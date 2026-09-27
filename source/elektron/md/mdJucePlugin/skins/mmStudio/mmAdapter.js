@@ -21,6 +21,7 @@
 	const J = o => JSON.stringify(o, (k, v) => v === Infinity ? "inf" : v);
 	const now = () => performance.now();
 	const selfTest = /[?&]selftest=1/.test(location.search);
+	const cpuTest = /[?&]selftest=mmcpu/.test(location.search);
 
 	/* ---------------- what the machine holds ---------------- */
 	const FW = { pat: [], kit: [], song: [], glob: [], machine: null, engine: "missing", cat: null };
@@ -201,7 +202,7 @@
 			: synced ? "ready" : "sync";
 		if (S.eng !== st) setEng(st);
 		if (st === "norom" && !noRomShown) { noRomShown = true; window.firstRun(); }
-		if (st === "ready" && !last.ready) { last.ready = true; log("ready: pattern " + CUR.pat + " kit " + CUR.kit); if (selfTest) setTimeout(runSelfTest, 500); }
+		if (st === "ready" && !last.ready) { last.ready = true; log("ready: pattern " + CUR.pat + " kit " + CUR.kit); if (selfTest) setTimeout(runSelfTest, 500); if (cpuTest) runCpuPhases(); }
 	}
 
 	/* ---------------- documents -> the page ---------------- */
@@ -588,6 +589,13 @@
 	new MutationObserver(() => { if (!naQueued) { naQueued = true; queueMicrotask(() => { naQueued = false; markNa(); }); } })
 		.observe(document.body, { childList: true, subtree: true });
 
+	/* ---- the editor's menu (skins, GUI scale, settings): right-click an empty part of the header ---- */
+	document.addEventListener("contextmenu", e => {
+		if (!e.target.closest(".top") || e.target.closest("button,[role=slider],[role=button],select,input,b,.lcdpanel")) return;
+		e.preventDefault();
+		send({ op: "openMenu" });
+	});
+
 	/* ---------------- messages from the plug-in ---------------- */
 	Bridge.onMessage(m => {
 		if (m.type === "doc") onDoc(m);
@@ -617,6 +625,23 @@
 		setTimeout(() => { const i = waiters.indexOf(w); if (i >= 0) { waiters.splice(i, 1); fail(new Error("timeout")); } }, ms);
 	});
 	const sleep = ms => new Promise(r => setTimeout(r, ms));
+	/* ?selftest=mmcpu (scripts/mm-editor-cpu.sh): fixed 30 s phases, each start and end logged
+	   ("cpu <phase> start/end"), so the script reads the processes' CPU time from outside. */
+	async function runCpuPhases() {
+		const log2 = t => log("MM-P3: " + t);
+		while (!FW.machine || FW.machine.loading.done < FW.machine.loading.total) await sleep(200);
+		await sleep(5000);	// the background loads settle
+		const phase = async (name, ms) => { log2(`cpu ${name} start`); await sleep(ms); log2(`cpu ${name} end`); };
+		MOCK("goWs")("seq");
+		await phase("stopped", 30000);
+		if (!S.playing) window.togglePlay();
+		await sleep(1000);
+		await phase("playing-seq", 30000);
+		MOCK("goWs")("mix");
+		await phase("playing-mix", 30000);
+		window.togglePlay();
+		log2("cpu done");
+	}
 	async function runSelfTest() {
 		const results = [];
 		const check = async (name, fn) => {

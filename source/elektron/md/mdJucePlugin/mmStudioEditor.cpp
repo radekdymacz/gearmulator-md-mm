@@ -4,6 +4,7 @@
 #include "mdPluginProcessor.h"
 #include "mmStudioLink.h"
 
+#include "jucePluginEditorLib/pluginEditorState.h"
 #include "jucePluginLib/midiLearnTranslator.h"
 #include "juceRmlUi/juceRmlComponent.h"
 
@@ -16,12 +17,18 @@ namespace mdJucePlugin
 {
 	namespace json = elektronData::json;
 
+#if JUCE_MAC
+	bool setWebPageZoom(juce::Component& _web, double _zoom);	// mdStudioWebZoom.mm (shared with the MD)
+#else
+	inline bool setWebPageZoom(juce::Component&, double) { return false; }
+#endif
+
 	namespace
 	{
 		constexpr const char* g_bridgeCommand = "gmbridge://c/";
 		constexpr const char* g_bridgeLog = "gmbridge://log/";
 		constexpr const char* g_pageResource = "mmStudio.html";
-		constexpr int g_headerHeight = 24;	// the RML header strip (dp at scale 1)
+		constexpr int g_headerHeight = 0;	// no RML header: the menu is native (standalone) or opened by the page
 		constexpr int g_skinHeight = 924;	// mmStudio.rml body height
 
 		void log(const juce::String& _line)
@@ -132,9 +139,11 @@ namespace mdJucePlugin
 
 		const auto file = juce::File::getSpecialLocation(juce::File::tempDirectory).getChildFile("gearmulator-mmStudio.html");
 		file.replaceWithText(bundlePage());
-		// GEARMULATOR_MMSTUDIO_SELFTEST=1: the page edits by itself and logs the round trips.
-		const bool selfTest = juce::SystemStats::getEnvironmentVariable("GEARMULATOR_MMSTUDIO_SELFTEST", {}) == "1";
-		const auto url = selfTest ? juce::URL(file).withParameter("selftest", "1") : juce::URL(file);
+		// GEARMULATOR_MMSTUDIO_SELFTEST=1: the page edits by itself and logs the round trips;
+		// =mmcpu: fixed phases for scripts/mm-editor-cpu.sh.
+		const auto selfTestMode = juce::SystemStats::getEnvironmentVariable("GEARMULATOR_MMSTUDIO_SELFTEST", {});
+		const bool selfTest = selfTestMode == "1" || selfTestMode == "mmcpu";
+		const auto url = selfTest ? juce::URL(file).withParameter("selftest", selfTestMode) : juce::URL(file);
 		m_web->goToURL(url.toString(true));
 		log("page loading, selftest=" + juce::String(selfTest ? 1 : 0) + ", " + juce::String(file.getSize()) + " bytes");
 		startTimerHz(30);
@@ -249,6 +258,13 @@ namespace mdJucePlugin
 			r.set("note", _ok ? _note : std::string());
 			m_outbox.push_back(std::move(r));
 		};
+		if(op == "openMenu")
+		{
+			// The editor's menu (skins, scale, settings) where the page was right-clicked.
+			if(auto* state = getProcessor().getEditorState())
+				state->createPopupMenu().showMenuAsync(juce::PopupMenu::Options().withMousePosition());
+			return true;
+		}
 		if(op == "revealRomFolder")
 		{
 			const juce::File folder(juce::String::fromUTF8(getProcessor().getPublicRomFolder().c_str()));
@@ -460,6 +476,8 @@ namespace mdJucePlugin
 		if(e != m_lastEngine)
 		{
 			log(juce::String("engine: ") + engineName(e));
+			if(e == mmDesk::Desk::Engine::Ready)
+				log("audio: " + juce::String(getProcessor().getSampleRate(), 0) + " Hz, block " + juce::String(getProcessor().getBlockSize()) + " frames");
 			m_lastEngine = e;
 			publishLcd(true);
 		}
@@ -492,5 +510,8 @@ namespace mdJucePlugin
 		const auto target = bounds.withTrimmedTop(header);
 		if(m_web->getBounds() != target)
 			m_web->setBounds(target);
+		// The page is laid out for 1440 px: below that it is zoomed out as a whole.
+		if(target.getWidth() > 0)
+			setWebPageZoom(*m_web, std::min(1.0, target.getWidth() / 1440.0));
 	}
 }

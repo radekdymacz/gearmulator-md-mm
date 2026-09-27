@@ -342,6 +342,11 @@ add_executable(mdCpuBenchTest mdCpuBenchTest.cpp mdFirmwareSession.h)
 target_link_libraries(mdCpuBenchTest PRIVATE mdLib elektronData)
 set_property(TARGET mdCpuBenchTest PROPERTY FOLDER "Elektron/test")
 
+# MM-P3: the same measurement for the Monomachine OS 1.32B. Manual: needs a ROM.
+add_executable(mmCpuBenchTest mmCpuBenchTest.cpp mdFirmwareSession.h)
+target_link_libraries(mmCpuBenchTest PRIVATE mdLib elektronData)
+set_property(TARGET mmCpuBenchTest PROPERTY FOLDER "Elektron/test")
+
 # P4 Machinedrum Editor discovery probes (start-up animation, chaining,
 # mutes, kit and pattern library). Manual: needs a user-supplied ROM.
 add_executable(mdP4ProbeFirmwareTest mdP4ProbeFirmwareTest.cpp mdFirmwareSession.h)
