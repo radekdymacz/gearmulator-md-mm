@@ -1003,6 +1003,10 @@ html,body{min-width:1280px}
 /* v43: page control on the right, above the grid */
 #seqp{position:relative}
 .pagectl.seqpage{position:absolute;right:0;top:0;height:24px;z-index:3;background:var(--bg);padding-left:10px}
+/* v44: page control above the grid, never over the step numbers */
+.rul{height:44px!important;padding-bottom:2px}
+.railhead.tall{height:44px!important;align-items:flex-end!important;padding-bottom:2px}
+.pagectl.seqpage{top:0;height:26px;background:transparent;padding-left:0}
 </style>
 
 <div class="app">
@@ -1192,7 +1196,7 @@ function renderTop(){
 function th(i,extra=""){const t=S.tracks[i];return`<div class="th ${i===S.sel?"sel":""} ${audible(i)?"":"off"} ${extra}" data-sel="${i}" style="--c:${FAMC[t.fam]}">
  <div class="sw"></div><div class="n ${i%4===0?"fill":""}">${i+1}</div><div class="nm" title="${t.name}"><b>${t.m}</b></div>
  <button class="ms m" data-mute="${i}" aria-pressed="${t.mute}" aria-label="Mute track ${i+1}">M</button><button class="ms s" data-solo="${i}" aria-pressed="${t.solo}" aria-label="Solo track ${i+1}">S</button></div>`}
-function renderRail(){if(S.ws==="sampler"){renderSlots();return}$("#rail").innerHTML=`<div class="railhead">Track</div>`+S.tracks.map((_,i)=>th(i)).join("")+(S.ws==="seq"?`<div class="railparams"><div class="rphead"><span class="cap">Lock parameter</span><button id="clearLane" class="iconkey" aria-label="Clear ${S.lane} locks" title="Clear ${S.lane} locks"><svg viewBox="0 0 14 14" aria-hidden="true"><path d="M2 4h10M5.5 4V2.5h3V4M3.5 4l.7 8h5.6l.7-8M6 6.5v3.5M8 6.5v3.5" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg></button></div><div class="pgrid vert" id="chips"></div></div>`:"")}
+function renderRail(){if(S.ws==="sampler"){renderSlots();return}$("#rail").innerHTML=`<div class="railhead ${S.ws==="seq"?"tall":""}">Track</div>`+S.tracks.map((_,i)=>th(i)).join("")+(S.ws==="seq"?`<div class="railparams"><div class="rphead"><span class="cap">Lock parameter</span><button id="clearLane" class="iconkey" aria-label="Clear ${S.lane} locks" title="Clear ${S.lane} locks"><svg viewBox="0 0 14 14" aria-hidden="true"><path d="M2 4h10M5.5 4V2.5h3V4M3.5 4l.7 8h5.6l.7-8M6 6.5v3.5M8 6.5v3.5" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg></button></div><div class="pgrid vert" id="chips"></div></div>`:"")}
 
 /* ===== Sequence ===== */
 S.page=0;S.viewAll=false;S.follow=false;

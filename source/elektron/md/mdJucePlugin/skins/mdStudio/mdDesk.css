@@ -1011,6 +1011,10 @@ html,body{min-width:1280px}
 /* v43: page control on the right, above the grid */
 #seqp{position:relative}
 .pagectl.seqpage{position:absolute;right:0;top:0;height:24px;z-index:3;background:var(--bg);padding-left:10px}
+/* v44: page control above the grid, never over the step numbers */
+.rul{height:44px!important;padding-bottom:2px}
+.railhead.tall{height:44px!important;align-items:flex-end!important;padding-bottom:2px}
+.pagectl.seqpage{top:0;height:26px;background:transparent;padding-left:0}
 
 /* ===== The real machine's states (not in the mockup) ===== */
 .st.past{opacity:.45}
