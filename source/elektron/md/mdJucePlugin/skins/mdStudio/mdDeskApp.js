@@ -156,7 +156,10 @@ function renderTop() {
 	$("#kitname").textContent = kitName(S.kit);
 	setKitState(S.kitState);
 	$("#undo").disabled = !S.canUndo; $("#redo").disabled = !S.canRedo; syncUndoCounts();
-	$("#play").setAttribute("aria-pressed", S.playing); $("#rec").setAttribute("aria-pressed", !!S.rec); $("#recled").classList.toggle("on", !!S.rec);
+	/* One key: PLAY while stopped, STOP while playing (the icon follows the machine). */
+	$("#play").setAttribute("aria-pressed", S.playing); $("#playico").textContent = S.playing ? "■" : "▶"; $("#play").setAttribute("aria-label", S.playing ? "Stop" : "Play");
+	$("#rec").setAttribute("aria-pressed", !!S.rec); $("#recled").classList.toggle("on", !!S.rec);
+	renderEngine();
 	syncTx();
 	const st = $("#status");
 	if (st) {
@@ -165,6 +168,22 @@ function renderTop() {
 	}
 	if (S.firmware === "missing") firstRun(); else if ($("#dlg").dataset.first === "1") { $("#dlg").hidden = true; $("#dlg").dataset.first = ""; }
 }
+
+/* The engine menu in the LCD: EMU OS 1.63 is the only engine today. Its LED is lit while the
+   firmware answers. HW MIDI is disabled in the markup (not available yet); LOAD ROM opens the
+   first-run screen. */
+function renderEngine() {
+	const btn = $(".lcdeng"), led = $("#engled"); if (!btn || !led) return;
+	const txt = { ready: "EMU OS 1.63", booting: "EMU OS 1.63 · starting", missing: "EMU · no ROM", unsupported: "EMU · not OS 1.63" }[S.firmware] || "EMU OS 1.63";
+	btn.querySelector("span").textContent = txt; led.classList.toggle("on", S.firmware === "ready");
+	btn.title = S.firmware === "ready" ? "Engine: the real Machinedrum OS 1.63 runs inside the app. Editing a real Machinedrum over MIDI is not available yet." : "Engine: " + txt;
+}
+document.addEventListener("change", e => {
+	if (e.target.id !== "engsel") return;
+	const sel = e.target, v = sel.value; sel.value = "emu"; renderEngine();
+	if (v === "rom") firstRun(true);
+	else if (v === "hw") toast("HW MIDI is not available yet. The editor runs the emulated OS 1.63.");
+});
 
 /* ===== Track header (one component, used by rail and grid) ===== */
 function th(i, extra = "") {
@@ -668,11 +687,11 @@ function openK(btn) {
 	pop.style.top = (r.bottom + scrollY + 4) + "px"; pop.style.left = Math.max(16, Math.min(r.left + scrollX, innerWidth - pop.offsetWidth - 16)) + "px"; btn.setAttribute("aria-expanded", "true");
 	(pop.querySelector(".kopt[aria-selected=true]") || pop.querySelector(".kopt"))?.focus();
 }
-function kopt(o, sel) { return `<button class="kopt" role="option" data-v="${o.value}" aria-selected="${o.value === sel.value}">${o.text}</button>`; }
+function kopt(o, sel) { return `<button class="kopt" role="option" data-v="${o.value}" aria-selected="${o.value === sel.value}"${o.disabled ? ` disabled aria-disabled="true" title="${o.title || "Not available"}"` : ""}>${o.text}</button>`; }
 function closeK() { const pop = $("#kpop"); if (pop.hidden) return; pop.hidden = true; kFor?.setAttribute("aria-expanded", "false"); }
 document.addEventListener("click", e => {
 	const b = e.target.closest(".kselbtn"); if (b) { const same = kFor === b && !$("#kpop").hidden; closeK(); if (!same) openK(b); return; }
-	const o = e.target.closest("#kpop .kopt"); if (o && kFor) { const sel = document.getElementById(kFor.dataset.for); sel.value = o.dataset.v; kFor.querySelector("span").textContent = sel.selectedOptions[0].text; closeK(); kFor.focus(); sel.dispatchEvent(new Event("change", { bubbles: true })); return; }
+	const o = e.target.closest("#kpop .kopt"); if (o && o.disabled) return; if (o && kFor) { const sel = document.getElementById(kFor.dataset.for); sel.value = o.dataset.v; kFor.querySelector("span").textContent = sel.selectedOptions[0].text; closeK(); kFor.focus(); sel.dispatchEvent(new Event("change", { bubbles: true })); return; }
 	if (!e.target.closest("#kpop")) closeK();
 }, true);
 document.addEventListener("keydown", e => {
@@ -749,15 +768,19 @@ function secAction(kind) {
 }
 
 /* ===== First run: firmware needed ===== */
-function firstRun() {
-	const d = $("#dlg"); if (d.dataset.first === "1" && !d.hidden) return;
+/* The firmware screen. Opened by itself while no MD OS 1.63 runs (it cannot be closed then), or
+   from LOAD ROM in the engine menu (then it has a Close key while the firmware runs). */
+function firstRun(manual) {
+	const d = $("#dlg"), mode = manual && S.firmware !== "missing" ? "manual" : "1";
+	if (d.dataset.first === mode && !d.hidden) return;
 	const m = machineState().desk || {};
 	d.innerHTML = `<div class="dlgbox first" role="dialog" aria-modal="true" aria-label="Firmware needed">
  <div class="lcdbig">MACHINEDRUM FIRMWARE NEEDED</div>
  <p>Machinedrum Editor runs the real Machinedrum operating system. Elektron's firmware cannot be shipped with the app, so you add the one from your own machine.</p>
  <ol><li>Dump the <b>OS 1.63</b> flash image from your Machinedrum (8 MiB, <span class="mono">.bin</span>).</li><li>Put it in the ROM folder${m.romFolder ? `: <span class="mono">${m.romFolder}</span>` : ""}.</li><li>Press <b>Check again</b>. Machinedrum Editor checks its size and version and keeps it on this computer only.</li></ol>
- <div class="btnrow"><button class="cream" data-romfolder="1">Show the ROM folder</button><button data-recheck="1">Check again</button><span class="note">UW, MKII and MKI units all use the same OS 1.63 image.</span></div></div>`;
-	d.hidden = false; d.dataset.first = "1";
+ <div class="btnrow"><button class="cream" data-romfolder="1">Show the ROM folder</button><button data-recheck="1">Check again</button><span class="note">UW, MKII and MKI units all use the same OS 1.63 image.${S.firmware === "ready" ? " OS 1.63 runs now. A new ROM is used after you reopen the plug-in." : ""}</span></div></div>`;
+	if (mode === "manual") d.querySelector(".btnrow").insertAdjacentHTML("beforeend", `<button data-firstclose="1">Close</button>`);
+	d.hidden = false; d.dataset.first = mode;
 }
 
 /* LCD line 2 editing */
@@ -871,7 +894,8 @@ document.addEventListener("click", e => {
 	const dl = e.target.closest("[data-dlg]"); if (dl) { const d = $("#dlg"), f = d._btns[+dl.dataset.dlg][2]; d.hidden = true; f(); return; }
 	if (e.target.closest("[data-romfolder]")) { cmd("revealRomFolder"); return; }
 	if (e.target.closest("[data-recheck]")) { cmd("recheckFirmware"); return; }
-	if ((e.target.closest("[data-dlgclose]") || e.target.id === "dlg") && $("#dlg").dataset.first !== "1") { $("#dlg").hidden = true; return; }
+	if (e.target.closest("[data-firstclose]")) { const d = $("#dlg"); d.hidden = true; d.dataset.first = ""; return; }
+	if ((e.target.closest("[data-dlgclose]") || e.target.id === "dlg") && $("#dlg").dataset.first !== "1") { $("#dlg").hidden = true; $("#dlg").dataset.first = ""; return; }
 	if (e.target.closest("#undo")) { cmd("undo"); return; }
 	if (e.target.closest("#redo")) { cmd("redo"); return; }
 	const sc = e.target.closest("[data-sec]"); if (sc) { secAction(sc.dataset.sec); return; }
@@ -888,8 +912,7 @@ document.addEventListener("click", e => {
 	}
 	const tb = e.target.closest("#tabs button"); if (tb) { S.ws = tb.dataset.ws; render(); return; }
 	if (e.target.closest("#platekey")) { setPlate(S.plate === "mk2" ? "mk1" : "mk2"); return; }
-	if (e.target.closest("#play")) { cmd("play"); return; }
-	if (e.target.closest("#stop")) { cmd("stop"); return; }
+	if (e.target.closest("#play")) { cmd(S.playing ? "stop" : "play"); return; }
 	if (e.target.closest("#rec")) { S.rec = !S.rec; renderTop(); if (S.rec) toast("Not wired yet: live recording. Trigs and knob moves you make are sent anyway."); return; }
 	if (e.target.closest("#patPrev")) { goPattern((S.queued ?? S.pat) - 1); return; }
 	if (e.target.closest("#patNext")) { goPattern((S.queued ?? S.pat) + 1); return; }
@@ -995,7 +1018,7 @@ function setPlate(v) { S.plate = v; document.documentElement.dataset.plate = v; 
 document.fonts && document.fonts.ready.then(() => redraw());
 document.addEventListener("keydown", e => {
 	const mod = e.metaKey || e.ctrlKey; const inField = e.target.closest?.("input,select,textarea");
-	if (!$("#dlg").hidden && e.key === "Escape" && $("#dlg").dataset.first !== "1") { $("#dlg").hidden = true; return; }
+	if (!$("#dlg").hidden && e.key === "Escape" && $("#dlg").dataset.first !== "1") { $("#dlg").hidden = true; $("#dlg").dataset.first = ""; return; }
 	if (mod && !inField && (e.key === "z" || e.key === "Z")) { e.preventDefault(); cmd(e.shiftKey ? "redo" : "undo"); return; }
 	if (mod && !inField && e.key === "y") { e.preventDefault(); cmd("redo"); return; }
 	if (mod && !inField && (e.key === "c" || e.key === "v")) { e.preventDefault(); secAction(e.key === "c" ? "copy" : "paste"); return; }
