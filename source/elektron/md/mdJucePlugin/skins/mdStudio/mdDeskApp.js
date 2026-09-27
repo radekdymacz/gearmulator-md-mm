@@ -50,13 +50,20 @@ function cmd(op, args = {}, key) {
 	Bridge.send(msg, { key, onResult: r => onResult(r) });
 	tx();
 }
-const SELFTEST = /[?&]selftest=1/.test(location.search);
+const SELFTEST = /[?&]selftest=(1|p4)/.test(location.search);
 function onResult(r) {
 	if (SELFTEST && (r.op === "record" || r.op === "recTrig" || r.op === "play" || r.op === "stop" || !r.ok)) Bridge.log("result " + r.op + " ok " + r.ok + " " + (r.errors || []).join(";") + " " + (r.note || ""));
 	if (!r.ok && r.errors && r.errors.length) { toast(r.errors[0]); showLastError(r.errors); }
 	else if (r.note) toast(r.note);
 }
-function pidx(t, n) { return slots(S.tracks[t].m).indexOf(n); }
+/* The kit parameter index 0-23. With the group (syn, fx, rt) it is looked up in that page only: some
+   machines have a synthesis parameter with a routing parameter's name (DIST), and the Mix DIST box must
+   not move the machine's own DIST (P4, found in the plug-in). */
+function pidx(t, n, g) {
+	const a = slots(S.tracks[t].m), base = { syn: 0, fx: 8, rt: 16 }[g];
+	if (base == null) return a.indexOf(n);
+	const k = a.slice(base, base + 8).indexOf(n); return k < 0 ? -1 : base + k;
+}
 
 /* ===== Model helpers (view, optimistic) ===== */
 function lk(t, p) { return t + ":" + p; }
@@ -106,7 +113,7 @@ function syncKitValues() {
 	S.tracks.forEach((t, i) => {
 		const b = base.tracks[i];
 		for (const g of ["syn", "fx", "rt"]) for (const n in t[g]) if (t[g][n] !== b[g][n]) {
-			const idx = pidx(i, n); if (idx >= 0) cmd("param", { k: S.kit, t: i, i: idx, v: t[g][n] }, "param:" + i + ":" + idx);
+			const idx = pidx(i, n, g); if (idx >= 0) cmd("param", { k: S.kit, t: i, i: idx, v: t[g][n] }, "param:" + i + ":" + idx);
 		}
 		const l = t.lfo, bl = b.lfo;
 		if (l.SPD !== bl.SPD) cmd("param", { k: S.kit, t: i, i: 21, v: l.SPD }, "param:" + i + ":21");
@@ -164,7 +171,7 @@ function renderTop() {
 	/* One key: PLAY while stopped, STOP while playing (the icon follows the machine). */
 	$("#play").setAttribute("aria-pressed", S.playing); $("#playico").textContent = S.playing ? "■" : "▶"; $("#play").setAttribute("aria-label", S.playing ? "Stop" : "Play");
 	$("#rec").setAttribute("aria-pressed", !!S.rec); $("#recled").classList.toggle("on", !!S.rec);
-	$("#rec").title = S.rec ? "Live recording: click a track's steps to play it, move a value to lock it. REC again: stop recording, keep playing (R)" : "Live recording, as RECORD + PLAY on the machine (R)";
+	$("#rec").title = S.rec ? "Live recording: click a track's steps to play it, move a value to lock it. A moved value locks the track's next trig whose step has not started yet (the editor marks it). REC again: stop recording, keep playing (R)" : "Live recording, as RECORD + PLAY on the machine (R)";
 	document.body.classList.toggle("liverec", !!S.rec);
 	renderEngine();
 	syncTx();
@@ -181,23 +188,29 @@ function renderTop() {
    EMU OS 1.63 (it answers MIDI: status reply seen), ROM ERROR (not OS 1.63). While it is not
    ready the LCD fields dim, REC and PLAY are disabled and edits wait (the desk refuses them).
    HW MIDI is not available yet. */
-const ENG = { missing: ["NO ROM", "off"], loading: ["LOADING ROM", "blink"], booting: ["BOOTING OS", "blink"], ready: ["EMU OS 1.63", "on"], unsupported: ["ROM ERROR", "off"] };
+const ENG = { missing: ["NO ROM", "off"], loading: ["LOADING ROM", "blink"], booting: ["BOOTING OS", "blink"], ready: ["EMU OS 1.63", "on"], unsupported: ["ROM ERROR", "off"],
+	hwconnect: ["HW CONNECT", "blink"], hwready: ["HW MIDI", "on"], hwnone: ["HW NO MIDI", "off"] };
+/* P4 HW MIDI: the desk drives a real Machinedrum on the plug-in's MIDI in/out; its link state is the engine's. */
+function engineKey() { const d = machineState().desk || {}; return d.engine === "hw" ? ({ connect: "hwconnect", ready: "hwready", lost: "hwnone" }[d.link] || "hwconnect") : S.firmware; }
 let lastEng = "";
 function renderEngine() {
 	const btn = $(".lcdeng"), led = $("#engled"); if (!btn || !led) return;
-	const [txt, mode] = ENG[S.firmware] || ENG.booting, ready = S.firmware === "ready";
+	const key = engineKey(), hw = key.startsWith("hw"), [txt, mode] = ENG[key] || ENG.booting, ready = key === "ready" || key === "hwready";
 	btn.querySelector("span").textContent = txt;
 	led.className = "led " + (mode === "on" ? "on" : mode === "blink" ? "on blink" : "");
 	$(".lcdpanel").classList.toggle("engwait", !ready);
 	["rec", "play"].forEach(id => { const k = document.getElementById(id); if (k) k.disabled = !ready; });
-	btn.title = ready ? "Engine: the real Machinedrum OS 1.63 runs inside the app. Editing a real Machinedrum over MIDI is not available yet." : "Engine: " + txt.toLowerCase() + ". Editing starts when it is ready.";
+	btn.title = hw ? (key === "hwready" ? "Engine: a real Machinedrum on the plug-in's MIDI in and out, at MIDI speed (a pattern takes about 1.7 s each way). No live recording, chains or boot screen over MIDI; PLAY/STOP are MIDI Start/Stop." : key === "hwnone" ? "Engine: HW MIDI, but the Machinedrum has not answered for a while. Check the MIDI cables and that its SYSEX is on." : "Engine: HW MIDI, waiting for the Machinedrum to answer on the plug-in's MIDI in and out.")
+		: ready ? "Engine: the real Machinedrum OS 1.63 runs inside the app. Choose HW MIDI to edit a real Machinedrum instead." : "Engine: " + txt.toLowerCase() + ". Editing starts when it is ready.";
+	const sel = document.getElementById("engsel"); if (sel) sel.value = hw ? "hw" : "emu";
+	["rec"].forEach(id => { const k = document.getElementById(id); if (k && hw) { k.disabled = true; k.title = "Live recording needs the machine's panel keys: the emulator only"; } });
 	if (S.firmware !== lastEng) { if (typeof SELFTEST !== "undefined" && SELFTEST) Bridge.log(`engine: ${txt} at ${Math.round(performance.now())} ms`); lastEng = S.firmware; }
 }
 document.addEventListener("change", e => {
 	if (e.target.id !== "engsel") return;
-	const sel = e.target, v = sel.value; sel.value = "emu"; renderEngine();
+	const sel = e.target, v = sel.value; renderEngine();
 	if (v === "rom") firstRun(true);
-	else if (v === "hw") toast("HW MIDI is not available yet. The editor runs the emulated OS 1.63.");
+	else if (v === "hw" || v === "emu") cmd("engine", { kind: v });
 });
 
 /* ===== Track header (one component, used by rail and grid) ===== */
@@ -215,7 +228,9 @@ function renderRail() {
 function pages16() { return S.len / 16; }
 function vis() { if (S.viewAll) return [0, S.len]; S.page = Math.min(S.page, pages16() - 1); return [S.page * 16, S.page * 16 + 16]; }
 function steps() { const [a, b] = vis(); return Array.from({ length: b - a }, (_, k) => a + k); }
-function cols() { return `repeat(${steps().length},minmax(18px,1fr))`; }
+/* Mockup v51: ALL fits every step (minmax 0, a 2 px gap, class "viewall" on html); the page
+   boundary is a 2 px shadow in the cell gap, so the lock lane lines up with the steps. */
+function cols() { return S.viewAll ? `repeat(${steps().length},minmax(0,1fr))` : `repeat(${steps().length},minmax(18px,1fr))`; }
 function stepCls(i, s) {
 	const t = S.tracks[i], c = ["st"]; if (s % 4 === 0) c.push("q"); if (s % 16 === 0 && s !== vis()[0]) c.push("gap"); if (s >= S.length) c.push("past");
 	if (t.trigs[s]) { c.push("on"); if (t.acc.has(s)) c.push("acc"); if (t.slide.has(s)) c.push("sl"); if (stepLocked(i, s)) c.push("lk"); }
@@ -224,15 +239,22 @@ function stepCls(i, s) {
 /* The PAGE control sits on the right, above the grid, on the ruler row. */
 function pageCtl() { return `<span class="pagectl rh seqpage"><button class="pgkey" id="pgkey" ${pages16() < 2 ? "disabled" : ""} title="Next page. Shift-click = previous. Keys [ and ].">Page</button><span class="pleds" aria-hidden="true">${[0, 1, 2, 3].map(k => `<span class="pl ${k < pages16() ? "" : "na"} ${!S.viewAll && k === S.page ? "cur" : ""}" data-plp="${k}"><i class="led"></i></span>`).join("")}</span><button class="ptog ${S.viewAll ? "on" : ""}" id="pgall" aria-pressed="${S.viewAll}" title="Show all steps"><i class="led"></i>All</button><button class="ptog ${S.follow ? "on" : ""}" id="pgfollow" aria-pressed="${S.follow}" title="Page follows the play position"><i class="led"></i>Fol</button></span>`; }
 function renderSeq() {
+	document.documentElement.classList.toggle("viewall", !!S.viewAll);
 	let h = `<div class="panel ${S.mode === "CLASSIC" ? "classic" : ""}" id="seqp">${pageCtl()}<div class="scroll" id="seqscroll"><div class="seq" id="seq">
   <div class="r" style="grid-template-columns:${cols()}">${steps().map(s => `<div class="rul ${s % 16 === 0 && s !== vis()[0] ? "gap" : ""}">${s % 4 === 0 ? s + 1 : ""}</div>`).join("")}</div>`;
 	S.tracks.forEach((t, i) => { h += `<div class="r ${i === S.sel ? "sel" : ""} ${audible(i) ? "" : "off"}" data-row="${i}" style="grid-template-columns:${cols()};--c:${FAMC[t.fam]}">${steps().map(s => `<button class="${stepCls(i, s)}" data-t="${i}" data-s="${s}" aria-label="Track ${i + 1} step ${s + 1}" aria-pressed="${t.trigs[s]}"></button>`).join("")}</div>`; });
-	h += `</div></div><div class="lanewrap"><div class="lanetop"><span class="cap">Lock lane · ${S.sel + 1} ${S.tracks[S.sel].name} · <b id="lanename">${S.lane}</b> <span class="lanescale">0–127</span></span>${S.mode === "CLASSIC" ? `<span class="warnline" title="Locks stay in the pattern but do nothing until you switch to EXTENDED.">CLASSIC: locks muted</span>` : ""}<span class="lanehelp" title="Draw across the bars to lock this parameter per step. Alt-drag erases. Hatched steps have no trig, so they cannot hold a lock. Dashed line = kit value.">Draw to lock · alt-drag erases</span>
+	h += `</div></div><div class="lanewrap"><div class="lanetop"><span class="cap">Lock lane · ${S.sel + 1} ${S.tracks[S.sel].name} · <b id="lanename">${S.lane}</b> <span class="lanescale">${bipLane() ? "L 64 · centre · R 63" : "0–127"}</span></span>${S.mode === "CLASSIC" ? `<span class="warnline" title="Locks stay in the pattern but do nothing until you switch to EXTENDED.">CLASSIC: locks muted</span>` : ""}<span class="lanehelp" title="Draw across the bars to lock this parameter per step. Alt-drag erases. Hatched steps have no trig, so they cannot hold a lock. Dashed line = kit value.">Draw to lock · alt-drag erases</span>
   <div class="legend"><span><i class="lg on"></i>Trig</span><span><i class="lg on acc"></i>Accent: shift-click${S.accAll ? " (all)" : ""}</span><span><i class="lg on sl"></i>Slide: alt-click${S.slideAll ? " (all)" : ""}</span><span><i class="lg on lk"></i>Has locks</span></div></div>
 </div>
   <div class="scroll" id="lanescroll"><div class="lane" id="lane" style="grid-template-columns:${cols()}"></div></div></div>`;
 	$("#main").innerHTML = h; renderLane(); syncScroll();
 }
+/* Mockup v57: bipolar lanes draw from the centre (64): up = right / boost / louder, down = left / cut.
+   The machine's signed parameters (manual: displayed -64..+63): PAN, EQG, the RAM-R levels and balances
+   MLEV MBAL ILEV IBAL, and the master EQ gains LG HG PG (CTR machines). */
+const BIP = SIGNED;
+function bipLane() { return BIP.has(S.lane); }
+function barHTML(v) { return bipLane() ? (v >= 64 ? `<i class="bp up" style="height:${(v - 64) / 63 * 50}%"></i>` : `<i class="bp dn" style="height:${(64 - v) / 64 * 50}%"></i>`) : `<i style="--h:${v / 127 * 168}px"></i>`; }
 function renderLane() {
 	const lane = $("#lane"); if (!lane) return;
 	const t = S.sel, tr = S.tracks[t], m = S.locks.get(lk(t, S.lane)), g = grp(t, S.lane), base = g[S.lane] ?? 0;
@@ -245,7 +267,7 @@ function renderLane() {
 	}).join("");
 	lane.innerHTML = steps().map(s => {
 		const on = tr.trigs[s], v = m?.get(s);
-		return `<div class="lb ${on ? "" : "none"} ${s % 16 === 0 && s !== vis()[0] ? "gap" : ""} ${S.playing && s === S.step ? "ph" : ""}" data-s="${s}">${on ? `<div class="base" style="--b:${3 + base / 127 * 168}px"></div>${v != null ? `<i style="--h:${v / 127 * 168}px"></i>` : ""}` : ""}</div>`;
+		return `<div class="lb ${on ? "" : "none"} ${s % 16 === 0 && s !== vis()[0] ? "gap" : ""} ${S.playing && s === S.step ? "ph" : ""}" data-s="${s}">${on ? `<div class="base" style="--b:${3 + base / 127 * 168}px"></div>${bipLane() ? `<div class="mid"></div>` : ""}${v != null ? barHTML(v) : ""}` : ""}</div>`;
 	}).join("");
 }
 function syncScroll() { const a = $("#seqscroll"), b = $("#lanescroll"); if (!a || !b) return; a.onscroll = () => { b.scrollLeft = a.scrollLeft; }; b.onscroll = () => { a.scrollLeft = b.scrollLeft; }; }
@@ -256,7 +278,8 @@ function laneAt(e) {
 	const lane = $("#lane"); if (!lane) return; const el = document.elementFromPoint(e.clientX, e.clientY)?.closest(".lb"); if (!el || !lane.contains(el)) return;
 	const s = +el.dataset.s, t = S.sel; if (!S.tracks[t].trigs[s]) return; const r = el.getBoundingClientRect(); const v = clamp(Math.round((r.bottom - 3 - e.clientY) / (r.height - 6) * 127));
 	if (laneDraw.erase) eraseLock(t, S.lane, s); else if (!setLock(t, S.lane, s, v)) return;
-	const bar = el.querySelector("i"); if (laneDraw.erase) { bar?.remove(); } else if (bar) bar.style.setProperty("--h", v / 127 * 168 + "px"); else el.insertAdjacentHTML("beforeend", `<i style="--h:${v / 127 * 168}px"></i>`);
+	/* One shape for render and drag (mockup's barHTML): a bipolar bar redraws while it is dragged. */
+	el.querySelector("i")?.remove(); if (!laneDraw.erase) el.insertAdjacentHTML("beforeend", barHTML(v));
 	laneDraw.touched.add(s); renderTop();
 }
 function endLaneDraw() { if (!laneDraw) return; laneDraw = null; gesture = 0; refreshRow(S.sel); renderLane(); }
@@ -315,7 +338,7 @@ function renderMix() {
   <div class="top2"><i class="led act" data-act="${i}"></i><span>${i + 1}</span></div>
   ${"VOL" in t.rt ? `<div class="fader" role="slider" tabindex="0" aria-label="Track ${i + 1} volume" data-g="rt" data-n="VOL" data-t="${i}"><div class="tr"><i></i></div><div class="cap2"></div></div>` : `<div class="fader"></div>`}
   <div class="v" data-show="${i}"></div>
-  ${["PAN", "DIST", "DEL", "REV"].map(n => n in t.rt ? pc("rt", n, { t: i }) : `<div class="pc empty" aria-hidden="true"></div>`).join("")}
+  ${["PAN", "DIST", "DEL", "REV"].map(n => n in t.rt ? (direct && (n === "DEL" || n === "REV") ? pc("rt", n, { t: i }).replace('class="pc"', `class="pc mainonly" title="${n === "DEL" ? "Delay" : "Reverb"} sends only reach the main outputs; this track goes to OUT ${out}. The value is kept."`) : pc("rt", n, { t: i })) : `<div class="pc empty" aria-hidden="true"></div>`).join("")}
   <button class="outk ${direct ? "on" : ""}" data-out="${i}" title="${direct ? "Individual output " + out + ": skips the master effects" : "Main output, through the master effects"}">OUT ${out}</button>
   <div class="mrow"><button class="ms m" data-mute="${i}" aria-pressed="${t.mute}" aria-label="Mute track ${i + 1}">M</button><button class="ms s" data-solo="${i}" aria-pressed="${t.solo}" aria-label="Solo track ${i + 1}">S</button></div>
   <div class="nm" title="${t.name}">${t.m}</div></div>`;
@@ -421,10 +444,10 @@ function syncControls() {
 	$$("#main [data-g]").forEach(el => {
 		const v = getV(el); if (v == null) { el.style.setProperty("--f", "0%"); const b0 = el.querySelector("b"); if (b0) b0.textContent = "—"; return; }
 		const f = v / 127 * 100 + "%"; el.style.setProperty("--f", f); el.setAttribute("aria-valuenow", v);
-		if (el.classList.contains("pc") && SIGNED.has(el.dataset.n)) { const q = v / 127 * 100; el.classList.add("bip"); el.style.setProperty("--pl", Math.min(q, 50.4) + "%"); el.style.setProperty("--pw", Math.max(1.5, Math.abs(q - 50.4)) + "%"); }
+		if (el.classList.contains("pc") && SIGNED.has(el.dataset.n)) { const q = v / 127 * 100; el.classList.add("bip"); el.style.setProperty("--pl", Math.min(q, 50.4) + "%"); el.style.setProperty("--pw", v === 64 ? "0%" : Math.max(3, Math.abs(q - 50.4)) + "%"); }
 		const b = el.querySelector("b"); if (b) b.textContent = SIGNED.has(el.dataset.n) && el.dataset.g !== "mfx" ? (v - 64 > 0 ? "+" : "") + (v - 64) : v;
 		if (["syn", "fx", "rt"].includes(el.dataset.g)) {
-			const tt = el.dataset.t != null ? +el.dataset.t : S.sel, idx = pidx(tt, el.dataset.n);
+			const tt = el.dataset.t != null ? +el.dataset.t : S.sel, idx = pidx(tt, el.dataset.n, el.dataset.g);
 			const mp = (Docs.learn?.mappings || []).filter(m => m.t === tt && m.i === idx);
 			el.classList.toggle("mapped", mp.length > 0);
 			el.classList.toggle("learnt", !!S.ctl.learnT && S.ctl.learnT.t === tt && S.ctl.learnT.p === el.dataset.n);
@@ -611,14 +634,43 @@ function renderSlots() {
  <div class="slotsec"><div class="scap">RAM · lost at power-off</div>${[1, 2, 3, 4].map(n => { const st = slotState(n), r = recTrack(n);
 		return `<button class="slotk ram st-${st}" data-slot="RAM${n}" aria-pressed="${S.smpSlot === "RAM" + n}"><i class="led"></i><b>RAM ${n}</b><span>${STATE_TXT[st]}${r >= 0 ? " · R" + (r + 1) : ""}</span></button>`; }).join("")}
  <div class="scap">ROM · kept · 48 slots</div><div class="romgrid">${Array.from({ length: 48 }, (_, i) => { const k = i + 1;
-		return `<button class="slotk rom ${S.tracks.some(t => t.m === romCode(k)) ? "has" : ""}" data-slot="ROM${k}" aria-pressed="${S.smpSlot === "ROM" + k}" title="${romCode(k)}">${String(k).padStart(2, "0")}</button>`; }).join("")}</div></div>`;
+		const used = S.tracks.map((t, i) => t.m === romCode(k) ? i + 1 : 0).filter(Boolean);
+		return `<button class="slotk rom ${used.length ? "has" : ""}" data-slot="ROM${k}" aria-pressed="${S.smpSlot === "ROM" + k}" title="${romCode(k)}${romName(k) ? " · named " + romName(k) + " (sent this session)" : ""}${used.length ? " · played by track " + used.join(", ") : ""}">${romName(k) || String(k).padStart(2, "0")}</button>`; }).join("")}</div>
+ <div class="scap" title="${NA.names} ${NA.memory}">Lit: used by this kit. Whether a slot holds a sample, its name and the memory in use are not reported by the machine.</div></div>`;
 }
 function pageKeys() { return `<span class="pagectl mini"><button class="pgkey" id="pgkey" ${pages16() < 2 ? "disabled" : ""} title="Next page. Shift-click = previous.">Page</button><span class="pleds" aria-hidden="true">${[0, 1, 2, 3].map(k => `<span class="pl ${k < pages16() ? "" : "na"} ${k === S.page ? "cur" : ""}" data-plp="${k}"><i class="led"></i><small>${k + 1}:4</small></span>`).join("")}</span></span>`; }
+/* P4: an empty RAM slot is one call to action. It shows what changes (which machines are replaced,
+   which trigs stay), does it as one undo step, and then the recorder is ready below. */
+function setupTracks() {
+	let r = S.smpRec ?? 12, p = S.smpPlay ?? 13;
+	if (p === r) p = (r + 1) % 16;
+	return [r, p];
+}
+function setupCard(n) {
+	const [rt, pt] = setupTracks(), R = S.tracks[rt], P = S.tracks[pt];
+	const rtr = R.trigs.slice(0, S.len).filter(Boolean).length, ptr = P.trigs.slice(0, S.len).filter(Boolean).length;
+	const step = (w, v) => `<span class="stepper"><button data-setupt="${w}" data-d="-1" aria-label="Previous track">‹</button><b class="mono">${v + 1}</b><button data-setupt="${w}" data-d="1" aria-label="Next track">›</button></span>`;
+	return `<section class="card smpsetup"><header><h3>Set up sampling · RAM ${n}</h3><span>the UW's RAM machines: one records, one plays</span></header>
+  <div class="insp">
+   <div class="irow"><span class="ilab">Records</span>${step("r", rt)}<span class="note">Track ${rt + 1}: <b>${R.m}</b> becomes <b>RAM-R${n}</b>. ${!rtr ? "It has no trig, so one goes on step 1 (a recorder records on its trigs)." : S.smpOnce ? `Its ${rtr} trig${rtr > 1 ? "s are" : " is"} cleared; one goes on step 1: it records once a loop.` : `Its ${rtr} trig${rtr > 1 ? "s stay" : " stays"}: it records on ${rtr > 1 ? "each" : "it"}.`}</span></div>
+   ${rtr > 1 || (rtr === 1 && !R.trigs[0]) ? `<div class="irow"><span class="ilab">Recorder trigs</span><span class="seg"><button data-smponce="0" aria-pressed="${!S.smpOnce}">Keep</button><button data-smponce="1" aria-pressed="${!!S.smpOnce}">Once, on step 1</button></span></div>` : ""}
+   <div class="irow"><span class="ilab">Plays</span>${step("p", pt)}<span class="note">Track ${pt + 1}: <b>${P.m}</b> becomes <b>RAM-P${n}</b>. ${ptr ? `Its ${ptr} trig${ptr > 1 ? "s stay" : " stays"}: it plays the take on ${ptr > 1 ? "each" : "it"}.` : "It has no trig yet: add them in the chop grid."}</span></div>
+   <div class="irow"><span class="ilab"></span><button class="cream" data-setupgo="${n}">Set up sampling</button><span class="note">One step: Undo takes it back. The two tracks' machines are replaced${S.keepFx ? " (effects and routing kept)" : ""}${S.smpOnce && rtr ? `; track ${rt + 1}'s trigs are cleared` : "; no trig is cleared"}.</span></div>
+  </div></section>`;
+}
+/* The recorder's source, from its levels: MLEV/MBAL = the machine's own mix, ILEV/IBAL = inputs A/B. */
+/* Manual A-15: MLEV/ILEV 0 records "as is", -64 records nothing (stored 64 and 0); the balances are
+   -64..+63 (stored 0..127, 64 = centre). */
+const SOURCES = [["main", "Main mix", { MLEV: 64, MBAL: 64, ILEV: 0, IBAL: 64 }], ["a", "Input A", { MLEV: 0, MBAL: 64, ILEV: 64, IBAL: 0 }],
+	["b", "Input B", { MLEV: 0, MBAL: 64, ILEV: 64, IBAL: 127 }], ["ab", "A + B", { MLEV: 0, MBAL: 64, ILEV: 64, IBAL: 64 }]];
+function sourceOf(t) { const y = S.tracks[t].syn; const hit = SOURCES.find(([, , v]) => Object.keys(v).every(k => y[k] === v[k])); return hit ? hit[0] : "custom"; }
+function sourceSeg(t) { const cur = sourceOf(t); return `<span class="seg srcseg">${SOURCES.map(([id, label]) => `<button data-recsrc="${id}" data-t="${t}" aria-pressed="${cur === id}">${label}</button>`).join("")}</span>${cur === "custom" ? `<span class="note">custom levels</span>` : ""}`; }
 function renderSampler() {
 	S.viewAll = false; const id = S.smpSlot; let h = "";
 	if (id.startsWith("RAM")) {
 		const n = +id.slice(3), r = recTrack(n), ps = players(n), st = slotState(n);
-		if (r < 0) { h = `<div class="smpempty"><div class="edblank big">RAM ${n} is not in this kit.<br>Put RAM-R${n} on a track to record and RAM-P${n} on another to play it.</div><button class="cream" data-assign="${n}">Put RAM-R${n} on track 13 and RAM-P${n} on track 14</button></div>`; }
+		if (S.firmware !== "ready") { h = `<div class="smpempty"><div class="edblank big">${S.firmware === "unsupported" ? "This firmware is not MD OS 1.63 UW: the Sampler needs the UW's ROM and RAM machines." : "The machine is not running yet. The Sampler works with the UW machine once it is ready."}</div></div>`; }
+		else if (r < 0) h = setupCard(n);
 		else {
 			if (S.chopTrack == null || !ps.includes(S.chopTrack)) S.chopTrack = ps[0] ?? null; const p = S.chopTrack, R = S.tracks[r];
 			const recSteps = R.trigs.slice(0, S.len).map((x, i) => x ? i + 1 : 0).filter(Boolean);
@@ -632,7 +684,7 @@ function renderSampler() {
    ${p != null ? `<section class="card"><header><h3>Chop</h3><span class="chophead">${ps.length > 1 ? ps.map(i => `<button class="${i === p ? "cream" : ""}" data-choptrk="${i}">Track ${i + 1}</button>`).join("") : "track " + (p + 1)}${pageKeys()}</span></header>
     <div class="chop" id="chop" data-p="${p}" style="grid-template-columns:repeat(16,minmax(0,1fr))">${steps().map(s => `<button class="${chopCls(p, s)}" data-cp="${s}" aria-label="Chop step ${s + 1}">${chopInner(p, s)}</button>`).join("")}</div>
     <div class="edhint">Click = trig. Drag a trig up or down = slice (a STRT lock). Alt-click = reverse. Shift-click = retrig roll.</div></section>` : `<div class="edblank">No track plays RAM-P${n}. Put RAM-P${n} on a track in Sound.</div>`}
-   <div class="smp2"><section class="card"><header><h3>Source</h3><span>recorder · track ${r + 1}</span></header><div class="ctl four">${RAMR.map(k => pc("syn", k, { t: r })).join("")}</div></section>
+   <div class="smp2"><section class="card"><header><h3>Source</h3><span>recorder · track ${r + 1}</span></header><div class="irow">${sourceSeg(r)}</div><div class="ctl four">${RAMR.map(k => pc("syn", k, { t: r })).join("")}</div></section>
     ${p != null ? `<section class="card"><header><h3>Playback</h3><span>player · track ${p + 1}</span></header><div class="ctl four">${SMPL.map(k => pc("syn", k, { t: p })).join("")}</div></section>` : ""}</div>`;
 		}
 	}
@@ -780,8 +832,10 @@ function modInspector(sr) {
 /* Controller rows: 8 knobs (CC 21-28 by default, the CC number is editable per row; kept per
    viewer), plus any other CC the plug-in's MIDI Learn preset maps. A row id is "ch:cc" (ch 255 =
    any channel). Mapping works with LEARN or here: a cell opens the row with that track's picker. */
-const KNOB_CCS = (() => { try { const v = JSON.parse(localStorage.getItem("mddesk.knobs")); if (Array.isArray(v) && v.length === 8) return v; } catch (_) { } return [21, 22, 23, 24, 25, 26, 27, 28]; })();
-function saveKnobs() { try { localStorage.setItem("mddesk.knobs", JSON.stringify(KNOB_CCS)); } catch (_) { } }
+/* The eight knob rows' CCs are part of the editor's setup (md-desk/setup), kept with the project by
+   the plug-in (P4); the desk sends them with "setup". */
+const KNOB_CCS = [21, 22, 23, 24, 25, 26, 27, 28];
+function saveKnobs() { cmd("knobs", { ccs: KNOB_CCS.slice() }); }
 function ccRows(maps) {
 	const rows = KNOB_CCS.map((cc, k) => ({ id: "255:" + cc, ch: 255, cc, label: "Knob " + (k + 1), knob: k }));
 	for (const m of maps) { const id = m.ch + ":" + m.cc; if (!rows.some(r => r.id === id)) rows.push({ id, ch: m.ch, cc: m.cc, label: m.ch === 255 ? "CC " + m.cc : "CC " + m.cc + " ch " + (m.ch + 1), knob: -1 }); }
@@ -826,7 +880,7 @@ document.addEventListener("pointerdown", e => {
 	if (el && ["syn", "fx", "rt", "lfo"].includes(el.dataset.g)) {
 		e.stopPropagation(); e.preventDefault();
 		const t = el.dataset.t != null ? +el.dataset.t : S.sel, n = el.dataset.n;
-		const i = el.dataset.g === "lfo" ? { SPD: 21, DEPTH: 22, SHMIX: 23 }[n] : pidx(t, n);
+		const i = el.dataset.g === "lfo" ? { SPD: 21, DEPTH: 22, SHMIX: 23 }[n] : pidx(t, n, el.dataset.g);
 		if (i == null || i < 0) return;
 		S.ctl.learnT = { t, p: n }; syncControls(); cmd("learnStart", { t, i }); toast(`Target: track ${t + 1} ${n}. Now turn a knob on your controller.`);
 	}
@@ -888,7 +942,8 @@ main.addEventListener("pointerdown", e => {
 });
 main.addEventListener("pointermove", e => {
 	if (active) { const r = active.c.getBoundingClientRect(), h = ED[active.c.dataset.ed].handles(r.width, r.height, active.c).find(h => h.k === active.k); if (h) { h.drag(clamp(e.clientX - r.left, 0, r.width), clamp(e.clientY - r.top, 0, r.height)); syncKitValues(); syncControls(); redraw(); } return; }
-	if (drag) { const fine = e.shiftKey ? .25 : 1; const d = drag.vert ? (drag.y - e.clientY) * 127 / 132 : ((e.clientX - drag.x) + (drag.y - e.clientY)) / 2; setV(drag.el, drag.v + d * fine); return; }
+	/* Mockup v60: a value box follows the axis that moved more (sideways or up/down), one value a pixel. */
+	if (drag) { const fine = e.shiftKey ? .25 : 1, dx = e.clientX - drag.x, dy = drag.y - e.clientY; const d = drag.vert ? dy * 127 / 132 : (Math.abs(dx) >= Math.abs(dy) ? dx : dy); setV(drag.el, drag.v + d * fine); return; }
 	if (laneDraw) { laneAt(e); return; }
 	const c = e.target.closest("canvas.ed"); if (c && ED[c.dataset.ed]) c.style.cursor = nearest(c, e) ? "grab" : "default";
 });
@@ -944,10 +999,26 @@ document.addEventListener("click", e => {
 		else { t.trigs[s] = !t.trigs[s]; cmd("trig", { p: S.pat, t: p, s, on: t.trigs[s] }); if (!t.trigs[s]) clearStep(p, s); else setLock(p, "STRT", s, t.syn.STRT); }
 		renderTop(); cp.className = chopCls(p, s); cp.innerHTML = chopInner(p, s); redraw(); return;
 	}
-	const as = e.target.closest("[data-assign]"); if (as) {
-		const n = as.dataset.assign; setMachine("RAM-R" + n, 12); setMachine("RAM-P" + n, 13);
-		cmd("clearSteps", { p: S.pat, t: 12, from: 0, to: S.len }); cmd("trig", { p: S.pat, t: 12, s: 0, on: true });
-		toast("Tracks 13 and 14 now hold RAM-R" + n + " and RAM-P" + n + "."); return;
+	const stt = e.target.closest("[data-setupt]"); if (stt) {
+		const [r, p] = setupTracks(), d = +stt.dataset.d;
+		if (stt.dataset.setupt === "r") { S.smpRec = (r + d + 16) % 16; if (S.smpRec === p) S.smpRec = (S.smpRec + d + 16) % 16; }
+		else { S.smpPlay = (p + d + 16) % 16; if (S.smpPlay === r) S.smpPlay = (S.smpPlay + d + 16) % 16; }
+		render(); return;
+	}
+	const sgo = e.target.closest("[data-setupgo]"); if (sgo) {
+		const n = sgo.dataset.setupgo, [r, p] = setupTracks(), noTrig = !S.tracks[r].trigs.slice(0, S.len).some(Boolean);
+		gesture = Bridge.gesture();	/* one undo step */
+		setMachine("RAM-R" + n, r); setMachine("RAM-P" + n, p);
+		if (!noTrig && S.smpOnce) { cmd("clearSteps", { p: S.pat, t: r, from: 0, to: S.len }); S.tracks[r].trigs.fill(false); }
+		if (noTrig || S.smpOnce) { S.tracks[r].trigs[0] = true; cmd("trig", { p: S.pat, t: r, s: 0, on: true }); }
+		gesture = 0;
+		toast(`Sampling ready: track ${r + 1} records (RAM-R${n}), track ${p + 1} plays (RAM-P${n}). Undo takes it back.`); render(); return;
+	}
+	const son = e.target.closest("[data-smponce]"); if (son) { S.smpOnce = son.dataset.smponce === "1"; render(); return; }
+	const rs = e.target.closest("[data-recsrc]"); if (rs) {
+		const t = +rs.dataset.t, src = SOURCES.find(([id]) => id === rs.dataset.recsrc);
+		if (src) { Object.assign(S.tracks[t].syn, src[2]); syncKitValues(); render(); }
+		return;
 	}
 	const rn = e.target.closest("[data-rename]"); if (rn) {
 		const k = +rn.dataset.rename;
@@ -984,7 +1055,7 @@ document.addEventListener("click", e => {
 	if (e.target.closest("#undo")) { cmd("undo"); return; }
 	if (e.target.closest("#redo")) { cmd("redo"); return; }
 	const sc = e.target.closest("[data-sec]"); if (sc) { secAction(sc.dataset.sec); return; }
-	if (e.target.closest("#kitf")) { ask(`<b>${kitName(S.kit)}</b> is ${S.kitState === "edited" ? "<b>edited</b>: the changes are not saved on the machine. They are kept in the DAW project." : "saved on the machine."}`, [["Save kit", "cream", saveKit], ["Reload kit (discard edits)", "danger", () => cmd("reloadKit")], ["Close", "", () => { }]]); return; }
+	/* #kitf and #pat open the kit library / pattern chooser (mdDeskLibrary.js). */
 	if (e.target.closest("[data-reloadsong]")) { cmd("reloadSong"); return; }
 	if (e.target.closest("#learnkey")) { toggleLearn(); return; }
 	if (S.ws === "control") {
@@ -1113,12 +1184,13 @@ Bridge.onMessage(m => {
 	}
 	case "machine": {
 		const before = Docs.machine; Docs.machine = m.doc;
-		const key = [m.doc.pattern?.current, m.doc.kit?.current, m.doc.desk?.queued, m.doc.desk?.firmware, m.doc.kit?.working, m.doc.song?.reloadNeeded, m.doc.extendedMode, (m.doc.desk?.mutes || []).join(), m.doc.desk?.playing, m.doc.desk?.recording, m.doc.desk?.kitSource, m.doc.song?.current].join("|");
+		const key = [m.doc.pattern?.current, m.doc.kit?.current, m.doc.desk?.queued, m.doc.desk?.firmware, m.doc.kit?.working, m.doc.song?.reloadNeeded, m.doc.extendedMode, (m.doc.desk?.mutes || []).join(), m.doc.desk?.playing, m.doc.desk?.recording, m.doc.desk?.kitSource, m.doc.song?.current, m.doc.desk?.engine, m.doc.desk?.link].join("|");
 		if (key !== lastKey || !before) { lastKey = key; scheduleRender(); }
 		else { S.tx = !!m.doc.desk.tx; S.roundTrip = m.doc.desk.roundTripMs; S.canUndo = !!m.doc.desk.undo; S.canRedo = !!m.doc.desk.redo; S.undoCount = m.doc.desk.undoCount; S.redoCount = m.doc.desk.redoCount; $("#undo").disabled = !S.canUndo; $("#redo").disabled = !S.canRedo; syncUndoCounts(); syncTx(); }
 		break;
 	}
 	case "telemetry": onTelemetry(m); break;
+	case "setup": if (m.doc && Array.isArray(m.doc.knobCcs) && m.doc.knobCcs.join() !== KNOB_CCS.join()) { m.doc.knobCcs.forEach((c, i) => KNOB_CCS[i] = c); if (S.ws === "control") scheduleRender(); } break;
 	case "mod": { const before = JSON.stringify(Mods.doc); Mods.onMessage(m); if (S.ws === "control") { if (JSON.stringify(Mods.doc) !== before && !interacting()) scheduleRender(); else syncMods(); } break; }
 	case "ask":
 		if (m.ask === "discardKit") ask(`<b>${patName(m.p)}</b> uses kit <b>${kitName(m.target)}</b>. Your edits to <b>${kitName(m.kit)}</b> are not saved on the machine and will be lost.`,

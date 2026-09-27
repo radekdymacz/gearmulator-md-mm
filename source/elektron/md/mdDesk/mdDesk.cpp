@@ -25,6 +25,22 @@ namespace mdDesk
 		// a memory image read before that would briefly undo them in the view.
 		constexpr double g_workingKitHoldMs = 150;
 		constexpr double g_keyQuietMs = 500;
+		// HW MIDI: the machine counts as lost after this long without a reply (status is
+		// asked for every second).
+		constexpr double g_hwLostMs = 3500;
+
+		// The dump a request brings back, for timeouts at DIN speed.
+		size_t replyBytes(const DocKind _k)
+		{
+			switch(_k)
+			{
+			case DocKind::Pattern: return 5410;
+			case DocKind::Kit: return 1233;
+			case DocKind::Song: return 3100;
+			case DocKind::Global: return 197;
+			}
+			return 0;
+		}
 
 		const char* kindName(const DocKind _k)
 		{
@@ -136,6 +152,8 @@ namespace mdDesk
 			if(m_docs.global)
 				m_dirty.insert({DocKind::Global, m_docs.global->position});
 			m_machineDirty = true;
+			publishSetup();
+			publishModulators();
 			if(m_firmware == Firmware::Present)
 			{
 				m_session.requestStatus();
@@ -160,9 +178,10 @@ namespace mdDesk
 				load({*k, static_cast<uint8_t>(*slot)}, true);
 			return;
 		}
-		if(!m_ready)
+		if(!isInputReady())
 		{
-			result(_message, {"The machine is still starting (device busy). Try again in a moment."}, {});
+			result(_message, {m_ready ? "The machine is still starting: its start-up animation ignores keys. The editor"
+				" takes input when it is over." : "The machine is still starting (device busy). Try again in a moment."}, {});
 			flush();
 			return;
 		}
@@ -195,6 +214,12 @@ namespace mdDesk
 			handleRecord(_message);
 		else if(op == "modSet")
 			handleModulators(_message);
+		else if(op == "chain" || op == "chainClear")
+			handleChain(_message);
+		else if(op == "knobs")
+			handleKnobs(_message);
+		else if(op == "kitLoad" || op == "kitSaveAs")
+			handleKitSlot(_message);
 		else if(op == "selectSong")
 		{
 			// P1: the Machinedrum ignores LOAD SONG while it plays.
@@ -274,7 +299,22 @@ namespace mdDesk
 
 	void Desk::handleEdit(const Value& _message)
 	{
-		auto edit = apply(m_docs, _message, m_clipboard);
+		const auto op = opOf(_message);
+		// The kit that plays is renamed live (0x55), like the LCD's kit name.
+		const auto k = intOf(_message, "k");
+		if(op == "kitRename" && k && currentKit() == *k)
+		{
+			Value m = Value::object();
+			m.set("op", "kitName");
+			m.set("k", *k);
+			if(const auto* n = _message.find("name"))
+				m.set("name", *n);
+			if(const auto id = intOf(_message, "id"))
+				m.set("id", *id);
+			handleEdit(m);
+			return;
+		}
+		auto edit = isLibraryCommand(op) ? applyLibrary(m_docs, _message, m_clipboard) : apply(m_docs, _message, m_clipboard);
 		if(!edit.errors.empty())
 		{
 			result(_message, edit.errors, {});
@@ -290,6 +330,8 @@ namespace mdDesk
 						"to stop recording, then edit the grid."}, {});
 					return;
 				}
+		if(!flagOf(_message, "force") && askFirst(_message, edit.changes))
+			return;
 		std::vector<std::string> errors;
 		std::string note = edit.note;
 		std::vector<Change> delivered;
@@ -322,6 +364,26 @@ namespace mdDesk
 		case DocKind::Kit:
 		{
 			const auto kit = currentKit();
+			if(_change.slotWrite)
+			{
+				// The kit library: a stored-slot dump; into the kit that plays also LOAD KIT.
+				const auto& k = std::get<ed::MdKit>(_change.after);
+				const bool playing = kit && *kit == ref.slot;
+				auto problems = m_session.pushKit(k, playing ? mdDataLink::Session::KitApply::StoreAndLoad
+					: mdDataLink::Session::KitApply::Store);
+				if(!problems.empty())
+				{
+					_errors.insert(_errors.end(), problems.begin(), problems.end());
+					return;
+				}
+				m_storedKits[ref.slot] = k;
+				m_docs.set(_change.after);
+				if(playing)
+					m_workingKit.reset();
+				m_lastLiveEditMs = m_port.nowMs();
+				m_dirty.insert(ref);
+				break;
+			}
 			if(!kit || *kit != ref.slot)
 			{
 				_errors.push_back("Only the kit that plays can be edited live" + (kit ? " (kit "
@@ -477,9 +539,142 @@ namespace mdDesk
 		if(!doc)
 			errors.emplace_back("doc: expected an md-desk/modulators document");
 		if(setup)
+		{
 			m_mods.setSetup(*setup);
+			m_setup.modulators = *setup;
+			saveSetup();
+		}
 		result(_message, errors, {});
 		publishModulators();
+	}
+
+	// Library edits that would silently lose something on the machine ask first (the page
+	// sends them again with force): a kit written into the kit that plays while it holds
+	// unsaved edits, or a pattern dump into the current pattern that links another kit
+	// (the firmware then loads that kit, measured).
+	bool Desk::askFirst(const Value& _message, const std::vector<Change>& _changes)
+	{
+		const bool edited = m_session.state().workingKit == mdDataLink::Session::WorkingKit::Edited;
+		const auto kit = currentKit();
+		for(const auto& c : _changes)
+		{
+			const auto ref = c.ref();
+			std::string what;
+			if(ref.kind == DocKind::Kit && c.slotWrite && kit && *kit == ref.slot && edited)
+				what = "overwriteKit";
+			else if(ref.kind == DocKind::Pattern && m_session.state().pattern == ref.slot && edited
+				&& std::get<ed::MdPattern>(c.after).kit != std::get<ed::MdPattern>(c.before).kit)
+				what = "relinkKit";
+			if(what.empty())
+				continue;
+			Value ask = Value::object();
+			ask.set("type", "ask");
+			ask.set("ask", what);
+			ask.set("command", _message);
+			ask.set("kit", kit ? Value(static_cast<int>(*kit)) : Value());
+			publish(ask);
+			result(_message, {}, {});
+			return true;
+		}
+		return false;
+	}
+
+	// LOAD KIT and SAVE KIT n from the kit library. Measured (mdP4ProbeFirmwareTest library):
+	// both make the slot the current kit and, in EXTENDED mode, relink the current pattern to
+	// it; LOAD KIT replaces unsaved edits (the machine keeps them in its UNDO KIT).
+	void Desk::handleKitSlot(const Value& _message)
+	{
+		const auto k = intOf(_message, "k");
+		if(!k || *k < 0 || *k > 63)
+		{
+			result(_message, {"k: expected a kit 0-63"}, {});
+			return;
+		}
+		const auto slot = static_cast<uint8_t>(*k);
+		const bool edited = m_session.state().workingKit == mdDataLink::Session::WorkingKit::Edited;
+		if(opOf(_message) == "kitLoad")
+		{
+			if(edited && !flagOf(_message, "force"))
+			{
+				Value ask = Value::object();
+				ask.set("type", "ask");
+				ask.set("ask", "loadKit");
+				ask.set("command", _message);
+				ask.set("kit", currentKit() ? Value(static_cast<int>(*currentKit())) : Value());
+				publish(ask);
+				result(_message, {}, {});
+				return;
+			}
+			m_session.loadKit(slot);
+		}
+		else
+		{
+			m_session.saveKit(slot);
+			if(const auto cur = currentKit(); cur)
+				if(const auto it = m_docs.kits.find(*cur); it != m_docs.kits.end())
+				{
+					auto saved = it->second;
+					saved.position = slot;
+					m_storedKits[slot] = saved;
+					m_docs.kits[slot] = saved;
+					m_dirty.insert({DocKind::Kit, slot});
+				}
+		}
+		// The machine switched kits and relinked the pattern: read them back.
+		m_session.requestStatus();
+		load({DocKind::Kit, slot}, true);
+		if(const auto p = m_session.state().pattern)
+			load({DocKind::Pattern, *p}, true);
+		m_machineDirty = true;
+		result(_message, {}, opOf(_message) == "kitLoad" ? "Loaded kit " + std::to_string(*k + 1)
+			: "Saved as kit " + std::to_string(*k + 1) + ": it is now the current kit");
+	}
+
+	// The Control workspace's knob rows: which CC each of the eight rows is.
+	void Desk::handleKnobs(const Value& _message)
+	{
+		std::vector<int> ccs;
+		if(const auto* list = _message.find("ccs"); list && list->isArray())
+			for(const auto& v : list->asArray())
+				ccs.push_back(v.isNumber() ? static_cast<int>(v.asNumber()) : -1);
+		const auto errors = validateKnobCcs(ccs);
+		if(errors.empty())
+		{
+			for(size_t i = 0; i < 8; ++i)
+				m_setup.knobCcs[i] = static_cast<uint8_t>(ccs[i]);
+			saveSetup();
+		}
+		result(_message, errors, {});
+		publishSetup();
+	}
+
+	std::vector<std::string> Desk::loadSetup(const Value& _setup)
+	{
+		std::vector<std::string> errors;
+		const auto s = deskSetupFromJson(_setup, errors);
+		if(!s)
+			return errors;
+		m_setup = *s;
+		m_mods.setSetup(m_setup.modulators);
+		publishSetup();
+		publishModulators();
+		return errors;
+	}
+
+	void Desk::publishSetup()
+	{
+		if(!m_pageReady)
+			return;
+		Value m = Value::object();
+		m.set("type", "setup");
+		m.set("doc", deskSetupToJson(m_setup));
+		publish(m);
+	}
+
+	void Desk::saveSetup() const
+	{
+		if(m_port.saveSetup)
+			m_port.saveSetup(deskSetupToJson(m_setup));
 	}
 
 	void Desk::runModulators(const double _now)
@@ -526,6 +721,11 @@ namespace mdDesk
 			if(!m_telemetry.playing || _now - m_recordAfterStopMs > 1500)
 				m_recordAfterStopMs = -1;
 		}
+		if(m_recLock && _now - m_recLock->atMs > 3000)
+		{
+			m_recLock.reset();
+			m_machineDirty = true;
+		}
 		if(!m_telemetry.recording)
 			return;
 		// What the firmware records shows up in the pattern: read it back now and then.
@@ -553,6 +753,14 @@ namespace mdDesk
 			{
 				m_keyQuietUntilMs = _now + g_keyQuietMs;
 				m_port.turnKnob(step->encoder, step->steps);
+				// Honest about where it lands: the track's next trig after the playing step.
+				const auto p = m_session.state().pattern ? m_docs.patterns.find(*m_session.state().pattern) : m_docs.patterns.end();
+				const auto at = p != m_docs.patterns.end() ? nextLockStep(p->second, step->track, m_telemetry.step) : std::nullopt;
+				if(at && m_telemetry.knobPage >= 0)
+					m_recLock = RecLock{step->track, static_cast<uint8_t>(m_telemetry.knobPage * 8 + step->encoder), *at, _now};
+				else
+					m_recLock.reset();
+				m_machineDirty = true;
 			}
 			break;
 		}
@@ -583,6 +791,16 @@ namespace mdDesk
 			return;
 		}
 		const auto slot = static_cast<uint8_t>(*p);
+		if(!flagOf(_message, "force") && !flagOf(_message, "chainOk") && m_telemetry.chainKnown && m_telemetry.chain.active)
+		{
+			Value ask = Value::object();
+			ask.set("type", "ask");
+			ask.set("ask", "breakChain");
+			ask.set("p", *p);
+			publish(ask);
+			result(_message, {}, {});
+			return;
+		}
 		if(!flagOf(_message, "force") && m_session.selectWouldDiscardKitEdits(slot))
 		{
 			const auto& links = m_session.state().patternKits;
@@ -594,6 +812,17 @@ namespace mdDesk
 			ask.set("target", static_cast<int>(links.at(slot)));
 			publish(ask);
 			result(_message, {}, {});
+			return;
+		}
+		if(flagOf(_message, "now") && m_telemetry.playing)
+		{
+			// Switch now: STOP, LOAD PATTERN, PLAY (measured: 367 ms, plays the new pattern).
+			pressKey("stop");
+			schedule(80, [this, slot] { m_session.selectPattern(slot); m_machineDirty = true; });
+			schedule(220, [this] { pressKey("play"); });
+			m_audibleQueue.reset();
+			load({DocKind::Pattern, slot}, true);
+			result(_message, {}, "Switched now: STOP, LOAD PATTERN, PLAY");
 			return;
 		}
 		m_session.selectPattern(slot);
@@ -608,10 +837,70 @@ namespace mdDesk
 		result(_message, {}, {});
 	}
 
+	// Chaining as on the machine: hold BANK, press the TRIG keys (mdDeskChain.h). The chain is
+	// the firmware's; the page sees it through the telemetry. CLEAR is LOAD PATTERN of the
+	// current pattern, which is what ends a chain on the machine.
+	void Desk::handleChain(const Value& _message)
+	{
+		if(opOf(_message) == "chainClear")
+		{
+			const auto current = m_session.state().pattern;
+			if(!current)
+			{
+				result(_message, {"The current pattern is not known yet"}, {});
+				return;
+			}
+			m_session.selectPattern(*current);
+			m_machineDirty = true;
+			result(_message, {}, "Chain cleared: " + ed::mdPatternName(*current) + " plays on");
+			return;
+		}
+		std::vector<int> patterns;
+		if(const auto* list = _message.find("patterns"); list && list->isArray())
+			for(const auto& v : list->asArray())
+				patterns.push_back(v.isNumber() ? static_cast<int>(v.asNumber()) : -1);
+		auto errors = validateChain(patterns);
+		if(errors.empty() && (!m_telemetry.valid || !m_port.pressKey))
+			errors.emplace_back("Chaining is made with the machine's keys: it needs the local emulated MD OS 1.63");
+		const auto keys = errors.empty() ? chainKeys(patterns, m_telemetry.bankGroup) : std::vector<std::string>{};
+		if(errors.empty() && keys.empty())
+			errors.emplace_back("The machine's BANK GROUP (A-D / E-H) is not known yet");
+		if(!errors.empty())
+		{
+			result(_message, errors, {});
+			return;
+		}
+		bool ok = true;
+		for(const auto& k : keys)
+			ok = ok && pressKey(k);
+		m_audibleQueue.reset();
+		m_machineDirty = true;
+		result(_message, ok ? std::vector<std::string>{} : std::vector<std::string>{"The panel did not take the keys"},
+			m_telemetry.playing ? "Chained: the machine plays them in this order from the pattern end, and loops"
+			: "Chained: PLAY starts at " + ed::mdPatternName(static_cast<uint8_t>(patterns.front())) + ", then loops");
+	}
+
 	// ---- device -> desk ----
+
+	// HW MIDI: nothing answered for a while, or never since the link was chosen.
+	bool Desk::linkLost() const
+	{
+		const auto now = m_port.nowMs();
+		return m_hw && (m_ready ? now - m_lastReplyMs > g_hwLostMs : now - m_hwSinceMs > g_hwLostMs + 1500);
+	}
+
+	void Desk::setHardwareLink(const bool _hardware)
+	{
+		if(m_hw == _hardware)
+			return;
+		m_hw = _hardware;
+		m_hwSinceMs = m_port.nowMs ? m_port.nowMs() : 0;
+		m_machineDirty = true;
+	}
 
 	void Desk::onDeviceSysex(const Bytes& _message)
 	{
+		m_lastReplyMs = m_port.nowMs();
 		m_session.onSysex(_message);
 		flush();
 	}
@@ -747,10 +1036,17 @@ namespace mdDesk
 			// Everything else in the background, so the song palette and the
 			// kit-link warnings know every pattern.
 			m_backgroundQueued = true;
+			// Over DIN MIDI a pattern takes 1.7 s: the small kits first there (the library).
+			if(m_hw)
+				for(unsigned k = 0; k < 64; ++k)
+					load({DocKind::Kit, static_cast<uint8_t>(k)}, false);
 			for(unsigned p = 0; p < 128; ++p)
 				load({DocKind::Pattern, static_cast<uint8_t>(p)}, false);
 			for(unsigned s = 0; s < 32; ++s)
 				load({DocKind::Song, static_cast<uint8_t>(s)}, false);
+			// The kit library shows every slot's name (P4).
+			for(unsigned k = 0; !m_hw && k < 64; ++k)
+				load({DocKind::Kit, static_cast<uint8_t>(k)}, false);
 		}
 	}
 
@@ -849,15 +1145,30 @@ namespace mdDesk
 		const bool changed = _t.step != m_telemetry.step || _t.pattern != m_telemetry.pattern
 			|| _t.playing != m_telemetry.playing || _t.valid != m_telemetry.valid
 			|| _t.recording != m_telemetry.recording || _t.gridEdit != m_telemetry.gridEdit
-			|| _t.knobPage != m_telemetry.knobPage;
+			|| _t.knobPage != m_telemetry.knobPage || _t.bootAnimation != m_telemetry.bootAnimation
+			|| _t.mutes != m_telemetry.mutes || _t.chainKnown != m_telemetry.chainKnown || _t.chain != m_telemetry.chain
+			|| _t.bankGroup != m_telemetry.bankGroup;
+		const bool machineChanged = _t.bootAnimation != m_telemetry.bootAnimation || _t.mutes != m_telemetry.mutes
+			|| _t.chainKnown != m_telemetry.chainKnown || _t.chain != m_telemetry.chain || _t.bankGroup != m_telemetry.bankGroup;
 		const bool recordingChanged = _t.recording != m_telemetry.recording;
 		const bool patternChanged = _t.valid && _t.pattern != m_telemetry.pattern;
 		const bool wasPlaying = m_telemetry.playing;
 		const int stepBefore = m_telemetry.step;
 		const bool wrapped = _t.valid && m_telemetry.step >= 0 && _t.step >= 0 && _t.step < m_telemetry.step;
 		m_telemetry = _t;
+		if(!m_telemetrySeen)
+		{
+			m_telemetrySeen = true;
+			m_machineDirty = true;
+		}
 		if(!changed)
 			return;
+		if(machineChanged)
+			m_machineDirty = true;
+		// The mutes the machine plays with (RAM), whoever set them: the page, CCs, the MUTE window.
+		if(_t.mutes >= 0)
+			for(size_t t = 0; t < 16; ++t)
+				m_mutes[t] = (_t.mutes >> t) & 1;
 		if(m_audibleQueue)
 		{
 			// Status and the RAM pattern byte both switch about two steps before the
@@ -887,6 +1198,7 @@ namespace mdDesk
 		if(recordingChanged)
 		{
 			m_knobs.reset();
+			m_recLock.reset();
 			m_machineDirty = true;
 			// The last recorded notes: read the pattern back.
 			if(!_t.recording && m_session.state().pattern)
@@ -962,7 +1274,7 @@ namespace mdDesk
 	{
 		if(m_loading)
 		{
-			if(_now - m_loadSentMs < g_loadTimeoutMs)
+			if(_now - m_loadSentMs < g_loadTimeoutMs + (m_hw ? DinPacer::wireMs(replyBytes(m_loading->kind)) * 1.5 : 0))
 				return;
 			// No answer: once more, then give up on it.
 			if(m_loadRetries++ < 1)
@@ -992,6 +1304,13 @@ namespace mdDesk
 	std::optional<uint8_t> Desk::currentKit() const
 	{
 		return m_session.state().kit;
+	}
+
+	bool Desk::isInputReady() const
+	{
+		// Without telemetry (another firmware) the first status reply is all there is.
+		return m_ready && m_firmware == Firmware::Present && m_telemetrySeen
+			&& (!m_telemetry.valid || m_telemetry.bootAnimation == 0);
 	}
 
 	bool Desk::isBusy() const
@@ -1041,6 +1360,11 @@ namespace mdDesk
 			else
 				m_session.requestStatus();
 		}
+		if(m_hw && linkLost() != m_linkLost)
+		{
+			m_linkLost = !m_linkLost;
+			m_machineDirty = true;
+		}
 		if(m_ready)
 			pumpLoads(now);
 		applyWorkingKit();
@@ -1048,7 +1372,7 @@ namespace mdDesk
 
 		for(auto it = m_pushSentMs.begin(); it != m_pushSentMs.end();)
 		{
-			if(now - it->second < g_pushTimeoutMs)
+			if(now - it->second < g_pushTimeoutMs + (m_hw ? 2.5 * DinPacer::wireMs(replyBytes(it->first.kind)) : 0))
 			{
 				++it;
 				continue;
@@ -1132,7 +1456,12 @@ namespace mdDesk
 		Value desk = Value::object();
 		desk.set("firmware", m_firmware == Firmware::Missing ? "missing"
 			: m_firmware == Firmware::Unsupported ? "unsupported" : m_firmware == Firmware::Loading ? "loading"
-			: m_ready ? "ready" : "booting");
+			: isInputReady() ? "ready" : "booting");
+		// "animation": the firmware answers MIDI but its start-up animation still ignores keys.
+		desk.set("engine", m_hw ? "hw" : "emu");
+		desk.set("link", !m_hw ? "local" : linkLost() ? "lost" : !m_ready ? "connect" : "ready");
+		desk.set("boot", m_firmware != Firmware::Present ? "off" : !m_ready ? "starting"
+			: isInputReady() ? "ready" : "animation");
 		desk.set("tx", isBusy());
 		desk.set("loading", static_cast<int>(m_loadQueue.size() + (m_loading ? 1 : 0)));
 		desk.set("roundTripMs", m_lastRoundTripMs);
@@ -1154,6 +1483,31 @@ namespace mdDesk
 			if(m_mutes[t])
 				mutes.push(static_cast<int>(t));
 		desk.set("mutes", std::move(mutes));
+		desk.set("mutesSource", m_telemetry.mutes >= 0 ? "memory" : "tracked");
+		if(m_telemetry.chainKnown)
+		{
+			Value chain = Value::object();
+			chain.set("active", m_telemetry.chain.active);
+			chain.set("next", m_telemetry.chain.next);
+			Value list = Value::array();
+			for(const auto p : m_telemetry.chain.patterns)
+				list.push(static_cast<int>(p));
+			chain.set("patterns", std::move(list));
+			desk.set("chain", std::move(chain));
+		}
+		else
+			desk.set("chain", Value());
+		desk.set("bankGroup", m_telemetry.bankGroup);
+		if(m_recLock)
+		{
+			Value l = Value::object();
+			l.set("track", static_cast<int>(m_recLock->track));
+			l.set("param", static_cast<int>(m_recLock->param));
+			l.set("step", static_cast<int>(m_recLock->step));
+			desk.set("recLock", std::move(l));
+		}
+		else
+			desk.set("recLock", Value());
 		doc.set("desk", std::move(desk));
 		Value m = Value::object();
 		m.set("type", "machine");

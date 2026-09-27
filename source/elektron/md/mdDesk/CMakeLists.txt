@@ -9,11 +9,15 @@ add_library(mdDesk STATIC)
 
 target_sources(mdDesk PRIVATE
 	mdDesk.cpp mdDesk.h
+	mdDeskChain.cpp mdDeskChain.h
 	mdDeskDelivery.cpp mdDeskDelivery.h
 	mdDeskEdit.cpp mdDeskEdit.h
 	mdDeskHistory.cpp mdDeskHistory.h
+	mdDeskLibrary.cpp mdDeskLibrary.h
 	mdDeskMod.cpp mdDeskMod.h
+	mdDeskPacer.h
 	mdDeskRecord.cpp mdDeskRecord.h
+	mdDeskSetup.cpp mdDeskSetup.h
 )
 
 target_link_libraries(mdDesk PUBLIC elektronData mdDataLink)

@@ -28,10 +28,12 @@ set(SOURCES
 	mdProductSkins.h
 	mdPluginProcessor.cpp mdPluginProcessor.h
 	mdStorageImage.cpp mdStorageImage.h
+	mdStandaloneApp.cpp
 	mdStudioEditor.cpp mdStudioEditor.h
 	mdStudioLink.cpp mdStudioLink.h
 	mmStudioEditor.cpp mmStudioEditor.h
 	mmStudioLink.cpp mmStudioLink.h
+	$<$<PLATFORM_ID:Darwin>:mdStudioWebZoom.mm>
 	mdPluginEntry.cpp
 
 	parameterDescriptions_md.json parameterDescriptions_mm.json
@@ -57,6 +59,8 @@ set(SOURCES
 	skins/mmStudio/mmConvert.js
 	skins/mmStudio/mmAdapter.js
 	skins/mmStudio/mmConvertTest.js
+	skins/mdStudio/mdDeskLive.js
+	skins/mdStudio/mdDeskLibrary.js
 	mdSettingsPanelFeel.cpp mdSettingsPanelFeel.h
 	mdSettingsAudioInput.cpp mdSettingsAudioInput.h
 )
@@ -92,6 +96,11 @@ juce_add_binary_data(mmJucePlugin_BinaryData SOURCES
 	${COMMON_ASSETS} "tus_settings_gui_Monomachine.rml"
 	"tus_settings_dspaudio_Monomachine.rml" ${MM_SKIN_ASSETS})
 
+# App icons (doc/modern-ux/icons, built with build-icons.sh).
+set(GEARMULATOR_ICON_BIG_mdJucePlugin "${CMAKE_CURRENT_SOURCE_DIR}/icons/md-1024.png")
+set(GEARMULATOR_ICON_SMALL_mdJucePlugin "${CMAKE_CURRENT_SOURCE_DIR}/icons/md-32.png")
+set(GEARMULATOR_ICON_BIG_mmJucePlugin "${CMAKE_CURRENT_SOURCE_DIR}/icons/mm-1024.png")
+set(GEARMULATOR_ICON_SMALL_mmJucePlugin "${CMAKE_CURRENT_SOURCE_DIR}/icons/mm-32.png")
 createJucePlugin(mdJucePlugin "Gearmulator MD" TRUE "Tmdr" mdJucePlugin_BinaryData mdLib)
 createJucePlugin(mmJucePlugin "Gearmulator MM" TRUE "Tmno" mmJucePlugin_BinaryData mdLib)
 target_link_libraries(mdJucePlugin PRIVATE elektronData mdDataLink mdDesk mmDesk)
@@ -105,6 +114,8 @@ target_link_libraries(mmJucePlugin PRIVATE elektronData mdDataLink mdDesk mmDesk
 foreach(plugin_target mdJucePlugin mmJucePlugin)
 	target_compile_definitions(${plugin_target} PUBLIC
 		JUCE_STANDALONE_PLUGIN_AUTO_OPEN_AUDIO_INPUT=0
+		# jucePluginEditorLib/standaloneApp.h: native title bar and menu bar (P4).
+		JUCE_USE_CUSTOM_PLUGIN_STANDALONE_APP=1
 		JUCE_VST3_EMULATE_MIDI_PC_WITH_PROGRAMS=1)
 endforeach()
 
@@ -117,6 +128,16 @@ if(APPLE)
 		mdJucePlugin_AU mmJucePlugin_AU
 		mdJucePlugin_Standalone mmJucePlugin_Standalone)
 		if(TARGET ${plugin_target})
+			# The app icon on the VST3 and AU bundles too: JUCE copies Icon.icns into every
+			# bundle but names it in the Info.plist of the standalone only.
+			if(plugin_target MATCHES "^(md|mm)JucePlugin_(VST3|AU)$")
+				add_custom_command(TARGET ${plugin_target} POST_BUILD
+					COMMAND /bin/sh -c "/usr/libexec/PlistBuddy -c 'Delete :CFBundleIconFile' \"$1\" 2>/dev/null; /usr/libexec/PlistBuddy -c 'Add :CFBundleIconFile string Icon.icns' \"$1\"" sh
+						"$<TARGET_BUNDLE_DIR:${plugin_target}>/Contents/Info.plist"
+					COMMENT "App icon on ${plugin_target}"
+					VERBATIM
+				)
+			endif()
 			add_custom_command(TARGET ${plugin_target} POST_BUILD
 				COMMAND /usr/bin/codesign --force --deep --sign -
 					"$<TARGET_BUNDLE_DIR:${plugin_target}>"
@@ -263,7 +284,9 @@ if(BUILD_TESTING)
 		juce::juce_opengl)
 	target_compile_definitions(mdAudioIoLayoutTest PRIVATE
 		JUCE_GLOBAL_MODULE_SETTINGS_INCLUDED=1
-		JUCE_STANDALONE_PLUGIN_AUTO_OPEN_AUDIO_INPUT=0)
+		JUCE_STANDALONE_PLUGIN_AUTO_OPEN_AUDIO_INPUT=0
+		# jucePluginEditorLib/standaloneApp.h: native title bar and menu bar (P4).
+		JUCE_USE_CUSTOM_PLUGIN_STANDALONE_APP=1)
 	set_property(TARGET mdAudioIoLayoutTest PROPERTY FOLDER "Elektron/test")
 	add_test(NAME mdAudioIoLayoutTest COMMAND mdAudioIoLayoutTest)
 	set_tests_properties(mdAudioIoLayoutTest PROPERTIES LABELS "UnitTest;AudioIo")
@@ -357,6 +380,19 @@ if(BUILD_TESTING)
 			LABELS "Integration;FirmwareTest;Soak"
 			SKIP_RETURN_CODE 77 TIMEOUT 900)
 	endif()
+
+	# P4: the editor's setup (MDSK chunk) round-trips with the plug-in state.
+	add_executable(mdDeskSetupStateTest mdDeskSetupStateTest.cpp)
+	target_link_libraries(mdDeskSetupStateTest PRIVATE
+		mdJucePlugin jucePluginEditorLib mdLib juce_plugin_modules
+		juce::juce_opengl)
+	target_include_directories(mdDeskSetupStateTest PRIVATE
+		${CMAKE_CURRENT_SOURCE_DIR}/../../..)
+	target_compile_definitions(mdDeskSetupStateTest PRIVATE
+		JUCE_GLOBAL_MODULE_SETTINGS_INCLUDED=1)
+	add_test(NAME mdDeskSetupStateTest COMMAND mdDeskSetupStateTest)
+	set_tests_properties(mdDeskSetupStateTest PROPERTIES LABELS "UnitTest" TIMEOUT 120)
+	set_property(TARGET mdDeskSetupStateTest PROPERTY FOLDER "Elektron/test")
 
 	add_executable(mdProjectStateRestoreTest mdProjectStateRestoreTest.cpp)
 	target_link_libraries(mdProjectStateRestoreTest PRIVATE

@@ -4,26 +4,36 @@
 #include "mdPluginProcessor.h"
 #include "mdStudioLink.h"
 
+#include "mdLib/mdautomation.h"
+
 #include "mdDesk/mdDesk.h"
 
+#include "jucePluginEditorLib/pluginEditorState.h"
 #include "jucePluginLib/midiLearnTranslator.h"
 #include "juceRmlUi/juceRmlComponent.h"
 
 #include "juce_gui_extra/juce_gui_extra.h"
 
 #include <cstring>
+#include <optional>
 #include <functional>
 
 namespace mdJucePlugin
 {
 	namespace json = elektronData::json;
 
+#if JUCE_MAC
+	bool setWebPageZoom(juce::Component& _web, double _zoom);	// mdStudioWebZoom.mm
+#else
+	inline bool setWebPageZoom(juce::Component&, double) { return false; }
+#endif
+
 	namespace
 	{
 		constexpr const char* g_bridgeCommand = "gmbridge://c/";
 		constexpr const char* g_bridgeLog = "gmbridge://log/";
 		constexpr const char* g_pageResource = "mdStudio.html";
-		constexpr int g_headerHeight = 24;	// matches the RML header strip (dp at scale 1)
+		constexpr int g_headerHeight = 0;	// P4: no RML header; the menu is native (standalone) or opened by the page
 		constexpr int g_skinHeight = 924;	// mdStudio.rml body height
 
 		// One line per bridge event, for measurements without a debugger.
@@ -105,6 +115,8 @@ namespace mdJucePlugin
 		m_web.reset();
 		m_desk.reset();
 		m_link.reset();
+		// HW MIDI belongs to the open editor: without it the plug-in is the emulator again.
+		dynamic_cast<AudioPluginAudioProcessor&>(getProcessor()).setExternalMidi(false);
 	}
 
 	void StudioEditor::create()
@@ -114,12 +126,80 @@ namespace mdJucePlugin
 		auto& processor = dynamic_cast<AudioPluginAudioProcessor&>(getProcessor());
 		m_link = std::make_unique<StudioLink>(processor, dynamic_cast<Controller&>(processor.getController()));
 
+		makeDesk(false);
+		m_link->onSysex = [this](const std::vector<uint8_t>& _m)
+		{
+			if(m_hw)
+				return;
+			m_desk->onDeviceSysex(_m);
+			flushPage();
+		};
+
+		m_web = std::make_unique<StudioWebView>([this](const std::string& _url) { onBridge(_url); });
+		getRmlComponent()->addAndMakeVisible(*m_web);
+		layoutWebView();
+
+		const auto file = juce::File::getSpecialLocation(juce::File::tempDirectory).getChildFile("gearmulator-mdStudio.html");
+		file.replaceWithText(bundlePage());
+		// GEARMULATOR_MDSTUDIO_SELFTEST=1: the page edits a trig and a kit value by
+		// itself and logs the round trips (the log file above).
+		// GEARMULATOR_MDSTUDIO_SELFTEST=p4: the P4 checks instead (mdDeskLive.js).
+		const auto selfTestKind = juce::SystemStats::getEnvironmentVariable("GEARMULATOR_MDSTUDIO_SELFTEST", {});
+		const bool selfTest = selfTestKind == "1" || selfTestKind.startsWith("p4");
+		const auto url = selfTest ? juce::URL(file).withParameter("selftest", selfTestKind) : juce::URL(file);
+		m_web->goToURL(url.toString(true));
+		log("page loading, selftest=" + juce::String(selfTest ? 1 : 0) + ", " + juce::String(file.getSize()) + " bytes");
+		startTimerHz(30);
+	}
+
+	// The desk for the engine: the emulated MD (StudioLink: SysEx into the device, kit
+	// values through the parameter layer, panel keys, telemetry) or, for HW MIDI (P4), a real
+	// Machinedrum through the plug-in's MIDI in/out at DIN speed: SysEx and CCs out, SysEx in,
+	// PLAY/STOP as MIDI Start/Stop, no panel keys, telemetry or memory.
+	void StudioEditor::makeDesk(const bool _hw)
+	{
+		auto& processor = dynamic_cast<AudioPluginAudioProcessor&>(getProcessor());
+		m_hw = _hw;
+		processor.setExternalMidi(_hw);
+		m_hwPacer = {};
 		mdDesk::Desk::Port port;
-		port.sendSysex = [this](const std::vector<uint8_t>& _m) { m_link->sendSysex(_m); };
-		port.sendKitParam = [this](const uint8_t _t, const uint8_t _i, const uint8_t _v) { m_link->setKitParam(_t, _i, _v); };
-		port.sendMute = [this](const uint8_t _t, const bool _on) { m_link->setMute(_t, _on); };
-		port.pressKey = [this](const std::string& _key) { return m_link->pressKey(_key); };
-		port.turnKnob = [this](const uint8_t _e, const int _s) { return m_link->turnKnob(_e, _s); };
+		if(_hw)
+		{
+			const auto baseChannel = [this]
+			{
+				const auto& g = m_desk ? m_desk->documents().global : std::nullopt;
+				return g ? g->baseChannel : uint8_t(0);
+			};
+			port.sendSysex = [this](const std::vector<uint8_t>& _m) { m_hwPacer.push(_m); };
+			port.sendKitParam = [this, baseChannel](const uint8_t _t, const uint8_t _i, const uint8_t _v)
+			{
+				const md::automation::ParameterChange change{static_cast<uint8_t>(_i == 24 ? md::automation::machinedrum::Level : _i / 8), _t,
+					static_cast<uint8_t>(_i == 24 ? 0 : _i % 8), _v};
+				if(const auto cc = md::automation::encodeParameterChange(md::MachineModel::Machinedrum, change, baseChannel()))
+					m_hwPacer.push({(*cc)[0], (*cc)[1], (*cc)[2]});
+			};
+			port.sendMute = [this, baseChannel](const uint8_t _t, const bool _on)
+			{
+				const md::automation::ParameterChange change{md::automation::machinedrum::Mute, _t, 0, static_cast<uint8_t>(_on ? 1 : 0)};
+				if(const auto cc = md::automation::encodeParameterChange(md::MachineModel::Machinedrum, change, baseChannel()))
+					m_hwPacer.push({(*cc)[0], (*cc)[1], (*cc)[2]});
+			};
+			port.pressKey = [this](const std::string& _key)
+			{
+				if(_key != "play" && _key != "stop")
+					return false;
+				m_hwPacer.push({static_cast<uint8_t>(_key == "play" ? 0xfa : 0xfc)});
+				return true;
+			};
+		}
+		else
+		{
+			port.sendSysex = [this](const std::vector<uint8_t>& _m) { m_link->sendSysex(_m); };
+			port.sendKitParam = [this](const uint8_t _t, const uint8_t _i, const uint8_t _v) { m_link->setKitParam(_t, _i, _v); };
+			port.sendMute = [this](const uint8_t _t, const bool _on) { m_link->setMute(_t, _on); };
+			port.pressKey = [this](const std::string& _key) { return m_link->pressKey(_key); };
+			port.turnKnob = [this](const uint8_t _e, const int _s) { return m_link->turnKnob(_e, _s); };
+		}
 		port.toPage = [this](const json::Value& _m)
 		{
 			m_outbox.push_back(_m);
@@ -135,27 +215,27 @@ namespace mdJucePlugin
 			}
 		};
 		port.nowMs = [] { return nowMs(); };
+		port.saveSetup = [&processor](const json::Value& _setup) { processor.setDeskSetup(json::write(_setup)); };
 		m_desk = std::make_unique<mdDesk::Desk>(port);
-		m_desk->setFirmware(m_link->firmware());
-		m_link->onSysex = [this](const std::vector<uint8_t>& _m)
-		{
-			m_desk->onDeviceSysex(_m);
-			flushPage();
-		};
+		m_desk->setHardwareLink(_hw);
+		loadDeskSetup();
+		m_desk->setFirmware(_hw ? mdDesk::Desk::Firmware::Present : m_link->firmware());
+		m_lastLcd.clear();
+	}
 
-		m_web = std::make_unique<StudioWebView>([this](const std::string& _url) { onBridge(_url); });
-		getRmlComponent()->addAndMakeVisible(*m_web);
-		layoutWebView();
-
-		const auto file = juce::File::getSpecialLocation(juce::File::tempDirectory).getChildFile("gearmulator-mdStudio.html");
-		file.replaceWithText(bundlePage());
-		// GEARMULATOR_MDSTUDIO_SELFTEST=1: the page edits a trig and a kit value by
-		// itself and logs the round trips (the log file above).
-		const bool selfTest = juce::SystemStats::getEnvironmentVariable("GEARMULATOR_MDSTUDIO_SELFTEST", {}) == "1";
-		const auto url = selfTest ? juce::URL(file).withParameter("selftest", "1") : juce::URL(file);
-		m_web->goToURL(url.toString(true));
-		log("page loading, selftest=" + juce::String(selfTest ? 1 : 0) + ", " + juce::String(file.getSize()) + " bytes");
-		startTimerHz(30);
+	// The editor's setup from the project (mdPluginProcessor "MDSK"), or the default one.
+	void StudioEditor::loadDeskSetup()
+	{
+		auto& processor = dynamic_cast<AudioPluginAudioProcessor&>(getProcessor());
+		m_deskSetupGeneration = processor.getDeskSetupGeneration();
+		const auto text = processor.getDeskSetup();
+		const auto doc = text.empty() ? std::optional<json::Value>(mdDesk::deskSetupToJson({})) : json::parse(text);
+		const auto errors = doc ? m_desk->loadSetup(*doc) : std::vector<std::string>{"not JSON"};
+		if(!errors.empty())
+			log("project setup not restored: " + juce::String(errors.front()));
+		else
+			log("setup restored: " + juce::String(static_cast<int>(m_desk->setup().modulators.sources.size())) + " app sources, knob CCs "
+				+ juce::String(static_cast<int>(m_desk->setup().knobCcs[0])) + "..");
 	}
 
 	std::string StudioEditor::resourceText(const std::string& _name) const
@@ -271,6 +351,30 @@ namespace mdJucePlugin
 			r.set("note", _ok ? _note : std::string());
 			m_outbox.push_back(std::move(r));
 		};
+		if(op == "engine")
+		{
+			// HW MIDI or the emulator (P4): a new desk for the other engine; the page starts over.
+			const auto* kind = _message.find("kind");
+			const bool hw = kind && kind->isString() && kind->asString() == "hw";
+			if(hw != m_hw)
+			{
+				m_outbox.push_back([]{ json::Value r = json::Value::object(); r.set("type", "reset"); return r; }());
+				makeDesk(hw);
+				json::Value ready = json::Value::object();
+				ready.set("op", "ready");
+				m_desk->onPageMessage(ready);
+				log(juce::String("engine: ") + (hw ? "HW MIDI (the plug-in's MIDI in/out)" : "emulator"));
+			}
+			reply(true, hw ? "HW MIDI: the editor talks to a Machinedrum on the plug-in's MIDI in and out" : "The emulated OS 1.63 again");
+			return true;
+		}
+		if(op == "openMenu")
+		{
+			// The editor's menu (skins, scale, settings) where the page was right-clicked.
+			if(auto* state = getProcessor().getEditorState())
+				state->createPopupMenu().showMenuAsync(juce::PopupMenu::Options().withMousePosition());
+			return true;
+		}
 		if(op == "revealRomFolder")
 		{
 			const juce::File folder(juce::String::fromUTF8(getProcessor().getPublicRomFolder().c_str()));
@@ -448,6 +552,36 @@ namespace mdJucePlugin
 		layoutWebView();
 		if(!m_desk)
 			return;
+		if(m_hw)
+		{
+			// HW MIDI: the wire at DIN speed out, the machine's SysEx in.
+			++m_ticks;
+			auto& processor = dynamic_cast<AudioPluginAudioProcessor&>(getProcessor());
+			for(auto& m : m_hwPacer.take(nowMs()))
+			{
+				synthLib::SMidiEvent e(synthLib::MidiEventSource::Editor);
+				if(!m.empty() && m[0] == 0xf0)
+					e.sysex.assign(m.begin(), m.end());
+				else
+				{
+					e.a = m.size() > 0 ? m[0] : 0;
+					e.b = m.size() > 1 ? m[1] : 0;
+					e.c = m.size() > 2 ? m[2] : 0;
+				}
+				processor.sendExternalMidi(e);
+				m_hwBytesOut += m.size();
+			}
+			if(m_ticks % 150 == 0)
+				log("HW MIDI: " + juce::String(static_cast<int64_t>(m_hwBytesOut)) + " bytes out so far");
+			std::vector<synthLib::SMidiEvent> in;
+			processor.drainExternalMidiIn(in);
+			for(const auto& e : in)
+				m_desk->onDeviceSysex(std::vector<uint8_t>(e.sysex.begin(), e.sysex.end()));
+			m_desk->onTelemetry(mdDesk::Telemetry{});
+			m_desk->tick();
+			flushPage();
+			return;
+		}
 		// The engine's state from the device, ten times a second; transitions logged.
 		if(++m_ticks % 3 == 0)
 		{
@@ -460,11 +594,27 @@ namespace mdJucePlugin
 			}
 			m_desk->setFirmware(fw);
 		}
-		if(m_ticks % 15 == 0 && juce::SystemStats::getEnvironmentVariable("GEARMULATOR_MDSTUDIO_SELFTEST", {}) == "1")
+		if(m_ticks % 15 == 0 && juce::SystemStats::getEnvironmentVariable("GEARMULATOR_MDSTUDIO_SELFTEST", {}).isNotEmpty())
 		{
 			const auto t = m_link->readTelemetry();
 			log("telemetry: step " + juce::String(t.step) + " playing " + juce::String(t.playing ? 1 : 0) + " rec "
 				+ juce::String(t.recording ? 1 : 0) + " grid " + juce::String(t.gridEdit ? 1 : 0) + " page " + juce::String(t.knobPage));
+		}
+		if(m_ticks == 90)
+		{
+			// The window chrome as the operating system sees it (standaloneApp.h, P4).
+			juce::String chrome = "window: ";
+			if(auto* w = dynamic_cast<juce::DocumentWindow*>(getRmlComponent() ? getRmlComponent()->getTopLevelComponent() : nullptr))
+				chrome << "\"" << w->getName() << "\" native title bar " << (w->isUsingNativeTitleBar() ? 1 : 0);
+			else
+				chrome << "hosted (no document window)";
+#if JUCE_MAC
+			if(auto* model = juce::MenuBarModel::getMacMainMenu())
+				chrome << ", menu bar: " << model->getMenuBarNames().joinIntoString(", ") << " (Editor menu "
+					<< model->getMenuForIndex(0, "Editor").getNumItems() << " items)";
+#endif
+			log(chrome);
+			log("audio: " + juce::String(getProcessor().getSampleRate(), 0) + " Hz, block " + juce::String(getProcessor().getBlockSize()) + " frames");
 		}
 		if(m_ticks % 150 == 0)
 		{
@@ -475,7 +625,23 @@ namespace mdJucePlugin
 				+ " docs p/k/s " + juce::String(static_cast<int>(d.patterns.size())) + "/" + juce::String(static_cast<int>(d.kits.size()))
 				+ "/" + juce::String(static_cast<int>(d.songs.size())) + " round trip " + juce::String(m_desk->lastRoundTripMs(), 1) + " ms");
 		}
+		if(dynamic_cast<AudioPluginAudioProcessor&>(getProcessor()).getDeskSetupGeneration() != m_deskSetupGeneration)
+			loadDeskSetup();
 		m_desk->onTelemetry(m_link->readTelemetry());
+		// While the machine starts, the page's LCD shows the firmware's own (start-up animation
+		// included), about 15 times a second, until the desk takes input.
+		if(m_pageReady && !m_desk->isInputReady() && m_ticks % 2 == 0)
+		{
+			std::vector<uint8_t> bits;
+			if(m_link->readLcd(bits) && bits != m_lastLcd)
+			{
+				m_lastLcd = bits;
+				json::Value l = json::Value::object();
+				l.set("type", "lcd");
+				l.set("bits", juce::Base64::toBase64(bits.data(), bits.size()).toStdString());
+				m_outbox.push_back(std::move(l));
+			}
+		}
 		std::vector<uint8_t> region;
 		if(m_link->readWorkingKit(region))
 			m_desk->onWorkingKitMemory(region);
@@ -500,5 +666,8 @@ namespace mdJucePlugin
 		const auto target = bounds.withTrimmedTop(header);
 		if(m_web->getBounds() != target)
 			m_web->setBounds(target);
+		// The page is laid out for 1440 px: below that it is zoomed out as a whole (P4).
+		if(target.getWidth() > 0)
+			setWebPageZoom(*m_web, std::min(1.0, target.getWidth() / 1440.0));
 	}
 }

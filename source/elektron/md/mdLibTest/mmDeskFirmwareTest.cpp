@@ -66,7 +66,7 @@ namespace
 		std::unique_ptr<mmDesk::Desk> desk;
 		md::MmTelemetry tel;
 
-		explicit Rig(const Bytes& _rom) : m(_rom, "mm", {}, g_mm)
+		explicit Rig(const Bytes& _rom) : m(_rom, "mm", {}, true, g_mm)
 		{
 			mmDesk::Desk::Port port;
 			port.sendSysex = [this](const Bytes& _b) { out.push_back(_b); };

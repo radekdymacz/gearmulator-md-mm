@@ -36,7 +36,7 @@ namespace mdDesk
 	{
 		std::vector<Change> out;
 		for(auto it = _changes.rbegin(); it != _changes.rend(); ++it)
-			out.push_back({it->after, it->before});
+			out.push_back({it->after, it->before, it->slotWrite});
 		return out;
 	}
 

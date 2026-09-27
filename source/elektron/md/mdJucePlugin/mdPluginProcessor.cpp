@@ -115,6 +115,11 @@ namespace mdJucePlugin
 			baseLib::ChunkWriter chunk(_stream, "RAMF", 1);
 			_stream.write(static_cast<uint8_t>(getRamRecordingMode()));
 		}
+		if(const auto setup = getDeskSetup(); !setup.empty())
+		{
+			baseLib::ChunkWriter chunk(_stream, "MDSK", 1);
+			_stream.write(setup);
+		}
 		const auto& controller = dynamic_cast<const Controller&>(getController());
 		const auto snapshot = controller.createAutomationSnapshot();
 		if(!snapshot.empty())
@@ -134,6 +139,11 @@ namespace mdJucePlugin
 			auto& controller = dynamic_cast<Controller&>(getController());
 			(void)controller.restoreAutomationSnapshot(snapshot);
 		});
+		_reader.add("MDSK", 1, [this](baseLib::BinaryStream& _stream, uint32_t)
+		{
+			setDeskSetup(_stream.readString());
+			m_deskSetupGeneration.fetch_add(1, std::memory_order_acq_rel);
+		});
 		_reader.add("RAMF", 1, [this](baseLib::BinaryStream& _stream, uint32_t)
 		{
 			m_ramRecordingModeChunkSeen = true;
@@ -144,10 +154,25 @@ namespace mdJucePlugin
 		});
 	}
 
+	std::string AudioPluginAudioProcessor::getDeskSetup() const
+	{
+		const std::lock_guard lock(m_deskSetupMutex);
+		return m_deskSetup;
+	}
+
+	void AudioPluginAudioProcessor::setDeskSetup(std::string _json)
+	{
+		const std::lock_guard lock(m_deskSetupMutex);
+		m_deskSetup = std::move(_json);
+	}
+
 	bool AudioPluginAudioProcessor::loadCustomData(const std::vector<uint8_t>& _sourceBuffer)
 	{
 		const auto previous = getRamRecordingMode();
 		m_ramRecordingModeChunkSeen = false;
+		// A project without the editor's setup starts from the default setup.
+		setDeskSetup({});
+		m_deskSetupGeneration.fetch_add(1, std::memory_order_acq_rel);
 		const bool result = jucePluginEditorLib::Processor::loadCustomData(_sourceBuffer);
 		if(!result)
 		{

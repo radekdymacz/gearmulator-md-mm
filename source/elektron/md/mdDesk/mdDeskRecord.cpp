@@ -68,4 +68,18 @@ namespace mdDesk
 		m_lastMs = _nowMs;
 		return KnobStep{KnobStep::Kind::Turn, track, static_cast<uint8_t>(index % 8), steps};
 	}
+
+	std::optional<uint8_t> nextLockStep(const elektronData::MdPattern& _pattern, const uint8_t _track, const int _currentStep)
+	{
+		const int length = std::max(1, static_cast<int>(_pattern.length));
+		if(_track > 15)
+			return {};
+		for(int i = 1; i <= length; ++i)
+		{
+			const int s = ((_currentStep < 0 ? -1 : _currentStep) + i) % length;
+			if(elektronData::hasTrig(_pattern, _track, static_cast<size_t>(s)))
+				return static_cast<uint8_t>(s);
+		}
+		return {};
+	}
 }

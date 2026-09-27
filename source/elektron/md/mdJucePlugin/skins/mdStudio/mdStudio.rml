@@ -3,10 +3,9 @@
 		<link type="text/rcss" href="tus_default.rcss"/>
 		<link type="text/rcss" href="tus_juceskin.rcss"/>
 	</head>
-	<!-- Machinedrum Editor frame. The web view (mdStudio.html) covers everything
-	     below the 24dp header; right-click the header for skins and settings.
-	     The page is laid out for 1440 x 900. -->
+	<!-- Machinedrum Editor frame. The web view (mdStudio.html) covers all of it.
+	     Skins and settings: the standalone's menu bar, or a right-click on an empty
+	     part of the page's header (P4). The page is laid out for 1440 x 924. -->
 	<body id="Root" style="left: 0dp; top: 0dp; width: 1440dp; height: 924dp; background-color: #202020;">
-		<div class="jucePos juceLabel" style="left: 10dp; top: 2dp; width: 1420dp; height: 20dp; line-height: 20dp; color: #c8c8c8; font-size: 13dp;">Machinedrum Editor - right-click here for skins and settings</div>
 	</body>
 </rml>

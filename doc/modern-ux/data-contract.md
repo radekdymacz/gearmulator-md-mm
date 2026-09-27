@@ -158,12 +158,82 @@ selected track, after SET STATUS track and the page key (`mdDesk::KnobRecorder`)
 so the firmware locks it on the track's next note. `recTrig` plays a track like
 its TRIG key.
 
+Which note (P4, `mdP4ProbeFirmwareTest lockwindow`): the track's next programmed
+trig whose step has not started when the turn lands. A turn 8 ms before the step
+locks it; at or after the step start it is too late and the lock goes to the
+following trig. A note played live at the same moment is not reliable (3 of 9).
+The desk names the trig it expects (`mdDesk::nextLockStep`) as
+`machine.desk.recLock` {track, param, step}; the page marks that cell until the
+read-back shows the real lock. Checked on firmware: the desk said step 9, the
+firmware locked step 9.
+
 **UW samples (P3).** `sampleName` (slot 0-47, 1-4 characters) sends the
 manual's 0x73. That is all the firmware offers: it has no request for names,
 memory in use or sample audio, and it ignores SDS dump requests (measured, no
 reply for three slots). Names, memory and audio are therefore not part of the
 contract; the page shows the controls that cannot work as disabled, with the
 reason.
+
+**Start-up (P4).** MD OS 1.63 answers MIDI about 13 s before it takes panel keys:
+its start-up animation ignores them (PLAY first taken 12.7 s after MIDI ready on a
+fresh machine, 9.3 s with a restored project). Main RAM 0x28998a is 00 until the
+main screen starts (13.4 s / 9.4 s), then non-zero; `md::BootAnimation` latches the
+first non-zero value per machine boot (30 s timeout) and `md::Device` publishes it.
+The desk takes page input only after it (`Desk::isInputReady`): `desk.firmware`
+stays `booting` and `desk.boot` says `animation` meanwhile; loads already run. While
+it waits the host sends the firmware's own LCD, `{"type":"lcd","bits"}` (128 x 64,
+one bit per pixel, row-major, 16 bytes a row, bit 7 = the left pixel, base64), which
+the page draws in its LCD with the plate's `--lcd` / `--ink`, then fades out. The
+host must call `onTelemetry` every tick, also without telemetry (`valid = false`).
+
+**Chaining and mutes (P4).** `machine.desk.chain` is the firmware's own pattern
+chain, read from the MC68331 internal SRAM (`md::ChainAndMutes`: 0x1001f5c active,
+0x1001f60 next, 0x1001f64 length, 32-bit patterns from 0x1001f68). The page asks
+for one with `{"op":"chain","patterns":[...]}`; the desk checks the machine's rules
+(`mdDesk/mdDeskChain.h`: 2-16 patterns, one bank, each once) and presses the keys
+the manual describes: BANK held, the TRIG keys held one after another in play
+order (pressed and released one by one they only select), with BANK GROUP first
+for the other half of the banks. The chain loops. A LOAD PATTERN or a single TRIG
+ends it; a pattern dump into a chained pattern does not (measured). So `select`
+while a chain is active answers `{"type":"ask","ask":"breakChain","p"}` and sends
+nothing; `select` with `chainOk` (or `force`) goes ahead. `chainClear` is LOAD
+PATTERN of the current pattern. `machine.desk.mutes` is the machine's pattern mute
+mask (main RAM 0x28b34a, 16 bits big-endian, bit 0 = track 1), so mutes made in the
+machine's MUTE window or by CC 12-15 show too (`mutesSource` = `memory`).
+
+**Kit library and pattern chooser (P4).** The desk loads all 64 kits (stored
+slots) in the background too. Commands (`mdDesk/mdDeskLibrary.h`, pure):
+`kitCopy`/`patCopy` {k|p}, `kitPaste`/`patPaste` {k|p}, `kitCopyTo`/`patCopyTo`
+{from, to} (drag-copy), `kitClear`/`patClear` {k|p}, `kitRename` {k, name}; and the
+machine actions `kitLoad` {k} (LOAD KIT), `kitSaveAs` {k} (SAVE KIT n), `select`
+{p, now} (switch now: STOP, LOAD PATTERN, PLAY while playing). Measured on the
+firmware (`mdP4ProbeFirmwareTest library`, smoke test p4):
+- SAVE KIT n makes n the current kit and, in EXTENDED, relinks the current pattern
+  to it. A manual LOAD KIT relinks it too.
+- A kit dump into the current slot is not heard until LOAD KIT: a paste or clear
+  into the kit that plays is therefore a dump plus LOAD KIT (`Change::slotWrite`).
+- There is no CLEAR command: clear writes an empty kit (every track GND-EMPTY,
+  neutral values, no name) or a pattern without trigs or locks (length, speed,
+  swing, accent and kit link kept). What the machine's own CLEAR leaves is unknown.
+- Rename: the kit that plays live (0x55, SAVE stores it); another slot: its dump
+  written back with the new name.
+- A pattern dump over the current pattern that links another kit makes the machine
+  load that kit. Slot writes that would lose unsaved kit edits answer
+  `{"type":"ask","ask":"overwriteKit"|"relinkKit"|"loadKit","command"}`; the page
+  sends the command again with `force`.
+Slot writes are undoable in the editor; LOAD and SAVE are the machine's (it keeps
+one UNDO KIT).
+
+**HW MIDI (P4).** `{"op":"engine","kind":"hw"|"emu"}` swaps the desk's port. HW:
+SysEx and CCs go out through the plug-in's MIDI out (host and physical ports,
+`pluginLib::Processor::setExternalMidi`), paced at DIN speed (`mdDesk::DinPacer`,
+3125 bytes a second); SysEx that comes in goes to the desk, not the emulated
+device, and the device's own MIDI output is held back. PLAY/STOP are MIDI Start /
+Stop; panel keys, telemetry, the working kit from memory and the boot LCD do not
+exist, so live recording and chaining are refused with the reason and the kit is
+`tracked`. Timeouts follow the wire (a pattern is 1.7 s each way); in the background
+the 64 kits load first. `machine.desk.engine` = `hw`, `link` = connect / ready /
+lost. The page gets `{"type":"reset"}` on a swap and starts its documents over.
 
 ### 4.6 `md-desk/modulators` (page -> desk, P3)
 
@@ -183,7 +253,19 @@ Rules (`mdDesk/mdDeskMod.h`):
   changes, within a rolling budget of 300 CCs a second (the mockup's limit).
   Over budget, the value is sent on a later step.
 - It is not part of the kit, a real Machinedrum does not play it, and live
-  recording does not record CCs. The setup is not saved with the project yet.
+  recording does not record CCs. The sources run while the editor is open (the
+  desk lives in the editor).
+
+### 4.7 `md-desk/setup` (kept with the project, P4)
+
+The editor's own setup: `modulators` (4.6) and `knobCcs`, the eight controller
+knob rows' CC numbers (0-127, distinct; default 21-28). The desk keeps it
+(`mdDesk/mdDeskSetup.h`), publishes `{"type":"setup","doc"}` to the page and hands
+every change to the host (`Port::saveSetup`), which stores the text as the plug-in
+state's `MDSK` chunk. A restored project brings it back, also into an open editor;
+a project without it starts from the default setup. The page changes the knob rows
+with `{"op":"knobs","ccs":[8 numbers]}` and the modulators with `modSet`. It is not
+machine data: a real Machinedrum never sees it.
 
 The UI must not show `edited` and "project not saved" as one flag. Two different things can be unsaved:
 

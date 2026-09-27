@@ -40,15 +40,13 @@ m = m.replace(BODY, '  <p class="statusline" id="status" role="status" hidden></
               '  <p class="errline" id="errline" role="alert" hidden></p>\n' + BODY)
 # Controls the machine cannot do yet: (mockup text, skin text). Each must match.
 HONEST = [
-    ('<option value="hw">HW MIDI</option>',
-     '<option value="hw" disabled title="Editing a real Machinedrum over MIDI is not available yet">'
-     'HW MIDI · not available yet</option>'),
+    # P4: HW MIDI is real (the plug-in's MIDI in/out); nothing to disable here now.
 ]
 for a, b in HONEST:
     assert a in m, 'mockup changed: ' + a
     m = m.replace(a, b)
 # The page's modules, in load order (a module that does not exist yet is skipped).
-SCRIPTS = ['mdDeskBridge.js', 'mdDeskModel.js', 'mdDeskMod.js', 'mdDeskApp.js']
+SCRIPTS = ['mdDeskBridge.js', 'mdDeskModel.js', 'mdDeskMod.js', 'mdDeskApp.js', 'mdDeskLive.js', 'mdDeskLibrary.js']
 title = re.search(r'<title>(.*?)</title>', src).group(1)
 page = '''<!doctype html>
 <html lang="en">
@@ -91,6 +89,7 @@ css = re.sub(r'@import url\([^)]*fonts\.googleapis[^)]*\);?\s*', '', css)
 tail = '''
 /* ===== The real machine's states (not in the mockup) ===== */
 .st.past{opacity:.45}
+.st.lkpend{outline:2px dashed var(--led);outline-offset:-2px}
 .statusline,.errline{margin:6px 0 0;padding:6px 10px;border-radius:3px;font:12px var(--pix);text-transform:uppercase}
 .statusline{background:var(--lcd);color:var(--ink)}
 .errline{background:var(--rec);color:#fff}

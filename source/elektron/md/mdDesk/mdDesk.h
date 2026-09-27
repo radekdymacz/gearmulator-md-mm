@@ -1,10 +1,14 @@
 #pragma once
 
+#include "mdDeskChain.h"
 #include "mdDeskDelivery.h"
 #include "mdDeskEdit.h"
 #include "mdDeskHistory.h"
+#include "mdDeskLibrary.h"
 #include "mdDeskMod.h"
+#include "mdDeskPacer.h"
 #include "mdDeskRecord.h"
+#include "mdDeskSetup.h"
 
 #include "elektronData/json.h"
 #include "mdDataLink/mdDataLink.h"
@@ -30,6 +34,14 @@ namespace mdDesk
 		bool gridEdit = false;	// grid edit (RECORD alone)
 		int knobPage = -1;		// DATA ENTRY page: 0 synthesis, 1 effects, 2 routing
 		bool valid = false;		// false: no telemetry for this firmware
+		// P4: the start-up animation (-1 unknown, 1 running: panel keys are ignored, 0 over),
+		// the pattern mutes (bit 0 = track 1, -1 unknown), the firmware's pattern chain and
+		// the BANK GROUP (0 A-D, 1 E-H, -1 unknown).
+		int bootAnimation = -1;
+		int mutes = -1;
+		bool chainKnown = false;
+		Chain chain;
+		int bankGroup = -1;
 	};
 
 	// MD Desk behind the page: the page sends small commands, the desk edits the
@@ -58,6 +70,8 @@ namespace mdDesk
 			// DATA ENTRY knob 0-7 turned by _steps (one step = one value).
 			std::function<bool(uint8_t _encoder, int _steps)> turnKnob;
 			std::function<void(const Value& _message)> toPage;
+			// The editor's setup (md-desk/setup) changed: keep it with the project.
+			std::function<void(const Value& _setup)> saveSetup;
 			std::function<double()> nowMs;
 		};
 
@@ -82,6 +96,9 @@ namespace mdDesk
 		// the panel editor). _index 24 = level.
 		void onHostKitParam(uint8_t _track, uint8_t _index, uint8_t _value);
 		void onHostMute(uint8_t _track, bool _muted);
+		// Call it every tick, also without telemetry (valid = false): input waits for the
+		// first call, so a status reply that arrives before it cannot open the page while
+		// the start-up animation still swallows keys.
 		void onTelemetry(const Telemetry& _telemetry);
 		// The working-kit region read from the machine's memory (MD OS 1.63,
 		// elektronData::mdWorkingKitFromMemory): kit number plus the kit that plays,
@@ -90,12 +107,24 @@ namespace mdDesk
 		// project all show without SAVE KIT. Send it when it changes.
 		void onWorkingKitMemory(const Bytes& _region);
 		void setFirmware(Firmware _firmware);
+		// HW MIDI (P4): the desk drives a real Machinedrum over MIDI (DIN speed), not the
+		// emulated one: timeouts follow the wire, and "machine.desk.engine" says "hw" with
+		// "link" connect (no reply yet), ready or lost (no reply for a while).
+		void setHardwareLink(bool _hardware);
+		bool isHardwareLink() const { return m_hw; }
+		// The setup stored with the project (md-desk/setup); errors if it does not validate,
+		// in which case the current setup stays.
+		std::vector<std::string> loadSetup(const Value& _setup);
+		const DeskSetup& setup() const { return m_setup; }
 		// About 30 times a second: status polling, loading, timeouts, publishing.
 		void tick();
 
 		const Documents& documents() const { return m_docs; }
 		const mdDataLink::Session& session() const { return m_session; }
 		bool isReady() const { return m_ready; }
+		// Ready for the page's input: the firmware answered and its start-up animation (which
+		// swallows panel keys) is over.
+		bool isInputReady() const;
 		bool isBusy() const;
 		double lastRoundTripMs() const { return m_lastRoundTripMs; }
 
@@ -122,6 +151,13 @@ namespace mdDesk
 		void handleSelect(const Value& _message);
 		void handleRecord(const Value& _message);
 		void handleModulators(const Value& _message);
+		void handleChain(const Value& _message);
+		void handleKnobs(const Value& _message);
+		void handleKitSlot(const Value& _message);
+		bool linkLost() const;
+		bool askFirst(const Value& _message, const std::vector<Change>& _changes);
+		void publishSetup();
+		void saveSetup() const;
 		void runModulators(double _now);
 		void publishModulators();
 		void pumpRecording(double _now);
@@ -177,9 +213,18 @@ namespace mdDesk
 		std::optional<uint8_t> m_lastKit;
 		std::optional<uint8_t> m_lastPattern;
 		Telemetry m_telemetry;
+		bool m_telemetrySeen = false;
+		bool m_hw = false;
+		double m_lastReplyMs = -1e9;
+		bool m_linkLost = false;
+		double m_hwSinceMs = 0;
 		std::array<bool, 16> m_mutes{};
 		KnobRecorder m_knobs;
+		// The trig the last knob turn will lock while recording (nextLockStep), for the page.
+		struct RecLock { uint8_t track = 0, param = 0, step = 0; double atMs = 0; };
+		std::optional<RecLock> m_recLock;
 		Modulators m_mods;
+		DeskSetup m_setup;
 		CcBudget m_ccBudget;
 		double m_recordPollMs = -1e9;
 		double m_recordAfterStopMs = -1;

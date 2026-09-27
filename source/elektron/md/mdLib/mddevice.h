@@ -234,6 +234,16 @@ namespace md
 			std::atomic<int> gridEdit{-1};
 			std::atomic<int> knobPage{-1};
 			std::atomic<uint64_t> blocks{0};
+			// P4 (md::BootAnimation, md::ChainAndMutes): the start-up animation (-1 unknown,
+			// 1 running: panel keys are ignored, 0 over), the pattern mutes (bit 0 = track 1,
+			// -1 unknown) and the firmware's pattern chain. The chain is published as values
+			// that may tear for one read while it changes; readers see the next block's.
+			std::atomic<int> bootAnimation{-1};
+			std::atomic<int> mutes{-1};
+			std::atomic<int> chainActive{-1};
+			std::atomic<int> chainNext{-1};
+			std::atomic<int> chainLength{0};
+			std::array<std::atomic<uint8_t>, 16> chain{};
 
 			// The working kit (P3, mdEditorProbeFirmwareTest workkit): patch RAM
 			// 0x700008 holds the current kit number, 0x70000a the kit that plays,
@@ -320,6 +330,8 @@ namespace md
 		std::shared_ptr<SequencerTelemetry> m_sequencerTelemetry = std::make_shared<SequencerTelemetry>();
 		std::shared_ptr<MmTelemetry> m_mmTelemetry = std::make_shared<MmTelemetry>();
 		SequencerState m_sequencer;
+		BootAnimation m_bootAnimation;
+		const Hardware* m_bootAnimationOf = nullptr;
 		// 128: the MM SYSEX RECV macro alone is 29 keys, about 60 row states (MM-P2).
 		std::array<PanelPacket, 128> m_panelSequence{};
 		size_t m_panelSequenceSize = 0;

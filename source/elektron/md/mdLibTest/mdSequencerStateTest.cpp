@@ -54,6 +54,31 @@ int main()
 	check(t16.size() == 2 && t16[0].row == 0x21 && t16[0].mask == 0x80 && t16[1].mask == 0, "trig16 is TRIG key 16");
 	check(md::panelKeySequence(md::MachineModel::Machinedrum, "trig17").empty(), "no TRIG key 17");
 	check(md::panelKeySequence(md::MachineModel::Machinedrum, "page").size() == 2, "the page key");
+	// P4: a chain holds the bank key and the TRIG keys together, in order.
+	const auto ch = md::panelKeySequence(md::MachineModel::Machinedrum, "chain:1:2,9,0");
+	check(ch.size() == 7 && ch[0].row == 0x23 && ch[0].mask == 0x02 && ch[1].row == 0x20 && ch[1].mask == 0x04
+		&& ch[2].row == 0x21 && ch[2].mask == 0x02 && ch[3].row == 0x20 && ch[3].mask == 0x05
+		&& ch[4].mask == 0 && ch[5].mask == 0 && ch[6].row == 0x23 && ch[6].mask == 0,
+		"chain:1:2,9,0 holds B/F, adds TRIG 3, 10, 1, releases all");
+	check(md::panelKeySequence(md::MachineModel::Machinedrum, "chain:4:1").empty()
+		&& md::panelKeySequence(md::MachineModel::Machinedrum, "chain:0:16").empty(), "no bank key 5, no TRIG 17");
+	check(md::panelKeySequence(md::MachineModel::Machinedrum, "bankGroup").size() == 2, "BANK GROUP key");
+	// P4: the start-up animation latch.
+	md::BootAnimation b;
+	check(b.state() == -1, "boot: unknown before the first byte");
+	b.update(0, ms(100));
+	check(b.state() == 1, "main screen byte 00: the animation runs");
+	b.update(0, ms(12000));
+	b.update(0x27, ms(10));
+	check(b.state() == 0, "non-zero: over");
+	b.update(0, ms(10));
+	check(b.state() == 0, "one-shot: stays over");
+	md::BootAnimation late;
+	late.update(0x27, ms(10));
+	check(late.state() == 0, "already past the animation: over at once");
+	md::BootAnimation stuck;
+	stuck.update(0, ms(31000));
+	check(stuck.state() == 0, "30 s timeout");
 	if(g_failures)
 		return 1;
 	std::puts("mdSequencerStateTest: PASS");

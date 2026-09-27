@@ -44,6 +44,8 @@ namespace mdJucePlugin
 		std::string bundlePage() const;
 		std::string resourceText(const std::string& _name) const;
 		void layoutWebView() const;
+		void loadDeskSetup();
+		void makeDesk(bool _hw);
 
 		std::unique_ptr<StudioLink> m_link;
 		std::unique_ptr<mdDesk::Desk> m_desk;
@@ -55,5 +57,10 @@ namespace mdJucePlugin
 		int m_learnTrack = -1;
 		int m_learnIndex = -1;
 		mdDesk::Desk::Firmware m_lastFirmware = mdDesk::Desk::Firmware::Missing;
+		uint32_t m_deskSetupGeneration = 0;
+		std::vector<uint8_t> m_lastLcd;
+		bool m_hw = false;
+		mdDesk::DinPacer m_hwPacer;
+		size_t m_hwBytesOut = 0;
 	};
 }

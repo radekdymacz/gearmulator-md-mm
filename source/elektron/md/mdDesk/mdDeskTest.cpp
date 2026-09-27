@@ -1,3 +1,4 @@
+#include <algorithm>
 // MD Desk editing model without firmware: commands -> documents, validation,
 // undo/redo, copy/paste, the live edits a kit change needs, and the Desk
 // orchestrator against a scripted device. Firmware behaviour is covered by
@@ -396,6 +397,7 @@ namespace
 		port.toPage = [&](const Value& _m) { page.push_back(_m); };
 		port.nowMs = [&] { return now; };
 		Desk desk(port);
+		desk.onTelemetry(Telemetry{});	// a host without sequencer telemetry says so
 		const auto status = [](const ed::MdStatus _p, const uint8_t _v)
 		{
 			return std::vector<uint8_t>{0xf0, 0x00, 0x20, 0x3c, 0x02, 0x00, 0x72, static_cast<uint8_t>(_p), _v, 0xf7};
@@ -502,6 +504,7 @@ namespace
 		port.toPage = [&](const Value& _m) { page.push_back(_m); };
 		port.nowMs = [&] { return now; };
 		Desk desk(port);
+		desk.onTelemetry(Telemetry{});	// a host without sequencer telemetry says so
 		const auto status = [](const ed::MdStatus _p, const uint8_t _v)
 		{
 			return std::vector<uint8_t>{0xf0, 0x00, 0x20, 0x3c, 0x02, 0x00, 0x72, static_cast<uint8_t>(_p), _v, 0xf7};
@@ -617,6 +620,7 @@ namespace
 		port.toPage = [&](const Value& _m) { page.push_back(_m); };
 		port.nowMs = [&] { return now; };
 		Desk desk(port);
+		desk.onTelemetry(Telemetry{});	// a host without sequencer telemetry says so
 		const auto status = [](const ed::MdStatus _p, const uint8_t _v)
 		{
 			return std::vector<uint8_t>{0xf0, 0x00, 0x20, 0x3c, 0x02, 0x00, 0x72, static_cast<uint8_t>(_p), _v, 0xf7};
@@ -642,6 +646,7 @@ namespace
 		desk.onWorkingKitMemory(region);
 		Telemetry t;
 		t.valid = true;
+		t.bootAnimation = 0;
 		desk.onTelemetry(t);
 
 		desk.onPageMessage(cmd(R"({"op":"record","id":1})"));
@@ -687,6 +692,200 @@ namespace
 		wire.clear();
 		desk.onPageMessage(cmd(R"({"op":"selectSong","s":3,"id":8})"));
 		check(ok() && !wire.empty() && wire[0] == ed::mdLoadSong(3) && desk.session().state().song == 3, "LOAD SONG 4 when stopped");
+	}
+
+	// P4: the start-up animation holds input; chaining, mutes from memory.
+	void testLive()
+	{
+		check(validateChain({1, 3}).empty() && !validateChain({1}).empty() && !validateChain({1, 17}).empty()
+			&& !validateChain({2, 2}).empty(), "chains: two or more, one bank, each once");
+		check(chainKeys({3, 1, 4}, 0) == std::vector<std::string>{"chain:0:3,1,4"}, "chain A04 A02 A05: BANK A/E + TRIGs 4 2 5");
+		check(chainKeys({65, 64}, 0) == std::vector<std::string>{"bankGroup", "chain:0:1,0"}, "bank E from A-D: BANK GROUP first");
+		check(chainKeys({65, 64}, 1) == std::vector<std::string>{"chain:0:1,0"}, "bank E in E-H: no BANK GROUP");
+		check(chainKeys({35, 36}, -1).empty(), "unknown BANK GROUP: no keys");
+
+		std::vector<std::vector<uint8_t>> wire;
+		std::vector<std::string> keys;
+		std::vector<Value> page;
+		double now = 0;
+		Desk::Port port;
+		port.sendSysex = [&](const std::vector<uint8_t>& _b) { wire.push_back(_b); };
+		port.pressKey = [&](const std::string& _k) { keys.push_back(_k); return true; };
+		port.sendMute = [](uint8_t, bool) {};
+		port.toPage = [&](const Value& _m) { page.push_back(_m); };
+		port.nowMs = [&] { return now; };
+		Desk desk(port);
+		const auto last = [&](const char* _type) -> const Value*
+		{
+			for(auto it = page.rbegin(); it != page.rend(); ++it)
+				if(it->find("type")->asString() == _type)
+					return &*it;
+			return nullptr;
+		};
+		const auto ok = [&] { const auto* r = last("result"); return r && r->find("ok")->asBool(); };
+		const auto firmware = [&] { const auto* m = last("machine"); return m ? m->find("doc")->find("desk")->find("firmware")->asString() : std::string(); };
+		Telemetry t;
+		t.valid = true;
+		t.bootAnimation = 1;
+		t.bankGroup = 0;
+		t.chainKnown = true;
+		desk.onTelemetry(t);
+		desk.onPageMessage(cmd(R"({"op":"ready"})"));
+		desk.onDeviceSysex({0xf0, 0x00, 0x20, 0x3c, 0x02, 0x00, 0x72, 0x04, 0x02, 0xf7});
+		desk.onDeviceSysex({0xf0, 0x00, 0x20, 0x3c, 0x02, 0x00, 0x72, 0x02, 0x05, 0xf7});
+		desk.tick();
+		check(desk.isReady() && !desk.isInputReady() && firmware() == "booting", "status answered, animation running: BOOTING OS");
+		desk.onPageMessage(cmd(R"({"op":"play","id":1})"));
+		check(!ok() && keys.empty(), "PLAY is held back during the animation");
+		t.bootAnimation = 0;
+		desk.onTelemetry(t);
+		desk.tick();
+		check(desk.isInputReady() && firmware() == "ready", "animation over: ready");
+		desk.onPageMessage(cmd(R"({"op":"chain","patterns":[3,1,4],"id":2})"));
+		check(ok() && keys.back() == "chain:0:3,1,4", "chain command: the machine's keys");
+		t.chain.active = true;
+		t.chain.patterns = {3, 1, 4};
+		t.chain.next = 1;
+		t.mutes = 0x0005;
+		desk.onTelemetry(t);
+		desk.tick();
+		const auto* m = last("machine");
+		const auto& d = *m->find("doc")->find("desk");
+		check(d.find("chain")->find("active")->asBool() && d.find("chain")->find("patterns")->asArray().size() == 3,
+			"the page sees the firmware's chain");
+		check(d.find("mutes")->asArray().size() == 2 && d.find("mutesSource")->asString() == "memory", "mutes 1 and 3 from memory");
+		wire.clear();
+		desk.onPageMessage(cmd(R"({"op":"select","p":9,"id":3})"));
+		const auto* ask = last("ask");
+		check(ask && ask->find("ask")->asString() == "breakChain" && wire.empty(), "select while chained asks first");
+		desk.onPageMessage(cmd(R"({"op":"select","p":9,"chainOk":true,"id":4})"));
+		check(!wire.empty() && wire.front() == ed::mdLoadPattern(9), "chainOk: LOAD PATTERN");
+		wire.clear();
+		desk.onPageMessage(cmd(R"({"op":"chainClear","id":5})"));
+		check(ok() && !wire.empty() && wire.front() == ed::mdLoadPattern(2), "CLEAR = LOAD PATTERN of the current pattern");
+		desk.onPageMessage(cmd(R"({"op":"chain","patterns":[1,17],"id":6})"));
+		check(!ok(), "a chain across banks is refused");
+	}
+
+	// P4: the editor's setup (modulators, knob CCs) is saved with the project.
+	void testSetup()
+	{
+		DeskSetup a;
+		a.knobCcs = {30, 31, 32, 33, 34, 35, 36, 37};
+		ModSource src;
+		src.id = "lfo1";
+		src.label = "LFO A";
+		a.modulators.sources.push_back(src);
+		std::vector<std::string> errors;
+		const auto b = deskSetupFromJson(deskSetupToJson(a), errors);
+		check(b && *b == a && errors.empty(), "md-desk/setup: value -> JSON -> value");
+		const auto bad = cmd(R"({"schema":"md-desk/setup","version":1,"knobCcs":[40,41,42,40,44,45,46,47]})");
+		errors.clear();
+		check(!deskSetupFromJson(bad, errors) && !errors.empty() && errors[0].find("knobCcs[3]") != std::string::npos,
+			"two knob rows on one CC are refused, with the path");
+
+		std::vector<Value> saved, page;
+		Desk::Port port;
+		port.toPage = [&](const Value& _m) { page.push_back(_m); };
+		port.saveSetup = [&](const Value& _s) { saved.push_back(_s); };
+		port.nowMs = [] { return 0.0; };
+		Desk desk(port);
+		desk.onTelemetry(Telemetry{});
+		desk.onPageMessage(cmd(R"({"op":"ready"})"));
+		desk.onDeviceSysex({0xf0, 0x00, 0x20, 0x3c, 0x02, 0x00, 0x72, 0x04, 0x00, 0xf7});
+		check(!desk.loadSetup(deskSetupToJson(a)).empty() == false && desk.setup() == a, "a project's setup loads");
+		bool published = false;
+		for(const auto& m : page)
+			published |= m.find("type")->asString() == "setup";
+		check(published, "and goes to the page");
+		desk.onPageMessage(cmd(R"({"op":"knobs","ccs":[1,2,3,4,5,6,7,8],"id":1})"));
+		check(!saved.empty() && saved.back().find("knobCcs")->asArray()[0].asNumber() == 1 && desk.setup().knobCcs[7] == 8,
+			"new knob CCs are saved with the project");
+		desk.onPageMessage(cmd(R"({"op":"modSet","id":2,"doc":{"schema":"md-desk/modulators","version":1,"sources":[],"links":[]}})"));
+		check(saved.back().find("modulators")->find("sources")->asArray().empty(), "a modulator change is saved too");
+		const auto before = saved.size();
+		desk.onPageMessage(cmd(R"({"op":"knobs","ccs":[1,1,3,4,5,6,7,8],"id":3})"));
+		check(saved.size() == before && desk.setup().knobCcs[1] == 2, "invalid knob CCs change nothing");
+	}
+
+	// P4: which trig a knob turn locks while live recording.
+	void testLockStep()
+	{
+		ed::MdPattern p;
+		p.length = 16;
+		p = ed::withTrig(p, 14, 8, true);
+		p = ed::withTrig(p, 14, 12, true);
+		check(nextLockStep(p, 14, 7) == 8, "turn in step 8: locks the trig on step 9");
+		check(nextLockStep(p, 14, 8) == 12, "turn in step 9 (its trig already started): the next trig, step 13");
+		check(nextLockStep(p, 14, 13) == 8, "past the last trig: wraps to step 9");
+		check(nextLockStep(p, 14, -1) == 8, "stopped: the first trig");
+		check(!nextLockStep(p, 3, 5), "a track without trigs: none");
+	}
+
+	// P4: the kit library and pattern chooser as pure slot edits.
+	void testLibrary()
+	{
+		Documents docs;
+		auto kit = *ed::decodeMdKit(load("programmed_kit_0.syx"));
+		auto other = kit;
+		other.position = 9;
+		docs.kits[kit.position] = kit;
+		docs.kits[9] = other;
+		auto pat = *ed::decodeMdPattern(load("programmed_pattern_1.syx"));
+		docs.patterns[pat.position] = pat;
+		auto p2 = pat;
+		p2.position = 20;
+		docs.patterns[20] = p2;
+		Clipboard clip;
+		check(!applyLibrary(docs, cmd(R"({"op":"kitPaste","k":9})"), clip).errors.empty(), "paste needs a copy first");
+		applyLibrary(docs, cmd("{\"op\":\"kitCopy\",\"k\":" + std::to_string(kit.position) + "}"), clip);
+		docs.kits[9].name[0] = 'Q';
+		auto r = applyLibrary(docs, cmd(R"({"op":"kitPaste","k":9})"), clip);
+		check(r.errors.empty() && r.changes.size() == 1 && r.changes[0].slotWrite && std::get<ed::MdKit>(r.changes[0].after).position == 9,
+			"kit paste: a slot write into K10");
+		r = applyLibrary(docs, cmd(R"({"op":"kitClear","k":9})"), clip);
+		check(r.changes.size() == 1 && isEmptyKit(std::get<ed::MdKit>(r.changes[0].after)), "kit clear: an empty kit");
+		r = applyLibrary(docs, cmd(R"({"op":"kitRename","k":9,"name":"new kit"})"), clip);
+		check(r.changes.size() == 1 && std::get<ed::MdKit>(r.changes[0].after).name[0] == 'N', "rename: upper case, 16 characters");
+		check(!applyLibrary(docs, cmd(R"({"op":"kitCopyTo","from":9,"to":9})"), clip).errors.empty(), "same slot refused");
+		r = applyLibrary(docs, cmd(R"({"op":"patClear","p":20})"), clip);
+		const auto& cleared = std::get<ed::MdPattern>(r.changes.at(0).after);
+		check(!r.changes[0].slotWrite && cleared.length == pat.length && cleared.kit == pat.kit
+			&& std::all_of(cleared.trigs.begin(), cleared.trigs.end(), [](const uint64_t _t) { return !_t; }), "pattern clear: no trigs, length and kit link kept");
+		r = applyLibrary(docs, cmd("{\"op\":\"patCopyTo\",\"from\":" + std::to_string(pat.position) + ",\"to\":20}"), clip);
+		check(r.errors.empty() && r.changes.empty(), "copying an identical pattern changes nothing");
+	}
+
+	// P4: HW MIDI link states.
+	void testHardwareLink()
+	{
+		std::vector<Value> page;
+		double now = 0;
+		Desk::Port port;
+		port.sendSysex = [](const std::vector<uint8_t>&) {};
+		port.toPage = [&](const Value& _m) { page.push_back(_m); };
+		port.nowMs = [&] { return now; };
+		Desk desk(port);
+		desk.setHardwareLink(true);
+		desk.onTelemetry(Telemetry{});
+		const auto link = [&]
+		{
+			for(auto it = page.rbegin(); it != page.rend(); ++it)
+				if(it->find("type")->asString() == "machine")
+					return it->find("doc")->find("desk")->find("link")->asString();
+			return std::string();
+		};
+		desk.onPageMessage(cmd(R"({"op":"ready"})"));
+		check(link() == "connect", "HW: connect until the machine answers");
+		now += 6000;
+		desk.tick();
+		check(link() == "lost", "HW: nothing answers for 5 s: HW NO MIDI");
+		desk.onDeviceSysex({0xf0, 0x00, 0x20, 0x3c, 0x02, 0x00, 0x72, 0x04, 0x00, 0xf7});
+		desk.tick();
+		check(link() == "ready" && desk.isInputReady(), "HW: the first status reply: HW MIDI, input taken");
+		now += 4000;
+		desk.tick();
+		check(link() == "lost", "HW: no reply for 3.5 s: lost");
 	}
 
 	void testSampleName()
@@ -743,6 +942,11 @@ int main()
 	testHistory();
 	testPushSlot();
 	testDesk();
+	testLive();
+	testSetup();
+	testLockStep();
+	testLibrary();
+	testHardwareLink();
 	testWorkingKitMemory();
 	testKnobRecorder();
 	testDeskRecording();

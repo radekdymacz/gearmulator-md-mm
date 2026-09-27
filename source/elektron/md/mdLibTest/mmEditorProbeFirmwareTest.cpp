@@ -189,7 +189,7 @@ namespace
 
 	std::unique_ptr<Machine> boot(const Bytes& _rom, const Bytes& _patchRam = {})
 	{
-		auto m = std::make_unique<Machine>(_rom, g_romName, _patchRam, g_mm);
+		auto m = std::make_unique<Machine>(_rom, g_romName, _patchRam, true, g_mm);
 		return m;
 	}
 

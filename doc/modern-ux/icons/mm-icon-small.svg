@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" width="1024" height="1024">
+  <!-- Monomachine Editor app icon (P4). Drawn from the editor's own plate tokens: the silver plate, the pale LCD with its dark ink, one red LED. No Elektron logo or trademark. -->
+  <defs>
+    <linearGradient id="plate" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#e2e1db"/><stop offset="1" stop-color="#b4b3ac"/></linearGradient>
+    <linearGradient id="lcd" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#cfd8c3"/><stop offset="1" stop-color="#a9b59d"/></linearGradient>
+    <radialGradient id="led" cx=".5" cy=".5" r=".5"><stop offset="0" stop-color="#fff2ea"/><stop offset=".35" stop-color="#ff3b2f"/><stop offset="1" stop-color="#ff3b2f" stop-opacity="0"/></radialGradient>
+    <clipPath id="body"><rect x="100" y="100" width="824" height="824" rx="185"/></clipPath>
+  </defs>
+  <g clip-path="url(#body)">
+    <rect x="100" y="100" width="824" height="824" fill="url(#plate)"/>
+    <rect x="100" y="640" width="824" height="260" fill="#a3a29b"/>
+    <rect x="100" y="640" width="824" height="6" fill="#b6b5ae"/>
+  </g>
+  <rect x="100.5" y="100.5" width="823" height="823" rx="185" fill="none" stroke="#000" stroke-opacity=".18" stroke-width="3"/>
+  <rect x="176" y="196" width="672" height="372" rx="36" fill="url(#lcd)"/>
+  <rect x="236" y="300" width="552" height="64" rx="8" fill="#1f2a18"/>
+  <rect x="236" y="410" width="360" height="64" rx="8" fill="#1f2a18"/>
+  <rect x="272" y="716" width="150" height="150" rx="22" fill="#e7e6e0"/>
+  <circle cx="660" cy="790" r="96" fill="url(#led)"/>
+  <circle cx="660" cy="790" r="44" fill="#ff3b2f"/>
+</svg>

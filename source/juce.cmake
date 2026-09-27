@@ -139,10 +139,18 @@ endmacro()
 
 macro(createJucePlugin targetName productName isSynth plugin4CC binaryDataProject synthLibProject)
 	string(REPLACE " " "" productNameIdentifier "${productName}")
+	# Optional app icons: set GEARMULATOR_ICON_BIG_<target> / GEARMULATOR_ICON_SMALL_<target>
+	# (PNG paths) before createJucePlugin.
+	set(_gmIconArgs)
+	if(DEFINED GEARMULATOR_ICON_BIG_${targetName})
+		list(APPEND _gmIconArgs ICON_BIG "${GEARMULATOR_ICON_BIG_${targetName}}")
+	endif()
+	if(DEFINED GEARMULATOR_ICON_SMALL_${targetName})
+		list(APPEND _gmIconArgs ICON_SMALL "${GEARMULATOR_ICON_SMALL_${targetName}}")
+	endif()
 	juce_add_plugin(${targetName}
 		# VERSION ...                                     # Set this if the plugin version is different to the project version
-		# ICON_BIG ...                                    # ICON_* arguments specify a path to an image file to use as an icon for the Standalone
-		# ICON_SMALL ...
+		${_gmIconArgs}                                    # ICON_* arguments specify a path to an image file to use as an icon for the Standalone
 		COMPANY_NAME "Gearmulator Preview"                 # Specify the name of the plugin's author
 		COMPANY_WEBSITE "https://dsp56300.wordpress.com"
 		IS_SYNTH ${isSynth}                               # Is this a synth or an effect?

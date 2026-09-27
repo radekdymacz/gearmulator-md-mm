@@ -75,6 +75,17 @@ namespace pluginLib
 		~Processor() override;
 
 		void addMidiEvent(const synthLib::SMidiEvent& _ev);
+
+		// External MIDI (P4, the Machinedrum Editor's HW MIDI): an editor drives real hardware
+		// through the plug-in's MIDI in and out (the host's and the physical ports) instead of
+		// the emulated device. While it is on, SysEx that comes in is kept for the editor
+		// (not given to the device), what the editor sends goes out in the next audio block,
+		// and the device's own MIDI output is not passed on (it would reach the hardware).
+		// Message thread, except the audio-thread side inside processBlock.
+		void setExternalMidi(bool _on);
+		bool isExternalMidi() const { return m_externalMidi.load(std::memory_order_acquire); }
+		void sendExternalMidi(const synthLib::SMidiEvent& _ev);
+		void drainExternalMidiIn(std::vector<synthLib::SMidiEvent>& _out);
 		bool tryAddRealtimeMidiEvent(const synthLib::SMidiEvent& _ev);
 		// Several legacy controllers batch preset parameter updates and then ask the
 		// wrapper to republish the finished program in one host-visible operation.
@@ -276,6 +287,9 @@ namespace pluginLib
 		ProgramChangeRouter m_programChangeRouter;
 
 		// Host MIDI feedback queue (filled from parameter listeners, drained in processBlock)
+		std::atomic<bool> m_externalMidi{false};
+		std::mutex m_externalMidiMutex;
+		std::vector<synthLib::SMidiEvent> m_externalIn, m_externalOut;
 		std::mutex m_hostFeedbackMutex;
 		std::vector<synthLib::SMidiEvent> m_hostFeedbackQueue;
 		std::atomic<bool> m_deviceRecoveryPending{false};

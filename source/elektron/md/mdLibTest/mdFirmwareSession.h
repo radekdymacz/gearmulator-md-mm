@@ -58,7 +58,9 @@ namespace mdFirmwareSession
 	class Machine
 	{
 	public:
-		Machine(const Bytes& _rom, const std::string& _romName, const Bytes& _patchRam = {},
+		// _waitSplash false: return as soon as the firmware takes MIDI, while its
+		// start-up animation still runs (P4 boot probe).
+		Machine(const Bytes& _rom, const std::string& _romName, const Bytes& _patchRam = {}, const bool _waitSplash = true,
 			const md::MachineModel _model = md::MachineModel::Machinedrum)
 			: m_hw(_rom, _romName, _model, _patchRam)
 		{
@@ -77,7 +79,7 @@ namespace mdFirmwareSession
 			// The splash animation keeps running after MIDI is ready: about 20 s on
 			// the MD, until 9.2 s after power-on on the MM (MM-P0-RESULT §6).
 			const uint32_t settleSeconds = _model == md::MachineModel::Monomachine ? 9 : 25;
-			for(uint32_t i = 0; i < g_rate * settleSeconds / g_block; ++i)
+			for(uint32_t i = 0; _waitSplash && i < g_rate * settleSeconds / g_block; ++i)
 				m_hw.advance(g_block);
 		}
 

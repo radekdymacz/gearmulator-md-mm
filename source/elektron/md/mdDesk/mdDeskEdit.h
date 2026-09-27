@@ -63,6 +63,10 @@ namespace mdDesk
 	{
 		Document before;
 		Document after;
+		// Kit changes: false = live edits of the kit that plays (CCs, live SysEx); true = a
+		// stored-slot write (the kit library, P4): a kit dump, plus LOAD KIT when it is the
+		// kit that plays.
+		bool slotWrite = false;
 
 		DocRef ref() const { return refOf(after); }
 	};
@@ -86,6 +90,8 @@ namespace mdDesk
 		std::optional<Steps> steps;
 		std::optional<Sound> sound;
 		std::optional<elektronData::json::Value> songRow;	// contract row
+		std::optional<elektronData::MdKit> kit;				// the kit library (P4)
+		std::optional<elektronData::MdPattern> pattern;		// the pattern chooser (P4)
 	};
 
 	struct EditResult
@@ -101,6 +107,11 @@ namespace mdDesk
 	// produce an invalid document is refused with its problems. Copy commands
 	// change only _clipboard.
 	EditResult apply(const Documents& _docs, const elektronData::json::Value& _command, Clipboard& _clipboard);
+
+	// The values "clear sound" uses: the machine's own defaults live in the firmware and
+	// cannot be read without saving the kit.
+	const std::array<uint8_t, 24>& neutralTrackValues();
+	uint8_t neutralTrackLevel();
 
 	// Step helpers shared with the page: the accent/slide set a step toggle edits,
 	// which is pattern-wide when the pattern's "edit all" flag is set.

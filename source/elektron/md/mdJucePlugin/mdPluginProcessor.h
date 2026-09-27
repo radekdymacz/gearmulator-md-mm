@@ -35,6 +35,10 @@ namespace mdJucePlugin
 	    ~AudioPluginAudioProcessor() override;
 
 		md::MachineModel getModel() const { return m_model; }
+		std::string getStandaloneWindowTitle() const override
+		{
+			return m_model == md::MachineModel::Monomachine ? "Monomachine Editor" : "Machinedrum Editor";
+		}
 		static md::MachineModel getCompiledProductModel();
 		static bool hasEmbeddedProductResource(std::string_view _filename);
 		juce::File getInstalledFactoryStorageImage() const;
@@ -55,6 +59,13 @@ namespace mdJucePlugin
 				m_ramRecordingMode.load(std::memory_order_relaxed));
 		}
 		bool isRamRecordingModeAvailable();
+		// The Machinedrum Editor's own setup (md-desk/setup JSON: app modulators, knob-row
+		// CCs), kept with the project as the "MDSK" chunk. The processor only stores the
+		// text; the editor's mdDesk::Desk validates it. The generation changes on every
+		// project restore, so an open editor can pick the restored setup up.
+		std::string getDeskSetup() const;
+		void setDeskSetup(std::string _json);
+		uint32_t getDeskSetupGeneration() const { return m_deskSetupGeneration.load(std::memory_order_acquire); }
 
 	    jucePluginEditorLib::PluginEditorState* createEditorState() override;
 	    synthLib::Device* createDevice() override;
@@ -92,6 +103,9 @@ namespace mdJucePlugin
 		std::atomic<uint8_t> m_ramRecordingMode{
 			static_cast<uint8_t>(md::RamRecordingMode::Original)};
 		bool m_ramRecordingModeChunkSeen = false;
+		mutable std::mutex m_deskSetupMutex;
+		std::string m_deskSetup;
+		std::atomic<uint32_t> m_deskSetupGeneration{0};
 		JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(AudioPluginAudioProcessor)
 	};
 }

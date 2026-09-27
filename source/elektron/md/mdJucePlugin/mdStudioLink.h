@@ -57,6 +57,9 @@ namespace mdJucePlugin
 		// The working-kit region (elektronData::mdWorkingKitFromMemory) when it changed
 		// since the last call; lock-free, MD OS 1.63 only.
 		bool readWorkingKit(Bytes& _region);
+		// The firmware's LCD, 128 x 64, one bit per pixel, row-major (16 bytes a row, bit 7 =
+		// the left pixel). False without a local device.
+		bool readLcd(std::vector<uint8_t>& _bits);
 		// Missing (no valid device / ROM), Unsupported (not MD OS 1.63) or Present.
 		mdDesk::Desk::Firmware firmware() const;
 
@@ -83,6 +86,7 @@ namespace mdJucePlugin
 		std::vector<baseLib::EventListener<pluginLib::Parameter*>> m_paramListeners;
 		std::array<std::atomic<uint32_t>, 16> m_dirtyParams{};		// bit n = index n (0-25)
 		std::shared_ptr<const md::Device::SequencerTelemetry> m_telemetry;
+		std::shared_ptr<md::FrontPanelPublisher> m_panel;
 		double m_telemetryCheckedMs = -1e9;
 		uint32_t m_workingKitSequence = 0;
 		const void* m_workingKitSource = nullptr;
