@@ -937,6 +937,13 @@ html,body{min-width:1280px}
 }
 .top .brand b{font-size:19px!important;letter-spacing:.06em;line-height:1}
 .top .brand small.ed{color:var(--led);font-size:13px!important;letter-spacing:.42em;font-weight:700;margin-top:3px;display:block}
+/* v34: LCD + transport form one centred unit */
+.top{grid-template-columns:1fr auto 1fr!important}
+.midgrp{grid-column:2;display:flex;gap:14px;align-items:flex-start;justify-self:center}
+.top .midgrp .wsgroup.trgroup{grid-column:auto!important;justify-self:auto!important}
+.rightgrp{grid-column:3!important;justify-self:end}
+.midgrp .lcdgroup{margin-top:0!important}
+.midgrp .trgroup{margin-top:0!important}
 
 /* ===== P2: states the real machine has ===== */
 .st.past{opacity:.45}

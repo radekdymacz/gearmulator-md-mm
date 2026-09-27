@@ -33,7 +33,7 @@ const isSampler = m => /^(ROM|RAM-P)/.test(m), isRec = m => /^RAM-R/.test(m);
 const SHAPES = ["Triangle", "Saw", "Square", "Linear decay", "Exp decay", "Random"];
 
 /* ===== State: UI fields here, data fields from deriveView() ===== */
-const S = { ws: "seq", sel: 0, lane: "FLTF", page: 0, viewAll: false, follow: false, step: -1, soloSet: new Set(),
+const S = { ws: "seq", sel: 0, lane: "FLTF", page: 0, viewAll: false, follow: false, step: -1, soloSet: new Set(), userMutes: new Set(),
 	songSel: 0, bank: 0, songZoom: "fit", smpSlot: "RAM1", chopTrack: null, capture: {}, keepFx: true, plate: "mk1",
 	tracks: [], locks: new Map(), song: [{ type: "end" }], len: 16, length: 16, mult: "1X", swing: 50, accAmt: 0, mode: "EXTENDED", bpm: 120, pat: 0, kit: 0,
 	kitState: "unknown", kitNames: {}, patKit: [], queued: null, firmware: "booting", loaded: false };
@@ -41,6 +41,9 @@ S.ctl = { learn: false, learnT: null, sel: null, selT: null, sent: 0, addT: 1, p
 	/* MOCK: app-only modulators, not wired to the machine. */
 	sources: [{ id: "lfoA", kind: "lfo", label: "LFO A", val: 64, SHAPE: 0, RATE: "1/2", DEPTH: 100 }, { id: "rndA", kind: "rnd", label: "Random A", val: 64, RATE: "1/16", SMOOTH: 30, _t: 64 }],
 	links: [] };
+
+/* Pointer capture can fail for a pointer the browser no longer tracks; the gesture still works. */
+function capture(el, e) { try { el.setPointerCapture(e.pointerId); } catch (_) { } }
 
 /* ===== Commands ===== */
 let gesture = 0;	// non-zero while a drag runs: one undo step
@@ -607,7 +610,7 @@ ED.rom = {
 	}, handles: () => []
 };
 let chopDrag = null;
-document.getElementById("main").addEventListener("pointerdown", e => { const c = e.target.closest(".cp.on"); if (!c || e.altKey || e.shiftKey) return; const p = +$("#chop").dataset.p, s = +c.dataset.cp, cur = S.locks.get(lk(p, "STRT"))?.get(s) ?? S.tracks[p].syn.STRT; chopDrag = { c, p, s, y: e.clientY, v: cur, moved: false }; gesture = Bridge.gesture(); c.setPointerCapture(e.pointerId); });
+document.getElementById("main").addEventListener("pointerdown", e => { const c = e.target.closest(".cp.on"); if (!c || e.altKey || e.shiftKey) return; const p = +$("#chop").dataset.p, s = +c.dataset.cp, cur = S.locks.get(lk(p, "STRT"))?.get(s) ?? S.tracks[p].syn.STRT; chopDrag = { c, p, s, y: e.clientY, v: cur, moved: false }; gesture = Bridge.gesture(); capture(c, e); });
 document.getElementById("main").addEventListener("pointermove", e => { if (!chopDrag) return; const d = Math.round((chopDrag.y - e.clientY) / 6) * 8; if (!d && !chopDrag.moved) return; chopDrag.moved = true; const v = clamp(chopDrag.v + d); if (setLock(chopDrag.p, "STRT", chopDrag.s, v)) { chopDrag.c.innerHTML = chopInner(chopDrag.p, chopDrag.s); renderTop(); redraw(); } });
 document.getElementById("main").addEventListener("pointerup", () => { if (chopDrag) { chopDrag.c.dataset.moved = chopDrag.moved ? "1" : ""; chopDrag = null; gesture = 0; } });
 
@@ -767,7 +770,7 @@ function l2step(k, d, alt) {
 	if (k === "accAmt") { S.accAmt = clamp(S.accAmt + d, 0, 15); cmd("accentAmount", { p: S.pat, v: S.accAmt }, "accAmt"); }
 	render();
 }
-document.addEventListener("pointerdown", e => { const el = e.target.closest(".l2.ed"); if (!el) return; const k = el.dataset.l2; if (k === "swing" || k === "accAmt") { l2drag = { k, y: e.clientY, v: S[k], moved: false }; gesture = Bridge.gesture(); el.setPointerCapture(e.pointerId); e.preventDefault(); } });
+document.addEventListener("pointerdown", e => { const el = e.target.closest(".l2.ed"); if (!el) return; const k = el.dataset.l2; if (k === "swing" || k === "accAmt") { l2drag = { k, y: e.clientY, v: S[k], moved: false }; gesture = Bridge.gesture(); capture(el, e); e.preventDefault(); } });
 document.addEventListener("pointermove", e => {
 	if (!l2drag) return; const d = Math.round((l2drag.y - e.clientY) / (l2drag.k === "swing" ? 3 : 6)); if (d) l2drag.moved = true; const v = l2drag.k === "swing" ? clamp(l2drag.v + d, 50, 80) : clamp(l2drag.v + d, 0, 15);
 	if (v !== S[l2drag.k]) { S[l2drag.k] = v; cmd(l2drag.k === "swing" ? "swing" : "accentAmount", { p: S.pat, v }, l2drag.k); renderSub(); }
@@ -780,9 +783,9 @@ document.addEventListener("wheel", e => { const el = e.target.closest(".l2.ed");
 let drag = null;
 const main = $("#main");
 main.addEventListener("pointerdown", e => {
-	const c = e.target.closest("canvas.ed"); if (c) { const h = nearest(c, e); if (!h) return; active = { c, k: h.k }; gesture = Bridge.gesture(); c.setPointerCapture(e.pointerId); e.preventDefault(); redraw(); return; }
-	const el = e.target.closest(".pc[data-g],.fader[data-g]"); if (el) { drag = { el, x: e.clientX, y: e.clientY, v: getV(el), vert: el.classList.contains("fader") }; gesture = Bridge.gesture(); el.setPointerCapture(e.pointerId); el.classList.add("act"); e.preventDefault(); return; }
-	const lb = e.target.closest(".lb"); if (lb) { laneDraw = { erase: e.altKey, touched: new Set() }; gesture = Bridge.gesture(); $("#lane").setPointerCapture(e.pointerId); laneAt(e); e.preventDefault(); }
+	const c = e.target.closest("canvas.ed"); if (c) { const h = nearest(c, e); if (!h) return; active = { c, k: h.k }; gesture = Bridge.gesture(); capture(c, e); e.preventDefault(); redraw(); return; }
+	const el = e.target.closest(".pc[data-g],.fader[data-g]"); if (el) { drag = { el, x: e.clientX, y: e.clientY, v: getV(el), vert: el.classList.contains("fader") }; gesture = Bridge.gesture(); capture(el, e); el.classList.add("act"); e.preventDefault(); return; }
+	const lb = e.target.closest(".lb"); if (lb) { laneDraw = { erase: e.altKey, touched: new Set() }; gesture = Bridge.gesture(); capture($("#lane"), e); laneAt(e); e.preventDefault(); }
 });
 main.addEventListener("pointermove", e => {
 	if (active) { const r = active.c.getBoundingClientRect(), h = ED[active.c.dataset.ed].handles(r.width, r.height, active.c).find(h => h.k === active.k); if (h) { h.drag(clamp(e.clientX - r.left, 0, r.width), clamp(e.clientY - r.top, 0, r.height)); syncKitValues(); syncControls(); redraw(); } return; }
@@ -799,16 +802,17 @@ main.addEventListener("dblclick", e => { const el = e.target.closest(".pc[data-g
 main.addEventListener("keydown", e => { const el = e.target.closest("[data-g]"); if (!el) return; const d = { ArrowRight: 1, ArrowUp: 1, ArrowLeft: -1, ArrowDown: -1, PageUp: 10, PageDown: -10 }[e.key]; if (d == null) return; e.preventDefault(); setV(el, getV(el) + d * (e.shiftKey ? 10 : 1)); });
 
 function setMute(i, on) { cmd("mute", { t: i, on }); S.tracks[i].mute = on; }
+/* Solo is the page's idea: it mutes every other track on the machine, and un-solo restores the
+   mutes the user had set (S.userMutes). */
 function applySolo() {
-	/* Solo is the page's idea: it mutes every other track on the machine. */
 	const any = S.soloSet.size > 0;
-	S.tracks.forEach((t, i) => { const want = any ? !S.soloSet.has(i) : !!t._userMute; if (t.mute !== want) setMute(i, want); });
+	S.tracks.forEach((t, i) => { const want = any ? !S.soloSet.has(i) : S.userMutes.has(i); if (t.mute !== want) setMute(i, want); });
 }
 document.addEventListener("click", e => {
 	const mu = e.target.closest("[data-mute]"), so = e.target.closest("[data-solo]");
 	if (mu || so) {
 		const i = +(mu || so).dataset[mu ? "mute" : "solo"], t = S.tracks[i];
-		if (mu) setMute(i, !t.mute);
+		if (mu) { t.mute ? S.userMutes.delete(i) : S.userMutes.add(i); setMute(i, !t.mute); }
 		else { S.soloSet.has(i) ? S.soloSet.delete(i) : S.soloSet.add(i); t.solo = S.soloSet.has(i); applySolo(); }
 		refreshAudible(); return;
 	}
@@ -909,7 +913,7 @@ function refreshAudible() {
 (() => {
 	const b = $("#bpm"); let d = null;
 	const set = v => { S.bpm = clamp(Math.round(v * 10) / 10, 30, 300); renderTop(); cmd("tempo", { bpm: S.bpm }, "tempo"); };
-	b.addEventListener("pointerdown", e => { d = { y: e.clientY, v: S.bpm }; gesture = Bridge.gesture(); b.setPointerCapture(e.pointerId); });
+	b.addEventListener("pointerdown", e => { d = { y: e.clientY, v: S.bpm }; gesture = Bridge.gesture(); capture(b, e); });
 	b.addEventListener("pointermove", e => { if (!d) return; const v = d.v + (d.y - e.clientY) * (e.shiftKey ? .1 : .5); if (Math.abs(v - S.bpm) >= .05) set(v); });
 	b.addEventListener("pointerup", () => { d = null; gesture = 0; });
 	b.addEventListener("keydown", e => { const k = { ArrowUp: 1, ArrowDown: -1 }[e.key]; if (!k) return; e.preventDefault(); set(S.bpm + k * (e.shiftKey ? .1 : 1)); });
