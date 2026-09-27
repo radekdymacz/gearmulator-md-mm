@@ -687,6 +687,7 @@ namespace elektronData
 				pages.push(numbers(pg));
 			pages.push(numbers(tr.midi));
 			o.set("pages", std::move(pages));
+			o.set("multiEnv", numbers(tr.multiEnv));
 			o.set("extra", hex(tr.extra));
 			Value assign = Value::object();
 			assign.set("page", numbers(_k.assignPage[t]));
@@ -750,6 +751,7 @@ namespace elektronData
 				for(size_t i = 0; i < 8; ++i)
 					page.toInteger(page.value().asArray()[i], "value", target[i], 0, 255);
 			}
+			tr.integers("multiEnv", k.tracks[t].multiEnv, 0, 255);
 			tr.hexBytes("extra", k.tracks[t].extra);
 			const auto assign = tr.child("assign");
 			assign.integers("page", k.assignPage[t], 0, 255);

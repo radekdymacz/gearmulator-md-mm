@@ -354,3 +354,6 @@ set_property(TARGET mmEditorProbeFirmwareTest PROPERTY FOLDER "Elektron/test")
 add_executable(mmDeskFirmwareTest mmDeskFirmwareTest.cpp mdFirmwareSession.h)
 target_link_libraries(mmDeskFirmwareTest PRIVATE mdLib mmDesk)
 set_property(TARGET mmDeskFirmwareTest PROPERTY FOLDER "Elektron/test")
+# -DGEARMULATOR_MM_ROM=<OS 1.32B image> runs it in ctest; without it the test skips.
+add_test(NAME mmDeskFirmwareTest COMMAND mmDeskFirmwareTest ${GEARMULATOR_MM_ROM})
+set_tests_properties(mmDeskFirmwareTest PROPERTIES LABELS "Integration;FirmwareTest" SKIP_RETURN_CODE 77 TIMEOUT 400)

@@ -320,7 +320,8 @@ namespace md
 		std::shared_ptr<SequencerTelemetry> m_sequencerTelemetry = std::make_shared<SequencerTelemetry>();
 		std::shared_ptr<MmTelemetry> m_mmTelemetry = std::make_shared<MmTelemetry>();
 		SequencerState m_sequencer;
-		std::array<PanelPacket, 32> m_panelSequence{};
+		// 128: the MM SYSEX RECV macro alone is 29 keys, about 60 row states (MM-P2).
+		std::array<PanelPacket, 128> m_panelSequence{};
 		size_t m_panelSequenceSize = 0;
 		size_t m_panelSequenceNext = 0;
 		uint32_t m_panelSequenceHold = 0;

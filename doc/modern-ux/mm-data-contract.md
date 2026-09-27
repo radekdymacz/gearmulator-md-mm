@@ -89,6 +89,7 @@ NOTE OFF.
 | `tracks[t].assign` | ASSIGN: `page`, `dest`, `add` for 6 sources x 2 rows: JOY R/L, JOY L, JOY U, JOY D, VELOCITY, KEY TRACKING. `add` is signed | panel (knobs A-H, every tab) |
 | `tracks[t].trigPos` | TRIG POS: the track that forwards its notes, `null` = --- | panel |
 | `trackMasks` | per-track bits: JOY mirror, key tracking HPF / LPF, LEGATO AMP / FLT / LFO | LEGATO AMP by panel, the rest from the factory set |
+| `tracks[t].multiEnv[6]` | MULTI ENV: ATK DEC SUS REL PORT and one more (NRPN 0x40-0x45 on the track). The factory set has the same values on all six tracks | live (NRPN and a kit diff) |
 | `tracks[t].extra`, `hidden.x1cd`, `hidden.x2b6` | not decoded, kept | |
 
 **The working kit** (the one that plays, unsaved edits included) is the kit's raw
@@ -123,10 +124,30 @@ after it ride in `hidden.rowsAfterEnd`.
 
 ### 4.5 `mm-desk/machine` (read-only, from the desk, MM-P2)
 
-The machine state the page shows: current and queued pattern, current kit and
-its working state (`clean` / `edited`), song, the engine (`booting` with the
-firmware's LCD, `ready`), and the SYSEX RECV session (`idle`, `entering`,
-`parked`, `leaving`). Defined with the desk in MM-P2.
+The machine state the page shows, published by `mmDesk::Desk` whenever it changes:
+
+| Member | Meaning |
+|---|---|
+| `engine` | `missing` (no ROM), `unsupported` (not OS 1.32B), `loading`, `booting` (the firmware's start-up screen), `ready` (the main screen came) |
+| `pattern.current`, `pattern.queued` | from the status replies; a LOAD PATTERN while playing is queued until the pattern end |
+| `kit.current`, `kit.working` | the kit slot, and `clean` / `edited`: the working kit in patch RAM against the stored slot |
+| `song.current`, `song.songMode` | the current song; song mode when known |
+| `global` | the active global slot |
+| `playing` | the sequencer runs (RAM telemetry) |
+| `recv` | the SYSEX RECV session: `state` (`idle`, `toMain`, `entering`, `parked`, `leaving`, `failed`), `sending` (dumps in flight), `received` / `errors` (the firmware's own counters) |
+| `loading` | `done` / `total` documents read (288) |
+| `roundTripMs`, `error` | the last dump's send-to-read-back time; the last problem, if any |
+
+Other messages to the page: `doc` (`kind`, `slot`, `pending` = sent but not yet
+read back, `working` = the current kit's working copy, `doc`), `tel` (`step`,
+`playing`, at most every 25 ms), `lcd` (the firmware's 128 x 64 LCD as 2048 hex
+digits, row by row, MSB = left pixel, while the engine is not ready),
+`catalogue`, `learn` and `result` (`op`, `id`, `ok`, `errors`, `note`).
+
+Commands from the page: `ready`, `set` (`kind`, `doc`), `load` (`kind`, `slot`),
+`select` (`p`), `loadKit` / `saveKit` (`k`), `loadSong` / `saveSong` (`s`),
+`tempo` (`bpm`), `play`, `stop`, `mute` (`t`, `on`), `revealRomFolder`,
+`recheckFirmware`, and the `learn*` family.
 
 ## 5. Hardware limits (`validate`)
 

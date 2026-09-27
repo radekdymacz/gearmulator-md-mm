@@ -125,13 +125,14 @@
     },
     "kitTrack": {
       "type": "object",
-      "required": ["machine", "outputs", "input", "pages", "extra", "assign", "trigPos"],
+      "required": ["machine", "outputs", "input", "pages", "multiEnv", "extra", "assign", "trigPos"],
       "properties": {
         "machine": {"enum": [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 32, 33]},
         "machineName": {"type": "string"},
         "outputs": {"type": "integer", "minimum": 0, "maximum": 7, "description": "bits AB 1, CD 2, EF 4"},
         "input": {"type": "integer", "minimum": 0, "maximum": 6, "description": "0 NEIGHBOR 1 INP A 2 INP B 3 INP A+B 4-6 BUS AB/CD/EF"},
         "pages": {"type": "array", "minItems": 8, "maxItems": 8, "items": {"type": "array", "items": {"$ref": "#/$defs/value"}, "minItems": 8, "maxItems": 8}},
+        "multiEnv": {"type": "array", "items": {"$ref": "#/$defs/byte"}, "minItems": 6, "maxItems": 6, "description": "MULTI ENV, NRPN 0x40-0x45: ATK DEC SUS REL PORT and one more"},
         "extra": {"$ref": "#/$defs/hex"},
         "assign": {
           "type": "object",

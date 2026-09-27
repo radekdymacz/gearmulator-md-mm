@@ -14,7 +14,9 @@ namespace elektronData
 	//   0x000  11  name, 7-bit, NUL padded (0x55, live)
 	//   0x00b   6  track levels (CC 7, live)
 	//   0x011 432  6 tracks x 72: 7 DATA pages x 8 (SYN AMP FLT EFX LF1 LF2 LF3, CC 48-119, live),
-	//              the MIDI page x 8 (LEN VEL PB PCHG CC1-4), 8 more bytes (unknown, kept)
+	//              the MIDI page x 8 (LEN VEL PB PCHG CC1-4, NRPN 0x38-0x3f), the MULTI ENV x 6
+	//              (NRPN 0x40-0x45: ATK DEC SUS REL PORT, one more; the same on every track in the
+	//              factory set), 2 unknown bytes (kept)
 	//   0x1c1   6  machines (0x5B ids, live)
 	//   0x1c7   6  routing (0x5C, live): output buses in bits 0-2 (AB 1, CD 2, EF 4), input in
 	//              bits 3-5 (0 NEIGHBOR, 1 INP A, 2 INP B, 3 INP A+B, 4-6 BUS AB/CD/EF; FX machines)
@@ -33,9 +35,13 @@ namespace elektronData
 	{
 		std::array<std::array<uint8_t, 8>, 7> pages{};
 		std::array<uint8_t, 8> midi{};
-		std::array<uint8_t, 8> extra{};
+		std::array<uint8_t, 6> multiEnv{};
+		std::array<uint8_t, 2> extra{};
 
-		bool operator==(const MmKitTrack& _o) const { return pages == _o.pages && midi == _o.midi && extra == _o.extra; }
+		bool operator==(const MmKitTrack& _o) const
+		{
+			return pages == _o.pages && midi == _o.midi && multiEnv == _o.multiEnv && extra == _o.extra;
+		}
 	};
 
 	struct MmKit

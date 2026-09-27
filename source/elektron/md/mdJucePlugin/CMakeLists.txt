@@ -30,6 +30,8 @@ set(SOURCES
 	mdStorageImage.cpp mdStorageImage.h
 	mdStudioEditor.cpp mdStudioEditor.h
 	mdStudioLink.cpp mdStudioLink.h
+	mmStudioEditor.cpp mmStudioEditor.h
+	mmStudioLink.cpp mmStudioLink.h
 	mdPluginEntry.cpp
 
 	parameterDescriptions_md.json parameterDescriptions_mm.json
@@ -48,6 +50,13 @@ set(SOURCES
 	skins/mdStudio/mdDeskBridge.js
 	skins/mdStudio/mdDeskModel.js
 	skins/mdStudio/mdDeskMod.js
+	skins/mmStudio/mmStudio.rml
+	skins/mmStudio/mmStudio.html
+	skins/mmStudio/mmStudio.css
+	skins/mmStudio/mmMockup.js
+	skins/mmStudio/mmConvert.js
+	skins/mmStudio/mmAdapter.js
+	skins/mmStudio/mmConvertTest.js
 	mdSettingsPanelFeel.cpp mdSettingsPanelFeel.h
 	mdSettingsAudioInput.cpp mdSettingsAudioInput.h
 )
@@ -70,7 +79,11 @@ file(GLOB MD_SKIN_ASSETS CONFIGURE_DEPENDS
 	"skins/mdStudio/fonts/*.woff2" "skins/mdStudio/fonts/*.ttf")
 file(GLOB MM_SKIN_ASSETS CONFIGURE_DEPENDS
 	"skins/mmSfx60/*.png" "skins/mmSfx60/*.rml" "skins/mmSfx60/*.rcss"
-	"skins/mmSfx60/*.ttf" "skins/mmSfx60/*.lua")
+	"skins/mmSfx60/*.ttf" "skins/mmSfx60/*.lua"
+	"skins/mmStudio/*.rml" "skins/mmStudio/*.html" "skins/mmStudio/*.css"
+	"skins/mmStudio/mmMockup.js" "skins/mmStudio/mmConvert.js" "skins/mmStudio/mmAdapter.js"
+	# shared with the Machinedrum Editor: the page bridge and the OFL fonts
+	"skins/mdStudio/mdDeskBridge.js" "skins/mdStudio/fonts/*.ttf")
 
 juce_add_binary_data(mdJucePlugin_BinaryData SOURCES
 	${COMMON_ASSETS} "tus_settings_gui_Machinedrum.rml"
@@ -81,8 +94,8 @@ juce_add_binary_data(mmJucePlugin_BinaryData SOURCES
 
 createJucePlugin(mdJucePlugin "Gearmulator MD" TRUE "Tmdr" mdJucePlugin_BinaryData mdLib)
 createJucePlugin(mmJucePlugin "Gearmulator MM" TRUE "Tmno" mmJucePlugin_BinaryData mdLib)
-target_link_libraries(mdJucePlugin PRIVATE elektronData mdDataLink mdDesk)
-target_link_libraries(mmJucePlugin PRIVATE elektronData mdDataLink mdDesk)
+target_link_libraries(mdJucePlugin PRIVATE elektronData mdDataLink mdDesk mmDesk)
+target_link_libraries(mmJucePlugin PRIVATE elektronData mdDataLink mdDesk mmDesk)
 
 # MD/MM expose an optional stereo input to plug-in hosts. Starting the
 # standalone with that input active makes CoreAudio combine the built-in input

@@ -52,6 +52,7 @@ namespace mmDesk
 			{
 				t.pages = {};
 				t.midi = {};
+				t.multiEnv = {};
 			}
 			return _k;
 		}
@@ -493,6 +494,9 @@ namespace mmDesk
 			for(uint8_t i = 0; i < 8; ++i)
 				if(_from.tracks[t].midi[i] != _to.tracks[t].midi[i])
 					m_port.sendNrpn(t, static_cast<uint8_t>(0x38 + i), _to.tracks[t].midi[i]);
+			for(uint8_t i = 0; i < 6; ++i)
+				if(_from.tracks[t].multiEnv[i] != _to.tracks[t].multiEnv[i])
+					m_port.sendNrpn(t, static_cast<uint8_t>(0x40 + i), _to.tracks[t].multiEnv[i]);
 		}
 		// What no live message reaches: a kit dump to the current slot, then LOAD KIT.
 		if(ed::mmKitRaw(liveFields(_from)) != ed::mmKitRaw(liveFields(_to)))

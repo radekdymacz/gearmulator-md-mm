@@ -2,6 +2,7 @@
 
 #include "mdEditor.h"
 #include "mdStudioEditor.h"
+#include "mmStudioEditor.h"
 #include "mdPluginProcessor.h"
 #include "mdProductSkinPolicy.h"
 #include "mdStandaloneRendererPolicy.h"
@@ -63,6 +64,8 @@ namespace mdJucePlugin
 	{
 		if(isStudioSkin(_skin.displayName, _skin.filename))
 			return new StudioEditor(m_processor, _skin);
+		if(isMmStudioSkin(_skin.displayName, _skin.filename))
+			return new MmStudioEditor(m_processor, _skin);
 		return new Editor(m_processor, _skin);
 	}
 

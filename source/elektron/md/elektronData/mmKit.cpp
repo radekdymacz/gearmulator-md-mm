@@ -16,6 +16,7 @@ namespace elektronData
 			{
 				_io.bytes(t.pages);
 				_io.bytes(t.midi);
+				_io.bytes(t.multiEnv);
 				_io.bytes(t.extra);
 			}
 			_io.bytes(_k.machines);
