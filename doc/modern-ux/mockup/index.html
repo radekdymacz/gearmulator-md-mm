@@ -1119,6 +1119,33 @@ html,body{min-width:1280px}
 .lb:not(.none)::before{content:"";position:absolute;left:2px;right:2px;top:2px;height:3px;border-radius:2px;background:var(--trig,var(--led));z-index:1}
 .lb:not(.none):hover{background:color-mix(in srgb,var(--ink) 20%,transparent)}
 .lb.ph:not(.none){background:color-mix(in srgb,var(--ink) 24%,transparent)}
+/* v57: bipolar lock lanes (PAN, EQG) draw from the centre: up = right / boost, down = left / cut */
+.lb .mid{position:absolute;left:0;right:0;top:50%;border-top:1px solid color-mix(in srgb,var(--ink) 55%,transparent)}
+.lb i.bp{height:auto}
+.lb i.bp.up{bottom:50%!important;top:auto}
+.lb i.bp.dn{top:50%!important;bottom:auto!important}
+/* v58: no big LCD panel behind the lane: only lockable steps are small LCD windows */
+#lanescroll{background:transparent!important}
+.lb:not(.none){background:var(--lcd)!important;border-radius:3px;box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--ink) 25%,transparent)}
+.lb:not(.none):hover{background:color-mix(in srgb,var(--lcd) 88%,var(--ink))!important}
+.lb.ph:not(.none){background:color-mix(in srgb,var(--lcd) 80%,var(--ink))!important}
+.lb.none{opacity:1!important;background:none!important;border-bottom:1px solid color-mix(in srgb,var(--print) 25%,transparent)}
+/* v59: lock lane as hardware keys with LED bar meters (lockable = a key with a meter, no trig = a dim key) */
+.lb{border-bottom:0!important}
+.lb:not(.none){background:var(--key)!important;border-radius:3px!important;box-shadow:inset 0 -2px 0 rgba(0,0,0,.35)!important}
+.lb:not(.none)::before{content:none!important}
+.lb:not(.none)::after{content:"";position:absolute;left:22%;right:22%;top:8px;bottom:6px;z-index:0;
+ background:repeating-linear-gradient(to top,color-mix(in srgb,var(--led) 16%,transparent) 0 5px,transparent 5px 8px)}
+.lb i{z-index:1;left:22%!important;right:22%!important;bottom:6px;max-height:calc(100% - 14px);
+ background:repeating-linear-gradient(to top,var(--led) 0 5px,transparent 5px 8px)!important;filter:drop-shadow(0 0 3px color-mix(in srgb,var(--led) 70%,transparent))}
+.lb i.bp.up{bottom:50%!important}
+.lb i.bp.dn{top:50%!important;background:repeating-linear-gradient(to bottom,var(--led) 0 5px,transparent 5px 8px)!important}
+.lb .base{z-index:2;border-top:1px dashed var(--keytext)!important;opacity:.55}
+.lb .mid{z-index:2;border-top:1px solid color-mix(in srgb,var(--keytext) 60%,transparent)!important}
+.lb:not(.none):hover{filter:brightness(1.18)}
+.lb.ph:not(.none){box-shadow:inset 0 0 0 2px color-mix(in srgb,var(--led) 55%,transparent),inset 0 -2px 0 rgba(0,0,0,.35)!important}
+.lb.none{background:var(--key)!important;opacity:.28!important;border-radius:3px}
+.lane{gap:3px}
 </style>
 
 <div class="app">
@@ -1328,13 +1355,16 @@ function steps(){const[a,b]=vis();return Array.from({length:b-a},(_,k)=>a+k)}
 function cols(){return S.viewAll?`repeat(${steps().length},minmax(0,1fr))`:`repeat(${steps().length},minmax(18px,1fr))`}
 function stepCls(i,s){const t=S.tracks[i],c=["st"];if(s%4===0)c.push("q");if(s%16===0&&s!==vis()[0])c.push("gap");if(t.trigs[s]){c.push("on");if(t.acc.has(s))c.push("acc");if(t.slide.has(s))c.push("sl");if(stepLocked(i,s))c.push("lk")}if(S.playing&&s===S.step)c.push("ph");return c.join(" ")}
 function pageCtl(){return`<span class="pagectl rh seqpage"><button class="pgkey" id="pgkey" ${pages16()<2?"disabled":""} title="Next page. Shift-click = previous. Keys [ and ].">Page</button><span class="pleds" aria-hidden="true">${[0,1,2,3].map(k=>`<span class="pl ${k<pages16()?"":"na"} ${!S.viewAll&&k===S.page?"cur":""}" data-plp="${k}"><i class="led"></i></span>`).join("")}</span><button class="ptog ${S.viewAll?"on":""}" id="pgall" aria-pressed="${S.viewAll}" title="Show all steps"><i class="led"></i>All</button><button class="ptog ${S.follow?"on":""}" id="pgfollow" aria-pressed="${S.follow}" title="Page follows the play position"><i class="led"></i>Fol</button></span>`}
+const BIP=new Set(["PAN","EQG"]);
+function bipLane(){return BIP.has(S.lane)}
+function barHTML(v){return bipLane()?(v>=64?`<i class="bp up" style="height:${(v-64)/63*50}%"></i>`:`<i class="bp dn" style="height:${(64-v)/64*50}%"></i>`):`<i style="--h:${v/127*168}px"></i>`}
 function renderSeq(){
  document.documentElement.classList.toggle("viewall",!!S.viewAll);
  const L=S.len;
  let h=`<div class="panel ${S.mode==="CLASSIC"?"classic":""}" id="seqp">${pageCtl()}<div class="scroll" id="seqscroll"><div class="seq" id="seq">
   <div class="r" style="grid-template-columns:${cols()}">${steps().map(s=>`<div class="rul ${s%16===0&&s!==vis()[0]?"gap":""}">${s%4===0?s+1:""}</div>`).join("")}</div>`;
  S.tracks.forEach((t,i)=>{h+=`<div class="r ${i===S.sel?"sel":""} ${audible(i)?"":"off"}" data-row="${i}" style="grid-template-columns:${cols()};--c:${FAMC[t.fam]}">${steps().map(s=>`<button class="${stepCls(i,s)}" data-t="${i}" data-s="${s}" aria-label="Track ${i+1} step ${s+1}" aria-pressed="${t.trigs[s]}"></button>`).join("")}</div>`});
- h+=`</div></div><div class="lanewrap"><div class="lanetop"><span class="cap">Lock lane · ${S.sel+1} ${S.tracks[S.sel].name} · <b id="lanename">${S.lane}</b> <span class="lanescale">0–127</span></span>${S.mode==="CLASSIC"?`<span class="warnline" title="Locks stay in the pattern but do nothing until you switch to EXTENDED.">CLASSIC: locks muted</span>`:""}<span class="lanehelp" title="Draw across the bars to lock this parameter per step. Alt-drag erases. Hatched steps have no trig, so they cannot hold a lock. Dashed line = kit value.">Draw to lock · alt-drag erases</span>
+ h+=`</div></div><div class="lanewrap"><div class="lanetop"><span class="cap">Lock lane · ${S.sel+1} ${S.tracks[S.sel].name} · <b id="lanename">${S.lane}</b> <span class="lanescale">${bipLane()?"L 64 · centre · R 63":"0–127"}</span></span>${S.mode==="CLASSIC"?`<span class="warnline" title="Locks stay in the pattern but do nothing until you switch to EXTENDED.">CLASSIC: locks muted</span>`:""}<span class="lanehelp" title="Draw across the bars to lock this parameter per step. Alt-drag erases. Hatched steps have no trig, so they cannot hold a lock. Dashed line = kit value.">Draw to lock · alt-drag erases</span>
   <div class="legend"><span><i class="lg on"></i>Trig</span><span><i class="lg on acc"></i>Accent: shift-click</span><span><i class="lg on sl"></i>Slide: alt-click</span><span><i class="lg on lk"></i>Has locks</span></div></div>
 </div>
   <div class="scroll" id="lanescroll"><div class="lane" id="lane" style="grid-template-columns:${cols()}"></div></div></div>`;
@@ -1353,7 +1383,7 @@ function renderLane(){
   return`<span class="plab">${lab}</span>`+a.map(p=>{if(!p)return`<span class="pk empty"></span>`;const n=S.locks.get(lk(t,p))?.size||0;
    return`<button class="pk ${n?"has":""}" data-lane="${p}" aria-pressed="${p===S.lane}" title="${n?n+" locked step"+(n>1?"s":""):"No locks yet"}">${p}${n?`<i>${n}</i>`:""}</button>`}).join("")}).join("");
  $("#lane").innerHTML=steps().map(s=>{const on=tr.trigs[s],v=m?.get(s);
-  return`<div class="lb ${on?"":"none"} ${s%16===0&&s!==vis()[0]?"gap":""} ${S.playing&&s===S.step?"ph":""}" data-s="${s}">${on?`<div class="base" style="--b:${3+base/127*168}px"></div>${v!=null?`<i style="--h:${v/127*168}px"></i>`:""}`:""}</div>`}).join("");
+  return`<div class="lb ${on?"":"none"} ${s%16===0&&s!==vis()[0]?"gap":""} ${S.playing&&s===S.step?"ph":""}" data-s="${s}">${on?`<div class="base" style="--b:${3+base/127*168}px"></div>${bipLane()?`<div class="mid"></div>`:""}${v!=null?barHTML(v):""}`:""}</div>`}).join("");
 }
 function syncScroll(){const a=$("#seqscroll"),b=$("#lanescroll");if(!a||!b)return;a.onscroll=()=>{b.scrollLeft=a.scrollLeft};b.onscroll=()=>{a.scrollLeft=b.scrollLeft}}
 function refreshRow(i){$$(`.st[data-t="${i}"]`).forEach(b=>{const s=+b.dataset.s;b.className=stepCls(i,s);b.setAttribute("aria-pressed",S.tracks[i].trigs[s])})}
@@ -1362,7 +1392,7 @@ let laneDraw=null;
 function laneAt(e){const lane=$("#lane");if(!lane)return;const el=document.elementFromPoint(e.clientX,e.clientY)?.closest(".lb");if(!el||!lane.contains(el))return;
  const s=+el.dataset.s,t=S.sel;if(!S.tracks[t].trigs[s])return;const r=el.getBoundingClientRect();const v=clamp(Math.round((r.bottom-3-e.clientY)/(r.height-6)*127));
  if(laneDraw.erase){const m=S.locks.get(lk(t,S.lane));if(m){m.delete(s);if(!m.size)S.locks.delete(lk(t,S.lane))}}else if(!setLock(t,S.lane,s,v))return;
- const bar=el.querySelector("i");if(laneDraw.erase){bar?.remove()}else if(bar)bar.style.setProperty("--h",v/127*168+"px");else el.insertAdjacentHTML("beforeend",`<i style="--h:${v/127*168}px"></i>`);
+ const bar=el.querySelector("i");bar?.remove();if(!laneDraw.erase)el.insertAdjacentHTML("beforeend",barHTML(v));
  laneDraw.touched.add(s);renderTop()}
 function endLaneDraw(){if(!laneDraw)return;laneDraw=null;refreshRow(S.sel);renderLane()}
 

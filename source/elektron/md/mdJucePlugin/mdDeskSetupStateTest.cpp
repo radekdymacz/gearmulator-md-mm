@@ -52,6 +52,28 @@ int main()
 	jb.setStateInformation(without.getData(), static_cast<int>(without.getSize()));
 	check(b.getDeskSetup().empty(), "a project without it starts from the default setup");
 	check(b.getDeskSetupGeneration() != g1, "and says so");
+	// P4 HW MIDI: the plug-in's MIDI in/out carry the editor's traffic to external hardware.
+	{
+		jb.prepareToPlay(44100.0, 256);
+		b.setExternalMidi(true);
+		synthLib::SMidiEvent out(synthLib::MidiEventSource::Editor);
+		out.sysex = {0xf0, 0x00, 0x20, 0x3c, 0x02, 0x00, 0x70, 0x04, 0xf7};
+		b.sendExternalMidi(out);
+		juce::AudioBuffer<float> audio(jb.getTotalNumOutputChannels(), 256);
+		juce::MidiBuffer midi;
+		const uint8_t reply[] = {0xf0, 0x00, 0x20, 0x3c, 0x02, 0x00, 0x72, 0x04, 0x05, 0xf7};
+		midi.addEvent(juce::MidiMessage::createSysExMessage(reply + 1, sizeof(reply) - 2), 0);
+		jb.processBlock(audio, midi);
+		bool sent = false;
+		for(const auto m : midi)
+			sent |= m.numBytes == 9 && m.data[6] == 0x70;
+		check(sent, "external MIDI: the editor's SysEx leaves through the plug-in's MIDI out");
+		std::vector<synthLib::SMidiEvent> in;
+		b.drainExternalMidiIn(in);
+		check(in.size() == 1 && in[0].sysex.size() == sizeof(reply) && in[0].sysex[6] == 0x72, "and the hardware's SysEx comes to the editor, not the device");
+		b.setExternalMidi(false);
+		jb.releaseResources();
+	}
 	std::printf("mdDeskSetupStateTest: %s\n", g_failures ? "FAIL" : "PASS");
 	return g_failures ? 1 : 0;
 }

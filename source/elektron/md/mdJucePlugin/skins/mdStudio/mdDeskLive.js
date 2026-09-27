@@ -113,6 +113,8 @@ function showFwLcd(on) {
 	p.classList.remove("fwboot"); p.classList.add("fwfade"); setTimeout(() => p.classList.remove("fwfade"), 700);
 }
 Bridge.onMessage(m => {
+	/* The engine changed (emulator <-> HW MIDI): the documents start over. */
+	if (m.type === "reset") { Docs.patterns = {}; Docs.kits = {}; Docs.songs = {}; Docs.global = null; Docs.machine = null; S.loaded = false; scheduleRender(); return; }
 	if (m.type === "lcd") {
 		if (m.bits) { const s = atob(m.bits); fwLcd.bits = Uint8Array.from(s, ch => ch.charCodeAt(0)); drawFwLcd(); }
 		const fw = (machineState().desk || {}).firmware;
@@ -239,4 +241,25 @@ if (/[?&]selftest=p4get/.test(location.search)) (async () => {
 	const sleep = ms => new Promise(r => setTimeout(r, ms));
 	await sleep(4000);
 	Bridge.log(`P4: page setup: ${Mods.doc.sources.length} app source(s) ${Mods.doc.sources.map(s => s.label + " -> " + Mods.linksOf(s.id).map(o => "T" + (o.l.track + 1) + " p" + o.l.param).join()).join("; ")}, knob CCs ${KNOB_CCS.join(" ")}`);
+})();
+
+/* ?selftest=p4hw: the engine menu's HW MIDI in the plug-in (no Machinedrum is connected here): the label
+   follows the link, the editor's traffic goes to the plug-in's MIDI out, and EMU brings the emulator back. */
+if (/[?&]selftest=p4hw/.test(location.search)) (async () => {
+	const sleep = ms => new Promise(r => setTimeout(r, ms));
+	const log = t => Bridge.log("P4: " + t);
+	const label = () => $(".lcdeng span")?.textContent;
+	while (!(machineState().desk && machineState().desk.firmware === "ready" && S.loaded)) await sleep(200);
+	await sleep(1000);
+	log(`start: ${label()}`);
+	const sel = $("#engsel"); sel.value = "hw"; sel.dispatchEvent(new Event("change", { bubbles: true }));
+	await sleep(1200);
+	log(`HW MIDI chosen: engine label ${label()}, link ${machineState().desk?.link}, REC disabled ${$("#rec").disabled}`);
+	await sleep(6000);
+	log(`nothing answers after 7 s: ${label()} (link ${machineState().desk?.link})`);
+	cmd("select", { p: 3 }); await sleep(300);
+	sel.value = "emu"; sel.dispatchEvent(new Event("change", { bubbles: true }));
+	let t0 = performance.now(); while (!(machineState().desk && machineState().desk.engine === "emu" && machineState().desk.firmware === "ready" && S.loaded) && performance.now() - t0 < 15000) await sleep(100);
+	log(`EMU again: ${label()} after ${Math.round(performance.now() - t0)} ms, pattern ${patName(S.pat)}`);
+	log("hw done");
 })();

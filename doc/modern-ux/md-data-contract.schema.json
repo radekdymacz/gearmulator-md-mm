@@ -275,6 +275,8 @@
           "description": "Added by mdDesk::Desk for the page (optional; readers ignore what they do not know).",
           "properties": {
             "firmware": {"enum": ["missing", "unsupported", "loading", "booting", "ready"], "description": "The engine: NO ROM, ROM ERROR, LOADING ROM, BOOTING OS, EMU OS 1.63. P4: ready only when the start-up animation is over (keys work)."},
+            "engine": {"enum": ["emu", "hw"], "description": "P4: the emulated MD OS 1.63, or HW MIDI: a real Machinedrum on the plug-in's MIDI in/out."},
+            "link": {"enum": ["local", "connect", "ready", "lost"], "description": "P4, HW MIDI: connect (HW CONNECT, no reply yet), ready (HW MIDI), lost (HW NO MIDI: no reply for 3.5 s, or none in 5 s after choosing it). local for the emulator."},
             "boot": {"enum": ["off", "starting", "animation", "ready"], "description": "P4: off (no firmware running), starting (no status reply yet), animation (the firmware answers MIDI but its start-up animation ignores panel keys), ready."},
             "tx": {"type": "boolean", "description": "An edit is on the wire (waiting for its read-back)."},
             "loading": {"type": "integer", "minimum": 0},

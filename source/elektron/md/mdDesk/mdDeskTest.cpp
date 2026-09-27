@@ -856,6 +856,38 @@ namespace
 		check(r.errors.empty() && r.changes.empty(), "copying an identical pattern changes nothing");
 	}
 
+	// P4: HW MIDI link states.
+	void testHardwareLink()
+	{
+		std::vector<Value> page;
+		double now = 0;
+		Desk::Port port;
+		port.sendSysex = [](const std::vector<uint8_t>&) {};
+		port.toPage = [&](const Value& _m) { page.push_back(_m); };
+		port.nowMs = [&] { return now; };
+		Desk desk(port);
+		desk.setHardwareLink(true);
+		desk.onTelemetry(Telemetry{});
+		const auto link = [&]
+		{
+			for(auto it = page.rbegin(); it != page.rend(); ++it)
+				if(it->find("type")->asString() == "machine")
+					return it->find("doc")->find("desk")->find("link")->asString();
+			return std::string();
+		};
+		desk.onPageMessage(cmd(R"({"op":"ready"})"));
+		check(link() == "connect", "HW: connect until the machine answers");
+		now += 6000;
+		desk.tick();
+		check(link() == "lost", "HW: nothing answers for 5 s: HW NO MIDI");
+		desk.onDeviceSysex({0xf0, 0x00, 0x20, 0x3c, 0x02, 0x00, 0x72, 0x04, 0x00, 0xf7});
+		desk.tick();
+		check(link() == "ready" && desk.isInputReady(), "HW: the first status reply: HW MIDI, input taken");
+		now += 4000;
+		desk.tick();
+		check(link() == "lost", "HW: no reply for 3.5 s: lost");
+	}
+
 	void testSampleName()
 	{
 		const auto m = ed::mdSetSampleName(5, "KIK");
@@ -914,6 +946,7 @@ int main()
 	testSetup();
 	testLockStep();
 	testLibrary();
+	testHardwareLink();
 	testWorkingKitMemory();
 	testKnobRecorder();
 	testDeskRecording();

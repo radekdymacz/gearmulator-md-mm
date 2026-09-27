@@ -6,6 +6,7 @@
 #include "mdDeskHistory.h"
 #include "mdDeskLibrary.h"
 #include "mdDeskMod.h"
+#include "mdDeskPacer.h"
 #include "mdDeskRecord.h"
 #include "mdDeskSetup.h"
 
@@ -106,6 +107,11 @@ namespace mdDesk
 		// project all show without SAVE KIT. Send it when it changes.
 		void onWorkingKitMemory(const Bytes& _region);
 		void setFirmware(Firmware _firmware);
+		// HW MIDI (P4): the desk drives a real Machinedrum over MIDI (DIN speed), not the
+		// emulated one: timeouts follow the wire, and "machine.desk.engine" says "hw" with
+		// "link" connect (no reply yet), ready or lost (no reply for a while).
+		void setHardwareLink(bool _hardware);
+		bool isHardwareLink() const { return m_hw; }
 		// The setup stored with the project (md-desk/setup); errors if it does not validate,
 		// in which case the current setup stays.
 		std::vector<std::string> loadSetup(const Value& _setup);
@@ -148,6 +154,7 @@ namespace mdDesk
 		void handleChain(const Value& _message);
 		void handleKnobs(const Value& _message);
 		void handleKitSlot(const Value& _message);
+		bool linkLost() const;
 		bool askFirst(const Value& _message, const std::vector<Change>& _changes);
 		void publishSetup();
 		void saveSetup() const;
@@ -207,6 +214,10 @@ namespace mdDesk
 		std::optional<uint8_t> m_lastPattern;
 		Telemetry m_telemetry;
 		bool m_telemetrySeen = false;
+		bool m_hw = false;
+		double m_lastReplyMs = -1e9;
+		bool m_linkLost = false;
+		double m_hwSinceMs = 0;
 		std::array<bool, 16> m_mutes{};
 		KnobRecorder m_knobs;
 		// The trig the last knob turn will lock while recording (nextLockStep), for the page.

@@ -224,6 +224,17 @@ firmware (`mdP4ProbeFirmwareTest library`, smoke test p4):
 Slot writes are undoable in the editor; LOAD and SAVE are the machine's (it keeps
 one UNDO KIT).
 
+**HW MIDI (P4).** `{"op":"engine","kind":"hw"|"emu"}` swaps the desk's port. HW:
+SysEx and CCs go out through the plug-in's MIDI out (host and physical ports,
+`pluginLib::Processor::setExternalMidi`), paced at DIN speed (`mdDesk::DinPacer`,
+3125 bytes a second); SysEx that comes in goes to the desk, not the emulated
+device, and the device's own MIDI output is held back. PLAY/STOP are MIDI Start /
+Stop; panel keys, telemetry, the working kit from memory and the boot LCD do not
+exist, so live recording and chaining are refused with the reason and the kit is
+`tracked`. Timeouts follow the wire (a pattern is 1.7 s each way); in the background
+the 64 kits load first. `machine.desk.engine` = `hw`, `link` = connect / ready /
+lost. The page gets `{"type":"reset"}` on a swap and starts its documents over.
+
 ### 4.6 `md-desk/modulators` (page -> desk, P3)
 
 App-only modulation for the Control workspace. The page owns it and sends it

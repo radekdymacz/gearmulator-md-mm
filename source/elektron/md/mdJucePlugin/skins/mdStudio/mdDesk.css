@@ -1124,6 +1124,33 @@ html,body{min-width:1280px}
 .lb:not(.none)::before{content:"";position:absolute;left:2px;right:2px;top:2px;height:3px;border-radius:2px;background:var(--trig,var(--led));z-index:1}
 .lb:not(.none):hover{background:color-mix(in srgb,var(--ink) 20%,transparent)}
 .lb.ph:not(.none){background:color-mix(in srgb,var(--ink) 24%,transparent)}
+/* v57: bipolar lock lanes (PAN, EQG) draw from the centre: up = right / boost, down = left / cut */
+.lb .mid{position:absolute;left:0;right:0;top:50%;border-top:1px solid color-mix(in srgb,var(--ink) 55%,transparent)}
+.lb i.bp{height:auto}
+.lb i.bp.up{bottom:50%!important;top:auto}
+.lb i.bp.dn{top:50%!important;bottom:auto!important}
+/* v58: no big LCD panel behind the lane: only lockable steps are small LCD windows */
+#lanescroll{background:transparent!important}
+.lb:not(.none){background:var(--lcd)!important;border-radius:3px;box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--ink) 25%,transparent)}
+.lb:not(.none):hover{background:color-mix(in srgb,var(--lcd) 88%,var(--ink))!important}
+.lb.ph:not(.none){background:color-mix(in srgb,var(--lcd) 80%,var(--ink))!important}
+.lb.none{opacity:1!important;background:none!important;border-bottom:1px solid color-mix(in srgb,var(--print) 25%,transparent)}
+/* v59: lock lane as hardware keys with LED bar meters (lockable = a key with a meter, no trig = a dim key) */
+.lb{border-bottom:0!important}
+.lb:not(.none){background:var(--key)!important;border-radius:3px!important;box-shadow:inset 0 -2px 0 rgba(0,0,0,.35)!important}
+.lb:not(.none)::before{content:none!important}
+.lb:not(.none)::after{content:"";position:absolute;left:22%;right:22%;top:8px;bottom:6px;z-index:0;
+ background:repeating-linear-gradient(to top,color-mix(in srgb,var(--led) 16%,transparent) 0 5px,transparent 5px 8px)}
+.lb i{z-index:1;left:22%!important;right:22%!important;bottom:6px;max-height:calc(100% - 14px);
+ background:repeating-linear-gradient(to top,var(--led) 0 5px,transparent 5px 8px)!important;filter:drop-shadow(0 0 3px color-mix(in srgb,var(--led) 70%,transparent))}
+.lb i.bp.up{bottom:50%!important}
+.lb i.bp.dn{top:50%!important;background:repeating-linear-gradient(to bottom,var(--led) 0 5px,transparent 5px 8px)!important}
+.lb .base{z-index:2;border-top:1px dashed var(--keytext)!important;opacity:.55}
+.lb .mid{z-index:2;border-top:1px solid color-mix(in srgb,var(--keytext) 60%,transparent)!important}
+.lb:not(.none):hover{filter:brightness(1.18)}
+.lb.ph:not(.none){box-shadow:inset 0 0 0 2px color-mix(in srgb,var(--led) 55%,transparent),inset 0 -2px 0 rgba(0,0,0,.35)!important}
+.lb.none{background:var(--key)!important;opacity:.28!important;border-radius:3px}
+.lane{gap:3px}
 
 /* ===== The real machine's states (not in the mockup) ===== */
 .st.past{opacity:.45}

@@ -65,8 +65,38 @@ namespace pluginLib
 		m_device.reset();
 	}
 
+	void Processor::setExternalMidi(const bool _on)
+	{
+		const std::scoped_lock lock(m_externalMidiMutex);
+		m_externalMidi.store(_on, std::memory_order_release);
+		m_externalIn.clear();
+		m_externalOut.clear();
+	}
+
+	void Processor::sendExternalMidi(const synthLib::SMidiEvent& _ev)
+	{
+		const std::scoped_lock lock(m_externalMidiMutex);
+		if(m_externalMidi.load(std::memory_order_relaxed))
+			m_externalOut.push_back(_ev);
+	}
+
+	void Processor::drainExternalMidiIn(std::vector<synthLib::SMidiEvent>& _out)
+	{
+		const std::scoped_lock lock(m_externalMidiMutex);
+		_out.insert(_out.end(), m_externalIn.begin(), m_externalIn.end());
+		m_externalIn.clear();
+	}
+
 	void Processor::addMidiEvent(const synthLib::SMidiEvent& _ev)
 	{
+		// External MIDI: SysEx from the hardware is the editor's.
+		if(_ev.source != synthLib::MidiEventSource::Device && !_ev.sysex.empty()
+			&& m_externalMidi.load(std::memory_order_acquire))
+		{
+			const std::scoped_lock lock(m_externalMidiMutex);
+			m_externalIn.push_back(_ev);
+			return;
+		}
 		// Process through MIDI Learn translator first
 		if (_ev.source != synthLib::MidiEventSource::Device)
 		{
@@ -904,8 +934,12 @@ namespace pluginLib
 		m_midiOut.clear();
 		getPlugin().getMidiOut(m_midiOut);
 
+		const bool external = m_externalMidi.load(std::memory_order_acquire);
 	    for (auto& e : m_midiOut)
 	    {
+			// External MIDI: the device's output must not reach the hardware.
+			if(external)
+				continue;
 		    addMidiEvent(e);
 
 			if (!getMidiRoutingMatrix().enabled(e, synthLib::MidiEventSource::Host))
@@ -914,6 +948,21 @@ namespace pluginLib
 	    	const auto mm = MidiPorts::toJuceMidiMessage(e);
 		    midiMessages.addEvent(mm, static_cast<int>(e.offset));
 	    }
+
+		// External MIDI: what the editor sends, to the host's MIDI out and the physical ports.
+		if(external)
+		{
+			std::unique_lock lock(m_externalMidiMutex, std::try_to_lock);
+			if(lock.owns_lock())
+			{
+				for(const auto& e : m_externalOut)
+				{
+					midiMessages.addEvent(MidiPorts::toJuceMidiMessage(e), 0);
+					m_midiPorts.send(e);
+				}
+				m_externalOut.clear();
+			}
+		}
 
 		// Drain MIDI Learn feedback events destined for the host
 		{

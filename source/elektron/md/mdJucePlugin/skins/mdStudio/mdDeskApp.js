@@ -181,23 +181,29 @@ function renderTop() {
    EMU OS 1.63 (it answers MIDI: status reply seen), ROM ERROR (not OS 1.63). While it is not
    ready the LCD fields dim, REC and PLAY are disabled and edits wait (the desk refuses them).
    HW MIDI is not available yet. */
-const ENG = { missing: ["NO ROM", "off"], loading: ["LOADING ROM", "blink"], booting: ["BOOTING OS", "blink"], ready: ["EMU OS 1.63", "on"], unsupported: ["ROM ERROR", "off"] };
+const ENG = { missing: ["NO ROM", "off"], loading: ["LOADING ROM", "blink"], booting: ["BOOTING OS", "blink"], ready: ["EMU OS 1.63", "on"], unsupported: ["ROM ERROR", "off"],
+	hwconnect: ["HW CONNECT", "blink"], hwready: ["HW MIDI", "on"], hwnone: ["HW NO MIDI", "off"] };
+/* P4 HW MIDI: the desk drives a real Machinedrum on the plug-in's MIDI in/out; its link state is the engine's. */
+function engineKey() { const d = machineState().desk || {}; return d.engine === "hw" ? ({ connect: "hwconnect", ready: "hwready", lost: "hwnone" }[d.link] || "hwconnect") : S.firmware; }
 let lastEng = "";
 function renderEngine() {
 	const btn = $(".lcdeng"), led = $("#engled"); if (!btn || !led) return;
-	const [txt, mode] = ENG[S.firmware] || ENG.booting, ready = S.firmware === "ready";
+	const key = engineKey(), hw = key.startsWith("hw"), [txt, mode] = ENG[key] || ENG.booting, ready = key === "ready" || key === "hwready";
 	btn.querySelector("span").textContent = txt;
 	led.className = "led " + (mode === "on" ? "on" : mode === "blink" ? "on blink" : "");
 	$(".lcdpanel").classList.toggle("engwait", !ready);
 	["rec", "play"].forEach(id => { const k = document.getElementById(id); if (k) k.disabled = !ready; });
-	btn.title = ready ? "Engine: the real Machinedrum OS 1.63 runs inside the app. Editing a real Machinedrum over MIDI is not available yet." : "Engine: " + txt.toLowerCase() + ". Editing starts when it is ready.";
+	btn.title = hw ? (key === "hwready" ? "Engine: a real Machinedrum on the plug-in's MIDI in and out, at MIDI speed (a pattern takes about 1.7 s each way). No live recording, chains or boot screen over MIDI; PLAY/STOP are MIDI Start/Stop." : key === "hwnone" ? "Engine: HW MIDI, but the Machinedrum has not answered for a while. Check the MIDI cables and that its SYSEX is on." : "Engine: HW MIDI, waiting for the Machinedrum to answer on the plug-in's MIDI in and out.")
+		: ready ? "Engine: the real Machinedrum OS 1.63 runs inside the app. Choose HW MIDI to edit a real Machinedrum instead." : "Engine: " + txt.toLowerCase() + ". Editing starts when it is ready.";
+	const sel = document.getElementById("engsel"); if (sel) sel.value = hw ? "hw" : "emu";
+	["rec"].forEach(id => { const k = document.getElementById(id); if (k && hw) { k.disabled = true; k.title = "Live recording needs the machine's panel keys: the emulator only"; } });
 	if (S.firmware !== lastEng) { if (typeof SELFTEST !== "undefined" && SELFTEST) Bridge.log(`engine: ${txt} at ${Math.round(performance.now())} ms`); lastEng = S.firmware; }
 }
 document.addEventListener("change", e => {
 	if (e.target.id !== "engsel") return;
-	const sel = e.target, v = sel.value; sel.value = "emu"; renderEngine();
+	const sel = e.target, v = sel.value; renderEngine();
 	if (v === "rom") firstRun(true);
-	else if (v === "hw") toast("HW MIDI is not available yet. The editor runs the emulated OS 1.63.");
+	else if (v === "hw" || v === "emu") cmd("engine", { kind: v });
 });
 
 /* ===== Track header (one component, used by rail and grid) ===== */
@@ -230,12 +236,18 @@ function renderSeq() {
 	let h = `<div class="panel ${S.mode === "CLASSIC" ? "classic" : ""}" id="seqp">${pageCtl()}<div class="scroll" id="seqscroll"><div class="seq" id="seq">
   <div class="r" style="grid-template-columns:${cols()}">${steps().map(s => `<div class="rul ${s % 16 === 0 && s !== vis()[0] ? "gap" : ""}">${s % 4 === 0 ? s + 1 : ""}</div>`).join("")}</div>`;
 	S.tracks.forEach((t, i) => { h += `<div class="r ${i === S.sel ? "sel" : ""} ${audible(i) ? "" : "off"}" data-row="${i}" style="grid-template-columns:${cols()};--c:${FAMC[t.fam]}">${steps().map(s => `<button class="${stepCls(i, s)}" data-t="${i}" data-s="${s}" aria-label="Track ${i + 1} step ${s + 1}" aria-pressed="${t.trigs[s]}"></button>`).join("")}</div>`; });
-	h += `</div></div><div class="lanewrap"><div class="lanetop"><span class="cap">Lock lane · ${S.sel + 1} ${S.tracks[S.sel].name} · <b id="lanename">${S.lane}</b> <span class="lanescale">0–127</span></span>${S.mode === "CLASSIC" ? `<span class="warnline" title="Locks stay in the pattern but do nothing until you switch to EXTENDED.">CLASSIC: locks muted</span>` : ""}<span class="lanehelp" title="Draw across the bars to lock this parameter per step. Alt-drag erases. Hatched steps have no trig, so they cannot hold a lock. Dashed line = kit value.">Draw to lock · alt-drag erases</span>
+	h += `</div></div><div class="lanewrap"><div class="lanetop"><span class="cap">Lock lane · ${S.sel + 1} ${S.tracks[S.sel].name} · <b id="lanename">${S.lane}</b> <span class="lanescale">${bipLane() ? "L 64 · centre · R 63" : "0–127"}</span></span>${S.mode === "CLASSIC" ? `<span class="warnline" title="Locks stay in the pattern but do nothing until you switch to EXTENDED.">CLASSIC: locks muted</span>` : ""}<span class="lanehelp" title="Draw across the bars to lock this parameter per step. Alt-drag erases. Hatched steps have no trig, so they cannot hold a lock. Dashed line = kit value.">Draw to lock · alt-drag erases</span>
   <div class="legend"><span><i class="lg on"></i>Trig</span><span><i class="lg on acc"></i>Accent: shift-click${S.accAll ? " (all)" : ""}</span><span><i class="lg on sl"></i>Slide: alt-click${S.slideAll ? " (all)" : ""}</span><span><i class="lg on lk"></i>Has locks</span></div></div>
 </div>
   <div class="scroll" id="lanescroll"><div class="lane" id="lane" style="grid-template-columns:${cols()}"></div></div></div>`;
 	$("#main").innerHTML = h; renderLane(); syncScroll();
 }
+/* Mockup v57: bipolar lanes draw from the centre (64): up = right / boost / louder, down = left / cut.
+   The machine's signed parameters (manual: displayed -64..+63): PAN, EQG, the RAM-R levels and balances
+   MLEV MBAL ILEV IBAL, and the master EQ gains LG HG PG (CTR machines). */
+const BIP = SIGNED;
+function bipLane() { return BIP.has(S.lane); }
+function barHTML(v) { return bipLane() ? (v >= 64 ? `<i class="bp up" style="height:${(v - 64) / 63 * 50}%"></i>` : `<i class="bp dn" style="height:${(64 - v) / 64 * 50}%"></i>`) : `<i style="--h:${v / 127 * 168}px"></i>`; }
 function renderLane() {
 	const lane = $("#lane"); if (!lane) return;
 	const t = S.sel, tr = S.tracks[t], m = S.locks.get(lk(t, S.lane)), g = grp(t, S.lane), base = g[S.lane] ?? 0;
@@ -248,7 +260,7 @@ function renderLane() {
 	}).join("");
 	lane.innerHTML = steps().map(s => {
 		const on = tr.trigs[s], v = m?.get(s);
-		return `<div class="lb ${on ? "" : "none"} ${s % 16 === 0 && s !== vis()[0] ? "gap" : ""} ${S.playing && s === S.step ? "ph" : ""}" data-s="${s}">${on ? `<div class="base" style="--b:${3 + base / 127 * 168}px"></div>${v != null ? `<i style="--h:${v / 127 * 168}px"></i>` : ""}` : ""}</div>`;
+		return `<div class="lb ${on ? "" : "none"} ${s % 16 === 0 && s !== vis()[0] ? "gap" : ""} ${S.playing && s === S.step ? "ph" : ""}" data-s="${s}">${on ? `<div class="base" style="--b:${3 + base / 127 * 168}px"></div>${bipLane() ? `<div class="mid"></div>` : ""}${v != null ? barHTML(v) : ""}` : ""}</div>`;
 	}).join("");
 }
 function syncScroll() { const a = $("#seqscroll"), b = $("#lanescroll"); if (!a || !b) return; a.onscroll = () => { b.scrollLeft = a.scrollLeft; }; b.onscroll = () => { a.scrollLeft = b.scrollLeft; }; }
@@ -259,7 +271,8 @@ function laneAt(e) {
 	const lane = $("#lane"); if (!lane) return; const el = document.elementFromPoint(e.clientX, e.clientY)?.closest(".lb"); if (!el || !lane.contains(el)) return;
 	const s = +el.dataset.s, t = S.sel; if (!S.tracks[t].trigs[s]) return; const r = el.getBoundingClientRect(); const v = clamp(Math.round((r.bottom - 3 - e.clientY) / (r.height - 6) * 127));
 	if (laneDraw.erase) eraseLock(t, S.lane, s); else if (!setLock(t, S.lane, s, v)) return;
-	const bar = el.querySelector("i"); if (laneDraw.erase) { bar?.remove(); } else if (bar) bar.style.setProperty("--h", v / 127 * 168 + "px"); else el.insertAdjacentHTML("beforeend", `<i style="--h:${v / 127 * 168}px"></i>`);
+	/* One shape for render and drag (mockup's barHTML): a bipolar bar redraws while it is dragged. */
+	el.querySelector("i")?.remove(); if (!laneDraw.erase) el.insertAdjacentHTML("beforeend", barHTML(v));
 	laneDraw.touched.add(s); renderTop();
 }
 function endLaneDraw() { if (!laneDraw) return; laneDraw = null; gesture = 0; refreshRow(S.sel); renderLane(); }
@@ -639,8 +652,10 @@ function setupCard(n) {
   </div></section>`;
 }
 /* The recorder's source, from its levels: MLEV/MBAL = the machine's own mix, ILEV/IBAL = inputs A/B. */
-const SOURCES = [["main", "Main mix", { MLEV: 127, MBAL: 64, ILEV: 0, IBAL: 64 }], ["a", "Input A", { MLEV: 0, MBAL: 64, ILEV: 127, IBAL: 0 }],
-	["b", "Input B", { MLEV: 0, MBAL: 64, ILEV: 127, IBAL: 127 }], ["ab", "A + B", { MLEV: 0, MBAL: 64, ILEV: 127, IBAL: 64 }]];
+/* Manual A-15: MLEV/ILEV 0 records "as is", -64 records nothing (stored 64 and 0); the balances are
+   -64..+63 (stored 0..127, 64 = centre). */
+const SOURCES = [["main", "Main mix", { MLEV: 64, MBAL: 64, ILEV: 0, IBAL: 64 }], ["a", "Input A", { MLEV: 0, MBAL: 64, ILEV: 64, IBAL: 0 }],
+	["b", "Input B", { MLEV: 0, MBAL: 64, ILEV: 64, IBAL: 127 }], ["ab", "A + B", { MLEV: 0, MBAL: 64, ILEV: 64, IBAL: 64 }]];
 function sourceOf(t) { const y = S.tracks[t].syn; const hit = SOURCES.find(([, , v]) => Object.keys(v).every(k => y[k] === v[k])); return hit ? hit[0] : "custom"; }
 function sourceSeg(t) { const cur = sourceOf(t); return `<span class="seg srcseg">${SOURCES.map(([id, label]) => `<button data-recsrc="${id}" data-t="${t}" aria-pressed="${cur === id}">${label}</button>`).join("")}</span>${cur === "custom" ? `<span class="note">custom levels</span>` : ""}`; }
 function renderSampler() {
@@ -1161,7 +1176,7 @@ Bridge.onMessage(m => {
 	}
 	case "machine": {
 		const before = Docs.machine; Docs.machine = m.doc;
-		const key = [m.doc.pattern?.current, m.doc.kit?.current, m.doc.desk?.queued, m.doc.desk?.firmware, m.doc.kit?.working, m.doc.song?.reloadNeeded, m.doc.extendedMode, (m.doc.desk?.mutes || []).join(), m.doc.desk?.playing, m.doc.desk?.recording, m.doc.desk?.kitSource, m.doc.song?.current].join("|");
+		const key = [m.doc.pattern?.current, m.doc.kit?.current, m.doc.desk?.queued, m.doc.desk?.firmware, m.doc.kit?.working, m.doc.song?.reloadNeeded, m.doc.extendedMode, (m.doc.desk?.mutes || []).join(), m.doc.desk?.playing, m.doc.desk?.recording, m.doc.desk?.kitSource, m.doc.song?.current, m.doc.desk?.engine, m.doc.desk?.link].join("|");
 		if (key !== lastKey || !before) { lastKey = key; scheduleRender(); }
 		else { S.tx = !!m.doc.desk.tx; S.roundTrip = m.doc.desk.roundTripMs; S.canUndo = !!m.doc.desk.undo; S.canRedo = !!m.doc.desk.redo; S.undoCount = m.doc.desk.undoCount; S.redoCount = m.doc.desk.redoCount; $("#undo").disabled = !S.canUndo; $("#redo").disabled = !S.canRedo; syncUndoCounts(); syncTx(); }
 		break;

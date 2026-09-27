@@ -1085,6 +1085,190 @@ namespace
 		_rig.run(300);
 	}
 
+	// P4 HW MIDI against the emulated MD as the MIDI peer ("a real Machinedrum"): the desk has
+	// no telemetry, no memory, no panel keys; SysEx and CCs go both ways at DIN speed
+	// (mdDesk::DinPacer, 3125 bytes a second each way).
+	class HwRig
+	{
+	public:
+		HwRig(const Bytes& _rom, const std::string& _romName) : m_machine(_rom, _romName)
+		{
+			mdDesk::Desk::Port port;
+			port.sendSysex = [this](const Bytes& _b) { m_out.push(_b); };
+			port.sendKitParam = [this](const uint8_t _t, const uint8_t _i, const uint8_t _v)
+			{
+				const md::automation::ParameterChange change{static_cast<uint8_t>(_i == 24 ? md::automation::machinedrum::Level : _i / 8), _t,
+					static_cast<uint8_t>(_i == 24 ? 0 : _i % 8), _v};
+				if(const auto cc = md::automation::encodeParameterChange(md::MachineModel::Machinedrum, change, 0))
+					m_out.push({(*cc)[0], (*cc)[1], (*cc)[2]});
+			};
+			port.sendMute = [this](const uint8_t _t, const bool _on) { m_out.push({static_cast<uint8_t>(0xb0 | (_t >> 2)), static_cast<uint8_t>(12 + (_t & 3)), static_cast<uint8_t>(_on ? 1 : 0)}); };
+			port.pressKey = [this](const std::string& _k)
+			{
+				if(_k == "play") { m_out.push({0xfa}); return true; }
+				if(_k == "stop") { m_out.push({0xfc}); return true; }
+				return false;
+			};
+			port.toPage = [this](const Value& _m)
+			{
+				const auto* t = _m.find("type");
+				if(t && t->asString() == "machine")
+					m_machineDoc = *_m.find("doc");
+				if(t && t->asString() == "result")
+					m_result = _m;
+			};
+			port.nowMs = [this] { return ms(m_machine.now()); };
+			m_desk = std::make_unique<mdDesk::Desk>(port);
+			m_desk->setHardwareLink(true);
+			m_machine.onSysex = [this](const Bytes& _b) { if(m_connected) m_toDesk.send(ms(m_machine.now()), _b); };
+		}
+
+		void page(const std::string& _json) { m_result.reset(); m_desk->onPageMessage(parse(_json)); }
+		void run(const double _ms)
+		{
+			const auto end = m_machine.now() + static_cast<uint64_t>(_ms * g_rate / 1000);
+			while(m_machine.now() < end)
+				step();
+		}
+		bool runUntil(const std::function<bool()>& _done, const double _timeoutMs)
+		{
+			const auto end = m_machine.now() + static_cast<uint64_t>(_timeoutMs * g_rate / 1000);
+			while(m_machine.now() < end)
+			{
+				if(_done())
+					return true;
+				step();
+			}
+			return _done();
+		}
+		std::string link() const
+		{
+			const auto* d = m_machineDoc ? m_machineDoc->find("desk") : nullptr;
+			const auto* l = d ? d->find("link") : nullptr;
+			return l && l->isString() ? l->asString() : std::string();
+		}
+		mdDesk::Desk& desk() { return *m_desk; }
+		Machine& machine() { return m_machine; }
+		const std::optional<Value>& lastResult() const { return m_result; }
+		void setConnected(const bool _c) { m_connected = _c; }
+		size_t bytesOut() const { return m_bytesOut; }
+
+	private:
+		// A message reaches the other side when its last byte has: the wire time after the
+		// wire was free for it.
+		struct Wire
+		{
+			double freeAt = 0;
+			std::deque<std::pair<double, Bytes>> flight;
+			void send(const double _now, Bytes _b)
+			{
+				freeAt = std::max(freeAt, _now) + mdDesk::DinPacer::wireMs(_b.size());
+				flight.emplace_back(freeAt, std::move(_b));
+			}
+		};
+
+		void step()
+		{
+			const double now = ms(m_machine.now());
+			for(auto& b : m_out.take(now))
+				m_toMachine.send(now, std::move(b));
+			while(!m_toMachine.flight.empty() && m_toMachine.flight.front().first <= now)
+			{
+				auto b = std::move(m_toMachine.flight.front().second);
+				m_toMachine.flight.pop_front();
+				m_bytesOut += b.size();
+				if(m_connected)
+					m_machine.send(b);
+			}
+			m_machine.step();
+			while(!m_toDesk.flight.empty() && m_toDesk.flight.front().first <= ms(m_machine.now()))
+			{
+				auto b = std::move(m_toDesk.flight.front().second);
+				m_toDesk.flight.pop_front();
+				m_desk->onDeviceSysex(b);
+			}
+			if(m_machine.now() - m_lastTick >= g_rate / 30)
+			{
+				m_lastTick = m_machine.now();
+				m_desk->onTelemetry(mdDesk::Telemetry{});
+				m_desk->tick();
+			}
+		}
+
+		Machine m_machine;
+		std::unique_ptr<mdDesk::Desk> m_desk;
+		mdDesk::DinPacer m_out;
+		Wire m_toMachine, m_toDesk;
+		std::optional<Value> m_machineDoc, m_result;
+		uint64_t m_lastTick = 0;
+		bool m_connected = true;
+		size_t m_bytesOut = 0;
+	};
+
+	void hardwareMidi(const Bytes& _rom, const std::string& _romName)
+	{
+		std::puts("== P4 HW MIDI: the editor drives a Machinedrum over MIDI at DIN speed (the emulator as the peer)");
+		HwRig hw(_rom, _romName);
+		auto& m = hw.machine();
+		hw.page(R"({"op":"ready"})");
+		check(hw.link() == "connect", "HW CONNECT until the machine answers");
+		const auto t0 = m.now();
+		const bool up = hw.runUntil([&] { return hw.link() == "ready" && hw.desk().session().state().pattern && hw.desk().session().state().kit
+			&& hw.desk().documents().patterns.count(*hw.desk().session().state().pattern) && hw.desk().documents().kits.count(*hw.desk().session().state().kit); }, 20000);
+		std::printf("  status, current pattern and kit over DIN: %.0f ms\n", ms(m.now() - t0));
+		check(up, "HW MIDI: status, the current pattern and its kit read");
+		if(!up)
+			return;
+		const auto pat = *hw.desk().session().state().pattern;
+		const auto kit = *hw.desk().session().state().kit;
+		// A grid edit: a pattern dump out, a read-back in, 1.7 s each way.
+		const bool had = ed::hasTrig(hw.desk().documents().patterns.at(pat), 2, 7);
+		auto t1 = m.now();
+		hw.page("{\"op\":\"trig\",\"p\":" + std::to_string(pat) + ",\"t\":2,\"s\":7,\"id\":980}");
+		const bool confirmed = hw.runUntil([&] { return !hw.desk().isBusy(); }, 10000);
+		const double pushMs = ms(m.now() - t1);
+		std::printf("  trig edit -> confirmed read-back over DIN: %.0f ms (desk round trip %.0f ms)\n", pushMs, hw.desk().lastRoundTripMs());
+		check(confirmed && ed::hasTrig(hw.desk().documents().patterns.at(pat), 2, 7) != had, "a pattern edit reaches the machine and is read back, no timeout");
+		check(pushMs > 3000, "the timing is the wire's (two 5410-byte dumps at 3125 bytes/s)");
+		// A kit value: a CC, in the machine's working kit.
+		const uint8_t v = static_cast<uint8_t>((hw.desk().documents().kits.at(kit).params[0][16] + 17) & 0x7f);
+		hw.page("{\"op\":\"param\",\"k\":" + std::to_string(kit) + ",\"t\":0,\"i\":16,\"v\":" + std::to_string(v) + ",\"id\":981}");
+		hw.run(300);
+		check(m.read8(ed::g_mdWorkingKitAddress + ed::g_mdWorkingKitParamsOffset + 16) == v, "a kit value goes out as a CC and the machine plays it");
+		// The kit library over MIDI.
+		const auto kitsAt = m.now();
+		const bool kits = hw.runUntil([&] { return hw.desk().documents().kits.size() == 64; }, 60000);
+		std::printf("  all 64 kits over DIN (background): %s after %.0f ms more\n", kits ? "read" : "NOT read", ms(m.now() - kitsAt));
+		hw.page("{\"op\":\"kitCopy\",\"k\":" + std::to_string(kit) + ",\"id\":982}");
+		hw.page(R"({"op":"kitPaste","k":50,"force":true,"id":983})");
+		hw.runUntil([&] { return !hw.desk().isBusy(); }, 6000);
+		hw.run(2500);
+		const auto k50 = ed::decodeMdKit(m.request(ed::mdKitRequest(50), ed::g_mdKitDump));
+		check(k50 && k50->models == hw.desk().documents().kits.at(kit).models, "kit paste into K51 over MIDI");
+		// Transport: MIDI Start / Stop.
+		hw.page(R"({"op":"play","id":984})");
+		const auto step0 = m.playhead();
+		bool moved = false;
+		for(int i = 0; i < 100 && !moved; ++i) { hw.run(20); moved = m.playhead() != step0; }
+		std::printf("  PLAY as MIDI Start (0xFA): the machine %s\n", moved ? "plays" : "does not play (its MIDI sync settings decide)");
+		hw.page(R"({"op":"stop","id":985})");
+		hw.run(300);
+		const auto* r = hw.lastResult() ? &*hw.lastResult() : nullptr;
+		(void)r;
+		// Live recording, chains, the working kit from memory and the boot LCD need the local emulator.
+		hw.page(R"({"op":"record","id":986})");
+		check(hw.lastResult() && !hw.lastResult()->find("ok")->asBool(), "REC is refused over MIDI, with the reason");
+		hw.page(R"({"op":"chain","patterns":[1,2],"id":987})");
+		check(hw.lastResult() && !hw.lastResult()->find("ok")->asBool(), "chaining is refused over MIDI, with the reason");
+		// Unplugged: HW NO MIDI after a while.
+		hw.setConnected(false);
+		const bool lost = hw.runUntil([&] { return hw.link() == "lost"; }, 6000);
+		check(lost, "no replies for 3.5 s: the link says lost (HW NO MIDI)");
+		hw.setConnected(true);
+		check(hw.runUntil([&] { return hw.link() == "ready"; }, 4000), "and ready again when it answers");
+		std::printf("  bytes sent to the machine: %zu\n", hw.bytesOut());
+	}
+
 int main(const int _argc, char** _argv)
 {
 	std::setvbuf(stdout, nullptr, _IOLBF, 0);
@@ -1098,6 +1282,12 @@ int main(const int _argc, char** _argv)
 		const auto rom = load(_argv[1]);
 		require(rom.size() == md::g_romSize, "ROM must be the 8 MiB MD 1.63 image");
 		const std::string mode = _argc > 2 ? _argv[2] : "";
+		if(mode == "hw")
+		{
+			hardwareMidi(rom, _argv[1]);
+			std::printf("mdDeskFirmwareTest hw: %s (%d failure(s))\n", g_failures ? "FAIL" : "PASS", g_failures);
+			return g_failures ? 1 : 0;
+		}
 		if(mode == "p4")
 		{
 			bootHold(rom, _argv[1]);

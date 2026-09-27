@@ -25,6 +25,22 @@ namespace mdDesk
 		// a memory image read before that would briefly undo them in the view.
 		constexpr double g_workingKitHoldMs = 150;
 		constexpr double g_keyQuietMs = 500;
+		// HW MIDI: the machine counts as lost after this long without a reply (status is
+		// asked for every second).
+		constexpr double g_hwLostMs = 3500;
+
+		// The dump a request brings back, for timeouts at DIN speed.
+		size_t replyBytes(const DocKind _k)
+		{
+			switch(_k)
+			{
+			case DocKind::Pattern: return 5410;
+			case DocKind::Kit: return 1233;
+			case DocKind::Song: return 3100;
+			case DocKind::Global: return 197;
+			}
+			return 0;
+		}
 
 		const char* kindName(const DocKind _k)
 		{
@@ -866,8 +882,25 @@ namespace mdDesk
 
 	// ---- device -> desk ----
 
+	// HW MIDI: nothing answered for a while, or never since the link was chosen.
+	bool Desk::linkLost() const
+	{
+		const auto now = m_port.nowMs();
+		return m_hw && (m_ready ? now - m_lastReplyMs > g_hwLostMs : now - m_hwSinceMs > g_hwLostMs + 1500);
+	}
+
+	void Desk::setHardwareLink(const bool _hardware)
+	{
+		if(m_hw == _hardware)
+			return;
+		m_hw = _hardware;
+		m_hwSinceMs = m_port.nowMs ? m_port.nowMs() : 0;
+		m_machineDirty = true;
+	}
+
 	void Desk::onDeviceSysex(const Bytes& _message)
 	{
+		m_lastReplyMs = m_port.nowMs();
 		m_session.onSysex(_message);
 		flush();
 	}
@@ -1003,12 +1036,16 @@ namespace mdDesk
 			// Everything else in the background, so the song palette and the
 			// kit-link warnings know every pattern.
 			m_backgroundQueued = true;
+			// Over DIN MIDI a pattern takes 1.7 s: the small kits first there (the library).
+			if(m_hw)
+				for(unsigned k = 0; k < 64; ++k)
+					load({DocKind::Kit, static_cast<uint8_t>(k)}, false);
 			for(unsigned p = 0; p < 128; ++p)
 				load({DocKind::Pattern, static_cast<uint8_t>(p)}, false);
 			for(unsigned s = 0; s < 32; ++s)
 				load({DocKind::Song, static_cast<uint8_t>(s)}, false);
 			// The kit library shows every slot's name (P4).
-			for(unsigned k = 0; k < 64; ++k)
+			for(unsigned k = 0; !m_hw && k < 64; ++k)
 				load({DocKind::Kit, static_cast<uint8_t>(k)}, false);
 		}
 	}
@@ -1237,7 +1274,7 @@ namespace mdDesk
 	{
 		if(m_loading)
 		{
-			if(_now - m_loadSentMs < g_loadTimeoutMs)
+			if(_now - m_loadSentMs < g_loadTimeoutMs + (m_hw ? DinPacer::wireMs(replyBytes(m_loading->kind)) * 1.5 : 0))
 				return;
 			// No answer: once more, then give up on it.
 			if(m_loadRetries++ < 1)
@@ -1323,6 +1360,11 @@ namespace mdDesk
 			else
 				m_session.requestStatus();
 		}
+		if(m_hw && linkLost() != m_linkLost)
+		{
+			m_linkLost = !m_linkLost;
+			m_machineDirty = true;
+		}
 		if(m_ready)
 			pumpLoads(now);
 		applyWorkingKit();
@@ -1330,7 +1372,7 @@ namespace mdDesk
 
 		for(auto it = m_pushSentMs.begin(); it != m_pushSentMs.end();)
 		{
-			if(now - it->second < g_pushTimeoutMs)
+			if(now - it->second < g_pushTimeoutMs + (m_hw ? 2.5 * DinPacer::wireMs(replyBytes(it->first.kind)) : 0))
 			{
 				++it;
 				continue;
@@ -1416,6 +1458,8 @@ namespace mdDesk
 			: m_firmware == Firmware::Unsupported ? "unsupported" : m_firmware == Firmware::Loading ? "loading"
 			: isInputReady() ? "ready" : "booting");
 		// "animation": the firmware answers MIDI but its start-up animation still ignores keys.
+		desk.set("engine", m_hw ? "hw" : "emu");
+		desk.set("link", !m_hw ? "local" : linkLost() ? "lost" : !m_ready ? "connect" : "ready");
 		desk.set("boot", m_firmware != Firmware::Present ? "off" : !m_ready ? "starting"
 			: isInputReady() ? "ready" : "animation");
 		desk.set("tx", isBusy());
