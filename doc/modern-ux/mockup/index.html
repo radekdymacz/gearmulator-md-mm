@@ -930,6 +930,13 @@ html,body{min-width:1280px}
 }
 .top .brand b{font-size:19px!important;letter-spacing:.06em;line-height:1}
 .top .brand small.ed{color:var(--led);font-size:13px!important;letter-spacing:.42em;font-weight:700;margin-top:3px;display:block}
+/* v34: LCD + transport form one centred unit */
+.top{grid-template-columns:1fr auto 1fr!important}
+.midgrp{grid-column:2;display:flex;gap:14px;align-items:flex-start;justify-self:center}
+.top .midgrp .wsgroup.trgroup{grid-column:auto!important;justify-self:auto!important}
+.rightgrp{grid-column:3!important;justify-self:end}
+.midgrp .lcdgroup{margin-top:0!important}
+.midgrp .trgroup{margin-top:0!important}
 </style>
 
 <div class="app">
@@ -946,6 +953,7 @@ html,body{min-width:1280px}
       <button role="tab" data-ws="control"><i class="led"></i><span>Control</span><small>6</small></button>
     </nav></div>
     </div>
+    <div class="midgrp">
       <div class="wsgroup trgroup"><span class="grplabel">Transport</span>
        <div class="tabs trkeys">
         <button class="tkey rec" id="rec" aria-pressed="false" aria-label="Record"><i class="led" id="recled"></i><span>● Rec</span></button>
@@ -953,7 +961,6 @@ html,body{min-width:1280px}
         <button class="tkey stop" id="stop" aria-label="Stop"><i class="led"></i><span>■ Stop</span></button>
        </div>
        <div class="seclabels"><button data-sec="copy" title="Copy (Cmd+C)">Copy</button><button data-sec="clear" title="Clear (Delete)">Clear</button><button data-sec="paste" title="Paste (Cmd+V)">Paste</button></div></div>
-    <div class="rightgrp">
       <div class="lcdgroup">
         <div class="lcdpanel">
           <div class="f"><small>Tempo <i class="led" id="tempoled" aria-hidden="true"></i></small><b id="bpm" role="slider" tabindex="0" aria-label="Tempo in bpm" title="Drag up or down">124.0</b></div>
@@ -963,6 +970,8 @@ html,body{min-width:1280px}
           <div class="lcd2" id="lcd2"></div>
         </div>
       </div>
+    </div>
+    <div class="rightgrp">
     <div class="wsgroup setgroup"><span class="grplabel">Setup</span>
      <div class="tabs setkeys">
       <button class="skey" id="undo" aria-label="Undo" title="Undo (Cmd+Z)"><i class="ico">↶</i><span>Undo</span><small id="undon"></small></button>
