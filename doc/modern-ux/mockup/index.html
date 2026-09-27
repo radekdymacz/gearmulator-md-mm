@@ -1022,6 +1022,11 @@ html,body{min-width:1280px}
 .lcdeng span{display:inline-block;min-width:11.2ch}
 /* v47: the old .play key style must not resize the page LEDs while playing */
 .pl.play{width:auto!important;height:auto!important;background:none!important;place-items:initial}
+/* v48: engine status in the LCD */
+.lcdeng .led.blink{animation:pgblink .5s steps(2) infinite}
+.lcdpanel.engwait .f:not(.trf),.lcdpanel.engwait .row2{opacity:.35;transition:opacity .3s}
+.lcdpanel .f,.lcdpanel .row2{transition:opacity .3s}
+.lcdt .lt:disabled{opacity:.4;cursor:default}
 </style>
 
 <div class="app">
@@ -1861,8 +1866,19 @@ function restartClock(){clearInterval(clock);clock=setInterval(tick,stepMs())}
 function setPos(){const p=$("#pos");if(p)p.textContent=S.playing&&S.step>=0?String(Math.floor(S.step/16)+1).padStart(2,"0")+"."+String(S.step%16+1).padStart(2,"0"):"--.--"}
 document.addEventListener("change",e=>{if(e.target.id!=="engsel")return;const sel=e.target,btn=document.querySelector(".lcdeng");
  if(sel.value==="rom"){sel.value=S.engine||"emu";btn.querySelector("span").textContent=sel.selectedOptions[0].text;firstRun();return}
- S.engine=sel.value;toast(S.engine==="hw"?"Hardware mode: edits go to your Machinedrum over MIDI":"Emulator mode: the real OS 1.63 runs inside the app")});
-function togglePlay(){S.playing=!S.playing;phLast=-1;clearInterval(clock);$("#playled")?.classList.remove("on");$$(".pl").forEach(b=>b.classList.remove("play"));$("#tempoled").classList.remove("on");$$(".ph").forEach(c=>c.classList.remove("ph"));if(S.playing){S.step=-1;tick();restartClock()}setPos();movePH();renderTop()}
+ S.engine=sel.value;startEngine(S.engine)});
+/* Engine status: the LCD shows what the engine is doing; editing waits until it is ready */
+const ENG={norom:["NO ROM","off"],loading:["LOADING ROM","blink"],boot:["BOOTING OS","blink"],ready:["EMU OS 1.63","on"],hwwait:["HW CONNECT","blink"],hwready:["HW MIDI","on"],hwnone:["HW NO MIDI","off"],error:["ROM ERROR","off"]};
+let engT=[];
+function setEng(st){S.eng=st;const [txt,led]=ENG[st],b=document.querySelector(".lcdeng"),l=document.getElementById("engled");if(!b)return;
+ b.querySelector("span").textContent=txt;l.className="led "+(led==="on"?"on":led==="blink"?"on blink":"");
+ const ready=st==="ready"||st==="hwready";document.querySelector(".lcdpanel").classList.toggle("engwait",!ready);
+ ["rec","play"].forEach(id=>{const k=document.getElementById(id);if(k)k.disabled=!ready});
+ b.title=ready?"Engine: running. Click to switch emulator or hardware, or load another ROM.":"Engine: "+txt.toLowerCase()+". Editing starts when it is ready."}
+function startEngine(kind){engT.forEach(clearTimeout);engT=[];if(S.playing)togglePlay();
+ if(kind==="hw"){setEng("hwwait");engT.push(setTimeout(()=>{setEng("hwready");toast("Hardware mode: edits go to your Machinedrum over MIDI")},900));return}
+ setEng("loading");engT.push(setTimeout(()=>setEng("boot"),700));engT.push(setTimeout(()=>{setEng("ready");toast("Emulator ready: the real OS 1.63 is running")},1800))}
+function togglePlay(){if(!S.playing&&S.eng&&S.eng!=="ready"&&S.eng!=="hwready")return;S.playing=!S.playing;phLast=-1;clearInterval(clock);$("#playled")?.classList.remove("on");$$(".pl").forEach(b=>b.classList.remove("play"));$("#tempoled").classList.remove("on");$$(".ph").forEach(c=>c.classList.remove("ph"));if(S.playing){S.step=-1;tick();restartClock()}setPos();movePH();renderTop()}
 
 function render(){closePicker();closeK();const sl=$("#seqscroll")?.scrollLeft||0;renderTop();const full=S.ws==="mix"||S.ws==="song"||S.ws==="control";$("#body").classList.toggle("full",full);$("#rail").hidden=full;if(!full)renderRail();renderSub();
  ({seq:renderSeq,sound:renderSound,mix:renderMix,song:renderSong,sampler:renderSampler,control:renderControl})[S.ws]();const sc=$("#seqscroll");if(sc){sc.scrollLeft=sl;$("#lanescroll").scrollLeft=sl}enhanceSelects(document.getElementById("main"));enhanceSelects(document.getElementById("subbar"));if(S.playing)restartClock()}
@@ -1885,5 +1901,5 @@ document.addEventListener("keydown",e=>{const mod=e.metaKey||e.ctrlKey;const inF
  if(e.key===" "){e.preventDefault();togglePlay()}
  if((e.key==="["||e.key==="]")&&S.ws==="seq"&&pages16()>1){const n=pages16();S.viewAll=false;S.page=(S.page+(e.key==="]"?1:-1)+n)%n;render()}});
 new ResizeObserver(()=>redraw()).observe(document.body);
-render();H.last=snap();
+render();H.last=snap();startEngine("emu");
 </script>

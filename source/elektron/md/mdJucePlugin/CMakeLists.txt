@@ -47,6 +47,7 @@ set(SOURCES
 	skins/mdStudio/mdDeskApp.js
 	skins/mdStudio/mdDeskBridge.js
 	skins/mdStudio/mdDeskModel.js
+	skins/mdStudio/mdDeskMod.js
 	mdSettingsPanelFeel.cpp mdSettingsPanelFeel.h
 	mdSettingsAudioInput.cpp mdSettingsAudioInput.h
 )
@@ -66,7 +67,7 @@ file(GLOB MD_SKIN_ASSETS CONFIGURE_DEPENDS
 	"skins/mdDefault/*.png" "skins/mdDefault/*.rml" "skins/mdDefault/*.rcss"
 	"skins/mdDefault/*.ttf" "skins/mdDefault/*.lua"
 	"skins/mdStudio/*.rml" "skins/mdStudio/*.html" "skins/mdStudio/*.css" "skins/mdStudio/*.js"
-	"skins/mdStudio/fonts/*.woff2")
+	"skins/mdStudio/fonts/*.woff2" "skins/mdStudio/fonts/*.ttf")
 file(GLOB MM_SKIN_ASSETS CONFIGURE_DEPENDS
 	"skins/mmSfx60/*.png" "skins/mmSfx60/*.rml" "skins/mmSfx60/*.rcss"
 	"skins/mmSfx60/*.ttf" "skins/mmSfx60/*.lua")

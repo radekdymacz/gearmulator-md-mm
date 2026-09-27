@@ -10,10 +10,7 @@
 #include <string>
 #include <vector>
 
-namespace mdDesk
-{
-	class Desk;
-}
+#include "mdDesk/mdDesk.h"
 
 namespace mdJucePlugin
 {
@@ -57,5 +54,6 @@ namespace mdJucePlugin
 		double m_lastCommandMs = 0;
 		int m_learnTrack = -1;
 		int m_learnIndex = -1;
+		mdDesk::Desk::Firmware m_lastFirmware = mdDesk::Desk::Firmware::Missing;
 	};
 }

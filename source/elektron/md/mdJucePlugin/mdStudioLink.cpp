@@ -207,6 +207,10 @@ namespace mdJucePlugin
 			const auto& hw = device->getHardware();
 			if(hw.getModel() != md::MachineModel::Machinedrum || hw.firmwareFingerprint() != md::g_mdOs163Fingerprint)
 				return mdDesk::Desk::Firmware::Unsupported;
+			if(device->isProjectStateRestorePending())
+				return mdDesk::Desk::Firmware::Loading;
+			if(!hw.isFirmwareMidiReady())
+				return mdDesk::Desk::Firmware::Booting;
 			return mdDesk::Desk::Firmware::Present;
 		});
 	}

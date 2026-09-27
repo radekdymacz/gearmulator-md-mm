@@ -166,8 +166,8 @@ namespace mdJucePlugin
 	}
 
 	// WKWebView may only read the one file it loads, so stylesheets, scripts and
-	// fonts are inlined. A font that is not bundled is dropped from its
-	// @font-face and the page falls back to system fonts.
+	// fonts are inlined. A font that is not bundled gets an empty source and the
+	// page falls back to system fonts.
 	std::string StudioEditor::bundlePage() const
 	{
 		// Replaces every "<open>NAME<close>" with _make(NAME).
@@ -188,16 +188,18 @@ namespace mdJucePlugin
 			}
 			return out + _text.substr(pos);
 		};
+		// url("fonts/NAME") -> a data URI; the type from the extension (ttf, woff2).
 		const auto inlineFonts = [&](const std::string& _css)
 		{
-			return replaceAll(_css, ",url(\"fonts/", "\") format(\"woff2\")", [&](const std::string& _name)
+			return replaceAll(_css, "url(\"fonts/", "\")", [&](const std::string& _name)
 			{
 				uint32_t size = 0;
 				const auto* data = findResourceByFilename(_name, size);
 				if(!data)
-					return std::string();
-				return ",url(\"data:font/woff2;base64," + juce::Base64::toBase64(data, size).toStdString()
-					+ "\") format(\"woff2\")";
+					return std::string("url(\"data:,\")");
+				const bool woff2 = _name.size() > 6 && _name.compare(_name.size() - 6, 6, ".woff2") == 0;
+				return std::string("url(\"data:font/") + (woff2 ? "woff2" : "ttf") + ";base64,"
+					+ juce::Base64::toBase64(data, size).toStdString() + "\")";
 			});
 		};
 		auto html = resourceText(g_pageResource);
@@ -406,8 +408,18 @@ namespace mdJucePlugin
 		layoutWebView();
 		if(!m_desk)
 			return;
-		if(++m_ticks % 30 == 0)
-			m_desk->setFirmware(m_link->firmware());
+		// The engine's state from the device, ten times a second; transitions logged.
+		if(++m_ticks % 3 == 0)
+		{
+			const auto fw = m_link->firmware();
+			if(fw != m_lastFirmware)
+			{
+				static constexpr const char* names[] = {"missing", "unsupported", "loading", "booting", "present"};
+				log("engine: " + juce::String(names[static_cast<int>(fw)]));
+				m_lastFirmware = fw;
+			}
+			m_desk->setFirmware(fw);
+		}
 		if(m_ticks % 15 == 0 && juce::SystemStats::getEnvironmentVariable("GEARMULATOR_MDSTUDIO_SELFTEST", {}) == "1")
 		{
 			const auto t = m_link->readTelemetry();
