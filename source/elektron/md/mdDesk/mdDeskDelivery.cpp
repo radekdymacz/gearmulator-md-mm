@@ -9,6 +9,8 @@ namespace mdDesk
 
 	namespace
 	{
+		constexpr uint8_t g_noGroupTarget = 0x7f;
+
 		LiveEdit edit(const Kind _kind, const size_t _track, const size_t _index, const uint8_t _value)
 		{
 			LiveEdit e;
@@ -120,11 +122,12 @@ namespace mdDesk
 		case Kind::Lfo:
 			return ed::mdSetLfo(_e.track, _e.index, _e.value);
 		case Kind::TrigGroup:
-			// A group is removed by pointing the track at itself (measured on OS 1.63,
-			// see P2-RESULT.md); 0xff is how the kit dump stores "none".
-			return ed::mdSetTrigGroup(_e.track, _e.value == ed::MdKit::g_noGroup ? _e.track : _e.value);
+			// Target 0x7f removes the group: OS 1.63 then stores 0xff ("none") in the
+			// kit, measured by mdDeskFirmwareTest probe. 0x10 and 0x40 are ignored,
+			// a track number (also the track itself) sets a group.
+			return ed::mdSetTrigGroup(_e.track, _e.value == ed::MdKit::g_noGroup ? g_noGroupTarget : _e.value);
 		case Kind::MuteGroup:
-			return ed::mdSetMuteGroup(_e.track, _e.value == ed::MdKit::g_noGroup ? _e.track : _e.value);
+			return ed::mdSetMuteGroup(_e.track, _e.value == ed::MdKit::g_noGroup ? g_noGroupTarget : _e.value);
 		case Kind::MasterFx:
 			return ed::mdSetMasterFx(_e.track, _e.index, _e.value);
 		case Kind::KitName:

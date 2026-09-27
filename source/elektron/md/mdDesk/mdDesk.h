@@ -141,6 +141,7 @@ namespace mdDesk
 		double m_lastLiveEditMs = -1e9;
 		double m_lastRoundTripMs = -1;
 		std::optional<uint8_t> m_audibleQueue;
+		double m_switchReportedMs = -1;
 		std::optional<uint8_t> m_lastKit;
 		std::optional<uint8_t> m_lastPattern;
 		Telemetry m_telemetry;

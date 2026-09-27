@@ -49,9 +49,9 @@ namespace mdDesk
 	struct Delivery
 	{
 		std::vector<LiveEdit> edits;
-		// Parts of the change that no live edit can make (for example removing a
-		// group, or the opaque LFO state); they reach the machine only through a
-		// kit dump + LOAD KIT, which would also save the kit. Listed for the UI.
+		// Parts of the change that no live edit can make (the opaque LFO running
+		// state); they reach the machine only through a kit dump + LOAD KIT, which
+		// would also save the kit. Listed for the UI.
 		std::vector<std::string> notLive;
 	};
 
@@ -63,6 +63,6 @@ namespace mdDesk
 	Delivery globalDelivery(const elektronData::MdGlobal& _before, const elektronData::MdGlobal& _after);
 
 	// SysEx for one live edit; empty for Param and Level (they are CCs, which the
-	// plug-in's parameter layer sends) and for a group removal (no live form).
+	// plug-in's parameter layer sends).
 	std::vector<uint8_t> liveEditSysex(const LiveEdit& _edit);
 }

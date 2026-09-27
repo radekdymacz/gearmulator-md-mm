@@ -390,6 +390,7 @@ namespace mdDesk
 		}
 		m_session.selectPattern(slot);
 		// While the sequencer plays the switch waits for the end of the pattern.
+		m_switchReportedMs = -1;
 		if(m_telemetry.playing && m_session.state().pattern != slot)
 			m_audibleQueue = slot;
 		else
@@ -569,13 +570,26 @@ namespace mdDesk
 			|| _t.playing != m_telemetry.playing || _t.valid != m_telemetry.valid;
 		const bool patternChanged = _t.valid && _t.pattern != m_telemetry.pattern;
 		const bool wasPlaying = m_telemetry.playing;
+		const bool wrapped = _t.valid && m_telemetry.step >= 0 && _t.step >= 0 && _t.step < m_telemetry.step;
 		m_telemetry = _t;
 		if(!changed)
 			return;
-		if(m_audibleQueue && _t.valid && _t.pattern == *m_audibleQueue)
+		if(m_audibleQueue)
 		{
-			m_audibleQueue.reset();
-			m_machineDirty = true;
+			// Status and the RAM pattern byte both switch about two steps before the
+			// new pattern is heard (P1, P2 smoke test); the playhead wrap is the
+			// audible switch.
+			const auto now = m_port.nowMs();
+			const bool reported = (_t.valid && _t.pattern == *m_audibleQueue)
+				|| m_session.state().pattern == *m_audibleQueue;
+			if(reported && m_switchReportedMs < 0)
+				m_switchReportedMs = now;
+			if(m_switchReportedMs >= 0 && (wrapped || !_t.playing || now - m_switchReportedMs > 2000))
+			{
+				m_audibleQueue.reset();
+				m_switchReportedMs = -1;
+				m_machineDirty = true;
+			}
 		}
 		if(wasPlaying != _t.playing)
 			m_machineDirty = true;

@@ -323,3 +323,10 @@ set_property(TARGET mdDataCaptureFirmwareTest PROPERTY FOLDER "Elektron/test")
 add_executable(mdDataLayerFirmwareTest mdDataLayerFirmwareTest.cpp mdFirmwareSession.h)
 target_link_libraries(mdDataLayerFirmwareTest PRIVATE mdLib mdDataLink)
 set_property(TARGET mdDataLayerFirmwareTest PROPERTY FOLDER "Elektron/test")
+
+# P2 MD Desk smoke test: page commands through mdDesk::Desk into MD 1.63
+# firmware, read back by dump (patterns, songs, globals) and SAVE KIT (the
+# working kit). Manual: needs a user-supplied ROM.
+add_executable(mdDeskFirmwareTest mdDeskFirmwareTest.cpp mdFirmwareSession.h)
+target_link_libraries(mdDeskFirmwareTest PRIVATE mdLib mdDesk)
+set_property(TARGET mdDeskFirmwareTest PROPERTY FOLDER "Elektron/test")
