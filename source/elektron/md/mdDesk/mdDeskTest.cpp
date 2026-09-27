@@ -1,0 +1,510 @@
+// MD Desk editing model without firmware: commands -> documents, validation,
+// undo/redo, copy/paste, the live edits a kit change needs, and the Desk
+// orchestrator against a scripted device. Firmware behaviour is covered by
+// mdLibTest/mdDeskFirmwareTest.cpp (manual, needs the ROM).
+
+#include "mdDesk.h"
+
+#include "elektronData/mdCommands.h"
+#include "elektronData/mdJson.h"
+#include "elektronData/mdMachines.h"
+#include "elektronData/mdValidate.h"
+
+#include <cstdio>
+#include <fstream>
+#include <iterator>
+
+namespace
+{
+	namespace ed = elektronData;
+	using ed::json::Value;
+	using namespace mdDesk;
+
+	int g_failures = 0;
+
+	void check(const bool _condition, const char* _what)
+	{
+		if(_condition)
+			return;
+		std::fprintf(stderr, "FAIL: %s\n", _what);
+		++g_failures;
+	}
+
+	std::vector<uint8_t> load(const char* _name)
+	{
+		std::ifstream s(std::string(MDDESK_TESTDATA_DIR) + "/" + _name, std::ios::binary);
+		return {std::istreambuf_iterator<char>(s), std::istreambuf_iterator<char>()};
+	}
+
+	Value cmd(const std::string& _json)
+	{
+		auto v = ed::json::parse(_json);
+		if(!v)
+			std::fprintf(stderr, "bad test JSON: %s\n", _json.c_str());
+		return v ? *v : Value();
+	}
+
+	Documents fixtureDocs()
+	{
+		Documents d;
+		d.patterns[0] = *ed::decodeMdPattern(load("programmed_pattern_0.syx"));	// 64 locks
+		d.patterns[1] = *ed::decodeMdPattern(load("programmed_pattern_1.syx"));	// no locks
+		d.kits[0] = *ed::decodeMdKit(load("programmed_kit_0.syx"));
+		d.songs[0] = *ed::decodeMdSong(load("programmed_song_0.syx"));
+		d.songs[1] = *ed::decodeMdSong(load("programmed_song_1.syx"));
+		d.global = *ed::decodeMdGlobal(load("programmed_global_0.syx"));
+		return d;
+	}
+
+	const ed::MdPattern& pat(const EditResult& _r)
+	{
+		return std::get<ed::MdPattern>(_r.changes.at(0).after);
+	}
+
+	void testTrigsAndLocks()
+	{
+		auto docs = fixtureDocs();
+		Clipboard clip;
+		const auto& p1 = docs.patterns[1];
+		const bool had = ed::hasTrig(p1, 2, 3);
+
+		auto r = apply(docs, cmd(R"({"op":"trig","p":1,"t":2,"s":3})"), clip);
+		check(r.errors.empty() && r.changes.size() == 1, "trig toggle changes the pattern");
+		check(ed::hasTrig(pat(r), 2, 3) != had, "trig toggle flips the step");
+		docs.set(r.changes[0].after);
+
+		// Locks live on trigs.
+		r = apply(docs, cmd(R"({"op":"trig","p":1,"t":2,"s":3,"on":true})"), clip);
+		if(!r.changes.empty())
+			docs.set(r.changes[0].after);
+		r = apply(docs, cmd(R"({"op":"lock","p":1,"t":2,"i":12,"s":3,"v":40})"), clip);
+		check(r.errors.empty() && ed::lockValue(pat(r), 2, 12, 3) == uint8_t{40}, "lock on a trig");
+		docs.set(r.changes[0].after);
+		check(ed::usedLockRows(docs.patterns[1]) == 1, "one lock row in use");
+
+		r = apply(docs, cmd(R"({"op":"trig","p":1,"t":2,"s":3,"on":false})"), clip);
+		check(r.errors.empty() && !ed::hasTrig(pat(r), 2, 3), "trig off");
+		check(!ed::lockValue(pat(r), 2, 12, 3) && ed::usedLockRows(pat(r)) == 0,
+			"removing a trig removes its locks and frees the row");
+		docs.set(r.changes[0].after);
+
+		r = apply(docs, cmd(R"({"op":"lock","p":1,"t":2,"i":12,"s":3,"v":40})"), clip);
+		check(!r.errors.empty() && r.changes.empty(), "a step without a trig cannot hold a lock");
+
+		// The 64-lock budget: pattern 0 uses all 64 rows.
+		const auto& full = docs.patterns[0];
+		check(ed::usedLockRows(full) == 64, "fixture pattern 0 has a full lock pool");
+		size_t t = 0, param = 0;
+		while(t < 16 && (full.lockMasks[t] >> param & 1))
+		{
+			if(++param == 24)
+			{
+				param = 0;
+				++t;
+			}
+		}
+		size_t s = 0;
+		while(s < ed::visibleSteps(full) && !ed::hasTrig(full, t, s))
+			++s;
+		if(s < ed::visibleSteps(full))
+		{
+			const auto c = "{\"op\":\"lock\",\"p\":0,\"t\":" + std::to_string(t) + ",\"i\":" + std::to_string(param)
+				+ ",\"s\":" + std::to_string(s) + ",\"v\":1}";
+			r = apply(docs, cmd(c), clip);
+			check(!r.errors.empty() && r.errors[0].find("64") != std::string::npos,
+				"a 65th locked parameter is refused");
+		}
+
+		// Erasing a lock step keeps the row while other steps hold locks.
+		for(size_t row = 0; row < 16 * 24; ++row)
+		{
+			const auto tt = row / 24, pp = row % 24;
+			if(!(full.lockMasks[tt] >> pp & 1))
+				continue;
+			std::vector<size_t> steps;
+			for(size_t ss = 0; ss < ed::visibleSteps(full); ++ss)
+				if(ed::lockValue(full, tt, pp, ss))
+					steps.push_back(ss);
+			if(steps.size() < 2)
+				continue;
+			const auto erased = ed::withoutLock(full, tt, pp, steps[0]);
+			check(ed::usedLockRows(erased) == 64 && !ed::lockValue(erased, tt, pp, steps[0])
+				&& ed::lockValue(erased, tt, pp, steps[1]), "erasing one lock step keeps the row");
+			const auto cleared = ed::withoutLockRow(full, tt, pp);
+			check(ed::usedLockRows(cleared) == 63 && ed::validate(cleared).empty(), "clearing a lane frees its row");
+			break;
+		}
+	}
+
+	void testPatternSettingsAndValidation()
+	{
+		auto docs = fixtureDocs();
+		Clipboard clip;
+		auto r = apply(docs, cmd(R"({"op":"totalLength","p":1,"v":48})"), clip);
+		check(r.errors.empty() && pat(r).scale == 2 && pat(r).length == 48, "total length sets scale and length");
+		r = apply(docs, cmd(R"({"op":"totalLength","p":1,"v":20})"), clip);
+		check(!r.errors.empty() && r.changes.empty(), "total length 20 is refused");
+		r = apply(docs, cmd(R"({"op":"length","p":1,"v":0})"), clip);
+		check(!r.errors.empty(), "length 0 is refused");
+		r = apply(docs, cmd(R"({"op":"swing","p":1,"v":65})"), clip);
+		check(r.errors.empty() && ed::swingPercent(pat(r).swingAmount) == 65, "swing in percent");
+		r = apply(docs, cmd(R"({"op":"swing","p":1,"v":81})"), clip);
+		check(!r.errors.empty(), "swing above 80 % is refused");
+		r = apply(docs, cmd(R"({"op":"speed","p":1,"v":"3/4X"})"), clip);
+		check(r.errors.empty() && pat(r).tempoMultiplier == 2, "speed by name");
+		r = apply(docs, cmd(R"({"op":"accentAmount","p":1,"v":15})"), clip);
+		check(r.errors.empty() && pat(r).accentAmount == 127, "accent 15 is 127");
+		r = apply(docs, cmd(R"({"op":"trig","p":9,"t":0,"s":0})"), clip);
+		check(!r.errors.empty(), "an unloaded pattern is refused");
+		r = apply(docs, cmd(R"({"op":"nonsense","p":1})"), clip);
+		check(!r.errors.empty(), "unknown commands are refused");
+		r = apply(docs, cmd(R"({"op":"trig","p":1,"t":16,"s":0})"), clip);
+		check(!r.errors.empty(), "track 17 is refused");
+	}
+
+	void testCopyPaste()
+	{
+		auto docs = fixtureDocs();
+		Clipboard clip;
+		auto r = apply(docs, cmd(R"({"op":"copySteps","p":0,"t":0,"from":0,"to":16})"), clip);
+		check(r.errors.empty() && r.changes.empty() && clip.steps && clip.steps->length == 16,
+			"copy fills the clipboard, changes nothing");
+		const auto& src = docs.patterns[0];
+		r = apply(docs, cmd(R"({"op":"pasteSteps","p":1,"t":5,"from":0})"), clip);
+		check(r.errors.empty() && r.changes.size() == 1, "paste into another pattern");
+		bool same = true;
+		for(size_t s = 0; s < 16; ++s)
+		{
+			same &= ed::hasTrig(src, 0, s) == ed::hasTrig(pat(r), 5, s);
+			for(size_t param = 0; param < 24; ++param)
+				same &= ed::lockValue(src, 0, param, s) == ed::lockValue(pat(r), 5, param, s);
+		}
+		check(same, "pasted trigs and locks match the copied page");
+
+		// Pasting into the full pool skips the locks that need new rows.
+		r = apply(docs, cmd(R"({"op":"copySteps","p":0,"t":0,"from":0,"to":16})"), clip);
+		r = apply(docs, cmd(R"({"op":"pasteSteps","p":0,"t":15,"from":0})"), clip);
+		check(r.errors.empty() && ed::usedLockRows(pat(r)) <= 64 && ed::validate(pat(r)).empty(),
+			"paste into a full pool stays within the budget");
+
+		r = apply(docs, cmd(R"({"op":"clearSteps","p":0,"t":0,"from":0,"to":16})"), clip);
+		bool empty = true;
+		for(size_t s = 0; s < 16; ++s)
+			empty &= !ed::hasTrig(pat(r), 0, s);
+		check(r.errors.empty() && empty, "clear empties the track page");
+
+		Clipboard none;
+		r = apply(docs, cmd(R"({"op":"pasteSteps","p":1,"t":0,"from":0})"), none);
+		check(!r.errors.empty(), "paste without a copy is refused");
+	}
+
+	void testKitEditsAndDelivery()
+	{
+		auto docs = fixtureDocs();
+		Clipboard clip;
+		const auto& k = docs.kits[0];
+		auto r = apply(docs, cmd(R"({"op":"param","k":0,"t":3,"i":16,"v":99})"), clip);
+		check(r.errors.empty() && r.changes.size() == 1, "kit param edit");
+		auto d = kitDelivery(k, std::get<ed::MdKit>(r.changes[0].after));
+		check(d.edits.size() == 1 && d.edits[0].kind == LiveEdit::Kind::Param && d.edits[0].track == 3
+			&& d.edits[0].index == 16 && d.edits[0].value == 99, "a param edit is one CC");
+		check(liveEditSysex(d.edits[0]).empty(), "params travel as CCs, not SysEx");
+
+		const auto sd = *ed::mdMachineModel("EFM-SD");
+		r = apply(docs, cmd("{\"op\":\"machine\",\"k\":0,\"t\":2,\"model\":" + std::to_string(sd) + "}"), clip);
+		check(r.errors.empty(), "machine change");
+		d = kitDelivery(k, std::get<ed::MdKit>(r.changes[0].after));
+		check(!d.edits.empty() && d.edits[0].kind == LiveEdit::Kind::Machine && d.edits[0].model == sd,
+			"machine change comes first");
+		size_t synthResent = 0;
+		for(const auto& e : d.edits)
+			synthResent += e.kind == LiveEdit::Kind::Param && e.track == 2 && e.index < 8;
+		check(synthResent == 8, "all eight synthesis values follow a machine change");
+		const auto bytes = liveEditSysex(d.edits[0]);
+		check(bytes.size() == 12 && bytes[6] == 0x5b && bytes[7] == 2 && bytes[8] == (sd & 0x7f) && bytes[9] == 0
+			&& bytes[10] == 0 && bytes[11] == 0xf7, "assign machine message (manual Appendix C)");
+
+		const auto rom = *ed::mdMachineModel("ROM-05");
+		const auto romBytes = ed::mdAssignMachine(0, rom, ed::MdMachineInit::Synthesis);
+		check(romBytes[8] == 4 && romBytes[9] == 1, "UW machines set c = 1");
+
+		r = apply(docs, cmd(R"({"op":"machine","k":0,"t":2,"model":5})"), clip);
+		check(!r.errors.empty(), "an undefined machine id is refused");
+
+		r = apply(docs, cmd(R"({"op":"lfo","k":0,"t":1,"field":"shape2","v":4})"), clip);
+		d = kitDelivery(k, std::get<ed::MdKit>(r.changes.at(0).after));
+		check(d.edits.size() == 1 && d.edits[0].kind == LiveEdit::Kind::Lfo, "LFO shape is one live edit");
+		const auto lfo = liveEditSysex(d.edits[0]);
+		check(lfo.size() == 10 && lfo[6] == 0x62 && lfo[7] == ((1 << 3) | 3) && lfo[8] == 4, "set LFO message");
+		r = apply(docs, cmd(R"({"op":"lfo","k":0,"t":1,"field":"shape2","v":6})"), clip);
+		check(!r.errors.empty(), "LFO shape 6 is refused");
+
+		r = apply(docs, cmd(R"({"op":"masterFx","k":0,"fx":"rhythmEcho","i":3,"v":10})"), clip);
+		d = kitDelivery(k, std::get<ed::MdKit>(r.changes.at(0).after));
+		const auto fx = liveEditSysex(d.edits.at(0));
+		check(fx[6] == 0x5d && fx[7] == 3 && fx[8] == 10, "rhythm echo parameter is 0x5d");
+
+		r = apply(docs, cmd(R"({"op":"group","k":0,"t":4,"kind":"mute","target":5})"), clip);
+		check(r.errors.empty() && std::get<ed::MdKit>(r.changes[0].after).muteGroups[4] == 5, "mute group");
+		r = apply(docs, cmd(R"({"op":"group","k":0,"t":4,"kind":"mute","target":4})"), clip);
+		check(!r.errors.empty(), "a track cannot group with itself");
+
+		r = apply(docs, cmd(R"({"op":"kitName","k":0,"name":"DUB ROOM"})"), clip);
+		d = kitDelivery(k, std::get<ed::MdKit>(r.changes.at(0).after));
+		check(d.edits.size() == 1 && d.edits[0].kind == LiveEdit::Kind::KitName
+			&& liveEditSysex(d.edits[0]).size() == 24, "kit name is 0x55 with 16 bytes");
+
+		// Copy / paste a sound between tracks.
+		r = apply(docs, cmd(R"({"op":"copySound","k":0,"t":0})"), clip);
+		check(clip.sound && r.changes.empty(), "copy sound");
+		r = apply(docs, cmd(R"({"op":"pasteSound","k":0,"t":9})"), clip);
+		const auto& pasted = std::get<ed::MdKit>(r.changes.at(0).after);
+		check(pasted.models[9] == k.models[0] && pasted.params[9] == k.params[0] && pasted.lfos[9].track == 9,
+			"paste sound copies machine and values, the LFO targets its new track");
+	}
+
+	void testSongEdits()
+	{
+		auto docs = fixtureDocs();
+		Clipboard clip;
+		// Song 1 is END only: insert a pattern row before it.
+		auto r = apply(docs, cmd(R"({"op":"rowInsert","s":1,"i":0,
+			"row":{"kind":"pattern","pattern":3,"repeats":1,"start":0,"end":16,"tempo":null,"mutes":[]}})"), clip);
+		check(r.errors.empty() && r.changes.size() == 1, "insert a row");
+		auto song = std::get<ed::MdSong>(r.changes[0].after);
+		check(song.rows.size() == 2 && song.rows[0].pattern == 3 && song.rows[0].repeats == 1, "row landed first");
+		docs.set(song);
+
+		r = apply(docs, cmd(R"({"op":"rowInsert","s":1,"i":1,"row":{"kind":"pattern","pattern":4,"repeats":0,
+			"start":0,"end":16,"tempo":120,"mutes":[2]}})"), clip);
+		docs.set(r.changes.at(0).after);
+		// A loop back to row 0 after two rows.
+		r = apply(docs, cmd(R"({"op":"rowInsert","s":1,"i":2,"row":{"kind":"loop","target":0,"repeats":1}})"), clip);
+		check(r.errors.empty(), "insert a loop");
+		docs.set(r.changes.at(0).after);
+		// Inserting before the loop's target moves the target with its row.
+		r = apply(docs, cmd(R"({"op":"rowInsert","s":1,"i":0,"row":{"kind":"pattern","pattern":7,"repeats":0,
+			"start":0,"end":16,"tempo":null,"mutes":[]}})"), clip);
+		check(r.errors.empty(), "insert at the top");
+		song = std::get<ed::MdSong>(r.changes.at(0).after);
+		check(song.rows[3].target == 1 && ed::songRowKind(song.rows[3], 3) == ed::MdSongRowKind::Loop,
+			"loop target follows its row");
+		docs.set(song);
+
+		r = apply(docs, cmd(R"({"op":"rowDelete","s":1,"i":4})"), clip);
+		check(!r.errors.empty(), "END cannot be deleted");
+		r = apply(docs, cmd(R"({"op":"rowSet","s":1,"i":1,"row":{"kind":"pattern","pattern":200,"repeats":0,
+			"start":0,"end":16,"tempo":null,"mutes":[]}})"), clip);
+		check(!r.errors.empty() && r.changes.empty(), "pattern 200 is refused with the contract's path");
+		// Rows now: A08, A04, A05, LOOP -> 1, END. Move A08 behind A05.
+		r = apply(docs, cmd(R"({"op":"rowMove","s":1,"from":0,"to":2})"), clip);
+		check(r.errors.empty(), "move a row");
+		song = std::get<ed::MdSong>(r.changes.at(0).after);
+		check(song.rows[2].pattern == 7 && song.rows[0].pattern == 3 && song.rows[3].target == 0,
+			"moved row lands, the loop still targets A04");
+		r = apply(docs, cmd(R"({"op":"copyRow","s":1,"i":1})"), clip);
+		r = apply(docs, cmd(R"({"op":"pasteRow","s":1,"i":1})"), clip);
+		check(r.errors.empty() && std::get<ed::MdSong>(r.changes.at(0).after).rows.size() == 6, "paste a row");
+
+		// The 256-row song is full.
+		r = apply(docs, cmd(R"({"op":"rowInsert","s":0,"i":0,"row":{"kind":"halt"}})"), clip);
+		check(!r.errors.empty(), "a 257th row is refused");
+	}
+
+	void testGlobal()
+	{
+		auto docs = fixtureDocs();
+		Clipboard clip;
+		auto r = apply(docs, cmd(R"({"op":"route","t":0,"out":"MAIN"})"), clip);
+		const auto before = *docs.global;
+		if(!r.changes.empty())
+		{
+			const auto d = globalDelivery(before, std::get<ed::MdGlobal>(r.changes[0].after));
+			check(d.edits.size() == 1 && liveEditSysex(d.edits[0])[6] == 0x5c, "routing is 0x5c");
+		}
+		r = apply(docs, cmd(R"({"op":"tempo","bpm":126.5})"), clip);
+		check(r.errors.empty() && std::get<ed::MdGlobal>(r.changes.at(0).after).tempo == 3036, "tempo x 24");
+		const auto d = globalDelivery(before, std::get<ed::MdGlobal>(r.changes.at(0).after));
+		const auto t = liveEditSysex(d.edits.at(0));
+		check(t[6] == 0x61 && ((t[7] << 7) | t[8]) == 3036, "set tempo message");
+		r = apply(docs, cmd(R"({"op":"tempo","bpm":301})"), clip);
+		check(!r.errors.empty(), "301 BPM is refused");
+	}
+
+	void testHistory()
+	{
+		auto docs = fixtureDocs();
+		Clipboard clip;
+		History h;
+		const auto original = docs.patterns[1];
+		for(int s = 0; s < 3; ++s)
+		{
+			auto r = apply(docs, cmd("{\"op\":\"trig\",\"p\":1,\"t\":0,\"s\":" + std::to_string(s) + "}"), clip);
+			docs.set(r.changes.at(0).after);
+			h.record(r.changes, 0);
+		}
+		check(h.size() == 3, "three commands, three steps");
+		auto u = h.undo();
+		check(u && u->size() == 1, "undo returns the step");
+		docs.set(u->at(0).after);
+		u = h.undo();
+		docs.set(u->at(0).after);
+		u = h.undo();
+		docs.set(u->at(0).after);
+		check(docs.patterns[1] == original && !h.canUndo() && h.canRedo(), "three undos restore the pattern");
+		auto re = h.redo();
+		docs.set(re->at(0).after);
+		check(ed::hasTrig(docs.patterns[1], 0, 0) != ed::hasTrig(original, 0, 0), "redo re-applies");
+
+		// A drag: one gesture, one undo step, first before + last after.
+		History g;
+		const auto start = docs.patterns[1];
+		for(int v = 10; v < 20; ++v)
+		{
+			auto r = apply(docs, cmd("{\"op\":\"trig\",\"p\":1,\"t\":1,\"s\":" + std::to_string(v) + "}"), clip);
+			docs.set(r.changes.at(0).after);
+			g.record(r.changes, 77);
+		}
+		check(g.size() == 1, "a gesture is one undo step");
+		const auto step = g.undo();
+		check(step && std::get<ed::MdPattern>(step->at(0).after) == start, "undoing the gesture restores its start");
+	}
+
+	void testPushSlot()
+	{
+		PushSlot<int> slot;
+		using R = PushSlot<int>::ReadBack;
+		check(slot.onReadBack(1) == R::NotWaiting, "a refresh while idle");
+		check(slot.want(1), "first edit goes out");
+		check(!slot.want(2) && !slot.want(3), "later edits wait");
+		check(slot.onReadBack(0) == R::Other, "an older reply does not confirm");
+		check(slot.onReadBack(1) == R::ConfirmedSendNext && slot.inFlight() == 3, "latest edit wins, one in flight");
+		check(slot.onReadBack(3) == R::Confirmed && !slot.busy(), "confirmed and idle");
+	}
+
+	// The Desk against a scripted device: the page's view of one edit.
+	void testDesk()
+	{
+		std::vector<std::vector<uint8_t>> wire;
+		std::vector<Value> page;
+		std::vector<std::array<uint8_t, 3>> params;
+		double now = 0;
+		Desk::Port port;
+		port.sendSysex = [&](const std::vector<uint8_t>& _b) { wire.push_back(_b); };
+		port.sendKitParam = [&](uint8_t _t, uint8_t _i, uint8_t _v) { params.push_back({_t, _i, _v}); };
+		port.toPage = [&](const Value& _m) { page.push_back(_m); };
+		port.nowMs = [&] { return now; };
+		Desk desk(port);
+		const auto status = [](const ed::MdStatus _p, const uint8_t _v)
+		{
+			return std::vector<uint8_t>{0xf0, 0x00, 0x20, 0x3c, 0x02, 0x00, 0x72, static_cast<uint8_t>(_p), _v, 0xf7};
+		};
+		const auto lastOf = [&](const char* _type) -> const Value*
+		{
+			for(auto it = page.rbegin(); it != page.rend(); ++it)
+				if(const auto* t = it->find("type"); t && t->asString() == _type)
+					return &*it;
+			return nullptr;
+		};
+
+		desk.onPageMessage(cmd(R"({"op":"ready"})"));
+		check(lastOf("catalogue") != nullptr, "the page gets the machine catalogue");
+		desk.onPageMessage(cmd(R"({"op":"trig","p":1,"t":0,"s":0,"id":1})"));
+		const auto* busy = lastOf("result");
+		check(busy && !busy->find("ok")->asBool(), "edits wait until the machine answers (device busy)");
+
+		auto pattern = *ed::decodeMdPattern(load("programmed_pattern_1.syx"));
+		auto kit = *ed::decodeMdKit(load("programmed_kit_0.syx"));
+		pattern.kit = kit.position;
+		desk.onDeviceSysex(status(ed::MdStatus::Pattern, pattern.position));
+		desk.onDeviceSysex(status(ed::MdStatus::Kit, kit.position));
+		desk.onDeviceSysex(status(ed::MdStatus::LockMode, 1));
+		check(desk.isReady(), "the first status reply means ready");
+		desk.onDeviceSysex(ed::encodeMdPattern(pattern));
+		desk.onDeviceSysex(ed::encodeMdKit(kit));
+
+		wire.clear();
+		now = 100;
+		desk.onPageMessage(cmd(R"({"op":"trig","p":1,"t":0,"s":1,"id":2})"));
+		const auto* ok = lastOf("result");
+		check(ok && ok->find("ok")->asBool(), "trig command accepted");
+		check(!wire.empty() && ed::mdDumpCommand(wire[0]) == ed::g_mdPatternDump, "a pattern dump went out");
+		const auto sent = *ed::decodeMdPattern(wire[0]);
+		check(ed::hasTrig(sent, 0, 1) != ed::hasTrig(pattern, 0, 1), "the dump carries the edit");
+		const auto* doc = lastOf("doc");
+		check(doc && doc->find("pending")->asBool(), "the page sees the edit as pending");
+		check(desk.isBusy(), "TX: busy while the read-back is due");
+
+		// A second edit while the first is in flight waits for the read-back.
+		wire.clear();
+		desk.onPageMessage(cmd(R"({"op":"trig","p":1,"t":0,"s":2,"id":3,"g":5})"));
+		check(wire.empty(), "no second dump while one is in flight");
+		now = 148;
+		desk.onDeviceSysex(ed::encodeMdPattern(sent));
+		check(!wire.empty() && ed::hasTrig(*ed::decodeMdPattern(wire[0]), 0, 2) != ed::hasTrig(pattern, 0, 2),
+			"the waiting edit goes out on the read-back");
+		check(desk.lastRoundTripMs() == 48, "round trip measured from the read-back");
+		desk.onDeviceSysex(wire[0]);
+		check(!desk.isBusy() || now - 100 < 120, "idle after the last read-back");
+
+		// A live kit edit is a CC, marks the kit edited, never a dump.
+		wire.clear();
+		desk.onPageMessage(cmd(R"({"op":"param","k":0,"t":1,"i":4,"v":77,"id":4})"));
+		check(params.size() == 1 && params[0] == std::array<uint8_t, 3>{1, 4, 77}, "kit param goes to the CC path");
+		check(wire.empty(), "no kit dump for a live edit");
+		check(desk.session().state().workingKit == mdDataLink::Session::WorkingKit::Edited, "kit is edited");
+		// A stored-slot dump does not overwrite the working copy.
+		desk.onDeviceSysex(ed::encodeMdKit(kit));
+		check(desk.documents().kits.at(0).params[1][4] == 77, "working copy survives a stored-slot dump");
+
+		// Editing another kit than the one playing is refused.
+		desk.onPageMessage(cmd(R"({"op":"param","k":3,"t":1,"i":4,"v":1,"id":5})"));
+		check(!lastOf("result")->find("ok")->asBool(), "a kit that is not loaded or not playing is refused");
+
+		// Undo reverses the kit edit through the same live path.
+		params.clear();
+		desk.onPageMessage(cmd(R"({"op":"undo","id":6})"));
+		check(params.size() == 1 && params[0][2] == kit.params[1][4], "undo sends the old value as a CC");
+
+		// Selecting a pattern linked to another kit while the kit is edited asks first.
+		desk.onPageMessage(cmd(R"({"op":"param","k":0,"t":1,"i":4,"v":90,"id":7})"));
+		auto other = pattern;
+		other.position = 9;
+		other.kit = 5;
+		desk.onDeviceSysex(ed::encodeMdPattern(other));
+		wire.clear();
+		desk.onPageMessage(cmd(R"({"op":"select","p":9,"id":8})"));
+		const auto* ask = lastOf("ask");
+		check(ask && ask->find("target")->asNumber() == 5 && wire.empty(), "switching away from edits asks first");
+		desk.onPageMessage(cmd(R"({"op":"select","p":9,"force":true,"id":9})"));
+		check(!wire.empty() && wire[0][6] == 0x57, "forced select sends LOAD PATTERN");
+
+		// A push without a read-back is reported, not silently lost.
+		page.clear();
+		wire.clear();
+		desk.onPageMessage(cmd(R"({"op":"trig","p":1,"t":3,"s":3,"id":10})"));
+		now += 2500;
+		desk.tick();
+		check(lastOf("error") != nullptr, "a push without a read-back is reported");
+	}
+}
+
+int main()
+{
+	testTrigsAndLocks();
+	testPatternSettingsAndValidation();
+	testCopyPaste();
+	testKitEditsAndDelivery();
+	testSongEdits();
+	testGlobal();
+	testHistory();
+	testPushSlot();
+	testDesk();
+	if(g_failures)
+	{
+		std::fprintf(stderr, "mdDeskTest: %d failure(s)\n", g_failures);
+		return 1;
+	}
+	std::puts("mdDeskTest: PASS");
+	return 0;
+}

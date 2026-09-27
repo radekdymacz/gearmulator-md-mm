@@ -1,0 +1,853 @@
+#include "mdDesk.h"
+
+#include "elektronData/mdCommands.h"
+#include "elektronData/mdJson.h"
+#include "elektronData/mdMachines.h"
+
+#include <algorithm>
+
+namespace mdDesk
+{
+	namespace ed = elektronData;
+	using Value = ed::json::Value;
+
+	namespace
+	{
+		constexpr double g_loadGapMs = 30;			// P1: about 30 ms per pattern in the background
+		constexpr double g_loadTimeoutMs = 800;
+		constexpr double g_pushTimeoutMs = 2000;
+		constexpr double g_statusIdleMs = 1000;		// P1: poll gently, a burst costs ~1.5 ms of step jitter
+		constexpr double g_statusQueuedMs = 250;
+		constexpr double g_liveEditTxMs = 120;
+
+		const char* kindName(const DocKind _k)
+		{
+			switch(_k)
+			{
+			case DocKind::Pattern: return "pattern";
+			case DocKind::Kit: return "kit";
+			case DocKind::Song: return "song";
+			case DocKind::Global: return "global";
+			}
+			return "";
+		}
+
+		std::optional<DocKind> kindFromName(const std::string& _s)
+		{
+			for(const auto k : {DocKind::Pattern, DocKind::Kit, DocKind::Song, DocKind::Global})
+				if(_s == kindName(k))
+					return k;
+			return {};
+		}
+
+		Value errorsToJson(const std::vector<std::string>& _errors)
+		{
+			Value a = Value::array();
+			for(const auto& e : _errors)
+				a.push(e);
+			return a;
+		}
+
+		std::string opOf(const Value& _m)
+		{
+			const auto* op = _m.find("op");
+			return op && op->isString() ? op->asString() : std::string();
+		}
+
+		std::optional<int> intOf(const Value& _m, const char* _key)
+		{
+			const auto* v = _m.find(_key);
+			if(!v || !v->isNumber())
+				return {};
+			return static_cast<int>(v->asNumber());
+		}
+
+		bool flagOf(const Value& _m, const char* _key)
+		{
+			const auto* v = _m.find(_key);
+			return v && v->isBool() && v->asBool();
+		}
+	}
+
+	Desk::Desk(Port _port)
+		: m_port(std::move(_port))
+		, m_session([this](const Bytes& _b)
+		{
+			if(m_port.sendSysex)
+				m_port.sendSysex(_b);
+		})
+	{
+		m_session.onPattern = [this](const ed::MdPattern& _p) { onPattern(_p); };
+		m_session.onKit = [this](const ed::MdKit& _k) { onKit(_k); };
+		m_session.onSong = [this](const ed::MdSong& _s) { onSong(_s); };
+		m_session.onGlobal = [this](const ed::MdGlobal& _g) { onGlobal(_g); };
+		m_session.onState = [this](const mdDataLink::Session::State& _s) { onState(_s); };
+	}
+
+	Value Desk::machineCatalogue()
+	{
+		Value machines = Value::array();
+		for(uint32_t model = 0; model < 256; ++model)
+		{
+			const auto name = ed::mdMachineName(model);
+			if(name.empty())
+				continue;
+			Value m = Value::object();
+			m.set("model", static_cast<int>(model));
+			m.set("machine", name);
+			m.set("family", ed::mdMachineFamily(model));
+			Value params = Value::array();
+			for(const auto* p : ed::mdMachineParamNames(model))
+				params.push(p && *p ? Value(p) : Value());
+			m.set("params", std::move(params));
+			machines.push(std::move(m));
+		}
+		Value doc = Value::object();
+		doc.set("schema", "md-desk/machines");
+		doc.set("version", 1);
+		doc.set("machines", std::move(machines));
+		return doc;
+	}
+
+	// ---- page -> desk ----
+
+	void Desk::onPageMessage(const Value& _message)
+	{
+		const auto op = opOf(_message);
+		if(op == "ready")
+		{
+			m_pageReady = true;
+			Value cat = Value::object();
+			cat.set("type", "catalogue");
+			cat.set("doc", machineCatalogue());
+			publish(cat);
+			for(const auto& [slot, p] : m_docs.patterns)
+				m_dirty.insert({DocKind::Pattern, slot});
+			for(const auto& [slot, k] : m_docs.kits)
+				m_dirty.insert({DocKind::Kit, slot});
+			for(const auto& [slot, s] : m_docs.songs)
+				m_dirty.insert({DocKind::Song, slot});
+			if(m_docs.global)
+				m_dirty.insert({DocKind::Global, m_docs.global->position});
+			m_machineDirty = true;
+			if(m_firmware == Firmware::Present)
+			{
+				m_session.requestStatus();
+				m_lastStatusMs = m_port.nowMs();
+			}
+			flush();
+			return;
+		}
+		if(m_firmware != Firmware::Present)
+		{
+			result(_message, {"No Machinedrum firmware is running"}, {});
+			flush();
+			return;
+		}
+		if(op == "load")
+		{
+			const auto* kind = _message.find("kind");
+			const auto slot = intOf(_message, "slot");
+			const auto k = kind && kind->isString() ? kindFromName(kind->asString()) : std::nullopt;
+			if(k && slot && *slot >= 0 && *slot < 128)
+				load({*k, static_cast<uint8_t>(*slot)}, true);
+			return;
+		}
+		if(!m_ready)
+		{
+			result(_message, {"The machine is still starting (device busy). Try again in a moment."}, {});
+			flush();
+			return;
+		}
+		if(op == "select")
+			handleSelect(_message);
+		else if(op == "undo" || op == "redo")
+			handleUndo(op == "redo", _message);
+		else if(op == "saveKit" || op == "reloadKit")
+		{
+			const auto kit = currentKit();
+			if(!kit)
+				result(_message, {"The current kit is not known yet"}, {});
+			else if(op == "saveKit")
+			{
+				m_session.saveKit(*kit);
+				if(const auto it = m_docs.kits.find(*kit); it != m_docs.kits.end())
+					m_storedKits[*kit] = it->second;
+				result(_message, {}, "Saved kit " + std::to_string(*kit + 1) + " on the machine");
+			}
+			else
+			{
+				m_session.loadKit(*kit);
+				m_docs.kits.erase(*kit);
+				load({DocKind::Kit, *kit}, true);
+				result(_message, {}, "Reloaded kit " + std::to_string(*kit + 1) + " from the machine");
+			}
+			m_machineDirty = true;
+		}
+		else if(op == "play" || op == "stop")
+		{
+			const bool ok = m_port.pressKey && m_port.pressKey(op);
+			result(_message, ok ? std::vector<std::string>{} : std::vector<std::string>{"Transport keys need the local"
+				" emulated machine"}, {});
+		}
+		else if(op == "reloadSong")
+		{
+			const auto song = m_session.state().song;
+			if(!song)
+				result(_message, {"The current song is not known yet"}, {});
+			else
+			{
+				// P1: the playing song ignores dumps and LOAD SONG: stop, load, play.
+				const bool wasPlaying = m_telemetry.playing;
+				if(wasPlaying && m_port.pressKey)
+					m_port.pressKey("stop");
+				schedule(wasPlaying ? 150 : 0, [this, s = *song] { m_session.loadSong(s); m_machineDirty = true; });
+				if(wasPlaying && m_port.pressKey)
+					schedule(300, [this] { m_port.pressKey("play"); });
+				result(_message, {}, "Song reloaded: stop, load, play");
+			}
+		}
+		else if(op == "mute")
+		{
+			const auto t = intOf(_message, "t");
+			if(!t || *t < 0 || *t > 15)
+				result(_message, {"t: expected a track 0-15"}, {});
+			else
+			{
+				const bool on = flagOf(_message, "on");
+				m_mutes[size_t(*t)] = on;
+				if(m_port.sendMute)
+					m_port.sendMute(uint8_t(*t), on);
+				m_machineDirty = true;
+			}
+		}
+		else
+			handleEdit(_message);
+		flush();
+	}
+
+	void Desk::handleEdit(const Value& _message)
+	{
+		auto edit = apply(m_docs, _message, m_clipboard);
+		if(!edit.errors.empty())
+		{
+			result(_message, edit.errors, {});
+			return;
+		}
+		std::vector<std::string> errors;
+		std::string note = edit.note;
+		std::vector<Change> delivered;
+		for(const auto& change : edit.changes)
+		{
+			const auto before = errors.size();
+			deliver(change, errors, note);
+			if(errors.size() == before)
+				delivered.push_back(change);
+		}
+		const auto gesture = intOf(_message, "g");
+		m_history.record(delivered, gesture && *gesture > 0 ? uint64_t(*gesture) : 0);
+		m_machineDirty = true;
+		result(_message, errors, note);
+	}
+
+	void Desk::deliver(const Change& _change, std::vector<std::string>& _errors, std::string& _note)
+	{
+		const auto ref = _change.ref();
+		switch(ref.kind)
+		{
+		case DocKind::Pattern:
+			m_docs.set(_change.after);
+			deliverPattern(std::get<ed::MdPattern>(_change.after), _errors);
+			break;
+		case DocKind::Song:
+			m_docs.set(_change.after);
+			deliverSong(std::get<ed::MdSong>(_change.after), _errors);
+			break;
+		case DocKind::Kit:
+		{
+			const auto kit = currentKit();
+			if(!kit || *kit != ref.slot)
+			{
+				_errors.push_back("Only the kit that plays can be edited live" + (kit ? " (kit "
+					+ std::to_string(*kit + 1) + " plays)" : std::string()));
+				return;
+			}
+			const auto current = m_docs.kits.find(ref.slot);
+			const auto& from = current != m_docs.kits.end() ? current->second : std::get<ed::MdKit>(_change.before);
+			const auto delivery = kitDelivery(from, std::get<ed::MdKit>(_change.after));
+			for(const auto& e : delivery.edits)
+			{
+				if(e.kind == LiveEdit::Kind::Param || e.kind == LiveEdit::Kind::Level)
+				{
+					if(m_port.sendKitParam)
+						m_port.sendKitParam(e.track, e.kind == LiveEdit::Kind::Level ? 24 : e.index, e.value);
+				}
+				else if(const auto sysex = liveEditSysex(e); !sysex.empty() && m_port.sendSysex)
+					m_port.sendSysex(sysex);
+			}
+			for(const auto& n : delivery.notLive)
+				_note += (_note.empty() ? "" : ". ") + n + " stays as it is on the machine";
+			m_docs.set(_change.after);
+			if(!delivery.edits.empty())
+			{
+				m_session.noteWorkingKitEdited();
+				m_lastLiveEditMs = m_port.nowMs();
+			}
+			m_dirty.insert(ref);
+			break;
+		}
+		case DocKind::Global:
+		{
+			if(!m_docs.global)
+				return;
+			const auto delivery = globalDelivery(*m_docs.global, std::get<ed::MdGlobal>(_change.after));
+			for(const auto& e : delivery.edits)
+				if(const auto sysex = liveEditSysex(e); !sysex.empty() && m_port.sendSysex)
+					m_port.sendSysex(sysex);
+			if(!delivery.notLive.empty())
+				m_session.pushGlobal(std::get<ed::MdGlobal>(_change.after));
+			m_docs.set(_change.after);
+			m_lastLiveEditMs = m_port.nowMs();
+			m_dirty.insert(ref);
+			// Read the slot back so the view shows what the firmware stored.
+			schedule(60, [this, slot = ref.slot] { m_session.requestGlobal(slot); });
+			break;
+		}
+		}
+	}
+
+	void Desk::deliverPattern(const ed::MdPattern& _p, std::vector<std::string>& _errors)
+	{
+		const DocRef ref{DocKind::Pattern, _p.position};
+		m_dirty.insert(ref);
+		auto& slot = m_patternPush[_p.position];
+		if(!slot.want(_p))
+			return;
+		auto problems = m_session.pushPattern(_p);
+		if(!problems.empty())
+		{
+			slot.abandon();
+			_errors.insert(_errors.end(), problems.begin(), problems.end());
+			return;
+		}
+		m_pushSentMs[ref] = m_port.nowMs();
+	}
+
+	void Desk::deliverSong(const ed::MdSong& _s, std::vector<std::string>& _errors)
+	{
+		const DocRef ref{DocKind::Song, _s.position};
+		m_dirty.insert(ref);
+		auto& slot = m_songPush[_s.position];
+		if(!slot.want(_s))
+			return;
+		auto problems = m_session.pushSong(_s);
+		if(!problems.empty())
+		{
+			slot.abandon();
+			_errors.insert(_errors.end(), problems.begin(), problems.end());
+			return;
+		}
+		m_pushSentMs[ref] = m_port.nowMs();
+	}
+
+	void Desk::handleUndo(const bool _redo, const Value& _message)
+	{
+		auto changes = _redo ? m_history.redo() : m_history.undo();
+		if(!changes)
+		{
+			result(_message, {_redo ? "Nothing to redo" : "Nothing to undo"}, {});
+			return;
+		}
+		std::vector<std::string> errors;
+		std::string note = _redo ? "Redo" : "Undo";
+		for(const auto& c : *changes)
+			deliver(c, errors, note);
+		m_machineDirty = true;
+		result(_message, errors, note);
+	}
+
+	void Desk::handleSelect(const Value& _message)
+	{
+		const auto p = intOf(_message, "p");
+		if(!p || *p < 0 || *p > 127)
+		{
+			result(_message, {"p: expected a pattern 0-127"}, {});
+			return;
+		}
+		const auto slot = static_cast<uint8_t>(*p);
+		if(!flagOf(_message, "force") && m_session.selectWouldDiscardKitEdits(slot))
+		{
+			const auto& links = m_session.state().patternKits;
+			Value ask = Value::object();
+			ask.set("type", "ask");
+			ask.set("ask", "discardKit");
+			ask.set("p", *p);
+			ask.set("kit", static_cast<int>(*m_session.state().kit));
+			ask.set("target", static_cast<int>(links.at(slot)));
+			publish(ask);
+			result(_message, {}, {});
+			return;
+		}
+		m_session.selectPattern(slot);
+		// While the sequencer plays the switch waits for the end of the pattern.
+		if(m_telemetry.playing && m_session.state().pattern != slot)
+			m_audibleQueue = slot;
+		else
+			m_audibleQueue.reset();
+		load({DocKind::Pattern, slot}, true);
+		m_machineDirty = true;
+		result(_message, {}, {});
+	}
+
+	// ---- device -> desk ----
+
+	void Desk::onDeviceSysex(const Bytes& _message)
+	{
+		m_session.onSysex(_message);
+		flush();
+	}
+
+	void Desk::onPattern(const ed::MdPattern& _p)
+	{
+		const DocRef ref{DocKind::Pattern, _p.position};
+		if(m_loading == ref)
+			m_loading.reset();
+		auto& slot = m_patternPush[_p.position];
+		const auto now = m_port.nowMs();
+		switch(slot.onReadBack(_p))
+		{
+		case PushSlot<ed::MdPattern>::ReadBack::NotWaiting:
+			m_docs.set(_p);
+			break;
+		case PushSlot<ed::MdPattern>::ReadBack::Confirmed:
+			m_lastRoundTripMs = now - m_pushSentMs[ref];
+			m_pushSentMs.erase(ref);
+			m_docs.set(_p);
+			break;
+		case PushSlot<ed::MdPattern>::ReadBack::ConfirmedSendNext:
+			m_lastRoundTripMs = now - m_pushSentMs[ref];
+			m_session.pushPattern(*slot.inFlight());
+			m_pushSentMs[ref] = now;
+			break;
+		case PushSlot<ed::MdPattern>::ReadBack::Other:
+			return;
+		}
+		m_dirty.insert(ref);
+		m_machineDirty = true;
+		// The current pattern names the kit the Sound and Mix workspaces edit.
+		if(m_session.state().pattern == _p.position)
+			if(const auto kit = currentKit())
+				load({DocKind::Kit, *kit}, true);
+	}
+
+	void Desk::onKit(const ed::MdKit& _k)
+	{
+		const DocRef ref{DocKind::Kit, _k.position};
+		if(m_loading == ref)
+			m_loading.reset();
+		m_storedKits[_k.position] = _k;
+		const bool working = currentKit() == _k.position;
+		const bool edited = m_session.state().workingKit == mdDataLink::Session::WorkingKit::Edited;
+		// A dump is the stored slot. The playing kit's unsaved edits live only in
+		// our working copy, which the dump must not overwrite.
+		if(!(working && edited && m_docs.kits.count(_k.position)))
+			m_docs.set(_k);
+		m_dirty.insert(ref);
+		m_machineDirty = true;
+	}
+
+	void Desk::onSong(const ed::MdSong& _s)
+	{
+		const DocRef ref{DocKind::Song, _s.position};
+		if(m_loading == ref)
+			m_loading.reset();
+		auto& slot = m_songPush[_s.position];
+		const auto now = m_port.nowMs();
+		switch(slot.onReadBack(_s))
+		{
+		case PushSlot<ed::MdSong>::ReadBack::NotWaiting:
+			m_docs.set(_s);
+			break;
+		case PushSlot<ed::MdSong>::ReadBack::Confirmed:
+			m_lastRoundTripMs = now - m_pushSentMs[ref];
+			m_pushSentMs.erase(ref);
+			m_docs.set(_s);
+			break;
+		case PushSlot<ed::MdSong>::ReadBack::ConfirmedSendNext:
+			m_lastRoundTripMs = now - m_pushSentMs[ref];
+			m_session.pushSong(*slot.inFlight());
+			m_pushSentMs[ref] = now;
+			break;
+		case PushSlot<ed::MdSong>::ReadBack::Other:
+			return;
+		}
+		m_dirty.insert(ref);
+		m_machineDirty = true;
+	}
+
+	void Desk::onGlobal(const ed::MdGlobal& _g)
+	{
+		const DocRef ref{DocKind::Global, _g.position};
+		if(m_loading == ref)
+			m_loading.reset();
+		if(!m_session.state().globalSlot || *m_session.state().globalSlot == _g.position)
+		{
+			m_docs.global = _g;
+			m_dirty.insert(ref);
+		}
+	}
+
+	void Desk::onState(const mdDataLink::Session::State& _s)
+	{
+		m_machineDirty = true;
+		if(!m_ready && m_firmware == Firmware::Present)
+			m_ready = true;
+		if(_s.kit && _s.kit != m_lastKit)
+		{
+			// Another kit plays now: its working copy is its stored slot.
+			if(m_lastKit)
+			{
+				if(const auto it = m_storedKits.find(*m_lastKit); it != m_storedKits.end())
+					m_docs.kits[*m_lastKit] = it->second;
+				m_dirty.insert({DocKind::Kit, *m_lastKit});
+			}
+			m_docs.kits.erase(*_s.kit);
+			load({DocKind::Kit, *_s.kit}, true);
+			m_lastKit = _s.kit;
+		}
+		if(_s.pattern && _s.pattern != m_lastPattern)
+		{
+			m_lastPattern = _s.pattern;
+			if(!m_docs.patterns.count(*_s.pattern))
+				load({DocKind::Pattern, *_s.pattern}, true);
+			if(!m_telemetry.valid && m_audibleQueue == _s.pattern)
+				m_audibleQueue.reset();
+		}
+		if(_s.globalSlot && (!m_docs.global || m_docs.global->position != *_s.globalSlot))
+			load({DocKind::Global, *_s.globalSlot}, true);
+		if(_s.song && !m_docs.songs.count(*_s.song))
+			load({DocKind::Song, *_s.song}, true);
+		if(!m_backgroundQueued && _s.pattern && _s.kit)
+		{
+			// Everything else in the background, so the song palette and the
+			// kit-link warnings know every pattern.
+			m_backgroundQueued = true;
+			for(unsigned p = 0; p < 128; ++p)
+				load({DocKind::Pattern, static_cast<uint8_t>(p)}, false);
+			for(unsigned s = 0; s < 32; ++s)
+				load({DocKind::Song, static_cast<uint8_t>(s)}, false);
+		}
+	}
+
+	void Desk::onHostKitParam(const uint8_t _track, const uint8_t _index, const uint8_t _value)
+	{
+		const auto kit = currentKit();
+		if(!kit || _track > 15 || _index > 24)
+			return;
+		const auto it = m_docs.kits.find(*kit);
+		if(it == m_docs.kits.end())
+			return;
+		auto& slot = _index == 24 ? it->second.levels[_track] : it->second.params[_track][_index];
+		if(slot == _value)
+			return;
+		slot = _value;
+		m_session.noteWorkingKitEdited();
+		m_dirty.insert({DocKind::Kit, *kit});
+	}
+
+	void Desk::onHostMute(const uint8_t _track, const bool _muted)
+	{
+		if(_track > 15 || m_mutes[_track] == _muted)
+			return;
+		m_mutes[_track] = _muted;
+		m_machineDirty = true;
+	}
+
+	void Desk::onTelemetry(const Telemetry& _t)
+	{
+		const bool changed = _t.step != m_telemetry.step || _t.pattern != m_telemetry.pattern
+			|| _t.playing != m_telemetry.playing || _t.valid != m_telemetry.valid;
+		const bool patternChanged = _t.valid && _t.pattern != m_telemetry.pattern;
+		const bool wasPlaying = m_telemetry.playing;
+		m_telemetry = _t;
+		if(!changed)
+			return;
+		if(m_audibleQueue && _t.valid && _t.pattern == *m_audibleQueue)
+		{
+			m_audibleQueue.reset();
+			m_machineDirty = true;
+		}
+		if(wasPlaying != _t.playing)
+			m_machineDirty = true;
+		// The sequencer switched on its own (chain, panel, program change): ask.
+		if(patternChanged && m_ready && m_session.state().pattern != _t.pattern && m_port.sendSysex)
+		{
+			m_port.sendSysex(ed::mdStatusRequest(ed::MdStatus::Pattern));
+			m_port.sendSysex(ed::mdStatusRequest(ed::MdStatus::Kit));
+		}
+		if(!m_pageReady)
+			return;
+		Value t = Value::object();
+		t.set("type", "telemetry");
+		t.set("step", _t.step);
+		t.set("pattern", _t.pattern);
+		t.set("playing", _t.playing);
+		t.set("valid", _t.valid);
+		publish(t);
+	}
+
+	void Desk::setFirmware(const Firmware _firmware)
+	{
+		if(m_firmware == _firmware)
+			return;
+		m_firmware = _firmware;
+		if(_firmware != Firmware::Present)
+			m_ready = false;
+		m_machineDirty = true;
+		flush();
+	}
+
+	// ---- loading ----
+
+	void Desk::load(const DocRef& _ref, const bool _urgent)
+	{
+		if(m_queued.count(_ref) || m_loading == _ref)
+		{
+			if(_urgent)
+			{
+				const auto it = std::find(m_loadQueue.begin(), m_loadQueue.end(), _ref);
+				if(it != m_loadQueue.end())
+				{
+					m_loadQueue.erase(it);
+					m_loadQueue.push_front(_ref);
+				}
+			}
+			return;
+		}
+		if(!_urgent && m_docs.get(_ref))
+			return;
+		m_queued.insert(_ref);
+		if(_urgent)
+			m_loadQueue.push_front(_ref);
+		else
+			m_loadQueue.push_back(_ref);
+	}
+
+	void Desk::request(const DocRef& _ref)
+	{
+		switch(_ref.kind)
+		{
+		case DocKind::Pattern: m_session.requestPattern(_ref.slot); break;
+		case DocKind::Kit: m_session.requestKit(_ref.slot); break;
+		case DocKind::Song: m_session.requestSong(_ref.slot); break;
+		case DocKind::Global: m_session.requestGlobal(_ref.slot); break;
+		}
+	}
+
+	void Desk::pumpLoads(const double _now)
+	{
+		if(m_loading)
+		{
+			if(_now - m_loadSentMs < g_loadTimeoutMs)
+				return;
+			// No answer: once more, then give up on it.
+			if(m_loadRetries++ < 1)
+			{
+				request(*m_loading);
+				m_loadSentMs = _now;
+				return;
+			}
+			m_loading.reset();
+		}
+		if(m_loadQueue.empty() || _now - m_lastRequestMs < g_loadGapMs)
+			return;
+		// Loads wait while an edit is on the wire: they would delay its read-back.
+		if(isBusy())
+			return;
+		const auto next = m_loadQueue.front();
+		m_loadQueue.pop_front();
+		m_queued.erase(next);
+		m_loading = next;
+		m_loadRetries = 0;
+		m_loadSentMs = _now;
+		m_lastRequestMs = _now;
+		request(next);
+	}
+
+	std::optional<uint8_t> Desk::currentKit() const
+	{
+		return m_session.state().kit;
+	}
+
+	bool Desk::isBusy() const
+	{
+		for(const auto& [slot, push] : m_patternPush)
+			if(push.busy())
+				return true;
+		for(const auto& [slot, push] : m_songPush)
+			if(push.busy())
+				return true;
+		return m_port.nowMs() - m_lastLiveEditMs < g_liveEditTxMs;
+	}
+
+	void Desk::schedule(const double _delayMs, std::function<void()> _action)
+	{
+		if(_delayMs <= 0)
+		{
+			_action();
+			return;
+		}
+		m_scheduled.emplace_back(m_port.nowMs() + _delayMs, std::move(_action));
+	}
+
+	void Desk::tick()
+	{
+		const auto now = m_port.nowMs();
+		auto due = std::move(m_scheduled);
+		m_scheduled.clear();
+		for(auto& [at, action] : due)
+		{
+			if(at <= now)
+				action();
+			else
+				m_scheduled.emplace_back(at, std::move(action));
+		}
+		if(m_firmware != Firmware::Present)
+		{
+			flush();
+			return;
+		}
+		const auto statusEvery = m_ready && m_audibleQueue ? g_statusQueuedMs : g_statusIdleMs;
+		if(now - m_lastStatusMs >= statusEvery)
+		{
+			m_lastStatusMs = now;
+			if(m_ready && m_audibleQueue && m_port.sendSysex)
+				m_port.sendSysex(ed::mdStatusRequest(ed::MdStatus::Pattern));
+			else
+				m_session.requestStatus();
+		}
+		if(m_ready)
+			pumpLoads(now);
+
+		for(auto it = m_pushSentMs.begin(); it != m_pushSentMs.end();)
+		{
+			if(now - it->second < g_pushTimeoutMs)
+			{
+				++it;
+				continue;
+			}
+			const auto ref = it->first;
+			it = m_pushSentMs.erase(it);
+			if(ref.kind == DocKind::Pattern)
+				m_patternPush[ref.slot].abandon();
+			else
+				m_songPush[ref.slot].abandon();
+			Value e = Value::object();
+			e.set("type", "error");
+			e.set("message", std::string("Push failed: the machine did not read back ") + kindName(ref.kind) + " "
+				+ (ref.kind == DocKind::Pattern ? ed::mdPatternName(ref.slot) : std::to_string(ref.slot + 1))
+				+ ". Showing what it holds.");
+			publish(e);
+			load(ref, true);
+		}
+		flush();
+	}
+
+	// ---- desk -> page ----
+
+	void Desk::publish(const Value& _message) const
+	{
+		if(m_port.toPage)
+			m_port.toPage(_message);
+	}
+
+	void Desk::result(const Value& _message, const std::vector<std::string>& _errors, const std::string& _note)
+	{
+		Value r = Value::object();
+		r.set("type", "result");
+		r.set("op", opOf(_message));
+		if(const auto id = intOf(_message, "id"))
+			r.set("id", *id);
+		r.set("ok", _errors.empty());
+		r.set("errors", errorsToJson(_errors));
+		r.set("note", _note);
+		publish(r);
+	}
+
+	void Desk::publishDoc(const DocRef& _ref)
+	{
+		const auto doc = m_docs.get(_ref);
+		if(!doc)
+			return;
+		Value m = Value::object();
+		m.set("type", "doc");
+		m.set("kind", kindName(_ref.kind));
+		bool pending = false;
+		if(_ref.kind == DocKind::Pattern)
+		{
+			const auto it = m_patternPush.find(_ref.slot);
+			pending = it != m_patternPush.end() && it->second.busy();
+		}
+		else if(_ref.kind == DocKind::Song)
+		{
+			const auto it = m_songPush.find(_ref.slot);
+			pending = it != m_songPush.end() && it->second.busy();
+		}
+		m.set("pending", pending);
+		m.set("doc", std::visit([](const auto& _v) -> Value
+		{
+			using T = std::decay_t<decltype(_v)>;
+			if constexpr(std::is_same_v<T, ed::MdPattern>)
+				return ed::patternToJson(_v);
+			else if constexpr(std::is_same_v<T, ed::MdKit>)
+				return ed::kitToJson(_v);
+			else if constexpr(std::is_same_v<T, ed::MdSong>)
+				return ed::songToJson(_v);
+			else
+				return ed::globalToJson(_v);
+		}, *doc));
+		publish(m);
+	}
+
+	void Desk::publishMachine()
+	{
+		auto doc = mdDataLink::Session::stateToJson(m_session.state());
+		Value desk = Value::object();
+		desk.set("firmware", m_firmware == Firmware::Missing ? "missing"
+			: m_firmware == Firmware::Unsupported ? "unsupported" : m_ready ? "ready" : "booting");
+		desk.set("tx", isBusy());
+		desk.set("loading", static_cast<int>(m_loadQueue.size() + (m_loading ? 1 : 0)));
+		desk.set("roundTripMs", m_lastRoundTripMs);
+		desk.set("undo", m_history.canUndo());
+		desk.set("redo", m_history.canRedo());
+		desk.set("queued", m_audibleQueue ? Value(static_cast<int>(*m_audibleQueue)) : Value());
+		desk.set("playing", m_telemetry.playing);
+		desk.set("telemetry", m_telemetry.valid);
+		Value mutes = Value::array();
+		for(size_t t = 0; t < 16; ++t)
+			if(m_mutes[t])
+				mutes.push(static_cast<int>(t));
+		desk.set("mutes", std::move(mutes));
+		doc.set("desk", std::move(desk));
+		Value m = Value::object();
+		m.set("type", "machine");
+		m.set("doc", std::move(doc));
+		publish(m);
+	}
+
+	void Desk::flush()
+	{
+		if(!m_pageReady)
+			return;
+		const bool tx = isBusy();
+		for(const auto& ref : m_dirty)
+			publishDoc(ref);
+		m_dirty.clear();
+		if(m_machineDirty || tx != m_lastTx)
+		{
+			m_machineDirty = false;
+			m_lastTx = tx;
+			publishMachine();
+		}
+	}
+}
