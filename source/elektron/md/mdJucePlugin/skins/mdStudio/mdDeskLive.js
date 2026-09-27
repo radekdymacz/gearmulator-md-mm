@@ -350,3 +350,37 @@ if (/[?&]selftest=p4cpu/.test(location.search)) (async () => {
 	$("#play").click();
 	log("cpu done");
 })();
+
+/* ?selftest=p5: P5 checks in the plug-in: PLAY right after ready (timed), GLOBAL, the ? list. */
+if (/[?&]selftest=p5(&|$)/.test(location.search)) (async () => {
+	const sleep = ms => new Promise(r => setTimeout(r, ms));
+	const log = t => Bridge.log("P5: " + t);
+	const desk = () => machineState().desk || {};
+	const until = async (f, ms) => { const end = performance.now() + ms; while (performance.now() < end) { if (f()) return performance.now(); await sleep(5); } return -1; };
+	const t0 = performance.now();
+	await until(() => desk().firmware === "ready", 90000);
+	log(`ready at ${Math.round(performance.now() - t0)} ms, loads queued ${desk().loading}`);
+	/* Times are taken in the message handler (a covered window throttles page timers to 1 s). */
+	let seenAt = -1; Bridge.onMessage(m => { if (m.type === "machine" && m.doc.desk && m.doc.desk.playing && seenAt < 0) seenAt = performance.now(); });
+	for (let i = 0; i < 4; i++) {
+		seenAt = -1; const a = performance.now(); $("#play").click();
+		await until(() => desk().playing, 3000);
+		log(`PLAY ${i + 1}: the page has "playing" ${Math.round(seenAt - a)} ms after the click (document.visibilityState ${document.visibilityState})`);
+		await sleep(300); $("#play").click(); await until(() => !desk().playing, 3000); await sleep(400);
+	}
+	/* GLOBAL: TEMPO OUT on, read back, off. */
+	openGlobal(); await sleep(300);
+	const g0 = Docs.global && Docs.global.control && Docs.global.control.tempoOut;
+	document.querySelector('[data-ga="tempoOut"][data-v="1"]')?.click();
+	let p1 = await until(() => Docs.global && Docs.global.control && Docs.global.control.tempoOut === true, 4000);
+	log(`GLOBAL: TEMPO OUT on -> read back ${p1 >= 0 ? "ok" : "FAIL"} (was ${g0}); panel ${!$("#globpop").hidden}, header ${document.querySelector(".top").scrollWidth} px`);
+	document.querySelector('[data-ga="tempoOut"][data-v="0"]')?.click();
+	p1 = await until(() => Docs.global.control.tempoOut === false, 4000);
+	log(`GLOBAL: TEMPO OUT off again ${p1 >= 0 ? "ok" : "FAIL"}`);
+	closeGlobal();
+	document.body.dispatchEvent(new KeyboardEvent("keydown", { key: "?", shiftKey: true, bubbles: true })); await sleep(200);
+	log(`? list: ${document.querySelectorAll("#keyspop .keyrow").length} keys in ${document.querySelectorAll("#keyspop h3").length} groups`);
+	toggleKeys(false);
+	log(`modulators run in the ${Mods.runs || "?"}`);
+	log("done");
+})();

@@ -35,7 +35,11 @@ int main()
 	juce::ScopedJuceInitialiser_GUI juce;
 	synthLib::RomLoader::addSearchPath(juce::File(rom).getParentDirectory().getFullPathName().toStdString());
 	mdJucePlugin::AudioPluginAudioProcessor::EphemeralConfig config;
-	config.deviceHomePath = std::string{};
+	// A home for the factory-flash cache (in the temp folder), so the processor prepares it once
+	// instead of rebooting the machine again and again without one.
+	const auto home = juce::File::getSpecialLocation(juce::File::tempDirectory).getChildFile("mdModRunnerFirmwareTest");
+	home.createDirectory();
+	config.deviceHomePath = home.getFullPathName().toStdString() + "/";
 	auto processor = std::make_unique<mdJucePlugin::AudioPluginAudioProcessor>(md::MachineModel::Machinedrum, config, false);
 	juce::AudioProcessor& ap = *processor;
 	ap.prepareToPlay(44100.0, 128);
@@ -59,7 +63,9 @@ int main()
 	std::shared_ptr<const md::Device::SequencerTelemetry> telemetry;
 	std::function<bool()> tick;
 	int phase = 0, ticks = 0;
-	bool outside = false;	// a value outside the link's 10..110 once it runs
+	bool outside = false;
+	int steps = 0, lastStep = -1;
+	const void* hw = nullptr;	// the machine the checks run on; the processor may reboot it	// a value outside the link's 10..110 once it runs
 	tick = [&]
 	{
 		++ticks;
@@ -78,7 +84,6 @@ int main()
 		{
 			// The start-up animation; the processor may replace the device meanwhile (its
 			// factory services), which boots again: count from the last boot.
-			static const void* hw = nullptr;
 			const void* now = nullptr;
 			const bool ready = processor->getPlugin().withDeviceLocked([&](synthLib::Device* _d)
 			{
@@ -108,11 +113,20 @@ int main()
 			ticks = 0;
 			return true;
 		}
-		telemetry = processor->getPlugin().withDeviceLocked([](synthLib::Device* _d)
+		const void* current = nullptr;
+		telemetry = processor->getPlugin().withDeviceLocked([&](synthLib::Device* _d)
 		{
 			auto* d = dynamic_cast<md::Device*>(_d);
+			current = d ? &d->getHardware() : nullptr;
 			return d ? d->getSequencerTelemetry() : nullptr;
 		});
+		if(current != hw)
+		{
+			// Rebooted (the processor's factory-flash service): wait for it again.
+			std::puts("  the processor rebooted the machine: waiting again");
+			phase = 1; ticks = 0; seen.clear(); steps = 0; lastStep = -1; outside = false;
+			return true;
+		}
 		if(telemetry && telemetry->playing.load() != 1 && ticks % 10 == 5)
 			pendingStart = 1;	// a replaced device (the processor's own services) starts again
 		if(false)
@@ -131,7 +145,14 @@ int main()
 			else if(ticks > 5)
 				outside = true;
 		}
-		return ticks < 40;
+		// Machine time, not wall time: until the playhead moved 32 steps (the emulator can run
+		// slower than real time on a loaded machine), at most 30 s.
+		if(telemetry)
+		{
+			const int st = telemetry->step.load();
+			if(st >= 0 && st != lastStep && telemetry->playing.load() == 1) { ++steps; lastStep = st; }
+		}
+		return steps < 32 && ticks < 300;
 	};
 	// This thread is the message thread: run the checks and the ModRunner's polls here.
 	auto* runner = processor->getModRunner();
@@ -151,7 +172,7 @@ int main()
 	audio.join();
 	ap.releaseResources();
 	const bool ok = seen.size() >= 4 && !outside;
-	std::printf("  with no editor, track 2 DIST took %zu values in 4 s (%d..%d)\n", seen.size(), seen.empty() ? -1 : *seen.begin(),
+	std::printf("  with no editor, track 2 DIST took %zu values in %d steps (%d..%d)\n", seen.size(), steps, seen.empty() ? -1 : *seen.begin(),
 		seen.empty() ? -1 : *seen.rbegin());
 	std::printf("mdModRunnerFirmwareTest: %s\n", ok ? "PASS" : "FAIL");
 	processor.reset();

@@ -146,7 +146,8 @@ namespace mdJucePlugin
 		// itself and logs the round trips (the log file above).
 		// GEARMULATOR_MDSTUDIO_SELFTEST=p4: the P4 checks instead (mdDeskLive.js).
 		const auto selfTestKind = juce::SystemStats::getEnvironmentVariable("GEARMULATOR_MDSTUDIO_SELFTEST", {});
-		const bool selfTest = selfTestKind == "1" || selfTestKind.startsWith("p4");
+		const bool selfTest = selfTestKind == "1" || selfTestKind.startsWith("p4") || selfTestKind.startsWith("p5");
+		m_selfTest = selfTest;
 		const auto url = selfTest ? juce::URL(file).withParameter("selftest", selfTestKind) : juce::URL(file);
 		m_web->goToURL(url.toString(true));
 		log("page loading, selftest=" + juce::String(selfTest ? 1 : 0) + ", " + juce::String(file.getSize()) + " bytes");
@@ -198,7 +199,12 @@ namespace mdJucePlugin
 			port.sendSysex = [this](const std::vector<uint8_t>& _m) { m_link->sendSysex(_m); };
 			port.sendKitParam = [this](const uint8_t _t, const uint8_t _i, const uint8_t _v) { m_link->setKitParam(_t, _i, _v); };
 			port.sendMute = [this](const uint8_t _t, const bool _on) { m_link->setMute(_t, _on); };
-			port.pressKey = [this](const std::string& _key) { return m_link->pressKey(_key); };
+			port.pressKey = [this](const std::string& _key)
+			{
+				if(m_selfTest)
+					log("key " + juce::String(_key) + " at " + juce::String(nowMs(), 0));
+				return m_link->pressKey(_key);
+			};
 			port.turnKnob = [this](const uint8_t _e, const int _s) { return m_link->turnKnob(_e, _s); };
 		}
 		port.toPage = [this](const json::Value& _m)
@@ -632,7 +638,15 @@ namespace mdJucePlugin
 		}
 		if(dynamic_cast<AudioPluginAudioProcessor&>(getProcessor()).getDeskSetupGeneration() != m_deskSetupGeneration)
 			loadDeskSetup();
-		m_desk->onTelemetry(m_link->readTelemetry());
+		{
+			const auto t = m_link->readTelemetry();
+			if(m_selfTest && t.playing != m_lastPlaying)
+			{
+				m_lastPlaying = t.playing;
+				log(juce::String("telemetry playing ") + (t.playing ? "1" : "0") + " at " + juce::String(nowMs(), 0) + " step " + juce::String(t.step));
+			}
+			m_desk->onTelemetry(t);
+		}
 		// While the machine starts, the page's LCD shows the firmware's own (start-up animation
 		// included), about 15 times a second, until the desk takes input.
 		if(m_pageReady && !m_desk->isInputReady() && m_ticks % 2 == 0)

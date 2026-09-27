@@ -60,6 +60,8 @@ namespace mdJucePlugin
 		uint32_t m_deskSetupGeneration = 0;
 		std::vector<uint8_t> m_lastLcd;
 		bool m_hw = false;
+		bool m_selfTest = false;
+		bool m_lastPlaying = false;
 		mdDesk::DinPacer m_hwPacer;
 		size_t m_hwBytesOut = 0;
 	};
