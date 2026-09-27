@@ -309,3 +309,17 @@ endif()
 add_executable(mdPatternLiveEditFirmwareTest patternLiveEditFirmwareTest.cpp)
 target_link_libraries(mdPatternLiveEditFirmwareTest PRIVATE mdLib elektronData)
 set_property(TARGET mdPatternLiveEditFirmwareTest PROPERTY FOLDER "Elektron/test")
+
+# P1 data layer: capture MD 1.63 user-data dumps (all slots, or a scripted
+# sequence of SysEx edits) for the elektronData codec corpus. Manual: needs a
+# user-supplied ROM.
+add_executable(mdDataCaptureFirmwareTest mdDataCaptureFirmwareTest.cpp)
+target_link_libraries(mdDataCaptureFirmwareTest PRIVATE mdLib)
+set_property(TARGET mdDataCaptureFirmwareTest PROPERTY FOLDER "Elektron/test")
+
+# P1 data layer: corpus round trip and behaviour probes (queue, kit link,
+# kit/song push timing and continuity) against MD 1.63 firmware. Manual:
+# needs a user-supplied ROM.
+add_executable(mdDataLayerFirmwareTest mdDataLayerFirmwareTest.cpp mdFirmwareSession.h)
+target_link_libraries(mdDataLayerFirmwareTest PRIVATE mdLib mdDataLink)
+set_property(TARGET mdDataLayerFirmwareTest PROPERTY FOLDER "Elektron/test")
