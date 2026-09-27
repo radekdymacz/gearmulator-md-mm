@@ -96,3 +96,25 @@ Mac16,8, Apple M4 Pro, 12 cores; standalone at 48 kHz, 512-frame blocks (the def
 - The editor's undo covers the current pattern, kit, song and global; library writes (paste, clear, rename of other slots) are not in it. The machine's UNDO KIT still works.
 - The song workspace edits the machine's current song; song slots are not switched from the page.
 - Screenshots of the plug-in window were not possible from this session (screen capture shows the desktop only); the page was checked in a browser harness with a fake host and in the plug-in through its self test and log.
+
+## 7. Installed
+
+- Release, arm64, from this branch (commit `7cfe57f`), with the MM icon on all three bundles.
+- VST3: `~/Library/Audio/Plug-Ins/VST3/Gearmulator MM.vst3`.
+- AU: `~/Library/Audio/Plug-Ins/Components/Gearmulator MM.component`. `auval -v aumu Tmno GmPv`: **AU VALIDATION SUCCEEDED**.
+- No earlier MM copies were installed, so there was nothing to back up (the MD ones were left alone).
+- Standalone: `bin/plugins/Release/Standalone/Gearmulator MM.app` in the worktree, where the build puts it (as the MD's; not installed). Window title "Monomachine Editor".
+- The editor page (`mmStudio`) is the MM plug-in's default skin; the SFX-60 panel stays in the menu.
+- **The ROM is not installed**: put the OS 1.32B image into `~/Documents/Gearmulator Preview/Monomachine/roms/` (the page's NO ROM dialog opens that folder).
+
+## 8. User files
+
+For the plug-in runs the ROM was linked into the ROM folder and removed afterwards.
+After the last run (and after `auval`, which rewrites `pluginPath_*` in the config
+as JUCE does) the Monomachine user folder was restored from the backup taken at
+the start and compared with it: `diff -r` identical, `Gearmulator MM.xml` SHA-1
+`eaae1ea33f2daf557f032b8416eabb8b5fa40dda` as at the start, `config/midilearn`
+and `roms` empty. The files the runs created and that did not exist at the start
+were removed: `logs/`, `skins/` in the user folder, `~/Library/Application
+Support/Gearmulator MM.settings`, and the MM caches and WebKit data in
+`~/Library/Caches` and `~/Library/WebKit`.
