@@ -1000,6 +1000,9 @@ html,body{min-width:1280px}
 .lcdeng.kselbtn:hover{text-decoration:underline}
 .lcdeng svg{width:8px;height:5px}
 .lcdeng .led{width:5px!important;height:5px!important;border-radius:50%}
+/* v43: page control on the right, above the grid */
+#seqp{position:relative}
+.pagectl.seqpage{position:absolute;right:0;top:0;height:24px;z-index:3;background:var(--bg);padding-left:10px}
 </style>
 
 <div class="app">
@@ -1189,7 +1192,7 @@ function renderTop(){
 function th(i,extra=""){const t=S.tracks[i];return`<div class="th ${i===S.sel?"sel":""} ${audible(i)?"":"off"} ${extra}" data-sel="${i}" style="--c:${FAMC[t.fam]}">
  <div class="sw"></div><div class="n ${i%4===0?"fill":""}">${i+1}</div><div class="nm" title="${t.name}"><b>${t.m}</b></div>
  <button class="ms m" data-mute="${i}" aria-pressed="${t.mute}" aria-label="Mute track ${i+1}">M</button><button class="ms s" data-solo="${i}" aria-pressed="${t.solo}" aria-label="Solo track ${i+1}">S</button></div>`}
-function renderRail(){if(S.ws==="sampler"){renderSlots();return}$("#rail").innerHTML=`<div class="railhead">${S.ws==="seq"?`<span class="pagectl rh"><button class="pgkey" id="pgkey" ${pages16()<2?"disabled":""} title="Next page. Shift-click = previous. Keys [ and ].">Page</button><span class="pleds" aria-hidden="true">${[0,1,2,3].map(k=>`<span class="pl ${k<pages16()?"":"na"} ${!S.viewAll&&k===S.page?"cur":""}" data-plp="${k}"><i class="led"></i></span>`).join("")}</span><button class="ptog ${S.viewAll?"on":""}" id="pgall" aria-pressed="${S.viewAll}" title="Show all steps"><i class="led"></i>All</button><button class="ptog ${S.follow?"on":""}" id="pgfollow" aria-pressed="${S.follow}" title="Page follows the play position"><i class="led"></i>Fol</button></span>`:"Track"}</div>`+S.tracks.map((_,i)=>th(i)).join("")+(S.ws==="seq"?`<div class="railparams"><div class="rphead"><span class="cap">Lock parameter</span><button id="clearLane" class="iconkey" aria-label="Clear ${S.lane} locks" title="Clear ${S.lane} locks"><svg viewBox="0 0 14 14" aria-hidden="true"><path d="M2 4h10M5.5 4V2.5h3V4M3.5 4l.7 8h5.6l.7-8M6 6.5v3.5M8 6.5v3.5" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg></button></div><div class="pgrid vert" id="chips"></div></div>`:"")}
+function renderRail(){if(S.ws==="sampler"){renderSlots();return}$("#rail").innerHTML=`<div class="railhead">Track</div>`+S.tracks.map((_,i)=>th(i)).join("")+(S.ws==="seq"?`<div class="railparams"><div class="rphead"><span class="cap">Lock parameter</span><button id="clearLane" class="iconkey" aria-label="Clear ${S.lane} locks" title="Clear ${S.lane} locks"><svg viewBox="0 0 14 14" aria-hidden="true"><path d="M2 4h10M5.5 4V2.5h3V4M3.5 4l.7 8h5.6l.7-8M6 6.5v3.5M8 6.5v3.5" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg></button></div><div class="pgrid vert" id="chips"></div></div>`:"")}
 
 /* ===== Sequence ===== */
 S.page=0;S.viewAll=false;S.follow=false;
@@ -1198,9 +1201,10 @@ function vis(){if(S.viewAll)return[0,S.len];S.page=Math.min(S.page,pages16()-1);
 function steps(){const[a,b]=vis();return Array.from({length:b-a},(_,k)=>a+k)}
 function cols(){return`repeat(${steps().length},minmax(18px,1fr))`}
 function stepCls(i,s){const t=S.tracks[i],c=["st"];if(s%4===0)c.push("q");if(s%16===0&&s!==vis()[0])c.push("gap");if(t.trigs[s]){c.push("on");if(t.acc.has(s))c.push("acc");if(t.slide.has(s))c.push("sl");if(stepLocked(i,s))c.push("lk")}if(S.playing&&s===S.step)c.push("ph");return c.join(" ")}
+function pageCtl(){return`<span class="pagectl rh seqpage"><button class="pgkey" id="pgkey" ${pages16()<2?"disabled":""} title="Next page. Shift-click = previous. Keys [ and ].">Page</button><span class="pleds" aria-hidden="true">${[0,1,2,3].map(k=>`<span class="pl ${k<pages16()?"":"na"} ${!S.viewAll&&k===S.page?"cur":""}" data-plp="${k}"><i class="led"></i></span>`).join("")}</span><button class="ptog ${S.viewAll?"on":""}" id="pgall" aria-pressed="${S.viewAll}" title="Show all steps"><i class="led"></i>All</button><button class="ptog ${S.follow?"on":""}" id="pgfollow" aria-pressed="${S.follow}" title="Page follows the play position"><i class="led"></i>Fol</button></span>`}
 function renderSeq(){
  const L=S.len;
- let h=`<div class="panel ${S.mode==="CLASSIC"?"classic":""}" id="seqp"><div class="scroll" id="seqscroll"><div class="seq" id="seq">
+ let h=`<div class="panel ${S.mode==="CLASSIC"?"classic":""}" id="seqp">${pageCtl()}<div class="scroll" id="seqscroll"><div class="seq" id="seq">
   <div class="r" style="grid-template-columns:${cols()}">${steps().map(s=>`<div class="rul ${s%16===0&&s!==vis()[0]?"gap":""}">${s%4===0?s+1:""}</div>`).join("")}</div>`;
  S.tracks.forEach((t,i)=>{h+=`<div class="r ${i===S.sel?"sel":""} ${audible(i)?"":"off"}" data-row="${i}" style="grid-template-columns:${cols()};--c:${FAMC[t.fam]}">${steps().map(s=>`<button class="${stepCls(i,s)}" data-t="${i}" data-s="${s}" aria-label="Track ${i+1} step ${s+1}" aria-pressed="${t.trigs[s]}"></button>`).join("")}</div>`});
  h+=`</div></div><div class="lanewrap"><div class="lanetop"><span class="cap">Lock lane · ${S.sel+1} ${S.tracks[S.sel].name} · <b id="lanename">${S.lane}</b> <span class="lanescale">0–127</span></span>${S.mode==="CLASSIC"?`<span class="warnline" title="Locks stay in the pattern but do nothing until you switch to EXTENDED.">CLASSIC: locks muted</span>`:""}<span class="lanehelp" title="Draw across the bars to lock this parameter per step. Alt-drag erases. Hatched steps have no trig, so they cannot hold a lock. Dashed line = kit value.">Draw to lock · alt-drag erases</span>

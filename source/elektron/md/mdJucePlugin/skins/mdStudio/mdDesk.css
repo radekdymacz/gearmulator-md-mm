@@ -1008,6 +1008,9 @@ html,body{min-width:1280px}
 .lcdeng.kselbtn:hover{text-decoration:underline}
 .lcdeng svg{width:8px;height:5px}
 .lcdeng .led{width:5px!important;height:5px!important;border-radius:50%}
+/* v43: page control on the right, above the grid */
+#seqp{position:relative}
+.pagectl.seqpage{position:absolute;right:0;top:0;height:24px;z-index:3;background:var(--bg);padding-left:10px}
 
 /* ===== The real machine's states (not in the mockup) ===== */
 .st.past{opacity:.45}
