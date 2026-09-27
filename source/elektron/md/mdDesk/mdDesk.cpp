@@ -834,6 +834,8 @@ namespace mdDesk
 		desk.set("roundTripMs", m_lastRoundTripMs);
 		desk.set("undo", m_history.canUndo());
 		desk.set("redo", m_history.canRedo());
+		desk.set("undoCount", static_cast<int>(m_history.size()));
+		desk.set("redoCount", static_cast<int>(m_history.redoSize()));
 		desk.set("queued", m_audibleQueue ? Value(static_cast<int>(*m_audibleQueue)) : Value());
 		desk.set("playing", m_telemetry.playing);
 		desk.set("telemetry", m_telemetry.valid);

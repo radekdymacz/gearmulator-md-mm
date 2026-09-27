@@ -29,6 +29,7 @@ namespace mdDesk
 		bool canUndo() const { return !m_undo.empty(); }
 		bool canRedo() const { return !m_redo.empty(); }
 		size_t size() const { return m_undo.size(); }
+		size_t redoSize() const { return m_redo.size(); }
 		void clear();
 
 	private:
