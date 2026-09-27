@@ -1,0 +1,11 @@
+<rml>
+	<head>
+		<link type="text/rcss" href="tus_default.rcss"/>
+		<link type="text/rcss" href="tus_juceskin.rcss"/>
+	</head>
+	<!-- Monomachine Editor frame. The web view (mmStudio.html) covers all of it.
+	     Skins and settings: the standalone's menu bar, or a right-click on an empty
+	     part of the page's header. The page is laid out for 1440 x 924. -->
+	<body id="Root" style="left: 0dp; top: 0dp; width: 1440dp; height: 924dp; background-color: #202020;">
+	</body>
+</rml>

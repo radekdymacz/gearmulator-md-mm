@@ -14,7 +14,8 @@ namespace mdJucePlugin
 			return {{"mmSfx60", "mmSfx60.rml", "", {"mmKnob.png",
 				"mmKnobAtlas.png", "mmKnobs.rcss", "mmScrew.png",
 				"mmBankLed.png", "mmBankLedLit.png", "mmSfx60.rcss",
-				"mmSfx60.rml"}}};
+				"mmSfx60.rml"}},
+				{"mmStudio", "mmStudio.rml", "", {"mmStudio.rml", "mmStudio.html"}}};
 		}
 
 		return {{"mdDefault", "mdDefault.rml", "", {"mdDefault.rcss", "mdDefault.rml",

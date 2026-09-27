@@ -31,6 +31,8 @@ set(SOURCES
 	mdStandaloneApp.cpp
 	mdStudioEditor.cpp mdStudioEditor.h
 	mdStudioLink.cpp mdStudioLink.h
+	mmStudioEditor.cpp mmStudioEditor.h
+	mmStudioLink.cpp mmStudioLink.h
 	$<$<PLATFORM_ID:Darwin>:mdStudioWebZoom.mm>
 	mdPluginEntry.cpp
 
@@ -50,6 +52,13 @@ set(SOURCES
 	skins/mdStudio/mdDeskBridge.js
 	skins/mdStudio/mdDeskModel.js
 	skins/mdStudio/mdDeskMod.js
+	skins/mmStudio/mmStudio.rml
+	skins/mmStudio/mmStudio.html
+	skins/mmStudio/mmStudio.css
+	skins/mmStudio/mmMockup.js
+	skins/mmStudio/mmConvert.js
+	skins/mmStudio/mmAdapter.js
+	skins/mmStudio/mmConvertTest.js
 	skins/mdStudio/mdDeskLive.js
 	skins/mdStudio/mdDeskLibrary.js
 	mdSettingsPanelFeel.cpp mdSettingsPanelFeel.h
@@ -74,7 +83,11 @@ file(GLOB MD_SKIN_ASSETS CONFIGURE_DEPENDS
 	"skins/mdStudio/fonts/*.woff2" "skins/mdStudio/fonts/*.ttf")
 file(GLOB MM_SKIN_ASSETS CONFIGURE_DEPENDS
 	"skins/mmSfx60/*.png" "skins/mmSfx60/*.rml" "skins/mmSfx60/*.rcss"
-	"skins/mmSfx60/*.ttf" "skins/mmSfx60/*.lua")
+	"skins/mmSfx60/*.ttf" "skins/mmSfx60/*.lua"
+	"skins/mmStudio/*.rml" "skins/mmStudio/*.html" "skins/mmStudio/*.css"
+	"skins/mmStudio/mmMockup.js" "skins/mmStudio/mmConvert.js" "skins/mmStudio/mmAdapter.js"
+	# shared with the Machinedrum Editor: the page bridge and the OFL fonts
+	"skins/mdStudio/mdDeskBridge.js" "skins/mdStudio/fonts/*.ttf")
 
 juce_add_binary_data(mdJucePlugin_BinaryData SOURCES
 	${COMMON_ASSETS} "tus_settings_gui_Machinedrum.rml"
@@ -83,14 +96,15 @@ juce_add_binary_data(mmJucePlugin_BinaryData SOURCES
 	${COMMON_ASSETS} "tus_settings_gui_Monomachine.rml"
 	"tus_settings_dspaudio_Monomachine.rml" ${MM_SKIN_ASSETS})
 
-# App icons (doc/modern-ux/icons, built with build-icons.sh). MM's are here too;
-# the MM product wires them on its branch.
+# App icons (doc/modern-ux/icons, built with build-icons.sh).
 set(GEARMULATOR_ICON_BIG_mdJucePlugin "${CMAKE_CURRENT_SOURCE_DIR}/icons/md-1024.png")
 set(GEARMULATOR_ICON_SMALL_mdJucePlugin "${CMAKE_CURRENT_SOURCE_DIR}/icons/md-32.png")
+set(GEARMULATOR_ICON_BIG_mmJucePlugin "${CMAKE_CURRENT_SOURCE_DIR}/icons/mm-1024.png")
+set(GEARMULATOR_ICON_SMALL_mmJucePlugin "${CMAKE_CURRENT_SOURCE_DIR}/icons/mm-32.png")
 createJucePlugin(mdJucePlugin "Gearmulator MD" TRUE "Tmdr" mdJucePlugin_BinaryData mdLib)
 createJucePlugin(mmJucePlugin "Gearmulator MM" TRUE "Tmno" mmJucePlugin_BinaryData mdLib)
-target_link_libraries(mdJucePlugin PRIVATE elektronData mdDataLink mdDesk)
-target_link_libraries(mmJucePlugin PRIVATE elektronData mdDataLink mdDesk)
+target_link_libraries(mdJucePlugin PRIVATE elektronData mdDataLink mdDesk mmDesk)
+target_link_libraries(mmJucePlugin PRIVATE elektronData mdDataLink mdDesk mmDesk)
 
 # MD/MM expose an optional stereo input to plug-in hosts. Starting the
 # standalone with that input active makes CoreAudio combine the built-in input
@@ -114,13 +128,13 @@ if(APPLE)
 		mdJucePlugin_AU mmJucePlugin_AU
 		mdJucePlugin_Standalone mmJucePlugin_Standalone)
 		if(TARGET ${plugin_target})
-			# The MD icon on the VST3 and AU bundles too: JUCE copies Icon.icns into every
+			# The app icon on the VST3 and AU bundles too: JUCE copies Icon.icns into every
 			# bundle but names it in the Info.plist of the standalone only.
-			if(plugin_target MATCHES "^mdJucePlugin_(VST3|AU)$")
+			if(plugin_target MATCHES "^(md|mm)JucePlugin_(VST3|AU)$")
 				add_custom_command(TARGET ${plugin_target} POST_BUILD
 					COMMAND /bin/sh -c "/usr/libexec/PlistBuddy -c 'Delete :CFBundleIconFile' \"$1\" 2>/dev/null; /usr/libexec/PlistBuddy -c 'Add :CFBundleIconFile string Icon.icns' \"$1\"" sh
 						"$<TARGET_BUNDLE_DIR:${plugin_target}>/Contents/Info.plist"
-					COMMENT "MD icon on ${plugin_target}"
+					COMMENT "App icon on ${plugin_target}"
 					VERBATIM
 				)
 			endif()

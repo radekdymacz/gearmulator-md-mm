@@ -1,0 +1,243 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/radekdymacz/gearmulator-md-mm/doc/modern-ux/mm-data-contract.schema.json",
+  "title": "Monomachine Editor data contract, version 1 (MM OS 1.32B)",
+  "description": "Plain-data documents between the Monomachine Editor page and the machine. Firmware units throughout. Cross-field limits (lock row count, offsets inside lengths, sorted locks) are enforced by elektronData::validate in C++, not here. See mm-data-contract.md.",
+  "oneOf": [
+    {"$ref": "#/$defs/pattern"},
+    {"$ref": "#/$defs/kit"},
+    {"$ref": "#/$defs/song"},
+    {"$ref": "#/$defs/global"},
+    {"$ref": "#/$defs/machine"}
+  ],
+  "$defs": {
+    "byte": {"type": "integer", "minimum": 0, "maximum": 255},
+    "value": {"type": "integer", "minimum": 0, "maximum": 127},
+    "signed": {"type": "integer", "minimum": -128, "maximum": 127},
+    "step": {"type": "integer", "minimum": 0, "maximum": 63},
+    "track": {"type": "integer", "minimum": 0, "maximum": 5},
+    "steps": {"type": "array", "items": {"$ref": "#/$defs/step"}, "uniqueItems": true},
+    "hex": {"type": "string", "pattern": "^([0-9a-f]{2})*$"},
+    "runs": {
+      "type": "array",
+      "items": {"type": "array", "prefixItems": [{"type": "integer", "minimum": 0}, {"$ref": "#/$defs/hex"}], "minItems": 2, "maxItems": 2}
+    },
+    "format": {
+      "type": "object",
+      "required": ["version", "revision"],
+      "properties": {"version": {"$ref": "#/$defs/value"}, "revision": {"$ref": "#/$defs/value"}}
+    },
+    "arp": {
+      "type": "object",
+      "required": ["play", "flag", "ojmp", "mode", "range", "speed", "length", "steps"],
+      "properties": {
+        "play": {"type": "integer", "minimum": 0, "maximum": 4, "description": "0 TRUE 1 UP 2 DOWN 3 CYCLE 4 RND"},
+        "flag": {"type": "integer", "minimum": 0, "maximum": 1, "description": "bit 3 of the play byte, meaning unknown, kept"},
+        "ojmp": {"type": "integer", "minimum": 0, "maximum": 15},
+        "mode": {"type": "integer", "minimum": 0, "maximum": 3, "description": "0 OFF 1 KEY 2 SID 3 ADD"},
+        "range": {"type": "integer", "minimum": 0, "maximum": 7, "description": "octaves - 1"},
+        "speed": {"$ref": "#/$defs/value", "description": "display = speed + 1 (x6 = one 16th)"},
+        "trigs": {"type": "integer", "minimum": 0, "maximum": 7, "description": "synth tracks only: bit 0 AMP, 1 FLT, 2 LFO"},
+        "length": {"type": "integer", "minimum": 1, "maximum": 16},
+        "steps": {"type": "array", "items": {"$ref": "#/$defs/byte"}, "minItems": 16, "maxItems": 16, "description": "0x40 + offset, 255 = muted"}
+      }
+    },
+    "noteEntry": {
+      "type": "array",
+      "prefixItems": [{"type": "integer", "minimum": 0, "maximum": 7}, {"$ref": "#/$defs/step"}, {"$ref": "#/$defs/value"}],
+      "minItems": 3, "maxItems": 3,
+      "description": "[track, step, MIDI note]; [7, 63, 127] is an empty entry (0xffff), seen inside the count in factory data"
+    },
+    "synthTrack": {
+      "type": "object",
+      "required": ["trig", "amp", "filter", "lfo", "noteOff", "chord", "slide", "swing", "notes", "transpose", "scale", "key", "arp"],
+      "properties": {
+        "trig": {"$ref": "#/$defs/steps", "description": "steps holding a trig (pitch, trigless or pitchless)"},
+        "amp": {"$ref": "#/$defs/steps"},
+        "filter": {"$ref": "#/$defs/steps"},
+        "lfo": {"$ref": "#/$defs/steps"},
+        "noteOff": {"$ref": "#/$defs/steps"},
+        "chord": {"$ref": "#/$defs/steps", "description": "steps with extra notes in chordNotes"},
+        "slide": {"$ref": "#/$defs/steps"},
+        "swing": {"$ref": "#/$defs/steps"},
+        "notes": {"type": "array", "items": {"type": "array", "prefixItems": [{"$ref": "#/$defs/step"}, {"$ref": "#/$defs/value"}], "minItems": 2, "maxItems": 2}},
+        "transpose": {"type": "integer", "minimum": -64, "maximum": 63},
+        "scale": {"type": "integer", "minimum": 0, "maximum": 3, "description": "0 --- 1 FIX 2 MAJ 3 MIN"},
+        "key": {"type": "integer", "minimum": 0, "maximum": 11},
+        "arp": {"$ref": "#/$defs/arp"}
+      }
+    },
+    "midiTrack": {
+      "type": "object",
+      "required": ["trig", "note", "noteOff", "slide", "swing", "transpose", "scale", "key", "arp"],
+      "properties": {
+        "trig": {"$ref": "#/$defs/steps"},
+        "note": {"$ref": "#/$defs/steps"},
+        "noteOff": {"$ref": "#/$defs/steps"},
+        "slide": {"$ref": "#/$defs/steps"},
+        "swing": {"$ref": "#/$defs/steps"},
+        "transpose": {"type": "integer", "minimum": -64, "maximum": 63},
+        "scale": {"type": "integer", "minimum": 0, "maximum": 3},
+        "key": {"type": "integer", "minimum": 0, "maximum": 11},
+        "arp": {"$ref": "#/$defs/arp"}
+      }
+    },
+    "pattern": {
+      "type": "object",
+      "required": ["schema", "version", "slot", "format", "length", "multiplier", "kit", "swingAmount", "patternTranspose", "tracks", "midiTracks", "locks", "midiNotes", "chordNotes", "hidden"],
+      "properties": {
+        "schema": {"const": "mm-desk/pattern"},
+        "version": {"const": 1},
+        "slot": {"type": "integer", "minimum": 0, "maximum": 127},
+        "name": {"type": "string", "pattern": "^[A-H](0[1-9]|1[0-6])$"},
+        "format": {"$ref": "#/$defs/format"},
+        "length": {"type": "integer", "minimum": 2, "maximum": 64},
+        "multiplier": {"enum": ["1X", "2X", "3/4X", "3/2X"]},
+        "kit": {"$ref": "#/$defs/value"},
+        "swingAmount": {"type": "integer", "minimum": 0, "maximum": 30, "description": "percent - 50"},
+        "patternTranspose": {"type": "integer", "minimum": -64, "maximum": 63},
+        "tracks": {"type": "array", "items": {"$ref": "#/$defs/synthTrack"}, "minItems": 6, "maxItems": 6},
+        "midiTracks": {"type": "array", "items": {"$ref": "#/$defs/midiTrack"}, "minItems": 6, "maxItems": 6},
+        "locks": {
+          "type": "array", "maxItems": 62,
+          "items": {
+            "type": "object",
+            "required": ["track", "page", "param", "steps"],
+            "properties": {
+              "track": {"$ref": "#/$defs/track"},
+              "page": {"type": "integer", "minimum": 0, "maximum": 7, "description": "SYN AMP FLT EFX LF1 LF2 LF3 MIDI"},
+              "param": {"type": "integer", "minimum": 0, "maximum": 7},
+              "steps": {"type": "array", "items": {"type": "array", "prefixItems": [{"$ref": "#/$defs/step"}, {"$ref": "#/$defs/value"}], "minItems": 2, "maxItems": 2}}
+            }
+          }
+        },
+        "midiNotes": {"type": "array", "items": {"$ref": "#/$defs/noteEntry"}, "maxItems": 400},
+        "chordNotes": {"type": "array", "items": {"$ref": "#/$defs/noteEntry"}, "maxItems": 192},
+        "hidden": {
+          "type": "object",
+          "properties": {
+            "x270": {"$ref": "#/$defs/hex"}, "x54e": {"$ref": "#/$defs/hex"},
+            "x555": {"$ref": "#/$defs/byte"}, "x14d7": {"$ref": "#/$defs/byte"},
+            "lockRows": {"$ref": "#/$defs/runs"}, "midiNotes": {"$ref": "#/$defs/runs"}, "chordNotes": {"$ref": "#/$defs/runs"}
+          }
+        }
+      }
+    },
+    "kitTrack": {
+      "type": "object",
+      "required": ["machine", "outputs", "input", "pages", "multiEnv", "extra", "assign", "trigPos"],
+      "properties": {
+        "machine": {"enum": [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 32, 33]},
+        "machineName": {"type": "string"},
+        "outputs": {"type": "integer", "minimum": 0, "maximum": 7, "description": "bits AB 1, CD 2, EF 4"},
+        "input": {"type": "integer", "minimum": 0, "maximum": 6, "description": "0 NEIGHBOR 1 INP A 2 INP B 3 INP A+B 4-6 BUS AB/CD/EF"},
+        "pages": {"type": "array", "minItems": 8, "maxItems": 8, "items": {"type": "array", "items": {"$ref": "#/$defs/value"}, "minItems": 8, "maxItems": 8}},
+        "multiEnv": {"type": "array", "items": {"$ref": "#/$defs/byte"}, "minItems": 6, "maxItems": 6, "description": "MULTI ENV, NRPN 0x40-0x45: ATK DEC SUS REL PORT and one more"},
+        "extra": {"$ref": "#/$defs/hex"},
+        "assign": {
+          "type": "object",
+          "required": ["page", "dest", "add"],
+          "properties": {
+            "page": {"type": "array", "items": {"$ref": "#/$defs/value"}, "minItems": 12, "maxItems": 12},
+            "dest": {"type": "array", "items": {"$ref": "#/$defs/value"}, "minItems": 12, "maxItems": 12},
+            "add": {"type": "array", "items": {"$ref": "#/$defs/signed"}, "minItems": 12, "maxItems": 12}
+          }
+        },
+        "trigPos": {"oneOf": [{"type": "null"}, {"$ref": "#/$defs/track"}]}
+      }
+    },
+    "kit": {
+      "type": "object",
+      "required": ["schema", "version", "slot", "format", "name", "levels", "tracks", "trackMasks", "hidden"],
+      "properties": {
+        "schema": {"const": "mm-desk/kit"},
+        "version": {"const": 1},
+        "slot": {"type": "integer", "minimum": 0, "maximum": 127},
+        "format": {"$ref": "#/$defs/format"},
+        "name": {"type": "string", "maxLength": 11},
+        "nameBytes": {"$ref": "#/$defs/hex"},
+        "levels": {"type": "array", "items": {"$ref": "#/$defs/value"}, "minItems": 6, "maxItems": 6},
+        "tracks": {"type": "array", "items": {"$ref": "#/$defs/kitTrack"}, "minItems": 6, "maxItems": 6},
+        "trackMasks": {
+          "type": "object",
+          "properties": {
+            "mirror": {"$ref": "#/$defs/byte"}, "hpf": {"$ref": "#/$defs/byte"}, "lpf": {"$ref": "#/$defs/byte"},
+            "legatoAmp": {"$ref": "#/$defs/byte"}, "legatoFilter": {"$ref": "#/$defs/byte"}, "legatoLfo": {"$ref": "#/$defs/byte"}
+          }
+        },
+        "hidden": {"type": "object", "properties": {"x1cd": {"$ref": "#/$defs/hex"}, "x2b6": {"$ref": "#/$defs/hex"}}}
+      }
+    },
+    "songRow": {
+      "type": "object",
+      "required": ["kind", "pattern", "target", "repeats", "mutes", "midiMutes", "offset", "length", "transpose", "trackTranspose", "midiTranspose", "tempo", "x3", "x21"],
+      "properties": {
+        "kind": {"enum": ["pattern", "loop", "jump", "halt", "end"]},
+        "pattern": {"$ref": "#/$defs/byte", "description": "0-127, 254 LOOP/JUMP/HALT, 255 END"},
+        "target": {"$ref": "#/$defs/byte"},
+        "repeats": {"$ref": "#/$defs/byte", "description": "plays repeats + 1 times; on a loop: the count, 0 = infinite"},
+        "mutes": {"$ref": "#/$defs/byte"},
+        "midiMutes": {"$ref": "#/$defs/byte"},
+        "offset": {"$ref": "#/$defs/byte"},
+        "length": {"$ref": "#/$defs/byte"},
+        "transpose": {"$ref": "#/$defs/signed"},
+        "trackTranspose": {"type": "array", "items": {"$ref": "#/$defs/signed"}, "minItems": 6, "maxItems": 6},
+        "midiTranspose": {"type": "array", "items": {"$ref": "#/$defs/signed"}, "minItems": 6, "maxItems": 6},
+        "tempo": {"oneOf": [{"type": "null"}, {"type": "integer", "minimum": 30, "maximum": 300}]},
+        "x3": {"$ref": "#/$defs/byte"},
+        "x21": {"$ref": "#/$defs/byte"}
+      }
+    },
+    "song": {
+      "type": "object",
+      "required": ["schema", "version", "slot", "format", "name", "rows", "hidden"],
+      "properties": {
+        "schema": {"const": "mm-desk/song"},
+        "version": {"const": 1},
+        "slot": {"type": "integer", "minimum": 0, "maximum": 23},
+        "format": {"$ref": "#/$defs/format"},
+        "name": {"type": "string", "maxLength": 14},
+        "nameBytes": {"$ref": "#/$defs/hex"},
+        "rows": {"type": "array", "items": {"$ref": "#/$defs/songRow"}, "maxItems": 200},
+        "hidden": {"type": "object", "properties": {"x0e": {"$ref": "#/$defs/hex"}, "rowsAfterEnd": {"$ref": "#/$defs/runs"}}}
+      }
+    },
+    "global": {
+      "type": "object",
+      "required": ["schema", "version", "slot", "format", "channels", "midiSeq", "routingMode", "masterTune", "multiMap", "control", "hidden"],
+      "properties": {
+        "schema": {"const": "mm-desk/global"},
+        "version": {"const": 1},
+        "slot": {"type": "integer", "minimum": 0, "maximum": 7},
+        "format": {"$ref": "#/$defs/format"},
+        "channels": {
+          "type": "object",
+          "required": ["auto", "base", "span", "multiTrig", "multiMap"],
+          "properties": {"auto": {"$ref": "#/$defs/byte"}, "base": {"$ref": "#/$defs/byte"}, "span": {"$ref": "#/$defs/byte"}, "multiTrig": {"$ref": "#/$defs/byte"}, "multiMap": {"$ref": "#/$defs/byte"}}
+        },
+        "midiSeq": {
+          "type": "object",
+          "required": ["channels", "ccs"],
+          "properties": {
+            "channels": {"type": "array", "items": {"$ref": "#/$defs/byte"}, "minItems": 6, "maxItems": 6},
+            "ccs": {"type": "array", "minItems": 6, "maxItems": 6, "items": {"type": "array", "items": {"$ref": "#/$defs/byte"}, "minItems": 4, "maxItems": 4}}
+          }
+        },
+        "routingMode": {"enum": ["3xSTEREO+AB=MIX", "3xSTEREO", "6xMONO"]},
+        "masterTune": {"type": "integer", "minimum": 0, "maximum": 65535, "description": "tenths of Hz"},
+        "multiMap": {"type": "array", "minItems": 6, "maxItems": 6, "items": {"type": "array", "items": {"$ref": "#/$defs/byte"}, "minItems": 32, "maxItems": 32}},
+        "control": {"$ref": "#/$defs/hex"},
+        "hidden": {"type": "object"}
+      }
+    },
+    "machine": {
+      "type": "object",
+      "required": ["schema", "version"],
+      "description": "Read-only machine state from the MM desk (MM-P2): current and queued pattern, kit and its working state, song, SYSEX RECV session, engine.",
+      "properties": {
+        "schema": {"const": "mm-desk/machine"},
+        "version": {"const": 1}
+      }
+    }
+  }
+}
