@@ -614,14 +614,41 @@ function renderSlots() {
  <div class="slotsec"><div class="scap">RAM · lost at power-off</div>${[1, 2, 3, 4].map(n => { const st = slotState(n), r = recTrack(n);
 		return `<button class="slotk ram st-${st}" data-slot="RAM${n}" aria-pressed="${S.smpSlot === "RAM" + n}"><i class="led"></i><b>RAM ${n}</b><span>${STATE_TXT[st]}${r >= 0 ? " · R" + (r + 1) : ""}</span></button>`; }).join("")}
  <div class="scap">ROM · kept · 48 slots</div><div class="romgrid">${Array.from({ length: 48 }, (_, i) => { const k = i + 1;
-		return `<button class="slotk rom ${S.tracks.some(t => t.m === romCode(k)) ? "has" : ""}" data-slot="ROM${k}" aria-pressed="${S.smpSlot === "ROM" + k}" title="${romCode(k)}">${String(k).padStart(2, "0")}</button>`; }).join("")}</div></div>`;
+		const used = S.tracks.map((t, i) => t.m === romCode(k) ? i + 1 : 0).filter(Boolean);
+		return `<button class="slotk rom ${used.length ? "has" : ""}" data-slot="ROM${k}" aria-pressed="${S.smpSlot === "ROM" + k}" title="${romCode(k)}${romName(k) ? " · named " + romName(k) + " (sent this session)" : ""}${used.length ? " · played by track " + used.join(", ") : ""}">${romName(k) || String(k).padStart(2, "0")}</button>`; }).join("")}</div>
+ <div class="scap" title="${NA.names} ${NA.memory}">Lit: used by this kit. Whether a slot holds a sample, its name and the memory in use are not reported by the machine.</div></div>`;
 }
 function pageKeys() { return `<span class="pagectl mini"><button class="pgkey" id="pgkey" ${pages16() < 2 ? "disabled" : ""} title="Next page. Shift-click = previous.">Page</button><span class="pleds" aria-hidden="true">${[0, 1, 2, 3].map(k => `<span class="pl ${k < pages16() ? "" : "na"} ${k === S.page ? "cur" : ""}" data-plp="${k}"><i class="led"></i><small>${k + 1}:4</small></span>`).join("")}</span></span>`; }
+/* P4: an empty RAM slot is one call to action. It shows what changes (which machines are replaced,
+   which trigs stay), does it as one undo step, and then the recorder is ready below. */
+function setupTracks() {
+	let r = S.smpRec ?? 12, p = S.smpPlay ?? 13;
+	if (p === r) p = (r + 1) % 16;
+	return [r, p];
+}
+function setupCard(n) {
+	const [rt, pt] = setupTracks(), R = S.tracks[rt], P = S.tracks[pt];
+	const rtr = R.trigs.slice(0, S.len).filter(Boolean).length, ptr = P.trigs.slice(0, S.len).filter(Boolean).length;
+	const step = (w, v) => `<span class="stepper"><button data-setupt="${w}" data-d="-1" aria-label="Previous track">‹</button><b class="mono">${v + 1}</b><button data-setupt="${w}" data-d="1" aria-label="Next track">›</button></span>`;
+	return `<section class="card smpsetup"><header><h3>Set up sampling · RAM ${n}</h3><span>the UW's RAM machines: one records, one plays</span></header>
+  <div class="insp">
+   <div class="irow"><span class="ilab">Records</span>${step("r", rt)}<span class="note">Track ${rt + 1}: <b>${R.m}</b> becomes <b>RAM-R${n}</b>. ${!rtr ? "It has no trig, so one goes on step 1 (a recorder records on its trigs)." : S.smpOnce ? `Its ${rtr} trig${rtr > 1 ? "s are" : " is"} cleared; one goes on step 1: it records once a loop.` : `Its ${rtr} trig${rtr > 1 ? "s stay" : " stays"}: it records on ${rtr > 1 ? "each" : "it"}.`}</span></div>
+   ${rtr > 1 || (rtr === 1 && !R.trigs[0]) ? `<div class="irow"><span class="ilab">Recorder trigs</span><span class="seg"><button data-smponce="0" aria-pressed="${!S.smpOnce}">Keep</button><button data-smponce="1" aria-pressed="${!!S.smpOnce}">Once, on step 1</button></span></div>` : ""}
+   <div class="irow"><span class="ilab">Plays</span>${step("p", pt)}<span class="note">Track ${pt + 1}: <b>${P.m}</b> becomes <b>RAM-P${n}</b>. ${ptr ? `Its ${ptr} trig${ptr > 1 ? "s stay" : " stays"}: it plays the take on ${ptr > 1 ? "each" : "it"}.` : "It has no trig yet: add them in the chop grid."}</span></div>
+   <div class="irow"><span class="ilab"></span><button class="cream" data-setupgo="${n}">Set up sampling</button><span class="note">One step: Undo takes it back. The two tracks' machines are replaced${S.keepFx ? " (effects and routing kept)" : ""}${S.smpOnce && rtr ? `; track ${rt + 1}'s trigs are cleared` : "; no trig is cleared"}.</span></div>
+  </div></section>`;
+}
+/* The recorder's source, from its levels: MLEV/MBAL = the machine's own mix, ILEV/IBAL = inputs A/B. */
+const SOURCES = [["main", "Main mix", { MLEV: 127, MBAL: 64, ILEV: 0, IBAL: 64 }], ["a", "Input A", { MLEV: 0, MBAL: 64, ILEV: 127, IBAL: 0 }],
+	["b", "Input B", { MLEV: 0, MBAL: 64, ILEV: 127, IBAL: 127 }], ["ab", "A + B", { MLEV: 0, MBAL: 64, ILEV: 127, IBAL: 64 }]];
+function sourceOf(t) { const y = S.tracks[t].syn; const hit = SOURCES.find(([, , v]) => Object.keys(v).every(k => y[k] === v[k])); return hit ? hit[0] : "custom"; }
+function sourceSeg(t) { const cur = sourceOf(t); return `<span class="seg srcseg">${SOURCES.map(([id, label]) => `<button data-recsrc="${id}" data-t="${t}" aria-pressed="${cur === id}">${label}</button>`).join("")}</span>${cur === "custom" ? `<span class="note">custom levels</span>` : ""}`; }
 function renderSampler() {
 	S.viewAll = false; const id = S.smpSlot; let h = "";
 	if (id.startsWith("RAM")) {
 		const n = +id.slice(3), r = recTrack(n), ps = players(n), st = slotState(n);
-		if (r < 0) { h = `<div class="smpempty"><div class="edblank big">RAM ${n} is not in this kit.<br>Put RAM-R${n} on a track to record and RAM-P${n} on another to play it.</div><button class="cream" data-assign="${n}">Put RAM-R${n} on track 13 and RAM-P${n} on track 14</button></div>`; }
+		if (S.firmware !== "ready") { h = `<div class="smpempty"><div class="edblank big">${S.firmware === "unsupported" ? "This firmware is not MD OS 1.63 UW: the Sampler needs the UW's ROM and RAM machines." : "The machine is not running yet. The Sampler works with the UW machine once it is ready."}</div></div>`; }
+		else if (r < 0) h = setupCard(n);
 		else {
 			if (S.chopTrack == null || !ps.includes(S.chopTrack)) S.chopTrack = ps[0] ?? null; const p = S.chopTrack, R = S.tracks[r];
 			const recSteps = R.trigs.slice(0, S.len).map((x, i) => x ? i + 1 : 0).filter(Boolean);
@@ -635,7 +662,7 @@ function renderSampler() {
    ${p != null ? `<section class="card"><header><h3>Chop</h3><span class="chophead">${ps.length > 1 ? ps.map(i => `<button class="${i === p ? "cream" : ""}" data-choptrk="${i}">Track ${i + 1}</button>`).join("") : "track " + (p + 1)}${pageKeys()}</span></header>
     <div class="chop" id="chop" data-p="${p}" style="grid-template-columns:repeat(16,minmax(0,1fr))">${steps().map(s => `<button class="${chopCls(p, s)}" data-cp="${s}" aria-label="Chop step ${s + 1}">${chopInner(p, s)}</button>`).join("")}</div>
     <div class="edhint">Click = trig. Drag a trig up or down = slice (a STRT lock). Alt-click = reverse. Shift-click = retrig roll.</div></section>` : `<div class="edblank">No track plays RAM-P${n}. Put RAM-P${n} on a track in Sound.</div>`}
-   <div class="smp2"><section class="card"><header><h3>Source</h3><span>recorder · track ${r + 1}</span></header><div class="ctl four">${RAMR.map(k => pc("syn", k, { t: r })).join("")}</div></section>
+   <div class="smp2"><section class="card"><header><h3>Source</h3><span>recorder · track ${r + 1}</span></header><div class="irow">${sourceSeg(r)}</div><div class="ctl four">${RAMR.map(k => pc("syn", k, { t: r })).join("")}</div></section>
     ${p != null ? `<section class="card"><header><h3>Playback</h3><span>player · track ${p + 1}</span></header><div class="ctl four">${SMPL.map(k => pc("syn", k, { t: p })).join("")}</div></section>` : ""}</div>`;
 		}
 	}
@@ -949,10 +976,26 @@ document.addEventListener("click", e => {
 		else { t.trigs[s] = !t.trigs[s]; cmd("trig", { p: S.pat, t: p, s, on: t.trigs[s] }); if (!t.trigs[s]) clearStep(p, s); else setLock(p, "STRT", s, t.syn.STRT); }
 		renderTop(); cp.className = chopCls(p, s); cp.innerHTML = chopInner(p, s); redraw(); return;
 	}
-	const as = e.target.closest("[data-assign]"); if (as) {
-		const n = as.dataset.assign; setMachine("RAM-R" + n, 12); setMachine("RAM-P" + n, 13);
-		cmd("clearSteps", { p: S.pat, t: 12, from: 0, to: S.len }); cmd("trig", { p: S.pat, t: 12, s: 0, on: true });
-		toast("Tracks 13 and 14 now hold RAM-R" + n + " and RAM-P" + n + "."); return;
+	const stt = e.target.closest("[data-setupt]"); if (stt) {
+		const [r, p] = setupTracks(), d = +stt.dataset.d;
+		if (stt.dataset.setupt === "r") { S.smpRec = (r + d + 16) % 16; if (S.smpRec === p) S.smpRec = (S.smpRec + d + 16) % 16; }
+		else { S.smpPlay = (p + d + 16) % 16; if (S.smpPlay === r) S.smpPlay = (S.smpPlay + d + 16) % 16; }
+		render(); return;
+	}
+	const sgo = e.target.closest("[data-setupgo]"); if (sgo) {
+		const n = sgo.dataset.setupgo, [r, p] = setupTracks(), noTrig = !S.tracks[r].trigs.slice(0, S.len).some(Boolean);
+		gesture = Bridge.gesture();	/* one undo step */
+		setMachine("RAM-R" + n, r); setMachine("RAM-P" + n, p);
+		if (!noTrig && S.smpOnce) { cmd("clearSteps", { p: S.pat, t: r, from: 0, to: S.len }); S.tracks[r].trigs.fill(false); }
+		if (noTrig || S.smpOnce) { S.tracks[r].trigs[0] = true; cmd("trig", { p: S.pat, t: r, s: 0, on: true }); }
+		gesture = 0;
+		toast(`Sampling ready: track ${r + 1} records (RAM-R${n}), track ${p + 1} plays (RAM-P${n}). Undo takes it back.`); render(); return;
+	}
+	const son = e.target.closest("[data-smponce]"); if (son) { S.smpOnce = son.dataset.smponce === "1"; render(); return; }
+	const rs = e.target.closest("[data-recsrc]"); if (rs) {
+		const t = +rs.dataset.t, src = SOURCES.find(([id]) => id === rs.dataset.recsrc);
+		if (src) { Object.assign(S.tracks[t].syn, src[2]); syncKitValues(); render(); }
+		return;
 	}
 	const rn = e.target.closest("[data-rename]"); if (rn) {
 		const k = +rn.dataset.rename;

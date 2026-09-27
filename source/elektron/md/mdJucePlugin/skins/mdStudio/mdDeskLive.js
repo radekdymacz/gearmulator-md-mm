@@ -184,6 +184,21 @@ if (/[?&]selftest=p4(&|$)/.test(location.search)) (async () => {
 	const oAll = off(), sc = $("#seqscroll"); const scroll = sc ? sc.scrollWidth - sc.clientWidth : -1;
 	S.viewAll = false; render();
 	log(`lane vs steps: 16 view ${o16} px, ALL ${oAll} px, ALL horizontal scroll ${scroll} px; header ${document.querySelector(".top").scrollWidth} px in ${innerWidth} px`);
+	/* Sampler: a RAM slot the kit does not use is one call to action, undoable. */
+	const kitDoc = () => Docs.kits[currentKitSlot()];
+	const n = [1, 2, 3, 4].find(k => !S.tracks.some(t => t.m === "RAM-R" + k));
+	if (n) {
+		S.ws = "sampler"; S.smpSlot = "RAM" + n; render(); await sleep(200);
+		log(`sampler RAM ${n} empty state: "${(document.querySelector(".smpsetup")?.innerText || "none").replace(/\s+/g, " ").slice(0, 260)}"`);
+		const [rt, pt] = setupTracks(), trigsBefore = S.tracks[rt].trigs.filter(Boolean).length, mBefore = [kitDoc().tracks[rt].machine, kitDoc().tracks[pt].machine];
+		document.querySelector("[data-setupgo]").click();
+		p1 = await until(() => kitDoc().tracks[rt].machine === "RAM-R" + n && kitDoc().tracks[pt].machine === "RAM-P" + n, 4000);
+		await sleep(600); render(); await sleep(200);
+		log(`set up sampling: ${p1 >= 0 ? "ok" : "FAIL"} track ${rt + 1} ${kitDoc().tracks[rt].machine}, track ${pt + 1} ${kitDoc().tracks[pt].machine}; trigs ${trigsBefore} -> ${S.tracks[rt].trigs.filter(Boolean).length}; shows Live/Freeze/Capture ${!!document.querySelector("[data-capture]")}, source keys ${document.querySelectorAll("[data-recsrc]").length}, chop grid ${!!document.querySelector("#chop")}`);
+		cmd("undo");
+		p1 = await until(() => kitDoc().tracks[rt].machine === mBefore[0] && kitDoc().tracks[pt].machine === mBefore[1], 4000);
+		log(`one Undo restores ${mBefore.join(" + ")}: ${p1 >= 0 ? "ok" : "FAIL"}`);
+	}
 	log("done");
 })();
 
