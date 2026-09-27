@@ -1,5 +1,6 @@
 #pragma once
 
+#include <atomic>
 #include <memory>
 #include <string>
 #include <utility>
@@ -197,6 +198,19 @@ namespace md
 		{
 			return m_frontPanelPublisher->getLedTransitionStatus();
 		}
+		// MD OS 1.63 sequencer telemetry from emulated RAM, published by the audio
+		// thread after every block and read lock-free by editors (MD Desk). -1 =
+		// unknown: another firmware, or nothing published yet. Addresses: P0
+		// (step) and the P2 smoke test (pattern, playing), fingerprint-gated.
+		struct SequencerTelemetry
+		{
+			std::atomic<int> step{-1};		// current step, 0-based, wraps at the pattern length
+			std::atomic<int> pattern{-1};	// switches with the status reply, ~2 steps before it is heard
+			std::atomic<int> playing{-1};	// 1 playing, 0 stopped
+			std::atomic<uint64_t> blocks{0};
+		};
+		std::shared_ptr<const SequencerTelemetry> getSequencerTelemetry() const { return m_sequencerTelemetry; }
+
 		// Direct access for the in-process editor (option B): the front-panel LCD/LED state
 		// and panel-event injection. Only valid for a local (non-bridged) device instance.
 		Hardware& getHardware() { return *m_hardware; }
@@ -245,7 +259,10 @@ namespace md
 		void clearProjectStateRestore();
 		void failProjectStateRestore(std::string _error);
 
+		void publishSequencerTelemetry();
+
 		const MachineModel m_model;
+		std::shared_ptr<SequencerTelemetry> m_sequencerTelemetry = std::make_shared<SequencerTelemetry>();
 		std::shared_ptr<FrontPanelPublisher> m_frontPanelPublisher;
 		std::shared_ptr<const PreparationContext> m_preparationContext;
 		std::unique_ptr<Hardware> m_hardware;

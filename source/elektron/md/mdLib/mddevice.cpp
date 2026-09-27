@@ -667,6 +667,7 @@ namespace md
 	{
 		m_hardware->processAudio(_inputs, _outputs,
 			static_cast<uint32_t>(_samples), getExtraLatencySamples());
+		publishSequencerTelemetry();
 		if(m_deferredPreparedState && m_deferredPreparedState->m_hardware
 			&& m_deferredPreparedState->m_hardware->isProjectStateRestorePending())
 		{
@@ -675,6 +676,27 @@ namespace md
 			m_deferredPreparedState->m_hardware->advance(
 				static_cast<uint32_t>(_samples));
 		}
+	}
+
+	void Device::publishSequencerTelemetry()
+	{
+		// Plain RAM reads on the thread that owns the hardware, once per block.
+		constexpr uint32_t stepAddress = 0x261aa7;
+		constexpr uint32_t patternAddress = 0x28d205;
+		constexpr uint32_t stoppedAddress = 0x28cdaf;	// 1 stopped, 0 playing
+		auto& t = *m_sequencerTelemetry;
+		if(m_model != MachineModel::Machinedrum || m_hardware->firmwareFingerprint() != g_mdOs163Fingerprint)
+		{
+			t.step.store(-1, std::memory_order_relaxed);
+			t.pattern.store(-1, std::memory_order_relaxed);
+			t.playing.store(-1, std::memory_order_relaxed);
+			return;
+		}
+		auto& uc = m_hardware->getUC();
+		t.step.store(uc.read8(stepAddress), std::memory_order_relaxed);
+		t.pattern.store(uc.read8(patternAddress), std::memory_order_relaxed);
+		t.playing.store(uc.read8(stoppedAddress) == 0 ? 1 : 0, std::memory_order_relaxed);
+		t.blocks.fetch_add(1, std::memory_order_release);
 	}
 
 	void Device::extraLatencyChanged()
