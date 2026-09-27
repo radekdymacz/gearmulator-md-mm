@@ -1,5 +1,5 @@
 <meta charset="utf-8">
-<title>Machinedrum Desk</title>
+<title>Machinedrum Editor</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600&family=IBM+Plex+Mono:wght@400;500&family=Silkscreen&display=swap">
 <style>
@@ -848,31 +848,94 @@ html,body{min-width:1280px}
 .firstlink{margin:0}
 .firstlink button{background:transparent;box-shadow:none;color:var(--print);font:600 11px var(--sans);letter-spacing:.14em;text-transform:uppercase;padding:0}
 .warnchip{background:var(--rec)!important;color:#fff!important}
+
+/* sub-bar removed: LCD line 2 carries each workspace's values */
+.subbar{display:none!important}
+.lcdpanel{grid-template-rows:auto auto;height:auto!important;padding:4px 2px 3px!important;row-gap:3px}
+.lcd2{grid-column:1/-1;display:flex;gap:12px;align-items:baseline;padding:3px 9px 0;border-top:1px solid color-mix(in srgb,var(--ink) 30%,transparent);min-height:18px;white-space:nowrap;overflow:hidden}
+.l2{display:inline-flex;gap:5px;align-items:baseline;font:12px var(--pix);color:var(--ink);text-transform:uppercase}
+.l2 small{font:9px var(--pix);opacity:.75}
+.l2 b{font-weight:400}
+.l2.ed{cursor:pointer;border-radius:2px;padding:0 3px;margin:0 -3px}
+.l2.ed:hover{background:color-mix(in srgb,var(--ink) 14%,transparent)}
+.l2[data-l2="swing"],.l2[data-l2="accAmt"]{cursor:ns-resize}
+.patkeys{height:auto!important;align-self:stretch}
+.body{margin-top:4px}
+.railhead{height:24px!important;align-items:center!important}
+.rul{height:24px!important}
+.pagectl.rh{display:flex;gap:6px;align-items:center;margin:0}
+.pagectl.rh .pgkey{height:22px;padding:0 8px;font-size:10px}
+.pagectl.rh .pleds{gap:5px;align-items:center}
+.pagectl.rh .pl .led{width:7px;height:7px}
+.pagectl.rh .ptog{margin:0;font-size:10px;letter-spacing:.08em;padding:0 1px;gap:3px}
+.card header .machbtn{margin:-6px 0 -2px}
+.songwarn{display:inline-flex;gap:8px;align-items:center;margin-left:12px;margin-right:auto}
+/* fit the whole Sequence page at 1440x900 */
+:root{--row:28px!important}
+.pgrid.vert{grid-template-rows:14px repeat(8,19px)!important}
+.pgrid.vert .pk{height:19px}
+.lb{height:174px!important}
+/* line 2 never widens the LCD: it takes line 1's width */
+.lcd2{width:0;min-width:100%;text-overflow:ellipsis}
+
+/* header v3: logo + WORKSPACE | TRANSPORT (centre) | LCD + SETUP; key rows on one line */
+.brand{display:grid!important;gap:3px;line-height:1!important;align-self:flex-start!important;margin-top:20px}
+.brand b{font:600 24px/1 var(--sans);letter-spacing:.08em;white-space:nowrap}
+.brand b span{color:var(--oxblood)}
+.brand small{font:600 9px var(--sans);letter-spacing:.2em;text-transform:uppercase;color:var(--print2);white-space:nowrap}
+.top{align-items:start!important}
+.top .left,.rightgrp{align-items:flex-start!important}
+.lcdgroup{margin-top:18px;align-self:flex-start!important}
+.top .wsgroup,.trgroup{align-self:flex-start!important}
+.top .left .wsgroup{grid-column:auto!important;justify-self:auto!important}
+.soundgrid>.card:nth-child(-n+3),.ctlui>.card,.songui.lay2>.card,.songleft>.card:first-child,.smpmain>.card:first-child{border-top:0!important;padding-top:0!important}
+
+/* LCD pattern arrows */
+.patrow{display:inline-flex;align-items:center;gap:3px}
+.lcdbtn{background:transparent!important;box-shadow:none!important;color:var(--ink)!important;padding:0 2px!important;font:14px var(--pix)!important;height:auto;min-width:0;border-radius:2px}
+.lcdbtn:hover{background:color-mix(in srgb,var(--ink) 15%,transparent)!important}
+/* EDIT group: undo / redo as real keys */
+.skey .ico{font-style:normal;font-size:13px;line-height:7px;height:7px;display:block}
+.skey:disabled{opacity:.4;cursor:default}
+.skey small{min-width:1ch}
+.firstlink{display:flex;gap:18px;align-items:center}
+.platekey2{background:transparent!important;box-shadow:none!important;color:var(--print)!important;font:600 11px var(--sans)!important;letter-spacing:.14em;text-transform:uppercase;padding:0!important}
+.platekey2 span{color:var(--led)}
+
+/* header band: logo, key groups and LCD share one top and one bottom line */
+:root{--hband:64px}
+.top .left .brand{margin-top:18px!important;height:var(--hband);align-content:center}
+.lcdgroup{margin-top:18px!important}
+.lcdpanel{height:var(--hband)!important;box-sizing:border-box;align-content:space-between!important;padding:5px 2px 4px!important;overflow:hidden}
+.lcdpanel .f b{font-size:13px!important;line-height:1.15}
+.lcdpanel small{line-height:1}
+.lcd2{padding-top:2px!important;min-height:0!important}
+.setkeys .skey{padding:6px 9px 7px!important;letter-spacing:.1em}
+.top{--hband:55px}
+.top .left .brand{margin-top:0!important}
+.lcdgroup{margin-top:0!important}
+.lcdpanel{padding:4px 2px 3px!important}
+.lcdpanel .f b{font-size:12px!important}
+.tkey span,.skey span,.top .tabs button span{white-space:nowrap}
+@media (max-width:1500px){
+ .lcdpanel .f{padding:0 5px!important}
+ .lcdpanel .f b{font-size:11px!important}
+ .lcd2{gap:8px!important;padding:2px 5px 0!important}
+ .l2{font-size:11px}
+ .setkeys .skey{padding:6px 7px 7px!important;font-size:11px!important;letter-spacing:.08em}
+ .top .tabs button{padding:6px 8px 7px!important;font-size:11px!important;letter-spacing:.1em}
+ .tkey{padding:6px 9px 7px!important;min-width:0!important;font-size:11px!important}
+ .brand b{font-size:21px}
+ .top{column-gap:12px!important}.top .left,.rightgrp{gap:12px!important}
+}
+.top .brand b{font-size:19px!important;letter-spacing:.06em;line-height:1}
+.top .brand small.ed{color:var(--led);font-size:13px!important;letter-spacing:.42em;font-weight:700;margin-top:3px;display:block}
 </style>
 
 <div class="app">
   <header class="top">
     <div class="left">
-      <div class="brand">MD <span>DESK</span></div>
-      <div class="lcdgroup">
-        <div class="lcdpanel">
-          <div class="f"><small>Tempo <i class="led" id="tempoled" aria-hidden="true"></i></small><b id="bpm" role="slider" tabindex="0" aria-label="Tempo in bpm" title="Drag up or down">124.0</b></div>
-          <div class="f"><small>Pattern <i class="led txled" id="txled" aria-hidden="true"></i></small><b id="pat">A01</b></div>
-          <div class="f kitf" id="kitf" role="button" tabindex="0" title="Kit actions: save, reload"><small>Kit <span class="save" id="save" role="status"><i></i><span>saved</span></span></small><b id="kitname">K01 WAREHOUSE</b></div>
-          <div class="f meter" id="meter" title="Locked parameters in this pattern. The Machinedrum allows 64."><small>Locks</small><b id="lockn">00/64</b></div>
-        </div>
-        <div class="patkeys"><button id="patPrev" aria-label="Previous pattern" title="Previous pattern">‹</button><button id="patNext" aria-label="Next pattern" title="Next pattern">›</button></div>
-        <div class="patkeys"><button id="undo" aria-label="Undo" title="Undo (Cmd+Z)">↶</button><button id="redo" aria-label="Redo" title="Redo (Shift+Cmd+Z)">↷</button></div>
-      </div>
-    </div>
-      <div class="wsgroup trgroup"><span class="grplabel">Transport</span>
-       <div class="tabs trkeys">
-        <button class="tkey rec" id="rec" aria-pressed="false" aria-label="Record"><i class="led" id="recled"></i><span>● Rec</span></button>
-        <button class="tkey" id="play" aria-pressed="false" aria-label="Play"><i class="led" id="playled"></i><span>▶ Play</span></button>
-        <button class="tkey stop" id="stop" aria-label="Stop"><i class="led"></i><span>■ Stop</span></button>
-       </div>
-       <div class="seclabels"><button data-sec="copy" title="Copy (Cmd+C)">Copy</button><button data-sec="clear" title="Clear (Delete)">Clear</button><button data-sec="paste" title="Paste (Cmd+V)">Paste</button></div></div>
-    <div class="rightgrp">
+      <div class="brand" aria-label="Machinedrum Editor"><b>MACHINEDRUM</b><small class="ed">Editor</small></div>
     <div class="wsgroup"><span class="grplabel">Workspace</span>
     <nav class="tabs" role="tablist" id="tabs">
       <button role="tab" data-ws="seq"><i class="led"></i><span>Sequence</span><small>1</small></button>
@@ -882,8 +945,28 @@ html,body{min-width:1280px}
       <button role="tab" data-ws="song"><i class="led"></i><span>Song</span><small>5</small></button>
       <button role="tab" data-ws="control"><i class="led"></i><span>Control</span><small>6</small></button>
     </nav></div>
+    </div>
+      <div class="wsgroup trgroup"><span class="grplabel">Transport</span>
+       <div class="tabs trkeys">
+        <button class="tkey rec" id="rec" aria-pressed="false" aria-label="Record"><i class="led" id="recled"></i><span>● Rec</span></button>
+        <button class="tkey" id="play" aria-pressed="false" aria-label="Play"><i class="led" id="playled"></i><span>▶ Play</span></button>
+        <button class="tkey stop" id="stop" aria-label="Stop"><i class="led"></i><span>■ Stop</span></button>
+       </div>
+       <div class="seclabels"><button data-sec="copy" title="Copy (Cmd+C)">Copy</button><button data-sec="clear" title="Clear (Delete)">Clear</button><button data-sec="paste" title="Paste (Cmd+V)">Paste</button></div></div>
+    <div class="rightgrp">
+      <div class="lcdgroup">
+        <div class="lcdpanel">
+          <div class="f"><small>Tempo <i class="led" id="tempoled" aria-hidden="true"></i></small><b id="bpm" role="slider" tabindex="0" aria-label="Tempo in bpm" title="Drag up or down">124.0</b></div>
+          <div class="f patf"><small>Pattern <i class="led txled" id="txled" aria-hidden="true"></i></small><span class="patrow"><button class="lcdbtn" id="patPrev" aria-label="Previous pattern" title="Previous pattern">‹</button><b id="pat">A01</b><button class="lcdbtn" id="patNext" aria-label="Next pattern" title="Next pattern">›</button></span></div>
+          <div class="f kitf" id="kitf" role="button" tabindex="0" title="Kit actions: save, reload"><small>Kit <span class="save" id="save" role="status"><i></i><span>saved</span></span></small><b id="kitname">K01 WAREHOUSE</b></div>
+          <div class="f meter" id="meter" title="Locked parameters in this pattern. The Machinedrum allows 64."><small>Locks</small><b id="lockn">00/64</b></div>
+          <div class="lcd2" id="lcd2"></div>
+        </div>
+      </div>
     <div class="wsgroup setgroup"><span class="grplabel">Setup</span>
      <div class="tabs setkeys">
+      <button class="skey" id="undo" aria-label="Undo" title="Undo (Cmd+Z)"><i class="ico">↶</i><span>Undo</span><small id="undon"></small></button>
+      <button class="skey" id="redo" aria-label="Redo" title="Redo (Shift+Cmd+Z)"><i class="ico">↷</i><span>Redo</span><small id="redon"></small></button>
       <button class="skey" id="learnkey" aria-pressed="false" title="Map any value to a controller knob (L)"><i class="led"></i><span>Learn</span><small>L</small></button>
       <button class="skey" id="platekey" aria-label="Switch panel colour" title="Switch between the MKI silver and MKII black panel"><i class="led"></i><span>MKI</span></button>
      </div></div>
@@ -1049,7 +1132,7 @@ function renderTop(){
  const lkk=$("#learnkey");if(lkk){lkk.setAttribute("aria-pressed",S.ctl.learn);lkk.classList.toggle("on",S.ctl.learn)}
  const pk=$("#platekey");if(pk)pk.querySelector("span").textContent=S.plate==="mk2"?"MKII":"MKI";
  const n=S.locks.size,m=$("#meter");$("#lockn").textContent=String(n).padStart(2,"0")+"/64";m.className="f meter"+(n>=64?" full":n>=52?" warn":"");
- $("#bpm").textContent=S.bpm.toFixed(1);$("#pat").innerHTML=S.queued!=null?`${patName(S.pat)}<span class="qarrow">›</span>${patName(S.queued)}`:patName(S.pat);$("#pat").parentElement.classList.toggle("queued",S.queued!=null);$("#kitname").textContent=kitName(S.kit);$("#undo").disabled=!H.undo.length;$("#redo").disabled=!H.redo.length;
+ $("#bpm").textContent=S.bpm.toFixed(1);$("#pat").innerHTML=S.queued!=null?`${patName(S.pat)}<span class="qarrow">›</span>${patName(S.queued)}`:patName(S.pat);$("#pat").parentElement.classList.toggle("queued",S.queued!=null);$("#kitname").textContent=kitName(S.kit);$("#undo").disabled=!H.undo.length;$("#redo").disabled=!H.redo.length;$("#undon").textContent=H.undo.length||"";$("#redon").textContent=H.redo.length||"";
  $("#play").setAttribute("aria-pressed",S.playing);$("#rec").setAttribute("aria-pressed",!!S.rec);$("#recled").classList.toggle("on",!!S.rec);
 }
 
@@ -1057,7 +1140,7 @@ function renderTop(){
 function th(i,extra=""){const t=S.tracks[i];return`<div class="th ${i===S.sel?"sel":""} ${audible(i)?"":"off"} ${extra}" data-sel="${i}" style="--c:${FAMC[t.fam]}">
  <div class="sw"></div><div class="n ${i%4===0?"fill":""}">${i+1}</div><div class="nm" title="${t.name}"><b>${t.m}</b></div>
  <button class="ms m" data-mute="${i}" aria-pressed="${t.mute}" aria-label="Mute track ${i+1}">M</button><button class="ms s" data-solo="${i}" aria-pressed="${t.solo}" aria-label="Solo track ${i+1}">S</button></div>`}
-function renderRail(){if(S.ws==="sampler"){renderSlots();return}$("#rail").innerHTML=`<div class="railhead">${S.ws==="seq"?(S.viewAll?"All "+S.len+" steps":"Page "+(S.page+1)+":"+pages16()+" · steps "+(S.page*16+1)+"–"+(S.page*16+16)):"Track"}</div>`+S.tracks.map((_,i)=>th(i)).join("")+(S.ws==="seq"?`<div class="railparams"><div class="rphead"><span class="cap">Lock parameter</span><button id="clearLane" class="iconkey" aria-label="Clear ${S.lane} locks" title="Clear ${S.lane} locks"><svg viewBox="0 0 14 14" aria-hidden="true"><path d="M2 4h10M5.5 4V2.5h3V4M3.5 4l.7 8h5.6l.7-8M6 6.5v3.5M8 6.5v3.5" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg></button></div><div class="pgrid vert" id="chips"></div></div>`:"")}
+function renderRail(){if(S.ws==="sampler"){renderSlots();return}$("#rail").innerHTML=`<div class="railhead">${S.ws==="seq"?`<span class="pagectl rh"><button class="pgkey" id="pgkey" ${pages16()<2?"disabled":""} title="Next page. Shift-click = previous. Keys [ and ].">Page</button><span class="pleds" aria-hidden="true">${[0,1,2,3].map(k=>`<span class="pl ${k<pages16()?"":"na"} ${!S.viewAll&&k===S.page?"cur":""}" data-plp="${k}"><i class="led"></i></span>`).join("")}</span><button class="ptog ${S.viewAll?"on":""}" id="pgall" aria-pressed="${S.viewAll}" title="Show all steps"><i class="led"></i>All</button><button class="ptog ${S.follow?"on":""}" id="pgfollow" aria-pressed="${S.follow}" title="Page follows the play position"><i class="led"></i>Fol</button></span>`:"Track"}</div>`+S.tracks.map((_,i)=>th(i)).join("")+(S.ws==="seq"?`<div class="railparams"><div class="rphead"><span class="cap">Lock parameter</span><button id="clearLane" class="iconkey" aria-label="Clear ${S.lane} locks" title="Clear ${S.lane} locks"><svg viewBox="0 0 14 14" aria-hidden="true"><path d="M2 4h10M5.5 4V2.5h3V4M3.5 4l.7 8h5.6l.7-8M6 6.5v3.5M8 6.5v3.5" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg></button></div><div class="pgrid vert" id="chips"></div></div>`:"")}
 
 /* ===== Sequence ===== */
 S.page=0;S.viewAll=false;S.follow=false;
@@ -1090,7 +1173,7 @@ function renderLane(){
   return`<span class="plab">${lab}</span>`+a.map(p=>{if(!p)return`<span class="pk empty"></span>`;const n=S.locks.get(lk(t,p))?.size||0;
    return`<button class="pk ${n?"has":""}" data-lane="${p}" aria-pressed="${p===S.lane}" title="${n?n+" locked step"+(n>1?"s":""):"No locks yet"}">${p}${n?`<i>${n}</i>`:""}</button>`}).join("")}).join("");
  $("#lane").innerHTML=steps().map(s=>{const on=tr.trigs[s],v=m?.get(s);
-  return`<div class="lb ${on?"":"none"} ${s%16===0&&s!==vis()[0]?"gap":""} ${S.playing&&s===S.step?"ph":""}" data-s="${s}">${on?`<div class="base" style="--b:${3+base/127*208}px"></div>${v!=null?`<i style="--h:${v/127*208}px"></i>`:""}`:""}</div>`}).join("");
+  return`<div class="lb ${on?"":"none"} ${s%16===0&&s!==vis()[0]?"gap":""} ${S.playing&&s===S.step?"ph":""}" data-s="${s}">${on?`<div class="base" style="--b:${3+base/127*168}px"></div>${v!=null?`<i style="--h:${v/127*168}px"></i>`:""}`:""}</div>`}).join("");
 }
 function syncScroll(){const a=$("#seqscroll"),b=$("#lanescroll");if(!a||!b)return;a.onscroll=()=>{b.scrollLeft=a.scrollLeft};b.onscroll=()=>{a.scrollLeft=b.scrollLeft}}
 function refreshRow(i){$$(`.st[data-t="${i}"]`).forEach(b=>{const s=+b.dataset.s;b.className=stepCls(i,s);b.setAttribute("aria-pressed",S.tracks[i].trigs[s])})}
@@ -1099,7 +1182,7 @@ let laneDraw=null;
 function laneAt(e){const lane=$("#lane");if(!lane)return;const el=document.elementFromPoint(e.clientX,e.clientY)?.closest(".lb");if(!el||!lane.contains(el))return;
  const s=+el.dataset.s,t=S.sel;if(!S.tracks[t].trigs[s])return;const r=el.getBoundingClientRect();const v=clamp(Math.round((r.bottom-3-e.clientY)/(r.height-6)*127));
  if(laneDraw.erase){const m=S.locks.get(lk(t,S.lane));if(m){m.delete(s);if(!m.size)S.locks.delete(lk(t,S.lane))}}else if(!setLock(t,S.lane,s,v))return;
- const bar=el.querySelector("i");if(laneDraw.erase){bar?.remove()}else if(bar)bar.style.setProperty("--h",v/127*208+"px");else el.insertAdjacentHTML("beforeend",`<i style="--h:${v/127*208}px"></i>`);
+ const bar=el.querySelector("i");if(laneDraw.erase){bar?.remove()}else if(bar)bar.style.setProperty("--h",v/127*168+"px");else el.insertAdjacentHTML("beforeend",`<i style="--h:${v/127*168}px"></i>`);
  laneDraw.touched.add(s);renderTop()}
 function endLaneDraw(){if(!laneDraw)return;laneDraw=null;refreshRow(S.sel);renderLane()}
 
@@ -1117,7 +1200,7 @@ function renderSound(){
   :"DEC" in tr.syn||"RAMP" in tr.syn?`<canvas class="ed" data-ed="synth" aria-label="Amp decay and pitch ramp. Drag the dots."></canvas><div class="edhint">${"RAMP" in tr.syn?"Solid = amp decay (DEC). Dashed = pitch ramp (RAMP, RDEC).":"Curve = amp decay (DEC)."}</div>`
   :`<div class="edblank">${about(tr.m)||"No curve for this machine."}</div>`;
  $("#main").innerHTML=`<div class="soundgrid">
-  <section class="card"><header><h3>Synthesis</h3><span>${tr.m} · ${pg.s.length} of 8</span></header>
+  <section class="card"><header><h3>Synthesis</h3><button class="machbtn" id="machbtn" aria-haspopup="dialog" aria-expanded="false" aria-label="Change machine"><span class="lcdtxt">${tr.m}</span><span class="mfam">${(FAMS.find(x=>x[0]===famKey(tr.m))||["",""])[0].replace("PI","P-I")} · ${(FAMS.find(x=>x[0]===famKey(tr.m))||["",""])[1]}</span><svg viewBox="0 0 10 6" aria-hidden="true"><path d="M1 1l4 4 4-4" fill="none" stroke="currentColor" stroke-width="1.5"/></svg></button></header>
    ${synthScreen}<div class="ctl four">${eight("syn",pg.s,{color:c})}</div></section>
   ${pg.e.length?`<section class="card"><header><h3>Effects</h3><span>${pg.e===FX?"Track effects page":"CC page"}</span></header>
    ${pg.e===FX?`<canvas class="ed" data-ed="fx" aria-label="Filter and EQ response. Drag the dots."></canvas><div class="edhint">Left dot = FLTF (drag up for FLTQ). Right dot = FLTW. Middle dot = EQF and EQG.</div>`:`<div class="edblank">MIDI CC pages: each pair picks a CC number (D) and sends its value (V).</div>`}
@@ -1198,7 +1281,7 @@ function renderSong(){
    <div class="irow"><span class="ilab"></span><span class="note">${sel.type==="loop"?"Loops can be nested. Forever loops are good live: pick the next row while it plays.":sel.type==="jump"?"Jumps the song pointer to another row.":"Pauses playback until you pick a row to go on from."}</span></div>`;
  $("#main").innerHTML=`<div class="songui lay2"><div class="songleft"><section class="card"><header><h3>Patterns</h3><span>drag onto the grid · click = add after row ${String(S.songSel+1).padStart(3,"0")}</span></header>${palette}</section>
    <section class="card"><header><h3>Selected row</h3><span class="rowacts"><button data-rowact="up" title="Move left">←</button><button data-rowact="down" title="Move right">→</button><button data-rowact="dup">Duplicate</button><button data-rowact="loop">Add loop</button><button data-rowact="del" class="danger">Delete</button></span></header><div class="insp">${insp}</div></section></div>
-  <section class="card"><header><h3>Arrangement</h3><span class="note">${S.song.length} of 256 rows · drag patterns onto the grid · drag cells to move · Delete removes</span></header>
+  <section class="card"><header><h3>Arrangement</h3>${S.songReload?`<span class="songwarn"><span class="lcdchip warnchip">Edits heard after STOP + reload</span><button class="cream" data-reloadsong="1">Reload song</button></span>`:""}<span class="note">${S.song.length} of 256 rows · drag patterns onto the grid · drag cells to move · Delete removes</span></header>
     <div class="durbar" title="Song shape by time (length × repeats)">${S.song.map((r,i)=>r.type?`<i class="db dbm"></i>`:`<i class="db ${i===S.songSel?"sel":""}" data-row="${i}" style="flex:${rowLen(r)*r.rep} 1 0"></i>`).join("")}</div>
     <div class="slotgrid" id="tl">${Array.from({length:16},(_,line)=>`<span class="sglab">${String(line*16+1).padStart(3,"0")}</span>${Array.from({length:16},(_,c)=>{const i=line*16+c,r=S.song[i];
       if(!r)return`<div class="scell empty" data-i="${i}"></div>`;
@@ -1343,30 +1426,17 @@ function chopInner(p,s){const t=S.tracks[p];if(!t.trigs[s])return"";const st=S.l
  const v=st??t.syn.STRT,rev=(en??t.syn.END)<v;return`<span class="sl">${Math.floor(v/8)+1}</span><span class="fx">${rev?"REV":""}${rt?" RTRG":""}</span>`}
 
 /* ===== Sub-bar: one line per workspace, always the same place ===== */
-function renderSub(){const t=S.sel,tr=S.tracks[t],c=FAMC[tr.fam];let h="";
- if(S.ws==="seq"){const L=S.len;h=`<div class="toolbar">
-  <label>Mode <span class="seg" id="mode" role="group" aria-label="Edit mode"><button data-v="CLASSIC" aria-pressed="${S.mode==="CLASSIC"}">CLASSIC</button><button data-v="EXTENDED" aria-pressed="${S.mode==="EXTENDED"}">EXTENDED</button></span></label>
-  <label>Length <span class="seg" data-set="len">${[16,32,48,64].map(n=>`<button data-v="${n}" aria-pressed="${n===L}">${n}</button>`).join("")}</span></label>
-  <label>Speed <span class="seg" data-set="mult">${["1X","2X","3/4X","3/2X"].map(n=>`<button data-v="${n}" aria-pressed="${n===S.mult}">${n}</button>`).join("")}</span></label>
-  <label>Swing ${segbar("swing",50,80,S.swing,"%")}</label>
-  <label>Accent ${segbar("accAmt",0,15,S.accAmt,"")}</label>
-  <div class="pagectl" role="group" aria-label="Pattern page">
-   <button class="pgkey" id="pgkey" ${pages16()<2?"disabled":""} aria-label="Next page, now page ${S.page+1} of ${pages16()}" title="Next page. Shift-click = previous. Keys [ and ].">Page</button>
-   <span class="pleds" aria-hidden="true">${[0,1,2,3].map(k=>`<span class="pl ${k<pages16()?"":"na"} ${!S.viewAll&&k===S.page?"cur":""}" data-plp="${k}"><i class="led"></i><small>${k+1}:4</small></span>`).join("")}</span>
-   <button class="ptog ${S.viewAll?"on":""}" id="pgall" aria-pressed="${S.viewAll}"><i class="led"></i>All</button>
-   <button class="ptog ${S.follow?"on":""}" id="pgfollow" aria-pressed="${S.follow}" title="The page follows the play position"><i class="led"></i>Follow</button></div>
-  
-</div>`}
- else if(S.ws==="sound")h=`<div class="headline"><h2>${t+1} · ${tr.name}</h2><button class="machbtn" id="machbtn" aria-haspopup="dialog" aria-expanded="false" aria-label="Change machine"><span class="lcdtxt">${tr.m}</span><span class="mfam">${(FAMS.find(x=>x[0]===famKey(tr.m))||["",""])[0].replace("PI","P-I")} · ${(FAMS.find(x=>x[0]===famKey(tr.m))||["",""])[1]}</span><svg viewBox="0 0 10 6" aria-hidden="true"><path d="M1 1l4 4 4-4" fill="none" stroke="currentColor" stroke-width="1.5"/></svg></button>
-  <span class="note" title="Shift = fine. Double-click = 64. A red square = the pattern locks this parameter.">Drag values sideways. Drag the dots on the screens.</span></div>`;
- else if(S.ws==="mix")h=`<div class="headline"><h2>Mix</h2><span class="note">Fader = VOL. DEL and REV feed the master effects. Master effects live in the kit; lock them with CTR machines.</span></div>`;
- else if(S.ws==="sampler"){const romUsed=ROMS.length,ramFree=Math.round((48-romUsed)/48*100);h=`<div class="headline"><h2>Sampler</h2><span class="fam" style="--c:var(--smp)">UW models only</span>
-   <span class="note">Pick a slot on the left. Live = records every loop. Freeze = keep the take.</span>
-   <div class="memb" style="margin-left:auto" title="Dark = ROM in use. Lit = free for RAM. More free memory = better RAM quality."><div class="meter"><div class="row"><span>Sample memory</span><b>${romUsed} of 48 ROM slots used</b></div></div>
-    <div class="bar"><i style="width:${100-ramFree}%;background:var(--pi)"></i><i style="width:${ramFree}%;background:var(--smp)"></i></div></div></div>`}
- else if(S.ws==="control")h=`<div class="headline"><h2>Control</h2><span class="lcdchip">In: example controller · 8 knobs · ch 1</span><span class="lcdchip" id="ccrate">CC out 0/s · limit 300/s</span><span class="note">Drag a knob row to test. LEARN (L) maps any value on any page.</span></div>`;
- else h=`<div class="headline"><h2>Song 01</h2><span class="lcdchip">${S.song.length} rows · ${Math.round(songSteps()/16)} bars · ${songTime()}</span>${S.songReload?`<span class="lcdchip warnchip">Edits heard after STOP + reload</span><button class="cream" data-reloadsong="1">Reload song</button>`:`<span class="note">Click a pattern to add it. Drag blocks to reorder. Up to 256 rows, 32 songs.</span>`}</div>`;
- $("#subbar").innerHTML=h}
+/* ===== LCD line 2: the workspace's own values (replaces the sub-bar) ===== */
+const L2=(k,label,val,title,edit)=>`<span class="l2 ${edit?"ed":""}" ${edit?`data-l2="${k}" role="button" tabindex="0"`:""} title="${title||""}"><small>${label}</small><b>${val}</b></span>`;
+function renderSub(){const t=S.sel,tr=S.tracks[t];let h="";
+ if(S.ws==="seq")h=L2("len","LEN",S.len,"Pattern length. Click to step 16 / 32 / 48 / 64.",1)+L2("mult","SPD",S.mult,"Tempo multiplier. Click to step 1X / 2X / 3/4X / 3/2X.",1)
+   +L2("swing","SWG",S.swing+"%","Swing 50–80 %. Drag up or down, or scroll.",1)+L2("accAmt","ACC",S.accAmt,"Accent 0–15. Drag up or down, or scroll.",1)+L2("mode","MODE",S.mode==="EXTENDED"?"EXT":"CLASSIC","Classic or Extended. Locks only play in Extended. Click to switch.",1);
+ else if(S.ws==="sound")h=L2("","TRACK",String(t+1).padStart(2,"0"))+L2("","MACHINE",tr.m)+L2("","",tr.name.toUpperCase());
+ else if(S.ws==="mix")h=L2("","PATH","SEND›ECHO›GATE›EQ›DYN›MAIN","Sends feed the master effects. Tracks on outputs A–F skip them.");
+ else if(S.ws==="sampler"){const romUsed=ROMS.length;h=L2("","ROM",romUsed+"/48","UW sample memory: ROM slots in use")+L2("","FREE",Math.round((48-romUsed)/48*100)+"%","Memory free for RAM recording. More free = better RAM quality.")+L2("","SLOT",S.smpSlot.replace(/^RAM/,"RAM ").replace(/^ROM/,"ROM "))}
+ else if(S.ws==="control")h=L2("","IN","CTRL CH1")+`<span class="l2" title="CCs sent to the machine per second"><small>CC OUT</small><b id="ccrate">0/s</b></span>`+L2("","LIMIT","300/s");
+ else h=L2("","SONG","01")+L2("","ROWS",S.song.length)+L2("","BARS",Math.round(songSteps()/16))+L2("","TIME",songTime());
+ $("#lcd2").innerHTML=h}
 S.smpSlot="RAM1";S.chopTrack=null;S.capture={};
 const romName=k=>ROMS[k-1]||"";const romCode=k=>"ROM-"+String(k).padStart(2,"0");
 function players(n){return S.tracks.map((t,i)=>t.m==="RAM-P"+n?i:-1).filter(i=>i>=0)}
@@ -1491,7 +1561,7 @@ const srcById=id=>S.ctl.sources.find(x=>x.id===id);
 function curveF(c,x){return c==="exp"?x*x:c==="log"?Math.sqrt(x):x}
 function applySrc(src){S.ctl.links.filter(l=>l.src===src.id).forEach(l=>{if(!params(l.t).includes(l.p))return;let x=src.val/127;if(l.inv)x=1-x;x=curveF(l.curve,x);grp(l.t,l.p)[l.p]=clamp(Math.round(l.min+(l.max-l.min)*x));S.ctl.sent++})}
 let ctlRaf=0;function ctlRefresh(){if(ctlRaf)return;ctlRaf=requestAnimationFrame(()=>{ctlRaf=0;syncControls();$$(".srch").forEach(h=>{const s2=srcById(h.dataset.src);h.style.setProperty("--f",s2.val/127*100+"%");h.querySelector(".sv").textContent=s2.val})})}
-setInterval(()=>{const r=$("#ccrate");if(r){r.textContent=`CC out ${S.ctl.sent}/s · limit 300/s`;r.classList.toggle("hot",S.ctl.sent>300)}S.ctl.sent=0},1000);
+setInterval(()=>{const r=$("#ccrate");if(r){r.textContent=`${S.ctl.sent}/s`;r.classList.toggle("hot",S.ctl.sent>300)}S.ctl.sent=0},1000);
 function ctlTick(){S.ctl.phase++;S.ctl.sources.forEach(sr=>{const n=RATES[sr.RATE]||8;
  if(sr.kind==="lfo"){const ph=(S.ctl.phase%n)/n;sr.val=clamp(Math.round(64+shape(sr.SHAPE,ph,false)*63*sr.DEPTH/100));applySrc(sr)}
  if(sr.kind==="rnd"){if(S.ctl.phase%n===0)sr._t=Math.round(Math.random()*127);const a=1-sr.SMOOTH/140;sr.val=clamp(Math.round(sr.val+(sr._t-sr.val)*a));applySrc(sr)}});ctlRefresh()}
@@ -1565,14 +1635,24 @@ function secAction(kind){
 /* ===== First run: firmware needed ===== */
 function firstRun(){const d=$("#dlg");d.innerHTML=`<div class="dlgbox first" role="dialog" aria-modal="true" aria-label="Firmware needed">
  <div class="lcdbig">MACHINEDRUM FIRMWARE NEEDED</div>
- <p>MD Desk runs the real Machinedrum operating system. Elektron's firmware cannot be shipped with the app, so you add the one from your own machine.</p>
- <ol><li>Dump the <b>OS 1.63</b> flash image from your Machinedrum (8 MiB, <span class="mono">.bin</span>).</li><li>Drop it here. MD Desk checks its size and version.</li><li>MD Desk keeps it on this computer only.</li></ol>
+ <p>Machinedrum Editor runs the real Machinedrum operating system. Elektron's firmware cannot be shipped with the app, so you add the one from your own machine.</p>
+ <ol><li>Dump the <b>OS 1.63</b> flash image from your Machinedrum (8 MiB, <span class="mono">.bin</span>).</li><li>Drop it here. Machinedrum Editor checks its size and version.</li><li>Machinedrum Editor keeps it on this computer only.</li></ol>
  <label class="drop" id="drop" tabindex="0"><input type="file" id="romfile" accept=".bin" hidden><span id="droptxt">Drop the .bin here, or click to choose it</span></label>
  <div class="btnrow"><button class="cream" data-dlgclose="1">Close preview</button><span class="note">UW, MKII and MKI units all use the same OS 1.63 image.</span></div></div>`;d.hidden=false}
 function checkRom(f){const t=$("#droptxt");if(!f)return;const ok=f.size===8388608;t.textContent=ok?`✓ ${f.name}: 8 MiB. In the real app: check the OS 1.63 checksum, then start.`:`✗ ${f.name}: ${(f.size/1048576).toFixed(2)} MiB. The OS 1.63 image is exactly 8 MiB.`;$("#drop").classList.toggle("ok",ok);$("#drop").classList.toggle("bad",!ok)}
 document.addEventListener("change",e=>{if(e.target.id==="romfile")checkRom(e.target.files[0])});
 document.addEventListener("dragover",e=>{if(e.target.closest?.("#drop")){e.preventDefault();$("#drop").classList.add("over")}});
 document.addEventListener("drop",e=>{if(e.target.closest?.("#drop")){e.preventDefault();$("#drop").classList.remove("over");checkRom(e.dataTransfer.files[0])}});
+
+/* LCD line 2 editing */
+let l2drag=null;
+function l2step(k,d){if(k==="len"){const o=[16,32,48,64];S.len=o[(o.indexOf(S.len)+d+4)%4]}if(k==="mult"){const o=["1X","2X","3/4X","3/2X"];S.mult=o[(o.indexOf(S.mult)+d+4)%4]}
+ if(k==="mode")S.mode=S.mode==="EXTENDED"?"CLASSIC":"EXTENDED";if(k==="swing")S.swing=clamp(S.swing+d,50,80);if(k==="accAmt")S.accAmt=clamp(S.accAmt+d,0,15);tx();render()}
+document.addEventListener("pointerdown",e=>{const el=e.target.closest(".l2.ed");if(!el)return;const k=el.dataset.l2;if(k==="swing"||k==="accAmt"){l2drag={k,y:e.clientY,v:S[k],moved:false};el.setPointerCapture(e.pointerId);e.preventDefault()}});
+document.addEventListener("pointermove",e=>{if(!l2drag)return;const d=Math.round((l2drag.y-e.clientY)/(l2drag.k==="swing"?3:6));if(d)l2drag.moved=true;const v=l2drag.k==="swing"?clamp(l2drag.v+d,50,80):clamp(l2drag.v+d,0,15);if(v!==S[l2drag.k]){S[l2drag.k]=v;renderSub()}});
+document.addEventListener("pointerup",e=>{if(!l2drag)return;const k=l2drag;l2drag=null;if(!k.moved)l2step(k.k,1);else tx()});
+document.addEventListener("click",e=>{const el=e.target.closest(".l2.ed");if(!el)return;const k=el.dataset.l2;if(k!=="swing"&&k!=="accAmt")l2step(k,e.shiftKey?-1:1)});
+document.addEventListener("wheel",e=>{const el=e.target.closest(".l2.ed");if(!el)return;e.preventDefault();l2step(el.dataset.l2,(e.deltaY||e.deltaX)<0?1:-1)},{passive:false});
 /* ===== Input ===== */
 let barDrag=null;
 document.addEventListener("pointerdown",e=>{const b=e.target.closest(".segbar");if(!b)return;barDrag=b;b.setPointerCapture(e.pointerId);barAt(b,e);e.preventDefault()});
