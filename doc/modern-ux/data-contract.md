@@ -198,7 +198,19 @@ Rules (`mdDesk/mdDeskMod.h`):
   changes, within a rolling budget of 300 CCs a second (the mockup's limit).
   Over budget, the value is sent on a later step.
 - It is not part of the kit, a real Machinedrum does not play it, and live
-  recording does not record CCs. The setup is not saved with the project yet.
+  recording does not record CCs. The sources run while the editor is open (the
+  desk lives in the editor).
+
+### 4.7 `md-desk/setup` (kept with the project, P4)
+
+The editor's own setup: `modulators` (4.6) and `knobCcs`, the eight controller
+knob rows' CC numbers (0-127, distinct; default 21-28). The desk keeps it
+(`mdDesk/mdDeskSetup.h`), publishes `{"type":"setup","doc"}` to the page and hands
+every change to the host (`Port::saveSetup`), which stores the text as the plug-in
+state's `MDSK` chunk. A restored project brings it back, also into an open editor;
+a project without it starts from the default setup. The page changes the knob rows
+with `{"op":"knobs","ccs":[8 numbers]}` and the modulators with `modSet`. It is not
+machine data: a real Machinedrum never sees it.
 
 The UI must not show `edited` and "project not saved" as one flag. Two different things can be unsaved:
 

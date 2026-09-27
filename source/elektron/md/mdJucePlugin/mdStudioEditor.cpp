@@ -12,6 +12,7 @@
 #include "juce_gui_extra/juce_gui_extra.h"
 
 #include <cstring>
+#include <optional>
 #include <functional>
 
 namespace mdJucePlugin
@@ -135,7 +136,9 @@ namespace mdJucePlugin
 			}
 		};
 		port.nowMs = [] { return nowMs(); };
+		port.saveSetup = [&processor](const json::Value& _setup) { processor.setDeskSetup(json::write(_setup)); };
 		m_desk = std::make_unique<mdDesk::Desk>(port);
+		loadDeskSetup();
 		m_desk->setFirmware(m_link->firmware());
 		m_link->onSysex = [this](const std::vector<uint8_t>& _m)
 		{
@@ -153,11 +156,26 @@ namespace mdJucePlugin
 		// itself and logs the round trips (the log file above).
 		// GEARMULATOR_MDSTUDIO_SELFTEST=p4: the P4 checks instead (mdDeskLive.js).
 		const auto selfTestKind = juce::SystemStats::getEnvironmentVariable("GEARMULATOR_MDSTUDIO_SELFTEST", {});
-		const bool selfTest = selfTestKind == "1" || selfTestKind == "p4";
+		const bool selfTest = selfTestKind == "1" || selfTestKind.startsWith("p4");
 		const auto url = selfTest ? juce::URL(file).withParameter("selftest", selfTestKind) : juce::URL(file);
 		m_web->goToURL(url.toString(true));
 		log("page loading, selftest=" + juce::String(selfTest ? 1 : 0) + ", " + juce::String(file.getSize()) + " bytes");
 		startTimerHz(30);
+	}
+
+	// The editor's setup from the project (mdPluginProcessor "MDSK"), or the default one.
+	void StudioEditor::loadDeskSetup()
+	{
+		auto& processor = dynamic_cast<AudioPluginAudioProcessor&>(getProcessor());
+		m_deskSetupGeneration = processor.getDeskSetupGeneration();
+		const auto text = processor.getDeskSetup();
+		const auto doc = text.empty() ? std::optional<json::Value>(mdDesk::deskSetupToJson({})) : json::parse(text);
+		const auto errors = doc ? m_desk->loadSetup(*doc) : std::vector<std::string>{"not JSON"};
+		if(!errors.empty())
+			log("project setup not restored: " + juce::String(errors.front()));
+		else
+			log("setup restored: " + juce::String(static_cast<int>(m_desk->setup().modulators.sources.size())) + " app sources, knob CCs "
+				+ juce::String(static_cast<int>(m_desk->setup().knobCcs[0])) + "..");
 	}
 
 	std::string StudioEditor::resourceText(const std::string& _name) const
@@ -477,6 +495,8 @@ namespace mdJucePlugin
 				+ " docs p/k/s " + juce::String(static_cast<int>(d.patterns.size())) + "/" + juce::String(static_cast<int>(d.kits.size()))
 				+ "/" + juce::String(static_cast<int>(d.songs.size())) + " round trip " + juce::String(m_desk->lastRoundTripMs(), 1) + " ms");
 		}
+		if(dynamic_cast<AudioPluginAudioProcessor&>(getProcessor()).getDeskSetupGeneration() != m_deskSetupGeneration)
+			loadDeskSetup();
 		m_desk->onTelemetry(m_link->readTelemetry());
 		std::vector<uint8_t> region;
 		if(m_link->readWorkingKit(region))

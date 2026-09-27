@@ -226,6 +226,17 @@
           "min": {"$ref": "#/$defs/u7"}, "max": {"$ref": "#/$defs/u7"}, "curve": {"enum": ["lin", "exp", "log"]}, "invert": {"type": "boolean"}}}}
       }
     },
+    "setup": {
+      "type": "object",
+      "description": "The editor's setup kept with the project (P4, mdDesk/mdDeskSetup.h): the app modulators and the CCs of the eight controller knob rows. Stored by the plug-in as the MDSK chunk of its state.",
+      "required": ["schema", "version"],
+      "properties": {
+        "schema": {"const": "md-desk/setup"},
+        "version": {"const": 1},
+        "modulators": {"$ref": "#/$defs/modulators"},
+        "knobCcs": {"type": "array", "minItems": 8, "maxItems": 8, "uniqueItems": true, "items": {"$ref": "#/$defs/u7"}}
+      }
+    },
     "machine": {
       "type": "object",
       "description": "Read-only machine state from mdDataLink::Session.",

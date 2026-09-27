@@ -755,6 +755,47 @@ namespace
 		check(!ok(), "a chain across banks is refused");
 	}
 
+	// P4: the editor's setup (modulators, knob CCs) is saved with the project.
+	void testSetup()
+	{
+		DeskSetup a;
+		a.knobCcs = {30, 31, 32, 33, 34, 35, 36, 37};
+		ModSource src;
+		src.id = "lfo1";
+		src.label = "LFO A";
+		a.modulators.sources.push_back(src);
+		std::vector<std::string> errors;
+		const auto b = deskSetupFromJson(deskSetupToJson(a), errors);
+		check(b && *b == a && errors.empty(), "md-desk/setup: value -> JSON -> value");
+		const auto bad = cmd(R"({"schema":"md-desk/setup","version":1,"knobCcs":[40,41,42,40,44,45,46,47]})");
+		errors.clear();
+		check(!deskSetupFromJson(bad, errors) && !errors.empty() && errors[0].find("knobCcs[3]") != std::string::npos,
+			"two knob rows on one CC are refused, with the path");
+
+		std::vector<Value> saved, page;
+		Desk::Port port;
+		port.toPage = [&](const Value& _m) { page.push_back(_m); };
+		port.saveSetup = [&](const Value& _s) { saved.push_back(_s); };
+		port.nowMs = [] { return 0.0; };
+		Desk desk(port);
+		desk.onTelemetry(Telemetry{});
+		desk.onPageMessage(cmd(R"({"op":"ready"})"));
+		desk.onDeviceSysex({0xf0, 0x00, 0x20, 0x3c, 0x02, 0x00, 0x72, 0x04, 0x00, 0xf7});
+		check(!desk.loadSetup(deskSetupToJson(a)).empty() == false && desk.setup() == a, "a project's setup loads");
+		bool published = false;
+		for(const auto& m : page)
+			published |= m.find("type")->asString() == "setup";
+		check(published, "and goes to the page");
+		desk.onPageMessage(cmd(R"({"op":"knobs","ccs":[1,2,3,4,5,6,7,8],"id":1})"));
+		check(!saved.empty() && saved.back().find("knobCcs")->asArray()[0].asNumber() == 1 && desk.setup().knobCcs[7] == 8,
+			"new knob CCs are saved with the project");
+		desk.onPageMessage(cmd(R"({"op":"modSet","id":2,"doc":{"schema":"md-desk/modulators","version":1,"sources":[],"links":[]}})"));
+		check(saved.back().find("modulators")->find("sources")->asArray().empty(), "a modulator change is saved too");
+		const auto before = saved.size();
+		desk.onPageMessage(cmd(R"({"op":"knobs","ccs":[1,1,3,4,5,6,7,8],"id":3})"));
+		check(saved.size() == before && desk.setup().knobCcs[1] == 2, "invalid knob CCs change nothing");
+	}
+
 	void testSampleName()
 	{
 		const auto m = ed::mdSetSampleName(5, "KIK");
@@ -810,6 +851,7 @@ int main()
 	testPushSlot();
 	testDesk();
 	testLive();
+	testSetup();
 	testWorkingKitMemory();
 	testKnobRecorder();
 	testDeskRecording();

@@ -15,6 +15,7 @@ target_sources(mdDesk PRIVATE
 	mdDeskHistory.cpp mdDeskHistory.h
 	mdDeskMod.cpp mdDeskMod.h
 	mdDeskRecord.cpp mdDeskRecord.h
+	mdDeskSetup.cpp mdDeskSetup.h
 )
 
 target_link_libraries(mdDesk PUBLIC elektronData mdDataLink)

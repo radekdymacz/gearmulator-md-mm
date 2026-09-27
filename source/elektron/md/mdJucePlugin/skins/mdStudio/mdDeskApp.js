@@ -783,8 +783,10 @@ function modInspector(sr) {
 /* Controller rows: 8 knobs (CC 21-28 by default, the CC number is editable per row; kept per
    viewer), plus any other CC the plug-in's MIDI Learn preset maps. A row id is "ch:cc" (ch 255 =
    any channel). Mapping works with LEARN or here: a cell opens the row with that track's picker. */
-const KNOB_CCS = (() => { try { const v = JSON.parse(localStorage.getItem("mddesk.knobs")); if (Array.isArray(v) && v.length === 8) return v; } catch (_) { } return [21, 22, 23, 24, 25, 26, 27, 28]; })();
-function saveKnobs() { try { localStorage.setItem("mddesk.knobs", JSON.stringify(KNOB_CCS)); } catch (_) { } }
+/* The eight knob rows' CCs are part of the editor's setup (md-desk/setup), kept with the project by
+   the plug-in (P4); the desk sends them with "setup". */
+const KNOB_CCS = [21, 22, 23, 24, 25, 26, 27, 28];
+function saveKnobs() { cmd("knobs", { ccs: KNOB_CCS.slice() }); }
 function ccRows(maps) {
 	const rows = KNOB_CCS.map((cc, k) => ({ id: "255:" + cc, ch: 255, cc, label: "Knob " + (k + 1), knob: k }));
 	for (const m of maps) { const id = m.ch + ":" + m.cc; if (!rows.some(r => r.id === id)) rows.push({ id, ch: m.ch, cc: m.cc, label: m.ch === 255 ? "CC " + m.cc : "CC " + m.cc + " ch " + (m.ch + 1), knob: -1 }); }
@@ -1122,6 +1124,7 @@ Bridge.onMessage(m => {
 		break;
 	}
 	case "telemetry": onTelemetry(m); break;
+	case "setup": if (m.doc && Array.isArray(m.doc.knobCcs) && m.doc.knobCcs.join() !== KNOB_CCS.join()) { m.doc.knobCcs.forEach((c, i) => KNOB_CCS[i] = c); if (S.ws === "control") scheduleRender(); } break;
 	case "mod": { const before = JSON.stringify(Mods.doc); Mods.onMessage(m); if (S.ws === "control") { if (JSON.stringify(Mods.doc) !== before && !interacting()) scheduleRender(); else syncMods(); } break; }
 	case "ask":
 		if (m.ask === "discardKit") ask(`<b>${patName(m.p)}</b> uses kit <b>${kitName(m.target)}</b>. Your edits to <b>${kitName(m.kit)}</b> are not saved on the machine and will be lost.`,

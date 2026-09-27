@@ -346,6 +346,19 @@ if(BUILD_TESTING)
 			SKIP_RETURN_CODE 77 TIMEOUT 900)
 	endif()
 
+	# P4: the editor's setup (MDSK chunk) round-trips with the plug-in state.
+	add_executable(mdDeskSetupStateTest mdDeskSetupStateTest.cpp)
+	target_link_libraries(mdDeskSetupStateTest PRIVATE
+		mdJucePlugin jucePluginEditorLib mdLib juce_plugin_modules
+		juce::juce_opengl)
+	target_include_directories(mdDeskSetupStateTest PRIVATE
+		${CMAKE_CURRENT_SOURCE_DIR}/../../..)
+	target_compile_definitions(mdDeskSetupStateTest PRIVATE
+		JUCE_GLOBAL_MODULE_SETTINGS_INCLUDED=1)
+	add_test(NAME mdDeskSetupStateTest COMMAND mdDeskSetupStateTest)
+	set_tests_properties(mdDeskSetupStateTest PROPERTIES LABELS "UnitTest" TIMEOUT 120)
+	set_property(TARGET mdDeskSetupStateTest PROPERTY FOLDER "Elektron/test")
+
 	add_executable(mdProjectStateRestoreTest mdProjectStateRestoreTest.cpp)
 	target_link_libraries(mdProjectStateRestoreTest PRIVATE
 		mdJucePlugin jucePluginEditorLib mdLib juce_plugin_modules

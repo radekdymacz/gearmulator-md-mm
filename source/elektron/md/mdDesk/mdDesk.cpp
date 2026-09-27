@@ -136,6 +136,8 @@ namespace mdDesk
 			if(m_docs.global)
 				m_dirty.insert({DocKind::Global, m_docs.global->position});
 			m_machineDirty = true;
+			publishSetup();
+			publishModulators();
 			if(m_firmware == Firmware::Present)
 			{
 				m_session.requestStatus();
@@ -197,6 +199,8 @@ namespace mdDesk
 			handleModulators(_message);
 		else if(op == "chain" || op == "chainClear")
 			handleChain(_message);
+		else if(op == "knobs")
+			handleKnobs(_message);
 		else if(op == "selectSong")
 		{
 			// P1: the Machinedrum ignores LOAD SONG while it plays.
@@ -479,9 +483,60 @@ namespace mdDesk
 		if(!doc)
 			errors.emplace_back("doc: expected an md-desk/modulators document");
 		if(setup)
+		{
 			m_mods.setSetup(*setup);
+			m_setup.modulators = *setup;
+			saveSetup();
+		}
 		result(_message, errors, {});
 		publishModulators();
+	}
+
+	// The Control workspace's knob rows: which CC each of the eight rows is.
+	void Desk::handleKnobs(const Value& _message)
+	{
+		std::vector<int> ccs;
+		if(const auto* list = _message.find("ccs"); list && list->isArray())
+			for(const auto& v : list->asArray())
+				ccs.push_back(v.isNumber() ? static_cast<int>(v.asNumber()) : -1);
+		const auto errors = validateKnobCcs(ccs);
+		if(errors.empty())
+		{
+			for(size_t i = 0; i < 8; ++i)
+				m_setup.knobCcs[i] = static_cast<uint8_t>(ccs[i]);
+			saveSetup();
+		}
+		result(_message, errors, {});
+		publishSetup();
+	}
+
+	std::vector<std::string> Desk::loadSetup(const Value& _setup)
+	{
+		std::vector<std::string> errors;
+		const auto s = deskSetupFromJson(_setup, errors);
+		if(!s)
+			return errors;
+		m_setup = *s;
+		m_mods.setSetup(m_setup.modulators);
+		publishSetup();
+		publishModulators();
+		return errors;
+	}
+
+	void Desk::publishSetup()
+	{
+		if(!m_pageReady)
+			return;
+		Value m = Value::object();
+		m.set("type", "setup");
+		m.set("doc", deskSetupToJson(m_setup));
+		publish(m);
+	}
+
+	void Desk::saveSetup() const
+	{
+		if(m_port.saveSetup)
+			m_port.saveSetup(deskSetupToJson(m_setup));
 	}
 
 	void Desk::runModulators(const double _now)

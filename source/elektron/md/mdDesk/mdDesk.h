@@ -6,6 +6,7 @@
 #include "mdDeskHistory.h"
 #include "mdDeskMod.h"
 #include "mdDeskRecord.h"
+#include "mdDeskSetup.h"
 
 #include "elektronData/json.h"
 #include "mdDataLink/mdDataLink.h"
@@ -65,6 +66,8 @@ namespace mdDesk
 			// DATA ENTRY knob 0-7 turned by _steps (one step = one value).
 			std::function<bool(uint8_t _encoder, int _steps)> turnKnob;
 			std::function<void(const Value& _message)> toPage;
+			// The editor's setup (md-desk/setup) changed: keep it with the project.
+			std::function<void(const Value& _setup)> saveSetup;
 			std::function<double()> nowMs;
 		};
 
@@ -97,6 +100,10 @@ namespace mdDesk
 		// project all show without SAVE KIT. Send it when it changes.
 		void onWorkingKitMemory(const Bytes& _region);
 		void setFirmware(Firmware _firmware);
+		// The setup stored with the project (md-desk/setup); errors if it does not validate,
+		// in which case the current setup stays.
+		std::vector<std::string> loadSetup(const Value& _setup);
+		const DeskSetup& setup() const { return m_setup; }
 		// About 30 times a second: status polling, loading, timeouts, publishing.
 		void tick();
 
@@ -130,6 +137,9 @@ namespace mdDesk
 		void handleRecord(const Value& _message);
 		void handleModulators(const Value& _message);
 		void handleChain(const Value& _message);
+		void handleKnobs(const Value& _message);
+		void publishSetup();
+		void saveSetup() const;
 		void runModulators(double _now);
 		void publishModulators();
 		void pumpRecording(double _now);
@@ -188,6 +198,7 @@ namespace mdDesk
 		std::array<bool, 16> m_mutes{};
 		KnobRecorder m_knobs;
 		Modulators m_mods;
+		DeskSetup m_setup;
 		CcBudget m_ccBudget;
 		double m_recordPollMs = -1e9;
 		double m_recordAfterStopMs = -1;

@@ -80,7 +80,7 @@ Bridge.onMessage(m => {
 
 /* GEARMULATOR_MDSTUDIO_SELFTEST=p4 (?selftest=p4): the P4 checks in the plug-in, through the page's
    own controls, logged with "P4:" (the log file of mdStudioEditor). */
-if (/[?&]selftest=p4/.test(location.search)) (async () => {
+if (/[?&]selftest=p4(&|$)/.test(location.search)) (async () => {
 	const sleep = ms => new Promise(r => setTimeout(r, ms));
 	const log = t => Bridge.log("P4: " + t);
 	const t0 = performance.now(), desk = () => machineState().desk || {};
@@ -129,4 +129,22 @@ if (/[?&]selftest=p4/.test(location.search)) (async () => {
 	S.viewAll = false; render();
 	log(`lane vs steps: 16 view ${o16} px, ALL ${oAll} px, ALL horizontal scroll ${scroll} px; header ${document.querySelector(".top").scrollWidth} px in ${innerWidth} px`);
 	log("done");
+})();
+
+/* ?selftest=p4set: change the editor's setup (an app LFO, knob row 1 on CC 40) so that a restart shows
+   whether it came back with the plug-in state (the editor logs "setup restored"). */
+if (/[?&]selftest=p4set/.test(location.search)) (async () => {
+	const sleep = ms => new Promise(r => setTimeout(r, ms));
+	while (!(machineState().desk && machineState().desk.firmware === "ready")) await sleep(200);
+	await sleep(500);
+	Mods.doc.sources = []; Mods.doc.links = [];
+	const id = Mods.add("lfo"); Mods.link(id, 2, 16); sendMods();
+	KNOB_CCS[0] = 40; saveKnobs();
+	await sleep(800);
+	Bridge.log(`P4: setup set: ${Mods.doc.sources.length} app source, knob 1 CC ${KNOB_CCS[0]}`);
+})();
+if (/[?&]selftest=p4get/.test(location.search)) (async () => {
+	const sleep = ms => new Promise(r => setTimeout(r, ms));
+	await sleep(4000);
+	Bridge.log(`P4: page setup: ${Mods.doc.sources.length} app source(s) ${Mods.doc.sources.map(s => s.label + " -> " + Mods.linksOf(s.id).map(o => "T" + (o.l.track + 1) + " p" + o.l.param).join()).join("; ")}, knob CCs ${KNOB_CCS.join(" ")}`);
 })();
