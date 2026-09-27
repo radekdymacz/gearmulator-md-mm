@@ -34,9 +34,9 @@ title = re.search(r'<title>(.*?)</title>', build).group(1)
 # ---- 1. markup ----
 m = open(SRC + body_file).read()
 HONEST = [
+    # MM-P4: HW MIDI is real (the plug-in's MIDI in/out); the option says what it needs.
     ('<option value="hw">HW MIDI</option>',
-     '<option value="hw" disabled title="Editing a real Monomachine over MIDI is not available yet">'
-     'HW MIDI · not available yet</option>'),
+     '<option value="hw" title="A real Monomachine on the plug-in\'s MIDI in and out">HW MIDI</option>'),
 ]
 for a, b in HONEST:
     assert a in m, 'mockup changed: ' + a
@@ -87,6 +87,10 @@ tail = '''
 /* What the editor cannot do yet (mmAdapter.js marks it, with the reason as the tooltip). */
 [data-na]{opacity:.42!important;cursor:not-allowed!important}
 [data-na] [data-na]{opacity:1!important}
+/* The Song workspace edits any of the 24 songs (MM-P4). */
+.songpick{display:inline-flex;gap:6px;align-items:center;margin-left:auto}
+.songpick select{font:12px var(--mono,monospace);background:var(--lcd);color:var(--ink);border:0;border-radius:3px;padding:2px 4px}
+.songpick button{font-size:11px}
 .lcdeng .led:not(.on){opacity:.35}
 '''
 out_css = head + css.strip('\n') + '\n' + tail

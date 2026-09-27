@@ -1546,4 +1546,8 @@ body.engwait #main,body.engwait #rail{pointer-events:none;opacity:.6;transition:
 /* What the editor cannot do yet (mmAdapter.js marks it, with the reason as the tooltip). */
 [data-na]{opacity:.42!important;cursor:not-allowed!important}
 [data-na] [data-na]{opacity:1!important}
+/* The Song workspace edits any of the 24 songs (MM-P4). */
+.songpick{display:inline-flex;gap:6px;align-items:center;margin-left:auto}
+.songpick select{font:12px var(--mono,monospace);background:var(--lcd);color:var(--ink);border:0;border-radius:3px;padding:2px 4px}
+.songpick button{font-size:11px}
 .lcdeng .led:not(.on){opacity:.35}

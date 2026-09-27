@@ -186,7 +186,7 @@ namespace mdJucePlugin
 		// GEARMULATOR_MMSTUDIO_SELFTEST=1: the page edits by itself and logs the round trips;
 		// =mmcpu: fixed phases for scripts/mm-editor-cpu.sh.
 		const auto selfTestMode = juce::SystemStats::getEnvironmentVariable("GEARMULATOR_MMSTUDIO_SELFTEST", {});
-		const bool selfTest = selfTestMode == "1" || selfTestMode == "mmcpu";
+		const bool selfTest = selfTestMode == "1" || selfTestMode == "p4" || selfTestMode == "mmcpu";
 		const auto url = selfTest ? juce::URL(file).withParameter("selftest", selfTestMode) : juce::URL(file);
 		m_web->goToURL(url.toString(true));
 		log("page loading, selftest=" + juce::String(selfTest ? 1 : 0) + ", " + juce::String(file.getSize()) + " bytes");
@@ -345,8 +345,10 @@ namespace mdJucePlugin
 				for(size_t i = 0; i < 3 && i < b->asArray().size(); ++i)
 					if(b->asArray()[i].isNumber())
 						v[i] = static_cast<int>(b->asArray()[i].asNumber());
-			const bool ok = v[0] >= 0x80 && v[0] < 0xf0 && v[1] >= 0 && v[1] < 128 && v[2] >= 0 && v[2] < 128
-				&& m_link->sendMidi(static_cast<uint8_t>(v[0]), static_cast<uint8_t>(v[1]), static_cast<uint8_t>(v[2]));
+			const bool valid = v[0] >= 0x80 && v[0] < 0xf0 && v[1] >= 0 && v[1] < 128 && v[2] >= 0 && v[2] < 128;
+			const auto a = static_cast<uint8_t>(v[0]), b1 = static_cast<uint8_t>(v[1]), c = static_cast<uint8_t>(v[2]);
+			// HW MIDI: to the real machine on the wire; else into the emulated one.
+			const bool ok = valid && (m_hw ? (m_hwPacer.push({a, b1, c}), true) : m_link->sendMidi(a, b1, c));
 			if(!ok)
 				reply(false, "midi: a channel message, [status 0x80-0xef, data, data]");
 			return true;

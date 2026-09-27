@@ -61,7 +61,7 @@ function ref(el){const d=el.dataset,t=d.t!=null?+d.t:S.sel,tr=trk(t),g=d.g;
   case"asg":{const r=tr.assign.tabs[S.asTab][+d.n];return[r,"add",{name:"ADD",max:127,signed:1},t,g]}
   case"link":return[S.ctl.links[+d.li],d.n,{name:d.n,max:127},t,g];case"src":return[srcById(d.src),d.n,{name:d.n,max:d.n==="DEPTH"?100:127},t,g];
   case"cc":return[tr.cc,+d.n,{name:"CC"+(+d.n+1),en:[...Array.from({length:128},(_,k)=>"CC"+k),"AFT"]},t,g];
-  case"mmap":{const r=S.mmap[+d.i];return[r,d.n,{name:d.n,...{trn:{max:127,signed:1},ofs:{max:63},len:{max:64},tim:{en:["1/16","2/16","4/16","8/16","16/16"]}}[d.n]},t,g]}}}
+  case"mmap":{const r=S.mmap[+d.i];return[r,d.n,{name:d.n,...{trn:{max:127,signed:1},ofs:{en:["---",...Array.from({length:64},(_,i)=>String(i).padStart(2,"0"))]},len:{max:64},tim:{en:["DIR","1","2","4","8","16","32"]}}[d.n]},t,g]}}}
 const getV=el=>{const[o,n]=ref(el);return o[n]};
 function setV(el,v){const[o,n,m,t,g]=ref(el);v=clamp(Math.round(v),0,maxOf(m));if(o[n]===v)return;o[n]=v;
  if(PAGES.includes(g)||g==="MID"||g==="lev"||g==="menv"||g==="asg"||g==="cc")soundEdited();else structEdited();

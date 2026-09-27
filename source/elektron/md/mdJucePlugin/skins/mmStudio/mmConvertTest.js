@@ -58,7 +58,7 @@ for (const { d, f } of docs["mm-desk/pattern"]) {
 for (const { d, f } of docs["mm-desk/song"]) check("song", f, C.songToFw(C.songToPage(d, lenOf), d, lenOf), d);
 for (const { d, f } of docs["mm-desk/global"]) {
 	const midi = d.midiSeq.channels.map((c, t) => ({ ch: c + 1, cc: [...d.midiSeq.ccs[t]] }));
-	check("global", f, C.globalToFw(d, d.routingMode, midi), d);
+	check("global", f, C.globalToFw(d, d.routingMode, midi, C.mapToPage(d)), d);
 }
 
 /* edits land where they should */
@@ -89,6 +89,29 @@ if (docs["mm-desk/kit"].length) {
 		&& Math.floor(o.tracks[0].pages[4][3] * 11 / 128) === 4]);
 	edits.push(["assign amount", o.tracks[1].assign.add[5] === -54]);
 	edits.push(["name", o.name === "RENAMED" && !("nameBytes" in o)]);
+}
+if (docs["mm-desk/global"].length) {
+	const d = docs["mm-desk/global"][0].d, rows = C.mapToPage(d);
+	rows[0] = { ...rows[0], pat: 2, ofs: 3, len: 8, trn: 61, tim: 3 };
+	const o = C.globalToFw(d, d.routingMode, d.midiSeq.channels.map((c, t) => ({ ch: c + 1, cc: d.midiSeq.ccs[t] })), rows);
+	edits.push(["multi map row", o.multiMap[1][0] === 2 && o.multiMap[2][0] === 2 && o.multiMap[3][0] === 8 && o.multiMap[4][0] === 253 && o.multiMap[5][0] === 3]);
+	const k = docs["mm-desk/kit"][0]?.d;
+	if (k) {
+		const p = C.kitToPage(k, d);
+		p.multi = { mode: 1, splitKey: 48, splitTrack: 3, timing: 6 };
+		p.tracks[2].port = 1;
+		const o2 = C.kitToFw(p, k, C.kitName(k));
+		edits.push(["multi trig and portamento", o2.multiTrig.mode === 1 && o2.multiTrig.splitTrack === 2 && o2.multiTrig.timing === 6 && !((o2.trackMasks.portamento >> 2) & 1)]);
+	}
+}
+if (docs["mm-desk/song"].length) {
+	/* a row more and a row less: the residue after END moves with it and the document stays valid */
+	const d = docs["mm-desk/song"].find(x => x.d.hidden.rowsAfterEnd.length)?.d || docs["mm-desk/song"][0].d;
+	const rows = C.songToPage(d, lenOf);
+	rows.splice(0, 0, { pat: 3, rep: 2 });
+	const o = C.songToFw(rows, d, lenOf);
+	const size = (200 - o.rows.length) * 24;
+	edits.push(["song row added, residue kept inside the region", o.rows.length === d.rows.length + 1 && o.hidden.rowsAfterEnd.every(([i, h]) => i * 2 + h.length <= size * 2)]);
 }
 for (const [what, ok] of edits) { n++; if (!ok) { fails++; console.log("FAIL edit:", what); } }
 

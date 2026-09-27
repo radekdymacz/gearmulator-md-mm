@@ -20,7 +20,7 @@
 	const C = MmConvert;
 	const J = o => JSON.stringify(o, (k, v) => v === Infinity ? "inf" : v);
 	const now = () => performance.now();
-	const selfTest = /[?&]selftest=1/.test(location.search);
+	const selfTest = /[?&]selftest=(1|p4)/.test(location.search), p4Only = /[?&]selftest=p4/.test(location.search);
 	const cpuTest = /[?&]selftest=mmcpu/.test(location.search);
 
 	/* ---------------- what the machine holds ---------------- */
@@ -30,7 +30,9 @@
 	const BASE = { pat: [], kit: [], song: [], glob: [] };
 	const REF = { pat: [], kit: [], kitName: [] };	// S.patData / S.kits objects last seen
 	const CUR = { pat: -1, kit: -1, song: 0, glob: 0 };
-	const last = { edit: 0, kitEdit: 0, tempoEdit: -1e9, mute: [], bpm: null, ready: false, note: "", noteMs: 0 };
+	const EDIT = { song: null };	// the song the Song workspace edits; null = the machine's current one
+	const songSlot = () => EDIT.song ?? CUR.song;
+	const last = { edit: 0, kitEdit: 0, tempoEdit: -1e9, muteEdit: -1e9, mute: [], midiMute: [], poly: null, bpm: null, ready: false, note: "", noteMs: 0, link: "emulator" };
 	let synced = false;	// S shows the machine (current pattern and working kit arrived)
 	const wantApply = new Set();
 
@@ -41,6 +43,7 @@
 	const { applyKit, applyPat, emptyPat, clearedKit, captureKit, capturePat, setKitState, render, renderTop, drawLib, toast, ask, setEng } =
 		Object.fromEntries(["applyKit", "applyPat", "emptyPat", "clearedKit", "captureKit", "capturePat", "setKitState", "render", "renderTop",
 			"drawLib", "toast", "ask", "setEng"].map(n => [n, MOCK(n)]));
+	function clearPage() {
 	applyKit({ ...clearedKit(), multi: S.multi });
 	S.tracks.forEach(t => t.name = machName(t.m));
 	applyPat(emptyPat(16));
@@ -55,6 +58,8 @@
 	S.ctl.links = [];	// the Control workspace starts without the mockup's example mappings
 	S.kits.forEach((k, i) => { REF.kit[i] = k; REF.kitName[i] = ""; });
 	S.tracks.forEach((t, i) => last.mute[i] = !!t.mute);
+	}
+	clearPage();
 
 	/* ---------------- undo covers the current pattern, kit and song, not the library ----------------
 	   The library (other slots) comes from the machine in the background; undoing
@@ -172,7 +177,7 @@
 	window.bootScreen = function () {
 		const el = $("#bootscr");
 		if (!el) return;
-		const on = S.eng === "boot" || S.eng === "sync" || S.eng === "loading";
+		const on = !hwLink() && (S.eng === "boot" || S.eng === "sync" || S.eng === "loading");
 		clearTimeout(lcdFade);
 		if (on) { el.classList.remove("fading"); el.classList.add("on", "fw"); return; }
 		if (!el.classList.contains("on")) return;
@@ -195,14 +200,15 @@
 				if (b) for (let k = 0; k < 8; k++) if (b & (0x80 >> k)) g.fillRect(xb * 8 + k, y, 1, 1);
 			}
 	}
-	let noRomShown = false;
+	let noRomShown = false, selfTestRan = false;
 	function showEngine() {
-		const e = FW.engine;
-		const st = e === "missing" ? "norom" : e === "unsupported" ? "unsupported" : e === "loading" ? "loading" : e === "booting" ? "boot"
+		const e = FW.engine, hw = FW.machine?.link === "hw" ? FW.machine.hw : null;
+		const st = hw ? (hw === "none" ? "hwnone" : hw === "ready" && synced ? "hwready" : "hwwait")
+			: e === "missing" ? "norom" : e === "unsupported" ? "unsupported" : e === "loading" ? "loading" : e === "booting" ? "boot"
 			: synced ? "ready" : "sync";
 		if (S.eng !== st) setEng(st);
 		if (st === "norom" && !noRomShown) { noRomShown = true; window.firstRun(); }
-		if (st === "ready" && !last.ready) { last.ready = true; log("ready: pattern " + CUR.pat + " kit " + CUR.kit); if (selfTest) setTimeout(runSelfTest, 500); if (cpuTest) runCpuPhases(); }
+		if ((st === "ready" || st === "hwready") && !last.ready) { last.ready = true; log("ready: pattern " + CUR.pat + " kit " + CUR.kit); if (selfTest && !selfTestRan) { selfTestRan = true; setTimeout(runSelfTest, 500); } if (cpuTest) runCpuPhases(); }
 	}
 
 	/* ---------------- documents -> the page ---------------- */
@@ -221,8 +227,8 @@
 		const s = S.kits[k];
 		return C.kitToFw(s.data || clearedKit(), b, s.empty ? "" : s.name, k);
 	}
-	const songDoc = () => FW.song[CUR.song] ? C.songToFw(S.song, FW.song[CUR.song], lenOf) : null;
-	const globDoc = () => FW.glob[CUR.glob] ? C.globalToFw(FW.glob[CUR.glob], S.routing, S.midi) : null;
+	const songDoc = () => FW.song[songSlot()] ? C.songToFw(S.song, FW.song[songSlot()], lenOf) : null;
+	const globDoc = () => FW.glob[CUR.glob] ? C.globalToFw(FW.glob[CUR.glob], S.routing, S.midi, S.mmap) : null;
 
 	function setSlotPattern(p) {
 		const d = FW.pat[p];
@@ -243,7 +249,6 @@
 	function applyCurrentKit() {
 		const d = FW.kit[CUR.kit];
 		const page = C.kitToPage(d, FW.glob[CUR.glob]);
-		page.multi = S.multi;
 		applyKit(page);
 		S.workName = C.kitName(d);
 		S.kits[CUR.kit] = { name: S.workName, empty: false, data: C.kitToPage(d, FW.glob[CUR.glob]) };
@@ -259,9 +264,9 @@
 		BASE.pat[CUR.pat] = J(patDoc(CUR.pat));
 	}
 	function applyCurrentSong() {
-		S.song = C.songToPage(FW.song[CUR.song], lenOf);
+		S.song = C.songToPage(FW.song[songSlot()], lenOf);
 		S.songSel = Math.min(S.songSel || 0, S.song.length - 1);
-		BASE.song[CUR.song] = J(songDoc());
+		BASE.song[songSlot()] = J(songDoc());
 	}
 	function applyCurrentGlobal() {
 		const g = FW.glob[CUR.glob];
@@ -298,13 +303,13 @@
 			const incoming = J(C.patternToFw(C.patternToPage(d, captureKit()), d, d.kit, captureKit(), CUR.pat));
 			if (!synced || incoming !== J(patDoc(CUR.pat))) { applyCurrentPattern(); changed = true; } else BASE.pat[CUR.pat] = incoming;
 		}
-		if (kinds.includes("song") && FW.song[CUR.song]) {
-			const incoming = J(C.songToFw(C.songToPage(FW.song[CUR.song], lenOf), FW.song[CUR.song], lenOf));
-			if (!synced || incoming !== J(songDoc())) { applyCurrentSong(); changed = true; } else BASE.song[CUR.song] = incoming;
+		if (kinds.includes("song") && FW.song[songSlot()]) {
+			const incoming = J(C.songToFw(C.songToPage(FW.song[songSlot()], lenOf), FW.song[songSlot()], lenOf));
+			if (!synced || incoming !== J(songDoc())) { applyCurrentSong(); changed = true; } else BASE.song[songSlot()] = incoming;
 		}
 		if (kinds.includes("glob") && FW.glob[CUR.glob]) {
 			const incoming = J(C.globalToFw(FW.glob[CUR.glob], FW.glob[CUR.glob].routingMode,
-				FW.glob[CUR.glob].midiSeq.channels.map((c, t) => ({ ch: c + 1, cc: FW.glob[CUR.glob].midiSeq.ccs[t] }))));
+				FW.glob[CUR.glob].midiSeq.channels.map((c, t) => ({ ch: c + 1, cc: FW.glob[CUR.glob].midiSeq.ccs[t] })), C.mapToPage(FW.glob[CUR.glob])));
 			if (!synced || incoming !== J(globDoc())) { applyCurrentGlobal(); changed = true; } else BASE.glob[CUR.glob] = incoming;
 		}
 		if (!synced) {
@@ -329,13 +334,15 @@
 			/* the patterns that play this kit read their locks' machines from it */
 			for (let p = 0; p < 128; p++) if (p !== CUR.pat && FW.pat[p] && FW.pat[p].kit === slot) setSlotPattern(p);
 		}
-		else if (kind === "song") { FW.song[slot] = doc; if (slot === CUR.song) wantApply.add("song"); }
+		else if (kind === "song") { FW.song[slot] = doc; if (slot === songSlot()) wantApply.add("song"); songPickerDirty = true; }
 		else if (kind === "global") { FW.glob[slot] = doc; if (slot === CUR.glob) wantApply.add("glob"); }
 		libDirty = true;
 	}
 	let libDirty = false;
 
 	function onMachine(d) {
+		if ((d.link || "emulator") !== last.link)
+			switchLink(d.link || "emulator");
 		FW.machine = d;
 		FW.engine = d.engine;
 		const cp = d.pattern.current, ck = d.kit.current, cs = d.song.current ?? 0, cg = d.global ?? 0;
@@ -354,12 +361,13 @@
 			if (FW.pat[cp]) wantApply.add("pat");
 			H.undo = []; H.redo = [];
 		}
-		if (cs !== CUR.song) { CUR.song = cs; if (FW.song[cs]) wantApply.add("song"); }
+		if (cs !== CUR.song) { CUR.song = cs; if (EDIT.song == null && FW.song[cs]) wantApply.add("song"); songPickerDirty = true; }
 		if (cg !== CUR.glob) { CUR.glob = cg; if (FW.glob[cg]) wantApply.add("glob"); }
 		const q = d.pattern.queued;
 		const queued = q != null && q !== cp ? q : null;
 		if (queued !== S.queued) { S.queued = queued; renderTop(); drawLib(); }
 		setPlaying(!!d.playing);
+		machineStates(d);
 		/* the machine's tempo (RAM), unless the user is setting it */
 		if (d.tempo != null && now() - last.tempoEdit > 1500 && d.tempo !== S.bpm) { S.bpm = d.tempo; last.bpm = d.tempo; renderTop(); }
 		if (synced && !busy() && now() - last.edit > 700) setKitState(d.kit.working === "edited" ? "edited" : "clean");
@@ -368,7 +376,7 @@
 		showEngine();
 		/* the library fills in the background: say how far */
 		const chip = document.querySelector(".lcdeng span");
-		if (chip && S.eng === "ready") chip.textContent = d.loading.done < d.loading.total ? `EMU OS 1.32B · ${d.loading.done}/${d.loading.total}` : ENG.ready[0];
+		if (chip && (S.eng === "ready" || S.eng === "hwready")) chip.textContent = d.loading.done < d.loading.total ? `${hwLink() ? "HW MIDI" : "EMU OS 1.32B"} · ${d.loading.done}/${d.loading.total}` : ENG[S.eng][0];
 	}
 
 	/* ---------------- the page -> the machine ---------------- */
@@ -379,6 +387,7 @@
 	function sendDoc(kind, doc, base, i) {
 		const text = J(doc);
 		if (text === base[i]) return false;
+		if (libBatch && base[i]) libBatch.push({ kind, slot: i, before: base[i], after: text });
 		base[i] = text;
 		send({ op: "set", kind, doc }, { key: kind + ":" + i, onResult: r => { if (!r.ok) { toast(r.errors[0] || "The machine did not take it."); log("set " + kind + " " + i + ": " + r.errors.join("; ")); } else note(r.note); } });
 		return true;
@@ -401,7 +410,8 @@
 		}
 		const pd = patDoc(CUR.pat);
 		if (pd) sendDoc("pattern", pd, BASE.pat, CUR.pat);
-		/* other slots the library changed */
+		/* other slots the library changed: one undo entry for them */
+		libBatch = [];
 		for (let p = 0; p < 128; p++) {
 			if (p === CUR.pat || S.patData[p] === REF.pat[p]) continue;
 			REF.pat[p] = S.patData[p];
@@ -414,16 +424,26 @@
 			const d = kitDoc(k);
 			if (d) sendDoc("kit", d, BASE.kit, k);
 		}
+		if (libBatch.length) { LU.undo.push({ items: libBatch }); LU.redo = []; renderTop(); }
+		libBatch = null;
 		const sd = songDoc();
-		if (sd) sendDoc("song", sd, BASE.song, CUR.song);
+		if (sd) sendDoc("song", sd, BASE.song, songSlot());
 		const gd = globDoc();
 		if (gd) sendDoc("global", gd, BASE.glob, CUR.glob);
 		/* mutes: the plug-in's mute parameters */
-		/* mutes and solos of the synth tracks: the plug-in's mute parameters */
+		/* mutes and solos: the synth tracks' mute parameters (CC 3), the MIDI tracks' MUTE window */
 		S.tracks.forEach((t, i) => {
 			const off = !MOCK("audible")(i);
-			if (off !== last.mute[i]) { last.mute[i] = off; send({ op: "mute", t: i, on: off ? 1 : 0 }); }
+			if (off !== last.mute[i]) { last.mute[i] = off; last.muteEdit = now(); send({ op: "mute", t: i, on: off ? 1 : 0 }); }
 		});
+		if (!hwLink())
+			S.midi.forEach((t, i) => {
+				const off = !MOCK("audible")(6 + i);
+				if (off !== last.midiMute[i]) { last.midiMute[i] = off; last.muteEdit = now(); send({ op: "muteMidi", t: i, on: off ? 1 : 0 }, { onResult: r => r.ok || toast(r.errors[0]) }); }
+			});
+		/* POLY is the machine's audio mode */
+		const poly = S.mode === "poly";
+		if (last.poly != null && poly !== last.poly) { last.poly = poly; last.polyEdit = now(); send({ op: "poly", on: poly ? 1 : 0 }); }
 		if (last.bpm !== S.bpm) {
 			if (last.bpm != null) { send({ op: "tempo", bpm: S.bpm }, { key: "tempo" }); last.tempoEdit = now(); }
 			last.bpm = S.bpm;
@@ -443,6 +463,12 @@
 		const p = $("#pst");
 		if (!p) return;
 		const r = FW.machine?.recv;
+		if (r && r.state === "waitingUser") {
+			p.textContent = "SEND " + r.waiting;
+			p.className = "pst warn";
+			p.title = "Edits wait for the Monomachine's SYSEX RECV screen. Click to send them.";
+			return;
+		}
 		const on = r && (r.sending > 0 || r.state === "entering" || r.state === "parked");
 		p.textContent = on ? (r.sending > 0 ? "RECV " + r.sending : "RECV") : "";
 		p.className = "pst";
@@ -526,41 +552,34 @@
 		if (e.target.closest("#learnkey")) setTimeout(() => { if (!S.learn) { learnPid = null; send({ op: "learnCancel" }); } }, 0);
 	}, true);
 
-	/* ---- MULTI MAP: read from the global; its fields past key and pattern are not decoded ---- */
+	/* ---- MULTI MAP: the global's ranges (MULTIMAP EDIT) ---- */
 	function mapFromGlobal() {
 		const g = FW.glob[CUR.glob];
 		if (!g || !g.multiMap) return;
-		const hi = g.multiMap[0], pat = g.multiMap[1], rows = [];
-		for (let r = 0; r < 32; r++) {
-			if (r && hi[r] <= hi[r - 1]) break;
-			rows.push({ hi: hi[r], pat: pat[r] === 255 ? -1 : pat[r], ofs: null, len: null, trn: null, tim: null });
-		}
-		rows[rows.length - 1].hi = 127;
-		S.mmap = rows;
-		S.mmapSel = Math.min(S.mmapSel || 0, rows.length - 1);
+		S.mmap = C.mapToPage(g);
+		S.mmapSel = Math.min(S.mmapSel || 0, S.mmap.length - 1);
 	}
 
 	/* ---- what the editor cannot do (yet): disabled, with the reason ---- */
+	const hwLink = () => FW.machine?.link === "hw";
 	const R = {
-		midiMute: "MIDI track mutes are set on the machine (FUNCTION + a track key in MIDI mode). The plug-in has no command for them yet.",
-		poly: "POLY is switched on the machine. The editor does not drive it yet.",
-		multi: "MULTI TRIG mode, split and timing are settings the editor does not decode yet: set them on the machine. The keys here do play on the MULTI TRIG channel.",
-		map: "MULTI MAP ranges live in the global slot. The editor reads each range's upper key and pattern; offset, length, transpose and timing are not decoded yet, so edit the map on the machine (GLOBAL › CONTROL › MULTIMAP EDIT). The keys here do play on the MULTI MAP channel.",
-		port: "PORTAMENTO mode (ALWAYS / ONLY LEGATO) is not decoded in the kit yet: set it on the machine.",
-		rec: "GRID RECORD and LIVE RECORD run on the machine. In the editor you draw steps directly.",
+		midiMuteHw: "Over MIDI the MIDI track mutes cannot be set: the Monomachine has no MIDI message for them (Appendix B: CC 3 mutes the six synth tracks only; Appendix C has no mute SysEx). Use FUNCTION + BANK GROUP on the machine.",
+		recHw: "Over MIDI the recording modes cannot be switched: RECORD has no MIDI message (Appendix C). Press RECORD on the Monomachine.",
 		loading: "Still reading this slot from the machine."
 	};
+	const midiMuteSel = [6, 7, 8, 9, 10, 11].flatMap(i => [`[data-mute="${i}"]`, `[data-solo="${i}"]`, `[data-gmute="${i}"]`]).join(",");
 	const NA = [
-		['[data-mute="6"],[data-mute="7"],[data-mute="8"],[data-mute="9"],[data-mute="10"],[data-mute="11"],[data-solo="6"],[data-solo="7"],[data-solo="8"],[data-solo="9"],[data-solo="10"],[data-solo="11"],[data-gmute="6"],[data-gmute="7"],[data-gmute="8"],[data-gmute="9"],[data-gmute="10"],[data-gmute="11"]', R.midiMute],
-		['[data-pmode="poly"]', R.poly],
-		['[data-set="mtmode"] button,[data-strk],[data-tim],#splitm', R.multi],
-		['.maprow [data-mhi],.maprow select,.maprow .kselbtn,.maprow .pc,[data-mdel],[data-madd],[data-band]', R.map],
-		['[data-set="port"] button', R.port],
-		["#rec", R.rec]
+		[midiMuteSel, R.midiMuteHw, hwLink],
+		["#rec", R.recHw, hwLink]
 	];
 	function markNa() {
-		for (const [sel, why] of NA)
-			for (const el of $$(sel)) if (el.dataset.na !== "1") { el.dataset.na = "1"; el.title = why; el.setAttribute("aria-disabled", "true"); }
+		for (const [sel, why, when] of NA) {
+			const on = when();
+			for (const el of $$(sel)) {
+				if (on && el.dataset.na !== "1") { el.dataset.na = "1"; el.title = why; el.setAttribute("aria-disabled", "true"); }
+				else if (!on && el.dataset.na === "1" && el.title === why) { delete el.dataset.na; el.removeAttribute("aria-disabled"); el.title = ""; }
+			}
+		}
 		/* library slots not read yet */
 		for (const el of $$("#libpop .ps[data-ps]")) {
 			const miss = !FW.pat[+el.dataset.ps];
@@ -571,11 +590,7 @@
 			if (miss !== (el.dataset.na === "1")) { if (miss) { el.dataset.na = "1"; el.title = R.loading; } else delete el.dataset.na; }
 		}
 		for (const el of $$(".band[data-band]")) { const r = S.mmap[+el.dataset.band]; if (r && r.pat < 0 && el.textContent !== "CUR") el.textContent = "CUR"; }
-		/* the reason in words where a whole card is the machine's */
-		const card = $(".maprow");
-		if (card && !card.querySelector(".statusline")) card.querySelector("header").insertAdjacentHTML("afterend", `<p class="statusline">${R.map}</p>`);
-		const note = $(".songui .card:last-child header .note");
-		if (note && !note.dataset.song) { note.dataset.song = "1"; note.textContent = `Song ${String(CUR.song + 1).padStart(2, "0")} (the machine's current song) · ` + note.textContent; }
+		songPicker();
 		for (const el of $$(".srch")) if (!el.dataset.hint) { el.dataset.hint = "1"; el.title = "On-screen source: it drives its targets through the editor. Your controller's knobs reach the machine through LEARN (the plug-in's MIDI learn)."; }
 	}
 	const blockNa = e => {
@@ -595,6 +610,152 @@
 		e.preventDefault();
 		send({ op: "openMenu" });
 	});
+
+
+	/* ================= MM-P4 ================= */
+
+	/* ---- the machine's mutes, POLY and recording, as it reports them ---- */
+	function machineStates(d) {
+		const quiet = now() - last.muteEdit > 1200 && !busy();
+		const solo = [...S.tracks, ...S.midi].some(t => t.solo);
+		if (quiet && !solo && d.mutes) {
+			let changed = false;
+			if (d.mutes.synth != null) S.tracks.forEach((t, i) => { const m = !!((d.mutes.synth >> i) & 1); last.mute[i] = m; if (!!t.mute !== m) { t.mute = m; changed = true; } });
+			if (d.mutes.midi != null) S.midi.forEach((t, i) => { const m = !!((d.mutes.midi >> i) & 1); last.midiMute[i] = m; if (!!t.mute !== m) { t.mute = m; changed = true; } });
+			if (changed && !busy()) render();
+		}
+		if (d.poly != null && now() - (last.polyEdit || -1e9) > 1500) {
+			last.poly = d.poly;
+			if (d.poly && S.mode !== "poly") { S.mode = "poly"; if (S.ws === "perform") render(); }
+			if (!d.poly && S.mode === "poly") { S.mode = "normal"; if (S.ws === "perform") render(); }
+		}
+		const rec = d.record != null && d.record !== "off";
+		if (rec !== !!S.rec) { S.rec = rec; renderTop(); }
+		const b = $("#rec");
+		if (b) b.title = d.record === "live" ? "LIVE RECORDING: notes you play are recorded. Click to stop recording."
+			: d.record === "grid" ? "GRID RECORDING: the machine's TRIG keys write steps. Click to leave."
+			: "RECORD: stopped = GRID RECORDING, playing = LIVE RECORDING (the keyboard's notes are recorded).";
+	}
+	/* RECORD: the machine's GRID RECORDING (stopped) or LIVE RECORDING (playing) */
+	document.addEventListener("click", e => {
+		if (!e.target.closest("#rec") || e.target.closest("[data-na]")) return;
+		e.preventDefault(); e.stopImmediatePropagation();
+		const cur = FW.machine?.record;
+		const mode = cur && cur !== "off" ? "off" : S.playing ? "live" : "grid";
+		send({ op: "record", mode }, { onResult: r => r.ok ? toast(mode === "off" ? "Recording off." : mode === "live" ? "LIVE RECORDING: play the keyboard; the notes are recorded to the nearest step." : "GRID RECORDING on the machine: its TRIG keys write steps; the editor reads them back.") : toast(r.errors[0]) });
+	}, true);
+
+	/* ---- the Song workspace edits any of the 24 songs ---- */
+	let songPickerDirty = true;
+	function songName(i) { const d = FW.song[i]; return d ? (d.nameBytes && /^ff/i.test(d.nameBytes) ? "EMPTY" : d.name || "EMPTY") : "…"; }
+	function songPicker() {
+		const head = $(".songui > section.card > header");
+		if (!head) return;
+		let box = head.querySelector(".songpick");
+		if (box && !songPickerDirty && +box.dataset.slot === songSlot() && +box.dataset.cur === CUR.song) return;
+		songPickerDirty = false;
+		const opts = Array.from({ length: 24 }, (_, i) => `<option value="${i}"${i === songSlot() ? " selected" : ""}>S${String(i + 1).padStart(2, "0")} ${escH(songName(i))}${i === CUR.song ? " · on the machine" : ""}</option>`).join("");
+		const html = `<span class="songpick" data-slot="${songSlot()}" data-cur="${CUR.song}"><select id="songsel" aria-label="Song to edit">${opts}</select>
+			<button id="songload"${songSlot() === CUR.song ? " disabled" : ""} title="LOAD SONG (0x6c): the machine plays this song in song mode. Only while stopped.">Load on the machine</button></span>`;
+		if (box) box.outerHTML = html; else head.insertAdjacentHTML("beforeend", html);
+	}
+	document.addEventListener("change", e => {
+		if (e.target.id !== "songsel") return;
+		e.stopImmediatePropagation();
+		const v = +e.target.value;
+		EDIT.song = v === CUR.song ? null : v;
+		songPickerDirty = true;
+		if (FW.song[v]) { applyCurrentSong(); render(); H.last = snap(); } else send({ op: "load", kind: "song", slot: v });
+	}, true);
+	document.addEventListener("click", e => {
+		if (!e.target.closest("#songload")) return;
+		e.stopImmediatePropagation();
+		const s2 = songSlot();
+		send({ op: "loadSong", s: s2 }, { onResult: r => { if (r.ok) { EDIT.song = null; songPickerDirty = true; toast(`S${String(s2 + 1).padStart(2, "0")} is the machine's song now.`); } else toast(r.errors[0]); } });
+	}, true);
+
+	/* ---- undo across library writes: one history for the page's edits and the slots it wrote ---- */
+	const LU = { undo: [], redo: [] };
+	let libBatch = null;	// the slots one sync pass writes
+	const undo0 = window.undo, redo0 = window.redo, commit0 = window.commit, renderTop0 = window.renderTop;
+	window.commit = function (...a) {
+		const n = H.undo.length, before = H.last;
+		const r = commit0.apply(this, a);
+		/* the mockup pushed a snapshot (it keeps at most 200: then the length stays) */
+		if (H.undo.length > n || (n >= 200 && H.last !== before)) { LU.undo.push({ mock: true }); LU.redo = []; }
+		return r;
+	};
+	function libApply(entry, which) {
+		for (const it of entry.items) {
+			const doc = JSON.parse(which === "before" ? it.before : it.after);
+			const base = it.kind === "pattern" ? BASE.pat : BASE.kit;
+			base[it.slot] = J(doc);
+			send({ op: "set", kind: it.kind, doc }, { onResult: r => r.ok || toast(r.errors[0]) });
+		}
+		toast(`${which === "before" ? "Undone" : "Redone"}: ${entry.items.map(it => it.kind === "kit" ? "K" + String(it.slot + 1).padStart(2, "0") : patName(it.slot)).join(", ")} (written back to the machine).`);
+	}
+	window.undo = function () {
+		const top = LU.undo.pop();
+		if (!top) return undo0();
+		LU.redo.push(top);
+		if (top.mock) return undo0();
+		libApply(top, "before");
+		renderTop();
+	};
+	window.redo = function () {
+		const top = LU.redo.pop();
+		if (!top) return redo0();
+		LU.undo.push(top);
+		if (top.mock) return redo0();
+		libApply(top, "after");
+		renderTop();
+	};
+	window.renderTop = function (...a) {
+		const r = renderTop0.apply(this, a);
+		const u = $("#undo"), v = $("#redo");
+		if (u) { u.disabled = !LU.undo.length && !H.undo.length; $("#undon").textContent = LU.undo.length || H.undo.length || ""; }
+		if (v) { v.disabled = !LU.redo.length && !H.redo.length; $("#redon").textContent = LU.redo.length || H.redo.length || ""; }
+		return r;
+	};
+
+	/* ---- HW MIDI: a real Monomachine on the plug-in's MIDI in/out ---- */
+	/* another machine (HW MIDI or the emulator): nothing the page knew holds */
+	function switchLink(link) {
+		last.link = link;
+		for (const k of ["pat", "kit", "song", "glob"]) { FW[k] = []; BASE[k] = []; }
+		REF.pat = []; REF.kit = []; REF.kitName = [];
+		CUR.pat = -1; CUR.kit = -1; CUR.song = 0; CUR.glob = 0; EDIT.song = null;
+		synced = false; last.ready = false;
+		LU.undo = []; LU.redo = []; H.undo = []; H.redo = [];
+		FW.machine = null;
+		clearPage();
+		render();
+		setEng(link === "hw" ? "hwwait" : "loading");
+	}
+	window.startEngine = kind => {
+		const link = kind === "hw" ? "hw" : "emulator";
+		if (link !== last.link) switchLink(link);
+		send({ op: "engine", kind: kind === "hw" ? "hw" : "emu" }, { onResult: r => toast(r.ok ? r.note : r.errors[0]) });
+	};
+	/* dumps wait for the person at the machine: SEND n in the pattern field */
+	window.sendDialog = function () {
+		const n = FW.machine?.recv?.waiting || 0;
+		ask(`<div class="lcdbig recv">SYSEX RECV · WAITING…</div><p>The Monomachine only takes a dump on its SysEx receive screen. <b>${n}</b> message${n === 1 ? "" : "s"} to send.</p>
+ <ol class="recvsteps"><li>On the Monomachine press <b>FUNCTION + KIT/SONG</b> (GLOBAL), then <b>FILE › SYSEX RECV</b>.</li><li>Set <b>MODE ORIG</b> and press <b>YES</b>. The screen shows <b>WAITING…</b></li><li>Press <b>Send now</b> here. When the editor has read them back, press <b>EXIT</b> on the machine.</li></ol>`,
+			[["Send now", "cream", () => send({ op: "hwSend" }, { onResult: r => toast(r.ok ? r.note : r.errors[0]) })], ["Later", "", () => {}]], "first");
+	};
+	/* PLAY over MIDI is MIDI Start: the machine follows it only with CONTROL IN TRANSPORT ACCEPT */
+	const togglePlay1 = window.togglePlay;
+	window.togglePlay = function () {
+		const g = FW.glob[CUR.glob];
+		if (hwLink() && !S.playing && g && g.controlIn && g.controlIn.transport === 0) {
+			ask(`PLAY is <b>MIDI Start</b> over MIDI. This Monomachine ignores it: <b>GLOBAL › CONTROL IN › TRANSPORT</b> is <b>IGNORE</b>.`,
+				[["Set TRANSPORT to ACCEPT", "cream", () => { const d = JSON.parse(JSON.stringify(g)); d.controlIn.transport = 1; BASE.glob[CUR.glob] = J(d);
+					send({ op: "set", kind: "global", doc: d }); toast("The global waits for SYSEX RECV: SEND in the pattern field."); }], ["Cancel", "", () => {}]]);
+			return;
+		}
+		togglePlay1();
+	};
 
 	/* ---------------- messages from the plug-in ---------------- */
 	Bridge.onMessage(m => {
@@ -644,7 +805,9 @@
 	}
 	async function runSelfTest() {
 		const results = [];
+		let inP4 = false;
 		const check = async (name, fn) => {
+			if (p4Only && !inP4) return;
 			const t0 = now();
 			try { const note = await fn(); results.push(true); log(`SELFTEST ok ${name} ${Math.round(now() - t0)} ms${note ? " " + note : ""}`); }
 			catch (e) { results.push(false); log(`SELFTEST FAIL ${name}: ${e.message}`); }
@@ -720,9 +883,81 @@
 			await sleep(300);
 			if (muted !== "truetruefalsetruetruetrue") throw new Error("mutes " + muted);
 		});
+		/* MM-P4 */
+		inP4 = true;
+		const machineIs = test => waitFor(m => m.type === "machine" && test(m.doc), 6000);
+		const docIs = (kind, slot, test) => waitFor(m => m.type === "doc" && m.kind === kind && m.slot === slot && !m.pending && test(m.doc), 10000);
+		await check("MIDI track mute (MUTE window)", async () => {
+			S.midi[2].mute = true; window.tx();
+			await machineIs(d => d.mutes.midi != null && ((d.mutes.midi >> 2) & 1) === 1);
+			S.midi[2].mute = false; window.tx();
+			await machineIs(d => ((d.mutes.midi >> 2) & 1) === 0);
+		});
+		await check("POLY (SET STATUS 0x20)", async () => {
+			S.mode = "poly"; window.tx();
+			await machineIs(d => d.poly === true);
+			S.mode = "normal"; window.tx();
+			await machineIs(d => d.poly === false);
+		});
+		await check("GRID RECORDING on and off", async () => {
+			document.querySelector("#rec").click();
+			await machineIs(d => d.record === "grid");
+			document.querySelector("#rec").click();
+			await machineIs(d => d.record === "off");
+		});
+		await check("MULTI TRIG and PORTAMENTO in the kit", async () => {
+			const m0 = { ...S.multi }, p0 = S.tracks[1].port;
+			S.multi = { ...S.multi, mode: 1, splitKey: 55, splitTrack: 4, timing: 2 };
+			S.tracks[1].port = p0 === 1 ? 0 : 1;
+			window.soundEdited();
+			await waitFor(m => m.type === "doc" && m.kind === "kit" && m.working && m.doc.multiTrig.mode === 1 && m.doc.multiTrig.splitKey === 55
+				&& m.doc.multiTrig.splitTrack === 3 && m.doc.multiTrig.timing === 2 && ((m.doc.trackMasks.portamento >> 1) & 1) === (p0 === 1 ? 1 : 0), 10000);
+			S.multi = m0; S.tracks[1].port = p0;
+			window.soundEdited();
+			await waitFor(m => m.type === "doc" && m.kind === "kit" && m.working && m.doc.multiTrig.mode === m0.mode, 10000);
+		});
+		await check("MULTI MAP row in the global", async () => {
+			const r0 = { ...S.mmap[0] };
+			Object.assign(S.mmap[0], { ofs: 3, len: 12, trn: 66, tim: 2 });
+			window.structEdited();
+			await docIs("global", CUR.glob, d => d.multiMap[2][0] === 2 && d.multiMap[3][0] === 12 && d.multiMap[4][0] === 2 && d.multiMap[5][0] === 2);
+			Object.assign(S.mmap[0], r0);
+			window.structEdited();
+			await docIs("global", CUR.glob, d => d.multiMap[5][0] === r0.tim);
+		});
+		await check("another song than the machine's (S24)", async () => {
+			const sel = document.querySelector("#songsel") || (MOCK("goWs")("song"), await sleep(300), document.querySelector("#songsel"));
+			sel.value = "23"; sel.dispatchEvent(new Event("change", { bubbles: true }));
+			await sleep(300);
+			const before = S.song.length;
+			S.song.splice(0, 0, { pat: 7, rep: 2 }); window.structEdited();
+			await docIs("song", 23, d => d.rows.length === before + 1 && d.rows[0].pattern === 7);
+			S.song.splice(0, 1); window.structEdited();
+			await docIs("song", 23, d => d.rows.length === before);
+			sel.value = String(CUR.song); sel.dispatchEvent(new Event("change", { bubbles: true }));
+			MOCK("goWs")("seq");
+		});
+		await check("undo a library write (kit paste into K100)", async () => {
+			const before = FW.kit[99] && C.kitName(FW.kit[99]), src = FW.kit[2] && C.kitName(FW.kit[2]);
+			MOCK("kitPut")(99, MOCK("kitSrc")(2), "Copy");
+			await sleep(100);
+			document.querySelector('#dlg [data-dlg="0"]')?.click();
+			log(`SELFTEST kit paste: K100 "${before}" <- K03 "${src}", page slot now "${S.kits[99].name}"`);
+			await docIs("kit", 99, d => C.kitName(d) === src);
+			window.undo();
+			await docIs("kit", 99, d => C.kitName(d) === before);
+			return `"${src}" then back to "${before}"`;
+		});
 		await check("song and global documents", async () => {
 			if (!FW.song[CUR.song] || !FW.glob[CUR.glob]) throw new Error("not loaded");
 			return S.song.length + " rows, routing " + S.routing;
+		});
+		await check("HW MIDI with no Monomachine attached: HW CONNECT, then HW NO MIDI, then the emulator again", async () => {
+			window.startEngine("hw");
+			await waitFor(m => m.type === "machine" && m.doc.link === "hw" && m.doc.hw === "none", 9000);
+			window.startEngine("emu");
+			await waitFor(m => m.type === "machine" && m.doc.link === "emulator" && m.doc.engine === "ready", 9000);
+			while (S.eng !== "ready") await sleep(200);
 		});
 		const ok = results.filter(Boolean).length;
 		log(`SELFTEST ${ok === results.length ? "PASS" : "FAIL"} ${ok}/${results.length}`);
