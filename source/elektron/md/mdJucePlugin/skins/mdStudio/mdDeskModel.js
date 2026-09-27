@@ -21,8 +21,14 @@ const SMPL = ["PTCH", "DEC", "HOLD", "BRR", "STRT", "END", "RTRG", "RTIM"];
 const RAMR = ["MLEV", "MBAL", "ILEV", "IBAL", "CUE1", "CUE2", "LEN", "RATE"];
 function slots(m) {
 	const c = Cat.byName[m];
-	return c ? c.params : [null, null, null, null, null, null, null, null, ...FX, ...RT];
+	if (!c) return [null, null, null, null, null, null, null, null, ...FX, ...RT];
+	/* P5: a synthesis parameter with the name of an effects or routing one (TRX-XT DIST, TRX-MA REV,
+	   INP-GA VOL) is its own parameter: the page addresses it as SYN·NAME, so every lock lane, value and
+	   command maps to one (page, index). The other is shown as RTG·NAME / FX·NAME (laneLabel). */
+	if (!c.qparams) { const later = c.params.slice(8); c.qparams = c.params.map((n, i) => i < 8 && n && later.includes(n) ? "SYN·" + n : n); }
+	return c.qparams;
 }
+function laneLabel(t, n) { const a = slots(S.tracks[t].m); if (!a.includes("SYN·" + n)) return n; return (a.indexOf(n) >= 16 ? "RTG·" : "FX·") + n; }
 /* Three pages of 8 slots; an unused slot is null. */
 function pages(m) { const a = slots(m); return { s: a.slice(0, 8), e: a.slice(8, 16), r: a.slice(16, 24) }; }
 const names = list => list.filter(Boolean);
