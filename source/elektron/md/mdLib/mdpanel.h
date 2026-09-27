@@ -1,5 +1,8 @@
 #pragma once
 
+#include <string>
+#include <vector>
+
 #include <array>
 #include <atomic>
 #include <cstddef>
@@ -112,6 +115,12 @@ namespace md
 
 	std::optional<uint8_t> panelEncoderCommand(MachineModel _model,
 		PanelEncoder _encoder);
+
+	// A named key press as the panel row states to send, each held for a moment,
+	// ending with the release. Names (MD, the Machinedrum Editor's vocabulary):
+	// "play", "stop", "record", "page" (SYNTHESIS/EFFECTS/ROUTING), "trig1".."trig16",
+	// and "recordPlay": hold RECORD, press PLAY (live recording). Empty if unknown.
+	std::vector<PanelPacket> panelKeySequence(MachineModel _model, const std::string& _key);
 
 	const char* panelControlName(PanelControl _control);
 	const char* panelEncoderName(PanelEncoder _encoder);

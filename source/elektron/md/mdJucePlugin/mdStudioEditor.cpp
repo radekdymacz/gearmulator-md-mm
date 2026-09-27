@@ -119,6 +119,7 @@ namespace mdJucePlugin
 		port.sendKitParam = [this](const uint8_t _t, const uint8_t _i, const uint8_t _v) { m_link->setKitParam(_t, _i, _v); };
 		port.sendMute = [this](const uint8_t _t, const bool _on) { m_link->setMute(_t, _on); };
 		port.pressKey = [this](const std::string& _key) { return m_link->pressKey(_key); };
+		port.turnKnob = [this](const uint8_t _e, const int _s) { return m_link->turnKnob(_e, _s); };
 		port.toPage = [this](const json::Value& _m)
 		{
 			m_outbox.push_back(_m);

@@ -160,6 +160,8 @@ function renderTop() {
 	/* One key: PLAY while stopped, STOP while playing (the icon follows the machine). */
 	$("#play").setAttribute("aria-pressed", S.playing); $("#playico").textContent = S.playing ? "■" : "▶"; $("#play").setAttribute("aria-label", S.playing ? "Stop" : "Play");
 	$("#rec").setAttribute("aria-pressed", !!S.rec); $("#recled").classList.toggle("on", !!S.rec);
+	$("#rec").title = S.rec ? "Live recording: click a track's steps to play it, move a value to lock it. REC again: stop recording, keep playing (R)" : "Live recording, as RECORD + PLAY on the machine (R)";
+	document.body.classList.toggle("liverec", !!S.rec);
 	renderEngine();
 	syncTx();
 	const st = $("#status");
@@ -845,6 +847,8 @@ document.addEventListener("click", e => {
 	const st = e.target.closest(".st"); if (st) {
 		const i = +st.dataset.t, s = +st.dataset.s, t = S.tracks[i];
 		if (!S.loaded) { toast("The pattern is not loaded yet."); return; }
+		/* Live recording: a click plays the track like its TRIG key; the machine records it. */
+		if (S.rec) { cmd("recTrig", { t: i }); if (i !== S.sel) select(i); return; }
 		if (e.shiftKey && t.trigs[s]) { t.acc.has(s) ? t.acc.delete(s) : t.acc.add(s); cmd("accent", { p: S.pat, t: i, s }); }
 		else if (e.altKey && t.trigs[s]) { t.slide.has(s) ? t.slide.delete(s) : t.slide.add(s); cmd("slide", { p: S.pat, t: i, s }); }
 		else { t.trigs[s] = !t.trigs[s]; if (!t.trigs[s]) { t.acc.delete(s); t.slide.delete(s); clearStep(i, s); renderTop(); } cmd("trig", { p: S.pat, t: i, s, on: t.trigs[s] }); }
@@ -916,7 +920,7 @@ document.addEventListener("click", e => {
 	const tb = e.target.closest("#tabs button"); if (tb) { S.ws = tb.dataset.ws; render(); return; }
 	if (e.target.closest("#platekey")) { setPlate(S.plate === "mk2" ? "mk1" : "mk2"); return; }
 	if (e.target.closest("#play")) { cmd(S.playing ? "stop" : "play"); return; }
-	if (e.target.closest("#rec")) { S.rec = !S.rec; renderTop(); if (S.rec) toast("Not wired yet: live recording. Trigs and knob moves you make are sent anyway."); return; }
+	if (e.target.closest("#rec")) { cmd("record"); return; }
 	if (e.target.closest("#patPrev")) { goPattern((S.queued ?? S.pat) - 1); return; }
 	if (e.target.closest("#patNext")) { goPattern((S.queued ?? S.pat) + 1); return; }
 });
@@ -949,6 +953,7 @@ function refreshAudible() {
 let lastStep = -1;
 function onTelemetry(m) {
 	Tele.step = m.step; Tele.pattern = m.pattern; Tele.valid = m.valid;
+	if (!!m.recording !== !!S.rec) { S.rec = !!m.recording; renderTop(); if (S.rec) toast("Live recording: click a track's steps to play it, move a value to lock it."); }
 	const wasPlaying = S.playing; S.playing = m.playing; S.step = m.playing ? m.step : -1;
 	if (wasPlaying !== S.playing) { renderTop(); $$(".ph").forEach(c => c.classList.remove("ph")); setPos(); phLast = -1; movePH(); }
 	const prev = lastStep; lastStep = S.step;
@@ -1009,7 +1014,7 @@ Bridge.onMessage(m => {
 	}
 	case "machine": {
 		const before = Docs.machine; Docs.machine = m.doc;
-		const key = [m.doc.pattern?.current, m.doc.kit?.current, m.doc.desk?.queued, m.doc.desk?.firmware, m.doc.kit?.working, m.doc.song?.reloadNeeded, m.doc.extendedMode, (m.doc.desk?.mutes || []).join(), m.doc.desk?.playing].join("|");
+		const key = [m.doc.pattern?.current, m.doc.kit?.current, m.doc.desk?.queued, m.doc.desk?.firmware, m.doc.kit?.working, m.doc.song?.reloadNeeded, m.doc.extendedMode, (m.doc.desk?.mutes || []).join(), m.doc.desk?.playing, m.doc.desk?.recording, m.doc.desk?.kitSource].join("|");
 		if (key !== lastKey || !before) { lastKey = key; scheduleRender(); }
 		else { S.tx = !!m.doc.desk.tx; S.roundTrip = m.doc.desk.roundTripMs; S.canUndo = !!m.doc.desk.undo; S.canRedo = !!m.doc.desk.redo; S.undoCount = m.doc.desk.undoCount; S.redoCount = m.doc.desk.redoCount; $("#undo").disabled = !S.canUndo; $("#redo").disabled = !S.canRedo; syncUndoCounts(); syncTx(); }
 		break;
@@ -1046,6 +1051,7 @@ document.addEventListener("keydown", e => {
 	if (S.ctl.learn && e.key === "Escape") { toggleLearn(); return; }
 	if (e.target.closest?.("input,select,textarea,[role=slider]") || e.metaKey || e.ctrlKey || e.altKey) return;
 	if ((e.key === "l" || e.key === "L")) { toggleLearn(); return; }
+	if (e.key === "r" || e.key === "R") { cmd("record"); return; }
 	const ws = ["seq", "sound", "mix", "sampler", "song", "control"][+e.key - 1]; if (ws) { S.ws = ws; render(); return; }
 	if ((S.ws === "song" || S.ws === "seq") && (e.key === "Delete" || e.key === "Backspace")) { e.preventDefault(); S.ws === "song" ? songAction("del") : secAction("clear"); return; }
 	if (S.ws === "song" && (e.key === "ArrowLeft" || e.key === "ArrowRight")) { S.songSel = Math.max(0, Math.min(S.song.length - 1, S.songSel + (e.key === "ArrowRight" ? 1 : -1))); render(); return; }

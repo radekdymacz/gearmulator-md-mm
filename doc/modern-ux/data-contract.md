@@ -147,6 +147,17 @@ and edits restored from a DAW project show without SAVE KIT. Without the region
 (another firmware) `kitSource` is `tracked`: the stored slot plus the edits the
 desk saw, as in P2.
 
+**Live recording (P3).** `machine.desk.recording` is true while the firmware
+live records (hold RECORD, press PLAY). It is read from RAM like a person reads
+the panel (`md::SequencerState`): the playhead moves and the RECORD LED blinks.
+While it records, the firmware owns the playing pattern: the desk refuses
+pattern edits to it (a dump would overwrite what was just recorded) and reads
+the pattern back every 400 ms instead. A kit value moved in the page is not sent
+as a CC (the firmware does not record CCs) but as DATA ENTRY knob turns of the
+selected track, after SET STATUS track and the page key (`mdDesk::KnobRecorder`),
+so the firmware locks it on the track's next note. `recTrig` plays a track like
+its TRIG key.
+
 The UI must not show `edited` and "project not saved" as one flag. Two different things can be unsaved:
 
 | State | Meaning | Lost by |

@@ -7,6 +7,7 @@
 #include <utility>
 
 #include "mdhardware.h"
+#include "mdsequencerstate.h"
 #include "mdsyseximport.h"
 
 #include "synthLib/device.h"
@@ -207,7 +208,12 @@ namespace md
 		{
 			std::atomic<int> step{-1};		// current step, 0-based, wraps at the pattern length
 			std::atomic<int> pattern{-1};	// switches with the status reply, ~2 steps before it is heard
-			std::atomic<int> playing{-1};	// 1 playing, 0 stopped
+			std::atomic<int> playing{-1};	// 1 playing, 0 stopped or paused
+			// P3 (md::SequencerState): live recording (RECORD held + PLAY), grid edit
+			// (RECORD alone) and the DATA ENTRY knob page: 0 synthesis, 1 effects, 2 routing.
+			std::atomic<int> recording{-1};
+			std::atomic<int> gridEdit{-1};
+			std::atomic<int> knobPage{-1};
 			std::atomic<uint64_t> blocks{0};
 
 			// The working kit (P3, mdEditorProbeFirmwareTest workkit): patch RAM
@@ -287,10 +293,11 @@ namespace md
 		void clearProjectStateRestore();
 		void failProjectStateRestore(std::string _error);
 
-		void publishSequencerTelemetry();
+		void publishSequencerTelemetry(size_t _frames);
 
 		const MachineModel m_model;
 		std::shared_ptr<SequencerTelemetry> m_sequencerTelemetry = std::make_shared<SequencerTelemetry>();
+		SequencerState m_sequencer;
 		std::shared_ptr<FrontPanelPublisher> m_frontPanelPublisher;
 		std::shared_ptr<const PreparationContext> m_preparationContext;
 		std::unique_ptr<Hardware> m_hardware;

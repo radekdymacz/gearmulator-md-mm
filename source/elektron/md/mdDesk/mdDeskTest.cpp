@@ -567,6 +567,116 @@ namespace
 		check(desk.documents().kits.count(7) && desk.documents().kits.at(7) == next, "then the new kit comes from memory");
 		check(!ed::mdWorkingKitFromMemory(std::vector<uint8_t>(10, 0)), "a short region is refused");
 	}
+
+	// Knob moves while live recording become panel steps: select, page, turn.
+	void testKnobRecorder()
+	{
+		ed::MdKit memory;
+		memory.params[3][12] = 40;
+		KnobRecorder k;
+		k.want(3, 12, 99);
+		auto s = k.next(0, 0, &memory);
+		check(s && s->kind == KnobStep::Kind::SelectTrack && s->track == 3, "first: select the track");
+		check(!k.next(10, 0, &memory), "then wait for the SET STATUS to land");
+		s = k.next(50, 0, &memory);
+		check(s && s->kind == KnobStep::Kind::PageKey, "then the page key (param 12 is on the effects page)");
+		check(!k.next(100, 0, &memory), "a page key needs time before the next");
+		s = k.next(300, 1, &memory);
+		check(s && s->kind == KnobStep::Kind::Turn && s->encoder == 4 && s->steps == 32, "turn knob E by at most 32");
+		check(!k.next(320, 1, &memory), "wait for memory to show the turn");
+		memory.params[3][12] = 72;
+		s = k.next(400, 1, &memory);
+		check(s && s->kind == KnobStep::Kind::Turn && s->steps == 27, "turn the rest");
+		memory.params[3][12] = 99;
+		check(!k.next(500, 1, &memory) && !k.pending(), "done when memory shows the value");
+		k.want(3, 1, 10);
+		memory.params[3][1] = 12;
+		s = k.next(600, 1, &memory);
+		check(s && s->kind == KnobStep::Kind::PageKey, "same track, other page: no second select");
+		s = k.next(800, 0, &memory);
+		check(s && s->kind == KnobStep::Kind::Turn && s->encoder == 1 && s->steps == -2, "turns down too");
+		check(!k.next(900, 0, nullptr), "nothing without memory");
+		k.reset();
+		check(!k.pending(), "reset forgets pending moves");
+	}
+
+	// The desk's REC key and what it refuses while the firmware records.
+	void testDeskRecording()
+	{
+		std::vector<std::vector<uint8_t>> wire;
+		std::vector<std::string> keys;
+		std::vector<std::pair<uint8_t, int>> turns;
+		std::vector<std::array<uint8_t, 3>> params;
+		std::vector<Value> page;
+		double now = 0;
+		Desk::Port port;
+		port.sendSysex = [&](const std::vector<uint8_t>& _b) { wire.push_back(_b); };
+		port.sendKitParam = [&](uint8_t _t, uint8_t _i, uint8_t _v) { params.push_back({_t, _i, _v}); };
+		port.pressKey = [&](const std::string& _k) { keys.push_back(_k); return true; };
+		port.turnKnob = [&](uint8_t _e, int _s) { turns.emplace_back(_e, _s); return true; };
+		port.toPage = [&](const Value& _m) { page.push_back(_m); };
+		port.nowMs = [&] { return now; };
+		Desk desk(port);
+		const auto status = [](const ed::MdStatus _p, const uint8_t _v)
+		{
+			return std::vector<uint8_t>{0xf0, 0x00, 0x20, 0x3c, 0x02, 0x00, 0x72, static_cast<uint8_t>(_p), _v, 0xf7};
+		};
+		const auto ok = [&]
+		{
+			for(auto it = page.rbegin(); it != page.rend(); ++it)
+				if(it->find("type")->asString() == "result")
+					return it->find("ok")->asBool();
+			return false;
+		};
+		auto pattern = *ed::decodeMdPattern(load("programmed_pattern_1.syx"));
+		auto kit = *ed::decodeMdKit(load("programmed_kit_0.syx"));
+		pattern.kit = kit.position;
+		desk.onPageMessage(cmd(R"({"op":"ready"})"));
+		desk.onDeviceSysex(status(ed::MdStatus::Pattern, pattern.position));
+		desk.onDeviceSysex(status(ed::MdStatus::Kit, kit.position));
+		desk.onDeviceSysex(ed::encodeMdPattern(pattern));
+		desk.onDeviceSysex(ed::encodeMdKit(kit));
+		auto image = ed::mdWorkingKitImage(kit);
+		std::vector<uint8_t> region{kit.position, 0};
+		region.insert(region.end(), image.begin(), image.end());
+		desk.onWorkingKitMemory(region);
+		Telemetry t;
+		t.valid = true;
+		desk.onTelemetry(t);
+
+		desk.onPageMessage(cmd(R"({"op":"record","id":1})"));
+		check(ok() && keys == std::vector<std::string>{"recordPlay"}, "REC from STOP holds RECORD and presses PLAY");
+		t.playing = t.recording = true;
+		t.knobPage = 0;
+		desk.onTelemetry(t);
+		desk.onPageMessage(cmd(R"({"op":"recTrig","t":4,"id":2})"));
+		check(ok() && keys.back() == "trig5", "a track played while recording is its TRIG key");
+		desk.onPageMessage(cmd("{\"op\":\"trig\",\"p\":" + std::to_string(pattern.position) + R"(,"t":0,"s":2,"id":3})"));
+		check(!ok(), "grid edits of the recording pattern wait");
+		params.clear();
+		desk.onPageMessage(cmd("{\"op\":\"param\",\"k\":" + std::to_string(kit.position) + R"(,"t":2,"i":3,"v":5,"id":4})"));
+		check(ok() && params.empty(), "a knob move while recording is not a CC");
+		for(int i = 0; i < 10; ++i)
+		{
+			now += 60;
+			desk.tick();
+		}
+		check(!turns.empty() && turns.back().first == 3, "it becomes DATA ENTRY turns of knob D");
+		check(desk.documents().kits.at(kit.position).params[2][3] == 5, "the view keeps the wanted value meanwhile");
+		keys.clear();
+		desk.onPageMessage(cmd(R"({"op":"record","id":5})"));
+		check(ok() && keys == std::vector<std::string>{"play"}, "REC while recording presses PLAY: keep playing");
+		t.recording = false;
+		desk.onTelemetry(t);
+		keys.clear();
+		desk.onPageMessage(cmd(R"({"op":"record","id":6})"));
+		check(keys == std::vector<std::string>{"stop"}, "REC while playing stops first");
+		t.playing = false;
+		desk.onTelemetry(t);
+		now += 40;
+		desk.tick();
+		check(keys.size() == 2 && keys[1] == "recordPlay", "then starts live recording once stopped");
+	}
 }
 
 int main()
@@ -581,6 +691,8 @@ int main()
 	testPushSlot();
 	testDesk();
 	testWorkingKitMemory();
+	testKnobRecorder();
+	testDeskRecording();
 	if(g_failures)
 	{
 		std::fprintf(stderr, "mdDeskTest: %d failure(s)\n", g_failures);

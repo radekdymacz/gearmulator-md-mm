@@ -19,6 +19,7 @@
 #include "elektronData/mdWorkingKit.h"
 
 #include "mdLib/mdautomation.h"
+#include "mdLib/mdsequencerstate.h"
 
 #include <deque>
 #include <functional>
@@ -71,8 +72,16 @@ namespace
 			};
 			port.pressKey = [this](const std::string& _key)
 			{
-				m_keys.push_back(_key == "play" ? md::PanelControl::Play : md::PanelControl::Stop);
-				return true;
+				const auto states = md::panelKeySequence(md::MachineModel::Machinedrum, _key);
+				m_keys.insert(m_keys.end(), states.begin(), states.end());
+				return !states.empty();
+			};
+			port.turnKnob = [this](const uint8_t _e, const int _steps)
+			{
+				const auto command = md::panelEncoderCommand(md::MachineModel::Machinedrum, static_cast<md::PanelEncoder>(_e));
+				for(int i = 0; command && i < std::abs(_steps); ++i)
+					m_machine.hardware().trySendPanelEvent(*command, _steps > 0 ? 0x01 : 0xff);
+				return command.has_value();
 			};
 			port.toPage = [this](const Value& _m) { onPage(_m); };
 			port.nowMs = [this] { return ms(m_machine.now()); };
@@ -174,10 +183,14 @@ namespace
 			{
 				const auto k = m_keys.front();
 				m_keys.pop_front();
-				m_machine.panel(k);
+				m_machine.hardware().trySendPanelEvent(k.row, k.mask);
+				m_machine.run(40);
 			}
 			else
 				m_machine.step();
+			m_leds.update(m_machine.read8(md::SequencerState::g_stepAddress), m_machine.read8(md::SequencerState::g_stoppedAddress),
+				m_machine.read8(md::SequencerState::g_recordLedAddress), m_machine.now() - m_ledsAt);
+			m_ledsAt = m_machine.now();
 			deliverIn();
 			const auto now = m_machine.now();
 			if(now - m_lastTick < g_rate / 30)
@@ -193,7 +206,10 @@ namespace
 			t.valid = true;
 			t.step = step;
 			t.pattern = m_machine.read8(0x28d205);
-			t.playing = m_machine.read8(0x28cdaf) == 0;
+			t.playing = m_leds.playing();
+			t.recording = m_leds.recording();
+			t.gridEdit = m_leds.gridEdit();
+			t.knobPage = m_machine.read8(md::SequencerState::g_knobPageAddress);
 			m_desk->onTelemetry(t);
 			// The working-kit region, as md::Device publishes it: when it changed.
 			Bytes region(ed::g_mdWorkingKitRegionSize);
@@ -238,7 +254,7 @@ namespace
 		std::unique_ptr<mdDesk::Desk> m_desk;
 		std::deque<Bytes> m_out;
 		std::deque<Bytes> m_in;
-		std::deque<md::PanelControl> m_keys;
+		std::deque<md::PanelPacket> m_keys;
 		uint64_t m_lastTick = 0;
 		int m_lastStep = -1;
 		uint64_t m_stepChangedAt = 0;
@@ -249,6 +265,8 @@ namespace
 		bool m_tx = false;
 		int m_telemetryPattern = -1;
 		Bytes m_lastRegion;
+		md::SequencerState m_leds;
+		uint64_t m_ledsAt = 0;
 	};
 
 	bool resultOk(const Rig& _rig)
@@ -444,7 +462,7 @@ namespace
 		_rig.page(R"({"op":"stop"})");
 		_rig.run(300);
 		check(_rig.machineDoc() && !_rig.machineDoc()->find("desk")->find("playing")->asBool(),
-			"the page shows the machine stopped (RAM 0x28cdaf)");
+			"the page shows the machine stopped");
 	}
 
 	// How does the firmware store "no group"? Candidates for the target byte.
@@ -551,6 +569,104 @@ namespace
 		check(shown, "the restored machine's page shows the unsaved edit, marked edited");
 	}
 
+	// P3: REC as on the machine. Live recording starts (hold RECORD, press PLAY), a
+	// track played from the page and a knob moved from the page are recorded by the
+	// firmware (trig; lock on the next note), grid edits wait, REC again leaves
+	// recording and keeps playing.
+	void liveRecording(Rig& _rig)
+	{
+		auto& m = _rig.machine();
+		auto& desk = _rig.desk();
+		std::puts("== P3 live recording (REC)");
+		const auto pattern = *desk.session().state().pattern;
+		const auto p = std::to_string(pattern);
+		_rig.page(R"({"op":"stop","id":40})");
+		_rig.run(300);
+		const auto total = std::to_string(ed::visibleSteps(desk.documents().patterns.at(pattern)));
+		for(const int t : {14, 15})
+		{
+			_rig.page("{\"op\":\"clearSteps\",\"p\":" + p + ",\"t\":" + std::to_string(t) + ",\"from\":0,\"to\":" + total
+				+ ",\"id\":41}");
+			resultOk(_rig);
+			_rig.runUntil([&] { return !desk.isBusy(); }, 2000);
+		}
+		_rig.runUntil([&] { return !desk.isBusy(); }, 2000);
+		{
+			const auto cleared = _rig.readPattern(pattern);
+			int left = 0;
+			for(size_t s = 0; cleared && s < ed::visibleSteps(*cleared); ++s)
+				left += ed::hasTrig(*cleared, 14, s) + ed::hasTrig(*cleared, 15, s);
+			check(cleared && left == 0, "tracks 15 and 16 cleared before recording");
+		}
+		const auto recording = [&]
+		{
+			const auto& d = _rig.machineDoc();
+			return d && d->find("desk")->find("recording")->asBool();
+		};
+		const auto t0 = m.now();
+		_rig.page(R"({"op":"record","id":42})");
+		check(resultOk(_rig), "REC accepted");
+		check(_rig.runUntil(recording, 1000), "live recording starts (hold RECORD, press PLAY)");
+		std::printf("  REC -> recording reported: %.1f ms emulated\n", ms(m.now() - t0));
+		const auto stepIs = [&](const int _s) { return [&m, _s] { return m.playhead() == _s; }; };
+		_rig.runUntil(stepIs(4), 3000);
+		_rig.page(R"({"op":"recTrig","t":15,"id":44})");
+		check(resultOk(_rig), "track 16 played from the page");
+		// A knob move on track 15 FLTF (effects page, param 12), then its note.
+		_rig.runUntil(stepIs(6), 3000);
+		const auto k0 = m.now();
+		_rig.page("{\"op\":\"param\",\"k\":" + std::to_string(*desk.session().state().kit) + R"(,"t":14,"i":12,"v":99,"id":43})");
+		check(resultOk(_rig), "knob move accepted while recording");
+		const bool turned = _rig.runUntil([&] { return m.read8(ed::g_mdWorkingKitAddress + ed::g_mdWorkingKitParamsOffset + 14 * 24 + 12) == 99; }, 1500);
+		check(turned, "the knob move reaches the machine as DATA ENTRY turns");
+		std::printf("  knob move -> value in the machine: %.1f ms emulated (select track, page key, turn)\n", ms(m.now() - k0));
+		_rig.page(R"({"op":"recTrig","t":14,"id":45})");
+		_rig.run(50);
+		_rig.page("{\"op\":\"trig\",\"p\":" + p + R"(,"t":0,"s":3,"id":46})");
+		check(_rig.lastResult() && !_rig.lastResult()->find("ok")->asBool(), "grid edits wait while recording");
+		_rig.runUntil(stepIs(12), 3000);
+		_rig.page(R"({"op":"record","id":47})");
+		check(_rig.runUntil([&] { return !recording(); }, 1000), "REC again leaves recording");
+		const auto& md = _rig.machineDoc();
+		check(md && md->find("desk")->find("playing")->asBool(), "and the pattern keeps playing");
+		const auto trigsOf = [&](const Value& _doc, const int _t)
+		{
+			std::vector<int> s;
+			for(const auto& v : _doc.find("tracks")->asArray()[size_t(_t)].find("trigs")->asArray())
+				s.push_back(int(v.asNumber()));
+			return s;
+		};
+		const bool shown = _rig.runUntil([&]
+		{
+			const auto d = _rig.pageDoc("pattern", pattern);
+			return d && !trigsOf(*d, 15).empty() && !trigsOf(*d, 14).empty();
+		}, 2000);
+		check(shown, "the recorded trigs reach the page's pattern document");
+		const auto d = _rig.pageDoc("pattern", pattern);
+		if(d)
+		{
+			std::printf("  track 16 recorded at step(s):");
+			for(const int s : trigsOf(*d, 15))
+				std::printf(" %d", s + 1);
+			std::printf("; track 15:");
+			for(const int s : trigsOf(*d, 14))
+				std::printf(" %d", s + 1);
+			std::printf("\n");
+			bool lock = false;
+			for(const auto& l : d->find("locks")->asArray())
+				if(l.find("track")->asNumber() == 14 && l.find("param")->asNumber() == 12)
+					for(const auto& sv : l.find("steps")->asArray())
+					{
+						std::printf("  lock track 15 FLTF step %d = %d\n", int(sv.asArray()[0].asNumber()) + 1,
+							int(sv.asArray()[1].asNumber()));
+						lock |= sv.asArray()[1].asNumber() == 99;
+					}
+			check(lock, "the knob move was recorded as a lock (99) on track 15's note");
+		}
+		_rig.page(R"({"op":"stop","id":48})");
+		_rig.run(300);
+	}
+
 int main(const int _argc, char** _argv)
 {
 	std::setvbuf(stdout, nullptr, _IOLBF, 0);
@@ -570,6 +686,7 @@ int main(const int _argc, char** _argv)
 			const auto patch = workingKitTruth(rig);
 			restoredKitTruth(rom, _argv[1], patch, kit, rig.desk().documents().kits.at(kit).params[0][2]);
 		}
+		liveRecording(rig);
 		if(_argc > 2 && std::string(_argv[2]) == "probe")
 		{
 			probeGroups(rig);

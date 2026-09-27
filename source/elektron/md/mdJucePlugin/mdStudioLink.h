@@ -46,8 +46,11 @@ namespace mdJucePlugin
 		// Kit parameter 0-23, 24 = level, through pluginLib::Parameter (Origin::Ui).
 		bool setKitParam(uint8_t _track, uint8_t _index, uint8_t _value) const;
 		bool setMute(uint8_t _track, bool _muted) const;
-		// Press and release a front-panel key ("play", "stop"); local MD only.
+		// Press and release a front-panel key: "play", "stop", "record", "recordPlay"
+		// (hold RECORD, press PLAY), "page", "trig1".."trig16". Local MD only.
 		bool pressKey(const std::string& _key);
+		// DATA ENTRY knob 0-7 by _steps.
+		bool turnKnob(uint8_t _encoder, int _steps) const;
 
 		// Lock-free read of the audio thread's MD OS 1.63 RAM telemetry.
 		mdDesk::Telemetry readTelemetry();
@@ -71,6 +74,7 @@ namespace mdJucePlugin
 
 	private:
 		void onDeviceSysex(const synthLib::SysexBuffer& _message);
+		bool sendPanel(uint8_t _row, uint8_t _mask) const;
 		pluginLib::Parameter* parameter(uint8_t _track, uint8_t _index) const;
 
 		AudioPluginAudioProcessor& m_processor;

@@ -126,6 +126,48 @@ namespace md
 		}
 	}
 
+	std::vector<PanelPacket> panelKeySequence(const MachineModel _model, const std::string& _key)
+	{
+		std::optional<PanelControl> control;
+		if(_key == "play")
+			control = PanelControl::Play;
+		else if(_key == "stop")
+			control = PanelControl::Stop;
+		else if(_key == "record" || _key == "recordPlay")
+			control = PanelControl::Record;
+		else if(_key == "page")
+			control = PanelControl::SynthesisEffectsRouting;
+		else if(_key.size() > 4 && _key.compare(0, 4, "trig") == 0)
+		{
+			int n = 0;
+			for(size_t i = 4; i < _key.size(); ++i)
+			{
+				if(_key[i] < '0' || _key[i] > '9')
+					return {};
+				n = n * 10 + (_key[i] - '0');
+			}
+			if(n < 1 || n > 16)
+				return {};
+			control = static_cast<PanelControl>(static_cast<int>(PanelControl::Trigger1) + n - 1);
+		}
+		if(!control)
+			return {};
+		const auto packet = panelPacket(_model, *control);
+		if(!packet)
+			return {};
+		std::vector<PanelPacket> states{*packet};
+		if(_key == "recordPlay")
+		{
+			const auto play = panelPacket(_model, PanelControl::Play);
+			if(!play || play->row != packet->row)
+				return {};
+			states.push_back({packet->row, static_cast<uint8_t>(packet->mask | play->mask)});
+			states.push_back(*packet);
+		}
+		states.push_back({packet->row, 0});
+		return states;
+	}
+
 	std::optional<PanelPacket> panelEncoderPressPacket(const MachineModel _model,
 		const PanelEncoder _encoder)
 	{

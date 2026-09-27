@@ -667,7 +667,7 @@ namespace md
 	{
 		m_hardware->processAudio(_inputs, _outputs,
 			static_cast<uint32_t>(_samples), getExtraLatencySamples());
-		publishSequencerTelemetry();
+		publishSequencerTelemetry(_samples);
 		if(m_deferredPreparedState && m_deferredPreparedState->m_hardware
 			&& m_deferredPreparedState->m_hardware->isProjectStateRestorePending())
 		{
@@ -678,24 +678,34 @@ namespace md
 		}
 	}
 
-	void Device::publishSequencerTelemetry()
+	void Device::publishSequencerTelemetry(const size_t _frames)
 	{
 		// Plain RAM reads on the thread that owns the hardware, once per block.
-		constexpr uint32_t stepAddress = 0x261aa7;
 		constexpr uint32_t patternAddress = 0x28d205;
-		constexpr uint32_t stoppedAddress = 0x28cdaf;	// 1 stopped, 0 playing
+		// Playing and recording: md::SequencerState (the stopped byte alone reads
+		// "playing" after STOP pressed twice).
 		auto& t = *m_sequencerTelemetry;
 		if(m_model != MachineModel::Machinedrum || m_hardware->firmwareFingerprint() != g_mdOs163Fingerprint)
 		{
 			t.step.store(-1, std::memory_order_relaxed);
 			t.pattern.store(-1, std::memory_order_relaxed);
 			t.playing.store(-1, std::memory_order_relaxed);
+			t.recording.store(-1, std::memory_order_relaxed);
+			t.gridEdit.store(-1, std::memory_order_relaxed);
+			t.knobPage.store(-1, std::memory_order_relaxed);
 			return;
 		}
 		auto& uc = m_hardware->getUC();
-		t.step.store(uc.read8(stepAddress), std::memory_order_relaxed);
+		const auto step = uc.read8(SequencerState::g_stepAddress);
+		t.step.store(step, std::memory_order_relaxed);
 		t.pattern.store(uc.read8(patternAddress), std::memory_order_relaxed);
-		t.playing.store(uc.read8(stoppedAddress) == 0 ? 1 : 0, std::memory_order_relaxed);
+		m_sequencer.update(step, uc.read8(SequencerState::g_stoppedAddress), uc.read8(SequencerState::g_recordLedAddress),
+			_frames);
+		t.playing.store(m_sequencer.playing() ? 1 : 0, std::memory_order_relaxed);
+		t.recording.store(m_sequencer.recording() ? 1 : 0, std::memory_order_relaxed);
+		t.gridEdit.store(m_sequencer.gridEdit() ? 1 : 0, std::memory_order_relaxed);
+		const auto page = uc.read8(SequencerState::g_knobPageAddress);
+		t.knobPage.store(page <= 2 ? page : -1, std::memory_order_relaxed);
 		const auto blocks = t.blocks.fetch_add(1, std::memory_order_release);
 
 		// The working kit, about 90 times a second, published only when it changed.

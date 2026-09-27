@@ -188,6 +188,8 @@ namespace mdDesk
 			}
 			m_machineDirty = true;
 		}
+		else if(op == "record" || op == "recTrig")
+			handleRecord(_message);
 		else if(op == "play" || op == "stop")
 		{
 			const bool ok = m_port.pressKey && m_port.pressKey(op);
@@ -238,6 +240,16 @@ namespace mdDesk
 			result(_message, edit.errors, {});
 			return;
 		}
+		// While live recording the firmware writes the playing pattern itself; a dump
+		// from the desk would overwrite what it just recorded.
+		if(m_telemetry.recording)
+			for(const auto& c : edit.changes)
+				if(c.ref().kind == DocKind::Pattern && m_session.state().pattern == c.ref().slot)
+				{
+					result(_message, {"Live recording owns this pattern: play the tracks, turn the knobs. Press REC "
+						"to stop recording, then edit the grid."}, {});
+					return;
+				}
 		std::vector<std::string> errors;
 		std::string note = edit.note;
 		std::vector<Change> delivered;
@@ -279,8 +291,16 @@ namespace mdDesk
 			const auto current = m_docs.kits.find(ref.slot);
 			const auto& from = current != m_docs.kits.end() ? current->second : std::get<ed::MdKit>(_change.before);
 			const auto delivery = kitDelivery(from, std::get<ed::MdKit>(_change.after));
+			bool live = false;
 			for(const auto& e : delivery.edits)
 			{
+				if(e.kind == LiveEdit::Kind::Param && m_telemetry.recording && m_port.turnKnob)
+				{
+					// Recorded as a lock only when it comes from the knobs (P3).
+					m_knobs.want(e.track, e.index, e.value);
+					continue;
+				}
+				live = true;
 				if(e.kind == LiveEdit::Kind::Param || e.kind == LiveEdit::Kind::Level)
 				{
 					if(m_port.sendKitParam)
@@ -293,10 +313,9 @@ namespace mdDesk
 				_note += (_note.empty() ? "" : ". ") + n + " stays as it is on the machine";
 			m_docs.set(_change.after);
 			if(!delivery.edits.empty())
-			{
 				m_session.noteWorkingKitEdited();
+			if(live)
 				m_lastLiveEditMs = m_port.nowMs();
-			}
 			m_dirty.insert(ref);
 			break;
 		}
@@ -352,6 +371,89 @@ namespace mdDesk
 			return;
 		}
 		m_pushSentMs[ref] = m_port.nowMs();
+	}
+
+	// REC works as on the machine: hold RECORD and press PLAY to live record (from
+	// STOP; while playing the firmware does not enter it, so the desk stops first),
+	// PLAY again to leave recording and keep playing. recTrig plays a track like its
+	// TRIG key, which the firmware records.
+	void Desk::handleRecord(const Value& _message)
+	{
+		const auto press = [&](const std::string& _key) { return m_port.pressKey && m_port.pressKey(_key); };
+		if(opOf(_message) == "recTrig")
+		{
+			const auto t = intOf(_message, "t");
+			if(!t || *t < 0 || *t > 15)
+				result(_message, {"t: expected a track 0-15"}, {});
+			else if(!m_telemetry.recording)
+				result(_message, {"Not recording: press REC first"}, {});
+			else
+				result(_message, press("trig" + std::to_string(*t + 1)) ? std::vector<std::string>{}
+					: std::vector<std::string>{"TRIG keys need the local emulated machine"}, {});
+			return;
+		}
+		if(!m_telemetry.valid)
+		{
+			result(_message, {"Live recording needs MD OS 1.63 telemetry"}, {});
+			return;
+		}
+		if(m_telemetry.recording)
+		{
+			const bool ok = press("play");
+			result(_message, ok ? std::vector<std::string>{} : std::vector<std::string>{"No panel here"},
+				"Recording off, the pattern keeps playing");
+			return;
+		}
+		if(m_telemetry.playing)
+		{
+			press("stop");
+			m_recordAfterStopMs = m_port.nowMs();
+			result(_message, {}, "Live recording from step 1 (the Machinedrum starts it from STOP)");
+			return;
+		}
+		const bool ok = press("recordPlay");
+		result(_message, ok ? std::vector<std::string>{} : std::vector<std::string>{"No panel here"},
+			"Live recording: play the tracks, turn the knobs");
+	}
+
+	void Desk::pumpRecording(const double _now)
+	{
+		// REC pressed while playing: live recording starts once the machine stopped.
+		if(m_recordAfterStopMs >= 0)
+		{
+			if(!m_telemetry.playing && m_port.pressKey)
+				m_port.pressKey("recordPlay");
+			if(!m_telemetry.playing || _now - m_recordAfterStopMs > 1500)
+				m_recordAfterStopMs = -1;
+		}
+		if(!m_telemetry.recording)
+			return;
+		// What the firmware records shows up in the pattern: read it back now and then.
+		const auto pattern = m_session.state().pattern;
+		if(pattern && _now - m_recordPollMs > 400 && !isBusy())
+		{
+			m_recordPollMs = _now;
+			load({DocKind::Pattern, *pattern}, true);
+		}
+		const auto* memory = m_workingKit && currentKit() == m_workingKit->position ? &*m_workingKit : nullptr;
+		const auto step = m_knobs.next(_now, m_telemetry.knobPage, memory);
+		if(!step)
+			return;
+		switch(step->kind)
+		{
+		case KnobStep::Kind::SelectTrack:
+			if(m_port.sendSysex)
+				m_port.sendSysex(ed::mdSetStatus(ed::MdStatus::Track, step->track));
+			break;
+		case KnobStep::Kind::PageKey:
+			if(m_port.pressKey)
+				m_port.pressKey("page");
+			break;
+		case KnobStep::Kind::Turn:
+			if(m_port.turnKnob && step->steps)
+				m_port.turnKnob(step->encoder, step->steps);
+			break;
+		}
 	}
 
 	void Desk::handleUndo(const bool _redo, const Value& _message)
@@ -613,6 +715,9 @@ namespace mdDesk
 			kit->revision = stored->second.revision;
 		}
 		m_workingKit = *kit;
+		// Knob moves still on their way stay in the view.
+		for(const auto& [key, value] : m_knobs.targets())
+			kit->params[key.first][key.second] = value;
 		const auto doc = m_docs.kits.find(kit->position);
 		if(doc == m_docs.kits.end() || doc->second != *kit)
 		{
@@ -640,7 +745,10 @@ namespace mdDesk
 	void Desk::onTelemetry(const Telemetry& _t)
 	{
 		const bool changed = _t.step != m_telemetry.step || _t.pattern != m_telemetry.pattern
-			|| _t.playing != m_telemetry.playing || _t.valid != m_telemetry.valid;
+			|| _t.playing != m_telemetry.playing || _t.valid != m_telemetry.valid
+			|| _t.recording != m_telemetry.recording || _t.gridEdit != m_telemetry.gridEdit
+			|| _t.knobPage != m_telemetry.knobPage;
+		const bool recordingChanged = _t.recording != m_telemetry.recording;
 		const bool patternChanged = _t.valid && _t.pattern != m_telemetry.pattern;
 		const bool wasPlaying = m_telemetry.playing;
 		const bool wrapped = _t.valid && m_telemetry.step >= 0 && _t.step >= 0 && _t.step < m_telemetry.step;
@@ -666,6 +774,14 @@ namespace mdDesk
 		}
 		if(wasPlaying != _t.playing)
 			m_machineDirty = true;
+		if(recordingChanged)
+		{
+			m_knobs.reset();
+			m_machineDirty = true;
+			// The last recorded notes: read the pattern back.
+			if(!_t.recording && m_session.state().pattern)
+				load({DocKind::Pattern, *m_session.state().pattern}, true);
+		}
 		// The sequencer switched on its own (chain, panel, program change): ask.
 		if(patternChanged && m_ready && m_session.state().pattern != _t.pattern && m_port.sendSysex)
 		{
@@ -679,6 +795,7 @@ namespace mdDesk
 		t.set("step", _t.step);
 		t.set("pattern", _t.pattern);
 		t.set("playing", _t.playing);
+		t.set("recording", _t.recording);
 		t.set("valid", _t.valid);
 		publish(t);
 	}
@@ -816,6 +933,7 @@ namespace mdDesk
 		if(m_ready)
 			pumpLoads(now);
 		applyWorkingKit();
+		pumpRecording(now);
 
 		for(auto it = m_pushSentMs.begin(); it != m_pushSentMs.end();)
 		{
@@ -913,6 +1031,9 @@ namespace mdDesk
 		desk.set("queued", m_audibleQueue ? Value(static_cast<int>(*m_audibleQueue)) : Value());
 		desk.set("playing", m_telemetry.playing);
 		desk.set("telemetry", m_telemetry.valid);
+		desk.set("recording", m_telemetry.recording);
+		desk.set("gridEdit", m_telemetry.gridEdit);
+		desk.set("knobPage", m_telemetry.knobPage);
 		// "memory": the current kit document is read from the machine's memory.
 		// "tracked": it is the stored slot plus the edits the desk saw.
 		desk.set("kitSource", m_workingKit && currentKit() == m_workingKit->position ? "memory" : "tracked");

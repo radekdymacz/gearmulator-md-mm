@@ -254,7 +254,10 @@
             "undo": {"type": "boolean"}, "redo": {"type": "boolean"},
             "undoCount": {"type": "integer", "minimum": 0}, "redoCount": {"type": "integer", "minimum": 0},
             "queued": {"oneOf": [{"type": "null"}, {"type": "integer", "minimum": 0, "maximum": 127}], "description": "Selected while playing and not heard yet (clears at the playhead wrap)."},
-            "playing": {"type": "boolean"},
+            "playing": {"type": "boolean", "description": "The playhead moves (md::SequencerState)."},
+            "recording": {"type": "boolean", "description": "Live recording (RECORD held + PLAY): the RECORD LED blinks while playing."},
+            "gridEdit": {"type": "boolean", "description": "Grid edit (RECORD alone): the RECORD LED is steady."},
+            "knobPage": {"type": "integer", "minimum": -1, "maximum": 2, "description": "DATA ENTRY page: 0 synthesis, 1 effects, 2 routing, -1 unknown."},
             "telemetry": {"type": "boolean", "description": "Playhead and state come from MD OS 1.63 RAM."},
             "mutes": {"type": "array", "items": {"$ref": "#/$defs/track"}},
             "kitSource": {"enum": ["memory", "tracked"], "description": "memory: the current kit document is the working kit read from the machine's memory (P3). tracked: the stored slot plus the edits the desk saw."}

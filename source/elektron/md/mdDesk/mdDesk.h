@@ -3,6 +3,7 @@
 #include "mdDeskDelivery.h"
 #include "mdDeskEdit.h"
 #include "mdDeskHistory.h"
+#include "mdDeskRecord.h"
 
 #include "elektronData/json.h"
 #include "mdDataLink/mdDataLink.h"
@@ -24,6 +25,9 @@ namespace mdDesk
 		int step = -1;			// 0-based, -1 unknown
 		int pattern = -1;		// the pattern the sequencer plays, -1 unknown
 		bool playing = false;
+		bool recording = false;	// live recording (RECORD held + PLAY)
+		bool gridEdit = false;	// grid edit (RECORD alone)
+		int knobPage = -1;		// DATA ENTRY page: 0 synthesis, 1 effects, 2 routing
 		bool valid = false;		// false: no telemetry for this firmware
 	};
 
@@ -46,8 +50,12 @@ namespace mdDesk
 			// Live kit parameter: index 0-23, or 24 for the track level (CCs).
 			std::function<void(uint8_t _track, uint8_t _index, uint8_t _value)> sendKitParam;
 			std::function<void(uint8_t _track, bool _muted)> sendMute;
-			// "play" or "stop" as a panel key press; false when not possible here.
+			// A panel key press and release; false when not possible here. Keys:
+			// "play", "stop", "record", "recordPlay" (hold RECORD, press PLAY: live
+			// recording), "page" (SYNTHESIS/EFFECTS/ROUTING), "trig1".."trig16".
 			std::function<bool(const std::string& _key)> pressKey;
+			// DATA ENTRY knob 0-7 turned by _steps (one step = one value).
+			std::function<bool(uint8_t _encoder, int _steps)> turnKnob;
 			std::function<void(const Value& _message)> toPage;
 			std::function<double()> nowMs;
 		};
@@ -105,6 +113,8 @@ namespace mdDesk
 		void deliverSong(const elektronData::MdSong& _s, std::vector<std::string>& _errors);
 		void handleUndo(bool _redo, const Value& _message);
 		void handleSelect(const Value& _message);
+		void handleRecord(const Value& _message);
+		void pumpRecording(double _now);
 
 		void onPattern(const elektronData::MdPattern& _p);
 		void onKit(const elektronData::MdKit& _k);
@@ -157,6 +167,9 @@ namespace mdDesk
 		std::optional<uint8_t> m_lastPattern;
 		Telemetry m_telemetry;
 		std::array<bool, 16> m_mutes{};
+		KnobRecorder m_knobs;
+		double m_recordPollMs = -1e9;
+		double m_recordAfterStopMs = -1;
 		std::vector<std::pair<double, std::function<void()>>> m_scheduled;
 	};
 }

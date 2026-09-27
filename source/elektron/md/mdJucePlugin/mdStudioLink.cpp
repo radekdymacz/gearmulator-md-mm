@@ -13,6 +13,8 @@
 
 #include "juce_events/juce_events.h"
 
+#include <cstdlib>
+
 namespace mdJucePlugin
 {
 	namespace
@@ -114,33 +116,43 @@ namespace mdJucePlugin
 		}
 	}
 
+	bool StudioLink::sendPanel(const uint8_t _row, const uint8_t _mask) const
+	{
+		return m_processor.getPlugin().withDeviceLocked([&](synthLib::Device* _base)
+		{
+			auto* device = dynamic_cast<md::Device*>(_base);
+			return device && device->sendPanelEvent(_row, _mask);
+		});
+	}
+
 	bool StudioLink::pressKey(const std::string& _key)
 	{
-		const auto control = _key == "play" ? md::PanelControl::Play : _key == "stop" ? md::PanelControl::Stop
-			: md::PanelControl::Record;
-		if(_key != "play" && _key != "stop")
+		const auto states = md::panelKeySequence(md::MachineModel::Machinedrum, _key);
+		if(states.empty() || !sendPanel(states.front().row, states.front().mask))
 			return false;
-		const auto packet = md::panelPacket(md::MachineModel::Machinedrum, control);
-		if(!packet)
-			return false;
-		const auto send = [this](const uint8_t _row, const uint8_t _mask)
+		// The firmware scans the panel every few ms; hold each state 40 ms.
+		for(size_t i = 1; i < states.size(); ++i)
 		{
-			return m_processor.getPlugin().withDeviceLocked([&](synthLib::Device* _base)
+			juce::Timer::callAfterDelay(static_cast<int>(40 * i), [alive = std::weak_ptr<StudioLink*>(m_alive), s = states[i]]
 			{
-				auto* device = dynamic_cast<md::Device*>(_base);
-				return device && device->sendPanelEvent(_row, _mask);
+				const auto self = alive.lock();
+				if(self && *self)
+					(*self)->sendPanel(s.row, s.mask);
 			});
-		};
-		if(!send(packet->row, packet->mask))
-			return false;
-		// Release like a finger would; the firmware scans the panel every few ms.
-		juce::Timer::callAfterDelay(60, [alive = std::weak_ptr<StudioLink*>(m_alive), send, row = packet->row]
-		{
-			const auto self = alive.lock();
-			if(self && *self)
-				send(row, 0);
-		});
+		}
 		return true;
+	}
+
+	bool StudioLink::turnKnob(const uint8_t _encoder, const int _steps) const
+	{
+		const auto command = md::panelEncoderCommand(md::MachineModel::Machinedrum,
+			static_cast<md::PanelEncoder>(_encoder));
+		if(_encoder > 7 || !command || !_steps)
+			return false;
+		bool ok = true;
+		for(int i = 0; i < std::abs(_steps) && ok; ++i)
+			ok = sendPanel(*command, _steps > 0 ? 0x01 : 0xff);
+		return ok;
 	}
 
 	mdDesk::Telemetry StudioLink::readTelemetry()
@@ -166,6 +178,9 @@ namespace mdJucePlugin
 		t.step = step;
 		t.pattern = m_telemetry->pattern.load(std::memory_order_relaxed);
 		t.playing = playing == 1;
+		t.recording = m_telemetry->recording.load(std::memory_order_relaxed) == 1;
+		t.gridEdit = m_telemetry->gridEdit.load(std::memory_order_relaxed) == 1;
+		t.knobPage = m_telemetry->knobPage.load(std::memory_order_relaxed);
 		return t;
 	}
 

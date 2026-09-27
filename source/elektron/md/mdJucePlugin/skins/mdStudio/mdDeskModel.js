@@ -101,6 +101,8 @@ function deriveView(S) {
 	S.mode = (M.extendedMode != null ? M.extendedMode : G ? G.extendedMode : true) ? "EXTENDED" : "CLASSIC";
 	S.bpm = G ? G.tempo : 120;
 	S.playing = !!desk.playing;
+	S.rec = !!desk.recording;		/* live recording, from the machine (RECORD LED blinking) */
+	S.gridEdit = !!desk.gridEdit;
 	S.tx = !!desk.tx;
 	S.roundTrip = desk.roundTripMs;
 	S.firmware = desk.firmware || "booting";

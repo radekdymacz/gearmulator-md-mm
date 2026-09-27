@@ -549,6 +549,42 @@ namespace
 		std::printf(" (%d)\n", shown);
 		for(const auto& [k, v] : st)
 			std::printf("  %s: 27f976=%02x 27f977=%02x 2818e1=%02x\n", k.c_str(), v[0x7f976], v[0x7f977], v[0x818e1]);
+		// Transitions, with the two mode bytes after each.
+		const auto show = [&](const char* _what)
+		{
+			m.run(250);
+			std::printf("  %-28s 27f976=%02x 27f977=%02x playing %d\n", _what, m.read8(0x27f976), m.read8(0x27f977),
+				m.read8(0x28cdaf) == 0);
+		};
+		show("stopped");
+		rawPanel(m, 0x22, 0x02); rawPanel(m, 0x22, 0x06); rawPanel(m, 0x22, 0x02); rawPanel(m, 0x22, 0x00);
+		show("REC+PLAY (live recording)");
+		m.panel(md::PanelControl::Play);
+		show("PLAY (exit rec, keep playing)");
+		m.panel(md::PanelControl::Record);
+		show("RECORD while playing (grid)");
+		m.panel(md::PanelControl::Record);
+		show("RECORD again");
+		m.panel(md::PanelControl::Stop);
+		show("STOP");
+		m.panel(md::PanelControl::Record);
+		show("RECORD stopped (grid)");
+		m.panel(md::PanelControl::Play);
+		show("PLAY in grid");
+		m.panel(md::PanelControl::Stop);
+		show("STOP in grid");
+		m.panel(md::PanelControl::Record);
+		show("RECORD (exit grid)");
+		rawPanel(m, 0x22, 0x02); rawPanel(m, 0x22, 0x06); rawPanel(m, 0x22, 0x02); rawPanel(m, 0x22, 0x00);
+		show("REC+PLAY again");
+		m.panel(md::PanelControl::Stop);
+		show("STOP while recording");
+		m.panel(md::PanelControl::SynthesisEffectsRouting);
+		show("page key");
+		rawPanel(m, 0x22, 0x02); rawPanel(m, 0x22, 0x06); rawPanel(m, 0x22, 0x02); rawPanel(m, 0x22, 0x00);
+		show("REC+PLAY on effects page");
+		m.panel(md::PanelControl::Stop);
+		show("STOP");
 		std::printf("  grid-edit candidates:");
 		shown = 0;
 		for(uint32_t a = 0; a < st["stop"].size(); ++a)
@@ -681,6 +717,137 @@ namespace
 		}
 		m.onSysex = nullptr;
 	}
+
+	// A playing flag that holds after STOP pressed twice, PLAY-pause, and in live
+	// recording: bytes equal in every "moving" state and different in every "still" one.
+	void playingFlag(const Bytes& _rom)
+	{
+		std::puts("== probe: RAM flags for 'moving' and 'live recording'");
+		Machine m(_rom, g_romName);
+		struct State { bool moving; bool live; std::vector<Bytes> ram; };
+		std::vector<State> states;
+		const auto recPlay = [&] { rawPanel(m, 0x22, 0x02); rawPanel(m, 0x22, 0x06); rawPanel(m, 0x22, 0x02); rawPanel(m, 0x22, 0x00); };
+		const auto grab = [&](const bool _moving, const bool _live, const char* _what)
+		{
+			m.run(200);
+			State s{_moving, _live, {}};
+			const auto s0 = m.playhead();
+			for(int i = 0; i < 4; ++i)
+			{
+				m.run(90);
+				s.ram.push_back(m.snapshotRam());
+			}
+			bool on = false, off = false;
+			for(int i = 0; i < 60; ++i)
+			{
+				m.run(20);
+				((m.read8(0x27f977) & 0x10) ? on : off) = true;
+			}
+			std::printf("  %-26s step %u -> %u, REC LED %s%s\n", _what, s0, m.playhead(), on && off ? "blinks" : on ? "on" : "off",
+				(on && off) != _live ? "  <-- label wrong" : "");
+			states.push_back(std::move(s));
+		};
+		grab(false, false, "boot");
+		m.panel(md::PanelControl::Stop);
+		grab(false, false, "STOP while stopped");
+		m.panel(md::PanelControl::Play);
+		grab(true, false, "PLAY");
+		m.panel(md::PanelControl::Play);
+		grab(false, false, "PLAY again (pause)");
+		m.panel(md::PanelControl::Play);
+		grab(true, false, "PLAY (resume)");
+		m.panel(md::PanelControl::Stop);
+		grab(false, false, "STOP");
+		recPlay();
+		grab(true, true, "REC+PLAY from STOP");
+		m.panel(md::PanelControl::Play);
+		grab(true, false, "PLAY (leave rec)");
+		m.panel(md::PanelControl::Stop);
+		m.panel(md::PanelControl::Stop);
+		grab(false, false, "STOP STOP");
+		recPlay();
+		grab(true, true, "REC+PLAY from STOP STOP");
+		m.panel(md::PanelControl::Stop);
+		grab(false, false, "STOP (from rec)");
+		m.panel(md::PanelControl::Record);
+		grab(false, false, "grid");
+		m.panel(md::PanelControl::Play);
+		grab(true, false, "grid + PLAY");
+		m.panel(md::PanelControl::Stop);
+		m.panel(md::PanelControl::Record);
+		grab(false, false, "STOP, grid off");
+		const auto find = [&](const char* _name, auto _key)
+		{
+			std::printf("  %s candidates:", _name);
+			int n = 0;
+			for(size_t a = 0; a < states[0].ram[0].size(); ++a)
+			{
+				std::optional<uint8_t> on, off;
+				bool ok = true;
+				for(const auto& s : states)
+					for(const auto& ram : s.ram)
+					{
+						auto& want = _key(s) ? on : off;
+						if(!want)
+							want = ram[a];
+						ok &= *want == ram[a];
+					}
+				if(ok && on && off && on != off && n++ < 16)
+					std::printf(" %06zx=%02x/%02x", a + 0x200000, *off, *on);
+			}
+			std::printf(" (%d)\n", n);
+		};
+		// Time series: 1.2 s of samples every 20 ms of the two LED-ish bytes.
+		const auto series = [&](const char* _what)
+		{
+			std::string a, b, c;
+			for(int i = 0; i < 60; ++i)
+			{
+				m.run(20);
+				a += (m.read8(0x27f977) & 0x10) ? '#' : '.';
+				b += (m.read8(0x25ac91) & 0x04) ? '#' : '.';
+				c += m.read8(0x28cdaf) ? '#' : '.';
+			}
+			std::printf("  %-18s REC-LED %s\n  %-18s PLAY    %s\n  %-18s 28cdaf  %s\n", _what, a.c_str(), "", b.c_str(), "", c.c_str());
+		};
+		m.panel(md::PanelControl::Stop);
+		series("stopped");
+		m.panel(md::PanelControl::Play);
+		series("playing");
+		m.panel(md::PanelControl::Play);
+		series("paused");
+		m.panel(md::PanelControl::Stop);
+		recPlay();
+		series("live rec");
+		m.panel(md::PanelControl::Play);
+		series("left rec, playing");
+		m.panel(md::PanelControl::Stop);
+		m.panel(md::PanelControl::Record);
+		series("grid");
+		m.panel(md::PanelControl::Play);
+		series("grid + playing");
+		m.panel(md::PanelControl::Stop);
+		m.panel(md::PanelControl::Record);
+		// How long must RECORD be held before PLAY? Five tries per timing.
+		for(const double hold : {20.0, 40.0, 80.0, 150.0})
+		{
+			int ok = 0;
+			for(int i = 0; i < 5; ++i)
+			{
+				m.panel(md::PanelControl::Stop);
+				m.run(100 + 37 * i);
+				rawPanel(m, 0x22, 0x02, hold);
+				rawPanel(m, 0x22, 0x06, hold);
+				rawPanel(m, 0x22, 0x02, hold);
+				rawPanel(m, 0x22, 0x00, hold);
+				m.run(200);
+				ok += (m.read8(0x27f977) & 0x10) != 0;
+			}
+			std::printf("  hold %.0f ms: live recording %d of 5\n", hold, ok);
+		}
+		find("moving", [](const State& _s) { return _s.moving; });
+		find("live recording", [](const State& _s) { return _s.live; });
+	}
 }
 
 int main(const int _argc, char** _argv)
@@ -703,6 +870,8 @@ int main(const int _argc, char** _argv)
 			liveRecording(rom);
 		if(only.empty() || only == "samples")
 			samples(rom, _argc > 3 ? patchRamFromState(_argv[3], rom) : Bytes{});
+		if(only.empty() || only == "playing")
+			playingFlag(rom);
 		if(only.empty() || only == "recknobs")
 			recordKnobs(rom);
 		if(only.empty() || only == "liverec" || only == "livelocks")
