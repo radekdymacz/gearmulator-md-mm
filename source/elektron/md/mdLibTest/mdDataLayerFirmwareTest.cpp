@@ -334,6 +334,7 @@ namespace probes
 {
 	void kitLink(const Bytes& _rom);
 	void session(const Bytes& _rom);
+	void persistence(const Bytes& _rom);
 	void queueRam(const Bytes& _rom);
 	void patternQueue(const Bytes& _rom);
 	void kitPush(const Bytes& _rom);
@@ -361,6 +362,8 @@ int main(const int _argc, char** _argv)
 		if(mode == "probe")
 		{
 			const std::string only = _argc > 3 ? _argv[3] : "";
+			if(only.empty() || only == "persist")
+				probes::persistence(rom);
 			if(only.empty() || only == "session")
 				probes::session(rom);
 			if(only.empty() || only == "link")
@@ -1062,5 +1065,38 @@ namespace probes
 		std::printf("  pushSong(256 rows, %zu bytes): on the wire %.1f ms, read-back %s after %.1f ms,"
 			" reload needed: %s\n", ed::encodeMdSong(s).size(), songSent, song && *song == s ? "equal" : "DIFFERS",
 			ms(songAt - t), st.songReloadNeeded ? "yes" : "no");
+	}
+
+	// What a DAW project keeps: the plug-in state is the 1 MiB patch RAM. Edit
+	// the machine, snapshot patch RAM, boot a second machine from it, compare.
+	void persistence(const Bytes& _rom)
+	{
+		std::puts("== probe: which edits survive a project save/restore (patch-RAM snapshot)");
+		Bytes ram;
+		ed::MdPattern pattern;
+		ed::MdSong song;
+		{
+			Machine m(_rom, g_romName);
+			pattern = *readPattern(m, 0);
+			pattern = ed::withTrig(pattern, 5, 3, !ed::hasTrig(pattern, 5, 3));
+			m.send(ed::encodeMdPattern(pattern));
+			song = *readSong(m, 0);
+			song.rows.front().repeats = 7;
+			m.send(ed::encodeMdSong(song));
+			m.send({0xb0, 8, 5});	// working kit 0, track 1 level: not saved
+			m.send(ed::mdSetStatus(ed::MdStatus::Track, 3));
+			m.run(200);
+			ram = m.hardware().copyPatchRam();
+		}
+		Machine m(_rom, g_romName, ram);
+		const auto p = readPattern(m, 0);
+		const auto s = readSong(m, 0);
+		const auto stored = readKit(m, 0);
+		m.send(ed::mdSaveKit(0));
+		const auto working = readKit(m, 0);
+		std::printf("  pattern dump: %s; song dump: %s; unsaved working-kit edit: %s (level %u, stored %u)\n",
+			p && *p == pattern ? "kept" : "LOST", s && *s == song ? "kept" : "LOST",
+			working && working->levels[0] == 5 ? "kept" : "LOST", working ? working->levels[0] : 0,
+			stored ? stored->levels[0] : 0);
 	}
 }
