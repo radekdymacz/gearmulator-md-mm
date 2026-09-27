@@ -143,7 +143,8 @@ namespace elektronData
 
 			// An integer member in [_min, _max].
 			template<typename T>
-			bool integer(const char* _key, T& _out, const double _min, const double _max, const bool _required = true) const
+			bool integer(const char* _key, T& _out, const double _min, const double _max,
+				const bool _required = true) const
 			{
 				const auto* v = get(_key, _required);
 				if(!v)
@@ -152,7 +153,8 @@ namespace elektronData
 			}
 
 			template<typename T>
-			bool toInteger(const Value& _v, const std::string& _path, T& _out, const double _min, const double _max) const
+			bool toInteger(const Value& _v, const std::string& _path, T& _out, const double _min,
+				const double _max) const
 			{
 				if(!_v.isNumber() || std::floor(_v.asNumber()) != _v.asNumber())
 				{
@@ -163,7 +165,8 @@ namespace elektronData
 				if(n < _min || n > _max)
 				{
 					m_errors.push_back(_path + ": " + std::to_string(static_cast<long long>(n)) + " is outside "
-						+ std::to_string(static_cast<long long>(_min)) + ".." + std::to_string(static_cast<long long>(_max)));
+						+ std::to_string(static_cast<long long>(_min)) + ".."
+						+ std::to_string(static_cast<long long>(_max)));
 					return false;
 				}
 				_out = static_cast<T>(n);
@@ -880,7 +883,8 @@ namespace elektronData
 			routing.push(r < g_outputs.size() ? Value(g_outputs[r]) : Value(static_cast<int>(r)));
 		v.set("routing", std::move(routing));
 		v.set("tempo", _g.tempo / 24.0);
-		v.set("extendedMode", _g.extendedMode <= 1 ? Value(_g.extendedMode == 1) : Value(static_cast<int>(_g.extendedMode)));
+		v.set("extendedMode", _g.extendedMode <= 1 ? Value(_g.extendedMode == 1)
+			: Value(static_cast<int>(_g.extendedMode)));
 		v.set("baseChannel", static_cast<int>(_g.baseChannel));
 		Value keymap = Value::array();
 		for(const auto k : _g.keymap)

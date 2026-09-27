@@ -185,8 +185,9 @@ namespace
 			l.shape1 = static_cast<uint8_t>(nextRandom(_seed) % 6);
 			l.shape2 = static_cast<uint8_t>(nextRandom(_seed) % 6);
 			l.update = static_cast<uint8_t>(nextRandom(_seed) % 3);
-			k.trigGroups[t] = nextRandom(_seed) % 3 ? ed::MdKit::g_noGroup : static_cast<uint8_t>(nextRandom(_seed) % 16);
-			k.muteGroups[t] = nextRandom(_seed) % 3 ? ed::MdKit::g_noGroup : static_cast<uint8_t>(nextRandom(_seed) % 16);
+			const auto group = [&] { return static_cast<uint8_t>(nextRandom(_seed) % 16); };
+			k.trigGroups[t] = nextRandom(_seed) % 3 ? ed::MdKit::g_noGroup : group();
+			k.muteGroups[t] = nextRandom(_seed) % 3 ? ed::MdKit::g_noGroup : group();
 		}
 		for(auto& fx : k.masterFx)
 			for(auto& p : fx)
@@ -308,7 +309,8 @@ namespace
 			const auto s = randomSong(seed, slot, rows);
 			require(ed::validate(s).empty(), "generated song does not validate");
 			m.send(ed::encodeMdSong(s));
-			const auto back = ed::decodeMdSong(dump("programmed/song", ed::mdSongRequest(slot), ed::g_mdSongDump, slot));
+			const auto back = ed::decodeMdSong(dump("programmed/song", ed::mdSongRequest(slot), ed::g_mdSongDump,
+				slot));
 			noteNormalisation(report, "song", s, back);
 		}
 		for(uint8_t slot = 0; slot < 8; ++slot)
@@ -614,7 +616,8 @@ namespace probes
 		edited.rows[5].pattern = 41;
 		const auto drained = m.send(ed::encodeMdSong(edited));
 		track(5000);
-		std::printf("  song 10 11 12 13 14 15, rows 5-6 pushed as 40 41 mid-play (drained %.1f ms): played", ms(drained));
+		std::printf("  song 10 11 12 13 14 15, rows 5-6 pushed as 40 41 mid-play (drained %.1f ms): played",
+			ms(drained));
 		for(const auto p : order)
 			std::printf(" %d", p);
 		std::printf("\n");
@@ -749,7 +752,8 @@ namespace probes
 			const double step = 60000.0 / 125.0 / 4.0;
 			const double first = ne ? even / ne : 0;
 			std::printf("  swingAmount %5u (%d %%): onset gaps %.1f / %.1f ms -> swing %.1f %% (expected %d %%)\n",
-				amount, ed::swingPercent(amount), first, no ? odd / no : 0, 50.0 * first / step, ed::swingPercent(amount));
+				amount, ed::swingPercent(amount), first, no ? odd / no : 0, 50.0 * first / step,
+				ed::swingPercent(amount));
 		}
 
 		// Tempo multiplier: step period from the playhead.
@@ -806,7 +810,8 @@ namespace probes
 				if(back->accentAmount != _p.accentAmount)
 					diff += " accent " + std::to_string(_p.accentAmount) + "->" + std::to_string(back->accentAmount);
 				if(back->tempoMultiplier != _p.tempoMultiplier)
-					diff += " mult " + std::to_string(_p.tempoMultiplier) + "->" + std::to_string(back->tempoMultiplier);
+					diff += " mult " + std::to_string(_p.tempoMultiplier) + "->"
+						+ std::to_string(back->tempoMultiplier);
 				if(back->lockRows != _p.lockRows || back->lockMasks != _p.lockMasks)
 					diff += " locks changed";
 				if(back->trigs != _p.trigs)
@@ -964,7 +969,8 @@ namespace probes
 				&& playing1[a] == 1;
 			if(next || current)
 				std::printf("  0x%06x: idle %u, A03 queued %u, A03 playing %u, A02 queued %u, A02 playing %u -> %s\n",
-					0x200000 + a, idle[a], queued2[a], playing2[a], queued1[a], playing1[a], next ? "next?" : "current");
+					0x200000 + a, idle[a], queued2[a], playing2[a], queued1[a], playing1[a],
+					next ? "next?" : "current");
 		}
 	}
 
@@ -1009,7 +1015,8 @@ namespace probes
 		auto t = m.now();
 		link.pushPattern(a02);
 		waitFor([&] { return pattern.has_value(); }, 500);
-		std::printf("  pushPattern: read-back value %s after %.1f ms\n", pattern && *pattern == a02 ? "equal" : "DIFFERS",
+		std::printf("  pushPattern: read-back value %s after %.1f ms\n",
+			pattern && *pattern == a02 ? "equal" : "DIFFERS",
 			ms(patternAt - t));
 		m.send({0xb0, 8, 5});
 		link.noteWorkingKitEdited();
@@ -1035,7 +1042,8 @@ namespace probes
 			link.requestStatus();
 			m.run(20);
 		}
-		std::printf("  selectPattern(A02) while playing: queued until %.0f ms, then kit %d, working kit %s\n", clearedAt,
+		std::printf("  selectPattern(A02) while playing: queued until %.0f ms, then kit %d, working kit %s\n",
+			clearedAt,
 			st.kit ? *st.kit : -1, st.workingKit == mdDataLink::Session::WorkingKit::Clean ? "clean (edit lost)"
 			: "edited");
 
