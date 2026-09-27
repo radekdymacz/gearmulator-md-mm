@@ -924,17 +924,20 @@ let lastStep = -1;
 function onTelemetry(m) {
 	Tele.step = m.step; Tele.pattern = m.pattern; Tele.valid = m.valid;
 	const wasPlaying = S.playing; S.playing = m.playing; S.step = m.playing ? m.step : -1;
-	if (wasPlaying !== S.playing) { renderTop(); $$(".ph").forEach(c => c.classList.remove("ph")); }
+	if (wasPlaying !== S.playing) { renderTop(); $$(".ph").forEach(c => c.classList.remove("ph")); setPos(); }
 	const prev = lastStep; lastStep = S.step;
 	if (S.step === prev) return;
 	const pp = Math.floor(Math.max(0, S.step) / 16);
 	if (S.ws === "mix" && S.step >= 0) S.tracks.forEach((t, i) => { if (t.trigs[S.step] && audible(i)) { const l = document.querySelector(`.act[data-act="${i}"]`); if (l) { l.classList.add("on"); setTimeout(() => l.classList.remove("on"), 90); } } });
 	$$(".pl").forEach(b => b.classList.toggle("play", +b.dataset.plp === pp && S.playing));
 	if (S.follow && S.ws === "seq" && !S.viewAll && pp !== S.page && !laneDraw && S.playing) { S.page = pp; render(); }
-	$("#tempoled").classList.toggle("on", S.playing && S.step % 4 === 0); $("#playled")?.classList.toggle("on", S.playing && S.step % 4 === 0);
+	$("#tempoled").classList.toggle("on", S.playing && S.step % 4 === 0); setPos(); $("#playled")?.classList.toggle("on", S.playing && S.step % 4 === 0);
 	$$(`.st[data-s="${prev}"],.lb[data-s="${prev}"],.cp[data-cp="${prev}"]`).forEach(c => c.classList.remove("ph"));
 	if (S.playing) $$(`.st[data-s="${S.step}"],.lb[data-s="${S.step}"],.cp[data-cp="${S.step}"]`).forEach(c => c.classList.add("ph"));
 }
+
+/* POSITION: bar.step of the machine's playhead (a 16-step bar), --.-- when stopped. */
+function setPos() { const p = $("#pos"); if (p) p.textContent = S.playing && S.step >= 0 ? String(Math.floor(S.step / 16) + 1).padStart(2, "0") + "." + String(S.step % 16 + 1).padStart(2, "0") : "--.--"; }
 
 /* ===== Documents in: re-derive, then render (in place while a gesture runs) ===== */
 let pendingRender = false, renderRaf = 0, lastKey = "";
