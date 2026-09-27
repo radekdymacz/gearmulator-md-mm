@@ -50,6 +50,7 @@ set(SOURCES
 	skins/mdStudio/mdDeskModel.js
 	skins/mdStudio/mdDeskMod.js
 	skins/mdStudio/mdDeskLive.js
+	skins/mdStudio/mdDeskLibrary.js
 	mdSettingsPanelFeel.cpp mdSettingsPanelFeel.h
 	mdSettingsAudioInput.cpp mdSettingsAudioInput.h
 )

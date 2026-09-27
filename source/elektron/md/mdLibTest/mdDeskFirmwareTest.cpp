@@ -23,6 +23,7 @@
 #include "mdLib/mdfrontpanel.h"
 #include "mdLib/mdsequencerstate.h"
 
+#include <algorithm>
 #include <deque>
 #include <set>
 #include <functional>
@@ -988,6 +989,102 @@ namespace
 		check(predicted >= 0 && landed == predicted, "the firmware locked the trig the desk named");
 	}
 
+	std::string kitNameOf(const ed::MdKit& _k)
+	{
+		std::string n;
+		for(const auto c : _k.name)
+		{
+			if(!c)
+				break;
+			n += static_cast<char>(c);
+		}
+		return n;
+	}
+
+	// P4: the kit library and pattern chooser on firmware, checked by the machine's own dumps.
+	void library(Rig& _rig)
+	{
+		auto& m = _rig.machine();
+		auto& desk = _rig.desk();
+		std::puts("== P4 kit library and pattern chooser");
+		const bool all = _rig.runUntil([&] { return desk.documents().kits.size() == 64 && desk.documents().patterns.size() == 128 && !desk.isBusy(); }, 30000);
+		check(all, "all 64 kits and 128 patterns loaded in the background");
+		const auto kitStatus = [&] { return ed::parseMdStatusResponse(m.request(ed::mdStatusRequest(ed::MdStatus::Kit), 0x72))->value; };
+		const auto readKit = [&](const uint8_t _k) { return *ed::decodeMdKit(m.request(ed::mdKitRequest(_k), ed::g_mdKitDump)); };
+		const auto cur = *desk.session().state().kit;
+		const auto working = desk.documents().kits.at(cur);
+		const auto settle = [&] { _rig.runUntil([&] { return !desk.isBusy(); }, 2000); _rig.run(200); };
+		_rig.page("{\"op\":\"kitCopy\",\"k\":" + std::to_string(cur) + ",\"id\":950}");
+		_rig.page(R"({"op":"kitPaste","k":40,"id":951})");
+		check(resultOk(_rig), "paste into K41 accepted");
+		settle();
+		const auto k40 = readKit(40);
+		check(k40.params == working.params && k40.models == working.models, "K41 holds the copied kit (machine dump)");
+		_rig.page(R"({"op":"kitRename","k":40,"name":"lib test","id":952})");
+		settle();
+		check(kitNameOf(readKit(40)) == "LIB TEST", "rename of a slot that does not play: dump with the new name");
+		_rig.page(R"({"op":"kitClear","k":40,"id":953})");
+		settle();
+		const auto cleared = readKit(40);
+		check(std::all_of(cleared.models.begin(), cleared.models.end(), [](const uint32_t _m) { return _m == 0; }) && kitNameOf(cleared).empty(),
+			"clear: every track GND-EMPTY, no name");
+		_rig.page(R"({"op":"undo","id":954})");
+		settle();
+		check(kitNameOf(readKit(40)) == "LIB TEST", "undo brings the renamed kit back");
+		_rig.page(R"({"op":"kitCopyTo","from":40,"to":41,"id":955})");
+		settle();
+		check(kitNameOf(readKit(41)) == "LIB TEST", "drag-copy K41 -> K42");
+		_rig.page(R"({"op":"kitSaveAs","k":42,"id":956})");
+		settle();
+		check(kitStatus() == 42, "Save as K43: it is the current kit");
+		const auto pat = *desk.session().state().pattern;
+		check(_rig.readPattern(pat)->kit == 42, "and the current pattern links to it (EXTENDED)");
+		_rig.page("{\"op\":\"kitLoad\",\"k\":" + std::to_string(cur) + ",\"force\":true,\"id\":957}");
+		settle();
+		check(kitStatus() == cur, "LOAD KIT back to the first kit");
+		// Paste into the kit that plays: a dump plus LOAD KIT, heard at once.
+		_rig.page("{\"op\":\"kitCopy\",\"k\":40,\"id\":970}");
+		_rig.page("{\"op\":\"kitPaste\",\"k\":" + std::to_string(cur) + ",\"force\":true,\"id\":971}");
+		settle();
+		const auto image = ed::mdWorkingKitFromMemory([&]
+		{
+			Bytes r(ed::g_mdWorkingKitRegionSize);
+			for(size_t i = 0; i < r.size(); ++i)
+				r[i] = m.read8(ed::g_mdWorkingKitRegionAddress + static_cast<uint32_t>(i));
+			return r;
+		}());
+		check(image && kitNameOf(*image) == "LIB TEST" && image->models == readKit(40).models, "paste into the kit that plays: heard at once (working kit in memory)");
+		_rig.page("{\"op\":\"kitRename\",\"k\":" + std::to_string(cur) + ",\"name\":\"LIVE NAME\",\"id\":972}");
+		settle();
+		_rig.run(300);
+		check(kitNameOf(desk.documents().kits.at(cur)) == "LIVE NAME", "rename of the kit that plays: live (0x55), the working kit shows it");
+		// Patterns.
+		_rig.page("{\"op\":\"patCopy\",\"p\":" + std::to_string(pat) + ",\"id\":958}");
+		_rig.page(R"({"op":"patPaste","p":100,"id":959})");
+		settle();
+		const auto src = *_rig.readPattern(pat), p100 = *_rig.readPattern(100);
+		check(p100.trigs == src.trigs && p100.lockMasks == src.lockMasks && p100.kit == src.kit, "pattern paste into G05: notes, locks, kit link");
+		_rig.page(R"({"op":"patClear","p":100,"id":960})");
+		settle();
+		const auto c100 = *_rig.readPattern(100);
+		check(std::all_of(c100.trigs.begin(), c100.trigs.end(), [](const uint64_t _t) { return _t == 0; }) && c100.length == src.length,
+			"pattern clear: no trigs, length kept");
+		// Switch now while playing.
+		_rig.page(R"({"op":"play","id":961})");
+		_rig.runUntil([&] { return _rig.telemetry().playing; }, 2000);
+		_rig.run(500);
+		const auto target = static_cast<uint8_t>((pat + 3) % 128);
+		const auto t0 = m.now();
+		_rig.page("{\"op\":\"select\",\"p\":" + std::to_string(target) + ",\"now\":true,\"force\":true,\"id\":962}");
+		const bool now = _rig.runUntil([&] { return _rig.telemetry().playing && _rig.telemetry().pattern == target; }, 3000);
+		std::printf("  switch now: playing %s after %.0f ms\n", ed::mdPatternName(target).c_str(), ms(m.now() - t0));
+		check(now, "Now while playing: STOP, LOAD PATTERN, PLAY plays the new pattern");
+		_rig.page(R"({"op":"stop","id":963})");
+		_rig.run(300);
+		m.send(ed::mdLoadPattern(pat));
+		_rig.run(300);
+	}
+
 int main(const int _argc, char** _argv)
 {
 	std::setvbuf(stdout, nullptr, _IOLBF, 0);
@@ -1010,6 +1107,7 @@ int main(const int _argc, char** _argv)
 			mutesTruth(rig);
 			chaining(rig);
 			recLockTruth(rig);
+			library(rig);
 			std::printf("mdDeskFirmwareTest p4: %s (%d failure(s))\n", g_failures ? "FAIL" : "PASS", g_failures);
 			return g_failures ? 1 : 0;
 		}

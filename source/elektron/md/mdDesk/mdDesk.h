@@ -4,6 +4,7 @@
 #include "mdDeskDelivery.h"
 #include "mdDeskEdit.h"
 #include "mdDeskHistory.h"
+#include "mdDeskLibrary.h"
 #include "mdDeskMod.h"
 #include "mdDeskRecord.h"
 #include "mdDeskSetup.h"
@@ -146,6 +147,8 @@ namespace mdDesk
 		void handleModulators(const Value& _message);
 		void handleChain(const Value& _message);
 		void handleKnobs(const Value& _message);
+		void handleKitSlot(const Value& _message);
+		bool askFirst(const Value& _message, const std::vector<Change>& _changes);
 		void publishSetup();
 		void saveSetup() const;
 		void runModulators(double _now);

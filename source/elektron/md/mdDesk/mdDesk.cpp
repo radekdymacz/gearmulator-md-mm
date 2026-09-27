@@ -202,6 +202,8 @@ namespace mdDesk
 			handleChain(_message);
 		else if(op == "knobs")
 			handleKnobs(_message);
+		else if(op == "kitLoad" || op == "kitSaveAs")
+			handleKitSlot(_message);
 		else if(op == "selectSong")
 		{
 			// P1: the Machinedrum ignores LOAD SONG while it plays.
@@ -281,7 +283,22 @@ namespace mdDesk
 
 	void Desk::handleEdit(const Value& _message)
 	{
-		auto edit = apply(m_docs, _message, m_clipboard);
+		const auto op = opOf(_message);
+		// The kit that plays is renamed live (0x55), like the LCD's kit name.
+		const auto k = intOf(_message, "k");
+		if(op == "kitRename" && k && currentKit() == *k)
+		{
+			Value m = Value::object();
+			m.set("op", "kitName");
+			m.set("k", *k);
+			if(const auto* n = _message.find("name"))
+				m.set("name", *n);
+			if(const auto id = intOf(_message, "id"))
+				m.set("id", *id);
+			handleEdit(m);
+			return;
+		}
+		auto edit = isLibraryCommand(op) ? applyLibrary(m_docs, _message, m_clipboard) : apply(m_docs, _message, m_clipboard);
 		if(!edit.errors.empty())
 		{
 			result(_message, edit.errors, {});
@@ -297,6 +314,8 @@ namespace mdDesk
 						"to stop recording, then edit the grid."}, {});
 					return;
 				}
+		if(!flagOf(_message, "force") && askFirst(_message, edit.changes))
+			return;
 		std::vector<std::string> errors;
 		std::string note = edit.note;
 		std::vector<Change> delivered;
@@ -329,6 +348,26 @@ namespace mdDesk
 		case DocKind::Kit:
 		{
 			const auto kit = currentKit();
+			if(_change.slotWrite)
+			{
+				// The kit library: a stored-slot dump; into the kit that plays also LOAD KIT.
+				const auto& k = std::get<ed::MdKit>(_change.after);
+				const bool playing = kit && *kit == ref.slot;
+				auto problems = m_session.pushKit(k, playing ? mdDataLink::Session::KitApply::StoreAndLoad
+					: mdDataLink::Session::KitApply::Store);
+				if(!problems.empty())
+				{
+					_errors.insert(_errors.end(), problems.begin(), problems.end());
+					return;
+				}
+				m_storedKits[ref.slot] = k;
+				m_docs.set(_change.after);
+				if(playing)
+					m_workingKit.reset();
+				m_lastLiveEditMs = m_port.nowMs();
+				m_dirty.insert(ref);
+				break;
+			}
 			if(!kit || *kit != ref.slot)
 			{
 				_errors.push_back("Only the kit that plays can be edited live" + (kit ? " (kit "
@@ -491,6 +530,88 @@ namespace mdDesk
 		}
 		result(_message, errors, {});
 		publishModulators();
+	}
+
+	// Library edits that would silently lose something on the machine ask first (the page
+	// sends them again with force): a kit written into the kit that plays while it holds
+	// unsaved edits, or a pattern dump into the current pattern that links another kit
+	// (the firmware then loads that kit, measured).
+	bool Desk::askFirst(const Value& _message, const std::vector<Change>& _changes)
+	{
+		const bool edited = m_session.state().workingKit == mdDataLink::Session::WorkingKit::Edited;
+		const auto kit = currentKit();
+		for(const auto& c : _changes)
+		{
+			const auto ref = c.ref();
+			std::string what;
+			if(ref.kind == DocKind::Kit && c.slotWrite && kit && *kit == ref.slot && edited)
+				what = "overwriteKit";
+			else if(ref.kind == DocKind::Pattern && m_session.state().pattern == ref.slot && edited
+				&& std::get<ed::MdPattern>(c.after).kit != std::get<ed::MdPattern>(c.before).kit)
+				what = "relinkKit";
+			if(what.empty())
+				continue;
+			Value ask = Value::object();
+			ask.set("type", "ask");
+			ask.set("ask", what);
+			ask.set("command", _message);
+			ask.set("kit", kit ? Value(static_cast<int>(*kit)) : Value());
+			publish(ask);
+			result(_message, {}, {});
+			return true;
+		}
+		return false;
+	}
+
+	// LOAD KIT and SAVE KIT n from the kit library. Measured (mdP4ProbeFirmwareTest library):
+	// both make the slot the current kit and, in EXTENDED mode, relink the current pattern to
+	// it; LOAD KIT replaces unsaved edits (the machine keeps them in its UNDO KIT).
+	void Desk::handleKitSlot(const Value& _message)
+	{
+		const auto k = intOf(_message, "k");
+		if(!k || *k < 0 || *k > 63)
+		{
+			result(_message, {"k: expected a kit 0-63"}, {});
+			return;
+		}
+		const auto slot = static_cast<uint8_t>(*k);
+		const bool edited = m_session.state().workingKit == mdDataLink::Session::WorkingKit::Edited;
+		if(opOf(_message) == "kitLoad")
+		{
+			if(edited && !flagOf(_message, "force"))
+			{
+				Value ask = Value::object();
+				ask.set("type", "ask");
+				ask.set("ask", "loadKit");
+				ask.set("command", _message);
+				ask.set("kit", currentKit() ? Value(static_cast<int>(*currentKit())) : Value());
+				publish(ask);
+				result(_message, {}, {});
+				return;
+			}
+			m_session.loadKit(slot);
+		}
+		else
+		{
+			m_session.saveKit(slot);
+			if(const auto cur = currentKit(); cur)
+				if(const auto it = m_docs.kits.find(*cur); it != m_docs.kits.end())
+				{
+					auto saved = it->second;
+					saved.position = slot;
+					m_storedKits[slot] = saved;
+					m_docs.kits[slot] = saved;
+					m_dirty.insert({DocKind::Kit, slot});
+				}
+		}
+		// The machine switched kits and relinked the pattern: read them back.
+		m_session.requestStatus();
+		load({DocKind::Kit, slot}, true);
+		if(const auto p = m_session.state().pattern)
+			load({DocKind::Pattern, *p}, true);
+		m_machineDirty = true;
+		result(_message, {}, opOf(_message) == "kitLoad" ? "Loaded kit " + std::to_string(*k + 1)
+			: "Saved as kit " + std::to_string(*k + 1) + ": it is now the current kit");
 	}
 
 	// The Control workspace's knob rows: which CC each of the eight rows is.
@@ -675,6 +796,17 @@ namespace mdDesk
 			ask.set("target", static_cast<int>(links.at(slot)));
 			publish(ask);
 			result(_message, {}, {});
+			return;
+		}
+		if(flagOf(_message, "now") && m_telemetry.playing)
+		{
+			// Switch now: STOP, LOAD PATTERN, PLAY (measured: 367 ms, plays the new pattern).
+			pressKey("stop");
+			schedule(80, [this, slot] { m_session.selectPattern(slot); m_machineDirty = true; });
+			schedule(220, [this] { pressKey("play"); });
+			m_audibleQueue.reset();
+			load({DocKind::Pattern, slot}, true);
+			result(_message, {}, "Switched now: STOP, LOAD PATTERN, PLAY");
 			return;
 		}
 		m_session.selectPattern(slot);
@@ -875,6 +1007,9 @@ namespace mdDesk
 				load({DocKind::Pattern, static_cast<uint8_t>(p)}, false);
 			for(unsigned s = 0; s < 32; ++s)
 				load({DocKind::Song, static_cast<uint8_t>(s)}, false);
+			// The kit library shows every slot's name (P4).
+			for(unsigned k = 0; k < 64; ++k)
+				load({DocKind::Kit, static_cast<uint8_t>(k)}, false);
 		}
 	}
 

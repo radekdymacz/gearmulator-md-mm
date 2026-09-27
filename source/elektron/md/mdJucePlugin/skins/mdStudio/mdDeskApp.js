@@ -1032,7 +1032,7 @@ document.addEventListener("click", e => {
 	if (e.target.closest("#undo")) { cmd("undo"); return; }
 	if (e.target.closest("#redo")) { cmd("redo"); return; }
 	const sc = e.target.closest("[data-sec]"); if (sc) { secAction(sc.dataset.sec); return; }
-	if (e.target.closest("#kitf")) { ask(`<b>${kitName(S.kit)}</b> is ${S.kitState === "edited" ? "<b>edited</b>: the changes are not saved on the machine. They are kept in the DAW project." : "saved on the machine."}`, [["Save kit", "cream", saveKit], ["Reload kit (discard edits)", "danger", () => cmd("reloadKit")], ["Close", "", () => { }]]); return; }
+	/* #kitf and #pat open the kit library / pattern chooser (mdDeskLibrary.js). */
 	if (e.target.closest("[data-reloadsong]")) { cmd("reloadSong"); return; }
 	if (e.target.closest("#learnkey")) { toggleLearn(); return; }
 	if (S.ws === "control") {

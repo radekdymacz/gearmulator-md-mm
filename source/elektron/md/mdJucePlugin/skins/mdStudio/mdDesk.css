@@ -1114,6 +1114,9 @@ html,body{min-width:1280px}
 .lcdpanel.fwboot .lcdfw{display:block}
 .lcdpanel.fwfade .lcdfw{display:block;opacity:0}
 @media (prefers-reduced-motion:reduce){.ms.m.prep::after,.chainrow .lcdchip.nx{animation:none}.lcdfw{transition:none}}
+/* v55: equal grid: no page-boundary shadow; the ruler number marks the page start */
+.st.gap,.lb.gap,.cp.gap,.st.gap.ph{box-shadow:none!important}
+.rul.gap{color:var(--print);font-weight:700}
 
 /* ===== The real machine's states (not in the mockup) ===== */
 .st.past{opacity:.45}

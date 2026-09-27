@@ -199,6 +199,23 @@ if (/[?&]selftest=p4(&|$)/.test(location.search)) (async () => {
 		p1 = await until(() => kitDoc().tracks[rt].machine === mBefore[0] && kitDoc().tracks[pt].machine === mBefore[1], 4000);
 		log(`one Undo restores ${mBefore.join(" + ")}: ${p1 >= 0 ? "ok" : "FAIL"}`);
 	}
+	/* Kit library and pattern chooser: 64 kits and 128 patterns from the machine, a paste into K64, undo. */
+	S.ws = "seq"; render();
+	await until(() => Object.keys(Docs.kits).length === 64, 30000);
+	$("#kitf").click(); await sleep(300);
+	const cells = document.querySelectorAll("#libpop .ks").length, named = [...document.querySelectorAll("#libpop .ks .lsn")].filter(e => e.textContent !== "…").length;
+	log(`kit library: ${cells} slots, ${named} read from the machine; open ${!$("#libpop").hidden}`);
+	const src = currentKitSlot(), before63 = JSON.stringify(Docs.kits[63]);
+	LIB.sel = src; libAct("copy"); await sleep(200);
+	LIB.sel = 63; drawLib(true); libAct("paste"); await sleep(200);
+	$("#dlg").querySelector('[data-dlg="0"]')?.click();
+	p1 = await until(() => Docs.kits[63] && Docs.kits[63].name === Docs.kits[src].name && JSON.stringify(Docs.kits[63].tracks.map(t => t.machine)) === JSON.stringify(Docs.kits[src].tracks.map(t => t.machine)), 4000);
+	log(`paste K${nn(src)} into K64: ${p1 >= 0 ? "ok" : "FAIL"} (the machine's read-back of K64)`);
+	cmd("undo"); p1 = await until(() => JSON.stringify(Docs.kits[63]) === before63, 4000);
+	log(`undo restores K64: ${p1 >= 0 ? "ok" : "FAIL"}`);
+	closeLib(false); $("#pat").click(); await sleep(300);
+	log(`pattern chooser: ${document.querySelectorAll("#libpop .ps").length} slots, ${[...document.querySelectorAll("#libpop .ps span")].filter(e => e.textContent !== "…").length} read; LCD ${Math.round(document.querySelector(".lcdpanel").getBoundingClientRect().width)} px`);
+	closeLib(false);
 	log("done");
 })();
 

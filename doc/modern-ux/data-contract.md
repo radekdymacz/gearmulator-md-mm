@@ -201,6 +201,29 @@ PATTERN of the current pattern. `machine.desk.mutes` is the machine's pattern mu
 mask (main RAM 0x28b34a, 16 bits big-endian, bit 0 = track 1), so mutes made in the
 machine's MUTE window or by CC 12-15 show too (`mutesSource` = `memory`).
 
+**Kit library and pattern chooser (P4).** The desk loads all 64 kits (stored
+slots) in the background too. Commands (`mdDesk/mdDeskLibrary.h`, pure):
+`kitCopy`/`patCopy` {k|p}, `kitPaste`/`patPaste` {k|p}, `kitCopyTo`/`patCopyTo`
+{from, to} (drag-copy), `kitClear`/`patClear` {k|p}, `kitRename` {k, name}; and the
+machine actions `kitLoad` {k} (LOAD KIT), `kitSaveAs` {k} (SAVE KIT n), `select`
+{p, now} (switch now: STOP, LOAD PATTERN, PLAY while playing). Measured on the
+firmware (`mdP4ProbeFirmwareTest library`, smoke test p4):
+- SAVE KIT n makes n the current kit and, in EXTENDED, relinks the current pattern
+  to it. A manual LOAD KIT relinks it too.
+- A kit dump into the current slot is not heard until LOAD KIT: a paste or clear
+  into the kit that plays is therefore a dump plus LOAD KIT (`Change::slotWrite`).
+- There is no CLEAR command: clear writes an empty kit (every track GND-EMPTY,
+  neutral values, no name) or a pattern without trigs or locks (length, speed,
+  swing, accent and kit link kept). What the machine's own CLEAR leaves is unknown.
+- Rename: the kit that plays live (0x55, SAVE stores it); another slot: its dump
+  written back with the new name.
+- A pattern dump over the current pattern that links another kit makes the machine
+  load that kit. Slot writes that would lose unsaved kit edits answer
+  `{"type":"ask","ask":"overwriteKit"|"relinkKit"|"loadKit","command"}`; the page
+  sends the command again with `force`.
+Slot writes are undoable in the editor; LOAD and SAVE are the machine's (it keeps
+one UNDO KIT).
+
 ### 4.6 `md-desk/modulators` (page -> desk, P3)
 
 App-only modulation for the Control workspace. The page owns it and sends it

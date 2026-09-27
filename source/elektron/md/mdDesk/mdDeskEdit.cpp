@@ -898,4 +898,7 @@ namespace mdDesk
 			result.changes.push_back({*before, *after});
 		return result;
 	}
+
+	const std::array<uint8_t, 24>& neutralTrackValues() { return g_neutral; }
+	uint8_t neutralTrackLevel() { return g_neutralLevel; }
 }
