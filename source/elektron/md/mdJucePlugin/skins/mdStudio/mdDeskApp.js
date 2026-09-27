@@ -96,7 +96,8 @@ function setKitState(st) {
 	const s = $("#save"); if (!s) return;
 	s.classList.toggle("dirty", st === "edited");
 	s.lastElementChild.textContent = st === "edited" ? "edited" : st === "clean" ? "saved" : "?";
-	s.title = st === "edited" ? "Kit edits are not saved on the machine. They are kept in the DAW project." : st === "clean" ? "The kit matches its saved slot on the machine." : "Not known yet";
+	s.title = (st === "edited" ? "Kit edits are not saved on the machine. They are kept in the DAW project." : st === "clean" ? "The kit matches its saved slot on the machine." : "Not known yet")
+		+ (S.kitSource === "memory" ? " Read from the machine's memory." : "");
 }
 function syncUndoCounts() { const u = $("#undon"), r = $("#redon"); if (u) u.textContent = S.undoCount || ""; if (r) r.textContent = S.redoCount || ""; }
 /* Kit values: the view may be edited by any control; this sends what changed since the last document. */

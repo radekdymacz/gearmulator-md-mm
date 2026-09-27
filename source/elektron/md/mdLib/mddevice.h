@@ -1,5 +1,6 @@
 #pragma once
 
+#include <array>
 #include <atomic>
 #include <memory>
 #include <string>
@@ -208,6 +209,33 @@ namespace md
 			std::atomic<int> pattern{-1};	// switches with the status reply, ~2 steps before it is heard
 			std::atomic<int> playing{-1};	// 1 playing, 0 stopped
 			std::atomic<uint64_t> blocks{0};
+
+			// The working kit (P3, mdEditorProbeFirmwareTest workkit): patch RAM
+			// 0x700008 holds the current kit number, 0x70000a the kit that plays,
+			// unsaved edits included, as the kit dump's raw fields in dump order.
+			// elektronData::mdWorkingKitFromMemory decodes the region. Republished
+			// when it changes; a seqlock of relaxed atomics.
+			static constexpr uint32_t g_workingKitAddress = 0x700008;
+			static constexpr size_t g_workingKitSize = 0x462;
+			std::atomic<uint32_t> workingKitSequence{0};		// odd while written, 0 = never
+			std::array<std::atomic<uint8_t>, g_workingKitSize> workingKit{};
+
+			// A consistent copy of the working kit; false while it is being written or
+			// before the first publication. _sequence identifies the copy.
+			bool readWorkingKit(std::vector<uint8_t>& _image, uint32_t& _sequence) const
+			{
+				const auto before = workingKitSequence.load(std::memory_order_acquire);
+				if(before == 0 || (before & 1))
+					return false;
+				_image.resize(g_workingKitSize);
+				for(size_t i = 0; i < g_workingKitSize; ++i)
+					_image[i] = workingKit[i].load(std::memory_order_relaxed);
+				std::atomic_thread_fence(std::memory_order_acquire);
+				if(workingKitSequence.load(std::memory_order_relaxed) != before)
+					return false;
+				_sequence = before;
+				return true;
+			}
 		};
 		std::shared_ptr<const SequencerTelemetry> getSequencerTelemetry() const { return m_sequencerTelemetry; }
 

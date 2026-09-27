@@ -696,7 +696,25 @@ namespace md
 		t.step.store(uc.read8(stepAddress), std::memory_order_relaxed);
 		t.pattern.store(uc.read8(patternAddress), std::memory_order_relaxed);
 		t.playing.store(uc.read8(stoppedAddress) == 0 ? 1 : 0, std::memory_order_relaxed);
-		t.blocks.fetch_add(1, std::memory_order_release);
+		const auto blocks = t.blocks.fetch_add(1, std::memory_order_release);
+
+		// The working kit, about 90 times a second, published only when it changed.
+		if(blocks % 8)
+			return;
+		constexpr auto size = SequencerTelemetry::g_workingKitSize;
+		bool changed = t.workingKitSequence.load(std::memory_order_relaxed) == 0;
+		for(size_t i = 0; i < size && !changed; ++i)
+			changed = uc.read8(SequencerTelemetry::g_workingKitAddress + static_cast<uint32_t>(i))
+				!= t.workingKit[i].load(std::memory_order_relaxed);
+		if(!changed)
+			return;
+		const auto sequence = t.workingKitSequence.load(std::memory_order_relaxed);
+		t.workingKitSequence.store(sequence + 1, std::memory_order_relaxed);
+		std::atomic_thread_fence(std::memory_order_release);
+		for(size_t i = 0; i < size; ++i)
+			t.workingKit[i].store(uc.read8(SequencerTelemetry::g_workingKitAddress + static_cast<uint32_t>(i)),
+				std::memory_order_relaxed);
+		t.workingKitSequence.store(sequence + 2, std::memory_order_release);
 	}
 
 	void Device::extraLatencyChanged()

@@ -94,6 +94,7 @@ function deriveView(S) {
 	S.queued = desk.queued != null ? desk.queued : null;
 	S.kit = currentKitSlot();
 	S.kitState = M.kit && M.kit.working || "unknown";
+	S.kitSource = desk.kitSource || "tracked";
 	S.kitNames = {};
 	for (const k in Docs.kits) S.kitNames[k] = Docs.kits[k].name;
 	S.patKit = Array.from({ length: 128 }, (_, p) => Docs.patterns[p] ? Docs.patterns[p].kit : null);

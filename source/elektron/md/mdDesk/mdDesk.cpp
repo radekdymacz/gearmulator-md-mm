@@ -3,6 +3,7 @@
 #include "elektronData/mdCommands.h"
 #include "elektronData/mdJson.h"
 #include "elektronData/mdMachines.h"
+#include "elektronData/mdWorkingKit.h"
 
 #include <algorithm>
 
@@ -19,6 +20,9 @@ namespace mdDesk
 		constexpr double g_statusIdleMs = 1000;		// P1: poll gently, a burst costs ~1.5 ms of step jitter
 		constexpr double g_statusQueuedMs = 250;
 		constexpr double g_liveEditTxMs = 120;
+		// The desk's own live edits reach the firmware's memory after the MIDI queue;
+		// a memory image read before that would briefly undo them in the view.
+		constexpr double g_workingKitHoldMs = 150;
 
 		const char* kindName(const DocKind _k)
 		{
@@ -449,9 +453,13 @@ namespace mdDesk
 		m_storedKits[_k.position] = _k;
 		const bool working = currentKit() == _k.position;
 		const bool edited = m_session.state().workingKit == mdDataLink::Session::WorkingKit::Edited;
-		// A dump is the stored slot. The playing kit's unsaved edits live only in
-		// our working copy, which the dump must not overwrite.
-		if(!(working && edited && m_docs.kits.count(_k.position)))
+		const bool fromMemory = working && m_workingKit && m_workingKit->position == _k.position;
+		// A dump is the stored slot. The playing kit comes from memory when the
+		// firmware offers it; otherwise its unsaved edits live only in our working
+		// copy, which the dump must not overwrite.
+		if(fromMemory)
+			judgeWorkingKit();
+		else if(!(working && edited && m_docs.kits.count(_k.position)))
 			m_docs.set(_k);
 		m_dirty.insert(ref);
 		m_machineDirty = true;
@@ -515,6 +523,8 @@ namespace mdDesk
 			m_docs.kits.erase(*_s.kit);
 			load({DocKind::Kit, *_s.kit}, true);
 			m_lastKit = _s.kit;
+			if(m_workingKit && m_workingKit->position != *_s.kit)
+				m_workingKit.reset();
 		}
 		if(_s.pattern && _s.pattern != m_lastPattern)
 		{
@@ -562,6 +572,69 @@ namespace mdDesk
 			return;
 		m_mutes[_track] = _muted;
 		m_machineDirty = true;
+	}
+
+	void Desk::onWorkingKitMemory(const Bytes& _region)
+	{
+		m_workingRegion = _region;
+		applyWorkingKit();
+		flush();
+	}
+
+	void Desk::applyWorkingKit()
+	{
+		if(!m_workingRegion || m_firmware != Firmware::Present)
+			return;
+		const auto now = m_port.nowMs();
+		if(now - m_lastLiveEditMs < g_workingKitHoldMs)
+			return;
+		auto kit = ed::mdWorkingKitFromMemory(*m_workingRegion);
+		if(!kit)
+		{
+			m_workingRegion.reset();
+			return;
+		}
+		// Memory names the current kit. Status is polled; until it agrees, ask once
+		// and keep the image.
+		if(currentKit() != kit->position)
+		{
+			if(now - m_kitStatusAskedMs > 200 && m_port.sendSysex)
+			{
+				m_kitStatusAskedMs = now;
+				m_port.sendSysex(ed::mdStatusRequest(ed::MdStatus::Kit));
+			}
+			return;
+		}
+		m_workingRegion.reset();
+		const auto stored = m_storedKits.find(kit->position);
+		if(stored != m_storedKits.end())
+		{
+			kit->version = stored->second.version;
+			kit->revision = stored->second.revision;
+		}
+		m_workingKit = *kit;
+		const auto doc = m_docs.kits.find(kit->position);
+		if(doc == m_docs.kits.end() || doc->second != *kit)
+		{
+			m_docs.kits[kit->position] = *kit;
+			m_dirty.insert({DocKind::Kit, kit->position});
+		}
+		judgeWorkingKit();
+		m_machineDirty = true;
+	}
+
+	// Edited or clean from memory against the stored slot, not from what the desk saw.
+	void Desk::judgeWorkingKit()
+	{
+		if(!m_workingKit || currentKit() != m_workingKit->position)
+			return;
+		const auto stored = m_storedKits.find(m_workingKit->position);
+		if(stored == m_storedKits.end())
+			return;
+		const bool clean = ed::mdSameKitSound(*m_workingKit, stored->second);
+		const auto want = clean ? mdDataLink::Session::WorkingKit::Clean : mdDataLink::Session::WorkingKit::Edited;
+		if(m_session.state().workingKit != want)
+			m_session.noteWorkingKitObserved(clean);
 	}
 
 	void Desk::onTelemetry(const Telemetry& _t)
@@ -742,6 +815,7 @@ namespace mdDesk
 		}
 		if(m_ready)
 			pumpLoads(now);
+		applyWorkingKit();
 
 		for(auto it = m_pushSentMs.begin(); it != m_pushSentMs.end();)
 		{
@@ -839,6 +913,9 @@ namespace mdDesk
 		desk.set("queued", m_audibleQueue ? Value(static_cast<int>(*m_audibleQueue)) : Value());
 		desk.set("playing", m_telemetry.playing);
 		desk.set("telemetry", m_telemetry.valid);
+		// "memory": the current kit document is read from the machine's memory.
+		// "tracked": it is the stored slot plus the edits the desk saw.
+		desk.set("kitSource", m_workingKit && currentKit() == m_workingKit->position ? "memory" : "tracked");
 		Value mutes = Value::array();
 		for(size_t t = 0; t < 16; ++t)
 			if(m_mutes[t])

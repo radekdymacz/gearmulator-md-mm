@@ -133,6 +133,19 @@ and master effects belong to the linked kit's document. The mockup's single
 | `song.current`, `song.reloadNeeded` | A song was written into the current song's slot. It is heard after STOP, LOAD SONG and PLAY |
 | `songMode`, `extendedMode`, `globalSlot`, `track` | Status values. `null` until reported |
 | `patternKits` | `[pattern, kit]` links seen in pattern dumps. `Session::selectWouldDiscardKitEdits(p)` uses them |
+| `desk` | Added by `mdDesk::Desk` for the page: firmware state, TX, round trip, undo counts, the audible queue, mutes, and `kitSource` (below) |
+
+**The working kit comes from memory (P3).** On MD OS 1.63 the kit that plays,
+unsaved edits included, sits in patch (battery) RAM at `0x70000a` as the kit
+dump's raw fields in dump order, with the current kit number at `0x700008`
+(`elektronData/mdWorkingKit.h`, found by `mdEditorProbeFirmwareTest workkit`).
+`md::Device` republishes the region lock-free when it changes; the desk makes it
+the current kit's document. `machine.desk.kitSource` says `memory` then, and
+`kit.working` is `edited` exactly when that document differs from the stored
+slot's dump (LFO running state aside). So panel encoder moves, host automation
+and edits restored from a DAW project show without SAVE KIT. Without the region
+(another firmware) `kitSource` is `tracked`: the stored slot plus the edits the
+desk saw, as in P2.
 
 The UI must not show `edited` and "project not saved" as one flag. Two different things can be unsaved:
 

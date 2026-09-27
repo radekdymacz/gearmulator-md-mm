@@ -9,6 +9,7 @@
 #include "elektronData/mdJson.h"
 #include "elektronData/mdMachines.h"
 #include "elektronData/mdValidate.h"
+#include "elektronData/mdWorkingKit.h"
 
 #include <cstdio>
 #include <fstream>
@@ -487,6 +488,85 @@ namespace
 		desk.tick();
 		check(lastOf("error") != nullptr, "a push without a read-back is reported");
 	}
+
+	// The working kit read from memory is the truth for the current kit: edits the
+	// desk never saw (panel, DAW restore) show, edited/clean follows the stored slot.
+	void testWorkingKitMemory()
+	{
+		std::vector<std::vector<uint8_t>> wire;
+		std::vector<Value> page;
+		double now = 0;
+		Desk::Port port;
+		port.sendSysex = [&](const std::vector<uint8_t>& _b) { wire.push_back(_b); };
+		port.sendKitParam = [&](uint8_t, uint8_t, uint8_t) {};
+		port.toPage = [&](const Value& _m) { page.push_back(_m); };
+		port.nowMs = [&] { return now; };
+		Desk desk(port);
+		const auto status = [](const ed::MdStatus _p, const uint8_t _v)
+		{
+			return std::vector<uint8_t>{0xf0, 0x00, 0x20, 0x3c, 0x02, 0x00, 0x72, static_cast<uint8_t>(_p), _v, 0xf7};
+		};
+		const auto region = [](const ed::MdKit& _k)
+		{
+			auto image = ed::mdWorkingKitImage(_k);
+			std::vector<uint8_t> r{_k.position, 0};
+			r.insert(r.end(), image.begin(), image.end());
+			return r;
+		};
+		const auto machine = [&]() -> const Value*
+		{
+			for(auto it = page.rbegin(); it != page.rend(); ++it)
+				if(it->find("type")->asString() == "machine")
+					return it->find("doc");
+			return nullptr;
+		};
+		auto kit = *ed::decodeMdKit(load("programmed_kit_0.syx"));
+		kit.position = 3;
+		desk.onPageMessage(cmd(R"({"op":"ready"})"));
+		desk.onDeviceSysex(status(ed::MdStatus::Kit, 3));
+		desk.onDeviceSysex(ed::encodeMdKit(kit));
+		check(desk.session().state().workingKit != mdDataLink::Session::WorkingKit::Edited, "stored kit loaded");
+
+		// A value changed on the machine's panel, never seen by the desk.
+		auto panel = kit;
+		panel.params[2][5] = static_cast<uint8_t>(kit.params[2][5] ^ 0x11);
+		desk.onWorkingKitMemory(region(panel));
+		check(desk.documents().kits.at(3).params[2][5] == panel.params[2][5], "memory edit shows in the kit document");
+		check(desk.session().state().workingKit == mdDataLink::Session::WorkingKit::Edited, "memory differs: edited");
+		check(machine() && machine()->find("desk")->find("kitSource")->asString() == "memory", "the page is told: memory");
+		// A stored-slot dump keeps the memory copy.
+		desk.onDeviceSysex(ed::encodeMdKit(kit));
+		check(desk.documents().kits.at(3).params[2][5] == panel.params[2][5], "a stored dump does not undo memory");
+		// Back to the stored values: clean without SAVE KIT.
+		desk.onWorkingKitMemory(region(kit));
+		check(desk.session().state().workingKit == mdDataLink::Session::WorkingKit::Clean, "memory equals slot: clean");
+
+		// Right after the desk's own live edit, an image is held (it may predate the CC).
+		now = 1000;
+		desk.onPageMessage(cmd(R"({"op":"param","k":3,"t":0,"i":1,"v":5,"id":1})"));
+		desk.onWorkingKitMemory(region(kit));
+		check(desk.documents().kits.at(3).params[0][1] == 5, "held: the optimistic edit stays");
+		auto after = kit;
+		after.params[0][1] = 5;
+		desk.onWorkingKitMemory(region(after));
+		now = 1200;
+		desk.tick();
+		check(desk.documents().kits.at(3).params[0][1] == 5, "applied after the hold with the edit in memory");
+
+		// Memory names another kit than status: ask status, apply once it agrees.
+		auto next = kit;
+		next.position = 7;
+		wire.clear();
+		desk.onWorkingKitMemory(region(next));
+		bool asked = false;
+		for(const auto& w : wire)
+			asked |= w.size() == 9 && w[6] == 0x70 && w[7] == static_cast<uint8_t>(ed::MdStatus::Kit);
+		check(asked && !desk.documents().kits.count(7), "a kit switch seen in memory asks for status first");
+		desk.onDeviceSysex(status(ed::MdStatus::Kit, 7));
+		desk.tick();
+		check(desk.documents().kits.count(7) && desk.documents().kits.at(7) == next, "then the new kit comes from memory");
+		check(!ed::mdWorkingKitFromMemory(std::vector<uint8_t>(10, 0)), "a short region is refused");
+	}
 }
 
 int main()
@@ -500,6 +580,7 @@ int main()
 	testHistory();
 	testPushSlot();
 	testDesk();
+	testWorkingKitMemory();
 	if(g_failures)
 	{
 		std::fprintf(stderr, "mdDeskTest: %d failure(s)\n", g_failures);

@@ -101,6 +101,9 @@ namespace mdDataLink
 		// The UI changed the working kit live (CC / parameter edits). The session
 		// cannot see those itself.
 		void noteWorkingKitEdited();
+		// The working kit was read from the machine's memory (MD OS 1.63): it equals
+		// its stored slot, or it does not. Overrides what the session inferred.
+		void noteWorkingKitObserved(bool _matchesSlot);
 
 		// True when selecting _slot would replace the working kit while it holds
 		// unsaved edits: EXTENDED mode and a known link to a different kit.

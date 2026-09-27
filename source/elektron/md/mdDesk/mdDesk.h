@@ -68,6 +68,12 @@ namespace mdDesk
 		void onHostKitParam(uint8_t _track, uint8_t _index, uint8_t _value);
 		void onHostMute(uint8_t _track, bool _muted);
 		void onTelemetry(const Telemetry& _telemetry);
+		// The working-kit region read from the machine's memory (MD OS 1.63,
+		// elektronData::mdWorkingKitFromMemory): kit number plus the kit that plays,
+		// unsaved edits included. With it the Sound and Mix documents are firmware
+		// truth: panel encoders, host automation and edits restored from a DAW
+		// project all show without SAVE KIT. Send it when it changes.
+		void onWorkingKitMemory(const Bytes& _region);
 		void setFirmware(Firmware _firmware);
 		// About 30 times a second: status polling, loading, timeouts, publishing.
 		void tick();
@@ -105,6 +111,8 @@ namespace mdDesk
 		void onSong(const elektronData::MdSong& _s);
 		void onGlobal(const elektronData::MdGlobal& _g);
 		void onState(const mdDataLink::Session::State& _s);
+		void applyWorkingKit();
+		void judgeWorkingKit();
 
 		void load(const DocRef& _ref, bool _urgent);
 		void pumpLoads(double _now);
@@ -122,6 +130,9 @@ namespace mdDesk
 		std::map<uint8_t, PushSlot<elektronData::MdSong>> m_songPush;
 		std::map<DocRef, double> m_pushSentMs;
 		std::map<uint8_t, elektronData::MdKit> m_storedKits;	// last stored-slot dumps
+		std::optional<Bytes> m_workingRegion;					// waiting to be applied
+		std::optional<elektronData::MdKit> m_workingKit;		// last applied, from memory
+		double m_kitStatusAskedMs = -1e9;
 
 		std::deque<DocRef> m_loadQueue;
 		std::set<DocRef> m_queued;

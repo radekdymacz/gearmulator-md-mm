@@ -51,6 +51,9 @@ namespace mdJucePlugin
 
 		// Lock-free read of the audio thread's MD OS 1.63 RAM telemetry.
 		mdDesk::Telemetry readTelemetry();
+		// The working-kit region (elektronData::mdWorkingKitFromMemory) when it changed
+		// since the last call; lock-free, MD OS 1.63 only.
+		bool readWorkingKit(Bytes& _region);
 		// Missing (no valid device / ROM), Unsupported (not MD OS 1.63) or Present.
 		mdDesk::Desk::Firmware firmware() const;
 
@@ -77,6 +80,8 @@ namespace mdJucePlugin
 		std::array<std::atomic<uint32_t>, 16> m_dirtyParams{};		// bit n = index n (0-25)
 		std::shared_ptr<const md::Device::SequencerTelemetry> m_telemetry;
 		double m_telemetryCheckedMs = -1e9;
+		uint32_t m_workingKitSequence = 0;
+		const void* m_workingKitSource = nullptr;
 		std::shared_ptr<StudioLink*> m_alive;
 	};
 }

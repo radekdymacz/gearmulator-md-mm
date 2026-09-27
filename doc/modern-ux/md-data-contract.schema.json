@@ -242,7 +242,24 @@
         "track": {"oneOf": [{"type": "null"}, {"$ref": "#/$defs/track"}]},
         "songMode": {"oneOf": [{"type": "null"}, {"type": "boolean"}]},
         "extendedMode": {"oneOf": [{"type": "null"}, {"type": "boolean"}]},
-        "patternKits": {"type": "array", "description": "[pattern slot, kit] for every pattern seen in a dump.", "items": {"type": "array", "minItems": 2, "maxItems": 2, "items": {"type": "integer", "minimum": 0, "maximum": 127}}}
+        "patternKits": {"type": "array", "description": "[pattern slot, kit] for every pattern seen in a dump.", "items": {"type": "array", "minItems": 2, "maxItems": 2, "items": {"type": "integer", "minimum": 0, "maximum": 127}}},
+        "desk": {
+          "type": "object",
+          "description": "Added by mdDesk::Desk for the page (optional; readers ignore what they do not know).",
+          "properties": {
+            "firmware": {"enum": ["missing", "unsupported", "booting", "ready"]},
+            "tx": {"type": "boolean", "description": "An edit is on the wire (waiting for its read-back)."},
+            "loading": {"type": "integer", "minimum": 0},
+            "roundTripMs": {"type": "number", "description": "Last edit -> read-back time; -1 before the first."},
+            "undo": {"type": "boolean"}, "redo": {"type": "boolean"},
+            "undoCount": {"type": "integer", "minimum": 0}, "redoCount": {"type": "integer", "minimum": 0},
+            "queued": {"oneOf": [{"type": "null"}, {"type": "integer", "minimum": 0, "maximum": 127}], "description": "Selected while playing and not heard yet (clears at the playhead wrap)."},
+            "playing": {"type": "boolean"},
+            "telemetry": {"type": "boolean", "description": "Playhead and state come from MD OS 1.63 RAM."},
+            "mutes": {"type": "array", "items": {"$ref": "#/$defs/track"}},
+            "kitSource": {"enum": ["memory", "tracked"], "description": "memory: the current kit document is the working kit read from the machine's memory (P3). tracked: the stored slot plus the edits the desk saw."}
+          }
+        }
       }
     }
   }

@@ -174,6 +174,13 @@ namespace mdDataLink
 		changed(before);
 	}
 
+	void Session::noteWorkingKitObserved(const bool _matchesSlot)
+	{
+		const auto before = m_state;
+		m_state.workingKit = _matchesSlot ? WorkingKit::Clean : WorkingKit::Edited;
+		changed(before);
+	}
+
 	bool Session::selectWouldDiscardKitEdits(const uint8_t _slot) const
 	{
 		if(m_state.workingKit != WorkingKit::Edited || m_state.extendedMode != true || !m_state.kit)

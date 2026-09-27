@@ -330,3 +330,9 @@ set_property(TARGET mdDataLayerFirmwareTest PROPERTY FOLDER "Elektron/test")
 add_executable(mdDeskFirmwareTest mdDeskFirmwareTest.cpp mdFirmwareSession.h)
 target_link_libraries(mdDeskFirmwareTest PRIVATE mdLib mdDesk)
 set_property(TARGET mdDeskFirmwareTest PROPERTY FOLDER "Elektron/test")
+
+# P3 Machinedrum Editor discovery probes (working kit in memory, live
+# recording, sample names, SDS). Manual: needs a user-supplied ROM.
+add_executable(mdEditorProbeFirmwareTest mdEditorProbeFirmwareTest.cpp mdFirmwareSession.h)
+target_link_libraries(mdEditorProbeFirmwareTest PRIVATE mdLib elektronData)
+set_property(TARGET mdEditorProbeFirmwareTest PROPERTY FOLDER "Elektron/test")

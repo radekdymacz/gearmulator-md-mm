@@ -13,6 +13,7 @@ target_sources(elektronData PRIVATE
 	mdGlobal.cpp mdGlobal.h
 	mdJson.cpp mdJson.h
 	mdKit.cpp mdKit.h
+	mdWorkingKit.cpp mdWorkingKit.h
 	mdMachines.cpp mdMachines.h
 	mdPattern.cpp mdPattern.h
 	mdSong.cpp mdSong.h

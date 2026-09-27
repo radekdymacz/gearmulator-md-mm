@@ -417,6 +417,9 @@ namespace mdJucePlugin
 				+ "/" + juce::String(static_cast<int>(d.songs.size())) + " round trip " + juce::String(m_desk->lastRoundTripMs(), 1) + " ms");
 		}
 		m_desk->onTelemetry(m_link->readTelemetry());
+		std::vector<uint8_t> region;
+		if(m_link->readWorkingKit(region))
+			m_desk->onWorkingKitMemory(region);
 		m_link->drainParameterChanges([this](const uint8_t _t, const uint8_t _i, const uint8_t _v)
 		{
 			if(_i == 25)

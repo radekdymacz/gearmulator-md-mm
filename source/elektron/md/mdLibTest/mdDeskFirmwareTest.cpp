@@ -16,6 +16,7 @@
 #include "elektronData/mdCommands.h"
 #include "elektronData/mdJson.h"
 #include "elektronData/mdMachines.h"
+#include "elektronData/mdWorkingKit.h"
 
 #include "mdLib/mdautomation.h"
 
@@ -53,7 +54,8 @@ namespace
 	class Rig
 	{
 	public:
-		explicit Rig(const Bytes& _rom, const std::string& _romName) : m_machine(_rom, _romName)
+		explicit Rig(const Bytes& _rom, const std::string& _romName, const Bytes& _patchRam = {})
+			: m_machine(_rom, _romName, _patchRam)
 		{
 			mdDesk::Desk::Port port;
 			port.sendSysex = [this](const Bytes& _b) { m_out.push_back(_b); };
@@ -193,6 +195,15 @@ namespace
 			t.pattern = m_machine.read8(0x28d205);
 			t.playing = m_machine.read8(0x28cdaf) == 0;
 			m_desk->onTelemetry(t);
+			// The working-kit region, as md::Device publishes it: when it changed.
+			Bytes region(ed::g_mdWorkingKitRegionSize);
+			for(size_t i = 0; i < region.size(); ++i)
+				region[i] = m_machine.read8(ed::g_mdWorkingKitRegionAddress + static_cast<uint32_t>(i));
+			if(region != m_lastRegion)
+			{
+				m_lastRegion = region;
+				m_desk->onWorkingKitMemory(region);
+			}
 			m_desk->tick();
 		}
 
@@ -237,6 +248,7 @@ namespace
 		std::optional<Value> m_machineDoc;
 		bool m_tx = false;
 		int m_telemetryPattern = -1;
+		Bytes m_lastRegion;
 	};
 
 	bool resultOk(const Rig& _rig)
@@ -494,6 +506,51 @@ namespace
 	}
 }
 
+	// P3: the working kit from memory. A panel encoder edit the desk never sent, and
+	// a DAW project restored into a new machine, both show without SAVE KIT.
+	Bytes workingKitTruth(Rig& _rig)
+	{
+		auto& m = _rig.machine();
+		auto& desk = _rig.desk();
+		std::puts("== P3 working kit from memory (panel edit, DAW restore)");
+		const auto kit = *desk.session().state().kit;
+		const auto before = desk.documents().kits.at(kit).params[0][2];
+		m.send(ed::mdSetStatus(ed::MdStatus::Track, 0));
+		m.run(40);
+		// DATA ENTRY C on the synthesis page of track 1: five steps, like a finger.
+		const int dir = before > 100 ? -1 : 1;
+		const auto t0 = m.now();
+		for(int i = 0; i < 5; ++i)
+			m.hardware().trySendPanelEvent(0x32, dir > 0 ? 0x01 : 0xff);
+		const auto want = static_cast<uint8_t>(before + 5 * dir);
+		const bool seen = _rig.runUntil([&]
+		{
+			const auto doc = _rig.pageDoc("kit", kit);
+			return doc && doc->find("tracks")->asArray()[0].find("synth")->asArray()[2].asNumber() == want;
+		}, 1000);
+		check(seen, "panel encoder edit shows in the page's kit document");
+		std::printf("  panel encoder -> page kit document: %.1f ms emulated (value %u -> %u)\n", ms(m.now() - t0), before, want);
+		const auto& md = _rig.machineDoc();
+		check(md && md->find("kit")->find("working")->asString() == "edited", "the kit is 'edited' without SAVE KIT");
+		check(md && md->find("desk")->find("kitSource")->asString() == "memory", "kit source: memory");
+		return m.hardware().copyPatchRam();
+	}
+
+	void restoredKitTruth(const Bytes& _rom, const std::string& _romName, const Bytes& _patchRam, const uint8_t _kit,
+		const uint8_t _value)
+	{
+		std::puts("== P3 DAW project restore: unsaved kit edit in a new machine");
+		Rig rig(_rom, _romName, _patchRam);
+		rig.page(R"({"op":"ready"})");
+		const bool shown = rig.runUntil([&]
+		{
+			const auto doc = rig.pageDoc("kit", _kit);
+			return doc && doc->find("tracks")->asArray()[0].find("synth")->asArray()[2].asNumber() == _value
+				&& rig.machineDoc() && rig.machineDoc()->find("kit")->find("working")->asString() == "edited";
+		}, 5000);
+		check(shown, "the restored machine's page shows the unsaved edit, marked edited");
+	}
+
 int main(const int _argc, char** _argv)
 {
 	std::setvbuf(stdout, nullptr, _IOLBF, 0);
@@ -508,6 +565,11 @@ int main(const int _argc, char** _argv)
 		require(rom.size() == md::g_romSize, "ROM must be the 8 MiB MD 1.63 image");
 		Rig rig(rom, _argv[1]);
 		smoke(rig);
+		{
+			const auto kit = *rig.desk().session().state().kit;
+			const auto patch = workingKitTruth(rig);
+			restoredKitTruth(rom, _argv[1], patch, kit, rig.desk().documents().kits.at(kit).params[0][2]);
+		}
 		if(_argc > 2 && std::string(_argv[2]) == "probe")
 		{
 			probeGroups(rig);

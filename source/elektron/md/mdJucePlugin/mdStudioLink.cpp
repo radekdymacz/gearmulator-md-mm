@@ -6,6 +6,8 @@
 #include "mdLib/mdhardware.h"
 #include "mdLib/mdpanel.h"
 
+#include "elektronData/mdWorkingKit.h"
+
 #include "jucePluginLib/parameter.h"
 #include "synthLib/plugin.h"
 
@@ -165,6 +167,24 @@ namespace mdJucePlugin
 		t.pattern = m_telemetry->pattern.load(std::memory_order_relaxed);
 		t.playing = playing == 1;
 		return t;
+	}
+
+	bool StudioLink::readWorkingKit(Bytes& _region)
+	{
+		using T = md::Device::SequencerTelemetry;
+		static_assert(T::g_workingKitAddress == elektronData::g_mdWorkingKitRegionAddress
+			&& T::g_workingKitSize == elektronData::g_mdWorkingKitRegionSize, "working-kit region: mdLib and elektronData disagree");
+		if(!m_telemetry)
+			return false;
+		uint32_t sequence = 0;
+		if(!m_telemetry->readWorkingKit(_region, sequence))
+			return false;
+		// A new device (state restore, ROM change) starts its own sequence.
+		if(sequence == m_workingKitSequence && m_workingKitSource == m_telemetry.get())
+			return false;
+		m_workingKitSequence = sequence;
+		m_workingKitSource = m_telemetry.get();
+		return true;
 	}
 
 	mdDesk::Desk::Firmware StudioLink::firmware() const
