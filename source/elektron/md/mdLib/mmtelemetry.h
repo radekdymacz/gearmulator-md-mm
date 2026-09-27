@@ -20,6 +20,7 @@ namespace md
 		static constexpr uint32_t g_recvCountAddress = 0x26a3c4;	// u32: messages taken on SYSEX RECV
 		static constexpr uint32_t g_recvErrorAddress = 0x26a3c8;	// u32: bad messages on SYSEX RECV
 		static constexpr uint32_t g_recvActiveAddress = 0x26a3c3;	// 1 while SYSEX RECV takes dumps
+		static constexpr uint32_t g_tempoAddress = 0x2bc2a6;		// u16: tempo x 24 (0x61 and the TEMPO screen, MM-P3)
 		// Patch RAM: 0x700023 is the current kit number, 0x700028 the working kit
 		// (the kit dump's raw payload, 698 bytes, unsaved edits included).
 		static constexpr uint32_t g_workingKitAddress = 0x700023;
@@ -37,6 +38,7 @@ namespace md
 		std::atomic<uint32_t> recvCount{0};
 		std::atomic<uint32_t> recvErrors{0};
 		std::atomic<int> recvActive{0};
+		std::atomic<int> tempo{0};			// BPM x 24, 0 = unknown
 		std::atomic<uint64_t> blocks{0};
 
 		std::atomic<uint32_t> workingKitSequence{0};		// odd while written, 0 = never
@@ -74,6 +76,7 @@ namespace md
 			recvCount.store(read32(g_recvCountAddress), std::memory_order_relaxed);
 			recvErrors.store(read32(g_recvErrorAddress), std::memory_order_relaxed);
 			recvActive.store(_read8(g_recvActiveAddress) == 1 ? 1 : 0, std::memory_order_relaxed);
+			tempo.store((int(_read8(g_tempoAddress)) << 8) | _read8(g_tempoAddress + 1), std::memory_order_relaxed);
 			const auto n = blocks.fetch_add(1, std::memory_order_release);
 			if(n % 8)
 				return;
@@ -95,6 +98,7 @@ namespace md
 			step.store(-1, std::memory_order_relaxed);
 			running.store(-1, std::memory_order_relaxed);
 			screen.store(0, std::memory_order_relaxed);
+			tempo.store(0, std::memory_order_relaxed);
 		}
 	};
 }

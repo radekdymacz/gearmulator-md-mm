@@ -119,6 +119,14 @@ namespace mdJucePlugin
 		}
 	}
 
+	bool MmStudioLink::sendMidi(const uint8_t _status, const uint8_t _data1, const uint8_t _data2) const
+	{
+		if(_status < 0x80 || _status >= 0xf0 || _data1 > 0x7f || _data2 > 0x7f)
+			return false;
+		m_processor.addMidiEvent(synthLib::SMidiEvent(synthLib::MidiEventSource::Editor, _status, _data1, _data2));
+		return true;
+	}
+
 	bool MmStudioLink::pressKeys(const std::vector<mmDesk::Key>& _keys) const
 	{
 		std::vector<md::PanelPacket> states;
@@ -173,6 +181,7 @@ namespace mdJucePlugin
 		t.recvCount = m_telemetry->recvCount.load(std::memory_order_relaxed);
 		t.recvErrors = m_telemetry->recvErrors.load(std::memory_order_relaxed);
 		t.recvActive = m_telemetry->recvActive.load(std::memory_order_relaxed) == 1;
+		t.tempo = m_telemetry->tempo.load(std::memory_order_relaxed);
 		return t;
 	}
 

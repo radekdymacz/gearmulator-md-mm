@@ -136,6 +136,7 @@ namespace
 			t.recvCount = tel.recvCount.load();
 			t.recvErrors = tel.recvErrors.load();
 			t.recvActive = tel.recvActive.load() == 1;
+			t.tempo = tel.tempo.load();
 			return t;
 		}
 
@@ -384,8 +385,13 @@ namespace
 		check(r.desk->pattern(64) && ed::encodeMmPattern(*r.desk->pattern(64)) == ed::encodeMmPattern(p), "stored as sent");
 		r.msg(R"({"op":"select","p":64})");
 		r.run(300);
+		r.msg(R"({"op":"tempo","bpm":133})");
+		r.run(100);
+		r.desk->onTelemetry(r.readTelemetry());
+		check(r.readTelemetry().tempo == 133 * 24, "tempo 133 read back from RAM (0x2bc2a6)");
 		r.msg(R"({"op":"tempo","bpm":120})");
 		r.run(100);
+		check(r.readTelemetry().tempo == 120 * 24, "tempo 120 read back from RAM");
 		// Play; skip the first pass, then note where each step of the second pass starts.
 		r.msg(R"({"op":"play"})");
 		int last = -1, passes = 0;

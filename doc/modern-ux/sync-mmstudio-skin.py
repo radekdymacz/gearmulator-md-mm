@@ -84,7 +84,9 @@ tail = '''
 .statusline,.errline{margin:6px 0 0;padding:6px 10px;border-radius:3px;font:12px var(--pix);text-transform:uppercase}
 .statusline{background:var(--lcd);color:var(--ink)}
 .errline{background:var(--rec,#c43);color:#fff}
-.kopt:disabled,button[data-na],[data-na]{opacity:.45;cursor:not-allowed}
+/* What the editor cannot do yet (mmAdapter.js marks it, with the reason as the tooltip). */
+[data-na]{opacity:.42!important;cursor:not-allowed!important}
+[data-na] [data-na]{opacity:1!important}
 .lcdeng .led:not(.on){opacity:.35}
 '''
 out_css = head + css.strip('\n') + '\n' + tail

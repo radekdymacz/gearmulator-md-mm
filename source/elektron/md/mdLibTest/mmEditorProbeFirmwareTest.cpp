@@ -979,6 +979,29 @@ namespace
 				ls >> t;
 				m->run(t);
 			}
+			else if(op == "peek16")
+			{
+				std::string h;
+				std::printf("  peek16");
+				while(ls >> h)
+				{
+					const auto a = static_cast<uint32_t>(std::stoul(h, nullptr, 16));
+					std::printf(" %06x=%u", a, (static_cast<uint32_t>(m->read8(a)) << 8) | m->read8(a + 1));
+				}
+				std::printf("\n");
+			}
+			else if(op == "ramfind")
+			{
+				// ramfind <u16 hex>: RAM addresses holding that big-endian word (tempo and state hunts)
+				std::string h;
+				ls >> h;
+				const auto v = static_cast<uint32_t>(std::stoul(h, nullptr, 16));
+				std::printf("  ramfind %04x:", v);
+				int n = 0;
+				for(uint32_t a = 0x200000; a < 0x2c0000 && n < 40; ++a)
+					if(((static_cast<uint32_t>(m->read8(a)) << 8) | m->read8(a + 1)) == v) { std::printf(" %06x", a); ++n; }
+				std::printf("\n");
+			}
 			else if(op == "lcd")
 			{
 				std::string t;

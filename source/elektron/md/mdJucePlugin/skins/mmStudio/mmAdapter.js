@@ -29,7 +29,7 @@
 	const BASE = { pat: [], kit: [], song: [], glob: [] };
 	const REF = { pat: [], kit: [], kitName: [] };	// S.patData / S.kits objects last seen
 	const CUR = { pat: -1, kit: -1, song: 0, glob: 0 };
-	const last = { edit: 0, kitEdit: 0, mute: [], bpm: null, ready: false, note: "", noteMs: 0 };
+	const last = { edit: 0, kitEdit: 0, tempoEdit: -1e9, mute: [], bpm: null, ready: false, note: "", noteMs: 0 };
 	let synced = false;	// S shows the machine (current pattern and working kit arrived)
 	const wantApply = new Set();
 
@@ -266,6 +266,7 @@
 		const g = FW.glob[CUR.glob];
 		S.routing = g.routingMode;
 		S.midi.forEach((x, t) => { x.ch = g.midiSeq.channels[t] + 1; x.cc = [...g.midiSeq.ccs[t]]; });
+		mapFromGlobal();
 		BASE.glob[CUR.glob] = J(globDoc());
 	}
 
@@ -307,7 +308,7 @@
 		}
 		if (!synced) {
 			synced = true;
-			S.tracks.forEach((t, i) => last.mute[i] = !!t.mute);
+			S.tracks.forEach((t, i) => last.mute[i] = !MOCK("audible")(i));
 		}
 		if (changed) {
 			MOCK("autoRange")(S.sel);
@@ -358,10 +359,15 @@
 		const queued = q != null && q !== cp ? q : null;
 		if (queued !== S.queued) { S.queued = queued; renderTop(); drawLib(); }
 		setPlaying(!!d.playing);
+		/* the machine's tempo (RAM), unless the user is setting it */
+		if (d.tempo != null && now() - last.tempoEdit > 1500 && d.tempo !== S.bpm) { S.bpm = d.tempo; last.bpm = d.tempo; renderTop(); }
 		if (synced && !busy() && now() - last.edit > 700) setKitState(d.kit.working === "edited" ? "edited" : "clean");
 		renderPst();
 		if (d.error && d.error !== last.error) { last.error = d.error; toast(d.error); }
 		showEngine();
+		/* the library fills in the background: say how far */
+		const chip = document.querySelector(".lcdeng span");
+		if (chip && S.eng === "ready") chip.textContent = d.loading.done < d.loading.total ? `EMU OS 1.32B · ${d.loading.done}/${d.loading.total}` : ENG.ready[0];
 	}
 
 	/* ---------------- the page -> the machine ---------------- */
@@ -412,11 +418,13 @@
 		const gd = globDoc();
 		if (gd) sendDoc("global", gd, BASE.glob, CUR.glob);
 		/* mutes: the plug-in's mute parameters */
+		/* mutes and solos of the synth tracks: the plug-in's mute parameters */
 		S.tracks.forEach((t, i) => {
-			if (!!t.mute !== last.mute[i]) { last.mute[i] = !!t.mute; send({ op: "mute", t: i, on: t.mute ? 1 : 0 }); }
+			const off = !MOCK("audible")(i);
+			if (off !== last.mute[i]) { last.mute[i] = off; send({ op: "mute", t: i, on: off ? 1 : 0 }); }
 		});
 		if (last.bpm !== S.bpm) {
-			if (last.bpm != null) send({ op: "tempo", bpm: S.bpm }, { key: "tempo" });
+			if (last.bpm != null) { send({ op: "tempo", bpm: S.bpm }, { key: "tempo" }); last.tempoEdit = now(); }
 			last.bpm = S.bpm;
 		}
 	}
@@ -441,6 +449,145 @@
 	};
 	const renderPst = window.renderPst;
 
+
+	/* ================= MM-P3: every control real, or disabled with the reason ================= */
+
+	/* ---- the keyboard and the joystick play the machine (MIDI into the plug-in) ---- */
+	const chan = () => FW.glob[CUR.glob]?.channels;
+	function keyChannel() {
+		const c = chan();
+		if (!c) return null;
+		const ch = S.mode === "multi" ? c.multiTrig : S.mode === "map" ? c.multiMap : c.base + asgT();
+		return ch >= 0 && ch < 16 ? ch : null;
+	}
+	const trackChannel = t => { const c = chan(); const ch = c ? c.base + t : -1; return ch >= 0 && ch < 16 ? ch : null; };
+	const midi = (b, key) => send({ op: "midi", b }, key ? { key } : {});
+	let held = null;
+	function noteOff() { if (held) { midi([0x80 | held.ch, held.n, 0]); held = null; } }
+	window.playKey = function (n) {
+		$$(".kb .dn").forEach(k => k.classList.remove("dn"));
+		$(`.kb [data-key="${n}"]`)?.classList.add("dn");
+		const ch = keyChannel(), info = $("#kbinfo");
+		if (ch == null) { if (info) info.textContent = "That MIDI channel is OFF in the global (GLOBAL › MIDI › CHANNELS)."; return; }
+		if (held && held.n === n && held.ch === ch) return;
+		noteOff();
+		midi([0x90 | ch, n, 100]);
+		held = { ch, n };
+		const what = S.mode === "multi" ? "MULTI TRIG" : S.mode === "map" ? "MULTI MAP" : "T" + (asgT() + 1);
+		if (info) info.textContent = `${what} · ${noteName(n)} · MIDI channel ${ch + 1}`;
+	};
+	document.addEventListener("pointerup", () => { noteOff(); if (joyOn) { joyOn = false; joySend(0, 0); } }, true);
+	document.addEventListener("pointercancel", () => noteOff(), true);
+	let joyOn = false;
+	function joySend(x, y) {
+		const ch = trackChannel(asgT());
+		if (ch == null) return;
+		const pb = Math.max(0, Math.min(16383, Math.round(8192 + x * 8191)));
+		midi([0xe0 | ch, pb & 0x7f, pb >> 7], "joyx");
+		midi([0xb0 | ch, 1, Math.round(Math.max(0, y) * 127)], "joyu");
+		midi([0xb0 | ch, 2, Math.round(Math.max(0, -y) * 127)], "joyd");
+	}
+	const joyAt0 = MOCK("joyAt");
+	window.joyAt = function (e) { joyAt0(e); joyOn = true; joySend(S.joy.x, S.joy.y); };
+
+	/* ---- LEARN: the plug-in's MIDI learn (persistent, per plug-in) ---- */
+	let learnPid = null;
+	document.addEventListener("pointerdown", () => setTimeout(() => {
+		if (!S.learn || !S.learnT) return;
+		const k = S.learnT.t + "|" + S.learnT.pid;
+		if (k === learnPid) return;
+		learnPid = k;
+		const [pg, i] = S.learnT.pid.split(".");
+		if (S.learnT.t >= 6 || pg === "MID") { toast("MIDI page values are NRPN on the machine: the plug-in's MIDI learn cannot map them."); S.learnT = null; return; }
+		send({ op: "learnStart", t: S.learnT.t, pg: PAGES.indexOf(pg), i: +i }, { onResult: r => r.ok ? toast("Move a knob on your controller, or press 1-8 for CC 21-28.") : toast(r.errors[0]) });
+	}, 0), true);
+	const learnBind0 = MOCK("learnBind");
+	window.learnBind = function (k) {
+		const lt = S.learnT;
+		if (!lt) return;
+		const [pg, i] = lt.pid.split(".");
+		if (lt.t >= 6 || pg === "MID") { toast("MIDI page values cannot be learned."); return; }
+		send({ op: "learnCancel" });
+		send({ op: "learnAdd", cc: 20 + k, t: lt.t, pg: PAGES.indexOf(pg), i: +i }, { onResult: r => { if (!r.ok) toast(r.errors[0]); } });
+		learnPid = null;
+		learnBind0(k);	// the Control workspace's Knob k drives the same value on screen
+	};
+	function onLearn(doc) {
+		const prev = FW.learn;
+		FW.learn = doc;
+		if (prev && prev.learning && !doc.learning && doc.mappings.length > prev.mappings.length) {
+			const m = doc.mappings[doc.mappings.length - 1];
+			toast(`Learned: CC ${m.cc} → T${m.t + 1} ${PAGES[m.pg] || ""} ${pname(m.t, PAGES[m.pg] + "." + m.i) || ""}. Stored with the plug-in.`);
+			S.learnT = null; learnPid = null;
+		}
+	}
+	document.addEventListener("click", e => {
+		if (e.target.closest("#learnkey")) setTimeout(() => { if (!S.learn) { learnPid = null; send({ op: "learnCancel" }); } }, 0);
+	}, true);
+
+	/* ---- MULTI MAP: read from the global; its fields past key and pattern are not decoded ---- */
+	function mapFromGlobal() {
+		const g = FW.glob[CUR.glob];
+		if (!g || !g.multiMap) return;
+		const hi = g.multiMap[0], pat = g.multiMap[1], rows = [];
+		for (let r = 0; r < 32; r++) {
+			if (r && hi[r] <= hi[r - 1]) break;
+			rows.push({ hi: hi[r], pat: pat[r] === 255 ? -1 : pat[r], ofs: null, len: null, trn: null, tim: null });
+		}
+		rows[rows.length - 1].hi = 127;
+		S.mmap = rows;
+		S.mmapSel = Math.min(S.mmapSel || 0, rows.length - 1);
+	}
+
+	/* ---- what the editor cannot do (yet): disabled, with the reason ---- */
+	const R = {
+		midiMute: "MIDI track mutes are set on the machine (FUNCTION + a track key in MIDI mode). The plug-in has no command for them yet.",
+		poly: "POLY is switched on the machine. The editor does not drive it yet.",
+		multi: "MULTI TRIG mode, split and timing are settings the editor does not decode yet: set them on the machine. The keys here do play on the MULTI TRIG channel.",
+		map: "MULTI MAP ranges live in the global slot. The editor reads each range's upper key and pattern; offset, length, transpose and timing are not decoded yet, so edit the map on the machine (GLOBAL › CONTROL › MULTIMAP EDIT). The keys here do play on the MULTI MAP channel.",
+		port: "PORTAMENTO mode (ALWAYS / ONLY LEGATO) is not decoded in the kit yet: set it on the machine.",
+		rec: "GRID RECORD and LIVE RECORD run on the machine. In the editor you draw steps directly.",
+		loading: "Still reading this slot from the machine."
+	};
+	const NA = [
+		['[data-mute="6"],[data-mute="7"],[data-mute="8"],[data-mute="9"],[data-mute="10"],[data-mute="11"],[data-solo="6"],[data-solo="7"],[data-solo="8"],[data-solo="9"],[data-solo="10"],[data-solo="11"],[data-gmute="6"],[data-gmute="7"],[data-gmute="8"],[data-gmute="9"],[data-gmute="10"],[data-gmute="11"]', R.midiMute],
+		['[data-pmode="poly"]', R.poly],
+		['[data-set="mtmode"] button,[data-strk],[data-tim],#splitm', R.multi],
+		['.maprow [data-mhi],.maprow select,.maprow .kselbtn,.maprow .pc,[data-mdel],[data-madd],[data-band]', R.map],
+		['[data-set="port"] button', R.port],
+		["#rec", R.rec]
+	];
+	function markNa() {
+		for (const [sel, why] of NA)
+			for (const el of $$(sel)) if (el.dataset.na !== "1") { el.dataset.na = "1"; el.title = why; el.setAttribute("aria-disabled", "true"); }
+		/* library slots not read yet */
+		for (const el of $$("#libpop .ps[data-ps]")) {
+			const miss = !FW.pat[+el.dataset.ps];
+			if (miss !== (el.dataset.na === "1")) { if (miss) { el.dataset.na = "1"; el.title = R.loading; } else delete el.dataset.na; }
+		}
+		for (const el of $$("#libpop .ks[data-ks]")) {
+			const miss = !FW.kit[+el.dataset.ks];
+			if (miss !== (el.dataset.na === "1")) { if (miss) { el.dataset.na = "1"; el.title = R.loading; } else delete el.dataset.na; }
+		}
+		for (const el of $$(".band[data-band]")) { const r = S.mmap[+el.dataset.band]; if (r && r.pat < 0 && el.textContent !== "CUR") el.textContent = "CUR"; }
+		/* the reason in words where a whole card is the machine's */
+		const card = $(".maprow");
+		if (card && !card.querySelector(".statusline")) card.querySelector("header").insertAdjacentHTML("afterend", `<p class="statusline">${R.map}</p>`);
+		const note = $(".songui .card:last-child header .note");
+		if (note && !note.dataset.song) { note.dataset.song = "1"; note.textContent = `Song ${String(CUR.song + 1).padStart(2, "0")} (the machine's current song) · ` + note.textContent; }
+		for (const el of $$(".srch")) if (!el.dataset.hint) { el.dataset.hint = "1"; el.title = "On-screen source: it drives its targets through the editor. Your controller's knobs reach the machine through LEARN (the plug-in's MIDI learn)."; }
+	}
+	const blockNa = e => {
+		const el = e.target.closest?.("[data-na]");
+		if (!el) return;
+		e.preventDefault(); e.stopImmediatePropagation();
+		if (e.type === "click") toast(el.title);
+	};
+	for (const ev of ["pointerdown", "click", "change", "wheel", "keydown", "dragstart"]) document.addEventListener(ev, blockNa, { capture: true, passive: false });
+	let naQueued = false;
+	new MutationObserver(() => { if (!naQueued) { naQueued = true; queueMicrotask(() => { naQueued = false; markNa(); }); } })
+		.observe(document.body, { childList: true, subtree: true });
+
 	/* ---------------- messages from the plug-in ---------------- */
 	Bridge.onMessage(m => {
 		if (m.type === "doc") onDoc(m);
@@ -448,7 +595,7 @@
 		else if (m.type === "tel") { if (m.playing !== S.playing) setPlaying(m.playing); if (S.playing) showStep(m.step); }
 		else if (m.type === "lcd") { if (m.engine) FW.engine = m.engine; drawLcd(m.bits); showEngine(); }
 		else if (m.type === "catalogue") FW.cat = m.doc;
-		else if (m.type === "learn") FW.learn = m.doc;
+		else if (m.type === "learn") onLearn(m.doc);
 		else if (m.type === "result" && !m.ok && m.errors?.length && m.op !== "set") toast(m.errors[0]);
 		selfTestSeen(m);
 	});
@@ -531,6 +678,22 @@
 			await waitFor(m => m.type === "tel" && m.playing && m.step > 0);
 			window.togglePlay();
 			await waitFor(m => m.type === "machine" && !m.doc.playing);
+		});
+		await check("tempo out and read back (0x61, RAM)", async () => {
+			const t0 = S.bpm, t = t0 === 133 ? 127 : 133;
+			S.bpm = t; window.tx();
+			await waitFor(m => m.type === "machine" && m.doc.tempo === t, 5000);
+			S.bpm = t0; window.tx();
+			await waitFor(m => m.type === "machine" && m.doc.tempo === t0, 5000);
+			return t0 + " -> " + t + " -> " + t0 + " BPM";
+		});
+		await check("solo mutes the other synth tracks", async () => {
+			S.tracks[2].solo = true; window.tx();
+			await sleep(300);
+			const muted = last.mute.join("");
+			S.tracks[2].solo = false; window.tx();
+			await sleep(300);
+			if (muted !== "truetruefalsetruetruetrue") throw new Error("mutes " + muted);
 		});
 		await check("song and global documents", async () => {
 			if (!FW.song[CUR.song] || !FW.glob[CUR.glob]) throw new Error("not loaded");

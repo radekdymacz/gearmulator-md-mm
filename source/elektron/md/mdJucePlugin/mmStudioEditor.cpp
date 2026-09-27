@@ -257,6 +257,21 @@ namespace mdJucePlugin
 			reply(true, {});
 			return true;
 		}
+		if(op == "midi")
+		{
+			// {"op":"midi","b":[status, data1, data2]}: the page's keyboard and joystick
+			const auto* b = _message.find("b");
+			std::array<int, 3> v{-1, 0, 0};
+			if(b && b->isArray())
+				for(size_t i = 0; i < 3 && i < b->asArray().size(); ++i)
+					if(b->asArray()[i].isNumber())
+						v[i] = static_cast<int>(b->asArray()[i].asNumber());
+			const bool ok = v[0] >= 0x80 && v[0] < 0xf0 && v[1] >= 0 && v[1] < 128 && v[2] >= 0 && v[2] < 128
+				&& m_link->sendMidi(static_cast<uint8_t>(v[0]), static_cast<uint8_t>(v[1]), static_cast<uint8_t>(v[2]));
+			if(!ok)
+				reply(false, "midi: a channel message, [status 0x80-0xef, data, data]");
+			return true;
+		}
 		if(op == "recheckFirmware")
 		{
 			const auto e = m_link->engine();

@@ -31,6 +31,7 @@ namespace mmDesk
 		uint32_t recvCount = 0;
 		uint32_t recvErrors = 0;
 		bool recvActive = false;	// SYSEX RECV takes dumps (RAM 0x26a3c3)
+		int tempo = 0;				// BPM x 24 (RAM 0x2bc2a6), 0 = unknown
 	};
 
 	// Screen words of MM OS 1.32B (MM-P0-RESULT §3).

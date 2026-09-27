@@ -159,6 +159,8 @@ namespace mmDesk
 		d.set("song", std::move(s));
 		d.set("global", m_curGlobal < 0 ? Value() : Value(m_curGlobal));
 		d.set("playing", m_tel.valid && m_tel.running);
+		// 30-300 BPM in firmware units (x 24); anything else is not a tempo yet (boot).
+		d.set("tempo", m_tel.tempo >= 720 && m_tel.tempo <= 7200 ? Value(m_tel.tempo / 24.0) : Value());
 		Value r = Value::object();
 		r.set("state", m_recv.stateName());
 		size_t inFlight = 0;
@@ -766,8 +768,9 @@ namespace mmDesk
 	void Desk::onTelemetry(const Telemetry& _t)
 	{
 		const bool wasRunning = m_tel.running;
+		const int wasTempo = m_tel.tempo;
 		m_tel = _t;
-		if(wasRunning != _t.running)
+		if(wasRunning != _t.running || wasTempo != _t.tempo)
 			m_machineDirty = true;
 		if(!_t.running && m_queuedPattern >= 0)
 		{

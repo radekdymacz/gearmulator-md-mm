@@ -45,6 +45,8 @@ namespace mdJucePlugin
 		// page 0-6 DATA pages, 7 level, 8 mute (parameterDescriptions_mm.json).
 		bool setParam(uint8_t _track, uint8_t _page, uint8_t _index, uint8_t _value) const;
 		void sendNrpn(uint8_t _track, uint8_t _param, uint8_t _value) const;
+		// A channel message from the page (keyboard, joystick): note on/off, CC, pitch bend.
+		bool sendMidi(uint8_t _status, uint8_t _data1, uint8_t _data2) const;
 		bool pressKeys(const std::vector<mmDesk::Key>& _keys) const;
 
 		mmDesk::Telemetry readTelemetry();
