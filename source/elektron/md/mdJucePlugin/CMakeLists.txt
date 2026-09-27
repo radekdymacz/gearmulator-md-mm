@@ -43,6 +43,10 @@ set(SOURCES
 	skins/mmSfx60/mmSfx60.rcss
 	skins/mdStudio/mdStudio.rml
 	skins/mdStudio/mdStudio.html
+	skins/mdStudio/mdDesk.css
+	skins/mdStudio/mdDeskApp.js
+	skins/mdStudio/mdDeskBridge.js
+	skins/mdStudio/mdDeskModel.js
 	mdSettingsPanelFeel.cpp mdSettingsPanelFeel.h
 	mdSettingsAudioInput.cpp mdSettingsAudioInput.h
 )
@@ -61,7 +65,8 @@ set(COMMON_ASSETS
 file(GLOB MD_SKIN_ASSETS CONFIGURE_DEPENDS
 	"skins/mdDefault/*.png" "skins/mdDefault/*.rml" "skins/mdDefault/*.rcss"
 	"skins/mdDefault/*.ttf" "skins/mdDefault/*.lua"
-	"skins/mdStudio/*.rml" "skins/mdStudio/*.html")
+	"skins/mdStudio/*.rml" "skins/mdStudio/*.html" "skins/mdStudio/*.css" "skins/mdStudio/*.js"
+	"skins/mdStudio/fonts/*.woff2")
 file(GLOB MM_SKIN_ASSETS CONFIGURE_DEPENDS
 	"skins/mmSfx60/*.png" "skins/mmSfx60/*.rml" "skins/mmSfx60/*.rcss"
 	"skins/mmSfx60/*.ttf" "skins/mmSfx60/*.lua")
@@ -75,8 +80,8 @@ juce_add_binary_data(mmJucePlugin_BinaryData SOURCES
 
 createJucePlugin(mdJucePlugin "Gearmulator MD" TRUE "Tmdr" mdJucePlugin_BinaryData mdLib)
 createJucePlugin(mmJucePlugin "Gearmulator MM" TRUE "Tmno" mmJucePlugin_BinaryData mdLib)
-target_link_libraries(mdJucePlugin PRIVATE elektronData mdDataLink)
-target_link_libraries(mmJucePlugin PRIVATE elektronData mdDataLink)
+target_link_libraries(mdJucePlugin PRIVATE elektronData mdDataLink mdDesk)
+target_link_libraries(mmJucePlugin PRIVATE elektronData mdDataLink mdDesk)
 
 # MD/MM expose an optional stereo input to plug-in hosts. Starting the
 # standalone with that input active makes CoreAudio combine the built-in input

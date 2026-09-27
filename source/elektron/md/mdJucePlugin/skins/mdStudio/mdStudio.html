@@ -1,68 +1,92 @@
 <!doctype html>
-<html>
+<html lang="en">
 <head>
 <meta charset="utf-8">
-<title>MD Studio P0</title>
-<style>
-	body { background: #181818; color: #ccc; font: 12px -apple-system, sans-serif; margin: 8px; }
-	#status { margin-bottom: 6px; }
-	table { border-collapse: collapse; }
-	td { width: 14px; height: 20px; border: 1px solid #333; cursor: pointer; }
-	td.label { width: 28px; cursor: default; color: #888; border: none; }
-	td.x { background: #d86b1e; }
-	td.L { background: #e8c21e; }
-	td.beat { border-left: 2px solid #555; }
-	td.play { outline: 2px solid #4ad; }
-	button { margin-left: 8px; }
-</style>
+<title>Machinedrum Editor</title>
+<!-- The Machinedrum Editor page (P2): the approved mockup
+     doc/modern-ux/mockup/index.html on the plug-in's documents. Markup and
+     stylesheet follow the mockup; the editor inlines the stylesheet, scripts
+     and any bundled fonts before loading (WKWebView reads only this file). -->
+<link rel="stylesheet" href="mdDesk.css">
 </head>
 <body>
-<div id="status">waiting for firmware...<button onclick="bridge('refresh')">refresh</button></div>
-<table id="grid"></table>
-<script>
-	// C++ -> page: gm.pattern(json), gm.playhead(step). Page -> C++: bridge(cmd).
-	function bridge(cmd) { window.location.href = 'gmbridge://' + cmd; }
-	var state = null;
-	var playhead = -1;
-	var selfTest = location.search.indexOf('selftest=1') >= 0 ? ['toggle/0/8', 'toggle/2/3', 'toggle/0/8'] : [];
-	window.gm = {
-		pattern: function(p) {
-			state = p; render();
-			if (selfTest.length)
-				setTimeout(function() { bridge(selfTest.shift()); }, 1500);
-		},
-		playhead: function(s) { playhead = s; paintPlayhead(); }
-	};
-	function render() {
-		var grid = document.getElementById('grid');
-		grid.innerHTML = '';
-		for (var t = 0; t < 16; ++t) {
-			var tr = document.createElement('tr');
-			var label = document.createElement('td');
-			label.className = 'label';
-			label.textContent = 'T' + (t + 1);
-			tr.appendChild(label);
-			var trigs = state.tracks[t].trigs;
-			for (var s = 0; s < trigs.length; ++s) {
-				var td = document.createElement('td');
-				td.className = (trigs[s] === '.' ? '' : trigs[s]) + (s % 4 === 0 ? ' beat' : '');
-				td.dataset.step = s;
-				td.onclick = (function(t, s) { return function() { bridge('toggle/' + t + '/' + s); }; })(t, s);
-				tr.appendChild(td);
-			}
-			grid.appendChild(tr);
-		}
-		var rt = state.roundTripMs >= 0 ? ' | last click -> firmware read-back ' + state.roundTripMs.toFixed(1) + ' ms' : '';
-		document.getElementById('status').firstChild.textContent = 'pattern ' + (state.position + 1) + ' | length ' +
-			state.length + ' | lock rows ' + state.lockRows + '/64' + rt;
-		paintPlayhead();
-	}
-	function paintPlayhead() {
-		var cells = document.querySelectorAll('td[data-step]');
-		for (var i = 0; i < cells.length; ++i)
-			cells[i].classList.toggle('play', Number(cells[i].dataset.step) === playhead);
-	}
-	bridge('ready');
-</script>
+<div class="app">
+  <header class="top">
+    <div class="left">
+      <div class="brand" aria-label="Machinedrum Editor"><b>MACHINEDRUM</b><small class="ed">Editor</small></div>
+    <div class="wsgroup"><span class="grplabel">Workspace</span>
+    <nav class="tabs" role="tablist" id="tabs">
+      <button role="tab" data-ws="seq"><i class="led"></i><span>Sequence</span><small>1</small></button>
+      <button role="tab" data-ws="sound"><i class="led"></i><span>Sound</span><small>2</small></button>
+      <button role="tab" data-ws="mix"><i class="led"></i><span>Mix</span><small>3</small></button>
+      <button role="tab" data-ws="sampler"><i class="led"></i><span>Sampler</span><small>4</small></button>
+      <button role="tab" data-ws="song"><i class="led"></i><span>Song</span><small>5</small></button>
+      <button role="tab" data-ws="control"><i class="led"></i><span>Control</span><small>6</small></button>
+    </nav></div>
+    </div>
+      <div class="wsgroup trgroup"><span class="grplabel">Transport</span>
+       <div class="tabs trkeys">
+        <button class="tkey rec" id="rec" aria-pressed="false" aria-label="Record"><i class="led" id="recled"></i><span>● Rec</span></button>
+        <button class="tkey" id="play" aria-pressed="false" aria-label="Play"><i class="led" id="playled"></i><span>▶ Play</span></button>
+        <button class="tkey stop" id="stop" aria-label="Stop"><i class="led"></i><span>■ Stop</span></button>
+       </div>
+       <div class="seclabels"><button data-sec="copy" title="Copy (Cmd+C)">Copy</button><button data-sec="clear" title="Clear (Delete)">Clear</button><button data-sec="paste" title="Paste (Cmd+V)">Paste</button></div></div>
+    <div class="rightgrp">
+      <div class="lcdgroup">
+        <div class="lcdpanel">
+          <div class="f"><small>Tempo <i class="led" id="tempoled" aria-hidden="true"></i></small><b id="bpm" role="slider" tabindex="0" aria-label="Tempo in bpm" title="Drag up or down">124.0</b></div>
+          <div class="f patf"><small>Pattern <i class="led txled" id="txled" aria-hidden="true"></i></small><span class="patrow"><button class="lcdbtn" id="patPrev" aria-label="Previous pattern" title="Previous pattern">‹</button><b id="pat">A01</b><button class="lcdbtn" id="patNext" aria-label="Next pattern" title="Next pattern">›</button></span></div>
+          <div class="f kitf" id="kitf" role="button" tabindex="0" title="Kit actions: save, reload"><small>Kit <span class="save" id="save" role="status"><i></i><span>saved</span></span></small><b id="kitname">K01 WAREHOUSE</b></div>
+          <div class="f meter" id="meter" title="Locked parameters in this pattern. The Machinedrum allows 64."><small>Locks</small><b id="lockn">00/64</b></div>
+          <div class="lcd2" id="lcd2"></div>
+        </div>
+      </div>
+    <div class="wsgroup setgroup"><span class="grplabel">Setup</span>
+     <div class="tabs setkeys">
+      <button class="skey" id="undo" aria-label="Undo" title="Undo (Cmd+Z)"><i class="ico">↶</i><span>Undo</span><small id="undon"></small></button>
+      <button class="skey" id="redo" aria-label="Redo" title="Redo (Shift+Cmd+Z)"><i class="ico">↷</i><span>Redo</span><small id="redon"></small></button>
+      <button class="skey" id="learnkey" aria-pressed="false" title="Map any value to a controller knob (L)"><i class="led"></i><span>Learn</span><small>L</small></button>
+      <button class="skey" id="platekey" aria-label="Switch panel colour" title="Switch between the MKI silver and MKII black panel"><i class="led"></i><span>MKI</span></button>
+     </div></div>
+    </div>
+  </header>
+
+  <div class="subbar" id="subbar"></div>
+  <p class="statusline" id="status" role="status" hidden></p>
+  <p class="errline" id="errline" role="alert" hidden></p>
+  <div class="body" id="body">
+    <aside class="panel rail" id="rail" aria-label="Tracks"></aside>
+    <main id="main"></main>
+  </div>
+
+  <p class="firstlink"><span class="note">Machinedrum OS 1.63 · every edit goes to the emulated machine and is read back</span></p>
+  <details class="rules">
+    <summary>Hardware rules this editor follows (Machinedrum OS 1.63 manual)</summary>
+    <ul>
+      <li>16 tracks. Each track holds one machine: TRX, EFM, E12, P-I, GND, CTR, ROM, RAM or MID.</li>
+      <li>Pattern length is 16, 32, 48 or 64 steps. Tempo multiplier is 1X, 2X, 3/4X or 3/2X.</li>
+      <li>A pattern can lock 64 parameters in total, shared by all tracks. A locked parameter can take its own value on every step of that track.</li>
+      <li>Locks live on trigs. A step with no trig cannot hold a lock, and removing a trig removes its locks.</li>
+      <li>Locks work only in EXTENDED mode. In CLASSIC they stay in the pattern but do nothing.</li>
+      <li>Accent is 0–15. Swing is 50–80 %, where 50 % means no swing.</li>
+      <li>Each track has three pages of 8: SYNTHESIS (machine), EFFECTS (AMD AMF EQF EQG FLTF FLTW FLTQ SRR) and ROUTING (DIST VOL PAN DEL REV LFOS LFOD LFOM).</li>
+      <li>16 LFOs per kit: TRCK, PARAM, SHP1, SHP2 (6 shapes, SHP2 inverted), UPDTE (FREE, TRIG, HOLD), SPD, DEPTH, SHMIX.</li>
+      <li>Master effects (Rhythm Echo, Gate Box, EQ, Dynamix) are saved in the kit, work on the main outputs only and cannot be locked.</li>
+      <li>Mute and trig relations live in the kit (EDIT KIT, RELATE column).</li>
+      <li>UW only: 4 RAM recorders (RAM-R1 to R4) capture the main mix and inputs A/B on a trig. RAM-P1 to P4 play them back. RAM is lost at power-off.</li>
+      <li>UW only: 48 ROM slots keep samples after power-off. ROM and RAM share one DSP memory; less ROM in use means better RAM quality.</li>
+      <li>CTR machines have no sound: CTR-AL moves a parameter on all tracks, CTR-8P holds 8 shortcuts (a trigless trig), CTR-RE/GB/EQ/DX let you lock the master effects.</li>
+      <li>MID machines send NOTE plus two chord notes (N2, N3), LEN, VEL, PB, MW, AT and 5 CCs to external gear.</li>
+      <li>A song has up to 256 rows. Each row sets pattern, start, length, tempo and mutes. 32 songs fit in memory.</li>
+    </ul>
+  </details>
+</div>
+<div class="machpop" id="machpop" role="dialog" aria-label="Choose a machine" hidden></div>
+<div class="kpop" id="kpop" role="listbox" hidden></div>
+<div class="dlg" id="dlg" hidden></div>
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
+<script src="mdDeskBridge.js"></script>
+<script src="mdDeskModel.js"></script>
+<script src="mdDeskApp.js"></script>
 </body>
 </html>

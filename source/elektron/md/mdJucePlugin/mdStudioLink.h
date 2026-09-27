@@ -1,55 +1,82 @@
 #pragma once
 
-#include "elektronData/mdPattern.h"
-#include "mdDataLink/mdDataLink.h"
+#include "mdDesk/mdDesk.h"
+
+#include "mdLib/mddevice.h"
 
 #include "baseLib/event.h"
 #include "synthLib/midiTypes.h"
 
+#include <array>
+#include <atomic>
 #include <cstdint>
 #include <functional>
 #include <memory>
 #include <optional>
+#include <string>
+#include <vector>
+
+namespace pluginLib
+{
+	class Parameter;
+}
 
 namespace mdJucePlugin
 {
 	class AudioPluginAudioProcessor;
 	class Controller;
 
-	// The studio editor's only door to the machine. Data travels as the
-	// firmware's own SysEx dumps through an mdDataLink::Session; the view never
-	// sees bytes, only decoded elektronData values and Session state. Call and
+	// The Machinedrum Editor page's edge to the machine: SysEx in and out, kit
+	// parameters through the plug-in's parameter layer (so live edits are CCs,
+	// exactly like host automation), panel keys and the audio thread's sequencer
+	// telemetry. Nothing here knows documents; that is mdDesk::Desk. Call and
 	// receive on the message thread.
 	class StudioLink
 	{
 	public:
+		using Bytes = std::vector<uint8_t>;
+
 		StudioLink(AudioPluginAudioProcessor& _processor, Controller& _controller);
 		~StudioLink();
 
 		StudioLink(const StudioLink&) = delete;
 		StudioLink& operator=(const StudioLink&) = delete;
 
-		// Asks the firmware for its current pattern number, then for that pattern.
-		void requestCurrentPattern();
-		// Sends the dump, then requests it back so the view shows firmware truth.
-		void sendPattern(const elektronData::MdPattern& _pattern);
+		void sendSysex(const Bytes& _message) const;
+		// Kit parameter 0-23, 24 = level, through pluginLib::Parameter (Origin::Ui).
+		bool setKitParam(uint8_t _track, uint8_t _index, uint8_t _value) const;
+		bool setMute(uint8_t _track, bool _muted) const;
+		// Press and release a front-panel key ("play", "stop"); local MD only.
+		bool pressKey(const std::string& _key);
 
-		// MD OS 1.63 sequencer step (0-based) read from emulated RAM. Empty for a
-		// remote device or any other firmware.
-		std::optional<uint8_t> readPlayhead() const;
+		// Lock-free read of the audio thread's MD OS 1.63 RAM telemetry.
+		mdDesk::Telemetry readTelemetry();
+		// Missing (no valid device / ROM), Unsupported (not MD OS 1.63) or Present.
+		mdDesk::Desk::Firmware firmware() const;
 
-		std::function<void(const elektronData::MdPattern&)> onPattern;
+		// The name of kit parameter _index (0-24) in the plug-in's parameter layer.
+		static const char* parameterName(uint8_t _index);
 
-		// The whole data layer (kits, songs, globals, machine state) for P2.
-		mdDataLink::Session& session() { return m_session; }
+		// Every SysEx message the machine sends (marshalled to the message thread).
+		std::function<void(const Bytes&)> onSysex;
+
+		// Parameters that changed since the last call (host automation, MIDI learn,
+		// the panel editor): (track, index 0-24 or 25 = mute, value).
+		void drainParameterChanges(const std::function<void(uint8_t, uint8_t, uint8_t)>& _visit);
+
+		Controller& controller() { return m_controller; }
 
 	private:
 		void onDeviceSysex(const synthLib::SysexBuffer& _message);
-		void sendSysex(const std::vector<uint8_t>& _message) const;
+		pluginLib::Parameter* parameter(uint8_t _track, uint8_t _index) const;
 
 		AudioPluginAudioProcessor& m_processor;
-		mdDataLink::Session m_session;
+		Controller& m_controller;
 		baseLib::EventListener<synthLib::SysexBuffer> m_sysexListener;
+		std::vector<baseLib::EventListener<pluginLib::Parameter*>> m_paramListeners;
+		std::array<std::atomic<uint32_t>, 16> m_dirtyParams{};		// bit n = index n (0-25)
+		std::shared_ptr<const md::Device::SequencerTelemetry> m_telemetry;
+		double m_telemetryCheckedMs = -1e9;
 		std::shared_ptr<StudioLink*> m_alive;
 	};
 }
