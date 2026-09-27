@@ -983,6 +983,15 @@ html,body{min-width:1280px}
 .lcdt .lt .led,.lcdt .lt #recled{display:none!important}
 .lcdt .lt.rec[aria-pressed=true]{animation:blink 1s steps(2) infinite}
 @media (max-width:1500px){.lcdt .lt{height:36px!important;width:38px;font-size:17px!important}}
+/* v38: taller LCD, keys line up with the value row and line 2 */
+.top{--lcdh:88px}
+.lcdpanel{padding:10px 4px 10px!important;row-gap:8px!important}
+.lcdpanel .trf{display:grid!important;grid-template-rows:auto 1fr;align-content:stretch!important;gap:4px!important}
+.lcdt{align-self:stretch;align-items:stretch}
+.lcdt .lt{height:auto!important;min-height:0}
+.row2{align-items:center;padding-top:7px}
+.row2 .lcd2,.row2 .lcdsec{padding-top:0!important;align-items:center}
+@media (max-width:1500px){.top{--lcdh:82px}.lcdt .lt{height:auto!important}}
 
 /* ===== P2: states the real machine has ===== */
 .st.past{opacity:.45}
