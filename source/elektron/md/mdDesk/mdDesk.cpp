@@ -702,16 +702,16 @@ namespace mdDesk
 
 	void Desk::runModulators(const double _now)
 	{
-		if(m_mods.setup().links.empty())
-			return;
-		const auto kit = currentKit();
-		for(const auto& o : m_mods.step())
+		if(m_port.modulatorsElsewhere)
 		{
-			if(!kit || !m_port.sendKitParam || !m_ccBudget.take(_now))
-			{
-				m_mods.unsent(o);
+			publishModulators();
+			return;
+		}
+		const auto kit = currentKit();
+		for(const auto& o : m_mods.onPlayhead(m_telemetry.step, m_telemetry.playing, _now))
+		{
+			if(!kit || !m_port.sendKitParam)
 				continue;
-			}
 			m_port.sendKitParam(o.track, o.param, o.value);
 			onHostKitParam(o.track, o.param, o.value);
 		}
@@ -726,10 +726,13 @@ namespace mdDesk
 		m.set("type", "mod");
 		m.set("doc", modSetupToJson(m_mods.setup()));
 		Value values = Value::array();
-		for(const auto v : m_mods.values())
+		const auto report = m_port.modulatorsElsewhere ? m_port.modulatorsElsewhere()
+			: ModReport{m_mods.values(), m_mods.ccPerSecond(m_port.nowMs())};
+		for(const auto v : report.values)
 			values.push(v);
 		m.set("values", std::move(values));
-		m.set("ccPerSecond", m_ccBudget.lastSecond(m_port.nowMs()));
+		m.set("ccPerSecond", report.ccPerSecond);
+		m.set("runs", m_port.modulatorsElsewhere ? "plug-in" : "editor");
 		m.set("ccLimit", g_modCcPerSecond);
 		publish(m);
 	}
@@ -1210,13 +1213,9 @@ namespace mdDesk
 			}
 		}
 		if(wasPlaying != _t.playing)
-		{
 			m_machineDirty = true;
-			if(!_t.playing)
-				m_mods.reset();
-		}
-		// App modulators move on the machine's own steps.
-		if(_t.valid && _t.playing && _t.step >= 0 && _t.step != stepBefore)
+		// App modulators move on the machine's own steps (here, unless they run in the plug-in).
+		if(_t.valid && (_t.step != stepBefore || wasPlaying != _t.playing))
 			runModulators(m_port.nowMs());
 		if(recordingChanged)
 		{

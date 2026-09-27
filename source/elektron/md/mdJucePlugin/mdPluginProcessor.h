@@ -65,6 +65,10 @@ namespace mdJucePlugin
 		// project restore, so an open editor can pick the restored setup up.
 		std::string getDeskSetup() const;
 		void setDeskSetup(std::string _json);
+		// The app modulators, run here so they move with the editor closed (P5).
+		class ModRunner* getModRunner() const { return m_modRunner.get(); }
+		// Changes with every setDeskSetup (the editor's saves and project restores).
+		uint32_t getDeskSetupVersion() const { return m_deskSetupVersion.load(std::memory_order_acquire); }
 		uint32_t getDeskSetupGeneration() const { return m_deskSetupGeneration.load(std::memory_order_acquire); }
 
 	    jucePluginEditorLib::PluginEditorState* createEditorState() override;
@@ -106,6 +110,8 @@ namespace mdJucePlugin
 		mutable std::mutex m_deskSetupMutex;
 		std::string m_deskSetup;
 		std::atomic<uint32_t> m_deskSetupGeneration{0};
+		std::atomic<uint32_t> m_deskSetupVersion{0};
+		std::unique_ptr<class ModRunner> m_modRunner;
 		JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(AudioPluginAudioProcessor)
 	};
 }

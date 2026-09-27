@@ -31,6 +31,7 @@ set(SOURCES
 	mdStandaloneApp.cpp
 	mdStudioEditor.cpp mdStudioEditor.h
 	mdStudioLink.cpp mdStudioLink.h
+	mdModRunner.cpp mdModRunner.h
 	mmStudioEditor.cpp mmStudioEditor.h
 	mmStudioLink.cpp mmStudioLink.h
 	$<$<PLATFORM_ID:Darwin>:mdStudioWebZoom.mm>
@@ -395,6 +396,17 @@ if(BUILD_TESTING)
 	add_test(NAME mdDeskSetupStateTest COMMAND mdDeskSetupStateTest)
 	set_tests_properties(mdDeskSetupStateTest PROPERTIES LABELS "UnitTest" TIMEOUT 120)
 	set_property(TARGET mdDeskSetupStateTest PROPERTY FOLDER "Elektron/test")
+
+	# P5: the app modulators in the processor, no editor (manual: needs the ROM).
+	add_executable(mdModRunnerFirmwareTest mdModRunnerFirmwareTest.cpp)
+	target_link_libraries(mdModRunnerFirmwareTest PRIVATE
+		mdJucePlugin jucePluginEditorLib mdLib juce_plugin_modules
+		juce::juce_opengl)
+	target_include_directories(mdModRunnerFirmwareTest PRIVATE
+		${CMAKE_CURRENT_SOURCE_DIR}/../../..)
+	target_compile_definitions(mdModRunnerFirmwareTest PRIVATE
+		JUCE_GLOBAL_MODULE_SETTINGS_INCLUDED=1)
+	set_property(TARGET mdModRunnerFirmwareTest PROPERTY FOLDER "Elektron/test")
 
 	add_executable(mdProjectStateRestoreTest mdProjectStateRestoreTest.cpp)
 	target_link_libraries(mdProjectStateRestoreTest PRIVATE

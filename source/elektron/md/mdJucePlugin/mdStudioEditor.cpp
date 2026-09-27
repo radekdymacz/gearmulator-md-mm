@@ -3,6 +3,7 @@
 #include "mdController.h"
 #include "mdPluginProcessor.h"
 #include "mdStudioLink.h"
+#include "mdModRunner.h"
 
 #include "mdLib/mdautomation.h"
 
@@ -216,6 +217,10 @@ namespace mdJucePlugin
 		};
 		port.nowMs = [] { return nowMs(); };
 		port.saveSetup = [&processor](const json::Value& _setup) { processor.setDeskSetup(json::write(_setup)); };
+		// The emulator's app modulators run in the processor (P5, ModRunner); HW MIDI keeps them
+		// in the desk (it has no playhead there, so they stay still).
+		if(!_hw && processor.getModRunner())
+			port.modulatorsElsewhere = [&processor] { return processor.getModRunner()->report(); };
 		m_desk = std::make_unique<mdDesk::Desk>(port);
 		m_desk->setHardwareLink(_hw);
 		loadDeskSetup();

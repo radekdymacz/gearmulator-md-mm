@@ -1,4 +1,5 @@
 #include "mdPluginProcessor.h"
+#include "mdModRunner.h"
 
 #include "mdController.h"
 #include "mdPluginEditorState.h"
@@ -164,6 +165,8 @@ namespace mdJucePlugin
 	{
 		const std::lock_guard lock(m_deskSetupMutex);
 		m_deskSetup = std::move(_json);
+		// The ModRunner picks it up on the message thread, whichever thread set it.
+		m_deskSetupVersion.fetch_add(1, std::memory_order_release);
 	}
 
 	bool AudioPluginAudioProcessor::loadCustomData(const std::vector<uint8_t>& _sourceBuffer)
@@ -443,6 +446,8 @@ namespace mdJucePlugin
 		}
 		if(m_model == md::MachineModel::Machinedrum || m_startupDiagnosticsEnabled)
 			startTimer(250);
+		if(m_model == md::MachineModel::Machinedrum)
+			m_modRunner = std::make_unique<ModRunner>(*this);
 		m_performanceReport = std::make_unique<synthLib::PerformanceReport>(
 			getPlugin().getRealtimeInstrumentation(), panelEventDetails);
 		// The environment switch is also useful in hosts without an open editor.
@@ -465,6 +470,7 @@ namespace mdJucePlugin
 
 	AudioPluginAudioProcessor::~AudioPluginAudioProcessor()
 	{
+		m_modRunner.reset();
 		stopTimer();
 		m_performanceReport.reset();
 		destroyEditorState();

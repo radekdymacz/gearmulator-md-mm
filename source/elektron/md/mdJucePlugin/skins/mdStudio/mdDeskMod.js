@@ -22,5 +22,5 @@ const Mods = {
 		if (this.doc.links.some(l => l.source === id && l.track === track && l.param === param)) return false;
 		this.doc.links.push({ source: id, track, param, min: 0, max: 127, curve: "lin", invert: false }); return true;
 	},
-	onMessage(m) { this.doc = m.doc; this.values = m.values || []; this.cc = m.ccPerSecond || 0; this.limit = m.ccLimit || 300; }
+	onMessage(m) { this.doc = m.doc; this.values = m.values || []; this.cc = m.ccPerSecond || 0; this.limit = m.ccLimit || 300; this.runs = m.runs || "editor"; }
 };

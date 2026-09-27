@@ -266,4 +266,28 @@ namespace mdDesk
 			[&](const double _t) { return _nowMs - _t < 1000; }));
 		return static_cast<int>(m_sent.size());
 	}
+
+	std::vector<ModOutput> ModEngine::onPlayhead(const int _step, const bool _playing, const double _nowMs)
+	{
+		std::vector<ModOutput> out;
+		if(m_playing && !_playing)
+			m_mods.reset();
+		m_playing = _playing;
+		if(!_playing || _step < 0 || _step == m_lastStep)
+		{
+			m_lastStep = _playing ? m_lastStep : -1;
+			return out;
+		}
+		m_lastStep = _step;
+		if(m_mods.setup().links.empty())
+			return out;
+		for(const auto& o : m_mods.step())
+		{
+			if(m_budget.take(_nowMs))
+				out.push_back(o);
+			else
+				m_mods.unsent(o);
+		}
+		return out;
+	}
 }

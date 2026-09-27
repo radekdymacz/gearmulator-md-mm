@@ -278,8 +278,12 @@ Rules (`mdDesk/mdDeskMod.h`):
   changes, within a rolling budget of 300 CCs a second (the mockup's limit).
   Over budget, the value is sent on a later step.
 - It is not part of the kit, a real Machinedrum does not play it, and live
-  recording does not record CCs. The sources run while the editor is open (the
-  desk lives in the editor).
+  recording does not record CCs. P5: with the emulator they run in the plug-in's
+  processor (`mdJucePlugin/mdModRunner`, the same pure `mdDesk::ModEngine`, on the
+  message thread, CCs through the parameter layer), so they keep moving with the
+  editor closed; the desk only edits the setup and shows the processor's values
+  (`"runs":"plug-in"` in the `mod` message). Over HW MIDI they stay in the desk
+  (there is no playhead to follow there, so they do not move).
 
 ### 4.7 `md-desk/setup` (kept with the project, P4)
 

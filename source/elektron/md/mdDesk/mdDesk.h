@@ -70,6 +70,9 @@ namespace mdDesk
 			// DATA ENTRY knob 0-7 turned by _steps (one step = one value).
 			std::function<bool(uint8_t _encoder, int _steps)> turnKnob;
 			std::function<void(const Value& _message)> toPage;
+			// The app modulators run elsewhere (the plug-in's processor, P5): the desk then only
+			// edits their setup and shows these values. Unset: the desk runs them itself.
+			std::function<ModReport()> modulatorsElsewhere;
 			// The editor's setup (md-desk/setup) changed: keep it with the project.
 			std::function<void(const Value& _setup)> saveSetup;
 			std::function<double()> nowMs;
@@ -223,9 +226,8 @@ namespace mdDesk
 		// The trig the last knob turn will lock while recording (nextLockStep), for the page.
 		struct RecLock { uint8_t track = 0, param = 0, step = 0; double atMs = 0; };
 		std::optional<RecLock> m_recLock;
-		Modulators m_mods;
+		ModEngine m_mods;
 		DeskSetup m_setup;
-		CcBudget m_ccBudget;
 		double m_recordPollMs = -1e9;
 		double m_recordAfterStopMs = -1;
 		double m_keyQuietUntilMs = -1e9;

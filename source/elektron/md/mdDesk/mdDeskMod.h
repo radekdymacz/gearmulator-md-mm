@@ -131,4 +131,35 @@ namespace mdDesk
 	private:
 		std::vector<double> m_sent;
 	};
+
+	// The app modulators as they run (P5): the setup, the machine's steps in, the CCs to send
+	// out within the budget. Pure; the editor's desk or the plug-in's processor (so they run with
+	// the editor closed) drives one.
+	class ModEngine
+	{
+	public:
+		void setSetup(ModSetup _setup) { m_mods.setSetup(std::move(_setup)); }
+		const ModSetup& setup() const { return m_mods.setup(); }
+
+		// The machine's playhead: a new step while playing moves the sources; the link values
+		// to send now come back (over the budget they wait for a later step). Stopping restarts
+		// the sources from phase 0.
+		std::vector<ModOutput> onPlayhead(int _step, bool _playing, double _nowMs);
+
+		std::vector<int> values() const { return m_mods.values(); }
+		int ccPerSecond(const double _nowMs) { return m_budget.lastSecond(_nowMs); }
+
+	private:
+		Modulators m_mods;
+		CcBudget m_budget;
+		int m_lastStep = -1;
+		bool m_playing = false;
+	};
+
+	// What the page shows of modulators that run elsewhere.
+	struct ModReport
+	{
+		std::vector<int> values;
+		int ccPerSecond = 0;
+	};
 }
