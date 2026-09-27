@@ -16,23 +16,26 @@ namespace mdJucePlugin
 	{
 		// Found by mdPatternLiveEditFirmwareTest: current step, 0..length-1.
 		constexpr uint32_t g_mdPlayheadAddress = 0x261aa7;
-
-		constexpr uint8_t g_statusResponse = 0x72;
-		constexpr uint8_t g_statusPattern = 0x04;
-		constexpr uint8_t g_patternDump = 0x67;
-
-		bool isMdMessage(const synthLib::SysexBuffer& _m, const uint8_t _command)
-		{
-			return _m.size() > 8 && _m[0] == 0xf0 && _m[1] == 0x00 && _m[2] == 0x20 && _m[3] == 0x3c
-				&& _m[4] == 0x02 && _m[6] == _command;
-		}
 	}
 
 	StudioLink::StudioLink(AudioPluginAudioProcessor& _processor, Controller& _controller)
 		: m_processor(_processor)
+		, m_session([this](const std::vector<uint8_t>& _m) { sendSysex(_m); })
 		, m_sysexListener(_controller.evDeviceSysex, [this](const synthLib::SysexBuffer& _m) { onDeviceSysex(_m); })
 		, m_alive(std::make_shared<StudioLink*>(this))
 	{
+		m_session.onPattern = [this](const elektronData::MdPattern& _p)
+		{
+			if(onPattern)
+				onPattern(_p);
+		};
+		// A newly reported current pattern is fetched, as the P0 editor did.
+		m_session.onState = [this, last = std::optional<uint8_t>()](const mdDataLink::Session::State& _s) mutable
+		{
+			if(_s.pattern && _s.pattern != last)
+				m_session.requestPattern(*_s.pattern);
+			last = _s.pattern;
+		};
 	}
 
 	StudioLink::~StudioLink()
@@ -42,13 +45,15 @@ namespace mdJucePlugin
 
 	void StudioLink::requestCurrentPattern()
 	{
-		sendSysex({0xf0, 0x00, 0x20, 0x3c, 0x02, 0x00, 0x70, g_statusPattern, 0xf7});
+		// Always re-fetch, even when the pattern number did not change.
+		sendSysex(elektronData::mdStatusRequest(elektronData::MdStatus::Pattern));
+		if(const auto current = m_session.state().pattern)
+			m_session.requestPattern(*current);
 	}
 
 	void StudioLink::sendPattern(const elektronData::MdPattern& _pattern)
 	{
-		sendSysex(elektronData::encodeMdPattern(_pattern));
-		sendSysex(elektronData::mdPatternRequest(_pattern.position));
+		m_session.pushPattern(_pattern);
 	}
 
 	std::optional<uint8_t> StudioLink::readPlayhead() const
@@ -67,21 +72,15 @@ namespace mdJucePlugin
 
 	void StudioLink::onDeviceSysex(const synthLib::SysexBuffer& _message)
 	{
-		if(isMdMessage(_message, g_statusResponse) && _message[7] == g_statusPattern)
-		{
-			sendSysex(elektronData::mdPatternRequest(_message[8]));
+		// Drain thread -> message thread; the Session is single-threaded.
+		if(_message.size() < 9 || _message[0] != 0xf0 || _message[4] != 0x02)
 			return;
-		}
-		if(!isMdMessage(_message, g_patternDump))
-			return;
-		auto pattern = elektronData::decodeMdPattern({_message.begin(), _message.end()});
-		if(!pattern)
-			return;
-		juce::MessageManager::callAsync([alive = std::weak_ptr<StudioLink*>(m_alive), p = std::move(*pattern)]
+		juce::MessageManager::callAsync([alive = std::weak_ptr<StudioLink*>(m_alive),
+			m = std::vector<uint8_t>(_message.begin(), _message.end())]
 		{
 			const auto self = alive.lock();
-			if(self && *self && (*self)->onPattern)
-				(*self)->onPattern(p);
+			if(self && *self)
+				(*self)->m_session.onSysex(m);
 		});
 	}
 

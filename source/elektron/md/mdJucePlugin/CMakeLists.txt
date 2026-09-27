@@ -75,8 +75,8 @@ juce_add_binary_data(mmJucePlugin_BinaryData SOURCES
 
 createJucePlugin(mdJucePlugin "Gearmulator MD" TRUE "Tmdr" mdJucePlugin_BinaryData mdLib)
 createJucePlugin(mmJucePlugin "Gearmulator MM" TRUE "Tmno" mmJucePlugin_BinaryData mdLib)
-target_link_libraries(mdJucePlugin PRIVATE elektronData)
-target_link_libraries(mmJucePlugin PRIVATE elektronData)
+target_link_libraries(mdJucePlugin PRIVATE elektronData mdDataLink)
+target_link_libraries(mmJucePlugin PRIVATE elektronData mdDataLink)
 
 # MD/MM expose an optional stereo input to plug-in hosts. Starting the
 # standalone with that input active makes CoreAudio combine the built-in input

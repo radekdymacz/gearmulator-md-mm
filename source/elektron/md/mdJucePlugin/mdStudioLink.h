@@ -1,6 +1,7 @@
 #pragma once
 
 #include "elektronData/mdPattern.h"
+#include "mdDataLink/mdDataLink.h"
 
 #include "baseLib/event.h"
 #include "synthLib/midiTypes.h"
@@ -15,9 +16,10 @@ namespace mdJucePlugin
 	class AudioPluginAudioProcessor;
 	class Controller;
 
-	// The studio editor's only door to the machine (P0 plumbing proof).
-	// Pattern data travels as the firmware's own SysEx dumps; the view never sees
-	// bytes, only decoded elektronData values. Call and receive on the message thread.
+	// The studio editor's only door to the machine. Data travels as the
+	// firmware's own SysEx dumps through an mdDataLink::Session; the view never
+	// sees bytes, only decoded elektronData values and Session state. Call and
+	// receive on the message thread.
 	class StudioLink
 	{
 	public:
@@ -38,11 +40,15 @@ namespace mdJucePlugin
 
 		std::function<void(const elektronData::MdPattern&)> onPattern;
 
+		// The whole data layer (kits, songs, globals, machine state) for P2.
+		mdDataLink::Session& session() { return m_session; }
+
 	private:
 		void onDeviceSysex(const synthLib::SysexBuffer& _message);
 		void sendSysex(const std::vector<uint8_t>& _message) const;
 
 		AudioPluginAudioProcessor& m_processor;
+		mdDataLink::Session m_session;
 		baseLib::EventListener<synthLib::SysexBuffer> m_sysexListener;
 		std::shared_ptr<StudioLink*> m_alive;
 	};
