@@ -178,6 +178,24 @@ namespace md
 		{
 			return m_hardware->trySendPanelEvent(_command, _argument);
 		}
+		// A key press as panel row states (md::panelKeySequence), each held for
+		// _holdFrames of machine time: the audio thread sends them, so a hold does
+		// not depend on UI timers (live recording needs RECORD held < 150 ms before
+		// PLAY). Queued after a sequence still running. Needs the device lock.
+		bool sendPanelSequence(const std::vector<PanelPacket>& _states, uint32_t _holdFrames)
+		{
+			// Drop what was sent, then append.
+			std::copy(m_panelSequence.begin() + static_cast<std::ptrdiff_t>(m_panelSequenceNext),
+				m_panelSequence.begin() + static_cast<std::ptrdiff_t>(m_panelSequenceSize), m_panelSequence.begin());
+			m_panelSequenceSize -= m_panelSequenceNext;
+			m_panelSequenceNext = 0;
+			if(_states.empty() || m_panelSequenceSize + _states.size() > m_panelSequence.size())
+				return false;
+			std::copy(_states.begin(), _states.end(), m_panelSequence.begin() + static_cast<std::ptrdiff_t>(m_panelSequenceSize));
+			m_panelSequenceSize += _states.size();
+			m_panelSequenceHold = _holdFrames;
+			return true;
+		}
 		PanelInputQueueStatus getPanelInputStatus() const
 		{
 			return m_hardware->getPanelInputStatus();
@@ -298,6 +316,12 @@ namespace md
 		const MachineModel m_model;
 		std::shared_ptr<SequencerTelemetry> m_sequencerTelemetry = std::make_shared<SequencerTelemetry>();
 		SequencerState m_sequencer;
+		std::array<PanelPacket, 32> m_panelSequence{};
+		size_t m_panelSequenceSize = 0;
+		size_t m_panelSequenceNext = 0;
+		uint32_t m_panelSequenceHold = 0;
+		uint64_t m_panelSequenceAt = 0;
+		uint64_t m_frames = 0;
 		std::shared_ptr<FrontPanelPublisher> m_frontPanelPublisher;
 		std::shared_ptr<const PreparationContext> m_preparationContext;
 		std::unique_ptr<Hardware> m_hardware;

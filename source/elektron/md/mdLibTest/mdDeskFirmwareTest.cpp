@@ -695,7 +695,52 @@ int main(const int _argc, char** _argv)
 	{
 		const auto rom = load(_argv[1]);
 		require(rom.size() == md::g_romSize, "ROM must be the 8 MiB MD 1.63 image");
+		if(false && _argc > 3 && std::string(_argv[2]) == "playload")
+		{
+			Rig user(rom, _argv[1], patchRamFromState(_argv[3], rom));
+			user.page(R"({"op":"ready"})");
+			user.runUntil([&] { return user.desk().isReady() && user.desk().documents().patterns.size() > 20; }, 5000);
+			for(int i = 0; i < 3; ++i)
+			{
+				const auto t0 = user.machine().now();
+				user.page(R"({"op":"play","id":1})");
+				const bool on = user.runUntil([&] { return user.machineDoc() && user.machineDoc()->find("desk")->find("playing")->asBool(); }, 3000);
+				std::printf("user state PLAY %d: %s after %.0f ms, step %u, stopped byte %u\n", i, on ? "playing" : "NOT playing",
+					ms(user.machine().now() - t0), user.machine().playhead(), user.machine().read8(0x28cdaf));
+				user.page(R"({"op":"stop","id":2})");
+				user.run(800);
+			}
+			return 0;
+		}
 		Rig rig(rom, _argv[1]);
+		if(_argc > 2 && std::string(_argv[2]) == "playload")
+		{
+			// PLAY while the desk loads patterns and songs in the background.
+			rig.page(R"({"op":"ready"})");
+			rig.runUntil([&] { return rig.desk().isReady() && rig.desk().documents().patterns.size() > 20; }, 5000);
+			for(int i = 0; i < 3; ++i)
+			{
+				if(i == 1)
+					rig.page(R"({"op":"saveKit","id":3})");
+				if(i == 2)
+				{
+					const auto p = std::to_string(*rig.desk().session().state().pattern);
+					rig.page("{\"op\":\"trig\",\"p\":" + p + ",\"t\":0,\"s\":3,\"id\":5}");
+					rig.runUntil([&] { return !rig.desk().isBusy(); }, 1000);
+					rig.page("{\"op\":\"param\",\"k\":" + std::to_string(*rig.desk().session().state().kit) + ",\"t\":0,\"i\":16,\"v\":9,\"id\":6}");
+					rig.page(R"({"op":"saveKit","id":7})");
+				}
+				rig.run(300);
+				const auto t0 = rig.machine().now();
+				rig.page(R"({"op":"play","id":1})");
+				const bool on = rig.runUntil([&] { return rig.machineDoc() && rig.machineDoc()->find("desk")->find("playing")->asBool(); }, 3000);
+				std::printf("PLAY %d while loading (%zu patterns, %zu songs): %s after %.0f ms\n", i, rig.desk().documents().patterns.size(),
+					rig.desk().documents().songs.size(), on ? "playing" : "NOT playing", ms(rig.machine().now() - t0));
+				rig.page(R"({"op":"stop","id":2})");
+				rig.run(800);
+			}
+			return 0;
+		}
 		smoke(rig);
 		{
 			const auto kit = *rig.desk().session().state().kit;

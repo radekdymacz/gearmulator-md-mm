@@ -115,6 +115,7 @@ namespace mdDesk
 		void handleSelect(const Value& _message);
 		void handleRecord(const Value& _message);
 		void pumpRecording(double _now);
+		bool pressKey(const std::string& _key);
 
 		void onPattern(const elektronData::MdPattern& _p);
 		void onKit(const elektronData::MdKit& _k);
@@ -170,6 +171,7 @@ namespace mdDesk
 		KnobRecorder m_knobs;
 		double m_recordPollMs = -1e9;
 		double m_recordAfterStopMs = -1;
+		double m_keyQuietUntilMs = -1e9;
 		std::vector<std::pair<double, std::function<void()>>> m_scheduled;
 	};
 }

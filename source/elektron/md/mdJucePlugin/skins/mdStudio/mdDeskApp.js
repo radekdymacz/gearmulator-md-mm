@@ -53,7 +53,9 @@ function cmd(op, args = {}, key) {
 	Bridge.send(msg, { key, onResult: r => onResult(r) });
 	tx();
 }
+const SELFTEST = /[?&]selftest=1/.test(location.search);
 function onResult(r) {
+	if (SELFTEST && (r.op === "record" || r.op === "recTrig" || r.op === "play" || r.op === "stop" || !r.ok)) Bridge.log("result " + r.op + " ok " + r.ok + " " + (r.errors || []).join(";") + " " + (r.note || ""));
 	if (!r.ok && r.errors && r.errors.length) { toast(r.errors[0]); showLastError(r.errors); }
 	else if (r.note) toast(r.note);
 }
@@ -1141,5 +1143,45 @@ if (/[?&]selftest=1/.test(location.search)) (async () => {
 	log(`kit read back after SAVE KIT: ${t1 >= 0 ? "ok" : "FAIL"} DIST = ${kit() ? kit().tracks[0].routing[0] : "?"} (${ms(t0, t1)})`);
 	cmd("param", { k, t: 0, i: 16, v: old }); await sleep(200); cmd("saveKit"); await sleep(500);
 	S.ws = "seq"; render();
+	/* P3: working kit from memory, LCD width, REC. The firmware's start-up animation runs for about
+	   20 s after it answers MIDI and eats the first key press: wait it out. */
+	while (performance.now() < 30000) await sleep(500);
+	log(`P3: kit source ${machineState().desk.kitSource}, kit ${machineState().kit.working}, song mode ${machineState().songMode}, mutes ${machineState().desk.mutes}`);
+	const lcdW = () => Math.round(document.querySelector(".lcdpanel").getBoundingClientRect().width * 10) / 10;
+	const widths = [lcdW()];
+	const bpm0 = S.bpm;
+	for (const b of [30, 299.5, bpm0]) { cmd("tempo", { bpm: b }); await sleep(250); widths.push(lcdW()); }
+	await sleep(800);
+	log(`P3: tempo back to ${S.bpm} (was ${bpm0})`);
+	log(`P3: LCD width through tempo changes ${widths.join(" / ")} px, font ${getComputedStyle($("#bpm")).fontFamily.split(",")[0]} loaded ${document.fonts.check("12px Silkscreen")}`);
+	const recOn = () => !!machineState().desk.recording;
+	t0 = performance.now();
+	$("#play").click();
+	t1 = await until(() => machineState().desk.playing, 3000);
+	log(`P3: PLAY key -> playing ${t1 >= 0 ? "ok" : "FAIL"} ${ms(t0, t1)}, key shows ${$("#playico").textContent}`);
+	t0 = performance.now();
+	$("#play").click();
+	t1 = await until(() => !machineState().desk.playing, 3000);
+	log(`P3: STOP (same key) -> stopped ${t1 >= 0 ? "ok" : "FAIL"} ${ms(t0, t1)}, key shows ${$("#playico").textContent}`);
+	await sleep(300);
+	t0 = performance.now();
+	$("#rec").click();
+	t1 = await until(recOn, 3000);
+	log(`P3: after REC: playing ${machineState().desk.playing} step ${S.step} telemetry ${machineState().desk.telemetry}`);
+	log(`P3: REC -> live recording ${t1 >= 0 ? "ok" : "FAIL"} ${ms(t0, t1)}; LCD ${lcdW()} px, REC key pressed ${$("#rec").getAttribute("aria-pressed")}`);
+	if (t1 >= 0) {
+		const tr = 13, before = (pat().tracks[tr].trigs || []).length;
+		await until(() => S.step >= 2 && S.step <= 4, 3000);
+		document.querySelector(`.st[data-t="${tr}"][data-s="0"]`).click();
+		await sleep(1200);
+		const after = (pat().tracks[tr].trigs || []).length;
+		log(`P3: grid click while recording -> recorded trig on track ${tr + 1}: ${after > before ? "ok" : "FAIL"} (${before} -> ${after} trigs, read back while recording)`);
+		$("#rec").click();
+		t1 = await until(() => !recOn(), 3000);
+		log(`P3: REC again -> recording off ${t1 >= 0 ? "ok" : "FAIL"}, still playing ${machineState().desk.playing}`);
+		$("#play").click(); await until(() => !machineState().desk.playing, 3000);
+		log(`P3: PLAY key shows ${$("#playico").textContent} after stop`);
+		cmd("clearSteps", { p: currentPatternSlot(), t: tr, from: 0, to: S.len }); await sleep(400);
+	}
 	log("selftest done; kit " + JSON.stringify(machineState().kit) + ", undo steps " + machineState().desk.undoCount);
 })();

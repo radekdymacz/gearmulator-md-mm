@@ -668,6 +668,13 @@ namespace md
 		m_hardware->processAudio(_inputs, _outputs,
 			static_cast<uint32_t>(_samples), getExtraLatencySamples());
 		publishSequencerTelemetry(_samples);
+		m_frames += _samples;
+		if(m_panelSequenceNext < m_panelSequenceSize && m_frames >= m_panelSequenceAt)
+		{
+			const auto& p = m_panelSequence[m_panelSequenceNext++];
+			(void)m_hardware->trySendPanelEvent(p.row, p.mask);
+			m_panelSequenceAt = m_frames + m_panelSequenceHold;
+		}
 		if(m_deferredPreparedState && m_deferredPreparedState->m_hardware
 			&& m_deferredPreparedState->m_hardware->isProjectStateRestorePending())
 		{

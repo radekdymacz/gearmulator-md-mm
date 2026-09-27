@@ -408,6 +408,12 @@ namespace mdJucePlugin
 			return;
 		if(++m_ticks % 30 == 0)
 			m_desk->setFirmware(m_link->firmware());
+		if(m_ticks % 15 == 0 && juce::SystemStats::getEnvironmentVariable("GEARMULATOR_MDSTUDIO_SELFTEST", {}) == "1")
+		{
+			const auto t = m_link->readTelemetry();
+			log("telemetry: step " + juce::String(t.step) + " playing " + juce::String(t.playing ? 1 : 0) + " rec "
+				+ juce::String(t.recording ? 1 : 0) + " grid " + juce::String(t.gridEdit ? 1 : 0) + " page " + juce::String(t.knobPage));
+		}
 		if(m_ticks % 150 == 0)
 		{
 			const auto& s = m_desk->session().state();

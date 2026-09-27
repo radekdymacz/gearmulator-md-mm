@@ -128,19 +128,14 @@ namespace mdJucePlugin
 	bool StudioLink::pressKey(const std::string& _key)
 	{
 		const auto states = md::panelKeySequence(md::MachineModel::Machinedrum, _key);
-		if(states.empty() || !sendPanel(states.front().row, states.front().mask))
+		if(states.empty())
 			return false;
-		// The firmware scans the panel every few ms; hold each state 40 ms.
-		for(size_t i = 1; i < states.size(); ++i)
+		// Held 40 ms each in machine time (the audio thread sends them).
+		return m_processor.getPlugin().withDeviceLocked([&](synthLib::Device* _base)
 		{
-			juce::Timer::callAfterDelay(static_cast<int>(40 * i), [alive = std::weak_ptr<StudioLink*>(m_alive), s = states[i]]
-			{
-				const auto self = alive.lock();
-				if(self && *self)
-					(*self)->sendPanel(s.row, s.mask);
-			});
-		}
-		return true;
+			auto* device = dynamic_cast<md::Device*>(_base);
+			return device && device->sendPanelSequence(states, md::g_samplerate * 40 / 1000);
+		});
 	}
 
 	bool StudioLink::turnKnob(const uint8_t _encoder, const int _steps) const

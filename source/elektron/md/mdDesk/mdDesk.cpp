@@ -24,6 +24,7 @@ namespace mdDesk
 		// The desk's own live edits reach the firmware's memory after the MIDI queue;
 		// a memory image read before that would briefly undo them in the view.
 		constexpr double g_workingKitHoldMs = 150;
+		constexpr double g_keyQuietMs = 500;
 
 		const char* kindName(const DocKind _k)
 		{
@@ -212,7 +213,7 @@ namespace mdDesk
 		}
 		else if(op == "play" || op == "stop")
 		{
-			const bool ok = m_port.pressKey && m_port.pressKey(op);
+			const bool ok = pressKey(op);
 			result(_message, ok ? std::vector<std::string>{} : std::vector<std::string>{"Transport keys need the local"
 				" emulated machine"}, {});
 		}
@@ -225,11 +226,11 @@ namespace mdDesk
 			{
 				// P1: the playing song ignores dumps and LOAD SONG: stop, load, play.
 				const bool wasPlaying = m_telemetry.playing;
-				if(wasPlaying && m_port.pressKey)
-					m_port.pressKey("stop");
+				if(wasPlaying)
+					pressKey("stop");
 				schedule(wasPlaying ? 150 : 0, [this, s = *song] { m_session.loadSong(s); m_machineDirty = true; });
-				if(wasPlaying && m_port.pressKey)
-					schedule(300, [this] { m_port.pressKey("play"); });
+				if(wasPlaying)
+					schedule(300, [this] { pressKey("play"); });
 				result(_message, {}, "Song reloaded: stop, load, play");
 			}
 		}
@@ -399,7 +400,7 @@ namespace mdDesk
 	// TRIG key, which the firmware records.
 	void Desk::handleRecord(const Value& _message)
 	{
-		const auto press = [&](const std::string& _key) { return m_port.pressKey && m_port.pressKey(_key); };
+		const auto press = [&](const std::string& _key) { return pressKey(_key); };
 		if(opOf(_message) == "recTrig")
 		{
 			const auto t = intOf(_message, "t");
@@ -436,13 +437,24 @@ namespace mdDesk
 			"Live recording: play the tracks, turn the knobs");
 	}
 
+	// Panel keys are lost while the firmware builds a dump (measured in the plug-in:
+	// PLAY during the background song loads did nothing). Keep the line quiet
+	// around every key press.
+	bool Desk::pressKey(const std::string& _key)
+	{
+		if(!m_port.pressKey)
+			return false;
+		m_keyQuietUntilMs = m_port.nowMs() + g_keyQuietMs;
+		return m_port.pressKey(_key);
+	}
+
 	void Desk::pumpRecording(const double _now)
 	{
 		// REC pressed while playing: live recording starts once the machine stopped.
 		if(m_recordAfterStopMs >= 0)
 		{
-			if(!m_telemetry.playing && m_port.pressKey)
-				m_port.pressKey("recordPlay");
+			if(!m_telemetry.playing)
+				pressKey("recordPlay");
 			if(!m_telemetry.playing || _now - m_recordAfterStopMs > 1500)
 				m_recordAfterStopMs = -1;
 		}
@@ -466,12 +478,14 @@ namespace mdDesk
 				m_port.sendSysex(ed::mdSetStatus(ed::MdStatus::Track, step->track));
 			break;
 		case KnobStep::Kind::PageKey:
-			if(m_port.pressKey)
-				m_port.pressKey("page");
+			pressKey("page");
 			break;
 		case KnobStep::Kind::Turn:
 			if(m_port.turnKnob && step->steps)
+			{
+				m_keyQuietUntilMs = _now + g_keyQuietMs;
 				m_port.turnKnob(step->encoder, step->steps);
+			}
 			break;
 		}
 	}
@@ -885,8 +899,9 @@ namespace mdDesk
 		}
 		if(m_loadQueue.empty() || _now - m_lastRequestMs < g_loadGapMs)
 			return;
-		// Loads wait while an edit is on the wire: they would delay its read-back.
-		if(isBusy())
+		// Loads wait while an edit is on the wire (they would delay its read-back) and
+		// around panel key presses.
+		if(isBusy() || _now < m_keyQuietUntilMs)
 			return;
 		const auto next = m_loadQueue.front();
 		m_loadQueue.pop_front();
@@ -942,7 +957,7 @@ namespace mdDesk
 			return;
 		}
 		const auto statusEvery = m_ready && m_audibleQueue ? g_statusQueuedMs : g_statusIdleMs;
-		if(now - m_lastStatusMs >= statusEvery)
+		if(now - m_lastStatusMs >= statusEvery && now >= m_keyQuietUntilMs)
 		{
 			m_lastStatusMs = now;
 			if(m_ready && m_audibleQueue && m_port.sendSysex)
