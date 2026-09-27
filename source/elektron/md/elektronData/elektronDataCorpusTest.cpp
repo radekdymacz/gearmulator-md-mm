@@ -2,7 +2,9 @@
 // must decode and re-encode byte for byte, and survive the JSON contract
 // (value -> JSON -> value) unchanged. Files may hold one or several messages.
 //
-//   elektronDataCorpusTest <file-or-dir>...
+//   elektronDataCorpusTest [--json <out-dir>] <file-or-dir>...
+//
+// --json also writes each dump's contract document to <out-dir>.
 
 #include "mdCommands.h"
 #include "mdGlobal.h"
@@ -31,6 +33,8 @@ namespace
 
 	std::map<std::string, Tally> g_tally;
 	int g_failures = 0;
+	std::string g_jsonOut;
+	size_t g_jsonCount = 0;
 
 	std::vector<Bytes> splitMessages(const Bytes& _file)
 	{
@@ -67,6 +71,12 @@ namespace
 			return false;
 		}
 		const auto text = elektronData::json::write(_toJson(*value));
+		if(!g_jsonOut.empty())
+		{
+			const auto pretty = elektronData::json::write(_toJson(*value), 1);
+			const auto path = g_jsonOut + "/" + std::to_string(g_jsonCount++) + ".json";
+			baseLib::filesystem::writeFile(path, reinterpret_cast<const uint8_t*>(pretty.data()), pretty.size());
+		}
 		const auto parsed = elektronData::json::parse(text);
 		if(!parsed)
 		{
@@ -170,7 +180,14 @@ int main(const int _argc, char** _argv)
 		return 77;
 	}
 	for(int i = 1; i < _argc; ++i)
+	{
+		if(std::string(_argv[i]) == "--json" && i + 1 < _argc)
+		{
+			g_jsonOut = _argv[++i];
+			continue;
+		}
 		checkPath(_argv[i]);
+	}
 	size_t total = 0;
 	for(const auto& [type, t] : g_tally)
 	{
