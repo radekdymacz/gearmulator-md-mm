@@ -676,6 +676,17 @@ namespace
 		now += 40;
 		desk.tick();
 		check(keys.size() == 2 && keys[1] == "recordPlay", "then starts live recording once stopped");
+
+		// Song selection: LOAD SONG when stopped, refused while playing.
+		t.playing = true;
+		desk.onTelemetry(t);
+		desk.onPageMessage(cmd(R"({"op":"selectSong","s":3,"id":7})"));
+		check(!ok(), "no song change while playing");
+		t.playing = false;
+		desk.onTelemetry(t);
+		wire.clear();
+		desk.onPageMessage(cmd(R"({"op":"selectSong","s":3,"id":8})"));
+		check(ok() && !wire.empty() && wire[0] == ed::mdLoadSong(3) && desk.session().state().song == 3, "LOAD SONG 4 when stopped");
 	}
 
 	void testSampleName()

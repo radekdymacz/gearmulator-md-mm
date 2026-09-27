@@ -594,7 +594,7 @@ function renderSub() {
 	else if (S.ws === "mix") h = L2("", "PATH", "SEND›ECHO›GATE›EQ›DYN›MAIN", "Sends feed the master effects. Tracks on outputs A–F skip them.");
 	else if (S.ws === "sampler") { const used = S.tracks.filter(t => /^ROM/.test(t.m)).length; h = L2("", "MEM", "n/a", NA.memory) + L2("", "KIT", used + " ROM", "Tracks in this kit that play a ROM slot") + L2("", "SLOT", S.smpSlot.replace(/^RAM/, "RAM ").replace(/^ROM/, "ROM ")); }
 	else if (S.ws === "control") h = L2("", "IN", "MIDI LEARN") + L2("", "MAPS", (Docs.learn?.mappings || []).length);
-	else h = L2("", "SONG", String(S.songSlot + 1).padStart(2, "0")) + L2("", "ROWS", S.song.length) + L2("", "BARS", Math.round(songSteps() / 16)) + L2("", "TIME", songTime());
+	else h = L2("song", "SONG", String(S.songSlot + 1).padStart(2, "0"), "Song slot. Click for the next one, shift-click for the previous (the machine loads it when stopped).", 1) + L2("", "ROWS", S.song.length) + L2("", "BARS", Math.round(songSteps() / 16)) + L2("", "TIME", songTime());
 	$("#lcd2").innerHTML = h;
 }
 const romName = k => SENT_NAMES[k] || ""; const romCode = k => "ROM-" + String(k).padStart(2, "0");
@@ -843,6 +843,7 @@ function firstRun(manual) {
 let l2drag = null;
 function l2step(k, d, alt) {
 	if (k === "len") { if (alt) cmd("length", { p: S.pat, v: ((S.length - 1 + d + S.len) % S.len) + 1 }); else { const o = [16, 32, 48, 64]; S.len = o[(o.indexOf(S.len) + d + 4) % 4]; cmd("totalLength", { p: S.pat, v: S.len }); } }
+	if (k === "song") { cmd("selectSong", { s: (S.songSlot + d + 32) % 32 }); return; }
 	if (k === "mult") { const o = ["1X", "2X", "3/4X", "3/2X"]; S.mult = o[(o.indexOf(S.mult) + d + 4) % 4]; cmd("speed", { p: S.pat, v: S.mult }); }
 	if (k === "mode") { S.mode = S.mode === "EXTENDED" ? "CLASSIC" : "EXTENDED"; cmd("extended", { on: S.mode === "EXTENDED" }); }
 	if (k === "swing") { S.swing = clamp(S.swing + d, 50, 80); cmd("swing", { p: S.pat, v: S.swing }, "swing"); }
@@ -1087,7 +1088,7 @@ Bridge.onMessage(m => {
 	}
 	case "machine": {
 		const before = Docs.machine; Docs.machine = m.doc;
-		const key = [m.doc.pattern?.current, m.doc.kit?.current, m.doc.desk?.queued, m.doc.desk?.firmware, m.doc.kit?.working, m.doc.song?.reloadNeeded, m.doc.extendedMode, (m.doc.desk?.mutes || []).join(), m.doc.desk?.playing, m.doc.desk?.recording, m.doc.desk?.kitSource].join("|");
+		const key = [m.doc.pattern?.current, m.doc.kit?.current, m.doc.desk?.queued, m.doc.desk?.firmware, m.doc.kit?.working, m.doc.song?.reloadNeeded, m.doc.extendedMode, (m.doc.desk?.mutes || []).join(), m.doc.desk?.playing, m.doc.desk?.recording, m.doc.desk?.kitSource, m.doc.song?.current].join("|");
 		if (key !== lastKey || !before) { lastKey = key; scheduleRender(); }
 		else { S.tx = !!m.doc.desk.tx; S.roundTrip = m.doc.desk.roundTripMs; S.canUndo = !!m.doc.desk.undo; S.canRedo = !!m.doc.desk.redo; S.undoCount = m.doc.desk.undoCount; S.redoCount = m.doc.desk.redoCount; $("#undo").disabled = !S.canUndo; $("#redo").disabled = !S.canRedo; syncUndoCounts(); syncTx(); }
 		break;

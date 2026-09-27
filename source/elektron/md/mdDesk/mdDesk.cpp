@@ -195,6 +195,22 @@ namespace mdDesk
 			handleRecord(_message);
 		else if(op == "modSet")
 			handleModulators(_message);
+		else if(op == "selectSong")
+		{
+			// P1: the Machinedrum ignores LOAD SONG while it plays.
+			const auto s = intOf(_message, "s");
+			if(!s || *s < 0 || *s > 31)
+				result(_message, {"s: expected a song 0-31"}, {});
+			else if(m_telemetry.playing)
+				result(_message, {"Stop first: the Machinedrum loads another song only when stopped"}, {});
+			else
+			{
+				m_session.loadSong(static_cast<uint8_t>(*s));
+				load({DocKind::Song, static_cast<uint8_t>(*s)}, true);
+				m_machineDirty = true;
+				result(_message, {}, "Song " + std::to_string(*s + 1) + " loaded");
+			}
+		}
 		else if(op == "sampleName")
 		{
 			// UW ROM slot names: the firmware takes 0x73 but never reports names.

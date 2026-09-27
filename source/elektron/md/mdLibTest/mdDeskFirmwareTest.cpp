@@ -762,6 +762,16 @@ int main(const int _argc, char** _argv)
 		}
 		liveRecording(rig);
 		sampleName(rig);
+		{
+			std::puts("== P3 song selection");
+			rig.page(R"({"op":"selectSong","s":2,"id":80})");
+			check(resultOk(rig), "song 3 selected while stopped");
+			rig.run(200);
+			const auto st = ed::parseMdStatusResponse(rig.machine().request(ed::mdStatusRequest(ed::MdStatus::Song), 0x72));
+			check(st && st->value == 2, "the machine reports song 3 as current");
+			rig.page(R"({"op":"selectSong","s":0,"id":81})");
+			rig.run(200);
+		}
 		appModulators(rig);
 		if(_argc > 2 && std::string(_argv[2]) == "probe")
 		{
