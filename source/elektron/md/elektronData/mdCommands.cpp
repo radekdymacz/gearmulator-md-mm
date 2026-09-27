@@ -67,4 +67,72 @@ namespace elektronData
 			return 0;
 		}
 	}
+
+	namespace
+	{
+		std::vector<uint8_t> command(const uint8_t _id, std::initializer_list<uint8_t> _data)
+		{
+			std::vector<uint8_t> m{0xf0, 0x00, 0x20, 0x3c, dumpIo::g_mdProductId, 0x00, _id};
+			for(const auto b : _data)
+				m.push_back(static_cast<uint8_t>(b & 0x7f));
+			m.push_back(0xf7);
+			return m;
+		}
+
+		constexpr uint8_t g_assignMachineId = 0x5b;
+		constexpr uint8_t g_trackRoutingId = 0x5c;
+		constexpr uint8_t g_tempoId = 0x61;
+		constexpr uint8_t g_lfoId = 0x62;
+		constexpr uint8_t g_trigGroupId = 0x65;
+		constexpr uint8_t g_muteGroupId = 0x66;
+		constexpr uint8_t g_kitNameId = 0x55;
+		// Indexed by MdKit::MasterFx: gate box 0x5e, rhythm echo 0x5d, EQ 0x5f, dynamix 0x60.
+		constexpr uint8_t g_masterFxIds[4] = {0x5e, 0x5d, 0x5f, 0x60};
+	}
+
+	std::vector<uint8_t> mdAssignMachine(const uint8_t _track, const uint32_t _model, const MdMachineInit _init)
+	{
+		const auto uw = static_cast<uint8_t>((_model & 0x80) ? 1 : 0);
+		return command(g_assignMachineId, {static_cast<uint8_t>(_track & 0x0f), static_cast<uint8_t>(_model & 0x7f), uw,
+			static_cast<uint8_t>(_init)});
+	}
+
+	std::vector<uint8_t> mdSetMasterFx(const size_t _fx, const uint8_t _param, const uint8_t _value)
+	{
+		return command(g_masterFxIds[_fx & 3], {static_cast<uint8_t>(_param & 7), _value});
+	}
+
+	std::vector<uint8_t> mdSetLfo(const uint8_t _lfo, const uint8_t _param, const uint8_t _value)
+	{
+		return command(g_lfoId, {static_cast<uint8_t>(((_lfo & 0x0f) << 3) | (_param & 7)), _value});
+	}
+
+	std::vector<uint8_t> mdSetTrigGroup(const uint8_t _track, const uint8_t _target)
+	{
+		return command(g_trigGroupId, {static_cast<uint8_t>(_track & 0x0f), _target});
+	}
+
+	std::vector<uint8_t> mdSetMuteGroup(const uint8_t _track, const uint8_t _target)
+	{
+		return command(g_muteGroupId, {static_cast<uint8_t>(_track & 0x0f), _target});
+	}
+
+	std::vector<uint8_t> mdSetKitName(const std::string& _name)
+	{
+		std::vector<uint8_t> m{0xf0, 0x00, 0x20, 0x3c, dumpIo::g_mdProductId, 0x00, g_kitNameId};
+		for(size_t i = 0; i < 16; ++i)
+			m.push_back(i < _name.size() ? static_cast<uint8_t>(_name[i] & 0x7f) : 0);
+		m.push_back(0xf7);
+		return m;
+	}
+
+	std::vector<uint8_t> mdSetTrackRouting(const uint8_t _track, const uint8_t _output)
+	{
+		return command(g_trackRoutingId, {static_cast<uint8_t>(_track & 0x0f), static_cast<uint8_t>(_output & 7)});
+	}
+
+	std::vector<uint8_t> mdSetTempo(const uint16_t _tempo)
+	{
+		return command(g_tempoId, {static_cast<uint8_t>((_tempo >> 7) & 0x7f), static_cast<uint8_t>(_tempo & 0x7f)});
+	}
 }

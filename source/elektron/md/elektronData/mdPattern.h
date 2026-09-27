@@ -86,4 +86,15 @@ namespace elektronData
 	// Fails when a new row is needed and all 64 are in use (the MD lock budget).
 	std::optional<MdPattern> withLock(const MdPattern& _pattern, size_t _track, size_t _param,
 		size_t _step, uint8_t _value);
+
+	// Steps the sequencer plays and the UI shows: the manual's total length
+	// (SCALE SETUP), 16, 32, 48 or 64, within what the dump can hold.
+	size_t visibleSteps(const MdPattern& _pattern);
+
+	// Removes one step's lock. When no visible step of that (track, parameter)
+	// keeps a lock, its row is freed as the firmware does: the rows after it move
+	// up and the last row becomes an unused (zero) row.
+	MdPattern withoutLock(const MdPattern& _pattern, size_t _track, size_t _param, size_t _step);
+	// Removes a (track, parameter) row and every lock in it.
+	MdPattern withoutLockRow(const MdPattern& _pattern, size_t _track, size_t _param);
 }

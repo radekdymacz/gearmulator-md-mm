@@ -290,4 +290,39 @@ namespace elektronData
 		result.lockRows[*lockRowIndex(result, _track, _param)][_step] = _value;
 		return result;
 	}
+
+	size_t visibleSteps(const MdPattern& _p)
+	{
+		const size_t count = _p.extended ? MdPattern::g_maxSteps : MdPattern::g_maxSteps / 2;
+		const size_t total = 16 * (static_cast<size_t>(_p.scale & 3) + 1);
+		return total < count ? total : count;
+	}
+
+	MdPattern withoutLockRow(const MdPattern& _p, const size_t _track, const size_t _param)
+	{
+		const auto row = lockRowIndex(_p, _track, _param);
+		if(!row)
+			return _p;
+		auto result = _p;
+		auto& rows = result.lockRows;
+		std::move(rows.begin() + static_cast<std::ptrdiff_t>(*row) + 1, rows.end(),
+			rows.begin() + static_cast<std::ptrdiff_t>(*row));
+		rows.back().fill(0);
+		result.lockMasks[_track] &= ~(1u << _param);
+		return result;
+	}
+
+	MdPattern withoutLock(const MdPattern& _p, const size_t _track, const size_t _param, const size_t _step)
+	{
+		const auto row = lockRowIndex(_p, _track, _param);
+		if(!row || _step >= MdPattern::g_maxSteps)
+			return _p;
+		auto result = _p;
+		result.lockRows[*row][_step] = MdPattern::g_noLock;
+		const auto visible = visibleSteps(result);
+		for(size_t s = 0; s < visible; ++s)
+			if(result.lockRows[*row][s] != MdPattern::g_noLock)
+				return result;
+		return withoutLockRow(result, _track, _param);
+	}
 }
