@@ -348,3 +348,9 @@ set_property(TARGET mdSequencerStateTest PROPERTY FOLDER "Elektron/test")
 add_executable(mmEditorProbeFirmwareTest mmEditorProbeFirmwareTest.cpp mdFirmwareSession.h sysexPanelDriver.h)
 target_link_libraries(mmEditorProbeFirmwareTest PRIVATE mdLib elektronData)
 set_property(TARGET mmEditorProbeFirmwareTest PROPERTY FOLDER "Elektron/test")
+
+# MM-P2 Monomachine Editor smoke test: mmDesk::Desk against MM OS 1.32B firmware
+# (SYSEX RECV session, pattern/kit/song delivery, queue). Manual: needs a ROM.
+add_executable(mmDeskFirmwareTest mmDeskFirmwareTest.cpp mdFirmwareSession.h)
+target_link_libraries(mmDeskFirmwareTest PRIVATE mdLib mmDesk)
+set_property(TARGET mmDeskFirmwareTest PROPERTY FOLDER "Elektron/test")

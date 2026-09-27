@@ -1301,6 +1301,147 @@ namespace
 		for(int i = 0; i < 6; ++i) key(*m, md::PanelControl::Exit, 10, 10);
 	}
 
+	// The current kit number next to the working kit, and a playing/stopped byte.
+	void stateBytesMode(const Bytes& _rom)
+	{
+		auto m = boot(_rom);
+		const auto around = [&](const char* _t)
+		{
+			std::printf("%-24s 0x700018..0x700028:", _t);
+			for(uint32_t a = 0x700018; a < 0x700029; ++a) std::printf(" %02x", m->read8(a));
+			std::printf("\n");
+		};
+		around("kit 0");
+		m->send(mmCommand(0x58, {5}));
+		m->run(200);
+		around("LOAD KIT 5");
+		m->send(mmCommand(0x58, {77}));
+		m->run(200);
+		around("LOAD KIT 77");
+		// playing byte: snapshots stopped / playing / paused / stopped
+		std::vector<std::pair<std::string, Bytes>> snaps;
+		m->send(mmCommand(0x57, {1}));
+		m->run(200);
+		snaps.emplace_back("stopped", m->snapshotRam());
+		tap(*m, md::PanelControl::Play); m->run(700);
+		snaps.emplace_back("playing", m->snapshotRam());
+		m->run(900);
+		snaps.emplace_back("playing2", m->snapshotRam());
+		tap(*m, md::PanelControl::Play); m->run(500);
+		snaps.emplace_back("paused", m->snapshotRam());
+		tap(*m, md::PanelControl::Play); m->run(700);
+		snaps.emplace_back("playing3", m->snapshotRam());
+		tap(*m, md::PanelControl::Stop); m->run(500);
+		snaps.emplace_back("stopped2", m->snapshotRam());
+		tap(*m, md::PanelControl::Stop); m->run(500);
+		snaps.emplace_back("stopped3", m->snapshotRam());
+		int shown = 0;
+		for(uint32_t a = 0; a < 0x100000 && shown < 30; ++a)
+		{
+			const auto p1 = snaps[1].second[a];
+			if(snaps[2].second[a] != p1 || snaps[4].second[a] != p1) continue;
+			const auto s0 = snaps[0].second[a];
+			if(snaps[5].second[a] != s0 || snaps[6].second[a] != s0 || s0 == p1) continue;
+			std::printf("  play-state candidate 0x%06x: stopped %02x playing %02x paused %02x\n", 0x200000 + a, s0, p1, snaps[3].second[a]);
+			++shown;
+		}
+	}
+
+	// Enumerated values: sweep a CC 0..127, group the values that draw the same
+	// screen, save one LCD per group (read the names from the images).
+	//   enums <outdir> <machine id> <data page 0-6> <param 0-7>...
+	void enumsMode(const Bytes& _rom, const std::string& _dir, const int _machine, const int _page, const std::vector<int>& _params)
+	{
+		auto m = boot(_rom);
+		m->send(mmCommand(0x5b, {0, static_cast<uint8_t>(_machine), 1}));
+		m->run(200);
+		for(int i = 0; i < _page; ++i) key(*m, md::PanelControl::DataPageForward, 20, 60);
+		m->run(200);
+		if(const char* pre = std::getenv("MM_ENUM_PRESET"))	// "cc=value", e.g. 88=0
+		{
+			int c = 0, v = 0;
+			if(std::sscanf(pre, "%d=%d", &c, &v) == 2)
+			{
+				m->send({0xb0, static_cast<uint8_t>(c), static_cast<uint8_t>(v)});
+				m->run(100);
+			}
+		}
+		for(const int param : _params)
+		{
+			const auto cc = static_cast<uint8_t>(ed::mmParamCc(static_cast<uint8_t>(_page), static_cast<uint8_t>(param)));
+			std::printf("machine %d page %d param %d (CC %d):", _machine, _page, param, cc);
+			Lcd last{};
+			int groupStart = 0;
+			int group = 0;
+			for(int v = 0; v <= 128; ++v)
+			{
+				Lcd now{};
+				if(v <= 127)
+				{
+					m->send({0xb0, cc, static_cast<uint8_t>(v)});
+					m->run(60);
+					now = lcdBits(*m);
+				}
+				if(v == 0) { last = now; continue; }
+				if(v == 128 || now != last)
+				{
+					std::printf(" [%d-%d]", groupStart, v - 1);
+					// save the screen of this group
+					m->send({0xb0, cc, static_cast<uint8_t>(groupStart)});
+					m->run(60);
+					char n[64];
+					std::snprintf(n, sizeof(n), "/enum-m%d-p%d-i%d-g%02d.pgm", _machine, _page, param, group++);
+					md::test::panelImage(m->hardware(), _dir + n);
+					if(v <= 127) { m->send({0xb0, cc, static_cast<uint8_t>(v)}); m->run(60); }
+					groupStart = v;
+					last = now;
+				}
+			}
+			std::printf("\n");
+		}
+	}
+
+	// A RAM byte that is set only on SYSEX RECV (not on other GLOBAL EDIT screens).
+	void recvFlag2Mode(const Bytes& _rom)
+	{
+		auto m = boot(_rom);
+		using C = md::PanelControl;
+		std::vector<std::pair<std::string, Bytes>> in, out;
+		const auto snapOut = [&](const char* _n) { out.emplace_back(_n, m->snapshotRam()); std::printf("  out %-10s screen %08x\n", _n, read32(*m, g_screenAddress)); };
+		const auto snapIn = [&](const char* _n) { in.emplace_back(_n, m->snapshotRam()); std::printf("  in  %-10s screen %08x\n", _n, read32(*m, g_screenAddress)); };
+		snapOut("main");
+		chord(*m, C::Kit, 10, 30); m->run(100); snapOut("slots");
+		key(*m, C::Enter, 10, 30); m->run(100); snapOut("edit");
+		key(*m, C::Enter, 10, 30); m->run(100); snapOut("audio");
+		key(*m, C::Exit, 10, 30); key(*m, C::Down, 10, 30); key(*m, C::Right, 10, 30); key(*m, C::Enter, 10, 30); m->run(100); snapOut("ctrl-item");
+		for(int i = 0; i < 8; ++i) key(*m, C::Exit, 10, 10);
+		recvMacro(*m, 10, 10); m->run(100); snapIn("recv");
+		key(*m, C::Exit, 10, 30); m->run(100); snapOut("file-list");
+		key(*m, C::Up, 10, 30); key(*m, C::Enter, 10, 30); m->run(100); snapOut("sysex-send?");
+		for(int i = 0; i < 8; ++i) key(*m, C::Exit, 10, 10);
+		recvMacro(*m, 10, 10); m->run(100);
+		m->send(retarget(patternDump(*m, 1), 30)); m->run(200); snapIn("recv+msg");
+		for(int i = 0; i < 8; ++i) key(*m, C::Exit, 10, 10);
+		tap(*m, C::Play); m->run(300);
+		recvMacro(*m, 10, 10); m->run(100); snapIn("recv-play");
+		for(int i = 0; i < 8; ++i) key(*m, C::Exit, 10, 10);
+		m->run(100); snapOut("main-play");
+		int shown = 0;
+		for(uint32_t a = 0; a < 0x100000 && shown < 20; ++a)
+		{
+			const auto v = in[0].second[a];
+			bool ok = true;
+			for(const auto& x : in) ok &= x.second[a] == v;
+			int differs = 0;
+			for(const auto& x : out) differs += x.second[a] != v;
+			if(!ok || differs < static_cast<int>(out.size()) - 1) continue;
+			std::printf("  recv-only 0x%06x = %02x (out:", 0x200000 + a, v);
+			for(const auto& x : out) std::printf(" %02x", x.second[a]);
+			std::printf(")\n");
+			++shown;
+		}
+	}
+
 	// Is a pattern dump taken on a normal screen?
 	void gateMode(const Bytes& _rom)
 	{
@@ -1548,6 +1689,15 @@ int main(const int _argc, char** _argv)
 		else if(mode == "screens") screensMode(rom);
 		else if(mode == "lab") labMode(rom, dir);
 		else if(mode == "program") programMode(rom, dir);
+		else if(mode == "statebytes") stateBytesMode(rom);
+		else if(mode == "recvflag2") recvFlag2Mode(rom);
+		else if(mode == "enums")
+		{
+			require(_argc >= 7, "enums <outdir> <machine> <page> <param>...");
+			std::vector<int> params;
+			for(int i = 6; i < _argc; ++i) params.push_back(std::atoi(_argv[i]));
+			enumsMode(rom, dir, std::atoi(_argv[4]), std::atoi(_argv[5]), params);
+		}
 		else if(mode == "all")
 		{
 			gateMode(rom);

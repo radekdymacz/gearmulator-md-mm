@@ -1,0 +1,96 @@
+#pragma once
+
+#include <cstdint>
+#include <deque>
+#include <string>
+#include <vector>
+
+namespace mmDesk
+{
+	// Front-panel keys the desk presses (the edge maps them to md::PanelControl).
+	enum class Key : uint8_t
+	{
+		Exit,
+		Enter,
+		Up,
+		Down,
+		Left,
+		Right,
+		Global,		// FUNCTION + KIT/SONG: the GLOBAL menu
+		Play,
+		Stop
+	};
+
+	// The machine as the desk sees it, from the audio thread (md::MmTelemetry).
+	struct Telemetry
+	{
+		bool valid = false;
+		int step = -1;
+		bool running = false;
+		uint32_t screen = 0;
+		uint32_t recvCount = 0;
+		uint32_t recvErrors = 0;
+		bool recvActive = false;	// SYSEX RECV takes dumps (RAM 0x26a3c3)
+	};
+
+	// Screen words of MM OS 1.32B (MM-P0-RESULT §3).
+	constexpr uint32_t g_screenBoot = 0x002c27f8;
+	constexpr uint32_t g_screenMain = 0x002c2908;
+	constexpr uint32_t g_screenGlobalEdit = 0x002c3a98;	// all GLOBAL EDIT menus, SYSEX RECV among them
+
+	// On SYSEX RECV and taking dumps: the screen word says GLOBAL EDIT and the
+	// receive flag is set (MM-P2-RESULT §2).
+	inline bool onSysexRecv(const Telemetry& _t) { return _t.screen == g_screenGlobalEdit && _t.recvActive; }
+
+	// The SYSEX RECV session. The Monomachine takes a dump only on GLOBAL > FILE >
+	// SYSEX RECV. The session drives the panel there when there is something to
+	// send, sends while parked (the machine keeps playing, MM-P0 §3), and leaves
+	// after an idle time. Pure: feed it the time and the screen word, it returns
+	// the keys to press and the dumps to send.
+	class RecvSession
+	{
+	public:
+		enum class State
+		{
+			Idle,		// not on SYSEX RECV, nothing to send
+			ToMain,		// EXIT until the main screen, then the macro
+			Entering,	// the macro runs
+			Parked,		// on SYSEX RECV: dumps go out
+			Leaving,	// EXIT back to the main screen
+			Failed		// the screen never came; retried after a pause
+		};
+
+		struct Out
+		{
+			std::vector<Key> keys;
+			std::vector<std::vector<uint8_t>> sends;
+		};
+
+		// The path: GLOBAL, ENTER, cursor to a known place, FILE, SYSEX RECV, ORIG.
+		static std::vector<Key> enterMacro();
+		static std::vector<Key> exitKeys();
+
+		void want(std::vector<uint8_t> _dump) { m_queue.push_back(std::move(_dump)); }
+		// Keeps the session parked a while longer (an edit is coming).
+		void touch(const double _now) { m_lastActivity = _now; }
+		Out tick(double _now, const Telemetry& _t);
+
+		State state() const { return m_state; }
+		const char* stateName() const;
+		size_t queued() const { return m_queue.size(); }
+		bool parked() const { return m_state == State::Parked; }
+
+		double idleMs = 3000;		// parked and quiet this long -> leave
+		double timeoutMs = 3000;	// a screen that does not come -> retry
+
+	private:
+		void go(State _s, double _now) { m_state = _s; m_since = _now; }
+
+		std::deque<std::vector<uint8_t>> m_queue;
+		State m_state = State::Idle;
+		double m_since = 0;
+		double m_lastActivity = 0;
+		int m_attempts = 0;
+		double m_keysDone = 0;	// the keys pressed last are through by then
+	};
+}

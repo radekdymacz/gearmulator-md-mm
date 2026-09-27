@@ -3,6 +3,7 @@ cmake_minimum_required(VERSION 3.15)
 add_subdirectory(elektronData)
 add_subdirectory(mdDataLink)
 add_subdirectory(mdDesk)
+add_subdirectory(mmDesk)
 add_subdirectory(mdLib)
 
 if(BUILD_TESTING)

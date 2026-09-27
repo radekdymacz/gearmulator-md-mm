@@ -18,6 +18,7 @@ set(SOURCES
 	mdhostclock.h
 	mdmc.cpp mdmc.h
 	mdmemorymap.h
+	mmtelemetry.h
 	mdmidiprotocol.h
 	mdsysexautomation.cpp mdsysexautomation.h
 	mdrealtimemidiqueue.h

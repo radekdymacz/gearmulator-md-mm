@@ -104,6 +104,32 @@ namespace elektronData
 			for(size_t s = 0; s < MmPattern::g_steps; ++s)
 				p.check(_pat.lockRows[r][s] == MmPattern::g_noLock || _pat.lockRows[r][s] <= 127,
 					"lock row " + std::to_string(r) + " step " + std::to_string(s) + " must be 0-127");
+		// Trig kinds (MM-P2-RESULT §3): a step holds a trig (trig), fires envelopes
+		// (amp, filter, lfo) or both. Trigless = trig without envelopes; pitchless =
+		// trig without a note; an envelope-only step (TRIG SELECT) has no trig bit.
+		// Notes and chords need the trig; a lock needs a trig or an envelope trig.
+		for(size_t t = 0; t < MmPattern::g_tracks; ++t)
+		{
+			for(size_t s = 0; s < MmPattern::g_steps; ++s)
+			{
+				const bool trig = mmStepSet(_pat.pitch[t], s);
+				p.check(trig || _pat.notes[t][s] == MmPattern::g_noNote,
+					"tracks[" + std::to_string(t) + "] step " + std::to_string(s) + " has a note but no trig");
+				p.check(trig || !mmStepSet(_pat.chord[t], s),
+					"tracks[" + std::to_string(t) + "] step " + std::to_string(s) + " has chord notes but no trig");
+				p.check(mmStepSet(_pat.midiTrig[t], s) || !mmStepSet(_pat.midiNote[t], s),
+					"midiTracks[" + std::to_string(t) + "] step " + std::to_string(s) + " has notes but no MIDI trig");
+			}
+		}
+		for(size_t r = 0; r < params.size() && r < _pat.lockRowCount && r < MmPattern::g_lockRows; ++r)
+		{
+			const auto& lp = params[r];
+			const auto holds = lp.page == 7 ? _pat.midiTrig[lp.track]
+				: _pat.pitch[lp.track] | _pat.amp[lp.track] | _pat.filter[lp.track] | _pat.lfo[lp.track];
+			for(size_t s = 0; s < MmPattern::g_steps; ++s)
+				p.check(_pat.lockRows[r][s] == MmPattern::g_noLock || mmStepSet(holds, s),
+					"a lock on track " + std::to_string(lp.track + 1) + " step " + std::to_string(s + 1) + " has no trig to sit on");
+		}
 		notePool(p, _pat.midiNotes, _pat.midiNoteCount, "midiNotes");
 		notePool(p, _pat.chordNotes, _pat.chordNoteCount, "chordNotes");
 		return p.take();

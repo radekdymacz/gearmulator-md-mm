@@ -53,6 +53,7 @@ Measured at 1280 px:
 - The workspace always starts at y = 120.
 - Selecting any of the 12 tracks (synth or MIDI side), or toggling ALL, leaves the roll (top 174, 493 px), the ENV/SLIDE/SWING rows (top 676) and the lock lane (top 790) exactly where they were. The lock lane bars are 80 px, so the page fits 1280 × 900 without scrolling.
 - 6 workspaces. Every one fits 1280 × 900 and 1920 × 1080 with no scroll, on synth and MIDI tracks, every Sound machine type and all 4 Perform modes. No two horizontal rules sit within 12 px of each other: section rules sit only at the bottom of a row.
+- While BOOTING OS, the LCD shows a firmware-style start-up screen: model, OS 1.32B, memory and pattern counts, and a progress bar. It is drawn over the LCD, so the width does not change. The text is the editor's own, not the ROM's.
 - The LCD reports the engine as NO ROM / LOADING ROM / BOOTING OS / EMU OS 1.32B / ROM ERROR / HW CONNECT / HW MIDI, with an LED that is off, blinking or on (the MD Editor's v48). Until the engine is ready, the fields dim, REC and PLAY are disabled, and editing waits. On page load it runs load → boot → ready.
 - LCD fields and line 2 use fixed-width slots (MD v46), so nothing reaches COPY / CLR / PASTE and the LCD stays 597 px wide.
 - In Sequence, the rail's LOCK PARAMETER block starts on the lock lane's title line (within 1 px) and ends at its bottom edge (0 px). The free space goes above it.
@@ -76,7 +77,7 @@ Measured at 1280 px:
 | Manual feature | Control | Firmware path | vs MD Editor |
 |---|---|---|---|
 | Kit ↔ pattern link, kit reload on a pattern change (1-18) | Switching to a pattern linked to another kit while the kit is `edited` asks: "Save kit, then switch" / "Switch (edits to UNDO KIT)" / "Cancel" | status 0x02; kit link inside the pattern dump | Same dialog, but it names the MM's UNDO KIT, which really keeps the lost edits |
-| Load / save / name a kit, 128 slots (1-19) | Click the KIT field: Save kit, Reload kit | SX 0x58 LOAD KIT, 0x59 SAVE KIT, 0x55 set kit name (11 characters) | 128 kits (MD: 64). The name is 11 characters. `K01 MONOMACHINE` is exactly 11 |
+| Load / save / name a kit, 128 slots (1-19) | **Kit library** (click KIT in the LCD, or Enter on it). The MD Editor's v50 panel, sized for the MM: a 16 × 8 grid of 128 slots. Each slot shows its number, its name (11 characters), its pattern links and a star when unlinked (1-19). The current kit shows saved / edited. Actions: Load, Save, Save as Kn, Copy, Paste, Clear, Rename (F2 or double-click), and drag-copy slot to slot. Arrows / Enter / Delete / Cmd+C/V / Cmd+Z / Esc. Every button's tooltip says what it is on the firmware | SX 0x58 LOAD KIT, 0x59 SAVE KIT, 0x53 request, 0x55 set kit name (11 bytes). **Kit dumps (0x52) for paste / clear / drag / renaming another slot go through SYSEX RECV** (RECV in the emulator, SEND n on hardware) | 128 kits (MD: 64), 11-character names (MD: 16). Every MM pattern recalls its kit, so there is no CLASSIC mode, and Load relinks the current pattern (as KIT › LOAD does, 1-12). A cleared kit is six GND-SIN (1-19) |
 | UNDO KIT (1-20) | Named in the kit and switch dialogs | slot 0 of the kit list | New |
 | Copy / clear kit (1-21) | — (P2 kit browser) | kit dump | Deferred, like the MD |
 | Assign a machine to a track: SYNTH / MACHINE / MIX columns (1-22) | Sound › Synthesis › machine key: family column + machine grid + preview. "Keep track effects + LFOs" toggle. MKII-only machines are disabled on MKI | SX 0x5B assign machine (track, machine id, init pages) | Same picker pattern with MM families. A new FX machine automatically gets an input and DEC = REL = 127, the manual's rule for passing audio through |
@@ -102,7 +103,7 @@ Measured at 1280 px:
 
 | Manual feature | Control | Firmware path | vs MD Editor |
 |---|---|---|---|
-| ASSIGN: JOY R/L (MIRR), JOY U/D, VELOCITY, KEY TRACKING (+ HPF / LPF tracking), 2 × PAGE / DEST / ADD (1-38..1-40) | Perform › Assign: track keys 1-6, tab seg, joystick pad (springs back and shows the live ADD per destination), 2 rows of PAGE / DEST / ADD, Mirror, HPF / LPF tracking | kit dump; joystick = PB / CC 1 / CC 2 | New (the MD has no assign) |
+| ASSIGN: JOY R/L (MIRR), JOY U, JOY D, VELOCITY, KEY TRACKING (+ HPF / LPF tracking), 2 × PAGE / DEST / ADD (1-38..1-40) | Perform › Assign: track keys 1-6, the 5 firmware tabs, joystick pad (springs back and shows the live ADD per destination), 2 rows of PAGE / DEST / ADD, Mirror, HPF / LPF tracking | kit dump; joystick = PB / CC 1 / CC 2 | New (the MD has no assign) |
 | TRIG settings: TRIG POS (forward notes), PORTAMENTO ALWAYS / ONLY LEGATO, legato AMP / FLT / LFO (1-40, 1-41) | Sound › Trig setup: trig position select, PORT seg + PORT / HOLD / DEC values, LEGATO keys. TRIG POS is also drawn on the Mix graph as a dotted "TRIG ›Tn" cord | kit dump | MD trig groups are similar but different: the MM forwards notes and can chain |
 | MULTI TRIG: ALL TRK, SPLIT KEY (ZONES: TRACK + KEY), SEQ START, SEQ TRNSP (TIMING) (1-41..1-43) | Perform › Multi trig: mode seg. SPLIT: a draggable split marker on the keyboard with coloured zones and an "Upper from Tn" stepper. SEQ modes: Timing stepper; the key transposes / restarts the pattern from C-4 | Multi trig channel (default 7) | New |
 | MULTI ENV: ATK DEC SUS REL (127 = infinite) PORT (1-43) | Perform › Multi envelope: ADSR screen + 5 values + the "no effect" recipe | NRPN 0x40-0x45 | New |
@@ -111,7 +112,7 @@ Measured at 1280 px:
 
 | Manual feature | Control | Firmware path | vs MD Editor |
 |---|---|---|---|
-| Pattern select, cued while playing (1-45) | LCD ‹ › queues: `A01›A02` blinks until the pattern ends | SX 0x57; status 0x04 (the MD's P1 finding says it runs about 2 steps early, not re-measured on MM) | Same |
+| Pattern select, cued while playing (1-45) | LCD ‹ ›, or the **Pattern chooser** (click the pattern name): 8 banks A-H × 16, each slot showing its length and kit. Click queues (Shift = now); Copy / Paste / Clear / drag-copy; A-H jump to a bank. The queued pattern's own name blinks in the LCD, then gives one short inverted flash when it starts (MD v49). Pattern dumps for paste / clear / copy go through SYSEX RECV | SX 0x57; status 0x04 (the MD's P1 finding says it runs about 2 steps early, not re-measured on MM) | Same |
 | Pattern chaining (1-46) | — | panel / RAM | Deferred (also on the MD) |
 | SCALE SETUP: total steps 2-64, pages, 1X / 2X / 3/4X / 3/2X (1-46) | LCD line 2 `LEN` (click = ±1 page, scroll = ±1 step) and `SPD` | pattern dump | MD lengths are 16 / 32 / 48 / 64. The MM takes any step count |
 | GRID RECORDING: trig on / off, hold a trig for its pitch, NOTE OFF with FUNCTION, chords (1-47, 1-48) | **One object per step, edited in one place.** Roll (selected track): click adds a note or moves the trig's pitch, drag vertically for pitch, shift-click adds a chord note (stacked, drawn with a dot), **drag the bar's end to move its NOTE OFF**, alt-click deletes a note, alt-click on an empty step sets or clears a NOTE OFF. Scroll moves the pitch window (no label needed). The gestures are in the roll's tooltip | pattern dump | New. The MD has no pitch per step. The hardware shows a trig's pitch only while you hold it; here every trig sits at its pitch |
@@ -201,10 +202,10 @@ Measured at 1280 px:
 ## 13. Not yet covered, and what I was unsure of
 
 Deferred:
-- Pattern chaining, track and pattern copy
+- Pattern chaining and track copy (pattern copy is in the Pattern chooser)
 - Super copy (melody copy is modelled but not on a key yet)
 - Rotate trigs, step recording, live recording
-- Kit browser (copy / clear kit), global slots
+- Global slots
 - CONTROL IN / OUT, DigiPRO manager, +Drive
 - Turbo MIDI, pitch bend
 
@@ -212,20 +213,17 @@ Uncertain, to verify against the ROM or the hardware:
 1. **The Monomachine has no MIDI machines.** The brief mentions "MIDI machines". OS 1.32's machine list (A-1..A-15, SX 0x5B ids) has none. MIDI is the separate 6-track MIDI sequencer, so it got its own workspace.
 2. **"+" machines.** The only "+" in OS 1.32 is the FM+ family name. Using the previous track as an input is FX machines in NEIBOR mode, plus SID's MSRC = PRCH. That is what the graph shows as chaining.
 3. **Per-step note length and accents.** Synth tracks have no LEN and no accent. Length = the next trig or a NOTE OFF, shaped by AMP HOLD / DEC, and the sequencer always plays velocity 100. Only MIDI tracks have LEN / VEL. The "light part" of a gate is an **estimate**: (ATK + HOLD + DEC) / 127 × 16 steps. The real HOLD / DEC time scale is not in the manual.
-4. **SID page.** The manual describes both MOD / MSRC / MFRQ and SYNC / SFRQ. Eight knobs cannot hold both. The mockup uses WAVE PW PWAD PWRS MOD MSRC MFRQ TUNE. Check this on the ROM.
-5. **Parameter lists lost in the PDF's two-column layout:**
-   - DPRO-WAVE: WAVE WP WPM WPRS TUNE
-   - DPRO-BBOX: PTCH STRT RTRG RTIM TUNE (the manual says START)
-   - GND-NOIS: ST STON RED TUNE
-   - FX-RINGMOD: WAVE EXT MIX INP
-   The slot order is my best reading of the manual.
-6. **Enumerations not printed in the manual:**
-   - the 11 LFO wave names (TRI SAW SQR EXP RMP RND + mirrored)
-   - the 8 PTCH destination names (VIB1 … 16OCT)
-   - the MULT steps (1X-128X, "each step halves the cycle")
-   - the arp SPD, RNGE and OJMP ranges
-   - the LEN unit (1 step = 8 in the lane)
-   - PCH2-4 encoding (offset from 64; OFF and the just ratios 6/5 … 3/2 are not modelled)
+4. **Parameter slots and lists now follow the OS 1.32B screens** (read by the editor agent), not the manual text:
+   - every machine's 8 SYN slots, with unused knobs left empty (for example SWAVE-SAW slot 4, DPRO-BBOX has no TUNE, GND-NOIS is ST RED STON)
+   - LFO / ASSIGN PAGE order PTCH SYN AMP FLT EFX LF1-3 MID
+   - WAVE TRI ITRI SAW ISAW SQR ISQR EXP IEXP RMP IRMP RND
+   - MULT 1X-64X (7 steps)
+   - PTCH destinations 1/12 2/12 7/12 1OCT 2OCT 4OCT 8OCT 16OCT
+   - CONS order … T TH TJ V Z
+   - ASSIGN has 5 tabs: JOY RL (MIRR), JOY U, JOY D, VEL, KEY (HPF / LPF)
+   - The mockup keeps enum indices; the editor converts firmware 0-127 as index = floor(v × n / 128).
+5. The SID page is WAVE in slot 4 after PW / PWAD / PWRS; the manual's SYNC / SFRQ text belongs to DPRO-WAVE slots 5-6.
+6. **Still unverified:** the arp SPD, RNGE and OJMP ranges; the LEN unit (1 step = 8 in the roll); PCH2-4 encoding (offset from 64; OFF and the just ratios are not modelled).
 7. **Which commands the MM takes outside SYSEX RECV.** The emulator proves the gate for dumps. It is unknown whether SX 0x5B (assign machine), 0x5C (routing), 0x57 (load pattern) and 0x61 (tempo) are also gated. The mockup treats them as live, like CCs. This needs a probe in `mmSysexWorkflowTest`.
 8. **Kit dumps need two receive-mode passes** in `mmSysexWorkflowTest` (`expectedBoundaries` = 2 for 0x52). The reason is not known. The HW dialog assumes one pass.
 9. The MD's P1 findings may or may not hold on the MM:

@@ -82,4 +82,52 @@ namespace elektronData
 		static constexpr uint8_t bases[7]{48, 56, 72, 80, 88, 104, 112};
 		return _page < 7 && _param < 8 ? static_cast<uint8_t>(bases[_page] + _param) : 0;
 	}
+
+	std::vector<std::string> mmSynthEnum(const uint8_t _machine, const uint8_t _slot)
+	{
+		static const std::vector<std::string> onOff{"OFF", "ON"};
+		switch(_machine)
+		{
+		case 2: return _slot == 2 ? onOff : std::vector<std::string>{};						// GND-NOIS STON
+		case 3:																				// SID-6581
+			if(_slot == 2) return onOff;													// PWRS
+			if(_slot == 3) return {"TRI", "SAW", "PULS", "MIX", "NOIS"};					// WAVE
+			if(_slot == 4) return {"OFF", "RING", "SYNC", "R+S"};							// MOD
+			if(_slot == 5) return {"MFRQ", "PRCH"};											// MSRC
+			return {};
+		case 5: return _slot == 6 ? onOff : std::vector<std::string>{};						// SWAVE-PULS PWRS
+		case 6: return _slot == 3 || _slot == 4 ? onOff : std::vector<std::string>{};		// DPRO-WAVE WPRS SYNC
+		case 11:																			// VO-6
+			if(_slot == 2) return onOff;													// V-SW
+			if(_slot == 4) return {"-", "B", "D", "F", "G", "H", "J", "K", "L", "M", "N", "P", "R", "RR", "S", "SJ", "T", "TH", "TJ", "V", "Z"};
+			return {};
+		default: return {};
+		}
+	}
+
+	const std::vector<std::string>& mmLfoPages()
+	{
+		static const std::vector<std::string> v{"PTCH", "SYNT", "AMP", "FILT", "EFFX", "LFO1", "LFO2", "LFO3", "MIDI"};
+		return v;
+	}
+	const std::vector<std::string>& mmLfoTrigs()
+	{
+		static const std::vector<std::string> v{"FREE", "TRIG", "HOLD", "ONE", "HALF"};
+		return v;
+	}
+	const std::vector<std::string>& mmLfoWaves()
+	{
+		static const std::vector<std::string> v{"TRI", "ITRI", "SAW", "ISAW", "SQR", "ISQR", "EXP", "IEXP", "RMP", "IRMP", "RND"};
+		return v;
+	}
+	const std::vector<std::string>& mmLfoMults()
+	{
+		static const std::vector<std::string> v{"1X", "2X", "4X", "8X", "16X", "32X", "64X"};
+		return v;
+	}
+	const std::vector<std::string>& mmPitchDests()
+	{
+		static const std::vector<std::string> v{"1/12", "2/12", "7/12", "1OCT", "2OCT", "4OCT", "8OCT", "16OCT"};
+		return v;
+	}
 }

@@ -1,0 +1,528 @@
+
+/* =====================================================================
+   MONOMACHINE EDITOR: plate, LEDs and the MM-only components.
+   Everything above this line is the Machinedrum Editor design system, unchanged.
+   ===================================================================== */
+
+/* SFX-60 plate (MKI and MKII share it; the MKII only adds the "MKII" print).
+   Colours from the emulator's mmSfx60 panel skin: silver chassis, dark-grey print,
+   rust track labels, grey-green LCD in a black bezel, red / green / yellow trig LEDs. */
+:root,:root[data-plate="mk1"],:root[data-plate="mk2"]{
+  color-scheme:light;
+  --plate:#d4d5d0;--plate2:#c8cac2;--plate3:#e2e1d9;--print:#383934;--print2:#56574f;--print3:#74756f;--rule:#aaaba5;--body:#292a26;
+  --key:#3a3b36;--key2:#4b4d47;--keytext:#efefe8;--keydim:#aeb0a8;--cream:#efefe8;--creamtext:#292a26;
+  --led:#e65d42;--ledoff:#7b4035;--ledg:#9fc568;--ledgoff:#56604b;--ledy:#e4c45c;--rec:#cf4f39;
+  --lcd:#b9c4b0;--ink:#172014;--bezel:#0d0f0c;--labfill:#a04d39;--labtext:#f0eee7;--knob:#3a3b36;--rust:#a04d39;
+  --trig:var(--led);--oxblood:var(--rust);
+}
+html{scrollbar-gutter:stable}
+html,body{min-width:0!important}
+.app{min-width:1240px!important}
+body{overflow-x:hidden}
+
+/* the LCD sits in a black bezel, like the hardware */
+.lcdpanel{box-shadow:0 0 0 3px var(--bezel),inset 0 0 0 1px color-mix(in srgb,var(--ink) 14%,transparent)!important}
+canvas.ed,.edblank,#lanescroll,.lcdroll,.slotgrid,.lcdbox{box-shadow:0 0 0 2px var(--bezel)}
+.brand small.mk{font:600 9px var(--sans)!important;letter-spacing:.24em!important;color:var(--print2)!important;margin-top:2px}
+
+/* ===== shared small parts ===== */
+.led.g.on{background:var(--ledg);box-shadow:0 0 6px 1px var(--ledg)}
+.led.y.on{background:var(--ledy);box-shadow:0 0 6px 1px var(--ledy)}
+.keyrow{display:flex;gap:4px;flex-wrap:wrap;align-items:center}
+.lkey{display:inline-flex;align-items:center;gap:6px;height:26px;padding:0 10px;font:600 11px var(--sans);letter-spacing:.12em;text-transform:uppercase}
+.lkey[aria-pressed=true]{background:var(--cream);color:var(--creamtext)}
+.lkey[aria-pressed=true] .led{background:var(--led);box-shadow:0 0 6px 1px var(--led)}
+.lkey:disabled{opacity:.4;cursor:default}
+.lkey small{font:500 10px var(--mono);letter-spacing:0;opacity:.7}
+.hint{font-size:13px;color:var(--print3)}
+.hint b{color:var(--print2);font-weight:600}
+.pc.dis{opacity:.35;pointer-events:none}
+.pc .mod{position:absolute;right:4px;top:3px;font:9px var(--pix);color:var(--lcd);letter-spacing:0}
+.pc.lfot{box-shadow:inset 0 -2px 0 rgba(0,0,0,.35),inset 0 0 0 1px var(--lcd)}
+.pc.droptarget{outline:2px dashed var(--lcd);outline-offset:1px}
+.pc.dropok{outline:2px solid var(--led);outline-offset:1px}
+.tag{display:inline-block;font:600 10px var(--sans);letter-spacing:.14em;text-transform:uppercase;padding:2px 6px;border-radius:2px;background:var(--labfill);color:var(--labtext)}
+.tag.ghost{background:transparent;color:var(--print2);box-shadow:inset 0 0 0 1px var(--rule)}
+.card header .kv{flex-wrap:nowrap}
+
+/* ===== rail ===== */
+.sidesw{display:flex;gap:3px;margin:0 0 4px}
+.sidesw button{flex:1;height:22px;padding:0;font:600 10px var(--sans);letter-spacing:.14em;text-transform:uppercase;display:inline-flex;gap:5px;align-items:center;justify-content:center}
+.sidesw button .led{width:6px;height:6px}
+.sidesw button[aria-pressed=true]{background:var(--cream);color:var(--creamtext)}
+.sidesw button[aria-pressed=true] .led{background:var(--led);box-shadow:0 0 5px var(--led)}
+.th .nm small{font:500 10px var(--mono);color:var(--print3);margin-left:auto}
+.th.poly-off{opacity:.4}
+.railsec{margin-top:10px;border-top:2px solid var(--print);padding-top:7px;display:grid;gap:5px}
+.trigsel{display:grid;grid-template-columns:repeat(4,1fr);gap:3px}
+.trigsel button{height:34px;padding:3px 0 0;display:grid;justify-items:center;gap:3px;font:600 10px var(--sans);letter-spacing:.1em}
+.trigsel button .led{width:7px;height:7px}
+.trigsel button[aria-pressed=true]{background:var(--cream);color:var(--creamtext)}
+.trigsel button[aria-pressed=true] .led{background:var(--led);box-shadow:0 0 6px 1px var(--led)}
+.pagetabs{display:grid;grid-template-columns:repeat(7,1fr);gap:2px}
+.pagetabs button{height:32px;padding:3px 0 0;display:grid;justify-items:center;gap:3px;font:600 8.5px var(--sans);letter-spacing:.04em;background:var(--key)}
+.pagetabs button .led{width:6px;height:6px}
+.pagetabs button[aria-pressed=true] .led{background:var(--led);box-shadow:0 0 5px var(--led)}
+.pagetabs button.has::after{content:"";position:absolute}
+.pkcol{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:3px}
+.pkcol .pk{height:22px;width:auto}
+
+/* ===== sequence grid: six tracks, note on every key ===== */
+.mseq{display:grid;gap:3px;min-width:max-content}
+.mrowg{display:grid;gap:3px;align-items:center}
+.mst{position:relative;height:40px;border-radius:3px;border:0;padding:0;background:var(--key);box-shadow:inset 0 -2px 0 rgba(0,0,0,.35);cursor:pointer;--lamp:var(--led)}
+.mst.q{background:var(--key2)}
+/* 16-step boundary: the step grid stays perfectly equal (no space, no marker in or between cells);
+   only the ruler number of a page start is bolder */
+.mst.gap,.rul.gap,.tlane .tc.gap,.lb.gap{margin-left:0}
+.rul.gap{font-weight:700;color:var(--ink)}
+/* the roll, the ENV / SLIDE / SWING rows and the lock lane share one column grid: same template, same
+   width, same left edge (items may shrink below their content so 1fr tracks stay equal) */
+.mrowg>*,.tlane>*,#lane>*{min-width:0}
+.lanewrap #lanescroll{padding-left:0!important;padding-right:0!important}
+.mstack.all{min-width:0}
+.mst:hover{filter:brightness(1.2)}
+.mst.on{background-image:linear-gradient(var(--lamp),var(--lamp));background-repeat:no-repeat;background-position:center 5px;background-size:62% 5px;box-shadow:inset 0 -2px 0 rgba(0,0,0,.35),inset 0 0 14px -6px var(--lamp)}
+.mst.on.g{--lamp:var(--ledg)}
+.mst.on.y{--lamp:var(--ledy)}
+.mst .nt{position:absolute;left:0;right:0;bottom:6px;text-align:center;font:500 10.5px var(--mono);color:var(--keytext);letter-spacing:0;pointer-events:none;white-space:nowrap}
+.mst .nt em{font-style:normal;color:var(--keydim);font-size:9px}
+.mst.lk::before{content:"";position:absolute;right:4px;top:12px;width:5px;height:5px;background:var(--cream)}
+.mst.sl::after{content:"";position:absolute;left:3px;top:12px;width:9px;height:5px;background:linear-gradient(135deg,transparent 45%,var(--cream) 45% 60%,transparent 60%)}
+.mst.ph{box-shadow:0 0 0 2px var(--cream)!important}
+.mst.dim{opacity:.35}
+.mrowg.off .mst.on{filter:saturate(0) brightness(.7)}
+.mrowg.sel .mst:not(.on){filter:brightness(1.25)}
+.mseq .th{height:40px}
+.mseq .rul{height:24px!important}
+
+/* trig tracks of the selected track: every sub-track at once (the hardware cycles TRIG SELECT) */
+.tlanes{display:grid;gap:2px;margin-top:10px;min-width:max-content}
+.tlane{display:grid;gap:3px;align-items:center}
+.tlane .tc{height:16px;border-radius:2px;background:transparent;box-shadow:inset 0 0 0 1px var(--rule);padding:0;cursor:pointer;position:relative}
+.tlane .tc:hover{background:var(--plate3)}
+.tlane .tc.on{background:var(--key);box-shadow:none}
+.tlane .tc.on::after{content:"";position:absolute;left:30%;right:30%;top:5px;height:5px;border-radius:1px;background:var(--lamp,var(--led));box-shadow:0 0 4px var(--lamp,var(--led))}
+.tlane .tc.na{opacity:.28;cursor:default;box-shadow:inset 0 0 0 1px var(--rule)}
+.tlane .tc.ph{box-shadow:inset 0 0 0 2px var(--print)}
+.tlane.amp .tc{--lamp:var(--led)}.tlane.flt .tc{--lamp:var(--ledy)}.tlane.lfo .tc{--lamp:var(--ledg)}.tlane.sld .tc{--lamp:var(--cream)}.tlane.swg .tc{--lamp:var(--keydim)}
+.tlab{font:600 10px var(--sans);letter-spacing:.14em;text-transform:uppercase;color:var(--print2);display:flex;justify-content:space-between;align-items:center;padding-right:6px}
+.tlab small{font:9px var(--mono);letter-spacing:0;color:var(--print3)}
+.seqwrap{display:grid;grid-template-columns:minmax(0,1fr);gap:0}
+.seqinfo{display:flex;gap:14px;align-items:center;margin:12px 0 6px;border-top:2px solid var(--print);padding-top:8px;height:34px;white-space:nowrap}
+.seqinfo .legend{margin-left:auto}
+.legend i.lg.g{background-image:linear-gradient(var(--ledg),var(--ledg))}
+.legend i.lg.y{background-image:linear-gradient(var(--ledy),var(--ledy))}
+.lanesvg{position:absolute;inset:0;pointer-events:none;overflow:visible}
+.lanebox{position:relative}
+.lb{height:150px!important}
+
+/* ===== notes: piano roll ===== */
+.notesgrid{display:grid;gap:18px}
+.rollcard{display:grid;gap:8px}
+.rollbar{display:flex;gap:14px;align-items:center;flex-wrap:nowrap;white-space:nowrap}
+.rollbar .grow{flex:1}
+canvas.roll{display:block;width:100%;height:330px;border-radius:4px;background:var(--lcd);touch-action:none;cursor:crosshair}
+.notes3{display:grid;grid-template-columns:minmax(0,1.5fr) minmax(0,1fr) minmax(0,1fr);gap:22px;align-items:start}
+.arpgrid{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.25fr);gap:16px;align-items:start}
+.arptrack{display:grid;grid-template-columns:repeat(16,minmax(0,1fr));gap:2px;height:112px;padding:6px;background:var(--lcd);border-radius:4px;touch-action:none;user-select:none;position:relative}
+.arptrack .ac{position:relative;border-radius:1px;cursor:ns-resize;background:color-mix(in srgb,var(--ink) 8%,transparent)}
+.arptrack .ac.na{background:repeating-linear-gradient(135deg,transparent 0 3px,color-mix(in srgb,var(--ink) 16%,transparent) 3px 5px);cursor:e-resize}
+.arptrack .ac .z{position:absolute;left:0;right:0;top:50%;border-top:1px dashed color-mix(in srgb,var(--ink) 45%,transparent)}
+.arptrack .ac i{position:absolute;left:2px;right:2px;background:var(--ink)}
+.arptrack .ac.mute i{background:transparent;box-shadow:inset 0 0 0 1px var(--ink)}
+.arptrack .ac b{position:absolute;bottom:1px;left:0;right:0;text-align:center;font:8px var(--pix);color:var(--ink);font-weight:400}
+.arptrack .ac.ph{background:color-mix(in srgb,var(--ink) 22%,transparent)}
+.arplenrow{display:grid;grid-template-columns:repeat(16,minmax(0,1fr));gap:2px;padding:0 6px}
+.arplenrow button{height:14px;padding:0;background:transparent;box-shadow:none;border-radius:1px;border-top:3px solid var(--rule)}
+.arplenrow button.on{border-top-color:var(--ledg)}
+.arplenrow button:hover{border-top-color:var(--print)}
+.statemach{font:10px/1.7 var(--pix);background:var(--lcd);color:var(--ink);padding:8px 10px;border-radius:3px;box-shadow:0 0 0 2px var(--bezel);min-height:58px}
+.statemach b{font-weight:400;background:var(--ink);color:var(--lcd);padding:0 4px}
+
+/* ===== sound: four pages, three LFOs ===== */
+.sound4{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:18px;align-items:stretch}
+.sound4 canvas.ed{height:132px}
+.sound4 .edblank{height:132px}
+.sound4 .card{align-content:start}
+.lfo3{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:18px;margin-top:18px;align-items:start}
+.lfo3 canvas.ed{height:92px}
+.lfohead{display:flex;align-items:center;gap:8px}
+.lfohandle{width:26px;height:26px;padding:0;display:grid;place-items:center;border-radius:50%;cursor:grab;background:var(--cream);color:var(--creamtext);font:11px var(--pix);flex:none;box-shadow:inset 0 -2px 0 rgba(0,0,0,.25)}
+.lfohandle:active{cursor:grabbing}
+.lforoute{display:flex;gap:6px;align-items:center;flex-wrap:nowrap}
+.lforoute .kselbtn{height:26px;min-width:0;width:auto;flex:1}
+.lforoute .arrow{font:12px var(--pix);color:var(--print2)}
+.shapes.w11 button{padding:2px 3px}
+.shapes.w11 svg{width:22px;height:18px}
+.cordsvg{position:fixed;inset:0;pointer-events:none;z-index:30}
+.card .machbtn{width:auto!important;max-width:240px}
+.soundnote{font-size:13px;color:var(--print3);margin-top:-4px;min-height:17px}
+
+/* ===== mix: the routing graph ===== */
+.routewrap{display:grid;gap:14px}
+.routebar{display:flex;gap:16px;align-items:center;flex-wrap:nowrap;white-space:nowrap}
+.routebar .grow{flex:1}
+svg.route{display:block;width:100%;height:300px;border-radius:4px;background:var(--lcd);box-shadow:0 0 0 2px var(--bezel);user-select:none}
+svg.route text{font-family:Silkscreen,ui-monospace,monospace;fill:var(--ink)}
+svg.route .node rect{fill:var(--ink);cursor:pointer}
+svg.route .node.sel rect.frame{fill:none;stroke:var(--ink);stroke-width:2}
+svg.route .node text{fill:var(--lcd)}
+svg.route .node.fx rect.body{fill:transparent;stroke:var(--ink);stroke-width:2}
+svg.route .node.fx text{fill:var(--ink)}
+svg.route .node.muted{opacity:.45}
+svg.route .bus{stroke:var(--ink);stroke-width:3}
+svg.route .bus.dim{opacity:.25}
+svg.route .cord{fill:none;stroke:var(--ink);stroke-width:2}
+svg.route .cord.dash{stroke-dasharray:5 4}
+svg.route .cord.dot{stroke-dasharray:1.5 4;stroke-linecap:round;stroke-width:2.5}
+svg.route .tap{fill:var(--ink)}
+svg.route .jack{fill:transparent;stroke:var(--ink);stroke-width:2}
+svg.route .jack.live{fill:var(--ink)}
+.strips6{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:14px}
+.strip6{display:grid;gap:5px;padding:6px 6px 8px;border-left:3px solid transparent;align-content:start}
+.strip6.sel{border-left-color:var(--led);background:var(--plate3)}
+.strip6 .shead{display:flex;justify-content:space-between;align-items:baseline;gap:6px}
+.strip6 .shead b{font:500 13px var(--mono);color:var(--body)}
+.strip6 .shead span{font-size:12px;color:var(--print2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.strip6 .frow{display:grid;grid-template-columns:48px minmax(0,1fr);gap:8px;align-items:stretch}
+.strip6 .fader{height:150px}
+.strip6 .pcs{display:grid;gap:3px;align-content:start}
+.strip6 .pc{height:28px}
+.busk{display:grid;grid-template-columns:repeat(3,1fr);gap:3px}
+.busk button{height:24px;padding:0;font:600 11px var(--mono);letter-spacing:0}
+.busk button[aria-pressed=true]{background:var(--cream);color:var(--creamtext)}
+.strip6 .kselbtn{height:26px}
+.strip6 .inlab{font:600 10px var(--sans);letter-spacing:.14em;text-transform:uppercase;color:var(--print2)}
+.flowl{font:11px/1.8 var(--pix);background:var(--lcd);color:var(--ink);padding:8px 12px;border-radius:3px;box-shadow:0 0 0 2px var(--bezel);text-transform:uppercase;display:grid;gap:0}
+.flowl i{font-style:normal;opacity:.6}
+
+/* ===== perform: keyboard, multi trig, multi map, assign ===== */
+.perf{display:grid;gap:18px}
+.perfbar{display:flex;gap:18px;align-items:center;flex-wrap:nowrap;white-space:nowrap}
+.kbwrap{position:relative;display:grid;gap:6px}
+.kb{position:relative;height:150px;user-select:none;touch-action:none}
+.kb .w{position:absolute;top:0;bottom:0;border-radius:0 0 4px 4px;background:var(--cream);box-shadow:inset 0 0 0 1px var(--rule),inset 0 -6px 0 rgba(0,0,0,.08);cursor:pointer}
+.kb .b{position:absolute;top:0;height:92px;border-radius:0 0 3px 3px;background:var(--key);box-shadow:inset 0 -4px 0 rgba(0,0,0,.35);z-index:2;cursor:pointer}
+.kb .w.dn{background:var(--plate2)}
+.kb .b.dn{background:var(--key2)}
+.kb .w small{position:absolute;bottom:8px;left:0;right:0;text-align:center;font:500 10px var(--mono);color:var(--print3)}
+.kb .zone{position:absolute;top:-8px;height:5px;border-radius:1px;z-index:3}
+.kb .splitm{position:absolute;top:-14px;bottom:-4px;width:4px;margin-left:-2px;background:var(--led);box-shadow:0 0 8px var(--led);z-index:4;cursor:ew-resize;border-radius:2px}
+.kb .splitm span{position:absolute;top:-2px;left:8px;font:10px var(--pix);color:var(--led);white-space:nowrap}
+.mapbands{position:relative;height:22px}
+.mapbands .band{position:absolute;top:0;bottom:0;border-radius:2px;background:var(--lcd);color:var(--ink);font:10px var(--pix);display:flex;align-items:center;justify-content:center;box-shadow:inset 0 0 0 1px var(--ink);cursor:pointer;white-space:nowrap;overflow:hidden}
+.mapbands .band.sel{background:var(--ink);color:var(--lcd)}
+.trklamps{display:flex;gap:10px;align-items:center}
+.trklamps span{display:inline-flex;gap:5px;align-items:center;font:600 11px var(--mono);color:var(--print)}
+.perf3{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr) minmax(0,1.1fr);gap:22px;align-items:start}
+.perf3 canvas.ed{height:120px}
+.joy{position:relative;width:150px;height:150px;border-radius:6px;background:var(--lcd);box-shadow:0 0 0 2px var(--bezel);touch-action:none;cursor:grab;flex:none}
+.joy .cross{position:absolute;left:50%;top:0;bottom:0;border-left:1px dashed color-mix(in srgb,var(--ink) 45%,transparent)}
+.joy .cross2{position:absolute;top:50%;left:0;right:0;border-top:1px dashed color-mix(in srgb,var(--ink) 45%,transparent)}
+.joy .knobj{position:absolute;width:22px;height:22px;margin:-11px 0 0 -11px;border-radius:50%;background:var(--ink);box-shadow:0 0 0 3px var(--lcd),0 0 0 5px var(--ink)}
+.joy small{position:absolute;font:9px var(--pix);color:var(--ink)}
+.asgn{display:grid;grid-template-columns:auto minmax(0,1fr);gap:14px;align-items:start}
+.asrow{display:grid;grid-template-columns:22px minmax(0,1fr) minmax(0,1fr) 72px;gap:4px;align-items:center}
+.asrow .kselbtn{height:28px}
+.asrow .pc{height:28px}
+.asrow>b{font:12px var(--pix);color:var(--print)}
+table.mmap{border-collapse:collapse;width:100%;font-size:14px}
+table.mmap th{font-weight:600;color:var(--print2);text-align:left;font-size:11px;letter-spacing:.14em;text-transform:uppercase;padding:5px 6px;border-bottom:2px solid var(--print)}
+table.mmap td{padding:4px 6px;border-bottom:1px solid var(--rule);white-space:nowrap}
+table.mmap tr.sel td{background:var(--plate3)}
+table.mmap tr.sel td:first-child{box-shadow:inset 3px 0 0 var(--led)}
+.mutes12{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:3px}
+.mutes12 button{height:30px;padding:0;display:grid;justify-items:center;align-content:center;gap:2px;font:500 11px var(--mono);letter-spacing:0}
+.mutes12 button .led{width:6px;height:6px}
+.mutes12 button.on .led{background:var(--ledg);box-shadow:0 0 5px var(--ledg)}
+.mutes12 button:not(.on){background:var(--rec);color:#fff}
+.mutelab{font:600 10px var(--sans);letter-spacing:.14em;text-transform:uppercase;color:var(--print2);margin-top:4px}
+
+/* ===== song (MM): per-row transpose ===== */
+.ttr{display:grid;grid-template-columns:34px repeat(6,minmax(0,1fr));gap:3px;align-items:center;flex:1}
+.ttr .ilab{min-width:0}
+.ttr .tt{display:grid;grid-template-columns:18px 1fr 18px;align-items:center;height:26px;background:var(--key);border-radius:3px;color:var(--keytext)}
+.ttr .tt button{all:unset;cursor:pointer;text-align:center;font:600 12px var(--mono);color:var(--keydim)}
+.ttr .tt button:hover{color:var(--keytext)}
+.ttr .tt b{text-align:center;font:500 12px var(--mono)}
+.ttr .tt.on{background:var(--cream);color:var(--creamtext)}.ttr .tt.on button{color:var(--creamtext)}
+.mkeys.m12{grid-template-columns:repeat(6,minmax(0,1fr))!important}
+.slotgrid{grid-template-columns:34px repeat(16,minmax(0,1fr))!important}
+
+/* ===== sysex receive, the MM's one-way door ===== */
+.lcdpanel .patf small .pst{font:9px var(--pix);letter-spacing:0;margin-left:2px}
+.lcdpanel .patf small .pst.warn{background:var(--ink);color:var(--lcd);padding:0 3px;border-radius:1px;cursor:pointer;animation:blink 1s steps(2) infinite}
+@media (prefers-reduced-motion:reduce){.lcdpanel .patf small .pst.warn{animation:none}}
+.recvsteps{display:grid;gap:6px;margin:0;padding-left:20px}
+.recvsteps li b{font-weight:600}
+.lcdbig.recv{letter-spacing:.06em}
+body.learn .pc[data-g]{outline:1px dashed var(--print2);outline-offset:1px;cursor:pointer}
+body.learn .pc.mapped{outline:2px solid var(--led)}
+.pc.mapped:not(.lk) span::before{content:"";display:inline-block;width:5px;height:5px;border-radius:50%;background:var(--lcd);margin-right:4px;vertical-align:1px}
+.rowst{height:40px;display:grid;align-content:center;gap:3px;padding-left:6px;font:600 10px var(--sans);letter-spacing:.1em;color:var(--print2)}
+.rowst span{display:flex;gap:4px;align-items:center;white-space:nowrap}
+.rowst .led{width:6px;height:6px}
+.tlane .tlab{padding:0 0 0 6px;font-size:9.5px}
+.lbscale{height:150px;display:grid;align-content:space-between;padding:0 0 0 6px;font:9px var(--pix);color:var(--ink)}
+.lbscale b{font-weight:400}
+.lbscale span{display:grid;opacity:.75}.lbscale small{font:8px var(--pix)}
+.ws-seq .rail .th,.ws-midi .rail .th{height:32px}
+/* line 2 never widens the LCD (no jump between workspaces) */
+.row2{width:0;min-width:100%;overflow:hidden}
+.notes3{grid-template-columns:minmax(0,2fr) minmax(0,1fr)!important}
+.rollcard header h3{white-space:nowrap}
+.rollbar{justify-content:flex-end}
+canvas.roll{height:300px}
+.arpgrid{grid-template-columns:minmax(0,1.15fr) minmax(0,1fr)!important}
+.arpgrid .seg{gap:9px;flex-wrap:wrap}
+/* ===== one Sequence: overview rows, the expanded note lane, slide/swing, dock ===== */
+.mst{height:32px}
+.mst.on{background-position:center 4px;background-size:62% 4px}
+.mst .nt{bottom:8px;font-size:10.5px}
+.mst.lk::before{top:9px}
+.mst.sl::after{top:9px}
+.rowst{height:32px;gap:1px}
+.mst .gt{position:absolute;left:3px;right:3px;bottom:3px;height:3px;border-radius:1px;background:var(--lamp);opacity:.75;pointer-events:none}
+.mst .gt.gs{right:-3px}
+.mst .gt.gm{left:-3px;right:-3px}
+.mst .gt.ge{left:-3px}
+.mst.gap .gt.gm,.mst.gap .gt.ge{left:-3px}
+.mst:not(.on) .gt{background:var(--keydim);opacity:.6}
+.lanehead{display:flex;gap:14px;align-items:center;white-space:nowrap;margin:10px 0 5px;border-top:2px solid var(--print);padding-top:7px;height:32px}
+.lanehead .hint{overflow:hidden;text-overflow:ellipsis;min-width:0}
+.lanehead .legend{margin-left:auto;flex:none}
+.lanecv{min-width:max-content}
+canvas.roll{width:100%;display:block;border-radius:4px;background:var(--lcd);box-shadow:0 0 0 2px var(--bezel);touch-action:none;cursor:crosshair}
+.tlanes{margin-top:8px!important}
+.tlane .tc.envc{display:flex;gap:2px;align-items:center;justify-content:center;box-shadow:none;background:transparent;cursor:default}
+.tlane .tc.envc.na{opacity:.3}
+.tlane .tc.envc .d{width:9px;height:9px;min-width:0;padding:0;border-radius:50%;background:transparent;box-shadow:inset 0 0 0 1.5px var(--print3);cursor:pointer}
+.tlane .tc.envc .d.on.a{background:var(--led);box-shadow:0 0 4px var(--led)}
+.tlane .tc.envc .d.on.f{background:var(--ledy);box-shadow:0 0 4px var(--ledy)}
+.tlane .tc.envc .d.on.l{background:var(--ledg);box-shadow:0 0 4px var(--ledg)}
+.tlane .tc.envc::after{display:none}
+/* ALL (up to 64 steps in the width): the three trig-track dots stack in the narrow step */
+.mstack.all .tlane .tc.envc{flex-direction:column;gap:1px}
+.mstack.all .tlane .tc.envc .d{width:4px;height:4px;box-shadow:inset 0 0 0 1px var(--print3)}
+.envlab{display:inline-flex;gap:2px;align-items:center;font:600 9px var(--sans);letter-spacing:.04em;color:var(--print2)}
+.envlab i{width:6px;height:6px;border-radius:50%;margin-left:2px}.envlab i.a{background:var(--led)}.envlab i.f{background:var(--ledy)}.envlab i.l{background:var(--ledg)}
+.dock{margin-top:10px;border-top:2px solid var(--print);padding-top:8px}
+.docktabs{display:flex;gap:4px;align-items:center;height:30px;white-space:nowrap;margin-bottom:8px}
+.docktabs .lkey[aria-selected=true]{background:var(--cream);color:var(--creamtext)}
+.docktabs .lkey[aria-selected=true] .led{background:var(--led);box-shadow:0 0 6px 1px var(--led)}
+.dockinfo{margin-left:12px;font-size:12px;color:var(--print3);overflow:hidden;text-overflow:ellipsis;display:flex;gap:10px;align-items:baseline}
+.dockbody{height:158px;overflow:hidden}
+.dock3{display:grid;grid-template-columns:minmax(0,1.1fr) minmax(0,1fr) minmax(0,.9fr);gap:18px;align-items:start}
+.dock .lb{height:120px!important}
+.dock .lbscale{height:120px}
+.dock #lanescroll{padding:6px 8px!important}
+.dock .arptrack{height:96px}
+.dock .statemach{min-height:0;font-size:9.5px;line-height:1.6}
+.lanehead{position:sticky;left:0;max-width:100%}
+.lanehead .hint{font-size:12px}
+.sound4 .card header{flex-wrap:nowrap}
+.sound4 .card header>span{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.sound4 .machbtn{width:auto!important;grid-template-columns:auto auto 10px!important;max-width:190px}
+.joy{width:128px!important;height:128px!important}
+.asrow{grid-template-columns:16px 62px minmax(0,1fr) 70px!important}
+.asrow .kselbtn{padding:0 6px;font-size:12px}
+.sound4 .pc span,.lfo3 .pc span{letter-spacing:.04em;font-size:11px}
+.sound4 .pc b{font-size:13px}
+.sound4 .pc{padding:0 6px}
+.mst .gt.gd{opacity:.28}
+.kb .splitm span{top:18px;left:8px;background:var(--cream);padding:1px 4px;border-radius:2px}
+/* ===== v3: one note sequencer, six stacked lanes ===== */
+.rail .th{display:block!important;padding:0!important}
+.threw{display:grid;grid-template-columns:22px minmax(0,1fr) 24px 24px;gap:6px;align-items:center;padding:0 4px 0 2px;height:100%}
+.rail .th.tall .threw{height:34px}
+.ws-seq .rail .th{height:34px}
+.ws-seq .rail .th.tall{background:var(--plate3)}
+.th .lockpick{margin:6px 6px 0 4px;border-top:1px solid var(--rule)!important;padding-top:6px}
+.tallinfo{font:500 12px var(--mono);color:var(--print2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.mstack{display:grid;gap:3px;min-width:max-content}
+.nlane{position:relative;border-radius:4px}
+.nlane canvas.roll{height:auto;box-shadow:0 0 0 1px color-mix(in srgb,var(--bezel) 60%,transparent)}
+.nlane:not(.big) canvas.roll{cursor:pointer}
+.nlane:not(.big):hover canvas.roll{box-shadow:0 0 0 2px var(--print2)}
+.nlane.big canvas.roll{box-shadow:0 0 0 2px var(--bezel),0 0 0 4px var(--led)}
+.attach{display:grid;grid-template-rows:auto auto 1fr;align-content:start;overflow:hidden}
+.lanehint{height:22px;display:flex;align-items:center;white-space:nowrap;overflow:hidden;position:sticky;left:0}
+.lanehint .hint{font-size:12px;overflow:hidden;text-overflow:ellipsis}
+.attach .tlanes{margin-top:2px!important;height:58px}
+.attach .dock{margin-top:6px;padding-top:6px;position:sticky;left:0}
+.attach .dockbody{height:134px}
+.attach .dock .lb{height:108px!important}.attach .dock .lbscale{height:108px}
+.attach .docktabs{margin-bottom:6px}
+.velbar{display:block;width:60%;height:12px;border-radius:1px;background:linear-gradient(to top,var(--led) var(--v),transparent var(--v));box-shadow:inset 0 0 0 1px var(--print3)}
+.tlane .tc.envc .velbar{margin:auto}
+.attach{width:0;min-width:100%}
+.attach .tlanes{min-width:0!important}
+/* the RECV / SEND n flag has a fixed slot, so the LCD never changes width */
+.lcdpanel .patf small .pst{display:inline-block;width:6.5ch;text-align:left;white-space:nowrap;overflow:hidden}
+
+/* the old .play key style must not resize the page LEDs while playing */
+.pl.play{width:auto!important;height:auto!important;background:none!important;place-items:initial}
+/* ===== v4: the MD Editor's Sequence layout, one roll for the selected track ===== */
+.ws-seq .rail .th,.ws-sound .rail .th{height:var(--row)!important;background:transparent}
+.rail .th.sel{background:var(--plate3)!important}
+.seqtop{height:24px;display:flex;justify-content:flex-end;align-items:center;margin-bottom:3px}
+.seqtop .pagectl{margin:0}
+#seqscroll{overflow-x:auto}
+.ws-seq .lanewrap{padding:12px 0 0!important}
+.ws-seq .lb{height:124px!important}
+.ws-seq .lbscale{height:124px}
+.tlanes{margin-top:6px!important}
+.railparams .pagetabs{margin-bottom:2px}
+.seqcards{display:grid;grid-template-columns:minmax(0,1.9fr) minmax(0,1fr) minmax(0,1fr);gap:18px;margin-top:18px;align-items:start}
+.seqcards .dock3{grid-template-columns:minmax(0,1fr);gap:10px}
+.seqcards .arpc .dock3{grid-template-columns:minmax(0,1.25fr) minmax(0,1fr)}
+.seqcards .arpc .statemach{grid-column:1/-1;min-height:0}
+.seqcards .arptrack{height:96px}
+.ws-seq .lb{height:80px!important}
+.ws-seq .lbscale{height:80px}
+/* lock block fills down to the lock lane's bottom */
+#rail .railparams{box-sizing:border-box;grid-template-rows:auto auto minmax(0,1fr);align-content:stretch}
+#rail .railparams .pkcol{grid-auto-rows:minmax(0,1fr);align-content:stretch}
+#rail .railparams .pkcol .pk{height:auto;min-height:0}
+#rail .railparams .pagetabs button{height:30px}
+#rail .railparams{gap:5px!important}
+#rail .railparams .pagetabs button{height:22px;padding:0;grid-auto-flow:column;display:flex;align-items:center;justify-content:center;gap:3px}
+#rail .railparams .pagetabs button .led{width:5px;height:5px}
+#rail .railparams .rphead{height:22px}
+/* ===== rules only at the bottom of rows (no double lines under the header) ===== */
+.sound4 .card,.lfo3 .card,.seqcards .card,.perf .card{border-top:0!important;padding-top:0!important}
+.sound4{border-bottom:2px solid var(--print);padding-bottom:12px}
+.lfo3{border-bottom:2px solid var(--print);padding-bottom:12px;margin-top:12px!important}
+.seqcards{margin-top:12px!important}
+.card header.tipped{cursor:help}
+.card header.tipped h3::after{content:" ⓘ";font-size:10px;color:var(--print3);letter-spacing:0}
+/* ===== Sound: dense, one screen ===== */
+.sound4 canvas.ed,.sound4 .edblank{height:86px!important}
+.sound4 .card{gap:8px}
+.sound4 .pc,.lfo3 .pc,.seqcards .pc{height:28px}
+.lfo3 canvas.ed{height:50px!important}
+.lfo3 .card{gap:6px}
+.lfo3 .lforoute .kselbtn{height:24px}
+.shapes.w11{flex-wrap:nowrap;gap:2px}
+.shapes.w11 button{padding:1px 2px;flex:1;min-width:0;height:20px;display:grid;place-items:center}
+.shapes.w11 svg{width:18px;height:13px}
+.lfo3 .seg button{font-size:11px}
+.lfohandle{width:22px;height:22px;font-size:10px}
+.seqcards .card{gap:6px}
+.seqcards .dock3{gap:6px}
+.seqcards .arptrack{height:62px}
+.seqcards .arplenrow button{height:10px}
+.seqcards .kv{gap:6px}
+.seqcards .two label{gap:3px}
+.seqcards .statemach{font-size:9px;line-height:1.5;padding:5px 8px}
+/* ===== Mix: strips on top, graph below ===== */
+.routewrap{gap:10px!important}
+.mixrow{border-bottom:2px solid var(--print);padding-bottom:10px}
+.strip6{padding:4px 6px 6px!important;gap:4px!important}
+.strip6 .fader{height:128px!important}
+.strip6 .pc{height:26px!important}
+.busrow{display:grid;grid-template-columns:28px minmax(0,1fr);gap:6px;align-items:center}
+.busrow .kselbtn{height:24px}
+.flowl{padding:5px 12px!important;line-height:1.6!important}
+
+/* ===== v46 (MD): fixed LCD field widths, tabular digits ===== */
+.lcdpanel b,.lcd2{font-variant-numeric:tabular-nums}
+#bpm,#pos,#lockn{display:inline-block;width:5.2ch;min-width:0!important;text-align:left}
+#pat{display:inline-block;width:3.2ch;text-align:center}
+#kitname{display:inline-block;width:15.2ch;min-width:0!important;max-width:none!important;overflow:hidden;text-overflow:clip;white-space:nowrap}
+.lcdeng span{display:inline-block;min-width:12.2ch}
+.lcd2 .l2{flex:none;overflow:hidden;white-space:nowrap}
+.lcd2 .l2 b{overflow:hidden}
+/* ===== v48 (MD): engine status ===== */
+.lcdeng .led.blink{animation:pgblink .5s steps(2) infinite}
+.lcdpanel.engwait .f:not(.trf),.lcdpanel.engwait .row2{opacity:.35;transition:opacity .3s}
+.lcdpanel .f,.lcdpanel .row2{transition:opacity .3s}
+.lcdt .lt:disabled{opacity:.4;cursor:default}
+body.engwait #main,body.engwait #rail{pointer-events:none;opacity:.6;transition:opacity .3s}
+/* MKII: the only visible difference is the print under the screen */
+.lcdgroup{position:relative}
+:root[data-plate="mk2"] .lcdgroup::after{content:"MKII";position:absolute;left:50%;transform:translateX(-50%);bottom:-11px;font:600 8px var(--sans);letter-spacing:.3em;color:var(--print2)}
+/* ===== Perform: controls on top, the keyboard at the bottom ===== */
+.perf{gap:12px!important}
+.perf3{border-bottom:2px solid var(--print);padding-bottom:12px;align-items:stretch}
+.maprow{border-bottom:2px solid var(--print);padding-bottom:10px}
+.maprow table.mmap td{padding:2px 6px}
+.maprow .pc{height:24px}
+.kbsec{display:grid;gap:6px}
+.kbtitle{flex-wrap:nowrap}
+.kb{height:132px}
+.kb .b{height:80px}
+.perf3 canvas.ed{height:104px!important}
+/* ===== Control: 12 track columns ===== */
+.mx{grid-template-columns:150px repeat(12,minmax(0,1fr))!important}
+/* the RECV / SEND flag floats in the Pattern field (no reserved width) */
+.lcdpanel .patf{position:relative}
+.lcdpanel .patf small .pst{position:absolute;right:6px;top:4px;width:auto!important}
+.kb{height:clamp(130px,calc(100vh - 620px),250px)!important}
+.kb .b{height:62%!important}
+.perf.map .kb{height:clamp(110px,calc(100vh - 800px),220px)!important}
+.mxh small{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%}
+.kb{height:clamp(130px,calc(100vh - 540px),380px)!important}
+.perf.map .kb{height:clamp(110px,calc(100vh - 740px),300px)!important}
+
+/* v49 (MD): the queued pattern is its own name, blinking; a short inverted flash when it starts */
+.patrow.queued #pat{animation:blink .5s steps(2) infinite}
+.lcdpanel .patf.flash #pat{animation:patflash .45s ease-out}
+@keyframes patflash{0%{background:var(--ink);color:var(--lcd)}100%{background:transparent;color:inherit}}
+
+/* ===== v50 (MD): kit library + pattern chooser ===== */
+.libpop{position:absolute;z-index:22;width:min(1180px,calc(100vw - 32px));display:grid;gap:10px;align-content:start;padding:14px;background:var(--plate);border:2px solid var(--print);border-radius:6px;box-shadow:0 18px 40px rgba(0,0,0,.35);overflow:auto;overscroll-behavior:contain;color:var(--body)}
+.libhead{display:flex;align-items:center;gap:14px;border-bottom:1px solid var(--rule);padding-bottom:8px;min-width:0}
+.libhead .note{margin-right:auto;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0;font-size:13px}
+.libx{height:24px;padding:0 9px;font:600 10px var(--sans);letter-spacing:.14em;text-transform:uppercase}
+.libacts{display:flex;gap:10px 22px;align-items:center;flex-wrap:wrap}
+.libacts .grp{display:flex;gap:4px;align-items:center}
+.libacts .ilab{min-width:0;margin-right:4px;white-space:nowrap}
+.libacts button{height:26px;padding:0 10px;font:600 11px var(--sans);letter-spacing:.12em;text-transform:uppercase;white-space:nowrap}
+.libacts button:disabled{opacity:.35;cursor:default}
+.libacts .danger:hover:not(:disabled){background:var(--rec);color:#fff}
+.libgrid{display:grid;gap:4px}
+.libgrid.kits{grid-template-columns:repeat(16,minmax(0,1fr))}
+.libgrid.pats{grid-template-columns:30px repeat(16,minmax(0,1fr))}
+.ls{position:relative;display:grid;gap:2px;align-content:center;text-align:left;min-width:0;padding:4px 5px;font-weight:500;letter-spacing:0}
+.ls .lsh{display:flex;justify-content:space-between;align-items:center;gap:3px}
+.ls .lsh b{font:500 11px var(--mono)}
+.ls .lsh em{font:600 8px var(--sans);font-style:normal;letter-spacing:.1em;text-transform:uppercase;display:inline-flex;gap:3px;align-items:center}
+.ls .lsh .led{width:5px;height:5px}
+.ls .lsn{font:500 10px var(--mono);white-space:nowrap;overflow:hidden;text-overflow:clip;text-transform:uppercase;height:14px;line-height:14px}
+.ls .lsl{font:9px var(--mono);color:var(--keydim);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-height:11px}
+.ks{height:52px}
+.ps{height:42px;padding:4px 6px;gap:1px}
+.ps b{font:500 13px var(--mono)}
+.ps span{font:10px var(--mono);color:var(--keydim);white-space:nowrap;overflow:hidden}
+.ls.empty{background:transparent;box-shadow:inset 0 0 0 1px var(--rule);color:var(--print3)}
+.ls.empty .lsl,.ps.empty span{color:var(--print3)}
+.ls.empty:hover{background:var(--plate3)}
+.ls.cur,.ls.cur:hover{background:var(--cream);color:var(--creamtext);box-shadow:inset 0 -2px 0 rgba(0,0,0,.2)}
+.ls.cur .lsl,.ps.cur span{color:var(--creamtext);opacity:.8}
+.ls[aria-selected=true]{outline:2px solid var(--led);outline-offset:1px}
+.ls.over{outline:2px dashed var(--led);outline-offset:1px}
+.ls.dragging{opacity:.4}
+.ks.edited .lsh .led{animation:blink 1s steps(2) infinite}
+.lsin{width:100%;min-width:0;height:14px;padding:0 2px;border:0;border-radius:2px;background:var(--lcd);color:var(--ink);font:10px var(--mono);text-transform:uppercase;outline:none;box-shadow:inset 0 0 0 1px var(--ink)}
+.ps.q{box-shadow:inset 0 0 0 2px var(--led)}
+.ps.q b,.ps.q span{animation:blink .5s steps(2) infinite}
+.ps.flash{animation:libflash .45s ease-out}
+@keyframes libflash{0%{box-shadow:0 0 0 3px var(--led)}100%{box-shadow:0 0 0 0 transparent}}
+.lbank{justify-content:center;padding:0!important;font-size:12px}
+.libfoot{display:flex;justify-content:space-between;gap:16px;font-size:12px;color:var(--print2);border-top:1px solid var(--rule);padding-top:7px}
+.libfoot span{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
+.libfoot .fw{cursor:help;flex:none}
+#pat{cursor:pointer;border-radius:2px}
+#pat:hover,.kitf[aria-expanded=true],#pat[aria-expanded=true]{background:color-mix(in srgb,var(--ink) 15%,transparent)}
+@media (prefers-reduced-motion:reduce){.ps.q b,.ps.q span,.ks.edited .lsh .led{animation:none}}
+/* ===== boot screen inside the LCD (absolute: the LCD keeps its width) ===== */
+.lcdpanel{position:relative}
+.bootscr{position:absolute;inset:0;z-index:5;display:none;align-content:center;justify-items:center;gap:6px;background:var(--lcd);color:var(--ink);border-radius:4px;font-family:Silkscreen,ui-monospace,monospace}
+.bootscr.on{display:grid}
+.bootscr .bs1{font-size:15px;letter-spacing:.14em}
+.bootscr .bs1 span{font-size:10px;letter-spacing:.06em;opacity:.75}
+.bootscr .bs2{font-size:10px;letter-spacing:.06em}
+.bootscr .bsbar{width:62%;height:6px;box-shadow:inset 0 0 0 1px var(--ink);border-radius:1px;overflow:hidden}
+.bootscr .bsbar i{display:block;height:100%;width:0;background:var(--ink);transition:width .2s steps(4)}

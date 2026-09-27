@@ -36,5 +36,20 @@ namespace elektronData
 	// Pages 0-6. Level is CC 7.
 	uint8_t mmParamCc(uint8_t _page, uint8_t _param);
 	constexpr uint8_t g_mmLevelCc = 7;
+
+	// Enumerated values. The firmware stores them as 0-127 and shows the n names in
+	// equal bands: index = floor(v * n / 128) (measured by sweeping each CC and
+	// grouping the screens, mmEditorProbeFirmwareTest enums). mmEnumValue gives the
+	// lowest value of a band.
+	constexpr int mmEnumIndex(const int _v, const int _n) { return _v * _n / 128; }
+	constexpr int mmEnumValue(const int _i, const int _n) { return (_i * 128 + _n - 1) / _n; }
+	// The names a SYN slot shows for this machine, empty when it is a plain 0-127 value.
+	std::vector<std::string> mmSynthEnum(uint8_t _machine, uint8_t _slot);
+	// LFO page parameters, in the firmware's order.
+	const std::vector<std::string>& mmLfoPages();	// PTCH SYNT AMP FILT EFFX LFO1 LFO2 LFO3 MIDI
+	const std::vector<std::string>& mmLfoTrigs();	// FREE TRIG HOLD ONE HALF
+	const std::vector<std::string>& mmLfoWaves();	// TRI ITRI SAW ISAW SQR ISQR EXP IEXP RMP IRMP RND
+	const std::vector<std::string>& mmLfoMults();	// 1X .. 64X
+	const std::vector<std::string>& mmPitchDests();	// 1/12 .. 16OCT (DEST when PAGE is PTCH)
 	constexpr uint8_t g_mmMuteCc = 3;
 }

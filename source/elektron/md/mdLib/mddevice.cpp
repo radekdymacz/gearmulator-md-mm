@@ -692,6 +692,16 @@ namespace md
 		// Playing and recording: md::SequencerState (the stopped byte alone reads
 		// "playing" after STOP pressed twice).
 		auto& t = *m_sequencerTelemetry;
+		if(m_model == MachineModel::Monomachine)
+		{
+			if(m_hardware->firmwareFingerprint() == g_mmOs132bFingerprint)
+			{
+				auto& uc = m_hardware->getUC();
+				m_mmTelemetry->publish([&uc](const uint32_t _a) { return uc.read8(_a); });
+			}
+			else
+				m_mmTelemetry->clear();
+		}
 		if(m_model != MachineModel::Machinedrum || m_hardware->firmwareFingerprint() != g_mdOs163Fingerprint)
 		{
 			t.step.store(-1, std::memory_order_relaxed);
