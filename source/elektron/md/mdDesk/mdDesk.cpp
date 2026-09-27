@@ -6,6 +6,7 @@
 #include "elektronData/mdWorkingKit.h"
 
 #include <algorithm>
+#include <cstdio>
 
 namespace mdDesk
 {
@@ -190,6 +191,25 @@ namespace mdDesk
 		}
 		else if(op == "record" || op == "recTrig")
 			handleRecord(_message);
+		else if(op == "sampleName")
+		{
+			// UW ROM slot names: the firmware takes 0x73 but never reports names.
+			const auto slot = intOf(_message, "slot");
+			const auto* name = _message.find("name");
+			const auto bytes = slot && *slot >= 0 && *slot < 48 && name && name->isString()
+				? ed::mdSetSampleName(static_cast<uint8_t>(*slot), name->asString()) : std::vector<uint8_t>{};
+			if(bytes.empty())
+				result(_message, {"A sample name is 1-4 letters (A-Z, 0-9, space, punctuation) for ROM slot 1-48"}, {});
+			else
+			{
+				if(m_port.sendSysex)
+					m_port.sendSysex(bytes);
+				char label[8];
+				std::snprintf(label, sizeof(label), "ROM-%02d", *slot + 1);
+				result(_message, {}, std::string("Sent the name to ") + label + ". The Machinedrum shows it in SAMPLE MGR; "
+					"it cannot report names back, so the editor does not read them.");
+			}
+		}
 		else if(op == "play" || op == "stop")
 		{
 			const bool ok = m_port.pressKey && m_port.pressKey(op);

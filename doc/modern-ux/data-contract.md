@@ -158,6 +158,13 @@ selected track, after SET STATUS track and the page key (`mdDesk::KnobRecorder`)
 so the firmware locks it on the track's next note. `recTrig` plays a track like
 its TRIG key.
 
+**UW samples (P3).** `sampleName` (slot 0-47, 1-4 characters) sends the
+manual's 0x73. That is all the firmware offers: it has no request for names,
+memory in use or sample audio, and it ignores SDS dump requests (measured, no
+reply for three slots). Names, memory and audio are therefore not part of the
+contract; the page shows the controls that cannot work as disabled, with the
+reason.
+
 The UI must not show `edited` and "project not saved" as one flag. Two different things can be unsaved:
 
 | State | Meaning | Lost by |

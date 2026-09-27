@@ -677,6 +677,15 @@ namespace
 		desk.tick();
 		check(keys.size() == 2 && keys[1] == "recordPlay", "then starts live recording once stopped");
 	}
+
+	void testSampleName()
+	{
+		const auto m = ed::mdSetSampleName(5, "KIK");
+		check(m == std::vector<uint8_t>{0xf0, 0x00, 0x20, 0x3c, 0x02, 0x00, 0x73, 5, 'K', 'I', 'K', ' ', 0xf7},
+			"0x73: slot, 4 characters space padded");
+		check(ed::mdSetSampleName(48, "A").empty() && ed::mdSetSampleName(0, "").empty()
+			&& ed::mdSetSampleName(0, "TOOLONG").empty() && ed::mdSetSampleName(0, "\x01").empty(), "bad names refused");
+	}
 }
 
 int main()
@@ -693,6 +702,7 @@ int main()
 	testWorkingKitMemory();
 	testKnobRecorder();
 	testDeskRecording();
+	testSampleName();
 	if(g_failures)
 	{
 		std::fprintf(stderr, "mdDeskTest: %d failure(s)\n", g_failures);

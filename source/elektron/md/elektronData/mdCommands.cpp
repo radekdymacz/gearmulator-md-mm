@@ -47,6 +47,22 @@ namespace elektronData
 		return {};
 	}
 
+	std::vector<uint8_t> mdSetSampleName(const uint8_t _slot, const std::string& _name)
+	{
+		if(_slot > 47 || _name.empty() || _name.size() > 4)
+			return {};
+		std::vector<uint8_t> m{0xf0, 0x00, 0x20, 0x3c, dumpIo::g_mdProductId, 0x00, 0x73, _slot};
+		for(size_t i = 0; i < 4; ++i)
+		{
+			const char c = i < _name.size() ? _name[i] : ' ';
+			if(c < 0x20 || c > 0x7e)
+				return {};
+			m.push_back(static_cast<uint8_t>(c));
+		}
+		m.push_back(0xf7);
+		return m;
+	}
+
 	std::vector<uint8_t> mdLoadPattern(const uint8_t _slot)
 	{
 		return dumpIo::request(g_loadPatternId, _slot);

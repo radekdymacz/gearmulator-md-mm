@@ -667,6 +667,22 @@ namespace
 		_rig.run(300);
 	}
 
+	// P3 sampler: Rename sends 0x73. The firmware has no name request, so the only
+	// evidence is its own copy of the last name it took (RAM 0x29f300).
+	void sampleName(Rig& _rig)
+	{
+		auto& m = _rig.machine();
+		std::puts("== P3 sampler: Rename (0x73)");
+		_rig.page(R"({"op":"sampleName","slot":5,"name":"KIK","id":60})");
+		check(resultOk(_rig), "sample name accepted");
+		_rig.run(100);
+		const bool taken = m.read8(0x29f300) == 'K' && m.read8(0x29f301) == 'I' && m.read8(0x29f302) == 'K'
+			&& m.read8(0x29f303) == ' ';
+		check(taken, "the firmware took the name (its last-name buffer, RAM 0x29f300)");
+		_rig.page(R"({"op":"sampleName","slot":5,"name":"TOOLONG","id":61})");
+		check(_rig.lastResult() && !_rig.lastResult()->find("ok")->asBool(), "a name longer than 4 is refused");
+	}
+
 int main(const int _argc, char** _argv)
 {
 	std::setvbuf(stdout, nullptr, _IOLBF, 0);
@@ -687,6 +703,7 @@ int main(const int _argc, char** _argv)
 			restoredKitTruth(rom, _argv[1], patch, kit, rig.desk().documents().kits.at(kit).params[0][2]);
 		}
 		liveRecording(rig);
+		sampleName(rig);
 		if(_argc > 2 && std::string(_argv[2]) == "probe")
 		{
 			probeGroups(rig);

@@ -58,6 +58,11 @@ namespace elektronData
 	// Tempo in BPM x 24 (30-300 BPM).
 	std::vector<uint8_t> mdSetTempo(uint16_t _tempo);
 
+	// UW sample name (manual Appendix C, 0x73): slot 0-47 (0-31 on MKI), up to 4
+	// 7-bit ASCII characters, space padded. Affects the current sample bank. The
+	// firmware has no request for names: this only sets one. Empty if invalid.
+	std::vector<uint8_t> mdSetSampleName(uint8_t _slot, const std::string& _name);
+
 	// Which dump a complete MD SysEx message is, by command byte; 0 if none.
 	uint8_t mdDumpCommand(const std::vector<uint8_t>& _sysex);
 

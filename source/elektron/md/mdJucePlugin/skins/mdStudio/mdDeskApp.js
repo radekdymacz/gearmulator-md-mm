@@ -517,10 +517,17 @@ function drawEd(c) {
 }
 function nearest(c, e) { const r = c.getBoundingClientRect(), x = e.clientX - r.left, y = e.clientY - r.top; let best = null, bd = 16; ED[c.dataset.ed].handles(r.width, r.height, c).forEach(h => { const d = Math.hypot(h.x - x, clamp(h.y, 6, r.height - 6) - y); if (d < bd) { bd = d; best = h; } }); return best; }
 
-/* ===== Sampler (UW): real kit machines and pattern locks; waveforms and ROM names are MOCK ===== */
+/* ===== Sampler (UW): real kit machines, pattern locks, recorder mutes and sample names sent with
+   0x73. Not readable from the machine (so not shown): the sample audio (waveforms are examples),
+   names and memory in use. Not possible from here: SDS send, RAM to ROM copy (SAMPLE MGR only). ===== */
+const NA = {
+	send: "Send is not available: the Machinedrum ignores SDS dump requests (measured on OS 1.63). It sends samples only from its own SAMPLE MGR menu.",
+	rom: "Copy RAM to ROM is not available here: the Machinedrum does it only in its SAMPLE MGR menu (FUNCTION + REC, FUNCTION + STOP). Not wired yet.",
+	memory: "Sample memory in use: the Machinedrum does not report it over MIDI, and it has not been found in its memory yet.",
+	names: "Sample names: the Machinedrum takes a new name (Rename) but never reports names, so they are not shown." };
 const recTrack = n => S.tracks.findIndex(t => t.m === "RAM-R" + n), playTrack = n => S.tracks.findIndex(t => t.m === "RAM-P" + n);
-/* MOCK: sample names (the firmware's 0x73 name request is not wired yet). */
-const ROMS = [];
+/* Names the user sent this session (0x73). They are not read back: the machine cannot report them. */
+const SENT_NAMES = {};
 function hash(i) { const x = Math.sin(i * 127.1) * 43758.5; return x - Math.floor(x); }
 /* MOCK: the captured audio is modelled from the pattern itself: resampling records your own beat. */
 function capture(n, bins) {
@@ -578,12 +585,12 @@ function renderSub() {
 		+ L2("swing", "SWG", S.swing + "%", "Swing 50–80 %. Drag up or down, or scroll.", 1) + L2("accAmt", "ACC", S.accAmt, "Accent 0–15. Drag up or down, or scroll.", 1) + L2("mode", "MODE", S.mode === "EXTENDED" ? "EXT" : "CLASSIC", "Classic or Extended. Locks only play in Extended. Click to switch.", 1);
 	else if (S.ws === "sound") h = L2("", "TRACK", String(t + 1).padStart(2, "0")) + L2("", "MACHINE", tr.m) + L2("", "", tr.name.toUpperCase());
 	else if (S.ws === "mix") h = L2("", "PATH", "SEND›ECHO›GATE›EQ›DYN›MAIN", "Sends feed the master effects. Tracks on outputs A–F skip them.");
-	else if (S.ws === "sampler") { const used = S.tracks.filter(t => /^ROM/.test(t.m)).length; h = L2("", "ROM", "?/48", "UW sample memory in use is not read from the machine yet (MOCK)") + L2("", "KIT", used + " ROM", "Tracks in this kit that play a ROM slot") + L2("", "SLOT", S.smpSlot.replace(/^RAM/, "RAM ").replace(/^ROM/, "ROM ")); }
+	else if (S.ws === "sampler") { const used = S.tracks.filter(t => /^ROM/.test(t.m)).length; h = L2("", "MEM", "n/a", NA.memory) + L2("", "KIT", used + " ROM", "Tracks in this kit that play a ROM slot") + L2("", "SLOT", S.smpSlot.replace(/^RAM/, "RAM ").replace(/^ROM/, "ROM ")); }
 	else if (S.ws === "control") h = L2("", "IN", "MIDI LEARN") + L2("", "MAPS", (Docs.learn?.mappings || []).length);
 	else h = L2("", "SONG", String(S.songSlot + 1).padStart(2, "0")) + L2("", "ROWS", S.song.length) + L2("", "BARS", Math.round(songSteps() / 16)) + L2("", "TIME", songTime());
 	$("#lcd2").innerHTML = h;
 }
-const romName = k => ROMS[k - 1] || ""; const romCode = k => "ROM-" + String(k).padStart(2, "0");
+const romName = k => SENT_NAMES[k] || ""; const romCode = k => "ROM-" + String(k).padStart(2, "0");
 function players(n) { return S.tracks.map((t, i) => t.m === "RAM-P" + n ? i : -1).filter(i => i >= 0); }
 function slotState(n) { const r = recTrack(n); if (r < 0) return "none"; if (S.capture[n]) return "cap"; return S.tracks[r].mute ? "frozen" : "live"; }
 const STATE_TXT = { none: "not in kit", live: "live", frozen: "frozen", cap: "capturing" };
@@ -608,7 +615,7 @@ function renderSampler() {
      <button class="${st === "live" ? "cream" : ""}" data-slotmode="live" aria-pressed="${st === "live"}" title="Record again on every loop (unmutes the recorder track)">Live</button>
      <button class="${st === "frozen" ? "cream" : ""}" data-slotmode="frozen" aria-pressed="${st === "frozen"}" title="Mute the recorder track and keep this take">Freeze</button>
      <button class="rec" data-capture="${n}" title="Record one loop, then freeze">Capture next loop</button>
-     <span class="grow"></span><button data-mock="rom" title="Not wired yet">Copy RAM to ROM</button></div>
+     <span class="grow"></span><button data-na="rom" disabled title="${NA.rom}">Copy RAM to ROM</button></div>
     <canvas class="ed smpwave" data-ed="slot" data-n="${n}" aria-label="Captured audio with start and end markers"></canvas></section>
    ${p != null ? `<section class="card"><header><h3>Chop</h3><span class="chophead">${ps.length > 1 ? ps.map(i => `<button class="${i === p ? "cream" : ""}" data-choptrk="${i}">Track ${i + 1}</button>`).join("") : "track " + (p + 1)}${pageKeys()}</span></header>
     <div class="chop" id="chop" data-p="${p}" style="grid-template-columns:repeat(16,minmax(0,1fr))">${steps().map(s => `<button class="${chopCls(p, s)}" data-cp="${s}" aria-label="Chop step ${s + 1}">${chopInner(p, s)}</button>`).join("")}</div>
@@ -619,9 +626,9 @@ function renderSampler() {
 	}
 	else {
 		const k = +id.slice(3), code = romCode(k), users = S.tracks.map((t, i) => t.m === code ? i : -1).filter(i => i >= 0), u = users[0];
-		h = `<section class="card"><header><h3>${code}</h3><span>${k <= 24 ? "one-shot" : "loop (STRT and END are linear)"} · the sample's name and audio are not read from the machine yet</span></header>
+		h = `<section class="card"><header><h3>${code}${romName(k) ? ` <span class="note" title="Sent this session with Rename; the machine cannot report names">sent: ${romName(k)}</span>` : ""}</h3><span title="${NA.names}">${k <= 24 ? "one-shot" : "loop (STRT and END are linear)"} · the machine does not report sample names or audio</span></header>
    <div class="slotbar"><span class="note">${users.length ? "Used by " + users.map(i => "track " + (i + 1)).join(", ") : "Not used in this kit"}</span><span class="grow"></span>
-    <button class="cream" data-romput="${k}">Put on track ${S.sel + 1}</button><button data-mock="send" title="Not wired yet">Send</button><button data-mock="rename" title="Not wired yet">Rename</button></div>
+    <button class="cream" data-romput="${k}">Put on track ${S.sel + 1}</button><button data-na="send" disabled title="${NA.send}">Send</button><button data-rename="${k}" title="Send a new name (4 letters) to the machine, SysEx 0x73">Rename</button></div>
    <canvas class="ed smpwave" data-ed="rom" data-k="${k}" aria-label="Example ROM sample waveform"></canvas></section>
    ${u != null ? `<div class="smp2"><section class="card"><header><h3>Playback</h3><span>track ${u + 1}</span></header><div class="ctl four">${SMPL.map(q => pc("syn", q, { t: u })).join("")}</div></section></div>` : ""}`;
 	}
@@ -876,14 +883,19 @@ document.addEventListener("click", e => {
 		cmd("clearSteps", { p: S.pat, t: 12, from: 0, to: S.len }); cmd("trig", { p: S.pat, t: 12, s: 0, on: true });
 		toast("Tracks 13 and 14 now hold RAM-R" + n + " and RAM-P" + n + "."); return;
 	}
-	const mo = e.target.closest("[data-mock]"); if (mo) { toast({ rom: "Not wired yet: copying a capture into a ROM slot.", send: "Not wired yet: sending a sample (SDS).", rename: "Not wired yet: renaming a sample." }[mo.dataset.mock]); return; }
+	const rn = e.target.closest("[data-rename]"); if (rn) {
+		const k = +rn.dataset.rename;
+		ask(`Name for <b>${romCode(k)}</b> (up to 4 letters, sent with SysEx 0x73):<br><input id="rname" maxlength="4" value="${romName(k)}" style="font:16px var(--mono);width:8ch;margin-top:8px;text-transform:uppercase">`,
+			[["Send name", "cream", () => { const v = ($("#rname")?.value || "").toUpperCase(); if (!v) return; SENT_NAMES[k] = v; cmd("sampleName", { slot: k - 1, name: v }); render(); }], ["Cancel", "", () => { }]]);
+		setTimeout(() => $("#rname")?.focus(), 0); return;
+	}
 	const pgk2 = e.target.closest("#pgkey"); if (pgk2 && !pgk2.disabled) { const n = pages16(); S.viewAll = false; S.page = (S.page + (e.shiftKey ? -1 : 1) + n) % n; render(); return; }
 	const plp = e.target.closest(".pl[data-plp]"); if (plp && !plp.classList.contains("na")) { S.page = +plp.dataset.plp; S.viewAll = false; render(); return; }
 	if (e.target.closest("#pgall")) { S.viewAll = !S.viewAll; render(); return; }
 	if (e.target.closest("#pgfollow")) { S.follow = !S.follow; render(); return; }
 	const sk = e.target.closest(".slotk"); if (sk) { S.smpSlot = sk.dataset.slot; render(); return; }
 	const sm = e.target.closest("[data-slotmode]"); if (sm) { const n = +S.smpSlot.slice(3), r = recTrack(n); if (r >= 0) { setMute(r, sm.dataset.slotmode === "frozen"); delete S.capture[n]; render(); } return; }
-	const cap = e.target.closest("[data-capture]"); if (cap) { const n = +cap.dataset.capture, r = recTrack(n); if (!S.playing) { toast("Press PLAY first. The capture starts at the next loop."); return; } S.capture[n] = "armed"; setMute(r, false); render(); return; }
+	const cap = e.target.closest("[data-capture]"); if (cap) { const n = +cap.dataset.capture, r = recTrack(n); if (!S.playing) { toast("Press PLAY first. The capture starts at the next loop."); return; } if (r < 0) return; S.capture[n] = "armed"; setMute(r, true); toast("RAM " + n + ": records the next whole loop, then freezes."); render(); return; }
 	const ct = e.target.closest("[data-choptrk]"); if (ct) { S.chopTrack = +ct.dataset.choptrk; render(); return; }
 	const rp = e.target.closest("[data-romput]"); if (rp) { S.keepFx = true; setMachine(romCode(+rp.dataset.romput)); toast("Track " + (S.sel + 1) + " now plays " + romCode(+rp.dataset.romput) + "."); return; }
 	if (S.ws === "song") {
@@ -958,6 +970,13 @@ function onTelemetry(m) {
 	if (wasPlaying !== S.playing) { renderTop(); $$(".ph").forEach(c => c.classList.remove("ph")); setPos(); phLast = -1; movePH(); }
 	const prev = lastStep; lastStep = S.step;
 	if (S.step === prev) return;
+	/* Capture next loop (UW): the recorder track plays (records) for one whole loop from the next
+	   wrap, then it is muted again, which keeps the take (Freeze). The mutes are the machine's. */
+	if (prev >= 0 && S.step >= 0 && S.step < prev) for (const n in S.capture) {
+		const r = recTrack(+n);
+		if (S.capture[n] === "armed") { S.capture[n] = "rec"; if (r >= 0) setMute(r, false); }
+		else { delete S.capture[n]; if (r >= 0) setMute(r, true); toast("RAM " + n + " captured and frozen."); if (S.ws === "sampler") render(); }
+	}
 	const pp = Math.floor(Math.max(0, S.step) / 16);
 	if (S.ws === "mix" && S.step >= 0) S.tracks.forEach((t, i) => { if (t.trigs[S.step] && audible(i)) { const l = document.querySelector(`.act[data-act="${i}"]`); if (l) { l.classList.add("on"); setTimeout(() => l.classList.remove("on"), 90); } } });
 	$$(".pl").forEach(b => b.classList.toggle("play", +b.dataset.plp === pp && S.playing));
