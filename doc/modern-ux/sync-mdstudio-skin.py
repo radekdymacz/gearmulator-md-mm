@@ -108,7 +108,8 @@ out_css = head + css.strip('\n') + '\n' + tail
 scripts = ''.join(open(SK + f).read() for f in os.listdir(SK) if f.endswith('.js'))
 wanted = (set(re.findall(r'\$\("#([A-Za-z][\w-]*)', scripts)) | set(re.findall(r'getElementById\("([\w-]+)"\)', scripts))
           | set(re.findall(r'closest\("#([A-Za-z][\w-]*)"\)', scripts)))
-made = set(re.findall(r'id="([A-Za-z][\w-]*)"', scripts)) | set(re.findall(r'id=\\"([\w-]+)', scripts))
+made = (set(re.findall(r'id="([A-Za-z][\w-]*)"', scripts)) | set(re.findall(r'id=\\"([\w-]+)', scripts))
+        | set(re.findall(r'\.id\s*=\s*"([\w-]+)"', scripts)))
 present = set(re.findall(r'id="([\w-]+)"', m))
 missing = sorted(wanted - present - made)
 if missing:

@@ -1015,6 +1015,19 @@ html,body{min-width:1280px}
 .rul{height:44px!important;padding-bottom:2px}
 .railhead.tall{height:44px!important;align-items:flex-end!important;padding-bottom:2px}
 .pagectl.seqpage{top:0;height:26px;background:transparent;padding-left:0}
+/* v45: soft gliding playhead instead of white boxes */
+#seq{position:relative}
+.st.ph{box-shadow:none!important;outline:none!important}
+#phcol{position:absolute;left:0;top:0;pointer-events:none;z-index:2;opacity:0;border-radius:5px;
+ background:linear-gradient(to bottom,color-mix(in srgb,var(--led) 16%,transparent),color-mix(in srgb,var(--led) 7%,transparent));
+ box-shadow:0 0 0 1px color-mix(in srgb,var(--led) 45%,transparent),0 0 14px color-mix(in srgb,var(--led) 22%,transparent);mix-blend-mode:screen;will-change:transform}
+:root[data-plate="mk1"] #phcol{mix-blend-mode:normal;background:color-mix(in srgb,var(--led) 20%,transparent);box-shadow:0 0 0 1px color-mix(in srgb,var(--led) 70%,transparent),0 0 12px color-mix(in srgb,var(--led) 30%,transparent)}
+/* v46: LCD fields have fixed widths, so values never resize the LCD */
+.lcdpanel b,.lcd2{font-variant-numeric:tabular-nums}
+#bpm,#pos,#lockn{display:inline-block;width:5.2ch;min-width:0!important;text-align:left}
+#pat{display:inline-block;width:3.2ch;text-align:center}
+#kitname{display:inline-block;width:16.2ch;min-width:0!important;max-width:none!important;overflow:hidden;text-overflow:clip;white-space:nowrap}
+.lcdeng span{display:inline-block;min-width:11.2ch}
 
 /* ===== The real machine's states (not in the mockup) ===== */
 .st.past{opacity:.45}

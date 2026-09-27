@@ -1007,6 +1007,19 @@ html,body{min-width:1280px}
 .rul{height:44px!important;padding-bottom:2px}
 .railhead.tall{height:44px!important;align-items:flex-end!important;padding-bottom:2px}
 .pagectl.seqpage{top:0;height:26px;background:transparent;padding-left:0}
+/* v45: soft gliding playhead instead of white boxes */
+#seq{position:relative}
+.st.ph{box-shadow:none!important;outline:none!important}
+#phcol{position:absolute;left:0;top:0;pointer-events:none;z-index:2;opacity:0;border-radius:5px;
+ background:linear-gradient(to bottom,color-mix(in srgb,var(--led) 16%,transparent),color-mix(in srgb,var(--led) 7%,transparent));
+ box-shadow:0 0 0 1px color-mix(in srgb,var(--led) 45%,transparent),0 0 14px color-mix(in srgb,var(--led) 22%,transparent);mix-blend-mode:screen;will-change:transform}
+:root[data-plate="mk1"] #phcol{mix-blend-mode:normal;background:color-mix(in srgb,var(--led) 20%,transparent);box-shadow:0 0 0 1px color-mix(in srgb,var(--led) 70%,transparent),0 0 12px color-mix(in srgb,var(--led) 30%,transparent)}
+/* v46: LCD fields have fixed widths, so values never resize the LCD */
+.lcdpanel b,.lcd2{font-variant-numeric:tabular-nums}
+#bpm,#pos,#lockn{display:inline-block;width:5.2ch;min-width:0!important;text-align:left}
+#pat{display:inline-block;width:3.2ch;text-align:center}
+#kitname{display:inline-block;width:16.2ch;min-width:0!important;max-width:none!important;overflow:hidden;text-overflow:clip;white-space:nowrap}
+.lcdeng span{display:inline-block;min-width:11.2ch}
 </style>
 
 <div class="app">
@@ -1830,14 +1843,24 @@ function tick(){const prev=S.step;S.step=(S.step+1)%S.len;ctlTick();if(S.step===
  if(S.ws==="mix")S.tracks.forEach((t,i)=>{if(t.trigs[S.step]&&audible(i)){const l=document.querySelector(`.act[data-act="${i}"]`);if(l){l.classList.add("on");setTimeout(()=>l.classList.remove("on"),90)}}});
  if(S.step===0)for(const n in S.capture){if(S.capture[n]==="armed")S.capture[n]="rec";else if(S.capture[n]==="rec"){delete S.capture[n];const r=recTrack(+n);if(r>=0)S.tracks[r].mute=true;toast("RAM "+n+" captured and frozen.");if(S.ws==="sampler")render()}}const pp=Math.floor(S.step/16);
  $$(".pl").forEach(b=>b.classList.toggle("play",+b.dataset.plp===pp&&S.playing));
- if(S.follow&&S.ws==="seq"&&!S.viewAll&&pp!==S.page&&!laneDraw){S.page=pp;render()}$("#tempoled").classList.toggle("on",S.step%4===0);setPos();$("#playled")?.classList.toggle("on",S.step%4===0);$$(`.st[data-s="${prev}"],.lb[data-s="${prev}"],.cp[data-cp="${prev}"]`).forEach(c=>c.classList.remove("ph"));$$(`.st[data-s="${S.step}"],.lb[data-s="${S.step}"],.cp[data-cp="${S.step}"]`).forEach(c=>c.classList.add("ph"))}
+ if(S.follow&&S.ws==="seq"&&!S.viewAll&&pp!==S.page&&!laneDraw){S.page=pp;render()}$("#tempoled").classList.toggle("on",S.step%4===0);setPos();queueMicrotask(movePH);$("#playled")?.classList.toggle("on",S.step%4===0);$$(`.st[data-s="${prev}"],.lb[data-s="${prev}"],.cp[data-cp="${prev}"]`).forEach(c=>c.classList.remove("ph"));$$(`.st[data-s="${S.step}"],.lb[data-s="${S.step}"],.cp[data-cp="${S.step}"]`).forEach(c=>c.classList.add("ph"))}
+/* Soft playhead: one glowing column that glides between steps */
+let phLast=-1;
+function movePH(){const seq=document.getElementById("seq");if(!seq)return;let ph=document.getElementById("phcol");
+ const c=S.playing&&S.step>=0?seq.querySelector(`.st[data-t="0"][data-s="${S.step}"]`):null;
+ if(!c){if(ph)ph.style.opacity="0";phLast=-1;return}
+ let fresh=false;if(!ph){fresh=true;ph=document.createElement("div");ph.id="phcol";ph.setAttribute("aria-hidden","true");seq.appendChild(ph)}
+ const last=seq.querySelector(`.st[data-t="${S.tracks.length-1}"][data-s="${S.step}"]`)||c;
+ const wrap=fresh||phLast<0||c.offsetLeft<phLast;ph.style.transition=wrap?"opacity .15s":`transform ${Math.round(Math.min(stepMs()*.85,140))}ms cubic-bezier(.2,.7,.3,1),opacity .15s`;
+ ph.style.width=c.offsetWidth+"px";ph.style.top=(c.offsetTop-3)+"px";ph.style.height=(last.offsetTop+last.offsetHeight-c.offsetTop+6)+"px";
+ ph.style.transform=`translateX(${c.offsetLeft}px)`;ph.style.opacity="1";phLast=c.offsetLeft}
 function stepMs(){const m={"1X":1,"2X":2,"3/4X":.75,"3/2X":1.5}[S.mult];return 60000/S.bpm/4/m}
 function restartClock(){clearInterval(clock);clock=setInterval(tick,stepMs())}
 function setPos(){const p=$("#pos");if(p)p.textContent=S.playing&&S.step>=0?String(Math.floor(S.step/16)+1).padStart(2,"0")+"."+String(S.step%16+1).padStart(2,"0"):"--.--"}
 document.addEventListener("change",e=>{if(e.target.id!=="engsel")return;const sel=e.target,btn=document.querySelector(".lcdeng");
  if(sel.value==="rom"){sel.value=S.engine||"emu";btn.querySelector("span").textContent=sel.selectedOptions[0].text;firstRun();return}
  S.engine=sel.value;toast(S.engine==="hw"?"Hardware mode: edits go to your Machinedrum over MIDI":"Emulator mode: the real OS 1.63 runs inside the app")});
-function togglePlay(){S.playing=!S.playing;clearInterval(clock);$("#playled")?.classList.remove("on");$$(".pl").forEach(b=>b.classList.remove("play"));$("#tempoled").classList.remove("on");$$(".ph").forEach(c=>c.classList.remove("ph"));if(S.playing){S.step=-1;tick();restartClock()}setPos();renderTop()}
+function togglePlay(){S.playing=!S.playing;phLast=-1;clearInterval(clock);$("#playled")?.classList.remove("on");$$(".pl").forEach(b=>b.classList.remove("play"));$("#tempoled").classList.remove("on");$$(".ph").forEach(c=>c.classList.remove("ph"));if(S.playing){S.step=-1;tick();restartClock()}setPos();movePH();renderTop()}
 
 function render(){closePicker();closeK();const sl=$("#seqscroll")?.scrollLeft||0;renderTop();const full=S.ws==="mix"||S.ws==="song"||S.ws==="control";$("#body").classList.toggle("full",full);$("#rail").hidden=full;if(!full)renderRail();renderSub();
  ({seq:renderSeq,sound:renderSound,mix:renderMix,song:renderSong,sampler:renderSampler,control:renderControl})[S.ws]();const sc=$("#seqscroll");if(sc){sc.scrollLeft=sl;$("#lanescroll").scrollLeft=sl}enhanceSelects(document.getElementById("main"));enhanceSelects(document.getElementById("subbar"));if(S.playing)restartClock()}

@@ -950,16 +950,33 @@ let lastStep = -1;
 function onTelemetry(m) {
 	Tele.step = m.step; Tele.pattern = m.pattern; Tele.valid = m.valid;
 	const wasPlaying = S.playing; S.playing = m.playing; S.step = m.playing ? m.step : -1;
-	if (wasPlaying !== S.playing) { renderTop(); $$(".ph").forEach(c => c.classList.remove("ph")); setPos(); }
+	if (wasPlaying !== S.playing) { renderTop(); $$(".ph").forEach(c => c.classList.remove("ph")); setPos(); phLast = -1; movePH(); }
 	const prev = lastStep; lastStep = S.step;
 	if (S.step === prev) return;
 	const pp = Math.floor(Math.max(0, S.step) / 16);
 	if (S.ws === "mix" && S.step >= 0) S.tracks.forEach((t, i) => { if (t.trigs[S.step] && audible(i)) { const l = document.querySelector(`.act[data-act="${i}"]`); if (l) { l.classList.add("on"); setTimeout(() => l.classList.remove("on"), 90); } } });
 	$$(".pl").forEach(b => b.classList.toggle("play", +b.dataset.plp === pp && S.playing));
 	if (S.follow && S.ws === "seq" && !S.viewAll && pp !== S.page && !laneDraw && S.playing) { S.page = pp; render(); }
-	$("#tempoled").classList.toggle("on", S.playing && S.step % 4 === 0); setPos(); $("#playled")?.classList.toggle("on", S.playing && S.step % 4 === 0);
+	$("#tempoled").classList.toggle("on", S.playing && S.step % 4 === 0); setPos(); queueMicrotask(movePH); $("#playled")?.classList.toggle("on", S.playing && S.step % 4 === 0);
 	$$(`.st[data-s="${prev}"],.lb[data-s="${prev}"],.cp[data-cp="${prev}"]`).forEach(c => c.classList.remove("ph"));
 	if (S.playing) $$(`.st[data-s="${S.step}"],.lb[data-s="${S.step}"],.cp[data-cp="${S.step}"]`).forEach(c => c.classList.add("ph"));
+}
+
+/* Soft playhead (mockup v45): one glowing column over the grid that glides from step to step.
+   It jumps without animation on a wrap or a re-render and fades out on stop. The step is the
+   machine's own (RAM telemetry). */
+let phLast = -1;
+function stepMs() { const m = { "1X": 1, "2X": 2, "3/4X": .75, "3/2X": 1.5 }[S.mult] || 1; return 60000 / (S.bpm || 120) / 4 / m; }
+function movePH() {
+	const seq = document.getElementById("seq"); if (!seq) return; let ph = document.getElementById("phcol");
+	const c = S.playing && S.step >= 0 ? seq.querySelector(`.st[data-t="0"][data-s="${S.step}"]`) : null;
+	if (!c) { if (ph) ph.style.opacity = "0"; phLast = -1; return; }
+	let fresh = false; if (!ph) { fresh = true; ph = document.createElement("div"); ph.id = "phcol"; ph.setAttribute("aria-hidden", "true"); seq.appendChild(ph); }
+	const last = seq.querySelector(`.st[data-t="${S.tracks.length - 1}"][data-s="${S.step}"]`) || c;
+	const wrap = fresh || phLast < 0 || c.offsetLeft < phLast;
+	ph.style.transition = wrap ? "opacity .15s" : `transform ${Math.round(Math.min(stepMs() * .85, 140))}ms cubic-bezier(.2,.7,.3,1),opacity .15s`;
+	ph.style.width = c.offsetWidth + "px"; ph.style.top = (c.offsetTop - 3) + "px"; ph.style.height = (last.offsetTop + last.offsetHeight - c.offsetTop + 6) + "px";
+	ph.style.transform = `translateX(${c.offsetLeft}px)`; ph.style.opacity = "1"; phLast = c.offsetLeft;
 }
 
 /* POSITION: bar.step of the machine's playhead (a 16-step bar), --.-- when stopped. */
@@ -1015,6 +1032,7 @@ function render() {
 	if (!full) renderRail(); renderSub();
 	({ seq: renderSeq, sound: renderSound, mix: renderMix, song: renderSong, sampler: renderSampler, control: renderControl })[S.ws]();
 	const sc = $("#seqscroll"); if (sc) { sc.scrollLeft = sl; $("#lanescroll").scrollLeft = sl; } enhanceSelects(document.getElementById("main"));
+	phLast = -1; movePH();
 }
 function setPlate(v) { S.plate = v; document.documentElement.dataset.plate = v; try { localStorage.setItem("mddesk.plate", v); } catch (_) { } renderTop(); redraw(); }
 (() => { let v = null; try { v = localStorage.getItem("mddesk.plate"); } catch (_) { } if (!v) v = matchMedia("(prefers-color-scheme: dark)").matches ? "mk2" : "mk1"; S.plate = v; document.documentElement.dataset.plate = v; })();
