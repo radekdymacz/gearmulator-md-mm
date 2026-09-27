@@ -40,7 +40,23 @@ document.addEventListener("keydown", e => {
 	const on = !S.tracks[i].mute; muteSet(i, on); refreshAudible(); lcdSay([[i, on]]);
 }, true);
 const refreshAudible0 = refreshAudible; refreshAudible = function () { refreshAudible0(); showPrep(); };
-const renderP0 = render; render = function () { renderP0(); showPrep(); };
+const renderP0 = render; render = function () { renderP0(); showPrep(); markRecLock(); };
+
+/* ===== Knob locks while live recording (P4): the firmware locks the track's next trig whose step has
+   not started when the turn lands; the desk says which (machine.desk.recLock), the cell shows it until
+   the read-back brings the real lock. ===== */
+let recLockKey = "";
+function markRecLock() {
+	$$(".st.lkpend").forEach(c => c.classList.remove("lkpend"));
+	const l = (machineState().desk || {}).recLock; if (!l) return;
+	const c = document.querySelector(`.st[data-t="${l.track}"][data-s="${l.step}"]`); if (c) c.classList.add("lkpend");
+}
+Bridge.onMessage(m => {
+	if (m.type !== "machine" || !m.doc.desk) return;
+	const l = m.doc.desk.recLock, key = l ? l.track + ":" + l.param + ":" + l.step : "";
+	if (key && key !== recLockKey) toast(`Locks track ${l.track + 1} step ${l.step + 1}: its next trig after the move. A trig already playing is too late.`);
+	recLockKey = key; setTimeout(markRecLock, 20);
+});
 
 /* ===== Pattern chain (manual p.37): the machine's own, made with its keys ===== */
 S.chainDraft = [];

@@ -1,6 +1,7 @@
 #pragma once
 
 #include "elektronData/mdKit.h"
+#include "elektronData/mdPattern.h"
 
 #include <cstdint>
 #include <map>
@@ -70,4 +71,12 @@ namespace mdDesk
 		double m_lastMs = -1e9;
 		double m_lastPageMs = -1e9;
 	};
+
+	// Which trig a DATA ENTRY turn locks while live recording (P4, mdP4ProbeFirmwareTest
+	// lockwindow): the track's next programmed trig whose step starts after the turn. A turn
+	// 8 ms before a trig's step locks it; one at or after the step start is too late for it
+	// and goes to the track's following trig. (A note played live in the same moment is not
+	// reliable: its lock came through in 3 of 9 tries.) _currentStep is the step playing when
+	// the turn lands; the pattern loops at its length. None when the track has no trig.
+	std::optional<uint8_t> nextLockStep(const elektronData::MdPattern& _pattern, uint8_t _track, int _currentStep);
 }

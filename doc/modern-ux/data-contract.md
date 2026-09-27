@@ -158,6 +158,15 @@ selected track, after SET STATUS track and the page key (`mdDesk::KnobRecorder`)
 so the firmware locks it on the track's next note. `recTrig` plays a track like
 its TRIG key.
 
+Which note (P4, `mdP4ProbeFirmwareTest lockwindow`): the track's next programmed
+trig whose step has not started when the turn lands. A turn 8 ms before the step
+locks it; at or after the step start it is too late and the lock goes to the
+following trig. A note played live at the same moment is not reliable (3 of 9).
+The desk names the trig it expects (`mdDesk::nextLockStep`) as
+`machine.desk.recLock` {track, param, step}; the page marks that cell until the
+read-back shows the real lock. Checked on firmware: the desk said step 9, the
+firmware locked step 9.
+
 **UW samples (P3).** `sampleName` (slot 0-47, 1-4 characters) sends the
 manual's 0x73. That is all the firmware offers: it has no request for names,
 memory in use or sample audio, and it ignores SDS dump requests (measured, no

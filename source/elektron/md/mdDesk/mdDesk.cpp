@@ -584,6 +584,11 @@ namespace mdDesk
 			if(!m_telemetry.playing || _now - m_recordAfterStopMs > 1500)
 				m_recordAfterStopMs = -1;
 		}
+		if(m_recLock && _now - m_recLock->atMs > 3000)
+		{
+			m_recLock.reset();
+			m_machineDirty = true;
+		}
 		if(!m_telemetry.recording)
 			return;
 		// What the firmware records shows up in the pattern: read it back now and then.
@@ -611,6 +616,14 @@ namespace mdDesk
 			{
 				m_keyQuietUntilMs = _now + g_keyQuietMs;
 				m_port.turnKnob(step->encoder, step->steps);
+				// Honest about where it lands: the track's next trig after the playing step.
+				const auto p = m_session.state().pattern ? m_docs.patterns.find(*m_session.state().pattern) : m_docs.patterns.end();
+				const auto at = p != m_docs.patterns.end() ? nextLockStep(p->second, step->track, m_telemetry.step) : std::nullopt;
+				if(at && m_telemetry.knobPage >= 0)
+					m_recLock = RecLock{step->track, static_cast<uint8_t>(m_telemetry.knobPage * 8 + step->encoder), *at, _now};
+				else
+					m_recLock.reset();
+				m_machineDirty = true;
 			}
 			break;
 		}
@@ -1013,6 +1026,7 @@ namespace mdDesk
 		if(recordingChanged)
 		{
 			m_knobs.reset();
+			m_recLock.reset();
 			m_machineDirty = true;
 			// The last recorded notes: read the pattern back.
 			if(!_t.recording && m_session.state().pattern)
@@ -1305,6 +1319,16 @@ namespace mdDesk
 		else
 			desk.set("chain", Value());
 		desk.set("bankGroup", m_telemetry.bankGroup);
+		if(m_recLock)
+		{
+			Value l = Value::object();
+			l.set("track", static_cast<int>(m_recLock->track));
+			l.set("param", static_cast<int>(m_recLock->param));
+			l.set("step", static_cast<int>(m_recLock->step));
+			desk.set("recLock", std::move(l));
+		}
+		else
+			desk.set("recLock", Value());
 		doc.set("desk", std::move(desk));
 		Value m = Value::object();
 		m.set("type", "machine");

@@ -164,7 +164,7 @@ function renderTop() {
 	/* One key: PLAY while stopped, STOP while playing (the icon follows the machine). */
 	$("#play").setAttribute("aria-pressed", S.playing); $("#playico").textContent = S.playing ? "■" : "▶"; $("#play").setAttribute("aria-label", S.playing ? "Stop" : "Play");
 	$("#rec").setAttribute("aria-pressed", !!S.rec); $("#recled").classList.toggle("on", !!S.rec);
-	$("#rec").title = S.rec ? "Live recording: click a track's steps to play it, move a value to lock it. REC again: stop recording, keep playing (R)" : "Live recording, as RECORD + PLAY on the machine (R)";
+	$("#rec").title = S.rec ? "Live recording: click a track's steps to play it, move a value to lock it. A moved value locks the track's next trig whose step has not started yet (the editor marks it). REC again: stop recording, keep playing (R)" : "Live recording, as RECORD + PLAY on the machine (R)";
 	document.body.classList.toggle("liverec", !!S.rec);
 	renderEngine();
 	syncTx();

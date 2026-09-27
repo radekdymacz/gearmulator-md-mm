@@ -91,6 +91,7 @@ css = re.sub(r'@import url\([^)]*fonts\.googleapis[^)]*\);?\s*', '', css)
 tail = '''
 /* ===== The real machine's states (not in the mockup) ===== */
 .st.past{opacity:.45}
+.st.lkpend{outline:2px dashed var(--led);outline-offset:-2px}
 .statusline,.errline{margin:6px 0 0;padding:6px 10px;border-radius:3px;font:12px var(--pix);text-transform:uppercase}
 .statusline{background:var(--lcd);color:var(--ink)}
 .errline{background:var(--rec);color:#fff}

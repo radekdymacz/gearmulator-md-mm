@@ -206,6 +206,9 @@ namespace mdDesk
 		bool m_telemetrySeen = false;
 		std::array<bool, 16> m_mutes{};
 		KnobRecorder m_knobs;
+		// The trig the last knob turn will lock while recording (nextLockStep), for the page.
+		struct RecLock { uint8_t track = 0, param = 0, step = 0; double atMs = 0; };
+		std::optional<RecLock> m_recLock;
 		Modulators m_mods;
 		DeskSetup m_setup;
 		CcBudget m_ccBudget;

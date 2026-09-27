@@ -807,6 +807,20 @@ namespace
 		check(saved.size() == before && desk.setup().knobCcs[1] == 2, "invalid knob CCs change nothing");
 	}
 
+	// P4: which trig a knob turn locks while live recording.
+	void testLockStep()
+	{
+		ed::MdPattern p;
+		p.length = 16;
+		p = ed::withTrig(p, 14, 8, true);
+		p = ed::withTrig(p, 14, 12, true);
+		check(nextLockStep(p, 14, 7) == 8, "turn in step 8: locks the trig on step 9");
+		check(nextLockStep(p, 14, 8) == 12, "turn in step 9 (its trig already started): the next trig, step 13");
+		check(nextLockStep(p, 14, 13) == 8, "past the last trig: wraps to step 9");
+		check(nextLockStep(p, 14, -1) == 8, "stopped: the first trig");
+		check(!nextLockStep(p, 3, 5), "a track without trigs: none");
+	}
+
 	void testSampleName()
 	{
 		const auto m = ed::mdSetSampleName(5, "KIK");
@@ -863,6 +877,7 @@ int main()
 	testDesk();
 	testLive();
 	testSetup();
+	testLockStep();
 	testWorkingKitMemory();
 	testKnobRecorder();
 	testDeskRecording();

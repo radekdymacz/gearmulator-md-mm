@@ -9,6 +9,7 @@
 #include "mdFirmwareSession.h"
 
 #include "elektronData/mdCommands.h"
+#include "elektronData/mdGlobal.h"
 #include "elektronData/mdJson.h"
 #include "elektronData/mdKit.h"
 #include "elektronData/mdPattern.h"
@@ -360,6 +361,63 @@ namespace
 			(playheadMoves(k, 600) ? hi : lo) = mid;
 		}
 		std::printf("  PLAY first taken at %.2f s\n", hi / 1000);
+	}
+
+	// Live recording: when must a DATA ENTRY turn come for the firmware to lock a note? A
+	// programmed trig on track 15 step 9 (and optionally a live note there), knob A turned
+	// at an offset from the start of step 9; which step gets the lock.
+	void lockWindow(const Bytes& _rom, const bool _liveNote)
+	{
+		std::printf("== probe: the knob lock window (%s)\n", _liveNote ? "live note on step 9" : "programmed trig on step 9");
+		Machine m(_rom, g_romName);
+		const auto g = ed::decodeMdGlobal(m.request(ed::mdGlobalRequest(0), ed::g_mdGlobalDump));
+		const int patSlot = status(m, ed::MdStatus::Pattern);
+		auto base = *readPattern(m, static_cast<uint8_t>(patSlot));
+		base.length = 16;
+		for(uint8_t t = 0; t < 16; ++t)
+			for(uint8_t st = 0; st < 64; ++st)
+				if(ed::hasTrig(base, t, st))
+					base = ed::withTrig(base, t, st, false);
+		if(!_liveNote)
+			base = ed::withTrig(base, 14, 8, true);
+		m.send(ed::mdSetStatus(ed::MdStatus::Track, 14));
+		int note = -1;
+		for(int n = 0; n < 128; ++n)
+			if(g->keymap[n] == 14) { note = n; break; }
+		for(const double d : {-375.0, -250.0, -190.0, -125.0, -95.0, -63.0, -40.0, -20.0, -8.0, 0.0, 8.0, 20.0, 40.0})
+		{
+			m.send(ed::encodeMdPattern(base));
+			m.run(50);
+			rawPanel(m, 0x22, 0x02); rawPanel(m, 0x22, 0x06); rawPanel(m, 0x22, 0x02); rawPanel(m, 0x22, 0x00);
+			// Period from two step edges, then step 8's start.
+			auto edge = [&](const int _step) { for(int i = 0; i < 40000 && m.playhead() != _step; ++i) m.step(); return m.now(); };
+			const auto t6 = edge(6), t7 = edge(7);
+			const auto period = t7 - t6;
+			const auto at = static_cast<int64_t>(t7 + period) + static_cast<int64_t>(d * g_rate / 1000);
+			m.runUntil(static_cast<uint64_t>(std::max<int64_t>(at, static_cast<int64_t>(m.now()))));
+			for(int i = 0; i < 10; ++i)
+				m.hardware().trySendPanelEvent(0x30, 0x01);
+			if(_liveNote)
+			{
+				edge(8);
+				m.send({static_cast<uint8_t>(0x90 | g->baseChannel), static_cast<uint8_t>(note), 100});
+				m.run(20);
+				m.send({static_cast<uint8_t>(0x80 | g->baseChannel), static_cast<uint8_t>(note), 0});
+			}
+			edge(13);
+			m.panel(md::PanelControl::Stop);
+			m.panel(md::PanelControl::Stop);
+			m.run(150);
+			const auto after = *readPattern(m, static_cast<uint8_t>(patSlot));
+			std::printf("  turn at %+6.0f ms from step 9 (step %.0f ms): lock on", d, ms(period));
+			bool any = false;
+			for(uint8_t st = 0; st < 16; ++st)
+				if(const auto v = ed::lockValue(after, 14, 0, st)) { std::printf(" step %u (%u)", st + 1, *v); any = true; }
+			std::printf("%s; trigs", any ? "" : " none");
+			for(uint8_t st = 0; st < 16; ++st)
+				if(ed::hasTrig(after, 14, st)) std::printf(" %u", st + 1);
+			std::printf("\n");
+		}
 	}
 
 	// ---- keys: which panel keys does the firmware take, when? ----
@@ -1160,6 +1218,11 @@ int main(const int _argc, char** _argv)
 			flagUse(rom);
 		if(only == "bootui")
 			bootUi(rom, _argc > 3 ? patchRamFromState(_argv[3], rom) : Bytes{});
+		if(only == "lockwindow")
+		{
+			lockWindow(rom, false);
+			lockWindow(rom, true);
+		}
 		if(only == "chain2")
 			chainVariants(rom);
 		if(only.empty() || only == "mutes")

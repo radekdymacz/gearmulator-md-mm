@@ -296,6 +296,9 @@
                 "next": {"type": "integer", "minimum": -1, "maximum": 16, "description": "The entry the firmware queues next."},
                 "patterns": {"type": "array", "maxItems": 16, "items": {"type": "integer", "minimum": 0, "maximum": 127}}}}],
               "description": "null: not readable on this firmware."},
+            "recLock": {"oneOf": [{"type": "null"}, {"type": "object", "required": ["track", "param", "step"], "properties": {
+              "track": {"$ref": "#/$defs/track"}, "param": {"type": "integer", "minimum": 0, "maximum": 23}, "step": {"type": "integer", "minimum": 0, "maximum": 63}}}],
+              "description": "P4, live recording: the trig the last knob turn locks (mdDesk::nextLockStep), for about 3 s."},
             "bankGroup": {"type": "integer", "minimum": -1, "maximum": 1, "description": "The machine's BANK GROUP: 0 A-D, 1 E-H, -1 unknown."},
             "kitSource": {"enum": ["memory", "tracked"], "description": "memory: the current kit document is the working kit read from the machine's memory (P3). tracked: the stored slot plus the edits the desk saw."}
           }

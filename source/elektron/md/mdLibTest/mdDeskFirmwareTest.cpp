@@ -938,6 +938,56 @@ namespace
 		check(_rig.lastResult() && !_rig.lastResult()->find("ok")->asBool(), "a chain across banks is refused (the machine's rule)");
 	}
 
+	// P4: while live recording, a value moved in the page locks the trig the desk names.
+	void recLockTruth(Rig& _rig)
+	{
+		auto& m = _rig.machine();
+		std::puts("== P4 live recording: the lock lands where the desk says");
+		const auto slot = *_rig.desk().session().state().pattern;
+		auto p = *_rig.readPattern(slot);
+		p.length = 16;
+		for(uint8_t t = 0; t < 16; ++t)
+			for(uint8_t s = 0; s < 64; ++s)
+				if(ed::hasTrig(p, t, s))
+					p = ed::withTrig(p, t, s, false);
+		p = ed::withTrig(p, 14, 8, true);
+		p = ed::withTrig(p, 14, 12, true);
+		p.lockMasks.fill(0);
+		m.send(ed::encodeMdPattern(p));
+		_rig.page("{\"op\":\"load\",\"kind\":\"pattern\",\"slot\":" + std::to_string(slot) + "}");
+		_rig.runUntil([&] { return ed::hasTrig(_rig.desk().documents().patterns.at(slot), 14, 12); }, 2000);
+		_rig.run(300);
+		const auto kit = *_rig.desk().session().state().kit;
+		const int before = _rig.desk().documents().kits.at(kit).params[14][0];
+		_rig.page(R"({"op":"record","id":940})");
+		_rig.runUntil([&] { return _rig.telemetry().recording; }, 3000);
+		_rig.runUntil([&] { return _rig.telemetry().step == 2; }, 5000);
+		const int want = before > 60 ? before - 20 : before + 20;
+		_rig.page("{\"op\":\"param\",\"k\":" + std::to_string(kit) + ",\"t\":14,\"i\":0,\"v\":" + std::to_string(want) + ",\"id\":941}");
+		int predicted = -1;
+		_rig.runUntil([&]
+		{
+			const auto* d = _rig.machineDoc() ? _rig.machineDoc()->find("desk") : nullptr;
+			const auto* l = d ? d->find("recLock") : nullptr;
+			if(l && l->isObject())
+				predicted = static_cast<int>(l->find("step")->asNumber());
+			return predicted >= 0;
+		}, 2000);
+		_rig.runUntil([&] { return _rig.telemetry().step == 14; }, 5000);
+		_rig.page(R"({"op":"record","id":942})");
+		_rig.run(200);
+		_rig.page(R"({"op":"stop","id":943})");
+		_rig.runUntil([&] { return !_rig.telemetry().playing; }, 3000);
+		_rig.run(300);
+		const auto after = *_rig.readPattern(slot);
+		std::printf("  desk said step %d; locks on track 15 param 0:", predicted + 1);
+		int landed = -1;
+		for(uint8_t s = 0; s < 16; ++s)
+			if(const auto v = ed::lockValue(after, 14, 0, s)) { std::printf(" step %u = %u", s + 1, *v); if(landed < 0) landed = s; }
+		std::printf("\n");
+		check(predicted >= 0 && landed == predicted, "the firmware locked the trig the desk named");
+	}
+
 int main(const int _argc, char** _argv)
 {
 	std::setvbuf(stdout, nullptr, _IOLBF, 0);
@@ -959,6 +1009,7 @@ int main(const int _argc, char** _argv)
 			rig.runUntil([&] { return rig.desk().isInputReady() && rig.desk().session().state().pattern; }, 5000);
 			mutesTruth(rig);
 			chaining(rig);
+			recLockTruth(rig);
 			std::printf("mdDeskFirmwareTest p4: %s (%d failure(s))\n", g_failures ? "FAIL" : "PASS", g_failures);
 			return g_failures ? 1 : 0;
 		}
