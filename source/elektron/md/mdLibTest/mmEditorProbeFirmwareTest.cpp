@@ -1,0 +1,1144 @@
+// MM-P0: Monomachine Editor probes against MM OS 1.32B firmware (manual: needs a
+// user-supplied ROM). Discovery harness: it finds and measures. The smoke test
+// for the editor is mmDeskFirmwareTest.
+//
+//   mmEditorProbeFirmwareTest <ROM> <mode> [outdir]
+//
+// Modes (MM-P0-RESULT.md says what each found):
+//   all        gate, recv, commands, kitsong, burst, queue, screens in turn
+//   lcd        boot and print the LCD and the status values
+//   dumps <d>  a few dumps of each kind into <d>
+//   corpus <d> [patch-ram]   every user-data slot into <d>
+//   gate       dumps on a normal screen vs on SYSEX RECV (paced, unpaced, chunked)
+//   recv       playback, playhead, CCs and dumps while parked on SYSEX RECV
+//   commands   which live SysEx commands act outside (and inside) SYSEX RECV
+//   kitsong    kit, song and global dumps on SYSEX RECV; kit slot vs working kit
+//   burst      back-to-back dumps; the RECV message and error counters
+//   macro      how fast the SYSEX RECV panel macro can run
+//   recvflag, recvcount, workkit, boot   RAM searches
+//   queue      a queued pattern switch against status and the playhead
+//   screens    the firmware's screen word across screens
+// Exits 77 (skip) without arguments.
+
+#include "mdFirmwareSession.h"
+#include "sysexPanelDriver.h"
+
+#include "elektronData/sysex7bit.h"
+
+#include "mdLib/mdautomation.h"
+
+#include <algorithm>
+#include <cmath>
+#include <cstring>
+#include <map>
+#include <optional>
+#include <set>
+
+using namespace mdFirmwareSession;
+
+namespace
+{
+	std::string g_romName;
+	int g_failures = 0;
+	constexpr auto g_mm = md::MachineModel::Monomachine;
+
+	void check(const bool _condition, const std::string& _what)
+	{
+		std::printf("  %s %s\n", _condition ? "ok  " : "FAIL", _what.c_str());
+		if(!_condition)
+			++g_failures;
+	}
+
+	double ms(const uint64_t _frames) { return _frames * 1000.0 / g_rate; }
+
+	Bytes mmRequest(const uint8_t _command, const uint8_t _value)
+	{
+		return {0xf0, 0x00, 0x20, 0x3c, 0x03, 0x00, _command, static_cast<uint8_t>(_value & 0x7f), 0xf7};
+	}
+
+	Bytes mmCommand(const uint8_t _command, const Bytes& _args)
+	{
+		Bytes m{0xf0, 0x00, 0x20, 0x3c, 0x03, 0x00, _command};
+		m.insert(m.end(), _args.begin(), _args.end());
+		m.push_back(0xf7);
+		return m;
+	}
+
+	// 7-bit unpack of [10, size-5), then the MM run-length decode (0x80|n, v = n x v).
+	Bytes rawPayload(const Bytes& _sysex)
+	{
+		if(_sysex.size() < 15)
+			return {};
+		const auto packed = elektronData::decode7Bit(_sysex.data() + 10, _sysex.size() - 15);
+		Bytes out;
+		for(size_t i = 0; i < packed.size(); ++i)
+		{
+			if(!(packed[i] & 0x80))
+				out.push_back(packed[i]);
+			else if(i + 1 < packed.size())
+			{
+				out.insert(out.end(), packed[i] & 0x7f, packed[i + 1]);
+				++i;
+			}
+		}
+		return out;
+	}
+
+	Bytes packedPayload(const Bytes& _sysex)
+	{
+		return elektronData::decode7Bit(_sysex.data() + 10, _sysex.size() - 15);
+	}
+
+	// Literal (uncompressed, escaped) re-encode of a raw payload into a dump.
+	Bytes encodeLiteral(const Bytes& _header10, const Bytes& _raw)
+	{
+		Bytes packed;
+		for(const auto b : _raw)
+		{
+			if(b & 0x80)
+				packed.push_back(0x81);
+			packed.push_back(b);
+		}
+		Bytes m(_header10.begin(), _header10.begin() + 10);
+		const auto enc = elektronData::encode7Bit(packed.data(), packed.size());
+		m.insert(m.end(), enc.begin(), enc.end());
+		m.resize(m.size() + 5);
+		elektronData::writeDumpTrailer(m);
+		return m;
+	}
+
+	// The firmware's own run-length choice (matches every dump it sends): runs of
+	// 2-127 equal bytes, and single bytes with bit 7 set, become (0x80|n, v).
+	Bytes encodeRle(const Bytes& _header10, const Bytes& _raw)
+	{
+		Bytes packed;
+		for(size_t i = 0; i < _raw.size();)
+		{
+			size_t j = i;
+			while(j < _raw.size() && _raw[j] == _raw[i] && j - i < 127)
+				++j;
+			const auto n = j - i;
+			if(n >= 2 || (_raw[i] & 0x80))
+			{
+				packed.push_back(static_cast<uint8_t>(0x80 | n));
+				packed.push_back(_raw[i]);
+			}
+			else
+				packed.push_back(_raw[i]);
+			i = j;
+		}
+		Bytes m(_header10.begin(), _header10.begin() + 10);
+		const auto enc = elektronData::encode7Bit(packed.data(), packed.size());
+		m.insert(m.end(), enc.begin(), enc.end());
+		// The firmware writes each group's high-bit byte before the group, so a
+		// stream that ends on a full group still carries one empty group byte.
+		if(packed.size() % 7 == 0)
+			m.push_back(0);
+		m.resize(m.size() + 5);
+		elektronData::writeDumpTrailer(m);
+		return m;
+	}
+
+	Bytes retarget(Bytes _dump, const uint8_t _slot)
+	{
+		_dump[9] = _slot;
+		elektronData::writeDumpTrailer(_dump);
+		return _dump;
+	}
+
+	void printLcd(Machine& _m, const char* _title)
+	{
+		const auto p = _m.hardware().getFrontPanelSnapshot();
+		std::printf("---- LCD %s\n", _title);
+		for(uint32_t y = 0; y < 64; y += 2)
+		{
+			std::string line;
+			for(uint32_t x = 0; x < 128; ++x)
+			{
+				const bool a = p.getLcdPixel(x, y), b = p.getLcdPixel(x, y + 1);
+				line += a && b ? "\xe2\x96\x88" : a ? "\xe2\x96\x80" : b ? "\xe2\x96\x84" : " ";
+			}
+			// trim right
+			while(!line.empty() && line.back() == ' ')
+				line.pop_back();
+			std::printf("|%s\n", line.c_str());
+		}
+	}
+
+	int status(Machine& _m, const uint8_t _param)
+	{
+		const auto r = _m.request(mmRequest(0x70, _param), 0x72);
+		return r.size() == 10 && r[7] == _param ? r[8] : -1;
+	}
+
+	Bytes dump(Machine& _m, const uint8_t _command, const uint8_t _slot, uint64_t* _frames = nullptr)
+	{
+		return _m.request(mmRequest(static_cast<uint8_t>(_command + 1), _slot), _command, _frames);
+	}
+
+	Bytes patternDump(Machine& _m, const uint8_t _slot) { return dump(_m, 0x67, _slot); }
+
+	std::unique_ptr<Machine> boot(const Bytes& _rom, const Bytes& _patchRam = {})
+	{
+		auto m = std::make_unique<Machine>(_rom, g_romName, _patchRam, g_mm);
+		return m;
+	}
+
+	void tap(Machine& _m, const md::PanelControl _c)
+	{
+		md::test::panelTap(_m.hardware(), _c);
+	}
+
+	// The plug-in's own file-transfer path: paced at the DIN rate, gated to one
+	// receive kind. Returns the final state; frames = start -> complete.
+	md::MidiSysexTransferState sendPaced(Machine& _m, const Bytes& _bytes, uint64_t* _frames = nullptr)
+	{
+		auto prepared = md::prepareMidiSysexTransfer(_bytes, g_mm);
+		require(prepared.has_value(), "transfer did not prepare");
+		require(_m.hardware().startMidiSysexTransfer(*prepared), "transfer did not start");
+		const auto start = _m.now();
+		for(;;)
+		{
+			_m.step();
+			const auto p = _m.hardware().getMidiSysexTransferProgress();
+			if(p.state == md::MidiSysexTransferState::Complete || p.state == md::MidiSysexTransferState::Failed
+				|| p.state == md::MidiSysexTransferState::WaitingForReceiveMode || _m.now() - start > g_rate * 20)
+			{
+				if(_frames)
+					*_frames = _m.now() - start;
+				return p.state;
+			}
+		}
+	}
+
+	// Paced by hand: fragments of _chunk bytes, _gapMs apart, through the plain MIDI input.
+	uint64_t sendChunked(Machine& _m, const Bytes& _bytes, const size_t _chunk, const double _gapMs)
+	{
+		const auto start = _m.now();
+		for(size_t i = 0; i < _bytes.size(); i += _chunk)
+		{
+			synthLib::SMidiEvent e(synthLib::MidiEventSource::Host);
+			e.sysex.assign(_bytes.begin() + i, _bytes.begin() + std::min(_bytes.size(), i + _chunk));
+			_m.hardware().sendMidi(e);
+			_m.run(_gapMs);
+		}
+		while(!_m.hardware().isMidiIngressIdle())
+			_m.step();
+		return _m.now() - start;
+	}
+
+	// ---- modes ---------------------------------------------------------------
+
+	void lcdMode(const Bytes& _rom)
+	{
+		auto m = boot(_rom);
+		printLcd(*m, "after boot");
+		for(const uint8_t p : {0x01, 0x02, 0x04, 0x08, 0x10, 0x20, 0x21, 0x22, 0x23})
+			std::printf("status 0x%02x = %d\n", p, status(*m, p));
+	}
+
+	void dumpsMode(const Bytes& _rom, const std::string& _dir)
+	{
+		auto m = boot(_rom);
+		const auto one = [&](const uint8_t _cmd, const uint8_t _slot, const char* _name)
+		{
+			uint64_t f = 0;
+			const auto d = dump(*m, _cmd, _slot, &f);
+			const auto raw = rawPayload(d);
+			std::printf("%s %u: %zu bytes, packed %zu, raw %zu, reply %.1f ms, header %02x %02x %02x %02x\n", _name, _slot,
+				d.size(), d.size() > 15 ? packedPayload(d).size() : 0, raw.size(), ms(f), d.size() > 9 ? d[6] : 0,
+				d.size() > 9 ? d[7] : 0, d.size() > 9 ? d[8] : 0, d.size() > 9 ? d[9] : 0);
+			if(!_dir.empty() && !d.empty())
+				save(_dir + "/" + _name + "-" + std::to_string(_slot) + ".syx", d);
+			return d;
+		};
+		for(uint8_t s = 0; s < 4; ++s) one(0x67, s, "pattern");
+		for(uint8_t s = 0; s < 4; ++s) one(0x52, s, "kit");
+		for(uint8_t s = 0; s < 2; ++s) one(0x69, s, "song");
+		for(uint8_t s = 0; s < 2; ++s) one(0x50, s, "global");
+	}
+
+	// Every user-data slot, as the firmware sends it (the factory set without a
+	// patch-RAM image, else the image's content).
+	void corpusMode(const Bytes& _rom, const std::string& _dir, const Bytes& _patchRam)
+	{
+		require(!_dir.empty(), "corpus needs an output directory");
+		auto m = boot(_rom, _patchRam);
+		const auto all = [&](const uint8_t _cmd, const int _count, const char* _name)
+		{
+			size_t total = 0;
+			for(int s = 0; s < _count; ++s)
+			{
+				const auto d = dump(*m, _cmd, static_cast<uint8_t>(s));
+				require(!d.empty(), std::string("no reply for ") + _name + " " + std::to_string(s));
+				char n[64];
+				std::snprintf(n, sizeof(n), "/%s-%03d.syx", _name, s);
+				save(_dir + n, d);
+				total += d.size();
+			}
+			std::printf("%s: %d dumps, %zu bytes\n", _name, _count, total);
+		};
+		all(0x67, 128, "pattern");
+		all(0x52, 128, "kit");
+		all(0x69, 24, "song");
+		all(0x50, 8, "global");
+	}
+
+	Bytes savedKit(Machine& _m, const uint8_t _slot)
+	{
+		_m.send(mmCommand(0x59, {_slot}));
+		_m.run(150);
+		return rawPayload(dump(_m, 0x52, _slot));
+	}
+
+	std::string diffText(const Bytes& _a, const Bytes& _b, const size_t _max = 24)
+	{
+		std::string t;
+		size_t n = 0;
+		for(size_t i = 0; i < std::min(_a.size(), _b.size()); ++i)
+		{
+			if(_a[i] == _b[i])
+				continue;
+			if(n++ < _max)
+			{
+				char b[32];
+				std::snprintf(b, sizeof(b), " %03zx:%02x>%02x", i, _a[i], _b[i]);
+				t += b;
+			}
+		}
+		return std::to_string(n) + " bytes" + t;
+	}
+
+	// Which SysEx commands act outside SYSEX RECV (mm-manual-mapping §13.7)?
+	void commandsMode(const Bytes& _rom, const bool _inRecv)
+	{
+		auto m = boot(_rom);
+		if(_inRecv)
+			md::test::enterMmReceive(m->hardware(), false);
+		std::printf("screen: %s\n", _inRecv ? "SYSEX RECV" : "normal");
+		auto kit = savedKit(*m, 0);
+		const auto kitStep = [&](const char* _what, const Bytes& _cmd)
+		{
+			m->send(_cmd);
+			m->run(150);
+			const auto now = savedKit(*m, 0);
+			std::printf("%-28s kit diff: %s\n", _what, diffText(kit, now).c_str());
+			const bool changed = now != kit;
+			kit = now;
+			return changed;
+		};
+		check(kitStep("0x5b machine T1 GND-SIN", mmCommand(0x5b, {0, 1, 1})), "0x5B assign machine acts");
+		check(kitStep("0x5b machine T1 SID", mmCommand(0x5b, {0, 3, 0})), "0x5B assign machine (no init) acts");
+		check(kitStep("0x5c route T1 bus CD in B", mmCommand(0x5c, {0, 2, 2})), "0x5C routing acts");
+		check(kitStep("0x55 kit name PROBE", mmCommand(0x55, {'P', 'R', 'O', 'B', 'E', 0, 0, 0, 0, 0, 0})), "0x55 kit name acts");
+		check(kitStep("CC48 T1 = 99", {0xb0, 48, 99}), "CC 48 (SYN 1) acts");
+		check(kitStep("CC56 T2 = 11", {0xb1, 56, 11}), "CC 56 (AMP 1) T2 acts");
+		check(kitStep("CC7 T3 = 33", {0xb2, 7, 33}), "CC 7 (level) T3 acts");
+		const auto g0 = rawPayload(dump(*m, 0x50, 0));
+		m->send(mmCommand(0x61, {static_cast<uint8_t>((100 * 24) >> 7), static_cast<uint8_t>((100 * 24) & 0x7f)}));
+		m->run(150);
+		const auto g1 = rawPayload(dump(*m, 0x50, 0));
+		std::printf("0x61 tempo 100: global diff %s\n", diffText(g0, g1).c_str());
+		m->send(mmCommand(0x71, {0x22, 3}));
+		m->run(100);
+		{
+			const int t = status(*m, 0x22);
+			std::printf("0x71 0x22 (audio track) = 3 -> status 0x22 reports %d\n", t);
+			check(t == 0, "0x71 cannot set the focus track (the manual lists 0x22 for requests only)");
+		}
+		m->send(mmCommand(0x6c, {2}));
+		m->run(100);
+		check(status(*m, 0x08) == 2, "0x6C LOAD SONG 2");
+		m->send(mmCommand(0x56, {1}));
+		m->run(100);
+		check(status(*m, 0x01) == 1, "0x56 set active global 1");
+		m->send(mmCommand(0x58, {3}));
+		m->run(100);
+		check(status(*m, 0x02) == 3, "0x58 LOAD KIT 3");
+		m->send(mmCommand(0x57, {4}));
+		m->run(100);
+		check(status(*m, 0x04) == 4, "0x57 LOAD PATTERN 4");
+		printLcd(*m, "after commands");
+	}
+
+	using Lcd = std::array<uint8_t, 128 * 64 / 8>;
+	Lcd lcdBits(Machine& _m)
+	{
+		const auto p = _m.hardware().getFrontPanelSnapshot();
+		Lcd b{};
+		for(uint32_t y = 0; y < 64; ++y)
+			for(uint32_t x = 0; x < 128; ++x)
+				if(p.getLcdPixel(x, y))
+					b[(y * 128 + x) >> 3] |= static_cast<uint8_t>(1u << (x & 7));
+		return b;
+	}
+
+	int lcdDiff(const Lcd& _a, const Lcd& _b)
+	{
+		int n = 0;
+		for(size_t i = 0; i < _a.size(); ++i)
+			n += __builtin_popcount(_a[i] ^ _b[i]);
+		return n;
+	}
+
+	// A panel key through the session (audio rendered), hold and gap in ms.
+	void key(Machine& _m, const md::PanelControl _c, const double _holdMs, const double _gapMs)
+	{
+		const auto p = md::panelPacket(g_mm, _c);
+		require(p.has_value(), "no MM panel packet");
+		_m.hardware().trySendPanelEvent(p->row, p->mask);
+		_m.run(_holdMs);
+		_m.hardware().trySendPanelEvent(p->row, 0);
+		_m.run(_gapMs);
+	}
+
+	void chord(Machine& _m, const md::PanelControl _c, const double _holdMs, const double _gapMs)
+	{
+		const auto f = *md::panelPacket(g_mm, md::PanelControl::Function);
+		const auto t = *md::panelPacket(g_mm, _c);
+		md::PanelRowState rows;
+		for(const auto pk : {rows.press(f), rows.press(t), rows.release(t), rows.release(f)})
+		{
+			_m.hardware().trySendPanelEvent(pk.row, pk.mask);
+			_m.run(_holdMs);
+		}
+		_m.run(_gapMs);
+	}
+
+	// GLOBAL > FILE > SYSEX RECV (the same path as sysexPanelDriver's enterMmReceive).
+	void recvMacro(Machine& _m, const double _hold, const double _gap)
+	{
+		using C = md::PanelControl;
+		chord(_m, C::Kit, _hold, _gap);
+		key(_m, C::Enter, _hold, _gap);
+		for(int i = 0; i < 4; ++i) key(_m, C::Left, _hold, _gap);
+		for(int i = 0; i < 8; ++i) key(_m, C::Up, _hold, _gap);
+		key(_m, C::Down, _hold, _gap);
+		key(_m, C::Down, _hold, _gap);
+		key(_m, C::Right, _hold, _gap);
+		for(int i = 0; i < 8; ++i) key(_m, C::Up, _hold, _gap);
+		key(_m, C::Down, _hold, _gap);
+		key(_m, C::Enter, _hold, _gap);
+		key(_m, C::Right, _hold, _gap);
+		key(_m, C::Enter, _hold, _gap);
+	}
+
+	void macroMode(const Bytes& _rom)
+	{
+		auto m = boot(_rom);
+		const auto normal = lcdBits(*m);
+		md::test::enterMmReceive(m->hardware(), false);
+		const auto recv = lcdBits(*m);
+		md::test::exitMenus(m->hardware());
+		m->run(300);
+		std::printf("reference: normal vs recv %d px, back to normal %d px\n", lcdDiff(normal, recv), lcdDiff(normal, lcdBits(*m)));
+		const auto p75 = retarget(patternDump(*m, 75), 20);
+		for(const auto& t : std::vector<std::pair<double, double>>{{40, 40}, {20, 30}, {10, 20}, {10, 10}, {5, 10}, {4, 4}})
+		{
+			const auto t0 = m->now();
+			recvMacro(*m, t.first, t.second);
+			const auto t1 = m->now();
+			m->run(20);
+			const int d = lcdDiff(recv, lcdBits(*m));
+			// Does it take a dump now?
+			const auto before = rawPayload(patternDump(*m, 20));
+			m->send(p75);
+			m->run(50);
+			const bool took = rawPayload(patternDump(*m, 20)) == rawPayload(p75);
+			const auto t2 = m->now();
+			for(int i = 0; i < 4; ++i) key(*m, md::PanelControl::Exit, t.first, t.second);
+			m->run(50);
+			const int back = lcdDiff(normal, lcdBits(*m));
+			std::printf("hold %.0f gap %.0f ms: macro %.0f ms, lcd diff to RECV %d px, dump taken %d (%.0f ms), 4x EXIT -> normal diff %d px (%.0f ms)\n",
+				t.first, t.second, ms(t1 - t0), d, took, ms(t2 - t1), back, ms(m->now() - t2));
+			(void)before;
+			// put slot 20 back to something else so the next round can detect a store
+			md::test::enterMmReceive(m->hardware(), false);
+			m->send(retarget(patternDump(*m, 1), 20));
+			m->run(50);
+			md::test::exitMenus(m->hardware());
+			m->run(300);
+		}
+	}
+
+	// A RAM byte that says "SYSEX RECV is waiting": equal in every RECV entry,
+	// different on the normal screen, the GLOBAL menu and the SYSEX SEND screen.
+	void recvFlagMode(const Bytes& _rom)
+	{
+		auto m = boot(_rom);
+		using C = md::PanelControl;
+		std::vector<Bytes> recvSnaps, otherSnaps;
+		otherSnaps.push_back(m->snapshotRam());
+		tap(*m, C::Play);
+		m->run(500);
+		otherSnaps.push_back(m->snapshotRam());
+		for(int round = 0; round < 3; ++round)
+		{
+			recvMacro(*m, 10, 10);
+			m->run(100 + round * 300);
+			recvSnaps.push_back(m->snapshotRam());
+			for(int i = 0; i < 8; ++i) key(*m, C::Exit, 10, 10);
+			m->run(200);
+			otherSnaps.push_back(m->snapshotRam());
+			chord(*m, C::Kit, 10, 10);	// GLOBAL menu
+			m->run(200);
+			otherSnaps.push_back(m->snapshotRam());
+			for(int i = 0; i < 8; ++i) key(*m, C::Exit, 10, 10);
+			m->run(200);
+			if(round == 1) { tap(*m, C::Stop); m->run(300); }
+		}
+		int shown = 0;
+		for(uint32_t a = 0; a < 0x100000 && shown < 40; ++a)
+		{
+			const auto v = recvSnaps[0][a];
+			bool same = true;
+			for(const auto& r : recvSnaps) same &= r[a] == v;
+			if(!same) continue;
+			bool distinct = true;
+			for(const auto& o : otherSnaps) distinct &= o[a] != v;
+			if(!distinct) continue;
+			std::printf("  recv flag candidate 0x%06x = 0x%02x (others:", 0x200000 + a, v);
+			for(const auto& o : otherSnaps) std::printf(" %02x", o[a]);
+			std::printf(")\n");
+			++shown;
+		}
+	}
+
+	constexpr uint32_t g_recvFlag = 0x268033;	// 1 while SYSEX RECV waits for its first message
+	constexpr uint32_t g_screenAddress = 0x266ec8;	// u32: the firmware's current screen handler
+	constexpr uint32_t g_screenRecv = 0x002c3a98;
+	uint32_t read32(Machine& _m, const uint32_t _a)
+	{
+		return (uint32_t(_m.read8(_a)) << 24) | (uint32_t(_m.read8(_a + 1)) << 16) | (uint32_t(_m.read8(_a + 2)) << 8) | _m.read8(_a + 3);
+	}
+	bool onRecv(Machine& _m) { return read32(_m, g_screenAddress) == g_screenRecv; }
+
+	void kitSongMode(const Bytes& _rom)
+	{
+		auto m = boot(_rom);
+		using C = md::PanelControl;
+		recvMacro(*m, 10, 10);
+		m->run(50);
+		check(m->read8(g_recvFlag) == 1, "RAM 0x268033 = 1 on SYSEX RECV");
+		// Kit: stored slot 0 vs the working kit.
+		const auto k0 = dump(*m, 0x52, 0);
+		auto raw = rawPayload(k0);
+		const auto workBefore = raw;
+		raw[0x0b] = 5;	// T1 level
+		std::memcpy(raw.data(), "KITDUMP\0\0\0\0", 11);
+		const auto sent = encodeRle(k0, raw);
+		const auto t0 = m->now();
+		m->send(sent);
+		m->run(100);
+		std::printf("kit dump drained+100 ms: %.1f ms, recv flag after %d\n", ms(m->now() - t0), m->read8(g_recvFlag));
+		check(onRecv(*m), "still on SYSEX RECV after a kit dump (screen word)");
+		check(m->read8(g_recvFlag) == 0, "the waiting flag clears after the first message");
+		printLcd(*m, "after kit dump in RECV");
+		const auto stored = rawPayload(dump(*m, 0x52, 0));
+		check(stored == raw, "kit dump stores slot 0");
+		// Working kit: SAVE KIT to a scratch slot (makes it current), compare.
+		m->send(mmCommand(0x59, {100}));
+		m->run(150);
+		const auto working = rawPayload(dump(*m, 0x52, 100));
+		std::printf("working kit after the kit dump: %s\n", diffText(workBefore, working).c_str());
+		check(working == workBefore, "a kit dump does not change the working kit (stored slot only)");
+		m->send(mmCommand(0x58, {0}));
+		m->run(150);
+		m->send(mmCommand(0x59, {101}));
+		m->run(150);
+		check(rawPayload(dump(*m, 0x52, 101)) == raw, "LOAD KIT 0 then makes the dumped kit the working kit");
+
+		// Song 0
+		const auto s0 = dump(*m, 0x69, 0);
+		auto sraw = rawPayload(s0);
+		std::memcpy(sraw.data(), "PROBESONG\0\0\0\0\0", 14);
+		m->send(encodeRle(s0, sraw));
+		m->run(100);
+		check(rawPayload(dump(*m, 0x69, 0)) == sraw, "song dump stored in RECV");
+		check(onRecv(*m), "still on SYSEX RECV after a song dump");
+		// Global 1 (not active)
+		const auto g1 = dump(*m, 0x50, 1);
+		auto graw = rawPayload(g1);
+		std::printf("global raw[0..8]: %02x %02x %02x %02x %02x %02x %02x %02x\n", graw[0], graw[1], graw[2], graw[3], graw[4], graw[5], graw[6], graw[7]);
+		graw[0x10] ^= 1;
+		m->send(encodeRle(g1, graw));
+		m->run(100);
+		check(rawPayload(dump(*m, 0x50, 1)) == graw, "global dump stored in RECV");
+		check(onRecv(*m), "still on SYSEX RECV after a global dump");
+		const auto tx = m->now();
+		for(int i = 0; i < 8; ++i) key(*m, C::Exit, 10, 10);
+		m->run(20);
+		std::printf("exit: %.0f ms, flag %d\n", ms(m->now() - tx), m->read8(g_recvFlag));
+		check(!onRecv(*m), "off SYSEX RECV after EXIT");
+		printLcd(*m, "after exit");
+	}
+
+	void recvCountMode(const Bytes& _rom)
+	{
+		auto m = boot(_rom);
+		using C = md::PanelControl;
+		std::vector<Bytes> in, out;
+		out.push_back(m->snapshotRam());
+		chord(*m, C::Kit, 10, 10);
+		m->run(200);
+		out.push_back(m->snapshotRam());
+		for(int i = 0; i < 8; ++i) key(*m, C::Exit, 10, 10);
+		const auto k5 = dump(*m, 0x52, 5);
+		for(int round = 0; round < 2; ++round)
+		{
+			recvMacro(*m, 10, 10);
+			m->run(100);
+			in.push_back(m->snapshotRam());
+			for(int n = 0; n < 3; ++n)
+			{
+				m->send(k5);
+				m->run(150);
+				in.push_back(m->snapshotRam());
+			}
+			for(int i = 0; i < 8; ++i) key(*m, C::Exit, 10, 10);
+			m->run(200);
+			out.push_back(m->snapshotRam());
+		}
+		for(uint32_t a = 0; a < 0x100000; ++a)
+		{
+			// count: 0,1,2,3,0,1,2,3
+			bool count = true;
+			for(size_t i = 0; i < in.size(); ++i) count &= in[i][a] == (i % 4);
+			if(count)
+				std::printf("  count candidate 0x%06x\n", 0x200000 + a);
+			const auto v = in[0][a];
+			bool same = true;
+			for(const auto& r : in) same &= r[a] == v;
+			bool distinct = true;
+			for(const auto& o : out) distinct &= o[a] != v;
+			if(same && distinct)
+			{
+				std::printf("  screen candidate 0x%06x = %02x (out:", 0x200000 + a, v);
+				for(const auto& o : out) std::printf(" %02x", o[a]);
+				std::printf(")\n");
+			}
+		}
+	}
+
+	constexpr uint32_t g_recvCount = 0x26a3c7;	// messages received on this RECV screen
+
+	void burstMode(const Bytes& _rom)
+	{
+		auto m = boot(_rom);
+		recvMacro(*m, 10, 10);
+		m->run(50);
+		std::printf("recv: flag %d count %d, region:", m->read8(g_recvFlag), m->read8(g_recvCount));
+		for(uint32_t a = 0x26a3c0; a < 0x26a3d0; ++a) std::printf(" %02x", m->read8(a));
+		std::printf("\n");
+		std::vector<Bytes> sent;
+		for(uint8_t s = 0; s < 4; ++s)
+			sent.push_back(retarget(patternDump(*m, static_cast<uint8_t>(1 + s)), static_cast<uint8_t>(40 + s)));
+		// back to back, no wait
+		std::vector<std::pair<double, int>> flagTrace;
+		const auto t0 = m->now();
+		m->onBlock = [&] { flagTrace.emplace_back(ms(m->now() - t0), m->read8(g_recvFlag) | (m->read8(g_recvCount) << 1)); };
+		for(const auto& d : sent)
+		{
+			synthLib::SMidiEvent e(synthLib::MidiEventSource::Host);
+			e.sysex = d;
+			m->hardware().sendMidi(e);
+		}
+		m->run(400);
+		m->onBlock = nullptr;
+		int last = -1;
+		for(const auto& [t, v] : flagTrace)
+			if(v != last) { std::printf("  %6.1f ms flag %d count %d\n", t, v & 1, v >> 1); last = v; }
+		int ok = 0;
+		for(uint8_t s = 0; s < 4; ++s)
+			ok += rawPayload(patternDump(*m, static_cast<uint8_t>(40 + s))) == rawPayload(sent[s]);
+		std::printf("back-to-back: %d of 4 stored\n", ok);
+		check(ok == 4, "four pattern dumps back to back are all stored");
+		// A bad checksum
+		auto bad = sent[0];
+		bad[bad.size() - 4] ^= 1;
+		m->send(bad);
+		m->run(200);
+		std::printf("after a bad checksum: count %d, region:", m->read8(g_recvCount));
+		for(uint32_t a = 0x26a3c0; a < 0x26a3d0; ++a) std::printf(" %02x", m->read8(a));
+		std::printf("\n");
+		printLcd(*m, "after bad dump");
+	}
+
+	std::vector<size_t> findAll(const Bytes& _hay, const Bytes& _needle)
+	{
+		std::vector<size_t> at;
+		auto it = _hay.begin();
+		while((it = std::search(it, _hay.end(), _needle.begin(), _needle.end())) != _hay.end())
+		{
+			at.push_back(static_cast<size_t>(it - _hay.begin()));
+			++it;
+		}
+		return at;
+	}
+
+	// Where does the kit that plays live? (like MD P3: patch RAM 0x70000a)
+	void workKitMode(const Bytes& _rom)
+	{
+		auto m = boot(_rom);
+		m->send({0xb0, 48, 99});
+		m->send({0xb3, 72, 17});
+		m->run(100);
+		m->send(mmCommand(0x59, {100}));
+		m->run(150);
+		const auto work = rawPayload(dump(*m, 0x52, 100));
+		const auto patch = m->hardware().copyPatchRam();
+		const auto ram = m->snapshotRam();
+		const Bytes needle(work.begin() + 0x11, work.begin() + 0x11 + 96);
+		for(const auto a : findAll(patch, needle))
+			std::printf("  params found in patch RAM +0x%06zx (cpu 0x%06zx)\n", a, 0x700000 + a);
+		for(const auto a : findAll(ram, needle))
+			std::printf("  params found in main RAM 0x%06zx\n", 0x200000 + a);
+		const Bytes name(work.begin(), work.begin() + 11);
+		for(const auto a : findAll(patch, name))
+			std::printf("  name found in patch RAM +0x%06zx\n", a);
+		for(const auto a : findAll(ram, name))
+			std::printf("  name found in main RAM 0x%06zx\n", 0x200000 + a);
+		// Full image?
+		for(const auto a : findAll(patch, work))
+			std::printf("  WHOLE kit image in patch RAM +0x%06zx\n", a);
+		for(const auto a : findAll(ram, work))
+			std::printf("  WHOLE kit image in main RAM 0x%06zx\n", 0x200000 + a);
+		// Unsaved edit: does a location follow?
+		m->send({0xb0, 48, 42});
+		m->run(100);
+		const auto patch2 = m->hardware().copyPatchRam();
+		const auto ram2 = m->snapshotRam();
+		std::printf("after CC48=42 (not saved):\n");
+		for(size_t i = 0; i < patch.size(); ++i)
+			if(patch[i] != patch2[i]) std::printf("  patch +0x%06zx %02x>%02x\n", i, patch[i], patch2[i]);
+		int shown = 0;
+		for(size_t i = 0; i < ram.size() && shown < 30; ++i)
+			if(ram[i] == 99 && ram2[i] == 42) { std::printf("  main 0x%06zx 99>42\n", 0x200000 + i); ++shown; }
+	}
+
+	constexpr size_t g_patternLengthOffset = 0x424;	// raw payload, 2-64 (factory: 16/64)
+
+	void queueMode(const Bytes& _rom)
+	{
+		auto m = boot(_rom);
+		int shortSlot = -1;
+		for(uint8_t s = 2; s < 40 && shortSlot < 0; ++s)
+		{
+			const auto r = rawPayload(patternDump(*m, s));
+			if(r.size() > g_patternLengthOffset && r[g_patternLengthOffset] < 64 && r.size() > 0 && rawPayload(patternDump(*m, s)) != rawPayload(patternDump(*m, 75)))
+				shortSlot = s;
+		}
+		std::printf("short pattern: slot %d\n", shortSlot);
+		require(shortSlot > 0, "no short pattern");
+		const std::vector<uint32_t> cands{0x257e57, 0x2bc287, 0x2bc28b, 0x2bdf3d};
+		m->send(mmCommand(0x57, {1}));
+		m->run(100);
+		tap(*m, md::PanelControl::Play);
+		// run to step ~8 of pattern 1
+		while(m->read8(cands[0]) != 8) m->step();
+		const auto tSel = m->now();
+		m->send(mmCommand(0x57, {static_cast<uint8_t>(shortSlot)}));
+		int lastStatus = -2;
+		std::vector<int> last(cands.size(), -1);
+		for(int i = 0; i < 80 * 4; ++i)
+		{
+			m->run(31.25);
+			if(i % 4 == 0)
+			{
+				const int st = status(*m, 0x04);
+				if(st != lastStatus) { std::printf("  +%6.0f ms status pattern %d\n", ms(m->now() - tSel), st); lastStatus = st; }
+			}
+			std::string line;
+			bool changed = false;
+			for(size_t c = 0; c < cands.size(); ++c)
+			{
+				const int v = m->read8(cands[c]);
+				if(v < last[c] && last[c] >= 0) changed = true;
+				last[c] = v;
+				line += " " + std::to_string(v);
+			}
+			if(changed)
+				std::printf("  +%6.0f ms wrap: candidates%s\n", ms(m->now() - tSel), line.c_str());
+		}
+		std::printf("final candidates:");
+		for(const auto c : cands) std::printf(" 0x%06x=%d", c, m->read8(c));
+		std::printf("\n");
+	}
+
+	// Boot timeline: MIDI ready, the LCD animation, the first status reply, and
+	// when a panel key first takes effect (TEMPO opens its menu).
+	void bootMode(const Bytes& _rom)
+	{
+		md::Hardware hw(_rom, g_romName, g_mm);
+		require(hw.isValid(), "invalid MM");
+		uint64_t frames = 0;
+		uint64_t midiReady = 0;
+		uint64_t lastChange = 0;
+		std::string prev;
+		int changes = 0;
+		const auto lcdHash = [&] {
+			const auto p = hw.getFrontPanelSnapshot();
+			std::string h(128 * 64 / 8, '\0');
+			for(uint32_t y = 0; y < 64; ++y)
+				for(uint32_t x = 0; x < 128; ++x)
+					if(p.getLcdPixel(x, y)) h[(y * 128 + x) >> 3] |= static_cast<char>(1 << (x & 7));
+			return h;
+		};
+		while(frames < g_rate * 40ull)
+		{
+			hw.advance(g_block);
+			frames += g_block;
+			if(!midiReady && hw.isFirmwareMidiReady())
+			{
+				midiReady = frames;
+				std::printf("  %6.0f ms firmware MIDI ready\n", ms(frames));
+			}
+			if((frames / g_block) % 35 == 0)	// ~50 ms
+			{
+				const auto h = lcdHash();
+				if(h != prev)
+				{
+					++changes;
+					if(frames - lastChange > g_rate / 2 || changes < 6)
+						std::printf("  %6.0f ms LCD changes (#%d, %zu lit px)\n", ms(frames), changes,
+							static_cast<size_t>(hw.getFrontPanelSnapshot().countLitPixels()));
+					lastChange = frames;
+					prev = h;
+				}
+			}
+		}
+		std::printf("  LCD changed %d times; last change at %.0f ms\n", changes, ms(lastChange));
+
+		// A RAM byte that flips when the animation ends (fresh machine).
+		md::Hardware h2(_rom, g_romName, g_mm);
+		const auto snap = [&] { Bytes r; for(uint32_t a = 0x200000; a < 0x300000; ++a) r.push_back(h2.getUC().read8(a)); return r; };
+		std::vector<Bytes> during, after;
+		uint64_t f2 = 0;
+		for(const double t : {3.0, 5.0, 7.0, 8.5, 10.0, 12.0, 15.0, 20.0})
+		{
+			while(f2 < static_cast<uint64_t>(t * g_rate)) { h2.advance(g_block); f2 += g_block; }
+			(t < 9.0 ? during : after).push_back(snap());
+		}
+		int shown = 0;
+		for(uint32_t a = 0; a < 0x100000 && shown < 30; ++a)
+		{
+			const auto d = during[0][a], f = after[0][a];
+			if(d == f) continue;
+			bool ok = true;
+			for(const auto& x : during) ok &= x[a] == d;
+			for(const auto& x : after) ok &= x[a] == f;
+			if(ok) { std::printf("  boot-done candidate 0x%06x %02x -> %02x\n", 0x200000 + a, d, f); ++shown; }
+		}
+	}
+
+	void screensMode(const Bytes& _rom)
+	{
+		md::Hardware hw(_rom, g_romName, g_mm);
+		uint64_t f = 0;
+		uint32_t last = 0;
+		while(f < g_rate * 12ull)
+		{
+			hw.advance(g_block);
+			f += g_block;
+			auto& uc = hw.getUC();
+			const uint32_t v = (uint32_t(uc.read8(g_screenAddress)) << 24) | (uint32_t(uc.read8(g_screenAddress + 1)) << 16)
+				| (uint32_t(uc.read8(g_screenAddress + 2)) << 8) | uc.read8(g_screenAddress + 3);
+			if(v != last) { std::printf("  boot %6.0f ms screen 0x%08x (midi ready %d)\n", ms(f), v, hw.isFirmwareMidiReady()); last = v; }
+		}
+		auto m = boot(_rom);
+		using C = md::PanelControl;
+		std::printf("normal 0x%08x\n", read32(*m, g_screenAddress));
+		tap(*m, C::Play); m->run(300);
+		std::printf("playing 0x%08x\n", read32(*m, g_screenAddress));
+		key(*m, C::Tempo, 10, 10); m->run(200);
+		std::printf("tempo 0x%08x\n", read32(*m, g_screenAddress));
+		key(*m, C::Exit, 10, 10); m->run(200);
+		chord(*m, C::Kit, 10, 10); m->run(200);
+		std::printf("global 0x%08x\n", read32(*m, g_screenAddress));
+		for(int i = 0; i < 8; ++i) key(*m, C::Exit, 10, 10);
+		recvMacro(*m, 10, 10); m->run(50);
+		std::printf("recv 0x%08x\n", read32(*m, g_screenAddress));
+		m->send(dump(*m, 0x52, 3)); m->run(100);
+		std::printf("recv after a dump 0x%08x\n", read32(*m, g_screenAddress));
+		for(int i = 0; i < 8; ++i) key(*m, C::Exit, 10, 10);
+		m->run(50);
+		std::printf("after exit 0x%08x\n", read32(*m, g_screenAddress));
+		// fewest EXITs back to normal
+		recvMacro(*m, 10, 10); m->run(50);
+		int n = 0;
+		while(read32(*m, g_screenAddress) == 0x3a98 || (read32(*m, g_screenAddress) & 0xffff) != 0x2908)
+		{
+			key(*m, C::Exit, 10, 10);
+			if(++n > 10) break;
+		}
+		std::printf("EXITs from RECV to normal: %d\n", n);
+	}
+
+	// Is a pattern dump taken on a normal screen?
+	void gateMode(const Bytes& _rom)
+	{
+		auto m = boot(_rom);
+		const auto p0 = patternDump(*m, 0);
+		require(!p0.empty(), "no pattern 0 dump");
+		auto raw = rawPayload(p0);
+		std::printf("pattern raw size %zu\n", raw.size());
+		// Flip a byte deep inside (a candidate trig byte) and send to slot 5.
+		auto edited = raw;
+		for(size_t i = 0; i < 8; ++i)
+			edited[i] ^= 0xff;
+		const auto sent = retarget(encodeLiteral(p0, edited), 5);
+		const auto before = rawPayload(patternDump(*m, 5));
+		m->send(sent);
+		m->run(300);
+		const auto after = rawPayload(patternDump(*m, 5));
+		std::printf("normal screen: slot5 before==after %d, after==sent %d\n", before == after, after == edited);
+		check(before == after, "MM ignores a pattern dump on a normal screen (manual 1-99)");
+		printLcd(*m, "after sending on normal screen");
+
+		const auto tryRecv = [&](const char* _how, const std::function<void()>& _send, const uint8_t _slot)
+		{
+			const auto target = retarget(encodeLiteral(p0, edited), _slot);
+			(void)target;
+			md::test::enterMmReceive(m->hardware(), false);
+			printLcd(*m, (std::string("SYSEX RECV before ") + _how).c_str());
+			_send();
+			m->run(1500);
+			printLcd(*m, (std::string("after ") + _how).c_str());
+			md::test::exitMenus(m->hardware());
+			m->run(500);
+			const auto back = rawPayload(patternDump(*m, _slot));
+			std::printf("%s: stored==sent %d\n", _how, back == edited);
+			return back == edited;
+		};
+		check(encodeRle(p0, rawPayload(p0)) == p0, "firmware RLE choice reproduced on pattern 0");
+		const auto s6 = retarget(encodeRle(p0, edited), 6);
+		const auto s7 = retarget(encodeRle(p0, edited), 7);
+		const auto s8 = retarget(encodeRle(p0, edited), 8);
+		{
+			const auto p1 = patternDump(*m, 1);
+			const auto s9 = retarget(p1, 9);
+			md::test::enterMmReceive(m->hardware(), false);
+			m->send(s9);
+			m->run(1500);
+			printLcd(*m, "after firmware-bytes dump");
+			md::test::exitMenus(m->hardware());
+			m->run(500);
+			check(rawPayload(patternDump(*m, 9)) == rawPayload(p1), "RECV: firmware's own pattern 1 bytes stored to slot 9");
+			const auto lit = retarget(encodeLiteral(p1, rawPayload(p1)), 10);
+			md::test::enterMmReceive(m->hardware(), false);
+			m->send(lit);
+			m->run(1500);
+			md::test::exitMenus(m->hardware());
+			m->run(500);
+			std::printf("literal (uncompressed) pattern dump: %zu bytes\n", lit.size());
+			check(rawPayload(patternDump(*m, 10)) != rawPayload(p1), "RECV: an uncompressed pattern dump is dropped (the firmware's run-length form is needed)");
+		}
+		check(tryRecv("unpaced", [&] { m->send(s6); }, 6), "RECV: unpaced dump stored");
+		check(tryRecv("paced transfer", [&] {
+			uint64_t f = 0;
+			const auto st = sendPaced(*m, s7, &f);
+			std::printf("paced transfer state %u after %.1f ms\n", unsigned(st), ms(f));
+		}, 7), "RECV: paced transfer stored");
+		check(tryRecv("chunked 32B/10ms", [&] {
+			std::printf("chunked took %.1f ms\n", ms(sendChunked(*m, s8, 32, 10.0)));
+		}, 8), "RECV: chunked dump stored");
+	}
+
+	double rms(const std::vector<float>& _l, const std::vector<float>& _r, const uint64_t _from, const uint64_t _to)
+	{
+		double e = 0;
+		const auto to = std::min<uint64_t>(_to, _l.size());
+		if(to <= _from)
+			return 0;
+		for(auto i = _from; i < to; ++i)
+			e += double(_l[i]) * _l[i] + double(_r[i]) * _r[i];
+		return std::sqrt(e / double(2 * (to - _from)));
+	}
+
+	double rmsLast(Machine& _m, const double _ms)
+	{
+		const auto n = static_cast<uint64_t>(_ms * g_rate / 1000);
+		return rms(_m.left(), _m.right(), _m.now() > n ? _m.now() - n : 0, _m.now());
+	}
+
+	// Candidate playhead bytes: sampled 4 times per 16th, a byte that steps by one
+	// (or wraps to 0) once per step, in main RAM.
+	std::vector<uint32_t> scanPlayhead(Machine& _m, const double _stepMs, const int _steps)
+	{
+		const int perStep = 4;
+		std::vector<Bytes> snaps;
+		for(int i = 0; i < _steps * perStep; ++i)
+		{
+			snaps.push_back(_m.snapshotRam());
+			_m.run(_stepMs / perStep);
+		}
+		std::vector<uint32_t> found;
+		for(uint32_t a = 0; a < 0x100000; ++a)
+		{
+			for(int phase = 0; phase < perStep; ++phase)
+			{
+				bool ok = true;
+				int changes = 0;
+				for(int k = phase; k + perStep < static_cast<int>(snaps.size()) && ok; k += perStep)
+				{
+					const int v0 = snaps[k][a], v1 = snaps[k + perStep][a];
+					if(v1 == v0 + 1) ++changes;
+					else if(v1 == 0 && v0 >= 1) ++changes;
+					else ok = false;
+				}
+				if(ok && changes >= _steps - 2)
+				{
+					found.push_back(0x200000 + a);
+					std::printf("  playhead candidate 0x%06x:", 0x200000 + a);
+					for(int k = phase; k < static_cast<int>(snaps.size()); k += perStep)
+						std::printf(" %d", snaps[k][a]);
+					std::printf("\n");
+					break;
+				}
+			}
+		}
+		return found;
+	}
+
+	void allChannelsCc(Machine& _m, const uint8_t _cc, const uint8_t _v)
+	{
+		for(uint8_t ch = 0; ch < 6; ++ch)
+			_m.send({static_cast<uint8_t>(0xb0 | ch), _cc, _v});
+	}
+
+	void recvMode(const Bytes& _rom)
+	{
+		auto m = boot(_rom);
+		// Outside RECV: LOAD PATTERN and SET TEMPO.
+		m->send(mmCommand(0x57, {1}));
+		m->run(200);
+		check(status(*m, 0x04) == 1, "0x57 LOAD PATTERN works outside SYSEX RECV (status reports pattern 1)");
+		m->send(mmCommand(0x61, {static_cast<uint8_t>((120 * 24) >> 7), static_cast<uint8_t>((120 * 24) & 0x7f)}));
+		m->run(100);
+		printLcd(*m, "pattern 1 loaded");
+		tap(*m, md::PanelControl::Play);
+		m->run(1500);
+		const double base = rmsLast(*m, 1000);
+		std::printf("playing pattern 1: rms %.4f\n", base);
+		check(base > 0.001, "pattern 1 plays (audible)");
+		const auto heads = scanPlayhead(*m, 125.0, 24);
+		check(!heads.empty(), "a RAM playhead byte found");
+
+		// CC live edit on a normal screen: level 0 on all tracks.
+		allChannelsCc(*m, 7, 0);
+		m->run(600);
+		const double muted = rmsLast(*m, 400);
+		allChannelsCc(*m, 7, 100);
+		m->run(600);
+		const double back = rmsLast(*m, 400);
+		std::printf("CC7 level 0: rms %.5f, back to 100: %.4f\n", muted, back);
+		check(muted < base * 0.1 && back > base * 0.3, "CC level edits are live on a normal screen");
+
+		// Enter SYSEX RECV while playing: does the sequencer keep running?
+		const auto head = heads.empty() ? 0u : heads.front();
+		const auto t0 = m->now();
+		std::vector<std::pair<uint64_t, int>> trace;
+		m->onBlock = [&] { if(head && (m->now() % 2048) == 0) trace.emplace_back(m->now(), m->read8(head)); };
+		md::test::enterMmReceive(m->hardware(), false);
+		// enterMmReceive advances the hardware directly; render some audio through the session.
+		m->run(1000);
+		const double inRecv = rmsLast(*m, 800);
+		std::printf("macro to RECV: %.0f ms machine time (hardware advance, not rendered); rms in RECV %.4f\n", ms(m->now() - t0), inRecv);
+		check(inRecv > base * 0.3, "the pattern keeps playing on the SYSEX RECV screen");
+		int moves = 0;
+		for(size_t i = 1; i < trace.size(); ++i) moves += trace[i].second != trace[i - 1].second;
+		std::printf("playhead moves while in RECV: %d\n", moves);
+		check(moves > 4, "the playhead moves on the SYSEX RECV screen");
+
+		// CC in RECV
+		allChannelsCc(*m, 7, 0);
+		m->run(600);
+		const double mutedRecv = rmsLast(*m, 400);
+		allChannelsCc(*m, 7, 100);
+		m->run(600);
+		std::printf("CC7 level 0 in RECV: rms %.5f\n", mutedRecv);
+		check(mutedRecv < base * 0.1, "CC level edits are live on the SYSEX RECV screen");
+
+		// Pattern dump over the PLAYING pattern (slot 1) with pattern 0's content (empty).
+		const auto empty = retarget(patternDump(*m, 75), 1);	// factory slot 75 is empty
+		const auto p1 = patternDump(*m, 1);
+		std::printf("pattern requests answered in RECV: %d\n", !p1.empty());
+		check(!p1.empty(), "dump requests are answered on the SYSEX RECV screen");
+		const auto tSend = m->now();
+		m->send(empty);
+		for(int w = 0; w < 8; ++w)
+		{
+			m->run(250);
+			std::printf("  +%4.0f ms rms %.5f step %d\n", ms(m->now() - tSend), rmsLast(*m, 250), head ? m->read8(head) : -1);
+		}
+		const double afterEmpty = rmsLast(*m, 800);
+		check(rawPayload(patternDump(*m, 1)) == rawPayload(empty), "slot 1 reads back as the empty pattern");
+		std::printf("playing pattern replaced by an empty one: rms %.5f (%.0f ms after)\n", afterEmpty, ms(m->now() - tSend));
+		check(afterEmpty < base * 0.2, "a dump over the playing pattern is heard at once (no reload)");
+		m->send(p1);
+		m->run(1500);
+		const double restored = rmsLast(*m, 800);
+		std::printf("restored: rms %.4f\n", restored);
+		check(restored > base * 0.3, "sending the original back restores it, still playing");
+		printLcd(*m, "RECV after the dumps");
+
+		// Leave RECV
+		md::test::exitMenus(m->hardware());
+		m->run(1000);
+		const double after = rmsLast(*m, 800);
+		check(after > base * 0.3, "still playing after leaving SYSEX RECV");
+		printLcd(*m, "after EXIT");
+	}
+}
+
+int main(const int _argc, char** _argv)
+{
+	std::setvbuf(stdout, nullptr, _IOLBF, 0);
+	if(_argc < 3)
+	{
+		std::puts("usage: mmEditorProbeFirmwareTest <ROM> <all|lcd|dumps|corpus|gate|recv|commands|kitsong|burst|macro|queue|screens|...> [outdir]");
+		return 77;
+	}
+	try
+	{
+		g_romName = _argv[1];
+		const auto rom = load(_argv[1]);
+		require(rom.size() == md::g_romSize, "ROM must be the 8 MiB MM 1.32B image");
+		const std::string mode = _argv[2];
+		const std::string dir = _argc > 3 ? _argv[3] : "";
+		if(mode == "lcd") lcdMode(rom);
+		else if(mode == "dumps") dumpsMode(rom, dir);
+		else if(mode == "gate") gateMode(rom);
+		else if(mode == "recv") recvMode(rom);
+		else if(mode == "macro") macroMode(rom);
+		else if(mode == "recvflag") recvFlagMode(rom);
+		else if(mode == "kitsong") kitSongMode(rom);
+		else if(mode == "recvcount") recvCountMode(rom);
+		else if(mode == "burst") burstMode(rom);
+		else if(mode == "workkit") workKitMode(rom);
+		else if(mode == "queue") queueMode(rom);
+		else if(mode == "boot") bootMode(rom);
+		else if(mode == "screens") screensMode(rom);
+		else if(mode == "all")
+		{
+			gateMode(rom);
+			recvMode(rom);
+			commandsMode(rom, false);
+			commandsMode(rom, true);
+			kitSongMode(rom);
+			burstMode(rom);
+			queueMode(rom);
+			screensMode(rom);
+		}
+		else if(mode == "commands") { commandsMode(rom, false); commandsMode(rom, true); }
+		else if(mode == "corpus") corpusMode(rom, dir, _argc > 4 ? load(_argv[4]) : Bytes{});
+		else require(false, "unknown mode " + mode);
+		std::printf("%s (%d failures)\n", g_failures ? "FAIL" : "PASS", g_failures);
+		return g_failures ? 1 : 0;
+	}
+	catch(const std::exception& _e)
+	{
+		std::fprintf(stderr, "mmEditorProbeFirmwareTest FAIL: %s\n", _e.what());
+		return 1;
+	}
+}

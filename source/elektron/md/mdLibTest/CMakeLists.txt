@@ -342,3 +342,9 @@ target_link_libraries(mdSequencerStateTest PRIVATE mdLib)
 add_test(NAME mdSequencerStateTest COMMAND mdSequencerStateTest)
 set_tests_properties(mdSequencerStateTest PROPERTIES LABELS "UnitTest")
 set_property(TARGET mdSequencerStateTest PROPERTY FOLDER "Elektron/test")
+
+# MM-P0 Monomachine Editor discovery probes (SYSEX RECV gate, dumps, playhead,
+# CC live edits) against MM OS 1.32B firmware. Manual: needs a user-supplied ROM.
+add_executable(mmEditorProbeFirmwareTest mmEditorProbeFirmwareTest.cpp mdFirmwareSession.h sysexPanelDriver.h)
+target_link_libraries(mmEditorProbeFirmwareTest PRIVATE mdLib elektronData)
+set_property(TARGET mmEditorProbeFirmwareTest PROPERTY FOLDER "Elektron/test")

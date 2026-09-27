@@ -1,7 +1,8 @@
 #pragma once
 
-// Headless MD OS 1.63 session for firmware harnesses: boot, render audio, send
-// MIDI and wait for the UART to drain, collect SysEx replies. Test-only.
+// Headless firmware session for harnesses (MD OS 1.63, and MM OS 1.32B when
+// constructed with MachineModel::Monomachine): boot, render audio, send MIDI and
+// wait for the UART to drain, collect SysEx replies. Test-only.
 
 #include "mdLib/mdhardware.h"
 #include "mdLib/mdpanel.h"
@@ -57,8 +58,9 @@ namespace mdFirmwareSession
 	class Machine
 	{
 	public:
-		Machine(const Bytes& _rom, const std::string& _romName, const Bytes& _patchRam = {})
-			: m_hw(_rom, _romName, md::MachineModel::Machinedrum, _patchRam)
+		Machine(const Bytes& _rom, const std::string& _romName, const Bytes& _patchRam = {},
+			const md::MachineModel _model = md::MachineModel::Machinedrum)
+			: m_hw(_rom, _romName, _model, _patchRam)
 		{
 			require(m_hw.isValid(), "firmware did not construct a valid machine");
 			for(auto& o : m_out)
@@ -70,7 +72,7 @@ namespace mdFirmwareSession
 			{
 				m_hw.advance(g_block);
 				frames += g_block;
-				require(frames < g_rate * 60, "MD firmware boot timed out");
+				require(frames < g_rate * 60, "firmware boot timed out");
 			}
 			// The splash animation keeps running for ~20 s after MIDI is ready.
 			for(uint32_t i = 0; i < g_rate * 25 / g_block; ++i)
@@ -170,7 +172,7 @@ namespace mdFirmwareSession
 
 		void panel(const md::PanelControl _control)
 		{
-			const auto packet = md::panelPacket(md::MachineModel::Machinedrum, _control);
+			const auto packet = md::panelPacket(m_hw.getModel(), _control);
 			require(packet.has_value(), "no panel packet");
 			m_hw.trySendPanelEvent(packet->row, packet->mask);
 			run(40);
