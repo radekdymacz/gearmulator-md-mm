@@ -614,6 +614,7 @@ namespace mdJucePlugin
 					<< model->getMenuForIndex(0, "Editor").getNumItems() << " items)";
 #endif
 			log(chrome);
+			log("audio: " + juce::String(getProcessor().getSampleRate(), 0) + " Hz, block " + juce::String(getProcessor().getBlockSize()) + " frames");
 		}
 		if(m_ticks % 150 == 0)
 		{

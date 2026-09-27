@@ -337,6 +337,11 @@ add_executable(mdEditorProbeFirmwareTest mdEditorProbeFirmwareTest.cpp mdFirmwar
 target_link_libraries(mdEditorProbeFirmwareTest PRIVATE mdLib elektronData)
 set_property(TARGET mdEditorProbeFirmwareTest PROPERTY FOLDER "Elektron/test")
 
+# P4: CPU per emulated MD instance, headless (manual: needs a user-supplied ROM).
+add_executable(mdCpuBenchTest mdCpuBenchTest.cpp mdFirmwareSession.h)
+target_link_libraries(mdCpuBenchTest PRIVATE mdLib elektronData)
+set_property(TARGET mdCpuBenchTest PROPERTY FOLDER "Elektron/test")
+
 # P4 Machinedrum Editor discovery probes (start-up animation, chaining,
 # mutes, kit and pattern library). Manual: needs a user-supplied ROM.
 add_executable(mdP4ProbeFirmwareTest mdP4ProbeFirmwareTest.cpp mdFirmwareSession.h)

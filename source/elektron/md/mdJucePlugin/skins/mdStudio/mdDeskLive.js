@@ -329,3 +329,22 @@ if (/[?&]selftest=p4mix/.test(location.search)) (async () => {
 	await p4Mix(log, sleep);
 	log("mix done");
 })();
+
+/* ?selftest=p4cpu (scripts/md-editor-cpu.sh): fixed phases for a CPU measurement from outside; each phase
+   start and end is logged ("P4: cpu <phase> start/end") so the script can read the processes' CPU time. */
+if (/[?&]selftest=p4cpu/.test(location.search)) (async () => {
+	const sleep = ms => new Promise(r => setTimeout(r, ms));
+	const log = t => Bridge.log("P4: " + t);
+	while (!(machineState().desk && machineState().desk.firmware === "ready" && S.loaded)) await sleep(200);
+	await sleep(8000);	/* the background loads settle */
+	const phase = async (name, ms) => { log(`cpu ${name} start`); await sleep(ms); log(`cpu ${name} end`); };
+	S.ws = "seq"; render();
+	await phase("stopped", 30000);
+	if (!S.playing) $("#play").click();
+	await sleep(1000);
+	await phase("playing-seq", 30000);
+	S.ws = "mix"; render();
+	await phase("playing-mix", 30000);
+	$("#play").click();
+	log("cpu done");
+})();
