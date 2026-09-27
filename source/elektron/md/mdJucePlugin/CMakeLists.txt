@@ -61,6 +61,8 @@ set(SOURCES
 	skins/mmStudio/mmConvertTest.js
 	skins/mdStudio/mdDeskLive.js
 	skins/mdStudio/mdDeskLibrary.js
+	skins/mdStudio/mdDeskKeys.js
+	skins/mdStudio/mdDeskGlobal.js
 	mdSettingsPanelFeel.cpp mdSettingsPanelFeel.h
 	mdSettingsAudioInput.cpp mdSettingsAudioInput.h
 )

@@ -31,6 +31,10 @@ function applyPrep() {
 function prepToggle(i) { if (!S.tracks[i]) return; if (PREP.has(i)) PREP.delete(i); else PREP.set(i, !S.tracks[i].mute); showPrep(); }
 document.addEventListener("click", e => { const b = e.target.closest(".ms.m[data-mute]"); if (!b || !e.shiftKey) return; e.stopImmediatePropagation(); e.preventDefault(); prepToggle(+b.dataset.mute); }, true);
 document.addEventListener("keyup", e => { if (e.key === "Shift") applyPrep(); });
+Keys.bind({ keys: ["1–8", "Q–I"], mod: "alt", group: "Mutes", does: "Mute or unmute track 1–16, in any workspace" });
+Keys.bind({ keys: ["1–8", "Q–I"], mod: "alt+shift", group: "Mutes", does: "Prepare a mute (+ / X); applied when ⇧ is let go" });
+Keys.bind({ keys: ["M key"], mod: "shift", group: "Mutes", does: "Click: prepare that track's mute" });
+Keys.bind({ keys: ["drag a value"], mod: "alt", group: "Values", does: "Move that knob on every track (parameter tweaking)" });
 const MKEYS = ["Digit1", "Digit2", "Digit3", "Digit4", "Digit5", "Digit6", "Digit7", "Digit8", "KeyQ", "KeyW", "KeyE", "KeyR", "KeyT", "KeyY", "KeyU", "KeyI"];
 document.addEventListener("keydown", e => {
 	if (!e.altKey || e.metaKey || e.ctrlKey || e.target.closest?.("input,select,textarea")) return;
@@ -63,14 +67,12 @@ Bridge.onMessage(m => {
 
 /* ===== Tap tempo (manual p.36): T taps, the average of the last taps sets the tempo (0x61). ===== */
 const TAP = [];
-document.addEventListener("keydown", e => {
-	if ((e.key !== "t" && e.key !== "T") || e.metaKey || e.ctrlKey || e.altKey || e.target.closest?.("input,select,textarea")) return;
+Keys.bind({ keys: ["T"], group: "Transport", does: "Tap tempo (the average of the last taps)", run: () => {
 	const now = performance.now(); if (TAP.length && now - TAP[TAP.length - 1] > 2000) TAP.length = 0;
 	TAP.push(now); if (TAP.length > 5) TAP.shift();
 	if (TAP.length >= 2) { const bpm = clamp(Math.round(60000 / ((TAP[TAP.length - 1] - TAP[0]) / (TAP.length - 1)) * 10) / 10, 30, 300); S.bpm = bpm; renderTop(); cmd("tempo", { bpm }, "tempo"); toast("Tap tempo: " + bpm.toFixed(1) + " BPM"); }
 	else toast("Tap tempo: keep tapping T");
-	e.preventDefault();
-});
+} });
 
 /* ===== Parameter tweaking (manual p.37, FUNCTION + a DATA ENTRY knob): Alt held while moving a track
    value moves the same knob on every track by the same amount. As on the machine, RAM machines, MIDI and

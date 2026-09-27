@@ -46,7 +46,7 @@ for a, b in HONEST:
     assert a in m, 'mockup changed: ' + a
     m = m.replace(a, b)
 # The page's modules, in load order (a module that does not exist yet is skipped).
-SCRIPTS = ['mdDeskBridge.js', 'mdDeskModel.js', 'mdDeskMod.js', 'mdDeskApp.js', 'mdDeskLive.js', 'mdDeskLibrary.js']
+SCRIPTS = ['mdDeskBridge.js', 'mdDeskModel.js', 'mdDeskKeys.js', 'mdDeskMod.js', 'mdDeskApp.js', 'mdDeskLive.js', 'mdDeskLibrary.js', 'mdDeskGlobal.js']
 title = re.search(r'<title>(.*?)</title>', src).group(1)
 page = '''<!doctype html>
 <html lang="en">

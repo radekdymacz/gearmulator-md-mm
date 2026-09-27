@@ -1156,6 +1156,34 @@ html,body{min-width:1280px}
    gets while dragged, so a dragged fader or value box shrank to 7 x 7 px (the "small something", and the strip
    re-flowed). No native drag or selection on value controls; the bipolar fill at the centre is only the tick. */
 .pc,.fader{-webkit-user-drag:none;user-select:none;-webkit-user-select:none}
+/* v61 (P5): GLOBAL settings panel (the machine's FUNCTION + PATTERN/SONG menu), from the engine menu or G */
+.globpop{position:absolute;z-index:22;width:min(1180px,calc(100vw - 32px));display:grid;gap:10px;align-content:start;padding:14px;background:var(--plate);border:2px solid var(--print);border-radius:6px;box-shadow:0 18px 40px rgba(0,0,0,.35);overflow:auto;overscroll-behavior:contain;color:var(--body)}
+.globgrid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}
+.globgrid .card{gap:8px}
+.globgrid .wide{grid-column:span 2}
+.gslots{display:flex;gap:4px}
+.gslots button{width:30px;height:26px;padding:0;font:500 12px var(--mono);letter-spacing:0;position:relative}
+.gslots button[aria-pressed=true]{background:var(--cream);color:var(--creamtext)}
+.grow2{display:flex;align-items:center;gap:8px;min-height:28px}
+.grow2 .ilab{min-width:92px}
+.grow2 .seg button{height:24px;padding:0 9px;font:600 11px var(--sans);letter-spacing:.1em}
+.gmap{display:grid;grid-template-columns:repeat(8,minmax(0,1fr));gap:4px}
+.gmk{display:grid;gap:1px;padding:4px 5px;text-align:left;font:500 11px var(--mono);letter-spacing:0;height:40px;align-content:center}
+.gmk small{font:10px var(--mono);color:var(--keydim)}
+.gmk .stepper{display:flex;gap:2px}
+.gmk.none{opacity:.55}
+.grout{display:grid;grid-template-columns:repeat(16,minmax(0,1fr));gap:3px}
+.grout button{height:34px;padding:0;display:grid;align-content:center;font:500 10px var(--mono);letter-spacing:0}
+.grout button b{font:600 11px var(--mono)}
+.grout button.on{background:var(--cream);color:var(--creamtext)}
+.ginputs{display:grid;grid-template-columns:auto repeat(5,minmax(0,1fr));gap:3px 8px;font:12px var(--mono);align-items:center}
+.ginputs span{color:var(--print2);font:600 10px var(--sans);letter-spacing:.12em;text-transform:uppercase}
+.gnv{font:600 9px var(--sans);letter-spacing:.1em;text-transform:uppercase;color:var(--print3);border:1px solid var(--rule);border-radius:2px;padding:0 4px;margin-left:6px}
+/* v61 (P5): the ? key list, generated from the key map */
+.keysgrid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}
+.keyrows{display:grid;gap:4px}
+.keyrow{display:grid;grid-template-columns:minmax(96px,auto) 1fr;gap:10px;align-items:baseline;font-size:13px}
+.keyrow kbd{justify-self:start;font:500 11px var(--mono);background:var(--key);color:var(--keytext);border-radius:3px;padding:2px 6px;box-shadow:inset 0 -2px 0 rgba(0,0,0,.35);white-space:nowrap}
 
 /* ===== The real machine's states (not in the mockup) ===== */
 .st.past{opacity:.45}

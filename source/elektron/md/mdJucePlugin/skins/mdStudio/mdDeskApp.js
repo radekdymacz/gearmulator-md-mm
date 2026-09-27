@@ -210,6 +210,7 @@ document.addEventListener("change", e => {
 	if (e.target.id !== "engsel") return;
 	const sel = e.target, v = sel.value; renderEngine();
 	if (v === "rom") firstRun(true);
+	else if (v === "global") { sel.value = (machineState().desk || {}).engine === "hw" ? "hw" : "emu"; openGlobal(); }
 	else if (v === "hw" || v === "emu") cmd("engine", { kind: v });
 });
 
@@ -1214,22 +1215,27 @@ function render() {
 function setPlate(v) { S.plate = v; document.documentElement.dataset.plate = v; try { localStorage.setItem("mddesk.plate", v); } catch (_) { } renderTop(); redraw(); }
 (() => { let v = null; try { v = localStorage.getItem("mddesk.plate"); } catch (_) { } if (!v) v = matchMedia("(prefers-color-scheme: dark)").matches ? "mk2" : "mk1"; S.plate = v; document.documentElement.dataset.plate = v; })();
 document.fonts && document.fonts.ready.then(() => redraw());
-document.addEventListener("keydown", e => {
-	const mod = e.metaKey || e.ctrlKey; const inField = e.target.closest?.("input,select,textarea");
-	if (!$("#dlg").hidden && e.key === "Escape" && $("#dlg").dataset.first !== "1") { $("#dlg").hidden = true; $("#dlg").dataset.first = ""; return; }
-	if (mod && !inField && (e.key === "z" || e.key === "Z")) { e.preventDefault(); cmd(e.shiftKey ? "redo" : "undo"); return; }
-	if (mod && !inField && e.key === "y") { e.preventDefault(); cmd("redo"); return; }
-	if (mod && !inField && (e.key === "c" || e.key === "v")) { e.preventDefault(); secAction(e.key === "c" ? "copy" : "paste"); return; }
-	if (S.ctl.learn && e.key === "Escape") { toggleLearn(); return; }
-	if (e.target.closest?.("input,select,textarea,[role=slider]") || e.metaKey || e.ctrlKey || e.altKey) return;
-	if ((e.key === "l" || e.key === "L")) { toggleLearn(); return; }
-	if (e.key === "r" || e.key === "R") { cmd("record"); return; }
-	const ws = ["seq", "sound", "mix", "sampler", "song", "control"][+e.key - 1]; if (ws) { S.ws = ws; render(); return; }
-	if ((S.ws === "song" || S.ws === "seq") && (e.key === "Delete" || e.key === "Backspace")) { e.preventDefault(); S.ws === "song" ? songAction("del") : secAction("clear"); return; }
-	if (S.ws === "song" && (e.key === "ArrowLeft" || e.key === "ArrowRight")) { S.songSel = Math.max(0, Math.min(S.song.length - 1, S.songSel + (e.key === "ArrowRight" ? 1 : -1))); render(); return; }
-	if (e.key === " ") { e.preventDefault(); cmd(S.playing ? "stop" : "play"); }
-	if ((e.key === "[" || e.key === "]") && S.ws === "seq" && pages16() > 1) { const n = pages16(); S.viewAll = false; S.page = (S.page + (e.key === "]" ? 1 : -1) + n) % n; render(); }
-});
+/* The editor's keys (mdDeskKeys.js: dispatched from this map, and listed by ?). */
+const dlgOpen = () => !$("#dlg").hidden && $("#dlg").dataset.first !== "1";
+Keys.bind({ keys: ["Escape"], group: "Anywhere", does: "Close the dialog", when: dlgOpen, field: true, run: () => { $("#dlg").hidden = true; $("#dlg").dataset.first = ""; } });
+Keys.bind({ keys: ["Z"], mod: "cmd", group: "Anywhere", does: "Undo", run: () => cmd("undo") });
+Keys.bind({ keys: ["Z"], mod: "cmd+shift", group: "Anywhere", does: "Redo", run: () => cmd("redo") });
+Keys.bind({ keys: ["Y"], mod: "cmd", group: "Anywhere", does: "Redo", run: () => cmd("redo") });
+Keys.bind({ keys: ["C"], mod: "cmd", group: "Anywhere", does: "Copy (track page, sound, song row)", run: () => secAction("copy") });
+Keys.bind({ keys: ["V"], mod: "cmd", group: "Anywhere", does: "Paste", run: () => secAction("paste") });
+Keys.bind({ keys: ["Escape"], group: "Anywhere", does: "Leave LEARN", when: () => S.ctl.learn, run: () => toggleLearn() });
+Keys.bind({ keys: ["Space"], group: "Transport", does: "Play / stop", run: () => cmd(S.playing ? "stop" : "play") });
+Keys.bind({ keys: ["R"], group: "Transport", does: "Live recording (RECORD + PLAY)", run: () => cmd("record") });
+["seq", "sound", "mix", "sampler", "song", "control"].forEach((ws, i) => Keys.bind({ keys: [String(i + 1)], group: "Workspaces", does: ["Sequence", "Sound", "Mix", "Sampler", "Song", "Control"][i], run: () => { S.ws = ws; render(); } }));
+Keys.bind({ keys: ["L"], group: "Workspaces", does: "LEARN: map a value to a controller knob", run: () => toggleLearn() });
+Keys.bind({ keys: ["[", "]"], group: "Sequence", does: "Previous / next page", when: () => S.ws === "seq" && pages16() > 1, run: e => { const n = pages16(); S.viewAll = false; S.page = (S.page + (e.key === "]" ? 1 : -1) + n) % n; render(); } });
+Keys.bind({ keys: ["Delete", "Backspace"], group: "Sequence", does: "Clear the selected steps (Song: delete the row)", when: () => S.ws === "song" || S.ws === "seq", run: () => S.ws === "song" ? songAction("del") : secAction("clear") });
+Keys.bind({ keys: ["ArrowLeft", "ArrowRight"], group: "Song", does: "Previous / next row", when: () => S.ws === "song", run: e => { S.songSel = Math.max(0, Math.min(S.song.length - 1, S.songSel + (e.key === "ArrowRight" ? 1 : -1))); render(); } });
+Keys.bind({ keys: ["step"], mod: "shift", group: "Sequence", does: "Click: accent" });
+Keys.bind({ keys: ["step"], mod: "alt", group: "Sequence", does: "Click: slide" });
+Keys.bind({ keys: ["lock lane"], mod: "alt", group: "Sequence", does: "Drag: erase locks" });
+Keys.bind({ keys: ["ArrowUp", "ArrowDown"], group: "Values", does: "A focused value, tempo or bar: one step (⇧: fine or ×10)" });
+Keys.bind({ keys: ["ArrowLeft", "ArrowRight"], group: "Values", does: "A focused value: one step" });
 new ResizeObserver(() => redraw()).observe(document.body);
 render();
 Bridge.ready();

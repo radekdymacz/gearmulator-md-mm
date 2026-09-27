@@ -189,6 +189,10 @@ document.addEventListener("drop", e => {
 document.addEventListener("dragend", () => { if (!LIB.drag && !$$("#libpop .dragging").length) return; LIB.drag = null; drawLib(true); });
 
 /* ----- keyboard (capture, so the panel owns its keys while it is open) ----- */
+[["Enter / Space on KIT or the pattern", "", "Open the kit library / pattern chooser"], ["Arrows", "", "Move"], ["Enter", "", "Kits: load. Patterns: queue"],
+ ["Enter", "shift", "Patterns: switch now"], ["A–H", "", "Patterns: jump to a bank"], ["F2", "", "Kits: rename (or double-click)"], ["Delete", "", "Clear the slot"],
+ ["C / V", "cmd", "Copy / paste the slot"], ["Z", "cmd", "Undo a paste, clear or rename"], ["Escape", "", "Close"]]
+	.forEach(([k, m, d]) => Keys.bind({ keys: [k], mod: m, group: "Kit library, pattern chooser", does: d }));
 document.addEventListener("keydown", e => {
 	if (!LIB.open) { if ((e.key === "Enter" || e.key === " ") && (e.target.id === "kitf" || e.target.id === "pat")) { e.preventDefault(); e.stopImmediatePropagation(); openLib(e.target.id === "kitf" ? "kit" : "pat"); } return; }
 	if (!$("#dlg").hidden) return;

@@ -1151,6 +1151,34 @@ html,body{min-width:1280px}
    gets while dragged, so a dragged fader or value box shrank to 7 x 7 px (the "small something", and the strip
    re-flowed). No native drag or selection on value controls; the bipolar fill at the centre is only the tick. */
 .pc,.fader{-webkit-user-drag:none;user-select:none;-webkit-user-select:none}
+/* v61 (P5): GLOBAL settings panel (the machine's FUNCTION + PATTERN/SONG menu), from the engine menu or G */
+.globpop{position:absolute;z-index:22;width:min(1180px,calc(100vw - 32px));display:grid;gap:10px;align-content:start;padding:14px;background:var(--plate);border:2px solid var(--print);border-radius:6px;box-shadow:0 18px 40px rgba(0,0,0,.35);overflow:auto;overscroll-behavior:contain;color:var(--body)}
+.globgrid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}
+.globgrid .card{gap:8px}
+.globgrid .wide{grid-column:span 2}
+.gslots{display:flex;gap:4px}
+.gslots button{width:30px;height:26px;padding:0;font:500 12px var(--mono);letter-spacing:0;position:relative}
+.gslots button[aria-pressed=true]{background:var(--cream);color:var(--creamtext)}
+.grow2{display:flex;align-items:center;gap:8px;min-height:28px}
+.grow2 .ilab{min-width:92px}
+.grow2 .seg button{height:24px;padding:0 9px;font:600 11px var(--sans);letter-spacing:.1em}
+.gmap{display:grid;grid-template-columns:repeat(8,minmax(0,1fr));gap:4px}
+.gmk{display:grid;gap:1px;padding:4px 5px;text-align:left;font:500 11px var(--mono);letter-spacing:0;height:40px;align-content:center}
+.gmk small{font:10px var(--mono);color:var(--keydim)}
+.gmk .stepper{display:flex;gap:2px}
+.gmk.none{opacity:.55}
+.grout{display:grid;grid-template-columns:repeat(16,minmax(0,1fr));gap:3px}
+.grout button{height:34px;padding:0;display:grid;align-content:center;font:500 10px var(--mono);letter-spacing:0}
+.grout button b{font:600 11px var(--mono)}
+.grout button.on{background:var(--cream);color:var(--creamtext)}
+.ginputs{display:grid;grid-template-columns:auto repeat(5,minmax(0,1fr));gap:3px 8px;font:12px var(--mono);align-items:center}
+.ginputs span{color:var(--print2);font:600 10px var(--sans);letter-spacing:.12em;text-transform:uppercase}
+.gnv{font:600 9px var(--sans);letter-spacing:.1em;text-transform:uppercase;color:var(--print3);border:1px solid var(--rule);border-radius:2px;padding:0 4px;margin-left:6px}
+/* v61 (P5): the ? key list, generated from the key map */
+.keysgrid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}
+.keyrows{display:grid;gap:4px}
+.keyrow{display:grid;grid-template-columns:minmax(96px,auto) 1fr;gap:10px;align-items:baseline;font-size:13px}
+.keyrow kbd{justify-self:start;font:500 11px var(--mono);background:var(--key);color:var(--keytext);border-radius:3px;padding:2px 6px;box-shadow:inset 0 -2px 0 rgba(0,0,0,.35);white-space:nowrap}
 </style>
 
 <div class="app">
@@ -1171,7 +1199,7 @@ html,body{min-width:1280px}
       <div class="lcdgroup">
         <div class="lcdpanel">
           <div class="lcdfw" id="lcdfw" aria-hidden="true"><canvas id="lcdfwc" width="128" height="64"></canvas></div>
-          <div class="f trf"><small class="engf"><select id="engsel" data-k="1" hidden><option value="emu">EMU OS 1.63</option><option value="hw">HW MIDI</option><option value="rom">LOAD ROM</option></select><button class="kselbtn lcdeng" type="button" data-for="engsel" aria-haspopup="listbox" aria-expanded="false" aria-label="Engine: emulator or hardware" title="Engine: run the emulator, or edit a real Machinedrum over MIDI"><i class="led on" id="engled"></i><span>EMU OS 1.63</span><svg viewBox="0 0 10 6" aria-hidden="true"><path d="M1 1l4 4 4-4" fill="none" stroke="currentColor" stroke-width="1.5"/></svg></button></small><span class="lcdt">
+          <div class="f trf"><small class="engf"><select id="engsel" data-k="1" hidden><option value="emu">EMU OS 1.63</option><option value="hw">HW MIDI</option><option value="global">GLOBAL…</option><option value="rom">LOAD ROM</option></select><button class="kselbtn lcdeng" type="button" data-for="engsel" aria-haspopup="listbox" aria-expanded="false" aria-label="Engine: emulator or hardware" title="Engine: run the emulator, or edit a real Machinedrum over MIDI"><i class="led on" id="engled"></i><span>EMU OS 1.63</span><svg viewBox="0 0 10 6" aria-hidden="true"><path d="M1 1l4 4 4-4" fill="none" stroke="currentColor" stroke-width="1.5"/></svg></button></small><span class="lcdt">
             <button class="lt rec" id="rec" aria-pressed="false" aria-label="Record" title="Record (R)"><i class="led" id="recled"></i>●</button>
             <button class="lt" id="play" aria-pressed="false" aria-label="Play" title="Play / stop (Space)"><i class="led" id="playled"></i><span id="playico">▶</span></button>
 </span></div>
@@ -1205,6 +1233,8 @@ html,body{min-width:1280px}
 <div class="machpop" id="machpop" role="dialog" aria-label="Choose a machine" hidden></div>
 <div class="kpop" id="kpop" role="listbox" hidden></div>
 <div class="libpop" id="libpop" role="dialog" hidden></div>
+<div class="globpop libpop" id="globpop" role="dialog" aria-label="Global settings" hidden></div>
+<div class="globpop libpop" id="keyspop" role="dialog" aria-label="Keys" hidden></div>
 <div class="dlg" id="dlg" hidden></div>
 <div class="toast" id="toast" role="status" aria-live="polite"></div>
 
@@ -1245,7 +1275,10 @@ for(let i=1;i<=4;i++){MACH["RAM-R"+i]=RAMR;MACH["RAM-P"+i]=SMPL}
 const PFX={MID:["CC1D","CC1V","CC2D","CC2V","CC3D","CC3V","CC4D","CC4V"],"CTR-8P":["P1 TRK","P1 PAR","P2 TRK","P2 PAR","P3 TRK","P3 PAR","P4 TRK","P4 PAR"],"CTR-RE":[],"CTR-GB":[],"CTR-EQ":[],"CTR-DX":[]};
 const PRT={MID:["CC5D","CC5V","PCHG","LFOS","LFOD","LFOM"],"CTR-8P":["P5 TRK","P5 PAR","P6 TRK","P6 PAR","P7 TRK","P7 PAR","P8 TRK","P8 PAR"],"CTR-RE":[],"CTR-GB":[],"CTR-EQ":[],"CTR-DX":[]};
 function famOf(m){const f=m.split("-")[0];return f==="ROM"||f==="RAM"?"SMP":f}
-function pages(m){const f=m.split("-")[0];return{s:MACH[m],e:PFX[m]||PFX[f]||FX,r:PRT[m]||PRT[f]||RT}}
+/* v61: a synthesis parameter with the name of an effects or routing one (TRX-XT DIST, TRX-MA REV, INP-GA VOL) is its
+   own parameter: it is addressed as SYN·DIST, and the other one is shown as RTG·DIST / FX·NAME (laneLabel). */
+function pages(m){const f=m.split("-")[0],e=PFX[m]||PFX[f]||FX,r=PRT[m]||PRT[f]||RT;return{s:MACH[m]&&MACH[m].map(n=>n&&(e.includes(n)||r.includes(n))?"SYN·"+n:n),e,r}}
+function laneLabel(t,p){const pg=pages(S.tracks[t].m);if(!pg.s||!pg.s.includes("SYN·"+p))return p;return(pg.r.includes(p)?"RTG·":"FX·")+p}
 const isSampler=m=>/^(ROM|RAM-P)/.test(m),isRec=m=>/^RAM-R/.test(m);
 const SIGNED=new Set(["MLEV","ILEV","MBAL","IBAL","EQG","PAN","LG","HG","PG"]);
 const DEF={STRT:0,BRR:0,RTRG:0,RTIM:0,CUE1:0,CUE2:0,HOLD:30,FLTW:127,VOL:100,PAN:64,EQF:64,EQG:64,LFOS:64,MLEV:64,MBAL:64,ILEV:0,IBAL:64,LEN:64,RATE:127,END:127,DEC:64,PTCH:64,VEL:100,NOTE:36,LEN:64};
@@ -1369,7 +1402,7 @@ function renderSeq(){
  let h=`<div class="panel ${S.mode==="CLASSIC"?"classic":""}" id="seqp">${pageCtl()}<div class="scroll" id="seqscroll"><div class="seq" id="seq">
   <div class="r" style="grid-template-columns:${cols()}">${steps().map(s=>`<div class="rul ${s%16===0&&s!==vis()[0]?"gap":""}">${s%4===0?s+1:""}</div>`).join("")}</div>`;
  S.tracks.forEach((t,i)=>{h+=`<div class="r ${i===S.sel?"sel":""} ${audible(i)?"":"off"}" data-row="${i}" style="grid-template-columns:${cols()};--c:${FAMC[t.fam]}">${steps().map(s=>`<button class="${stepCls(i,s)}" data-t="${i}" data-s="${s}" aria-label="Track ${i+1} step ${s+1}" aria-pressed="${t.trigs[s]}"></button>`).join("")}</div>`});
- h+=`</div></div><div class="lanewrap"><div class="lanetop"><span class="cap">Lock lane · ${S.sel+1} ${S.tracks[S.sel].name} · <b id="lanename">${S.lane}</b> <span class="lanescale">${bipLane()?"L 64 · centre · R 63":"0–127"}</span></span>${S.mode==="CLASSIC"?`<span class="warnline" title="Locks stay in the pattern but do nothing until you switch to EXTENDED.">CLASSIC: locks muted</span>`:""}<span class="lanehelp" title="Draw across the bars to lock this parameter per step. Alt-drag erases. Hatched steps have no trig, so they cannot hold a lock. Dashed line = kit value.">Draw to lock · alt-drag erases</span>
+ h+=`</div></div><div class="lanewrap"><div class="lanetop"><span class="cap">Lock lane · ${S.sel+1} ${S.tracks[S.sel].name} · <b id="lanename">${laneLabel(S.sel,S.lane)}</b> <span class="lanescale">${bipLane()?"L 64 · centre · R 63":"0–127"}</span></span>${S.mode==="CLASSIC"?`<span class="warnline" title="Locks stay in the pattern but do nothing until you switch to EXTENDED.">CLASSIC: locks muted</span>`:""}<span class="lanehelp" title="Draw across the bars to lock this parameter per step. Alt-drag erases. Hatched steps have no trig, so they cannot hold a lock. Dashed line = kit value.">Draw to lock · alt-drag erases</span>
   <div class="legend"><span><i class="lg on"></i>Trig</span><span><i class="lg on acc"></i>Accent: shift-click</span><span><i class="lg on sl"></i>Slide: alt-click</span><span><i class="lg on lk"></i>Has locks</span></div></div>
 </div>
   <div class="scroll" id="lanescroll"><div class="lane" id="lane" style="grid-template-columns:${cols()}"></div></div></div>`;
@@ -1386,7 +1419,7 @@ function renderLane(){
  const cl=$("#clearLane");if(cl){cl.title="Clear "+S.lane+" locks";cl.setAttribute("aria-label","Clear "+S.lane+" locks")}
  const pg=pages(tr.m);$("#chips").innerHTML=[["Synth",pg.s],["Effects",pg.e],["Routing",pg.r]].map(([lab,ps])=>{const a=[...ps];while(a.length<8)a.push(null);
   return`<span class="plab">${lab}</span>`+a.map(p=>{if(!p)return`<span class="pk empty"></span>`;const n=S.locks.get(lk(t,p))?.size||0;
-   return`<button class="pk ${n?"has":""}" data-lane="${p}" aria-pressed="${p===S.lane}" title="${n?n+" locked step"+(n>1?"s":""):"No locks yet"}">${p}${n?`<i>${n}</i>`:""}</button>`}).join("")}).join("");
+   return`<button class="pk ${n?"has":""}" data-lane="${p}" aria-pressed="${p===S.lane}" title="${n?n+" locked step"+(n>1?"s":""):"No locks yet"}">${laneLabel(t,p)}${n?`<i>${n}</i>`:""}</button>`}).join("")}).join("");
  $("#lane").innerHTML=steps().map(s=>{const on=tr.trigs[s],v=m?.get(s);
   return`<div class="lb ${on?"":"none"} ${s%16===0&&s!==vis()[0]?"gap":""} ${S.playing&&s===S.step?"ph":""}" data-s="${s}">${on?`<div class="base" style="--b:${3+base/127*168}px"></div>${bipLane()?`<div class="mid"></div>`:""}${v!=null?barHTML(v):""}`:""}</div>`}).join("");
 }
@@ -2006,6 +2039,7 @@ function restartClock(){clearInterval(clock);clock=setInterval(tick,stepMs())}
 function setPos(){const p=$("#pos");if(p)p.textContent=S.playing&&S.step>=0?String(Math.floor(S.step/16)+1).padStart(2,"0")+"."+String(S.step%16+1).padStart(2,"0"):"--.--"}
 document.addEventListener("change",e=>{if(e.target.id!=="engsel")return;const sel=e.target,btn=document.querySelector(".lcdeng");
  if(sel.value==="rom"){sel.value=S.engine||"emu";btn.querySelector("span").textContent=sel.selectedOptions[0].text;firstRun();return}
+ if(sel.value==="global"){sel.value=S.engine||"emu";btn.querySelector("span").textContent=sel.selectedOptions[0].text;openGlobal();return}
  S.engine=sel.value;startEngine(S.engine)});
 /* Engine status: the LCD shows what the engine is doing; editing waits until it is ready */
 const ENG={norom:["NO ROM","off"],loading:["LOADING ROM","blink"],boot:["BOOTING OS","blink"],ready:["EMU OS 1.63","on"],hwwait:["HW CONNECT","blink"],hwready:["HW MIDI","on"],hwnone:["HW NO MIDI","off"],error:["ROM ERROR","off"]};
@@ -2243,4 +2277,128 @@ function drawFwLcd(bits){const c=$("#lcdfwc"),x=c.getContext("2d"),cs=getCompute
 function fwBootDemo(on){const p=$(".lcdpanel");clearInterval(fwBootDemo.t);if(!on){p.classList.remove("fwboot");p.classList.add("fwfade");setTimeout(()=>p.classList.remove("fwfade"),700);return}
  p.classList.add("fwboot");let f=0;fwBootDemo.t=setInterval(()=>{f++;const w=Math.min(128,f*6);drawFwLcd((i,y)=>(y>18&&y<30&&i<w&&(i*7+y*3+f)%11<6)||(y>=44&&y<=46&&i>=48&&i<48+Math.min(32,f)))},100)}
 const setEng0=setEng;setEng=function(st){setEng0(st);const was=setEng.last;setEng.last=st;if(st==="boot")fwBootDemo(true);else if(was==="boot")fwBootDemo(false)};
+
+/* v61 (P5): GLOBAL settings (manual pp.57-62, 80-81): the machine's FUNCTION + PATTERN/SONG menu as one panel,
+   opened from the engine menu (GLOBAL…) or with G. glob() gives the view, globSend(field, value) changes one
+   setting; both are the host's (example state in the mockup, the desk's documents in the plug-in). What was
+   measured on the firmware is plain; what could not be is marked "not verified". */
+var GP={open:false};
+const NOTE=n=>["C","C#","D","D#","E","F","F#","G","G#","A","A#","B"][n%12]+(Math.floor(n/12)-1);
+const GTIP={
+ base:"The first of four MIDI channels the machine listens and sends on (channel n to n+3)",
+ tempoIn:"INTERNAL: its own BPM. EXTERNAL: follows MIDI clock (MIDI Start waits for the clock)",
+ ctrlIn:"React to MIDI Start, Stop and Continue",tempoOut:"Send MIDI clock",ctrlOut:"Send MIDI Start, Stop and Continue",
+ pcIn:"Program change selects a pattern",pcOut:"Selecting a pattern sends a program change",
+ pcCh:"BASE: in on the four base channels, out on the first",
+ trig:"How a note mapped to a pattern starts it. GATE: plays while the key is held. START: at once. QUE: at the end of the playing pattern",
+ local:"OFF: the TRIG keys and the sequencer do not play the internal sounds. Stored in the global; its effect could not be verified in the emulator",
+ map:"The note that plays each track. A key maps one function: choosing a used key frees it elsewhere",
+ inputs:"The external inputs as trig pads. Shown as stored; they need pads on the inputs, so they are not verified here" };
+function drawGlobal(){const pop=$("#globpop");if(!GP.open){pop.hidden=true;return}const G=glob();if(!G){pop.innerHTML=`<div class="libhead"><span class="cap">Global</span><span class="note">Reading the global settings from the machine…</span><button class="libx" data-ga="close">Esc</button></div>`;pop.hidden=false;placeGlobal();return}
+ const tog=(f,on,tip,a="ON",b="OFF")=>`<span class="seg" title="${tip}"><button data-ga="${f}" data-v="1" aria-pressed="${on}">${a}</button><button data-ga="${f}" data-v="0" aria-pressed="${!on}">${b}</button></span>`;
+ const step=(f,label,tip)=>`<span class="stepper" title="${tip}"><button data-ga="${f}" data-d="-1" aria-label="Less">−</button><b class="mono">${label}</b><button data-ga="${f}" data-d="1" aria-label="More">+</button></span>`;
+ const trackKey=t=>{const n=G.keymap.indexOf(t);return`<div class="gmk key${n<0?" none":""}" title="${GTIP.map}"><small>TRACK ${t+1}</small><span class="stepper"><button data-ga="map" data-t="${t}" data-d="-1" aria-label="Lower note">‹</button><b>${n<0?"--":NOTE(n)}</b><button data-ga="map" data-t="${t}" data-d="1" aria-label="Higher note">›</button></span></div>`};
+ const pats=G.keymap.map((v,n)=>v!=null&&v>=16&&v<32?`${NOTE(n)}→P${v-15}`:null).filter(Boolean);
+ const outs=["A","B","C","D","E","F","MAIN"];
+ pop.innerHTML=`<div class="libhead"><span class="cap">Global</span><span class="lcdchip">GLOBAL ${G.slot+1}</span><span class="gslots" title="8 global setups; the lit one is active (SysEx 0x56)">${Array.from({length:8},(_,k)=>`<button data-ga="slot" data-v="${k}" aria-pressed="${k===G.slot}">${k+1}</button>`).join("")}</span><span class="note">FUNCTION + PATTERN/SONG on the machine. A change is stored and made active at once.</span><button class="libx" data-ga="close" title="Close (Esc)">Esc</button></div>
+ <div class="globgrid">
+  <section class="card"><header><h3>Control</h3><span>MIDI</span></header>
+   <div class="grow2"><span class="ilab">Base channel</span>${step("base",(G.baseChannel+1)+"–"+(G.baseChannel+4),GTIP.base)}</div>
+   <div class="grow2"><span class="ilab">Prg change in</span>${tog("pcIn",G.pcIn,GTIP.pcIn)}</div>
+   <div class="grow2"><span class="ilab">Prg change out</span>${tog("pcOut",G.pcOut,GTIP.pcOut)}</div>
+   <div class="grow2"><span class="ilab">Prg channel</span>${step("pcCh",G.pcChannel?G.pcChannel:"BASE",GTIP.pcCh)}</div>
+   <div class="grow2"><span class="ilab">Local ctrl</span>${tog("local",G.local,GTIP.local)}<span class="gnv" title="${GTIP.local}">not verified</span></div></section>
+  <section class="card"><header><h3>Sync</h3><span>clock and transport</span></header>
+   <div class="grow2"><span class="ilab">Tempo in</span>${tog("tempoIn",G.tempoIn==="external",GTIP.tempoIn,"EXT","INT")}</div>
+   <div class="grow2"><span class="ilab">Ctrl in</span>${tog("ctrlIn",G.ctrlIn,GTIP.ctrlIn)}</div>
+   <div class="grow2"><span class="ilab">Tempo out</span>${tog("tempoOut",G.tempoOut,GTIP.tempoOut)}</div>
+   <div class="grow2"><span class="ilab">Ctrl out</span>${tog("ctrlOut",G.ctrlOut,GTIP.ctrlOut)}</div></section>
+  <section class="card"><header><h3>Trig in A / B</h3><span>external pads<span class="gnv" title="${GTIP.inputs}">not verified</span></span></header>
+   <div class="ginputs" title="${GTIP.inputs}"><span></span><span>Gate</span><span>Sens</span><span>Vmin</span><span>Vmax</span><span>Dest</span>
+    ${["A","B"].map((x,i)=>`<span>${x}</span>`+[0,2,4,6,8].map(k=>`<b>${G.inputs[k+i]}</b>`).join("")).join("")}</div></section>
+  <section class="card wide"><header><h3>Map editor</h3><span>MIDI notes → tracks and patterns</span></header>
+   <div class="grow2"><span class="ilab">Pattern trig</span><span class="seg" title="${GTIP.trig}">${["gate","start","que"].map((m,i)=>`<button data-ga="trig" data-v="${i}" aria-pressed="${G.trigMode===m}">${m.toUpperCase()}</button>`).join("")}</span><span class="note">${pats.length?pats.length+" notes play patterns: "+pats.slice(0,6).join(" ")+(pats.length>6?" …":""):"No notes play patterns."}</span></div>
+   <div class="gmap">${Array.from({length:16},(_,t)=>trackKey(t)).join("")}</div></section>
+  <section class="card"><header><h3>Routing</h3><span>track outputs · A–F skip the master effects</span></header>
+   <div class="grout">${G.routing.map((o,t)=>`<button class="${o!=="MAIN"?"on":""}" data-ga="route" data-t="${t}" title="Track ${t+1}: ${o==="MAIN"?"main output, through the master effects":"output "+o+", skips the master effects"}. Click for the next output."><small>${t+1}</small><b>${o}</b></button>`).join("")}</div></section>
+ </div>
+ <div class="libfoot"><span>G or the engine menu opens it · Esc closes · every change is stored on the machine and made active</span><span class="fw" title="The machine keeps 8 global setups">GLOBAL ${G.slot+1} of 8</span></div>`;
+ pop.hidden=false;placeGlobal()}
+function placeGlobal(){const pop=$("#globpop"),r=$(".lcdpanel").getBoundingClientRect(),top=Math.max(16,r.bottom+8);pop.style.top=(top+scrollY)+"px";pop.style.maxHeight=Math.max(240,innerHeight-top-12)+"px";pop.style.left=Math.max(16,(document.documentElement.clientWidth-pop.offsetWidth)/2+scrollX)+"px"}
+function openGlobal(){if(typeof closeLib==="function")closeLib(false);GP.open=true;drawGlobal()}
+function closeGlobal(){GP.open=false;drawGlobal()}
+function globalClick(a){const G=glob();if(!G)return;const f=a.dataset.ga,v=a.dataset.v!=null?+a.dataset.v:null,d=a.dataset.d!=null?+a.dataset.d:0;
+ if(f==="close"){closeGlobal();return}
+ if(f==="slot"){globSend("slot",v);return}
+ if(f==="base"){globSend("baseChannel",Math.max(0,Math.min(12,G.baseChannel+d)));return}
+ if(f==="pcCh"){globSend("programChangeChannel",Math.max(0,Math.min(16,(G.pcChannel||0)+d)));return}
+ if(f==="trig"){globSend("trigMode",v);return}
+ if(f==="route"){const outs=["MAIN","A","B","C","D","E","F"],t=+a.dataset.t;globSend("route",{t,out:outs[(outs.indexOf(G.routing[t])+1)%outs.length]});return}
+ if(f==="map"){const t=+a.dataset.t;let n=G.keymap.indexOf(t);n=n<0?(d>0?0:127):n+d;n=Math.max(0,Math.min(127,n));globSend("keymap",{note:n,target:t});return}
+ const map={pcIn:"programChangeIn",pcOut:"programChangeOut",local:"localControl",tempoIn:"tempoIn",ctrlIn:"ctrlIn",tempoOut:"tempoOut",ctrlOut:"ctrlOut"};
+ if(map[f])globSend(map[f],v===1)}
+document.addEventListener("click",e=>{if(!GP.open)return;const pop=$("#globpop");if(pop.contains(e.target)){const a=e.target.closest("[data-ga]");if(a)globalClick(a);return}if(!e.target.closest?.("#dlg,.kpop,#kpop,.lcdeng"))closeGlobal()},true);
+document.addEventListener("keydown",e=>{if(e.target.closest?.("input,select,textarea")||e.metaKey||e.ctrlKey||e.altKey)return;
+ if(GP.open&&e.key==="Escape"){e.preventDefault();e.stopImmediatePropagation();closeGlobal();return}
+ if((e.key==="g"||e.key==="G")&&$("#dlg").hidden){e.preventDefault();e.stopImmediatePropagation();GP.open?closeGlobal():openGlobal()}},true);
+addEventListener("resize",()=>{if(GP.open)placeGlobal()});
+
+/* The mockup's example global setup (in the plug-in: md-desk/global from the machine) */
+S.glob={slot:0,baseChannel:0,tempoIn:"internal",ctrlIn:true,tempoOut:false,ctrlOut:false,pcIn:false,pcOut:false,pcChannel:null,trigMode:"start",local:true,
+ keymap:(()=>{const k=Array(128).fill(null);[36,38,40,41,43,45,47,48,50,52,53,55,57,59,60,62].forEach((n,t)=>k[n]=t);[64,65,67,69,71,72,74,76,77,79,81,83,84,86,88,89].forEach((n,i)=>k[n]=16+i);return k})(),
+ routing:Array(16).fill("MAIN"),inputs:[16,16,1,1,0,0,127,127,0,0]};
+function glob(){const G=S.glob;G.routing=S.tracks.map(t=>t.out||"MAIN");return G}
+function globSend(f,v){const G=S.glob;
+ if(f==="slot")G.slot=v;else if(f==="baseChannel")G.baseChannel=v;else if(f==="programChangeChannel")G.pcChannel=v||null;
+ else if(f==="trigMode")G.trigMode=["gate","start","que"][v];else if(f==="route")S.tracks[v.t].out=v.out;
+ else if(f==="keymap"){G.keymap=G.keymap.map(x=>x===v.target?null:x);G.keymap[v.note]=v.target}
+ else G[{programChangeIn:"pcIn",programChangeOut:"pcOut",localControl:"local"}[f]||f]=f==="tempoIn"?(v?"external":"internal"):v;
+ tx();drawGlobal();if(f==="route"&&S.ws==="mix")render()}
+
+/* The page's key map (P5): every shortcut is an entry here. The ? overlay is generated from it, so it
+   lists what the keys really do. An entry with run() is dispatched by the one handler below (in order,
+   the first match wins); an entry without run() is handled next to its own code (a panel, a focused
+   control) and only described here. Nothing here knows the DOM of the workspaces. */
+const Keys = (() => {
+	const list = [];
+	const norm = e => e.key === " " ? "Space" : e.key.length === 1 ? e.key.toUpperCase() : e.key;
+	/* {keys: ["Z"], mod: "cmd"|"alt"|"shift"|"cmd+shift"|"", group, does, when?: () => bool, run?: e => void, field?: true} */
+	function bind(entry) { list.push(Object.assign({ mod: "", when: null, field: false }, entry)); }
+	function modOf(e) { return [e.metaKey || e.ctrlKey ? "cmd" : "", e.altKey ? "alt" : "", e.shiftKey ? "shift" : ""].filter(Boolean).join("+"); }
+	document.addEventListener("keydown", e => {
+		const inField = e.target.closest?.("input,select,textarea,[role=slider]"), k = norm(e), m = modOf(e);
+		for (const b of list) {
+			if (!b.run || !b.keys.includes(k)) continue;
+			const want = b.mod || "", ok = want === m || (want === "" && m === "shift" && k.length === 1 && !/[A-Z]/.test(k));
+			if (!ok || (inField && !b.field) || (b.when && !b.when())) continue;
+			e.preventDefault(); b.run(e); return;
+		}
+	});
+	const label = b => [...(b.mod ? b.mod.split("+").map(x => ({ cmd: "⌘", alt: "⌥", shift: "⇧" }[x])) : []), b.keys.map(k => ({ Space: "Space", ArrowLeft: "←", ArrowRight: "→", ArrowUp: "↑", ArrowDown: "↓", Escape: "Esc", Delete: "Delete", Backspace: "⌫", Enter: "Enter" }[k] || k)).join(" / ")].join("");
+	return { bind, list: () => list.slice(), label };
+})();
+
+/* ===== The ? overlay ===== */
+function drawKeys() {
+	const pop = $("#keyspop"); if (!pop) return;
+	const groups = [];
+	for (const b of Keys.list()) { let g = groups.find(x => x.name === b.group); if (!g) groups.push(g = { name: b.group, rows: [] }); g.rows.push(b); }
+	pop.innerHTML = `<div class="libhead"><span class="cap">Keys</span><span class="note">Every shortcut of the editor, from its key map. ? or Esc closes.</span><button class="libx" data-keysx="1">Esc</button></div>
+	<div class="keysgrid">${groups.map(g => `<section class="card"><header><h3>${g.name}</h3></header><div class="keyrows">${g.rows.map(b => `<div class="keyrow"><kbd>${Keys.label(b)}</kbd><span>${b.does}</span></div>`).join("")}</div></section>`).join("")}</div>`;
+	pop.hidden = false;
+	const r = $(".lcdpanel").getBoundingClientRect(), top = Math.max(16, r.bottom + 8);
+	pop.style.top = (top + scrollY) + "px"; pop.style.maxHeight = Math.max(240, innerHeight - top - 12) + "px"; pop.style.left = Math.max(16, (document.documentElement.clientWidth - pop.offsetWidth) / 2 + scrollX) + "px";
+}
+function toggleKeys(on) { const pop = $("#keyspop"); if (!pop) return; if (on ?? pop.hidden) drawKeys(); else pop.hidden = true; }
+Keys.bind({ keys: ["?"], group: "Help", does: "This list of keys", run: () => toggleKeys() });
+Keys.bind({ keys: ["Escape"], group: "Help", does: "Close the list of keys", when: () => !$("#keyspop").hidden, run: () => toggleKeys(false) });
+document.addEventListener("click", e => { const pop = $("#keyspop"); if (!pop || pop.hidden) return; if (e.target.closest("[data-keysx]") || !pop.contains(e.target)) pop.hidden = true; }, true);
+
+/* The mockup's keys, described (its handlers are the mockup's own; in the plug-in the map dispatches). */
+[["Escape","","Anywhere","Close the dialog, panel or LEARN"],["Z","cmd","Anywhere","Undo"],["Z","cmd+shift","Anywhere","Redo"],["C","cmd","Anywhere","Copy"],["V","cmd","Anywhere","Paste"],
+ ["G","","Anywhere","GLOBAL settings (also in the engine menu)"],["Space","","Transport","Play / stop"],["R","","Transport","Live recording"],["T","","Transport","Tap tempo"],
+ ["1–6","","Workspaces","Sequence, Sound, Mix, Sampler, Song, Control"],["L","","Workspaces","LEARN"],["[ / ]","","Sequence","Previous / next page"],
+ ["Delete","","Sequence","Clear (Song: delete the row)"],["step","shift","Sequence","Click: accent"],["step","alt","Sequence","Click: slide"],["lock lane","alt","Sequence","Drag: erase locks"],
+ ["1–8 / Q–I","alt","Mutes","Mute track 1–16"],["1–8 / Q–I","alt+shift","Mutes","Prepare a mute"],["← / →","","Song","Previous / next row"],["↑ / ↓","","Values","A focused value: one step"]]
+ .forEach(([k,m,g,d])=>Keys.bind({keys:[k],mod:m,group:g,does:d}));
 </script>
