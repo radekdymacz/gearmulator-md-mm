@@ -81,6 +81,10 @@ juce_add_binary_data(mmJucePlugin_BinaryData SOURCES
 	${COMMON_ASSETS} "tus_settings_gui_Monomachine.rml"
 	"tus_settings_dspaudio_Monomachine.rml" ${MM_SKIN_ASSETS})
 
+# App icons (doc/modern-ux/icons, built with build-icons.sh). MM's are here too;
+# the MM product wires them on its branch.
+set(GEARMULATOR_ICON_BIG_mdJucePlugin "${CMAKE_CURRENT_SOURCE_DIR}/icons/md-1024.png")
+set(GEARMULATOR_ICON_SMALL_mdJucePlugin "${CMAKE_CURRENT_SOURCE_DIR}/icons/md-32.png")
 createJucePlugin(mdJucePlugin "Gearmulator MD" TRUE "Tmdr" mdJucePlugin_BinaryData mdLib)
 createJucePlugin(mmJucePlugin "Gearmulator MM" TRUE "Tmno" mmJucePlugin_BinaryData mdLib)
 target_link_libraries(mdJucePlugin PRIVATE elektronData mdDataLink mdDesk)
@@ -108,6 +112,16 @@ if(APPLE)
 		mdJucePlugin_AU mmJucePlugin_AU
 		mdJucePlugin_Standalone mmJucePlugin_Standalone)
 		if(TARGET ${plugin_target})
+			# The MD icon on the VST3 and AU bundles too: JUCE copies Icon.icns into every
+			# bundle but names it in the Info.plist of the standalone only.
+			if(plugin_target MATCHES "^mdJucePlugin_(VST3|AU)$")
+				add_custom_command(TARGET ${plugin_target} POST_BUILD
+					COMMAND /bin/sh -c "/usr/libexec/PlistBuddy -c 'Delete :CFBundleIconFile' \"$1\" 2>/dev/null; /usr/libexec/PlistBuddy -c 'Add :CFBundleIconFile string Icon.icns' \"$1\"" sh
+						"$<TARGET_BUNDLE_DIR:${plugin_target}>/Contents/Info.plist"
+					COMMENT "MD icon on ${plugin_target}"
+					VERBATIM
+				)
+			endif()
 			add_custom_command(TARGET ${plugin_target} POST_BUILD
 				COMMAND /usr/bin/codesign --force --deep --sign -
 					"$<TARGET_BUNDLE_DIR:${plugin_target}>"
