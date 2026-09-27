@@ -18,11 +18,19 @@
 //   recvflag, recvcount, workkit, boot   RAM searches
 //   queue      a queued pattern switch against status and the playhead
 //   screens    the firmware's screen word across screens
+//   lab <script>      MM-P1 layout lab: panel/MIDI actions with dump diffs (see labMode)
+//   program <dir>     MM-P1 programmed corpus: random valid dumps through SYSEX RECV, read back
 // Exits 77 (skip) without arguments.
 
 #include "mdFirmwareSession.h"
 #include "sysexPanelDriver.h"
 
+#include "elektronData/mmGlobal.h"
+#include "elektronData/mmKit.h"
+#include "elektronData/mmMachines.h"
+#include "elektronData/mmPattern.h"
+#include "elektronData/mmSong.h"
+#include "elektronData/mmValidate.h"
 #include "elektronData/sysex7bit.h"
 
 #include "mdLib/mdautomation.h"
@@ -33,6 +41,7 @@
 #include <map>
 #include <optional>
 #include <set>
+#include <sstream>
 
 using namespace mdFirmwareSession;
 
@@ -874,6 +883,424 @@ namespace
 		std::printf("EXITs from RECV to normal: %d\n", n);
 	}
 
+	// ---- lab: a line script of panel/MIDI actions with dump diffs -------------
+	//   key <Name> [hold gap]   chord <Name>    hold <Name>    release <Name>
+	//   knob <0-7> <delta>      note <n> [vel] [ch]   noteon <n> [vel] [ch]   noteoff <n> [ch]
+	//   cc <ch> <cc> <v>        sx <hex..>       wait <ms>      lcd [title]
+	//   empty <slot>            (pattern <slot> := factory empty 75, then LOAD PATTERN)
+	//   psnap <label>           (diff of the current pattern slot vs the last psnap)
+	//   ksnap <label>           (SAVE KIT 127 and diff vs the last ksnap)
+	//   gsnap <slot> <label>    ssnap <slot> <label>   save <file>  (last pattern snap)
+	//   # comment
+	std::optional<md::PanelControl> controlByName(const std::string& _n)
+	{
+		for(int i = 0; i <= static_cast<int>(md::PanelControl::ClassicExtended); ++i)
+			if(_n == md::panelControlName(static_cast<md::PanelControl>(i)))
+				return static_cast<md::PanelControl>(i);
+		return std::nullopt;
+	}
+
+	void labMode(const Bytes& _rom, const std::string& _script)
+	{
+		auto m = boot(_rom);
+		std::ifstream in(_script);
+		require(in.good(), "cannot read script " + _script);
+		md::PanelRowState rows;
+		int slot = status(*m, 0x04);
+		Bytes lastP = rawPayload(patternDump(*m, static_cast<uint8_t>(slot)));
+		Bytes lastK, lastG, lastS;
+		std::string line;
+		while(std::getline(in, line))
+		{
+			std::istringstream ls(line);
+			std::string op;
+			if(!(ls >> op) || op[0] == '#')
+				continue;
+			std::printf("> %s\n", line.c_str());
+			if(op == "key" || op == "chord" || op == "hold" || op == "release")
+			{
+				std::string n;
+				double hold = 30, gap = 60;
+				ls >> n >> hold >> gap;
+				const auto c = controlByName(n);
+				require(c.has_value(), "unknown control " + n);
+				const auto pk = md::panelPacket(g_mm, *c);
+				require(pk.has_value(), "no MM packet for " + n);
+				if(op == "key") key(*m, *c, hold, gap);
+				else if(op == "chord") chord(*m, *c, hold, gap);
+				else if(op == "hold") { const auto s2 = rows.press(*pk); m->hardware().trySendPanelEvent(s2.row, s2.mask); m->run(hold); }
+				else { const auto s2 = rows.release(*pk); m->hardware().trySendPanelEvent(s2.row, s2.mask); m->run(hold); }
+			}
+			else if(op == "knob")
+			{
+				int e = 0, d = 0;
+				ls >> e >> d;
+				const auto cmd = md::panelEncoderCommand(g_mm, static_cast<md::PanelEncoder>(e));
+				require(cmd.has_value(), "no encoder");
+				for(int i = 0; i < std::abs(d); ++i)
+				{
+					m->hardware().trySendPanelEvent(*cmd, d > 0 ? 0x01 : 0xff);
+					m->run(8);
+				}
+				m->run(50);
+			}
+			else if(op == "note" || op == "noteon" || op == "noteoff")
+			{
+				int n = 60, v = 100, ch = 8;
+				ls >> n;
+				if(op != "noteoff") ls >> v;
+				ls >> ch;
+				if(op != "noteoff")
+					m->send({static_cast<uint8_t>(0x90 | ch), static_cast<uint8_t>(n), static_cast<uint8_t>(v)});
+				if(op == "note")
+					m->run(60);
+				if(op != "noteon")
+					m->send({static_cast<uint8_t>(0x80 | ch), static_cast<uint8_t>(n), 0});
+				m->run(60);
+			}
+			else if(op == "cc")
+			{
+				int ch = 0, c = 0, v = 0;
+				ls >> ch >> c >> v;
+				m->send({static_cast<uint8_t>(0xb0 | ch), static_cast<uint8_t>(c), static_cast<uint8_t>(v)});
+				m->run(30);
+			}
+			else if(op == "sx")
+			{
+				Bytes b;
+				std::string h;
+				while(ls >> h) b.push_back(static_cast<uint8_t>(std::stoul(h, nullptr, 16)));
+				m->send(b);
+				m->run(100);
+			}
+			else if(op == "wait")
+			{
+				double t = 0;
+				ls >> t;
+				m->run(t);
+			}
+			else if(op == "lcd")
+			{
+				std::string t;
+				std::getline(ls, t);
+				printLcd(*m, t.c_str());
+			}
+			else if(op == "empty")
+			{
+				int s2 = 0;
+				ls >> s2;
+				recvMacro(*m, 10, 10);
+				m->send(retarget(patternDump(*m, 75), static_cast<uint8_t>(s2)));
+				m->run(50);
+				for(int i = 0; i < 6; ++i) key(*m, md::PanelControl::Exit, 10, 10);
+				m->send(mmCommand(0x57, {static_cast<uint8_t>(s2)}));
+				m->run(200);
+				slot = s2;
+				lastP = rawPayload(patternDump(*m, static_cast<uint8_t>(slot)));
+			}
+			else if(op == "psnap")
+			{
+				std::string label;
+				std::getline(ls, label);
+				slot = status(*m, 0x04);
+				const auto now = rawPayload(patternDump(*m, static_cast<uint8_t>(slot)));
+				std::printf("  [P%d%s] %s\n", slot, label.c_str(), diffText(lastP, now, 64).c_str());
+				lastP = now;
+			}
+			else if(op == "ksnap")
+			{
+				std::string label;
+				std::getline(ls, label);
+				const auto now = savedKit(*m, 127);
+				if(!lastK.empty())
+					std::printf("  [K%s] %s\n", label.c_str(), diffText(lastK, now, 64).c_str());
+				lastK = now;
+			}
+			else if(op == "gsnap" || op == "ssnap")
+			{
+				int s2 = 0;
+				std::string label;
+				ls >> s2;
+				std::getline(ls, label);
+				auto& last = op == "gsnap" ? lastG : lastS;
+				const auto now = rawPayload(dump(*m, op == "gsnap" ? 0x50 : 0x69, static_cast<uint8_t>(s2)));
+				if(!last.empty())
+					std::printf("  [%s%d%s] %s\n", op == "gsnap" ? "G" : "S", s2, label.c_str(), diffText(last, now, 64).c_str());
+				last = now;
+			}
+			else if(op == "save")
+			{
+				std::string f;
+				ls >> f;
+				save(f, encodeRle(patternDump(*m, static_cast<uint8_t>(slot)), lastP));
+			}
+			else
+				require(false, "unknown lab op " + op);
+		}
+	}
+
+	// ---- programmed corpus (MM-P1) --------------------------------------------
+	namespace ed = elektronData;
+
+	struct Rng
+	{
+		uint32_t s = 12345;
+		uint32_t next() { s = s * 1664525u + 1013904223u; return s >> 8; }
+		int in(const int _lo, const int _hi) { return _lo + static_cast<int>(next() % static_cast<uint32_t>(_hi - _lo + 1)); }
+		bool chance(const int _pct) { return in(0, 99) < _pct; }
+	};
+
+	uint64_t randomMask(Rng& _r, const int _pct)
+	{
+		uint64_t m = 0;
+		for(int s = 0; s < 64; ++s)
+			if(_r.chance(_pct)) m |= uint64_t{1} << s;
+		return m;
+	}
+
+	ed::MmPattern randomPattern(Rng& _r, ed::MmPattern _p, const int _variant)
+	{
+		_p.length = static_cast<uint8_t>(_variant % 4 == 0 ? 64 : _r.in(2, 64));
+		_p.multiplier = static_cast<uint8_t>(_r.in(0, 3));
+		_p.kit = static_cast<uint8_t>(_r.in(0, 127));
+		_p.swingAmount = static_cast<uint8_t>(_r.in(0, 30));
+		_p.patternTranspose = static_cast<int8_t>(_r.in(-24, 24));
+		for(size_t t = 0; t < 6; ++t)
+		{
+			_p.pitch[t] = randomMask(_r, 30);
+			_p.amp[t] = _p.pitch[t] & randomMask(_r, 90);
+			_p.filter[t] = _p.pitch[t] & randomMask(_r, 90);
+			_p.lfo[t] = _p.pitch[t] & randomMask(_r, 90);
+			_p.noteOff[t] = ~_p.pitch[t] & randomMask(_r, 5);
+			_p.slide[t] = randomMask(_r, 10);
+			_p.swing[t] = randomMask(_r, 50);
+			_p.midiTrig[t] = randomMask(_r, 20);
+			_p.midiNote[t] = _p.midiTrig[t];
+			_p.midiNoteOff[t] = ~_p.midiTrig[t] & randomMask(_r, 5);
+			_p.midiSlide[t] = randomMask(_r, 10);
+			_p.midiSwing[t] = randomMask(_r, 50);
+			_p.chord[t] = 0;
+			for(size_t s = 0; s < 64; ++s)
+				_p.notes[t][s] = ed::mmStepSet(_p.pitch[t], s) && _r.chance(90) ? static_cast<uint8_t>(_r.in(24, 100)) : ed::MmPattern::g_noNote;
+			_p.transpose.track[t] = static_cast<int8_t>(_r.in(-24, 24));
+			_p.transpose.scale[t] = static_cast<uint8_t>(_r.in(0, 3));
+			_p.transpose.key[t] = static_cast<uint8_t>(_r.in(0, 11));
+			_p.midiTranspose.track[t] = static_cast<int8_t>(_r.in(-24, 24));
+			_p.midiTranspose.scale[t] = static_cast<uint8_t>(_r.in(0, 3));
+			_p.midiTranspose.key[t] = static_cast<uint8_t>(_r.in(0, 11));
+			for(auto* a : {&_p.arp, &_p.midiArp})
+			{
+				a->playOjmp[t] = static_cast<uint8_t>(_r.in(0, 4) | (_r.in(0, 3) << 4));
+				a->mode[t] = static_cast<uint8_t>(_r.in(0, 3));
+				a->range[t] = static_cast<uint8_t>(_r.in(0, 3));
+				a->speed[t] = static_cast<uint8_t>(_r.in(0, 23));
+				a->length[t] = static_cast<uint8_t>(_r.in(1, 16));
+				for(auto& st : a->steps[t])
+					st = _r.chance(20) ? 0xff : static_cast<uint8_t>(0x40 + _r.in(-24, 24));
+			}
+			_p.arp.trigs[t] = static_cast<uint8_t>(_r.in(0, 7));
+		}
+		// Locks: a sorted random subset, up to the full pool.
+		for(auto& lm : _p.lockMasks) lm.fill(0);
+		const int want = _variant % 4 == 1 ? 62 : _r.in(0, 40);
+		int have = 0;
+		while(have < want)
+		{
+			const auto t = _r.in(0, 5), pg = _r.in(0, 7), i = _r.in(0, 7);
+			if(_p.lockMasks[t][pg] & (1u << i)) continue;
+			_p.lockMasks[t][pg] |= static_cast<uint8_t>(1u << i);
+			++have;
+		}
+		_p.lockRowCount = static_cast<uint8_t>(have);
+		const auto params = ed::mmLockParams(_p);
+		for(size_t r = 0; r < ed::MmPattern::g_lockRows; ++r)
+			for(size_t s = 0; s < 64; ++s)
+			{
+				const bool used = r < params.size();
+				const auto trigs = used ? (params[r].page == 7 ? _p.midiTrig[params[r].track] : _p.pitch[params[r].track]) : 0;
+				_p.lockRows[r][s] = used && ed::mmStepSet(trigs, s) && _r.chance(60) ? static_cast<uint8_t>(_r.in(0, 127)) : 0xff;
+			}
+		// MIDI notes, in (step, track) order, one or more per MIDI trig.
+		std::vector<ed::MmNoteEntry> midi;
+		for(uint8_t s = 0; s < 64; ++s)
+			for(uint8_t t = 0; t < 6; ++t)
+				if(ed::mmStepSet(_p.midiTrig[t], s))
+					for(int k = _r.in(1, _variant % 4 == 2 ? 4 : 2); k > 0 && midi.size() < 400; --k)
+						midi.push_back({t, s, static_cast<uint8_t>(_r.in(24, 100))});
+		_p.midiNotes.fill(0xffff);
+		for(size_t i = 0; i < midi.size(); ++i) _p.midiNotes[i] = ed::mmNoteEntryWord(midi[i]);
+		_p.midiNoteCount = static_cast<uint16_t>(midi.size());
+		// Chords: extra notes on some synth trigs with a pitch.
+		std::vector<ed::MmNoteEntry> chords;
+		for(uint8_t s = 0; s < 64; ++s)
+			for(uint8_t t = 0; t < 6; ++t)
+				if(_p.notes[t][s] != 0xff && _r.chance(15))
+				{
+					_p.chord[t] |= ed::mmStepBit(s);
+					for(int k = _r.in(1, 3); k > 0 && chords.size() < 192; --k)
+						chords.push_back({t, s, static_cast<uint8_t>(_r.in(24, 100))});
+				}
+		_p.chordNotes.fill(0xffff);
+		for(size_t i = 0; i < chords.size(); ++i) _p.chordNotes[i] = ed::mmNoteEntryWord(chords[i]);
+		_p.chordNoteCount = static_cast<uint8_t>(chords.size());
+		return _p;
+	}
+
+	ed::MmKit randomKit(Rng& _r, ed::MmKit _k)
+	{
+		static const char* names[] = {"PROBE", "RANDOM KIT", "LAB", "MM P1", "SYNTHS", "X"};
+		const std::string n = names[_r.in(0, 5)];
+		_k.name.fill(0);
+		for(size_t i = 0; i < n.size(); ++i) _k.name[i] = static_cast<uint8_t>(n[i]);
+		const auto& machines = ed::mmMachines();
+		for(size_t t = 0; t < 6; ++t)
+		{
+			_k.levels[t] = static_cast<uint8_t>(_r.in(0, 127));
+			_k.machines[t] = machines[static_cast<size_t>(_r.in(0, static_cast<int>(machines.size()) - 1))].id;
+			_k.routing[t] = ed::mmRouting(static_cast<uint8_t>(_r.in(0, 7)), static_cast<uint8_t>(_r.in(0, 6)));
+			for(auto& pg : _k.tracks[t].pages) for(auto& v : pg) v = static_cast<uint8_t>(_r.in(0, 127));
+			for(auto& v : _k.tracks[t].midi) v = static_cast<uint8_t>(_r.in(0, 127));
+			for(auto& v : _k.assignPage[t]) v = static_cast<uint8_t>(_r.in(0, 8));
+			for(auto& v : _k.assignDest[t]) v = static_cast<uint8_t>(_r.in(0, 7));
+			for(auto& v : _k.assignAdd[t]) v = static_cast<int8_t>(_r.in(-64, 63));
+			_k.trigPos[t] = _r.chance(70) ? 0xff : static_cast<uint8_t>(_r.in(0, 5));
+		}
+		_k.mirrorMask = static_cast<uint8_t>(_r.in(0, 63));
+		_k.legatoAmp = static_cast<uint8_t>(0xc0 | _r.in(0, 63));
+		return _k;
+	}
+
+	ed::MmSong randomSong(Rng& _r, ed::MmSong _s, const int _variant)
+	{
+		const size_t rows = _variant % 3 == 0 ? 199 : static_cast<size_t>(_r.in(1, 60));
+		const std::string n = "SONG P1 " + std::to_string(_variant);
+		_s.name.fill(0);
+		for(size_t i = 0; i < n.size() && i < 14; ++i) _s.name[i] = static_cast<uint8_t>(n[i]);
+		for(size_t i = 0; i < rows; ++i)
+		{
+			auto& b = _s.rows[i].bytes;
+			b.fill(0);
+			if(i > 0 && _r.chance(10))
+			{
+				b[ed::mmSongRow::g_pattern] = ed::MmSong::g_loop;
+				b[ed::mmSongRow::g_target] = static_cast<uint8_t>(_r.in(0, static_cast<int>(i)));
+				b[ed::mmSongRow::g_repeats] = static_cast<uint8_t>(_r.in(0, 8));
+				b[ed::mmSongRow::g_length] = 0x3f;
+				b[22] = b[23] = 0xff;
+				continue;
+			}
+			b[ed::mmSongRow::g_pattern] = static_cast<uint8_t>(_r.in(0, 127));
+			b[ed::mmSongRow::g_repeats] = static_cast<uint8_t>(_r.in(0, 63));
+			b[ed::mmSongRow::g_mutes] = static_cast<uint8_t>(_r.in(0, 63));
+			b[ed::mmSongRow::g_midiMutes] = static_cast<uint8_t>(_r.in(0, 63));
+			b[ed::mmSongRow::g_length] = static_cast<uint8_t>(_r.in(1, 64));
+			b[ed::mmSongRow::g_offset] = static_cast<uint8_t>(_r.in(0, b[ed::mmSongRow::g_length] - 1));
+			b[ed::mmSongRow::g_transpose] = static_cast<uint8_t>(static_cast<int8_t>(_r.in(-12, 12)));
+			for(size_t t = 0; t < 6; ++t)
+			{
+				b[ed::mmSongRow::g_trackTranspose + t] = static_cast<uint8_t>(static_cast<int8_t>(_r.in(-12, 12)));
+				b[ed::mmSongRow::g_midiTranspose + t] = static_cast<uint8_t>(static_cast<int8_t>(_r.in(-12, 12)));
+			}
+			const int tempo = _r.chance(50) ? 0xffff : _r.in(30, 300);
+			b[22] = static_cast<uint8_t>(tempo >> 8);
+			b[23] = static_cast<uint8_t>(tempo);
+		}
+		auto& end = _s.rows[rows].bytes;
+		end.fill(0);
+		end[0] = ed::MmSong::g_end;
+		end[22] = end[23] = 0xff;
+		return _s;
+	}
+
+	// Push valid random documents through SYSEX RECV and keep the firmware's raw read-backs.
+	void programMode(const Bytes& _rom, const std::string& _dir)
+	{
+		require(!_dir.empty(), "program needs an output directory");
+		auto m = boot(_rom);
+		Rng rng;
+		const auto base = *ed::decodeMmPattern(patternDump(*m, 75));
+		const auto kitBase = *ed::decodeMmKit(dump(*m, 0x52, 0));
+		const auto songBase = *ed::decodeMmSong(dump(*m, 0x69, 1));
+		recvMacro(*m, 10, 10);
+		require(onRecv(*m), "not on SYSEX RECV");
+		int stored = 0, total = 0;
+		const auto push = [&](const Bytes& _sent, const uint8_t _cmd, const uint8_t _slot, const std::string& _name)
+		{
+			m->send(_sent);
+			m->run(40);
+			const auto back = dump(*m, _cmd, _slot);
+			++total;
+			const bool same = back == _sent;
+			stored += same;
+			if(!same)
+				std::printf("  read-back differs: %s (%zu vs %zu bytes)\n", _name.c_str(), back.size(), _sent.size());
+			save(_dir + "/" + _name + ".syx", back);
+		};
+		for(int i = 0; i < 128; ++i)
+		{
+			auto p = randomPattern(rng, base, i);
+			p.position = static_cast<uint8_t>(i);
+			{
+				const auto problems = ed::validate(p);
+				require(problems.empty(), "generated pattern invalid: " + (problems.empty() ? std::string() : problems.front()));
+			}
+			char n[32];
+			std::snprintf(n, sizeof(n), "pattern-%03d", i);
+			push(ed::encodeMmPattern(p), 0x67, static_cast<uint8_t>(i), n);
+		}
+		for(int i = 0; i < 128; ++i)
+		{
+			auto k = randomKit(rng, kitBase);
+			k.position = static_cast<uint8_t>(i);
+			{
+				const auto problems = ed::validate(k);
+				require(problems.empty(), "generated kit invalid: " + (problems.empty() ? std::string() : problems.front()));
+			}
+			char n[32];
+			std::snprintf(n, sizeof(n), "kit-%03d", i);
+			push(ed::encodeMmKit(k), 0x52, static_cast<uint8_t>(i), n);
+		}
+		for(int i = 0; i < 24; ++i)
+		{
+			auto s = randomSong(rng, songBase, i);
+			s.position = static_cast<uint8_t>(i);
+			{
+				const auto problems = ed::validate(s);
+				require(problems.empty(), "generated song invalid: " + (problems.empty() ? std::string() : problems.front()));
+			}
+			char n[32];
+			std::snprintf(n, sizeof(n), "song-%03d", i);
+			push(ed::encodeMmSong(s), 0x69, static_cast<uint8_t>(i), n);
+		}
+		for(int i = 1; i < 8; ++i)
+		{
+			auto g = *ed::decodeMmGlobal(dump(*m, 0x50, static_cast<uint8_t>(i)));
+			g.routingMode = static_cast<uint8_t>(rng.in(0, 2));
+			g.masterTune = static_cast<uint16_t>(rng.in(4300, 4500));
+			for(auto& c : g.midiSeqChannels) c = static_cast<uint8_t>(rng.in(0, 15));
+			for(auto& cc : g.midiSeqCcs) for(auto& v : cc) v = static_cast<uint8_t>(rng.in(0, 119));
+			g.baseChannel = static_cast<uint8_t>(rng.in(0, 9));
+			char n[32];
+			std::snprintf(n, sizeof(n), "global-%03d", i);
+			push(ed::encodeMmGlobal(g), 0x50, static_cast<uint8_t>(i), n);
+		}
+		std::printf("programmed: %d of %d read back byte for byte\n", stored, total);
+		check(stored == total, "the firmware stores every valid programmed dump exactly as sent");
+
+		// Invalid values: stored verbatim, or refused?
+		auto bad = base;
+		bad.position = 100;
+		bad.length = 90;
+		bad.multiplier = 7;
+		bad.lockMasks[0][0] = 0x01;	// a locked parameter without a row count
+		const auto sentBad = ed::encodeMmPattern(bad);
+		m->send(sentBad);
+		m->run(40);
+		const auto backBad = dump(*m, 0x67, 100);
+		std::printf("invalid pattern (length 90, multiplier 7, mask without row): stored verbatim %d\n", backBad == sentBad);
+		for(int i = 0; i < 6; ++i) key(*m, md::PanelControl::Exit, 10, 10);
+	}
+
 	// Is a pattern dump taken on a normal screen?
 	void gateMode(const Bytes& _rom)
 	{
@@ -1119,6 +1546,8 @@ int main(const int _argc, char** _argv)
 		else if(mode == "queue") queueMode(rom);
 		else if(mode == "boot") bootMode(rom);
 		else if(mode == "screens") screensMode(rom);
+		else if(mode == "lab") labMode(rom, dir);
+		else if(mode == "program") programMode(rom, dir);
 		else if(mode == "all")
 		{
 			gateMode(rom);

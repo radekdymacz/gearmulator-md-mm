@@ -74,8 +74,10 @@ namespace mdFirmwareSession
 				frames += g_block;
 				require(frames < g_rate * 60, "firmware boot timed out");
 			}
-			// The splash animation keeps running for ~20 s after MIDI is ready.
-			for(uint32_t i = 0; i < g_rate * 25 / g_block; ++i)
+			// The splash animation keeps running after MIDI is ready: about 20 s on
+			// the MD, until 9.2 s after power-on on the MM (MM-P0-RESULT §6).
+			const uint32_t settleSeconds = _model == md::MachineModel::Monomachine ? 9 : 25;
+			for(uint32_t i = 0; i < g_rate * settleSeconds / g_block; ++i)
 				m_hw.advance(g_block);
 		}
 

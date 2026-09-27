@@ -2,7 +2,7 @@ cmake_minimum_required(VERSION 3.15)
 
 project(elektronData)
 
-# Pure value codec for Elektron MD user data (pattern, kit, song, global dumps). No JUCE,
+# Pure value codecs for Elektron MD and MM user data (pattern, kit, song, global dumps). No JUCE,
 # no device: it depends on nothing but the standard library.
 add_library(elektronData STATIC)
 
@@ -18,6 +18,16 @@ target_sources(elektronData PRIVATE
 	mdPattern.cpp mdPattern.h
 	mdSong.cpp mdSong.h
 	mdValidate.cpp mdValidate.h
+	mmCommands.cpp mmCommands.h
+	mmDump.cpp mmDump.h
+	mmGlobal.cpp mmGlobal.h
+	mmJson.cpp mmJson.h
+	mmKit.cpp mmKit.h
+	mmLayout.h
+	mmMachines.cpp mmMachines.h
+	mmPattern.cpp mmPattern.h
+	mmSong.cpp mmSong.h
+	mmValidate.cpp mmValidate.h
 	sysex7bit.cpp sysex7bit.h
 )
 
@@ -41,6 +51,24 @@ if(BUILD_TESTING)
 	add_test(NAME elektronDataCorpusTest COMMAND elektronDataCorpusTest ${CMAKE_CURRENT_SOURCE_DIR}/testdata)
 	set_tests_properties(elektronDataCorpusTest PROPERTIES LABELS "UnitTest")
 	set_property(TARGET elektronDataCorpusTest PROPERTY FOLDER "Elektron/test")
+	# Monomachine OS 1.32B: the same checks (byte-exact, JSON-exact, valid) on
+	# programmed firmware read-backs in testdata/mm; a local factory backup can be
+	# added with -DELEKTRONDATA_MM_CORPUS_DIR=<dir of .syx dumps>.
+	add_executable(mmDataTest mmDataTest.cpp)
+	target_link_libraries(mmDataTest PRIVATE elektronData)
+	add_test(NAME mmDataTest COMMAND mmDataTest)
+	set_tests_properties(mmDataTest PROPERTIES LABELS "UnitTest")
+	set_property(TARGET mmDataTest PROPERTY FOLDER "Elektron/test")
+
+	add_executable(mmDataCorpusTest mmDataCorpusTest.cpp)
+	target_link_libraries(mmDataCorpusTest PRIVATE elektronData baseLib)
+	add_test(NAME mmDataCorpusTest COMMAND mmDataCorpusTest ${CMAKE_CURRENT_SOURCE_DIR}/testdata/mm)
+	set_tests_properties(mmDataCorpusTest PROPERTIES LABELS "UnitTest")
+	set_property(TARGET mmDataCorpusTest PROPERTY FOLDER "Elektron/test")
+	if(ELEKTRONDATA_MM_CORPUS_DIR)
+		add_test(NAME mmDataLocalCorpusTest COMMAND mmDataCorpusTest ${ELEKTRONDATA_MM_CORPUS_DIR})
+		set_tests_properties(mmDataLocalCorpusTest PROPERTIES LABELS "UnitTest")
+	endif()
 	if(ELEKTRONDATA_CORPUS_DIR)
 		add_test(NAME elektronDataLocalCorpusTest COMMAND elektronDataCorpusTest ${ELEKTRONDATA_CORPUS_DIR})
 		set_tests_properties(elektronDataLocalCorpusTest PROPERTIES LABELS "UnitTest")
