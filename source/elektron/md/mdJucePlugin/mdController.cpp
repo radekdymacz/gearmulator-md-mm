@@ -789,6 +789,7 @@ namespace mdJucePlugin
 	bool Controller::parseSysexMessage(const pluginLib::SysEx& _message,
 		synthLib::MidiEventSource)
 	{
+		evDeviceSysex(_message);
 		const std::lock_guard synchronizationLock(m_synchronizationLock);
 		if(const auto status = md::automation::sysex::parseStatusResponse(
 			m_model, _message))
