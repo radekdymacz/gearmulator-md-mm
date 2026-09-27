@@ -56,7 +56,14 @@ function onResult(r) {
 	if (!r.ok && r.errors && r.errors.length) { toast(r.errors[0]); showLastError(r.errors); }
 	else if (r.note) toast(r.note);
 }
-function pidx(t, n) { return slots(S.tracks[t].m).indexOf(n); }
+/* The kit parameter index 0-23. With the group (syn, fx, rt) it is looked up in that page only: some
+   machines have a synthesis parameter with a routing parameter's name (DIST), and the Mix DIST box must
+   not move the machine's own DIST (P4, found in the plug-in). */
+function pidx(t, n, g) {
+	const a = slots(S.tracks[t].m), base = { syn: 0, fx: 8, rt: 16 }[g];
+	if (base == null) return a.indexOf(n);
+	const k = a.slice(base, base + 8).indexOf(n); return k < 0 ? -1 : base + k;
+}
 
 /* ===== Model helpers (view, optimistic) ===== */
 function lk(t, p) { return t + ":" + p; }
@@ -106,7 +113,7 @@ function syncKitValues() {
 	S.tracks.forEach((t, i) => {
 		const b = base.tracks[i];
 		for (const g of ["syn", "fx", "rt"]) for (const n in t[g]) if (t[g][n] !== b[g][n]) {
-			const idx = pidx(i, n); if (idx >= 0) cmd("param", { k: S.kit, t: i, i: idx, v: t[g][n] }, "param:" + i + ":" + idx);
+			const idx = pidx(i, n, g); if (idx >= 0) cmd("param", { k: S.kit, t: i, i: idx, v: t[g][n] }, "param:" + i + ":" + idx);
 		}
 		const l = t.lfo, bl = b.lfo;
 		if (l.SPD !== bl.SPD) cmd("param", { k: S.kit, t: i, i: 21, v: l.SPD }, "param:" + i + ":21");
@@ -331,7 +338,7 @@ function renderMix() {
   <div class="top2"><i class="led act" data-act="${i}"></i><span>${i + 1}</span></div>
   ${"VOL" in t.rt ? `<div class="fader" role="slider" tabindex="0" aria-label="Track ${i + 1} volume" data-g="rt" data-n="VOL" data-t="${i}"><div class="tr"><i></i></div><div class="cap2"></div></div>` : `<div class="fader"></div>`}
   <div class="v" data-show="${i}"></div>
-  ${["PAN", "DIST", "DEL", "REV"].map(n => n in t.rt ? pc("rt", n, { t: i }) : `<div class="pc empty" aria-hidden="true"></div>`).join("")}
+  ${["PAN", "DIST", "DEL", "REV"].map(n => n in t.rt ? (direct && (n === "DEL" || n === "REV") ? pc("rt", n, { t: i }).replace('class="pc"', `class="pc mainonly" title="${n === "DEL" ? "Delay" : "Reverb"} sends only reach the main outputs; this track goes to OUT ${out}. The value is kept."`) : pc("rt", n, { t: i })) : `<div class="pc empty" aria-hidden="true"></div>`).join("")}
   <button class="outk ${direct ? "on" : ""}" data-out="${i}" title="${direct ? "Individual output " + out + ": skips the master effects" : "Main output, through the master effects"}">OUT ${out}</button>
   <div class="mrow"><button class="ms m" data-mute="${i}" aria-pressed="${t.mute}" aria-label="Mute track ${i + 1}">M</button><button class="ms s" data-solo="${i}" aria-pressed="${t.solo}" aria-label="Solo track ${i + 1}">S</button></div>
   <div class="nm" title="${t.name}">${t.m}</div></div>`;
@@ -437,10 +444,10 @@ function syncControls() {
 	$$("#main [data-g]").forEach(el => {
 		const v = getV(el); if (v == null) { el.style.setProperty("--f", "0%"); const b0 = el.querySelector("b"); if (b0) b0.textContent = "—"; return; }
 		const f = v / 127 * 100 + "%"; el.style.setProperty("--f", f); el.setAttribute("aria-valuenow", v);
-		if (el.classList.contains("pc") && SIGNED.has(el.dataset.n)) { const q = v / 127 * 100; el.classList.add("bip"); el.style.setProperty("--pl", Math.min(q, 50.4) + "%"); el.style.setProperty("--pw", Math.max(1.5, Math.abs(q - 50.4)) + "%"); }
+		if (el.classList.contains("pc") && SIGNED.has(el.dataset.n)) { const q = v / 127 * 100; el.classList.add("bip"); el.style.setProperty("--pl", Math.min(q, 50.4) + "%"); el.style.setProperty("--pw", v === 64 ? "0%" : Math.max(3, Math.abs(q - 50.4)) + "%"); }
 		const b = el.querySelector("b"); if (b) b.textContent = SIGNED.has(el.dataset.n) && el.dataset.g !== "mfx" ? (v - 64 > 0 ? "+" : "") + (v - 64) : v;
 		if (["syn", "fx", "rt"].includes(el.dataset.g)) {
-			const tt = el.dataset.t != null ? +el.dataset.t : S.sel, idx = pidx(tt, el.dataset.n);
+			const tt = el.dataset.t != null ? +el.dataset.t : S.sel, idx = pidx(tt, el.dataset.n, el.dataset.g);
 			const mp = (Docs.learn?.mappings || []).filter(m => m.t === tt && m.i === idx);
 			el.classList.toggle("mapped", mp.length > 0);
 			el.classList.toggle("learnt", !!S.ctl.learnT && S.ctl.learnT.t === tt && S.ctl.learnT.p === el.dataset.n);
@@ -873,7 +880,7 @@ document.addEventListener("pointerdown", e => {
 	if (el && ["syn", "fx", "rt", "lfo"].includes(el.dataset.g)) {
 		e.stopPropagation(); e.preventDefault();
 		const t = el.dataset.t != null ? +el.dataset.t : S.sel, n = el.dataset.n;
-		const i = el.dataset.g === "lfo" ? { SPD: 21, DEPTH: 22, SHMIX: 23 }[n] : pidx(t, n);
+		const i = el.dataset.g === "lfo" ? { SPD: 21, DEPTH: 22, SHMIX: 23 }[n] : pidx(t, n, el.dataset.g);
 		if (i == null || i < 0) return;
 		S.ctl.learnT = { t, p: n }; syncControls(); cmd("learnStart", { t, i }); toast(`Target: track ${t + 1} ${n}. Now turn a knob on your controller.`);
 	}
@@ -935,7 +942,8 @@ main.addEventListener("pointerdown", e => {
 });
 main.addEventListener("pointermove", e => {
 	if (active) { const r = active.c.getBoundingClientRect(), h = ED[active.c.dataset.ed].handles(r.width, r.height, active.c).find(h => h.k === active.k); if (h) { h.drag(clamp(e.clientX - r.left, 0, r.width), clamp(e.clientY - r.top, 0, r.height)); syncKitValues(); syncControls(); redraw(); } return; }
-	if (drag) { const fine = e.shiftKey ? .25 : 1; const d = drag.vert ? (drag.y - e.clientY) * 127 / 132 : ((e.clientX - drag.x) + (drag.y - e.clientY)) / 2; setV(drag.el, drag.v + d * fine); return; }
+	/* Mockup v60: a value box follows the axis that moved more (sideways or up/down), one value a pixel. */
+	if (drag) { const fine = e.shiftKey ? .25 : 1, dx = e.clientX - drag.x, dy = drag.y - e.clientY; const d = drag.vert ? dy * 127 / 132 : (Math.abs(dx) >= Math.abs(dy) ? dx : dy); setV(drag.el, drag.v + d * fine); return; }
 	if (laneDraw) { laneAt(e); return; }
 	const c = e.target.closest("canvas.ed"); if (c && ED[c.dataset.ed]) c.style.cursor = nearest(c, e) ? "grab" : "default";
 });

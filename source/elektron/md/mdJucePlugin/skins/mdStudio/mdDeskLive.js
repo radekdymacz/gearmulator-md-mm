@@ -58,6 +58,43 @@ Bridge.onMessage(m => {
 	recLockKey = key; setTimeout(markRecLock, 20);
 });
 
+/* ===== Fit: the page is laid out for 1440 px. A smaller plug-in window (GUI scale 75 % is 1080 px)
+   zooms the whole page out natively (WKWebView pageZoom, mdStudioWebZoom.mm), so nothing is cut. ===== */
+
+/* ===== Tap tempo (manual p.36): T taps, the average of the last taps sets the tempo (0x61). ===== */
+const TAP = [];
+document.addEventListener("keydown", e => {
+	if ((e.key !== "t" && e.key !== "T") || e.metaKey || e.ctrlKey || e.altKey || e.target.closest?.("input,select,textarea")) return;
+	const now = performance.now(); if (TAP.length && now - TAP[TAP.length - 1] > 2000) TAP.length = 0;
+	TAP.push(now); if (TAP.length > 5) TAP.shift();
+	if (TAP.length >= 2) { const bpm = clamp(Math.round(60000 / ((TAP[TAP.length - 1] - TAP[0]) / (TAP.length - 1)) * 10) / 10, 30, 300); S.bpm = bpm; renderTop(); cmd("tempo", { bpm }, "tempo"); toast("Tap tempo: " + bpm.toFixed(1) + " BPM"); }
+	else toast("Tap tempo: keep tapping T");
+	e.preventDefault();
+});
+
+/* ===== Parameter tweaking (manual p.37, FUNCTION + a DATA ENTRY knob): Alt held while moving a track
+   value moves the same knob on every track by the same amount. As on the machine, RAM machines, MIDI and
+   CTR tracks are left out, and a value that hits 0 or 127 does not come back symmetrically. ===== */
+let tweak = null;
+document.addEventListener("pointerdown", e => { const el = e.target.closest?.("#main .pc[data-g],#main .fader[data-g]"); tweak = el && e.altKey && ["syn", "fx", "rt"].includes(el.dataset.g) ? { el, t: el.dataset.t != null ? +el.dataset.t : S.sel } : null; }, true);
+document.addEventListener("pointerup", () => { if (tweak) { tweak = null; } }, true);
+const skipTweak = m => /^(RAM|MID|CTR)/.test(m);
+const setV0 = setV;
+setV = function (el, v) {
+	if (!tweak || tweak.el !== el) return setV0(el, v);
+	const g = el.dataset.g, n = el.dataset.n, t0 = tweak.t, before = S.tracks[t0][g][n];
+	setV0(el, v);
+	const delta = S.tracks[t0][g][n] - before; if (!delta) return;
+	const slot = g === "syn" ? pages(S.tracks[t0].m).s.indexOf(n) : -1;
+	S.tracks.forEach((tr, t) => {
+		if (t === t0 || skipTweak(tr.m)) return;
+		const name = g === "syn" ? pages(tr.m).s[slot] : n;	/* synthesis: the same knob, whatever it is on that machine */
+		if (!name || !(name in tr[g])) return;
+		tr[g][name] = clamp(tr[g][name] + delta);
+	});
+	syncKitValues(); syncControls();
+};
+
 /* ===== The editor's menu (skins, GUI scale, settings): right-click an empty part of the header
    (P4; the standalone also has it in the native menu bar). ===== */
 document.addEventListener("contextmenu", e => {
@@ -222,6 +259,7 @@ if (/[?&]selftest=p4(&|$)/.test(location.search)) (async () => {
 	closeLib(false); $("#pat").click(); await sleep(300);
 	log(`pattern chooser: ${document.querySelectorAll("#libpop .ps").length} slots, ${[...document.querySelectorAll("#libpop .ps span")].filter(e => e.textContent !== "…").length} read; LCD ${Math.round(document.querySelector(".lcdpanel").getBoundingClientRect().width)} px`);
 	closeLib(false);
+	await p4Mix(log, sleep);
 	log("done");
 })();
 
@@ -262,4 +300,32 @@ if (/[?&]selftest=p4hw/.test(location.search)) (async () => {
 	let t0 = performance.now(); while (!(machineState().desk && machineState().desk.engine === "emu" && machineState().desk.firmware === "ready" && S.loaded) && performance.now() - t0 < 15000) await sleep(100);
 	log(`EMU again: ${label()} after ${Math.round(performance.now() - t0)} ms, pattern ${patName(S.pat)}`);
 	log("hw done");
+})();
+
+/* The Mix checks (v60): also alone with ?selftest=p4mix. */
+async function p4Mix(log, sleep) {
+	/* Mix (v60 fixes): a dragged fader keeps its geometry, a value box follows a sideways drag, DEL/REV on OUT A say MAIN only. */
+	S.ws = "mix"; render(); await sleep(300);
+	const strip = () => [...document.querySelectorAll(".strip")][6];
+	const fd = strip().querySelector(".fader"), fb = fd.getBoundingClientRect(), fx = fb.left + fb.width / 2, fy = fb.top + fb.height / 2, sh = strip().getBoundingClientRect().height;
+	const pe = (el, t, x, y) => el.dispatchEvent(new PointerEvent(t, { bubbles: true, clientX: x, clientY: y, pointerId: 7, buttons: 1, pointerType: "mouse" }));
+	const vol0 = S.tracks[6].rt.VOL; pe(fd, "pointerdown", fx, fy); for (let i = 1; i <= 6; i++) { pe(fd, "pointermove", fx, fy + i * 4); await sleep(30); }
+	const midF = fd.getBoundingClientRect().height, midS = strip().getBoundingClientRect().height; pe(fd, "pointerup", fx, fy + 24); await sleep(300);
+	log(`Mix fader drag: fader ${fb.height}->${midF} px, strip ${sh}->${midS} px while dragging, VOL ${vol0} -> ${S.tracks[6].rt.VOL}: ${midF === fb.height && midS === sh ? "ok geometry fixed" : "FAIL"}`);
+	const ds = strip().querySelector('.pc[data-n="DIST"]'), db = ds.getBoundingClientRect(), dist0 = S.tracks[6].rt.DIST;
+	const sent = [], send0 = Bridge.send; Bridge.send = (m, o) => { if (m.op === "param") sent.push(m.t + ":" + m.i + "=" + m.v); return send0(m, o); };
+	let seen = 0, lastX = null; const probe = e => { seen++; lastX = e.clientX; }; main.addEventListener("pointermove", probe);
+	pe(ds, "pointerdown", db.left + 10, db.top + 10); log(`  drag after pointerdown: ${drag ? "set, vert " + drag.vert + ", v " + drag.v : "none"}`); for (let i = 1; i <= 5; i++) { pe(ds, "pointermove", db.left + 10 + i * 4, db.top + 10); await sleep(30); }
+	const midD = ds.getBoundingClientRect().width, midV = S.tracks[6].rt.DIST; main.removeEventListener("pointermove", probe); log(`  moves seen ${seen}, last clientX ${lastX} (down at ${db.left + 10}, drag.x ${drag && drag.x}), drag ${drag ? "still set" : "gone"}, tweak ${!!tweak}, sent ${sent.join(" ")}`); Bridge.send = send0; pe(ds, "pointerup", db.left + 30, db.top + 10); await sleep(300);
+	log(`DIST sideways drag: ${dist0} -> ${midV} while dragging, ${S.tracks[6].rt.DIST} after, box ${db.width}->${midD} px: ${S.tracks[6].rt.DIST !== dist0 && midD === db.width ? "ok" : "FAIL"}`);
+	cmd("param", { k: S.kit, t: 6, i: 16, v: dist0 }); cmd("param", { k: S.kit, t: 6, i: 17, v: vol0 }); await sleep(200);
+	log(`fit: page zoom ${Math.round(innerWidth / 1440 * 1000) / 1000 || 1}, page ${document.documentElement.scrollWidth} px wide in ${innerWidth} px, header right edge ${Math.round(document.querySelector(".rightgrp").getBoundingClientRect().right)} px`);
+}
+if (/[?&]selftest=p4mix/.test(location.search)) (async () => {
+	const sleep = ms => new Promise(r => setTimeout(r, ms));
+	const log = t => Bridge.log("P4: " + t);
+	while (!(machineState().desk && machineState().desk.firmware === "ready" && S.loaded)) await sleep(200);
+	await sleep(1500);
+	await p4Mix(log, sleep);
+	log("mix done");
 })();

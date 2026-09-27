@@ -22,6 +22,12 @@ namespace mdJucePlugin
 {
 	namespace json = elektronData::json;
 
+#if JUCE_MAC
+	bool setWebPageZoom(juce::Component& _web, double _zoom);	// mdStudioWebZoom.mm
+#else
+	inline bool setWebPageZoom(juce::Component&, double) { return false; }
+#endif
+
 	namespace
 	{
 		constexpr const char* g_bridgeCommand = "gmbridge://c/";
@@ -659,5 +665,8 @@ namespace mdJucePlugin
 		const auto target = bounds.withTrimmedTop(header);
 		if(m_web->getBounds() != target)
 			m_web->setBounds(target);
+		// The page is laid out for 1440 px: below that it is zoomed out as a whole (P4).
+		if(target.getWidth() > 0)
+			setWebPageZoom(*m_web, std::min(1.0, target.getWidth() / 1440.0));
 	}
 }

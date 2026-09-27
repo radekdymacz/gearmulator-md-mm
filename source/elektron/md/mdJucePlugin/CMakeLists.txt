@@ -31,6 +31,7 @@ set(SOURCES
 	mdStandaloneApp.cpp
 	mdStudioEditor.cpp mdStudioEditor.h
 	mdStudioLink.cpp mdStudioLink.h
+	$<$<PLATFORM_ID:Darwin>:mdStudioWebZoom.mm>
 	mdPluginEntry.cpp
 
 	parameterDescriptions_md.json parameterDescriptions_mm.json

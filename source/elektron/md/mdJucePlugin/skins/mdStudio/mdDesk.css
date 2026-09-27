@@ -714,11 +714,12 @@ canvas.ed.smpwave{height:200px}
 .pc.bip .ctr,.pc.bip::before{display:block!important;content:"";position:absolute;left:50%;bottom:0;width:1px;height:6px;background:var(--keydim);opacity:.8}
 /* mix */
 .strip .top2{display:flex;justify-content:center;gap:6px;align-items:center}
-.strip .act{width:7px;height:7px}
-.strip .act.on{background:var(--led);box-shadow:0 0 6px 1px var(--led)}
+.strip .led.act{width:7px;height:7px}
+.strip .led.act.on{background:var(--led);box-shadow:0 0 6px 1px var(--led)}
 .outk{height:22px;padding:0;font:600 10px var(--mono);letter-spacing:0}
 .outk.on{background:var(--cream);color:var(--creamtext)}
-.strip.direct .pc[data-n="DEL"],.strip.direct .pc[data-n="REV"]{opacity:.35}
+.pc.mainonly span::after{content:"MAIN";margin-left:4px;padding:0 3px;border-radius:2px;font:600 8px var(--sans);letter-spacing:.08em;vertical-align:1px;background:var(--keydim);color:var(--key)}
+.pc.mainonly b{text-decoration:line-through;text-decoration-thickness:1px}
 .flow{margin:14px 0 0;display:flex;gap:10px;align-items:center;flex-wrap:wrap;font:11px var(--pix);background:var(--lcd);color:var(--ink);padding:7px 12px;border-radius:3px;text-transform:uppercase}
 .flow i{font-style:normal;opacity:.6}
 .flow span{margin-left:auto;opacity:.7}
@@ -1151,6 +1152,10 @@ html,body{min-width:1280px}
 .lb.ph:not(.none){box-shadow:inset 0 0 0 2px color-mix(in srgb,var(--led) 55%,transparent),inset 0 -2px 0 rgba(0,0,0,.35)!important}
 .lb.none{background:var(--key)!important;opacity:.28!important;border-radius:3px}
 .lane{gap:3px}
+/* v60 (P4 Mix fixes): the strip's activity LED rule only hit ".act" before, which is also the class a control
+   gets while dragged, so a dragged fader or value box shrank to 7 x 7 px (the "small something", and the strip
+   re-flowed). No native drag or selection on value controls; the bipolar fill at the centre is only the tick. */
+.pc,.fader{-webkit-user-drag:none;user-select:none;-webkit-user-select:none}
 
 /* ===== The real machine's states (not in the mockup) ===== */
 .st.past{opacity:.45}

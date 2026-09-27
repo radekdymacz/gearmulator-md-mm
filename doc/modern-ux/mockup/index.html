@@ -709,11 +709,12 @@ canvas.ed.smpwave{height:200px}
 .pc.bip .ctr,.pc.bip::before{display:block!important;content:"";position:absolute;left:50%;bottom:0;width:1px;height:6px;background:var(--keydim);opacity:.8}
 /* mix */
 .strip .top2{display:flex;justify-content:center;gap:6px;align-items:center}
-.strip .act{width:7px;height:7px}
-.strip .act.on{background:var(--led);box-shadow:0 0 6px 1px var(--led)}
+.strip .led.act{width:7px;height:7px}
+.strip .led.act.on{background:var(--led);box-shadow:0 0 6px 1px var(--led)}
 .outk{height:22px;padding:0;font:600 10px var(--mono);letter-spacing:0}
 .outk.on{background:var(--cream);color:var(--creamtext)}
-.strip.direct .pc[data-n="DEL"],.strip.direct .pc[data-n="REV"]{opacity:.35}
+.pc.mainonly span::after{content:"MAIN";margin-left:4px;padding:0 3px;border-radius:2px;font:600 8px var(--sans);letter-spacing:.08em;vertical-align:1px;background:var(--keydim);color:var(--key)}
+.pc.mainonly b{text-decoration:line-through;text-decoration-thickness:1px}
 .flow{margin:14px 0 0;display:flex;gap:10px;align-items:center;flex-wrap:wrap;font:11px var(--pix);background:var(--lcd);color:var(--ink);padding:7px 12px;border-radius:3px;text-transform:uppercase}
 .flow i{font-style:normal;opacity:.6}
 .flow span{margin-left:auto;opacity:.7}
@@ -1146,6 +1147,10 @@ html,body{min-width:1280px}
 .lb.ph:not(.none){box-shadow:inset 0 0 0 2px color-mix(in srgb,var(--led) 55%,transparent),inset 0 -2px 0 rgba(0,0,0,.35)!important}
 .lb.none{background:var(--key)!important;opacity:.28!important;border-radius:3px}
 .lane{gap:3px}
+/* v60 (P4 Mix fixes): the strip's activity LED rule only hit ".act" before, which is also the class a control
+   gets while dragged, so a dragged fader or value box shrank to 7 x 7 px (the "small something", and the strip
+   re-flowed). No native drag or selection on value controls; the bipolar fill at the centre is only the tick. */
+.pc,.fader{-webkit-user-drag:none;user-select:none;-webkit-user-select:none}
 </style>
 
 <div class="app">
@@ -1355,7 +1360,7 @@ function steps(){const[a,b]=vis();return Array.from({length:b-a},(_,k)=>a+k)}
 function cols(){return S.viewAll?`repeat(${steps().length},minmax(0,1fr))`:`repeat(${steps().length},minmax(18px,1fr))`}
 function stepCls(i,s){const t=S.tracks[i],c=["st"];if(s%4===0)c.push("q");if(s%16===0&&s!==vis()[0])c.push("gap");if(t.trigs[s]){c.push("on");if(t.acc.has(s))c.push("acc");if(t.slide.has(s))c.push("sl");if(stepLocked(i,s))c.push("lk")}if(S.playing&&s===S.step)c.push("ph");return c.join(" ")}
 function pageCtl(){return`<span class="pagectl rh seqpage"><button class="pgkey" id="pgkey" ${pages16()<2?"disabled":""} title="Next page. Shift-click = previous. Keys [ and ].">Page</button><span class="pleds" aria-hidden="true">${[0,1,2,3].map(k=>`<span class="pl ${k<pages16()?"":"na"} ${!S.viewAll&&k===S.page?"cur":""}" data-plp="${k}"><i class="led"></i></span>`).join("")}</span><button class="ptog ${S.viewAll?"on":""}" id="pgall" aria-pressed="${S.viewAll}" title="Show all steps"><i class="led"></i>All</button><button class="ptog ${S.follow?"on":""}" id="pgfollow" aria-pressed="${S.follow}" title="Page follows the play position"><i class="led"></i>Fol</button></span>`}
-const BIP=new Set(["PAN","EQG"]);
+const BIP=new Set(["PAN","EQG","MLEV","MBAL","ILEV","IBAL","LG","HG","PG"]);
 function bipLane(){return BIP.has(S.lane)}
 function barHTML(v){return bipLane()?(v>=64?`<i class="bp up" style="height:${(v-64)/63*50}%"></i>`:`<i class="bp dn" style="height:${(64-v)/64*50}%"></i>`):`<i style="--h:${v/127*168}px"></i>`}
 function renderSeq(){
@@ -1443,7 +1448,7 @@ function renderMix(){
   <div class="top2"><i class="led act" data-act="${i}"></i><span>${i+1}</span></div>
   <div class="fader" role="slider" tabindex="0" aria-label="Track ${i+1} volume" data-g="rt" data-n="VOL" data-t="${i}"><div class="tr"><i></i></div><div class="cap2"></div></div>
   <div class="v" data-show="${i}"></div>
-  ${["PAN","DIST","DEL","REV"].map(n=>n in t.rt?pc("rt",n,{t:i}):`<div class="pc empty" aria-hidden="true"></div>`).join("")}
+  ${["PAN","DIST","DEL","REV"].map(n=>n in t.rt?(direct&&(n==="DEL"||n==="REV")?pc("rt",n,{t:i}).replace('class="pc"',`class="pc mainonly" title="${n==="DEL"?"Delay":"Reverb"} sends only reach the main outputs; this track goes to OUT ${out}. The value is kept."`):pc("rt",n,{t:i})):`<div class="pc empty" aria-hidden="true"></div>`).join("")}
   <button class="outk ${direct?"on":""}" data-out="${i}" title="${direct?"Individual output "+out+": skips the master effects":"Main output, through the master effects"}">OUT ${out}</button>
   <div class="mrow"><button class="ms m" data-mute="${i}" aria-pressed="${t.mute}" aria-label="Mute track ${i+1}">M</button><button class="ms s" data-solo="${i}" aria-pressed="${t.solo}" aria-label="Solo track ${i+1}">S</button></div>
   <div class="nm" title="${t.name}">${t.m}</div></div>`}).join("")}</div></div></div>
@@ -1537,7 +1542,7 @@ function syncMini(){const tl=$("#tl"),v=$("#mmview"),mm=$("#minimap");if(!tl||!v
 
 /* ===== Controls: sync in place, never rebuild while dragging ===== */
 function syncControls(){
- $$("#main [data-g]").forEach(el=>{const v=getV(el);if(v==null){el.style.setProperty("--f","0%");const b0=el.querySelector("b");if(b0)b0.textContent="—";return}const f=v/127*100+"%";el.style.setProperty("--f",f);el.setAttribute("aria-valuenow",v);if(el.classList.contains("pc")&&SIGNED.has(el.dataset.n)){const q=v/127*100;el.classList.add("bip");el.style.setProperty("--pl",Math.min(q,50.4)+"%");el.style.setProperty("--pw",Math.max(1.5,Math.abs(q-50.4))+"%")}
+ $$("#main [data-g]").forEach(el=>{const v=getV(el);if(v==null){el.style.setProperty("--f","0%");const b0=el.querySelector("b");if(b0)b0.textContent="—";return}const f=v/127*100+"%";el.style.setProperty("--f",f);el.setAttribute("aria-valuenow",v);if(el.classList.contains("pc")&&SIGNED.has(el.dataset.n)){const q=v/127*100;el.classList.add("bip");el.style.setProperty("--pl",Math.min(q,50.4)+"%");el.style.setProperty("--pw",v===64?"0%":Math.max(3,Math.abs(q-50.4))+"%")}
   const b=el.querySelector("b");if(b)b.textContent=SIGNED.has(el.dataset.n)&&el.dataset.g!=="mfx"?(v-64>0?"+":"")+(v-64):v;
   if(["syn","fx","rt"].includes(el.dataset.g)){const tt=el.dataset.t!=null?+el.dataset.t:S.sel,mp=S.ctl.links.filter(l=>l.t===tt&&l.p===el.dataset.n);el.classList.toggle("mapped",mp.length>0);el.classList.toggle("learnt",!!S.ctl.learnT&&S.ctl.learnT.t===tt&&S.ctl.learnT.p===el.dataset.n);if(mp.length)el.title="Mapped: "+mp.map(l=>srcById(l.src)?.label).join(", ");}
   if(el.classList.contains("pc")&&el.dataset.g!=="mfx"&&el.dataset.g!=="lfo")el.classList.toggle("lk",S.locks.has(lk(el.dataset.t!=null?+el.dataset.t:S.sel,el.dataset.n)))});
@@ -1880,7 +1885,7 @@ main.addEventListener("pointerdown",e=>{
 });
 main.addEventListener("pointermove",e=>{
  if(active){const r=active.c.getBoundingClientRect(),h=ED[active.c.dataset.ed].handles(r.width,r.height,active.c).find(h=>h.k===active.k);if(h){h.drag(clamp(e.clientX-r.left,0,r.width),clamp(e.clientY-r.top,0,r.height));markDirty();syncControls();redraw()}return}
- if(drag){const fine=e.shiftKey?.25:1;const d=drag.vert?(drag.y-e.clientY)*127/132:((e.clientX-drag.x)+(drag.y-e.clientY))/2;setV(drag.el,drag.v+d*fine);return}
+ if(drag){const fine=e.shiftKey?.25:1,dx=e.clientX-drag.x,dy=drag.y-e.clientY;const d=drag.vert?dy*127/132:(Math.abs(dx)>=Math.abs(dy)?dx:dy);setV(drag.el,drag.v+d*fine);return}
  if(laneDraw){laneAt(e);return}
  const c=e.target.closest("canvas.ed");if(c)c.style.cursor=nearest(c,e)?"grab":"default";
 });
