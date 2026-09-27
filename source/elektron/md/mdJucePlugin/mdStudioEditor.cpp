@@ -321,6 +321,46 @@ namespace mdJucePlugin
 			};
 			reply(true, {});
 		}
+		else if(op == "learnAdd")
+		{
+			// A mapping made without LEARN: a controller row x a track's parameter.
+			const int cc = intOf(_message, "cc"), t = intOf(_message, "t"), i = intOf(_message, "i");
+			const int ch = intOf(_message, "ch", pluginLib::MidiLearnMapping::AllChannels);
+			if(cc < 0 || cc > 127 || t < 0 || t > 15 || i < 0 || i > 24 || (ch > 15 && ch != pluginLib::MidiLearnMapping::AllChannels))
+			{
+				reply(false, "learnAdd: expected cc 0-127, a track and a parameter");
+				return true;
+			}
+			pluginLib::MidiLearnMapping mapping;
+			mapping.type = pluginLib::MidiLearnMapping::Type::ControlChange;
+			mapping.controller = static_cast<uint8_t>(cc);
+			mapping.channel = static_cast<uint8_t>(ch);
+			mapping.part = static_cast<uint8_t>(t);
+			mapping.paramName = StudioLink::parameterName(static_cast<uint8_t>(i));
+			auto preset = translator->getPreset();
+			preset.addMapping(mapping);
+			translator->setPreset(preset);
+			getProcessor().saveDefaultMidiLearnPreset();
+			reply(true, "CC " + std::to_string(cc) + " -> track " + std::to_string(t + 1));
+		}
+		else if(op == "learnSetCc")
+		{
+			// A controller row's CC number changed: its mappings follow it.
+			const int from = intOf(_message, "from"), to = intOf(_message, "to");
+			if(from < 0 || from > 127 || to < 0 || to > 127)
+			{
+				reply(false, "learnSetCc: expected CC numbers 0-127");
+				return true;
+			}
+			auto preset = translator->getPreset();
+			for(auto& m : preset.getMappings())
+				if(m.type == pluginLib::MidiLearnMapping::Type::ControlChange && m.controller == from
+					&& m.channel == pluginLib::MidiLearnMapping::AllChannels)
+					m.controller = static_cast<uint8_t>(to);
+			translator->setPreset(preset);
+			getProcessor().saveDefaultMidiLearnPreset();
+			reply(true, {});
+		}
 		else if(op == "learnCancel")
 		{
 			translator->cancelLearning();

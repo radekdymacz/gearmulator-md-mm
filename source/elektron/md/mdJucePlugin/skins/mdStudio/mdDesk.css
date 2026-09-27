@@ -1032,6 +1032,10 @@ html,body{min-width:1280px}
 .lcdpanel.engwait .f:not(.trf),.lcdpanel.engwait .row2{opacity:.35;transition:opacity .3s}
 .lcdpanel .f,.lcdpanel .row2{transition:opacity .3s}
 .lcdt .lt:disabled{opacity:.4;cursor:default}
+/* v49: queued pattern = its own name blinking; a short flash when it starts */
+.patrow.queued #pat{animation:blink .5s steps(2) infinite}
+.lcdpanel .patf.flash #pat{animation:patflash .45s ease-out}
+@keyframes patflash{0%{background:var(--ink);color:var(--lcd)}100%{background:transparent;color:inherit}}
 
 /* ===== The real machine's states (not in the mockup) ===== */
 .st.past{opacity:.45}
@@ -1042,6 +1046,9 @@ html,body{min-width:1280px}
 .lcdeng .led:not(.on){opacity:.35}
 body.liverec .st,body.liverec .lb{cursor:cell}
 .recbadge{font:10px var(--pix);text-transform:uppercase;color:var(--rec)}
+/* Control side panel: the title on one line, the description under it. */
+.ctlui .card>header{flex-direction:column!important;align-items:flex-start!important;gap:2px!important}
+.ctlui .card>header h3{white-space:nowrap}
 /* LCD transport keys: an explicit square tied to the LCD height. The mockup's
    aspect-ratio on a stretched height collapsed to slivers in the plug-in's
    WebKit, so no aspect-ratio and no stretch here. */

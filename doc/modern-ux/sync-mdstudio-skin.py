@@ -98,6 +98,9 @@ tail = '''
 .lcdeng .led:not(.on){opacity:.35}
 body.liverec .st,body.liverec .lb{cursor:cell}
 .recbadge{font:10px var(--pix);text-transform:uppercase;color:var(--rec)}
+/* Control side panel: the title on one line, the description under it. */
+.ctlui .card>header{flex-direction:column!important;align-items:flex-start!important;gap:2px!important}
+.ctlui .card>header h3{white-space:nowrap}
 /* LCD transport keys: an explicit square tied to the LCD height. The mockup's
    aspect-ratio on a stretched height collapsed to slivers in the plug-in's
    WebKit, so no aspect-ratio and no stretch here. */

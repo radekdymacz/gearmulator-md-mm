@@ -1027,6 +1027,10 @@ html,body{min-width:1280px}
 .lcdpanel.engwait .f:not(.trf),.lcdpanel.engwait .row2{opacity:.35;transition:opacity .3s}
 .lcdpanel .f,.lcdpanel .row2{transition:opacity .3s}
 .lcdt .lt:disabled{opacity:.4;cursor:default}
+/* v49: queued pattern = its own name blinking; a short flash when it starts */
+.patrow.queued #pat{animation:blink .5s steps(2) infinite}
+.lcdpanel .patf.flash #pat{animation:patflash .45s ease-out}
+@keyframes patflash{0%{background:var(--ink);color:var(--lcd)}100%{background:transparent;color:inherit}}
 </style>
 
 <div class="app">
@@ -1190,7 +1194,7 @@ function goPattern(p){p=(p+128)%128;if(p===S.pat&&S.queued==null)return;
    [["Save kit, then switch","cream",()=>{saveKit();queuePattern(p)}],["Switch and lose edits","danger",()=>queuePattern(p)],["Cancel","",()=>{}]]);return}
  queuePattern(p)}
 function queuePattern(p){if(S.playing){S.queued=p;renderTop();tx();return}applyPattern(p)}
-function applyPattern(p){const kitChange=S.mode==="EXTENDED"&&S.patKit[p]!==S.kit;S.pat=p;S.queued=null;if(kitChange){S.kit=S.patKit[p];setKitState("clean");toast("Loaded "+kitName(S.kit)+" with "+patName(p)+" (example data).")}render()}
+function applyPattern(p){const kitChange=S.mode==="EXTENDED"&&S.patKit[p]!==S.kit;S.pat=p;S.queued=null;if(kitChange){S.kit=S.patKit[p];setKitState("clean");toast("Loaded "+kitName(S.kit)+" with "+patName(p)+" (example data).")}render();const pf=document.querySelector(".patf");if(pf){pf.classList.remove("flash");void pf.offsetWidth;pf.classList.add("flash")}}
 function saveKit(){setKitState("clean");tx();toast("Saved "+kitName(S.kit)+" on the machine.")}
 function ask(html,btns){const d=$("#dlg");d.innerHTML=`<div class="dlgbox" role="alertdialog" aria-modal="true"><p>${html}</p><div class="btnrow">${btns.map(([t,c],i)=>`<button class="${c}" data-dlg="${i}">${t}</button>`).join("")}</div></div>`;d.hidden=false;d._btns=btns;d.querySelector("button")?.focus()}
 
@@ -1208,7 +1212,7 @@ function renderTop(){
  const lkk=$("#learnkey");if(lkk){lkk.setAttribute("aria-pressed",S.ctl.learn);lkk.classList.toggle("on",S.ctl.learn)}
  const pk=$("#platekey");if(pk)pk.querySelector("span").textContent=S.plate==="mk2"?"MKII":"MKI";
  const n=S.locks.size,m=$("#meter");$("#lockn").textContent=String(n).padStart(2,"0")+"/64";m.className="f meter"+(n>=64?" full":n>=52?" warn":"");
- $("#bpm").textContent=S.bpm.toFixed(1);$("#pat").innerHTML=S.queued!=null?`${patName(S.pat)}<span class="qarrow">›</span>${patName(S.queued)}`:patName(S.pat);$("#pat").parentElement.classList.toggle("queued",S.queued!=null);$("#kitname").textContent=kitName(S.kit);$("#undo").disabled=!H.undo.length;$("#redo").disabled=!H.redo.length;$("#undon").textContent=H.undo.length||"";$("#redon").textContent=H.redo.length||"";
+ $("#bpm").textContent=S.bpm.toFixed(1);$("#pat").textContent=patName(S.queued??S.pat);$("#pat").parentElement.classList.toggle("queued",S.queued!=null);$("#kitname").textContent=kitName(S.kit);$("#undo").disabled=!H.undo.length;$("#redo").disabled=!H.redo.length;$("#undon").textContent=H.undo.length||"";$("#redon").textContent=H.redo.length||"";
  $("#play").setAttribute("aria-pressed",S.playing);$("#playico").textContent=S.playing?"■":"▶";$("#play").setAttribute("aria-label",S.playing?"Stop":"Play");$("#rec").setAttribute("aria-pressed",!!S.rec);$("#recled").classList.toggle("on",!!S.rec);
 }
 

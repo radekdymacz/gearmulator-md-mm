@@ -145,14 +145,19 @@ const getV = el => { const [o, n] = ref(el); return o[n]; };
 function setV(el, v) { const [o, n] = ref(el); v = clamp(Math.round(v), 0, n === "depth" ? 100 : 127); if (o[n] === v) return; o[n] = v; if (el.dataset.g === "src" || el.dataset.g === "link") sendMods(); else syncKitValues(); syncControls(); redraw(); }
 
 /* ===== Top bar ===== */
+let lastQueued = null;
 function renderTop() {
 	$$("#tabs button").forEach(b => b.setAttribute("aria-selected", b.dataset.ws === S.ws));
 	const lkk = $("#learnkey"); if (lkk) { lkk.setAttribute("aria-pressed", S.ctl.learn); lkk.classList.toggle("on", S.ctl.learn); }
 	const pk = $("#platekey"); if (pk) pk.querySelector("span").textContent = S.plate === "mk2" ? "MKII" : "MKI";
 	const n = S.locks.size, m = $("#meter"); $("#lockn").textContent = String(n).padStart(2, "0") + "/64"; m.className = "f meter" + (n >= 64 ? " full" : n >= 52 ? " warn" : "");
 	$("#bpm").textContent = (+S.bpm).toFixed(1);
-	$("#pat").innerHTML = S.queued != null ? `${patName(S.pat)}<span class="qarrow">›</span>${patName(S.queued)}` : patName(S.pat);
+	/* Mockup v49: only the target's name, blinking while it waits for the pattern end; one short
+	   flash when the machine really switches (the desk clears the queue at the playhead wrap). */
+	$("#pat").textContent = patName(S.queued ?? S.pat);
 	$("#pat").parentElement.classList.toggle("queued", S.queued != null);
+	if (lastQueued != null && S.queued == null && S.pat === lastQueued) { const pf = $(".patf"); if (pf) { pf.classList.remove("flash"); void pf.offsetWidth; pf.classList.add("flash"); } }
+	lastQueued = S.queued;
 	$("#kitname").textContent = kitName(S.kit);
 	setKitState(S.kitState);
 	$("#undo").disabled = !S.canUndo; $("#redo").disabled = !S.canRedo; syncUndoCounts();
@@ -772,28 +777,42 @@ function modInspector(sr) {
 	  <select id="mp">${slots(S.tracks[C.addT].m).map((p, i) => p ? `<option value="${i}">${p}</option>` : "").join("")}</select><button class="cream" id="maddl">Add target</button></div>
 	 <div class="irow"><span class="ilab"></span><button data-addsrc="lfo">+ App LFO</button><button data-addsrc="random">+ Random</button><button class="danger" data-delsrc="${sr.id}">Remove ${sr.label}</button></div></section>`;
 }
+/* Controller rows: 8 knobs (CC 21-28 by default, the CC number is editable per row; kept per
+   viewer), plus any other CC the plug-in's MIDI Learn preset maps. A row id is "ch:cc" (ch 255 =
+   any channel). Mapping works with LEARN or here: a cell opens the row with that track's picker. */
+const KNOB_CCS = (() => { try { const v = JSON.parse(localStorage.getItem("mddesk.knobs")); if (Array.isArray(v) && v.length === 8) return v; } catch (_) { } return [21, 22, 23, 24, 25, 26, 27, 28]; })();
+function saveKnobs() { try { localStorage.setItem("mddesk.knobs", JSON.stringify(KNOB_CCS)); } catch (_) { } }
+function ccRows(maps) {
+	const rows = KNOB_CCS.map((cc, k) => ({ id: "255:" + cc, ch: 255, cc, label: "Knob " + (k + 1), knob: k }));
+	for (const m of maps) { const id = m.ch + ":" + m.cc; if (!rows.some(r => r.id === id)) rows.push({ id, ch: m.ch, cc: m.cc, label: m.ch === 255 ? "CC " + m.cc : "CC " + m.cc + " ch " + (m.ch + 1), knob: -1 }); }
+	return rows;
+}
 function renderControl() {
-	const L = Docs.learn || { mappings: [], learning: null }, maps = L.mappings;
-	const ccs = [...new Set(maps.map(m => m.ch + ":" + m.cc))].map(k => { const [ch, cc] = k.split(":").map(Number); return { ch, cc }; });
+	const L = Docs.learn || { mappings: [], learning: null }, maps = L.mappings, rows = ccRows(maps);
 	const C = S.ctl;
-	if (C.sel == null || (C.sel.startsWith("app:") && !Mods.source(C.sel.slice(4)))) C.sel = ccs.length ? ccs[0].ch + ":" + ccs[0].cc : Mods.doc.sources.length ? "app:" + Mods.doc.sources[0].id : null;
+	if (C.sel == null || (C.sel.startsWith("app:") && !Mods.source(C.sel.slice(4))) || (!C.sel.startsWith("app:") && !rows.some(r => r.id === C.sel))) C.sel = rows[0].id;
+	const mapsOf = id => maps.filter(m => m.ch + ":" + m.cc === id);
 	const mx = `<div class="mx"><span></span>${S.tracks.map((t, i) => `<span class="mxh" title="${t.name}"><b>${i + 1}</b><small>${t.m}</small></span>`).join("")}
-  ${ccs.map(src => { const id = src.ch + ":" + src.cc; return `<button class="srch ${id === C.sel ? "sel" : ""} k-cc" data-src="${id}" style="--f:0%"><span class="sk">CC ${src.cc}</span><b>${src.ch === 255 ? "any channel" : "ch " + (src.ch + 1)}</b><span class="sv mono"></span></button>
-   ${S.tracks.map((t, i) => { const ls = maps.filter(m => m.ch === src.ch && m.cc === src.cc && m.t === i); return `<button class="mxc ${ls.length ? "on" : ""} ${id === C.sel && C.selT === i ? "sel" : ""}" data-mxsrc="${id}" data-mxt="${i}" title="${ls.map(l => l.name).join(", ") || "no link"}">${ls.slice(0, 2).map(l => `<i>${slots(t.m)[l.i] || l.name}</i>`).join("")}${ls.length > 2 ? `<i>+${ls.length - 2}</i>` : ""}</button>`; }).join("")}`; }).join("")}
+  ${rows.map(src => { const ms = mapsOf(src.id); return `<button class="srch ${src.id === C.sel ? "sel" : ""} k-cc" data-src="${src.id}" style="--f:0%" title="${ms.length ? ms.length + " target" + (ms.length > 1 ? "s" : "") : "Not mapped: does nothing yet"}"><span class="sk">CC ${src.cc}</span><b>${src.label}</b><span class="sv mono">${ms.length ? ms.length : "–"}</span></button>
+   ${S.tracks.map((t, i) => { const ls = ms.filter(m => m.t === i); return `<button class="mxc ${ls.length ? "on" : ""} ${src.id === C.sel && C.selT === i ? "sel" : ""}" data-mxsrc="${src.id}" data-mxt="${i}" title="${ls.map(l => slots(t.m)[l.i] || l.name).join(", ") || "Map " + src.label + " to track " + (i + 1)}">${ls.slice(0, 2).map(l => `<i>${slots(t.m)[l.i] || l.name}</i>`).join("")}${ls.length > 2 ? `<i>+${ls.length - 2}</i>` : ""}</button>`; }).join("")}`; }).join("")}
   ${Mods.doc.sources.map(modRow).join("")}</div>`;
-	const app = C.sel && C.sel.startsWith("app:") ? Mods.source(C.sel.slice(4)) : null;
+	const app = C.sel.startsWith("app:") ? Mods.source(C.sel.slice(4)) : null;
 	let insp;
 	if (app) insp = modInspector(app);
 	else {
-		const selMaps = maps.filter(m => m.ch + ":" + m.cc === C.sel && (C.selT == null || m.t === C.selT));
-		insp = `<section class="card"><header><h3>${C.sel ? "CC " + C.sel.split(":")[1] : "No mappings yet"}</h3><span>from your MIDI controller · saved with the plug-in's MIDI Learn preset</span></header>
-  <div class="note">${L.learning ? `Learning <b>track ${L.learning.t + 1} ${slots(S.tracks[L.learning.t].m)[L.learning.i] || L.learning.name}</b>: turn a knob both ways.` : "Press LEARN (L), click any value in Sound, Mix or here, then turn a knob. The mapping moves the value through the plug-in's parameters, like host automation."}</div>
+		const row = rows.find(r => r.id === C.sel), selMaps = mapsOf(C.sel).filter(m => C.selT == null || m.t === C.selT);
+		const t = C.selT != null ? C.selT : C.addT;
+		insp = `<section class="card"><header><h3>${row.label} · CC ${row.cc}</h3><span>${row.ch === 255 ? "any channel" : "channel " + (row.ch + 1)} · from your MIDI controller · saved with the plug-in's MIDI Learn preset</span></header>
+  ${row.knob >= 0 ? `<div class="irow"><span class="ilab">CC</span><span class="stepper"><button data-knobcc="-1" aria-label="Lower CC number">−</button><b class="mono">${row.cc}</b><button data-knobcc="1" aria-label="Higher CC number">+</button></span><span class="note">the CC your controller's knob ${row.knob + 1} sends; its targets follow</span></div>` : ""}
+  <div class="note">${L.learning ? `Learning <b>track ${L.learning.t + 1} ${slots(S.tracks[L.learning.t].m)[L.learning.i] || L.learning.name}</b>: turn a knob both ways.` : "Pick a target below, or press LEARN (L), click any value and turn a knob. The mapping moves the value through the plug-in's parameters, like host automation."}</div>
   <div class="lhead"><span class="cap">Targets</span>${C.selT != null ? `<button class="ptog on" data-selt="all"><i class="led"></i>Track ${C.selT + 1} only</button>` : `<span class="note">${selMaps.length} target${selMaps.length === 1 ? "" : "s"}</span>`}</div>
   <div class="lnks">${selMaps.map(l => `<div class="lnk"><span class="lcdchip" title="${S.tracks[l.t].name}">T${l.t + 1} ${slots(S.tracks[l.t].m)[l.i] || l.name}</span><span class="note">${l.mode}</span><span></span>
-   <button class="ptog ${l.invert ? "on" : ""}" data-linv="${l.index}"><i class="led"></i>Inv</button><button class="iconkey" data-ldel="${l.index}" aria-label="Remove mapping" title="Remove">×</button></div>`).join("") || `<div class="note">No targets. Use LEARN.</div>`}</div>
+   <button class="ptog ${l.invert ? "on" : ""}" data-linv="${l.index}"><i class="led"></i>Inv</button><button class="iconkey" data-ldel="${l.index}" aria-label="Remove mapping" title="Remove">×</button></div>`).join("") || `<div class="note">Not mapped: this row does nothing yet.</div>`}</div>
+  <div class="irow addrow"><span class="ilab">Add</span><select id="ct">${S.tracks.map((x, i) => `<option value="${i}" ${i === t ? "selected" : ""}>Track ${i + 1} · ${x.m}</option>`).join("")}</select>
+   <select id="cp">${slots(S.tracks[t].m).map((p, i) => p ? `<option value="${i}">${p}</option>` : "").join("")}<option value="24">LEVEL</option></select><button class="cream" id="caddl">Add target</button></div>
   <div class="irow"><span class="ilab"></span><button data-addsrc="lfo">+ App LFO</button><button data-addsrc="random">+ Random</button></div></section>`;
 	}
-	$("#main").innerHTML = `<div class="ctlui"><section class="card"><header><h3>Mapping matrix</h3><span>rows = controller CCs and app modulators · columns = tracks</span></header>${mx}</section>${insp}</div>`;
+	$("#main").innerHTML = `<div class="ctlui"><section class="card"><header><h3>Mapping matrix</h3><span>rows = controller knobs, learned CCs and app modulators · columns = tracks</span></header>${mx}</section>${insp}</div>`;
 	syncControls();
 }
 /* Values and the CC rate while the machine plays: in place, no re-render. */
@@ -971,7 +990,13 @@ document.addEventListener("click", e => {
 	if (S.ws === "control") {
 		const C = S.ctl;
 		const shh = e.target.closest(".srch.k-cc"); if (shh) { C.sel = shh.dataset.src; C.selT = null; render(); return; }
-		const mc = e.target.closest(".mxc[data-mxsrc]"); if (mc) { C.sel = mc.dataset.mxsrc; C.selT = +mc.dataset.mxt; render(); return; }
+		const mc = e.target.closest(".mxc[data-mxsrc]"); if (mc) { C.sel = mc.dataset.mxsrc; C.selT = C.addT = +mc.dataset.mxt; render(); return; }
+		if (e.target.closest("#caddl")) { const [ch, cc] = C.sel.split(":").map(Number); cmd("learnAdd", { cc, ch, t: +$("#ct").value, i: +$("#cp").value }); return; }
+		const kc = e.target.closest("[data-knobcc]"); if (kc) {
+			const [, cc] = C.sel.split(":").map(Number), k = KNOB_CCS.indexOf(cc), to = clamp(cc + +kc.dataset.knobcc, 0, 127);
+			if (k < 0 || KNOB_CCS.includes(to)) { toast("Another knob row already uses CC " + to + "."); return; }
+			KNOB_CCS[k] = to; saveKnobs(); cmd("learnSetCc", { from: cc, to }); C.sel = "255:" + to; render(); return;
+		}
 		if (e.target.closest("[data-selt]")) { C.selT = null; render(); return; }
 		const li = e.target.closest("[data-linv]"); if (li) { cmd("learnInvert", { index: +li.dataset.linv }); return; }
 		const as = e.target.closest("[data-addsrc]"); if (as) { const id = Mods.add(as.dataset.addsrc); C.sel = "app:" + id; C.selT = null; sendMods(); render(); return; }
@@ -992,7 +1017,7 @@ document.addEventListener("click", e => {
 });
 document.addEventListener("change", e => {
 	const id = e.target.id, v = e.target.value, tr = S.tracks[S.sel], l = tr.lfo;
-	if (id === "mt") { S.ctl.addT = +v; render(); return; }
+	if (id === "mt" || id === "ct") { S.ctl.addT = +v; if (id === "ct" && S.ctl.selT != null) S.ctl.selT = +v; render(); return; }
 	if (id === "lfoT") { l.TRCK = +v; if (!params(+v).includes(l.PARAM)) l.PARAM = params(+v)[0]; syncKitValues(); renderSound(); enhanceSelects($("#main")); }
 	if (id === "lfoP") { l.PARAM = v; syncKitValues(); }
 	if (id === "mg") { tr.muteGroup = v === "" ? null : +v; syncKitValues(); }
@@ -1240,6 +1265,16 @@ if (/[?&]selftest=1/.test(location.search)) (async () => {
 		$("#rec").click();
 		t1 = await until(() => !recOn(), 3000);
 		log(`P3: REC again -> recording off ${t1 >= 0 ? "ok" : "FAIL"}, still playing ${machineState().desk.playing}`);
+		/* v49: a queued pattern shows only its name, blinking; a flash when it starts. */
+		const from = currentPatternSlot(), to = (from + 1) % 128, w0 = lcdW();
+		cmd("select", { p: to, force: true });
+		await until(() => machineState().desk.queued === to, 2000); await sleep(150);
+		log(`P3: queued ${patName(to)}: LCD shows "${$("#pat").textContent}" ${getComputedStyle($("#pat")).animationName}, LCD ${w0} -> ${lcdW()} px`);
+		let flashed = false; const obs = new MutationObserver(() => { if ($(".patf").classList.contains("flash")) flashed = true; }); obs.observe($(".patf"), { attributes: true });
+		t0 = performance.now(); t1 = await until(() => machineState().desk.queued == null && currentPatternSlot() === to, 12000); await sleep(100); obs.disconnect();
+		log(`P3: switch heard after ${ms(t0, t1)}: LCD "${$("#pat").textContent}", flash ${flashed ? "ok" : "FAIL"}, LCD ${lcdW()} px`);
+		cmd("stop"); await until(() => !machineState().desk.playing, 3000);
+		cmd("select", { p: from, force: true }); await sleep(500);
 		$("#play").click(); await until(() => !machineState().desk.playing, 3000);
 		log(`P3: PLAY key shows ${$("#playico").textContent} after stop`);
 		cmd("clearSteps", { p: currentPatternSlot(), t: tr, from: 0, to: S.len }); await sleep(400);
