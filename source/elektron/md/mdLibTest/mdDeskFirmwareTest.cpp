@@ -1269,6 +1269,52 @@ namespace
 		std::printf("  bytes sent to the machine: %zu\n", hw.bytesOut());
 	}
 
+	// P5: the GLOBAL panel's settings reach the machine and take effect (a dump plus 0x56).
+	void globalSettings(Rig& _rig)
+	{
+		auto& m = _rig.machine();
+		std::puts("== P5 GLOBAL settings");
+		int clocks = 0, pcIn = -1;
+		m.onMidi = [&](const synthLib::SMidiEvent& _e) { if(_e.a == 0xf8) ++clocks; };
+		_rig.page(R"({"op":"globalSet","field":"tempoOut","on":true,"id":990})");
+		check(resultOk(_rig), "TEMPO OUT on accepted");
+		_rig.runUntil([&] { return !_rig.desk().isBusy(); }, 2000);
+		_rig.run(300);
+		_rig.page(R"({"op":"play","id":991})");
+		_rig.runUntil([&] { return _rig.telemetry().playing; }, 2000);
+		clocks = 0;
+		_rig.run(500);
+		const int on = clocks;
+		_rig.page(R"({"op":"stop","id":992})");
+		_rig.run(400);
+		_rig.page(R"({"op":"globalSet","field":"tempoOut","on":false,"id":993})");
+		_rig.runUntil([&] { return !_rig.desk().isBusy(); }, 2000);
+		_rig.run(300);
+		_rig.page(R"({"op":"play","id":994})");
+		_rig.runUntil([&] { return _rig.telemetry().playing; }, 2000);
+		clocks = 0;
+		_rig.run(500);
+		const int off = clocks;
+		_rig.page(R"({"op":"stop","id":995})");
+		_rig.run(400);
+		std::printf("  MIDI clocks in 0.5 s: TEMPO OUT on %d, off %d\n", on, off);
+		check(on > 10 && off == 0, "TEMPO OUT: the machine sends MIDI clock only when on");
+		const auto gdoc = _rig.pageDoc("global", *_rig.desk().session().state().globalSlot);
+		check(gdoc && gdoc->find("control") && !gdoc->find("control")->find("tempoOut")->asBool(), "the page's global document says TEMPO OUT off");
+		_rig.page(R"({"op":"globalSet","field":"programChangeIn","on":true,"id":996})");
+		_rig.runUntil([&] { return !_rig.desk().isBusy(); }, 2000);
+		_rig.run(300);
+		m.send({0xc0, 9});
+		_rig.run(300);
+		pcIn = ed::parseMdStatusResponse(m.request(ed::mdStatusRequest(ed::MdStatus::Pattern), 0x72))->value;
+		check(pcIn == 9, "PRG CHANGE IN on: program change 9 selects A10");
+		_rig.page(R"({"op":"globalSet","field":"programChangeIn","on":false,"id":997})");
+		_rig.runUntil([&] { return !_rig.desk().isBusy(); }, 2000);
+		m.send(ed::mdLoadPattern(0));
+		_rig.run(300);
+		m.onMidi = nullptr;
+	}
+
 int main(const int _argc, char** _argv)
 {
 	std::setvbuf(stdout, nullptr, _IOLBF, 0);
@@ -1298,6 +1344,7 @@ int main(const int _argc, char** _argv)
 			chaining(rig);
 			recLockTruth(rig);
 			library(rig);
+			globalSettings(rig);
 			std::printf("mdDeskFirmwareTest p4: %s (%d failure(s))\n", g_failures ? "FAIL" : "PASS", g_failures);
 			return g_failures ? 1 : 0;
 		}

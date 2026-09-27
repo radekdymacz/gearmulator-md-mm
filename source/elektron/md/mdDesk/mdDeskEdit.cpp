@@ -774,6 +774,86 @@ namespace mdDesk
 				_g.extendedMode = *on ? 1 : 0;
 				return _g;
 			}
+			if(_op == "globalSet")
+			{
+				// P5: the GLOBAL menu's settings, by name (elektronData::mdGlobalBits, measured).
+				namespace b = ed::mdGlobalBits;
+				const auto field = _a.text("field");
+				if(!field)
+					return {};
+				const auto bit = [&](uint8_t& _byte, const uint8_t _mask, const bool _set)
+				{
+					_byte = static_cast<uint8_t>(_set ? _byte | _mask : _byte & ~_mask);
+				};
+				const auto flag = [&]() -> std::optional<bool>
+				{
+					const auto f = _a.flag("on");
+					if(!f)
+						_errors.push_back("on: expected true or false");
+					return f;
+				};
+				if(*field == "baseChannel")
+				{
+					const auto v = _a.integer("v", 0, b::g_maxBaseChannel);
+					if(!v)
+						return {};
+					_g.baseChannel = uint8_t(*v);
+				}
+				else if(*field == "tempoIn" || *field == "ctrlIn" || *field == "tempoOut" || *field == "ctrlOut"
+					|| *field == "programChangeIn" || *field == "programChangeOut" || *field == "localControl")
+				{
+					const auto on = flag();
+					if(!on)
+						return {};
+					if(*field == "tempoIn") bit(_g.syncFlags, b::g_tempoInExternal, *on);
+					else if(*field == "ctrlIn") bit(_g.syncFlags, b::g_ctrlInOff, !*on);
+					else if(*field == "tempoOut") bit(_g.syncFlags, b::g_tempoOut, *on);
+					else if(*field == "ctrlOut") bit(_g.syncFlags, b::g_ctrlOut, *on);
+					else if(*field == "programChangeIn") bit(_g.programChange, b::g_programChangeIn, *on);
+					else if(*field == "programChangeOut") bit(_g.programChange, b::g_programChangeOut, *on);
+					else _g.localControl = *on ? 1 : 0;
+				}
+				else if(*field == "programChangeChannel")
+				{
+					const auto v = _a.integer("v", 0, 16);	// 0 = BASE
+					if(!v)
+						return {};
+					_g.programChange = static_cast<uint8_t>((_g.programChange & 3) | (*v << 2));
+				}
+				else if(*field == "trigMode")
+				{
+					const auto v = _a.integer("v", 0, 2);
+					if(!v)
+						return {};
+					_g.trigMode = uint8_t(*v);
+				}
+				else if(*field == "keymap")
+				{
+					const auto note = _a.integer("note", 0, 127);
+					const auto* target = _a.value("target");
+					if(!note)
+						return {};
+					if(target && target->isNull())
+						_g.keymap[size_t(*note)] = ed::MdGlobal::g_unmapped;
+					else
+					{
+						const auto t = _a.integer("target", 0, 31);
+						if(!t)
+							return {};
+						// A MIDI key maps one function: the target's old key is freed (the machine's rule).
+						for(auto& k : _g.keymap)
+							if(k == *t)
+								k = ed::MdGlobal::g_unmapped;
+						_g.keymap[size_t(*note)] = uint8_t(*t);
+					}
+				}
+				else
+				{
+					_errors.push_back("field: unknown global setting " + *field);
+					return {};
+				}
+				return _g;
+			}
 			_errors.push_back("unknown global command " + _op);
 			return {};
 		}
@@ -861,7 +941,7 @@ namespace mdDesk
 			before = it->second;
 			after = *edit;
 		}
-		else if(isOneOf(op, {"route", "tempo", "extended"}))
+		else if(isOneOf(op, {"route", "tempo", "extended", "globalSet"}))
 		{
 			if(!_docs.global)
 			{

@@ -77,4 +77,9 @@ namespace elektronData
 	{
 		return dumpIo::request(g_globalRequestId, _slot);
 	}
+
+	std::vector<uint8_t> mdSetActiveGlobal(const uint8_t _slot)
+	{
+		return {0xf0, 0x00, 0x20, 0x3c, 0x02, 0x00, 0x56, static_cast<uint8_t>(_slot & 7), 0xf7};
+	}
 }

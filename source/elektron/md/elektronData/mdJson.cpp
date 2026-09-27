@@ -898,6 +898,20 @@ namespace elektronData
 		other.set("programChange", static_cast<int>(_g.programChange));
 		other.set("trigMode", static_cast<int>(_g.trigMode));
 		v.set("settings", std::move(other));
+		// P5: the measured meaning of the settings, derived, read-only (settings is the value).
+		namespace b = mdGlobalBits;
+		Value c = Value::object();
+		c.set("tempoIn", _g.syncFlags & b::g_tempoInExternal ? "external" : "internal");
+		c.set("ctrlIn", !(_g.syncFlags & b::g_ctrlInOff));
+		c.set("tempoOut", (_g.syncFlags & b::g_tempoOut) != 0);
+		c.set("ctrlOut", (_g.syncFlags & b::g_ctrlOut) != 0);
+		c.set("programChangeIn", (_g.programChange & b::g_programChangeIn) != 0);
+		c.set("programChangeOut", (_g.programChange & b::g_programChangeOut) != 0);
+		c.set("programChangeChannel", (_g.programChange >> 2) ? Value(static_cast<int>(_g.programChange >> 2)) : Value());
+		c.set("trigMode", _g.trigMode == 0 ? Value("gate") : _g.trigMode == 1 ? Value("start") : _g.trigMode == 2 ? Value("que")
+			: Value(static_cast<int>(_g.trigMode)));
+		c.set("localControl", _g.localControl != 0);
+		v.set("control", std::move(c));
 		return v;
 	}
 

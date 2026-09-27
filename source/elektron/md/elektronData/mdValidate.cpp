@@ -217,6 +217,7 @@ namespace elektronData
 				p.range(at("keymap", n), _g.keymap[n], 0, 31);
 		p.range("tempo (BPM x 24)", _g.tempo, g_minTempo, g_maxTempo);
 		p.range("extendedMode", _g.extendedMode, 0, 1);
+		p.range("settings.programChange channel", _g.programChange >> 2, 0, 16);
 		return p.take();
 	}
 }

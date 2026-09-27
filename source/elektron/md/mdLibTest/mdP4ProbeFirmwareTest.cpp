@@ -420,6 +420,199 @@ namespace
 		}
 	}
 
+	// ---- P5: the GLOBAL settings bytes, by behaviour ----
+	void globals(const Bytes& _rom)
+	{
+		std::puts("== probe: GLOBAL settings (sync, local control, program change, base channel)");
+		Machine m(_rom, g_romName);
+		const int slot = status(m, ed::MdStatus::GlobalSlot);
+		const auto readG = [&] { return *ed::decodeMdGlobal(m.request(ed::mdGlobalRequest(static_cast<uint8_t>(slot)), ed::g_mdGlobalDump)); };
+		const auto g0 = readG();
+		std::printf("  slot %d: base %d unused %d sync %02x local %d inputs", slot, g0.baseChannel, g0.unused, g0.syncFlags, g0.localControl);
+		for(const auto v : g0.inputSettings) std::printf(" %d", v);
+		std::printf(" prgch %02x trigmode %d\n", g0.programChange, g0.trigMode);
+		std::printf("  keymap:");
+		for(int n = 0; n < 128; ++n) if(g0.keymap[n] != 0xff) std::printf(" %d:%d", n, g0.keymap[n]);
+		std::printf("\n");
+		int fa = 0, fc = 0, f8 = 0, pcOut = -1, notes = 0;
+		m.onMidi = [&](const synthLib::SMidiEvent& _e)
+		{
+			if(_e.a == 0xfa || _e.a == 0xfb) ++fa;
+			else if(_e.a == 0xfc) ++fc;
+			else if(_e.a == 0xf8) ++f8;
+			else if((_e.a & 0xf0) == 0xc0) pcOut = _e.b;
+			else if((_e.a & 0xf0) == 0x90) ++notes;
+		};
+		const auto put = [&](const ed::MdGlobal& _g, const bool _reselect)
+		{
+			m.send(ed::encodeMdGlobal(_g));
+			if(_reselect)
+				m.send({0xf0, 0x00, 0x20, 0x3c, 0x02, 0x00, 0x56, static_cast<uint8_t>(slot), 0xf7});
+			m.run(1000);
+		};
+		const auto playing = [&] { const auto a = m.playhead(); m.run(400); return m.playhead() != a; };
+		// Sync bits.
+		for(int b = -1; b < 8; ++b)
+		{
+			for(const bool re : {false, true})
+			{
+				auto g = g0;
+				g.syncFlags = b < 0 ? 0 : static_cast<uint8_t>(1 << b);
+				put(g, re);
+				fa = fc = f8 = 0;
+				press(m, md::PanelControl::Play);
+				m.run(500);
+				const int clocks = f8, starts = fa;
+				press(m, md::PanelControl::Stop);
+				press(m, md::PanelControl::Stop);
+				m.run(200);
+				const int stops = fc;
+				m.send({0xfa});
+				const bool extStart = playing();
+				m.send({0xfc});
+				m.run(200);
+				press(m, md::PanelControl::Stop);
+				m.run(100);
+				const auto rb = readG();
+				std::printf("  [stored %02x] sync %02x%s: out clock %d start %d stop %d; MIDI Start in plays %d\n", rb.syncFlags, g.syncFlags, re ? " +0x56" : "", clocks, starts, stops, extStart ? 1 : 0);
+			}
+		}
+		put(g0, true);
+		// Local control: TRIG 1 with local on and off.
+		for(const int local : {1, 0})
+		{
+			auto g = g0;
+			g.localControl = static_cast<uint8_t>(local);
+			for(const bool re : {false, true})
+			{
+				put(g, re);
+				m.run(300);
+				const auto from = m.left().size();
+				notes = 0;
+				press(m, md::PanelControl::Trigger1);
+				m.run(200);
+				double e = 0;
+				for(size_t i = from; i < m.left().size(); ++i) e += m.left()[i] * m.left()[i];
+				std::printf("  local %d%s: TRIG 1 energy %.4f, notes out %d\n", local, re ? " +0x56" : "", e, notes);
+			}
+		}
+		put(g0, true);
+		// Program change.
+		for(const int v : {0, 1, 2, 3, 4, 8, 16, 17, 32, 64})
+		{
+			auto g = g0;
+			g.programChange = static_cast<uint8_t>(v);
+			put(g, true);
+			m.send(ed::mdLoadPattern(0));
+			m.run(100);
+			m.send({static_cast<uint8_t>(0xc0 | g0.baseChannel), 5});
+			m.run(200);
+			const int in = status(m, ed::MdStatus::Pattern);
+			pcOut = -1;
+			rawPanel(m, 0x23, 0x01, 60); rawPanel(m, 0x20, 0x04, 60); rawPanel(m, 0x20, 0, 60); rawPanel(m, 0x23, 0, 200);
+			std::printf("  prgch %02x: PC 5 in -> pattern %d; select A03 on the panel -> PC out %d\n", v, in, pcOut);
+		}
+		put(g0, true);
+		// Base channel.
+		for(const int bc : {0, 2})
+		{
+			auto g = g0;
+			g.baseChannel = static_cast<uint8_t>(bc);
+			put(g, true);
+			const auto before = m.read8(ed::g_mdWorkingKitAddress + ed::g_mdWorkingKitParamsOffset + 16);
+			m.send({0xb0, 16 + 16, static_cast<uint8_t>((before + 11) & 0x7f)});	// track 1 DIST on channel 1
+			m.run(80);
+			const auto after0 = m.read8(ed::g_mdWorkingKitAddress + ed::g_mdWorkingKitParamsOffset + 16);
+			m.send({static_cast<uint8_t>(0xb0 | 2), 16 + 16, static_cast<uint8_t>((before + 22) & 0x7f)});
+			m.run(80);
+			const auto after2 = m.read8(ed::g_mdWorkingKitAddress + ed::g_mdWorkingKitParamsOffset + 16);
+			std::printf("  base %d: DIST CC on ch1 %s, on ch3 %s\n", bc + 1, after0 != before ? "taken" : "ignored", after2 != after0 ? "taken" : "ignored");
+		}
+		put(g0, true);
+		// Sync bits with an external clock, and TRIG energy per bit (local control?).
+		const auto trigEnergy = [&]
+		{
+			m.run(300);
+			const auto from = m.left().size();
+			press(m, md::PanelControl::Trigger1);
+			m.run(200);
+			double e = 0;
+			for(size_t i = from; i < m.left().size(); ++i) e += m.left()[i] * m.left()[i];
+			return e;
+		};
+		for(const int v : {0x00, 0x01, 0x02, 0x04, 0x08, 0x10, 0x11})
+		{
+			auto g = g0;
+			g.syncFlags = static_cast<uint8_t>(v);
+			put(g, true);
+			m.send({0xfa});
+			const bool alone = playing();
+			m.send({0xfc}); m.run(100); press(m, md::PanelControl::Stop); m.run(100);
+			m.send({0xfa});
+			const auto a = m.playhead();
+			for(int i = 0; i < 48; ++i) { m.send({0xf8}); m.run(20); }
+			const bool clocked = m.playhead() != a;
+			m.send({0xfc}); m.run(100); press(m, md::PanelControl::Stop); m.run(100);
+			const auto e = trigEnergy();
+			std::printf("  sync %02x: MIDI Start alone plays %d, with MIDI clock plays %d; TRIG 1 energy %.2f\n", v, alone ? 1 : 0, clocked ? 1 : 0, e);
+		}
+		put(g0, true);
+		for(const int lc : {0, 1, 2, 127})
+		{
+			auto g = g0;
+			g.localControl = static_cast<uint8_t>(lc);
+			put(g, true);
+			std::printf("  local byte %d: TRIG 1 energy %.2f (stored %d)\n", lc, trigEnergy(), readG().localControl);
+		}
+		put(g0, true);
+		for(const int v : {0x01, 0x05, 0x09, 0x0d, 0x11, 0x21, 0x41, 0x03})
+		{
+			auto g = g0;
+			g.programChange = static_cast<uint8_t>(v);
+			put(g, true);
+			std::printf("  prgch %02x: PC 7 in accepted on channels", v);
+			for(int ch = 0; ch < 16; ++ch)
+			{
+				m.send(ed::mdLoadPattern(0)); m.run(60);
+				m.send({static_cast<uint8_t>(0xc0 | ch), 7}); m.run(120);
+				if(status(m, ed::MdStatus::Pattern) == 7) std::printf(" %d", ch + 1);
+			}
+			pcOut = -1;
+			int pcCh = -1;
+			m.onMidi = [&](const synthLib::SMidiEvent& _e) { if((_e.a & 0xf0) == 0xc0) { pcOut = _e.b; pcCh = _e.a & 15; } };
+			rawPanel(m, 0x23, 0x01, 60); rawPanel(m, 0x20, 0x04, 60); rawPanel(m, 0x20, 0, 60); rawPanel(m, 0x23, 0, 200);
+			std::printf("; PC out %d on channel %d\n", pcOut, pcCh + 1);
+		}
+		put(g0, true);
+		for(const int u : {1, 127})
+		{
+			auto g = g0;
+			g.unused = static_cast<uint8_t>(u);
+			put(g, true);
+			std::printf("  byte 1 = %d: TRIG 1 energy %.2f\n", u, trigEnergy());
+		}
+		put(g0, true);
+		// Notes mapped to 16-31, per trig mode.
+		for(const int tm : {0, 1, 2})
+		{
+			auto g = g0;
+			g.trigMode = static_cast<uint8_t>(tm);
+			put(g, true);
+			m.send(ed::mdLoadPattern(10)); m.run(100);
+			m.send({static_cast<uint8_t>(0x90 | g0.baseChannel), 65, 100}); m.run(300);
+			const int onPat = status(m, ed::MdStatus::Pattern);
+			const bool pl = playing();
+			m.send({static_cast<uint8_t>(0x80 | g0.baseChannel), 65, 0}); m.run(300);
+			const bool pl2 = playing();
+			press(m, md::PanelControl::Stop); press(m, md::PanelControl::Stop); m.run(200);
+			std::printf("  trig mode %d: note 65 (map %d) -> pattern %d, playing %d, after note off %d\n", tm, g0.keymap[65], onPat, pl ? 1 : 0, pl2 ? 1 : 0);
+		}
+		put(g0, true);
+		// Trig mode (MAP EDITOR TRIG: GATE/START/QUE) for a note mapped to a pattern: which notes map patterns?
+		for(int n = 0; n < 128; ++n)
+			if(g0.keymap[n] >= 16 && g0.keymap[n] != 0xff) { std::printf("  first non-track map: note %d -> %d\n", n, g0.keymap[n]); break; }
+	}
+
 	// ---- keys: which panel keys does the firmware take, when? ----
 
 	void keys(const Bytes& _rom)
@@ -1223,6 +1416,8 @@ int main(const int _argc, char** _argv)
 			lockWindow(rom, false);
 			lockWindow(rom, true);
 		}
+		if(only == "globals")
+			globals(rom);
 		if(only == "chain2")
 			chainVariants(rom);
 		if(only.empty() || only == "mutes")

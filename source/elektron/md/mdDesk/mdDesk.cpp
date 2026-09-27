@@ -1,6 +1,7 @@
 #include "mdDesk.h"
 
 #include "elektronData/mdCommands.h"
+#include "elektronData/mdGlobal.h"
 #include "elektronData/mdJson.h"
 #include "elektronData/mdMachines.h"
 #include "elektronData/mdWorkingKit.h"
@@ -220,6 +221,22 @@ namespace mdDesk
 			handleKnobs(_message);
 		else if(op == "kitLoad" || op == "kitSaveAs")
 			handleKitSlot(_message);
+		else if(op == "globalSlot")
+		{
+			// The machine's active GLOBAL slot (0x56), then its settings are read.
+			const auto slot = intOf(_message, "slot");
+			if(!slot || *slot < 0 || *slot > 7)
+				result(_message, {"slot: expected a global slot 0-7"}, {});
+			else
+			{
+				if(m_port.sendSysex)
+					m_port.sendSysex(ed::mdSetActiveGlobal(static_cast<uint8_t>(*slot)));
+				m_session.requestStatus();
+				load({DocKind::Global, static_cast<uint8_t>(*slot)}, true);
+				m_machineDirty = true;
+				result(_message, {}, "Global " + std::to_string(*slot + 1) + " is active");
+			}
+		}
 		else if(op == "selectSong")
 		{
 			// P1: the Machinedrum ignores LOAD SONG while it plays.
@@ -430,7 +447,13 @@ namespace mdDesk
 				if(const auto sysex = liveEditSysex(e); !sysex.empty() && m_port.sendSysex)
 					m_port.sendSysex(sysex);
 			if(!delivery.notLive.empty())
+			{
+				// A global dump is stored at once but applied only when its slot is made
+				// active (P5, measured): 0x56 right after it.
 				m_session.pushGlobal(std::get<ed::MdGlobal>(_change.after));
+				if(m_port.sendSysex && (!m_session.state().globalSlot || *m_session.state().globalSlot == ref.slot))
+					m_port.sendSysex(ed::mdSetActiveGlobal(ref.slot));
+			}
 			m_docs.set(_change.after);
 			m_lastLiveEditMs = m_port.nowMs();
 			m_dirty.insert(ref);

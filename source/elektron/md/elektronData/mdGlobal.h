@@ -48,6 +48,31 @@ namespace elektronData
 		bool operator!=(const MdGlobal& _o) const { return !(*this == _o); }
 	};
 
+	// The meaning of the raw settings, measured on MD OS 1.63 (P5, mdP4ProbeFirmwareTest globals):
+	// a global dump is stored at once but applied only when its slot is made active (SysEx 0x56).
+	//  - syncFlags: 0x01 TEMPO IN external (MIDI Start waits for MIDI clock), 0x10 CTRL IN off (MIDI
+	//    Start/Stop ignored), 0x20 TEMPO OUT (sends MIDI clock), 0x40 CTRL OUT (sends Start/Stop).
+	//    0x02, 0x04, 0x08: no effect found.
+	//  - programChange: 0x01 IN, 0x02 OUT, bits 2-6 the channel: 0 = BASE (in on the four base
+	//    channels, out on the first), n = channel n (1-16).
+	//  - baseChannel: 0-12 = channels 1-4 .. 13-16 (verified with CCs on 1 and 3).
+	//  - trigMode (MAP EDITOR TRIG): 0 GATE (the pattern stops on note off, verified), 1 START, 2 QUE.
+	//  - keymap: 0-15 = a track, 16-31 = a pattern of the current bank (note 65 -> 17 selects A02).
+	//  - localControl: stored; no effect on TRIG keys was seen in the emulator (not verified).
+	//  - inputSettings: TRIG IN A/B (GATE, SENS, VMIN, VMAX, DEST in the manual); not verified.
+	namespace mdGlobalBits
+	{
+		constexpr uint8_t g_tempoInExternal = 0x01;
+		constexpr uint8_t g_ctrlInOff = 0x10;
+		constexpr uint8_t g_tempoOut = 0x20;
+		constexpr uint8_t g_ctrlOut = 0x40;
+		constexpr uint8_t g_programChangeIn = 0x01;
+		constexpr uint8_t g_programChangeOut = 0x02;
+		constexpr uint8_t g_maxBaseChannel = 12;
+	}
+
+	std::vector<uint8_t> mdSetActiveGlobal(uint8_t _slot);	// SysEx 0x56
+
 	std::optional<MdGlobal> decodeMdGlobal(const std::vector<uint8_t>& _sysex);
 	std::vector<uint8_t> encodeMdGlobal(const MdGlobal& _global);
 

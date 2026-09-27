@@ -888,6 +888,36 @@ namespace
 		check(link() == "lost", "HW: no reply for 3.5 s: lost");
 	}
 
+	// P5: GLOBAL settings by name.
+	void testGlobalSet()
+	{
+		Documents docs;
+		docs.global = ed::MdGlobal{};
+		docs.global->keymap.fill(ed::MdGlobal::g_unmapped);
+		docs.global->keymap[36] = 0;
+		Clipboard clip;
+		const auto run = [&](const std::string& _c)
+		{
+			auto r = apply(docs, cmd(_c), clip);
+			if(!r.changes.empty())
+				docs.global = std::get<ed::MdGlobal>(r.changes[0].after);
+			return r;
+		};
+		run(R"({"op":"globalSet","field":"tempoIn","on":true})");
+		run(R"({"op":"globalSet","field":"ctrlIn","on":false})");
+		run(R"({"op":"globalSet","field":"tempoOut","on":true})");
+		check(docs.global->syncFlags == 0x31, "sync: TEMPO IN ext 0x01, CTRL IN off 0x10, TEMPO OUT 0x20");
+		run(R"({"op":"globalSet","field":"programChangeOut","on":true})");
+		run(R"({"op":"globalSet","field":"programChangeChannel","v":8})");
+		check(docs.global->programChange == 0x22, "program change: OUT 0x02, channel 8 in bits 2-6");
+		check(!run(R"({"op":"globalSet","field":"baseChannel","v":13})").errors.empty(), "base channel 13 (14-17) refused");
+		run(R"({"op":"globalSet","field":"keymap","note":40,"target":0})");
+		check(docs.global->keymap[40] == 0 && docs.global->keymap[36] == ed::MdGlobal::g_unmapped, "a track mapped to another key frees its old key");
+		const auto j = ed::globalToJson(*docs.global);
+		check(j.find("control")->find("tempoIn")->asString() == "external" && !j.find("control")->find("ctrlIn")->asBool()
+			&& j.find("control")->find("programChangeChannel")->asNumber() == 8, "the contract's derived control view");
+	}
+
 	void testSampleName()
 	{
 		const auto m = ed::mdSetSampleName(5, "KIK");
@@ -947,6 +977,7 @@ int main()
 	testLockStep();
 	testLibrary();
 	testHardwareLink();
+	testGlobalSet();
 	testWorkingKitMemory();
 	testKnobRecorder();
 	testDeskRecording();

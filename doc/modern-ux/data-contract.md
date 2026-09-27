@@ -122,6 +122,31 @@ and master effects belong to the linked kit's document. The mockup's single
 | `S.mode` | `extendedMode` | Also SET STATUS 0x20 |
 | — | `baseChannel`, `keymap`, `settings` | Kept untouched. `keymap` values 16-31 appear in the Elektron default map for notes 64-89 (the manual maps those notes to patterns). Not verified |
 
+**GLOBAL settings (P5).** Measured on the firmware (`mdP4ProbeFirmwareTest globals`,
+`elektronData/mdGlobal.h` `mdGlobalBits`): a global dump is stored at once but
+**applied only when its slot is made active** (SysEx 0x56), so the desk sends 0x56
+after every settings push to the active slot.
+
+| Setting | Raw | Verified by |
+|---|---|---|
+| TEMPO IN external | `syncFlags` 0x01 | MIDI Start waits for MIDI clock |
+| CTRL IN off | `syncFlags` 0x10 | MIDI Start/Stop ignored |
+| TEMPO OUT | `syncFlags` 0x20 | the machine sends MIDI clock (25 in 0.5 s at 125 BPM) |
+| CTRL OUT | `syncFlags` 0x40 | the machine sends Start/Stop |
+| PRG CHANGE IN / OUT | `programChange` 0x01 / 0x02 | PC 7 selects A08 / selecting A03 sends PC 2 |
+| PRG CHANGE channel | `programChange` bits 2-6 | 0 = BASE (in on the 4 base channels), n = channel n |
+| Base channel | `baseChannel` 0-12 | CCs on channel 1 vs 3 |
+| MAP EDITOR TRIG | `trigMode` 0 GATE, 1 START, 2 QUE | GATE stops on note off |
+| Key map | `keymap` 0-15 track, 16-31 pattern | note 65 -> 17 selects A02 |
+| LOCAL CTRL | `localControl` | stored; no effect seen in the emulator (not verified) |
+| TRIG IN A/B | `inputSettings` | shown only (needs pads on the inputs; not verified) |
+
+`md-desk/global` carries a derived, read-only `control` view of these; the page
+changes them with `{"op":"globalSet","field":...,"on"|"v"}` (fields tempoIn, ctrlIn,
+tempoOut, ctrlOut, programChangeIn, programChangeOut, programChangeChannel 0-16,
+baseChannel 0-12, trigMode 0-2, localControl, keymap {note, target 0-31 or null})
+and selects the active slot with `{"op":"globalSlot","slot"}`.
+
 ### 4.5 `md-desk/machine` (read-only, from `mdDataLink::Session`)
 
 | Field | Meaning |

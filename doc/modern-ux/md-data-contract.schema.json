@@ -4,88 +4,260 @@
   "title": "MD Desk data contract, version 1 (Machinedrum OS 1.63)",
   "description": "Plain-data documents exchanged between MD Desk's UI and its data layer. Produced and checked by elektronData (patternToJson/patternFromJson etc.) and mdDataLink::Session::stateToJson. Values are firmware units; see data-contract.md for display units and the mockup mapping. Cross-field limits (length <= totalLength, lock budget, song structure) are checked by elektronData::validate and listed in data-contract.md. Readers must ignore unknown members.",
   "oneOf": [
-    {"$ref": "#/$defs/pattern"},
-    {"$ref": "#/$defs/kit"},
-    {"$ref": "#/$defs/song"},
-    {"$ref": "#/$defs/global"},
-    {"$ref": "#/$defs/machine"}
+    {
+      "$ref": "#/$defs/pattern"
+    },
+    {
+      "$ref": "#/$defs/kit"
+    },
+    {
+      "$ref": "#/$defs/song"
+    },
+    {
+      "$ref": "#/$defs/global"
+    },
+    {
+      "$ref": "#/$defs/machine"
+    }
   ],
   "$defs": {
-    "u7": {"type": "integer", "minimum": 0, "maximum": 127},
-    "track": {"type": "integer", "minimum": 0, "maximum": 15},
+    "u7": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 127
+    },
+    "track": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 15
+    },
     "steps64": {
       "description": "Sorted 0-based step numbers. Below 64 (extended dumps) or 32 (classic dumps).",
-      "type": "array", "items": {"type": "integer", "minimum": 0, "maximum": 63}, "uniqueItems": true
+      "type": "array",
+      "items": {
+        "type": "integer",
+        "minimum": 0,
+        "maximum": 63
+      },
+      "uniqueItems": true
     },
-    "page8": {"type": "array", "items": {"$ref": "#/$defs/u7"}, "minItems": 8, "maxItems": 8},
+    "page8": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/u7"
+      },
+      "minItems": 8,
+      "maxItems": 8
+    },
     "format": {
       "type": "object",
-      "required": ["version", "revision"],
+      "required": [
+        "version",
+        "revision"
+      ],
       "properties": {
-        "version": {"$ref": "#/$defs/u7"},
-        "revision": {"$ref": "#/$defs/u7"},
-        "extended": {"type": "boolean"}
+        "version": {
+          "$ref": "#/$defs/u7"
+        },
+        "revision": {
+          "$ref": "#/$defs/u7"
+        },
+        "extended": {
+          "type": "boolean"
+        }
       }
     },
-    "name": {"type": "string", "maxLength": 16, "description": "7-bit ASCII, no NUL."},
+    "name": {
+      "type": "string",
+      "maxLength": 16,
+      "description": "7-bit ASCII, no NUL."
+    },
     "nameTail": {
       "description": "Bytes after the name's NUL, only present when not all zero (factory data keeps leftovers).",
-      "type": "array", "items": {"$ref": "#/$defs/u7"}, "maxItems": 15
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/u7"
+      },
+      "maxItems": 15
     },
     "stepFlags": {
       "type": "object",
-      "required": ["editAll", "steps"],
+      "required": [
+        "editAll",
+        "steps"
+      ],
       "properties": {
-        "editAll": {"type": "integer", "enum": [0, 1], "description": "1 = one pattern-wide set (ALL), 0 = per-track sets in tracks[]."},
-        "steps": {"$ref": "#/$defs/steps64"}
+        "editAll": {
+          "type": "integer",
+          "enum": [
+            0,
+            1
+          ],
+          "description": "1 = one pattern-wide set (ALL), 0 = per-track sets in tracks[]."
+        },
+        "steps": {
+          "$ref": "#/$defs/steps64"
+        }
       }
     },
     "pattern": {
       "type": "object",
-      "required": ["schema", "version", "slot", "format", "length", "totalLength", "tempoMultiplier", "kit",
-        "accentAmount", "swingAmount", "lockedRowsField", "accent", "slide", "swing", "tracks", "locks"],
+      "required": [
+        "schema",
+        "version",
+        "slot",
+        "format",
+        "length",
+        "totalLength",
+        "tempoMultiplier",
+        "kit",
+        "accentAmount",
+        "swingAmount",
+        "lockedRowsField",
+        "accent",
+        "slide",
+        "swing",
+        "tracks",
+        "locks"
+      ],
       "properties": {
-        "schema": {"const": "md-desk/pattern"},
-        "version": {"const": 1},
-        "slot": {"type": "integer", "minimum": 0, "maximum": 127, "description": "A01 = 0 ... H16 = 127"},
-        "name": {"type": "string", "pattern": "^[A-H][0-9]{2}$", "description": "Derived from slot; ignored on input."},
-        "format": {"$ref": "#/$defs/format"},
-        "length": {"type": "integer", "minimum": 1, "maximum": 64},
-        "totalLength": {"enum": [16, 32, 48, 64]},
-        "tempoMultiplier": {"enum": ["1X", "2X", "3/4X", "3/2X"]},
-        "kit": {"type": "integer", "minimum": 0, "maximum": 63, "description": "Linked kit, recalled in EXTENDED mode."},
-        "accentAmount": {"$ref": "#/$defs/u7", "description": "Display 0-15 = round(v * 15 / 127)."},
-        "swingAmount": {"type": "integer", "minimum": 0, "maximum": 9830, "description": "Percent = 50 + v * 50 / 16384 (50-80 %)."},
-        "lockedRowsField": {"$ref": "#/$defs/u7", "description": "Opaque firmware byte, 0 in every observed dump."},
-        "accent": {"$ref": "#/$defs/stepFlags"},
-        "slide": {"$ref": "#/$defs/stepFlags"},
-        "swing": {"$ref": "#/$defs/stepFlags"},
+        "schema": {
+          "const": "md-desk/pattern"
+        },
+        "version": {
+          "const": 1
+        },
+        "slot": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 127,
+          "description": "A01 = 0 ... H16 = 127"
+        },
+        "name": {
+          "type": "string",
+          "pattern": "^[A-H][0-9]{2}$",
+          "description": "Derived from slot; ignored on input."
+        },
+        "format": {
+          "$ref": "#/$defs/format"
+        },
+        "length": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 64
+        },
+        "totalLength": {
+          "enum": [
+            16,
+            32,
+            48,
+            64
+          ]
+        },
+        "tempoMultiplier": {
+          "enum": [
+            "1X",
+            "2X",
+            "3/4X",
+            "3/2X"
+          ]
+        },
+        "kit": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 63,
+          "description": "Linked kit, recalled in EXTENDED mode."
+        },
+        "accentAmount": {
+          "$ref": "#/$defs/u7",
+          "description": "Display 0-15 = round(v * 15 / 127)."
+        },
+        "swingAmount": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9830,
+          "description": "Percent = 50 + v * 50 / 16384 (50-80 %)."
+        },
+        "lockedRowsField": {
+          "$ref": "#/$defs/u7",
+          "description": "Opaque firmware byte, 0 in every observed dump."
+        },
+        "accent": {
+          "$ref": "#/$defs/stepFlags"
+        },
+        "slide": {
+          "$ref": "#/$defs/stepFlags"
+        },
+        "swing": {
+          "$ref": "#/$defs/stepFlags"
+        },
         "tracks": {
-          "type": "array", "minItems": 16, "maxItems": 16,
+          "type": "array",
+          "minItems": 16,
+          "maxItems": 16,
           "items": {
             "type": "object",
-            "required": ["trigs", "accent", "slide", "swing"],
+            "required": [
+              "trigs",
+              "accent",
+              "slide",
+              "swing"
+            ],
             "properties": {
-              "trigs": {"$ref": "#/$defs/steps64"},
-              "accent": {"$ref": "#/$defs/steps64"},
-              "slide": {"$ref": "#/$defs/steps64"},
-              "swing": {"$ref": "#/$defs/steps64"}
+              "trigs": {
+                "$ref": "#/$defs/steps64"
+              },
+              "accent": {
+                "$ref": "#/$defs/steps64"
+              },
+              "slide": {
+                "$ref": "#/$defs/steps64"
+              },
+              "swing": {
+                "$ref": "#/$defs/steps64"
+              }
             }
           }
         },
         "locks": {
           "description": "The pooled parameter locks: at most 64 distinct (track, param), in firmware order.",
-          "type": "array", "maxItems": 64,
+          "type": "array",
+          "maxItems": 64,
           "items": {
             "type": "object",
-            "required": ["track", "param", "steps"],
+            "required": [
+              "track",
+              "param",
+              "steps"
+            ],
             "properties": {
-              "track": {"$ref": "#/$defs/track"},
-              "param": {"type": "integer", "minimum": 0, "maximum": 23, "description": "0-7 synthesis, 8-15 effects, 16-23 routing"},
+              "track": {
+                "$ref": "#/$defs/track"
+              },
+              "param": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 23,
+                "description": "0-7 synthesis, 8-15 effects, 16-23 routing"
+              },
               "steps": {
                 "description": "[step, value] for each locked step below totalLength.",
                 "type": "array",
-                "items": {"type": "array", "prefixItems": [{"type": "integer", "minimum": 0, "maximum": 63}, {"$ref": "#/$defs/u7"}], "minItems": 2, "maxItems": 2}
+                "items": {
+                  "type": "array",
+                  "prefixItems": [
+                    {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 63
+                    },
+                    {
+                      "$ref": "#/$defs/u7"
+                    }
+                  ],
+                  "minItems": 2,
+                  "maxItems": 2
+                }
               }
             }
           }
@@ -93,119 +265,532 @@
         "lockPoolHidden": {
           "description": "Run-length [count, byte] residue of the lock pool outside the semantic view (unused rows, steps past totalLength). Present only when not canonical; dropped when the lock layout changes.",
           "type": "array",
-          "items": {"type": "array", "prefixItems": [{"type": "integer", "minimum": 1, "maximum": 4096}, {"type": "integer", "minimum": 0, "maximum": 255}], "minItems": 2, "maxItems": 2}
+          "items": {
+            "type": "array",
+            "prefixItems": [
+              {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 4096
+              },
+              {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 255
+              }
+            ],
+            "minItems": 2,
+            "maxItems": 2
+          }
         }
       }
     },
     "lfo": {
       "type": "object",
-      "required": ["track", "param", "shape1", "shape2", "update", "state"],
+      "required": [
+        "track",
+        "param",
+        "shape1",
+        "shape2",
+        "update",
+        "state"
+      ],
       "properties": {
-        "track": {"$ref": "#/$defs/track"},
-        "param": {"type": "integer", "minimum": 0, "maximum": 23},
-        "shape1": {"type": "integer", "minimum": 0, "maximum": 5},
-        "shape2": {"type": "integer", "minimum": 0, "maximum": 5},
-        "update": {"type": "integer", "minimum": 0, "maximum": 2, "description": "0 FREE, 1 TRIG, 2 HOLD"},
-        "state": {"type": "string", "pattern": "^[0-9a-f]{62}$", "description": "Opaque firmware LFO state, kept as-is."}
+        "track": {
+          "$ref": "#/$defs/track"
+        },
+        "param": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 23
+        },
+        "shape1": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 5
+        },
+        "shape2": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 5
+        },
+        "update": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 2,
+          "description": "0 FREE, 1 TRIG, 2 HOLD"
+        },
+        "state": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{62}$",
+          "description": "Opaque firmware LFO state, kept as-is."
+        }
       }
     },
     "kit": {
       "type": "object",
-      "required": ["schema", "version", "slot", "format", "name", "tracks", "masterFx"],
+      "required": [
+        "schema",
+        "version",
+        "slot",
+        "format",
+        "name",
+        "tracks",
+        "masterFx"
+      ],
       "properties": {
-        "schema": {"const": "md-desk/kit"},
-        "version": {"const": 1},
-        "slot": {"type": "integer", "minimum": 0, "maximum": 63},
-        "format": {"$ref": "#/$defs/format"},
-        "name": {"$ref": "#/$defs/name"},
-        "nameTail": {"$ref": "#/$defs/nameTail"},
+        "schema": {
+          "const": "md-desk/kit"
+        },
+        "version": {
+          "const": 1
+        },
+        "slot": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 63
+        },
+        "format": {
+          "$ref": "#/$defs/format"
+        },
+        "name": {
+          "$ref": "#/$defs/name"
+        },
+        "nameTail": {
+          "$ref": "#/$defs/nameTail"
+        },
         "tracks": {
-          "type": "array", "minItems": 16, "maxItems": 16,
+          "type": "array",
+          "minItems": 16,
+          "maxItems": 16,
           "items": {
             "type": "object",
-            "required": ["model", "level", "synth", "effects", "routing", "lfo", "trigGroup", "muteGroup"],
+            "required": [
+              "model",
+              "level",
+              "synth",
+              "effects",
+              "routing",
+              "lfo",
+              "trigGroup",
+              "muteGroup"
+            ],
             "properties": {
-              "model": {"type": "integer", "minimum": 0, "maximum": 255, "description": "OS 1.63 machine id; UW machines have bit 7 set."},
-              "machine": {"type": "string", "description": "Manual name (TRX-BD, P-I-SD, ROM-05); derived, ignored on input."},
-              "level": {"$ref": "#/$defs/u7"},
-              "synth": {"$ref": "#/$defs/page8"},
-              "effects": {"$ref": "#/$defs/page8", "description": "AMD AMF EQF EQG FLTF FLTW FLTQ SRR"},
-              "routing": {"$ref": "#/$defs/page8", "description": "DIST VOL PAN DEL REV LFOS LFOD LFOM"},
-              "lfo": {"$ref": "#/$defs/lfo"},
-              "trigGroup": {"oneOf": [{"type": "null"}, {"$ref": "#/$defs/track"}]},
-              "muteGroup": {"oneOf": [{"type": "null"}, {"$ref": "#/$defs/track"}]}
+              "model": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 255,
+                "description": "OS 1.63 machine id; UW machines have bit 7 set."
+              },
+              "machine": {
+                "type": "string",
+                "description": "Manual name (TRX-BD, P-I-SD, ROM-05); derived, ignored on input."
+              },
+              "level": {
+                "$ref": "#/$defs/u7"
+              },
+              "synth": {
+                "$ref": "#/$defs/page8"
+              },
+              "effects": {
+                "$ref": "#/$defs/page8",
+                "description": "AMD AMF EQF EQG FLTF FLTW FLTQ SRR"
+              },
+              "routing": {
+                "$ref": "#/$defs/page8",
+                "description": "DIST VOL PAN DEL REV LFOS LFOD LFOM"
+              },
+              "lfo": {
+                "$ref": "#/$defs/lfo"
+              },
+              "trigGroup": {
+                "oneOf": [
+                  {
+                    "type": "null"
+                  },
+                  {
+                    "$ref": "#/$defs/track"
+                  }
+                ]
+              },
+              "muteGroup": {
+                "oneOf": [
+                  {
+                    "type": "null"
+                  },
+                  {
+                    "$ref": "#/$defs/track"
+                  }
+                ]
+              }
             }
           }
         },
         "masterFx": {
           "type": "object",
-          "required": ["gateBox", "rhythmEcho", "eq", "dynamix"],
+          "required": [
+            "gateBox",
+            "rhythmEcho",
+            "eq",
+            "dynamix"
+          ],
           "properties": {
-            "gateBox": {"$ref": "#/$defs/page8", "description": "DVOL PRED DEC DAMP HP LP GATE LEV"},
-            "rhythmEcho": {"$ref": "#/$defs/page8", "description": "TIME MOD MFRQ FB FILTF FILTW MONO LEV"},
-            "eq": {"$ref": "#/$defs/page8", "description": "LF LG HF HG PF PG PQ GAIN"},
-            "dynamix": {"$ref": "#/$defs/page8", "description": "ATCK REL TRHD RTIO KNEE HP OUTG MIX"}
+            "gateBox": {
+              "$ref": "#/$defs/page8",
+              "description": "DVOL PRED DEC DAMP HP LP GATE LEV"
+            },
+            "rhythmEcho": {
+              "$ref": "#/$defs/page8",
+              "description": "TIME MOD MFRQ FB FILTF FILTW MONO LEV"
+            },
+            "eq": {
+              "$ref": "#/$defs/page8",
+              "description": "LF LG HF HG PF PG PQ GAIN"
+            },
+            "dynamix": {
+              "$ref": "#/$defs/page8",
+              "description": "ATCK REL TRHD RTIO KNEE HP OUTG MIX"
+            }
           }
         }
       }
     },
     "songRow": {
       "type": "object",
-      "required": ["kind"],
+      "required": [
+        "kind"
+      ],
       "properties": {
-        "kind": {"enum": ["pattern", "loop", "jump", "halt", "end"]},
-        "pattern": {"type": "integer", "minimum": 0, "maximum": 127},
-        "repeats": {"type": "integer", "minimum": 0, "maximum": 63, "description": "pattern: extra passes (REP = repeats + 1); loop: extra passes of the body, 0 = infinite"},
-        "start": {"type": "integer", "minimum": 0, "maximum": 63},
-        "end": {"type": "integer", "minimum": 1, "maximum": 64, "description": "Step after the last one played."},
-        "tempo": {"oneOf": [{"type": "null"}, {"type": "number", "minimum": 30, "maximum": 300}], "description": "BPM, null = keep the previous tempo"},
-        "mutes": {"type": "array", "items": {"$ref": "#/$defs/track"}, "uniqueItems": true},
-        "target": {"type": "integer", "minimum": 0, "maximum": 255, "description": "loop: an earlier row; jump: a later row"},
-        "raw": {"description": "The row's fields as stored (pattern, reserved, repeats, target, mutes, tempo x 24, start, end), only when the kind's fields would not rebuild it.", "type": "array", "minItems": 8, "maxItems": 8, "items": {"type": "integer", "minimum": 0, "maximum": 65535}}
+        "kind": {
+          "enum": [
+            "pattern",
+            "loop",
+            "jump",
+            "halt",
+            "end"
+          ]
+        },
+        "pattern": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 127
+        },
+        "repeats": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 63,
+          "description": "pattern: extra passes (REP = repeats + 1); loop: extra passes of the body, 0 = infinite"
+        },
+        "start": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 63
+        },
+        "end": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 64,
+          "description": "Step after the last one played."
+        },
+        "tempo": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "type": "number",
+              "minimum": 30,
+              "maximum": 300
+            }
+          ],
+          "description": "BPM, null = keep the previous tempo"
+        },
+        "mutes": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/track"
+          },
+          "uniqueItems": true
+        },
+        "target": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 255,
+          "description": "loop: an earlier row; jump: a later row"
+        },
+        "raw": {
+          "description": "The row's fields as stored (pattern, reserved, repeats, target, mutes, tempo x 24, start, end), only when the kind's fields would not rebuild it.",
+          "type": "array",
+          "minItems": 8,
+          "maxItems": 8,
+          "items": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 65535
+          }
+        }
       },
       "allOf": [
-        {"if": {"properties": {"kind": {"const": "pattern"}}}, "then": {"required": ["pattern", "repeats", "start", "end", "tempo", "mutes"]}},
-        {"if": {"properties": {"kind": {"const": "loop"}}}, "then": {"required": ["target", "repeats"]}},
-        {"if": {"properties": {"kind": {"const": "jump"}}}, "then": {"required": ["target"]}}
+        {
+          "if": {
+            "properties": {
+              "kind": {
+                "const": "pattern"
+              }
+            }
+          },
+          "then": {
+            "required": [
+              "pattern",
+              "repeats",
+              "start",
+              "end",
+              "tempo",
+              "mutes"
+            ]
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "kind": {
+                "const": "loop"
+              }
+            }
+          },
+          "then": {
+            "required": [
+              "target",
+              "repeats"
+            ]
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "kind": {
+                "const": "jump"
+              }
+            }
+          },
+          "then": {
+            "required": [
+              "target"
+            ]
+          }
+        }
       ]
     },
     "song": {
       "type": "object",
-      "required": ["schema", "version", "slot", "format", "name", "rows"],
+      "required": [
+        "schema",
+        "version",
+        "slot",
+        "format",
+        "name",
+        "rows"
+      ],
       "properties": {
-        "schema": {"const": "md-desk/song"},
-        "version": {"const": 1},
-        "slot": {"type": "integer", "minimum": 0, "maximum": 31},
-        "format": {"$ref": "#/$defs/format"},
-        "name": {"$ref": "#/$defs/name"},
-        "nameTail": {"$ref": "#/$defs/nameTail"},
-        "rows": {"type": "array", "items": {"$ref": "#/$defs/songRow"}, "minItems": 1, "maxItems": 256, "description": "At most 256 rows including the final END."}
+        "schema": {
+          "const": "md-desk/song"
+        },
+        "version": {
+          "const": 1
+        },
+        "slot": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 31
+        },
+        "format": {
+          "$ref": "#/$defs/format"
+        },
+        "name": {
+          "$ref": "#/$defs/name"
+        },
+        "nameTail": {
+          "$ref": "#/$defs/nameTail"
+        },
+        "rows": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/songRow"
+          },
+          "minItems": 1,
+          "maxItems": 256,
+          "description": "At most 256 rows including the final END."
+        }
       }
     },
     "global": {
       "type": "object",
-      "required": ["schema", "version", "slot", "format", "routing", "tempo", "extendedMode", "baseChannel", "keymap", "settings"],
+      "required": [
+        "schema",
+        "version",
+        "slot",
+        "format",
+        "routing",
+        "tempo",
+        "extendedMode",
+        "baseChannel",
+        "keymap",
+        "settings"
+      ],
       "properties": {
-        "schema": {"const": "md-desk/global"},
-        "version": {"const": 1},
-        "slot": {"type": "integer", "minimum": 0, "maximum": 7},
-        "format": {"$ref": "#/$defs/format"},
-        "routing": {"type": "array", "minItems": 16, "maxItems": 16, "items": {"enum": ["A", "B", "C", "D", "E", "F", "MAIN"]}, "description": "Per-track output; A-F skip the master effects."},
-        "tempo": {"type": "number", "minimum": 30, "maximum": 300},
-        "extendedMode": {"type": "boolean"},
-        "baseChannel": {"$ref": "#/$defs/u7"},
-        "keymap": {"type": "array", "minItems": 128, "maxItems": 128, "items": {"oneOf": [{"type": "null"}, {"type": "integer", "minimum": 0, "maximum": 31}]}, "description": "MIDI note -> 0-15 track trig; 16-31 appear in the Elektron default map (notes 64-89), meaning not verified."},
+        "schema": {
+          "const": "md-desk/global"
+        },
+        "version": {
+          "const": 1
+        },
+        "slot": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 7
+        },
+        "format": {
+          "$ref": "#/$defs/format"
+        },
+        "routing": {
+          "type": "array",
+          "minItems": 16,
+          "maxItems": 16,
+          "items": {
+            "enum": [
+              "A",
+              "B",
+              "C",
+              "D",
+              "E",
+              "F",
+              "MAIN"
+            ]
+          },
+          "description": "Per-track output; A-F skip the master effects."
+        },
+        "tempo": {
+          "type": "number",
+          "minimum": 30,
+          "maximum": 300
+        },
+        "extendedMode": {
+          "type": "boolean"
+        },
+        "baseChannel": {
+          "$ref": "#/$defs/u7"
+        },
+        "keymap": {
+          "type": "array",
+          "minItems": 128,
+          "maxItems": 128,
+          "items": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 31
+              }
+            ]
+          },
+          "description": "MIDI note -> 0-15 track trig; 16-31 appear in the Elektron default map (notes 64-89), meaning not verified."
+        },
         "settings": {
           "type": "object",
           "description": "Round-tripped untouched; not verified individually.",
-          "required": ["unused", "syncFlags", "localControl", "inputSettings", "programChange", "trigMode"],
+          "required": [
+            "unused",
+            "syncFlags",
+            "localControl",
+            "inputSettings",
+            "programChange",
+            "trigMode"
+          ],
           "properties": {
-            "unused": {"$ref": "#/$defs/u7"},
-            "syncFlags": {"$ref": "#/$defs/u7"},
-            "localControl": {"$ref": "#/$defs/u7"},
-            "inputSettings": {"type": "array", "minItems": 10, "maxItems": 10, "items": {"$ref": "#/$defs/u7"}},
-            "programChange": {"$ref": "#/$defs/u7"},
-            "trigMode": {"$ref": "#/$defs/u7"}
+            "unused": {
+              "$ref": "#/$defs/u7"
+            },
+            "syncFlags": {
+              "$ref": "#/$defs/u7"
+            },
+            "localControl": {
+              "$ref": "#/$defs/u7"
+            },
+            "inputSettings": {
+              "type": "array",
+              "minItems": 10,
+              "maxItems": 10,
+              "items": {
+                "$ref": "#/$defs/u7"
+              }
+            },
+            "programChange": {
+              "$ref": "#/$defs/u7"
+            },
+            "trigMode": {
+              "$ref": "#/$defs/u7"
+            }
+          }
+        },
+        "control": {
+          "type": "object",
+          "description": "P5: the measured meaning of settings (elektronData::mdGlobalBits), derived and read-only: settings is the value. Change it with {op: globalSet, field, on|v}.",
+          "properties": {
+            "tempoIn": {
+              "enum": [
+                "internal",
+                "external"
+              ]
+            },
+            "ctrlIn": {
+              "type": "boolean"
+            },
+            "tempoOut": {
+              "type": "boolean"
+            },
+            "ctrlOut": {
+              "type": "boolean"
+            },
+            "programChangeIn": {
+              "type": "boolean"
+            },
+            "programChangeOut": {
+              "type": "boolean"
+            },
+            "programChangeChannel": {
+              "oneOf": [
+                {
+                  "type": "null"
+                },
+                {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 16
+                }
+              ],
+              "description": "null = BASE"
+            },
+            "trigMode": {
+              "oneOf": [
+                {
+                  "enum": [
+                    "gate",
+                    "start",
+                    "que"
+                  ]
+                },
+                {
+                  "type": "integer"
+                }
+              ]
+            },
+            "localControl": {
+              "type": "boolean",
+              "description": "Stored; no effect was seen in the emulator (not verified)."
+            }
           }
         }
       }
@@ -213,96 +798,483 @@
     "modulators": {
       "type": "object",
       "description": "App-only LFO and random sources and their links to kit parameters (page -> desk).",
-      "required": ["schema", "version"],
+      "required": [
+        "schema",
+        "version"
+      ],
       "properties": {
-        "schema": {"const": "md-desk/modulators"},
-        "version": {"const": 1},
-        "sources": {"type": "array", "maxItems": 16, "items": {"type": "object", "required": ["id", "kind"], "properties": {
-          "id": {"type": "string", "minLength": 1}, "label": {"type": "string"}, "kind": {"enum": ["lfo", "random"]},
-          "shape": {"type": "integer", "minimum": 0, "maximum": 5}, "rate": {"enum": ["1/16", "1/8", "1/4", "1/2", "1", "2", "4"]},
-          "depth": {"type": "integer", "minimum": 0, "maximum": 100}, "smooth": {"$ref": "#/$defs/u7"}}}},
-        "links": {"type": "array", "maxItems": 64, "items": {"type": "object", "required": ["source", "track", "param"], "properties": {
-          "source": {"type": "string"}, "track": {"$ref": "#/$defs/track"}, "param": {"type": "integer", "minimum": 0, "maximum": 23},
-          "min": {"$ref": "#/$defs/u7"}, "max": {"$ref": "#/$defs/u7"}, "curve": {"enum": ["lin", "exp", "log"]}, "invert": {"type": "boolean"}}}}
+        "schema": {
+          "const": "md-desk/modulators"
+        },
+        "version": {
+          "const": 1
+        },
+        "sources": {
+          "type": "array",
+          "maxItems": 16,
+          "items": {
+            "type": "object",
+            "required": [
+              "id",
+              "kind"
+            ],
+            "properties": {
+              "id": {
+                "type": "string",
+                "minLength": 1
+              },
+              "label": {
+                "type": "string"
+              },
+              "kind": {
+                "enum": [
+                  "lfo",
+                  "random"
+                ]
+              },
+              "shape": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 5
+              },
+              "rate": {
+                "enum": [
+                  "1/16",
+                  "1/8",
+                  "1/4",
+                  "1/2",
+                  "1",
+                  "2",
+                  "4"
+                ]
+              },
+              "depth": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 100
+              },
+              "smooth": {
+                "$ref": "#/$defs/u7"
+              }
+            }
+          }
+        },
+        "links": {
+          "type": "array",
+          "maxItems": 64,
+          "items": {
+            "type": "object",
+            "required": [
+              "source",
+              "track",
+              "param"
+            ],
+            "properties": {
+              "source": {
+                "type": "string"
+              },
+              "track": {
+                "$ref": "#/$defs/track"
+              },
+              "param": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 23
+              },
+              "min": {
+                "$ref": "#/$defs/u7"
+              },
+              "max": {
+                "$ref": "#/$defs/u7"
+              },
+              "curve": {
+                "enum": [
+                  "lin",
+                  "exp",
+                  "log"
+                ]
+              },
+              "invert": {
+                "type": "boolean"
+              }
+            }
+          }
+        }
       }
     },
     "setup": {
       "type": "object",
       "description": "The editor's setup kept with the project (P4, mdDesk/mdDeskSetup.h): the app modulators and the CCs of the eight controller knob rows. Stored by the plug-in as the MDSK chunk of its state.",
-      "required": ["schema", "version"],
+      "required": [
+        "schema",
+        "version"
+      ],
       "properties": {
-        "schema": {"const": "md-desk/setup"},
-        "version": {"const": 1},
-        "modulators": {"$ref": "#/$defs/modulators"},
-        "knobCcs": {"type": "array", "minItems": 8, "maxItems": 8, "uniqueItems": true, "items": {"$ref": "#/$defs/u7"}}
+        "schema": {
+          "const": "md-desk/setup"
+        },
+        "version": {
+          "const": 1
+        },
+        "modulators": {
+          "$ref": "#/$defs/modulators"
+        },
+        "knobCcs": {
+          "type": "array",
+          "minItems": 8,
+          "maxItems": 8,
+          "uniqueItems": true,
+          "items": {
+            "$ref": "#/$defs/u7"
+          }
+        }
       }
     },
     "machine": {
       "type": "object",
       "description": "Read-only machine state from mdDataLink::Session.",
-      "required": ["schema", "version", "pattern", "kit", "song"],
+      "required": [
+        "schema",
+        "version",
+        "pattern",
+        "kit",
+        "song"
+      ],
       "properties": {
-        "schema": {"const": "md-desk/machine"},
-        "version": {"const": 1},
+        "schema": {
+          "const": "md-desk/machine"
+        },
+        "version": {
+          "const": 1
+        },
         "pattern": {
           "type": "object",
           "properties": {
-            "current": {"oneOf": [{"type": "null"}, {"type": "integer", "minimum": 0, "maximum": 127}]},
-            "queued": {"oneOf": [{"type": "null"}, {"type": "integer", "minimum": 0, "maximum": 127}], "description": "Selected while playing; becomes current at the end of the current pattern."}
+            "current": {
+              "oneOf": [
+                {
+                  "type": "null"
+                },
+                {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 127
+                }
+              ]
+            },
+            "queued": {
+              "oneOf": [
+                {
+                  "type": "null"
+                },
+                {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 127
+                }
+              ],
+              "description": "Selected while playing; becomes current at the end of the current pattern."
+            }
           }
         },
         "kit": {
           "type": "object",
           "properties": {
-            "current": {"oneOf": [{"type": "null"}, {"type": "integer", "minimum": 0, "maximum": 63}]},
-            "working": {"enum": ["unknown", "clean", "edited"], "description": "edited = not saved on the machine: lost on LOAD KIT or a switch to a pattern linked to another kit."}
+            "current": {
+              "oneOf": [
+                {
+                  "type": "null"
+                },
+                {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 63
+                }
+              ]
+            },
+            "working": {
+              "enum": [
+                "unknown",
+                "clean",
+                "edited"
+              ],
+              "description": "edited = not saved on the machine: lost on LOAD KIT or a switch to a pattern linked to another kit."
+            }
           }
         },
         "song": {
           "type": "object",
           "properties": {
-            "current": {"oneOf": [{"type": "null"}, {"type": "integer", "minimum": 0, "maximum": 31}]},
-            "reloadNeeded": {"type": "boolean", "description": "The current song's slot was rewritten; heard after STOP, LOAD SONG, PLAY."}
+            "current": {
+              "oneOf": [
+                {
+                  "type": "null"
+                },
+                {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 31
+                }
+              ]
+            },
+            "reloadNeeded": {
+              "type": "boolean",
+              "description": "The current song's slot was rewritten; heard after STOP, LOAD SONG, PLAY."
+            }
           }
         },
-        "globalSlot": {"oneOf": [{"type": "null"}, {"type": "integer", "minimum": 0, "maximum": 7}]},
-        "track": {"oneOf": [{"type": "null"}, {"$ref": "#/$defs/track"}]},
-        "songMode": {"oneOf": [{"type": "null"}, {"type": "boolean"}]},
-        "extendedMode": {"oneOf": [{"type": "null"}, {"type": "boolean"}]},
-        "patternKits": {"type": "array", "description": "[pattern slot, kit] for every pattern seen in a dump.", "items": {"type": "array", "minItems": 2, "maxItems": 2, "items": {"type": "integer", "minimum": 0, "maximum": 127}}},
+        "globalSlot": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 7
+            }
+          ]
+        },
+        "track": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/track"
+            }
+          ]
+        },
+        "songMode": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "type": "boolean"
+            }
+          ]
+        },
+        "extendedMode": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "type": "boolean"
+            }
+          ]
+        },
+        "patternKits": {
+          "type": "array",
+          "description": "[pattern slot, kit] for every pattern seen in a dump.",
+          "items": {
+            "type": "array",
+            "minItems": 2,
+            "maxItems": 2,
+            "items": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 127
+            }
+          }
+        },
         "desk": {
           "type": "object",
           "description": "Added by mdDesk::Desk for the page (optional; readers ignore what they do not know).",
           "properties": {
-            "firmware": {"enum": ["missing", "unsupported", "loading", "booting", "ready"], "description": "The engine: NO ROM, ROM ERROR, LOADING ROM, BOOTING OS, EMU OS 1.63. P4: ready only when the start-up animation is over (keys work)."},
-            "engine": {"enum": ["emu", "hw"], "description": "P4: the emulated MD OS 1.63, or HW MIDI: a real Machinedrum on the plug-in's MIDI in/out."},
-            "link": {"enum": ["local", "connect", "ready", "lost"], "description": "P4, HW MIDI: connect (HW CONNECT, no reply yet), ready (HW MIDI), lost (HW NO MIDI: no reply for 3.5 s, or none in 5 s after choosing it). local for the emulator."},
-            "boot": {"enum": ["off", "starting", "animation", "ready"], "description": "P4: off (no firmware running), starting (no status reply yet), animation (the firmware answers MIDI but its start-up animation ignores panel keys), ready."},
-            "tx": {"type": "boolean", "description": "An edit is on the wire (waiting for its read-back)."},
-            "loading": {"type": "integer", "minimum": 0},
-            "roundTripMs": {"type": "number", "description": "Last edit -> read-back time; -1 before the first."},
-            "undo": {"type": "boolean"}, "redo": {"type": "boolean"},
-            "undoCount": {"type": "integer", "minimum": 0}, "redoCount": {"type": "integer", "minimum": 0},
-            "queued": {"oneOf": [{"type": "null"}, {"type": "integer", "minimum": 0, "maximum": 127}], "description": "Selected while playing and not heard yet (clears at the playhead wrap)."},
-            "playing": {"type": "boolean", "description": "The playhead moves (md::SequencerState)."},
-            "recording": {"type": "boolean", "description": "Live recording (RECORD held + PLAY): the RECORD LED blinks while playing."},
-            "gridEdit": {"type": "boolean", "description": "Grid edit (RECORD alone): the RECORD LED is steady."},
-            "knobPage": {"type": "integer", "minimum": -1, "maximum": 2, "description": "DATA ENTRY page: 0 synthesis, 1 effects, 2 routing, -1 unknown."},
-            "telemetry": {"type": "boolean", "description": "Playhead and state come from MD OS 1.63 RAM."},
-            "mutes": {"type": "array", "items": {"$ref": "#/$defs/track"}, "description": "The machine's pattern mutes (P4: read from RAM 0x28b34a when mutesSource is memory)."},
-            "mutesSource": {"enum": ["memory", "tracked"], "description": "memory: read from the machine (its MUTE window and CCs show too). tracked: what the desk sent and saw."},
-            "chain": {"oneOf": [{"type": "null"}, {"type": "object", "description": "The firmware's pattern chain (P4, BANK held + TRIG keys). One bank, each pattern once, loops.",
-              "required": ["active", "next", "patterns"],
-              "properties": {
-                "active": {"type": "boolean", "description": "False after a LOAD PATTERN or a single TRIG with BANK held."},
-                "next": {"type": "integer", "minimum": -1, "maximum": 16, "description": "The entry the firmware queues next."},
-                "patterns": {"type": "array", "maxItems": 16, "items": {"type": "integer", "minimum": 0, "maximum": 127}}}}],
-              "description": "null: not readable on this firmware."},
-            "recLock": {"oneOf": [{"type": "null"}, {"type": "object", "required": ["track", "param", "step"], "properties": {
-              "track": {"$ref": "#/$defs/track"}, "param": {"type": "integer", "minimum": 0, "maximum": 23}, "step": {"type": "integer", "minimum": 0, "maximum": 63}}}],
-              "description": "P4, live recording: the trig the last knob turn locks (mdDesk::nextLockStep), for about 3 s."},
-            "bankGroup": {"type": "integer", "minimum": -1, "maximum": 1, "description": "The machine's BANK GROUP: 0 A-D, 1 E-H, -1 unknown."},
-            "kitSource": {"enum": ["memory", "tracked"], "description": "memory: the current kit document is the working kit read from the machine's memory (P3). tracked: the stored slot plus the edits the desk saw."}
+            "firmware": {
+              "enum": [
+                "missing",
+                "unsupported",
+                "loading",
+                "booting",
+                "ready"
+              ],
+              "description": "The engine: NO ROM, ROM ERROR, LOADING ROM, BOOTING OS, EMU OS 1.63. P4: ready only when the start-up animation is over (keys work)."
+            },
+            "engine": {
+              "enum": [
+                "emu",
+                "hw"
+              ],
+              "description": "P4: the emulated MD OS 1.63, or HW MIDI: a real Machinedrum on the plug-in's MIDI in/out."
+            },
+            "link": {
+              "enum": [
+                "local",
+                "connect",
+                "ready",
+                "lost"
+              ],
+              "description": "P4, HW MIDI: connect (HW CONNECT, no reply yet), ready (HW MIDI), lost (HW NO MIDI: no reply for 3.5 s, or none in 5 s after choosing it). local for the emulator."
+            },
+            "boot": {
+              "enum": [
+                "off",
+                "starting",
+                "animation",
+                "ready"
+              ],
+              "description": "P4: off (no firmware running), starting (no status reply yet), animation (the firmware answers MIDI but its start-up animation ignores panel keys), ready."
+            },
+            "tx": {
+              "type": "boolean",
+              "description": "An edit is on the wire (waiting for its read-back)."
+            },
+            "loading": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "roundTripMs": {
+              "type": "number",
+              "description": "Last edit -> read-back time; -1 before the first."
+            },
+            "undo": {
+              "type": "boolean"
+            },
+            "redo": {
+              "type": "boolean"
+            },
+            "undoCount": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "redoCount": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "queued": {
+              "oneOf": [
+                {
+                  "type": "null"
+                },
+                {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 127
+                }
+              ],
+              "description": "Selected while playing and not heard yet (clears at the playhead wrap)."
+            },
+            "playing": {
+              "type": "boolean",
+              "description": "The playhead moves (md::SequencerState)."
+            },
+            "recording": {
+              "type": "boolean",
+              "description": "Live recording (RECORD held + PLAY): the RECORD LED blinks while playing."
+            },
+            "gridEdit": {
+              "type": "boolean",
+              "description": "Grid edit (RECORD alone): the RECORD LED is steady."
+            },
+            "knobPage": {
+              "type": "integer",
+              "minimum": -1,
+              "maximum": 2,
+              "description": "DATA ENTRY page: 0 synthesis, 1 effects, 2 routing, -1 unknown."
+            },
+            "telemetry": {
+              "type": "boolean",
+              "description": "Playhead and state come from MD OS 1.63 RAM."
+            },
+            "mutes": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/track"
+              },
+              "description": "The machine's pattern mutes (P4: read from RAM 0x28b34a when mutesSource is memory)."
+            },
+            "mutesSource": {
+              "enum": [
+                "memory",
+                "tracked"
+              ],
+              "description": "memory: read from the machine (its MUTE window and CCs show too). tracked: what the desk sent and saw."
+            },
+            "chain": {
+              "oneOf": [
+                {
+                  "type": "null"
+                },
+                {
+                  "type": "object",
+                  "description": "The firmware's pattern chain (P4, BANK held + TRIG keys). One bank, each pattern once, loops.",
+                  "required": [
+                    "active",
+                    "next",
+                    "patterns"
+                  ],
+                  "properties": {
+                    "active": {
+                      "type": "boolean",
+                      "description": "False after a LOAD PATTERN or a single TRIG with BANK held."
+                    },
+                    "next": {
+                      "type": "integer",
+                      "minimum": -1,
+                      "maximum": 16,
+                      "description": "The entry the firmware queues next."
+                    },
+                    "patterns": {
+                      "type": "array",
+                      "maxItems": 16,
+                      "items": {
+                        "type": "integer",
+                        "minimum": 0,
+                        "maximum": 127
+                      }
+                    }
+                  }
+                }
+              ],
+              "description": "null: not readable on this firmware."
+            },
+            "recLock": {
+              "oneOf": [
+                {
+                  "type": "null"
+                },
+                {
+                  "type": "object",
+                  "required": [
+                    "track",
+                    "param",
+                    "step"
+                  ],
+                  "properties": {
+                    "track": {
+                      "$ref": "#/$defs/track"
+                    },
+                    "param": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 23
+                    },
+                    "step": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 63
+                    }
+                  }
+                }
+              ],
+              "description": "P4, live recording: the trig the last knob turn locks (mdDesk::nextLockStep), for about 3 s."
+            },
+            "bankGroup": {
+              "type": "integer",
+              "minimum": -1,
+              "maximum": 1,
+              "description": "The machine's BANK GROUP: 0 A-D, 1 E-H, -1 unknown."
+            },
+            "kitSource": {
+              "enum": [
+                "memory",
+                "tracked"
+              ],
+              "description": "memory: the current kit document is the working kit read from the machine's memory (P3). tracked: the stored slot plus the edits the desk saw."
+            }
           }
         }
       }
