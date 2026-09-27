@@ -233,9 +233,11 @@ namespace md
 			std::atomic<int> gridEdit{-1};
 			std::atomic<int> knobPage{-1};
 			std::atomic<uint64_t> blocks{0};
-			// P4 (md::ChainAndMutes): the pattern mutes (bit 0 = track 1, -1 unknown) and the
-			// firmware's pattern chain. The chain is published as values
+			// P4 (md::BootAnimation, md::ChainAndMutes): the start-up animation (-1 unknown,
+			// 1 running: panel keys are ignored, 0 over), the pattern mutes (bit 0 = track 1,
+			// -1 unknown) and the firmware's pattern chain. The chain is published as values
 			// that may tear for one read while it changes; readers see the next block's.
+			std::atomic<int> bootAnimation{-1};
 			std::atomic<int> mutes{-1};
 			std::atomic<int> chainActive{-1};
 			std::atomic<int> chainNext{-1};
@@ -324,6 +326,8 @@ namespace md
 		const MachineModel m_model;
 		std::shared_ptr<SequencerTelemetry> m_sequencerTelemetry = std::make_shared<SequencerTelemetry>();
 		SequencerState m_sequencer;
+		BootAnimation m_bootAnimation;
+		const Hardware* m_bootAnimationOf = nullptr;
 		std::array<PanelPacket, 32> m_panelSequence{};
 		size_t m_panelSequenceSize = 0;
 		size_t m_panelSequenceNext = 0;

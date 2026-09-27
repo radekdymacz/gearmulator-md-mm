@@ -219,6 +219,9 @@ namespace
 			t.gridEdit = m_leds.gridEdit();
 			t.knobPage = m_machine.read8(md::SequencerState::g_knobPageAddress);
 			// P4, as md::Device publishes them.
+			m_boot.update(m_machine.read8(md::BootAnimation::g_mainScreenAddress), now - m_bootAt);
+			m_bootAt = now;
+			t.bootAnimation = m_boot.state();
 			t.mutes = (m_machine.read8(md::ChainAndMutes::g_muteAddress) << 8) | m_machine.read8(md::ChainAndMutes::g_muteAddress + 1);
 			{
 				const auto long32 = [&](const uint32_t _a)
@@ -301,6 +304,8 @@ namespace
 		Bytes m_lastRegion;
 		md::SequencerState m_leds;
 		uint64_t m_ledsAt = 0;
+		md::BootAnimation m_boot;
+		uint64_t m_bootAt = 0;
 		mdDesk::Telemetry m_lastTelemetry;
 
 	public:
@@ -759,6 +764,31 @@ namespace
 		check(_rig.lastResult() && !_rig.lastResult()->find("ok")->asBool(), "a name longer than 4 is refused");
 	}
 
+	// P4: the start-up animation holds input; the engine label says so until keys work.
+	void bootHold(const Bytes& _rom, const std::string& _romName)
+	{
+		std::puts("== P4 boot: input held until the start-up animation is over");
+		Rig rig(_rom, _romName, {}, false);
+		auto& m = rig.machine();
+		const auto t0 = m.now();
+		rig.page(R"({"op":"ready"})");
+		rig.runUntil([&] { return rig.desk().isReady(); }, 3000);
+		const auto answered = ms(m.now() - t0);
+		check(rig.machineString({"desk", "firmware"}) == "booting" && rig.machineString({"desk", "boot"}) == "animation",
+			"the firmware answers, the engine still says BOOTING OS (animation)");
+		rig.page(R"({"op":"play","id":900})");
+		check(rig.lastResult() && !rig.lastResult()->find("ok")->asBool(), "PLAY during the animation is held back, with the reason");
+		const bool ready = rig.runUntil([&] { return rig.desk().isInputReady(); }, 30000);
+		const auto readyMs = ms(m.now() - t0);
+		std::printf("  status reply %.0f ms, input ready %.0f ms after the firmware took MIDI\n", answered, readyMs);
+		check(ready && rig.machineString({"desk", "firmware"}) == "ready", "the engine says ready when the animation is over");
+		rig.page(R"({"op":"play","id":901})");
+		const bool plays = rig.runUntil([&] { return rig.telemetry().playing; }, 2000);
+		check(plays, "the first PLAY after ready plays (no key swallowed)");
+		rig.page(R"({"op":"stop","id":902})");
+		rig.run(300);
+	}
+
 	// P4: the mutes are the machine's (RAM 0x28b34a), whoever sets them.
 	void mutesTruth(Rig& _rig)
 	{
@@ -923,9 +953,10 @@ int main(const int _argc, char** _argv)
 		const std::string mode = _argc > 2 ? _argv[2] : "";
 		if(mode == "p4")
 		{
+			bootHold(rom, _argv[1]);
 			Rig rig(rom, _argv[1]);
 			rig.page(R"({"op":"ready"})");
-			rig.runUntil([&] { return rig.desk().isReady() && rig.desk().session().state().pattern; }, 5000);
+			rig.runUntil([&] { return rig.desk().isInputReady() && rig.desk().session().state().pattern; }, 5000);
 			mutesTruth(rig);
 			chaining(rig);
 			std::printf("mdDeskFirmwareTest p4: %s (%d failure(s))\n", g_failures ? "FAIL" : "PASS", g_failures);

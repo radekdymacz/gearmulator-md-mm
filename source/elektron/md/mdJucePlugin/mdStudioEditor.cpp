@@ -498,6 +498,20 @@ namespace mdJucePlugin
 		if(dynamic_cast<AudioPluginAudioProcessor&>(getProcessor()).getDeskSetupGeneration() != m_deskSetupGeneration)
 			loadDeskSetup();
 		m_desk->onTelemetry(m_link->readTelemetry());
+		// While the machine starts, the page's LCD shows the firmware's own (start-up animation
+		// included), about 15 times a second, until the desk takes input.
+		if(m_pageReady && !m_desk->isInputReady() && m_ticks % 2 == 0)
+		{
+			std::vector<uint8_t> bits;
+			if(m_link->readLcd(bits) && bits != m_lastLcd)
+			{
+				m_lastLcd = bits;
+				json::Value l = json::Value::object();
+				l.set("type", "lcd");
+				l.set("bits", juce::Base64::toBase64(bits.data(), bits.size()).toStdString());
+				m_outbox.push_back(std::move(l));
+			}
+		}
 		std::vector<uint8_t> region;
 		if(m_link->readWorkingKit(region))
 			m_desk->onWorkingKitMemory(region);

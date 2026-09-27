@@ -32,8 +32,10 @@ namespace mdDesk
 		bool gridEdit = false;	// grid edit (RECORD alone)
 		int knobPage = -1;		// DATA ENTRY page: 0 synthesis, 1 effects, 2 routing
 		bool valid = false;		// false: no telemetry for this firmware
-		// P4: the pattern mutes (bit 0 = track 1, -1 unknown), the firmware's pattern chain
-		// and the BANK GROUP (0 A-D, 1 E-H, -1 unknown).
+		// P4: the start-up animation (-1 unknown, 1 running: panel keys are ignored, 0 over),
+		// the pattern mutes (bit 0 = track 1, -1 unknown), the firmware's pattern chain and
+		// the BANK GROUP (0 A-D, 1 E-H, -1 unknown).
+		int bootAnimation = -1;
 		int mutes = -1;
 		bool chainKnown = false;
 		Chain chain;
@@ -92,6 +94,9 @@ namespace mdDesk
 		// the panel editor). _index 24 = level.
 		void onHostKitParam(uint8_t _track, uint8_t _index, uint8_t _value);
 		void onHostMute(uint8_t _track, bool _muted);
+		// Call it every tick, also without telemetry (valid = false): input waits for the
+		// first call, so a status reply that arrives before it cannot open the page while
+		// the start-up animation still swallows keys.
 		void onTelemetry(const Telemetry& _telemetry);
 		// The working-kit region read from the machine's memory (MD OS 1.63,
 		// elektronData::mdWorkingKitFromMemory): kit number plus the kit that plays,
@@ -110,6 +115,9 @@ namespace mdDesk
 		const Documents& documents() const { return m_docs; }
 		const mdDataLink::Session& session() const { return m_session; }
 		bool isReady() const { return m_ready; }
+		// Ready for the page's input: the firmware answered and its start-up animation (which
+		// swallows panel keys) is over.
+		bool isInputReady() const;
 		bool isBusy() const;
 		double lastRoundTripMs() const { return m_lastRoundTripMs; }
 
@@ -195,6 +203,7 @@ namespace mdDesk
 		std::optional<uint8_t> m_lastKit;
 		std::optional<uint8_t> m_lastPattern;
 		Telemetry m_telemetry;
+		bool m_telemetrySeen = false;
 		std::array<bool, 16> m_mutes{};
 		KnobRecorder m_knobs;
 		Modulators m_mods;

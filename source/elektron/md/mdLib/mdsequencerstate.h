@@ -54,6 +54,40 @@ namespace md
 		bool m_record = false;
 	};
 
+	// MD OS 1.63 start-up animation (P4, mdP4ProbeFirmwareTest boot/keys/bootui). The firmware
+	// takes MIDI while the animation still runs, but ignores panel keys until it is nearly
+	// over (PLAY first taken 12.7 s after MIDI ready on a fresh machine, 9.3 s with a restored
+	// project). RAM 0x28998a is 00 from boot until the main screen starts (13.4 s / 9.4 s),
+	// then non-zero: the first non-zero value is "over". It is a one-shot: feed the byte once
+	// per block while MIDI is ready, and reset for a new machine. (0x2a68e3, which also goes
+	// 02 -> 00 at the end of the animation, is set again by every SysEx dump, so it is not used.)
+	class BootAnimation
+	{
+	public:
+		static constexpr uint32_t g_mainScreenAddress = 0x28998a;
+		// Never seen longer than 14 s; after this it counts as over whatever the byte says.
+		static constexpr uint64_t g_timeoutFrames = uint64_t(g_samplerate) * 30;
+
+		void reset() { *this = BootAnimation(); }
+
+		void update(const uint8_t _mainScreen, const uint64_t _frames)
+		{
+			if(m_over)
+				return;
+			m_frames += _frames;
+			m_seen = true;
+			m_over = _mainScreen != 0 || m_frames >= g_timeoutFrames;
+		}
+
+		// -1 not known yet, 1 the animation runs (keys are ignored), 0 over.
+		int state() const { return m_over ? 0 : m_seen ? 1 : -1; }
+
+	private:
+		uint64_t m_frames = 0;
+		bool m_seen = false;
+		bool m_over = false;
+	};
+
 	// Pattern chain and mutes (P4, mdP4ProbeFirmwareTest chain4/chain5, mutes3).
 	//  - Chain (BANK held + TRIG keys held together, in order): MC68331 internal SRAM, 32-bit
 	//    big-endian values: 0x1001f5c active (0/1), 0x1001f60 the next entry to queue,

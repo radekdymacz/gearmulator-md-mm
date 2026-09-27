@@ -165,6 +165,18 @@ reply for three slots). Names, memory and audio are therefore not part of the
 contract; the page shows the controls that cannot work as disabled, with the
 reason.
 
+**Start-up (P4).** MD OS 1.63 answers MIDI about 13 s before it takes panel keys:
+its start-up animation ignores them (PLAY first taken 12.7 s after MIDI ready on a
+fresh machine, 9.3 s with a restored project). Main RAM 0x28998a is 00 until the
+main screen starts (13.4 s / 9.4 s), then non-zero; `md::BootAnimation` latches the
+first non-zero value per machine boot (30 s timeout) and `md::Device` publishes it.
+The desk takes page input only after it (`Desk::isInputReady`): `desk.firmware`
+stays `booting` and `desk.boot` says `animation` meanwhile; loads already run. While
+it waits the host sends the firmware's own LCD, `{"type":"lcd","bits"}` (128 x 64,
+one bit per pixel, row-major, 16 bytes a row, bit 7 = the left pixel, base64), which
+the page draws in its LCD with the plate's `--lcd` / `--ink`, then fades out. The
+host must call `onTelemetry` every tick, also without telemetry (`valid = false`).
+
 **Chaining and mutes (P4).** `machine.desk.chain` is the firmware's own pattern
 chain, read from the MC68331 internal SRAM (`md::ChainAndMutes`: 0x1001f5c active,
 0x1001f60 next, 0x1001f64 length, 32-bit patterns from 0x1001f68). The page asks

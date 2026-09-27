@@ -274,7 +274,8 @@
           "type": "object",
           "description": "Added by mdDesk::Desk for the page (optional; readers ignore what they do not know).",
           "properties": {
-            "firmware": {"enum": ["missing", "unsupported", "loading", "booting", "ready"], "description": "The engine: NO ROM, ROM ERROR, LOADING ROM, BOOTING OS, EMU OS 1.63."},
+            "firmware": {"enum": ["missing", "unsupported", "loading", "booting", "ready"], "description": "The engine: NO ROM, ROM ERROR, LOADING ROM, BOOTING OS, EMU OS 1.63. P4: ready only when the start-up animation is over (keys work)."},
+            "boot": {"enum": ["off", "starting", "animation", "ready"], "description": "P4: off (no firmware running), starting (no status reply yet), animation (the firmware answers MIDI but its start-up animation ignores panel keys), ready."},
             "tx": {"type": "boolean", "description": "An edit is on the wire (waiting for its read-back)."},
             "loading": {"type": "integer", "minimum": 0},
             "roundTripMs": {"type": "number", "description": "Last edit -> read-back time; -1 before the first."},

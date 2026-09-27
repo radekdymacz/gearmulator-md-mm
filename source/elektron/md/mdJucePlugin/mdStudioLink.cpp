@@ -182,6 +182,7 @@ namespace mdJucePlugin
 		t.recording = m_telemetry->recording.load(std::memory_order_relaxed) == 1;
 		t.gridEdit = m_telemetry->gridEdit.load(std::memory_order_relaxed) == 1;
 		t.knobPage = m_telemetry->knobPage.load(std::memory_order_relaxed);
+		t.bootAnimation = m_telemetry->bootAnimation.load(std::memory_order_relaxed);
 		t.mutes = m_telemetry->mutes.load(std::memory_order_relaxed);
 		const int active = m_telemetry->chainActive.load(std::memory_order_relaxed);
 		t.chainKnown = active >= 0;
@@ -218,6 +219,19 @@ namespace mdJucePlugin
 			return false;
 		m_workingKitSequence = sequence;
 		m_workingKitSource = m_telemetry.get();
+		return true;
+	}
+
+	bool StudioLink::readLcd(std::vector<uint8_t>& _bits)
+	{
+		if(!m_panel)
+			return false;
+		const auto panel = m_panel->read();
+		_bits.assign(md::FrontPanel::g_lcdWidth * md::FrontPanel::g_lcdHeight / 8, 0);
+		for(uint32_t y = 0; y < md::FrontPanel::g_lcdHeight; ++y)
+			for(uint32_t x = 0; x < md::FrontPanel::g_lcdWidth; ++x)
+				if(panel.getLcdPixel(x, y))
+					_bits[y * 16 + x / 8] |= static_cast<uint8_t>(0x80 >> (x & 7));
 		return true;
 	}
 

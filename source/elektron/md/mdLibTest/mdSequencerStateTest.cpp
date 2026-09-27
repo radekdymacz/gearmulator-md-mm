@@ -63,6 +63,22 @@ int main()
 	check(md::panelKeySequence(md::MachineModel::Machinedrum, "chain:4:1").empty()
 		&& md::panelKeySequence(md::MachineModel::Machinedrum, "chain:0:16").empty(), "no bank key 5, no TRIG 17");
 	check(md::panelKeySequence(md::MachineModel::Machinedrum, "bankGroup").size() == 2, "BANK GROUP key");
+	// P4: the start-up animation latch.
+	md::BootAnimation b;
+	check(b.state() == -1, "boot: unknown before the first byte");
+	b.update(0, ms(100));
+	check(b.state() == 1, "main screen byte 00: the animation runs");
+	b.update(0, ms(12000));
+	b.update(0x27, ms(10));
+	check(b.state() == 0, "non-zero: over");
+	b.update(0, ms(10));
+	check(b.state() == 0, "one-shot: stays over");
+	md::BootAnimation late;
+	late.update(0x27, ms(10));
+	check(late.state() == 0, "already past the animation: over at once");
+	md::BootAnimation stuck;
+	stuck.update(0, ms(31000));
+	check(stuck.state() == 0, "30 s timeout");
 	if(g_failures)
 		return 1;
 	std::puts("mdSequencerStateTest: PASS");

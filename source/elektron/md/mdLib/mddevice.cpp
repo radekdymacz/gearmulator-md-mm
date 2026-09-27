@@ -700,12 +700,21 @@ namespace md
 			t.recording.store(-1, std::memory_order_relaxed);
 			t.gridEdit.store(-1, std::memory_order_relaxed);
 			t.knobPage.store(-1, std::memory_order_relaxed);
+			t.bootAnimation.store(-1, std::memory_order_relaxed);
 			t.mutes.store(-1, std::memory_order_relaxed);
 			t.chainActive.store(-1, std::memory_order_relaxed);
 			return;
 		}
 		auto& uc = m_hardware->getUC();
-
+		// A new machine (state restore, ROM change) boots again.
+		if(m_bootAnimationOf != m_hardware.get())
+		{
+			m_bootAnimationOf = m_hardware.get();
+			m_bootAnimation.reset();
+		}
+		if(m_hardware->isFirmwareMidiReady())
+			m_bootAnimation.update(uc.read8(BootAnimation::g_mainScreenAddress), _frames);
+		t.bootAnimation.store(m_bootAnimation.state(), std::memory_order_relaxed);
 		const auto step = uc.read8(SequencerState::g_stepAddress);
 		t.step.store(step, std::memory_order_relaxed);
 		t.pattern.store(uc.read8(patternAddress), std::memory_order_relaxed);

@@ -162,9 +162,10 @@ namespace mdDesk
 				load({*k, static_cast<uint8_t>(*slot)}, true);
 			return;
 		}
-		if(!m_ready)
+		if(!isInputReady())
 		{
-			result(_message, {"The machine is still starting (device busy). Try again in a moment."}, {});
+			result(_message, {m_ready ? "The machine is still starting: its start-up animation ignores keys. The editor"
+				" takes input when it is over." : "The machine is still starting (device busy). Try again in a moment."}, {});
 			flush();
 			return;
 		}
@@ -959,10 +960,10 @@ namespace mdDesk
 		const bool changed = _t.step != m_telemetry.step || _t.pattern != m_telemetry.pattern
 			|| _t.playing != m_telemetry.playing || _t.valid != m_telemetry.valid
 			|| _t.recording != m_telemetry.recording || _t.gridEdit != m_telemetry.gridEdit
-			|| _t.knobPage != m_telemetry.knobPage
+			|| _t.knobPage != m_telemetry.knobPage || _t.bootAnimation != m_telemetry.bootAnimation
 			|| _t.mutes != m_telemetry.mutes || _t.chainKnown != m_telemetry.chainKnown || _t.chain != m_telemetry.chain
 			|| _t.bankGroup != m_telemetry.bankGroup;
-		const bool machineChanged = _t.mutes != m_telemetry.mutes
+		const bool machineChanged = _t.bootAnimation != m_telemetry.bootAnimation || _t.mutes != m_telemetry.mutes
 			|| _t.chainKnown != m_telemetry.chainKnown || _t.chain != m_telemetry.chain || _t.bankGroup != m_telemetry.bankGroup;
 		const bool recordingChanged = _t.recording != m_telemetry.recording;
 		const bool patternChanged = _t.valid && _t.pattern != m_telemetry.pattern;
@@ -970,6 +971,11 @@ namespace mdDesk
 		const int stepBefore = m_telemetry.step;
 		const bool wrapped = _t.valid && m_telemetry.step >= 0 && _t.step >= 0 && _t.step < m_telemetry.step;
 		m_telemetry = _t;
+		if(!m_telemetrySeen)
+		{
+			m_telemetrySeen = true;
+			m_machineDirty = true;
+		}
 		if(!changed)
 			return;
 		if(machineChanged)
@@ -1114,6 +1120,13 @@ namespace mdDesk
 		return m_session.state().kit;
 	}
 
+	bool Desk::isInputReady() const
+	{
+		// Without telemetry (another firmware) the first status reply is all there is.
+		return m_ready && m_firmware == Firmware::Present && m_telemetrySeen
+			&& (!m_telemetry.valid || m_telemetry.bootAnimation == 0);
+	}
+
 	bool Desk::isBusy() const
 	{
 		for(const auto& [slot, push] : m_patternPush)
@@ -1252,7 +1265,10 @@ namespace mdDesk
 		Value desk = Value::object();
 		desk.set("firmware", m_firmware == Firmware::Missing ? "missing"
 			: m_firmware == Firmware::Unsupported ? "unsupported" : m_firmware == Firmware::Loading ? "loading"
-			: m_ready ? "ready" : "booting");
+			: isInputReady() ? "ready" : "booting");
+		// "animation": the firmware answers MIDI but its start-up animation still ignores keys.
+		desk.set("boot", m_firmware != Firmware::Present ? "off" : !m_ready ? "starting"
+			: isInputReady() ? "ready" : "animation");
 		desk.set("tx", isBusy());
 		desk.set("loading", static_cast<int>(m_loadQueue.size() + (m_loading ? 1 : 0)));
 		desk.set("roundTripMs", m_lastRoundTripMs);

@@ -396,6 +396,7 @@ namespace
 		port.toPage = [&](const Value& _m) { page.push_back(_m); };
 		port.nowMs = [&] { return now; };
 		Desk desk(port);
+		desk.onTelemetry(Telemetry{});	// a host without sequencer telemetry says so
 		const auto status = [](const ed::MdStatus _p, const uint8_t _v)
 		{
 			return std::vector<uint8_t>{0xf0, 0x00, 0x20, 0x3c, 0x02, 0x00, 0x72, static_cast<uint8_t>(_p), _v, 0xf7};
@@ -502,6 +503,7 @@ namespace
 		port.toPage = [&](const Value& _m) { page.push_back(_m); };
 		port.nowMs = [&] { return now; };
 		Desk desk(port);
+		desk.onTelemetry(Telemetry{});	// a host without sequencer telemetry says so
 		const auto status = [](const ed::MdStatus _p, const uint8_t _v)
 		{
 			return std::vector<uint8_t>{0xf0, 0x00, 0x20, 0x3c, 0x02, 0x00, 0x72, static_cast<uint8_t>(_p), _v, 0xf7};
@@ -617,6 +619,7 @@ namespace
 		port.toPage = [&](const Value& _m) { page.push_back(_m); };
 		port.nowMs = [&] { return now; };
 		Desk desk(port);
+		desk.onTelemetry(Telemetry{});	// a host without sequencer telemetry says so
 		const auto status = [](const ed::MdStatus _p, const uint8_t _v)
 		{
 			return std::vector<uint8_t>{0xf0, 0x00, 0x20, 0x3c, 0x02, 0x00, 0x72, static_cast<uint8_t>(_p), _v, 0xf7};
@@ -642,6 +645,7 @@ namespace
 		desk.onWorkingKitMemory(region);
 		Telemetry t;
 		t.valid = true;
+		t.bootAnimation = 0;
 		desk.onTelemetry(t);
 
 		desk.onPageMessage(cmd(R"({"op":"record","id":1})"));
@@ -721,6 +725,7 @@ namespace
 		const auto firmware = [&] { const auto* m = last("machine"); return m ? m->find("doc")->find("desk")->find("firmware")->asString() : std::string(); };
 		Telemetry t;
 		t.valid = true;
+		t.bootAnimation = 1;
 		t.bankGroup = 0;
 		t.chainKnown = true;
 		desk.onTelemetry(t);
@@ -728,7 +733,13 @@ namespace
 		desk.onDeviceSysex({0xf0, 0x00, 0x20, 0x3c, 0x02, 0x00, 0x72, 0x04, 0x02, 0xf7});
 		desk.onDeviceSysex({0xf0, 0x00, 0x20, 0x3c, 0x02, 0x00, 0x72, 0x02, 0x05, 0xf7});
 		desk.tick();
-		check(desk.isReady() && firmware() == "ready", "ready");
+		check(desk.isReady() && !desk.isInputReady() && firmware() == "booting", "status answered, animation running: BOOTING OS");
+		desk.onPageMessage(cmd(R"({"op":"play","id":1})"));
+		check(!ok() && keys.empty(), "PLAY is held back during the animation");
+		t.bootAnimation = 0;
+		desk.onTelemetry(t);
+		desk.tick();
+		check(desk.isInputReady() && firmware() == "ready", "animation over: ready");
 		desk.onPageMessage(cmd(R"({"op":"chain","patterns":[3,1,4],"id":2})"));
 		check(ok() && keys.back() == "chain:0:3,1,4", "chain command: the machine's keys");
 		t.chain.active = true;

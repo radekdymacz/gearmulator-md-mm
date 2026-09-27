@@ -1,8 +1,10 @@
 "use strict";
-/* P4 live controls on the machine (mockup v52-v54): mutes on the track keys and the pattern chain. Loaded after mdDeskApp.js; uses its state (S), its
+/* P4 live controls on the machine (mockup v52-v54): mutes on the track keys, the pattern chain and the
+   firmware's own LCD while it boots. Loaded after mdDeskApp.js; uses its state (S), its
    render functions and its commands (cmd, setMute). What the page shows is the machine's:
    - mutes: machine.desk.mutes, read from RAM (mutesSource "memory"), whoever set them;
-   - chain: machine.desk.chain, read from the firmware's own chain (active, patterns, next). */
+   - chain: machine.desk.chain, read from the firmware's own chain (active, patterns, next);
+   - LCD: "lcd" messages with the 128 x 64 display while the engine says BOOTING OS. */
 
 /* ===== Mutes on the track keys (manual p.44, mockup v54) =====
    The rail M keys and the Mix strips are the machine's pattern mutes (RAM, machine.desk.mutes).
@@ -68,8 +70,33 @@ document.addEventListener("click", e => {
 const renderSong0 = renderSong;
 renderSong = function () { renderSong0(); const left = document.querySelector(".songleft"); if (left) left.insertAdjacentHTML("beforeend", chainCard()); };
 
+/* ===== Boot: the firmware's own LCD while the engine says BOOTING OS ===== */
+let fwLcd = { shown: false, bits: null };
+function drawFwLcd() {
+	const c = $("#lcdfwc"); if (!c || !fwLcd.bits) return;
+	const x = c.getContext("2d"), cs = getComputedStyle(document.documentElement);
+	x.fillStyle = cs.getPropertyValue("--lcd"); x.fillRect(0, 0, 128, 64); x.fillStyle = cs.getPropertyValue("--ink");
+	const b = fwLcd.bits;
+	for (let y = 0; y < 64; y++) for (let i = 0; i < 128; i++) if (b[y * 16 + (i >> 3)] & (0x80 >> (i & 7))) x.fillRect(i, y, 1, 1);
+}
+function showFwLcd(on) {
+	const p = $(".lcdpanel"); if (!p || on === fwLcd.shown) return;
+	fwLcd.shown = on;
+	if (on) { p.classList.remove("fwfade"); p.classList.add("fwboot"); return; }
+	p.classList.remove("fwboot"); p.classList.add("fwfade"); setTimeout(() => p.classList.remove("fwfade"), 700);
+}
 Bridge.onMessage(m => {
-	if (m.type === "machine") {
+	if (m.type === "lcd") {
+		if (m.bits) { const s = atob(m.bits); fwLcd.bits = Uint8Array.from(s, ch => ch.charCodeAt(0)); drawFwLcd(); }
+		const fw = (machineState().desk || {}).firmware;
+		showFwLcd(!!fwLcd.bits && fw !== "ready" && fw !== "missing" && fw !== "unsupported");
+	}
+	else if (m.type === "machine") {
+		const fw = m.doc.desk && m.doc.desk.firmware;
+		if (fw === "ready" || fw === "missing" || fw === "unsupported") showFwLcd(false);
+		/* BOOTING OS lasts until keys work: the firmware answers MIDI early, but its start-up
+		   animation ignores panel keys until it is over (about 13 s). */
+		if (m.doc.desk && m.doc.desk.boot === "animation") { const b = $(".lcdeng"); if (b) b.title = "Engine: MD OS 1.63 answers, but its start-up animation ignores keys until it ends (shown in the LCD). Editing starts then."; }
 		if (S.ws === "song" && m.doc.desk && JSON.stringify(m.doc.desk.chain) !== chainCard.last) { chainCard.last = JSON.stringify(m.doc.desk.chain); scheduleRender(); }
 	}
 	else if (m.type === "ask" && m.ask === "breakChain") {
@@ -85,11 +112,17 @@ if (/[?&]selftest=p4(&|$)/.test(location.search)) (async () => {
 	const log = t => Bridge.log("P4: " + t);
 	const t0 = performance.now(), desk = () => machineState().desk || {};
 	const until = async (f, ms) => { const end = performance.now() + ms; while (performance.now() < end) { if (f()) return performance.now(); await sleep(20); } return -1; };
+	let frames = 0, firstLcd = -1, bootSeen = false;
+	Bridge.onMessage(m => { if (m.type === "lcd" && m.bits) { frames++; if (firstLcd < 0) firstLcd = performance.now() - t0; } if (m.type === "machine" && m.doc.desk && m.doc.desk.boot === "animation") bootSeen = true; });
 	const ready = await until(() => desk().firmware === "ready" && S.loaded, 90000);
+	log(`boot: firmware LCD frames ${frames} (first at ${Math.round(firstLcd)} ms), animation state seen ${bootSeen}, input ready at ${Math.round(ready - t0)} ms, LCD mirror shown now ${$(".lcdpanel").classList.contains("fwboot")}`);
 	if (ready < 0) { log("FAIL: not ready"); return; }
-	/* The start-up animation swallows keys for about 13 s after the firmware answers. */
-	while (performance.now() - t0 < 25000) await sleep(500);
-	let p1 = -1;
+	await sleep(1500);
+	/* The first key after ready is taken. */
+	let p0 = performance.now(); $("#play").click();
+	let p1 = await until(() => desk().playing, 3000);
+	log(`first PLAY after ready: ${p1 >= 0 ? "ok plays" : "FAIL"} ${Math.round(p1 - p0)} ms`);
+	$("#play").click(); await until(() => !desk().playing, 3000); await sleep(400);
 	/* Mutes: a rail M key, then two prepared with Shift, applied on release. */
 	S.ws = "seq"; render(); await sleep(200);
 	const has = t => (desk().mutes || []).includes(t);
