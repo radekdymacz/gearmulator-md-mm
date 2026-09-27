@@ -20,15 +20,20 @@ namespace elektronData
 	//   0x1c1   6  machines (0x5B ids, live)
 	//   0x1c7   6  routing (0x5C, live): output buses in bits 0-2 (AB 1, CD 2, EF 4), input in
 	//              bits 3-5 (0 NEIGHBOR, 1 INP A, 2 INP B, 3 INP A+B, 4-6 BUS AB/CD/EF; FX machines)
-	//   0x1cd   5  unknown (kept)
+	//   0x1cd   3  unknown (kept)
+	//   0x1d0   1  JOY mirror, bit per track (ASSIGN JOY R/L MIRR, panel, MM-P4)
+	//   0x1d1   1  unknown (kept)
 	//   0x1d2  72  ASSIGN pages, 6 tracks x 6 sources x 2 rows (panel)
 	//   0x21a  72  ASSIGN destinations (panel)
 	//   0x262  72  ASSIGN amounts, signed (panel)
 	//                sources: JOY R/L (JOY R), JOY L, JOY U, JOY D, VELOCITY, KEY TRACKING
-	//   0x2aa   3  track bit masks: JOY mirror, key tracking HPF, LPF (inferred from the factory set)
+	//   0x2aa   3  track bit masks: key tracking LPF, HPF (ASSIGN KEY tab), PORTAMENTO ALWAYS
+	//              (TRIG window; clear = ONLY LEGATO) (panel, MM-P4; MM-P1 had guessed mirror/hpf/lpf)
 	//   0x2ad   6  TRIG POS: the track that forwards notes, 0xff = --- (panel)
-	//   0x2b3   3  track bit masks: LEGATO AMP (panel), FLT, LFO (inferred)
-	//   0x2b6   4  unknown (kept)
+	//   0x2b3   3  track bit masks: LEGATO AMP, FLT, LFO (panel)
+	//   0x2b6   4  MULTI TRIG: mode (0 ALL TRK, 1 SPLIT KEY, 2 SEQ START, 3 SEQ TRNSP), timing
+	//              (0 DIRECT, 1/16 2/16 4/16 8/16 16/16 32/16), split key (note), split track
+	//              (the first upper track, 0-based) (panel, MM-P4)
 	// The working kit (the one that plays, unsaved edits included) is this raw
 	// payload in patch RAM at 0x700028 (MM-P0-RESULT §5).
 	struct MmKitTrack
@@ -62,13 +67,15 @@ namespace elektronData
 		std::array<MmKitTrack, g_tracks> tracks{};
 		std::array<uint8_t, g_tracks> machines{};
 		std::array<uint8_t, g_tracks> routing{};
-		std::array<uint8_t, 5> x1cd{};
+		std::array<uint8_t, 3> x1cd{};
+		uint8_t mirrorMask = 0x3f;
+		uint8_t x1d1 = 0;
 		std::array<std::array<uint8_t, 12>, g_tracks> assignPage{}, assignDest{};
 		std::array<std::array<int8_t, 12>, g_tracks> assignAdd{};	// signed
-		uint8_t mirrorMask = 0x3f, hpfMask = 0x3f, lpfMask = 0x3f;
+		uint8_t lpfMask = 0x3f, hpfMask = 0x3f, portamentoMask = 0x3f;
 		std::array<uint8_t, g_tracks> trigPos{};
 		uint8_t legatoAmp = 0xff, legatoFilter = 0xff, legatoLfo = 0xff;
-		std::array<uint8_t, 4> x2b6{};
+		uint8_t multiTrigMode = 0, multiTrigTiming = 0, splitKey = 60, splitTrack = 3;
 
 		bool operator==(const MmKit& _o) const;
 		bool operator!=(const MmKit& _o) const { return !(*this == _o); }

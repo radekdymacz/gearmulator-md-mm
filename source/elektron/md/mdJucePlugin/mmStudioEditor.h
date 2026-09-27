@@ -6,6 +6,7 @@
 
 #include "juce_gui_basics/juce_gui_basics.h"
 
+#include "mdDesk/mdDeskPacer.h"
 #include "mmDesk/mmDesk.h"
 
 #include <array>
@@ -59,5 +60,8 @@ namespace mdJucePlugin
 		int m_learnPage = -1;
 		int m_learnIndex = -1;
 		mmDesk::Desk::Engine m_lastEngine = mmDesk::Desk::Engine::Missing;
+		bool m_hw = false;					// HW MIDI (MM-P4)
+		mdDesk::DinPacer m_hwPacer;
+		size_t m_hwBytesOut = 0;
 	};
 }

@@ -93,6 +93,8 @@ namespace mdFirmwareSession
 		std::function<void()> onBlock;
 		// Every complete SysEx message the firmware sends.
 		std::function<void(const Bytes&)> onSysex;
+		// Every other MIDI event the firmware sends (notes, CCs, clock), with the frame (MM-P4).
+		std::function<void(const synthLib::SMidiEvent&, uint64_t)> onMidiEvent;
 
 		void step()
 		{
@@ -105,7 +107,11 @@ namespace mdFirmwareSession
 			for(const auto& e : m_events)
 			{
 				if(e.sysex.empty())
+				{
+					if(onMidiEvent)
+						onMidiEvent(e, m_frames);
 					continue;
+				}
 				m_rx.emplace_back(e.sysex.begin(), e.sysex.end());
 				if(onSysex)
 					onSysex(m_rx.back());

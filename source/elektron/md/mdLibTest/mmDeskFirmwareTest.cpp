@@ -17,10 +17,13 @@
 #include "mdLib/mdautomation.h"
 #include "mdLib/mmtelemetry.h"
 
+#include "mdDesk/mdDeskPacer.h"
 #include "mmDesk/mmDesk.h"
+#include "mmDesk/mmRecv.h"
 
 #include <cmath>
 #include <deque>
+#include <map>
 
 using namespace mdFirmwareSession;
 namespace ed = elektronData;
@@ -53,6 +56,11 @@ namespace
 		case K::Play: return C::Play;
 		case K::Stop: return C::Stop;
 		case K::Global: return C::Kit;	// with FUNCTION
+		case K::Record: return C::Record;
+			case K::LiveRecord: return C::Play;	// with RECORD held
+		case K::MuteWindow: return C::BankGroup;	// with FUNCTION
+		case K::Trig9: case K::Trig10: case K::Trig11: case K::Trig12: case K::Trig13: case K::Trig14:
+			return static_cast<C>(static_cast<int>(C::Trigger1) + 8 + (static_cast<int>(_k) - static_cast<int>(K::Trig9)));
 		}
 		return std::nullopt;
 	}
@@ -66,35 +74,84 @@ namespace
 		std::unique_ptr<mmDesk::Desk> desk;
 		md::MmTelemetry tel;
 
-		explicit Rig(const Bytes& _rom) : m(_rom, "mm", {}, true, g_mm)
+		// _hw: the desk drives the machine as a real Monomachine over MIDI (MM-P4): DIN speed both
+		// ways, no panel keys, no telemetry, no memory. The panel queue stays, for the "user".
+		explicit Rig(const Bytes& _rom, const bool _hw = false) : m(_rom, "mm", {}, true, g_mm), hw(_hw)
 		{
 			mmDesk::Desk::Port port;
-			port.sendSysex = [this](const Bytes& _b) { out.push_back(_b); };
+			port.sendSysex = [this](const Bytes& _b) { if(hw) pacer.push(_b); else out.push_back(_b); };
 			port.sendParam = [this](const uint8_t _t, const uint8_t _p, const uint8_t _i, const uint8_t _v)
 			{
 				const md::automation::ParameterChange c{_p, _t, _i, _v};
 				if(const auto cc = md::automation::encodeParameterChange(g_mm, c, 0))
-					out.push_back({(*cc)[0], (*cc)[1], (*cc)[2]});
+					send({(*cc)[0], (*cc)[1], (*cc)[2]});
 			};
 			port.sendNrpn = [this](const uint8_t _t, const uint8_t _p, const uint8_t _v)
 			{
-				out.push_back({0xb0, 99, _t});
-				out.push_back({0xb0, 98, _p});
-				out.push_back({0xb0, 6, _v});
+				send({0xb0, 99, _t});
+				send({0xb0, 98, _p});
+				send({0xb0, 6, _v});
 			};
 			port.pressKeys = [this](const std::vector<mmDesk::Key>& _keys)
+			{
+				if(hw)
+				{
+					// Over MIDI only PLAY and STOP: MIDI Start / Stop.
+					if(_keys.size() != 1 || (_keys[0] != mmDesk::Key::Play && _keys[0] != mmDesk::Key::Stop))
+						return false;
+					pacer.push({static_cast<uint8_t>(_keys[0] == mmDesk::Key::Play ? 0xfa : 0xfc)});
+					return true;
+				}
+				return userKeys(_keys);
+			};
+			port.toPage = [this](const Value& _v) { page.push_back(_v); };
+			port.nowMs = [this] { return ms(); };
+			desk = std::make_unique<mmDesk::Desk>(port);
+			if(hw)
+				desk->setHardwareLink(true);
+			m.onSysex = [this](const Bytes& _b)
+			{
+				if(unplugged)
+					return;
+				if(hw)
+					inPacer.push(_b);	// the machine's MIDI out is DIN too
+				else
+					replies.push_back(_b);
+			};
+			m.onBlock = [this]
+			{
+				while(!panel.empty() && panel.front().first <= m.now())
+				{
+					m.hardware().trySendPanelEvent(panel.front().second.row, panel.front().second.mask);
+					panel.pop_front();
+				}
+			};
+		}
+
+		bool hw = false;
+		bool unplugged = false;
+		mdDesk::DinPacer pacer, inPacer;
+		size_t hwBytesIn = 0;
+		size_t hwBytesOut = 0;
+
+		void send(Bytes _b) { if(hw) pacer.push(std::move(_b)); else out.push_back(std::move(_b)); }
+
+		// Keys on the machine's panel: the desk's (emulator) or a person's (HW MIDI tests).
+		bool userKeys(const std::vector<mmDesk::Key>& _keys)
+		{
 			{
 				uint64_t at = std::max(m.now(), panel.empty() ? 0 : panel.back().first) + 64;
 				const auto hold = static_cast<uint64_t>(g_rate / 100);	// 10 ms
 				const auto fn = *md::panelPacket(g_mm, md::PanelControl::Function);
+				const auto rec = *md::panelPacket(g_mm, md::PanelControl::Record);
 				for(const auto k : _keys)
 				{
 					const auto c = control(k);
 					const auto pk = *md::panelPacket(g_mm, *c);
-					if(k == mmDesk::Key::Global)
+					if(mmDesk::isChord(k))
 					{
 						md::PanelRowState rows;
-						for(const auto s : {rows.press(fn), rows.press(pk), rows.release(pk), rows.release(fn)})
+						for(const auto s : {rows.press(k == mmDesk::Key::LiveRecord ? rec : fn), rows.press(pk), rows.release(pk), rows.release(k == mmDesk::Key::LiveRecord ? rec : fn)})
 						{
 							panel.emplace_back(at, s);
 							at += hold;
@@ -107,19 +164,7 @@ namespace
 					at += hold;
 				}
 				return true;
-			};
-			port.toPage = [this](const Value& _v) { page.push_back(_v); };
-			port.nowMs = [this] { return ms(); };
-			desk = std::make_unique<mmDesk::Desk>(port);
-			m.onSysex = [this](const Bytes& _b) { replies.push_back(_b); };
-			m.onBlock = [this]
-			{
-				while(!panel.empty() && panel.front().first <= m.now())
-				{
-					m.hardware().trySendPanelEvent(panel.front().second.row, panel.front().second.mask);
-					panel.pop_front();
-				}
-			};
+			}
 		}
 
 		std::vector<Bytes> replies;
@@ -137,6 +182,8 @@ namespace
 			t.recvErrors = tel.recvErrors.load();
 			t.recvActive = tel.recvActive.load() == 1;
 			t.tempo = tel.tempo.load();
+			t.mutes = tel.mutes.load();
+			t.recording = tel.recording.load();
 			return t;
 		}
 
@@ -146,7 +193,16 @@ namespace
 			const auto end = m.now() + static_cast<uint64_t>(_ms * g_rate / 1000);
 			while(m.now() < end)
 			{
-				desk->onTelemetry(readTelemetry());
+				if(!hw)
+					desk->onTelemetry(readTelemetry());
+				else
+					readTelemetry();	// for the test's own checks
+				for(auto& b : pacer.take(ms()))
+				{
+					hwBytesOut += b.size();
+					if(!unplugged)
+						out.push_back(std::move(b));
+				}
 				Bytes region;
 				uint32_t seq = 0;
 				if(tel.readWorkingKit(region, seq) && seq != m_lastSeq)
@@ -171,6 +227,11 @@ namespace
 					out.pop_front();
 				}
 				m.run(10);
+				for(auto& b : inPacer.take(ms()))
+				{
+					hwBytesIn += b.size();
+					replies.push_back(std::move(b));
+				}
 				auto r = std::move(replies);
 				replies.clear();
 				for(const auto& x : r)
@@ -185,6 +246,14 @@ namespace
 			for(auto it = page.rbegin(); it != page.rend(); ++it)
 				if(it->find("type")->asString() == "result")
 					return *it;
+			return {};
+		}
+
+		Value lastMachine() const
+		{
+			for(auto it = page.rbegin(); it != page.rend(); ++it)
+				if(it->find("type")->asString() == "machine")
+					return *it->find("doc");
 			return {};
 		}
 
@@ -450,6 +519,235 @@ namespace
 	}
 }
 
+
+	// MM-P4: POLY, MIDI track mutes, RECORD, MULTI TRIG and PORTAMENTO in the kit, the MULTI MAP.
+	void p4(const Bytes& _rom)
+	{
+		std::puts("p4");
+		Rig r(_rom);
+		std::map<int, int> noteOns;	// channel -> note ons from the machine's MIDI out
+		r.m.onMidiEvent = [&](const synthLib::SMidiEvent& _e, uint64_t) { if((_e.a & 0xf0) == 0x90 && _e.c) ++noteOns[_e.a & 0x0f]; };
+		r.msg(R"({"op":"ready"})");
+		r.desk->setEngine(mmDesk::Desk::Engine::Ready);
+		r.run(600);
+		while(r.desk->loaded() < 288)
+			r.run(100);
+
+		// POLY: SET STATUS 0x20, read back by status.
+		r.msg(R"({"op":"poly","on":1})");
+		r.run(1500);
+		check(r.lastMachine().find("poly")->isBool() && r.lastMachine().find("poly")->asBool(), "POLY on (SET STATUS 0x20, status reads 1)");
+		r.msg(R"({"op":"poly","on":0})");
+		r.run(1500);
+		check(!r.lastMachine().find("poly")->asBool(), "POLY off again");
+
+		// A pattern with MIDI track 1 notes every 4 steps (E01).
+		auto p = *r.desk->pattern(64);
+		p.length = 16;
+		for(size_t t = 0; t < 6; ++t)
+			p.amp[t] = p.filter[t] = p.lfo[t] = p.pitch[t] = p.chord[t] = p.midiTrig[t] = p.midiNote[t] = 0;
+		for(auto& m : p.lockMasks) m.fill(0);
+		p.lockRowCount = 0;
+		p.chordNoteCount = 0;
+		p.midiNoteCount = 0;
+		for(uint8_t st = 0; st < 16; st += 4)
+		{
+			p.midiTrig[0] |= ed::mmStepBit(st);
+			p.midiNote[0] |= ed::mmStepBit(st);
+			p.midiNotes[p.midiNoteCount++] = ed::mmNoteEntryWord({0, st, 60});
+		}
+		const auto problems = ed::validate(p);
+		check(problems.empty(), "the MIDI pattern validates" + (problems.empty() ? std::string() : ": " + problems.front()));
+		r.msg(R"({"op":"set","kind":"pattern","doc":)" + ed::json::write(ed::mmPatternToJson(p)) + "}");
+		r.run(1500);
+		r.msg(R"({"op":"select","p":64})");
+		r.run(300);
+		const auto g = *r.desk->global(static_cast<uint8_t>(std::max(0, r.desk->currentGlobal())));
+		const int ch = g.midiSeqChannels[0] & 15;
+		r.msg(R"({"op":"play"})");
+		r.run(2000);
+		noteOns.clear();
+		r.run(2000);
+		const int before = noteOns[ch];
+		check(before >= 3, "MIDI track 1 plays on channel " + std::to_string(ch + 1) + " (" + std::to_string(before) + " notes in 2 s)");
+		r.msg(R"({"op":"muteMidi","t":0,"on":1})");
+		r.run(800);
+		check(((r.tel.mutes.load() >> 6) & 1) == 1, "MIDI track 1 muted through the MUTE window (RAM 0x2bfedd)");
+		noteOns.clear();
+		r.run(2000);
+		check(noteOns[ch] == 0, "muted: no notes on its channel (" + std::to_string(noteOns[ch]) + ")");
+		r.msg(R"({"op":"muteMidi","t":0,"on":0})");
+		r.run(800);
+		noteOns.clear();
+		r.run(2000);
+		check(((r.tel.mutes.load() >> 6) & 1) == 0 && noteOns[ch] >= 3, "unmuted: its notes again (" + std::to_string(noteOns[ch]) + ")");
+		// Synth track mute: CC 3 through the mute parameter; the RAM shows it.
+		r.msg(R"({"op":"mute","t":2,"on":1})");
+		r.run(300);
+		check(((r.tel.mutes.load() >> 2) & 1) == 1, "synth track 3 muted (CC 3, RAM 0x2bfeb5)");
+		r.msg(R"({"op":"mute","t":2,"on":0})");
+		r.run(300);
+
+		// RECORD while playing: a note on track 1's channel is recorded into the pattern.
+		const auto trigsBefore = r.desk->pattern(64)->pitch[0];
+		r.msg(R"({"op":"record","mode":"live"})");
+		r.run(500);
+		check(r.tel.recording.load() == 2, "LIVE RECORDING on (RECORD + PLAY; RAM 0x2bff01)");
+		const uint8_t base = g.baseChannel & 15;
+		r.out.push_back({static_cast<uint8_t>(0x90 | base), 67, 100});
+		r.run(120);
+		r.out.push_back({static_cast<uint8_t>(0x80 | base), 67, 0});
+		r.run(1500);
+		r.msg(R"({"op":"record","mode":"off"})");
+		r.run(2500);
+		check(r.tel.recording.load() == 0, "recording off (RECORD twice)");
+		const auto trigsAfter = r.desk->pattern(64)->pitch[0];
+		check(trigsAfter != trigsBefore, "the live-recorded note is in the pattern read back (T1 trigs " + std::to_string(trigsBefore) + " -> " + std::to_string(trigsAfter) + ")");
+		r.msg(R"({"op":"stop"})");
+		r.run(500);
+		// GRID RECORDING (stopped): the machine's TRIG keys write steps; the desk reads them back.
+		r.msg(R"({"op":"record","mode":"grid"})");
+		r.run(500);
+		check(r.tel.recording.load() == 1, "GRID RECORDING on (RECORD; RAM 0x26bbb3)");
+		const auto gridBefore = r.desk->pattern(64)->pitch[0];
+		{
+			const auto pk = *md::panelPacket(g_mm, md::PanelControl::Trigger12);
+			r.panel.emplace_back(r.m.now() + 64, pk);
+			r.panel.emplace_back(r.m.now() + 64 + 441, md::PanelPacket{pk.row, 0});
+		}
+		r.run(2500);
+		check(r.desk->pattern(64)->pitch[0] == (gridBefore ^ ed::mmStepBit(11)), "a TRIG key in GRID RECORDING is read back while recording");
+		r.msg(R"({"op":"record","mode":"off"})");
+		r.run(600);
+		check(r.tel.recording.load() == 0, "GRID RECORDING off");
+
+		// MULTI TRIG and PORTAMENTO: kit fields without a live message (dump + LOAD KIT).
+		auto k = *r.desk->workingKit();
+		k.multiTrigMode = 1;
+		k.multiTrigTiming = 3;
+		k.splitKey = 48;
+		k.splitTrack = 2;
+		k.portamentoMask = static_cast<uint8_t>(k.portamentoMask & ~1);
+		r.msg(R"({"op":"set","kind":"kit","doc":)" + ed::json::write(ed::mmKitToJson(k)) + "}");
+		r.run(3000);
+		const auto& w = *r.desk->workingKit();
+		check(w.multiTrigMode == 1 && w.multiTrigTiming == 3 && w.splitKey == 48 && w.splitTrack == 2, "MULTI TRIG mode, timing and zones in the working kit");
+		check((w.portamentoMask & 1) == 0, "PORTAMENTO ONLY LEGATO on track 1 in the working kit");
+
+		// MULTI MAP: range 1 offset 2, length 8, transpose -3, timing 4/16, pattern A03.
+		auto gl = g;
+		gl.multiMap[1][0] = 2;
+		gl.multiMap[2][0] = 2;
+		gl.multiMap[3][0] = 8;
+		gl.multiMap[4][0] = static_cast<uint8_t>(-3);
+		gl.multiMap[5][0] = 3;
+		r.msg(R"({"op":"set","kind":"global","doc":)" + ed::json::write(ed::mmGlobalToJson(gl)) + "}");
+		r.run(3000);
+		check(r.desk->global(gl.position) && *r.desk->global(gl.position) == gl, "MULTI MAP fields stored and read back");
+	}
+
+	// MM-P4: HW MIDI. The desk drives the emulated machine as if it were a real one on MIDI:
+	// DIN speed, no panel keys, no telemetry. The test plays the person at the machine.
+	void hwLink(const Bytes& _rom)
+	{
+		std::puts("hw");
+		Rig r(_rom, true);
+		r.msg(R"({"op":"ready"})");
+		const auto t0 = r.ms();
+		while(r.ms() - t0 < 8000 && !(r.desk->currentPattern() >= 0 && r.desk->pattern(static_cast<uint8_t>(r.desk->currentPattern()))
+			&& r.desk->workingKit()))
+			r.run(50);
+		check(r.lastMachine().find("hw")->asString() == "ready", "connected: the machine answers status requests");
+		check(r.desk->workingKit().has_value(), "the current pattern and its kit arrive over DIN (" + std::to_string(int(r.ms() - t0)) + " ms)");
+		const auto tk = r.ms();
+		while(r.ms() - tk < 180000)
+		{
+			bool all = true;
+			for(uint8_t i = 0; i < 128 && all; ++i)
+				all = r.desk->kit(i).has_value();
+			if(all)
+				break;
+			r.run(200);
+		}
+		std::printf("  all 128 kits after %.1f s at DIN speed\n", (r.ms() - tk) / 1000);
+
+		// A kit value goes out as a CC; the machine plays it (its working kit in RAM).
+		auto k = *r.desk->workingKit();
+		k.tracks[0].pages[1][5] = static_cast<uint8_t>(k.tracks[0].pages[1][5] == 90 ? 91 : 90);
+		r.msg(R"({"op":"set","kind":"kit","doc":)" + ed::json::write(ed::mmKitToJson(k)) + "}");
+		r.run(300);
+		Bytes region;
+		uint32_t seq = 0;
+		r.tel.readWorkingKit(region, seq);
+		check(region.size() > 5 && region[5 + 0x11 + 8 + 5] == k.tracks[0].pages[1][5], "a kit value as a CC reaches the machine's working kit");
+
+		// A pattern edit waits for SYSEX RECV, which only the person can open.
+		const auto slot = static_cast<uint8_t>(r.desk->currentPattern());
+		auto p = *r.desk->pattern(slot);
+		p.amp[0] ^= ed::mmStepBit(15);
+		p.pitch[0] |= p.amp[0] & ed::mmStepBit(15);
+		if(!(p.amp[0] & ed::mmStepBit(15)))
+			p.pitch[0] &= ~ed::mmStepBit(15);
+		p.filter[0] &= ~ed::mmStepBit(15);
+		p.lfo[0] &= ~ed::mmStepBit(15);
+		r.msg(R"({"op":"set","kind":"pattern","doc":)" + ed::json::write(ed::mmPatternToJson(p)) + "}");
+		r.run(500);
+		check(r.lastMachine().find("recv")->find("state")->asString() == "waitingUser", "the dump waits for SYSEX RECV (SEND 1)");
+		r.userKeys(mmDesk::RecvSession::enterMacro());
+		r.run(1500);
+		check(r.tel.recvActive.load() == 1, "the person opened GLOBAL > FILE > SYSEX RECV");
+		const auto ts = r.ms();
+		r.msg(R"({"op":"hwSend"})");
+		while(r.ms() - ts < 10000 && r.desk->lastRoundTripMs() < 0)
+			r.run(50);
+		check(r.desk->lastRoundTripMs() > 0 && r.desk->pattern(slot)->amp[0] == p.amp[0], "sent and confirmed by read-back (" + std::to_string(int(r.ms() - ts)) + " ms)");
+		r.userKeys(mmDesk::RecvSession::exitKeys());
+		r.run(500);
+
+		// POLY over MIDI: SET STATUS.
+		r.msg(R"({"op":"poly","on":1})");
+		r.run(2500);
+		check(r.lastMachine().find("poly")->isBool() && r.lastMachine().find("poly")->asBool(), "POLY over MIDI (SET STATUS)");
+		r.msg(R"({"op":"poly","on":0})");
+		r.run(2500);
+		// Keys that have no MIDI command say so.
+		r.msg(R"({"op":"muteMidi","t":0,"on":1})");
+		check(!r.lastResult().find("ok")->asBool(), "MIDI track mutes refused over MIDI, with the reason");
+		r.msg(R"({"op":"record","on":1})");
+		check(!r.lastResult().find("ok")->asBool(), "RECORD refused over MIDI, with the reason");
+		// PLAY as MIDI Start: ignored while CONTROL IN TRANSPORT is IGNORE (the factory setting).
+		r.msg(R"({"op":"play"})");
+		r.run(1500);
+		check(r.tel.running.load() == 0, "MIDI Start is ignored with TRANSPORT IGNORE (global 0x06 = 0)");
+		// The editor sets TRANSPORT ACCEPT in the active global (a dump, so through SYSEX RECV).
+		auto g = *r.desk->global(static_cast<uint8_t>(r.desk->currentGlobal()));
+		g.transportIn = 1;
+		r.msg(R"({"op":"set","kind":"global","doc":)" + ed::json::write(ed::mmGlobalToJson(g)) + "}");
+		r.run(300);
+		r.userKeys(mmDesk::RecvSession::enterMacro());
+		r.run(1500);
+		r.msg(R"({"op":"hwSend"})");
+		r.run(3000);
+		r.userKeys(mmDesk::RecvSession::exitKeys());
+		r.run(800);
+		check(r.desk->global(g.position)->transportIn == 1, "TRANSPORT ACCEPT stored (read back)");
+		r.msg(R"({"op":"play"})");
+		r.run(1500);
+		check(r.tel.running.load() == 1, "PLAY as MIDI Start plays the machine");
+		r.msg(R"({"op":"stop"})");
+		r.run(800);
+		check(r.tel.running.load() == 0, "STOP as MIDI Stop");
+
+		// Unplugged, then back.
+		r.unplugged = true;
+		r.run(5000);
+		check(r.lastMachine().find("hw")->asString() == "none", "unplugged: HW NO MIDI");
+		r.unplugged = false;
+		r.run(2500);
+		check(r.lastMachine().find("hw")->asString() == "ready", "back: HW MIDI");
+		std::printf("  %zu bytes out, %zu bytes in, at DIN speed both ways\n", r.hwBytesOut, r.hwBytesIn);
+	}
+
 int main(const int _argc, char** _argv)
 {
 	std::setvbuf(stdout, nullptr, _IOLBF, 0);
@@ -467,6 +765,10 @@ int main(const int _argc, char** _argv)
 			smoke(rom);
 		if(only.empty() || only == "trigkinds")
 			trigKinds(rom);
+		if(only.empty() || only == "p4")
+			p4(rom);
+		if(only.empty() || only == "hw")
+			hwLink(rom);
 		std::printf("%s (%d failures)\n", g_failures ? "FAIL" : "PASS", g_failures);
 		return g_failures ? 1 : 0;
 	}

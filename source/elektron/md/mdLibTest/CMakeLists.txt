@@ -368,7 +368,7 @@ set_property(TARGET mmEditorProbeFirmwareTest PROPERTY FOLDER "Elektron/test")
 # MM-P2 Monomachine Editor smoke test: mmDesk::Desk against MM OS 1.32B firmware
 # (SYSEX RECV session, pattern/kit/song delivery, queue). Manual: needs a ROM.
 add_executable(mmDeskFirmwareTest mmDeskFirmwareTest.cpp mdFirmwareSession.h)
-target_link_libraries(mmDeskFirmwareTest PRIVATE mdLib mmDesk)
+target_link_libraries(mmDeskFirmwareTest PRIVATE mdLib mmDesk mdDesk)
 set_property(TARGET mmDeskFirmwareTest PROPERTY FOLDER "Elektron/test")
 # -DGEARMULATOR_MM_ROM=<OS 1.32B image> runs it in ctest; without it the test skips.
 add_test(NAME mmDeskFirmwareTest COMMAND mmDeskFirmwareTest ${GEARMULATOR_MM_ROM})

@@ -148,7 +148,7 @@
     },
     "kit": {
       "type": "object",
-      "required": ["schema", "version", "slot", "format", "name", "levels", "tracks", "trackMasks", "hidden"],
+      "required": ["schema", "version", "slot", "format", "name", "levels", "tracks", "trackMasks", "multiTrig", "hidden"],
       "properties": {
         "schema": {"const": "mm-desk/kit"},
         "version": {"const": 1},
@@ -161,11 +161,19 @@
         "trackMasks": {
           "type": "object",
           "properties": {
-            "mirror": {"$ref": "#/$defs/byte"}, "hpf": {"$ref": "#/$defs/byte"}, "lpf": {"$ref": "#/$defs/byte"},
+            "mirror": {"$ref": "#/$defs/byte"}, "hpf": {"$ref": "#/$defs/byte"}, "lpf": {"$ref": "#/$defs/byte"}, "portamento": {"$ref": "#/$defs/byte"},
             "legatoAmp": {"$ref": "#/$defs/byte"}, "legatoFilter": {"$ref": "#/$defs/byte"}, "legatoLfo": {"$ref": "#/$defs/byte"}
           }
         },
-        "hidden": {"type": "object", "properties": {"x1cd": {"$ref": "#/$defs/hex"}, "x2b6": {"$ref": "#/$defs/hex"}}}
+        "multiTrig": {
+          "type": "object",
+          "required": ["mode", "timing", "splitKey", "splitTrack"],
+          "properties": {
+            "mode": {"type": "integer", "minimum": 0, "maximum": 3}, "timing": {"type": "integer", "minimum": 0, "maximum": 6},
+            "splitKey": {"$ref": "#/$defs/value"}, "splitTrack": {"type": "integer", "minimum": 0, "maximum": 5}
+          }
+        },
+        "hidden": {"type": "object", "properties": {"x1cd": {"$ref": "#/$defs/hex"}, "x1d1": {"$ref": "#/$defs/byte"}}}
       }
     },
     "songRow": {
@@ -204,7 +212,7 @@
     },
     "global": {
       "type": "object",
-      "required": ["schema", "version", "slot", "format", "channels", "midiSeq", "routingMode", "masterTune", "multiMap", "control", "hidden"],
+      "required": ["schema", "version", "slot", "format", "channels", "midiSeq", "routingMode", "masterTune", "multiMap", "control", "controlIn", "hidden"],
       "properties": {
         "schema": {"const": "mm-desk/global"},
         "version": {"const": 1},
@@ -226,6 +234,7 @@
         "routingMode": {"enum": ["3xSTEREO+AB=MIX", "3xSTEREO", "6xMONO"]},
         "masterTune": {"type": "integer", "minimum": 0, "maximum": 65535, "description": "tenths of Hz"},
         "multiMap": {"type": "array", "minItems": 6, "maxItems": 6, "items": {"type": "array", "items": {"$ref": "#/$defs/byte"}, "minItems": 32, "maxItems": 32}},
+        "controlIn": {"type": "object", "required": ["tempoSync", "transport"], "properties": {"tempoSync": {"$ref": "#/$defs/byte"}, "transport": {"$ref": "#/$defs/byte"}}},
         "control": {"$ref": "#/$defs/hex"},
         "hidden": {"type": "object"}
       }

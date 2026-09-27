@@ -67,6 +67,11 @@ namespace mmDesk
 		// A kit value changed outside the desk (host automation, the panel).
 		void onHostParam(uint8_t _track, uint8_t _page, uint8_t _index, uint8_t _value);
 		void setEngine(Engine _engine);
+		// HW MIDI (MM-P4): a real Monomachine on the plug-in's MIDI in/out instead of the
+		// emulator. No panel keys, RAM or LCD: dumps wait until the user has put the machine
+		// on GLOBAL > FILE > SYSEX RECV and says so ("hwSend"); everything else is SysEx and CC.
+		void setHardwareLink(bool _hw);
+		bool isHardwareLink() const { return m_hw; }
 		void tick();
 
 		Engine engine() const { return m_engine; }
@@ -153,5 +158,15 @@ namespace mmDesk
 		double m_lastRoundTripMs = -1;
 		double m_keysBusyUntilMs = -1e9;
 		std::string m_lastError;
+
+		// MM-P4
+		int m_poly = -1, m_midiMode = -1;
+		int m_lastRecording = -1;
+		double m_lastRecordReadMs = -1e9;
+		bool m_hw = false;
+		double m_hwSinceMs = 0, m_hwLastReplyMs = -1e9;
+		std::deque<Bytes> m_hwQueue;	// dumps (and LOAD KIT) waiting for the user's SYSEX RECV
+		std::string hwState(double _now) const;
+		std::string m_lastHwState;
 	};
 }

@@ -4,6 +4,8 @@
 #include "mdPluginProcessor.h"
 #include "mmStudioLink.h"
 
+#include "mdLib/mdautomation.h"
+
 #include "jucePluginEditorLib/pluginEditorState.h"
 #include "jucePluginLib/midiLearnTranslator.h"
 #include "juceRmlUi/juceRmlComponent.h"
@@ -110,6 +112,8 @@ namespace mdJucePlugin
 		m_web.reset();
 		m_desk.reset();
 		m_link.reset();
+		// HW MIDI belongs to the open editor: without it the plug-in is the emulator again.
+		dynamic_cast<AudioPluginAudioProcessor&>(getProcessor()).setExternalMidi(false);
 	}
 
 	void MmStudioEditor::create()
@@ -119,16 +123,56 @@ namespace mdJucePlugin
 		auto& processor = dynamic_cast<AudioPluginAudioProcessor&>(getProcessor());
 		m_link = std::make_unique<MmStudioLink>(processor, dynamic_cast<Controller&>(processor.getController()));
 
+		// The desk's port: the emulated machine (MmStudioLink), or for HW MIDI (MM-P4) a real
+		// Monomachine on the plug-in's MIDI in/out at DIN speed: SysEx and CCs out, SysEx in,
+		// PLAY/STOP as MIDI Start/Stop, no panel keys, telemetry or memory.
 		mmDesk::Desk::Port port;
-		port.sendSysex = [this](const std::vector<uint8_t>& _m) { m_link->sendSysex(_m); };
-		port.sendParam = [this](const uint8_t _t, const uint8_t _p, const uint8_t _i, const uint8_t _v) { m_link->setParam(_t, _p, _i, _v); };
-		port.sendNrpn = [this](const uint8_t _t, const uint8_t _p, const uint8_t _v) { m_link->sendNrpn(_t, _p, _v); };
-		port.pressKeys = [this](const std::vector<mmDesk::Key>& _k) { return m_link->pressKeys(_k); };
+		const auto baseChannel = [this]
+		{
+			const auto g = m_desk ? m_desk->currentGlobal() : -1;
+			const auto& doc = g >= 0 ? m_desk->global(static_cast<uint8_t>(g)) : std::nullopt;
+			return doc ? static_cast<uint8_t>(doc->baseChannel & 15) : uint8_t(0);
+		};
+		port.sendSysex = [this](const std::vector<uint8_t>& _m) { if(m_hw) m_hwPacer.push(_m); else m_link->sendSysex(_m); };
+		port.sendParam = [this, baseChannel](const uint8_t _t, const uint8_t _p, const uint8_t _i, const uint8_t _v)
+		{
+			if(!m_hw)
+			{
+				m_link->setParam(_t, _p, _i, _v);
+				return;
+			}
+			const md::automation::ParameterChange c{_p, _t, _i, _v};
+			if(const auto cc = md::automation::encodeParameterChange(md::MachineModel::Monomachine, c, baseChannel()))
+				m_hwPacer.push({(*cc)[0], (*cc)[1], (*cc)[2]});
+		};
+		port.sendNrpn = [this, baseChannel](const uint8_t _t, const uint8_t _p, const uint8_t _v)
+		{
+			if(!m_hw)
+			{
+				m_link->sendNrpn(_t, _p, _v);
+				return;
+			}
+			const auto st = static_cast<uint8_t>(0xb0 | baseChannel());
+			m_hwPacer.push({st, 99, _t});
+			m_hwPacer.push({st, 98, _p});
+			m_hwPacer.push({st, 6, static_cast<uint8_t>(_v & 0x7f)});
+		};
+		port.pressKeys = [this](const std::vector<mmDesk::Key>& _k)
+		{
+			if(!m_hw)
+				return m_link->pressKeys(_k);
+			if(_k.size() != 1 || (_k[0] != mmDesk::Key::Play && _k[0] != mmDesk::Key::Stop))
+				return false;
+			m_hwPacer.push({static_cast<uint8_t>(_k[0] == mmDesk::Key::Play ? 0xfa : 0xfc)});
+			return true;
+		};
 		port.toPage = [this](const json::Value& _m) { m_outbox.push_back(_m); };
 		port.nowMs = [] { return nowMs(); };
 		m_desk = std::make_unique<mmDesk::Desk>(port);
 		m_link->onSysex = [this](const std::vector<uint8_t>& _m)
 		{
+			if(m_hw)
+				return;
 			m_desk->onDeviceSysex(_m);
 			flushPage();
 		};
@@ -258,6 +302,25 @@ namespace mdJucePlugin
 			r.set("note", _ok ? _note : std::string());
 			m_outbox.push_back(std::move(r));
 		};
+		if(op == "engine")
+		{
+			// {"op":"engine","kind":"hw"|"emu"}: HW MIDI or the emulator.
+			const auto* kind = _message.find("kind");
+			const bool hw = kind && kind->isString() && kind->asString() == "hw";
+			if(hw != m_hw)
+			{
+				m_hw = hw;
+				m_hwPacer = {};
+				dynamic_cast<AudioPluginAudioProcessor&>(getProcessor()).setExternalMidi(hw);
+				m_desk->setHardwareLink(hw);
+				json::Value ready = json::Value::object();
+				ready.set("op", "ready");
+				m_desk->onPageMessage(ready);
+				log(juce::String("engine: ") + (hw ? "HW MIDI (the plug-in's MIDI in/out)" : "emulator"));
+			}
+			reply(true, hw ? "HW MIDI: the editor talks to a Monomachine on the plug-in's MIDI in and out" : "The emulated OS 1.32B again");
+			return true;
+		}
 		if(op == "openMenu")
 		{
 			// The editor's menu (skins, scale, settings) where the page was right-clicked.
@@ -470,6 +533,34 @@ namespace mdJucePlugin
 		if(!m_desk)
 			return;
 		++m_ticks;
+		if(m_hw)
+		{
+			// HW MIDI: the wire at DIN speed out, the machine's SysEx in.
+			auto& processor = dynamic_cast<AudioPluginAudioProcessor&>(getProcessor());
+			for(auto& m : m_hwPacer.take(nowMs()))
+			{
+				synthLib::SMidiEvent e(synthLib::MidiEventSource::Editor);
+				if(!m.empty() && m[0] == 0xf0)
+					e.sysex.assign(m.begin(), m.end());
+				else
+				{
+					e.a = m.size() > 0 ? m[0] : 0;
+					e.b = m.size() > 1 ? m[1] : 0;
+					e.c = m.size() > 2 ? m[2] : 0;
+				}
+				processor.sendExternalMidi(e);
+				m_hwBytesOut += m.size();
+			}
+			if(m_ticks % 150 == 0)
+				log("HW MIDI: " + juce::String(static_cast<int64_t>(m_hwBytesOut)) + " bytes out so far");
+			std::vector<synthLib::SMidiEvent> in;
+			processor.drainExternalMidiIn(in);
+			for(const auto& e : in)
+				m_desk->onDeviceSysex(std::vector<uint8_t>(e.sysex.begin(), e.sysex.end()));
+			m_desk->tick();
+			flushPage();
+			return;
+		}
 		const auto t = m_link->readTelemetry();
 		m_desk->onTelemetry(t);
 		const auto e = m_link->engine();

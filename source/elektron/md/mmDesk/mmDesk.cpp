@@ -159,13 +159,24 @@ namespace mmDesk
 		d.set("song", std::move(s));
 		d.set("global", m_curGlobal < 0 ? Value() : Value(m_curGlobal));
 		d.set("playing", m_tel.valid && m_tel.running);
+		d.set("link", m_hw ? "hw" : "emulator");
+		if(m_hw)
+			d.set("hw", hwState(m_port.nowMs()));
+		Value mutes = Value::object();
+		mutes.set("synth", m_tel.mutes < 0 ? Value() : Value(m_tel.mutes & 0x3f));
+		mutes.set("midi", m_tel.mutes < 0 ? Value() : Value((m_tel.mutes >> 6) & 0x3f));
+		d.set("mutes", std::move(mutes));
+		static const char* recModes[] = {"off", "grid", "live"};
+		d.set("record", m_tel.recording < 0 || m_tel.recording > 2 ? Value() : Value(recModes[m_tel.recording]));
+		d.set("poly", m_poly < 0 ? Value() : Value(m_poly == 1));
 		// 30-300 BPM in firmware units (x 24); anything else is not a tempo yet (boot).
 		d.set("tempo", m_tel.tempo >= 720 && m_tel.tempo <= 7200 ? Value(m_tel.tempo / 24.0) : Value());
 		Value r = Value::object();
-		r.set("state", m_recv.stateName());
+		r.set("state", m_hw ? (m_hwQueue.empty() ? "idle" : "waitingUser") : m_recv.stateName());
 		size_t inFlight = 0;
 		for(const auto& [ref, push] : m_pushes)
 			inFlight += push.waitingRecv || push.waitingReadBack;
+		r.set("waiting", static_cast<unsigned long>(m_hwQueue.size()));
 		r.set("sending", static_cast<unsigned long>(inFlight));
 		r.set("received", static_cast<unsigned long>(m_tel.recvCount));
 		r.set("errors", static_cast<unsigned long>(m_tel.recvErrors));
@@ -309,10 +320,22 @@ namespace mmDesk
 				return;
 			}
 			if(op == "loadKit")
+			{
 				sendNow(ed::mmLoadKit(static_cast<uint8_t>(k)));
+				if(m_hw)
+				{
+					m_working.reset();
+					request({Kind::Kit, static_cast<uint8_t>(k)}, true);
+				}
+			}
 			else
 			{
 				sendNow(ed::mmSaveKit(static_cast<uint8_t>(k)));
+				if(m_hw && m_working)
+				{
+					m_working->position = static_cast<uint8_t>(k);
+					m_kits[k] = m_working;
+				}
 				request({Kind::Kit, static_cast<uint8_t>(k)}, true);	// the stored slot now
 			}
 			m_curKit = k;
@@ -354,6 +377,83 @@ namespace mmDesk
 			result(_msg, true, {}, "");
 			return;
 		}
+		if(op == "hwSend")
+		{
+			// HW MIDI: the user says the machine is on SYSEX RECV. Send what waited; read it back.
+			if(!m_hw)
+			{
+				result(_msg, false, {"hwSend: only with HW MIDI"}, "");
+				return;
+			}
+			const auto n = m_hwQueue.size();
+			while(!m_hwQueue.empty())
+			{
+				const auto s = std::move(m_hwQueue.front());
+				m_hwQueue.pop_front();
+				m_port.sendSysex(s);
+				for(auto& [ref, push] : m_pushes)
+					if(push.waitingRecv && push.sent == s)
+					{
+						push.waitingRecv = false;
+						push.waitingReadBack = true;
+						push.sentMs = now;
+						request(ref, true);
+					}
+			}
+			m_machineDirty = true;
+			result(_msg, true, {}, std::to_string(n) + " message(s) sent. Press EXIT on the Monomachine when the editor has read them back.");
+			return;
+		}
+		if(op == "poly")
+		{
+			// SET STATUS 0x20 (audio mode, 0 mono, 1 poly), then read it back.
+			sendNow(ed::mmSetStatus(ed::MmStatus::Poly, num(_msg, "on", 0) ? 1 : 0));
+			sendNow(ed::mmStatusRequest(ed::MmStatus::Poly));
+			result(_msg, true, {}, "");
+			return;
+		}
+		if(op == "muteMidi" || op == "record")
+		{
+			if(m_hw)
+			{
+				result(_msg, false, {op == "record" ? "RECORD has no MIDI command (Appendix C): press it on the Monomachine."
+					: "MIDI track mutes have no MIDI command (Appendix B has CC 3 for the six synth tracks only): use FUNCTION + BANK GROUP on the Monomachine."}, "");
+				return;
+			}
+			if(m_tel.mutes < 0 || m_tel.recording < 0)
+			{
+				result(_msg, false, {"The machine's state is not known yet."}, "");
+				return;
+			}
+			const bool on = num(_msg, "on", 0) != 0;
+			std::vector<Key> keys;
+			if(op == "record")
+			{
+				// mode: "off", "grid" (RECORD: GRID RECORDING) or "live" (RECORD + PLAY). RECORD from
+				// LIVE goes to GRID (MM-P4 lab), so off from live is RECORD twice.
+				const auto mode = str(_msg, "mode");
+				const int want = mode == "live" ? 2 : mode == "grid" ? 1 : 0;
+				const int cur = m_tel.recording;
+				// from -> to: 0 off, 1 grid, 2 live
+				static const std::vector<Key> R{Key::Record}, LR{Key::LiveRecord}, R_LR{Key::Record, Key::LiveRecord}, RR{Key::Record, Key::Record};
+				if(want != cur && cur >= 0)
+					keys = cur == 0 ? (want == 1 ? R : LR) : cur == 1 ? (want == 0 ? R : R_LR) : (want == 0 ? RR : R);
+			}
+			else
+			{
+				const auto t = num(_msg, "t");
+				if(t < 0 || t > 5)
+				{
+					result(_msg, false, {"muteMidi: MIDI track 0-5"}, "");
+					return;
+				}
+				if(((m_tel.mutes >> (6 + t)) & 1) != (on ? 1 : 0))
+					keys = {Key::MuteWindow, static_cast<Key>(static_cast<int>(Key::Trig9) + t), Key::Exit};
+			}
+			const bool ok = keys.empty() || pressKeys(keys);
+			result(_msg, ok, ok ? std::vector<std::string>{} : std::vector<std::string>{"The panel is busy (SYSEX RECV); try again."}, "");
+			return;
+		}
 		if(op == "play" || op == "stop")
 		{
 			const bool ok = pressKeys({op == "play" ? Key::Play : Key::Stop});
@@ -369,6 +469,7 @@ namespace mmDesk
 				return;
 			}
 			m_port.sendParam(static_cast<uint8_t>(t), 8, 0, num(_msg, "on", 0) ? 1 : 0);
+			m_lastStatusMs = now - 800;
 			result(_msg, true, {}, "");
 			return;
 		}
@@ -463,6 +564,14 @@ namespace mmDesk
 			const Ref r{Kind::Global, g->position};
 			m_globals[g->position] = *g;
 			pushDump(r, ed::encodeMmGlobal(*g));
+			// A dump writes the stored slot; the active global takes it when it is made active again.
+			if(static_cast<int>(g->position) == m_curGlobal)
+			{
+				if(m_hw)
+					m_hwQueue.push_back(ed::mmSetActiveGlobal(g->position));
+				else
+					m_recv.want(ed::mmSetActiveGlobal(g->position));
+			}
 			publishDoc(r, true);
 			result(_msg, true, {}, "");
 			return;
@@ -506,7 +615,10 @@ namespace mmDesk
 			auto k = _to;
 			k.position = static_cast<uint8_t>(m_curKit);
 			pushDump({Kind::Kit, k.position}, ed::encodeMmKit(k));
-			m_recv.want(ed::mmLoadKit(k.position));
+			if(m_hw)
+				m_hwQueue.push_back(ed::mmLoadKit(k.position));
+			else
+				m_recv.want(ed::mmLoadKit(k.position));
 			m_kits[k.position] = k;
 			_notes.push_back("Written to the kit slot and loaded (no live SysEx for this setting).");
 		}
@@ -525,13 +637,16 @@ namespace mmDesk
 		p.sent = _dump;
 		p.waitingRecv = true;
 		p.sentMs = m_port.nowMs();
-		m_recv.want(std::move(_dump));
+		if(m_hw)
+			m_hwQueue.push_back(std::move(_dump));
+		else
+			m_recv.want(std::move(_dump));
 		m_machineDirty = true;
 	}
 
 	void Desk::pumpRecv(const double _now)
 	{
-		auto out = m_recv.tick(_now, m_tel);
+		auto out = m_hw ? RecvSession::Out{} : m_recv.tick(_now, m_tel);
 		if(!out.keys.empty())
 		{
 			m_port.pressKeys(out.keys);
@@ -557,7 +672,7 @@ namespace mmDesk
 		// A read-back that never came: give up on that push.
 		for(auto& [ref, push] : m_pushes)
 		{
-			if(push.waitingReadBack && _now - push.sentMs > 8000)
+			if(push.waitingReadBack && _now - push.sentMs > (m_hw ? 15000 : 8000))
 			{
 				push.waitingReadBack = false;
 				m_lastError = std::string("No read-back for a ") + kindName(static_cast<int>(ref.kind)) + " dump.";
@@ -598,7 +713,7 @@ namespace mmDesk
 
 	void Desk::requestStatus()
 	{
-		for(const auto p : {ed::MmStatus::Pattern, ed::MmStatus::Kit, ed::MmStatus::Song, ed::MmStatus::Global, ed::MmStatus::SongMode})
+		for(const auto p : {ed::MmStatus::Pattern, ed::MmStatus::Kit, ed::MmStatus::Song, ed::MmStatus::Global, ed::MmStatus::SongMode, ed::MmStatus::Poly})
 			m_port.sendSysex(ed::mmStatusRequest(p));
 	}
 
@@ -606,7 +721,7 @@ namespace mmDesk
 	{
 		if(m_loading)
 		{
-			if(_now - m_loadSentMs < 400)
+			if(_now - m_loadSentMs < (m_hw ? 6000 : 400))
 				return;
 			if(++m_loadRetries > 2)
 			{
@@ -641,6 +756,12 @@ namespace mmDesk
 	{
 		if(_m.size() < 8 || _m[0] != 0xf0 || _m[4] != ed::g_mmProductId)
 			return;
+		if(m_hw)
+		{
+			if(hwState(m_port.nowMs()) != "ready")
+				m_machineDirty = true;
+			m_hwLastReplyMs = m_port.nowMs();
+		}
 		const auto cmd = _m[6];
 		if(cmd == 0x72)
 		{
@@ -697,6 +818,15 @@ namespace mmDesk
 			}
 			m_machineDirty = true;
 		}
+		// HW MIDI: no memory to read the working kit from; it starts as the stored slot and
+		// then follows the editor's own live edits.
+		if(m_hw && _r.kind == Kind::Kit && static_cast<int>(_r.slot) == m_curKit && (!m_working || m_working->position != _r.slot))
+		{
+			m_working = m_kits[_r.slot];
+			publishDoc(_r, pending);
+			m_machineDirty = true;
+			return;
+		}
 		// The current kit's page document is the working kit; a stored-slot dump changes its edited state.
 		if(_r.kind == Kind::Kit && static_cast<int>(_r.slot) == m_curKit && m_working)
 		{
@@ -724,6 +854,11 @@ namespace mmDesk
 			if(m_curKit != _value)
 			{
 				m_curKit = _value;
+				if(m_hw)
+				{
+					m_working.reset();
+					request({Kind::Kit, _value}, true);
+				}
 				if(!m_kits[_value])
 					request({Kind::Kit, _value}, true);
 			}
@@ -747,6 +882,9 @@ namespace mmDesk
 		case ed::MmStatus::SongMode:
 			m_songMode = _value;
 			break;
+		case ed::MmStatus::Poly:
+			m_poly = _value;
+			break;
 		default:
 			return;
 		}
@@ -767,10 +905,12 @@ namespace mmDesk
 
 	void Desk::onTelemetry(const Telemetry& _t)
 	{
+		if(m_hw)
+			return;	// HW MIDI: no telemetry
 		const bool wasRunning = m_tel.running;
-		const int wasTempo = m_tel.tempo;
+		const int wasTempo = m_tel.tempo, wasMutes = m_tel.mutes, wasRec = m_tel.recording;
 		m_tel = _t;
-		if(wasRunning != _t.running || wasTempo != _t.tempo)
+		if(wasRunning != _t.running || wasTempo != _t.tempo || wasMutes != _t.mutes || wasRec != _t.recording)
 			m_machineDirty = true;
 		if(!_t.running && m_queuedPattern >= 0)
 		{
@@ -790,12 +930,55 @@ namespace mmDesk
 		(void)_track; (void)_page; (void)_index; (void)_value;
 	}
 
+	void Desk::setHardwareLink(const bool _hw)
+	{
+		if(_hw == m_hw)
+			return;
+		m_hw = _hw;
+		// Another machine: nothing the desk knew holds.
+		m_recv = RecvSession{};
+		for(auto& p : m_patterns) p.reset();
+		for(auto& k : m_kits) k.reset();
+		for(auto& s : m_songs) s.reset();
+		for(auto& g : m_globals) g.reset();
+		m_working.reset();
+		m_workingRegion.reset();
+		m_pushes.clear();
+		m_pending.clear();
+		m_loadQueue.clear();
+		m_loading.reset();
+		m_hwQueue.clear();
+		m_backgroundQueued = false;
+		m_curPattern = m_curKit = m_curSong = m_curGlobal = m_songMode = m_queuedPattern = -1;
+		m_poly = m_midiMode = -1;
+		m_tel = Telemetry{};
+		m_lastError.clear();
+		m_hwSinceMs = m_port.nowMs();
+		m_hwLastReplyMs = -1e9;
+		m_lastStatusMs = -1e9;
+		if(_hw)
+			m_ready = true;	// status requests go out at once; the page shows the link's state
+		else
+			m_ready = m_engine == Engine::Ready;
+		m_machineDirty = true;
+	}
+
+	std::string Desk::hwState(const double _now) const
+	{
+		// connect: no reply yet (up to 5 s); ready: replies; none: no reply for 3.5 s.
+		if(m_hwLastReplyMs < m_hwSinceMs)
+			return _now - m_hwSinceMs < 5000 ? "connect" : "none";
+		return _now - m_hwLastReplyMs < 3500 ? "ready" : "none";
+	}
+
 	void Desk::setEngine(const Engine _engine)
 	{
 		if(_engine == m_engine)
 			return;
 		m_engine = _engine;
 		m_machineDirty = true;
+		if(m_hw)
+			return;	// HW MIDI: the emulator's state does not matter
 		if(_engine == Engine::Ready && !m_ready)
 		{
 			m_ready = true;
@@ -822,6 +1005,24 @@ namespace mmDesk
 		}
 		pumpRecv(now);
 		pumpLoads(now);
+		if(m_hw)
+		{
+			// The link's state changes with time as well as with replies.
+			const auto s = hwState(now);
+			if(s != m_lastHwState) { m_lastHwState = s; m_machineDirty = true; }
+		}
+		// RECORD: the machine writes the pattern; read it back while it records and when it stops.
+		if(m_tel.recording >= 0 && m_curPattern >= 0)
+		{
+			if((m_tel.recording >= 1 && now - m_lastRecordReadMs > 1000) || (m_lastRecording >= 1 && m_tel.recording == 0))
+			{
+				m_lastRecordReadMs = now;
+				request({Kind::Pattern, static_cast<uint8_t>(m_curPattern)}, true);
+			}
+			if(m_lastRecording != m_tel.recording)
+				m_machineDirty = true;
+			m_lastRecording = m_tel.recording;
+		}
 
 		// The working kit from memory, unless our own live edit may not have landed yet.
 		if(m_workingRegion && now - m_liveEditMs > 200 && m_workingRegion->size() >= 5 + ed::MmKit::g_rawSize)

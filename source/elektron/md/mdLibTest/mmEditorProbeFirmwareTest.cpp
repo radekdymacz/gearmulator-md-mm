@@ -979,6 +979,55 @@ namespace
 				ls >> t;
 				m->run(t);
 			}
+			else if(op == "ramdiff")
+			{
+				// ramdiff <label>: RAM bytes (0x200000-0x2c0000) that were steady before (two reads 200 ms
+				// apart), are steady now, and differ: state, not the machine's moving counters. At most 60.
+				std::string label;
+				std::getline(ls, label);
+				static std::vector<uint8_t> prev;
+				static std::vector<bool> prevSteady;
+				const auto snap = [&]
+				{
+					std::vector<uint8_t> r(0xc0000);
+					for(uint32_t a2 = 0; a2 < r.size(); ++a2) r[a2] = m->read8(0x200000 + a2);
+					return r;
+				};
+				const auto s1 = snap();
+				m->run(200);
+				const auto s2 = snap();
+				std::vector<bool> steady(s1.size());
+				for(size_t i = 0; i < s1.size(); ++i) steady[i] = s1[i] == s2[i];
+				if(!prev.empty())
+				{
+					int n = 0, total = 0;
+					std::printf("  ramdiff%s:", label.c_str());
+					for(uint32_t i = 0; i < s2.size(); ++i)
+						if(prevSteady[i] && steady[i] && prev[i] != s2[i]) { ++total; if(n++ < 4000) std::printf(" %06x:%02x>%02x", 0x200000 + i, prev[i], s2[i]); }
+					std::printf(" (%d)\n", total);
+				}
+				prev = s2;
+				prevSteady = steady;
+			}
+			else if(op == "peek8")
+			{
+				// peek8 <addr hex> <count>
+				std::string h;
+				int n = 1;
+				ls >> h >> n;
+				const auto a = static_cast<uint32_t>(std::stoul(h, nullptr, 16));
+				std::printf("  peek8 %06x:", a);
+				for(int i = 0; i < n; ++i) std::printf(" %02x", m->read8(a + static_cast<uint32_t>(i)));
+				std::printf("\n");
+			}
+			else if(op == "status")
+			{
+				// status <param hex>: the status reply (0x70/0x72)
+				std::string h;
+				ls >> h;
+				const auto p = static_cast<uint8_t>(std::stoul(h, nullptr, 16));
+				std::printf("  status %02x = %d\n", p, status(*m, p));
+			}
 			else if(op == "peek16")
 			{
 				std::string h;

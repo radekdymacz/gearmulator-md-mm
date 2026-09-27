@@ -88,9 +88,10 @@ NOTE OFF.
 | `tracks[t].input` | 0 NEIGHBOR, 1 INP A, 2 INP B, 3 INP A+B, 4-6 BUS AB/CD/EF. Used by FX machines | factory set, 0x5C |
 | `tracks[t].assign` | ASSIGN: `page`, `dest`, `add` for 6 sources x 2 rows: JOY R/L, JOY L, JOY U, JOY D, VELOCITY, KEY TRACKING. `add` is signed | panel (knobs A-H, every tab) |
 | `tracks[t].trigPos` | TRIG POS: the track that forwards its notes, `null` = --- | panel |
-| `trackMasks` | per-track bits: JOY mirror, key tracking HPF / LPF, LEGATO AMP / FLT / LFO | LEGATO AMP by panel, the rest from the factory set |
+| `trackMasks` | per-track bits: JOY mirror (0x1d0), key tracking HPF / LPF, PORTAMENTO (set = ALWAYS, clear = ONLY LEGATO), LEGATO AMP / FLT / LFO. **Corrected in MM-P4:** MM-P1 had inferred mirror/hpf/lpf at 0x2aa-0x2ac; the panel shows 0x2aa LPF, 0x2ab HPF, 0x2ac PORTAMENTO | panel (every bit) |
+| `multiTrig` | MULTI TRIG: `mode` 0 ALL TRK, 1 SPLIT KEY, 2 SEQ START, 3 SEQ TRNSP; `timing` 0 DIRECT, 1/16 2/16 4/16 8/16 16/16 32/16; `splitKey` (note, the first key of the upper zone); `splitTrack` (0-based, the first upper track) | panel (MM-P4) |
 | `tracks[t].multiEnv[6]` | MULTI ENV: ATK DEC SUS REL PORT and one more (NRPN 0x40-0x45 on the track). The factory set has the same values on all six tracks | live (NRPN and a kit diff) |
-| `tracks[t].extra`, `hidden.x1cd`, `hidden.x2b6` | not decoded, kept | |
+| `tracks[t].extra`, `hidden.x1cd`, `hidden.x1d1` | not decoded, kept | |
 
 **The working kit** (the one that plays, unsaved edits included) is the kit's raw
 payload in patch RAM at `0x700028`. A kit dump writes the stored slot only; LOAD
@@ -119,8 +120,9 @@ after it ride in `hidden.rowsAfterEnd`.
 | `routingMode` | `3xSTEREO+AB=MIX`, `3xSTEREO`, `6xMONO` | panel |
 | `masterTune` | tenths of Hz | panel |
 | `midiSeq.channels`, `midiSeq.ccs` | the MIDI sequencer tracks' channels and CL1-4 CC numbers | factory set (10-15; 1 2 7 10) |
-| `multiMap` | 6 fields x 32 ranges: upper key, pattern (255 = current), then four fields (OFS LEN TRN TIM in some order, not verified) | factory set |
-| `control`, `hidden` | CONTROL OUT1/OUT2/IN and the rest, kept | |
+| `multiMap` | 6 fields x 32 ranges: upper key; pattern (255 = CUR); offset (255 = ---); length; transpose (signed byte); timing (0 DIR, 1 2 4 8 16 32). Unused ranges repeat the last upper key | panel (MULTIMAP EDIT, MM-P4) |
+| `controlIn` | CONTROL IN: `tempoSync` 0 INTERNAL, 1 EXT MIDI CLK; `transport` 0 IGNORE, 1 ACCEPT (MIDI Start/Stop) | panel (MM-P4) |
+| `control`, `hidden` | CONTROL OUT1/OUT2 and the rest, kept | |
 
 ### 4.5 `mm-desk/machine` (read-only, from the desk, MM-P2)
 
