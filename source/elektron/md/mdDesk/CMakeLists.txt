@@ -12,6 +12,7 @@ target_sources(mdDesk PRIVATE
 	mdDeskDelivery.cpp mdDeskDelivery.h
 	mdDeskEdit.cpp mdDeskEdit.h
 	mdDeskHistory.cpp mdDeskHistory.h
+	mdDeskMod.cpp mdDeskMod.h
 	mdDeskRecord.cpp mdDeskRecord.h
 )
 

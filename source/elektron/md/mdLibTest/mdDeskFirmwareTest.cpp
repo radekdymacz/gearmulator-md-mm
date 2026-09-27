@@ -6,6 +6,7 @@
 //
 //   mdDeskFirmwareTest <ROM>          the smoke test (edits, read-backs, timing)
 //   mdDeskFirmwareTest <ROM> probe    also: telemetry RAM, group removal
+//   mdDeskFirmwareTest <ROM> playload PLAY while the desk loads in the background
 //
 // Exits 77 (skip) without arguments.
 
@@ -22,6 +23,7 @@
 #include "mdLib/mdsequencerstate.h"
 
 #include <deque>
+#include <set>
 #include <functional>
 #include <map>
 #include <memory>
@@ -620,6 +622,9 @@ namespace
 		const bool turned = _rig.runUntil([&] { return m.read8(ed::g_mdWorkingKitAddress + ed::g_mdWorkingKitParamsOffset + 14 * 24 + 12) == 99; }, 1500);
 		check(turned, "the knob move reaches the machine as DATA ENTRY turns");
 		std::printf("  knob move -> value in the machine: %.1f ms emulated (select track, page key, turn)\n", ms(m.now() - k0));
+		// The note on the next step (a person plays it after turning the knob).
+		const auto at = m.playhead();
+		_rig.runUntil([&] { return m.playhead() != at; }, 1000);
 		_rig.page(R"({"op":"recTrig","t":14,"id":45})");
 		_rig.run(50);
 		_rig.page("{\"op\":\"trig\",\"p\":" + p + R"(,"t":0,"s":3,"id":46})");
@@ -667,6 +672,31 @@ namespace
 		_rig.run(300);
 	}
 
+	// P3 control: an app LFO moves a kit parameter on the machine's steps.
+	void appModulators(Rig& _rig)
+	{
+		auto& m = _rig.machine();
+		std::puts("== P3 control: app LFO -> track 2 DIST, on the machine's steps");
+		_rig.page(R"({"op":"modSet","id":70,"doc":{"schema":"md-desk/modulators","version":1,
+			"sources":[{"id":"lfo1","label":"LFO A","kind":"lfo","shape":0,"rate":"1/2","depth":100}],
+			"links":[{"source":"lfo1","track":1,"param":16,"min":10,"max":110,"curve":"lin"}]}})");
+		check(resultOk(_rig), "modulator setup accepted");
+		std::set<int> seen;
+		_rig.page(R"({"op":"play","id":71})");
+		_rig.run(400);
+		const auto t0 = m.now();
+		while(ms(m.now() - t0) < 2000)
+		{
+			_rig.run(20);
+			seen.insert(m.read8(ed::g_mdWorkingKitAddress + ed::g_mdWorkingKitParamsOffset + 1 * 24 + 16));
+		}
+		_rig.page(R"({"op":"stop","id":72})");
+		_rig.run(300);
+		std::printf("  track 2 DIST took %zu values in 2 s (%d..%d)\n", seen.size(), *seen.begin(), *seen.rbegin());
+		check(seen.size() >= 4 && *seen.begin() >= 10 && *seen.rbegin() <= 110, "the machine's DIST follows the LFO within min..max");
+		_rig.page(R"({"op":"modSet","id":73,"doc":{"schema":"md-desk/modulators","version":1,"sources":[],"links":[]}})");
+	}
+
 	// P3 sampler: Rename sends 0x73. The firmware has no name request, so the only
 	// evidence is its own copy of the last name it took (RAM 0x29f300).
 	void sampleName(Rig& _rig)
@@ -695,23 +725,6 @@ int main(const int _argc, char** _argv)
 	{
 		const auto rom = load(_argv[1]);
 		require(rom.size() == md::g_romSize, "ROM must be the 8 MiB MD 1.63 image");
-		if(false && _argc > 3 && std::string(_argv[2]) == "playload")
-		{
-			Rig user(rom, _argv[1], patchRamFromState(_argv[3], rom));
-			user.page(R"({"op":"ready"})");
-			user.runUntil([&] { return user.desk().isReady() && user.desk().documents().patterns.size() > 20; }, 5000);
-			for(int i = 0; i < 3; ++i)
-			{
-				const auto t0 = user.machine().now();
-				user.page(R"({"op":"play","id":1})");
-				const bool on = user.runUntil([&] { return user.machineDoc() && user.machineDoc()->find("desk")->find("playing")->asBool(); }, 3000);
-				std::printf("user state PLAY %d: %s after %.0f ms, step %u, stopped byte %u\n", i, on ? "playing" : "NOT playing",
-					ms(user.machine().now() - t0), user.machine().playhead(), user.machine().read8(0x28cdaf));
-				user.page(R"({"op":"stop","id":2})");
-				user.run(800);
-			}
-			return 0;
-		}
 		Rig rig(rom, _argv[1]);
 		if(_argc > 2 && std::string(_argv[2]) == "playload")
 		{
@@ -749,6 +762,7 @@ int main(const int _argc, char** _argv)
 		}
 		liveRecording(rig);
 		sampleName(rig);
+		appModulators(rig);
 		if(_argc > 2 && std::string(_argv[2]) == "probe")
 		{
 			probeGroups(rig);

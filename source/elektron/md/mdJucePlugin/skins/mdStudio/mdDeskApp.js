@@ -37,10 +37,7 @@ const S = { ws: "seq", sel: 0, lane: "FLTF", page: 0, viewAll: false, follow: fa
 	songSel: 0, bank: 0, songZoom: "fit", smpSlot: "RAM1", chopTrack: null, capture: {}, keepFx: true, plate: "mk1",
 	tracks: [], locks: new Map(), song: [{ type: "end" }], len: 16, length: 16, mult: "1X", swing: 50, accAmt: 0, mode: "EXTENDED", bpm: 120, pat: 0, kit: 0,
 	kitState: "unknown", kitNames: {}, patKit: [], queued: null, firmware: "booting", loaded: false };
-S.ctl = { learn: false, learnT: null, sel: null, selT: null, sent: 0, addT: 1, phase: 0,
-	/* MOCK: app-only modulators, not wired to the machine. */
-	sources: [{ id: "lfoA", kind: "lfo", label: "LFO A", val: 64, SHAPE: 0, RATE: "1/2", DEPTH: 100 }, { id: "rndA", kind: "rnd", label: "Random A", val: 64, RATE: "1/16", SMOOTH: 30, _t: 64 }],
-	links: [] };
+S.ctl = { learn: false, learnT: null, sel: null, selT: null, addT: 1 };
 
 /* Pointer capture can fail for a pointer the browser no longer tracks; the gesture still works. */
 function capture(el, e) { try { el.setPointerCapture(e.pointerId); } catch (_) { } }
@@ -141,11 +138,11 @@ function ref(el) {
 	const d = el.dataset, t = d.t != null ? +d.t : S.sel, tr = S.tracks[t];
 	switch (d.g) {
 	case "syn": return [tr.syn, d.n]; case "fx": return [tr.fx, d.n]; case "rt": return [tr.rt, d.n]; case "lfo": return [tr.lfo, d.n];
-	case "mfx": return [S.mfx[d.f].v, d.n]; case "src": return [S.ctl.sources.find(x => x.id === d.src), d.n];
+	case "mfx": return [S.mfx[d.f].v, d.n]; case "src": return [Mods.source(d.src), d.n]; case "link": return [Mods.doc.links[+d.li], d.n];
 	}
 }
 const getV = el => { const [o, n] = ref(el); return o[n]; };
-function setV(el, v) { const [o, n] = ref(el); v = clamp(Math.round(v)); if (o[n] === v) return; o[n] = v; if (el.dataset.g !== "src") syncKitValues(); syncControls(); redraw(); }
+function setV(el, v) { const [o, n] = ref(el); v = clamp(Math.round(v), 0, n === "depth" ? 100 : 127); if (o[n] === v) return; o[n] = v; if (el.dataset.g === "src" || el.dataset.g === "link") sendMods(); else syncKitValues(); syncControls(); redraw(); }
 
 /* ===== Top bar ===== */
 function renderTop() {
@@ -168,20 +165,28 @@ function renderTop() {
 	syncTx();
 	const st = $("#status");
 	if (st) {
-		const msg = S.firmware === "booting" ? "The machine is starting. Edits wait until it answers." : S.firmware === "unsupported" ? "This firmware is not Machinedrum OS 1.63. MD Desk needs OS 1.63." : !S.loaded ? "Reading the current pattern and kit from the machine…" : "";
+		const msg = S.firmware === "booting" || S.firmware === "loading" ? "The machine is starting. Edits wait until it answers." : S.firmware === "unsupported" ? "This firmware is not Machinedrum OS 1.63. MD Desk needs OS 1.63." : !S.loaded ? "Reading the current pattern and kit from the machine…" : "";
 		st.textContent = msg; st.hidden = !msg;
 	}
 	if (S.firmware === "missing") firstRun(); else if ($("#dlg").dataset.first === "1") { $("#dlg").hidden = true; $("#dlg").dataset.first = ""; }
 }
 
-/* The engine menu in the LCD: EMU OS 1.63 is the only engine today. Its LED is lit while the
-   firmware answers. HW MIDI is disabled in the markup (not available yet); LOAD ROM opens the
-   first-run screen. */
+/* The engine label in the LCD shows the engine's real state (mockup v48), from the device:
+   NO ROM, LOADING ROM (the machine is prepared or restored), BOOTING OS (the firmware starts),
+   EMU OS 1.63 (it answers MIDI: status reply seen), ROM ERROR (not OS 1.63). While it is not
+   ready the LCD fields dim, REC and PLAY are disabled and edits wait (the desk refuses them).
+   HW MIDI is not available yet. */
+const ENG = { missing: ["NO ROM", "off"], loading: ["LOADING ROM", "blink"], booting: ["BOOTING OS", "blink"], ready: ["EMU OS 1.63", "on"], unsupported: ["ROM ERROR", "off"] };
+let lastEng = "";
 function renderEngine() {
 	const btn = $(".lcdeng"), led = $("#engled"); if (!btn || !led) return;
-	const txt = { ready: "EMU OS 1.63", booting: "EMU OS 1.63 · starting", missing: "EMU · no ROM", unsupported: "EMU · not OS 1.63" }[S.firmware] || "EMU OS 1.63";
-	btn.querySelector("span").textContent = txt; led.classList.toggle("on", S.firmware === "ready");
-	btn.title = S.firmware === "ready" ? "Engine: the real Machinedrum OS 1.63 runs inside the app. Editing a real Machinedrum over MIDI is not available yet." : "Engine: " + txt;
+	const [txt, mode] = ENG[S.firmware] || ENG.booting, ready = S.firmware === "ready";
+	btn.querySelector("span").textContent = txt;
+	led.className = "led " + (mode === "on" ? "on" : mode === "blink" ? "on blink" : "");
+	$(".lcdpanel").classList.toggle("engwait", !ready);
+	["rec", "play"].forEach(id => { const k = document.getElementById(id); if (k) k.disabled = !ready; });
+	btn.title = ready ? "Engine: the real Machinedrum OS 1.63 runs inside the app. Editing a real Machinedrum over MIDI is not available yet." : "Engine: " + txt.toLowerCase() + ". Editing starts when it is ready.";
+	if (S.firmware !== lastEng) { if (typeof SELFTEST !== "undefined" && SELFTEST) Bridge.log(`engine: ${txt} at ${Math.round(performance.now())} ms`); lastEng = S.firmware; }
 }
 document.addEventListener("change", e => {
 	if (e.target.id !== "engsel") return;
@@ -420,7 +425,7 @@ function syncControls() {
 			el.classList.toggle("learnt", !!S.ctl.learnT && S.ctl.learnT.t === tt && S.ctl.learnT.p === el.dataset.n);
 			if (mp.length) el.title = "Mapped: " + mp.map(m => "CC " + m.cc).join(", ");
 		}
-		if (el.classList.contains("pc") && el.dataset.g !== "mfx" && el.dataset.g !== "lfo" && el.dataset.g !== "src") el.classList.toggle("lk", S.locks.has(lk(el.dataset.t != null ? +el.dataset.t : S.sel, el.dataset.n)));
+		if (el.classList.contains("pc") && el.dataset.g !== "mfx" && el.dataset.g !== "lfo" && el.dataset.g !== "src" && el.dataset.g !== "link") el.classList.toggle("lk", S.locks.has(lk(el.dataset.t != null ? +el.dataset.t : S.sel, el.dataset.n)));
 	});
 	$$("#main [data-show]").forEach(el => el.textContent = S.tracks[+el.dataset.show].rt.VOL ?? "—");
 }
@@ -741,23 +746,60 @@ function toggleLearn() {
 	S.ctl.learn = !S.ctl.learn; S.ctl.learnT = null; document.body.classList.toggle("learn", S.ctl.learn); renderTop(); syncControls();
 	if (S.ctl.learn) toast("LEARN: click a value, then turn a knob on your MIDI controller."); else cmd("learnCancel");
 }
+/* App modulators: the page edits Mods.doc and sends it whole; values and the CC rate come back. */
+function sendMods() { cmd("modSet", { doc: Mods.doc }, "modSet"); }
+function paramName(t, i) { return slots(S.tracks[t].m)[i] || "#" + (i + 1); }
+function modRow(sr) {
+	const C = S.ctl, id = "app:" + sr.id;
+	return `<button class="srch k-${sr.kind === "lfo" ? "lfo" : "rnd"} ${id === C.sel ? "sel" : ""}" data-src="${id}" style="--f:${Mods.valueOf(sr.id) / 127 * 100}%" title="App only: runs in the editor on the machine's steps and sends CCs"><span class="sk">APP</span><b>${sr.label}</b><span class="sv mono">${Mods.valueOf(sr.id)}</span></button>
+	 ${S.tracks.map((t, i) => { const ls = Mods.linksOf(sr.id).filter(o => o.l.track === i); return `<button class="mxc ${ls.length ? "on" : ""} ${id === C.sel && C.selT === i ? "sel" : ""}" data-mxsrc="${id}" data-mxt="${i}" title="${ls.map(o => paramName(i, o.l.param)).join(", ") || "no link"}">${ls.slice(0, 2).map(o => `<i>${paramName(i, o.l.param)}</i>`).join("")}${ls.length > 2 ? `<i>+${ls.length - 2}</i>` : ""}</button>`; }).join("")}`;
+}
+function modInspector(sr) {
+	const C = S.ctl, links = Mods.linksOf(sr.id).filter(o => C.selT == null || o.l.track === C.selT);
+	const rate = `<div class="irow"><span class="ilab">Rate</span><span class="seg" data-set="srcrate">${Mods.RATES.map(x => `<button data-v="${x}" aria-pressed="${sr.rate === x}">${x}</button>`).join("")}</span></div>`;
+	const params = sr.kind === "lfo" ? `<div class="irow"><span class="ilab">Shape</span><div class="shapes">${SHAPES.map((n, i) => `<button data-srcshape="${i}" aria-pressed="${sr.shape === i}" title="${n}">${shapeIcon(i, false)}</button>`).join("")}</div></div>${rate}
+	 <div class="irow"><span class="ilab">Depth</span><div style="width:140px"><div class="pc" role="slider" tabindex="0" aria-label="Depth" aria-valuemax="100" data-g="src" data-n="depth" data-src="${sr.id}"><span>DEPTH</span><b></b></div></div></div>`
+		: `${rate}<div class="irow"><span class="ilab">Smooth</span><div style="width:140px"><div class="pc" role="slider" tabindex="0" aria-label="Smooth" data-g="src" data-n="smooth" data-src="${sr.id}"><span>SMOOTH</span><b></b></div></div></div>`;
+	return `<section class="card"><header><h3>${sr.label}</h3><span><b class="apponly">App only</b> · not in the kit · <span class="mono" id="ccrate" title="CCs the app modulators sent in the last second; the budget is ${Mods.limit}">${Mods.cc}/s of ${Mods.limit}</span></span></header>
+	 <div class="note">Runs in the editor and moves with the machine's own steps while it plays, sent as CCs like host automation (at most ${Mods.limit} a second). A real Machinedrum does not play it, a lock wins on its step, and live recording does not record it. The setup is not saved with the project yet.</div>
+	 ${params}
+	 <div class="lhead"><span class="cap">Targets</span>${C.selT != null ? `<button class="ptog on" data-selt="all"><i class="led"></i>Track ${C.selT + 1} only</button>` : `<span class="note">${links.length} target${links.length === 1 ? "" : "s"}</span>`}</div>
+	 <div class="lnks">${links.map(({ l, li }) => `<div class="lnk"><span class="lcdchip" title="${S.tracks[l.track].name}">T${l.track + 1} ${paramName(l.track, l.param)}</span>
+	  <div class="pc" role="slider" tabindex="0" aria-label="Min" data-g="link" data-n="min" data-li="${li}"><span>MIN</span><b></b></div><div class="pc" role="slider" tabindex="0" aria-label="Max" data-g="link" data-n="max" data-li="${li}"><span>MAX</span><b></b></div>
+	  <span class="seg" data-set="lcurve" data-li="${li}">${["lin", "exp", "log"].map(c => `<button data-v="${c}" aria-pressed="${l.curve === c}">${c.toUpperCase()}</button>`).join("")}</span>
+	  <button class="ptog ${l.invert ? "on" : ""}" data-minv="${li}"><i class="led"></i>Inv</button><button class="iconkey" data-mdel="${li}" aria-label="Remove target" title="Remove">×</button></div>`).join("") || `<div class="note">No targets yet. Add one below.</div>`}</div>
+	 <div class="irow addrow"><span class="ilab">Add</span><select id="mt">${S.tracks.map((t, i) => `<option value="${i}" ${i === C.addT ? "selected" : ""}>Track ${i + 1} · ${t.m}</option>`).join("")}</select>
+	  <select id="mp">${slots(S.tracks[C.addT].m).map((p, i) => p ? `<option value="${i}">${p}</option>` : "").join("")}</select><button class="cream" id="maddl">Add target</button></div>
+	 <div class="irow"><span class="ilab"></span><button data-addsrc="lfo">+ App LFO</button><button data-addsrc="random">+ Random</button><button class="danger" data-delsrc="${sr.id}">Remove ${sr.label}</button></div></section>`;
+}
 function renderControl() {
 	const L = Docs.learn || { mappings: [], learning: null }, maps = L.mappings;
 	const ccs = [...new Set(maps.map(m => m.ch + ":" + m.cc))].map(k => { const [ch, cc] = k.split(":").map(Number); return { ch, cc }; });
-	const C = S.ctl; if (C.sel == null && ccs.length) C.sel = ccs[0].ch + ":" + ccs[0].cc;
+	const C = S.ctl;
+	if (C.sel == null || (C.sel.startsWith("app:") && !Mods.source(C.sel.slice(4)))) C.sel = ccs.length ? ccs[0].ch + ":" + ccs[0].cc : Mods.doc.sources.length ? "app:" + Mods.doc.sources[0].id : null;
 	const mx = `<div class="mx"><span></span>${S.tracks.map((t, i) => `<span class="mxh" title="${t.name}"><b>${i + 1}</b><small>${t.m}</small></span>`).join("")}
   ${ccs.map(src => { const id = src.ch + ":" + src.cc; return `<button class="srch ${id === C.sel ? "sel" : ""} k-cc" data-src="${id}" style="--f:0%"><span class="sk">CC ${src.cc}</span><b>${src.ch === 255 ? "any channel" : "ch " + (src.ch + 1)}</b><span class="sv mono"></span></button>
    ${S.tracks.map((t, i) => { const ls = maps.filter(m => m.ch === src.ch && m.cc === src.cc && m.t === i); return `<button class="mxc ${ls.length ? "on" : ""} ${id === C.sel && C.selT === i ? "sel" : ""}" data-mxsrc="${id}" data-mxt="${i}" title="${ls.map(l => l.name).join(", ") || "no link"}">${ls.slice(0, 2).map(l => `<i>${slots(t.m)[l.i] || l.name}</i>`).join("")}${ls.length > 2 ? `<i>+${ls.length - 2}</i>` : ""}</button>`; }).join("")}`; }).join("")}
-  ${C.sources.map(sr => `<button class="srch k-${sr.kind}" data-src="${sr.id}" title="MOCK: app-only modulator, not wired to the machine"><span class="sk">MOCK</span><b>${sr.label}</b><span class="sv mono">—</span></button>${S.tracks.map(() => `<span class="mxc" aria-hidden="true"></span>`).join("")}`).join("")}</div>`;
-	const selMaps = maps.filter(m => m.ch + ":" + m.cc === C.sel && (C.selT == null || m.t === C.selT));
-	const insp = `<section class="card"><header><h3>${C.sel ? "CC " + C.sel.split(":")[1] : "No mappings yet"}</h3><span>from your MIDI controller · saved with the plug-in's MIDI Learn preset</span></header>
+  ${Mods.doc.sources.map(modRow).join("")}</div>`;
+	const app = C.sel && C.sel.startsWith("app:") ? Mods.source(C.sel.slice(4)) : null;
+	let insp;
+	if (app) insp = modInspector(app);
+	else {
+		const selMaps = maps.filter(m => m.ch + ":" + m.cc === C.sel && (C.selT == null || m.t === C.selT));
+		insp = `<section class="card"><header><h3>${C.sel ? "CC " + C.sel.split(":")[1] : "No mappings yet"}</h3><span>from your MIDI controller · saved with the plug-in's MIDI Learn preset</span></header>
   <div class="note">${L.learning ? `Learning <b>track ${L.learning.t + 1} ${slots(S.tracks[L.learning.t].m)[L.learning.i] || L.learning.name}</b>: turn a knob both ways.` : "Press LEARN (L), click any value in Sound, Mix or here, then turn a knob. The mapping moves the value through the plug-in's parameters, like host automation."}</div>
   <div class="lhead"><span class="cap">Targets</span>${C.selT != null ? `<button class="ptog on" data-selt="all"><i class="led"></i>Track ${C.selT + 1} only</button>` : `<span class="note">${selMaps.length} target${selMaps.length === 1 ? "" : "s"}</span>`}</div>
   <div class="lnks">${selMaps.map(l => `<div class="lnk"><span class="lcdchip" title="${S.tracks[l.t].name}">T${l.t + 1} ${slots(S.tracks[l.t].m)[l.i] || l.name}</span><span class="note">${l.mode}</span><span></span>
    <button class="ptog ${l.invert ? "on" : ""}" data-linv="${l.index}"><i class="led"></i>Inv</button><button class="iconkey" data-ldel="${l.index}" aria-label="Remove mapping" title="Remove">×</button></div>`).join("") || `<div class="note">No targets. Use LEARN.</div>`}</div>
-  <div class="irow"><span class="ilab"></span><span class="note"><b class="apponly">Mock</b> App LFO and random rows are the design only: they do not run yet.</span></div></section>`;
-	$("#main").innerHTML = `<div class="ctlui"><section class="card"><header><h3>Mapping matrix</h3><span>rows = controller CCs · columns = tracks</span></header>${mx}</section>${insp}</div>`;
+  <div class="irow"><span class="ilab"></span><button data-addsrc="lfo">+ App LFO</button><button data-addsrc="random">+ Random</button></div></section>`;
+	}
+	$("#main").innerHTML = `<div class="ctlui"><section class="card"><header><h3>Mapping matrix</h3><span>rows = controller CCs and app modulators · columns = tracks</span></header>${mx}</section>${insp}</div>`;
 	syncControls();
+}
+/* Values and the CC rate while the machine plays: in place, no re-render. */
+function syncMods() {
+	$$(".srch[data-src^='app:']").forEach(h => { const v = Mods.valueOf(h.dataset.src.slice(4)); h.style.setProperty("--f", v / 127 * 100 + "%"); const sv = h.querySelector(".sv"); if (sv) sv.textContent = v; });
+	const r = $("#ccrate"); if (r) { r.textContent = `${Mods.cc}/s of ${Mods.limit}`; r.classList.toggle("hot", Mods.cc >= Mods.limit); }
 }
 document.addEventListener("pointerdown", e => {
 	if (!S.ctl.learn) return;
@@ -867,6 +909,8 @@ document.addEventListener("click", e => {
 	const sg = e.target.closest(".seg[data-set] button"); if (sg) {
 		const k = sg.parentElement.dataset.set, v = sg.dataset.v;
 		if (k === "upd") { S.tracks[S.sel].lfo.UPDTE = v; syncKitValues(); sg.parentElement.querySelectorAll("button").forEach(b => b.setAttribute("aria-pressed", b === sg)); redraw(); }
+		else if (k === "srcrate" && S.ws === "control") { const s = Mods.source(S.ctl.sel.slice(4)); if (s) { s.rate = v; sendMods(); render(); } }
+		else if (k === "lcurve" && S.ws === "control") { const l = Mods.doc.links[+sg.parentElement.dataset.li]; if (l) { l.curve = v; sendMods(); render(); } }
 		else if (k === "loopkind" && S.ws === "song") { const r = S.song[S.songSel]; r.type = v; if (v === "halt") r.to = S.songSel; if (v === "loop") { r.count = r.count || 2; r.to = Math.min(r.to ?? 0, Math.max(0, S.songSel - 1)); } if (v === "jump") r.to = Math.max(r.to ?? 0, S.songSel + 1); rowSet(S.songSel); render(); }
 		return;
 	}
@@ -929,6 +973,13 @@ document.addEventListener("click", e => {
 		const mc = e.target.closest(".mxc[data-mxsrc]"); if (mc) { C.sel = mc.dataset.mxsrc; C.selT = +mc.dataset.mxt; render(); return; }
 		if (e.target.closest("[data-selt]")) { C.selT = null; render(); return; }
 		const li = e.target.closest("[data-linv]"); if (li) { cmd("learnInvert", { index: +li.dataset.linv }); return; }
+		const as = e.target.closest("[data-addsrc]"); if (as) { const id = Mods.add(as.dataset.addsrc); C.sel = "app:" + id; C.selT = null; sendMods(); render(); return; }
+		const ds = e.target.closest("[data-delsrc]"); if (ds) { Mods.remove(ds.dataset.delsrc); C.sel = null; sendMods(); render(); return; }
+		const mi = e.target.closest("[data-minv]"); if (mi) { const l = Mods.doc.links[+mi.dataset.minv]; l.invert = !l.invert; sendMods(); render(); return; }
+		const md = e.target.closest("[data-mdel]"); if (md) { Mods.doc.links.splice(+md.dataset.mdel, 1); sendMods(); render(); return; }
+		const ss = e.target.closest("[data-srcshape]"); if (ss) { const s = Mods.source(C.sel.slice(4)); if (s) { s.shape = +ss.dataset.srcshape; sendMods(); render(); } return; }
+		if (e.target.closest("#maddl")) { const s = Mods.source(C.sel.slice(4)), p = +$("#mp").value; if (s && Mods.link(s.id, C.addT, p)) { sendMods(); render(); } else toast("That target is already linked."); return; }
+		const asrc = e.target.closest(".srch[data-src^='app:']"); if (asrc) { C.sel = asrc.dataset.src; C.selT = null; render(); return; }
 		const ld = e.target.closest("[data-ldel]"); if (ld) { cmd("learnRemove", { index: +ld.dataset.ldel }); return; }
 	}
 	const tb = e.target.closest("#tabs button"); if (tb) { S.ws = tb.dataset.ws; render(); return; }
@@ -940,6 +991,7 @@ document.addEventListener("click", e => {
 });
 document.addEventListener("change", e => {
 	const id = e.target.id, v = e.target.value, tr = S.tracks[S.sel], l = tr.lfo;
+	if (id === "mt") { S.ctl.addT = +v; render(); return; }
 	if (id === "lfoT") { l.TRCK = +v; if (!params(+v).includes(l.PARAM)) l.PARAM = params(+v)[0]; syncKitValues(); renderSound(); enhanceSelects($("#main")); }
 	if (id === "lfoP") { l.PARAM = v; syncKitValues(); }
 	if (id === "mg") { tr.muteGroup = v === "" ? null : +v; syncKitValues(); }
@@ -1041,6 +1093,7 @@ Bridge.onMessage(m => {
 		break;
 	}
 	case "telemetry": onTelemetry(m); break;
+	case "mod": { const before = JSON.stringify(Mods.doc); Mods.onMessage(m); if (S.ws === "control") { if (JSON.stringify(Mods.doc) !== before && !interacting()) scheduleRender(); else syncMods(); } break; }
 	case "ask":
 		if (m.ask === "discardKit") ask(`<b>${patName(m.p)}</b> uses kit <b>${kitName(m.target)}</b>. Your edits to <b>${kitName(m.kit)}</b> are not saved on the machine and will be lost.`,
 			[["Save kit, then switch", "cream", () => { saveKit(); cmd("select", { p: m.p, force: true }); }], ["Switch and lose edits", "danger", () => cmd("select", { p: m.p, force: true })], ["Cancel", "", () => { }]]);
@@ -1153,7 +1206,14 @@ if (/[?&]selftest=1/.test(location.search)) (async () => {
 	for (const b of [30, 299.5, bpm0]) { cmd("tempo", { bpm: b }); await sleep(250); widths.push(lcdW()); }
 	await sleep(800);
 	log(`P3: tempo back to ${S.bpm} (was ${bpm0})`);
-	log(`P3: LCD width through tempo changes ${widths.join(" / ")} px, font ${getComputedStyle($("#bpm")).fontFamily.split(",")[0]} loaded ${document.fonts.check("12px Silkscreen")}`);
+	log(`P3: LCD width through tempo changes ${widths.join(" / ")} px`);
+	await document.fonts.ready;
+	const faces = [...document.fonts].map(f => `${f.family.replace(/"/g, "")} ${f.weight} ${f.status}`);
+	const fam = q => getComputedStyle(document.querySelector(q)).fontFamily.split(",")[0].replace(/"/g, "");
+	log(`P3: fonts ${faces.join(", ")}; LCD value ${fam("#bpm")}, workspace keys ${fam("#tabs button")}, grid ruler ${fam(".rul")}`);
+	const rect = q => { const b = document.querySelector(q).getBoundingClientRect(); return `${Math.round(b.left)},${Math.round(b.top)} ${Math.round(b.width)}x${Math.round(b.height)}`; };
+	const rb = $("#rec").getBoundingClientRect(), pb = $("#play").getBoundingClientRect();
+	log(`P3: transport keys REC ${rect("#rec")}, PLAY ${rect("#play")}: ${Math.abs(rb.width - rb.height) < 1 && Math.abs(pb.width - pb.height) < 1 && rb.width > 30 && Math.abs(rb.top - pb.top) < 1 && pb.left > rb.right ? "ok square, side by side" : "FAIL"}; LCD ${rect(".lcdpanel")}, window ${innerWidth}x${innerHeight}`);
 	const recOn = () => !!machineState().desk.recording;
 	t0 = performance.now();
 	$("#play").click();

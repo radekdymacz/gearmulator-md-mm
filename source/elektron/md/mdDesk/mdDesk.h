@@ -3,6 +3,7 @@
 #include "mdDeskDelivery.h"
 #include "mdDeskEdit.h"
 #include "mdDeskHistory.h"
+#include "mdDeskMod.h"
 #include "mdDeskRecord.h"
 
 #include "elektronData/json.h"
@@ -60,11 +61,17 @@ namespace mdDesk
 			std::function<double()> nowMs;
 		};
 
+		// The engine's life, from the device (the page's LCD engine label):
+		// Missing (NO ROM) -> Loading (LOADING ROM: the device prepares or restores
+		// its images) -> Booting (BOOTING OS: the firmware runs but does not take MIDI
+		// yet) -> Present (booting until the first status reply, then ready).
 		enum class Firmware
 		{
 			Missing,		// no ROM: the first-run screen
-			Unsupported,	// another firmware than MD OS 1.63
-			Present			// booting until the first status reply, then ready
+			Unsupported,	// another firmware than MD OS 1.63 (ROM ERROR)
+			Loading,		// ROM found, the machine is being prepared or restored
+			Booting,		// the firmware starts; MIDI is not taken yet
+			Present			// takes MIDI: booting until the first status reply, then ready
 		};
 
 		explicit Desk(Port _port);
@@ -114,6 +121,9 @@ namespace mdDesk
 		void handleUndo(bool _redo, const Value& _message);
 		void handleSelect(const Value& _message);
 		void handleRecord(const Value& _message);
+		void handleModulators(const Value& _message);
+		void runModulators(double _now);
+		void publishModulators();
 		void pumpRecording(double _now);
 		bool pressKey(const std::string& _key);
 
@@ -169,6 +179,8 @@ namespace mdDesk
 		Telemetry m_telemetry;
 		std::array<bool, 16> m_mutes{};
 		KnobRecorder m_knobs;
+		Modulators m_mods;
+		CcBudget m_ccBudget;
 		double m_recordPollMs = -1e9;
 		double m_recordAfterStopMs = -1;
 		double m_keyQuietUntilMs = -1e9;

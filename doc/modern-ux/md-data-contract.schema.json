@@ -210,6 +210,22 @@
         }
       }
     },
+    "modulators": {
+      "type": "object",
+      "description": "App-only LFO and random sources and their links to kit parameters (page -> desk).",
+      "required": ["schema", "version"],
+      "properties": {
+        "schema": {"const": "md-desk/modulators"},
+        "version": {"const": 1},
+        "sources": {"type": "array", "maxItems": 16, "items": {"type": "object", "required": ["id", "kind"], "properties": {
+          "id": {"type": "string", "minLength": 1}, "label": {"type": "string"}, "kind": {"enum": ["lfo", "random"]},
+          "shape": {"type": "integer", "minimum": 0, "maximum": 5}, "rate": {"enum": ["1/16", "1/8", "1/4", "1/2", "1", "2", "4"]},
+          "depth": {"type": "integer", "minimum": 0, "maximum": 100}, "smooth": {"$ref": "#/$defs/u7"}}}},
+        "links": {"type": "array", "maxItems": 64, "items": {"type": "object", "required": ["source", "track", "param"], "properties": {
+          "source": {"type": "string"}, "track": {"$ref": "#/$defs/track"}, "param": {"type": "integer", "minimum": 0, "maximum": 23},
+          "min": {"$ref": "#/$defs/u7"}, "max": {"$ref": "#/$defs/u7"}, "curve": {"enum": ["lin", "exp", "log"]}, "invert": {"type": "boolean"}}}}
+      }
+    },
     "machine": {
       "type": "object",
       "description": "Read-only machine state from mdDataLink::Session.",
@@ -247,7 +263,7 @@
           "type": "object",
           "description": "Added by mdDesk::Desk for the page (optional; readers ignore what they do not know).",
           "properties": {
-            "firmware": {"enum": ["missing", "unsupported", "booting", "ready"]},
+            "firmware": {"enum": ["missing", "unsupported", "loading", "booting", "ready"], "description": "The engine: NO ROM, ROM ERROR, LOADING ROM, BOOTING OS, EMU OS 1.63."},
             "tx": {"type": "boolean", "description": "An edit is on the wire (waiting for its read-back)."},
             "loading": {"type": "integer", "minimum": 0},
             "roundTripMs": {"type": "number", "description": "Last edit -> read-back time; -1 before the first."},

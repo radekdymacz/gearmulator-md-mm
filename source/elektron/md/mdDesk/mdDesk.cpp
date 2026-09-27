@@ -146,7 +146,8 @@ namespace mdDesk
 		}
 		if(m_firmware != Firmware::Present)
 		{
-			result(_message, {"No Machinedrum firmware is running"}, {});
+			result(_message, {m_firmware == Firmware::Loading || m_firmware == Firmware::Booting
+				? "The machine is starting (device busy). Try again in a moment." : "No Machinedrum firmware is running"}, {});
 			flush();
 			return;
 		}
@@ -192,6 +193,8 @@ namespace mdDesk
 		}
 		else if(op == "record" || op == "recTrig")
 			handleRecord(_message);
+		else if(op == "modSet")
+			handleModulators(_message);
 		else if(op == "sampleName")
 		{
 			// UW ROM slot names: the firmware takes 0x73 but never reports names.
@@ -446,6 +449,55 @@ namespace mdDesk
 			return false;
 		m_keyQuietUntilMs = m_port.nowMs() + g_keyQuietMs;
 		return m_port.pressKey(_key);
+	}
+
+	// App-only LFO and random sources (mdDeskMod.h): the page sends the whole
+	// setup; the desk runs it on the machine's steps.
+	void Desk::handleModulators(const Value& _message)
+	{
+		const auto* doc = _message.find("doc");
+		std::vector<std::string> errors;
+		const auto setup = doc ? modSetupFromJson(*doc, errors) : std::nullopt;
+		if(!doc)
+			errors.emplace_back("doc: expected an md-desk/modulators document");
+		if(setup)
+			m_mods.setSetup(*setup);
+		result(_message, errors, {});
+		publishModulators();
+	}
+
+	void Desk::runModulators(const double _now)
+	{
+		if(m_mods.setup().links.empty())
+			return;
+		const auto kit = currentKit();
+		for(const auto& o : m_mods.step())
+		{
+			if(!kit || !m_port.sendKitParam || !m_ccBudget.take(_now))
+			{
+				m_mods.unsent(o);
+				continue;
+			}
+			m_port.sendKitParam(o.track, o.param, o.value);
+			onHostKitParam(o.track, o.param, o.value);
+		}
+		publishModulators();
+	}
+
+	void Desk::publishModulators()
+	{
+		if(!m_pageReady)
+			return;
+		Value m = Value::object();
+		m.set("type", "mod");
+		m.set("doc", modSetupToJson(m_mods.setup()));
+		Value values = Value::array();
+		for(const auto v : m_mods.values())
+			values.push(v);
+		m.set("values", std::move(values));
+		m.set("ccPerSecond", m_ccBudget.lastSecond(m_port.nowMs()));
+		m.set("ccLimit", g_modCcPerSecond);
+		publish(m);
 	}
 
 	void Desk::pumpRecording(const double _now)
@@ -785,6 +837,7 @@ namespace mdDesk
 		const bool recordingChanged = _t.recording != m_telemetry.recording;
 		const bool patternChanged = _t.valid && _t.pattern != m_telemetry.pattern;
 		const bool wasPlaying = m_telemetry.playing;
+		const int stepBefore = m_telemetry.step;
 		const bool wrapped = _t.valid && m_telemetry.step >= 0 && _t.step >= 0 && _t.step < m_telemetry.step;
 		m_telemetry = _t;
 		if(!changed)
@@ -807,7 +860,14 @@ namespace mdDesk
 			}
 		}
 		if(wasPlaying != _t.playing)
+		{
 			m_machineDirty = true;
+			if(!_t.playing)
+				m_mods.reset();
+		}
+		// App modulators move on the machine's own steps.
+		if(_t.valid && _t.playing && _t.step >= 0 && _t.step != stepBefore)
+			runModulators(m_port.nowMs());
 		if(recordingChanged)
 		{
 			m_knobs.reset();
@@ -1055,7 +1115,8 @@ namespace mdDesk
 		auto doc = mdDataLink::Session::stateToJson(m_session.state());
 		Value desk = Value::object();
 		desk.set("firmware", m_firmware == Firmware::Missing ? "missing"
-			: m_firmware == Firmware::Unsupported ? "unsupported" : m_ready ? "ready" : "booting");
+			: m_firmware == Firmware::Unsupported ? "unsupported" : m_firmware == Firmware::Loading ? "loading"
+			: m_ready ? "ready" : "booting");
 		desk.set("tx", isBusy());
 		desk.set("loading", static_cast<int>(m_loadQueue.size() + (m_loading ? 1 : 0)));
 		desk.set("roundTripMs", m_lastRoundTripMs);

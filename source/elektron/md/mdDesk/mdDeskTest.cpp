@@ -686,6 +686,39 @@ namespace
 		check(ed::mdSetSampleName(48, "A").empty() && ed::mdSetSampleName(0, "").empty()
 			&& ed::mdSetSampleName(0, "TOOLONG").empty() && ed::mdSetSampleName(0, "\x01").empty(), "bad names refused");
 	}
+
+	void testModulators()
+	{
+		std::vector<std::string> errors;
+		const auto setup = modSetupFromJson(cmd(R"({"schema":"md-desk/modulators","version":1,
+			"sources":[{"id":"lfoA","kind":"lfo","shape":1,"rate":"1/4","depth":100},{"id":"rndA","kind":"random","rate":"1/16","smooth":0}],
+			"links":[{"source":"lfoA","track":2,"param":12,"min":20,"max":100},{"source":"lfoA","track":3,"param":0,"min":0,"max":127,"curve":"exp","invert":true},
+			{"source":"rndA","track":4,"param":16}]})"), errors);
+		check(setup && errors.empty(), "a modulator setup parses");
+		check(setup && modSetupFromJson(modSetupToJson(*setup), errors) && errors.empty(), "and round-trips");
+		const auto bad = modSetupFromJson(cmd(R"({"schema":"md-desk/modulators","version":1,"sources":[{"id":"a","kind":"lfo","rate":"3"}],
+			"links":[{"source":"b","track":16,"param":24}]})"), errors);
+		check(!bad && errors.size() >= 4, "bad rate, source, track and param are refused with paths");
+		Modulators m;
+		m.setSetup(*setup);
+		// A saw over 4 steps on link 1: 20 + 80 * (lfo / 127), lfo 1, 33, 64, 96.
+		std::vector<int> link1;
+		for(int s = 0; s < 8; ++s)
+			for(const auto& o : m.step())
+				if(o.track == 2)
+					link1.push_back(o.value);
+		check(link1 == std::vector<int>{21, 41, 60, 80, 21, 41, 60, 80}, "the saw LFO moves link 1 per step within min..max");
+		const auto first = m.step();
+		m.reset();
+		check(!m.step().empty(), "after a stop the next step sends again");
+		CcBudget budget;
+		int taken = 0;
+		for(int i = 0; i < 400; ++i)
+			taken += budget.take(100 + i);
+		check(taken == g_modCcPerSecond, "the CC budget allows 300 a second");
+		check(budget.take(1200), "and refills after a second");
+		(void)first;
+	}
 }
 
 int main()
@@ -703,6 +736,7 @@ int main()
 	testKnobRecorder();
 	testDeskRecording();
 	testSampleName();
+	testModulators();
 	if(g_failures)
 	{
 		std::fprintf(stderr, "mdDeskTest: %d failure(s)\n", g_failures);

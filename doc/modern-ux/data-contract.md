@@ -165,6 +165,26 @@ reply for three slots). Names, memory and audio are therefore not part of the
 contract; the page shows the controls that cannot work as disabled, with the
 reason.
 
+### 4.6 `md-desk/modulators` (page -> desk, P3)
+
+App-only modulation for the Control workspace. The page owns it and sends it
+whole with `{"op":"modSet","doc":...}`; the desk answers with
+`{"type":"mod","doc","values","ccPerSecond","ccLimit"}`.
+
+| Field | Meaning |
+|---|---|
+| `sources[]` | At most 16. `id` (unique), `label`, `kind` `lfo` or `random`, `shape` 0-5 (the page's LFO shapes), `rate` `1/16` `1/8` `1/4` `1/2` `1` `2` `4` (the cycle or hold, in 16th-note steps), `depth` 0-100 (LFO), `smooth` 0-127 (random) |
+| `links[]` | At most 64. `source` (a source id), `track` 0-15, `param` 0-23 (the kit parameter index), `min`, `max` 0-127, `curve` `lin` `exp` `log`, `invert` |
+
+Rules (`mdDesk/mdDeskMod.h`):
+- Sources move once per step of the machine's own playhead, and only while it
+  plays; they restart from phase 0 after STOP.
+- A link sends `min + (max - min) * curve(value / 127)` as a CC, only when it
+  changes, within a rolling budget of 300 CCs a second (the mockup's limit).
+  Over budget, the value is sent on a later step.
+- It is not part of the kit, a real Machinedrum does not play it, and live
+  recording does not record CCs. The setup is not saved with the project yet.
+
 The UI must not show `edited` and "project not saved" as one flag. Two different things can be unsaved:
 
 | State | Meaning | Lost by |
