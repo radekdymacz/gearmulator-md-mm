@@ -1112,6 +1112,13 @@ html,body{min-width:1280px}
 /* v55: equal grid: no page-boundary shadow; the ruler number marks the page start */
 .st.gap,.lb.gap,.cp.gap,.st.gap.ph{box-shadow:none!important}
 .rul.gap{color:var(--print);font-weight:700}
+/* v56: the lock lane shows where you CAN lock: trig steps are lit slots, other steps recede */
+.lb.none{background:none!important;opacity:.5}
+.lb.none .base{display:none}
+.lb:not(.none){background:color-mix(in srgb,var(--ink) 11%,transparent);border-radius:3px 3px 0 0}
+.lb:not(.none)::before{content:"";position:absolute;left:2px;right:2px;top:2px;height:3px;border-radius:2px;background:var(--trig,var(--led));z-index:1}
+.lb:not(.none):hover{background:color-mix(in srgb,var(--ink) 20%,transparent)}
+.lb.ph:not(.none){background:color-mix(in srgb,var(--ink) 24%,transparent)}
 </style>
 
 <div class="app">
@@ -2194,7 +2201,9 @@ const chainGo0=goPattern;goPattern=function(p,now){if(S.chain.active){ask(`Picki
 const chainSong0=renderSong;renderSong=function(){chainSong0();const left=document.querySelector(".songleft");if(left)left.insertAdjacentHTML("beforeend",chainCard())};
 /* Boot: while the engine says BOOTING OS the LCD shows the machine's own screen, start-up animation and
    all (keys are ignored until it is over); then it fades to the editor's fields. The size stays. */
-function drawFwLcd(bits){const c=$("#lcdfwc"),x=c.getContext("2d"),cs=getComputedStyle(document.documentElement);x.fillStyle=cs.getPropertyValue("--lcd");x.fillRect(0,0,128,64);x.fillStyle=cs.getPropertyValue("--ink");
+/* The LCD's own tokens (read where the LCD is, so the plate's --lcd/--ink apply): the overlay's background is
+   the LCD colour over the whole LCD, the canvas draws only the lit pixels. */
+function drawFwLcd(bits){const c=$("#lcdfwc"),x=c.getContext("2d"),cs=getComputedStyle($(".lcdpanel"));x.clearRect(0,0,128,64);x.fillStyle=cs.getPropertyValue("--ink");
  for(let y=0;y<64;y++)for(let i=0;i<128;i++)if(bits(i,y))x.fillRect(i,y,1,1)}
 function fwBootDemo(on){const p=$(".lcdpanel");clearInterval(fwBootDemo.t);if(!on){p.classList.remove("fwboot");p.classList.add("fwfade");setTimeout(()=>p.classList.remove("fwfade"),700);return}
  p.classList.add("fwboot");let f=0;fwBootDemo.t=setInterval(()=>{f++;const w=Math.min(128,f*6);drawFwLcd((i,y)=>(y>18&&y<30&&i<w&&(i*7+y*3+f)%11<6)||(y>=44&&y<=46&&i>=48&&i<48+Math.min(32,f)))},100)}

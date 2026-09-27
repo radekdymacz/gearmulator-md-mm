@@ -1117,6 +1117,13 @@ html,body{min-width:1280px}
 /* v55: equal grid: no page-boundary shadow; the ruler number marks the page start */
 .st.gap,.lb.gap,.cp.gap,.st.gap.ph{box-shadow:none!important}
 .rul.gap{color:var(--print);font-weight:700}
+/* v56: the lock lane shows where you CAN lock: trig steps are lit slots, other steps recede */
+.lb.none{background:none!important;opacity:.5}
+.lb.none .base{display:none}
+.lb:not(.none){background:color-mix(in srgb,var(--ink) 11%,transparent);border-radius:3px 3px 0 0}
+.lb:not(.none)::before{content:"";position:absolute;left:2px;right:2px;top:2px;height:3px;border-radius:2px;background:var(--trig,var(--led));z-index:1}
+.lb:not(.none):hover{background:color-mix(in srgb,var(--ink) 20%,transparent)}
+.lb.ph:not(.none){background:color-mix(in srgb,var(--ink) 24%,transparent)}
 
 /* ===== The real machine's states (not in the mockup) ===== */
 .st.past{opacity:.45}

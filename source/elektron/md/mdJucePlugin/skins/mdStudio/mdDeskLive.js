@@ -97,11 +97,15 @@ renderSong = function () { renderSong0(); const left = document.querySelector(".
 let fwLcd = { shown: false, bits: null };
 function drawFwLcd() {
 	const c = $("#lcdfwc"); if (!c || !fwLcd.bits) return;
-	const x = c.getContext("2d"), cs = getComputedStyle(document.documentElement);
-	x.fillStyle = cs.getPropertyValue("--lcd"); x.fillRect(0, 0, 128, 64); x.fillStyle = cs.getPropertyValue("--ink");
+	/* The LCD's own tokens (the plate's --lcd/--ink where the LCD is): the overlay's background is the LCD
+	   colour over the whole LCD, the canvas draws only the lit pixels. */
+	const x = c.getContext("2d"), cs = getComputedStyle($(".lcdpanel"));
+	x.clearRect(0, 0, 128, 64); x.fillStyle = cs.getPropertyValue("--ink");
 	const b = fwLcd.bits;
 	for (let y = 0; y < 64; y++) for (let i = 0; i < 128; i++) if (b[y * 16 + (i >> 3)] & (0x80 >> (i & 7))) x.fillRect(i, y, 1, 1);
 }
+/* A plate switch while it shows: redraw with the new plate's ink. */
+new MutationObserver(() => { if (fwLcd.shown) drawFwLcd(); }).observe(document.documentElement, { attributes: true, attributeFilter: ["data-plate"] });
 function showFwLcd(on) {
 	const p = $(".lcdpanel"); if (!p || on === fwLcd.shown) return;
 	fwLcd.shown = on;
