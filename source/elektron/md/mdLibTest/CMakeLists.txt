@@ -303,3 +303,9 @@ if(BUILD_TESTING)
 	set_tests_properties(mdTurboMidiUnitTest mdSdsTransferTest PROPERTIES FIXTURES_SETUP MdSysexTransport)
 	set_property(TEST mdLibTests mdAudioQueueTest APPEND PROPERTY FIXTURES_REQUIRED MdSysexTransport)
 endif()
+
+# P0 modern-UX proof: live pattern edits by SysEx against MD 1.63 firmware.
+# Manual: needs a user-supplied ROM (no firmware is bundled), writes WAVs.
+add_executable(mdPatternLiveEditFirmwareTest patternLiveEditFirmwareTest.cpp)
+target_link_libraries(mdPatternLiveEditFirmwareTest PRIVATE mdLib elektronData)
+set_property(TARGET mdPatternLiveEditFirmwareTest PROPERTY FOLDER "Elektron/test")
