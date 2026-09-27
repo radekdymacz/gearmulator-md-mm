@@ -1031,6 +1031,84 @@ html,body{min-width:1280px}
 .patrow.queued #pat{animation:blink .5s steps(2) infinite}
 .lcdpanel .patf.flash #pat{animation:patflash .45s ease-out}
 @keyframes patflash{0%{background:var(--ink);color:var(--lcd)}100%{background:transparent;color:inherit}}
+/* v50: kit library + pattern chooser: one big panel over the workspace, built from the machine picker's keys */
+.libpop{position:absolute;z-index:22;width:min(1180px,calc(100vw - 32px));display:grid;gap:10px;align-content:start;padding:14px;background:var(--plate);border:2px solid var(--print);border-radius:6px;box-shadow:0 18px 40px rgba(0,0,0,.35);overflow:auto;overscroll-behavior:contain;color:var(--body)}
+.libhead{display:flex;align-items:center;gap:14px;border-bottom:1px solid var(--rule);padding-bottom:8px;min-width:0}
+.libhead .note{margin-right:auto;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0;font-size:13px}
+.libx{height:24px;padding:0 9px;font:600 10px var(--sans);letter-spacing:.14em;text-transform:uppercase}
+.libacts{display:flex;gap:10px 22px;align-items:center;flex-wrap:wrap}
+.libacts .grp{display:flex;gap:4px;align-items:center}
+.libacts .ilab{min-width:0;margin-right:4px;white-space:nowrap}
+.libacts button{height:26px;padding:0 10px;font:600 11px var(--sans);letter-spacing:.12em;text-transform:uppercase;white-space:nowrap}
+.libacts button:disabled{opacity:.35;cursor:default}
+.libacts .danger:hover:not(:disabled){background:var(--rec);color:#fff}
+.libgrid{display:grid;gap:4px}
+.libgrid.kits{grid-template-columns:repeat(8,minmax(0,1fr))}
+.libgrid.pats{grid-template-columns:30px repeat(16,minmax(0,1fr))}
+.ls{position:relative;display:grid;gap:2px;align-content:center;text-align:left;min-width:0;padding:5px 7px;font-weight:500;letter-spacing:0}
+.ls .lsh{display:flex;justify-content:space-between;align-items:center;gap:4px}
+.ls .lsh b{font:500 12px var(--mono)}
+.ls .lsh em{font:600 9px var(--sans);font-style:normal;letter-spacing:.14em;text-transform:uppercase;display:inline-flex;gap:4px;align-items:center}
+.ls .lsh .led{width:6px;height:6px}
+.ls .lsn{font:500 12px var(--mono);white-space:nowrap;overflow:hidden;text-overflow:clip;text-transform:uppercase;height:18px;line-height:18px}
+.ls .lsl{font:10px var(--mono);color:var(--keydim);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-height:12px}
+.ks{height:60px}
+.ps{height:44px;padding:4px 6px;gap:1px}
+.ps b{font:500 13px var(--mono)}
+.ps span{font:10px var(--mono);color:var(--keydim);white-space:nowrap;overflow:hidden}
+.ls.empty{background:transparent;box-shadow:inset 0 0 0 1px var(--rule);color:var(--print3)}
+.ls.empty .lsl,.ps.empty span{color:var(--print3)}
+.ls.empty:hover{background:var(--plate3)}
+.ls.cur,.ls.cur:hover{background:var(--cream);color:var(--creamtext);box-shadow:inset 0 -2px 0 rgba(0,0,0,.2)}
+.ls.cur .lsl,.ps.cur span{color:var(--creamtext);opacity:.8}
+.ls[aria-selected=true]{outline:2px solid var(--led);outline-offset:1px}
+.ls.over{outline:2px dashed var(--led);outline-offset:1px}
+.ls.dragging{opacity:.4}
+.ks.edited .lsh .led{animation:blink 1s steps(2) infinite}
+.lsin{width:100%;min-width:0;height:18px;padding:0 3px;border:0;border-radius:2px;background:var(--lcd);color:var(--ink);font:12px var(--mono);text-transform:uppercase;outline:none;box-shadow:inset 0 0 0 1px var(--ink)}
+.ps.q{box-shadow:inset 0 0 0 2px var(--led)}
+.ps.q b,.ps.q span{animation:blink .5s steps(2) infinite}
+.ps.flash{animation:libflash .45s ease-out}
+@keyframes libflash{0%{box-shadow:0 0 0 3px var(--led)}100%{box-shadow:0 0 0 0 transparent}}
+.lbank{justify-content:center;padding:0!important;font-size:12px}
+.libfoot{display:flex;justify-content:space-between;gap:16px;font-size:12px;color:var(--print2);border-top:1px solid var(--rule);padding-top:7px}
+.libfoot span{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
+.libfoot .fw{cursor:help;flex:none}
+#pat{cursor:pointer;border-radius:2px}
+#pat:hover,.kitf[aria-expanded=true],#pat[aria-expanded=true]{background:color-mix(in srgb,var(--ink) 15%,transparent)}
+@media (prefers-reduced-motion:reduce){.ps.q b,.ps.q span,.ks.edited .lsh .led{animation:none}}
+/* v51: no gaps between 16-step pages (they offset the lock lane); ALL fits 64 steps without scrolling */
+.st.gap,.rul.gap,.lb.gap,.cp.gap{margin-left:0!important}
+.st.gap,.lb.gap,.cp.gap{box-shadow:-2px 0 0 0 var(--print2)}
+.st.gap.ph{box-shadow:-2px 0 0 0 var(--print2)!important}
+.viewall .seq .r,.viewall .lane{gap:2px!important}
+.viewall .seq,.viewall #seqscroll,.viewall #lanescroll{min-width:0!important;overflow-x:hidden}
+.viewall .seq{display:grid}
+#lanescroll{padding-left:0!important;padding-right:0!important}
+/* v52 (P4): pattern chain (BANK + TRIGs), the firmware LCD while it boots; v54: prepared mutes on the M keys */
+.ms.m.prep{box-shadow:inset 0 0 0 2px var(--led)}
+.ms.m.prep::after{content:attr(data-prep);position:absolute;inset:0;display:grid;place-items:center;font:700 12px var(--pix);animation:blink .5s steps(2) infinite}
+.ms.m.prep{position:relative;color:transparent!important}
+.lcd2 .lcdmsg{font:inherit;letter-spacing:.06em}
+.chainp{display:grid;grid-template-columns:repeat(8,minmax(0,1fr));gap:4px}
+.chk{position:relative;height:40px;display:grid;align-content:center;gap:1px;padding:0 6px;text-align:left;font:500 13px var(--mono);letter-spacing:0}
+.chk small{font-size:10px;color:var(--keydim)}
+.chk em{position:absolute;right:5px;top:3px;font:700 12px var(--pix);font-style:normal;color:var(--led)}
+.chk.in{box-shadow:inset 0 0 0 2px var(--led)}
+.chainrow{display:flex;align-items:center;gap:6px;flex-wrap:wrap;min-height:26px}
+.chainrow .lcdchip{font:12px var(--pix);text-transform:uppercase}
+.chainrow .lcdchip.now{outline:2px solid var(--ink);outline-offset:-2px}
+.chainrow .lcdchip.nx{animation:blink .5s steps(2) infinite}
+.chainrow i{font-style:normal;color:var(--print2)}
+.chainacts{display:flex;gap:6px;align-items:center}
+.chainacts button{height:26px;padding:0 10px;font:600 11px var(--sans);letter-spacing:.12em;text-transform:uppercase}
+.chainacts button:disabled{opacity:.35;cursor:default}
+.lcdpanel{position:relative}
+.lcdfw{position:absolute;inset:0;z-index:3;display:none;background:var(--lcd);border-radius:4px;pointer-events:none;transition:opacity .6s}
+.lcdfw canvas{display:block;height:100%;margin:0 auto;image-rendering:pixelated;image-rendering:crisp-edges}
+.lcdpanel.fwboot .lcdfw{display:block}
+.lcdpanel.fwfade .lcdfw{display:block;opacity:0}
+@media (prefers-reduced-motion:reduce){.ms.m.prep::after,.chainrow .lcdchip.nx{animation:none}.lcdfw{transition:none}}
 </style>
 
 <div class="app">
@@ -1050,14 +1128,15 @@ html,body{min-width:1280px}
     <div class="midgrp">
       <div class="lcdgroup">
         <div class="lcdpanel">
+          <div class="lcdfw" id="lcdfw" aria-hidden="true"><canvas id="lcdfwc" width="128" height="64"></canvas></div>
           <div class="f trf"><small class="engf"><select id="engsel" data-k="1" hidden><option value="emu">EMU OS 1.63</option><option value="hw">HW MIDI</option><option value="rom">LOAD ROM</option></select><button class="kselbtn lcdeng" type="button" data-for="engsel" aria-haspopup="listbox" aria-expanded="false" aria-label="Engine: emulator or hardware" title="Engine: run the emulator, or edit a real Machinedrum over MIDI"><i class="led on" id="engled"></i><span>EMU OS 1.63</span><svg viewBox="0 0 10 6" aria-hidden="true"><path d="M1 1l4 4 4-4" fill="none" stroke="currentColor" stroke-width="1.5"/></svg></button></small><span class="lcdt">
             <button class="lt rec" id="rec" aria-pressed="false" aria-label="Record" title="Record (R)"><i class="led" id="recled"></i>●</button>
             <button class="lt" id="play" aria-pressed="false" aria-label="Play" title="Play / stop (Space)"><i class="led" id="playled"></i><span id="playico">▶</span></button>
 </span></div>
           <div class="f"><small>Tempo <i class="led" id="tempoled" aria-hidden="true"></i></small><b id="bpm" role="slider" tabindex="0" aria-label="Tempo in bpm" title="Drag up or down">124.0</b></div>
           <div class="f posf"><small>Position</small><b id="pos">--.--</b></div>
-          <div class="f patf"><small>Pattern <i class="led txled" id="txled" aria-hidden="true"></i></small><span class="patrow"><button class="lcdbtn" id="patPrev" aria-label="Previous pattern" title="Previous pattern">‹</button><b id="pat">A01</b><button class="lcdbtn" id="patNext" aria-label="Next pattern" title="Next pattern">›</button></span></div>
-          <div class="f kitf" id="kitf" role="button" tabindex="0" title="Kit actions: save, reload"><small>Kit <span class="save" id="save" role="status"><i></i><span>saved</span></span></small><b id="kitname">K01 WAREHOUSE</b></div>
+          <div class="f patf"><small>Pattern <i class="led txled" id="txled" aria-hidden="true"></i></small><span class="patrow"><button class="lcdbtn" id="patPrev" aria-label="Previous pattern" title="Previous pattern">‹</button><b id="pat" role="button" tabindex="0" aria-haspopup="dialog" aria-expanded="false" title="Pattern chooser: all 128 patterns">A01</b><button class="lcdbtn" id="patNext" aria-label="Next pattern" title="Next pattern">›</button></span></div>
+          <div class="f kitf" id="kitf" role="button" tabindex="0" aria-haspopup="dialog" aria-expanded="false" title="Kit library: all 64 kits. Load, save, copy, rename"><small>Kit <span class="save" id="save" role="status"><i></i><span>saved</span></span></small><b id="kitname">K01 WAREHOUSE</b></div>
           <div class="f meter" id="meter" title="Locked parameters in this pattern. The Machinedrum allows 64."><small>Locks</small><b id="lockn">00/64</b></div>
           <div class="row2"><div class="lcd2" id="lcd2"></div><div class="lcdsec"><button data-sec="copy" title="Copy (Cmd+C)">Copy</button><button data-sec="clear" title="Clear (Delete)">Clr</button><button data-sec="paste" title="Paste (Cmd+V)">Paste</button></div></div>
         </div>
@@ -1083,6 +1162,7 @@ html,body{min-width:1280px}
 </div>
 <div class="machpop" id="machpop" role="dialog" aria-label="Choose a machine" hidden></div>
 <div class="kpop" id="kpop" role="listbox" hidden></div>
+<div class="libpop" id="libpop" role="dialog" hidden></div>
 <div class="dlg" id="dlg" hidden></div>
 <div class="toast" id="toast" role="status" aria-live="polite"></div>
 
@@ -1182,20 +1262,27 @@ function audible(t){const any=S.tracks.some(x=>x.solo);return any?S.tracks[t].so
 function clamp(v,a=0,b=127){return Math.max(a,Math.min(b,v))}
 const $=q=>document.querySelector(q),$$=q=>[...document.querySelectorAll(q)];
 let toastT;function toast(m){const e=$("#toast");e.textContent=m;e.classList.add("on");clearTimeout(toastT);toastT=setTimeout(()=>e.classList.remove("on"),2800)}
-S.patKit=Array.from({length:128},(_,p)=>p===2?4:p>=16?p%64:0);S.kitNames={0:"WAREHOUSE",4:"DUB ROOM"};S.kit=0;S.kitState="clean";S.queued=null;S.songReload=false;
-const kitName=k=>"K"+String(k+1).padStart(2,"0")+" "+(S.kitNames[k]||"KIT "+String(k+1).padStart(2,"0"));
+S.patKit=Array.from({length:128},(_,p)=>p<12?[0,0,4,0,1,1,2,0,3,3,5,5][p]:p>=16?p%64:0);S.kit=0;S.kitState="clean";S.queued=null;S.songReload=false;
+/* v50: 64 kit slots and 128 pattern slots. data:null = the example (factory) content, made on demand */
+const KITN=["WAREHOUSE","TAPE HISS","IRON LUNG","BROKEN RADIO","DUB ROOM","GLASS FM","PI FOUNDRY","SUB MARINE","CLAP TRAP","NIGHT BUS","RUST BELT","DRY RUN"];
+S.kits=Array.from({length:64},(_,k)=>({name:KITN[k]||"",empty:!KITN[k],data:null}));S.workName=S.kits[0].name;
+S.patInfo=Array.from({length:128},(_,p)=>({has:p<12,len:[32,32,16,64,32,16,48,32][p%8]}));S.patData={};
+const kitName=k=>"K"+String(k+1).padStart(2,"0")+" "+((k===S.kit?S.workName:S.kits[k].name)||"EMPTY");
 let txT;function tx(){const l=$("#txled");if(!l)return;l.classList.add("on");clearTimeout(txT);const ms=45+Math.round(Math.random()*15);txT=setTimeout(()=>{l.classList.remove("on");l.parentElement.parentElement.title="Synced with the machine · round trip "+ms+" ms"},70)}
 /* Only kit edits are "not saved on the machine": pattern, song and global dumps write their slots at once (P1-RESULT). */
 function markDirty(){tx();if(S.ws==="seq")return;if(S.ws==="song"){if(S.playing)S.songReload=true;return}setKitState("edited")}
 function setKitState(st){S.kitState=st;const s=$("#save");if(!s)return;s.classList.toggle("dirty",st==="edited");s.lastElementChild.textContent=st==="edited"?"edited":"saved";s.title=st==="edited"?"Kit edits are not saved on the machine. They are kept in the DAW project.":"The kit matches its saved slot on the machine."}
-function goPattern(p){p=(p+128)%128;if(p===S.pat&&S.queued==null)return;
- const kitChange=S.mode==="EXTENDED"&&S.patKit[p]!==S.kit;
+function goPattern(p,now){p=(p+128)%128;if(p===S.pat&&S.queued==null)return;
+ const kitChange=S.mode==="EXTENDED"&&S.patKit[p]!==S.kit,go=now?()=>switchNow(p):()=>queuePattern(p);
  if(kitChange&&S.kitState==="edited"){ask(`<b>${patName(p)}</b> uses kit <b>${kitName(S.patKit[p])}</b>. Your edits to <b>${kitName(S.kit)}</b> are not saved on the machine and will be lost.`,
-   [["Save kit, then switch","cream",()=>{saveKit();queuePattern(p)}],["Switch and lose edits","danger",()=>queuePattern(p)],["Cancel","",()=>{}]]);return}
- queuePattern(p)}
+   [["Save kit, then switch","cream",()=>{saveKit();go()}],["Switch and lose edits","danger",go],["Cancel","",()=>{}]]);return}
+ go()}
+function switchNow(p){const was=S.playing;S.queued=null;applyPattern(p);if(was){S.step=-1;phLast=-1;toast("Switched now. On the machine this is STOP, LOAD PATTERN, PLAY (not tested).")}}
 function queuePattern(p){if(S.playing){S.queued=p;renderTop();tx();return}applyPattern(p)}
-function applyPattern(p){const kitChange=S.mode==="EXTENDED"&&S.patKit[p]!==S.kit;S.pat=p;S.queued=null;if(kitChange){S.kit=S.patKit[p];setKitState("clean");toast("Loaded "+kitName(S.kit)+" with "+patName(p)+" (example data).")}render();const pf=document.querySelector(".patf");if(pf){pf.classList.remove("flash");void pf.offsetWidth;pf.classList.add("flash")}}
-function saveKit(){setKitState("clean");tx();toast("Saved "+kitName(S.kit)+" on the machine.")}
+function applyPattern(p){const kitChange=S.mode==="EXTENDED"&&S.patKit[p]!==S.kit;
+ if(p!==S.pat){S.patData[S.pat]=capturePat();S.patInfo[S.pat]={has:hasPat(S.pat),len:S.len};S.pat=p;applyPat(S.patData[p]||emptyPat(S.patInfo[p].len))}
+ S.queued=null;if(kitChange){S.kit=S.patKit[p];applyKit(kitData(S.kit));S.workName=S.kits[S.kit].name;setKitState("clean");toast("Loaded "+kitName(S.kit)+" with "+patName(p)+".")}render();H.last=snap();const pf=document.querySelector(".patf");if(pf){pf.classList.remove("flash");void pf.offsetWidth;pf.classList.add("flash")}const ls=document.querySelector("#libpop .ps.cur");if(ls){ls.classList.remove("flash");void ls.offsetWidth;ls.classList.add("flash")}}
+function saveKit(){S.kits[S.kit]={name:S.workName,empty:false,data:captureKit()};setKitState("clean");tx();toast("Saved "+kitName(S.kit)+" on the machine.")}
 function ask(html,btns){const d=$("#dlg");d.innerHTML=`<div class="dlgbox" role="alertdialog" aria-modal="true"><p>${html}</p><div class="btnrow">${btns.map(([t,c],i)=>`<button class="${c}" data-dlg="${i}">${t}</button>`).join("")}</div></div>`;d.hidden=false;d._btns=btns;d.querySelector("button")?.focus()}
 
 
@@ -1214,6 +1301,7 @@ function renderTop(){
  const n=S.locks.size,m=$("#meter");$("#lockn").textContent=String(n).padStart(2,"0")+"/64";m.className="f meter"+(n>=64?" full":n>=52?" warn":"");
  $("#bpm").textContent=S.bpm.toFixed(1);$("#pat").textContent=patName(S.queued??S.pat);$("#pat").parentElement.classList.toggle("queued",S.queued!=null);$("#kitname").textContent=kitName(S.kit);$("#undo").disabled=!H.undo.length;$("#redo").disabled=!H.redo.length;$("#undon").textContent=H.undo.length||"";$("#redon").textContent=H.redo.length||"";
  $("#play").setAttribute("aria-pressed",S.playing);$("#playico").textContent=S.playing?"■":"▶";$("#play").setAttribute("aria-label",S.playing?"Stop":"Play");$("#rec").setAttribute("aria-pressed",!!S.rec);$("#recled").classList.toggle("on",!!S.rec);
+ if(LIB.open)drawLib();
 }
 
 /* ===== Track header (one component, used by rail and grid) ===== */
@@ -1227,10 +1315,11 @@ S.page=0;S.viewAll=false;S.follow=false;
 function pages16(){return S.len/16}
 function vis(){if(S.viewAll)return[0,S.len];S.page=Math.min(S.page,pages16()-1);return[S.page*16,S.page*16+16]}
 function steps(){const[a,b]=vis();return Array.from({length:b-a},(_,k)=>a+k)}
-function cols(){return`repeat(${steps().length},minmax(18px,1fr))`}
+function cols(){return S.viewAll?`repeat(${steps().length},minmax(0,1fr))`:`repeat(${steps().length},minmax(18px,1fr))`}
 function stepCls(i,s){const t=S.tracks[i],c=["st"];if(s%4===0)c.push("q");if(s%16===0&&s!==vis()[0])c.push("gap");if(t.trigs[s]){c.push("on");if(t.acc.has(s))c.push("acc");if(t.slide.has(s))c.push("sl");if(stepLocked(i,s))c.push("lk")}if(S.playing&&s===S.step)c.push("ph");return c.join(" ")}
 function pageCtl(){return`<span class="pagectl rh seqpage"><button class="pgkey" id="pgkey" ${pages16()<2?"disabled":""} title="Next page. Shift-click = previous. Keys [ and ].">Page</button><span class="pleds" aria-hidden="true">${[0,1,2,3].map(k=>`<span class="pl ${k<pages16()?"":"na"} ${!S.viewAll&&k===S.page?"cur":""}" data-plp="${k}"><i class="led"></i></span>`).join("")}</span><button class="ptog ${S.viewAll?"on":""}" id="pgall" aria-pressed="${S.viewAll}" title="Show all steps"><i class="led"></i>All</button><button class="ptog ${S.follow?"on":""}" id="pgfollow" aria-pressed="${S.follow}" title="Page follows the play position"><i class="led"></i>Fol</button></span>`}
 function renderSeq(){
+ document.documentElement.classList.toggle("viewall",!!S.viewAll);
  const L=S.len;
  let h=`<div class="panel ${S.mode==="CLASSIC"?"classic":""}" id="seqp">${pageCtl()}<div class="scroll" id="seqscroll"><div class="seq" id="seq">
   <div class="r" style="grid-template-columns:${cols()}">${steps().map(s=>`<div class="rul ${s%16===0&&s!==vis()[0]?"gap":""}">${s%4===0?s+1:""}</div>`).join("")}</div>`;
@@ -1328,8 +1417,8 @@ function renderMix(){
 S.song=[{pat:0,rep:1},{pat:0,rep:2},{pat:1,rep:4,mutes:[8,9]},{pat:2,rep:2,ofs:16,len:16},{pat:1,rep:4},{pat:3,rep:1,bpm:126,mutes:[4,10]},{type:"loop",to:2,count:2},{type:"end"}];
 S.songSel=2;S.bank=0;S.songTick=0;S.songZoom="fit";
 const patName=p=>"ABCDEFGH"[p>>4]+String((p&15)+1).padStart(2,"0");
-function patLen(p){return p===S.pat?S.len:[32,32,16,64,32,16,48,32][p%8]}
-const hasPat=p=>p<12||p===S.pat;
+function patLen(p){return p===S.pat?S.len:S.patInfo[p].len}
+const hasPat=p=>p===S.pat?S.patInfo[p].has||S.tracks.some(t=>t.trigs.some(Boolean)):S.patInfo[p].has;
 const rowLen=r=>r.len??(patLen(r.pat)-(r.ofs||0));
 function songSteps(){let n=0;S.song.forEach(r=>{if(!r.type)n+=rowLen(r)*r.rep});S.song.forEach((r,i)=>{if(r.type==="loop"&&r.count!==Infinity){let seg=0;for(let k=r.to;k<i;k++){const q=S.song[k];if(!q.type)seg+=rowLen(q)*q.rep}n+=seg*(r.count-1)}});return n}
 function songTime(){const st=songSteps(),sec=st*60/S.bpm/4;return`${Math.floor(sec/60)}:${String(Math.round(sec%60)).padStart(2,"0")}`}
@@ -1684,9 +1773,10 @@ document.addEventListener("pointerup",()=>{if(knobDrag){const k=knobDrag;knobDra
 /* ===== Undo / redo: plain snapshots of everything the user edits ===== */
 const H={undo:[],redo:[],last:null};
 function snap(){return JSON.stringify({tracks:S.tracks.map(t=>({...t,acc:[...t.acc],slide:[...t.slide]})),locks:[...S.locks].map(([k,m])=>[k,[...m]]),song:S.song,mfx:S.mfx,links:S.ctl.links,
- len:S.len,mult:S.mult,swing:S.swing,accAmt:S.accAmt,mode:S.mode,kitState:S.kitState},(k,v)=>v===Infinity?"∞":v)}
+ len:S.len,mult:S.mult,swing:S.swing,accAmt:S.accAmt,mode:S.mode,kitState:S.kitState,pat:S.pat,kit:S.kit,workName:S.workName,kits:S.kits,patKit:S.patKit,patInfo:S.patInfo,patData:S.patData},(k,v)=>v===Infinity?"∞":v)}
 function restore(str){const o=JSON.parse(str,(k,v)=>v==="∞"?Infinity:v);S.tracks=o.tracks.map(t=>({...t,acc:new Set(t.acc),slide:new Set(t.slide)}));S.locks=new Map(o.locks.map(([k,m])=>[k,new Map(m)]));
- S.song=o.song;S.mfx=o.mfx;S.ctl.links=o.links;S.len=o.len;S.mult=o.mult;S.swing=o.swing;S.accAmt=o.accAmt;S.mode=o.mode;setKitState(o.kitState)}
+ S.song=o.song;S.mfx=o.mfx;S.ctl.links=o.links;S.len=o.len;S.mult=o.mult;S.swing=o.swing;S.accAmt=o.accAmt;S.mode=o.mode;
+ S.pat=o.pat;S.queued=null;S.kit=o.kit;S.workName=o.workName;S.kits=o.kits;S.patKit=o.patKit;S.patInfo=o.patInfo;S.patData=o.patData;setKitState(o.kitState)}
 function commit(){const cur=snap();if(H.last==null){H.last=cur;return}if(cur!==H.last){H.undo.push(H.last);if(H.undo.length>200)H.undo.shift();H.redo=[];H.last=cur;renderTop()}}
 function undo(){if(!H.undo.length){toast("Nothing to undo.");return}const cur=snap();H.redo.push(cur);const prev=H.undo.pop();restore(prev);H.last=prev;tx();render();toast("Undo")}
 function redo(){if(!H.redo.length){toast("Nothing to redo.");return}const cur=snap();H.undo.push(cur);const nx=H.redo.pop();restore(nx);H.last=nx;tx();render();toast("Redo")}
@@ -1808,7 +1898,8 @@ document.addEventListener("click",e=>{
  if(e.target.closest("#undo")){undo();return}
  if(e.target.closest("#redo")){redo();return}
  const sc=e.target.closest("[data-sec]");if(sc){secAction(sc.dataset.sec);return}
- if(e.target.closest("#kitf")){ask(`<b>${kitName(S.kit)}</b> is ${S.kitState==="edited"?"<b>edited</b>: the changes are not saved on the machine. They are kept in the DAW project.":"saved on the machine."}`,[["Save kit","cream",saveKit],["Reload kit (discard edits)","danger",()=>{setKitState("clean");toast("Reloaded "+kitName(S.kit)+" from the machine (example data).")}],["Close","",()=>{}]]);return}
+ if(e.target.closest("#kitf")){toggleLib("kit");return}
+ if(e.target.closest("#pat")){toggleLib("pat");return}
  if(e.target.closest("[data-reloadsong]")){S.songReload=false;if(S.playing){togglePlay();togglePlay()}toast("Song reloaded: stop, load, play.");render();return}
  if(e.target.closest("#learnkey")){toggleLearn();return}
  if(S.ws==="control"){const C=S.ctl;
@@ -1888,6 +1979,155 @@ function render(){closePicker();closeK();const sl=$("#seqscroll")?.scrollLeft||0
  ({seq:renderSeq,sound:renderSound,mix:renderMix,song:renderSong,sampler:renderSampler,control:renderControl})[S.ws]();const sc=$("#seqscroll");if(sc){sc.scrollLeft=sl;$("#lanescroll").scrollLeft=sl}enhanceSelects(document.getElementById("main"));enhanceSelects(document.getElementById("subbar"));if(S.playing)restartClock()}
 function setPlate(v){S.plate=v;document.documentElement.dataset.plate=v;try{localStorage.setItem("mddesk.plate",v)}catch(_){}renderTop();redraw()}
 (()=>{let v=null;try{v=localStorage.getItem("mddesk.plate")}catch(_){}if(!v){const dt=document.documentElement.dataset.theme;v=dt==="dark"||(dt!=="light"&&matchMedia("(prefers-color-scheme: dark)").matches)?"mk2":"mk1"}S.plate=v;document.documentElement.dataset.plate=v})();
+/* ===== v50: Kit library + Pattern chooser. One big panel over the workspace; you stay where you are ===== */
+var LIB={open:null,sel:0,renaming:null,drag:null,sig:""};
+const clone=o=>JSON.parse(JSON.stringify(o));
+const nn=k=>String(k+1).padStart(2,"0");
+const escH=s=>String(s).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+/* Name characters: SysEx 0x55 takes 16 ASCII bytes (7-bit). Which of them the MD font draws is not checked, so the mockup keeps to a safe set. */
+const KBAD=/[^A-Z0-9 \-.\/+&!?'#*():]/g;
+/* kit content = machines, parameters, effects, routing, LFOs, groups, master effects, name (manual p.14) */
+function captureKit(){return clone({tracks:S.tracks.map(t=>({m:t.m,name:t.name,fam:t.fam,syn:t.syn,fx:t.fx,rt:t.rt,lfo:t.lfo,muteGroup:t.muteGroup,trigGroup:t.trigGroup,out:t.out||"MAIN"})),mfx:S.mfx})}
+const FACTORY=captureKit();
+function setMach(d,i,m){const pg=pages(m),t=d.tracks[i];t.m=m;t.fam=famOf(m);t.name=nameOf(m);t.syn=mk(pg.s,true);t.fx=mk(pg.e);t.rt=mk(pg.r)}
+function factoryKit(k){const d=clone(FACTORY);if(!k)return d;
+ if(k%3===1){setMach(d,0,"EFM-BD");setMach(d,1,"EFM-SD")}else if(k%3===2){setMach(d,0,"E12-BD");setMach(d,1,"E12-SD")}
+ d.tracks.forEach((t,i)=>Object.keys(t.syn).forEach((p,j)=>t.syn[p]=clamp(t.syn[p]+(k*37+i*11+j*5)%31-15)));d.mfx.echo.v.FB=clamp(48+k*3);d.mfx.gate.v.DEC=clamp(60+k*4);return d}
+function clearedKit(){const d=clone(FACTORY);KIT.forEach(([_,m],i)=>{setMach(d,i,m);d.tracks[i].lfo={TRCK:i,PARAM:"PTCH",SHP1:0,SHP2:1,UPDTE:"TRIG",SPD:64,DEPTH:0,SHMIX:30};d.tracks[i].muteGroup=null;d.tracks[i].trigGroup=null;d.tracks[i].out="MAIN"});return d}
+function kitData(k){const s=S.kits[k];return s.data?clone(s.data):s.empty?clearedKit():factoryKit(k)}
+function pruneLocks(){for(const k of [...S.locks.keys()]){const[t,p]=k.split(":");if(!params(+t).includes(p))S.locks.delete(k)}if(!params(S.sel).includes(S.lane))S.lane=params(S.sel).includes("FLTF")?"FLTF":params(S.sel)[0]}
+function applyKit(d){d=clone(d);S.tracks.forEach((t,i)=>Object.assign(t,d.tracks[i]));S.mfx=d.mfx;pruneLocks()}
+/* pattern content = trigs, accents, slides, locks, length (+ kit link) */
+function capturePat(){return{len:S.len,tr:S.tracks.map(t=>({g:t.trigs.map(b=>b?1:0).join(""),acc:[...t.acc],slide:[...t.slide]})),locks:[...S.locks].map(([k,m])=>[k,[...m]])}}
+function emptyPat(len){return{len,tr:S.tracks.map(()=>({g:"0".repeat(64),acc:[],slide:[]})),locks:[]}}
+function applyPat(d){S.len=d.len;d.tr.forEach((x,i)=>{const t=S.tracks[i];t.trigs=[...x.g].map(c=>c==="1");t.acc=new Set(x.acc);t.slide=new Set(x.slide)});S.locks=new Map(d.locks.map(([k,m])=>[k,new Map(m)]));pruneLocks()}
+for(let p=1;p<12;p++){const r=(p*2)%32;S.patData[p]={len:S.patInfo[p].len,tr:SEED.map((g,i)=>{const s=(g.slice(r)+g.slice(0,r));return{g:(i+p)%4===3?"0".repeat(64):s+s,acc:i<2?[12,28]:[],slide:[]}}),locks:[]}}
+const linked=k=>S.mode==="EXTENDED"?Array.from({length:128},(_,p)=>p).filter(p=>S.patKit[p]===k&&hasPat(p)):[];
+const kDisp=k=>k===S.kit?S.workName:S.kits[k].name;
+
+/* firmware honesty: what each action is on the real machine */
+const KTIP={
+ load:"LOAD KIT (SysEx 0x58). Unsaved edits are discarded; the machine keeps them in its UNDO KIT (the first entry of its kit list). EXTENDED: the current pattern is relinked to this kit. Whether the firmware relinks on a manual load is not tested",
+ save:"SAVE KIT to the current slot (SysEx 0x59). The overwritten slot goes to the machine's UNDO KIT",
+ saveas:"SAVE KIT n to the selected slot (SysEx 0x59). On the machine SAVE KIT n also makes n the current kit (P1), so the editor switches to it. The old slot keeps what it had",
+ copy:"Reads the slot with a kit dump request (0x53). The current kit is read from the working kit in memory (P3), so unsaved edits come along. On other firmware that needs SAVE KIT first",
+ paste:"Kit dump (0x52) into the slot. A dump only writes the stored slot, so pasting into the current kit also sends LOAD KIT (0x58) to be heard (P1)",
+ clear:"There is no SysEx CLEAR KIT. The editor sends a kit dump with init values. What the machine's own CLEAR KIT leaves in a slot (machines, name) is not checked",
+ rename:"Current kit: SysEx 0x55 sets the working kit's name (16 ASCII bytes); SAVE stores it. Other slots: dump request, new name, dump back. Which characters the MD font draws is not checked",
+ reload:"LOAD KIT on the current slot (0x58): the edits are discarded. The machine keeps them in its UNDO KIT",
+ drag:"Drag onto another slot to copy it: dump request, then a dump into the target"};
+const PTIP={
+ go:"LOAD PATTERN (SysEx 0x57). While playing the machine switches at the pattern end. P1: its status reports the new pattern about 2 steps early and never says queued, so the editor keeps the queue itself",
+ now:"Switch now (Shift+click, Shift+Enter). Stopped: the same as a click. Playing: the machine only switches at the pattern end, so the editor would send STOP, LOAD PATTERN, PLAY (not tested)",
+ copy:"Pattern dump request (0x68). Copies notes, locks and the kit link, like the machine's COPY PATTERN",
+ paste:"Pattern dump (0x67) into the slot. Pattern dumps are live (P1). Pasting over the current pattern does not load its kit here; whether the machine does is not tested",
+ clear:"There is no SysEx CLEAR PATTERN. The editor sends an empty pattern dump. The machine's own CLEAR PATTERN may reset more (length, scale) than this does"};
+
+function kitSlot(k){const cur=k===S.kit,st=S.kits[k],empty=st.empty&&!cur,name=kDisp(k),lp=linked(k),ed=cur&&S.kitState==="edited";
+ const links=S.mode!=="EXTENDED"?"":lp.length?lp.slice(0,3).map(patName).join(" ")+(lp.length>3?" +"+(lp.length-3):""):empty?"":"no pattern";
+ const tip=`K${nn(k)} ${name||"(cleared)"}${cur?" · current kit, "+(ed?"edited: not saved on the machine":"saved"):""}${S.mode==="EXTENDED"?" · "+(lp.length?"linked to "+lp.map(patName).join(" "):"no pattern links to it (the machine marks it with a star)"):""}. ${KTIP.drag}`;
+ const nm=LIB.renaming===k?`<input class="lsin" id="lsin" maxlength="16" value="${escH(name)}" aria-label="Kit name, up to 16 characters" spellcheck="false" autocomplete="off">`:empty&&!name?"EMPTY":escH(name||"EMPTY")+(S.mode==="EXTENDED"&&!lp.length&&!empty?"*":"");
+ return`<button class="ls ks${empty?" empty":""}${cur?" cur":""}${ed?" edited":""}" data-ks="${k}" draggable="${LIB.renaming===k?"false":"true"}" aria-selected="${k===LIB.sel}" title="${escH(tip)}"><span class="lsh"><b>K${nn(k)}</b>${cur?`<em><i class="led${ed?" on":""}"></i>${ed?"edited":"saved"}</em>`:""}</span><span class="lsn">${nm}</span><span class="lsl">${links}</span></button>`}
+function drawKitLib(){const k=LIB.sel,cur=S.kit,ed=S.kitState==="edited",empty=S.kits[k].empty&&k!==cur,dis=c=>c?" disabled":"";
+ return`<div class="libhead"><span class="cap">Kit library</span><span class="lcdchip">K${nn(cur)} ${escH(S.workName||"EMPTY")} · ${ed?"edited":"saved"}</span><span class="note">${S.mode==="EXTENDED"?"EXTENDED: every pattern recalls its kit.":"CLASSIC: patterns do not recall kits."} 64 slots.</span><button class="libx" data-la="close" title="Close (Esc)">Esc</button></div>
+ <div class="libacts"><div class="grp"><span class="ilab">Current K${nn(cur)}</span><button data-la="save" title="${KTIP.save}">Save</button><button class="danger" data-la="reload"${dis(!ed)} title="${KTIP.reload}">Reload</button></div>
+  <div class="grp"><span class="ilab">Slot K${nn(k)}</span><button data-la="load"${dis(k===cur&&!ed)} title="${k===cur?"Already the current kit. Enter reloads it when it is edited. ":""}${KTIP.load} (Enter)">Load</button><button data-la="saveas"${dis(k===cur)} title="${k===cur?"This is the current slot: use Save. ":""}${KTIP.saveas}">Save as K${nn(k)}</button>
+  <button data-la="copy" title="${KTIP.copy} (Cmd+C)">Copy</button><button data-la="paste"${dis(CLIP?.type!=="kit")} title="${CLIP?.type==="kit"?"Paste K"+nn(CLIP.from)+" "+escH(CLIP.name)+". ":"Copy a kit first. "}${KTIP.paste} (Cmd+V)">Paste</button>
+  <button class="danger" data-la="clear"${dis(empty)} title="${KTIP.clear} (Delete)">Clear</button><button data-la="rename" title="${KTIP.rename} (F2 or double-click)">Rename</button></div></div>
+ <div class="libgrid kits" aria-label="64 kit slots">${Array.from({length:64},(_,i)=>kitSlot(i)).join("")}</div>
+ <div class="libfoot"><span>Arrows move · Enter loads · F2 or double-click renames · Delete clears · drag a slot onto another to copy · Cmd+Z undoes · Esc closes</span><span class="fw" title="The machine keeps one UNDO KIT as the first entry of its kit list: the kit lost to the last load or overwrite. The editor's own undo works on top of it.">The machine also keeps an UNDO KIT</span></div>`}
+function patSlot(p){const cur=p===S.pat,q=p===S.queued&&!cur,has=hasPat(p),ext=S.mode==="EXTENDED";
+ const tip=`${patName(p)} · ${has?patLen(p)+" steps"+(ext?" · kit "+kitName(S.patKit[p]):""):"empty"}${cur?" · current":""}${q?" · queued: starts at the pattern end":""}. Click queues, Shift+click switches now. Drag onto another slot to copy.`;
+ return`<button class="ls ps${has?"":" empty"}${cur?" cur":""}${q?" q":""}" data-ps="${p}" draggable="${has}" aria-selected="${p===LIB.sel}" title="${escH(tip)}"><b>${patName(p)}</b><span>${has?patLen(p)+(ext?" · K"+nn(S.patKit[p]):""):"EMPTY"}</span></button>`}
+function drawPatLib(){const p=LIB.sel,cur=S.pat,dis=c=>c?" disabled":"",ext=S.mode==="EXTENDED";
+ const rows=[..."ABCDEFGH"].map((b,i)=>`<button class="bank lbank${i===cur>>4?" on":""}" data-lb="${i}" title="Bank ${b} (key ${b})"><i class="led"></i>${b}</button>`+Array.from({length:16},(_,j)=>patSlot(i*16+j)).join("")).join("");
+ return`<div class="libhead"><span class="cap">Patterns</span><span class="lcdchip">${patName(cur)} · ${S.len} steps${ext?" · K"+nn(S.patKit[cur]):""}${S.queued!=null&&S.queued!==cur?" → "+patName(S.queued):""}</span><span class="note">8 banks × 16. ${S.playing?"Playing: a new pattern starts at the pattern end.":"Stopped: a click switches at once."}</span><button class="libx" data-la="close" title="Close (Esc)">Esc</button></div>
+ <div class="libacts"><div class="grp"><span class="ilab">Slot ${patName(p)}</span><button data-la="go"${dis(p===cur&&S.queued==null)} title="${PTIP.go} (Enter)">${S.playing?"Queue":"Go"}</button><button data-la="now"${dis(p===cur&&S.queued==null)} title="${PTIP.now}">Now</button>
+  <button data-la="copy" title="${PTIP.copy} (Cmd+C)">Copy</button><button data-la="paste"${dis(CLIP?.type!=="pat")} title="${CLIP?.type==="pat"?"Paste "+patName(CLIP.from)+". ":"Copy a pattern first. "}${PTIP.paste} (Cmd+V)">Paste</button><button class="danger" data-la="clear"${dis(!hasPat(p))} title="${PTIP.clear} (Delete)">Clear</button></div></div>
+ <div class="libgrid pats" aria-label="128 patterns">${rows}</div>
+ <div class="libfoot"><span>Arrows move · A–H jump to a bank · Enter queues · Shift+Enter switches now · Delete clears · drag a slot onto another to copy · Esc closes</span><span class="fw" title="${PTIP.go}">Queued = blinking</span></div>`}
+function libSig(){return[LIB.open,LIB.sel,LIB.renaming,S.pat,S.queued,S.kit,S.kitState,S.workName,S.mode,S.playing,S.len,CLIP?.type,CLIP?.from,hasPat(S.pat),S.patKit.join(),S.kits.map(k=>k.name+(k.empty?0:1)).join("|"),S.patInfo.map(x=>+x.has+"."+x.len).join()].join("~")}
+function drawLib(focus){if(!LIB.open||LIB.drag)return;const sig=libSig(),pop=$("#libpop"),had=focus||pop.contains(document.activeElement);
+ if(sig===LIB.sig&&pop.firstChild){if(focus&&!pop.contains(document.activeElement))libFocus();return}LIB.sig=sig;
+ pop.innerHTML=LIB.open==="kit"?drawKitLib():drawPatLib();pop.dataset.kind=LIB.open;pop.setAttribute("aria-label",LIB.open==="kit"?"Kit library":"Pattern chooser");
+ const inp=$("#lsin");if(inp){inp.focus({preventScroll:true});inp.select();return}if(had)libFocus()}
+function libFocus(){const pop=$("#libpop"),el=pop.querySelector(".ls[aria-selected=true]");if(!el)return;el.focus({preventScroll:true});
+ if(pop.scrollHeight>pop.clientHeight){const a=el.getBoundingClientRect(),b=pop.getBoundingClientRect();if(a.top<b.top)pop.scrollTop-=b.top-a.top+8;else if(a.bottom>b.bottom)pop.scrollTop+=a.bottom-b.bottom+8}}
+function placeLib(){const pop=$("#libpop"),r=$(".lcdpanel").getBoundingClientRect(),top=Math.max(16,r.bottom+8);pop.style.top=(top+scrollY)+"px";pop.style.maxHeight=Math.max(240,innerHeight-top-12)+"px";pop.style.left=Math.max(16,(document.documentElement.clientWidth-pop.offsetWidth)/2+scrollX)+"px"}
+function openLib(kind){closePicker();closeK();if(LIB.open)closeLib(false);LIB.open=kind;LIB.sel=kind==="kit"?S.kit:(S.queued??S.pat);LIB.renaming=null;$("#libpop").hidden=false;drawLib();placeLib();libFocus();$(kind==="kit"?"#kitf":"#pat").setAttribute("aria-expanded","true")}
+function closeLib(back){if(!LIB.open)return;const k=LIB.open;LIB.open=null;LIB.sig="";LIB.renaming=null;LIB.drag=null;$("#libpop").hidden=true;const t=$(k==="kit"?"#kitf":"#pat");t.setAttribute("aria-expanded","false");if(back)t.focus()}
+function toggleLib(kind){LIB.open===kind?closeLib(false):openLib(kind)}
+addEventListener("resize",()=>{if(LIB.open)placeLib()});
+
+/* ----- kit actions (all editor state, so all undoable) ----- */
+function kitLoad(k){if(k===S.kit){if(S.kitState==="edited")kitReload();else toast(kitName(k)+" is already the current kit.");return}
+ const go=()=>{S.kit=k;applyKit(kitData(k));S.workName=S.kits[k].name;if(S.mode==="EXTENDED")S.patKit[S.pat]=k;setKitState("clean");tx();render();drawLib(true);toast("Loaded "+kitName(k)+".")};
+ if(S.kitState==="edited"){ask(`Load <b>${kitName(k)}</b>? Your edits to <b>${kitName(S.kit)}</b> are not saved on the machine and will be lost.`,[["Save kit, then load","cream",()=>{saveKit();go()}],["Load and lose edits","danger",go],["Cancel","",()=>drawLib(true)]]);return}go()}
+function kitSave(){saveKit();drawLib(true)}
+function kitSaveAs(k){if(k===S.kit){kitSave();return}
+ const go=()=>{const from=S.kit;S.kits[k]={name:S.workName,empty:false,data:captureKit()};S.kit=k;if(S.mode==="EXTENDED")S.patKit[S.pat]=k;setKitState("clean");tx();render();drawLib(true);toast("Saved as "+kitName(k)+". It is now the current kit; K"+nn(from)+" keeps its saved version.")};
+ if(!S.kits[k].empty){ask(`Overwrite <b>${kitName(k)}</b> with the current kit <b>${kitName(S.kit)}</b>? The machine keeps the overwritten kit in its UNDO KIT.`,[["Overwrite","danger",go],["Cancel","",()=>drawLib(true)]]);return}go()}
+function kitSrc(k){return k===S.kit?{from:k,name:S.workName,empty:false,data:captureKit()}:{from:k,name:S.kits[k].name,empty:S.kits[k].empty,data:S.kits[k].data?clone(S.kits[k].data):null}}
+function kitCopy(k){CLIP={type:"kit",...kitSrc(k)};drawLib(true);toast("Copied "+kitName(k)+(k===S.kit&&S.kitState==="edited"?" with its unsaved edits.":"."))}
+function kitPut(k,src,verb){if(src.from===k){toast("That is the same slot.");return}
+ const go=()=>{S.kits[k]={name:src.name,empty:src.empty,data:src.data?clone(src.data):src.empty?null:kitData(src.from)};if(k===S.kit){applyKit(kitData(k));S.workName=S.kits[k].name;setKitState("clean")}tx();render();drawLib(true);toast(verb+" K"+nn(src.from)+" into "+kitName(k)+".")};
+ const busy=!S.kits[k].empty||k===S.kit;if(busy){ask(`${verb} <b>K${nn(src.from)} ${escH(src.name||"EMPTY")}</b> over <b>${kitName(k)}</b>?${k===S.kit?" It is the current kit"+(S.kitState==="edited"?": its unsaved edits are lost.":", so it is loaded too."):""}`,[["Overwrite","danger",go],["Cancel","",()=>drawLib(true)]]);return}go()}
+function kitPaste(k){if(CLIP?.type!=="kit"){toast("Copy a kit first.");return}kitPut(k,CLIP,"Paste")}
+function kitClear(k){if(S.kits[k].empty&&k!==S.kit){toast(kitName(k)+" is already empty.");return}
+ ask(`Clear <b>${kitName(k)}</b>?${k===S.kit?" It is the current kit: the tracks go back to init values"+(S.kitState==="edited"?" and the unsaved edits are lost.":"."):""}${linked(k).length?" "+linked(k).length+" pattern(s) link to it.":""}`,[["Clear kit","danger",()=>{S.kits[k]={name:"",empty:true,data:null};if(k===S.kit){applyKit(clearedKit());S.workName="";setKitState("clean")}tx();render();drawLib(true);toast("Cleared K"+nn(k)+".")}],["Cancel","",()=>drawLib(true)]])}
+function kitReload(){if(S.kitState!=="edited"){toast(kitName(S.kit)+" matches its saved slot. Nothing to reload.");return}
+ ask(`Reload <b>${kitName(S.kit)}</b> from the machine? Your edits are lost.`,[["Reload (discard edits)","danger",()=>{applyKit(kitData(S.kit));S.workName=S.kits[S.kit].name;setKitState("clean");tx();render();drawLib(true);toast("Reloaded "+kitName(S.kit)+" from the machine.")}],["Cancel","",()=>drawLib(true)]])}
+function startRename(k){if(LIB.open!=="kit")return;LIB.sel=k;LIB.renaming=k;drawLib(true)}
+function finishRename(ok){const k=LIB.renaming;if(k==null)return;const v=($("#lsin")?.value||"").toUpperCase().replace(KBAD,"").slice(0,16).trimEnd();LIB.renaming=null;
+ if(ok&&v!==kDisp(k)){if(k===S.kit){S.workName=v;setKitState("edited");toast("Renamed the working kit. SAVE stores the name on the machine.")}else{const s=S.kits[k];if(s.empty&&!s.data)s.data=clearedKit();s.empty=false;s.name=v;tx();toast("Renamed K"+nn(k)+" on the machine.")}renderTop()}
+ drawLib(true)}
+/* ----- pattern actions ----- */
+function patSrc(p){return{from:p,has:hasPat(p),kit:S.patKit[p],data:p===S.pat?capturePat():clone(S.patData[p]||emptyPat(S.patInfo[p].len))}}
+function patCopy(p){CLIP={type:"pat",...patSrc(p)};drawLib(true);toast("Copied "+patName(p)+": notes, locks"+(S.mode==="EXTENDED"?" and its kit link.":"."))}
+function patPut(p,src,verb){if(src.from===p){toast("That is the same slot.");return}
+ const go=()=>{const d=clone(src.data);S.patData[p]=d;S.patInfo[p]={has:src.has,len:d.len};if(S.mode==="EXTENDED")S.patKit[p]=src.kit;if(p===S.pat)applyPat(d);tx();render();drawLib(true);toast(verb+" "+patName(src.from)+" into "+patName(p)+".")};
+ if(hasPat(p)){ask(`${verb} <b>${patName(src.from)}</b> over <b>${patName(p)}</b>? Its notes and locks are replaced.`,[["Overwrite","danger",go],["Cancel","",()=>drawLib(true)]]);return}go()}
+function patPaste(p){if(CLIP?.type!=="pat"){toast("Copy a pattern first.");return}patPut(p,CLIP,"Paste")}
+function patClear(p){if(!hasPat(p)){toast(patName(p)+" is already empty.");return}
+ ask(`Clear <b>${patName(p)}</b>? Its notes and locks are removed.`,[["Clear pattern","danger",()=>{const e=emptyPat(patLen(p));S.patData[p]=e;S.patInfo[p]={has:false,len:e.len};if(p===S.pat)applyPat(e);tx();render();drawLib(true);toast("Cleared "+patName(p)+".")}],["Cancel","",()=>drawLib(true)]])}
+function patGo(p,now){LIB.sel=p;if(p===S.pat&&S.queued==null){drawLib(true);return}goPattern(p,now);drawLib(true)}
+function libAct(a){const k=LIB.sel,kit=LIB.open==="kit";
+ ({close:()=>closeLib(true),load:()=>kitLoad(k),save:kitSave,saveas:()=>kitSaveAs(k),reload:kitReload,rename:()=>startRename(k),
+   copy:()=>kit?kitCopy(k):patCopy(k),paste:()=>kit?kitPaste(k):patPaste(k),clear:()=>kit?kitClear(k):patClear(k),go:()=>patGo(k,false),now:()=>patGo(k,true)})[a]?.()}
+
+/* ----- mouse ----- */
+document.addEventListener("click",e=>{if(!LIB.open)return;if($("#libpop").contains(e.target)||e.target.closest?.("#dlg,#kitf,#pat,#undo,#redo"))return;closeLib(false)},true);
+document.addEventListener("click",e=>{if(!LIB.open||!$("#libpop").contains(e.target)||e.target.closest?.("#lsin"))return;
+ const a=e.target.closest("[data-la]");if(a){if(!a.disabled)libAct(a.dataset.la);return}
+ const ks=e.target.closest("[data-ks]");if(ks){const k=+ks.dataset.ks;if(LIB.renaming!=null)finishRename(true);LIB.sel=k;drawLib(true);return}
+ const ps=e.target.closest("[data-ps]");if(ps){patGo(+ps.dataset.ps,e.shiftKey);return}
+ const lb=e.target.closest("[data-lb]");if(lb){LIB.sel=+lb.dataset.lb*16+(LIB.sel&15);drawLib(true)}});
+document.addEventListener("dblclick",e=>{const ks=e.target.closest("#libpop [data-ks]");if(ks&&!e.target.closest("#lsin"))startRename(+ks.dataset.ks)});
+document.addEventListener("input",e=>{if(e.target.id!=="lsin")return;const i=e.target,c=i.selectionStart,v=i.value.toUpperCase().replace(KBAD,"").slice(0,16);if(v!==i.value){i.value=v;i.setSelectionRange(Math.min(c,v.length),Math.min(c,v.length))}});
+document.addEventListener("focusout",e=>{if(e.target.id==="lsin"&&LIB.renaming!=null)setTimeout(()=>{if(document.activeElement?.id!=="lsin")finishRename(true)},0)});
+document.addEventListener("dragstart",e=>{const s=e.target.closest?.("#libpop .ls[data-ks],#libpop .ls[data-ps]");if(!s)return;LIB.drag={kit:"ks" in s.dataset,v:+(s.dataset.ks??s.dataset.ps)};s.classList.add("dragging");e.dataTransfer.effectAllowed="copy";try{e.dataTransfer.setData("text/plain",String(LIB.drag.v))}catch(_){}});
+const libTarget=el=>el.closest?.(LIB.drag?.kit?"#libpop [data-ks]":"#libpop [data-ps]");
+document.addEventListener("dragover",e=>{if(!LIB.drag)return;const t=libTarget(e.target);$$("#libpop .ls.over").forEach(x=>x!==t&&x.classList.remove("over"));if(!t)return;e.preventDefault();e.dataTransfer.dropEffect="copy";t.classList.add("over")});
+document.addEventListener("drop",e=>{if(!LIB.drag)return;const t=libTarget(e.target),d=LIB.drag;LIB.drag=null;if(!t)return;e.preventDefault();const to=+(t.dataset.ks??t.dataset.ps);LIB.sel=to;
+ if(d.kit)kitPut(to,kitSrc(d.v),"Copy");else patPut(to,patSrc(d.v),"Copy");drawLib(true)});
+document.addEventListener("dragend",()=>{if(!LIB.drag&&!$$("#libpop .dragging").length)return;LIB.drag=null;drawLib(true)});
+
+/* ----- keyboard (capture, so the panel owns its keys while it is open) ----- */
+document.addEventListener("keydown",e=>{
+ if(!LIB.open){if((e.key==="Enter"||e.key===" ")&&(e.target.id==="kitf"||e.target.id==="pat")){e.preventDefault();e.stopImmediatePropagation();openLib(e.target.id==="kitf"?"kit":"pat")}return}
+ if(!$("#dlg").hidden)return;
+ if(e.target.id==="lsin"){if(e.key==="Enter"||e.key==="Escape"){e.preventDefault();finishRename(e.key==="Enter")}e.stopImmediatePropagation();return}
+ const mod=e.metaKey||e.ctrlKey,kit=LIB.open==="kit",n=kit?64:128,cols=kit?8:16,key=e.key;let h=true;
+ if(key==="Escape")closeLib(true);
+ else if(!mod&&!e.altKey&&/^Arrow/.test(key)){LIB.sel=(LIB.sel+{ArrowLeft:-1,ArrowRight:1,ArrowUp:-cols,ArrowDown:cols}[key]+n)%n;drawLib(true)}
+ else if(key==="Enter"){if(kit)kitLoad(LIB.sel);else patGo(LIB.sel,e.shiftKey||mod)}
+ else if(key==="F2"&&kit)startRename(LIB.sel);
+ else if(key==="Delete"||key==="Backspace")(kit?kitClear:patClear)(LIB.sel);
+ else if(mod&&(key==="c"||key==="C"))(kit?kitCopy:patCopy)(LIB.sel);
+ else if(mod&&(key==="v"||key==="V"))(kit?kitPaste:patPaste)(LIB.sel);
+ else if(!kit&&!mod&&!e.altKey&&/^[a-h]$/i.test(key)){LIB.sel="abcdefgh".indexOf(key.toLowerCase())*16+(LIB.sel&15);drawLib(true)}
+ else h=false;
+ if(h){e.preventDefault();e.stopImmediatePropagation()}},true);
 document.fonts&&document.fonts.ready.then(()=>redraw());
 document.addEventListener("keydown",e=>{const mod=e.metaKey||e.ctrlKey;const inField=e.target.closest?.("input,select,textarea");
  if(!$("#dlg").hidden&&e.key==="Escape"){$("#dlg").hidden=true;return}
@@ -1906,4 +2146,54 @@ document.addEventListener("keydown",e=>{const mod=e.metaKey||e.ctrlKey;const inF
  if((e.key==="["||e.key==="]")&&S.ws==="seq"&&pages16()>1){const n=pages16();S.viewAll=false;S.page=(S.page+(e.key==="]"?1:-1)+n)%n;render()}});
 new ResizeObserver(()=>redraw()).observe(document.body);
 render();H.last=snap();startEngine("emu");
+
+/* ===== v52 (P4): MUTE window, pattern chain, the firmware LCD while it boots ===== */
+/* Mutes (manual p.44) live on the track keys: the rail M keys and the Mix strips, one mask (the machine's
+   pattern mutes). A click mutes or unmutes at once. Shift held = the machine's FUNCTION in its MUTE window:
+   clicks only prepare ("+" will unmute, "X" will mute, blinking) and all apply when Shift is let go.
+   Option+1-8 and Option+Q-I toggle tracks 1-16 in any workspace (1-6 pick workspaces, R records); where no
+   track keys are shown, LCD line 2 says what changed. Muted tracks stay muted when the pattern changes. */
+var PREP=new Map();
+function showPrep(){$$(".ms.m[data-mute]").forEach(b=>{const i=+b.dataset.mute,p=PREP.get(i);b.classList.toggle("prep",p!=null);if(p!=null)b.dataset.prep=p?"X":"+";else delete b.dataset.prep})}
+function applyPrep(){if(!PREP.size)return;const ch=[...PREP];for(const[i,m]of ch)S.tracks[i].mute=m;PREP.clear();refreshAudible();showPrep();lcdSay(ch)}
+function lcdSay(ch){if(S.ws==="seq"||S.ws==="sound"||S.ws==="mix")return;const on=ch.filter(([,m])=>m).map(([i])=>i+1),off=ch.filter(([,m])=>!m).map(([i])=>i+1);
+ const t=(on.length?"MUTE "+on.join(" "):"")+(on.length&&off.length?" · ":"")+(off.length?"UNMUTE "+off.join(" "):"");const l=$("#lcd2");l.innerHTML=`<b class="lcdmsg">${t}</b>`;clearTimeout(lcdSay.t);lcdSay.t=setTimeout(renderSub,1600)}
+document.addEventListener("click",e=>{const b=e.target.closest(".ms.m[data-mute]");if(!b||!e.shiftKey)return;e.stopImmediatePropagation();e.preventDefault();const i=+b.dataset.mute;if(PREP.has(i))PREP.delete(i);else PREP.set(i,!S.tracks[i].mute);showPrep()},true);
+document.addEventListener("keyup",e=>{if(e.key==="Shift")applyPrep()});
+const MKEYS=["Digit1","Digit2","Digit3","Digit4","Digit5","Digit6","Digit7","Digit8","KeyQ","KeyW","KeyE","KeyR","KeyT","KeyY","KeyU","KeyI"];
+document.addEventListener("keydown",e=>{if(!e.altKey||e.metaKey||e.ctrlKey||e.target.closest?.("input,select,textarea"))return;const i=MKEYS.indexOf(e.code);if(i<0)return;e.preventDefault();e.stopImmediatePropagation();
+ if(e.shiftKey){if(PREP.has(i))PREP.delete(i);else PREP.set(i,!S.tracks[i].mute);showPrep();return}
+ S.tracks[i].mute=!S.tracks[i].mute;refreshAudible();lcdSay([[i,S.tracks[i].mute]])},true);
+const refreshAudible0=refreshAudible;refreshAudible=function(){refreshAudible0();showPrep()};
+const renderP0=render;render=function(){renderP0();showPrep()};
+/* Pattern chain (manual p.37): hold a BANK key, press the TRIG keys in play order. One bank only, each
+   pattern once, and the chain loops. Picking a pattern (LOAD PATTERN) or a single TRIG ends it; editing
+   the chained patterns does not. STOP then PLAY starts at the cued pattern. Built in the Song workspace. */
+S.chain={active:false,list:[],pos:0,draft:[]};
+function chainCard(){const c=S.chain,b=S.bank,bn="ABCDEFGH"[b];
+ const pads=Array.from({length:16},(_,k)=>{const p=b*16+k,n=c.draft.indexOf(p);return`<button class="chk${hasPat(p)?"":" empty"}${n>=0?" in":""}" data-chainpad="${p}" title="${patName(p)}${n>=0?": number "+(n+1)+" in the chain. Click removes it.":". Click adds it to the chain."}">${patName(p)}<small>${hasPat(p)?patLen(p):"empty"}</small>${n>=0?`<em>${n+1}</em>`:""}</button>`}).join("");
+ const live=c.active?c.list.map((p,i)=>`<span class="lcdchip${p===S.pat?" now":""}${p===S.queued?" nx":""}">${patName(p)}</span>`).join("<i>»</i>")+"<i>↺</i>":`<span class="note">No chain. The machine plays ${patName(S.pat)} and stays on it.</span>`;
+ return`<section class="card"><header><h3>Chain</h3><span>bank ${bn} · loops · BANK + TRIGs on the machine</span></header>
+  <div class="chainp">${pads}</div>
+  <div class="irow"><span class="ilab">Plays</span><div class="chainrow">${live}</div></div>
+  <div class="irow"><span class="ilab"></span><span class="chainacts"><button class="cream" data-chain="send"${c.draft.length<2?" disabled":""} title="Hold BANK ${bn}, press the TRIG keys in this order. ${S.playing?"Starts at the pattern end.":"PLAY starts at the first one."}">Chain ${c.draft.length?c.draft.length:""}</button><button data-chain="undo"${c.draft.length?"":" disabled"}>Back</button><button class="danger" data-chain="clear"${c.active?"":" disabled"} title="LOAD PATTERN of the current pattern: the machine's way to end a chain">Clear</button></span>
+  <span class="note">One bank, each pattern once. Picking a pattern ends the chain; editing its patterns does not.</span></div></section>`}
+function chainAct(a){const c=S.chain;
+ if(a==="send"){if(c.draft.length<2)return;c.list=[...c.draft];c.active=true;c.pos=0;S.queued=c.list[0];if(!S.playing){applyPattern(c.list[0]);c.pos=1;S.queued=c.list[1%c.list.length]}toast("Chained "+c.list.map(patName).join(" » ")+", looping.");render();return}
+ if(a==="undo"){c.draft.pop();render();return}
+ if(a==="clear"){c.active=false;c.list=[];S.queued=null;toast("Chain cleared: "+patName(S.pat)+" plays on.");render()}}
+document.addEventListener("click",e=>{const p=e.target.closest("[data-chainpad]");if(p){const c=S.chain,n=+p.dataset.chainpad,i=c.draft.indexOf(n);if(i>=0)c.draft.splice(i,1);else if(c.draft.length<16)c.draft.push(n);render();return}
+ const a=e.target.closest("[data-chain]");if(a&&!a.disabled)chainAct(a.dataset.chain)});
+/* At the pattern end the chain cues its next pattern (the machine does this itself). */
+const chainTick0=tick;tick=function(){const wrap=(S.step+1)%S.len===0;chainTick0();if(wrap&&S.chain.active&&S.queued==null){const c=S.chain,i=c.list.indexOf(S.pat);S.queued=c.list[(i+1)%c.list.length];renderTop();if(S.ws==="song")render()}};
+/* Picking a pattern while chained ends the chain, as on the machine: ask first. */
+const chainGo0=goPattern;goPattern=function(p,now){if(S.chain.active){ask(`Picking <b>${patName((p+128)%128)}</b> ends the chain <b>${S.chain.list.map(patName).join(" » ")}</b>, as on the machine.`,[["Pick it, end the chain","danger",()=>{S.chain.active=false;S.chain.list=[];chainGo0(p,now)}],["Cancel","",()=>{}]]);return}chainGo0(p,now)};
+const chainSong0=renderSong;renderSong=function(){chainSong0();const left=document.querySelector(".songleft");if(left)left.insertAdjacentHTML("beforeend",chainCard())};
+/* Boot: while the engine says BOOTING OS the LCD shows the machine's own screen, start-up animation and
+   all (keys are ignored until it is over); then it fades to the editor's fields. The size stays. */
+function drawFwLcd(bits){const c=$("#lcdfwc"),x=c.getContext("2d"),cs=getComputedStyle(document.documentElement);x.fillStyle=cs.getPropertyValue("--lcd");x.fillRect(0,0,128,64);x.fillStyle=cs.getPropertyValue("--ink");
+ for(let y=0;y<64;y++)for(let i=0;i<128;i++)if(bits(i,y))x.fillRect(i,y,1,1)}
+function fwBootDemo(on){const p=$(".lcdpanel");clearInterval(fwBootDemo.t);if(!on){p.classList.remove("fwboot");p.classList.add("fwfade");setTimeout(()=>p.classList.remove("fwfade"),700);return}
+ p.classList.add("fwboot");let f=0;fwBootDemo.t=setInterval(()=>{f++;const w=Math.min(128,f*6);drawFwLcd((i,y)=>(y>18&&y<30&&i<w&&(i*7+y*3+f)%11<6)||(y>=44&&y<=46&&i>=48&&i<48+Math.min(32,f)))},100)}
+const setEng0=setEng;setEng=function(st){setEng0(st);const was=setEng.last;setEng.last=st;if(st==="boot")fwBootDemo(true);else if(was==="boot")fwBootDemo(false)};
 </script>

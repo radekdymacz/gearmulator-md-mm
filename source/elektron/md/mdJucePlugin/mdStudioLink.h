@@ -83,6 +83,7 @@ namespace mdJucePlugin
 		std::vector<baseLib::EventListener<pluginLib::Parameter*>> m_paramListeners;
 		std::array<std::atomic<uint32_t>, 16> m_dirtyParams{};		// bit n = index n (0-25)
 		std::shared_ptr<const md::Device::SequencerTelemetry> m_telemetry;
+		std::shared_ptr<md::FrontPanelPublisher> m_panel;
 		double m_telemetryCheckedMs = -1e9;
 		uint32_t m_workingKitSequence = 0;
 		const void* m_workingKitSource = nullptr;

@@ -151,8 +151,10 @@ namespace mdJucePlugin
 		file.replaceWithText(bundlePage());
 		// GEARMULATOR_MDSTUDIO_SELFTEST=1: the page edits a trig and a kit value by
 		// itself and logs the round trips (the log file above).
-		const bool selfTest = juce::SystemStats::getEnvironmentVariable("GEARMULATOR_MDSTUDIO_SELFTEST", {}) == "1";
-		const auto url = selfTest ? juce::URL(file).withParameter("selftest", "1") : juce::URL(file);
+		// GEARMULATOR_MDSTUDIO_SELFTEST=p4: the P4 checks instead (mdDeskLive.js).
+		const auto selfTestKind = juce::SystemStats::getEnvironmentVariable("GEARMULATOR_MDSTUDIO_SELFTEST", {});
+		const bool selfTest = selfTestKind == "1" || selfTestKind == "p4";
+		const auto url = selfTest ? juce::URL(file).withParameter("selftest", selfTestKind) : juce::URL(file);
 		m_web->goToURL(url.toString(true));
 		log("page loading, selftest=" + juce::String(selfTest ? 1 : 0) + ", " + juce::String(file.getSize()) + " bytes");
 		startTimerHz(30);
@@ -460,7 +462,7 @@ namespace mdJucePlugin
 			}
 			m_desk->setFirmware(fw);
 		}
-		if(m_ticks % 15 == 0 && juce::SystemStats::getEnvironmentVariable("GEARMULATOR_MDSTUDIO_SELFTEST", {}) == "1")
+		if(m_ticks % 15 == 0 && juce::SystemStats::getEnvironmentVariable("GEARMULATOR_MDSTUDIO_SELFTEST", {}).isNotEmpty())
 		{
 			const auto t = m_link->readTelemetry();
 			log("telemetry: step " + juce::String(t.step) + " playing " + juce::String(t.playing ? 1 : 0) + " rec "

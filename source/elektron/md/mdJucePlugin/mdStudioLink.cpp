@@ -13,6 +13,7 @@
 
 #include "juce_events/juce_events.h"
 
+#include <algorithm>
 #include <cstdlib>
 
 namespace mdJucePlugin
@@ -163,6 +164,11 @@ namespace mdJucePlugin
 				auto* device = dynamic_cast<md::Device*>(_base);
 				return device ? device->getSequencerTelemetry() : nullptr;
 			});
+			m_panel = m_processor.getPlugin().withDeviceLocked([](synthLib::Device* _base) -> std::shared_ptr<md::FrontPanelPublisher>
+			{
+				auto* device = dynamic_cast<md::Device*>(_base);
+				return device ? device->getFrontPanelPublisher() : nullptr;
+			});
 		}
 		mdDesk::Telemetry t;
 		if(!m_telemetry)
@@ -176,6 +182,24 @@ namespace mdJucePlugin
 		t.recording = m_telemetry->recording.load(std::memory_order_relaxed) == 1;
 		t.gridEdit = m_telemetry->gridEdit.load(std::memory_order_relaxed) == 1;
 		t.knobPage = m_telemetry->knobPage.load(std::memory_order_relaxed);
+		t.mutes = m_telemetry->mutes.load(std::memory_order_relaxed);
+		const int active = m_telemetry->chainActive.load(std::memory_order_relaxed);
+		t.chainKnown = active >= 0;
+		if(t.chainKnown)
+		{
+			t.chain.active = active == 1;
+			t.chain.next = m_telemetry->chainNext.load(std::memory_order_relaxed);
+			const int length = std::min(16, m_telemetry->chainLength.load(std::memory_order_relaxed));
+			for(int i = 0; i < length; ++i)
+				t.chain.patterns.push_back(m_telemetry->chain[static_cast<size_t>(i)].load(std::memory_order_relaxed));
+		}
+		if(m_panel)
+		{
+			const auto panel = m_panel->read();
+			using L = md::FrontPanel::ModeLed;
+			if(panel.wasLedBankWritten(md::FrontPanel::LedBank::Mode))
+				t.bankGroup = panel.getModeLed(L::BankGroupEH) ? 1 : panel.getModeLed(L::BankGroupAD) ? 0 : -1;
+		}
 		return t;
 	}
 

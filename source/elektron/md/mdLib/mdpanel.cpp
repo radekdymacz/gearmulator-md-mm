@@ -126,8 +126,54 @@ namespace md
 		}
 	}
 
+	namespace
+	{
+		std::vector<PanelPacket> chainSequence(const MachineModel _model, const std::string& _spec)
+		{
+			// _spec = "<k>:<t>,<t>,..."
+			if(_model != MachineModel::Machinedrum || _spec.size() < 3 || _spec[1] != ':' || _spec[0] < '0' || _spec[0] > '3')
+				return {};
+			const auto bank = panelPacket(_model, static_cast<PanelControl>(static_cast<int>(PanelControl::BankA) + (_spec[0] - '0')));
+			if(!bank)
+				return {};
+			std::vector<int> trigs;
+			int n = -1;
+			for(size_t i = 2; i <= _spec.size(); ++i)
+			{
+				const char c = i < _spec.size() ? _spec[i] : ',';
+				if(c == ',')
+				{
+					if(n < 0 || n > 15)
+						return {};
+					trigs.push_back(n);
+					n = -1;
+				}
+				else if(c >= '0' && c <= '9')
+					n = (n < 0 ? 0 : n * 10) + (c - '0');
+				else
+					return {};
+			}
+			if(trigs.empty() || trigs.size() > 16)
+				return {};
+			std::vector<PanelPacket> states{*bank};
+			uint8_t rows[2] = {0, 0};
+			for(const int t : trigs)
+			{
+				rows[t >> 3] = static_cast<uint8_t>(rows[t >> 3] | (1u << (t & 7)));
+				states.push_back({static_cast<uint8_t>(0x20 + (t >> 3)), rows[t >> 3]});
+			}
+			for(uint8_t r = 0; r < 2; ++r)
+				if(rows[r])
+					states.push_back({static_cast<uint8_t>(0x20 + r), 0});
+			states.push_back({bank->row, 0});
+			return states;
+		}
+	}
+
 	std::vector<PanelPacket> panelKeySequence(const MachineModel _model, const std::string& _key)
 	{
+		if(_key.compare(0, 6, "chain:") == 0)
+			return chainSequence(_model, _key.substr(6));
 		std::optional<PanelControl> control;
 		if(_key == "play")
 			control = PanelControl::Play;
@@ -137,6 +183,8 @@ namespace md
 			control = PanelControl::Record;
 		else if(_key == "page")
 			control = PanelControl::SynthesisEffectsRouting;
+		else if(_key == "bankGroup")
+			control = PanelControl::BankGroup;
 		else if(_key.size() > 4 && _key.compare(0, 4, "trig") == 0)
 		{
 			int n = 0;

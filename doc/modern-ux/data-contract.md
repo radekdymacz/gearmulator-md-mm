@@ -165,6 +165,21 @@ reply for three slots). Names, memory and audio are therefore not part of the
 contract; the page shows the controls that cannot work as disabled, with the
 reason.
 
+**Chaining and mutes (P4).** `machine.desk.chain` is the firmware's own pattern
+chain, read from the MC68331 internal SRAM (`md::ChainAndMutes`: 0x1001f5c active,
+0x1001f60 next, 0x1001f64 length, 32-bit patterns from 0x1001f68). The page asks
+for one with `{"op":"chain","patterns":[...]}`; the desk checks the machine's rules
+(`mdDesk/mdDeskChain.h`: 2-16 patterns, one bank, each once) and presses the keys
+the manual describes: BANK held, the TRIG keys held one after another in play
+order (pressed and released one by one they only select), with BANK GROUP first
+for the other half of the banks. The chain loops. A LOAD PATTERN or a single TRIG
+ends it; a pattern dump into a chained pattern does not (measured). So `select`
+while a chain is active answers `{"type":"ask","ask":"breakChain","p"}` and sends
+nothing; `select` with `chainOk` (or `force`) goes ahead. `chainClear` is LOAD
+PATTERN of the current pattern. `machine.desk.mutes` is the machine's pattern mute
+mask (main RAM 0x28b34a, 16 bits big-endian, bit 0 = track 1), so mutes made in the
+machine's MUTE window or by CC 12-15 show too (`mutesSource` = `memory`).
+
 ### 4.6 `md-desk/modulators` (page -> desk, P3)
 
 App-only modulation for the Control workspace. The page owns it and sends it

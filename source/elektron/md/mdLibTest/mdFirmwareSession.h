@@ -57,7 +57,9 @@ namespace mdFirmwareSession
 	class Machine
 	{
 	public:
-		Machine(const Bytes& _rom, const std::string& _romName, const Bytes& _patchRam = {})
+		// _waitSplash false: return as soon as the firmware takes MIDI, while its
+		// start-up animation still runs (P4 boot probe).
+		Machine(const Bytes& _rom, const std::string& _romName, const Bytes& _patchRam = {}, const bool _waitSplash = true)
 			: m_hw(_rom, _romName, md::MachineModel::Machinedrum, _patchRam)
 		{
 			require(m_hw.isValid(), "firmware did not construct a valid machine");
@@ -73,7 +75,7 @@ namespace mdFirmwareSession
 				require(frames < g_rate * 60, "MD firmware boot timed out");
 			}
 			// The splash animation keeps running for ~20 s after MIDI is ready.
-			for(uint32_t i = 0; i < g_rate * 25 / g_block; ++i)
+			for(uint32_t i = 0; _waitSplash && i < g_rate * 25 / g_block; ++i)
 				m_hw.advance(g_block);
 		}
 

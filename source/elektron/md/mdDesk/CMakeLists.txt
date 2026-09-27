@@ -9,6 +9,7 @@ add_library(mdDesk STATIC)
 
 target_sources(mdDesk PRIVATE
 	mdDesk.cpp mdDesk.h
+	mdDeskChain.cpp mdDeskChain.h
 	mdDeskDelivery.cpp mdDeskDelivery.h
 	mdDeskEdit.cpp mdDeskEdit.h
 	mdDeskHistory.cpp mdDeskHistory.h

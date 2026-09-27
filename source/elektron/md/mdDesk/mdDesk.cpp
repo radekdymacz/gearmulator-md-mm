@@ -195,6 +195,8 @@ namespace mdDesk
 			handleRecord(_message);
 		else if(op == "modSet")
 			handleModulators(_message);
+		else if(op == "chain" || op == "chainClear")
+			handleChain(_message);
 		else if(op == "selectSong")
 		{
 			// P1: the Machinedrum ignores LOAD SONG while it plays.
@@ -583,6 +585,16 @@ namespace mdDesk
 			return;
 		}
 		const auto slot = static_cast<uint8_t>(*p);
+		if(!flagOf(_message, "force") && !flagOf(_message, "chainOk") && m_telemetry.chainKnown && m_telemetry.chain.active)
+		{
+			Value ask = Value::object();
+			ask.set("type", "ask");
+			ask.set("ask", "breakChain");
+			ask.set("p", *p);
+			publish(ask);
+			result(_message, {}, {});
+			return;
+		}
 		if(!flagOf(_message, "force") && m_session.selectWouldDiscardKitEdits(slot))
 		{
 			const auto& links = m_session.state().patternKits;
@@ -606,6 +618,49 @@ namespace mdDesk
 		load({DocKind::Pattern, slot}, true);
 		m_machineDirty = true;
 		result(_message, {}, {});
+	}
+
+	// Chaining as on the machine: hold BANK, press the TRIG keys (mdDeskChain.h). The chain is
+	// the firmware's; the page sees it through the telemetry. CLEAR is LOAD PATTERN of the
+	// current pattern, which is what ends a chain on the machine.
+	void Desk::handleChain(const Value& _message)
+	{
+		if(opOf(_message) == "chainClear")
+		{
+			const auto current = m_session.state().pattern;
+			if(!current)
+			{
+				result(_message, {"The current pattern is not known yet"}, {});
+				return;
+			}
+			m_session.selectPattern(*current);
+			m_machineDirty = true;
+			result(_message, {}, "Chain cleared: " + ed::mdPatternName(*current) + " plays on");
+			return;
+		}
+		std::vector<int> patterns;
+		if(const auto* list = _message.find("patterns"); list && list->isArray())
+			for(const auto& v : list->asArray())
+				patterns.push_back(v.isNumber() ? static_cast<int>(v.asNumber()) : -1);
+		auto errors = validateChain(patterns);
+		if(errors.empty() && (!m_telemetry.valid || !m_port.pressKey))
+			errors.emplace_back("Chaining is made with the machine's keys: it needs the local emulated MD OS 1.63");
+		const auto keys = errors.empty() ? chainKeys(patterns, m_telemetry.bankGroup) : std::vector<std::string>{};
+		if(errors.empty() && keys.empty())
+			errors.emplace_back("The machine's BANK GROUP (A-D / E-H) is not known yet");
+		if(!errors.empty())
+		{
+			result(_message, errors, {});
+			return;
+		}
+		bool ok = true;
+		for(const auto& k : keys)
+			ok = ok && pressKey(k);
+		m_audibleQueue.reset();
+		m_machineDirty = true;
+		result(_message, ok ? std::vector<std::string>{} : std::vector<std::string>{"The panel did not take the keys"},
+			m_telemetry.playing ? "Chained: the machine plays them in this order from the pattern end, and loops"
+			: "Chained: PLAY starts at " + ed::mdPatternName(static_cast<uint8_t>(patterns.front())) + ", then loops");
 	}
 
 	// ---- device -> desk ----
@@ -849,7 +904,11 @@ namespace mdDesk
 		const bool changed = _t.step != m_telemetry.step || _t.pattern != m_telemetry.pattern
 			|| _t.playing != m_telemetry.playing || _t.valid != m_telemetry.valid
 			|| _t.recording != m_telemetry.recording || _t.gridEdit != m_telemetry.gridEdit
-			|| _t.knobPage != m_telemetry.knobPage;
+			|| _t.knobPage != m_telemetry.knobPage
+			|| _t.mutes != m_telemetry.mutes || _t.chainKnown != m_telemetry.chainKnown || _t.chain != m_telemetry.chain
+			|| _t.bankGroup != m_telemetry.bankGroup;
+		const bool machineChanged = _t.mutes != m_telemetry.mutes
+			|| _t.chainKnown != m_telemetry.chainKnown || _t.chain != m_telemetry.chain || _t.bankGroup != m_telemetry.bankGroup;
 		const bool recordingChanged = _t.recording != m_telemetry.recording;
 		const bool patternChanged = _t.valid && _t.pattern != m_telemetry.pattern;
 		const bool wasPlaying = m_telemetry.playing;
@@ -858,6 +917,12 @@ namespace mdDesk
 		m_telemetry = _t;
 		if(!changed)
 			return;
+		if(machineChanged)
+			m_machineDirty = true;
+		// The mutes the machine plays with (RAM), whoever set them: the page, CCs, the MUTE window.
+		if(_t.mutes >= 0)
+			for(size_t t = 0; t < 16; ++t)
+				m_mutes[t] = (_t.mutes >> t) & 1;
 		if(m_audibleQueue)
 		{
 			// Status and the RAM pattern byte both switch about two steps before the
@@ -1154,6 +1219,21 @@ namespace mdDesk
 			if(m_mutes[t])
 				mutes.push(static_cast<int>(t));
 		desk.set("mutes", std::move(mutes));
+		desk.set("mutesSource", m_telemetry.mutes >= 0 ? "memory" : "tracked");
+		if(m_telemetry.chainKnown)
+		{
+			Value chain = Value::object();
+			chain.set("active", m_telemetry.chain.active);
+			chain.set("next", m_telemetry.chain.next);
+			Value list = Value::array();
+			for(const auto p : m_telemetry.chain.patterns)
+				list.push(static_cast<int>(p));
+			chain.set("patterns", std::move(list));
+			desk.set("chain", std::move(chain));
+		}
+		else
+			desk.set("chain", Value());
+		desk.set("bankGroup", m_telemetry.bankGroup);
 		doc.set("desk", std::move(desk));
 		Value m = Value::object();
 		m.set("type", "machine");

@@ -20,6 +20,7 @@
 #include "elektronData/mdWorkingKit.h"
 
 #include "mdLib/mdautomation.h"
+#include "mdLib/mdfrontpanel.h"
 #include "mdLib/mdsequencerstate.h"
 
 #include <deque>
@@ -57,8 +58,8 @@ namespace
 	class Rig
 	{
 	public:
-		explicit Rig(const Bytes& _rom, const std::string& _romName, const Bytes& _patchRam = {})
-			: m_machine(_rom, _romName, _patchRam)
+		explicit Rig(const Bytes& _rom, const std::string& _romName, const Bytes& _patchRam = {}, const bool _waitSplash = true)
+			: m_machine(_rom, _romName, _patchRam, _waitSplash)
 		{
 			mdDesk::Desk::Port port;
 			port.sendSysex = [this](const Bytes& _b) { m_out.push_back(_b); };
@@ -84,6 +85,11 @@ namespace
 				for(int i = 0; command && i < std::abs(_steps); ++i)
 					m_machine.hardware().trySendPanelEvent(*command, _steps > 0 ? 0x01 : 0xff);
 				return command.has_value();
+			};
+			port.sendMute = [this](const uint8_t _t, const bool _on)
+			{
+				m_out.push_back({static_cast<uint8_t>(0xb0 | (baseChannel() + (_t >> 2))), static_cast<uint8_t>(12 + (_t & 3)),
+					static_cast<uint8_t>(_on ? 1 : 0)});
 			};
 			port.toPage = [this](const Value& _m) { onPage(_m); };
 			port.nowMs = [this] { return ms(m_machine.now()); };
@@ -212,6 +218,32 @@ namespace
 			t.recording = m_leds.recording();
 			t.gridEdit = m_leds.gridEdit();
 			t.knobPage = m_machine.read8(md::SequencerState::g_knobPageAddress);
+			// P4, as md::Device publishes them.
+			t.mutes = (m_machine.read8(md::ChainAndMutes::g_muteAddress) << 8) | m_machine.read8(md::ChainAndMutes::g_muteAddress + 1);
+			{
+				const auto long32 = [&](const uint32_t _a)
+				{
+					return (uint32_t(m_machine.read8(_a)) << 24) | (uint32_t(m_machine.read8(_a + 1)) << 16)
+						| (uint32_t(m_machine.read8(_a + 2)) << 8) | m_machine.read8(_a + 3);
+				};
+				const auto a = md::ChainAndMutes::g_chainAddress;
+				const auto active = long32(a), next = long32(a + 4), length = long32(a + 8);
+				t.chainKnown = active <= 1 && length <= 16 && next <= 16;
+				if(t.chainKnown)
+				{
+					t.chain.active = active == 1;
+					t.chain.next = static_cast<int>(next);
+					for(uint32_t i = 0; i < length; ++i)
+						t.chain.patterns.push_back(static_cast<uint8_t>(long32(a + 12 + 4 * i) & 0x7f));
+				}
+			}
+			{
+				const auto panel = m_machine.hardware().getFrontPanelSnapshot();
+				using L = md::FrontPanel::ModeLed;
+				if(panel.wasLedBankWritten(md::FrontPanel::LedBank::Mode))
+					t.bankGroup = panel.getModeLed(L::BankGroupEH) ? 1 : panel.getModeLed(L::BankGroupAD) ? 0 : -1;
+			}
+			m_lastTelemetry = t;
 			m_desk->onTelemetry(t);
 			// The working-kit region, as md::Device publishes it: when it changed.
 			Bytes region(ed::g_mdWorkingKitRegionSize);
@@ -269,6 +301,20 @@ namespace
 		Bytes m_lastRegion;
 		md::SequencerState m_leds;
 		uint64_t m_ledsAt = 0;
+		mdDesk::Telemetry m_lastTelemetry;
+
+	public:
+		const mdDesk::Telemetry& telemetry() const { return m_lastTelemetry; }
+		std::string machineString(std::initializer_list<const char*> _path) const
+		{
+			if(!m_machineDoc)
+				return {};
+			const Value* v = &*m_machineDoc;
+			for(const auto* k : _path)
+				if(!(v = v->find(k)))
+					return {};
+			return v->isString() ? v->asString() : std::string();
+		}
 	};
 
 	bool resultOk(const Rig& _rig)
@@ -713,6 +759,155 @@ namespace
 		check(_rig.lastResult() && !_rig.lastResult()->find("ok")->asBool(), "a name longer than 4 is refused");
 	}
 
+	// P4: the mutes are the machine's (RAM 0x28b34a), whoever sets them.
+	void mutesTruth(Rig& _rig)
+	{
+		auto& m = _rig.machine();
+		std::puts("== P4 mutes: from the machine's memory");
+		const auto muted = [&](const int _t)
+		{
+			const auto* list = _rig.machineDoc() ? _rig.machineDoc()->find("desk")->find("mutes") : nullptr;
+			if(!list)
+				return false;
+			for(const auto& v : list->asArray())
+				if(static_cast<int>(v.asNumber()) == _t)
+					return true;
+			return false;
+		};
+		_rig.page(R"({"op":"mute","t":2,"on":true,"id":910})");
+		const bool landed = _rig.runUntil([&] { return muted(2) && _rig.telemetry().mutes == 0x0004; }, 1000);
+		std::printf("  machine mutes %04x, page %s\n", _rig.telemetry().mutes, muted(2) ? "muted 3" : "not muted 3");
+		check(landed, "a page mute lands in the machine's mute set");
+		check(_rig.machineString({"desk", "mutesSource"}) == "memory", "the page's mutes are read from memory");
+		// The panel's MUTE window: FUNCTION + A/E, TRIG 6.
+		m.hardware().trySendPanelEvent(0x24, 0x02); _rig.run(60);
+		m.hardware().trySendPanelEvent(0x23, 0x01); _rig.run(60);
+		m.hardware().trySendPanelEvent(0x23, 0x00); _rig.run(60);
+		m.hardware().trySendPanelEvent(0x24, 0x00); _rig.run(200);
+		m.hardware().trySendPanelEvent(0x20, 0x20); _rig.run(60);
+		m.hardware().trySendPanelEvent(0x20, 0x00); _rig.run(200);
+		m.panel(md::PanelControl::Exit);
+		check(_rig.runUntil([&] { return muted(5) && muted(2); }, 1000), "a mute made in the panel's MUTE window shows in the page");
+		_rig.page(R"({"op":"mute","t":2,"on":false,"id":911})");
+		_rig.page(R"({"op":"mute","t":5,"on":false,"id":912})");
+		check(_rig.runUntil([&] { return _rig.telemetry().mutes == 0; }, 1000), "unmuted again");
+	}
+
+	std::vector<int> chainOf(const Rig& _rig)
+	{
+		std::vector<int> v;
+		const auto& t = _rig.telemetry();
+		if(t.chainKnown && t.chain.active)
+			for(const auto p : t.chain.patterns)
+				v.push_back(p);
+		return v;
+	}
+
+	// The pattern the machine reports at each playhead wrap.
+	std::vector<int> wrapPatterns(Rig& _rig, const int _n)
+	{
+		std::vector<int> seen;
+		int last = _rig.telemetry().step;
+		for(int guard = 0; guard < 4000 && static_cast<int>(seen.size()) < _n; ++guard)
+		{
+			_rig.run(10);
+			const int s = _rig.telemetry().step;
+			if(s >= 0 && last >= 0 && s < last)
+			{
+				_rig.run(40);
+				seen.push_back(_rig.telemetry().pattern);
+			}
+			last = s;
+		}
+		return seen;
+	}
+
+	void chaining(Rig& _rig)
+	{
+		auto& m = _rig.machine();
+		std::puts("== P4 pattern chaining");
+		// Short patterns so the wraps come quickly: A02..A05 16 steps, one trig each.
+		for(uint8_t s = 1; s <= 4; ++s)
+		{
+			auto p = _rig.readPattern(s);
+			require(p.has_value(), "pattern");
+			p->length = 16;
+			m.send(ed::encodeMdPattern(*p));
+		}
+		m.send(ed::mdLoadPattern(0));
+		_rig.run(200);
+		_rig.page(R"({"op":"play","id":920})");
+		_rig.runUntil([&] { return _rig.telemetry().playing; }, 2000);
+		const auto t0 = m.now();
+		_rig.page(R"({"op":"chain","patterns":[3,1,4],"id":921})");
+		check(resultOk(_rig), "chain A04 A02 A05 accepted");
+		const bool made = _rig.runUntil([&] { return chainOf(_rig) == std::vector<int>{3, 1, 4}; }, 3000);
+		check(made, "the firmware holds the chain (internal SRAM), as the page sees it");
+		std::printf("  chain command -> firmware chain %.0f ms\n", ms(m.now() - t0));
+		const auto order = wrapPatterns(_rig, 5);
+		std::printf("  pattern at each wrap:");
+		for(const int p : order) std::printf(" %s", p >= 0 ? ed::mdPatternName(static_cast<uint8_t>(p)).c_str() : "?");
+		std::printf("\n");
+		check(order.size() == 5 && order[0] == 3 && order[1] == 1 && order[2] == 4 && order[3] == 3, "the machine plays A04 A02 A05 and loops");
+		// A grid edit of a chained pattern (a pattern dump): does the chain survive?
+		_rig.page(R"({"op":"trig","p":1,"t":2,"s":6,"id":922})");
+		_rig.runUntil([&] { return !_rig.desk().isBusy(); }, 1000);
+		_rig.run(100);
+		check(chainOf(_rig) == std::vector<int>{3, 1, 4}, "a pattern dump into a chained pattern keeps the chain");
+		// LOAD PATTERN would clear it: the desk asks first.
+		_rig.page(R"({"op":"select","p":7,"id":923})");
+		check(_rig.telemetry().chain.active, "select while chained asks first (breakChain) and sends nothing");
+		_rig.page(R"({"op":"select","p":7,"force":true,"id":924})");
+		check(_rig.runUntil([&] { return !_rig.telemetry().chain.active; }, 1000), "select with force clears the chain, as on the machine");
+		// A chain in bank E: the BANK GROUP key first.
+		for(uint8_t s = 64; s <= 65; ++s)
+		{
+			auto p = _rig.readPattern(s);
+			p->length = 16;
+			m.send(ed::encodeMdPattern(*p));
+		}
+		_rig.page(R"({"op":"chain","patterns":[65,64],"id":925})");
+		check(resultOk(_rig), "chain E02 E01 accepted");
+		check(_rig.runUntil([&] { return chainOf(_rig) == std::vector<int>{65, 64}; }, 3000), "bank E chain: BANK GROUP pressed, chain held");
+		const auto e = wrapPatterns(_rig, 3);
+		check(e.size() == 3 && e[0] == 65 && e[1] == 64 && e[2] == 65, "the machine plays E02 E01 and loops");
+		_rig.page(R"({"op":"chainClear","id":926})");
+		check(_rig.runUntil([&] { return !_rig.telemetry().chain.active; }, 1000), "CLEAR ends the chain");
+		_rig.page(R"({"op":"chain","patterns":[1,3],"id":927})");
+		check(resultOk(_rig) && _rig.runUntil([&] { return chainOf(_rig) == std::vector<int>{1, 3}; }, 3000), "chain A02 A04");
+		_rig.page(R"({"op":"stop","id":928})");
+		_rig.runUntil([&] { return !_rig.telemetry().playing; }, 2000);
+		_rig.run(300);
+		_rig.page(R"({"op":"play","id":929})");
+		_rig.runUntil([&] { return _rig.telemetry().playing; }, 2000);
+		_rig.run(100);
+		const auto after = wrapPatterns(_rig, 3);
+		std::printf("  STOP, PLAY with a chain: plays %d, then", _rig.telemetry().pattern);
+		for(const int p : after) std::printf(" %d", p);
+		std::printf("; chain %s\n", _rig.telemetry().chain.active ? "active" : "gone");
+		// Stopped: does the gesture chain?
+		_rig.page(R"({"op":"stop","id":930})");
+		_rig.runUntil([&] { return !_rig.telemetry().playing; }, 2000);
+		_rig.run(300);
+		_rig.page(R"({"op":"chain","patterns":[2,4],"id":931})");
+		_rig.run(800);
+		std::printf("  chain while stopped: firmware chain %s, current %d\n", chainOf(_rig) == std::vector<int>{2, 4} ? "A03 A05" : "not made",
+			_rig.telemetry().pattern);
+		_rig.page(R"({"op":"play","id":932})");
+		_rig.runUntil([&] { return _rig.telemetry().playing; }, 2000);
+		const auto st = wrapPatterns(_rig, 3);
+		std::printf("  then PLAY:");
+		for(const int p : st) std::printf(" %d", p);
+		std::printf("\n");
+		_rig.page(R"({"op":"chainClear","id":933})");
+		_rig.page(R"({"op":"stop","id":934})");
+		_rig.run(500);
+		m.send(ed::mdLoadPattern(0));
+		_rig.run(300);
+		_rig.page(R"({"op":"chain","patterns":[1,17],"id":935})");
+		check(_rig.lastResult() && !_rig.lastResult()->find("ok")->asBool(), "a chain across banks is refused (the machine's rule)");
+	}
+
 int main(const int _argc, char** _argv)
 {
 	std::setvbuf(stdout, nullptr, _IOLBF, 0);
@@ -725,6 +920,17 @@ int main(const int _argc, char** _argv)
 	{
 		const auto rom = load(_argv[1]);
 		require(rom.size() == md::g_romSize, "ROM must be the 8 MiB MD 1.63 image");
+		const std::string mode = _argc > 2 ? _argv[2] : "";
+		if(mode == "p4")
+		{
+			Rig rig(rom, _argv[1]);
+			rig.page(R"({"op":"ready"})");
+			rig.runUntil([&] { return rig.desk().isReady() && rig.desk().session().state().pattern; }, 5000);
+			mutesTruth(rig);
+			chaining(rig);
+			std::printf("mdDeskFirmwareTest p4: %s (%d failure(s))\n", g_failures ? "FAIL" : "PASS", g_failures);
+			return g_failures ? 1 : 0;
+		}
 		Rig rig(rom, _argv[1]);
 		if(_argc > 2 && std::string(_argv[2]) == "playload")
 		{

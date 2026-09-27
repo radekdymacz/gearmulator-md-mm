@@ -689,6 +689,72 @@ namespace
 		check(ok() && !wire.empty() && wire[0] == ed::mdLoadSong(3) && desk.session().state().song == 3, "LOAD SONG 4 when stopped");
 	}
 
+	// P4: the start-up animation holds input; chaining, mutes from memory.
+	void testLive()
+	{
+		check(validateChain({1, 3}).empty() && !validateChain({1}).empty() && !validateChain({1, 17}).empty()
+			&& !validateChain({2, 2}).empty(), "chains: two or more, one bank, each once");
+		check(chainKeys({3, 1, 4}, 0) == std::vector<std::string>{"chain:0:3,1,4"}, "chain A04 A02 A05: BANK A/E + TRIGs 4 2 5");
+		check(chainKeys({65, 64}, 0) == std::vector<std::string>{"bankGroup", "chain:0:1,0"}, "bank E from A-D: BANK GROUP first");
+		check(chainKeys({65, 64}, 1) == std::vector<std::string>{"chain:0:1,0"}, "bank E in E-H: no BANK GROUP");
+		check(chainKeys({35, 36}, -1).empty(), "unknown BANK GROUP: no keys");
+
+		std::vector<std::vector<uint8_t>> wire;
+		std::vector<std::string> keys;
+		std::vector<Value> page;
+		double now = 0;
+		Desk::Port port;
+		port.sendSysex = [&](const std::vector<uint8_t>& _b) { wire.push_back(_b); };
+		port.pressKey = [&](const std::string& _k) { keys.push_back(_k); return true; };
+		port.sendMute = [](uint8_t, bool) {};
+		port.toPage = [&](const Value& _m) { page.push_back(_m); };
+		port.nowMs = [&] { return now; };
+		Desk desk(port);
+		const auto last = [&](const char* _type) -> const Value*
+		{
+			for(auto it = page.rbegin(); it != page.rend(); ++it)
+				if(it->find("type")->asString() == _type)
+					return &*it;
+			return nullptr;
+		};
+		const auto ok = [&] { const auto* r = last("result"); return r && r->find("ok")->asBool(); };
+		const auto firmware = [&] { const auto* m = last("machine"); return m ? m->find("doc")->find("desk")->find("firmware")->asString() : std::string(); };
+		Telemetry t;
+		t.valid = true;
+		t.bankGroup = 0;
+		t.chainKnown = true;
+		desk.onTelemetry(t);
+		desk.onPageMessage(cmd(R"({"op":"ready"})"));
+		desk.onDeviceSysex({0xf0, 0x00, 0x20, 0x3c, 0x02, 0x00, 0x72, 0x04, 0x02, 0xf7});
+		desk.onDeviceSysex({0xf0, 0x00, 0x20, 0x3c, 0x02, 0x00, 0x72, 0x02, 0x05, 0xf7});
+		desk.tick();
+		check(desk.isReady() && firmware() == "ready", "ready");
+		desk.onPageMessage(cmd(R"({"op":"chain","patterns":[3,1,4],"id":2})"));
+		check(ok() && keys.back() == "chain:0:3,1,4", "chain command: the machine's keys");
+		t.chain.active = true;
+		t.chain.patterns = {3, 1, 4};
+		t.chain.next = 1;
+		t.mutes = 0x0005;
+		desk.onTelemetry(t);
+		desk.tick();
+		const auto* m = last("machine");
+		const auto& d = *m->find("doc")->find("desk");
+		check(d.find("chain")->find("active")->asBool() && d.find("chain")->find("patterns")->asArray().size() == 3,
+			"the page sees the firmware's chain");
+		check(d.find("mutes")->asArray().size() == 2 && d.find("mutesSource")->asString() == "memory", "mutes 1 and 3 from memory");
+		wire.clear();
+		desk.onPageMessage(cmd(R"({"op":"select","p":9,"id":3})"));
+		const auto* ask = last("ask");
+		check(ask && ask->find("ask")->asString() == "breakChain" && wire.empty(), "select while chained asks first");
+		desk.onPageMessage(cmd(R"({"op":"select","p":9,"chainOk":true,"id":4})"));
+		check(!wire.empty() && wire.front() == ed::mdLoadPattern(9), "chainOk: LOAD PATTERN");
+		wire.clear();
+		desk.onPageMessage(cmd(R"({"op":"chainClear","id":5})"));
+		check(ok() && !wire.empty() && wire.front() == ed::mdLoadPattern(2), "CLEAR = LOAD PATTERN of the current pattern");
+		desk.onPageMessage(cmd(R"({"op":"chain","patterns":[1,17],"id":6})"));
+		check(!ok(), "a chain across banks is refused");
+	}
+
 	void testSampleName()
 	{
 		const auto m = ed::mdSetSampleName(5, "KIK");
@@ -743,6 +809,7 @@ int main()
 	testHistory();
 	testPushSlot();
 	testDesk();
+	testLive();
 	testWorkingKitMemory();
 	testKnobRecorder();
 	testDeskRecording();

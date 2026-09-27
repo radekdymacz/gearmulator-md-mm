@@ -1,5 +1,6 @@
 #pragma once
 
+#include "mdDeskChain.h"
 #include "mdDeskDelivery.h"
 #include "mdDeskEdit.h"
 #include "mdDeskHistory.h"
@@ -30,6 +31,12 @@ namespace mdDesk
 		bool gridEdit = false;	// grid edit (RECORD alone)
 		int knobPage = -1;		// DATA ENTRY page: 0 synthesis, 1 effects, 2 routing
 		bool valid = false;		// false: no telemetry for this firmware
+		// P4: the pattern mutes (bit 0 = track 1, -1 unknown), the firmware's pattern chain
+		// and the BANK GROUP (0 A-D, 1 E-H, -1 unknown).
+		int mutes = -1;
+		bool chainKnown = false;
+		Chain chain;
+		int bankGroup = -1;
 	};
 
 	// MD Desk behind the page: the page sends small commands, the desk edits the
@@ -122,6 +129,7 @@ namespace mdDesk
 		void handleSelect(const Value& _message);
 		void handleRecord(const Value& _message);
 		void handleModulators(const Value& _message);
+		void handleChain(const Value& _message);
 		void runModulators(double _now);
 		void publishModulators();
 		void pumpRecording(double _now);

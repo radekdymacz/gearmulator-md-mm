@@ -53,4 +53,18 @@ namespace md
 		bool m_stopped = true;
 		bool m_record = false;
 	};
+
+	// Pattern chain and mutes (P4, mdP4ProbeFirmwareTest chain4/chain5, mutes3).
+	//  - Chain (BANK held + TRIG keys held together, in order): MC68331 internal SRAM, 32-bit
+	//    big-endian values: 0x1001f5c active (0/1), 0x1001f60 the next entry to queue,
+	//    0x1001f64 the length, 0x1001f68 + 4 n the patterns 0-127. One bank, each pattern
+	//    once, so at most 16. SysEx LOAD PATTERN or a single TRIG clears "active".
+	//  - Mutes: main RAM 0x28b34a, 16 bits big-endian, bit 0 = track 1. CC 12-15 and the
+	//    panel's MUTE window write it.
+	struct ChainAndMutes
+	{
+		static constexpr uint32_t g_chainAddress = 0x1001f5c;
+		static constexpr uint32_t g_muteAddress = 0x28b34a;
+		static constexpr size_t g_maxChain = 16;
+	};
 }

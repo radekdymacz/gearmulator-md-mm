@@ -50,7 +50,7 @@ function cmd(op, args = {}, key) {
 	Bridge.send(msg, { key, onResult: r => onResult(r) });
 	tx();
 }
-const SELFTEST = /[?&]selftest=1/.test(location.search);
+const SELFTEST = /[?&]selftest=(1|p4)/.test(location.search);
 function onResult(r) {
 	if (SELFTEST && (r.op === "record" || r.op === "recTrig" || r.op === "play" || r.op === "stop" || !r.ok)) Bridge.log("result " + r.op + " ok " + r.ok + " " + (r.errors || []).join(";") + " " + (r.note || ""));
 	if (!r.ok && r.errors && r.errors.length) { toast(r.errors[0]); showLastError(r.errors); }
@@ -215,7 +215,9 @@ function renderRail() {
 function pages16() { return S.len / 16; }
 function vis() { if (S.viewAll) return [0, S.len]; S.page = Math.min(S.page, pages16() - 1); return [S.page * 16, S.page * 16 + 16]; }
 function steps() { const [a, b] = vis(); return Array.from({ length: b - a }, (_, k) => a + k); }
-function cols() { return `repeat(${steps().length},minmax(18px,1fr))`; }
+/* Mockup v51: ALL fits every step (minmax 0, a 2 px gap, class "viewall" on html); the page
+   boundary is a 2 px shadow in the cell gap, so the lock lane lines up with the steps. */
+function cols() { return S.viewAll ? `repeat(${steps().length},minmax(0,1fr))` : `repeat(${steps().length},minmax(18px,1fr))`; }
 function stepCls(i, s) {
 	const t = S.tracks[i], c = ["st"]; if (s % 4 === 0) c.push("q"); if (s % 16 === 0 && s !== vis()[0]) c.push("gap"); if (s >= S.length) c.push("past");
 	if (t.trigs[s]) { c.push("on"); if (t.acc.has(s)) c.push("acc"); if (t.slide.has(s)) c.push("sl"); if (stepLocked(i, s)) c.push("lk"); }
@@ -224,6 +226,7 @@ function stepCls(i, s) {
 /* The PAGE control sits on the right, above the grid, on the ruler row. */
 function pageCtl() { return `<span class="pagectl rh seqpage"><button class="pgkey" id="pgkey" ${pages16() < 2 ? "disabled" : ""} title="Next page. Shift-click = previous. Keys [ and ].">Page</button><span class="pleds" aria-hidden="true">${[0, 1, 2, 3].map(k => `<span class="pl ${k < pages16() ? "" : "na"} ${!S.viewAll && k === S.page ? "cur" : ""}" data-plp="${k}"><i class="led"></i></span>`).join("")}</span><button class="ptog ${S.viewAll ? "on" : ""}" id="pgall" aria-pressed="${S.viewAll}" title="Show all steps"><i class="led"></i>All</button><button class="ptog ${S.follow ? "on" : ""}" id="pgfollow" aria-pressed="${S.follow}" title="Page follows the play position"><i class="led"></i>Fol</button></span>`; }
 function renderSeq() {
+	document.documentElement.classList.toggle("viewall", !!S.viewAll);
 	let h = `<div class="panel ${S.mode === "CLASSIC" ? "classic" : ""}" id="seqp">${pageCtl()}<div class="scroll" id="seqscroll"><div class="seq" id="seq">
   <div class="r" style="grid-template-columns:${cols()}">${steps().map(s => `<div class="rul ${s % 16 === 0 && s !== vis()[0] ? "gap" : ""}">${s % 4 === 0 ? s + 1 : ""}</div>`).join("")}</div>`;
 	S.tracks.forEach((t, i) => { h += `<div class="r ${i === S.sel ? "sel" : ""} ${audible(i) ? "" : "off"}" data-row="${i}" style="grid-template-columns:${cols()};--c:${FAMC[t.fam]}">${steps().map(s => `<button class="${stepCls(i, s)}" data-t="${i}" data-s="${s}" aria-label="Track ${i + 1} step ${s + 1}" aria-pressed="${t.trigs[s]}"></button>`).join("")}</div>`; });

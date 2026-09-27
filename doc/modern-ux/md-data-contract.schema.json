@@ -275,7 +275,16 @@
             "gridEdit": {"type": "boolean", "description": "Grid edit (RECORD alone): the RECORD LED is steady."},
             "knobPage": {"type": "integer", "minimum": -1, "maximum": 2, "description": "DATA ENTRY page: 0 synthesis, 1 effects, 2 routing, -1 unknown."},
             "telemetry": {"type": "boolean", "description": "Playhead and state come from MD OS 1.63 RAM."},
-            "mutes": {"type": "array", "items": {"$ref": "#/$defs/track"}},
+            "mutes": {"type": "array", "items": {"$ref": "#/$defs/track"}, "description": "The machine's pattern mutes (P4: read from RAM 0x28b34a when mutesSource is memory)."},
+            "mutesSource": {"enum": ["memory", "tracked"], "description": "memory: read from the machine (its MUTE window and CCs show too). tracked: what the desk sent and saw."},
+            "chain": {"oneOf": [{"type": "null"}, {"type": "object", "description": "The firmware's pattern chain (P4, BANK held + TRIG keys). One bank, each pattern once, loops.",
+              "required": ["active", "next", "patterns"],
+              "properties": {
+                "active": {"type": "boolean", "description": "False after a LOAD PATTERN or a single TRIG with BANK held."},
+                "next": {"type": "integer", "minimum": -1, "maximum": 16, "description": "The entry the firmware queues next."},
+                "patterns": {"type": "array", "maxItems": 16, "items": {"type": "integer", "minimum": 0, "maximum": 127}}}}],
+              "description": "null: not readable on this firmware."},
+            "bankGroup": {"type": "integer", "minimum": -1, "maximum": 1, "description": "The machine's BANK GROUP: 0 A-D, 1 E-H, -1 unknown."},
             "kitSource": {"enum": ["memory", "tracked"], "description": "memory: the current kit document is the working kit read from the machine's memory (P3). tracked: the stored slot plus the edits the desk saw."}
           }
         }

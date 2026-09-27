@@ -700,9 +700,12 @@ namespace md
 			t.recording.store(-1, std::memory_order_relaxed);
 			t.gridEdit.store(-1, std::memory_order_relaxed);
 			t.knobPage.store(-1, std::memory_order_relaxed);
+			t.mutes.store(-1, std::memory_order_relaxed);
+			t.chainActive.store(-1, std::memory_order_relaxed);
 			return;
 		}
 		auto& uc = m_hardware->getUC();
+
 		const auto step = uc.read8(SequencerState::g_stepAddress);
 		t.step.store(step, std::memory_order_relaxed);
 		t.pattern.store(uc.read8(patternAddress), std::memory_order_relaxed);
@@ -715,9 +718,28 @@ namespace md
 		t.knobPage.store(page <= 2 ? page : -1, std::memory_order_relaxed);
 		const auto blocks = t.blocks.fetch_add(1, std::memory_order_release);
 
-		// The working kit, about 90 times a second, published only when it changed.
+		// The working kit, mutes and chain about 90 times a second.
 		if(blocks % 8)
 			return;
+		t.mutes.store((uc.read8(ChainAndMutes::g_muteAddress) << 8) | uc.read8(ChainAndMutes::g_muteAddress + 1),
+			std::memory_order_relaxed);
+		{
+			const auto long32 = [&](const uint32_t _a)
+			{
+				return (uint32_t(uc.read8(_a)) << 24) | (uint32_t(uc.read8(_a + 1)) << 16) | (uint32_t(uc.read8(_a + 2)) << 8)
+					| uc.read8(_a + 3);
+			};
+			const auto active = long32(ChainAndMutes::g_chainAddress);
+			const auto next = long32(ChainAndMutes::g_chainAddress + 4);
+			const auto length = long32(ChainAndMutes::g_chainAddress + 8);
+			const bool sane = active <= 1 && length <= ChainAndMutes::g_maxChain && next <= ChainAndMutes::g_maxChain;
+			t.chainActive.store(sane ? static_cast<int>(active) : -1, std::memory_order_relaxed);
+			t.chainNext.store(sane ? static_cast<int>(next) : -1, std::memory_order_relaxed);
+			t.chainLength.store(sane ? static_cast<int>(length) : 0, std::memory_order_relaxed);
+			for(uint32_t i = 0; sane && i < length; ++i)
+				t.chain[i].store(static_cast<uint8_t>(long32(ChainAndMutes::g_chainAddress + 12 + 4 * i) & 0x7f),
+					std::memory_order_relaxed);
+		}
 		constexpr auto size = SequencerTelemetry::g_workingKitSize;
 		bool changed = t.workingKitSequence.load(std::memory_order_relaxed) == 0;
 		for(size_t i = 0; i < size && !changed; ++i)

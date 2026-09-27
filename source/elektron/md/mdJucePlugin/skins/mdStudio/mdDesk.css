@@ -1036,6 +1036,84 @@ html,body{min-width:1280px}
 .patrow.queued #pat{animation:blink .5s steps(2) infinite}
 .lcdpanel .patf.flash #pat{animation:patflash .45s ease-out}
 @keyframes patflash{0%{background:var(--ink);color:var(--lcd)}100%{background:transparent;color:inherit}}
+/* v50: kit library + pattern chooser: one big panel over the workspace, built from the machine picker's keys */
+.libpop{position:absolute;z-index:22;width:min(1180px,calc(100vw - 32px));display:grid;gap:10px;align-content:start;padding:14px;background:var(--plate);border:2px solid var(--print);border-radius:6px;box-shadow:0 18px 40px rgba(0,0,0,.35);overflow:auto;overscroll-behavior:contain;color:var(--body)}
+.libhead{display:flex;align-items:center;gap:14px;border-bottom:1px solid var(--rule);padding-bottom:8px;min-width:0}
+.libhead .note{margin-right:auto;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0;font-size:13px}
+.libx{height:24px;padding:0 9px;font:600 10px var(--sans);letter-spacing:.14em;text-transform:uppercase}
+.libacts{display:flex;gap:10px 22px;align-items:center;flex-wrap:wrap}
+.libacts .grp{display:flex;gap:4px;align-items:center}
+.libacts .ilab{min-width:0;margin-right:4px;white-space:nowrap}
+.libacts button{height:26px;padding:0 10px;font:600 11px var(--sans);letter-spacing:.12em;text-transform:uppercase;white-space:nowrap}
+.libacts button:disabled{opacity:.35;cursor:default}
+.libacts .danger:hover:not(:disabled){background:var(--rec);color:#fff}
+.libgrid{display:grid;gap:4px}
+.libgrid.kits{grid-template-columns:repeat(8,minmax(0,1fr))}
+.libgrid.pats{grid-template-columns:30px repeat(16,minmax(0,1fr))}
+.ls{position:relative;display:grid;gap:2px;align-content:center;text-align:left;min-width:0;padding:5px 7px;font-weight:500;letter-spacing:0}
+.ls .lsh{display:flex;justify-content:space-between;align-items:center;gap:4px}
+.ls .lsh b{font:500 12px var(--mono)}
+.ls .lsh em{font:600 9px var(--sans);font-style:normal;letter-spacing:.14em;text-transform:uppercase;display:inline-flex;gap:4px;align-items:center}
+.ls .lsh .led{width:6px;height:6px}
+.ls .lsn{font:500 12px var(--mono);white-space:nowrap;overflow:hidden;text-overflow:clip;text-transform:uppercase;height:18px;line-height:18px}
+.ls .lsl{font:10px var(--mono);color:var(--keydim);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-height:12px}
+.ks{height:60px}
+.ps{height:44px;padding:4px 6px;gap:1px}
+.ps b{font:500 13px var(--mono)}
+.ps span{font:10px var(--mono);color:var(--keydim);white-space:nowrap;overflow:hidden}
+.ls.empty{background:transparent;box-shadow:inset 0 0 0 1px var(--rule);color:var(--print3)}
+.ls.empty .lsl,.ps.empty span{color:var(--print3)}
+.ls.empty:hover{background:var(--plate3)}
+.ls.cur,.ls.cur:hover{background:var(--cream);color:var(--creamtext);box-shadow:inset 0 -2px 0 rgba(0,0,0,.2)}
+.ls.cur .lsl,.ps.cur span{color:var(--creamtext);opacity:.8}
+.ls[aria-selected=true]{outline:2px solid var(--led);outline-offset:1px}
+.ls.over{outline:2px dashed var(--led);outline-offset:1px}
+.ls.dragging{opacity:.4}
+.ks.edited .lsh .led{animation:blink 1s steps(2) infinite}
+.lsin{width:100%;min-width:0;height:18px;padding:0 3px;border:0;border-radius:2px;background:var(--lcd);color:var(--ink);font:12px var(--mono);text-transform:uppercase;outline:none;box-shadow:inset 0 0 0 1px var(--ink)}
+.ps.q{box-shadow:inset 0 0 0 2px var(--led)}
+.ps.q b,.ps.q span{animation:blink .5s steps(2) infinite}
+.ps.flash{animation:libflash .45s ease-out}
+@keyframes libflash{0%{box-shadow:0 0 0 3px var(--led)}100%{box-shadow:0 0 0 0 transparent}}
+.lbank{justify-content:center;padding:0!important;font-size:12px}
+.libfoot{display:flex;justify-content:space-between;gap:16px;font-size:12px;color:var(--print2);border-top:1px solid var(--rule);padding-top:7px}
+.libfoot span{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
+.libfoot .fw{cursor:help;flex:none}
+#pat{cursor:pointer;border-radius:2px}
+#pat:hover,.kitf[aria-expanded=true],#pat[aria-expanded=true]{background:color-mix(in srgb,var(--ink) 15%,transparent)}
+@media (prefers-reduced-motion:reduce){.ps.q b,.ps.q span,.ks.edited .lsh .led{animation:none}}
+/* v51: no gaps between 16-step pages (they offset the lock lane); ALL fits 64 steps without scrolling */
+.st.gap,.rul.gap,.lb.gap,.cp.gap{margin-left:0!important}
+.st.gap,.lb.gap,.cp.gap{box-shadow:-2px 0 0 0 var(--print2)}
+.st.gap.ph{box-shadow:-2px 0 0 0 var(--print2)!important}
+.viewall .seq .r,.viewall .lane{gap:2px!important}
+.viewall .seq,.viewall #seqscroll,.viewall #lanescroll{min-width:0!important;overflow-x:hidden}
+.viewall .seq{display:grid}
+#lanescroll{padding-left:0!important;padding-right:0!important}
+/* v52 (P4): pattern chain (BANK + TRIGs), the firmware LCD while it boots; v54: prepared mutes on the M keys */
+.ms.m.prep{box-shadow:inset 0 0 0 2px var(--led)}
+.ms.m.prep::after{content:attr(data-prep);position:absolute;inset:0;display:grid;place-items:center;font:700 12px var(--pix);animation:blink .5s steps(2) infinite}
+.ms.m.prep{position:relative;color:transparent!important}
+.lcd2 .lcdmsg{font:inherit;letter-spacing:.06em}
+.chainp{display:grid;grid-template-columns:repeat(8,minmax(0,1fr));gap:4px}
+.chk{position:relative;height:40px;display:grid;align-content:center;gap:1px;padding:0 6px;text-align:left;font:500 13px var(--mono);letter-spacing:0}
+.chk small{font-size:10px;color:var(--keydim)}
+.chk em{position:absolute;right:5px;top:3px;font:700 12px var(--pix);font-style:normal;color:var(--led)}
+.chk.in{box-shadow:inset 0 0 0 2px var(--led)}
+.chainrow{display:flex;align-items:center;gap:6px;flex-wrap:wrap;min-height:26px}
+.chainrow .lcdchip{font:12px var(--pix);text-transform:uppercase}
+.chainrow .lcdchip.now{outline:2px solid var(--ink);outline-offset:-2px}
+.chainrow .lcdchip.nx{animation:blink .5s steps(2) infinite}
+.chainrow i{font-style:normal;color:var(--print2)}
+.chainacts{display:flex;gap:6px;align-items:center}
+.chainacts button{height:26px;padding:0 10px;font:600 11px var(--sans);letter-spacing:.12em;text-transform:uppercase}
+.chainacts button:disabled{opacity:.35;cursor:default}
+.lcdpanel{position:relative}
+.lcdfw{position:absolute;inset:0;z-index:3;display:none;background:var(--lcd);border-radius:4px;pointer-events:none;transition:opacity .6s}
+.lcdfw canvas{display:block;height:100%;margin:0 auto;image-rendering:pixelated;image-rendering:crisp-edges}
+.lcdpanel.fwboot .lcdfw{display:block}
+.lcdpanel.fwfade .lcdfw{display:block;opacity:0}
+@media (prefers-reduced-motion:reduce){.ms.m.prep::after,.chainrow .lcdchip.nx{animation:none}.lcdfw{transition:none}}
 
 /* ===== The real machine's states (not in the mockup) ===== */
 .st.past{opacity:.45}
