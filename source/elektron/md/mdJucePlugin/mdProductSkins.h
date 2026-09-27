@@ -18,6 +18,7 @@ namespace mdJucePlugin
 		}
 
 		return {{"mdDefault", "mdDefault.rml", "", {"mdDefault.rcss", "mdDefault.rml",
-			"mdKnobLineFree.png", "mdKnobs.rcss", "mdScrew.png", "mdSoundWheel.png"}}};
+			"mdKnobLineFree.png", "mdKnobs.rcss", "mdScrew.png", "mdSoundWheel.png"}},
+			{"mdStudio", "mdStudio.rml", "", {"mdStudio.rml", "mdStudio.html"}}};
 	}
 }

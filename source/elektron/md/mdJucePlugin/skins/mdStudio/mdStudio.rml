@@ -1,0 +1,11 @@
+<rml>
+	<head>
+		<link type="text/rcss" href="tus_default.rcss"/>
+		<link type="text/rcss" href="tus_juceskin.rcss"/>
+	</head>
+	<!-- P0 studio editor frame. The HTML web view covers everything below the
+	     28dp header; right-click the header for skins and settings. -->
+	<body id="Root" style="left: 0dp; top: 0dp; width: 1100dp; height: 570dp; background-color: #202020;">
+		<div class="jucePos juceLabel" style="left: 10dp; top: 4dp; width: 1080dp; height: 20dp; line-height: 20dp; color: #c8c8c8; font-size: 13dp;">Gearmulator MD - Studio (P0 proof). Right-click here for skins and settings.</div>
+	</body>
+</rml>

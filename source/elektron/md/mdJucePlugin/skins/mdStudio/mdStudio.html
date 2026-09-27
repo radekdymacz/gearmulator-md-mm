@@ -1,0 +1,68 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>MD Studio P0</title>
+<style>
+	body { background: #181818; color: #ccc; font: 12px -apple-system, sans-serif; margin: 8px; }
+	#status { margin-bottom: 6px; }
+	table { border-collapse: collapse; }
+	td { width: 14px; height: 20px; border: 1px solid #333; cursor: pointer; }
+	td.label { width: 28px; cursor: default; color: #888; border: none; }
+	td.x { background: #d86b1e; }
+	td.L { background: #e8c21e; }
+	td.beat { border-left: 2px solid #555; }
+	td.play { outline: 2px solid #4ad; }
+	button { margin-left: 8px; }
+</style>
+</head>
+<body>
+<div id="status">waiting for firmware...<button onclick="bridge('refresh')">refresh</button></div>
+<table id="grid"></table>
+<script>
+	// C++ -> page: gm.pattern(json), gm.playhead(step). Page -> C++: bridge(cmd).
+	function bridge(cmd) { window.location.href = 'gmbridge://' + cmd; }
+	var state = null;
+	var playhead = -1;
+	var selfTest = location.search.indexOf('selftest=1') >= 0 ? ['toggle/0/8', 'toggle/2/3', 'toggle/0/8'] : [];
+	window.gm = {
+		pattern: function(p) {
+			state = p; render();
+			if (selfTest.length)
+				setTimeout(function() { bridge(selfTest.shift()); }, 1500);
+		},
+		playhead: function(s) { playhead = s; paintPlayhead(); }
+	};
+	function render() {
+		var grid = document.getElementById('grid');
+		grid.innerHTML = '';
+		for (var t = 0; t < 16; ++t) {
+			var tr = document.createElement('tr');
+			var label = document.createElement('td');
+			label.className = 'label';
+			label.textContent = 'T' + (t + 1);
+			tr.appendChild(label);
+			var trigs = state.tracks[t].trigs;
+			for (var s = 0; s < trigs.length; ++s) {
+				var td = document.createElement('td');
+				td.className = (trigs[s] === '.' ? '' : trigs[s]) + (s % 4 === 0 ? ' beat' : '');
+				td.dataset.step = s;
+				td.onclick = (function(t, s) { return function() { bridge('toggle/' + t + '/' + s); }; })(t, s);
+				tr.appendChild(td);
+			}
+			grid.appendChild(tr);
+		}
+		var rt = state.roundTripMs >= 0 ? ' | last click -> firmware read-back ' + state.roundTripMs.toFixed(1) + ' ms' : '';
+		document.getElementById('status').firstChild.textContent = 'pattern ' + (state.position + 1) + ' | length ' +
+			state.length + ' | lock rows ' + state.lockRows + '/64' + rt;
+		paintPlayhead();
+	}
+	function paintPlayhead() {
+		var cells = document.querySelectorAll('td[data-step]');
+		for (var i = 0; i < cells.length; ++i)
+			cells[i].classList.toggle('play', Number(cells[i].dataset.step) === playhead);
+	}
+	bridge('ready');
+</script>
+</body>
+</html>

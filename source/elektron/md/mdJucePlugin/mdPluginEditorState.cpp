@@ -1,6 +1,7 @@
 #include "mdPluginEditorState.h"
 
 #include "mdEditor.h"
+#include "mdStudioEditor.h"
 #include "mdPluginProcessor.h"
 #include "mdProductSkinPolicy.h"
 #include "mdStandaloneRendererPolicy.h"
@@ -60,6 +61,8 @@ namespace mdJucePlugin
 
 	jucePluginEditorLib::Editor* PluginEditorState::createEditor(const jucePluginEditorLib::Skin& _skin)
 	{
+		if(isStudioSkin(_skin.displayName, _skin.filename))
+			return new StudioEditor(m_processor, _skin);
 		return new Editor(m_processor, _skin);
 	}
 
