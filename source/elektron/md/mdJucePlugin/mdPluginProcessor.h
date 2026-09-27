@@ -35,6 +35,10 @@ namespace mdJucePlugin
 	    ~AudioPluginAudioProcessor() override;
 
 		md::MachineModel getModel() const { return m_model; }
+		std::string getStandaloneWindowTitle() const override
+		{
+			return m_model == md::MachineModel::Monomachine ? "Monomachine Editor" : "Machinedrum Editor";
+		}
 		static md::MachineModel getCompiledProductModel();
 		static bool hasEmbeddedProductResource(std::string_view _filename);
 		juce::File getInstalledFactoryStorageImage() const;

@@ -28,6 +28,7 @@ set(SOURCES
 	mdProductSkins.h
 	mdPluginProcessor.cpp mdPluginProcessor.h
 	mdStorageImage.cpp mdStorageImage.h
+	mdStandaloneApp.cpp
 	mdStudioEditor.cpp mdStudioEditor.h
 	mdStudioLink.cpp mdStudioLink.h
 	mdPluginEntry.cpp
@@ -93,6 +94,8 @@ target_link_libraries(mmJucePlugin PRIVATE elektronData mdDataLink mdDesk)
 foreach(plugin_target mdJucePlugin mmJucePlugin)
 	target_compile_definitions(${plugin_target} PUBLIC
 		JUCE_STANDALONE_PLUGIN_AUTO_OPEN_AUDIO_INPUT=0
+		# jucePluginEditorLib/standaloneApp.h: native title bar and menu bar (P4).
+		JUCE_USE_CUSTOM_PLUGIN_STANDALONE_APP=1
 		JUCE_VST3_EMULATE_MIDI_PC_WITH_PROGRAMS=1)
 endforeach()
 
@@ -251,7 +254,9 @@ if(BUILD_TESTING)
 		juce::juce_opengl)
 	target_compile_definitions(mdAudioIoLayoutTest PRIVATE
 		JUCE_GLOBAL_MODULE_SETTINGS_INCLUDED=1
-		JUCE_STANDALONE_PLUGIN_AUTO_OPEN_AUDIO_INPUT=0)
+		JUCE_STANDALONE_PLUGIN_AUTO_OPEN_AUDIO_INPUT=0
+		# jucePluginEditorLib/standaloneApp.h: native title bar and menu bar (P4).
+		JUCE_USE_CUSTOM_PLUGIN_STANDALONE_APP=1)
 	set_property(TARGET mdAudioIoLayoutTest PROPERTY FOLDER "Elektron/test")
 	add_test(NAME mdAudioIoLayoutTest COMMAND mdAudioIoLayoutTest)
 	set_tests_properties(mdAudioIoLayoutTest PROPERTIES LABELS "UnitTest;AudioIo")

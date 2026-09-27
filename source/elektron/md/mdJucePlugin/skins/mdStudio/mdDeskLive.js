@@ -58,6 +58,13 @@ Bridge.onMessage(m => {
 	recLockKey = key; setTimeout(markRecLock, 20);
 });
 
+/* ===== The editor's menu (skins, GUI scale, settings): right-click an empty part of the header
+   (P4; the standalone also has it in the native menu bar). ===== */
+document.addEventListener("contextmenu", e => {
+	if (!e.target.closest(".top") || e.target.closest("button,[role=slider],[role=button],select,input,b,.lcdpanel")) return;
+	e.preventDefault(); Bridge.send({ op: "openMenu" });
+});
+
 /* ===== Pattern chain (manual p.37): the machine's own, made with its keys ===== */
 S.chainDraft = [];
 function chainDoc() { const d = machineState().desk || {}; return d.chain || null; }

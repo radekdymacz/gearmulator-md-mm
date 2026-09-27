@@ -331,10 +331,22 @@ void PluginEditorState::openMenu(const Rml::Event& _event)
 	if(getEditor()->openContextMenuForParameter(_event))
 		return;
 
+	juceRmlUi::Menu menu;
+	fillMenu(menu);
+	menu.runModal(_event, 16);
+}
+
+juce::PopupMenu PluginEditorState::createPopupMenu()
+{
+	juceRmlUi::Menu menu;
+	fillMenu(menu);
+	return menu.toPopupMenu();
+}
+
+void PluginEditorState::fillMenu(juceRmlUi::Menu& menu)
+{
 	const auto& config = m_processor.getConfig();
     const auto scale = juce::roundToInt(config.getDoubleValue("scale", 100));
-
-	juceRmlUi::Menu menu;
 
 	juceRmlUi::Menu scaleMenu;
 	scaleMenu.addEntry("50%", scale == 50, [this] { setGuiScale(50); });
@@ -350,6 +362,22 @@ void PluginEditorState::openMenu(const Rml::Event& _event)
 	scaleMenu.addEntry("300%", scale == 300, [this] { setGuiScale(300); });
 
 	menu.addSubMenu("GUI Scale", std::move(scaleMenu));
+
+	// The skins built into the plug-in (the settings page also lists skins on disk).
+	{
+		juceRmlUi::Menu skinMenu;
+		for(const auto& skin : getIncludedSkins())
+		{
+			const bool current = skin.filename == m_currentSkin.filename && skin.folder == m_currentSkin.folder;
+			skinMenu.addEntry(skin.displayName, current, [this, skin]
+			{
+				// After the menu closed: loading a skin replaces the editor.
+				juce::MessageManager::callAsync([this, skin] { loadSkin(skin); });
+			});
+		}
+		if(!skinMenu.empty())
+			menu.addSubMenu("Skins", std::move(skinMenu));
+	}
 
 	menu.addSeparator();
 
@@ -436,11 +464,10 @@ void PluginEditorState::openMenu(const Rml::Event& _event)
 	{
 		juce::MessageManager::callAsync([this]
 		{
-			getEditor()->showSettings(true);
+			if(auto* editor = getEditor())
+				editor->showSettings(true);
 		});
 	});
-
-	menu.runModal(_event, 16);
 }
 
 Skin PluginEditorState::readSkinFromConfig() const

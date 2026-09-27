@@ -1,0 +1,164 @@
+#pragma once
+
+// A standalone application for gearmulator plug-ins with native window chrome: the
+// operating system's title bar (traffic lights on macOS) instead of JUCE's drawn one,
+// and the editor's menu (GUI scale, skins, settings) in the native menu bar, next to
+// Audio/MIDI settings and saving or loading the state. Everything else is JUCE's
+// StandaloneFilterWindow and StandalonePluginHolder as before, including the settings
+// file name, so existing standalone state is kept.
+//
+// Use: define JUCE_USE_CUSTOM_PLUGIN_STANDALONE_APP=1 for the plug-in target and
+// compile one file of the plug-in's shared code with
+//     #include "jucePluginEditorLib/standaloneApp.h"
+//     JUCE_CREATE_APPLICATION_DEFINE(jucePluginEditorLib::StandaloneApp)
+// The window title is Processor::getStandaloneWindowTitle().
+
+#include "pluginEditor.h"
+#include "pluginEditorState.h"
+#include "pluginProcessor.h"
+
+#include <juce_audio_devices/juce_audio_devices.h>
+#include <juce_gui_extra/juce_gui_extra.h>
+#include <juce_audio_utils/juce_audio_utils.h>
+#include <juce_audio_plugin_client/detail/juce_PluginUtilities.h>
+#include <juce_audio_plugin_client/Standalone/juce_StandaloneFilterWindow.h>
+
+namespace jucePluginEditorLib
+{
+	class StandaloneWindow : public juce::StandaloneFilterWindow, juce::MenuBarModel
+	{
+	public:
+		StandaloneWindow(const juce::String& _appName, juce::PropertySet* _settings)
+			: juce::StandaloneFilterWindow(_appName,
+				juce::LookAndFeel::getDefaultLookAndFeel().findColour(juce::ResizableWindow::backgroundColourId),
+				_settings, false)
+		{
+			setUsingNativeTitleBar(true);
+			hideJuceOptionsButton();
+			if(auto* p = dynamic_cast<Processor*>(getAudioProcessor()))
+			{
+				const auto title = p->getStandaloneWindowTitle();
+				if(!title.empty())
+					setName(juce::String::fromUTF8(title.c_str()));
+			}
+#if JUCE_MAC
+			juce::PopupMenu appleExtras;
+			appleExtras.addItem("Settings...", [this] { showEditorSettings(); });
+			appleExtras.addItem("Audio/MIDI Settings...", [this] { pluginHolder->showAudioSettingsDialog(); });
+			juce::MenuBarModel::setMacMainMenu(this, &appleExtras);
+#else
+			setMenuBar(this);
+#endif
+		}
+
+		~StandaloneWindow() override
+		{
+#if JUCE_MAC
+			juce::MenuBarModel::setMacMainMenu(nullptr);
+#else
+			setMenuBar(nullptr);
+#endif
+		}
+
+		void resized() override
+		{
+			juce::StandaloneFilterWindow::resized();
+			hideJuceOptionsButton();
+		}
+
+		juce::StringArray getMenuBarNames() override { return {"Editor", "Audio"}; }
+
+		juce::PopupMenu getMenuForIndex(const int _index, const juce::String&) override
+		{
+			if(_index == 0)
+			{
+				if(auto* p = dynamic_cast<Processor*>(getAudioProcessor()))
+					if(auto* state = p->getEditorState())
+						return state->createPopupMenu();
+				return {};
+			}
+			juce::PopupMenu m;
+			m.addItem("Audio/MIDI Settings...", [this] { pluginHolder->showAudioSettingsDialog(); });
+			m.addSeparator();
+			m.addItem("Save current state...", [this] { pluginHolder->askUserToSaveState(); });
+			m.addItem("Load a saved state...", [this] { pluginHolder->askUserToLoadState(); });
+			return m;
+		}
+
+		void menuItemSelected(int, int) override {}
+
+	private:
+		void showEditorSettings()
+		{
+			if(auto* p = dynamic_cast<Processor*>(getAudioProcessor()))
+				if(auto* state = p->getEditorState())
+					if(auto* editor = state->getEditor())
+						editor->showSettings(true);
+		}
+
+		// JUCE's drawn title bar has an "Options" button; the native one has no room for it,
+		// and its entries are in the menu bar.
+		void hideJuceOptionsButton()
+		{
+			for(auto* c : getChildren())
+				if(auto* b = dynamic_cast<juce::TextButton*>(c); b && b->getButtonText() == "Options")
+					b->setVisible(false);
+		}
+	};
+
+	class StandaloneApp : public juce::JUCEApplication
+	{
+	public:
+		StandaloneApp()
+		{
+			juce::PropertiesFile::Options options;
+			options.applicationName = m_appName;
+			options.filenameSuffix = ".settings";
+			options.osxLibrarySubFolder = "Application Support";
+#if JUCE_LINUX || JUCE_BSD
+			options.folderName = "~/.config";
+#else
+			options.folderName = "";
+#endif
+			m_appProperties.setStorageParameters(options);
+		}
+
+		const juce::String getApplicationName() override { return m_appName; }
+		const juce::String getApplicationVersion() override { return JucePlugin_VersionString; }
+		bool moreThanOneInstanceAllowed() override { return true; }
+		void anotherInstanceStarted(const juce::String&) override {}
+
+		void initialise(const juce::String&) override
+		{
+			m_window = std::make_unique<StandaloneWindow>(getApplicationName(), m_appProperties.getUserSettings());
+			m_window->setVisible(true);
+		}
+
+		void shutdown() override
+		{
+			m_window = nullptr;
+			m_appProperties.saveIfNeeded();
+		}
+
+		void systemRequestedQuit() override
+		{
+			if(m_window)
+				m_window->pluginHolder->savePluginState();
+			if(juce::ModalComponentManager::getInstance()->cancelAllModalComponents())
+			{
+				juce::Timer::callAfterDelay(100, []
+				{
+					if(auto app = juce::JUCEApplicationBase::getInstance())
+						app->systemRequestedQuit();
+				});
+			}
+			else
+				quit();
+		}
+
+	private:
+		juce::ApplicationProperties m_appProperties;
+		std::unique_ptr<StandaloneWindow> m_window;
+		const juce::String m_appName{juce::CharPointer_UTF8(JucePlugin_Name)};
+	};
+}

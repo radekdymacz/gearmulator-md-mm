@@ -6,6 +6,7 @@
 
 #include "mdDesk/mdDesk.h"
 
+#include "jucePluginEditorLib/pluginEditorState.h"
 #include "jucePluginLib/midiLearnTranslator.h"
 #include "juceRmlUi/juceRmlComponent.h"
 
@@ -24,7 +25,7 @@ namespace mdJucePlugin
 		constexpr const char* g_bridgeCommand = "gmbridge://c/";
 		constexpr const char* g_bridgeLog = "gmbridge://log/";
 		constexpr const char* g_pageResource = "mdStudio.html";
-		constexpr int g_headerHeight = 24;	// matches the RML header strip (dp at scale 1)
+		constexpr int g_headerHeight = 0;	// P4: no RML header; the menu is native (standalone) or opened by the page
 		constexpr int g_skinHeight = 924;	// mdStudio.rml body height
 
 		// One line per bridge event, for measurements without a debugger.
@@ -291,6 +292,13 @@ namespace mdJucePlugin
 			r.set("note", _ok ? _note : std::string());
 			m_outbox.push_back(std::move(r));
 		};
+		if(op == "openMenu")
+		{
+			// The editor's menu (skins, scale, settings) where the page was right-clicked.
+			if(auto* state = getProcessor().getEditorState())
+				state->createPopupMenu().showMenuAsync(juce::PopupMenu::Options().withMousePosition());
+			return true;
+		}
 		if(op == "revealRomFolder")
 		{
 			const juce::File folder(juce::String::fromUTF8(getProcessor().getPublicRomFolder().c_str()));
@@ -485,6 +493,21 @@ namespace mdJucePlugin
 			const auto t = m_link->readTelemetry();
 			log("telemetry: step " + juce::String(t.step) + " playing " + juce::String(t.playing ? 1 : 0) + " rec "
 				+ juce::String(t.recording ? 1 : 0) + " grid " + juce::String(t.gridEdit ? 1 : 0) + " page " + juce::String(t.knobPage));
+		}
+		if(m_ticks == 90)
+		{
+			// The window chrome as the operating system sees it (standaloneApp.h, P4).
+			juce::String chrome = "window: ";
+			if(auto* w = dynamic_cast<juce::DocumentWindow*>(getRmlComponent() ? getRmlComponent()->getTopLevelComponent() : nullptr))
+				chrome << "\"" << w->getName() << "\" native title bar " << (w->isUsingNativeTitleBar() ? 1 : 0);
+			else
+				chrome << "hosted (no document window)";
+#if JUCE_MAC
+			if(auto* model = juce::MenuBarModel::getMacMainMenu())
+				chrome << ", menu bar: " << model->getMenuBarNames().joinIntoString(", ") << " (Editor menu "
+					<< model->getMenuForIndex(0, "Editor").getNumItems() << " items)";
+#endif
+			log(chrome);
 		}
 		if(m_ticks % 150 == 0)
 		{
