@@ -2,12 +2,18 @@ cmake_minimum_required(VERSION 3.15)
 
 project(elektronData)
 
-# Pure value codec for Elektron MD/MM user data (pattern dumps first). No JUCE,
+# Pure value codec for Elektron MD user data (pattern, kit, song, global dumps). No JUCE,
 # no device: it depends on nothing but the standard library.
 add_library(elektronData STATIC)
 
 target_sources(elektronData PRIVATE
+	dumpIo.h
+	mdCommands.cpp mdCommands.h
+	mdGlobal.cpp mdGlobal.h
+	mdKit.cpp mdKit.h
+	mdMachines.cpp mdMachines.h
 	mdPattern.cpp mdPattern.h
+	mdSong.cpp mdSong.h
 	sysex7bit.cpp sysex7bit.h
 )
 

@@ -51,7 +51,7 @@ namespace elektronData
 
 		uint8_t accentAmount = 0;
 		uint8_t length = 16;
-		uint8_t doubleTempo = 0;
+		uint8_t tempoMultiplier = 0;
 		uint8_t scale = 0;
 		uint8_t kit = 0;
 		uint8_t lockedRows = 0;

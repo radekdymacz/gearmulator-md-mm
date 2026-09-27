@@ -1,5 +1,6 @@
 #include "mdPattern.h"
 
+#include "dumpIo.h"
 #include "sysex7bit.h"
 
 #include <algorithm>
@@ -8,7 +9,9 @@ namespace elektronData
 {
 	namespace
 	{
-		constexpr uint8_t g_mdProductId = 0x02;
+		using dumpIo::g_mdProductId;
+		using dumpIo::section;
+		using dumpIo::Writer;
 		constexpr uint8_t g_patternDumpId = 0x67;
 		constexpr uint8_t g_patternRequestId = 0x68;
 
@@ -34,50 +37,6 @@ namespace elektronData
 		static_assert(MdPattern::g_shortDumpSize == g_extendedOffset + 5);
 		static_assert(MdPattern::g_extendedDumpSize == g_extendedOffset + encoded7BitSize(g_extendedSize) + 5);
 
-		class Reader
-		{
-		public:
-			explicit Reader(std::vector<uint8_t> _raw) : m_raw(std::move(_raw)) {}
-
-			uint32_t u32()
-			{
-				uint32_t v = 0;
-				for(size_t i = 0; i < 4; ++i)
-					v = (v << 8) | m_raw[m_pos++];
-				return v;
-			}
-			uint8_t u8() { return m_raw[m_pos++]; }
-
-		private:
-			std::vector<uint8_t> m_raw;
-			size_t m_pos = 0;
-		};
-
-		class Writer
-		{
-		public:
-			void u32(const uint32_t _v)
-			{
-				for(int shift = 24; shift >= 0; shift -= 8)
-					m_raw.push_back(static_cast<uint8_t>(_v >> shift));
-			}
-			void u8(const uint8_t _v) { m_raw.push_back(_v); }
-
-			void appendEncodedTo(std::vector<uint8_t>& _message) const
-			{
-				const auto encoded = encode7Bit(m_raw.data(), m_raw.size());
-				_message.insert(_message.end(), encoded.begin(), encoded.end());
-			}
-
-		private:
-			std::vector<uint8_t> m_raw;
-		};
-
-		Reader section(const std::vector<uint8_t>& _sysex, const size_t _offset, const size_t _rawSize)
-		{
-			return Reader(decode7Bit(_sysex.data() + _offset, encoded7BitSize(_rawSize)));
-		}
-
 		uint64_t lo(const uint32_t _v) { return _v; }
 		uint64_t hi(const uint32_t _v) { return static_cast<uint64_t>(_v) << 32; }
 		uint32_t loWord(const uint64_t _v) { return static_cast<uint32_t>(_v); }
@@ -96,7 +55,7 @@ namespace elektronData
 			&& extended == _o.extended && trigs == _o.trigs && lockMasks == _o.lockMasks
 			&& accentPattern == _o.accentPattern && slidePattern == _o.slidePattern
 			&& swingPattern == _o.swingPattern && swingAmount == _o.swingAmount
-			&& accentAmount == _o.accentAmount && length == _o.length && doubleTempo == _o.doubleTempo
+			&& accentAmount == _o.accentAmount && length == _o.length && tempoMultiplier == _o.tempoMultiplier
 			&& scale == _o.scale && kit == _o.kit && lockedRows == _o.lockedRows && lockRows == _o.lockRows
 			&& accentEditAll == _o.accentEditAll && slideEditAll == _o.slideEditAll
 			&& swingEditAll == _o.swingEditAll && trackAccent == _o.trackAccent
@@ -134,7 +93,7 @@ namespace elektronData
 		const auto* s = _sysex.data() + g_scalarsOffset;
 		p.accentAmount = s[0];
 		p.length = s[1];
-		p.doubleTempo = s[2];
+		p.tempoMultiplier = s[2];
 		p.scale = s[3];
 		p.kit = s[4];
 		p.lockedRows = s[5];
@@ -199,7 +158,7 @@ namespace elektronData
 		flags.u32(_p.swingAmount);
 		flags.appendEncodedTo(m);
 
-		m.insert(m.end(), {_p.accentAmount, _p.length, _p.doubleTempo, _p.scale, _p.kit, _p.lockedRows});
+		m.insert(m.end(), {_p.accentAmount, _p.length, _p.tempoMultiplier, _p.scale, _p.kit, _p.lockedRows});
 
 		Writer locks;
 		for(const auto& row : _p.lockRows)
