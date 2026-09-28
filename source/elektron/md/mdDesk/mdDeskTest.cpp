@@ -1003,10 +1003,43 @@ namespace
 		std::printf("  %zu published messages of %zu types, %zu off the contract\n", g_published.size(), types.size(), bad);
 		check(bad == 0 && !g_published.empty(), "every published message is on the contract");
 	}
+	// The command table is the vocabulary (P6): the contract's $defs/command must be what the
+	// table generates. mdDeskTest --write-schema rewrites it.
+	void checkCommandSchema(const bool _write)
+	{
+		std::ifstream in(MDDESK_SCHEMA);
+		const std::string text{std::istreambuf_iterator<char>(in), std::istreambuf_iterator<char>()};
+		auto root = ed::json::parse(text);
+		check(root.has_value(), "the contract schema loads");
+		if(!root)
+			return;
+		const auto generated = commandTable().schema();
+		auto* defs = root->find("$defs");
+		const auto* current = defs ? defs->find("command") : nullptr;
+		const bool same = current && ed::json::write(*current) == ed::json::write(generated);
+		if(_write && !same && defs)
+		{
+			defs->put("command", generated);
+			std::ofstream out(MDDESK_SCHEMA);
+			out << ed::json::write(*root, 2) << "\n";
+			std::printf("  wrote $defs/command (%zu commands)\n", commandTable().commands().size());
+			return;
+		}
+		check(same, "the schema's $defs/command is generated from the command table (mdDeskTest --write-schema)");
+		// Every command the page sends validates against it; so does a bad one not.
+		const ed::json::Schema schema(*root);
+		check(schema.validate(*ed::json::parse(R"({"op":"trig","p":1,"t":0,"s":3,"id":4})"), "command").empty()
+			&& !schema.validate(*ed::json::parse(R"({"op":"trig","p":200,"t":0,"s":3})"), "command").empty(), "commands validate");
+	}
 }
 
-int main()
+int main(const int _argc, char** _argv)
 {
+	if(_argc > 1 && std::string(_argv[1]) == "--write-schema")
+	{
+		checkCommandSchema(true);
+		return 0;
+	}
 	testTrigsAndLocks();
 	testPatternSettingsAndValidation();
 	testCopyPaste();
@@ -1028,6 +1061,7 @@ int main()
 	testSampleName();
 	testModulators();
 	checkPublished();
+	checkCommandSchema(false);
 	if(g_failures)
 	{
 		std::fprintf(stderr, "mdDeskTest: %d failure(s)\n", g_failures);

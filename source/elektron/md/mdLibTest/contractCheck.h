@@ -41,17 +41,32 @@ namespace contractCheck
 					std::printf("  contract: %s message: %s\n", name.c_str(), p.c_str());
 		}
 
+		// A command the test sends as the page would: it must be on the contract too ($defs/command).
+		void command(const elektronData::json::Value& _command)
+		{
+			if(!m_schema)
+				return;
+			++m_commands;
+			const auto problems = m_schema->validate(_command, "command");
+			if(problems.empty())
+				return;
+			if(m_bad++ < 5)
+				std::printf("  contract: command %s: %s\n", elektronData::json::write(_command).c_str(), problems.front().c_str());
+		}
+
 		bool loaded() const { return m_schema.has_value(); }
 		size_t seen() const { return m_seen; }
 		size_t bad() const { return m_bad; }
 		std::string summary() const
 		{
-			return std::to_string(m_seen) + " published messages on the contract, " + std::to_string(m_bad) + " off it";
+			return std::to_string(m_seen) + " published messages and " + std::to_string(m_commands) + " commands on the contract, "
+				+ std::to_string(m_bad) + " off it";
 		}
 
 	private:
 		std::optional<elektronData::json::Schema> m_schema;
 		size_t m_seen = 0;
 		size_t m_bad = 0;
+		size_t m_commands = 0;
 	};
 }

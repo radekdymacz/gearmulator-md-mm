@@ -106,6 +106,7 @@ namespace
 		void page(const std::string& _json)
 		{
 			m_lastResult.reset();
+			g_contract.command(parse(_json));
 			m_desk->onPageMessage(parse(_json));
 		}
 
@@ -1129,7 +1130,7 @@ namespace
 			m_machine.onSysex = [this](const Bytes& _b) { if(m_connected) m_toDesk.send(ms(m_machine.now()), _b); };
 		}
 
-		void page(const std::string& _json) { m_result.reset(); m_desk->onPageMessage(parse(_json)); }
+		void page(const std::string& _json) { m_result.reset(); g_contract.command(parse(_json)); m_desk->onPageMessage(parse(_json)); }
 		void run(const double _ms)
 		{
 			const auto end = m_machine.now() + static_cast<uint64_t>(_ms * g_rate / 1000);
