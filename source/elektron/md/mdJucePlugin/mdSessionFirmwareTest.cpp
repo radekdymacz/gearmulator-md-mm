@@ -86,6 +86,23 @@ namespace
 			m.set("type", "openAudio");
 			published.push_back(std::move(m));
 		}
+		// romInstall (P7): the session's verdict on a chosen or dropped file; a wrong one, so nothing is copied
+		{
+			const auto bad = juce::File::createTempFile(".bin");
+			bad.replaceWithData("abc", 3);
+			session->installRom(bad);
+			bad.deleteFile();
+		}
+		// syxPreview, syxProgress, syxExport (P7): the session's SysEx messages; the export is read back as
+		// the import's preview (the documents the session holds, round trip through the file)
+		{
+			const auto f = juce::File::createTempFile(".syx");
+			session->exportSyx(f);
+			session->openSyx(f);
+			session->onPageMessage(parseJson(R"({"op":"syxImport","id":7,"kinds":["kit"]})"));
+			session->onPageMessage(parseJson(R"({"op":"syxCancel","id":8})"));
+			f.deleteFile();
+		}
 		session->detach();
 
 		const auto r = contract::checkMessages(*root, published);

@@ -95,8 +95,15 @@ let txT; function tx() { const l = $("#txled"); if (!l) return; l.classList.add(
 /* P7: the sync slot on LCD line 2 (fixed width): SEND while an edit is on its way, SYNC when the machine shows them all */
 function syncTx() {
 	const l = $("#txled"), t = $("#synct"), f = $("#syncf"); if (!l) return;
-	l.classList.toggle("on", V.tx); if (t) t.textContent = V.tx ? "Send" : "Sync";
-	if (f) f.title = V.tx ? "Sending edits to the machine" : "In step with the machine" + (V.roundTrip >= 0 ? " · last round trip " + Math.round(V.roundTrip) + " ms" : "");
+	/* the machine follows an external clock (in a DAW: the host's tempo and transport, set by the plug-in) */
+	const host = Docs.global?.control?.tempoIn === "external";
+	/* the slot by priority: the background read of the library (READ n/m and its bar), then SEND, HOST, SYNC */
+	const left = (machineState().desk || {}).loading || 0, done = Object.keys(Docs.patterns).length + Object.keys(Docs.kits).length + Object.keys(Docs.songs).length;
+	const reading = left > 0 && V.input;
+	if (f) { f.classList.toggle("read", reading); f.style.setProperty("--rf", reading ? (done / (done + left)).toFixed(3) : 0); }
+	l.classList.toggle("on", V.tx); if (t) t.textContent = reading ? `${done}/${done + left}` : V.tx ? "Send" : host ? "Host" : "Sync";
+	if (f && reading) f.title = "Reading the machine's patterns, kits and songs in the background: edit away, the library fills in";
+	else if (f) f.title = V.tx ? "Sending edits to the machine" : (host ? "Follows the host's tempo and transport (GLOBAL: TEMPO IN external). " : "") + "In step with the machine" + (V.roundTrip >= 0 ? " · last round trip " + Math.round(V.roundTrip) + " ms" : "");
 }
 function setKitState(st) {
 	const s = $("#save"); if (!s) return;
@@ -149,7 +156,7 @@ function onAsk(m) {
 	const again = () => { const c = Object.assign({}, m.command, { force: true }); delete c.id; const { op, ...args } = c; cmd(op, args); };
 	ask(m.message || "Go on?", [[m.confirm || "Go on", "danger", again], ["Cancel", "", () => { }]]);
 }
-function ask(html, btns) { const d = $("#dlg"); d.innerHTML = `<div class="dlgbox" role="alertdialog" aria-modal="true"><p>${html}</p><div class="btnrow">${btns.map(([t, c], i) => `<button class="${c}" data-dlg="${i}">${t}</button>`).join("")}</div></div>`; d.hidden = false; d._btns = btns; d.querySelector("button")?.focus(); }
+function ask(html, btns) { const d = $("#dlg"); d.innerHTML = `<div class="dlgbox" role="alertdialog" aria-modal="true"><p>${html}</p><div class="btnrow">${btns.map(([t, c], i) => `<button class="${c}" data-dlg="${i}">${t}</button>`).join("")}</div></div>`; d.hidden = false; d._btns = btns; d.querySelector(".btnrow button:last-child")?.focus(); }
 
 /* Value access for every control: data-g group, data-n name, data-t track, data-f master fx */
 function ref(el) {
@@ -195,11 +202,15 @@ function renderTop() {
 	syncTx();
 	const st = $("#status");
 	if (st) {
-		/* not taking input: what the plug-in says about it (NO ROM has its own screen) */
-		const msg = !V.input && V.lifecycle !== "missing" ? V.lifecycleText : !V.loaded ? "Reading the current pattern and kit from the machine…" : "";
+		/* P7: while the machine starts, the start-up card says so (Boot); after it, the first read */
+		const msg = V.input && !V.loaded ? "Reading the current pattern and kit from the machine…" : "";
 		st.textContent = msg; st.hidden = !msg;
 	}
-	if (V.lifecycle === "missing") firstRun(); else if ($("#dlg").dataset.first === "1") { $("#dlg").hidden = true; $("#dlg").dataset.first = ""; }
+	/* the start-up card over the whole window until the machine takes input; NO ROM and ROM ERROR are its
+	   first-run states (an engine over MIDI has no start-up of its own) */
+	const bootState = { missing: "missing", unsupported: "unsupported", loading: "loading", booting: "booting", animating: "booting" }[V.lifecycle] || "ready";
+	Boot.update({ state: bootState, machine: "Machinedrum" });
+	if ($("#dlg").dataset.first === "1") { $("#dlg").hidden = true; $("#dlg").dataset.first = ""; }
 }
 
 /* The engine label in the LCD shows the engine's real state (mockup v48), from the device:
@@ -1008,10 +1019,21 @@ function firstRun(manual) {
  <div class="lcdbig">MACHINEDRUM FIRMWARE NEEDED</div>
  <p>Machinedrum Editor runs the real Machinedrum operating system. Elektron's firmware cannot be shipped with the app, so you add the one from your own machine.</p>
  <ol><li>Dump the <b>OS 1.63</b> flash image from your Machinedrum (8 MiB, <span class="mono">.bin</span>).</li><li>Put it in the ROM folder${m.romFolder ? `: <span class="mono">${m.romFolder}</span>` : ""}.</li><li>Press <b>Check again</b>. Machinedrum Editor checks its size and version and keeps it on this computer only.</li></ol>
- <div class="btnrow"><button class="cream" data-romfolder="1">Show the ROM folder</button><button data-recheck="1">Check again</button><span class="note">UW, MKII and MKI units all use the same OS 1.63 image.${V.midi ? " OS 1.63 runs now. A new ROM is used after you reopen the plug-in." : ""}</span></div></div>`;
+ <div class="btnrow"><button class="cream" data-choose-rom="1">Choose ROM file…</button><button data-romfolder="1">Show the ROM folder</button><button data-recheck="1">Check again</button><span class="note">UW, MKII and MKI units all use the same OS 1.63 image.${V.midi ? " OS 1.63 runs now. A new ROM is used after you reopen the plug-in." : ""}</span></div></div>`;
 	if (mode === "manual") d.querySelector(".btnrow").insertAdjacentHTML("beforeend", `<button data-firstclose="1">Close</button>`);
 	d.hidden = false; d.dataset.first = mode;
 }
+
+/* the start-up card's keys: the host's native file chooser, the ROM folder, a new look (the ROM stays on this computer) */
+Boot.host = { chooseRom: () => cmd("chooseRom"), revealRom: () => cmd("revealRomFolder"), recheck: () => cmd("recheckFirmware") };
+Bridge.onMessage(m => { if (m.type === "romInstall") { Boot.rom(m); toast(m.text); } });
+/* SysEx import and export: the host's file dialogs and document writes (the page never reads the file) */
+Syx.host = { choose: () => cmd("chooseSyx"), exportAll: () => cmd("syxExport"), start: kinds => cmd("syxImport", { kinds }), stop: () => cmd("syxCancel") };
+Bridge.onMessage(m => {
+	if (m.type === "syxPreview") Syx.preview(m);
+	else if (m.type === "syxProgress") Syx.progress(m);
+	else if (m.type === "syxExport") toast(m.text);
+});
 
 /* LCD line 2 editing */
 let l2drag = null;
@@ -1200,6 +1222,7 @@ document.addEventListener("click", e => {
 	const ok = e.target.closest("[data-out]"); if (ok) { const i = +ok.dataset.out, O = Enums().outputs, out = O[(O.indexOf(V.tracks[i].out || O[0]) + 1) % O.length]; if (!out) return; cmd("route", { t: i, out }, undefined, [[["tracks", i, "out"], out]]); render(); return; }
 	const dl = e.target.closest("[data-dlg]"); if (dl) { const d = $("#dlg"), f = d._btns[+dl.dataset.dlg][2]; d.hidden = true; f(); return; }
 	if (e.target.closest("[data-romfolder]")) { cmd("revealRomFolder"); return; }
+	if (e.target.closest("[data-choose-rom]")) { cmd("chooseRom"); return; }
 	if (e.target.closest("[data-recheck]")) { cmd("recheckFirmware"); return; }
 	if (e.target.closest("[data-firstclose]")) { const d = $("#dlg"); d.hidden = true; d.dataset.first = ""; return; }
 	if ((e.target.closest("[data-dlgclose]") || e.target.id === "dlg") && $("#dlg").dataset.first !== "1") { $("#dlg").hidden = true; $("#dlg").dataset.first = ""; return; }

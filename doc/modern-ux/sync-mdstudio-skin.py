@@ -47,7 +47,7 @@ for a, b in HONEST:
     m = m.replace(a, b)
 # The page's modules, in load order (a module that does not exist yet is skipped).
 # mdDeskSelfTest.js last: the self-tests, in the plug-in only with the diagnostics (an empty script otherwise).
-SCRIPTS = ['mdDeskModal.js', 'mdDeskBridge.js', 'mdDeskModel.js', 'mdDeskKeys.js', 'mdDeskMod.js', 'mdDeskApp.js', 'mdDeskLive.js', 'mdDeskLibrary.js', 'mdDeskGlobal.js', 'mdDeskAudio.js', 'mdDeskSelfTest.js']
+SCRIPTS = ['mdDeskModal.js', 'mdDeskBoot.js', 'mdDeskSyx.js', 'mdDeskBridge.js', 'mdDeskModel.js', 'mdDeskKeys.js', 'mdDeskMod.js', 'mdDeskApp.js', 'mdDeskLive.js', 'mdDeskLibrary.js', 'mdDeskGlobal.js', 'mdDeskAudio.js', 'mdDeskSelfTest.js']
 title = re.search(r'<title>(.*?)</title>', src).group(1)
 page = '''<!doctype html>
 <html lang="en">

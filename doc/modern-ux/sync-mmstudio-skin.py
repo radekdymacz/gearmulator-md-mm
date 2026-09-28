@@ -99,8 +99,6 @@ tail = '''
 .lcdpanel .trf{display:flex!important;flex-direction:column!important;justify-content:flex-start!important;align-items:flex-start!important;gap:3px!important}
 .lcdt{display:flex!important;flex-direction:row!important;flex-wrap:nowrap!important;align-items:flex-start!important;align-self:flex-start!important;gap:5px!important}
 .lcdt .lt{flex:0 0 var(--ltk)!important;width:var(--ltk)!important;height:var(--ltk)!important;min-width:var(--ltk)!important;min-height:var(--ltk)!important;aspect-ratio:auto!important;box-sizing:border-box!important;display:flex!important;align-items:center!important;justify-content:center!important;padding:0!important}
-/* The MKII print sits inside the header, above its bottom rule. */
-:root[data-plate="mk2"] .lcdgroup::after{bottom:-7px!important}
 '''
 out_css = head + css.strip('\n') + '\n' + tail
 

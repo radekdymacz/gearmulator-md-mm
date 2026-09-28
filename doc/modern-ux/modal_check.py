@@ -22,4 +22,26 @@ def check(root):
         problems.append('the MM mockup MODAL script (src/57-modal.js) differs from the MD mockup')
     if blocks(root + 'source/elektron/md/mdJucePlugin/skins/mdStudio/mdDeskModal.js') != [js]:
         problems.append('the MD skin MODAL script (mdDeskModal.js) differs from the MD mockup')
+    # the start-up card (BOOT blocks): the same pairs of copies
+    RB = re.compile(r'/\* BOOT BEGIN.*?/\* BOOT END \*/', re.S)
+    mdb = RB.findall(open(root + 'doc/modern-ux/mockup/index.html').read())
+    if len(mdb) != 2:
+        return problems + ['the MD mockup needs one BOOT stylesheet block and one script block, has %d' % len(mdb)]
+    if RB.findall(open(root + 'doc/modern-ux/mm-mockup/src/20-mm.css').read()) != [mdb[0]]:
+        problems.append('the MM mockup BOOT stylesheet block differs from the MD mockup')
+    if RB.findall(open(root + 'doc/modern-ux/mm-mockup/src/58-boot.js').read()) != [mdb[1]]:
+        problems.append('the MM mockup BOOT script (src/58-boot.js) differs from the MD mockup')
+    if RB.findall(open(root + 'source/elektron/md/mdJucePlugin/skins/mdStudio/mdDeskBoot.js').read()) != [mdb[1]]:
+        problems.append('the MD skin BOOT script (mdDeskBoot.js) differs from the MD mockup')
+    # SysEx import (SYX blocks)
+    RS = re.compile(r'/\* SYX BEGIN.*?/\* SYX END \*/', re.S)
+    mds = RS.findall(open(root + 'doc/modern-ux/mockup/index.html').read())
+    if len(mds) != 2:
+        return problems + ['the MD mockup needs one SYX stylesheet block and one script block, has %d' % len(mds)]
+    if RS.findall(open(root + 'doc/modern-ux/mm-mockup/src/20-mm.css').read()) != [mds[0]]:
+        problems.append('the MM mockup SYX stylesheet block differs from the MD mockup')
+    if RS.findall(open(root + 'doc/modern-ux/mm-mockup/src/59-syx.js').read()) != [mds[1]]:
+        problems.append('the MM mockup SYX script (src/59-syx.js) differs from the MD mockup')
+    if RS.findall(open(root + 'source/elektron/md/mdJucePlugin/skins/mdStudio/mdDeskSyx.js').read()) != [mds[1]]:
+        problems.append('the MD skin SYX script (mdDeskSyx.js) differs from the MD mockup')
     return problems

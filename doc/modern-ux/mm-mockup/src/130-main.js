@@ -253,10 +253,15 @@ function setEngineTip(st,tip){const e=ENG[st];if(!e||e[2]===tip)return;ENG[st]=[
 function setEng(st){S.eng=st;const[txt,led]=ENG[st],b=document.querySelector(".lcdeng"),l=document.getElementById("engled");if(!b)return;
  b.querySelector("span").textContent=txt;l.className="led "+(led==="on"?"on":led==="blink"?"on blink":"");
  refreshEngGate();
+ /* P7: the start-up card over the whole window until the machine takes input; NO ROM and ROM ERROR are its first-run states */
+ Boot.update({state:{norom:"missing",unsupported:"unsupported",loading:"loading",boot:"booting"}[st]||"ready",machine:"Monomachine"});
  bootScreen(st==="boot");
  b.title=ENG[st][2]||(engReady()?"Engine: running. Click to switch emulator or hardware, or load another ROM.":"Engine: "+txt.toLowerCase()+". Editing starts when it is ready.")}
 /* while BOOTING OS the LCD shows a firmware-style start-up screen (the text is the editor's, not a copy of the ROM's) */
-let bootT=[];function bootScreen(on){if(HOST.bootScreen)return HOST.bootScreen(on);const el=$("#bootscr");if(!el)return;bootT.forEach(clearTimeout);bootT=[];el.classList.toggle("on",on);if(!on)return;$("#bsmk").textContent=S.plate==="mk1"?"SFX-60":"SFX-60 MKII";
+let bootT=[];function bootScreen(on){if(HOST.bootScreen)return HOST.bootScreen(on);const el=$("#bootscr");if(!el)return;
+ /* P7: the example boot's screen is drawn into the start-up card: the editor's own text, not the ROM's */
+ if(on){let f=0;const tk=()=>{if(S.eng!=="boot")return;f++;const b=new Uint8Array(1024);const px=(x,y)=>{b[y*16+(x>>3)]|=0x80>>(x&7)};for(let x=0;x<128;x++){px(x,0);px(x,63)}for(let y=0;y<64;y++){px(0,y);px(127,y)}for(let x=10;x<Math.min(118,10+f*6);x++)for(let y=28;y<36;y++)px(x,y);Boot.lcd(b);bootT.push(setTimeout(tk,70))};tk()}
+ if(!HOST.bootScreen)return;bootT.forEach(clearTimeout);bootT=[];el.classList.toggle("on",on);if(!on)return;$("#bsmk").textContent=S.plate==="mk1"?"SFX-60":"SFX-60 MKII";
  const steps=[["OS 1.32B · TESTING MEMORY",15],["BATTERY RAM · 128 KITS",40],["128 PATTERNS · 24 SONGS",65],[S.plate==="mk1"?"DSP · FACTORY WAVES":"DSP · 64 DIGIPRO WAVES",85],["STARTING SEQUENCER",100]];
  steps.forEach(([t,f],i)=>bootT.push(setTimeout(()=>{$("#bstxt").textContent=t;$("#bsbar").style.width=f+"%"},i*210)))}
 function startEngine(kind){engT.forEach(clearTimeout);engT=[];if(S.playing)togglePlay();
@@ -368,6 +373,8 @@ const copy=o=>JSON.parse(JSON.stringify(o));
    (a Uint8Array); null: back to the editor's fields, cross-faded */
 let lcdFadeT=0;
 function setLcd(bits){const el=$("#bootscr");if(!el)return;clearTimeout(lcdFadeT);
+ /* P7: the firmware's screen goes to the start-up card; the header's LCD stays itself */
+ if(bits&&bits.length>=1024){Boot.lcd(bits);return}
  if(bits&&bits.length>=1024){let c=el.querySelector("canvas.fwlcd");if(!c){c=document.createElement("canvas");c.className="fwlcd";c.width=128;c.height=64;el.appendChild(c)}
   const g=c.getContext("2d"),cs=getComputedStyle(el);g.fillStyle=cs.getPropertyValue("--lcd").trim()||"#b7c79a";g.fillRect(0,0,128,64);g.fillStyle=cs.getPropertyValue("--ink").trim()||"#1d2a1a";
   for(let y=0;y<64;y++)for(let xb=0;xb<16;xb++){const b=bits[y*16+xb];if(b)for(let k=0;k<8;k++)if(b&(0x80>>k))g.fillRect(xb*8+k,y,1,1)}
@@ -376,6 +383,16 @@ function setLcd(bits){const el=$("#bootscr");if(!el)return;clearTimeout(lcdFadeT
 const dialogOpen=()=>!$("#dlg").hidden;
 /* the firmware screen (an ask with class "first" and the firmware text) closes when the host has a firmware again */
 function closeFirmwareDialog(){const d=$("#dlg");if(!d.hidden&&d.querySelector(".dlgbox.first .lcdbig"))d.hidden=true}
+/* SysEx import and export: the host's file dialogs and document writes; the example shows a pretend file */
+Syx.host={choose:()=>{if(HOST.syxChoose)return HOST.syxChoose();Syx.preview({ok:true,file:"example.syx",model:"Monomachine",fullBackup:false,problemCount:0,problems:[],items:{kit:[{slot:0,name:"SUPERWAVES",overwrites:true}],pattern:[{slot:0,name:"A01",kit:0,overwrites:true}],song:[],global:[]}})},
+ exportAll:()=>{if(HOST.syxExport)return HOST.syxExport();toast("In the plug-in: a save dialog, then every document as one .syx.")},
+ start:k=>{if(HOST.syxStart)return HOST.syxStart(k);Syx.progress({done:2,total:2,running:false,text:"Imported (example)."})},
+ stop:()=>{if(HOST.syxStop)return HOST.syxStop()}};
+/* the start-up card's keys: the host's native file chooser and ROM folder (the ROM stays on this computer); the
+   example pretends an install */
+Boot.host={chooseRom:()=>{if(HOST.chooseRom)return HOST.chooseRom();Boot.rom({ok:true,text:"\u2713 Monomachine OS 1.32B found (example)"});setTimeout(()=>startEngine("emu"),900)},
+ revealRom:()=>{if(HOST.revealRom)return HOST.revealRom();toast("In the plug-in: the ROM folder opens in Finder.")},
+ recheck:()=>{if(HOST.recheck)return HOST.recheck();startEngine("emu")}};
 /* the editor's menu (a host's): right-click an empty part of the header */
 document.addEventListener("contextmenu",e=>{if(!HOST.menu||!e.target.closest(".top")||e.target.closest("button,[role=slider],[role=button],select,input,b,.lcdpanel"))return;e.preventDefault();HOST.menu()});
 window.MMView={
@@ -392,7 +409,7 @@ window.MMView={
  startEmpty,setCurrent:({pattern,kit})=>{if(pattern!=null)S.pat=pattern;if(kit!=null)S.kit=kit},setQueued:q=>{S.queued=q},setTempo:bpm=>{S.bpm=bpm},setInput,
  setPlaying,setStep,setPatternSlot,setKitSlot,setWorkingKit,setSong,setRouting:r=>{S.routing=r},setMidiTracks,setMultiMap,
  setEng,setEngineLabel,setEngineTip,setEngines,setAudioEntry,setKitState,clearLearnTarget:()=>{S.learnT=null},setModulation,setCtlSetup,disable,setReading,
- setLcd,setKeyDown,setPst,closeFirmwareDialog,
+ setLcd,setKeyDown,setPst,closeFirmwareDialog,bootRom:r=>Boot.rom(r),syxPreview:m=>Syx.preview(m),syxProgress:m=>Syx.progress(m),
  /* calls */
  render,renderTop,drawLib,toast,ask,redraw,movePH,setPos,flashTracks,goWs,clickStep,autoRange,kitSave,
  redrawAudio:()=>{if(AP.open)drawAudio()},audioLevel,openAudio};

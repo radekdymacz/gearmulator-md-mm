@@ -14,6 +14,7 @@
 #include "elektronData/mmKit.h"
 #include "elektronData/mmPattern.h"
 #include "elektronData/mmValidate.h"
+#include "elektronData/syxImport.h"
 
 #include "mdLib/mdautomation.h"
 #include "mdLib/mmtelemetry.h"
@@ -25,6 +26,7 @@
 #include <cmath>
 #include <cstdlib>
 #include <deque>
+#include <fstream>
 
 using namespace mdFirmwareSession;
 namespace ed = elektronData;
@@ -483,6 +485,28 @@ namespace
 		check(r.tel.step.load() == t0, "and stops on the host's Stop");
 		r.msg(R"({"op":"followHost"})");
 		check(r.lastResult().find("note")->asString().empty(), "a second followHost changes nothing");
+		// Clock and transport OUT (the leader of two apps over a MIDI bus): which bytes make the machine send them
+		if(std::getenv("MM_SYNC_OUT"))
+		{
+			int f8 = 0, fa = 0, fc = 0;
+			r.m.onMidi = [&](const synthLib::SMidiEvent& _e) { if(_e.a == 0xf8) ++f8; else if(_e.a == 0xfa) ++fa; else if(_e.a == 0xfc) ++fc; };
+			auto g3 = *r.desk->global(static_cast<uint8_t>(r.desk->currentGlobal()));
+			g3.x05[0] = g3.x05[1] = 0;	// its own clock again (not following)
+			for(const size_t i : {size_t{0x07}, size_t{0x08}, size_t{0x09}, size_t{0x0a}})
+			{
+				auto raw = ed::mmGlobalRaw(g3);
+				const auto was = raw[i];
+				raw[i] = raw[i] ? 0 : 1;
+				r.msg(R"({"op":"set","kind":"global","doc":)" + ed::json::write(ed::mmGlobalToJson(*ed::mmGlobalFromRaw(raw, g3.position))) + "}");
+				r.run(5000);
+				f8 = fa = fc = 0;
+				r.msg(R"({"op":"play"})"); r.run(1000); r.msg(R"({"op":"stop"})"); r.run(600);
+				std::printf("  byte %02zx %02x -> %02x: out clocks %d, start %d, stop %d (internal play 1 s)\n", i, was, raw[i], f8, fa, fc);
+				r.msg(R"({"op":"set","kind":"global","doc":)" + ed::json::write(ed::mmGlobalToJson(g3)) + "}");
+				r.run(5000);
+			}
+			r.m.onMidi = nullptr;
+		}
 		if(!std::getenv("MM_SYNC_SEARCH"))
 			return;
 		// which undecoded global byte is the MIDI SYNC setting: flip each and look again
@@ -512,6 +536,65 @@ namespace
 			r.msg(R"({"op":"set","kind":"global","doc":)" + ed::json::write(ed::mmGlobalToJson(*g)) + "}");
 			r.run(3000);
 		}
+	}
+
+	// P7: a full backup .syx imported through the desk (one "set" per document, one gesture) and read back from
+	// the firmware. The user's own file, read in place (MM_SYX, default Radek's download); skipped without it.
+	void syxImport(const Bytes& _rom)
+	{
+		std::puts("syx import");
+		namespace ed = elektronData;
+		const char* path = std::getenv("MM_SYX");
+		const std::string file = path ? path : "/Users/radek/Downloads/AE_LIVE_ELEKTRONS_BACKUP_010308/mm010308.syx";
+		std::ifstream in(file, std::ios::binary);
+		if(!in) { std::printf("  skip: %s not found\n", file.c_str()); return; }
+		const Bytes bytes((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
+		const auto f = ed::parseSyx(bytes);
+		check(f.model == ed::SyxModel::Mm && f.problems.empty(), "the file is a Monomachine dump with no problems");
+		Rig r(_rom);
+		r.msg(R"({"op":"ready"})");
+		r.desk->setProbe(mmDesk::Desk::Probe::Running);
+		r.run(600);
+		while(r.desk->loaded() < 288) r.run(100);
+		r.run(1000);
+		size_t sent = 0;
+		int refused = 0;
+		const auto set = [&](const char* _kind, const ed::json::Value& _doc)
+		{
+			r.msg(std::string(R"({"op":"set","g":777,"kind":")") + _kind + R"(","doc":)" + ed::json::write(_doc) + "}"); ++sent;
+			const auto res = r.lastResult();
+			if(res.isObject() && !res.find("ok")->asBool() && refused++ < 3) std::printf("    %s refused: %s\n", _kind, ed::json::write(*res.find("errors")).c_str());
+			r.run(20);
+		};
+		// what OS 1.32B takes as it is (the session's SyxTraits::fits): its own formats and sizes, validating
+		const auto kitSize = ed::encodeMmKit(ed::MmKit{}).size();
+		std::map<uint8_t, ed::MmKit> kits; std::map<uint8_t, ed::MmPattern> pats; std::map<uint8_t, ed::MmSong> songs;
+		for(const auto& [s, k] : f.mm.kits) if(k.version == 2 && k.revision == 1 && ed::encodeMmKit(k).size() == kitSize) kits[s] = k;
+		for(const auto& [s, p] : f.mm.patterns) if(ed::validate(p).empty()) pats[s] = p;
+		for(const auto& [s, g] : f.mm.songs) if(g.version == 2 && g.revision == 1) songs[s] = g;
+		std::printf("  the firmware takes %zu kits, %zu patterns and %zu songs of the file as they are (the others are an older OS's)\n", kits.size(), pats.size(), songs.size());
+		for(const auto& [s, k] : kits) set("kit", ed::mmKitToJson(k));
+		for(const auto& [s, p] : pats) set("pattern", ed::mmPatternToJson(p));
+		for(const auto& [s, g] : songs) set("song", ed::mmSongToJson(g));
+		const auto t0 = r.ms();
+		const double limit = std::getenv("MM_SYX_MS") ? std::atof(std::getenv("MM_SYX_MS")) : 600000;
+		while(r.ms() - t0 < limit)
+		{
+			r.run(500);
+			bool busy = false;
+			for(const auto& [s, k] : kits) { const auto d = r.desk->kit(s); if(!d || ed::encodeMmKit(*d) != ed::encodeMmKit(k)) { busy = true; break; } }
+			if(!busy) for(const auto& [s, p] : pats) { const auto d = r.desk->pattern(s); if(!d || ed::encodeMmPattern(*d) != ed::encodeMmPattern(p)) { busy = true; break; } }
+			if(!busy) break;
+		}
+		size_t same = 0, total = 0;
+		std::string off;
+		for(const auto& [s, k] : kits) { ++total; const auto d = r.desk->kit(s); if(d && ed::encodeMmKit(*d) == ed::encodeMmKit(k)) ++same; else if(off.size() < 80) { off += " kit " + std::to_string(s + 1);
+			if(d) { const auto a = ed::encodeMmKit(k), b = ed::encodeMmKit(*d); int n = 0; for(size_t i = 0; i < std::min(a.size(), b.size()) && n < 8; ++i) if(a[i] != b[i]) { char t[32]; std::snprintf(t, sizeof(t), " @%zu %02x->%02x", i, a[i], b[i]); off += t; ++n; } if(a.size() != b.size()) off += " size " + std::to_string(a.size()) + "/" + std::to_string(b.size()); } else off += " missing"; } }
+		for(const auto& [s, p] : pats) { ++total; const auto d = r.desk->pattern(s); if(d && ed::encodeMmPattern(*d) == ed::encodeMmPattern(p)) ++same; else if(off.size() < 80) off += " pattern " + std::to_string(s + 1); }
+		for(const auto& [s, g] : songs) { ++total; const auto d = r.desk->song(s); if(d && ed::encodeMmSong(*d) == ed::encodeMmSong(g)) ++same; else if(off.size() < 80) off += " song " + std::to_string(s + 1); }
+		std::printf("  %zu documents sent, %zu of %zu read back equal after %.0f s emulated%s%s\n", sent, same, total, (r.ms() - t0) / 1000, off.empty() ? "" : "; not equal:", off.c_str());
+		check(same == total, "the documents the firmware takes read back from it as in the file (" + std::to_string(same) + " of " + std::to_string(total) + ")");
+		check(r.desk->coreState().history().size() == 1, "the whole import is one undo step (" + std::to_string(r.desk->coreState().history().size()) + ")");
 	}
 
 	// Zero crossings per second / 2 over a window of the left channel.
@@ -667,6 +750,8 @@ int main(const int _argc, char** _argv)
 			smoke(rom);
 		if(only.empty() || only == "trigkinds")
 			trigKinds(rom);
+		if(only == "syximport")
+			syxImport(rom);
 		if(only.empty() || only == "hostclock")
 			hostClock(rom);
 		if(only.empty() || only == "patterns")

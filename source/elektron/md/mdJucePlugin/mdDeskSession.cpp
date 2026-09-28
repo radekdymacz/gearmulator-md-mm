@@ -1,6 +1,7 @@
 #include "mdDeskSession.h"
 
 #include "mdSessions.h"
+#include "mdRomInstall.h"
 
 #include "mdPluginProcessor.h"
 
@@ -64,6 +65,30 @@ namespace mdJucePlugin
 	void DeskSession::reply(const Value& _message, const bool _ok, const std::string& _note) const
 	{
 		toPage(deskCore::resultMessage(_message, _ok ? std::vector<std::string>{} : std::vector<std::string>{_note}, _note));
+	}
+
+	void DeskSession::installRom(const juce::File& _file)
+	{
+		const juce::File folder(juce::String::fromUTF8(m_processor.getPublicRomFolder().c_str()));
+		const auto r = mdJucePlugin::installRom(_file, m_processor.getModel(), folder);
+		Value m = Value::object();
+		m.set("type", "romInstall");
+		m.set("ok", r.ok);
+		m.set("text", r.text);
+		toPage(m);
+		if(!r.ok)
+			return;
+		// The machine starts again with the new firmware, without reopening the plug-in; the page's boot
+		// card shows its start-up.
+		const bool restarted = pluginProcessorOf(m_processor).rebootDevice();
+		if(!restarted)
+		{
+			Value e = Value::object();
+			e.set("type", "romInstall");
+			e.set("ok", false);
+			e.set("text", r.text + ". The machine did not start with it: close and reopen the plug-in.");
+			toPage(e);
+		}
 	}
 
 	void DeskSession::revealRomFolder(const Value& _message) const

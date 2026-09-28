@@ -384,3 +384,17 @@ target_link_libraries(deskWirePortTest PRIVATE mdDeskWirePort mmDeskWirePort)
 add_test(NAME deskWirePortTest COMMAND deskWirePortTest)
 set_tests_properties(deskWirePortTest PROPERTIES LABELS "UnitTest;Midi")
 set_property(TARGET deskWirePortTest PROPERTY FOLDER "Elektron/test")
+
+# .syx import and export (P7): synthetic dumps; no firmware.
+add_executable(syxImportTest syxImportTest.cpp)
+target_link_libraries(syxImportTest PRIVATE elektronData)
+add_test(NAME syxImportTest COMMAND syxImportTest)
+set_tests_properties(syxImportTest PROPERTIES LABELS "UnitTest")
+set_property(TARGET syxImportTest PROPERTY FOLDER "Elektron/test")
+
+# The same on two local third-party backups (never in the repo); skips (77) when they are absent.
+add_executable(syxImportFileTest syxImportFileTest.cpp)
+target_link_libraries(syxImportFileTest PRIVATE elektronData)
+add_test(NAME syxImportFileTest COMMAND syxImportFileTest)
+set_tests_properties(syxImportFileTest PROPERTIES LABELS "UnitTest" SKIP_RETURN_CODE 77)
+set_property(TARGET syxImportFileTest PROPERTY FOLDER "Elektron/test")

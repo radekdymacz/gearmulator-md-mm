@@ -22,6 +22,7 @@
 #include "elektronData/mdJson.h"
 #include "elektronData/mdMachines.h"
 #include "elektronData/mdWorkingKit.h"
+#include "elektronData/syxImport.h"
 
 #include "mdLib/mdautomation.h"
 #include "mdLib/mdfrontpanel.h"
@@ -29,6 +30,7 @@
 
 #include <algorithm>
 #include <deque>
+#include <fstream>
 #include <set>
 #include <functional>
 #include <map>
@@ -1358,6 +1360,74 @@ namespace
 		m.onMidi = nullptr;
 	}
 
+	// P7: a full backup .syx imported through the desk (the session's SysEx import: one "set" per document,
+	// one gesture) and read back from the firmware equal. The file is the user's own, read in place and
+	// never copied (argument 3); skipped without it.
+	void syxImport(const Bytes& _rom, const std::string& _romName, const std::string& _file)
+	{
+		std::puts("syx import");
+		namespace ed = elektronData;
+		std::ifstream in(_file, std::ios::binary);
+		if(!in)
+		{
+			std::printf("  skip: %s not found\n", _file.c_str());
+			return;
+		}
+		const Bytes bytes((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
+		const auto f = ed::parseSyx(bytes);
+		check(f.model == ed::SyxModel::Md && f.problems.empty(), "the file is a Machinedrum dump with no problems");
+		Rig rig(_rom, _romName);
+		auto& desk = rig.desk();
+		rig.page(R"({"op":"ready"})");
+		rig.runUntil([&] { return desk.isReady() && desk.documents().global && desk.documents().patterns.size() == 128 && desk.documents().kits.size() == 64 && desk.documents().songs.size() == 32; }, 60000);
+		const int active = desk.documents().global ? desk.documents().global->position : -1;
+		size_t sent = 0;
+		const auto set = [&](const char* _kind, const ed::json::Value& _doc)
+		{
+			rig.page(std::string(R"({"op":"set","g":777,"kind":")") + _kind + R"(","doc":)" + ed::json::write(_doc) + "}");
+			++sent;
+			rig.runUntil([&] { return !desk.isBusy(); }, 5000);
+		};
+		for(const auto& [s, g] : f.md.globals)
+			if(s == active && g.version == 6 && g.revision == 1)	// the session leaves out an older OS's globals
+				set("global", ed::globalToJson(g));
+		std::printf("  before: pattern %d kit %d global %d\n", desk.linkState().pattern ? *desk.linkState().pattern : -1, desk.linkState().kit ? *desk.linkState().kit : -1, active);
+		for(const auto& [s, k] : f.md.kits) set("kit", ed::kitToJson(k));
+		std::printf("  after kits: pattern %d kit %d\n", desk.linkState().pattern ? *desk.linkState().pattern : -1, desk.linkState().kit ? *desk.linkState().kit : -1);
+		for(const auto& [s, p] : f.md.patterns) set("pattern", ed::patternToJson(p));
+		std::printf("  after patterns: pattern %d kit %d global %d\n", desk.linkState().pattern ? *desk.linkState().pattern : -1, desk.linkState().kit ? *desk.linkState().kit : -1, desk.documents().global ? desk.documents().global->position : -1);
+		for(const auto& [s, g] : f.md.songs) set("song", ed::songToJson(g));
+		rig.run(2000);
+		size_t same = 0, total = 0;
+		std::vector<std::string> off;
+		const auto& v = desk.documents();
+		const auto cmp = [&](const char* _k, const int _s, const Bytes& _a, const std::optional<Bytes>& _b)
+		{
+			++total;
+			if(_b && *_b == _a) ++same;
+			else if(off.size() < 8)
+			{
+				std::string d;
+				if(_b)
+					for(size_t i = 0, n = 0; i < std::min(_a.size(), _b->size()) && n < 6; ++i)
+						if(_a[i] != (*_b)[i]) { char t[40]; std::snprintf(t, sizeof(t), " @%zu %02x->%02x", i, _a[i], (*_b)[i]); d += t; ++n; }
+				off.push_back(std::string(_k) + " " + std::to_string(_s + 1) + (_b ? d : " missing") + (_b && _a.size() != _b->size() ? " (size " + std::to_string(_a.size()) + "/" + std::to_string(_b->size()) + ")" : ""));
+			}
+		};
+		for(const auto& [s, k] : f.md.kits) { const auto it = v.kits.find(s); cmp("kit", s, ed::encodeMdKit(k), it == v.kits.end() ? std::nullopt : std::optional<Bytes>(ed::encodeMdKit(it->second))); }
+		for(const auto& [s, p] : f.md.patterns) { const auto it = v.patterns.find(s); cmp("pattern", s, ed::encodeMdPattern(p), it == v.patterns.end() ? std::nullopt : std::optional<Bytes>(ed::encodeMdPattern(it->second))); }
+		for(const auto& [s, g] : f.md.songs) { const auto it = v.songs.find(s); cmp("song", s, ed::encodeMdSong(g), it == v.songs.end() ? std::nullopt : std::optional<Bytes>(ed::encodeMdSong(it->second))); }
+		if(f.md.globals.count(static_cast<uint8_t>(active)) && f.md.globals.at(static_cast<uint8_t>(active)).version == 6)
+			cmp("global", active, ed::encodeMdGlobal(f.md.globals.at(static_cast<uint8_t>(active))), v.global ? std::optional<Bytes>(ed::encodeMdGlobal(*v.global)) : std::nullopt);
+		std::printf("  %zu documents sent, %zu of %zu read back equal%s", sent, same, total, off.empty() ? "\n" : "; not equal:");
+		for(const auto& o : off) std::printf(" %s", o.c_str());
+		if(!off.empty()) std::printf("\n");
+		// Measured on the AE backup (OS 1.2x era): its globals are format 5/1 (OS 1.63 stores 6/1, converting them),
+		// and two kit names hold bytes the contract's name does not carry; everything else is byte-exact.
+		check(total > 0 && same * 100 >= total * 98, "the imported documents read back from the firmware as in the file (" + std::to_string(same) + " of " + std::to_string(total) + ")");
+		check(desk.coreState().history().size() == 1, "the whole import is one undo step (" + std::to_string(desk.coreState().history().size()) + ")");
+	}
+
 	// P7: in a DAW the plug-in sends the host's transport and tempo as MIDI Start, clock and Stop; the
 	// session sends followHost so the machine's active global takes them (TEMPO IN external), without an
 	// undo step. Steps counted over 4 s of a 100 BPM clock, before and after.
@@ -1434,6 +1504,13 @@ int main(const int _argc, char** _argv)
 			globalSettings(rig);
 			check(g_contract.loaded() && g_contract.bad() == 0, g_contract.summary());
 			std::printf("mdDeskFirmwareTest p4: %s (%d failure(s))\n", g_failures ? "FAIL" : "PASS", g_failures);
+			return g_failures ? 1 : 0;
+		}
+		if(mode == "syximport")
+		{
+			syxImport(rom, _argv[1], _argc > 3 ? _argv[3] : "/Users/radek/Downloads/AE_LIVE_ELEKTRONS_BACKUP_010308/md010308.syx");
+			check(g_contract.loaded() && g_contract.bad() == 0, g_contract.summary());
+			std::printf("mdDeskFirmwareTest syximport: %s (%d failure(s))\n", g_failures ? "FAIL" : "PASS", g_failures);
 			return g_failures ? 1 : 0;
 		}
 		if(mode == "hostclock")

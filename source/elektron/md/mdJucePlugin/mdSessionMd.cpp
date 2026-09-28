@@ -10,6 +10,9 @@
 
 #include "deskWire/mdWire.h"
 
+#include "elektronData/mdJson.h"
+#include "elektronData/mdValidate.h"
+
 #include <deque>
 
 namespace mdJucePlugin
@@ -112,6 +115,58 @@ namespace mdJucePlugin
 
 	// The Machinedrum Editor's session: the engine map, the learnable parameters, its page and the
 	// editor's setup kept with the project.
+	// P7: the Machinedrum's SysEx import traits (mdSyxSession.h)
+	template<> struct SyxTraits<mdDesk::Desk>
+	{
+		using Docs = elektronData::MdDocuments;
+		static constexpr elektronData::SyxModel model = elektronData::SyxModel::Md;
+		static constexpr const char* name = "Machinedrum";
+		static const Docs& docs(const elektronData::SyxFile& _f) { return _f.md; }
+		static Docs machine(const mdDesk::Desk& _d)
+		{
+			const auto& v = _d.documents();
+			Docs o;
+			o.patterns = v.patterns;
+			o.kits = v.kits;
+			o.songs = v.songs;
+			if(v.global)
+				o.globals[v.global->position] = *v.global;
+			return o;
+		}
+		static elektronData::json::Value json(const elektronData::SyxKind _k, const Docs& _d, const uint8_t _s)
+		{
+			namespace ed = elektronData;
+			switch(_k)
+			{
+			case ed::SyxKind::Pattern: return ed::patternToJson(_d.patterns.at(_s));
+			case ed::SyxKind::Kit: return ed::kitToJson(_d.kits.at(_s));
+			case ed::SyxKind::Song: return ed::songToJson(_d.songs.at(_s));
+			default: return ed::globalToJson(_d.globals.at(_s));
+			}
+		}
+		// What OS 1.63 takes as it is: the documents of its own formats (the one it would store) that validate.
+		static std::string fits(const elektronData::SyxKind _k, const Docs& _d, const uint8_t _s)
+		{
+			namespace ed = elektronData;
+			const auto older = [](const int _v, const int _r, const int _wv, const int _wr)
+			{
+				return _v == _wv && _r == _wr ? std::string() : "format " + std::to_string(_v) + "/" + std::to_string(_r) + " (OS 1.63 stores " + std::to_string(_wv) + "/" + std::to_string(_wr) + ")";
+			};
+			switch(_k)
+			{
+			case ed::SyxKind::Pattern: { const auto& p = _d.patterns.at(_s); auto w = older(p.version, p.revision, 3, 1); if(w.empty() && !ed::validate(p).empty()) w = ed::validate(p).front(); return w; }
+			case ed::SyxKind::Kit: { const auto& k = _d.kits.at(_s); auto w = older(k.version, k.revision, 4, 1); if(w.empty() && !ed::validate(k).empty()) w = ed::validate(k).front(); return w; }
+			case ed::SyxKind::Song: { const auto& g = _d.songs.at(_s); return older(g.version, g.revision, 2, 2); }
+			default: { const auto& g = _d.globals.at(_s); return older(g.version, g.revision, 6, 1); }
+			}
+		}
+		// The editor edits the active GLOBAL slot only; the file's others are left out.
+		static bool importable(const elektronData::SyxItem& _i, const mdDesk::Desk& _d)
+		{
+			return _i.kind != elektronData::SyxKind::Global || (_d.documents().global && _d.documents().global->position == _i.slot);
+		}
+	};
+
 	class MdSession final : public SessionOf<mdDesk::Desk>
 	{
 	public:

@@ -164,8 +164,9 @@ Bridge.onMessage(m => {
 	   BOOTING OS lasts until keys work: the firmware answers MIDI early, but its start-up animation
 	   ignores panel keys until it is over (about 13 s; the lifecycle's "animating"). */
 	if (m.type === "lcd") {
-		if (m.bits) { const s = atob(m.bits); fwLcd.bits = Uint8Array.from(s, ch => ch.charCodeAt(0)); drawFwLcd(); }
-		showFwLcd(!!fwLcd.bits && !machineState().input);
+		if (m.bits) { const s = atob(m.bits); fwLcd.bits = Uint8Array.from(s, ch => ch.charCodeAt(0)); Boot.lcd(fwLcd.bits); }
+		/* P7: the start-up animation lives in the start-up card; the header's LCD stays itself */
+		showFwLcd(false);
 	}
 	else if (m.type === "machine") {
 		if (m.doc.input) { showFwLcd(false); if (!wasReady) modInFlight = 0; wasReady = true; }

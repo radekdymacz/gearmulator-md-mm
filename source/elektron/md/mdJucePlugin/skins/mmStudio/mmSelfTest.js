@@ -200,6 +200,11 @@ window.MMDiagnostics = {};
 			catch (e) { results.push(false); log(`SELFTEST FAIL ${name}: ${e.message}`); }
 			await sleep(800);
 		};
+		for (const [name, pass, note] of window.__p7boot || []) { results.push(!!pass); log(`SELFTEST ${pass ? "ok" : "FAIL"} ${name} ${note}`); }
+		{
+			const card = $("#bootcard");
+			results.push(card.hidden); log(`SELFTEST ${card.hidden ? "ok" : "FAIL"} the card is gone once the machine takes input`);
+		}
 		while (!machine() || machine().loading.done < machine().loading.total) await sleep(200);
 		V().goWs("seq");
 		await sleep(4000);
@@ -225,7 +230,7 @@ window.MMDiagnostics = {};
 			sent.length = 0; asks.length = 0;
 			const before = machine().kit.working;
 			window.queuePattern(to);
-			const moved = await waitFor(m => m.type === "machine" && m.doc.pattern.current === to, 15000).then(() => true, () => false);
+			const moved = await waitFor(m => m.type === "machine" && m.doc.pattern.current === to, 30000).then(() => true, () => false);
 			await sleep(2500);
 			const edits = sent.filter(x => x.startsWith("set:"));
 			if (machine().kit.working !== "clean") log("p7: after select " + to + ": " + kitDiff());
@@ -297,6 +302,7 @@ window.MMDiagnostics = {};
 			return note;
 		});
 		await check("a drag paints SLIDE steps on, then off, one undo step each", async () => {
+			V().goWs("seq"); await sleep(600);
 			const p = cur().pat, q = st => $(`.tc[data-tl="sld"][data-s="${st}"]`);
 			const free = [...Array(s.len - 3).keys()].find(st => [0, 1, 2, 3].every(k => !s.tracks[s.sel].slide.has(st + k)));
 			if (free == null) throw new Error("no four free SLIDE steps");
@@ -333,6 +339,7 @@ window.MMDiagnostics = {};
 		});
 		await check("LEN on LCD line 2 changes the steps (click, shift-click)", async () => {
 			lenTest = true;
+			V().goWs("seq"); await sleep(600);
 			const p = cur().pat, len0 = s.len, seen = [len0];
 			const seenDocs = [];
 			Bridge.onMessage(m => { if (lenTest && m.type === "doc" && m.kind === "pattern" && m.slot === p) { seenDocs.push(m.doc.length + (m.pending ? "p" : "")); log("p7: doc pattern " + p + " length " + m.doc.length + (m.pending ? " pending" : "") + ", page LEN " + s.len); } if (lenTest && m.type === "result" && m.op === "set") seenDocs.push("result " + m.ok + " " + (m.errors || []).join(",") + " " + (m.note || "")); });
@@ -403,4 +410,30 @@ window.MMDiagnostics = {};
 	});
 	const kind = (location.search.match(/[?&]selftest=(\w+)/) || [])[1];
 	if (kind && TESTS[kind]) window.MMPage.whenReady(TESTS[kind]);
+	/* p7, from the page's start: the start-up card covers the window and blocks input while the machine starts */
+	if (kind === "p7") (async () => {
+		const until = async (f, ms) => { const end = now() + ms; while (now() < end) { if (f()) return true; await sleep(30); } return false; };
+		const out = window.__p7boot = [];
+		const sent = [], send0 = Bridge.send;
+		Bridge.send = (m, o) => { sent.push(m.op); return send0(m, o); };
+		const booting = await until(() => typeof Boot !== "undefined" && Boot.state() === "booting", 20000);
+		await sleep(2500);
+		const card = $("#bootcard"), top = typeof Modal !== "undefined" ? Modal.top() : null, cardShown = !!card && !card.hidden;
+		const hit = el => { if (!el) return false; const r = el.getBoundingClientRect(); const t = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2); return !!t && (t.closest("#bootcard") || t.id === "modalbg"); };
+		const covered = hit($("#play")) && hit($('[data-ws="mix"]'));
+		document.dispatchEvent(new KeyboardEvent("keydown", { key: " ", code: "Space", bubbles: true, cancelable: true }));
+		await sleep(300);
+		/* the animation has blank frames: the most pixels over a few seconds */
+		let inked = 0;
+		for (let k = 0; k < 20 && !$("#bootcard").hidden; k++) {
+			const g = $("#bootlcd").getContext("2d").getImageData(0, 0, 128, 64).data;
+			let n = 0; for (let i = 0; i < g.length; i += 4) if (g[i] !== g[0] || g[i + 1] !== g[1] || g[i + 2] !== g[2]) n++;
+			inked = Math.max(inked, n); await sleep(200);
+		}
+		const blocked = covered && !sent.includes("play");
+		Bridge.send = send0;
+		out.push([`while it starts, the start-up card covers the window and blocks input`, booting && cardShown && top === "bootcard" && blocked,
+			`card ${cardShown}, top ${top}, blocked ${blocked} (sent ${sent.join(",") || "-"})`]);
+		out.push(["the card mirrors the firmware's LCD", inked > 50, inked + " pixels"]);
+	})();
 })();

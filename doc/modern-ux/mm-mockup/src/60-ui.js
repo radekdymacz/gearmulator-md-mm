@@ -2,7 +2,7 @@
 /* ===== Feedback: toast, TX lamp, dialogs ===== */
 let toastT;function toast(m){const e=$("#toast");e.textContent=m;e.classList.add("on");clearTimeout(toastT);toastT=setTimeout(()=>e.classList.remove("on"),3000)}
 let txT;function tx(){const l=$("#txled");if(!l)return;l.classList.add("on");clearTimeout(txT);txT=setTimeout(()=>l.classList.remove("on"),70)}
-function ask(html,btns,cls=""){const d=$("#dlg");d.innerHTML=`<div class="dlgbox ${cls}" role="alertdialog" aria-modal="true">${html.startsWith("<")?html:`<p>${html}</p>`}<div class="btnrow">${btns.map(([t,c],i)=>`<button class="${c}" data-dlg="${i}">${t}</button>`).join("")}</div></div>`;d.hidden=false;d._btns=btns;d.querySelector("button")?.focus()}
+function ask(html,btns,cls=""){const d=$("#dlg");d.innerHTML=`<div class="dlgbox ${cls}" role="alertdialog" aria-modal="true">${html.startsWith("<")?html:`<p>${html}</p>`}<div class="btnrow">${btns.map(([t,c],i)=>`<button class="${c}" data-dlg="${i}">${t}</button>`).join("")}</div></div>`;d.hidden=false;d._btns=btns;d.querySelector(".btnrow button:last-child")?.focus()}
 
 /* ===== Honest machine state =====
    Sound edits go out as CCs at once (Appendix B) but stay unsaved in the kit.
@@ -17,7 +17,9 @@ function renderPst(){if(HOST.renderPst)return HOST.renderPst();if(S.engine==="hw
  else if(S.patSent==="recv")setPst("RECV","The emulator is on SYSEX RECV and takes the dump.");else setPst("","")}
 /* the pattern field's SYSEX RECV state: its text, tooltip, and warn (a click opens the send dialog) */
 /* P7: the sync slot on LCD line 2: SYNC when nothing is on its way, else the host's word (RECV n, SEND n) */
-function setPst(text,tip,warn){const p=$("#pst"),f=$("#syncf");if(!p||!f)return;p.textContent=text||"Sync";f.classList.toggle("warn",!!warn);f.title=tip||"In step with the machine"}
+function setPst(text,tip,warn,read){const p=$("#pst"),f=$("#syncf");if(!p||!f)return;p.textContent=text||"Sync";f.classList.toggle("warn",!!warn);f.title=tip||"In step with the machine";
+ /* read: the background read's fraction (a thin bar under the word), or nothing */
+ f.classList.toggle("read",read!=null);f.style.setProperty("--rf",read??0)}
 function sendDialog(){ask(`<div class="lcdbig recv">SYSEX RECV · WAITING…</div><p>The Monomachine only accepts a dump on its SysEx receive screen. <b>${S.pend}</b> edit${S.pend===1?"":"s"} to send.</p>
  <ol class="recvsteps"><li>On the Monomachine press <b>FUNCTION + KIT/SONG</b> (GLOBAL), then <b>FILE › SYSEX RECV</b>.</li><li>Set <b>MODE ORIG</b> and press <b>YES</b>. The screen shows <b>WAITING…</b></li><li>Press <b>Send</b> here. Then press <b>EXIT</b> on the machine.</li></ol>`,
  [["Send now","cream",()=>{S.pend=0;S.patSent="live";renderPst();tx();toast("Sent. The pattern and song slots now match the editor. Press EXIT on the Monomachine.")}],["Later","",()=>{}]],"first")}

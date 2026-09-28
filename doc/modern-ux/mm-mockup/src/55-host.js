@@ -23,6 +23,10 @@
                                       shows their moving values with MMView.setModulation
      notes                            the host's words for the Control sources ({ccSource, appSource})
      engine(kind), firstRun(), bootScreen(on), renderPst(), engineLabels, menu()
+     syxChoose(), syxExport(), syxStart(kinds), syxStop()   SysEx import and export (P7): the host's file
+                                      dialogs; the preview and progress come back through MMView
+     chooseRom(), revealRom(), recheck()   the start-up card's keys (P7): the native file chooser for the
+                                      firmware, the ROM folder, look again (the page never reads the ROM)
      audioDoc(), audioSend(command), audioMeter(on)   the AUDIO / MIDI panel's devices
    The view's side, for a host: window.MMView (130-main.js): values to read, setters (the LCD
    picture, the held key, the pattern field's RECV state, the engine words), and

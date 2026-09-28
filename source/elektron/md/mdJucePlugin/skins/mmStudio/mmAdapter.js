@@ -314,14 +314,15 @@
 		const caps = machine?.capabilities, life = LIFE[machine?.lifecycle || "loading"] || "boot";
 		const st = life === "ready" && !synced ? "sync" : life;
 		if (caps) {
-			const l = machine.loading, text = caps.label + (l && l.done < l.total ? ` · ${l.done}/${l.total}` : "");
+			/* the engine's own label only: the background read is in the sync slot (renderPst) */
+			const text = caps.label;
 			if (text + caps.about !== last.readyLabel) { last.readyLabel = text + caps.about; V().setEngineLabel("ready", [text, "on", caps.about || ""]); }
 		}
 		if (machine && life !== "ready") V().setEngineTip(st, machine.lifecycleText || "");
 		if (V().engineState() !== st) V().setEng(st);
-		/* NO ROM: the firmware screen, which closes by itself as soon as the engine is anything else */
-		if (st === "norom") { if (!noRomShown) { noRomShown = true; host.firstRun(); } }
-		else if (noRomShown) { noRomShown = false; V().closeFirmwareDialog(); }
+		/* NO ROM and ROM ERROR are the start-up card's first-run states (the view's setEng shows them, P7);
+		   a firmware dialog the LOAD ROM menu opened closes as soon as the engine is anything else */
+		if (st !== "norom" && noRomShown) { noRomShown = false; V().closeFirmwareDialog(); }
 		if (st === "ready" && !last.ready) {
 			last.ready = true;
 			log("ready: pattern " + cur("pattern") + " kit " + cur("kit"));
@@ -449,12 +450,23 @@
 		/* the Control workspace's LFO and Random sources and their links: the plug-in runs them */
 		modulators(setup) { sendMods(setup); },
 		engine(kind) { send({ op: "engine", kind }, { onResult: r => V().toast(r.ok ? r.note : r.errors[0]) }); },
+		/* the start-up card's keys (P7): the window's native file chooser for the firmware (the page never reads
+		   it), the ROM folder, and a new look */
+		chooseRom() { send({ op: "chooseRom" }); },
+		/* SysEx import and export (P7): the window's file dialogs; the plug-in parses and writes */
+		syxChoose() { send({ op: "chooseSyx" }); },
+		syxExport() { send({ op: "syxExport" }); },
+		syxStart(kinds) { send({ op: "syxImport", kinds }, { onResult: r => { if (!r.ok) V().toast(r.errors[0]); } }); },
+		syxStop() { send({ op: "syxCancel" }); },
+		revealRom() { send({ op: "revealRomFolder" }); },
+		recheck() { send({ op: "recheckFirmware" }, { onResult: r => V().toast(r.ok ? r.note : r.errors[0]) }); },
 		firstRun() {
+			noRomShown = true;
 			log("NO ROM dialog shown (lifecycle " + machine?.lifecycle + ")");
 			V().ask(`<div class="lcdbig">MONOMACHINE FIRMWARE NEEDED</div>
  <p>Monomachine Editor runs the real Monomachine operating system. Elektron's firmware cannot ship with the plug-in, so you add the one from your own machine.</p>
- <ol class="recvsteps"><li>Dump the <b>OS 1.32B</b> flash image from your Monomachine (<span class="mono">.bin</span>).</li><li>Put it in the plug-in's ROM folder (<b>Show ROM folder</b>).</li><li>Reopen the plug-in. It stays on this computer only.</li></ol>`,
-				[["Show ROM folder", "cream", () => send({ op: "revealRomFolder" })],
+ <ol class="recvsteps"><li>Dump the <b>OS 1.32B</b> flash image from your Monomachine (<span class="mono">.bin</span>).</li><li>Choose it here, or drop it on the window: the editor checks it and copies it into its ROM folder.</li><li>The machine starts with it at once. It stays on this computer only.</li></ol>`,
+				[["Choose ROM file…", "cream", () => send({ op: "chooseRom" })], ["Show ROM folder", "", () => send({ op: "revealRomFolder" })],
 					["Check again", "", () => send({ op: "recheckFirmware" }, { onResult: r => { V().toast(r.ok ? r.note : r.errors[0]); if (!r.ok) { noRomShown = false; showEngine(); } } })], ["Close", "", () => {}]], "first");
 		},
 		/* while the firmware starts, the LCD shows the machine's own screen (the lcd messages), not
@@ -465,8 +477,13 @@
 			if (!window.MMView) return;	// the mockup's first render, before its view is there
 			const r = machine?.recv, caps = machine?.capabilities, manual = caps?.values?.dumps === "manual";
 			const on = r && (r.sending > 0 || r.state === "entering" || r.state === "parked");
+			const l = machine?.loading;
 			if (manual && r?.sending) V().setPst("SEND " + r.sending, caps.reasons?.recvSession || "", true);
+			else if (machine?.input && l && l.done < l.total) V().setPst(`${l.done}/${l.total}`, "Reading the machine's patterns, kits and songs in the background: edit away, the library fills in.", false, l.done / l.total);
 			else if (on) V().setPst(r.sending > 0 ? "RECV " + r.sending : "RECV", "The machine is on GLOBAL › SYSEX RECV and takes the edits (" + r.state + ", " + r.received + " received).", false);
+			/* P7: the machine follows an external clock (in a DAW: the host's, set by the plug-in): MIDI SYNC
+			   CLOCK IN and TRANSPORT IN, the global's raw 0x05 and 0x06 */
+			else if (/^0101/.test(globalNow()?.hidden?.x05 || "")) V().setPst("Host", "Follows the host's tempo and transport (GLOBAL › MIDI SYNC CLOCK IN, TRANSPORT IN).", false);
 			else V().setPst("", "", false);
 		},
 		/* the editor's menu (skins, GUI scale, settings) */
@@ -532,6 +549,10 @@
 		else if (m.type === "openAudio") V().openAudio();
 		else if (m.type === "learn") onLearn(m.doc);
 		else if (m.type === "ask") onAsk(m);
+			else if (m.type === "romInstall") { V().bootRom(m); V().toast(m.text); }
+			else if (m.type === "syxPreview") V().syxPreview(m);
+			else if (m.type === "syxProgress") V().syxProgress(m);
+			else if (m.type === "syxExport") V().toast(m.text);
 		else if (m.type === "error") onError(m);
 		else if (m.type === "result" && !m.ok && m.errors?.length && m.op !== "set" && m.op !== "modSet") V().toast(m.errors[0]);
 	}

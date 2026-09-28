@@ -253,7 +253,36 @@ if (/[?&]selftest=p7(&|$)/.test(location.search)) (async () => {
 	let ok = 0, n = 0;
 	const check = (name, pass, note) => { n++; if (pass) ok++; log(`${pass ? "ok" : "FAIL"} ${name}${note ? ": " + note : ""}`); };
 	const until = async (f, ms) => { const end = performance.now() + ms; while (performance.now() < end) { if (f()) return true; await sleep(30); } return false; };
+	/* the start-up card: over the whole window while the machine starts, input blocked, its LCD drawn */
+	{
+		const sent = [], send0 = Bridge.send;
+		Bridge.send = (m, o) => { sent.push(m.op); return send0(m, o); };
+		const booting = await until(() => Boot.state() === "booting", 20000);
+		await sleep(3000);
+		const card = $("#bootcard"), top = Modal.top(), ws0 = S.ws, cardShown = !card.hidden;
+		/* what a pointer on the PLAY key and on a workspace key hits: the card, not the keys */
+		const hit = el => { const r = el.getBoundingClientRect(); const t = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2); return !!t && (t.closest("#bootcard") || t.id === "modalbg"); };
+		const covered = hit($("#play")) && hit(document.querySelector('[data-ws="mix"]'));
+		document.dispatchEvent(new KeyboardEvent("keydown", { key: " ", code: "Space", bubbles: true, cancelable: true }));
+		await sleep(300);
+		/* the animation has blank frames: the most pixels over a few seconds */
+		let inked = 0;
+		for (let k = 0; k < 20 && !$("#bootcard").hidden; k++) {
+			const g = $("#bootlcd").getContext("2d").getImageData(0, 0, 128, 64).data;
+			let n = 0; for (let i = 0; i < g.length; i += 4) if (g[i] !== g[0] || g[i + 1] !== g[1] || g[i + 2] !== g[2]) n++;
+			inked = Math.max(inked, n); await sleep(200);
+		}
+		const blocked = covered && !sent.includes("play") && !V.playing && S.ws === ws0;
+		Bridge.send = send0;
+		check("while it starts, the start-up card covers the window and blocks input", booting && cardShown && top === "bootcard" && blocked,
+			`card ${cardShown}, top ${top}, blocked ${blocked} (sent ${sent.join(",") || "-"}), LCD pixels ${inked}`);
+		check("the card mirrors the firmware's LCD", inked > 50, inked + " pixels");
+		await until(() => runs() && V.loaded, 90000);
+		await sleep(800);
+		check("the card is gone once the machine takes input", card.hidden && Modal.top() !== "bootcard", `hidden ${card.hidden}`);
+	}
 	if (!await until(() => runs() && V.loaded, 90000)) { log("FAIL: not ready"); return; }
+	S.ws = "seq"; render();	/* the Sequence, whichever workspace the project was left on */
 	await sleep(2500);
 	const pat = () => Docs.patterns[currentPatternSlot()];
 	check("all steps by default", $$('.st[data-t="0"]').length === V.len && S.viewAll, $$('.st[data-t="0"]').length + " of " + V.len + " steps");

@@ -39,6 +39,7 @@ target_sources(elektronData PRIVATE
 	mmSong.cpp mmSong.h
 	mmValidate.cpp mmValidate.h
 	sysex7bit.cpp sysex7bit.h
+	syxImport.cpp syxImport.h
 )
 
 target_link_libraries(elektronData PUBLIC elektronJson)

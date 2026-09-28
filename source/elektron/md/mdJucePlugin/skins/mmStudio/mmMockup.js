@@ -186,6 +186,10 @@ const kitName=k=>"K"+String(k+1).padStart(2,"0")+" "+((k===S.kit?S.workName:S.ki
                                       shows their moving values with MMView.setModulation
      notes                            the host's words for the Control sources ({ccSource, appSource})
      engine(kind), firstRun(), bootScreen(on), renderPst(), engineLabels, menu()
+     syxChoose(), syxExport(), syxStart(kinds), syxStop()   SysEx import and export (P7): the host's file
+                                      dialogs; the preview and progress come back through MMView
+     chooseRom(), revealRom(), recheck()   the start-up card's keys (P7): the native file chooser for the
+                                      firmware, the ROM folder, look again (the page never reads the ROM)
      audioDoc(), audioSend(command), audioMeter(on)   the AUDIO / MIDI panel's devices
    The view's side, for a host: window.MMView (130-main.js): values to read, setters (the LCD
    picture, the held key, the pattern field's RECV state, the engine words), and
@@ -203,15 +207,20 @@ const HOST=window.MMHost||{};
      confirm  a question (the plug-in's asks, the first-run notice): Esc is its last key (Cancel, Close),
               a click outside does nothing, the first focus is its last key (never the destructive one)
      panel    a library, settings or list: Esc and a click outside close it (its own close function)
+     boot     the start-up card (BOOT block): nothing closes it but the machine becoming ready
    A listbox (the dropdowns) is not a modal: it stays at its button. */
 const Modal = (() => {
-	const KINDS = { confirm: { outside: false, focusLast: true }, panel: { outside: true, focusLast: false } };
+	const KINDS = { confirm: { outside: false, focusLast: true, esc: true }, panel: { outside: true, focusLast: false, esc: true },
+		boot: { outside: false, focusLast: false, esc: false } };
 	const DIALOGS = [["#dlg", "confirm", null], ["#libpop", "panel", "closeLib"], ["#globpop", "panel", "closeGlobal"],
-		["#keyspop", "panel", "toggleKeys"], ["#audiopop", "panel", "closeAudio"], ["#machpop", "panel", "closePicker"]];
+		["#keyspop", "panel", "toggleKeys"], ["#audiopop", "panel", "closeAudio"], ["#machpop", "panel", "closePicker"], ["#bootcard", "boot", null],
+		["#syxpop", "panel", null]];
 	const stack = [];	// {el, kind, close, back}
 	const FOCUSABLE = 'button:not([disabled]),[href],input:not([disabled]),select:not([disabled]),textarea,[tabindex]:not([tabindex="-1"])';
 	let bg = null;
-	const box = d => d.el.id === "dlg" ? d.el.querySelector(".dlgbox") || d.el : d.el;
+	/* an overlay dialog (the questions, the start-up card) is its own backdrop area; its box is inside */
+	const overlay = el => el.id === "dlg" || el.id === "bootcard";
+	const box = d => overlay(d.el) ? d.el.querySelector(".dlgbox,.bootbox") || d.el : d.el;
 	const keys = d => [...box(d).querySelectorAll(FOCUSABLE)].filter(e => e.offsetParent !== null || e === document.activeElement);
 	function layer() {
 		if (!bg) { bg = document.createElement("div"); bg.id = "modalbg"; bg.className = "modalbg"; bg.hidden = true; document.body.appendChild(bg); }
@@ -230,7 +239,8 @@ const Modal = (() => {
 		const d = { el, kind, close, back: document.activeElement };
 		stack.push(d); layer();
 		if (!box(d).hasAttribute("tabindex")) box(d).setAttribute("tabindex", "-1");
-		requestAnimationFrame(() => { if (stack.includes(d) && (KINDS[d.kind].focusLast || !box(d).contains(document.activeElement))) focusIn(d); });
+		/* after the dialog's own focus call (a timer, not a frame: a window behind others draws no frames) */
+		setTimeout(() => { if (stack.includes(d) && (KINDS[d.kind].focusLast || !box(d).contains(document.activeElement))) focusIn(d); }, 0);
 	}
 	function gone(el) {
 		const i = stack.findIndex(d => d.el === el); if (i < 0) return;
@@ -240,6 +250,7 @@ const Modal = (() => {
 	}
 	/* close the top one as its kind says: a confirm by its last key (the dialog's own handler runs) */
 	function dismiss(d) {
+		if (!KINDS[d.kind].esc) return;
 		if (d.kind === "confirm") { const b = d.el.querySelector(".btnrow button:last-child"); if (b) b.click(); else d.el.hidden = true; return; }
 		const f = d.close && window[d.close]; if (typeof f === "function") f(false); if (!d.el.hidden) d.el.hidden = true;
 	}
@@ -255,14 +266,15 @@ const Modal = (() => {
 	document.addEventListener("keydown", e => {
 		const d = top(); if (!d) return;
 		if (e.key === "Escape") { e.preventDefault(); e.stopImmediatePropagation(); dismiss(d); return; }
-		if (e.key !== "Tab") return;
+		/* keys meant for the page behind (its shortcuts) do not reach it; the menu bar's own shortcuts are the system's */
+		if (e.key !== "Tab") { if (!box(d).contains(e.target) && !e.target.closest?.("#kpop") && !e.metaKey) { e.preventDefault(); e.stopImmediatePropagation(); } return; }
 		const k = keys(d); if (!k.length) { e.preventDefault(); return; }
 		const i = k.indexOf(document.activeElement), n = e.shiftKey ? (i <= 0 ? k.length - 1 : i - 1) : (i < 0 || i === k.length - 1 ? 0 : i + 1);
 		e.preventDefault(); k[n].focus();
 	}, true);
 	for (const ev of ["pointerdown", "mousedown", "click"]) document.addEventListener(ev, e => {
 		const d = top(); if (!d) return;
-		const outside = e.target === bg || (d.el.id === "dlg" && e.target === d.el);
+		const outside = e.target === bg || (overlay(d.el) && e.target === d.el);
 		if (!outside) return;
 		e.preventDefault(); e.stopImmediatePropagation();
 		if (ev === "click") { if (KINDS[d.kind].outside) dismiss(d); else { const b = box(d); b.classList.remove("nudge"); void b.offsetWidth; b.classList.add("nudge"); } }
@@ -270,16 +282,201 @@ const Modal = (() => {
 	/* focus that leaves the top dialog (a click on the page behind is stopped above) comes back */
 	document.addEventListener("focusin", e => { const d = top(); if (d && !d.el.contains(e.target) && e.target !== bg && !e.target.closest?.("#kpop")) focusIn(d); });
 	if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", watch); else watch();
+	/* Tips: the LCD's titles show under the display, never over it (a native tooltip covers the fields) */
+	const tip = document.createElement("div"); tip.className = "lcdtip"; tip.hidden = true; tip.setAttribute("role", "tooltip"); document.body.appendChild(tip);
+	let tipT = 0;
+	document.addEventListener("mouseover", e => {
+		const el = e.target.closest?.(".lcdpanel [title],.lcdpanel [data-tip]"), lcd = el?.closest(".lcdpanel");
+		clearTimeout(tipT); tip.hidden = true;
+		if (!el || !lcd) return;
+		if (el.title) { el.dataset.tip = el.title; el.removeAttribute("title"); }
+		tipT = setTimeout(() => {
+			const r = el.getBoundingClientRect(), l = lcd.getBoundingClientRect();
+			tip.textContent = el.dataset.tip; tip.hidden = false;
+			tip.style.top = (l.bottom + 8) + "px";
+			tip.style.left = Math.max(8, Math.min(innerWidth - tip.offsetWidth - 8, r.left + r.width / 2 - tip.offsetWidth / 2)) + "px";
+		}, 450);
+	});
+	document.addEventListener("mouseout", e => { if (e.target.closest?.(".lcdpanel")) { clearTimeout(tipT); tip.hidden = true; } });
+	/* a title set later (a state's new words) moves to the tip too */
+	new MutationObserver(ms => { for (const m of ms) { const el = m.target; if (el.title && el.closest?.(".lcdpanel")) { el.dataset.tip = el.title; el.removeAttribute("title"); } } })
+		.observe(document.body, { attributes: true, attributeFilter: ["title"], subtree: true });
 	return { open: () => stack.map(d => d.el.id), top: () => top()?.el.id || null };
 })();
 /* MODAL END */
+
+/* ---- 58-boot.js ---- */
+/* BOOT BEGIN (P7): the start-up card, the same text in both editors (checked by the sync scripts). While
+   the firmware starts, a modal card over the whole window (the modal layer's "boot" kind: nothing behind it
+   takes a key or a click) shows the machine's own LCD, mirrored big and pixel for pixel, a progress bar and
+   what to wait for; it fades out when the machine takes input. The same card is the first run: NO ROM and
+   ROM ERROR show the firmware steps, a native file chooser, a drop target for the whole window, and the
+   ROM folder. The page reads no ROM bytes: the host opens, checks and copies the file (Boot.host).
+     Boot.update({state, machine, text})  state: "loading" | "booting" | "missing" | "unsupported" | "ready"
+     Boot.lcd(bytes)                     the firmware's 128 x 64 screen (1024 bytes, rows of 16, MSB first)
+     Boot.rom({ok, text})                the host's verdict on a chosen or dropped file
+     Boot.host = {chooseRom(), revealRom(), recheck()}   the app's host calls */
+const Boot = (() => {
+	const EXPECT = { Machinedrum: 14000, Monomachine: 11000 };	// ms from the first BOOTING OS to input (measured)
+	const card = document.createElement("div");
+	card.id = "bootcard"; card.className = "bootcard"; card.hidden = true;
+	card.setAttribute("role", "dialog"); card.setAttribute("aria-modal", "true"); card.setAttribute("aria-labelledby", "boott");
+	card.innerHTML = `<div class="bootbox" tabindex="-1">
+ <div class="bootlcd"><canvas id="bootlcd" width="128" height="64" aria-label="The machine's own screen"></canvas></div>
+ <h2 id="boott">Starting…</h2>
+ <div class="bootbar" id="bootbar" role="progressbar" aria-valuemin="0" aria-valuemax="100"><i></i></div>
+ <p class="bootline" id="bootline">Keys work when the start-up animation ends.</p>
+ <div class="bootrom" id="bootrom" hidden>
+  <ol class="bootsteps" id="bootsteps"></ol>
+  <div class="btnrow"><button class="cream" data-bootrom="choose">Choose ROM file…</button><button data-bootrom="recheck">Check again</button></div>
+  <p class="bootdrop">…or drop the <span class="mono">.bin</span>, or a <span class="mono">.zip</span> with it, anywhere on this window.</p>
+  <p class="bootres" id="bootres" role="status"></p>
+  <p class="bootpriv">The firmware stays on this computer: the editor checks it and copies it into its ROM folder, and sends it nowhere. <button class="linkkey" data-bootrom="folder">Show the ROM folder</button></p>
+ </div>
+</div>`;
+	document.body.appendChild(card);
+	const $b = id => card.querySelector("#" + id);
+	let shown = null, t0 = 0, raf = 0, machine = "Machinedrum", lastBits = null;
+	const cssv = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+	function draw() {
+		const c = $b("bootlcd"), g = c.getContext("2d");
+		g.fillStyle = cssv("--lcd") || "#b8c4b0"; g.fillRect(0, 0, 128, 64);
+		if (!lastBits) return;
+		g.fillStyle = cssv("--ink") || "#1a2418";
+		for (let y = 0; y < 64; y++) for (let x = 0; x < 128; x++) if (lastBits[y * 16 + (x >> 3)] & (0x80 >> (x & 7))) g.fillRect(x, y, 1, 1);
+	}
+	function tick() {
+		raf = 0;
+		if (shown !== "booting") return;
+		const f = Math.min(.95, (performance.now() - t0) / (EXPECT[machine] || 14000));
+		$b("bootbar").querySelector("i").style.width = (f * 100).toFixed(1) + "%";
+		$b("bootbar").setAttribute("aria-valuenow", Math.round(f * 100));
+		raf = requestAnimationFrame(tick);
+	}
+	function steps(m) {
+		const os = m === "Monomachine" ? "OS 1.32B" : "OS 1.63", units = m === "Monomachine" ? "SFX-6, SFX-60 MKI and MKII use the same image" : "UW, MKII and MKI units use the same image";
+		return `<li>Dump the <b>${os}</b> flash image from your ${m} (8 MiB, <span class="mono">.bin</span>). ${units}.</li><li>Choose it here, or drop it on this window. The editor checks that it is the ${m}'s ${os} before it copies it.</li><li>The machine starts at once: no need to reopen the editor.</li>`;
+	}
+	function update(o) {
+		machine = o.machine || machine;
+		const st = o.state === "animating" ? "booting" : o.state;
+		if (st === "ready" || !st) {
+			if (shown && !card.hidden) { card.classList.add("out"); setTimeout(() => { if (shown === null) { card.hidden = true; card.classList.remove("out"); } }, 380); }
+			shown = null; return;
+		}
+		card.classList.remove("out");
+		if (st !== shown) {
+			if (st === "booting" || st === "loading") t0 = performance.now();
+			shown = st;
+		}
+		const rom = st === "missing" || st === "unsupported";
+		card.classList.toggle("rom", rom);
+		card.classList.toggle("ind", st === "loading");
+		$b("boott").textContent = rom ? (st === "missing" ? `${machine} firmware needed` : `This is not the ${machine}'s firmware`) : st === "loading" ? `Preparing the ${machine}…` : `Starting the ${machine}…`;
+		$b("bootline").textContent = rom ? (st === "unsupported" ? "The ROM in the folder is another OS or a damaged dump. Choose the right image." : "The editor runs the real firmware, which cannot ship with it: you add the one from your own machine.")
+			: "Keys work when the start-up animation ends.";
+		$b("bootrom").hidden = !rom;
+		if (rom) $b("bootsteps").innerHTML = steps(machine);
+		card.hidden = false;
+		draw();
+		if (!raf && st === "booting") raf = requestAnimationFrame(tick);
+	}
+	function lcd(bits) { lastBits = bits; if (!card.hidden) draw(); }
+	function rom(r) {
+		const el = $b("bootres");
+		el.textContent = r.text || ""; el.className = "bootres " + (r.ok ? "ok" : "bad");
+		if (r.ok) { $b("boott").textContent = `Starting the ${machine}…`; t0 = performance.now(); }
+	}
+	card.addEventListener("click", e => {
+		const k = e.target.closest("[data-bootrom]"); if (!k || !Boot.host) return;
+		const a = k.dataset.bootrom;
+		if (a === "choose") Boot.host.chooseRom(); else if (a === "recheck") Boot.host.recheck(); else if (a === "folder") Boot.host.revealRom();
+	});
+	return { update, lcd, rom, host: null, state: () => shown };
+})();
+/* BOOT END */
+
+/* ---- 59-syx.js ---- */
+/* SYX BEGIN (P7): SysEx import and export, the same text in both editors (checked by the sync scripts).
+   The host opens, parses and writes the files (the page never reads their bytes): a .syx chosen with
+   "Import SysEx…" or dropped on the window comes back as a preview, here a panel of the modal layer with
+   what is in the file and what it overwrites; "Import" sends the chosen kinds as ordinary document writes
+   (one undo step), a few at a time, with progress and a Stop key.
+     Syx.keys()            the library's two keys (markup)
+     Syx.preview(m)        {type:"syxPreview", ok, text, file, model, fullBackup, items:{kind:[{slot,name,overwrites}]}, problems}
+     Syx.progress(m)       {type:"syxProgress", done, total, running, text}
+     Syx.exported(m)       {type:"syxExport", ok, text}
+     Syx.host = {choose(), exportAll(), start(kinds), stop()}   the app's host calls */
+const Syx = (() => {
+	const KINDS = [["kit", "Kits"], ["pattern", "Patterns"], ["song", "Songs"], ["global", "Globals"]];
+	const pop = document.createElement("div");
+	pop.id = "syxpop"; pop.className = "syxpop libpop"; pop.hidden = true;
+	pop.setAttribute("role", "dialog"); pop.setAttribute("aria-label", "Import SysEx");
+	document.body.appendChild(pop);
+	let last = null, running = false;
+	const esc = s => String(s).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
+	const chosen = () => [...pop.querySelectorAll("[data-syxkind]:checked")].map(b => b.dataset.syxkind);
+	function sums() {
+		const k = chosen(), items = last?.items || {};
+		const n = k.reduce((a, x) => a + (items[x] || []).length, 0), over = k.reduce((a, x) => a + (items[x] || []).filter(i => i.overwrites).length, 0);
+		const go = pop.querySelector('[data-syxgo="start"]');
+		if (go) { go.textContent = n ? `Import ${n} item${n > 1 ? "s" : ""}` : "Nothing chosen"; go.disabled = !n || running; go.className = over ? "danger" : "cream"; }
+		const w = pop.querySelector(".syxwarn");
+		if (w) w.textContent = over ? `${over} slot${over > 1 ? "s" : ""} on the machine hold data and are overwritten, the pattern and kit that play too if they are among them. One Undo takes the whole import back.` : n ? "Only empty slots are written." : "";
+	}
+	function preview(m) {
+		last = m; running = false;
+		if (!m.ok) { pop.innerHTML = `<div class="libhead"><span class="cap">Import SysEx</span><span class="note">${esc(m.file || "")}</span><button class="libx" data-syxgo="close">Esc</button></div><p class="syxwhy">${esc(m.text)}</p>`; pop.hidden = false; return; }
+		const rows = KINDS.map(([k, label]) => {
+			const list = m.items[k] || [];
+			if (!list.length) return "";
+			const over = list.filter(i => i.overwrites).length;
+			const names = list.slice(0, 64).map(i => `<span class="syxname ${i.overwrites ? "over" : ""}" title="${i.overwrites ? "overwrites a slot that holds data" : "an empty slot"}">${esc(k === "pattern" ? i.name + " · K" + String(i.kit + 1).padStart(2, "0") : (i.name || "(no name)"))}</span>`).join("") + (list.length > 64 ? `<span class="syxname">+${list.length - 64}</span>` : "");
+			return `<label class="syxrow"><input type="checkbox" data-syxkind="${k}" ${k === "global" ? "" : "checked"}><b>${label}</b><span class="syxn">${list.length}${over ? ` · ${over} overwrite` : ""}</span></label><div class="syxnames">${names}</div>`;
+		}).join("");
+		pop.innerHTML = `<div class="libhead"><span class="cap">Import SysEx</span><span class="lcdchip">${esc(m.model)}${m.fullBackup ? " · full backup" : ""}</span><span class="note">${esc(m.file)}. Into the same slots as in the file. Globals are settings (MIDI channels, sync): off unless you tick them.</span><button class="libx" data-syxgo="close">Esc</button></div>
+ <div class="syxbody">${rows}</div>
+ ${m.problemCount ? `<details class="syxprob"><summary>${m.problemCount} message${m.problemCount > 1 ? "s" : ""} could not be read</summary>${m.problems.map(p => `<div>${esc(p)}</div>`).join("")}</details>` : ""}
+ ${m.leftOutCount ? `<details class="syxprob"><summary>${m.leftOutCount} document${m.leftOutCount > 1 ? "s" : ""} left out: this ${esc(m.model)}'s OS does not take them as they are</summary>${(m.leftOut || []).map(p => `<div>${esc(p)}</div>`).join("")}</details>` : ""}
+ <p class="syxwarn"></p>
+ <div class="syxbar" hidden><i></i><span></span></div>
+ <div class="btnrow"><button class="cream" data-syxgo="start">Import</button><button data-syxgo="stop" hidden>Stop</button><button data-syxgo="close">Cancel</button></div>`;
+		pop.hidden = false; sums();
+	}
+	function progress(m) {
+		if (pop.hidden) return;
+		running = !!m.running;
+		const bar = pop.querySelector(".syxbar"); if (!bar) return;
+		bar.hidden = !m.total;
+		bar.querySelector("i").style.width = (m.total ? m.done / m.total * 100 : 0) + "%";
+		bar.querySelector("span").textContent = m.text || (m.total ? `${m.done} of ${m.total} sent` : "");
+		pop.querySelector('[data-syxgo="stop"]').hidden = !running;
+		pop.querySelector('[data-syxgo="close"]').textContent = running ? "Hide" : m.total && m.done >= m.total ? "Done" : "Cancel";
+		sums();
+	}
+	pop.addEventListener("change", e => { if (e.target.matches("[data-syxkind]")) sums(); });
+	document.addEventListener("click", e => {
+		const k = e.target.closest?.("[data-syx]");
+		if (k && Syx.host) { if (k.dataset.syx === "import") Syx.host.choose(); else Syx.host.exportAll(); return; }
+		const g = e.target.closest?.("[data-syxgo]"); if (!g || !pop.contains(g)) return;
+		const a = g.dataset.syxgo;
+		if (a === "start" && Syx.host) { running = true; Syx.host.start(chosen()); sums(); }
+		else if (a === "stop" && Syx.host) Syx.host.stop();
+		else if (a === "close") pop.hidden = true;
+	});
+	return {
+		keys: () => `<span class="syxkeys"><button class="amkey" data-syx="import" title="Open a .syx (a backup, or dumps from any source) and choose what to import. Or drop it on the window.">Import SysEx…</button><button class="amkey" data-syx="export" title="Every pattern, kit, song and the global the editor holds, as one .syx">Export SysEx…</button></span>`,
+		preview, progress, exported: m => m, host: null
+	};
+})();
+/* SYX END */
 
 /* ---- 60-ui.js ---- */
 
 /* ===== Feedback: toast, TX lamp, dialogs ===== */
 let toastT;function toast(m){const e=$("#toast");e.textContent=m;e.classList.add("on");clearTimeout(toastT);toastT=setTimeout(()=>e.classList.remove("on"),3000)}
 let txT;function tx(){const l=$("#txled");if(!l)return;l.classList.add("on");clearTimeout(txT);txT=setTimeout(()=>l.classList.remove("on"),70)}
-function ask(html,btns,cls=""){const d=$("#dlg");d.innerHTML=`<div class="dlgbox ${cls}" role="alertdialog" aria-modal="true">${html.startsWith("<")?html:`<p>${html}</p>`}<div class="btnrow">${btns.map(([t,c],i)=>`<button class="${c}" data-dlg="${i}">${t}</button>`).join("")}</div></div>`;d.hidden=false;d._btns=btns;d.querySelector("button")?.focus()}
+function ask(html,btns,cls=""){const d=$("#dlg");d.innerHTML=`<div class="dlgbox ${cls}" role="alertdialog" aria-modal="true">${html.startsWith("<")?html:`<p>${html}</p>`}<div class="btnrow">${btns.map(([t,c],i)=>`<button class="${c}" data-dlg="${i}">${t}</button>`).join("")}</div></div>`;d.hidden=false;d._btns=btns;d.querySelector(".btnrow button:last-child")?.focus()}
 
 /* ===== Honest machine state =====
    Sound edits go out as CCs at once (Appendix B) but stay unsaved in the kit.
@@ -294,7 +491,9 @@ function renderPst(){if(HOST.renderPst)return HOST.renderPst();if(S.engine==="hw
  else if(S.patSent==="recv")setPst("RECV","The emulator is on SYSEX RECV and takes the dump.");else setPst("","")}
 /* the pattern field's SYSEX RECV state: its text, tooltip, and warn (a click opens the send dialog) */
 /* P7: the sync slot on LCD line 2: SYNC when nothing is on its way, else the host's word (RECV n, SEND n) */
-function setPst(text,tip,warn){const p=$("#pst"),f=$("#syncf");if(!p||!f)return;p.textContent=text||"Sync";f.classList.toggle("warn",!!warn);f.title=tip||"In step with the machine"}
+function setPst(text,tip,warn,read){const p=$("#pst"),f=$("#syncf");if(!p||!f)return;p.textContent=text||"Sync";f.classList.toggle("warn",!!warn);f.title=tip||"In step with the machine";
+ /* read: the background read's fraction (a thin bar under the word), or nothing */
+ f.classList.toggle("read",read!=null);f.style.setProperty("--rf",read??0)}
 function sendDialog(){ask(`<div class="lcdbig recv">SYSEX RECV · WAITING…</div><p>The Monomachine only accepts a dump on its SysEx receive screen. <b>${S.pend}</b> edit${S.pend===1?"":"s"} to send.</p>
  <ol class="recvsteps"><li>On the Monomachine press <b>FUNCTION + KIT/SONG</b> (GLOBAL), then <b>FILE › SYSEX RECV</b>.</li><li>Set <b>MODE ORIG</b> and press <b>YES</b>. The screen shows <b>WAITING…</b></li><li>Press <b>Send</b> here. Then press <b>EXIT</b> on the machine.</li></ol>`,
  [["Send now","cream",()=>{S.pend=0;S.patSent="live";renderPst();tx();toast("Sent. The pattern and song slots now match the editor. Press EXIT on the Monomachine.")}],["Later","",()=>{}]],"first")}
@@ -1053,7 +1252,7 @@ function kitSlot(k){const cur=k===S.kit,st=S.kits[k],empty=st.empty&&!cur,name=k
  const nm=LIB.renaming===k?`<input class="lsin" id="lsin" maxlength="${KNAME}" value="${escH(name)}" aria-label="Kit name, up to ${KNAME} characters" spellcheck="false" autocomplete="off">`:empty&&!name?"EMPTY":escH(name||"EMPTY")+(!lp.length&&!empty?"*":"");
  return`<button class="ls ks${empty?" empty":""}${cur?" cur":""}${ed?" edited":""}" data-ks="${k}" draggable="${LIB.renaming===k?"false":"true"}" aria-selected="${k===LIB.sel}" title="${escH(tip)}"><span class="lsh"><b>K${nn(k)}</b>${cur?`<em><i class="led${ed?" on":""}"></i>${ed?"ed":"ok"}</em>`:""}</span><span class="lsn">${nm}</span><span class="lsl">${links}</span></button>`}
 function drawKitLib(){const k=LIB.sel,cur=S.kit,ed=S.kitState==="edited",empty=S.kits[k].empty&&k!==cur,dis=c=>c?" disabled":"";
- return`<div class="libhead"><span class="cap">Kit library</span><span class="lcdchip">K${nn(cur)} ${escH(S.workName||"EMPTY")} · ${ed?"edited":"saved"}</span><span class="note">128 slots. Every pattern recalls its kit. Writes go through SYSEX RECV.</span><button class="libx" data-la="close" title="Close (Esc)">Esc</button></div>
+ return`<div class="libhead"><span class="cap">Kit library</span><span class="lcdchip">K${nn(cur)} ${escH(S.workName||"EMPTY")} · ${ed?"edited":"saved"}</span><span class="note">128 slots. Every pattern recalls its kit. Writes go through SYSEX RECV.</span>${Syx.keys()}<button class="libx" data-la="close" title="Close (Esc)">Esc</button></div>
  <div class="libacts"><div class="grp"><span class="ilab">Current K${nn(cur)}</span><button data-la="save" title="${KTIP.save}">Save</button><button class="danger" data-la="reload"${dis(!ed)} title="${KTIP.reload}">Reload</button></div>
   <div class="grp"><span class="ilab">Slot K${nn(k)}</span><button data-la="load"${dis(k===cur&&!ed)} title="${k===cur?"Already the current kit. Enter reloads it when it is edited. ":""}${KTIP.load} (Enter)">Load</button><button data-la="saveas"${dis(k===cur)} title="${k===cur?"This is the current slot: use Save. ":""}${KTIP.saveas}">Save as K${nn(k)}</button>
   <button data-la="copy" title="${KTIP.copy} (Cmd+C)">Copy</button><button data-la="paste"${dis(LCLIP?.type!=="kit")} title="${LCLIP?.type==="kit"?"Paste K"+nn(LCLIP.from)+" "+escH(LCLIP.name)+". ":"Copy a kit first. "}${KTIP.paste} (Cmd+V)">Paste</button>
@@ -1065,7 +1264,7 @@ function patSlot(p){const cur=p===S.pat,q=p===S.queued&&!cur,has=hasPat(p);
  return`<button class="ls ps${has?"":" empty"}${cur?" cur":""}${q?" q":""}" data-ps="${p}" draggable="${has}" aria-selected="${p===LIB.sel}" title="${escH(tip)}"><b>${patName(p)}</b><span>${has?patLen(p)+" · K"+nn(S.patKit[p]):"EMPTY"}</span></button>`}
 function drawPatLib(){const p=LIB.sel,cur=S.pat,dis=c=>c?" disabled":"";
  const rows=[..."ABCDEFGH"].map((b,i)=>`<button class="bank lbank${i===cur>>4?" on":""}" data-lb="${i}" title="Bank ${b} (key ${b})"><i class="led"></i>${b}</button>`+Array.from({length:16},(_,j)=>patSlot(i*16+j)).join("")).join("");
- return`<div class="libhead"><span class="cap">Patterns</span><span class="lcdchip">${patName(cur)} · ${S.len} steps · K${nn(S.patKit[cur])}${S.queued!=null&&S.queued!==cur?" → "+patName(S.queued):""}</span><span class="note">8 banks × 16. ${S.playing?"Playing: a new pattern starts at the pattern end.":"Stopped: a click switches at once."} Factory presets sit in A-D, E-H start empty.</span><button class="libx" data-la="close" title="Close (Esc)">Esc</button></div>
+ return`<div class="libhead"><span class="cap">Patterns</span><span class="lcdchip">${patName(cur)} · ${S.len} steps · K${nn(S.patKit[cur])}${S.queued!=null&&S.queued!==cur?" → "+patName(S.queued):""}</span><span class="note">8 banks × 16. ${S.playing?"Playing: a new pattern starts at the pattern end.":"Stopped: a click switches at once."} Factory presets sit in A-D, E-H start empty.</span>${Syx.keys()}<button class="libx" data-la="close" title="Close (Esc)">Esc</button></div>
  <div class="libacts"><div class="grp"><span class="ilab">Slot ${patName(p)}</span><button data-la="go"${dis(p===cur&&S.queued==null)} title="${PTIP.go} (Enter)">${S.playing?"Queue":"Go"}</button><button data-la="now"${dis(p===cur&&S.queued==null)} title="${PTIP.now}">Now</button>
   <button data-la="copy" title="${PTIP.copy} (Cmd+C)">Copy</button><button data-la="paste"${dis(LCLIP?.type!=="pat")} title="${LCLIP?.type==="pat"?"Paste "+patName(LCLIP.from)+". ":"Copy a pattern first. "}${PTIP.paste} (Cmd+V)">Paste</button><button class="danger" data-la="clear"${dis(!hasPat(p))} title="${PTIP.clear} (Delete)">Clear</button></div></div>
  <div class="libgrid pats" aria-label="128 patterns">${rows}</div>
@@ -1533,10 +1732,15 @@ function setEngineTip(st,tip){const e=ENG[st];if(!e||e[2]===tip)return;ENG[st]=[
 function setEng(st){S.eng=st;const[txt,led]=ENG[st],b=document.querySelector(".lcdeng"),l=document.getElementById("engled");if(!b)return;
  b.querySelector("span").textContent=txt;l.className="led "+(led==="on"?"on":led==="blink"?"on blink":"");
  refreshEngGate();
+ /* P7: the start-up card over the whole window until the machine takes input; NO ROM and ROM ERROR are its first-run states */
+ Boot.update({state:{norom:"missing",unsupported:"unsupported",loading:"loading",boot:"booting"}[st]||"ready",machine:"Monomachine"});
  bootScreen(st==="boot");
  b.title=ENG[st][2]||(engReady()?"Engine: running. Click to switch emulator or hardware, or load another ROM.":"Engine: "+txt.toLowerCase()+". Editing starts when it is ready.")}
 /* while BOOTING OS the LCD shows a firmware-style start-up screen (the text is the editor's, not a copy of the ROM's) */
-let bootT=[];function bootScreen(on){if(HOST.bootScreen)return HOST.bootScreen(on);const el=$("#bootscr");if(!el)return;bootT.forEach(clearTimeout);bootT=[];el.classList.toggle("on",on);if(!on)return;$("#bsmk").textContent=S.plate==="mk1"?"SFX-60":"SFX-60 MKII";
+let bootT=[];function bootScreen(on){if(HOST.bootScreen)return HOST.bootScreen(on);const el=$("#bootscr");if(!el)return;
+ /* P7: the example boot's screen is drawn into the start-up card: the editor's own text, not the ROM's */
+ if(on){let f=0;const tk=()=>{if(S.eng!=="boot")return;f++;const b=new Uint8Array(1024);const px=(x,y)=>{b[y*16+(x>>3)]|=0x80>>(x&7)};for(let x=0;x<128;x++){px(x,0);px(x,63)}for(let y=0;y<64;y++){px(0,y);px(127,y)}for(let x=10;x<Math.min(118,10+f*6);x++)for(let y=28;y<36;y++)px(x,y);Boot.lcd(b);bootT.push(setTimeout(tk,70))};tk()}
+ if(!HOST.bootScreen)return;bootT.forEach(clearTimeout);bootT=[];el.classList.toggle("on",on);if(!on)return;$("#bsmk").textContent=S.plate==="mk1"?"SFX-60":"SFX-60 MKII";
  const steps=[["OS 1.32B · TESTING MEMORY",15],["BATTERY RAM · 128 KITS",40],["128 PATTERNS · 24 SONGS",65],[S.plate==="mk1"?"DSP · FACTORY WAVES":"DSP · 64 DIGIPRO WAVES",85],["STARTING SEQUENCER",100]];
  steps.forEach(([t,f],i)=>bootT.push(setTimeout(()=>{$("#bstxt").textContent=t;$("#bsbar").style.width=f+"%"},i*210)))}
 function startEngine(kind){engT.forEach(clearTimeout);engT=[];if(S.playing)togglePlay();
@@ -1648,6 +1852,8 @@ const copy=o=>JSON.parse(JSON.stringify(o));
    (a Uint8Array); null: back to the editor's fields, cross-faded */
 let lcdFadeT=0;
 function setLcd(bits){const el=$("#bootscr");if(!el)return;clearTimeout(lcdFadeT);
+ /* P7: the firmware's screen goes to the start-up card; the header's LCD stays itself */
+ if(bits&&bits.length>=1024){Boot.lcd(bits);return}
  if(bits&&bits.length>=1024){let c=el.querySelector("canvas.fwlcd");if(!c){c=document.createElement("canvas");c.className="fwlcd";c.width=128;c.height=64;el.appendChild(c)}
   const g=c.getContext("2d"),cs=getComputedStyle(el);g.fillStyle=cs.getPropertyValue("--lcd").trim()||"#b7c79a";g.fillRect(0,0,128,64);g.fillStyle=cs.getPropertyValue("--ink").trim()||"#1d2a1a";
   for(let y=0;y<64;y++)for(let xb=0;xb<16;xb++){const b=bits[y*16+xb];if(b)for(let k=0;k<8;k++)if(b&(0x80>>k))g.fillRect(xb*8+k,y,1,1)}
@@ -1656,6 +1862,16 @@ function setLcd(bits){const el=$("#bootscr");if(!el)return;clearTimeout(lcdFadeT
 const dialogOpen=()=>!$("#dlg").hidden;
 /* the firmware screen (an ask with class "first" and the firmware text) closes when the host has a firmware again */
 function closeFirmwareDialog(){const d=$("#dlg");if(!d.hidden&&d.querySelector(".dlgbox.first .lcdbig"))d.hidden=true}
+/* SysEx import and export: the host's file dialogs and document writes; the example shows a pretend file */
+Syx.host={choose:()=>{if(HOST.syxChoose)return HOST.syxChoose();Syx.preview({ok:true,file:"example.syx",model:"Monomachine",fullBackup:false,problemCount:0,problems:[],items:{kit:[{slot:0,name:"SUPERWAVES",overwrites:true}],pattern:[{slot:0,name:"A01",kit:0,overwrites:true}],song:[],global:[]}})},
+ exportAll:()=>{if(HOST.syxExport)return HOST.syxExport();toast("In the plug-in: a save dialog, then every document as one .syx.")},
+ start:k=>{if(HOST.syxStart)return HOST.syxStart(k);Syx.progress({done:2,total:2,running:false,text:"Imported (example)."})},
+ stop:()=>{if(HOST.syxStop)return HOST.syxStop()}};
+/* the start-up card's keys: the host's native file chooser and ROM folder (the ROM stays on this computer); the
+   example pretends an install */
+Boot.host={chooseRom:()=>{if(HOST.chooseRom)return HOST.chooseRom();Boot.rom({ok:true,text:"\u2713 Monomachine OS 1.32B found (example)"});setTimeout(()=>startEngine("emu"),900)},
+ revealRom:()=>{if(HOST.revealRom)return HOST.revealRom();toast("In the plug-in: the ROM folder opens in Finder.")},
+ recheck:()=>{if(HOST.recheck)return HOST.recheck();startEngine("emu")}};
 /* the editor's menu (a host's): right-click an empty part of the header */
 document.addEventListener("contextmenu",e=>{if(!HOST.menu||!e.target.closest(".top")||e.target.closest("button,[role=slider],[role=button],select,input,b,.lcdpanel"))return;e.preventDefault();HOST.menu()});
 window.MMView={
@@ -1672,7 +1888,7 @@ window.MMView={
  startEmpty,setCurrent:({pattern,kit})=>{if(pattern!=null)S.pat=pattern;if(kit!=null)S.kit=kit},setQueued:q=>{S.queued=q},setTempo:bpm=>{S.bpm=bpm},setInput,
  setPlaying,setStep,setPatternSlot,setKitSlot,setWorkingKit,setSong,setRouting:r=>{S.routing=r},setMidiTracks,setMultiMap,
  setEng,setEngineLabel,setEngineTip,setEngines,setAudioEntry,setKitState,clearLearnTarget:()=>{S.learnT=null},setModulation,setCtlSetup,disable,setReading,
- setLcd,setKeyDown,setPst,closeFirmwareDialog,
+ setLcd,setKeyDown,setPst,closeFirmwareDialog,bootRom:r=>Boot.rom(r),syxPreview:m=>Syx.preview(m),syxProgress:m=>Syx.progress(m),
  /* calls */
  render,renderTop,drawLib,toast,ask,redraw,movePH,setPos,flashTracks,goWs,clickStep,autoRange,kitSave,
  redrawAudio:()=>{if(AP.open)drawAudio()},audioLevel,openAudio};

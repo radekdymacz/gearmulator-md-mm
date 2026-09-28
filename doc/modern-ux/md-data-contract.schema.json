@@ -2187,6 +2187,129 @@
         },
         {
           "type": "object",
+          "description": "P7: the plug-in's verdict on a firmware file the user chose or dropped (checked, copied into the ROM folder; it never leaves the computer).",
+          "required": [
+            "type",
+            "ok",
+            "text"
+          ],
+          "properties": {
+            "type": {
+              "const": "romInstall"
+            },
+            "ok": {
+              "type": "boolean"
+            },
+            "text": {
+              "type": "string"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "description": "P7: a .syx file the user chose or dropped, parsed by the plug-in: what it holds and what it overwrites.",
+          "required": [
+            "type",
+            "ok",
+            "file",
+            "text"
+          ],
+          "properties": {
+            "type": {
+              "const": "syxPreview"
+            },
+            "ok": {
+              "type": "boolean"
+            },
+            "file": {
+              "type": "string"
+            },
+            "text": {
+              "type": "string"
+            },
+            "model": {
+              "type": "string"
+            },
+            "fullBackup": {
+              "type": "boolean"
+            },
+            "items": {
+              "type": "object"
+            },
+            "problems": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "leftOut": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "leftOutCount": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "problemCount": {
+              "type": "integer",
+              "minimum": 0
+            }
+          }
+        },
+        {
+          "type": "object",
+          "description": "P7: an import's progress (documents sent of the chosen ones).",
+          "required": [
+            "type",
+            "done",
+            "total",
+            "running",
+            "text"
+          ],
+          "properties": {
+            "type": {
+              "const": "syxProgress"
+            },
+            "done": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "total": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "running": {
+              "type": "boolean"
+            },
+            "text": {
+              "type": "string"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "description": "P7: an export to a .syx: written, or why not.",
+          "required": [
+            "type",
+            "ok",
+            "text"
+          ],
+          "properties": {
+            "type": {
+              "const": "syxExport"
+            },
+            "ok": {
+              "type": "boolean"
+            },
+            "text": {
+              "type": "string"
+            }
+          }
+        },
+        {
+          "type": "object",
           "description": "The plug-in's MIDI learn mappings (host).",
           "required": [
             "type",
@@ -4914,6 +5037,140 @@
           "properties": {
             "op": {
               "const": "revealRomFolder"
+            },
+            "id": {
+              "type": "integer"
+            },
+            "g": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "force": {
+              "type": [
+                "boolean",
+                "integer"
+              ]
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "description": "host: choose the firmware file (.bin, or a .zip with it): the window's native file chooser; the file stays on this computer",
+          "required": [
+            "op"
+          ],
+          "properties": {
+            "op": {
+              "const": "chooseRom"
+            },
+            "id": {
+              "type": "integer"
+            },
+            "g": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "force": {
+              "type": [
+                "boolean",
+                "integer"
+              ]
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "description": "host: choose a .syx to import: the window's native file chooser; a preview follows (syxPreview)",
+          "required": [
+            "op"
+          ],
+          "properties": {
+            "op": {
+              "const": "chooseSyx"
+            },
+            "id": {
+              "type": "integer"
+            },
+            "g": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "force": {
+              "type": [
+                "boolean",
+                "integer"
+              ]
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "description": "host: import the previewed .syx: the kinds chosen (global, kit, pattern, song), as document writes, one undo step",
+          "required": [
+            "op",
+            "kinds"
+          ],
+          "properties": {
+            "op": {
+              "const": "syxImport"
+            },
+            "id": {
+              "type": "integer"
+            },
+            "g": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "force": {
+              "type": [
+                "boolean",
+                "integer"
+              ]
+            },
+            "kinds": {
+              "type": "array"
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "description": "host: stop an import between items",
+          "required": [
+            "op"
+          ],
+          "properties": {
+            "op": {
+              "const": "syxCancel"
+            },
+            "id": {
+              "type": "integer"
+            },
+            "g": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "force": {
+              "type": [
+                "boolean",
+                "integer"
+              ]
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "description": "host: every document the editor holds, as one .syx: the window's native save dialog",
+          "required": [
+            "op"
+          ],
+          "properties": {
+            "op": {
+              "const": "syxExport"
             },
             "id": {
               "type": "integer"

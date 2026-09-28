@@ -2,6 +2,7 @@
 
 #include "mdMidiLearnCommands.h"
 #include "mdPageSpec.h"
+#include "mdSyxSession.h"
 
 #include "deskCore/deskCapabilities.h"
 #include "deskCore/deskCommands.h"
@@ -38,6 +39,10 @@ namespace mdJucePlugin
 	constexpr double g_lcdMs = 64;				// the machine's screen while it starts, about 15 Hz
 	constexpr double g_engineChoicesMs = 1000;	// whether the engines are available (a MIDI out appeared)
 	constexpr double g_followHostMs = 2000;		// in a DAW: the machine's global follows the host (followHost)
+
+	// P7: a model's SysEx import traits (mdSessionMd.cpp, mdSessionMm.cpp): the documents' type, the
+	// file's and the desk's documents, one document as the contract's JSON, and what may be imported.
+	template<typename DeskT> struct SyxTraits;
 
 	// P7: whether the machine follows the host's tempo and transport: in a DAW's plug-in only.
 	bool followsHost(AudioPluginAudioProcessor& _processor);
@@ -88,6 +93,14 @@ namespace mdJucePlugin
 
 		void toPage(const Value& _message) const;
 		AudioPluginAudioProcessor& processor() const { return m_processor; }
+		// P7: a firmware file the user chose or dropped on the window: checked (md::checkRom), copied into
+		// the ROM folder (never over another file), and the machine started again with it. The page hears
+		// {"type":"romInstall", ok, text}. Nothing leaves this computer.
+		void installRom(const juce::File& _file);
+		// P7: a .syx the user chose or dropped: its preview for the page (syxPreview); and every document
+		// the editor holds written to a .syx (syxExport). The model's session does both.
+		virtual void openSyx(const juce::File& _file) = 0;
+		virtual void exportSyx(const juce::File& _file) = 0;
 
 	protected:
 		void reply(const Value& _message, bool _ok, const std::string& _note) const;
@@ -247,6 +260,8 @@ namespace mdJucePlugin
 			case Action::Engine: setEngine(_message); break;
 			case Action::RecheckFirmware: recheckFirmware(_message); break;
 			case Action::RevealRomFolder: revealRomFolder(_message); break;
+			case Action::SyxImport: syxImport(_message); break;
+			case Action::SyxCancel: m_syx.cancel(); toPage(m_syx.progress("Import stopped.")); reply(_message, true, "Import stopped."); break;
 			case Action::Midi: onMidi(_message); break;
 			case Action::LearnStart:
 			case Action::LearnAdd:
@@ -271,6 +286,13 @@ namespace mdJucePlugin
 			// P7: in a DAW the host's tempo and transport reach the machine as MIDI clock, Start and Stop
 			// (synthLib::MidiClock); the machine follows them only with its global set for it. The model
 			// says how (hostFollowing), the adapter sets it without an undo step; ready machines only.
+			// P7: a .syx import goes out a few documents a step, while the machine takes input
+			if(m_syx.running() && m_desk->lifecycle() == deskCore::Lifecycle::Ready)
+			{
+				for(const auto& c : m_syx.next(4))
+					m_desk->onPageMessage(c);
+				toPage(m_syx.progress(m_syx.running() ? "" : "Imported: the machine takes the documents in over the next moments (the sync slot shows them going out)."));
+			}
 			if(m_followHost && m_desk->lifecycle() == deskCore::Lifecycle::Ready && due(t, g_followHostMs))
 			{
 				Value m = Value::object();
@@ -382,6 +404,48 @@ namespace mdJucePlugin
 			reply(_message, true, "Engine: " + record->profile.label);
 		}
 
+		using Syx = SyxTraits<DeskT>;
+
+		void openSyx(const juce::File& _file) override
+		{
+			juce::MemoryBlock mb;
+			if(_file.getSize() > 32 * 1024 * 1024 || !_file.loadFileAsData(mb))
+			{
+				Value m = Value::object();
+				m.set("type", "syxPreview"); m.set("ok", false); m.set("file", _file.getFileName().toStdString());
+				m.set("text", "The file could not be read.");
+				toPage(m);
+				return;
+			}
+			const auto* d = static_cast<const uint8_t*>(mb.getData());
+			toPage(m_syx.open(std::vector<uint8_t>(d, d + mb.getSize()), _file.getFileName().toStdString(), Syx::machine(*m_desk)));
+		}
+
+		void syxImport(const Value& _message)
+		{
+			std::vector<std::string> kinds;
+			if(const auto* k = _message.find("kinds"); k && k->isArray())
+				for(const auto& v : k->asArray())
+					if(v.isString())
+						kinds.push_back(v.asString());
+			// one gesture id for the whole import: one undo step
+			const auto why = m_syx.start(kinds, 0x40000000u + (++m_syxImports), [this](const elektronData::SyxItem& _i) { return Syx::importable(_i, *m_desk); });
+			reply(_message, why.empty(), why);
+			toPage(m_syx.progress());
+		}
+
+		void exportSyx(const juce::File& _file) override
+		{
+			const auto bytes = elektronData::writeSyx(Syx::machine(*m_desk));
+			Value m = Value::object();
+			m.set("type", "syxExport");
+			const bool ok = !bytes.empty() && _file.replaceWithData(bytes.data(), bytes.size());
+			m.set("ok", ok);
+			m.set("text", ok ? "Wrote " + _file.getFileName().toStdString() + " (" + std::to_string(bytes.size()) + " bytes): every document the editor holds."
+				: "The .syx could not be written.");
+			toPage(m);
+		}
+
 		void recheckFirmware(const Value& _message)
 		{
 			using P = deskCore::LifeFacts::Probe;
@@ -404,6 +468,8 @@ namespace mdJucePlugin
 		// A plug-in in a host (a DAW): not the standalone app, which has no host transport, and not a
 		// processor without a plug-in wrapper (the tests).
 		const bool m_followHost;
+		SyxJob<SyxTraits<DeskT>> m_syx;
+		uint32_t m_syxImports = 0;
 	};
 
 	// The machine's own screen while it starts, as the page's LCD (both models): every g_lcdMs, only

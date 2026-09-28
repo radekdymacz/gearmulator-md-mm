@@ -24,7 +24,12 @@ namespace deskHost
 		LearnInvert,
 		AudioPublish,		// the standalone's audio and MIDI devices
 		AudioSet,
-		AudioMeter
+		AudioMeter,
+		ChooseRom,			// P7: the native file chooser for a firmware file (.bin, or a .zip with it)
+		ChooseSyx,			// P7: the native file chooser for a .syx to import (its preview follows)
+		SyxImport,			// P7: import the previewed .syx (the kinds chosen)
+		SyxCancel,
+		SyxExport			// P7: the native save dialog, then every document the editor holds as one .syx
 	};
 
 	// Who acts on a row: the session (it outlives the window) or the window (the menu and the

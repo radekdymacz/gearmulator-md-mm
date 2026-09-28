@@ -1669,18 +1669,24 @@ svg.route{width:100%;height:100%;min-height:0}
 .row2 .lcdsec{border-left:var(--lrule)!important;padding:0 7px!important;align-self:stretch;align-items:center}
 .lcdpanel .led{width:5px!important;height:5px!important;border-radius:50%}
 /* the sync slot: always there, one width, the LED and one word (SYNC, SEND, RECV n) */
-.syncf{flex:none;display:inline-flex;align-items:center;gap:5px;width:9.5ch;padding:0 8px;border-left:var(--lrule);align-self:stretch;font:8px/8px var(--pix);letter-spacing:.06em;text-transform:uppercase;color:var(--ink);white-space:nowrap;overflow:hidden}
-.lcdpanel .syncf b{font:8px/8px var(--pix)!important;letter-spacing:.06em}
+.syncf{flex:none;display:inline-flex;align-items:center;gap:6px;box-sizing:border-box;width:calc(8ch + 29px);padding:0 9px;border-left:var(--lrule);align-self:stretch;font:12px/12px var(--pix);letter-spacing:normal;text-transform:uppercase;color:var(--ink);white-space:nowrap;overflow:hidden}
+.lcdpanel .syncf b{font:12px/12px var(--pix)!important;letter-spacing:normal;font-weight:400}
+.lcdpanel .syncf .led{flex:none}
+/* the LCD's own tips: under the display, never over it (see Tips in the MODAL block) */
+.lcdtip{position:fixed;z-index:130;max-width:360px;padding:6px 9px;border-radius:4px;background:var(--plate);color:var(--body);border:1px solid var(--print2);font:500 12px/1.35 var(--sans);box-shadow:0 8px 20px rgba(0,0,0,.3);pointer-events:none}
+.lcdtip[hidden]{display:none}
 .syncf.warn{cursor:pointer}
 .syncf.warn b{animation:blink 1s steps(2) infinite}
+/* the background read of the library (READ n/m): a thin bar along the slot's foot */
+.syncf.read{background:linear-gradient(color-mix(in srgb,var(--ink) 70%,transparent),color-mix(in srgb,var(--ink) 70%,transparent)) no-repeat left bottom/calc(var(--rf,0) * 100%) 2px}
 /* the MKII print sits centred under the display's bezel */
-:root[data-plate="mk2"] .lcdgroup::after{bottom:-15px!important;font:600 9px/9px var(--sans)!important;letter-spacing:.4em!important;padding-left:.4em}
+:root[data-plate="mk2"] .lcdgroup::after{bottom:-14px!important;font:600 8px/8px var(--sans)!important;letter-spacing:.4em!important;padding-left:.4em}
 /* LCD END */
 /* MODAL BEGIN (P7): the one modal layer (see the MODAL block of the script): a dimmed backdrop, the
    dialog centred on the window above it, the newest on top; a listbox opened from a dialog above both */
 .modalbg{position:fixed;inset:0;z-index:var(--mz,59);background:rgba(8,8,6,.52)}
 .modalbg[hidden]{display:none}
-.modal:not(.dlg){position:fixed!important;left:50%!important;top:50%!important;right:auto!important;bottom:auto!important;transform:translate(-50%,-50%)!important;margin:0!important;max-width:calc(100vw - 48px)!important;max-height:calc(100vh - 48px)!important;overflow:auto!important;z-index:var(--mz,60)!important;box-sizing:border-box}
+.modal:not(.dlg):not(.bootcard){position:fixed!important;left:50%!important;top:50%!important;right:auto!important;bottom:auto!important;transform:translate(-50%,-50%)!important;margin:0!important;max-width:calc(100vw - 48px)!important;max-height:calc(100vh - 48px)!important;overflow:auto!important;z-index:var(--mz,60)!important;box-sizing:border-box}
 .dlg.modal{background:transparent!important;z-index:var(--mz,60)!important}
 .modal:focus,.modal .dlgbox:focus{outline:none}
 .modalopen .kpop{z-index:120!important}
@@ -1688,9 +1694,51 @@ svg.route{width:100%;height:100%;min-height:0}
 .dlgbox.nudge{animation:nudge .16s 2}
 @media (prefers-reduced-motion:reduce){.dlgbox.nudge{animation:none}}
 /* MODAL END */
+/* BOOT BEGIN (P7): the start-up and first-run card (see the BOOT block of the script) */
+.bootcard{position:fixed;inset:0;z-index:var(--mz,60);display:grid;place-items:center;padding:24px;background:transparent;transition:opacity .35s}
+.bootcard[hidden]{display:none}
+.bootcard.out{opacity:0}
+.bootbox{width:min(600px,calc(100vw - 48px));max-height:calc(100vh - 48px);overflow:auto;box-sizing:border-box;display:grid;gap:14px;justify-items:center;text-align:center;padding:22px 24px;background:var(--plate);border:2px solid var(--print);border-radius:8px;box-shadow:0 24px 60px rgba(0,0,0,.45);color:var(--body)}
+.bootbox:focus{outline:none}
+.bootlcd{padding:10px;background:var(--lcd);border-radius:6px;box-shadow:inset 0 0 0 2px color-mix(in srgb,var(--ink) 25%,transparent)}
+.bootlcd canvas{display:block;width:512px;height:256px;max-width:calc(100vw - 110px);height:auto;aspect-ratio:2/1;image-rendering:pixelated;image-rendering:crisp-edges}
+.bootcard.rom .bootlcd{display:none}
+.bootbox h2{margin:0;font:600 18px var(--sans);letter-spacing:.14em;text-transform:uppercase;color:var(--print)}
+.bootbar{width:min(420px,100%);height:8px;border-radius:4px;background:var(--ledoff);overflow:hidden;box-shadow:inset 0 0 0 1px var(--rule)}
+.bootbar i{display:block;height:100%;width:0;background:var(--led);transition:width .25s linear}
+.bootcard.ind .bootbar i{width:30%!important;animation:bootind 1.2s ease-in-out infinite}
+@keyframes bootind{0%{transform:translateX(-100%)}100%{transform:translateX(340%)}}
+.bootcard.rom .bootbar{display:none}
+.bootline{margin:0;font:500 13px var(--sans);color:var(--print2);max-width:48ch}
+.bootrom{display:grid;gap:10px;justify-items:center;width:100%}
+.bootsteps{margin:0;padding-left:1.4em;text-align:left;font:500 13px/1.5 var(--sans);max-width:52ch}
+.bootdrop,.bootpriv{margin:0;font:500 12px var(--sans);color:var(--print2);max-width:56ch}
+.bootres{margin:0;min-height:1.3em;font:600 13px var(--sans)}
+.bootres.ok{color:var(--print)}
+.bootres.bad{color:var(--led)}
+.linkkey{all:unset;cursor:pointer;text-decoration:underline;color:var(--print)}
+@media (prefers-reduced-motion:reduce){.bootcard{transition:none}.bootcard.ind .bootbar i{animation:none}}
+/* BOOT END */
 /* P7: the workspace and setup keys: one minimum width each, so the rows look even (MIX was a sliver) */
 #tabs button{min-width:60px!important;justify-content:center;box-sizing:border-box}
 .setkeys button{min-width:46px!important;justify-content:center;box-sizing:border-box}
+/* SYX BEGIN (P7): the SysEx import panel (see the SYX block of the script) */
+.syxpop{position:absolute;z-index:22;width:min(900px,calc(100vw - 32px));display:grid;gap:10px;align-content:start;padding:14px;background:var(--plate);border:2px solid var(--print);border-radius:6px;box-shadow:0 18px 40px rgba(0,0,0,.35)}
+.syxpop[hidden]{display:none}
+.syxbody{display:grid;gap:6px;max-height:48vh;overflow:auto}
+.syxrow{display:flex;align-items:center;gap:10px;font:600 13px var(--sans);letter-spacing:.06em;text-transform:uppercase;color:var(--print)}
+.syxrow .syxn{font:500 12px var(--mono);letter-spacing:0;text-transform:none;color:var(--print2)}
+.syxnames{display:flex;flex-wrap:wrap;gap:3px;padding:0 0 6px 24px}
+.syxname{font:10px var(--pix);text-transform:uppercase;padding:2px 5px;border-radius:2px;background:var(--lcd);color:var(--ink);opacity:.8}
+.syxname.over{opacity:1;box-shadow:inset 0 0 0 1px var(--led)}
+.syxwarn,.syxwhy{margin:0;font:500 12px var(--sans);color:var(--print2)}
+.syxprob{font:500 12px var(--mono);color:var(--print2)}
+.syxbar{position:relative;height:18px;border-radius:3px;background:var(--ledoff);overflow:hidden}
+.syxbar i{position:absolute;left:0;top:0;bottom:0;background:var(--led);width:0;transition:width .2s}
+.syxbar span{position:relative;display:block;text-align:center;font:600 11px/18px var(--sans);color:var(--body)}
+.syxkeys{display:inline-flex;gap:6px;margin-left:auto}
+.syxkeys+.libx{margin-left:8px!important}
+/* SYX END */
 /* AUDIO-MIDI PANEL BEGIN (P6): the AUDIO / MIDI panel, the plate's own keys, LEDs and dropdowns */
 .ampop{position:absolute;z-index:22;width:min(1180px,calc(100vw - 32px));display:grid;gap:10px;align-content:start;padding:14px;background:var(--plate);border:2px solid var(--print);border-radius:6px;box-shadow:0 18px 40px rgba(0,0,0,.35);overflow:auto;overscroll-behavior:contain;color:var(--print)}
 .ampop[hidden]{display:none}
@@ -1734,5 +1782,3 @@ svg.route{width:100%;height:100%;min-height:0}
 .lcdpanel .trf{display:flex!important;flex-direction:column!important;justify-content:flex-start!important;align-items:flex-start!important;gap:3px!important}
 .lcdt{display:flex!important;flex-direction:row!important;flex-wrap:nowrap!important;align-items:flex-start!important;align-self:flex-start!important;gap:5px!important}
 .lcdt .lt{flex:0 0 var(--ltk)!important;width:var(--ltk)!important;height:var(--ltk)!important;min-width:var(--ltk)!important;min-height:var(--ltk)!important;aspect-ratio:auto!important;box-sizing:border-box!important;display:flex!important;align-items:center!important;justify-content:center!important;padding:0!important}
-/* The MKII print sits inside the header, above its bottom rule. */
-:root[data-plate="mk2"] .lcdgroup::after{bottom:-7px!important}

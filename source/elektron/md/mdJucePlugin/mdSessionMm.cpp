@@ -10,6 +10,10 @@
 
 #include "deskWire/mmWire.h"
 
+#include "elektronData/mmJson.h"
+#include "elektronData/mmKit.h"
+#include "elektronData/mmValidate.h"
+
 #include <deque>
 
 namespace mdJucePlugin
@@ -115,6 +119,62 @@ namespace mdJucePlugin
 
 	// The Monomachine Editor's session: the engine map, the learnable parameters, its page, the page's
 	// MIDI and the app modulators kept with the project.
+	// P7: the Monomachine's SysEx import traits (mdSyxSession.h)
+	template<> struct SyxTraits<mmDesk::Desk>
+	{
+		using Docs = elektronData::MmDocuments;
+		static constexpr elektronData::SyxModel model = elektronData::SyxModel::Mm;
+		static constexpr const char* name = "Monomachine";
+		static const Docs& docs(const elektronData::SyxFile& _f) { return _f.mm; }
+		static Docs machine(const mmDesk::Desk& _d)
+		{
+			const auto& v = _d.documents();
+			Docs o;
+			o.patterns = v.patterns;
+			o.kits = v.kits;
+			o.songs = v.songs;
+			o.globals = v.globals;
+			return o;
+		}
+		static elektronData::json::Value json(const elektronData::SyxKind _k, const Docs& _d, const uint8_t _s)
+		{
+			namespace ed = elektronData;
+			switch(_k)
+			{
+			case ed::SyxKind::Pattern: return ed::mmPatternToJson(_d.patterns.at(_s));
+			case ed::SyxKind::Kit: return ed::mmKitToJson(_d.kits.at(_s));
+			case ed::SyxKind::Song: return ed::mmSongToJson(_d.songs.at(_s));
+			default: return ed::mmGlobalToJson(_d.globals.at(_s));
+			}
+		}
+		static bool importable(const elektronData::SyxItem&, const mmDesk::Desk&) { return true; }
+		// What OS 1.32B takes as it is: dumps of its own formats and sizes that validate (an older OS's kit
+		// dump is shorter; the firmware ignores it).
+		static std::string fits(const elektronData::SyxKind _k, const Docs& _d, const uint8_t _s)
+		{
+			namespace ed = elektronData;
+			const auto older = [](const int _v, const int _r, const int _wv, const int _wr)
+			{
+				return _v == _wv && _r == _wr ? std::string() : "format " + std::to_string(_v) + "/" + std::to_string(_r) + " (OS 1.32B stores " + std::to_string(_wv) + "/" + std::to_string(_wr) + ")";
+			};
+			switch(_k)
+			{
+			// patterns of format 5/1 (an older OS) are stored as they are (measured on the firmware): only validation
+			case ed::SyxKind::Pattern: { const auto& p = _d.patterns.at(_s); const auto v = ed::validate(p); return v.empty() ? std::string() : v.front(); }
+			case ed::SyxKind::Kit:
+			{
+				static const auto size = ed::encodeMmKit(ed::MmKit{}).size();
+				const auto& k = _d.kits.at(_s);
+				auto w = older(k.version, k.revision, 2, 1);
+				if(w.empty() && ed::encodeMmKit(k).size() != size) w = "an older OS's kit (" + std::to_string(ed::encodeMmKit(k).size()) + " bytes, OS 1.32B's are " + std::to_string(size) + ")";
+				return w;
+			}
+			case ed::SyxKind::Song: { const auto& g = _d.songs.at(_s); return older(g.version, g.revision, 2, 1); }
+			default: { const auto& g = _d.globals.at(_s); return older(g.version, g.revision, 3, 1); }
+			}
+		}
+	};
+
 	class MmSession final : public SessionOf<mmDesk::Desk, MmEngine>
 	{
 	public:

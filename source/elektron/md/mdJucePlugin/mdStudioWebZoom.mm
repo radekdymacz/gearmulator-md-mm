@@ -33,4 +33,28 @@ namespace mdJucePlugin
 #endif
 		return false;
 	}
+
+	// P7: a file dropped on the window goes to the editor (a ROM .bin or .zip, a .syx), not to the web view,
+	// which would open it as a page: the WKWebView stops taking drags, so AppKit hands them to JUCE's peer.
+	bool passFileDropsToEditor(juce::Component& _web)
+	{
+#if JUCE_MAC && JUCE_WEB_BROWSER
+		for(auto* c : _web.getChildren())
+		{
+			auto* nv = dynamic_cast<juce::NSViewComponent*>(c);
+			if(!nv || !nv->getView())
+				continue;
+			id view = (__bridge id)nv->getView();
+			if(![view isKindOfClass:[NSView class]])
+				return false;
+			[(NSView*)view unregisterDraggedTypes];
+			for(NSView* sub in [(NSView*)view subviews])
+				[sub unregisterDraggedTypes];
+			return true;
+		}
+#else
+		(void)_web;
+#endif
+		return false;
+	}
 }

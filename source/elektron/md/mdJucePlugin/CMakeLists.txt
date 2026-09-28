@@ -32,6 +32,7 @@ set(SOURCES
 	mdDeskSession.cpp mdDeskSession.h
 	mdMidiLearnCommands.cpp mdMidiLearnCommands.h
 	mdPageEditor.cpp mdPageEditor.h
+	mdRomInstall.cpp mdRomInstall.h
 	mdSessionMd.cpp mdSessionMm.cpp mdSessions.h
 	mdStudioLink.cpp mdStudioLink.h
 	mdWebPageHost.cpp mdWebPageHost.h
@@ -47,6 +48,8 @@ set(SOURCES
 	skins/mdStudio/mdDeskApp.js
 	skins/mdStudio/mdDeskBridge.js
 	skins/mdStudio/mdDeskModal.js
+	skins/mdStudio/mdDeskBoot.js
+	skins/mdStudio/mdDeskSyx.js
 	skins/mdStudio/mdDeskModel.js
 	skins/mdStudio/mdDeskMod.js
 	skins/mmStudio/mmStudio.rml
@@ -264,6 +267,14 @@ if(BUILD_TESTING)
 	set_tests_properties(mdStandaloneRendererPolicyTest PROPERTIES
 		LABELS "UnitTest;Rendering")
 	set_property(TARGET mdStandaloneRendererPolicyTest PROPERTY FOLDER "Elektron/test")
+
+	add_executable(mdRomInstallTest mdRomInstallTest.cpp mdRomInstall.cpp)
+	target_include_directories(mdRomInstallTest PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/..)
+	target_link_libraries(mdRomInstallTest PRIVATE juce::juce_core)
+	target_compile_definitions(mdRomInstallTest PRIVATE JUCE_GLOBAL_MODULE_SETTINGS_INCLUDED=1 JUCE_STANDALONE_APPLICATION=1)
+	add_test(NAME mdRomInstallTest COMMAND mdRomInstallTest)
+	set_tests_properties(mdRomInstallTest PROPERTIES LABELS "UnitTest")
+	set_property(TARGET mdRomInstallTest PROPERTY FOLDER "Elektron/test")
 
 	add_executable(mdWindowFitTest mdWindowFitTest.cpp)
 	target_include_directories(mdWindowFitTest PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/../../..)
