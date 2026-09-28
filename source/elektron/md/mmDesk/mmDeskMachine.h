@@ -56,15 +56,15 @@ namespace mmDesk
 
 		// ---- MmAdapter: Monomachine facts from the device ----
 		void setProbe(Probe _probe) override;
-		void onTelemetry(const Telemetry& _telemetry) override;
+		bool onTelemetry(const Telemetry& _telemetry) override;
 		void onWorkingKit(const Bytes& _region) override;
 		void sendModulation(uint8_t _track, uint8_t _param, uint8_t _value, const Documents& _view) override;
 		const Telemetry& telemetry() const override { return m_tel; }
 		bool playing() const override { return m_playing; }
-		int currentPattern() const override { return m_curPattern; }
-		int currentKit() const override { return m_curKit; }
-		int currentSong() const override { return m_curSong; }
-		int currentGlobal() const override { return m_curGlobal; }
+		int currentPattern() const { return m_curPattern; }
+		int currentKit() const { return m_curKit; }
+		int currentSong() const { return m_curSong; }
+		int currentGlobal() const { return m_curGlobal; }
 
 		const Profile& profile() const { return m_profile; }
 		bool ready() const { return deskCore::takesInput(lifecycle()); }
@@ -103,7 +103,7 @@ namespace mmDesk
 		void pumpSequence(double _now);
 		void applyWorkingKit(double _now, const Documents& _view);
 		bool pressKeys(const std::vector<Key>& _keys);
-		std::string kitState(const Documents& _view) const;
+		deskCore::KitState kitState(const Documents& _view) const;
 		void setBaseChannel(const elektronData::MmGlobal& _g);
 
 		deskCore::Outcome cmdLoad(const Value&, const Documents&);

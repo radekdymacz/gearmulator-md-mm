@@ -6,6 +6,7 @@
 #include "mmDeskMachine.h"
 
 #include "deskCore/deskContract.h"
+#include "deskCore/deskKinds.h"
 #include "deskHost/deskHost.h"
 
 #include "elektronData/mmCommands.h"
@@ -475,13 +476,16 @@ void checkContract(const bool _write)
 	if(!root)
 		return;
 	const auto generated = deskHost::contractCommands(mmDesk::commandTable().schema());
+	std::vector<std::string> kinds;
+	for(const auto* n : deskCore::kindNames<mmDesk::MmModel>())
+		kinds.push_back(n);
 	// The catalogue the page gets (MmModel::catalogue), kept as a file too: the page's own tests
 	// check the mockup's tables against it (mmConvertTest.js).
 	const auto catalogue = ed::json::write(mmDesk::MmModel::catalogue(), 2) + "\n";
 	if(_write)
 	{
 		std::ofstream out(MMDESK_SCHEMA);
-		out << ed::json::write(contract::withGenerated(*root, generated), 2) << "\n";
+		out << ed::json::write(contract::withDocKinds(contract::withGenerated(*root, generated), kinds), 2) << "\n";
 		std::ofstream cat(MMDESK_CATALOGUE);
 		cat << catalogue;
 		return;
@@ -493,6 +497,8 @@ void checkContract(const bool _write)
 	}
 	check(contract::sameCommands(*root, generated), "the schema's $defs/command is generated from the command tables (--write-schema)");
 	check(contract::sameLifecycle(*root), "the schema's lifecycle enum is the lifecycle rows (--write-schema)");
+	for(const auto& gap : contract::docKindGaps(*root, kinds))
+		check(false, gap.c_str());
 	// The plug-in's host sends these; this test has no host.
 	const auto r = contract::checkMessages(*root, g_published, {"learn", "audio", "audioLevel", "openAudio"});
 	for(const auto& p : r.off)

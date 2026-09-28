@@ -1489,7 +1489,7 @@
         },
         {
           "type": "object",
-          "description": "P6: a question before something is lost. The page shows message with a confirm button; confirm resends command with force.",
+          "description": "P6: a question before something is lost. The page shows message with a confirm button; confirm resends command with force, which answers every question the command raised: a command that loses two things asks once, naming both (also).",
           "required": ["type", "ask", "message", "confirm", "command"],
           "properties": {
             "type": {
@@ -1497,6 +1497,13 @@
             },
             "ask": {
               "enum": ["loadKit", "reloadKit", "overwriteSlot", "discardKit"]
+            },
+            "also": {
+              "type": "array",
+              "description": "Other questions this one answers too (force answers all of them).",
+              "items": {
+                "enum": ["loadKit", "reloadKit", "overwriteSlot", "discardKit"]
+              }
             },
             "message": {
               "type": "string"

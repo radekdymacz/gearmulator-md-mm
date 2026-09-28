@@ -58,17 +58,27 @@ namespace deskCore
 	// A memory image (decoded by the model, _imageKit: which kit it is) against what is known: the
 	// kit status says plays, and the working kit the core shows (_shown, may be null). An image that
 	// predates the editor's own live edits waits for the next one, until they are too old to wait
-	// for. The image taken is what the machine holds (the knob stepping and the edited/clean
-	// judgement read it); the kit reported is _overlay(image): edits still on their way that the
-	// image cannot show yet (knob turns while recording) stay in the view. Pure.
-	template<typename Kit, typename Reflects, typename Overlay>
+	// for. While edits must hold (_hold: knob turns on their way, which no image shows until they
+	// are done) the image is taken and reported as observed, but settles nothing: the edits stay
+	// pending over it. What is reported is always what the machine holds. Pure.
+	template<typename Kit, typename Reflects>
 	FromImage<Kit> fromImage(WorkingCopy<Kit> _w, const Kit& _image, const int _imageKit, const std::optional<int> _currentKit,
-		const Kit* _shown, const double _nowMs, const Reflects& _reflects, const Overlay& _overlay)
+		const Kit* _shown, const double _nowMs, const bool _hold, const Reflects& _reflects)
 	{
 		FromImage<Kit> r;
 		if(!_currentKit || *_currentKit != _imageKit)
 		{
 			r.askStatus = true;
+			r.next = std::move(_w);
+			return r;
+		}
+		if(_hold && _w.expect.any())
+		{
+			_w.region.reset();
+			_w.seed = false;
+			if(!_w.image || !(*_w.image == _image))
+				r.take = _image;
+			_w.image = _image;
 			r.next = std::move(_w);
 			return r;
 		}
@@ -82,10 +92,27 @@ namespace deskCore
 		r.settles = _w.expect.any();
 		_w.expect.clear();
 		_w.image = _image;
-		const Kit view = _overlay(_image);
-		if(r.settles || !_shown || !(*_shown == view))
-			r.take = view;
+		if(r.settles || !_shown || !(*_shown == _image))
+			r.take = _image;
 		r.next = std::move(_w);
 		return r;
+	}
+
+	// Whether the kit that plays differs from its stored slot: the machine document's
+	// kit.working. Named only where it is published.
+	enum class KitState : uint8_t { Unknown, Clean, Edited };
+
+	inline const char* kitStateName(const KitState _s)
+	{
+		return _s == KitState::Clean ? "clean" : _s == KitState::Edited ? "edited" : "unknown";
+	}
+
+	// The working kit against its stored slot (either may be unknown), by the model's sameness. Pure.
+	template<typename Kit, typename Same>
+	KitState kitStateOf(const Kit* _working, const Kit* _stored, const Same& _same)
+	{
+		if(!_working || !_stored)
+			return KitState::Unknown;
+		return _same(*_working, *_stored) ? KitState::Clean : KitState::Edited;
 	}
 }

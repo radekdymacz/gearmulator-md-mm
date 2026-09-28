@@ -162,6 +162,20 @@ namespace deskCore
 		// {"type":"mod","doc","values","ccPerSecond","runs":"plug-in","ccLimit"}: what the page shows.
 		elektronData::json::Value message(const ModLimits& _limits, double _nowMs);
 
+		// One step of the machine (both desks, on the adapter's step edge): the modulated values go
+		// to the adapter (sendModulation, like host automation); the message to publish, when any
+		// modulator runs.
+		template<typename Adapter, typename Documents>
+		std::optional<elektronData::json::Value> step(Adapter& _adapter, const Documents& _view, const ModLimits& _limits,
+			const int _step, const bool _playing, const double _nowMs)
+		{
+			for(const auto& o : onPlayhead(_step, _playing, _nowMs))
+				_adapter.sendModulation(o.track, o.param, o.value, _view);
+			if(setup().sources.empty())
+				return std::nullopt;
+			return message(_limits, _nowMs);
+		}
+
 	private:
 		Modulators m_mods;
 		CcBudget m_budget;

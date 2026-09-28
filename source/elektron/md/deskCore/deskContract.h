@@ -1,6 +1,7 @@
 #pragma once
 
 #include "deskCommands.h"
+#include "deskCore.h"
 #include "deskLifecycle.h"
 
 #include "elektronData/json.h"
@@ -114,6 +115,85 @@ namespace deskCore::contract
 			}
 		}
 		return _root;
+	}
+
+	// The doc message variant ({"type":"doc"}) of $defs/message, or null.
+	inline elektronData::json::Value* docMessageVariant(elektronData::json::Value& _root)
+	{
+		auto* defs = _root.find("$defs");
+		auto* message = defs ? defs->find("message") : nullptr;
+		auto* variants = message ? message->find("oneOf") : nullptr;
+		if(!variants || !variants->isArray())
+			return nullptr;
+		for(auto& v : variants->asArray())
+			if(const auto* p = v.find("properties"))
+				if(const auto* t = p->find("type"); t && t->find("const") && t->find("const")->isString() && t->find("const")->asString() == "doc")
+					return &v;
+		return nullptr;
+	}
+
+	inline elektronData::json::Value namesOf(const std::vector<std::string>& _names)
+	{
+		auto a = elektronData::json::Value::array();
+		for(const auto& n : _names)
+			a.push(n);
+		return a;
+	}
+
+	// The observed-document sources (Source) as the contract names them.
+	inline std::vector<std::string> sourceNames()
+	{
+		return {sourceName(Source::None), sourceName(Source::Dump), sourceName(Source::Memory), sourceName(Source::Tracked)};
+	}
+
+	// The doc message's generated parts: its kind enum (the model's kinds, Model::kinds()) and its
+	// source enum. Each kind also needs its if/then document $ref (written by hand: which $defs
+	// shape a kind has); docKindGaps reports a kind without one.
+	inline elektronData::json::Value withDocKinds(elektronData::json::Value _root, const std::vector<std::string>& _kinds)
+	{
+		if(auto* v = docMessageVariant(_root))
+			if(auto* p = v->find("properties"))
+			{
+				if(auto* k = p->find("kind"))
+					k->put("enum", namesOf(_kinds));
+				if(auto* s = p->find("source"))
+					s->put("enum", namesOf(sourceNames()));
+			}
+		return _root;
+	}
+
+	// What the doc message variant does not say as the model does: the kind and source enums, and
+	// a kind with no if/then document shape.
+	inline std::vector<std::string> docKindGaps(elektronData::json::Value _root, const std::vector<std::string>& _kinds)
+	{
+		std::vector<std::string> gaps;
+		const auto* v = docMessageVariant(_root);
+		if(!v)
+			return {"no doc message in $defs/message"};
+		const auto* p = v->find("properties");
+		const auto* k = p ? p->find("kind") : nullptr;
+		const auto* s = p ? p->find("source") : nullptr;
+		if(!k || !k->find("enum") || !(*k->find("enum") == namesOf(_kinds)))
+			gaps.push_back("the doc message's kind enum is not the model's kinds (--write-schema)");
+		if(!s || !s->find("enum") || !(*s->find("enum") == namesOf(sourceNames())))
+			gaps.push_back("the doc message's source enum is not deskCore's sources (--write-schema)");
+		const auto* all = v->find("allOf");
+		for(const auto& kind : _kinds)
+		{
+			bool shaped = false;
+			if(all && all->isArray())
+				for(const auto& c : all->asArray())
+				{
+					const auto* ifp = c.find("if") ? c.find("if")->find("properties") : nullptr;
+					const auto* kc = ifp && ifp->find("kind") ? ifp->find("kind")->find("const") : nullptr;
+					const auto* then = c.find("then") ? c.find("then")->find("properties") : nullptr;
+					if(kc && kc->isString() && kc->asString() == kind && then && then->find("doc") && then->find("doc")->find("$ref"))
+						shaped = true;
+				}
+			if(!shaped)
+				gaps.push_back("the doc message has no document shape for kind " + kind);
+		}
+		return gaps;
 	}
 
 	// The contract's lifecycle enum is the lifecycle rows' names.

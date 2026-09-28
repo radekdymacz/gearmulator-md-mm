@@ -354,22 +354,23 @@ namespace
 	{
 		using Kit = std::vector<int>;
 		const auto reflects = [](const Kit& _image, const Kit&, const Kit& _to) { return _image == _to; };
-		const auto none = [](Kit _k) { return _k; };
 		WorkingCopy<Kit> w;
-		auto r = fromImage(w, Kit{1, 2}, 3, std::optional<int>(4), static_cast<const Kit*>(nullptr), 0, reflects, none);
+		auto r = fromImage(w, Kit{1, 2}, 3, std::optional<int>(4), static_cast<const Kit*>(nullptr), 0, false, reflects);
 		check(r.askStatus && !r.take && !r.next.image, "an image of another kit than status says: ask, take nothing");
-		r = fromImage(w, Kit{1, 2}, 3, std::optional<int>(3), static_cast<const Kit*>(nullptr), 0, reflects, none);
+		r = fromImage(w, Kit{1, 2}, 3, std::optional<int>(3), static_cast<const Kit*>(nullptr), 0, false, reflects);
 		check(r.take == Kit({1, 2}) && r.next.image == Kit({1, 2}) && !r.next.seed && !r.settles, "the image is taken and reported");
 		w = r.next;
 		w.expect.sent(Kit{1, 2}, Kit{1, 9}, 100);
 		const Kit shown{1, 9};
-		r = fromImage(w, Kit{1, 2}, 3, std::optional<int>(3), &shown, 150, reflects, none);
+		r = fromImage(w, Kit{1, 2}, 3, std::optional<int>(3), &shown, 150, false, reflects);
 		check(!r.take && r.next.expect.any(), "an image from before the edit waits");
-		r = fromImage(w, Kit{1, 9}, 3, std::optional<int>(3), &shown, 160, reflects, none);
+		r = fromImage(w, Kit{1, 9}, 3, std::optional<int>(3), &shown, 160, false, reflects);
 		check(r.settles && r.take == Kit({1, 9}) && !r.next.expect.any(), "the image that shows it settles the edit");
-		const auto knob = [](Kit _k) { _k[0] = 7; return _k; };
-		r = fromImage(r.next, Kit{2, 9}, 3, std::optional<int>(3), &shown, 170, reflects, knob);
-		check(r.next.image == Kit({2, 9}) && r.take == Kit({7, 9}), "the machine's image is kept, the view keeps the knob on its way");
+		auto held = r.next;
+		held.expect.sent(Kit{1, 9}, Kit{7, 9}, 170);
+		r = fromImage(held, Kit{2, 9}, 3, std::optional<int>(3), &shown, 175, true, reflects);
+		check(r.next.image == Kit({2, 9}) && r.take == Kit({2, 9}) && !r.settles && r.next.expect.any(),
+			"knob turns on their way: the image is observed as it is, the edit stays pending");
 		const auto sw = switched(r.next);
 		check(sw.seed && !sw.image && !sw.expect.any(), "another kit plays: nothing of the old one holds");
 	}
@@ -378,6 +379,18 @@ namespace
 int main()
 {
 	workingCopy();
+	{
+		Outcome a, b, none;
+		a.ask = Ask{"breakChain", "ends the chain", "Go", Value::object(), {}};
+		b.ask = Ask{"discardKit", "loses kit edits", "Switch", Value::object(), {}};
+		b.ask->details.set("kit", 3);
+		const auto both = withAsk(withAsk(none, a), b);
+		const auto m = askMessage(*both.ask, *elektronData::json::parse(R"({"op":"select","p":2,"id":7,"force":false})"));
+		check(m.find("ask")->asString() == "breakChain" && m.find("also")->asArray().size() == 1
+			&& m.find("message")->asString() == "ends the chain<br>loses kit edits" && m.find("kit")->asNumber() == 3
+			&& !m.find("command")->find("id") && !m.find("command")->find("force"),
+			"two questions of one command are one ask naming both (force answers both)");
+	}
 	loadQueue();
 	lifecycle();
 	sequence();

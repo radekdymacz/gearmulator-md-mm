@@ -1,5 +1,6 @@
 #pragma once
 
+#include <algorithm>
 #include "deskCapabilities.h"
 #include "deskCommands.h"
 #include "deskHistory.h"
@@ -53,14 +54,16 @@ namespace deskCore
 	};
 
 	// A question for the user before something is lost (P6: one protocol). The core publishes it as
-	// {"type":"ask","ask":what,"message","confirm","command": the command to resend, ...details}; the
-	// page's answer is that command with force.
+	// {"type":"ask","ask":what,"also":[...],"message","confirm","command": the command to resend,
+	// ...details}; the page's answer is that command with force. Force answers every question the
+	// command raises, so a command that loses two things asks one question naming both (withAsk).
 	struct Ask
 	{
 		std::string what;		// its name ("discardKit", "overwriteSlot", ...)
 		std::string message;	// the question, may carry <b>..</b>
 		std::string confirm;	// the words on the button that goes on
 		Value details = Value::object();
+		std::vector<std::string> also;	// the other questions this one answers too
 	};
 
 	// What an adapter answers a command or a delivery with.
@@ -71,11 +74,43 @@ namespace deskCore
 		std::optional<Ask> ask;				// a question for the user: nothing was done
 	};
 
+	// _o with _next's question joined to its own (the first names the ask and its button; the
+	// messages are both shown). Errors and notes of _next are kept too.
+	inline Outcome withAsk(Outcome _o, const Outcome& _next)
+	{
+		_o.errors.insert(_o.errors.end(), _next.errors.begin(), _next.errors.end());
+		if(!_next.ask)
+			return _o;
+		if(!_o.ask)
+		{
+			_o.ask = _next.ask;
+			return _o;
+		}
+		auto& a = *_o.ask;
+		const auto& b = *_next.ask;
+		if(a.what != b.what && std::find(a.also.begin(), a.also.end(), b.what) == a.also.end())
+			a.also.push_back(b.what);
+		if(a.message.find(b.message) == std::string::npos)
+			a.message += "<br>" + b.message;
+		if(b.details.isObject())
+			for(const auto& [k, v] : b.details.asObject())
+				if(!a.details.find(k))
+					a.details.set(k, v);
+		return _o;
+	}
+
 	inline Value askMessage(const Ask& _ask, const Value& _command)
 	{
 		Value m = Value::object();
 		m.set("type", "ask");
 		m.set("ask", _ask.what);
+		if(!_ask.also.empty())
+		{
+			Value also = Value::array();
+			for(const auto& w : _ask.also)
+				also.push(w);
+			m.set("also", std::move(also));
+		}
 		m.set("message", _ask.message);
 		m.set("confirm", _ask.confirm);
 		Value command = Value::object();

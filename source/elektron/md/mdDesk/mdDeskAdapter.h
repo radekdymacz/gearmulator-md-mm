@@ -5,8 +5,6 @@
 
 #include "deskCore/deskCore.h"
 
-#include "mdDataLink/mdDataLink.h"
-
 #include <cstdint>
 #include <functional>
 #include <string>
@@ -73,9 +71,5 @@ namespace mdDesk
 		virtual void sendModulation(uint8_t _track, uint8_t _param, uint8_t _value, const Documents& _view) = 0;
 
 		virtual const Telemetry& telemetry() const = 0;
-		// The machine's current pattern, kit, song... as the protocol reports them.
-		virtual const mdDataLink::Session::State& linkState() const = 0;
-		virtual bool replied() const = 0;
-		virtual double lastRoundTripMs() const = 0;
 	};
 }

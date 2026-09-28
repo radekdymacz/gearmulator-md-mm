@@ -161,13 +161,11 @@ namespace mmDesk
 		return m_working.expect.expecting(now());
 	}
 
-	std::string MmMachine::kitState(const Documents& _view) const
+	deskCore::KitState MmMachine::kitState(const Documents& _view) const
 	{
-		const auto* working = _view.workingKitOf(m_curKit);
 		const auto stored = m_curKit >= 0 ? _view.kits.find(static_cast<uint8_t>(m_curKit)) : _view.kits.end();
-		if(!working || stored == _view.kits.end())
-			return "unknown";
-		return ed::mmKitRaw(*working) == ed::mmKitRaw(stored->second) ? "clean" : "edited";
+		return deskCore::kitStateOf(_view.workingKitOf(m_curKit), stored == _view.kits.end() ? nullptr : &stored->second,
+			[](const ed::MmKit& _a, const ed::MmKit& _b) { return ed::mmKitRaw(_a) == ed::mmKitRaw(_b); });
 	}
 
 	namespace
@@ -231,7 +229,7 @@ namespace mmDesk
 	Outcome MmMachine::askLoadKit(const Value& _command, const Documents& _view)
 	{
 		const auto k = num(_command, "k", m_curKit);
-		if(kitState(_view) != "edited")
+		if(kitState(_view) != deskCore::KitState::Edited)
 			return ok();
 		if(k == m_curKit)
 			return ask("reloadKit", "Reload <b>" + kitLabel(_view, k) + "</b> from the machine? Your edits go to its UNDO KIT.",
@@ -245,7 +243,7 @@ namespace mmDesk
 	{
 		const auto p = num(_command, "p");
 		const auto it = _view.patterns.find(static_cast<uint8_t>(p));
-		if(it == _view.patterns.end() || static_cast<int>(it->second.kit) == m_curKit || kitState(_view) != "edited")
+		if(it == _view.patterns.end() || static_cast<int>(it->second.kit) == m_curKit || kitState(_view) != deskCore::KitState::Edited)
 			return ok();
 		Outcome o = ask("discardKit", "<b>" + ed::mmPatternName(static_cast<uint8_t>(p)) + "</b> uses kit <b>" + kitLabel(_view, it->second.kit)
 			+ "</b>. Your edits to <b>" + kitLabel(_view, m_curKit) + "</b> are not saved on the machine and will be lost.", "Switch and lose edits");
@@ -464,7 +462,7 @@ namespace mmDesk
 	Outcome MmMachine::cmdLoadKit(const Value& _m, const Documents& _view)
 	{
 		const auto k = num(_m, "k", m_curKit);
-		if(k == m_curKit && kitState(_view) == "clean")
+		if(k == m_curKit && kitState(_view) == deskCore::KitState::Clean)
 			return refuse("The kit that plays matches its saved slot. Nothing to reload.");
 		return kitAction(k, false);
 	}
@@ -760,9 +758,10 @@ namespace mmDesk
 		}
 	}
 
-	void MmMachine::onTelemetry(const Telemetry& _t)
+	bool MmMachine::onTelemetry(const Telemetry& _t)
 	{
 		m_tel = _t;
+		const bool stepped = _t.valid && _t.step != m_rawStep;
 		// Playing = the RAM flag, or the step byte advancing: two single steps forward (or a wrap to 0)
 		// in a row, each within three step times at the tempo (a 3/4X pattern included). A stop that
 		// resets the step to 0 is one move, so it never reads as playing. Derived; m_tel stays as read.
@@ -783,6 +782,7 @@ namespace mmDesk
 		if(!m_playing && m_queuedPattern >= 0)
 			m_lastStatusMs = -1e9;	// stopped: LOAD PATTERN switches at once; status will say
 		pumpSequence(t);
+		return stepped;
 	}
 
 	void MmMachine::onWorkingKit(const Bytes& _region)
@@ -821,8 +821,7 @@ namespace mmDesk
 			return;
 		}
 		const auto current = m_curKit >= 0 ? std::optional<int>(m_curKit) : std::nullopt;
-		auto r = deskCore::fromImage(std::move(m_working), *k, kitNumber, current, _view.workingKitOf(m_curKit), _now, reflects,
-			[](const ed::MmKit& _k) { return _k; });
+		auto r = deskCore::fromImage(std::move(m_working), *k, kitNumber, current, _view.workingKitOf(m_curKit), _now, false, reflects);
 		m_working = std::move(r.next);
 		if(r.askStatus && _now - m_lastStatusMs > 200)
 		{
@@ -891,7 +890,7 @@ namespace mmDesk
 		d.set("pattern", std::move(p));
 		Value k = Value::object();
 		k.set("current", m_curKit < 0 ? Value() : Value(m_curKit));
-		k.set("working", kitState(_view));
+		k.set("working", deskCore::kitStateName(kitState(_view)));
 		d.set("kit", std::move(k));
 		Value s = Value::object();
 		s.set("current", m_curSong < 0 ? Value() : Value(m_curSong));

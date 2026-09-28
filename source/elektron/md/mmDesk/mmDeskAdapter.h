@@ -58,7 +58,8 @@ namespace mmDesk
 		using Probe = deskCore::LifeFacts::Probe;
 
 		virtual void setProbe(Probe _probe) = 0;
-		virtual void onTelemetry(const Telemetry& _telemetry) = 0;
+		// Every tick; true on a step edge (the step byte moved), as the MD's TelemetryEvents.stepped.
+		virtual bool onTelemetry(const Telemetry& _telemetry) = 0;
 		// md::MmTelemetry's working-kit region: [0] kit number, [5..] the raw kit.
 		virtual void onWorkingKit(const Bytes& _region) = 0;
 		// App modulation of the kit that plays: param = DATA page * 8 + index.
@@ -67,9 +68,5 @@ namespace mmDesk
 		virtual const Telemetry& telemetry() const = 0;
 		// The sequencer plays (the RAM flag, or the step byte advancing).
 		virtual bool playing() const = 0;
-		virtual int currentPattern() const = 0;
-		virtual int currentKit() const = 0;
-		virtual int currentSong() const = 0;
-		virtual int currentGlobal() const = 0;
 	};
 }

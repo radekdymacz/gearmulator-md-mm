@@ -62,10 +62,12 @@ namespace mdDesk
 		std::vector<std::string> loadSetup(const Value& _setup);
 		const DeskSetup& setup() const { return m_setup; }
 
-		const mdDataLink::Session::State& linkState() const { return machine().linkState(); }
-		bool isReady() const { return machine().replied(); }
 		bool isBusy() const { return machine().busy(); }
-		double lastRoundTripMs() const { return machine().lastRoundTripMs(); }
+		// The default adapter's protocol facts (MdMachine), for tests and diagnostics; empty, false
+		// and -1 for another adapter. Not part of MdAdapter: an engine with its own protocol has none.
+		const mdDataLink::Session::State& linkState() const;
+		bool isReady() const;
+		double lastRoundTripMs() const;
 
 	private:
 		void onSetup(const Value& _message) override;

@@ -17,6 +17,21 @@ namespace mmDesk
 	{
 	}
 
+	namespace
+	{
+		template<typename F>
+		int ofMachine(const MmAdapter& _a, F _f)
+		{
+			const auto* m = dynamic_cast<const MmMachine*>(&_a);
+			return m ? _f(*m) : -1;
+		}
+	}
+
+	int Desk::currentPattern() const { return ofMachine(machine(), [](const MmMachine& _m) { return _m.currentPattern(); }); }
+	int Desk::currentKit() const { return ofMachine(machine(), [](const MmMachine& _m) { return _m.currentKit(); }); }
+	int Desk::currentSong() const { return ofMachine(machine(), [](const MmMachine& _m) { return _m.currentSong(); }); }
+	int Desk::currentGlobal() const { return ofMachine(machine(), [](const MmMachine& _m) { return _m.currentGlobal(); }); }
+
 	std::unique_ptr<MmAdapter> Desk::defaultAdapter(const Profile& _profile, const DevicePort& _device)
 	{
 		return std::make_unique<MmMachine>(_profile, _device);
@@ -68,23 +83,15 @@ namespace mmDesk
 
 	void Desk::onTelemetry(const Telemetry& _t)
 	{
-		machine().onTelemetry(_t);
-		// App modulators move on the machine's own steps.
-		if(_t.valid && _t.step != m_lastStep)
-		{
-			m_lastStep = _t.step;
+		// App modulators move on the machine's own steps (the adapter's step edge).
+		if(machine().onTelemetry(_t))
 			runModulators();
-		}
 	}
 
 	void Desk::runModulators()
 	{
-		const auto& t = machine().telemetry();
-		const auto out = m_mods.onPlayhead(t.step, machine().playing(), now());
-		for(const auto& o : out)
-			machine().sendModulation(o.track, o.param, o.value, documents());
-		if(!m_mods.setup().sources.empty())
-			publishModulators();
+		if(auto m = m_mods.step(machine(), documents(), g_mmModLimits, machine().telemetry().step, machine().playing(), now()))
+			publish(*m);
 		flush();
 	}
 

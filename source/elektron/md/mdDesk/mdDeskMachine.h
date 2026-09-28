@@ -61,9 +61,10 @@ namespace mdDesk
 		void onHostMute(uint8_t _track, bool _muted) override;
 		void sendModulation(uint8_t _track, uint8_t _param, uint8_t _value, const Documents& _view) override;
 		const Telemetry& telemetry() const override { return m_telemetry; }
-		const mdDataLink::Session::State& linkState() const override { return m_session.state(); }
-		bool replied() const override { return m_wire.replied; }
-		double lastRoundTripMs() const override { return m_lastRoundTripMs; }
+		// The protocol facts (not MdAdapter's: the desk reads them for tests and diagnostics).
+		const mdDataLink::Session::State& linkState() const { return m_session.state(); }
+		bool replied() const { return m_wire.replied; }
+		double lastRoundTripMs() const { return m_lastRoundTripMs; }
 
 		const Profile& profile() const { return m_profile; }
 		size_t loading() const { return m_loads.pending(); }
@@ -91,12 +92,29 @@ namespace mdDesk
 		};
 		// Panel keys on their way (a fact from the device's telemetry, P6): pressed at atMs, seen
 		// pending by the device, and over when the device says none are left.
+		// Panel keys (and knob turns) sent and not yet worked off, as the device reports them: it
+		// shows keys pending, then none left. One fact, two transitions.
 		struct Keys
 		{
 			std::vector<std::string> waiting;	// held back while a dump request is in flight
 			bool sent = false;
 			bool seenPending = false;
 			double sentMs = 0;
+
+			void pressed(const double _nowMs)
+			{
+				sent = true;
+				seenPending = false;
+				sentMs = _nowMs;
+			}
+			// The device's count of keys it has not worked off (-1: it does not say).
+			void onPending(const int _pending)
+			{
+				if(sent && _pending > 0)
+					seenPending = true;
+				else if(sent && (seenPending || _pending < 0))
+					sent = false;
+			}
 		};
 
 		// What the panel-key features need (one fact each, read by capabilities() and the commands).
@@ -123,6 +141,7 @@ namespace mdDesk
 		void onState(const mdDataLink::Session::State& _s);
 		void takeWorkingKit(const Documents* _view);
 		void judgeWorkingKit(const elektronData::MdKit& _stored);
+		const elektronData::MdKit* heldKit(const Documents& _view) const;
 		void setBaseChannel(const elektronData::MdGlobal& _g);
 		void pumpLoads(double _now);
 		void pumpPushes(double _now);

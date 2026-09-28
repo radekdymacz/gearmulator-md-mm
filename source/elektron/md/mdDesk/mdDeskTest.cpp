@@ -9,6 +9,7 @@
 #include "mdDeskMachine.h"
 
 #include "deskCore/deskContract.h"
+#include "deskCore/deskKinds.h"
 #include "deskHost/deskHost.h"
 
 #include "elektronData/jsonSchema.h"
@@ -1033,14 +1034,19 @@ namespace
 		if(!root)
 			return;
 		const auto generated = deskHost::contractCommands(commandTable().schema());
+	std::vector<std::string> kinds;
+	for(const auto* n : deskCore::kindNames<mdDesk::MdModel>())
+		kinds.push_back(n);
 		if(_write)
 		{
 			std::ofstream out(MDDESK_SCHEMA);
-			out << ed::json::write(contract::withGenerated(*root, generated), 2) << "\n";
+			out << ed::json::write(contract::withDocKinds(contract::withGenerated(*root, generated), kinds), 2) << "\n";
 			return;
 		}
 		check(contract::sameCommands(*root, generated), "the schema's $defs/command is generated from the command tables (--write-schema)");
 		check(contract::sameLifecycle(*root), "the schema's lifecycle enum is the lifecycle rows (--write-schema)");
+	for(const auto& gap : contract::docKindGaps(*root, kinds))
+		check(false, gap.c_str());
 		// The plug-in's host sends these; this test has no host.
 		const auto r = contract::checkMessages(*root, g_published, {"learn", "audio", "audioLevel", "openAudio"});
 		for(const auto& p : r.off)
@@ -1102,13 +1108,9 @@ namespace
 		void onHostMute(uint8_t, bool) override {}
 		void sendModulation(uint8_t, uint8_t, uint8_t, const Documents&) override {}
 		const Telemetry& telemetry() const override { return m_telemetry; }
-		const mdDataLink::Session::State& linkState() const override { return m_state; }
-		bool replied() const override { return true; }
-		double lastRoundTripMs() const override { return -1; }
 
 	private:
 		Telemetry m_telemetry;
-		mdDataLink::Session::State m_state;
 	};
 
 	void testFakeAdapter()

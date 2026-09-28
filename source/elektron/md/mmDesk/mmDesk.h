@@ -66,10 +66,12 @@ namespace mmDesk
 		std::optional<elektronData::MmKit> workingKit() const;
 		std::optional<elektronData::MmSong> song(uint8_t _slot) const;
 		std::optional<elektronData::MmGlobal> global(uint8_t _slot) const;
-		int currentPattern() const { return machine().currentPattern(); }
-		int currentKit() const { return machine().currentKit(); }
-		int currentSong() const { return machine().currentSong(); }
-		int currentGlobal() const { return machine().currentGlobal(); }
+		// What the default adapter (MmMachine) knows plays, for tests and diagnostics; -1 for another
+		// adapter. Not part of MmAdapter: the machine document and the adapter's context carry it.
+		int currentPattern() const;
+		int currentKit() const;
+		int currentSong() const;
+		int currentGlobal() const;
 		size_t loaded() const { const auto s = status(); const auto* v = s.find("loaded"); return v && v->isNumber() ? static_cast<size_t>(v->asNumber()) : 0; }
 		double lastRoundTripMs() const { const auto s = status(); const auto* v = s.find("roundTripMs"); return v && v->isNumber() ? v->asNumber() : -1; }
 
@@ -81,7 +83,6 @@ namespace mmDesk
 
 		std::function<void(const Value&)> m_saveSetup;
 		deskCore::ModEngine m_mods;
-		int m_lastStep = -1;
 	};
 
 	// The Monomachine's links address its six synth tracks' DATA pages (page * 8 + index) and levels.

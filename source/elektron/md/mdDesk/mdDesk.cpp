@@ -18,6 +18,30 @@ namespace mdDesk
 	{
 	}
 
+	namespace
+	{
+		const MdMachine* mdMachineOf(const MdAdapter& _a) { return dynamic_cast<const MdMachine*>(&_a); }
+	}
+
+	const mdDataLink::Session::State& Desk::linkState() const
+	{
+		static const mdDataLink::Session::State none;
+		const auto* m = mdMachineOf(machine());
+		return m ? m->linkState() : none;
+	}
+
+	bool Desk::isReady() const
+	{
+		const auto* m = mdMachineOf(machine());
+		return m ? m->replied() : deskCore::takesMidi(lifecycle());
+	}
+
+	double Desk::lastRoundTripMs() const
+	{
+		const auto* m = mdMachineOf(machine());
+		return m ? m->lastRoundTripMs() : -1;
+	}
+
 	std::unique_ptr<MdAdapter> Desk::defaultAdapter(const Profile& _profile, const DevicePort& _device)
 	{
 		return std::make_unique<MdMachine>(_profile, _device);
@@ -111,9 +135,8 @@ namespace mdDesk
 	void Desk::runModulators()
 	{
 		const auto& t = machine().telemetry();
-		for(const auto& o : m_mods.onPlayhead(t.step, t.playing, now()))
-			machine().sendModulation(o.track, o.param, o.value, documents());
-		publishModulators();
+		if(auto m = m_mods.step(machine(), documents(), g_mdModLimits, t.step, t.playing, now()))
+			publish(*m);
 	}
 
 	// ---- device facts -> the adapter ----

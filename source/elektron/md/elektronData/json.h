@@ -59,6 +59,7 @@ namespace elektronData::json
 		double asNumber() const { return m_number; }
 		const std::string& asString() const { return m_string; }
 		const Array& asArray() const { return m_array; }
+		Array& asArray() { return m_array; }
 		const Object& asObject() const { return m_object; }
 
 		// Object access: nullptr when absent or not an object.
