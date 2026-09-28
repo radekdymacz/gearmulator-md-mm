@@ -1,5 +1,7 @@
 #pragma once
 
+#include "deskHost/deskHost.h"
+
 #include "elektronData/json.h"
 
 #include "juce_audio_devices/juce_audio_devices.h"
@@ -40,7 +42,7 @@ namespace mdJucePlugin
 		AudioMidiLink& operator=(const AudioMidiLink&) = delete;
 
 		// True when the message was one of the ops above (handled, replied).
-		bool handle(const elektronData::json::Value& _message);
+		bool handle(deskHost::Action _action, const elektronData::json::Value& _message);
 		// The editor's timer: the input level, a few times a second, while the page asks.
 		void tick();
 		void publish();

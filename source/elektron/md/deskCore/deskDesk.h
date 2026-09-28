@@ -1,6 +1,7 @@
 #pragma once
 
 #include "deskCore.h"
+#include "deskLcd.h"
 
 #include <functional>
 #include <memory>
@@ -9,95 +10,76 @@
 
 namespace deskCore
 {
-	// One editor behind its page (P6): the core, one machine adapter (an engine from the model's
+	// One editor behind its page (P6): the core, one machine adapter (an engine of the model's
 	// engine map) and the one router that reads the model's command table. The same for the
 	// Machinedrum and the Monomachine; a model adds only what is its own (the MD's setup).
 	//
-	// MachineT is the model's adapter (Machine<Model> plus the model's device facts); it is made
-	// from (profile, device port). Model provides: commands() (the table), catalogue() (the
-	// document the page gets on ready), refusal(lifecycle) (why a gated command waits).
+	// Adapter is the model's adapter interface: Machine<Model> plus the model's device facts
+	// (telemetry, memory, host parameters). Which class implements it is the engine's choice: the
+	// desk holds whatever adapter it is given (setEngine), so an engine with its own protocol is
+	// its own adapter class, not a new desk. Model provides: commands() (the table), catalogue()
+	// (the document the page gets on ready), refusal(lifecycle) (why a gated command waits).
 	// Single threaded.
-	template<typename Model, typename MachineT>
+	template<typename Model, typename Adapter>
 	class Desk
 	{
 	public:
-		using Profile = typename MachineT::Profile;
-		using DevicePort = typename MachineT::Port;
 		using Documents = typename Model::Documents;
 
-		Desk(Profile _profile, DevicePort _device, std::function<void(const Value&)> _toPage, std::function<double()> _nowMs)
-			: m_toPage(std::move(_toPage))
-			, m_nowMs(std::move(_nowMs))
-			, m_core([this](const Value& _m)
-			{
-				if(m_toPage)
-					m_toPage(_m);
-			})
+		Desk(std::unique_ptr<Adapter> _adapter, std::function<void(const Value&)> _toPage, std::function<double()> _nowMs)
+			: m_nowMs(std::move(_nowMs))
+			, m_core(std::move(_toPage))
 		{
-			setEngine(std::move(_profile), std::move(_device));
+			setEngine(std::move(_adapter));
 		}
 		virtual ~Desk() = default;
 
 		Desk(const Desk&) = delete;
 		Desk& operator=(const Desk&) = delete;
 
-		// A page message, routed by the command table. False for a host command (the plug-in's),
-		// which the caller handles; the table's row says which (hostOp()).
+		// A page message, routed by the model's command table. False for an op the model does not
+		// know (the plug-in's own table has it, or nobody does): the caller answers it.
 		bool onPageMessage(const Value& _message)
 		{
-			const auto op = opOf(_message);
-			const auto* spec = Model::commands().find(op);
+			const auto* spec = Model::commands().find(opOf(_message));
 			if(!spec)
-			{
-				m_core.result(_message, {"unknown command " + op}, {});
-				flush();
-				return true;
-			}
-			if(spec->owner == Owner::Host)
 				return false;
 			const auto lc = m_machine->lifecycle();
 			const bool open = spec->gate == Gate::None || (spec->gate == Gate::Midi ? takesMidi(lc) : takesInput(lc));
 			if(!open)
-			{
 				m_core.result(_message, {Model::refusal(lc)}, {});
-				flush();
-				return true;
-			}
-			if(const auto errors = Model::Table::check(*spec, _message); !errors.empty())
-			{
+			else if(const auto errors = Model::Table::check(*spec, _message); !errors.empty())
 				m_core.result(_message, errors, {});
-				flush();
-				return true;
-			}
-			switch(spec->owner)
+			else
 			{
-			case Owner::Core:
-				if(op == "ready")
-					onReady(_message);
-				else
-					m_core.onCommand(_message);
-				break;
-			case Owner::Machine: m_core.onMachineCommand(_message); break;
-			case Owner::Setup: onSetup(_message); break;
-			case Owner::Host: break;
+				switch(spec->owner)
+				{
+				case Owner::Core:
+					switch(spec->core)
+					{
+					case CoreOp::Ready: onReady(_message); break;
+					case CoreOp::Undo: m_core.undo(_message); break;
+					case CoreOp::Redo: m_core.redo(_message); break;
+					case CoreOp::Edit: m_core.edit(_message); break;
+					case CoreOp::Set: m_core.set(_message); break;
+					}
+					break;
+				case Owner::Machine: m_core.onMachineCommand(_message); break;
+				case Owner::Setup: onSetup(_message); break;
+				case Owner::Host: m_core.result(_message, {"not a desk command"}, {}); break;
+				}
 			}
 			flush();
 			return true;
 		}
 
-		static HostOp hostOp(const Value& _message)
+		// An engine of the model's engine map: its adapter; the documents start over. The desk owns
+		// the adapter from here; the old one is gone when this returns.
+		void setEngine(std::unique_ptr<Adapter> _adapter)
 		{
-			const auto* spec = Model::commands().find(opOf(_message));
-			return spec && spec->owner == Owner::Host ? spec->host : HostOp::None;
-		}
-
-		// An engine from the model's engine map: a new adapter; the documents start over.
-		void setEngine(Profile _profile, DevicePort _device)
-		{
-			m_core.setMachine(nullptr);
-			m_machine = std::make_unique<MachineT>(std::move(_profile), std::move(_device));
-			m_core.setMachine(m_machine.get());
-			if(m_pageReady)
+			m_core.setMachine(_adapter.get());
+			m_machine = std::move(_adapter);
+			if(m_core.pageReadyNow())
 			{
 				Value reset = Value::object();
 				reset.set("type", "reset");
@@ -122,12 +104,15 @@ namespace deskCore
 			flush();
 		}
 
-		// The page went away (the editor window closed): nothing is published until the next ready.
-		void detachPage()
+		// The machine's own screen while it starts (a device fact): the page's LCD until it takes input.
+		void showLcd(const std::vector<uint8_t>& _bits)
 		{
-			m_pageReady = false;
-			m_core.detach();
+			if(!isInputReady())
+				m_core.publish(lcdMessage(_bits));
 		}
+
+		// The page went away (the editor window closed): nothing is published until the next ready.
+		void detachPage() { m_core.detach(); }
 
 		void flush()
 		{
@@ -135,20 +120,23 @@ namespace deskCore
 			m_core.flush();
 		}
 
-		MachineT& machine() { return *m_machine; }
-		const MachineT& machine() const { return *m_machine; }
+		Adapter& machine() { return *m_machine; }
+		const Adapter& machine() const { return *m_machine; }
 		const Core<Model>& coreState() const { return m_core; }
 		const Documents& documents() const { return m_core.view(); }
 		Lifecycle lifecycle() const { return m_machine->lifecycle(); }
 		bool isInputReady() const { return takesInput(lifecycle()); }
-		const std::string& engine() const { return m_machine->profile().id; }
+		// How many times a page said ready (the plug-in publishes its own parts after each).
+		uint32_t readyCount() const { return m_readyCount; }
+		// A page has been up: the machine is polled and read from then on.
+		bool pageSeen() const { return m_core.pageSeen(); }
 
 	protected:
 		virtual void onSetup(const Value& _message) { m_core.result(_message, {"no setup here"}, {}); }
 		// The page (re)attached: after the core's own publishing, what the model adds.
 		virtual void onReadyExtra() {}
-		void publish(const Value& _message) const { m_core.publish(_message); }
-		void result(const Value& _message, const std::vector<std::string>& _errors, const std::string& _note) const
+		void publish(const Value& _message) { m_core.publish(_message); }
+		void result(const Value& _message, const std::vector<std::string>& _errors, const std::string& _note)
 		{
 			m_core.result(_message, _errors, _note);
 		}
@@ -158,7 +146,7 @@ namespace deskCore
 	private:
 		void onReady(const Value& _message)
 		{
-			m_pageReady = true;
+			++m_readyCount;
 			m_core.pageReady();
 			Value cat = Value::object();
 			cat.set("type", "catalogue");
@@ -169,10 +157,9 @@ namespace deskCore
 				m_core.result(_message, {}, {});
 		}
 
-		std::function<void(const Value&)> m_toPage;
 		std::function<double()> m_nowMs;
 		Core<Model> m_core;
-		std::unique_ptr<MachineT> m_machine;
-		bool m_pageReady = false;
+		std::unique_ptr<Adapter> m_machine;
+		uint32_t m_readyCount = 0;
 	};
 }

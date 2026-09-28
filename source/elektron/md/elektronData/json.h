@@ -80,6 +80,10 @@ namespace elektronData::json
 		Object m_object;
 	};
 
+	// Values are equal when they are the same JSON value: objects by their members, whatever the order.
+	bool operator==(const Value& _a, const Value& _b);
+	inline bool operator!=(const Value& _a, const Value& _b) { return !(_a == _b); }
+
 	std::string write(const Value& _value, int _indent = -1);
 	// Empty on any syntax error; _error (optional) gets a short description.
 	std::optional<Value> parse(const std::string& _text, std::string* _error = nullptr);

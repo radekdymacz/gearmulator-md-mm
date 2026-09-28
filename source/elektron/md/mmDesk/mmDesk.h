@@ -1,14 +1,16 @@
 #pragma once
 
-#include "mmDeskMachine.h"
+#include "mmDeskAdapter.h"
 #include "mmDeskModel.h"
 #include "mmRecv.h"
 
 #include "deskCore/deskDesk.h"
+#include "deskCore/deskMod.h"
 
 #include "elektronData/json.h"
 
 #include <functional>
+#include <memory>
 #include <optional>
 #include <string>
 #include <vector>
@@ -16,45 +18,48 @@
 namespace mmDesk
 {
 	// The Monomachine Editor behind its page (MM OS 1.32B, P6): deskCore's Desk (the same core,
-	// router and adapter seam as the Machinedrum's; here the edits are whole documents) plus the
-	// device facts it forwards to its adapter. Single-threaded.
-	class Desk final : public deskCore::Desk<MmModel, MmMachine>
+	// router and adapter seam as the Machinedrum's; here the edits are whole documents) plus what is
+	// the Monomachine's own: the app modulators (deskCore's ModEngine, as the MD's) and the device
+	// facts it forwards to its adapter. Single-threaded.
+	class Desk final : public deskCore::Desk<MmModel, MmAdapter>
 	{
 	public:
 		using Bytes = std::vector<uint8_t>;
 		using Value = elektronData::json::Value;
-		using Probe = MmMachine::Probe;
+		using Probe = MmAdapter::Probe;
+		using Adapter = MmAdapter;
+		using Profile = mmDesk::Profile;
+		using DevicePort = mmDesk::DevicePort;
 
+		// The device edge (the engine's) plus the page and the project's setup store.
 		struct Port
 		{
-			std::function<void(const Bytes&)> sendSysex;
-			std::function<void(uint8_t _track, uint8_t _page, uint8_t _index, uint8_t _value)> sendParam;
-			std::function<void(uint8_t _track, uint8_t _param, uint8_t _value)> sendNrpn;
-			std::function<bool(const std::vector<Key>&)> pressKeys;
+			DevicePort device;
 			std::function<void(const Value&)> toPage;
-			std::function<double()> nowMs;
-
-			MmMachine::Port device() const { return {sendSysex, sendParam, sendNrpn, pressKeys, nowMs}; }
+			// The app modulators (mm-desk/modulators) changed: keep them with the project.
+			std::function<void(const Value& _setup)> saveSetup;
 		};
 
+		// With the Monomachine adapter both engines use (MmMachine), for this profile.
 		explicit Desk(Port _port, const Profile& _profile = emulatorProfile());
+		Desk(std::unique_ptr<MmAdapter> _adapter, Port _port);
 
-		void onTelemetry(const Telemetry& _t) { machine().onTelemetry(_t); }
+		static std::unique_ptr<MmAdapter> defaultAdapter(const Profile& _profile, const DevicePort& _device);
+
+		void onTelemetry(const Telemetry& _t);
 		// md::MmTelemetry's working-kit region: [0] kit number, [5..] the raw kit.
 		void onWorkingKit(const Bytes& _region) { machine().onWorkingKit(_region); }
 		void setProbe(Probe _probe) { machine().setProbe(_probe); }
-		// An engine of the engine map: its profile and its device edge.
-		void setEngine(const Profile& _profile, const MmMachine::Port& _device)
-		{
-			deskCore::Desk<MmModel, MmMachine>::setEngine(_profile, _device);
-		}
+		// The modulators stored with the project (mm-desk/modulators); errors if they do not validate.
+		std::vector<std::string> loadSetup(const Value& _setup);
 
-		bool isReady() const { return machine().ready(); }
+		bool isReady() const { return isInputReady(); }
 		const RecvSession& recv() const { return machine().recv(); }
 		std::optional<elektronData::MmPattern> pattern(uint8_t _slot) const;
 		// The stored slot (what a dump holds).
-		const std::optional<elektronData::MmKit>& kit(uint8_t _slot) const { return machine().storedKit(_slot); }
-		const std::optional<elektronData::MmKit>& workingKit() const { return machine().workingKit(); }
+		std::optional<elektronData::MmKit> kit(uint8_t _slot) const;
+		// The kit that plays, as the machine holds it (with the live edits it took).
+		std::optional<elektronData::MmKit> workingKit() const;
 		std::optional<elektronData::MmSong> song(uint8_t _slot) const;
 		std::optional<elektronData::MmGlobal> global(uint8_t _slot) const;
 		int currentPattern() const { return machine().currentPattern(); }
@@ -63,5 +68,18 @@ namespace mmDesk
 		int currentGlobal() const { return machine().currentGlobal(); }
 		size_t loaded() const { return machine().loaded(); }
 		double lastRoundTripMs() const { return machine().lastRoundTripMs(); }
+
+	private:
+		void onSetup(const Value& _message) override;
+		void onReadyExtra() override { publishModulators(); }
+		void publishModulators();
+		void runModulators();
+
+		std::function<void(const Value&)> m_saveSetup;
+		deskCore::ModEngine m_mods;
+		int m_lastStep = -1;
 	};
+
+	// The Monomachine's links address its six synth tracks' DATA pages (page * 8 + index) and levels.
+	constexpr deskCore::ModLimits g_mmModLimits{"mm-desk/modulators", 5, 63};
 }

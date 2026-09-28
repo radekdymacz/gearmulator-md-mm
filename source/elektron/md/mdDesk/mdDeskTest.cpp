@@ -6,6 +6,9 @@
 
 #include "mdDesk.h"
 #include "mdDeskLibrary.h"
+#include "mdDeskMachine.h"
+
+#include "deskHost/deskHost.h"
 
 #include "elektronData/jsonSchema.h"
 #include "elektronData/mdCommands.h"
@@ -418,10 +421,10 @@ namespace
 		std::vector<std::array<uint8_t, 3>> params;
 		double now = 0;
 		Desk::Port port;
-		port.sendSysex = [&](const std::vector<uint8_t>& _b) { wire.push_back(_b); };
-		port.sendKitParam = [&](uint8_t _t, uint8_t _i, uint8_t _v) { params.push_back({_t, _i, _v}); };
+		port.device.sendSysex = [&](const std::vector<uint8_t>& _b) { wire.push_back(_b); };
+		port.device.sendKitParam = [&](uint8_t _t, uint8_t _i, uint8_t _v) { params.push_back({_t, _i, _v}); };
 		port.toPage = [&](const Value& _m) { page.push_back(_m); g_published.push_back(_m); };
-		port.nowMs = [&] { return now; };
+		port.device.nowMs = [&] { return now; };
 		Desk desk(port);
 		desk.onTelemetry(Telemetry{});	// a host without sequencer telemetry says so
 		const auto status = [](const ed::MdStatus _p, const uint8_t _v)
@@ -481,10 +484,11 @@ namespace
 		desk.onPageMessage(cmd(R"({"op":"param","k":0,"t":1,"i":4,"v":77,"id":4})"));
 		check(params.size() == 1 && params[0] == std::array<uint8_t, 3>{1, 4, 77}, "kit param goes to the CC path");
 		check(wire.empty(), "no kit dump for a live edit");
-		check(desk.session().state().workingKit == mdDataLink::Session::WorkingKit::Edited, "kit is edited");
+		check(desk.linkState().workingKit == mdDataLink::Session::WorkingKit::Edited, "kit is edited");
 		// A stored-slot dump does not overwrite the working copy.
 		desk.onDeviceSysex(ed::encodeMdKit(kit));
-		check(desk.documents().kits.at(0).params[1][4] == 77, "working copy survives a stored-slot dump");
+		check(desk.documents().working && desk.documents().working->kit.params[1][4] == 77 && desk.documents().kits.at(0).params[1][4] == kit.params[1][4],
+			"the working kit survives a stored-slot dump, which is the stored slot only");
 
 		// Editing another kit than the one playing is refused.
 		desk.onPageMessage(cmd(R"({"op":"param","k":3,"t":1,"i":4,"v":1,"id":5})"));
@@ -525,10 +529,10 @@ namespace
 		std::vector<Value> page;
 		double now = 0;
 		Desk::Port port;
-		port.sendSysex = [&](const std::vector<uint8_t>& _b) { wire.push_back(_b); };
-		port.sendKitParam = [&](uint8_t, uint8_t, uint8_t) {};
+		port.device.sendSysex = [&](const std::vector<uint8_t>& _b) { wire.push_back(_b); };
+		port.device.sendKitParam = [&](uint8_t, uint8_t, uint8_t) {};
 		port.toPage = [&](const Value& _m) { page.push_back(_m); g_published.push_back(_m); };
-		port.nowMs = [&] { return now; };
+		port.device.nowMs = [&] { return now; };
 		Desk desk(port);
 		desk.onTelemetry(Telemetry{});	// a host without sequencer telemetry says so
 		const auto status = [](const ed::MdStatus _p, const uint8_t _v)
@@ -554,33 +558,35 @@ namespace
 		desk.onPageMessage(cmd(R"({"op":"ready"})"));
 		desk.onDeviceSysex(status(ed::MdStatus::Kit, 3));
 		desk.onDeviceSysex(ed::encodeMdKit(kit));
-		check(desk.session().state().workingKit != mdDataLink::Session::WorkingKit::Edited, "stored kit loaded");
+		check(desk.linkState().workingKit != mdDataLink::Session::WorkingKit::Edited, "stored kit loaded");
 
 		// A value changed on the machine's panel, never seen by the desk.
 		auto panel = kit;
 		panel.params[2][5] = static_cast<uint8_t>(kit.params[2][5] ^ 0x11);
 		desk.onWorkingKitMemory(region(panel));
-		check(desk.documents().kits.at(3).params[2][5] == panel.params[2][5], "memory edit shows in the kit document");
-		check(desk.session().state().workingKit == mdDataLink::Session::WorkingKit::Edited, "memory differs: edited");
+		check(desk.documents().working->kit.params[2][5] == panel.params[2][5], "memory edit shows in the working kit");
+		check(desk.linkState().workingKit == mdDataLink::Session::WorkingKit::Edited, "memory differs: edited");
 		check(machine() && machine()->find("desk")->find("kitSource")->asString() == "memory", "the page is told: memory");
 		// A stored-slot dump keeps the memory copy.
 		desk.onDeviceSysex(ed::encodeMdKit(kit));
-		check(desk.documents().kits.at(3).params[2][5] == panel.params[2][5], "a stored dump does not undo memory");
+		check(desk.documents().working->kit.params[2][5] == panel.params[2][5], "a stored dump does not undo memory");
 		// Back to the stored values: clean without SAVE KIT.
 		desk.onWorkingKitMemory(region(kit));
-		check(desk.session().state().workingKit == mdDataLink::Session::WorkingKit::Clean, "memory equals slot: clean");
+		check(desk.linkState().workingKit == mdDataLink::Session::WorkingKit::Clean, "memory equals slot: clean");
 
 		// Right after the desk's own live edit, an image is held (it may predate the CC).
 		now = 1000;
 		desk.onPageMessage(cmd(R"({"op":"param","k":3,"t":0,"i":1,"v":5,"id":1})"));
 		desk.onWorkingKitMemory(region(kit));
-		check(desk.documents().kits.at(3).params[0][1] == 5, "held: the optimistic edit stays");
+		check(desk.documents().working->kit.params[0][1] == 5 && desk.coreState().state({DocKind::WorkingKit, 0})->pending,
+			"held: the edit is pending until memory shows it");
 		auto after = kit;
 		after.params[0][1] = 5;
 		desk.onWorkingKitMemory(region(after));
 		now = 1200;
 		desk.tick();
-		check(desk.documents().kits.at(3).params[0][1] == 5, "applied after the hold with the edit in memory");
+		check(desk.documents().working->kit.params[0][1] == 5 && !desk.coreState().state({DocKind::WorkingKit, 0})->pending,
+			"settled by the image that shows the edit");
 
 		// Memory names another kit than status: ask status, apply once it agrees.
 		auto next = kit;
@@ -590,10 +596,10 @@ namespace
 		bool asked = false;
 		for(const auto& w : wire)
 			asked |= w.size() == 9 && w[6] == 0x70 && w[7] == static_cast<uint8_t>(ed::MdStatus::Kit);
-		check(asked && !desk.documents().kits.count(7), "a kit switch seen in memory asks for status first");
+		check(asked && desk.documents().working->kit.position == 3, "a kit switch seen in memory asks for status first");
 		desk.onDeviceSysex(status(ed::MdStatus::Kit, 7));
 		desk.tick();
-		check(desk.documents().kits.count(7) && desk.documents().kits.at(7) == next, "then the new kit comes from memory");
+		check(desk.documents().working && desk.documents().working->kit == next, "then the new kit comes from memory");
 		check(!ed::mdWorkingKitFromMemory(std::vector<uint8_t>(10, 0)), "a short region is refused");
 
 		// P6: the desk outlives the machine: a reboot (a restored project) starts over.
@@ -604,7 +610,7 @@ namespace
 		bool reset = false;
 		for(const auto& m : page)
 			reset |= m.find("type")->asString() == "reset";
-		check(reset && desk.documents().kits.empty() && !desk.coreState().history().canUndo(), "a reboot: the page starts over, nothing old is kept");
+		check(reset && desk.documents().kits.empty() && !desk.documents().working && !desk.coreState().history().canUndo(), "a reboot: the page starts over, nothing old is kept");
 	}
 
 	// Knob moves while live recording become panel steps: select, page, turn.
@@ -649,12 +655,12 @@ namespace
 		std::vector<Value> page;
 		double now = 0;
 		Desk::Port port;
-		port.sendSysex = [&](const std::vector<uint8_t>& _b) { wire.push_back(_b); };
-		port.sendKitParam = [&](uint8_t _t, uint8_t _i, uint8_t _v) { params.push_back({_t, _i, _v}); };
-		port.pressKey = [&](const std::string& _k) { keys.push_back(_k); return true; };
-		port.turnKnob = [&](uint8_t _e, int _s) { turns.emplace_back(_e, _s); return true; };
+		port.device.sendSysex = [&](const std::vector<uint8_t>& _b) { wire.push_back(_b); };
+		port.device.sendKitParam = [&](uint8_t _t, uint8_t _i, uint8_t _v) { params.push_back({_t, _i, _v}); };
+		port.device.pressKey = [&](const std::string& _k) { keys.push_back(_k); return true; };
+		port.device.turnKnob = [&](uint8_t _e, int _s) { turns.emplace_back(_e, _s); return true; };
 		port.toPage = [&](const Value& _m) { page.push_back(_m); g_published.push_back(_m); };
-		port.nowMs = [&] { return now; };
+		port.device.nowMs = [&] { return now; };
 		Desk desk(port);
 		desk.onTelemetry(Telemetry{});	// a host without sequencer telemetry says so
 		const auto status = [](const ed::MdStatus _p, const uint8_t _v)
@@ -703,7 +709,7 @@ namespace
 			desk.tick();
 		}
 		check(!turns.empty() && turns.back().first == 3, "it becomes DATA ENTRY turns of knob D");
-		check(desk.documents().kits.at(kit.position).params[2][3] == 5, "the view keeps the wanted value meanwhile");
+		check(desk.documents().working && desk.documents().working->kit.params[2][3] == 5, "the view keeps the wanted value meanwhile");
 		keys.clear();
 		desk.onPageMessage(cmd(R"({"op":"record","id":5})"));
 		check(ok() && keys == std::vector<std::string>{"play"}, "REC while recording presses PLAY: keep playing");
@@ -727,7 +733,7 @@ namespace
 		desk.onTelemetry(t);
 		wire.clear();
 		desk.onPageMessage(cmd(R"({"op":"selectSong","s":3,"id":8})"));
-		check(ok() && !wire.empty() && wire[0] == ed::mdLoadSong(3) && desk.session().state().song == 3, "LOAD SONG 4 when stopped");
+		check(ok() && !wire.empty() && wire[0] == ed::mdLoadSong(3) && desk.linkState().song == 3, "LOAD SONG 4 when stopped");
 	}
 
 	// P4: the start-up animation holds input; chaining, mutes from memory.
@@ -745,11 +751,11 @@ namespace
 		std::vector<Value> page;
 		double now = 0;
 		Desk::Port port;
-		port.sendSysex = [&](const std::vector<uint8_t>& _b) { wire.push_back(_b); };
-		port.pressKey = [&](const std::string& _k) { keys.push_back(_k); return true; };
-		port.sendMute = [](uint8_t, bool) {};
+		port.device.sendSysex = [&](const std::vector<uint8_t>& _b) { wire.push_back(_b); };
+		port.device.pressKey = [&](const std::string& _k) { keys.push_back(_k); return true; };
+		port.device.sendMute = [](uint8_t, bool) {};
 		port.toPage = [&](const Value& _m) { page.push_back(_m); g_published.push_back(_m); };
-		port.nowMs = [&] { return now; };
+		port.device.nowMs = [&] { return now; };
 		Desk desk(port);
 		const auto last = [&](const char* _type) -> const Value*
 		{
@@ -824,7 +830,7 @@ namespace
 		Desk::Port port;
 		port.toPage = [&](const Value& _m) { page.push_back(_m); g_published.push_back(_m); };
 		port.saveSetup = [&](const Value& _s) { saved.push_back(_s); };
-		port.nowMs = [] { return 0.0; };
+		port.device.nowMs = [] { return 0.0; };
 		Desk desk(port);
 		desk.onTelemetry(Telemetry{});
 		desk.onPageMessage(cmd(R"({"op":"ready"})"));
@@ -877,7 +883,7 @@ namespace
 		run(docs, cmd("{\"op\":\"kitCopy\",\"k\":" + std::to_string(kit.position) + "}"), clip);
 		docs.kits[9].name[0] = 'Q';
 		auto r = run(docs, cmd(R"({"op":"kitPaste","k":9})"), clip);
-		check(r.errors.empty() && r.changes.size() == 1 && r.changes[0].slotWrite && std::get<ed::MdKit>(r.changes[0].after).position == 9,
+		check(r.errors.empty() && r.changes.size() == 1 && r.changes[0].ref().kind == DocKind::Kit && std::get<ed::MdKit>(r.changes[0].after).position == 9,
 			"kit paste: a slot write into K10");
 		r = run(docs, cmd(R"({"op":"kitClear","k":9})"), clip);
 		check(r.changes.size() == 1 && isEmptyKit(std::get<ed::MdKit>(r.changes[0].after)), "kit clear: an empty kit");
@@ -886,7 +892,7 @@ namespace
 		check(!run(docs, cmd(R"({"op":"kitCopyTo","from":9,"to":9})"), clip).errors.empty(), "same slot refused");
 		r = run(docs, cmd(R"({"op":"patClear","p":20})"), clip);
 		const auto& cleared = std::get<ed::MdPattern>(r.changes.at(0).after);
-		check(!r.changes[0].slotWrite && cleared.length == pat.length && cleared.kit == pat.kit
+		check(cleared.length == pat.length && cleared.kit == pat.kit
 			&& std::all_of(cleared.trigs.begin(), cleared.trigs.end(), [](const uint64_t _t) { return !_t; }), "pattern clear: no trigs, length and kit link kept");
 		r = run(docs, cmd("{\"op\":\"patCopyTo\",\"from\":" + std::to_string(pat.position) + ",\"to\":20}"), clip);
 		check(r.errors.empty() && r.changes.empty(), "copying an identical pattern changes nothing");
@@ -898,11 +904,11 @@ namespace
 		std::vector<Value> page;
 		double now = 0;
 		Desk::Port port;
-		port.sendSysex = [](const std::vector<uint8_t>&) {};
+		port.device.sendSysex = [](const std::vector<uint8_t>&) {};
 		port.toPage = [&](const Value& _m) { page.push_back(_m); g_published.push_back(_m); };
-		port.nowMs = [&] { return now; };
+		port.device.nowMs = [&] { return now; };
 		Desk desk(port);
-		desk.setEngine(wireProfile(), port.device());
+		desk.setEngine(Desk::defaultAdapter(wireProfile(), port.device));
 		desk.onTelemetry(Telemetry{});
 		const auto link = [&]
 		{
@@ -975,7 +981,7 @@ namespace
 		const auto bad = modSetupFromJson(cmd(R"({"schema":"md-desk/modulators","version":1,"sources":[{"id":"a","kind":"lfo","rate":"3"}],
 			"links":[{"source":"b","track":16,"param":24}]})"), errors);
 		check(!bad && errors.size() >= 4, "bad rate, source, track and param are refused with paths");
-		Modulators m;
+		deskCore::Modulators m;
 		m.setSetup(*setup);
 		// A saw over 4 steps on link 1: 20 + 80 * (lfo / 127), lfo 1, 33, 64, 96.
 		std::vector<int> link1;
@@ -987,7 +993,7 @@ namespace
 		const auto first = m.step();
 		m.reset();
 		check(!m.step().empty(), "after a stop the next step sends again");
-		CcBudget budget;
+		deskCore::CcBudget budget;
 		int taken = 0;
 		for(int i = 0; i < 400; ++i)
 			taken += budget.take(100 + i);
@@ -1051,7 +1057,7 @@ namespace
 		check(root.has_value(), "the contract schema loads");
 		if(!root)
 			return;
-		const auto generated = commandTable().schema();
+		const auto generated = deskHost::contractCommands(commandTable().schema());
 		auto* defs = root->find("$defs");
 		const auto* current = defs ? defs->find("command") : nullptr;
 		const bool same = current && ed::json::write(*current) == ed::json::write(generated);

@@ -60,17 +60,24 @@ namespace mmDesk
 			Failed		// the screen never came; retried after a pause
 		};
 
+		// A dump to send and whose it is (the caller's tag: which push it answers).
+		struct Send
+		{
+			std::vector<uint8_t> bytes;
+			uint32_t tag = 0;
+		};
+
 		struct Out
 		{
 			std::vector<Key> keys;
-			std::vector<std::vector<uint8_t>> sends;
+			std::vector<Send> sends;
 		};
 
 		// The path: GLOBAL, ENTER, cursor to a known place, FILE, SYSEX RECV, ORIG.
 		static std::vector<Key> enterMacro();
 		static std::vector<Key> exitKeys();
 
-		void want(std::vector<uint8_t> _dump) { m_queue.push_back(std::move(_dump)); }
+		void want(std::vector<uint8_t> _dump, const uint32_t _tag = 0) { m_queue.push_back({std::move(_dump), _tag}); }
 		// Keeps the session parked a while longer (an edit is coming).
 		void touch(const double _now) { m_lastActivity = _now; }
 		Out tick(double _now, const Telemetry& _t);
@@ -86,7 +93,7 @@ namespace mmDesk
 	private:
 		void go(State _s, double _now) { m_state = _s; m_since = _now; }
 
-		std::deque<std::vector<uint8_t>> m_queue;
+		std::deque<Send> m_queue;
 		State m_state = State::Idle;
 		double m_since = 0;
 		double m_lastActivity = 0;

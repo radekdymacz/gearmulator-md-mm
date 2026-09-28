@@ -181,7 +181,7 @@ namespace
 			m.set("source", sourceName(_s));
 			return m;
 		}
-		static void decorate(Value&, const History<Change>&, const Machine<ToyModel>&) {}
+		static void decorate(Value&, const History<Change>&) {}
 	};
 
 	class ToyMachine final : public Machine<ToyModel>
@@ -228,18 +228,18 @@ namespace
 			return nullptr;
 		};
 		check(lastDoc() && lastDoc()->find("value")->asNumber() == 10 && !lastDoc()->find("pending")->asBool(), "observed is published");
-		c.onCommand(*elektronData::json::parse(R"({"op":"set","s":1,"v":20,"g":1})"));
+		c.edit(*elektronData::json::parse(R"({"op":"set","s":1,"v":20,"g":1})"));
 		c.flush();
 		check(lastDoc()->find("value")->asNumber() == 20 && lastDoc()->find("pending")->asBool(), "an edit is pending until seen");
 		check(!page.empty() && page.back().find("type")->asString() == "result", "the result comes after the documents it changed");
 		check(c.state({ToyModel::Kind::Toy, 1})->observed->value == 10, "observed keeps what the machine holds");
-		c.onCommand(*elektronData::json::parse(R"({"op":"set","s":1,"v":-5})"));
+		c.edit(*elektronData::json::parse(R"({"op":"set","s":1,"v":-5})"));
 		check(c.view().toys.at(1).value == 20, "a refused edit leaves no value the machine never took");
 		m.events.push_back(ToyMachine::Ev::observed({1, 20}, Source::Dump));
 		c.pump();
 		c.flush();
 		check(!lastDoc()->find("pending")->asBool() && !c.state({ToyModel::Kind::Toy, 1})->pending, "the read-back confirms");
-		c.onCommand(*elektronData::json::parse(R"({"op":"set","s":1,"v":30})"));
+		c.edit(*elektronData::json::parse(R"({"op":"set","s":1,"v":30})"));
 		m.events.push_back(ToyMachine::Ev::failed({ToyModel::Kind::Toy, 1}, "no read-back"));
 		c.pump();
 		c.flush();
@@ -249,9 +249,9 @@ namespace
 			error = error || (p.find("type")->asString() == "error" && p.find("message")->asString() == "no read-back");
 		check(error, "and says so");
 		const auto sentBefore = m.sent.size();
-		c.onCommand(*elektronData::json::parse(R"({"op":"undo"})"));
+		c.undo(*elektronData::json::parse(R"({"op":"undo"})"));
 		check(m.sent.size() == sentBefore, "undo from what the page shows: the failed push is already undone, nothing is sent");
-		c.onCommand(*elektronData::json::parse(R"({"op":"undo","id":9})"));
+		c.undo(*elektronData::json::parse(R"({"op":"undo","id":9})"));
 		check(m.sent.back().value == 10, "and the step before");
 		c.flush();
 		check(page.back().find("type")->asString() == "result" && page.back().find("id")->asNumber() == 9, "undo answers");

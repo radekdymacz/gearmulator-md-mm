@@ -39,16 +39,13 @@ namespace mdDesk
 			return n;
 		}
 
-		std::vector<std::string> problems(const Document& _doc)
-		{
-			return std::visit([](const auto& _v) { return ed::validate(_v); }, _doc);
-		}
+		std::vector<std::string> problems(const Document& _doc) { return problemsOf(_doc); }
 	}
 
 	bool isLibraryCommand(const std::string& _op)
 	{
 		const auto* c = commandTable().find(_op);
-		return c && std::string(c->group) == "library";
+		return c && c->group == g_library;
 	}
 
 	ed::MdKit emptyKit(const ed::MdKit& _like, const uint8_t _slot)
@@ -90,18 +87,27 @@ namespace mdDesk
 		return _kit.name[0] == 0 && std::all_of(_kit.models.begin(), _kit.models.end(), [](const uint32_t _m) { return _m == 0; });
 	}
 
-	EditResult applyLibrary(const Documents& _docs, const Value& _command, Clipboard& _clipboard)
+	EditResult applyLibrary(const Documents& _docs, const Value& _command, Clipboard& _clipboard, const EditContext& _context)
 	{
 		EditResult r;
 		const auto* opv = _command.find("op");
 		const std::string op = opv && opv->isString() ? opv->asString() : std::string();
-		const bool kit = op.rfind("kit", 0) == 0;
+		const auto* row = commandTable().find(op);
+		const bool kit = row && row->kind == static_cast<int>(DocKind::Kit);
 		const auto kitAt = [&](const int _k) -> const ed::MdKit*
 		{
 			const auto it = _docs.kits.find(static_cast<uint8_t>(_k));
 			if(it == _docs.kits.end())
 				r.errors.push_back("kit " + kitLabel(_k) + " is not loaded yet");
 			return it == _docs.kits.end() ? nullptr : &it->second;
+		};
+		// What a copy takes: the kit that plays as it sounds (the working kit), another as stored.
+		const auto kitFrom = [&](const int _k) -> const ed::MdKit*
+		{
+			if(_context.currentKit && *_context.currentKit == _k)
+				if(const auto* w = _docs.workingKitOf(static_cast<uint8_t>(_k)))
+					return w;
+			return kitAt(_k);
 		};
 		const auto patAt = [&](const int _p) -> const ed::MdPattern*
 		{
@@ -119,7 +125,7 @@ namespace mdDesk
 			}
 			const bool same = std::visit([&](const auto& _a) { return _a == std::get<std::decay_t<decltype(_a)>>(_before); }, _after);
 			if(!same)
-				r.changes.push_back({_before, std::move(_after), kit});
+				r.changes.push_back({_before, std::move(_after)});
 		};
 		const int max = kit ? 63 : 127;
 		const char* key = kit ? "k" : "p";
@@ -131,7 +137,7 @@ namespace mdDesk
 				return r;
 			if(kit)
 			{
-				if(const auto* k = kitAt(*s))
+				if(const auto* k = kitFrom(*s))
 				{
 					_clipboard.kit = *k;
 					r.note = "Copied " + kitLabel(*s) + " " + kitName(*k);
@@ -161,7 +167,7 @@ namespace mdDesk
 			if(kit)
 			{
 				const auto* dst = kitAt(*target);
-				const auto* src = from ? kitAt(*from) : (_clipboard.kit ? &*_clipboard.kit : nullptr);
+				const auto* src = from ? kitFrom(*from) : (_clipboard.kit ? &*_clipboard.kit : nullptr);
 				if(!from && !_clipboard.kit)
 					r.errors.emplace_back("Copy a kit first");
 				if(!dst || !src)

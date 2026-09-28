@@ -7,11 +7,11 @@
 
 #include "mdDesk/mdDesk.h"
 
-#include "deskCore/deskLcd.h"
-
 #include "mdLib/mdautomation.h"
 
 #include "juce_core/juce_core.h"
+
+#include <deque>
 
 namespace mdJucePlugin
 {
@@ -21,28 +21,27 @@ namespace mdJucePlugin
 	namespace
 	{
 		double nowMs() { return juce::Time::getMillisecondCounterHiRes(); }
+
+		// StudioLink's parameter index of a track's mute (after the 24 kit parameters and the level).
+		constexpr uint8_t g_muteParam = 25;
 	}
 
 	// The emulated MD OS 1.63 (StudioLink): SysEx into the device, kit values through the parameter
 	// layer, panel keys, and the device's facts: telemetry, the working kit from memory, the probe,
-	// host parameter changes and, while it starts, its own LCD.
+	// host parameter changes and, while it starts, its own LCD. What the device says is queued and
+	// handed to the desk in step().
 	class MdEmuEngine final : public MdEngine
 	{
 	public:
 		explicit MdEmuEngine(DeskSession& _session)
-			: m_session(_session)
-			, m_link(_session.processor(), dynamic_cast<Controller&>(_session.processor().getController()))
+			: m_link(_session.processor(), dynamic_cast<Controller&>(_session.processor().getController()))
 		{
-			m_link.onSysex = [this](const std::vector<uint8_t>& _m)
-			{
-				if(m_desk)
-					m_desk->onDeviceSysex(_m);
-			};
+			m_link.onSysex = [this](const std::vector<uint8_t>& _m) { m_in.push_back(_m); };
 		}
 
-		mdDesk::MdMachine::Port device() override
+		mdDesk::DevicePort device() override
 		{
-			mdDesk::MdMachine::Port p;
+			mdDesk::DevicePort p;
 			p.sendSysex = [this](const std::vector<uint8_t>& _m) { m_link.sendSysex(_m); };
 			p.sendKitParam = [this](const uint8_t _t, const uint8_t _i, const uint8_t _v) { m_link.setKitParam(_t, _i, _v); };
 			p.sendMute = [this](const uint8_t _t, const bool _on) { m_link.setMute(_t, _on); };
@@ -56,28 +55,22 @@ namespace mdJucePlugin
 
 		void step(mdDesk::Desk& _desk, const uint64_t _tick) override
 		{
+			while(!m_in.empty())
+			{
+				const auto m = std::move(m_in.front());
+				m_in.pop_front();
+				_desk.onDeviceSysex(m);
+			}
 			if(_tick % 12 == 1)
 				_desk.setProbe(m_link.probe());
 			_desk.onTelemetry(m_link.readTelemetry());
-			// While the machine starts, the page's LCD shows the firmware's own (start-up animation
-			// included), about 15 times a second, until the desk takes input.
-			if(m_session.attached() && !_desk.isInputReady() && _tick % 8 == 0)
-			{
-				std::vector<uint8_t> bits;
-				if(m_link.readLcd(bits) && bits != m_lastLcd)
-				{
-					m_lastLcd = bits;
-					m_session.toPage(deskCore::lcdMessage(bits));
-				}
-			}
-			if(_desk.isInputReady())
-				m_lastLcd.clear();
+			m_lcd.step(_desk, _tick, [this](std::vector<uint8_t>& _bits) { return m_link.readLcd(_bits); });
 			std::vector<uint8_t> region;
 			if(m_link.readWorkingKit(region))
 				_desk.onWorkingKitMemory(region);
 			m_link.drainParameterChanges([&_desk](const uint8_t _t, const uint8_t _i, const uint8_t _v)
 			{
-				if(_i == 25)
+				if(_i == g_muteParam)
 					_desk.onHostMute(_t, _v != 0);
 				else
 					_desk.onHostKitParam(_t, _i, _v);
@@ -85,40 +78,43 @@ namespace mdJucePlugin
 		}
 
 	private:
-		DeskSession& m_session;
 		StudioLink m_link;
-		std::vector<uint8_t> m_lastLcd;
+		std::deque<std::vector<uint8_t>> m_in;
+		LcdFeed m_lcd;
 	};
 
-	// A real Machinedrum on the plug-in's MIDI in and out at DIN speed: SysEx and CCs out, PLAY/STOP
-	// as MIDI Start/Stop, SysEx in. No panel, telemetry or memory.
+	// A real Machinedrum on the plug-in's MIDI in and out at DIN speed: SysEx and CCs out (on the
+	// machine's base channel, a fact the adapter gives), PLAY/STOP as MIDI Start/Stop, SysEx in.
+	// No panel, telemetry or memory.
 	class MdWireEngine final : public MdEngine
 	{
 	public:
-		explicit MdWireEngine(DeskSession& _session) : m_wire(_session.processor()) {}
+		explicit MdWireEngine(DeskSession& _session) : m_wire(midiWireOf(_session.processor())) {}
 
-		mdDesk::MdMachine::Port device() override
+		mdDesk::DevicePort device() override
 		{
 			const auto cc = [this](const md::automation::ParameterChange& _c)
 			{
-				const auto& g = m_desk ? m_desk->documents().global : std::nullopt;
-				if(const auto m = md::automation::encodeParameterChange(md::MachineModel::Machinedrum, _c, g ? g->baseChannel : uint8_t(0)))
+				if(const auto m = md::automation::encodeParameterChange(md::MachineModel::Machinedrum, _c, m_channel))
 					m_wire.send({(*m)[0], (*m)[1], (*m)[2]});
 			};
-			mdDesk::MdMachine::Port p;
+			mdDesk::DevicePort p;
 			p.sendSysex = [this](const std::vector<uint8_t>& _m) { m_wire.send(_m); };
 			p.sendKitParam = [cc](const uint8_t _t, const uint8_t _i, const uint8_t _v)
 			{
-				cc({static_cast<uint8_t>(_i == 24 ? md::automation::machinedrum::Level : _i / 8), _t, static_cast<uint8_t>(_i == 24 ? 0 : _i % 8), _v});
+				constexpr uint8_t levelIndex = 24;
+				cc({static_cast<uint8_t>(_i == levelIndex ? md::automation::machinedrum::Level : _i / 8), _t,
+					static_cast<uint8_t>(_i == levelIndex ? 0 : _i % 8), _v});
 			};
 			p.sendMute = [cc](const uint8_t _t, const bool _on) { cc({md::automation::machinedrum::Mute, _t, 0, static_cast<uint8_t>(_on ? 1 : 0)}); };
 			p.pressKey = [this](const std::string& _key)
 			{
-				if(_key != "play" && _key != "stop")
-					return false;
-				m_wire.send({static_cast<uint8_t>(_key == "play" ? 0xfa : 0xfc)});
-				return true;
+				const auto b = MidiWire::realtimeOf(_key);
+				if(b)
+					m_wire.send({b});
+				return b != 0;
 			};
+			p.baseChannel = [this](const uint8_t _ch) { m_channel = _ch; };
 			p.nowMs = [] { return nowMs(); };
 			return p;
 		}
@@ -127,36 +123,32 @@ namespace mdJucePlugin
 
 		void step(mdDesk::Desk& _desk, uint64_t) override
 		{
-			m_wire.pump([&_desk](const std::vector<uint8_t>& _m) { _desk.onDeviceSysex(_m); });
+			m_wire.pump(nowMs(), [&_desk](const std::vector<uint8_t>& _m) { _desk.onDeviceSysex(_m); });
 			_desk.onTelemetry(mdDesk::Telemetry{});
 		}
 
 	private:
 		MidiWire m_wire;
+		uint8_t m_channel = 0;
 	};
 
-	// The Machinedrum Editor's session: the engine map, the learnable parameters and the editor's
-	// setup kept with the project.
+	// The Machinedrum Editor's session: the engine map, the learnable parameters, its page and the
+	// editor's setup kept with the project.
 	class MdSession final : public SessionOf<mdDesk::Desk>
 	{
 	public:
 		explicit MdSession(AudioPluginAudioProcessor& _processor)
-			: SessionOf<mdDesk::Desk>(_processor, engines(), learnModel(), [this](const mdDesk::Profile& _profile, const mdDesk::MdMachine::Port& _device)
+			: SessionOf<mdDesk::Desk>(_processor, engines(), learnModel(), page(), [this](std::unique_ptr<mdDesk::MdAdapter> _adapter)
 			{
 				mdDesk::Desk::Port p;
-				p.sendSysex = _device.sendSysex;
-				p.sendKitParam = _device.sendKitParam;
-				p.sendMute = _device.sendMute;
-				p.pressKey = _device.pressKey;
-				p.turnKnob = _device.turnKnob;
-				p.nowMs = _device.nowMs;
+				p.device.nowMs = [] { return nowMs(); };
 				p.toPage = [this](const Value& _m) { toPage(_m); };
 				p.saveSetup = [this](const Value& _setup)
 				{
 					m_processor.setDeskSetup(json::write(_setup));
 					m_setupVersion = m_processor.getDeskSetupVersion();
 				};
-				return std::make_unique<mdDesk::Desk>(p, _profile);
+				return std::make_unique<mdDesk::Desk>(std::move(_adapter), p);
 			})
 		{
 			loadSetup();
@@ -166,8 +158,13 @@ namespace mdJucePlugin
 		static std::vector<Record> engines()
 		{
 			return {
-				{mdDesk::emulatorProfile(), false, [](DeskSession& _s) { return std::make_unique<MdEmuEngine>(_s); }},
-				{mdDesk::wireProfile(), true, [](DeskSession& _s) { return std::make_unique<MdWireEngine>(_s); }}};
+				{mdDesk::emulatorProfile(), [](DeskSession& _s) { return std::make_unique<MdEmuEngine>(_s); }},
+				{mdDesk::wireProfile(), [](DeskSession& _s) { return std::make_unique<MdWireEngine>(_s); }}};
+		}
+
+		static WebPageHost::Spec page()
+		{
+			return {"mdStudio.html", "gearmulator-mdStudio.log", "GEARMULATOR_MDSTUDIO_SELFTEST", {"1", "p4", "p5", "p6"}, 1440};
 		}
 
 		static MidiLearnCommands::Model learnModel()
@@ -208,7 +205,7 @@ namespace mdJucePlugin
 
 		std::string statusExtra() const override
 		{
-			const auto& st = desk().session().state();
+			const auto& st = desk().linkState();
 			const auto& d = desk().documents();
 			return "pattern " + std::to_string(st.pattern ? *st.pattern : -1) + " kit " + std::to_string(st.kit ? *st.kit : -1)
 				+ " docs p/k/s " + std::to_string(d.patterns.size()) + "/" + std::to_string(d.kits.size()) + "/"

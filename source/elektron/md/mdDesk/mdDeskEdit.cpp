@@ -24,6 +24,20 @@ namespace mdDesk
 			DocRef operator()(const ed::MdKit& _k) const { return {DocKind::Kit, _k.position}; }
 			DocRef operator()(const ed::MdSong& _s) const { return {DocKind::Song, _s.position}; }
 			DocRef operator()(const ed::MdGlobal& _g) const { return {DocKind::Global, _g.position}; }
+			DocRef operator()(const WorkingKit&) const { return {DocKind::WorkingKit, 0}; }
+		};
+		return std::visit(Visitor{}, _doc);
+	}
+
+	std::vector<std::string> problemsOf(const Document& _doc)
+	{
+		struct Visitor
+		{
+			std::vector<std::string> operator()(const WorkingKit& _w) const { return ed::validate(_w.kit); }
+			std::vector<std::string> operator()(const ed::MdPattern& _v) const { return ed::validate(_v); }
+			std::vector<std::string> operator()(const ed::MdKit& _v) const { return ed::validate(_v); }
+			std::vector<std::string> operator()(const ed::MdSong& _v) const { return ed::validate(_v); }
+			std::vector<std::string> operator()(const ed::MdGlobal& _v) const { return ed::validate(_v); }
 		};
 		return std::visit(Visitor{}, _doc);
 	}
@@ -48,6 +62,10 @@ namespace mdDesk
 			if(global && global->position == _ref.slot)
 				return Document(*global);
 			break;
+		case DocKind::WorkingKit:
+			if(working)
+				return Document(*working);
+			break;
 		}
 		return {};
 	}
@@ -61,6 +79,7 @@ namespace mdDesk
 			void operator()(const ed::MdKit& _k) const { docs.kits[_k.position] = _k; }
 			void operator()(const ed::MdSong& _s) const { docs.songs[_s.position] = _s; }
 			void operator()(const ed::MdGlobal& _g) const { docs.global = _g; }
+			void operator()(const WorkingKit& _w) const { docs.working = _w; }
 		};
 		std::visit(Visitor{*this}, _doc);
 	}
@@ -860,7 +879,7 @@ namespace mdDesk
 			return {};
 		}
 
-		// The document kind a command edits: the command table's (P6: one vocabulary).
+		// The document kind a command edits: the model's command table (P6: one vocabulary).
 		std::optional<DocKind> kindOf(const std::string& _op)
 		{
 			const auto* c = commandTable().find(_op);
@@ -869,15 +888,11 @@ namespace mdDesk
 			return static_cast<DocKind>(c->kind);
 		}
 
-		std::vector<std::string> problemsOf(const Document& _doc)
-		{
-			return std::visit([](const auto& _v) { return ed::validate(_v); }, _doc);
-		}
 	}
 
 	namespace
 	{
-	EditResult applyEdit(const Documents& _docs, const Value& _command, Clipboard& _clipboard)
+	EditResult applyEdit(const Documents& _docs, const Value& _command, Clipboard& _clipboard, const EditContext& _context)
 	{
 		EditResult result;
 		const auto* opValue = _command.find("op");
@@ -916,17 +931,22 @@ namespace mdDesk
 			const auto k = args.integer("k", 0, 63);
 			if(!k)
 				return result;
+			// The kit that plays is edited as the working kit (live); another slot as its stored dump.
+			const bool plays = _context.currentKit && *_context.currentKit == *k;
+			const auto* kit = plays ? _docs.workingKitOf(uint8_t(*k)) : nullptr;
 			const auto it = _docs.kits.find(uint8_t(*k));
-			if(it == _docs.kits.end())
+			if(!kit && !plays && it != _docs.kits.end())
+				kit = &it->second;
+			if(!kit)
 			{
 				result.errors.push_back("kit " + std::to_string(*k + 1) + " is not loaded yet");
 				return result;
 			}
-			auto edit = editKit(it->second, op, args, result.errors, _clipboard, result.note);
+			auto edit = editKit(*kit, op, args, result.errors, _clipboard, result.note);
 			if(!edit)
 				return result;
-			before = it->second;
-			after = *edit;
+			before = plays ? Document(WorkingKit{*kit}) : Document(*kit);
+			after = plays ? Document(WorkingKit{*edit}) : Document(*edit);
 		}
 		else if(kind == DocKind::Song)
 		{
@@ -1002,8 +1022,8 @@ namespace mdDesk
 		}
 		// Values in, values out: the clipboard the command leaves is returned, not changed in place.
 		auto clipboard = _clipboard;
-		auto result = isLibraryCommand(op) ? applyLibrary(_docs, _command, clipboard) : applyEdit(_docs, _command, clipboard);
-		if(result.errors.empty() && (op.rfind("copy", 0) == 0 || op == "kitCopy" || op == "patCopy"))
+		auto result = isLibraryCommand(op) ? applyLibrary(_docs, _command, clipboard, _context) : applyEdit(_docs, _command, clipboard, _context);
+		if(result.errors.empty() && !(clipboard == _clipboard))
 			result.clipboard = std::move(clipboard);
 		return result;
 	}

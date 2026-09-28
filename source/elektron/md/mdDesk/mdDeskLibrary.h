@@ -16,14 +16,16 @@ namespace mdDesk
 	//    What the machine's own CLEAR leaves is not known;
 	//  - rename of a slot that does not play writes its dump with the new name (the kit
 	//    that plays is renamed live with kitName, 0x55).
-	// Kit results are slot writes (Change::slotWrite): into the kit that plays that is a
-	// dump plus LOAD KIT, which replaces its unsaved edits.
+	// Kit results are stored-slot writes (DocKind::Kit): into the kit that plays that is a
+	// dump plus LOAD KIT, which replaces its unsaved edits. A copy of the kit that plays copies
+	// what it sounds like (the working kit).
 	//
 	// Commands: kitCopy {k}, kitPaste {k}, kitCopyTo {from, to}, kitClear {k}, kitRename
 	// {k, name}; patCopy {p}, patPaste {p}, patCopyTo {from, to}, patClear {p}.
 	bool isLibraryCommand(const std::string& _op);
 	// The library part of apply (mdDeskEdit.h), which calls it.
-	EditResult applyLibrary(const Documents& _docs, const elektronData::json::Value& _command, Clipboard& _clipboard);
+	EditResult applyLibrary(const Documents& _docs, const elektronData::json::Value& _command, Clipboard& _clipboard,
+		const EditContext& _context);
 
 	elektronData::MdKit emptyKit(const elektronData::MdKit& _like, uint8_t _slot);
 	elektronData::MdPattern emptyPattern(const elektronData::MdPattern& _like);

@@ -1,6 +1,6 @@
 #pragma once
 
-#include "mdDeskMod.h"
+#include "deskCore/deskMod.h"
 
 #include "elektronData/json.h"
 
@@ -12,6 +12,17 @@
 
 namespace mdDesk
 {
+	// The app modulators are deskCore's (shared with the Monomachine); the MD's links address the
+	// 16 tracks' 24 kit parameters.
+	using deskCore::ModSetup;
+	using deskCore::ModSource;
+	using deskCore::ModLink;
+	using deskCore::ModEngine;
+	using deskCore::g_modCcPerSecond;
+	using deskCore::modSetupFromJson;
+	using deskCore::modSetupToJson;
+	constexpr deskCore::ModLimits g_mdModLimits{"md-desk/modulators", 15, 23};
+
 	// The editor's own setup that belongs to the project, not to the machine (P4): the app
 	// modulators (md-desk/modulators) and the CC numbers of the Control workspace's eight
 	// controller knob rows. As the "md-desk/setup" document it is stored with the plug-in

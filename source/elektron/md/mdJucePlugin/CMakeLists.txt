@@ -70,14 +70,9 @@ set(SOURCES
 
 # P6: the editors' diagnostics (the log of the web view, the window chrome and the session's
 # state, and the pages' self-tests: mdDeskSelfTest.js, mmSelfTest.js) observe the editors. Off by
-# default in a Release build, so a release package has none of it; a test or development build
-# turns it on (-Dgearmulator_MDMM_DIAGNOSTICS=ON).
-if(CMAKE_BUILD_TYPE STREQUAL "Release" OR CMAKE_BUILD_TYPE STREQUAL "MinSizeRel")
-	set(gearmulator_MDMM_DIAGNOSTICS_DEFAULT OFF)
-else()
-	set(gearmulator_MDMM_DIAGNOSTICS_DEFAULT ON)
-endif()
-option(gearmulator_MDMM_DIAGNOSTICS "The Machinedrum/Monomachine Editors' diagnostics log and self-tests" ${gearmulator_MDMM_DIAGNOSTICS_DEFAULT})
+# default for every generator and configuration (single- and multi-config), so a release package
+# has none of it; a test or development build turns it on (-Dgearmulator_MDMM_DIAGNOSTICS=ON).
+option(gearmulator_MDMM_DIAGNOSTICS "The Machinedrum/Monomachine Editors' diagnostics log and self-tests" OFF)
 if(gearmulator_MDMM_DIAGNOSTICS)
 	list(APPEND SOURCES mdDiagnostics.cpp mdDiagnostics.h)
 endif()
@@ -122,8 +117,8 @@ set(GEARMULATOR_ICON_BIG_mmJucePlugin "${CMAKE_CURRENT_SOURCE_DIR}/icons/mm-1024
 set(GEARMULATOR_ICON_SMALL_mmJucePlugin "${CMAKE_CURRENT_SOURCE_DIR}/icons/mm-32.png")
 createJucePlugin(mdJucePlugin "Gearmulator MD" TRUE "Tmdr" mdJucePlugin_BinaryData mdLib)
 createJucePlugin(mmJucePlugin "Gearmulator MM" TRUE "Tmno" mmJucePlugin_BinaryData mdLib)
-target_link_libraries(mdJucePlugin PRIVATE elektronData mdDataLink mdDesk mmDesk)
-target_link_libraries(mmJucePlugin PRIVATE elektronData mdDataLink mdDesk mmDesk)
+target_link_libraries(mdJucePlugin PRIVATE elektronData mdDataLink mdDesk mmDesk deskHost)
+target_link_libraries(mmJucePlugin PRIVATE elektronData mdDataLink mdDesk mmDesk deskHost)
 
 # MD/MM expose an optional stereo input to plug-in hosts. Starting the
 # standalone with that input active makes CoreAudio combine the built-in input
@@ -418,6 +413,9 @@ if(BUILD_TESTING)
 	target_compile_definitions(mdSessionFirmwareTest PRIVATE
 		JUCE_GLOBAL_MODULE_SETTINGS_INCLUDED=1)
 	set_property(TARGET mdSessionFirmwareTest PROPERTY FOLDER "Elektron/test")
+	# P6: in ctest; it skips (77) without GEARMULATOR_MD_FIRMWARE_BIN in the environment.
+	add_test(NAME mdSessionFirmwareTest COMMAND mdSessionFirmwareTest)
+	set_tests_properties(mdSessionFirmwareTest PROPERTIES LABELS "Integration;FirmwareTest" SKIP_RETURN_CODE 77 TIMEOUT 300)
 
 	add_executable(mdProjectStateRestoreTest mdProjectStateRestoreTest.cpp)
 	target_link_libraries(mdProjectStateRestoreTest PRIVATE

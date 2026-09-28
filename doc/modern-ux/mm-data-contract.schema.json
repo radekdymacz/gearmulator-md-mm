@@ -80,10 +80,7 @@
     },
     "format": {
       "type": "object",
-      "required": [
-        "version",
-        "revision"
-      ],
+      "required": ["version", "revision"],
       "properties": {
         "version": {
           "$ref": "#/$defs/value"
@@ -95,16 +92,7 @@
     },
     "arp": {
       "type": "object",
-      "required": [
-        "play",
-        "flag",
-        "ojmp",
-        "mode",
-        "range",
-        "speed",
-        "length",
-        "steps"
-      ],
+      "required": ["play", "flag", "ojmp", "mode", "range", "speed", "length", "steps"],
       "properties": {
         "play": {
           "type": "integer",
@@ -182,21 +170,7 @@
     },
     "synthTrack": {
       "type": "object",
-      "required": [
-        "trig",
-        "amp",
-        "filter",
-        "lfo",
-        "noteOff",
-        "chord",
-        "slide",
-        "swing",
-        "notes",
-        "transpose",
-        "scale",
-        "key",
-        "arp"
-      ],
+      "required": ["trig", "amp", "filter", "lfo", "noteOff", "chord", "slide", "swing", "notes", "transpose", "scale", "key", "arp"],
       "properties": {
         "trig": {
           "$ref": "#/$defs/steps",
@@ -263,17 +237,7 @@
     },
     "midiTrack": {
       "type": "object",
-      "required": [
-        "trig",
-        "note",
-        "noteOff",
-        "slide",
-        "swing",
-        "transpose",
-        "scale",
-        "key",
-        "arp"
-      ],
+      "required": ["trig", "note", "noteOff", "slide", "swing", "transpose", "scale", "key", "arp"],
       "properties": {
         "trig": {
           "$ref": "#/$defs/steps"
@@ -312,22 +276,7 @@
     },
     "pattern": {
       "type": "object",
-      "required": [
-        "schema",
-        "version",
-        "slot",
-        "length",
-        "multiplier",
-        "kit",
-        "swingAmount",
-        "patternTranspose",
-        "tracks",
-        "midiTracks",
-        "locks",
-        "midiNotes",
-        "chordNotes",
-        "firmware"
-      ],
+      "required": ["schema", "version", "slot", "length", "multiplier", "kit", "swingAmount", "patternTranspose", "tracks", "midiTracks", "locks", "midiNotes", "chordNotes", "firmware"],
       "properties": {
         "schema": {
           "const": "mm-desk/pattern"
@@ -350,12 +299,7 @@
           "maximum": 64
         },
         "multiplier": {
-          "enum": [
-            "1X",
-            "2X",
-            "3/4X",
-            "3/2X"
-          ]
+          "enum": ["1X", "2X", "3/4X", "3/2X"]
         },
         "kit": {
           "$ref": "#/$defs/value"
@@ -392,12 +336,7 @@
           "maxItems": 62,
           "items": {
             "type": "object",
-            "required": [
-              "track",
-              "page",
-              "param",
-              "steps"
-            ],
+            "required": ["track", "page", "param", "steps"],
             "properties": {
               "track": {
                 "$ref": "#/$defs/track"
@@ -475,50 +414,16 @@
               "$ref": "#/$defs/runs"
             }
           },
-          "required": [
-            "format"
-          ]
+          "required": ["format"]
         }
       }
     },
     "kitTrack": {
       "type": "object",
-      "required": [
-        "machine",
-        "outputs",
-        "input",
-        "pages",
-        "multiEnv",
-        "extra",
-        "assign",
-        "trigPos"
-      ],
+      "required": ["machine", "outputs", "input", "pages", "multiEnv", "extra", "assign", "trigPos"],
       "properties": {
         "machine": {
-          "enum": [
-            0,
-            1,
-            2,
-            3,
-            4,
-            5,
-            6,
-            7,
-            8,
-            9,
-            10,
-            11,
-            12,
-            13,
-            14,
-            15,
-            16,
-            17,
-            18,
-            19,
-            32,
-            33
-          ]
+          "enum": [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 32, 33]
         },
         "machineName": {
           "type": "string"
@@ -562,11 +467,7 @@
         },
         "assign": {
           "type": "object",
-          "required": [
-            "page",
-            "dest",
-            "add"
-          ],
+          "required": ["page", "dest", "add"],
           "properties": {
             "page": {
               "type": "array",
@@ -608,16 +509,7 @@
     },
     "kit": {
       "type": "object",
-      "required": [
-        "schema",
-        "version",
-        "slot",
-        "name",
-        "levels",
-        "tracks",
-        "trackMasks",
-        "firmware"
-      ],
+      "required": ["schema", "version", "slot", "name", "levels", "tracks", "trackMasks", "firmware"],
       "properties": {
         "schema": {
           "const": "mm-desk/kit"
@@ -690,39 +582,16 @@
               "$ref": "#/$defs/hex"
             }
           },
-          "required": [
-            "format"
-          ]
+          "required": ["format"]
         }
       }
     },
     "songRow": {
       "type": "object",
-      "required": [
-        "kind",
-        "pattern",
-        "target",
-        "repeats",
-        "mutes",
-        "midiMutes",
-        "offset",
-        "length",
-        "transpose",
-        "trackTranspose",
-        "midiTranspose",
-        "tempo",
-        "x3",
-        "x21"
-      ],
+      "required": ["kind", "pattern", "target", "repeats", "mutes", "midiMutes", "offset", "length", "transpose", "trackTranspose", "midiTranspose", "tempo", "x3", "x21"],
       "properties": {
         "kind": {
-          "enum": [
-            "pattern",
-            "loop",
-            "jump",
-            "halt",
-            "end"
-          ]
+          "enum": ["pattern", "loop", "jump", "halt", "end"]
         },
         "pattern": {
           "$ref": "#/$defs/byte",
@@ -788,14 +657,7 @@
     },
     "song": {
       "type": "object",
-      "required": [
-        "schema",
-        "version",
-        "slot",
-        "name",
-        "rows",
-        "firmware"
-      ],
+      "required": ["schema", "version", "slot", "name", "rows", "firmware"],
       "properties": {
         "schema": {
           "const": "mm-desk/song"
@@ -836,26 +698,13 @@
               "$ref": "#/$defs/runs"
             }
           },
-          "required": [
-            "format"
-          ]
+          "required": ["format"]
         }
       }
     },
     "global": {
       "type": "object",
-      "required": [
-        "schema",
-        "version",
-        "slot",
-        "channels",
-        "midiSeq",
-        "routingMode",
-        "masterTune",
-        "multiMap",
-        "control",
-        "firmware"
-      ],
+      "required": ["schema", "version", "slot", "channels", "midiSeq", "routingMode", "masterTune", "multiMap", "control", "firmware"],
       "properties": {
         "schema": {
           "const": "mm-desk/global"
@@ -870,13 +719,7 @@
         },
         "channels": {
           "type": "object",
-          "required": [
-            "auto",
-            "base",
-            "span",
-            "multiTrig",
-            "multiMap"
-          ],
+          "required": ["auto", "base", "span", "multiTrig", "multiMap"],
           "properties": {
             "auto": {
               "$ref": "#/$defs/byte"
@@ -897,10 +740,7 @@
         },
         "midiSeq": {
           "type": "object",
-          "required": [
-            "channels",
-            "ccs"
-          ],
+          "required": ["channels", "ccs"],
           "properties": {
             "channels": {
               "type": "array",
@@ -926,11 +766,7 @@
           }
         },
         "routingMode": {
-          "enum": [
-            "3xSTEREO+AB=MIX",
-            "3xSTEREO",
-            "6xMONO"
-          ]
+          "enum": ["3xSTEREO+AB=MIX", "3xSTEREO", "6xMONO"]
         },
         "masterTune": {
           "type": "integer",
@@ -962,47 +798,18 @@
               "$ref": "#/$defs/format"
             }
           },
-          "required": [
-            "format"
-          ]
+          "required": ["format"]
         }
       }
     },
     "lifecycle": {
       "description": "P6: the machine's life as one value (deskCore::Lifecycle): the engine label and the input gate follow it.",
-      "enum": [
-        "missing",
-        "unsupported",
-        "loading",
-        "booting",
-        "animating",
-        "ready",
-        "hwConnecting",
-        "hwLost"
-      ]
+      "enum": ["missing", "unsupported", "loading", "booting", "animating", "ready", "hwConnecting", "hwLost"]
     },
     "capabilities": {
       "type": "object",
       "description": "P6: what the engine can do, as data (deskCore::Capabilities). A page enables a control when its capability is true and shows reasons[name] otherwise.",
-      "required": [
-        "engine",
-        "label",
-        "about",
-        "reasons",
-        "transport",
-        "panelKeys",
-        "recvSession",
-        "lcd",
-        "workingKitMemory",
-        "telemetry",
-        "midiMutes",
-        "poly",
-        "multiTrig",
-        "multiMap",
-        "portamento",
-        "gridRecord",
-        "dumps"
-      ],
+      "required": ["engine", "label", "about", "reasons", "transport", "panelKeys", "recvSession", "lcd", "workingKitMemory", "telemetry", "midiMutes", "poly", "multiTrig", "multiMap", "portamento", "gridRecord", "dumps"],
       "additionalProperties": false,
       "properties": {
         "engine": {
@@ -1055,10 +862,7 @@
           "type": "boolean"
         },
         "dumps": {
-          "enum": [
-            "recv",
-            "manual"
-          ]
+          "enum": ["recv", "manual"]
         },
         "reasons": {
           "type": "object",
@@ -1074,11 +878,7 @@
       "description": "P6: the engine map (the plug-in's engine records), in menu order; empty for a desk outside the plug-in.",
       "items": {
         "type": "object",
-        "required": [
-          "id",
-          "label",
-          "available"
-        ],
+        "required": ["id", "label", "available"],
         "additionalProperties": false,
         "properties": {
           "id": {
@@ -1100,12 +900,7 @@
     "history": {
       "type": "object",
       "description": "P6: the core's undo history (a gesture is one step).",
-      "required": [
-        "undo",
-        "redo",
-        "undoCount",
-        "redoCount"
-      ],
+      "required": ["undo", "redo", "undoCount", "redoCount"],
       "additionalProperties": false,
       "properties": {
         "undo": {
@@ -1124,28 +919,95 @@
         }
       }
     },
+    "modulators": {
+      "type": "object",
+      "description": "App-only LFO and random sources and their links to the kit that plays (page -> plug-in, P6: run in the plug-in on the machine's steps, as the Machinedrum's).",
+      "required": ["schema", "version"],
+      "properties": {
+        "schema": {
+          "const": "mm-desk/modulators"
+        },
+        "version": {
+          "const": 1
+        },
+        "sources": {
+          "type": "array",
+          "maxItems": 16,
+          "items": {
+            "type": "object",
+            "required": ["id", "kind"],
+            "properties": {
+              "id": {
+                "type": "string",
+                "minLength": 1
+              },
+              "label": {
+                "type": "string"
+              },
+              "kind": {
+                "enum": ["lfo", "random"]
+              },
+              "shape": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 5
+              },
+              "rate": {
+                "enum": ["1/16", "1/8", "1/4", "1/2", "1", "2", "4"]
+              },
+              "depth": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 100
+              },
+              "smooth": {
+                "$ref": "#/$defs/u7"
+              }
+            }
+          }
+        },
+        "links": {
+          "type": "array",
+          "maxItems": 64,
+          "items": {
+            "type": "object",
+            "required": ["source", "track", "param"],
+            "properties": {
+              "source": {
+                "type": "string"
+              },
+              "track": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 5,
+                "description": "A synth track."
+              },
+              "param": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 63,
+                "description": "DATA page * 8 + index (page 7 index 0: the level)."
+              },
+              "min": {
+                "$ref": "#/$defs/u7"
+              },
+              "max": {
+                "$ref": "#/$defs/u7"
+              },
+              "curve": {
+                "enum": ["lin", "exp", "log"]
+              },
+              "invert": {
+                "type": "boolean"
+              }
+            }
+          }
+        }
+      }
+    },
     "machine": {
       "type": "object",
-      "required": [
-        "schema",
-        "version",
-        "engine",
-        "link",
-        "pattern",
-        "kit",
-        "song",
-        "global",
-        "playing",
-        "tempo",
-        "recv",
-        "loading",
-        "roundTripMs",
-        "error",
-        "lifecycle",
-        "capabilities",
-        "engines",
-        "history"
-      ],
+      "required": ["schema", "version", "engine", "link", "pattern", "kit", "song", "global", "playing", "tempo", "recv", "loading", "roundTripMs", "lifecycle", "capabilities", "engines", "history"],
       "description": "Read-only machine state from the MM desk: current and queued pattern, kit and its working state, song, SYSEX RECV session, and the core's parts (P6: every member declared).",
       "properties": {
         "schema": {
@@ -1155,31 +1017,17 @@
           "const": 1
         },
         "engine": {
-          "enum": [
-            "missing",
-            "unsupported",
-            "loading",
-            "booting",
-            "ready"
-          ],
+          "enum": ["missing", "unsupported", "loading", "booting", "ready"],
           "description": "Older string, derived from lifecycle."
         },
         "link": {
-          "enum": [
-            "local",
-            "connect",
-            "ready",
-            "lost"
-          ],
+          "enum": ["local", "connect", "ready", "lost"],
           "description": "Older string, derived from lifecycle: local = not HW MIDI."
         },
         "pattern": {
           "type": "object",
           "additionalProperties": false,
-          "required": [
-            "current",
-            "queued"
-          ],
+          "required": ["current", "queued"],
           "properties": {
             "current": {
               "oneOf": [
@@ -1211,10 +1059,7 @@
         "kit": {
           "type": "object",
           "additionalProperties": false,
-          "required": [
-            "current",
-            "working"
-          ],
+          "required": ["current", "working"],
           "properties": {
             "current": {
               "oneOf": [
@@ -1229,21 +1074,14 @@
               ]
             },
             "working": {
-              "enum": [
-                "unknown",
-                "clean",
-                "edited"
-              ]
+              "enum": ["unknown", "clean", "edited"]
             }
           }
         },
         "song": {
           "type": "object",
           "additionalProperties": false,
-          "required": [
-            "current",
-            "songMode"
-          ],
+          "required": ["current", "songMode"],
           "properties": {
             "current": {
               "oneOf": [
@@ -1300,12 +1138,7 @@
         "recv": {
           "type": "object",
           "additionalProperties": false,
-          "required": [
-            "state",
-            "sending",
-            "received",
-            "errors"
-          ],
+          "required": ["state", "sending", "received", "errors"],
           "properties": {
             "state": {
               "type": "string",
@@ -1329,10 +1162,7 @@
         "loading": {
           "type": "object",
           "additionalProperties": false,
-          "required": [
-            "done",
-            "total"
-          ],
+          "required": ["done", "total"],
           "properties": {
             "done": {
               "type": "integer",
@@ -1346,9 +1176,6 @@
         },
         "roundTripMs": {
           "type": "number"
-        },
-        "error": {
-          "type": "string"
         },
         "lifecycle": {
           "$ref": "#/$defs/lifecycle"
@@ -1367,11 +1194,7 @@
     },
     "catalogue": {
       "type": "object",
-      "required": [
-        "schema",
-        "version",
-        "machines"
-      ],
+      "required": ["schema", "version", "machines"],
       "properties": {
         "schema": {
           "const": "mm-desk/catalogue"
@@ -1387,16 +1210,11 @@
     "message": {
       "description": "P6: every message the plug-in sends the Monomachine Editor page. Checked by mmDeskTest.",
       "type": "object",
-      "required": [
-        "type"
-      ],
+      "required": ["type"],
       "oneOf": [
         {
           "type": "object",
-          "required": [
-            "type",
-            "doc"
-          ],
+          "required": ["type", "doc"],
           "properties": {
             "type": {
               "const": "catalogue"
@@ -1408,22 +1226,13 @@
         },
         {
           "type": "object",
-          "required": [
-            "type",
-            "kind",
-            "doc"
-          ],
+          "required": ["type", "kind", "doc"],
           "properties": {
             "type": {
               "const": "doc"
             },
             "kind": {
-              "enum": [
-                "pattern",
-                "kit",
-                "song",
-                "global"
-              ]
+              "enum": ["pattern", "kit", "song", "global", "workingKit"]
             },
             "pending": {
               "type": "boolean",
@@ -1435,19 +1244,11 @@
             "slot": {
               "type": "integer",
               "minimum": 0,
-              "maximum": 127
-            },
-            "working": {
-              "type": "boolean",
-              "description": "The kit document is the working kit read from memory."
+              "maximum": 127,
+              "description": "The slot; for the working kit, the kit it was loaded from."
             },
             "source": {
-              "enum": [
-                "none",
-                "dump",
-                "memory",
-                "tracked"
-              ]
+              "enum": ["none", "dump", "memory", "tracked"]
             }
           },
           "allOf": [
@@ -1514,15 +1315,29 @@
                   }
                 }
               }
+            },
+            {
+              "if": {
+                "properties": {
+                  "kind": {
+                    "const": "workingKit"
+                  }
+                }
+              },
+              "then": {
+                "properties": {
+                  "doc": {
+                    "$ref": "#/$defs/kit"
+                  }
+                }
+              }
             }
-          ]
+          ],
+          "description": "A document: a stored slot (pattern, kit, song, global) or the kit that plays (workingKit, P6)."
         },
         {
           "type": "object",
-          "required": [
-            "type",
-            "doc"
-          ],
+          "required": ["type", "doc"],
           "properties": {
             "type": {
               "const": "machine"
@@ -1534,13 +1349,7 @@
         },
         {
           "type": "object",
-          "required": [
-            "type",
-            "op",
-            "ok",
-            "errors",
-            "note"
-          ],
+          "required": ["type", "op", "ok", "errors", "note"],
           "properties": {
             "type": {
               "const": "result"
@@ -1567,11 +1376,7 @@
         },
         {
           "type": "object",
-          "required": [
-            "type",
-            "step",
-            "playing"
-          ],
+          "required": ["type", "step", "playing"],
           "properties": {
             "type": {
               "const": "tel"
@@ -1588,10 +1393,7 @@
         {
           "type": "object",
           "description": "The firmware's own LCD: 128 x 64, one bit a pixel, rows of 16 bytes, base64 (P6: the same encoding as the MD's).",
-          "required": [
-            "type",
-            "bits"
-          ],
+          "required": ["type", "bits"],
           "properties": {
             "type": {
               "const": "lcd"
@@ -1604,28 +1406,20 @@
         },
         {
           "type": "object",
-          "required": [
-            "type",
-            "doc"
-          ],
+          "required": ["type", "doc"],
           "properties": {
             "type": {
               "const": "learn"
             },
             "doc": {
               "type": "object",
-              "required": [
-                "mappings",
-                "learning"
-              ]
+              "required": ["mappings", "learning"]
             }
           }
         },
         {
           "type": "object",
-          "required": [
-            "type"
-          ],
+          "required": ["type"],
           "properties": {
             "type": {
               "const": "reset"
@@ -1634,10 +1428,7 @@
         },
         {
           "type": "object",
-          "required": [
-            "type",
-            "ask"
-          ],
+          "required": ["type", "ask"],
           "properties": {
             "type": {
               "const": "ask"
@@ -1649,10 +1440,7 @@
         },
         {
           "type": "object",
-          "required": [
-            "type",
-            "message"
-          ],
+          "required": ["type", "message"],
           "properties": {
             "type": {
               "const": "error"
@@ -1665,21 +1453,14 @@
         {
           "type": "object",
           "description": "The standalone's audio and MIDI devices (host, mdAudioMidiLink; schema gm-audio/devices in md-data-contract.schema.json).",
-          "required": [
-            "type",
-            "doc"
-          ],
+          "required": ["type", "doc"],
           "properties": {
             "type": {
               "const": "audio"
             },
             "doc": {
               "type": "object",
-              "required": [
-                "schema",
-                "version",
-                "standalone"
-              ],
+              "required": ["schema", "version", "standalone"],
               "properties": {
                 "schema": {
                   "const": "gm-audio/devices"
@@ -1690,10 +1471,7 @@
         },
         {
           "type": "object",
-          "required": [
-            "type",
-            "in"
-          ],
+          "required": ["type", "in"],
           "properties": {
             "type": {
               "const": "audioLevel"
@@ -1704,65 +1482,104 @@
               "maximum": 1
             }
           }
+        },
+        {
+          "type": "object",
+          "required": ["type", "doc", "values", "ccPerSecond", "runs", "ccLimit"],
+          "properties": {
+            "type": {
+              "const": "mod"
+            },
+            "doc": {
+              "$ref": "#/$defs/modulators"
+            },
+            "values": {
+              "type": "array",
+              "items": {
+                "type": "number"
+              }
+            },
+            "ccPerSecond": {
+              "type": "number",
+              "minimum": 0
+            },
+            "runs": {
+              "enum": ["editor", "plug-in"]
+            },
+            "ccLimit": {
+              "type": "number"
+            }
+          }
         }
       ]
     },
     "command": {
-      "description": "Generated from the command table (deskCore::CommandTable::schema, P6): every command the page may send.",
+      "description": "Generated from the model's command table and the plug-in's (deskHost), P6: every command the page may send.",
       "oneOf": [
         {
           "type": "object",
           "description": "core: the page is up: everything is published once more",
-          "required": [
-            "op"
-          ],
+          "required": ["op"],
           "properties": {
             "op": {
               "const": "ready"
             },
             "id": {
               "type": "integer"
+            },
+            "g": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "force": {
+              "type": ["boolean", "integer"]
             }
           }
         },
         {
           "type": "object",
           "description": "core: undo the last step (a gesture is one step)",
-          "required": [
-            "op"
-          ],
+          "required": ["op"],
           "properties": {
             "op": {
               "const": "undo"
             },
             "id": {
               "type": "integer"
+            },
+            "g": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "force": {
+              "type": ["boolean", "integer"]
             }
           }
         },
         {
           "type": "object",
           "description": "core",
-          "required": [
-            "op"
-          ],
+          "required": ["op"],
           "properties": {
             "op": {
               "const": "redo"
             },
             "id": {
               "type": "integer"
+            },
+            "g": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "force": {
+              "type": ["boolean", "integer"]
             }
           }
         },
         {
           "type": "object",
-          "description": "core: a whole document as the intent",
-          "required": [
-            "op",
-            "kind",
-            "doc"
-          ],
+          "description": "core: a whole document as the intent (workingKit: the kit that plays)",
+          "required": ["op", "kind", "doc"],
           "properties": {
             "op": {
               "const": "set"
@@ -1770,8 +1587,16 @@
             "id": {
               "type": "integer"
             },
+            "g": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "force": {
+              "type": ["boolean", "integer"]
+            },
             "kind": {
-              "type": "string"
+              "type": "string",
+              "enum": ["pattern", "kit", "workingKit", "song", "global"]
             },
             "doc": {
               "type": "object"
@@ -1781,11 +1606,7 @@
         {
           "type": "object",
           "description": "machine: read a document now",
-          "required": [
-            "op",
-            "kind",
-            "slot"
-          ],
+          "required": ["op", "kind", "slot"],
           "properties": {
             "op": {
               "const": "load"
@@ -1793,8 +1614,16 @@
             "id": {
               "type": "integer"
             },
+            "g": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "force": {
+              "type": ["boolean", "integer"]
+            },
             "kind": {
-              "type": "string"
+              "type": "string",
+              "enum": ["pattern", "kit", "song", "global"]
             },
             "slot": {
               "type": "integer",
@@ -1806,10 +1635,7 @@
         {
           "type": "object",
           "description": "machine: LOAD PATTERN (at the pattern end while playing; now: STOP, LOAD, PLAY)",
-          "required": [
-            "op",
-            "p"
-          ],
+          "required": ["op", "p"],
           "properties": {
             "op": {
               "const": "select"
@@ -1817,31 +1643,40 @@
             "id": {
               "type": "integer"
             },
+            "g": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "force": {
+              "type": ["boolean", "integer"]
+            },
             "p": {
               "type": "integer",
               "minimum": 0,
               "maximum": 127
             },
             "now": {
-              "type": [
-                "boolean",
-                "integer"
-              ]
+              "type": ["boolean", "integer"]
             }
           }
         },
         {
           "type": "object",
           "description": "machine: LOAD KIT (the current kit without k)",
-          "required": [
-            "op"
-          ],
+          "required": ["op"],
           "properties": {
             "op": {
               "const": "loadKit"
             },
             "id": {
               "type": "integer"
+            },
+            "g": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "force": {
+              "type": ["boolean", "integer"]
             },
             "k": {
               "type": "integer",
@@ -1853,15 +1688,20 @@
         {
           "type": "object",
           "description": "machine: SAVE KIT",
-          "required": [
-            "op"
-          ],
+          "required": ["op"],
           "properties": {
             "op": {
               "const": "saveKit"
             },
             "id": {
               "type": "integer"
+            },
+            "g": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "force": {
+              "type": ["boolean", "integer"]
             },
             "k": {
               "type": "integer",
@@ -1873,15 +1713,20 @@
         {
           "type": "object",
           "description": "machine: LOAD SONG (stopped)",
-          "required": [
-            "op"
-          ],
+          "required": ["op"],
           "properties": {
             "op": {
               "const": "loadSong"
             },
             "id": {
               "type": "integer"
+            },
+            "g": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "force": {
+              "type": ["boolean", "integer"]
             },
             "s": {
               "type": "integer",
@@ -1893,15 +1738,20 @@
         {
           "type": "object",
           "description": "machine: SAVE SONG",
-          "required": [
-            "op"
-          ],
+          "required": ["op"],
           "properties": {
             "op": {
               "const": "saveSong"
             },
             "id": {
               "type": "integer"
+            },
+            "g": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "force": {
+              "type": ["boolean", "integer"]
             },
             "s": {
               "type": "integer",
@@ -1913,16 +1763,20 @@
         {
           "type": "object",
           "description": "machine: 0x61",
-          "required": [
-            "op",
-            "bpm"
-          ],
+          "required": ["op", "bpm"],
           "properties": {
             "op": {
               "const": "tempo"
             },
             "id": {
               "type": "integer"
+            },
+            "g": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "force": {
+              "type": ["boolean", "integer"]
             },
             "bpm": {
               "type": "number",
@@ -1934,40 +1788,70 @@
         {
           "type": "object",
           "description": "machine",
-          "required": [
-            "op"
-          ],
+          "required": ["op"],
           "properties": {
             "op": {
               "const": "play"
             },
             "id": {
               "type": "integer"
+            },
+            "g": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "force": {
+              "type": ["boolean", "integer"]
             }
           }
         },
         {
           "type": "object",
           "description": "machine",
-          "required": [
-            "op"
-          ],
+          "required": ["op"],
           "properties": {
             "op": {
               "const": "stop"
             },
             "id": {
               "type": "integer"
+            },
+            "g": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "force": {
+              "type": ["boolean", "integer"]
+            }
+          }
+        },
+        {
+          "type": "object",
+          "description": "setup: the app modulators (mm-desk/modulators)",
+          "required": ["op", "doc"],
+          "properties": {
+            "op": {
+              "const": "modSet"
+            },
+            "id": {
+              "type": "integer"
+            },
+            "g": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "force": {
+              "type": ["boolean", "integer"]
+            },
+            "doc": {
+              "type": "object"
             }
           }
         },
         {
           "type": "object",
           "description": "machine: a synth track's mute",
-          "required": [
-            "op",
-            "t"
-          ],
+          "required": ["op", "t"],
           "properties": {
             "op": {
               "const": "mute"
@@ -1975,32 +1859,40 @@
             "id": {
               "type": "integer"
             },
+            "g": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "force": {
+              "type": ["boolean", "integer"]
+            },
             "t": {
               "type": "integer",
               "minimum": 0,
               "maximum": 5
             },
             "on": {
-              "type": [
-                "boolean",
-                "integer"
-              ]
+              "type": ["boolean", "integer"]
             }
           }
         },
         {
           "type": "object",
-          "description": "host: an entry of the engine map: emu, hw",
-          "required": [
-            "op",
-            "kind"
-          ],
+          "description": "host: an entry of the engine map (machine.engines)",
+          "required": ["op", "kind"],
           "properties": {
             "op": {
               "const": "engine"
             },
             "id": {
               "type": "integer"
+            },
+            "g": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "force": {
+              "type": ["boolean", "integer"]
             },
             "kind": {
               "type": "string"
@@ -2009,17 +1901,61 @@
         },
         {
           "type": "object",
-          "description": "host: a channel message from the page (keys, joystick)",
-          "required": [
-            "op",
-            "b"
-          ],
+          "description": "host: look for the ROM again",
+          "required": ["op"],
+          "properties": {
+            "op": {
+              "const": "recheckFirmware"
+            },
+            "id": {
+              "type": "integer"
+            },
+            "g": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "force": {
+              "type": ["boolean", "integer"]
+            }
+          }
+        },
+        {
+          "type": "object",
+          "description": "host",
+          "required": ["op"],
+          "properties": {
+            "op": {
+              "const": "revealRomFolder"
+            },
+            "id": {
+              "type": "integer"
+            },
+            "g": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "force": {
+              "type": ["boolean", "integer"]
+            }
+          }
+        },
+        {
+          "type": "object",
+          "description": "host: a channel message from the page: [status 0x80-0xef, data, data]",
+          "required": ["op", "b"],
           "properties": {
             "op": {
               "const": "midi"
             },
             "id": {
               "type": "integer"
+            },
+            "g": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "force": {
+              "type": ["boolean", "integer"]
             },
             "b": {
               "type": "array"
@@ -2028,57 +1964,28 @@
         },
         {
           "type": "object",
-          "description": "host",
-          "required": [
-            "op"
-          ],
-          "properties": {
-            "op": {
-              "const": "recheckFirmware"
-            },
-            "id": {
-              "type": "integer"
-            }
-          }
-        },
-        {
-          "type": "object",
-          "description": "host",
-          "required": [
-            "op"
-          ],
-          "properties": {
-            "op": {
-              "const": "revealRomFolder"
-            },
-            "id": {
-              "type": "integer"
-            }
-          }
-        },
-        {
-          "type": "object",
           "description": "host: the editor's menu",
-          "required": [
-            "op"
-          ],
+          "required": ["op"],
           "properties": {
             "op": {
               "const": "openMenu"
             },
             "id": {
               "type": "integer"
+            },
+            "g": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "force": {
+              "type": ["boolean", "integer"]
             }
           }
         },
         {
           "type": "object",
-          "description": "host: MIDI learn",
-          "required": [
-            "op",
-            "t",
-            "pg"
-          ],
+          "description": "host: MIDI learn a track's parameter",
+          "required": ["op", "t"],
           "properties": {
             "op": {
               "const": "learnStart"
@@ -2086,10 +1993,17 @@
             "id": {
               "type": "integer"
             },
+            "g": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "force": {
+              "type": ["boolean", "integer"]
+            },
             "t": {
               "type": "integer",
               "minimum": 0,
-              "maximum": 5
+              "maximum": 15
             },
             "pg": {
               "type": "integer",
@@ -2099,25 +2013,27 @@
             "i": {
               "type": "integer",
               "minimum": 0,
-              "maximum": 7
+              "maximum": 24
             }
           }
         },
         {
           "type": "object",
-          "description": "host",
-          "required": [
-            "op",
-            "cc",
-            "t",
-            "pg"
-          ],
+          "description": "host: a CC mapping without learning",
+          "required": ["op", "cc", "t"],
           "properties": {
             "op": {
               "const": "learnAdd"
             },
             "id": {
               "type": "integer"
+            },
+            "g": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "force": {
+              "type": ["boolean", "integer"]
             },
             "cc": {
               "type": "integer",
@@ -2127,7 +2043,7 @@
             "t": {
               "type": "integer",
               "minimum": 0,
-              "maximum": 5
+              "maximum": 15
             },
             "pg": {
               "type": "integer",
@@ -2137,38 +2053,82 @@
             "i": {
               "type": "integer",
               "minimum": 0,
-              "maximum": 7
+              "maximum": 24
+            },
+            "ch": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 255
+            }
+          }
+        },
+        {
+          "type": "object",
+          "description": "host: a controller row's CC changed: its mappings follow",
+          "required": ["op", "from", "to"],
+          "properties": {
+            "op": {
+              "const": "learnSetCc"
+            },
+            "id": {
+              "type": "integer"
+            },
+            "g": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "force": {
+              "type": ["boolean", "integer"]
+            },
+            "from": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 127
+            },
+            "to": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 127
             }
           }
         },
         {
           "type": "object",
           "description": "host",
-          "required": [
-            "op"
-          ],
+          "required": ["op"],
           "properties": {
             "op": {
               "const": "learnCancel"
             },
             "id": {
               "type": "integer"
+            },
+            "g": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "force": {
+              "type": ["boolean", "integer"]
             }
           }
         },
         {
           "type": "object",
           "description": "host",
-          "required": [
-            "op",
-            "index"
-          ],
+          "required": ["op", "index"],
           "properties": {
             "op": {
               "const": "learnRemove"
             },
             "id": {
               "type": "integer"
+            },
+            "g": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "force": {
+              "type": ["boolean", "integer"]
             },
             "index": {
               "type": "integer",
@@ -2180,16 +2140,20 @@
         {
           "type": "object",
           "description": "host",
-          "required": [
-            "op",
-            "index"
-          ],
+          "required": ["op", "index"],
           "properties": {
             "op": {
               "const": "learnInvert"
             },
             "id": {
               "type": "integer"
+            },
+            "g": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "force": {
+              "type": ["boolean", "integer"]
             },
             "index": {
               "type": "integer",
@@ -2201,30 +2165,40 @@
         {
           "type": "object",
           "description": "host: the standalone's audio and MIDI devices",
-          "required": [
-            "op"
-          ],
+          "required": ["op"],
           "properties": {
             "op": {
               "const": "audio"
             },
             "id": {
               "type": "integer"
+            },
+            "g": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "force": {
+              "type": ["boolean", "integer"]
             }
           }
         },
         {
           "type": "object",
           "description": "host",
-          "required": [
-            "op"
-          ],
+          "required": ["op"],
           "properties": {
             "op": {
               "const": "audioSet"
             },
             "id": {
               "type": "integer"
+            },
+            "g": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "force": {
+              "type": ["boolean", "integer"]
             },
             "set": {
               "type": "string"
@@ -2237,9 +2211,7 @@
         {
           "type": "object",
           "description": "host",
-          "required": [
-            "op"
-          ],
+          "required": ["op"],
           "properties": {
             "op": {
               "const": "audioMeter"
@@ -2247,11 +2219,15 @@
             "id": {
               "type": "integer"
             },
+            "g": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "force": {
+              "type": ["boolean", "integer"]
+            },
             "on": {
-              "type": [
-                "boolean",
-                "integer"
-              ]
+              "type": ["boolean", "integer"]
             }
           }
         }

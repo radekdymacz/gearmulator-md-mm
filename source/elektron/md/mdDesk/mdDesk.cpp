@@ -1,18 +1,24 @@
 #include "mdDesk.h"
 
+#include "mdDeskMachine.h"
+
 namespace mdDesk
 {
 	using Value = elektronData::json::Value;
 
-	Desk::Desk(Port _port, const Profile& _profile)
-		: deskCore::Desk<MdModel, MdMachine>(_profile, _port.device(), _port.toPage, _port.nowMs)
+	Desk::Desk(Port _port, const Profile& _profile) : Desk(defaultAdapter(_profile, _port.device), _port)
+	{
+	}
+
+	Desk::Desk(std::unique_ptr<MdAdapter> _adapter, Port _port)
+		: deskCore::Desk<MdModel, MdAdapter>(std::move(_adapter), _port.toPage, _port.device.nowMs)
 		, m_saveSetup(std::move(_port.saveSetup))
 	{
 	}
 
-	void Desk::setEngine(const Profile& _profile, const MdMachine::Port& _device)
+	std::unique_ptr<MdAdapter> Desk::defaultAdapter(const Profile& _profile, const DevicePort& _device)
 	{
-		deskCore::Desk<MdModel, MdMachine>::setEngine(_profile, _device);
+		return std::make_unique<MdMachine>(_profile, _device);
 	}
 
 	// ---- the editor's setup: the app modulators and the knob rows ----
@@ -24,7 +30,7 @@ namespace mdDesk
 		if(op == "modSet")
 		{
 			// App-only LFO and random sources (mdDeskMod.h): the page sends the whole setup.
-			const auto setup = modSetupFromJson(*_message.find("doc"), errors);
+			const auto setup = modSetupFromJson(*_message.find("doc"), errors, g_mdModLimits);
 			if(setup)
 			{
 				m_mods.setSetup(*setup);
@@ -87,7 +93,7 @@ namespace mdDesk
 	{
 		Value m = Value::object();
 		m.set("type", "mod");
-		m.set("doc", modSetupToJson(m_mods.setup()));
+		m.set("doc", modSetupToJson(m_mods.setup(), g_mdModLimits));
 		Value values = Value::array();
 		for(const auto v : m_mods.values())
 			values.push(v);
@@ -131,7 +137,7 @@ namespace mdDesk
 
 	void Desk::onWorkingKitMemory(const Bytes& _region)
 	{
-		machine().onWorkingKitMemory(_region);
+		machine().onWorkingKitMemory(_region, documents());
 		flush();
 	}
 

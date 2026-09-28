@@ -1,9 +1,9 @@
-#include "mdDeskMod.h"
+#include "deskMod.h"
 
 #include <algorithm>
 #include <cmath>
 
-namespace mdDesk
+namespace deskCore
 {
 	namespace json = elektronData::json;
 
@@ -44,12 +44,12 @@ namespace mdDesk
 		}
 	}
 
-	std::optional<ModSetup> modSetupFromJson(const json::Value& _doc, std::vector<std::string>& _errors)
+	std::optional<ModSetup> modSetupFromJson(const json::Value& _doc, std::vector<std::string>& _errors, const ModLimits& _limits)
 	{
 		const auto before = _errors.size();
 		const auto* schema = _doc.find("schema");
-		if(!schema || !schema->isString() || schema->asString() != "md-desk/modulators")
-			_errors.emplace_back("$.schema: expected md-desk/modulators");
+		if(!schema || !schema->isString() || schema->asString() != _limits.schema)
+			_errors.emplace_back(std::string("$.schema: expected ") + _limits.schema);
 		const auto* version = _doc.find("version");
 		if(!version || !version->isNumber() || version->asNumber() != 1)
 			_errors.emplace_back("$.version: expected 1");
@@ -108,8 +108,8 @@ namespace mdDesk
 					_errors.push_back(path + ".source: expected one of the sources");
 				else
 					l.source = src->asString();
-				l.track = static_cast<uint8_t>(intIn(o, "track", 0, 15, 0, path, _errors));
-				l.param = static_cast<uint8_t>(intIn(o, "param", 0, 23, 0, path, _errors));
+				l.track = static_cast<uint8_t>(intIn(o, "track", 0, _limits.maxTrack, 0, path, _errors));
+				l.param = static_cast<uint8_t>(intIn(o, "param", 0, _limits.maxParam, 0, path, _errors));
 				l.min = static_cast<uint8_t>(intIn(o, "min", 0, 127, 0, path, _errors));
 				l.max = static_cast<uint8_t>(intIn(o, "max", 0, 127, 127, path, _errors));
 				if(const auto* c = o.find("curve"))
@@ -130,10 +130,10 @@ namespace mdDesk
 		return s;
 	}
 
-	json::Value modSetupToJson(const ModSetup& _s)
+	json::Value modSetupToJson(const ModSetup& _s, const ModLimits& _limits)
 	{
 		json::Value doc = json::Value::object();
-		doc.set("schema", "md-desk/modulators");
+		doc.set("schema", _limits.schema);
 		doc.set("version", 1);
 		json::Value sources = json::Value::array();
 		for(const auto& m : _s.sources)

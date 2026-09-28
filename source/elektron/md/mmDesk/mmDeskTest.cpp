@@ -3,6 +3,9 @@
 // mdLibTest/mmDeskFirmwareTest.
 
 #include "mmDesk.h"
+#include "mmDeskMachine.h"
+
+#include "deskHost/deskHost.h"
 
 #include "elektronData/mmCommands.h"
 #include "elektronData/mmDump.h"
@@ -168,10 +171,10 @@ namespace
 		std::vector<Value> page;
 		std::vector<std::tuple<uint8_t, uint8_t, uint8_t, uint8_t>> params;
 		mmDesk::Desk::Port port;
-		port.sendSysex = [&](const Bytes& _b) { m.take(_b); };
-		port.sendParam = [&](uint8_t _t, uint8_t _p, uint8_t _i, uint8_t _v) { params.emplace_back(_t, _p, _i, _v); };
-		port.sendNrpn = [](uint8_t, uint8_t, uint8_t) {};
-		port.pressKeys = [&](const std::vector<mmDesk::Key>& _k)
+		port.device.sendSysex = [&](const Bytes& _b) { m.take(_b); };
+		port.device.sendParam = [&](uint8_t _t, uint8_t _p, uint8_t _i, uint8_t _v) { params.emplace_back(_t, _p, _i, _v); };
+		port.device.sendNrpn = [](uint8_t, uint8_t, uint8_t) {};
+		port.device.pressKeys = [&](const std::vector<mmDesk::Key>& _k)
 		{
 			m.keysPressed += static_cast<int>(_k.size());
 			if(_k == mmDesk::RecvSession::enterMacro())
@@ -181,7 +184,7 @@ namespace
 			return true;
 		};
 		port.toPage = [&](const Value& _v) { page.push_back(_v); g_published.push_back(_v); };
-		port.nowMs = [&] { return now; };
+		port.device.nowMs = [&] { return now; };
 		mmDesk::Desk d(port);
 		const auto run = [&](const double _ms)
 		{
@@ -271,12 +274,12 @@ void playingFromSteps()
 	double now = 0;
 	std::vector<Value> page;
 	mmDesk::Desk::Port port;
-	port.sendSysex = [](const Bytes&) {};
-	port.sendParam = [](uint8_t, uint8_t, uint8_t, uint8_t) {};
-	port.sendNrpn = [](uint8_t, uint8_t, uint8_t) {};
-	port.pressKeys = [](const std::vector<mmDesk::Key>&) { return true; };
+	port.device.sendSysex = [](const Bytes&) {};
+	port.device.sendParam = [](uint8_t, uint8_t, uint8_t, uint8_t) {};
+	port.device.sendNrpn = [](uint8_t, uint8_t, uint8_t) {};
+	port.device.pressKeys = [](const std::vector<mmDesk::Key>&) { return true; };
 	port.toPage = [&](const Value& _v) { page.push_back(_v); g_published.push_back(_v); };
-	port.nowMs = [&] { return now; };
+	port.device.nowMs = [&] { return now; };
 	mmDesk::Desk d(port);
 	d.onPageMessage(*ed::json::parse(R"({"op":"ready"})"));
 	d.setProbe(mmDesk::Desk::Probe::Running);
@@ -380,7 +383,7 @@ void checkCommandSchema(const bool _write)
 	check(root.has_value(), "the contract schema loads");
 	if(!root)
 		return;
-	const auto generated = mmDesk::commandTable().schema();
+	const auto generated = deskHost::contractCommands(mmDesk::commandTable().schema());
 	auto* defs = root->find("$defs");
 	const auto* current = defs ? defs->find("command") : nullptr;
 	const bool same = current && ed::json::write(*current) == ed::json::write(generated);

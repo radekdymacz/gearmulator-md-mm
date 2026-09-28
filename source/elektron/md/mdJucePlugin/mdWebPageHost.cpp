@@ -113,10 +113,16 @@ namespace mdJucePlugin
 		return *m_web;
 	}
 
+	// This instance's log (P6: one per instance, like its page file; two editors never share one).
 	void WebPageHost::log(const juce::String& _line) const
 	{
-		juce::File::getSpecialLocation(juce::File::tempDirectory).getChildFile(juce::String(m_spec.log))
-			.appendText(juce::Time::getCurrentTime().toString(false, true, true, true) + " " + _line + "\n");
+		if(m_logFile == juce::File())
+		{
+			const juce::String name(m_spec.log);
+			m_logFile = juce::File::getSpecialLocation(juce::File::tempDirectory).getChildFile(name.upToLastOccurrenceOf(".", false, false)
+				+ "-" + juce::String::toHexString(juce::Random::getSystemRandom().nextInt()) + ".log");
+		}
+		m_logFile.appendText(juce::Time::getCurrentTime().toString(false, true, true, true) + " " + _line + "\n");
 	}
 
 	// WKWebView may only read the one file it loads, so stylesheets, scripts and fonts are inlined.
@@ -182,16 +188,14 @@ namespace mdJucePlugin
 			log("bad page message: " + juce::String(error));
 			return;
 		}
-		for(const auto& message : batch->asArray())
+		// The page speaks: its script is up and takes messages (whatever it said first).
+		if(!m_pageReady)
 		{
-			const auto* op = message.find("op");
-			if(op && op->isString() && op->asString() == "ready")
-			{
-				m_pageReady = true;
-				log("page ready");
-			}
-			m_onMessage(message);
+			m_pageReady = true;
+			log("page up");
 		}
+		for(const auto& message : batch->asArray())
+			m_onMessage(message);
 		flush();
 	}
 

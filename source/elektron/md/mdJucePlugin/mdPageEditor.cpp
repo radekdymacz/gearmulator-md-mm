@@ -16,17 +16,6 @@ namespace mdJucePlugin
 {
 	namespace json = elektronData::json;
 
-	namespace
-	{
-		// The two products' pages as data.
-		WebPageHost::Spec specOf(const md::MachineModel _model)
-		{
-			if(_model == md::MachineModel::Monomachine)
-				return {"mmStudio.html", "gearmulator-mmStudio.log", "GEARMULATOR_MMSTUDIO_SELFTEST", {"1", "mmcpu", "p6"}, 1440};
-			return {"mdStudio.html", "gearmulator-mdStudio.log", "GEARMULATOR_MDSTUDIO_SELFTEST", {"1", "p4", "p5", "p6"}, 1440};
-		}
-	}
-
 	PageEditor::PageEditor(jucePluginEditorLib::Processor& _processor, const jucePluginEditorLib::Skin& _skin)
 		: jucePluginEditorLib::Editor(_processor, _skin)
 	{
@@ -46,7 +35,8 @@ namespace mdJucePlugin
 	{
 		jucePluginEditorLib::Editor::create();
 		auto& processor = dynamic_cast<AudioPluginAudioProcessor&>(getProcessor());
-		m_page = std::make_unique<WebPageHost>(specOf(processor.getModel()),
+		m_session = processor.getDeskSession();
+		m_page = std::make_unique<WebPageHost>(m_session ? m_session->pageSpec() : WebPageHost::Spec{},
 			[this](const std::string& _name)
 			{
 				uint32_t size = 0;
@@ -55,7 +45,6 @@ namespace mdJucePlugin
 			},
 			[this](const json::Value& _m) { onPageMessage(_m); });
 		m_audio = std::make_unique<AudioMidiLink>(getProcessor(), [this](json::Value _m) { m_page->send(std::move(_m)); });
-		m_session = processor.getDeskSession();
 		if(m_session)
 			m_session->attach([this](const json::Value& _m) { m_page->send(_m); });
 		getRmlComponent()->addAndMakeVisible(m_page->component());
@@ -70,16 +59,20 @@ namespace mdJucePlugin
 
 	void PageEditor::onPageMessage(const json::Value& _message)
 	{
-		// The table's host column says who acts: the window for its menu and the AUDIO / MIDI panel,
-		// the session for the rest.
-		const auto host = m_session ? m_session->hostOp(_message) : deskCore::HostOp::None;
-		if(host == deskCore::HostOp::Audio && m_audio && m_audio->handle(_message))
-			return;
-		if(host == deskCore::HostOp::Menu)
+		// deskHost's table says who acts: the window for its menu and the AUDIO / MIDI panel, the
+		// session for the rest.
+		if(const auto* row = deskHost::commands().find(deskCore::opOf(_message)); row && deskHost::isWindowAction(row->handler))
 		{
-			// The editor's menu (skins, scale, settings) where the page was right-clicked.
-			if(auto* state = getProcessor().getEditorState())
-				state->createPopupMenu().showMenuAsync(juce::PopupMenu::Options().withMousePosition());
+			if(const auto errors = deskHost::Table::check(*row, _message); !errors.empty())
+				m_page->send(deskCore::resultMessage(_message, errors, {}));
+			else if(row->handler == deskHost::Action::Menu)
+			{
+				// The editor's menu (skins, scale, settings) where the page was right-clicked.
+				if(auto* state = getProcessor().getEditorState())
+					state->createPopupMenu().showMenuAsync(juce::PopupMenu::Options().withMousePosition());
+			}
+			else if(!m_audio || !m_audio->handle(row->handler, _message))
+				m_page->send(deskCore::resultMessage(_message, {"The audio devices are the standalone app's."}, {}));
 			return;
 		}
 		if(m_session)

@@ -12,8 +12,10 @@ namespace deskCore
 {
 	// The page's command vocabulary as data (P6): one table per model, read by the one router
 	// (deskCore::Desk): the owner column says who acts, the gate when, the arguments what is
-	// valid, the handler column which function of the machine adapter runs, the host column
-	// which plug-in action. The contract's $defs/command is generated from it.
+	// valid, the core column which core action. The model's table is the vocabulary only: which
+	// adapter function runs a machine command is the adapter's own map, and the plug-in's
+	// commands are the plug-in's table (a CommandTable<its action type>, whose handler column
+	// names the action). The contract's $defs/command is generated from the tables.
 	enum class Owner : uint8_t
 	{
 		Core,		// documents: edits (pure apply), undo/redo, ready
@@ -22,24 +24,21 @@ namespace deskCore
 		Host		// the plug-in: MIDI learn, the ROM folder, the engine map, menus
 	};
 
+	// What the core does for an Owner::Core command.
+	enum class CoreOp : uint8_t
+	{
+		Edit,		// a pure edit (the model's apply)
+		Set,		// a whole document as the intent (the model's setDocument)
+		Ready,		// the page is up: everything once more
+		Undo,
+		Redo
+	};
+
 	enum class Gate : uint8_t
 	{
 		None,		// any time
 		Midi,		// the firmware answers MIDI (loads)
 		Input		// the machine takes input (lifecycle Ready)
-	};
-
-	// What the plug-in does for an Owner::Host command (the same for both editors).
-	enum class HostOp : uint8_t
-	{
-		None,
-		Engine,				// switch the engine (the engine map)
-		RecheckFirmware,
-		RevealRomFolder,
-		Midi,				// a channel message from the page
-		Learn,				// MIDI learn (mdMidiLearnCommands)
-		Audio,				// the standalone's audio and MIDI devices (the window's)
-		Menu				// the editor's menu (the window's)
 	};
 
 	enum class ArgType : uint8_t
@@ -56,9 +55,11 @@ namespace deskCore
 		double min = 0;
 		double max = 0;
 		bool optional = false;
+		std::vector<const char*> oneOf;	// Text: the values allowed (empty: any text)
 	};
 
-	// One row. H is the model's handler type (a member function of its machine adapter).
+	// One row. H is what the table's owner acts with (nothing for a model's table; the plug-in's
+	// action for the plug-in's table).
 	template<typename H = std::nullptr_t>
 	struct Command
 	{
@@ -68,9 +69,9 @@ namespace deskCore
 		int kind = -1;				// the document kind the command edits (the model's enum), -1: none
 		std::vector<Arg> args;
 		const char* help = "";
-		H handler{};				// Owner::Machine: the adapter's function
-		HostOp host = HostOp::None;	// Owner::Host: the plug-in's action
-		const char* group = "";		// the model's grouping ("library": the MD's kit library and pattern chooser)
+		CoreOp core = CoreOp::Edit;	// Owner::Core: which core action
+		int group = 0;				// the model's grouping (the MD's kit library and pattern chooser), 0: none
+		H handler{};				// the table owner's action (the plug-in's table)
 	};
 
 	const char* ownerName(Owner _o);

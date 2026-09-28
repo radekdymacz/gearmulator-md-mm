@@ -1,6 +1,8 @@
 #pragma once
 
-#include "mdDesk/mdDesk.h"
+#include "mdDesk/mdDeskTelemetry.h"
+
+#include "deskCore/deskLifecycle.h"
 
 #include "mdLib/mddevice.h"
 

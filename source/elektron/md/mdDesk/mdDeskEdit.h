@@ -27,24 +27,43 @@ namespace mdDesk
 		Pattern,
 		Kit,
 		Song,
-		Global
+		Global,
+		WorkingKit
 	};
 
 	using DocRef = deskCore::Ref<DocKind>;
 
+	// The kit that plays, as its own document (P6): the machine's working copy of the kit it
+	// loaded from slot kit.position, with the live edits it took. One identity (the working kit,
+	// slot 0 of its kind); DocKind::Kit documents are the stored slots only.
+	struct WorkingKit
+	{
+		elektronData::MdKit kit;
+
+		bool operator==(const WorkingKit& _o) const { return kit == _o.kit; }
+	};
+
 	using Document = std::variant<elektronData::MdPattern, elektronData::MdKit, elektronData::MdSong,
-		elektronData::MdGlobal>;
+		elektronData::MdGlobal, WorkingKit>;
 
 	DocRef refOf(const Document& _doc);
+	// The hardware limits a document breaks (elektronData::validate), one line each.
+	std::vector<std::string> problemsOf(const Document& _doc);
 
-	// Every document the desk holds. For the kit that plays, kits[] holds the
-	// working copy (the stored slot plus live edits), not the stored slot.
+	// Every document the desk holds: the stored kit slots, and the kit that plays as the working kit.
 	struct Documents
 	{
 		std::map<uint8_t, elektronData::MdPattern> patterns;
-		std::map<uint8_t, elektronData::MdKit> kits;
+		std::map<uint8_t, elektronData::MdKit> kits;		// stored slots
 		std::map<uint8_t, elektronData::MdSong> songs;
 		std::optional<elektronData::MdGlobal> global;
+		std::optional<WorkingKit> working;
+
+		// The working kit when it is the one loaded from slot _kit.
+		const elektronData::MdKit* workingKitOf(uint8_t _kit) const
+		{
+			return working && working->kit.position == _kit ? &working->kit : nullptr;
+		}
 
 		std::optional<Document> get(const DocRef& _ref) const;
 		void set(const Document& _doc);
@@ -52,12 +71,10 @@ namespace mdDesk
 
 	struct Change
 	{
+		// A kit change is a stored-slot write (a dump, plus LOAD KIT into the kit that plays); a
+		// working-kit change is a live edit of the kit that plays. The kind says which.
 		Document before;
 		Document after;
-		// Kit changes: false = live edits of the kit that plays (CCs, live SysEx); true = a
-		// stored-slot write (the kit library, P4): a kit dump, plus LOAD KIT when it is the
-		// kit that plays.
-		bool slotWrite = false;
 
 		DocRef ref() const { return refOf(after); }
 	};
@@ -70,6 +87,11 @@ namespace mdDesk
 			size_t length = 0;
 			uint64_t trigs = 0, accent = 0, slide = 0;
 			std::map<uint8_t, std::map<uint8_t, uint8_t>> locks;	// param -> step -> value
+
+			bool operator==(const Steps& _o) const
+			{
+				return length == _o.length && trigs == _o.trigs && accent == _o.accent && slide == _o.slide && locks == _o.locks;
+			}
 		};
 		struct Sound
 		{
@@ -77,12 +99,22 @@ namespace mdDesk
 			std::array<uint8_t, elektronData::MdKit::g_paramsPerTrack> params{};
 			uint8_t level = 0;
 			elektronData::MdLfo lfo;
+
+			bool operator==(const Sound& _o) const
+			{
+				return model == _o.model && params == _o.params && level == _o.level && lfo == _o.lfo;
+			}
 		};
 		std::optional<Steps> steps;
 		std::optional<Sound> sound;
 		std::optional<elektronData::json::Value> songRow;	// contract row
 		std::optional<elektronData::MdKit> kit;				// the kit library (P4)
 		std::optional<elektronData::MdPattern> pattern;		// the pattern chooser (P4)
+
+		bool operator==(const Clipboard& _o) const
+		{
+			return steps == _o.steps && sound == _o.sound && songRow == _o.songRow && kit == _o.kit && pattern == _o.pattern;
+		}
 	};
 
 	struct EditResult
@@ -93,8 +125,8 @@ namespace mdDesk
 		std::optional<Clipboard> clipboard;	// the new clipboard after a copy command
 	};
 
-	// What an edit may depend on besides the documents: the machine's current kit (a rename
-	// of the kit that plays is its live name edit). Data from the adapter.
+	// What an edit may depend on besides the documents: the machine's current kit (its edits are
+	// working-kit edits; a rename of it is its live name). Data from the adapter.
 	struct EditContext
 	{
 		std::optional<uint8_t> currentKit;

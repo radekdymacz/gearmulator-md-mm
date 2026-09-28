@@ -41,68 +41,58 @@ namespace mdDesk
 		return true;
 	}
 
-	WorkingKit liveEdited(WorkingKit _w, const ed::MdKit& _from, const ed::MdKit& _to, const double _nowMs)
+	KitMemory switched(const KitMemory& _m)
 	{
-		if(!_w.expecting(_nowMs) || !_w.expectFrom)
-			_w.expectFrom = _from;
-		_w.expectTo = _to;
-		_w.expectedAtMs = _nowMs;
-		_w.tracked = _to;
-		return _w;
+		KitMemory m;
+		m.region = _m.region;
+		return m;
 	}
 
-	WorkingKit switched(const WorkingKit& _w)
-	{
-		WorkingKit w;
-		w.region = _w.region;
-		return w;
-	}
-
-	TakeResult takeMemory(WorkingKit _w, const std::optional<uint8_t> _currentKit, const ed::MdKit* _stored,
+	TakeResult takeMemory(KitMemory _m, const std::optional<uint8_t> _currentKit, const ed::MdKit* _stored,
 		const std::map<std::pair<uint8_t, uint8_t>, uint8_t>& _knobTargets, const double _nowMs)
 	{
 		TakeResult r;
-		if(!_w.region)
+		if(!_m.region)
 		{
-			r.next = std::move(_w);
+			r.next = std::move(_m);
 			return r;
 		}
-		auto kit = ed::mdWorkingKitFromMemory(*_w.region);
+		auto kit = ed::mdWorkingKitFromMemory(*_m.region);
 		if(!kit)
 		{
-			_w.region.reset();
-			r.next = std::move(_w);
+			_m.region.reset();
+			r.next = std::move(_m);
 			return r;
 		}
 		// Memory names the current kit. Status is polled; until it agrees, ask and keep the image.
 		if(_currentKit != kit->position)
 		{
 			r.askKitStatus = true;
-			r.next = std::move(_w);
+			r.next = std::move(_m);
 			return r;
 		}
-		// An image from before the editor's own live edit: wait for the next one.
-		if(_w.expecting(_nowMs) && _w.expectFrom && !reflects(*kit, *_w.expectFrom, *_w.expectTo))
-		{
-			r.next = std::move(_w);
-			return r;
-		}
-		_w.region.reset();
-		_w.expectFrom.reset();
-		_w.expectTo.reset();
 		if(_stored)
 		{
 			kit->version = _stored->version;
 			kit->revision = _stored->revision;
 		}
-		_w.memory = *kit;
+		// An image from before the editor's own live edits: wait for the next one.
+		if(!_m.expect.takes(*kit, _nowMs, reflects))
+		{
+			r.next = std::move(_m);
+			return r;
+		}
+		_m.region.reset();
+		r.settles = _m.expect.any();
+		_m.expect.clear();
+		_m.image = *kit;
 		// Knob moves still on their way stay in the view.
 		for(const auto& [key, value] : _knobTargets)
 			kit->params[key.first][key.second] = value;
-		if(!_w.tracked || !(*_w.tracked == *kit))
-			r.show = *kit;
-		_w.tracked = *kit;
-		r.next = std::move(_w);
+		if(r.settles || !_m.shown || !(*_m.shown == *kit))
+			r.take = *kit;
+		_m.shown = *kit;
+		r.next = std::move(_m);
 		return r;
 	}
 }

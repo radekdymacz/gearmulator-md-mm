@@ -32,7 +32,8 @@ const PTIP = {
 	clear: "There is no CLEAR PATTERN over SysEx: the editor writes the pattern without trigs or locks, keeping its length, speed, swing, accent and kit link. The machine's own CLEAR PATTERN may reset more" };
 
 /* ----- kits and patterns from the documents ----- */
-function kitDoc(k) { return Docs.kits[k]; }
+/* the kit that plays shows as it sounds (the working kit), the others as stored */
+function kitDoc(k) { return k === currentKitSlot() ? kitDocOf(Docs) : Docs.kits[k]; }
 function kitLoaded(k) { return !!kitDoc(k); }
 function kitEmpty(k) { const d = kitDoc(k); return !!d && !d.name && d.tracks.every(t => t.machine === "GND-EMPTY"); }
 function kDisp(k) { const d = kitDoc(k); return d ? d.name : ""; }

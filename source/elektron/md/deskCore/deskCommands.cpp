@@ -42,7 +42,16 @@ namespace deskCore
 				s.set("oneOf", std::move(one));
 				break;
 			}
-			case ArgType::Text: s.set("type", "string"); break;
+			case ArgType::Text:
+				s.set("type", "string");
+				if(!_a.oneOf.empty())
+				{
+					Value e = Value::array();
+					for(const auto* v : _a.oneOf)
+						e.push(v);
+					s.set("enum", std::move(e));
+				}
+				break;
 			case ArgType::Bool:
 			{
 				Value t = Value::array();
@@ -125,6 +134,18 @@ namespace deskCore
 		case ArgType::Text:
 			if(!_v->isString())
 				_errors.push_back(std::string(_a.name) + ": missing text");
+			else if(!_a.oneOf.empty())
+			{
+				bool found = false;
+				std::string list;
+				for(const auto* v : _a.oneOf)
+				{
+					found = found || _v->asString() == v;
+					list += (list.empty() ? "" : ", ") + std::string(v);
+				}
+				if(!found)
+					_errors.push_back(std::string(_a.name) + ": expected one of " + list);
+			}
 			break;
 		case ArgType::Bool:
 			if(!_v->isBool() && !_v->isNumber())
@@ -152,6 +173,17 @@ namespace deskCore
 		Value id = Value::object();
 		id.set("type", "integer");
 		props.set("id", std::move(id));
+		// Every command may carry a gesture (one undo step for a drag) and force (the answer to an ask).
+		Value g = Value::object();
+		g.set("type", "integer");
+		g.set("minimum", 0);
+		props.set("g", std::move(g));
+		Value force = Value::object();
+		Value ft = Value::array();
+		ft.push("boolean");
+		ft.push("integer");
+		force.set("type", std::move(ft));
+		props.set("force", std::move(force));
 		Value required = Value::array();
 		required.push("op");
 		for(const auto& a : _args)

@@ -14,6 +14,7 @@
 #include "mdFirmwareSession.h"
 
 #include "mdDesk/mdDesk.h"
+#include "deskCore/deskPacer.h"
 
 #include "elektronData/mdCommands.h"
 #include "elektronData/mdJson.h"
@@ -65,8 +66,8 @@ namespace
 			: m_machine(_rom, _romName, _patchRam, _waitSplash)
 		{
 			mdDesk::Desk::Port port;
-			port.sendSysex = [this](const Bytes& _b) { m_out.push_back(_b); };
-			port.sendKitParam = [this](const uint8_t _t, const uint8_t _i, const uint8_t _v)
+			port.device.sendSysex = [this](const Bytes& _b) { m_out.push_back(_b); };
+			port.device.sendKitParam = [this](const uint8_t _t, const uint8_t _i, const uint8_t _v)
 			{
 				const md::automation::ParameterChange change{
 					static_cast<uint8_t>(_i == 24 ? md::automation::machinedrum::Level : _i / 8), _t,
@@ -76,26 +77,26 @@ namespace
 				if(cc)
 					m_out.push_back({(*cc)[0], (*cc)[1], (*cc)[2]});
 			};
-			port.pressKey = [this](const std::string& _key)
+			port.device.pressKey = [this](const std::string& _key)
 			{
 				const auto states = md::panelKeySequence(md::MachineModel::Machinedrum, _key);
 				m_keys.insert(m_keys.end(), states.begin(), states.end());
 				return !states.empty();
 			};
-			port.turnKnob = [this](const uint8_t _e, const int _steps)
+			port.device.turnKnob = [this](const uint8_t _e, const int _steps)
 			{
 				const auto command = md::panelEncoderCommand(md::MachineModel::Machinedrum, static_cast<md::PanelEncoder>(_e));
 				for(int i = 0; command && i < std::abs(_steps); ++i)
 					m_machine.hardware().trySendPanelEvent(*command, _steps > 0 ? 0x01 : 0xff);
 				return command.has_value();
 			};
-			port.sendMute = [this](const uint8_t _t, const bool _on)
+			port.device.sendMute = [this](const uint8_t _t, const bool _on)
 			{
 				m_out.push_back({static_cast<uint8_t>(0xb0 | (baseChannel() + (_t >> 2))), static_cast<uint8_t>(12 + (_t & 3)),
 					static_cast<uint8_t>(_on ? 1 : 0)});
 			};
 			port.toPage = [this](const Value& _m) { g_contract(_m); onPage(_m); };
-			port.nowMs = [this] { return ms(m_machine.now()); };
+			port.device.nowMs = [this] { return ms(m_machine.now()); };
 			m_desk = std::make_unique<mdDesk::Desk>(port);
 			m_machine.onSysex = [this](const Bytes& _b) { m_in.push_back(_b); };
 		}
@@ -359,15 +360,15 @@ namespace
 		_rig.page(R"({"op":"ready"})");
 		const bool ready = _rig.runUntil([&]
 		{
-			const auto& s = desk.session().state();
+			const auto& s = desk.linkState();
 			return desk.isReady() && s.pattern && s.kit && desk.documents().patterns.count(*s.pattern)
 				&& desk.documents().kits.count(*s.kit) && desk.documents().global;
 		}, 3000);
 		check(ready, "ready: current pattern, its kit and the global settings loaded");
 		if(!ready)
 			return;
-		const auto pattern = *desk.session().state().pattern;
-		const auto kit = *desk.session().state().kit;
+		const auto pattern = *desk.linkState().pattern;
+		const auto kit = *desk.linkState().kit;
 		std::printf("  current pattern %s, kit %u\n", ed::mdPatternName(pattern).c_str(), kit + 1);
 
 		// 1. A trig, through the page command, read back from the firmware.
@@ -403,7 +404,7 @@ namespace
 		check(locked && ed::lockValue(*locked, 0, 12, 5) == uint8_t{33}, "the firmware holds the lock");
 
 		// 3. A working-kit value via the CC path; SAVE KIT is the only way to read it.
-		const auto kitBefore = desk.documents().kits.at(kit);
+		const auto kitBefore = desk.documents().working->kit;
 		const uint8_t newDist = static_cast<uint8_t>((kitBefore.params[0][16] + 17) & 0x7f);
 		_rig.page("{\"op\":\"param\",\"k\":" + std::to_string(kit) + ",\"t\":0,\"i\":16,\"v\":"
 			+ std::to_string(newDist) + "}");
@@ -421,7 +422,7 @@ namespace
 		check(resultOk(_rig), "machine command accepted");
 		_rig.run(80);
 		saved = _rig.saveAndReadKit(kit);
-		const auto& want = desk.documents().kits.at(kit);
+		const auto& want = desk.documents().working->kit;
 		check(saved && saved->models[1] == efm, "track 2 plays EFM-SD");
 		check(saved && saved->params[1] == want.params[1], "all 24 values of track 2 match the desk's kit");
 
@@ -457,7 +458,7 @@ namespace
 		_rig.page(R"({"op":"undo"})");
 		_rig.page(R"({"op":"undo"})");
 		_rig.run(50);
-		const auto undoneTo = desk.documents().kits.at(kit);
+		const auto undoneTo = desk.documents().working->kit;
 		saved = _rig.saveAndReadKit(kit);
 		check(saved && saved->trigGroups[5] == undoneTo.trigGroups[5] && saved->muteGroups[3] == undoneTo.muteGroups[3],
 			"undo restores the groups on the machine");
@@ -471,7 +472,7 @@ namespace
 		check(g && g->routing[7] == 2 && g->tempo == 131 * 24, "routing and tempo live edits land in the global");
 
 		// 8. A song row, pushed and read back.
-		const auto song = desk.session().state().song.value_or(0);
+		const auto song = desk.linkState().song.value_or(0);
 		_rig.runUntil([&] { return desk.documents().songs.count(song) > 0; }, 1000);
 		_rig.page("{\"op\":\"rowInsert\",\"s\":" + std::to_string(song) + ",\"i\":0,\"row\":{\"kind\":\"pattern\","
 			"\"pattern\":" + std::to_string(pattern) + ",\"repeats\":1,\"start\":0,\"end\":16,\"tempo\":null,"
@@ -483,7 +484,7 @@ namespace
 		const auto sgBack = ed::decodeMdSong(m.request(ed::mdSongRequest(song), ed::g_mdSongDump));
 		check(sgBack && sgBack->rows.size() >= 2 && sgBack->rows[0].pattern == pattern && sgBack->rows[0].mutes == 8,
 			"the firmware holds the new song row");
-		check(desk.session().state().songReloadNeeded, "the current song is marked reload-needed");
+		check(desk.linkState().songReloadNeeded, "the current song is marked reload-needed");
 
 		// 9. Pattern select while playing: queued until the sequencer switches.
 		auto next = desk.documents().patterns.at(pattern);
@@ -505,7 +506,7 @@ namespace
 		double statusAt = -1, ramAt = -1, clearedAt = -1;
 		_rig.runUntil([&]
 		{
-			if(statusAt < 0 && desk.session().state().pattern == next.position)
+			if(statusAt < 0 && desk.linkState().pattern == next.position)
 				statusAt = ms(m.now() - q0);
 			if(ramAt < 0 && m.read8(0x28d205) == next.position)
 				ramAt = ms(m.now() - q0);
@@ -528,7 +529,7 @@ namespace
 	{
 		std::puts("== probe: removing a mute/trig group");
 		auto& m = _rig.machine();
-		const auto kit = *_rig.desk().session().state().kit;
+		const auto kit = *_rig.desk().linkState().kit;
 		for(const uint8_t candidate : {uint8_t{0x7f}, uint8_t{0x10}, uint8_t{0x40}, uint8_t{0x0f}})
 		{
 			m.send(ed::mdSetMuteGroup(3, 4));
@@ -589,8 +590,8 @@ namespace
 		auto& m = _rig.machine();
 		auto& desk = _rig.desk();
 		std::puts("== P3 working kit from memory (panel edit, DAW restore)");
-		const auto kit = *desk.session().state().kit;
-		const auto before = desk.documents().kits.at(kit).params[0][2];
+		const auto kit = *desk.linkState().kit;
+		const auto before = desk.documents().working->kit.params[0][2];
 		m.send(ed::mdSetStatus(ed::MdStatus::Track, 0));
 		m.run(40);
 		// DATA ENTRY C on the synthesis page of track 1: five steps, like a finger.
@@ -601,7 +602,7 @@ namespace
 		const auto want = static_cast<uint8_t>(before + 5 * dir);
 		const bool seen = _rig.runUntil([&]
 		{
-			const auto doc = _rig.pageDoc("kit", kit);
+			const auto doc = _rig.pageDoc("workingKit", kit);
 			return doc && doc->find("tracks")->asArray()[0].find("synth")->asArray()[2].asNumber() == want;
 		}, 1000);
 		check(seen, "panel encoder edit shows in the page's kit document");
@@ -620,7 +621,7 @@ namespace
 		rig.page(R"({"op":"ready"})");
 		const bool shown = rig.runUntil([&]
 		{
-			const auto doc = rig.pageDoc("kit", _kit);
+			const auto doc = rig.pageDoc("workingKit", _kit);
 			return doc && doc->find("tracks")->asArray()[0].find("synth")->asArray()[2].asNumber() == _value
 				&& rig.machineDoc() && rig.machineDoc()->find("kit")->find("working")->asString() == "edited";
 		}, 5000);
@@ -636,7 +637,7 @@ namespace
 		auto& m = _rig.machine();
 		auto& desk = _rig.desk();
 		std::puts("== P3 live recording (REC)");
-		const auto pattern = *desk.session().state().pattern;
+		const auto pattern = *desk.linkState().pattern;
 		const auto p = std::to_string(pattern);
 		_rig.page(R"({"op":"stop","id":40})");
 		_rig.run(300);
@@ -680,7 +681,7 @@ namespace
 		// A knob move on track 15 FLTF (effects page, param 12), then its note.
 		_rig.runUntil(stepIs(6), 3000);
 		const auto k0 = m.now();
-		_rig.page("{\"op\":\"param\",\"k\":" + std::to_string(*desk.session().state().kit) + R"(,"t":14,"i":12,"v":99,"id":43})");
+		_rig.page("{\"op\":\"param\",\"k\":" + std::to_string(*desk.linkState().kit) + R"(,"t":14,"i":12,"v":99,"id":43})");
 		check(resultOk(_rig), "knob move accepted while recording");
 		const bool turned = _rig.runUntil([&] { return m.read8(ed::g_mdWorkingKitAddress + ed::g_mdWorkingKitParamsOffset + 14 * 24 + 12) == 99; }, 1500);
 		check(turned, "the knob move reaches the machine as DATA ENTRY turns");
@@ -951,7 +952,7 @@ namespace
 	{
 		auto& m = _rig.machine();
 		std::puts("== P4 live recording: the lock lands where the desk says");
-		const auto slot = *_rig.desk().session().state().pattern;
+		const auto slot = *_rig.desk().linkState().pattern;
 		auto p = *_rig.readPattern(slot);
 		p.length = 16;
 		for(uint8_t t = 0; t < 16; ++t)
@@ -965,8 +966,8 @@ namespace
 		_rig.page("{\"op\":\"load\",\"kind\":\"pattern\",\"slot\":" + std::to_string(slot) + "}");
 		_rig.runUntil([&] { return ed::hasTrig(_rig.desk().documents().patterns.at(slot), 14, 12); }, 2000);
 		_rig.run(300);
-		const auto kit = *_rig.desk().session().state().kit;
-		const int before = _rig.desk().documents().kits.at(kit).params[14][0];
+		const auto kit = *_rig.desk().linkState().kit;
+		const int before = _rig.desk().documents().working->kit.params[14][0];
 		_rig.page(R"({"op":"record","id":940})");
 		_rig.runUntil([&] { return _rig.telemetry().recording; }, 3000);
 		_rig.runUntil([&] { return _rig.telemetry().step == 2; }, 5000);
@@ -1018,8 +1019,8 @@ namespace
 		check(all, "all 64 kits and 128 patterns loaded in the background");
 		const auto kitStatus = [&] { return ed::parseMdStatusResponse(m.request(ed::mdStatusRequest(ed::MdStatus::Kit), 0x72))->value; };
 		const auto readKit = [&](const uint8_t _k) { return *ed::decodeMdKit(m.request(ed::mdKitRequest(_k), ed::g_mdKitDump)); };
-		const auto cur = *desk.session().state().kit;
-		const auto working = desk.documents().kits.at(cur);
+		const auto cur = *desk.linkState().kit;
+		const auto working = desk.documents().working->kit;
 		const auto settle = [&] { _rig.runUntil([&] { return !desk.isBusy(); }, 2000); _rig.run(200); };
 		_rig.page("{\"op\":\"kitCopy\",\"k\":" + std::to_string(cur) + ",\"id\":950}");
 		_rig.page(R"({"op":"kitPaste","k":40,"id":951})");
@@ -1044,7 +1045,7 @@ namespace
 		_rig.page(R"({"op":"kitSaveAs","k":42,"id":956})");
 		settle();
 		check(kitStatus() == 42, "Save as K43: it is the current kit");
-		const auto pat = *desk.session().state().pattern;
+		const auto pat = *desk.linkState().pattern;
 		check(_rig.readPattern(pat)->kit == 42, "and the current pattern links to it (EXTENDED)");
 		_rig.page("{\"op\":\"kitLoad\",\"k\":" + std::to_string(cur) + ",\"force\":true,\"id\":957}");
 		settle();
@@ -1064,7 +1065,7 @@ namespace
 		_rig.page("{\"op\":\"kitRename\",\"k\":" + std::to_string(cur) + ",\"name\":\"LIVE NAME\",\"id\":972}");
 		settle();
 		_rig.run(300);
-		check(kitNameOf(desk.documents().kits.at(cur)) == "LIVE NAME", "rename of the kit that plays: live (0x55), the working kit shows it");
+		check(kitNameOf(desk.documents().working->kit) == "LIVE NAME", "rename of the kit that plays: live (0x55), the working kit shows it");
 		// Patterns.
 		_rig.page("{\"op\":\"patCopy\",\"p\":" + std::to_string(pat) + ",\"id\":958}");
 		_rig.page(R"({"op":"patPaste","p":100,"id":959})");
@@ -1101,16 +1102,16 @@ namespace
 		HwRig(const Bytes& _rom, const std::string& _romName) : m_machine(_rom, _romName)
 		{
 			mdDesk::Desk::Port port;
-			port.sendSysex = [this](const Bytes& _b) { m_out.push(_b); };
-			port.sendKitParam = [this](const uint8_t _t, const uint8_t _i, const uint8_t _v)
+			port.device.sendSysex = [this](const Bytes& _b) { m_out.push(_b); };
+			port.device.sendKitParam = [this](const uint8_t _t, const uint8_t _i, const uint8_t _v)
 			{
 				const md::automation::ParameterChange change{static_cast<uint8_t>(_i == 24 ? md::automation::machinedrum::Level : _i / 8), _t,
 					static_cast<uint8_t>(_i == 24 ? 0 : _i % 8), _v};
 				if(const auto cc = md::automation::encodeParameterChange(md::MachineModel::Machinedrum, change, 0))
 					m_out.push({(*cc)[0], (*cc)[1], (*cc)[2]});
 			};
-			port.sendMute = [this](const uint8_t _t, const bool _on) { m_out.push({static_cast<uint8_t>(0xb0 | (_t >> 2)), static_cast<uint8_t>(12 + (_t & 3)), static_cast<uint8_t>(_on ? 1 : 0)}); };
-			port.pressKey = [this](const std::string& _k)
+			port.device.sendMute = [this](const uint8_t _t, const bool _on) { m_out.push({static_cast<uint8_t>(0xb0 | (_t >> 2)), static_cast<uint8_t>(12 + (_t & 3)), static_cast<uint8_t>(_on ? 1 : 0)}); };
+			port.device.pressKey = [this](const std::string& _k)
 			{
 				if(_k == "play") { m_out.push({0xfa}); return true; }
 				if(_k == "stop") { m_out.push({0xfc}); return true; }
@@ -1125,7 +1126,7 @@ namespace
 				if(t && t->asString() == "result")
 					m_result = _m;
 			};
-			port.nowMs = [this] { return ms(m_machine.now()); };
+			port.device.nowMs = [this] { return ms(m_machine.now()); };
 			m_desk = std::make_unique<mdDesk::Desk>(port, mdDesk::wireProfile());
 			m_machine.onSysex = [this](const Bytes& _b) { if(m_connected) m_toDesk.send(ms(m_machine.now()), _b); };
 		}
@@ -1220,14 +1221,14 @@ namespace
 		hw.page(R"({"op":"ready"})");
 		check(hw.link() == "connect", "HW CONNECT until the machine answers");
 		const auto t0 = m.now();
-		const bool up = hw.runUntil([&] { return hw.link() == "ready" && hw.desk().session().state().pattern && hw.desk().session().state().kit
-			&& hw.desk().documents().patterns.count(*hw.desk().session().state().pattern) && hw.desk().documents().kits.count(*hw.desk().session().state().kit); }, 20000);
+		const bool up = hw.runUntil([&] { return hw.link() == "ready" && hw.desk().linkState().pattern && hw.desk().linkState().kit
+			&& hw.desk().documents().patterns.count(*hw.desk().linkState().pattern) && hw.desk().documents().kits.count(*hw.desk().linkState().kit); }, 20000);
 		std::printf("  status, current pattern and kit over DIN: %.0f ms\n", ms(m.now() - t0));
 		check(up, "HW MIDI: status, the current pattern and its kit read");
 		if(!up)
 			return;
-		const auto pat = *hw.desk().session().state().pattern;
-		const auto kit = *hw.desk().session().state().kit;
+		const auto pat = *hw.desk().linkState().pattern;
+		const auto kit = *hw.desk().linkState().kit;
 		// A grid edit: a pattern dump out, a read-back in, 1.7 s each way.
 		const bool had = ed::hasTrig(hw.desk().documents().patterns.at(pat), 2, 7);
 		auto t1 = m.now();
@@ -1238,7 +1239,7 @@ namespace
 		check(confirmed && ed::hasTrig(hw.desk().documents().patterns.at(pat), 2, 7) != had, "a pattern edit reaches the machine and is read back, no timeout");
 		check(pushMs > 3000, "the timing is the wire's (two 5410-byte dumps at 3125 bytes/s)");
 		// A kit value: a CC, in the machine's working kit.
-		const uint8_t v = static_cast<uint8_t>((hw.desk().documents().kits.at(kit).params[0][16] + 17) & 0x7f);
+		const uint8_t v = static_cast<uint8_t>((hw.desk().documents().working->kit.params[0][16] + 17) & 0x7f);
 		hw.page("{\"op\":\"param\",\"k\":" + std::to_string(kit) + ",\"t\":0,\"i\":16,\"v\":" + std::to_string(v) + ",\"id\":981}");
 		hw.run(300);
 		check(m.read8(ed::g_mdWorkingKitAddress + ed::g_mdWorkingKitParamsOffset + 16) == v, "a kit value goes out as a CC and the machine plays it");
@@ -1306,7 +1307,7 @@ namespace
 		_rig.run(400);
 		std::printf("  MIDI clocks in 0.5 s: TEMPO OUT on %d, off %d\n", on, off);
 		check(on > 10 && off == 0, "TEMPO OUT: the machine sends MIDI clock only when on");
-		const auto gdoc = _rig.pageDoc("global", *_rig.desk().session().state().globalSlot);
+		const auto gdoc = _rig.pageDoc("global", *_rig.desk().linkState().globalSlot);
 		check(gdoc && gdoc->find("control") && !gdoc->find("control")->find("tempoOut")->asBool(), "the page's global document says TEMPO OUT off");
 		_rig.page(R"({"op":"globalSet","field":"programChangeIn","on":true,"id":996})");
 		_rig.runUntil([&] { return !_rig.desk().isBusy(); }, 2000);
@@ -1347,7 +1348,7 @@ int main(const int _argc, char** _argv)
 			bootHold(rom, _argv[1]);
 			Rig rig(rom, _argv[1]);
 			rig.page(R"({"op":"ready"})");
-			rig.runUntil([&] { return rig.desk().isInputReady() && rig.desk().session().state().pattern; }, 5000);
+			rig.runUntil([&] { return rig.desk().isInputReady() && rig.desk().linkState().pattern; }, 5000);
 			mutesTruth(rig);
 			chaining(rig);
 			recLockTruth(rig);
@@ -1369,10 +1370,10 @@ int main(const int _argc, char** _argv)
 					rig.page(R"({"op":"saveKit","id":3})");
 				if(i == 2)
 				{
-					const auto p = std::to_string(*rig.desk().session().state().pattern);
+					const auto p = std::to_string(*rig.desk().linkState().pattern);
 					rig.page("{\"op\":\"trig\",\"p\":" + p + ",\"t\":0,\"s\":3,\"id\":5}");
 					rig.runUntil([&] { return !rig.desk().isBusy(); }, 1000);
-					rig.page("{\"op\":\"param\",\"k\":" + std::to_string(*rig.desk().session().state().kit) + ",\"t\":0,\"i\":16,\"v\":9,\"id\":6}");
+					rig.page("{\"op\":\"param\",\"k\":" + std::to_string(*rig.desk().linkState().kit) + ",\"t\":0,\"i\":16,\"v\":9,\"id\":6}");
 					rig.page(R"({"op":"saveKit","id":7})");
 				}
 				rig.run(300);
@@ -1388,9 +1389,9 @@ int main(const int _argc, char** _argv)
 		}
 		smoke(rig);
 		{
-			const auto kit = *rig.desk().session().state().kit;
+			const auto kit = *rig.desk().linkState().kit;
 			const auto patch = workingKitTruth(rig);
-			restoredKitTruth(rom, _argv[1], patch, kit, rig.desk().documents().kits.at(kit).params[0][2]);
+			restoredKitTruth(rom, _argv[1], patch, kit, rig.desk().documents().working->kit.params[0][2]);
 		}
 		liveRecording(rig);
 		sampleName(rig);

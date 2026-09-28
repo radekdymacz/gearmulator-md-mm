@@ -9,6 +9,7 @@ add_library(mdDesk STATIC)
 
 target_sources(mdDesk PRIVATE
 	mdDesk.cpp mdDesk.h
+	mdDeskAdapter.h
 	mdDeskChain.cpp mdDeskChain.h
 	mdDeskDelivery.cpp mdDeskDelivery.h
 	mdDeskEdit.cpp mdDeskEdit.h
@@ -16,7 +17,6 @@ target_sources(mdDesk PRIVATE
 	mdDeskLibrary.cpp mdDeskLibrary.h
 	mdDeskMachine.cpp mdDeskMachine.h
 	mdDeskModel.cpp mdDeskModel.h
-	mdDeskMod.cpp mdDeskMod.h
 	mdDeskRecord.cpp mdDeskRecord.h
 	mdDeskSetup.cpp mdDeskSetup.h
 	mdDeskTelemetry.h
@@ -30,7 +30,7 @@ set_property(TARGET mdDesk PROPERTY FOLDER "Elektron")
 
 if(BUILD_TESTING)
 	add_executable(mdDeskTest mdDeskTest.cpp)
-	target_link_libraries(mdDeskTest PRIVATE mdDesk)
+	target_link_libraries(mdDeskTest PRIVATE mdDesk deskHost)
 	target_compile_definitions(mdDeskTest PRIVATE MDDESK_SCHEMA="${CMAKE_CURRENT_SOURCE_DIR}/../../../../doc/modern-ux/md-data-contract.schema.json")
 	target_compile_definitions(mdDeskTest PRIVATE
 		MDDESK_TESTDATA_DIR="${CMAKE_CURRENT_SOURCE_DIR}/../elektronData/testdata")

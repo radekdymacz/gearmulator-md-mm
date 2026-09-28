@@ -10,6 +10,7 @@ project(deskCore)
 add_library(deskCore STATIC)
 
 target_sources(deskCore PRIVATE
+	deskAdapter.h
 	deskCapabilities.h
 	deskCommands.cpp deskCommands.h
 	deskCore.h
@@ -18,6 +19,7 @@ target_sources(deskCore PRIVATE
 	deskHistory.h
 	deskLifecycle.cpp deskLifecycle.h
 	deskLoadQueue.h
+	deskMod.cpp deskMod.h
 	deskPacer.h
 	deskPush.h
 	deskRef.h

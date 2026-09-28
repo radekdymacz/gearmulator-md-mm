@@ -21,6 +21,7 @@ namespace mmDesk
 			Ref operator()(const ed::MmKit& _k) const { return {Kind::Kit, _k.position}; }
 			Ref operator()(const ed::MmSong& _s) const { return {Kind::Song, _s.position}; }
 			Ref operator()(const ed::MmGlobal& _g) const { return {Kind::Global, _g.position}; }
+			Ref operator()(const WorkingKit&) const { return {Kind::WorkingKit, 0}; }
 		};
 		return std::visit(Visitor{}, _doc);
 	}
@@ -33,13 +34,14 @@ namespace mmDesk
 		case Kind::Kit: return "kit";
 		case Kind::Song: return "song";
 		case Kind::Global: return "global";
+		case Kind::WorkingKit: return "workingKit";
 		}
 		return "";
 	}
 
 	std::optional<Kind> kindFromName(const std::string& _name)
 	{
-		for(const auto k : {Kind::Pattern, Kind::Kit, Kind::Song, Kind::Global})
+		for(const auto k : {Kind::Pattern, Kind::Kit, Kind::Song, Kind::Global, Kind::WorkingKit})
 			if(_name == kindName(k))
 				return k;
 		return {};
@@ -56,6 +58,8 @@ namespace mmDesk
 				return ed::mmKitToJson(_v);
 			else if constexpr(std::is_same_v<T, ed::MmSong>)
 				return ed::mmSongToJson(_v);
+			else if constexpr(std::is_same_v<T, WorkingKit>)
+				return ed::mmKitToJson(_v.kit);
 			else
 				return ed::mmGlobalToJson(_v);
 		}, _doc);
@@ -74,6 +78,7 @@ namespace mmDesk
 		case Kind::Kit: return find(kits);
 		case Kind::Song: return find(songs);
 		case Kind::Global: return find(globals);
+		case Kind::WorkingKit: return working ? std::optional<Document>(*working) : std::nullopt;
 		}
 		return {};
 	}
@@ -87,6 +92,7 @@ namespace mmDesk
 			void operator()(const ed::MmKit& _k) const { d.kits[_k.position] = _k; }
 			void operator()(const ed::MmSong& _s) const { d.songs[_s.position] = _s; }
 			void operator()(const ed::MmGlobal& _g) const { d.globals[_g.position] = _g; }
+			void operator()(const WorkingKit& _w) const { d.working = _w; }
 		};
 		std::visit(Visitor{*this}, _doc);
 	}
@@ -99,24 +105,19 @@ namespace mmDesk
 		case Kind::Kit: kits.erase(_ref.slot); break;
 		case Kind::Song: songs.erase(_ref.slot); break;
 		case Kind::Global: globals.erase(_ref.slot); break;
+		case Kind::WorkingKit: working.reset(); break;
 		}
 	}
 
-	EditResult apply(const Documents& _docs, const Value& _command, const EditContext& _context)
+	EditResult setDocument(const Documents& _docs, const Value& _command, const EditContext& _context)
 	{
 		EditResult r;
-		const auto* op = _command.find("op");
-		if(!op || !op->isString() || op->asString() != "set")
-		{
-			r.errors.push_back("unknown command " + (op && op->isString() ? op->asString() : std::string()));
-			return r;
-		}
 		const auto* kindValue = _command.find("kind");
 		const auto* doc = _command.find("doc");
 		const auto kind = kindValue && kindValue->isString() ? kindFromName(kindValue->asString()) : std::nullopt;
 		if(!kind)
 		{
-			r.errors.emplace_back("set: kind must be pattern, kit, song or global");
+			r.errors.emplace_back("set: kind must be pattern, kit, workingKit, song or global");
 			return r;
 		}
 		if(!doc)
@@ -131,10 +132,28 @@ namespace mmDesk
 		case Kind::Kit: if(auto v = ed::mmKitFromJson(*doc, r.errors)) after = *v; break;
 		case Kind::Song: if(auto v = ed::mmSongFromJson(*doc, r.errors)) after = *v; break;
 		case Kind::Global: if(auto v = ed::mmGlobalFromJson(*doc, r.errors)) after = *v; break;
+		case Kind::WorkingKit:
+			if(auto v = ed::mmKitFromJson(*doc, r.errors))
+			{
+				if(v->position != _context.currentKit)
+				{
+					r.errors.emplace_back("set: the working kit is the kit that plays");
+					return r;
+				}
+				after = WorkingKit{*v};
+			}
+			break;
 		}
 		if(!after)
 			return r;
-		if(auto problems = std::visit([](const auto& _v) { return ed::validate(_v); }, *after); !problems.empty())
+		const auto problems = std::visit([](const auto& _v)
+		{
+			if constexpr(std::is_same_v<std::decay_t<decltype(_v)>, WorkingKit>)
+				return ed::validate(_v.kit);
+			else
+				return ed::validate(_v);
+		}, *after);
+		if(!problems.empty())
 		{
 			r.errors = std::move(problems);
 			return r;
@@ -147,7 +166,7 @@ namespace mmDesk
 			return r;
 		}
 		if(!(*before == *after))
-			r.changes.push_back({*before, *after, *kind == Kind::Kit && static_cast<int>(ref.slot) != _context.currentKit});
+			r.changes.push_back({*before, *after});
 		return r;
 	}
 
@@ -156,9 +175,8 @@ namespace mmDesk
 		Value m = Value::object();
 		m.set("type", "doc");
 		m.set("kind", kindName(_ref.kind));
-		m.set("slot", _ref.slot);
+		m.set("slot", _ref.kind == Kind::WorkingKit ? std::get<WorkingKit>(_doc).kit.position : _ref.slot);
 		m.set("pending", _pending);
-		m.set("working", _ref.kind == Kind::Kit && (_source == deskCore::Source::Memory || _source == deskCore::Source::Tracked));
 		m.set("source", deskCore::sourceName(_source));
 		m.set("doc", documentToJson(_doc));
 		return m;
@@ -223,4 +241,61 @@ namespace mmDesk
 		return c;
 	}
 
+
+	std::string MmModel::refusal(const deskCore::Lifecycle _l)
+	{
+		using deskCore::Lifecycle;
+		switch(_l)
+		{
+		case Lifecycle::Missing:
+		case Lifecycle::Unsupported: return "No Monomachine OS 1.32B is running.";
+		case Lifecycle::Loading: return "The machine is being prepared. Try again in a moment.";
+		case Lifecycle::Booting:
+		case Lifecycle::Animating: return "The machine is still starting: the editor takes input when its start screen is gone.";
+		case Lifecycle::HwConnecting: return "Waiting for the Monomachine to answer on the plug-in's MIDI in and out.";
+		case Lifecycle::HwLost: return "The Monomachine has not answered for a while. Check the MIDI cables.";
+		case Lifecycle::Ready: break;
+		}
+		return "The engine is not ready yet.";
+	}
+
+	// ---- the command table (MmModel::commands): the model's vocabulary, data only (the adapter maps
+	// its ops to its own functions; the plug-in's commands are deskHost's table) ----
+
+	const CommandTable& MmModel::commands()
+	{
+		using deskCore::Arg;
+		using deskCore::ArgType;
+		using deskCore::Gate;
+		using deskCore::CoreOp;
+		using deskCore::Owner;
+		const Arg p{"p", ArgType::Integer, 0, 127};
+		const Arg kOpt{"k", ArgType::Integer, 0, 127, true};
+		const Arg sOpt{"s", ArgType::Integer, 0, 23, true};
+		const Arg t6{"t", ArgType::Integer, 0, 5};
+		static const CommandTable table({
+			// ---- the core: documents ----
+			{"ready", Owner::Core, Gate::None, -1, {}, "the page is up: everything is published once more", CoreOp::Ready},
+			{"undo", Owner::Core, Gate::Input, -1, {}, "undo the last step (a gesture is one step)", CoreOp::Undo},
+			{"redo", Owner::Core, Gate::Input, -1, {}, "", CoreOp::Redo},
+			{"set", Owner::Core, Gate::Input, -1, {{"kind", ArgType::Text, 0, 0, false, {"pattern", "kit", "workingKit", "song", "global"}},
+				{"doc", ArgType::Object}}, "a whole document as the intent (workingKit: the kit that plays)", CoreOp::Set},
+			// ---- the machine ----
+			{"load", Owner::Machine, Gate::Input, -1, {{"kind", ArgType::Text, 0, 0, false, {"pattern", "kit", "song", "global"}}, {"slot", ArgType::Integer, 0, 127}}, "read a document now"},
+			{"select", Owner::Machine, Gate::Input, -1, {p, {"now", ArgType::Bool, 0, 0, true}},
+				"LOAD PATTERN (at the pattern end while playing; now: STOP, LOAD, PLAY)"},
+			{"loadKit", Owner::Machine, Gate::Input, -1, {kOpt}, "LOAD KIT (the current kit without k)"},
+			{"saveKit", Owner::Machine, Gate::Input, -1, {kOpt}, "SAVE KIT"},
+			{"loadSong", Owner::Machine, Gate::Input, -1, {sOpt}, "LOAD SONG (stopped)"},
+			{"saveSong", Owner::Machine, Gate::Input, -1, {sOpt}, "SAVE SONG"},
+			{"tempo", Owner::Machine, Gate::Input, -1, {{"bpm", ArgType::Number, 30, 300}}, "0x61"},
+			{"play", Owner::Machine, Gate::Input, -1, {}, ""},
+			{"stop", Owner::Machine, Gate::Input, -1, {}, ""},
+			// ---- the editor's setup ----
+			{"modSet", Owner::Setup, Gate::None, -1, {{"doc", ArgType::Object}}, "the app modulators (mm-desk/modulators)"},
+			// ---- the machine ----
+			{"mute", Owner::Machine, Gate::Input, -1, {t6, {"on", ArgType::Bool, 0, 0, true}}, "a synth track's mute"},
+		});
+		return table;
+	}
 }

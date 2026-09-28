@@ -159,6 +159,9 @@ namespace deskCore
 		virtual Outcome submit(const Change& _change, const Documents& _view) = 0;
 		// A machine-owned command (the command table's Owner::Machine).
 		virtual Outcome command(const Value& _command, const Documents& _view) = 0;
+		// Before a machine command runs: a question for the user (ask), or nothing. The core asks
+		// unless the command carries force (the user's answer); the adapter never reads force.
+		virtual Outcome askFor(const Value& _command, const Documents& _view) { (void)_command; (void)_view; return {}; }
 		virtual void onSysex(const Bytes& _message) = 0;
 		virtual void tick(double _nowMs, const Documents& _view) = 0;
 		// The page (re)attached: ask the machine what it holds now.
@@ -202,16 +205,20 @@ namespace deskCore
 			forgetAll();
 		}
 
-		// An edit, undo or redo (the table's Owner::Core).
-		void onCommand(const Value& _message)
+		void undo(const Value& _message) { undoRedo(false, _message); }
+		void redo(const Value& _message) { undoRedo(true, _message); }
+
+		// A pure edit (the table's CoreOp::Edit).
+		void edit(const Value& _message) { run(_message, Model::apply(m_view, _message, m_clipboard, context())); }
+		// A whole document as the intent (CoreOp::Set): the pure transform "replace it with this
+		// validated value".
+		void set(const Value& _message) { run(_message, Model::setDocument(m_view, _message, context())); }
+
+	private:
+		typename Model::Context context() const { return m_machine ? m_machine->context() : typename Model::Context{}; }
+
+		void run(const Value& _message, const typename Model::EditResult& r)
 		{
-			const auto op = opOf(_message);
-			if(op == "undo" || op == "redo")
-			{
-				undoRedo(op == "redo", _message);
-				return;
-			}
-			const auto r = Model::apply(m_view, _message, m_clipboard, m_machine ? m_machine->context() : typename Model::Context{});
 			if(r.clipboard)
 				m_clipboard = *r.clipboard;
 			if(!r.errors.empty() || r.changes.empty() || !m_machine)
@@ -225,8 +232,7 @@ namespace deskCore
 				result(_message, review.errors, {});
 				return;
 			}
-			const auto* force = _message.find("force");
-			if(review.ask && !(force && force->isBool() && force->asBool()))
+			if(review.ask && !forced(_message))
 			{
 				publish(*review.ask);
 				result(_message, {}, {});
@@ -240,11 +246,24 @@ namespace deskCore
 			result(_message, errors, note);
 		}
 
+	public:
+
 		// A machine-owned command: the adapter's outcome becomes the page's result (and ask).
 		void onMachineCommand(const Value& _message)
 		{
 			if(!m_machine)
 				return;
+			if(!forced(_message))
+			{
+				const auto a = m_machine->askFor(_message, m_view);
+				if(a.ask || !a.errors.empty())
+				{
+					if(a.ask)
+						publish(*a.ask);
+					result(_message, a.errors, a.note);
+					return;
+				}
+			}
 			const auto o = m_machine->command(_message, m_view);
 			pump();
 			if(o.ask)
@@ -306,9 +325,7 @@ namespace deskCore
 					Value reset = Value::object();
 					reset.set("type", "reset");
 					publish(reset);
-					const bool ready = m_pageReady;
 					forgetAll();
-					m_pageReady = ready;
 					break;
 				}
 				}
@@ -319,9 +336,10 @@ namespace deskCore
 		void pageReady()
 		{
 			m_pageReady = true;
+			m_pageSeen = true;
 			for(const auto& [ref, s] : m_docs)
 				m_dirty.insert(ref);
-			m_lastMachine.clear();
+			m_lastMachine.reset();
 			if(m_machine)
 				m_machine->pageReady();
 		}
@@ -331,9 +349,9 @@ namespace deskCore
 		// Publish the documents that changed and the machine document when its value changed, then
 		// the results of the commands since the last flush: a page that gets a result already has
 		// the documents it refers to.
-		void flush(const std::function<void(Value&)>& _decorate = {})
+		void flush()
 		{
-			publishDocuments(_decorate);
+			publishDocuments();
 			auto results = std::move(m_results);
 			m_results.clear();
 			for(const auto& r : results)
@@ -341,7 +359,7 @@ namespace deskCore
 		}
 
 	private:
-		void publishDocuments(const std::function<void(Value&)>& _decorate)
+		void publishDocuments()
 		{
 			if(!m_pageReady || !m_machine)
 				return;
@@ -354,12 +372,9 @@ namespace deskCore
 			}
 			m_dirty.clear();
 			auto doc = machineDocument();
-			if(_decorate)
-				_decorate(doc);
-			auto text = elektronData::json::write(doc);
-			if(text == m_lastMachine)
+			if(m_lastMachine && *m_lastMachine == doc)
 				return;
-			m_lastMachine = std::move(text);
+			m_lastMachine = doc;
 			Value m = Value::object();
 			m.set("type", "machine");
 			m.set("doc", std::move(doc));
@@ -384,17 +399,17 @@ namespace deskCore
 			for(const auto& e : m_engines)
 				engines.push(e.toJson());
 			doc.set("engines", std::move(engines));
-			Model::decorate(doc, m_history, *m_machine);
+			Model::decorate(doc, m_history);
 			return doc;
 		}
 
 		// A command's result: published by the next flush, after the documents it changed.
-		void result(const Value& _message, const std::vector<std::string>& _errors, const std::string& _note) const
+		void result(const Value& _message, const std::vector<std::string>& _errors, const std::string& _note)
 		{
 			m_results.push_back(resultMessage(_message, _errors, _note));
 		}
 
-		void publish(const Value& _message) const
+		void publish(const Value& _message)
 		{
 			if(m_pageReady && m_toPage)
 				m_toPage(_message);
@@ -412,7 +427,10 @@ namespace deskCore
 		}
 		const History<Change>& history() const { return m_history; }
 		const Clipboard& clipboard() const { return m_clipboard; }
+		// The one page fact: a page is attached and has said ready (documents go out), and a page
+		// has been up at least once (the machine is polled and read from then on).
 		bool pageReadyNow() const { return m_pageReady; }
+		bool pageSeen() const { return m_pageSeen; }
 		bool anyPending() const
 		{
 			for(const auto& [ref, s] : m_docs)
@@ -467,6 +485,12 @@ namespace deskCore
 			result(_message, errors, note);
 		}
 
+		static bool forced(const Value& _message)
+		{
+			const auto* f = _message.find("force");
+			return f && ((f->isBool() && f->asBool()) || (f->isNumber() && f->asNumber() != 0));
+		}
+
 		void changed(const Ref& _ref)
 		{
 			const auto it = m_docs.find(_ref);
@@ -484,7 +508,7 @@ namespace deskCore
 			m_view = {};
 			m_dirty.clear();
 			m_history.clear();
-			m_lastMachine.clear();
+			m_lastMachine.reset();
 		}
 
 		std::function<void(const Value&)> m_toPage;
@@ -494,9 +518,10 @@ namespace deskCore
 		History<Change> m_history;
 		Clipboard m_clipboard;
 		std::set<Ref> m_dirty;
-		std::string m_lastMachine;
+		std::optional<Value> m_lastMachine;		// the machine document last published
 		bool m_pageReady = false;
+		bool m_pageSeen = false;
 		std::vector<EngineChoice> m_engines;
-		mutable std::vector<Value> m_results;	// results waiting for the flush
+		std::vector<Value> m_results;	// results waiting for the flush
 	};
 }

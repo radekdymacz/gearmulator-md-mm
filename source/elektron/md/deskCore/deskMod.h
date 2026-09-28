@@ -7,7 +7,7 @@
 #include <string>
 #include <vector>
 
-namespace mdDesk
+namespace deskCore
 {
 	// App-only modulation sources (the Control workspace's App LFO and Random rows).
 	// They run in the editor, not in the Machinedrum: on every step of the
@@ -16,8 +16,9 @@ namespace mdDesk
 	// results as CCs, like host automation, within a CC-rate budget. A real
 	// Machinedrum would not play them, and they are not saved in the kit.
 	//
-	// The page owns the setup and sends it whole as "md-desk/modulators" (see
-	// doc/modern-ux/data-contract.md). Pure: no clock, no I/O.
+	// The page owns the setup and sends it whole ("md-desk/modulators", "mm-desk/modulators"; see
+	// doc/modern-ux/data-contract.md). Shared by both editors (P6): a model says what its links
+	// may address (ModLimits). Pure: no clock, no I/O.
 	struct ModSource
 	{
 		enum class Kind : uint8_t
@@ -52,7 +53,7 @@ namespace mdDesk
 
 		std::string source;
 		uint8_t track = 0;
-		uint8_t param = 0;		// kit parameter 0-23
+		uint8_t param = 0;		// the model's kit parameter (MD 0-23; MM DATA page * 8 + index)
 		uint8_t min = 0;
 		uint8_t max = 127;
 		Curve curve = Curve::Lin;
@@ -83,8 +84,17 @@ namespace mdDesk
 	// The mockup marks more than 300 CCs a second as too many for the machine.
 	constexpr int g_modCcPerSecond = 300;
 
-	std::optional<ModSetup> modSetupFromJson(const elektronData::json::Value& _doc, std::vector<std::string>& _errors);
-	elektronData::json::Value modSetupToJson(const ModSetup& _setup);
+	// What a model's links may address, and its setup document's schema name.
+	struct ModLimits
+	{
+		const char* schema = "md-desk/modulators";
+		int maxTrack = 15;
+		int maxParam = 23;
+	};
+
+	std::optional<ModSetup> modSetupFromJson(const elektronData::json::Value& _doc, std::vector<std::string>& _errors,
+		const ModLimits& _limits = {});
+	elektronData::json::Value modSetupToJson(const ModSetup& _setup, const ModLimits& _limits = {});
 
 	struct ModOutput
 	{

@@ -7,43 +7,7 @@ namespace elektronData::json
 {
 	namespace
 	{
-		bool equal(const Value& _a, const Value& _b)
-		{
-			if(_a.type() != _b.type())
-				return false;
-			switch(_a.type())
-			{
-			case Value::Type::Null: return true;
-			case Value::Type::Bool: return _a.asBool() == _b.asBool();
-			case Value::Type::Number: return _a.asNumber() == _b.asNumber();
-			case Value::Type::String: return _a.asString() == _b.asString();
-			case Value::Type::Array:
-			{
-				const auto& a = _a.asArray();
-				const auto& b = _b.asArray();
-				if(a.size() != b.size())
-					return false;
-				for(size_t i = 0; i < a.size(); ++i)
-					if(!equal(a[i], b[i]))
-						return false;
-				return true;
-			}
-			case Value::Type::Object:
-			{
-				const auto& a = _a.asObject();
-				if(a.size() != _b.asObject().size())
-					return false;
-				for(const auto& [k, v] : a)
-				{
-					const auto* o = _b.find(k);
-					if(!o || !equal(v, *o))
-						return false;
-				}
-				return true;
-			}
-			}
-			return false;
-		}
+		bool equal(const Value& _a, const Value& _b) { return _a == _b; }
 
 		bool isType(const Value& _v, const std::string& _t)
 		{

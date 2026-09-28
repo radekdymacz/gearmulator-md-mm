@@ -71,20 +71,20 @@ namespace
 		explicit Rig(const Bytes& _rom) : m(_rom, "mm", {}, true, g_mm)
 		{
 			mmDesk::Desk::Port port;
-			port.sendSysex = [this](const Bytes& _b) { out.push_back(_b); };
-			port.sendParam = [this](const uint8_t _t, const uint8_t _p, const uint8_t _i, const uint8_t _v)
+			port.device.sendSysex = [this](const Bytes& _b) { out.push_back(_b); };
+			port.device.sendParam = [this](const uint8_t _t, const uint8_t _p, const uint8_t _i, const uint8_t _v)
 			{
 				const md::automation::ParameterChange c{_p, _t, _i, _v};
 				if(const auto cc = md::automation::encodeParameterChange(g_mm, c, 0))
 					out.push_back({(*cc)[0], (*cc)[1], (*cc)[2]});
 			};
-			port.sendNrpn = [this](const uint8_t _t, const uint8_t _p, const uint8_t _v)
+			port.device.sendNrpn = [this](const uint8_t _t, const uint8_t _p, const uint8_t _v)
 			{
 				out.push_back({0xb0, 99, _t});
 				out.push_back({0xb0, 98, _p});
 				out.push_back({0xb0, 6, _v});
 			};
-			port.pressKeys = [this](const std::vector<mmDesk::Key>& _keys)
+			port.device.pressKeys = [this](const std::vector<mmDesk::Key>& _keys)
 			{
 				uint64_t at = std::max(m.now(), panel.empty() ? 0 : panel.back().first) + 64;
 				const auto hold = static_cast<uint64_t>(g_rate / 100);	// 10 ms
@@ -111,7 +111,7 @@ namespace
 				return true;
 			};
 			port.toPage = [this](const Value& _v) { g_contract(_v); page.push_back(_v); };
-			port.nowMs = [this] { return ms(); };
+			port.device.nowMs = [this] { return ms(); };
 			desk = std::make_unique<mmDesk::Desk>(port);
 			m.onSysex = [this](const Bytes& _b) { replies.push_back(_b); };
 			m.onBlock = [this]
@@ -263,18 +263,18 @@ namespace
 		auto k = *r.desk->workingKit();
 		const auto kitSlot = k.position;
 		k.tracks[0].pages[2][0] = static_cast<uint8_t>(k.tracks[0].pages[2][0] ^ 0x20);	// FLT BASE
-		r.msg(R"({"op":"set","id":2,"kind":"kit","doc":)" + ed::json::write(ed::mmKitToJson(k)) + "}");
+		r.msg(R"({"op":"set","id":2,"kind":"workingKit","doc":)" + ed::json::write(ed::mmKitToJson(k)) + "}");
 		r.run(400);
 		check(r.desk->workingKit() && r.desk->workingKit()->tracks[0].pages[2][0] == k.tracks[0].pages[2][0],
 			"a kit value reaches the working kit by CC");
 		k.trigPos[2] = 1;
-		r.msg(R"({"op":"set","id":3,"kind":"kit","doc":)" + ed::json::write(ed::mmKitToJson(k)) + "}");
+		r.msg(R"({"op":"set","id":3,"kind":"workingKit","doc":)" + ed::json::write(ed::mmKitToJson(k)) + "}");
 		const auto note = r.lastResult().find("note")->asString();
 		r.run(1500);
 		check(r.desk->workingKit() && r.desk->workingKit()->trigPos[2] == 1, "TRIG POS reaches the working kit (" + note + ")");
 		check(r.desk->kit(kitSlot) && r.desk->kit(kitSlot)->trigPos[2] == 1, "and the stored slot");
 		k.machines[3] = 3;	// SID
-		r.msg(R"({"op":"set","id":4,"kind":"kit","doc":)" + ed::json::write(ed::mmKitToJson(k)) + "}");
+		r.msg(R"({"op":"set","id":4,"kind":"workingKit","doc":)" + ed::json::write(ed::mmKitToJson(k)) + "}");
 		r.run(500);
 		check(r.desk->workingKit() && r.desk->workingKit()->machines[3] == 3, "a machine change by 0x5B");
 
@@ -356,7 +356,7 @@ namespace
 		for(size_t t = 1; t < 6; ++t)
 			k.levels[t] = 0;
 		k.levels[0] = 120;
-		r.msg(R"({"op":"set","kind":"kit","doc":)" + ed::json::write(ed::mmKitToJson(k)) + "}");
+		r.msg(R"({"op":"set","kind":"workingKit","doc":)" + ed::json::write(ed::mmKitToJson(k)) + "}");
 		r.run(800);
 		{
 			const auto& w = *r.desk->workingKit();

@@ -40,7 +40,7 @@ namespace mdDesk
 		if(const auto* m = _doc.find("modulators"))
 		{
 			std::vector<std::string> modErrors;
-			auto mods = modSetupFromJson(*m, modErrors);
+			auto mods = modSetupFromJson(*m, modErrors, g_mdModLimits);
 			for(const auto& e : modErrors)
 				_errors.push_back("$.modulators" + (e.rfind("$", 0) == 0 ? e.substr(1) : ": " + e));
 			if(mods)
@@ -68,7 +68,7 @@ namespace mdDesk
 		json::Value d = json::Value::object();
 		d.set("schema", "md-desk/setup");
 		d.set("version", 1);
-		d.set("modulators", modSetupToJson(_setup.modulators));
+		d.set("modulators", modSetupToJson(_setup.modulators, g_mdModLimits));
 		json::Value k = json::Value::array();
 		for(const auto cc : _setup.knobCcs)
 			k.push(static_cast<int>(cc));

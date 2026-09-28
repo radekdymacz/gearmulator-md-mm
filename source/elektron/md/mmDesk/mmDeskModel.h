@@ -20,31 +20,51 @@
 namespace mmDesk
 {
 	// The Monomachine model for deskCore::Core (P6): the same pipeline as the Machinedrum's.
-	// Its page sends whole documents as the intent ({"op":"set","kind","doc","g"}); apply is
+	// Its page sends whole documents as the intent ({"op":"set","kind","doc","g"}); setDocument is
 	// the pure transform "replace it with this validated value"; undo is the core's.
 	enum class Kind : uint8_t
 	{
 		Pattern,
 		Kit,
 		Song,
-		Global
+		Global,
+		WorkingKit
 	};
 
 	using Ref = deskCore::Ref<Kind>;
-	using Document = std::variant<elektronData::MmPattern, elektronData::MmKit, elektronData::MmSong, elektronData::MmGlobal>;
+
+	// The kit that plays, as its own document (P6): the machine's working copy of the kit it
+	// loaded from slot kit.position. One identity (slot 0 of its kind); Kind::Kit documents are the
+	// stored slots only.
+	struct WorkingKit
+	{
+		elektronData::MmKit kit;
+
+		bool operator==(const WorkingKit& _o) const { return kit == _o.kit; }
+	};
+
+	using Document = std::variant<elektronData::MmPattern, elektronData::MmKit, elektronData::MmSong, elektronData::MmGlobal,
+		WorkingKit>;
 
 	Ref refOf(const Document& _doc);
 	const char* kindName(Kind _k);
 	std::optional<Kind> kindFromName(const std::string& _name);
 	elektronData::json::Value documentToJson(const Document& _doc);
 
-	// Every document the desk shows. For the kit that plays, kits[] holds the working kit.
+	// Every document the desk shows: the stored kit slots, and the kit that plays as the working kit.
 	struct Documents
 	{
 		std::map<uint8_t, elektronData::MmPattern> patterns;
-		std::map<uint8_t, elektronData::MmKit> kits;
+		std::map<uint8_t, elektronData::MmKit> kits;		// stored slots
 		std::map<uint8_t, elektronData::MmSong> songs;
 		std::map<uint8_t, elektronData::MmGlobal> globals;
+		std::optional<WorkingKit> working;
+
+		// The working kit when it is the one loaded from slot _kit.
+		const elektronData::MmKit* workingKitOf(const int _kit) const
+		{
+			return working && working->kit.position == _kit ? &working->kit : nullptr;
+		}
 
 		std::optional<Document> get(const Ref& _ref) const;
 		void set(const Document& _doc);
@@ -53,16 +73,16 @@ namespace mmDesk
 
 	struct Change
 	{
+		// A kit change is a stored-slot dump; a working-kit change a live edit of the kit that plays.
 		Document before;
 		Document after;
-		// Kit changes: false = live edits of the kit that plays; true = a stored-slot dump.
-		bool slotWrite = false;
 
 		Ref ref() const { return refOf(after); }
 	};
 
 	struct Clipboard
 	{
+		bool operator==(const Clipboard&) const { return true; }
 	};
 
 	struct EditContext
@@ -79,13 +99,11 @@ namespace mmDesk
 	};
 
 	// {"op":"set","kind","doc"}: the document, validated (elektronData::validate), replaces the one
-	// the desk shows. Pure.
-	EditResult apply(const Documents& _docs, const elektronData::json::Value& _command, const EditContext& _context);
+	// the desk shows (the working kit is the kit that plays). Pure.
+	EditResult setDocument(const Documents& _docs, const elektronData::json::Value& _command, const EditContext& _context);
 
-	class MmMachine;
-	// A machine command's handler: a function of the Monomachine adapter (the table's handler column).
-	using MachineHandler = deskCore::Outcome (MmMachine::*)(const elektronData::json::Value&, const Documents&);
-	using CommandTable = deskCore::CommandTable<MachineHandler>;
+	// The Monomachine's command vocabulary (P6): data only; the adapter maps its ops to its own functions.
+	using CommandTable = deskCore::CommandTable<>;
 
 	struct MmModel
 	{
@@ -103,18 +121,26 @@ namespace mmDesk
 		static std::optional<Document> get(const Documents& _docs, const Ref& _ref) { return _docs.get(_ref); }
 		static void set(Documents& _docs, const Document& _d) { _docs.set(_d); }
 		static void erase(Documents& _docs, const Ref& _ref) { _docs.erase(_ref); }
-		static EditResult apply(const Documents& _docs, const elektronData::json::Value& _command, const Clipboard&, const Context& _c)
+		// The Monomachine's page edits nothing in small steps: every edit is a whole document (set).
+		static EditResult apply(const Documents&, const elektronData::json::Value& _command, const Clipboard&, const Context&)
 		{
-			return mmDesk::apply(_docs, _command, _c);
+			EditResult r;
+			r.errors.push_back("unknown command " + deskCore::opOf(_command));
+			return r;
 		}
-		// {"type":"doc","kind","slot","pending","working","source","doc"}; working = the kit that plays.
+		static EditResult setDocument(const Documents& _docs, const elektronData::json::Value& _command, const Context& _c)
+		{
+			return mmDesk::setDocument(_docs, _command, _c);
+		}
+		// {"type":"doc","kind","slot","pending","source","doc"}; the working kit's slot is the kit it came from.
 		static elektronData::json::Value docMessage(const Ref& _ref, const Document& _doc, bool _pending, deskCore::Source _source);
-		static void decorate(elektronData::json::Value&, const deskCore::History<Change>&, const deskCore::Machine<MmModel>&) {}
-		// The Monomachine Editor's command vocabulary (mmDeskMachine.cpp: the handler column is the adapter's).
+		static void decorate(elektronData::json::Value&, const deskCore::History<Change>&) {}
+		// The Monomachine Editor's command vocabulary.
 		static const Table& commands();
 		// The OS 1.32B machine table and enumerations as "mm-desk/catalogue".
 		static elektronData::json::Value catalogue();
-		static std::string refusal(deskCore::Lifecycle) { return "The engine is not ready yet."; }
+		// Why a gated command waits.
+		static std::string refusal(deskCore::Lifecycle _l);
 	};
 
 	inline const CommandTable& commandTable() { return MmModel::commands(); }

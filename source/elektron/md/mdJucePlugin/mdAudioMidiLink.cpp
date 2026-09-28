@@ -244,32 +244,35 @@ namespace mdJucePlugin
 		return "audioSet: unknown setting " + *what;
 	}
 
-	bool AudioMidiLink::handle(const json::Value& _message)
+	// The window's audio actions (deskHost's table: the arguments are checked there).
+	bool AudioMidiLink::handle(const deskHost::Action _action, const json::Value& _message)
 	{
-		const auto* op = stringOf(_message, "op");
-		if(!op)
-			return false;
-		if(*op == "audio")
+		using A = deskHost::Action;
+		switch(_action)
 		{
+		case A::AudioPublish:
 			publish();
+			m_toPage(deskCore::resultMessage(_message, {}, {}));
 			return true;
-		}
-		if(*op == "audioMeter")
+		case A::AudioMeter:
 		{
 			const auto* on = _message.find("on");
-			m_meter = on && on->isBool() && on->asBool() && holder();
+			m_meter = on && ((on->isBool() && on->asBool()) || (on->isNumber() && on->asNumber() != 0)) && holder();
 			if(m_meter && !m_inputLevel)
 				m_inputLevel = holder()->deviceManager.getInputLevelGetter();
 			if(!m_meter)
 				m_inputLevel = nullptr;
+			m_toPage(deskCore::resultMessage(_message, {}, {}));
 			return true;
 		}
-		if(*op != "audioSet")
+		case A::AudioSet:
+			m_lastError = apply(_message);
+			m_toPage(deskCore::resultMessage(_message, m_lastError.empty() ? std::vector<std::string>{} : std::vector<std::string>{m_lastError}, {}));
+			publish();
+			return true;
+		default:
 			return false;
-		m_lastError = apply(_message);
-		m_toPage(deskCore::resultMessage(_message, m_lastError.empty() ? std::vector<std::string>{} : std::vector<std::string>{m_lastError}, {}));
-		publish();
-		return true;
+		}
 	}
 
 	void AudioMidiLink::tick()

@@ -43,10 +43,11 @@ namespace mdJucePlugin
 		m_publish(deskCore::resultMessage(_message, _ok ? std::vector<std::string>{} : std::vector<std::string>{_note}, _note));
 	}
 
-	void MidiLearnCommands::handle(const Value& _message)
+	// One function per action (deskHost's table); the table checked the arguments' types and ranges,
+	// the model's record says which tracks and parameters can be learned.
+	void MidiLearnCommands::handle(const deskHost::Action _action, const Value& _message)
 	{
-		const auto* opValue = _message.find("op");
-		const auto op = opValue && opValue->isString() ? opValue->asString() : std::string();
+		using A = deskHost::Action;
 		auto* translator = m_processor.getMidiLearnTranslator();
 		if(!translator)
 		{
@@ -54,14 +55,15 @@ namespace mdJucePlugin
 			return;
 		}
 		const auto target = targetOf(_message);
-		const bool trackOk = target.t >= 0 && target.t < m_model.tracks;
-		const auto name = trackOk ? m_model.parameter(target) : std::string();
-		const auto save = [&](const auto& _preset)
+		const auto name = target.t >= 0 && target.t < m_model.tracks ? m_model.parameter(target) : std::string();
+		const auto save = [&](const pluginLib::MidiLearnPreset& _preset)
 		{
 			translator->setPreset(_preset);
 			m_processor.saveDefaultMidiLearnPreset();
 		};
-		if(op == "learnStart")
+		switch(_action)
+		{
+		case A::LearnStart:
 		{
 			if(name.empty())
 			{
@@ -83,15 +85,16 @@ namespace mdJucePlugin
 				publish();
 			};
 			reply(_message, true, {});
+			break;
 		}
-		else if(op == "learnAdd")
+		case A::LearnAdd:
 		{
 			// A mapping made without LEARN: a controller row x a track's parameter.
 			const int cc = intOf(_message, "cc");
 			const int ch = intOf(_message, "ch", pluginLib::MidiLearnMapping::AllChannels);
-			if(cc < 0 || cc > 127 || name.empty() || (ch > 15 && ch != pluginLib::MidiLearnMapping::AllChannels))
+			if(name.empty() || (ch > 15 && ch != pluginLib::MidiLearnMapping::AllChannels))
 			{
-				reply(_message, false, "learnAdd: expected cc 0-127 and a learnable parameter of a track");
+				reply(_message, false, "learnAdd: a learnable parameter of a track, on channel 1-16 or all");
 				return;
 			}
 			pluginLib::MidiLearnMapping mapping;
@@ -104,16 +107,12 @@ namespace mdJucePlugin
 			preset.addMapping(mapping);
 			save(preset);
 			reply(_message, true, "CC " + std::to_string(cc) + " -> track " + std::to_string(target.t + 1));
+			break;
 		}
-		else if(op == "learnSetCc")
+		case A::LearnSetCc:
 		{
 			// A controller row's CC number changed: its mappings follow it.
 			const int from = intOf(_message, "from"), to = intOf(_message, "to");
-			if(from < 0 || from > 127 || to < 0 || to > 127)
-			{
-				reply(_message, false, "learnSetCc: expected CC numbers 0-127");
-				return;
-			}
 			auto preset = translator->getPreset();
 			for(auto& m : preset.getMappings())
 				if(m.type == pluginLib::MidiLearnMapping::Type::ControlChange && m.controller == from
@@ -121,31 +120,35 @@ namespace mdJucePlugin
 					m.controller = static_cast<uint8_t>(to);
 			save(preset);
 			reply(_message, true, {});
+			break;
 		}
-		else if(op == "learnCancel")
-		{
+		case A::LearnCancel:
 			translator->cancelLearning();
 			translator->onMappingLearned = nullptr;
 			reply(_message, true, {});
-		}
-		else if(op == "learnRemove" || op == "learnInvert")
+			break;
+		case A::LearnRemove:
+		case A::LearnInvert:
 		{
 			auto preset = translator->getPreset();
-			const auto index = intOf(_message, "index");
-			if(index < 0 || static_cast<size_t>(index) >= preset.getMappings().size())
+			const auto index = static_cast<size_t>(intOf(_message, "index"));
+			if(index >= preset.getMappings().size())
 			{
 				reply(_message, false, "learn: no such mapping");
 				return;
 			}
-			if(op == "learnRemove")
-				preset.removeMapping(static_cast<size_t>(index));
+			if(_action == A::LearnRemove)
+				preset.removeMapping(index);
 			else
-				preset.getMappings()[static_cast<size_t>(index)].invert ^= true;
+				preset.getMappings()[index].invert ^= true;
 			save(preset);
 			reply(_message, true, {});
+			break;
 		}
-		else
-			reply(_message, false, "unknown command " + op);
+		default:
+			reply(_message, false, "not a MIDI learn command");
+			return;
+		}
 		publish();
 	}
 

@@ -74,28 +74,45 @@ namespace mdJucePlugin
 		reply(_message, true, {});
 	}
 
-	MidiWire::MidiWire(AudioPluginAudioProcessor& _processor) : m_processor(_processor)
+	void MidiWire::pump(const double _nowMs, const std::function<void(const Bytes&)>& _in)
 	{
+		for(auto& m : m_pacer.take(_nowMs))
+			m_out(m);
+		for(const auto& m : m_in())
+			_in(m);
 	}
 
-	void MidiWire::pump(const std::function<void(const std::vector<uint8_t>&)>& _in)
+	uint8_t MidiWire::realtimeOf(const std::string& _key)
 	{
-		for(auto& m : m_pacer.take(juce::Time::getMillisecondCounterHiRes()))
+		static const std::map<std::string, uint8_t> keys{{"play", 0xfa}, {"stop", 0xfc}};
+		const auto it = keys.find(_key);
+		return it == keys.end() ? 0 : it->second;
+	}
+
+	MidiWire midiWireOf(AudioPluginAudioProcessor& _processor)
+	{
+		auto* p = &_processor;
+		return MidiWire([p](const MidiWire::Bytes& _m)
 		{
 			synthLib::SMidiEvent e(synthLib::MidiEventSource::Editor);
-			if(!m.empty() && m[0] == 0xf0)
-				e.sysex.assign(m.begin(), m.end());
+			if(!_m.empty() && _m[0] == 0xf0)
+				e.sysex.assign(_m.begin(), _m.end());
 			else
 			{
-				e.a = m.size() > 0 ? m[0] : 0;
-				e.b = m.size() > 1 ? m[1] : 0;
-				e.c = m.size() > 2 ? m[2] : 0;
+				e.a = _m.size() > 0 ? _m[0] : 0;
+				e.b = _m.size() > 1 ? _m[1] : 0;
+				e.c = _m.size() > 2 ? _m[2] : 0;
 			}
-			m_processor.sendExternalMidi(e);
-		}
-		std::vector<synthLib::SMidiEvent> in;
-		m_processor.drainExternalMidiIn(in);
-		for(const auto& e : in)
-			_in(std::vector<uint8_t>(e.sysex.begin(), e.sysex.end()));
+			p->sendExternalMidi(e);
+		}, [p]
+		{
+			std::vector<synthLib::SMidiEvent> in;
+			p->drainExternalMidiIn(in);
+			std::vector<MidiWire::Bytes> out;
+			for(const auto& e : in)
+				if(!e.sysex.empty())
+					out.emplace_back(e.sysex.begin(), e.sysex.end());
+			return out;
+		});
 	}
 }

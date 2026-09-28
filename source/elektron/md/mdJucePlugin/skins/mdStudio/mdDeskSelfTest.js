@@ -78,7 +78,7 @@ if (/[?&]selftest=p4(&|$)/.test(location.search)) (async () => {
 	S.viewAll = false; render();
 	log(`lane vs steps: 16 view ${o16} px, ALL ${oAll} px, ALL horizontal scroll ${scroll} px; header ${document.querySelector(".top").scrollWidth} px in ${innerWidth} px`);
 	/* Sampler: a RAM slot the kit does not use is one call to action, undoable. */
-	const kitDoc = () => Docs.kits[currentKitSlot()];
+	const kitDoc = () => kitDocOf(Docs);
 	const n = [1, 2, 3, 4].find(k => !V.tracks.some(t => t.m === "RAM-R" + k));
 	if (n) {
 		S.ws = "sampler"; S.smpSlot = "RAM" + n; render(); await sleep(200);
@@ -249,7 +249,7 @@ if (/[?&]selftest=1/.test(location.search)) (async () => {
 		setTimeout(() => { if (waiter && waiter.done === done) { waiter = null; done(-1); } }, ms);
 	});
 	const log = t => Bridge.log("selftest: " + t);
-	const pat = () => Docs.patterns[currentPatternSlot()], kit = () => Docs.kits[currentKitSlot()];
+	const pat = () => Docs.patterns[currentPatternSlot()], kit = () => kitDocOf(Docs);
 	const idle = () => !(machineState().desk || {}).tx;
 	const status = () => `loaded ${!!(pat() && kit())} lifecycle ${machineState().lifecycle} pattern ${currentPatternSlot()} kit ${currentKitSlot()} docs ${Object.keys(Docs.patterns).length}/${Object.keys(Docs.kits).length}/${Object.keys(Docs.songs).length}`;
 	if (await until(() => pat() && kit() && runs(), 60000) < 0) { log("FAIL: the machine did not load: " + status()); return; }

@@ -1,5 +1,7 @@
 #pragma once
 
+#include "deskHost/deskHost.h"
+
 #include "elektronData/json.h"
 
 #include <functional>
@@ -47,10 +49,9 @@ namespace mdJucePlugin
 		MidiLearnCommands(const MidiLearnCommands&) = delete;
 		MidiLearnCommands& operator=(const MidiLearnCommands&) = delete;
 
-		static bool isLearnCommand(const std::string& _op) { return _op.rfind("learn", 0) == 0; }
-
-		// Handles a learn command: the reply (a result message) and the new document are published.
-		void handle(const Value& _message);
+		// A learn command (deskHost's LearnStart..LearnInvert): the reply (a result message) and the new
+		// document are published.
+		void handle(deskHost::Action _action, const Value& _message);
 		void publish();
 
 	private:

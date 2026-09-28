@@ -48,6 +48,7 @@ namespace mdJucePlugin
 		bool pageReady() const { return m_pageReady; }
 		const juce::String& selfTest() const { return m_selfTest; }
 		void log(const juce::String& _line) const;
+		mutable juce::File m_logFile;
 
 	private:
 		void onBridge(const std::string& _url);
