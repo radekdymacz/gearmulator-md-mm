@@ -11,20 +11,20 @@ function ask(html,btns,cls=""){const d=$("#dlg");d.innerHTML=`<div class="dlgbox
    EMU: the app drives that screen itself (the emulator can press the panel).
    HW: edits queue up until you open the screen and press Send. */
 let pstT;
-function structEdited(){tx();if(S.engine==="emu"){S.patSent="recv";renderPst();clearTimeout(pstT);pstT=setTimeout(()=>{S.patSent="live";renderPst()},650)}else{S.pend++;S.patSent="pend";renderPst()}}
-function soundEdited(){tx();setKitState("edited")}
-function renderPst(){const p=$("#pst");if(!p)return;if(S.engine==="hw"&&S.pend){p.textContent="SEND "+S.pend;p.className="pst warn";p.title="Unsent pattern and song edits. Click to send them."}
+function structEdited(){tx();if(HOST.edited){HOST.edited("struct");return}if(S.engine==="emu"){S.patSent="recv";renderPst();clearTimeout(pstT);pstT=setTimeout(()=>{S.patSent="live";renderPst()},650)}else{S.pend++;S.patSent="pend";renderPst()}}
+function soundEdited(){tx();setKitState("edited");if(HOST.edited)HOST.edited("sound")}
+function renderPst(){if(HOST.renderPst)return HOST.renderPst();const p=$("#pst");if(!p)return;if(S.engine==="hw"&&S.pend){p.textContent="SEND "+S.pend;p.className="pst warn";p.title="Unsent pattern and song edits. Click to send them."}
  else if(S.patSent==="recv"){p.textContent="RECV";p.className="pst";p.title="The emulator is on SYSEX RECV and takes the dump."}else{p.textContent="";p.className="pst"}}
 function sendDialog(){ask(`<div class="lcdbig recv">SYSEX RECV · WAITING…</div><p>The Monomachine only accepts a dump on its SysEx receive screen. <b>${S.pend}</b> edit${S.pend===1?"":"s"} to send.</p>
  <ol class="recvsteps"><li>On the Monomachine press <b>FUNCTION + KIT/SONG</b> (GLOBAL), then <b>FILE › SYSEX RECV</b>.</li><li>Set <b>MODE ORIG</b> and press <b>YES</b>. The screen shows <b>WAITING…</b></li><li>Press <b>Send</b> here. Then press <b>EXIT</b> on the machine.</li></ol>`,
  [["Send now","cream",()=>{S.pend=0;S.patSent="live";renderPst();tx();toast("Sent. The pattern and song slots now match the editor. Press EXIT on the Monomachine.")}],["Later","",()=>{}]],"first")}
 function setKitState(st){S.kitState=st;const s=$("#save");if(!s)return;s.classList.toggle("dirty",st==="edited");s.lastElementChild.textContent=st==="edited"?"edited":"saved";s.title=st==="edited"?"Kit edits are not saved on the machine. They are kept in the DAW project.":"The kit matches its saved slot on the machine."}
-function saveKit(){S.kits[S.kit]={name:S.workName,empty:false,data:captureKit()};setKitState("clean");tx();toast("Saved "+kitName(S.kit)+" on the machine (SAVE KIT). The overwritten kit went to the UNDO KIT slot.")}
+function saveKit(){if(HOST.kit)return HOST.kit("save",S.kit);S.kits[S.kit]={name:S.workName,empty:false,data:captureKit()};setKitState("clean");tx();toast("Saved "+kitName(S.kit)+" on the machine (SAVE KIT). The overwritten kit went to the UNDO KIT slot.")}
 function goPattern(p,now){p=(p+128)%128;if(p===S.pat&&S.queued==null)return;const kitChange=S.patKit[p]!==S.kit,go=now?()=>switchNow(p):()=>queuePattern(p);
  if(kitChange&&S.kitState==="edited"){ask(`<b>${patName(p)}</b> uses kit <b>${kitName(S.patKit[p])}</b>. Your edits to <b>${kitName(S.kit)}</b> are not saved. The Monomachine keeps them in its UNDO KIT slot, but only until the next unsaved switch.`,
   [["Save kit, then switch","cream",()=>{saveKit();go()}],["Switch (edits to UNDO KIT)","danger",go],["Cancel","",()=>{}]]);return}go()}
-function switchNow(p){const was=S.playing;S.queued=null;applyPattern(p);if(was){S.step=-1;toast("Switched now. On the machine this is STOP, LOAD PATTERN, PLAY (not tested).")}}
-function queuePattern(p){if(S.playing){S.queued=p;renderTop();tx();return}applyPattern(p)}
+function switchNow(p){if(HOST.selectPattern)return HOST.selectPattern(p,true);const was=S.playing;S.queued=null;applyPattern(p);if(was){S.step=-1;toast("Switched now. On the machine this is STOP, LOAD PATTERN, PLAY (not tested).")}}
+function queuePattern(p){if(HOST.selectPattern)return HOST.selectPattern(p,false);if(S.playing){S.queued=p;renderTop();tx();return}applyPattern(p)}
 function applyPattern(p){const kc=S.patKit[p]!==S.kit;
  if(p!==S.pat){S.patData[S.pat]=capturePat();S.patInfo[S.pat]={has:curHas(),len:S.len};S.pat=p;applyPat(S.patData[p]||emptyPat(S.patInfo[p].len))}
  S.queued=null;if(kc){S.kit=S.patKit[p];applyKit(kitData(S.kit));S.workName=S.kits[S.kit].name;setKitState("clean");toast("Loaded "+kitName(S.kit)+" with "+patName(p)+".")}autoRange(S.sel);render();H.last=snap();
@@ -37,7 +37,7 @@ function renderTop(){
  $("#platekey span").textContent=S.plate==="mk1"?"MKI":"MKII";
  const n=S.locks.size,m=$("#meter");$("#lockn").textContent=String(n).padStart(2,"0")+"/62";m.className="f meter"+(n>=62?" full":n>=52?" warn":"");
  $("#bpm").textContent=S.bpm.toFixed(1);$("#pat").textContent=patName(S.queued??S.pat);$("#pat").parentElement.classList.toggle("queued",S.queued!=null);
- $("#kitname").textContent=kitName(S.kit);$("#undo").disabled=!H.undo.length;$("#redo").disabled=!H.redo.length;$("#undon").textContent=H.undo.length||"";$("#redon").textContent=H.redo.length||"";
+ $("#kitname").textContent=kitName(S.kit);const hc=HOST.history?HOST.history():{undo:H.undo.length,redo:H.redo.length};$("#undo").disabled=!hc.undo;$("#redo").disabled=!hc.redo;$("#undon").textContent=hc.undo||"";$("#redon").textContent=hc.redo||"";
  $("#play").setAttribute("aria-pressed",S.playing);$("#playico").textContent=S.playing?"■":"▶";$("#play").setAttribute("aria-label",S.playing?"Stop":"Play");$("#rec").setAttribute("aria-pressed",!!S.rec);$("#recled").classList.toggle("on",!!S.rec);
  renderPst()}
 /* line 2: fixed-width slots (as in the MD Editor v46), so values never push into COPY / CLR / PASTE */

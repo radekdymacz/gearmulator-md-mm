@@ -1843,6 +1843,25 @@ function lastNote(t,s){const tr=trk(t);for(let k=s-1;k>=-S.len;k--){const st=tr.
 const patName=p=>"ABCDEFGH"[p>>4]+String((p&15)+1).padStart(2,"0");
 const kitName=k=>"K"+String(k+1).padStart(2,"0")+" "+((k===S.kit?S.workName:S.kits[k].name)||"EMPTY");
 
+/* ===== Host (P6): the seam between this UI and what plays it =====
+   Here the mockup's own example engine plays: a local clock, snapshot undo, a pretend boot.
+   In the plug-in, mmAdapter.js sets window.MMHost before this script runs, and the real
+   machine plays: its transport, its library, its undo (in C++). The UI hands those actions to
+   the host through these calls; a call the host does not have is done the mockup's way.
+     start()                          the page is up
+     edited(what)                     a gesture edited the view: "struct", "sound" or "commit" (it ended)
+     slotWritten(kind, slot)          a library gesture wrote another slot ("kit" | "pattern")
+     undo(), redo(), history()        undo lives with the host; history() = {undo, redo} counts
+     togglePlay(), ownsClock          the machine is the sequencer
+     selectPattern(p, now)            LOAD PATTERN (now: STOP, LOAD PATTERN, PLAY)
+     kit(op, k)                       "save" | "load" | "saveAs" | "reload"
+     tempo(bpm), mutes()              the machine's tempo; the synth tracks' mutes changed
+     playKey(note), joy(xy), learnBind(target, knob)
+     engine(kind), firstRun(), bootScreen(on), renderPst(), engineLabels
+     audioDoc(), audioSend(command), audioMeter(on)   the AUDIO / MIDI panel's devices
+   The view's side, for a host: window.MMView (130-main.js). */
+const HOST=window.MMHost||{};
+
 /* ===== Feedback: toast, TX lamp, dialogs ===== */
 let toastT;function toast(m){const e=$("#toast");e.textContent=m;e.classList.add("on");clearTimeout(toastT);toastT=setTimeout(()=>e.classList.remove("on"),3000)}
 let txT;function tx(){const l=$("#txled");if(!l)return;l.classList.add("on");clearTimeout(txT);txT=setTimeout(()=>l.classList.remove("on"),70)}
@@ -1855,20 +1874,20 @@ function ask(html,btns,cls=""){const d=$("#dlg");d.innerHTML=`<div class="dlgbox
    EMU: the app drives that screen itself (the emulator can press the panel).
    HW: edits queue up until you open the screen and press Send. */
 let pstT;
-function structEdited(){tx();if(S.engine==="emu"){S.patSent="recv";renderPst();clearTimeout(pstT);pstT=setTimeout(()=>{S.patSent="live";renderPst()},650)}else{S.pend++;S.patSent="pend";renderPst()}}
-function soundEdited(){tx();setKitState("edited")}
-function renderPst(){const p=$("#pst");if(!p)return;if(S.engine==="hw"&&S.pend){p.textContent="SEND "+S.pend;p.className="pst warn";p.title="Unsent pattern and song edits. Click to send them."}
+function structEdited(){tx();if(HOST.edited){HOST.edited("struct");return}if(S.engine==="emu"){S.patSent="recv";renderPst();clearTimeout(pstT);pstT=setTimeout(()=>{S.patSent="live";renderPst()},650)}else{S.pend++;S.patSent="pend";renderPst()}}
+function soundEdited(){tx();setKitState("edited");if(HOST.edited)HOST.edited("sound")}
+function renderPst(){if(HOST.renderPst)return HOST.renderPst();const p=$("#pst");if(!p)return;if(S.engine==="hw"&&S.pend){p.textContent="SEND "+S.pend;p.className="pst warn";p.title="Unsent pattern and song edits. Click to send them."}
  else if(S.patSent==="recv"){p.textContent="RECV";p.className="pst";p.title="The emulator is on SYSEX RECV and takes the dump."}else{p.textContent="";p.className="pst"}}
 function sendDialog(){ask(`<div class="lcdbig recv">SYSEX RECV · WAITING…</div><p>The Monomachine only accepts a dump on its SysEx receive screen. <b>${S.pend}</b> edit${S.pend===1?"":"s"} to send.</p>
  <ol class="recvsteps"><li>On the Monomachine press <b>FUNCTION + KIT/SONG</b> (GLOBAL), then <b>FILE › SYSEX RECV</b>.</li><li>Set <b>MODE ORIG</b> and press <b>YES</b>. The screen shows <b>WAITING…</b></li><li>Press <b>Send</b> here. Then press <b>EXIT</b> on the machine.</li></ol>`,
  [["Send now","cream",()=>{S.pend=0;S.patSent="live";renderPst();tx();toast("Sent. The pattern and song slots now match the editor. Press EXIT on the Monomachine.")}],["Later","",()=>{}]],"first")}
 function setKitState(st){S.kitState=st;const s=$("#save");if(!s)return;s.classList.toggle("dirty",st==="edited");s.lastElementChild.textContent=st==="edited"?"edited":"saved";s.title=st==="edited"?"Kit edits are not saved on the machine. They are kept in the DAW project.":"The kit matches its saved slot on the machine."}
-function saveKit(){S.kits[S.kit]={name:S.workName,empty:false,data:captureKit()};setKitState("clean");tx();toast("Saved "+kitName(S.kit)+" on the machine (SAVE KIT). The overwritten kit went to the UNDO KIT slot.")}
+function saveKit(){if(HOST.kit)return HOST.kit("save",S.kit);S.kits[S.kit]={name:S.workName,empty:false,data:captureKit()};setKitState("clean");tx();toast("Saved "+kitName(S.kit)+" on the machine (SAVE KIT). The overwritten kit went to the UNDO KIT slot.")}
 function goPattern(p,now){p=(p+128)%128;if(p===S.pat&&S.queued==null)return;const kitChange=S.patKit[p]!==S.kit,go=now?()=>switchNow(p):()=>queuePattern(p);
  if(kitChange&&S.kitState==="edited"){ask(`<b>${patName(p)}</b> uses kit <b>${kitName(S.patKit[p])}</b>. Your edits to <b>${kitName(S.kit)}</b> are not saved. The Monomachine keeps them in its UNDO KIT slot, but only until the next unsaved switch.`,
   [["Save kit, then switch","cream",()=>{saveKit();go()}],["Switch (edits to UNDO KIT)","danger",go],["Cancel","",()=>{}]]);return}go()}
-function switchNow(p){const was=S.playing;S.queued=null;applyPattern(p);if(was){S.step=-1;toast("Switched now. On the machine this is STOP, LOAD PATTERN, PLAY (not tested).")}}
-function queuePattern(p){if(S.playing){S.queued=p;renderTop();tx();return}applyPattern(p)}
+function switchNow(p){if(HOST.selectPattern)return HOST.selectPattern(p,true);const was=S.playing;S.queued=null;applyPattern(p);if(was){S.step=-1;toast("Switched now. On the machine this is STOP, LOAD PATTERN, PLAY (not tested).")}}
+function queuePattern(p){if(HOST.selectPattern)return HOST.selectPattern(p,false);if(S.playing){S.queued=p;renderTop();tx();return}applyPattern(p)}
 function applyPattern(p){const kc=S.patKit[p]!==S.kit;
  if(p!==S.pat){S.patData[S.pat]=capturePat();S.patInfo[S.pat]={has:curHas(),len:S.len};S.pat=p;applyPat(S.patData[p]||emptyPat(S.patInfo[p].len))}
  S.queued=null;if(kc){S.kit=S.patKit[p];applyKit(kitData(S.kit));S.workName=S.kits[S.kit].name;setKitState("clean");toast("Loaded "+kitName(S.kit)+" with "+patName(p)+".")}autoRange(S.sel);render();H.last=snap();
@@ -1881,7 +1900,7 @@ function renderTop(){
  $("#platekey span").textContent=S.plate==="mk1"?"MKI":"MKII";
  const n=S.locks.size,m=$("#meter");$("#lockn").textContent=String(n).padStart(2,"0")+"/62";m.className="f meter"+(n>=62?" full":n>=52?" warn":"");
  $("#bpm").textContent=S.bpm.toFixed(1);$("#pat").textContent=patName(S.queued??S.pat);$("#pat").parentElement.classList.toggle("queued",S.queued!=null);
- $("#kitname").textContent=kitName(S.kit);$("#undo").disabled=!H.undo.length;$("#redo").disabled=!H.redo.length;$("#undon").textContent=H.undo.length||"";$("#redon").textContent=H.redo.length||"";
+ $("#kitname").textContent=kitName(S.kit);const hc=HOST.history?HOST.history():{undo:H.undo.length,redo:H.redo.length};$("#undo").disabled=!hc.undo;$("#redo").disabled=!hc.redo;$("#undon").textContent=hc.undo||"";$("#redon").textContent=hc.redo||"";
  $("#play").setAttribute("aria-pressed",S.playing);$("#playico").textContent=S.playing?"■":"▶";$("#play").setAttribute("aria-label",S.playing?"Stop":"Play");$("#rec").setAttribute("aria-pressed",!!S.rec);$("#recled").classList.toggle("on",!!S.rec);
  renderPst()}
 /* line 2: fixed-width slots (as in the MD Editor v46), so values never push into COPY / CLR / PASTE */
@@ -2390,7 +2409,7 @@ function renderPerform(){const pm=PMODES.find(p=>p[0]===S.mode),t=asgT(),tr=S.tr
  syncControls();redraw()}
 let kbDown=null,lampT={};
 function flashTracks(ts){ts.forEach(i=>{const l=$(`[data-lamp="${i}"]`);if(!l)return;l.classList.add("on");clearTimeout(lampT[i]);lampT[i]=setTimeout(()=>l.classList.remove("on"),160)})}
-function playKey(n){$$(".kb .dn").forEach(k=>k.classList.remove("dn"));$(`.kb [data-key="${n}"]`)?.classList.add("dn");const info=$("#kbinfo");let ts=[],msg="";
+function playKey(n){if(HOST.playKey)return HOST.playKey(n);$$(".kb .dn").forEach(k=>k.classList.remove("dn"));$(`.kb [data-key="${n}"]`)?.classList.add("dn");const info=$("#kbinfo");let ts=[],msg="";
  if(S.mode==="normal"||S.mode==="poly"){const t=asgT();ts=[t];msg=`${S.mode==="poly"?"POLY ":""}T${t+1} ${noteName(n)}`}
  else if(S.mode==="multi"){const m=S.multi.mode;if(m===0){ts=[0,1,2,3,4,5];msg=`All tracks ${noteName(n)}`}else if(m===1){const up=n>=S.multi.splitKey,a=S.multi.splitTrack-1;ts=up?[0,1,2,3,4,5].filter(i=>i>=a):[0,1,2,3,4,5].filter(i=>i<a);msg=`${up?"Upper":"Lower"} zone ${noteName(n)}`}
   else{S.mtTrn=n-60;msg=`${m===2?"Restart":"Transpose"} pattern ${S.mtTrn>=0?"+":""}${S.mtTrn}${S.multi.timing?" at the next "+TIMS[S.multi.timing]:""}`;if(!S.playing)togglePlay();else if(m===2){S.step=-1}ts=[0,1,2,3,4,5]}}
@@ -2417,7 +2436,7 @@ setInterval(()=>{const r=$("#ccrate");if(r){r.textContent=`${S.ctl.sent}/s`;r.cl
 function ctlTick(){S.ctl.phase++;S.ctl.sources.forEach(sr=>{const n=RATES[sr.RATE]||8;
  if(sr.kind==="lfo"){const ph=(S.ctl.phase%n)/n;sr.val=clamp(Math.round(64+lshape(sr.SHAPE,ph)*63*sr.DEPTH/100));applySrc(sr)}
  if(sr.kind==="rnd"){if(S.ctl.phase%n===0)sr._t=Math.round(Math.random()*127);const a=1-sr.SMOOTH/140;sr.val=clamp(Math.round(sr.val+(sr._t-sr.val)*a));applySrc(sr)}});if(S.ws==="control")ctlRefresh()}
-function learnBind(k){const lt=S.learnT;if(!lt)return;const id="cc"+(20+k);if(S.ctl.links.some(l=>l.src===id&&l.t===lt.t&&l.pid===lt.pid)){toast("Already mapped.");return}
+function learnBind(k){const lt=S.learnT;if(!lt)return;if(HOST.learnBind)HOST.learnBind(lt,k);const id="cc"+(20+k);if(S.ctl.links.some(l=>l.src===id&&l.t===lt.t&&l.pid===lt.pid)){toast("Already mapped.");return}
  S.ctl.links.push({src:id,t:lt.t,pid:lt.pid,min:0,max:127,curve:"lin",inv:false});S.learnT=null;S.ctl.sel=id;syncControls();toast(`Knob ${k} (CC ${20+k}) → ${tLabel(lt.t)} ${pidLabel(lt.t,lt.pid)}.`);if(S.ws==="control")render()}
 const ALLT=[0,1,2,3,4,5,6,7,8,9,10,11];
 function targetOpts(t){return pagesOf(t).flatMap(pg=>pnames(t,pg).map((n,i)=>n?opt(pg+"."+i,pg+" "+n,""):"")).join("")}
@@ -2622,36 +2641,36 @@ addEventListener("resize",()=>{if(LIB.open)placeLib()});
 function relinkCur(k){S.patKit[S.pat]=k}
 
 /* ----- kit actions (all editor state, so all undoable) ----- */
-function kitLoad(k){if(k===S.kit){if(S.kitState==="edited")kitReload();else toast(kitName(k)+" is already the current kit.");return}
+function kitLoad(k){if(HOST.kit)return HOST.kit("load",k);if(k===S.kit){if(S.kitState==="edited")kitReload();else toast(kitName(k)+" is already the current kit.");return}
  const go=()=>{S.kit=k;applyKit(kitData(k));S.workName=S.kits[k].name;relinkCur(k);setKitState("clean");tx();render();drawLib(true);toast("Loaded "+kitName(k)+". "+patName(S.pat)+" now uses it.")};
  if(S.kitState==="edited"){ask(`Load <b>${kitName(k)}</b>? Your edits to <b>${kitName(S.kit)}</b> are not saved on the machine. They go to its UNDO KIT.`,[["Save kit, then load","cream",()=>{saveKit();go()}],["Load (edits to UNDO KIT)","danger",go],["Cancel","",()=>drawLib(true)]]);return}go()}
 function kitSave(){saveKit();drawLib(true)}
-function kitSaveAs(k){if(k===S.kit){kitSave();return}
+function kitSaveAs(k){if(HOST.kit)return HOST.kit("saveAs",k);if(k===S.kit){kitSave();return}
  const go=()=>{const from=S.kit;S.kits[k]={name:S.workName,empty:false,data:captureKit()};S.kit=k;relinkCur(k);setKitState("clean");tx();render();drawLib(true);toast("Saved as "+kitName(k)+". It is now the current kit; K"+nn(from)+" keeps its saved version.")};
  if(!S.kits[k].empty){ask(`Overwrite <b>${kitName(k)}</b> with the current kit <b>${kitName(S.kit)}</b>? The machine keeps the overwritten kit in its UNDO KIT.`,[["Overwrite","danger",go],["Cancel","",()=>drawLib(true)]]);return}go()}
 function kitSrc(k){return k===S.kit?{from:k,name:S.workName,empty:false,data:captureKit()}:{from:k,name:S.kits[k].name,empty:S.kits[k].empty,data:S.kits[k].data?clone(S.kits[k].data):null}}
 function kitCopy(k){LCLIP={type:"kit",...kitSrc(k)};drawLib(true);toast("Copied "+kitName(k)+(k===S.kit&&S.kitState==="edited"?" with its unsaved edits.":"."))}
 function kitPut(k,src,verb){if(src.from===k){toast("That is the same slot.");return}
- const go=()=>{S.kits[k]={name:src.name,empty:src.empty,data:src.data?clone(src.data):src.empty?null:kitData(src.from)};if(k===S.kit){applyKit(kitData(k));S.workName=S.kits[k].name;setKitState("clean")}structEdited();render();drawLib(true);toast(verb+" K"+nn(src.from)+" into "+kitName(k)+" (kit dump through SYSEX RECV).")};
+ const go=()=>{S.kits[k]={name:src.name,empty:src.empty,data:src.data?clone(src.data):src.empty?null:kitData(src.from)};if(k===S.kit){applyKit(kitData(k));S.workName=S.kits[k].name;setKitState("clean")}if(HOST.slotWritten)HOST.slotWritten("kit",k);structEdited();render();drawLib(true);toast(verb+" K"+nn(src.from)+" into "+kitName(k)+" (kit dump through SYSEX RECV).")};
  const busy=!S.kits[k].empty||k===S.kit;if(busy){ask(`${verb} <b>K${nn(src.from)} ${escH(src.name||"EMPTY")}</b> over <b>${kitName(k)}</b>?${k===S.kit?" It is the current kit"+(S.kitState==="edited"?": its unsaved edits are lost.":", so it is loaded too."):""}`,[["Overwrite","danger",go],["Cancel","",()=>drawLib(true)]]);return}go()}
 function kitPaste(k){if(LCLIP?.type!=="kit"){toast("Copy a kit first.");return}kitPut(k,LCLIP,"Paste")}
 function kitClear(k){if(S.kits[k].empty&&k!==S.kit){toast(kitName(k)+" is already empty.");return}
- ask(`Clear <b>${kitName(k)}</b>?${k===S.kit?" It is the current kit: all six tracks go back to GND-SIN"+(S.kitState==="edited"?" and the unsaved edits are lost.":"."):""}${linked(k).length?" "+linked(k).length+" pattern(s) link to it.":""}`,[["Clear kit","danger",()=>{S.kits[k]={name:"",empty:true,data:null};if(k===S.kit){applyKit(clearedKit());S.workName="";setKitState("clean")}structEdited();render();drawLib(true);toast("Cleared K"+nn(k)+".")}],["Cancel","",()=>drawLib(true)]])}
-function kitReload(){if(S.kitState!=="edited"){toast(kitName(S.kit)+" matches its saved slot. Nothing to reload.");return}
+ ask(`Clear <b>${kitName(k)}</b>?${k===S.kit?" It is the current kit: all six tracks go back to GND-SIN"+(S.kitState==="edited"?" and the unsaved edits are lost.":"."):""}${linked(k).length?" "+linked(k).length+" pattern(s) link to it.":""}`,[["Clear kit","danger",()=>{S.kits[k]={name:"",empty:true,data:null};if(k===S.kit){applyKit(clearedKit());S.workName="";setKitState("clean")}if(HOST.slotWritten)HOST.slotWritten("kit",k);structEdited();render();drawLib(true);toast("Cleared K"+nn(k)+".")}],["Cancel","",()=>drawLib(true)]])}
+function kitReload(){if(HOST.kit)return HOST.kit("reload",S.kit);if(S.kitState!=="edited"){toast(kitName(S.kit)+" matches its saved slot. Nothing to reload.");return}
  ask(`Reload <b>${kitName(S.kit)}</b> from the machine? Your edits go to its UNDO KIT.`,[["Reload (discard edits)","danger",()=>{applyKit(kitData(S.kit));S.workName=S.kits[S.kit].name;setKitState("clean");tx();render();drawLib(true);toast("Reloaded "+kitName(S.kit)+" from the machine.")}],["Cancel","",()=>drawLib(true)]])}
 function startRename(k){if(LIB.open!=="kit")return;LIB.sel=k;LIB.renaming=k;drawLib(true)}
 function finishRename(ok){const k=LIB.renaming;if(k==null)return;const v=($("#lsin")?.value||"").toUpperCase().replace(KBAD,"").slice(0,KNAME).trimEnd();LIB.renaming=null;
- if(ok&&v!==kDisp(k)){if(k===S.kit){S.workName=v;setKitState("edited");tx();toast("Renamed the working kit (SysEx 0x55). SAVE stores the name on the machine.")}else{const s=S.kits[k];if(s.empty&&!s.data)s.data=clearedKit();s.empty=false;s.name=v;structEdited();toast("Renamed K"+nn(k)+" (kit dump through SYSEX RECV).")}renderTop()}
+ if(ok&&v!==kDisp(k)){if(k===S.kit){S.workName=v;setKitState("edited");tx();toast("Renamed the working kit (SysEx 0x55). SAVE stores the name on the machine.")}else{const s=S.kits[k];if(s.empty&&!s.data)s.data=clearedKit();s.empty=false;s.name=v;if(HOST.slotWritten)HOST.slotWritten("kit",k);structEdited();toast("Renamed K"+nn(k)+" (kit dump through SYSEX RECV).")}renderTop()}
  drawLib(true)}
 /* ----- pattern actions ----- */
 function patSrc(p){return{from:p,has:hasPat(p),kit:S.patKit[p],data:p===S.pat?capturePat():clone(S.patData[p]||emptyPat(S.patInfo[p].len))}}
 function patCopy(p){LCLIP={type:"pat",...patSrc(p)};drawLib(true);toast("Copied "+patName(p)+": notes, locks, arp, transpose, swing, slide and its kit link.")}
 function patPut(p,src,verb){if(src.from===p){toast("That is the same slot.");return}
- const go=()=>{const d=clone(src.data);S.patData[p]=d;S.patInfo[p]={has:src.has,len:d.len};S.patKit[p]=src.kit;if(p===S.pat)applyPat(d);structEdited();render();drawLib(true);toast(verb+" "+patName(src.from)+" into "+patName(p)+" (pattern dump through SYSEX RECV).")};
+ const go=()=>{const d=clone(src.data);S.patData[p]=d;S.patInfo[p]={has:src.has,len:d.len};S.patKit[p]=src.kit;if(p===S.pat)applyPat(d);if(HOST.slotWritten)HOST.slotWritten("pattern",p);structEdited();render();drawLib(true);toast(verb+" "+patName(src.from)+" into "+patName(p)+" (pattern dump through SYSEX RECV).")};
  if(hasPat(p)){ask(`${verb} <b>${patName(src.from)}</b> over <b>${patName(p)}</b>? Its notes and locks are replaced.`,[["Overwrite","danger",go],["Cancel","",()=>drawLib(true)]]);return}go()}
 function patPaste(p){if(LCLIP?.type!=="pat"){toast("Copy a pattern first.");return}patPut(p,LCLIP,"Paste")}
 function patClear(p){if(!hasPat(p)){toast(patName(p)+" is already empty.");return}
- ask(`Clear <b>${patName(p)}</b>? Its notes and locks are removed. It keeps its kit link, as on the machine.`,[["Clear pattern","danger",()=>{const e=emptyPat(patLen(p));S.patData[p]=e;S.patInfo[p]={has:false,len:e.len};if(p===S.pat)applyPat(e);structEdited();render();drawLib(true);toast("Cleared "+patName(p)+".")}],["Cancel","",()=>drawLib(true)]])}
+ ask(`Clear <b>${patName(p)}</b>? Its notes and locks are removed. It keeps its kit link, as on the machine.`,[["Clear pattern","danger",()=>{const e=emptyPat(patLen(p));S.patData[p]=e;S.patInfo[p]={has:false,len:e.len};if(p===S.pat)applyPat(e);if(HOST.slotWritten)HOST.slotWritten("pattern",p);structEdited();render();drawLib(true);toast("Cleared "+patName(p)+".")}],["Cancel","",()=>drawLib(true)]])}
 function patGo(p,now){LIB.sel=p;if(p===S.pat&&S.queued==null){drawLib(true);return}goPattern(p,now);drawLib(true)}
 function libAct(a){const k=LIB.sel,kit=LIB.open==="kit";
  ({close:()=>closeLib(true),load:()=>kitLoad(k),save:kitSave,saveas:()=>kitSaveAs(k),reload:kitReload,rename:()=>startRename(k),
@@ -2789,9 +2808,9 @@ const AUD={schema:"gm-audio/devices",version:1,standalone:true,driver:{id:"CoreA
  latencyMs:11.3,running:true,midiInputs:[{id:"iac",name:"IAC Driver Bus 1",on:false},{id:"tm1",name:"Elektron TM-1",on:true}],
  midiOutput:{id:"",list:[{id:"iac",name:"IAC Driver Bus 1"},{id:"tm1",name:"Elektron TM-1"}]},bluetooth:true,error:""};
 let audMeterT=0;
-function audioDoc(){return AUD}
-function audioMeter(on){clearInterval(audMeterT);if(on)audMeterT=setInterval(()=>audioLevel(!AUD.input.id?0:(AUD.input.muted?.01:.04)+Math.random()*.12),120)}
-function audioSend(c){const D=AUD,say=t=>typeof toast==="function"&&toast(t);
+function audioDoc(){return HOST.audioDoc?HOST.audioDoc():AUD}
+function audioMeter(on){if(HOST.audioMeter)return HOST.audioMeter(on);clearInterval(audMeterT);if(on)audMeterT=setInterval(()=>audioLevel(!AUD.input.id?0:(AUD.input.muted?.01:.04)+Math.random()*.12),120)}
+function audioSend(c){if(HOST.audioSend)return HOST.audioSend(c);const D=AUD,say=t=>typeof toast==="function"&&toast(t);
  if(c.do==="test"){say("Test tone on "+D.output.id);return}
  if(c.do==="bluetooth"){say("The system's Bluetooth MIDI dialog opens here");return}
  if(c.set==="output"){D.output.id=c.device;const n=c.device==="Audient iD14"?4:2;D.outputChannels=Array.from({length:n},(_,i)=>({name:"Output "+(i+1),on:i<2}))}
@@ -2812,9 +2831,9 @@ function snap(){return JSON.stringify({tracks:S.tracks.map(packT),midi:S.midi.ma
  routing:S.routing,multi:S.multi,menv:S.menv,mmap:S.mmap,mode:S.mode,links:S.ctl.links,kitState:S.kitState,kits:S.kits,patData:S.patData,patInfo:S.patInfo,patKit:S.patKit,kit:S.kit,workName:S.workName},(k,v)=>v===Infinity?"∞":v)}
 function restore(str){const o=JSON.parse(str,(k,v)=>v==="∞"?Infinity:v);S.tracks=o.tracks.map(unpackT);S.midi=o.midi.map(unpackT);S.locks=new Map(o.locks.map(([k,m])=>[k,new Map(m)]));
  Object.assign(S,{song:o.song,len:o.len,mult:o.mult,swingAmt:o.swingAmt,patTrn:o.patTrn,routing:o.routing,multi:o.multi,menv:o.menv,mmap:o.mmap,mode:o.mode});S.ctl.links=o.links||[];setKitState(o.kitState);if(o.kits){S.kits=o.kits;S.patData=o.patData;S.patInfo=o.patInfo;S.patKit=o.patKit;S.kit=o.kit;S.workName=o.workName;drawLib()}}
-function commit(){if(laneDraw||rollDrag||drag||active||arpDrag)return;const cur=snap();if(H.last==null){H.last=cur;return}if(cur!==H.last){H.undo.push(H.last);if(H.undo.length>200)H.undo.shift();H.redo=[];H.last=cur;renderTop()}}
-function undo(){if(!H.undo.length){toast("Nothing to undo.");return}H.redo.push(snap());const prev=H.undo.pop();restore(prev);H.last=prev;tx();render();toast("Undo")}
-function redo(){if(!H.redo.length){toast("Nothing to redo.");return}H.undo.push(snap());const nx=H.redo.pop();restore(nx);H.last=nx;tx();render();toast("Redo")}
+function commit(){if(laneDraw||rollDrag||drag||active||arpDrag)return;if(HOST.edited){HOST.edited("commit");return}const cur=snap();if(H.last==null){H.last=cur;return}if(cur!==H.last){H.undo.push(H.last);if(H.undo.length>200)H.undo.shift();H.redo=[];H.last=cur;renderTop()}}
+function undo(){if(HOST.undo)return HOST.undo();if(!H.undo.length){toast("Nothing to undo.");return}H.redo.push(snap());const prev=H.undo.pop();restore(prev);H.last=prev;tx();render();toast("Undo")}
+function redo(){if(HOST.redo)return HOST.redo();if(!H.redo.length){toast("Nothing to redo.");return}H.undo.push(snap());const nx=H.redo.pop();restore(nx);H.last=nx;tx();render();toast("Redo")}
 ["pointerup","keyup","click","change"].forEach(ev=>document.addEventListener(ev,()=>setTimeout(commit,0)));
 
 /* ===== COPY CLEAR PASTE, per workspace, as the manual scopes them ===== */
@@ -2840,7 +2859,7 @@ function secAction(kind){const t=S.sel,tr=trk(t),e2melody=false;
  toast("Copy, clear and paste work in Sequence (page), Notes (melody), Sound (machine), Perform (assign) and Song (row).")}
 
 /* ===== First run: firmware needed ===== */
-function firstRun(){ask(`<div class="lcdbig">MONOMACHINE FIRMWARE NEEDED</div>
+function firstRun(){if(HOST.firstRun)return HOST.firstRun();ask(`<div class="lcdbig">MONOMACHINE FIRMWARE NEEDED</div>
  <p>Monomachine Editor runs the real Monomachine operating system. Elektron's firmware cannot ship with the app, so you add the one from your own machine.</p>
  <ol class="recvsteps"><li>Dump the <b>OS 1.32B</b> flash image from your Monomachine (8 MiB, <span class="mono">.bin</span>).</li><li>Drop it here. The editor checks its size and fingerprint.</li><li>It stays on this computer only.</li></ol>
  <label class="drop" id="drop" tabindex="0"><input type="file" id="romfile" accept=".bin" hidden><span id="droptxt">Drop the .bin here, or click to choose it</span></label>
@@ -2896,7 +2915,7 @@ function endDrag(e){if(cord){cordEnd(e);return}if(rollDrag)rollUp();if(active){a
 main.addEventListener("pointerup",endDrag);main.addEventListener("pointercancel",endDrag);
 function joyAt(e){const r=$("#joy").getBoundingClientRect();S.joy={x:clamp((e.clientX-r.left)/r.width*2-1,-1,1),y:clamp(1-(e.clientY-r.top)/r.height*2,-1,1)};const k=$("#knobj");k.style.left=(50+S.joy.x*42)+"%";k.style.top=(50-S.joy.y*42)+"%";
  const tr=S.tracks[asgT()],A=tr.assign,rows=A.tabs[S.asTab];const amt=S.asTab==="JOY U"?Math.max(0,S.joy.y):S.asTab==="JOY D"?Math.max(0,-S.joy.y):A.mirr?S.joy.x:Math.max(0,S.joy.x);
- $("#kbinfo")&&($("#kbinfo").textContent=rows.map(r=>`${LPAGES[r.pg]} ${destNames(asgT(),r.pg)[r.d]} ${Math.round((r.add-64)*amt)>=0?"+":""}${Math.round((r.add-64)*amt)}`).join(" · "));tx()}
+ $("#kbinfo")&&($("#kbinfo").textContent=rows.map(r=>`${LPAGES[r.pg]} ${destNames(asgT(),r.pg)[r.d]} ${Math.round((r.add-64)*amt)>=0?"+":""}${Math.round((r.add-64)*amt)}`).join(" · "));tx();if(HOST.joy)HOST.joy(S.joy)}
 function renderArp(){const el=$("#arptrack");if(!el)return;const a=trk(S.sel).arp;el.innerHTML=arpCells(a);$$(".arplenrow button").forEach((b,k)=>b.classList.toggle("on",k<a.len));const c2=$("#arpcap");if(c2)c2.textContent="Rhythm + offset · "+a.len+" steps";$$(".mrowg .rowst").length&&0;redraw()}
 main.addEventListener("wheel",e=>{
  const el=e.target.closest(".pc[data-g],.fader[data-g]");if(el){e.preventDefault();const d=(e.deltaY||e.deltaX)<0?1:-1;setV(el,getV(el)+d*(e.shiftKey?10:1));return}
@@ -2912,8 +2931,8 @@ function setSide(sd){S.side=sd;select(S.sel%6+(sd==="midi"?6:0))}
 function select(t){S.sel=t;autoRange(t);const pg=S.lane.split(".")[0];if(isMidiT(t)){if(pg!=="MID"){S.lane="MID.1";S.lanePage="MID"}}else if(pg==="MID"||!pname(t,S.lane)){S.lane="FLT.1";S.lanePage="FLT"}render()}
 document.addEventListener("click",e=>{
  const mu=e.target.closest("[data-mute]"),so=e.target.closest("[data-solo]");
- if(mu||so){const i=+(mu||so).dataset[mu?"mute":"solo"],t=trk(i);if(mu)t.mute=!t.mute;else t.solo=!t.solo;tx();render();return}
- const gm=e.target.closest("[data-gmute]");if(gm){const t=trk(+gm.dataset.gmute);t.mute=!t.mute;tx();render();return}
+ if(mu||so){const i=+(mu||so).dataset[mu?"mute":"solo"],t=trk(i);if(mu)t.mute=!t.mute;else t.solo=!t.solo;tx();if(HOST.mutes)HOST.mutes();render();return}
+ const gm=e.target.closest("[data-gmute]");if(gm){const t=trk(+gm.dataset.gmute);t.mute=!t.mute;tx();if(HOST.mutes)HOST.mutes();render();return}
  const ev=e.target.closest("[data-env]");if(ev){clickEnv(ev.dataset.env,+ev.dataset.s);return}
  const sd=e.target.closest("[data-side]");if(sd){setSide(sd.dataset.side);return}
  const dk=e.target.closest("[data-dock]");if(dk){S.dock=dk.dataset.dock;rerenderSeq();return}
@@ -2982,7 +3001,7 @@ document.addEventListener("click",e=>{
 document.addEventListener("change",e=>{const id=e.target.id,v=e.target.value,tr=trk(S.sel);
  if(id==="romfile"){checkRom(e.target.files[0]);return}
  if(id==="engsel"){const btn=document.querySelector(".lcdeng");if(v==="audio"){e.target.value=S.engine;btn.querySelector("span").textContent=e.target.selectedOptions[0].text;openAudio();return}if(v==="rom"){e.target.value=S.engine;btn.querySelector("span").textContent=e.target.selectedOptions[0].text;firstRun();return}
-  S.engine=v;S.pend=0;renderPst();startEngine(v);return}
+  S.engine=v;S.pend=0;renderPst();if(HOST.engine)HOST.engine(v);else startEngine(v);return}
  let m=id.match(/^lp(\d)$/);if(m){const l=V("LF"+m[1]);l[0]=+v;l[1]=0;soundEdited();render();return}
  m=id.match(/^ld(\d)$/);if(m){V("LF"+m[1])[1]=+v;soundEdited();render();return}
  m=id.match(/^inp(\d)$/);if(m){S.tracks[+m[1]].inp=v;soundEdited();render();return}
@@ -3011,12 +3030,12 @@ document.addEventListener("keydown",e=>{const mod=e.metaKey||e.ctrlKey,inField=e
 
 /* BPM: drag or arrows */
 (()=>{const b=$("#bpm");let d=null;b.addEventListener("pointerdown",e=>{d={y:e.clientY,v:S.bpm};b.setPointerCapture(e.pointerId)});
- b.addEventListener("pointermove",e=>{if(!d)return;S.bpm=clamp(Math.round((d.v+(d.y-e.clientY)*(e.shiftKey?.1:.5))*10)/10,30,300);renderTop();if(S.playing)restartClock()});
- b.addEventListener("pointerup",()=>d=null);b.addEventListener("keydown",e=>{const k={ArrowUp:1,ArrowDown:-1}[e.key];if(!k)return;e.preventDefault();S.bpm=clamp(S.bpm+k*(e.shiftKey?.1:1),30,300);renderTop();if(S.playing)restartClock()})})();
+ b.addEventListener("pointermove",e=>{if(!d)return;S.bpm=clamp(Math.round((d.v+(d.y-e.clientY)*(e.shiftKey?.1:.5))*10)/10,30,300);if(HOST.tempo)HOST.tempo(S.bpm);renderTop();if(S.playing)restartClock()});
+ b.addEventListener("pointerup",()=>d=null);b.addEventListener("keydown",e=>{const k={ArrowUp:1,ArrowDown:-1}[e.key];if(!k)return;e.preventDefault();S.bpm=clamp(S.bpm+k*(e.shiftKey?.1:1),30,300);if(HOST.tempo)HOST.tempo(S.bpm);renderTop();if(S.playing)restartClock()})})();
 
 
 /* ===== Engine status (from the MD Editor v48): the LCD says what the engine is doing; editing waits until it is ready ===== */
-const ENG={norom:["NO ROM","off"],loading:["LOADING ROM","blink"],boot:["BOOTING OS","blink"],ready:["EMU OS 1.32B","on"],hwwait:["HW CONNECT","blink"],hwready:["HW MIDI","on"],hwnone:["HW NO MIDI","off"],error:["ROM ERROR","off"]};
+const ENG={...{norom:["NO ROM","off"],loading:["LOADING ROM","blink"],boot:["BOOTING OS","blink"],ready:["EMU OS 1.32B","on"],hwwait:["HW CONNECT","blink"],hwready:["HW MIDI","on"],hwnone:["HW NO MIDI","off"],error:["ROM ERROR","off"]},...HOST.engineLabels};
 let engT=[];
 function engReady(){return S.eng==="ready"||S.eng==="hwready"}
 function setEng(st){S.eng=st;const[txt,led]=ENG[st],b=document.querySelector(".lcdeng"),l=document.getElementById("engled");if(!b)return;
@@ -3026,7 +3045,7 @@ function setEng(st){S.eng=st;const[txt,led]=ENG[st],b=document.querySelector(".l
  bootScreen(st==="boot");
  b.title=ready?"Engine: running. Click to switch emulator or hardware, or load another ROM.":"Engine: "+txt.toLowerCase()+". Editing starts when it is ready."}
 /* while BOOTING OS the LCD shows a firmware-style start-up screen (the text is the editor's, not a copy of the ROM's) */
-let bootT=[];function bootScreen(on){const el=$("#bootscr");if(!el)return;bootT.forEach(clearTimeout);bootT=[];el.classList.toggle("on",on);if(!on)return;$("#bsmk").textContent=S.plate==="mk1"?"SFX-60":"SFX-60 MKII";
+let bootT=[];function bootScreen(on){if(HOST.bootScreen)return HOST.bootScreen(on);const el=$("#bootscr");if(!el)return;bootT.forEach(clearTimeout);bootT=[];el.classList.toggle("on",on);if(!on)return;$("#bsmk").textContent=S.plate==="mk1"?"SFX-60":"SFX-60 MKII";
  const steps=[["OS 1.32B · TESTING MEMORY",15],["BATTERY RAM · 128 KITS",40],["128 PATTERNS · 24 SONGS",65],[S.plate==="mk1"?"DSP · FACTORY WAVES":"DSP · 64 DIGIPRO WAVES",85],["STARTING SEQUENCER",100]];
  steps.forEach(([t,f],i)=>bootT.push(setTimeout(()=>{$("#bstxt").textContent=t;$("#bsbar").style.width=f+"%"},i*210)))}
 function startEngine(kind){engT.forEach(clearTimeout);engT=[];if(S.playing)togglePlay();
@@ -3042,7 +3061,7 @@ function tick(){const prev=S.step;S.step=(S.step+1)%S.len;ctlTick();if(S.step===
  if(S.ws==="seq")redraw();
  if(S.ws==="perform"){const act=[0,1,2,3,4,5].filter(i=>{const st=S.tracks[i].steps[S.step];return st&&!st.off&&st.a&&audible(i)&&(S.mode!=="poly"||i===asgT())});flashTracks(act)}}
 function stepMs(){const m={"1X":1,"2X":2,"3/4X":.75,"3/2X":1.5}[S.mult];return 60000/S.bpm/4/m}
-function restartClock(){clearInterval(clock);clock=setInterval(tick,stepMs())}
+function restartClock(){if(HOST.ownsClock)return;clearInterval(clock);clock=setInterval(tick,stepMs())}
 /* Soft playhead (as the MD Editor, v45): one ink-tinted column over the roll, the ENV/SLIDE/SWING
    rows and the lock lane that glides from step to step. It jumps without animation on a wrap, a
    page flip or a scroll, and fades out on stop. It lives on <body> in viewport coordinates, so the
@@ -3060,7 +3079,7 @@ function movePH(glide=true){let ph=document.getElementById("phcol");
  ph.style.opacity=r.right>v.left+1&&r.left<v.right-1?"1":"0";phX=r.left}
 addEventListener("scroll",()=>{if(S.playing)movePH(false)},true);addEventListener("resize",()=>{if(S.playing)movePH(false)});
 function setPos(){$("#pos").textContent=S.playing&&S.step>=0?String(Math.floor(S.step/16)+1).padStart(2,"0")+"."+String(S.step%16+1).padStart(2,"0"):"--.--"}
-function togglePlay(){if(!S.playing&&S.eng&&!engReady())return;S.playing=!S.playing;clearInterval(clock);$$(".pl").forEach(b=>b.classList.remove("play"));$("#tempoled").classList.remove("on");$$(".ph").forEach(c=>c.classList.remove("ph"));if(S.playing){S.step=-1;tick();restartClock()}else S.queued=null;setPos();renderTop();redraw();movePH(false)}
+function togglePlay(){if(HOST.togglePlay)return HOST.togglePlay();if(!S.playing&&S.eng&&!engReady())return;S.playing=!S.playing;clearInterval(clock);$$(".pl").forEach(b=>b.classList.remove("play"));$("#tempoled").classList.remove("on");$$(".ph").forEach(c=>c.classList.remove("ph"));if(S.playing){S.step=-1;tick();restartClock()}else S.queued=null;setPos();renderTop();redraw();movePH(false)}
 
 /* ===== Render ===== */
 function render(){closePicker();closeK();const sl=$("#seqscroll")?.scrollLeft||0;renderTop();{const m=(S.ws==="seq"||S.ws==="sound")&&S.side==="midi";if(!m&&S.sel>5)S.sel-=6;if(m&&S.sel<6)S.sel+=6}const full=["mix","perform","song","control"].includes(S.ws);
@@ -3078,5 +3097,8 @@ addEventListener("resize",()=>{if(S.ws==="seq"){fitLane();drawSlides();alignLock
 
 /* deep links: #ws=sound&t=3&dock=arp&plate=mk1&mode=multi */
 (()=>{const q=new URLSearchParams(location.hash.slice(1));if(q.get("plate")){S.plate=q.get("plate");document.documentElement.dataset.plate=S.plate}if(q.get("ws"))S.ws=q.get("ws");if(q.get("side")==="midi")S.side="midi";{const t=(q.get("t")?+q.get("t")-1:0)+((S.ws==="seq"||S.ws==="sound")&&S.side==="midi"?6:0);S.sel=t;select(t)}if(q.get("dock"))S.dock=q.get("dock");if(q.get("mode"))S.mode=q.get("mode");if(q.get("mt"))S.multi.mode=+q.get("mt");if(q.get("all"))S.viewAll=true;autoRange(S.sel)})();
-render();H.last=snap();startEngine("emu");{const lb=new URLSearchParams(location.hash.slice(1)).get("lib");if(lb)setTimeout(()=>openLib(lb),2000)}
+/* The view's API for a host (P6): the state it renders and the calls a host makes. */
+window.MMView={S,H,LIB,ENG,applyKit,applyPat,emptyPat,clearedKit,captureKit,capturePat,setKitState,render,renderTop,drawLib,toast,ask,setEng,
+ engReady,ctlTick,setPos,movePH,redraw,audible,flashTracks,goWs,clickStep,autoRange,kitSave,machName,kitName,pname,asgT,noteName,audioSelfTest,busy:()=>{try{return !!(drag||laneDraw||rollDrag||active||arpDrag||l2drag||joyDrag||splitDrag||cord||kbDown)}catch(_){return false}}};
+render();H.last=snap();if(HOST.start)HOST.start();else startEngine("emu");{const lb=new URLSearchParams(location.hash.slice(1)).get("lib");if(lb)setTimeout(()=>openLib(lb),2000)}
 </script>

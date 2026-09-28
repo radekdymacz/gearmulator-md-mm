@@ -97,9 +97,9 @@ const AUD={schema:"gm-audio/devices",version:1,standalone:true,driver:{id:"CoreA
  latencyMs:11.3,running:true,midiInputs:[{id:"iac",name:"IAC Driver Bus 1",on:false},{id:"tm1",name:"Elektron TM-1",on:true}],
  midiOutput:{id:"",list:[{id:"iac",name:"IAC Driver Bus 1"},{id:"tm1",name:"Elektron TM-1"}]},bluetooth:true,error:""};
 let audMeterT=0;
-function audioDoc(){return AUD}
-function audioMeter(on){clearInterval(audMeterT);if(on)audMeterT=setInterval(()=>audioLevel(!AUD.input.id?0:(AUD.input.muted?.01:.04)+Math.random()*.12),120)}
-function audioSend(c){const D=AUD,say=t=>typeof toast==="function"&&toast(t);
+function audioDoc(){return HOST.audioDoc?HOST.audioDoc():AUD}
+function audioMeter(on){if(HOST.audioMeter)return HOST.audioMeter(on);clearInterval(audMeterT);if(on)audMeterT=setInterval(()=>audioLevel(!AUD.input.id?0:(AUD.input.muted?.01:.04)+Math.random()*.12),120)}
+function audioSend(c){if(HOST.audioSend)return HOST.audioSend(c);const D=AUD,say=t=>typeof toast==="function"&&toast(t);
  if(c.do==="test"){say("Test tone on "+D.output.id);return}
  if(c.do==="bluetooth"){say("The system's Bluetooth MIDI dialog opens here");return}
  if(c.set==="output"){D.output.id=c.device;const n=c.device==="Audient iD14"?4:2;D.outputChannels=Array.from({length:n},(_,i)=>({name:"Output "+(i+1),on:i<2}))}

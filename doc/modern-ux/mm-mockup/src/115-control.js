@@ -19,7 +19,7 @@ setInterval(()=>{const r=$("#ccrate");if(r){r.textContent=`${S.ctl.sent}/s`;r.cl
 function ctlTick(){S.ctl.phase++;S.ctl.sources.forEach(sr=>{const n=RATES[sr.RATE]||8;
  if(sr.kind==="lfo"){const ph=(S.ctl.phase%n)/n;sr.val=clamp(Math.round(64+lshape(sr.SHAPE,ph)*63*sr.DEPTH/100));applySrc(sr)}
  if(sr.kind==="rnd"){if(S.ctl.phase%n===0)sr._t=Math.round(Math.random()*127);const a=1-sr.SMOOTH/140;sr.val=clamp(Math.round(sr.val+(sr._t-sr.val)*a));applySrc(sr)}});if(S.ws==="control")ctlRefresh()}
-function learnBind(k){const lt=S.learnT;if(!lt)return;const id="cc"+(20+k);if(S.ctl.links.some(l=>l.src===id&&l.t===lt.t&&l.pid===lt.pid)){toast("Already mapped.");return}
+function learnBind(k){const lt=S.learnT;if(!lt)return;if(HOST.learnBind)HOST.learnBind(lt,k);const id="cc"+(20+k);if(S.ctl.links.some(l=>l.src===id&&l.t===lt.t&&l.pid===lt.pid)){toast("Already mapped.");return}
  S.ctl.links.push({src:id,t:lt.t,pid:lt.pid,min:0,max:127,curve:"lin",inv:false});S.learnT=null;S.ctl.sel=id;syncControls();toast(`Knob ${k} (CC ${20+k}) → ${tLabel(lt.t)} ${pidLabel(lt.t,lt.pid)}.`);if(S.ws==="control")render()}
 const ALLT=[0,1,2,3,4,5,6,7,8,9,10,11];
 function targetOpts(t){return pagesOf(t).flatMap(pg=>pnames(t,pg).map((n,i)=>n?opt(pg+"."+i,pg+" "+n,""):"")).join("")}
