@@ -145,3 +145,35 @@ temp/cmake_p4/source/elektron/md/mdLibTest/mdP4ProbeFirmwareTest "<ROM>" globals
 GEARMULATOR_MD_FIRMWARE_BIN="<ROM>" temp/cmake_p4/source/elektron/md/mdJucePlugin/mdModRunnerFirmwareTest
 GEARMULATOR_MDSTUDIO_SELFTEST=p5   (the standalone: PLAY timing, GLOBAL, the ? list, where the modulators run)
 ```
+
+## 10. Follow-up (2026-09-28): one UI, blank window, false NO ROM, MM mockup
+
+- **The editor page is the only UI, for both apps.**
+  - The panel skins are removed: `skins/mdDefault` and `skins/mmSfx60`, and the panel editor's pointer tests with them.
+  - Each product offers one skin: "Machinedrum Editor" or "Monomachine Editor". `createEditor` always makes the page.
+  - A config that names an old skin (Radek's names mdDefault / mmSfx60) falls back to the page silently. Checked with both of Radek's real configs, which are unchanged.
+  - Editor › Skins is hidden when there is one skin.
+  - The panel C++ (`mdEditor`, `mdPixelPerfectPanel`, the LCD interaction model) is still compiled but never made. The page's boot LCD does not use it: it reads `md::FrontPanel` directly. Deleting that code is a clean-up left for later.
+- **The blank window** came only from a live switch from the panel editor to the page. Its page never loaded (no "page ready", no render); re-making the page itself works.
+  - With the panel gone, that path is gone.
+  - The page now logs its first render ("first render: … elements"), so a blank page fails the self-test.
+  - Measured, MD: a fresh launch with the old-skin config rendered 340 elements, 1517 × 945; the page re-made twice rendered each time (`GEARMULATOR_MDSTUDIO_SELFTEST=p5skin`).
+  - Measured, MM: a fresh launch rendered 164 elements.
+- **False "firmware needed"** (MM page; the shared logic now covers both apps):
+  - The MM page started with engine "missing" and never closed the dialog.
+  - Now:
+    - no device yet is LOADING, not NO ROM (both links);
+    - the MM page starts as loading;
+    - NO ROM shows only after the plug-in has said "missing" for 1.5 s;
+    - the dialog closes by itself when the engine is anything else;
+    - Check again re-queries.
+  - MM check: engine booting, then ready; no NO ROM dialog; 288 documents loaded.
+- **The MM mockup's latest rounds are copied into `doc/modern-ux/mm-mockup/` and synced into the MM skin:**
+  - lock lane of 190 px in MM colours;
+  - rail lock keys at MD size;
+  - full-height workspaces;
+  - high-DPI pitch roll fix;
+  - rail LOCK PARAMETER block: 2 rows of chips, a 2 × 4 key grid.
+- **Installed:** MD and MM VST3/AU. Both pass auval.
+  - The previous copies are backed up at `~/Library/Audio/Gearmulator P5b backup 2026-09-28/`.
+  - Standalones: `bin/plugins/Release/Standalone/Gearmulator MD.app` and `Gearmulator MM.app` in this worktree. They are not copied to /Applications (not approved yet).

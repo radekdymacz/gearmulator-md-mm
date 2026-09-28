@@ -1533,6 +1533,79 @@ body.engwait #main,body.engwait #rail{pointer-events:none;opacity:.6;transition:
 .bootscr .bs2{font-size:10px;letter-spacing:.06em}
 .bootscr .bsbar{width:62%;height:6px;box-shadow:inset 0 0 0 1px var(--ink);border-radius:1px;overflow:hidden}
 .bootscr .bsbar i{display:block;height:100%;width:0;background:var(--ink);transition:width .2s steps(4)}
+/* ===== v5: Sequence rebalance: the roll takes what is left, the lock lane gets MD height ===== */
+#seq canvas.roll[data-big]{height:clamp(240px,calc(100vh - 512px),640px)!important}
+.ws-seq .lb{height:170px!important}
+.ws-seq .lbscale{height:170px}
+/* MD v58/v59: no LCD panel behind the lane; keys with LED meters */
+.ws-seq #lanescroll{background:transparent!important;box-shadow:none!important;padding:0!important}
+.ws-seq .lb{border-bottom:0!important;border-radius:3px!important;overflow:hidden}
+.ws-seq .lb:not(.none){background:var(--key)!important;box-shadow:inset 0 -2px 0 rgba(0,0,0,.35)!important}
+.ws-seq .lb:not(.none)::after{content:"";position:absolute;left:22%;right:22%;top:8px;bottom:6px;z-index:0;background:repeating-linear-gradient(to top,color-mix(in srgb,var(--led) 16%,transparent) 0 5px,transparent 5px 8px)}
+.ws-seq .lb i{position:absolute;z-index:1;left:22%!important;right:22%!important;max-height:calc(100% - 14px);background:repeating-linear-gradient(to top,var(--led) 0 5px,transparent 5px 8px)!important;filter:drop-shadow(0 0 3px color-mix(in srgb,var(--led) 70%,transparent))}
+.ws-seq .lb i.bp.dn{background:repeating-linear-gradient(to bottom,var(--led) 0 5px,transparent 5px 8px)!important}
+.ws-seq .lb .base{position:absolute;left:0;right:0;z-index:2;height:0;border-top:1px dashed var(--keytext)!important;opacity:.55}
+.ws-seq .lb .mid{position:absolute;left:0;right:0;z-index:2;top:calc(8px + (100% - 14px)*.5);border-top:1px solid color-mix(in srgb,var(--keytext) 60%,transparent)}
+.ws-seq .lb:not(.none):hover{filter:brightness(1.18)}
+.ws-seq .lb.ph:not(.none){box-shadow:inset 0 0 0 2px color-mix(in srgb,var(--led) 55%,transparent),inset 0 -2px 0 rgba(0,0,0,.35)!important}
+.ws-seq .lb.none{background:var(--key)!important;opacity:.28!important}
+.ws-seq .lbscale{color:var(--print2)}
+/* rail lock block: MD key size (one column of 8, like DATA ENTRY A-H) */
+#rail .railparams .pkcol{grid-template-columns:minmax(0,1fr)!important;grid-auto-rows:minmax(18px,1fr)!important}
+#rail .railparams .pagetabs button{height:24px}
+/* ===== Sound fills the height: canvases and spacing grow with the viewport ===== */
+.sound4 canvas.ed,.sound4 .edblank{height:clamp(86px,calc(50vh - 364px),220px)!important}
+.lfo3 canvas.ed{height:clamp(50px,calc(35vh - 265px),150px)!important}
+.sound4 .card,.lfo3 .card,.seqcards .card{gap:clamp(6px,calc(2vh - 10px),14px)!important}
+.sound4{padding-bottom:clamp(12px,calc(3vh - 15px),22px)!important}
+.lfo3{padding-bottom:clamp(12px,calc(3vh - 15px),22px)!important;margin-top:clamp(12px,calc(3vh - 15px),22px)!important}
+.seqcards{margin-top:clamp(12px,calc(3vh - 15px),22px)!important}
+.seqcards .arptrack{height:clamp(62px,calc(20vh - 118px),120px)!important}
+/* ===== Control fills the height ===== */
+.srch,.mxc{height:clamp(36px,calc((100vh - 290px)/10 - 3px),60px)!important}
+.sound4 canvas.ed,.sound4 .edblank{height:clamp(86px,calc(50vh - 300px),250px)!important}
+.lfo3 canvas.ed{height:clamp(50px,calc(40vh - 268px),170px)!important}
+#seq canvas.roll[data-big]{height:clamp(240px,calc(100vh - 462px),680px)!important}
+#rail .railparams .pkcol{grid-auto-rows:minmax(0,1fr)!important;gap:2px!important}
+#seq canvas.roll[data-big]{height:clamp(240px,calc(100vh - 498px),660px)!important}
+.ws-seq .lb{height:190px!important}
+.ws-seq .lbscale{height:190px}
+/* fill the height on Perform, Mix and Control too */
+.kb{height:clamp(130px,calc(100vh - 424px),560px)!important}
+.perf.map .kb{height:clamp(110px,calc(100vh - 752px),420px)!important}
+.strip6 .fader{height:clamp(128px,calc(100vh - 638px),300px)!important}
+.srch,.mxc{height:clamp(36px,calc((100vh - 222px)/10 - 3px),72px)!important}
+.kb{height:clamp(130px,calc(100vh - 436px),560px)!important}
+.strip6 .fader{height:clamp(128px,calc(100vh - 648px),300px)!important}
+.perf.map .kb{height:clamp(110px,calc(100vh - 740px),420px)!important}
+.kb{height:clamp(130px,calc(100vh - 436px),680px)!important}
+.strip6 .fader{height:clamp(128px,calc(100vh - 648px),286px)!important}
+.srch,.mxc{height:clamp(36px,calc((100vh - 222px)/10 - 3px),90px)!important}
+#seq .nlane{width:0;min-width:100%}
+#seq canvas.roll{width:100%!important;min-width:0;max-width:100%}
+/* v6: compact rail lock block: title on the lane title line, keys at the lane bottom, spare height in between */
+#rail .railparams{grid-template-rows:auto minmax(0,1fr) auto auto!important;gap:4px!important}
+#rail .railparams::after{content:none}
+#rail .railparams .lpspace{min-height:0}
+#rail .railparams .pagetabs{grid-template-columns:repeat(4,minmax(0,1fr))!important;gap:3px;margin:0!important}
+#rail .railparams .pagetabs button{height:26px!important;display:flex;align-items:center;justify-content:center;gap:5px;padding:0 4px;font:600 11px var(--sans)!important;letter-spacing:.08em;white-space:nowrap;overflow:visible}
+#rail .railparams .pagetabs button .led{width:6px!important;height:6px!important}
+#rail .railparams .pkcol{grid-template-columns:repeat(2,minmax(0,1fr))!important;grid-auto-rows:26px!important;gap:3px!important}
+#rail .railparams .pkcol .pk{height:26px!important;font-size:12px;padding:0 6px}
+/* ===== v7: MM lock lane = small MM LCD windows (pale LCD, ink segments), not the MD's red LEDs ===== */
+.ws-seq .lb:not(.none){background:var(--lcd)!important;box-shadow:0 0 0 1px var(--bezel),inset 0 0 0 1px color-mix(in srgb,var(--ink) 18%,transparent)!important}
+.ws-seq .lb:not(.none)::after{background:repeating-linear-gradient(to top,color-mix(in srgb,var(--ink) 11%,transparent) 0 5px,transparent 5px 8px)!important}
+.ws-seq .lb i{background:repeating-linear-gradient(to top,var(--ink) 0 5px,transparent 5px 8px)!important;filter:none!important}
+.ws-seq .lb i.bp.dn{background:repeating-linear-gradient(to bottom,var(--ink) 0 5px,transparent 5px 8px)!important}
+.ws-seq .lb .base{border-top:1px dashed var(--ink)!important;opacity:.7}
+.ws-seq .lb .mid{border-top:1px solid color-mix(in srgb,var(--ink) 70%,transparent)!important}
+.ws-seq .lb:not(.none):hover{filter:none;background:color-mix(in srgb,var(--lcd) 86%,var(--ink))!important}
+.ws-seq .lb.ph:not(.none){background:color-mix(in srgb,var(--lcd) 78%,var(--ink))!important;box-shadow:0 0 0 1px var(--bezel),inset 0 0 0 2px var(--ink)!important}
+.ws-seq #lane:active .lb:not(.none):hover{background:color-mix(in srgb,var(--lcd) 80%,var(--ink))!important}
+.ws-seq .lb.none{background:var(--key)!important;opacity:.28!important;box-shadow:none!important}
+/* the trig type as a small state mark at the top of the slot: red = all trigs, green = part / trigless (panel LED colours) */
+.ws-seq .lb:not(.none)::before{content:""!important;display:block!important;position:absolute;left:30%;right:30%;top:2px;height:3px;border-radius:1px;z-index:2;background:var(--led)}
+.ws-seq .lb.k-part::before,.ws-seq .lb.k-trigless::before{background:var(--ledg)}
 
 /* ===== The real machine's states (not in the mockup) ===== */
 /* While the firmware starts, the LCD shows the machine's own screen (mmAdapter.js). */

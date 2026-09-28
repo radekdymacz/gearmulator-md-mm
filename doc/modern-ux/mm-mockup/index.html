@@ -1532,6 +1532,79 @@ body.engwait #main,body.engwait #rail{pointer-events:none;opacity:.6;transition:
 .bootscr .bs2{font-size:10px;letter-spacing:.06em}
 .bootscr .bsbar{width:62%;height:6px;box-shadow:inset 0 0 0 1px var(--ink);border-radius:1px;overflow:hidden}
 .bootscr .bsbar i{display:block;height:100%;width:0;background:var(--ink);transition:width .2s steps(4)}
+/* ===== v5: Sequence rebalance: the roll takes what is left, the lock lane gets MD height ===== */
+#seq canvas.roll[data-big]{height:clamp(240px,calc(100vh - 512px),640px)!important}
+.ws-seq .lb{height:170px!important}
+.ws-seq .lbscale{height:170px}
+/* MD v58/v59: no LCD panel behind the lane; keys with LED meters */
+.ws-seq #lanescroll{background:transparent!important;box-shadow:none!important;padding:0!important}
+.ws-seq .lb{border-bottom:0!important;border-radius:3px!important;overflow:hidden}
+.ws-seq .lb:not(.none){background:var(--key)!important;box-shadow:inset 0 -2px 0 rgba(0,0,0,.35)!important}
+.ws-seq .lb:not(.none)::after{content:"";position:absolute;left:22%;right:22%;top:8px;bottom:6px;z-index:0;background:repeating-linear-gradient(to top,color-mix(in srgb,var(--led) 16%,transparent) 0 5px,transparent 5px 8px)}
+.ws-seq .lb i{position:absolute;z-index:1;left:22%!important;right:22%!important;max-height:calc(100% - 14px);background:repeating-linear-gradient(to top,var(--led) 0 5px,transparent 5px 8px)!important;filter:drop-shadow(0 0 3px color-mix(in srgb,var(--led) 70%,transparent))}
+.ws-seq .lb i.bp.dn{background:repeating-linear-gradient(to bottom,var(--led) 0 5px,transparent 5px 8px)!important}
+.ws-seq .lb .base{position:absolute;left:0;right:0;z-index:2;height:0;border-top:1px dashed var(--keytext)!important;opacity:.55}
+.ws-seq .lb .mid{position:absolute;left:0;right:0;z-index:2;top:calc(8px + (100% - 14px)*.5);border-top:1px solid color-mix(in srgb,var(--keytext) 60%,transparent)}
+.ws-seq .lb:not(.none):hover{filter:brightness(1.18)}
+.ws-seq .lb.ph:not(.none){box-shadow:inset 0 0 0 2px color-mix(in srgb,var(--led) 55%,transparent),inset 0 -2px 0 rgba(0,0,0,.35)!important}
+.ws-seq .lb.none{background:var(--key)!important;opacity:.28!important}
+.ws-seq .lbscale{color:var(--print2)}
+/* rail lock block: MD key size (one column of 8, like DATA ENTRY A-H) */
+#rail .railparams .pkcol{grid-template-columns:minmax(0,1fr)!important;grid-auto-rows:minmax(18px,1fr)!important}
+#rail .railparams .pagetabs button{height:24px}
+/* ===== Sound fills the height: canvases and spacing grow with the viewport ===== */
+.sound4 canvas.ed,.sound4 .edblank{height:clamp(86px,calc(50vh - 364px),220px)!important}
+.lfo3 canvas.ed{height:clamp(50px,calc(35vh - 265px),150px)!important}
+.sound4 .card,.lfo3 .card,.seqcards .card{gap:clamp(6px,calc(2vh - 10px),14px)!important}
+.sound4{padding-bottom:clamp(12px,calc(3vh - 15px),22px)!important}
+.lfo3{padding-bottom:clamp(12px,calc(3vh - 15px),22px)!important;margin-top:clamp(12px,calc(3vh - 15px),22px)!important}
+.seqcards{margin-top:clamp(12px,calc(3vh - 15px),22px)!important}
+.seqcards .arptrack{height:clamp(62px,calc(20vh - 118px),120px)!important}
+/* ===== Control fills the height ===== */
+.srch,.mxc{height:clamp(36px,calc((100vh - 290px)/10 - 3px),60px)!important}
+.sound4 canvas.ed,.sound4 .edblank{height:clamp(86px,calc(50vh - 300px),250px)!important}
+.lfo3 canvas.ed{height:clamp(50px,calc(40vh - 268px),170px)!important}
+#seq canvas.roll[data-big]{height:clamp(240px,calc(100vh - 462px),680px)!important}
+#rail .railparams .pkcol{grid-auto-rows:minmax(0,1fr)!important;gap:2px!important}
+#seq canvas.roll[data-big]{height:clamp(240px,calc(100vh - 498px),660px)!important}
+.ws-seq .lb{height:190px!important}
+.ws-seq .lbscale{height:190px}
+/* fill the height on Perform, Mix and Control too */
+.kb{height:clamp(130px,calc(100vh - 424px),560px)!important}
+.perf.map .kb{height:clamp(110px,calc(100vh - 752px),420px)!important}
+.strip6 .fader{height:clamp(128px,calc(100vh - 638px),300px)!important}
+.srch,.mxc{height:clamp(36px,calc((100vh - 222px)/10 - 3px),72px)!important}
+.kb{height:clamp(130px,calc(100vh - 436px),560px)!important}
+.strip6 .fader{height:clamp(128px,calc(100vh - 648px),300px)!important}
+.perf.map .kb{height:clamp(110px,calc(100vh - 740px),420px)!important}
+.kb{height:clamp(130px,calc(100vh - 436px),680px)!important}
+.strip6 .fader{height:clamp(128px,calc(100vh - 648px),286px)!important}
+.srch,.mxc{height:clamp(36px,calc((100vh - 222px)/10 - 3px),90px)!important}
+#seq .nlane{width:0;min-width:100%}
+#seq canvas.roll{width:100%!important;min-width:0;max-width:100%}
+/* v6: compact rail lock block: title on the lane title line, keys at the lane bottom, spare height in between */
+#rail .railparams{grid-template-rows:auto minmax(0,1fr) auto auto!important;gap:4px!important}
+#rail .railparams::after{content:none}
+#rail .railparams .lpspace{min-height:0}
+#rail .railparams .pagetabs{grid-template-columns:repeat(4,minmax(0,1fr))!important;gap:3px;margin:0!important}
+#rail .railparams .pagetabs button{height:26px!important;display:flex;align-items:center;justify-content:center;gap:5px;padding:0 4px;font:600 11px var(--sans)!important;letter-spacing:.08em;white-space:nowrap;overflow:visible}
+#rail .railparams .pagetabs button .led{width:6px!important;height:6px!important}
+#rail .railparams .pkcol{grid-template-columns:repeat(2,minmax(0,1fr))!important;grid-auto-rows:26px!important;gap:3px!important}
+#rail .railparams .pkcol .pk{height:26px!important;font-size:12px;padding:0 6px}
+/* ===== v7: MM lock lane = small MM LCD windows (pale LCD, ink segments), not the MD's red LEDs ===== */
+.ws-seq .lb:not(.none){background:var(--lcd)!important;box-shadow:0 0 0 1px var(--bezel),inset 0 0 0 1px color-mix(in srgb,var(--ink) 18%,transparent)!important}
+.ws-seq .lb:not(.none)::after{background:repeating-linear-gradient(to top,color-mix(in srgb,var(--ink) 11%,transparent) 0 5px,transparent 5px 8px)!important}
+.ws-seq .lb i{background:repeating-linear-gradient(to top,var(--ink) 0 5px,transparent 5px 8px)!important;filter:none!important}
+.ws-seq .lb i.bp.dn{background:repeating-linear-gradient(to bottom,var(--ink) 0 5px,transparent 5px 8px)!important}
+.ws-seq .lb .base{border-top:1px dashed var(--ink)!important;opacity:.7}
+.ws-seq .lb .mid{border-top:1px solid color-mix(in srgb,var(--ink) 70%,transparent)!important}
+.ws-seq .lb:not(.none):hover{filter:none;background:color-mix(in srgb,var(--lcd) 86%,var(--ink))!important}
+.ws-seq .lb.ph:not(.none){background:color-mix(in srgb,var(--lcd) 78%,var(--ink))!important;box-shadow:0 0 0 1px var(--bezel),inset 0 0 0 2px var(--ink)!important}
+.ws-seq #lane:active .lb:not(.none):hover{background:color-mix(in srgb,var(--lcd) 80%,var(--ink))!important}
+.ws-seq .lb.none{background:var(--key)!important;opacity:.28!important;box-shadow:none!important}
+/* the trig type as a small state mark at the top of the slot: red = all trigs, green = part / trigless (panel LED colours) */
+.ws-seq .lb:not(.none)::before{content:""!important;display:block!important;position:absolute;left:30%;right:30%;top:2px;height:3px;border-radius:1px;z-index:2;background:var(--led)}
+.ws-seq .lb.k-part::before,.ws-seq .lb.k-trigless::before{background:var(--ledg)}
 </style>
 <div class="app">
   <header class="top">
@@ -1800,7 +1873,7 @@ function ref(el){const d=el.dataset,t=d.t!=null?+d.t:S.sel,tr=trk(t),g=d.g;
   case"asg":{const r=tr.assign.tabs[S.asTab][+d.n];return[r,"add",{name:"ADD",max:127,signed:1},t,g]}
   case"link":return[S.ctl.links[+d.li],d.n,{name:d.n,max:127},t,g];case"src":return[srcById(d.src),d.n,{name:d.n,max:d.n==="DEPTH"?100:127},t,g];
   case"cc":return[tr.cc,+d.n,{name:"CC"+(+d.n+1),en:[...Array.from({length:128},(_,k)=>"CC"+k),"AFT"]},t,g];
-  case"mmap":{const r=S.mmap[+d.i];return[r,d.n,{name:d.n,...{trn:{max:127,signed:1},ofs:{max:63},len:{max:64},tim:{en:["1/16","2/16","4/16","8/16","16/16"]}}[d.n]},t,g]}}}
+  case"mmap":{const r=S.mmap[+d.i];return[r,d.n,{name:d.n,...{trn:{max:127,signed:1},ofs:{en:["---",...Array.from({length:64},(_,i)=>String(i).padStart(2,"0"))]},len:{max:64},tim:{en:["DIR","1","2","4","8","16","32"]}}[d.n]},t,g]}}}
 const getV=el=>{const[o,n]=ref(el);return o[n]};
 function setV(el,v){const[o,n,m,t,g]=ref(el);v=clamp(Math.round(v),0,maxOf(m));if(o[n]===v)return;o[n]=v;
  if(PAGES.includes(g)||g==="MID"||g==="lev"||g==="menv"||g==="asg"||g==="cc")soundEdited();else structEdited();
@@ -1882,7 +1955,7 @@ function th(t){const tr=trk(t),polyOff=S.mode==="poly"&&t!==S.sel&&t<6;return`<d
 function pageKeys(){return`<span class="pagectl rh"><button class="pgkey" id="pgkey" ${pages16()<2?"disabled":""} title="Next page. Shift-click = previous. Keys [ and ].">Page</button><span class="pleds" aria-hidden="true">${[0,1,2,3].map(k=>`<span class="pl ${k<pages16()?"":"na"} ${!S.viewAll&&k===S.page?"cur":""}" data-plp="${k}"><i class="led"></i></span>`).join("")}</span><button class="ptog ${S.viewAll?"on":""}" id="pgall" aria-pressed="${S.viewAll}" title="Show all steps"><i class="led"></i>All</button><button class="ptog ${S.follow?"on":""}" id="pgfollow" aria-pressed="${S.follow}" title="Page follows the play position"><i class="led"></i>Fol</button></span>`}
 function lockPicker(t){const midi=isMidiT(t),list=pagesOf(t);if(!list.includes(S.lanePage))S.lanePage=list[0];
  return`<div class="railparams"><div class="rphead"><span class="cap">Lock parameter</span><button id="clearLane" class="iconkey" aria-label="Clear these locks" title="Clear ${pidLabel(t,S.lane)} locks"><svg viewBox="0 0 14 14" aria-hidden="true"><path d="M2 4h10M5.5 4V2.5h3V4M3.5 4l.7 8h5.6l.7-8M6 6.5v3.5M8 6.5v3.5" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg></button></div>
-  <div class="pagetabs" role="group" aria-label="DATA page">${midi?`<button data-lpage="MID" aria-pressed="true" style="grid-column:1/-1"><i class="led"></i>MIDI PAGE</button>`:PAGES.map(p=>{const n=trackLockPids(t).filter(x=>x.startsWith(p+".")).length;return`<button data-lpage="${p}" aria-pressed="${S.lanePage===p}" title="${PAGEN[p]}${n?" · "+n+" locked":""}"><i class="led ${n&&S.lanePage!==p?"g on":""}"></i>${p}</button>`}).join("")}</div>
+  <div class="lpspace"></div><div class="pagetabs" role="group" aria-label="DATA page">${midi?`<button data-lpage="MID" aria-pressed="true" style="grid-column:1/-1"><i class="led"></i>MIDI PAGE</button>`:PAGES.map(p=>{const n=trackLockPids(t).filter(x=>x.startsWith(p+".")).length;return`<button data-lpage="${p}" aria-pressed="${S.lanePage===p}" aria-label="${PAGEN[p]}${n?", "+n+" locked":""}"><i class="led ${n&&S.lanePage!==p?"g on":""}"></i>${p}</button>`}).join("")}</div>
   <div class="pkcol">${pnames(t,S.lanePage).map((nm,i)=>{if(!nm)return`<span class="pk empty"></span>`;const pid=S.lanePage+"."+i,n=S.locks.get(lkKey(t,pid))?.size||0;return`<button class="pk ${n?"has":""}" data-lane="${pid}" aria-pressed="${pid===S.lane}" title="${n?n+" locked step"+(n>1?"s":""):"No locks yet"}">${nm}${n?`<i>${n}</i>`:""}</button>`}).join("")}${Array.from({length:8-pnames(t,S.lanePage).length},()=>`<span class="pk empty"></span>`).join("")}</div></div>`}
 function sideSw(){return`<div class="sidesw" role="group" aria-label="Sequencer side"><button data-side="int" aria-pressed="${S.side!=="midi"}" title="The six synth tracks"><i class="led"></i>Synth</button><button data-side="midi" aria-pressed="${S.side==="midi"}" title="The six MIDI sequencer tracks (FUNCTION + TRIG SELECT on the machine)"><i class="led"></i>MIDI</button></div>`}
 function renderRail(){const r=$("#rail"),withSide=S.ws==="seq"||S.ws==="sound";
@@ -1892,7 +1965,7 @@ const ROLL_TIP=t=>`${tLabel(t)} notes. Click adds a note or moves its pitch · d
 function renderSeq(){const t=S.sel,tr=trk(t),midi=isMidiT(t);
  const rows=[["env",midi?"VEL":"Env"],["sld","Slide"],["swg","Swing"]];
  let h=`<div class="seqtop">${pageKeys()}</div><div class="scroll" id="seqscroll"><div class="mstack ${S.viewAll?"all":""}" id="seq"><div class="mrowg ruler" style="grid-template-columns:${cols()}">${steps().map(s=>`<div class="rul ${gapC(s)}" data-s="${s}">${s%4===0?s+1:""}</div>`).join("")}<div class="rul"></div></div>
-  <div class="nlane big"><canvas class="roll" data-ed="lane" data-t="${t}" data-big="1" style="height:${ROLL_H}px" title="${ROLL_TIP(t)}" aria-label="${ROLL_TIP(t)}"></canvas></div>
+  <div class="nlane big"><canvas class="roll" data-ed="lane" data-t="${t}" data-big="1" title="${ROLL_TIP(t)}" aria-label="${ROLL_TIP(t)}"></canvas></div>
   <div class="tlanes" id="tlanes">${rows.map(([k,lab])=>{if(k==="env"&&midi)return`<div class="tlane env" style="grid-template-columns:${cols()}" title="Velocity per note (VEL, lockable)">${steps().map(s=>{const st=tr.steps[s];const v=st&&!st.off?velOf(t,s):null;return`<span class="tc envc ${gapC(s)} ${v==null?"na":""}">${v!=null?`<i class="velbar" style="--v:${v/127*100}%" title="VEL ${v}"></i>`:""}</span>`}).join("")}<span class="tlab">VEL</span></div>`;
    return`<div class="tlane ${k}" style="grid-template-columns:${cols()}" title="${{env:"Which envelopes this trig fires: AMP (red), FILTER (yellow), LFO (green), the manual's trig tracks. No dots = trigless.",sld:"Slide: a locked value glides to its next lock",swg:"Swing: these steps come late by the pattern's swing amount"}[k]}">${steps().map(s=>{const st=tr.steps[s];
     if(k==="env"){const ok=st&&!st.off;return`<span class="tc envc ${gapC(s)} ${ok?"":"na"}" data-s="${s}">${ok?["a","f","l"].map(b=>`<button class="d ${b} ${st[b]?"on":""}" data-env="${b}" data-s="${s}" aria-pressed="${!!st[b]}" aria-label="${{a:"AMP",f:"FILTER",l:"LFO"}[b]} trig step ${s+1}"></button>`).join(""):""}</span>`}
@@ -1909,17 +1982,24 @@ function alignLock(){const rp=$("#rail .railparams"),lt=$(".lanetop"),ls=$("#lan
 function dockInfo(t){return{locks:`<span class="cap" style="font-size:11px">${pidLabel(t,S.lane)}</span> <span class="lanescale" id="lanescale"></span> <span class="hint">draw to lock · alt-drag erases · slide trigs glide</span>`,arp:"FUNCTION + ARP · one per track, 12 per pattern",trn:"FUNCTION + TRANSPOSE · live, the notes stay",trig:"KIT › TRIG",midipage:"GLOBAL › MIDI SEQ › MIDISEQ SET · page stored in the kit"}[S.dock]}
 function dockBody(t){if(S.dock==="locks")return`<div class="scroll" id="lanescroll"><div class="lanebox"><div class="lane" id="lane" style="grid-template-columns:${cols()}"></div><svg class="lanesvg" id="lanesvg"></svg></div></div>`;
  if(S.dock==="arp")return arpPanel(t);if(S.dock==="trn")return trnPanel(t);if(S.dock==="trig")return trigPanel(t);return midiPanel(t)}
-function fitLane(){const g=$("#seq"),sc=$("#seqscroll");if(!g)return;$$("#seq canvas.roll").forEach(c=>c.style.width="");const w=g.querySelector(".ruler").scrollWidth;$$("#seq canvas.roll").forEach(c=>c.style.width=w+"px");const d=$("#dock");if(d&&sc)d.style.width=sc.clientWidth+"px";redraw()}
-function lanePx(v,mx){return 3+v/mx*72}
+/* the roll takes the stack width from CSS (.nlane width:0; min-width:100%), so the canvas bitmap size (dpr) never widens the grid */
+function fitLane(){const g=$("#seq"),sc=$("#seqscroll");if(!g)return;$$("#seq canvas.roll").forEach(c=>c.style.width="");const d=$("#dock");if(d&&sc)d.style.width=sc.clientWidth+"px";redraw()}
+/* MD v58/v59 lock lane: lockable steps are hardware keys with a vertical LED meter; no trig = a dim key.
+   One barHTML for render and drag. Heights are fractions of the key's inner meter (key height minus 14 px). */
+const IN="(100% - 14px)";
+function laneMeta(){const t=S.sel,[pg,i]=S.lane.split(".");const m=meta(t,pg,+i);return{m,mx:maxOf(m),bip:!!m.signed}}
+function barHTML(v){const{mx,bip}=laneMeta(),f=v/mx;if(bip)return f>=.5?`<i class="bp up" style="bottom:calc(6px + ${IN}*.5);height:calc(${IN}*${(f-.5).toFixed(4)})"></i>`:`<i class="bp dn" style="top:calc(8px + ${IN}*.5);height:calc(${IN}*${(.5-f).toFixed(4)})"></i>`;
+ return`<i style="bottom:6px;height:calc(${IN}*${f.toFixed(4)})"></i>`}
+function baseHTML(v,mx){return`<div class="base" style="bottom:calc(6px + ${IN}*${(v/mx).toFixed(4)})"></div>`}
 function renderLane(){const lane=$("#lane");if(!lane)return;const t=S.sel,tr=trk(t),pid=S.lane,[pg,i]=pid.split("."),m=meta(t,pg,+i),mx=maxOf(m),lm=S.locks.get(lkKey(t,pid)),base=getP(t,pid);
  const sc=$("#lanescale");if(sc)sc.textContent=m.en?`${m.en[0]}…${m.en[mx]}`:m.signed?"−64…+63":"0–127";
  lane.innerHTML=steps().map(s=>{const st=tr.steps[s],on=st&&!st.off,v=lm?.get(s);
-  return`<div class="lb ${on?"":"none"} ${gapC(s)} ${S.playing&&s===S.step?"ph":""}" data-s="${s}" title="${on?(v!=null?"Locked "+fmt(m,v):"Kit value "+fmt(m,base)):"No trig here: add one (a trigless trig with alt-click keeps the envelopes quiet)"}">${on?`<div class="base" style="--b:${lanePx(base,mx)}px"></div>${v!=null?`<i style="--h:${v/mx*72}px"></i>`:""}`:""}</div>`}).join("")+`<div class="lbscale"><b>${fmt(m,mx)}</b><span>${fmt(m,base)}<small>kit</small></span><b>${fmt(m,0)}</b></div>`;
+  return`<div class="lb ${on?"":"none"} ${on?"k-"+(isMidiT(t)?"full":stepKind(st)):""} ${gapC(s)} ${S.playing&&s===S.step?"ph":""}" data-s="${s}" title="${on?(v!=null?"Locked "+fmt(m,v):"Kit value "+fmt(m,base)):"No trig here: add one (a trigless trig with alt-click keeps the envelopes quiet)"}">${on?`${baseHTML(base,mx)}${m.signed?`<div class="mid"></div>`:""}${v!=null?barHTML(v):""}`:""}</div>`}).join("")+`<div class="lbscale"><b>${fmt(m,mx)}</b><span>${fmt(m,base)}<small>kit</small></span><b>${fmt(m,0)}</b></div>`;
  requestAnimationFrame(drawSlides)}
 function drawSlides(){const svg=$("#lanesvg"),lane=$("#lane");if(!svg||!lane)return;const t=S.sel,tr=trk(t),lm=S.locks.get(lkKey(t,S.lane));svg.innerHTML="";if(!lm)return;
  const[pg,i]=S.lane.split("."),mx=maxOf(meta(t,pg,+i)),box=lane.getBoundingClientRect(),ink=cssv("--ink");let d="";const locked=[...lm.keys()].sort((a,b)=>a-b);
  locked.forEach(s=>{if(!tr.slide.has(s))return;const nx=locked.find(x=>x>s);if(nx==null)return;const a=lane.querySelector(`.lb[data-s="${s}"]`),b=lane.querySelector(`.lb[data-s="${nx}"]`);if(!a)return;
-  const ra=a.getBoundingClientRect(),y=v=>ra.bottom-box.top-v/mx*72,xa=ra.left-box.left+ra.width/2;
+  const ra=a.getBoundingClientRect(),y=v=>ra.bottom-box.top-6-v/mx*(ra.height-14),xa=ra.left-box.left+ra.width/2;
   const xb=b?b.getBoundingClientRect().left-box.left+b.getBoundingClientRect().width/2:box.width-50;d+=`<path d="M${xa} ${y(lm.get(s))} L${xb} ${y(lm.get(nx))}" fill="none" stroke="${ink}" stroke-width="2.5" stroke-dasharray="6 3"/><circle cx="${xa}" cy="${y(lm.get(s))}" r="4" fill="${ink}"/>`});
  svg.setAttribute("width",box.width);svg.setAttribute("height",box.height);svg.innerHTML=d}
 function syncScroll(){const a=$("#seqscroll"),b=$("#lanescroll");if(!a||!b)return;a.onscroll=()=>{b.scrollLeft=a.scrollLeft};b.onscroll=()=>{a.scrollLeft=b.scrollLeft}}
@@ -1934,9 +2014,9 @@ function clickTl(k,s){const tr=trk(S.sel);if(k==="sld"){tr.slide.has(s)?tr.slide
 function clickEnv(b,s){const t=S.sel,st=trk(t).steps[s];if(!st||st.off)return;st[b]=st[b]?0:1;if(!st.n&&!st.a&&!st.f&&!st.l){trk(t).steps[s]=null;clearStepLocks(t,s)}structEdited();rerenderSeq()}
 let laneDraw=null;
 function laneAt(e){const lane=$("#lane");if(!lane)return;const el=document.elementFromPoint(e.clientX,e.clientY)?.closest(".lb");if(!el||!lane.contains(el))return;
- const s=+el.dataset.s,t=S.sel,st=trk(t).steps[s];if(!st||st.off)return;const[pg,i]=S.lane.split("."),mx=maxOf(meta(t,pg,+i));const r=el.getBoundingClientRect();const v=clamp(Math.round((r.bottom-3-e.clientY)/72*mx),0,mx);
+ const s=+el.dataset.s,t=S.sel,st=trk(t).steps[s];if(!st||st.off)return;const[pg,i]=S.lane.split("."),mx=maxOf(meta(t,pg,+i));const r=el.getBoundingClientRect();const v=clamp(Math.round((r.bottom-6-e.clientY)/(r.height-14)*mx),0,mx);
  if(laneDraw.erase){const m=S.locks.get(lkKey(t,S.lane));if(m){m.delete(s);if(!m.size)S.locks.delete(lkKey(t,S.lane))}}else if(!setLock(t,S.lane,s,v))return;
- const bar=el.querySelector("i");if(laneDraw.erase)bar?.remove();else if(bar)bar.style.setProperty("--h",v/mx*72+"px");else el.insertAdjacentHTML("beforeend",`<i style="--h:${v/mx*72}px"></i>`);
+ el.querySelector("i")?.remove();if(!laneDraw.erase)el.insertAdjacentHTML("beforeend",barHTML(v));
  laneDraw.touched=true;renderTop();drawSlides()}
 function endLaneDraw(){if(!laneDraw)return;const t=laneDraw.touched;laneDraw=null;if(t){structEdited();rerenderSeq()}}
 
@@ -2219,7 +2299,7 @@ function renderMix(){const T=S.tracks;
 
 /* ===== Perform: keyboard modes, multi trig, multi map, multi env, assign, mutes ===== */
 const PMODES=[["normal","Auto track","Keys play the track in focus (AUTO TRACK channel 9)."],["multi","Multi trig","One source plays all six tracks as one big mono synth (channel 7)."],["map","Multi map","Key ranges start patterns, with offset, length and transpose (channel 8)."],["poly","Poly","All six engines play the track in focus with six voices. Other tracks go quiet."]];
-const MTM=["ALL TRK","SPLIT KEY","SEQ START","SEQ TRNSP"],TIMS=["1/16","2/16","4/16","8/16","16/16"];
+const MTM=["ALL TRK","SPLIT KEY","SEQ START","SEQ TRNSP"],TIMS=["DIRECT","1/16","2/16","4/16","8/16","16/16","32/16"];
 const isBlack=n=>[1,3,6,8,10].includes(n%12);
 function kbRange(){const lo=12*(S.kbOct+1);return[lo,lo+47]}
 function zoneOf(n){if(S.mode!=="multi"||S.multi.mode!==1)return null;return n>=S.multi.splitKey?"up":"lo"}
@@ -2714,7 +2794,7 @@ document.addEventListener("click",e=>{
  const bs=e.target.closest("[data-bus]");if(bs){const tr=S.tracks[+bs.dataset.t];tr.out[bs.dataset.bus]=!tr.out[bs.dataset.bus];soundEdited();render();return}
  const pmk=e.target.closest("[data-pmode]");if(pmk){S.mode=pmk.dataset.pmode;if(S.mode==="poly")toast("POLY: T"+(asgT()+1)+" now plays six voices. The other five tracks are off until you leave POLY.");render();return}
  const so2=e.target.closest("[data-strk]");if(so2){S.multi.splitTrack=clamp(S.multi.splitTrack+ +so2.dataset.strk,2,6);render();return}
- const tm=e.target.closest("[data-tim]");if(tm){S.multi.timing=clamp(S.multi.timing+ +tm.dataset.tim,0,4);render();return}
+ const tm=e.target.closest("[data-tim]");if(tm){S.multi.timing=clamp(S.multi.timing+ +tm.dataset.tim,0,6);render();return}
  const ko=e.target.closest("[data-kboct]");if(ko){S.kbOct=clamp(S.kbOct+ +ko.dataset.kboct,0,6);render();return}
  const bd=e.target.closest("[data-band]");if(bd){S.mmapSel=+bd.dataset.band;render();return}
  const mr=e.target.closest("tr[data-mrow]");if(mr&&!e.target.closest("button,.pc,.kselbtn")){S.mmapSel=+mr.dataset.mrow;render();return}
@@ -2830,7 +2910,8 @@ function setPlate(v){S.plate=v;document.documentElement.dataset.plate=v;try{loca
  if(v==="mk2")toast("MKII: the same silver plate, plus user waveforms and the DigiPRO draw machines.");
  render();redraw()}
 (()=>{let v=null;try{v=localStorage.getItem("mmeditor.plate")}catch(_){}if(!["mk1","mk2"].includes(v))v="mk2";S.plate=v;document.documentElement.dataset.plate=v})();
-document.fonts&&document.fonts.ready.then(()=>{redraw();alignLock()});
+document.fonts&&document.fonts.ready.then(()=>{if(S.ws==="seq"){fitLane();drawSlides()}redraw();alignLock()});
+if(window.ResizeObserver)new ResizeObserver(()=>{if(S.ws==="seq"){fitLane();alignLock()}}).observe(document.getElementById("main"));
 addEventListener("resize",()=>{if(S.ws==="seq"){fitLane();drawSlides();alignLock()}redraw()});
 
 /* deep links: #ws=sound&t=3&dock=arp&plate=mk1&mode=multi */

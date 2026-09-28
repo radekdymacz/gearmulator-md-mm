@@ -39,13 +39,6 @@ set(SOURCES
 
 	parameterDescriptions_md.json parameterDescriptions_mm.json
 
-	skins/mdDefault/mdDefault.rml
-	skins/mdDefault/mdKnobs.rcss
-	skins/mdDefault/mdDefault.rcss
-	skins/mmSfx60/mmSfx60.rml
-	skins/mmSfx60/mmKnobAtlas.svg
-	skins/mmSfx60/mmKnobs.rcss
-	skins/mmSfx60/mmSfx60.rcss
 	skins/mdStudio/mdStudio.rml
 	skins/mdStudio/mdStudio.html
 	skins/mdStudio/mdDesk.css
@@ -80,13 +73,9 @@ set(COMMON_ASSETS
 	"../../../jucePluginData/elektron_panel.rcss"
 	"../../../jucePluginData/elektron_materials.rcss")
 file(GLOB MD_SKIN_ASSETS CONFIGURE_DEPENDS
-	"skins/mdDefault/*.png" "skins/mdDefault/*.rml" "skins/mdDefault/*.rcss"
-	"skins/mdDefault/*.ttf" "skins/mdDefault/*.lua"
 	"skins/mdStudio/*.rml" "skins/mdStudio/*.html" "skins/mdStudio/*.css" "skins/mdStudio/*.js"
 	"skins/mdStudio/fonts/*.woff2" "skins/mdStudio/fonts/*.ttf")
 file(GLOB MM_SKIN_ASSETS CONFIGURE_DEPENDS
-	"skins/mmSfx60/*.png" "skins/mmSfx60/*.rml" "skins/mmSfx60/*.rcss"
-	"skins/mmSfx60/*.ttf" "skins/mmSfx60/*.lua"
 	"skins/mmStudio/*.rml" "skins/mmStudio/*.html" "skins/mmStudio/*.css"
 	"skins/mmStudio/mmMockup.js" "skins/mmStudio/mmConvert.js" "skins/mmStudio/mmAdapter.js"
 	# shared with the Machinedrum Editor: the page bridge and the OFL fonts
@@ -226,27 +215,8 @@ if(BUILD_TESTING)
 		set_property(TARGET mdLcdInteractionCorpusTest PROPERTY FOLDER "Elektron/test")
 	endif()
 
-	add_executable(mdLcdEditorPointerTest mdLcdEditorPointerTest.cpp)
-	target_include_directories(mdLcdEditorPointerTest PRIVATE
-		"${CMAKE_SOURCE_DIR}/source" "${CMAKE_SOURCE_DIR}/source/elektron/md")
-	target_link_libraries(mdLcdEditorPointerTest PRIVATE mdJucePlugin
-		jucePluginEditorLib juceRmlUi juceUiLib juce_plugin_modules mdLib)
-	add_test(NAME mdLcdEditorPointerTest COMMAND mdLcdEditorPointerTest)
-	set_tests_properties(mdLcdEditorPointerTest PROPERTIES
-		LABELS "IntegrationTest;LcdInteraction;PointerInput")
-	set_property(TARGET mdLcdEditorPointerTest PROPERTY FOLDER "Elektron/test")
-
-	add_executable(mmLcdEditorPointerTest mdLcdEditorPointerTest.cpp)
-	target_compile_definitions(mmLcdEditorPointerTest PRIVATE MD_LCD_POINTER_TEST_MM=1)
-	target_include_directories(mmLcdEditorPointerTest PRIVATE
-		"${CMAKE_SOURCE_DIR}/source" "${CMAKE_SOURCE_DIR}/source/elektron/md")
-	target_link_libraries(mmLcdEditorPointerTest PRIVATE mmJucePlugin
-		jucePluginEditorLib juceRmlUi juceUiLib juce_plugin_modules mdLib)
-	add_test(NAME mmLcdEditorPointerTest COMMAND mmLcdEditorPointerTest)
-	set_tests_properties(mmLcdEditorPointerTest PROPERTIES
-		LABELS "IntegrationTest;LcdInteraction;PointerInput")
-	set_property(TARGET mmLcdEditorPointerTest PROPERTY FOLDER "Elektron/test")
-
+	# The panel editor's pointer tests (mdLcdEditorPointerTest.cpp) went with the panel skins (P5):
+	# the editor page is the only UI.
 	add_executable(mdStandaloneRendererPolicyTest mdStandaloneRendererPolicyTest.cpp)
 	add_test(NAME mdStandaloneRendererPolicyTest COMMAND mdStandaloneRendererPolicyTest)
 	set_tests_properties(mdStandaloneRendererPolicyTest PROPERTIES

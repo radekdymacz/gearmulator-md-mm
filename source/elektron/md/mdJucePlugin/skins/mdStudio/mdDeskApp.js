@@ -1203,6 +1203,13 @@ Bridge.onMessage(m => {
 	}
 });
 
+/* The page's first real render, logged so a blank page fails the self-tests. */
+let firstRenderLogged = false;
+function logFirstRender() {
+	if (firstRenderLogged || !S.tracks.length) return; firstRenderLogged = true;
+	const r = document.querySelector(".app").getBoundingClientRect();
+	Bridge.log(`first render: ${S.ws}, ${document.querySelectorAll("#main *").length} elements in #main, page ${Math.round(r.width)} x ${Math.round(r.height)}, window ${innerWidth} x ${innerHeight}, ${Math.round(performance.now())} ms`);
+}
 function render() {
 	closePicker(); closeK(); const sl = $("#seqscroll")?.scrollLeft || 0; renderTop();
 	const full = S.ws === "mix" || S.ws === "song" || S.ws === "control"; $("#body").classList.toggle("full", full); $("#rail").hidden = full;
@@ -1210,7 +1217,7 @@ function render() {
 	if (!full) renderRail(); renderSub();
 	({ seq: renderSeq, sound: renderSound, mix: renderMix, song: renderSong, sampler: renderSampler, control: renderControl })[S.ws]();
 	const sc = $("#seqscroll"); if (sc) { sc.scrollLeft = sl; $("#lanescroll").scrollLeft = sl; } enhanceSelects(document.getElementById("main"));
-	phLast = -1; movePH();
+	phLast = -1; movePH(); logFirstRender();
 }
 function setPlate(v) { S.plate = v; document.documentElement.dataset.plate = v; try { localStorage.setItem("mddesk.plate", v); } catch (_) { } renderTop(); redraw(); }
 (() => { let v = null; try { v = localStorage.getItem("mddesk.plate"); } catch (_) { } if (!v) v = matchMedia("(prefers-color-scheme: dark)").matches ? "mk2" : "mk1"; S.plate = v; document.documentElement.dataset.plate = v; })();

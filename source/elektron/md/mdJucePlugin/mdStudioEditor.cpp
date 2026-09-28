@@ -79,10 +79,28 @@ namespace mdJucePlugin
 		bool pageAboutToLoad(const juce::String& _url) override
 		{
 			if(!_url.startsWith("gmbridge://"))
+			{
+				if(onLoadEvent && !_url.startsWith("javascript:"))
+					onLoadEvent("about to load " + _url.substring(0, 60));
 				return true;
+			}
 			m_onBridge(_url.toStdString());
 			return false;
 		}
+
+		void pageFinishedLoading(const juce::String& _url) override
+		{
+			if(onLoadEvent && !_url.startsWith("javascript:"))
+				onLoadEvent("finished loading " + _url.substring(0, 60));
+		}
+		bool pageLoadHadNetworkError(const juce::String& _error) override
+		{
+			if(onLoadEvent)
+				onLoadEvent("load error " + _error);
+			return false;
+		}
+
+		std::function<void(const juce::String&)> onLoadEvent;
 
 	private:
 		std::function<void(const std::string&)> m_onBridge;
@@ -137,6 +155,9 @@ namespace mdJucePlugin
 		};
 
 		m_web = std::make_unique<StudioWebView>([this](const std::string& _url) { onBridge(_url); });
+#if JUCE_WEB_BROWSER
+		m_web->onLoadEvent = [](const juce::String& _e) { log("web view: " + _e); };
+#endif
 		getRmlComponent()->addAndMakeVisible(*m_web);
 		layoutWebView();
 
@@ -610,6 +631,15 @@ namespace mdJucePlugin
 			const auto t = m_link->readTelemetry();
 			log("telemetry: step " + juce::String(t.step) + " playing " + juce::String(t.playing ? 1 : 0) + " rec "
 				+ juce::String(t.recording ? 1 : 0) + " grid " + juce::String(t.gridEdit ? 1 : 0) + " page " + juce::String(t.knobPage));
+		}
+		if(m_ticks == 60 || m_ticks == 300)
+		{
+			// The web view as JUCE has it (a blank window = no view, no size or not showing).
+			const auto b = m_web ? m_web->getBounds() : juce::Rectangle<int>();
+			auto* root = getRmlComponent();
+			log("web view: " + b.toString() + (m_web && m_web->isShowing() ? " showing" : " NOT showing") + ", root "
+				+ (root ? root->getBounds().toString() + (root->isShowing() ? " showing" : " NOT showing") : juce::String("none"))
+				+ ", window " + (m_web && m_web->getTopLevelComponent() ? m_web->getTopLevelComponent()->getBounds().toString() : juce::String("none")));
 		}
 		if(m_ticks == 90)
 		{

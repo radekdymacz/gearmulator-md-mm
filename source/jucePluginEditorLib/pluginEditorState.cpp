@@ -375,7 +375,8 @@ void PluginEditorState::fillMenu(juceRmlUi::Menu& menu)
 				juce::MessageManager::callAsync([this, skin] { loadSkin(skin); });
 			});
 		}
-		if(!skinMenu.empty())
+		// A product with one UI has nothing to choose.
+		if(getIncludedSkins().size() > 1)
 			menu.addSubMenu("Skins", std::move(skinMenu));
 	}
 

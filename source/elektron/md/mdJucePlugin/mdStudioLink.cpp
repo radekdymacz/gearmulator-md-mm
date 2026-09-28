@@ -240,7 +240,11 @@ namespace mdJucePlugin
 		return m_processor.getPlugin().withDeviceLocked([](synthLib::Device* _base)
 		{
 			auto* device = dynamic_cast<md::Device*>(_base);
-			if(!device || !device->isValid())
+			// No device yet (the processor is still making or replacing it): not a missing ROM.
+			// Only a device that exists and has no valid firmware is a definite NO ROM.
+			if(!device)
+				return mdDesk::Desk::Firmware::Loading;
+			if(!device->isValid())
 				return mdDesk::Desk::Firmware::Missing;
 			const auto& hw = device->getHardware();
 			if(hw.getModel() != md::MachineModel::Machinedrum || hw.firmwareFingerprint() != md::g_mdOs163Fingerprint)

@@ -38,11 +38,38 @@ namespace mdJucePlugin
 			config.saveIfNeeded();
 		}
 
+		// GEARMULATOR_MDSTUDIO_SELFTEST=p5skin: switch skins live through the same call the
+		// Editor > Skins menu makes, and log the editor each time (P5).
+		if(juce::SystemStats::getEnvironmentVariable("GEARMULATOR_MDSTUDIO_SELFTEST", {}) == "p5skin")
+		{
+			const auto logLine = [](const juce::String& _l)
+			{
+				juce::File::getSpecialLocation(juce::File::tempDirectory).getChildFile("gearmulator-mdStudio.log")
+					.appendText(juce::Time::getCurrentTime().toString(false, true, true, true) + " P5: " + _l + "\n");
+			};
+			const auto report = [this, logLine](const juce::String& _what)
+			{
+				auto* e = getEditor();
+				auto* ui = getUiRoot();
+				logLine(_what + ": current skin \"" + juce::String(getCurrentSkin().displayName) + "\" (" + juce::String(getCurrentSkin().filename)
+					+ "), editor " + (dynamic_cast<StudioEditor*>(e) ? "Machinedrum Editor page" : e ? "panel" : "none")
+					+ (ui ? ", " + juce::String(ui->getWidth()) + " x " + juce::String(ui->getHeight()) : juce::String()));
+			};
+			juce::String names;
+			for(const auto& skin : getIncludedSkins())
+				names << "\"" << skin.displayName << "\" ";
+			logLine("Editor > Skins lists: " + names);
+			// The editor page re-made twice, as a settings change or a host reopening it does.
+			juce::Timer::callAfterDelay(20000, [this, report] { report("at start"); loadSkin(getIncludedSkins()[0]);
+				juce::Timer::callAfterDelay(6000, [this, report] { report("re-made once"); loadSkin(getIncludedSkins()[0]);
+					juce::Timer::callAfterDelay(8000, [report] { report("re-made twice"); }); }); });
+		}
+
 		const auto configuredSkin = readSkinFromConfig();
-		if(configuredSkin.isValid() && isSkinCompatible(_processor.getModel(),
+		if(configuredSkin.isValid() && configuredSkin.folder.empty() && isSkinCompatible(_processor.getModel(),
 			configuredSkin.displayName, configuredSkin.filename))
 		{
-			loadSkin(configuredSkin);
+			loadSkin(getIncludedSkins().front());
 			return;
 		}
 
@@ -60,13 +87,13 @@ namespace mdJucePlugin
 		loadDefaultSkin();
 	}
 
+	// The editor page is the only UI: whatever skin is asked for, the product's page is made.
 	jucePluginEditorLib::Editor* PluginEditorState::createEditor(const jucePluginEditorLib::Skin& _skin)
 	{
-		if(isStudioSkin(_skin.displayName, _skin.filename))
-			return new StudioEditor(m_processor, _skin);
-		if(isMmStudioSkin(_skin.displayName, _skin.filename))
-			return new MmStudioEditor(m_processor, _skin);
-		return new Editor(m_processor, _skin);
+		const auto& page = getIncludedSkins().front();
+		if(static_cast<AudioPluginAudioProcessor&>(m_processor).getModel() == md::MachineModel::Monomachine)
+			return new MmStudioEditor(m_processor, isMmStudioSkin(_skin.displayName, _skin.filename) ? _skin : page);
+		return new StudioEditor(m_processor, isStudioSkin(_skin.displayName, _skin.filename) ? _skin : page);
 	}
 
 	void PluginEditorState::initContextMenu(juceRmlUi::Menu& _menu)

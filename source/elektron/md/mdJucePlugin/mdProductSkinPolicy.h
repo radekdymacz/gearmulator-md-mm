@@ -8,12 +8,12 @@ namespace mdJucePlugin
 {
 	constexpr const char* defaultSkinName(const md::MachineModel _model)
 	{
-		return _model == md::MachineModel::Monomachine ? "mmStudio" : "mdDefault";
+		return _model == md::MachineModel::Monomachine ? "Monomachine Editor" : "Machinedrum Editor";
 	}
 
 	constexpr const char* defaultSkinFile(const md::MachineModel _model)
 	{
-		return _model == md::MachineModel::Monomachine ? "mmStudio.rml" : "mdDefault.rml";
+		return _model == md::MachineModel::Monomachine ? "mmStudio.rml" : "mdStudio.rml";
 	}
 
 	// The HTML studio editor (P0) instead of the panel editor.
@@ -28,18 +28,12 @@ namespace mdJucePlugin
 		return _displayName == "mmStudio" || _filename == "mmStudio.rml";
 	}
 
-	// Preserve support for third-party skins while rejecting a persisted selection
-	// that is known to belong to the other Elektron product.
+	// Only the product's own editor page: any other saved skin (the removed panels, another
+	// product's page, a skin folder) falls back to it silently.
 	constexpr bool isSkinCompatible(const md::MachineModel _model,
 		const std::string_view _displayName, const std::string_view _filename)
 	{
-		const auto isMachinedrumSkin = _displayName == "mdDefault" || _filename == "mdDefault.rml"
-			|| isStudioSkin(_displayName, _filename);
-		const auto isMonomachineSkin = _displayName == "mmSfx60" || _filename == "mmSfx60.rml"
-			|| isMmStudioSkin(_displayName, _filename);
-
-		return _model == md::MachineModel::Monomachine
-			? !isMachinedrumSkin
-			: !isMonomachineSkin;
+		return _model == md::MachineModel::Monomachine ? isMmStudioSkin(_displayName, _filename) || _displayName == "Monomachine Editor"
+			: isStudioSkin(_displayName, _filename) || _displayName == "Machinedrum Editor";
 	}
 }

@@ -24,7 +24,9 @@
 	const cpuTest = /[?&]selftest=mmcpu/.test(location.search);
 
 	/* ---------------- what the machine holds ---------------- */
-	const FW = { pat: [], kit: [], song: [], glob: [], machine: null, engine: "missing", cat: null };
+	/* The engine is unknown until the plug-in says (P5): not "missing", which opened the NO ROM dialog
+	   before the first report. */
+	const FW = { pat: [], kit: [], song: [], glob: [], machine: null, engine: "loading", cat: null };
 	/* per slot: the JSON of the document the page's state converts to when it
 	   shows the machine's version, i.e. "nothing to send" */
 	const BASE = { pat: [], kit: [], song: [], glob: [] };
@@ -36,6 +38,9 @@
 
 	const send = (msg, opt) => Bridge.send(msg, opt);
 	const log = t => Bridge.log(t);
+	/* The page's first render, logged so a blank page fails the self-tests (P5). */
+	setTimeout(() => { const a = document.querySelector(".app"), r = a ? a.getBoundingClientRect() : { width: 0, height: 0 };
+		log(`first render: ${document.querySelectorAll("#main *").length} elements in #main, page ${Math.round(r.width)} x ${Math.round(r.height)}, window ${innerWidth} x ${innerHeight}`); }, 1500);
 
 	/* ---------------- start empty, not with the mockup's example ---------------- */
 	const { applyKit, applyPat, emptyPat, clearedKit, captureKit, capturePat, setKitState, render, renderTop, drawLib, toast, ask, setEng } =
@@ -158,11 +163,12 @@
 
 	/* ---------------- the ROM ---------------- */
 	window.firstRun = function () {
+		log("NO ROM dialog shown (engine " + FW.engine + ")");
 		ask(`<div class="lcdbig">MONOMACHINE FIRMWARE NEEDED</div>
  <p>Monomachine Editor runs the real Monomachine operating system. Elektron's firmware cannot ship with the plug-in, so you add the one from your own machine.</p>
  <ol class="recvsteps"><li>Dump the <b>OS 1.32B</b> flash image from your Monomachine (<span class="mono">.bin</span>).</li><li>Put it in the plug-in's ROM folder (<b>Show ROM folder</b>).</li><li>Reopen the plug-in. It stays on this computer only.</li></ol>`,
 			[["Show ROM folder", "cream", () => send({ op: "revealRomFolder" })],
-				["Check again", "", () => send({ op: "recheckFirmware" }, { onResult: r => toast(r.ok ? r.note : r.errors[0]) })], ["Close", "", () => {}]], "first");
+				["Check again", "", () => send({ op: "recheckFirmware" }, { onResult: r => { toast(r.ok ? r.note : r.errors[0]); if (!r.ok) setTimeout(window.firstRun, 50); } })], ["Close", "", () => {}]], "first");
 	};
 
 	/* ---------------- engine and the firmware's LCD ---------------- */
@@ -195,13 +201,16 @@
 				if (b) for (let k = 0; k < 8; k++) if (b & (0x80 >> k)) g.fillRect(xb * 8 + k, y, 1, 1);
 			}
 	}
-	let noRomShown = false;
+	let noRomShown = false, noRomAt = 0;
 	function showEngine() {
 		const e = FW.engine;
 		const st = e === "missing" ? "norom" : e === "unsupported" ? "unsupported" : e === "loading" ? "loading" : e === "booting" ? "boot"
 			: synced ? "ready" : "sync";
 		if (S.eng !== st) setEng(st);
-		if (st === "norom" && !noRomShown) { noRomShown = true; window.firstRun(); }
+		/* NO ROM only when the plug-in has said so for 1.5 s (a device being made or replaced is not a
+		   missing ROM), and the dialog closes by itself as soon as the engine is anything else. */
+		if (st === "norom") { if (!noRomAt) noRomAt = performance.now(); if (!noRomShown && performance.now() - noRomAt > 1500) { noRomShown = true; window.firstRun(); } else if (!noRomShown) setTimeout(showEngine, 1600); }
+		else { noRomAt = 0; noRomShown = false; const d = $("#dlg"); if (d && !d.hidden && /FIRMWARE NEEDED/.test(d.textContent)) d.hidden = true; }
 		if (st === "ready" && !last.ready) { last.ready = true; log("ready: pattern " + CUR.pat + " kit " + CUR.kit); if (selfTest) setTimeout(runSelfTest, 500); if (cpuTest) runCpuPhases(); }
 	}
 

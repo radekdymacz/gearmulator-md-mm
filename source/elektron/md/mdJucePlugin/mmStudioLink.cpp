@@ -206,7 +206,10 @@ namespace mdJucePlugin
 		{
 			using E = mmDesk::Desk::Engine;
 			auto* device = dynamic_cast<md::Device*>(_base);
-			if(!device || !device->isValid())
+			// No device yet: not a missing ROM (P5). Only an invalid device is a definite NO ROM.
+			if(!device)
+				return E::Loading;
+			if(!device->isValid())
 				return E::Missing;
 			const auto& hw = device->getHardware();
 			if(hw.getModel() != md::MachineModel::Monomachine || hw.firmwareFingerprint() != md::g_mmOs132bFingerprint)
