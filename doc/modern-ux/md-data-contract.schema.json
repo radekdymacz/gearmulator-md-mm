@@ -1278,6 +1278,426 @@
           }
         }
       }
+    },
+    "catalogue": {
+      "type": "object",
+      "description": "The OS 1.63 machine table (mdDesk::Desk::machineCatalogue).",
+      "required": [
+        "schema",
+        "version",
+        "machines"
+      ],
+      "properties": {
+        "schema": {
+          "const": "md-desk/machines"
+        },
+        "version": {
+          "const": 1
+        },
+        "machines": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": [
+              "model",
+              "machine",
+              "family",
+              "params"
+            ],
+            "properties": {
+              "model": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 255
+              },
+              "machine": {
+                "type": "string"
+              },
+              "family": {
+                "type": "string"
+              },
+              "params": {
+                "type": "array",
+                "minItems": 24,
+                "maxItems": 24,
+                "items": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "message": {
+      "description": "P6: every message the plug-in sends the Machinedrum Editor page (Bridge gm.recv). Checked by mdDeskTest against what the desk publishes.",
+      "type": "object",
+      "required": [
+        "type"
+      ],
+      "oneOf": [
+        {
+          "type": "object",
+          "description": "The machine table, once after ready.",
+          "required": [
+            "type",
+            "doc"
+          ],
+          "properties": {
+            "type": {
+              "const": "catalogue"
+            },
+            "doc": {
+              "$ref": "#/$defs/catalogue"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "required": [
+            "type",
+            "kind",
+            "doc"
+          ],
+          "properties": {
+            "type": {
+              "const": "doc"
+            },
+            "kind": {
+              "enum": [
+                "pattern",
+                "kit",
+                "song",
+                "global"
+              ]
+            },
+            "pending": {
+              "type": "boolean",
+              "description": "The document shows an edit submitted to the machine and not yet read back (P6: pending, published merged over observed)."
+            },
+            "doc": {
+              "type": "object"
+            },
+            "slot": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 127
+            },
+            "source": {
+              "enum": [
+                "none",
+                "dump",
+                "memory",
+                "tracked"
+              ],
+              "description": "P6: where the observed document came from."
+            }
+          },
+          "allOf": [
+            {
+              "if": {
+                "properties": {
+                  "kind": {
+                    "const": "pattern"
+                  }
+                }
+              },
+              "then": {
+                "properties": {
+                  "doc": {
+                    "$ref": "#/$defs/pattern"
+                  }
+                }
+              }
+            },
+            {
+              "if": {
+                "properties": {
+                  "kind": {
+                    "const": "kit"
+                  }
+                }
+              },
+              "then": {
+                "properties": {
+                  "doc": {
+                    "$ref": "#/$defs/kit"
+                  }
+                }
+              }
+            },
+            {
+              "if": {
+                "properties": {
+                  "kind": {
+                    "const": "song"
+                  }
+                }
+              },
+              "then": {
+                "properties": {
+                  "doc": {
+                    "$ref": "#/$defs/song"
+                  }
+                }
+              }
+            },
+            {
+              "if": {
+                "properties": {
+                  "kind": {
+                    "const": "global"
+                  }
+                }
+              },
+              "then": {
+                "properties": {
+                  "doc": {
+                    "$ref": "#/$defs/global"
+                  }
+                }
+              }
+            }
+          ]
+        },
+        {
+          "type": "object",
+          "required": [
+            "type",
+            "doc"
+          ],
+          "properties": {
+            "type": {
+              "const": "machine"
+            },
+            "doc": {
+              "$ref": "#/$defs/machine"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "required": [
+            "type",
+            "op",
+            "ok",
+            "errors",
+            "note"
+          ],
+          "properties": {
+            "type": {
+              "const": "result"
+            },
+            "op": {
+              "type": "string"
+            },
+            "id": {
+              "type": "integer"
+            },
+            "ok": {
+              "type": "boolean"
+            },
+            "errors": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "note": {
+              "type": "string"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "description": "A command that would lose something asks first; the page sends it again with force.",
+          "required": [
+            "type",
+            "ask"
+          ],
+          "properties": {
+            "type": {
+              "const": "ask"
+            },
+            "ask": {
+              "enum": [
+                "overwriteKit",
+                "relinkKit",
+                "loadKit",
+                "breakChain",
+                "discardKit"
+              ]
+            },
+            "command": {
+              "type": "object"
+            },
+            "kit": {
+              "type": [
+                "integer",
+                "null"
+              ]
+            },
+            "p": {
+              "type": "integer"
+            },
+            "target": {
+              "type": "integer"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "required": [
+            "type",
+            "message"
+          ],
+          "properties": {
+            "type": {
+              "const": "error"
+            },
+            "message": {
+              "type": "string"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "required": [
+            "type",
+            "step",
+            "pattern",
+            "playing",
+            "recording",
+            "valid"
+          ],
+          "properties": {
+            "type": {
+              "const": "telemetry"
+            },
+            "step": {
+              "type": "integer",
+              "minimum": -1
+            },
+            "pattern": {
+              "type": "integer",
+              "minimum": -1
+            },
+            "playing": {
+              "type": "boolean"
+            },
+            "recording": {
+              "type": "boolean"
+            },
+            "valid": {
+              "type": "boolean"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "required": [
+            "type",
+            "doc"
+          ],
+          "properties": {
+            "type": {
+              "const": "setup"
+            },
+            "doc": {
+              "$ref": "#/$defs/setup"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "required": [
+            "type",
+            "doc",
+            "values",
+            "ccPerSecond",
+            "runs",
+            "ccLimit"
+          ],
+          "properties": {
+            "type": {
+              "const": "mod"
+            },
+            "doc": {
+              "$ref": "#/$defs/modulators"
+            },
+            "values": {
+              "type": "array",
+              "items": {
+                "type": "number"
+              }
+            },
+            "ccPerSecond": {
+              "type": "number",
+              "minimum": 0
+            },
+            "runs": {
+              "enum": [
+                "editor",
+                "plug-in"
+              ]
+            },
+            "ccLimit": {
+              "type": "number"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "description": "The firmware's own LCD while it starts: 128 x 64, one bit a pixel, row-major, base64.",
+          "required": [
+            "type",
+            "bits"
+          ],
+          "properties": {
+            "type": {
+              "const": "lcd"
+            },
+            "bits": {
+              "type": "string"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "description": "The plug-in's MIDI learn mappings (host).",
+          "required": [
+            "type",
+            "doc"
+          ],
+          "properties": {
+            "type": {
+              "const": "learn"
+            },
+            "doc": {
+              "type": "object",
+              "required": [
+                "mappings",
+                "learning"
+              ]
+            }
+          }
+        },
+        {
+          "type": "object",
+          "description": "The engine changed: the page starts its documents over.",
+          "required": [
+            "type"
+          ],
+          "properties": {
+            "type": {
+              "const": "reset"
+            }
+          }
+        }
+      ]
     }
   }
 }

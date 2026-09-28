@@ -2,7 +2,7 @@
 // must decode and re-encode byte for byte, and survive the JSON contract
 // (value -> JSON -> value) unchanged. Files may hold one or several messages.
 //
-//   elektronDataCorpusTest [--json <out-dir>] <file-or-dir>...
+//   elektronDataCorpusTest [--json <out-dir>] [--schema <file>] <file-or-dir>...
 //
 // --json also writes each dump's contract document to <out-dir>.
 
@@ -13,11 +13,14 @@
 #include "mdPattern.h"
 #include "mdSong.h"
 
+#include "jsonSchema.h"
+
 #include "baseLib/filesystem.h"
 
 #include <algorithm>
 #include <cstdio>
 #include <map>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -34,6 +37,8 @@ namespace
 	std::map<std::string, Tally> g_tally;
 	int g_failures = 0;
 	std::string g_jsonOut;
+	// --schema: every document must also validate against the contract's JSON Schema (the executable spec).
+	std::optional<elektronData::json::Schema> g_schema;
 	size_t g_jsonCount = 0;
 
 	std::vector<Bytes> splitMessages(const Bytes& _file)
@@ -70,7 +75,14 @@ namespace
 			_why = "re-encode differs";
 			return false;
 		}
-		const auto text = elektronData::json::write(_toJson(*value));
+		const auto doc = _toJson(*value);
+		if(g_schema)
+			if(const auto problems = g_schema->validate(doc); !problems.empty())
+			{
+				_why = "schema: " + problems.front();
+				return false;
+			}
+		const auto text = elektronData::json::write(doc);
 		if(!g_jsonOut.empty())
 		{
 			const auto pretty = elektronData::json::write(_toJson(*value), 1);
@@ -181,6 +193,20 @@ int main(const int _argc, char** _argv)
 	}
 	for(int i = 1; i < _argc; ++i)
 	{
+		if(std::string(_argv[i]) == "--schema" && i + 1 < _argc)
+		{
+			std::vector<uint8_t> text;
+			const auto* path = _argv[++i];
+			const auto root = baseLib::filesystem::readFile(text, path)
+				? elektronData::json::parse(std::string(text.begin(), text.end())) : std::nullopt;
+			if(!root)
+			{
+				std::fprintf(stderr, "FAIL cannot read the schema %s\n", path);
+				return 1;
+			}
+			g_schema.emplace(*root);
+			continue;
+		}
 		if(std::string(_argv[i]) == "--json" && i + 1 < _argc)
 		{
 			g_jsonOut = _argv[++i];

@@ -8,7 +8,13 @@
 #include "elektronData/mmDump.h"
 #include "elektronData/mmJson.h"
 
+#include "elektronData/jsonSchema.h"
+
 #include <cstdio>
+#include <cstdlib>
+#include <fstream>
+#include <iterator>
+#include <map>
 #include <string>
 
 namespace
@@ -17,6 +23,8 @@ namespace
 	using Bytes = std::vector<uint8_t>;
 	using ed::json::Value;
 	int g_failures = 0;
+	// Every message a desk published in these tests; main() checks them against the contract (P6).
+	std::vector<Value> g_published;
 
 	void check(const bool _ok, const char* _what)
 	{
@@ -141,6 +149,8 @@ namespace
 			ed::MmSong so;
 			so.position = s;
 			so.rows[0].bytes[0] = 0xff;
+			// An END row as the firmware writes it: no tempo change (0xffff), the contract's null.
+			so.rows[0].bytes[ed::mmSongRow::g_tempo] = so.rows[0].bytes[ed::mmSongRow::g_tempo + 1] = 0xff;
 			m.slots[{0x69, s}] = ed::encodeMmSong(so);
 		}
 		for(uint8_t s = 0; s < 8; ++s)
@@ -165,7 +175,7 @@ namespace
 				m.screenWord = mmDesk::g_screenMain;
 			return true;
 		};
-		port.toPage = [&](const Value& _v) { page.push_back(_v); };
+		port.toPage = [&](const Value& _v) { page.push_back(_v); g_published.push_back(_v); };
 		port.nowMs = [&] { return now; };
 		mmDesk::Desk d(port);
 		const auto run = [&](const double _ms)
@@ -259,7 +269,7 @@ void playingFromSteps()
 	port.sendParam = [](uint8_t, uint8_t, uint8_t, uint8_t) {};
 	port.sendNrpn = [](uint8_t, uint8_t, uint8_t) {};
 	port.pressKeys = [](const std::vector<mmDesk::Key>&) { return true; };
-	port.toPage = [&](const Value& _v) { page.push_back(_v); };
+	port.toPage = [&](const Value& _v) { page.push_back(_v); g_published.push_back(_v); };
 	port.nowMs = [&] { return now; };
 	mmDesk::Desk d(port);
 	d.onPageMessage(*ed::json::parse(R"({"op":"ready"})"));
@@ -306,11 +316,42 @@ void playingFromSteps()
 	check(machineStopped, "the step stands still for three step times: stopped");
 }
 
+// The executable spec: every published message validates against the contract's
+// JSON Schema ($defs/message). GEARMULATOR_DUMP_MESSAGES=1 prints one of each type.
+void checkPublished()
+{
+	std::ifstream in(MMDESK_SCHEMA);
+	const std::string text{std::istreambuf_iterator<char>(in), std::istreambuf_iterator<char>()};
+	const auto root = ed::json::parse(text);
+	check(root.has_value(), "the contract schema loads");
+	if(!root)
+		return;
+	const ed::json::Schema schema(*root);
+	std::map<std::string, size_t> types;
+	size_t bad = 0;
+	for(const auto& m : g_published)
+	{
+		const auto* type = m.find("type");
+		const auto name = type && type->isString() ? type->asString() : std::string("?");
+		if(types[name]++ == 0 && std::getenv("GEARMULATOR_DUMP_MESSAGES"))
+			std::printf("%s\n", ed::json::write(m).c_str());
+		const auto problems = schema.validate(m, "message");
+		if(problems.empty())
+			continue;
+		if(bad++ < 5)
+			for(const auto& p : problems)
+				std::printf("    %s: %s\n", name.c_str(), p.c_str());
+	}
+	std::printf("  %zu published messages of %zu types, %zu off the contract\n", g_published.size(), types.size(), bad);
+	check(bad == 0 && !g_published.empty(), "every published message is on the contract");
+}
+
 int main()
 {
 	recvSession();
 	desk();
 	playingFromSteps();
+	checkPublished();
 	std::printf("%s (%d failures)\n", g_failures ? "FAIL" : "PASS", g_failures);
 	return g_failures ? 1 : 0;
 }

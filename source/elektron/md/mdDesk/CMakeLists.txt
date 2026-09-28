@@ -28,6 +28,7 @@ set_property(TARGET mdDesk PROPERTY FOLDER "Elektron")
 if(BUILD_TESTING)
 	add_executable(mdDeskTest mdDeskTest.cpp)
 	target_link_libraries(mdDeskTest PRIVATE mdDesk)
+	target_compile_definitions(mdDeskTest PRIVATE MDDESK_SCHEMA="${CMAKE_CURRENT_SOURCE_DIR}/../../../../doc/modern-ux/md-data-contract.schema.json")
 	target_compile_definitions(mdDeskTest PRIVATE
 		MDDESK_TESTDATA_DIR="${CMAKE_CURRENT_SOURCE_DIR}/../elektronData/testdata")
 	add_test(NAME mdDeskTest COMMAND mdDeskTest)

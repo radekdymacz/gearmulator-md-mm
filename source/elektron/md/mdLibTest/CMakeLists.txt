@@ -327,8 +327,9 @@ set_property(TARGET mdDataLayerFirmwareTest PROPERTY FOLDER "Elektron/test")
 # P2 MD Desk smoke test: page commands through mdDesk::Desk into MD 1.63
 # firmware, read back by dump (patterns, songs, globals) and SAVE KIT (the
 # working kit). Manual: needs a user-supplied ROM.
-add_executable(mdDeskFirmwareTest mdDeskFirmwareTest.cpp mdFirmwareSession.h)
+add_executable(mdDeskFirmwareTest mdDeskFirmwareTest.cpp mdFirmwareSession.h contractCheck.h)
 target_link_libraries(mdDeskFirmwareTest PRIVATE mdLib mdDesk)
+target_compile_definitions(mdDeskFirmwareTest PRIVATE MDDESK_SCHEMA="${CMAKE_CURRENT_SOURCE_DIR}/../../../../doc/modern-ux/md-data-contract.schema.json")
 set_property(TARGET mdDeskFirmwareTest PROPERTY FOLDER "Elektron/test")
 
 # P3 Machinedrum Editor discovery probes (working kit in memory, live
@@ -369,6 +370,7 @@ set_property(TARGET mmEditorProbeFirmwareTest PROPERTY FOLDER "Elektron/test")
 # (SYSEX RECV session, pattern/kit/song delivery, queue). Manual: needs a ROM.
 add_executable(mmDeskFirmwareTest mmDeskFirmwareTest.cpp mdFirmwareSession.h)
 target_link_libraries(mmDeskFirmwareTest PRIVATE mdLib mmDesk)
+target_compile_definitions(mmDeskFirmwareTest PRIVATE MMDESK_SCHEMA="${CMAKE_CURRENT_SOURCE_DIR}/../../../../doc/modern-ux/mm-data-contract.schema.json")
 set_property(TARGET mmDeskFirmwareTest PROPERTY FOLDER "Elektron/test")
 # -DGEARMULATOR_MM_ROM=<OS 1.32B image> runs it in ctest; without it the test skips.
 add_test(NAME mmDeskFirmwareTest COMMAND mmDeskFirmwareTest ${GEARMULATOR_MM_ROM})

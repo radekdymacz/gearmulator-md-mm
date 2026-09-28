@@ -9,6 +9,7 @@ add_library(elektronData STATIC)
 target_sources(elektronData PRIVATE
 	dumpIo.h
 	json.cpp json.h
+	jsonSchema.cpp jsonSchema.h
 	mdCommands.cpp mdCommands.h
 	mdGlobal.cpp mdGlobal.h
 	mdJson.cpp mdJson.h
@@ -48,7 +49,8 @@ if(BUILD_TESTING)
 	# -DELEKTRONDATA_CORPUS_DIR=<dir of .syx dumps>.
 	add_executable(elektronDataCorpusTest elektronDataCorpusTest.cpp)
 	target_link_libraries(elektronDataCorpusTest PRIVATE elektronData baseLib)
-	add_test(NAME elektronDataCorpusTest COMMAND elektronDataCorpusTest ${CMAKE_CURRENT_SOURCE_DIR}/testdata)
+	add_test(NAME elektronDataCorpusTest COMMAND elektronDataCorpusTest
+		--schema ${CMAKE_CURRENT_SOURCE_DIR}/../../../../doc/modern-ux/md-data-contract.schema.json ${CMAKE_CURRENT_SOURCE_DIR}/testdata)
 	set_tests_properties(elektronDataCorpusTest PROPERTIES LABELS "UnitTest")
 	set_property(TARGET elektronDataCorpusTest PROPERTY FOLDER "Elektron/test")
 	# Monomachine OS 1.32B: the same checks (byte-exact, JSON-exact, valid) on
@@ -62,7 +64,8 @@ if(BUILD_TESTING)
 
 	add_executable(mmDataCorpusTest mmDataCorpusTest.cpp)
 	target_link_libraries(mmDataCorpusTest PRIVATE elektronData baseLib)
-	add_test(NAME mmDataCorpusTest COMMAND mmDataCorpusTest ${CMAKE_CURRENT_SOURCE_DIR}/testdata/mm)
+	add_test(NAME mmDataCorpusTest COMMAND mmDataCorpusTest
+		--schema ${CMAKE_CURRENT_SOURCE_DIR}/../../../../doc/modern-ux/mm-data-contract.schema.json ${CMAKE_CURRENT_SOURCE_DIR}/testdata/mm)
 	set_tests_properties(mmDataCorpusTest PROPERTIES LABELS "UnitTest")
 	set_property(TARGET mmDataCorpusTest PROPERTY FOLDER "Elektron/test")
 	if(ELEKTRONDATA_MM_CORPUS_DIR)

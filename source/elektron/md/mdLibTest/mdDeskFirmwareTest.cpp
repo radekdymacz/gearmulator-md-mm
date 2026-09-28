@@ -10,6 +10,7 @@
 //
 // Exits 77 (skip) without arguments.
 
+#include "contractCheck.h"
 #include "mdFirmwareSession.h"
 
 #include "mdDesk/mdDesk.h"
@@ -37,6 +38,7 @@ using ed::json::Value;
 namespace
 {
 	int g_failures = 0;
+	contractCheck::Checker g_contract(MDDESK_SCHEMA);
 
 	void check(const bool _condition, const std::string& _what)
 	{
@@ -92,7 +94,7 @@ namespace
 				m_out.push_back({static_cast<uint8_t>(0xb0 | (baseChannel() + (_t >> 2))), static_cast<uint8_t>(12 + (_t & 3)),
 					static_cast<uint8_t>(_on ? 1 : 0)});
 			};
-			port.toPage = [this](const Value& _m) { onPage(_m); };
+			port.toPage = [this](const Value& _m) { g_contract(_m); onPage(_m); };
 			port.nowMs = [this] { return ms(m_machine.now()); };
 			m_desk = std::make_unique<mdDesk::Desk>(port);
 			m_machine.onSysex = [this](const Bytes& _b) { m_in.push_back(_b); };
@@ -1111,6 +1113,7 @@ namespace
 			};
 			port.toPage = [this](const Value& _m)
 			{
+				g_contract(_m);
 				const auto* t = _m.find("type");
 				if(t && t->asString() == "machine")
 					m_machineDoc = *_m.find("doc");
@@ -1331,6 +1334,7 @@ int main(const int _argc, char** _argv)
 		if(mode == "hw")
 		{
 			hardwareMidi(rom, _argv[1]);
+			check(g_contract.loaded() && g_contract.bad() == 0, g_contract.summary());
 			std::printf("mdDeskFirmwareTest hw: %s (%d failure(s))\n", g_failures ? "FAIL" : "PASS", g_failures);
 			return g_failures ? 1 : 0;
 		}
@@ -1345,6 +1349,7 @@ int main(const int _argc, char** _argv)
 			recLockTruth(rig);
 			library(rig);
 			globalSettings(rig);
+			check(g_contract.loaded() && g_contract.bad() == 0, g_contract.summary());
 			std::printf("mdDeskFirmwareTest p4: %s (%d failure(s))\n", g_failures ? "FAIL" : "PASS", g_failures);
 			return g_failures ? 1 : 0;
 		}
@@ -1407,6 +1412,7 @@ int main(const int _argc, char** _argv)
 		std::fprintf(stderr, "mdDeskFirmwareTest FAIL: %s\n", _e.what());
 		return 1;
 	}
-	std::printf("mdDeskFirmwareTest: %s (%d failure(s))\n", g_failures ? "FAIL" : "PASS", g_failures);
+	check(g_contract.loaded() && g_contract.bad() == 0, g_contract.summary());
+			std::printf("mdDeskFirmwareTest: %s (%d failure(s))\n", g_failures ? "FAIL" : "PASS", g_failures);
 	return g_failures ? 1 : 0;
 }

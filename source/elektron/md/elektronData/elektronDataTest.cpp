@@ -3,6 +3,7 @@
 // (doc/modern-ux/P0-RESULT.md, P1-RESULT.md); firmware round trips live in
 // mdLibTest/mdDataLayerFirmwareTest.cpp and the corpus in elektronDataCorpusTest.
 
+#include "jsonSchema.h"
 #include "mdGlobal.h"
 #include "mdJson.h"
 #include "mdKit.h"
@@ -292,6 +293,30 @@ namespace
 	}
 
 	// Optional: byte-exact round trip of dumps captured from firmware.
+
+	// The schema validator refuses what the contract refuses (the executable spec, P6).
+	void testSchema()
+	{
+		namespace j = elektronData::json;
+		const auto schema = j::parse(R"({"$defs":{"u7":{"type":"integer","minimum":0,"maximum":127}},
+			"type":"object","required":["schema","v"],"properties":{"schema":{"const":"x"},
+			"v":{"$ref":"#/$defs/u7"},"list":{"type":"array","items":{"enum":["a","b"]},"maxItems":2,"uniqueItems":true},
+			"name":{"type":"string","pattern":"^[A-H][0-9]{2}$"},"n":{"oneOf":[{"type":"null"},{"type":"integer"}]}}})");
+		check(schema.has_value(), "schema parses");
+		const j::Schema s(*schema);
+		const auto errors = [&](const char* _json) { return s.validate(*j::parse(_json)); };
+		check(errors(R"({"schema":"x","v":5,"list":["a"],"name":"A01","n":null})").empty(), "a valid instance passes");
+		check(errors(R"({"schema":"x","v":128})").size() == 1, "maximum");
+		check(errors(R"({"schema":"x","v":1.5})").size() == 1, "integer");
+		check(errors(R"({"schema":"y","v":1})").size() == 1, "const");
+		check(errors(R"({"schema":"x"})").size() == 1, "required");
+		check(errors(R"({"schema":"x","v":1,"list":["a","a","c"]})").size() == 3, "items, maxItems, uniqueItems");
+		check(errors(R"({"schema":"x","v":1,"name":"Z99"})").size() == 1, "pattern");
+		check(!errors(R"({"schema":"x","v":1,"n":"no"})").empty(), "oneOf");
+		const auto e = errors(R"({"schema":"x","v":200})");
+		check(!e.empty() && e[0].find("$.v") == 0, "errors carry the JSON path");
+	}
+
 	void testCapturedDumps(const int _argc, char** _argv)
 	{
 		for(int i = 1; i < _argc; ++i)
@@ -318,6 +343,7 @@ int main(const int _argc, char** _argv)
 	testGlobal();
 	testPatternContract();
 	testJson();
+	testSchema();
 	testCapturedDumps(_argc, _argv);
 	std::printf("elektronDataTest: %s\n", g_failures ? "FAIL" : "PASS");
 	return g_failures ? 1 : 0;

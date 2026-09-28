@@ -6,6 +6,7 @@
 //
 // Exits 77 (skip) without arguments.
 
+#include "contractCheck.h"
 #include "mdFirmwareSession.h"
 
 #include "elektronData/mmCommands.h"
@@ -29,6 +30,7 @@ using ed::json::Value;
 namespace
 {
 	int g_failures = 0;
+	contractCheck::Checker g_contract(MMDESK_SCHEMA);
 	constexpr auto g_mm = md::MachineModel::Monomachine;
 
 	void check(const bool _ok, const std::string& _what)
@@ -108,7 +110,7 @@ namespace
 				}
 				return true;
 			};
-			port.toPage = [this](const Value& _v) { page.push_back(_v); };
+			port.toPage = [this](const Value& _v) { g_contract(_v); page.push_back(_v); };
 			port.nowMs = [this] { return ms(); };
 			desk = std::make_unique<mmDesk::Desk>(port);
 			m.onSysex = [this](const Bytes& _b) { replies.push_back(_b); };
@@ -284,6 +286,7 @@ namespace
 		s.rows[0].bytes[22] = s.rows[0].bytes[23] = 0xff;
 		s.rows[1].bytes = {};
 		s.rows[1].bytes[0] = 0xff;
+		s.rows[1].bytes[22] = s.rows[1].bytes[23] = 0xff;	// END keeps the tempo, as the firmware writes it
 		r.msg(R"({"op":"set","id":5,"kind":"song","doc":)" + ed::json::write(ed::mmSongToJson(s)) + "}");
 		r.run(800);
 		check(r.desk->song(2) && r.desk->song(2)->rows[0].bytes[0] == 7, "a song dump through SYSEX RECV");
@@ -467,6 +470,7 @@ int main(const int _argc, char** _argv)
 			smoke(rom);
 		if(only.empty() || only == "trigkinds")
 			trigKinds(rom);
+		check(g_contract.loaded() && g_contract.bad() == 0, g_contract.summary());
 		std::printf("%s (%d failures)\n", g_failures ? "FAIL" : "PASS", g_failures);
 		return g_failures ? 1 : 0;
 	}

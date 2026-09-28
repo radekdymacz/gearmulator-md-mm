@@ -6,6 +6,7 @@
 
 #include "mdDesk.h"
 
+#include "elektronData/jsonSchema.h"
 #include "elektronData/mdCommands.h"
 #include "elektronData/mdJson.h"
 #include "elektronData/mdMachines.h"
@@ -13,6 +14,7 @@
 #include "elektronData/mdWorkingKit.h"
 
 #include <cstdio>
+#include <cstdlib>
 #include <fstream>
 #include <iterator>
 
@@ -23,6 +25,8 @@ namespace
 	using namespace mdDesk;
 
 	int g_failures = 0;
+	// Every message a desk published in these tests; main() checks them against the contract (P6).
+	std::vector<Value> g_published;
 
 	void check(const bool _condition, const char* _what)
 	{
@@ -394,7 +398,7 @@ namespace
 		Desk::Port port;
 		port.sendSysex = [&](const std::vector<uint8_t>& _b) { wire.push_back(_b); };
 		port.sendKitParam = [&](uint8_t _t, uint8_t _i, uint8_t _v) { params.push_back({_t, _i, _v}); };
-		port.toPage = [&](const Value& _m) { page.push_back(_m); };
+		port.toPage = [&](const Value& _m) { page.push_back(_m); g_published.push_back(_m); };
 		port.nowMs = [&] { return now; };
 		Desk desk(port);
 		desk.onTelemetry(Telemetry{});	// a host without sequencer telemetry says so
@@ -501,7 +505,7 @@ namespace
 		Desk::Port port;
 		port.sendSysex = [&](const std::vector<uint8_t>& _b) { wire.push_back(_b); };
 		port.sendKitParam = [&](uint8_t, uint8_t, uint8_t) {};
-		port.toPage = [&](const Value& _m) { page.push_back(_m); };
+		port.toPage = [&](const Value& _m) { page.push_back(_m); g_published.push_back(_m); };
 		port.nowMs = [&] { return now; };
 		Desk desk(port);
 		desk.onTelemetry(Telemetry{});	// a host without sequencer telemetry says so
@@ -617,7 +621,7 @@ namespace
 		port.sendKitParam = [&](uint8_t _t, uint8_t _i, uint8_t _v) { params.push_back({_t, _i, _v}); };
 		port.pressKey = [&](const std::string& _k) { keys.push_back(_k); return true; };
 		port.turnKnob = [&](uint8_t _e, int _s) { turns.emplace_back(_e, _s); return true; };
-		port.toPage = [&](const Value& _m) { page.push_back(_m); };
+		port.toPage = [&](const Value& _m) { page.push_back(_m); g_published.push_back(_m); };
 		port.nowMs = [&] { return now; };
 		Desk desk(port);
 		desk.onTelemetry(Telemetry{});	// a host without sequencer telemetry says so
@@ -712,7 +716,7 @@ namespace
 		port.sendSysex = [&](const std::vector<uint8_t>& _b) { wire.push_back(_b); };
 		port.pressKey = [&](const std::string& _k) { keys.push_back(_k); return true; };
 		port.sendMute = [](uint8_t, bool) {};
-		port.toPage = [&](const Value& _m) { page.push_back(_m); };
+		port.toPage = [&](const Value& _m) { page.push_back(_m); g_published.push_back(_m); };
 		port.nowMs = [&] { return now; };
 		Desk desk(port);
 		const auto last = [&](const char* _type) -> const Value*
@@ -786,7 +790,7 @@ namespace
 
 		std::vector<Value> saved, page;
 		Desk::Port port;
-		port.toPage = [&](const Value& _m) { page.push_back(_m); };
+		port.toPage = [&](const Value& _m) { page.push_back(_m); g_published.push_back(_m); };
 		port.saveSetup = [&](const Value& _s) { saved.push_back(_s); };
 		port.nowMs = [] { return 0.0; };
 		Desk desk(port);
@@ -863,7 +867,7 @@ namespace
 		double now = 0;
 		Desk::Port port;
 		port.sendSysex = [](const std::vector<uint8_t>&) {};
-		port.toPage = [&](const Value& _m) { page.push_back(_m); };
+		port.toPage = [&](const Value& _m) { page.push_back(_m); g_published.push_back(_m); };
 		port.nowMs = [&] { return now; };
 		Desk desk(port);
 		desk.setHardwareLink(true);
@@ -959,6 +963,35 @@ namespace
 		check(budget.take(1200), "and refills after a second");
 		(void)first;
 	}
+	// The executable spec: every published message validates against the contract's
+	// JSON Schema ($defs/message). GEARMULATOR_DUMP_MESSAGES=1 prints one of each type.
+	void checkPublished()
+	{
+		std::ifstream in(MDDESK_SCHEMA);
+		const std::string text{std::istreambuf_iterator<char>(in), std::istreambuf_iterator<char>()};
+		const auto root = ed::json::parse(text);
+		check(root.has_value(), "the contract schema loads");
+		if(!root)
+			return;
+		const ed::json::Schema schema(*root);
+		std::map<std::string, size_t> types;
+		size_t bad = 0;
+		for(const auto& m : g_published)
+		{
+			const auto* type = m.find("type");
+			const auto name = type && type->isString() ? type->asString() : std::string("?");
+			if(types[name]++ == 0 && std::getenv("GEARMULATOR_DUMP_MESSAGES"))
+				std::printf("%s\n", ed::json::write(m).c_str());
+			const auto problems = schema.validate(m, "message");
+			if(problems.empty())
+				continue;
+			if(bad++ < 5)
+				for(const auto& p : problems)
+					std::printf("    %s: %s\n", name.c_str(), p.c_str());
+		}
+		std::printf("  %zu published messages of %zu types, %zu off the contract\n", g_published.size(), types.size(), bad);
+		check(bad == 0 && !g_published.empty(), "every published message is on the contract");
+	}
 }
 
 int main()
@@ -983,6 +1016,7 @@ int main()
 	testDeskRecording();
 	testSampleName();
 	testModulators();
+	checkPublished();
 	if(g_failures)
 	{
 		std::fprintf(stderr, "mdDeskTest: %d failure(s)\n", g_failures);
