@@ -20,8 +20,8 @@ const ABOUT = {
 	"GND-EMPTY": "No machine on this track." };
 function about(m) { const f = famKey(m); if (/^CTR-(RE|GB|EQ|DX)/.test(m)) return ABOUT.CTRM; return ABOUT[m] || ABOUT[m.slice(0, 5)] || ABOUT[f] || ""; }
 const FULL = { BD: "Bass drum", B2: "Bass drum 2", SD: "Snare drum", XT: "Tom", MT: "Tom", CP: "Clap", RS: "Rim shot", CB: "Cow bell", CH: "Closed hihat", OH: "Open hihat", CY: "Cymbal", MA: "Maracas", CL: "Claves", XC: "Congas", HH: "Hihat", HT: "High tom", LT: "Low tom", RC: "Ride cymbal", CC: "Crash cymbal", BR: "Brushed snare", TA: "Tambourine", TR: "Triangle", SH: "Shaker", BC: "Bongo conga", ML: "Metallica", SIN: "Sinus", NS: "Noise", IM: "Impulse", EMPTY: "Empty", GA: "Input gate A", GB: "Input gate B", FA: "Filter follower A", FB: "Filter follower B", EA: "Input envelope A", EB: "Input envelope B", AL: "Control all", "8P": "Control 8 parameters", RE: "Control rhythm echo", GB2: "Control gate box", EQ: "Control master EQ", DX: "Control Dynamix" };
-function nameOf(m) {
-	const f = famKey(m), c = codeOf(m);
+function nameOf(m, cat = Cat) {
+	const f = famKey(m, cat), c = codeOf(m, cat);
 	if (f === "MID") return "MIDI channel " + (+c);
 	if (f === "ROM") return "ROM sample " + c;
 	if (/^R\d/.test(c) && f === "RAM") return "RAM record " + c.slice(1);
@@ -46,11 +46,13 @@ let gesture = 0;	// non-zero while a drag runs: one undo step
 function cmd(op, args = {}, key) {
 	const msg = Object.assign({ op }, args);
 	if (gesture) msg.g = gesture;
-	Bridge.send(msg, { key, onResult: r => onResult(r) });
+	Overlay.sent(Bridge.send(msg, { key, onResult: r => onResult(r) }));
 	tx();
 }
 const SELFTEST = /[?&]selftest=(1|p4)/.test(location.search);
 function onResult(r) {
+	/* its optimistic edits leave the overlay; a refused one is shown as the documents have it */
+	if (Overlay.answered(r.id) && !r.ok) scheduleRender();
 	if (SELFTEST && (r.op === "record" || r.op === "recTrig" || r.op === "play" || r.op === "stop" || !r.ok)) Bridge.log("result " + r.op + " ok " + r.ok + " " + (r.errors || []).join(";") + " " + (r.note || ""));
 	if (!r.ok && r.errors && r.errors.length) { toast(r.errors[0]); showLastError(r.errors); }
 	else if (r.note) toast(r.note);
@@ -757,8 +759,8 @@ function drawPicker() {
 function prevText(m) { return `<b>${m}</b> ${nameOf(m)} · ${names(pages(m).s).join(" ")}`; }
 function setMachine(v, t = S.sel) {
 	const c = Cat.byName[v]; if (!c) return;
-	cmd("machine", { k: V.kit, t, model: c.model, keepFx: S.keepFx });
 	const tr = V.tracks[t]; tr.m = v; tr.fam = famOf(v); tr.name = nameOf(v);
+	cmd("machine", { k: V.kit, t, model: c.model, keepFx: S.keepFx });
 	if (!params(t).includes(S.lane)) S.lane = params(t).includes("FLTF") ? "FLTF" : params(t)[0] || "FLTF";
 	closePicker(); render();
 }
@@ -984,7 +986,7 @@ main.addEventListener("wheel", e => { const el = e.target.closest(".pc[data-g],.
 main.addEventListener("dblclick", e => { const el = e.target.closest(".pc[data-g],.fader[data-g]"); if (el) setV(el, el.dataset.n === "VOL" ? 100 : 64); });
 main.addEventListener("keydown", e => { const el = e.target.closest("[data-g]"); if (!el) return; const d = { ArrowRight: 1, ArrowUp: 1, ArrowLeft: -1, ArrowDown: -1, PageUp: 10, PageDown: -10 }[e.key]; if (d == null) return; e.preventDefault(); setV(el, getV(el) + d * (e.shiftKey ? 10 : 1)); });
 
-function setMute(i, on) { cmd("mute", { t: i, on }); V.tracks[i].mute = on; }
+function setMute(i, on) { V.tracks[i].mute = on; cmd("mute", { t: i, on }); }
 /* Solo is the page's idea: it mutes every other track on the machine, and un-solo restores the
    mutes the user had set (S.userMutes). */
 function applySolo() {
@@ -1145,8 +1147,12 @@ function refreshAudible() {
 let lastStep = -1;
 function onTelemetry(m) {
 	Tele.step = m.step; Tele.pattern = m.pattern; Tele.valid = m.valid;
-	if (!!m.recording !== !!V.rec) { V.rec = !!m.recording; renderTop(); if (V.rec) toast("Live recording: click a track's steps to play it, move a value to lock it."); }
-	const wasPlaying = V.playing; V.playing = m.playing; S.step = m.playing ? m.step : -1;
+	Docs.telemetry = m;
+	/* the transport is derived from the telemetry (transportOf): set in place, the rest of V stays */
+	const wasPlaying = V.playing, wasRec = V.rec;
+	Object.assign(Overlay.raw(V), transportOf(Docs));
+	if (V.rec !== wasRec) { renderTop(); if (V.rec) toast("Live recording: click a track's steps to play it, move a value to lock it."); }
+	S.step = V.playing ? m.step : -1;
 	if (wasPlaying !== V.playing) { renderTop(); $$(".ph").forEach(c => c.classList.remove("ph")); setPos(); phLast = -1; movePH(); }
 	const prev = lastStep; lastStep = S.step;
 	if (S.step === prev) return;
@@ -1187,14 +1193,29 @@ function movePH() {
 function setPos() { const p = $("#pos"); if (p) p.textContent = V.playing && S.step >= 0 ? String(Math.floor(S.step / 16) + 1).padStart(2, "0") + "." + String(S.step % 16 + 1).padStart(2, "0") : "--.--"; }
 
 /* ===== Documents in: re-derive, then render (in place while a gesture runs) ===== */
-let pendingRender = false, renderRaf = 0, lastKey = "";
+let pendingRender = false, renderRaf = 0;
+let Base = null;	// the view last derived from the documents (V is it with the overlay)
+/* A machine document often changes only the view's status (TX, round trip, undo counts): that is
+   set in place; any other change of the derived view renders. */
+const STATUS = ["tx", "roundTrip", "canUndo", "canRedo", "undoCount", "redoCount"];
+function sameValue(a, b) {
+	if (a === b) return true;
+	if (!a || !b || typeof a !== "object" || typeof b !== "object") return false;
+	if (a instanceof Set || b instanceof Set) return a instanceof Set && b instanceof Set && a.size === b.size && [...a].every(x => b.has(x));
+	if (a instanceof Map || b instanceof Map) return a instanceof Map && b instanceof Map && a.size === b.size && [...a].every(([k, x]) => b.has(k) && sameValue(x, b.get(k)));
+	if (Array.isArray(a) !== Array.isArray(b)) return false;
+	const ka = Object.keys(a), kb = Object.keys(b);
+	return ka.length === kb.length && ka.every(k => sameValue(a[k], b[k]));
+}
+const beyondStatus = v => { const o = { ...v }; for (const k of STATUS) delete o[k]; return o; };
 function interacting() { return !!(drag || active || laneDraw || l2drag || chopDrag || drag2); }
 function scheduleRender() {
 	if (renderRaf) return;
 	/* A timer, not an animation frame: documents must land while the window is covered. */
 	renderRaf = setTimeout(() => {
 		renderRaf = 0;
-		V = deriveView(Docs, S);
+		Base = deriveView(Docs, S);
+		V = view();
 		if (interacting()) { pendingRender = true; syncControls(); renderTop(); renderSub(); redraw(); return; }
 		pendingRender = false;
 		render();
@@ -1212,10 +1233,13 @@ Bridge.onMessage(m => {
 		break;
 	}
 	case "machine": {
-		const before = Docs.machine; Docs.machine = m.doc;
-		const key = [m.doc.pattern?.current, m.doc.kit?.current, m.doc.desk?.queued, m.doc.desk?.firmware, m.doc.kit?.working, m.doc.song?.reloadNeeded, m.doc.extendedMode, (m.doc.desk?.mutes || []).join(), m.doc.desk?.playing, m.doc.desk?.recording, m.doc.desk?.kitSource, m.doc.song?.current, m.doc.desk?.engine, m.doc.desk?.link, m.doc.lifecycle].join("|");
-		if (key !== lastKey || !before) { lastKey = key; scheduleRender(); }
-		else { const h = m.doc.history || {}; V.tx = !!m.doc.desk.tx; V.roundTrip = m.doc.desk.roundTripMs; V.canUndo = !!h.undo; V.canRedo = !!h.redo; V.undoCount = h.undoCount || 0; V.redoCount = h.redoCount || 0; $("#undo").disabled = !V.canUndo; $("#redo").disabled = !V.canRedo; syncUndoCounts(); syncTx(); }
+		Docs.machine = m.doc;
+		const next = deriveView(Docs, S);
+		if (!Base || !sameValue(beyondStatus(Base), beyondStatus(next))) { scheduleRender(); break; }
+		Base = next;
+		const r = Overlay.raw(V);
+		for (const k of STATUS) r[k] = next[k];
+		$("#undo").disabled = !V.canUndo; $("#redo").disabled = !V.canRedo; syncUndoCounts(); syncTx();
 		break;
 	}
 	case "telemetry": onTelemetry(m); break;

@@ -372,6 +372,13 @@ if(BUILD_TESTING)
 			SKIP_RETURN_CODE 77 TIMEOUT 900)
 	endif()
 
+	# P6: the Machinedrum page's model (the pure view and the optimistic overlay), when node is here.
+	find_program(GEARMULATOR_NODE node)
+	if(GEARMULATOR_NODE)
+		add_test(NAME mdDeskModelPageTest COMMAND ${GEARMULATOR_NODE} ${CMAKE_CURRENT_SOURCE_DIR}/skins/mdStudio/mdDeskModelTest.js)
+		set_tests_properties(mdDeskModelPageTest PROPERTIES LABELS "UnitTest" TIMEOUT 60)
+	endif()
+
 	# P4: the editor's setup (MDSK chunk) round-trips with the plug-in state.
 	add_executable(mdDeskSetupStateTest mdDeskSetupStateTest.cpp)
 	target_link_libraries(mdDeskSetupStateTest PRIVATE

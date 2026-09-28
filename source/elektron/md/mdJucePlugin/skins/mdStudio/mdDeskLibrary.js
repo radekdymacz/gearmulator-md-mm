@@ -5,7 +5,7 @@
    dump (mdDesk/mdDeskLibrary.h, measured in mdP4ProbeFirmwareTest library). What the firmware has no
    command for says so in its tooltip. Loaded after mdDeskApp.js; uses its state and commands. */
 
-const LIB = { open: null, sel: 0, renaming: null, drag: null, sig: "" };
+const LIB = { open: null, sel: 0, renaming: null, drag: null, html: "" };
 let CLIP = null;	// what the desk's library clipboard holds: {type: "kit"|"pat", from, name}
 const nn = k => String(k + 1).padStart(2, "0");
 const escH = s => String(s).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
@@ -73,16 +73,12 @@ function drawPatLib() {
  <div class="libgrid pats" aria-label="128 patterns">${rows}</div>
  <div class="libfoot"><span>Arrows move · A–H jump to a bank · Enter queues · Shift+Enter switches now · Delete clears · drag a slot onto another to copy · Cmd+Z undoes a paste or clear · Esc closes</span><span class="fw" title="${PTIP.go}">Queued = blinking</span></div>`;
 }
-function libSig() {
-	return [LIB.open, LIB.sel, LIB.renaming, V.pat, V.queued, V.kit, V.kitState, V.mode, V.playing, V.len, CLIP?.type, CLIP?.from,
-		Object.keys(Docs.kits).map(k => k + (Docs.kits[k].name || "") + (kitEmpty(+k) ? 0 : 1)).join("|"),
-		Object.keys(Docs.patterns).map(p => p + "." + (hasPat(+p) ? 1 : 0) + "." + patLen(+p) + "." + Docs.patterns[p].kit).join()].join("~");
-}
+/* The library is redrawn when what it shows changed: its markup is the value compared. */
 function drawLib(focus) {
-	if (!LIB.open || LIB.drag) return; const sig = libSig(), pop = $("#libpop"), had = focus || pop.contains(document.activeElement);
-	if (sig === LIB.sig && pop.firstChild) { if (focus && !pop.contains(document.activeElement)) libFocus(); return; }
-	LIB.sig = sig;
-	pop.innerHTML = LIB.open === "kit" ? drawKitLib() : drawPatLib(); pop.dataset.kind = LIB.open; pop.setAttribute("aria-label", LIB.open === "kit" ? "Kit library" : "Pattern chooser");
+	if (!LIB.open || LIB.drag) return; const html = LIB.open === "kit" ? drawKitLib() : drawPatLib(), pop = $("#libpop"), had = focus || pop.contains(document.activeElement);
+	if (html === LIB.html && pop.firstChild && pop.dataset.kind === LIB.open) { if (focus && !pop.contains(document.activeElement)) libFocus(); return; }
+	LIB.html = html;
+	pop.innerHTML = html; pop.dataset.kind = LIB.open; pop.setAttribute("aria-label", LIB.open === "kit" ? "Kit library" : "Pattern chooser");
 	const inp = $("#lsin"); if (inp) { inp.focus({ preventScroll: true }); inp.select(); return; } if (had) libFocus();
 }
 function libFocus() {
@@ -91,7 +87,7 @@ function libFocus() {
 }
 function placeLib() { const pop = $("#libpop"), r = $(".lcdpanel").getBoundingClientRect(), top = Math.max(16, r.bottom + 8); pop.style.top = (top + scrollY) + "px"; pop.style.maxHeight = Math.max(240, innerHeight - top - 12) + "px"; pop.style.left = Math.max(16, (document.documentElement.clientWidth - pop.offsetWidth) / 2 + scrollX) + "px"; }
 function openLib(kind) { closePicker(); closeK(); if (LIB.open) closeLib(false); LIB.open = kind; LIB.sel = kind === "kit" ? V.kit : (V.queued ?? V.pat); LIB.renaming = null; $("#libpop").hidden = false; drawLib(); placeLib(); libFocus(); $(kind === "kit" ? "#kitf" : "#pat").setAttribute("aria-expanded", "true"); }
-function closeLib(back) { if (!LIB.open) return; const k = LIB.open; LIB.open = null; LIB.sig = ""; LIB.renaming = null; LIB.drag = null; $("#libpop").hidden = true; const t = $(k === "kit" ? "#kitf" : "#pat"); t.setAttribute("aria-expanded", "false"); if (back) t.focus(); }
+function closeLib(back) { if (!LIB.open) return; const k = LIB.open; LIB.open = null; LIB.html = ""; LIB.renaming = null; LIB.drag = null; $("#libpop").hidden = true; const t = $(k === "kit" ? "#kitf" : "#pat"); t.setAttribute("aria-expanded", "false"); if (back) t.focus(); }
 function toggleLib(kind) { LIB.open === kind ? closeLib(false) : openLib(kind); }
 addEventListener("resize", () => { if (LIB.open) placeLib(); });
 

@@ -32,14 +32,13 @@ const Bridge = (() => {
 		else if (window.gmDev) window.gmDev(batch);
 	}
 	/* send(msg, {key, onResult}): a message with the same key still waiting in
-	   this frame is replaced (a drag sends its latest value once per frame). */
+	   this frame is replaced (a drag sends its latest value once per frame); the
+	   replacement keeps its id, so one result answers both. */
 	function send(msg, opt = {}) {
-		msg.id = nextId++;
+		const i = opt.key ? queue.findIndex(q => q.key === opt.key) : -1;
+		msg.id = i >= 0 ? queue[i].msg.id : nextId++;
 		if (opt.onResult) pending.set(msg.id, { op: msg.op, onResult: opt.onResult });
-		if (opt.key) {
-			const i = queue.findIndex(q => q.key === opt.key);
-			if (i >= 0) { queue[i] = { key: opt.key, msg }; return msg.id; }
-		}
+		if (i >= 0) { queue[i] = { key: opt.key, msg }; return msg.id; }
 		queue.push({ key: opt.key, msg });
 		/* A click goes out at once; drag values (keyed) are batched per 16 ms. */
 		if (!opt.key) { if (raf) { clearTimeout(raf); } flush(); }

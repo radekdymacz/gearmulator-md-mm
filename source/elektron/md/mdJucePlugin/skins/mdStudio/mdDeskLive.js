@@ -156,7 +156,7 @@ function showFwLcd(on) {
 }
 Bridge.onMessage(m => {
 	/* The engine changed (emulator <-> HW MIDI): the documents start over. */
-	if (m.type === "reset") { Docs.patterns = {}; Docs.kits = {}; Docs.songs = {}; Docs.global = null; Docs.machine = null; V.loaded = false; scheduleRender(); return; }
+	if (m.type === "reset") { Docs.patterns = {}; Docs.kits = {}; Docs.songs = {}; Docs.global = null; Docs.machine = null; Docs.telemetry = null; Overlay.clear(); scheduleRender(); return; }
 	if (m.type === "lcd") {
 		if (m.bits) { const s = atob(m.bits); fwLcd.bits = Uint8Array.from(s, ch => ch.charCodeAt(0)); drawFwLcd(); }
 		const fw = (machineState().desk || {}).firmware;

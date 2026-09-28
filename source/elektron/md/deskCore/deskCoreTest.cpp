@@ -231,6 +231,7 @@ namespace
 		c.onCommand(*elektronData::json::parse(R"({"op":"set","s":1,"v":20,"g":1})"));
 		c.flush();
 		check(lastDoc()->find("value")->asNumber() == 20 && lastDoc()->find("pending")->asBool(), "an edit is pending until seen");
+		check(!page.empty() && page.back().find("type")->asString() == "result", "the result comes after the documents it changed");
 		check(c.state({ToyModel::Kind::Toy, 1})->observed->value == 10, "observed keeps what the machine holds");
 		c.onCommand(*elektronData::json::parse(R"({"op":"set","s":1,"v":-5})"));
 		check(c.view().toys.at(1).value == 20, "a refused edit leaves no value the machine never took");
@@ -252,6 +253,7 @@ namespace
 		check(m.sent.size() == sentBefore, "undo from what the page shows: the failed push is already undone, nothing is sent");
 		c.onCommand(*elektronData::json::parse(R"({"op":"undo","id":9})"));
 		check(m.sent.back().value == 10, "and the step before");
+		c.flush();
 		check(page.back().find("type")->asString() == "result" && page.back().find("id")->asNumber() == 9, "undo answers");
 	}
 }

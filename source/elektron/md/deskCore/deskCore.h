@@ -328,8 +328,20 @@ namespace deskCore
 
 		void detach() { m_pageReady = false; }
 
-		// Publish the documents that changed and the machine document when its value changed.
+		// Publish the documents that changed and the machine document when its value changed, then
+		// the results of the commands since the last flush: a page that gets a result already has
+		// the documents it refers to.
 		void flush(const std::function<void(Value&)>& _decorate = {})
+		{
+			publishDocuments(_decorate);
+			auto results = std::move(m_results);
+			m_results.clear();
+			for(const auto& r : results)
+				publish(r);
+		}
+
+	private:
+		void publishDocuments(const std::function<void(Value&)>& _decorate)
 		{
 			if(!m_pageReady || !m_machine)
 				return;
@@ -354,6 +366,8 @@ namespace deskCore
 			publish(m);
 		}
 
+	public:
+
 		// The machine document: the adapter's state plus the core's parts.
 		Value machineDocument() const
 		{
@@ -374,9 +388,10 @@ namespace deskCore
 			return doc;
 		}
 
+		// A command's result: published by the next flush, after the documents it changed.
 		void result(const Value& _message, const std::vector<std::string>& _errors, const std::string& _note) const
 		{
-			publish(resultMessage(_message, _errors, _note));
+			m_results.push_back(resultMessage(_message, _errors, _note));
 		}
 
 		void publish(const Value& _message) const
@@ -482,5 +497,6 @@ namespace deskCore
 		std::string m_lastMachine;
 		bool m_pageReady = false;
 		std::vector<EngineChoice> m_engines;
+		mutable std::vector<Value> m_results;	// results waiting for the flush
 	};
 }
