@@ -584,6 +584,16 @@ namespace
 		desk.tick();
 		check(desk.documents().kits.count(7) && desk.documents().kits.at(7) == next, "then the new kit comes from memory");
 		check(!ed::mdWorkingKitFromMemory(std::vector<uint8_t>(10, 0)), "a short region is refused");
+
+		// P6: the desk outlives the machine: a reboot (a restored project) starts over.
+		desk.setFirmware(Desk::Firmware::Loading);
+		check(!desk.isInputReady(), "restoring: no input");
+		page.clear();
+		desk.setFirmware(Desk::Firmware::Present);
+		bool reset = false;
+		for(const auto& m : page)
+			reset |= m.find("type")->asString() == "reset";
+		check(reset && desk.documents().kits.empty() && !desk.core().history().canUndo(), "a reboot: the page starts over, nothing old is kept");
 	}
 
 	// Knob moves while live recording become panel steps: select, page, turn.

@@ -70,7 +70,9 @@ namespace deskCore
 			Observed,	// the machine holds `doc`
 			Forget,		// nothing is known about `ref` any more (it will be read again)
 			Settled,	// a submitted change of `ref` is no longer in flight (ok, or failed with `message`)
-			Notice		// a message for the page as it is (telemetry, a failure)
+			Notice,		// a message for the page as it is (telemetry, a failure)
+			Reset		// the machine started over (a reboot, a restored project): nothing it held before is
+						// known any more, and undo steps no longer apply to it
 		};
 
 		Kind kind = Kind::Notice;
@@ -109,6 +111,12 @@ namespace deskCore
 		{
 			Event e;
 			e.notice = std::move(_message);
+			return e;
+		}
+		static Event reset()
+		{
+			Event e;
+			e.kind = Kind::Reset;
 			return e;
 		}
 	};
@@ -271,6 +279,16 @@ namespace deskCore
 				case Ev::Kind::Notice:
 					publish(e.notice);
 					break;
+				case Ev::Kind::Reset:
+				{
+					Value reset = Value::object();
+					reset.set("type", "reset");
+					publish(reset);
+					const bool ready = m_pageReady;
+					forgetAll();
+					m_pageReady = ready;
+					break;
+				}
 				}
 			}
 		}

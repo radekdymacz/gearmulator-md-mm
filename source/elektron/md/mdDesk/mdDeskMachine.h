@@ -119,6 +119,8 @@ namespace mdDesk
 		using Handler = deskCore::Outcome (MdMachine::*)(const Value&, const Documents&);
 
 		deskCore::LifeFacts facts() const;
+		void wireSession();
+		void startOver();
 		bool inputReady() const { return deskCore::takesInput(lifecycle()); }
 		double now() const { return m_port.nowMs(); }
 		bool pressKey(const std::string& _key);

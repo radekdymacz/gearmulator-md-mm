@@ -98,12 +98,17 @@ namespace mdDesk
 				m_port.sendSysex(_b);
 		})
 	{
+		wireSession();
+		m_wireSinceMs = m_port.nowMs ? m_port.nowMs() : 0;
+	}
+
+	void MdMachine::wireSession()
+	{
 		m_session.onPattern = [this](const ed::MdPattern& _p) { onPattern(_p); };
 		m_session.onKit = [this](const ed::MdKit& _k) { onKit(_k); };
 		m_session.onSong = [this](const ed::MdSong& _s) { onSong(_s); };
 		m_session.onGlobal = [this](const ed::MdGlobal& _g) { onGlobal(_g); };
 		m_session.onState = [this](const mdDataLink::Session::State& _s) { onState(_s); };
-		m_wireSinceMs = m_port.nowMs ? m_port.nowMs() : 0;
 	}
 
 	// ---- facts ----
@@ -140,9 +145,40 @@ namespace mdDesk
 	{
 		if(m_firmware == _firmware)
 			return;
+		const bool restarted = _firmware == Firmware::Present && m_firmware != Firmware::Present && !m_known.empty();
 		m_firmware = _firmware;
 		if(_firmware != Firmware::Present)
 			m_replied = false;
+		if(restarted)
+			startOver();
+	}
+
+	// The machine booted again (a restored project, a new device): what it held before is not
+	// known any more. The session outlives the machine, so it reads everything again.
+	void MdMachine::startOver()
+	{
+		m_known.clear();
+		m_loads = {};
+		m_backgroundQueued = false;
+		m_pushes.clear();
+		m_storedKits.clear();
+		m_workingRegion.reset();
+		m_workingKit.reset();
+		m_trackedKit.reset();
+		m_lastKit.reset();
+		m_lastPattern.reset();
+		m_audibleQueue.reset();
+		m_knobs.reset();
+		m_recLock.reset();
+		m_sequence.clear();
+		m_telemetrySeen = false;
+		m_session = mdDataLink::Session([this](const Bytes& _b)
+		{
+			if(m_port.sendSysex)
+				m_port.sendSysex(_b);
+		});
+		wireSession();
+		m_events.push_back(Ev::reset());
 	}
 
 	deskCore::Capabilities MdMachine::capabilities() const

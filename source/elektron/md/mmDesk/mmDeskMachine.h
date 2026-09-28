@@ -110,6 +110,7 @@ namespace mmDesk
 		using Handler = deskCore::Outcome (MmMachine::*)(const Value&, const Documents&);
 
 		deskCore::LifeFacts facts() const;
+		void startOver();
 		double now() const { return m_port.nowMs(); }
 		void observe(const Document& _doc, deskCore::Source _source);
 		void forget(const Ref& _ref);

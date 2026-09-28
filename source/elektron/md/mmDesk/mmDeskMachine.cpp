@@ -114,9 +114,29 @@ namespace mmDesk
 		if(_firmware == m_firmware)
 			return;
 		const bool wasReady = ready();
+		const bool wasRunning = m_firmware == Firmware::Running || m_firmware == Firmware::Ready;
 		m_firmware = _firmware;
+		const bool running = m_firmware == Firmware::Running || m_firmware == Firmware::Ready;
+		if(running && !wasRunning && !m_known.empty())
+			startOver();
 		if(!wasReady && ready())
 			m_lastStatusMs = -1e9;	// status now
+	}
+
+	// The machine booted again (a restored project, a new device): read everything again.
+	void MmMachine::startOver()
+	{
+		m_known.clear();
+		m_kits = {};
+		m_working.reset();
+		m_workingRegion.reset();
+		m_pushes.clear();
+		m_loads = {};
+		m_backgroundQueued = false;
+		m_recv = {};
+		m_curPattern = m_curKit = m_curSong = m_curGlobal = m_songMode = m_queuedPattern = -1;
+		m_sequence.clear();
+		m_events.push_back(Ev::reset());
 	}
 
 	deskCore::Capabilities MmMachine::capabilities() const
