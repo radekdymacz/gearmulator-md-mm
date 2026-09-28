@@ -104,9 +104,41 @@ The MM steps are the same in `mmDesk/mmDeskModel.*` (`MmModel::kinds()`) and `mm
 
    Never branch on the engine id.
 
+## Add a dialog (P7)
+
+Every dialog uses the one modal layer: the MODAL blocks of script and stylesheet. The same text is in the MD mockup, the MM mockup (`src/57-modal.js`, `src/20-mm.css`) and the MD skin (`mdDeskModal.js`), and `modal_check.py` fails both sync scripts on drift.
+
+1. Give the dialog an element with `hidden`, plus its own open and close functions, as the libraries have.
+2. Add one row to `DIALOGS` in the MODAL block: `[selector, kind, closeFunctionName]`. The kind is `confirm` (Esc answers its last key, a click outside keeps it) or `panel` (Esc and a click outside close it through its close function). Change the block in the MD mockup, then copy it to the other two places.
+3. The layer centres the dialog over the backdrop, moves the focus in and returns it, and stacks dialogs. Do not position the dialog yourself.
+
+## The shared page blocks (P7)
+
+Four blocks of script and stylesheet are the same text in the MD mockup, the MM mockup and the MD skin. `modal_check.py` and `audio_panel_check.py` fail both sync scripts on drift:
+
+| Block | What it does |
+|---|---|
+| MODAL | The modal layer, plus the LCD's tips under the display. |
+| BOOT | The start-up and first-run card. The app sets `Boot.host`, and its lifecycle calls `Boot.update`. |
+| SYX | The SysEx import panel. The app sets `Syx.host`, and the library headers call `Syx.keys()`. |
+| AUDIO-MIDI PANEL | The audio and MIDI panel. |
+
+The files never pass through the page:
+- the window's drop zone and native choosers (`mdPageEditor.cpp`) hand them to the session;
+- `DeskSession::installRom` checks and copies a ROM, then restarts the machine;
+- `openSyx` sends the preview, the `syxImport` row queues the import (`SyxJob`, `mdSyxSession.h`), and `exportSyx` writes the file.
+
+A model's SysEx rules (what its OS takes as it is) are its `SyxTraits`, in `mdSessionMd.cpp` and `mdSessionMm.cpp`.
+
+## The host's clock (P7)
+
+- **In a DAW** the plug-in sends the host's transport and tempo to the firmware as MIDI clock (`synthLib::MidiClock`). Each model says what its active global must be to follow them (`hostFollowing`, pure), and the `followHost` machine command sets it without an undo step. The session sends that command every 2 s, in a DAW's plug-in only (`followsHost`).
+- **A new machine** gets a `hostFollowing` of its own, plus the command row. See [DESIGN-P7-sync.md](DESIGN-P7-sync.md).
+
 ## Build and check
 
 Configure a test build with `-DBUILD_TESTING=ON -Dgearmulator_MDMM_DIAGNOSTICS=ON`; diagnostics (the log, the self-tests) are off by default for every generator. Then:
 - `ctest -E "Plugin|_AU|VST|FirmwareTest"` runs the unit tests.
 - `mdDeskFirmwareTest <MD ROM> [hw|p4|playload]` and `mmDeskFirmwareTest <MM ROM>` run the firmware smoke tests, including the contract check; `GEARMULATOR_MD_FIRMWARE_BIN=<MD ROM> ctest -R mdSessionFirmwareTest` runs the session without an editor.
-- `GEARMULATOR_MDSTUDIO_SELFTEST=1|p4|p4hw|p5|p6audio` and `GEARMULATOR_MMSTUDIO_SELFTEST=1|mmcpu|p6audio` run the in-plugin self-tests on the standalone apps.
+- `GEARMULATOR_MDSTUDIO_SELFTEST=1|p4|p4hw|p5|p6audio|p7` and `GEARMULATOR_MMSTUDIO_SELFTEST=1|mmcpu|p6audio|p7` run the in-plugin self-tests on the standalone apps.
+- `mdDeskFirmwareTest <MD ROM> hostclock` and `mmDeskFirmwareTest <MM ROM> hostclock` check that the machines follow a host's clock after `followHost`.
