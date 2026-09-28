@@ -14,6 +14,7 @@
 #include "mdFirmwareSession.h"
 
 #include "mdDesk/mdDesk.h"
+#include "mdDesk/mdDeskWirePort.h"
 #include "deskCore/deskPacer.h"
 #include "deskWire/mdWire.h"
 
@@ -1124,23 +1125,8 @@ namespace
 	public:
 		HwRig(const Bytes& _rom, const std::string& _romName) : m_machine(_rom, _romName)
 		{
-			const auto send = [this](const std::optional<Bytes>& _m)
-			{
-				if(_m)
-					m_wire.send(*_m);
-			};
 			mdDesk::Desk::Port port;
-			port.device.sendSysex = [this](const Bytes& _b) { m_wire.send(_b); };
-			port.device.sendKitParam = [this, send](const uint8_t _t, const uint8_t _i, const uint8_t _v) { send(deskWire::md::kitParam(m_channel, _t, _i, _v)); };
-			port.device.sendMute = [this, send](const uint8_t _t, const bool _on) { send(deskWire::md::mute(m_channel, _t, _on)); };
-			port.device.pressKey = [this](const std::string& _k)
-			{
-				const auto b = deskWire::md::realtimeOf(_k);
-				if(b)
-					m_wire.send(Bytes{*b});
-				return b.has_value();
-			};
-			port.device.baseChannel = [this](const uint8_t _ch) { m_channel = _ch; };
+			port.device = mdDesk::wirePort(m_wire, m_channel, [this] { return ms(m_machine.now()); });
 			port.toPage = [this](const Value& _m)
 			{
 				g_contract(_m);
@@ -1150,7 +1136,6 @@ namespace
 				if(t && t->asString() == "result")
 					m_result = _m;
 			};
-			port.device.nowMs = [this] { return ms(m_machine.now()); };
 			m_desk = std::make_unique<mdDesk::Desk>(port, mdDesk::wireProfile());
 			m_machine.onSysex = [this](const Bytes& _b) { if(m_connected) m_toDesk.send(ms(m_machine.now()), _b); };
 		}

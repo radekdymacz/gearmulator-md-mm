@@ -1,7 +1,7 @@
 #pragma once
 
 #include "mdMidiLearnCommands.h"
-#include "mdWebPageHost.h"
+#include "mdPageSpec.h"
 
 #include "deskCore/deskCapabilities.h"
 #include "deskCore/deskCommands.h"
@@ -22,6 +22,7 @@
 #include <memory>
 #include <optional>
 #include <string>
+#include <type_traits>
 #include <vector>
 
 namespace mdJucePlugin
@@ -79,7 +80,7 @@ namespace mdJucePlugin
 		// One line of state for the diagnostics log.
 		virtual std::string status() const = 0;
 		// The page the editor window shows for this session (data: the file, its log, its self-tests).
-		virtual const WebPageHost::Spec& pageSpec() const = 0;
+		virtual const PageSpec& pageSpec() const = 0;
 
 		void toPage(const Value& _message) const;
 		AudioPluginAudioProcessor& processor() const { return m_processor; }
@@ -185,16 +186,21 @@ namespace mdJucePlugin
 	// The session for one model (P6: one class for both editors). The engine map, the plug-in's
 	// commands, the setup store and the step are here; a model gives its engines, its learnable
 	// parameters, its page and its default setup, and adds what is its own (the page's MIDI).
-	template<typename DeskT>
+	// EngineT is the model's own engine base (Engine<DeskT> unless the model adds to it, e.g. the
+	// MM's MmEngine for its page MIDI): currentEngine() returns it typed, so a model that needs
+	// more than device()/step()/probe() casts once here rather than at every call site.
+	template<typename DeskT, typename EngineT = Engine<DeskT>>
 	class SessionOf : public DeskSession
 	{
 	public:
+		static_assert(std::is_base_of_v<Engine<DeskT>, EngineT>, "SessionOf's EngineT must derive from Engine<DeskT>");
+
 		using Record = EngineRecord<DeskT>;
 		using Action = deskHost::Action;
 
 		// _defaultSetup: what a project without a setup gets (none: the desk keeps its own).
 		SessionOf(AudioPluginAudioProcessor& _processor, std::vector<Record> _engines, MidiLearnCommands::Model _learn,
-			WebPageHost::Spec _page, std::optional<Value> _defaultSetup)
+			PageSpec _page, std::optional<Value> _defaultSetup)
 			: DeskSession(_processor)
 			, m_engines(std::move(_engines))
 			, m_setup(_processor)
@@ -263,7 +269,7 @@ namespace mdJucePlugin
 				+ elektronData::json::write(m_desk->status());
 		}
 
-		const WebPageHost::Spec& pageSpec() const override { return m_page; }
+		const PageSpec& pageSpec() const override { return m_page; }
 
 		DeskT& desk() { return *m_desk; }
 		const DeskT& desk() const { return *m_desk; }
@@ -272,7 +278,7 @@ namespace mdJucePlugin
 	protected:
 		virtual void onMidi(const Value& _message) { reply(_message, false, "midi: this editor's page has no keyboard"); }
 		virtual const char* missingText() const = 0;
-		Engine<DeskT>& currentEngine() { return *m_engine; }
+		EngineT& currentEngine() { return static_cast<EngineT&>(*m_engine); }
 		void onDetach() override { m_desk->detachPage(); }
 
 	private:
@@ -374,7 +380,7 @@ namespace mdJucePlugin
 		SetupStore m_setup;
 		std::optional<Value> m_defaultSetup;
 		MidiLearnCommands m_learn;
-		WebPageHost::Spec m_page;
+		PageSpec m_page;
 		std::unique_ptr<Engine<DeskT>> m_engine;
 		std::unique_ptr<DeskT> m_desk;
 		std::vector<deskCore::EngineChoice> m_choices;

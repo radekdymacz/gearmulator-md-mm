@@ -1,5 +1,7 @@
 #pragma once
 
+#include "mdPageSpec.h"
+
 #include "elektronData/json.h"
 
 #include "juce_gui_basics/juce_gui_basics.h"
@@ -22,15 +24,7 @@ namespace mdJucePlugin
 	{
 	public:
 		using Value = elektronData::json::Value;
-
-		struct Spec
-		{
-			std::string page;					// the bundled page, e.g. "mdStudio.html"
-			std::string log;					// the diagnostics log in the temp folder, e.g. "gearmulator-mdStudio.log"
-			std::string selfTestVariable;		// GEARMULATOR_MDSTUDIO_SELFTEST
-			std::vector<std::string> selfTests;	// the values (prefixes) that make the page test itself
-			int designWidth = 1440;				// below it the page is zoomed out as a whole
-		};
+		using Spec = PageSpec;
 
 		WebPageHost(Spec _spec, std::function<std::string(const std::string&)> _resource,
 			std::function<void(const Value&)> _onMessage);

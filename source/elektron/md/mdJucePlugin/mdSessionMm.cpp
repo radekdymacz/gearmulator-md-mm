@@ -6,6 +6,7 @@
 #include "mmStudioLink.h"
 
 #include "mmDesk/mmDesk.h"
+#include "mmDesk/mmDeskWirePort.h"
 
 #include "deskWire/mmWire.h"
 
@@ -92,24 +93,7 @@ namespace mdJucePlugin
 
 		mmDesk::DevicePort device() override
 		{
-			mmDesk::DevicePort p;
-			p.sendSysex = [this](const std::vector<uint8_t>& _m) { m_wire.wire().send(_m); };
-			p.sendParam = [this](const uint8_t _t, const uint8_t _p, const uint8_t _i, const uint8_t _v)
-			{
-				if(const auto m = deskWire::mm::param(m_channel, _t, _p, _i, _v))
-					m_wire.wire().send(*m);
-			};
-			p.sendNrpn = [this](const uint8_t _t, const uint8_t _p, const uint8_t _v) { m_wire.wire().send(deskWire::mm::nrpn(m_channel, _t, _p, _v)); };
-			p.pressKeys = [this](const std::vector<mmDesk::Key>& _k)
-			{
-				const auto bytes = deskWire::realtimeOf(_k);
-				if(bytes)
-					m_wire.wire().send(*bytes);
-				return bytes.has_value();
-			};
-			p.baseChannel = [this](const uint8_t _ch) { m_channel = _ch; };
-			p.nowMs = [] { return nowMs(); };
-			return p;
+			return mmDesk::wirePort(m_wire.wire(), m_channel, [] { return nowMs(); });
 		}
 
 		deskCore::LifeFacts::Probe probe() override { return deskCore::LifeFacts::Probe::Running; }
@@ -131,11 +115,11 @@ namespace mdJucePlugin
 
 	// The Monomachine Editor's session: the engine map, the learnable parameters, its page, the page's
 	// MIDI and the app modulators kept with the project.
-	class MmSession final : public SessionOf<mmDesk::Desk>
+	class MmSession final : public SessionOf<mmDesk::Desk, MmEngine>
 	{
 	public:
 		explicit MmSession(AudioPluginAudioProcessor& _processor)
-			: SessionOf<mmDesk::Desk>(_processor, engines(), learnModel(), page(), std::nullopt)
+			: SessionOf<mmDesk::Desk, MmEngine>(_processor, engines(), learnModel(), page(), std::nullopt)
 		{
 		}
 
@@ -147,7 +131,7 @@ namespace mdJucePlugin
 				{mmDesk::wireProfile(), [](DeskSession& _s) { return std::make_unique<MmWireEngine>(_s); }, midiOutAvailability}};
 		}
 
-		static WebPageHost::Spec page()
+		static PageSpec page()
 		{
 			return {"mmStudio.html", "gearmulator-mmStudio.log", "GEARMULATOR_MMSTUDIO_SELFTEST", {"1", "mmcpu", "p6"}, 1440};
 		}
@@ -174,7 +158,7 @@ namespace mdJucePlugin
 		{
 			const auto& b = _message.find("b")->asArray();
 			const auto v = [&](const size_t _i) { return static_cast<int>(b[_i].asNumber()); };
-			auto& engine = static_cast<MmEngine&>(currentEngine());
+			auto& engine = currentEngine();
 			const bool ok = v(0) >= 0x80 && v(1) < 0x80 && v(2) < 0x80
 				&& engine.sendMidi(static_cast<uint8_t>(v(0)), static_cast<uint8_t>(v(1)), static_cast<uint8_t>(v(2)));
 			if(!ok)

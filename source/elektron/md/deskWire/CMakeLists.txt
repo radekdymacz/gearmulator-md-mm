@@ -5,13 +5,15 @@ project(deskWire)
 # The MIDI wire (P6): a machine at the end of a MIDI cable, paced at DIN speed, and the encoders a
 # wire speaks (MD kit parameter / level / mute as CCs, MM parameter CCs and NRPN, PLAY/STOP as
 # realtime). Pure (no JUCE) and header only: the plug-in's wire engines and the firmware test rigs
-# (mdLibTest) use the same code, so the HW MIDI firmware test exercises the plug-in's wire.
+# (mdLibTest) use the same code, so the HW MIDI firmware test exercises the plug-in's wire. Links
+# only deskCore and mdAutomation (the pure CC maps) — never mdLib, hardwareLib or dsp56kEmu, so the
+# wire and its test build without the emulator.
 add_library(deskWire INTERFACE)
 target_sources(deskWire INTERFACE
 	${CMAKE_CURRENT_SOURCE_DIR}/deskWire.h
 	${CMAKE_CURRENT_SOURCE_DIR}/mdWire.h
 	${CMAKE_CURRENT_SOURCE_DIR}/mmWire.h)
-target_link_libraries(deskWire INTERFACE deskCore mdLib)
+target_link_libraries(deskWire INTERFACE deskCore mdAutomation)
 target_include_directories(deskWire INTERFACE ${CMAKE_CURRENT_SOURCE_DIR}/..)
 target_compile_features(deskWire INTERFACE cxx_std_17)
 

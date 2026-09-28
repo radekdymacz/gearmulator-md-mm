@@ -5,10 +5,18 @@ project(mdLib)
 option(MD_TRANSPORT_DIAGNOSTICS
 	"Compile the MD/MM transport and scheduler scorecard" OFF)
 
+# Pure CC parameter-change maps (P6): MD kit parameters and MM parameters/mute as MIDI CCs on a
+# base channel, and back. No device, no emulator, no JUCE: deskWire's wire engines and the
+# firmware test rigs encode with this same code, and mdLib links it for its own SysEx automation
+# glue (mdautomationsync, mdsysexautomation).
+add_library(mdAutomation STATIC mdautomation.cpp mdautomation.h)
+target_include_directories(mdAutomation PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/..)
+target_compile_features(mdAutomation PUBLIC cxx_std_17)
+set_property(TARGET mdAutomation PROPERTY FOLDER "Elektron")
+
 add_library(mdLib STATIC)
 
 set(SOURCES
-	mdautomation.cpp mdautomation.h
 	mdautomationsync.cpp mdautomationsync.h
 	mddevice.cpp mddevice.h
 	mddsp.cpp mddsp.h
@@ -42,7 +50,7 @@ set(SOURCES
 target_sources(mdLib PRIVATE ${SOURCES})
 source_group("source" FILES ${SOURCES})
 
-target_link_libraries(mdLib PUBLIC hardwareLib dsp56kEmu elektronData)
+target_link_libraries(mdLib PUBLIC hardwareLib dsp56kEmu elektronData mdAutomation)
 target_compile_definitions(mdLib PUBLIC
 	MD_TRANSPORT_DIAGNOSTICS=$<BOOL:${MD_TRANSPORT_DIAGNOSTICS}>)
 

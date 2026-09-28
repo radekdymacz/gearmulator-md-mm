@@ -6,6 +6,7 @@
 #include "mdStudioLink.h"
 
 #include "mdDesk/mdDesk.h"
+#include "mdDesk/mdDeskWirePort.h"
 
 #include "deskWire/mdWire.h"
 
@@ -93,25 +94,7 @@ namespace mdJucePlugin
 
 		mdDesk::DevicePort device() override
 		{
-			const auto send = [this](const std::optional<deskWire::Bytes>& _m)
-			{
-				if(_m)
-					m_wire.wire().send(*_m);
-			};
-			mdDesk::DevicePort p;
-			p.sendSysex = [this](const std::vector<uint8_t>& _m) { m_wire.wire().send(_m); };
-			p.sendKitParam = [this, send](const uint8_t _t, const uint8_t _i, const uint8_t _v) { send(deskWire::md::kitParam(m_channel, _t, _i, _v)); };
-			p.sendMute = [this, send](const uint8_t _t, const bool _on) { send(deskWire::md::mute(m_channel, _t, _on)); };
-			p.pressKey = [this](const std::string& _key)
-			{
-				const auto b = deskWire::md::realtimeOf(_key);
-				if(b)
-					m_wire.wire().send(deskWire::Bytes{*b});
-				return b.has_value();
-			};
-			p.baseChannel = [this](const uint8_t _ch) { m_channel = _ch; };
-			p.nowMs = [] { return nowMs(); };
-			return p;
+			return mdDesk::wirePort(m_wire.wire(), m_channel, [] { return nowMs(); });
 		}
 
 		deskCore::LifeFacts::Probe probe() override { return deskCore::LifeFacts::Probe::Running; }
@@ -145,7 +128,7 @@ namespace mdJucePlugin
 				{mdDesk::wireProfile(), [](DeskSession& _s) { return std::make_unique<MdWireEngine>(_s); }, midiOutAvailability}};
 		}
 
-		static WebPageHost::Spec page()
+		static PageSpec page()
 		{
 			return {"mdStudio.html", "gearmulator-mdStudio.log", "GEARMULATOR_MDSTUDIO_SELFTEST", {"1", "p4", "p5", "p6"}, 1440};
 		}
