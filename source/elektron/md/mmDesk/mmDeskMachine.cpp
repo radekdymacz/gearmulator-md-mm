@@ -59,13 +59,15 @@ namespace mmDesk
 
 	const Profile& emulatorProfile()
 	{
-		static const Profile p{"emu", "EMU OS 1.32B", false};
+		static const Profile p{"emu", "EMU OS 1.32B", "Engine: the real Monomachine OS 1.32B runs inside the app. Choose HW MIDI to "
+			"edit a real Monomachine instead.", false};
 		return p;
 	}
 
 	const Profile& wireProfile()
 	{
-		static const Profile p{"hw", "HW MIDI", true};
+		static const Profile p{"hw", "HW MIDI", "Engine: a real Monomachine on the plug-in's MIDI in and out, at MIDI speed. "
+			"Pattern, song and global dumps need it on GLOBAL › FILE › SYSEX RECV; PLAY/STOP are MIDI Start/Stop.", true};
 		return p;
 	}
 
@@ -141,6 +143,7 @@ namespace mmDesk
 		deskCore::Capabilities c;
 		c.engine = m_profile.id;
 		c.label = m_profile.label;
+		c.about = m_profile.about;
 		const bool panel = m_port.pressKeys && !m_profile.wire;
 		c.set("transport", static_cast<bool>(m_port.pressKeys), "No transport here.");
 		c.set("panelKeys", panel, "Over HW MIDI the editor cannot press the machine's keys.");

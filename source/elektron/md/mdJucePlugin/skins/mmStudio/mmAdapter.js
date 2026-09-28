@@ -171,7 +171,7 @@
 		V().renderTop();
 		/* the library fills in the background: say how far */
 		const chip = $(".lcdeng span");
-		if (chip && S().eng === "ready") chip.textContent = d.loading.done < d.loading.total ? `EMU OS 1.32B · ${d.loading.done}/${d.loading.total}` : V().ENG.ready[0];
+		if (chip && S().eng === "ready") chip.textContent = d.loading.done < d.loading.total ? `${V().ENG.ready[0]} · ${d.loading.done}/${d.loading.total}` : V().ENG.ready[0];
 	}
 
 	/* the plug-in's engine changed (HW MIDI or the emulator): its documents start over */
@@ -276,17 +276,22 @@
 			}
 	}
 	let noRomShown = false, noRomAt = 0;
+	/* machine.lifecycle -> the mockup's engine states */
+	const LIFE = { missing: "norom", unsupported: "unsupported", loading: "loading", booting: "boot", animating: "boot", ready: "ready",
+		hwConnecting: "hwwait", hwLost: "hwnone" };
 	function showEngine() {
 		if (!window.MMView) return;
-		const e = FW.engine, hw = FW.machine?.capabilities?.engine === "hw", link = FW.machine?.link;
-		const st = hw ? (link === "ready" ? (synced ? "hwready" : "sync") : link === "lost" ? "hwnone" : "hwwait")
-			: e === "missing" ? "norom" : e === "unsupported" ? "unsupported" : e === "loading" ? "loading" : e === "booting" ? "boot" : synced ? "ready" : "sync";
+		/* the label follows the one lifecycle value; when ready it is the engine's own (capabilities) */
+		const caps = FW.machine?.capabilities, life = LIFE[FW.machine?.lifecycle || "loading"] || "boot";
+		const st = life === "ready" && !synced ? "sync" : life;
+		if (caps) V().ENG.ready = [caps.label, "on"];
 		if (S().eng !== st) V().setEng(st);
+		if (st === "ready" && caps?.about) $(".lcdeng").title = caps.about;
 		/* NO ROM only when the plug-in has said so for 1.5 s (a device being made or replaced is not
 		   a missing ROM), and the dialog closes by itself as soon as the engine is anything else. */
 		if (st === "norom") { if (!noRomAt) noRomAt = now(); if (!noRomShown && now() - noRomAt > 1500) { noRomShown = true; host.firstRun(); } else if (!noRomShown) setTimeout(showEngine, 1600); }
 		else { noRomAt = 0; noRomShown = false; const d = $("#dlg"); if (d && !d.hidden && /FIRMWARE NEEDED/.test(d.textContent)) d.hidden = true; }
-		if ((st === "ready" || st === "hwready") && !last.ready) {
+		if (st === "ready" && !last.ready) {
 			last.ready = true;
 			log("ready: pattern " + CUR.pat + " kit " + CUR.kit);
 			if (selfTest) setTimeout(runSelfTest, 500);
@@ -294,16 +299,24 @@
 			if (audioTest) setTimeout(() => V().audioSelfTest?.({ log: t => log("AUDIO: " + t), play: on => { if (on !== S().playing) host.togglePlay(); }, step: () => S().step, playing: () => S().playing }), 3000);
 		}
 	}
-	/* the engine menu's entries: the plug-in's engine map (machine.engines) */
+	/* the engine menu's engine entries: the plug-in's engine map (machine.engines), in its order,
+	   before the menu's own entries */
+	const ENGINE_ACTIONS = ["audio", "rom"];
 	function markEngines(d) {
-		for (const e of d.engines || []) {
-			const o = $(`#engsel option[value="${e.id}"]`);
-			if (!o) continue;
+		const sel = $("#engsel");
+		if (!sel) return;
+		const engines = d.engines || [];
+		for (const o of [...sel.options]) if (!ENGINE_ACTIONS.includes(o.value) && !engines.some(e => e.id === o.value)) o.remove();
+		const first = [...sel.options].find(o => ENGINE_ACTIONS.includes(o.value)) || null;
+		for (const e of engines) {
+			let o = sel.querySelector(`option[value="${e.id}"]`);
+			if (!o) { o = document.createElement("option"); o.value = e.id; }
+			sel.insertBefore(o, first);
+			o.textContent = e.label;
 			o.disabled = !e.available;
 			o.title = e.available ? "" : e.reason || "";
 		}
-		const sel = $("#engsel");
-		if (sel && d.capabilities?.engine) sel.value = d.capabilities.engine;
+		if (d.capabilities?.engine) { sel.value = d.capabilities.engine; S().engine = d.capabilities.engine; }
 	}
 	/* what the engine cannot do: disabled, with the reason (machine.capabilities) */
 	const NA = [

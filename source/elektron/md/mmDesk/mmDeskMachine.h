@@ -24,6 +24,7 @@ namespace mmDesk
 	{
 		std::string id;			// the engine map's key
 		std::string label;		// the LCD's engine label when ready ("EMU OS 1.32B")
+		std::string about;		// what the engine is, for the label's tooltip
 		bool wire = false;		// at DIN speed: no panel to drive SYSEX RECV, no telemetry, replies make the lifecycle
 	};
 

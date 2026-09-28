@@ -72,13 +72,16 @@ namespace mdDesk
 
 	const Profile& emulatorProfile()
 	{
-		static const Profile p{"emu", "EMU OS 1.63", false, false, true};
+		static const Profile p{"emu", "EMU OS 1.63", "Engine: the real Machinedrum OS 1.63 runs inside the app. Choose HW MIDI to "
+			"edit a real Machinedrum instead.", false, false, true};
 		return p;
 	}
 
 	const Profile& wireProfile()
 	{
-		static const Profile p{"hw", "HW MIDI", true, true, false};
+		static const Profile p{"hw", "HW MIDI", "Engine: a real Machinedrum on the plug-in's MIDI in and out, at MIDI speed (a "
+			"pattern takes about 1.7 s each way). No live recording, chains or boot screen over MIDI; PLAY/STOP are MIDI "
+			"Start/Stop.", true, true, false};
 		return p;
 	}
 
@@ -171,6 +174,7 @@ namespace mdDesk
 		deskCore::Capabilities c;
 		c.engine = m_profile.id;
 		c.label = m_profile.label;
+		c.about = m_profile.about;
 		const bool keys = m_port.pressKey && !m_profile.wire;
 		const bool telemetry = m_telemetry.valid;
 		static const std::string noKeys = "It needs the machine's panel keys: the emulator only (over HW MIDI there are none).";

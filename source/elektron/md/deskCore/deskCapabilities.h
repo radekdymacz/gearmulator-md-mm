@@ -22,6 +22,7 @@ namespace deskCore
 
 		std::string engine;			// the engine map's id: "emu", "hw"
 		std::string label;			// the LCD's engine label: "EMU OS 1.63", "HW MIDI"
+		std::string about;			// the engine label's tooltip while it is ready
 		std::vector<Can> can;
 		std::vector<std::pair<std::string, std::string>> values;	// named text values ("dumps": "recv")
 
@@ -60,6 +61,7 @@ namespace deskCore
 			elektronData::json::Value v = elektronData::json::Value::object();
 			v.set("engine", engine);
 			v.set("label", label);
+			v.set("about", about);
 			for(const auto& c : can)
 				v.set(c.name, c.yes);
 			for(const auto& [k, t] : values)

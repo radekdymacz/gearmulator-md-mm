@@ -188,33 +188,46 @@ function renderTop() {
 
 /* The engine label in the LCD shows the engine's real state (mockup v48), from the device:
    NO ROM, LOADING ROM (the machine is prepared or restored), BOOTING OS (the firmware starts),
-   EMU OS 1.63 (it answers MIDI: status reply seen), ROM ERROR (not OS 1.63). While it is not
-   ready the LCD fields dim, REC and PLAY are disabled and edits wait (the desk refuses them).
-   P6: the label follows the one lifecycle value and the engine (machine.lifecycle,
-   machine.capabilities.engine); what works on that engine follows its capabilities. */
-const ENG = { missing: ["NO ROM", "off"], loading: ["LOADING ROM", "blink"], booting: ["BOOTING OS", "blink"], ready: ["EMU OS 1.63", "on"], unsupported: ["ROM ERROR", "off"],
-	hwconnect: ["HW CONNECT", "blink"], hwready: ["HW MIDI", "on"], hwnone: ["HW NO MIDI", "off"] };
-const engineId = () => V.caps.engine || "emu";
-function engineKey() {
-	if (engineId() === "hw") return { ready: "hwready", hwLost: "hwnone" }[V.lifecycle] || "hwconnect";
-	return { missing: "missing", unsupported: "unsupported", loading: "loading", ready: "ready" }[V.lifecycle] || "booting";
+   the engine's own label when it takes input (EMU OS 1.63, HW MIDI), ROM ERROR (not OS 1.63),
+   HW CONNECT / HW NO MIDI for a machine on the MIDI wire. While it is not ready the LCD fields
+   dim, REC and PLAY are disabled and edits wait (the desk refuses them).
+   P6: the label follows the one lifecycle value (machine.lifecycle) and, when ready, the
+   engine's capabilities (label, about); the menu is the engine map (machine.engines). */
+const ENG = { missing: ["NO ROM", "off"], loading: ["LOADING ROM", "blink"], booting: ["BOOTING OS", "blink"], animating: ["BOOTING OS", "blink"], unsupported: ["ROM ERROR", "off"],
+	hwConnecting: ["HW CONNECT", "blink", "Engine: HW MIDI, waiting for the Machinedrum to answer on the plug-in's MIDI in and out."],
+	hwLost: ["HW NO MIDI", "off", "Engine: HW MIDI, but the Machinedrum has not answered for a while. Check the MIDI cables and that its SYSEX is on."] };
+/* the engine menu's own entries (not engines) */
+const ENGINE_ACTIONS = ["global", "audio", "rom"];
+function engineLabel() {
+	if (V.lifecycle === "ready") return [V.caps.label || "READY", "on", V.caps.about || ""];
+	return ENG[V.lifecycle] || ENG.booting;
+}
+/* the menu's engine entries are the engine map's, in its order, before the menu's own */
+function renderEngineMenu(sel) {
+	const engines = machineState().engines || [];
+	for (const o of [...sel.options]) if (!ENGINE_ACTIONS.includes(o.value) && !engines.some(e => e.id === o.value)) o.remove();
+	const first = [...sel.options].find(o => ENGINE_ACTIONS.includes(o.value)) || null;
+	for (const e of engines) {
+		let o = sel.querySelector(`option[value="${e.id}"]`);
+		if (!o) { o = document.createElement("option"); o.value = e.id; }
+		sel.insertBefore(o, first);
+		o.textContent = e.label;
+		o.disabled = !e.available;
+		o.title = e.available ? "" : e.reason || "";
+	}
+	if (V.caps.engine) sel.value = V.caps.engine;
 }
 let lastEng = "";
 function renderEngine() {
 	const btn = $(".lcdeng"), led = $("#engled"); if (!btn || !led) return;
-	const key = engineKey(), hw = engineId() === "hw", [txt, mode] = ENG[key] || ENG.booting, ready = key === "ready" || key === "hwready";
+	const [txt, mode, about] = engineLabel(), ready = V.lifecycle === "ready";
 	btn.querySelector("span").textContent = txt;
 	led.className = "led " + (mode === "on" ? "on" : mode === "blink" ? "on blink" : "");
 	$(".lcdpanel").classList.toggle("engwait", !ready);
 	["rec", "play"].forEach(id => { const k = document.getElementById(id); if (k) k.disabled = !ready; });
-	btn.title = hw ? (key === "hwready" ? "Engine: a real Machinedrum on the plug-in's MIDI in and out, at MIDI speed (a pattern takes about 1.7 s each way). No live recording, chains or boot screen over MIDI; PLAY/STOP are MIDI Start/Stop." : key === "hwnone" ? "Engine: HW MIDI, but the Machinedrum has not answered for a while. Check the MIDI cables and that its SYSEX is on." : "Engine: HW MIDI, waiting for the Machinedrum to answer on the plug-in's MIDI in and out.")
-		: ready ? "Engine: the real Machinedrum OS 1.63 runs inside the app. Choose HW MIDI to edit a real Machinedrum instead." : "Engine: " + txt.toLowerCase() + ". Editing starts when it is ready.";
+	btn.title = about || "Engine: " + txt.toLowerCase() + ". Editing starts when it is ready.";
 	const sel = document.getElementById("engsel");
-	if (sel) {
-		sel.value = engineId();
-		/* the engine map's entries (machine.engines) */
-		for (const e of machineState().engines || []) { const o = sel.querySelector(`option[value="${e.id}"]`); if (o) { o.disabled = !e.available; o.title = e.available ? "" : e.reason || ""; } }
-	}
+	if (sel) renderEngineMenu(sel);
 	/* live recording needs what the engine may not have (machine.capabilities.liveRecord, with its reason) */
 	const rec = document.getElementById("rec");
 	if (rec && V.caps.liveRecord === false) { rec.disabled = true; rec.title = V.caps.reasons?.liveRecord || rec.title; }
@@ -224,9 +237,9 @@ document.addEventListener("change", e => {
 	if (e.target.id !== "engsel") return;
 	const sel = e.target, v = sel.value; renderEngine();
 	if (v === "rom") firstRun(true);
-	else if (v === "global") { sel.value = engineId(); openGlobal(); }
-	else if (v === "audio") { sel.value = engineId(); openAudio(); }
-	else if (v === "hw" || v === "emu") cmd("engine", { kind: v });
+	else if (v === "global") { sel.value = V.caps.engine; openGlobal(); }
+	else if (v === "audio") { sel.value = V.caps.engine; openAudio(); }
+	else if ((machineState().engines || []).some(x => x.id === v)) cmd("engine", { kind: v });
 });
 
 /* ===== Track header (one component, used by rail and grid) ===== */

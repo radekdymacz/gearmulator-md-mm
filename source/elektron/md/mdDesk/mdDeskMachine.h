@@ -30,6 +30,7 @@ namespace mdDesk
 	{
 		std::string id;				// the engine map's key
 		std::string label;			// the LCD's engine label when ready ("EMU OS 1.63")
+		std::string about;			// what the engine is, for the label's tooltip
 		bool wire = false;			// at DIN speed: timeouts follow it, the lifecycle follows replies
 		bool kitsFirst = false;		// background loads: the 64 small kits first (a pattern is 1.7 s over DIN)
 		bool memory = true;			// the device publishes the working kit and the LCD
