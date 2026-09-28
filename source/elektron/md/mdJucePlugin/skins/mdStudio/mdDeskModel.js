@@ -71,6 +71,18 @@ const names = list => list.filter(Boolean);
 function famKey(m, cat = Cat) { const c = cat.byName[m]; const f = c ? c.family : m.split("-")[0]; return f === "P-I" ? "PI" : f; }
 function famOf(m, cat = Cat) { const f = famKey(m, cat); return f === "ROM" || f === "RAM" ? "SMP" : f; }
 function codeOf(m, cat = Cat) { const c = cat.byName[m]; return c ? m.slice(c.family.length + 1) : m.split("-").slice(1).join("-"); }
+/* Full English names of the machines' codes (P6: moved from mdDeskApp.js so the model never calls
+   up into the app; mdDeskModelTest.js then exercises this nameOf, not a stub). */
+const FULL = { BD: "Bass drum", B2: "Bass drum 2", SD: "Snare drum", XT: "Tom", MT: "Tom", CP: "Clap", RS: "Rim shot", CB: "Cow bell", CH: "Closed hihat", OH: "Open hihat", CY: "Cymbal", MA: "Maracas", CL: "Claves", XC: "Congas", HH: "Hihat", HT: "High tom", LT: "Low tom", RC: "Ride cymbal", CC: "Crash cymbal", BR: "Brushed snare", TA: "Tambourine", TR: "Triangle", SH: "Shaker", BC: "Bongo conga", ML: "Metallica", SIN: "Sinus", NS: "Noise", IM: "Impulse", EMPTY: "Empty", GA: "Input gate A", GB: "Input gate B", FA: "Filter follower A", FB: "Filter follower B", EA: "Input envelope A", EB: "Input envelope B", AL: "Control all", "8P": "Control 8 parameters", RE: "Control rhythm echo", GB2: "Control gate box", EQ: "Control master EQ", DX: "Control Dynamix" };
+function nameOf(m, cat = Cat) {
+	const f = famKey(m, cat), c = codeOf(m, cat);
+	if (f === "MID") return "MIDI channel " + (+c);
+	if (f === "ROM") return "ROM sample " + c;
+	if (/^R\d/.test(c) && f === "RAM") return "RAM record " + c.slice(1);
+	if (/^P\d/.test(c) && f === "RAM") return "RAM play " + c.slice(1);
+	if (f === "CTR" && c === "GB") return FULL.GB2;
+	return FULL[c] || m;
+}
 
 /* ---- units (mdValidate.h) ---- */
 const swingPercent = v => 50 + Math.round(v * 50 / 16384);

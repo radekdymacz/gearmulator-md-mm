@@ -15,7 +15,10 @@ const S={ws:"seq",sel:0,side:"int",len:32,mult:"1X",swingAmt:58,playing:false,st
  lane:"FLT.1",lanePage:"FLT",locks:new Map(),patTrn:64,routing:"3xSTEREO+AB=MIX",plate:"mk2",engine:"emu",pend:0,patSent:"live",rec:false,
  mode:"normal",multi:{mode:0,splitKey:60,splitTrack:3,timing:4},menv:{ATK:0,DEC:127,SUS:127,REL:127,PORT:0},kbOct:3,
  mmap:[{hi:47,pat:0,ofs:0,len:0,trn:64,tim:4},{hi:59,pat:1,ofs:0,len:16,trn:64,tim:4},{hi:71,pat:0,ofs:0,len:0,trn:69,tim:4},{hi:127,pat:2,ofs:8,len:8,trn:64,tim:1}],mmapSel:1,
- gmutes:null,rollLo:36,ghost:true,asTab:"JOY RL",joy:{x:0,y:0}};
+ gmutes:null,rollLo:36,ghost:true,asTab:"JOY RL",joy:{x:0,y:0},
+ /* whether the machine takes input (machine.input); null while no host has said (the standalone
+    mockup, which has no host), so engReady() falls back to the engine label (S.eng) */
+ input:null};
 S.tracks=[newTrack("SWAVE-SAW","Bass"),newTrack("FX-CHORUS","Bass chorus"),newTrack("SID-6581","Arp lead"),newTrack("VO-6","Monomachine"),newTrack("DPRO-BBOX","Drums"),newTrack("FX-REVERB","Room")];
 S.midi=[1,2,3,4,5,6].map(k=>newMidi([10,3,4,5,6,7][k-1]));S.midi[0].name="Drum machine";S.midi[1].name="Poly pad";
 S.kitNames={0:"MONOMACHINE",1:"ACID BATH",2:"VOCODED",5:"SID LEADS"};S.patKit=Array.from({length:128},(_,p)=>p===2?1:p===5?2:p>=16?p%128:0);

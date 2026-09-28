@@ -71,15 +71,17 @@
 	/* ---------------- the machine's documents -> the view ---------------- */
 	const kitPageOf = k => k === cur("kit") && synced ? V().captureKit() : V().kitSlot(k).data || (DOCS.kit[k] ? C().kitToPage(DOCS.kit[k], globalNow()) : null);
 	const lenOf = p => p === cur("pattern") && synced ? V().patternLength(p) : DOCS.pattern[p]?.length ?? V().patternLength(p);
-	/* what the view's state is as the contract's documents */
+	/* what the view's state is as the contract's documents. b is that slot's own base (its
+	   firmware pass-through fields): never another slot's, even the current one's -- no base, no
+	   send (sendDoc shows why). */
 	function patDoc(p) {
-		const b = DOCS.pattern[p] || DOCS.pattern[cur("pattern")] || DOCS.pattern.find(Boolean);
+		const b = DOCS.pattern[p];
 		if (!b) return null;
 		const slot = V().patternSlot(p), data = p === cur("pattern") ? V().capturePat() : slot.data;
 		return data ? C().patternToFw(data, b, slot.kit, kitPageOf(slot.kit), p) : null;
 	}
 	function kitDoc(k) {
-		const b = (k === cur("kit") ? kitNow() : DOCS.kit[k]) || kitNow() || DOCS.kit.find(Boolean);
+		const b = k === cur("kit") ? kitNow() : DOCS.kit[k];
 		if (!b) return null;
 		if (k === cur("kit")) return C().kitToFw(V().captureKit(), b, V().workName(), k);
 		const s = V().kitSlot(k);
@@ -200,7 +202,9 @@
 		}
 		for (const kind of ["song", "global"]) if (changed(kind) && DOCS[kind][cur(kind)]) wantApply.add(kind);
 		if (queuedIn(d) !== queuedIn(prev)) { V().setQueued(queuedIn(d)); V().renderTop(); V().drawLib(); }
-		V().setPlaying(!!d.playing);
+		/* whether the machine takes input (as the MD page gates: machine.input, not a lifecycle
+		   guess) -- playing is telemetry's only, never the machine document's (P6) */
+		V().setInput(!!d.input);
 		/* the machine's tempo (RAM), unless a tempo the user set is still on its way */
 		if (!tempoInFlight && d.tempo != null && d.tempo !== V().tempo()) { V().setTempo(d.tempo); V().renderTop(); }
 		if (synced) V().setKitState(kitState());
@@ -228,6 +232,7 @@
 		wantApply.clear();
 		last.ready = false;
 		lcdBits = null;
+		if (window.MMView) V().setInput(false);
 		markReading();
 		showEngine();
 	}
@@ -236,7 +241,9 @@
 	/* the view shows the machine and the machine takes input: an edit can go out */
 	const canSend = () => synced && !!catalogue && V().engReady();
 	function sendDoc(kind, doc, slot) {
-		if (!doc) return;
+		/* no base document for this slot (patDoc/kitDoc): never borrow another slot's, and never
+		   send silently -- the same reason the library shows while a slot is still coming in */
+		if (!doc) { V().toast("Still reading this slot from the machine."); log("no base for " + kind + " " + slot + ": not sent"); return; }
 		const g = gesture;
 		send({ op: "set", kind, doc, g }, { key: kind + ":" + slot, onResult: r => {
 			if (!r.ok) { V().toast(r.errors[0] || "The machine did not take it."); log("set " + kind + " " + slot + ": " + r.errors.join("; ")); }

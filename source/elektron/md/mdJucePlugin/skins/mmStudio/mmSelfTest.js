@@ -95,6 +95,10 @@ window.MMDiagnostics = {};
 		});
 		await check("pitchless trig", async () => {
 			const st = free();
+			/* no gesture reaches a=1,f=1,l=1 with no note: clickStep's alt-click only toggles an
+			   existing step between full and trigless (it keeps whatever note is there), and a
+			   fresh alt-click always adds one. A direct write is the only way in (kept, per the
+			   round's own rule for a case with no named call or DOM event). */
 			s.tracks[0].steps[st] = { a: 1, f: 1, l: 1 };
 			window.structEdited();
 			await readBack(d => d.tracks[0].trig.includes(st) && !d.tracks[0].notes.some(n => n[0] === st));
@@ -107,6 +111,8 @@ window.MMDiagnostics = {};
 			/* the kit that plays: the working kit document (the older contract: kit, working) */
 			const playing = m => m.type === "doc" && (m.kind === "workingKit" || (m.kind === "kit" && m.working));
 			const got = waitFor(m => playing(m) && m.doc.tracks[0].pages[1][5] === v, 5000);
+			/* AMP VOL has no exact-value gesture (only the knob's relative pointer drag, 115-control.js):
+			   a direct write is the only way to land on a precise value (kept, as above). */
 			s.tracks[0].v.AMP[5] = v;
 			window.soundEdited();
 			await got;
@@ -149,19 +155,23 @@ window.MMDiagnostics = {};
 		});
 		await check("tempo out and read back (0x61, RAM)", async () => {
 			const t0 = s.bpm, t = t0 === 133 ? 127 : 133;
-			s.bpm = t; host.tempo(t);
+			/* V().setTempo is the named call the BPM drag itself uses (130-main.js); no direct S write */
+			V().setTempo(t); host.tempo(t);
 			await waitFor(m => m.type === "machine" && m.doc.tempo === t, 5000);
-			s.bpm = t0; host.tempo(t0);
+			V().setTempo(t0); host.tempo(t0);
 			await waitFor(m => m.type === "machine" && m.doc.tempo === t0, 5000);
 			return t0 + " -> " + t + " -> " + t0 + " BPM";
 		});
 		await check("solo mutes the other synth tracks", async () => {
 			const before = [0, 1, 2, 3, 4, 5].map(i => !V().audible(i));
 			sentMute.length = 0;
-			s.tracks[2].solo = true; host.mutes();
+			/* the rail's own SOLO key (a DOM event), not a direct write of S.tracks[2].solo: it
+			   flips the solo and calls host.mutes() itself, as a real click would */
+			const solo = $('[data-solo="2"]');
+			solo.click();
 			await sleep(300);
 			const muted = before.map((m, i) => sentMute[i] ?? m).join("");
-			s.tracks[2].solo = false; host.mutes();
+			solo.click();
 			await sleep(300);
 			if (muted !== "truetruefalsetruetruetrue") throw new Error("mutes " + muted);
 		});

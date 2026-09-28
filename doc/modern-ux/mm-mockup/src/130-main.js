@@ -213,15 +213,22 @@ document.addEventListener("keydown",e=>{const mod=e.metaKey||e.ctrlKey,inField=e
 /* ===== Engine status (from the MD Editor v48): the LCD says what the engine is doing; editing waits until it is ready ===== */
 const ENG={...{norom:["NO ROM","off"],loading:["LOADING ROM","blink"],boot:["BOOTING OS","blink"],ready:["EMU OS 1.32B","on"],hwwait:["HW CONNECT","blink"],hwready:["HW MIDI","on"],hwnone:["HW NO MIDI","off"],error:["ROM ERROR","off"]},...HOST.engineLabels};
 let engT=[];
-function engReady(){return S.eng==="ready"||S.eng==="hwready"}
+/* Whether the machine takes input: machine.input when a host has said (S.input, set through
+   setInput), as the MD page gates (V.input) -- not the engine label (S.eng), whose lifecycle map
+   has no "takes input in hwLost" case and so used to disagree with the core. The standalone
+   mockup has no host to call setInput, so S.input stays null and this falls back to the label. */
+function engReady(){return S.input!=null?S.input:(S.eng==="ready"||S.eng==="hwready")}
+function setInput(on){const v=!!on;if(S.input===v)return;S.input=v;refreshEngGate()}
+/* the REC/PLAY keys and the "engwait" dimming follow engReady(), on any change that could move it */
+function refreshEngGate(){const ready=engReady();document.querySelector(".lcdpanel").classList.toggle("engwait",!ready);document.body.classList.toggle("engwait",!ready);
+ ["rec","play"].forEach(id=>{const k=document.getElementById(id);if(k)k.disabled=!ready})}
 /* a host's words for what an engine state means: the label's tooltip */
 function setEngineTip(st,tip){const e=ENG[st];if(!e||e[2]===tip)return;ENG[st]=[e[0],e[1],tip];if(S.eng===st)setEng(st)}
 function setEng(st){S.eng=st;const[txt,led]=ENG[st],b=document.querySelector(".lcdeng"),l=document.getElementById("engled");if(!b)return;
  b.querySelector("span").textContent=txt;l.className="led "+(led==="on"?"on":led==="blink"?"on blink":"");
- const ready=engReady();document.querySelector(".lcdpanel").classList.toggle("engwait",!ready);document.body.classList.toggle("engwait",!ready);
- ["rec","play"].forEach(id=>{const k=document.getElementById(id);if(k)k.disabled=!ready});
+ refreshEngGate();
  bootScreen(st==="boot");
- b.title=ENG[st][2]||(ready?"Engine: running. Click to switch emulator or hardware, or load another ROM.":"Engine: "+txt.toLowerCase()+". Editing starts when it is ready.")}
+ b.title=ENG[st][2]||(engReady()?"Engine: running. Click to switch emulator or hardware, or load another ROM.":"Engine: "+txt.toLowerCase()+". Editing starts when it is ready.")}
 /* while BOOTING OS the LCD shows a firmware-style start-up screen (the text is the editor's, not a copy of the ROM's) */
 let bootT=[];function bootScreen(on){if(HOST.bootScreen)return HOST.bootScreen(on);const el=$("#bootscr");if(!el)return;bootT.forEach(clearTimeout);bootT=[];el.classList.toggle("on",on);if(!on)return;$("#bsmk").textContent=S.plate==="mk1"?"SFX-60":"SFX-60 MKII";
  const steps=[["OS 1.32B · TESTING MEMORY",15],["BATTERY RAM · 128 KITS",40],["128 PATTERNS · 24 SONGS",65],[S.plate==="mk1"?"DSP · FACTORY WAVES":"DSP · 64 DIGIPRO WAVES",85],["STARTING SEQUENCER",100]];
@@ -356,7 +363,7 @@ window.MMView={
  song:()=>copy(S.song),routing:()=>S.routing,midiTracks:()=>S.midi.map(x=>({ch:x.ch,cc:[...x.cc]})),multi:()=>copy(S.multi),
  learnTarget:()=>S.learn&&S.learnT?{...S.learnT}:null,learning:()=>!!S.learn,ctlSetup,
  /* setters */
- startEmpty,setCurrent:({pattern,kit})=>{if(pattern!=null)S.pat=pattern;if(kit!=null)S.kit=kit},setQueued:q=>{S.queued=q},setTempo:bpm=>{S.bpm=bpm},
+ startEmpty,setCurrent:({pattern,kit})=>{if(pattern!=null)S.pat=pattern;if(kit!=null)S.kit=kit},setQueued:q=>{S.queued=q},setTempo:bpm=>{S.bpm=bpm},setInput,
  setPlaying,setStep,setPatternSlot,setKitSlot,setWorkingKit,setSong,setRouting:r=>{S.routing=r},setMidiTracks,setMultiMap,
  setEng,setEngineLabel,setEngineTip,setEngines,setAudioEntry,setKitState,clearLearnTarget:()=>{S.learnT=null},setModulation,setCtlSetup,disable,setReading,
  setLcd,setKeyDown,setPst,closeFirmwareDialog,

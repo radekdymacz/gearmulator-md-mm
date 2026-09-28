@@ -19,16 +19,7 @@ const ABOUT = {
 	ROM: "Plays a sample kept in ROM. ROM-25 to ROM-48 are made for loops (STRT and END are linear).",
 	"GND-EMPTY": "No machine on this track." };
 function about(m) { const f = famKey(m); if (/^CTR-(RE|GB|EQ|DX)/.test(m)) return ABOUT.CTRM; return ABOUT[m] || ABOUT[m.slice(0, 5)] || ABOUT[f] || ""; }
-const FULL = { BD: "Bass drum", B2: "Bass drum 2", SD: "Snare drum", XT: "Tom", MT: "Tom", CP: "Clap", RS: "Rim shot", CB: "Cow bell", CH: "Closed hihat", OH: "Open hihat", CY: "Cymbal", MA: "Maracas", CL: "Claves", XC: "Congas", HH: "Hihat", HT: "High tom", LT: "Low tom", RC: "Ride cymbal", CC: "Crash cymbal", BR: "Brushed snare", TA: "Tambourine", TR: "Triangle", SH: "Shaker", BC: "Bongo conga", ML: "Metallica", SIN: "Sinus", NS: "Noise", IM: "Impulse", EMPTY: "Empty", GA: "Input gate A", GB: "Input gate B", FA: "Filter follower A", FB: "Filter follower B", EA: "Input envelope A", EB: "Input envelope B", AL: "Control all", "8P": "Control 8 parameters", RE: "Control rhythm echo", GB2: "Control gate box", EQ: "Control master EQ", DX: "Control Dynamix" };
-function nameOf(m, cat = Cat) {
-	const f = famKey(m, cat), c = codeOf(m, cat);
-	if (f === "MID") return "MIDI channel " + (+c);
-	if (f === "ROM") return "ROM sample " + c;
-	if (/^R\d/.test(c) && f === "RAM") return "RAM record " + c.slice(1);
-	if (/^P\d/.test(c) && f === "RAM") return "RAM play " + c.slice(1);
-	if (f === "CTR" && c === "GB") return FULL.GB2;
-	return FULL[c] || m;
-}
+/* nameOf (and its FULL table) live in mdDeskModel.js (P6): pure model, no call up into the app. */
 const isSampler = m => /^(ROM|RAM-P)/.test(m), isRec = m => /^RAM-R/.test(m);
 const SHAPES = ["Triangle", "Saw", "Square", "Linear decay", "Exp decay", "Random"];
 
@@ -47,13 +38,14 @@ let gesture = 0;	// non-zero while a drag runs: one undo step
 /* A command to the plug-in. optimistic: the [path, value] writes into the view the gesture shows at
    once (mdDeskModel.js, Overlay), on the document the command edits (docOf); they are kept over
    every new derivation until its result. */
-function cmd(op, args = {}, key, optimistic) {
+function cmd(op, args = {}, key, optimistic, onDone) {
 	const msg = Object.assign({ op }, args);
 	if (gesture) msg.g = gesture;
 	let answered = false;	/* a host may answer at once, inside send */
-	const id = Bridge.send(msg, { key, onResult: r => { answered = true; onResult(r); } });
+	const id = Bridge.send(msg, { key, onResult: r => { answered = true; onResult(r); if (onDone) onDone(r); } });
 	if (optimistic && optimistic.length) { if (!answered) Overlay.add(id, optimistic, docOf(op, args)); V = view(); }
 	tx();
+	return id;
 }
 const DELETE = Overlay.DELETE;
 function onResult(r) {
@@ -163,7 +155,9 @@ function ref(el) {
 const getV = el => { const [o, n] = ref(el); return o[n]; };
 function setV(el, v) {
 	const [o, n] = ref(el); v = clamp(Math.round(v), 0, n === "depth" ? 100 : 127); if (o[n] === v) return;
-	if (el.dataset.g === "src" || el.dataset.g === "link") { o[n] = v; sendMods(); }	/* the page's own modulator setup (Mods.doc), sent whole */
+	/* the page's own modulator setup (Mods.doc): a new doc, sent whole */
+	if (el.dataset.g === "src") { Mods.setSource(el.dataset.src, { [n]: v }); sendMods(); }
+	else if (el.dataset.g === "link") { Mods.setLink(+el.dataset.li, { [n]: v }); sendMods(); }
 	else sendControl(el, v);
 	syncControls(); redraw();
 }
@@ -896,8 +890,11 @@ function toggleLearn() {
 	S.ctl.learn = !S.ctl.learn; S.ctl.learnT = null; document.body.classList.toggle("learn", S.ctl.learn); renderTop(); syncControls();
 	if (S.ctl.learn) toast("LEARN: click a value, then turn a knob on your MIDI controller."); else cmd("learnCancel");
 }
-/* App modulators: the page edits Mods.doc and sends it whole; values and the CC rate come back. */
-function sendMods() { cmd("modSet", { doc: Mods.doc }, "modSet"); }
+/* App modulators: the page edits build a new Mods.doc (mdDeskMod.js) and it is sent whole; values
+   and the CC rate come back. modInFlight is the id of a modSet not answered yet (the MM page's
+   pattern): while it is set, an incoming "mod" message does not overwrite the pending edit. */
+let modInFlight = 0;
+function sendMods() { modInFlight = cmd("modSet", { doc: Mods.doc }, "modSet", undefined, r => { if (r.id === modInFlight) modInFlight = 0; }); }
 function paramName(t, i) { return slots(V.tracks[t].m)[i] || "#" + (i + 1); }
 function modRow(sr) {
 	const C = S.ctl, id = "app:" + sr.id;
@@ -1089,8 +1086,8 @@ document.addEventListener("click", e => {
 	const sg = e.target.closest(".seg[data-set] button"); if (sg) {
 		const k = sg.parentElement.dataset.set, v = sg.dataset.v;
 		if (k === "upd") { sendLfo(S.sel, "UPDTE", v); sg.parentElement.querySelectorAll("button").forEach(b => b.setAttribute("aria-pressed", b === sg)); redraw(); }
-		else if (k === "srcrate" && S.ws === "control") { const s = Mods.source(S.ctl.sel.slice(4)); if (s) { s.rate = v; sendMods(); render(); } }
-		else if (k === "lcurve" && S.ws === "control") { const l = Mods.doc.links[+sg.parentElement.dataset.li]; if (l) { l.curve = v; sendMods(); render(); } }
+		else if (k === "srcrate" && S.ws === "control") { const id = S.ctl.sel.slice(4); if (Mods.source(id)) { Mods.setSource(id, { rate: v }); sendMods(); render(); } }
+		else if (k === "lcurve" && S.ws === "control") { const li = +sg.parentElement.dataset.li; if (Mods.doc.links[li]) { Mods.setLink(li, { curve: v }); sendMods(); render(); } }
 		else if (k === "loopkind" && S.ws === "song") { const r = { ...V.song[S.songSel], type: v }; if (v === "halt") r.to = S.songSel; if (v === "loop") { r.count = r.count || 2; r.to = Math.min(r.to ?? 0, Math.max(0, S.songSel - 1)); } if (v === "jump") r.to = Math.max(r.to ?? 0, S.songSel + 1); rowSet(S.songSel, r); render(); }
 		return;
 	}
@@ -1177,9 +1174,9 @@ document.addEventListener("click", e => {
 		const li = e.target.closest("[data-linv]"); if (li) { cmd("learnInvert", { index: +li.dataset.linv }); return; }
 		const as = e.target.closest("[data-addsrc]"); if (as) { const id = Mods.add(as.dataset.addsrc); C.sel = "app:" + id; C.selT = null; sendMods(); render(); return; }
 		const ds = e.target.closest("[data-delsrc]"); if (ds) { Mods.remove(ds.dataset.delsrc); C.sel = null; sendMods(); render(); return; }
-		const mi = e.target.closest("[data-minv]"); if (mi) { const l = Mods.doc.links[+mi.dataset.minv]; l.invert = !l.invert; sendMods(); render(); return; }
-		const md = e.target.closest("[data-mdel]"); if (md) { Mods.doc.links.splice(+md.dataset.mdel, 1); sendMods(); render(); return; }
-		const ss = e.target.closest("[data-srcshape]"); if (ss) { const s = Mods.source(C.sel.slice(4)); if (s) { s.shape = +ss.dataset.srcshape; sendMods(); render(); } return; }
+		const mi = e.target.closest("[data-minv]"); if (mi) { const li = +mi.dataset.minv, l = Mods.doc.links[li]; if (l) { Mods.setLink(li, { invert: !l.invert }); sendMods(); render(); } return; }
+		const md = e.target.closest("[data-mdel]"); if (md) { Mods.removeLink(+md.dataset.mdel); sendMods(); render(); return; }
+		const ss = e.target.closest("[data-srcshape]"); if (ss) { const id = C.sel.slice(4); if (Mods.source(id)) { Mods.setSource(id, { shape: +ss.dataset.srcshape }); sendMods(); render(); } return; }
 		if (e.target.closest("#maddl")) { const s = Mods.source(C.sel.slice(4)), p = +$("#mp").value; if (s && Mods.link(s.id, C.addT, p)) { sendMods(); render(); } else toast("That target is already linked."); return; }
 		const asrc = e.target.closest(".srch[data-src^='app:']"); if (asrc) { C.sel = asrc.dataset.src; C.selT = null; render(); return; }
 		const ld = e.target.closest("[data-ldel]"); if (ld) { cmd("learnRemove", { index: +ld.dataset.ldel }); return; }
@@ -1317,7 +1314,13 @@ Bridge.onMessage(m => {
 	}
 	case "telemetry": onTelemetry(m); break;
 	case "setup": if (m.doc && Array.isArray(m.doc.knobCcs) && m.doc.knobCcs.join() !== KNOB_CCS.join()) { m.doc.knobCcs.forEach((c, i) => KNOB_CCS[i] = c); if (S.ws === "control") scheduleRender(); } break;
-	case "mod": { const before = Mods.doc; Mods.onMessage(m); if (S.ws === "control") { if (!sameValue(Mods.doc, before) && !interacting()) scheduleRender(); else syncMods(); } break; }
+	case "mod": {
+		/* a modSet is still on its way: keep the pending edit, only its values/CC rate are live */
+		if (modInFlight) { Mods.applyLive(m); if (S.ws === "control") syncMods(); break; }
+		const before = Mods.doc; Mods.onMessage(m);
+		if (S.ws === "control") { if (!sameValue(Mods.doc, before) && !interacting()) scheduleRender(); else syncMods(); }
+		break;
+	}
 	case "ask": onAsk(m); break;
 	case "error": toast(m.message); showLastError([m.message]); break;
 	case "learn": Docs.learn = m.doc; if (S.ws === "control") scheduleRender(); else syncControls(); if (!m.doc.learning && S.ctl.learnT) { S.ctl.learnT = null; syncControls(); } break;
