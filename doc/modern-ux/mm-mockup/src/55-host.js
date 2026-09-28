@@ -16,7 +16,14 @@
      kit(op, k)                       "save" | "load" | "saveAs" | "reload"
      tempo(bpm), mutes()              the machine's tempo; the synth tracks' mutes changed
      playKey(note), joy(xy), learnBind(target, knob)
+     modulators(setup)                the Control workspace's app sources or links changed: the
+                                      host's engine runs them ({sources, links}, ctlSetup()); it
+                                      shows their moving values with MMView.setModulation
+     notes                            the host's words for the Control sources ({ccSource, appSource})
      engine(kind), firstRun(), bootScreen(on), renderPst(), engineLabels
      audioDoc(), audioSend(command), audioMeter(on)   the AUDIO / MIDI panel's devices
-   The view's side, for a host: window.MMView (130-main.js). */
+   Every call here is one a host must have: the plug-in's (mmAdapter.js) implements all of them
+   (sync-mmstudio-skin.py checks both ways).
+   The view's side, for a host: window.MMView (130-main.js): values to read, setters, and
+   disable(capability, reason) for what the host's engine cannot do. */
 const HOST=window.MMHost||{};

@@ -11,7 +11,8 @@
    knob value inside one enumeration step, residue bytes, undecoded fields)
    rides along from the base document untouched.
 
-   Depends on the mockup's tables: MACH, PAGES, EN, INPUTS, machName, clamp. */
+   Depends on the mockup's tables: MACH, PAGES, EN, INPUTS, machName, clamp.
+   The modulators (modToFw, modToPage) are the Control workspace's setup <-> md-desk/modulators. */
 const MmConvert = (() => {
 	const clone = o => JSON.parse(JSON.stringify(o));
 	const cl = (v, a = 0, b = 127) => Math.max(a, Math.min(b, Math.round(v)));
@@ -319,8 +320,42 @@ const MmConvert = (() => {
 		return d;
 	}
 
+	/* ---------------- modulators (md-desk/modulators, run by the plug-in) ---------------- */
+	/* The Control workspace's app sources and links (ctlSetup(): LFO {SHAPE, RATE, DEPTH}, Random
+	   {RATE, SMOOTH}; links {src, t, pid "SYN.3", min, max, curve, inv}) <-> the plug-in's setup.
+	   A link's param is the kit document's page index * 8 + the parameter (PAGES order). The page's
+	   LFO shapes are LWAVE indices (TRI SAW SQR EXP RMP RND, the page's SAW falls); the ModEngine's
+	   are 0 triangle, 1 saw (rising), 2 square, 3 linear decay, 4 exp decay, 5 random. Targets on
+	   MIDI tracks (t 6-11, the MID page) are not modulated by the plug-in: they are left out. */
+	const SHAPE_FW = { 0: 0, 2: 3, 4: 2, 6: 4, 8: 1, 10: 5 };
+	const SHAPE_PAGE = { 0: 0, 1: 8, 2: 4, 3: 2, 4: 6, 5: 10 };
+	const RATES = ["1/16", "1/8", "1/4", "1/2", "1", "2", "4"];
+	function modToFw(setup) {
+		const sources = setup.sources.map(x => ({
+			id: x.id, label: x.label, kind: x.kind === "lfo" ? "lfo" : "random",
+			shape: x.kind === "lfo" ? SHAPE_FW[x.SHAPE] ?? SHAPE_FW[x.SHAPE & ~1] ?? 0 : 0,
+			rate: RATES.includes(x.RATE) ? x.RATE : "1/2",
+			depth: x.kind === "lfo" ? cl(x.DEPTH ?? 100, 0, 100) : 100,
+			smooth: x.kind === "lfo" ? 30 : cl(x.SMOOTH ?? 30)
+		}));
+		const links = setup.links.map(l => {
+			const [pg, i] = l.pid.split("."), p = PAGES.indexOf(pg);
+			if (l.t < 0 || l.t > 5 || p < 0) return null;
+			return { source: l.src, track: l.t, param: p * 8 + +i, min: cl(l.min), max: cl(l.max), curve: l.curve, invert: !!l.inv };
+		}).filter(Boolean);
+		return { schema: "mm-desk/modulators", version: 1, sources, links };
+	}
+	function modToPage(d) {
+		return {
+			sources: d.sources.map(x => x.kind === "lfo"
+				? { id: x.id, kind: "lfo", label: x.label, val: 64, SHAPE: SHAPE_PAGE[x.shape] ?? 0, RATE: x.rate, DEPTH: x.depth }
+				: { id: x.id, kind: "rnd", label: x.label, val: 64, RATE: x.rate, SMOOTH: x.smooth, _t: 64 }),
+			links: d.links.map(l => ({ src: l.source, t: l.track, pid: PAGES[l.param >> 3] + "." + (l.param & 7), min: l.min, max: l.max, curve: l.curve, inv: !!l.invert }))
+		};
+	}
+
 	return {
 		kitToPage, kitToFw, kitName, kitEmpty, patternToPage, patternToFw, songToPage, songToFw, globalToFw,
-		hasTrigs, machineName, enumN, valueToPage, valueToFw, lockKey, parseLockKey, TABS
+		modToFw, modToPage, hasTrigs, machineName, enumN, valueToPage, valueToFw, lockKey, parseLockKey, TABS
 	};
 })();

@@ -48,7 +48,7 @@ function renderSub(){const t=S.sel,tr=trk(t);let h="";
  else if(S.ws==="mix")h=L2("route","ROUTE",S.routing.replace("3xSTEREO+AB=MIX","3xST+AB=MIX"),"Global routing: 3xSTEREO, 3xSTEREO+AB=MIX or 6xMONO. Click to step.",1,17)+L2("","IN","A B","",0,6);
  else if(S.ws==="perform")h=L2("pmode","MODE",{normal:"AUTO",multi:"MULTI",map:"MAP",poly:"POLY"}[S.mode],"Keyboard mode: auto track, multi trig, multi map or poly. Click to step.",1,10)+L2("","",S.mode==="multi"?["ALL TRK","SPLIT","SEQ STRT","SEQ TRNS"][S.multi.mode]:"","",0,9)+L2("","CH",{normal:"09",multi:"07",map:"08",poly:"09"}[S.mode],"MIDI channel of this keyboard mode","",5);
  else if(S.ws==="control")h=L2("","IN","CH1","Controller input channel",0,6)+L2("","CC OUT","0/s","CCs sent to the machine per second",0,11,"ccrate")+L2("","MAX","300/s","The editor thins CC output above this rate",0,10);
- else h=L2("","SONG","01","",0,7)+L2("","ROWS",S.song.length,"",0,7)+L2("","BARS",Math.round(songSteps()/16),"",0,7)+L2("","TIME",songTime(),"",0,8);
+ else h=L2("","SONG",String((S.songSlot??0)+1).padStart(2,"0"),"",0,7)+L2("","ROWS",S.song.length,"",0,7)+L2("","BARS",Math.round(songSteps()/16),"",0,7)+L2("","TIME",songTime(),"",0,8);
  $("#lcd2").innerHTML=h}
 
 /* ===== Controls: one key-style value control for everything ===== */
@@ -64,7 +64,7 @@ function ref(el){const d=el.dataset,t=d.t!=null?+d.t:S.sel,tr=trk(t),g=d.g;
   case"mmap":{const r=S.mmap[+d.i];return[r,d.n,{name:d.n,...{trn:{max:127,signed:1},ofs:{en:["---",...Array.from({length:64},(_,i)=>String(i).padStart(2,"0"))]},len:{max:64},tim:{en:["DIR","1","2","4","8","16","32"]}}[d.n]},t,g]}}}
 const getV=el=>{const[o,n]=ref(el);return o[n]};
 function setV(el,v){const[o,n,m,t,g]=ref(el);v=clamp(Math.round(v),0,maxOf(m));if(o[n]===v)return;o[n]=v;
- if(g==="cc")soundEdited("global");else if(PAGES.includes(g)||g==="MID"||g==="lev"||g==="menv"||g==="asg")soundEdited();else structEdited();
+ if(g==="cc")soundEdited("global");else if(PAGES.includes(g)||g==="MID"||g==="lev"||g==="menv"||g==="asg")soundEdited();else if(g==="src"||g==="link")ctlChanged();else structEdited();
  if(g.startsWith("LF")&&(+el.dataset.n<2)){if(+el.dataset.n===0)o[1]=0;render();return}
  syncControls();redraw()}
 function pc(g,n,{t,label,cls="",extra=""}={}){if(n==null)return`<div class="pc empty" aria-hidden="true"></div>`;

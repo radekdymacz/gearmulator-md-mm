@@ -2,139 +2,168 @@
 /* Monomachine Editor: the plug-in's host for the approved mockup (P6).
    The mockup (mmMockup.js, copied verbatim from doc/modern-ux/mm-mockup) is the UI. It hands
    everything the machine does to its host, window.MMHost, which this file defines before the
-   mockup loads: transport, patterns, the kit library, undo, tempo, mutes, the keyboard and the
-   AUDIO / MIDI panel. Nothing of the mockup is replaced; its view is used through window.MMView.
+   mockup loads: transport, patterns, the kit library, undo, tempo, mutes, the keyboard, the
+   Control workspace's modulators and the AUDIO / MIDI panel. Nothing of the mockup is replaced.
+   Its view is used through window.MMView only: values to read, named setters, and
+   disable(capability, reason); never its state (sync-mmstudio-skin.py checks that).
    - The plug-in publishes the core's documents (observed, or pending while an edit is on its
-     way) and the machine document; they are shown in the mockup's view through MmConvert (the
-     pure page <-> contract translation).
+     way), keyed by the contract's kinds: pattern, kit (the stored slots), workingKit (the kit
+     that plays), song, global; and the machine document, which says which slots are current.
+     They are shown in the view through MmConvert (the pure page <-> contract translation).
    - An edit is sent as the intent the core takes for the Monomachine: the whole document
-     ({"op":"set","kind","doc","g"}) of each kind the gesture said it edited. The page does not
-     compare documents: the core takes a document equal to its own as no change. The gesture id g
-     makes a drag one undo step; undo and redo are the core's (C++).
+     ({"op":"set","kind","doc","g"}) of each kind the gesture said it edited: "workingKit" for the
+     kit that plays, "kit" only for a stored slot the library wrote. The page does not compare
+     documents: the core takes a document equal to its own as no change. The gesture id g makes
+     a drag one undo step; undo and redo are the core's (C++).
+   - The Control workspace's LFO and Random sources run in the plug-in ("modSet", the "mod"
+     message brings their values); they are never kit edits.
    - What the engine cannot do is disabled with the reason, from machine.capabilities. */
 (() => {
 	const V = () => window.MMView;			// the mockup's view: after it ran
-	const S = () => window.MMView.S;
 	const $ = q => document.querySelector(q), $$ = q => [...document.querySelectorAll(q)];
 	const send = (msg, opt) => Bridge.send(msg, opt);
 	const log = t => Bridge.log(t);
 	const now = () => performance.now();
-	const selfTest = (location.search.match(/[?&]selftest=(\w+)/) || [])[1];	// GEARMULATOR_MMSTUDIO_SELFTEST
+	const copy = o => o == null ? o : JSON.parse(JSON.stringify(o));
+	const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);	// documents are JSON values
 
 	/* ---------------- what the core shows ---------------- */
-	/* The engine is unknown until the plug-in says (P5): not "missing", which opened the NO ROM
-	   dialog before the first report. */
-	const FW = { pat: [], kit: [], song: [], glob: [], machine: null, engine: "loading", cat: null, learn: null };
-	const CUR = { pat: -1, kit: -1, song: 0, glob: 0 };
-	const last = { edit: 0, tempoEdit: -1e9, mute: [], ready: false, note: "", noteMs: 0, error: "" };
+	const KINDS = ["kit", "pattern", "song", "global"];	// the working set's kinds, in sending order
+	const DOCS = { pattern: [], kit: [], song: [], global: [] };	// by slot, as the plug-in published them
+	let working = null;		// the workingKit message: {slot, source, pending, doc}
+	let machine = null, catalogue = null, learn = null;
+	/* the current slot of a kind, from a machine document (null: not known yet) */
+	function slotIn(d, kind) {
+		if (!d) return null;
+		if (kind === "pattern") return d.pattern.current;
+		if (kind === "kit") return d.kit.current;
+		if (kind === "song") return d.song.current ?? 0;
+		return d.global ?? 0;
+	}
+	const cur = kind => slotIn(machine, kind);
+	const queuedIn = d => { const q = d?.pattern.queued; return q != null && q !== d.pattern.current ? q : null; };
+	/* the kit that plays: the working kit when it is the current slot's, else the stored slot (until
+	   the first working kit arrives, and while a kit change has not brought the new one yet) */
+	const kitNow = () => working && working.slot === cur("kit") ? working.doc : DOCS.kit[cur("kit")];
+	const globalNow = () => DOCS.global[cur("global")];
+	const last = { mute: [], ready: false, note: "", noteMs: 0, readyLabel: "", caps: null };
 	let synced = false;		// the view shows the machine (current pattern and working kit arrived)
-	const wantApply = new Set();
-	const dirty = new Set();	// the working set's kinds a gesture edited ("kit", "pattern", "song", "global")
+	const wantApply = new Set();	// the current kinds whose documents the view has not shown yet
+	const dirty = new Set();	// the working set's kinds a gesture edited
 	const written = new Set();	// library slots a gesture wrote ("kit:5", "pattern:12")
 	let gesture = Bridge.gesture();
+	let tempoInFlight = 0, modInFlight = 0;	// the id of a tempo or modSet command not answered yet
 	let audioDocument = null;
-	/* What a gesture edits when it does not name the document: the mockup's two edit kinds. The
-	   kinds are sent in this order (a pattern's locks read their machines from the kit). */
+	const readyHooks = [];
+	/* What a gesture edits when it does not name the document: the mockup's two edit kinds. */
 	const EDITS = { struct: ["pattern", "song"], sound: ["kit"] };
-	const KINDS = ["kit", "pattern", "song", "global"];
 
 	/* ---------------- the machine's documents -> the view ---------------- */
 	const C = () => MmConvert;
-	const kitPageOf = k => k === CUR.kit && synced ? V().captureKit() : S().kits[k]?.data || (FW.kit[k] ? C().kitToPage(FW.kit[k], FW.glob[CUR.glob]) : null);
-	const lenOf = p => p === S().pat && synced ? S().len : FW.pat[p]?.length ?? S().patInfo[p].len;
+	const kitPageOf = k => k === cur("kit") && synced ? V().captureKit() : V().kitSlot(k).data || (DOCS.kit[k] ? C().kitToPage(DOCS.kit[k], globalNow()) : null);
+	const lenOf = p => p === cur("pattern") && synced ? V().patternLength(p) : DOCS.pattern[p]?.length ?? V().patternLength(p);
 	/* what the view's state is as the contract's documents */
 	function patDoc(p) {
-		const b = FW.pat[p] || FW.pat[CUR.pat] || FW.pat.find(Boolean);
+		const b = DOCS.pattern[p] || DOCS.pattern[cur("pattern")] || DOCS.pattern.find(Boolean);
 		if (!b) return null;
-		const data = p === CUR.pat ? V().capturePat() : S().patData[p];
-		return data ? C().patternToFw(data, b, S().patKit[p], kitPageOf(S().patKit[p]), p) : null;
+		const slot = V().patternSlot(p), data = p === cur("pattern") ? V().capturePat() : slot.data;
+		return data ? C().patternToFw(data, b, slot.kit, kitPageOf(slot.kit), p) : null;
 	}
 	function kitDoc(k) {
-		const b = FW.kit[k] || FW.kit[CUR.kit] || FW.kit.find(Boolean);
+		const b = (k === cur("kit") ? kitNow() : DOCS.kit[k]) || kitNow() || DOCS.kit.find(Boolean);
 		if (!b) return null;
-		if (k === CUR.kit) return C().kitToFw(V().captureKit(), b, S().workName, k);
-		const s = S().kits[k];
+		if (k === cur("kit")) return C().kitToFw(V().captureKit(), b, V().workName(), k);
+		const s = V().kitSlot(k);
 		return C().kitToFw(s.data || V().clearedKit(), b, s.empty ? "" : s.name, k);
 	}
-	const songDoc = () => FW.song[CUR.song] ? C().songToFw(S().song, FW.song[CUR.song], lenOf) : null;
-	const globDoc = () => FW.glob[CUR.glob] ? C().globalToFw(FW.glob[CUR.glob], S().routing, S().midi) : null;
+	const songDoc = () => DOCS.song[cur("song")] ? C().songToFw(V().song(), DOCS.song[cur("song")], lenOf) : null;
+	const globDoc = () => globalNow() ? C().globalToFw(globalNow(), V().routing(), V().midiTracks()) : null;
 
 	function setSlotPattern(p) {
-		const d = FW.pat[p];
-		if (p === CUR.pat) return;
-		S().patData[p] = C().patternToPage(d, kitPageOf(d.kit));
-		S().patInfo[p] = { has: C().hasTrigs(d), len: d.length };
-		S().patKit[p] = d.kit;
+		const d = DOCS.pattern[p];
+		if (!d || p === cur("pattern")) return;
+		V().setPatternSlot(p, { data: C().patternToPage(d, kitPageOf(d.kit)), kit: d.kit, has: C().hasTrigs(d), len: d.length });
 	}
 	function setSlotKit(k) {
-		const d = FW.kit[k];
-		if (k === CUR.kit) return;
-		S().kits[k] = { name: C().kitName(d), empty: C().kitEmpty(d), data: C().kitToPage(d, FW.glob[CUR.glob]) };
+		const d = DOCS.kit[k];
+		V().setKitSlot(k, { name: C().kitName(d), empty: C().kitEmpty(d), data: C().kitToPage(d, globalNow()) });
 	}
+	const kitState = () => machine?.kit.working === "edited" ? "edited" : "clean";
 	function applyCurrentKit() {
-		const d = FW.kit[CUR.kit];
-		const page = C().kitToPage(d, FW.glob[CUR.glob]);
-		page.multi = S().multi;
-		V().applyKit(page);
-		S().workName = C().kitName(d);
-		S().kits[CUR.kit] = { name: S().workName, empty: false, data: C().kitToPage(d, FW.glob[CUR.glob]) };
-		if (FW.machine) V().setKitState(FW.machine.kit.working === "edited" ? "edited" : "clean");
+		const d = kitNow();
+		V().setWorkingKit(C().kitToPage(d, globalNow()), C().kitName(d));
+		if (machine) V().setKitState(kitState());
 	}
 	function applyCurrentPattern() {
-		const d = FW.pat[CUR.pat];
-		V().applyPat(C().patternToPage(d, V().captureKit()));
-		S().patKit[CUR.pat] = d.kit;
-		S().patInfo[CUR.pat] = { has: C().hasTrigs(d), len: d.length };
+		const d = DOCS.pattern[cur("pattern")];
+		V().setPatternSlot(cur("pattern"), { data: C().patternToPage(d, V().captureKit()), kit: d.kit, has: C().hasTrigs(d), len: d.length });
 	}
-	function applyCurrentSong() {
-		S().song = C().songToPage(FW.song[CUR.song], lenOf);
-		S().songSel = Math.min(S().songSel || 0, S().song.length - 1);
-	}
+	const applyCurrentSong = () => V().setSong(C().songToPage(DOCS.song[cur("song")], lenOf), cur("song"));
 	function applyCurrentGlobal() {
-		const g = FW.glob[CUR.glob];
-		S().routing = g.routingMode;
-		S().midi.forEach((x, t) => { x.ch = g.midiSeq.channels[t] + 1; x.cc = [...g.midiSeq.ccs[t]]; });
-		mapFromGlobal();
+		const g = globalNow();
+		V().setRouting(g.routingMode);
+		V().setMidiTracks(g.midiSeq.channels.map((c, t) => ({ ch: c + 1, cc: [...g.midiSeq.ccs[t]] })));
+		mapFromGlobal(g);
+	}
+	/* ---- MULTI MAP: read from the global; its fields past key and pattern are not decoded ---- */
+	function mapFromGlobal(g) {
+		if (!g.multiMap) return;
+		const hi = g.multiMap[0], pat = g.multiMap[1], rows = [];
+		for (let r = 0; r < 32; r++) {
+			if (r && hi[r] <= hi[r - 1]) break;
+			rows.push({ hi: hi[r], pat: pat[r] === 255 ? -1 : pat[r], ofs: null, len: null, trn: null, tim: null });
+		}
+		rows[rows.length - 1].hi = 127;
+		V().setMultiMap(rows);
 	}
 
 	/* Show what the core holds, unless the user is in a gesture or the view has edits not sent
 	   yet (the next reconcile sends them; the core then shows them). */
 	function applyPending() {
 		if (!wantApply.size) return;
-		if (FW.pat[CUR.pat] == null || FW.kit[CUR.kit] == null) return;
-		if (synced && (V().busy() || !$("#dlg").hidden || V().LIB.renaming != null || V().LIB.drag != null || syncT)) return;
-		let changed = false;
+		if (DOCS.pattern[cur("pattern")] == null || kitNow() == null) return;
+		if (synced && (V().busy() || !$("#dlg").hidden || V().libBusy() || syncT)) return;
 		const kinds = [...wantApply];
 		wantApply.clear();
 		/* the kit first: the pattern's locks read their machines from it */
-		if (kinds.includes("kit")) { applyCurrentKit(); changed = true; }
-		if (kinds.includes("kit") && FW.machine) V().setKitState(FW.machine.kit.working === "edited" ? "edited" : "clean");
-		if ((kinds.includes("pat") || changed) && FW.pat[CUR.pat]) { applyCurrentPattern(); changed = true; }
-		if (kinds.includes("song") && FW.song[CUR.song]) { applyCurrentSong(); changed = true; }
-		if (kinds.includes("glob") && FW.glob[CUR.glob]) { applyCurrentGlobal(); changed = true; }
+		const kit = kinds.includes("kit"), song = kinds.includes("song") && DOCS.song[cur("song")], glob = kinds.includes("global") && globalNow();
+		if (kit) applyCurrentKit();
+		if (kinds.includes("pattern") || kit) applyCurrentPattern();
+		if (song) applyCurrentSong();
+		if (glob) applyCurrentGlobal();
 		if (!synced) {
 			synced = true;
-			S().tracks.forEach((t, i) => last.mute[i] = !V().audible(i));
+			for (let i = 0; i < 6; i++) last.mute[i] = !V().audible(i);
 		}
-		if (changed) {
-			V().autoRange(S().sel);
+		if (kit || kinds.includes("pattern") || song || glob) {
+			V().autoRange(V().sel());
 			V().render();
 			V().drawLib();
 		}
 		showEngine();
 	}
 
+	/* the library slots not read yet */
+	function markReading() {
+		for (const kind of ["pattern", "kit"]) V().setReading(kind, [...Array(128).keys()].filter(s => !DOCS[kind][s]));
+	}
 	function onDoc(m) {
 		const { kind, slot, doc } = m;
-		if (kind === "pattern") { FW.pat[slot] = doc; if (slot === CUR.pat) wantApply.add("pat"); else setSlotPattern(slot); }
-		else if (kind === "kit") {
-			FW.kit[slot] = doc;
-			if (slot === CUR.kit) wantApply.add("kit"); else setSlotKit(slot);
-			/* the patterns that play this kit read their locks' machines from it */
-			for (let p = 0; p < 128; p++) if (p !== CUR.pat && FW.pat[p] && FW.pat[p].kit === slot) setSlotPattern(p);
+		if (kind === "workingKit") {
+			working = { slot, source: m.source, pending: !!m.pending, doc };
+			if (slot === cur("kit")) wantApply.add("kit");
 		}
-		else if (kind === "song") { FW.song[slot] = doc; if (slot === CUR.song) wantApply.add("song"); }
-		else if (kind === "global") { FW.glob[slot] = doc; if (slot === CUR.glob) wantApply.add("glob"); }
+		else if (DOCS[kind]) {
+			const first = !DOCS[kind][slot];
+			DOCS[kind][slot] = doc;
+			if (kind === "pattern") { if (slot === cur("pattern")) wantApply.add("pattern"); else setSlotPattern(slot); }
+			else if (kind === "kit") { setSlotKit(slot); if (slot === cur("kit") && !(working && working.slot === slot)) wantApply.add("kit"); }
+			else if (slot === cur(kind)) wantApply.add(kind);
+			if (first && (kind === "pattern" || kind === "kit")) markReading();
+		}
+		/* the patterns that play this kit read their locks' machines from it */
+		if (kind === "kit" || kind === "workingKit")
+			for (let p = 0; p < 128; p++) if (DOCS.pattern[p] && DOCS.pattern[p].kit === slot) setSlotPattern(p);
 		libDirty = true;
 		/* the current documents are shown right away (the 120 ms timer only catches up after a gesture) */
 		if (wantApply.size && !applyT) applyT = setTimeout(() => { applyT = 0; applyPending(); }, 0);
@@ -143,45 +172,46 @@
 	let libDirty = false;
 
 	function onMachine(d) {
-		FW.machine = d;
-		FW.engine = d.engine;
-		const cp = d.pattern.current, ck = d.kit.current, cs = d.song.current ?? 0, cg = d.global ?? 0;
-		if (ck != null && ck !== CUR.kit) { CUR.kit = ck; S().kit = ck; if (FW.kit[ck]) wantApply.add("kit"); }
-		if (cp != null && cp !== CUR.pat) {
-			const old = CUR.pat;
-			CUR.pat = cp; S().pat = cp;
-			if (old >= 0 && FW.pat[old]) setSlotPattern(old);
-			if (FW.pat[cp]) wantApply.add("pat");
+		const prev = machine;
+		machine = d;
+		const changed = kind => slotIn(d, kind) != null && slotIn(d, kind) !== slotIn(prev, kind);
+		if (changed("kit")) { V().setCurrent({ kit: cur("kit") }); if (kitNow()) wantApply.add("kit"); }
+		if (changed("pattern")) {
+			const old = slotIn(prev, "pattern");
+			V().setCurrent({ pattern: cur("pattern") });
+			if (old != null) setSlotPattern(old);
+			if (DOCS.pattern[cur("pattern")]) wantApply.add("pattern");
 		}
-		if (cs !== CUR.song) { CUR.song = cs; if (FW.song[cs]) wantApply.add("song"); }
-		if (cg !== CUR.glob) { CUR.glob = cg; if (FW.glob[cg]) wantApply.add("glob"); }
-		const q = d.pattern.queued;
-		const queued = q != null && q !== cp ? q : null;
-		if (queued !== S().queued) { S().queued = queued; V().renderTop(); V().drawLib(); }
-		setPlaying(!!d.playing);
-		/* the machine's tempo (RAM), unless the user is setting it */
-		if (d.tempo != null && now() - last.tempoEdit > 1500 && d.tempo !== S().bpm) { S().bpm = d.tempo; V().renderTop(); }
-		if (synced && !V().busy()) V().setKitState(d.kit.working === "edited" ? "edited" : "clean");
+		for (const kind of ["song", "global"]) if (changed(kind) && DOCS[kind][cur(kind)]) wantApply.add(kind);
+		if (queuedIn(d) !== queuedIn(prev)) { V().setQueued(queuedIn(d)); V().renderTop(); V().drawLib(); }
+		V().setPlaying(!!d.playing);
+		/* the machine's tempo (RAM), unless a tempo the user set is still on its way */
+		if (!tempoInFlight && d.tempo != null && d.tempo !== V().tempo()) { V().setTempo(d.tempo); V().renderTop(); }
+		if (synced && !V().busy()) V().setKitState(kitState());
 		host.renderPst();
-		if (d.error && d.error !== last.error) { last.error = d.error; V().toast(d.error); }
-		markEngines(d);
+		V().setEngines(d.engines || [], d.capabilities?.engine);
+		markCapabilities(d.capabilities);
 		showEngine();
 		V().renderTop();
-		/* the library fills in the background: say how far */
-		const chip = $(".lcdeng span");
-		if (chip && S().eng === "ready") chip.textContent = d.loading.done < d.loading.total ? `${V().ENG.ready[0]} · ${d.loading.done}/${d.loading.total}` : V().ENG.ready[0];
+	}
+	/* what the engine cannot do: disabled, with the reason (machine.capabilities) */
+	function markCapabilities(caps) {
+		if (!caps || same(caps, last.caps)) return;
+		last.caps = copy(caps);
+		for (const [cap, can] of Object.entries(caps)) if (typeof can === "boolean") V().disable(cap, can ? "" : caps.reasons?.[cap] || "Not available here.");
 	}
 
 	/* the plug-in's engine changed (HW MIDI or the emulator): its documents start over */
 	function onReset() {
-		for (const k of ["pat", "kit", "song", "glob"]) FW[k] = [];
-		FW.machine = null;
-		CUR.pat = CUR.kit = -1; CUR.song = CUR.glob = 0;
+		for (const k of KINDS) DOCS[k] = [];
+		working = null;
+		machine = null;
 		synced = false;
 		wantApply.clear();
 		dirty.clear();
 		written.clear();
 		last.ready = false;
+		markReading();
 		showEngine();
 	}
 
@@ -189,7 +219,7 @@
 	/* After an edit, the working set's documents the gesture edited (and the slots a library
 	   gesture wrote) go out whole, tagged with the gesture. */
 	let syncT = 0;
-	function scheduleSync() { last.edit = now(); if (!syncT) syncT = setTimeout(() => { syncT = 0; sync(); }, 40); }
+	function scheduleSync() { if (!syncT) syncT = setTimeout(() => { syncT = 0; sync(); }, 40); }
 	function sendDoc(kind, doc, slot) {
 		if (!doc) return false;
 		send({ op: "set", kind, doc, g: gesture }, { key: kind + ":" + slot, onResult: r => {
@@ -207,52 +237,44 @@
 		if (!synced || !V().engReady()) return;
 		const edited = KINDS.filter(k => dirty.has(k));
 		dirty.clear();
-		/* the working kit goes live (CC, NRPN, machine, routing, name) */
-		if (edited.includes("kit")) sendDoc("kit", kitDoc(CUR.kit), CUR.kit);
-		if (edited.includes("pattern")) sendDoc("pattern", patDoc(CUR.pat), CUR.pat);
+		/* the kit that plays goes live (CC, NRPN, machine, routing, name) */
+		if (edited.includes("kit")) sendDoc("workingKit", kitDoc(cur("kit")), cur("kit"));
+		if (edited.includes("pattern")) sendDoc("pattern", patDoc(cur("pattern")), cur("pattern"));
 		for (const w of [...written]) {
 			const [kind, s] = w.split(":"), slot = +s;
 			written.delete(w);
-			if (kind === "kit" && slot === CUR.kit) send({ op: "saveKit", k: slot });	// the library wrote the current kit's slot: store it too
+			if (kind === "kit" && slot === cur("kit")) send({ op: "saveKit", k: slot });	// the library wrote the current kit's slot: store it too
 			else if (kind === "kit") sendDoc("kit", kitDoc(slot), slot);
-			else if (kind === "pattern" && slot !== CUR.pat) sendDoc("pattern", patDoc(slot), slot);
+			else if (kind === "pattern" && slot !== cur("pattern")) sendDoc("pattern", patDoc(slot), slot);
 		}
-		if (edited.includes("song")) sendDoc("song", songDoc(), CUR.song);
-		if (edited.includes("global")) sendDoc("global", globDoc(), CUR.glob);
+		if (edited.includes("song")) sendDoc("song", songDoc(), cur("song"));
+		if (edited.includes("global")) sendDoc("global", globDoc(), cur("global"));
 	}
 
-	/* ---------------- the machine's transport and playhead ---------------- */
-	function showStep(step) {
-		const s = S(), prev = s.step;
-		s.step = step;
-		/* the Control workspace's LFO and Random sources move with the machine's steps */
-		V().ctlTick();
-		if (s.ctl.links.length) { dirty.add("kit"); scheduleSync(); }
-		const pp = Math.floor(step / 16);
-		$$(".pl").forEach(b => b.classList.toggle("play", +b.dataset.plp === pp && s.playing));
-		if (s.follow && s.ws === "seq" && !s.viewAll && pp !== s.page && !V().busy()) { s.page = pp; V().render(); }
-		$("#tempoled")?.classList.toggle("on", step % 4 === 0);
-		V().setPos();
-		queueMicrotask(() => V().movePH());
-		$$(`.mst[data-s="${prev}"],.lb[data-s="${prev}"],.tc[data-s="${prev}"]`).forEach(c => c.classList.remove("ph"));
-		$$(`.mst[data-s="${step}"],.lb[data-s="${step}"],.tc[data-s="${step}"]`).forEach(c => c.classList.add("ph"));
-		if (s.ws === "seq") V().redraw();
-		if (s.ws === "perform") V().flashTracks([0, 1, 2, 3, 4, 5].filter(i => { const st = s.tracks[i].steps[step]; return st && !st.off && st.a && V().audible(i); }));
+	/* ---------------- the Control workspace's modulators: run by the plug-in ---------------- */
+	/* the page's setup as the plug-in has it: a MIDI track target is not modulated there */
+	function sendMods(setup) {
+		const doc = C().modToFw(setup);
+		if (setup.links.some(l => l.t >= 6) && !same(doc, last.modSent)) V().toast("Targets on MIDI tracks are not moved by the plug-in's modulators.");
+		last.modSent = doc;
+		modInFlight = send({ op: "modSet", doc }, { key: "modSet", onResult: r => {
+			if (r.id === modInFlight) modInFlight = 0;
+			if (!r.ok) V().toast(r.errors[0] || "The plug-in did not take the modulators.");
+		} });
 	}
-	function setPlaying(on) {
-		const s = S();
-		if (s.playing === on) return;
-		s.playing = on;
-		if (!on) {
-			$$(".pl").forEach(b => b.classList.remove("play"));
-			$("#tempoled")?.classList.remove("on");
-			$$(".ph").forEach(c => c.classList.remove("ph"));
-			s.step = -1;
+	/* {type:"mod", doc, values, ccPerSecond, ccLimit, runs}: the setup as taken and its sources' values */
+	function onMod(m) {
+		const setup = V().ctlSetup();
+		/* the plug-in's setup is the one that runs (a project it restored, say); the page's MIDI track
+		   targets, which it does not take, stay on the page */
+		if (!modInFlight && m.doc && !same(C().modToFw(setup), m.doc)) {
+			const page = C().modToPage(m.doc), ids = new Set(page.sources.map(x => x.id));
+			page.links.push(...setup.links.filter(l => l.t >= 6 && ids.has(l.src)));
+			V().setCtlSetup(page);
 		}
-		V().setPos();
-		V().renderTop();
-		V().redraw();
-		V().movePH(false);
+		const values = {};
+		(m.doc?.sources || []).forEach((x, i) => { if (m.values?.[i] != null) values[x.id] = m.values[i]; });
+		V().setModulation({ values, ccPerSecond: m.ccPerSecond || 0 });
 	}
 
 	/* ---------------- the engine, its capabilities and the firmware's LCD ---------------- */
@@ -279,91 +301,32 @@
 		hwConnecting: "hwwait", hwLost: "hwnone" };
 	function showEngine() {
 		if (!window.MMView) return;
-		/* the label follows the one lifecycle value; when ready it is the engine's own (capabilities) */
-		const caps = FW.machine?.capabilities, life = LIFE[FW.machine?.lifecycle || "loading"] || "boot";
+		/* the label follows the one lifecycle value; when ready it is the engine's own (capabilities),
+		   and while the library fills in the background it says how far */
+		const caps = machine?.capabilities, life = LIFE[machine?.lifecycle || "loading"] || "boot";
 		const st = life === "ready" && !synced ? "sync" : life;
-		if (caps) V().ENG.ready = [caps.label, "on"];
-		if (S().eng !== st) V().setEng(st);
-		if (st === "ready" && caps?.about) $(".lcdeng").title = caps.about;
+		if (caps) {
+			const l = machine.loading, text = caps.label + (l && l.done < l.total ? ` · ${l.done}/${l.total}` : "");
+			if (text + caps.about !== last.readyLabel) { last.readyLabel = text + caps.about; V().setEngineLabel("ready", [text, "on", caps.about || ""]); }
+		}
+		if (V().engineState() !== st) V().setEng(st);
 		/* NO ROM only when the plug-in has said so for 1.5 s (a device being made or replaced is not
 		   a missing ROM), and the dialog closes by itself as soon as the engine is anything else. */
 		if (st === "norom") { if (!noRomAt) noRomAt = now(); if (!noRomShown && now() - noRomAt > 1500) { noRomShown = true; host.firstRun(); } else if (!noRomShown) setTimeout(showEngine, 1600); }
 		else { noRomAt = 0; noRomShown = false; const d = $("#dlg"); if (d && !d.hidden && /FIRMWARE NEEDED/.test(d.textContent)) d.hidden = true; }
 		if (st === "ready" && !last.ready) {
 			last.ready = true;
-			log("ready: pattern " + CUR.pat + " kit " + CUR.kit);
-			if (selfTest && window.MMSelfTest?.[selfTest]) window.MMSelfTest[selfTest](selfTestContext());
+			log("ready: pattern " + cur("pattern") + " kit " + cur("kit"));
+			for (const f of readyHooks.splice(0)) try { f(); } catch (e) { log("ready hook: " + e.message); }
 		}
 	}
-	/* the engine menu's engine entries: the plug-in's engine map (machine.engines), in its order,
-	   before the menu's own entries */
-	const ENGINE_ACTIONS = ["audio", "rom"];
-	function markEngines(d) {
-		const sel = $("#engsel");
-		if (!sel) return;
-		const engines = d.engines || [];
-		for (const o of [...sel.options]) if (!ENGINE_ACTIONS.includes(o.value) && !engines.some(e => e.id === o.value)) o.remove();
-		const first = [...sel.options].find(o => ENGINE_ACTIONS.includes(o.value)) || null;
-		for (const e of engines) {
-			let o = sel.querySelector(`option[value="${e.id}"]`);
-			if (!o) { o = document.createElement("option"); o.value = e.id; }
-			sel.insertBefore(o, first);
-			o.textContent = e.label;
-			o.disabled = !e.available;
-			o.title = e.available ? "" : e.reason || "";
-		}
-		if (d.capabilities?.engine) { sel.value = d.capabilities.engine; S().engine = d.capabilities.engine; }
-	}
-	/* what the engine cannot do: disabled, with the reason (machine.capabilities) */
-	const NA = [
-		['[data-mute="6"],[data-mute="7"],[data-mute="8"],[data-mute="9"],[data-mute="10"],[data-mute="11"],[data-solo="6"],[data-solo="7"],[data-solo="8"],[data-solo="9"],[data-solo="10"],[data-solo="11"],[data-gmute="6"],[data-gmute="7"],[data-gmute="8"],[data-gmute="9"],[data-gmute="10"],[data-gmute="11"]', "midiMutes"],
-		['[data-pmode="poly"]', "poly"],
-		['[data-set="mtmode"] button,[data-strk],[data-tim],#splitm', "multiTrig"],
-		['.maprow [data-mhi],.maprow select,.maprow .kselbtn,.maprow .pc,[data-mdel],[data-madd],[data-band]', "multiMap"],
-		['[data-set="port"] button', "portamento"],
-		["#rec", "gridRecord"]
-	];
-	const loadingNote = "Still reading this slot from the machine.";
-	function markNa() {
-		const caps = FW.machine?.capabilities;
-		if (!caps) return;
-		for (const [sel, cap] of NA) {
-			const why = caps[cap] === false ? caps.reasons?.[cap] || "Not available here." : "";
-			for (const el of $$(sel)) {
-				if (why && el.dataset.na !== "1") { el.dataset.na = "1"; el.title = why; el.setAttribute("aria-disabled", "true"); }
-				else if (!why && el.dataset.na === "1") { delete el.dataset.na; el.removeAttribute("aria-disabled"); }
-			}
-		}
-		/* library slots not read yet */
-		for (const el of $$("#libpop .ps[data-ps]")) {
-			const miss = !FW.pat[+el.dataset.ps];
-			if (miss !== (el.dataset.na === "1")) { if (miss) { el.dataset.na = "1"; el.title = loadingNote; } else delete el.dataset.na; }
-		}
-		for (const el of $$("#libpop .ks[data-ks]")) {
-			const miss = !FW.kit[+el.dataset.ks];
-			if (miss !== (el.dataset.na === "1")) { if (miss) { el.dataset.na = "1"; el.title = loadingNote; } else delete el.dataset.na; }
-		}
-		for (const el of $$(".band[data-band]")) { const r = S().mmap[+el.dataset.band]; if (r && r.pat < 0 && el.textContent !== "CUR") el.textContent = "CUR"; }
-		/* the reason in words where a whole card is the machine's */
-		const card = $(".maprow");
-		if (card && caps.multiMap === false && !card.querySelector(".statusline")) card.querySelector("header").insertAdjacentHTML("afterend", `<p class="statusline">${caps.reasons.multiMap}</p>`);
-		const songNote = $(".songui .card:last-child header .note");
-		if (songNote && !songNote.dataset.song) { songNote.dataset.song = "1"; songNote.textContent = `Song ${String(CUR.song + 1).padStart(2, "0")} (the machine's current song) · ` + songNote.textContent; }
-		for (const el of $$(".srch")) if (!el.dataset.hint) { el.dataset.hint = "1"; el.title = "On-screen source: it drives its targets through the editor. Your controller's knobs reach the machine through LEARN (the plug-in's MIDI learn)."; }
-	}
-	const blockNa = e => {
-		const el = e.target.closest?.("[data-na]");
-		if (!el) return;
-		e.preventDefault(); e.stopImmediatePropagation();
-		if (e.type === "click") V().toast(el.title);
-	};
 
 	/* ---------------- the keyboard and the joystick play the machine (MIDI into the plug-in) ---------------- */
-	const chan = () => FW.glob[CUR.glob]?.channels;
+	const chan = () => globalNow()?.channels;
 	function keyChannel() {
 		const c = chan();
 		if (!c) return null;
-		const ch = S().mode === "multi" ? c.multiTrig : S().mode === "map" ? c.multiMap : c.base + V().asgT();
+		const ch = V().mode() === "multi" ? c.multiTrig : V().mode() === "map" ? c.multiMap : c.base + V().asgT();
 		return ch >= 0 && ch < 16 ? ch : null;
 	}
 	const trackChannel = t => { const c = chan(); const ch = c ? c.base + t : -1; return ch >= 0 && ch < 16 ? ch : null; };
@@ -383,34 +346,32 @@
 	/* ---------------- LEARN: the plug-in's MIDI learn (persistent, per plug-in) ---------------- */
 	let learnPid = null;
 	function onLearn(doc) {
-		const prev = FW.learn;
-		FW.learn = doc;
+		const prev = learn;
+		learn = doc;
 		if (prev && prev.learning && !doc.learning && doc.mappings.length > prev.mappings.length) {
 			const m = doc.mappings[doc.mappings.length - 1];
 			V().toast(`Learned: CC ${m.cc} → T${m.t + 1} ${PAGES[m.pg] || ""} ${V().pname(m.t, PAGES[m.pg] + "." + m.i) || ""}. Stored with the plug-in.`);
-			S().learnT = null; learnPid = null;
+			V().clearLearnTarget(); learnPid = null;
 		}
 	}
 
-	/* ---- MULTI MAP: read from the global; its fields past key and pattern are not decoded ---- */
-	function mapFromGlobal() {
-		const g = FW.glob[CUR.glob];
-		if (!g || !g.multiMap) return;
-		const hi = g.multiMap[0], pat = g.multiMap[1], rows = [];
-		for (let r = 0; r < 32; r++) {
-			if (r && hi[r] <= hi[r - 1]) break;
-			rows.push({ hi: hi[r], pat: pat[r] === 255 ? -1 : pat[r], ofs: null, len: null, trn: null, tim: null });
-		}
-		rows[rows.length - 1].hi = 127;
-		S().mmap = rows;
-		S().mmapSel = Math.min(S().mmapSel || 0, rows.length - 1);
+	/* ---------------- what the plug-in asks, and what it refused ---------------- */
+	/* {type:"ask", ask, message?, command?}: a confirmation; "Go on" sends the command again with force */
+	function onAsk(m) {
+		const text = m.message || "The machine asks before it goes on (" + m.ask + ").";
+		V().ask(text, m.command ? [["Go on", "danger", () => send(Object.assign({}, m.command, { force: true }))], ["Cancel", "", () => {}]] : [["OK", "", () => {}]]);
 	}
+	function onError(m) { log("error: " + m.message); V().toast(m.message); }
 
 	/* ================= the host: what the mockup hands to the machine ================= */
 	const kitNameOf = k => V().kitName(k);
 	const host = window.MMHost = {
 		ownsClock: true,	// the firmware is the sequencer: no local clock
 		engineLabels: { sync: ["READING MACHINE", "blink"], unsupported: ["NOT OS 1.32B", "off"] },
+		notes: {
+			ccSource: "On-screen knob: it drives its targets through the editor. Your controller's knobs reach the machine through LEARN (the plug-in's MIDI learn).",
+			appSource: "Runs in the plug-in on the machine's own steps and sends CCs, at most 300 a second, also with the editor closed. A lock wins on its step. Targets on MIDI tracks are not moved."
+		},
 		start() {
 			if (document.readyState === "loading") addEventListener("DOMContentLoaded", init);
 			else init();
@@ -428,29 +389,29 @@
 		slotWritten(kind, slot) { written.add(kind + ":" + slot); scheduleSync(); },
 		undo() { send({ op: "undo" }, { onResult: r => r.ok ? V().toast(r.note || "Undo") : V().toast(r.errors[0]) }); },
 		redo() { send({ op: "redo" }, { onResult: r => r.ok ? V().toast(r.note || "Redo") : V().toast(r.errors[0]) }); },
-		history() { const h = FW.machine?.history; return { undo: h?.undoCount || 0, redo: h?.redoCount || 0 }; },
-		togglePlay() { if (V().engReady()) send({ op: S().playing ? "stop" : "play" }); },
+		history() { const h = machine?.history; return { undo: h?.undoCount || 0, redo: h?.redoCount || 0 }; },
+		togglePlay() { if (V().engReady()) send({ op: V().playing() ? "stop" : "play" }); },
 		selectPattern(p, nowFlag) { send({ op: "select", p, now: !!nowFlag }, { onResult: r => r.note && V().toast(r.note) }); },
 		kit(op, k) {
-			const s = S();
+			const ck = cur("kit"), edited = V().kitState() === "edited";
 			if (op === "save") {
-				s.kits[s.kit] = { name: s.workName, empty: false, data: V().captureKit() };	// the page's copy of the slot, at once
+				V().setKitSlot(ck, { name: V().workName(), empty: false, data: V().captureKit() });	// the page's copy of the slot, at once
 				sync();	// working kit edits first
-				send({ op: "saveKit", k: s.kit }, { onResult: r => r.ok || V().toast(r.errors[0]) });
+				send({ op: "saveKit", k: ck }, { onResult: r => r.ok || V().toast(r.errors[0]) });
 				return;
 			}
 			if (op === "reload") {
-				if (s.kitState !== "edited") { V().toast(kitNameOf(s.kit) + " matches its saved slot. Nothing to reload."); return; }
-				V().ask(`Reload <b>${kitNameOf(s.kit)}</b> from the machine? Your edits go to its UNDO KIT.`,
-					[["Reload (discard edits)", "danger", () => { send({ op: "loadKit", k: s.kit }); V().toast("Reloading " + kitNameOf(s.kit) + " (LOAD KIT)."); V().drawLib(true); }],
+				if (!edited) { V().toast(kitNameOf(ck) + " matches its saved slot. Nothing to reload."); return; }
+				V().ask(`Reload <b>${kitNameOf(ck)}</b> from the machine? Your edits go to its UNDO KIT.`,
+					[["Reload (discard edits)", "danger", () => { send({ op: "loadKit", k: ck }); V().toast("Reloading " + kitNameOf(ck) + " (LOAD KIT)."); V().drawLib(true); }],
 						["Cancel", "", () => V().drawLib(true)]]);
 				return;
 			}
 			if (op === "load") {
-				if (k === s.kit) { if (s.kitState === "edited") host.kit("reload", k); else V().toast(kitNameOf(k) + " is already the current kit."); return; }
+				if (k === ck) { if (edited) host.kit("reload", k); else V().toast(kitNameOf(k) + " is already the current kit."); return; }
 				const go = () => { send({ op: "loadKit", k }); V().toast("Loading " + kitNameOf(k) + " (LOAD KIT)."); V().drawLib(true); };
-				if (s.kitState === "edited") {
-					V().ask(`Load <b>${kitNameOf(k)}</b>? Your edits to <b>${kitNameOf(s.kit)}</b> are not saved on the machine. They go to its UNDO KIT.`,
+				if (edited) {
+					V().ask(`Load <b>${kitNameOf(k)}</b>? Your edits to <b>${kitNameOf(ck)}</b> are not saved on the machine. They go to its UNDO KIT.`,
 						[["Save kit, then load", "cream", () => { host.kit("save"); go(); }], ["Load (edits to UNDO KIT)", "danger", go], ["Cancel", "", () => V().drawLib(true)]]);
 					return;
 				}
@@ -458,23 +419,26 @@
 				return;
 			}
 			if (op === "saveAs") {
-				if (k === s.kit) { V().kitSave(); return; }
+				if (k === ck) { V().kitSave(); return; }
 				const go = () => { sync(); send({ op: "saveKit", k }); V().toast("Saving as " + kitNameOf(k) + " (SAVE KIT). It becomes the current kit."); V().drawLib(true); };
-				if (!s.kits[k].empty) {
-					V().ask(`Overwrite <b>${kitNameOf(k)}</b> with the current kit <b>${kitNameOf(s.kit)}</b>? The machine keeps the overwritten kit in its UNDO KIT.`,
+				if (!V().kitSlot(k).empty) {
+					V().ask(`Overwrite <b>${kitNameOf(k)}</b> with the current kit <b>${kitNameOf(ck)}</b>? The machine keeps the overwritten kit in its UNDO KIT.`,
 						[["Overwrite", "danger", go], ["Cancel", "", () => V().drawLib(true)]]);
 					return;
 				}
 				go();
 			}
 		},
-		tempo(bpm) { last.tempoEdit = now(); send({ op: "tempo", bpm }, { key: "tempo" }); },
+		/* the machine's tempo: the machine document's tempo is shown again once this is answered */
+		tempo(bpm) {
+			tempoInFlight = send({ op: "tempo", bpm }, { key: "tempo", onResult: r => { if (r.id === tempoInFlight) tempoInFlight = 0; } });
+		},
 		mutes() {
 			/* mutes and solos of the synth tracks: the plug-in's mute parameters */
-			S().tracks.forEach((t, i) => {
+			for (let i = 0; i < 6; i++) {
 				const off = !V().audible(i);
 				if (off !== last.mute[i]) { last.mute[i] = off; send({ op: "mute", t: i, on: off ? 1 : 0 }); }
-			});
+			}
 		},
 		playKey(n) {
 			$$(".kb .dn").forEach(k => k.classList.remove("dn"));
@@ -485,7 +449,7 @@
 			noteOff();
 			midi([0x90 | ch, n, 100]);
 			held = { ch, n };
-			const what = S().mode === "multi" ? "MULTI TRIG" : S().mode === "map" ? "MULTI MAP" : "T" + (V().asgT() + 1);
+			const what = V().mode() === "multi" ? "MULTI TRIG" : V().mode() === "map" ? "MULTI MAP" : "T" + (V().asgT() + 1);
 			if (info) info.textContent = `${what} · ${V().noteName(n)} · MIDI channel ${ch + 1}`;
 		},
 		joy(xy) { joyOn = true; joySend(xy.x, xy.y); },
@@ -497,9 +461,11 @@
 			learnPid = null;
 			/* the mockup's Control workspace then binds its Knob k to the same value on screen */
 		},
+		/* the Control workspace's LFO and Random sources and their links: the plug-in runs them */
+		modulators(setup) { sendMods(setup); },
 		engine(kind) { send({ op: "engine", kind }, { onResult: r => V().toast(r.ok ? r.note : r.errors[0]) }); },
 		firstRun() {
-			log("NO ROM dialog shown (engine " + FW.engine + ")");
+			log("NO ROM dialog shown (lifecycle " + machine?.lifecycle + ")");
 			V().ask(`<div class="lcdbig">MONOMACHINE FIRMWARE NEEDED</div>
  <p>Monomachine Editor runs the real Monomachine operating system. Elektron's firmware cannot ship with the plug-in, so you add the one from your own machine.</p>
  <ol class="recvsteps"><li>Dump the <b>OS 1.32B</b> flash image from your Monomachine (<span class="mono">.bin</span>).</li><li>Put it in the plug-in's ROM folder (<b>Show ROM folder</b>).</li><li>Reopen the plug-in. It stays on this computer only.</li></ol>`,
@@ -510,7 +476,7 @@
 		bootScreen() {
 			const el = $("#bootscr");
 			if (!el) return;
-			const st = S().eng, on = st === "boot" || st === "sync" || st === "loading";
+			const st = V().engineState(), on = st === "boot" || st === "sync" || st === "loading";
 			clearTimeout(lcdFade);
 			if (on) { el.classList.remove("fading"); el.classList.add("on", "fw"); return; }
 			if (!el.classList.contains("on")) return;
@@ -522,11 +488,11 @@
 		renderPst() {
 			const p = $("#pst");
 			if (!p) return;
-			const r = FW.machine?.recv, manual = FW.machine?.capabilities?.dumps === "manual";
+			const r = machine?.recv, manual = machine?.capabilities?.dumps === "manual";
 			const on = r && (r.sending > 0 || r.state === "entering" || r.state === "parked");
 			p.textContent = manual && r?.sending ? "SEND " + r.sending : on ? (r.sending > 0 ? "RECV " + r.sending : "RECV") : "";
 			p.className = manual && r?.sending ? "pst warn" : "pst";
-			p.title = manual && r?.sending ? FW.machine.capabilities.reasons?.recvSession || ""
+			p.title = manual && r?.sending ? machine.capabilities.reasons?.recvSession || ""
 				: on ? "The machine is on GLOBAL › SYSEX RECV and takes the edits (" + r.state + ", " + r.received + " received)." : "";
 		},
 		/* the AUDIO / MIDI panel: the plug-in's devices (mdAudioMidiLink.cpp); in a plug-in the
@@ -535,14 +501,21 @@
 		audioSend(c) { send(Object.assign({ op: "audioSet" }, c)); },
 		audioMeter(on) { send({ op: "audioMeter", on: !!on }); }
 	};
-	function showAudioEntry() {
-		const o = document.querySelector('#engsel option[value="audio"]');
-		if (o) o.hidden = o.disabled = !(audioDocument && audioDocument.standalone);
-	}
+
+	/* What the page holds, read-only, for whoever looks (a diagnostics build's self-tests register
+	   here; the page does not know them): copies of the documents, and a call once the machine is
+	   ready. */
+	window.MMPage = {
+		inspect() {
+			return { machine: copy(machine), workingKit: copy(working), learn: copy(learn), catalogue: copy(catalogue),
+				doc: (kind, slot) => copy(DOCS[kind]?.[slot]), slots: kind => DOCS[kind] ? DOCS[kind].map((d, s) => d ? s : -1).filter(s => s >= 0) : [] };
+		},
+		whenReady(f) { if (last.ready) f(); else readyHooks.push(f); }
+	};
 
 	/* ---------------- start: after the mockup and MmConvert are there ---------------- */
 	function init() {
-		const v = V(), s = v.S;
+		const v = V();
 		/* The page's first render, logged so a blank page fails the self-tests (P5). */
 		setTimeout(() => { const a = $(".app"), r = a ? a.getBoundingClientRect() : { width: 0, height: 0 };
 			log(`first render: ${$$("#main *").length} elements in #main, page ${Math.round(r.width)} x ${Math.round(r.height)}, window ${innerWidth} x ${innerHeight}`);
@@ -553,37 +526,24 @@
 			const mk = getComputedStyle($(".lcdgroup"), "::after"), top = $(".top").getBoundingClientRect(), g = $(".lcdgroup").getBoundingClientRect();
 			log(`MKII print: bottom ${mk.bottom}, LCD group bottom ${Math.round(g.bottom)}, header bottom ${Math.round(top.bottom)}`); }, 1500);
 		/* start empty, not with the mockup's example */
-		v.applyKit({ ...v.clearedKit(), multi: s.multi });
-		s.tracks.forEach(t => t.name = v.machName(t.m));
-		v.applyPat(v.emptyPat(16));
-		s.song = [{ type: "end" }];
-		s.songSel = 0;
-		s.kits = Array.from({ length: 128 }, () => ({ name: "", empty: true, data: null }));
-		s.patInfo = Array.from({ length: 128 }, () => ({ has: false, len: 16 }));
-		s.patKit = Array(128).fill(0);
-		s.patData = {};
-		s.workName = "";
-		s.kit = 0; s.pat = 0; s.queued = null; s.playing = false; s.step = -1;
-		s.ctl.links = [];	// the Control workspace starts without the mockup's example mappings
-		s.tracks.forEach((t, i) => last.mute[i] = !!t.mute);
+		v.startEmpty();
+		for (let i = 0; i < 6; i++) last.mute[i] = !v.audible(i);
+		markReading();
 		document.addEventListener("pointerup", () => { noteOff(); if (joyOn) { joyOn = false; joySend(0, 0); } }, true);
 		document.addEventListener("pointercancel", () => noteOff(), true);
 		document.addEventListener("pointerdown", () => setTimeout(() => {
-			if (!s.learn || !s.learnT) return;
-			const k = s.learnT.t + "|" + s.learnT.pid;
+			const lt = v.learnTarget();
+			if (!lt) return;
+			const k = lt.t + "|" + lt.pid;
 			if (k === learnPid) return;
 			learnPid = k;
-			const [pg, i] = s.learnT.pid.split(".");
-			if (s.learnT.t >= 6 || pg === "MID") { v.toast("MIDI page values are NRPN on the machine: the plug-in's MIDI learn cannot map them."); s.learnT = null; return; }
-			send({ op: "learnStart", t: s.learnT.t, pg: PAGES.indexOf(pg), i: +i }, { onResult: r => r.ok ? v.toast("Move a knob on your controller, or press 1-8 for CC 21-28.") : v.toast(r.errors[0]) });
+			const [pg, i] = lt.pid.split(".");
+			if (lt.t >= 6 || pg === "MID") { v.toast("MIDI page values are NRPN on the machine: the plug-in's MIDI learn cannot map them."); v.clearLearnTarget(); return; }
+			send({ op: "learnStart", t: lt.t, pg: PAGES.indexOf(pg), i: +i }, { onResult: r => r.ok ? v.toast("Move a knob on your controller, or press 1-8 for CC 21-28.") : v.toast(r.errors[0]) });
 		}, 0), true);
 		document.addEventListener("click", e => {
-			if (e.target.closest("#learnkey")) setTimeout(() => { if (!s.learn) { learnPid = null; send({ op: "learnCancel" }); } }, 0);
+			if (e.target.closest("#learnkey")) setTimeout(() => { if (!v.learning()) { learnPid = null; send({ op: "learnCancel" }); } }, 0);
 		}, true);
-		for (const ev of ["pointerdown", "click", "change", "wheel", "keydown", "dragstart"]) document.addEventListener(ev, blockNa, { capture: true, passive: false });
-		let naQueued = false;
-		new MutationObserver(() => { if (!naQueued) { naQueued = true; queueMicrotask(() => { naQueued = false; markNa(); }); } })
-			.observe(document.body, { childList: true, subtree: true });
 		/* the editor's menu (skins, GUI scale, settings): right-click an empty part of the header */
 		document.addEventListener("contextmenu", e => {
 			if (!e.target.closest(".top") || e.target.closest("button,[role=slider],[role=button],select,input,b,.lcdpanel")) return;
@@ -596,9 +556,9 @@
 		});
 		setInterval(() => {
 			applyPending();
-			if (libDirty && v.LIB.open && !v.busy()) { libDirty = false; v.drawLib(); }
+			if (libDirty && !v.busy()) { libDirty = false; v.drawLib(); }
 		}, 120);
-		showAudioEntry();
+		v.setAudioEntry(false);
 		v.setEng("loading");
 		send({ op: "audio" });
 		Bridge.ready();
@@ -607,17 +567,17 @@
 	function onMessage(m) {
 		if (m.type === "doc") onDoc(m);
 		else if (m.type === "machine") onMachine(m.doc);
-		else if (m.type === "tel") { if (m.playing !== S().playing) setPlaying(m.playing); if (S().playing) showStep(m.step); }
+		else if (m.type === "tel") { if (m.playing !== V().playing()) V().setPlaying(m.playing); if (V().playing()) V().setStep(m.step); }
 		else if (m.type === "lcd") { drawLcd(m.bits); showEngine(); }
-		else if (m.type === "catalogue") FW.cat = m.doc;
+		else if (m.type === "mod") onMod(m);
+		else if (m.type === "catalogue") catalogue = m.doc;
 		else if (m.type === "reset") onReset();
-		else if (m.type === "audio") { audioDocument = m.doc; showAudioEntry(); if (window.AP?.open) drawAudio(); }
+		else if (m.type === "audio") { audioDocument = m.doc; V().setAudioEntry(!!(audioDocument && audioDocument.standalone)); if (window.AP?.open) drawAudio(); }
 		else if (m.type === "audioLevel") audioLevel(m.in);
 		else if (m.type === "openAudio") openAudio();
 		else if (m.type === "learn") onLearn(m.doc);
-		else if (m.type === "result" && !m.ok && m.errors?.length && m.op !== "set") V().toast(m.errors[0]);
+		else if (m.type === "ask") onAsk(m);
+		else if (m.type === "error") onError(m);
+		else if (m.type === "result" && !m.ok && m.errors?.length && m.op !== "set" && m.op !== "modSet") V().toast(m.errors[0]);
 	}
-
-	/* the self-tests (mmSelfTest.js, diagnostics builds only) get what they look at */
-	function selfTestContext() { return { FW, CUR, last, host, log, now }; }
 })();

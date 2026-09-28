@@ -218,7 +218,7 @@ function setEng(st){S.eng=st;const[txt,led]=ENG[st],b=document.querySelector(".l
  const ready=engReady();document.querySelector(".lcdpanel").classList.toggle("engwait",!ready);document.body.classList.toggle("engwait",!ready);
  ["rec","play"].forEach(id=>{const k=document.getElementById(id);if(k)k.disabled=!ready});
  bootScreen(st==="boot");
- b.title=ready?"Engine: running. Click to switch emulator or hardware, or load another ROM.":"Engine: "+txt.toLowerCase()+". Editing starts when it is ready."}
+ b.title=ENG[st][2]||(ready?"Engine: running. Click to switch emulator or hardware, or load another ROM.":"Engine: "+txt.toLowerCase()+". Editing starts when it is ready.")}
 /* while BOOTING OS the LCD shows a firmware-style start-up screen (the text is the editor's, not a copy of the ROM's) */
 let bootT=[];function bootScreen(on){if(HOST.bootScreen)return HOST.bootScreen(on);const el=$("#bootscr");if(!el)return;bootT.forEach(clearTimeout);bootT=[];el.classList.toggle("on",on);if(!on)return;$("#bsmk").textContent=S.plate==="mk1"?"SFX-60":"SFX-60 MKII";
  const steps=[["OS 1.32B · TESTING MEMORY",15],["BATTERY RAM · 128 KITS",40],["128 PATTERNS · 24 SONGS",65],[S.plate==="mk1"?"DSP · FACTORY WAVES":"DSP · 64 DIGIPRO WAVES",85],["STARTING SEQUENCER",100]];
@@ -228,8 +228,9 @@ function startEngine(kind){engT.forEach(clearTimeout);engT=[];if(S.playing)toggl
  setEng("loading");engT.push(setTimeout(()=>setEng("boot"),700));engT.push(setTimeout(()=>{setEng("ready");toast("Emulator ready: the real OS 1.32B is running")},1800))}
 /* ===== Transport ===== */
 let clock=null;
-function tick(){const prev=S.step;S.step=(S.step+1)%S.len;ctlTick();if(S.step===0&&S.queued!=null){applyPattern(S.queued);return}
- const pp=Math.floor(S.step/16);$$(".pl").forEach(b=>b.classList.toggle("play",+b.dataset.plp===pp&&S.playing));
+function tick(){const prev=S.step;S.step=(S.step+1)%S.len;ctlTick();if(S.step===0&&S.queued!=null){applyPattern(S.queued);return}stepShown(prev)}
+/* the playhead, POSITION, the page LEDs and the lamps at S.step (the step before it was prev) */
+function stepShown(prev){const pp=Math.floor(S.step/16);$$(".pl").forEach(b=>b.classList.toggle("play",+b.dataset.plp===pp&&S.playing));
  if(S.follow&&S.ws==="seq"&&!S.viewAll&&pp!==S.page&&!laneDraw){S.page=pp;render()}
  $("#tempoled").classList.toggle("on",S.step%4===0);setPos();queueMicrotask(movePH);
  $$(`.mst[data-s="${prev}"],.lb[data-s="${prev}"],.tc[data-s="${prev}"]`).forEach(c=>c.classList.remove("ph"));$$(`.mst[data-s="${S.step}"],.lb[data-s="${S.step}"],.tc[data-s="${S.step}"]`).forEach(c=>c.classList.add("ph"));
@@ -254,6 +255,9 @@ function movePH(glide=true){let ph=document.getElementById("phcol");
  ph.style.opacity=r.right>v.left+1&&r.left<v.right-1?"1":"0";phX=r.left}
 addEventListener("scroll",()=>{if(S.playing)movePH(false)},true);addEventListener("resize",()=>{if(S.playing)movePH(false)});
 function setPos(){$("#pos").textContent=S.playing&&S.step>=0?String(Math.floor(S.step/16)+1).padStart(2,"0")+"."+String(S.step%16+1).padStart(2,"0"):"--.--"}
+/* A host's transport (P6): the machine's step and whether it plays, shown. */
+function setStep(step){const prev=S.step;S.step=step;stepShown(prev)}
+function setPlaying(on){if(S.playing===on)return;S.playing=on;if(!on){$$(".pl").forEach(b=>b.classList.remove("play"));$("#tempoled").classList.remove("on");$$(".ph").forEach(c=>c.classList.remove("ph"));S.step=-1}setPos();renderTop();redraw();movePH(false)}
 function togglePlay(){if(HOST.togglePlay)return HOST.togglePlay();if(!S.playing&&S.eng&&!engReady())return;S.playing=!S.playing;clearInterval(clock);$$(".pl").forEach(b=>b.classList.remove("play"));$("#tempoled").classList.remove("on");$$(".ph").forEach(c=>c.classList.remove("ph"));if(S.playing){S.step=-1;tick();restartClock()}else S.queued=null;setPos();renderTop();redraw();movePH(false)}
 
 /* ===== Render ===== */
@@ -272,7 +276,71 @@ addEventListener("resize",()=>{if(S.ws==="seq"){fitLane();drawSlides();alignLock
 
 /* deep links: #ws=sound&t=3&dock=arp&plate=mk1&mode=multi */
 (()=>{const q=new URLSearchParams(location.hash.slice(1));if(q.get("plate")){S.plate=q.get("plate");document.documentElement.dataset.plate=S.plate}if(q.get("ws"))S.ws=q.get("ws");if(q.get("side")==="midi")S.side="midi";{const t=(q.get("t")?+q.get("t")-1:0)+((S.ws==="seq"||S.ws==="sound")&&S.side==="midi"?6:0);S.sel=t;select(t)}if(q.get("dock"))S.dock=q.get("dock");if(q.get("mode"))S.mode=q.get("mode");if(q.get("mt"))S.multi.mode=+q.get("mt");if(q.get("all"))S.viewAll=true;autoRange(S.sel)})();
-/* The view's API for a host (P6): the state it renders and the calls a host makes. */
-window.MMView={S,H,LIB,ENG,applyKit,applyPat,emptyPat,clearedKit,captureKit,capturePat,setKitState,render,renderTop,drawLib,toast,ask,setEng,
- engReady,ctlTick,setPos,movePH,redraw,audible,flashTracks,goWs,clickStep,autoRange,kitSave,machName,kitName,pname,asgT,noteName,audioSelfTest,busy:()=>{try{return !!(drag||laneDraw||rollDrag||active||arpDrag||l2drag||joyDrag||splitDrag||cord||kbDown)}catch(_){return false}}};
+/* ===== The view's side for a host (P6) =====
+   A host reads the view through values (never its state) and sets it through named setters; what
+   its engine cannot do it says with disable(capability, reason). */
+const NA_SEL={
+ midiMutes:[6,7,8,9,10,11].flatMap(t=>[`[data-mute="${t}"]`,`[data-solo="${t}"]`,`[data-gmute="${t}"]`]).join(","),
+ poly:'[data-pmode="poly"]',multiTrig:'[data-set="mtmode"] button,[data-strk],[data-tim],#splitm',
+ multiMap:'.maprow [data-mhi],.maprow select,.maprow .kselbtn,.maprow .pc,[data-mdel],[data-madd],[data-band]',
+ portamento:'[data-set="port"] button',gridRecord:"#rec"};
+const NA_CARD={multiMap:".maprow"};	// a card that also says the reason in words
+const NA={},READING={pattern:new Set(),kit:new Set()},READ_NOTE="Still reading this slot from the machine.";
+function markNa(){
+ for(const[cap,sel] of Object.entries(NA_SEL)){const why=NA[cap]||"";for(const el of $$(sel)){
+  if(why&&el.dataset.na!=="1"){el.dataset.na="1";el.title=why;el.setAttribute("aria-disabled","true")}
+  else if(!why&&el.dataset.na==="1"){delete el.dataset.na;el.removeAttribute("aria-disabled")}}}
+ for(const[cap,sel] of Object.entries(NA_CARD)){const card=$(sel);if(card&&NA[cap]&&!card.querySelector(".statusline"))card.querySelector("header").insertAdjacentHTML("afterend",`<p class="statusline">${NA[cap]}</p>`)}
+ for(const[kind,attr] of [["pattern","ps"],["kit","ks"]])for(const el of $$(`#libpop .${attr}[data-${attr}]`)){const miss=READING[kind].has(+el.dataset[attr]);
+  if(miss!==(el.dataset.na==="1")){if(miss){el.dataset.na="1";el.title=READ_NOTE}else delete el.dataset.na}}}
+let naQueued=false;
+new MutationObserver(()=>{if(!naQueued){naQueued=true;queueMicrotask(()=>{naQueued=false;markNa()})}}).observe(document.body,{childList:true,subtree:true});
+for(const ev of["pointerdown","click","change","wheel","keydown","dragstart"])document.addEventListener(ev,e=>{const el=e.target.closest?.("[data-na]");if(!el)return;e.preventDefault();e.stopImmediatePropagation();if(e.type==="click")toast(el.title)},{capture:true,passive:false});
+function disable(cap,why){NA[cap]=why||"";markNa()}
+function setReading(kind,slots){READING[kind]=new Set(slots);markNa()}
+/* start with nothing: no example kit, pattern, song or mappings */
+function startEmpty(){applyKit({...clearedKit(),multi:S.multi});S.tracks.forEach(t=>t.name=machName(t.m));applyPat(emptyPat(16));S.song=[{type:"end"}];S.songSel=0;
+ S.kits=Array.from({length:128},()=>({name:"",empty:true,data:null}));S.patInfo=Array.from({length:128},()=>({has:false,len:16}));S.patKit=Array(128).fill(0);S.patData={};S.workName="";
+ S.kit=0;S.pat=0;S.queued=null;S.playing=false;S.step=-1;S.ctl.links=[];S.ctl.sources=S.ctl.sources.filter(x=>x.kind==="cc")}
+function setPatternSlot(p,{data,kit,has,len}){S.patKit[p]=kit;S.patInfo[p]={has,len};if(p===S.pat)applyPat(data);else S.patData[p]=data}
+function setKitSlot(k,{name,empty,data}){S.kits[k]={name,empty,data}}
+function setWorkingKit(page,name){applyKit({...page,multi:page.multi??S.multi});S.workName=name}
+function setSong(rows,slot){S.song=rows;S.songSlot=slot;S.songSel=Math.min(S.songSel||0,rows.length-1)}
+function setMidiTracks(list){S.midi.forEach((x,t)=>{x.ch=list[t].ch;x.cc=[...list[t].cc]})}
+function setMultiMap(rows){S.mmap=rows;S.mmapSel=Math.min(S.mmapSel||0,rows.length-1)}
+/* an engine state's LCD label: [text, led "on" | "blink" | "off", tooltip] */
+function setEngineLabel(st,label){ENG[st]=label;if(S.eng===st)setEng(st)}
+/* a host's engine map ([{id, label, available, reason}]) in the engine menu, before the menu's own entries */
+function setEngines(list,current){const sel=$("#engsel");if(!sel)return;const own=["audio","rom"];
+ for(const o of [...sel.options])if(!own.includes(o.value)&&!list.some(e=>e.id===o.value))o.remove();
+ const first=[...sel.options].find(o=>own.includes(o.value))||null;
+ for(const e of list){let o=sel.querySelector(`option[value="${e.id}"]`);if(!o){o=document.createElement("option");o.value=e.id}sel.insertBefore(o,first);o.textContent=e.label;o.disabled=!e.available;o.title=e.available?"":e.reason||""}
+ if(current){sel.value=current;S.engine=current}}
+/* the AUDIO / MIDI entry of the engine menu: only where the host has the devices (a standalone) */
+function setAudioEntry(on){const o=document.querySelector('#engsel option[value="audio"]');if(o)o.hidden=o.disabled=!on}
+/* the app sources and their links as the host's engine took them (ctlSetup() shape); the knob rows and their links stay */
+function setCtlSetup({sources,links}){const cc=S.ctl.sources.filter(x=>x.kind==="cc"),ccIds=new Set(cc.map(x=>x.id)),old=S.ctl.sources;
+ S.ctl.sources=[...cc,...sources.map(x=>({...x,val:old.find(o=>o.id===x.id)?.val??64}))];
+ S.ctl.links=[...S.ctl.links.filter(l=>ccIds.has(l.src)),...links];
+ if(!srcById(S.ctl.sel))S.ctl.sel=S.ctl.sources[0]?.id;if(S.ws==="control")render()}
+/* the app sources as the host's engine runs them: their values ({id: 0-127}) and the CC rate */
+function setModulation({values,ccPerSecond}){for(const sr of S.ctl.sources)if(values[sr.id]!=null)sr.val=values[sr.id];S.ctl.rate=ccPerSecond;if(S.ws==="control")ctlRefresh()}
+const copy=o=>JSON.parse(JSON.stringify(o));
+window.MMView={
+ /* values */
+ captureKit,capturePat,clearedKit,emptyPat,audible,engReady,asgT,noteName,pname,machName,kitName,
+ busy:()=>{try{return !!(drag||laneDraw||rollDrag||active||arpDrag||l2drag||joyDrag||splitDrag||cord||kbDown)}catch(_){return false}},
+ libBusy:()=>LIB.renaming!=null||LIB.drag!=null,
+ sel:()=>S.sel,mode:()=>S.mode,playing:()=>S.playing,step:()=>S.step,tempo:()=>S.bpm,engineState:()=>S.eng,kitState:()=>S.kitState,workName:()=>S.workName,
+ kitSlot:k=>({...S.kits[k]}),patternSlot:p=>({data:S.patData[p],kit:S.patKit[p],...S.patInfo[p]}),patternLength:p=>p===S.pat?S.len:S.patInfo[p].len,
+ song:()=>copy(S.song),routing:()=>S.routing,midiTracks:()=>S.midi.map(x=>({ch:x.ch,cc:[...x.cc]})),multi:()=>copy(S.multi),
+ learnTarget:()=>S.learn&&S.learnT?{...S.learnT}:null,learning:()=>!!S.learn,ctlSetup,
+ /* setters */
+ startEmpty,setCurrent:({pattern,kit})=>{if(pattern!=null)S.pat=pattern;if(kit!=null)S.kit=kit},setQueued:q=>{S.queued=q},setTempo:bpm=>{S.bpm=bpm},
+ setPlaying,setStep,setPatternSlot,setKitSlot,setWorkingKit,setSong,setRouting:r=>{S.routing=r},setMidiTracks,setMultiMap,
+ setEng,setEngineLabel,setEngines,setAudioEntry,setKitState,clearLearnTarget:()=>{S.learnT=null},setModulation,setCtlSetup,disable,setReading,
+ /* calls */
+ render,renderTop,drawLib,toast,ask,redraw,movePH,setPos,flashTracks,goWs,clickStep,autoRange,kitSave,
+ /* the self-tests (diagnostics only) play the user through the state itself, and the panel's own test */
+ S,audioSelfTest};
 render();H.last=snap();if(HOST.start)HOST.start();else startEngine("emu");{const lb=new URLSearchParams(location.hash.slice(1)).get("lib");if(lb)setTimeout(()=>openLib(lb),2000)}

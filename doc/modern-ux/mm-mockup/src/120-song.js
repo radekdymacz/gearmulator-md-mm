@@ -32,7 +32,7 @@ function renderSong(){const sel=S.song[S.songSel]||S.song[0];
  const lines=Math.ceil(200/16);
  $("#main").innerHTML=`<div class="songui lay2"><div class="songleft"><section class="card"><header><h3>Patterns</h3><span>drag onto the grid · click = add after row ${String(S.songSel+1).padStart(3,"0")}</span></header>${palette}</section>
    <section class="card"><header><h3>Selected row</h3><span class="rowacts"><button data-rowact="up" title="Move left">←</button><button data-rowact="down" title="Move right">→</button><button data-rowact="dup">Duplicate</button><button data-rowact="loop">Add loop</button><button data-rowact="del" class="danger">Delete</button></span></header><div class="insp">${insp}</div></section></div>
-  <section class="card"><header><h3>Arrangement</h3><span class="note">${S.song.length} of 200 rows · T track transpose · M mutes · B tempo</span></header>
+  <section class="card"><header><h3>Arrangement</h3><span class="note">${S.songSlot!=null?`Song ${String(S.songSlot+1).padStart(2,"0")} (the machine's current song) · `:""}${S.song.length} of 200 rows · T track transpose · M mutes · B tempo</span></header>
    <div class="durbar" title="Song shape by time (length × repeats)">${S.song.map((r,i)=>r.type?`<i class="db dbm"></i>`:`<i class="db ${i===S.songSel?"sel":""}" data-row="${i}" style="flex:${rowLen(r)*r.rep} 1 0"></i>`).join("")}</div>
    <div class="slotgrid" id="tl">${Array.from({length:lines},(_,line)=>`<span class="sglab">${String(line*16+1).padStart(3,"0")}</span>${Array.from({length:16},(_,c)=>{const i=line*16+c,r=S.song[i];if(i>=200)return`<span></span>`;
      if(!r)return`<div class="scell empty" data-i="${i}"></div>`;

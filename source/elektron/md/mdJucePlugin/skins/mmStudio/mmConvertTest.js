@@ -90,6 +90,18 @@ if (docs["mm-desk/kit"].length) {
 	edits.push(["assign amount", o.tracks[1].assign.add[5] === -54]);
 	edits.push(["name", o.name === "RENAMED" && !("nameBytes" in o)]);
 }
+/* the Control workspace's app sources <-> md-desk/modulators (the plug-in runs them) */
+{
+	const setup = { sources: [{ id: "lfoA", kind: "lfo", label: "LFO A", val: 64, SHAPE: 2, RATE: "1/4", DEPTH: 80 },
+		{ id: "rndA", kind: "rnd", label: "Random A", val: 64, RATE: "1/16", SMOOTH: 30, _t: 64 }],
+	links: [{ src: "lfoA", t: 2, pid: "AMP.6", min: 30, max: 98, curve: "lin", inv: false }, { src: "rndA", t: 7, pid: "MID.4", min: 0, max: 127, curve: "lin", inv: true },
+		{ src: "rndA", t: 0, pid: "LF3.1", min: 5, max: 120, curve: "exp", inv: true }] };
+	const m = C.modToFw(setup);
+	edits.push(["modulators to the contract", m.schema === "mm-desk/modulators" && m.sources[0].kind === "lfo" && m.sources[0].shape === 3 && m.sources[0].depth === 80
+		&& m.sources[1].kind === "random" && m.sources[1].smooth === 30 && m.links.length === 2 && m.links[0].param === 14 && m.links[1].param === 49 && m.links[1].invert]);
+	const back = C.modToPage(m), again = C.modToFw(back);
+	edits.push(["modulators round trip", !diff(again, m) && back.links[0].pid === "AMP.6" && back.sources[0].SHAPE === 2]);
+}
 for (const [what, ok] of edits) { n++; if (!ok) { fails++; console.log("FAIL edit:", what); } }
 
 const counts = Object.entries(docs).map(([k, l]) => l.length + " " + k.split("/")[1]).join(", ");

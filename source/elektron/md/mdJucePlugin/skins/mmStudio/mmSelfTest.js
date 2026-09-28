@@ -1,15 +1,22 @@
 "use strict";
 /* The Monomachine Editor's self-tests (P6): diagnostics only. This bundle is in the plug-in only
    when it is built with gearmulator_MDMM_DIAGNOSTICS (a test or development build); a release
-   page has none of it. GEARMULATOR_MMSTUDIO_SELFTEST=<kind> gives the page ?selftest=<kind>; the
-   adapter calls MMSelfTest[kind] once the machine is ready, with what the tests look at
-   (T: FW, CUR, last, host, log, now). */
-window.MMSelfTest = (() => {
+   page has none of it. GEARMULATOR_MMSTUDIO_SELFTEST=<kind> gives the page ?selftest=<kind>; this
+   bundle registers itself with the page (MMPage.whenReady) and reads the documents the page holds
+   through MMPage.inspect(). The page knows nothing about it. */
+(() => {
 	const V = () => window.MMView;
-	const S = () => window.MMView.S;
+	const S = () => window.MMView.S;	// the tests play the user: they edit the view's state itself
 	const $ = q => document.querySelector(q);
-	let FW, CUR, last, host, log, now;
-	const take = T => ({ FW, CUR, last, host, log, now } = T);
+	const host = window.MMHost, log = t => Bridge.log(t), now = () => performance.now();
+	const I = () => window.MMPage.inspect();
+	const machine = () => I().machine;
+	/* the current slots, from the machine document */
+	const cur = () => { const m = machine(); return { pat: m.pattern.current, kit: m.kit.current, song: m.song.current ?? 0, glob: m.global ?? 0 }; };
+	/* the mute commands the page sent (the plug-in's mute parameters), by track */
+	const sentMute = [];
+	const send0 = Bridge.send;
+	Bridge.send = (msg, opt) => { if (msg.op === "mute") sentMute[msg.t] = !!msg.on; return send0(msg, opt); };
 	/* waits for a message the plug-in sends */
 	const waiters = [];
 	Bridge.onMessage(m => { for (const w of [...waiters]) if (w.test(m)) { waiters.splice(waiters.indexOf(w), 1); w.done(m); } });
@@ -24,7 +31,7 @@ window.MMSelfTest = (() => {
 	   ("cpu <phase> start/end"), so the script reads the processes' CPU time from outside. */
 	async function runCpuPhases() {
 		const log2 = t => log("MM-P3: " + t);
-		while (!FW.machine || FW.machine.loading.done < FW.machine.loading.total) await sleep(200);
+		while (!machine() || machine().loading.done < machine().loading.total) await sleep(200);
 		await sleep(5000);	// the background loads settle
 		const phase = async (name, ms) => { log2(`cpu ${name} start`); await sleep(ms); log2(`cpu ${name} end`); };
 		V().goWs("seq");
@@ -45,11 +52,11 @@ window.MMSelfTest = (() => {
 			catch (e) { results.push(false); log(`SELFTEST FAIL ${name}: ${e.message}`); }
 			await sleep(1200);
 		};
-		const p = CUR.pat;
+		const CUR = cur(), p = CUR.pat;
 		const readBack = test => waitFor(m => m.type === "doc" && m.kind === "pattern" && m.slot === p && !m.pending && test(m.doc));
 		const free = () => [...Array(s.len).keys()].find(st => !s.tracks[0].steps[st]);
 		const clickStep = (t, st, e) => { V().clickStep(t, st, e); host.edited("commit"); };
-		log(`SELFTEST start: pattern ${p} kit ${CUR.kit} song ${CUR.song} global ${CUR.glob}, loaded ${FW.machine?.loading.done}/${FW.machine?.loading.total}`);
+		log(`SELFTEST start: pattern ${p} kit ${CUR.kit} song ${CUR.song} global ${CUR.glob}, loaded ${machine()?.loading.done}/${machine()?.loading.total}`);
 		await check("pattern trig (SYSEX RECV round trip)", async () => {
 			const st = free();
 			if (st == null) throw new Error("no free step on T1");
@@ -64,7 +71,7 @@ window.MMSelfTest = (() => {
 			clickStep(0, st, {});
 			await readBack(d => d.tracks[0].trig.includes(st));
 			await sleep(200);
-			const before = FW.machine?.history?.undoCount || 0;
+			const before = machine()?.history?.undoCount || 0;
 			host.undo();
 			await readBack(d => !d.tracks[0].trig.includes(st));
 			for (let n = 0; n < 15 && s.tracks[0].steps[st]; n++) await sleep(100);
@@ -93,13 +100,15 @@ window.MMSelfTest = (() => {
 		});
 		await check("kit value live (AMP VOL, CC)", async () => {
 			const v0 = s.tracks[0].v.AMP[5], v = v0 > 60 ? v0 - 7 : v0 + 7;
-			const got = waitFor(m => m.type === "doc" && m.kind === "kit" && m.working && m.doc.tracks[0].pages[1][5] === v, 5000);
+			/* the kit that plays: the working kit document (the older contract: kit, working) */
+			const playing = m => m.type === "doc" && (m.kind === "workingKit" || (m.kind === "kit" && m.working));
+			const got = waitFor(m => playing(m) && m.doc.tracks[0].pages[1][5] === v, 5000);
 			s.tracks[0].v.AMP[5] = v;
 			window.soundEdited();
 			await got;
 			s.tracks[0].v.AMP[5] = v0;
 			window.soundEdited();
-			await waitFor(m => m.type === "doc" && m.kind === "kit" && m.working && m.doc.tracks[0].pages[1][5] === v0, 5000);
+			await waitFor(m => playing(m) && m.doc.tracks[0].pages[1][5] === v0, 5000);
 		});
 		await check("pattern switch (LOAD PATTERN)", async () => {
 			const to = (p + 1) % 128;
@@ -143,19 +152,21 @@ window.MMSelfTest = (() => {
 			return t0 + " -> " + t + " -> " + t0 + " BPM";
 		});
 		await check("solo mutes the other synth tracks", async () => {
+			const before = [0, 1, 2, 3, 4, 5].map(i => !V().audible(i));
+			sentMute.length = 0;
 			s.tracks[2].solo = true; host.mutes();
 			await sleep(300);
-			const muted = last.mute.join("");
+			const muted = before.map((m, i) => sentMute[i] ?? m).join("");
 			s.tracks[2].solo = false; host.mutes();
 			await sleep(300);
 			if (muted !== "truetruefalsetruetruetrue") throw new Error("mutes " + muted);
 		});
 		await check("song and global documents", async () => {
-			if (!FW.song[CUR.song] || !FW.glob[CUR.glob]) throw new Error("not loaded");
+			if (!I().doc("song", CUR.song) || !I().doc("global", CUR.glob)) throw new Error("not loaded");
 			return s.song.length + " rows, routing " + s.routing;
 		});
 		await check("capabilities as data (the engine's reasons)", async () => {
-			const caps = FW.machine?.capabilities;
+			const caps = machine()?.capabilities;
 			if (!caps || caps.engine !== "emu" || caps.midiMutes !== false || !caps.reasons?.midiMutes) throw new Error(JSON.stringify(caps));
 			const el = $('[data-mute="6"]');
 			if (el && el.dataset.na !== "1") throw new Error("MIDI track mute not marked");
@@ -165,11 +176,13 @@ window.MMSelfTest = (() => {
 		log(`SELFTEST ${ok === results.length ? "PASS" : "FAIL"} ${ok}/${results.length}`);
 	}
 
-	return {
+	const TESTS = {
 		/* ?selftest=1: edits through the mockup's own gestures and its host, each round trip logged */
-		1: T => { take(T); setTimeout(runSelfTest, 500); },
-		mmcpu: T => { take(T); runCpuPhases(); },
+		1: () => setTimeout(runSelfTest, 500),
+		mmcpu: () => runCpuPhases(),
 		/* ?selftest=p6audio: the AUDIO / MIDI panel's self-test (the mockup's) */
-		p6audio: T => { take(T); setTimeout(() => V().audioSelfTest?.({ log: t => log("AUDIO: " + t), play: on => { if (on !== S().playing) host.togglePlay(); }, step: () => S().step, playing: () => S().playing }), 3000); }
+		p6audio: () => setTimeout(() => V().audioSelfTest({ log: t => log("AUDIO: " + t), play: on => { if (on !== V().playing()) host.togglePlay(); }, step: () => V().step(), playing: () => V().playing() }), 3000)
 	};
+	const kind = (location.search.match(/[?&]selftest=(\w+)/) || [])[1];
+	if (kind && TESTS[kind]) window.MMPage.whenReady(TESTS[kind]);
 })();

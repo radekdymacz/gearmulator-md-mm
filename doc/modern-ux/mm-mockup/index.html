@@ -1849,7 +1849,10 @@ const kitName=k=>"K"+String(k+1).padStart(2,"0")+" "+((k===S.kit?S.workName:S.ki
    machine plays: its transport, its library, its undo (in C++). The UI hands those actions to
    the host through these calls; a call the host does not have is done the mockup's way.
      start()                          the page is up
-     edited(what)                     a gesture edited the view: "struct", "sound" or "commit" (it ended)
+     edited(what, kind)               a gesture edited the view: "struct", "sound" or "commit" (it ended);
+                                      kind names the document it edited ("pattern", "kit", "song",
+                                      "global") when the gesture knows, else the host takes what
+                                      "struct" (pattern, song) or "sound" (kit) edit
      slotWritten(kind, slot)          a library gesture wrote another slot ("kit" | "pattern")
      undo(), redo(), history()        undo lives with the host; history() = {undo, redo} counts
      togglePlay(), ownsClock          the machine is the sequencer
@@ -1857,9 +1860,16 @@ const kitName=k=>"K"+String(k+1).padStart(2,"0")+" "+((k===S.kit?S.workName:S.ki
      kit(op, k)                       "save" | "load" | "saveAs" | "reload"
      tempo(bpm), mutes()              the machine's tempo; the synth tracks' mutes changed
      playKey(note), joy(xy), learnBind(target, knob)
+     modulators(setup)                the Control workspace's app sources or links changed: the
+                                      host's engine runs them ({sources, links}, ctlSetup()); it
+                                      shows their moving values with MMView.setModulation
+     notes                            the host's words for the Control sources ({ccSource, appSource})
      engine(kind), firstRun(), bootScreen(on), renderPst(), engineLabels
      audioDoc(), audioSend(command), audioMeter(on)   the AUDIO / MIDI panel's devices
-   The view's side, for a host: window.MMView (130-main.js). */
+   Every call here is one a host must have: the plug-in's (mmAdapter.js) implements all of them
+   (sync-mmstudio-skin.py checks both ways).
+   The view's side, for a host: window.MMView (130-main.js): values to read, setters, and
+   disable(capability, reason) for what the host's engine cannot do. */
 const HOST=window.MMHost||{};
 
 /* ===== Feedback: toast, TX lamp, dialogs ===== */
@@ -1874,8 +1884,8 @@ function ask(html,btns,cls=""){const d=$("#dlg");d.innerHTML=`<div class="dlgbox
    EMU: the app drives that screen itself (the emulator can press the panel).
    HW: edits queue up until you open the screen and press Send. */
 let pstT;
-function structEdited(){tx();if(HOST.edited){HOST.edited("struct");return}if(S.engine==="emu"){S.patSent="recv";renderPst();clearTimeout(pstT);pstT=setTimeout(()=>{S.patSent="live";renderPst()},650)}else{S.pend++;S.patSent="pend";renderPst()}}
-function soundEdited(){tx();setKitState("edited");if(HOST.edited)HOST.edited("sound")}
+function structEdited(kind){tx();if(HOST.edited){HOST.edited("struct",kind);return}if(S.engine==="emu"){S.patSent="recv";renderPst();clearTimeout(pstT);pstT=setTimeout(()=>{S.patSent="live";renderPst()},650)}else{S.pend++;S.patSent="pend";renderPst()}}
+function soundEdited(kind){tx();setKitState("edited");if(HOST.edited)HOST.edited("sound",kind)}
 function renderPst(){if(HOST.renderPst)return HOST.renderPst();const p=$("#pst");if(!p)return;if(S.engine==="hw"&&S.pend){p.textContent="SEND "+S.pend;p.className="pst warn";p.title="Unsent pattern and song edits. Click to send them."}
  else if(S.patSent==="recv"){p.textContent="RECV";p.className="pst";p.title="The emulator is on SYSEX RECV and takes the dump."}else{p.textContent="";p.className="pst"}}
 function sendDialog(){ask(`<div class="lcdbig recv">SYSEX RECV · WAITING…</div><p>The Monomachine only accepts a dump on its SysEx receive screen. <b>${S.pend}</b> edit${S.pend===1?"":"s"} to send.</p>
@@ -1911,7 +1921,7 @@ function renderSub(){const t=S.sel,tr=trk(t);let h="";
  else if(S.ws==="mix")h=L2("route","ROUTE",S.routing.replace("3xSTEREO+AB=MIX","3xST+AB=MIX"),"Global routing: 3xSTEREO, 3xSTEREO+AB=MIX or 6xMONO. Click to step.",1,17)+L2("","IN","A B","",0,6);
  else if(S.ws==="perform")h=L2("pmode","MODE",{normal:"AUTO",multi:"MULTI",map:"MAP",poly:"POLY"}[S.mode],"Keyboard mode: auto track, multi trig, multi map or poly. Click to step.",1,10)+L2("","",S.mode==="multi"?["ALL TRK","SPLIT","SEQ STRT","SEQ TRNS"][S.multi.mode]:"","",0,9)+L2("","CH",{normal:"09",multi:"07",map:"08",poly:"09"}[S.mode],"MIDI channel of this keyboard mode","",5);
  else if(S.ws==="control")h=L2("","IN","CH1","Controller input channel",0,6)+L2("","CC OUT","0/s","CCs sent to the machine per second",0,11,"ccrate")+L2("","MAX","300/s","The editor thins CC output above this rate",0,10);
- else h=L2("","SONG","01","",0,7)+L2("","ROWS",S.song.length,"",0,7)+L2("","BARS",Math.round(songSteps()/16),"",0,7)+L2("","TIME",songTime(),"",0,8);
+ else h=L2("","SONG",String((S.songSlot??0)+1).padStart(2,"0"),"",0,7)+L2("","ROWS",S.song.length,"",0,7)+L2("","BARS",Math.round(songSteps()/16),"",0,7)+L2("","TIME",songTime(),"",0,8);
  $("#lcd2").innerHTML=h}
 
 /* ===== Controls: one key-style value control for everything ===== */
@@ -1927,7 +1937,7 @@ function ref(el){const d=el.dataset,t=d.t!=null?+d.t:S.sel,tr=trk(t),g=d.g;
   case"mmap":{const r=S.mmap[+d.i];return[r,d.n,{name:d.n,...{trn:{max:127,signed:1},ofs:{en:["---",...Array.from({length:64},(_,i)=>String(i).padStart(2,"0"))]},len:{max:64},tim:{en:["DIR","1","2","4","8","16","32"]}}[d.n]},t,g]}}}
 const getV=el=>{const[o,n]=ref(el);return o[n]};
 function setV(el,v){const[o,n,m,t,g]=ref(el);v=clamp(Math.round(v),0,maxOf(m));if(o[n]===v)return;o[n]=v;
- if(PAGES.includes(g)||g==="MID"||g==="lev"||g==="menv"||g==="asg"||g==="cc")soundEdited();else structEdited();
+ if(g==="cc")soundEdited("global");else if(PAGES.includes(g)||g==="MID"||g==="lev"||g==="menv"||g==="asg")soundEdited();else if(g==="src"||g==="link")ctlChanged();else structEdited();
  if(g.startsWith("LF")&&(+el.dataset.n<2)){if(+el.dataset.n===0)o[1]=0;render();return}
  syncControls();redraw()}
 function pc(g,n,{t,label,cls="",extra=""}={}){if(n==null)return`<div class="pc empty" aria-hidden="true"></div>`;
@@ -2362,7 +2372,7 @@ function renderKb(){const[lo,hi]=kbRange(),whites=[];for(let n=lo;n<=hi;n++)if(!
   h+=`<div class="zone" style="left:0;width:${x}%;background:var(--ledg)"></div><div class="zone" style="left:${x}%;width:${100-x}%;background:var(--led)"></div><div class="splitm" id="splitm" style="left:${x}%" title="Drag the split point"><span>SPLIT ${noteName(sk)} · T${S.multi.splitTrack}-6 above</span></div>`}
  return h}
 function mapBands(){const[lo,hi]=kbRange(),whites=[];for(let n=lo;n<=hi;n++)if(!isBlack(n))whites.push(n);const ww=100/whites.length,xOf=n=>{let i=whites.findIndex(w=>w>=n);if(i<0)i=whites.length;return i*ww};let from=0;
- return S.mmap.map((r,i)=>{const a=Math.max(from,lo),b=Math.min(r.hi,hi);from=r.hi+1;if(b<lo||a>hi)return"";const x0=xOf(a),x1=xOf(b+1);return`<div class="band ${i===S.mmapSel?"sel":""}" data-band="${i}" style="left:${x0}%;width:${Math.max(2,x1-x0)}%">${patName(r.pat)}${r.trn!==0&&r.trn!==64?"":""}</div>`}).join("")}
+ return S.mmap.map((r,i)=>{const a=Math.max(from,lo),b=Math.min(r.hi,hi);from=r.hi+1;if(b<lo||a>hi)return"";const x0=xOf(a),x1=xOf(b+1);return`<div class="band ${i===S.mmapSel?"sel":""}" data-band="${i}" style="left:${x0}%;width:${Math.max(2,x1-x0)}%">${r.pat<0?"CUR":patName(r.pat)}${r.trn!==0&&r.trn!==64?"":""}</div>`}).join("")}
 ED.menv={draw(g,W,H){const e=S.menv,ink=cssv("--ink"),T=18,B=H-10,y=v=>B-v*(B-T),a=e.ATK/127*W*.22,d=e.DEC/127*W*.24,s=e.SUS/127,r=e.REL>=127?W*.3:e.REL/127*W*.26,hold=W*.28;grid(g,W,H);
   g.strokeStyle=ink;g.lineWidth=2.2;g.beginPath();g.moveTo(0,y(0));g.lineTo(a,y(1));g.lineTo(a+d,y(s));g.lineTo(a+d+hold,y(s));g.lineTo(Math.min(W,a+d+hold+r),e.REL>=127?y(s):y(0));g.stroke();label(g,"ADSR over all tracks"+(e.REL>=127?" · REL ∞":""))},
  handles(W,H){const e=S.menv,T=18,B=H-10,y=v=>B-v*(B-T),a=e.ATK/127*W*.22,d=e.DEC/127*W*.24,hold=W*.28;return[{x:Math.max(5,a),y:y(1),k:"ATK",drag:x=>e.ATK=clamp(Math.round(x/(W*.22)*127))},{x:a+d,y:y(e.SUS/127),k:"DEC · SUS",drag:(x,yy)=>{e.DEC=clamp(Math.round((x-a)/(W*.24)*127));e.SUS=clamp(Math.round((B-yy)/(B-T)*127))}},
@@ -2432,17 +2442,22 @@ function curveF(c,x){return c==="exp"?x*x:c==="log"?Math.sqrt(x):x}
 function ccOf(t,pid){const[pg,i]=pid.split(".");if(pg==="MID")return"NRPN "+(0x38+ +i);return"CC "+(CCBASE[pg]+ +i)}
 function applySrc(src){S.ctl.links.filter(l=>l.src===src.id).forEach(l=>{if(!pname(l.t,l.pid))return;let x=src.val/127;if(l.inv)x=1-x;x=curveF(l.curve,x);const[pg,i]=l.pid.split(".");const m=meta(l.t,pg,+i);trk(l.t).v[pg][+i]=clamp(Math.round((l.min+(l.max-l.min)*x)/127*maxOf(m)),0,maxOf(m));S.ctl.sent++})}
 let ctlRaf=0;function ctlRefresh(){if(ctlRaf)return;ctlRaf=requestAnimationFrame(()=>{ctlRaf=0;syncControls();$$(".srch").forEach(h=>{const s2=srcById(h.dataset.src);h.style.setProperty("--f",s2.val/127*100+"%");h.querySelector(".sv").textContent=s2.val})})}
-setInterval(()=>{const r=$("#ccrate");if(r){r.textContent=`${S.ctl.sent}/s`;r.classList.toggle("hot",S.ctl.sent>300)}S.ctl.sent=0},1000);
+setInterval(()=>{const r=$("#ccrate"),n=S.ctl.rate??S.ctl.sent;if(r){r.textContent=`${n}/s`;r.classList.toggle("hot",n>300)}S.ctl.sent=0},1000);
 function ctlTick(){S.ctl.phase++;S.ctl.sources.forEach(sr=>{const n=RATES[sr.RATE]||8;
  if(sr.kind==="lfo"){const ph=(S.ctl.phase%n)/n;sr.val=clamp(Math.round(64+lshape(sr.SHAPE,ph)*63*sr.DEPTH/100));applySrc(sr)}
  if(sr.kind==="rnd"){if(S.ctl.phase%n===0)sr._t=Math.round(Math.random()*127);const a=1-sr.SMOOTH/140;sr.val=clamp(Math.round(sr.val+(sr._t-sr.val)*a));applySrc(sr)}});if(S.ws==="control")ctlRefresh()}
+/* The app sources and their links, as a value (a host's engine runs them): the LFO and Random
+   sources (not the controller's knob rows) and the links from them. */
+function ctlSetup(){const app=S.ctl.sources.filter(x=>x.kind!=="cc");return JSON.parse(JSON.stringify({sources:app,links:S.ctl.links.filter(l=>app.some(x=>x.id===l.src))}))}
+/* the app sources' setup changed: a host that runs them gets the new one */
+function ctlChanged(){tx();if(HOST.modulators)HOST.modulators(ctlSetup())}
 function learnBind(k){const lt=S.learnT;if(!lt)return;if(HOST.learnBind)HOST.learnBind(lt,k);const id="cc"+(20+k);if(S.ctl.links.some(l=>l.src===id&&l.t===lt.t&&l.pid===lt.pid)){toast("Already mapped.");return}
  S.ctl.links.push({src:id,t:lt.t,pid:lt.pid,min:0,max:127,curve:"lin",inv:false});S.learnT=null;S.ctl.sel=id;syncControls();toast(`Knob ${k} (CC ${20+k}) → ${tLabel(lt.t)} ${pidLabel(lt.t,lt.pid)}.`);if(S.ws==="control")render()}
 const ALLT=[0,1,2,3,4,5,6,7,8,9,10,11];
 function targetOpts(t){return pagesOf(t).flatMap(pg=>pnames(t,pg).map((n,i)=>n?opt(pg+"."+i,pg+" "+n,""):"")).join("")}
 function renderControl(){const C=S.ctl,sel=srcById(C.sel)||C.sources[0];
  const mx=`<div class="mx"><span></span>${ALLT.map(i=>`<span class="mxh" title="${trk(i).name}"><b>${tLabel(i)}</b><small>${i<6?shortM(trk(i).m):"CH"+String(trk(i).ch).padStart(2,"0")}</small></span>`).join("")}
-  ${C.sources.map(sr=>`<button class="srch ${sr.id===C.sel?"sel":""} k-${sr.kind}" data-src="${sr.id}" style="--f:${sr.val/127*100}%"><span class="sk">${sr.kind==="cc"?"CC "+sr.cc:"APP"}</span><b>${sr.label}</b><span class="sv mono">${sr.val}</span></button>
+  ${C.sources.map(sr=>`<button class="srch ${sr.id===C.sel?"sel":""} k-${sr.kind}" data-src="${sr.id}" style="--f:${sr.val/127*100}%"${HOST.notes?` title="${sr.kind==="cc"?HOST.notes.ccSource:HOST.notes.appSource}"`:""}><span class="sk">${sr.kind==="cc"?"CC "+sr.cc:"APP"}</span><b>${sr.label}</b><span class="sv mono">${sr.val}</span></button>
    ${ALLT.map(i=>{const ls=C.links.filter(l=>l.src===sr.id&&l.t===i);return`<button class="mxc ${ls.length?"on":""} ${sr.id===C.sel&&C.selT===i?"sel":""}" data-mxsrc="${sr.id}" data-mxt="${i}" title="${ls.map(l=>pidLabel(i,l.pid)).join(", ")||"no link"}">${ls.slice(0,2).map(l=>`<i>${pname(i,l.pid)}</i>`).join("")}${ls.length>2?`<i>+${ls.length-2}</i>`:""}</button>`}).join("")}`).join("")}</div>`;
  const links=C.links.map((l,li)=>({l,li})).filter(o=>o.l.src===sel.id&&(C.selT==null||o.l.t===C.selT));
  const appParams=sel.kind==="lfo"?`<div class="irow"><span class="ilab">Shape</span><div class="shapes">${[0,2,4,6,8,10].map(i=>`<button data-srcshape="${i}" aria-pressed="${sel.SHAPE===i}" title="${LWAVE[i]}">${shapeIcon(i)}</button>`).join("")}</div></div>
@@ -2451,7 +2466,7 @@ function renderControl(){const C=S.ctl,sel=srcById(C.sel)||C.sources[0];
   :sel.kind==="rnd"?`<div class="irow"><span class="ilab">Rate</span><span class="seg" data-set="srcrate">${Object.keys(RATES).map(r=>`<button data-v="${r}" aria-pressed="${sel.RATE===r}">${r}</button>`).join("")}</span></div>
    <div class="irow"><span class="ilab">Smooth</span><div style="width:140px"><div class="pc" role="slider" tabindex="0" aria-label="SMOOTH" data-g="src" data-n="SMOOTH" data-src="${sel.id}"><span>SMOOTH</span><b></b></div></div></div>`:"";
  const insp=`<section class="card"><header><h3>${sel.label}</h3><span>${sel.kind==="cc"?"CC "+sel.cc+" · from your controller":"<b class='apponly'>App only</b> · not saved in the kit"}</span></header>
-  ${sel.kind!=="cc"?`<div class="note">Runs in the app and sends CCs to the Monomachine while it plays. A lock wins on its step.</div>`:""}
+  ${sel.kind!=="cc"?`<div class="note">${HOST.notes?.appSource||"Runs in the app and sends CCs to the Monomachine while it plays. A lock wins on its step."}</div>`:""}
   ${appParams}
   <div class="lhead"><span class="cap">Targets</span>${C.selT!=null?`<button class="ptog on" data-selt="all"><i class="led"></i>${tLabel(C.selT)} only</button>`:`<span class="note">${links.length} target${links.length===1?"":"s"}</span>`}</div>
   <div class="lnks">${links.map(({l,li})=>`<div class="lnk"><span class="lcdchip" title="${ccOf(l.t,l.pid)} on the track channel">${tLabel(l.t)} ${pidLabel(l.t,l.pid)}</span>
@@ -2471,13 +2486,13 @@ document.addEventListener("click",e=>{if(S.ws!=="control")return;const C=S.ctl;
  const sh=e.target.closest(".srch");if(sh){if(sh.dataset.moved){sh.dataset.moved="";return}C.sel=sh.dataset.src;C.selT=null;render();return}
  const mc=e.target.closest(".mxc");if(mc){C.sel=mc.dataset.mxsrc;C.selT=+mc.dataset.mxt;C.addT=C.selT;render();return}
  if(e.target.closest("[data-selt]")){C.selT=null;render();return}
- const ss=e.target.closest("[data-srcshape]");if(ss){srcById(C.sel).SHAPE=+ss.dataset.srcshape;render();return}
- const sr=e.target.closest(".seg[data-set=srcrate] button");if(sr){srcById(C.sel).RATE=sr.dataset.v;render();return}
- const lc=e.target.closest(".seg[data-set=lcurve] button");if(lc){C.links[+lc.parentElement.dataset.li].curve=lc.dataset.v;render();return}
- const li=e.target.closest("[data-linv]");if(li){const l=C.links[+li.dataset.linv];l.inv=!l.inv;render();return}
- const ld=e.target.closest("[data-ldel]");if(ld){C.links.splice(+ld.dataset.ldel,1);render();return}
- if(e.target.closest("#laddl")){const pid=$("#lp").value,t=C.addT;if(C.links.some(l=>l.src===C.sel&&l.t===t&&l.pid===pid)){toast("Already a target.");return}C.links.push({src:C.sel,t,pid,min:0,max:127,curve:"lin",inv:false});render();return}
- const as=e.target.closest("[data-addsrc]");if(as){const k=as.dataset.addsrc,n=C.sources.filter(x=>x.kind===k).length;const id=k+"X"+Date.now();C.sources.push(k==="lfo"?{id,kind:"lfo",label:"LFO "+"ABCDEFGH"[n],val:64,SHAPE:2,RATE:"1",DEPTH:80}:{id,kind:"rnd",label:"Random "+"ABCDEFGH"[n],val:64,RATE:"1/8",SMOOTH:0,_t:64});C.sel=id;render();return}});
+ const ss=e.target.closest("[data-srcshape]");if(ss){srcById(C.sel).SHAPE=+ss.dataset.srcshape;ctlChanged();render();return}
+ const sr=e.target.closest(".seg[data-set=srcrate] button");if(sr){srcById(C.sel).RATE=sr.dataset.v;ctlChanged();render();return}
+ const lc=e.target.closest(".seg[data-set=lcurve] button");if(lc){C.links[+lc.parentElement.dataset.li].curve=lc.dataset.v;ctlChanged();render();return}
+ const li=e.target.closest("[data-linv]");if(li){const l=C.links[+li.dataset.linv];l.inv=!l.inv;ctlChanged();render();return}
+ const ld=e.target.closest("[data-ldel]");if(ld){C.links.splice(+ld.dataset.ldel,1);ctlChanged();render();return}
+ if(e.target.closest("#laddl")){const pid=$("#lp").value,t=C.addT;if(C.links.some(l=>l.src===C.sel&&l.t===t&&l.pid===pid)){toast("Already a target.");return}C.links.push({src:C.sel,t,pid,min:0,max:127,curve:"lin",inv:false});ctlChanged();render();return}
+ const as=e.target.closest("[data-addsrc]");if(as){const k=as.dataset.addsrc,n=C.sources.filter(x=>x.kind===k).length;const id=k+"X"+Date.now();C.sources.push(k==="lfo"?{id,kind:"lfo",label:"LFO "+"ABCDEFGH"[n],val:64,SHAPE:2,RATE:"1",DEPTH:80}:{id,kind:"rnd",label:"Random "+"ABCDEFGH"[n],val:64,RATE:"1/8",SMOOTH:0,_t:64});C.sel=id;ctlChanged();render();return}});
 document.addEventListener("change",e=>{if(e.target.id==="lt"){S.ctl.addT=+e.target.value;render()}});
 
 /* ===== Song (from the MD Editor, with the MM's per-row transpose, 6 + 6 mutes, 200 rows) ===== */
@@ -2513,7 +2528,7 @@ function renderSong(){const sel=S.song[S.songSel]||S.song[0];
  const lines=Math.ceil(200/16);
  $("#main").innerHTML=`<div class="songui lay2"><div class="songleft"><section class="card"><header><h3>Patterns</h3><span>drag onto the grid · click = add after row ${String(S.songSel+1).padStart(3,"0")}</span></header>${palette}</section>
    <section class="card"><header><h3>Selected row</h3><span class="rowacts"><button data-rowact="up" title="Move left">←</button><button data-rowact="down" title="Move right">→</button><button data-rowact="dup">Duplicate</button><button data-rowact="loop">Add loop</button><button data-rowact="del" class="danger">Delete</button></span></header><div class="insp">${insp}</div></section></div>
-  <section class="card"><header><h3>Arrangement</h3><span class="note">${S.song.length} of 200 rows · T track transpose · M mutes · B tempo</span></header>
+  <section class="card"><header><h3>Arrangement</h3><span class="note">${S.songSlot!=null?`Song ${String(S.songSlot+1).padStart(2,"0")} (the machine's current song) · `:""}${S.song.length} of 200 rows · T track transpose · M mutes · B tempo</span></header>
    <div class="durbar" title="Song shape by time (length × repeats)">${S.song.map((r,i)=>r.type?`<i class="db dbm"></i>`:`<i class="db ${i===S.songSel?"sel":""}" data-row="${i}" style="flex:${rowLen(r)*r.rep} 1 0"></i>`).join("")}</div>
    <div class="slotgrid" id="tl">${Array.from({length:lines},(_,line)=>`<span class="sglab">${String(line*16+1).padStart(3,"0")}</span>${Array.from({length:16},(_,c)=>{const i=line*16+c,r=S.song[i];if(i>=200)return`<span></span>`;
      if(!r)return`<div class="scell empty" data-i="${i}"></div>`;
@@ -2872,7 +2887,7 @@ function l2step(k,d,fine){
  if(k==="mult"){const o=["1X","2X","3/4X","3/2X"];S.mult=o[(o.indexOf(S.mult)+d+4)%4];structEdited()}
  if(k==="swing"){S.swingAmt=clamp(S.swingAmt+d,50,80);structEdited()}
   if(k==="ptrn"){S.patTrn=clamp(S.patTrn+d,0,127);structEdited()}
- if(k==="route"){S.routing=ROUTES[(ROUTES.indexOf(S.routing)+d+3)%3];soundEdited()}
+ if(k==="route"){S.routing=ROUTES[(ROUTES.indexOf(S.routing)+d+3)%3];soundEdited("global")}
  if(k==="side"){setSide(S.side==="midi"?"int":"midi");return}
  if(k==="pmode"){const o=PMODES.map(p=>p[0]);S.mode=o[(o.indexOf(S.mode)+d+4)%4]}
  render()}
@@ -2946,7 +2961,7 @@ document.addEventListener("click",e=>{
   if(k==="arpmode"){tr.arp.MODE=+v;structEdited();render();return}if(k==="arpplay"){tr.arp.PLAY=+v;structEdited();render();return}
   if(k==="scale"){tr.tr.SCALE=+v;structEdited();render();return}if(k==="port"){tr.port=+v;soundEdited();render();return}
   if(k==="ltrig"){V(sg.parentElement.dataset.l)[2]=+v;soundEdited();render();return}
-  if(k==="routing"){S.routing=v;soundEdited();render();return}
+  if(k==="routing"){S.routing=v;soundEdited("global");render();return}
   if(k==="mtmode"){S.multi.mode=+v;render();return}if(k==="astab"){S.asTab=v;render();return}if(k==="astrk"){S.sel=+v;render();return}
   if(k==="loopkind"){const r=S.song[S.songSel];r.type=v;if(v==="halt")r.to=S.songSel;if(v==="jump"&&r.to<=S.songSel)r.to=Math.min(S.song.length-1,S.songSel+1);if(v==="loop"){if(!r.count)r.count=2;if(r.to>=S.songSel)r.to=Math.max(0,S.songSel-1)}structEdited();render();return}}
  const at=e.target.closest("[data-arptrig]");if(at){const a=trk(S.sel).arp,k=at.dataset.arptrig;a[k]=a[k]?0:1;structEdited();render();return}
@@ -3009,7 +3024,7 @@ document.addEventListener("change",e=>{const id=e.target.id,v=e.target.value,tr=
  m=id.match(/^asd(\d)$/);if(m){S.tracks[asgT()].assign.tabs[S.asTab][+m[1]].d=+v;soundEdited();return}
  m=id.match(/^mpat(\d+)$/);if(m){S.mmap[+m[1]].pat=+v;render();return}
  if(id==="trigpos"){tr.trigpos=v===""?null:+v;soundEdited();render();return}
- if(id==="mch"){tr.ch=+v;soundEdited();render();return}});
+ if(id==="mch"){tr.ch=+v;soundEdited("global");render();return}});
 
 /* ===== Keys ===== */
 document.addEventListener("keydown",e=>{const mod=e.metaKey||e.ctrlKey,inField=e.target.closest?.("input,select,textarea");
@@ -3043,7 +3058,7 @@ function setEng(st){S.eng=st;const[txt,led]=ENG[st],b=document.querySelector(".l
  const ready=engReady();document.querySelector(".lcdpanel").classList.toggle("engwait",!ready);document.body.classList.toggle("engwait",!ready);
  ["rec","play"].forEach(id=>{const k=document.getElementById(id);if(k)k.disabled=!ready});
  bootScreen(st==="boot");
- b.title=ready?"Engine: running. Click to switch emulator or hardware, or load another ROM.":"Engine: "+txt.toLowerCase()+". Editing starts when it is ready."}
+ b.title=ENG[st][2]||(ready?"Engine: running. Click to switch emulator or hardware, or load another ROM.":"Engine: "+txt.toLowerCase()+". Editing starts when it is ready.")}
 /* while BOOTING OS the LCD shows a firmware-style start-up screen (the text is the editor's, not a copy of the ROM's) */
 let bootT=[];function bootScreen(on){if(HOST.bootScreen)return HOST.bootScreen(on);const el=$("#bootscr");if(!el)return;bootT.forEach(clearTimeout);bootT=[];el.classList.toggle("on",on);if(!on)return;$("#bsmk").textContent=S.plate==="mk1"?"SFX-60":"SFX-60 MKII";
  const steps=[["OS 1.32B · TESTING MEMORY",15],["BATTERY RAM · 128 KITS",40],["128 PATTERNS · 24 SONGS",65],[S.plate==="mk1"?"DSP · FACTORY WAVES":"DSP · 64 DIGIPRO WAVES",85],["STARTING SEQUENCER",100]];
@@ -3053,8 +3068,9 @@ function startEngine(kind){engT.forEach(clearTimeout);engT=[];if(S.playing)toggl
  setEng("loading");engT.push(setTimeout(()=>setEng("boot"),700));engT.push(setTimeout(()=>{setEng("ready");toast("Emulator ready: the real OS 1.32B is running")},1800))}
 /* ===== Transport ===== */
 let clock=null;
-function tick(){const prev=S.step;S.step=(S.step+1)%S.len;ctlTick();if(S.step===0&&S.queued!=null){applyPattern(S.queued);return}
- const pp=Math.floor(S.step/16);$$(".pl").forEach(b=>b.classList.toggle("play",+b.dataset.plp===pp&&S.playing));
+function tick(){const prev=S.step;S.step=(S.step+1)%S.len;ctlTick();if(S.step===0&&S.queued!=null){applyPattern(S.queued);return}stepShown(prev)}
+/* the playhead, POSITION, the page LEDs and the lamps at S.step (the step before it was prev) */
+function stepShown(prev){const pp=Math.floor(S.step/16);$$(".pl").forEach(b=>b.classList.toggle("play",+b.dataset.plp===pp&&S.playing));
  if(S.follow&&S.ws==="seq"&&!S.viewAll&&pp!==S.page&&!laneDraw){S.page=pp;render()}
  $("#tempoled").classList.toggle("on",S.step%4===0);setPos();queueMicrotask(movePH);
  $$(`.mst[data-s="${prev}"],.lb[data-s="${prev}"],.tc[data-s="${prev}"]`).forEach(c=>c.classList.remove("ph"));$$(`.mst[data-s="${S.step}"],.lb[data-s="${S.step}"],.tc[data-s="${S.step}"]`).forEach(c=>c.classList.add("ph"));
@@ -3079,6 +3095,9 @@ function movePH(glide=true){let ph=document.getElementById("phcol");
  ph.style.opacity=r.right>v.left+1&&r.left<v.right-1?"1":"0";phX=r.left}
 addEventListener("scroll",()=>{if(S.playing)movePH(false)},true);addEventListener("resize",()=>{if(S.playing)movePH(false)});
 function setPos(){$("#pos").textContent=S.playing&&S.step>=0?String(Math.floor(S.step/16)+1).padStart(2,"0")+"."+String(S.step%16+1).padStart(2,"0"):"--.--"}
+/* A host's transport (P6): the machine's step and whether it plays, shown. */
+function setStep(step){const prev=S.step;S.step=step;stepShown(prev)}
+function setPlaying(on){if(S.playing===on)return;S.playing=on;if(!on){$$(".pl").forEach(b=>b.classList.remove("play"));$("#tempoled").classList.remove("on");$$(".ph").forEach(c=>c.classList.remove("ph"));S.step=-1}setPos();renderTop();redraw();movePH(false)}
 function togglePlay(){if(HOST.togglePlay)return HOST.togglePlay();if(!S.playing&&S.eng&&!engReady())return;S.playing=!S.playing;clearInterval(clock);$$(".pl").forEach(b=>b.classList.remove("play"));$("#tempoled").classList.remove("on");$$(".ph").forEach(c=>c.classList.remove("ph"));if(S.playing){S.step=-1;tick();restartClock()}else S.queued=null;setPos();renderTop();redraw();movePH(false)}
 
 /* ===== Render ===== */
@@ -3097,8 +3116,72 @@ addEventListener("resize",()=>{if(S.ws==="seq"){fitLane();drawSlides();alignLock
 
 /* deep links: #ws=sound&t=3&dock=arp&plate=mk1&mode=multi */
 (()=>{const q=new URLSearchParams(location.hash.slice(1));if(q.get("plate")){S.plate=q.get("plate");document.documentElement.dataset.plate=S.plate}if(q.get("ws"))S.ws=q.get("ws");if(q.get("side")==="midi")S.side="midi";{const t=(q.get("t")?+q.get("t")-1:0)+((S.ws==="seq"||S.ws==="sound")&&S.side==="midi"?6:0);S.sel=t;select(t)}if(q.get("dock"))S.dock=q.get("dock");if(q.get("mode"))S.mode=q.get("mode");if(q.get("mt"))S.multi.mode=+q.get("mt");if(q.get("all"))S.viewAll=true;autoRange(S.sel)})();
-/* The view's API for a host (P6): the state it renders and the calls a host makes. */
-window.MMView={S,H,LIB,ENG,applyKit,applyPat,emptyPat,clearedKit,captureKit,capturePat,setKitState,render,renderTop,drawLib,toast,ask,setEng,
- engReady,ctlTick,setPos,movePH,redraw,audible,flashTracks,goWs,clickStep,autoRange,kitSave,machName,kitName,pname,asgT,noteName,audioSelfTest,busy:()=>{try{return !!(drag||laneDraw||rollDrag||active||arpDrag||l2drag||joyDrag||splitDrag||cord||kbDown)}catch(_){return false}}};
+/* ===== The view's side for a host (P6) =====
+   A host reads the view through values (never its state) and sets it through named setters; what
+   its engine cannot do it says with disable(capability, reason). */
+const NA_SEL={
+ midiMutes:[6,7,8,9,10,11].flatMap(t=>[`[data-mute="${t}"]`,`[data-solo="${t}"]`,`[data-gmute="${t}"]`]).join(","),
+ poly:'[data-pmode="poly"]',multiTrig:'[data-set="mtmode"] button,[data-strk],[data-tim],#splitm',
+ multiMap:'.maprow [data-mhi],.maprow select,.maprow .kselbtn,.maprow .pc,[data-mdel],[data-madd],[data-band]',
+ portamento:'[data-set="port"] button',gridRecord:"#rec"};
+const NA_CARD={multiMap:".maprow"};	// a card that also says the reason in words
+const NA={},READING={pattern:new Set(),kit:new Set()},READ_NOTE="Still reading this slot from the machine.";
+function markNa(){
+ for(const[cap,sel] of Object.entries(NA_SEL)){const why=NA[cap]||"";for(const el of $$(sel)){
+  if(why&&el.dataset.na!=="1"){el.dataset.na="1";el.title=why;el.setAttribute("aria-disabled","true")}
+  else if(!why&&el.dataset.na==="1"){delete el.dataset.na;el.removeAttribute("aria-disabled")}}}
+ for(const[cap,sel] of Object.entries(NA_CARD)){const card=$(sel);if(card&&NA[cap]&&!card.querySelector(".statusline"))card.querySelector("header").insertAdjacentHTML("afterend",`<p class="statusline">${NA[cap]}</p>`)}
+ for(const[kind,attr] of [["pattern","ps"],["kit","ks"]])for(const el of $$(`#libpop .${attr}[data-${attr}]`)){const miss=READING[kind].has(+el.dataset[attr]);
+  if(miss!==(el.dataset.na==="1")){if(miss){el.dataset.na="1";el.title=READ_NOTE}else delete el.dataset.na}}}
+let naQueued=false;
+new MutationObserver(()=>{if(!naQueued){naQueued=true;queueMicrotask(()=>{naQueued=false;markNa()})}}).observe(document.body,{childList:true,subtree:true});
+for(const ev of["pointerdown","click","change","wheel","keydown","dragstart"])document.addEventListener(ev,e=>{const el=e.target.closest?.("[data-na]");if(!el)return;e.preventDefault();e.stopImmediatePropagation();if(e.type==="click")toast(el.title)},{capture:true,passive:false});
+function disable(cap,why){NA[cap]=why||"";markNa()}
+function setReading(kind,slots){READING[kind]=new Set(slots);markNa()}
+/* start with nothing: no example kit, pattern, song or mappings */
+function startEmpty(){applyKit({...clearedKit(),multi:S.multi});S.tracks.forEach(t=>t.name=machName(t.m));applyPat(emptyPat(16));S.song=[{type:"end"}];S.songSel=0;
+ S.kits=Array.from({length:128},()=>({name:"",empty:true,data:null}));S.patInfo=Array.from({length:128},()=>({has:false,len:16}));S.patKit=Array(128).fill(0);S.patData={};S.workName="";
+ S.kit=0;S.pat=0;S.queued=null;S.playing=false;S.step=-1;S.ctl.links=[];S.ctl.sources=S.ctl.sources.filter(x=>x.kind==="cc")}
+function setPatternSlot(p,{data,kit,has,len}){S.patKit[p]=kit;S.patInfo[p]={has,len};if(p===S.pat)applyPat(data);else S.patData[p]=data}
+function setKitSlot(k,{name,empty,data}){S.kits[k]={name,empty,data}}
+function setWorkingKit(page,name){applyKit({...page,multi:page.multi??S.multi});S.workName=name}
+function setSong(rows,slot){S.song=rows;S.songSlot=slot;S.songSel=Math.min(S.songSel||0,rows.length-1)}
+function setMidiTracks(list){S.midi.forEach((x,t)=>{x.ch=list[t].ch;x.cc=[...list[t].cc]})}
+function setMultiMap(rows){S.mmap=rows;S.mmapSel=Math.min(S.mmapSel||0,rows.length-1)}
+/* an engine state's LCD label: [text, led "on" | "blink" | "off", tooltip] */
+function setEngineLabel(st,label){ENG[st]=label;if(S.eng===st)setEng(st)}
+/* a host's engine map ([{id, label, available, reason}]) in the engine menu, before the menu's own entries */
+function setEngines(list,current){const sel=$("#engsel");if(!sel)return;const own=["audio","rom"];
+ for(const o of [...sel.options])if(!own.includes(o.value)&&!list.some(e=>e.id===o.value))o.remove();
+ const first=[...sel.options].find(o=>own.includes(o.value))||null;
+ for(const e of list){let o=sel.querySelector(`option[value="${e.id}"]`);if(!o){o=document.createElement("option");o.value=e.id}sel.insertBefore(o,first);o.textContent=e.label;o.disabled=!e.available;o.title=e.available?"":e.reason||""}
+ if(current){sel.value=current;S.engine=current}}
+/* the AUDIO / MIDI entry of the engine menu: only where the host has the devices (a standalone) */
+function setAudioEntry(on){const o=document.querySelector('#engsel option[value="audio"]');if(o)o.hidden=o.disabled=!on}
+/* the app sources and their links as the host's engine took them (ctlSetup() shape); the knob rows and their links stay */
+function setCtlSetup({sources,links}){const cc=S.ctl.sources.filter(x=>x.kind==="cc"),ccIds=new Set(cc.map(x=>x.id)),old=S.ctl.sources;
+ S.ctl.sources=[...cc,...sources.map(x=>({...x,val:old.find(o=>o.id===x.id)?.val??64}))];
+ S.ctl.links=[...S.ctl.links.filter(l=>ccIds.has(l.src)),...links];
+ if(!srcById(S.ctl.sel))S.ctl.sel=S.ctl.sources[0]?.id;if(S.ws==="control")render()}
+/* the app sources as the host's engine runs them: their values ({id: 0-127}) and the CC rate */
+function setModulation({values,ccPerSecond}){for(const sr of S.ctl.sources)if(values[sr.id]!=null)sr.val=values[sr.id];S.ctl.rate=ccPerSecond;if(S.ws==="control")ctlRefresh()}
+const copy=o=>JSON.parse(JSON.stringify(o));
+window.MMView={
+ /* values */
+ captureKit,capturePat,clearedKit,emptyPat,audible,engReady,asgT,noteName,pname,machName,kitName,
+ busy:()=>{try{return !!(drag||laneDraw||rollDrag||active||arpDrag||l2drag||joyDrag||splitDrag||cord||kbDown)}catch(_){return false}},
+ libBusy:()=>LIB.renaming!=null||LIB.drag!=null,
+ sel:()=>S.sel,mode:()=>S.mode,playing:()=>S.playing,step:()=>S.step,tempo:()=>S.bpm,engineState:()=>S.eng,kitState:()=>S.kitState,workName:()=>S.workName,
+ kitSlot:k=>({...S.kits[k]}),patternSlot:p=>({data:S.patData[p],kit:S.patKit[p],...S.patInfo[p]}),patternLength:p=>p===S.pat?S.len:S.patInfo[p].len,
+ song:()=>copy(S.song),routing:()=>S.routing,midiTracks:()=>S.midi.map(x=>({ch:x.ch,cc:[...x.cc]})),multi:()=>copy(S.multi),
+ learnTarget:()=>S.learn&&S.learnT?{...S.learnT}:null,learning:()=>!!S.learn,ctlSetup,
+ /* setters */
+ startEmpty,setCurrent:({pattern,kit})=>{if(pattern!=null)S.pat=pattern;if(kit!=null)S.kit=kit},setQueued:q=>{S.queued=q},setTempo:bpm=>{S.bpm=bpm},
+ setPlaying,setStep,setPatternSlot,setKitSlot,setWorkingKit,setSong,setRouting:r=>{S.routing=r},setMidiTracks,setMultiMap,
+ setEng,setEngineLabel,setEngines,setAudioEntry,setKitState,clearLearnTarget:()=>{S.learnT=null},setModulation,setCtlSetup,disable,setReading,
+ /* calls */
+ render,renderTop,drawLib,toast,ask,redraw,movePH,setPos,flashTracks,goWs,clickStep,autoRange,kitSave,
+ /* the self-tests (diagnostics only) play the user through the state itself, and the panel's own test */
+ S,audioSelfTest};
 render();H.last=snap();if(HOST.start)HOST.start();else startEngine("emu");{const lb=new URLSearchParams(location.hash.slice(1)).get("lib");if(lb)setTimeout(()=>openLib(lb),2000)}
 </script>
