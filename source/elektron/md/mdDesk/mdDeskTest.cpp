@@ -42,9 +42,9 @@ namespace
 	}
 
 	// apply is pure: the clipboard a copy leaves comes back in the result.
-	EditResult run(const Documents& _docs, const Value& _cmd, Clipboard& _clip)
+	EditResult run(const Documents& _docs, const Value& _cmd, Clipboard& _clip, const EditContext& _context = {})
 	{
-		auto r = apply(_docs, _cmd, _clip);
+		auto r = apply(_docs, _cmd, _clip, _context);
 		if(r.clipboard)
 			_clip = *r.clipboard;
 		return r;
@@ -224,17 +224,26 @@ namespace
 		auto docs = fixtureDocs();
 		Clipboard clip;
 		const auto& k = docs.kits[0];
-		auto r = run(docs, cmd(R"({"op":"param","k":0,"t":3,"i":16,"v":99})"), clip);
+		// Live kit edits change the working kit of the kit that plays, and nothing else.
+		const EditContext plays{uint8_t{0}};
+		check(!run(docs, cmd(R"({"op":"param","k":0,"t":3,"i":16,"v":99})"), clip, plays).errors.empty(),
+			"a kit edit without a working kit is refused");
+		docs.working = WorkingKit{k};
+		check(!run(docs, cmd(R"({"op":"param","k":0,"t":3,"i":16,"v":99})"), clip).errors.empty(),
+			"a kit edit for a kit that does not play is refused");
+		check(!run(docs, cmd(R"({"op":"kitRename","k":0,"name":"DUB ROOM"})"), clip, plays).errors.empty(),
+			"kitRename of the kit that plays is refused (kitName renames it)");
+		auto r = run(docs, cmd(R"({"op":"param","k":0,"t":3,"i":16,"v":99})"), clip, plays);
 		check(r.errors.empty() && r.changes.size() == 1, "kit param edit");
-		auto d = kitDelivery(k, std::get<ed::MdKit>(r.changes[0].after));
+		auto d = kitDelivery(k, std::get<WorkingKit>(r.changes[0].after).kit);
 		check(d.edits.size() == 1 && d.edits[0].kind == LiveEdit::Kind::Param && d.edits[0].track == 3
 			&& d.edits[0].index == 16 && d.edits[0].value == 99, "a param edit is one CC");
 		check(liveEditSysex(d.edits[0]).empty(), "params travel as CCs, not SysEx");
 
 		const auto sd = *ed::mdMachineModel("EFM-SD");
-		r = run(docs, cmd("{\"op\":\"machine\",\"k\":0,\"t\":2,\"model\":" + std::to_string(sd) + "}"), clip);
+		r = run(docs, cmd("{\"op\":\"machine\",\"k\":0,\"t\":2,\"model\":" + std::to_string(sd) + "}"), clip, plays);
 		check(r.errors.empty(), "machine change");
-		d = kitDelivery(k, std::get<ed::MdKit>(r.changes[0].after));
+		d = kitDelivery(k, std::get<WorkingKit>(r.changes[0].after).kit);
 		check(!d.edits.empty() && d.edits[0].kind == LiveEdit::Kind::Machine && d.edits[0].model == sd,
 			"machine change comes first");
 		size_t synthResent = 0;
@@ -249,37 +258,37 @@ namespace
 		const auto romBytes = ed::mdAssignMachine(0, rom, ed::MdMachineInit::Synthesis);
 		check(romBytes[8] == 4 && romBytes[9] == 1, "UW machines set c = 1");
 
-		r = run(docs, cmd(R"({"op":"machine","k":0,"t":2,"model":5})"), clip);
+		r = run(docs, cmd(R"({"op":"machine","k":0,"t":2,"model":5})"), clip, plays);
 		check(!r.errors.empty(), "an undefined machine id is refused");
 
-		r = run(docs, cmd(R"({"op":"lfo","k":0,"t":1,"field":"shape2","v":4})"), clip);
-		d = kitDelivery(k, std::get<ed::MdKit>(r.changes.at(0).after));
+		r = run(docs, cmd(R"({"op":"lfo","k":0,"t":1,"field":"shape2","v":4})"), clip, plays);
+		d = kitDelivery(k, std::get<WorkingKit>(r.changes.at(0).after).kit);
 		check(d.edits.size() == 1 && d.edits[0].kind == LiveEdit::Kind::Lfo, "LFO shape is one live edit");
 		const auto lfo = liveEditSysex(d.edits[0]);
 		check(lfo.size() == 10 && lfo[6] == 0x62 && lfo[7] == ((1 << 3) | 3) && lfo[8] == 4, "set LFO message");
-		r = run(docs, cmd(R"({"op":"lfo","k":0,"t":1,"field":"shape2","v":6})"), clip);
+		r = run(docs, cmd(R"({"op":"lfo","k":0,"t":1,"field":"shape2","v":6})"), clip, plays);
 		check(!r.errors.empty(), "LFO shape 6 is refused");
 
-		r = run(docs, cmd(R"({"op":"masterFx","k":0,"fx":"rhythmEcho","i":3,"v":10})"), clip);
-		d = kitDelivery(k, std::get<ed::MdKit>(r.changes.at(0).after));
+		r = run(docs, cmd(R"({"op":"masterFx","k":0,"fx":"rhythmEcho","i":3,"v":10})"), clip, plays);
+		d = kitDelivery(k, std::get<WorkingKit>(r.changes.at(0).after).kit);
 		const auto fx = liveEditSysex(d.edits.at(0));
 		check(fx[6] == 0x5d && fx[7] == 3 && fx[8] == 10, "rhythm echo parameter is 0x5d");
 
-		r = run(docs, cmd(R"({"op":"group","k":0,"t":4,"kind":"mute","target":5})"), clip);
-		check(r.errors.empty() && std::get<ed::MdKit>(r.changes[0].after).muteGroups[4] == 5, "mute group");
-		r = run(docs, cmd(R"({"op":"group","k":0,"t":4,"kind":"mute","target":4})"), clip);
+		r = run(docs, cmd(R"({"op":"group","k":0,"t":4,"kind":"mute","target":5})"), clip, plays);
+		check(r.errors.empty() && std::get<WorkingKit>(r.changes[0].after).kit.muteGroups[4] == 5, "mute group");
+		r = run(docs, cmd(R"({"op":"group","k":0,"t":4,"kind":"mute","target":4})"), clip, plays);
 		check(!r.errors.empty(), "a track cannot group with itself");
 
-		r = run(docs, cmd(R"({"op":"kitName","k":0,"name":"DUB ROOM"})"), clip);
-		d = kitDelivery(k, std::get<ed::MdKit>(r.changes.at(0).after));
+		r = run(docs, cmd(R"({"op":"kitName","k":0,"name":"DUB ROOM"})"), clip, plays);
+		d = kitDelivery(k, std::get<WorkingKit>(r.changes.at(0).after).kit);
 		check(d.edits.size() == 1 && d.edits[0].kind == LiveEdit::Kind::KitName
 			&& liveEditSysex(d.edits[0]).size() == 24, "kit name is 0x55 with 16 bytes");
 
 		// Copy / paste a sound between tracks.
-		r = run(docs, cmd(R"({"op":"copySound","k":0,"t":0})"), clip);
+		r = run(docs, cmd(R"({"op":"copySound","k":0,"t":0})"), clip, plays);
 		check(clip.sound && r.changes.empty(), "copy sound");
-		r = run(docs, cmd(R"({"op":"pasteSound","k":0,"t":9})"), clip);
-		const auto& pasted = std::get<ed::MdKit>(r.changes.at(0).after);
+		r = run(docs, cmd(R"({"op":"pasteSound","k":0,"t":9})"), clip, plays);
+		const auto& pasted = std::get<WorkingKit>(r.changes.at(0).after).kit;
 		check(pasted.models[9] == k.models[0] && pasted.params[9] == k.params[0] && pasted.lfos[9].track == 9,
 			"paste sound copies machine and values, the LFO targets its new track");
 	}

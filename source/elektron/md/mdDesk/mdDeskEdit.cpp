@@ -4,12 +4,13 @@
 
 #include "elektronData/mdJson.h"
 #include "elektronData/mdMachines.h"
+#include "elektronData/mdNames.h"
 #include "elektronData/mdValidate.h"
 
 #include <algorithm>
 #include <array>
 #include <cmath>
-#include <functional>
+#include <map>
 
 namespace mdDesk
 {
@@ -84,26 +85,37 @@ namespace mdDesk
 		std::visit(Visitor{*this}, _doc);
 	}
 
-	bool accentOn(const ed::MdPattern& _p, const size_t _track, const size_t _step)
+	namespace
 	{
-		const auto bits = _p.accentEditAll ? _p.accentPattern : _p.trackAccent[_track & 15];
-		return (bits >> _step) & 1;
+		// A step mark (accent or slide): one pattern-wide set while the pattern's EDIT ALL is on,
+		// else one set per track.
+		struct Mark
+		{
+			const char* name;
+			uint32_t ed::MdPattern::*editAll;
+			uint64_t ed::MdPattern::*all;
+			decltype(ed::MdPattern::trackAccent) ed::MdPattern::*perTrack;
+		};
+		constexpr Mark g_accent{"accent", &ed::MdPattern::accentEditAll, &ed::MdPattern::accentPattern, &ed::MdPattern::trackAccent};
+		constexpr Mark g_slide{"slide", &ed::MdPattern::slideEditAll, &ed::MdPattern::slidePattern, &ed::MdPattern::trackSlide};
+
+		uint64_t& bitsOf(ed::MdPattern& _p, const Mark& _m, const size_t _track)
+		{
+			return _p.*_m.editAll ? _p.*_m.all : (_p.*_m.perTrack)[_track & 15];
+		}
+
+		bool markOn(const ed::MdPattern& _p, const Mark& _m, const size_t _track, const size_t _step)
+		{
+			const auto bits = _p.*_m.editAll ? _p.*_m.all : (_p.*_m.perTrack)[_track & 15];
+			return (bits >> _step) & 1;
+		}
 	}
 
-	bool slideOn(const ed::MdPattern& _p, const size_t _track, const size_t _step)
-	{
-		const auto bits = _p.slideEditAll ? _p.slidePattern : _p.trackSlide[_track & 15];
-		return (bits >> _step) & 1;
-	}
+	bool accentOn(const ed::MdPattern& _p, const size_t _track, const size_t _step) { return markOn(_p, g_accent, _track, _step); }
+	bool slideOn(const ed::MdPattern& _p, const size_t _track, const size_t _step) { return markOn(_p, g_slide, _track, _step); }
 
 	namespace
 	{
-		constexpr std::array<const char*, 4> g_speeds{"1X", "2X", "3/4X", "3/2X"};
-		constexpr std::array<const char*, 4> g_masterFx{"gateBox", "rhythmEcho", "eq", "dynamix"};
-		constexpr std::array<const char*, 7> g_outputs{"A", "B", "C", "D", "E", "F", "MAIN"};
-		constexpr std::array<const char*, 5> g_lfoFields{"track", "param", "shape1", "shape2", "update"};
-		constexpr std::array<int, 5> g_lfoMax{15, 23, 5, 5, 2};
-
 		// Neutral track values for "clear sound": the machine's own defaults live in
 		// the firmware and cannot be read without saving the kit.
 		constexpr std::array<uint8_t, 24> g_neutral{
@@ -114,13 +126,17 @@ namespace mdDesk
 
 		std::string trackName(const size_t _t) { return "track " + std::to_string(_t + 1); }
 
-		// Reads command arguments; every problem becomes an error line.
+		// Reads command arguments. apply has checked the command against its table row
+		// (types, constant ranges, oneOf), so those are read as they are; `within` is for the
+		// limits that depend on the document (visible steps, song rows, extended mode...) or on
+		// another argument. Every problem becomes an error line.
 		class Args
 		{
 		public:
 			Args(const Value& _cmd, std::vector<std::string>& _errors) : m_cmd(_cmd), m_errors(_errors) {}
 
-			std::optional<int> integer(const char* _key, const int _min, const int _max) const
+			// A number the table has checked; an optional argument that is absent is an error here.
+			std::optional<int> integer(const char* _key) const
 			{
 				const auto* v = m_cmd.find(_key);
 				if(!v || !v->isNumber())
@@ -128,40 +144,35 @@ namespace mdDesk
 					m_errors.push_back(std::string(_key) + ": missing number");
 					return {};
 				}
-				const double d = v->asNumber();
-				if(d != std::floor(d) || d < _min || d > _max)
-				{
-					m_errors.push_back(std::string(_key) + ": " + std::to_string(static_cast<long long>(d))
-						+ " is outside " + std::to_string(_min) + ".." + std::to_string(_max));
-					return {};
-				}
-				return static_cast<int>(d);
+				return static_cast<int>(v->asNumber());
 			}
 
-			std::optional<double> number(const char* _key, const double _min, const double _max) const
+			std::optional<int> within(const char* _key, const int _min, const int _max) const
 			{
-				const auto* v = m_cmd.find(_key);
-				if(!v || !v->isNumber() || v->asNumber() < _min || v->asNumber() > _max)
+				const auto v = integer(_key);
+				if(v && (*v < _min || *v > _max))
 				{
-					m_errors.push_back(std::string(_key) + ": expected a number in " + std::to_string(_min) + ".."
-						+ std::to_string(_max));
+					m_errors.push_back(std::string(_key) + ": " + std::to_string(*v) + " is outside " + std::to_string(_min)
+						+ ".." + std::to_string(_max));
 					return {};
 				}
-				return v->asNumber();
+				return v;
 			}
 
-			std::optional<std::string> text(const char* _key) const
+			double number(const char* _key) const { return m_cmd.find(_key)->asNumber(); }
+			const std::string& text(const char* _key) const { return m_cmd.find(_key)->asString(); }
+
+			// The index of a text the table's oneOf allows, in the names it comes from (elektronData/mdNames.h).
+			template<typename Names>
+			size_t indexIn(const char* _key, const Names& _names) const
 			{
-				const auto* v = m_cmd.find(_key);
-				if(!v || !v->isString())
-				{
-					m_errors.push_back(std::string(_key) + ": missing text");
-					return {};
-				}
-				return v->asString();
+				const auto& t = text(_key);
+				for(size_t i = 0; i < _names.size(); ++i)
+					if(t == _names[i])
+						return i;
+				return 0;	// not reached: the table's oneOf is these names
 			}
 
-			bool has(const char* _key) const { return m_cmd.find(_key) != nullptr; }
 			bool isNull(const char* _key) const
 			{
 				const auto* v = m_cmd.find(_key);
@@ -174,6 +185,14 @@ namespace mdDesk
 					return {};
 				return v->asBool();
 			}
+			// A flag the command must carry.
+			std::optional<bool> requiredFlag(const char* _key) const
+			{
+				const auto f = flag(_key);
+				if(!f)
+					m_errors.push_back(std::string(_key) + ": expected true or false");
+				return f;
+			}
 			const Value* value(const char* _key) const { return m_cmd.find(_key); }
 			bool ok() const { return m_errors.empty(); }
 
@@ -182,14 +201,20 @@ namespace mdDesk
 			std::vector<std::string>& m_errors;
 		};
 
-		template<typename Names>
-		std::optional<size_t> indexOf(const Names& _names, const std::string& _name)
+		// What an edit function gets besides its document.
+		struct In
 		{
-			for(size_t i = 0; i < _names.size(); ++i)
-				if(_name == _names[i])
-					return i;
-			return {};
-		}
+			const Args& a;
+			std::vector<std::string>& errors;
+			Clipboard& clip;
+			std::string& note;
+		};
+
+		// One function per op, per document type: the edit tables below.
+		template<typename T>
+		using EditFn = std::optional<T> (*)(T, const In&);
+		template<typename T>
+		using Edits = std::map<std::string, EditFn<T>>;
 
 		// ---- pattern ----
 
@@ -210,376 +235,357 @@ namespace mdDesk
 			_bits ^= uint64_t{1} << _s;
 		}
 
-		struct PatternEdit
-		{
-			ed::MdPattern value;
-			std::string note;
-		};
+		int visibleOf(const ed::MdPattern& _p) { return static_cast<int>(ed::visibleSteps(_p)); }
+		std::optional<int> stepArg(const ed::MdPattern& _p, const In& _in) { return _in.a.within("s", 0, visibleOf(_p) - 1); }
 
-		std::optional<PatternEdit> editPattern(ed::MdPattern _p, const std::string& _op, const Args& _a,
-			std::vector<std::string>& _errors, Clipboard& _clip)
+		std::optional<ed::MdPattern> trig(ed::MdPattern _p, const In& _in)
 		{
-			const auto visible = static_cast<int>(ed::visibleSteps(_p));
-			const auto track = [&] { return _a.integer("t", 0, 15); };
-			const auto step = [&] { return _a.integer("s", 0, visible - 1); };
-
-			if(_op == "trig")
-			{
-				const auto t = track(), s = step();
-				if(!_a.ok())
-					return {};
-				const bool on = _a.flag("on").value_or(!ed::hasTrig(_p, size_t(*t), size_t(*s)));
-				return PatternEdit{on ? ed::withTrig(_p, size_t(*t), size_t(*s), true) : clearStep(_p, size_t(*t),
-					size_t(*s)), {}};
-			}
-			if(_op == "accent" || _op == "slide")
-			{
-				const auto t = track(), s = step();
-				if(!_a.ok())
-					return {};
-				if(!ed::hasTrig(_p, size_t(*t), size_t(*s)))
-				{
-					_errors.push_back("Step " + std::to_string(*s + 1) + " of " + trackName(size_t(*t))
-						+ " has no trig");
-					return {};
-				}
-				const bool all = _op == "accent" ? _p.accentEditAll : _p.slideEditAll;
-				auto& bits = _op == "accent" ? (all ? _p.accentPattern : _p.trackAccent[size_t(*t)])
-					: (all ? _p.slidePattern : _p.trackSlide[size_t(*t)]);
-				toggleBit(bits, size_t(*s));
-				return PatternEdit{_p, all ? "Pattern-wide " + _op + " (EDIT ALL is on)" : std::string()};
-			}
-			if(_op == "lock")
-			{
-				const auto t = track(), i = _a.integer("i", 0, 23), s = step();
-				if(!_a.ok())
-					return {};
-				if(_a.isNull("v"))
-					return PatternEdit{ed::withoutLock(_p, size_t(*t), size_t(*i), size_t(*s)), {}};
-				const auto v = _a.integer("v", 0, 127);
-				if(!v)
-					return {};
-				if(!ed::hasTrig(_p, size_t(*t), size_t(*s)))
-				{
-					_errors.push_back("A step without a trig cannot hold a lock");
-					return {};
-				}
-				const auto locked = ed::withLock(_p, size_t(*t), size_t(*i), size_t(*s), uint8_t(*v));
-				if(!locked)
-				{
-					_errors.push_back("All 64 locked parameters are in use. Clear one before you lock a new parameter.");
-					return {};
-				}
-				return PatternEdit{*locked, {}};
-			}
-			if(_op == "clearLane")
-			{
-				const auto t = track(), i = _a.integer("i", 0, 23);
-				if(!_a.ok())
-					return {};
-				return PatternEdit{ed::withoutLockRow(_p, size_t(*t), size_t(*i)), {}};
-			}
-			if(_op == "length")
-			{
-				const auto v = _a.integer("v", 1, visible);
-				if(!v)
-					return {};
-				_p.length = uint8_t(*v);
-				return PatternEdit{_p, {}};
-			}
-			if(_op == "totalLength")
-			{
-				const auto v = _a.integer("v", 16, _p.extended ? 64 : 32);
-				if(!v)
-					return {};
-				if(*v % 16)
-				{
-					_errors.push_back("Total length is 16, 32, 48 or 64");
-					return {};
-				}
-				_p.scale = uint8_t(*v / 16 - 1);
-				_p.length = uint8_t(*v);
-				return PatternEdit{_p, {}};
-			}
-			if(_op == "speed")
-			{
-				const auto v = _a.text("v");
-				const auto index = v ? indexOf(g_speeds, *v) : std::nullopt;
-				if(!index)
-				{
-					_errors.push_back("Speed is 1X, 2X, 3/4X or 3/2X");
-					return {};
-				}
-				_p.tempoMultiplier = uint8_t(*index);
-				return PatternEdit{_p, {}};
-			}
-			if(_op == "swing")
-			{
-				const auto v = _a.integer("v", 50, 80);
-				if(!v)
-					return {};
-				_p.swingAmount = ed::swingAmountFromPercent(*v);
-				return PatternEdit{_p, {}};
-			}
-			if(_op == "accentAmount")
-			{
-				const auto v = _a.integer("v", 0, 15);
-				if(!v)
-					return {};
-				_p.accentAmount = ed::accentAmountFromDisplay(*v);
-				return PatternEdit{_p, {}};
-			}
-			if(_op == "patternKit")
-			{
-				const auto v = _a.integer("v", 0, 63);
-				if(!v)
-					return {};
-				_p.kit = uint8_t(*v);
-				return PatternEdit{_p, {}};
-			}
-			if(_op == "clearSteps" || _op == "copySteps")
-			{
-				const auto t = track(), from = _a.integer("from", 0, visible - 1), to = _a.integer("to", 1, visible);
-				if(!_a.ok())
-					return {};
-				if(*to <= *from)
-				{
-					_errors.push_back("Empty step range");
-					return {};
-				}
-				const auto where = trackName(size_t(*t)) + ", steps " + std::to_string(*from + 1) + "-"
-					+ std::to_string(*to);
-				if(_op == "clearSteps")
-				{
-					for(int s = *from; s < *to; ++s)
-						_p = clearStep(_p, size_t(*t), size_t(s));
-					return PatternEdit{_p, "Cleared " + where};
-				}
-				Clipboard::Steps c;
-				c.length = size_t(*to - *from);
-				for(int s = *from; s < *to; ++s)
-				{
-					const auto bit = uint64_t{1} << (s - *from);
-					if(ed::hasTrig(_p, size_t(*t), size_t(s)))
-						c.trigs |= bit;
-					if(accentOn(_p, size_t(*t), size_t(s)))
-						c.accent |= bit;
-					if(slideOn(_p, size_t(*t), size_t(s)))
-						c.slide |= bit;
-					for(uint8_t param = 0; param < ed::MdKit::g_paramsPerTrack; ++param)
-						if(const auto v = ed::lockValue(_p, size_t(*t), param, size_t(s)))
-							c.locks[param][uint8_t(s - *from)] = *v;
-				}
-				_clip.steps = std::move(c);
-				return PatternEdit{_p, "Copied " + where};
-			}
-			if(_op == "pasteSteps")
-			{
-				const auto t = track(), from = _a.integer("from", 0, visible - 1);
-				if(!_a.ok())
-					return {};
-				if(!_clip.steps)
-				{
-					_errors.push_back("Copy a track page first");
-					return {};
-				}
-				const auto& c = *_clip.steps;
-				const auto end = std::min<size_t>(size_t(*from) + c.length, size_t(visible));
-				for(size_t s = size_t(*from); s < end; ++s)
-					_p = clearStep(_p, size_t(*t), s);
-				size_t skipped = 0;
-				for(size_t s = size_t(*from); s < end; ++s)
-				{
-					const auto bit = uint64_t{1} << (s - size_t(*from));
-					if(!(c.trigs & bit))
-						continue;
-					_p = ed::withTrig(_p, size_t(*t), s, true);
-					if(c.accent & bit && !accentOn(_p, size_t(*t), s))
-						toggleBit(_p.accentEditAll ? _p.accentPattern : _p.trackAccent[size_t(*t)], s);
-					if(c.slide & bit && !slideOn(_p, size_t(*t), s))
-						toggleBit(_p.slideEditAll ? _p.slidePattern : _p.trackSlide[size_t(*t)], s);
-				}
-				for(const auto& [param, steps] : c.locks)
-				{
-					for(const auto& [rel, v] : steps)
-					{
-						const auto s = size_t(*from) + rel;
-						if(s >= end)
-							continue;
-						if(const auto locked = ed::withLock(_p, size_t(*t), param, s, v))
-							_p = *locked;
-						else
-							++skipped;
-					}
-				}
-				std::string note = "Pasted into " + trackName(size_t(*t));
-				if(skipped)
-					note += ". " + std::to_string(skipped) + " lock(s) skipped: all 64 locked parameters are in use";
-				return PatternEdit{_p, note};
-			}
-			_errors.push_back("unknown pattern command " + _op);
-			return {};
+			const auto t = size_t(*_in.a.integer("t"));
+			const auto s = stepArg(_p, _in);
+			if(!s)
+				return {};
+			const bool on = _in.a.flag("on").value_or(!ed::hasTrig(_p, t, size_t(*s)));
+			return on ? ed::withTrig(_p, t, size_t(*s), true) : clearStep(_p, t, size_t(*s));
 		}
 
-		// ---- kit ----
-
-		std::optional<ed::MdKit> editKit(ed::MdKit _k, const std::string& _op, const Args& _a,
-			std::vector<std::string>& _errors, Clipboard& _clip, std::string& _note)
+		std::optional<ed::MdPattern> toggleMark(ed::MdPattern _p, const In& _in, const Mark& _m)
 		{
-			const auto track = [&] { return _a.integer("t", 0, 15); };
-			if(_op == "param")
+			const auto t = size_t(*_in.a.integer("t"));
+			const auto s = stepArg(_p, _in);
+			if(!s)
+				return {};
+			if(!ed::hasTrig(_p, t, size_t(*s)))
 			{
-				const auto t = track(), i = _a.integer("i", 0, 23), v = _a.integer("v", 0, 127);
-				if(!_a.ok())
-					return {};
-				_k.params[size_t(*t)][size_t(*i)] = uint8_t(*v);
-				return _k;
+				_in.errors.push_back("Step " + std::to_string(*s + 1) + " of " + trackName(t) + " has no trig");
+				return {};
 			}
-			if(_op == "level")
+			toggleBit(bitsOf(_p, _m, t), size_t(*s));
+			if(_p.*_m.editAll)
+				_in.note = "Pattern-wide " + std::string(_m.name) + " (EDIT ALL is on)";
+			return _p;
+		}
+
+		std::optional<ed::MdPattern> accent(ed::MdPattern _p, const In& _in) { return toggleMark(std::move(_p), _in, g_accent); }
+		std::optional<ed::MdPattern> slide(ed::MdPattern _p, const In& _in) { return toggleMark(std::move(_p), _in, g_slide); }
+
+		std::optional<ed::MdPattern> lock(ed::MdPattern _p, const In& _in)
+		{
+			const auto t = size_t(*_in.a.integer("t")), i = size_t(*_in.a.integer("i"));
+			const auto s = stepArg(_p, _in);
+			if(!s)
+				return {};
+			if(_in.a.isNull("v"))
+				return ed::withoutLock(_p, t, i, size_t(*s));
+			if(!ed::hasTrig(_p, t, size_t(*s)))
 			{
-				const auto t = track(), v = _a.integer("v", 0, 127);
-				if(!_a.ok())
-					return {};
-				_k.levels[size_t(*t)] = uint8_t(*v);
-				return _k;
+				_in.errors.push_back("A step without a trig cannot hold a lock");
+				return {};
 			}
-			if(_op == "machine")
+			const auto locked = ed::withLock(_p, t, i, size_t(*s), uint8_t(*_in.a.integer("v")));
+			if(!locked)
+				_in.errors.push_back("All 64 locked parameters are in use. Clear one before you lock a new parameter.");
+			return locked;
+		}
+
+		std::optional<ed::MdPattern> clearLane(ed::MdPattern _p, const In& _in)
+		{
+			return ed::withoutLockRow(_p, size_t(*_in.a.integer("t")), size_t(*_in.a.integer("i")));
+		}
+
+		std::optional<ed::MdPattern> length(ed::MdPattern _p, const In& _in)
+		{
+			const auto v = _in.a.within("v", 1, visibleOf(_p));
+			if(!v)
+				return {};
+			_p.length = uint8_t(*v);
+			return _p;
+		}
+
+		std::optional<ed::MdPattern> totalLength(ed::MdPattern _p, const In& _in)
+		{
+			const auto v = _in.a.within("v", 16, _p.extended ? 64 : 32);
+			if(!v)
+				return {};
+			if(*v % 16)
 			{
-				const auto t = track(), model = _a.integer("model", 0, 255);
-				if(!_a.ok())
-					return {};
-				if(!ed::isKnownMdMachine(uint32_t(*model)))
+				_in.errors.push_back("Total length is 16, 32, 48 or 64");
+				return {};
+			}
+			_p.scale = uint8_t(*v / 16 - 1);
+			_p.length = uint8_t(*v);
+			return _p;
+		}
+
+		std::optional<ed::MdPattern> speed(ed::MdPattern _p, const In& _in)
+		{
+			_p.tempoMultiplier = uint8_t(_in.a.indexIn("v", ed::g_mdTempoMultipliers));
+			return _p;
+		}
+
+		std::optional<ed::MdPattern> swing(ed::MdPattern _p, const In& _in)
+		{
+			_p.swingAmount = ed::swingAmountFromPercent(*_in.a.integer("v"));
+			return _p;
+		}
+
+		std::optional<ed::MdPattern> accentAmount(ed::MdPattern _p, const In& _in)
+		{
+			_p.accentAmount = ed::accentAmountFromDisplay(*_in.a.integer("v"));
+			return _p;
+		}
+
+		std::optional<ed::MdPattern> patternKit(ed::MdPattern _p, const In& _in)
+		{
+			_p.kit = uint8_t(*_in.a.integer("v"));
+			return _p;
+		}
+
+		// A track's step range [from, to) within the visible steps, and its "track n, steps a-b".
+		struct StepRange
+		{
+			size_t track, from, to;
+			std::string where;
+		};
+
+		std::optional<StepRange> stepRange(const ed::MdPattern& _p, const In& _in)
+		{
+			const auto t = size_t(*_in.a.integer("t"));
+			const auto from = _in.a.within("from", 0, visibleOf(_p) - 1), to = _in.a.within("to", 1, visibleOf(_p));
+			if(!from || !to)
+				return {};
+			if(*to <= *from)
+			{
+				_in.errors.push_back("Empty step range");
+				return {};
+			}
+			return StepRange{t, size_t(*from), size_t(*to), trackName(t) + ", steps " + std::to_string(*from + 1) + "-" + std::to_string(*to)};
+		}
+
+		std::optional<ed::MdPattern> clearSteps(ed::MdPattern _p, const In& _in)
+		{
+			const auto r = stepRange(_p, _in);
+			if(!r)
+				return {};
+			for(auto s = r->from; s < r->to; ++s)
+				_p = clearStep(_p, r->track, s);
+			_in.note = "Cleared " + r->where;
+			return _p;
+		}
+
+		std::optional<ed::MdPattern> copySteps(ed::MdPattern _p, const In& _in)
+		{
+			const auto r = stepRange(_p, _in);
+			if(!r)
+				return {};
+			Clipboard::Steps c;
+			c.length = r->to - r->from;
+			for(auto s = r->from; s < r->to; ++s)
+			{
+				const auto bit = uint64_t{1} << (s - r->from);
+				if(ed::hasTrig(_p, r->track, s))
+					c.trigs |= bit;
+				if(accentOn(_p, r->track, s))
+					c.accent |= bit;
+				if(slideOn(_p, r->track, s))
+					c.slide |= bit;
+				for(uint8_t param = 0; param < ed::MdKit::g_paramsPerTrack; ++param)
+					if(const auto v = ed::lockValue(_p, r->track, param, s))
+						c.locks[param][uint8_t(s - r->from)] = *v;
+			}
+			_in.clip.steps = std::move(c);
+			_in.note = "Copied " + r->where;
+			return _p;
+		}
+
+		std::optional<ed::MdPattern> pasteSteps(ed::MdPattern _p, const In& _in)
+		{
+			const auto t = size_t(*_in.a.integer("t"));
+			const auto from = _in.a.within("from", 0, visibleOf(_p) - 1);
+			if(!from)
+				return {};
+			if(!_in.clip.steps)
+			{
+				_in.errors.push_back("Copy a track page first");
+				return {};
+			}
+			const auto& c = *_in.clip.steps;
+			const auto start = size_t(*from);
+			const auto end = std::min<size_t>(start + c.length, size_t(visibleOf(_p)));
+			for(auto s = start; s < end; ++s)
+				_p = clearStep(_p, t, s);
+			size_t skipped = 0;
+			for(auto s = start; s < end; ++s)
+			{
+				const auto bit = uint64_t{1} << (s - start);
+				if(!(c.trigs & bit))
+					continue;
+				_p = ed::withTrig(_p, t, s, true);
+				for(const auto& [mark, bits] : {std::pair{&g_accent, c.accent}, std::pair{&g_slide, c.slide}})
+					if(bits & bit && !markOn(_p, *mark, t, s))
+						toggleBit(bitsOf(_p, *mark, t), s);
+			}
+			for(const auto& [param, steps] : c.locks)
+			{
+				for(const auto& [rel, v] : steps)
 				{
-					_errors.push_back("model " + std::to_string(*model) + " is not an OS 1.63 machine");
+					const auto s = start + rel;
+					if(s >= end)
+						continue;
+					if(const auto locked = ed::withLock(_p, t, param, s, v))
+						_p = *locked;
+					else
+						++skipped;
+				}
+			}
+			_in.note = "Pasted into " + trackName(t);
+			if(skipped)
+				_in.note += ". " + std::to_string(skipped) + " lock(s) skipped: all 64 locked parameters are in use";
+			return _p;
+		}
+
+		const Edits<ed::MdPattern>& patternEdits()
+		{
+			static const Edits<ed::MdPattern> edits{
+				{"trig", trig}, {"accent", accent}, {"slide", slide}, {"lock", lock}, {"clearLane", clearLane},
+				{"length", length}, {"totalLength", totalLength}, {"speed", speed}, {"swing", swing},
+				{"accentAmount", accentAmount}, {"patternKit", patternKit}, {"clearSteps", clearSteps},
+				{"copySteps", copySteps}, {"pasteSteps", pasteSteps}};
+			return edits;
+		}
+
+		// ---- the working kit ----
+
+		std::optional<ed::MdKit> param(ed::MdKit _k, const In& _in)
+		{
+			_k.params[size_t(*_in.a.integer("t"))][size_t(*_in.a.integer("i"))] = uint8_t(*_in.a.integer("v"));
+			return _k;
+		}
+
+		std::optional<ed::MdKit> level(ed::MdKit _k, const In& _in)
+		{
+			_k.levels[size_t(*_in.a.integer("t"))] = uint8_t(*_in.a.integer("v"));
+			return _k;
+		}
+
+		std::optional<ed::MdKit> machine(ed::MdKit _k, const In& _in)
+		{
+			const auto t = size_t(*_in.a.integer("t"));
+			const auto model = uint32_t(*_in.a.integer("model"));
+			if(!ed::isKnownMdMachine(model))
+			{
+				_in.errors.push_back("model " + std::to_string(model) + " is not an OS 1.63 machine");
+				return {};
+			}
+			_k.models[t] = model;
+			// The synthesis values stay as they are and are sent to the new
+			// machine; without "keep", effects and routing go neutral.
+			if(!_in.a.flag("keepFx").value_or(true))
+				for(size_t i = 8; i < 24; ++i)
+					_k.params[t][i] = g_neutral[i];
+			return _k;
+		}
+
+		std::optional<ed::MdKit> lfo(ed::MdKit _k, const In& _in)
+		{
+			const auto field = _in.a.indexIn("field", ed::g_mdLfoFields);
+			const auto v = _in.a.within("v", 0, ed::g_mdLfoFieldMax[field]);
+			if(!v)
+				return {};
+			auto& l = _k.lfos[size_t(*_in.a.integer("t"))];
+			uint8_t* fields[] = {&l.track, &l.param, &l.shape1, &l.shape2, &l.update};
+			*fields[field] = uint8_t(*v);
+			return _k;
+		}
+
+		std::optional<ed::MdKit> group(ed::MdKit _k, const In& _in)
+		{
+			const auto t = *_in.a.integer("t");
+			uint8_t target = ed::MdKit::g_noGroup;
+			if(!_in.a.isNull("target"))
+			{
+				const auto v = *_in.a.integer("target");
+				if(v == t)
+				{
+					_in.errors.push_back("A track cannot be in a group with itself");
 					return {};
 				}
-				_k.models[size_t(*t)] = uint32_t(*model);
-				// The synthesis values stay as they are and are sent to the new
-				// machine; without "keep", effects and routing go neutral.
-				if(!_a.flag("keepFx").value_or(true))
-					for(size_t i = 8; i < 24; ++i)
-						_k.params[size_t(*t)][i] = g_neutral[i];
-				return _k;
+				target = uint8_t(v);
 			}
-			if(_op == "lfo")
+			(_in.a.text("kind") == "trig" ? _k.trigGroups : _k.muteGroups)[size_t(t)] = target;
+			return _k;
+		}
+
+		std::optional<ed::MdKit> masterFx(ed::MdKit _k, const In& _in)
+		{
+			_k.masterFx[_in.a.indexIn("fx", ed::g_mdMasterFx)][size_t(*_in.a.integer("i"))] = uint8_t(*_in.a.integer("v"));
+			return _k;
+		}
+
+		std::optional<ed::MdKit> kitName(ed::MdKit _k, const In& _in)
+		{
+			const auto& name = _in.a.text("name");
+			if(name.size() > ed::MdKit::g_nameSize)
 			{
-				const auto t = track();
-				const auto field = _a.text("field");
-				const auto index = field ? indexOf(g_lfoFields, *field) : std::nullopt;
-				if(!index)
-				{
-					_errors.push_back("field: expected track, param, shape1, shape2 or update");
-					return {};
-				}
-				const auto v = _a.integer("v", 0, g_lfoMax[*index]);
-				if(!_a.ok())
-					return {};
-				auto& lfo = _k.lfos[size_t(*t)];
-				uint8_t* fields[] = {&lfo.track, &lfo.param, &lfo.shape1, &lfo.shape2, &lfo.update};
-				*fields[*index] = uint8_t(*v);
-				return _k;
+				_in.errors.push_back("A kit name has at most 16 characters");
+				return {};
 			}
-			if(_op == "group")
+			_k.name.fill(0);
+			std::copy(name.begin(), name.end(), _k.name.begin());
+			return _k;
+		}
+
+		std::optional<ed::MdKit> copySound(ed::MdKit _k, const In& _in)
+		{
+			const auto t = size_t(*_in.a.integer("t"));
+			Clipboard::Sound s;
+			s.model = _k.models[t];
+			s.params = _k.params[t];
+			s.level = _k.levels[t];
+			s.lfo = _k.lfos[t];
+			_in.clip.sound = s;
+			_in.note = "Copied the sound of " + trackName(t) + " (" + ed::mdMachineName(s.model) + ")";
+			return _k;
+		}
+
+		std::optional<ed::MdKit> pasteSound(ed::MdKit _k, const In& _in)
+		{
+			const auto t = size_t(*_in.a.integer("t"));
+			if(!_in.clip.sound)
 			{
-				const auto t = track();
-				const auto kind = _a.text("kind");
-				if(!_a.ok())
-					return {};
-				if(*kind != "trig" && *kind != "mute")
-				{
-					_errors.push_back("kind: expected trig or mute");
-					return {};
-				}
-				uint8_t target = ed::MdKit::g_noGroup;
-				if(!_a.isNull("target"))
-				{
-					const auto v = _a.integer("target", 0, 15);
-					if(!v)
-						return {};
-					if(*v == *t)
-					{
-						_errors.push_back("A track cannot be in a group with itself");
-						return {};
-					}
-					target = uint8_t(*v);
-				}
-				(*kind == "trig" ? _k.trigGroups : _k.muteGroups)[size_t(*t)] = target;
-				return _k;
+				_in.errors.push_back("Copy a track's sound first");
+				return {};
 			}
-			if(_op == "masterFx")
-			{
-				const auto fx = _a.text("fx");
-				const auto index = fx ? indexOf(g_masterFx, *fx) : std::nullopt;
-				const auto i = _a.integer("i", 0, 7), v = _a.integer("v", 0, 127);
-				if(!index)
-					_errors.push_back("fx: expected gateBox, rhythmEcho, eq or dynamix");
-				if(!_a.ok() || !index)
-					return {};
-				_k.masterFx[*index][size_t(*i)] = uint8_t(*v);
-				return _k;
-			}
-			if(_op == "kitName")
-			{
-				const auto name = _a.text("name");
-				if(!name)
-					return {};
-				if(name->size() > ed::MdKit::g_nameSize)
-				{
-					_errors.push_back("A kit name has at most 16 characters");
-					return {};
-				}
-				_k.name.fill(0);
-				std::copy(name->begin(), name->end(), _k.name.begin());
-				return _k;
-			}
-			if(_op == "copySound")
-			{
-				const auto t = track();
-				if(!t)
-					return {};
-				Clipboard::Sound s;
-				s.model = _k.models[size_t(*t)];
-				s.params = _k.params[size_t(*t)];
-				s.level = _k.levels[size_t(*t)];
-				s.lfo = _k.lfos[size_t(*t)];
-				_clip.sound = s;
-				_note = "Copied the sound of " + trackName(size_t(*t)) + " (" + ed::mdMachineName(s.model) + ")";
-				return _k;
-			}
-			if(_op == "pasteSound")
-			{
-				const auto t = track();
-				if(!t)
-					return {};
-				if(!_clip.sound)
-				{
-					_errors.push_back("Copy a track's sound first");
-					return {};
-				}
-				const auto& s = *_clip.sound;
-				_k.models[size_t(*t)] = s.model;
-				_k.params[size_t(*t)] = s.params;
-				_k.levels[size_t(*t)] = s.level;
-				_k.lfos[size_t(*t)] = s.lfo;
-				_k.lfos[size_t(*t)].track = uint8_t(*t);
-				_note = "Pasted " + ed::mdMachineName(s.model) + " onto " + trackName(size_t(*t));
-				return _k;
-			}
-			if(_op == "clearSound")
-			{
-				const auto t = track();
-				if(!t)
-					return {};
-				std::copy(g_neutral.begin(), g_neutral.end(), _k.params[size_t(*t)].begin());
-				_k.levels[size_t(*t)] = g_neutralLevel;
-				_note = trackName(size_t(*t)) + " reset to neutral values";
-				return _k;
-			}
-			_errors.push_back("unknown kit command " + _op);
-			return {};
+			const auto& s = *_in.clip.sound;
+			_k.models[t] = s.model;
+			_k.params[t] = s.params;
+			_k.levels[t] = s.level;
+			_k.lfos[t] = s.lfo;
+			_k.lfos[t].track = uint8_t(t);
+			_in.note = "Pasted " + ed::mdMachineName(s.model) + " onto " + trackName(t);
+			return _k;
+		}
+
+		std::optional<ed::MdKit> clearSound(ed::MdKit _k, const In& _in)
+		{
+			const auto t = size_t(*_in.a.integer("t"));
+			std::copy(g_neutral.begin(), g_neutral.end(), _k.params[t].begin());
+			_k.levels[t] = g_neutralLevel;
+			_in.note = trackName(t) + " reset to neutral values";
+			return _k;
+		}
+
+		const Edits<ed::MdKit>& kitEdits()
+		{
+			static const Edits<ed::MdKit> edits{
+				{"param", param}, {"level", level}, {"machine", machine}, {"lfo", lfo}, {"group", group},
+				{"masterFx", masterFx}, {"kitName", kitName}, {"copySound", copySound}, {"pasteSound", pasteSound},
+				{"clearSound", clearSound}};
+			return edits;
 		}
 
 		// ---- song (edited as contract rows, so row semantics stay in mdJson) ----
+
+		using Rows = std::vector<Value>;
 
 		Value withMember(const Value& _object, const std::string& _key, Value _value)
 		{
@@ -607,7 +613,7 @@ namespace mdDesk
 		}
 
 		// Loop and jump targets follow their rows: _map[old] = new index.
-		std::vector<Value> remapTargets(std::vector<Value> _rows, const std::vector<size_t>& _map)
+		Rows remapTargets(Rows _rows, const std::vector<size_t>& _map)
 		{
 			for(auto& row : _rows)
 			{
@@ -624,405 +630,447 @@ namespace mdDesk
 			return _rows;
 		}
 
-		std::optional<ed::MdSong> editSong(const ed::MdSong& _song, const std::string& _op, const Args& _a,
-			std::vector<std::string>& _errors, Clipboard& _clip, std::string& _note)
+		std::optional<int> rowArg(const Rows& _rows, const In& _in, const char* _key)
+		{
+			return _in.a.within(_key, 0, static_cast<int>(_rows.size()) - 1);
+		}
+
+		std::optional<Rows> copyRow(Rows _rows, const In& _in)
+		{
+			const auto i = rowArg(_rows, _in, "i");
+			if(!i)
+				return {};
+			if(isEnd(_rows[size_t(*i)]))
+			{
+				_in.errors.push_back("END cannot be copied");
+				return {};
+			}
+			_in.clip.songRow = _rows[size_t(*i)];
+			_in.note = "Copied row " + std::to_string(*i + 1);
+			return _rows;
+		}
+
+		std::optional<Rows> rowSet(Rows _rows, const In& _in)
+		{
+			const auto i = rowArg(_rows, _in, "i");
+			if(!i)
+				return {};
+			_rows[size_t(*i)] = *_in.a.value("row");
+			return _rows;
+		}
+
+		// Insert at i; the END row can only move down.
+		std::optional<Rows> insertRow(Rows _rows, const In& _in, const Value& _row)
+		{
+			if(_rows.size() >= ed::MdSong::g_maxRows)
+			{
+				_in.errors.push_back("A song holds 256 rows");
+				return {};
+			}
+			const auto at = size_t(*_in.a.integer("i"));
+			std::vector<size_t> map(_rows.size());
+			for(size_t j = 0; j < map.size(); ++j)
+				map[j] = j < at ? j : j + 1;
+			_rows = remapTargets(std::move(_rows), map);
+			_rows.insert(_rows.begin() + static_cast<std::ptrdiff_t>(at), _row);
+			return _rows;
+		}
+
+		std::optional<Rows> rowInsert(Rows _rows, const In& _in)
+		{
+			if(!rowArg(_rows, _in, "i"))
+				return {};
+			const auto* row = _in.a.value("row");
+			if(!row)
+			{
+				_in.errors.push_back("row: missing object");
+				return {};
+			}
+			return insertRow(std::move(_rows), _in, *row);
+		}
+
+		std::optional<Rows> pasteRow(Rows _rows, const In& _in)
+		{
+			if(!rowArg(_rows, _in, "i"))
+				return {};
+			if(!_in.clip.songRow)
+			{
+				_in.errors.push_back("Copy a song row first");
+				return {};
+			}
+			return insertRow(std::move(_rows), _in, *_in.clip.songRow);
+		}
+
+		std::optional<Rows> rowDelete(Rows _rows, const In& _in)
+		{
+			const auto i = rowArg(_rows, _in, "i");
+			if(!i)
+				return {};
+			if(isEnd(_rows[size_t(*i)]))
+			{
+				_in.errors.push_back("END cannot be deleted");
+				return {};
+			}
+			const auto at = size_t(*i);
+			std::vector<size_t> map(_rows.size());
+			for(size_t j = 0; j < map.size(); ++j)
+				map[j] = j <= at ? j : j - 1;
+			_rows.erase(_rows.begin() + static_cast<std::ptrdiff_t>(at));
+			return remapTargets(std::move(_rows), map);
+		}
+
+		std::optional<Rows> rowMove(Rows _rows, const In& _in)
+		{
+			const auto from = rowArg(_rows, _in, "from"), to = rowArg(_rows, _in, "to");
+			if(!from || !to)
+				return {};
+			if(isEnd(_rows[size_t(*from)]) || isEnd(_rows[size_t(*to)]))
+			{
+				_in.errors.push_back("END stays the last row");
+				return {};
+			}
+			std::vector<size_t> order(_rows.size());
+			for(size_t j = 0; j < order.size(); ++j)
+				order[j] = j;
+			const auto moved = order[size_t(*from)];
+			order.erase(order.begin() + *from);
+			order.insert(order.begin() + *to, moved);
+			std::vector<size_t> map(_rows.size());
+			for(size_t j = 0; j < order.size(); ++j)
+				map[order[j]] = j;
+			_rows = remapTargets(std::move(_rows), map);
+			Rows reordered;
+			for(const auto j : order)
+				reordered.push_back(_rows[j]);
+			return reordered;
+		}
+
+		const Edits<Rows>& songEdits()
+		{
+			static const Edits<Rows> edits{
+				{"copyRow", copyRow}, {"rowSet", rowSet}, {"rowInsert", rowInsert}, {"pasteRow", pasteRow},
+				{"rowDelete", rowDelete}, {"rowMove", rowMove}};
+			return edits;
+		}
+
+		// A song edit runs on its contract rows; the song comes back through the codec.
+		std::optional<ed::MdSong> editSong(const ed::MdSong& _song, const EditFn<Rows> _fn, const In& _in)
 		{
 			const auto doc = ed::songToJson(_song);
 			const auto* rowsValue = doc.find("rows");
-			std::vector<Value> rows = rowsValue ? rowsValue->asArray() : std::vector<Value>{};
-			const auto count = static_cast<int>(rows.size());
-			const auto rowArg = [&](const char* _key) { return _a.integer(_key, 0, count - 1); };
-
-			if(_op == "copyRow")
-			{
-				const auto i = rowArg("i");
-				if(!i)
-					return {};
-				if(isEnd(rows[size_t(*i)]))
-				{
-					_errors.push_back("END cannot be copied");
-					return {};
-				}
-				_clip.songRow = rows[size_t(*i)];
-				_note = "Copied row " + std::to_string(*i + 1);
+			const Rows rows = rowsValue ? rowsValue->asArray() : Rows{};
+			const auto edited = _fn(rows, _in);
+			if(!edited)
+				return {};
+			if(*edited == rows)
 				return _song;
-			}
-
-			std::vector<size_t> map(rows.size());
-			for(size_t j = 0; j < map.size(); ++j)
-				map[j] = j;
-
-			if(_op == "rowSet")
-			{
-				const auto i = rowArg("i");
-				const auto* row = _a.value("row");
-				if(!i || !row || !row->isObject())
-				{
-					if(!row || !row->isObject())
-						_errors.push_back("row: missing object");
-					return {};
-				}
-				rows[size_t(*i)] = *row;
-			}
-			else if(_op == "rowInsert" || _op == "pasteRow")
-			{
-				const auto i = _a.integer("i", 0, count - 1);
-				if(!i)
-					return {};
-				Value row;
-				if(_op == "pasteRow")
-				{
-					if(!_clip.songRow)
-					{
-						_errors.push_back("Copy a song row first");
-						return {};
-					}
-					row = *_clip.songRow;
-				}
-				else
-				{
-					const auto* r = _a.value("row");
-					if(!r || !r->isObject())
-					{
-						_errors.push_back("row: missing object");
-						return {};
-					}
-					row = *r;
-				}
-				if(rows.size() >= ed::MdSong::g_maxRows)
-				{
-					_errors.push_back("A song holds 256 rows");
-					return {};
-				}
-				// Insert at i; the END row can only move down.
-				const auto at = size_t(*i);
-				for(size_t j = 0; j < map.size(); ++j)
-					map[j] = j < at ? j : j + 1;
-				rows = remapTargets(std::move(rows), map);
-				rows.insert(rows.begin() + static_cast<std::ptrdiff_t>(at), row);
-			}
-			else if(_op == "rowDelete")
-			{
-				const auto i = rowArg("i");
-				if(!i)
-					return {};
-				if(isEnd(rows[size_t(*i)]))
-				{
-					_errors.push_back("END cannot be deleted");
-					return {};
-				}
-				const auto at = size_t(*i);
-				for(size_t j = 0; j < map.size(); ++j)
-					map[j] = j <= at ? (j == at ? at : j) : j - 1;
-				rows.erase(rows.begin() + static_cast<std::ptrdiff_t>(at));
-				std::vector<size_t> shrunk(map.begin(), map.end());
-				rows = remapTargets(std::move(rows), shrunk);
-			}
-			else if(_op == "rowMove")
-			{
-				const auto from = rowArg("from"), to = rowArg("to");
-				if(!from || !to)
-					return {};
-				if(isEnd(rows[size_t(*from)]) || isEnd(rows[size_t(*to)]))
-				{
-					_errors.push_back("END stays the last row");
-					return {};
-				}
-				std::vector<size_t> order(rows.size());
-				for(size_t j = 0; j < order.size(); ++j)
-					order[j] = j;
-				const auto moved = order[size_t(*from)];
-				order.erase(order.begin() + *from);
-				order.insert(order.begin() + *to, moved);
-				for(size_t j = 0; j < order.size(); ++j)
-					map[order[j]] = j;
-				rows = remapTargets(std::move(rows), map);
-				std::vector<Value> reordered;
-				for(const auto j : order)
-					reordered.push_back(rows[j]);
-				rows = std::move(reordered);
-			}
-			else
-			{
-				_errors.push_back("unknown song command " + _op);
-				return {};
-			}
-
-			const auto edited = withMember(doc, "rows", Value(Value::Array(rows.begin(), rows.end())));
 			std::vector<std::string> problems;
-			auto song = ed::songFromJson(edited, problems);
+			auto song = ed::songFromJson(withMember(doc, "rows", Value(Value::Array(edited->begin(), edited->end()))), problems);
 			if(!song)
-			{
-				_errors.insert(_errors.end(), problems.begin(), problems.end());
-				return {};
-			}
+				_in.errors.insert(_in.errors.end(), problems.begin(), problems.end());
 			return song;
 		}
 
 		// ---- global ----
 
-		std::optional<ed::MdGlobal> editGlobal(ed::MdGlobal _g, const std::string& _op, const Args& _a,
-			std::vector<std::string>& _errors)
+		std::optional<ed::MdGlobal> route(ed::MdGlobal _g, const In& _in)
 		{
-			if(_op == "route")
-			{
-				const auto t = _a.integer("t", 0, 15);
-				const auto out = _a.text("out");
-				const auto index = out ? indexOf(g_outputs, *out) : std::nullopt;
-				if(!index)
-					_errors.push_back("out: expected A-F or MAIN");
-				if(!t || !index)
-					return {};
-				_g.routing[size_t(*t)] = uint8_t(*index);
-				return _g;
-			}
-			if(_op == "tempo")
-			{
-				const auto bpm = _a.number("bpm", 30, 300);
-				if(!bpm)
-					return {};
-				_g.tempo = static_cast<uint16_t>(std::lround(*bpm * 24));
-				return _g;
-			}
-			if(_op == "extended")
-			{
-				const auto on = _a.flag("on");
-				if(!on)
-				{
-					_errors.push_back("on: expected true or false");
-					return {};
-				}
-				_g.extendedMode = *on ? 1 : 0;
-				return _g;
-			}
-			if(_op == "globalSet")
-			{
-				// P5: the GLOBAL menu's settings, by name (elektronData::mdGlobalBits, measured).
-				namespace b = ed::mdGlobalBits;
-				const auto field = _a.text("field");
-				if(!field)
-					return {};
-				const auto bit = [&](uint8_t& _byte, const uint8_t _mask, const bool _set)
-				{
-					_byte = static_cast<uint8_t>(_set ? _byte | _mask : _byte & ~_mask);
-				};
-				const auto flag = [&]() -> std::optional<bool>
-				{
-					const auto f = _a.flag("on");
-					if(!f)
-						_errors.push_back("on: expected true or false");
-					return f;
-				};
-				if(*field == "baseChannel")
-				{
-					const auto v = _a.integer("v", 0, b::g_maxBaseChannel);
-					if(!v)
-						return {};
-					_g.baseChannel = uint8_t(*v);
-				}
-				else if(*field == "tempoIn" || *field == "ctrlIn" || *field == "tempoOut" || *field == "ctrlOut"
-					|| *field == "programChangeIn" || *field == "programChangeOut" || *field == "localControl")
-				{
-					const auto on = flag();
-					if(!on)
-						return {};
-					if(*field == "tempoIn") bit(_g.syncFlags, b::g_tempoInExternal, *on);
-					else if(*field == "ctrlIn") bit(_g.syncFlags, b::g_ctrlInOff, !*on);
-					else if(*field == "tempoOut") bit(_g.syncFlags, b::g_tempoOut, *on);
-					else if(*field == "ctrlOut") bit(_g.syncFlags, b::g_ctrlOut, *on);
-					else if(*field == "programChangeIn") bit(_g.programChange, b::g_programChangeIn, *on);
-					else if(*field == "programChangeOut") bit(_g.programChange, b::g_programChangeOut, *on);
-					else _g.localControl = *on ? 1 : 0;
-				}
-				else if(*field == "programChangeChannel")
-				{
-					const auto v = _a.integer("v", 0, 16);	// 0 = BASE
-					if(!v)
-						return {};
-					_g.programChange = static_cast<uint8_t>((_g.programChange & 3) | (*v << 2));
-				}
-				else if(*field == "trigMode")
-				{
-					const auto v = _a.integer("v", 0, 2);
-					if(!v)
-						return {};
-					_g.trigMode = uint8_t(*v);
-				}
-				else if(*field == "keymap")
-				{
-					const auto note = _a.integer("note", 0, 127);
-					const auto* target = _a.value("target");
-					if(!note)
-						return {};
-					if(target && target->isNull())
-						_g.keymap[size_t(*note)] = ed::MdGlobal::g_unmapped;
-					else
-					{
-						const auto t = _a.integer("target", 0, 31);
-						if(!t)
-							return {};
-						// A MIDI key maps one function: the target's old key is freed (the machine's rule).
-						for(auto& k : _g.keymap)
-							if(k == *t)
-								k = ed::MdGlobal::g_unmapped;
-						_g.keymap[size_t(*note)] = uint8_t(*t);
-					}
-				}
-				else
-				{
-					_errors.push_back("field: unknown global setting " + *field);
-					return {};
-				}
-				return _g;
-			}
-			_errors.push_back("unknown global command " + _op);
-			return {};
+			_g.routing[size_t(*_in.a.integer("t"))] = uint8_t(_in.a.indexIn("out", ed::g_mdOutputs));
+			return _g;
 		}
 
-		// The document kind a command edits: the model's command table (P6: one vocabulary).
-		std::optional<DocKind> kindOf(const std::string& _op)
+		std::optional<ed::MdGlobal> tempo(ed::MdGlobal _g, const In& _in)
 		{
-			const auto* c = commandTable().find(_op);
-			if(!c || c->kind < 0)
+			_g.tempo = static_cast<uint16_t>(std::lround(_in.a.number("bpm") * 24));
+			return _g;
+		}
+
+		std::optional<ed::MdGlobal> extended(ed::MdGlobal _g, const In& _in)
+		{
+			const auto on = _in.a.requiredFlag("on");
+			if(!on)
 				return {};
-			return static_cast<DocKind>(c->kind);
+			_g.extendedMode = *on ? 1 : 0;
+			return _g;
 		}
 
+		// P5: the GLOBAL menu's settings, by name (elektronData::mdGlobalBits, measured): one setter per field.
+		using GlobalField = bool (*)(ed::MdGlobal&, const In&);
+		namespace gb = ed::mdGlobalBits;
+
+		void setBit(uint8_t& _byte, const uint8_t _mask, const bool _set)
+		{
+			_byte = static_cast<uint8_t>(_set ? _byte | _mask : _byte & ~_mask);
+		}
+
+		// A flag field: bit _mask of the byte, set when "on" (cleared when on, if inverted).
+		template<uint8_t ed::MdGlobal::*Byte, uint8_t Mask, bool Inverted = false>
+		bool flagField(ed::MdGlobal& _g, const In& _in)
+		{
+			const auto on = _in.a.requiredFlag("on");
+			if(on)
+				setBit(_g.*Byte, Mask, *on != Inverted);
+			return on.has_value();
+		}
+
+		bool localControl(ed::MdGlobal& _g, const In& _in)
+		{
+			const auto on = _in.a.requiredFlag("on");
+			if(on)
+				_g.localControl = *on ? 1 : 0;
+			return on.has_value();
+		}
+
+		bool baseChannel(ed::MdGlobal& _g, const In& _in)
+		{
+			const auto v = _in.a.within("v", 0, gb::g_maxBaseChannel);
+			if(v)
+				_g.baseChannel = uint8_t(*v);
+			return v.has_value();
+		}
+
+		bool programChangeChannel(ed::MdGlobal& _g, const In& _in)
+		{
+			const auto v = _in.a.within("v", 0, 16);	// 0 = BASE
+			if(v)
+				_g.programChange = static_cast<uint8_t>((_g.programChange & 3) | (*v << 2));
+			return v.has_value();
+		}
+
+		bool trigMode(ed::MdGlobal& _g, const In& _in)
+		{
+			const auto v = _in.a.within("v", 0, 2);
+			if(v)
+				_g.trigMode = uint8_t(*v);
+			return v.has_value();
+		}
+
+		bool keymap(ed::MdGlobal& _g, const In& _in)
+		{
+			const auto note = _in.a.integer("note");
+			if(!note)
+				return false;
+			const auto* target = _in.a.value("target");
+			if(target && target->isNull())
+			{
+				_g.keymap[size_t(*note)] = ed::MdGlobal::g_unmapped;
+				return true;
+			}
+			const auto t = _in.a.integer("target");
+			if(!t)
+				return false;
+			// A MIDI key maps one function: the target's old key is freed (the machine's rule).
+			for(auto& k : _g.keymap)
+				if(k == *t)
+					k = ed::MdGlobal::g_unmapped;
+			_g.keymap[size_t(*note)] = uint8_t(*t);
+			return true;
+		}
+
+		const std::map<std::string, GlobalField>& globalFields()
+		{
+			static const std::map<std::string, GlobalField> fields{
+				{"baseChannel", baseChannel},
+				{"tempoIn", flagField<&ed::MdGlobal::syncFlags, gb::g_tempoInExternal>},
+				{"ctrlIn", flagField<&ed::MdGlobal::syncFlags, gb::g_ctrlInOff, true>},
+				{"tempoOut", flagField<&ed::MdGlobal::syncFlags, gb::g_tempoOut>},
+				{"ctrlOut", flagField<&ed::MdGlobal::syncFlags, gb::g_ctrlOut>},
+				{"programChangeIn", flagField<&ed::MdGlobal::programChange, gb::g_programChangeIn>},
+				{"programChangeOut", flagField<&ed::MdGlobal::programChange, gb::g_programChangeOut>},
+				{"localControl", localControl},
+				{"programChangeChannel", programChangeChannel},
+				{"trigMode", trigMode},
+				{"keymap", keymap}};
+			return fields;
+		}
+
+		std::optional<ed::MdGlobal> globalSet(ed::MdGlobal _g, const In& _in)
+		{
+			const auto& field = _in.a.text("field");
+			const auto it = globalFields().find(field);
+			if(it == globalFields().end())
+			{
+				_in.errors.push_back("field: unknown global setting " + field);	// the table's oneOf and this map disagree
+				return {};
+			}
+			if(!it->second(_g, _in))
+				return {};
+			return _g;
+		}
+
+		const Edits<ed::MdGlobal>& globalEdits()
+		{
+			static const Edits<ed::MdGlobal> edits{{"route", route}, {"tempo", tempo}, {"extended", extended}, {"globalSet", globalSet}};
+			return edits;
+		}
+
+		// ---- the edit: the document the command's kind names, its op's function, the change ----
+
+		template<typename T>
+		std::optional<EditFn<T>> editFor(const Edits<T>& _edits, const std::string& _op, std::vector<std::string>& _errors)
+		{
+			const auto it = _edits.find(_op);
+			if(it == _edits.end())
+			{
+				_errors.push_back("no edit for command " + _op);	// a table row without its function
+				return {};
+			}
+			return it->second;
+		}
+
+		// The document an edit starts from and the one it gives; nothing when it was refused.
+		struct Edited
+		{
+			Document before;
+			Document after;
+		};
+
+		template<typename T, typename Wrap = T>
+		std::optional<Edited> run(const Edits<T>& _edits, const T& _doc, const std::string& _op, const In& _in)
+		{
+			const auto fn = editFor(_edits, _op, _in.errors);
+			if(!fn)
+				return {};
+			auto after = (*fn)(_doc, _in);
+			if(!after)
+				return {};
+			return Edited{Document(Wrap{_doc}), Document(Wrap{*after})};
+		}
+
+		std::string slotName(const char* _what, const int _slot) { return std::string(_what) + " " + std::to_string(_slot + 1); }
+
+		std::optional<Edited> editPattern(const Documents& _docs, const std::string& _op, const In& _in, const EditContext&)
+		{
+			const auto p = *_in.a.integer("p");
+			const auto it = _docs.patterns.find(uint8_t(p));
+			if(it == _docs.patterns.end())
+			{
+				_in.errors.push_back("pattern " + ed::mdPatternName(unsigned(p)) + " is not loaded yet");
+				return {};
+			}
+			return run(patternEdits(), it->second, _op, _in);
+		}
+
+		// Live kit edits change the working kit, and only for the kit that plays (the page sends them for it).
+		std::optional<Edited> editWorkingKit(const Documents& _docs, const std::string& _op, const In& _in, const EditContext& _context)
+		{
+			const auto k = *_in.a.integer("k");
+			if(!_context.currentKit || *_context.currentKit != k)
+			{
+				_in.errors.push_back(slotName("kit", k) + " is not the kit that plays: " + _op
+					+ " edits the working kit of the kit that plays");
+				return {};
+			}
+			const auto* kit = _docs.workingKitOf(uint8_t(k));
+			if(!kit)
+			{
+				_in.errors.push_back("the working kit of " + slotName("kit", k) + " is not loaded yet");
+				return {};
+			}
+			return run<ed::MdKit, WorkingKit>(kitEdits(), *kit, _op, _in);
+		}
+
+		std::optional<Edited> editSongAt(const Documents& _docs, const std::string& _op, const In& _in, const EditContext&)
+		{
+			const auto s = *_in.a.integer("s");
+			const auto it = _docs.songs.find(uint8_t(s));
+			if(it == _docs.songs.end())
+			{
+				_in.errors.push_back(slotName("song", s) + " is not loaded yet");
+				return {};
+			}
+			const auto fn = editFor(songEdits(), _op, _in.errors);
+			if(!fn)
+				return {};
+			const auto after = editSong(it->second, *fn, _in);
+			if(!after)
+				return {};
+			return Edited{it->second, *after};
+		}
+
+		std::optional<Edited> editGlobal(const Documents& _docs, const std::string& _op, const In& _in, const EditContext&)
+		{
+			if(!_docs.global)
+			{
+				_in.errors.push_back("the global settings are not loaded yet");
+				return {};
+			}
+			return run(globalEdits(), *_docs.global, _op, _in);
+		}
+
+		// Which document a command edits, by the table's kind column (DocKind::Kit rows are the library's).
+		using KindEdit = std::optional<Edited> (*)(const Documents&, const std::string&, const In&, const EditContext&);
+
+		std::optional<KindEdit> kindEdit(const DocKind _kind)
+		{
+			static const std::map<DocKind, KindEdit> edits{
+				{DocKind::Pattern, editPattern}, {DocKind::WorkingKit, editWorkingKit}, {DocKind::Song, editSongAt},
+				{DocKind::Global, editGlobal}};
+			const auto it = edits.find(_kind);
+			if(it == edits.end())
+				return {};
+			return it->second;
+		}
+
+		EditResult applyEdit(const Documents& _docs, const Value& _command, const deskCore::Command<>& _row, Clipboard& _clipboard,
+			const EditContext& _context)
+		{
+			EditResult result;
+			const auto& op = _command.find("op")->asString();
+			const Args args(_command, result.errors);
+			const In in{args, result.errors, _clipboard, result.note};
+
+			const auto edit = kindEdit(static_cast<DocKind>(_row.kind));
+			if(!edit)
+			{
+				result.errors.push_back("unknown command " + op);
+				return result;
+			}
+			const auto e = (*edit)(_docs, op, in, _context);
+			if(!e || !result.errors.empty())
+			{
+				result.note.clear();
+				return result;
+			}
+			auto problems = problemsOf(e->after);
+			if(!problems.empty())
+			{
+				result.errors = std::move(problems);
+				result.note.clear();
+				return result;
+			}
+			if(!(e->before == e->after))
+				result.changes.push_back({e->before, e->after});
+			return result;
+		}
 	}
 
-	namespace
-	{
-	EditResult applyEdit(const Documents& _docs, const Value& _command, Clipboard& _clipboard, const EditContext& _context)
+	EditResult apply(const Documents& _docs, const Value& _command, const Clipboard& _clipboard, const EditContext& _context)
 	{
 		EditResult result;
-		const auto* opValue = _command.find("op");
-		if(!_command.isObject() || !opValue || !opValue->isString())
+		const auto* opValue = _command.isObject() ? _command.find("op") : nullptr;
+		if(!opValue || !opValue->isString())
 		{
 			result.errors.push_back("command: missing op");
 			return result;
 		}
 		const auto& op = opValue->asString();
-		const Args args(_command, result.errors);
-
-		std::optional<Document> before;
-		std::optional<Document> after;
-
-		const auto kind = kindOf(op);
-		if(kind == DocKind::Pattern)
-		{
-			const auto p = args.integer("p", 0, 127);
-			if(!p)
-				return result;
-			const auto it = _docs.patterns.find(uint8_t(*p));
-			if(it == _docs.patterns.end())
-			{
-				result.errors.push_back("pattern " + ed::mdPatternName(unsigned(*p)) + " is not loaded yet");
-				return result;
-			}
-			auto edit = editPattern(it->second, op, args, result.errors, _clipboard);
-			if(!edit)
-				return result;
-			result.note = edit->note;
-			before = it->second;
-			after = edit->value;
-		}
-		else if(kind == DocKind::Kit)
-		{
-			const auto k = args.integer("k", 0, 63);
-			if(!k)
-				return result;
-			// The kit that plays is edited as the working kit (live); another slot as its stored dump.
-			const bool plays = _context.currentKit && *_context.currentKit == *k;
-			const auto* kit = plays ? _docs.workingKitOf(uint8_t(*k)) : nullptr;
-			const auto it = _docs.kits.find(uint8_t(*k));
-			if(!kit && !plays && it != _docs.kits.end())
-				kit = &it->second;
-			if(!kit)
-			{
-				result.errors.push_back("kit " + std::to_string(*k + 1) + " is not loaded yet");
-				return result;
-			}
-			auto edit = editKit(*kit, op, args, result.errors, _clipboard, result.note);
-			if(!edit)
-				return result;
-			before = plays ? Document(WorkingKit{*kit}) : Document(*kit);
-			after = plays ? Document(WorkingKit{*edit}) : Document(*edit);
-		}
-		else if(kind == DocKind::Song)
-		{
-			const auto s = args.integer("s", 0, 31);
-			if(!s)
-				return result;
-			const auto it = _docs.songs.find(uint8_t(*s));
-			if(it == _docs.songs.end())
-			{
-				result.errors.push_back("song " + std::to_string(*s + 1) + " is not loaded yet");
-				return result;
-			}
-			auto edit = editSong(it->second, op, args, result.errors, _clipboard, result.note);
-			if(!edit)
-				return result;
-			before = it->second;
-			after = *edit;
-		}
-		else if(kind == DocKind::Global)
-		{
-			if(!_docs.global)
-			{
-				result.errors.push_back("the global settings are not loaded yet");
-				return result;
-			}
-			auto edit = editGlobal(*_docs.global, op, args, result.errors);
-			if(!edit)
-				return result;
-			before = *_docs.global;
-			after = *edit;
-		}
-		else
+		const auto* row = commandTable().find(op);
+		if(!row || row->owner != deskCore::Owner::Core || row->core != deskCore::CoreOp::Edit || row->kind < 0)
 		{
 			result.errors.push_back("unknown command " + op);
 			return result;
 		}
-
-		if(!result.errors.empty())
+		// The table's own check (the router runs it too): the edits then trust its types and ranges.
+		if(auto errors = CommandTable::check(*row, _command); !errors.empty())
+		{
+			result.errors = std::move(errors);
 			return result;
-		auto problems = problemsOf(*after);
-		if(!problems.empty())
-		{
-			result.errors = std::move(problems);
-			result.note.clear();
-			return result;
-		}
-		const bool same = std::visit([&](const auto& _a)
-		{
-			using T = std::decay_t<decltype(_a)>;
-			return _a == std::get<T>(*before);
-		}, *after);
-		if(!same)
-			result.changes.push_back({*before, *after});
-		return result;
-	}
-
-	}
-
-	EditResult apply(const Documents& _docs, const Value& _command, const Clipboard& _clipboard, const EditContext& _context)
-	{
-		const auto* opValue = _command.find("op");
-		const auto op = opValue && opValue->isString() ? opValue->asString() : std::string();
-		// The kit that plays is renamed live (0x55, like the LCD's kit name), another slot by its dump.
-		const auto* k = _command.find("k");
-		if(op == "kitRename" && k && k->isNumber() && _context.currentKit && *_context.currentKit == k->asNumber())
-		{
-			Value rename = Value::object();
-			rename.set("op", "kitName");
-			rename.set("k", *k);
-			if(const auto* n = _command.find("name"))
-				rename.set("name", *n);
-			return apply(_docs, rename, _clipboard, _context);
 		}
 		// Values in, values out: the clipboard the command leaves is returned, not changed in place.
 		auto clipboard = _clipboard;
-		auto result = isLibraryCommand(op) ? applyLibrary(_docs, _command, clipboard, _context) : applyEdit(_docs, _command, clipboard, _context);
+		result = row->group == g_library ? applyLibrary(_docs, _command, *row, clipboard, _context)
+			: applyEdit(_docs, _command, *row, clipboard, _context);
 		if(result.errors.empty() && !(clipboard == _clipboard))
 			result.clipboard = std::move(clipboard);
 		return result;

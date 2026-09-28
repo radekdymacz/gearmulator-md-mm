@@ -125,19 +125,23 @@ namespace mdDesk
 		std::optional<Clipboard> clipboard;	// the new clipboard after a copy command
 	};
 
-	// What an edit may depend on besides the documents: the machine's current kit (its edits are
-	// working-kit edits; a rename of it is its live name). Data from the adapter.
+	// What an edit may depend on besides the documents: the machine's current kit (the only kit
+	// the live kit edits may change). Data from the adapter.
 	struct EditContext
 	{
 		std::optional<uint8_t> currentKit;
 	};
 
 	// Applies one command, pure: the documents and the clipboard in, the changes (and a new
-	// clipboard after a copy) out. Pattern commands carry "p" (slot), kit commands "k",
-	// song commands "s"; the kit library and pattern chooser commands (mdDeskLibrary.h)
-	// too. Every changed document is validated with the hardware limits
-	// (elektronData::validate) before it is returned; a command that would produce an
-	// invalid document is refused with its problems.
+	// clipboard after a copy) out. The command's row in the model's command table says which
+	// document it edits (its kind column) and checks its arguments first; then one function
+	// per op runs (op -> function tables), trusting the row's types and constant ranges and
+	// checking only what depends on the document. Pattern commands carry "p" (slot), song
+	// commands "s"; the live kit commands (kind WorkingKit) carry "k", which must be the kit
+	// that plays, and edit the working kit; the kit library and pattern chooser commands
+	// (group library, mdDeskLibrary.h) write stored slots. Every changed document is validated
+	// with the hardware limits (elektronData::validate) before it is returned; a command that
+	// would produce an invalid document is refused with its problems.
 	EditResult apply(const Documents& _docs, const elektronData::json::Value& _command, const Clipboard& _clipboard,
 		const EditContext& _context = {});
 
