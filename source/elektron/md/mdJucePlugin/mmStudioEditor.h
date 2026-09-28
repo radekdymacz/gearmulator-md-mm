@@ -16,6 +16,7 @@
 namespace mdJucePlugin
 {
 	class MmStudioLink;
+	class AudioMidiLink;
 	class MmStudioWebView;
 
 	// The "mmStudio" skin: the Monomachine Editor page (skins/mmStudio) in a JUCE
@@ -34,6 +35,7 @@ namespace mdJucePlugin
 
 		void create() override;
 		std::pair<std::string, std::string> getDemoRestrictionText() const override { return {}; }
+		bool openAudioMidiSettings() override;
 
 	private:
 		void timerCallback() override;
@@ -50,6 +52,7 @@ namespace mdJucePlugin
 		std::unique_ptr<MmStudioLink> m_link;
 		std::unique_ptr<mmDesk::Desk> m_desk;
 		std::unique_ptr<MmStudioWebView> m_web;
+		std::unique_ptr<AudioMidiLink> m_audio;	// AUDIO / MIDI panel (standalone devices)
 		std::vector<elektronData::json::Value> m_outbox;
 		bool m_pageReady = false;
 		uint32_t m_ticks = 0;

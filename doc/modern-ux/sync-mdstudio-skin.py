@@ -46,7 +46,7 @@ for a, b in HONEST:
     assert a in m, 'mockup changed: ' + a
     m = m.replace(a, b)
 # The page's modules, in load order (a module that does not exist yet is skipped).
-SCRIPTS = ['mdDeskBridge.js', 'mdDeskModel.js', 'mdDeskKeys.js', 'mdDeskMod.js', 'mdDeskApp.js', 'mdDeskLive.js', 'mdDeskLibrary.js', 'mdDeskGlobal.js']
+SCRIPTS = ['mdDeskBridge.js', 'mdDeskModel.js', 'mdDeskKeys.js', 'mdDeskMod.js', 'mdDeskApp.js', 'mdDeskLive.js', 'mdDeskLibrary.js', 'mdDeskGlobal.js', 'mdDeskAudio.js']
 title = re.search(r'<title>(.*?)</title>', src).group(1)
 page = '''<!doctype html>
 <html lang="en">
@@ -120,6 +120,15 @@ present = set(re.findall(r'id="([\w-]+)"', m))
 missing = sorted(wanted - present - made)
 if missing:
     print('contract check: the page looks up ids the mockup markup no longer has:', ', '.join(missing))
+    sys.exit(1)
+
+# ---- the shared AUDIO / MIDI panel: one text in every copy ----
+sys.dont_write_bytecode = True
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import audio_panel_check
+panel = audio_panel_check.check(R)
+if panel:
+    print('AUDIO / MIDI panel: ' + '; '.join(panel))
     sys.exit(1)
 
 if check_only:

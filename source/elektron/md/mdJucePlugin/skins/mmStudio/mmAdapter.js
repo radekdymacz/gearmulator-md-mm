@@ -22,6 +22,7 @@
 	const now = () => performance.now();
 	const selfTest = /[?&]selftest=1/.test(location.search);
 	const cpuTest = /[?&]selftest=mmcpu/.test(location.search);
+	const audioTest = /[?&]selftest=p6audio/.test(location.search);
 
 	/* ---------------- what the machine holds ---------------- */
 	/* The engine is unknown until the plug-in says (P5): not "missing", which opened the NO ROM dialog
@@ -219,7 +220,7 @@
 		   missing ROM), and the dialog closes by itself as soon as the engine is anything else. */
 		if (st === "norom") { if (!noRomAt) noRomAt = performance.now(); if (!noRomShown && performance.now() - noRomAt > 1500) { noRomShown = true; window.firstRun(); } else if (!noRomShown) setTimeout(showEngine, 1600); }
 		else { noRomAt = 0; noRomShown = false; const d = $("#dlg"); if (d && !d.hidden && /FIRMWARE NEEDED/.test(d.textContent)) d.hidden = true; }
-		if (st === "ready" && !last.ready) { last.ready = true; log("ready: pattern " + CUR.pat + " kit " + CUR.kit); if (selfTest) setTimeout(runSelfTest, 500); if (cpuTest) runCpuPhases(); }
+		if (st === "ready" && !last.ready) { last.ready = true; log("ready: pattern " + CUR.pat + " kit " + CUR.kit); if (selfTest) setTimeout(runSelfTest, 500); if (cpuTest) runCpuPhases(); if (audioTest) setTimeout(() => MOCK("audioSelfTest")({ log: t => log("AUDIO: " + t), play: on => { if (on !== S.playing) window.togglePlay(); }, step: () => S.step, playing: () => S.playing }), 3000); }
 	}
 
 	/* ---------------- documents -> the page ---------------- */
@@ -613,6 +614,22 @@
 		send({ op: "openMenu" });
 	});
 
+	/* ---------------- AUDIO / MIDI (P6): the standalone's devices ---------------- */
+	/* The mockup's panel renders a gm-audio/devices document; here it is the plug-in's
+	   AudioDeviceManager (mdAudioMidiLink.cpp) instead of the mockup's example devices. In a
+	   plug-in the document says standalone false: no engine-menu entry. */
+	let audioDocument = null;
+	MOCK("audioDoc"); MOCK("audioSend"); MOCK("audioMeter");
+	window.audioDoc = () => audioDocument;
+	window.audioSend = c => send(Object.assign({ op: "audioSet" }, c));
+	window.audioMeter = on => send({ op: "audioMeter", on: !!on });
+	function showAudioEntry() {
+		const o = document.querySelector('#engsel option[value="audio"]');
+		if (o) o.hidden = o.disabled = !(audioDocument && audioDocument.standalone);
+	}
+	showAudioEntry();
+	send({ op: "audio" });
+
 	/* ---------------- messages from the plug-in ---------------- */
 	addEventListener("error", e => log("page error: " + e.message + " at " + (e.filename || "").split("/").pop() + ":" + e.lineno));
 	Bridge.onMessage(m => {
@@ -625,6 +642,9 @@
 		else if (m.type === "tel") { if (m.playing !== S.playing) setPlaying(m.playing); if (S.playing) showStep(m.step); }
 		else if (m.type === "lcd") { if (m.engine) FW.engine = m.engine; drawLcd(m.bits); showEngine(); }
 		else if (m.type === "catalogue") FW.cat = m.doc;
+		else if (m.type === "audio") { audioDocument = m.doc; showAudioEntry(); if (window.AP?.open) MOCK("drawAudio")(); }
+		else if (m.type === "audioLevel") MOCK("audioLevel")(m.in);
+		else if (m.type === "openAudio") MOCK("openAudio")();
 		else if (m.type === "learn") onLearn(m.doc);
 		else if (m.type === "result" && !m.ok && m.errors?.length && m.op !== "set") toast(m.errors[0]);
 	}

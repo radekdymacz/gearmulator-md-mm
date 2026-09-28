@@ -7,6 +7,12 @@
 // StandaloneFilterWindow and StandalonePluginHolder as before, including the settings
 // file name, so existing standalone state is kept.
 //
+// No "Audio input is muted to avoid feedback loop" bar: the input still starts muted
+// (JUCE's default, kept in the settings), and an editor that shows the mute itself (the
+// Machinedrum and Monomachine Editors' AUDIO / MIDI panel) says so there. Audio/MIDI
+// Settings... opens the editor's own panel when it has one (Editor::openAudioMidiSettings),
+// otherwise JUCE's dialog.
+//
 // Use: define JUCE_USE_CUSTOM_PLUGIN_STANDALONE_APP=1 for the plug-in target and
 // compile one file of the plug-in's shared code with
 //     #include "jucePluginEditorLib/standaloneApp.h"
@@ -35,6 +41,7 @@ namespace jucePluginEditorLib
 		{
 			setUsingNativeTitleBar(true);
 			hideJuceOptionsButton();
+			detachFeedbackBanner();
 			if(auto* p = dynamic_cast<Processor*>(getAudioProcessor()))
 			{
 				const auto title = p->getStandaloneWindowTitle();
@@ -44,7 +51,7 @@ namespace jucePluginEditorLib
 #if JUCE_MAC
 			juce::PopupMenu appleExtras;
 			appleExtras.addItem("Settings...", [this] { showEditorSettings(); });
-			appleExtras.addItem("Audio/MIDI Settings...", [this] { pluginHolder->showAudioSettingsDialog(); });
+			appleExtras.addItem("Audio/MIDI Settings...", [this] { showAudioMidiSettings(); });
 			juce::MenuBarModel::setMacMainMenu(this, &appleExtras);
 #else
 			setMenuBar(this);
@@ -78,7 +85,7 @@ namespace jucePluginEditorLib
 				return {};
 			}
 			juce::PopupMenu m;
-			m.addItem("Audio/MIDI Settings...", [this] { pluginHolder->showAudioSettingsDialog(); });
+			m.addItem("Audio/MIDI Settings...", [this] { showAudioMidiSettings(); });
 			m.addSeparator();
 			m.addItem("Save current state...", [this] { pluginHolder->askUserToSaveState(); });
 			m.addItem("Load a saved state...", [this] { pluginHolder->askUserToLoadState(); });
@@ -88,6 +95,29 @@ namespace jucePluginEditorLib
 		void menuItemSelected(int, int) override {}
 
 	private:
+		void showAudioMidiSettings()
+		{
+			if(auto* p = dynamic_cast<Processor*>(getAudioProcessor()))
+				if(auto* state = p->getEditorState())
+					if(auto* editor = state->getEditor(); editor && editor->openAudioMidiSettings())
+						return;
+			pluginHolder->showAudioSettingsDialog();
+		}
+
+		// JUCE's content component shows its yellow bar while the input is muted and follows
+		// the holder's mute value to do so. Move the holder (its audio callback's mute and the
+		// saved setting) to a fresh value with the same state, then clear the old one, which
+		// only the bar still follows: the bar goes and never comes back; the mute stays.
+		void detachFeedbackBanner()
+		{
+			auto& mute = pluginHolder->getMuteInputValue();
+			juce::Value old;
+			old.referTo(mute);
+			juce::Value fresh(mute.getValue());
+			mute.referTo(fresh);
+			old = false;
+		}
+
 		void showEditorSettings()
 		{
 			if(auto* p = dynamic_cast<Processor*>(getAudioProcessor()))

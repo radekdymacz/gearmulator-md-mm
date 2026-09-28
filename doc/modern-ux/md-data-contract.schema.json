@@ -18,6 +18,9 @@
     },
     {
       "$ref": "#/$defs/machine"
+    },
+    {
+      "$ref": "#/$defs/audioDevices"
     }
   ],
   "$defs": {
@@ -1276,6 +1279,203 @@
               "description": "memory: the current kit document is the working kit read from the machine's memory (P3). tracked: the stored slot plus the edits the desk saw."
             }
           }
+        }
+      }
+    },
+    "audioDevices": {
+      "type": "object",
+      "description": "The standalone's audio and MIDI devices (P6, mdJucePlugin/mdAudioMidiLink.cpp; data-contract.md 4.8). Not machine data. In a plug-in only schema, version and standalone:false.",
+      "required": [
+        "schema",
+        "version",
+        "standalone"
+      ],
+      "properties": {
+        "schema": {
+          "const": "gm-audio/devices"
+        },
+        "version": {
+          "const": 1
+        },
+        "standalone": {
+          "type": "boolean"
+        },
+        "driver": {
+          "type": "object",
+          "required": [
+            "id",
+            "list"
+          ],
+          "properties": {
+            "id": {
+              "type": "string"
+            },
+            "list": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          }
+        },
+        "output": {
+          "type": "object",
+          "required": [
+            "id",
+            "list"
+          ],
+          "properties": {
+            "id": {
+              "type": "string"
+            },
+            "list": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          }
+        },
+        "input": {
+          "type": "object",
+          "required": [
+            "id",
+            "list",
+            "muted"
+          ],
+          "properties": {
+            "id": {
+              "type": "string"
+            },
+            "list": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "muted": {
+              "type": "boolean"
+            }
+          }
+        },
+        "outputChannels": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": [
+              "name",
+              "on"
+            ],
+            "properties": {
+              "name": {
+                "type": "string"
+              },
+              "on": {
+                "type": "boolean"
+              }
+            }
+          }
+        },
+        "sampleRate": {
+          "type": "object",
+          "required": [
+            "value",
+            "list"
+          ],
+          "properties": {
+            "value": {
+              "type": "number"
+            },
+            "list": {
+              "type": "array",
+              "items": {
+                "type": "number"
+              }
+            }
+          }
+        },
+        "bufferSize": {
+          "type": "object",
+          "required": [
+            "value",
+            "list"
+          ],
+          "properties": {
+            "value": {
+              "type": "number"
+            },
+            "list": {
+              "type": "array",
+              "items": {
+                "type": "number"
+              }
+            }
+          }
+        },
+        "latencyMs": {
+          "type": "number",
+          "minimum": 0
+        },
+        "running": {
+          "type": "boolean"
+        },
+        "error": {
+          "type": "string"
+        },
+        "midiInputs": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": [
+              "id",
+              "name",
+              "on"
+            ],
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "name": {
+                "type": "string"
+              },
+              "on": {
+                "type": "boolean"
+              }
+            }
+          }
+        },
+        "midiOutput": {
+          "type": "object",
+          "required": [
+            "id",
+            "list"
+          ],
+          "properties": {
+            "id": {
+              "type": "string"
+            },
+            "list": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "required": [
+                  "id",
+                  "name"
+                ],
+                "properties": {
+                  "id": {
+                    "type": "string"
+                  },
+                  "name": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "bluetooth": {
+          "type": "boolean"
         }
       }
     }

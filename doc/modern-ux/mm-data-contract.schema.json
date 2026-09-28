@@ -8,7 +8,8 @@
     {"$ref": "#/$defs/kit"},
     {"$ref": "#/$defs/song"},
     {"$ref": "#/$defs/global"},
-    {"$ref": "#/$defs/machine"}
+    {"$ref": "#/$defs/machine"},
+    {"$ref": "md-data-contract.schema.json#/$defs/audioDevices", "description": "The standalone's audio and MIDI devices, shared with the Machinedrum Editor (data-contract.md 4.8)"}
   ],
   "$defs": {
     "byte": {"type": "integer", "minimum": 0, "maximum": 255},

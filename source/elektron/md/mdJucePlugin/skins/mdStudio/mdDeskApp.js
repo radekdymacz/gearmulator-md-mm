@@ -211,6 +211,7 @@ document.addEventListener("change", e => {
 	const sel = e.target, v = sel.value; renderEngine();
 	if (v === "rom") firstRun(true);
 	else if (v === "global") { sel.value = (machineState().desk || {}).engine === "hw" ? "hw" : "emu"; openGlobal(); }
+	else if (v === "audio") { sel.value = (machineState().desk || {}).engine === "hw" ? "hw" : "emu"; openAudio(); }
 	else if (v === "hw" || v === "emu") cmd("engine", { kind: v });
 });
 
@@ -764,7 +765,7 @@ function openK(btn) {
 	pop.style.top = (r.bottom + scrollY + 4) + "px"; pop.style.left = Math.max(16, Math.min(r.left + scrollX, innerWidth - pop.offsetWidth - 16)) + "px"; btn.setAttribute("aria-expanded", "true");
 	(pop.querySelector(".kopt[aria-selected=true]") || pop.querySelector(".kopt"))?.focus();
 }
-function kopt(o, sel) { return `<button class="kopt" role="option" data-v="${o.value}" aria-selected="${o.value === sel.value}"${o.disabled ? ` disabled aria-disabled="true" title="${o.title || "Not available"}"` : ""}>${o.text}</button>`; }
+function kopt(o, sel) { if (o.hidden) return ""; return `<button class="kopt" role="option" data-v="${o.value}" aria-selected="${o.value === sel.value}"${o.disabled ? ` disabled aria-disabled="true" title="${o.title || "Not available"}"` : ""}>${o.text}</button>`; }
 function closeK() { const pop = $("#kpop"); if (pop.hidden) return; pop.hidden = true; kFor?.setAttribute("aria-expanded", "false"); }
 document.addEventListener("click", e => {
 	const b = e.target.closest(".kselbtn"); if (b) { const same = kFor === b && !$("#kpop").hidden; closeK(); if (!same) openK(b); return; }

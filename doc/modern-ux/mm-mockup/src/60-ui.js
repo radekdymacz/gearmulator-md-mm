@@ -94,7 +94,7 @@ function openK(btn){const sel=document.getElementById(btn.dataset.for);kFor=btn;
  let top=r.bottom+scrollY+4;if(r.bottom+pop.offsetHeight+8>innerHeight&&r.top>pop.offsetHeight+8)top=r.top+scrollY-pop.offsetHeight-4;
  pop.style.top=top+"px";pop.style.left=Math.max(16,Math.min(r.left+scrollX,innerWidth-pop.offsetWidth-16))+"px";btn.setAttribute("aria-expanded","true");
  (pop.querySelector(".kopt[aria-selected=true]")||pop.querySelector(".kopt"))?.focus()}
-function kopt(o,sel){return`<button class="kopt" role="option" data-v="${o.value}" aria-selected="${o.value===sel.value}" ${o.disabled?"disabled":""}>${o.text}</button>`}
+function kopt(o,sel){if(o.hidden)return"";return`<button class="kopt" role="option" data-v="${o.value}" aria-selected="${o.value===sel.value}" ${o.disabled?"disabled":""}>${o.text}</button>`}
 function closeK(){const pop=$("#kpop");if(pop.hidden)return;pop.hidden=true;kFor?.setAttribute("aria-expanded","false")}
 document.addEventListener("click",e=>{const b=e.target.closest(".kselbtn");if(b){const same=kFor===b&&!$("#kpop").hidden;closeK();if(!same)openK(b);return}
  const o=e.target.closest("#kpop .kopt");if(o&&kFor){const sel=document.getElementById(kFor.dataset.for);sel.value=o.dataset.v;kFor.querySelector("span").textContent=sel.selectedOptions[0].text;closeK();kFor.focus();sel.dispatchEvent(new Event("change",{bubbles:true}));return}

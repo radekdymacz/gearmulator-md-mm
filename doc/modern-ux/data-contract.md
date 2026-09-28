@@ -307,6 +307,35 @@ The UI must not show `edited` and "project not saved" as one flag. Two different
 Pattern, song and global dumps write their slots directly. Only the kit has a
 separate working copy that can be unsaved on the machine.
 
+### 4.8 `gm-audio/devices` (the standalone's audio and MIDI, P6)
+
+Not machine data either: the standalone app's devices, shared by the Machinedrum and
+Monomachine Editors (`mdJucePlugin/mdAudioMidiLink.cpp`). JUCE's `AudioDeviceManager`
+stays the engine; the page's AUDIO / MIDI panel only renders this document and sends
+commands. The link publishes `{"type":"audio","doc"}` on `{"op":"audio"}`, after every
+command and whenever the device manager changes.
+
+| Field | Meaning |
+|---|---|
+| `standalone` | false in a plug-in: the host owns audio and MIDI, nothing else follows and the page shows no engine-menu entry |
+| `driver` `{id, list}` | the audio driver (CoreAudio, ...) |
+| `output` `{id, list}` | the output device by name |
+| `input` `{id, list, muted}` | the input device (`""` = none) and the feedback mute. The input starts muted (JUCE's default); the panel shows the mute instead of JUCE's yellow bar |
+| `outputChannels` `[{name, on}]` | the device's outputs and which are active |
+| `sampleRate`, `bufferSize` `{value, list}` | current and available |
+| `latencyMs`, `running`, `error` | output latency plus one buffer, the device runs, the last command's error |
+| `midiInputs` `[{id, name, on}]` | every MIDI input and whether it is enabled |
+| `midiOutput` `{id, list:[{id, name}]}` | the MIDI output (`""` = none) |
+| `bluetooth` | Bluetooth MIDI pairing is available |
+
+Commands, `{"op":"audioSet", ...}` (the message's own `id` is the request number, so
+devices go in `device`): `set` = `driver`/`output`/`input`/`midiOutput` with `device`,
+`sampleRate`/`bufferSize` with `value`, `mute` with `on`, `outputChannel` with `index`
+and `on`, `midiInput` with `device` and `on`; or `do` = `test` (a test tone) or
+`bluetooth` (the system's pairing dialog). Each gets a `result` and a fresh document;
+changes are saved with the standalone's settings at once. `{"op":"audioMeter","on"}`
+starts or stops `{"type":"audioLevel","in":0-1}` (the input before the mute, 15 Hz).
+
 ## 5. Hardware limits (`elektronData::validate`)
 
 | Document | Limit |
