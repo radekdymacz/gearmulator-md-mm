@@ -11,6 +11,7 @@
 #include "mdDataLink/mdDataLink.h"
 
 #include <functional>
+#include <map>
 #include <memory>
 #include <string>
 #include <vector>
@@ -69,7 +70,11 @@ namespace mdDesk
 		bool isReady() const;
 		double lastRoundTripMs() const;
 
+		// The Owner::Setup ops the desk has a function for (checked against the table).
+		static std::vector<std::string> setupOps();
+
 	private:
+		static const std::map<std::string, void (Desk::*)(const Value&)>& setups();
 		void onSetup(const Value& _message) override;
 		void setModulators(const Value& _message);
 		void setKnobs(const Value& _message);

@@ -140,7 +140,7 @@ namespace mdDesk
 		void onDumpReadBack(const Document& _doc);
 		void onState(const mdDataLink::Session::State& _s);
 		void takeWorkingKit(const Documents* _view);
-		void judgeWorkingKit(const elektronData::MdKit& _stored);
+		deskCore::KitState kitState(const Documents& _view) const;
 		const elektronData::MdKit* heldKit(const Documents& _view) const;
 		void setBaseChannel(const elektronData::MdGlobal& _g);
 		void pumpLoads(double _now);

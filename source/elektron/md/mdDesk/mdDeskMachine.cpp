@@ -11,6 +11,7 @@
 #include "elektronData/mdMachines.h"
 #include "elektronData/mdWorkingKit.h"
 
+#include <cassert>
 #include <algorithm>
 #include <cstdio>
 
@@ -58,6 +59,7 @@ namespace mdDesk
 		// same command with force.
 		Outcome ask(const char* _what, std::string _message, const char* _confirm, Value _details = Value::object())
 		{
+			assert(std::find(MdModel::asks().begin(), MdModel::asks().end(), _what) != MdModel::asks().end() && "a question the model does not declare");
 			Outcome o;
 			o.ask = deskCore::Ask{_what, std::move(_message), _confirm, std::move(_details)};
 			return o;
@@ -269,7 +271,7 @@ namespace mdDesk
 		// library clearing or writing over a slot that holds something, a kit written into the kit
 		// that plays while it holds unsaved edits, a pattern dump into the current pattern that links
 		// another kit (the firmware then loads that kit, measured).
-		const bool edited = m_session.state().workingKit == mdDataLink::Session::WorkingKit::Edited;
+		const bool edited = kitState(_view) == deskCore::KitState::Edited;
 		const auto kit = currentKit();
 		const auto* row = MdModel::commands().find(deskCore::opOf(_command));
 		const bool library = row && row->group == g_library;
@@ -380,8 +382,6 @@ namespace mdDesk
 			std::string note;
 			for(const auto& n : delivery.notLive)
 				note += (note.empty() ? "" : ". ") + n + " stays as it is on the machine";
-			if(!delivery.edits.empty())
-				m_session.noteWorkingKitEdited();
 			// The edit is pending until the machine's memory shows it (or it is too old to wait for);
 			// without memory nothing reads it back: it is done as sent.
 			if(m_profile.memory && !delivery.edits.empty())
@@ -492,10 +492,14 @@ namespace mdDesk
 			o = ask("breakChain", "Picking <b>" + ed::mdPatternName(slot) + "</b> ends the chain <b>" + list + "</b>, as on the machine.",
 				"Pick it, end the chain", std::move(d));
 		}
-		if(m_session.selectWouldDiscardKitEdits(slot))
+		// EXTENDED mode loads the kit a pattern links: another kit loses the edits.
+		const auto& st = m_session.state();
+		const auto link = st.patternKits.find(slot);
+		if(kitState(_view) == deskCore::KitState::Edited && st.extendedMode == true && st.kit && link != st.patternKits.end()
+			&& link->second != *st.kit)
 		{
-			const auto kit = *m_session.state().kit;
-			const auto target = m_session.state().patternKits.at(slot);
+			const auto kit = *st.kit;
+			const auto target = link->second;
 			Value d = Value::object();
 			d.set("p", slot);
 			d.set("kit", static_cast<int>(kit));
@@ -510,7 +514,7 @@ namespace mdDesk
 	// LOAD KIT drops the unsaved edits of the kit that plays.
 	Outcome MdMachine::askKitLoad(const Value& _command, const Documents& _view)
 	{
-		if(m_session.state().workingKit != mdDataLink::Session::WorkingKit::Edited)
+		if(kitState(_view) != deskCore::KitState::Edited)
 			return ok();
 		const auto kit = currentKit();
 		return ask("loadKit", "Load <b>" + kitLabel(_view, static_cast<uint8_t>(*intOf(_command, "k"))) + "</b>? The unsaved edits of <b>"
@@ -521,7 +525,7 @@ namespace mdDesk
 	Outcome MdMachine::askReloadKit(const Value&, const Documents& _view)
 	{
 		const auto kit = currentKit();
-		if(!kit || m_session.state().workingKit != mdDataLink::Session::WorkingKit::Edited)
+		if(!kit || kitState(_view) != deskCore::KitState::Edited)
 			return ok();
 		return ask("reloadKit", "Reload <b>" + kitLabel(_view, *kit) + "</b> from the machine? Your edits are lost.", "Reload (discard edits)",
 			kitDetails(kit));
@@ -572,13 +576,17 @@ namespace mdDesk
 		return ok();
 	}
 
-	// The kit that plays as the machine holds it: memory's last image, or (no memory, or none taken
-	// yet) what the editor knows of it. Never the editor's edits still on their way.
+	// The kit that plays as the machine holds it: the live edits already sent (CCs and SysEx the
+	// firmware has taken, memory just has not shown them yet), else memory's last image (with what
+	// host automation moved since), else what the editor knows of it. Never knob turns still queued
+	// (while recording they reach the machine one DATA ENTRY step at a time).
 	const ed::MdKit* MdMachine::heldKit(const Documents& _view) const
 	{
 		const auto kit = currentKit();
 		if(!kit)
 			return nullptr;
+		if(m_working.expect.expecting(now()) && !m_knobs.pending() && m_working.expect.to && m_working.expect.to->position == *kit)
+			return &*m_working.expect.to;
 		if(m_profile.memory && m_working.image && m_working.image->position == *kit)
 			return &*m_working.image;
 		return _view.workingKitOf(*kit);
@@ -596,12 +604,12 @@ namespace mdDesk
 		return ok("Saved kit " + std::to_string(*kit + 1) + " on the machine");
 	}
 
-	Outcome MdMachine::cmdReloadKit(const Value&, const Documents&)
+	Outcome MdMachine::cmdReloadKit(const Value&, const Documents& _view)
 	{
 		const auto kit = currentKit();
 		if(!kit)
 			return refuse("The current kit is not known yet");
-		if(m_session.state().workingKit != mdDataLink::Session::WorkingKit::Edited)
+		if(kitState(_view) != deskCore::KitState::Edited)
 			return refuse("The kit that plays matches its saved slot. Nothing to reload.");
 		m_session.loadKit(*kit);
 		// The working kit is the stored slot again: from memory, or from the slot's next dump.
@@ -936,7 +944,6 @@ namespace mdDesk
 		observe(_k, Source::Dump);
 		if(currentKit() != _k.position)
 			return;
-		judgeWorkingKit(_k);
 		// Until memory shows it (or on a device without memory), the kit that plays starts as its slot.
 		auto [next, seed] = deskCore::fromDump(std::move(m_working), _k);
 		m_working = std::move(next);
@@ -1020,8 +1027,12 @@ namespace mdDesk
 		if(slot == _value)
 			return;
 		slot = _value;
-		m_session.noteWorkingKitEdited();
-		// Something else moved the kit that plays: the machine holds it (memory will show it too).
+		// Something else moved the kit that plays: the machine holds it (memory will show it too),
+		// so the next change builds on this one, not on the older image.
+		if(m_working.expect.expecting(now()) && m_working.expect.to && m_working.expect.to->position == k.position)
+			m_working.expect.to = k;
+		else if(m_working.image && m_working.image->position == k.position)
+			m_working.image = k;
 		observe(WorkingKit{k}, Source::Tracked);
 	}
 
@@ -1084,20 +1095,16 @@ namespace mdDesk
 			else
 				observe(WorkingKit{*r.take}, Source::Memory);
 		}
-		if(stored && !m_working.region)
-			judgeWorkingKit(*stored);
 	}
 
-	// Edited or clean from memory against the stored slot, not from what the editor saw.
-	void MdMachine::judgeWorkingKit(const ed::MdKit& _stored)
+	// The kit that plays against its stored slot, as the page sees them (the working kit's pending
+	// live edits count: they are what would be lost). One rule for both machines (deskCore).
+	deskCore::KitState MdMachine::kitState(const Documents& _view) const
 	{
-		const auto& memory = m_working.image;
-		if(!memory || currentKit() != memory->position || _stored.position != memory->position)
-			return;
-		const bool clean = ed::mdSameKitSound(*memory, _stored);
-		const auto want = clean ? mdDataLink::Session::WorkingKit::Clean : mdDataLink::Session::WorkingKit::Edited;
-		if(m_session.state().workingKit != want)
-			m_session.noteWorkingKitObserved(clean);
+		const auto kit = currentKit();
+		const auto stored = kit ? _view.kits.find(*kit) : _view.kits.end();
+		return deskCore::kitStateOf(kit ? _view.workingKitOf(*kit) : nullptr, stored == _view.kits.end() ? nullptr : &stored->second,
+			[](const ed::MdKit& _a, const ed::MdKit& _b) { return ed::mdSameKitSound(_a, _b); });
 	}
 
 	void MdMachine::setBaseChannel(const ed::MdGlobal& _g)
@@ -1246,9 +1253,11 @@ namespace mdDesk
 		return v;
 	}
 
-	Value MdMachine::state(const Documents&) const
+	Value MdMachine::state(const Documents& _view) const
 	{
 		auto doc = mdDataLink::Session::stateToJson(m_session.state());
+		if(auto* kit = doc.find("kit"))
+			kit->put("working", deskCore::kitStateName(kitState(_view)));
 		Value desk = Value::object();
 		desk.set("tx", busy());
 		desk.set("loading", static_cast<int>(m_loads.pending()));

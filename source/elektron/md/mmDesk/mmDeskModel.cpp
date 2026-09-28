@@ -263,9 +263,9 @@ namespace mmDesk
 		using deskCore::Gate;
 		using deskCore::CoreOp;
 		using deskCore::Owner;
-		const Arg p{"p", ArgType::Integer, 0, 127};
-		const Arg kOpt{"k", ArgType::Integer, 0, 127, true};
-		const Arg sOpt{"s", ArgType::Integer, 0, 23, true};
+		const Arg p = deskCore::slotArg<MmModel>("p", Kind::Pattern);
+		const Arg kOpt = deskCore::slotArg<MmModel>("k", Kind::Kit, true);
+		const Arg sOpt = deskCore::slotArg<MmModel>("s", Kind::Song, true);
 		const Arg t6{"t", ArgType::Integer, 0, 5};
 		static const CommandTable table({
 			// ---- the core: documents ----
@@ -275,7 +275,7 @@ namespace mmDesk
 			{"set", Owner::Core, Gate::Input, -1, {{"kind", ArgType::Text, 0, 0, false, deskCore::kindNames<MmModel>()},
 				{"doc", ArgType::Object}}, "a whole document as the intent (workingKit: the kit that plays)", CoreOp::Set},
 			// ---- the machine ----
-			{"load", Owner::Machine, Gate::Input, -1, {{"kind", ArgType::Text, 0, 0, false, deskCore::kindNames<MmModel>(true)}, {"slot", ArgType::Integer, 0, 127}}, "read a document now"},
+			{"load", Owner::Machine, Gate::Input, -1, {{"kind", ArgType::Text, 0, 0, false, deskCore::kindNames<MmModel>(true)}, {"slot", ArgType::Integer, 0, static_cast<double>(deskCore::maxLoadableSlots<MmModel>() - 1)}}, "read a document now"},
 			{"select", Owner::Machine, Gate::Input, -1, {p, {"now", ArgType::Bool, 0, 0, true}},
 				"LOAD PATTERN (at the pattern end while playing; now: STOP, LOAD, PLAY)"},
 			{"loadKit", Owner::Machine, Gate::Input, -1, {kOpt}, "LOAD KIT (the current kit without k)"},

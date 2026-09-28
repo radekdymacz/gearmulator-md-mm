@@ -163,22 +163,25 @@ namespace deskCore
 		elektronData::json::Value message(const ModLimits& _limits, double _nowMs);
 
 		// One step of the machine (both desks, on the adapter's step edge): the modulated values go
-		// to the adapter (sendModulation, like host automation); the message to publish, when any
-		// modulator runs.
+		// to the adapter (sendModulation, like host automation); the message to publish while any
+		// modulator runs, and until the CC rate it showed has fallen to zero after the last one went.
 		template<typename Adapter, typename Documents>
 		std::optional<elektronData::json::Value> step(Adapter& _adapter, const Documents& _view, const ModLimits& _limits,
 			const int _step, const bool _playing, const double _nowMs)
 		{
 			for(const auto& o : onPlayhead(_step, _playing, _nowMs))
 				_adapter.sendModulation(o.track, o.param, o.value, _view);
-			if(setup().sources.empty())
+			if(setup().sources.empty() && m_shownRate == 0)
 				return std::nullopt;
-			return message(_limits, _nowMs);
+			auto m = message(_limits, _nowMs);
+			m_shownRate = ccPerSecond(_nowMs);
+			return m;
 		}
 
 	private:
 		Modulators m_mods;
 		CcBudget m_budget;
+		int m_shownRate = 0;	// the CC rate the last stepped message showed
 		int m_lastStep = -1;
 		bool m_playing = false;
 	};

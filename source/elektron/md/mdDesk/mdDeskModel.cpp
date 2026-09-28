@@ -210,9 +210,10 @@ namespace mdDesk
 		const auto list = [](const auto& _names) { return std::vector<const char*>(_names.begin(), _names.end()); };
 		constexpr auto S = static_cast<int>(DocKind::Song);
 		constexpr auto G = static_cast<int>(DocKind::Global);
-		const Arg p{"p", ArgType::Integer, 0, 127};
-		const Arg k{"k", ArgType::Integer, 0, 63};
-		const Arg s{"s", ArgType::Integer, 0, 31};
+		const auto slot = [](const char* _name, const DocKind _kind) { return deskCore::slotArg<MdModel>(_name, _kind); };
+		const Arg p = slot("p", DocKind::Pattern);
+		const Arg k = slot("k", DocKind::Kit);
+		const Arg s = slot("s", DocKind::Song);
 		const Arg t{"t", ArgType::Integer, 0, 15};
 		const Arg step{"s", ArgType::Integer, 0, 63};
 		const Arg i24{"i", ArgType::Integer, 0, 23};
@@ -237,13 +238,13 @@ namespace mdDesk
 			{"speed", Owner::Core, Gate::Input, P, {p, {"v", ArgType::Text, 0, 0, false, list(ed::g_mdTempoMultipliers)}}, "the tempo multiplier"},
 			{"swing", Owner::Core, Gate::Input, P, {p, {"v", ArgType::Integer, 50, 80}}, "percent"},
 			{"accentAmount", Owner::Core, Gate::Input, P, {p, {"v", ArgType::Integer, 0, 15}}, ""},
-			{"patternKit", Owner::Core, Gate::Input, P, {p, {"v", ArgType::Integer, 0, 63}}, ""},
+			{"patternKit", Owner::Core, Gate::Input, P, {p, slot("v", DocKind::Kit)}, ""},
 			{"clearSteps", Owner::Core, Gate::Input, P, {p, t, {"from", ArgType::Integer, 0, 63}, {"to", ArgType::Integer, 1, 64}}, ""},
 			{"copySteps", Owner::Core, Gate::Input, P, {p, t, {"from", ArgType::Integer, 0, 63}, {"to", ArgType::Integer, 1, 64}}, ""},
 			{"pasteSteps", Owner::Core, Gate::Input, P, {p, t, {"from", ArgType::Integer, 0, 63}}, ""},
 			{"patCopy", Owner::Core, Gate::Input, P, {p}, "the pattern chooser", CoreOp::Edit, g_library},
 			{"patPaste", Owner::Core, Gate::Input, P, {p}, "", CoreOp::Edit, g_library},
-			{"patCopyTo", Owner::Core, Gate::Input, P, {{"from", ArgType::Integer, 0, 127}, {"to", ArgType::Integer, 0, 127}}, "drag-copy", CoreOp::Edit, g_library},
+			{"patCopyTo", Owner::Core, Gate::Input, P, {slot("from", DocKind::Pattern), slot("to", DocKind::Pattern)}, "drag-copy", CoreOp::Edit, g_library},
 			{"patClear", Owner::Core, Gate::Input, P, {p}, "", CoreOp::Edit, g_library},
 			{"param", Owner::Core, Gate::Input, W, {k, t, i24, v127}, "a kit parameter 0-23"},
 			{"level", Owner::Core, Gate::Input, W, {k, t, v127}, ""},
@@ -257,7 +258,7 @@ namespace mdDesk
 			{"clearSound", Owner::Core, Gate::Input, W, {k, t}, ""},
 			{"kitCopy", Owner::Core, Gate::Input, K, {k}, "the kit library", CoreOp::Edit, g_library},
 			{"kitPaste", Owner::Core, Gate::Input, K, {k}, "", CoreOp::Edit, g_library},
-			{"kitCopyTo", Owner::Core, Gate::Input, K, {{"from", ArgType::Integer, 0, 63}, {"to", ArgType::Integer, 0, 63}}, "", CoreOp::Edit, g_library},
+			{"kitCopyTo", Owner::Core, Gate::Input, K, {slot("from", DocKind::Kit), slot("to", DocKind::Kit)}, "", CoreOp::Edit, g_library},
 			{"kitClear", Owner::Core, Gate::Input, K, {k}, "", CoreOp::Edit, g_library},
 			{"kitRename", Owner::Core, Gate::Input, K, {k, {"name", ArgType::Text}}, "", CoreOp::Edit, g_library},
 			{"rowSet", Owner::Core, Gate::Input, S, {s, row, {"row", ArgType::Object}}, "song rows"},
@@ -272,7 +273,7 @@ namespace mdDesk
 			{"globalSet", Owner::Core, Gate::Input, G, {{"field", ArgType::Text, 0, 0, false, list(ed::g_mdGlobalFields)}, opt(on), any, {"note", ArgType::Integer, 0, 127, true},
 				{"target", ArgType::IntegerOrNull, 0, 31, true}}, "a GLOBAL setting by name"},
 			// ---- the machine ----
-			{"load", Owner::Machine, Gate::Midi, -1, {{"kind", ArgType::Text, 0, 0, false, deskCore::kindNames<MdModel>(true)}, {"slot", ArgType::Integer, 0, 127}}, "read a document now"},
+			{"load", Owner::Machine, Gate::Midi, -1, {{"kind", ArgType::Text, 0, 0, false, deskCore::kindNames<MdModel>(true)}, {"slot", ArgType::Integer, 0, static_cast<double>(deskCore::maxLoadableSlots<MdModel>() - 1)}}, "read a document now"},
 			{"select", Owner::Machine, Gate::Input, -1, {p, {"now", ArgType::Bool, 0, 0, true}},
 				"LOAD PATTERN (queued while playing; now: STOP, LOAD, PLAY)"},
 			{"saveKit", Owner::Machine, Gate::Input, -1, {}, "SAVE KIT to the current slot"},
@@ -283,7 +284,7 @@ namespace mdDesk
 			{"recTrig", Owner::Machine, Gate::Input, -1, {t}, "a TRIG key while recording"},
 			{"chain", Owner::Machine, Gate::Input, -1, {{"patterns", ArgType::Array}}, "BANK held + TRIG keys"},
 			{"chainClear", Owner::Machine, Gate::Input, -1, {}, ""},
-			{"globalSlot", Owner::Machine, Gate::Input, -1, {{"slot", ArgType::Integer, 0, 7}}, "the active GLOBAL slot"},
+			{"globalSlot", Owner::Machine, Gate::Input, -1, {slot("slot", DocKind::Global)}, "the active GLOBAL slot"},
 			{"selectSong", Owner::Machine, Gate::Input, -1, {s}, "LOAD SONG (stopped)"},
 			{"reloadSong", Owner::Machine, Gate::Input, -1, {}, "stop, load, play"},
 			{"sampleName", Owner::Machine, Gate::Input, -1, {{"slot", ArgType::Integer, 0, 47}, {"name", ArgType::Text}}, "0x73"},

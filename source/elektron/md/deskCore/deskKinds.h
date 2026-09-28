@@ -1,5 +1,6 @@
 #pragma once
 
+#include "deskCommands.h"
 #include "deskCore.h"
 
 #include "elektronData/json.h"
@@ -106,5 +107,34 @@ namespace deskCore
 		if(!(*before == *after))
 			r.changes.push_back({*before, *after});
 		return r;
+	}
+
+	// A slot argument of a kind: 0 .. slots-1, from the kind's record (the one place the count is).
+	template<typename Model>
+	Arg slotArg(const char* _name, const typename Model::Kind _kind, const bool _optional = false)
+	{
+		const auto* k = kindSpec<Model>(_kind);
+		return Arg{_name, ArgType::Integer, 0, static_cast<double>(k ? k->slots - 1 : 0), _optional};
+	}
+
+	// The largest slot count of the kinds the page may ask for ("load"'s slot range).
+	template<typename Model>
+	int maxLoadableSlots()
+	{
+		int n = 1;
+		for(const auto& k : Model::kinds())
+			if(k.loadable && k.slots > n)
+				n = k.slots;
+		return n;
+	}
+
+	// A slot number the machine reports for a kind, folded into its range (the firmware numbers some
+	// slots past the count: songs, globals).
+	template<typename Model>
+	uint8_t slotIn(const typename Model::Kind _kind, const int _value)
+	{
+		const auto* k = kindSpec<Model>(_kind);
+		const int n = k && k->slots > 0 ? k->slots : 1;
+		return static_cast<uint8_t>(((_value % n) + n) % n);
 	}
 }

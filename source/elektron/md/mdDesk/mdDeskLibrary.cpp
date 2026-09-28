@@ -290,6 +290,14 @@ namespace mdDesk
 		return _kit.name[0] == 0 && std::all_of(_kit.models.begin(), _kit.models.end(), [](const uint32_t _m) { return _m == 0; });
 	}
 
+	std::vector<std::string> libraryOps()
+	{
+		std::vector<std::string> ops;
+		for(const auto& [op, a] : actions())
+			ops.push_back(op);
+		return ops;
+	}
+
 	EditResult applyLibrary(const Documents& _docs, const Value& _command, const deskCore::Command<>& _row, Clipboard& _clipboard,
 		const EditContext& _context)
 	{

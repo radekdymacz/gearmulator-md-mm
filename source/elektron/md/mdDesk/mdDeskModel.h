@@ -58,6 +58,13 @@ namespace mdDesk
 		static elektronData::json::Value catalogue();
 		// What a lifecycle state means for the user (machine.lifecycleText; also why a gated command waits).
 		static std::string lifecycleText(deskCore::Lifecycle _l);
+		// The questions the MD adapter may ask (deskCore::Ask::what): the contract's ask enum.
+		static const std::vector<std::string>& asks()
+		{
+			static const std::vector<std::string> a{"breakChain", "discardKit", "loadKit", "reloadKit", "overwriteKit", "overwriteSlot",
+				"clearSlot", "relinkKit"};
+			return a;
+		}
 	};
 
 	const char* kindName(DocKind _k);

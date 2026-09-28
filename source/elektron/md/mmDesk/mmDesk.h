@@ -50,8 +50,9 @@ namespace mmDesk
 
 		void onTelemetry(const Telemetry& _t);
 		// md::MmTelemetry's working-kit region: [0] kit number, [5..] the raw kit.
-		void onWorkingKit(const Bytes& _region) { machine().onWorkingKit(_region); }
-		void setProbe(Probe _probe) { machine().setProbe(_probe); }
+		// Device facts; what they change goes out at once, as with the MD's.
+		void onWorkingKit(const Bytes& _region) { machine().onWorkingKit(_region); flush(); }
+		void setProbe(Probe _probe) { machine().setProbe(_probe); flush(); }
 		// The modulators stored with the project (mm-desk/modulators); errors if they do not validate.
 		std::vector<std::string> loadSetup(const Value& _setup);
 
@@ -74,6 +75,9 @@ namespace mmDesk
 		int currentGlobal() const;
 		size_t loaded() const { const auto s = status(); const auto* v = s.find("loaded"); return v && v->isNumber() ? static_cast<size_t>(v->asNumber()) : 0; }
 		double lastRoundTripMs() const { const auto s = status(); const auto* v = s.find("roundTripMs"); return v && v->isNumber() ? v->asNumber() : -1; }
+
+		// The Owner::Setup ops the desk has a function for (checked against the table).
+		static std::vector<std::string> setupOps();
 
 	private:
 		void onSetup(const Value& _message) override;

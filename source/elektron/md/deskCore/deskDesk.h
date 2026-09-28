@@ -85,9 +85,7 @@ namespace deskCore
 			m_machine = std::move(_adapter);
 			if(m_core.pageReadyNow())
 			{
-				Value reset = Value::object();
-				reset.set("type", "reset");
-				m_core.publishNow(reset);
+				m_core.startOver();
 				onReady({});
 				flush();
 			}

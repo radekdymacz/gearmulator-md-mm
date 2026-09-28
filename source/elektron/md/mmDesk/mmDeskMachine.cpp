@@ -8,6 +8,7 @@
 #include "deskCore/deskKinds.h"
 #include "deskCore/deskPacer.h"
 
+#include <cassert>
 #include <cstdio>
 
 #include <algorithm>
@@ -172,6 +173,7 @@ namespace mmDesk
 	{
 		Outcome ask(const char* _what, std::string _message, const char* _confirm)
 		{
+			assert(std::find(MmModel::asks().begin(), MmModel::asks().end(), _what) != MmModel::asks().end() && "a question the model does not declare");
 			Outcome o;
 			o.ask = deskCore::Ask{_what, std::move(_message), _confirm, Value::object()};
 			return o;
@@ -633,8 +635,8 @@ namespace mmDesk
 		{
 		case ed::g_mmPatternDump: onDump({Kind::Pattern, static_cast<uint8_t>(slot & 127)}, _m); break;
 		case ed::g_mmKitDump: onDump({Kind::Kit, static_cast<uint8_t>(slot & 127)}, _m); break;
-		case ed::g_mmSongDump: onDump({Kind::Song, static_cast<uint8_t>(slot % 24)}, _m); break;
-		case ed::g_mmGlobalDump: onDump({Kind::Global, static_cast<uint8_t>(slot & 7)}, _m); break;
+		case ed::g_mmSongDump: onDump({Kind::Song, deskCore::slotIn<MmModel>(Kind::Song, slot)}, _m); break;
+		case ed::g_mmGlobalDump: onDump({Kind::Global, deskCore::slotIn<MmModel>(Kind::Global, slot)}, _m); break;
 		default: break;
 		}
 	}
@@ -730,16 +732,16 @@ namespace mmDesk
 			if(m_curSong != _value)
 			{
 				m_curSong = _value;
-				if(!known({Kind::Song, static_cast<uint8_t>(_value % 24)}))
-					request({Kind::Song, static_cast<uint8_t>(_value % 24)}, true);
+				if(!known({Kind::Song, deskCore::slotIn<MmModel>(Kind::Song, _value)}))
+					request({Kind::Song, deskCore::slotIn<MmModel>(Kind::Song, _value)}, true);
 			}
 			break;
 		case ed::MmStatus::Global:
 			if(m_curGlobal != _value)
 			{
 				m_curGlobal = _value;
-				if(!known({Kind::Global, static_cast<uint8_t>(_value & 7)}))
-					request({Kind::Global, static_cast<uint8_t>(_value & 7)}, true);
+				if(!known({Kind::Global, deskCore::slotIn<MmModel>(Kind::Global, _value)}))
+					request({Kind::Global, deskCore::slotIn<MmModel>(Kind::Global, _value)}, true);
 			}
 			break;
 		case ed::MmStatus::SongMode:

@@ -196,6 +196,44 @@ namespace deskCore::contract
 		return gaps;
 	}
 
+	// The ask message variant of $defs/message, or null.
+	inline elektronData::json::Value* askMessageVariant(elektronData::json::Value& _root)
+	{
+		auto* defs = _root.find("$defs");
+		auto* message = defs ? defs->find("message") : nullptr;
+		auto* variants = message ? message->find("oneOf") : nullptr;
+		if(!variants || !variants->isArray())
+			return nullptr;
+		for(auto& v : variants->asArray())
+			if(const auto* p = v.find("properties"))
+				if(const auto* t = p->find("type"); t && t->find("const") && t->find("const")->isString() && t->find("const")->asString() == "ask")
+					return &v;
+		return nullptr;
+	}
+
+	// The ask message's ask and also enums: the model's questions (Model::asks()).
+	inline elektronData::json::Value withAsks(elektronData::json::Value _root, const std::vector<std::string>& _asks)
+	{
+		if(auto* v = askMessageVariant(_root))
+			if(auto* p = v->find("properties"))
+			{
+				if(auto* a = p->find("ask"))
+					a->put("enum", namesOf(_asks));
+				if(auto* also = p->find("also"))
+					if(auto* items = also->find("items"))
+						items->put("enum", namesOf(_asks));
+			}
+		return _root;
+	}
+
+	inline bool sameAsks(elektronData::json::Value _root, const std::vector<std::string>& _asks)
+	{
+		const auto* v = askMessageVariant(_root);
+		const auto* p = v ? v->find("properties") : nullptr;
+		const auto* a = p ? p->find("ask") : nullptr;
+		return a && a->find("enum") && *a->find("enum") == namesOf(_asks);
+	}
+
 	// The contract's lifecycle enum is the lifecycle rows' names.
 	inline bool sameLifecycle(const elektronData::json::Value& _root)
 	{
@@ -225,6 +263,24 @@ namespace deskCore::contract
 			const auto* c = _table.find(op);
 			if(!c || c->owner != _owner)
 				gaps.push_back(std::string("a function for ") + op + ", which is not a " + ownerName(_owner) + " command of the table");
+		}
+		return gaps;
+	}
+
+	// The Core/Edit rows (pure edits) and the ops the model's edit functions are keyed by, both ways.
+	template<typename H>
+	std::vector<std::string> editGaps(const CommandTable<H>& _table, const std::vector<std::string>& _edits)
+	{
+		std::vector<std::string> gaps;
+		const std::set<std::string> edits(_edits.begin(), _edits.end());
+		for(const auto& c : _table.commands())
+			if(c.owner == Owner::Core && c.core == CoreOp::Edit && !edits.count(c.op))
+				gaps.push_back(std::string("no edit function for the command ") + c.op);
+		for(const auto& op : edits)
+		{
+			const auto* c = _table.find(op);
+			if(!c || c->owner != Owner::Core || c->core != CoreOp::Edit)
+				gaps.push_back("an edit function for " + op + ", which is not an edit command of the table");
 		}
 		return gaps;
 	}

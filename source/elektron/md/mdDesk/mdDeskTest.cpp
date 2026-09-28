@@ -42,6 +42,15 @@ namespace
 		++g_failures;
 	}
 
+	// The machine document's kit.working, as the page reads it.
+	std::string kitWorking(const Desk& _desk)
+	{
+		const auto doc = _desk.machine().state(_desk.documents());
+		const auto* k = doc.find("kit");
+		const auto* w = k ? k->find("working") : nullptr;
+		return w && w->isString() ? w->asString() : std::string();
+	}
+
 	// apply is pure: the clipboard a copy leaves comes back in the result.
 	EditResult run(const Documents& _docs, const Value& _cmd, Clipboard& _clip, const EditContext& _context = {})
 	{
@@ -495,7 +504,7 @@ namespace
 		desk.onPageMessage(cmd(R"({"op":"param","k":0,"t":1,"i":4,"v":77,"id":4})"));
 		check(params.size() == 1 && params[0] == std::array<uint8_t, 3>{1, 4, 77}, "kit param goes to the CC path");
 		check(wire.empty(), "no kit dump for a live edit");
-		check(desk.linkState().workingKit == mdDataLink::Session::WorkingKit::Edited, "kit is edited");
+		check(kitWorking(desk) == "edited", "kit is edited");
 		// A stored-slot dump does not overwrite the working copy.
 		desk.onDeviceSysex(ed::encodeMdKit(kit));
 		check(desk.documents().working && desk.documents().working->kit.params[1][4] == 77 && desk.documents().kits.at(0).params[1][4] == kit.params[1][4],
@@ -569,14 +578,14 @@ namespace
 		desk.onPageMessage(cmd(R"({"op":"ready"})"));
 		desk.onDeviceSysex(status(ed::MdStatus::Kit, 3));
 		desk.onDeviceSysex(ed::encodeMdKit(kit));
-		check(desk.linkState().workingKit != mdDataLink::Session::WorkingKit::Edited, "stored kit loaded");
+		check(kitWorking(desk) != "edited", "stored kit loaded");
 
 		// A value changed on the machine's panel, never seen by the desk.
 		auto panel = kit;
 		panel.params[2][5] = static_cast<uint8_t>(kit.params[2][5] ^ 0x11);
 		desk.onWorkingKitMemory(region(panel));
 		check(desk.documents().working->kit.params[2][5] == panel.params[2][5], "memory edit shows in the working kit");
-		check(desk.linkState().workingKit == mdDataLink::Session::WorkingKit::Edited, "memory differs: edited");
+		check(kitWorking(desk) == "edited", "memory differs: edited");
 		const Value* wdoc = nullptr;
 		for(auto it = page.rbegin(); it != page.rend() && !wdoc; ++it)
 			if(it->find("type")->asString() == "doc" && it->find("kind")->asString() == "workingKit")
@@ -588,7 +597,7 @@ namespace
 		check(desk.documents().working->kit.params[2][5] == panel.params[2][5], "a stored dump does not undo memory");
 		// Back to the stored values: clean without SAVE KIT.
 		desk.onWorkingKitMemory(region(kit));
-		check(desk.linkState().workingKit == mdDataLink::Session::WorkingKit::Clean, "memory equals slot: clean");
+		check(kitWorking(desk) == "clean", "memory equals slot: clean");
 
 		// Right after the desk's own live edit, an image is held (it may predate the CC).
 		now = 1000;
@@ -603,6 +612,24 @@ namespace
 		desk.tick();
 		check(desk.documents().working->kit.params[0][1] == 5 && !desk.coreState().state({DocKind::WorkingKit, 0})->pending,
 			"settled by the image that shows the edit");
+
+		// Host automation twice within one image: the second builds on the first.
+		desk.onHostKitParam(1, 2, 40);
+		desk.onHostKitParam(1, 3, 41);
+		check(desk.documents().working->kit.params[1][2] == 40 && desk.documents().working->kit.params[1][3] == 41,
+			"two automated parameters within one memory image both hold");
+		// SAVE KIT right after a live edit, before memory shows it: the slot holds the edit.
+		now = 1300;
+		desk.onPageMessage(cmd(R"({"op":"param","k":3,"t":0,"i":2,"v":77,"id":2})"));
+		desk.onPageMessage(cmd(R"({"op":"saveKit","id":3})"));
+		desk.tick();
+		const auto saved = desk.documents().kits.find(3);
+		check(saved != desk.documents().kits.end() && saved->second.params[0][2] == 77 && saved->second.params[1][2] == 40,
+			"SAVE KIT right after an edit stores the edit and the automation");
+		after = desk.documents().working->kit;
+		desk.onWorkingKitMemory(region(after));
+		now = 1500;
+		desk.tick();
 
 		// Memory names another kit than status: ask status, apply once it agrees.
 		auto next = kit;
@@ -1040,11 +1067,12 @@ namespace
 		if(_write)
 		{
 			std::ofstream out(MDDESK_SCHEMA);
-			out << ed::json::write(contract::withDocKinds(contract::withGenerated(*root, generated), kinds), 2) << "\n";
+			out << ed::json::write(contract::withAsks(contract::withDocKinds(contract::withGenerated(*root, generated), kinds), mdDesk::MdModel::asks()), 2) << "\n";
 			return;
 		}
 		check(contract::sameCommands(*root, generated), "the schema's $defs/command is generated from the command tables (--write-schema)");
 		check(contract::sameLifecycle(*root), "the schema's lifecycle enum is the lifecycle rows (--write-schema)");
+	check(contract::sameAsks(*root, mdDesk::MdModel::asks()), "the schema's ask enum is the model's questions (--write-schema)");
 	for(const auto& gap : contract::docKindGaps(*root, kinds))
 		check(false, gap.c_str());
 		// The plug-in's host sends these; this test has no host.
@@ -1057,6 +1085,10 @@ namespace
 		check(r.offCount == 0 && r.messages > 0, "every published message is on the contract");
 		check(r.unseen.empty(), "every message type and machine member the contract declares is published");
 		auto gaps = contract::handlerGaps(commandTable(), deskCore::Owner::Machine, MdMachine::commandsHandled());
+		for(const auto& g : contract::handlerGaps(commandTable(), deskCore::Owner::Setup, Desk::setupOps()))
+			gaps.push_back(g);
+		for(const auto& g : contract::editGaps(commandTable(), editOps()))
+			gaps.push_back(g);
 		for(const auto& g : contract::unknownOps(commandTable(), MdMachine::commandsAsking()))
 			gaps.push_back(g);
 		for(const auto& g : gaps)

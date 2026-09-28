@@ -50,12 +50,25 @@ namespace mdDesk
 	// ---- the editor's setup: the app modulators and the knob rows ----
 
 	// The table's Owner::Setup rows, one function each.
+	const std::map<std::string, void (Desk::*)(const Value&)>& Desk::setups()
+	{
+		static const std::map<std::string, void (Desk::*)(const Value&)> map{
+			{"modSet", &Desk::setModulators}, {"knobs", &Desk::setKnobs}};
+		return map;
+	}
+
+	std::vector<std::string> Desk::setupOps()
+	{
+		std::vector<std::string> ops;
+		for(const auto& [op, f] : setups())
+			ops.push_back(op);
+		return ops;
+	}
+
 	void Desk::onSetup(const Value& _message)
 	{
-		static const std::map<std::string, void (Desk::*)(const Value&)> setups{
-			{"modSet", &Desk::setModulators}, {"knobs", &Desk::setKnobs}};
-		const auto it = setups.find(deskCore::opOf(_message));
-		if(it == setups.end())
+		const auto it = setups().find(deskCore::opOf(_message));
+		if(it == setups().end())
 			result(_message, {"no such setup"}, {});
 		else
 			(this->*(it->second))(_message);

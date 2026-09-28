@@ -144,6 +144,9 @@ namespace mdDesk
 	// would produce an invalid document is refused with its problems.
 	EditResult apply(const Documents& _docs, const elektronData::json::Value& _command, const Clipboard& _clipboard,
 		const EditContext& _context = {});
+	// The ops the edit tables have a function for (the library's included): the contract test
+	// checks them against the command table's Core/Edit rows, both ways.
+	std::vector<std::string> editOps();
 
 	// The values "clear sound" uses: the machine's own defaults live in the firmware and
 	// cannot be read without saving the kit.

@@ -476,7 +476,7 @@ void checkContract(const bool _write)
 	if(_write)
 	{
 		std::ofstream out(MMDESK_SCHEMA);
-		out << ed::json::write(contract::withDocKinds(contract::withGenerated(*root, generated), kinds), 2) << "\n";
+		out << ed::json::write(contract::withAsks(contract::withDocKinds(contract::withGenerated(*root, generated), kinds), mmDesk::MmModel::asks()), 2) << "\n";
 		std::ofstream cat(MMDESK_CATALOGUE);
 		cat << catalogue;
 		return;
@@ -488,6 +488,7 @@ void checkContract(const bool _write)
 	}
 	check(contract::sameCommands(*root, generated), "the schema's $defs/command is generated from the command tables (--write-schema)");
 	check(contract::sameLifecycle(*root), "the schema's lifecycle enum is the lifecycle rows (--write-schema)");
+	check(contract::sameAsks(*root, mmDesk::MmModel::asks()), "the schema's ask enum is the model's questions (--write-schema)");
 	for(const auto& gap : contract::docKindGaps(*root, kinds))
 		check(false, gap.c_str());
 	// The plug-in's host sends these; this test has no host.
@@ -500,6 +501,8 @@ void checkContract(const bool _write)
 	check(r.offCount == 0 && r.messages > 0, "every published message is on the contract");
 	check(r.unseen.empty(), "every message type and machine member the contract declares is published");
 	auto gaps = contract::handlerGaps(mmDesk::commandTable(), deskCore::Owner::Machine, mmDesk::MmMachine::commandsHandled());
+	for(const auto& g : contract::handlerGaps(mmDesk::commandTable(), deskCore::Owner::Setup, mmDesk::Desk::setupOps()))
+		gaps.push_back(g);
 	for(const auto& g : contract::unknownOps(mmDesk::commandTable(), mmDesk::MmMachine::commandsAsking()))
 		gaps.push_back(g);
 	for(const auto& g : gaps)

@@ -52,8 +52,16 @@ namespace mmDesk
 
 	// ---- the app modulators (the same engine as the Machinedrum's) ----
 
+	std::vector<std::string> Desk::setupOps() { return {"modSet"}; }
+
+	// The table's one Owner::Setup row: modSet.
 	void Desk::onSetup(const Value& _message)
 	{
+		if(deskCore::opOf(_message) != "modSet")
+		{
+			result(_message, {"no such setup"}, {});
+			return;
+		}
 		std::vector<std::string> errors;
 		if(const auto setup = deskCore::modSetupFromJson(*_message.find("doc"), errors, g_mmModLimits))
 		{

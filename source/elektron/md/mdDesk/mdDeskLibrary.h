@@ -33,6 +33,8 @@ namespace mdDesk
 	EditResult applyLibrary(const Documents& _docs, const elektronData::json::Value& _command, const deskCore::Command<>& _row,
 		Clipboard& _clipboard, const EditContext& _context);
 
+	std::vector<std::string> libraryOps();
+
 	elektronData::MdKit emptyKit(const elektronData::MdKit& _like, uint8_t _slot);
 	elektronData::MdPattern emptyPattern(const elektronData::MdPattern& _like);
 	// A kit counts as empty in the library: no name and every track GND-EMPTY.

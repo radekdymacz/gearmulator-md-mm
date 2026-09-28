@@ -79,6 +79,8 @@ namespace deskCore
 	inline Outcome withAsk(Outcome _o, const Outcome& _next)
 	{
 		_o.errors.insert(_o.errors.end(), _next.errors.begin(), _next.errors.end());
+		if(!_next.note.empty())
+			_o.note += (_o.note.empty() ? "" : ". ") + _next.note;
 		if(!_next.ask)
 			return _o;
 		if(!_o.ask)
@@ -396,10 +398,7 @@ namespace deskCore
 				}
 				case Ev::Kind::Reset:
 				{
-					Value reset = Value::object();
-					reset.set("type", "reset");
-					publishNow(reset);
-					forgetAll();
+					startOver();
 					break;
 				}
 				}
@@ -501,7 +500,22 @@ namespace deskCore
 				m_out.push_back(std::move(_message));
 		}
 		// A message that goes before everything queued (a reset: the page starts over).
-		void publishNow(const Value& _message) { send(_message); }
+
+		// The machine started over (or another engine took its place): the page is told at once, and
+		// what was queued from before goes, except the results the page's commands wait for (they
+		// follow the reset, in order). Nothing that was known is kept.
+		void startOver()
+		{
+			Value reset = Value::object();
+			reset.set("type", "reset");
+			send(reset);
+			std::vector<Value> kept;
+			for(auto& m : m_out)
+				if(const auto* t = m.find("type"); t && t->isString() && t->asString() == "result")
+					kept.push_back(std::move(m));
+			m_out = std::move(kept);
+			forgetAll();
+		}
 
 		// The engine map's entries, for the page's engine menu (machine.engines).
 		void setEngines(std::vector<EngineChoice> _engines) { m_engines = std::move(_engines); }

@@ -1045,6 +1045,21 @@ namespace mdDesk
 		}
 	}
 
+	std::vector<std::string> editOps()
+	{
+		std::vector<std::string> ops = libraryOps();
+		const auto add = [&ops](const auto& _edits)
+		{
+			for(const auto& [op, fn] : _edits)
+				ops.push_back(op);
+		};
+		add(patternEdits());
+		add(kitEdits());
+		add(songEdits());
+		add(globalEdits());
+		return ops;
+	}
+
 	EditResult apply(const Documents& _docs, const Value& _command, const Clipboard& _clipboard, const EditContext& _context)
 	{
 		EditResult result;
