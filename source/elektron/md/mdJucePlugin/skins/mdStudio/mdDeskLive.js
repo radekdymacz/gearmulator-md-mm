@@ -25,10 +25,10 @@ const renderSub0 = renderSub;
 renderSub = function () { renderSub0(); const l = $("#lcd2"); if (l && lcdSay.until && performance.now() < lcdSay.until) l.innerHTML = `<b class="lcdmsg">${lcdSay.text}</b>`; };
 function applyPrep() {
 	if (!PREP.size) return; const ch = [...PREP];
-	for (const [i, m] of ch) if (S.tracks[i] && S.tracks[i].mute !== m) muteSet(i, m);
+	for (const [i, m] of ch) if (V.tracks[i] && V.tracks[i].mute !== m) muteSet(i, m);
 	PREP.clear(); refreshAudible(); showPrep(); lcdSay(ch);
 }
-function prepToggle(i) { if (!S.tracks[i]) return; if (PREP.has(i)) PREP.delete(i); else PREP.set(i, !S.tracks[i].mute); showPrep(); }
+function prepToggle(i) { if (!V.tracks[i]) return; if (PREP.has(i)) PREP.delete(i); else PREP.set(i, !V.tracks[i].mute); showPrep(); }
 document.addEventListener("click", e => { const b = e.target.closest(".ms.m[data-mute]"); if (!b || !e.shiftKey) return; e.stopImmediatePropagation(); e.preventDefault(); prepToggle(+b.dataset.mute); }, true);
 document.addEventListener("keyup", e => { if (e.key === "Shift") applyPrep(); });
 Keys.bind({ keys: ["1–8", "Q–I"], mod: "alt", group: "Mutes", does: "Mute or unmute track 1–16, in any workspace" });
@@ -38,10 +38,10 @@ Keys.bind({ keys: ["drag a value"], mod: "alt", group: "Values", does: "Move tha
 const MKEYS = ["Digit1", "Digit2", "Digit3", "Digit4", "Digit5", "Digit6", "Digit7", "Digit8", "KeyQ", "KeyW", "KeyE", "KeyR", "KeyT", "KeyY", "KeyU", "KeyI"];
 document.addEventListener("keydown", e => {
 	if (!e.altKey || e.metaKey || e.ctrlKey || e.target.closest?.("input,select,textarea")) return;
-	const i = MKEYS.indexOf(e.code); if (i < 0 || !S.tracks[i]) return;
+	const i = MKEYS.indexOf(e.code); if (i < 0 || !V.tracks[i]) return;
 	e.preventDefault(); e.stopImmediatePropagation();
 	if (e.shiftKey) { prepToggle(i); return; }
-	const on = !S.tracks[i].mute; muteSet(i, on); refreshAudible(); lcdSay([[i, on]]);
+	const on = !V.tracks[i].mute; muteSet(i, on); refreshAudible(); lcdSay([[i, on]]);
 }, true);
 const refreshAudible0 = refreshAudible; refreshAudible = function () { refreshAudible0(); showPrep(); };
 const renderP0 = render; render = function () { renderP0(); showPrep(); markRecLock(); };
@@ -70,7 +70,7 @@ const TAP = [];
 Keys.bind({ keys: ["T"], group: "Transport", does: "Tap tempo (the average of the last taps)", run: () => {
 	const now = performance.now(); if (TAP.length && now - TAP[TAP.length - 1] > 2000) TAP.length = 0;
 	TAP.push(now); if (TAP.length > 5) TAP.shift();
-	if (TAP.length >= 2) { const bpm = clamp(Math.round(60000 / ((TAP[TAP.length - 1] - TAP[0]) / (TAP.length - 1)) * 10) / 10, 30, 300); S.bpm = bpm; renderTop(); cmd("tempo", { bpm }, "tempo"); toast("Tap tempo: " + bpm.toFixed(1) + " BPM"); }
+	if (TAP.length >= 2) { const bpm = clamp(Math.round(60000 / ((TAP[TAP.length - 1] - TAP[0]) / (TAP.length - 1)) * 10) / 10, 30, 300); V.bpm = bpm; renderTop(); cmd("tempo", { bpm }, "tempo"); toast("Tap tempo: " + bpm.toFixed(1) + " BPM"); }
 	else toast("Tap tempo: keep tapping T");
 } });
 
@@ -84,17 +84,18 @@ const skipTweak = m => /^(RAM|MID|CTR)/.test(m);
 const setV0 = setV;
 setV = function (el, v) {
 	if (!tweak || tweak.el !== el) return setV0(el, v);
-	const g = el.dataset.g, n = el.dataset.n, t0 = tweak.t, before = S.tracks[t0][g][n];
+	const g = el.dataset.g, n = el.dataset.n, t0 = tweak.t, before = V.tracks[t0][g][n];
 	setV0(el, v);
-	const delta = S.tracks[t0][g][n] - before; if (!delta) return;
-	const slot = g === "syn" ? pages(S.tracks[t0].m).s.indexOf(n) : -1;
-	S.tracks.forEach((tr, t) => {
+	const delta = V.tracks[t0][g][n] - before; if (!delta) return;
+	const slot = g === "syn" ? pages(V.tracks[t0].m).s.indexOf(n) : -1;
+	V.tracks.forEach((tr, t) => {
 		if (t === t0 || skipTweak(tr.m)) return;
 		const name = g === "syn" ? pages(tr.m).s[slot] : n;	/* synthesis: the same knob, whatever it is on that machine */
 		if (!name || !(name in tr[g])) return;
 		tr[g][name] = clamp(tr[g][name] + delta);
+		sendParam(t, g, name);
 	});
-	syncKitValues(); syncControls();
+	syncControls();
 };
 
 /* ===== The editor's menu (skins, GUI scale, settings): right-click an empty part of the header
@@ -112,13 +113,13 @@ function chainCard() {
 	S.chainDraft = d;
 	const known = !!c, active = known && c.active && c.patterns.length > 0;
 	const pads = Array.from({ length: 16 }, (_, k) => { const p = b * 16 + k, n = d.indexOf(p); return `<button class="chk${hasPat(p) ? "" : " empty"}${n >= 0 ? " in" : ""}" data-chainpad="${p}" title="${patName(p)}${n >= 0 ? ": number " + (n + 1) + " in the chain. Click removes it." : ". Click adds it to the chain."}">${patName(p)}<small>${hasPat(p) ? patLen(p) : "empty"}</small>${n >= 0 ? `<em>${n + 1}</em>` : ""}</button>`; }).join("");
-	const playing = S.pat, list = active ? c.patterns : [], at = list.indexOf(playing), next = active ? list[(at + 1) % list.length] : null;
-	const live = !known ? `<span class="note">The chain is not readable on this firmware.</span>` : active ? list.map(p => `<span class="lcdchip${p === playing ? " now" : ""}${S.playing && p === next && at >= 0 ? " nx" : ""}">${patName(p)}</span>`).join("<i>»</i>") + "<i>↺</i>"
+	const playing = V.pat, list = active ? c.patterns : [], at = list.indexOf(playing), next = active ? list[(at + 1) % list.length] : null;
+	const live = !known ? `<span class="note">The chain is not readable on this firmware.</span>` : active ? list.map(p => `<span class="lcdchip${p === playing ? " now" : ""}${V.playing && p === next && at >= 0 ? " nx" : ""}">${patName(p)}</span>`).join("<i>»</i>") + "<i>↺</i>"
 		: `<span class="note">No chain. The machine plays ${patName(playing)} and stays on it.</span>`;
 	return `<section class="card"><header><h3>Chain</h3><span>bank ${bn} · loops · BANK + TRIGs on the machine</span></header>
   <div class="chainp">${pads}</div>
   <div class="irow"><span class="ilab">Plays</span><div class="chainrow">${live}</div></div>
-  <div class="irow"><span class="ilab"></span><span class="chainacts"><button class="cream" data-chain="send"${d.length < 2 || !known ? " disabled" : ""} title="Holds BANK ${bn} and presses the TRIG keys in this order on the machine. ${S.playing ? "It starts at the pattern end." : "PLAY starts at the first one."}">Chain ${d.length ? d.length : ""}</button><button data-chain="undo"${d.length ? "" : " disabled"}>Back</button><button class="danger" data-chain="clear"${active ? "" : " disabled"} title="LOAD PATTERN of the current pattern: the machine's way to end a chain">Clear</button></span>
+  <div class="irow"><span class="ilab"></span><span class="chainacts"><button class="cream" data-chain="send"${d.length < 2 || !known ? " disabled" : ""} title="Holds BANK ${bn} and presses the TRIG keys in this order on the machine. ${V.playing ? "It starts at the pattern end." : "PLAY starts at the first one."}">Chain ${d.length ? d.length : ""}</button><button data-chain="undo"${d.length ? "" : " disabled"}>Back</button><button class="danger" data-chain="clear"${active ? "" : " disabled"} title="LOAD PATTERN of the current pattern: the machine's way to end a chain">Clear</button></span>
   <span class="note">One bank, each pattern once. Picking a pattern ends the chain; editing its patterns does not.</span></div></section>`;
 }
 document.addEventListener("click", e => {
@@ -153,7 +154,7 @@ function showFwLcd(on) {
 }
 Bridge.onMessage(m => {
 	/* The engine changed (emulator <-> HW MIDI): the documents start over. */
-	if (m.type === "reset") { Docs.patterns = {}; Docs.kits = {}; Docs.songs = {}; Docs.global = null; Docs.machine = null; S.loaded = false; scheduleRender(); return; }
+	if (m.type === "reset") { Docs.patterns = {}; Docs.kits = {}; Docs.songs = {}; Docs.global = null; Docs.machine = null; V.loaded = false; scheduleRender(); return; }
 	if (m.type === "lcd") {
 		if (m.bits) { const s = atob(m.bits); fwLcd.bits = Uint8Array.from(s, ch => ch.charCodeAt(0)); drawFwLcd(); }
 		const fw = (machineState().desk || {}).firmware;
@@ -182,7 +183,7 @@ if (/[?&]selftest=p4(&|$)/.test(location.search)) (async () => {
 	const until = async (f, ms) => { const end = performance.now() + ms; while (performance.now() < end) { if (f()) return performance.now(); await sleep(20); } return -1; };
 	let frames = 0, firstLcd = -1, bootSeen = false;
 	Bridge.onMessage(m => { if (m.type === "lcd" && m.bits) { frames++; if (firstLcd < 0) firstLcd = performance.now() - t0; } if (m.type === "machine" && m.doc.desk && m.doc.desk.boot === "animation") bootSeen = true; });
-	const ready = await until(() => desk().firmware === "ready" && S.loaded, 90000);
+	const ready = await until(() => desk().firmware === "ready" && V.loaded, 90000);
 	log(`boot: firmware LCD frames ${frames} (first at ${Math.round(firstLcd)} ms), animation state seen ${bootSeen}, input ready at ${Math.round(ready - t0)} ms, LCD mirror shown now ${$(".lcdpanel").classList.contains("fwboot")}`);
 	if (ready < 0) { log("FAIL: not ready"); return; }
 	await sleep(1500);
@@ -231,15 +232,15 @@ if (/[?&]selftest=p4(&|$)/.test(location.search)) (async () => {
 	log(`lane vs steps: 16 view ${o16} px, ALL ${oAll} px, ALL horizontal scroll ${scroll} px; header ${document.querySelector(".top").scrollWidth} px in ${innerWidth} px`);
 	/* Sampler: a RAM slot the kit does not use is one call to action, undoable. */
 	const kitDoc = () => Docs.kits[currentKitSlot()];
-	const n = [1, 2, 3, 4].find(k => !S.tracks.some(t => t.m === "RAM-R" + k));
+	const n = [1, 2, 3, 4].find(k => !V.tracks.some(t => t.m === "RAM-R" + k));
 	if (n) {
 		S.ws = "sampler"; S.smpSlot = "RAM" + n; render(); await sleep(200);
 		log(`sampler RAM ${n} empty state: "${(document.querySelector(".smpsetup")?.innerText || "none").replace(/\s+/g, " ").slice(0, 260)}"`);
-		const [rt, pt] = setupTracks(), trigsBefore = S.tracks[rt].trigs.filter(Boolean).length, mBefore = [kitDoc().tracks[rt].machine, kitDoc().tracks[pt].machine];
+		const [rt, pt] = setupTracks(), trigsBefore = V.tracks[rt].trigs.filter(Boolean).length, mBefore = [kitDoc().tracks[rt].machine, kitDoc().tracks[pt].machine];
 		document.querySelector("[data-setupgo]").click();
 		p1 = await until(() => kitDoc().tracks[rt].machine === "RAM-R" + n && kitDoc().tracks[pt].machine === "RAM-P" + n, 4000);
 		await sleep(600); render(); await sleep(200);
-		log(`set up sampling: ${p1 >= 0 ? "ok" : "FAIL"} track ${rt + 1} ${kitDoc().tracks[rt].machine}, track ${pt + 1} ${kitDoc().tracks[pt].machine}; trigs ${trigsBefore} -> ${S.tracks[rt].trigs.filter(Boolean).length}; shows Live/Freeze/Capture ${!!document.querySelector("[data-capture]")}, source keys ${document.querySelectorAll("[data-recsrc]").length}, chop grid ${!!document.querySelector("#chop")}`);
+		log(`set up sampling: ${p1 >= 0 ? "ok" : "FAIL"} track ${rt + 1} ${kitDoc().tracks[rt].machine}, track ${pt + 1} ${kitDoc().tracks[pt].machine}; trigs ${trigsBefore} -> ${V.tracks[rt].trigs.filter(Boolean).length}; shows Live/Freeze/Capture ${!!document.querySelector("[data-capture]")}, source keys ${document.querySelectorAll("[data-recsrc]").length}, chop grid ${!!document.querySelector("#chop")}`);
 		cmd("undo");
 		p1 = await until(() => kitDoc().tracks[rt].machine === mBefore[0] && kitDoc().tracks[pt].machine === mBefore[1], 4000);
 		log(`one Undo restores ${mBefore.join(" + ")}: ${p1 >= 0 ? "ok" : "FAIL"}`);
@@ -289,7 +290,7 @@ if (/[?&]selftest=p4hw/.test(location.search)) (async () => {
 	const sleep = ms => new Promise(r => setTimeout(r, ms));
 	const log = t => Bridge.log("P4: " + t);
 	const label = () => $(".lcdeng span")?.textContent;
-	while (!(machineState().desk && machineState().desk.firmware === "ready" && S.loaded)) await sleep(200);
+	while (!(machineState().desk && machineState().desk.firmware === "ready" && V.loaded)) await sleep(200);
 	await sleep(1000);
 	log(`start: ${label()}`);
 	const sel = $("#engsel"); sel.value = "hw"; sel.dispatchEvent(new Event("change", { bubbles: true }));
@@ -299,8 +300,8 @@ if (/[?&]selftest=p4hw/.test(location.search)) (async () => {
 	log(`nothing answers after 7 s: ${label()} (link ${machineState().desk?.link})`);
 	cmd("select", { p: 3 }); await sleep(300);
 	sel.value = "emu"; sel.dispatchEvent(new Event("change", { bubbles: true }));
-	let t0 = performance.now(); while (!(machineState().desk && machineState().desk.engine === "emu" && machineState().desk.firmware === "ready" && S.loaded) && performance.now() - t0 < 15000) await sleep(100);
-	log(`EMU again: ${label()} after ${Math.round(performance.now() - t0)} ms, pattern ${patName(S.pat)}`);
+	let t0 = performance.now(); while (!(machineState().desk && machineState().desk.engine === "emu" && machineState().desk.firmware === "ready" && V.loaded) && performance.now() - t0 < 15000) await sleep(100);
+	log(`EMU again: ${label()} after ${Math.round(performance.now() - t0)} ms, pattern ${patName(V.pat)}`);
 	log("hw done");
 })();
 
@@ -311,22 +312,22 @@ async function p4Mix(log, sleep) {
 	const strip = () => [...document.querySelectorAll(".strip")][6];
 	const fd = strip().querySelector(".fader"), fb = fd.getBoundingClientRect(), fx = fb.left + fb.width / 2, fy = fb.top + fb.height / 2, sh = strip().getBoundingClientRect().height;
 	const pe = (el, t, x, y) => el.dispatchEvent(new PointerEvent(t, { bubbles: true, clientX: x, clientY: y, pointerId: 7, buttons: 1, pointerType: "mouse" }));
-	const vol0 = S.tracks[6].rt.VOL; pe(fd, "pointerdown", fx, fy); for (let i = 1; i <= 6; i++) { pe(fd, "pointermove", fx, fy + i * 4); await sleep(30); }
+	const vol0 = V.tracks[6].rt.VOL; pe(fd, "pointerdown", fx, fy); for (let i = 1; i <= 6; i++) { pe(fd, "pointermove", fx, fy + i * 4); await sleep(30); }
 	const midF = fd.getBoundingClientRect().height, midS = strip().getBoundingClientRect().height; pe(fd, "pointerup", fx, fy + 24); await sleep(300);
-	log(`Mix fader drag: fader ${fb.height}->${midF} px, strip ${sh}->${midS} px while dragging, VOL ${vol0} -> ${S.tracks[6].rt.VOL}: ${midF === fb.height && midS === sh ? "ok geometry fixed" : "FAIL"}`);
-	const ds = strip().querySelector('.pc[data-n="DIST"]'), db = ds.getBoundingClientRect(), dist0 = S.tracks[6].rt.DIST;
+	log(`Mix fader drag: fader ${fb.height}->${midF} px, strip ${sh}->${midS} px while dragging, VOL ${vol0} -> ${V.tracks[6].rt.VOL}: ${midF === fb.height && midS === sh ? "ok geometry fixed" : "FAIL"}`);
+	const ds = strip().querySelector('.pc[data-n="DIST"]'), db = ds.getBoundingClientRect(), dist0 = V.tracks[6].rt.DIST;
 	const sent = [], send0 = Bridge.send; Bridge.send = (m, o) => { if (m.op === "param") sent.push(m.t + ":" + m.i + "=" + m.v); return send0(m, o); };
 	let seen = 0, lastX = null; const probe = e => { seen++; lastX = e.clientX; }; main.addEventListener("pointermove", probe);
 	pe(ds, "pointerdown", db.left + 10, db.top + 10); log(`  drag after pointerdown: ${drag ? "set, vert " + drag.vert + ", v " + drag.v : "none"}`); for (let i = 1; i <= 5; i++) { pe(ds, "pointermove", db.left + 10 + i * 4, db.top + 10); await sleep(30); }
-	const midD = ds.getBoundingClientRect().width, midV = S.tracks[6].rt.DIST; main.removeEventListener("pointermove", probe); log(`  moves seen ${seen}, last clientX ${lastX} (down at ${db.left + 10}, drag.x ${drag && drag.x}), drag ${drag ? "still set" : "gone"}, tweak ${!!tweak}, sent ${sent.join(" ")}`); Bridge.send = send0; pe(ds, "pointerup", db.left + 30, db.top + 10); await sleep(300);
-	log(`DIST sideways drag: ${dist0} -> ${midV} while dragging, ${S.tracks[6].rt.DIST} after, box ${db.width}->${midD} px: ${S.tracks[6].rt.DIST !== dist0 && midD === db.width ? "ok" : "FAIL"}`);
-	cmd("param", { k: S.kit, t: 6, i: 16, v: dist0 }); cmd("param", { k: S.kit, t: 6, i: 17, v: vol0 }); await sleep(200);
+	const midD = ds.getBoundingClientRect().width, midV = V.tracks[6].rt.DIST; main.removeEventListener("pointermove", probe); log(`  moves seen ${seen}, last clientX ${lastX} (down at ${db.left + 10}, drag.x ${drag && drag.x}), drag ${drag ? "still set" : "gone"}, tweak ${!!tweak}, sent ${sent.join(" ")}`); Bridge.send = send0; pe(ds, "pointerup", db.left + 30, db.top + 10); await sleep(300);
+	log(`DIST sideways drag: ${dist0} -> ${midV} while dragging, ${V.tracks[6].rt.DIST} after, box ${db.width}->${midD} px: ${V.tracks[6].rt.DIST !== dist0 && midD === db.width ? "ok" : "FAIL"}`);
+	cmd("param", { k: V.kit, t: 6, i: 16, v: dist0 }); cmd("param", { k: V.kit, t: 6, i: 17, v: vol0 }); await sleep(200);
 	log(`fit: page zoom ${Math.round(innerWidth / 1440 * 1000) / 1000 || 1}, page ${document.documentElement.scrollWidth} px wide in ${innerWidth} px, header right edge ${Math.round(document.querySelector(".rightgrp").getBoundingClientRect().right)} px`);
 }
 if (/[?&]selftest=p4mix/.test(location.search)) (async () => {
 	const sleep = ms => new Promise(r => setTimeout(r, ms));
 	const log = t => Bridge.log("P4: " + t);
-	while (!(machineState().desk && machineState().desk.firmware === "ready" && S.loaded)) await sleep(200);
+	while (!(machineState().desk && machineState().desk.firmware === "ready" && V.loaded)) await sleep(200);
 	await sleep(1500);
 	await p4Mix(log, sleep);
 	log("mix done");
@@ -337,12 +338,12 @@ if (/[?&]selftest=p4mix/.test(location.search)) (async () => {
 if (/[?&]selftest=p4cpu/.test(location.search)) (async () => {
 	const sleep = ms => new Promise(r => setTimeout(r, ms));
 	const log = t => Bridge.log("P4: " + t);
-	while (!(machineState().desk && machineState().desk.firmware === "ready" && S.loaded)) await sleep(200);
+	while (!(machineState().desk && machineState().desk.firmware === "ready" && V.loaded)) await sleep(200);
 	await sleep(8000);	/* the background loads settle */
 	const phase = async (name, ms) => { log(`cpu ${name} start`); await sleep(ms); log(`cpu ${name} end`); };
 	S.ws = "seq"; render();
 	await phase("stopped", 30000);
-	if (!S.playing) $("#play").click();
+	if (!V.playing) $("#play").click();
 	await sleep(1000);
 	await phase("playing-seq", 30000);
 	S.ws = "mix"; render();

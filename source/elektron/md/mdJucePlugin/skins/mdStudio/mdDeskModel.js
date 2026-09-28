@@ -28,7 +28,7 @@ function slots(m) {
 	if (!c.qparams) { const later = c.params.slice(8); c.qparams = c.params.map((n, i) => i < 8 && n && later.includes(n) ? "SYN·" + n : n); }
 	return c.qparams;
 }
-function laneLabel(t, n) { const a = slots(S.tracks[t].m); if (!a.includes("SYN·" + n)) return n; return (a.indexOf(n) >= 16 ? "RTG·" : "FX·") + n; }
+function laneLabel(t, n) { const a = slots(V.tracks[t].m); if (!a.includes("SYN·" + n)) return n; return (a.indexOf(n) >= 16 ? "RTG·" : "FX·") + n; }
 /* Three pages of 8 slots; an unused slot is null. */
 function pages(m) { const a = slots(m); return { s: a.slice(0, 8), e: a.slice(8, 16), r: a.slice(16, 24) }; }
 const names = list => list.filter(Boolean);
@@ -87,56 +87,56 @@ function rowToContract(r, lengthOf) {
 	return { kind: "end" };
 }
 
-/* ---- the view: what the renderers read (the mockup's S, now derived) ---- */
+/* ---- the view (P6): a value derived from the documents, what the renderers read ----
+   deriveView(Docs, ui) is pure: the documents and the few UI facts it needs (the page-only solos)
+   in, a new view out; the page replaces V with it on every document. A gesture may edit the
+   current V for immediate feedback; the command it sends goes to the plug-in, and the next
+   document replaces the whole view. The UI's own state (workspace, selection, zoom...) is S. */
+const MFXD = {
+	echo: { name: "Rhythm Echo", sub: "Tempo-synced delay. TIME is in 128th notes, so 64 is two beats.", k: ["TIME", "MOD", "MFRQ", "FB", "FILTF", "FILTW", "MONO", "LEV"] },
+	gate: { name: "Gate Box", sub: "Reverb for percussion. GATE at 127 turns the gate off.", k: ["DVOL", "PRED", "DEC", "DAMP", "HP", "LP", "GATE", "LEV"] },
+	eq: { name: "Master EQ", sub: "Low shelf, high shelf, one parametric band. Drag the points.", k: ["LF", "LG", "HF", "HG", "PF", "PG", "PQ", "GAIN"] },
+	dyn: { name: "Dynamix", sub: "Compressor on the main out. Drag threshold and ratio.", k: ["ATCK", "REL", "TRHD", "RTIO", "KNEE", "HP", "OUTG", "MIX"] } };
 function lengthOfPattern(p) { const d = Docs.patterns[p]; return d ? d.length : 16; }
-function deriveView(S) {
-	const P = Docs.patterns[currentPatternSlot()];
-	const K = Docs.kits[currentKitSlot()];
-	const G = Docs.global;
+function deriveView(docs, ui) {
+	const P = docs.patterns[currentPatternSlot()];
+	const K = docs.kits[currentKitSlot()];
+	const G = docs.global;
 	const M = machineState();
 	const desk = M.desk || {};
-	S.loaded = !!(P && K);
-	S.pat = currentPatternSlot();
-	S.queued = desk.queued != null ? desk.queued : null;
-	S.kit = currentKitSlot();
-	S.kitState = M.kit && M.kit.working || "unknown";
-	S.kitSource = desk.kitSource || "tracked";
-	S.kitNames = {};
-	for (const k in Docs.kits) S.kitNames[k] = Docs.kits[k].name;
-	S.patKit = Array.from({ length: 128 }, (_, p) => Docs.patterns[p] ? Docs.patterns[p].kit : null);
-	S.mode = (M.extendedMode != null ? M.extendedMode : G ? G.extendedMode : true) ? "EXTENDED" : "CLASSIC";
-	S.bpm = G ? G.tempo : 120;
-	S.playing = !!desk.playing;
-	S.rec = !!desk.recording;		/* live recording, from the machine (RECORD LED blinking) */
-	S.gridEdit = !!desk.gridEdit;
-	S.tx = !!desk.tx;
-	S.roundTrip = desk.roundTripMs;
-	S.firmware = desk.firmware || "booting";
-	S.canUndo = !!desk.undo; S.canRedo = !!desk.redo; S.undoCount = desk.undoCount || 0; S.redoCount = desk.redoCount || 0;
-	S.songReload = !!(M.song && M.song.reloadNeeded);
+	const hist = M.history || {};
+	const v = { loaded: !!(P && K), pat: currentPatternSlot(), queued: desk.queued != null ? desk.queued : null, kit: currentKitSlot(),
+		kitState: M.kit && M.kit.working || "unknown", kitSource: desk.kitSource || "tracked", kitNames: {},
+		patKit: Array.from({ length: 128 }, (_, p) => docs.patterns[p] ? docs.patterns[p].kit : null),
+		mode: (M.extendedMode != null ? M.extendedMode : G ? G.extendedMode : true) ? "EXTENDED" : "CLASSIC",
+		bpm: G ? G.tempo : 120, playing: !!desk.playing, rec: !!desk.recording, gridEdit: !!desk.gridEdit, tx: !!desk.tx,
+		roundTrip: desk.roundTripMs, firmware: desk.firmware || "booting", lifecycle: M.lifecycle || "booting", caps: M.capabilities || {},
+		canUndo: !!hist.undo, canRedo: !!hist.redo, undoCount: hist.undoCount || 0, redoCount: hist.redoCount || 0,
+		songReload: !!(M.song && M.song.reloadNeeded), len: 16, length: 16, mult: "1X", swing: 50, accAmt: 0, accAll: false, slideAll: false };
+	for (const k in docs.kits) v.kitNames[k] = docs.kits[k].name;
 	const mutes = new Set(desk.mutes || []);
 	if (P) {
-		S.len = P.totalLength;
-		S.length = P.length;
-		S.mult = P.tempoMultiplier;
-		S.swing = swingPercent(P.swingAmount);
-		S.accAmt = accentDisplay(P.accentAmount);
-		S.accAll = P.accent.editAll === 1;
-		S.slideAll = P.slide.editAll === 1;
+		v.len = P.totalLength;
+		v.length = P.length;
+		v.mult = P.tempoMultiplier;
+		v.swing = swingPercent(P.swingAmount);
+		v.accAmt = accentDisplay(P.accentAmount);
+		v.accAll = P.accent.editAll === 1;
+		v.slideAll = P.slide.editAll === 1;
 	}
 	const accAll = P ? stepSet(P.accent.steps) : new Set(), slideAll = P ? stepSet(P.slide.steps) : new Set();
-	S.tracks = Array.from({ length: 16 }, (_, i) => {
+	v.tracks = Array.from({ length: 16 }, (_, i) => {
 		const kt = K ? K.tracks[i] : null;
 		const m = kt ? kt.machine || "GND-EMPTY" : "GND-EMPTY";
 		const a = slots(m);
 		const t = { name: nameOf(m), m, model: kt ? kt.model : 0, fam: famOf(m), syn: {}, fx: {}, rt: {}, level: kt ? kt.level : 0,
-			mute: mutes.has(i), solo: S.soloSet ? S.soloSet.has(i) : false, out: G ? (G.routing[i] === "MAIN" ? "MAIN" : G.routing[i]) : "MAIN",
+			mute: mutes.has(i), solo: ui.soloSet ? ui.soloSet.has(i) : false, out: G ? (G.routing[i] === "MAIN" ? "MAIN" : G.routing[i]) : "MAIN",
 			trigs: Array(64).fill(false), acc: new Set(), slide: new Set(), muteGroup: kt ? kt.muteGroup : null, trigGroup: kt ? kt.trigGroup : null };
 		if (kt) {
 			a.forEach((n, j) => {
 				if (!n) return;
-				const v = j < 8 ? kt.synth[j] : j < 16 ? kt.effects[j - 8] : kt.routing[j - 16];
-				(j < 8 ? t.syn : j < 16 ? t.fx : t.rt)[n] = v;
+				const val = j < 8 ? kt.synth[j] : j < 16 ? kt.effects[j - 8] : kt.routing[j - 16];
+				(j < 8 ? t.syn : j < 16 ? t.fx : t.rt)[n] = val;
 			});
 			const tn = K.tracks[kt.lfo.track] ? slots(K.tracks[kt.lfo.track].machine || "GND-EMPTY") : a;
 			t.lfo = { TRCK: kt.lfo.track, PARAM: tn[kt.lfo.param] || "#" + (kt.lfo.param + 1), PARAMI: kt.lfo.param, SHP1: kt.lfo.shape1, SHP2: kt.lfo.shape2,
@@ -145,33 +145,30 @@ function deriveView(S) {
 		if (P) {
 			const pt = P.tracks[i];
 			for (const s of pt.trigs) t.trigs[s] = true;
-			t.acc = S.accAll ? new Set([...accAll].filter(s => t.trigs[s])) : stepSet(pt.accent);
-			t.slide = S.slideAll ? new Set([...slideAll].filter(s => t.trigs[s])) : stepSet(pt.slide);
+			t.acc = v.accAll ? new Set([...accAll].filter(s => t.trigs[s])) : stepSet(pt.accent);
+			t.slide = v.slideAll ? new Set([...slideAll].filter(s => t.trigs[s])) : stepSet(pt.slide);
 		}
 		return t;
 	});
-	S.locks = new Map();
+	v.locks = new Map();
 	if (P) for (const l of P.locks) {
-		const n = slots(S.tracks[l.track].m)[l.param] || "#" + (l.param + 1);
-		S.locks.set(l.track + ":" + n, new Map(l.steps.map(([s, v]) => [s, v])));
+		const n = slots(v.tracks[l.track].m)[l.param] || "#" + (l.param + 1);
+		v.locks.set(l.track + ":" + n, new Map(l.steps.map(([s, val]) => [s, val])));
 	}
-	S.mfx = S.mfx || {
-		echo: { name: "Rhythm Echo", sub: "Tempo-synced delay. TIME is in 128th notes, so 64 is two beats.", k: ["TIME", "MOD", "MFRQ", "FB", "FILTF", "FILTW", "MONO", "LEV"], v: {} },
-		gate: { name: "Gate Box", sub: "Reverb for percussion. GATE at 127 turns the gate off.", k: ["DVOL", "PRED", "DEC", "DAMP", "HP", "LP", "GATE", "LEV"], v: {} },
-		eq: { name: "Master EQ", sub: "Low shelf, high shelf, one parametric band. Drag the points.", k: ["LF", "LG", "HF", "HG", "PF", "PG", "PQ", "GAIN"], v: {} },
-		dyn: { name: "Dynamix", sub: "Compressor on the main out. Drag threshold and ratio.", k: ["ATCK", "REL", "TRHD", "RTIO", "KNEE", "HP", "OUTG", "MIX"], v: {} } };
-	for (const id in S.mfx) {
+	v.mfx = {};
+	for (const id in MFXD) {
 		const vals = K ? K.masterFx[MFX[id]] : null;
-		S.mfx[id].v = {};
-		S.mfx[id].k.forEach((n, j) => { S.mfx[id].v[n] = vals ? vals[j] : 0; });
+		v.mfx[id] = { ...MFXD[id], v: {} };
+		MFXD[id].k.forEach((n, j) => { v.mfx[id].v[n] = vals ? vals[j] : 0; });
 	}
-	const song = Docs.songs[currentSongSlot()];
-	S.songSlot = currentSongSlot();
-	S.song = song ? song.rows.map((r, i) => rowFromContract(r, i, lengthOfPattern)) : [{ type: "end" }];
-	S.songName = song ? song.name : "";
-	/* The baseline the value diff (syncKitValues) compares against. */
-	S.base = snapshotKit(S);
+	const song = docs.songs[currentSongSlot()];
+	v.songSlot = currentSongSlot();
+	v.song = song ? song.rows.map((r, i) => rowFromContract(r, i, lengthOfPattern)) : [{ type: "end" }];
+	v.songName = song ? song.name : "";
+	return v;
 }
-function snapshotKit(S) {
-	return JSON.stringify({ tracks: S.tracks.map(t => ({ m: t.m, syn: t.syn, fx: t.fx, rt: t.rt, lfo: t.lfo, mg: t.muteGroup, tg: t.trigGroup, out: t.out })), mfx: Object.fromEntries(Object.entries(S.mfx).map(([k, f]) => [k, f.v])) });
-}
+/* The view before the first document (the renderers run once before it). */
+let V = { loaded: false, pat: 0, queued: null, kit: 0, kitState: "unknown", kitSource: "tracked", kitNames: {}, patKit: [], mode: "EXTENDED", bpm: 120,
+	playing: false, rec: false, gridEdit: false, tx: false, roundTrip: -1, firmware: "booting", lifecycle: "booting", caps: {}, canUndo: false, canRedo: false,
+	undoCount: 0, redoCount: 0, songReload: false, len: 16, length: 16, mult: "1X", swing: 50, accAmt: 0, accAll: false, slideAll: false, tracks: [],
+	locks: new Map(), mfx: Object.fromEntries(Object.entries(MFXD).map(([id, d]) => [id, { ...d, v: {} }])), songSlot: 0, song: [{ type: "end" }], songName: "" };

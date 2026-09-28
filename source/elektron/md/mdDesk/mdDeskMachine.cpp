@@ -822,7 +822,13 @@ namespace mdDesk
 		// must not replace.
 		if(fromMemory)
 			judgeWorkingKit();
-		else if(!(working && edited && m_known.count(ref)))
+		if(fromMemory || (working && edited && m_known.count(ref)))
+		{
+			// The page asked for this slot: it gets the working copy it shows (a read answers).
+			if(m_trackedKit && m_trackedKit->position == _k.position)
+				observe(*m_trackedKit, fromMemory ? Source::Memory : Source::Tracked);
+		}
+		else
 			observe(_k, Source::Dump);
 	}
 

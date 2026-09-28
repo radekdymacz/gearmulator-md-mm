@@ -64,7 +64,7 @@ const Bridge = (() => {
 			}
 		}
 	};
-	window.addEventListener("error", e => log("page error: " + e.message + " @" + e.lineno));
+	window.addEventListener("error", e => log("page error: " + e.message + " @" + e.lineno + " " + (e.error && e.error.stack || "")));
 	return {
 		send, log, onMessage: h => handlers.push(h),
 		gesture: () => nextGesture++,
