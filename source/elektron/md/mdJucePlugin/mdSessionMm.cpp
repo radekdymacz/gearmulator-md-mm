@@ -99,7 +99,7 @@ namespace mdJucePlugin
 		deskCore::LifeFacts::Probe probe() override { return deskCore::LifeFacts::Probe::Running; }
 		bool sendMidi(const uint8_t _s, const uint8_t _d1, const uint8_t _d2) override
 		{
-			m_wire.wire().send(deskWire::Bytes{_s, _d1, _d2});
+			m_wire.wire().send(deskWire::channelMessage(_s, _d1, _d2));
 			return true;
 		}
 

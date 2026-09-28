@@ -5,9 +5,14 @@
 
 #include "mdPluginProcessor.h"
 #include "mdDeskSession.h"
+#include "mdAudioMidiLink.h"
 
 #include "mdLib/mddevice.h"
 
+#include "deskCore/deskContract.h"
+#include "deskHost/deskHost.h"
+
+#include "elektronData/json.h"
 #include "elektronData/mdWorkingKit.h"
 
 #include "juce_audio_utils/juce_audio_utils.h"
@@ -20,9 +25,76 @@
 #include <CoreFoundation/CoreFoundation.h>
 #endif
 #include <cstdio>
+#include <fstream>
 #include <functional>
+#include <iterator>
 #include <set>
 #include <thread>
+
+namespace
+{
+	using Value = elektronData::json::Value;
+
+	Value parseJson(const std::string& _json)
+	{
+		auto v = elektronData::json::parse(_json);
+		return v ? *v : Value::object();
+	}
+
+	// P6: the host messages a desk session cannot publish itself (they are the plug-in's own,
+	// not the desk's: MIDI Learn, AUDIO/MIDI). mdDeskTest's contract check has to name these
+	// "elsewhere" for want of a host; here there is one, so they get checked against the same
+	// contract instead of staying untested.
+	bool checkHostMessages(mdJucePlugin::AudioPluginAudioProcessor& _processor, juce::AudioProcessor& _ap)
+	{
+		namespace contract = deskCore::contract;
+		std::ifstream in(MDDESK_SCHEMA);
+		const std::string text{std::istreambuf_iterator<char>(in), std::istreambuf_iterator<char>()};
+		const auto root = elektronData::json::parse(text);
+		if(!root)
+		{
+			std::puts("  contract: the schema did not load");
+			return false;
+		}
+		auto* session = _processor.getDeskSession();
+		if(!session)
+		{
+			std::puts("  contract: no desk session");
+			return false;
+		}
+		std::vector<Value> published;
+		session->attach([&](const Value& _m) { published.push_back(_m); });
+		// "ready": everything the session publishes once a page attaches, "learn" among it.
+		session->onPageMessage(parseJson(R"({"op":"ready"})"));
+
+		// AUDIO/MIDI is the editor window's, not the session's (mdPageEditor.h owns it); built the
+		// same way here, on the same processor, so its messages are the real ones.
+		mdJucePlugin::AudioMidiLink audio(_ap, [&](Value _m) { published.push_back(std::move(_m)); });
+		audio.handle(deskHost::Action::AudioPublish, parseJson(R"({"op":"audio","id":1})"));
+		// audioLevel: only sent while a standalone host meters its input (tick(), AudioMidiLink.cpp);
+		// this test runs the processor directly, with no standalone holder to meter. Built exactly as
+		// AudioMidiLink::tick() does, so the contract still sees the shape it will see live.
+		{
+			Value m = Value::object();
+			m.set("type", "audioLevel");
+			m.set("in", 0.0);
+			published.push_back(std::move(m));
+		}
+		// openAudio: the editor window asking the page to open its panel (mdPageEditor.cpp), no doc.
+		{
+			Value m = Value::object();
+			m.set("type", "openAudio");
+			published.push_back(std::move(m));
+		}
+		session->detach();
+
+		const auto r = contract::checkMessages(*root, published);
+		for(const auto& p : r.off)
+			std::printf("    %s\n", p.c_str());
+		std::printf("  host messages: %zu published of %zu types, %zu off the contract\n", r.messages, r.types, r.offCount);
+		return r.offCount == 0;
+	}
+}
 
 int main()
 {
@@ -171,7 +243,8 @@ int main()
 	const bool ok = seen.size() >= 4 && !outside;
 	std::printf("  with no editor, track 2 DIST took %zu values in %d steps (%d..%d)\n", seen.size(), steps, seen.empty() ? -1 : *seen.begin(),
 		seen.empty() ? -1 : *seen.rbegin());
-	std::printf("mdSessionFirmwareTest: %s\n", ok ? "PASS" : "FAIL");
+	const bool hostOk = checkHostMessages(*processor, ap);
+	std::printf("mdSessionFirmwareTest: %s\n", ok && hostOk ? "PASS" : "FAIL");
 	processor.reset();
-	return ok ? 0 : 1;
+	return ok && hostOk ? 0 : 1;
 }

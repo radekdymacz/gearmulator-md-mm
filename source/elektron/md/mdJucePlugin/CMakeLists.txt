@@ -423,7 +423,8 @@ if(BUILD_TESTING)
 	target_include_directories(mdSessionFirmwareTest PRIVATE
 		${CMAKE_CURRENT_SOURCE_DIR}/../../..)
 	target_compile_definitions(mdSessionFirmwareTest PRIVATE
-		JUCE_GLOBAL_MODULE_SETTINGS_INCLUDED=1)
+		JUCE_GLOBAL_MODULE_SETTINGS_INCLUDED=1
+		MDDESK_SCHEMA="${CMAKE_CURRENT_SOURCE_DIR}/../../../../doc/modern-ux/md-data-contract.schema.json")
 	set_property(TARGET mdSessionFirmwareTest PROPERTY FOLDER "Elektron/test")
 	# P6: in ctest; it skips (77) without GEARMULATOR_MD_FIRMWARE_BIN in the environment.
 	add_test(NAME mdSessionFirmwareTest COMMAND mdSessionFirmwareTest)

@@ -15,8 +15,8 @@ namespace mmDesk
 	// The Monomachine's DevicePort over a MIDI wire (P4 HW MIDI): parameters as deskWire's CCs,
 	// NRPN, and PLAY/STOP as realtime, all on the base channel the adapter gives; SysEx straight
 	// onto the wire. Pure (no JUCE, no emulator): the plug-in's wire engine
-	// (mdJucePlugin/mdSessionMm.cpp) and a firmware test rig build the same DevicePort from their
-	// own MidiWire and clock, so the HW firmware test can exercise the plug-in's port. _channel is
+	// (mdJucePlugin/mdSessionMm.cpp) and mdLibTest's deskWirePortTest build the same DevicePort
+	// from their own MidiWire and clock, so a test exercises the plug-in's port. _channel is
 	// written by the adapter (baseChannel) and read back by every encode; the caller owns it and
 	// _wire, and both must outlive the DevicePort.
 	inline DevicePort wirePort(deskWire::MidiWire& _wire, uint8_t& _channel, std::function<double()> _nowMs)

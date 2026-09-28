@@ -375,3 +375,12 @@ set_property(TARGET mmDeskFirmwareTest PROPERTY FOLDER "Elektron/test")
 # -DGEARMULATOR_MM_ROM=<OS 1.32B image> runs it in ctest; without it the test skips.
 add_test(NAME mmDeskFirmwareTest COMMAND mmDeskFirmwareTest ${GEARMULATOR_MM_ROM})
 set_tests_properties(mmDeskFirmwareTest PROPERTIES LABELS "Integration;FirmwareTest" SKIP_RETURN_CODE 77 TIMEOUT 400)
+
+# Unit test: mdDesk::wirePort and mmDesk::wirePort send the right bytes (kit param, mute, NRPN,
+# panel keys) on the base channel. No ROM, no emulator - links the two wirePort INTERFACE
+# targets only.
+add_executable(deskWirePortTest deskWirePortTest.cpp)
+target_link_libraries(deskWirePortTest PRIVATE mdDeskWirePort mmDeskWirePort)
+add_test(NAME deskWirePortTest COMMAND deskWirePortTest)
+set_tests_properties(deskWirePortTest PROPERTIES LABELS "UnitTest;Midi")
+set_property(TARGET deskWirePortTest PROPERTY FOLDER "Elektron/test")

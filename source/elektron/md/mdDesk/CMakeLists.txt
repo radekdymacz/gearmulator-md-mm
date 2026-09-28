@@ -28,6 +28,13 @@ target_include_directories(mdDesk PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/..)
 target_compile_features(mdDesk PUBLIC cxx_std_17)
 set_property(TARGET mdDesk PROPERTY FOLDER "Elektron")
 
+# mdDeskWirePort.h bridges mdDesk's DevicePort to deskWire (P4 HW MIDI): it is not part of
+# mdDesk's own sources (only the engines that speak MIDI need it), so it gets its own tiny
+# INTERFACE target rather than making every mdDesk consumer pull in deskWire.
+add_library(mdDeskWirePort INTERFACE)
+target_sources(mdDeskWirePort INTERFACE ${CMAKE_CURRENT_SOURCE_DIR}/mdDeskWirePort.h)
+target_link_libraries(mdDeskWirePort INTERFACE mdDesk deskWire)
+
 if(BUILD_TESTING)
 	add_executable(mdDeskTest mdDeskTest.cpp)
 	target_link_libraries(mdDeskTest PRIVATE mdDesk deskHost)

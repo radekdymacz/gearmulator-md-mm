@@ -160,7 +160,31 @@ namespace
 			return it == m_sources.end() ? std::string() : it->second;
 		}
 		const std::optional<Value>& machineDoc() const { return m_machineDoc; }
-		int publishedTelemetryPattern() const { return m_telemetryPattern; }
+
+		// The page's own telemetry, as published ({"type":"telemetry", step, pattern, playing,
+		// recording, valid}) - not the rig's own read of the device (telemetry() below). The
+		// transport checks (PLAY/STOP/REC) want what the page sees, the same as machineDoc().
+		struct PageTelemetry
+		{
+			bool valid = false;
+			int step = -1;
+			int pattern = -1;
+			bool playing = false;
+			bool recording = false;
+		};
+		PageTelemetry pageTelemetry() const
+		{
+			PageTelemetry t;
+			if(!m_publishedTelemetry)
+				return t;
+			const auto& v = *m_publishedTelemetry;
+			if(const auto* p = v.find("valid")) t.valid = p->asBool();
+			if(const auto* p = v.find("step")) t.step = static_cast<int>(p->asNumber());
+			if(const auto* p = v.find("pattern")) t.pattern = static_cast<int>(p->asNumber());
+			if(const auto* p = v.find("playing")) t.playing = p->asBool();
+			if(const auto* p = v.find("recording")) t.recording = p->asBool();
+			return t;
+		}
 
 		// A direct read, outside the desk (the test's own oracle).
 		std::optional<ed::MdKit> saveAndReadKit(const uint8_t _slot)
@@ -310,7 +334,7 @@ namespace
 				m_tx = m_machineDoc->find("desk")->find("tx")->asBool();
 			}
 			else if(t == "telemetry")
-				m_telemetryPattern = static_cast<int>(_m.find("pattern")->asNumber());
+				m_publishedTelemetry = _m;
 		}
 
 		Machine m_machine;
@@ -328,7 +352,7 @@ namespace
 		std::optional<Value> m_lastAsk;
 		std::optional<Value> m_machineDoc;
 		bool m_tx = false;
-		int m_telemetryPattern = -1;
+		std::optional<Value> m_publishedTelemetry;
 		Bytes m_lastRegion;
 		md::SequencerState m_leds;
 		uint64_t m_ledsAt = 0;
@@ -517,7 +541,7 @@ namespace
 		m.send(ed::encodeMdPattern(next));
 		_rig.run(100);
 		_rig.page(R"({"op":"play"})");
-		_rig.runUntil([&] { return _rig.telemetry().playing; },
+		_rig.runUntil([&] { return _rig.pageTelemetry().playing; },
 			2000);
 		_rig.run(300);
 		const auto q0 = m.now();
@@ -542,7 +566,7 @@ namespace
 		check(clearedAt > statusAt, "the queue clears at the playhead wrap, after the early status switch");
 		_rig.page(R"({"op":"stop"})");
 		_rig.run(300);
-		check(!_rig.telemetry().playing,
+		check(!_rig.pageTelemetry().playing,
 			"the page shows the machine stopped");
 	}
 
@@ -687,7 +711,7 @@ namespace
 		_rig.page("{\"op\":\"trig\",\"p\":" + p + R"(,"t":14,"s":9,"on":true,"id":40})");
 		check(resultOk(_rig), "track 15's note at step 10");
 		_rig.runUntil([&] { return !desk.isBusy(); }, 2000);
-		const auto recording = [&] { return _rig.telemetry().recording; };
+		const auto recording = [&] { return _rig.pageTelemetry().recording; };
 		const auto t0 = m.now();
 		_rig.page(R"({"op":"record","id":42})");
 		check(resultOk(_rig), "REC accepted");
@@ -711,7 +735,7 @@ namespace
 		_rig.runUntil(stepIs(12), 3000);
 		_rig.page(R"({"op":"record","id":47})");
 		check(_rig.runUntil([&] { return !recording(); }, 1000), "REC again leaves recording");
-		check(_rig.telemetry().playing, "and the pattern keeps playing");
+		check(_rig.pageTelemetry().playing, "and the pattern keeps playing");
 		const auto trigsOf = [&](const Value& _doc, const int _t)
 		{
 			std::vector<int> s;
@@ -810,7 +834,7 @@ namespace
 		std::printf("  status reply %.0f ms, input ready %.0f ms after the firmware took MIDI\n", answered, readyMs);
 		check(ready && rig.machineString({"lifecycle"}) == "ready", "the engine says ready when the animation is over");
 		rig.page(R"({"op":"play","id":901})");
-		const bool plays = rig.runUntil([&] { return rig.telemetry().playing; }, 2000);
+		const bool plays = rig.runUntil([&] { return rig.pageTelemetry().playing; }, 2000);
 		check(plays, "the first PLAY after ready plays (no key swallowed)");
 		rig.page(R"({"op":"stop","id":902})");
 		rig.run(300);
@@ -894,7 +918,7 @@ namespace
 		m.send(ed::mdLoadPattern(0));
 		_rig.run(200);
 		_rig.page(R"({"op":"play","id":920})");
-		_rig.runUntil([&] { return _rig.telemetry().playing; }, 2000);
+		_rig.runUntil([&] { return _rig.pageTelemetry().playing; }, 2000);
 		const auto t0 = m.now();
 		_rig.page(R"({"op":"chain","patterns":[3,1,4],"id":921})");
 		check(resultOk(_rig), "chain A04 A02 A05 accepted");
@@ -933,25 +957,25 @@ namespace
 		_rig.page(R"({"op":"chain","patterns":[1,3],"id":927})");
 		check(resultOk(_rig) && _rig.runUntil([&] { return chainOf(_rig) == std::vector<int>{1, 3}; }, 3000), "chain A02 A04");
 		_rig.page(R"({"op":"stop","id":928})");
-		_rig.runUntil([&] { return !_rig.telemetry().playing; }, 2000);
+		_rig.runUntil([&] { return !_rig.pageTelemetry().playing; }, 2000);
 		_rig.run(300);
 		_rig.page(R"({"op":"play","id":929})");
-		_rig.runUntil([&] { return _rig.telemetry().playing; }, 2000);
+		_rig.runUntil([&] { return _rig.pageTelemetry().playing; }, 2000);
 		_rig.run(100);
 		const auto after = wrapPatterns(_rig, 3);
-		std::printf("  STOP, PLAY with a chain: plays %d, then", _rig.telemetry().pattern);
+		std::printf("  STOP, PLAY with a chain: plays %d, then", _rig.pageTelemetry().pattern);
 		for(const int p : after) std::printf(" %d", p);
 		std::printf("; chain %s\n", _rig.telemetry().chain.active ? "active" : "gone");
 		// Stopped: does the gesture chain?
 		_rig.page(R"({"op":"stop","id":930})");
-		_rig.runUntil([&] { return !_rig.telemetry().playing; }, 2000);
+		_rig.runUntil([&] { return !_rig.pageTelemetry().playing; }, 2000);
 		_rig.run(300);
 		_rig.page(R"({"op":"chain","patterns":[2,4],"id":931})");
 		_rig.run(800);
 		std::printf("  chain while stopped: firmware chain %s, current %d\n", chainOf(_rig) == std::vector<int>{2, 4} ? "A03 A05" : "not made",
-			_rig.telemetry().pattern);
+			_rig.pageTelemetry().pattern);
 		_rig.page(R"({"op":"play","id":932})");
-		_rig.runUntil([&] { return _rig.telemetry().playing; }, 2000);
+		_rig.runUntil([&] { return _rig.pageTelemetry().playing; }, 2000);
 		const auto st = wrapPatterns(_rig, 3);
 		std::printf("  then PLAY:");
 		for(const int p : st) std::printf(" %d", p);
@@ -987,8 +1011,8 @@ namespace
 		const auto kit = *_rig.desk().linkState().kit;
 		const int before = _rig.desk().documents().working->kit.params[14][0];
 		_rig.page(R"({"op":"record","id":940})");
-		_rig.runUntil([&] { return _rig.telemetry().recording; }, 3000);
-		_rig.runUntil([&] { return _rig.telemetry().step == 2; }, 5000);
+		_rig.runUntil([&] { return _rig.pageTelemetry().recording; }, 3000);
+		_rig.runUntil([&] { return _rig.pageTelemetry().step == 2; }, 5000);
 		const int want = before > 60 ? before - 20 : before + 20;
 		_rig.page("{\"op\":\"param\",\"k\":" + std::to_string(kit) + ",\"t\":14,\"i\":0,\"v\":" + std::to_string(want) + ",\"id\":941}");
 		int predicted = -1;
@@ -1000,11 +1024,11 @@ namespace
 				predicted = static_cast<int>(l->find("step")->asNumber());
 			return predicted >= 0;
 		}, 2000);
-		_rig.runUntil([&] { return _rig.telemetry().step == 14; }, 5000);
+		_rig.runUntil([&] { return _rig.pageTelemetry().step == 14; }, 5000);
 		_rig.page(R"({"op":"record","id":942})");
 		_rig.run(200);
 		_rig.page(R"({"op":"stop","id":943})");
-		_rig.runUntil([&] { return !_rig.telemetry().playing; }, 3000);
+		_rig.runUntil([&] { return !_rig.pageTelemetry().playing; }, 3000);
 		_rig.run(300);
 		const auto after = *_rig.readPattern(slot);
 		std::printf("  desk said step %d; locks on track 15 param 0:", predicted + 1);
@@ -1097,12 +1121,12 @@ namespace
 			"pattern clear: no trigs, length kept");
 		// Switch now while playing.
 		_rig.pageConfirmed(R"({"op":"play","id":961})");
-		_rig.runUntil([&] { return _rig.telemetry().playing; }, 2000);
+		_rig.runUntil([&] { return _rig.pageTelemetry().playing; }, 2000);
 		_rig.run(500);
 		const auto target = static_cast<uint8_t>((pat + 3) % 128);
 		const auto t0 = m.now();
 		_rig.pageConfirmed("{\"op\":\"select\",\"p\":" + std::to_string(target) + ",\"now\":true,\"force\":true,\"id\":962}");
-		const bool now = _rig.runUntil([&] { return _rig.telemetry().playing && _rig.telemetry().pattern == target; }, 3000);
+		const bool now = _rig.runUntil([&] { return _rig.pageTelemetry().playing && _rig.pageTelemetry().pattern == target; }, 3000);
 		std::printf("  switch now: playing %s after %.0f ms\n", ed::mdPatternName(target).c_str(), ms(m.now() - t0));
 		check(now, "Now while playing: STOP, LOAD PATTERN, PLAY plays the new pattern");
 		_rig.pageConfirmed(R"({"op":"stop","id":963})");
@@ -1300,7 +1324,7 @@ namespace
 		_rig.runUntil([&] { return !_rig.desk().isBusy(); }, 2000);
 		_rig.run(300);
 		_rig.page(R"({"op":"play","id":991})");
-		_rig.runUntil([&] { return _rig.telemetry().playing; }, 2000);
+		_rig.runUntil([&] { return _rig.pageTelemetry().playing; }, 2000);
 		clocks = 0;
 		_rig.run(500);
 		const int on = clocks;
@@ -1310,7 +1334,7 @@ namespace
 		_rig.runUntil([&] { return !_rig.desk().isBusy(); }, 2000);
 		_rig.run(300);
 		_rig.page(R"({"op":"play","id":994})");
-		_rig.runUntil([&] { return _rig.telemetry().playing; }, 2000);
+		_rig.runUntil([&] { return _rig.pageTelemetry().playing; }, 2000);
 		clocks = 0;
 		_rig.run(500);
 		const int off = clocks;
@@ -1390,7 +1414,7 @@ int main(const int _argc, char** _argv)
 				rig.run(300);
 				const auto t0 = rig.machine().now();
 				rig.page(R"({"op":"play","id":1})");
-				const bool on = rig.runUntil([&] { return rig.telemetry().playing; }, 3000);
+				const bool on = rig.runUntil([&] { return rig.pageTelemetry().playing; }, 3000);
 				std::printf("PLAY %d while loading (%zu patterns, %zu songs): %s after %.0f ms\n", i, rig.desk().documents().patterns.size(),
 					rig.desk().documents().songs.size(), on ? "playing" : "NOT playing", ms(rig.machine().now() - t0));
 				rig.page(R"({"op":"stop","id":2})");

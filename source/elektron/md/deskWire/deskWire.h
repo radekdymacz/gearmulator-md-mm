@@ -22,6 +22,19 @@ namespace deskWire
 		constexpr uint8_t g_nrpnMsb = 99;
 		constexpr uint8_t g_nrpnLsb = 98;
 		constexpr uint8_t g_dataEntry = 6;
+		constexpr uint8_t g_programChange = 0xc0;
+		constexpr uint8_t g_channelPressure = 0xd0;
+	}
+
+	// A channel voice message at its own MIDI length: program change and channel pressure
+	// (0xc0-0xdf) are two bytes (status, data1); every other channel message (note on/off, poly
+	// pressure, CC, pitch bend) is three.
+	inline Bytes channelMessage(const uint8_t _status, const uint8_t _data1, const uint8_t _data2)
+	{
+		const uint8_t hi = _status & 0xf0;
+		if(hi == midi::g_programChange || hi == midi::g_channelPressure)
+			return {_status, _data1};
+		return {_status, _data1, _data2};
 	}
 
 	// A control change on _channel (0-15).

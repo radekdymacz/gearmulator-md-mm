@@ -58,6 +58,16 @@ namespace
 		check(got.size() == 2, "nothing twice");
 	}
 
+	void channelMessages()
+	{
+		std::printf("wire: channel message length\n");
+		check(deskWire::channelMessage(0x90, 60, 100) == Bytes({0x90, 60, 100}), "note on is three bytes");
+		check(deskWire::channelMessage(0xb3, 1, 2) == Bytes({0xb3, 1, 2}), "CC is three bytes");
+		check(deskWire::channelMessage(0xe0, 0, 64) == Bytes({0xe0, 0, 64}), "pitch bend is three bytes");
+		check(deskWire::channelMessage(0xc2, 5, 0xff) == Bytes({0xc2, 5}), "program change is two bytes, the third dropped");
+		check(deskWire::channelMessage(0xd5, 77, 0xff) == Bytes({0xd5, 77}), "channel pressure is two bytes, the third dropped");
+	}
+
 	void realtime()
 	{
 		std::printf("wire: realtime keys\n");
@@ -103,6 +113,7 @@ int main()
 {
 	pacedOut();
 	wholeIn();
+	channelMessages();
 	realtime();
 	mdEncoders();
 	mmEncoders();

@@ -173,13 +173,15 @@ namespace mdJucePlugin
 	};
 
 	// One engine of the engine map: its profile (id, label, what it offers), how to make it and
-	// whether it can be chosen now (none: always).
-	template<typename DeskT>
+	// whether it can be chosen now (none: always). EngineT is what make() returns, typed: a
+	// SessionOf<DeskT, EngineT> holds these, so currentEngine() needs no cast (below).
+	template<typename DeskT, typename EngineT = Engine<DeskT>>
 	struct EngineRecord
 	{
+		static_assert(std::is_base_of_v<Engine<DeskT>, EngineT>, "EngineRecord's EngineT must derive from Engine<DeskT>");
 		using Profile = typename DeskT::Profile;
 		Profile profile;
-		std::function<std::unique_ptr<Engine<DeskT>>(DeskSession&)> make;
+		std::function<std::unique_ptr<EngineT>(DeskSession&)> make;
 		std::function<Availability(const DeskSession&)> available;
 	};
 
@@ -195,7 +197,7 @@ namespace mdJucePlugin
 	public:
 		static_assert(std::is_base_of_v<Engine<DeskT>, EngineT>, "SessionOf's EngineT must derive from Engine<DeskT>");
 
-		using Record = EngineRecord<DeskT>;
+		using Record = EngineRecord<DeskT, EngineT>;
 		using Action = deskHost::Action;
 
 		// _defaultSetup: what a project without a setup gets (none: the desk keeps its own).
@@ -278,7 +280,7 @@ namespace mdJucePlugin
 	protected:
 		virtual void onMidi(const Value& _message) { reply(_message, false, "midi: this editor's page has no keyboard"); }
 		virtual const char* missingText() const = 0;
-		EngineT& currentEngine() { return static_cast<EngineT&>(*m_engine); }
+		EngineT& currentEngine() { return *m_engine; }
 		void onDetach() override { m_desk->detachPage(); }
 
 	private:
@@ -381,7 +383,7 @@ namespace mdJucePlugin
 		std::optional<Value> m_defaultSetup;
 		MidiLearnCommands m_learn;
 		PageSpec m_page;
-		std::unique_ptr<Engine<DeskT>> m_engine;
+		std::unique_ptr<EngineT> m_engine;
 		std::unique_ptr<DeskT> m_desk;
 		std::vector<deskCore::EngineChoice> m_choices;
 		uint64_t m_tick = 0;
