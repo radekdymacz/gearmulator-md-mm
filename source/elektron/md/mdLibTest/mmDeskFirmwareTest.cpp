@@ -185,6 +185,23 @@ namespace
 
 		void msg(const std::string& _json) { g_contract.command(*ed::json::parse(_json)); desk->onPageMessage(*ed::json::parse(_json)); }
 
+		// A command the user confirms, as the page does: an ask it raises is answered by sending the
+		// ask's command again with force.
+		void msgConfirmed(const std::string& _json)
+		{
+			const auto from = page.size();
+			msg(_json);
+			for(size_t i = from; i < page.size(); ++i)
+				if(page[i].find("type")->asString() == "ask")
+				{
+					std::printf("  ask %s: %s (confirmed)\n", page[i].find("ask")->asString().c_str(), page[i].find("message")->asString().c_str());
+					Value c = *page[i].find("command");
+					c.put("force", true);
+					msg(ed::json::write(c));
+					return;
+				}
+		}
+
 		Value lastResult() const
 		{
 			for(auto it = page.rbegin(); it != page.rend(); ++it)
@@ -223,7 +240,7 @@ namespace
 		check(r.desk->loaded() == 288, "every pattern, kit, song and global loads");
 
 		// Play pattern 1 (a factory demo), then edit it through the desk.
-		r.msg(R"({"op":"select","p":1})");
+		r.msgConfirmed(R"({"op":"select","p":1})");
 		r.run(300);
 		r.msg(R"({"op":"play"})");
 		r.run(1500);
@@ -236,7 +253,7 @@ namespace
 		for(auto& m : p.lockMasks) m.fill(0);		// locks need trigs to sit on
 		p.lockRowCount = 0;
 		p.chordNoteCount = 0;
-		std::printf("  before the edit: screen %08x recv %s\n", r.tel.screen.load(), r.desk->recv().stateName());
+		std::printf("  before the edit: screen %08x recv %s\n", r.tel.screen.load(), r.desk->recvState().c_str());
 		const auto tEdit = r.ms();
 		r.msg(R"({"op":"set","id":1,"kind":"pattern","doc":)" + ed::json::write(ed::mmPatternToJson(p)) + "}");
 		check(r.lastResult().find("ok")->asBool(), "the edit is accepted");
@@ -250,10 +267,10 @@ namespace
 			if(r.desk->lastRoundTripMs() > 0 && confirmed < 0)
 			{
 				confirmed = r.ms() - tEdit;
-				parkedThen = r.desk->recv().parked();
+				parkedThen = r.desk->recvParked();
 			}
 			if(std::getenv("MMDESK_TRACE") && (r.ms() - tEdit < 120 || static_cast<int>(r.ms() - tEdit) % 100 < 10))
-				std::printf("    +%.0f recv %s screen %08x count %u\n", r.ms() - tEdit, r.desk->recv().stateName(), r.tel.screen.load(), r.tel.recvCount.load());
+				std::printf("    +%.0f recv %s screen %08x count %u\n", r.ms() - tEdit, r.desk->recvState().c_str(), r.tel.screen.load(), r.tel.recvCount.load());
 		}
 		std::printf("  edit -> SYSEX RECV -> stored -> read back: %.0f ms (desk round trip %.0f ms)\n", confirmed, r.desk->lastRoundTripMs());
 		check(confirmed > 0, "confirmed by read-back");
@@ -300,7 +317,7 @@ namespace
 		check(r.tel.running.load() == 1, "still playing after leaving");
 
 		// Queue a pattern while playing.
-		r.msg(R"({"op":"select","p":2})");
+		r.msgConfirmed(R"({"op":"select","p":2})");
 		r.run(200);
 		bool sawQueued = false;
 		for(auto it = r.page.rbegin(); it != r.page.rend(); ++it)
@@ -389,7 +406,7 @@ namespace
 		r.msg(R"({"op":"set","kind":"pattern","doc":)" + ed::json::write(ed::mmPatternToJson(p)) + "}");
 		r.run(1500);
 		check(r.desk->pattern(64) && ed::encodeMmPattern(*r.desk->pattern(64)) == ed::encodeMmPattern(p), "stored as sent");
-		r.msg(R"({"op":"select","p":64})");
+		r.msgConfirmed(R"({"op":"select","p":64})");
 		r.run(300);
 		r.msg(R"({"op":"tempo","bpm":133})");
 		r.run(100);

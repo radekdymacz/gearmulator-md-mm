@@ -990,6 +990,13 @@ namespace elektronData
 		const json::FirmwareLayout g_globalFw{{"format"}, {}, {}};
 	}
 
+	std::vector<std::string> mdFirmwareNames(const std::string& _kind)
+	{
+		const json::FirmwareLayout* l = _kind == "pattern" ? &g_patternFw : _kind == "kit" ? &g_kitFw
+			: _kind == "song" ? &g_songFw : _kind == "global" ? &g_globalFw : nullptr;
+		return l ? json::firmwareNames(*l) : std::vector<std::string>{};
+	}
+
 	Value patternToJson(const MdPattern& _p) { return json::groupFirmware(patternToJsonV1(_p), g_patternFw, g_mdContractVersion); }
 	Value kitToJson(const MdKit& _k) { return json::groupFirmware(kitToJsonV1(_k), g_kitFw, g_mdContractVersion); }
 	Value songToJson(const MdSong& _s) { return json::groupFirmware(songToJsonV1(_s), g_songFw, g_mdContractVersion); }

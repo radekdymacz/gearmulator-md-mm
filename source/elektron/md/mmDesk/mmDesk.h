@@ -38,6 +38,8 @@ namespace mmDesk
 			std::function<void(const Value&)> toPage;
 			// The app modulators (mm-desk/modulators) changed: keep them with the project.
 			std::function<void(const Value& _setup)> saveSetup;
+			// After every ready of a page, once the desk has published its own documents.
+			std::function<void()> ready;
 		};
 
 		// With the Monomachine adapter both engines use (MmMachine), for this profile.

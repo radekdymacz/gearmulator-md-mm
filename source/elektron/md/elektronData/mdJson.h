@@ -26,6 +26,9 @@ namespace elektronData
 
 	json::Value patternToJson(const MdPattern& _pattern);
 	json::Value kitToJson(const MdKit& _kit);
+	// The names each kind ("pattern", "kit", "song", "global") groups under "firmware"
+	// (json::firmwareNames of its layout); empty for another kind.
+	std::vector<std::string> mdFirmwareNames(const std::string& _kind);
 	json::Value songToJson(const MdSong& _song);
 	json::Value globalToJson(const MdGlobal& _global);
 

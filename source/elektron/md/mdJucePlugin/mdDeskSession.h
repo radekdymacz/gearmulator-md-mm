@@ -211,14 +211,8 @@ namespace mdJucePlugin
 
 		void onPageMessage(const Value& _message) override
 		{
-			const auto ready = m_desk->readyCount();
 			if(m_desk->onPageMessage(_message))
-			{
-				// After the page's ready the plug-in publishes its own document too.
-				if(m_desk->readyCount() != ready)
-					m_learn.publish();
 				return;
-			}
 			const auto* row = deskHost::commands().find(deskCore::opOf(_message));
 			if(!row)
 			{
@@ -290,6 +284,8 @@ namespace mdJucePlugin
 			p.device.nowMs = [] { return sessionNowMs(); };
 			p.toPage = [this](const Value& _m) { toPage(_m); };
 			p.saveSetup = [this](const Value& _setup) { m_setup.save(_setup); };
+			// After the page's ready the plug-in publishes its own document too.
+			p.ready = [this] { m_learn.publish(); };
 			return p;
 		}
 

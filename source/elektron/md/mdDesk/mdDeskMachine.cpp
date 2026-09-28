@@ -1054,8 +1054,14 @@ namespace mdDesk
 		}
 		const auto* shown = _view && kit ? _view->workingKitOf(*kit) : nullptr;
 		const std::optional<int> current = kit ? std::optional<int>(*kit) : std::nullopt;
-		// Knob moves still on their way while recording keep the edit pending (the view shows them).
-		auto r = deskCore::fromImage(std::move(m_working), *image, image->position, current, shown, now(), m_knobs.pending(), reflects);
+		// Knob moves still on their way while recording stay in the view.
+		const auto overlay = [this](ed::MdKit _k)
+		{
+			for(const auto& [key, value] : m_knobs.targets())
+				_k.params[key.first][key.second] = value;
+			return _k;
+		};
+		auto r = deskCore::fromImage(std::move(m_working), *image, image->position, current, shown, now(), reflects, overlay);
 		m_working = std::move(r.next);
 		if(r.askStatus && now() - m_kitStatusAskedMs > 200 && m_port.sendSysex)
 		{

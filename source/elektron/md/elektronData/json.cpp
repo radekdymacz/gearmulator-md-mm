@@ -1,5 +1,6 @@
 #include "json.h"
 
+#include <cassert>
 #include <cmath>
 #include <cstdio>
 #include <cstdlib>
@@ -36,6 +37,12 @@ namespace elektronData::json
 		if(m_type != Type::Object)
 		{
 			*this = object();
+		}
+		if(auto* v = find(_key))
+		{
+			assert(false && "json::Value::set: the key is already set (use put to replace)");
+			*v = std::move(_value);
+			return *this;
 		}
 		m_object.emplace_back(_key, std::move(_value));
 		return *this;

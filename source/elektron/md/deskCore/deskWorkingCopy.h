@@ -56,12 +56,14 @@ namespace deskCore
 	};
 
 	// A memory image (decoded by the model, _imageKit: which kit it is) against what is known: the
-	// kit status says plays, the working kit the core shows (_shown, may be null), and whether live
-	// edits must hold (_hold: knob moves still on their way). An image that predates the editor's
-	// own live edits waits for the next one, until they are too old to wait for. Pure.
-	template<typename Kit, typename Reflects>
+	// kit status says plays, and the working kit the core shows (_shown, may be null). An image that
+	// predates the editor's own live edits waits for the next one, until they are too old to wait
+	// for. The image taken is what the machine holds (the knob stepping and the edited/clean
+	// judgement read it); the kit reported is _overlay(image): edits still on their way that the
+	// image cannot show yet (knob turns while recording) stay in the view. Pure.
+	template<typename Kit, typename Reflects, typename Overlay>
 	FromImage<Kit> fromImage(WorkingCopy<Kit> _w, const Kit& _image, const int _imageKit, const std::optional<int> _currentKit,
-		const Kit* _shown, const double _nowMs, const bool _hold, const Reflects& _reflects)
+		const Kit* _shown, const double _nowMs, const Reflects& _reflects, const Overlay& _overlay)
 	{
 		FromImage<Kit> r;
 		if(!_currentKit || *_currentKit != _imageKit)
@@ -70,7 +72,7 @@ namespace deskCore
 			r.next = std::move(_w);
 			return r;
 		}
-		if((_hold && _w.expect.any()) || !_w.expect.takes(_image, _nowMs, _reflects))
+		if(!_w.expect.takes(_image, _nowMs, _reflects))
 		{
 			r.next = std::move(_w);
 			return r;
@@ -80,8 +82,9 @@ namespace deskCore
 		r.settles = _w.expect.any();
 		_w.expect.clear();
 		_w.image = _image;
-		if(r.settles || !_shown || !(*_shown == _image))
-			r.take = _image;
+		const Kit view = _overlay(_image);
+		if(r.settles || !_shown || !(*_shown == view))
+			r.take = view;
 		r.next = std::move(_w);
 		return r;
 	}

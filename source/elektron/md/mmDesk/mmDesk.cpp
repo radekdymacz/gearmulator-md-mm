@@ -12,7 +12,7 @@ namespace mmDesk
 	}
 
 	Desk::Desk(std::unique_ptr<MmAdapter> _adapter, Port _port)
-		: deskCore::Desk<MmModel, MmAdapter>(std::move(_adapter), _port.toPage, _port.device.nowMs)
+		: deskCore::Desk<MmModel, MmAdapter>(std::move(_adapter), _port.toPage, _port.device.nowMs, _port.ready)
 		, m_saveSetup(std::move(_port.saveSetup))
 	{
 	}
@@ -62,18 +62,9 @@ namespace mmDesk
 
 	void Desk::publishModulators()
 	{
-		Value m = Value::object();
-		m.set("type", "mod");
-		m.set("doc", deskCore::modSetupToJson(m_mods.setup(), g_mmModLimits));
-		Value values = Value::array();
-		for(const auto v : m_mods.values())
-			values.push(v);
-		m.set("values", std::move(values));
-		m.set("ccPerSecond", m_mods.ccPerSecond(now()));
-		m.set("runs", "plug-in");
-		m.set("ccLimit", deskCore::g_modCcPerSecond);
-		publish(m);
+		publish(m_mods.message(g_mmModLimits, now()));
 	}
+
 
 	void Desk::onTelemetry(const Telemetry& _t)
 	{

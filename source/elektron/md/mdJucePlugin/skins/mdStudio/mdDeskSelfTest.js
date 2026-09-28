@@ -5,8 +5,8 @@
    the page sees as ?selftest=<kind>. Each test drives the page's own controls and commands and
    logs to the plug-in's log (Bridge.log). */
 
-/* the firmware runs: it answers MIDI (machine.midi) */
-const runs = () => !!machineState().midi;
+/* the firmware runs and the editor takes input (its start-up animation is over): machine.input */
+const runs = () => !!machineState().input;
 /* A command that asks: the page shows the plug-in's question (mdDeskApp.js, onAsk); the tests answer
    it through that dialog, as the user does (its first key is the confirm). True when one came. */
 async function answerAsk(ms = 1500) {

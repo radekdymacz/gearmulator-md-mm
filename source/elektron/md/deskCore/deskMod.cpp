@@ -290,4 +290,20 @@ namespace deskCore
 		}
 		return out;
 	}
+
+	json::Value ModEngine::message(const ModLimits& _limits, const double _nowMs)
+	{
+		json::Value m = json::Value::object();
+		m.set("type", "mod");
+		m.set("doc", modSetupToJson(setup(), _limits));
+		json::Value values = json::Value::array();
+		for(const auto v : m_mods.values())
+			values.push(v);
+		m.set("values", std::move(values));
+		m.set("ccPerSecond", ccPerSecond(_nowMs));
+		// The desk is the plug-in's (its session owns it): the modulators move with the editor closed.
+		m.set("runs", "plug-in");
+		m.set("ccLimit", g_modCcPerSecond);
+		return m;
+	}
 }

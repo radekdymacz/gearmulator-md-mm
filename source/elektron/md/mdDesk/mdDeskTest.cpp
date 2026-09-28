@@ -1057,6 +1057,92 @@ namespace
 			std::printf("    %s\n", g.c_str());
 		check(gaps.empty(), "every machine command of the table has its adapter function, and no other; every ask is a command");
 	}
+
+	// The desk holds whichever adapter the engine gives it (P6): a fake with no protocol at all
+	// gets the page's documents, its edits and its machine commands through the same core.
+	class FakeMdAdapter final : public deskCore::AdapterBase<MdModel, MdAdapter>
+	{
+	public:
+		std::vector<Change> submitted;
+		std::vector<std::string> commands;
+		std::optional<Probe> probe;
+
+		void hold(const Document& _doc) { observe(_doc, deskCore::Source::Dump); }
+
+		deskCore::Outcome review(const Value&, const std::vector<Change>&, const Documents&) override { return {}; }
+		deskCore::Outcome submit(const Change& _change, const Documents&) override
+		{
+			submitted.push_back(_change);
+			settle(_change.after, deskCore::Source::Tracked);
+			return {};
+		}
+		deskCore::Outcome command(const Value& _command, const Documents&) override
+		{
+			commands.push_back(deskCore::opOf(_command));
+			return {};
+		}
+		void onSysex(const Bytes&) override {}
+		void tick(double, const Documents&) override {}
+		Value state(const Documents&) const override { return Value::object(); }
+		deskCore::Capabilities capabilities() const override
+		{
+			deskCore::Capabilities c;
+			c.engine = "fake";
+			c.label = "FAKE";
+			return c;
+		}
+		deskCore::Lifecycle lifecycle() const override { return deskCore::Lifecycle::Ready; }
+		Context context() const override { return {std::optional<uint8_t>(0)}; }
+		bool busy() const override { return false; }
+
+		void setProbe(const Probe _probe) override { probe = _probe; }
+		TelemetryEvents onTelemetry(const Telemetry& _t) override { m_telemetry = _t; return {}; }
+		void onWorkingKitMemory(const Bytes&, const Documents&) override {}
+		void onHostKitParam(uint8_t, uint8_t, uint8_t, const Documents&) override {}
+		void onHostMute(uint8_t, bool) override {}
+		void sendModulation(uint8_t, uint8_t, uint8_t, const Documents&) override {}
+		const Telemetry& telemetry() const override { return m_telemetry; }
+		const mdDataLink::Session::State& linkState() const override { return m_state; }
+		bool replied() const override { return true; }
+		double lastRoundTripMs() const override { return -1; }
+
+	private:
+		Telemetry m_telemetry;
+		mdDataLink::Session::State m_state;
+	};
+
+	void testFakeAdapter()
+	{
+		std::vector<Value> page;
+		double now = 0;
+		Desk::Port port;
+		port.toPage = [&](const Value& _m) { page.push_back(_m); };
+		port.device.nowMs = [&] { return now; };
+		int readies = 0;
+		port.ready = [&] { ++readies; };
+		auto fake = std::make_unique<FakeMdAdapter>();
+		auto& f = *fake;
+		Desk desk(std::move(fake), port);
+		const auto count = [&](const char* _type)
+		{
+			return std::count_if(page.begin(), page.end(), [&](const Value& _m) { return _m.find("type")->asString() == _type; });
+		};
+		desk.onPageMessage(cmd(R"({"op":"ready","id":1})"));
+		desk.tick();
+		check(count("catalogue") == 1 && count("machine") >= 1 && readies == 1, "fake adapter: ready, the catalogue and the machine document, then the ready hook");
+		ed::MdPattern p;
+		p.position = 3;
+		f.hold(p);
+		desk.tick();
+		desk.onPageMessage(cmd(R"({"op":"trig","p":3,"t":0,"s":2,"id":2})"));
+		desk.tick();
+		check(f.submitted.size() == 1 && std::holds_alternative<ed::MdPattern>(f.submitted[0].after)
+			&& ed::hasTrig(std::get<ed::MdPattern>(f.submitted[0].after), 0, 2), "fake adapter: a page edit arrives as one change");
+		desk.onPageMessage(cmd(R"({"op":"play","id":3})"));
+		check(f.commands == std::vector<std::string>{"play"}, "fake adapter: a machine command reaches it");
+		desk.setProbe(deskCore::LifeFacts::Probe::Running);
+		check(f.probe == deskCore::LifeFacts::Probe::Running, "fake adapter: the device's facts reach it");
+	}
 }
 
 int main(const int _argc, char** _argv)
@@ -1087,6 +1173,7 @@ int main(const int _argc, char** _argv)
 	testDeskRecording();
 	testSampleName();
 	testModulators();
+	testFakeAdapter();
 	checkContract(false);
 	if(g_failures)
 	{

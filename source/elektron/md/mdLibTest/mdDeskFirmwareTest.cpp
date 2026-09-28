@@ -110,6 +110,20 @@ namespace
 			m_desk->onPageMessage(parse(_json));
 		}
 
+		// A command the user confirms, as the page does: an ask it raises is answered by sending the
+		// ask's command again with force.
+		void pageConfirmed(const std::string& _json)
+		{
+			m_lastAsk.reset();
+			page(_json);
+			if(!m_lastAsk)
+				return;
+			Value c = *m_lastAsk->find("command");
+			std::printf("  ask %s (confirmed)\n", m_lastAsk->find("ask")->asString().c_str());
+			c.put("force", true);
+			page(ed::json::write(c));
+		}
+
 		// Advance emulated time, delivering desk output and machine replies.
 		void run(const double _ms)
 		{
@@ -137,6 +151,12 @@ namespace
 		{
 			const auto it = m_docs.find(_kind + ":" + std::to_string(_slot));
 			return it == m_docs.end() ? std::nullopt : std::optional<Value>(it->second);
+		}
+		// Where the last document of a kind came from ("memory", "dump", ...).
+		std::string pageDocSource(const std::string& _kind) const
+		{
+			const auto it = m_sources.find(_kind);
+			return it == m_sources.end() ? std::string() : it->second;
 		}
 		const std::optional<Value>& machineDoc() const { return m_machineDoc; }
 		int publishedTelemetryPattern() const { return m_telemetryPattern; }
@@ -269,6 +289,8 @@ namespace
 			const auto& t = type->asString();
 			if(t == "result")
 				m_lastResult = _m;
+			else if(t == "ask")
+				m_lastAsk = _m;
 			else if(t == "error")
 			{
 				m_lastError = _m;
@@ -278,6 +300,8 @@ namespace
 			{
 				const auto& doc = *_m.find("doc");
 				m_docs[_m.find("kind")->asString() + ":" + std::to_string(int(doc.find("slot")->asNumber()))] = doc;
+				if(const auto* src = _m.find("source"); src && src->isString())
+					m_sources[_m.find("kind")->asString()] = src->asString();
 			}
 			else if(t == "machine")
 			{
@@ -299,6 +323,8 @@ namespace
 		std::optional<Value> m_lastResult;
 		std::optional<Value> m_lastError;
 		std::map<std::string, Value> m_docs;
+		std::map<std::string, std::string> m_sources;
+		std::optional<Value> m_lastAsk;
 		std::optional<Value> m_machineDoc;
 		bool m_tx = false;
 		int m_telemetryPattern = -1;
@@ -604,7 +630,8 @@ namespace
 		std::printf("  panel encoder -> page kit document: %.1f ms emulated (value %u -> %u)\n", ms(m.now() - t0), before, want);
 		const auto& md = _rig.machineDoc();
 		check(md && md->find("kit")->find("working")->asString() == "edited", "the kit is 'edited' without SAVE KIT");
-		check(md && md->find("desk")->find("kitSource")->asString() == "memory", "kit source: memory");
+		const auto wk = _rig.pageDoc("workingKit", kit);
+		check(wk && _rig.pageDocSource("workingKit") == "memory", "kit source: memory");
 		return m.hardware().copyPatchRam();
 	}
 
@@ -778,14 +805,14 @@ namespace
 		rig.page(R"({"op":"ready"})");
 		rig.runUntil([&] { return rig.desk().isReady(); }, 3000);
 		const auto answered = ms(m.now() - t0);
-		check(rig.machineString({"desk", "firmware"}) == "booting" && rig.machineString({"desk", "boot"}) == "animation",
+		check(rig.machineString({"lifecycle"}) == "animating",
 			"the firmware answers, the engine still says BOOTING OS (animation)");
 		rig.page(R"({"op":"play","id":900})");
 		check(rig.lastResult() && !rig.lastResult()->find("ok")->asBool(), "PLAY during the animation is held back, with the reason");
 		const bool ready = rig.runUntil([&] { return rig.desk().isInputReady(); }, 30000);
 		const auto readyMs = ms(m.now() - t0);
 		std::printf("  status reply %.0f ms, input ready %.0f ms after the firmware took MIDI\n", answered, readyMs);
-		check(ready && rig.machineString({"desk", "firmware"}) == "ready", "the engine says ready when the animation is over");
+		check(ready && rig.machineString({"lifecycle"}) == "ready", "the engine says ready when the animation is over");
 		rig.page(R"({"op":"play","id":901})");
 		const bool plays = rig.runUntil([&] { return rig.telemetry().playing; }, 2000);
 		check(plays, "the first PLAY after ready plays (no key swallowed)");
@@ -1017,37 +1044,37 @@ namespace
 		const auto cur = *desk.linkState().kit;
 		const auto working = desk.documents().working->kit;
 		const auto settle = [&] { _rig.runUntil([&] { return !desk.isBusy(); }, 2000); _rig.run(200); };
-		_rig.page("{\"op\":\"kitCopy\",\"k\":" + std::to_string(cur) + ",\"id\":950}");
-		_rig.page(R"({"op":"kitPaste","k":40,"id":951})");
+		_rig.pageConfirmed("{\"op\":\"kitCopy\",\"k\":" + std::to_string(cur) + ",\"id\":950}");
+		_rig.pageConfirmed(R"({"op":"kitPaste","k":40,"id":951})");
 		check(resultOk(_rig), "paste into K41 accepted");
 		settle();
 		const auto k40 = readKit(40);
 		check(k40.params == working.params && k40.models == working.models, "K41 holds the copied kit (machine dump)");
-		_rig.page(R"({"op":"kitRename","k":40,"name":"lib test","id":952})");
+		_rig.pageConfirmed(R"({"op":"kitRename","k":40,"name":"lib test","id":952})");
 		settle();
 		check(kitNameOf(readKit(40)) == "LIB TEST", "rename of a slot that does not play: dump with the new name");
-		_rig.page(R"({"op":"kitClear","k":40,"id":953})");
+		_rig.pageConfirmed(R"({"op":"kitClear","k":40,"id":953})");
 		settle();
 		const auto cleared = readKit(40);
 		check(std::all_of(cleared.models.begin(), cleared.models.end(), [](const uint32_t _m) { return _m == 0; }) && kitNameOf(cleared).empty(),
 			"clear: every track GND-EMPTY, no name");
-		_rig.page(R"({"op":"undo","id":954})");
+		_rig.pageConfirmed(R"({"op":"undo","id":954})");
 		settle();
 		check(kitNameOf(readKit(40)) == "LIB TEST", "undo brings the renamed kit back");
-		_rig.page(R"({"op":"kitCopyTo","from":40,"to":41,"id":955})");
+		_rig.pageConfirmed(R"({"op":"kitCopyTo","from":40,"to":41,"id":955})");
 		settle();
 		check(kitNameOf(readKit(41)) == "LIB TEST", "drag-copy K41 -> K42");
-		_rig.page(R"({"op":"kitSaveAs","k":42,"id":956})");
+		_rig.pageConfirmed(R"({"op":"kitSaveAs","k":42,"id":956})");
 		settle();
 		check(kitStatus() == 42, "Save as K43: it is the current kit");
 		const auto pat = *desk.linkState().pattern;
 		check(_rig.readPattern(pat)->kit == 42, "and the current pattern links to it (EXTENDED)");
-		_rig.page("{\"op\":\"kitLoad\",\"k\":" + std::to_string(cur) + ",\"force\":true,\"id\":957}");
+		_rig.pageConfirmed("{\"op\":\"kitLoad\",\"k\":" + std::to_string(cur) + ",\"force\":true,\"id\":957}");
 		settle();
 		check(kitStatus() == cur, "LOAD KIT back to the first kit");
 		// Paste into the kit that plays: a dump plus LOAD KIT, heard at once.
-		_rig.page("{\"op\":\"kitCopy\",\"k\":40,\"id\":970}");
-		_rig.page("{\"op\":\"kitPaste\",\"k\":" + std::to_string(cur) + ",\"force\":true,\"id\":971}");
+		_rig.pageConfirmed("{\"op\":\"kitCopy\",\"k\":40,\"id\":970}");
+		_rig.pageConfirmed("{\"op\":\"kitPaste\",\"k\":" + std::to_string(cur) + ",\"force\":true,\"id\":971}");
 		settle();
 		const auto image = ed::mdWorkingKitFromMemory([&]
 		{
@@ -1057,32 +1084,32 @@ namespace
 			return r;
 		}());
 		check(image && kitNameOf(*image) == "LIB TEST" && image->models == readKit(40).models, "paste into the kit that plays: heard at once (working kit in memory)");
-		_rig.page("{\"op\":\"kitRename\",\"k\":" + std::to_string(cur) + ",\"name\":\"LIVE NAME\",\"id\":972}");
+		_rig.pageConfirmed("{\"op\":\"kitName\",\"k\":" + std::to_string(cur) + ",\"name\":\"LIVE NAME\",\"id\":972}");
 		settle();
 		_rig.run(300);
 		check(kitNameOf(desk.documents().working->kit) == "LIVE NAME", "rename of the kit that plays: live (0x55), the working kit shows it");
 		// Patterns.
-		_rig.page("{\"op\":\"patCopy\",\"p\":" + std::to_string(pat) + ",\"id\":958}");
-		_rig.page(R"({"op":"patPaste","p":100,"id":959})");
+		_rig.pageConfirmed("{\"op\":\"patCopy\",\"p\":" + std::to_string(pat) + ",\"id\":958}");
+		_rig.pageConfirmed(R"({"op":"patPaste","p":100,"id":959})");
 		settle();
 		const auto src = *_rig.readPattern(pat), p100 = *_rig.readPattern(100);
 		check(p100.trigs == src.trigs && p100.lockMasks == src.lockMasks && p100.kit == src.kit, "pattern paste into G05: notes, locks, kit link");
-		_rig.page(R"({"op":"patClear","p":100,"id":960})");
+		_rig.pageConfirmed(R"({"op":"patClear","p":100,"id":960})");
 		settle();
 		const auto c100 = *_rig.readPattern(100);
 		check(std::all_of(c100.trigs.begin(), c100.trigs.end(), [](const uint64_t _t) { return _t == 0; }) && c100.length == src.length,
 			"pattern clear: no trigs, length kept");
 		// Switch now while playing.
-		_rig.page(R"({"op":"play","id":961})");
+		_rig.pageConfirmed(R"({"op":"play","id":961})");
 		_rig.runUntil([&] { return _rig.telemetry().playing; }, 2000);
 		_rig.run(500);
 		const auto target = static_cast<uint8_t>((pat + 3) % 128);
 		const auto t0 = m.now();
-		_rig.page("{\"op\":\"select\",\"p\":" + std::to_string(target) + ",\"now\":true,\"force\":true,\"id\":962}");
+		_rig.pageConfirmed("{\"op\":\"select\",\"p\":" + std::to_string(target) + ",\"now\":true,\"force\":true,\"id\":962}");
 		const bool now = _rig.runUntil([&] { return _rig.telemetry().playing && _rig.telemetry().pattern == target; }, 3000);
 		std::printf("  switch now: playing %s after %.0f ms\n", ed::mdPatternName(target).c_str(), ms(m.now() - t0));
 		check(now, "Now while playing: STOP, LOAD PATTERN, PLAY plays the new pattern");
-		_rig.page(R"({"op":"stop","id":963})");
+		_rig.pageConfirmed(R"({"op":"stop","id":963})");
 		_rig.run(300);
 		m.send(ed::mdLoadPattern(pat));
 		_rig.run(300);
@@ -1146,10 +1173,10 @@ namespace
 			}
 			return _done();
 		}
-		std::string link() const
+		// The lifecycle the machine document shows: hwConnecting, ready, hwLost.
+		std::string lifecycle() const
 		{
-			const auto* d = m_machineDoc ? m_machineDoc->find("desk") : nullptr;
-			const auto* l = d ? d->find("link") : nullptr;
+			const auto* l = m_machineDoc ? m_machineDoc->find("lifecycle") : nullptr;
 			return l && l->isString() ? l->asString() : std::string();
 		}
 		mdDesk::Desk& desk() { return *m_desk; }
@@ -1223,9 +1250,9 @@ namespace
 		HwRig hw(_rom, _romName);
 		auto& m = hw.machine();
 		hw.page(R"({"op":"ready"})");
-		check(hw.link() == "connect", "HW CONNECT until the machine answers");
+		check(hw.lifecycle() == "hwConnecting", "HW CONNECT until the machine answers");
 		const auto t0 = m.now();
-		const bool up = hw.runUntil([&] { return hw.link() == "ready" && hw.desk().linkState().pattern && hw.desk().linkState().kit
+		const bool up = hw.runUntil([&] { return hw.lifecycle() == "ready" && hw.desk().linkState().pattern && hw.desk().linkState().kit
 			&& hw.desk().documents().patterns.count(*hw.desk().linkState().pattern) && hw.desk().documents().kits.count(*hw.desk().linkState().kit); }, 20000);
 		std::printf("  status, current pattern and kit over DIN: %.0f ms\n", ms(m.now() - t0));
 		check(up, "HW MIDI: status, the current pattern and its kit read");
@@ -1274,10 +1301,10 @@ namespace
 		check(hw.lastResult() && !hw.lastResult()->find("ok")->asBool(), "chaining is refused over MIDI, with the reason");
 		// Unplugged: HW NO MIDI after a while.
 		hw.setConnected(false);
-		const bool lost = hw.runUntil([&] { return hw.link() == "lost"; }, 6000);
+		const bool lost = hw.runUntil([&] { return hw.lifecycle() == "hwLost"; }, 6000);
 		check(lost, "no replies for 3.5 s: the link says lost (HW NO MIDI)");
 		hw.setConnected(true);
-		check(hw.runUntil([&] { return hw.link() == "ready"; }, 4000), "and ready again when it answers");
+		check(hw.runUntil([&] { return hw.lifecycle() == "ready"; }, 4000), "and ready again when it answers");
 		std::printf("  bytes sent to the machine: %zu\n", hw.bytesOut());
 	}
 

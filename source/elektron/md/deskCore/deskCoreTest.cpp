@@ -8,6 +8,7 @@
 #include "deskPush.h"
 #include "deskRef.h"
 #include "deskSequence.h"
+#include "deskWorkingCopy.h"
 
 #include <cstdio>
 #include <string>
@@ -248,7 +249,9 @@ namespace
 		double now = 0;
 		auto first = std::make_unique<ToyMachine>();
 		auto* m = first.get();
-		Desk<ToyModel, Machine<ToyModel>> d(std::move(first), [&](const Value& _m) { page.push_back(_m); }, [&] { return now; });
+		int readies = 0;
+		Desk<ToyModel, Machine<ToyModel>> d(std::move(first), [&](const Value& _m) { page.push_back(_m); }, [&] { return now; },
+			[&] { ++readies; });
 		const auto send = [&](const char* _json) { return d.onPageMessage(*elektronData::json::parse(_json)); };
 		const auto last = [&](const char* _type) -> const Value*
 		{
@@ -257,7 +260,7 @@ namespace
 					return &*it;
 			return nullptr;
 		};
-		check(send(R"({"op":"ready","id":1})") && last("catalogue") && d.readyCount() == 1, "ready: the catalogue, counted");
+		check(send(R"({"op":"ready","id":1})") && last("catalogue") && readies == 1, "ready: the catalogue, then the ready hook");
 		check(!send(R"({"op":"learnStart"})"), "an op the model does not know is the caller's");
 		send(R"({"op":"set","s":42,"v":1,"id":2})");
 		check(!last("result")->find("ok")->asBool() && last("result")->find("errors")->asArray()[0].asString().find("s:") == 0,
@@ -344,10 +347,37 @@ namespace
 		c.flush();
 		check(page.back().find("type")->asString() == "result" && page.back().find("id")->asNumber() == 9, "undo answers");
 	}
+	// The working-copy policy on a toy kit (an int per knob): status is the truth, an image that
+	// predates the editor's edits waits, the image taken is what the machine holds and the view
+	// keeps the overlay (edits the image cannot show yet).
+	void workingCopy()
+	{
+		using Kit = std::vector<int>;
+		const auto reflects = [](const Kit& _image, const Kit&, const Kit& _to) { return _image == _to; };
+		const auto none = [](Kit _k) { return _k; };
+		WorkingCopy<Kit> w;
+		auto r = fromImage(w, Kit{1, 2}, 3, std::optional<int>(4), static_cast<const Kit*>(nullptr), 0, reflects, none);
+		check(r.askStatus && !r.take && !r.next.image, "an image of another kit than status says: ask, take nothing");
+		r = fromImage(w, Kit{1, 2}, 3, std::optional<int>(3), static_cast<const Kit*>(nullptr), 0, reflects, none);
+		check(r.take == Kit({1, 2}) && r.next.image == Kit({1, 2}) && !r.next.seed && !r.settles, "the image is taken and reported");
+		w = r.next;
+		w.expect.sent(Kit{1, 2}, Kit{1, 9}, 100);
+		const Kit shown{1, 9};
+		r = fromImage(w, Kit{1, 2}, 3, std::optional<int>(3), &shown, 150, reflects, none);
+		check(!r.take && r.next.expect.any(), "an image from before the edit waits");
+		r = fromImage(w, Kit{1, 9}, 3, std::optional<int>(3), &shown, 160, reflects, none);
+		check(r.settles && r.take == Kit({1, 9}) && !r.next.expect.any(), "the image that shows it settles the edit");
+		const auto knob = [](Kit _k) { _k[0] = 7; return _k; };
+		r = fromImage(r.next, Kit{2, 9}, 3, std::optional<int>(3), &shown, 170, reflects, knob);
+		check(r.next.image == Kit({2, 9}) && r.take == Kit({7, 9}), "the machine's image is kept, the view keeps the knob on its way");
+		const auto sw = switched(r.next);
+		check(sw.seed && !sw.image && !sw.expect.any(), "another kit plays: nothing of the old one holds");
+	}
 }
 
 int main()
 {
+	workingCopy();
 	loadQueue();
 	lifecycle();
 	sequence();

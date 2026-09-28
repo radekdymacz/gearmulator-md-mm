@@ -38,6 +38,8 @@ namespace mdDesk
 			std::function<void(const Value& _message)> toPage;
 			// The editor's setup (md-desk/setup) changed: keep it with the project.
 			std::function<void(const Value& _setup)> saveSetup;
+			// After every ready of a page, once the desk has published its own documents.
+			std::function<void()> ready;
 		};
 
 		// With the Machinedrum adapter both engines use (MdMachine), for this profile.

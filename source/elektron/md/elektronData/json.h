@@ -66,7 +66,8 @@ namespace elektronData::json
 		Value* find(const std::string& _key);
 		// Object building: replaces the member when it exists, appends it otherwise.
 		Value& put(const std::string& _key, Value _value);
-		// Object building: appends (does not replace).
+		// Object building: a new member. A key set twice is a bug (asserted); a release build keeps
+		// one member per key (the last), so a document never carries the same key twice.
 		Value& set(const std::string& _key, Value _value);
 		// Array building.
 		Value& push(Value _value);

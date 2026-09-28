@@ -821,7 +821,8 @@ namespace mmDesk
 			return;
 		}
 		const auto current = m_curKit >= 0 ? std::optional<int>(m_curKit) : std::nullopt;
-		auto r = deskCore::fromImage(std::move(m_working), *k, kitNumber, current, _view.workingKitOf(m_curKit), _now, false, reflects);
+		auto r = deskCore::fromImage(std::move(m_working), *k, kitNumber, current, _view.workingKitOf(m_curKit), _now, reflects,
+			[](const ed::MmKit& _k) { return _k; });
 		m_working = std::move(r.next);
 		if(r.askStatus && _now - m_lastStatusMs > 200)
 		{

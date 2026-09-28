@@ -159,6 +159,9 @@ namespace deskCore
 		std::vector<int> values() const { return m_mods.values(); }
 		int ccPerSecond(const double _nowMs) { return m_budget.lastSecond(_nowMs); }
 
+		// {"type":"mod","doc","values","ccPerSecond","runs":"plug-in","ccLimit"}: what the page shows.
+		elektronData::json::Value message(const ModLimits& _limits, double _nowMs);
+
 	private:
 		Modulators m_mods;
 		CcBudget m_budget;

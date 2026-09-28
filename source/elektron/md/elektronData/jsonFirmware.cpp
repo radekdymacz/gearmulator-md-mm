@@ -28,6 +28,14 @@ namespace elektronData::json
 		}
 	}
 
+	std::vector<std::string> firmwareNames(const FirmwareLayout& _layout)
+	{
+		std::vector<std::string> names = _layout.topLevel;
+		for(const auto& [path, name] : _layout.perTrack)
+			names.push_back(name);
+		return names;
+	}
+
 	Value groupFirmware(const Value& _v1, const FirmwareLayout& _layout, const int _version)
 	{
 		if(!_v1.isObject())

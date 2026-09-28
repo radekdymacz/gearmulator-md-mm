@@ -21,6 +21,11 @@ namespace elektronData::json
 		std::string mergedObject;										// an object whose members join firmware ("hidden")
 	};
 
+	// The names a layout puts under "firmware" (top-level fields and per-track lists; a merged
+	// object's members are the codec's own). A name the codec never writes is a layout typo: the
+	// corpus test checks every name shows up in some document of its kind.
+	std::vector<std::string> firmwareNames(const FirmwareLayout& _layout);
+
 	// A version 1 document -> version 2 (the given version number).
 	Value groupFirmware(const Value& _v1, const FirmwareLayout& _layout, int _version);
 	// A version 2 document -> the codec's version 1 layout; any other version is returned as is.

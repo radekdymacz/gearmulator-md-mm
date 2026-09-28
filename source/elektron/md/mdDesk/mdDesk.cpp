@@ -13,7 +13,7 @@ namespace mdDesk
 	}
 
 	Desk::Desk(std::unique_ptr<MdAdapter> _adapter, Port _port)
-		: deskCore::Desk<MdModel, MdAdapter>(std::move(_adapter), _port.toPage, _port.device.nowMs)
+		: deskCore::Desk<MdModel, MdAdapter>(std::move(_adapter), _port.toPage, _port.device.nowMs, _port.ready)
 		, m_saveSetup(std::move(_port.saveSetup))
 	{
 	}
@@ -103,19 +103,9 @@ namespace mdDesk
 
 	void Desk::publishModulators()
 	{
-		Value m = Value::object();
-		m.set("type", "mod");
-		m.set("doc", modSetupToJson(m_mods.setup(), g_mdModLimits));
-		Value values = Value::array();
-		for(const auto v : m_mods.values())
-			values.push(v);
-		m.set("values", std::move(values));
-		m.set("ccPerSecond", m_mods.ccPerSecond(now()));
-		// The desk is the plug-in's (its session owns it): the modulators move with the editor closed.
-		m.set("runs", "plug-in");
-		m.set("ccLimit", g_modCcPerSecond);
-		publish(m);
+		publish(m_mods.message(g_mdModLimits, now()));
 	}
+
 
 	// App modulators move on the machine's own steps.
 	void Desk::runModulators()

@@ -27,8 +27,11 @@ namespace deskCore
 	public:
 		using Documents = typename Model::Documents;
 
-		Desk(std::unique_ptr<Adapter> _adapter, std::function<void(const Value&)> _toPage, std::function<double()> _nowMs)
+		// _ready: called after every ready of a page (the plug-in publishes its own documents then).
+		Desk(std::unique_ptr<Adapter> _adapter, std::function<void(const Value&)> _toPage, std::function<double()> _nowMs,
+			std::function<void()> _ready = {})
 			: m_nowMs(std::move(_nowMs))
+			, m_ready(std::move(_ready))
 			, m_core(std::move(_toPage))
 		{
 			setEngine(std::move(_adapter));
@@ -128,8 +131,6 @@ namespace deskCore
 		const Documents& documents() const { return m_core.view(); }
 		Lifecycle lifecycle() const { return m_machine->lifecycle(); }
 		bool isInputReady() const { return takesInput(lifecycle()); }
-		// How many times a page said ready (the plug-in publishes its own parts after each).
-		uint32_t readyCount() const { return m_readyCount; }
 		// What the adapter is doing, for the diagnostics line.
 		Value status() const { return m_machine->status(); }
 		// A page has been up: the machine is polled and read from then on.
@@ -150,20 +151,21 @@ namespace deskCore
 	private:
 		void onReady(const Value& _message)
 		{
-			++m_readyCount;
 			m_core.pageReady();
 			Value cat = Value::object();
 			cat.set("type", "catalogue");
 			cat.set("doc", Model::catalogue());
 			m_core.publish(cat);
 			onReadyExtra();
+			if(m_ready)
+				m_ready();
 			if(_message.isObject())
 				m_core.result(_message, {}, {});
 		}
 
 		std::function<double()> m_nowMs;
+		std::function<void()> m_ready;
 		Core<Model> m_core;
 		std::unique_ptr<Adapter> m_machine;
-		uint32_t m_readyCount = 0;
 	};
 }

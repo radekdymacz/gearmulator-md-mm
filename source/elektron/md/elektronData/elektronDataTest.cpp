@@ -274,6 +274,25 @@ namespace
 		check(kback && *kback == kit, "a version 1 kit document still reads");
 		check(elektronData::kitFromJson(kj, errors) == std::optional<elektronData::MdKit>(kit), "and version 2");
 
+		// Every name a layout groups is one the codec writes (a typo would leave its field at the
+		// top, silently): values that carry each conditional field (a name tail, hidden lock bytes).
+		const auto grouped = [](const elektronData::json::Value& _doc, const std::string& _kind)
+		{
+			for(const auto& name : elektronData::mdFirmwareNames(_kind))
+				if(!_doc.find("firmware")->find(name) || _doc.find(name))
+					return false;
+			return !elektronData::mdFirmwareNames(_kind).empty();
+		};
+		auto tailKit = kit;
+		tailKit.name = {'K', 0, 'x'};
+		auto hiddenPattern = p;
+		hiddenPattern.lockRows[63][0] = 0x11;
+		elektronData::MdSong tailSong;
+		tailSong.name = {'S', 0, 'y'};
+		check(grouped(elektronData::kitToJson(tailKit), "kit") && grouped(elektronData::patternToJson(hiddenPattern), "pattern")
+			&& grouped(elektronData::songToJson(tailSong), "song") && grouped(elektronData::globalToJson({}), "global"),
+			"every firmware layout name is a field the codec writes");
+
 		// Hardware limits reported with a path.
 		auto doc = text;
 		doc.replace(doc.find("\"length\":32"), 11, "\"length\":40");
