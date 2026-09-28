@@ -1,5 +1,7 @@
 #pragma once
 
+#include "elektronData/mmScreen.h"
+
 #include <cstdint>
 #include <deque>
 #include <string>
@@ -21,17 +23,7 @@ namespace mmDesk
 		Stop
 	};
 
-	// The screen the firmware shows, as the device layer reports it (md::MmScreen; the
-	// handler addresses live there, MM-P0-RESULT §3).
-	enum class Screen : uint8_t
-	{
-		Unknown,
-		Boot,
-		Main,
-		Global,
-		GlobalEdit,	// the GLOBAL EDIT menus, SYSEX RECV among them
-		Other
-	};
+	using Screen = elektronData::MmScreen;
 
 	// The machine as the desk sees it, from the audio thread (md::MmTelemetry).
 	struct Telemetry

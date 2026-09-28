@@ -1,5 +1,6 @@
 #pragma once
 
+#include <algorithm>
 #include <array>
 #include <atomic>
 #include <memory>
@@ -188,13 +189,17 @@ namespace md
 			// Drop what was sent, then append.
 			std::copy(m_panelSequence.begin() + static_cast<std::ptrdiff_t>(m_panelSequenceNext),
 				m_panelSequence.begin() + static_cast<std::ptrdiff_t>(m_panelSequenceSize), m_panelSequence.begin());
+			std::copy(m_panelSequenceHolds.begin() + static_cast<std::ptrdiff_t>(m_panelSequenceNext),
+				m_panelSequenceHolds.begin() + static_cast<std::ptrdiff_t>(m_panelSequenceSize), m_panelSequenceHolds.begin());
 			m_panelSequenceSize -= m_panelSequenceNext;
 			m_panelSequenceNext = 0;
 			if(_states.empty() || m_panelSequenceSize + _states.size() > m_panelSequence.size())
 				return false;
 			std::copy(_states.begin(), _states.end(), m_panelSequence.begin() + static_cast<std::ptrdiff_t>(m_panelSequenceSize));
+			// Each packet keeps its own hold (a knob turn queued after a key does not shorten the key's).
+			std::fill(m_panelSequenceHolds.begin() + static_cast<std::ptrdiff_t>(m_panelSequenceSize),
+				m_panelSequenceHolds.begin() + static_cast<std::ptrdiff_t>(m_panelSequenceSize + _states.size()), _holdFrames);
 			m_panelSequenceSize += _states.size();
-			m_panelSequenceHold = _holdFrames;
 			return true;
 		}
 		PanelInputQueueStatus getPanelInputStatus() const
@@ -234,6 +239,10 @@ namespace md
 			std::atomic<int> gridEdit{-1};
 			std::atomic<int> knobPage{-1};
 			std::atomic<uint64_t> blocks{0};
+			// P6: panel packets (keys, encoder steps) queued by sendPanelSequence and not yet sent to the
+			// machine. A fact for the editor: the firmware loses keys while it builds a dump, so it does
+			// not ask for one while keys are on their way.
+			std::atomic<int> panelPending{0};
 			// P4 (md::BootAnimation, md::ChainAndMutes): the start-up animation (-1 unknown,
 			// 1 running: panel keys are ignored, 0 over), the pattern mutes (bit 0 = track 1,
 			// -1 unknown) and the firmware's pattern chain. The chain is published as values
@@ -336,7 +345,7 @@ namespace md
 		std::array<PanelPacket, 128> m_panelSequence{};
 		size_t m_panelSequenceSize = 0;
 		size_t m_panelSequenceNext = 0;
-		uint32_t m_panelSequenceHold = 0;
+		std::array<uint32_t, 128> m_panelSequenceHolds{};
 		uint64_t m_panelSequenceAt = 0;
 		uint64_t m_frames = 0;
 		std::shared_ptr<FrontPanelPublisher> m_frontPanelPublisher;

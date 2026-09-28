@@ -361,15 +361,18 @@ namespace
 			h.record(r.changes, 0);
 		}
 		check(h.size() == 3, "three commands, three steps");
-		auto u = h.undo();
+		// Undo and redo are next() then done() with what was delivered (all of it here).
+		const auto undo = [&h] { auto c = h.next(History::Direction::Undo); if(c) h.done(History::Direction::Undo, *c); return c; };
+		const auto redo = [&h] { auto c = h.next(History::Direction::Redo); if(c) h.done(History::Direction::Redo, *c); return c; };
+		auto u = undo();
 		check(u && u->size() == 1, "undo returns the step");
 		docs.set(u->at(0).after);
-		u = h.undo();
+		u = undo();
 		docs.set(u->at(0).after);
-		u = h.undo();
+		u = undo();
 		docs.set(u->at(0).after);
 		check(docs.patterns[1] == original && !h.canUndo() && h.canRedo(), "three undos restore the pattern");
-		auto re = h.redo();
+		auto re = redo();
 		docs.set(re->at(0).after);
 		check(ed::hasTrig(docs.patterns[1], 0, 0) != ed::hasTrig(original, 0, 0), "redo re-applies");
 
@@ -383,7 +386,15 @@ namespace
 			g.record(r.changes, 77);
 		}
 		check(g.size() == 1, "a gesture is one undo step");
-		const auto step = g.undo();
+		// P6: only delivered changes are recorded: an undo that delivers nothing leaves no redo step.
+		{
+			History d;
+			const auto r = run(docs, cmd(R"({"op":"trig","p":1,"t":2,"s":0})"), clip);
+			d.record(r.changes, 0);
+			d.done(History::Direction::Undo, {});
+			check(!d.canUndo() && !d.canRedo(), "an undo nothing of which was delivered is not redoable");
+		}
+		const auto step = g.next(History::Direction::Undo);
 		check(step && std::get<ed::MdPattern>(step->at(0).after) == start, "undoing the gesture restores its start");
 	}
 
@@ -586,14 +597,14 @@ namespace
 		check(!ed::mdWorkingKitFromMemory(std::vector<uint8_t>(10, 0)), "a short region is refused");
 
 		// P6: the desk outlives the machine: a reboot (a restored project) starts over.
-		desk.setFirmware(Desk::Firmware::Loading);
+		desk.setProbe(Desk::Probe::Loading);
 		check(!desk.isInputReady(), "restoring: no input");
 		page.clear();
-		desk.setFirmware(Desk::Firmware::Present);
+		desk.setProbe(Desk::Probe::Running);
 		bool reset = false;
 		for(const auto& m : page)
 			reset |= m.find("type")->asString() == "reset";
-		check(reset && desk.documents().kits.empty() && !desk.core().history().canUndo(), "a reboot: the page starts over, nothing old is kept");
+		check(reset && desk.documents().kits.empty() && !desk.coreState().history().canUndo(), "a reboot: the page starts over, nothing old is kept");
 	}
 
 	// Knob moves while live recording become panel steps: select, page, turn.
@@ -891,7 +902,7 @@ namespace
 		port.toPage = [&](const Value& _m) { page.push_back(_m); g_published.push_back(_m); };
 		port.nowMs = [&] { return now; };
 		Desk desk(port);
-		desk.setHardwareLink(true);
+		desk.setEngine(wireProfile(), port.device());
 		desk.onTelemetry(Telemetry{});
 		const auto link = [&]
 		{

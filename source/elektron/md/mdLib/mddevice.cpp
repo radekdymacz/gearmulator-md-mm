@@ -671,10 +671,14 @@ namespace md
 		m_frames += _samples;
 		if(m_panelSequenceNext < m_panelSequenceSize && m_frames >= m_panelSequenceAt)
 		{
+			const auto hold = m_panelSequenceHolds[m_panelSequenceNext];
 			const auto& p = m_panelSequence[m_panelSequenceNext++];
 			(void)m_hardware->trySendPanelEvent(p.row, p.mask);
-			m_panelSequenceAt = m_frames + m_panelSequenceHold;
+			m_panelSequenceAt = m_frames + hold;
 		}
+		// Pending until the last packet was sent and held.
+		m_sequencerTelemetry->panelPending.store(m_panelSequenceNext < m_panelSequenceSize || m_frames < m_panelSequenceAt
+			? static_cast<int>(m_panelSequenceSize - m_panelSequenceNext) + 1 : 0, std::memory_order_relaxed);
 		if(m_deferredPreparedState && m_deferredPreparedState->m_hardware
 			&& m_deferredPreparedState->m_hardware->isProjectStateRestorePending())
 		{

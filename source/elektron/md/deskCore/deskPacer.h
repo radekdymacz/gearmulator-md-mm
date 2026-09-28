@@ -5,7 +5,7 @@
 #include <deque>
 #include <vector>
 
-namespace mdDesk
+namespace deskCore
 {
 	// MIDI at DIN speed (P4, HW MIDI): 31250 baud, 10 bits a byte, so 3125 bytes a second;
 	// a 5410-byte pattern dump takes 1.73 s on the wire. The pacer lets messages out no

@@ -13,9 +13,12 @@ target_sources(deskCore PRIVATE
 	deskCapabilities.h
 	deskCommands.cpp deskCommands.h
 	deskCore.h
+	deskDesk.h
+	deskLcd.h
 	deskHistory.h
 	deskLifecycle.cpp deskLifecycle.h
 	deskLoadQueue.h
+	deskPacer.h
 	deskPush.h
 	deskRef.h
 	deskSequence.h

@@ -17,10 +17,10 @@ target_sources(mdDesk PRIVATE
 	mdDeskMachine.cpp mdDeskMachine.h
 	mdDeskModel.cpp mdDeskModel.h
 	mdDeskMod.cpp mdDeskMod.h
-	mdDeskPacer.h
 	mdDeskRecord.cpp mdDeskRecord.h
 	mdDeskSetup.cpp mdDeskSetup.h
 	mdDeskTelemetry.h
+	mdDeskWorkingKit.cpp mdDeskWorkingKit.h
 )
 
 target_link_libraries(mdDesk PUBLIC deskCore elektronData mdDataLink)

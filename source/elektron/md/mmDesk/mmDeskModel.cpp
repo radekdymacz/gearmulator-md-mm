@@ -1,6 +1,7 @@
 #include "mmDeskModel.h"
 
 #include "elektronData/mmJson.h"
+#include "elektronData/mmMachines.h"
 #include "elektronData/mmValidate.h"
 
 namespace mmDesk
@@ -163,46 +164,63 @@ namespace mmDesk
 		return m;
 	}
 
-	const deskCore::CommandTable& commandTable()
+	namespace
 	{
-		const Arg p{"p", ArgType::Integer, 0, 127};
-		const Arg kOpt{"k", ArgType::Integer, 0, 127, true};
-		const Arg sOpt{"s", ArgType::Integer, 0, 23, true};
-		const Arg t6{"t", ArgType::Integer, 0, 5};
-		const Arg learnTarget[] = {{"t", ArgType::Integer, 0, 5}, {"pg", ArgType::Integer, 0, 7}, {"i", ArgType::Integer, 0, 7, true}};
-		static const deskCore::CommandTable table({
-			// ---- the core: documents ----
-			{"ready", Owner::Core, Gate::None, -1, {}, "the page is up: everything is published once more"},
-			{"undo", Owner::Core, Gate::Input, -1, {}, "undo the last step (a gesture is one step)"},
-			{"redo", Owner::Core, Gate::Input, -1, {}, ""},
-			{"set", Owner::Core, Gate::Input, -1, {{"kind", ArgType::Text}, {"doc", ArgType::Object}}, "a whole document as the intent"},
-			// ---- the machine ----
-			{"load", Owner::Machine, Gate::Input, -1, {{"kind", ArgType::Text}, {"slot", ArgType::Integer, 0, 127}}, "read a document now"},
-			{"select", Owner::Machine, Gate::Input, -1, {p, {"now", ArgType::Bool, 0, 0, true}},
-				"LOAD PATTERN (at the pattern end while playing; now: STOP, LOAD, PLAY)"},
-			{"loadKit", Owner::Machine, Gate::Input, -1, {kOpt}, "LOAD KIT (the current kit without k)"},
-			{"saveKit", Owner::Machine, Gate::Input, -1, {kOpt}, "SAVE KIT"},
-			{"loadSong", Owner::Machine, Gate::Input, -1, {sOpt}, "LOAD SONG (stopped)"},
-			{"saveSong", Owner::Machine, Gate::Input, -1, {sOpt}, "SAVE SONG"},
-			{"tempo", Owner::Machine, Gate::Input, -1, {{"bpm", ArgType::Number, 30, 300}}, "0x61"},
-			{"play", Owner::Machine, Gate::Input, -1, {}, ""},
-			{"stop", Owner::Machine, Gate::Input, -1, {}, ""},
-			{"mute", Owner::Machine, Gate::Input, -1, {t6, {"on", ArgType::Bool, 0, 0, true}}, "a synth track's mute"},
-			// ---- the plug-in ----
-			{"engine", Owner::Host, Gate::None, -1, {{"kind", ArgType::Text}}, "an entry of the engine map: emu, hw"},
-			{"midi", Owner::Host, Gate::None, -1, {{"b", ArgType::Array}}, "a channel message from the page (keys, joystick)"},
-			{"recheckFirmware", Owner::Host, Gate::None, -1, {}, ""},
-			{"revealRomFolder", Owner::Host, Gate::None, -1, {}, ""},
-			{"openMenu", Owner::Host, Gate::None, -1, {}, "the editor's menu"},
-			{"learnStart", Owner::Host, Gate::None, -1, {learnTarget[0], learnTarget[1], learnTarget[2]}, "MIDI learn"},
-			{"learnAdd", Owner::Host, Gate::None, -1, {{"cc", ArgType::Integer, 0, 127}, learnTarget[0], learnTarget[1], learnTarget[2]}, ""},
-			{"learnCancel", Owner::Host, Gate::None, -1, {}, ""},
-			{"learnRemove", Owner::Host, Gate::None, -1, {{"index", ArgType::Integer, 0, 1e6}}, ""},
-			{"learnInvert", Owner::Host, Gate::None, -1, {{"index", ArgType::Integer, 0, 1e6}}, ""},
-			{"audio", Owner::Host, Gate::None, -1, {}, "the standalone's audio and MIDI devices"},
-			{"audioSet", Owner::Host, Gate::None, -1, {{"set", ArgType::Text, 0, 0, true}, {"do", ArgType::Text, 0, 0, true}}, ""},
-			{"audioMeter", Owner::Host, Gate::None, -1, {{"on", ArgType::Bool, 0, 0, true}}, ""},
-		});
-		return table;
+		Value strings(const std::vector<std::string>& _v)
+		{
+			Value a = Value::array();
+			for(const auto& s : _v)
+				a.push(s);
+			return a;
+		}
 	}
+
+	Value MmModel::catalogue()
+	{
+		Value c = Value::object();
+		c.set("schema", "mm-desk/catalogue");
+		c.set("version", 1);
+		Value machines = Value::array();
+		for(const auto& mi : ed::mmMachines())
+		{
+			Value m = Value::object();
+			m.set("id", mi.id);
+			m.set("name", mi.name);
+			m.set("family", mi.family);
+			Value syn = Value::array();
+			Value enums = Value::object();
+			for(uint8_t i = 0; i < 8; ++i)
+			{
+				syn.push(mi.synth[i]);
+				const auto e = ed::mmSynthEnum(mi.id, i);
+				if(!e.empty())
+					enums.set(std::to_string(i), strings(e));
+			}
+			m.set("synth", std::move(syn));
+			m.set("enums", std::move(enums));
+			m.set("fx", mi.fx);
+			m.set("mk2", mi.mk2);
+			machines.push(std::move(m));
+		}
+		c.set("machines", std::move(machines));
+		Value pages = Value::array();
+		for(uint8_t pg = 1; pg < 8; ++pg)
+		{
+			Value names = Value::array();
+			for(const auto* n : ed::mmFixedPage(pg))
+				names.push(n);
+			pages.push(std::move(names));
+		}
+		c.set("fixedPages", std::move(pages));
+		Value lfo = Value::object();
+		lfo.set("pages", strings(ed::mmLfoPages()));
+		lfo.set("trigs", strings(ed::mmLfoTrigs()));
+		lfo.set("waves", strings(ed::mmLfoWaves()));
+		lfo.set("mults", strings(ed::mmLfoMults()));
+		lfo.set("pitchDests", strings(ed::mmPitchDests()));
+		c.set("lfo", std::move(lfo));
+		c.set("enumRule", "index = floor(value * n / 128); value = ceil(index * 128 / n)");
+		return c;
+	}
+
 }

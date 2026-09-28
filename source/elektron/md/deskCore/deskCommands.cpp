@@ -1,7 +1,5 @@
 #include "deskCommands.h"
 
-#include <cmath>
-
 namespace deskCore
 {
 	using elektronData::json::Value;
@@ -67,6 +65,22 @@ namespace deskCore
 		return op && op->isString() ? op->asString() : std::string();
 	}
 
+	Value resultMessage(const Value& _command, const std::vector<std::string>& _errors, const std::string& _note)
+	{
+		Value r = Value::object();
+		r.set("type", "result");
+		r.set("op", opOf(_command));
+		if(const auto* id = _command.find("id"); id && id->isNumber())
+			r.set("id", *id);
+		r.set("ok", _errors.empty());
+		Value errors = Value::array();
+		for(const auto& e : _errors)
+			errors.push(e);
+		r.set("errors", std::move(errors));
+		r.set("note", _errors.empty() ? _note : std::string());
+		return r;
+	}
+
 	const char* ownerName(const Owner _o)
 	{
 		switch(_o)
@@ -79,100 +93,78 @@ namespace deskCore
 		return "";
 	}
 
-	const Command* CommandTable::find(const std::string& _op) const
+	void checkArg(const Arg& _a, const Value* _v, std::vector<std::string>& _errors)
 	{
-		for(const auto& c : m_commands)
-			if(_op == c.op)
-				return &c;
-		return nullptr;
+		if(!_v)
+		{
+			if(!_a.optional)
+				_errors.push_back(std::string(_a.name) + (_a.type == ArgType::Text ? ": missing text" : ": missing"
+					+ std::string(_a.type == ArgType::Integer || _a.type == ArgType::Number ? " number" : "")));
+			return;
+		}
+		const auto range = [&](const double _d, const bool _integer)
+		{
+			if((_integer && _d != std::floor(_d)) || _d < _a.min || _d > _a.max)
+				_errors.push_back(std::string(_a.name) + ": " + num(_d) + " is outside " + num(_a.min) + ".." + num(_a.max));
+		};
+		switch(_a.type)
+		{
+		case ArgType::Integer:
+		case ArgType::Number:
+			if(!_v->isNumber())
+				_errors.push_back(std::string(_a.name) + ": missing number");
+			else
+				range(_v->asNumber(), _a.type == ArgType::Integer);
+			break;
+		case ArgType::IntegerOrNull:
+			if(_v->isNumber())
+				range(_v->asNumber(), true);
+			else if(!_v->isNull())
+				_errors.push_back(std::string(_a.name) + ": expected a number or null");
+			break;
+		case ArgType::Text:
+			if(!_v->isString())
+				_errors.push_back(std::string(_a.name) + ": missing text");
+			break;
+		case ArgType::Bool:
+			if(!_v->isBool() && !_v->isNumber())
+				_errors.push_back(std::string(_a.name) + ": expected true or false");
+			break;
+		case ArgType::Object:
+			if(!_v->isObject())
+				_errors.push_back(std::string(_a.name) + ": expected an object");
+			break;
+		case ArgType::Array:
+			if(!_v->isArray())
+				_errors.push_back(std::string(_a.name) + ": expected a list");
+			break;
+		case ArgType::Any:
+			break;
+		}
 	}
 
-	std::vector<std::string> CommandTable::check(const Command& _command, const Value& _message)
+	Value commandSchema(const char* _op, const Owner _owner, const char* _help, const std::vector<Arg>& _args)
 	{
-		std::vector<std::string> errors;
-		for(const auto& a : _command.args)
+		Value props = Value::object();
+		Value op = Value::object();
+		op.set("const", _op);
+		props.set("op", std::move(op));
+		Value id = Value::object();
+		id.set("type", "integer");
+		props.set("id", std::move(id));
+		Value required = Value::array();
+		required.push("op");
+		for(const auto& a : _args)
 		{
-			const auto* v = _message.find(a.name);
-			if(!v)
-			{
-				if(!a.optional)
-					errors.push_back(std::string(a.name) + (a.type == ArgType::Text ? ": missing text" : ": missing"
-						+ std::string(a.type == ArgType::Integer || a.type == ArgType::Number ? " number" : "")));
-				continue;
-			}
-			const auto range = [&](const double _d, const bool _integer)
-			{
-				if((_integer && _d != std::floor(_d)) || _d < a.min || _d > a.max)
-					errors.push_back(std::string(a.name) + ": " + num(_d) + " is outside " + num(a.min) + ".." + num(a.max));
-			};
-			switch(a.type)
-			{
-			case ArgType::Integer:
-			case ArgType::Number:
-				if(!v->isNumber())
-					errors.push_back(std::string(a.name) + ": missing number");
-				else
-					range(v->asNumber(), a.type == ArgType::Integer);
-				break;
-			case ArgType::IntegerOrNull:
-				if(v->isNumber())
-					range(v->asNumber(), true);
-				else if(!v->isNull())
-					errors.push_back(std::string(a.name) + ": expected a number or null");
-				break;
-			case ArgType::Text:
-				if(!v->isString())
-					errors.push_back(std::string(a.name) + ": missing text");
-				break;
-			case ArgType::Bool:
-				if(!v->isBool() && !v->isNumber())
-					errors.push_back(std::string(a.name) + ": expected true or false");
-				break;
-			case ArgType::Object:
-				if(!v->isObject())
-					errors.push_back(std::string(a.name) + ": expected an object");
-				break;
-			case ArgType::Array:
-				if(!v->isArray())
-					errors.push_back(std::string(a.name) + ": expected a list");
-				break;
-			case ArgType::Any:
-				break;
-			}
+			props.set(a.name, typeSchema(a));
+			if(!a.optional)
+				required.push(a.name);
 		}
-		return errors;
-	}
-
-	Value CommandTable::schema() const
-	{
-		Value one = Value::array();
-		for(const auto& c : m_commands)
-		{
-			Value props = Value::object();
-			Value op = Value::object();
-			op.set("const", c.op);
-			props.set("op", std::move(op));
-			Value id = Value::object();
-			id.set("type", "integer");
-			props.set("id", std::move(id));
-			Value required = Value::array();
-			required.push("op");
-			for(const auto& a : c.args)
-			{
-				props.set(a.name, typeSchema(a));
-				if(!a.optional)
-					required.push(a.name);
-			}
-			Value s = Value::object();
-			s.set("type", "object");
-			s.set("description", std::string(ownerName(c.owner)) + (*c.help ? std::string(": ") + c.help : std::string()));
-			s.set("required", std::move(required));
-			s.set("properties", std::move(props));
-			one.push(std::move(s));
-		}
-		Value root = Value::object();
-		root.set("description", "Generated from the command table (deskCore::CommandTable::schema, P6): every command the page may send.");
-		root.set("oneOf", std::move(one));
-		return root;
+		Value s = Value::object();
+		s.set("type", "object");
+		s.set("description", std::string(ownerName(_owner)) + (*_help ? std::string(": ") + _help : std::string()));
+		s.set("required", std::move(required));
+		s.set("properties", std::move(props));
+		return s;
 	}
 }

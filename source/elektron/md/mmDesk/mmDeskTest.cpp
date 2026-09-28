@@ -105,6 +105,11 @@ namespace
 					replies.push_back(it->second);
 				return;
 			}
+			if(cmd == 0x57 && _m.size() > 7)
+			{
+				pattern = _m[7];	// LOAD PATTERN while stopped: the machine switches at once
+				return;
+			}
 			if(cmd == 0x70)
 			{
 				const uint8_t v = _m[7] == 0x04 ? pattern : _m[7] == 0x02 ? kit : 0;
@@ -203,7 +208,7 @@ namespace
 			return Value();
 		};
 		check(!lastResult().find("ok")->asBool(), "busy before the engine is ready");
-		d.setEngine(mmDesk::Desk::Engine::Ready);
+		d.setProbe(mmDesk::Desk::Probe::Running);
 		run(400);
 		check(d.currentPattern() == 3 && d.currentKit() == 5, "status: pattern and kit");
 		std::printf("  (loaded %zu, fake decode %d)", d.loaded(), (int)ed::decodeMmPattern(m.slots[{0x67, 3}]).has_value());
@@ -250,7 +255,8 @@ namespace
 
 		// Select while stopped.
 		msg(R"({"op":"select","id":9,"p":10})");
-		check(d.currentPattern() == 10, "select while stopped switches at once");
+		run(50);	// P6: the current pattern is what the machine reports, not what was asked for
+		check(d.currentPattern() == 10, "select while stopped switches at once (status says so)");
 		bool sawMachine = false;
 		for(const auto& v : page)
 			sawMachine |= v.find("type")->asString() == "machine";
@@ -273,7 +279,7 @@ void playingFromSteps()
 	port.nowMs = [&] { return now; };
 	mmDesk::Desk d(port);
 	d.onPageMessage(*ed::json::parse(R"({"op":"ready"})"));
-	d.setEngine(mmDesk::Desk::Engine::Ready);
+	d.setProbe(mmDesk::Desk::Probe::Running);
 	const auto playing = [&]
 	{
 		for(auto it = page.rbegin(); it != page.rend(); ++it)

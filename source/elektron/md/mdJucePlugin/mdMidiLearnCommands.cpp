@@ -1,5 +1,7 @@
 #include "mdMidiLearnCommands.h"
 
+#include "deskCore/deskCommands.h"
+
 #include "jucePluginLib/midiLearnTranslator.h"
 #include "jucePluginLib/processor.h"
 
@@ -38,19 +40,7 @@ namespace mdJucePlugin
 
 	void MidiLearnCommands::reply(const Value& _message, const bool _ok, const std::string& _note) const
 	{
-		json::Value r = json::Value::object();
-		r.set("type", "result");
-		const auto* op = _message.find("op");
-		r.set("op", op ? *op : json::Value(""));
-		if(const auto* id = _message.find("id"); id && id->isNumber())
-			r.set("id", *id);
-		r.set("ok", _ok);
-		json::Value errors = json::Value::array();
-		if(!_ok)
-			errors.push(_note);
-		r.set("errors", std::move(errors));
-		r.set("note", _ok ? _note : std::string());
-		m_publish(r);
+		m_publish(deskCore::resultMessage(_message, _ok ? std::vector<std::string>{} : std::vector<std::string>{_note}, _note));
 	}
 
 	void MidiLearnCommands::handle(const Value& _message)

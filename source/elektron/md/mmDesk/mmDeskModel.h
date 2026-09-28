@@ -82,6 +82,11 @@ namespace mmDesk
 	// the desk shows. Pure.
 	EditResult apply(const Documents& _docs, const elektronData::json::Value& _command, const EditContext& _context);
 
+	class MmMachine;
+	// A machine command's handler: a function of the Monomachine adapter (the table's handler column).
+	using MachineHandler = deskCore::Outcome (MmMachine::*)(const elektronData::json::Value&, const Documents&);
+	using CommandTable = deskCore::CommandTable<MachineHandler>;
+
 	struct MmModel
 	{
 		using Kind = mmDesk::Kind;
@@ -92,8 +97,10 @@ namespace mmDesk
 		using Clipboard = mmDesk::Clipboard;
 		using Context = EditContext;
 		using EditResult = mmDesk::EditResult;
+		using Table = CommandTable;
 
 		static Ref refOf(const Document& _d) { return mmDesk::refOf(_d); }
+		static std::optional<Document> get(const Documents& _docs, const Ref& _ref) { return _docs.get(_ref); }
 		static void set(Documents& _docs, const Document& _d) { _docs.set(_d); }
 		static void erase(Documents& _docs, const Ref& _ref) { _docs.erase(_ref); }
 		static EditResult apply(const Documents& _docs, const elektronData::json::Value& _command, const Clipboard&, const Context& _c)
@@ -103,8 +110,12 @@ namespace mmDesk
 		// {"type":"doc","kind","slot","pending","working","source","doc"}; working = the kit that plays.
 		static elektronData::json::Value docMessage(const Ref& _ref, const Document& _doc, bool _pending, deskCore::Source _source);
 		static void decorate(elektronData::json::Value&, const deskCore::History<Change>&, const deskCore::Machine<MmModel>&) {}
+		// The Monomachine Editor's command vocabulary (mmDeskMachine.cpp: the handler column is the adapter's).
+		static const Table& commands();
+		// The OS 1.32B machine table and enumerations as "mm-desk/catalogue".
+		static elektronData::json::Value catalogue();
+		static std::string refusal(deskCore::Lifecycle) { return "The engine is not ready yet."; }
 	};
 
-	// The Monomachine Editor's command vocabulary.
-	const deskCore::CommandTable& commandTable();
+	inline const CommandTable& commandTable() { return MmModel::commands(); }
 }

@@ -1206,7 +1206,7 @@
         },
         {
           "type": "object",
-          "description": "The firmware's own LCD: 128 x 64, one bit a pixel, rows of 16 bytes, hex.",
+          "description": "The firmware's own LCD: 128 x 64, one bit a pixel, rows of 16 bytes, base64 (P6: the same encoding as the MD's).",
           "required": [
             "type",
             "bits"
@@ -1217,10 +1217,7 @@
             },
             "bits": {
               "type": "string",
-              "pattern": "^[0-9a-f]{2048}$"
-            },
-            "engine": {
-              "type": "string"
+              "pattern": "^[A-Za-z0-9+/]{1366}==$"
             }
           }
         },

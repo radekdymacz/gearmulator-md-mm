@@ -22,13 +22,31 @@ namespace mmDesk
 	// speak the same protocol; the profile says what the wire allows.
 	struct Profile
 	{
-		std::string id;			// "emu", "hw"
-		std::string label;		// "EMU OS 1.32B", "HW MIDI"
-		bool wire = false;		// HW MIDI: no panel to drive SYSEX RECV, no telemetry, replies make the lifecycle
+		std::string id;			// the engine map's key
+		std::string label;		// the LCD's engine label when ready ("EMU OS 1.32B")
+		bool wire = false;		// at DIN speed: no panel to drive SYSEX RECV, no telemetry, replies make the lifecycle
 	};
 
-	const std::vector<Profile>& profiles();
-	const Profile* profile(const std::string& _id);
+	const Profile& emulatorProfile();	// "emu"
+	const Profile& wireProfile();		// "hw"
+
+	// The kit that plays, as one value (P6): the working kit (memory, or what the editor sent), a
+	// memory image not taken yet, and the live edits sent and not yet seen in memory (raw kit bytes
+	// from and to). An image is taken once it shows every byte the editor changed, or once the edit
+	// is older than g_expectTimeoutMs (the machine then holds something else: it wins).
+	struct WorkingKit
+	{
+		static constexpr double g_expectTimeoutMs = 1000;
+
+		std::optional<elektronData::MmKit> kit;
+		std::optional<std::vector<uint8_t>> region;
+		std::vector<uint8_t> expectFrom, expectTo;
+		double expectedAtMs = 0;
+
+		bool expecting(double _nowMs) const { return !expectTo.empty() && _nowMs - expectedAtMs < g_expectTimeoutMs; }
+		// Every byte that differs between expectFrom and expectTo has expectTo's value in _raw.
+		bool reflected(const std::vector<uint8_t>& _raw) const;
+	};
 
 	// The Monomachine adapter (P6) behind deskCore's Machine protocol. Delivery:
 	//   pattern, song, global, a stored kit: a dump on SYSEX RECV (RecvSession drives the panel
@@ -43,6 +61,9 @@ namespace mmDesk
 		using Bytes = std::vector<uint8_t>;
 		using Value = elektronData::json::Value;
 
+		using Profile = mmDesk::Profile;
+		using Probe = deskCore::LifeFacts::Probe;
+
 		struct Port
 		{
 			std::function<void(const Bytes&)> sendSysex;
@@ -55,15 +76,6 @@ namespace mmDesk
 			// MIDI only Play and Stop exist (MIDI Start / Stop).
 			std::function<bool(const std::vector<Key>&)> pressKeys;
 			std::function<double()> nowMs;
-		};
-
-		// What the device says about the firmware.
-		enum class Firmware
-		{
-			Missing, Unsupported, Loading,
-			Booting,	// MIDI not ready yet
-			Running,	// takes MIDI; its screen says whether the start-up animation is over
-			Ready		// the host judged the start screen gone (tests, the plug-in's probe)
 		};
 
 		MmMachine(Profile _profile, Port _port);
@@ -82,7 +94,8 @@ namespace mmDesk
 		bool busy() const override;
 
 		// ---- Monomachine facts from the device ----
-		void setFirmware(Firmware _firmware);
+		// What the device says about the firmware (the emulator; a wire has no probe).
+		void setProbe(Probe _probe);
 		void onTelemetry(const Telemetry& _telemetry);
 		// md::MmTelemetry's working-kit region: [0] kit number, [5..] the raw kit.
 		void onWorkingKit(const Bytes& _region);
@@ -90,7 +103,7 @@ namespace mmDesk
 		const Profile& profile() const { return m_profile; }
 		const RecvSession& recv() const { return m_recv; }
 		const std::optional<elektronData::MmKit>& storedKit(uint8_t _slot) const { return m_kits[_slot & 127]; }
-		const std::optional<elektronData::MmKit>& workingKit() const { return m_working; }
+		const std::optional<elektronData::MmKit>& workingKit() const { return m_working.kit; }
 		int currentPattern() const { return m_curPattern; }
 		int currentKit() const { return m_curKit; }
 		int currentSong() const { return m_curSong; }
@@ -107,7 +120,6 @@ namespace mmDesk
 			double sentMs = 0;
 			bool onRecv = false;	// queued on the RECV session, not on the wire yet
 		};
-		using Handler = deskCore::Outcome (MmMachine::*)(const Value&, const Documents&);
 
 		deskCore::LifeFacts facts() const;
 		void startOver();
@@ -135,7 +147,7 @@ namespace mmDesk
 		deskCore::Outcome cmdTempo(const Value&, const Documents&);
 		deskCore::Outcome cmdTransport(const Value&, const Documents&);
 		deskCore::Outcome cmdMute(const Value&, const Documents&);
-		static const std::map<std::string, Handler>& handlers();
+		friend struct MmModel;	// the command table's handler column
 
 		const Profile m_profile;
 		Port m_port;
@@ -143,9 +155,7 @@ namespace mmDesk
 		std::vector<Ev> m_events;
 		std::set<Ref> m_known;
 		std::array<std::optional<elektronData::MmKit>, 128> m_kits;	// stored slots
-		std::optional<elektronData::MmKit> m_working;				// the working kit (memory, or tracked over HW MIDI)
-		std::optional<Bytes> m_workingRegion;
-		double m_liveEditMs = -1e9;
+		WorkingKit m_working;
 		std::map<Ref, Push> m_pushes;
 
 		deskCore::LoadQueue<Ref> m_loads;
@@ -157,7 +167,7 @@ namespace mmDesk
 		int m_rawStep = -1;
 		int m_stepMoves = 0;
 		double m_stepMovedMs = -1e9;
-		Firmware m_firmware = Firmware::Missing;
+		Probe m_probe = Probe::Missing;
 		bool m_replied = false;
 		uint32_t m_statusReplies = 0;
 		double m_lastReplyMs = -1e9;

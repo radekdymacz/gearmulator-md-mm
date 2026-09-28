@@ -15,13 +15,6 @@ namespace mdJucePlugin
 {
 	namespace
 	{
-		// The device layer's screen kinds and the desk's are the same list (P6).
-		static_assert(static_cast<int>(mmDesk::Screen::Unknown) == static_cast<int>(md::MmScreen::Unknown)
-			&& static_cast<int>(mmDesk::Screen::Boot) == static_cast<int>(md::MmScreen::Boot)
-			&& static_cast<int>(mmDesk::Screen::Main) == static_cast<int>(md::MmScreen::Main)
-			&& static_cast<int>(mmDesk::Screen::Global) == static_cast<int>(md::MmScreen::Global)
-			&& static_cast<int>(mmDesk::Screen::GlobalEdit) == static_cast<int>(md::MmScreen::GlobalEdit)
-			&& static_cast<int>(mmDesk::Screen::Other) == static_cast<int>(md::MmScreen::Other), "screen kinds disagree");
 		// parameterDescriptions_mm.json: pages 0-6 (8 each), 7 level, 8 mute.
 		constexpr const char* g_names[7][8] = {
 			{"SynthesisA", "SynthesisB", "SynthesisC", "SynthesisD", "SynthesisE", "SynthesisF", "SynthesisG", "SynthesisH"},
@@ -184,7 +177,7 @@ namespace mdJucePlugin
 		const int running = m_telemetry->running.load(std::memory_order_relaxed);
 		t.valid = t.step >= 0 && running >= 0;
 		t.running = running == 1;
-		t.screen = static_cast<mmDesk::Screen>(md::MmTelemetry::screenOf(m_telemetry->screen.load(std::memory_order_relaxed)));
+		t.screen = md::MmTelemetry::screenOf(m_telemetry->screen.load(std::memory_order_relaxed));
 		t.recvCount = m_telemetry->recvCount.load(std::memory_order_relaxed);
 		t.recvErrors = m_telemetry->recvErrors.load(std::memory_order_relaxed);
 		t.recvActive = m_telemetry->recvActive.load(std::memory_order_relaxed) == 1;
@@ -206,32 +199,27 @@ namespace mdJucePlugin
 		return true;
 	}
 
-	mmDesk::Desk::Engine MmStudioLink::engine()
+	deskCore::LifeFacts::Probe MmStudioLink::probe() const
 	{
-		const auto screen = m_telemetry ? m_telemetry->screen.load(std::memory_order_relaxed) : 0u;
-		return m_processor.getPlugin().withDeviceLocked([screen](synthLib::Device* _base)
+		using P = deskCore::LifeFacts::Probe;
+		return m_processor.getPlugin().withDeviceLocked([](synthLib::Device* _base)
 		{
-			using E = mmDesk::Desk::Engine;
 			auto* device = dynamic_cast<md::Device*>(_base);
 			// No device yet: not a missing ROM (P5). Only an invalid device is a definite NO ROM.
 			if(!device)
-				return E::Loading;
+				return P::Loading;
 			if(!device->isValid())
-				return E::Missing;
+				return P::Missing;
 			const auto& hw = device->getHardware();
 			if(hw.getModel() != md::MachineModel::Monomachine || hw.firmwareFingerprint() != md::g_mmOs132bFingerprint)
-				return E::Unsupported;
+				return P::Unsupported;
 			if(device->isProjectStateRestorePending())
-				return E::Loading;
-			// Ready when the start-up animation is over (MM-P0 §6): the screen word leaves it.
-			const auto kind = md::MmTelemetry::screenOf(screen);
-			if(!hw.isFirmwareMidiReady() || kind == md::MmScreen::Unknown || kind == md::MmScreen::Boot)
-				return E::Booting;
-			return E::Ready;
+				return P::Loading;
+			return hw.isFirmwareMidiReady() ? P::Running : P::Booting;
 		});
 	}
 
-	bool MmStudioLink::readLcd(std::array<uint8_t, 1024>& _bits) const
+	bool MmStudioLink::readLcd(std::vector<uint8_t>& _bits) const
 	{
 		return m_processor.getPlugin().withDeviceLocked([&](synthLib::Device* _base)
 		{
@@ -239,7 +227,7 @@ namespace mdJucePlugin
 			if(!device || !device->isValid())
 				return false;
 			const auto panel = device->getFrontPanelSnapshot();
-			_bits.fill(0);
+			_bits.assign(1024, 0);
 			for(uint32_t y = 0; y < 64; ++y)
 				for(uint32_t x = 0; x < 128; ++x)
 					if(panel.getLcdPixel(x, y))

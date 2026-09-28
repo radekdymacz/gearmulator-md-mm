@@ -70,10 +70,12 @@ namespace mdJucePlugin
 
 	void PageEditor::onPageMessage(const json::Value& _message)
 	{
-		if(m_audio && m_audio->handle(_message))
+		// The table's host column says who acts: the window for its menu and the AUDIO / MIDI panel,
+		// the session for the rest.
+		const auto host = m_session ? m_session->hostOp(_message) : deskCore::HostOp::None;
+		if(host == deskCore::HostOp::Audio && m_audio && m_audio->handle(_message))
 			return;
-		const auto* op = _message.find("op");
-		if(op && op->isString() && op->asString() == "openMenu")
+		if(host == deskCore::HostOp::Menu)
 		{
 			// The editor's menu (skins, scale, settings) where the page was right-clicked.
 			if(auto* state = getProcessor().getEditorState())

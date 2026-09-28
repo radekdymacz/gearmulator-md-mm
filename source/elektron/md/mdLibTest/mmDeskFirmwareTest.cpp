@@ -134,7 +134,7 @@ namespace
 			t.valid = true;
 			t.step = tel.step.load();
 			t.running = tel.running.load() == 1;
-			t.screen = static_cast<mmDesk::Screen>(md::MmTelemetry::screenOf(tel.screen.load()));
+			t.screen = md::MmTelemetry::screenOf(tel.screen.load());
 			t.recvCount = tel.recvCount.load();
 			t.recvErrors = tel.recvErrors.load();
 			t.recvActive = tel.recvActive.load() == 1;
@@ -208,7 +208,7 @@ namespace
 	{
 		Rig r(_rom);
 		r.msg(R"({"op":"ready"})");
-		r.desk->setEngine(mmDesk::Desk::Engine::Ready);
+		r.desk->setProbe(mmDesk::Desk::Probe::Running);
 		r.run(600);
 		check(r.desk->currentPattern() == 0 && r.desk->currentKit() >= 0, "status: current pattern and kit");
 		check(r.desk->pattern(0).has_value(), "the current pattern is loaded");
@@ -340,7 +340,7 @@ namespace
 		std::puts("trig kinds");
 		Rig r(_rom);
 		r.msg(R"({"op":"ready"})");
-		r.desk->setEngine(mmDesk::Desk::Engine::Ready);
+		r.desk->setProbe(mmDesk::Desk::Probe::Running);
 		r.run(600);
 		while(r.desk->loaded() < 288)
 			r.run(100);

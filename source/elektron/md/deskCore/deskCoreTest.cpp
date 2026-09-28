@@ -108,13 +108,13 @@ namespace
 	void commands()
 	{
 		std::puts("command table");
-		const CommandTable t({{"trig", Owner::Core, Gate::Input, 0, {{"p", ArgType::Integer, 0, 127}, {"t", ArgType::Integer, 0, 15}}, "toggle"},
+		const CommandTable<> t({{"trig", Owner::Core, Gate::Input, 0, {{"p", ArgType::Integer, 0, 127}, {"t", ArgType::Integer, 0, 15}}, "toggle"},
 			{"lock", Owner::Core, Gate::Input, 0, {{"v", ArgType::IntegerOrNull, 0, 127}}, ""}});
 		const auto* c = t.find("trig");
 		check(c && !t.find("nope"), "lookup");
-		const auto e = CommandTable::check(*c, *elektronData::json::parse(R"({"op":"trig","p":200})"));
+		const auto e = CommandTable<>::check(*c, *elektronData::json::parse(R"({"op":"trig","p":200})"));
 		check(e.size() == 2 && e[0] == "p: 200 is outside 0..127" && e[1] == "t: missing number", "argument lines");
-		check(CommandTable::check(*t.find("lock"), *elektronData::json::parse(R"({"op":"lock","v":null})")).empty(), "null clears");
+		check(CommandTable<>::check(*t.find("lock"), *elektronData::json::parse(R"({"op":"lock","v":null})")).empty(), "null clears");
 		const auto s = t.schema();
 		check(s.find("oneOf") && s.find("oneOf")->asArray().size() == 2, "the schema lists every command");
 	}
@@ -150,6 +150,11 @@ namespace
 		static Ref refOf(const Toy& _t) { return {Kind::Toy, _t.slot}; }
 		static void set(Documents& _d, const Toy& _t) { _d.toys[_t.slot] = _t; }
 		static void erase(Documents& _d, const Ref& _r) { _d.toys.erase(_r.slot); }
+		static std::optional<Toy> get(const Documents& _d, const Ref& _r)
+		{
+			const auto it = _d.toys.find(_r.slot);
+			return it == _d.toys.end() ? std::nullopt : std::optional<Toy>(it->second);
+		}
 		static EditResult apply(const Documents& _d, const Value& _cmd, const Clipboard&, const Context&)
 		{
 			EditResult r;
@@ -234,7 +239,7 @@ namespace
 		c.flush();
 		check(!lastDoc()->find("pending")->asBool() && !c.state({ToyModel::Kind::Toy, 1})->pending, "the read-back confirms");
 		c.onCommand(*elektronData::json::parse(R"({"op":"set","s":1,"v":30})"));
-		m.events.push_back(ToyMachine::Ev::settled({ToyModel::Kind::Toy, 1}, false, "no read-back"));
+		m.events.push_back(ToyMachine::Ev::failed({ToyModel::Kind::Toy, 1}, "no read-back"));
 		c.pump();
 		c.flush();
 		check(lastDoc()->find("value")->asNumber() == 20, "a failed push falls back to what was observed");
@@ -242,8 +247,9 @@ namespace
 		for(const auto& p : page)
 			error = error || (p.find("type")->asString() == "error" && p.find("message")->asString() == "no read-back");
 		check(error, "and says so");
+		const auto sentBefore = m.sent.size();
 		c.onCommand(*elektronData::json::parse(R"({"op":"undo"})"));
-		check(m.sent.back().value == 20, "undo delivers the step's before");
+		check(m.sent.size() == sentBefore, "undo from what the page shows: the failed push is already undone, nothing is sent");
 		c.onCommand(*elektronData::json::parse(R"({"op":"undo","id":9})"));
 		check(m.sent.back().value == 10, "and the step before");
 		check(page.back().find("type")->asString() == "result" && page.back().find("id")->asNumber() == 9, "undo answers");

@@ -222,6 +222,7 @@ namespace
 			t.recording = m_leds.recording();
 			t.gridEdit = m_leds.gridEdit();
 			t.knobPage = m_machine.read8(md::SequencerState::g_knobPageAddress);
+			t.panelPending = static_cast<int>(m_keys.size());	// the rig's key queue, as md::Device reports its own
 			// P4, as md::Device publishes them.
 			m_boot.update(m_machine.read8(md::BootAnimation::g_mainScreenAddress), now - m_bootAt);
 			m_bootAt = now;
@@ -1093,7 +1094,7 @@ namespace
 
 	// P4 HW MIDI against the emulated MD as the MIDI peer ("a real Machinedrum"): the desk has
 	// no telemetry, no memory, no panel keys; SysEx and CCs go both ways at DIN speed
-	// (mdDesk::DinPacer, 3125 bytes a second each way).
+	// (deskCore::DinPacer, 3125 bytes a second each way).
 	class HwRig
 	{
 	public:
@@ -1125,8 +1126,7 @@ namespace
 					m_result = _m;
 			};
 			port.nowMs = [this] { return ms(m_machine.now()); };
-			m_desk = std::make_unique<mdDesk::Desk>(port);
-			m_desk->setHardwareLink(true);
+			m_desk = std::make_unique<mdDesk::Desk>(port, mdDesk::wireProfile());
 			m_machine.onSysex = [this](const Bytes& _b) { if(m_connected) m_toDesk.send(ms(m_machine.now()), _b); };
 		}
 
@@ -1169,7 +1169,7 @@ namespace
 			std::deque<std::pair<double, Bytes>> flight;
 			void send(const double _now, Bytes _b)
 			{
-				freeAt = std::max(freeAt, _now) + mdDesk::DinPacer::wireMs(_b.size());
+				freeAt = std::max(freeAt, _now) + deskCore::DinPacer::wireMs(_b.size());
 				flight.emplace_back(freeAt, std::move(_b));
 			}
 		};
@@ -1204,7 +1204,7 @@ namespace
 
 		Machine m_machine;
 		std::unique_ptr<mdDesk::Desk> m_desk;
-		mdDesk::DinPacer m_out;
+		deskCore::DinPacer m_out;
 		Wire m_toMachine, m_toDesk;
 		std::optional<Value> m_machineDoc, m_result;
 		uint64_t m_lastTick = 0;

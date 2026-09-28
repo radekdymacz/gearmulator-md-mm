@@ -256,9 +256,10 @@
 
 	/* ---------------- the engine, its capabilities and the firmware's LCD ---------------- */
 	let lcdFade = 0;
-	function drawLcd(hex) {
-		const el = $("#bootscr");
-		if (!el || hex.length < 2048) return;
+	/* the firmware's LCD: 128 x 64, one bit a pixel, rows of 16 bytes, base64 (one encoding for both editors) */
+	function drawLcd(b64) {
+		const el = $("#bootscr"), bits = Uint8Array.from(atob(b64 || ""), c => c.charCodeAt(0));
+		if (!el || bits.length < 1024) return;
 		let c = el.querySelector("canvas.fwlcd");
 		if (!c) { c = document.createElement("canvas"); c.className = "fwlcd"; c.width = 128; c.height = 64; el.appendChild(c); }
 		const g = c.getContext("2d"), cs = getComputedStyle(el);
@@ -267,7 +268,7 @@
 		g.fillStyle = cs.getPropertyValue("--ink").trim() || "#1d2a1a";
 		for (let y = 0; y < 64; y++)
 			for (let xb = 0; xb < 16; xb++) {
-				const b = parseInt(hex.substr((y * 16 + xb) * 2, 2), 16);
+				const b = bits[y * 16 + xb];
 				if (b) for (let k = 0; k < 8; k++) if (b & (0x80 >> k)) g.fillRect(xb * 8 + k, y, 1, 1);
 			}
 	}
@@ -592,7 +593,7 @@
 		if (m.type === "doc") onDoc(m);
 		else if (m.type === "machine") onMachine(m.doc);
 		else if (m.type === "tel") { if (m.playing !== S().playing) setPlaying(m.playing); if (S().playing) showStep(m.step); }
-		else if (m.type === "lcd") { if (m.engine) FW.engine = m.engine; drawLcd(m.bits); showEngine(); }
+		else if (m.type === "lcd") { drawLcd(m.bits); showEngine(); }
 		else if (m.type === "catalogue") FW.cat = m.doc;
 		else if (m.type === "reset") onReset();
 		else if (m.type === "audio") { audioDocument = m.doc; showAudioEntry(); if (window.AP?.open) drawAudio(); }

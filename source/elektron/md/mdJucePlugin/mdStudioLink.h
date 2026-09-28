@@ -60,8 +60,9 @@ namespace mdJucePlugin
 		// The firmware's LCD, 128 x 64, one bit per pixel, row-major (16 bytes a row, bit 7 =
 		// the left pixel). False without a local device.
 		bool readLcd(std::vector<uint8_t>& _bits);
-		// Missing (no valid device / ROM), Unsupported (not MD OS 1.63) or Present.
-		mdDesk::Desk::Firmware firmware() const;
+		// What the device says about the firmware: Missing (no valid device / ROM), Unsupported (not MD OS
+		// 1.63), Loading, Booting or Running.
+		deskCore::LifeFacts::Probe probe() const;
 
 		// The name of kit parameter _index (0-24) in the plug-in's parameter layer.
 		static const char* parameterName(uint8_t _index);

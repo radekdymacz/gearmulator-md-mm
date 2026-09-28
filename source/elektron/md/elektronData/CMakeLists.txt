@@ -26,6 +26,7 @@ target_sources(elektronData PRIVATE
 	mmJson.cpp mmJson.h
 	mmKit.cpp mmKit.h
 	mmLayout.h
+	mmScreen.h
 	mmMachines.cpp mmMachines.h
 	mmPattern.cpp mmPattern.h
 	mmSong.cpp mmSong.h

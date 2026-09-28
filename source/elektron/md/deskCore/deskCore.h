@@ -69,7 +69,8 @@ namespace deskCore
 		{
 			Observed,	// the machine holds `doc`
 			Forget,		// nothing is known about `ref` any more (it will be read again)
-			Settled,	// a submitted change of `ref` is no longer in flight (ok, or failed with `message`)
+			Settled,	// a submitted change of `ref` is no longer in flight: ok with the value the machine now
+						// holds (doc, when it is known), or failed with `message`
 			Notice,		// a message for the page as it is (telemetry, a failure)
 			Reset		// the machine started over (a reboot, a restored project): nothing it held before is
 						// known any more, and undo steps no longer apply to it
@@ -98,12 +99,25 @@ namespace deskCore
 			e.ref = _ref;
 			return e;
 		}
-		static Event settled(const Ref& _ref, const bool _ok, std::string _message = {})
+		// The change reached the machine and it holds _doc now (a read-back, or what a live edit
+		// sent when nothing reads it back: _source says which).
+		static Event settledWith(Doc _doc, const Source _source, const Ref& _ref)
 		{
 			Event e;
 			e.kind = Kind::Settled;
 			e.ref = _ref;
-			e.ok = _ok;
+			e.doc = std::move(_doc);
+			e.source = _source;
+			return e;
+		}
+		// The change did not reach the machine (refused, no read-back, the machine holds something
+		// else): the view falls back to what was last observed.
+		static Event failed(const Ref& _ref, std::string _message)
+		{
+			Event e;
+			e.kind = Kind::Settled;
+			e.ref = _ref;
+			e.ok = false;
 			e.message = std::move(_message);
 			return e;
 		}
@@ -263,7 +277,15 @@ namespace deskCore
 					changed(e.ref);
 					break;
 				case Ev::Kind::Settled:
-					if(const auto it = m_docs.find(e.ref); it != m_docs.end() && it->second.pending)
+					if(e.doc)
+					{
+						auto& s = m_docs[e.ref];
+						s.observed = std::move(e.doc);
+						s.source = e.source;
+						s.pending.reset();
+						changed(e.ref);
+					}
+					else if(const auto it = m_docs.find(e.ref); it != m_docs.end() && it->second.pending)
 					{
 						it->second.pending.reset();
 						changed(e.ref);
@@ -344,24 +366,17 @@ namespace deskCore
 			doc.set("history", std::move(history));
 			doc.set("lifecycle", lifecycleName(m_machine->lifecycle()));
 			doc.set("capabilities", m_machine->capabilities().toJson());
+			Value engines = Value::array();
+			for(const auto& e : m_engines)
+				engines.push(e.toJson());
+			doc.set("engines", std::move(engines));
 			Model::decorate(doc, m_history, *m_machine);
 			return doc;
 		}
 
 		void result(const Value& _message, const std::vector<std::string>& _errors, const std::string& _note) const
 		{
-			Value r = Value::object();
-			r.set("type", "result");
-			r.set("op", opOf(_message));
-			if(const auto* id = _message.find("id"); id && id->isNumber())
-				r.set("id", *id);
-			r.set("ok", _errors.empty());
-			Value errors = Value::array();
-			for(const auto& e : _errors)
-				errors.push(e);
-			r.set("errors", std::move(errors));
-			r.set("note", _note);
-			publish(r);
+			publish(resultMessage(_message, _errors, _note));
 		}
 
 		void publish(const Value& _message) const
@@ -369,6 +384,9 @@ namespace deskCore
 			if(m_pageReady && m_toPage)
 				m_toPage(_message);
 		}
+
+		// The engine map's entries, for the page's engine menu (machine.engines).
+		void setEngines(std::vector<EngineChoice> _engines) { m_engines = std::move(_engines); }
 
 		const Documents& view() const { return m_view; }
 		const std::map<Ref, DocState<Doc>>& docs() const { return m_docs; }
@@ -394,6 +412,8 @@ namespace deskCore
 			std::vector<Change> delivered;
 			for(const auto& c : _changes)
 			{
+				if(c.before == c.after)
+					continue;	// the page shows it already (an undo of something the machine already undid)
 				const auto o = m_machine->submit(c, m_view);
 				if(!o.errors.empty())
 				{
@@ -412,17 +432,23 @@ namespace deskCore
 			return delivered;
 		}
 
+		// Undo and redo deliver like any edit: from what the page shows now (each change's `before`
+		// is the current view), and only what was delivered is recorded.
 		void undoRedo(const bool _redo, const Value& _message)
 		{
-			auto changes = _redo ? m_history.redo() : m_history.undo();
+			const auto d = _redo ? History<Change>::Direction::Redo : History<Change>::Direction::Undo;
+			auto changes = m_history.next(d);
 			if(!changes)
 			{
 				result(_message, {_redo ? "Nothing to redo" : "Nothing to undo"}, {});
 				return;
 			}
+			for(auto& c : *changes)
+				if(auto now = Model::get(m_view, c.ref()))
+					c.before = *now;
 			std::vector<std::string> errors;
 			std::string note = _redo ? "Redo" : "Undo";
-			deliver(*changes, errors, note);
+			m_history.done(d, deliver(*changes, errors, note));
 			result(_message, errors, note);
 		}
 
@@ -455,5 +481,6 @@ namespace deskCore
 		std::set<Ref> m_dirty;
 		std::string m_lastMachine;
 		bool m_pageReady = false;
+		std::vector<EngineChoice> m_engines;
 	};
 }

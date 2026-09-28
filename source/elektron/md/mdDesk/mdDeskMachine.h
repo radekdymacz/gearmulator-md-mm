@@ -2,12 +2,13 @@
 
 #include "mdDeskDelivery.h"
 #include "mdDeskModel.h"
-#include "mdDeskPacer.h"
 #include "mdDeskRecord.h"
 #include "mdDeskTelemetry.h"
+#include "mdDeskWorkingKit.h"
 
 #include "deskCore/deskCore.h"
 #include "deskCore/deskLoadQueue.h"
+#include "deskCore/deskPacer.h"
 #include "deskCore/deskSequence.h"
 
 #include "mdDataLink/mdDataLink.h"
@@ -22,29 +23,31 @@
 
 namespace mdDesk
 {
-	// The engines a Machinedrum can be edited with (P6): the engine map's entries as data.
-	// The emulated MD OS 1.63 and a real Machinedrum over HW MIDI speak the same protocol
-	// (mdDataLink); they differ in what the wire allows, which is this profile.
+	// What an engine's wire allows, as data (P6). The emulated MD OS 1.63 and a real Machinedrum
+	// over HW MIDI speak the same protocol (mdDataLink); the profile is how they differ. The engine
+	// map (the plug-in's session) holds one engine record per engine, with its profile.
 	struct Profile
 	{
-		std::string id;				// "emu", "hw"
-		std::string label;			// "EMU OS 1.63", "HW MIDI"
-		bool wire = false;			// HW MIDI: DIN speed (timeouts follow it), the lifecycle follows replies
+		std::string id;				// the engine map's key
+		std::string label;			// the LCD's engine label when ready ("EMU OS 1.63")
+		bool wire = false;			// at DIN speed: timeouts follow it, the lifecycle follows replies
 		bool kitsFirst = false;		// background loads: the 64 small kits first (a pattern is 1.7 s over DIN)
+		bool memory = true;			// the device publishes the working kit and the LCD
 	};
 
-	// The engine map: id -> profile, in the menu's order.
-	const std::vector<Profile>& profiles();
-	const Profile* profile(const std::string& _id);
+	const Profile& emulatorProfile();	// "emu"
+	const Profile& wireProfile();		// "hw"
 
-	// The Machinedrum adapter (P6): mdDataLink, kit delivery, the knob recorder, the load
-	// queue, pushes, sequences and the machine state, behind the deskCore Machine protocol.
-	// The core never sees SysEx, keys or RAM; this class never publishes documents.
+	// The Machinedrum adapter (P6): mdDataLink, kit delivery, the knob recorder, the load queue,
+	// pushes, sequences on facts and the machine state, behind deskCore's Machine protocol. The
+	// core never sees SysEx, keys or RAM; this class never publishes documents.
 	class MdMachine final : public deskCore::Machine<MdModel>
 	{
 	public:
 		using Bytes = std::vector<uint8_t>;
 		using Value = elektronData::json::Value;
+		using Profile = mdDesk::Profile;
+		using Probe = deskCore::LifeFacts::Probe;
 
 		// The device edge: where bytes, CCs and keys go.
 		struct Port
@@ -59,13 +62,6 @@ namespace mdDesk
 			// DATA ENTRY knob 0-7 turned by _steps. Unset: no panel.
 			std::function<bool(uint8_t _encoder, int _steps)> turnKnob;
 			std::function<double()> nowMs;
-		};
-
-		// What the device says about the firmware (the emulator; HW MIDI has none).
-		enum class Firmware
-		{
-			Missing, Unsupported, Loading, Booting,
-			Present		// runs MD OS 1.63 and takes MIDI
 		};
 
 		MdMachine(Profile _profile, Port _port);
@@ -85,9 +81,10 @@ namespace mdDesk
 		bool busy() const override;
 
 		// ---- Machinedrum facts from the device ----
-		void setFirmware(Firmware _firmware);
+		// What the device says about the firmware (the emulator; a wire has no probe).
+		void setProbe(Probe _probe);
 		// Every tick, also without telemetry (valid = false).
-		TelemetryEvents onTelemetry(const Telemetry& _telemetry, const Documents& _view);
+		TelemetryEvents onTelemetry(const Telemetry& _telemetry);
 		// The working-kit region read from memory (elektronData::mdWorkingKitFromMemory).
 		void onWorkingKitMemory(const Bytes& _region);
 		// A kit parameter changed outside the editor (host automation, MIDI learn, a modulator).
@@ -100,10 +97,12 @@ namespace mdDesk
 		const mdDataLink::Session& session() const { return m_session; }
 		const Telemetry& telemetry() const { return m_telemetry; }
 		double lastRoundTripMs() const { return m_lastRoundTripMs; }
-		bool replied() const { return m_replied; }
 		size_t loading() const { return m_loads.pending(); }
+		bool replied() const { return m_replied; }
 
 	private:
+		friend struct MdModel;	// the command table's handler column
+
 		// What a sequence step does (deskCore::Sequencer, facts instead of fixed delays).
 		enum class Act : uint8_t { Stop, Play, RecordPlay, LoadSong, SelectPattern };
 		struct Push
@@ -116,14 +115,23 @@ namespace mdDesk
 			uint8_t track = 0, param = 0, step = 0;
 			double atMs = 0;
 		};
-		using Handler = deskCore::Outcome (MdMachine::*)(const Value&, const Documents&);
+		// Panel keys on their way (a fact from the device's telemetry, P6): pressed at atMs, seen
+		// pending by the device, and over when the device says none are left.
+		struct Keys
+		{
+			std::vector<std::string> waiting;	// held back while a dump request is in flight
+			bool sent = false;
+			bool seenPending = false;
+			double sentMs = 0;
+		};
 
 		deskCore::LifeFacts facts() const;
 		void wireSession();
 		void startOver();
-		bool inputReady() const { return deskCore::takesInput(lifecycle()); }
 		double now() const { return m_port.nowMs(); }
+		bool keysOnTheirWay() const;
 		bool pressKey(const std::string& _key);
+		void releaseKeys();
 		void observe(const Document& _doc, deskCore::Source _source);
 		void forget(const DocRef& _ref);
 		void load(const DocRef& _ref, bool _urgent);
@@ -137,7 +145,7 @@ namespace mdDesk
 		void onGlobal(const elektronData::MdGlobal& _g);
 		void onDumpReadBack(const Document& _doc);
 		void onState(const mdDataLink::Session::State& _s);
-		void applyWorkingKit();
+		void takeWorkingKit();
 		void judgeWorkingKit();
 		void pumpLoads(double _now);
 		void pumpPushes(double _now);
@@ -145,7 +153,7 @@ namespace mdDesk
 		void pumpSequence(double _now);
 		void runSequence(std::vector<deskCore::SeqStep<Act>> _steps);
 
-		// Machine commands (the table's Owner::Machine), by op.
+		// Machine commands (the table's handler column).
 		deskCore::Outcome cmdLoad(const Value&, const Documents&);
 		deskCore::Outcome cmdSelect(const Value&, const Documents&);
 		deskCore::Outcome cmdSaveKit(const Value&, const Documents&);
@@ -161,7 +169,6 @@ namespace mdDesk
 		deskCore::Outcome cmdSampleName(const Value&, const Documents&);
 		deskCore::Outcome cmdTransport(const Value&, const Documents&);
 		deskCore::Outcome cmdMute(const Value&, const Documents&);
-		static const std::map<std::string, Handler>& handlers();
 
 		const Profile m_profile;
 		Port m_port;
@@ -174,21 +181,18 @@ namespace mdDesk
 		std::map<DocRef, Push> m_pushes;
 
 		std::map<uint8_t, elektronData::MdKit> m_storedKits;	// last stored-slot dumps
-		std::optional<Bytes> m_workingRegion;					// waiting to be applied
-		std::optional<elektronData::MdKit> m_workingKit;		// last applied, from memory
-		std::optional<elektronData::MdKit> m_trackedKit;		// the working kit as the adapter knows it (no memory)
+		WorkingKit m_working;
 		double m_kitStatusAskedMs = -1e9;
 
-		Firmware m_firmware = Firmware::Present;
+		Probe m_probe = Probe::Running;
 		bool m_replied = false;
 		uint32_t m_statusReplies = 0;
 		bool m_telemetrySeen = false;
 		double m_lastReplyMs = -1e9;
 		double m_wireSinceMs = 0;
 		double m_lastStatusMs = -1e9;
-		double m_lastLiveEditMs = -1e9;
 		double m_lastRoundTripMs = -1;
-		double m_keyQuietUntilMs = -1e9;
+		Keys m_keys;
 		std::optional<uint8_t> m_audibleQueue;
 		double m_switchReportedMs = -1;
 		std::optional<uint8_t> m_lastKit;

@@ -51,9 +51,10 @@ namespace mdJucePlugin
 
 		mmDesk::Telemetry readTelemetry();
 		bool readWorkingKit(Bytes& _region);
-		mmDesk::Desk::Engine engine();
+		// What the device says about the firmware (the start screen is the adapter's fact, from telemetry).
+		deskCore::LifeFacts::Probe probe() const;
 		// The firmware's LCD, 128 x 64, one bit a pixel, rows of 16 bytes (MSB left).
-		bool readLcd(std::array<uint8_t, 1024>& _bits) const;
+		bool readLcd(std::vector<uint8_t>& _bits) const;
 
 		static const char* parameterName(uint8_t _page, uint8_t _index);
 

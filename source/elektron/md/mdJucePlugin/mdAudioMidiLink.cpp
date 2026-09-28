@@ -1,5 +1,7 @@
 #include "mdAudioMidiLink.h"
 
+#include "deskCore/deskCommands.h"
+
 #include "juce_audio_utils/juce_audio_utils.h"
 #include "juce_audio_plugin_client/Standalone/juce_StandaloneFilterWindow.h"
 
@@ -265,18 +267,7 @@ namespace mdJucePlugin
 		if(*op != "audioSet")
 			return false;
 		m_lastError = apply(_message);
-		json::Value r = json::Value::object();
-		r.set("type", "result");
-		r.set("op", "audioSet");
-		const auto* id = _message.find("id");
-		r.set("id", id && id->isNumber() ? id->asNumber() : 0.0);
-		r.set("ok", m_lastError.empty());
-		json::Value errors = json::Value::array();
-		if(!m_lastError.empty())
-			errors.push(m_lastError);
-		r.set("errors", std::move(errors));
-		r.set("note", std::string());
-		m_toPage(std::move(r));
+		m_toPage(deskCore::resultMessage(_message, m_lastError.empty() ? std::vector<std::string>{} : std::vector<std::string>{m_lastError}, {}));
 		publish();
 		return true;
 	}

@@ -10,13 +10,18 @@
 namespace deskCore
 {
 	// Undo/redo over documents. A step is the list of changes one command (or one drag
-	// gesture) made; undo hands back the inverted changes and the caller delivers them
-	// like any other edit. Change needs `before`, `after` and `ref()`; inverting swaps
-	// before and after and keeps every other member. Pure values, no clocks.
+	// gesture) made. Change needs `before`, `after` and `ref()`; inverting swaps before and after
+	// and keeps every other member. Pure values, no clocks.
+	//
+	// Undo and redo are two steps (P6): next() says what to deliver (the caller refreshes each
+	// change's `before` from what it shows now), done() records what was delivered. So a step
+	// only ever holds changes that reached the machine.
 	template<typename Change>
 	class History
 	{
 	public:
+		enum class Direction : uint8_t { Undo, Redo };
+
 		explicit History(const size_t _limit = 200) : m_limit(_limit) {}
 
 		// _gesture != 0 merges into the previous step when that step came from the
@@ -47,33 +52,31 @@ namespace deskCore
 				}
 				return;
 			}
-			m_undo.push_back({_changes, _gesture});
-			while(m_undo.size() > m_limit)
-				m_undo.pop_front();
+			push(m_undo, {_changes, _gesture});
 		}
 
-		// The changes to apply, as before -> after pairs in the undo direction.
-		std::optional<std::vector<Change>> undo()
+		// The changes to deliver for an undo (inverted, in reverse order) or a redo, or none.
+		std::optional<std::vector<Change>> next(const Direction _d) const
 		{
-			if(m_undo.empty())
+			const auto& from = _d == Direction::Undo ? m_undo : m_redo;
+			if(from.empty())
 				return {};
-			auto step = std::move(m_undo.back());
-			m_undo.pop_back();
-			auto changes = inverted(step.changes);
-			m_redo.push_back(std::move(step));
-			return changes;
+			return _d == Direction::Undo ? inverted(from.back().changes) : from.back().changes;
 		}
 
-		std::optional<std::vector<Change>> redo()
+		// The step next() gave is done: what of it was delivered (as delivered) moves to the other
+		// list; what was not is dropped.
+		void done(const Direction _d, const std::vector<Change>& _delivered)
 		{
-			if(m_redo.empty())
-				return {};
-			auto step = std::move(m_redo.back());
-			m_redo.pop_back();
-			auto changes = step.changes;
-			step.gesture = 0;	// a redone step never merges with a new gesture
-			m_undo.push_back(std::move(step));
-			return changes;
+			auto& from = _d == Direction::Undo ? m_undo : m_redo;
+			auto& to = _d == Direction::Undo ? m_redo : m_undo;
+			if(from.empty())
+				return;
+			from.pop_back();
+			if(_delivered.empty())
+				return;
+			// Undo delivered inverted changes: the redo step is their inversion again.
+			push(to, {_d == Direction::Undo ? inverted(_delivered) : _delivered, 0});
 		}
 
 		bool canUndo() const { return !m_undo.empty(); }
@@ -92,6 +95,13 @@ namespace deskCore
 			std::vector<Change> changes;
 			uint64_t gesture = 0;
 		};
+
+		void push(std::deque<Step>& _list, Step _step)
+		{
+			_list.push_back(std::move(_step));
+			while(_list.size() > m_limit)
+				_list.pop_front();
+		}
 
 		static std::vector<Change> inverted(const std::vector<Change>& _changes)
 		{

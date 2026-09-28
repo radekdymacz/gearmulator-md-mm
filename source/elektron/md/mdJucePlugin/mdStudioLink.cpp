@@ -145,10 +145,14 @@ namespace mdJucePlugin
 			static_cast<md::PanelEncoder>(_encoder));
 		if(_encoder > 7 || !command || !_steps)
 			return false;
-		bool ok = true;
-		for(int i = 0; i < std::abs(_steps) && ok; ++i)
-			ok = sendPanel(*command, _steps > 0 ? 0x01 : 0xff);
-		return ok;
+		// One packet a step, through the device's panel sequence, so its pending fact covers them.
+		const std::vector<md::PanelPacket> steps(static_cast<size_t>(std::abs(_steps)),
+			md::PanelPacket{*command, static_cast<uint8_t>(_steps > 0 ? 0x01 : 0xff)});
+		return m_processor.getPlugin().withDeviceLocked([&](synthLib::Device* _base)
+		{
+			auto* device = dynamic_cast<md::Device*>(_base);
+			return device && device->sendPanelSequence(steps, 1);
+		});
 	}
 
 	mdDesk::Telemetry StudioLink::readTelemetry()
@@ -184,6 +188,7 @@ namespace mdJucePlugin
 		t.knobPage = m_telemetry->knobPage.load(std::memory_order_relaxed);
 		t.bootAnimation = m_telemetry->bootAnimation.load(std::memory_order_relaxed);
 		t.mutes = m_telemetry->mutes.load(std::memory_order_relaxed);
+		t.panelPending = m_telemetry->panelPending.load(std::memory_order_relaxed);
 		const int active = m_telemetry->chainActive.load(std::memory_order_relaxed);
 		t.chainKnown = active >= 0;
 		if(t.chainKnown)
@@ -235,25 +240,26 @@ namespace mdJucePlugin
 		return true;
 	}
 
-	mdDesk::Desk::Firmware StudioLink::firmware() const
+	deskCore::LifeFacts::Probe StudioLink::probe() const
 	{
+		using P = deskCore::LifeFacts::Probe;
 		return m_processor.getPlugin().withDeviceLocked([](synthLib::Device* _base)
 		{
 			auto* device = dynamic_cast<md::Device*>(_base);
 			// No device yet (the processor is still making or replacing it): not a missing ROM.
 			// Only a device that exists and has no valid firmware is a definite NO ROM.
 			if(!device)
-				return mdDesk::Desk::Firmware::Loading;
+				return P::Loading;
 			if(!device->isValid())
-				return mdDesk::Desk::Firmware::Missing;
+				return P::Missing;
 			const auto& hw = device->getHardware();
 			if(hw.getModel() != md::MachineModel::Machinedrum || hw.firmwareFingerprint() != md::g_mdOs163Fingerprint)
-				return mdDesk::Desk::Firmware::Unsupported;
+				return P::Unsupported;
 			if(device->isProjectStateRestorePending())
-				return mdDesk::Desk::Firmware::Loading;
+				return P::Loading;
 			if(!hw.isFirmwareMidiReady())
-				return mdDesk::Desk::Firmware::Booting;
-			return mdDesk::Desk::Firmware::Present;
+				return P::Booting;
+			return P::Running;
 		});
 	}
 

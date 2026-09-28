@@ -16,7 +16,6 @@ namespace mmDesk
 	namespace
 	{
 		constexpr double g_readBackTimeoutMs = 8000;
-		constexpr double g_liveEditHoldMs = 200;	// our own live edit may not have landed in memory yet
 		constexpr deskCore::LoadQueue<Ref>::Policy g_loadPolicy{25, 2};
 		constexpr double g_bytesPerMs = 3.125;		// DIN MIDI
 
@@ -58,18 +57,26 @@ namespace mmDesk
 		}
 	}
 
-	const std::vector<Profile>& profiles()
+	const Profile& emulatorProfile()
 	{
-		static const std::vector<Profile> list{{"emu", "EMU OS 1.32B", false}, {"hw", "HW MIDI", true}};
-		return list;
+		static const Profile p{"emu", "EMU OS 1.32B", false};
+		return p;
 	}
 
-	const Profile* profile(const std::string& _id)
+	const Profile& wireProfile()
 	{
-		for(const auto& p : profiles())
-			if(p.id == _id)
-				return &p;
-		return nullptr;
+		static const Profile p{"hw", "HW MIDI", true};
+		return p;
+	}
+
+	bool WorkingKit::reflected(const std::vector<uint8_t>& _raw) const
+	{
+		if(expectTo.empty() || _raw.size() != expectTo.size())
+			return true;
+		for(size_t i = 0; i < _raw.size(); ++i)
+			if(i < expectFrom.size() && expectFrom[i] != expectTo[i] && _raw[i] != expectTo[i])
+				return false;
+		return true;
 	}
 
 	MmMachine::MmMachine(Profile _profile, Port _port) : m_profile(std::move(_profile)), m_port(std::move(_port))
@@ -92,32 +99,23 @@ namespace mmDesk
 			f.silentMs = now() - (m_replied ? m_lastReplyMs : m_wireSinceMs);
 			return f;
 		}
-		switch(m_firmware)
-		{
-		case Firmware::Missing: f.probe = P::Missing; break;
-		case Firmware::Unsupported: f.probe = P::Unsupported; break;
-		case Firmware::Loading: f.probe = P::Loading; break;
-		case Firmware::Booting: f.probe = P::Booting; break;
-		case Firmware::Running:
-		case Firmware::Ready: f.probe = P::Running; break;
-		}
+		f.probe = m_probe;
 		// The Monomachine takes input once its start screen is gone (MM-P0 §6); no status reply is
 		// needed for that.
 		f.replied = true;
 		const bool animating = m_tel.valid ? m_tel.screen == Screen::Unknown || m_tel.screen == Screen::Boot : true;
-		f.animation = m_firmware == Firmware::Ready || !animating ? A::Over : A::Running;
+		f.animation = animating ? A::Running : A::Over;
 		return f;
 	}
 
-	void MmMachine::setFirmware(const Firmware _firmware)
+	void MmMachine::setProbe(const Probe _probe)
 	{
-		if(_firmware == m_firmware)
+		if(_probe == m_probe)
 			return;
 		const bool wasReady = ready();
-		const bool wasRunning = m_firmware == Firmware::Running || m_firmware == Firmware::Ready;
-		m_firmware = _firmware;
-		const bool running = m_firmware == Firmware::Running || m_firmware == Firmware::Ready;
-		if(running && !wasRunning && !m_known.empty())
+		const bool restarted = _probe == Probe::Running && m_probe != Probe::Running && !m_known.empty();
+		m_probe = _probe;
+		if(restarted)
 			startOver();
 		if(!wasReady && ready())
 			m_lastStatusMs = -1e9;	// status now
@@ -128,8 +126,7 @@ namespace mmDesk
 	{
 		m_known.clear();
 		m_kits = {};
-		m_working.reset();
-		m_workingRegion.reset();
+		m_working = {};
 		m_pushes.clear();
 		m_loads = {};
 		m_backgroundQueued = false;
@@ -172,7 +169,8 @@ namespace mmDesk
 		for(const auto& [ref, push] : m_pushes)
 			if(push.slot.busy())
 				return true;
-		return false;
+		// A live edit the machine's memory does not show yet is on the wire too.
+		return m_working.expecting(now());
 	}
 
 	std::vector<MmMachine::Ev> MmMachine::drain()
@@ -196,9 +194,9 @@ namespace mmDesk
 
 	std::string MmMachine::kitState() const
 	{
-		if(m_curKit < 0 || !m_working || !m_kits[m_curKit])
+		if(m_curKit < 0 || !m_working.kit || !m_kits[m_curKit])
 			return "unknown";
-		return ed::mmKitRaw(*m_working) == ed::mmKitRaw(*m_kits[m_curKit]) ? "clean" : "edited";
+		return ed::mmKitRaw(*m_working.kit) == ed::mmKitRaw(*m_kits[m_curKit]) ? "clean" : "edited";
 	}
 
 	bool MmMachine::pressKeys(const std::vector<Key>& _keys)
@@ -242,15 +240,19 @@ namespace mmDesk
 		case Kind::Kit:
 		{
 			const auto& k = std::get<ed::MmKit>(_change.after);
-			if(!_change.slotWrite && m_working)
+			if(!_change.slotWrite && m_working.kit)
 			{
 				std::vector<std::string> notes;
-				deliverKitLive(std::get<ed::MmKit>(_change.before), k, notes);
-				m_working = k;
-				m_liveEditMs = now();
+				const auto& before = std::get<ed::MmKit>(_change.before);
+				deliverKitLive(before, k, notes);
 				// No read-back exists for a live edit: the working kit is what was sent, until memory shows it.
-				observe(k, Source::Tracked);
-				m_events.push_back(Ev::settled(ref, true));
+				if(!m_working.expecting(now()))
+					m_working.expectFrom = ed::mmKitRaw(before);
+				m_working.expectTo = ed::mmKitRaw(k);
+				m_working.expectedAtMs = now();
+				m_working.kit = k;
+				m_known.insert(ref);
+				m_events.push_back(Ev::settledWith(k, Source::Tracked, ref));
 				std::string note;
 				for(const auto& n : notes)
 					note += (note.empty() ? "" : " ") + n;
@@ -329,29 +331,12 @@ namespace mmDesk
 
 	// ---- machine commands ----
 
-	const std::map<std::string, MmMachine::Handler>& MmMachine::handlers()
-	{
-		static const std::map<std::string, Handler> map{
-			{"load", &MmMachine::cmdLoad},
-			{"select", &MmMachine::cmdSelect},
-			{"loadKit", &MmMachine::cmdKit},
-			{"saveKit", &MmMachine::cmdKit},
-			{"loadSong", &MmMachine::cmdSong},
-			{"saveSong", &MmMachine::cmdSong},
-			{"tempo", &MmMachine::cmdTempo},
-			{"play", &MmMachine::cmdTransport},
-			{"stop", &MmMachine::cmdTransport},
-			{"mute", &MmMachine::cmdMute}};
-		return map;
-	}
-
 	Outcome MmMachine::command(const Value& _command, const Documents& _view)
 	{
-		const auto op = deskCore::opOf(_command);
-		const auto it = handlers().find(op);
-		if(it == handlers().end())
-			return refuse("unknown command " + op);
-		return (this->*(it->second))(_command, _view);
+		const auto* spec = MmModel::commands().find(deskCore::opOf(_command));
+		if(!spec || !spec->handler)
+			return refuse("unknown command " + deskCore::opOf(_command));
+		return (this->*(spec->handler))(_command, _view);
 	}
 
 	Outcome MmMachine::cmdLoad(const Value& _m, const Documents&)
@@ -378,14 +363,11 @@ namespace mmDesk
 			return ok();
 		}
 		m_port.sendSysex(ed::mmLoadPattern(static_cast<uint8_t>(p)));
-		if(playing)
-			m_queuedPattern = p;
-		else
-		{
-			m_queuedPattern = -1;
-			m_curPattern = p;
-		}
-		m_lastStatusMs = now() - 800;	// status soon
+		// The current pattern is what the machine reports; while it plays the switch waits for the
+		// pattern end (the queue is the editor's request until status says so).
+		m_queuedPattern = playing ? p : -1;
+		requestStatus();
+		m_lastStatusMs = now();
 		if(!m_known.count({Kind::Pattern, static_cast<uint8_t>(p)}))
 			request({Kind::Pattern, static_cast<uint8_t>(p)}, true);
 		return ok(m_queuedPattern >= 0 ? "queued: starts at the pattern end" : "");
@@ -403,14 +385,13 @@ namespace mmDesk
 			m_port.sendSysex(ed::mmSaveKit(static_cast<uint8_t>(k)));
 			request({Kind::Kit, static_cast<uint8_t>(k)}, true);	// the stored slot now
 		}
-		const auto from = m_curKit;
-		m_curKit = k;
-		kitSwitched(from, k);
-		// LOAD KIT and SAVE KIT relink the current pattern to the kit (as on the MD): read it back. The
-		// firmware takes MIDI in order, so the answer to this request already shows the relink.
+		// The current kit is what the machine reports (status, memory). LOAD KIT and SAVE KIT relink the
+		// current pattern to the kit (as on the MD): read it back; the firmware takes MIDI in order, so
+		// the answer already shows the relink.
+		requestStatus();
+		m_lastStatusMs = now();
 		if(m_curPattern >= 0)
 			request({Kind::Pattern, static_cast<uint8_t>(m_curPattern)}, true);
-		m_lastStatusMs = now() - 800;
 		return ok();
 	}
 
@@ -425,7 +406,8 @@ namespace mmDesk
 		m_port.sendSysex(load ? ed::mmLoadSong(static_cast<uint8_t>(s)) : ed::mmSaveSong(static_cast<uint8_t>(s)));
 		if(!load)
 			request({Kind::Song, static_cast<uint8_t>(s)}, true);
-		m_curSong = s;
+		requestStatus();	// the current song is what the machine reports
+		m_lastStatusMs = now();
 		return ok();
 	}
 
@@ -570,8 +552,14 @@ namespace mmDesk
 			case deskCore::PushSlot<Bytes>::ReadBack::Confirmed:
 				m_lastRoundTripMs = t - push.sentMs;
 				m_lastError.clear();
-				m_events.push_back(Ev::settled(_r, true));
-				break;
+				m_known.insert(_r);
+				if(!(_r.kind == Kind::Kit && static_cast<int>(_r.slot) == m_curKit && m_working.kit))
+				{
+					m_events.push_back(Ev::settledWith(*doc, Source::Dump, _r));
+					return;
+				}
+				m_events.push_back(Ev::settledWith(*m_working.kit, Source::Memory, _r));
+				return;
 			case deskCore::PushSlot<Bytes>::ReadBack::ConfirmedSendNext:
 			{
 				m_lastRoundTripMs = t - push.sentMs;
@@ -590,13 +578,13 @@ namespace mmDesk
 				if(next)
 					pushDump(_r, std::move(*next));
 				else
-					m_events.push_back(Ev::settled(_r, true));
+					m_events.push_back(Ev::failed(_r, m_lastError));
 				break;
 			}
 			}
 		}
 		// The current kit's page document is the working kit; a stored-slot dump changes its edited state only.
-		if(_r.kind == Kind::Kit && static_cast<int>(_r.slot) == m_curKit && m_working)
+		if(_r.kind == Kind::Kit && static_cast<int>(_r.slot) == m_curKit && m_working.kit)
 			return;
 		observe(*doc, Source::Dump);
 	}
@@ -702,21 +690,26 @@ namespace mmDesk
 
 	void MmMachine::onWorkingKit(const Bytes& _region)
 	{
-		m_workingRegion = _region;
+		m_working.region = _region;
 	}
 
 	void MmMachine::applyWorkingKit(const double _now)
 	{
-		// The working kit from memory, unless our own live edit may not have landed yet.
-		if(!m_workingRegion || _now - m_liveEditMs <= g_liveEditHoldMs || m_workingRegion->size() < 5 + ed::MmKit::g_rawSize)
+		// The working kit from memory, unless it is from before the editor's own live edit.
+		const auto& region = m_working.region;
+		if(!region || region->size() < 5 + ed::MmKit::g_rawSize)
 			return;
-		const auto kitNumber = static_cast<int>((*m_workingRegion)[0] & 127);
-		const std::vector<uint8_t> raw(m_workingRegion->begin() + 5, m_workingRegion->begin() + 5 + ed::MmKit::g_rawSize);
-		m_workingRegion.reset();
+		const auto kitNumber = static_cast<int>((*region)[0] & 127);
+		const std::vector<uint8_t> raw(region->begin() + 5, region->begin() + 5 + ed::MmKit::g_rawSize);
+		if(m_working.expecting(_now) && kitNumber == m_curKit && !m_working.reflected(raw))
+			return;
+		m_working.region.reset();
+		m_working.expectFrom.clear();
+		m_working.expectTo.clear();
 		auto k = ed::mmKitFromRaw(raw, static_cast<uint8_t>(kitNumber));
 		if(!k)
 			return;
-		const bool changed = !m_working || ed::mmKitRaw(*m_working) != raw || m_working->position != k->position
+		const bool changed = !m_working.kit || ed::mmKitRaw(*m_working.kit) != raw || m_working.kit->position != k->position
 			|| m_curKit != kitNumber || !m_known.count({Kind::Kit, static_cast<uint8_t>(kitNumber)});
 		if(m_curKit != kitNumber)
 		{
@@ -726,7 +719,7 @@ namespace mmDesk
 		}
 		if(!changed)
 			return;
-		m_working = *k;
+		m_working.kit = *k;
 		observe(*k, Source::Memory);
 		if(!m_kits[m_curKit])
 			request({Kind::Kit, static_cast<uint8_t>(m_curKit)}, true);
@@ -755,7 +748,7 @@ namespace mmDesk
 				continue;
 			push.slot.abandon();
 			m_lastError = std::string("No read-back for a ") + kindName(ref.kind) + " dump.";
-			m_events.push_back(Ev::settled(ref, true));
+			m_events.push_back(Ev::failed(ref, m_lastError));
 		}
 		// The playhead, at most every 25 ms.
 		const bool playing = m_tel.valid && m_tel.running;
@@ -812,10 +805,56 @@ namespace mmDesk
 		d.set("loading", std::move(l));
 		d.set("roundTripMs", m_lastRoundTripMs);
 		d.set("error", m_lastError);
-		Value engines = Value::array();
-		for(const auto& e : profiles())
-			engines.push(deskCore::EngineChoice{e.id, e.label, true, {}}.toJson());
-		d.set("engines", std::move(engines));
 		return d;
+	}
+
+	// ---- the command table (MmModel::commands): the handler column is this adapter's ----
+
+	const CommandTable& MmModel::commands()
+	{
+		using deskCore::Arg;
+		using deskCore::ArgType;
+		using deskCore::Gate;
+		using deskCore::HostOp;
+		using deskCore::Owner;
+		const Arg p{"p", ArgType::Integer, 0, 127};
+		const Arg kOpt{"k", ArgType::Integer, 0, 127, true};
+		const Arg sOpt{"s", ArgType::Integer, 0, 23, true};
+		const Arg t6{"t", ArgType::Integer, 0, 5};
+		const Arg learnTarget[] = {{"t", ArgType::Integer, 0, 5}, {"pg", ArgType::Integer, 0, 7}, {"i", ArgType::Integer, 0, 7, true}};
+		static const CommandTable table({
+			// ---- the core: documents ----
+			{"ready", Owner::Core, Gate::None, -1, {}, "the page is up: everything is published once more"},
+			{"undo", Owner::Core, Gate::Input, -1, {}, "undo the last step (a gesture is one step)"},
+			{"redo", Owner::Core, Gate::Input, -1, {}, ""},
+			{"set", Owner::Core, Gate::Input, -1, {{"kind", ArgType::Text}, {"doc", ArgType::Object}}, "a whole document as the intent"},
+			// ---- the machine ----
+			{"load", Owner::Machine, Gate::Input, -1, {{"kind", ArgType::Text}, {"slot", ArgType::Integer, 0, 127}}, "read a document now", &MmMachine::cmdLoad},
+			{"select", Owner::Machine, Gate::Input, -1, {p, {"now", ArgType::Bool, 0, 0, true}},
+				"LOAD PATTERN (at the pattern end while playing; now: STOP, LOAD, PLAY)", &MmMachine::cmdSelect},
+			{"loadKit", Owner::Machine, Gate::Input, -1, {kOpt}, "LOAD KIT (the current kit without k)", &MmMachine::cmdKit},
+			{"saveKit", Owner::Machine, Gate::Input, -1, {kOpt}, "SAVE KIT", &MmMachine::cmdKit},
+			{"loadSong", Owner::Machine, Gate::Input, -1, {sOpt}, "LOAD SONG (stopped)", &MmMachine::cmdSong},
+			{"saveSong", Owner::Machine, Gate::Input, -1, {sOpt}, "SAVE SONG", &MmMachine::cmdSong},
+			{"tempo", Owner::Machine, Gate::Input, -1, {{"bpm", ArgType::Number, 30, 300}}, "0x61", &MmMachine::cmdTempo},
+			{"play", Owner::Machine, Gate::Input, -1, {}, "", &MmMachine::cmdTransport},
+			{"stop", Owner::Machine, Gate::Input, -1, {}, "", &MmMachine::cmdTransport},
+			{"mute", Owner::Machine, Gate::Input, -1, {t6, {"on", ArgType::Bool, 0, 0, true}}, "a synth track's mute", &MmMachine::cmdMute},
+			// ---- the plug-in ----
+			{"engine", Owner::Host, Gate::None, -1, {{"kind", ArgType::Text}}, "an entry of the engine map: emu, hw", nullptr, HostOp::Engine},
+			{"midi", Owner::Host, Gate::None, -1, {{"b", ArgType::Array}}, "a channel message from the page (keys, joystick)", nullptr, HostOp::Midi},
+			{"recheckFirmware", Owner::Host, Gate::None, -1, {}, "", nullptr, HostOp::RecheckFirmware},
+			{"revealRomFolder", Owner::Host, Gate::None, -1, {}, "", nullptr, HostOp::RevealRomFolder},
+			{"openMenu", Owner::Host, Gate::None, -1, {}, "the editor's menu", nullptr, HostOp::Menu},
+			{"learnStart", Owner::Host, Gate::None, -1, {learnTarget[0], learnTarget[1], learnTarget[2]}, "MIDI learn", nullptr, HostOp::Learn},
+			{"learnAdd", Owner::Host, Gate::None, -1, {{"cc", ArgType::Integer, 0, 127}, learnTarget[0], learnTarget[1], learnTarget[2]}, "", nullptr, HostOp::Learn},
+			{"learnCancel", Owner::Host, Gate::None, -1, {}, "", nullptr, HostOp::Learn},
+			{"learnRemove", Owner::Host, Gate::None, -1, {{"index", ArgType::Integer, 0, 1e6}}, "", nullptr, HostOp::Learn},
+			{"learnInvert", Owner::Host, Gate::None, -1, {{"index", ArgType::Integer, 0, 1e6}}, "", nullptr, HostOp::Learn},
+			{"audio", Owner::Host, Gate::None, -1, {}, "the standalone's audio and MIDI devices", nullptr, HostOp::Audio},
+			{"audioSet", Owner::Host, Gate::None, -1, {{"set", ArgType::Text, 0, 0, true}, {"do", ArgType::Text, 0, 0, true}}, "", nullptr, HostOp::Audio},
+			{"audioMeter", Owner::Host, Gate::None, -1, {{"on", ArgType::Bool, 0, 0, true}}, "", nullptr, HostOp::Audio},
+		});
+		return table;
 	}
 }

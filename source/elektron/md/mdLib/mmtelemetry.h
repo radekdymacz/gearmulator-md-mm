@@ -1,5 +1,7 @@
 #pragma once
 
+#include "elektronData/mmScreen.h"
+
 #include <array>
 #include <atomic>
 #include <cstddef>
@@ -12,17 +14,7 @@ namespace md
 	// §6; mmEditorProbeFirmwareTest), published by the audio thread after every
 	// block and read lock-free by the Monomachine Editor. Fingerprint-gated by the
 	// device: -1 / 0 = unknown for another firmware.
-	// The screen the firmware shows, as a fact (P6): the handler addresses below stay in
-	// this device layer; the editor's desk sees only these kinds.
-	enum class MmScreen : uint8_t
-	{
-		Unknown,	// no firmware screen yet (0, or not an OS 1.32B handler)
-		Boot,		// the start-up animation
-		Main,
-		Global,
-		GlobalEdit,	// the GLOBAL EDIT menus, SYSEX RECV among them
-		Other		// another OS 1.32B screen
-	};
+	using MmScreen = elektronData::MmScreen;
 
 	struct MmTelemetry
 	{
