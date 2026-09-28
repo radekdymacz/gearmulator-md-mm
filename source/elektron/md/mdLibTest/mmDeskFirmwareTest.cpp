@@ -180,7 +180,7 @@ namespace
 			}
 		}
 
-		void msg(const std::string& _json) { desk->onPageMessage(*ed::json::parse(_json)); }
+		void msg(const std::string& _json) { g_contract.command(*ed::json::parse(_json)); desk->onPageMessage(*ed::json::parse(_json)); }
 
 		Value lastResult() const
 		{

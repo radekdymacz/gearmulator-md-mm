@@ -4,122 +4,414 @@
   "title": "Monomachine Editor data contract, version 1 (MM OS 1.32B)",
   "description": "Plain-data documents between the Monomachine Editor page and the machine. Firmware units throughout. Cross-field limits (lock row count, offsets inside lengths, sorted locks) are enforced by elektronData::validate in C++, not here. See mm-data-contract.md.",
   "oneOf": [
-    {"$ref": "#/$defs/pattern"},
-    {"$ref": "#/$defs/kit"},
-    {"$ref": "#/$defs/song"},
-    {"$ref": "#/$defs/global"},
-    {"$ref": "#/$defs/machine"},
-    {"$ref": "md-data-contract.schema.json#/$defs/audioDevices", "description": "The standalone's audio and MIDI devices, shared with the Machinedrum Editor (data-contract.md 4.8)"}
+    {
+      "$ref": "#/$defs/pattern"
+    },
+    {
+      "$ref": "#/$defs/kit"
+    },
+    {
+      "$ref": "#/$defs/song"
+    },
+    {
+      "$ref": "#/$defs/global"
+    },
+    {
+      "$ref": "#/$defs/machine"
+    },
+    {
+      "$ref": "md-data-contract.schema.json#/$defs/audioDevices",
+      "description": "The standalone's audio and MIDI devices, shared with the Machinedrum Editor (data-contract.md 4.8)"
+    }
   ],
   "$defs": {
-    "byte": {"type": "integer", "minimum": 0, "maximum": 255},
-    "value": {"type": "integer", "minimum": 0, "maximum": 127},
-    "signed": {"type": "integer", "minimum": -128, "maximum": 127},
-    "step": {"type": "integer", "minimum": 0, "maximum": 63},
-    "track": {"type": "integer", "minimum": 0, "maximum": 5},
-    "steps": {"type": "array", "items": {"$ref": "#/$defs/step"}, "uniqueItems": true},
-    "hex": {"type": "string", "pattern": "^([0-9a-f]{2})*$"},
+    "byte": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 255
+    },
+    "value": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 127
+    },
+    "signed": {
+      "type": "integer",
+      "minimum": -128,
+      "maximum": 127
+    },
+    "step": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 63
+    },
+    "track": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 5
+    },
+    "steps": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/step"
+      },
+      "uniqueItems": true
+    },
+    "hex": {
+      "type": "string",
+      "pattern": "^([0-9a-f]{2})*$"
+    },
     "runs": {
       "type": "array",
-      "items": {"type": "array", "prefixItems": [{"type": "integer", "minimum": 0}, {"$ref": "#/$defs/hex"}], "minItems": 2, "maxItems": 2}
+      "items": {
+        "type": "array",
+        "prefixItems": [
+          {
+            "type": "integer",
+            "minimum": 0
+          },
+          {
+            "$ref": "#/$defs/hex"
+          }
+        ],
+        "minItems": 2,
+        "maxItems": 2
+      }
     },
     "format": {
       "type": "object",
       "required": ["version", "revision"],
-      "properties": {"version": {"$ref": "#/$defs/value"}, "revision": {"$ref": "#/$defs/value"}}
+      "properties": {
+        "version": {
+          "$ref": "#/$defs/value"
+        },
+        "revision": {
+          "$ref": "#/$defs/value"
+        }
+      }
     },
     "arp": {
       "type": "object",
       "required": ["play", "flag", "ojmp", "mode", "range", "speed", "length", "steps"],
       "properties": {
-        "play": {"type": "integer", "minimum": 0, "maximum": 4, "description": "0 TRUE 1 UP 2 DOWN 3 CYCLE 4 RND"},
-        "flag": {"type": "integer", "minimum": 0, "maximum": 1, "description": "bit 3 of the play byte, meaning unknown, kept"},
-        "ojmp": {"type": "integer", "minimum": 0, "maximum": 15},
-        "mode": {"type": "integer", "minimum": 0, "maximum": 3, "description": "0 OFF 1 KEY 2 SID 3 ADD"},
-        "range": {"type": "integer", "minimum": 0, "maximum": 7, "description": "octaves - 1"},
-        "speed": {"$ref": "#/$defs/value", "description": "display = speed + 1 (x6 = one 16th)"},
-        "trigs": {"type": "integer", "minimum": 0, "maximum": 7, "description": "synth tracks only: bit 0 AMP, 1 FLT, 2 LFO"},
-        "length": {"type": "integer", "minimum": 1, "maximum": 16},
-        "steps": {"type": "array", "items": {"$ref": "#/$defs/byte"}, "minItems": 16, "maxItems": 16, "description": "0x40 + offset, 255 = muted"}
+        "play": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 4,
+          "description": "0 TRUE 1 UP 2 DOWN 3 CYCLE 4 RND"
+        },
+        "flag": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 1,
+          "description": "bit 3 of the play byte, meaning unknown, kept"
+        },
+        "ojmp": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 15
+        },
+        "mode": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 3,
+          "description": "0 OFF 1 KEY 2 SID 3 ADD"
+        },
+        "range": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 7,
+          "description": "octaves - 1"
+        },
+        "speed": {
+          "$ref": "#/$defs/value",
+          "description": "display = speed + 1 (x6 = one 16th)"
+        },
+        "trigs": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 7,
+          "description": "synth tracks only: bit 0 AMP, 1 FLT, 2 LFO"
+        },
+        "length": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 16
+        },
+        "steps": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/byte"
+          },
+          "minItems": 16,
+          "maxItems": 16,
+          "description": "0x40 + offset, 255 = muted"
+        }
       }
     },
     "noteEntry": {
       "type": "array",
-      "prefixItems": [{"type": "integer", "minimum": 0, "maximum": 7}, {"$ref": "#/$defs/step"}, {"$ref": "#/$defs/value"}],
-      "minItems": 3, "maxItems": 3,
+      "prefixItems": [
+        {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 7
+        },
+        {
+          "$ref": "#/$defs/step"
+        },
+        {
+          "$ref": "#/$defs/value"
+        }
+      ],
+      "minItems": 3,
+      "maxItems": 3,
       "description": "[track, step, MIDI note]; [7, 63, 127] is an empty entry (0xffff), seen inside the count in factory data"
     },
     "synthTrack": {
       "type": "object",
       "required": ["trig", "amp", "filter", "lfo", "noteOff", "chord", "slide", "swing", "notes", "transpose", "scale", "key", "arp"],
       "properties": {
-        "trig": {"$ref": "#/$defs/steps", "description": "steps holding a trig (pitch, trigless or pitchless)"},
-        "amp": {"$ref": "#/$defs/steps"},
-        "filter": {"$ref": "#/$defs/steps"},
-        "lfo": {"$ref": "#/$defs/steps"},
-        "noteOff": {"$ref": "#/$defs/steps"},
-        "chord": {"$ref": "#/$defs/steps", "description": "steps with extra notes in chordNotes"},
-        "slide": {"$ref": "#/$defs/steps"},
-        "swing": {"$ref": "#/$defs/steps"},
-        "notes": {"type": "array", "items": {"type": "array", "prefixItems": [{"$ref": "#/$defs/step"}, {"$ref": "#/$defs/value"}], "minItems": 2, "maxItems": 2}},
-        "transpose": {"type": "integer", "minimum": -64, "maximum": 63},
-        "scale": {"type": "integer", "minimum": 0, "maximum": 3, "description": "0 --- 1 FIX 2 MAJ 3 MIN"},
-        "key": {"type": "integer", "minimum": 0, "maximum": 11},
-        "arp": {"$ref": "#/$defs/arp"}
+        "trig": {
+          "$ref": "#/$defs/steps",
+          "description": "steps holding a trig (pitch, trigless or pitchless)"
+        },
+        "amp": {
+          "$ref": "#/$defs/steps"
+        },
+        "filter": {
+          "$ref": "#/$defs/steps"
+        },
+        "lfo": {
+          "$ref": "#/$defs/steps"
+        },
+        "noteOff": {
+          "$ref": "#/$defs/steps"
+        },
+        "chord": {
+          "$ref": "#/$defs/steps",
+          "description": "steps with extra notes in chordNotes"
+        },
+        "slide": {
+          "$ref": "#/$defs/steps"
+        },
+        "swing": {
+          "$ref": "#/$defs/steps"
+        },
+        "notes": {
+          "type": "array",
+          "items": {
+            "type": "array",
+            "prefixItems": [
+              {
+                "$ref": "#/$defs/step"
+              },
+              {
+                "$ref": "#/$defs/value"
+              }
+            ],
+            "minItems": 2,
+            "maxItems": 2
+          }
+        },
+        "transpose": {
+          "type": "integer",
+          "minimum": -64,
+          "maximum": 63
+        },
+        "scale": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 3,
+          "description": "0 --- 1 FIX 2 MAJ 3 MIN"
+        },
+        "key": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 11
+        },
+        "arp": {
+          "$ref": "#/$defs/arp"
+        }
       }
     },
     "midiTrack": {
       "type": "object",
       "required": ["trig", "note", "noteOff", "slide", "swing", "transpose", "scale", "key", "arp"],
       "properties": {
-        "trig": {"$ref": "#/$defs/steps"},
-        "note": {"$ref": "#/$defs/steps"},
-        "noteOff": {"$ref": "#/$defs/steps"},
-        "slide": {"$ref": "#/$defs/steps"},
-        "swing": {"$ref": "#/$defs/steps"},
-        "transpose": {"type": "integer", "minimum": -64, "maximum": 63},
-        "scale": {"type": "integer", "minimum": 0, "maximum": 3},
-        "key": {"type": "integer", "minimum": 0, "maximum": 11},
-        "arp": {"$ref": "#/$defs/arp"}
+        "trig": {
+          "$ref": "#/$defs/steps"
+        },
+        "note": {
+          "$ref": "#/$defs/steps"
+        },
+        "noteOff": {
+          "$ref": "#/$defs/steps"
+        },
+        "slide": {
+          "$ref": "#/$defs/steps"
+        },
+        "swing": {
+          "$ref": "#/$defs/steps"
+        },
+        "transpose": {
+          "type": "integer",
+          "minimum": -64,
+          "maximum": 63
+        },
+        "scale": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 3
+        },
+        "key": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 11
+        },
+        "arp": {
+          "$ref": "#/$defs/arp"
+        }
       }
     },
     "pattern": {
       "type": "object",
       "required": ["schema", "version", "slot", "format", "length", "multiplier", "kit", "swingAmount", "patternTranspose", "tracks", "midiTracks", "locks", "midiNotes", "chordNotes", "hidden"],
       "properties": {
-        "schema": {"const": "mm-desk/pattern"},
-        "version": {"const": 1},
-        "slot": {"type": "integer", "minimum": 0, "maximum": 127},
-        "name": {"type": "string", "pattern": "^[A-H](0[1-9]|1[0-6])$"},
-        "format": {"$ref": "#/$defs/format"},
-        "length": {"type": "integer", "minimum": 2, "maximum": 64},
-        "multiplier": {"enum": ["1X", "2X", "3/4X", "3/2X"]},
-        "kit": {"$ref": "#/$defs/value"},
-        "swingAmount": {"type": "integer", "minimum": 0, "maximum": 30, "description": "percent - 50"},
-        "patternTranspose": {"type": "integer", "minimum": -64, "maximum": 63},
-        "tracks": {"type": "array", "items": {"$ref": "#/$defs/synthTrack"}, "minItems": 6, "maxItems": 6},
-        "midiTracks": {"type": "array", "items": {"$ref": "#/$defs/midiTrack"}, "minItems": 6, "maxItems": 6},
+        "schema": {
+          "const": "mm-desk/pattern"
+        },
+        "version": {
+          "const": 1
+        },
+        "slot": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 127
+        },
+        "name": {
+          "type": "string",
+          "pattern": "^[A-H](0[1-9]|1[0-6])$"
+        },
+        "format": {
+          "$ref": "#/$defs/format"
+        },
+        "length": {
+          "type": "integer",
+          "minimum": 2,
+          "maximum": 64
+        },
+        "multiplier": {
+          "enum": ["1X", "2X", "3/4X", "3/2X"]
+        },
+        "kit": {
+          "$ref": "#/$defs/value"
+        },
+        "swingAmount": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 30,
+          "description": "percent - 50"
+        },
+        "patternTranspose": {
+          "type": "integer",
+          "minimum": -64,
+          "maximum": 63
+        },
+        "tracks": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/synthTrack"
+          },
+          "minItems": 6,
+          "maxItems": 6
+        },
+        "midiTracks": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/midiTrack"
+          },
+          "minItems": 6,
+          "maxItems": 6
+        },
         "locks": {
-          "type": "array", "maxItems": 62,
+          "type": "array",
+          "maxItems": 62,
           "items": {
             "type": "object",
             "required": ["track", "page", "param", "steps"],
             "properties": {
-              "track": {"$ref": "#/$defs/track"},
-              "page": {"type": "integer", "minimum": 0, "maximum": 7, "description": "SYN AMP FLT EFX LF1 LF2 LF3 MIDI"},
-              "param": {"type": "integer", "minimum": 0, "maximum": 7},
-              "steps": {"type": "array", "items": {"type": "array", "prefixItems": [{"$ref": "#/$defs/step"}, {"$ref": "#/$defs/value"}], "minItems": 2, "maxItems": 2}}
+              "track": {
+                "$ref": "#/$defs/track"
+              },
+              "page": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 7,
+                "description": "SYN AMP FLT EFX LF1 LF2 LF3 MIDI"
+              },
+              "param": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 7
+              },
+              "steps": {
+                "type": "array",
+                "items": {
+                  "type": "array",
+                  "prefixItems": [
+                    {
+                      "$ref": "#/$defs/step"
+                    },
+                    {
+                      "$ref": "#/$defs/value"
+                    }
+                  ],
+                  "minItems": 2,
+                  "maxItems": 2
+                }
+              }
             }
           }
         },
-        "midiNotes": {"type": "array", "items": {"$ref": "#/$defs/noteEntry"}, "maxItems": 400},
-        "chordNotes": {"type": "array", "items": {"$ref": "#/$defs/noteEntry"}, "maxItems": 192},
+        "midiNotes": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/noteEntry"
+          },
+          "maxItems": 400
+        },
+        "chordNotes": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/noteEntry"
+          },
+          "maxItems": 192
+        },
         "hidden": {
           "type": "object",
           "properties": {
-            "x270": {"$ref": "#/$defs/hex"}, "x54e": {"$ref": "#/$defs/hex"},
-            "x555": {"$ref": "#/$defs/byte"}, "x14d7": {"$ref": "#/$defs/byte"},
-            "lockRows": {"$ref": "#/$defs/runs"}, "midiNotes": {"$ref": "#/$defs/runs"}, "chordNotes": {"$ref": "#/$defs/runs"}
+            "x270": {
+              "$ref": "#/$defs/hex"
+            },
+            "x54e": {
+              "$ref": "#/$defs/hex"
+            },
+            "x555": {
+              "$ref": "#/$defs/byte"
+            },
+            "x14d7": {
+              "$ref": "#/$defs/byte"
+            },
+            "lockRows": {
+              "$ref": "#/$defs/runs"
+            },
+            "midiNotes": {
+              "$ref": "#/$defs/runs"
+            },
+            "chordNotes": {
+              "$ref": "#/$defs/runs"
+            }
           }
         }
       }
@@ -128,107 +420,376 @@
       "type": "object",
       "required": ["machine", "outputs", "input", "pages", "multiEnv", "extra", "assign", "trigPos"],
       "properties": {
-        "machine": {"enum": [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 32, 33]},
-        "machineName": {"type": "string"},
-        "outputs": {"type": "integer", "minimum": 0, "maximum": 7, "description": "bits AB 1, CD 2, EF 4"},
-        "input": {"type": "integer", "minimum": 0, "maximum": 6, "description": "0 NEIGHBOR 1 INP A 2 INP B 3 INP A+B 4-6 BUS AB/CD/EF"},
-        "pages": {"type": "array", "minItems": 8, "maxItems": 8, "items": {"type": "array", "items": {"$ref": "#/$defs/value"}, "minItems": 8, "maxItems": 8}},
-        "multiEnv": {"type": "array", "items": {"$ref": "#/$defs/byte"}, "minItems": 6, "maxItems": 6, "description": "MULTI ENV, NRPN 0x40-0x45: ATK DEC SUS REL PORT and one more"},
-        "extra": {"$ref": "#/$defs/hex"},
+        "machine": {
+          "enum": [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 32, 33]
+        },
+        "machineName": {
+          "type": "string"
+        },
+        "outputs": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 7,
+          "description": "bits AB 1, CD 2, EF 4"
+        },
+        "input": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 6,
+          "description": "0 NEIGHBOR 1 INP A 2 INP B 3 INP A+B 4-6 BUS AB/CD/EF"
+        },
+        "pages": {
+          "type": "array",
+          "minItems": 8,
+          "maxItems": 8,
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/$defs/value"
+            },
+            "minItems": 8,
+            "maxItems": 8
+          }
+        },
+        "multiEnv": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/byte"
+          },
+          "minItems": 6,
+          "maxItems": 6,
+          "description": "MULTI ENV, NRPN 0x40-0x45: ATK DEC SUS REL PORT and one more"
+        },
+        "extra": {
+          "$ref": "#/$defs/hex"
+        },
         "assign": {
           "type": "object",
           "required": ["page", "dest", "add"],
           "properties": {
-            "page": {"type": "array", "items": {"$ref": "#/$defs/value"}, "minItems": 12, "maxItems": 12},
-            "dest": {"type": "array", "items": {"$ref": "#/$defs/value"}, "minItems": 12, "maxItems": 12},
-            "add": {"type": "array", "items": {"$ref": "#/$defs/signed"}, "minItems": 12, "maxItems": 12}
+            "page": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/value"
+              },
+              "minItems": 12,
+              "maxItems": 12
+            },
+            "dest": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/value"
+              },
+              "minItems": 12,
+              "maxItems": 12
+            },
+            "add": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/signed"
+              },
+              "minItems": 12,
+              "maxItems": 12
+            }
           }
         },
-        "trigPos": {"oneOf": [{"type": "null"}, {"$ref": "#/$defs/track"}]}
+        "trigPos": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/track"
+            }
+          ]
+        }
       }
     },
     "kit": {
       "type": "object",
       "required": ["schema", "version", "slot", "format", "name", "levels", "tracks", "trackMasks", "hidden"],
       "properties": {
-        "schema": {"const": "mm-desk/kit"},
-        "version": {"const": 1},
-        "slot": {"type": "integer", "minimum": 0, "maximum": 127},
-        "format": {"$ref": "#/$defs/format"},
-        "name": {"type": "string", "maxLength": 11},
-        "nameBytes": {"$ref": "#/$defs/hex"},
-        "levels": {"type": "array", "items": {"$ref": "#/$defs/value"}, "minItems": 6, "maxItems": 6},
-        "tracks": {"type": "array", "items": {"$ref": "#/$defs/kitTrack"}, "minItems": 6, "maxItems": 6},
+        "schema": {
+          "const": "mm-desk/kit"
+        },
+        "version": {
+          "const": 1
+        },
+        "slot": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 127
+        },
+        "format": {
+          "$ref": "#/$defs/format"
+        },
+        "name": {
+          "type": "string",
+          "maxLength": 11
+        },
+        "nameBytes": {
+          "$ref": "#/$defs/hex"
+        },
+        "levels": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/value"
+          },
+          "minItems": 6,
+          "maxItems": 6
+        },
+        "tracks": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/kitTrack"
+          },
+          "minItems": 6,
+          "maxItems": 6
+        },
         "trackMasks": {
           "type": "object",
           "properties": {
-            "mirror": {"$ref": "#/$defs/byte"}, "hpf": {"$ref": "#/$defs/byte"}, "lpf": {"$ref": "#/$defs/byte"},
-            "legatoAmp": {"$ref": "#/$defs/byte"}, "legatoFilter": {"$ref": "#/$defs/byte"}, "legatoLfo": {"$ref": "#/$defs/byte"}
+            "mirror": {
+              "$ref": "#/$defs/byte"
+            },
+            "hpf": {
+              "$ref": "#/$defs/byte"
+            },
+            "lpf": {
+              "$ref": "#/$defs/byte"
+            },
+            "legatoAmp": {
+              "$ref": "#/$defs/byte"
+            },
+            "legatoFilter": {
+              "$ref": "#/$defs/byte"
+            },
+            "legatoLfo": {
+              "$ref": "#/$defs/byte"
+            }
           }
         },
-        "hidden": {"type": "object", "properties": {"x1cd": {"$ref": "#/$defs/hex"}, "x2b6": {"$ref": "#/$defs/hex"}}}
+        "hidden": {
+          "type": "object",
+          "properties": {
+            "x1cd": {
+              "$ref": "#/$defs/hex"
+            },
+            "x2b6": {
+              "$ref": "#/$defs/hex"
+            }
+          }
+        }
       }
     },
     "songRow": {
       "type": "object",
       "required": ["kind", "pattern", "target", "repeats", "mutes", "midiMutes", "offset", "length", "transpose", "trackTranspose", "midiTranspose", "tempo", "x3", "x21"],
       "properties": {
-        "kind": {"enum": ["pattern", "loop", "jump", "halt", "end"]},
-        "pattern": {"$ref": "#/$defs/byte", "description": "0-127, 254 LOOP/JUMP/HALT, 255 END"},
-        "target": {"$ref": "#/$defs/byte"},
-        "repeats": {"$ref": "#/$defs/byte", "description": "plays repeats + 1 times; on a loop: the count, 0 = infinite"},
-        "mutes": {"$ref": "#/$defs/byte"},
-        "midiMutes": {"$ref": "#/$defs/byte"},
-        "offset": {"$ref": "#/$defs/byte"},
-        "length": {"$ref": "#/$defs/byte"},
-        "transpose": {"$ref": "#/$defs/signed"},
-        "trackTranspose": {"type": "array", "items": {"$ref": "#/$defs/signed"}, "minItems": 6, "maxItems": 6},
-        "midiTranspose": {"type": "array", "items": {"$ref": "#/$defs/signed"}, "minItems": 6, "maxItems": 6},
-        "tempo": {"oneOf": [{"type": "null"}, {"type": "integer", "minimum": 30, "maximum": 300}]},
-        "x3": {"$ref": "#/$defs/byte"},
-        "x21": {"$ref": "#/$defs/byte"}
+        "kind": {
+          "enum": ["pattern", "loop", "jump", "halt", "end"]
+        },
+        "pattern": {
+          "$ref": "#/$defs/byte",
+          "description": "0-127, 254 LOOP/JUMP/HALT, 255 END"
+        },
+        "target": {
+          "$ref": "#/$defs/byte"
+        },
+        "repeats": {
+          "$ref": "#/$defs/byte",
+          "description": "plays repeats + 1 times; on a loop: the count, 0 = infinite"
+        },
+        "mutes": {
+          "$ref": "#/$defs/byte"
+        },
+        "midiMutes": {
+          "$ref": "#/$defs/byte"
+        },
+        "offset": {
+          "$ref": "#/$defs/byte"
+        },
+        "length": {
+          "$ref": "#/$defs/byte"
+        },
+        "transpose": {
+          "$ref": "#/$defs/signed"
+        },
+        "trackTranspose": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/signed"
+          },
+          "minItems": 6,
+          "maxItems": 6
+        },
+        "midiTranspose": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/signed"
+          },
+          "minItems": 6,
+          "maxItems": 6
+        },
+        "tempo": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "type": "integer",
+              "minimum": 30,
+              "maximum": 300
+            }
+          ]
+        },
+        "x3": {
+          "$ref": "#/$defs/byte"
+        },
+        "x21": {
+          "$ref": "#/$defs/byte"
+        }
       }
     },
     "song": {
       "type": "object",
       "required": ["schema", "version", "slot", "format", "name", "rows", "hidden"],
       "properties": {
-        "schema": {"const": "mm-desk/song"},
-        "version": {"const": 1},
-        "slot": {"type": "integer", "minimum": 0, "maximum": 23},
-        "format": {"$ref": "#/$defs/format"},
-        "name": {"type": "string", "maxLength": 14},
-        "nameBytes": {"$ref": "#/$defs/hex"},
-        "rows": {"type": "array", "items": {"$ref": "#/$defs/songRow"}, "maxItems": 200},
-        "hidden": {"type": "object", "properties": {"x0e": {"$ref": "#/$defs/hex"}, "rowsAfterEnd": {"$ref": "#/$defs/runs"}}}
+        "schema": {
+          "const": "mm-desk/song"
+        },
+        "version": {
+          "const": 1
+        },
+        "slot": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 23
+        },
+        "format": {
+          "$ref": "#/$defs/format"
+        },
+        "name": {
+          "type": "string",
+          "maxLength": 14
+        },
+        "nameBytes": {
+          "$ref": "#/$defs/hex"
+        },
+        "rows": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/songRow"
+          },
+          "maxItems": 200
+        },
+        "hidden": {
+          "type": "object",
+          "properties": {
+            "x0e": {
+              "$ref": "#/$defs/hex"
+            },
+            "rowsAfterEnd": {
+              "$ref": "#/$defs/runs"
+            }
+          }
+        }
       }
     },
     "global": {
       "type": "object",
       "required": ["schema", "version", "slot", "format", "channels", "midiSeq", "routingMode", "masterTune", "multiMap", "control", "hidden"],
       "properties": {
-        "schema": {"const": "mm-desk/global"},
-        "version": {"const": 1},
-        "slot": {"type": "integer", "minimum": 0, "maximum": 7},
-        "format": {"$ref": "#/$defs/format"},
+        "schema": {
+          "const": "mm-desk/global"
+        },
+        "version": {
+          "const": 1
+        },
+        "slot": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 7
+        },
+        "format": {
+          "$ref": "#/$defs/format"
+        },
         "channels": {
           "type": "object",
           "required": ["auto", "base", "span", "multiTrig", "multiMap"],
-          "properties": {"auto": {"$ref": "#/$defs/byte"}, "base": {"$ref": "#/$defs/byte"}, "span": {"$ref": "#/$defs/byte"}, "multiTrig": {"$ref": "#/$defs/byte"}, "multiMap": {"$ref": "#/$defs/byte"}}
+          "properties": {
+            "auto": {
+              "$ref": "#/$defs/byte"
+            },
+            "base": {
+              "$ref": "#/$defs/byte"
+            },
+            "span": {
+              "$ref": "#/$defs/byte"
+            },
+            "multiTrig": {
+              "$ref": "#/$defs/byte"
+            },
+            "multiMap": {
+              "$ref": "#/$defs/byte"
+            }
+          }
         },
         "midiSeq": {
           "type": "object",
           "required": ["channels", "ccs"],
           "properties": {
-            "channels": {"type": "array", "items": {"$ref": "#/$defs/byte"}, "minItems": 6, "maxItems": 6},
-            "ccs": {"type": "array", "minItems": 6, "maxItems": 6, "items": {"type": "array", "items": {"$ref": "#/$defs/byte"}, "minItems": 4, "maxItems": 4}}
+            "channels": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/byte"
+              },
+              "minItems": 6,
+              "maxItems": 6
+            },
+            "ccs": {
+              "type": "array",
+              "minItems": 6,
+              "maxItems": 6,
+              "items": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/$defs/byte"
+                },
+                "minItems": 4,
+                "maxItems": 4
+              }
+            }
           }
         },
-        "routingMode": {"enum": ["3xSTEREO+AB=MIX", "3xSTEREO", "6xMONO"]},
-        "masterTune": {"type": "integer", "minimum": 0, "maximum": 65535, "description": "tenths of Hz"},
-        "multiMap": {"type": "array", "minItems": 6, "maxItems": 6, "items": {"type": "array", "items": {"$ref": "#/$defs/byte"}, "minItems": 32, "maxItems": 32}},
-        "control": {"$ref": "#/$defs/hex"},
-        "hidden": {"type": "object"}
+        "routingMode": {
+          "enum": ["3xSTEREO+AB=MIX", "3xSTEREO", "6xMONO"]
+        },
+        "masterTune": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 65535,
+          "description": "tenths of Hz"
+        },
+        "multiMap": {
+          "type": "array",
+          "minItems": 6,
+          "maxItems": 6,
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/$defs/byte"
+            },
+            "minItems": 32,
+            "maxItems": 32
+          }
+        },
+        "control": {
+          "$ref": "#/$defs/hex"
+        },
+        "hidden": {
+          "type": "object"
+        }
       }
     },
     "machine": {
@@ -236,11 +797,766 @@
       "required": ["schema", "version"],
       "description": "Read-only machine state from the MM desk (MM-P2): current and queued pattern, kit and its working state, song, SYSEX RECV session, engine.",
       "properties": {
-        "schema": {"const": "mm-desk/machine"},
-        "version": {"const": 1}
+        "schema": {
+          "const": "mm-desk/machine"
+        },
+        "version": {
+          "const": 1
+        }
       }
     },
-    "catalogue": {"type": "object", "required": ["schema", "version", "machines"], "properties": {"schema": {"const": "mm-desk/catalogue"}, "version": {"const": 1}, "machines": {"type": "array"}}},
-    "message": {"description": "P6: every message the plug-in sends the Monomachine Editor page. Checked by mmDeskTest.", "type": "object", "required": ["type"], "oneOf": [{"type": "object", "required": ["type", "doc"], "properties": {"type": {"const": "catalogue"}, "doc": {"$ref": "#/$defs/catalogue"}}}, {"type": "object", "required": ["type", "kind", "doc"], "properties": {"type": {"const": "doc"}, "kind": {"enum": ["pattern", "kit", "song", "global"]}, "pending": {"type": "boolean", "description": "The document shows an edit submitted to the machine and not yet read back (P6: pending, published merged over observed)."}, "doc": {"type": "object"}, "slot": {"type": "integer", "minimum": 0, "maximum": 127}, "working": {"type": "boolean", "description": "The kit document is the working kit read from memory."}, "source": {"enum": ["none", "dump", "memory", "tracked"]}}, "allOf": [{"if": {"properties": {"kind": {"const": "pattern"}}}, "then": {"properties": {"doc": {"$ref": "#/$defs/pattern"}}}}, {"if": {"properties": {"kind": {"const": "kit"}}}, "then": {"properties": {"doc": {"$ref": "#/$defs/kit"}}}}, {"if": {"properties": {"kind": {"const": "song"}}}, "then": {"properties": {"doc": {"$ref": "#/$defs/song"}}}}, {"if": {"properties": {"kind": {"const": "global"}}}, "then": {"properties": {"doc": {"$ref": "#/$defs/global"}}}}]}, {"type": "object", "required": ["type", "doc"], "properties": {"type": {"const": "machine"}, "doc": {"$ref": "#/$defs/machine"}}}, {"type": "object", "required": ["type", "op", "ok", "errors", "note"], "properties": {"type": {"const": "result"}, "op": {"type": "string"}, "id": {"type": "integer"}, "ok": {"type": "boolean"}, "errors": {"type": "array", "items": {"type": "string"}}, "note": {"type": "string"}}}, {"type": "object", "required": ["type", "step", "playing"], "properties": {"type": {"const": "tel"}, "step": {"type": "integer", "minimum": -1}, "playing": {"type": "boolean"}}}, {"type": "object", "description": "The firmware's own LCD: 128 x 64, one bit a pixel, rows of 16 bytes, hex.", "required": ["type", "bits"], "properties": {"type": {"const": "lcd"}, "bits": {"type": "string", "pattern": "^[0-9a-f]{2048}$"}, "engine": {"type": "string"}}}, {"type": "object", "required": ["type", "doc"], "properties": {"type": {"const": "learn"}, "doc": {"type": "object", "required": ["mappings", "learning"]}}}, {"type": "object", "required": ["type"], "properties": {"type": {"const": "reset"}}}, {"type": "object", "required": ["type", "ask"], "properties": {"type": {"const": "ask"}, "ask": {"type": "string"}}}, {"type": "object", "required": ["type", "message"], "properties": {"type": {"const": "error"}, "message": {"type": "string"}}}, {"type": "object", "description": "The standalone's audio and MIDI devices (host, mdAudioMidiLink; schema gm-audio/devices in md-data-contract.schema.json).", "required": ["type", "doc"], "properties": {"type": {"const": "audio"}, "doc": {"type": "object", "required": ["schema", "version", "standalone"], "properties": {"schema": {"const": "gm-audio/devices"}}}}}, {"type": "object", "required": ["type", "in"], "properties": {"type": {"const": "audioLevel"}, "in": {"type": "number", "minimum": 0, "maximum": 1}}}]}
+    "catalogue": {
+      "type": "object",
+      "required": ["schema", "version", "machines"],
+      "properties": {
+        "schema": {
+          "const": "mm-desk/catalogue"
+        },
+        "version": {
+          "const": 1
+        },
+        "machines": {
+          "type": "array"
+        }
+      }
+    },
+    "message": {
+      "description": "P6: every message the plug-in sends the Monomachine Editor page. Checked by mmDeskTest.",
+      "type": "object",
+      "required": ["type"],
+      "oneOf": [
+        {
+          "type": "object",
+          "required": ["type", "doc"],
+          "properties": {
+            "type": {
+              "const": "catalogue"
+            },
+            "doc": {
+              "$ref": "#/$defs/catalogue"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "required": ["type", "kind", "doc"],
+          "properties": {
+            "type": {
+              "const": "doc"
+            },
+            "kind": {
+              "enum": ["pattern", "kit", "song", "global"]
+            },
+            "pending": {
+              "type": "boolean",
+              "description": "The document shows an edit submitted to the machine and not yet read back (P6: pending, published merged over observed)."
+            },
+            "doc": {
+              "type": "object"
+            },
+            "slot": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 127
+            },
+            "working": {
+              "type": "boolean",
+              "description": "The kit document is the working kit read from memory."
+            },
+            "source": {
+              "enum": ["none", "dump", "memory", "tracked"]
+            }
+          },
+          "allOf": [
+            {
+              "if": {
+                "properties": {
+                  "kind": {
+                    "const": "pattern"
+                  }
+                }
+              },
+              "then": {
+                "properties": {
+                  "doc": {
+                    "$ref": "#/$defs/pattern"
+                  }
+                }
+              }
+            },
+            {
+              "if": {
+                "properties": {
+                  "kind": {
+                    "const": "kit"
+                  }
+                }
+              },
+              "then": {
+                "properties": {
+                  "doc": {
+                    "$ref": "#/$defs/kit"
+                  }
+                }
+              }
+            },
+            {
+              "if": {
+                "properties": {
+                  "kind": {
+                    "const": "song"
+                  }
+                }
+              },
+              "then": {
+                "properties": {
+                  "doc": {
+                    "$ref": "#/$defs/song"
+                  }
+                }
+              }
+            },
+            {
+              "if": {
+                "properties": {
+                  "kind": {
+                    "const": "global"
+                  }
+                }
+              },
+              "then": {
+                "properties": {
+                  "doc": {
+                    "$ref": "#/$defs/global"
+                  }
+                }
+              }
+            }
+          ]
+        },
+        {
+          "type": "object",
+          "required": ["type", "doc"],
+          "properties": {
+            "type": {
+              "const": "machine"
+            },
+            "doc": {
+              "$ref": "#/$defs/machine"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "required": ["type", "op", "ok", "errors", "note"],
+          "properties": {
+            "type": {
+              "const": "result"
+            },
+            "op": {
+              "type": "string"
+            },
+            "id": {
+              "type": "integer"
+            },
+            "ok": {
+              "type": "boolean"
+            },
+            "errors": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "note": {
+              "type": "string"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "required": ["type", "step", "playing"],
+          "properties": {
+            "type": {
+              "const": "tel"
+            },
+            "step": {
+              "type": "integer",
+              "minimum": -1
+            },
+            "playing": {
+              "type": "boolean"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "description": "The firmware's own LCD: 128 x 64, one bit a pixel, rows of 16 bytes, hex.",
+          "required": ["type", "bits"],
+          "properties": {
+            "type": {
+              "const": "lcd"
+            },
+            "bits": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{2048}$"
+            },
+            "engine": {
+              "type": "string"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "required": ["type", "doc"],
+          "properties": {
+            "type": {
+              "const": "learn"
+            },
+            "doc": {
+              "type": "object",
+              "required": ["mappings", "learning"]
+            }
+          }
+        },
+        {
+          "type": "object",
+          "required": ["type"],
+          "properties": {
+            "type": {
+              "const": "reset"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "required": ["type", "ask"],
+          "properties": {
+            "type": {
+              "const": "ask"
+            },
+            "ask": {
+              "type": "string"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "required": ["type", "message"],
+          "properties": {
+            "type": {
+              "const": "error"
+            },
+            "message": {
+              "type": "string"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "description": "The standalone's audio and MIDI devices (host, mdAudioMidiLink; schema gm-audio/devices in md-data-contract.schema.json).",
+          "required": ["type", "doc"],
+          "properties": {
+            "type": {
+              "const": "audio"
+            },
+            "doc": {
+              "type": "object",
+              "required": ["schema", "version", "standalone"],
+              "properties": {
+                "schema": {
+                  "const": "gm-audio/devices"
+                }
+              }
+            }
+          }
+        },
+        {
+          "type": "object",
+          "required": ["type", "in"],
+          "properties": {
+            "type": {
+              "const": "audioLevel"
+            },
+            "in": {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 1
+            }
+          }
+        }
+      ]
+    },
+    "command": {
+      "description": "Generated from the command table (deskCore::CommandTable::schema, P6): every command the page may send.",
+      "oneOf": [
+        {
+          "type": "object",
+          "description": "core: the page is up: everything is published once more",
+          "required": ["op"],
+          "properties": {
+            "op": {
+              "const": "ready"
+            },
+            "id": {
+              "type": "integer"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "description": "core: undo the last step (a gesture is one step)",
+          "required": ["op"],
+          "properties": {
+            "op": {
+              "const": "undo"
+            },
+            "id": {
+              "type": "integer"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "description": "core",
+          "required": ["op"],
+          "properties": {
+            "op": {
+              "const": "redo"
+            },
+            "id": {
+              "type": "integer"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "description": "core: a whole document as the intent",
+          "required": ["op", "kind", "doc"],
+          "properties": {
+            "op": {
+              "const": "set"
+            },
+            "id": {
+              "type": "integer"
+            },
+            "kind": {
+              "type": "string"
+            },
+            "doc": {
+              "type": "object"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "description": "machine: read a document now",
+          "required": ["op", "kind", "slot"],
+          "properties": {
+            "op": {
+              "const": "load"
+            },
+            "id": {
+              "type": "integer"
+            },
+            "kind": {
+              "type": "string"
+            },
+            "slot": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 127
+            }
+          }
+        },
+        {
+          "type": "object",
+          "description": "machine: LOAD PATTERN (at the pattern end while playing; now: STOP, LOAD, PLAY)",
+          "required": ["op", "p"],
+          "properties": {
+            "op": {
+              "const": "select"
+            },
+            "id": {
+              "type": "integer"
+            },
+            "p": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 127
+            },
+            "now": {
+              "type": ["boolean", "integer"]
+            }
+          }
+        },
+        {
+          "type": "object",
+          "description": "machine: LOAD KIT (the current kit without k)",
+          "required": ["op"],
+          "properties": {
+            "op": {
+              "const": "loadKit"
+            },
+            "id": {
+              "type": "integer"
+            },
+            "k": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 127
+            }
+          }
+        },
+        {
+          "type": "object",
+          "description": "machine: SAVE KIT",
+          "required": ["op"],
+          "properties": {
+            "op": {
+              "const": "saveKit"
+            },
+            "id": {
+              "type": "integer"
+            },
+            "k": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 127
+            }
+          }
+        },
+        {
+          "type": "object",
+          "description": "machine: LOAD SONG (stopped)",
+          "required": ["op"],
+          "properties": {
+            "op": {
+              "const": "loadSong"
+            },
+            "id": {
+              "type": "integer"
+            },
+            "s": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 23
+            }
+          }
+        },
+        {
+          "type": "object",
+          "description": "machine: SAVE SONG",
+          "required": ["op"],
+          "properties": {
+            "op": {
+              "const": "saveSong"
+            },
+            "id": {
+              "type": "integer"
+            },
+            "s": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 23
+            }
+          }
+        },
+        {
+          "type": "object",
+          "description": "machine: 0x61",
+          "required": ["op", "bpm"],
+          "properties": {
+            "op": {
+              "const": "tempo"
+            },
+            "id": {
+              "type": "integer"
+            },
+            "bpm": {
+              "type": "number",
+              "minimum": 30,
+              "maximum": 300
+            }
+          }
+        },
+        {
+          "type": "object",
+          "description": "machine",
+          "required": ["op"],
+          "properties": {
+            "op": {
+              "const": "play"
+            },
+            "id": {
+              "type": "integer"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "description": "machine",
+          "required": ["op"],
+          "properties": {
+            "op": {
+              "const": "stop"
+            },
+            "id": {
+              "type": "integer"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "description": "machine: a synth track's mute",
+          "required": ["op", "t"],
+          "properties": {
+            "op": {
+              "const": "mute"
+            },
+            "id": {
+              "type": "integer"
+            },
+            "t": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 5
+            },
+            "on": {
+              "type": ["boolean", "integer"]
+            }
+          }
+        },
+        {
+          "type": "object",
+          "description": "host: an entry of the engine map: emu, hw",
+          "required": ["op", "kind"],
+          "properties": {
+            "op": {
+              "const": "engine"
+            },
+            "id": {
+              "type": "integer"
+            },
+            "kind": {
+              "type": "string"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "description": "host: a channel message from the page (keys, joystick)",
+          "required": ["op", "b"],
+          "properties": {
+            "op": {
+              "const": "midi"
+            },
+            "id": {
+              "type": "integer"
+            },
+            "b": {
+              "type": "array"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "description": "host",
+          "required": ["op"],
+          "properties": {
+            "op": {
+              "const": "recheckFirmware"
+            },
+            "id": {
+              "type": "integer"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "description": "host",
+          "required": ["op"],
+          "properties": {
+            "op": {
+              "const": "revealRomFolder"
+            },
+            "id": {
+              "type": "integer"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "description": "host: the editor's menu",
+          "required": ["op"],
+          "properties": {
+            "op": {
+              "const": "openMenu"
+            },
+            "id": {
+              "type": "integer"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "description": "host: MIDI learn",
+          "required": ["op", "t", "pg"],
+          "properties": {
+            "op": {
+              "const": "learnStart"
+            },
+            "id": {
+              "type": "integer"
+            },
+            "t": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 5
+            },
+            "pg": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 7
+            },
+            "i": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 7
+            }
+          }
+        },
+        {
+          "type": "object",
+          "description": "host",
+          "required": ["op", "cc", "t", "pg"],
+          "properties": {
+            "op": {
+              "const": "learnAdd"
+            },
+            "id": {
+              "type": "integer"
+            },
+            "cc": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 127
+            },
+            "t": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 5
+            },
+            "pg": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 7
+            },
+            "i": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 7
+            }
+          }
+        },
+        {
+          "type": "object",
+          "description": "host",
+          "required": ["op"],
+          "properties": {
+            "op": {
+              "const": "learnCancel"
+            },
+            "id": {
+              "type": "integer"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "description": "host",
+          "required": ["op", "index"],
+          "properties": {
+            "op": {
+              "const": "learnRemove"
+            },
+            "id": {
+              "type": "integer"
+            },
+            "index": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 1000000
+            }
+          }
+        },
+        {
+          "type": "object",
+          "description": "host",
+          "required": ["op", "index"],
+          "properties": {
+            "op": {
+              "const": "learnInvert"
+            },
+            "id": {
+              "type": "integer"
+            },
+            "index": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 1000000
+            }
+          }
+        },
+        {
+          "type": "object",
+          "description": "host: the standalone's audio and MIDI devices",
+          "required": ["op"],
+          "properties": {
+            "op": {
+              "const": "audio"
+            },
+            "id": {
+              "type": "integer"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "description": "host",
+          "required": ["op"],
+          "properties": {
+            "op": {
+              "const": "audioSet"
+            },
+            "id": {
+              "type": "integer"
+            },
+            "set": {
+              "type": "string"
+            },
+            "do": {
+              "type": "string"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "description": "host",
+          "required": ["op"],
+          "properties": {
+            "op": {
+              "const": "audioMeter"
+            },
+            "id": {
+              "type": "integer"
+            },
+            "on": {
+              "type": ["boolean", "integer"]
+            }
+          }
+        }
+      ]
+    }
   }
 }

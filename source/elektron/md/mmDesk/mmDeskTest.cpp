@@ -346,12 +346,44 @@ void checkPublished()
 	check(bad == 0 && !g_published.empty(), "every published message is on the contract");
 }
 
-int main()
+
+// The command table is the vocabulary (P6): the contract's $defs/command must be what it generates.
+// mmDeskTest --write-schema rewrites it.
+void checkCommandSchema(const bool _write)
 {
+	std::ifstream in(MMDESK_SCHEMA);
+	const std::string text{std::istreambuf_iterator<char>(in), std::istreambuf_iterator<char>()};
+	auto root = ed::json::parse(text);
+	check(root.has_value(), "the contract schema loads");
+	if(!root)
+		return;
+	const auto generated = mmDesk::commandTable().schema();
+	auto* defs = root->find("$defs");
+	const auto* current = defs ? defs->find("command") : nullptr;
+	const bool same = current && ed::json::write(*current) == ed::json::write(generated);
+	if(_write && !same && defs)
+	{
+		defs->put("command", generated);
+		std::ofstream out(MMDESK_SCHEMA);
+		out << ed::json::write(*root, 2) << "\n";
+		std::printf("  wrote $defs/command (%zu commands)\n", mmDesk::commandTable().commands().size());
+		return;
+	}
+	check(same, "the schema's $defs/command is generated from the command table (mmDeskTest --write-schema)");
+}
+
+int main(const int _argc, char** _argv)
+{
+	if(_argc > 1 && std::string(_argv[1]) == "--write-schema")
+	{
+		checkCommandSchema(true);
+		return 0;
+	}
 	recvSession();
 	desk();
 	playingFromSteps();
 	checkPublished();
+	checkCommandSchema(false);
 	std::printf("%s (%d failures)\n", g_failures ? "FAIL" : "PASS", g_failures);
 	return g_failures ? 1 : 0;
 }

@@ -8,9 +8,11 @@ project(mmDesk)
 add_library(mmDesk STATIC)
 target_sources(mmDesk PRIVATE
 	mmDesk.cpp mmDesk.h
+	mmDeskMachine.cpp mmDeskMachine.h
+	mmDeskModel.cpp mmDeskModel.h
 	mmRecv.cpp mmRecv.h
 )
-target_link_libraries(mmDesk PUBLIC elektronData)
+target_link_libraries(mmDesk PUBLIC deskCore elektronData)
 target_include_directories(mmDesk PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/..)
 target_compile_features(mmDesk PUBLIC cxx_std_17)
 set_property(TARGET mmDesk PROPERTY FOLDER "Elektron")
