@@ -37,6 +37,10 @@ namespace mdJucePlugin
 	constexpr double g_deskTickMs = 32;			// the desk's own work, about 30 Hz
 	constexpr double g_lcdMs = 64;				// the machine's screen while it starts, about 15 Hz
 	constexpr double g_engineChoicesMs = 1000;	// whether the engines are available (a MIDI out appeared)
+	constexpr double g_followHostMs = 2000;		// in a DAW: the machine's global follows the host (followHost)
+
+	// P7: whether the machine follows the host's tempo and transport: in a DAW's plug-in only.
+	bool followsHost(AudioPluginAudioProcessor& _processor);
 
 	// Due on the session's first step, then once every _periodMs (_tick counts steps from 1).
 	constexpr bool due(const uint64_t _tick, const double _periodMs)
@@ -209,6 +213,7 @@ namespace mdJucePlugin
 			, m_defaultSetup(std::move(_defaultSetup))
 			, m_learn(pluginProcessorOf(_processor), std::move(_learn), [this](const Value& _m) { toPage(_m); })
 			, m_page(std::move(_page))
+			, m_followHost(followsHost(_processor))
 		{
 			m_engine = m_record->make(*this);
 			m_desk = std::make_unique<DeskT>(m_engine->adapter(m_record->profile), port());
@@ -263,6 +268,15 @@ namespace mdJucePlugin
 				publishChoices();
 			if(m_desk->pageSeen() && due(t, g_deskTickMs))
 				m_desk->tick();
+			// P7: in a DAW the host's tempo and transport reach the machine as MIDI clock, Start and Stop
+			// (synthLib::MidiClock); the machine follows them only with its global set for it. The model
+			// says how (hostFollowing), the adapter sets it without an undo step; ready machines only.
+			if(m_followHost && m_desk->lifecycle() == deskCore::Lifecycle::Ready && due(t, g_followHostMs))
+			{
+				Value m = Value::object();
+				m.set("op", "followHost");
+				m_desk->onPageMessage(m);
+			}
 		}
 
 		std::string status() const override
@@ -387,6 +401,9 @@ namespace mdJucePlugin
 		std::unique_ptr<DeskT> m_desk;
 		std::vector<deskCore::EngineChoice> m_choices;
 		uint64_t m_tick = 0;
+		// A plug-in in a host (a DAW): not the standalone app, which has no host transport, and not a
+		// processor without a plug-in wrapper (the tests).
+		const bool m_followHost;
 	};
 
 	// The machine's own screen while it starts, as the page's LCD (both models): every g_lcdMs, only

@@ -10,6 +10,12 @@
 
 namespace mdJucePlugin
 {
+	bool followsHost(AudioPluginAudioProcessor& _processor)
+	{
+		const juce::AudioProcessor& p = pluginProcessorOf(_processor);
+		return p.wrapperType != juce::AudioProcessor::wrapperType_Undefined && p.wrapperType != juce::AudioProcessor::wrapperType_Standalone;
+	}
+
 	pluginLib::Processor& pluginProcessorOf(AudioPluginAudioProcessor& _processor)
 	{
 		return _processor;

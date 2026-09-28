@@ -147,6 +147,10 @@ namespace mmDesk
 		static std::optional<elektronData::json::Value> clipboardDocument(const Clipboard&) { return {}; }
 		// The Monomachine Editor's command vocabulary.
 		static const Table& commands();
+		// P7: the active global as it must be for the machine to follow a DAW's tempo and transport (MIDI
+		// clock, Start, Stop): GLOBAL › MIDI SYNC CLOCK IN and TRANSPORT IN on (raw 0x05 and 0x06, x05[0..1];
+		// as booted both are off). Nothing when it already does. Pure (measured: mmDeskFirmwareTest hostclock).
+		static std::optional<elektronData::MmGlobal> hostFollowing(const elektronData::MmGlobal& _global);
 		// The OS 1.32B machine table and enumerations as "mm-desk/catalogue".
 		static elektronData::json::Value catalogue();
 		// What a lifecycle state means for the user (machine.lifecycleText; also why a gated command waits).

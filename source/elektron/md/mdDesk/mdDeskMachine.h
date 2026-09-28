@@ -174,6 +174,7 @@ namespace mdDesk
 		deskCore::Outcome cmdPlay(const Value&, const Documents&);
 		deskCore::Outcome cmdStop(const Value&, const Documents&);
 		deskCore::Outcome cmdMute(const Value&, const Documents&);
+		deskCore::Outcome cmdFollowHost(const Value&, const Documents&);
 
 		const Profile m_profile;
 		Port m_port;

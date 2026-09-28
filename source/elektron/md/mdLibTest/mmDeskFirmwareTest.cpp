@@ -23,6 +23,7 @@
 #include "deskWire/mmWire.h"
 
 #include <cmath>
+#include <cstdlib>
 #include <deque>
 
 using namespace mdFirmwareSession;
@@ -465,6 +466,23 @@ namespace
 		std::printf("  global %d: tempo %.1f\n", r.desk->currentGlobal(), r.readTelemetry().tempo / 24.0);
 		const int steps = clockedSteps(r, 100, 4);
 		std::printf("  as booted: %.2f steps/s with a 100 BPM clock (the clock: %.2f)\n", steps / 4.0, 100.0 / 60 * 4);
+		check(steps == 0, "as booted the machine ignores the host's Start and clock");
+		// in a DAW the session sends followHost: CLOCK IN on the active global, without an undo step
+		r.msg(R"({"op":"followHost"})");
+		std::printf("  followHost: %s\n", r.lastResult().find("note")->asString().c_str());
+		r.run(6000);
+		const auto g2 = r.desk->global(static_cast<uint8_t>(r.desk->currentGlobal()));
+		check(g2 && g2->x05[0] == 1 && g2->x05[1] == 1, "followHost sets GLOBAL › MIDI SYNC CLOCK IN and TRANSPORT IN, read back");
+		check(r.desk->coreState().history().size() == 0, "without an undo step");
+		// following the clock, the step rate scales with it (the pattern's own speed, 1X..3/2X, on top)
+		const double at100 = clockedSteps(r, 100, 4) / 4.0, at150 = clockedSteps(r, 150, 4) / 4.0;
+		std::printf("  after followHost: %.2f steps/s at a 100 BPM clock, %.2f at 150 (ratio %.2f)\n", at100, at150, at100 > 0 ? at150 / at100 : 0);
+		check(at100 > 1 && std::abs(at150 / at100 - 1.5) < 0.1, "the machine follows the host's Start and its clock (100 and 150 BPM)");
+		const int t0 = r.tel.step.load();
+		r.run(1000);
+		check(r.tel.step.load() == t0, "and stops on the host's Stop");
+		r.msg(R"({"op":"followHost"})");
+		check(r.lastResult().find("note")->asString().empty(), "a second followHost changes nothing");
 		if(!std::getenv("MM_SYNC_SEARCH"))
 			return;
 		// which undecoded global byte is the MIDI SYNC setting: flip each and look again
@@ -477,15 +495,20 @@ namespace
 		for(size_t i = 0x05; i < 0x12; ++i) cand.push_back(i);
 		for(size_t i = 0x30; i < 0x36; ++i) cand.push_back(i);
 		for(size_t i = 0xfd; i < 0x106; ++i) cand.push_back(i);
+		if(const char* only = std::getenv("MM_SYNC_BYTES")) { cand.clear(); for(const char* p = only; *p;) { cand.push_back(std::strtoul(p, const_cast<char**>(&p), 16)); if(*p == ',') ++p; } }
 		for(const auto i : cand)
 		{
 			auto raw = raw0;
 			raw[i] = raw0[i] ? 0 : 1;
+			if(const char* v = std::getenv("MM_SYNC_VAL")) raw[i] = static_cast<uint8_t>(std::strtoul(v, nullptr, 16));
+			if(const char* both = std::getenv("MM_SYNC_ALSO")) raw[std::strtoul(both, nullptr, 16)] = 1;
 			const auto gg = ed::mmGlobalFromRaw(raw, g->position);
 			r.msg(R"({"op":"set","kind":"global","doc":)" + ed::json::write(ed::mmGlobalToJson(*gg)) + "}");
 			r.run(4000);
-			const int n = clockedSteps(r, 100, 2);
-			std::printf("  byte %03zx %02x -> %02x: %.2f steps/s\n", i, raw0[i], raw[i], n / 2.0);
+			r.out.push_back(ed::mmSetActiveGlobal(g->position));
+			r.run(800);
+			const int n = clockedSteps(r, 100, 2), n150 = clockedSteps(r, 150, 2);
+			std::printf("  byte %03zx %02x -> %02x: %.2f steps/s at 100 BPM, %.2f at 150\n", i, raw0[i], raw[i], n / 2.0, n150 / 2.0);
 			r.msg(R"({"op":"set","kind":"global","doc":)" + ed::json::write(ed::mmGlobalToJson(*g)) + "}");
 			r.run(3000);
 		}
@@ -644,7 +667,7 @@ int main(const int _argc, char** _argv)
 			smoke(rom);
 		if(only.empty() || only == "trigkinds")
 			trigKinds(rom);
-		if(only == "hostclock")
+		if(only.empty() || only == "hostclock")
 			hostClock(rom);
 		if(only.empty() || only == "patterns")
 			patterns(rom);

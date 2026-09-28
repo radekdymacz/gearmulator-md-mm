@@ -1358,6 +1358,49 @@ namespace
 		m.onMidi = nullptr;
 	}
 
+	// P7: in a DAW the plug-in sends the host's transport and tempo as MIDI Start, clock and Stop; the
+	// session sends followHost so the machine's active global takes them (TEMPO IN external), without an
+	// undo step. Steps counted over 4 s of a 100 BPM clock, before and after.
+	void hostClock(const Bytes& _rom, const std::string& _romName)
+	{
+		std::puts("host clock");
+		Rig rig(_rom, _romName);
+		auto& desk = rig.desk();
+		rig.page(R"({"op":"ready"})");
+		rig.runUntil([&] { return desk.isReady() && desk.documents().global && desk.linkState().pattern; }, 8000);
+		rig.run(1500);
+		auto& m = rig.machine();
+		const auto clocked = [&](const double _bpm = 100)
+		{
+			m.send({0xfa});
+			int steps = 0, last = m.playhead();
+			const double every = 60000.0 / _bpm / 24;
+			for(double t = 0; t < 4000; t += every) { m.send({0xf8}); rig.run(every); const int p = m.playhead(); if(p != last) { ++steps; last = p; } }
+			m.send({0xfc});
+			rig.run(300);
+			return steps / 4.0;
+		};
+		const double want = 100.0 / 60 * 4;
+		const double before = clocked();
+		std::printf("  as booted: %.2f steps/s with a 100 BPM clock (%.2f), sync %02x\n", before, want, desk.documents().global->syncFlags);
+		const double before150 = clocked(150);
+		std::printf("  as booted at a 150 BPM clock: %.2f steps/s (ratio %.2f)\n", before150, before > 0 ? before150 / before : 0);
+		check(std::abs(before150 / before - 1.0) < 0.1 && std::abs(before - want) > 0.8, "as booted the machine plays its own tempo, not the host's");
+		rig.page(R"({"op":"followHost","id":1})");
+		std::printf("  followHost: %s\n", rig.lastResult() ? rig.lastResult()->find("note")->asString().c_str() : "(no result)");
+		rig.run(2000);
+		check(desk.documents().global && (desk.documents().global->syncFlags & ed::mdGlobalBits::g_tempoInExternal), "followHost sets TEMPO IN external, read back");
+		check(desk.coreState().history().size() == 0, "without an undo step");
+		const double after = clocked(), at150 = clocked(150);
+		std::printf("  after followHost: %.2f steps/s at a 100 BPM clock, %.2f at 150 (ratio %.2f)\n", after, at150, after > 0 ? at150 / after : 0);
+		check(after > 1 && std::abs(at150 / after - 1.5) < 0.1, "the machine follows the host's Start and its clock (100 and 150 BPM)");
+		const auto p0 = m.playhead();
+		rig.run(1000);
+		check(m.playhead() == p0, "and stops on the host's Stop");
+		rig.page(R"({"op":"followHost","id":2})");
+		check(rig.lastResult() && rig.lastResult()->find("note")->asString().empty(), "a second followHost changes nothing");
+	}
+
 int main(const int _argc, char** _argv)
 {
 	std::setvbuf(stdout, nullptr, _IOLBF, 0);
@@ -1391,6 +1434,13 @@ int main(const int _argc, char** _argv)
 			globalSettings(rig);
 			check(g_contract.loaded() && g_contract.bad() == 0, g_contract.summary());
 			std::printf("mdDeskFirmwareTest p4: %s (%d failure(s))\n", g_failures ? "FAIL" : "PASS", g_failures);
+			return g_failures ? 1 : 0;
+		}
+		if(mode == "hostclock")
+		{
+			hostClock(rom, _argv[1]);
+			check(g_contract.loaded() && g_contract.bad() == 0, g_contract.summary());
+			std::printf("mdDeskFirmwareTest hostclock: %s (%d failure(s))\n", g_failures ? "FAIL" : "PASS", g_failures);
 			return g_failures ? 1 : 0;
 		}
 		Rig rig(rom, _argv[1]);

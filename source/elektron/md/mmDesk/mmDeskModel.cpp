@@ -291,7 +291,18 @@ namespace mmDesk
 			{"modSet", Owner::Setup, Gate::None, -1, {{"doc", ArgType::Object}}, "the app modulators (mm-desk/modulators)"},
 			// ---- the machine ----
 			{"mute", Owner::Machine, Gate::Input, -1, {t6, {"on", ArgType::Bool, 0, 0, true}}, "a synth track's mute"},
+			{"followHost", Owner::Machine, Gate::Input, -1, {}, "in a DAW: the active GLOBAL follows the host's clock and transport"},
 		});
 		return table;
+	}
+
+	std::optional<ed::MmGlobal> MmModel::hostFollowing(const ed::MmGlobal& _global)
+	{
+		if(_global.x05[0] == 1 && _global.x05[1] == 1)
+			return std::nullopt;
+		auto g = _global;
+		g.x05[0] = 1;	// CLOCK IN
+		g.x05[1] = 1;	// TRANSPORT IN
+		return g;
 	}
 }

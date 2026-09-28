@@ -54,6 +54,10 @@ namespace mdDesk
 		static const std::vector<deskCore::Unsupported>& unsupported() { static const std::vector<deskCore::Unsupported> none; return none; }
 		// The Machinedrum Editor's command vocabulary (every op the page may send).
 		static const Table& commands();
+		// P7: the active global as it must be for the machine to follow a DAW's tempo and transport (the
+		// plug-in sends them as MIDI clock, Start, Stop): TEMPO IN external, CTRL IN on. Nothing when it
+		// already does. Pure (measured: mdP4ProbeFirmwareTest hostclock).
+		static std::optional<elektronData::MdGlobal> hostFollowing(const elektronData::MdGlobal& _global);
 		// The OS 1.63 machine table as a "md-desk/machines" document (the page gets it on ready).
 		static elektronData::json::Value catalogue();
 		// What a lifecycle state means for the user (machine.lifecycleText; also why a gated command waits).

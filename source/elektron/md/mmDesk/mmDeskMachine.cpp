@@ -405,7 +405,7 @@ namespace mmDesk
 			{"load", &MmMachine::cmdLoad}, {"select", &MmMachine::cmdSelect}, {"loadKit", &MmMachine::cmdLoadKit},
 			{"saveKit", &MmMachine::cmdSaveKit}, {"loadSong", &MmMachine::cmdLoadSong}, {"saveSong", &MmMachine::cmdSaveSong},
 			{"tempo", &MmMachine::cmdTempo}, {"play", &MmMachine::cmdPlay}, {"stop", &MmMachine::cmdStop},
-			{"mute", &MmMachine::cmdMute}};
+			{"mute", &MmMachine::cmdMute}, {"followHost", &MmMachine::cmdFollowHost}};
 		return map;
 	}
 
@@ -522,14 +522,37 @@ namespace mmDesk
 		return ok();
 	}
 
-	Outcome MmMachine::cmdPlay(const Value&, const Documents&)
+	Outcome MmMachine::cmdPlay(const Value&, const Documents& _view)
 	{
-		return pressKeys({Key::Play}) ? ok() : refuse("The panel is busy (SYSEX RECV); try again.");
+		if(!pressKeys({Key::Play}))
+			return refuse("The panel is busy (SYSEX RECV); try again.");
+		// P7: a machine that follows the host's clock (in a DAW) plays with the host's transport
+		const auto it = m_curGlobal < 0 ? _view.globals.end() : _view.globals.find(static_cast<uint8_t>(m_curGlobal & 7));
+		const bool follows = it != _view.globals.end() && it->second.x05[0] == 1;
+		return ok(follows ? "The machine follows the host: it plays when the host's transport runs." : "");
 	}
 
 	Outcome MmMachine::cmdStop(const Value&, const Documents&)
 	{
 		return pressKeys({Key::Stop}) ? ok() : refuse("The panel is busy (SYSEX RECV); try again.");
+	}
+
+	// P7, in a DAW: the machine follows the host's MIDI clock and Start/Stop (MmModel::hostFollowing). The
+	// global goes out as a dump on SYSEX RECV (made active with 0x56 once it is read back, onDump): the
+	// machine's own setting, not an edit, so no undo step.
+	Outcome MmMachine::cmdFollowHost(const Value&, const Documents& _view)
+	{
+		if(m_curGlobal < 0)
+			return ok();
+		const auto ref = Ref{Kind::Global, static_cast<uint8_t>(m_curGlobal & 7)};
+		const auto it = _view.globals.find(ref.slot);
+		if(it == _view.globals.end() || m_pushes[ref].slot.busy())
+			return ok();
+		const auto g = MmModel::hostFollowing(it->second);
+		if(!g)
+			return ok();
+		pushDump(ref, ed::encodeMmGlobal(*g));
+		return ok("The machine follows the host's tempo and transport (GLOBAL " + std::to_string(ref.slot + 1) + ": MIDI SYNC CLOCK IN, TRANSPORT IN)");
 	}
 
 	Outcome MmMachine::cmdMute(const Value& _m, const Documents&)
@@ -675,7 +698,14 @@ namespace mmDesk
 			}
 		}
 		if(action == deskCore::ReadBackAction::Settle)
+		{
 			settle(*doc, Source::Dump);
+			// A global is stored at once but applied only when its slot is made active, and not while the
+			// machine is on SYSEX RECV (P7, measured with MIDI SYNC's CLOCK IN, mmDeskFirmwareTest
+			// hostclock): the active slot's push ends with 0x56 once the panel is back on its main screen.
+			if(_r.kind == Kind::Global && static_cast<int>(_r.slot) == (m_curGlobal & 7))
+				m_activateGlobal = static_cast<int>(_r.slot);
+		}
 		else
 			observe(*doc, Source::Dump);
 		// Until memory shows it (or on a device without memory), the kit that plays starts as its slot.
@@ -854,6 +884,11 @@ namespace mmDesk
 			requestStatus();
 		}
 		pumpRecv(_now);
+		if(m_activateGlobal >= 0 && (m_profile.wire || m_recv.state() == RecvSession::State::Idle))
+		{
+			m_port.sendSysex(ed::mmSetActiveGlobal(static_cast<uint8_t>(m_activateGlobal)));
+			m_activateGlobal = -1;
+		}
 		pumpLoads(_now);
 		applyWorkingKit(_now, _view);
 		// A read-back that never came: give up on that push.

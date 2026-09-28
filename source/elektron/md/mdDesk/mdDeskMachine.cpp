@@ -434,7 +434,7 @@ namespace mdDesk
 			{"chainClear", &MdMachine::cmdChainClear}, {"globalSlot", &MdMachine::cmdGlobalSlot},
 			{"selectSong", &MdMachine::cmdSelectSong}, {"reloadSong", &MdMachine::cmdReloadSong},
 			{"sampleName", &MdMachine::cmdSampleName}, {"play", &MdMachine::cmdPlay}, {"stop", &MdMachine::cmdStop},
-			{"mute", &MdMachine::cmdMute}};
+			{"mute", &MdMachine::cmdMute}, {"followHost", &MdMachine::cmdFollowHost}};
 		return map;
 	}
 
@@ -774,14 +774,36 @@ namespace mdDesk
 			"names back, so the editor does not read them.");
 	}
 
-	Outcome MdMachine::cmdPlay(const Value&, const Documents&)
+	Outcome MdMachine::cmdPlay(const Value&, const Documents& _view)
 	{
-		return pressKey("play") ? ok() : refuse("Transport keys need the local emulated machine");
+		if(!pressKey("play"))
+			return refuse("Transport keys need the local emulated machine");
+		// P7: a machine that follows the host's clock (in a DAW) plays with the host's transport
+		const bool follows = _view.global && (_view.global->syncFlags & ed::mdGlobalBits::g_tempoInExternal);
+		return ok(follows ? "The machine follows the host: it plays when the host's transport runs." : "");
 	}
 
 	Outcome MdMachine::cmdStop(const Value&, const Documents&)
 	{
 		return pressKey("stop") ? ok() : refuse("Transport keys need the local emulated machine");
+	}
+
+	// P7, in a DAW: the machine follows the host's MIDI clock and Start/Stop (MdModel::hostFollowing). The
+	// global goes out as a dump (made active with 0x56, then read back): the machine's own setting, not an
+	// edit, so no undo step.
+	Outcome MdMachine::cmdFollowHost(const Value&, const Documents& _view)
+	{
+		const auto slot = m_session.state().globalSlot;
+		if(!slot || !_view.global || _view.global->position != *slot)
+			return ok();
+		const auto g = MdModel::hostFollowing(*_view.global);
+		if(!g)
+			return ok();
+		if(auto problems = m_session.pushGlobal(*g); !problems.empty())
+			return {problems, {}, {}};
+		if(m_port.sendSysex)
+			m_port.sendSysex(ed::mdSetActiveGlobal(*slot));
+		return ok("The machine follows the host's tempo and transport (GLOBAL " + std::to_string(*slot + 1) + ": TEMPO IN external)");
 	}
 
 	Outcome MdMachine::cmdMute(const Value& _m, const Documents&)

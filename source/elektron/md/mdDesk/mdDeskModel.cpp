@@ -293,10 +293,20 @@ namespace mdDesk
 			{"play", Owner::Machine, Gate::Input, -1, {}, ""},
 			{"stop", Owner::Machine, Gate::Input, -1, {}, ""},
 			{"mute", Owner::Machine, Gate::Input, -1, {t, on}, ""},
+			{"followHost", Owner::Machine, Gate::Input, -1, {}, "in a DAW: the active GLOBAL follows the host's clock and transport"},
 			// ---- the editor's setup ----
 			{"modSet", Owner::Setup, Gate::None, -1, {{"doc", ArgType::Object}}, "the app modulators (md-desk/modulators)"},
 			{"knobs", Owner::Setup, Gate::None, -1, {{"ccs", ArgType::Array}}, "the eight knob rows' CCs"},
 		});
 		return table;
+	}
+
+	std::optional<ed::MdGlobal> MdModel::hostFollowing(const ed::MdGlobal& _global)
+	{
+		auto g = _global;
+		g.syncFlags = static_cast<uint8_t>((g.syncFlags | ed::mdGlobalBits::g_tempoInExternal) & ~ed::mdGlobalBits::g_ctrlInOff);
+		if(g.syncFlags == _global.syncFlags)
+			return std::nullopt;
+		return g;
 	}
 }

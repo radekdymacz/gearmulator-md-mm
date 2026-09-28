@@ -12,7 +12,10 @@ namespace elektronData
 	// value. The raw payload is 264 bytes (MM-P1-RESULT §5).
 	//   0x00  auto track channel, base channel, channel span, multi trig channel,
 	//         multi map channel (0-based; the order follows the MIDI CHANNELS screen's values)
-	//   0x05  13  unknown (kept)
+	//   0x05   1  GLOBAL › MIDI SYNC CLOCK IN: 1 plays at the MIDI clock's tempo (P7, measured:
+	//              mmDeskFirmwareTest hostclock; kept in x05[0])
+	//   0x06   1  TRANSPORT IN: 1 takes MIDI Start/Stop (x05[1]); both 0 as booted
+	//   0x07  11  unknown (kept)
 	//   0x12   6  MIDI sequencer track channels (inferred)
 	//   0x18  24  MIDI sequencer CC numbers CL1-4, 6 x 4 (inferred)
 	//   0x30   6  unknown (kept)

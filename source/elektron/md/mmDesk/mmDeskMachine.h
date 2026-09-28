@@ -117,6 +117,7 @@ namespace mmDesk
 		deskCore::Outcome cmdPlay(const Value&, const Documents&);
 		deskCore::Outcome cmdStop(const Value&, const Documents&);
 		deskCore::Outcome cmdMute(const Value&, const Documents&);
+		deskCore::Outcome cmdFollowHost(const Value&, const Documents&);
 
 		const Profile m_profile;
 		Port m_port;
@@ -139,6 +140,7 @@ namespace mmDesk
 		Probe m_probe = Probe::Missing;
 		deskCore::WireFacts m_wire;
 		int m_curPattern = -1, m_curKit = -1, m_curSong = -1, m_curGlobal = -1, m_songMode = -1;
+		int m_activateGlobal = -1;	// the active global's slot to make active again (0x56) once RECV is left
 		int m_queuedPattern = -1;
 		int m_lastStep = -1;
 		bool m_lastPlaying = false;

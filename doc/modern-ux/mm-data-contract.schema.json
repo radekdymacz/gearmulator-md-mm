@@ -2001,6 +2001,27 @@
         },
         {
           "type": "object",
+          "description": "machine: in a DAW: the active GLOBAL follows the host's clock and transport",
+          "required": ["op"],
+          "properties": {
+            "op": {
+              "const": "followHost"
+            },
+            "id": {
+              "type": "integer"
+            },
+            "g": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "force": {
+              "type": ["boolean", "integer"]
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
           "description": "host: an entry of the engine map (machine.engines)",
           "required": ["op", "kind"],
           "properties": {
