@@ -37,18 +37,24 @@ const SHAPES = ["Triangle", "Saw", "Square", "Linear decay", "Exp decay", "Rando
 const S = { ws: "seq", sel: 0, lane: "FLTF", page: 0, viewAll: false, follow: false, step: -1, soloSet: new Set(), userMutes: new Set(),
 	songSel: 0, bank: 0, songZoom: "fit", smpSlot: "RAM1", chopTrack: null, capture: {}, keepFx: true, plate: "mk1" };
 S.ctl = { learn: false, learnT: null, sel: null, selT: null, addT: 1 };
+V = view();	/* the view before the first document (mdDeskModel.js) */
 
 /* Pointer capture can fail for a pointer the browser no longer tracks; the gesture still works. */
 function capture(el, e) { try { el.setPointerCapture(e.pointerId); } catch (_) { } }
 
 /* ===== Commands ===== */
 let gesture = 0;	// non-zero while a drag runs: one undo step
-function cmd(op, args = {}, key) {
+/* A command to the plug-in. optimistic: the [path, value] writes into the view the gesture shows at
+   once (mdDeskModel.js, Overlay); they are kept over every new derivation until its result. */
+function cmd(op, args = {}, key, optimistic) {
 	const msg = Object.assign({ op }, args);
 	if (gesture) msg.g = gesture;
-	Overlay.sent(Bridge.send(msg, { key, onResult: r => onResult(r) }));
+	let answered = false;	/* a host may answer at once, inside send */
+	const id = Bridge.send(msg, { key, onResult: r => { answered = true; onResult(r); } });
+	if (optimistic && optimistic.length) { if (!answered) Overlay.add(id, optimistic); V = view(); }
 	tx();
 }
+const DELETE = Overlay.DELETE;
 function onResult(r) {
 	/* its optimistic edits leave the overlay; a refused one is shown as the documents have it */
 	if (Overlay.answered(r.id) && !r.ok) scheduleRender();
@@ -68,24 +74,19 @@ function pidx(t, n, g) {
 function lk(t, p) { return t + ":" + p; }
 function setLock(t, p, s, v, quiet) {
 	const k = lk(t, p);
-	if (!V.locks.has(k)) {
-		if (V.locks.size >= 64) { if (!quiet) toast("All 64 locked parameters are in use. Clear one before you lock a new parameter."); return false; }
-		V.locks.set(k, new Map());
-	}
-	V.locks.get(k).set(s, v);
+	if (!V.locks.has(k) && V.locks.size >= 64) { if (!quiet) toast("All 64 locked parameters are in use. Clear one before you lock a new parameter."); return false; }
 	const i = pidx(t, p);
-	if (i >= 0) cmd("lock", { p: V.pat, t, i, s, v }, "lock:" + t + ":" + i + ":" + s);
+	if (i >= 0) cmd("lock", { p: V.pat, t, i, s, v }, "lock:" + t + ":" + i + ":" + s, [[["locks", k, s], v]]);
 	return true;
 }
 function eraseLock(t, p, s) {
-	const m = V.locks.get(lk(t, p));
-	if (m) { m.delete(s); if (!m.size) V.locks.delete(lk(t, p)); }
 	const i = pidx(t, p);
-	if (i >= 0) cmd("lock", { p: V.pat, t, i, s, v: null }, "lock:" + t + ":" + i + ":" + s);
+	if (i >= 0) cmd("lock", { p: V.pat, t, i, s, v: null }, "lock:" + t + ":" + i + ":" + s, [[["locks", lk(t, p), s], DELETE]]);
 }
 function stepLocked(t, s) { for (const [k, m] of V.locks) if (+k.split(":")[0] === t && m.has(s)) return true; return false; }
 function trackLocks(t) { return [...V.locks.keys()].filter(k => +k.split(":")[0] === t).map(k => k.split(":")[1]); }
-function clearStep(t, s) { for (const [k, m] of [...V.locks]) if (+k.split(":")[0] === t) { m.delete(s); if (!m.size) V.locks.delete(k); } }
+/* the view writes that clear a step's locks (a trig removed takes its locks with it) */
+function clearStep(t, s) { return [...V.locks].filter(([k, m]) => +k.split(":")[0] === t && m.has(s)).map(([k]) => [["locks", k, s], DELETE]); }
 function params(t) { const p = pages(V.tracks[t].m); return [...names(p.s), ...names(p.e), ...names(p.r)]; }
 function grp(t, p) { const x = V.tracks[t]; return p in x.syn ? x.syn : p in x.fx ? x.fx : x.rt; }
 function audible(t) { const any = V.tracks.some(x => x.solo); return any ? V.tracks[t].solo : !V.tracks[t].mute; }
@@ -107,33 +108,33 @@ function setKitState(st) {
 function syncUndoCounts() { const u = $("#undon"), r = $("#redon"); if (u) u.textContent = V.undoCount || ""; if (r) r.textContent = V.redoCount || ""; }
 /* Commands at the gesture (P6): a control that changed a kit value sends that value; nothing is
    compared with an earlier copy. */
-function sendParam(t, g, n) {
+function sendParam(t, g, n, v) {
 	const i = pidx(t, n, g); if (i < 0) return;
-	cmd("param", { k: V.kit, t, i, v: V.tracks[t][g][n] }, "param:" + t + ":" + i);
+	cmd("param", { k: V.kit, t, i, v }, "param:" + t + ":" + i, [[["tracks", t, g, n], v]]);
 }
 const LFO_PARAM = { SPD: 21, DEPTH: 22, SHMIX: 23 }, LFO_FIELD = { TRCK: "track", PARAM: "param", SHP1: "shape1", SHP2: "shape2", UPDTE: "update" };
-function sendLfo(t, n) {
-	const l = V.tracks[t].lfo;
-	if (n in LFO_PARAM) { cmd("param", { k: V.kit, t, i: LFO_PARAM[n], v: l[n] }, "param:" + t + ":" + LFO_PARAM[n]); return; }
+/* An LFO field's new view value v (TRCK a track, PARAM a parameter name, UPDTE FREE/TRIG/HOLD). */
+function sendLfo(t, n, v) {
+	const w = [[["tracks", t, "lfo", n], v]];
+	if (n in LFO_PARAM) { cmd("param", { k: V.kit, t, i: LFO_PARAM[n], v }, "param:" + t + ":" + LFO_PARAM[n], w); return; }
 	const field = LFO_FIELD[n]; if (!field) return;
-	const v = n === "TRCK" ? l.TRCK : n === "PARAM" ? slots(V.tracks[l.TRCK].m).indexOf(l.PARAM) : n === "UPDTE" ? UPDATES.indexOf(l.UPDTE) : l[n];
-	if (v >= 0) cmd("lfo", { k: V.kit, t, field, v });
+	const c = n === "PARAM" ? slots(V.tracks[V.tracks[t].lfo.TRCK].m).indexOf(v) : n === "UPDTE" ? UPDATES.indexOf(v) : v;
+	if (c >= 0) cmd("lfo", { k: V.kit, t, field, v: c }, undefined, w);
 }
-function sendGroup(t, kind) { cmd("group", { k: V.kit, t, kind, target: kind === "mute" ? V.tracks[t].muteGroup : V.tracks[t].trigGroup }); }
-function sendMfx(id, n) { const i = MFXD[id].k.indexOf(n); if (i >= 0) cmd("masterFx", { k: V.kit, fx: MFX[id], i, v: V.mfx[id].v[n] }, "mfx:" + id + ":" + i); }
-/* A curve editor's values after a handle moved: the handle may move any of them. */
-const ED_SENDS = {
-	synth: () => ["DEC", "RAMP", "RDEC"].forEach(n => n in V.tracks[S.sel].syn && sendParam(S.sel, "syn", n)),
-	fx: () => ["FLTF", "FLTW", "FLTQ", "EQF", "EQG"].forEach(n => n in V.tracks[S.sel].fx && sendParam(S.sel, "fx", n)),
-	eq: () => MFXD.eq.k.forEach(n => sendMfx("eq", n)),
-	dyn: () => MFXD.dyn.k.forEach(n => sendMfx("dyn", n)) };
-function sendEditor(name) { if (ED_SENDS[name]) ED_SENDS[name](); }
-/* The value a control (data-g, data-n, data-t, data-f) shows, sent. */
-function sendControl(el) {
+function sendGroup(t, kind, target) { cmd("group", { k: V.kit, t, kind, target }, undefined, [[["tracks", t, kind === "mute" ? "muteGroup" : "trigGroup"], target]]); }
+function sendMfx(id, n, v) { const i = MFXD[id].k.indexOf(n); if (i >= 0) cmd("masterFx", { k: V.kit, fx: MFX[id], i, v }, "mfx:" + id + ":" + i, [[["mfx", id, "v", n], v]]); }
+/* A curve editor's handle moved: its drag gives the values it moves ({name: value}); the editor's
+   "to" says where they go (a track's page, or a master effect). */
+function sendEditor(c, vals) {
+	const to = ED[c.dataset.ed].to?.(c); if (!to || !vals) return;
+	for (const [n, v] of Object.entries(vals)) to.f ? sendMfx(to.f, n, v) : sendParam(to.t, to.g, n, v);
+}
+/* A control (data-g, data-n, data-t, data-f) set to v, sent. */
+function sendControl(el, v) {
 	const d = el.dataset, t = d.t != null ? +d.t : S.sel;
-	if (d.g === "syn" || d.g === "fx" || d.g === "rt") sendParam(t, d.g, d.n);
-	else if (d.g === "lfo") sendLfo(t, d.n);
-	else if (d.g === "mfx") sendMfx(d.f, d.n);
+	if (d.g === "syn" || d.g === "fx" || d.g === "rt") sendParam(t, d.g, d.n, v);
+	else if (d.g === "lfo") sendLfo(t, d.n, v);
+	else if (d.g === "mfx") sendMfx(d.f, d.n, v);
 }
 function goPattern(p) {
 	p = (p + 128) % 128;
@@ -152,7 +153,12 @@ function ref(el) {
 	}
 }
 const getV = el => { const [o, n] = ref(el); return o[n]; };
-function setV(el, v) { const [o, n] = ref(el); v = clamp(Math.round(v), 0, n === "depth" ? 100 : 127); if (o[n] === v) return; o[n] = v; if (el.dataset.g === "src" || el.dataset.g === "link") sendMods(); else sendControl(el); syncControls(); redraw(); }
+function setV(el, v) {
+	const [o, n] = ref(el); v = clamp(Math.round(v), 0, n === "depth" ? 100 : 127); if (o[n] === v) return;
+	if (el.dataset.g === "src" || el.dataset.g === "link") { o[n] = v; sendMods(); }	/* the page's own modulator setup (Mods.doc), sent whole */
+	else sendControl(el, v);
+	syncControls(); redraw();
+}
 
 /* ===== Top bar ===== */
 let lastQueued = null;
@@ -178,12 +184,12 @@ function renderTop() {
 	document.body.classList.toggle("liverec", !!V.rec);
 	renderEngine();
 	syncTx();
-	const st = $("#status");
+	const st = $("#status"), life = lifeOf(V.lifecycle);
 	if (st) {
-		const msg = V.firmware === "booting" || V.firmware === "loading" ? "The machine is starting. Edits wait until it answers." : V.firmware === "unsupported" ? "This firmware is not Machinedrum OS 1.63. MD Desk needs OS 1.63." : !V.loaded ? "Reading the current pattern and kit from the machine…" : "";
+		const msg = life.status || (!V.loaded ? "Reading the current pattern and kit from the machine…" : "");
 		st.textContent = msg; st.hidden = !msg;
 	}
-	if (V.firmware === "missing") firstRun(); else if ($("#dlg").dataset.first === "1") { $("#dlg").hidden = true; $("#dlg").dataset.first = ""; }
+	if (V.lifecycle === "missing") firstRun(); else if ($("#dlg").dataset.first === "1") { $("#dlg").hidden = true; $("#dlg").dataset.first = ""; }
 }
 
 /* The engine label in the LCD shows the engine's real state (mockup v48), from the device:
@@ -191,16 +197,32 @@ function renderTop() {
    the engine's own label when it takes input (EMU OS 1.63, HW MIDI), ROM ERROR (not OS 1.63),
    HW CONNECT / HW NO MIDI for a machine on the MIDI wire. While it is not ready the LCD fields
    dim, REC and PLAY are disabled and edits wait (the desk refuses them).
-   P6: the label follows the one lifecycle value (machine.lifecycle) and, when ready, the
-   engine's capabilities (label, about); the menu is the engine map (machine.engines). */
-const ENG = { missing: ["NO ROM", "off"], loading: ["LOADING ROM", "blink"], booting: ["BOOTING OS", "blink"], animating: ["BOOTING OS", "blink"], unsupported: ["ROM ERROR", "off"],
-	hwConnecting: ["HW CONNECT", "blink", "Engine: HW MIDI, waiting for the Machinedrum to answer on the plug-in's MIDI in and out."],
-	hwLost: ["HW NO MIDI", "off", "Engine: HW MIDI, but the Machinedrum has not answered for a while. Check the MIDI cables and that its SYSEX is on."] };
+   P6: everything the page shows about the engine's state follows the one lifecycle value
+   (machine.lifecycle) through this one table and, when ready, the engine's capabilities
+   (label, about); the menu is the engine map (machine.engines).
+   label/led: the LCD's engine label; tip: its tooltip; status: the status line; runs: the
+   firmware runs (the Sampler works, the ROM screen says a new ROM needs a reopen); fwLcd: the
+   firmware's own LCD may show (mdDeskLive.js). */
+const STARTING = "The machine is starting. Edits wait until it answers.";
+const LIFE = {
+	missing: { label: "NO ROM", led: "off" },
+	loading: { label: "LOADING ROM", led: "blink", status: STARTING, fwLcd: true },
+	booting: { label: "BOOTING OS", led: "blink", status: STARTING, fwLcd: true },
+	animating: { label: "BOOTING OS", led: "blink", status: STARTING, fwLcd: true,
+		tip: "Engine: MD OS 1.63 answers, but its start-up animation ignores keys until it ends (shown in the LCD). Editing starts then." },
+	unsupported: { label: "ROM ERROR", led: "off", status: "This firmware is not Machinedrum OS 1.63. MD Desk needs OS 1.63." },
+	hwConnecting: { label: "HW CONNECT", led: "blink", status: STARTING, fwLcd: true,
+		tip: "Engine: HW MIDI, waiting for the Machinedrum to answer on the plug-in's MIDI in and out." },
+	hwLost: { label: "HW NO MIDI", led: "off", runs: true,
+		tip: "Engine: HW MIDI, but the Machinedrum has not answered for a while. Check the MIDI cables and that its SYSEX is on." },
+	ready: { label: "READY", led: "on", runs: true } };
+const lifeOf = l => LIFE[l] || LIFE.booting;
 /* the engine menu's own entries (not engines) */
 const ENGINE_ACTIONS = ["global", "audio", "rom"];
 function engineLabel() {
-	if (V.lifecycle === "ready") return [V.caps.label || "READY", "on", V.caps.about || ""];
-	return ENG[V.lifecycle] || ENG.booting;
+	const e = lifeOf(V.lifecycle);
+	if (V.lifecycle === "ready") return [V.caps.label || e.label, e.led, V.caps.about || ""];
+	return [e.label, e.led, e.tip || ""];
 }
 /* the menu's engine entries are the engine map's, in its order, before the menu's own */
 function renderEngineMenu(sel) {
@@ -384,8 +406,9 @@ const rowLen = r => r.len ?? (patLen(r.pat) - (r.ofs || 0));
 function songSteps() { let n = 0; V.song.forEach(r => { if (!r.type) n += rowLen(r) * r.rep; }); V.song.forEach((r, i) => { if (r.type === "loop" && r.count !== Infinity) { let seg = 0; for (let k = r.to; k < i; k++) { const q = V.song[k]; if (!q.type) seg += rowLen(q) * q.rep; } n += seg * (r.count - 1); } }); return n; }
 function songTime() { const st = songSteps(), sec = st * 60 / V.bpm / 4; return `${Math.floor(sec / 60)}:${String(Math.round(sec % 60)).padStart(2, "0")}`; }
 function loopOf(i) { return V.song.findIndex((r, k) => r.type === "loop" && k > i && r.to <= i); }
-function songCmd(op, args) { cmd(op, Object.assign({ s: V.songSlot }, args)); }
-function rowSet(i) { songCmd("rowSet", { i, row: rowToContract(V.song[i], patLen) }); }
+function songCmd(op, args, optimistic) { cmd(op, Object.assign({ s: V.songSlot }, args), undefined, optimistic); }
+/* row i becomes r (a view row): sent, and shown at once */
+function rowSet(i, r) { songCmd("rowSet", { i, row: rowToContract(r, patLen) }, [[["song", i], r]]); }
 function renderSong() {
 	const sel = V.song[S.songSel] || V.song[0];
 	const palette = `<div class="banks">${[..."ABCDEFGH"].map((b, k) => `<button class="bank ${k === S.bank ? "on" : ""}" data-bank="${k}"><i class="led"></i>${b}</button>`).join("")}</div>
@@ -431,7 +454,7 @@ function songAction(a) {
 	if (a === "loop") { const at = r.type === "end" ? i : i + 1; songCmd("rowInsert", { i: at, row: { kind: "loop", target: Math.max(0, at - 1), repeats: 1 } }); S.songSel = at; }
 }
 function songStep(k, d) {
-	const r = V.song[S.songSel];
+	const r = { ...V.song[S.songSel] };
 	if (k === "pat") r.pat = (r.pat + d + 128) % 128;
 	if (k === "rep") r.rep = Math.max(1, Math.min(64, r.rep + d));
 	if (k === "bpm") r.bpm = Math.max(30, Math.min(300, (r.bpm || Math.round(V.bpm)) + d));
@@ -440,7 +463,7 @@ function songStep(k, d) {
 	if (k === "to") r.to = Math.max(r.type === "jump" ? S.songSel + 1 : 0, Math.min(r.type === "loop" ? S.songSel - 1 : V.song.length - 1, r.to + d));
 	/* The firmware plays a loop repeats + 1 times and 0 is infinite, so a finite loop plays at least twice. */
 	if (k === "count") r.count = r.count === Infinity ? (d < 0 ? 64 : Infinity) : Math.max(2, Math.min(64, r.count + d));
-	rowSet(S.songSel); render();
+	rowSet(S.songSel, r); render();
 }
 let drag2 = null;
 function dropTarget(el) { const c = el?.closest?.(".scell"); if (!c) return null; const i = +c.dataset.i, endI = V.song.length - 1; return i < endI ? { i, mode: "onto" } : { i: endI, mode: "append" }; }
@@ -458,7 +481,7 @@ document.addEventListener("drop", e => {
 	if (!drag2) return; const t = dropTarget(e.target); if (!t) return; e.preventDefault();
 	if (drag2.kind === "pat") {
 		if (V.song.length >= 256) { toast("A song holds 256 rows."); }
-		else if (t.mode === "onto" && !V.song[t.i].type) { V.song[t.i].pat = drag2.v; rowSet(t.i); S.songSel = t.i; }
+		else if (t.mode === "onto" && !V.song[t.i].type) { rowSet(t.i, { ...V.song[t.i], pat: drag2.v }); S.songSel = t.i; }
 		else { const at = t.mode === "onto" ? t.i : V.song.length - 1; songCmd("rowInsert", { i: at, row: rowToContract({ pat: drag2.v, rep: 1 }, patLen) }); S.songSel = at; }
 	}
 	else { const from = drag2.v; let to = t.mode === "onto" ? t.i : V.song.length - 2; if (from !== to && V.song[from].type !== "end") { songCmd("rowMove", { from, to }); S.songSel = to; } }
@@ -485,10 +508,13 @@ function syncControls() {
 	$$("#main [data-show]").forEach(el => el.textContent = V.tracks[+el.dataset.show].rt.VOL ?? "—");
 }
 
-/* ===== Curve editors (the mockup's; a handle edits the view, the gesture sends the editor's values: ED[..].sends) ===== */
+/* ===== Curve editors (the mockup's): a handle's drag gives the values it moves, the editor's "to"
+   where they go (sendEditor). ===== */
+const toTrack = g => () => ({ t: S.sel, g }), toMfx = f => () => ({ f });
 const cssv = v => getComputedStyle(document.documentElement).getPropertyValue(v).trim();
 const ED = {
 	synth: {
+		to: toTrack("syn"),
 		draw(g, W, H) {
 			const tr = V.tracks[S.sel], s = tr.syn, Y = v => H - 12 - v * (H - 30); grid(g, W, H);
 			const k = .03 + (s.DEC ?? 64) / 127 * .35; line(g, W, x => { const t = x / W; return Y(t < .01 ? t / .01 : Math.exp(-(t - .01) / k)); }, cssv("--ink"), 2.2);
@@ -497,16 +523,17 @@ const ED = {
 		},
 		handles(W, H) {
 			const s = V.tracks[S.sel].syn, Y = v => H - 12 - v * (H - 30), out = []; const k = .03 + (s.DEC ?? 64) / 127 * .35, td = .01 + k * Math.log(4);
-			if ("DEC" in s) out.push({ x: td * W, y: Y(.25), k: "DEC", c: cssv("--ink"), drag: (x) => { s.DEC = clamp(Math.round(((x / W - .01) / Math.log(4) - .03) / .35 * 127)); } });
+			if ("DEC" in s) out.push({ x: td * W, y: Y(.25), k: "DEC", c: cssv("--ink"), drag: (x) => ({ DEC: clamp(Math.round(((x / W - .01) / Math.log(4) - .03) / .35 * 127)) }) });
 			if ("RAMP" in s) {
 				const r = s.RAMP / 127, rd = .01 + (s.RDEC ?? 0) / 127 * .3;
-				out.push({ x: 6, y: Y(.25 + r * .65), k: "RAMP", c: cssv("--ink"), drag: (x, y) => { s.RAMP = clamp(Math.round(((H - 12 - y) / (H - 30) - .25) / .65 * 127)); } });
-				if ("RDEC" in s) out.push({ x: rd * W, y: Y(.25 + r * .65 / Math.E), k: "RDEC", c: cssv("--ink"), drag: (x) => { s.RDEC = clamp(Math.round((x / W - .01) / .3 * 127)); } });
+				out.push({ x: 6, y: Y(.25 + r * .65), k: "RAMP", c: cssv("--ink"), drag: (x, y) => ({ RAMP: clamp(Math.round(((H - 12 - y) / (H - 30) - .25) / .65 * 127)) }) });
+				if ("RDEC" in s) out.push({ x: rd * W, y: Y(.25 + r * .65 / Math.E), k: "RDEC", c: cssv("--ink"), drag: (x) => ({ RDEC: clamp(Math.round((x / W - .01) / .3 * 127)) }) });
 			}
 			return out;
 		}
 	},
 	fx: {
+		to: toTrack("fx"),
 		resp(u) {
 			const f = V.tracks[S.sel].fx, hp = f.FLTF / 127, lp = Math.min(1, hp + f.FLTW / 127), q = f.FLTQ / 127; let d = 0;
 			if (u < hp) d -= Math.pow((hp - u) * 7, 2); if (u > lp) d -= Math.pow((u - lp) * 7, 2);
@@ -515,9 +542,9 @@ const ED = {
 		draw(g, W, H) { grid(g, W, H); line(g, W, x => clamp(H / 2 - this.resp(x / W) * (H / 4), 6, H - 6), cssv("--ink"), 2.2); label(g, "filter + EQ"); },
 		handles(W, H) {
 			const f = V.tracks[S.sel].fx, hp = f.FLTF / 127, lp = Math.min(1, hp + f.FLTW / 127), yy = u => clamp(H / 2 - this.resp(u) * (H / 4), 6, H - 6);
-			return [{ x: Math.max(6, hp * W), y: yy(hp), k: "FLTF", c: cssv("--ink"), drag: (x, y) => { f.FLTF = clamp(Math.round(x / W * 127)); f.FLTQ = clamp(Math.round((H / 2 - y) / (H / 2) * 127)); } },
-			{ x: Math.min(W - 6, lp * W), y: yy(lp), k: "FLTW", c: cssv("--ink"), drag: (x) => { f.FLTW = clamp(Math.round((x / W - f.FLTF / 127) * 127)); } },
-			{ x: f.EQF / 127 * W, y: yy(f.EQF / 127), k: "EQ", c: cssv("--ink"), drag: (x, y) => { f.EQF = clamp(Math.round(x / W * 127)); f.EQG = clamp(Math.round(64 + (H / 2 - y) / (H / 4) / .9 * 64)); } }];
+			return [{ x: Math.max(6, hp * W), y: yy(hp), k: "FLTF", c: cssv("--ink"), drag: (x, y) => ({ FLTF: clamp(Math.round(x / W * 127)), FLTQ: clamp(Math.round((H / 2 - y) / (H / 2) * 127)) }) },
+			{ x: Math.min(W - 6, lp * W), y: yy(lp), k: "FLTW", c: cssv("--ink"), drag: (x) => ({ FLTW: clamp(Math.round((x / W - f.FLTF / 127) * 127)) }) },
+			{ x: f.EQF / 127 * W, y: yy(f.EQF / 127), k: "EQ", c: cssv("--ink"), drag: (x, y) => ({ EQF: clamp(Math.round(x / W * 127)), EQG: clamp(Math.round(64 + (H / 2 - y) / (H / 4) / .9 * 64)) }) }];
 		}
 	},
 	lfo: {
@@ -528,27 +555,30 @@ const ED = {
 		}, handles: () => []
 	},
 	eq: {
+		to: toMfx("eq"),
 		resp(u) { const v = V.mfx.eq.v; return (v.LG - 64) / 64 / (1 + Math.exp((u - v.LF / 127) * 18)) + (v.HG - 64) / 64 / (1 + Math.exp(-(u - v.HF / 127) * 18)) + (v.PG - 64) / 64 * Math.exp(-Math.pow((u - v.PF / 127) * (4 + v.PQ / 8), 2)); },
 		draw(g, W, H) { grid(g, W, H); line(g, W, x => H / 2 - this.resp(x / W) * H / 3, cssv("--ink"), 2); label(g, "master EQ"); },
 		handles(W, H) {
 			const v = V.mfx.eq.v, yy = u => H / 2 - this.resp(u) * H / 3, gy = y => clamp(Math.round(64 + (H / 2 - y) / (H / 3) * 64));
-			return [["LF", "LG"], ["PF", "PG"], ["HF", "HG"]].map(([fk, gk]) => ({ x: v[fk] / 127 * W, y: yy(v[fk] / 127), k: fk, c: cssv("--ink"), drag: (x, y) => { v[fk] = clamp(Math.round(x / W * 127)); v[gk] = gy(y); } }));
+			return [["LF", "LG"], ["PF", "PG"], ["HF", "HG"]].map(([fk, gk]) => ({ x: v[fk] / 127 * W, y: yy(v[fk] / 127), k: fk, c: cssv("--ink"), drag: (x, y) => ({ [fk]: clamp(Math.round(x / W * 127)), [gk]: gy(y) }) }));
 		}
 	},
 	dyn: {
+		to: toMfx("dyn"),
 		out(i) { const v = V.mfx.dyn.v, th = v.TRHD / 127, r = 1 + v.RTIO / 127 * 9, kn = Math.max(.001, v.KNEE / 127 * .25); return i <= th - kn ? i : i >= th + kn ? th + (i - th) / r : i + ((1 / r - 1) * Math.pow(i - th + kn, 2)) / (4 * kn); },
 		draw(g, W, H) {
 			grid(g, W, H); g.strokeStyle = inkA(0.45); g.setLineDash([3, 3]); g.beginPath(); g.moveTo(0, H - 6); g.lineTo(W, 6); g.stroke(); g.setLineDash([]);
 			line(g, W, x => H - 6 - this.out(x / W) * (H - 12), cssv("--ink"), 2); label(g, "in → out");
 		},
 		handles(W, H) {
-			const v = V.mfx.dyn.v, th = v.TRHD / 127; return [{ x: th * W, y: H - 6 - this.out(th) * (H - 12), k: "TRHD", c: cssv("--ink"), drag: (x) => { v.TRHD = clamp(Math.round(x / W * 127)); } },
-			{ x: W - 6, y: H - 6 - this.out(1) * (H - 12), k: "RTIO", c: cssv("--ink"), drag: (x, y) => { const o = (H - 6 - y) / (H - 12), th = v.TRHD / 127; const r = (1 - th) / Math.max(.01, o - th); v.RTIO = clamp(Math.round((r - 1) / 9 * 127)); } }];
+			const v = V.mfx.dyn.v, th = v.TRHD / 127; return [{ x: th * W, y: H - 6 - this.out(th) * (H - 12), k: "TRHD", c: cssv("--ink"), drag: (x) => ({ TRHD: clamp(Math.round(x / W * 127)) }) },
+			{ x: W - 6, y: H - 6 - this.out(1) * (H - 12), k: "RTIO", c: cssv("--ink"), drag: (x, y) => { const o = (H - 6 - y) / (H - 12), th = v.TRHD / 127; const r = (1 - th) / Math.max(.01, o - th); return { RTIO: clamp(Math.round((r - 1) / 9 * 127)) }; } }];
 		}
 	}
 };
 function inkA(a) { const h = cssv("--ink").replace("#", ""); const n = parseInt(h.length === 3 ? h.split("").map(c => c + c).join("") : h, 16); return `rgba(${n >> 16 & 255},${n >> 8 & 255},${n & 255},${a})`; }
 ED.route = {
+	to: toTrack("rt"),
 	g() { return 1 + (V.tracks[S.sel].rt.DIST || 0) / 127 * 8; }, sh(x, g) { return Math.tanh(x * g) / Math.tanh(g); },
 	draw(g, W, H) {
 		const r = V.tracks[S.sel].rt, G = this.g(); grid(g, W, H);
@@ -559,8 +589,8 @@ ED.route = {
 	},
 	handles(W, H) {
 		const r = V.tracks[S.sel].rt, self = this; const G = this.g(), u = .4, yD = H / 2 - this.sh(u, G) * (H / 2 - 8);
-		return [{ x: r.PAN / 127 * W, y: H - 10 - r.VOL / 127 * (H - 24), k: "PAN · VOL", c: cssv("--ink"), drag: (x, y) => { r.PAN = clamp(Math.round(x / W * 127)); r.VOL = clamp(Math.round((H - 10 - y) / (H - 24) * 127)); } },
-		{ x: (u + 1) / 2 * W, y: yD, k: "DIST", c: cssv("--ink"), drag: (x, y) => { const want = (H / 2 - y) / (H / 2 - 8); let best = 0, bd = 9; for (let d = 0; d <= 127; d++) { const o = self.sh(u, 1 + d / 127 * 8); if (Math.abs(o - want) < bd) { bd = Math.abs(o - want); best = d; } } r.DIST = best; } }];
+		return [{ x: r.PAN / 127 * W, y: H - 10 - r.VOL / 127 * (H - 24), k: "PAN · VOL", c: cssv("--ink"), drag: (x, y) => ({ PAN: clamp(Math.round(x / W * 127)), VOL: clamp(Math.round((H - 10 - y) / (H - 24) * 127)) }) },
+		{ x: (u + 1) / 2 * W, y: yD, k: "DIST", c: cssv("--ink"), drag: (x, y) => { const want = (H / 2 - y) / (H / 2 - 8); let best = 0, bd = 9; for (let d = 0; d <= 127; d++) { const o = self.sh(u, 1 + d / 127 * 8); if (Math.abs(o - want) < bd) { bd = Math.abs(o - want); best = d; } } return { DIST: best }; } }];
 	}
 };
 function grid(g, W, H) { g.strokeStyle = inkA(0.13); g.lineWidth = 1; for (let i = 1; i < 4; i++) { g.beginPath(); g.moveTo(0, Math.round(H * i / 4) + .5); g.lineTo(W, Math.round(H * i / 4) + .5); g.stroke(); } for (let i = 1; i < 8; i++) { g.beginPath(); g.moveTo(Math.round(W * i / 8) + .5, 0); g.lineTo(Math.round(W * i / 8) + .5, H); g.stroke(); } }
@@ -604,6 +634,7 @@ function capture(n, bins) {
 }
 function wave(g, W, H, data, from, to, color, dim) { const n = data.length, mid = H / 2 + 6; for (let x = 0; x < W; x++) { const v = data[Math.floor(x / W * n)] || 0, h = v * (H / 2 - 14); const u = x / W; const inside = u >= Math.min(from, to) && u <= Math.max(from, to); g.fillStyle = inside ? color : dim; g.fillRect(x, mid - h, 1, Math.max(1, h * 2)); } }
 ED.sample = {
+	to: toTrack("syn"),
 	draw(g, W, H) {
 		const tr = V.tracks[S.sel], y = tr.syn, n = +(tr.m.match(/RAM-P(\d)/) || [])[1]; grid(g, W, H);
 		const data = n ? capture(n, W) : Float32Array.from({ length: W }, (_, i) => Math.exp(-i / W * 5) * (.5 + .5 * hash(i)));
@@ -613,25 +644,27 @@ ED.sample = {
 			[...m.entries()].sort((p, q) => p[1] - q[1]).forEach(([st, v]) => { const x = Math.round(v / 127 * W) + .5; g.beginPath(); g.moveTo(x, 22); g.lineTo(x, H - 4); g.stroke(); g.fillText(st + 1, x + 2, H - 6); }); }
 		label(g, (n ? `RAM-P${n} · plays RAM-R${n}` : "ROM sample") + (rev ? " · reversed" : ""));
 	},
-	handles(W, H) { const y = V.tracks[S.sel].syn; return [{ x: y.STRT / 127 * W, y: H - 14, k: "STRT", c: cssv("--ink"), drag: x => { y.STRT = clamp(Math.round(x / W * 127)); } }, { x: y.END / 127 * W, y: 30, k: "END", c: cssv("--ink"), drag: x => { y.END = clamp(Math.round(x / W * 127)); } }]; }
+	handles(W, H) { const y = V.tracks[S.sel].syn; return [{ x: y.STRT / 127 * W, y: H - 14, k: "STRT", c: cssv("--ink"), drag: x => ({ STRT: clamp(Math.round(x / W * 127)) }) }, { x: y.END / 127 * W, y: 30, k: "END", c: cssv("--ink"), drag: x => ({ END: clamp(Math.round(x / W * 127)) }) }]; }
 };
 ED.rec = {
+	to: toTrack("syn"),
 	draw(g, W, H) {
 		const tr = V.tracks[S.sel], n = +tr.m.slice(5), R = tr.syn, data = capture(n, W), len = R.LEN / 127; grid(g, W, H);
 		if (data) wave(g, W, H, data, 0, 1, cssv("--ink"), "transparent"); g.fillStyle = inkA(0.3); g.fillRect(len * W, 0, W - len * W, H);
 		g.fillStyle = cssv("--ink"); g.font = "10px Silkscreen, monospace"; for (let k = 0; k <= 32; k += 4) { const x = k / 32 * W; g.fillText(k ? k + "" : "", x + 2, H - 4); }
 		label(g, `capture ${Math.round(R.LEN / 4)} steps · RATE ${R.RATE}`);
 	},
-	handles(W, H) { const R = V.tracks[S.sel].syn; return [{ x: R.LEN / 127 * W, y: H / 2, k: "LEN", c: cssv("--ink"), drag: x => { R.LEN = clamp(Math.round(x / W * 127)); } }]; }
+	handles(W, H) { const R = V.tracks[S.sel].syn; return [{ x: R.LEN / 127 * W, y: H / 2, k: "LEN", c: cssv("--ink"), drag: x => ({ LEN: clamp(Math.round(x / W * 127)) }) }]; }
 };
 ED.slot = {
+	to: c => { const p = playTrack(+c.dataset.n); return p < 0 ? null : { t: p, g: "syn" }; },
 	draw(g, W, H, c) {
 		const n = +c.dataset.n, p = playTrack(n), data = capture(n, W); grid(g, W, H); if (!data) { label(g, "Empty"); return; }
 		const y = p >= 0 ? V.tracks[p].syn : { STRT: 0, END: 127 }; const a = y.STRT / 127, b = y.END / 127; wave(g, W, H, data, a, b, cssv("--ink"), inkA(0.26));
 		const m = p >= 0 && V.locks.get(lk(p, "STRT")); if (m) { g.strokeStyle = cssv("--ink"); [...m.values()].forEach(v => { const x = Math.round(v / 127 * W) + .5; g.beginPath(); g.moveTo(x, 20); g.lineTo(x, H - 2); g.stroke(); }); }
 		label(g, `RAM-R${n} capture (example waveform)`);
 	},
-	handles(W, H, c) { const p = playTrack(+c.dataset.n); if (p < 0) return []; const y = V.tracks[p].syn; return [{ x: y.STRT / 127 * W, y: H - 12, k: "STRT", c: cssv("--ink"), drag: x => { y.STRT = clamp(Math.round(x / W * 127)); } }, { x: y.END / 127 * W, y: 26, k: "END", c: cssv("--ink"), drag: x => { y.END = clamp(Math.round(x / W * 127)); } }]; }
+	handles(W, H, c) { const p = playTrack(+c.dataset.n); if (p < 0) return []; const y = V.tracks[p].syn; return [{ x: y.STRT / 127 * W, y: H - 12, k: "STRT", c: cssv("--ink"), drag: x => ({ STRT: clamp(Math.round(x / W * 127)) }) }, { x: y.END / 127 * W, y: 26, k: "END", c: cssv("--ink"), drag: x => ({ END: clamp(Math.round(x / W * 127)) }) }]; }
 };
 function chopCls(p, s) { const t = V.tracks[p], c = ["cp"]; if (s % 4 === 0) c.push("q"); if (s % 16 === 0 && s) c.push("gap"); if (t.trigs[s]) c.push("on"); if (V.playing && s === S.step) c.push("ph"); return c.join(" "); }
 function chopInner(p, s) {
@@ -696,7 +729,7 @@ function renderSampler() {
 	S.viewAll = false; const id = S.smpSlot; let h = "";
 	if (id.startsWith("RAM")) {
 		const n = +id.slice(3), r = recTrack(n), ps = players(n), st = slotState(n);
-		if (V.firmware !== "ready") { h = `<div class="smpempty"><div class="edblank big">${V.firmware === "unsupported" ? "This firmware is not MD OS 1.63 UW: the Sampler needs the UW's ROM and RAM machines." : "The machine is not running yet. The Sampler works with the UW machine once it is ready."}</div></div>`; }
+		if (!lifeOf(V.lifecycle).runs) { h = `<div class="smpempty"><div class="edblank big">${V.lifecycle === "unsupported" ? "This firmware is not MD OS 1.63 UW: the Sampler needs the UW's ROM and RAM machines." : "The machine is not running yet. The Sampler works with the UW machine once it is ready."}</div></div>`; }
 		else if (r < 0) h = setupCard(n);
 		else {
 			if (S.chopTrack == null || !ps.includes(S.chopTrack)) S.chopTrack = ps[0] ?? null; const p = S.chopTrack, R = V.tracks[r];
@@ -755,8 +788,7 @@ function drawPicker() {
 function prevText(m) { return `<b>${m}</b> ${nameOf(m)} · ${names(pages(m).s).join(" ")}`; }
 function setMachine(v, t = S.sel) {
 	const c = Cat.byName[v]; if (!c) return;
-	const tr = V.tracks[t]; tr.m = v; tr.fam = famOf(v); tr.name = nameOf(v);
-	cmd("machine", { k: V.kit, t, model: c.model, keepFx: S.keepFx });
+	cmd("machine", { k: V.kit, t, model: c.model, keepFx: S.keepFx }, undefined, [[["tracks", t, "m"], v], [["tracks", t, "fam"], famOf(v)], [["tracks", t, "name"], nameOf(v)]]);
 	if (!params(t).includes(S.lane)) S.lane = params(t).includes("FLTF") ? "FLTF" : params(t)[0] || "FLTF";
 	closePicker(); render();
 }
@@ -802,15 +834,17 @@ document.addEventListener("keydown", e => {
 	const opts = [...document.querySelectorAll("#kpop .kopt")], i = opts.indexOf(document.activeElement), d = { ArrowDown: 1, ArrowRight: 1, ArrowUp: -1, ArrowLeft: -1 }[e.key]; if (d && opts.length) { e.preventDefault(); opts[(i + d + opts.length) % opts.length].focus(); }
 });
 ED.echo = {
+	to: toMfx("echo"),
 	draw(g, W, H) {
 		const v = V.mfx.echo.v, dt = Math.max(1, v.TIME) / 256, fb = v.FB / 64; grid(g, W, H);
 		g.strokeStyle = inkA(.35); g.setLineDash([3, 3]); g.beginPath(); g.moveTo(0, H - 8 - (H - 22)); g.lineTo(W, H - 8 - (H - 22)); g.stroke(); g.setLineDash([]);
 		let a = 1, x = 0, k = 0; g.fillStyle = cssv("--ink"); while (x <= 1 && k < 40) { const h = Math.min(1.25, a) * (H - 22); g.fillRect(Math.round(x * W), H - 8 - h, k ? 4 : 6, h); x += dt; a *= fb; k++; if (a < .02) break; }
 		label(g, fb > 1 ? "echo taps · feedback grows!" : "echo taps · 2 bars");
 	},
-	handles(W, H) { const v = V.mfx.echo.v, dt = Math.max(1, v.TIME) / 256, a2 = Math.min(1.25, v.FB / 64); return [{ x: dt * W + 2, y: H - 8 - a2 * (H - 22), k: "TIME · FB", c: cssv("--ink"), drag: (x, y) => { v.TIME = clamp(Math.round(x / W * 256)); v.FB = clamp(Math.round((H - 8 - y) / (H - 22) * 64)); } }]; }
+	handles(W, H) { const v = V.mfx.echo.v, dt = Math.max(1, v.TIME) / 256, a2 = Math.min(1.25, v.FB / 64); return [{ x: dt * W + 2, y: H - 8 - a2 * (H - 22), k: "TIME · FB", c: cssv("--ink"), drag: (x, y) => ({ TIME: clamp(Math.round(x / W * 256)), FB: clamp(Math.round((H - 8 - y) / (H - 22) * 64)) }) }]; }
 };
 ED.gate = {
+	to: toMfx("gate"),
 	draw(g, W, H) {
 		const v = V.mfx.gate.v, pre = v.PRED / 127 * .15, dec = .5 + v.DEC / 127 * 2.5, gate = v.GATE >= 127 ? 9 : v.GATE / 127 * 3, span = 3.3; grid(g, W, H);
 		line(g, W, x => { const t = x / W * span; if (t < pre) return H - 8; if (t > pre + gate) return H - 8; return H - 8 - (H - 22) * Math.exp(-(t - pre) / (dec / 4)); }, cssv("--ink"), 2.2);
@@ -819,9 +853,9 @@ ED.gate = {
 	},
 	handles(W, H) {
 		const v = V.mfx.gate.v, span = 3.3, pre = v.PRED / 127 * .15, dec = .5 + v.DEC / 127 * 2.5, gate = v.GATE >= 127 ? 3.2 : v.GATE / 127 * 3;
-		return [{ x: pre / span * W + 6, y: H - 10, k: "PRED", c: cssv("--ink"), drag: x => { v.PRED = clamp(Math.round((x / W * span) / .15 * 127)); } },
-		{ x: (pre + dec / 4) / span * W, y: H - 8 - (H - 22) / Math.E, k: "DEC", c: cssv("--ink"), drag: x => { v.DEC = clamp(Math.round(((x / W * span - pre) * 4 - .5) / 2.5 * 127)); } },
-		{ x: Math.min(W - 6, (pre + gate) / span * W), y: 14, k: "GATE", c: cssv("--ink"), drag: x => { const t = x / W * span - pre; v.GATE = t >= 3.05 ? 127 : clamp(Math.round(t / 3 * 127)); } }];
+		return [{ x: pre / span * W + 6, y: H - 10, k: "PRED", c: cssv("--ink"), drag: x => ({ PRED: clamp(Math.round((x / W * span) / .15 * 127)) }) },
+		{ x: (pre + dec / 4) / span * W, y: H - 8 - (H - 22) / Math.E, k: "DEC", c: cssv("--ink"), drag: x => ({ DEC: clamp(Math.round(((x / W * span - pre) * 4 - .5) / 2.5 * 127)) }) },
+		{ x: Math.min(W - 6, (pre + gate) / span * W), y: 14, k: "GATE", c: cssv("--ink"), drag: x => { const t = x / W * span - pre; return { GATE: t >= 3.05 ? 127 : clamp(Math.round(t / 3 * 127)) }; } }];
 	}
 };
 
@@ -927,14 +961,14 @@ function secAction(kind) {
 /* The firmware screen. Opened by itself while no MD OS 1.63 runs (it cannot be closed then), or
    from LOAD ROM in the engine menu (then it has a Close key while the firmware runs). */
 function firstRun(manual) {
-	const d = $("#dlg"), mode = manual && V.firmware !== "missing" ? "manual" : "1";
+	const d = $("#dlg"), mode = manual && V.lifecycle !== "missing" ? "manual" : "1";
 	if (d.dataset.first === mode && !d.hidden) return;
 	const m = machineState().desk || {};
 	d.innerHTML = `<div class="dlgbox first" role="dialog" aria-modal="true" aria-label="Firmware needed">
  <div class="lcdbig">MACHINEDRUM FIRMWARE NEEDED</div>
  <p>Machinedrum Editor runs the real Machinedrum operating system. Elektron's firmware cannot be shipped with the app, so you add the one from your own machine.</p>
  <ol><li>Dump the <b>OS 1.63</b> flash image from your Machinedrum (8 MiB, <span class="mono">.bin</span>).</li><li>Put it in the ROM folder${m.romFolder ? `: <span class="mono">${m.romFolder}</span>` : ""}.</li><li>Press <b>Check again</b>. Machinedrum Editor checks its size and version and keeps it on this computer only.</li></ol>
- <div class="btnrow"><button class="cream" data-romfolder="1">Show the ROM folder</button><button data-recheck="1">Check again</button><span class="note">UW, MKII and MKI units all use the same OS 1.63 image.${V.firmware === "ready" ? " OS 1.63 runs now. A new ROM is used after you reopen the plug-in." : ""}</span></div></div>`;
+ <div class="btnrow"><button class="cream" data-romfolder="1">Show the ROM folder</button><button data-recheck="1">Check again</button><span class="note">UW, MKII and MKI units all use the same OS 1.63 image.${lifeOf(V.lifecycle).runs ? " OS 1.63 runs now. A new ROM is used after you reopen the plug-in." : ""}</span></div></div>`;
 	if (mode === "manual") d.querySelector(".btnrow").insertAdjacentHTML("beforeend", `<button data-firstclose="1">Close</button>`);
 	d.hidden = false; d.dataset.first = mode;
 }
@@ -942,18 +976,22 @@ function firstRun(manual) {
 /* LCD line 2 editing */
 let l2drag = null;
 function l2step(k, d, alt) {
-	if (k === "len") { if (alt) cmd("length", { p: V.pat, v: ((V.length - 1 + d + V.len) % V.len) + 1 }); else { const o = [16, 32, 48, 64]; V.len = o[(o.indexOf(V.len) + d + 4) % 4]; cmd("totalLength", { p: V.pat, v: V.len }); } }
+	if (k === "len") { if (alt) cmd("length", { p: V.pat, v: ((V.length - 1 + d + V.len) % V.len) + 1 }); else { const o = [16, 32, 48, 64], v = o[(o.indexOf(V.len) + d + 4) % 4]; cmd("totalLength", { p: V.pat, v }, undefined, [[["len"], v]]); } }
 	if (k === "song") { cmd("selectSong", { s: (V.songSlot + d + 32) % 32 }); return; }
-	if (k === "mult") { const o = ["1X", "2X", "3/4X", "3/2X"]; V.mult = o[(o.indexOf(V.mult) + d + 4) % 4]; cmd("speed", { p: V.pat, v: V.mult }); }
-	if (k === "mode") { V.mode = V.mode === "EXTENDED" ? "CLASSIC" : "EXTENDED"; cmd("extended", { on: V.mode === "EXTENDED" }); }
-	if (k === "swing") { V.swing = clamp(V.swing + d, 50, 80); cmd("swing", { p: V.pat, v: V.swing }, "swing"); }
-	if (k === "accAmt") { V.accAmt = clamp(V.accAmt + d, 0, 15); cmd("accentAmount", { p: V.pat, v: V.accAmt }, "accAmt"); }
+	if (k === "mult") { const o = ["1X", "2X", "3/4X", "3/2X"], v = o[(o.indexOf(V.mult) + d + 4) % 4]; cmd("speed", { p: V.pat, v }, undefined, [[["mult"], v]]); }
+	if (k === "mode") { const v = V.mode === "EXTENDED" ? "CLASSIC" : "EXTENDED"; cmd("extended", { on: v === "EXTENDED" }, undefined, [[["mode"], v]]); }
+	if (k === "swing" || k === "accAmt") l2set(k, V[k] + d);
 	render();
 }
-document.addEventListener("pointerdown", e => { const el = e.target.closest(".l2.ed"); if (!el) return; const k = el.dataset.l2; if (k === "swing" || k === "accAmt") { l2drag = { k, y: e.clientY, v: S[k], moved: false }; gesture = Bridge.gesture(); capture(el, e); e.preventDefault(); } });
+/* swing (50-80 %) or accent (0-15) set to v */
+function l2set(k, v) {
+	v = k === "swing" ? clamp(v, 50, 80) : clamp(v, 0, 15); if (v === V[k]) return;
+	cmd(k === "swing" ? "swing" : "accentAmount", { p: V.pat, v }, k, [[[k], v]]);
+}
+document.addEventListener("pointerdown", e => { const el = e.target.closest(".l2.ed"); if (!el) return; const k = el.dataset.l2; if (k === "swing" || k === "accAmt") { l2drag = { k, y: e.clientY, v: V[k], moved: false }; gesture = Bridge.gesture(); capture(el, e); e.preventDefault(); } });
 document.addEventListener("pointermove", e => {
-	if (!l2drag) return; const d = Math.round((l2drag.y - e.clientY) / (l2drag.k === "swing" ? 3 : 6)); if (d) l2drag.moved = true; const v = l2drag.k === "swing" ? clamp(l2drag.v + d, 50, 80) : clamp(l2drag.v + d, 0, 15);
-	if (v !== S[l2drag.k]) { S[l2drag.k] = v; cmd(l2drag.k === "swing" ? "swing" : "accentAmount", { p: V.pat, v }, l2drag.k); renderSub(); }
+	if (!l2drag) return; const d = Math.round((l2drag.y - e.clientY) / (l2drag.k === "swing" ? 3 : 6)); if (d) l2drag.moved = true;
+	const before = V[l2drag.k]; l2set(l2drag.k, l2drag.v + d); if (V[l2drag.k] !== before) renderSub();
 });
 document.addEventListener("pointerup", e => { if (!l2drag) return; const k = l2drag; l2drag = null; gesture = 0; if (!k.moved) l2step(k.k, 1); });
 document.addEventListener("click", e => { const el = e.target.closest(".l2.ed"); if (!el) return; const k = el.dataset.l2; if (k !== "swing" && k !== "accAmt") l2step(k, e.shiftKey ? -1 : 1, e.altKey); });
@@ -968,7 +1006,7 @@ main.addEventListener("pointerdown", e => {
 	const lb = e.target.closest(".lb"); if (lb) { laneDraw = { erase: e.altKey, touched: new Set() }; gesture = Bridge.gesture(); capture($("#lane"), e); laneAt(e); e.preventDefault(); }
 });
 main.addEventListener("pointermove", e => {
-	if (active) { const r = active.c.getBoundingClientRect(), h = ED[active.c.dataset.ed].handles(r.width, r.height, active.c).find(h => h.k === active.k); if (h) { h.drag(clamp(e.clientX - r.left, 0, r.width), clamp(e.clientY - r.top, 0, r.height)); sendEditor(active.c.dataset.ed); syncControls(); redraw(); } return; }
+	if (active) { const r = active.c.getBoundingClientRect(), h = ED[active.c.dataset.ed].handles(r.width, r.height, active.c).find(h => h.k === active.k); if (h) { sendEditor(active.c, h.drag(clamp(e.clientX - r.left, 0, r.width), clamp(e.clientY - r.top, 0, r.height))); syncControls(); redraw(); } return; }
 	/* Mockup v60: a value box follows the axis that moved more (sideways or up/down), one value a pixel. */
 	if (drag) { const fine = e.shiftKey ? .25 : 1, dx = e.clientX - drag.x, dy = drag.y - e.clientY; const d = drag.vert ? dy * 127 / 132 : (Math.abs(dx) >= Math.abs(dy) ? dx : dy); setV(drag.el, drag.v + d * fine); return; }
 	if (laneDraw) { laneAt(e); return; }
@@ -982,7 +1020,7 @@ main.addEventListener("wheel", e => { const el = e.target.closest(".pc[data-g],.
 main.addEventListener("dblclick", e => { const el = e.target.closest(".pc[data-g],.fader[data-g]"); if (el) setV(el, el.dataset.n === "VOL" ? 100 : 64); });
 main.addEventListener("keydown", e => { const el = e.target.closest("[data-g]"); if (!el) return; const d = { ArrowRight: 1, ArrowUp: 1, ArrowLeft: -1, ArrowDown: -1, PageUp: 10, PageDown: -10 }[e.key]; if (d == null) return; e.preventDefault(); setV(el, getV(el) + d * (e.shiftKey ? 10 : 1)); });
 
-function setMute(i, on) { V.tracks[i].mute = on; cmd("mute", { t: i, on }); }
+function setMute(i, on) { cmd("mute", { t: i, on }, undefined, [[["tracks", i, "mute"], on]]); }
 /* Solo is the page's idea: it mutes every other track on the machine, and un-solo restores the
    mutes the user had set (S.userMutes). */
 function applySolo() {
@@ -994,7 +1032,7 @@ document.addEventListener("click", e => {
 	if (mu || so) {
 		const i = +(mu || so).dataset[mu ? "mute" : "solo"], t = V.tracks[i];
 		if (mu) { t.mute ? S.userMutes.delete(i) : S.userMutes.add(i); setMute(i, !t.mute); }
-		else { S.soloSet.has(i) ? S.soloSet.delete(i) : S.soloSet.add(i); t.solo = S.soloSet.has(i); applySolo(); }
+		else { S.soloSet.has(i) ? S.soloSet.delete(i) : S.soloSet.add(i); V = view(); applySolo(); }	/* solo is UI state the view reads */
 		refreshAudible(); return;
 	}
 	const st = e.target.closest(".st"); if (st) {
@@ -1002,28 +1040,33 @@ document.addEventListener("click", e => {
 		if (!V.loaded) { toast("The pattern is not loaded yet."); return; }
 		/* Live recording: a click plays the track like its TRIG key; the machine records it. */
 		if (V.rec) { cmd("recTrig", { t: i }); if (i !== S.sel) select(i); return; }
-		if (e.shiftKey && t.trigs[s]) { t.acc.has(s) ? t.acc.delete(s) : t.acc.add(s); cmd("accent", { p: V.pat, t: i, s }); }
-		else if (e.altKey && t.trigs[s]) { t.slide.has(s) ? t.slide.delete(s) : t.slide.add(s); cmd("slide", { p: V.pat, t: i, s }); }
-		else { t.trigs[s] = !t.trigs[s]; if (!t.trigs[s]) { t.acc.delete(s); t.slide.delete(s); clearStep(i, s); renderTop(); } cmd("trig", { p: V.pat, t: i, s, on: t.trigs[s] }); }
+		if (e.shiftKey && t.trigs[s]) cmd("accent", { p: V.pat, t: i, s }, undefined, [[["tracks", i, "acc", s], !t.acc.has(s)]]);
+		else if (e.altKey && t.trigs[s]) cmd("slide", { p: V.pat, t: i, s }, undefined, [[["tracks", i, "slide", s], !t.slide.has(s)]]);
+		else {
+			const on = !t.trigs[s], w = [[["tracks", i, "trigs", s], on]];
+			if (!on) w.push([["tracks", i, "acc", s], false], [["tracks", i, "slide", s], false], ...clearStep(i, s));
+			cmd("trig", { p: V.pat, t: i, s, on }, undefined, w);
+			if (!on) renderTop();
+		}
 		refreshRow(i); if (i !== S.sel) select(i); else renderLane(); return;
 	}
 	const sel = e.target.closest("[data-sel]"); if (sel && !e.target.closest("button,select,.pc,.fader")) { select(+sel.dataset.sel); return; }
 	const sg = e.target.closest(".seg[data-set] button"); if (sg) {
 		const k = sg.parentElement.dataset.set, v = sg.dataset.v;
-		if (k === "upd") { V.tracks[S.sel].lfo.UPDTE = v; sendLfo(S.sel, "UPDTE"); sg.parentElement.querySelectorAll("button").forEach(b => b.setAttribute("aria-pressed", b === sg)); redraw(); }
+		if (k === "upd") { sendLfo(S.sel, "UPDTE", v); sg.parentElement.querySelectorAll("button").forEach(b => b.setAttribute("aria-pressed", b === sg)); redraw(); }
 		else if (k === "srcrate" && S.ws === "control") { const s = Mods.source(S.ctl.sel.slice(4)); if (s) { s.rate = v; sendMods(); render(); } }
 		else if (k === "lcurve" && S.ws === "control") { const l = Mods.doc.links[+sg.parentElement.dataset.li]; if (l) { l.curve = v; sendMods(); render(); } }
-		else if (k === "loopkind" && S.ws === "song") { const r = V.song[S.songSel]; r.type = v; if (v === "halt") r.to = S.songSel; if (v === "loop") { r.count = r.count || 2; r.to = Math.min(r.to ?? 0, Math.max(0, S.songSel - 1)); } if (v === "jump") r.to = Math.max(r.to ?? 0, S.songSel + 1); rowSet(S.songSel); render(); }
+		else if (k === "loopkind" && S.ws === "song") { const r = { ...V.song[S.songSel], type: v }; if (v === "halt") r.to = S.songSel; if (v === "loop") { r.count = r.count || 2; r.to = Math.min(r.to ?? 0, Math.max(0, S.songSel - 1)); } if (v === "jump") r.to = Math.max(r.to ?? 0, S.songSel + 1); rowSet(S.songSel, r); render(); }
 		return;
 	}
 	const ch = e.target.closest("[data-lane]"); if (ch) { S.lane = ch.dataset.lane; render(); return; }
-	if (e.target.closest("#clearLane")) { const i = pidx(S.sel, S.lane); V.locks.delete(lk(S.sel, S.lane)); if (i >= 0) cmd("clearLane", { p: V.pat, t: S.sel, i }); renderTop(); refreshRow(S.sel); renderLane(); return; }
-	const sh = e.target.closest("[data-shape]"); if (sh) { V.tracks[S.sel].lfo[sh.dataset.slot] = +sh.dataset.shape; sendLfo(S.sel, sh.dataset.slot); $$(`[data-slot="${sh.dataset.slot}"]`).forEach(b => b.setAttribute("aria-pressed", b === sh)); redraw(); return; }
+	if (e.target.closest("#clearLane")) { const i = pidx(S.sel, S.lane); if (i >= 0) cmd("clearLane", { p: V.pat, t: S.sel, i }, undefined, [[["locks", lk(S.sel, S.lane)], DELETE]]); renderTop(); refreshRow(S.sel); renderLane(); return; }
+	const sh = e.target.closest("[data-shape]"); if (sh) { sendLfo(S.sel, sh.dataset.slot, +sh.dataset.shape); $$(`[data-slot="${sh.dataset.slot}"]`).forEach(b => b.setAttribute("aria-pressed", b === sh)); redraw(); return; }
 	const cp = e.target.closest(".cp"); if (cp) {
 		if (cp.dataset.moved) { cp.dataset.moved = ""; return; } const p = +$("#chop").dataset.p, s = +cp.dataset.cp, t = V.tracks[p];
 		if (t.trigs[s] && e.altKey) { const st = V.locks.get(lk(p, "STRT"))?.get(s) ?? t.syn.STRT, en = V.locks.get(lk(p, "END"))?.get(s); if (en != null && en < st) eraseLock(p, "END", s); else setLock(p, "END", s, Math.max(0, st - 8)); }
 		else if (t.trigs[s] && e.shiftKey) { const r = V.locks.get(lk(p, "RTRG"))?.get(s); if (r) { eraseLock(p, "RTRG", s); eraseLock(p, "RTIM", s); } else { setLock(p, "RTRG", s, 20); setLock(p, "RTIM", s, 10); } }
-		else { t.trigs[s] = !t.trigs[s]; cmd("trig", { p: V.pat, t: p, s, on: t.trigs[s] }); if (!t.trigs[s]) clearStep(p, s); else setLock(p, "STRT", s, t.syn.STRT); }
+		else { const on = !t.trigs[s]; cmd("trig", { p: V.pat, t: p, s, on }, undefined, [[["tracks", p, "trigs", s], on], ...(on ? [] : clearStep(p, s))]); if (on) setLock(p, "STRT", s, t.syn.STRT); }
 		renderTop(); cp.className = chopCls(p, s); cp.innerHTML = chopInner(p, s); redraw(); return;
 	}
 	const stt = e.target.closest("[data-setupt]"); if (stt) {
@@ -1036,15 +1079,15 @@ document.addEventListener("click", e => {
 		const n = sgo.dataset.setupgo, [r, p] = setupTracks(), noTrig = !V.tracks[r].trigs.slice(0, V.len).some(Boolean);
 		gesture = Bridge.gesture();	/* one undo step */
 		setMachine("RAM-R" + n, r); setMachine("RAM-P" + n, p);
-		if (!noTrig && S.smpOnce) { cmd("clearSteps", { p: V.pat, t: r, from: 0, to: V.len }); V.tracks[r].trigs.fill(false); }
-		if (noTrig || S.smpOnce) { V.tracks[r].trigs[0] = true; cmd("trig", { p: V.pat, t: r, s: 0, on: true }); }
+		if (!noTrig && S.smpOnce) cmd("clearSteps", { p: V.pat, t: r, from: 0, to: V.len }, undefined, V.tracks[r].trigs.map((on, s) => on && [["tracks", r, "trigs", s], false]).filter(Boolean));
+		if (noTrig || S.smpOnce) cmd("trig", { p: V.pat, t: r, s: 0, on: true }, undefined, [[["tracks", r, "trigs", 0], true]]);
 		gesture = 0;
 		toast(`Sampling ready: track ${r + 1} records (RAM-R${n}), track ${p + 1} plays (RAM-P${n}). Undo takes it back.`); render(); return;
 	}
 	const son = e.target.closest("[data-smponce]"); if (son) { S.smpOnce = son.dataset.smponce === "1"; render(); return; }
 	const rs = e.target.closest("[data-recsrc]"); if (rs) {
 		const t = +rs.dataset.t, src = SOURCES.find(([id]) => id === rs.dataset.recsrc);
-		if (src) { Object.assign(V.tracks[t].syn, src[2]); Object.keys(src[2]).forEach(n => sendParam(t, "syn", n)); render(); }
+		if (src) { Object.entries(src[2]).forEach(([n, v]) => sendParam(t, "syn", n, v)); render(); }
 		return;
 	}
 	const rn = e.target.closest("[data-rename]"); if (rn) {
@@ -1068,12 +1111,12 @@ document.addEventListener("click", e => {
 		const rw = e.target.closest(".scell:not(.empty),.db[data-row]"); if (rw) { S.songSel = +rw.dataset.row; render(); return; }
 		const ra = e.target.closest("[data-rowact]"); if (ra) { songAction(ra.dataset.rowact); return; }
 		const stp = e.target.closest("[data-step]"); if (stp) { songStep(stp.dataset.step, +stp.dataset.d * (e.shiftKey ? 10 : 1)); return; }
-		const mk = e.target.closest("[data-rowmute]"); if (mk) { const r = V.song[S.songSel], k = +mk.dataset.rowmute; r.mutes = r.mutes || []; r.mutes = r.mutes.includes(k) ? r.mutes.filter(x => x !== k) : [...r.mutes, k]; rowSet(S.songSel); render(); return; }
-		if (e.target.closest("[data-bpmkeep]")) { const r = V.song[S.songSel]; r.bpm = r.bpm ? undefined : Math.round(V.bpm); rowSet(S.songSel); render(); return; }
-		if (e.target.closest("[data-fullpat]")) { const r = V.song[S.songSel]; delete r.ofs; delete r.len; rowSet(S.songSel); render(); return; }
-		if (e.target.closest("[data-inf]")) { const r = V.song[S.songSel]; r.count = r.count === Infinity ? 2 : Infinity; rowSet(S.songSel); render(); return; }
+		const mk = e.target.closest("[data-rowmute]"); if (mk) { const r = V.song[S.songSel], k = +mk.dataset.rowmute, m = r.mutes || []; rowSet(S.songSel, { ...r, mutes: m.includes(k) ? m.filter(x => x !== k) : [...m, k] }); render(); return; }
+		if (e.target.closest("[data-bpmkeep]")) { const r = V.song[S.songSel]; rowSet(S.songSel, { ...r, bpm: r.bpm ? undefined : Math.round(V.bpm) }); render(); return; }
+		if (e.target.closest("[data-fullpat]")) { const { ofs, len, ...r } = V.song[S.songSel]; rowSet(S.songSel, r); render(); return; }
+		if (e.target.closest("[data-inf]")) { const r = V.song[S.songSel]; rowSet(S.songSel, { ...r, count: r.count === Infinity ? 2 : Infinity }); render(); return; }
 	}
-	const ok = e.target.closest("[data-out]"); if (ok) { const t = V.tracks[+ok.dataset.out]; t.out = OUTS[(OUTS.indexOf(t.out || "MAIN") + 1) % OUTS.length]; cmd("route", { t: +ok.dataset.out, out: t.out }); render(); return; }
+	const ok = e.target.closest("[data-out]"); if (ok) { const i = +ok.dataset.out, out = OUTS[(OUTS.indexOf(V.tracks[i].out || "MAIN") + 1) % OUTS.length]; cmd("route", { t: i, out }, undefined, [[["tracks", i, "out"], out]]); render(); return; }
 	const dl = e.target.closest("[data-dlg]"); if (dl) { const d = $("#dlg"), f = d._btns[+dl.dataset.dlg][2]; d.hidden = true; f(); return; }
 	if (e.target.closest("[data-romfolder]")) { cmd("revealRomFolder"); return; }
 	if (e.target.closest("[data-recheck]")) { cmd("recheckFirmware"); return; }
@@ -1116,10 +1159,10 @@ document.addEventListener("click", e => {
 document.addEventListener("change", e => {
 	const id = e.target.id, v = e.target.value, tr = V.tracks[S.sel], l = tr.lfo;
 	if (id === "mt" || id === "ct") { S.ctl.addT = +v; if (id === "ct" && S.ctl.selT != null) S.ctl.selT = +v; render(); return; }
-	if (id === "lfoT") { l.TRCK = +v; if (!params(+v).includes(l.PARAM)) l.PARAM = params(+v)[0]; sendLfo(S.sel, "TRCK"); sendLfo(S.sel, "PARAM"); renderSound(); enhanceSelects($("#main")); }
-	if (id === "lfoP") { l.PARAM = v; sendLfo(S.sel, "PARAM"); }
-	if (id === "mg") { tr.muteGroup = v === "" ? null : +v; sendGroup(S.sel, "mute"); }
-	if (id === "tg") { tr.trigGroup = v === "" ? null : +v; sendGroup(S.sel, "trig"); }
+	if (id === "lfoT") { const p = params(+v).includes(l.PARAM) ? l.PARAM : params(+v)[0]; sendLfo(S.sel, "TRCK", +v); sendLfo(S.sel, "PARAM", p); renderSound(); enhanceSelects($("#main")); }
+	if (id === "lfoP") sendLfo(S.sel, "PARAM", v);
+	if (id === "mg") sendGroup(S.sel, "mute", v === "" ? null : +v);
+	if (id === "tg") sendGroup(S.sel, "trig", v === "" ? null : +v);
 });
 
 function select(i) { S.sel = i; if (!params(i).includes(S.lane)) S.lane = params(i).includes("FLTF") ? "FLTF" : params(i)[0] || "FLTF"; render(); }
@@ -1132,7 +1175,7 @@ function refreshAudible() {
 /* BPM: drag up or down, arrows -> global tempo (0x61) */
 (() => {
 	const b = $("#bpm"); let d = null;
-	const set = v => { V.bpm = clamp(Math.round(v * 10) / 10, 30, 300); renderTop(); cmd("tempo", { bpm: V.bpm }, "tempo"); };
+	const set = v => { const bpm = clamp(Math.round(v * 10) / 10, 30, 300); cmd("tempo", { bpm }, "tempo", [[["bpm"], bpm]]); renderTop(); };
 	b.addEventListener("pointerdown", e => { d = { y: e.clientY, v: V.bpm }; gesture = Bridge.gesture(); capture(b, e); });
 	b.addEventListener("pointermove", e => { if (!d) return; const v = d.v + (d.y - e.clientY) * (e.shiftKey ? .1 : .5); if (Math.abs(v - V.bpm) >= .05) set(v); });
 	b.addEventListener("pointerup", () => { d = null; gesture = 0; });
@@ -1144,9 +1187,9 @@ let lastStep = -1;
 function onTelemetry(m) {
 	Tele.step = m.step; Tele.pattern = m.pattern; Tele.valid = m.valid;
 	Docs.telemetry = m;
-	/* the transport is derived from the telemetry (transportOf): set in place, the rest of V stays */
-	const wasPlaying = V.playing, wasRec = V.rec;
-	Object.assign(Overlay.raw(V), transportOf(Docs));
+	/* the transport is derived from the telemetry document (transportOf): a new view when it changed */
+	const wasPlaying = V.playing, wasRec = V.rec, tp = transportOf(Docs);
+	if (tp.playing !== wasPlaying || tp.rec !== wasRec) { Base = deriveView(Docs, S); V = view(); }
 	if (V.rec !== wasRec) { renderTop(); if (V.rec) toast("Live recording: click a track's steps to play it, move a value to lock it."); }
 	S.step = V.playing ? m.step : -1;
 	if (wasPlaying !== V.playing) { renderTop(); $$(".ph").forEach(c => c.classList.remove("ph")); setPos(); phLast = -1; movePH(); }
@@ -1191,8 +1234,8 @@ function setPos() { const p = $("#pos"); if (p) p.textContent = V.playing && S.s
 /* ===== Documents in: re-derive, then render (in place while a gesture runs) ===== */
 let pendingRender = false, renderRaf = 0;
 let Base = null;	// the view last derived from the documents (V is it with the overlay)
-/* A machine document often changes only the view's status (TX, round trip, undo counts): that is
-   set in place; any other change of the derived view renders. */
+/* A machine document often changes only the view's status (TX, round trip, undo counts): then the
+   view is the same value with the new status (no render); any other change of the derived view renders. */
 const STATUS = ["tx", "roundTrip", "canUndo", "canRedo", "undoCount", "redoCount"];
 function sameValue(a, b) {
 	if (a === b) return true;
@@ -1221,10 +1264,14 @@ Bridge.onMessage(m => {
 	switch (m.type) {
 	case "catalogue": setCatalogue(m.doc); scheduleRender(); break;
 	case "doc": {
-		const d = m.doc, slot = d.slot;
-		if (m.kind === "pattern") Docs.patterns[slot] = d; else if (m.kind === "kit") Docs.kits[slot] = d; else if (m.kind === "song") Docs.songs[slot] = d; else if (m.kind === "global") Docs.global = d;
+		/* the message names the slot (m.slot; the document's own slot field where it has one) and where the
+		   document came from (m.source); the working kit is the kit that plays, "kit" the stored slots */
+		const d = m.doc, slot = m.slot != null ? m.slot : d.slot;
+		if (m.kind === "workingKit") Docs.workingKit = { slot, source: m.source, pending: !!m.pending, doc: d };
+		else if (m.kind === "pattern") Docs.patterns[slot] = d; else if (m.kind === "kit") Docs.kits[slot] = d; else if (m.kind === "song") Docs.songs[slot] = d; else if (m.kind === "global") Docs.global = d;
+		if (m.kind !== "workingKit" && m.source) Docs.sources[m.kind + ":" + slot] = m.source;
 		/* Background loads of other patterns only matter to the song palette. */
-		const relevant = (m.kind === "pattern" && (slot === currentPatternSlot() || S.ws === "song")) || (m.kind === "kit" && slot === currentKitSlot()) || m.kind === "global" || (m.kind === "song" && slot === currentSongSlot());
+		const relevant = (m.kind === "pattern" && (slot === currentPatternSlot() || S.ws === "song")) || ((m.kind === "kit" || m.kind === "workingKit") && slot === currentKitSlot()) || m.kind === "global" || (m.kind === "song" && slot === currentSongSlot());
 		if (relevant) scheduleRender();
 		break;
 	}
@@ -1233,14 +1280,13 @@ Bridge.onMessage(m => {
 		const next = deriveView(Docs, S);
 		if (!Base || !sameValue(beyondStatus(Base), beyondStatus(next))) { scheduleRender(); break; }
 		Base = next;
-		const r = Overlay.raw(V);
-		for (const k of STATUS) r[k] = next[k];
+		V = Object.assign({}, V, Object.fromEntries(STATUS.map(k => [k, next[k]])));
 		$("#undo").disabled = !V.canUndo; $("#redo").disabled = !V.canRedo; syncUndoCounts(); syncTx();
 		break;
 	}
 	case "telemetry": onTelemetry(m); break;
 	case "setup": if (m.doc && Array.isArray(m.doc.knobCcs) && m.doc.knobCcs.join() !== KNOB_CCS.join()) { m.doc.knobCcs.forEach((c, i) => KNOB_CCS[i] = c); if (S.ws === "control") scheduleRender(); } break;
-	case "mod": { const before = JSON.stringify(Mods.doc); Mods.onMessage(m); if (S.ws === "control") { if (JSON.stringify(Mods.doc) !== before && !interacting()) scheduleRender(); else syncMods(); } break; }
+	case "mod": { const before = Mods.doc; Mods.onMessage(m); if (S.ws === "control") { if (!sameValue(Mods.doc, before) && !interacting()) scheduleRender(); else syncMods(); } break; }
 	case "ask":
 		if (m.ask === "discardKit") ask(`<b>${patName(m.p)}</b> uses kit <b>${kitName(m.target)}</b>. Your edits to <b>${kitName(m.kit)}</b> are not saved on the machine and will be lost.`,
 			[["Save kit, then switch", "cream", () => { saveKit(); cmd("select", { p: m.p, force: true }); }], ["Switch and lose edits", "danger", () => cmd("select", { p: m.p, force: true })], ["Cancel", "", () => { }]]);
@@ -1254,14 +1300,14 @@ Bridge.onMessage(m => {
 /* The page's first real render, logged so a blank page fails the self-tests. */
 let firstRenderLogged = false;
 function logFirstRender() {
-	if (firstRenderLogged || !V.tracks.length) return; firstRenderLogged = true;
+	if (firstRenderLogged || !Base) return; firstRenderLogged = true;
 	const r = document.querySelector(".app").getBoundingClientRect();
 	Bridge.log(`first render: ${S.ws}, ${document.querySelectorAll("#main *").length} elements in #main, page ${Math.round(r.width)} x ${Math.round(r.height)}, window ${innerWidth} x ${innerHeight}, ${Math.round(performance.now())} ms`);
 }
 function render() {
 	closePicker(); closeK(); const sl = $("#seqscroll")?.scrollLeft || 0; renderTop();
 	const full = S.ws === "mix" || S.ws === "song" || S.ws === "control"; $("#body").classList.toggle("full", full); $("#rail").hidden = full;
-	if (!V.tracks.length) { $("#main").innerHTML = ""; renderSub(); return; }
+	if (!Base) { $("#main").innerHTML = ""; renderSub(); return; }	/* no document yet */
 	if (!full) renderRail(); renderSub();
 	({ seq: renderSeq, sound: renderSound, mix: renderMix, song: renderSong, sampler: renderSampler, control: renderControl })[S.ws]();
 	const sc = $("#seqscroll"); if (sc) { sc.scrollLeft = sl; $("#lanescroll").scrollLeft = sl; } enhanceSelects(document.getElementById("main"));

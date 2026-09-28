@@ -4,7 +4,9 @@
    working kit); the view is derived from them after every change and may be
    edited optimistically, but every edit is also sent as a command and the
    next document replaces the view. See doc/modern-ux/data-contract.md. */
-const Docs = { patterns: {}, kits: {}, songs: {}, global: null, machine: null, catalogue: null, learn: null, telemetry: null };
+/* kits: the stored slots; workingKit: the kit that plays ({slot, source, pending, doc}, the slot it was
+   loaded from); sources: each stored document's "source" ("kit:3" -> "dump"). */
+const Docs = { patterns: {}, kits: {}, songs: {}, global: null, machine: null, catalogue: null, workingKit: null, sources: {}, learn: null, telemetry: null };
 const Tele = { step: -1, pattern: -1, playing: false, valid: false };
 
 /* ---- machine catalogue (md-desk/machines, from elektronData::mdMachineParamNames) ----
@@ -64,6 +66,11 @@ function kitSlotOf(docs) {
 	const p = docs.patterns[patternSlotOf(docs)];
 	return p ? p.kit : 0;
 }
+/* The current kit's document: the working kit when it is the current slot's, else the stored slot
+   (until the first working kit arrives, and while a kit change has not brought the new one yet). */
+function workingKitOf(docs) { const w = docs.workingKit; return w && w.slot === kitSlotOf(docs) ? w : null; }
+function kitDocOf(docs) { const w = workingKitOf(docs); return w ? w.doc : docs.kits[kitSlotOf(docs)]; }
+function kitSourceOf(docs) { const w = workingKitOf(docs); return w ? w.source : docs.sources["kit:" + kitSlotOf(docs)] || "none"; }
 function songSlotOf(docs) { const m = machineOf(docs); return m.song && m.song.current != null ? m.song.current : 0; }
 function lengthIn(docs, p) { const d = docs.patterns[p]; return d ? d.length : 16; }
 /* the transport: the telemetry's when it has come (newer than the machine document), else the desk's */
@@ -122,21 +129,22 @@ function deriveView(docs, ui) {
 	const cat = catalogueIndex(docs.catalogue);
 	const pat = patternSlotOf(docs), kit = kitSlotOf(docs), songSlot = songSlotOf(docs);
 	const P = docs.patterns[pat];
-	const K = docs.kits[kit];
+	const K = kitDocOf(docs);
 	const G = docs.global;
 	const M = machineOf(docs);
 	const desk = M.desk || {};
 	const hist = M.history || {};
 	const transport = transportOf(docs);
 	const v = { loaded: !!(P && K), pat, queued: desk.queued != null ? desk.queued : null, kit,
-		kitState: M.kit && M.kit.working || "unknown", kitSource: desk.kitSource || "tracked", kitNames: {},
+		kitState: M.kit && M.kit.working || "unknown", kitSource: kitSourceOf(docs), kitNames: {},
 		patKit: Array.from({ length: 128 }, (_, p) => docs.patterns[p] ? docs.patterns[p].kit : null),
 		mode: (M.extendedMode != null ? M.extendedMode : G ? G.extendedMode : true) ? "EXTENDED" : "CLASSIC",
 		bpm: G ? G.tempo : 120, playing: transport.playing, rec: transport.rec, gridEdit: !!desk.gridEdit, tx: !!desk.tx,
-		roundTrip: desk.roundTripMs, firmware: desk.firmware || "booting", lifecycle: M.lifecycle || "booting", caps: M.capabilities || {},
+		roundTrip: desk.roundTripMs, lifecycle: M.lifecycle || "booting", caps: M.capabilities || {},
 		canUndo: !!hist.undo, canRedo: !!hist.redo, undoCount: hist.undoCount || 0, redoCount: hist.redoCount || 0,
 		songReload: !!(M.song && M.song.reloadNeeded), len: 16, length: 16, mult: "1X", swing: 50, accAmt: 0, accAll: false, slideAll: false };
 	for (const k in docs.kits) v.kitNames[k] = docs.kits[k].name;
+	if (K) v.kitNames[kit] = K.name;
 	const mutes = new Set(desk.mutes || []);
 	if (P) {
 		v.len = P.totalLength;
@@ -191,98 +199,66 @@ function deriveView(docs, ui) {
 	return v;
 }
 /* ---- optimistic edits (P6): an explicit overlay over the derived view ----
-   A gesture shows its edit at once by writing into V as before, but V is a lens: every write is
-   kept as an overlay entry (path, value), and the next command the page sends (cmd) owns the
-   entries written since the last one. view() is the overlay applied, in order, to
-   deriveView(Docs, S); an entry leaves when the plug-in answers its command (the result comes
-   after the documents it changed), so a refused edit disappears and a taken one is in the
-   documents. Entries hold values, never toggles: applying one to a view that already shows the
-   edit changes nothing. A write no command follows (in the same task) is the view's only until
-   the next derivation, as before. Paths go through objects, arrays, Maps (a value, or DELETE)
-   and Sets (member in or out). */
+   A gesture that shows its edit at once says so in its command: cmd(op, args, key, optimistic),
+   where optimistic is a list of [path, value] into the view. The page applies them at once and
+   keeps them as overlay entries owned by that command's id; view() is the overlay applied, in
+   order, to deriveView(Docs, S). An entry leaves when the plug-in answers its command (the result
+   comes after the documents it changed), so a refused edit disappears and a taken one is in the
+   documents. A keyed command that replaces a waiting one keeps its id, so it takes over the
+   entries by path. Entries hold values, never toggles: applying one to a view that already shows
+   the edit changes nothing. Paths go through objects, arrays, Maps and Sets:
+   - an object or array member, or a Map entry: the value, or Overlay.DELETE;
+   - a Set member: true (in) or false (out);
+   - a Map of Maps (the lock lanes): a write into a missing inner Map makes it, and a delete that
+     empties one removes it, so the view's inner Maps are never empty. */
 const Overlay = (() => {
-	const DELETE = Symbol("delete"), RAW = Symbol("raw");
-	const entries = new Map();	// JSON of the path -> { path, value, id }
-	let staged = [];
-	const raw = v => v && typeof v === "object" && v[RAW] || v;
+	const DELETE = Symbol("delete");
+	const entries = new Map();	// path key -> { path, value, id }
+	const keyOf = path => path.map(String).join("\u241f");
 	const tag = v => Object.prototype.toString.call(v), isMap = v => tag(v) === "[object Map]", isSet = v => tag(v) === "[object Set]";
 	const clone = v => {
-		v = raw(v);
 		if (isMap(v)) return new Map([...v].map(([k, x]) => [k, clone(x)]));
 		if (isSet(v)) return new Set(v);
 		if (Array.isArray(v)) return v.map(clone);
 		if (v && typeof v === "object") return Object.fromEntries(Object.entries(v).map(([k, x]) => [k, clone(x)]));
 		return v;
 	};
-	function dropUnsent() { for (const k of staged) if (entries.get(k)?.id === 0) entries.delete(k); staged = []; }
-	function record(path, value) {
-		const k = JSON.stringify(path);
-		entries.delete(k);
-		entries.set(k, { path, value: clone(value), id: 0 });
-		if (!staged.length) queueMicrotask(dropUnsent);
-		staged.push(k);
-	}
 	function setIn(root, path, value) {
+		const up = [];	// [container, key] on the way, for the Map-of-Maps rule
 		let o = root;
 		for (let i = 0; i < path.length - 1; i++) {
-			o = isMap(o) ? o.get(path[i]) : o[path[i]];
-			if (o == null || typeof o !== "object") return;	// that part of the view is not there (another pattern, a reset)
+			let next = isMap(o) ? o.get(path[i]) : o[path[i]];
+			if (next == null && isMap(o) && value !== DELETE && i === path.length - 2) { next = new Map(); o.set(path[i], next); }
+			if (next == null || typeof next !== "object") return;	// that part of the view is not there (another pattern, a reset)
+			up.push([o, path[i]]);
+			o = next;
 		}
 		const k = path[path.length - 1];
 		if (isSet(o)) value ? o.add(k) : o.delete(k);
-		else if (isMap(o)) value === DELETE ? o.delete(k) : o.set(k, clone(value));
+		else if (isMap(o)) {
+			if (value !== DELETE) { o.set(k, clone(value)); return; }
+			o.delete(k);
+			const [parent, pk] = up[up.length - 1] || [];
+			if (!o.size && isMap(parent)) parent.delete(pk);
+		}
 		else if (value === DELETE) delete o[k];
 		else o[k] = clone(value);
 	}
-	/* the lens: reads go to the view, writes also to the overlay */
-	const lenses = new WeakMap();
-	function lens(target, path) {
-		if (!target || typeof target !== "object") return target;
-		let p = lenses.get(target);
-		if (p) return p;
-		const at = k => [...path, Array.isArray(target) && typeof k === "string" && /^\d+$/.test(k) ? +k : k];
-		if (isSet(target)) p = new Proxy(target, { get(t, k) {
-			if (k === RAW) return t;
-			if (k === "size") return t.size;
-			if (k === "add") return x => { t.add(x); record(at(x), true); return p; };
-			if (k === "delete") return x => { const r = t.delete(x); record(at(x), false); return r; };
-			if (k === "clear") return () => { for (const x of [...t]) record(at(x), false); t.clear(); };
-			const f = t[k]; return typeof f === "function" ? f.bind(t) : f;
-		} });
-		else if (isMap(target)) p = new Proxy(target, { get(t, k) {
-			if (k === RAW) return t;
-			if (k === "size") return t.size;
-			if (k === "get") return x => lens(t.get(x), at(x));
-			if (k === "set") return (x, v) => { t.set(x, raw(v)); record(at(x), v); return p; };
-			if (k === "delete") return x => { const r = t.delete(x); record(at(x), DELETE); return r; };
-			if (k === "entries" || k === Symbol.iterator) return function* () { for (const [x, v] of t) yield [x, lens(v, at(x))]; };
-			if (k === "values") return function* () { for (const [x, v] of t) yield lens(v, at(x)); };
-			if (k === "forEach") return fn => t.forEach((v, x) => fn(lens(v, at(x)), x, p));
-			const f = t[k]; return typeof f === "function" ? f.bind(t) : f;
-		} });
-		else p = new Proxy(target, {
-			get(t, k) { if (k === RAW) return t; const v = t[k]; return typeof k === "symbol" || typeof v === "function" ? v : lens(v, at(k)); },
-			set(t, k, v) { t[k] = raw(v); if (typeof k !== "symbol") record(at(k), v); return true; },
-			deleteProperty(t, k) { delete t[k]; if (typeof k !== "symbol") record(at(k), DELETE); return true; }
-		});
-		lenses.set(target, p);
-		return p;
-	}
 	return {
-		/* the command the page just sent owns what was written since the last one */
-		sent(id) { for (const k of staged) { const e = entries.get(k); if (e && e.id === 0) e.id = id; } staged = []; },
+		DELETE,
+		/* the writes a command shows at once, owned by its id (a later write of a path owns it) */
+		add(id, writes) { for (const [path, value] of writes) { const k = keyOf(path); entries.delete(k); entries.set(k, { path, value: clone(value), id }); } },
 		/* its answer came: its entries leave; true when there were any */
 		answered(id) { let any = false; for (const [k, e] of entries) if (e.id === id) { entries.delete(k); any = true; } return any; },
-		clear() { entries.clear(); staged = []; },
+		clear() { entries.clear(); },
 		size: () => entries.size,
-		/* the view to render: the overlay over a derived view, behind the lens */
-		over(v) { for (const e of entries.values()) setIn(v, e.path, e.value); return lens(v, []); },
-		raw
+		/* the overlay applied to a freshly derived view (which it changes and returns) */
+		over(v) { for (const e of entries.values()) setIn(v, e.path, e.value); return v; }
 	};
 })();
+const EMPTY_DOCS = { patterns: {}, kits: {}, songs: {}, global: null, machine: null, catalogue: null, workingKit: null, sources: {}, telemetry: null };
 function view() { return Overlay.over(deriveView(Docs, S)); }
-/* The view before the first document (the renderers run once before it). */
-let V = Overlay.over({ loaded: false, pat: 0, queued: null, kit: 0, kitState: "unknown", kitSource: "tracked", kitNames: {}, patKit: [], mode: "EXTENDED", bpm: 120,
-	playing: false, rec: false, gridEdit: false, tx: false, roundTrip: -1, firmware: "booting", lifecycle: "booting", caps: {}, canUndo: false, canRedo: false,
-	undoCount: 0, redoCount: 0, songReload: false, len: 16, length: 16, mult: "1X", swing: 50, accAmt: 0, accAll: false, slideAll: false, tracks: [],
-	locks: new Map(), mfx: Object.fromEntries(Object.entries(MFXD).map(([id, d]) => [id, { ...d, v: {} }])), songSlot: 0, song: [{ type: "end" }], songName: "" });
+/* The view the renderers read: view(), replaced on every document and command. Before the first
+   document it is the overlay over deriveView(EMPTY_DOCS, S), set by the page once its UI state
+   (S) and names (nameOf) exist (mdDeskApp.js). */
+let V = null;

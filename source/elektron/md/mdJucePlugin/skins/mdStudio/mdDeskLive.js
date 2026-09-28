@@ -70,7 +70,7 @@ const TAP = [];
 Keys.bind({ keys: ["T"], group: "Transport", does: "Tap tempo (the average of the last taps)", run: () => {
 	const now = performance.now(); if (TAP.length && now - TAP[TAP.length - 1] > 2000) TAP.length = 0;
 	TAP.push(now); if (TAP.length > 5) TAP.shift();
-	if (TAP.length >= 2) { const bpm = clamp(Math.round(60000 / ((TAP[TAP.length - 1] - TAP[0]) / (TAP.length - 1)) * 10) / 10, 30, 300); V.bpm = bpm; renderTop(); cmd("tempo", { bpm }, "tempo"); toast("Tap tempo: " + bpm.toFixed(1) + " BPM"); }
+	if (TAP.length >= 2) { const bpm = clamp(Math.round(60000 / ((TAP[TAP.length - 1] - TAP[0]) / (TAP.length - 1)) * 10) / 10, 30, 300); cmd("tempo", { bpm }, "tempo", [[["bpm"], bpm]]); renderTop(); toast("Tap tempo: " + bpm.toFixed(1) + " BPM"); }
 	else toast("Tap tempo: keep tapping T");
 } });
 
@@ -92,8 +92,7 @@ setV = function (el, v) {
 		if (t === t0 || skipTweak(tr.m)) return;
 		const name = g === "syn" ? pages(tr.m).s[slot] : n;	/* synthesis: the same knob, whatever it is on that machine */
 		if (!name || !(name in tr[g])) return;
-		tr[g][name] = clamp(tr[g][name] + delta);
-		sendParam(t, g, name);
+		sendParam(t, g, name, clamp(tr[g][name] + delta));
 	});
 	syncControls();
 };
@@ -156,19 +155,18 @@ function showFwLcd(on) {
 }
 Bridge.onMessage(m => {
 	/* The engine changed (emulator <-> HW MIDI): the documents start over. */
-	if (m.type === "reset") { Docs.patterns = {}; Docs.kits = {}; Docs.songs = {}; Docs.global = null; Docs.machine = null; Docs.telemetry = null; Overlay.clear(); scheduleRender(); return; }
+	if (m.type === "reset") { Object.assign(Docs, { patterns: {}, kits: {}, songs: {}, global: null, machine: null, workingKit: null, sources: {}, telemetry: null }); Overlay.clear(); scheduleRender(); return; }
+	/* The firmware's LCD shows while the lifecycle says it may (LIFE[..].fwLcd: the firmware starts);
+	   BOOTING OS lasts until keys work: the firmware answers MIDI early, but its start-up animation
+	   ignores panel keys until it is over (about 13 s; the lifecycle's "animating", its tooltip in LIFE). */
 	if (m.type === "lcd") {
 		if (m.bits) { const s = atob(m.bits); fwLcd.bits = Uint8Array.from(s, ch => ch.charCodeAt(0)); drawFwLcd(); }
-		const fw = (machineState().desk || {}).firmware;
-		showFwLcd(!!fwLcd.bits && fw !== "ready" && fw !== "missing" && fw !== "unsupported");
+		showFwLcd(!!fwLcd.bits && !!lifeOf(machineState().lifecycle).fwLcd);
 	}
 	else if (m.type === "machine") {
-		const fw = m.doc.desk && m.doc.desk.firmware;
-		if (fw === "ready" || fw === "missing" || fw === "unsupported") showFwLcd(false);
-		/* BOOTING OS lasts until keys work: the firmware answers MIDI early, but its start-up
-		   animation ignores panel keys until it is over (about 13 s). */
-		if (m.doc.desk && m.doc.desk.boot === "animation") { const b = $(".lcdeng"); if (b) b.title = "Engine: MD OS 1.63 answers, but its start-up animation ignores keys until it ends (shown in the LCD). Editing starts then."; }
-		if (S.ws === "song" && m.doc.desk && JSON.stringify(m.doc.desk.chain) !== chainCard.last) { chainCard.last = JSON.stringify(m.doc.desk.chain); scheduleRender(); }
+		if (!lifeOf(m.doc.lifecycle).fwLcd) showFwLcd(false);
+		const chain = m.doc.desk ? m.doc.desk.chain : undefined;
+		if (S.ws === "song" && m.doc.desk && !sameValue(chain, chainCard.last)) { chainCard.last = chain; scheduleRender(); }
 	}
 	else if (m.type === "ask" && m.ask === "breakChain") {
 		const c = chainDoc(), list = c && c.patterns ? c.patterns.map(patName).join(" » ") : "";

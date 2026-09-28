@@ -5,6 +5,9 @@
    the page sees as ?selftest=<kind>. Each test drives the page's own controls and commands and
    logs to the plug-in's log (Bridge.log). */
 
+/* the firmware runs (the old desk.firmware "ready"): the lifecycle's table (mdDeskApp.js, LIFE) */
+const runs = () => !!lifeOf(machineState().lifecycle).runs;
+
 /* ?selftest=1 or p4: results of the transport and live-recording commands, and every refusal */
 if (/[?&]selftest=(1|p4)/.test(location.search)) Bridge.onMessage(r => {
 	if (r.type === "result" && (r.op === "record" || r.op === "recTrig" || r.op === "play" || r.op === "stop" || !r.ok))
@@ -26,8 +29,8 @@ if (/[?&]selftest=p4(&|$)/.test(location.search)) (async () => {
 	const t0 = performance.now(), desk = () => machineState().desk || {};
 	const until = async (f, ms) => { const end = performance.now() + ms; while (performance.now() < end) { if (f()) return performance.now(); await sleep(20); } return -1; };
 	let frames = 0, firstLcd = -1, bootSeen = false;
-	Bridge.onMessage(m => { if (m.type === "lcd" && m.bits) { frames++; if (firstLcd < 0) firstLcd = performance.now() - t0; } if (m.type === "machine" && m.doc.desk && m.doc.desk.boot === "animation") bootSeen = true; });
-	const ready = await until(() => desk().firmware === "ready" && V.loaded, 90000);
+	Bridge.onMessage(m => { if (m.type === "lcd" && m.bits) { frames++; if (firstLcd < 0) firstLcd = performance.now() - t0; } if (m.type === "machine" && m.doc.lifecycle === "animating") bootSeen = true; });
+	const ready = await until(() => runs() && V.loaded, 90000);
 	log(`boot: firmware LCD frames ${frames} (first at ${Math.round(firstLcd)} ms), animation state seen ${bootSeen}, input ready at ${Math.round(ready - t0)} ms, LCD mirror shown now ${$(".lcdpanel").classList.contains("fwboot")}`);
 	if (ready < 0) { log("FAIL: not ready"); return; }
 	await sleep(1500);
@@ -114,7 +117,7 @@ if (/[?&]selftest=p4(&|$)/.test(location.search)) (async () => {
    whether it came back with the plug-in state (the editor logs "setup restored"). */
 if (/[?&]selftest=p4set/.test(location.search)) (async () => {
 	const sleep = ms => new Promise(r => setTimeout(r, ms));
-	while (!(machineState().desk && machineState().desk.firmware === "ready")) await sleep(200);
+	while (!(runs())) await sleep(200);
 	await sleep(500);
 	Mods.doc.sources = []; Mods.doc.links = [];
 	const id = Mods.add("lfo"); Mods.link(id, 2, 16); sendMods();
@@ -134,7 +137,7 @@ if (/[?&]selftest=p4hw/.test(location.search)) (async () => {
 	const sleep = ms => new Promise(r => setTimeout(r, ms));
 	const log = t => Bridge.log("P4: " + t);
 	const label = () => $(".lcdeng span")?.textContent;
-	while (!(machineState().desk && machineState().desk.firmware === "ready" && V.loaded)) await sleep(200);
+	while (!(runs() && V.loaded)) await sleep(200);
 	await sleep(1000);
 	log(`start: ${label()}`);
 	const sel = $("#engsel"); sel.value = "hw"; sel.dispatchEvent(new Event("change", { bubbles: true }));
@@ -144,7 +147,7 @@ if (/[?&]selftest=p4hw/.test(location.search)) (async () => {
 	log(`nothing answers after 7 s: ${label()} (link ${machineState().desk?.link})`);
 	cmd("select", { p: 3 }); await sleep(300);
 	sel.value = "emu"; sel.dispatchEvent(new Event("change", { bubbles: true }));
-	let t0 = performance.now(); while (!(machineState().desk && machineState().desk.engine === "emu" && machineState().desk.firmware === "ready" && V.loaded) && performance.now() - t0 < 15000) await sleep(100);
+	let t0 = performance.now(); while (!((machineState().capabilities || {}).engine === "emu" && runs() && V.loaded) && performance.now() - t0 < 15000) await sleep(100);
 	log(`EMU again: ${label()} after ${Math.round(performance.now() - t0)} ms, pattern ${patName(V.pat)}`);
 	log("hw done");
 })();
@@ -171,7 +174,7 @@ async function p4Mix(log, sleep) {
 if (/[?&]selftest=p4mix/.test(location.search)) (async () => {
 	const sleep = ms => new Promise(r => setTimeout(r, ms));
 	const log = t => Bridge.log("P4: " + t);
-	while (!(machineState().desk && machineState().desk.firmware === "ready" && V.loaded)) await sleep(200);
+	while (!(runs() && V.loaded)) await sleep(200);
 	await sleep(1500);
 	await p4Mix(log, sleep);
 	log("mix done");
@@ -182,7 +185,7 @@ if (/[?&]selftest=p4mix/.test(location.search)) (async () => {
 if (/[?&]selftest=p4cpu/.test(location.search)) (async () => {
 	const sleep = ms => new Promise(r => setTimeout(r, ms));
 	const log = t => Bridge.log("P4: " + t);
-	while (!(machineState().desk && machineState().desk.firmware === "ready" && V.loaded)) await sleep(200);
+	while (!(runs() && V.loaded)) await sleep(200);
 	await sleep(8000);	/* the background loads settle */
 	const phase = async (name, ms) => { log(`cpu ${name} start`); await sleep(ms); log(`cpu ${name} end`); };
 	S.ws = "seq"; render();
@@ -203,7 +206,7 @@ if (/[?&]selftest=p5(&|$)/.test(location.search)) (async () => {
 	const desk = () => machineState().desk || {};
 	const until = async (f, ms) => { const end = performance.now() + ms; while (performance.now() < end) { if (f()) return performance.now(); await sleep(5); } return -1; };
 	const t0 = performance.now();
-	await until(() => desk().firmware === "ready", 90000);
+	await until(() => runs(), 90000);
 	log(`ready at ${Math.round(performance.now() - t0)} ms, loads queued ${desk().loading}`);
 	/* Times are taken in the message handler (a covered window throttles page timers to 1 s). */
 	let seenAt = -1; Bridge.onMessage(m => { if (m.type === "machine" && m.doc.desk && m.doc.desk.playing && seenAt < 0) seenAt = performance.now(); });
@@ -248,8 +251,8 @@ if (/[?&]selftest=1/.test(location.search)) (async () => {
 	const log = t => Bridge.log("selftest: " + t);
 	const pat = () => Docs.patterns[currentPatternSlot()], kit = () => Docs.kits[currentKitSlot()];
 	const idle = () => !(machineState().desk || {}).tx;
-	const status = () => `loaded ${!!(pat() && kit())} firmware ${machineState().desk?.firmware} pattern ${currentPatternSlot()} kit ${currentKitSlot()} docs ${Object.keys(Docs.patterns).length}/${Object.keys(Docs.kits).length}/${Object.keys(Docs.songs).length}`;
-	if (await until(() => pat() && kit() && machineState().desk?.firmware === "ready", 60000) < 0) { log("FAIL: the machine did not load: " + status()); return; }
+	const status = () => `loaded ${!!(pat() && kit())} lifecycle ${machineState().lifecycle} pattern ${currentPatternSlot()} kit ${currentKitSlot()} docs ${Object.keys(Docs.patterns).length}/${Object.keys(Docs.kits).length}/${Object.keys(Docs.songs).length}`;
+	if (await until(() => pat() && kit() && runs(), 60000) < 0) { log("FAIL: the machine did not load: " + status()); return; }
 	log("loaded: " + status() + " visibility " + document.visibilityState);
 	await sleep(1500);
 	const p = currentPatternSlot(), k = currentKitSlot(), has = () => pat().tracks[0].trigs.includes(8);
@@ -293,7 +296,7 @@ if (/[?&]selftest=1/.test(location.search)) (async () => {
 	/* P3: working kit from memory, LCD width, REC. The firmware's start-up animation runs for about
 	   20 s after it answers MIDI and eats the first key press: wait it out. */
 	while (performance.now() < 30000) await sleep(500);
-	log(`P3: kit source ${machineState().desk.kitSource}, kit ${machineState().kit.working}, song mode ${machineState().songMode}, mutes ${machineState().desk.mutes}`);
+	log(`P3: kit source ${V.kitSource}, kit ${machineState().kit.working}, song mode ${machineState().songMode}, mutes ${machineState().desk.mutes}`);
 	const lcdW = () => Math.round(document.querySelector(".lcdpanel").getBoundingClientRect().width * 10) / 10;
 	const widths = [lcdW()];
 	const bpm0 = V.bpm;
@@ -347,8 +350,34 @@ if (/[?&]selftest=1/.test(location.search)) (async () => {
 		log(`P3: PLAY key shows ${$("#playico").textContent} after stop`);
 		cmd("clearSteps", { p: currentPatternSlot(), t: tr, from: 0, to: V.len }); await sleep(400);
 	}
-	log("selftest done; kit " + JSON.stringify(machineState().kit) + ", undo steps " + machineState().desk.undoCount);
+	log("selftest done; kit " + JSON.stringify(machineState().kit) + ", undo steps " + (machineState().history || {}).undoCount);
 })();
+
+/* The AUDIO / MIDI panel's own self-test: the same text as in the mockups' panel block
+   (doc/modern-ux/audio_panel_check.py checks it), here so a release page has none of it. */
+/* The panel's self-test (the editors' ?selftest=p6audio, or the mockup's console): open the panel, see
+   the level arrive, change the buffer size and the output device and back, and check after each change
+   that the machine keeps playing (its step moves). T gives log, play(on), step() and playing(). */
+async function audioSelfTest(T){const sleep=ms=>new Promise(r=>setTimeout(r,ms)),res=[];
+ const until=async(f,ms=8000)=>{const t0=Date.now();while(Date.now()-t0<ms){const D=audioDoc();if(D&&f(D))return D;await sleep(100)}const D=audioDoc();throw new Error("timeout: output "+D?.output?.id+", buffer "+D?.bufferSize?.value+", running "+D?.running+(D?.error?", error "+D.error:""))};
+ const moving=async()=>{const s0=T.step();for(let i=0;i<30;i++){await sleep(100);if(T.playing()&&T.step()!==s0)return true}return false};
+ const check=async(name,fn)=>{try{const n=await fn();res.push(true);T.log("ok   "+name+(n?": "+n:""))}catch(e){res.push(false);T.log("FAIL "+name+": "+e.message)}};
+ const D0=await until(D=>D.standalone,15000),out0=D0.output.id,buf0=D0.bufferSize.value,muted0=!!D0.input.muted;
+ T.log("devices: "+D0.output.list.length+" outputs ("+out0+"), "+D0.input.list.length+" inputs, "+D0.sampleRate.value+" Hz, buffer "+buf0+", "+(D0.midiInputs||[]).length+" MIDI inputs, running "+D0.running);
+ let levels=0;const lv=audioLevel;window.audioLevel=v=>{levels++;lv(v)};
+ await check("panel opens",async()=>{openAudio();await sleep(700);if(!AP.open||$("#audiopop").hidden)throw new Error("not shown");const n=$("#audiopop").querySelectorAll("select,button").length;return n+" controls, "+levels+" level updates"});
+ window.audioLevel=lv;
+ T.play(true);await sleep(1500);
+ await check("playing before the changes",async()=>{if(!(await moving()))throw new Error("the step does not move");return "step "+T.step()});
+ const buf1=D0.bufferSize.list.find(b=>b!==buf0&&b>=128&&b<=1024)??D0.bufferSize.list.find(b=>b!==buf0);
+ await check("buffer size "+buf0+" -> "+buf1,async()=>{if(buf1==null)throw new Error("one buffer size only");audioSend({set:"bufferSize",value:buf1});const D=await until(D=>D.bufferSize.value===buf1&&D.running);if(!(await moving()))throw new Error("audio stopped");return D.latencyMs+" ms, still playing"});
+ await check("buffer size back to "+buf0,async()=>{audioSend({set:"bufferSize",value:buf0});await until(D=>D.bufferSize.value===buf0&&D.running);if(!(await moving()))throw new Error("audio stopped");return "still playing"});
+ const out1=D0.output.list.find(o=>o!==out0);
+ await check("output "+out0+" -> "+(out1??"-"),async()=>{if(!out1)return "one output device only, skipped";audioSend({set:"output",device:out1});await until(D=>D.output.id===out1&&D.running);if(!(await moving()))throw new Error("audio stopped");return "still playing"});
+ await check("output back to "+out0,async()=>{if(!out1)return "skipped";audioSend({set:"output",device:out0});await until(D=>D.output.id===out0&&D.running);if(!(await moving()))throw new Error("audio stopped");return "still playing"});
+ await check("input mute toggles and is kept",async()=>{audioSend({set:"mute",on:!muted0});await until(D=>!!D.input.muted===!muted0);audioSend({set:"mute",on:muted0});await until(D=>!!D.input.muted===muted0);return muted0?"muted again":"live again"});
+ T.play(false);closeAudio();await sleep(300);
+ T.log((res.every(Boolean)?"PASS ":"FAIL ")+res.filter(Boolean).length+"/"+res.length)}
 
 /* GEARMULATOR_MDSTUDIO_SELFTEST=p6audio: the panel's self-test once the engine is ready. */
 if (/[?&]selftest=p6audio/.test(location.search)) (async () => {
