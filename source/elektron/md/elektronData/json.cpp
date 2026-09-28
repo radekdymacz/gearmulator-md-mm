@@ -16,6 +16,21 @@ namespace elektronData::json
 		return nullptr;
 	}
 
+	Value* Value::find(const std::string& _key)
+	{
+		return const_cast<Value*>(static_cast<const Value&>(*this).find(_key));
+	}
+
+	Value& Value::put(const std::string& _key, Value _value)
+	{
+		if(auto* v = find(_key))
+		{
+			*v = std::move(_value);
+			return *this;
+		}
+		return set(_key, std::move(_value));
+	}
+
 	Value& Value::set(const std::string& _key, Value _value)
 	{
 		if(m_type != Type::Object)

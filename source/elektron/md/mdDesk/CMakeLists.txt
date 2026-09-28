@@ -14,6 +14,8 @@ target_sources(mdDesk PRIVATE
 	mdDeskEdit.cpp mdDeskEdit.h
 	mdDeskHistory.h
 	mdDeskLibrary.cpp mdDeskLibrary.h
+	mdDeskMachine.cpp mdDeskMachine.h
+	mdDeskModel.cpp mdDeskModel.h
 	mdDeskMod.cpp mdDeskMod.h
 	mdDeskPacer.h
 	mdDeskRecord.cpp mdDeskRecord.h

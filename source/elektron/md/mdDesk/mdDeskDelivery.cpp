@@ -141,4 +141,12 @@ namespace mdDesk
 		}
 		return {};
 	}
+
+	KitRoute routeKitEdits(const std::vector<LiveEdit>& _edits, const bool _recording)
+	{
+		KitRoute r;
+		for(const auto& e : _edits)
+			(_recording && e.kind == LiveEdit::Kind::Param ? r.knobs : r.live).push_back(e);
+		return r;
+	}
 }

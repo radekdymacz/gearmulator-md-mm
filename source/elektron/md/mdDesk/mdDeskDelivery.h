@@ -62,6 +62,16 @@ namespace mdDesk
 
 	Delivery globalDelivery(const elektronData::MdGlobal& _before, const elektronData::MdGlobal& _after);
 
+	// Where a kit's live edits go (P6, the route as data): normally all live; while the
+	// firmware live records, parameter values become DATA ENTRY knob targets
+	// (KnobRecorder, mdDeskRecord.h), because it records knob turns, not CCs.
+	struct KitRoute
+	{
+		std::vector<LiveEdit> live;
+		std::vector<LiveEdit> knobs;
+	};
+	KitRoute routeKitEdits(const std::vector<LiveEdit>& _edits, bool _recording);
+
 	// SysEx for one live edit; empty for Param and Level (they are CCs, which the
 	// plug-in's parameter layer sends).
 	std::vector<uint8_t> liveEditSysex(const LiveEdit& _edit);

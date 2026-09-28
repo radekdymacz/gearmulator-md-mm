@@ -5,6 +5,7 @@
 // mdLibTest/mdDeskFirmwareTest.cpp (manual, needs the ROM).
 
 #include "mdDesk.h"
+#include "mdDeskLibrary.h"
 
 #include "elektronData/jsonSchema.h"
 #include "elektronData/mdCommands.h"
@@ -851,22 +852,22 @@ namespace
 		p2.position = 20;
 		docs.patterns[20] = p2;
 		Clipboard clip;
-		check(!applyLibrary(docs, cmd(R"({"op":"kitPaste","k":9})"), clip).errors.empty(), "paste needs a copy first");
-		applyLibrary(docs, cmd("{\"op\":\"kitCopy\",\"k\":" + std::to_string(kit.position) + "}"), clip);
+		check(!run(docs, cmd(R"({"op":"kitPaste","k":9})"), clip).errors.empty(), "paste needs a copy first");
+		run(docs, cmd("{\"op\":\"kitCopy\",\"k\":" + std::to_string(kit.position) + "}"), clip);
 		docs.kits[9].name[0] = 'Q';
-		auto r = applyLibrary(docs, cmd(R"({"op":"kitPaste","k":9})"), clip);
+		auto r = run(docs, cmd(R"({"op":"kitPaste","k":9})"), clip);
 		check(r.errors.empty() && r.changes.size() == 1 && r.changes[0].slotWrite && std::get<ed::MdKit>(r.changes[0].after).position == 9,
 			"kit paste: a slot write into K10");
-		r = applyLibrary(docs, cmd(R"({"op":"kitClear","k":9})"), clip);
+		r = run(docs, cmd(R"({"op":"kitClear","k":9})"), clip);
 		check(r.changes.size() == 1 && isEmptyKit(std::get<ed::MdKit>(r.changes[0].after)), "kit clear: an empty kit");
-		r = applyLibrary(docs, cmd(R"({"op":"kitRename","k":9,"name":"new kit"})"), clip);
+		r = run(docs, cmd(R"({"op":"kitRename","k":9,"name":"new kit"})"), clip);
 		check(r.changes.size() == 1 && std::get<ed::MdKit>(r.changes[0].after).name[0] == 'N', "rename: upper case, 16 characters");
-		check(!applyLibrary(docs, cmd(R"({"op":"kitCopyTo","from":9,"to":9})"), clip).errors.empty(), "same slot refused");
-		r = applyLibrary(docs, cmd(R"({"op":"patClear","p":20})"), clip);
+		check(!run(docs, cmd(R"({"op":"kitCopyTo","from":9,"to":9})"), clip).errors.empty(), "same slot refused");
+		r = run(docs, cmd(R"({"op":"patClear","p":20})"), clip);
 		const auto& cleared = std::get<ed::MdPattern>(r.changes.at(0).after);
 		check(!r.changes[0].slotWrite && cleared.length == pat.length && cleared.kit == pat.kit
 			&& std::all_of(cleared.trigs.begin(), cleared.trigs.end(), [](const uint64_t _t) { return !_t; }), "pattern clear: no trigs, length and kit link kept");
-		r = applyLibrary(docs, cmd("{\"op\":\"patCopyTo\",\"from\":" + std::to_string(pat.position) + ",\"to\":20}"), clip);
+		r = run(docs, cmd("{\"op\":\"patCopyTo\",\"from\":" + std::to_string(pat.position) + ",\"to\":20}"), clip);
 		check(r.errors.empty() && r.changes.empty(), "copying an identical pattern changes nothing");
 	}
 

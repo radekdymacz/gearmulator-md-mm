@@ -654,6 +654,13 @@ namespace
 				left += ed::hasTrig(*cleared, 14, s) + ed::hasTrig(*cleared, 15, s);
 			check(cleared && left == 0, "tracks 15 and 16 cleared before recording");
 		}
+		// P6: the lock goes to the track's next programmed trig whose step has not started when the
+		// turn lands (P4, mdP4ProbeFirmwareTest lockwindow); a note played live in the same moment is
+		// a firmware race (3 of 9), which made this check hang on a few ms of phase. So track 15 gets
+		// its note at step 10 before recording, and the knob is turned at step 7.
+		_rig.page("{\"op\":\"trig\",\"p\":" + p + R"(,"t":14,"s":9,"on":true,"id":40})");
+		check(resultOk(_rig), "track 15's note at step 10");
+		_rig.runUntil([&] { return !desk.isBusy(); }, 2000);
 		const auto recording = [&]
 		{
 			const auto& d = _rig.machineDoc();
@@ -676,10 +683,6 @@ namespace
 		const bool turned = _rig.runUntil([&] { return m.read8(ed::g_mdWorkingKitAddress + ed::g_mdWorkingKitParamsOffset + 14 * 24 + 12) == 99; }, 1500);
 		check(turned, "the knob move reaches the machine as DATA ENTRY turns");
 		std::printf("  knob move -> value in the machine: %.1f ms emulated (select track, page key, turn)\n", ms(m.now() - k0));
-		// The note on the next step (a person plays it after turning the knob).
-		const auto at = m.playhead();
-		_rig.runUntil([&] { return m.playhead() != at; }, 1000);
-		_rig.page(R"({"op":"recTrig","t":14,"id":45})");
 		_rig.run(50);
 		_rig.page("{\"op\":\"trig\",\"p\":" + p + R"(,"t":0,"s":3,"id":46})");
 		check(_rig.lastResult() && !_rig.lastResult()->find("ok")->asBool(), "grid edits wait while recording");

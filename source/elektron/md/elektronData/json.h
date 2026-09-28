@@ -63,6 +63,9 @@ namespace elektronData::json
 
 		// Object access: nullptr when absent or not an object.
 		const Value* find(const std::string& _key) const;
+		Value* find(const std::string& _key);
+		// Object building: replaces the member when it exists, appends it otherwise.
+		Value& put(const std::string& _key, Value _value);
 		// Object building: appends (does not replace).
 		Value& set(const std::string& _key, Value _value);
 		// Array building.

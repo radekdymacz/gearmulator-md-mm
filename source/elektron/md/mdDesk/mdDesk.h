@@ -1,217 +1,113 @@
 #pragma once
 
-#include "mdDeskChain.h"
-#include "mdDeskDelivery.h"
-#include "mdDeskEdit.h"
-#include "mdDeskHistory.h"
-#include "mdDeskLibrary.h"
+#include "mdDeskMachine.h"
 #include "mdDeskMod.h"
-#include "mdDeskPacer.h"
-#include "mdDeskRecord.h"
+#include "mdDeskModel.h"
 #include "mdDeskSetup.h"
 #include "mdDeskTelemetry.h"
+
+#include "deskCore/deskCore.h"
 
 #include "elektronData/json.h"
 #include "mdDataLink/mdDataLink.h"
 
-#include <array>
-#include <deque>
 #include <functional>
-#include <map>
+#include <memory>
 #include <optional>
-#include <set>
 #include <string>
 #include <vector>
 
 namespace mdDesk
 {
-	// MD Desk behind the page: the page sends small commands, the desk edits the
-	// documents (mdDeskEdit), delivers the change (pattern/song dumps through
-	// mdDataLink, working-kit and global edits as live edits) and publishes the
-	// firmware's read-back and the machine state as contract documents. Single
-	// threaded: call everything from one thread.
+	// The Machinedrum Editor behind its page (P6): the engine-neutral core (documents as
+	// observed + pending, pure edits, undo, publishing), one Machinedrum adapter chosen
+	// from the engine map (the emulated OS 1.63, or HW MIDI), and the editor's own setup
+	// (app modulators, knob rows). The command table routes every page message by owner.
+	// Single threaded: call everything from one thread. The plug-in's processor owns one,
+	// so it outlives the editor window; the firmware smoke tests drive one directly.
 	class Desk
 	{
 	public:
 		using Bytes = std::vector<uint8_t>;
 		using Value = elektronData::json::Value;
+		using Firmware = MdMachine::Firmware;
 
-		// Everything the desk needs from its host. The plug-in and the firmware
-		// smoke test implement it.
+		// Everything the desk needs from its host: the device edge (MdMachine::Port) plus the
+		// page, the project's setup store and the clock.
 		struct Port
 		{
 			std::function<void(const Bytes&)> sendSysex;
-			// Live kit parameter: index 0-23, or 24 for the track level (CCs).
 			std::function<void(uint8_t _track, uint8_t _index, uint8_t _value)> sendKitParam;
 			std::function<void(uint8_t _track, bool _muted)> sendMute;
-			// A panel key press and release; false when not possible here. Keys:
-			// "play", "stop", "record", "recordPlay" (hold RECORD, press PLAY: live
-			// recording), "page" (SYNTHESIS/EFFECTS/ROUTING), "trig1".."trig16".
 			std::function<bool(const std::string& _key)> pressKey;
-			// DATA ENTRY knob 0-7 turned by _steps (one step = one value).
 			std::function<bool(uint8_t _encoder, int _steps)> turnKnob;
 			std::function<void(const Value& _message)> toPage;
-			// The app modulators run elsewhere (the plug-in's processor, P5): the desk then only
-			// edits their setup and shows these values. Unset: the desk runs them itself.
+			// The app modulators run elsewhere: the desk then only edits their setup and shows
+			// these values. Unset: the desk runs them itself.
 			std::function<ModReport()> modulatorsElsewhere;
 			// The editor's setup (md-desk/setup) changed: keep it with the project.
 			std::function<void(const Value& _setup)> saveSetup;
 			std::function<double()> nowMs;
 		};
 
-		// The engine's life, from the device (the page's LCD engine label):
-		// Missing (NO ROM) -> Loading (LOADING ROM: the device prepares or restores
-		// its images) -> Booting (BOOTING OS: the firmware runs but does not take MIDI
-		// yet) -> Present (booting until the first status reply, then ready).
-		enum class Firmware
-		{
-			Missing,		// no ROM: the first-run screen
-			Unsupported,	// another firmware than MD OS 1.63 (ROM ERROR)
-			Loading,		// ROM found, the machine is being prepared or restored
-			Booting,		// the firmware starts; MIDI is not taken yet
-			Present			// takes MIDI: booting until the first status reply, then ready
-		};
-
 		explicit Desk(Port _port);
 
-		void onPageMessage(const Value& _message);
+		// A page message, routed by the command table. False for a host command (the plug-in's:
+		// MIDI learn, menus, the engine map), which the caller handles.
+		bool onPageMessage(const Value& _message);
 		void onDeviceSysex(const Bytes& _message);
-		// A kit parameter changed outside the desk (host automation, MIDI learn,
-		// the panel editor). _index 24 = level.
+		// A kit parameter changed outside the desk (host automation, MIDI learn). _index 24 = level.
 		void onHostKitParam(uint8_t _track, uint8_t _index, uint8_t _value);
 		void onHostMute(uint8_t _track, bool _muted);
-		// Call it every tick, also without telemetry (valid = false): input waits for the
-		// first call, so a status reply that arrives before it cannot open the page while
-		// the start-up animation still swallows keys.
+		// Every tick, also without telemetry (valid = false).
 		void onTelemetry(const Telemetry& _telemetry);
-		// The working-kit region read from the machine's memory (MD OS 1.63,
-		// elektronData::mdWorkingKitFromMemory): kit number plus the kit that plays,
-		// unsaved edits included. With it the Sound and Mix documents are firmware
-		// truth: panel encoders, host automation and edits restored from a DAW
-		// project all show without SAVE KIT. Send it when it changes.
+		// The working-kit region read from the machine's memory (elektronData::mdWorkingKitFromMemory).
 		void onWorkingKitMemory(const Bytes& _region);
 		void setFirmware(Firmware _firmware);
-		// HW MIDI (P4): the desk drives a real Machinedrum over MIDI (DIN speed), not the
-		// emulated one: timeouts follow the wire, and "machine.desk.engine" says "hw" with
-		// "link" connect (no reply yet), ready or lost (no reply for a while).
-		void setHardwareLink(bool _hardware);
-		bool isHardwareLink() const { return m_hw; }
-		// The setup stored with the project (md-desk/setup); errors if it does not validate,
-		// in which case the current setup stays.
+		// The engine map (profiles()): a new adapter, the documents start over. _port replaces the
+		// device edge (HW MIDI's is the wire); unset keeps the current one.
+		bool setEngine(const std::string& _id, const std::optional<Port>& _port = std::nullopt);
+		void setHardwareLink(bool _hardware) { setEngine(_hardware ? "hw" : "emu"); }
+		bool isHardwareLink() const { return m_machine->profile().wire; }
+		const std::string& engine() const { return m_machine->profile().id; }
+		// The setup stored with the project (md-desk/setup); errors if it does not validate.
 		std::vector<std::string> loadSetup(const Value& _setup);
 		const DeskSetup& setup() const { return m_setup; }
 		// About 30 times a second: status polling, loading, timeouts, publishing.
 		void tick();
+		// The page went away (the editor window closed): nothing is published until the next ready.
+		void detachPage();
 
-		const Documents& documents() const { return m_docs; }
-		const mdDataLink::Session& session() const { return m_session; }
-		bool isReady() const { return m_ready; }
-		// Ready for the page's input: the firmware answered and its start-up animation (which
-		// swallows panel keys) is over.
-		bool isInputReady() const;
-		bool isBusy() const;
-		double lastRoundTripMs() const { return m_lastRoundTripMs; }
+		const Documents& documents() const { return m_core.view(); }
+		const deskCore::Core<MdModel>& core() const { return m_core; }
+		const MdMachine& machine() const { return *m_machine; }
+		const mdDataLink::Session& session() const { return m_machine->session(); }
+		deskCore::Lifecycle lifecycle() const { return m_machine->lifecycle(); }
+		// The firmware answered (a status reply).
+		bool isReady() const { return m_machine->replied(); }
+		bool isInputReady() const { return deskCore::takesInput(lifecycle()); }
+		bool isBusy() const { return m_machine->busy(); }
+		double lastRoundTripMs() const { return m_machine->lastRoundTripMs(); }
 
 		// The OS 1.63 machine table as a "md-desk/machines" document.
 		static Value machineCatalogue();
 
 	private:
-		struct Pending
-		{
-			double sentMs = 0;
-		};
-
-		void publish(const Value& _message) const;
-		void publishDoc(const DocRef& _ref);
-		void publishMachine();
-		void result(const Value& _message, const std::vector<std::string>& _errors, const std::string& _note);
+		MdMachine::Port devicePort() const;
+		void onReady();
 		void flush();
-
-		void handleEdit(const Value& _message);
-		void deliver(const Change& _change, std::vector<std::string>& _errors, std::string& _note);
-		void deliverPattern(const elektronData::MdPattern& _p, std::vector<std::string>& _errors);
-		void deliverSong(const elektronData::MdSong& _s, std::vector<std::string>& _errors);
-		void handleUndo(bool _redo, const Value& _message);
-		void handleSelect(const Value& _message);
-		void handleRecord(const Value& _message);
-		void handleModulators(const Value& _message);
-		void handleChain(const Value& _message);
-		void handleKnobs(const Value& _message);
-		void handleKitSlot(const Value& _message);
-		bool linkLost() const;
-		bool askFirst(const Value& _message, const std::vector<Change>& _changes);
+		bool gate(const deskCore::Command& _spec, const Value& _message);
+		void onSetup(const Value& _message);
 		void publishSetup();
-		void saveSetup() const;
-		void runModulators(double _now);
 		void publishModulators();
-		void pumpRecording(double _now);
-		bool pressKey(const std::string& _key);
-
-		void onPattern(const elektronData::MdPattern& _p);
-		void onKit(const elektronData::MdKit& _k);
-		void onSong(const elektronData::MdSong& _s);
-		void onGlobal(const elektronData::MdGlobal& _g);
-		void onState(const mdDataLink::Session::State& _s);
-		void applyWorkingKit();
-		void judgeWorkingKit();
-
-		void load(const DocRef& _ref, bool _urgent);
-		void pumpLoads(double _now);
-		void request(const DocRef& _ref);
-		std::optional<uint8_t> currentKit() const;
-		void schedule(double _delayMs, std::function<void()> _action);
+		void saveSetup() const;
+		void runModulators();
 
 		Port m_port;
-		mdDataLink::Session m_session;
-		Documents m_docs;
-		History m_history;
-		Clipboard m_clipboard;
-
-		std::map<uint8_t, PushSlot<elektronData::MdPattern>> m_patternPush;
-		std::map<uint8_t, PushSlot<elektronData::MdSong>> m_songPush;
-		std::map<DocRef, double> m_pushSentMs;
-		std::map<uint8_t, elektronData::MdKit> m_storedKits;	// last stored-slot dumps
-		std::optional<Bytes> m_workingRegion;					// waiting to be applied
-		std::optional<elektronData::MdKit> m_workingKit;		// last applied, from memory
-		double m_kitStatusAskedMs = -1e9;
-
-		std::deque<DocRef> m_loadQueue;
-		std::set<DocRef> m_queued;
-		std::optional<DocRef> m_loading;
-		double m_loadSentMs = 0;
-		int m_loadRetries = 0;
-		double m_lastRequestMs = -1e9;
-		bool m_backgroundQueued = false;
-
-		std::set<DocRef> m_dirty;
-		bool m_machineDirty = true;
-		bool m_lastTx = false;
-		bool m_pageReady = false;
-		bool m_ready = false;
-		Firmware m_firmware = Firmware::Present;
-		double m_lastStatusMs = -1e9;
-		double m_lastLiveEditMs = -1e9;
-		double m_lastRoundTripMs = -1;
-		std::optional<uint8_t> m_audibleQueue;
-		double m_switchReportedMs = -1;
-		std::optional<uint8_t> m_lastKit;
-		std::optional<uint8_t> m_lastPattern;
-		Telemetry m_telemetry;
-		bool m_telemetrySeen = false;
-		bool m_hw = false;
-		double m_lastReplyMs = -1e9;
-		bool m_linkLost = false;
-		double m_hwSinceMs = 0;
-		std::array<bool, 16> m_mutes{};
-		KnobRecorder m_knobs;
-		// The trig the last knob turn will lock while recording (nextLockStep), for the page.
-		struct RecLock { uint8_t track = 0, param = 0, step = 0; double atMs = 0; };
-		std::optional<RecLock> m_recLock;
-		ModEngine m_mods;
+		deskCore::Core<MdModel> m_core;
+		std::unique_ptr<MdMachine> m_machine;
 		DeskSetup m_setup;
-		double m_recordPollMs = -1e9;
-		double m_recordAfterStopMs = -1;
-		double m_keyQuietUntilMs = -1e9;
-		std::vector<std::pair<double, std::function<void()>>> m_scheduled;
+		ModEngine m_mods;
+		bool m_pageReady = false;
 	};
 }
