@@ -18,6 +18,7 @@ target_sources(mdDesk PRIVATE
 	mdDeskPacer.h
 	mdDeskRecord.cpp mdDeskRecord.h
 	mdDeskSetup.cpp mdDeskSetup.h
+	mdDeskTelemetry.h
 )
 
 target_link_libraries(mdDesk PUBLIC deskCore elektronData mdDataLink)

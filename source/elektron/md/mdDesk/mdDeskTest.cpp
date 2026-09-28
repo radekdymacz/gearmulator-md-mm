@@ -36,6 +36,16 @@ namespace
 		++g_failures;
 	}
 
+	// apply is pure: the clipboard a copy leaves comes back in the result.
+	EditResult run(const Documents& _docs, const Value& _cmd, Clipboard& _clip)
+	{
+		auto r = apply(_docs, _cmd, _clip);
+		if(r.clipboard)
+			_clip = *r.clipboard;
+		return r;
+	}
+
+
 	std::vector<uint8_t> load(const char* _name)
 	{
 		std::ifstream s(std::string(MDDESK_TESTDATA_DIR) + "/" + _name, std::ios::binary);
@@ -74,27 +84,27 @@ namespace
 		const auto& p1 = docs.patterns[1];
 		const bool had = ed::hasTrig(p1, 2, 3);
 
-		auto r = apply(docs, cmd(R"({"op":"trig","p":1,"t":2,"s":3})"), clip);
+		auto r = run(docs, cmd(R"({"op":"trig","p":1,"t":2,"s":3})"), clip);
 		check(r.errors.empty() && r.changes.size() == 1, "trig toggle changes the pattern");
 		check(ed::hasTrig(pat(r), 2, 3) != had, "trig toggle flips the step");
 		docs.set(r.changes[0].after);
 
 		// Locks live on trigs.
-		r = apply(docs, cmd(R"({"op":"trig","p":1,"t":2,"s":3,"on":true})"), clip);
+		r = run(docs, cmd(R"({"op":"trig","p":1,"t":2,"s":3,"on":true})"), clip);
 		if(!r.changes.empty())
 			docs.set(r.changes[0].after);
-		r = apply(docs, cmd(R"({"op":"lock","p":1,"t":2,"i":12,"s":3,"v":40})"), clip);
+		r = run(docs, cmd(R"({"op":"lock","p":1,"t":2,"i":12,"s":3,"v":40})"), clip);
 		check(r.errors.empty() && ed::lockValue(pat(r), 2, 12, 3) == uint8_t{40}, "lock on a trig");
 		docs.set(r.changes[0].after);
 		check(ed::usedLockRows(docs.patterns[1]) == 1, "one lock row in use");
 
-		r = apply(docs, cmd(R"({"op":"trig","p":1,"t":2,"s":3,"on":false})"), clip);
+		r = run(docs, cmd(R"({"op":"trig","p":1,"t":2,"s":3,"on":false})"), clip);
 		check(r.errors.empty() && !ed::hasTrig(pat(r), 2, 3), "trig off");
 		check(!ed::lockValue(pat(r), 2, 12, 3) && ed::usedLockRows(pat(r)) == 0,
 			"removing a trig removes its locks and frees the row");
 		docs.set(r.changes[0].after);
 
-		r = apply(docs, cmd(R"({"op":"lock","p":1,"t":2,"i":12,"s":3,"v":40})"), clip);
+		r = run(docs, cmd(R"({"op":"lock","p":1,"t":2,"i":12,"s":3,"v":40})"), clip);
 		check(!r.errors.empty() && r.changes.empty(), "a step without a trig cannot hold a lock");
 
 		// The 64-lock budget: pattern 0 uses all 64 rows.
@@ -116,7 +126,7 @@ namespace
 		{
 			const auto c = "{\"op\":\"lock\",\"p\":0,\"t\":" + std::to_string(t) + ",\"i\":" + std::to_string(param)
 				+ ",\"s\":" + std::to_string(s) + ",\"v\":1}";
-			r = apply(docs, cmd(c), clip);
+			r = run(docs, cmd(c), clip);
 			check(!r.errors.empty() && r.errors[0].find("64") != std::string::npos,
 				"a 65th locked parameter is refused");
 		}
@@ -146,25 +156,25 @@ namespace
 	{
 		auto docs = fixtureDocs();
 		Clipboard clip;
-		auto r = apply(docs, cmd(R"({"op":"totalLength","p":1,"v":48})"), clip);
+		auto r = run(docs, cmd(R"({"op":"totalLength","p":1,"v":48})"), clip);
 		check(r.errors.empty() && pat(r).scale == 2 && pat(r).length == 48, "total length sets scale and length");
-		r = apply(docs, cmd(R"({"op":"totalLength","p":1,"v":20})"), clip);
+		r = run(docs, cmd(R"({"op":"totalLength","p":1,"v":20})"), clip);
 		check(!r.errors.empty() && r.changes.empty(), "total length 20 is refused");
-		r = apply(docs, cmd(R"({"op":"length","p":1,"v":0})"), clip);
+		r = run(docs, cmd(R"({"op":"length","p":1,"v":0})"), clip);
 		check(!r.errors.empty(), "length 0 is refused");
-		r = apply(docs, cmd(R"({"op":"swing","p":1,"v":65})"), clip);
+		r = run(docs, cmd(R"({"op":"swing","p":1,"v":65})"), clip);
 		check(r.errors.empty() && ed::swingPercent(pat(r).swingAmount) == 65, "swing in percent");
-		r = apply(docs, cmd(R"({"op":"swing","p":1,"v":81})"), clip);
+		r = run(docs, cmd(R"({"op":"swing","p":1,"v":81})"), clip);
 		check(!r.errors.empty(), "swing above 80 % is refused");
-		r = apply(docs, cmd(R"({"op":"speed","p":1,"v":"3/4X"})"), clip);
+		r = run(docs, cmd(R"({"op":"speed","p":1,"v":"3/4X"})"), clip);
 		check(r.errors.empty() && pat(r).tempoMultiplier == 2, "speed by name");
-		r = apply(docs, cmd(R"({"op":"accentAmount","p":1,"v":15})"), clip);
+		r = run(docs, cmd(R"({"op":"accentAmount","p":1,"v":15})"), clip);
 		check(r.errors.empty() && pat(r).accentAmount == 127, "accent 15 is 127");
-		r = apply(docs, cmd(R"({"op":"trig","p":9,"t":0,"s":0})"), clip);
+		r = run(docs, cmd(R"({"op":"trig","p":9,"t":0,"s":0})"), clip);
 		check(!r.errors.empty(), "an unloaded pattern is refused");
-		r = apply(docs, cmd(R"({"op":"nonsense","p":1})"), clip);
+		r = run(docs, cmd(R"({"op":"nonsense","p":1})"), clip);
 		check(!r.errors.empty(), "unknown commands are refused");
-		r = apply(docs, cmd(R"({"op":"trig","p":1,"t":16,"s":0})"), clip);
+		r = run(docs, cmd(R"({"op":"trig","p":1,"t":16,"s":0})"), clip);
 		check(!r.errors.empty(), "track 17 is refused");
 	}
 
@@ -172,11 +182,11 @@ namespace
 	{
 		auto docs = fixtureDocs();
 		Clipboard clip;
-		auto r = apply(docs, cmd(R"({"op":"copySteps","p":0,"t":0,"from":0,"to":16})"), clip);
+		auto r = run(docs, cmd(R"({"op":"copySteps","p":0,"t":0,"from":0,"to":16})"), clip);
 		check(r.errors.empty() && r.changes.empty() && clip.steps && clip.steps->length == 16,
 			"copy fills the clipboard, changes nothing");
 		const auto& src = docs.patterns[0];
-		r = apply(docs, cmd(R"({"op":"pasteSteps","p":1,"t":5,"from":0})"), clip);
+		r = run(docs, cmd(R"({"op":"pasteSteps","p":1,"t":5,"from":0})"), clip);
 		check(r.errors.empty() && r.changes.size() == 1, "paste into another pattern");
 		bool same = true;
 		for(size_t s = 0; s < 16; ++s)
@@ -188,19 +198,19 @@ namespace
 		check(same, "pasted trigs and locks match the copied page");
 
 		// Pasting into the full pool skips the locks that need new rows.
-		r = apply(docs, cmd(R"({"op":"copySteps","p":0,"t":0,"from":0,"to":16})"), clip);
-		r = apply(docs, cmd(R"({"op":"pasteSteps","p":0,"t":15,"from":0})"), clip);
+		r = run(docs, cmd(R"({"op":"copySteps","p":0,"t":0,"from":0,"to":16})"), clip);
+		r = run(docs, cmd(R"({"op":"pasteSteps","p":0,"t":15,"from":0})"), clip);
 		check(r.errors.empty() && ed::usedLockRows(pat(r)) <= 64 && ed::validate(pat(r)).empty(),
 			"paste into a full pool stays within the budget");
 
-		r = apply(docs, cmd(R"({"op":"clearSteps","p":0,"t":0,"from":0,"to":16})"), clip);
+		r = run(docs, cmd(R"({"op":"clearSteps","p":0,"t":0,"from":0,"to":16})"), clip);
 		bool empty = true;
 		for(size_t s = 0; s < 16; ++s)
 			empty &= !ed::hasTrig(pat(r), 0, s);
 		check(r.errors.empty() && empty, "clear empties the track page");
 
 		Clipboard none;
-		r = apply(docs, cmd(R"({"op":"pasteSteps","p":1,"t":0,"from":0})"), none);
+		r = run(docs, cmd(R"({"op":"pasteSteps","p":1,"t":0,"from":0})"), none);
 		check(!r.errors.empty(), "paste without a copy is refused");
 	}
 
@@ -209,7 +219,7 @@ namespace
 		auto docs = fixtureDocs();
 		Clipboard clip;
 		const auto& k = docs.kits[0];
-		auto r = apply(docs, cmd(R"({"op":"param","k":0,"t":3,"i":16,"v":99})"), clip);
+		auto r = run(docs, cmd(R"({"op":"param","k":0,"t":3,"i":16,"v":99})"), clip);
 		check(r.errors.empty() && r.changes.size() == 1, "kit param edit");
 		auto d = kitDelivery(k, std::get<ed::MdKit>(r.changes[0].after));
 		check(d.edits.size() == 1 && d.edits[0].kind == LiveEdit::Kind::Param && d.edits[0].track == 3
@@ -217,7 +227,7 @@ namespace
 		check(liveEditSysex(d.edits[0]).empty(), "params travel as CCs, not SysEx");
 
 		const auto sd = *ed::mdMachineModel("EFM-SD");
-		r = apply(docs, cmd("{\"op\":\"machine\",\"k\":0,\"t\":2,\"model\":" + std::to_string(sd) + "}"), clip);
+		r = run(docs, cmd("{\"op\":\"machine\",\"k\":0,\"t\":2,\"model\":" + std::to_string(sd) + "}"), clip);
 		check(r.errors.empty(), "machine change");
 		d = kitDelivery(k, std::get<ed::MdKit>(r.changes[0].after));
 		check(!d.edits.empty() && d.edits[0].kind == LiveEdit::Kind::Machine && d.edits[0].model == sd,
@@ -234,36 +244,36 @@ namespace
 		const auto romBytes = ed::mdAssignMachine(0, rom, ed::MdMachineInit::Synthesis);
 		check(romBytes[8] == 4 && romBytes[9] == 1, "UW machines set c = 1");
 
-		r = apply(docs, cmd(R"({"op":"machine","k":0,"t":2,"model":5})"), clip);
+		r = run(docs, cmd(R"({"op":"machine","k":0,"t":2,"model":5})"), clip);
 		check(!r.errors.empty(), "an undefined machine id is refused");
 
-		r = apply(docs, cmd(R"({"op":"lfo","k":0,"t":1,"field":"shape2","v":4})"), clip);
+		r = run(docs, cmd(R"({"op":"lfo","k":0,"t":1,"field":"shape2","v":4})"), clip);
 		d = kitDelivery(k, std::get<ed::MdKit>(r.changes.at(0).after));
 		check(d.edits.size() == 1 && d.edits[0].kind == LiveEdit::Kind::Lfo, "LFO shape is one live edit");
 		const auto lfo = liveEditSysex(d.edits[0]);
 		check(lfo.size() == 10 && lfo[6] == 0x62 && lfo[7] == ((1 << 3) | 3) && lfo[8] == 4, "set LFO message");
-		r = apply(docs, cmd(R"({"op":"lfo","k":0,"t":1,"field":"shape2","v":6})"), clip);
+		r = run(docs, cmd(R"({"op":"lfo","k":0,"t":1,"field":"shape2","v":6})"), clip);
 		check(!r.errors.empty(), "LFO shape 6 is refused");
 
-		r = apply(docs, cmd(R"({"op":"masterFx","k":0,"fx":"rhythmEcho","i":3,"v":10})"), clip);
+		r = run(docs, cmd(R"({"op":"masterFx","k":0,"fx":"rhythmEcho","i":3,"v":10})"), clip);
 		d = kitDelivery(k, std::get<ed::MdKit>(r.changes.at(0).after));
 		const auto fx = liveEditSysex(d.edits.at(0));
 		check(fx[6] == 0x5d && fx[7] == 3 && fx[8] == 10, "rhythm echo parameter is 0x5d");
 
-		r = apply(docs, cmd(R"({"op":"group","k":0,"t":4,"kind":"mute","target":5})"), clip);
+		r = run(docs, cmd(R"({"op":"group","k":0,"t":4,"kind":"mute","target":5})"), clip);
 		check(r.errors.empty() && std::get<ed::MdKit>(r.changes[0].after).muteGroups[4] == 5, "mute group");
-		r = apply(docs, cmd(R"({"op":"group","k":0,"t":4,"kind":"mute","target":4})"), clip);
+		r = run(docs, cmd(R"({"op":"group","k":0,"t":4,"kind":"mute","target":4})"), clip);
 		check(!r.errors.empty(), "a track cannot group with itself");
 
-		r = apply(docs, cmd(R"({"op":"kitName","k":0,"name":"DUB ROOM"})"), clip);
+		r = run(docs, cmd(R"({"op":"kitName","k":0,"name":"DUB ROOM"})"), clip);
 		d = kitDelivery(k, std::get<ed::MdKit>(r.changes.at(0).after));
 		check(d.edits.size() == 1 && d.edits[0].kind == LiveEdit::Kind::KitName
 			&& liveEditSysex(d.edits[0]).size() == 24, "kit name is 0x55 with 16 bytes");
 
 		// Copy / paste a sound between tracks.
-		r = apply(docs, cmd(R"({"op":"copySound","k":0,"t":0})"), clip);
+		r = run(docs, cmd(R"({"op":"copySound","k":0,"t":0})"), clip);
 		check(clip.sound && r.changes.empty(), "copy sound");
-		r = apply(docs, cmd(R"({"op":"pasteSound","k":0,"t":9})"), clip);
+		r = run(docs, cmd(R"({"op":"pasteSound","k":0,"t":9})"), clip);
 		const auto& pasted = std::get<ed::MdKit>(r.changes.at(0).after);
 		check(pasted.models[9] == k.models[0] && pasted.params[9] == k.params[0] && pasted.lfos[9].track == 9,
 			"paste sound copies machine and values, the LFO targets its new track");
@@ -274,22 +284,22 @@ namespace
 		auto docs = fixtureDocs();
 		Clipboard clip;
 		// Song 1 is END only: insert a pattern row before it.
-		auto r = apply(docs, cmd(R"({"op":"rowInsert","s":1,"i":0,
+		auto r = run(docs, cmd(R"({"op":"rowInsert","s":1,"i":0,
 			"row":{"kind":"pattern","pattern":3,"repeats":1,"start":0,"end":16,"tempo":null,"mutes":[]}})"), clip);
 		check(r.errors.empty() && r.changes.size() == 1, "insert a row");
 		auto song = std::get<ed::MdSong>(r.changes[0].after);
 		check(song.rows.size() == 2 && song.rows[0].pattern == 3 && song.rows[0].repeats == 1, "row landed first");
 		docs.set(song);
 
-		r = apply(docs, cmd(R"({"op":"rowInsert","s":1,"i":1,"row":{"kind":"pattern","pattern":4,"repeats":0,
+		r = run(docs, cmd(R"({"op":"rowInsert","s":1,"i":1,"row":{"kind":"pattern","pattern":4,"repeats":0,
 			"start":0,"end":16,"tempo":120,"mutes":[2]}})"), clip);
 		docs.set(r.changes.at(0).after);
 		// A loop back to row 0 after two rows.
-		r = apply(docs, cmd(R"({"op":"rowInsert","s":1,"i":2,"row":{"kind":"loop","target":0,"repeats":1}})"), clip);
+		r = run(docs, cmd(R"({"op":"rowInsert","s":1,"i":2,"row":{"kind":"loop","target":0,"repeats":1}})"), clip);
 		check(r.errors.empty(), "insert a loop");
 		docs.set(r.changes.at(0).after);
 		// Inserting before the loop's target moves the target with its row.
-		r = apply(docs, cmd(R"({"op":"rowInsert","s":1,"i":0,"row":{"kind":"pattern","pattern":7,"repeats":0,
+		r = run(docs, cmd(R"({"op":"rowInsert","s":1,"i":0,"row":{"kind":"pattern","pattern":7,"repeats":0,
 			"start":0,"end":16,"tempo":null,"mutes":[]}})"), clip);
 		check(r.errors.empty(), "insert at the top");
 		song = std::get<ed::MdSong>(r.changes.at(0).after);
@@ -297,23 +307,23 @@ namespace
 			"loop target follows its row");
 		docs.set(song);
 
-		r = apply(docs, cmd(R"({"op":"rowDelete","s":1,"i":4})"), clip);
+		r = run(docs, cmd(R"({"op":"rowDelete","s":1,"i":4})"), clip);
 		check(!r.errors.empty(), "END cannot be deleted");
-		r = apply(docs, cmd(R"({"op":"rowSet","s":1,"i":1,"row":{"kind":"pattern","pattern":200,"repeats":0,
+		r = run(docs, cmd(R"({"op":"rowSet","s":1,"i":1,"row":{"kind":"pattern","pattern":200,"repeats":0,
 			"start":0,"end":16,"tempo":null,"mutes":[]}})"), clip);
 		check(!r.errors.empty() && r.changes.empty(), "pattern 200 is refused with the contract's path");
 		// Rows now: A08, A04, A05, LOOP -> 1, END. Move A08 behind A05.
-		r = apply(docs, cmd(R"({"op":"rowMove","s":1,"from":0,"to":2})"), clip);
+		r = run(docs, cmd(R"({"op":"rowMove","s":1,"from":0,"to":2})"), clip);
 		check(r.errors.empty(), "move a row");
 		song = std::get<ed::MdSong>(r.changes.at(0).after);
 		check(song.rows[2].pattern == 7 && song.rows[0].pattern == 3 && song.rows[3].target == 0,
 			"moved row lands, the loop still targets A04");
-		r = apply(docs, cmd(R"({"op":"copyRow","s":1,"i":1})"), clip);
-		r = apply(docs, cmd(R"({"op":"pasteRow","s":1,"i":1})"), clip);
+		r = run(docs, cmd(R"({"op":"copyRow","s":1,"i":1})"), clip);
+		r = run(docs, cmd(R"({"op":"pasteRow","s":1,"i":1})"), clip);
 		check(r.errors.empty() && std::get<ed::MdSong>(r.changes.at(0).after).rows.size() == 6, "paste a row");
 
 		// The 256-row song is full.
-		r = apply(docs, cmd(R"({"op":"rowInsert","s":0,"i":0,"row":{"kind":"halt"}})"), clip);
+		r = run(docs, cmd(R"({"op":"rowInsert","s":0,"i":0,"row":{"kind":"halt"}})"), clip);
 		check(!r.errors.empty(), "a 257th row is refused");
 	}
 
@@ -321,19 +331,19 @@ namespace
 	{
 		auto docs = fixtureDocs();
 		Clipboard clip;
-		auto r = apply(docs, cmd(R"({"op":"route","t":0,"out":"MAIN"})"), clip);
+		auto r = run(docs, cmd(R"({"op":"route","t":0,"out":"MAIN"})"), clip);
 		const auto before = *docs.global;
 		if(!r.changes.empty())
 		{
 			const auto d = globalDelivery(before, std::get<ed::MdGlobal>(r.changes[0].after));
 			check(d.edits.size() == 1 && liveEditSysex(d.edits[0])[6] == 0x5c, "routing is 0x5c");
 		}
-		r = apply(docs, cmd(R"({"op":"tempo","bpm":126.5})"), clip);
+		r = run(docs, cmd(R"({"op":"tempo","bpm":126.5})"), clip);
 		check(r.errors.empty() && std::get<ed::MdGlobal>(r.changes.at(0).after).tempo == 3036, "tempo x 24");
 		const auto d = globalDelivery(before, std::get<ed::MdGlobal>(r.changes.at(0).after));
 		const auto t = liveEditSysex(d.edits.at(0));
 		check(t[6] == 0x61 && ((t[7] << 7) | t[8]) == 3036, "set tempo message");
-		r = apply(docs, cmd(R"({"op":"tempo","bpm":301})"), clip);
+		r = run(docs, cmd(R"({"op":"tempo","bpm":301})"), clip);
 		check(!r.errors.empty(), "301 BPM is refused");
 	}
 
@@ -345,7 +355,7 @@ namespace
 		const auto original = docs.patterns[1];
 		for(int s = 0; s < 3; ++s)
 		{
-			auto r = apply(docs, cmd("{\"op\":\"trig\",\"p\":1,\"t\":0,\"s\":" + std::to_string(s) + "}"), clip);
+			auto r = run(docs, cmd("{\"op\":\"trig\",\"p\":1,\"t\":0,\"s\":" + std::to_string(s) + "}"), clip);
 			docs.set(r.changes.at(0).after);
 			h.record(r.changes, 0);
 		}
@@ -367,7 +377,7 @@ namespace
 		const auto start = docs.patterns[1];
 		for(int v = 10; v < 20; ++v)
 		{
-			auto r = apply(docs, cmd("{\"op\":\"trig\",\"p\":1,\"t\":1,\"s\":" + std::to_string(v) + "}"), clip);
+			auto r = run(docs, cmd("{\"op\":\"trig\",\"p\":1,\"t\":1,\"s\":" + std::to_string(v) + "}"), clip);
 			docs.set(r.changes.at(0).after);
 			g.record(r.changes, 77);
 		}

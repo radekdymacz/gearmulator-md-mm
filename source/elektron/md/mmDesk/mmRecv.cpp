@@ -39,7 +39,7 @@ namespace mmDesk
 			return out;
 		const bool onRecv = onSysexRecv(_t);
 		const bool keysDone = _now >= m_keysDone;
-		const bool onMain = _t.screen == g_screenMain;
+		const bool onMain = _t.screen == Screen::Main;
 		switch(m_state)
 		{
 		case State::Failed:

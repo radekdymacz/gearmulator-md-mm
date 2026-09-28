@@ -90,14 +90,24 @@ namespace mdDesk
 		std::vector<Change> changes;		// empty: nothing changed
 		std::vector<std::string> errors;	// non-empty: refused, nothing changed
 		std::string note;					// one line for the user, may be empty
+		std::optional<Clipboard> clipboard;	// the new clipboard after a copy command
 	};
 
-	// Applies one command. Pattern commands carry "p" (slot), kit commands "k",
-	// song commands "s". Every changed document is validated with the hardware
-	// limits (elektronData::validate) before it is returned; a command that would
-	// produce an invalid document is refused with its problems. Copy commands
-	// change only _clipboard.
-	EditResult apply(const Documents& _docs, const elektronData::json::Value& _command, Clipboard& _clipboard);
+	// What an edit may depend on besides the documents: the machine's current kit (a rename
+	// of the kit that plays is its live name edit). Data from the adapter.
+	struct EditContext
+	{
+		std::optional<uint8_t> currentKit;
+	};
+
+	// Applies one command, pure: the documents and the clipboard in, the changes (and a new
+	// clipboard after a copy) out. Pattern commands carry "p" (slot), kit commands "k",
+	// song commands "s"; the kit library and pattern chooser commands (mdDeskLibrary.h)
+	// too. Every changed document is validated with the hardware limits
+	// (elektronData::validate) before it is returned; a command that would produce an
+	// invalid document is refused with its problems.
+	EditResult apply(const Documents& _docs, const elektronData::json::Value& _command, const Clipboard& _clipboard,
+		const EditContext& _context = {});
 
 	// The values "clear sound" uses: the machine's own defaults live in the firmware and
 	// cannot be read without saving the kit.

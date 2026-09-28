@@ -12,6 +12,18 @@ namespace md
 	// §6; mmEditorProbeFirmwareTest), published by the audio thread after every
 	// block and read lock-free by the Monomachine Editor. Fingerprint-gated by the
 	// device: -1 / 0 = unknown for another firmware.
+	// The screen the firmware shows, as a fact (P6): the handler addresses below stay in
+	// this device layer; the editor's desk sees only these kinds.
+	enum class MmScreen : uint8_t
+	{
+		Unknown,	// no firmware screen yet (0, or not an OS 1.32B handler)
+		Boot,		// the start-up animation
+		Main,
+		Global,
+		GlobalEdit,	// the GLOBAL EDIT menus, SYSEX RECV among them
+		Other		// another OS 1.32B screen
+	};
+
 	struct MmTelemetry
 	{
 		static constexpr uint32_t g_stepAddress = 0x257e57;		// current step, 0-based, wraps at the length
@@ -31,6 +43,15 @@ namespace md
 		static constexpr uint32_t g_screenMain = 0x002c2908;
 		static constexpr uint32_t g_screenGlobal = 0x002c2ee8;
 		static constexpr uint32_t g_screenGlobalEdit = 0x002c3a98;	// the GLOBAL EDIT menus, SYSEX RECV among them
+
+		static MmScreen screenOf(const uint32_t _word)
+		{
+			if(_word == g_screenBoot) return MmScreen::Boot;
+			if(_word == g_screenMain) return MmScreen::Main;
+			if(_word == g_screenGlobal) return MmScreen::Global;
+			if(_word == g_screenGlobalEdit) return MmScreen::GlobalEdit;
+			return _word != 0 && (_word >> 16) == 0x2c ? MmScreen::Other : MmScreen::Unknown;
+		}
 
 		std::atomic<int> step{-1};
 		std::atomic<int> running{-1};		// 1 playing, 0 stopped or paused

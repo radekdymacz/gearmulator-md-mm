@@ -1,4 +1,5 @@
 #include "mdDeskEdit.h"
+#include "mdDeskLibrary.h"
 
 #include "elektronData/mdJson.h"
 #include "elektronData/mdMachines.h"
@@ -872,7 +873,9 @@ namespace mdDesk
 		}
 	}
 
-	EditResult apply(const Documents& _docs, const Value& _command, Clipboard& _clipboard)
+	namespace
+	{
+	EditResult applyEdit(const Documents& _docs, const Value& _command, Clipboard& _clipboard)
 	{
 		EditResult result;
 		const auto* opValue = _command.find("op");
@@ -976,6 +979,31 @@ namespace mdDesk
 		}, *after);
 		if(!same)
 			result.changes.push_back({*before, *after});
+		return result;
+	}
+
+	}
+
+	EditResult apply(const Documents& _docs, const Value& _command, const Clipboard& _clipboard, const EditContext& _context)
+	{
+		const auto* opValue = _command.find("op");
+		const auto op = opValue && opValue->isString() ? opValue->asString() : std::string();
+		// The kit that plays is renamed live (0x55, like the LCD's kit name), another slot by its dump.
+		const auto* k = _command.find("k");
+		if(op == "kitRename" && k && k->isNumber() && _context.currentKit && *_context.currentKit == k->asNumber())
+		{
+			Value rename = Value::object();
+			rename.set("op", "kitName");
+			rename.set("k", *k);
+			if(const auto* n = _command.find("name"))
+				rename.set("name", *n);
+			return apply(_docs, rename, _clipboard, _context);
+		}
+		// Values in, values out: the clipboard the command leaves is returned, not changed in place.
+		auto clipboard = _clipboard;
+		auto result = isLibraryCommand(op) ? applyLibrary(_docs, _command, clipboard) : applyEdit(_docs, _command, clipboard);
+		if(result.errors.empty() && (op.rfind("copy", 0) == 0 || op == "kitCopy" || op == "patCopy"))
+			result.clipboard = std::move(clipboard);
 		return result;
 	}
 

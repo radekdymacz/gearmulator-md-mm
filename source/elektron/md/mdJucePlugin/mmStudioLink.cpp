@@ -15,6 +15,13 @@ namespace mdJucePlugin
 {
 	namespace
 	{
+		// The device layer's screen kinds and the desk's are the same list (P6).
+		static_assert(static_cast<int>(mmDesk::Screen::Unknown) == static_cast<int>(md::MmScreen::Unknown)
+			&& static_cast<int>(mmDesk::Screen::Boot) == static_cast<int>(md::MmScreen::Boot)
+			&& static_cast<int>(mmDesk::Screen::Main) == static_cast<int>(md::MmScreen::Main)
+			&& static_cast<int>(mmDesk::Screen::Global) == static_cast<int>(md::MmScreen::Global)
+			&& static_cast<int>(mmDesk::Screen::GlobalEdit) == static_cast<int>(md::MmScreen::GlobalEdit)
+			&& static_cast<int>(mmDesk::Screen::Other) == static_cast<int>(md::MmScreen::Other), "screen kinds disagree");
 		// parameterDescriptions_mm.json: pages 0-6 (8 each), 7 level, 8 mute.
 		constexpr const char* g_names[7][8] = {
 			{"SynthesisA", "SynthesisB", "SynthesisC", "SynthesisD", "SynthesisE", "SynthesisF", "SynthesisG", "SynthesisH"},
@@ -177,7 +184,7 @@ namespace mdJucePlugin
 		const int running = m_telemetry->running.load(std::memory_order_relaxed);
 		t.valid = t.step >= 0 && running >= 0;
 		t.running = running == 1;
-		t.screen = m_telemetry->screen.load(std::memory_order_relaxed);
+		t.screen = static_cast<mmDesk::Screen>(md::MmTelemetry::screenOf(m_telemetry->screen.load(std::memory_order_relaxed)));
 		t.recvCount = m_telemetry->recvCount.load(std::memory_order_relaxed);
 		t.recvErrors = m_telemetry->recvErrors.load(std::memory_order_relaxed);
 		t.recvActive = m_telemetry->recvActive.load(std::memory_order_relaxed) == 1;
@@ -217,7 +224,8 @@ namespace mdJucePlugin
 			if(device->isProjectStateRestorePending())
 				return E::Loading;
 			// Ready when the start-up animation is over (MM-P0 §6): the screen word leaves it.
-			if(!hw.isFirmwareMidiReady() || screen == 0 || screen == md::MmTelemetry::g_screenBoot || (screen >> 16) != 0x2c)
+			const auto kind = md::MmTelemetry::screenOf(screen);
+			if(!hw.isFirmwareMidiReady() || kind == md::MmScreen::Unknown || kind == md::MmScreen::Boot)
 				return E::Booting;
 			return E::Ready;
 		});

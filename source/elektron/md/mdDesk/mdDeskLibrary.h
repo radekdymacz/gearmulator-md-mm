@@ -22,6 +22,7 @@ namespace mdDesk
 	// Commands: kitCopy {k}, kitPaste {k}, kitCopyTo {from, to}, kitClear {k}, kitRename
 	// {k, name}; patCopy {p}, patPaste {p}, patCopyTo {from, to}, patClear {p}.
 	bool isLibraryCommand(const std::string& _op);
+	// The library part of apply (mdDeskEdit.h), which calls it.
 	EditResult applyLibrary(const Documents& _docs, const elektronData::json::Value& _command, Clipboard& _clipboard);
 
 	elektronData::MdKit emptyKit(const elektronData::MdKit& _like, uint8_t _slot);

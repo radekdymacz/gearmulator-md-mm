@@ -317,21 +317,9 @@ namespace mdDesk
 	void Desk::handleEdit(const Value& _message)
 	{
 		const auto op = opOf(_message);
-		// The kit that plays is renamed live (0x55), like the LCD's kit name.
-		const auto k = intOf(_message, "k");
-		if(op == "kitRename" && k && currentKit() == *k)
-		{
-			Value m = Value::object();
-			m.set("op", "kitName");
-			m.set("k", *k);
-			if(const auto* n = _message.find("name"))
-				m.set("name", *n);
-			if(const auto id = intOf(_message, "id"))
-				m.set("id", *id);
-			handleEdit(m);
-			return;
-		}
-		auto edit = isLibraryCommand(op) ? applyLibrary(m_docs, _message, m_clipboard) : apply(m_docs, _message, m_clipboard);
+		auto edit = apply(m_docs, _message, m_clipboard, {currentKit()});
+		if(edit.clipboard)
+			m_clipboard = *edit.clipboard;
 		if(!edit.errors.empty())
 		{
 			result(_message, edit.errors, {});
@@ -1168,19 +1156,13 @@ namespace mdDesk
 
 	void Desk::onTelemetry(const Telemetry& _t)
 	{
-		const bool changed = _t.step != m_telemetry.step || _t.pattern != m_telemetry.pattern
-			|| _t.playing != m_telemetry.playing || _t.valid != m_telemetry.valid
-			|| _t.recording != m_telemetry.recording || _t.gridEdit != m_telemetry.gridEdit
-			|| _t.knobPage != m_telemetry.knobPage || _t.bootAnimation != m_telemetry.bootAnimation
-			|| _t.mutes != m_telemetry.mutes || _t.chainKnown != m_telemetry.chainKnown || _t.chain != m_telemetry.chain
-			|| _t.bankGroup != m_telemetry.bankGroup;
-		const bool machineChanged = _t.bootAnimation != m_telemetry.bootAnimation || _t.mutes != m_telemetry.mutes
-			|| _t.chainKnown != m_telemetry.chainKnown || _t.chain != m_telemetry.chain || _t.bankGroup != m_telemetry.bankGroup;
-		const bool recordingChanged = _t.recording != m_telemetry.recording;
-		const bool patternChanged = _t.valid && _t.pattern != m_telemetry.pattern;
+		const auto e = diff(m_telemetry, _t);
+		const bool changed = e.any;
+		const bool machineChanged = e.machineChanged;
+		const bool recordingChanged = e.recordChanged;
+		const bool patternChanged = e.patternChanged;
 		const bool wasPlaying = m_telemetry.playing;
-		const int stepBefore = m_telemetry.step;
-		const bool wrapped = _t.valid && m_telemetry.step >= 0 && _t.step >= 0 && _t.step < m_telemetry.step;
+		const bool wrapped = e.wrapped;
 		m_telemetry = _t;
 		if(!m_telemetrySeen)
 		{
@@ -1215,7 +1197,7 @@ namespace mdDesk
 		if(wasPlaying != _t.playing)
 			m_machineDirty = true;
 		// App modulators move on the machine's own steps (here, unless they run in the plug-in).
-		if(_t.valid && (_t.step != stepBefore || wasPlaying != _t.playing))
+		if(e.stepped)
 			runModulators(m_port.nowMs());
 		if(recordingChanged)
 		{

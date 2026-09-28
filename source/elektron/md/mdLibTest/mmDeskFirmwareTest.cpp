@@ -134,7 +134,7 @@ namespace
 			t.valid = true;
 			t.step = tel.step.load();
 			t.running = tel.running.load() == 1;
-			t.screen = tel.screen.load();
+			t.screen = static_cast<mmDesk::Screen>(md::MmTelemetry::screenOf(tel.screen.load()));
 			t.recvCount = tel.recvCount.load();
 			t.recvErrors = tel.recvErrors.load();
 			t.recvActive = tel.recvActive.load() == 1;
@@ -293,7 +293,7 @@ namespace
 
 		// Idle: back to the main screen, still playing.
 		r.run(2500);
-		check(r.tel.screen.load() == mmDesk::g_screenMain, "left SYSEX RECV after the idle time");
+		check(md::MmTelemetry::screenOf(r.tel.screen.load()) == md::MmScreen::Main, "left SYSEX RECV after the idle time");
 		check(r.tel.running.load() == 1, "still playing after leaving");
 
 		// Queue a pattern while playing.

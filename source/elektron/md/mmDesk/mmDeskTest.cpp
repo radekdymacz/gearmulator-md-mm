@@ -33,12 +33,12 @@ namespace
 			++g_failures;
 	}
 
-	mmDesk::Telemetry screen(const uint32_t _s)
+	mmDesk::Telemetry screen(const mmDesk::Screen _s)
 	{
 		mmDesk::Telemetry t;
 		t.valid = true;
 		t.screen = _s;
-		t.recvActive = _s == mmDesk::g_screenGlobalEdit;
+		t.recvActive = _s == mmDesk::Screen::GlobalEdit;
 		return t;
 	}
 
@@ -46,29 +46,29 @@ namespace
 	{
 		std::puts("RECV session");
 		mmDesk::RecvSession r;
-		auto out = r.tick(0, screen(mmDesk::g_screenMain));
+		auto out = r.tick(0, screen(mmDesk::Screen::Main));
 		check(out.keys.empty() && r.state() == mmDesk::RecvSession::State::Idle, "nothing to send: stays idle");
 		r.want({0xf0, 1, 0xf7});
-		out = r.tick(10, screen(mmDesk::g_screenMain));
+		out = r.tick(10, screen(mmDesk::Screen::Main));
 		check(out.keys == mmDesk::RecvSession::enterMacro() && r.state() == mmDesk::RecvSession::State::Entering, "from the main screen: the macro");
-		out = r.tick(400, screen(0x2c2ee8));
+		out = r.tick(400, screen(mmDesk::Screen::Global));
 		check(out.sends.empty(), "no send before SYSEX RECV");
-		out = r.tick(700, screen(mmDesk::g_screenGlobalEdit));
-		out = r.tick(710, screen(mmDesk::g_screenGlobalEdit));
+		out = r.tick(700, screen(mmDesk::Screen::GlobalEdit));
+		out = r.tick(710, screen(mmDesk::Screen::GlobalEdit));
 		check(out.sends.size() == 1 && r.parked(), "parked: the dump goes out");
-		out = r.tick(1500, screen(mmDesk::g_screenGlobalEdit));
+		out = r.tick(1500, screen(mmDesk::Screen::GlobalEdit));
 		check(out.keys.empty() && r.parked(), "stays parked while quiet for less than the idle time");
-		out = r.tick(4000, screen(mmDesk::g_screenGlobalEdit));
+		out = r.tick(4000, screen(mmDesk::Screen::GlobalEdit));
 		check(out.keys == mmDesk::RecvSession::exitKeys() && r.state() == mmDesk::RecvSession::State::Leaving, "idle: EXIT back");
-		r.tick(4300, screen(mmDesk::g_screenMain));
+		r.tick(4300, screen(mmDesk::Screen::Main));
 		check(r.state() == mmDesk::RecvSession::State::Idle, "back on the main screen");
 		r.want({0xf0, 2, 0xf7});
-		out = r.tick(4400, screen(0x2c2d78));
+		out = r.tick(4400, screen(mmDesk::Screen::Other));
 		check(out.keys == mmDesk::RecvSession::exitKeys() && r.state() == mmDesk::RecvSession::State::ToMain, "from another screen: EXIT first");
-		out = r.tick(4650, screen(mmDesk::g_screenMain));
+		out = r.tick(4650, screen(mmDesk::Screen::Main));
 		check(out.keys == mmDesk::RecvSession::enterMacro(), "then the macro");
 		for(double t = 4700; t < 40000 && r.state() != mmDesk::RecvSession::State::Failed; t += 100)
-			r.tick(t, screen(mmDesk::g_screenMain));
+			r.tick(t, screen(mmDesk::Screen::Main));
 		check(r.state() == mmDesk::RecvSession::State::Failed, "a screen that never comes fails after three tries");
 		check(mmDesk::RecvSession::enterMacro().size() == 29, "the macro is 29 keys (GLOBAL counts as one)");
 	}
@@ -77,7 +77,7 @@ namespace
 	struct FakeMachine
 	{
 		std::map<std::pair<uint8_t, uint8_t>, Bytes> slots;
-		uint32_t screenWord = mmDesk::g_screenMain;
+		mmDesk::Screen screenWord = mmDesk::Screen::Main;
 		int keysPressed = 0;
 		uint8_t pattern = 3, kit = 5;
 		std::vector<Bytes> replies;
@@ -92,7 +92,7 @@ namespace
 			const auto cmd = _m[6];
 			if(cmd == 0x67 || cmd == 0x52 || cmd == 0x69 || cmd == 0x50)
 			{
-				if(screenWord == mmDesk::g_screenGlobalEdit)
+				if(screenWord == mmDesk::Screen::GlobalEdit)
 					slots[{cmd, _m[9]}] = _m;
 				else
 					ignored.push_back(_m);
@@ -170,9 +170,9 @@ namespace
 		{
 			m.keysPressed += static_cast<int>(_k.size());
 			if(_k == mmDesk::RecvSession::enterMacro())
-				m.screenWord = mmDesk::g_screenGlobalEdit;
+				m.screenWord = mmDesk::Screen::GlobalEdit;
 			else if(_k == mmDesk::RecvSession::exitKeys())
-				m.screenWord = mmDesk::g_screenMain;
+				m.screenWord = mmDesk::Screen::Main;
 			return true;
 		};
 		port.toPage = [&](const Value& _v) { page.push_back(_v); g_published.push_back(_v); };
@@ -224,7 +224,7 @@ namespace
 		run(300);
 		check(d.lastRoundTripMs() > 0, "read back and confirmed");
 		run(3500);
-		check(m.screenWord == mmDesk::g_screenMain && !d.recv().parked(), "left SYSEX RECV when idle");
+		check(m.screenWord == mmDesk::Screen::Main && !d.recv().parked(), "left SYSEX RECV when idle");
 
 		// Invalid: 63 locked parameters.
 		auto badDoc = ed::mmPatternToJson(p);
@@ -283,7 +283,7 @@ void playingFromSteps()
 	};
 	const auto feed = [&](const int _step, const double _ms)
 	{
-		mmDesk::Telemetry t = screen(mmDesk::g_screenMain);
+		mmDesk::Telemetry t = screen(mmDesk::Screen::Main);
 		t.step = _step;
 		t.tempo = 120 * 24;	// a 16th = 125 ms
 		for(double e = 0; e < _ms; e += 10)

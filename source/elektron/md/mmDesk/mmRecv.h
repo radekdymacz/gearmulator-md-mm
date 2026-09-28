@@ -21,27 +21,34 @@ namespace mmDesk
 		Stop
 	};
 
+	// The screen the firmware shows, as the device layer reports it (md::MmScreen; the
+	// handler addresses live there, MM-P0-RESULT §3).
+	enum class Screen : uint8_t
+	{
+		Unknown,
+		Boot,
+		Main,
+		Global,
+		GlobalEdit,	// the GLOBAL EDIT menus, SYSEX RECV among them
+		Other
+	};
+
 	// The machine as the desk sees it, from the audio thread (md::MmTelemetry).
 	struct Telemetry
 	{
 		bool valid = false;
 		int step = -1;
 		bool running = false;
-		uint32_t screen = 0;
+		Screen screen = Screen::Unknown;
 		uint32_t recvCount = 0;
 		uint32_t recvErrors = 0;
 		bool recvActive = false;	// SYSEX RECV takes dumps (RAM 0x26a3c3)
 		int tempo = 0;				// BPM x 24 (RAM 0x2bc2a6), 0 = unknown
 	};
 
-	// Screen words of MM OS 1.32B (MM-P0-RESULT §3).
-	constexpr uint32_t g_screenBoot = 0x002c27f8;
-	constexpr uint32_t g_screenMain = 0x002c2908;
-	constexpr uint32_t g_screenGlobalEdit = 0x002c3a98;	// all GLOBAL EDIT menus, SYSEX RECV among them
-
 	// On SYSEX RECV and taking dumps: the screen word says GLOBAL EDIT and the
 	// receive flag is set (MM-P2-RESULT §2).
-	inline bool onSysexRecv(const Telemetry& _t) { return _t.screen == g_screenGlobalEdit && _t.recvActive; }
+	inline bool onSysexRecv(const Telemetry& _t) { return _t.screen == Screen::GlobalEdit && _t.recvActive; }
 
 	// The SYSEX RECV session. The Monomachine takes a dump only on GLOBAL > FILE >
 	// SYSEX RECV. The session drives the panel there when there is something to

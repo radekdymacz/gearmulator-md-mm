@@ -9,6 +9,7 @@
 #include "mdDeskPacer.h"
 #include "mdDeskRecord.h"
 #include "mdDeskSetup.h"
+#include "mdDeskTelemetry.h"
 
 #include "elektronData/json.h"
 #include "mdDataLink/mdDataLink.h"
@@ -24,26 +25,6 @@
 
 namespace mdDesk
 {
-	// Sequencer telemetry published by the audio thread (MD OS 1.63 RAM bytes).
-	struct Telemetry
-	{
-		int step = -1;			// 0-based, -1 unknown
-		int pattern = -1;		// the pattern the sequencer plays, -1 unknown
-		bool playing = false;
-		bool recording = false;	// live recording (RECORD held + PLAY)
-		bool gridEdit = false;	// grid edit (RECORD alone)
-		int knobPage = -1;		// DATA ENTRY page: 0 synthesis, 1 effects, 2 routing
-		bool valid = false;		// false: no telemetry for this firmware
-		// P4: the start-up animation (-1 unknown, 1 running: panel keys are ignored, 0 over),
-		// the pattern mutes (bit 0 = track 1, -1 unknown), the firmware's pattern chain and
-		// the BANK GROUP (0 A-D, 1 E-H, -1 unknown).
-		int bootAnimation = -1;
-		int mutes = -1;
-		bool chainKnown = false;
-		Chain chain;
-		int bankGroup = -1;
-	};
-
 	// MD Desk behind the page: the page sends small commands, the desk edits the
 	// documents (mdDeskEdit), delivers the change (pattern/song dumps through
 	// mdDataLink, working-kit and global edits as live edits) and publishes the
