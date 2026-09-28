@@ -288,6 +288,27 @@ if (/[?&]selftest=p7(&|$)/.test(location.search)) (async () => {
 	Bridge.send = send0;
 	check("a drag ends where its button comes up", !sent.length && !interacting(), `${sent.length} sends, interacting ${interacting()}`);
 	S.ws = "seq"; render();
+	await sleep(400);
+	/* one modal system: the kit library centred over a dimmed backdrop, Esc closes it; a question keeps its place
+	   on a click outside, starts on its Cancel key and Esc answers Cancel */
+	{
+		const esc = () => document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true }));
+		$("#kitf").click(); await sleep(400);
+		const lib = $("#libpop"), r = lib.getBoundingClientRect(), bg = $("#modalbg");
+		const centred = Math.abs(r.left + r.width / 2 - innerWidth / 2) < 2 && Math.abs(r.top + r.height / 2 - innerHeight / 2) < 2;
+		const open1 = !lib.hidden && bg && !bg.hidden && lib.contains(document.activeElement);
+		esc(); await sleep(300);
+		check("the library is a modal: centred, backdrop, focus inside, Esc closes", centred && open1 && lib.hidden && bg.hidden, `centred ${centred}, open ${open1}, closed ${lib.hidden}`);
+		let answer = null;
+		ask("P7 self-test question?", [["Go on", "danger", () => { answer = "go"; }], ["Cancel", "", () => { answer = "cancel"; }]]);
+		await sleep(400);
+		const first = document.activeElement?.textContent;
+		bg.dispatchEvent(new MouseEvent("click", { bubbles: true })); $("#dlg").dispatchEvent(new MouseEvent("click", { bubbles: true }));
+		await sleep(200);
+		const stays = !$("#dlg").hidden && answer == null;
+		esc(); await sleep(300);
+		check("a question: first focus Cancel, a click outside keeps it, Esc answers Cancel", first === "Cancel" && stays && answer === "cancel" && $("#dlg").hidden, `focus ${first}, stays ${stays}, answer ${answer}`);
+	}
 	log(`${ok === n ? "PASS" : "FAIL"} ${ok}/${n}`);
 })();
 

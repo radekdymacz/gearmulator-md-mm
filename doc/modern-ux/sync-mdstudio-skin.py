@@ -47,7 +47,7 @@ for a, b in HONEST:
     m = m.replace(a, b)
 # The page's modules, in load order (a module that does not exist yet is skipped).
 # mdDeskSelfTest.js last: the self-tests, in the plug-in only with the diagnostics (an empty script otherwise).
-SCRIPTS = ['mdDeskBridge.js', 'mdDeskModel.js', 'mdDeskKeys.js', 'mdDeskMod.js', 'mdDeskApp.js', 'mdDeskLive.js', 'mdDeskLibrary.js', 'mdDeskGlobal.js', 'mdDeskAudio.js', 'mdDeskSelfTest.js']
+SCRIPTS = ['mdDeskModal.js', 'mdDeskBridge.js', 'mdDeskModel.js', 'mdDeskKeys.js', 'mdDeskMod.js', 'mdDeskApp.js', 'mdDeskLive.js', 'mdDeskLibrary.js', 'mdDeskGlobal.js', 'mdDeskAudio.js', 'mdDeskSelfTest.js']
 title = re.search(r'<title>(.*?)</title>', src).group(1)
 page = '''<!doctype html>
 <html lang="en">
@@ -128,6 +128,8 @@ sys.dont_write_bytecode = True
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import audio_panel_check
 panel = audio_panel_check.check(R)
+import modal_check
+panel += modal_check.check(R)
 if panel:
     print('AUDIO / MIDI panel: ' + '; '.join(panel))
     sys.exit(1)

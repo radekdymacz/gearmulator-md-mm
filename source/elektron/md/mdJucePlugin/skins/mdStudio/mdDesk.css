@@ -1276,6 +1276,21 @@ body{box-sizing:border-box;overflow:hidden}
 /* the MKII print sits centred under the display's bezel */
 :root[data-plate="mk2"] .lcdgroup::after{bottom:-15px!important;font:600 9px/9px var(--sans)!important;letter-spacing:.4em!important;padding-left:.4em}
 /* LCD END */
+/* MODAL BEGIN (P7): the one modal layer (see the MODAL block of the script): a dimmed backdrop, the
+   dialog centred on the window above it, the newest on top; a listbox opened from a dialog above both */
+.modalbg{position:fixed;inset:0;z-index:var(--mz,59);background:rgba(8,8,6,.52)}
+.modalbg[hidden]{display:none}
+.modal:not(.dlg){position:fixed!important;left:50%!important;top:50%!important;right:auto!important;bottom:auto!important;transform:translate(-50%,-50%)!important;margin:0!important;max-width:calc(100vw - 48px)!important;max-height:calc(100vh - 48px)!important;overflow:auto!important;z-index:var(--mz,60)!important;box-sizing:border-box}
+.dlg.modal{background:transparent!important;z-index:var(--mz,60)!important}
+.modal:focus,.modal .dlgbox:focus{outline:none}
+.modalopen .kpop{z-index:120!important}
+@keyframes nudge{25%{transform:translateX(-5px)}75%{transform:translateX(5px)}}
+.dlgbox.nudge{animation:nudge .16s 2}
+@media (prefers-reduced-motion:reduce){.dlgbox.nudge{animation:none}}
+/* MODAL END */
+/* P7: the workspace and setup keys: one minimum width each, so the rows look even (MIX was a sliver) */
+#tabs button{min-width:60px!important;justify-content:center;box-sizing:border-box}
+.setkeys button{min-width:46px!important;justify-content:center;box-sizing:border-box}
 
 /* ===== The real machine's states (not in the mockup) ===== */
 .st.past{opacity:.45}

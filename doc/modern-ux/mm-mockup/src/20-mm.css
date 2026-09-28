@@ -629,7 +629,13 @@ body{box-sizing:border-box;overflow:hidden}
 .ws-seq .lanetop{border-top:0!important;padding-top:0!important}
 /* Mix: the faders and the routing diagram share the height */
 #main>.routewrap{flex:1 1 auto;min-height:0;grid-template-rows:auto auto minmax(140px,1fr) auto}
-.strip6 .fader{height:clamp(120px,calc((100vh - 560px) * .55),300px)!important}
+/* a strip: the fader and its LEV value in one column, as tall as the four value boxes beside it (no gap) */
+.strip6 .frow{height:clamp(124px,calc((100vh - 560px) * .55),300px);align-items:stretch!important}
+.strip6 .fcol{display:grid;grid-template-rows:minmax(0,1fr) auto;justify-items:center;gap:5px;min-height:0}
+.strip6 .fcol .fader{height:auto!important;min-height:0;width:100%}
+.strip6 .fcol .v{font:500 13px/1 var(--mono);color:var(--body);text-align:center;min-width:3ch}
+.strip6 .pcs{grid-template-rows:repeat(4,minmax(0,1fr));align-content:stretch!important;min-height:0}
+.strip6 .pcs .pc{height:auto!important;min-height:0}
 svg.route{width:100%;height:100%;min-height:0}
 /* Shift + M prepares a mute, as the MD Editor (P7): "+" unmute, "X" mute, blinking until Shift comes up */
 .ms.m.prep{box-shadow:inset 0 0 0 2px var(--led);position:relative;color:transparent!important}
@@ -662,6 +668,21 @@ svg.route{width:100%;height:100%;min-height:0}
 /* the MKII print sits centred under the display's bezel */
 :root[data-plate="mk2"] .lcdgroup::after{bottom:-15px!important;font:600 9px/9px var(--sans)!important;letter-spacing:.4em!important;padding-left:.4em}
 /* LCD END */
+/* MODAL BEGIN (P7): the one modal layer (see the MODAL block of the script): a dimmed backdrop, the
+   dialog centred on the window above it, the newest on top; a listbox opened from a dialog above both */
+.modalbg{position:fixed;inset:0;z-index:var(--mz,59);background:rgba(8,8,6,.52)}
+.modalbg[hidden]{display:none}
+.modal:not(.dlg){position:fixed!important;left:50%!important;top:50%!important;right:auto!important;bottom:auto!important;transform:translate(-50%,-50%)!important;margin:0!important;max-width:calc(100vw - 48px)!important;max-height:calc(100vh - 48px)!important;overflow:auto!important;z-index:var(--mz,60)!important;box-sizing:border-box}
+.dlg.modal{background:transparent!important;z-index:var(--mz,60)!important}
+.modal:focus,.modal .dlgbox:focus{outline:none}
+.modalopen .kpop{z-index:120!important}
+@keyframes nudge{25%{transform:translateX(-5px)}75%{transform:translateX(5px)}}
+.dlgbox.nudge{animation:nudge .16s 2}
+@media (prefers-reduced-motion:reduce){.dlgbox.nudge{animation:none}}
+/* MODAL END */
+/* P7: the workspace and setup keys: one minimum width each, so the rows look even (MIX was a sliver) */
+#tabs button{min-width:60px!important;justify-content:center;box-sizing:border-box}
+.setkeys button{min-width:46px!important;justify-content:center;box-sizing:border-box}
 /* AUDIO-MIDI PANEL BEGIN (P6): the AUDIO / MIDI panel, the plate's own keys, LEDs and dropdowns */
 .ampop{position:absolute;z-index:22;width:min(1180px,calc(100vw - 32px));display:grid;gap:10px;align-content:start;padding:14px;background:var(--plate);border:2px solid var(--print);border-radius:6px;box-shadow:0 18px 40px rgba(0,0,0,.35);overflow:auto;overscroll-behavior:contain;color:var(--print)}
 .ampop[hidden]{display:none}

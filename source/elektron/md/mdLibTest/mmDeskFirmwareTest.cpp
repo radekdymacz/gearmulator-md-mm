@@ -431,6 +431,66 @@ namespace
 		}
 	}
 
+	// P7: a DAW's transport and tempo (MIDI Start, 24 clocks a quarter, Stop from synthLib::MidiClock): does the
+	// machine follow a 100 BPM clock, as booted? Steps counted over 4 s.
+	int clockedSteps(Rig& _r, const double _bpm, const double _seconds)
+	{
+		const auto midi = [&](const uint8_t _b) { synthLib::SMidiEvent e(synthLib::MidiEventSource::Host); e.a = _b; _r.m.hardware().sendMidi(e); };
+		midi(0xfa);
+		int steps = 0, last = _r.tel.step.load();
+		const double every = 60000.0 / _bpm / 24;
+		for(double t = 0; t < _seconds * 1000; t += every)
+		{
+			midi(0xf8);
+			_r.run(every);
+			const int st = _r.tel.step.load();
+			if(st != last) { ++steps; last = st; }
+		}
+		midi(0xfc);
+		_r.run(300);
+		return steps;
+	}
+
+	void hostClock(const Bytes& _rom)
+	{
+		std::puts("host clock");
+		Rig r(_rom);
+		r.msg(R"({"op":"ready"})");
+		r.desk->setProbe(mmDesk::Desk::Probe::Running);
+		r.run(600);
+		while(r.desk->loaded() < 288)
+			r.run(100);
+		r.run(1000);
+		const auto g = r.desk->global(static_cast<uint8_t>(r.desk->currentGlobal()));
+		std::printf("  global %d: tempo %.1f\n", r.desk->currentGlobal(), r.readTelemetry().tempo / 24.0);
+		const int steps = clockedSteps(r, 100, 4);
+		std::printf("  as booted: %.2f steps/s with a 100 BPM clock (the clock: %.2f)\n", steps / 4.0, 100.0 / 60 * 4);
+		if(!std::getenv("MM_SYNC_SEARCH"))
+			return;
+		// which undecoded global byte is the MIDI SYNC setting: flip each and look again
+		const auto raw0 = ed::mmGlobalRaw(*g);
+		std::printf("  raw x05..x11:"); for(size_t i = 0x05; i < 0x12; ++i) std::printf(" %02x", raw0[i]);
+		std::printf("  x30..x35:"); for(size_t i = 0x30; i < 0x36; ++i) std::printf(" %02x", raw0[i]);
+		std::printf("  xfd..x105:"); for(size_t i = 0xfd; i < 0x106; ++i) std::printf(" %02x", raw0[i]);
+		std::printf("\n");
+		std::vector<size_t> cand;
+		for(size_t i = 0x05; i < 0x12; ++i) cand.push_back(i);
+		for(size_t i = 0x30; i < 0x36; ++i) cand.push_back(i);
+		for(size_t i = 0xfd; i < 0x106; ++i) cand.push_back(i);
+		for(const auto i : cand)
+		{
+			auto raw = raw0;
+			raw[i] = raw0[i] ? 0 : 1;
+			const auto gg = ed::mmGlobalFromRaw(raw, g->position);
+			r.msg(R"({"op":"set","kind":"global","doc":)" + ed::json::write(ed::mmGlobalToJson(*gg)) + "}");
+			r.run(4000);
+			const int n = clockedSteps(r, 100, 2);
+			std::printf("  byte %03zx %02x -> %02x: %.2f steps/s\n", i, raw0[i], raw[i], n / 2.0);
+			r.msg(R"({"op":"set","kind":"global","doc":)" + ed::json::write(ed::mmGlobalToJson(*g)) + "}");
+			r.run(3000);
+		}
+	}
+
 	// Zero crossings per second / 2 over a window of the left channel.
 	double frequency(const std::vector<float>& _l, const size_t _from, const size_t _n)
 	{
@@ -584,6 +644,8 @@ int main(const int _argc, char** _argv)
 			smoke(rom);
 		if(only.empty() || only == "trigkinds")
 			trigKinds(rom);
+		if(only == "hostclock")
+			hostClock(rom);
 		if(only.empty() || only == "patterns")
 			patterns(rom);
 		check(g_contract.loaded() && g_contract.bad() == 0, g_contract.summary());

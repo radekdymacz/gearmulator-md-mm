@@ -46,6 +46,7 @@ set(SOURCES
 	skins/mdStudio/mdDesk.css
 	skins/mdStudio/mdDeskApp.js
 	skins/mdStudio/mdDeskBridge.js
+	skins/mdStudio/mdDeskModal.js
 	skins/mdStudio/mdDeskModel.js
 	skins/mdStudio/mdDeskMod.js
 	skins/mmStudio/mmStudio.rml

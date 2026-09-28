@@ -6,6 +6,6 @@ cat src/10-md-base.css src/20-mm.css
 printf '</style>\n'
 cat src/30-body.html
 printf '<script>\n'
-cat src/40-data.js src/50-state.js src/55-host.js src/60-ui.js src/70-seq.js src/80-notes.js src/90-sound.js src/100-mix.js src/110-perform.js src/115-control.js src/120-song.js src/125-lib.js src/127-audio.js src/130-main.js
+cat src/40-data.js src/50-state.js src/55-host.js src/57-modal.js src/60-ui.js src/70-seq.js src/80-notes.js src/90-sound.js src/100-mix.js src/110-perform.js src/115-control.js src/120-song.js src/125-lib.js src/127-audio.js src/130-main.js
 printf '</script>\n'
 } > index.html

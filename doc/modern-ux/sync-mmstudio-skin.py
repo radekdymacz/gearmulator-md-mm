@@ -30,6 +30,13 @@ R = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', '..') + '/'
 SRC = R + 'doc/modern-ux/mm-mockup/src/'
 SK = R + 'source/elektron/md/mdJucePlugin/skins/mmStudio/'
 check_only = '--check' in sys.argv
+sys.dont_write_bytecode = True
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import modal_check
+_modal = modal_check.check(R)
+if _modal:
+    print('modal layer: ' + '; '.join(_modal))
+    sys.exit(1)
 
 build = open(R + 'doc/modern-ux/mm-mockup/build.sh').read()
 css_files = re.findall(r'src/(\d+-[\w-]+\.css)', build)
@@ -110,7 +117,7 @@ adapter = open(SK + 'mmAdapter.js').read()
 selftest = open(SK + 'mmSelfTest.js').read()
 view = re.search(r'window\.MMView=\{(.*?)\};\n', js, re.S)
 exported = set(re.findall(r'(\w+)(?=[,:}]|$)', re.sub(r'/\*.*?\*/', '', view.group(1), flags=re.S))) if view else set()
-present = set(re.findall(r'id="([\w-]+)"', m)) | set(re.findall(r'id=\\?"([\w-]+)', js))
+present = set(re.findall(r'id="([\w-]+)"', m)) | set(re.findall(r'id=\\?"([\w-]+)', js)) | set(re.findall(r'\.id = "([\w-]+)"', js))
 
 
 def seam(text, name):

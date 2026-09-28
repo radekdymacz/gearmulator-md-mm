@@ -615,6 +615,50 @@ namespace
 
 	// ---- keys: which panel keys does the firmware take, when? ----
 
+	// P7: a DAW's transport and tempo reach the plug-in's machine as MIDI Start, clock (24 a quarter) and Stop
+	// (synthLib::MidiClock). Does the machine follow them with its GLOBAL as it boots, and with TEMPO IN
+	// external? Steps counted over 4 s of a 100 BPM clock (the machine's own tempo is its global's).
+	void hostClock(const Bytes& _rom)
+	{
+		std::puts("== probe: host transport and clock (P7)");
+		Machine m(_rom, g_romName);
+		const int slot = status(m, ed::MdStatus::GlobalSlot);
+		const auto readG = [&] { return *ed::decodeMdGlobal(m.request(ed::mdGlobalRequest(static_cast<uint8_t>(slot)), ed::g_mdGlobalDump)); };
+		const auto g0 = readG();
+		const auto put = [&](const ed::MdGlobal& _g)
+		{
+			m.send(ed::encodeMdGlobal(_g));
+			m.send({0xf0, 0x00, 0x20, 0x3c, 0x02, 0x00, 0x56, static_cast<uint8_t>(slot), 0xf7});
+			m.run(1000);
+		};
+		const auto measure = [&](const char* _what)
+		{
+			m.send({0xfa});
+			int steps = 0, last = m.playhead();
+			for(int i = 0; i < 160; ++i)	// 4 s: one clock every 25 ms is 100 BPM
+			{
+				m.send({0xf8});
+				m.run(25);
+				const int p = m.playhead();
+				if(p != last) { ++steps; last = p; }
+			}
+			m.send({0xfc}); m.run(200);
+			const bool stopped = !playheadMoves(m, 400);
+			stopMachine(m);
+			const double rate = steps / 4.0, want = 100.0 / 60 * 4;
+			std::printf("  %s: %.2f steps/s (clock %.2f, own tempo %.1f BPM = %.2f), stops on MIDI Stop %d\n", _what, rate, want, g0.tempo / 24.0, g0.tempo / 24.0 / 60 * 4, stopped ? 1 : 0);
+			return std::abs(rate - want) < 0.5;
+		};
+		std::printf("  global slot %d: sync %02x, tempo %.1f\n", slot, g0.syncFlags, g0.tempo / 24.0);
+		const bool asBooted = measure("as booted");
+		auto g = g0;
+		g.syncFlags = static_cast<uint8_t>((g.syncFlags | ed::mdGlobalBits::g_tempoInExternal) & ~0x10);
+		put(g);
+		const bool external = measure("TEMPO IN external, CTRL IN on");
+		std::printf("  follows the host clock: as booted %d, with TEMPO IN external %d\n", asBooted ? 1 : 0, external ? 1 : 0);
+		put(g0);
+	}
+
 	void keys(const Bytes& _rom)
 	{
 		std::puts("== probe: is a panel key taken during the start-up animation?");
@@ -1383,6 +1427,8 @@ int main(const int _argc, char** _argv)
 		const std::string only = _argc > 2 ? _argv[2] : "";
 		if(only.empty() || only == "boot")
 			boot(rom);
+		if(only == "hostclock")
+			hostClock(rom);
 		if(only.empty() || only == "keys")
 			keys(rom);
 		if(only.empty() || only == "chain")

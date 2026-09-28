@@ -193,6 +193,87 @@ const kitName=k=>"K"+String(k+1).padStart(2,"0")+" "+((k===S.kit?S.workName:S.ki
    to its controls, NA_INFO lists those with none). */
 const HOST=window.MMHost||{};
 
+/* ---- 57-modal.js ---- */
+/* MODAL BEGIN (P7): one modal system for every dialog of both editors, the same text in the MD mockup,
+   the MM mockup and the MD skin (checked by the sync scripts). The dialogs keep their own open and close
+   functions; this layer watches them (their hidden attribute) and gives every one the same behaviour:
+   centred on the window over a dimmed backdrop, focus inside it (Tab goes round), Esc and a click
+   outside by its kind, focus back where it was when it closes. Stacked: the newest is on top and only
+   it answers. The kinds, as data:
+     confirm  a question (the plug-in's asks, the first-run notice): Esc is its last key (Cancel, Close),
+              a click outside does nothing, the first focus is its last key (never the destructive one)
+     panel    a library, settings or list: Esc and a click outside close it (its own close function)
+   A listbox (the dropdowns) is not a modal: it stays at its button. */
+const Modal = (() => {
+	const KINDS = { confirm: { outside: false, focusLast: true }, panel: { outside: true, focusLast: false } };
+	const DIALOGS = [["#dlg", "confirm", null], ["#libpop", "panel", "closeLib"], ["#globpop", "panel", "closeGlobal"],
+		["#keyspop", "panel", "toggleKeys"], ["#audiopop", "panel", "closeAudio"], ["#machpop", "panel", "closePicker"]];
+	const stack = [];	// {el, kind, close, back}
+	const FOCUSABLE = 'button:not([disabled]),[href],input:not([disabled]),select:not([disabled]),textarea,[tabindex]:not([tabindex="-1"])';
+	let bg = null;
+	const box = d => d.el.id === "dlg" ? d.el.querySelector(".dlgbox") || d.el : d.el;
+	const keys = d => [...box(d).querySelectorAll(FOCUSABLE)].filter(e => e.offsetParent !== null || e === document.activeElement);
+	function layer() {
+		if (!bg) { bg = document.createElement("div"); bg.id = "modalbg"; bg.className = "modalbg"; bg.hidden = true; document.body.appendChild(bg); }
+		bg.hidden = !stack.length;
+		stack.forEach((d, i) => { d.el.classList.add("modal"); d.el.style.setProperty("--mz", 60 + i * 2); });
+		if (stack.length) bg.style.setProperty("--mz", 59 + (stack.length - 1) * 2);
+		document.documentElement.classList.toggle("modalopen", stack.length > 0);
+	}
+	function focusIn(d) {
+		const k = keys(d), ask = d.el.querySelector(".btnrow button:last-child");
+		const first = KINDS[d.kind].focusLast && ask ? ask : k.find(e => !e.matches(".libx,[data-keysx]")) || k[0];
+		(first || box(d)).focus({ preventScroll: true });
+	}
+	function shown(el, kind, close) {
+		if (stack.some(d => d.el === el)) return;
+		const d = { el, kind, close, back: document.activeElement };
+		stack.push(d); layer();
+		if (!box(d).hasAttribute("tabindex")) box(d).setAttribute("tabindex", "-1");
+		requestAnimationFrame(() => { if (stack.includes(d) && (KINDS[d.kind].focusLast || !box(d).contains(document.activeElement))) focusIn(d); });
+	}
+	function gone(el) {
+		const i = stack.findIndex(d => d.el === el); if (i < 0) return;
+		const [d] = stack.splice(i, 1); el.classList.remove("modal"); layer();
+		if (d.back && d.back.isConnected && !stack.length) d.back.focus({ preventScroll: true });
+		else if (stack.length) focusIn(stack[stack.length - 1]);
+	}
+	/* close the top one as its kind says: a confirm by its last key (the dialog's own handler runs) */
+	function dismiss(d) {
+		if (d.kind === "confirm") { const b = d.el.querySelector(".btnrow button:last-child"); if (b) b.click(); else d.el.hidden = true; return; }
+		const f = d.close && window[d.close]; if (typeof f === "function") f(false); if (!d.el.hidden) d.el.hidden = true;
+	}
+	const top = () => stack[stack.length - 1];
+	function watch() {
+		for (const [sel, kind, close] of DIALOGS) {
+			const el = document.querySelector(sel); if (!el) continue;
+			new MutationObserver(() => el.hidden ? gone(el) : shown(el, kind, close)).observe(el, { attributes: true, attributeFilter: ["hidden"] });
+			if (!el.hidden) shown(el, kind, close);
+		}
+	}
+	/* first in line (this block loads before the dialogs' own handlers): Esc, Tab and the backdrop */
+	document.addEventListener("keydown", e => {
+		const d = top(); if (!d) return;
+		if (e.key === "Escape") { e.preventDefault(); e.stopImmediatePropagation(); dismiss(d); return; }
+		if (e.key !== "Tab") return;
+		const k = keys(d); if (!k.length) { e.preventDefault(); return; }
+		const i = k.indexOf(document.activeElement), n = e.shiftKey ? (i <= 0 ? k.length - 1 : i - 1) : (i < 0 || i === k.length - 1 ? 0 : i + 1);
+		e.preventDefault(); k[n].focus();
+	}, true);
+	for (const ev of ["pointerdown", "mousedown", "click"]) document.addEventListener(ev, e => {
+		const d = top(); if (!d) return;
+		const outside = e.target === bg || (d.el.id === "dlg" && e.target === d.el);
+		if (!outside) return;
+		e.preventDefault(); e.stopImmediatePropagation();
+		if (ev === "click") { if (KINDS[d.kind].outside) dismiss(d); else { const b = box(d); b.classList.remove("nudge"); void b.offsetWidth; b.classList.add("nudge"); } }
+	}, true);
+	/* focus that leaves the top dialog (a click on the page behind is stopped above) comes back */
+	document.addEventListener("focusin", e => { const d = top(); if (d && !d.el.contains(e.target) && e.target !== bg && !e.target.closest?.("#kpop")) focusIn(d); });
+	if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", watch); else watch();
+	return { open: () => stack.map(d => d.el.id), top: () => top()?.el.id || null };
+})();
+/* MODAL END */
+
 /* ---- 60-ui.js ---- */
 
 /* ===== Feedback: toast, TX lamp, dialogs ===== */
@@ -687,8 +768,8 @@ function renderMix(){const T=S.tracks;
  $("#main").innerHTML=`<div class="routewrap">
   <div class="strips6 mixrow">${T.map((tr,i)=>{const fx=isFx(tr.m);return`<div class="strip6 ${i===S.sel?"sel":""}" data-sel="${i}" style="${audible(i)?"":"opacity:.5"}">
    <div class="shead"><b>T${i+1} ${shortM(tr.m)}</b><span>${tr.name}</span></div>
-   <div class="frow"><div class="fader" role="slider" tabindex="0" aria-label="T${i+1} level" data-g="lev" data-t="${i}" title="LEV: the track's master level. It cannot be locked or modulated."><div class="tr"><i></i></div><div class="cap2"></div></div>
-    <div class="pcs">${pc("AMP",5,{t:i,label:"VOL"})}${pc("AMP",6,{t:i,label:"PAN"})}${pc("AMP",4,{t:i,label:"DIST"})}${pc("EFX",4,{t:i,label:"DSND"})}<div class="v" data-show="${i}" title="LEV"></div></div></div>
+   <div class="frow"><div class="fcol"><div class="fader" role="slider" tabindex="0" aria-label="T${i+1} level" data-g="lev" data-t="${i}" title="LEV: the track's master level. It cannot be locked or modulated."><div class="tr"><i></i></div><div class="cap2"></div></div><div class="v" data-show="${i}" title="LEV: the track's level"></div></div>
+    <div class="pcs">${pc("AMP",5,{t:i,label:"VOL"})}${pc("AMP",6,{t:i,label:"PAN"})}${pc("AMP",4,{t:i,label:"DIST"})}${pc("EFX",4,{t:i,label:"DSND"})}</div></div>
    <div class="busrow"><span class="inlab">Out</span><div class="busk">${BUSES.map(b=>`<button data-bus="${b}" data-t="${i}" aria-pressed="${tr.out[b]}" title="${tr.out[b]?"Sends to":"Not sent to"} mix bus ${b}">${b}</button>`).join("")}</div></div>
    <div class="busrow"><span class="inlab">In</span>${fx?`<select id="inp${i}" data-inp="${i}" aria-label="T${i+1} input">${INPUTS.filter(x=>!(x==="NEIBOR"&&i===0)).map(x=>opt(x,x,tr.inp)).join("")}</select>`:`<button class="kselbtn" disabled title="Only FX machines take an input"><span>synth · none</span></button>`}</div>
    <div class="mrow"><button class="ms m ${ARMED.has(i)?"prep":""}" ${ARMED.has(i)?`data-prep="${ARMED.get(i)?"X":"+"}"`:""} data-mute="${i}" aria-pressed="${tr.mute}" aria-label="Mute T${i+1}">M</button><button class="ms s" data-solo="${i}" aria-pressed="${tr.solo}" aria-label="Solo T${i+1}">S</button></div></div>`}).join("")}</div>
