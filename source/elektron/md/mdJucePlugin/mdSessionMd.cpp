@@ -130,7 +130,7 @@ namespace mdJucePlugin
 
 		static PageSpec page()
 		{
-			return {"mdStudio.html", "gearmulator-mdStudio.log", "GEARMULATOR_MDSTUDIO_SELFTEST", {"1", "p4", "p5", "p6"}, 1440};
+			return {"mdStudio.html", "gearmulator-mdStudio.log", "GEARMULATOR_MDSTUDIO_SELFTEST", {"1", "p4", "p5", "p6", "p7"}, 1440};
 		}
 
 		// Every kit parameter and the level of any of the 16 tracks.

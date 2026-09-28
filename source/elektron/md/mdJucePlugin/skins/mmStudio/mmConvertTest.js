@@ -112,6 +112,16 @@ if (docs["mm-desk/kit"].length) {
 edits.push(["catalogue: the mockup's tables agree" + (catalogueOff.length ? " (" + catalogueOff.join("; ") + ")" : ""), catalogueOff.length === 0]);
 edits.push(["catalogue: LFO PAGE DEST TRIG WAVE MULT counts", [0, 1, 2, 3, 4].map(i => C.enumN("GND-GND", "LF1", i)).join() === "9,8,5,11,7"]);
 edits.push(["catalogue: DPRO-WAVE WAVE is 32 waveforms", C.enumN("DPRO-WAVE", "SYN", 0) === 32 && C.enumN("SID-6581", "SYN", 3) === 5]);
+/* P7: LEN on LCD line 2 (the mockup's lenStep): a click goes round the pages, a scroll steps (the
+   factory patterns are LEN 64, where a click used to do nothing) */
+{
+	const src = mock.match(/function lenStep\(len,d,fine\)\{.*\}/)[0];
+	const lenStep = vm.runInContext("(" + src.replace("function lenStep", "function") + ")", ctx);
+	const pages = [64, 16, 32, 48, 64].map((l, i, a) => i ? lenStep(a[i - 1], 1, false) : l);
+	edits.push(["LEN click goes round the pages: 64 " + pages.slice(1).join(" "), pages.join() === "64,16,32,48,64"]);
+	edits.push(["LEN shift-click goes back, 16 -> 64", lenStep(16, -1, false) === 64 && lenStep(64, -1, false) === 48 && lenStep(17, 1, false) === 48]);
+	edits.push(["LEN scroll: one step within 2-64", lenStep(64, 1, true) === 64 && lenStep(64, -1, true) === 63 && lenStep(2, -1, true) === 2]);
+}
 for (const [what, ok] of edits) { n++; if (!ok) { fails++; console.log("FAIL edit:", what); } }
 
 const counts = Object.entries(docs).map(([k, l]) => l.length + " " + k.split("/")[1]).join(", ");

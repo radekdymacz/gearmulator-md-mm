@@ -190,9 +190,137 @@ window.MMDiagnostics = {};
 		log(`SELFTEST ${ok === results.length ? "PASS" : "FAIL"} ${ok}/${results.length}`);
 	}
 
+	/* ?selftest=p7: P7's bugs through the user's own paths. A loaded pattern leaves its kit clean
+	   (no kit edit goes out, no question on the next switch), stopped and playing; the LEN key
+	   (LCD line 2) changes the step count, read back from the machine. */
+	async function runP7() {
+		const s = S(), results = [];
+		const check = async (name, fn) => {
+			try { const n = await fn(); results.push(true); log(`SELFTEST ok ${name}${n ? " " + n : ""}`); }
+			catch (e) { results.push(false); log(`SELFTEST FAIL ${name}: ${e.message}`); }
+			await sleep(800);
+		};
+		while (!machine() || machine().loading.done < machine().loading.total) await sleep(200);
+		V().goWs("seq");
+		await sleep(4000);
+		const sent = [], asks = [];
+		let lenTest = false;
+		const send1 = Bridge.send;
+		Bridge.send = (msg, opt) => { sent.push(msg.op + (msg.kind ? ":" + msg.kind : "")); if (msg.op === "set") log("p7: set " + msg.kind + " from " + new Error().stack.split("\n").slice(2, 7).map(x => x.trim().replace(/\(.*\//, "(")).join(" < ")); return send1(msg, opt); };
+		/* an ask is answered with the dialog's confirm key, as the user would, only while
+		   confirming is on: the kit that plays may hold real edits when the test starts */
+		let confirming = false;
+		Bridge.onMessage(m => { if (m.type !== "ask") return; asks.push(m.ask); if (confirming) setTimeout(() => $('#dlg [data-dlg="0"]')?.click(), 300); });
+		const p0 = cur().pat;
+		log(`p7: start: pattern ${p0} kit ${cur().kit} ${machine().kit.working}, modulators ${JSON.stringify(V().ctlSetup().links.length)} links`);
+		/* where the kit that plays differs from its stored slot (the documents' own paths) */
+		const kitDiff = () => {
+			const w = I().workingKit, st = I().doc("kit", cur().kit), out = [];
+			const walk = (a, b, at) => { if (out.length > 12) return; if (a && b && typeof a === "object") { for (const k of new Set([...Object.keys(a), ...Object.keys(b)])) walk(a[k], b[k], at + "." + k); } else if (JSON.stringify(a) !== JSON.stringify(b)) out.push(`${at} ${JSON.stringify(a)} vs ${JSON.stringify(b)}`); };
+			if (w && st) walk(w.doc, st, "");
+			return `working (${w?.source}, slot ${w?.slot}) vs stored: ${out.join("; ") || "same"}`;
+		};
+		log("p7: " + kitDiff());
+		const switchTo = async to => {
+			sent.length = 0; asks.length = 0;
+			const before = machine().kit.working;
+			window.queuePattern(to);
+			const moved = await waitFor(m => m.type === "machine" && m.doc.pattern.current === to, 15000).then(() => true, () => false);
+			await sleep(2500);
+			const edits = sent.filter(x => x.startsWith("set:"));
+			if (machine().kit.working !== "clean") log("p7: after select " + to + ": " + kitDiff());
+			log(`p7: select ${to}: kit ${before} before, ${moved ? "switched" : "NOT switched"}, kit ${cur().kit} ${machine().kit.working}; sent ${sent.join(",") || "-"}; asked ${asks.join(",") || "-"}`);
+			if (!moved) { document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true })); throw new Error(`pattern ${to} not loaded (asked ${asks.join(",") || "nothing"}, kit ${before})`); }
+			return { state: machine().kit.working, edits, asks: [...asks], kit: cur().kit };
+		};
+		await check("a loaded pattern's kit stays clean (stopped)", async () => {
+			const seen = [];
+			/* start from a clean kit: an edited one asks once (the question is right), and is confirmed */
+			if (machine().kit.working === "edited") {
+				confirming = true;
+				const r = await switchTo((p0 + 1) % 128);
+				confirming = false;
+				seen.push(`edited at start, asked ${r.asks.join(",") || "nothing"}, then kit ${r.kit} ${r.state}`);
+				if (r.asks.length !== 1 || r.state !== "clean") throw new Error(seen.join("; "));
+			}
+			const q = cur().pat;
+			for (const to of [(q + 1) % 128, (q + 2) % 128, (q + 3) % 128, q]) {
+				const r = await switchTo(to);
+				seen.push(`${to}->kit ${r.kit} ${r.state}${r.edits.length ? " sent " + r.edits.join(",") : ""}${r.asks.length ? " asked " + r.asks.join(",") : ""}`);
+				if (r.state !== "clean" || r.edits.length || r.asks.length) throw new Error(seen.join("; "));
+			}
+			return seen.join("; ");
+		});
+		await check("a loaded pattern's kit stays clean (playing)", async () => {
+			const seen = [];
+			if (!s.playing) host.togglePlay();
+			await waitFor(m => m.type === "telemetry" && m.playing, 4000);
+			try {
+				const q = cur().pat;
+				for (const to of [(q + 1) % 128, q]) {
+					const r = await switchTo(to);
+					seen.push(`${to}->kit ${r.kit} ${r.state}${r.edits.length ? " sent " + r.edits.join(",") : ""}${r.asks.length ? " asked " + r.asks.join(",") : ""}`);
+					if (r.state !== "clean" || r.edits.length || r.asks.length) throw new Error(seen.join("; "));
+				}
+			} finally { if (s.playing) host.togglePlay(); }
+			return seen.join("; ");
+		});
+		await check("a drag ends when its element goes and the button comes up elsewhere", async () => {
+			V().goWs("mix");
+			await sleep(600);
+			const f = $(".fader[data-g]");
+			if (!f) throw new Error("no fader on Mix");
+			const r = f.getBoundingClientRect(), x = r.left + r.width / 2, y = r.top + r.height / 2;
+			const pe = (type, o) => new PointerEvent(type, Object.assign({ bubbles: true, cancelable: true, pointerId: 7, pointerType: "mouse", clientX: x, clientY: y }, o));
+			const seen = [];
+			for (const how of ["pointerup outside #main", "no pointerup at all"]) {
+				f.isConnected && f.dispatchEvent(pe("pointerdown", { buttons: 1 }));
+				const f2 = $(".fader[data-g]");
+				f2.dispatchEvent(pe("pointerdown", { buttons: 1 }));
+				V().render();	// the machine's documents re-draw the workspace: the fader is a new element
+				if (how === "pointerup outside #main") $(".top").dispatchEvent(pe("pointerup", { buttons: 0 }));
+				sent.length = 0;
+				$("#main").dispatchEvent(pe("pointermove", { buttons: 0, clientY: y - 60 }));
+				await sleep(400);
+				const edits = sent.filter(k => k.startsWith("set:"));
+				seen.push(`${how}: ${edits.length} edits, busy ${V().busy()}`);
+				if (edits.length || V().busy()) throw new Error(seen.join("; "));
+			}
+			V().goWs("seq");
+			await sleep(600);
+			return seen.join("; ");
+		});
+		await check("LEN on LCD line 2 changes the steps (click, shift-click)", async () => {
+			lenTest = true;
+			const p = cur().pat, len0 = s.len, seen = [len0];
+			const seenDocs = [];
+			Bridge.onMessage(m => { if (lenTest && m.type === "doc" && m.kind === "pattern" && m.slot === p) { seenDocs.push(m.doc.length + (m.pending ? "p" : "")); log("p7: doc pattern " + p + " length " + m.doc.length + (m.pending ? " pending" : "") + ", page LEN " + s.len); } if (lenTest && m.type === "result" && m.op === "set") seenDocs.push("result " + m.ok + " " + (m.errors || []).join(",") + " " + (m.note || "")); });
+			log(`p7: LEN test on pattern ${p}, LEN ${len0}, playing ${s.playing}, recv ${machine().recv.state}`);
+			const key = () => document.querySelector('[data-l2="len"]');
+			const readBack = n => waitFor(m => m.type === "doc" && m.kind === "pattern" && m.slot === p && !m.pending && m.doc.length === n, 20000).catch(() => { throw new Error("LEN " + n + " not read back; saw " + seenDocs.join(" ") + "; sent " + sent.join(",") + "; recv " + machine().recv.state); });
+			for (const shift of [false, true]) {
+				const want = shift ? len0 : null;
+				log("p7: LEN click" + (shift ? " (shift)" : "") + " at " + s.len);
+				key().dispatchEvent(new MouseEvent("click", { bubbles: true, shiftKey: shift }));
+				host.edited("commit");
+				const n = s.len;
+				if (want == null && n === len0) throw new Error("the click left LEN at " + n);
+				await readBack(n);
+				seen.push(n);
+				await sleep(400);	// the read-back is shown first, as a user's next click would find it
+			}
+			if (s.len !== len0) throw new Error("LEN " + seen.join(" -> "));
+			return "LEN " + seen.join(" -> ") + ", read back each";
+		});
+		Bridge.send = send1;
+		const ok = results.filter(Boolean).length;
+		log(`SELFTEST ${ok === results.length ? "PASS" : "FAIL"} ${ok}/${results.length}`);
+	}
+
 	const TESTS = {
 		/* ?selftest=1: edits through the mockup's own gestures and its host, each round trip logged */
 		1: () => setTimeout(runSelfTest, 500),
+		p7: () => setTimeout(runP7, 500),
 		mmcpu: () => runCpuPhases(),
 		/* ?selftest=p6audio: the AUDIO / MIDI panel's self-test (the mockup's) */
 		p6audio: () => setTimeout(() => window.MMDiagnostics.audioSelfTest({ log: t => log("AUDIO: " + t), play: on => { if (on !== V().playing()) host.togglePlay(); }, step: () => V().step(), playing: () => V().playing() }), 3000)

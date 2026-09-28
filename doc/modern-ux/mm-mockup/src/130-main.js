@@ -43,7 +43,7 @@ function checkRom(f){const t=$("#droptxt");if(!f)return;const ok=f.size===838860
 
 /* ===== LCD line 2 ===== */
 function l2step(k,d,fine){
- if(k==="len"){S.len=fine?clamp(S.len+d,2,64):clamp((Math.ceil(S.len/16)+d)*16,16,64);structEdited()}
+ if(k==="len"){S.len=lenStep(S.len,d,fine);structEdited()}
  if(k==="mult"){const o=["1X","2X","3/4X","3/2X"];S.mult=o[(o.indexOf(S.mult)+d+4)%4];structEdited()}
  if(k==="swing"){S.swingAmt=clamp(S.swingAmt+d,50,80);structEdited()}
   if(k==="ptrn"){S.patTrn=clamp(S.patTrn+d,0,127);structEdited()}
@@ -53,7 +53,7 @@ function l2step(k,d,fine){
  render()}
 let l2drag=null;
 document.addEventListener("pointerdown",e=>{const el=e.target.closest(".l2.ed");if(!el)return;const k=el.dataset.l2;if(k==="swing"||k==="ptrn"){l2drag={k,y:e.clientY,v:k==="swing"?S.swingAmt:S.patTrn,moved:false};el.setPointerCapture(e.pointerId);e.preventDefault()}});
-document.addEventListener("pointermove",e=>{if(!l2drag)return;const d=Math.round((l2drag.y-e.clientY)/4);if(d)l2drag.moved=true;if(l2drag.k==="swing")S.swingAmt=clamp(l2drag.v+d,50,80);else S.patTrn=clamp(l2drag.v+d,0,127);renderSub()});
+document.addEventListener("pointermove",e=>{if(!l2drag)return;if(e.buttons===0&&e.pointerType==="mouse"){l2drag=null;return}const d=Math.round((l2drag.y-e.clientY)/4);if(d)l2drag.moved=true;if(l2drag.k==="swing")S.swingAmt=clamp(l2drag.v+d,50,80);else S.patTrn=clamp(l2drag.v+d,0,127);renderSub()});
 document.addEventListener("pointerup",()=>{if(!l2drag)return;const k=l2drag;l2drag=null;if(!k.moved)l2step(k.k,1);else{structEdited();render()}});
 document.addEventListener("click",e=>{const el=e.target.closest(".l2.ed");if(!el)return;const k=el.dataset.l2;if(k!=="swing"&&k!=="ptrn")l2step(k,e.shiftKey?-1:1)});
 document.addEventListener("wheel",e=>{const el=e.target.closest(".l2.ed");if(!el)return;e.preventDefault();l2step(el.dataset.l2,(e.deltaY||e.deltaX)<0?1:-1,true)},{passive:false});
@@ -73,6 +73,7 @@ main.addEventListener("pointerdown",e=>{
  if(e.target.closest("#splitm")){splitDrag=true;$("#splitm").setPointerCapture(e.pointerId);e.preventDefault();return}
  const key=e.target.closest(".kb [data-key]");if(key){kbDown=true;$("#kb").setPointerCapture(e.pointerId);playKey(+key.dataset.key);e.preventDefault()}});
 main.addEventListener("pointermove",e=>{
+ if(e.buttons===0&&e.pointerType==="mouse"&&dragging()){endDrag(e);return}
  if(cord){cordMove(e);return}
  const roll=e.target.closest?.("canvas.roll")||(rollDrag&&$("#roll"));if(roll&&(rollDrag||e.target===roll)){rollMove(roll,e);if(rollDrag)return}
  if(active){const r=active.c.getBoundingClientRect(),hh=ED[active.c.dataset.ed].handles(r.width,r.height,active.c).find(h=>h.k===active.k);if(hh){hh.drag(clamp(e.clientX-r.left,0,r.width),clamp(e.clientY-r.top,0,r.height));soundEdited();syncControls();redraw()}return}
@@ -88,7 +89,13 @@ function endDrag(e){if(cord){cordEnd(e);return}if(rollDrag)rollUp();if(active){a
  if(arpDrag){const a=trk(S.sel).arp;if(!arpDrag.moved){a.rhy[arpDrag.k]=!a.rhy[arpDrag.k];renderArp()}structEdited();arpDrag=null}
  if(joyDrag){joyDrag=false;S.joy={x:0,y:0};const k=$("#knobj");if(k){k.style.left="50%";k.style.top="50%"}if(HOST.joy)HOST.joy(S.joy)}
  if(splitDrag){splitDrag=false;render()}if(kbDown){kbDown=false;$$(".kb .dn").forEach(k=>k.classList.remove("dn"))}}
-main.addEventListener("pointerup",endDrag);main.addEventListener("pointercancel",endDrag);
+/* P7: a gesture ends wherever the button comes up. A render during a drag (a pattern load, the machine's
+   documents) removes the element that held the pointer, and its pointerup then lands outside #main: the drag
+   stayed on and every mouse move edited the value (the kit showed "edited" after each pattern load). So the end
+   is heard on the whole document, a move with no button down ends it too, and so does leaving the window. */
+document.addEventListener("pointerup",endDrag);document.addEventListener("pointercancel",endDrag);
+window.addEventListener("blur",()=>{if(dragging())endDrag({clientX:-1,clientY:-1})});
+const dragging=()=>!!(drag||active||laneDraw||arpDrag||joyDrag||splitDrag||rollDrag||kbDown||cord);
 function joyAt(e){const r=$("#joy").getBoundingClientRect();S.joy={x:clamp((e.clientX-r.left)/r.width*2-1,-1,1),y:clamp(1-(e.clientY-r.top)/r.height*2,-1,1)};const k=$("#knobj");k.style.left=(50+S.joy.x*42)+"%";k.style.top=(50-S.joy.y*42)+"%";
  const tr=S.tracks[asgT()],A=tr.assign,rows=A.tabs[S.asTab];const amt=S.asTab==="JOY U"?Math.max(0,S.joy.y):S.asTab==="JOY D"?Math.max(0,-S.joy.y):A.mirr?S.joy.x:Math.max(0,S.joy.x);
  $("#kbinfo")&&($("#kbinfo").textContent=rows.map(r=>`${LPAGES[r.pg]} ${destNames(asgT(),r.pg)[r.d]} ${Math.round((r.add-64)*amt)>=0?"+":""}${Math.round((r.add-64)*amt)}`).join(" · "));tx();if(HOST.joy)HOST.joy(S.joy)}
@@ -206,7 +213,7 @@ document.addEventListener("keydown",e=>{const mod=e.metaKey||e.ctrlKey,inField=e
 
 /* BPM: drag or arrows */
 (()=>{const b=$("#bpm");let d=null;b.addEventListener("pointerdown",e=>{d={y:e.clientY,v:S.bpm};b.setPointerCapture(e.pointerId)});
- b.addEventListener("pointermove",e=>{if(!d)return;S.bpm=clamp(Math.round((d.v+(d.y-e.clientY)*(e.shiftKey?.1:.5))*10)/10,30,300);if(HOST.tempo)HOST.tempo(S.bpm);renderTop();if(S.playing)restartClock()});
+ b.addEventListener("pointermove",e=>{if(!d)return;if(e.buttons===0&&e.pointerType==="mouse"){d=null;return}S.bpm=clamp(Math.round((d.v+(d.y-e.clientY)*(e.shiftKey?.1:.5))*10)/10,30,300);if(HOST.tempo)HOST.tempo(S.bpm);renderTop();if(S.playing)restartClock()});
  b.addEventListener("pointerup",()=>d=null);b.addEventListener("keydown",e=>{const k={ArrowUp:1,ArrowDown:-1}[e.key];if(!k)return;e.preventDefault();S.bpm=clamp(S.bpm+k*(e.shiftKey?.1:1),30,300);if(HOST.tempo)HOST.tempo(S.bpm);renderTop();if(S.playing)restartClock()})})();
 
 

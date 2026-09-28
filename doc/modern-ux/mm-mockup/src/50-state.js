@@ -75,6 +75,9 @@ function meta(t,pg,i){const tr=trk(t),name=pnames(t,pg)[i];
  if(pg.startsWith("LF")){if(i===0)return{name,en:LPAGES};if(i===1)return{name,en:destNames(t,tr.v[pg][0])};if(i===2)return{name,en:LTRIG};if(i===3)return{name,en:LWAVE};if(i===4)return{name,en:LMULT};return{name,max:127}}
  if(pg==="SYN"){const en=EN[tr.m+"."+name]||EN[name];if(en)return{name,en};if(tr.m==="DPRO-WAVE"&&name==="WAVE")return{name,max:31}}
  return{name,max:127,signed:SIGNED.has(name)||(pg==="SYN"&&/^PCH/.test(name))}}
+/* LEN (P7): a click steps a page and goes round (16 32 48 64 16 ...), shift-click back; a scroll one step, 2-64.
+   It used to stop at 64: a click on the factory patterns' LEN 64 did nothing. */
+function lenStep(len,d,fine){if(fine)return clamp(len+d,2,64);const p=Math.ceil(len/16)+d;return(((p-1)%4+4)%4+1)*16}
 const maxOf=m=>m.en?m.en.length-1:m.max;
 function fmt(m,v){if(v==null)return"—";if(m.en)return m.en[clamp(v,0,m.en.length-1)];if(m.signed){const d=v-64;return(d>0?"+":"")+d}return String(v)}
 function getP(t,pid){const[pg,i]=pid.split(".");return trk(t).v[pg]?.[+i]}

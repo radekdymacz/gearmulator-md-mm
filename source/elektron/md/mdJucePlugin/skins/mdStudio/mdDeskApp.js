@@ -792,8 +792,8 @@ ED.rom = {
 };
 let chopDrag = null;
 document.getElementById("main").addEventListener("pointerdown", e => { const c = e.target.closest(".cp.on"); if (!c || e.altKey || e.shiftKey) return; const p = +$("#chop").dataset.p, s = +c.dataset.cp, cur = V.locks.get(lk(p, "STRT"))?.get(s) ?? V.tracks[p].syn.STRT; chopDrag = { c, p, s, y: e.clientY, v: cur, moved: false }; gesture = Bridge.gesture(); capture(c, e); });
-document.getElementById("main").addEventListener("pointermove", e => { if (!chopDrag) return; const d = Math.round((chopDrag.y - e.clientY) / 6) * 8; if (!d && !chopDrag.moved) return; chopDrag.moved = true; const v = clamp(chopDrag.v + d); if (setLock(chopDrag.p, "STRT", chopDrag.s, v)) { chopDrag.c.innerHTML = chopInner(chopDrag.p, chopDrag.s); renderTop(); redraw(); } });
-document.getElementById("main").addEventListener("pointerup", () => { if (chopDrag) { chopDrag.c.dataset.moved = chopDrag.moved ? "1" : ""; chopDrag = null; gesture = 0; } });
+document.getElementById("main").addEventListener("pointermove", e => { if (!chopDrag) return; if (e.buttons === 0 && e.pointerType === "mouse") { chopDrag = null; gesture = 0; return; } const d = Math.round((chopDrag.y - e.clientY) / 6) * 8; if (!d && !chopDrag.moved) return; chopDrag.moved = true; const v = clamp(chopDrag.v + d); if (setLock(chopDrag.p, "STRT", chopDrag.s, v)) { chopDrag.c.innerHTML = chopInner(chopDrag.p, chopDrag.s); renderTop(); redraw(); } });
+document.addEventListener("pointerup", () => { if (chopDrag) { chopDrag.c.dataset.moved = chopDrag.moved ? "1" : ""; chopDrag = null; gesture = 0; } });
 
 /* ===== Machine picker (catalogue from the plug-in) ===== */
 const FAMS = [["TRX", "Analogue model"], ["EFM", "FM drums"], ["E12", "12-bit samples"], ["PI", "Physical model"], ["GND", "Tone and noise"], ["INP", "External input"], ["MID", "MIDI out"], ["CTR", "Control"], ["ROM", "ROM samples · UW"], ["RAM", "RAM record + play · UW"]];
@@ -1022,7 +1022,7 @@ function l2set(k, v) {
 }
 document.addEventListener("pointerdown", e => { const el = e.target.closest(".l2.ed"); if (!el) return; const k = el.dataset.l2; if (k === "swing" || k === "accAmt") { l2drag = { k, y: e.clientY, v: V[k], moved: false }; gesture = Bridge.gesture(); capture(el, e); e.preventDefault(); } });
 document.addEventListener("pointermove", e => {
-	if (!l2drag) return; const d = Math.round((l2drag.y - e.clientY) / (l2drag.k === "swing" ? 3 : 6)); if (d) l2drag.moved = true;
+	if (!l2drag) return; if (e.buttons === 0 && e.pointerType === "mouse") { l2drag = null; gesture = 0; return; } const d = Math.round((l2drag.y - e.clientY) / (l2drag.k === "swing" ? 3 : 6)); if (d) l2drag.moved = true;
 	const before = V[l2drag.k]; l2set(l2drag.k, l2drag.v + d); if (V[l2drag.k] !== before) renderSub();
 });
 document.addEventListener("pointerup", e => { if (!l2drag) return; const k = l2drag; l2drag = null; gesture = 0; if (!k.moved) l2step(k.k, 1); });
@@ -1038,6 +1038,7 @@ main.addEventListener("pointerdown", e => {
 	const lb = e.target.closest(".lb"); if (lb) { laneDraw = { erase: e.altKey, touched: new Set() }; gesture = Bridge.gesture(); capture($("#lane"), e); laneAt(e); e.preventDefault(); }
 });
 main.addEventListener("pointermove", e => {
+	if (e.buttons === 0 && e.pointerType === "mouse" && (drag || active || laneDraw)) { endDrag(); return; }
 	if (active) { const r = active.c.getBoundingClientRect(), h = ED[active.c.dataset.ed].handles(r.width, r.height, active.c).find(h => h.k === active.k); if (h) { sendEditor(active.c, h.drag(clamp(e.clientX - r.left, 0, r.width), clamp(e.clientY - r.top, 0, r.height))); syncControls(); redraw(); } return; }
 	/* Mockup v60: a value box follows the axis that moved more (sideways or up/down), one value a pixel. */
 	if (drag) { const fine = e.shiftKey ? .25 : 1, dx = e.clientX - drag.x, dy = drag.y - e.clientY; const d = drag.vert ? dy * 127 / 132 : (Math.abs(dx) >= Math.abs(dy) ? dx : dy); setV(drag.el, drag.v + d * fine); return; }
@@ -1045,7 +1046,11 @@ main.addEventListener("pointermove", e => {
 	const c = e.target.closest("canvas.ed"); if (c && ED[c.dataset.ed]) c.style.cursor = nearest(c, e) ? "grab" : "default";
 });
 function endDrag() { if (active) { active = null; redraw(); } if (drag) { drag.el.classList.remove("act"); drag = null; } endLaneDraw(); gesture = 0; if (pendingRender) scheduleRender(); }
-main.addEventListener("pointerup", endDrag); main.addEventListener("pointercancel", endDrag);
+/* P7: a gesture ends wherever the button comes up (a pointerup outside #main left the drag on: every later
+   mouse move edited the value, and the page waited for the gesture to end before showing the machine again).
+   A move with no button down ends it too, and so does leaving the window. */
+document.addEventListener("pointerup", endDrag); document.addEventListener("pointercancel", endDrag);
+window.addEventListener("blur", () => { if (drag || active || laneDraw) endDrag(); });
 /* A gesture ends with any pointer release, wherever it lands. */
 document.addEventListener("pointerup", () => setTimeout(() => { if (!interacting()) gesture = 0; }), true);
 main.addEventListener("wheel", e => { const el = e.target.closest(".pc[data-g],.fader[data-g]"); if (!el) return; e.preventDefault(); const d = (e.deltaY || e.deltaX) < 0 ? 1 : -1; setV(el, getV(el) + d * (e.shiftKey ? 10 : 1)); }, { passive: false });
@@ -1209,7 +1214,7 @@ function refreshAudible() {
 	const b = $("#bpm"); let d = null;
 	const set = v => { const bpm = clamp(Math.round(v * 10) / 10, 30, 300); cmd("tempo", { bpm }, "tempo", [[["bpm"], bpm]]); renderTop(); };
 	b.addEventListener("pointerdown", e => { d = { y: e.clientY, v: V.bpm }; gesture = Bridge.gesture(); capture(b, e); });
-	b.addEventListener("pointermove", e => { if (!d) return; const v = d.v + (d.y - e.clientY) * (e.shiftKey ? .1 : .5); if (Math.abs(v - V.bpm) >= .05) set(v); });
+	b.addEventListener("pointermove", e => { if (!d) return; if (e.buttons === 0 && e.pointerType === "mouse") { d = null; gesture = 0; return; } const v = d.v + (d.y - e.clientY) * (e.shiftKey ? .1 : .5); if (Math.abs(v - V.bpm) >= .05) set(v); });
 	b.addEventListener("pointerup", () => { d = null; gesture = 0; });
 	b.addEventListener("keydown", e => { const k = { ArrowUp: 1, ArrowDown: -1 }[e.key]; if (!k) return; e.preventDefault(); set(V.bpm + k * (e.shiftKey ? .1 : 1)); });
 })();

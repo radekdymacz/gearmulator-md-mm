@@ -337,6 +337,100 @@ namespace
 		check(r.tel.running.load() == 0, "STOP");
 	}
 
+	// The last machine document the desk published.
+	Value lastMachine(const Rig& _r)
+	{
+		for(auto it = _r.page.rbegin(); it != _r.page.rend(); ++it)
+			if(it->find("type")->asString() == "machine")
+				return *it->find("doc");
+		return {};
+	}
+
+	std::string kitWorking(const Rig& _r)
+	{
+		const auto m = lastMachine(_r);
+		return m.isObject() ? m.find("kit")->find("working")->asString() : "";
+	}
+
+	// P7: loading a pattern (which loads its kit) leaves the kit that plays clean, and no question
+	// comes on the next switch; the current pattern's LEN changes and plays at the new length.
+	void patterns(const Bytes& _rom)
+	{
+		std::puts("patterns");
+		Rig r(_rom);
+		r.msg(R"({"op":"ready"})");
+		r.desk->setProbe(mmDesk::Desk::Probe::Running);
+		r.run(600);
+		while(r.desk->loaded() < 288)
+			r.run(100);
+		r.run(1500);
+		std::printf("  after boot: kit %d %s\n", r.desk->currentKit(), kitWorking(r).c_str());
+		int asks = 0, edited = 0, loads = 0;
+		for(const int p : {1, 2, 3, 16, 17, 0})
+		{
+			const auto from = r.page.size();
+			r.msg(R"({"op":"select","p":)" + std::to_string(p) + "}");
+			for(size_t i = from; i < r.page.size(); ++i)
+				if(r.page[i].find("type")->asString() == "ask")
+				{
+					++asks;
+					std::printf("  select %d asks: %s\n", p, r.page[i].find("message")->asString().c_str());
+					Value c = *r.page[i].find("command");
+					c.put("force", true);
+					r.msg(ed::json::write(c));
+					break;
+				}
+			r.run(2500);
+			++loads;
+			const auto state = kitWorking(r);
+			const auto k = r.desk->currentKit();
+			std::printf("  select %d: pattern %d kit %d %s\n", p, r.desk->currentPattern(), k, state.c_str());
+			if(state == "edited")
+			{
+				++edited;
+				const auto w = r.desk->workingKit();
+				const auto s = r.desk->kit(static_cast<uint8_t>(k));
+				if(w && s)
+				{
+					const auto a = ed::mmKitRaw(*w), b = ed::mmKitRaw(*s);
+					for(size_t i = 0; i < a.size() && i < b.size(); ++i)
+						if(a[i] != b[i])
+							std::printf("    raw 0x%03zx: working %02x stored %02x\n", i, a[i], b[i]);
+				}
+			}
+		}
+		check(edited == 0, "a loaded pattern's kit is clean (" + std::to_string(edited) + " of " + std::to_string(loads) + " edited)");
+		check(asks == 0, "no question when nothing was edited (" + std::to_string(asks) + " asked)");
+
+		// LEN of the pattern that plays: 64 -> 32 -> 17, each read back and played at that length.
+		for(const int len : {32, 17})
+		{
+			const int cp = r.desk->currentPattern();
+			auto p = *r.desk->pattern(static_cast<uint8_t>(cp));
+			p.length = static_cast<uint8_t>(len);
+			r.msg(R"({"op":"set","kind":"pattern","doc":)" + ed::json::write(ed::mmPatternToJson(p)) + "}");
+			const auto ok = r.lastResult().find("ok")->asBool();
+			if(!ok)
+				std::printf("    %s\n", ed::json::write(r.lastResult()).c_str());
+			r.run(3000);
+			const auto back = r.desk->pattern(static_cast<uint8_t>(cp));
+			std::printf("  LEN %d on %d: accepted %d, read back %d, kit %s\n", len, cp, ok, back ? back->length : -1, kitWorking(r).c_str());
+			check(ok && back && back->length == len, "LEN " + std::to_string(len) + " of the pattern that plays is stored");
+			r.msg(R"({"op":"play"})");
+			int maxStep = -1;
+			const auto t0 = r.ms();
+			while(r.ms() - t0 < 64 * 125 + 1000)
+			{
+				r.run(10);
+				maxStep = std::max(maxStep, static_cast<int>(r.tel.step.load()));
+			}
+			r.msg(R"({"op":"stop"})");
+			r.run(600);
+			std::printf("  played: steps up to %d\n", maxStep + 1);
+			check(maxStep + 1 == len, "and it plays " + std::to_string(len) + " steps");
+		}
+	}
+
 	// Zero crossings per second / 2 over a window of the left channel.
 	double frequency(const std::vector<float>& _l, const size_t _from, const size_t _n)
 	{
@@ -490,6 +584,8 @@ int main(const int _argc, char** _argv)
 			smoke(rom);
 		if(only.empty() || only == "trigkinds")
 			trigKinds(rom);
+		if(only.empty() || only == "patterns")
+			patterns(rom);
 		check(g_contract.loaded() && g_contract.bad() == 0, g_contract.summary());
 		std::printf("%s (%d failures)\n", g_failures ? "FAIL" : "PASS", g_failures);
 		return g_failures ? 1 : 0;
