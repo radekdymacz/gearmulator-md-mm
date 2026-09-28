@@ -1228,6 +1228,19 @@
         },
         "machines": {
           "type": "array"
+        },
+        "slots": {
+          "type": "object",
+          "description": "P6: how many documents of each kind (the model's kind records).",
+          "additionalProperties": {
+            "type": "integer",
+            "minimum": 1
+          }
+        },
+        "tracks": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "P6: the kit's tracks (synth tracks)."
         }
       }
     },

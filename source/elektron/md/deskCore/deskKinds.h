@@ -137,4 +137,16 @@ namespace deskCore
 		const int n = k && k->slots > 0 ? k->slots : 1;
 		return static_cast<uint8_t>(((_value % n) + n) % n);
 	}
+
+	// {kind name: slots} of every kind with more than one slot: the catalogue's counts, so a page
+	// never writes them itself.
+	template<typename Model>
+	Value slotCounts()
+	{
+		Value v = Value::object();
+		for(const auto& k : Model::kinds())
+			if(k.slots > 1)
+				v.set(k.name, k.slots);
+		return v;
+	}
 }

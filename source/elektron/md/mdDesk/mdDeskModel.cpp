@@ -173,6 +173,8 @@ namespace mdDesk
 		doc.set("version", 1);
 		doc.set("machines", std::move(machines));
 		doc.set("enums", std::move(enums));
+		doc.set("slots", deskCore::slotCounts<MdModel>());
+		doc.set("tracks", static_cast<int>(ed::MdKit::g_tracks));
 		return doc;
 	}
 

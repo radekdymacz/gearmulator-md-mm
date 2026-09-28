@@ -36,8 +36,10 @@
 		return ka.length === kb.length && ka.every(k => sameValue(a[k], b[k]));
 	}
 	const copy = o => o == null ? o : structuredClone(o);
-	const SYNTH_TRACKS = 6;		// the Monomachine's synth tracks (the mute command's t)
-	const SLOTS = 128;			// its pattern and kit slots
+	// The Monomachine's synth tracks (the mute command's t) and its pattern and kit slots: the
+	// catalogue's counts once it has come (the defaults only until then).
+	let SYNTH_TRACKS = 6;
+	let SLOTS = 128;
 
 	/* ---------------- what the core shows ---------------- */
 	const KINDS = ["kit", "pattern", "song", "global"];
@@ -510,6 +512,8 @@
 
 	function onCatalogue(doc) {
 		catalogue = doc;
+		if (doc.tracks) SYNTH_TRACKS = doc.tracks;
+		if (doc.slots && doc.slots.pattern) SLOTS = doc.slots.pattern;
 		const off = C().useCatalogue(doc);
 		if (off.length) log("catalogue: the page's tables differ: " + off.join("; "));
 		showSlots();

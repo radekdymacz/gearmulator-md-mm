@@ -232,6 +232,8 @@ namespace mmDesk
 		lfo.set("pitchDests", strings(ed::mmPitchDests()));
 		c.set("lfo", std::move(lfo));
 		c.set("enumRule", "index = floor(value * n / 128); value = ceil(index * 128 / n)");
+		c.set("slots", deskCore::slotCounts<MmModel>());
+		c.set("tracks", static_cast<int>(ed::MmKit::g_tracks));	// the synth tracks
 		return c;
 	}
 

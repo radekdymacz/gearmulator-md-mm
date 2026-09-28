@@ -233,5 +233,12 @@
     "mults": ["1X", "2X", "4X", "8X", "16X", "32X", "64X"],
     "pitchDests": ["1/12", "2/12", "7/12", "1OCT", "2OCT", "4OCT", "8OCT", "16OCT"]
   },
-  "enumRule": "index = floor(value * n / 128); value = ceil(index * 128 / n)"
+  "enumRule": "index = floor(value * n / 128); value = ceil(index * 128 / n)",
+  "slots": {
+    "pattern": 128,
+    "kit": 128,
+    "song": 24,
+    "global": 8
+  },
+  "tracks": 6
 }
