@@ -1,0 +1,113 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Pay what you want — Machinedrum Editor + Monomachine Editor</title>
+<meta name="description" content="Step 2 of 3: pay what you want for the free editors, or just download. Zero is fine.">
+<meta name="color-scheme" content="light dark">
+<link rel="canonical" href="https://mdmm.nativekloud.com/get/support/">
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<link rel="icon" href="/favicon-32.png" sizes="32x32" type="image/png">
+<link rel="apple-touch-icon" href="/apple-touch-icon.png">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="Future Native Audio">
+<meta property="og:title" content="Download the Machinedrum Editor + Monomachine Editor">
+<meta property="og:description" content="Free, open-source editors for the Elektron Machinedrum and Monomachine. Pay what you want; zero is fine.">
+<meta property="og:url" content="https://mdmm.nativekloud.com/get/support/">
+<meta property="og:image" content="https://mdmm.nativekloud.com/og.png">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:image" content="https://mdmm.nativekloud.com/og.png">
+<link rel="stylesheet" href="/design/tokens.css">
+<link rel="stylesheet" href="/assets/site.css">
+<script src="/assets/theme.js"></script>
+</head>
+<body data-step="2">
+<a class="skip" href="#main">Skip to content</a>
+
+<header class="top">
+  <div class="wrap">
+    <a class="brand" href="/" aria-label="Future Native Audio — Machinedrum and Monomachine Editors, home">
+      <i class="dot" aria-hidden="true"></i>
+      <span class="brand-txt"><b>Future Native Audio</b><span>MD + MM Editors</span></span>
+    </a>
+    <nav class="nav" aria-label="Main">
+      <a class="hide-s" href="/#tour">Tour</a>
+      <a class="hide-s" href="/#features">Features</a>
+      <a class="hide-s" href="/#limits">Limits</a>
+      <a class="hide-s" href="/#credits">Credits</a>
+      <button class="themebtn" type="button" data-theme-toggle aria-label="Switch to dark theme"><svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="6.5" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M8 1.5a6.5 6.5 0 0 1 0 13z" fill="currentColor"/></svg></button>
+      <a class="btn btn-primary btn-sm" href="/get/">Download</a>
+    </nav>
+  </div>
+</header>
+
+<main id="main" class="checkout">
+  <div class="wrap">
+    <ol class="progress" aria-label="Download steps">
+      <li class="done"><b>1</b>Choose</li>
+      <li aria-current="step"><b>2</b>Support</li>
+      <li><b>3</b>Download</li>
+    </ol>
+    <h1>Pay what you want</h1>
+    <p class="lede">The editors are free software and stay free. If they are useful to you, a donation supports the time that goes into them. Zero is a perfectly good amount.</p>
+
+    <div class="nothanks">
+      <p><b>No thanks, just download.</b> Nothing is locked; you get exactly the same files.</p>
+      <a class="btn btn-ghost" href="/get/download/" data-carry id="skip">No thanks, just download</a>
+    </div>
+
+    <form id="donate" action="/get/download/" method="get">
+      <input type="hidden" name="ed" data-carry-field>
+      <input type="hidden" name="fmt" data-carry-field>
+      <fieldset>
+        <legend class="label">Suggested amounts</legend>
+        <div class="amounts" id="amounts"></div>
+        <div class="custom">
+          <label for="custom" class="small">Or your own amount</label>
+          <input id="custom" name="custom" type="number" inputmode="decimal" min="1" max="1000" step="1" placeholder="15">
+          <span class="small" id="currency">EUR</span>
+        </div>
+      </fieldset>
+      <div class="btns">
+        <button class="btn btn-primary" type="submit" id="pay">Donate with PayPal</button>
+        <a class="btn btn-ghost" href="/get/download/" data-carry>No thanks, just download</a>
+        <a class="btn btn-ghost" id="alt" hidden rel="noopener" target="_blank"></a>
+      </div>
+      <p class="note" id="paynote">PayPal opens in a new tab, and your download page opens here at the same time, so you never have to wait for the payment.</p>
+      <noscript><p class="warn">Donating needs JavaScript to open PayPal with your amount. You can still <a href="/get/download/">download without it</a>.</p></noscript>
+    </form>
+
+    <div class="cols2">
+      <div class="panel">
+        <h3>Where the money goes</h3>
+        <p class="small">Donations go to NativeKloud Consulting (Radosław Dymacz), who builds these editors. They are a voluntary gift, not a purchase: they do not unlock anything, and there is no refund process because there is nothing to refund.</p>
+      </div>
+      <div class="panel">
+        <h3>Thank the emulator's authors too</h3>
+        <p class="small">The emulation is the work of <a href="https://github.com/joelanders/gearmulator-md-mm">joelanders</a> and <a href="https://github.com/dsp56300/gearmulator">The Usual Suspects</a>. Money donated here does not reach them; see their pages if you want to support them directly.</p>
+      </div>
+    </div>
+  </div>
+</main>
+
+<footer class="foot">
+  <div class="wrap">
+    <div>
+      <p><b>Future Native Audio</b> — a NativeKloud Consulting product line.<br>A NativeKloud Consulting project — <a href="https://nativekloud.com">nativekloud.com</a></p>
+    </div>
+    <nav aria-label="Footer">
+      <a href="https://github.com/radekdymacz/gearmulator-md-mm">Source (GPL-3)</a>
+      <a href="https://github.com/radekdymacz/gearmulator-md-mm/issues">Issues</a>
+      <a href="/get/">Download</a>
+      <a href="/#credits">Credits</a>
+    </nav>
+    <p class="small">No cookies, no analytics, no third-party scripts.</p>
+  </div>
+</footer>
+
+<script src="/config.js"></script>
+<script src="/assets/main.js" defer></script>
+<script src="/assets/get.js" defer></script>
+</body>
+</html>

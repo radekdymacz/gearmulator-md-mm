@@ -1,0 +1,114 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Download — Machinedrum Editor + Monomachine Editor</title>
+<meta name="description" content="Step 3 of 3: download the editors, install them on macOS and add your own firmware image.">
+<meta name="color-scheme" content="light dark">
+<link rel="canonical" href="https://mdmm.nativekloud.com/get/download/">
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<link rel="icon" href="/favicon-32.png" sizes="32x32" type="image/png">
+<link rel="apple-touch-icon" href="/apple-touch-icon.png">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="Future Native Audio">
+<meta property="og:title" content="Download the Machinedrum Editor + Monomachine Editor">
+<meta property="og:description" content="Free, open-source editors for the Elektron Machinedrum and Monomachine. Pay what you want; zero is fine.">
+<meta property="og:url" content="https://mdmm.nativekloud.com/get/download/">
+<meta property="og:image" content="https://mdmm.nativekloud.com/og.png">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:image" content="https://mdmm.nativekloud.com/og.png">
+<link rel="stylesheet" href="/design/tokens.css">
+<link rel="stylesheet" href="/assets/site.css">
+<script src="/assets/theme.js"></script>
+</head>
+<body data-step="3">
+<a class="skip" href="#main">Skip to content</a>
+
+<header class="top">
+  <div class="wrap">
+    <a class="brand" href="/" aria-label="Future Native Audio — Machinedrum and Monomachine Editors, home">
+      <i class="dot" aria-hidden="true"></i>
+      <span class="brand-txt"><b>Future Native Audio</b><span>MD + MM Editors</span></span>
+    </a>
+    <nav class="nav" aria-label="Main">
+      <a class="hide-s" href="/#tour">Tour</a>
+      <a class="hide-s" href="/#features">Features</a>
+      <a class="hide-s" href="/#limits">Limits</a>
+      <a class="hide-s" href="/#credits">Credits</a>
+      <button class="themebtn" type="button" data-theme-toggle aria-label="Switch to dark theme"><svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="6.5" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M8 1.5a6.5 6.5 0 0 1 0 13z" fill="currentColor"/></svg></button>
+      <a class="btn btn-primary btn-sm" href="/get/">Download</a>
+    </nav>
+  </div>
+</header>
+
+<main id="main" class="checkout">
+  <div class="wrap">
+    <ol class="progress" aria-label="Download steps">
+      <li class="done"><b>1</b>Choose</li>
+      <li class="done"><b>2</b>Support</li>
+      <li aria-current="step"><b>3</b>Download</li>
+    </ol>
+    <h1>Download</h1>
+    <p class="thanks" id="thanks" hidden>If you donated: thank you. It really helps.</p>
+    <p class="lede">Your files, straight from GitHub Releases. Then install, add your firmware image, and play.</p>
+
+    <ul class="dl" id="dl">
+      <li><span>All downloads are on the GitHub Releases page.</span><a class="btn btn-primary btn-sm" href="https://github.com/radekdymacz/gearmulator-md-mm/releases">Releases</a></li>
+    </ul>
+
+    <div class="cols2">
+      <div class="panel">
+        <span class="label">Install</span>
+        <h3>The app and the plug-ins are not signed by Apple</h3>
+        <ol class="steps">
+          <li><b>App:</b> unzip it and move it to Applications.</li>
+          <li><b>First launch:</b> right-click (or Control-click) the app, choose <b>Open</b>, then <b>Open</b> again. If macOS still refuses, open System Settings → Privacy &amp; Security and click <b>Open Anyway</b>.</li>
+          <li><b>Plug-in:</b> copy the <code>.vst3</code> bundle to <code>~/Library/Audio/Plug-Ins/VST3/</code> and the <code>.component</code> to <code>~/Library/Audio/Plug-Ins/Components/</code>, then rescan in your DAW.</li>
+          <li><b>If the DAW will not load it:</b> macOS may have quarantined the download. In Terminal: <code>xattr -dr com.apple.quarantine ~/Library/Audio/Plug-Ins/VST3/&lt;name&gt;.vst3</code> (and the same for the <code>.component</code>).</li>
+        </ol>
+      </div>
+      <div class="panel accent">
+        <span class="label ink">Bring your own ROM</span>
+        <h3>Add your firmware image</h3>
+        <ol class="steps">
+          <li>Have your own firmware image ready: <b>Machinedrum OS 1.63</b> or <b>Monomachine OS 1.32B</b>, a full 8 MiB <code>.bin</code>. It is not included, and we cannot provide it.</li>
+          <li>Open the editor once. It shows <b>NO ROM</b> and a key that opens its ROM folder:<br><code>~/Documents/Gearmulator Preview/Machinedrum/roms/</code> or <code>…/Monomachine/roms/</code></li>
+          <li>Put the image in that folder.</li>
+          <li>Quit and reopen the app or plug-in. The editor checks the image's fingerprint, boots the OS and reads the machine. That takes 10–15 seconds.</li>
+        </ol>
+      </div>
+    </div>
+
+    <div class="panel">
+      <h3>Before you start</h3>
+      <ul class="list">
+        <li><b>Alpha.</b>Keep backups of your projects. Found a bug? <a href="https://github.com/radekdymacz/gearmulator-md-mm/issues">Open an issue</a>.</li>
+        <li><b>HW MIDI is beta.</b>It has not been tested on a real machine yet. On a Monomachine, you open SYSEX RECV yourself; the editor tells you when.</li>
+        <li><b>Source.</b>GPL-3, at <a href="https://github.com/radekdymacz/gearmulator-md-mm">github.com/radekdymacz/gearmulator-md-mm</a>.</li>
+      </ul>
+      <p class="small">Didn't donate and changed your mind? <a href="/get/support/" data-carry>You still can</a>.</p>
+    </div>
+  </div>
+</main>
+
+<footer class="foot">
+  <div class="wrap">
+    <div>
+      <p><b>Future Native Audio</b> — a NativeKloud Consulting product line.<br>A NativeKloud Consulting project — <a href="https://nativekloud.com">nativekloud.com</a></p>
+    </div>
+    <nav aria-label="Footer">
+      <a href="https://github.com/radekdymacz/gearmulator-md-mm">Source (GPL-3)</a>
+      <a href="https://github.com/radekdymacz/gearmulator-md-mm/issues">Issues</a>
+      <a href="/get/">Download</a>
+      <a href="/#credits">Credits</a>
+    </nav>
+    <p class="small">No cookies, no analytics, no third-party scripts.</p>
+  </div>
+</footer>
+
+<script src="/config.js"></script>
+<script src="/assets/main.js" defer></script>
+<script src="/assets/get.js" defer></script>
+</body>
+</html>
