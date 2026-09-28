@@ -15,6 +15,7 @@
 namespace mdJucePlugin
 {
 	class StudioLink;
+	class AudioMidiLink;
 	class StudioWebView;
 
 	// The "mdStudio" skin: the Machinedrum Editor page (skins/mdStudio) in a
@@ -33,6 +34,7 @@ namespace mdJucePlugin
 
 		void create() override;
 		std::pair<std::string, std::string> getDemoRestrictionText() const override { return {}; }
+		bool openAudioMidiSettings() override;
 
 	private:
 		void timerCallback() override;
@@ -50,6 +52,7 @@ namespace mdJucePlugin
 		std::unique_ptr<StudioLink> m_link;
 		std::unique_ptr<mdDesk::Desk> m_desk;
 		std::unique_ptr<StudioWebView> m_web;
+		std::unique_ptr<AudioMidiLink> m_audio;	// AUDIO / MIDI panel (standalone devices)
 		std::vector<elektronData::json::Value> m_outbox;
 		bool m_pageReady = false;
 		uint32_t m_ticks = 0;

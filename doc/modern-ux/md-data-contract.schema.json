@@ -18,6 +18,9 @@
     },
     {
       "$ref": "#/$defs/machine"
+    },
+    {
+      "$ref": "#/$defs/audioDevices"
     }
   ],
   "$defs": {
@@ -1279,6 +1282,203 @@
         }
       }
     },
+    "audioDevices": {
+      "type": "object",
+      "description": "The standalone's audio and MIDI devices (P6, mdJucePlugin/mdAudioMidiLink.cpp; data-contract.md 4.8). Not machine data. In a plug-in only schema, version and standalone:false.",
+      "required": [
+        "schema",
+        "version",
+        "standalone"
+      ],
+      "properties": {
+        "schema": {
+          "const": "gm-audio/devices"
+        },
+        "version": {
+          "const": 1
+        },
+        "standalone": {
+          "type": "boolean"
+        },
+        "driver": {
+          "type": "object",
+          "required": [
+            "id",
+            "list"
+          ],
+          "properties": {
+            "id": {
+              "type": "string"
+            },
+            "list": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          }
+        },
+        "output": {
+          "type": "object",
+          "required": [
+            "id",
+            "list"
+          ],
+          "properties": {
+            "id": {
+              "type": "string"
+            },
+            "list": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          }
+        },
+        "input": {
+          "type": "object",
+          "required": [
+            "id",
+            "list",
+            "muted"
+          ],
+          "properties": {
+            "id": {
+              "type": "string"
+            },
+            "list": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "muted": {
+              "type": "boolean"
+            }
+          }
+        },
+        "outputChannels": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": [
+              "name",
+              "on"
+            ],
+            "properties": {
+              "name": {
+                "type": "string"
+              },
+              "on": {
+                "type": "boolean"
+              }
+            }
+          }
+        },
+        "sampleRate": {
+          "type": "object",
+          "required": [
+            "value",
+            "list"
+          ],
+          "properties": {
+            "value": {
+              "type": "number"
+            },
+            "list": {
+              "type": "array",
+              "items": {
+                "type": "number"
+              }
+            }
+          }
+        },
+        "bufferSize": {
+          "type": "object",
+          "required": [
+            "value",
+            "list"
+          ],
+          "properties": {
+            "value": {
+              "type": "number"
+            },
+            "list": {
+              "type": "array",
+              "items": {
+                "type": "number"
+              }
+            }
+          }
+        },
+        "latencyMs": {
+          "type": "number",
+          "minimum": 0
+        },
+        "running": {
+          "type": "boolean"
+        },
+        "error": {
+          "type": "string"
+        },
+        "midiInputs": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": [
+              "id",
+              "name",
+              "on"
+            ],
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "name": {
+                "type": "string"
+              },
+              "on": {
+                "type": "boolean"
+              }
+            }
+          }
+        },
+        "midiOutput": {
+          "type": "object",
+          "required": [
+            "id",
+            "list"
+          ],
+          "properties": {
+            "id": {
+              "type": "string"
+            },
+            "list": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "required": [
+                  "id",
+                  "name"
+                ],
+                "properties": {
+                  "id": {
+                    "type": "string"
+                  },
+                  "name": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "bluetooth": {
+          "type": "boolean"
+        }
+      }
+    },
     "catalogue": {
       "type": "object",
       "description": "The OS 1.63 machine table (mdDesk::Desk::machineCatalogue).",
@@ -1694,6 +1894,39 @@
           "properties": {
             "type": {
               "const": "reset"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "description": "The standalone's audio and MIDI devices (host, mdAudioMidiLink).",
+          "required": [
+            "type",
+            "doc"
+          ],
+          "properties": {
+            "type": {
+              "const": "audio"
+            },
+            "doc": {
+              "$ref": "#/$defs/audioDevices"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "required": [
+            "type",
+            "in"
+          ],
+          "properties": {
+            "type": {
+              "const": "audioLevel"
+            },
+            "in": {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 1
             }
           }
         }

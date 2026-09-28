@@ -116,6 +116,10 @@ namespace jucePluginEditorLib
 
 		virtual std::pair<std::string, std::string> getDemoRestrictionText() const = 0;
 
+		// The standalone's Audio/MIDI Settings: an editor with its own panel opens it and
+		// returns true; false keeps JUCE's dialog (standaloneApp.h).
+		virtual bool openAudioMidiSettings() { return false; }
+
 		void showDemoRestrictionMessageBox() const;
 
 		Processor& getProcessor() const { return m_processor; }

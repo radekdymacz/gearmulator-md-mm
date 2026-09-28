@@ -125,6 +125,15 @@ if missing or missing_ids:
     print('contract check: mmAdapter.js needs', ', '.join(missing + ['#' + i for i in missing_ids]))
     sys.exit(1)
 
+# ---- the shared AUDIO / MIDI panel: one text in every copy ----
+sys.dont_write_bytecode = True
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import audio_panel_check
+panel = audio_panel_check.check(R)
+if panel:
+    print('AUDIO / MIDI panel: ' + '; '.join(panel))
+    sys.exit(1)
+
 outs = [('mmStudio.html', page), ('mmStudio.css', out_css), ('mmMockup.js', out_js)]
 if check_only:
     drift = [n for n, text in outs if not os.path.exists(SK + n) or open(SK + n).read() != text]

@@ -1,5 +1,7 @@
 #include "mdStudioEditor.h"
 
+#include "mdAudioMidiLink.h"
+
 #include "mdController.h"
 #include "mdPluginProcessor.h"
 #include "mdStudioLink.h"
@@ -125,6 +127,7 @@ namespace mdJucePlugin
 	StudioEditor::~StudioEditor()
 	{
 		stopTimer();
+		m_audio.reset();
 		if(auto* translator = getProcessor().getMidiLearnTranslator())
 		{
 			if(translator->isLearning())
@@ -141,6 +144,7 @@ namespace mdJucePlugin
 	void StudioEditor::create()
 	{
 		jucePluginEditorLib::Editor::create();
+		m_audio = std::make_unique<AudioMidiLink>(getProcessor(), [this](json::Value _m) { m_outbox.push_back(std::move(_m)); });
 
 		auto& processor = dynamic_cast<AudioPluginAudioProcessor&>(getProcessor());
 		m_link = std::make_unique<StudioLink>(processor, dynamic_cast<Controller&>(processor.getController()));
@@ -165,9 +169,10 @@ namespace mdJucePlugin
 		file.replaceWithText(bundlePage());
 		// GEARMULATOR_MDSTUDIO_SELFTEST=1: the page edits a trig and a kit value by
 		// itself and logs the round trips (the log file above).
-		// GEARMULATOR_MDSTUDIO_SELFTEST=p4: the P4 checks instead (mdDeskLive.js).
+		// GEARMULATOR_MDSTUDIO_SELFTEST=p4: the P4 checks instead (mdDeskLive.js); =p6audio: the
+		// AUDIO / MIDI panel's (mdDeskAudio.js).
 		const auto selfTestKind = juce::SystemStats::getEnvironmentVariable("GEARMULATOR_MDSTUDIO_SELFTEST", {});
-		const bool selfTest = selfTestKind == "1" || selfTestKind.startsWith("p4") || selfTestKind.startsWith("p5");
+		const bool selfTest = selfTestKind == "1" || selfTestKind.startsWith("p4") || selfTestKind.startsWith("p5") || selfTestKind.startsWith("p6");
 		m_selfTest = selfTest;
 		const auto url = selfTest ? juce::URL(file).withParameter("selftest", selfTestKind) : juce::URL(file);
 		m_web->goToURL(url.toString(true));
@@ -367,6 +372,8 @@ namespace mdJucePlugin
 	// Messages for the plug-in rather than the machine: MIDI learn, the ROM folder.
 	bool StudioEditor::handleEditorMessage(const json::Value& _message)
 	{
+		if(m_audio && m_audio->handle(_message))
+			return true;
 		const auto op = opOf(_message);
 		auto* translator = getProcessor().getMidiLearnTranslator();
 		const auto reply = [&](const bool _ok, const std::string& _note)
@@ -579,9 +586,24 @@ namespace mdJucePlugin
 		m_web->goToURL("javascript:window.gm&&gm.recv(" + json::write(batch) + ")");
 	}
 
+	bool StudioEditor::openAudioMidiSettings()
+	{
+		// Audio > Audio/MIDI Settings... in the menu bar opens the page's own panel.
+		if(!m_audio || !m_audio->standalone() || !m_pageReady)
+			return false;
+		json::Value m = json::Value::object();
+		m.set("type", "openAudio");
+		m_outbox.push_back(std::move(m));
+		m_audio->publish();
+		flushPage();
+		return true;
+	}
+
 	void StudioEditor::timerCallback()
 	{
 		layoutWebView();
+		if(m_audio)
+			m_audio->tick();
 		if(!m_desk)
 			return;
 		if(m_hw)

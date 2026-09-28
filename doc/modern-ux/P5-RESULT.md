@@ -177,3 +177,35 @@ GEARMULATOR_MDSTUDIO_SELFTEST=p5   (the standalone: PLAY timing, GLOBAL, the ? l
 - **Installed:** MD and MM VST3/AU. Both pass auval.
   - The previous copies are backed up at `~/Library/Audio/Gearmulator P5b backup 2026-09-28/`.
   - Standalones: `bin/plugins/Release/Standalone/Gearmulator MD.app` and `Gearmulator MM.app` in this worktree. They are not copied to /Applications (not approved yet).
+
+## 11. Follow-up 2: standalone chrome, AUDIO / MIDI panel, MM playhead
+
+- **MM transport keys:** they are explicit squares taken from `--lcdh`, as in the MD. The page logs their rects and a FAIL if they are not square and side by side. The MKII print now sits inside the header.
+- **MM playhead:**
+  - In the plug-in, the RAM running flag (0x26b46e) stayed 0 while the sequencer played. The page therefore never saw `playing`.
+  - `mmDesk` now treats the machine as playing when the flag is set or the step byte advances (two forward steps within three step times). A unit test covers this.
+  - The Sequence has the soft `#phcol` column over the roll, the ENV/SLIDE/SWING rows and the lock lane. The column is ink-tinted, glides between steps, jumps on a wrap, page flip or scroll, and fades on stop. It is in the mockup and the skin.
+  - The self-test checks that the column moves and spans the roll to the lane, that POSITION follows, and that the column fades on stop. MM self-test: 9/9.
+- **Icons:** a POST_BUILD step touches every bundle, and the apps are re-registered with `lsregister -f`. All six bundles have `CFBundleIconFile` = `Icon.icns`, and the file is present (MD d69adf10, MM 9635abd3).
+- **No yellow feedback bar** (`standaloneApp.h`, generic):
+  - The holder's mute moves to a fresh `Value` with the same state, so the bar never shows.
+  - The input still starts muted, and the panel shows the mute.
+  - Audio/MIDI Settings… (the app menu and Audio menu) opens the editor's own panel through `Editor::openAudioMidiSettings()`. JUCE's dialog is kept for editors without one.
+- **AUDIO / MIDI panel:**
+  - What it covers:
+    - the output device with a TEST key;
+    - the input device, a level meter and a MUTED/LIVE toggle ("Input muted (prevents feedback)");
+    - the active output channels;
+    - the sample rate and buffer;
+    - the MIDI inputs as LED toggles;
+    - the MIDI output;
+    - Bluetooth MIDI.
+  - It opens from the engine menu (AUDIO/MIDI…), the menu bar, or `,`.
+  - One script block and one stylesheet block serve the MD mockup, the MM mockup and the MD skin (`mdDeskAudio.js`). `audio_panel_check.py` makes both sync scripts stop on drift.
+  - The data is the `gm-audio/devices` document (data-contract.md 4.8, schema `audioDevices`) from `mdAudioMidiLink.cpp`. JUCE's AudioDeviceManager stays the engine.
+  - In a plug-in the document says `standalone:false`: no menu entry, and the panel only says that the host owns audio and MIDI.
+  - `GEARMULATOR_MDSTUDIO_SELFTEST=p6audio` and `GEARMULATOR_MMSTUDIO_SELFTEST=p6audio` each run a check that passes 7/7 in both standalones:
+    - the buffer goes 512 → 128 → 512 and the output goes Speakers → Teams Audio → Speakers;
+    - the machine keeps playing after each change;
+    - the mute toggles and is kept.
+- **Installed:** MD and MM VST3/AU. Both pass auval. The previous VST3s are backed up at `~/Library/Audio/Gearmulator P6a backup 2026-09-28/`; the AUs were not installed at that moment (the P5b backup holds the previous ones).

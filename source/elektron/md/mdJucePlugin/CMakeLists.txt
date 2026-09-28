@@ -57,8 +57,10 @@ set(SOURCES
 	skins/mdStudio/mdDeskLibrary.js
 	skins/mdStudio/mdDeskKeys.js
 	skins/mdStudio/mdDeskGlobal.js
+	skins/mdStudio/mdDeskAudio.js
 	mdSettingsPanelFeel.cpp mdSettingsPanelFeel.h
 	mdSettingsAudioInput.cpp mdSettingsAudioInput.h
+	mdAudioMidiLink.cpp mdAudioMidiLink.h
 )
 
 set(COMMON_ASSETS
