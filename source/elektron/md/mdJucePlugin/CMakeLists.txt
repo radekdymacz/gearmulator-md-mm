@@ -1,6 +1,13 @@
 cmake_minimum_required(VERSION 3.15)
 
-project(mdJucePlugin VERSION ${CMAKE_PROJECT_VERSION})
+# The Machinedrum and Monomachine Editors have their own release version, apart from
+# Gearmulator's (the bundles, the AU version, the installers and the site use it).
+set(MDMM_EDITOR_VERSION 0.2.0)
+project(mdJucePlugin VERSION ${MDMM_EDITOR_VERSION})
+set(CMAKE_PROJECT_VERSION ${PROJECT_VERSION})
+set(CMAKE_PROJECT_VERSION_MAJOR ${PROJECT_VERSION_MAJOR})
+set(CMAKE_PROJECT_VERSION_MINOR ${PROJECT_VERSION_MINOR})
+set(CMAKE_PROJECT_VERSION_PATCH ${PROJECT_VERSION_PATCH})
 
 execute_process(COMMAND git rev-parse --short=12 HEAD WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
 	OUTPUT_VARIABLE MDMM_DIAGNOSTICS_REVISION OUTPUT_STRIP_TRAILING_WHITESPACE ERROR_QUIET)

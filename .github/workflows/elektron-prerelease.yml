@@ -48,7 +48,7 @@ jobs:
       - name: Build the two installer packages
         run: |
           set -euo pipefail
-          # mdmm-v0.1.0-alpha -> 0.1.0 (Installer versions are numeric).
+          # mdmm-v0.2.0 -> 0.2.0, mdmm-v0.1.0-alpha -> 0.1.0 (Installer versions are numeric).
           version="$(printf '%s' "${TAG#mdmm-v}" | sed -E 's/^([0-9]+\.[0-9]+\.[0-9]+).*/\1/')"
           bundles="${RUNNER_TEMP}/mdmm-bundles"
           mkdir -p "${bundles}"
@@ -96,8 +96,14 @@ jobs:
             if [[ -f "${notes}" ]]; then
               notes_args=(--notes-file "${notes}")
             fi
+            # A tag with a suffix (mdmm-v0.1.0-alpha) is a pre-release; a plain
+            # version is a normal release, so releases/latest/download/ resolves.
+            channel_args=()
+            if [[ "${TAG#mdmm-v}" == *-* ]]; then
+              channel_args=(--prerelease)
+            fi
             gh release create "${TAG}" "${pkgs[@]}" --repo "${GITHUB_REPOSITORY}" \
-              --draft --prerelease --verify-tag \
+              --draft ${channel_args[@]+"${channel_args[@]}"} --verify-tag \
               --title "Machinedrum Editor + Monomachine Editor ${TAG#mdmm-v}" \
               "${notes_args[@]}"
           fi

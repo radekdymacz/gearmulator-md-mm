@@ -25,7 +25,7 @@ script_dir="$(cd "$(dirname "$0")" && pwd)"
 source_dir="$(cd "${script_dir}/../.." && pwd)"
 bundle_dir="$(cd "${1:?usage: build_mdmm_pkg.sh BUNDLE_DIR OUTPUT_DIR [VERSION]}" && pwd)"
 output_dir_input="${2:?usage: build_mdmm_pkg.sh BUNDLE_DIR OUTPUT_DIR [VERSION]}"
-version="${3:-0.1.0}"
+version="${3:-0.2.0}"
 resources_src="${script_dir}/pkg-resources"
 
 if [[ ! "${version}" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
@@ -181,7 +181,7 @@ for row in "${machines[@]}"; do
   cat > "${machine_dir}/distribution.xml" <<XML
 <?xml version="1.0" encoding="utf-8"?>
 <installer-gui-script minSpecVersion="2">
-  <title>${app_name} ${version} alpha</title>
+  <title>${app_name} ${version}</title>
   <product id="${identifier}" version="${version}"/>
   <welcome file="welcome.html" mime-type="text/html"/>
   <readme file="readme.html" mime-type="text/html"/>
