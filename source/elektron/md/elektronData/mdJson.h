@@ -20,7 +20,9 @@ namespace elektronData
 	// fromJson reports every problem it finds (JSON path + reason) and returns a
 	// value only when the document is well formed AND within the hardware limits
 	// of elektronData::validate.
-	constexpr int g_mdContractVersion = 1;
+	// Documents are version 2 (P6: the firmware's pass-through fields under "firmware"); readers
+	// also take version 1.
+	constexpr int g_mdContractVersion = 2;
 
 	json::Value patternToJson(const MdPattern& _pattern);
 	json::Value kitToJson(const MdKit& _kit);

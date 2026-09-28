@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://github.com/radekdymacz/gearmulator-md-mm/doc/modern-ux/mm-data-contract.schema.json",
-  "title": "Monomachine Editor data contract, version 1 (MM OS 1.32B)",
+  "title": "Monomachine Editor data contract, version 2 (MM OS 1.32B)",
   "description": "Plain-data documents between the Monomachine Editor page and the machine. Firmware units throughout. Cross-field limits (lock row count, offsets inside lengths, sorted locks) are enforced by elektronData::validate in C++, not here. See mm-data-contract.md.",
   "oneOf": [
     {
@@ -80,7 +80,10 @@
     },
     "format": {
       "type": "object",
-      "required": ["version", "revision"],
+      "required": [
+        "version",
+        "revision"
+      ],
       "properties": {
         "version": {
           "$ref": "#/$defs/value"
@@ -92,7 +95,16 @@
     },
     "arp": {
       "type": "object",
-      "required": ["play", "flag", "ojmp", "mode", "range", "speed", "length", "steps"],
+      "required": [
+        "play",
+        "flag",
+        "ojmp",
+        "mode",
+        "range",
+        "speed",
+        "length",
+        "steps"
+      ],
       "properties": {
         "play": {
           "type": "integer",
@@ -170,7 +182,21 @@
     },
     "synthTrack": {
       "type": "object",
-      "required": ["trig", "amp", "filter", "lfo", "noteOff", "chord", "slide", "swing", "notes", "transpose", "scale", "key", "arp"],
+      "required": [
+        "trig",
+        "amp",
+        "filter",
+        "lfo",
+        "noteOff",
+        "chord",
+        "slide",
+        "swing",
+        "notes",
+        "transpose",
+        "scale",
+        "key",
+        "arp"
+      ],
       "properties": {
         "trig": {
           "$ref": "#/$defs/steps",
@@ -237,7 +263,17 @@
     },
     "midiTrack": {
       "type": "object",
-      "required": ["trig", "note", "noteOff", "slide", "swing", "transpose", "scale", "key", "arp"],
+      "required": [
+        "trig",
+        "note",
+        "noteOff",
+        "slide",
+        "swing",
+        "transpose",
+        "scale",
+        "key",
+        "arp"
+      ],
       "properties": {
         "trig": {
           "$ref": "#/$defs/steps"
@@ -276,13 +312,28 @@
     },
     "pattern": {
       "type": "object",
-      "required": ["schema", "version", "slot", "format", "length", "multiplier", "kit", "swingAmount", "patternTranspose", "tracks", "midiTracks", "locks", "midiNotes", "chordNotes", "hidden"],
+      "required": [
+        "schema",
+        "version",
+        "slot",
+        "length",
+        "multiplier",
+        "kit",
+        "swingAmount",
+        "patternTranspose",
+        "tracks",
+        "midiTracks",
+        "locks",
+        "midiNotes",
+        "chordNotes",
+        "firmware"
+      ],
       "properties": {
         "schema": {
           "const": "mm-desk/pattern"
         },
         "version": {
-          "const": 1
+          "const": 2
         },
         "slot": {
           "type": "integer",
@@ -293,16 +344,18 @@
           "type": "string",
           "pattern": "^[A-H](0[1-9]|1[0-6])$"
         },
-        "format": {
-          "$ref": "#/$defs/format"
-        },
         "length": {
           "type": "integer",
           "minimum": 2,
           "maximum": 64
         },
         "multiplier": {
-          "enum": ["1X", "2X", "3/4X", "3/2X"]
+          "enum": [
+            "1X",
+            "2X",
+            "3/4X",
+            "3/2X"
+          ]
         },
         "kit": {
           "$ref": "#/$defs/value"
@@ -339,7 +392,12 @@
           "maxItems": 62,
           "items": {
             "type": "object",
-            "required": ["track", "page", "param", "steps"],
+            "required": [
+              "track",
+              "page",
+              "param",
+              "steps"
+            ],
             "properties": {
               "track": {
                 "$ref": "#/$defs/track"
@@ -388,9 +446,13 @@
           },
           "maxItems": 192
         },
-        "hidden": {
+        "firmware": {
           "type": "object",
+          "description": "P6, contract version 2: what the firmware carries that the editor passes through untouched (dump format bytes, residue, opaque state, undecoded bytes). Readers also take version 1, where these members sit at the top level.",
           "properties": {
+            "format": {
+              "$ref": "#/$defs/format"
+            },
             "x270": {
               "$ref": "#/$defs/hex"
             },
@@ -412,16 +474,51 @@
             "chordNotes": {
               "$ref": "#/$defs/runs"
             }
-          }
+          },
+          "required": [
+            "format"
+          ]
         }
       }
     },
     "kitTrack": {
       "type": "object",
-      "required": ["machine", "outputs", "input", "pages", "multiEnv", "extra", "assign", "trigPos"],
+      "required": [
+        "machine",
+        "outputs",
+        "input",
+        "pages",
+        "multiEnv",
+        "extra",
+        "assign",
+        "trigPos"
+      ],
       "properties": {
         "machine": {
-          "enum": [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 32, 33]
+          "enum": [
+            0,
+            1,
+            2,
+            3,
+            4,
+            5,
+            6,
+            7,
+            8,
+            9,
+            10,
+            11,
+            12,
+            13,
+            14,
+            15,
+            16,
+            17,
+            18,
+            19,
+            32,
+            33
+          ]
         },
         "machineName": {
           "type": "string"
@@ -465,7 +562,11 @@
         },
         "assign": {
           "type": "object",
-          "required": ["page", "dest", "add"],
+          "required": [
+            "page",
+            "dest",
+            "add"
+          ],
           "properties": {
             "page": {
               "type": "array",
@@ -507,21 +608,27 @@
     },
     "kit": {
       "type": "object",
-      "required": ["schema", "version", "slot", "format", "name", "levels", "tracks", "trackMasks", "hidden"],
+      "required": [
+        "schema",
+        "version",
+        "slot",
+        "name",
+        "levels",
+        "tracks",
+        "trackMasks",
+        "firmware"
+      ],
       "properties": {
         "schema": {
           "const": "mm-desk/kit"
         },
         "version": {
-          "const": 1
+          "const": 2
         },
         "slot": {
           "type": "integer",
           "minimum": 0,
           "maximum": 127
-        },
-        "format": {
-          "$ref": "#/$defs/format"
         },
         "name": {
           "type": "string",
@@ -569,25 +676,53 @@
             }
           }
         },
-        "hidden": {
+        "firmware": {
           "type": "object",
+          "description": "P6, contract version 2: what the firmware carries that the editor passes through untouched (dump format bytes, residue, opaque state, undecoded bytes). Readers also take version 1, where these members sit at the top level.",
           "properties": {
+            "format": {
+              "$ref": "#/$defs/format"
+            },
             "x1cd": {
               "$ref": "#/$defs/hex"
             },
             "x2b6": {
               "$ref": "#/$defs/hex"
             }
-          }
+          },
+          "required": [
+            "format"
+          ]
         }
       }
     },
     "songRow": {
       "type": "object",
-      "required": ["kind", "pattern", "target", "repeats", "mutes", "midiMutes", "offset", "length", "transpose", "trackTranspose", "midiTranspose", "tempo", "x3", "x21"],
+      "required": [
+        "kind",
+        "pattern",
+        "target",
+        "repeats",
+        "mutes",
+        "midiMutes",
+        "offset",
+        "length",
+        "transpose",
+        "trackTranspose",
+        "midiTranspose",
+        "tempo",
+        "x3",
+        "x21"
+      ],
       "properties": {
         "kind": {
-          "enum": ["pattern", "loop", "jump", "halt", "end"]
+          "enum": [
+            "pattern",
+            "loop",
+            "jump",
+            "halt",
+            "end"
+          ]
         },
         "pattern": {
           "$ref": "#/$defs/byte",
@@ -653,21 +788,25 @@
     },
     "song": {
       "type": "object",
-      "required": ["schema", "version", "slot", "format", "name", "rows", "hidden"],
+      "required": [
+        "schema",
+        "version",
+        "slot",
+        "name",
+        "rows",
+        "firmware"
+      ],
       "properties": {
         "schema": {
           "const": "mm-desk/song"
         },
         "version": {
-          "const": 1
+          "const": 2
         },
         "slot": {
           "type": "integer",
           "minimum": 0,
           "maximum": 23
-        },
-        "format": {
-          "$ref": "#/$defs/format"
         },
         "name": {
           "type": "string",
@@ -683,40 +822,61 @@
           },
           "maxItems": 200
         },
-        "hidden": {
+        "firmware": {
           "type": "object",
+          "description": "P6, contract version 2: what the firmware carries that the editor passes through untouched (dump format bytes, residue, opaque state, undecoded bytes). Readers also take version 1, where these members sit at the top level.",
           "properties": {
+            "format": {
+              "$ref": "#/$defs/format"
+            },
             "x0e": {
               "$ref": "#/$defs/hex"
             },
             "rowsAfterEnd": {
               "$ref": "#/$defs/runs"
             }
-          }
+          },
+          "required": [
+            "format"
+          ]
         }
       }
     },
     "global": {
       "type": "object",
-      "required": ["schema", "version", "slot", "format", "channels", "midiSeq", "routingMode", "masterTune", "multiMap", "control", "hidden"],
+      "required": [
+        "schema",
+        "version",
+        "slot",
+        "channels",
+        "midiSeq",
+        "routingMode",
+        "masterTune",
+        "multiMap",
+        "control",
+        "firmware"
+      ],
       "properties": {
         "schema": {
           "const": "mm-desk/global"
         },
         "version": {
-          "const": 1
+          "const": 2
         },
         "slot": {
           "type": "integer",
           "minimum": 0,
           "maximum": 7
         },
-        "format": {
-          "$ref": "#/$defs/format"
-        },
         "channels": {
           "type": "object",
-          "required": ["auto", "base", "span", "multiTrig", "multiMap"],
+          "required": [
+            "auto",
+            "base",
+            "span",
+            "multiTrig",
+            "multiMap"
+          ],
           "properties": {
             "auto": {
               "$ref": "#/$defs/byte"
@@ -737,7 +897,10 @@
         },
         "midiSeq": {
           "type": "object",
-          "required": ["channels", "ccs"],
+          "required": [
+            "channels",
+            "ccs"
+          ],
           "properties": {
             "channels": {
               "type": "array",
@@ -763,7 +926,11 @@
           }
         },
         "routingMode": {
-          "enum": ["3xSTEREO+AB=MIX", "3xSTEREO", "6xMONO"]
+          "enum": [
+            "3xSTEREO+AB=MIX",
+            "3xSTEREO",
+            "6xMONO"
+          ]
         },
         "masterTune": {
           "type": "integer",
@@ -787,14 +954,26 @@
         "control": {
           "$ref": "#/$defs/hex"
         },
-        "hidden": {
-          "type": "object"
+        "firmware": {
+          "type": "object",
+          "description": "P6, contract version 2: what the firmware carries that the editor passes through untouched (dump format bytes, residue, opaque state, undecoded bytes). Readers also take version 1, where these members sit at the top level.",
+          "properties": {
+            "format": {
+              "$ref": "#/$defs/format"
+            }
+          },
+          "required": [
+            "format"
+          ]
         }
       }
     },
     "machine": {
       "type": "object",
-      "required": ["schema", "version"],
+      "required": [
+        "schema",
+        "version"
+      ],
       "description": "Read-only machine state from the MM desk (MM-P2): current and queued pattern, kit and its working state, song, SYSEX RECV session, engine.",
       "properties": {
         "schema": {
@@ -807,7 +986,11 @@
     },
     "catalogue": {
       "type": "object",
-      "required": ["schema", "version", "machines"],
+      "required": [
+        "schema",
+        "version",
+        "machines"
+      ],
       "properties": {
         "schema": {
           "const": "mm-desk/catalogue"
@@ -823,11 +1006,16 @@
     "message": {
       "description": "P6: every message the plug-in sends the Monomachine Editor page. Checked by mmDeskTest.",
       "type": "object",
-      "required": ["type"],
+      "required": [
+        "type"
+      ],
       "oneOf": [
         {
           "type": "object",
-          "required": ["type", "doc"],
+          "required": [
+            "type",
+            "doc"
+          ],
           "properties": {
             "type": {
               "const": "catalogue"
@@ -839,13 +1027,22 @@
         },
         {
           "type": "object",
-          "required": ["type", "kind", "doc"],
+          "required": [
+            "type",
+            "kind",
+            "doc"
+          ],
           "properties": {
             "type": {
               "const": "doc"
             },
             "kind": {
-              "enum": ["pattern", "kit", "song", "global"]
+              "enum": [
+                "pattern",
+                "kit",
+                "song",
+                "global"
+              ]
             },
             "pending": {
               "type": "boolean",
@@ -864,7 +1061,12 @@
               "description": "The kit document is the working kit read from memory."
             },
             "source": {
-              "enum": ["none", "dump", "memory", "tracked"]
+              "enum": [
+                "none",
+                "dump",
+                "memory",
+                "tracked"
+              ]
             }
           },
           "allOf": [
@@ -936,7 +1138,10 @@
         },
         {
           "type": "object",
-          "required": ["type", "doc"],
+          "required": [
+            "type",
+            "doc"
+          ],
           "properties": {
             "type": {
               "const": "machine"
@@ -948,7 +1153,13 @@
         },
         {
           "type": "object",
-          "required": ["type", "op", "ok", "errors", "note"],
+          "required": [
+            "type",
+            "op",
+            "ok",
+            "errors",
+            "note"
+          ],
           "properties": {
             "type": {
               "const": "result"
@@ -975,7 +1186,11 @@
         },
         {
           "type": "object",
-          "required": ["type", "step", "playing"],
+          "required": [
+            "type",
+            "step",
+            "playing"
+          ],
           "properties": {
             "type": {
               "const": "tel"
@@ -992,7 +1207,10 @@
         {
           "type": "object",
           "description": "The firmware's own LCD: 128 x 64, one bit a pixel, rows of 16 bytes, hex.",
-          "required": ["type", "bits"],
+          "required": [
+            "type",
+            "bits"
+          ],
           "properties": {
             "type": {
               "const": "lcd"
@@ -1008,20 +1226,28 @@
         },
         {
           "type": "object",
-          "required": ["type", "doc"],
+          "required": [
+            "type",
+            "doc"
+          ],
           "properties": {
             "type": {
               "const": "learn"
             },
             "doc": {
               "type": "object",
-              "required": ["mappings", "learning"]
+              "required": [
+                "mappings",
+                "learning"
+              ]
             }
           }
         },
         {
           "type": "object",
-          "required": ["type"],
+          "required": [
+            "type"
+          ],
           "properties": {
             "type": {
               "const": "reset"
@@ -1030,7 +1256,10 @@
         },
         {
           "type": "object",
-          "required": ["type", "ask"],
+          "required": [
+            "type",
+            "ask"
+          ],
           "properties": {
             "type": {
               "const": "ask"
@@ -1042,7 +1271,10 @@
         },
         {
           "type": "object",
-          "required": ["type", "message"],
+          "required": [
+            "type",
+            "message"
+          ],
           "properties": {
             "type": {
               "const": "error"
@@ -1055,14 +1287,21 @@
         {
           "type": "object",
           "description": "The standalone's audio and MIDI devices (host, mdAudioMidiLink; schema gm-audio/devices in md-data-contract.schema.json).",
-          "required": ["type", "doc"],
+          "required": [
+            "type",
+            "doc"
+          ],
           "properties": {
             "type": {
               "const": "audio"
             },
             "doc": {
               "type": "object",
-              "required": ["schema", "version", "standalone"],
+              "required": [
+                "schema",
+                "version",
+                "standalone"
+              ],
               "properties": {
                 "schema": {
                   "const": "gm-audio/devices"
@@ -1073,7 +1312,10 @@
         },
         {
           "type": "object",
-          "required": ["type", "in"],
+          "required": [
+            "type",
+            "in"
+          ],
           "properties": {
             "type": {
               "const": "audioLevel"
@@ -1093,7 +1335,9 @@
         {
           "type": "object",
           "description": "core: the page is up: everything is published once more",
-          "required": ["op"],
+          "required": [
+            "op"
+          ],
           "properties": {
             "op": {
               "const": "ready"
@@ -1106,7 +1350,9 @@
         {
           "type": "object",
           "description": "core: undo the last step (a gesture is one step)",
-          "required": ["op"],
+          "required": [
+            "op"
+          ],
           "properties": {
             "op": {
               "const": "undo"
@@ -1119,7 +1365,9 @@
         {
           "type": "object",
           "description": "core",
-          "required": ["op"],
+          "required": [
+            "op"
+          ],
           "properties": {
             "op": {
               "const": "redo"
@@ -1132,7 +1380,11 @@
         {
           "type": "object",
           "description": "core: a whole document as the intent",
-          "required": ["op", "kind", "doc"],
+          "required": [
+            "op",
+            "kind",
+            "doc"
+          ],
           "properties": {
             "op": {
               "const": "set"
@@ -1151,7 +1403,11 @@
         {
           "type": "object",
           "description": "machine: read a document now",
-          "required": ["op", "kind", "slot"],
+          "required": [
+            "op",
+            "kind",
+            "slot"
+          ],
           "properties": {
             "op": {
               "const": "load"
@@ -1172,7 +1428,10 @@
         {
           "type": "object",
           "description": "machine: LOAD PATTERN (at the pattern end while playing; now: STOP, LOAD, PLAY)",
-          "required": ["op", "p"],
+          "required": [
+            "op",
+            "p"
+          ],
           "properties": {
             "op": {
               "const": "select"
@@ -1186,14 +1445,19 @@
               "maximum": 127
             },
             "now": {
-              "type": ["boolean", "integer"]
+              "type": [
+                "boolean",
+                "integer"
+              ]
             }
           }
         },
         {
           "type": "object",
           "description": "machine: LOAD KIT (the current kit without k)",
-          "required": ["op"],
+          "required": [
+            "op"
+          ],
           "properties": {
             "op": {
               "const": "loadKit"
@@ -1211,7 +1475,9 @@
         {
           "type": "object",
           "description": "machine: SAVE KIT",
-          "required": ["op"],
+          "required": [
+            "op"
+          ],
           "properties": {
             "op": {
               "const": "saveKit"
@@ -1229,7 +1495,9 @@
         {
           "type": "object",
           "description": "machine: LOAD SONG (stopped)",
-          "required": ["op"],
+          "required": [
+            "op"
+          ],
           "properties": {
             "op": {
               "const": "loadSong"
@@ -1247,7 +1515,9 @@
         {
           "type": "object",
           "description": "machine: SAVE SONG",
-          "required": ["op"],
+          "required": [
+            "op"
+          ],
           "properties": {
             "op": {
               "const": "saveSong"
@@ -1265,7 +1535,10 @@
         {
           "type": "object",
           "description": "machine: 0x61",
-          "required": ["op", "bpm"],
+          "required": [
+            "op",
+            "bpm"
+          ],
           "properties": {
             "op": {
               "const": "tempo"
@@ -1283,7 +1556,9 @@
         {
           "type": "object",
           "description": "machine",
-          "required": ["op"],
+          "required": [
+            "op"
+          ],
           "properties": {
             "op": {
               "const": "play"
@@ -1296,7 +1571,9 @@
         {
           "type": "object",
           "description": "machine",
-          "required": ["op"],
+          "required": [
+            "op"
+          ],
           "properties": {
             "op": {
               "const": "stop"
@@ -1309,7 +1586,10 @@
         {
           "type": "object",
           "description": "machine: a synth track's mute",
-          "required": ["op", "t"],
+          "required": [
+            "op",
+            "t"
+          ],
           "properties": {
             "op": {
               "const": "mute"
@@ -1323,14 +1603,20 @@
               "maximum": 5
             },
             "on": {
-              "type": ["boolean", "integer"]
+              "type": [
+                "boolean",
+                "integer"
+              ]
             }
           }
         },
         {
           "type": "object",
           "description": "host: an entry of the engine map: emu, hw",
-          "required": ["op", "kind"],
+          "required": [
+            "op",
+            "kind"
+          ],
           "properties": {
             "op": {
               "const": "engine"
@@ -1346,7 +1632,10 @@
         {
           "type": "object",
           "description": "host: a channel message from the page (keys, joystick)",
-          "required": ["op", "b"],
+          "required": [
+            "op",
+            "b"
+          ],
           "properties": {
             "op": {
               "const": "midi"
@@ -1362,7 +1651,9 @@
         {
           "type": "object",
           "description": "host",
-          "required": ["op"],
+          "required": [
+            "op"
+          ],
           "properties": {
             "op": {
               "const": "recheckFirmware"
@@ -1375,7 +1666,9 @@
         {
           "type": "object",
           "description": "host",
-          "required": ["op"],
+          "required": [
+            "op"
+          ],
           "properties": {
             "op": {
               "const": "revealRomFolder"
@@ -1388,7 +1681,9 @@
         {
           "type": "object",
           "description": "host: the editor's menu",
-          "required": ["op"],
+          "required": [
+            "op"
+          ],
           "properties": {
             "op": {
               "const": "openMenu"
@@ -1401,7 +1696,11 @@
         {
           "type": "object",
           "description": "host: MIDI learn",
-          "required": ["op", "t", "pg"],
+          "required": [
+            "op",
+            "t",
+            "pg"
+          ],
           "properties": {
             "op": {
               "const": "learnStart"
@@ -1429,7 +1728,12 @@
         {
           "type": "object",
           "description": "host",
-          "required": ["op", "cc", "t", "pg"],
+          "required": [
+            "op",
+            "cc",
+            "t",
+            "pg"
+          ],
           "properties": {
             "op": {
               "const": "learnAdd"
@@ -1462,7 +1766,9 @@
         {
           "type": "object",
           "description": "host",
-          "required": ["op"],
+          "required": [
+            "op"
+          ],
           "properties": {
             "op": {
               "const": "learnCancel"
@@ -1475,7 +1781,10 @@
         {
           "type": "object",
           "description": "host",
-          "required": ["op", "index"],
+          "required": [
+            "op",
+            "index"
+          ],
           "properties": {
             "op": {
               "const": "learnRemove"
@@ -1493,7 +1802,10 @@
         {
           "type": "object",
           "description": "host",
-          "required": ["op", "index"],
+          "required": [
+            "op",
+            "index"
+          ],
           "properties": {
             "op": {
               "const": "learnInvert"
@@ -1511,7 +1823,9 @@
         {
           "type": "object",
           "description": "host: the standalone's audio and MIDI devices",
-          "required": ["op"],
+          "required": [
+            "op"
+          ],
           "properties": {
             "op": {
               "const": "audio"
@@ -1524,7 +1838,9 @@
         {
           "type": "object",
           "description": "host",
-          "required": ["op"],
+          "required": [
+            "op"
+          ],
           "properties": {
             "op": {
               "const": "audioSet"
@@ -1543,7 +1859,9 @@
         {
           "type": "object",
           "description": "host",
-          "required": ["op"],
+          "required": [
+            "op"
+          ],
           "properties": {
             "op": {
               "const": "audioMeter"
@@ -1552,7 +1870,10 @@
               "type": "integer"
             },
             "on": {
-              "type": ["boolean", "integer"]
+              "type": [
+                "boolean",
+                "integer"
+              ]
             }
           }
         }

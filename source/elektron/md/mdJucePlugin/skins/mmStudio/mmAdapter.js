@@ -139,7 +139,10 @@
 		else if (kind === "song") { FW.song[slot] = doc; if (slot === CUR.song) wantApply.add("song"); }
 		else if (kind === "global") { FW.glob[slot] = doc; if (slot === CUR.glob) wantApply.add("glob"); }
 		libDirty = true;
+		/* the current documents are shown right away (the 120 ms timer only catches up after a gesture) */
+		if (wantApply.size && !applyT) applyT = setTimeout(() => { applyT = 0; applyPending(); }, 0);
 	}
+	let applyT = 0;
 	let libDirty = false;
 
 	function onMachine(d) {
@@ -658,7 +661,7 @@
 			const before = FW.machine?.history?.undoCount || 0;
 			host.undo();
 			await readBack(d => !d.tracks[0].trig.includes(st));
-			await sleep(300);
+			for (let n = 0; n < 15 && s.tracks[0].steps[st]; n++) await sleep(100);
 			if (s.tracks[0].steps[st]) throw new Error("the view still shows the undone trig");
 			host.redo();
 			await readBack(d => d.tracks[0].trig.includes(st));

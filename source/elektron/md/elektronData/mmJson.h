@@ -20,7 +20,9 @@ namespace elektronData
 	//
 	// fromJson reports every problem (JSON path + reason) and returns a value only
 	// when the document is well formed AND within mmValidate's limits.
-	constexpr int g_mmContractVersion = 1;
+	// Documents are version 2 (P6: "format" and the undecoded bytes under "firmware"); readers
+	// also take version 1.
+	constexpr int g_mmContractVersion = 2;
 
 	json::Value mmPatternToJson(const MmPattern& _pattern);
 	json::Value mmKitToJson(const MmKit& _kit);

@@ -1,4 +1,4 @@
-# MD Desk data contract, version 1
+# MD Desk data contract, version 2
 
 Machinedrum OS 1.63 only. Monomachine comes later on the same design.
 
@@ -27,12 +27,34 @@ Rules:
 ## 2. Versioning
 
 - Every document has `"schema"` (`md-desk/pattern`, `md-desk/kit`, `md-desk/song`,
-  `md-desk/global`, `md-desk/machine`) and `"version": 1`.
-- Readers ignore members they do not know. Adding an optional member keeps version 1.
-- Renaming, removing or re-meaning a member makes it version 2. `fromJson` refuses
+  `md-desk/global`, `md-desk/machine`) and `"version"`.
+- **Version 2 (P6)** of the pattern, kit, song and global documents groups what the firmware
+  stores and the editor passes through untouched under one member, `firmware`:
+  pattern `{format, lockedRowsField, lockPoolHidden}`, kit `{format, nameTail, lfoState[16]}`
+  (version 1's `tracks[].lfo.state`), song `{format, nameTail}`, global `{format}`. The fields
+  are the same; only where they sit changed, so a second engine does not inherit OS 1.63's
+  residue by accident. `fromJson` takes version 1 too (`elektronData/jsonFirmware.h`: the
+  layout of what moves is data). The machine document stays version 1.
+- Readers ignore members they do not know. Adding an optional member keeps the version.
+- Renaming, removing or re-meaning a member makes it the next version. `fromJson` refuses
   versions it does not know.
-- `format.version` / `format.revision` are the firmware's own dump format bytes
+- `firmware.format.version` / `revision` are the firmware's own dump format bytes
   (pattern 3/1, kit 4/1, song 2/2, global 6/1). Keep them as received.
+- The schema's `$defs/message` is every message the plug-in sends the page and
+  `$defs/command` every command the page may send; `command` is generated from the command
+  table (`mdDesk::commandTable`, `mdDeskTest --write-schema`), and the unit and firmware tests
+  check every published message and every command they send against them (P6).
+
+**What P6 added to the page protocol** (all additive):
+- `doc` messages carry `slot`, `pending` (an edit submitted and not yet read back: the core
+  publishes pending over observed) and `source` (`dump`, `memory`, `tracked`).
+- The machine document carries `lifecycle` (one value: missing, unsupported, loading, booting,
+  animating, ready, hwConnecting, hwLost; `desk.firmware`, `desk.boot` and `desk.link` are
+  derived from it), `capabilities` (what the engine can do, with `reasons` for what it cannot;
+  the page decides from these only), `engines` (the engine map for the engine menu) and
+  `history` (undo and redo counts; `desk.undo`.. are kept).
+- `{"type":"reset"}` also follows a machine that booted again (a restored project): the
+  session outlives the machine, so its documents and undo steps start over.
 
 ## 3. Units
 
@@ -75,12 +97,12 @@ and master effects belong to the linked kit's document. The mockup's single
 | (ALL accent) | `accent.steps`, `slide.steps`, `swing.steps` | Pattern-wide sets, used when `editAll` = 1 |
 | `S.locks` Map `"t:PARAM"` -> step -> value | `locks[] = {track, param, steps: [[step, value]]}` | `param` is the index 0-23: synthesis 0-7, effects 8-15, routing 16-23. Names come from the machine (the mockup's `MACH` table). At most 64 distinct (track, param) per pattern |
 | (link) | `kit` | 0-63 |
-| — | `lockedRowsField` | Opaque firmware byte, 0 in every dump seen. Keep it |
-| — | `lockPoolHidden` | Only present for factory data with residue in unused lock rows. Pass it through untouched |
+| — | `firmware.lockedRowsField` | Opaque firmware byte, 0 in every dump seen. Keep it |
+| — | `firmware.lockPoolHidden` | Only present for factory data with residue in unused lock rows. Pass it through untouched |
 
 - `locks` are listed in the firmware's order: (track, param) ascending.
 - The firmware re-sorts lock rows into that order.
-- A lock step outside `totalLength` is not part of the view. It rides in `lockPoolHidden`.
+- A lock step outside `totalLength` is not part of the view. It rides in `firmware.lockPoolHidden`.
 
 ### 4.2 `md-desk/kit` (slot 0-63)
 
@@ -95,7 +117,7 @@ and master effects belong to the linked kit's document. The mockup's single
 | `lfo.SPD DEPTH SHMIX` | `routing[5]`, `routing[6]`, `routing[7]` | Not in the LFO block |
 | `muteGroup`, `trigGroup` | `muteGroup`, `trigGroup` | Target track or `null` |
 | `S.mfx.echo/gate/eq/dyn` | `masterFx.rhythmEcho / gateBox / eq / dynamix` | 8 values each, in the mockup's key order |
-| kit name | `name` (+ `nameTail`) | Up to 16 characters, 7-bit. `nameTail` keeps factory leftovers after the NUL |
+| kit name | `name` (+ `firmware.nameTail`) | Up to 16 characters, 7-bit. `nameTail` keeps factory leftovers after the NUL |
 
 ### 4.3 `md-desk/song` (slot 0-31)
 

@@ -1,5 +1,7 @@
 #include "mmJson.h"
 
+#include "jsonFirmware.h"
+
 #include "mmGlobal.h"
 #include "mmKit.h"
 #include "mmMachines.h"
@@ -17,6 +19,8 @@ namespace elektronData
 
 	namespace
 	{
+		// The codec's own layout; documents leave as g_mmContractVersion (jsonFirmware.h).
+		constexpr int g_layoutVersion = 1;
 		constexpr std::array<const char*, 4> g_multipliers{"1X", "2X", "3/4X", "3/2X"};
 		constexpr std::array<const char*, 3> g_routingModes{"3xSTEREO+AB=MIX", "3xSTEREO", "6xMONO"};
 		const Value g_null;
@@ -25,7 +29,7 @@ namespace elektronData
 		{
 			Value v = Value::object();
 			v.set("schema", _schema);
-			v.set("version", g_mmContractVersion);
+			v.set("version", g_layoutVersion);
 			v.set("slot", static_cast<int>(_slot));
 			Value f = Value::object();
 			f.set("version", static_cast<int>(_version));
@@ -315,7 +319,7 @@ namespace elektronData
 				int version = 0;
 				if(!integer("version", version, 1, 1000))
 					return false;
-				if(version != g_mmContractVersion)
+				if(version != g_layoutVersion)
 				{
 					error("version " + std::to_string(version) + " is not supported");
 					return false;
@@ -444,7 +448,7 @@ namespace elektronData
 		return b;
 	}
 
-	Value mmPatternToJson(const MmPattern& _p)
+	Value mmPatternToJsonV1(const MmPattern& _p)
 	{
 		Value v = header("mm-desk/pattern", _p.position, _p.version, _p.revision);
 		v.set("name", mmPatternName(_p.position));
@@ -531,7 +535,7 @@ namespace elektronData
 		return v;
 	}
 
-	std::optional<MmPattern> mmPatternFromJson(const Value& _json, std::vector<std::string>& _errors)
+	std::optional<MmPattern> mmPatternFromJsonV1(const Value& _json, std::vector<std::string>& _errors)
 	{
 		const auto before = _errors.size();
 		const In in(_json, "$", _errors);
@@ -667,7 +671,7 @@ namespace elektronData
 
 	// ---- kit ----
 
-	Value mmKitToJson(const MmKit& _k)
+	Value mmKitToJsonV1(const MmKit& _k)
 	{
 		Value v = header("mm-desk/kit", _k.position, _k.version, _k.revision);
 		setName(v, _k.name);
@@ -713,7 +717,7 @@ namespace elektronData
 		return v;
 	}
 
-	std::optional<MmKit> mmKitFromJson(const Value& _json, std::vector<std::string>& _errors)
+	std::optional<MmKit> mmKitFromJsonV1(const Value& _json, std::vector<std::string>& _errors)
 	{
 		const auto before = _errors.size();
 		const In in(_json, "$", _errors);
@@ -800,7 +804,7 @@ namespace elektronData
 		}
 	}
 
-	Value mmSongToJson(const MmSong& _s)
+	Value mmSongToJsonV1(const MmSong& _s)
 	{
 		Value v = header("mm-desk/song", _s.position, _s.version, _s.revision);
 		setName(v, _s.name);
@@ -844,7 +848,7 @@ namespace elektronData
 		return v;
 	}
 
-	std::optional<MmSong> mmSongFromJson(const Value& _json, std::vector<std::string>& _errors)
+	std::optional<MmSong> mmSongFromJsonV1(const Value& _json, std::vector<std::string>& _errors)
 	{
 		const auto before = _errors.size();
 		const In in(_json, "$", _errors);
@@ -915,7 +919,7 @@ namespace elektronData
 
 	// ---- global ----
 
-	Value mmGlobalToJson(const MmGlobal& _g)
+	Value mmGlobalToJsonV1(const MmGlobal& _g)
 	{
 		Value v = header("mm-desk/global", _g.position, _g.version, _g.revision);
 		Value ch = Value::object();
@@ -947,7 +951,7 @@ namespace elektronData
 		return v;
 	}
 
-	std::optional<MmGlobal> mmGlobalFromJson(const Value& _json, std::vector<std::string>& _errors)
+	std::optional<MmGlobal> mmGlobalFromJsonV1(const Value& _json, std::vector<std::string>& _errors)
 	{
 		const auto before = _errors.size();
 		const In in(_json, "$", _errors);
@@ -1014,5 +1018,34 @@ namespace elektronData
 		for(const auto& e : validate(g))
 			_errors.push_back("$: " + e);
 		return _errors.size() == before ? std::optional<MmGlobal>(g) : std::nullopt;
+	}
+
+	// ---- contract version 2: "format" and the undecoded "hidden" bytes under "firmware" ----
+
+	namespace
+	{
+		const json::FirmwareLayout g_mmFw{{"format"}, {}, "hidden"};
+	}
+
+	Value mmPatternToJson(const MmPattern& _p) { return json::groupFirmware(mmPatternToJsonV1(_p), g_mmFw, g_mmContractVersion); }
+	Value mmKitToJson(const MmKit& _k) { return json::groupFirmware(mmKitToJsonV1(_k), g_mmFw, g_mmContractVersion); }
+	Value mmSongToJson(const MmSong& _s) { return json::groupFirmware(mmSongToJsonV1(_s), g_mmFw, g_mmContractVersion); }
+	Value mmGlobalToJson(const MmGlobal& _g) { return json::groupFirmware(mmGlobalToJsonV1(_g), g_mmFw, g_mmContractVersion); }
+
+	std::optional<MmPattern> mmPatternFromJson(const Value& _json, std::vector<std::string>& _errors)
+	{
+		return mmPatternFromJsonV1(json::ungroupFirmware(_json, g_mmFw, g_mmContractVersion, g_layoutVersion), _errors);
+	}
+	std::optional<MmKit> mmKitFromJson(const Value& _json, std::vector<std::string>& _errors)
+	{
+		return mmKitFromJsonV1(json::ungroupFirmware(_json, g_mmFw, g_mmContractVersion, g_layoutVersion), _errors);
+	}
+	std::optional<MmSong> mmSongFromJson(const Value& _json, std::vector<std::string>& _errors)
+	{
+		return mmSongFromJsonV1(json::ungroupFirmware(_json, g_mmFw, g_mmContractVersion, g_layoutVersion), _errors);
+	}
+	std::optional<MmGlobal> mmGlobalFromJson(const Value& _json, std::vector<std::string>& _errors)
+	{
+		return mmGlobalFromJsonV1(json::ungroupFirmware(_json, g_mmFw, g_mmContractVersion, g_layoutVersion), _errors);
 	}
 }

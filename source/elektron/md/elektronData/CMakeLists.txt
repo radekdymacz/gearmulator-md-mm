@@ -9,6 +9,7 @@ add_library(elektronData STATIC)
 target_sources(elektronData PRIVATE
 	dumpIo.h
 	json.cpp json.h
+	jsonFirmware.cpp jsonFirmware.h
 	jsonSchema.cpp jsonSchema.h
 	mdCommands.cpp mdCommands.h
 	mdGlobal.cpp mdGlobal.h

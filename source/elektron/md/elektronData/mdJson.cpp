@@ -1,5 +1,7 @@
 #include "mdJson.h"
 
+#include "jsonFirmware.h"
+
 #include "mdGlobal.h"
 #include "mdKit.h"
 #include "mdMachines.h"
@@ -18,6 +20,8 @@ namespace elektronData
 
 	namespace
 	{
+		// The codec's own layout; documents leave as g_mdContractVersion (jsonFirmware.h).
+		constexpr int g_layoutVersion = 1;
 		constexpr std::array<const char*, 4> g_tempoMultipliers{"1X", "2X", "3/4X", "3/2X"};
 		constexpr std::array<const char*, 4> g_fxNames{"gateBox", "rhythmEcho", "eq", "dynamix"};
 		constexpr std::array<const char*, 7> g_outputs{"A", "B", "C", "D", "E", "F", "MAIN"};
@@ -26,7 +30,7 @@ namespace elektronData
 		{
 			Value v = Value::object();
 			v.set("schema", _schema);
-			v.set("version", g_mdContractVersion);
+			v.set("version", g_layoutVersion);
 			v.set("slot", static_cast<int>(_slot));
 			return v;
 		}
@@ -267,7 +271,7 @@ namespace elektronData
 				if(s && (!s->isString() || s->asString() != _schema))
 					error(std::string("schema must be \"") + _schema + "\"");
 				int version = 0;
-				if(integer("version", version, 1, 1e9) && version != g_mdContractVersion)
+				if(integer("version", version, 1, 1e9) && version != g_layoutVersion)
 					error("unsupported contract version " + std::to_string(version));
 			}
 
@@ -360,7 +364,7 @@ namespace elektronData
 		}
 	}
 
-	Value patternToJson(const MdPattern& _p)
+	Value patternToJsonV1(const MdPattern& _p)
 	{
 		const size_t count = _p.extended ? 64 : 32;
 		auto v = header("md-desk/pattern", _p.position);
@@ -435,7 +439,7 @@ namespace elektronData
 		return v;
 	}
 
-	std::optional<MdPattern> patternFromJson(const Value& _json, std::vector<std::string>& _errors)
+	std::optional<MdPattern> patternFromJsonV1(const Value& _json, std::vector<std::string>& _errors)
 	{
 		const auto before = _errors.size();
 		const In in(_json, "$", _errors);
@@ -573,7 +577,7 @@ namespace elektronData
 
 	// ---- kit ----
 
-	Value kitToJson(const MdKit& _k)
+	Value kitToJsonV1(const MdKit& _k)
 	{
 		auto v = header("md-desk/kit", _k.position);
 		v.set("format", format(_k.version, _k.revision));
@@ -611,7 +615,7 @@ namespace elektronData
 		return v;
 	}
 
-	std::optional<MdKit> kitFromJson(const Value& _json, std::vector<std::string>& _errors)
+	std::optional<MdKit> kitFromJsonV1(const Value& _json, std::vector<std::string>& _errors)
 	{
 		const auto before = _errors.size();
 		const In in(_json, "$", _errors);
@@ -745,7 +749,7 @@ namespace elektronData
 		}
 	}
 
-	Value songToJson(const MdSong& _s)
+	Value songToJsonV1(const MdSong& _s)
 	{
 		auto v = header("md-desk/song", _s.position);
 		v.set("format", format(_s.version, _s.revision));
@@ -793,7 +797,7 @@ namespace elektronData
 		return v;
 	}
 
-	std::optional<MdSong> songFromJson(const Value& _json, std::vector<std::string>& _errors)
+	std::optional<MdSong> songFromJsonV1(const Value& _json, std::vector<std::string>& _errors)
 	{
 		const auto before = _errors.size();
 		const In in(_json, "$", _errors);
@@ -874,7 +878,7 @@ namespace elektronData
 
 	// ---- global ----
 
-	Value globalToJson(const MdGlobal& _g)
+	Value globalToJsonV1(const MdGlobal& _g)
 	{
 		auto v = header("md-desk/global", _g.position);
 		v.set("format", format(_g.version, _g.revision));
@@ -915,7 +919,7 @@ namespace elektronData
 		return v;
 	}
 
-	std::optional<MdGlobal> globalFromJson(const Value& _json, std::vector<std::string>& _errors)
+	std::optional<MdGlobal> globalFromJsonV1(const Value& _json, std::vector<std::string>& _errors)
 	{
 		const auto before = _errors.size();
 		const In in(_json, "$", _errors);
@@ -973,5 +977,37 @@ namespace elektronData
 		other.integer("programChange", g.programChange, 0, 127);
 		other.integer("trigMode", g.trigMode, 0, 127);
 		return finish(std::move(g), before, _errors);
+	}
+
+	// ---- contract version 2: the firmware's pass-through fields under "firmware" ----
+
+	namespace
+	{
+		const json::FirmwareLayout g_patternFw{{"format", "lockedRowsField", "lockPoolHidden"}, {}, {}};
+		const json::FirmwareLayout g_kitFw{{"format", "nameTail"}, {{"lfo.state", "lfoState"}}, {}};
+		const json::FirmwareLayout g_songFw{{"format", "nameTail"}, {}, {}};
+		const json::FirmwareLayout g_globalFw{{"format"}, {}, {}};
+	}
+
+	Value patternToJson(const MdPattern& _p) { return json::groupFirmware(patternToJsonV1(_p), g_patternFw, g_mdContractVersion); }
+	Value kitToJson(const MdKit& _k) { return json::groupFirmware(kitToJsonV1(_k), g_kitFw, g_mdContractVersion); }
+	Value songToJson(const MdSong& _s) { return json::groupFirmware(songToJsonV1(_s), g_songFw, g_mdContractVersion); }
+	Value globalToJson(const MdGlobal& _g) { return json::groupFirmware(globalToJsonV1(_g), g_globalFw, g_mdContractVersion); }
+
+	std::optional<MdPattern> patternFromJson(const Value& _json, std::vector<std::string>& _errors)
+	{
+		return patternFromJsonV1(json::ungroupFirmware(_json, g_patternFw, g_mdContractVersion, g_layoutVersion), _errors);
+	}
+	std::optional<MdKit> kitFromJson(const Value& _json, std::vector<std::string>& _errors)
+	{
+		return kitFromJsonV1(json::ungroupFirmware(_json, g_kitFw, g_mdContractVersion, g_layoutVersion), _errors);
+	}
+	std::optional<MdSong> songFromJson(const Value& _json, std::vector<std::string>& _errors)
+	{
+		return songFromJsonV1(json::ungroupFirmware(_json, g_songFw, g_mdContractVersion, g_layoutVersion), _errors);
+	}
+	std::optional<MdGlobal> globalFromJson(const Value& _json, std::vector<std::string>& _errors)
+	{
+		return globalFromJsonV1(json::ungroupFirmware(_json, g_globalFw, g_mdContractVersion, g_layoutVersion), _errors);
 	}
 }

@@ -1,4 +1,4 @@
-# Monomachine Editor data contract, version 1
+# Monomachine Editor data contract, version 2
 
 Monomachine SFX-6 / SFX-60 OS 1.32B only. The plain-data boundary between the
 Monomachine Editor page and the machine, on the same design as the MD's
@@ -25,16 +25,18 @@ Rules, as for the MD:
 
 ## 2. Versioning
 
-- `"schema"` is `mm-desk/pattern`, `mm-desk/kit`, `mm-desk/song`, `mm-desk/global` or `mm-desk/machine`; `"version": 1`.
-- Readers ignore members they do not know; adding an optional member keeps version 1; renaming or re-meaning one makes it version 2.
-- `format.version` / `format.revision` are the firmware's own dump format bytes: pattern 6/1, kit 2/1, song 2/1, global 3/1.
+- `"schema"` is `mm-desk/pattern`, `mm-desk/kit`, `mm-desk/song`, `mm-desk/global` or `mm-desk/machine`.
+- **Version 2 (P6):** the pattern, kit, song and global documents carry what the firmware stores and the editor passes through untouched under one member, `firmware`: `firmware.format` and the undecoded bytes (version 1's `hidden` members). A second engine then inherits nothing of OS 1.32B's layout by accident. Readers take version 1 too (`format` and `hidden` at the top level). The machine document stays version 1.
+- Readers ignore members they do not know; adding an optional member keeps the version; renaming or re-meaning one makes it the next.
+- `firmware.format.version` / `revision` are the firmware's own dump format bytes: pattern 6/1, kit 2/1, song 2/1, global 3/1.
+- The schema's `$defs/message` is every message the plug-in sends the page and `$defs/command` every command the page may send; `command` is generated from the command table (`mmDesk::commandTable`, `mmDeskTest --write-schema`), and the unit and firmware tests check every published message and every command they send against them.
 
 ## 3. Units and conventions
 
 - **Firmware units** everywhere, so value -> JSON -> value is lossless for every dump.
 - Steps, tracks, rows, slots, pages and parameters are 0-based; the screen shows them 1-based.
 - A step set is a list of steps (`"amp": [0, 4, 8]`).
-- Bytes that are not understood yet ride in `hidden` as hex (`"x54e": "ffffffff"`) or as runs `[[index, "hex"], ...]` against a default (lock rows and note pool entries past their counts, which hold firmware residue in factory patterns). The UI passes `hidden` back untouched.
+- Bytes that are not understood yet ride in `firmware` (version 1: `hidden`) as hex (`"x54e": "ffffffff"`) or as runs `[[index, "hex"], ...]` against a default (lock rows and note pool entries past their counts, which hold firmware residue in factory patterns). The UI passes `firmware` back untouched.
 - Names: `name` is the 7-bit text up to the first NUL; `nameBytes` (hex) is present as well when the bytes are not just that text padded with NULs (factory empty songs start with 0xff). When `nameBytes` is present it wins.
 
 | Field | Firmware unit | Display |

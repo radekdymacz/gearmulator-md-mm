@@ -3,6 +3,7 @@
 // (doc/modern-ux/P0-RESULT.md, P1-RESULT.md); firmware round trips live in
 // mdLibTest/mdDataLayerFirmwareTest.cpp and the corpus in elektronDataCorpusTest.
 
+#include "jsonFirmware.h"
 #include "jsonSchema.h"
 #include "mdGlobal.h"
 #include "mdJson.h"
@@ -258,6 +259,20 @@ namespace
 		std::vector<std::string> errors;
 		const auto back = elektronData::patternFromJson(*elektronData::json::parse(text), errors);
 		check(back && *back == p, "pattern JSON round trip");
+		// P6, contract version 2: the firmware's pass-through fields sit under "firmware"; a version
+		// 1 document (the old layout, fields at the top) still reads.
+		check(j.find("version")->asNumber() == 2 && j.find("firmware") && j.find("firmware")->find("format") && !j.find("format"),
+			"version 2 groups the firmware fields");
+		elektronData::MdKit kit;
+		kit.lfos[3].state[5] = 0x42;
+		const auto kj = elektronData::kitToJson(kit);
+		check(kj.find("firmware")->find("lfoState") && !kj.find("tracks")->asArray()[3].find("lfo")->find("state"), "the LFO state is firmware");
+		const elektronData::json::FirmwareLayout kitLayout{{"format", "nameTail"}, {{"lfo.state", "lfoState"}}, {}};
+		const auto v1 = elektronData::json::ungroupFirmware(kj, kitLayout, 2, 1);
+		check(v1.find("version")->asNumber() == 1 && v1.find("format") && v1.find("tracks")->asArray()[3].find("lfo")->find("state"), "as version 1");
+		const auto kback = elektronData::kitFromJson(v1, errors);
+		check(kback && *kback == kit, "a version 1 kit document still reads");
+		check(elektronData::kitFromJson(kj, errors) == std::optional<elektronData::MdKit>(kit), "and version 2");
 
 		// Hardware limits reported with a path.
 		auto doc = text;
