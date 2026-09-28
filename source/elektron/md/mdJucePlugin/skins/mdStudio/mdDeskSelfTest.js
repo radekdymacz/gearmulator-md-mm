@@ -5,8 +5,19 @@
    the page sees as ?selftest=<kind>. Each test drives the page's own controls and commands and
    logs to the plug-in's log (Bridge.log). */
 
-/* the firmware runs (the old desk.firmware "ready"): the lifecycle's table (mdDeskApp.js, LIFE) */
-const runs = () => !!lifeOf(machineState().lifecycle).runs;
+/* the firmware runs: it answers MIDI (machine.midi) */
+const runs = () => !!machineState().midi;
+/* A command that asks: the page shows the plug-in's question (mdDeskApp.js, onAsk); the tests answer
+   it through that dialog, as the user does (its first key is the confirm). True when one came. */
+async function answerAsk(ms = 1500) {
+	const end = performance.now() + ms;
+	while (performance.now() < end) {
+		const b = !$("#dlg").hidden && $("#dlg").dataset.first !== "1" && $('#dlg [data-dlg="0"]');
+		if (b) { b.click(); return true; }
+		await new Promise(r => setTimeout(r, 20));
+	}
+	return false;
+}
 
 /* ?selftest=1 or p4: results of the transport and live-recording commands, and every refusal */
 if (/[?&]selftest=(1|p4)/.test(location.search)) Bridge.onMessage(r => {
@@ -36,9 +47,9 @@ if (/[?&]selftest=p4(&|$)/.test(location.search)) (async () => {
 	await sleep(1500);
 	/* The first key after ready is taken. */
 	let p0 = performance.now(); $("#play").click();
-	let p1 = await until(() => desk().playing, 3000);
+	let p1 = await until(() => V.playing, 3000);
 	log(`first PLAY after ready: ${p1 >= 0 ? "ok plays" : "FAIL"} ${Math.round(p1 - p0)} ms`);
-	$("#play").click(); await until(() => !desk().playing, 3000); await sleep(400);
+	$("#play").click(); await until(() => !V.playing, 3000); await sleep(400);
 	/* Mutes: a rail M key, then two prepared with Shift, applied on release. */
 	S.ws = "seq"; render(); await sleep(200);
 	const has = t => (desk().mutes || []).includes(t);
@@ -60,16 +71,17 @@ if (/[?&]selftest=p4(&|$)/.test(location.search)) (async () => {
 	document.querySelector('[data-chain="send"]').click();
 	p1 = await until(() => desk().chain && desk().chain.active && desk().chain.patterns.join() === "1,2,3", 3000);
 	log(`chain A02 A03 A04 -> firmware chain ${p1 >= 0 ? "ok" : "FAIL"} (${JSON.stringify(desk().chain)})`);
-	$("#play").click(); await until(() => desk().playing, 3000);
+	$("#play").click(); await until(() => V.playing, 3000);
 	const seen = []; let last = -1;
-	await until(() => { const p = Tele.pattern; if (p !== last && p >= 0) { seen.push(p); last = p; } return seen.length >= 5; }, 20000);
+	await until(() => { const p = Docs.telemetry ? Docs.telemetry.pattern : -1; if (p !== last && p >= 0) { seen.push(p); last = p; } return seen.length >= 5; }, 20000);
 	render(); log(`plays ${seen.map(patName).join(" ")}; chain card "${document.querySelector(".chainrow")?.textContent}"`);
 	goPattern(0); await sleep(300);
+	await until(() => !$("#dlg").hidden, 1500);
 	log(`picking A01 while chained asks first: ${!$("#dlg").hidden ? "ok" : "FAIL"} "${$("#dlg p")?.textContent || ""}"`);
-	$("#dlg").querySelector('[data-dlg="0"]')?.click();
+	await answerAsk();
 	p1 = await until(() => desk().chain && !desk().chain.active, 3000);
 	log(`then the chain is gone: ${p1 >= 0 ? "ok" : "FAIL"}`);
-	$("#play").click(); await until(() => !desk().playing, 3000);
+	$("#play").click(); await until(() => !V.playing, 3000);
 	/* v51: the lock lane lines up with the steps, 16 and ALL. */
 	S.ws = "seq"; S.viewAll = false; render(); await sleep(300);
 	const off = () => { let worst = 0; for (const s of [0, 5, 15, 16, 31]) { const a = document.querySelector(`.st[data-t="0"][data-s="${s}"]`), b = document.querySelector(`.lb[data-s="${s}"]`); if (a && b) worst = Math.max(worst, Math.abs(a.getBoundingClientRect().left - b.getBoundingClientRect().left)); } return Math.round(worst * 10) / 10; };
@@ -100,8 +112,7 @@ if (/[?&]selftest=p4(&|$)/.test(location.search)) (async () => {
 	log(`kit library: ${cells} slots, ${named} read from the machine; open ${!$("#libpop").hidden}`);
 	const src = currentKitSlot(), before63 = JSON.stringify(Docs.kits[63]);
 	LIB.sel = src; libAct("copy"); await sleep(200);
-	LIB.sel = 63; drawLib(true); libAct("paste"); await sleep(200);
-	$("#dlg").querySelector('[data-dlg="0"]')?.click();
+	LIB.sel = 63; drawLib(true); libAct("paste"); await answerAsk();
 	p1 = await until(() => Docs.kits[63] && Docs.kits[63].name === Docs.kits[src].name && JSON.stringify(Docs.kits[63].tracks.map(t => t.machine)) === JSON.stringify(Docs.kits[src].tracks.map(t => t.machine)), 4000);
 	log(`paste K${nn(src)} into K64: ${p1 >= 0 ? "ok" : "FAIL"} (the machine's read-back of K64)`);
 	cmd("undo"); p1 = await until(() => JSON.stringify(Docs.kits[63]) === before63, 4000);
@@ -142,9 +153,9 @@ if (/[?&]selftest=p4hw/.test(location.search)) (async () => {
 	log(`start: ${label()}`);
 	const sel = $("#engsel"); sel.value = "hw"; sel.dispatchEvent(new Event("change", { bubbles: true }));
 	await sleep(1200);
-	log(`HW MIDI chosen: engine label ${label()}, link ${machineState().desk?.link}, REC disabled ${$("#rec").disabled}`);
+	log(`HW MIDI chosen: engine label ${label()}, lifecycle ${machineState().lifecycle}, REC disabled ${$("#rec").disabled}`);
 	await sleep(6000);
-	log(`nothing answers after 7 s: ${label()} (link ${machineState().desk?.link})`);
+	log(`nothing answers after 7 s: ${label()} (lifecycle ${machineState().lifecycle})`);
 	cmd("select", { p: 3 }); await sleep(300);
 	sel.value = "emu"; sel.dispatchEvent(new Event("change", { bubbles: true }));
 	let t0 = performance.now(); while (!((machineState().capabilities || {}).engine === "emu" && runs() && V.loaded) && performance.now() - t0 < 15000) await sleep(100);
@@ -212,9 +223,9 @@ if (/[?&]selftest=p5(&|$)/.test(location.search)) (async () => {
 	let seenAt = -1; Bridge.onMessage(m => { if (m.type === "machine" && m.doc.desk && m.doc.desk.playing && seenAt < 0) seenAt = performance.now(); });
 	for (let i = 0; i < 4; i++) {
 		seenAt = -1; const a = performance.now(); $("#play").click();
-		await until(() => desk().playing, 3000);
+		await until(() => V.playing, 3000);
 		log(`PLAY ${i + 1}: the page has "playing" ${Math.round(seenAt - a)} ms after the click (document.visibilityState ${document.visibilityState})`);
-		await sleep(300); $("#play").click(); await until(() => !desk().playing, 3000); await sleep(400);
+		await sleep(300); $("#play").click(); await until(() => !V.playing, 3000); await sleep(400);
 	}
 	/* GLOBAL: TEMPO OUT on, read back, off. */
 	openGlobal(); await sleep(300);
@@ -311,20 +322,20 @@ if (/[?&]selftest=1/.test(location.search)) (async () => {
 	const rect = q => { const b = document.querySelector(q).getBoundingClientRect(); return `${Math.round(b.left)},${Math.round(b.top)} ${Math.round(b.width)}x${Math.round(b.height)}`; };
 	const rb = $("#rec").getBoundingClientRect(), pb = $("#play").getBoundingClientRect();
 	log(`P3: transport keys REC ${rect("#rec")}, PLAY ${rect("#play")}: ${Math.abs(rb.width - rb.height) < 1 && Math.abs(pb.width - pb.height) < 1 && rb.width > 30 && Math.abs(rb.top - pb.top) < 1 && pb.left > rb.right ? "ok square, side by side" : "FAIL"}; LCD ${rect(".lcdpanel")}, window ${innerWidth}x${innerHeight}`);
-	const recOn = () => !!machineState().desk.recording;
+	const recOn = () => !!V.rec;
 	t0 = performance.now();
 	$("#play").click();
-	t1 = await until(() => machineState().desk.playing, 3000);
+	t1 = await until(() => V.playing, 3000);
 	log(`P3: PLAY key -> playing ${t1 >= 0 ? "ok" : "FAIL"} ${ms(t0, t1)}, key shows ${$("#playico").textContent}`);
 	t0 = performance.now();
 	$("#play").click();
-	t1 = await until(() => !machineState().desk.playing, 3000);
+	t1 = await until(() => !V.playing, 3000);
 	log(`P3: STOP (same key) -> stopped ${t1 >= 0 ? "ok" : "FAIL"} ${ms(t0, t1)}, key shows ${$("#playico").textContent}`);
 	await sleep(300);
 	t0 = performance.now();
 	$("#rec").click();
 	t1 = await until(recOn, 3000);
-	log(`P3: after REC: playing ${machineState().desk.playing} step ${S.step} telemetry ${machineState().desk.telemetry}`);
+	log(`P3: after REC: playing ${V.playing} step ${S.step} telemetry ${machineState().desk.telemetry}`);
 	log(`P3: REC -> live recording ${t1 >= 0 ? "ok" : "FAIL"} ${ms(t0, t1)}; LCD ${lcdW()} px, REC key pressed ${$("#rec").getAttribute("aria-pressed")}`);
 	if (t1 >= 0) {
 		const tr = 13, before = (pat().tracks[tr].trigs || []).length;
@@ -335,18 +346,18 @@ if (/[?&]selftest=1/.test(location.search)) (async () => {
 		log(`P3: grid click while recording -> recorded trig on track ${tr + 1}: ${after > before ? "ok" : "FAIL"} (${before} -> ${after} trigs, read back while recording)`);
 		$("#rec").click();
 		t1 = await until(() => !recOn(), 3000);
-		log(`P3: REC again -> recording off ${t1 >= 0 ? "ok" : "FAIL"}, still playing ${machineState().desk.playing}`);
+		log(`P3: REC again -> recording off ${t1 >= 0 ? "ok" : "FAIL"}, still playing ${V.playing}`);
 		/* v49: a queued pattern shows only its name, blinking; a flash when it starts. */
 		const from = currentPatternSlot(), to = (from + 1) % 128, w0 = lcdW();
-		cmd("select", { p: to, force: true });
+		cmd("select", { p: to }); await answerAsk(600);
 		await until(() => machineState().desk.queued === to, 2000); await sleep(150);
 		log(`P3: queued ${patName(to)}: LCD shows "${$("#pat").textContent}" ${getComputedStyle($("#pat")).animationName}, LCD ${w0} -> ${lcdW()} px`);
 		let flashed = false; const obs = new MutationObserver(() => { if ($(".patf").classList.contains("flash")) flashed = true; }); obs.observe($(".patf"), { attributes: true });
 		t0 = performance.now(); t1 = await until(() => machineState().desk.queued == null && currentPatternSlot() === to, 12000); await sleep(100); obs.disconnect();
 		log(`P3: switch heard after ${ms(t0, t1)}: LCD "${$("#pat").textContent}", flash ${flashed ? "ok" : "FAIL"}, LCD ${lcdW()} px`);
-		cmd("stop"); await until(() => !machineState().desk.playing, 3000);
-		cmd("select", { p: from, force: true }); await sleep(500);
-		$("#play").click(); await until(() => !machineState().desk.playing, 3000);
+		cmd("stop"); await until(() => !V.playing, 3000);
+		cmd("select", { p: from }); await answerAsk(600); await sleep(500);
+		$("#play").click(); await until(() => !V.playing, 3000);
 		log(`P3: PLAY key shows ${$("#playico").textContent} after stop`);
 		cmd("clearSteps", { p: currentPatternSlot(), t: tr, from: 0, to: V.len }); await sleep(400);
 	}

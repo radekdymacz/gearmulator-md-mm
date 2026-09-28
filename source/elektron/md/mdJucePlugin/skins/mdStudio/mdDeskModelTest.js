@@ -2,15 +2,17 @@
 /* The Machinedrum page's model (P6): deriveView is pure (the same documents give the same view,
    whatever the page's own Docs hold), the kit that plays comes from the working kit document, and
    the optimistic overlay is explicit: a command's [path, value] writes are kept over every new
-   derivation until that command's answer, then leave.
+   derivation until that command's answer, then leave, and only while the view shows the document
+   the command edits. The document shape is written once (EMPTY_DOCS, storeDoc, resetDocs); the
+   capabilities are nested and an unknown one is not allowed; the enumerations are the catalogue's.
      node mdDeskModelTest.js */
 const fs = require("fs"), path = require("path"), vm = require("vm");
 
 const ctx = vm.createContext({ console });
 vm.runInContext(fs.readFileSync(path.join(__dirname, "mdDeskModel.js"), "utf8")
 	+ "\nfunction nameOf(m) { return m; }\nconst S = { soloSet: new Set() };"
-	+ "\nthis.T = { deriveView, Overlay, view, Docs, S, EMPTY_DOCS, get V() { return V; } };", ctx);
-const { deriveView, Overlay, Docs, S, EMPTY_DOCS } = ctx.T;
+	+ "\nthis.T = { deriveView, Overlay, view, Docs, S, EMPTY_DOCS, storeDoc, resetDocs, canDo, docOf, multFactor, mfxName, get V() { return V; } };", ctx);
+const { deriveView, Overlay, Docs, S, EMPTY_DOCS, storeDoc, resetDocs, canDo, docOf, multFactor } = ctx.T;
 const DELETE = Overlay.DELETE;
 let failures = 0;
 const check = (ok, what) => { console.log((ok ? "  ok   " : "  FAIL ") + what); if (!ok) failures++; };
@@ -21,10 +23,16 @@ const pattern = { kit: 3, length: 16, totalLength: 16, tempoMultiplier: "1X", sw
 	accent: { editAll: 0, steps: [] }, slide: { editAll: 0, steps: [] },
 	tracks: Array.from({ length: 16 }, (_, i) => ({ trigs: i === 0 ? [0, 4] : [], accent: [], slide: [] })), locks: [{ track: 0, param: 0, steps: [[4, 99]] }] };
 const kit = (name, level = 100) => ({ name, tracks: Array.from({ length: 16 }, () => ({ ...track("GND-EMPTY"), level })),
-	masterFx: { rhythmEcho: Array(8).fill(0), gateBox: Array(8).fill(0), eq: Array(8).fill(0), dynamix: Array(8).fill(0) } });
-const docs = (extra = {}) => ({ patterns: { 5: pattern }, kits: { 3: kit("STORED") }, songs: {}, global: null, catalogue: null, telemetry: null,
+	masterFx: { rhythmEcho: Array(8).fill(0), gateBox: Array(8).fill(1), eq: Array(8).fill(2), dynamix: Array(8).fill(3) } });
+/* the catalogue's enumerations (contract-r4: the C++ tables) */
+const enums = { tempoMultipliers: ["1X", "2X", "3/4X", "3/2X"], masterFx: ["rhythmEcho", "gateBox", "eq", "dynamix"], outputs: ["MAIN", "A", "B", "C", "D", "E", "F"],
+	lfoFields: ["track", "param", "shape1", "shape2", "update"], lfoUpdates: ["FREE", "TRIG", "HOLD"], lfoParams: { SPD: 21, DEPTH: 22, SHMIX: 23 } };
+const catalogue = { schema: "md-desk/machines", version: 1, machines: [], enums };
+const caps = { engine: "emu", label: "EMU OS 1.63", about: "", can: { transport: true, chains: false }, reasons: { chains: "keys only" }, values: { dumps: "direct" } };
+const docs = (extra = {}) => ({ patterns: { 5: pattern }, kits: { 3: kit("STORED") }, songs: {}, global: null, catalogue, telemetry: null,
 	workingKit: null, sources: { "kit:3": "dump" },
-	machine: { pattern: { current: 5 }, kit: { current: 3, working: "clean" }, song: {}, desk: { playing: false }, lifecycle: "ready", capabilities: {} }, ...extra });
+	machine: { pattern: { current: 5 }, kit: { current: 3, working: "clean" }, song: {}, desk: { playing: true, recording: true }, lifecycle: "ready", input: true, midi: true,
+		lifecycleText: "", capabilities: caps, clipboard: { steps: false, sound: true, songRow: false, kit: 7, pattern: null } }, ...extra });
 
 /* pure */
 const a = deriveView(docs(), S);
@@ -32,8 +40,24 @@ Docs.patterns = { 1: { ...pattern, tracks: [] } };	// the page's own documents m
 const b = deriveView(docs(), S);
 check(a.pat === 5 && b.pat === 5 && a.kit === 3 && a.tracks[0].trigs[4] && b.tracks[0].trigs[4], "deriveView reads only the documents it is given");
 check(deriveView(docs({ telemetry: { playing: true, recording: false } }), S).playing, "the telemetry is a document: it gives the transport");
+check(!a.playing && !a.rec, "the transport is the telemetry's only (the machine document's desk.playing is not read)");
+check(deriveView(docs({ global: { extendedMode: false, tempo: 120, routing: Array(16).fill("MAIN") } }), S).mode === "CLASSIC" && a.mode === "EXTENDED", "the mode is the global's only");
+check(a.input && a.midi && a.clipboard.kit === 7 && a.clipboard.pattern === null && a.clipboard.sound, "input, midi and the clipboard are the machine document's");
+check(canDo(a, "transport") && !canDo(a, "chains") && !canDo(a, "noSuchCapability") && a.caps.reasons.chains === "keys only", "capabilities nested: can[name] true only; an unknown name is not allowed");
+check(!canDo(deriveView(EMPTY_DOCS, S), "transport"), "no machine document: nothing is allowed");
+check(a.tracks[0].lfo.UPDTE === "FREE" && a.tracks[0].lfo.SPD === 30 && a.mfx.gate.v.DVOL === 1 && a.mfx.dyn.v.ATCK === 3, "LFO updates, LFO parameters and the master effects come from the catalogue's enumerations");
+check(multFactor("3/4X") === 0.75 && multFactor("2X") === 2 && multFactor("1X") === 1, "a tempo multiplier's factor is read from its name");
 const e = deriveView(EMPTY_DOCS, S);
 check(!e.loaded && e.tracks.length === 16 && e.lifecycle === "booting" && e.locks.size === 0, "the view before any document is deriveView of the empty documents");
+
+/* the document shape, once */
+const d0 = { ...JSON.parse(JSON.stringify(EMPTY_DOCS)), catalogue, learn: { mappings: [] } };
+check(storeDoc(d0, { type: "doc", kind: "pattern", slot: 9, doc: pattern, source: "dump" }) === 9 && d0.patterns[9] === pattern && d0.sources["pattern:9"] === "dump", "a doc message is stored where its kind keeps it");
+storeDoc(d0, { type: "doc", kind: "workingKit", slot: 3, source: "memory", pending: true, doc: kit("W") });
+check(d0.workingKit.slot === 3 && d0.workingKit.pending && d0.workingKit.doc.name === "W" && !("workingKit:3" in d0.sources), "the working kit is its own document");
+check(storeDoc(d0, { type: "doc", kind: "sampleSlot", slot: 1, doc: {} }) === null, "a kind the page does not know is not stored");
+resetDocs(d0);
+check(!Object.keys(d0.patterns).length && d0.workingKit === null && d0.catalogue === catalogue && d0.learn && Object.keys(EMPTY_DOCS).every(k => k in d0), "a reset starts the engine's documents over (EMPTY_DOCS), the catalogue and learn stay");
 
 /* the working kit */
 check(a.kitNames[3] === "STORED" && a.kitSource === "dump", "no working kit yet: the current kit is the stored slot");
@@ -60,6 +84,17 @@ check(Overlay.answered(8) && !Overlay.answered(8) && Overlay.size() === 0, "an a
 Overlay.add(9, [[["locks", "0:#1", 4], DELETE], [["tracks", 0, "trigs", 4], false]]);
 V = Overlay.over(deriveView(docs(), S));
 check(!V.locks.has("0:#1") && !V.tracks[0].trigs[4], "a delete that empties a lock lane removes the lane");
+Overlay.clear();
+/* entries carry the document their command edits */
+check(JSON.stringify(docOf("trig", { p: 5, t: 0, s: 3 })) === '{"kind":"pattern","slot":5}' && docOf("param", { k: 3, t: 0, i: 1, v: 2 }).kind === "kit"
+	&& docOf("rowSet", { s: 2, i: 0, row: {} }).slot === 2 && docOf("tempo", { bpm: 120 }) === null, "a command's document from its arguments");
+Overlay.add(12, [[["tracks", 0, "trigs", 9], true]], docOf("trig", { p: 5, t: 0, s: 9 }));
+Overlay.add(13, [[["tracks", 0, "level"], 5]], docOf("level", { k: 3, t: 0, v: 5 }));
+V = Overlay.over(deriveView(docs(), S));
+check(V.tracks[0].trigs[9] && V.tracks[0].level === 5, "entries show on the document they edit");
+V = Overlay.over(deriveView(docs({ machine: { ...docs().machine, pattern: { current: 6 }, kit: { current: 4, working: "clean" } }, patterns: { 5: pattern, 6: pattern }, kits: { 3: kit("A"), 4: kit("B") } }), S));
+check(!V.tracks[0].trigs[9] && V.tracks[0].level === 100 && Overlay.size() === 2, "a pattern or kit switch under a waiting edit: the new documents show without it");
+Overlay.clear();
 Overlay.add(10, [[["tracks", 99, "mute"], true], [["song", 3, "pat"], 7]]);
 V = Overlay.over(deriveView(docs(), S));
 check(V.tracks.length === 16 && !V.song[3], "a write into a part of the view that is not there changes nothing");

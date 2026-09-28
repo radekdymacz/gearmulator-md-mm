@@ -45,13 +45,14 @@ function capture(el, e) { try { el.setPointerCapture(e.pointerId); } catch (_) {
 /* ===== Commands ===== */
 let gesture = 0;	// non-zero while a drag runs: one undo step
 /* A command to the plug-in. optimistic: the [path, value] writes into the view the gesture shows at
-   once (mdDeskModel.js, Overlay); they are kept over every new derivation until its result. */
+   once (mdDeskModel.js, Overlay), on the document the command edits (docOf); they are kept over
+   every new derivation until its result. */
 function cmd(op, args = {}, key, optimistic) {
 	const msg = Object.assign({ op }, args);
 	if (gesture) msg.g = gesture;
 	let answered = false;	/* a host may answer at once, inside send */
 	const id = Bridge.send(msg, { key, onResult: r => { answered = true; onResult(r); } });
-	if (optimistic && optimistic.length) { if (!answered) Overlay.add(id, optimistic); V = view(); }
+	if (optimistic && optimistic.length) { if (!answered) Overlay.add(id, optimistic, docOf(op, args)); V = view(); }
 	tx();
 }
 const DELETE = Overlay.DELETE;
@@ -112,17 +113,17 @@ function sendParam(t, g, n, v) {
 	const i = pidx(t, n, g); if (i < 0) return;
 	cmd("param", { k: V.kit, t, i, v }, "param:" + t + ":" + i, [[["tracks", t, g, n], v]]);
 }
-const LFO_PARAM = { SPD: 21, DEPTH: 22, SHMIX: 23 }, LFO_FIELD = { TRCK: "track", PARAM: "param", SHP1: "shape1", SHP2: "shape2", UPDTE: "update" };
-/* An LFO field's new view value v (TRCK a track, PARAM a parameter name, UPDTE FREE/TRIG/HOLD). */
+/* An LFO field's new view value v (TRCK a track, PARAM a parameter name, UPDTE one of the catalogue's
+   lfoUpdates). SPD DEPTH SHMIX are kit parameters (the catalogue's lfoParams), the rest lfo fields. */
 function sendLfo(t, n, v) {
-	const w = [[["tracks", t, "lfo", n], v]];
-	if (n in LFO_PARAM) { cmd("param", { k: V.kit, t, i: LFO_PARAM[n], v }, "param:" + t + ":" + LFO_PARAM[n], w); return; }
-	const field = LFO_FIELD[n]; if (!field) return;
-	const c = n === "PARAM" ? slots(V.tracks[V.tracks[t].lfo.TRCK].m).indexOf(v) : n === "UPDTE" ? UPDATES.indexOf(v) : v;
+	const w = [[["tracks", t, "lfo", n], v]], E = Enums(), pi = E.lfoParams[n];
+	if (pi != null) { cmd("param", { k: V.kit, t, i: pi, v }, "param:" + t + ":" + pi, w); return; }
+	const field = lfoField(n, E); if (!field) return;
+	const c = n === "PARAM" ? slots(V.tracks[V.tracks[t].lfo.TRCK].m).indexOf(v) : n === "UPDTE" ? E.lfoUpdates.indexOf(v) : v;
 	if (c >= 0) cmd("lfo", { k: V.kit, t, field, v: c }, undefined, w);
 }
 function sendGroup(t, kind, target) { cmd("group", { k: V.kit, t, kind, target }, undefined, [[["tracks", t, kind === "mute" ? "muteGroup" : "trigGroup"], target]]); }
-function sendMfx(id, n, v) { const i = MFXD[id].k.indexOf(n); if (i >= 0) cmd("masterFx", { k: V.kit, fx: MFX[id], i, v }, "mfx:" + id + ":" + i, [[["mfx", id, "v", n], v]]); }
+function sendMfx(id, n, v) { const i = MFXD[id].k.indexOf(n), fx = mfxName(id); if (i >= 0 && fx) cmd("masterFx", { k: V.kit, fx, i, v }, "mfx:" + id + ":" + i, [[["mfx", id, "v", n], v]]); }
 /* A curve editor's handle moved: its drag gives the values it moves ({name: value}); the editor's
    "to" says where they go (a track's page, or a master effect). */
 function sendEditor(c, vals) {
@@ -142,6 +143,13 @@ function goPattern(p) {
 	cmd("select", { p });
 }
 function saveKit() { cmd("saveKit"); }
+/* The plug-in asks before a command would lose something (P6: one protocol, the plug-in's): its
+   message, its confirm button, Cancel. Confirm sends the command again with force; the page decides
+   and words no question of its own. */
+function onAsk(m) {
+	const again = () => { const c = Object.assign({}, m.command, { force: true }); delete c.id; const { op, ...args } = c; cmd(op, args); };
+	ask(m.message || "Go on?", [[m.confirm || "Go on", "danger", again], ["Cancel", "", () => { }]]);
+}
 function ask(html, btns) { const d = $("#dlg"); d.innerHTML = `<div class="dlgbox" role="alertdialog" aria-modal="true"><p>${html}</p><div class="btnrow">${btns.map(([t, c], i) => `<button class="${c}" data-dlg="${i}">${t}</button>`).join("")}</div></div>`; d.hidden = false; d._btns = btns; d.querySelector("button")?.focus(); }
 
 /* Value access for every control: data-g group, data-n name, data-t track, data-f master fx */
@@ -184,9 +192,10 @@ function renderTop() {
 	document.body.classList.toggle("liverec", !!V.rec);
 	renderEngine();
 	syncTx();
-	const st = $("#status"), life = lifeOf(V.lifecycle);
+	const st = $("#status");
 	if (st) {
-		const msg = life.status || (!V.loaded ? "Reading the current pattern and kit from the machine…" : "");
+		/* not taking input: what the plug-in says about it (NO ROM has its own screen) */
+		const msg = !V.input && V.lifecycle !== "missing" ? V.lifecycleText : !V.loaded ? "Reading the current pattern and kit from the machine…" : "";
 		st.textContent = msg; st.hidden = !msg;
 	}
 	if (V.lifecycle === "missing") firstRun(); else if ($("#dlg").dataset.first === "1") { $("#dlg").hidden = true; $("#dlg").dataset.first = ""; }
@@ -195,34 +204,29 @@ function renderTop() {
 /* The engine label in the LCD shows the engine's real state (mockup v48), from the device:
    NO ROM, LOADING ROM (the machine is prepared or restored), BOOTING OS (the firmware starts),
    the engine's own label when it takes input (EMU OS 1.63, HW MIDI), ROM ERROR (not OS 1.63),
-   HW CONNECT / HW NO MIDI for a machine on the MIDI wire. While it is not ready the LCD fields
-   dim, REC and PLAY are disabled and edits wait (the desk refuses them).
-   P6: everything the page shows about the engine's state follows the one lifecycle value
-   (machine.lifecycle) through this one table and, when ready, the engine's capabilities
-   (label, about); the menu is the engine map (machine.engines).
-   label/led: the LCD's engine label; tip: its tooltip; status: the status line; runs: the
-   firmware runs (the Sampler works, the ROM screen says a new ROM needs a reopen); fwLcd: the
-   firmware's own LCD may show (mdDeskLive.js). */
-const STARTING = "The machine is starting. Edits wait until it answers.";
+   HW CONNECT / HW NO MIDI for a machine on the MIDI wire. While the machine takes no input the LCD
+   fields dim, REC and PLAY are disabled and edits wait (the desk refuses them).
+   P6: the page's words for the one lifecycle value (machine.lifecycle) are this table's label and
+   LED only. What a state means is the plug-in's (machine.lifecycleText: the tooltip and the status
+   line); whether the machine takes input (machine.input) and whether its firmware answers MIDI
+   (machine.midi) are facts too. When ready the label is the engine's own (capabilities label,
+   about); the menu is the engine map (machine.engines). */
 const LIFE = {
 	missing: { label: "NO ROM", led: "off" },
-	loading: { label: "LOADING ROM", led: "blink", status: STARTING, fwLcd: true },
-	booting: { label: "BOOTING OS", led: "blink", status: STARTING, fwLcd: true },
-	animating: { label: "BOOTING OS", led: "blink", status: STARTING, fwLcd: true,
-		tip: "Engine: MD OS 1.63 answers, but its start-up animation ignores keys until it ends (shown in the LCD). Editing starts then." },
-	unsupported: { label: "ROM ERROR", led: "off", status: "This firmware is not Machinedrum OS 1.63. MD Desk needs OS 1.63." },
-	hwConnecting: { label: "HW CONNECT", led: "blink", status: STARTING, fwLcd: true,
-		tip: "Engine: HW MIDI, waiting for the Machinedrum to answer on the plug-in's MIDI in and out." },
-	hwLost: { label: "HW NO MIDI", led: "off", runs: true,
-		tip: "Engine: HW MIDI, but the Machinedrum has not answered for a while. Check the MIDI cables and that its SYSEX is on." },
-	ready: { label: "READY", led: "on", runs: true } };
+	loading: { label: "LOADING ROM", led: "blink" },
+	booting: { label: "BOOTING OS", led: "blink" },
+	animating: { label: "BOOTING OS", led: "blink" },
+	unsupported: { label: "ROM ERROR", led: "off" },
+	hwConnecting: { label: "HW CONNECT", led: "blink" },
+	hwLost: { label: "HW NO MIDI", led: "off" },
+	ready: { label: "READY", led: "on" } };
 const lifeOf = l => LIFE[l] || LIFE.booting;
 /* the engine menu's own entries (not engines) */
 const ENGINE_ACTIONS = ["global", "audio", "rom"];
 function engineLabel() {
 	const e = lifeOf(V.lifecycle);
 	if (V.lifecycle === "ready") return [V.caps.label || e.label, e.led, V.caps.about || ""];
-	return [e.label, e.led, e.tip || ""];
+	return [e.label, e.led, V.lifecycleText];
 }
 /* the menu's engine entries are the engine map's, in its order, before the menu's own */
 function renderEngineMenu(sel) {
@@ -241,18 +245,46 @@ function renderEngineMenu(sel) {
 }
 function renderEngine() {
 	const btn = $(".lcdeng"), led = $("#engled"); if (!btn || !led) return;
-	const [txt, mode, about] = engineLabel(), ready = V.lifecycle === "ready";
+	const [txt, mode, about] = engineLabel();
 	btn.querySelector("span").textContent = txt;
 	led.className = "led " + (mode === "on" ? "on" : mode === "blink" ? "on blink" : "");
-	$(".lcdpanel").classList.toggle("engwait", !ready);
-	["rec", "play"].forEach(id => { const k = document.getElementById(id); if (k) k.disabled = !ready; });
+	/* REC, PLAY and edits wait while the machine takes no input (machine.input) */
+	$(".lcdpanel").classList.toggle("engwait", !V.input);
+	["rec", "play"].forEach(id => { const k = document.getElementById(id); if (k) k.disabled = !V.input; });
 	btn.title = about || "Engine: " + txt.toLowerCase() + ". Editing starts when it is ready.";
 	const sel = document.getElementById("engsel");
 	if (sel) renderEngineMenu(sel);
-	/* live recording needs what the engine may not have (machine.capabilities.liveRecord, with its reason) */
-	const rec = document.getElementById("rec");
-	if (rec && V.caps.liveRecord === false) { rec.disabled = true; rec.title = V.caps.reasons?.liveRecord || rec.title; }
+	markCapabilities();
 }
+/* What the engine cannot do (P6): each capability's controls, disabled with its reason while
+   machine.capabilities.can[name] is not true (a name the plug-in does not publish: not allowed).
+   CAP_INFO: capabilities the page shows no control for (they say how the machine is read). The
+   sync script checks both lists against the contract's capability names. */
+const CAP_CONTROLS = {
+	transport: "#play,#rec",
+	liveRecord: "#rec",
+	chains: '[data-chain="send"]',
+	sampleNames: "[data-rename]",
+	modulators: '[data-addsrc],[data-delsrc],[data-srcshape],[data-minv],[data-mdel],#maddl,[data-set="srcrate"] button,[data-set="lcurve"] button,.pc[data-g="src"],.pc[data-g="link"]' };
+const CAP_INFO = ["panelKeys", "lcd", "workingKitMemory", "mutesFromMemory"];
+function markCapabilities() {
+	const why = {};	/* element -> the reasons it is not allowed */
+	for (const [cap, sel] of Object.entries(CAP_CONTROLS)) {
+		if (canDo(V, cap)) continue;
+		for (const el of $$(sel)) (why[cap] = why[cap] || []).push(el);
+	}
+	const off = new Map();
+	for (const [cap, els] of Object.entries(why)) for (const el of els) if (!off.has(el)) off.set(el, V.caps.reasons[cap] || "Not available with this engine.");
+	for (const el of $$("[data-capna]")) if (!off.has(el)) { delete el.dataset.capna; if (el.dataset.captitle != null) { el.title = el.dataset.captitle; delete el.dataset.captitle; } el.removeAttribute("aria-disabled"); }
+	for (const [el, reason] of off) {
+		if (el.dataset.capna == null) el.dataset.captitle = el.title || "";
+		el.dataset.capna = "1"; el.title = reason; el.setAttribute("aria-disabled", "true");
+		if ("disabled" in el) el.disabled = true;
+	}
+}
+/* a control the engine cannot do takes no gesture: its reason instead */
+for (const ev of ["pointerdown", "click", "wheel", "keydown", "dblclick"])
+	document.addEventListener(ev, e => { const el = e.target.closest?.("[data-capna]"); if (!el) return; e.preventDefault(); e.stopImmediatePropagation(); if (e.type === "click") toast(el.title); }, { capture: true, passive: false });
 document.addEventListener("change", e => {
 	if (e.target.id !== "engsel") return;
 	const sel = e.target, v = sel.value; renderEngine();
@@ -729,7 +761,7 @@ function renderSampler() {
 	S.viewAll = false; const id = S.smpSlot; let h = "";
 	if (id.startsWith("RAM")) {
 		const n = +id.slice(3), r = recTrack(n), ps = players(n), st = slotState(n);
-		if (!lifeOf(V.lifecycle).runs) { h = `<div class="smpempty"><div class="edblank big">${V.lifecycle === "unsupported" ? "This firmware is not MD OS 1.63 UW: the Sampler needs the UW's ROM and RAM machines." : "The machine is not running yet. The Sampler works with the UW machine once it is ready."}</div></div>`; }
+		if (!V.midi) { h = `<div class="smpempty"><div class="edblank big">${V.lifecycle === "unsupported" ? "This firmware is not MD OS 1.63 UW: the Sampler needs the UW's ROM and RAM machines." : "The machine is not running yet. The Sampler works with the UW machine once it is ready."}</div></div>`; }
 		else if (r < 0) h = setupCard(n);
 		else {
 			if (S.chopTrack == null || !ps.includes(S.chopTrack)) S.chopTrack = ps[0] ?? null; const p = S.chopTrack, R = V.tracks[r];
@@ -941,8 +973,11 @@ document.addEventListener("pointerdown", e => {
 	if (el && ["syn", "fx", "rt", "lfo"].includes(el.dataset.g)) {
 		e.stopPropagation(); e.preventDefault();
 		const t = el.dataset.t != null ? +el.dataset.t : S.sel, n = el.dataset.n;
-		const i = el.dataset.g === "lfo" ? { SPD: 21, DEPTH: 22, SHMIX: 23 }[n] : pidx(t, n, el.dataset.g);
+		const i = el.dataset.g === "lfo" ? Enums().lfoParams[n] : pidx(t, n, el.dataset.g);
 		if (i == null || i < 0) return;
+		/* only the targets the plug-in's learn takes (the learn document's limits) */
+		const lim = Docs.learn && Docs.learn.limits;
+		if (lim && (t >= lim.tracks || !lim.params.some(q => q.i === i))) { toast(`Track ${t + 1} ${n} cannot be learned.`); return; }
 		S.ctl.learnT = { t, p: n }; syncControls(); cmd("learnStart", { t, i }); toast(`Target: track ${t + 1} ${n}. Now turn a knob on your controller.`);
 	}
 }, true);
@@ -968,7 +1003,7 @@ function firstRun(manual) {
  <div class="lcdbig">MACHINEDRUM FIRMWARE NEEDED</div>
  <p>Machinedrum Editor runs the real Machinedrum operating system. Elektron's firmware cannot be shipped with the app, so you add the one from your own machine.</p>
  <ol><li>Dump the <b>OS 1.63</b> flash image from your Machinedrum (8 MiB, <span class="mono">.bin</span>).</li><li>Put it in the ROM folder${m.romFolder ? `: <span class="mono">${m.romFolder}</span>` : ""}.</li><li>Press <b>Check again</b>. Machinedrum Editor checks its size and version and keeps it on this computer only.</li></ol>
- <div class="btnrow"><button class="cream" data-romfolder="1">Show the ROM folder</button><button data-recheck="1">Check again</button><span class="note">UW, MKII and MKI units all use the same OS 1.63 image.${lifeOf(V.lifecycle).runs ? " OS 1.63 runs now. A new ROM is used after you reopen the plug-in." : ""}</span></div></div>`;
+ <div class="btnrow"><button class="cream" data-romfolder="1">Show the ROM folder</button><button data-recheck="1">Check again</button><span class="note">UW, MKII and MKI units all use the same OS 1.63 image.${V.midi ? " OS 1.63 runs now. A new ROM is used after you reopen the plug-in." : ""}</span></div></div>`;
 	if (mode === "manual") d.querySelector(".btnrow").insertAdjacentHTML("beforeend", `<button data-firstclose="1">Close</button>`);
 	d.hidden = false; d.dataset.first = mode;
 }
@@ -978,7 +1013,7 @@ let l2drag = null;
 function l2step(k, d, alt) {
 	if (k === "len") { if (alt) cmd("length", { p: V.pat, v: ((V.length - 1 + d + V.len) % V.len) + 1 }); else { const o = [16, 32, 48, 64], v = o[(o.indexOf(V.len) + d + 4) % 4]; cmd("totalLength", { p: V.pat, v }, undefined, [[["len"], v]]); } }
 	if (k === "song") { cmd("selectSong", { s: (V.songSlot + d + 32) % 32 }); return; }
-	if (k === "mult") { const o = ["1X", "2X", "3/4X", "3/2X"], v = o[(o.indexOf(V.mult) + d + 4) % 4]; cmd("speed", { p: V.pat, v }, undefined, [[["mult"], v]]); }
+	if (k === "mult") { const o = Enums().tempoMultipliers; if (!o.length) return; const v = o[(o.indexOf(V.mult) + d + o.length) % o.length]; cmd("speed", { p: V.pat, v }, undefined, [[["mult"], v]]); }
 	if (k === "mode") { const v = V.mode === "EXTENDED" ? "CLASSIC" : "EXTENDED"; cmd("extended", { on: v === "EXTENDED" }, undefined, [[["mode"], v]]); }
 	if (k === "swing" || k === "accAmt") l2set(k, V[k] + d);
 	render();
@@ -1116,7 +1151,7 @@ document.addEventListener("click", e => {
 		if (e.target.closest("[data-fullpat]")) { const { ofs, len, ...r } = V.song[S.songSel]; rowSet(S.songSel, r); render(); return; }
 		if (e.target.closest("[data-inf]")) { const r = V.song[S.songSel]; rowSet(S.songSel, { ...r, count: r.count === Infinity ? 2 : Infinity }); render(); return; }
 	}
-	const ok = e.target.closest("[data-out]"); if (ok) { const i = +ok.dataset.out, out = OUTS[(OUTS.indexOf(V.tracks[i].out || "MAIN") + 1) % OUTS.length]; cmd("route", { t: i, out }, undefined, [[["tracks", i, "out"], out]]); render(); return; }
+	const ok = e.target.closest("[data-out]"); if (ok) { const i = +ok.dataset.out, O = Enums().outputs, out = O[(O.indexOf(V.tracks[i].out || O[0]) + 1) % O.length]; if (!out) return; cmd("route", { t: i, out }, undefined, [[["tracks", i, "out"], out]]); render(); return; }
 	const dl = e.target.closest("[data-dlg]"); if (dl) { const d = $("#dlg"), f = d._btns[+dl.dataset.dlg][2]; d.hidden = true; f(); return; }
 	if (e.target.closest("[data-romfolder]")) { cmd("revealRomFolder"); return; }
 	if (e.target.closest("[data-recheck]")) { cmd("recheckFirmware"); return; }
@@ -1132,7 +1167,7 @@ document.addEventListener("click", e => {
 		const C = S.ctl;
 		const shh = e.target.closest(".srch.k-cc"); if (shh) { C.sel = shh.dataset.src; C.selT = null; render(); return; }
 		const mc = e.target.closest(".mxc[data-mxsrc]"); if (mc) { C.sel = mc.dataset.mxsrc; C.selT = C.addT = +mc.dataset.mxt; render(); return; }
-		if (e.target.closest("#caddl")) { const [ch, cc] = C.sel.split(":").map(Number); cmd("learnAdd", { cc, ch, t: +$("#ct").value, i: +$("#cp").value }); return; }
+		if (e.target.closest("#caddl")) { const [ch, cc] = C.sel.split(":").map(Number); cmd("learnAdd", Object.assign({ cc, t: +$("#ct").value, i: +$("#cp").value }, ch === 255 ? {} : { ch })); return; }	/* no ch: any channel */
 		const kc = e.target.closest("[data-knobcc]"); if (kc) {
 			const [, cc] = C.sel.split(":").map(Number), k = KNOB_CCS.indexOf(cc), to = clamp(cc + +kc.dataset.knobcc, 0, 127);
 			if (k < 0 || KNOB_CCS.includes(to)) { toast("Another knob row already uses CC " + to + "."); return; }
@@ -1185,7 +1220,6 @@ function refreshAudible() {
 /* Transport: the playhead comes from the machine (telemetry), moved by class only */
 let lastStep = -1;
 function onTelemetry(m) {
-	Tele.step = m.step; Tele.pattern = m.pattern; Tele.valid = m.valid;
 	Docs.telemetry = m;
 	/* the transport is derived from the telemetry document (transportOf): a new view when it changed */
 	const wasPlaying = V.playing, wasRec = V.rec, tp = transportOf(Docs);
@@ -1215,7 +1249,7 @@ function onTelemetry(m) {
    It jumps without animation on a wrap or a re-render and fades out on stop. The step is the
    machine's own (RAM telemetry). */
 let phLast = -1;
-function stepMs() { const m = { "1X": 1, "2X": 2, "3/4X": .75, "3/2X": 1.5 }[V.mult] || 1; return 60000 / (V.bpm || 120) / 4 / m; }
+function stepMs() { const m = multFactor(V.mult); return 60000 / (V.bpm || 120) / 4 / m; }
 function movePH() {
 	const seq = document.getElementById("seq"); if (!seq) return; let ph = document.getElementById("phcol");
 	const c = V.playing && S.step >= 0 ? seq.querySelector(`.st[data-t="0"][data-s="${S.step}"]`) : null;
@@ -1264,12 +1298,9 @@ Bridge.onMessage(m => {
 	switch (m.type) {
 	case "catalogue": setCatalogue(m.doc); scheduleRender(); break;
 	case "doc": {
-		/* the message names the slot (m.slot; the document's own slot field where it has one) and where the
-		   document came from (m.source); the working kit is the kit that plays, "kit" the stored slots */
-		const d = m.doc, slot = m.slot != null ? m.slot : d.slot;
-		if (m.kind === "workingKit") Docs.workingKit = { slot, source: m.source, pending: !!m.pending, doc: d };
-		else if (m.kind === "pattern") Docs.patterns[slot] = d; else if (m.kind === "kit") Docs.kits[slot] = d; else if (m.kind === "song") Docs.songs[slot] = d; else if (m.kind === "global") Docs.global = d;
-		if (m.kind !== "workingKit" && m.source) Docs.sources[m.kind + ":" + slot] = m.source;
+		/* stored where its kind keeps it (mdDeskModel.js, storeDoc); the working kit is the kit that
+		   plays, "kit" the stored slots */
+		const slot = storeDoc(Docs, m); if (slot == null) break;
 		/* Background loads of other patterns only matter to the song palette. */
 		const relevant = (m.kind === "pattern" && (slot === currentPatternSlot() || S.ws === "song")) || ((m.kind === "kit" || m.kind === "workingKit") && slot === currentKitSlot()) || m.kind === "global" || (m.kind === "song" && slot === currentSongSlot());
 		if (relevant) scheduleRender();
@@ -1287,13 +1318,9 @@ Bridge.onMessage(m => {
 	case "telemetry": onTelemetry(m); break;
 	case "setup": if (m.doc && Array.isArray(m.doc.knobCcs) && m.doc.knobCcs.join() !== KNOB_CCS.join()) { m.doc.knobCcs.forEach((c, i) => KNOB_CCS[i] = c); if (S.ws === "control") scheduleRender(); } break;
 	case "mod": { const before = Mods.doc; Mods.onMessage(m); if (S.ws === "control") { if (!sameValue(Mods.doc, before) && !interacting()) scheduleRender(); else syncMods(); } break; }
-	case "ask":
-		if (m.ask === "discardKit") ask(`<b>${patName(m.p)}</b> uses kit <b>${kitName(m.target)}</b>. Your edits to <b>${kitName(m.kit)}</b> are not saved on the machine and will be lost.`,
-			[["Save kit, then switch", "cream", () => { saveKit(); cmd("select", { p: m.p, force: true }); }], ["Switch and lose edits", "danger", () => cmd("select", { p: m.p, force: true })], ["Cancel", "", () => { }]]);
-		break;
+	case "ask": onAsk(m); break;
 	case "error": toast(m.message); showLastError([m.message]); break;
 	case "learn": Docs.learn = m.doc; if (S.ws === "control") scheduleRender(); else syncControls(); if (!m.doc.learning && S.ctl.learnT) { S.ctl.learnT = null; syncControls(); } break;
-	case "log": break;
 	}
 });
 
@@ -1311,7 +1338,7 @@ function render() {
 	if (!full) renderRail(); renderSub();
 	({ seq: renderSeq, sound: renderSound, mix: renderMix, song: renderSong, sampler: renderSampler, control: renderControl })[S.ws]();
 	const sc = $("#seqscroll"); if (sc) { sc.scrollLeft = sl; $("#lanescroll").scrollLeft = sl; } enhanceSelects(document.getElementById("main"));
-	phLast = -1; movePH(); logFirstRender();
+	markCapabilities(); phLast = -1; movePH(); logFirstRender();
 }
 function setPlate(v) { S.plate = v; document.documentElement.dataset.plate = v; try { localStorage.setItem("mddesk.plate", v); } catch (_) { } renderTop(); redraw(); }
 (() => { let v = null; try { v = localStorage.getItem("mddesk.plate"); } catch (_) { } if (!v) v = matchMedia("(prefers-color-scheme: dark)").matches ? "mk2" : "mk1"; S.plate = v; document.documentElement.dataset.plate = v; })();

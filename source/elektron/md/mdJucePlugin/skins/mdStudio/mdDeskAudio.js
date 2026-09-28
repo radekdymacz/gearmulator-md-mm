@@ -69,9 +69,11 @@ addEventListener("resize",()=>{if(AP.open)placeAudio()});
 /* The plug-in's host (P6): the gm-audio/devices document of the standalone's AudioDeviceManager
    (mdAudioMidiLink.cpp). In a plug-in the document says standalone false: no engine-menu entry,
    and the panel only says that the host owns audio and MIDI. */
-let audioDocument = null;
-function audioDoc() { return audioDocument; }
-function audioSend(c) { Bridge.send(Object.assign({ op: "audioSet" }, c)); }
+let audioDocument = null, audioError = "";
+/* the panel shows the devices document and the last change's error: an audioSet failure is only in
+   its result (errors[0]), view state until the next change */
+function audioDoc() { return audioDocument && Object.assign({}, audioDocument, { error: audioError }); }
+function audioSend(c) { Bridge.send(Object.assign({ op: "audioSet" }, c), { onResult: r => { audioError = r.ok ? "" : (r.errors || [])[0] || ""; if (AP.open) drawAudio(); } }); }
 function audioMeter(on) { Bridge.send({ op: "audioMeter", on: !!on }); }
 function showAudioEntry() {
 	const o = document.querySelector('#engsel option[value="audio"]');

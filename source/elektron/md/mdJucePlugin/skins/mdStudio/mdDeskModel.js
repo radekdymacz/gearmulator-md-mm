@@ -4,10 +4,33 @@
    working kit); the view is derived from them after every change and may be
    edited optimistically, but every edit is also sent as a command and the
    next document replaces the view. See doc/modern-ux/data-contract.md. */
-/* kits: the stored slots; workingKit: the kit that plays ({slot, source, pending, doc}, the slot it was
-   loaded from); sources: each stored document's "source" ("kit:3" -> "dump"). */
-const Docs = { patterns: {}, kits: {}, songs: {}, global: null, machine: null, catalogue: null, workingKit: null, sources: {}, learn: null, telemetry: null };
-const Tele = { step: -1, pattern: -1, playing: false, valid: false };
+/* The document shape, written once (P6): what an engine publishes, and what starts over when the
+   engine changes ("reset"). kits: the stored slots; workingKit: the kit that plays ({slot, source,
+   pending, doc}, the slot it was loaded from); sources: each stored document's "source"
+   ("kit:3" -> "dump"); telemetry: the last telemetry notice (the transport and the playhead).
+   The catalogue and the MIDI learn document are the model's and the plug-in's: they stay. */
+const emptyDocs = () => ({ patterns: {}, kits: {}, songs: {}, global: null, machine: null, workingKit: null, sources: {}, telemetry: null });
+const EMPTY_DOCS = Object.freeze(emptyDocs());
+const Docs = Object.assign(emptyDocs(), { catalogue: null, learn: null });
+/* the engine changed: its documents start over */
+function resetDocs(docs) { Object.assign(docs, emptyDocs()); }
+/* A "doc" message stored where its kind keeps it: one entry a kind. The message names the slot
+   (m.slot; the document's own slot field where it has one) and where the document came from (m.source). */
+const DOC_STORE = {
+	pattern: (docs, slot, m) => { docs.patterns[slot] = m.doc; },
+	kit: (docs, slot, m) => { docs.kits[slot] = m.doc; },
+	song: (docs, slot, m) => { docs.songs[slot] = m.doc; },
+	global: (docs, slot, m) => { docs.global = m.doc; },
+	workingKit: (docs, slot, m) => { docs.workingKit = { slot, source: m.source, pending: !!m.pending, doc: m.doc }; }
+};
+/* stores the message's document; returns its slot, or null for a kind the page does not know */
+function storeDoc(docs, m) {
+	const store = DOC_STORE[m.kind]; if (!store) return null;
+	const slot = m.slot != null ? m.slot : m.doc.slot;
+	store(docs, slot, m);
+	if (m.kind !== "workingKit" && m.source) docs.sources[m.kind + ":" + slot] = m.source;
+	return slot;
+}
 
 /* ---- machine catalogue (md-desk/machines, from elektronData::mdMachineParamNames) ----
    Its index is derived from the document (once per document); Cat is the current one. */
@@ -53,9 +76,21 @@ function codeOf(m, cat = Cat) { const c = cat.byName[m]; return c ? m.slice(c.fa
 const swingPercent = v => 50 + Math.round(v * 50 / 16384);
 const accentDisplay = v => Math.round(v * 15 / 127);
 const patName = p => "ABCDEFGH"[p >> 4] + String((p & 15) + 1).padStart(2, "0");
-const OUTS = ["MAIN", "A", "B", "C", "D", "E", "F"];
-const UPDATES = ["FREE", "TRIG", "HOLD"];
-const MFX = { echo: "rhythmEcho", gate: "gateBox", eq: "eq", dyn: "dynamix" };
+/* ---- the catalogue's enumerations (P6: the C++ tables, one source) ----
+   outputs, masterFx (the kit's effect names), lfoFields (the lfo command's fields), lfoUpdates,
+   lfoParams ({SPD, DEPTH, SHMIX}: kit parameter indexes), tempoMultipliers. The page pairs its own
+   words with them by position: its master effects echo gate eq dyn are masterFx in order, and its
+   LFO fields TRCK PARAM SHP1 SHP2 UPDTE are lfoFields in order. Before the catalogue: empty. */
+const NO_ENUMS = Object.freeze({ outputs: [], masterFx: [], lfoFields: [], lfoUpdates: [], lfoParams: {}, tempoMultipliers: [] });
+const enumsOf = docs => (docs.catalogue && docs.catalogue.enums) || NO_ENUMS;
+const Enums = () => enumsOf(Docs);
+const MFX_IDS = ["echo", "gate", "eq", "dyn"], LFO_NAMES = ["TRCK", "PARAM", "SHP1", "SHP2", "UPDTE"];
+const mfxName = (id, E = Enums()) => E.masterFx[MFX_IDS.indexOf(id)];
+const lfoField = (n, E = Enums()) => { const i = LFO_NAMES.indexOf(n); return i < 0 ? undefined : E.lfoFields[i]; };
+/* a tempo multiplier's factor: "3/4X" -> 0.75 */
+const multFactor = m => { const [a, b] = String(m || "1X").replace("X", "").split("/").map(Number); return b ? a / b : a || 1; };
+/* a kit track's parameter 0-23 (synthesis, effects, routing) */
+const paramOf = (kt, i) => i < 8 ? kt.synth[i] : i < 16 ? kt.effects[i - 8] : kt.routing[i - 16];
 
 /* ---- document accessors: pure, of a set of documents; the page's are of Docs ---- */
 function machineOf(docs) { return docs.machine || { pattern: {}, kit: {}, song: {}, desk: {} }; }
@@ -73,11 +108,8 @@ function kitDocOf(docs) { const w = workingKitOf(docs); return w ? w.doc : docs.
 function kitSourceOf(docs) { const w = workingKitOf(docs); return w ? w.source : docs.sources["kit:" + kitSlotOf(docs)] || "none"; }
 function songSlotOf(docs) { const m = machineOf(docs); return m.song && m.song.current != null ? m.song.current : 0; }
 function lengthIn(docs, p) { const d = docs.patterns[p]; return d ? d.length : 16; }
-/* the transport: the telemetry's when it has come (newer than the machine document), else the desk's */
-function transportOf(docs) {
-	const t = docs.telemetry, desk = machineOf(docs).desk || {};
-	return t ? { playing: !!t.playing, rec: !!t.recording } : { playing: !!desk.playing, rec: !!desk.recording };
-}
+/* the transport: one source, the telemetry (stopped until it comes) */
+function transportOf(docs) { const t = docs.telemetry; return { playing: !!(t && t.playing), rec: !!(t && t.recording) }; }
 const machineState = () => machineOf(Docs);
 const currentPatternSlot = () => patternSlotOf(Docs);
 const currentKitSlot = () => kitSlotOf(Docs);
@@ -125,6 +157,8 @@ const MFXD = {
 	eq: { name: "Master EQ", sub: "Low shelf, high shelf, one parametric band. Drag the points.", k: ["LF", "LG", "HF", "HG", "PF", "PG", "PQ", "GAIN"] },
 	dyn: { name: "Dynamix", sub: "Compressor on the main out. Drag threshold and ratio.", k: ["ATCK", "REL", "TRHD", "RTIO", "KNEE", "HP", "OUTG", "MIX"] } };
 function lengthOfPattern(p) { return lengthIn(Docs, p); }
+/* what the engine can do: only a capability published as true (an unknown name is not allowed) */
+const canDo = (v, cap) => v.caps.can[cap] === true;
 function deriveView(docs, ui) {
 	const cat = catalogueIndex(docs.catalogue);
 	const pat = patternSlotOf(docs), kit = kitSlotOf(docs), songSlot = songSlotOf(docs);
@@ -135,12 +169,19 @@ function deriveView(docs, ui) {
 	const desk = M.desk || {};
 	const hist = M.history || {};
 	const transport = transportOf(docs);
+	const E = enumsOf(docs);
+	/* capabilities (nested): what the engine can do (can), why not (reasons), named values; a name
+	   missing from can is not allowed (canDo) */
+	const caps = Object.assign({ engine: "", label: "", about: "" }, M.capabilities || {});
+	caps.can = caps.can || {}; caps.reasons = caps.reasons || {}; caps.values = caps.values || {};
 	const v = { loaded: !!(P && K), pat, queued: desk.queued != null ? desk.queued : null, kit,
 		kitState: M.kit && M.kit.working || "unknown", kitSource: kitSourceOf(docs), kitNames: {},
 		patKit: Array.from({ length: 128 }, (_, p) => docs.patterns[p] ? docs.patterns[p].kit : null),
-		mode: (M.extendedMode != null ? M.extendedMode : G ? G.extendedMode : true) ? "EXTENDED" : "CLASSIC",
+		mode: (G ? G.extendedMode : true) ? "EXTENDED" : "CLASSIC",
 		bpm: G ? G.tempo : 120, playing: transport.playing, rec: transport.rec, gridEdit: !!desk.gridEdit, tx: !!desk.tx,
-		roundTrip: desk.roundTripMs, lifecycle: M.lifecycle || "booting", caps: M.capabilities || {},
+		roundTrip: desk.roundTripMs, lifecycle: M.lifecycle || "booting", lifecycleText: M.lifecycleText || "",
+		input: !!M.input, midi: !!M.midi, caps,
+		clipboard: Object.assign({ steps: false, sound: false, songRow: false, kit: null, pattern: null }, M.clipboard || {}),
 		canUndo: !!hist.undo, canRedo: !!hist.redo, undoCount: hist.undoCount || 0, redoCount: hist.redoCount || 0,
 		songReload: !!(M.song && M.song.reloadNeeded), len: 16, length: 16, mult: "1X", swing: 50, accAmt: 0, accAll: false, slideAll: false };
 	for (const k in docs.kits) v.kitNames[k] = docs.kits[k].name;
@@ -170,9 +211,10 @@ function deriveView(docs, ui) {
 				(j < 8 ? t.syn : j < 16 ? t.fx : t.rt)[n] = val;
 			});
 			const tn = K.tracks[kt.lfo.track] ? slots(K.tracks[kt.lfo.track].machine || "GND-EMPTY", cat) : a;
+			const lp = E.lfoParams, at = n => lp[n] != null ? paramOf(kt, lp[n]) : 0;
 			t.lfo = { TRCK: kt.lfo.track, PARAM: tn[kt.lfo.param] || "#" + (kt.lfo.param + 1), PARAMI: kt.lfo.param, SHP1: kt.lfo.shape1, SHP2: kt.lfo.shape2,
-				UPDTE: UPDATES[kt.lfo.update] || "FREE", SPD: kt.routing[5], DEPTH: kt.routing[6], SHMIX: kt.routing[7] };
-		} else t.lfo = { TRCK: i, PARAM: "", PARAMI: 0, SHP1: 0, SHP2: 0, UPDTE: "FREE", SPD: 0, DEPTH: 0, SHMIX: 0 };
+				UPDTE: E.lfoUpdates[kt.lfo.update] || "", SPD: at("SPD"), DEPTH: at("DEPTH"), SHMIX: at("SHMIX") };
+		} else t.lfo = { TRCK: i, PARAM: "", PARAMI: 0, SHP1: 0, SHP2: 0, UPDTE: E.lfoUpdates[0] || "", SPD: 0, DEPTH: 0, SHMIX: 0 };
 		if (P) {
 			const pt = P.tracks[i];
 			for (const s of pt.trigs) t.trigs[s] = true;
@@ -188,7 +230,7 @@ function deriveView(docs, ui) {
 	}
 	v.mfx = {};
 	for (const id in MFXD) {
-		const vals = K ? K.masterFx[MFX[id]] : null;
+		const vals = K ? K.masterFx[mfxName(id, E)] : null;
 		v.mfx[id] = { ...MFXD[id], v: {} };
 		MFXD[id].k.forEach((n, j) => { v.mfx[id].v[n] = vals ? vals[j] : 0; });
 	}
@@ -205,15 +247,28 @@ function deriveView(docs, ui) {
    order, to deriveView(Docs, S). An entry leaves when the plug-in answers its command (the result
    comes after the documents it changed), so a refused edit disappears and a taken one is in the
    documents. A keyed command that replaces a waiting one keeps its id, so it takes over the
-   entries by path. Entries hold values, never toggles: applying one to a view that already shows
+   entries by path. An entry carries the document its command edits ({kind, slot}, docOf): it is
+   applied only while the view shows that document, so a pattern or kit switch under a waiting edit
+   never shows it on the new one. Entries hold values, never toggles: applying one to a view that already shows
    the edit changes nothing. Paths go through objects, arrays, Maps and Sets:
    - an object or array member, or a Map entry: the value, or Overlay.DELETE;
    - a Set member: true (in) or false (out);
    - a Map of Maps (the lock lanes): a write into a missing inner Map makes it, and a delete that
      empties one removes it, so the view's inner Maps are never empty. */
+/* The document a command edits, from its arguments: p a pattern, k the kit (the working kit when it
+   plays), the song row ops' s a song; null: none of them (the global, the machine). */
+const SONG_ROW_OPS = new Set(["rowSet", "rowInsert", "rowDelete", "rowMove", "copyRow", "pasteRow"]);
+function docOf(op, args) {
+	if (args.p != null) return { kind: "pattern", slot: args.p };
+	if (args.k != null) return { kind: "kit", slot: args.k };
+	if (SONG_ROW_OPS.has(op) && args.s != null) return { kind: "song", slot: args.s };
+	return null;
+}
+/* the view shows that document (a kind the view has no slot for: always) */
+function shows(v, doc) { const at = { pattern: v.pat, kit: v.kit, song: v.songSlot }[doc.kind]; return at === undefined || at === doc.slot; }
 const Overlay = (() => {
 	const DELETE = Symbol("delete");
-	const entries = new Map();	// path key -> { path, value, id }
+	const entries = new Map();	// path key -> { path, value, id, doc }
 	const keyOf = path => path.map(String).join("\u241f");
 	const tag = v => Object.prototype.toString.call(v), isMap = v => tag(v) === "[object Map]", isSet = v => tag(v) === "[object Set]";
 	const clone = v => {
@@ -246,17 +301,17 @@ const Overlay = (() => {
 	}
 	return {
 		DELETE,
-		/* the writes a command shows at once, owned by its id (a later write of a path owns it) */
-		add(id, writes) { for (const [path, value] of writes) { const k = keyOf(path); entries.delete(k); entries.set(k, { path, value: clone(value), id }); } },
+		/* the writes a command shows at once, owned by its id (a later write of a path owns it), on the
+		   document it edits (null: whatever the view shows) */
+		add(id, writes, doc = null) { for (const [path, value] of writes) { const k = keyOf(path); entries.delete(k); entries.set(k, { path, value: clone(value), id, doc }); } },
 		/* its answer came: its entries leave; true when there were any */
 		answered(id) { let any = false; for (const [k, e] of entries) if (e.id === id) { entries.delete(k); any = true; } return any; },
 		clear() { entries.clear(); },
 		size: () => entries.size,
 		/* the overlay applied to a freshly derived view (which it changes and returns) */
-		over(v) { for (const e of entries.values()) setIn(v, e.path, e.value); return v; }
+		over(v) { for (const e of entries.values()) if (!e.doc || shows(v, e.doc)) setIn(v, e.path, e.value); return v; }
 	};
 })();
-const EMPTY_DOCS = { patterns: {}, kits: {}, songs: {}, global: null, machine: null, catalogue: null, workingKit: null, sources: {}, telemetry: null };
 function view() { return Overlay.over(deriveView(Docs, S)); }
 /* The view the renderers read: view(), replaced on every document and command. Before the first
    document it is the overlay over deriveView(EMPTY_DOCS, S), set by the page once its UI state

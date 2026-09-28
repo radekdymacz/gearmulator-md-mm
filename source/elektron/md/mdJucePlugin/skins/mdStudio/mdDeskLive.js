@@ -114,7 +114,7 @@ function chainCard() {
 	const pads = Array.from({ length: 16 }, (_, k) => { const p = b * 16 + k, n = d.indexOf(p); return `<button class="chk${hasPat(p) ? "" : " empty"}${n >= 0 ? " in" : ""}" data-chainpad="${p}" title="${patName(p)}${n >= 0 ? ": number " + (n + 1) + " in the chain. Click removes it." : ". Click adds it to the chain."}">${patName(p)}<small>${hasPat(p) ? patLen(p) : "empty"}</small>${n >= 0 ? `<em>${n + 1}</em>` : ""}</button>`; }).join("");
 	const playing = V.pat, list = active ? c.patterns : [], at = list.indexOf(playing), next = active ? list[(at + 1) % list.length] : null;
 	/* what the engine can do (machine.capabilities.chains, with its reason) */
-	const can = V.caps.chains !== false, why = V.caps.reasons?.chains || "";
+	const can = canDo(V, "chains"), why = V.caps.reasons.chains || "";
 	const live = !can ? `<span class="note">${why}</span>` : !known ? `<span class="note">The chain is not readable on this firmware.</span>` : active ? list.map(p => `<span class="lcdchip${p === playing ? " now" : ""}${V.playing && p === next && at >= 0 ? " nx" : ""}">${patName(p)}</span>`).join("<i>»</i>") + "<i>↺</i>"
 		: `<span class="note">No chain. The machine plays ${patName(playing)} and stays on it.</span>`;
 	return `<section class="card"><header><h3>Chain</h3><span>bank ${bn} · loops · BANK + TRIGs on the machine</span></header>
@@ -155,21 +155,17 @@ function showFwLcd(on) {
 }
 Bridge.onMessage(m => {
 	/* The engine changed (emulator <-> HW MIDI): the documents start over. */
-	if (m.type === "reset") { Object.assign(Docs, { patterns: {}, kits: {}, songs: {}, global: null, machine: null, workingKit: null, sources: {}, telemetry: null }); Overlay.clear(); scheduleRender(); return; }
-	/* The firmware's LCD shows while the lifecycle says it may (LIFE[..].fwLcd: the firmware starts);
+	if (m.type === "reset") { resetDocs(Docs); Overlay.clear(); scheduleRender(); return; }
+	/* The firmware's LCD shows while the machine takes no input (machine.input: the firmware starts);
 	   BOOTING OS lasts until keys work: the firmware answers MIDI early, but its start-up animation
-	   ignores panel keys until it is over (about 13 s; the lifecycle's "animating", its tooltip in LIFE). */
+	   ignores panel keys until it is over (about 13 s; the lifecycle's "animating"). */
 	if (m.type === "lcd") {
 		if (m.bits) { const s = atob(m.bits); fwLcd.bits = Uint8Array.from(s, ch => ch.charCodeAt(0)); drawFwLcd(); }
-		showFwLcd(!!fwLcd.bits && !!lifeOf(machineState().lifecycle).fwLcd);
+		showFwLcd(!!fwLcd.bits && !machineState().input);
 	}
 	else if (m.type === "machine") {
-		if (!lifeOf(m.doc.lifecycle).fwLcd) showFwLcd(false);
+		if (m.doc.input) showFwLcd(false);
 		const chain = m.doc.desk ? m.doc.desk.chain : undefined;
 		if (S.ws === "song" && m.doc.desk && !sameValue(chain, chainCard.last)) { chainCard.last = chain; scheduleRender(); }
-	}
-	else if (m.type === "ask" && m.ask === "breakChain") {
-		const c = chainDoc(), list = c && c.patterns ? c.patterns.map(patName).join(" » ") : "";
-		ask(`Picking <b>${patName(m.p)}</b> ends the chain <b>${list}</b>, as on the machine.`, [["Pick it, end the chain", "danger", () => cmd("select", { p: m.p, chainOk: true })], ["Cancel", "", () => { }]]);
 	}
 });

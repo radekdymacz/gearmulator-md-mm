@@ -3,10 +3,12 @@
    from the LCD's KIT field or pattern name. Everything is the machine's: 64 kits and 128 patterns from
    the desk's documents (it loads them all in the background), and every action a firmware command or
    dump (mdDesk/mdDeskLibrary.h, measured in mdP4ProbeFirmwareTest library). What the firmware has no
-   command for says so in its tooltip. Loaded after mdDeskApp.js; uses its state and commands. */
+   command for says so in its tooltip. Loaded after mdDeskApp.js; uses its state and commands.
+   P6: the library asks nothing itself. A command that would lose something (a load over edits, a
+   write over a slot, a clear) is sent as it is, and the plug-in asks (mdDeskApp.js, onAsk). What
+   the clipboard holds is the plug-in's (machine.clipboard). */
 
 const LIB = { open: null, sel: 0, renaming: null, drag: null, html: "" };
-let CLIP = null;	// what the desk's library clipboard holds: {type: "kit"|"pat", from, name}
 const nn = k => String(k + 1).padStart(2, "0");
 const escH = s => String(s).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
 /* Kit names: SysEx 0x55 takes 16 ASCII bytes (7-bit). Which of them the MD font draws is not checked, so
@@ -54,7 +56,7 @@ function drawKitLib() {
 	return `<div class="libhead"><span class="cap">Kit library</span><span class="lcdchip">K${nn(cur)} ${escH(kDisp(cur) || "EMPTY")} · ${ed ? "edited" : "saved"}</span><span class="note">${V.mode === "EXTENDED" ? "EXTENDED: every pattern recalls its kit." : "CLASSIC: patterns do not recall kits."} 64 slots${n < 64 ? ` · reading ${n} of 64 from the machine` : ""}.</span><button class="libx" data-la="close" title="Close (Esc)">Esc</button></div>
  <div class="libacts"><div class="grp"><span class="ilab">Current K${nn(cur)}</span><button data-la="save" title="${KTIP.save}">Save</button><button class="danger" data-la="reload"${dis(!ed)} title="${KTIP.reload}">Reload</button></div>
   <div class="grp"><span class="ilab">Slot K${nn(k)}</span><button data-la="load"${dis((k === cur && !ed) || !loaded)} title="${k === cur ? "Already the current kit. Enter reloads it when it is edited. " : ""}${KTIP.load} (Enter)">Load</button><button data-la="saveas"${dis(k === cur)} title="${k === cur ? "This is the current slot: use Save. " : ""}${KTIP.saveas}">Save as K${nn(k)}</button>
-  <button data-la="copy"${dis(!loaded)} title="${KTIP.copy} (Cmd+C)">Copy</button><button data-la="paste"${dis(CLIP?.type !== "kit" || !loaded)} title="${CLIP?.type === "kit" ? "Paste K" + nn(CLIP.from) + " " + escH(CLIP.name) + ". " : "Copy a kit first. "}${KTIP.paste} (Cmd+V)">Paste</button>
+  <button data-la="copy"${dis(!loaded)} title="${KTIP.copy} (Cmd+C)">Copy</button><button data-la="paste"${dis(V.clipboard.kit == null || !loaded)} title="${V.clipboard.kit != null ? "Paste K" + nn(V.clipboard.kit) + " " + escH(kDisp(V.clipboard.kit)) + ". " : "Copy a kit first. "}${KTIP.paste} (Cmd+V)">Paste</button>
   <button class="danger" data-la="clear"${dis(empty || !loaded)} title="${KTIP.clear} (Delete)">Clear</button><button data-la="rename"${dis(!loaded)} title="${KTIP.rename} (F2 or double-click)">Rename</button></div></div>
  <div class="libgrid kits" aria-label="64 kit slots">${Array.from({ length: 64 }, (_, i) => kitSlot(i)).join("")}</div>
  <div class="libfoot"><span>Arrows move · Enter loads · F2 or double-click renames · Delete clears · drag a slot onto another to copy · Cmd+Z undoes a paste, clear or rename · Esc closes</span><span class="fw" title="The machine keeps one UNDO KIT as the first entry of its kit list: the kit lost to the last load or overwrite. The editor's own undo works on top of it for slot writes; LOAD and SAVE are the machine's.">The machine also keeps an UNDO KIT</span></div>`;
@@ -70,7 +72,7 @@ function drawPatLib() {
 	const ck = patKitOf(cur);
 	return `<div class="libhead"><span class="cap">Patterns</span><span class="lcdchip">${patName(cur)} · ${V.len} steps${ext && ck != null ? " · K" + nn(ck) : ""}${V.queued != null && V.queued !== cur ? " → " + patName(V.queued) : ""}</span><span class="note">8 banks × 16. ${V.playing ? "Playing: a new pattern starts at the pattern end." : "Stopped: a click switches at once."}</span><button class="libx" data-la="close" title="Close (Esc)">Esc</button></div>
  <div class="libacts"><div class="grp"><span class="ilab">Slot ${patName(p)}</span><button data-la="go"${dis(p === cur && V.queued == null)} title="${PTIP.go} (Enter)">${V.playing ? "Queue" : "Go"}</button><button data-la="now"${dis(p === cur && V.queued == null)} title="${PTIP.now}">Now</button>
-  <button data-la="copy"${dis(!loaded)} title="${PTIP.copy} (Cmd+C)">Copy</button><button data-la="paste"${dis(CLIP?.type !== "pat" || !loaded)} title="${CLIP?.type === "pat" ? "Paste " + patName(CLIP.from) + ". " : "Copy a pattern first. "}${PTIP.paste} (Cmd+V)">Paste</button><button class="danger" data-la="clear"${dis(!hasPat(p))} title="${PTIP.clear} (Delete)">Clear</button></div></div>
+  <button data-la="copy"${dis(!loaded)} title="${PTIP.copy} (Cmd+C)">Copy</button><button data-la="paste"${dis(V.clipboard.pattern == null || !loaded)} title="${V.clipboard.pattern != null ? "Paste " + patName(V.clipboard.pattern) + ". " : "Copy a pattern first. "}${PTIP.paste} (Cmd+V)">Paste</button><button class="danger" data-la="clear"${dis(!hasPat(p))} title="${PTIP.clear} (Delete)">Clear</button></div></div>
  <div class="libgrid pats" aria-label="128 patterns">${rows}</div>
  <div class="libfoot"><span>Arrows move · A–H jump to a bank · Enter queues · Shift+Enter switches now · Delete clears · drag a slot onto another to copy · Cmd+Z undoes a paste or clear · Esc closes</span><span class="fw" title="${PTIP.go}">Queued = blinking</span></div>`;
 }
@@ -93,54 +95,38 @@ function toggleLib(kind) { LIB.open === kind ? closeLib(false) : openLib(kind); 
 addEventListener("resize", () => { if (LIB.open) placeLib(); });
 
 /* ----- kit actions: machine commands (load, save) and slot writes (the rest, undoable) ----- */
-const edits = () => V.kitState === "edited";
-function kitLoad(k) {
-	if (k === V.kit) { if (edits()) kitReload(); else toast(kitName(k) + " is already the current kit."); return; }
-	cmd("kitLoad", { k });	/* the desk asks first when the kit that plays has unsaved edits */
-}
-function kitSaveAs(k) {
-	if (k === V.kit) { saveKit(); return; }
-	const go = () => cmd("kitSaveAs", { k });
-	if (!kitEmpty(k)) { ask(`Overwrite <b>${kitName(k)}</b> with the current kit <b>${kitName(V.kit)}</b>? The machine keeps the overwritten kit in its UNDO KIT. K${nn(k)} becomes the current kit.`, [["Overwrite", "danger", go], ["Cancel", "", () => drawLib(true)]]); return; }
-	go();
-}
-function kitCopy(k) { cmd("kitCopy", { k }); CLIP = { type: "kit", from: k, name: kDisp(k) }; drawLib(true); }
+/* Enter on the current kit reloads it (the plug-in says when there is nothing to reload) */
+function kitLoad(k) { if (k === V.kit) kitReload(); else cmd("kitLoad", { k }); }
+function kitSaveAs(k) { if (k === V.kit) saveKit(); else cmd("kitSaveAs", { k }); }
+function kitCopy(k) { cmd("kitCopy", { k }); }
 function kitPut(k, from, verb) {
 	if (from === k) { toast("That is the same slot."); return; }
-	const send = () => cmd(verb === "Paste" ? "kitPaste" : "kitCopyTo", verb === "Paste" ? { k, force: true } : { from, to: k, force: true });
-	const src = verb === "Paste" ? CLIP.name : kDisp(from), busy = !kitEmpty(k) || k === V.kit;
-	if (busy) { ask(`${verb} <b>K${nn(from)} ${escH(src || "EMPTY")}</b> over <b>${kitName(k)}</b>?${k === V.kit ? " It is the current kit, so it is loaded too" + (edits() ? ": its unsaved edits are lost." : ".") : ""}`, [["Overwrite", "danger", send], ["Cancel", "", () => drawLib(true)]]); return; }
-	send();
+	if (verb === "Paste") cmd("kitPaste", { k }); else cmd("kitCopyTo", { from, to: k });
 }
-function kitPaste(k) { if (CLIP?.type !== "kit") { toast("Copy a kit first."); return; } kitPut(k, CLIP.from, "Paste"); }
+function kitPaste(k) { if (V.clipboard.kit == null) { toast("Copy a kit first."); return; } kitPut(k, V.clipboard.kit, "Paste"); }
 function kitClear(k) {
 	if (kitEmpty(k) && k !== V.kit) { toast(kitName(k) + " is already empty."); return; }
-	ask(`Clear <b>${kitName(k)}</b>? Every track becomes GND-EMPTY.${k === V.kit ? " It is the current kit: it is loaded" + (edits() ? " and the unsaved edits are lost." : ".") : ""}${linked(k).length ? " " + linked(k).length + " pattern(s) link to it." : ""}`,
-		[["Clear kit", "danger", () => cmd("kitClear", { k, force: true })], ["Cancel", "", () => drawLib(true)]]);
+	cmd("kitClear", { k });
 }
-function kitReload() {
-	if (!edits()) { toast(kitName(V.kit) + " matches its saved slot. Nothing to reload."); return; }
-	ask(`Reload <b>${kitName(V.kit)}</b> from the machine? Your edits are lost.`, [["Reload (discard edits)", "danger", () => cmd("reloadKit")], ["Cancel", "", () => drawLib(true)]]);
-}
+function kitReload() { cmd("reloadKit"); }
 function startRename(k) { if (LIB.open !== "kit" || !kitLoaded(k)) return; LIB.sel = k; LIB.renaming = k; drawLib(true); }
+/* the kit that plays is renamed in the working kit (kitName); a stored slot's dump is written back (kitRename) */
 function finishRename(ok) {
 	const k = LIB.renaming; if (k == null) return;
 	const v = ($("#lsin")?.value || "").toUpperCase().replace(KBAD, "").slice(0, 16).trimEnd(); LIB.renaming = null;
-	if (ok && v !== kDisp(k)) cmd("kitRename", { k, name: v });
+	if (ok && v !== kDisp(k)) cmd(k === V.kit ? "kitName" : "kitRename", { k, name: v });
 	drawLib(true);
 }
 /* ----- pattern actions ----- */
-function patCopy(p) { cmd("patCopy", { p }); CLIP = { type: "pat", from: p }; drawLib(true); }
+function patCopy(p) { cmd("patCopy", { p }); }
 function patPut(p, from, verb) {
 	if (from === p) { toast("That is the same slot."); return; }
-	const send = () => cmd(verb === "Paste" ? "patPaste" : "patCopyTo", verb === "Paste" ? { p } : { from, to: p });
-	if (hasPat(p)) { ask(`${verb} <b>${patName(from)}</b> over <b>${patName(p)}</b>? Its notes and locks are replaced.`, [["Overwrite", "danger", send], ["Cancel", "", () => drawLib(true)]]); return; }
-	send();
+	if (verb === "Paste") cmd("patPaste", { p }); else cmd("patCopyTo", { from, to: p });
 }
-function patPaste(p) { if (CLIP?.type !== "pat") { toast("Copy a pattern first."); return; } patPut(p, CLIP.from, "Paste"); }
+function patPaste(p) { if (V.clipboard.pattern == null) { toast("Copy a pattern first."); return; } patPut(p, V.clipboard.pattern, "Paste"); }
 function patClear(p) {
 	if (!hasPat(p)) { toast(patName(p) + " is already empty."); return; }
-	ask(`Clear <b>${patName(p)}</b>? Its notes and locks are removed.`, [["Clear pattern", "danger", () => cmd("patClear", { p })], ["Cancel", "", () => drawLib(true)]]);
+	cmd("patClear", { p });
 }
 function patGo(p, now) { LIB.sel = p; if (p === V.pat && V.queued == null) { drawLib(true); return; } if (now) cmd("select", { p, now: true }); else goPattern(p); drawLib(true); }
 function libAct(a) {
@@ -149,14 +135,8 @@ function libAct(a) {
 		copy: () => kit ? kitCopy(k) : patCopy(k), paste: () => kit ? kitPaste(k) : patPaste(k), clear: () => kit ? kitClear(k) : patClear(k), go: () => patGo(k, false), now: () => patGo(k, true) })[a]?.();
 }
 
-/* The desk asks before a load or write would lose unsaved kit edits on the machine. */
+/* what the library shows is the documents' and the machine's */
 Bridge.onMessage(m => {
-	if (m.type === "ask" && (m.ask === "loadKit" || m.ask === "overwriteKit" || m.ask === "relinkKit")) {
-		const c = Object.assign({}, m.command, { force: true }); delete c.id;
-		const what = m.ask === "loadKit" ? `Load <b>${kitName(c.k)}</b>?` : m.ask === "overwriteKit" ? `Write over <b>${kitName(m.kit)}</b>, the kit that plays?` : `This pattern links another kit, so the machine loads it.`;
-		ask(`${what} Your edits to <b>${kitName(m.kit)}</b> are not saved on the machine and will be lost.`,
-			[["Save kit, then go on", "cream", () => { saveKit(); cmd(c.op, c); }], ["Go on and lose edits", "danger", () => cmd(c.op, c)], ["Cancel", "", () => drawLib(true)]]);
-	}
 	if (LIB.open && (m.type === "doc" || m.type === "machine")) setTimeout(() => drawLib(), 30);
 });
 
