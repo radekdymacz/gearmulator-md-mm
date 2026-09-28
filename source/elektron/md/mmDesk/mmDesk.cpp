@@ -770,6 +770,23 @@ namespace mmDesk
 		const bool wasRunning = m_tel.running;
 		const int wasTempo = m_tel.tempo;
 		m_tel = _t;
+		// Playing = the RAM flag, or the step byte advancing: two single steps forward (or a wrap
+		// to 0) in a row, each within three step times at the tempo (a 3/4X pattern included).
+		// A stop that resets the step to 0 is one move, so it never reads as playing.
+		const double now = m_port.nowMs();
+		const double stepMs = _t.tempo > 0 ? 360000.0 / _t.tempo : 250.0;
+		const double window = std::max(250.0, 3.0 * stepMs);
+		if(_t.valid && _t.step != m_rawStep)
+		{
+			const bool forward = m_rawStep >= 0 && (_t.step == m_rawStep + 1 || (_t.step == 0 && m_rawStep > 0));
+			m_stepMoves = forward && now - m_stepMovedMs < window ? std::min(m_stepMoves + 1, 2) : (forward ? 1 : 0);
+			m_stepMovedMs = now;
+			m_rawStep = _t.step;
+		}
+		if(m_stepMoves >= 2 && now - m_stepMovedMs < window)
+			m_tel.running = m_tel.running || m_tel.valid;
+		else if(now - m_stepMovedMs >= window)
+			m_stepMoves = 0;
 		if(wasRunning != _t.running || wasTempo != _t.tempo)
 			m_machineDirty = true;
 		if(!_t.running && m_queuedPattern >= 0)

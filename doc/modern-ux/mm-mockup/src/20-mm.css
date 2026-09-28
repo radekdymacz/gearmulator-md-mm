@@ -540,7 +540,6 @@ body.engwait #main,body.engwait #rail{pointer-events:none;opacity:.6;transition:
 .ws-seq .lb .base{position:absolute;left:0;right:0;z-index:2;height:0;border-top:1px dashed var(--keytext)!important;opacity:.55}
 .ws-seq .lb .mid{position:absolute;left:0;right:0;z-index:2;top:calc(8px + (100% - 14px)*.5);border-top:1px solid color-mix(in srgb,var(--keytext) 60%,transparent)}
 .ws-seq .lb:not(.none):hover{filter:brightness(1.18)}
-.ws-seq .lb.ph:not(.none){box-shadow:inset 0 0 0 2px color-mix(in srgb,var(--led) 55%,transparent),inset 0 -2px 0 rgba(0,0,0,.35)!important}
 .ws-seq .lb.none{background:var(--key)!important;opacity:.28!important}
 .ws-seq .lbscale{color:var(--print2)}
 /* rail lock block: MD key size (one column of 8, like DATA ENTRY A-H) */
@@ -593,9 +592,14 @@ body.engwait #main,body.engwait #rail{pointer-events:none;opacity:.6;transition:
 .ws-seq .lb .base{border-top:1px dashed var(--ink)!important;opacity:.7}
 .ws-seq .lb .mid{border-top:1px solid color-mix(in srgb,var(--ink) 70%,transparent)!important}
 .ws-seq .lb:not(.none):hover{filter:none;background:color-mix(in srgb,var(--lcd) 86%,var(--ink))!important}
-.ws-seq .lb.ph:not(.none){background:color-mix(in srgb,var(--lcd) 78%,var(--ink))!important;box-shadow:0 0 0 1px var(--bezel),inset 0 0 0 2px var(--ink)!important}
 .ws-seq #lane:active .lb:not(.none):hover{background:color-mix(in srgb,var(--lcd) 80%,var(--ink))!important}
 .ws-seq .lb.none{background:var(--key)!important;opacity:.28!important;box-shadow:none!important}
 /* the trig type as a small state mark at the top of the slot: red = all trigs, green = part / trigless (panel LED colours) */
 .ws-seq .lb:not(.none)::before{content:""!important;display:block!important;position:absolute;left:30%;right:30%;top:2px;height:3px;border-radius:1px;z-index:2;background:var(--led)}
 .ws-seq .lb.k-part::before,.ws-seq .lb.k-trigless::before{background:var(--ledg)}
+/* Soft gliding playhead (as the MD Editor, v45): one ink-tinted column over the roll, the
+   ENV/SLIDE/SWING rows and the lock lane, instead of per-cell boxes in the Sequence */
+#phcol{position:fixed;left:0;top:0;pointer-events:none;z-index:3;opacity:0;border-radius:5px;will-change:transform;
+ background:linear-gradient(to bottom,color-mix(in srgb,var(--ink) 15%,transparent),color-mix(in srgb,var(--ink) 8%,transparent));
+ box-shadow:0 0 0 1px color-mix(in srgb,var(--ink) 55%,transparent),0 0 12px color-mix(in srgb,var(--ink) 25%,transparent);mix-blend-mode:multiply}
+.ws-seq #seq .tc.ph{box-shadow:none!important;outline:none!important}

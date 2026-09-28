@@ -137,7 +137,7 @@ select{background:var(--plate3);border:1px solid var(--rule);border-radius:3px;p
 .lb.none{background:repeating-linear-gradient(135deg,transparent 0 4px,color-mix(in srgb,var(--ink) 14%,transparent) 4px 6px);cursor:not-allowed}
 .lb i{position:absolute;left:3px;right:3px;bottom:0;background:var(--ink);height:var(--h)}
 .lb .base{position:absolute;left:0;right:0;height:0;border-top:1px dashed var(--ink);opacity:.55;bottom:var(--b)}
-.lb.ph{background:color-mix(in srgb,var(--ink) 12%,transparent)}
+.lb.ph:not(.ws-seq .lb){background:color-mix(in srgb,var(--ink) 12%,transparent)}
 .classic .lb i{opacity:.35}
 .warnline{color:var(--rec);font-size:14px;margin:0 0 8px}
 
@@ -1546,7 +1546,6 @@ body.engwait #main,body.engwait #rail{pointer-events:none;opacity:.6;transition:
 .ws-seq .lb .base{position:absolute;left:0;right:0;z-index:2;height:0;border-top:1px dashed var(--keytext)!important;opacity:.55}
 .ws-seq .lb .mid{position:absolute;left:0;right:0;z-index:2;top:calc(8px + (100% - 14px)*.5);border-top:1px solid color-mix(in srgb,var(--keytext) 60%,transparent)}
 .ws-seq .lb:not(.none):hover{filter:brightness(1.18)}
-.ws-seq .lb.ph:not(.none){box-shadow:inset 0 0 0 2px color-mix(in srgb,var(--led) 55%,transparent),inset 0 -2px 0 rgba(0,0,0,.35)!important}
 .ws-seq .lb.none{background:var(--key)!important;opacity:.28!important}
 .ws-seq .lbscale{color:var(--print2)}
 /* rail lock block: MD key size (one column of 8, like DATA ENTRY A-H) */
@@ -1599,12 +1598,17 @@ body.engwait #main,body.engwait #rail{pointer-events:none;opacity:.6;transition:
 .ws-seq .lb .base{border-top:1px dashed var(--ink)!important;opacity:.7}
 .ws-seq .lb .mid{border-top:1px solid color-mix(in srgb,var(--ink) 70%,transparent)!important}
 .ws-seq .lb:not(.none):hover{filter:none;background:color-mix(in srgb,var(--lcd) 86%,var(--ink))!important}
-.ws-seq .lb.ph:not(.none){background:color-mix(in srgb,var(--lcd) 78%,var(--ink))!important;box-shadow:0 0 0 1px var(--bezel),inset 0 0 0 2px var(--ink)!important}
 .ws-seq #lane:active .lb:not(.none):hover{background:color-mix(in srgb,var(--lcd) 80%,var(--ink))!important}
 .ws-seq .lb.none{background:var(--key)!important;opacity:.28!important;box-shadow:none!important}
 /* the trig type as a small state mark at the top of the slot: red = all trigs, green = part / trigless (panel LED colours) */
 .ws-seq .lb:not(.none)::before{content:""!important;display:block!important;position:absolute;left:30%;right:30%;top:2px;height:3px;border-radius:1px;z-index:2;background:var(--led)}
 .ws-seq .lb.k-part::before,.ws-seq .lb.k-trigless::before{background:var(--ledg)}
+/* Soft gliding playhead (as the MD Editor, v45): one ink-tinted column over the roll, the
+   ENV/SLIDE/SWING rows and the lock lane, instead of per-cell boxes in the Sequence */
+#phcol{position:fixed;left:0;top:0;pointer-events:none;z-index:3;opacity:0;border-radius:5px;will-change:transform;
+ background:linear-gradient(to bottom,color-mix(in srgb,var(--ink) 15%,transparent),color-mix(in srgb,var(--ink) 8%,transparent));
+ box-shadow:0 0 0 1px color-mix(in srgb,var(--ink) 55%,transparent),0 0 12px color-mix(in srgb,var(--ink) 25%,transparent);mix-blend-mode:multiply}
+.ws-seq #seq .tc.ph{box-shadow:none!important;outline:none!important}
 </style>
 <div class="app">
   <header class="top">
@@ -2004,7 +2008,7 @@ function drawSlides(){const svg=$("#lanesvg"),lane=$("#lane");if(!svg||!lane)ret
  svg.setAttribute("width",box.width);svg.setAttribute("height",box.height);svg.innerHTML=d}
 function syncScroll(){const a=$("#seqscroll"),b=$("#lanescroll");if(!a||!b)return;a.onscroll=()=>{b.scrollLeft=a.scrollLeft};b.onscroll=()=>{a.scrollLeft=b.scrollLeft}}
 function refreshRow(t){redraw();return;const gate={},am=ampSteps(t);noteSpans(t).forEach(sp=>{for(let k=sp.s;k<sp.e;k++)gate[k]=(k===sp.s?(sp.e-sp.s>1?"gs":"g1"):k===sp.e-1?"ge":"gm")+(k-sp.s>=am?" gd":"")});$$(`.mst[data-t="${t}"]`).forEach(b=>{const s=+b.dataset.s,st=trk(t).steps[s];b.className=stepCls(t,s);b.setAttribute("aria-pressed",!!st);b.title=stepTitle(t,s,st);b.innerHTML=`<span class="nt">${stepText(t,s,st)}</span>${gate[s]?`<span class="gt ${gate[s]}"></span>`:""}`})}
-function rerenderSeq(){const sl=$("#seqscroll")?.scrollLeft||0;renderRail();renderSeq();const sc=$("#seqscroll");if(sc){sc.scrollLeft=sl;const l=$("#lanescroll");if(l)l.scrollLeft=sl}enhanceSelects($("#main"))}
+function rerenderSeq(){const sl=$("#seqscroll")?.scrollLeft||0;renderRail();renderSeq();const sc=$("#seqscroll");if(sc){sc.scrollLeft=sl;const l=$("#lanescroll");if(l)l.scrollLeft=sl}enhanceSelects($("#main"));movePH(false)}
 function clickStep(t,s,e){const tr=trk(t),st=tr.steps[s];
  if(e.shiftKey){tr.steps[s]=st?.off?null:{off:1};if(!st?.off)clearStepLocks(t,s)}
  else if(e.altKey&&!isMidiT(t)){if(!st||st.off)tr.steps[s]={n:[lastNote(t,s)],a:0,f:0,l:0};else{const k=stepKind(st);Object.assign(st,k==="full"?{a:0,f:0,l:0}:{a:1,f:1,l:1})}}
@@ -2038,7 +2042,7 @@ ED.lane={draw(g,W,H,c){const G=laneGeom(c),t=G.t,tr=trk(t),ink=cssv("--ink");if(
    if(n%12===0){g.fillStyle=inkA(.3);g.fillRect(0,y+G.rh-.5,G.lastX,1)}
    g.fillStyle=blk?ink:inkA(.12);g.fillRect(G.lastX+6,y+.5,blk?14:22,G.rh-1);if(n%12===0||n===G.hi){g.fillStyle=ink;g.font="9px Silkscreen, monospace";g.fillText(noteName(n),G.lastX+30,y+G.rh-2)}}
   else{g.fillStyle=ink;g.font="8px Silkscreen, monospace";const ns=tr.steps.slice(0,S.len).flatMap(x=>x?.n||[]);if(ns.length){const mn=Math.min(...ns),mx=Math.max(...ns);g.fillText(mn===mx?noteName(mn).replace("-",""):noteName(mn).replace("-","")+"-"+noteName(mx).replace("-",""),G.lastX+4,11)}const st=rowStatus(t);if(st)g.fillText(st,G.lastX+4,H-5)}
-  G.vs.forEach(s=>{const x=G.col[s];if(!x)return;if(s%4===0){g.fillStyle=inkA(G.big?.1:.07);g.fillRect(x.x0,0,x.x1-x.x0,G.H)}if(S.playing&&s===S.step){g.fillStyle=inkA(.2);g.fillRect(x.x0,0,x.x1-x.x0,H)}});
+  G.vs.forEach(s=>{const x=G.col[s];if(!x)return;if(s%4===0){g.fillStyle=inkA(G.big?.1:.07);g.fillRect(x.x0,0,x.x1-x.x0,G.H)}if(S.playing&&s===S.step&&!G.big){g.fillStyle=inkA(.2);g.fillRect(x.x0,0,x.x1-x.x0,H)}});
   if(G.big&&S.ghost)side().forEach(o=>{if(o===t||(o<6&&(isFx(trk(o).m)||trk(o).m==="DPRO-BBOX")))return;noteSpans(o).forEach(sp=>{const r=spanX(G,sp);if(!r||sp.n[0]<G.lo||sp.n[0]>G.hi)return;g.fillStyle=inkA(.14);g.fillRect(r[0]+2,G.y(sp.n[0])+3,r[1]-r[0]-4,G.rh-6)})});
   noteSpans(t).forEach(sp=>{const r=spanX(G,sp);if(!r)return;const[x0,x1]=r,w=x1-x0,c0=G.col[sp.s];const va=midi?.4+.6*velOf(t,sp.s)/127:1;
    sp.n.forEach((n,k)=>{if(n<G.lo||n>G.hi)return;const y=G.y(n)+(G.big?1:.5),h=G.big?G.rh-2:Math.max(3,G.rh-1);
@@ -2891,20 +2895,36 @@ let clock=null;
 function tick(){const prev=S.step;S.step=(S.step+1)%S.len;ctlTick();if(S.step===0&&S.queued!=null){applyPattern(S.queued);return}
  const pp=Math.floor(S.step/16);$$(".pl").forEach(b=>b.classList.toggle("play",+b.dataset.plp===pp&&S.playing));
  if(S.follow&&S.ws==="seq"&&!S.viewAll&&pp!==S.page&&!laneDraw){S.page=pp;render()}
- $("#tempoled").classList.toggle("on",S.step%4===0);setPos();
+ $("#tempoled").classList.toggle("on",S.step%4===0);setPos();queueMicrotask(movePH);
  $$(`.mst[data-s="${prev}"],.lb[data-s="${prev}"],.tc[data-s="${prev}"]`).forEach(c=>c.classList.remove("ph"));$$(`.mst[data-s="${S.step}"],.lb[data-s="${S.step}"],.tc[data-s="${S.step}"]`).forEach(c=>c.classList.add("ph"));
  if(S.ws==="seq")redraw();
  if(S.ws==="perform"){const act=[0,1,2,3,4,5].filter(i=>{const st=S.tracks[i].steps[S.step];return st&&!st.off&&st.a&&audible(i)&&(S.mode!=="poly"||i===asgT())});flashTracks(act)}}
 function stepMs(){const m={"1X":1,"2X":2,"3/4X":.75,"3/2X":1.5}[S.mult];return 60000/S.bpm/4/m}
 function restartClock(){clearInterval(clock);clock=setInterval(tick,stepMs())}
+/* Soft playhead (as the MD Editor, v45): one ink-tinted column over the roll, the ENV/SLIDE/SWING
+   rows and the lock lane that glides from step to step. It jumps without animation on a wrap, a
+   page flip or a scroll, and fades out on stop. It lives on <body> in viewport coordinates, so the
+   roll's and the lane's scrollers both carry it (movePH(false) on scroll and resize). */
+let phX=null;
+function movePH(glide=true){let ph=document.getElementById("phcol");
+ const seq=$("#seq"),sc=$("#seqscroll"),col=S.playing&&S.step>=0&&S.ws==="seq"&&seq&&sc?seq.querySelector(`.ruler .rul[data-s="${S.step}"]`):null;
+ if(!col){if(ph)ph.style.opacity="0";phX=null;return}
+ if(!ph){ph=document.createElement("div");ph.id="phcol";ph.setAttribute("aria-hidden","true");document.body.appendChild(ph);phX=null}
+ const r=col.getBoundingClientRect(),v=sc.getBoundingClientRect(),top=(seq.querySelector(".nlane.big")||col).getBoundingClientRect().top,
+  lane=$("#lane"),bot=(lane&&lane.getClientRects().length?lane:$("#tlanes")||seq).getBoundingClientRect().bottom;
+ const jump=!glide||phX==null||r.left<phX;
+ ph.style.transition=jump?"opacity .15s":`transform ${Math.round(Math.min(stepMs()*.85,140))}ms cubic-bezier(.2,.7,.3,1),opacity .15s`;
+ ph.style.width=r.width+"px";ph.style.top=(top-3)+"px";ph.style.height=(bot-top+6)+"px";ph.style.transform=`translateX(${r.left}px)`;
+ ph.style.opacity=r.right>v.left+1&&r.left<v.right-1?"1":"0";phX=r.left}
+addEventListener("scroll",()=>{if(S.playing)movePH(false)},true);addEventListener("resize",()=>{if(S.playing)movePH(false)});
 function setPos(){$("#pos").textContent=S.playing&&S.step>=0?String(Math.floor(S.step/16)+1).padStart(2,"0")+"."+String(S.step%16+1).padStart(2,"0"):"--.--"}
-function togglePlay(){if(!S.playing&&S.eng&&!engReady())return;S.playing=!S.playing;clearInterval(clock);$$(".pl").forEach(b=>b.classList.remove("play"));$("#tempoled").classList.remove("on");$$(".ph").forEach(c=>c.classList.remove("ph"));if(S.playing){S.step=-1;tick();restartClock()}else S.queued=null;setPos();renderTop();redraw()}
+function togglePlay(){if(!S.playing&&S.eng&&!engReady())return;S.playing=!S.playing;clearInterval(clock);$$(".pl").forEach(b=>b.classList.remove("play"));$("#tempoled").classList.remove("on");$$(".ph").forEach(c=>c.classList.remove("ph"));if(S.playing){S.step=-1;tick();restartClock()}else S.queued=null;setPos();renderTop();redraw();movePH(false)}
 
 /* ===== Render ===== */
 function render(){closePicker();closeK();const sl=$("#seqscroll")?.scrollLeft||0;renderTop();{const m=(S.ws==="seq"||S.ws==="sound")&&S.side==="midi";if(!m&&S.sel>5)S.sel-=6;if(m&&S.sel<6)S.sel+=6}const full=["mix","perform","song","control"].includes(S.ws);
  $("#body").className="body "+(full?"full ":"")+"ws-"+S.ws;$("#rail").hidden=full;if(!full)renderRail();renderSub();
  ({control:renderControl,seq:renderSeq,sound:renderSound,mix:renderMix,perform:renderPerform,song:renderSong})[S.ws]();
- const sc=$("#seqscroll");if(sc){sc.scrollLeft=sl;const l=$("#lanescroll");if(l)l.scrollLeft=sl}enhanceSelects($("#main"));if(S.learn)document.body.classList.add("learn")}
+ const sc=$("#seqscroll");if(sc){sc.scrollLeft=sl;const l=$("#lanescroll");if(l)l.scrollLeft=sl}enhanceSelects($("#main"));if(S.learn)document.body.classList.add("learn");movePH(false)}
 function setPlate(v){S.plate=v;document.documentElement.dataset.plate=v;try{localStorage.setItem("mmeditor.plate",v)}catch(_){}
  if(v==="mk1"){const bad=S.tracks.filter(t=>MACH[t.m].mk2);if(bad.length)toast(`MKI: ${bad.map(t=>t.m).join(", ")} needs a MKII. It would load as nothing on a MKI.`);else toast("MKI: no user waveforms, no DPRO-DDRW or DPRO-DENS. The plate looks the same.")}
  if(v==="mk2")toast("MKII: the same silver plate, plus user waveforms and the DigiPRO draw machines.");

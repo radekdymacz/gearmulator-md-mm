@@ -248,10 +248,69 @@ namespace
 	}
 }
 
+// "playing" follows the step byte when the RAM running flag stays 0 (as in the plug-in).
+void playingFromSteps()
+{
+	std::printf("playing from the step byte\n");
+	double now = 0;
+	std::vector<Value> page;
+	mmDesk::Desk::Port port;
+	port.sendSysex = [](const Bytes&) {};
+	port.sendParam = [](uint8_t, uint8_t, uint8_t, uint8_t) {};
+	port.sendNrpn = [](uint8_t, uint8_t, uint8_t) {};
+	port.pressKeys = [](const std::vector<mmDesk::Key>&) { return true; };
+	port.toPage = [&](const Value& _v) { page.push_back(_v); };
+	port.nowMs = [&] { return now; };
+	mmDesk::Desk d(port);
+	d.onPageMessage(*ed::json::parse(R"({"op":"ready"})"));
+	d.setEngine(mmDesk::Desk::Engine::Ready);
+	const auto playing = [&]
+	{
+		for(auto it = page.rbegin(); it != page.rend(); ++it)
+			if(it->find("type")->asString() == "tel")
+				return it->find("playing")->asBool();
+		return false;
+	};
+	const auto feed = [&](const int _step, const double _ms)
+	{
+		mmDesk::Telemetry t = screen(mmDesk::g_screenMain);
+		t.step = _step;
+		t.tempo = 120 * 24;	// a 16th = 125 ms
+		for(double e = 0; e < _ms; e += 10)
+		{
+			now += 10;
+			d.onTelemetry(t);
+			d.tick();
+		}
+	};
+	feed(5, 500);
+	feed(0, 600);
+	check(!playing(), "a stop that resets the step is not playing");
+	feed(1, 130);
+	check(!playing(), "one step forward is not playing yet");
+	feed(2, 130);
+	check(playing(), "steps advancing: playing, with the running flag 0");
+	feed(3, 400);
+	d.tick();
+	for(double e = 0; e < 300; e += 10) { now += 10; d.tick(); }
+	feed(3, 60);
+	bool machineStopped = false;
+	for(auto it = page.rbegin(); it != page.rend(); ++it)
+		if(it->find("type")->asString() == "machine")
+		{
+			const auto* doc = it->find("doc");
+			const auto* p = doc ? doc->find("playing") : nullptr;
+			machineStopped = p && !p->asBool();
+			break;
+		}
+	check(machineStopped, "the step stands still for three step times: stopped");
+}
+
 int main()
 {
 	recvSession();
 	desk();
+	playingFromSteps();
 	std::printf("%s (%d failures)\n", g_failures ? "FAIL" : "PASS", g_failures);
 	return g_failures ? 1 : 0;
 }

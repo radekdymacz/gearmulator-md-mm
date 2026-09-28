@@ -128,7 +128,7 @@ select{background:var(--plate3);border:1px solid var(--rule);border-radius:3px;p
 .lb.none{background:repeating-linear-gradient(135deg,transparent 0 4px,color-mix(in srgb,var(--ink) 14%,transparent) 4px 6px);cursor:not-allowed}
 .lb i{position:absolute;left:3px;right:3px;bottom:0;background:var(--ink);height:var(--h)}
 .lb .base{position:absolute;left:0;right:0;height:0;border-top:1px dashed var(--ink);opacity:.55;bottom:var(--b)}
-.lb.ph{background:color-mix(in srgb,var(--ink) 12%,transparent)}
+.lb.ph:not(.ws-seq .lb){background:color-mix(in srgb,var(--ink) 12%,transparent)}
 .classic .lb i{opacity:.35}
 .warnline{color:var(--rec);font-size:14px;margin:0 0 8px}
 

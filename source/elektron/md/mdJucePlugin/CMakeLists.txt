@@ -130,6 +130,12 @@ if(APPLE)
 					VERBATIM
 				)
 			endif()
+			# Finder and the Dock cache a bundle's icon by its folder date: touch the bundle so
+			# a rebuilt app with a new icon shows it (P5: the MD app showed none).
+			add_custom_command(TARGET ${plugin_target} POST_BUILD
+				COMMAND /usr/bin/touch "$<TARGET_BUNDLE_DIR:${plugin_target}>"
+				VERBATIM
+			)
 			add_custom_command(TARGET ${plugin_target} POST_BUILD
 				COMMAND /usr/bin/codesign --force --deep --sign -
 					"$<TARGET_BUNDLE_DIR:${plugin_target}>"

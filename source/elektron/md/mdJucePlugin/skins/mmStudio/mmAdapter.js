@@ -40,7 +40,13 @@
 	const log = t => Bridge.log(t);
 	/* The page's first render, logged so a blank page fails the self-tests (P5). */
 	setTimeout(() => { const a = document.querySelector(".app"), r = a ? a.getBoundingClientRect() : { width: 0, height: 0 };
-		log(`first render: ${document.querySelectorAll("#main *").length} elements in #main, page ${Math.round(r.width)} x ${Math.round(r.height)}, window ${innerWidth} x ${innerHeight}`); }, 1500);
+		log(`first render: ${document.querySelectorAll("#main *").length} elements in #main, page ${Math.round(r.width)} x ${Math.round(r.height)}, window ${innerWidth} x ${innerHeight}`);
+		/* The LCD transport keys must be square and side by side (they collapsed to slivers once). */
+		const rb = $("#rec")?.getBoundingClientRect(), pb = $("#play")?.getBoundingClientRect();
+		const ok = rb && pb && Math.abs(rb.width - rb.height) < 1 && Math.abs(pb.width - pb.height) < 1 && rb.width > 30 && Math.abs(rb.top - pb.top) < 1 && pb.left > rb.right;
+		log(`transport keys: REC ${rb ? Math.round(rb.width) + "x" + Math.round(rb.height) : "?"}, PLAY ${pb ? Math.round(pb.width) + "x" + Math.round(pb.height) : "?"}: ${ok ? "ok square, side by side" : "FAIL"}`);
+		const mk = getComputedStyle(document.querySelector(".lcdgroup"), "::after"), top = document.querySelector(".top").getBoundingClientRect(), g = document.querySelector(".lcdgroup").getBoundingClientRect();
+		log(`MKII print: bottom ${mk.bottom}, LCD group bottom ${Math.round(g.bottom)}, header bottom ${Math.round(top.bottom)}`); }, 1500);
 
 	/* ---------------- start empty, not with the mockup's example ---------------- */
 	const { applyKit, applyPat, emptyPat, clearedKit, captureKit, capturePat, setKitState, render, renderTop, drawLib, toast, ask, setEng } =
@@ -91,6 +97,7 @@
 		if (S.follow && S.ws === "seq" && !S.viewAll && pp !== S.page && !busy()) { S.page = pp; render(); }
 		$("#tempoled")?.classList.toggle("on", step % 4 === 0);
 		MOCK("setPos")();
+		queueMicrotask(() => MOCK("movePH")());
 		$$(`.mst[data-s="${prev}"],.lb[data-s="${prev}"],.tc[data-s="${prev}"]`).forEach(c => c.classList.remove("ph"));
 		$$(`.mst[data-s="${step}"],.lb[data-s="${step}"],.tc[data-s="${step}"]`).forEach(c => c.classList.add("ph"));
 		if (S.ws === "seq") MOCK("redraw")();
@@ -111,6 +118,7 @@
 		MOCK("setPos")();
 		renderTop();
 		MOCK("redraw")();
+		MOCK("movePH")(false);
 	}
 
 	/* ---------------- patterns: the machine switches ---------------- */
@@ -606,7 +614,12 @@
 	});
 
 	/* ---------------- messages from the plug-in ---------------- */
+	addEventListener("error", e => log("page error: " + e.message + " at " + (e.filename || "").split("/").pop() + ":" + e.lineno));
 	Bridge.onMessage(m => {
+		try { onMessage(m); } catch (e) { log("page error in " + m.type + ": " + e.message + " " + (e.stack || "").split("\n")[0]); }
+		selfTestSeen(m);
+	});
+	function onMessage(m) {
 		if (m.type === "doc") onDoc(m);
 		else if (m.type === "machine") onMachine(m.doc);
 		else if (m.type === "tel") { if (m.playing !== S.playing) setPlaying(m.playing); if (S.playing) showStep(m.step); }
@@ -614,8 +627,7 @@
 		else if (m.type === "catalogue") FW.cat = m.doc;
 		else if (m.type === "learn") onLearn(m.doc);
 		else if (m.type === "result" && !m.ok && m.errors?.length && m.op !== "set") toast(m.errors[0]);
-		selfTestSeen(m);
-	});
+	}
 	setInterval(() => {
 		applyPending();
 		if (libDirty && LIB.open && !busy()) { libDirty = false; drawLib(); }
@@ -707,11 +719,28 @@
 			window.queuePattern(p);
 			await waitFor(m => m.type === "machine" && m.doc.pattern.current === p);
 		});
-		await check("play and stop", async () => {
+		await check("play and stop, playhead and POSITION follow the machine", async () => {
+			let stage = "play";
+			const W = (t, ms) => waitFor(t, ms).catch(() => { throw new Error("timeout at " + stage + ", step " + S.step + ", playing " + S.playing); });
+			MOCK("goWs")("seq");
+			await sleep(300);
 			window.togglePlay();
-			await waitFor(m => m.type === "tel" && m.playing && m.step > 0);
+			await W(m => m.type === "machine" && m.doc.playing, 4000);
+			stage = "tel playing";
+			await W(m => m.type === "tel" && m.playing && m.step > 0, 4000);
+			/* the soft playhead column glides with the machine's step (RAM telemetry), POSITION too */
+			const at = () => { const ph = $("#phcol"); return { x: ph ? new DOMMatrix(getComputedStyle(ph).transform).m41 : null, o: ph ? +ph.style.opacity : 0, h: ph ? ph.offsetHeight : 0, pos: $("#pos").textContent, step: S.step }; };
+			await sleep(150); const a = at(); stage = "next step";
+			await W(m => m.type === "tel" && m.playing && m.step > a.step);
+			await sleep(250); const b = at(); stage = "stop";
 			window.togglePlay();
-			await waitFor(m => m.type === "machine" && !m.doc.playing);
+			await W(m => m.type === "machine" && !m.doc.playing);
+			await sleep(300); const c = at();
+			const lane = $("#lane")?.getBoundingClientRect(), roll = $("#seq .nlane.big")?.getBoundingClientRect(), ph = $("#phcol")?.getBoundingClientRect();
+			const spans = lane && roll && ph && ph.top <= roll.top && ph.bottom >= lane.bottom;
+			const note = `x ${Math.round(a.x)} -> ${Math.round(b.x)}, step ${a.step} -> ${b.step}, POSITION ${a.pos} -> ${b.pos} -> ${c.pos}, column ${a.h} px over roll..lane ${spans ? "yes" : "no"}, opacity after stop ${c.o}`;
+			if (a.x == null || !(b.x > a.x) || a.o !== 1 || b.o !== 1 || !spans || a.pos === b.pos || c.pos !== "--.--" || c.o !== 0) throw new Error(note);
+			return note;
 		});
 		await check("tempo out and read back (0x61, RAM)", async () => {
 			const t0 = S.bpm, t = t0 === 133 ? 127 : 133;

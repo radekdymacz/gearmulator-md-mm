@@ -88,6 +88,15 @@ tail = '''
 [data-na]{opacity:.42!important;cursor:not-allowed!important}
 [data-na] [data-na]{opacity:1!important}
 .lcdeng .led:not(.on){opacity:.35}
+/* LCD transport keys (as the MD skin, P3/P5): an explicit square tied to the LCD height. The
+   mockup's aspect-ratio on a stretched height collapsed to slivers in the plug-in's WebKit, so no
+   aspect-ratio and no stretch here. */
+.top{--ltk:calc(var(--lcdh) - 30px)}
+.lcdpanel .trf{display:flex!important;flex-direction:column!important;justify-content:flex-start!important;align-items:flex-start!important;gap:3px!important}
+.lcdt{display:flex!important;flex-direction:row!important;flex-wrap:nowrap!important;align-items:flex-start!important;align-self:flex-start!important;gap:5px!important}
+.lcdt .lt{flex:0 0 var(--ltk)!important;width:var(--ltk)!important;height:var(--ltk)!important;min-width:var(--ltk)!important;min-height:var(--ltk)!important;aspect-ratio:auto!important;box-sizing:border-box!important;display:flex!important;align-items:center!important;justify-content:center!important;padding:0!important}
+/* The MKII print sits inside the header, above its bottom rule. */
+:root[data-plate="mk2"] .lcdgroup::after{bottom:-7px!important}
 '''
 out_css = head + css.strip('\n') + '\n' + tail
 

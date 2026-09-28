@@ -141,6 +141,11 @@ namespace mmDesk
 		bool m_backgroundQueued = false;
 
 		Telemetry m_tel;
+		// The step byte moving: in the plug-in the RAM running flag (0x26b46e) can stay 0 while
+		// the sequencer plays, so "playing" is the flag or the step advancing (onTelemetry).
+		int m_rawStep = -1;
+		int m_stepMoves = 0;
+		double m_stepMovedMs = -1e9;
 		Engine m_engine = Engine::Missing;
 		bool m_ready = false;
 		bool m_pageReady = false;
