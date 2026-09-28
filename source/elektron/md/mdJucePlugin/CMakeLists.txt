@@ -55,6 +55,9 @@ set(SOURCES
 	skins/mmStudio/mmConvert.js
 	skins/mmStudio/mmAdapter.js
 	skins/mmStudio/mmConvertTest.js
+	skins/mmStudio/mmSelfTest.js
+	skins/mdStudio/mdDeskSelfTest.js
+	skins/mdStudio/mdDeskModelTest.js
 	skins/mdStudio/mdDeskLive.js
 	skins/mdStudio/mdDeskLibrary.js
 	skins/mdStudio/mdDeskKeys.js
@@ -65,9 +68,16 @@ set(SOURCES
 	mdAudioMidiLink.cpp mdAudioMidiLink.h
 )
 
-# P6: the editors' diagnostics log (web view, window chrome, the session's state) is an observer
-# of the page view; release packages turn it off and it is not compiled.
-option(gearmulator_MDMM_DIAGNOSTICS "The Machinedrum/Monomachine Editors' diagnostics log" ON)
+# P6: the editors' diagnostics (the log of the web view, the window chrome and the session's
+# state, and the pages' self-tests: mdDeskSelfTest.js, mmSelfTest.js) observe the editors. Off by
+# default in a Release build, so a release package has none of it; a test or development build
+# turns it on (-Dgearmulator_MDMM_DIAGNOSTICS=ON).
+if(CMAKE_BUILD_TYPE STREQUAL "Release" OR CMAKE_BUILD_TYPE STREQUAL "MinSizeRel")
+	set(gearmulator_MDMM_DIAGNOSTICS_DEFAULT OFF)
+else()
+	set(gearmulator_MDMM_DIAGNOSTICS_DEFAULT ON)
+endif()
+option(gearmulator_MDMM_DIAGNOSTICS "The Machinedrum/Monomachine Editors' diagnostics log and self-tests" ${gearmulator_MDMM_DIAGNOSTICS_DEFAULT})
 if(gearmulator_MDMM_DIAGNOSTICS)
 	list(APPEND SOURCES mdDiagnostics.cpp mdDiagnostics.h)
 endif()
@@ -91,6 +101,12 @@ file(GLOB MM_SKIN_ASSETS CONFIGURE_DEPENDS
 	"skins/mmStudio/mmMockup.js" "skins/mmStudio/mmConvert.js" "skins/mmStudio/mmAdapter.js"
 	# shared with the Machinedrum Editor: the page bridge and the OFL fonts
 	"skins/mdStudio/mdDeskBridge.js" "skins/mdStudio/fonts/*.ttf")
+# The tests are not the page: node tests never ship, the self-tests only with the diagnostics.
+list(FILTER MD_SKIN_ASSETS EXCLUDE REGEX "Test\\.js$")
+if(gearmulator_MDMM_DIAGNOSTICS)
+	list(APPEND MD_SKIN_ASSETS "skins/mdStudio/mdDeskSelfTest.js")
+	list(APPEND MM_SKIN_ASSETS "skins/mmStudio/mmSelfTest.js")
+endif()
 
 juce_add_binary_data(mdJucePlugin_BinaryData SOURCES
 	${COMMON_ASSETS} "tus_settings_gui_Machinedrum.rml"

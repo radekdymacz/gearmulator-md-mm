@@ -152,10 +152,13 @@ namespace mdJucePlugin
 			+ "-" + juce::String::toHexString(juce::Random::getSystemRandom().nextInt64()) + ".html");
 		m_file = juce::File::getSpecialLocation(juce::File::tempDirectory).getChildFile("gearmulator-" + name);
 		m_file.replaceWithText(bundle());
+#if MDMM_DIAGNOSTICS
+		// A self-test is asked for in the environment; its script is only in diagnostics builds.
 		const auto kind = juce::SystemStats::getEnvironmentVariable(juce::String(m_spec.selfTestVariable), {});
 		for(const auto& t : m_spec.selfTests)
 			if(kind.isNotEmpty() && kind.startsWith(juce::String(t)))
 				m_selfTest = kind;
+#endif
 		const auto url = m_selfTest.isNotEmpty() ? juce::URL(m_file).withParameter("selftest", m_selfTest) : juce::URL(m_file);
 		m_web->goToURL(url.toString(true));
 		log("page loading, selftest=" + juce::String(m_selfTest.isNotEmpty() ? 1 : 0) + ", "

@@ -108,9 +108,3 @@ Bridge.onMessage(m => {
 Keys.bind({ keys: [","], group: "Anywhere", does: "AUDIO / MIDI settings (also in the engine menu)" });
 showAudioEntry();
 Bridge.send({ op: "audio" });
-/* GEARMULATOR_MDSTUDIO_SELFTEST=p6audio: the panel's self-test once the engine is ready. */
-if (/[?&]selftest=p6audio/.test(location.search)) (async () => {
-	while ($(".lcdpanel").classList.contains("engwait")) await new Promise(r => setTimeout(r, 200));
-	await new Promise(r => setTimeout(r, 3000));
-	await audioSelfTest({ log: t => Bridge.log("AUDIO: " + t), play: on => { if (on !== V.playing) cmd(on ? "play" : "stop"); }, step: () => S.step, playing: () => V.playing });
-})();

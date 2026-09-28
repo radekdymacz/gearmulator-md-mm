@@ -37,8 +37,9 @@ namespace mdJucePlugin
 			config.saveIfNeeded();
 		}
 
+#if MDMM_DIAGNOSTICS
 		// GEARMULATOR_MDSTUDIO_SELFTEST=p5skin: switch skins live through the same call the
-		// Editor > Skins menu makes, and log the editor each time (P5).
+		// Editor > Skins menu makes, and log the editor each time (P5). Diagnostics builds only.
 		if(juce::SystemStats::getEnvironmentVariable("GEARMULATOR_MDSTUDIO_SELFTEST", {}) == "p5skin")
 		{
 			const auto logLine = [](const juce::String& _l)
@@ -63,6 +64,7 @@ namespace mdJucePlugin
 				juce::Timer::callAfterDelay(6000, [this, report] { report("re-made once"); loadSkin(getIncludedSkins()[0]);
 					juce::Timer::callAfterDelay(8000, [report] { report("re-made twice"); }); }); });
 		}
+#endif
 
 		const auto configuredSkin = readSkinFromConfig();
 		if(configuredSkin.isValid() && configuredSkin.folder.empty() && isSkinCompatible(_processor.getModel(),

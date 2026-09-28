@@ -49,11 +49,9 @@ function cmd(op, args = {}, key) {
 	Overlay.sent(Bridge.send(msg, { key, onResult: r => onResult(r) }));
 	tx();
 }
-const SELFTEST = /[?&]selftest=(1|p4)/.test(location.search);
 function onResult(r) {
 	/* its optimistic edits leave the overlay; a refused one is shown as the documents have it */
 	if (Overlay.answered(r.id) && !r.ok) scheduleRender();
-	if (SELFTEST && (r.op === "record" || r.op === "recTrig" || r.op === "play" || r.op === "stop" || !r.ok)) Bridge.log("result " + r.op + " ok " + r.ok + " " + (r.errors || []).join(";") + " " + (r.note || ""));
 	if (!r.ok && r.errors && r.errors.length) { toast(r.errors[0]); showLastError(r.errors); }
 	else if (r.note) toast(r.note);
 }
@@ -219,7 +217,6 @@ function renderEngineMenu(sel) {
 	}
 	if (V.caps.engine) sel.value = V.caps.engine;
 }
-let lastEng = "";
 function renderEngine() {
 	const btn = $(".lcdeng"), led = $("#engled"); if (!btn || !led) return;
 	const [txt, mode, about] = engineLabel(), ready = V.lifecycle === "ready";
@@ -233,7 +230,6 @@ function renderEngine() {
 	/* live recording needs what the engine may not have (machine.capabilities.liveRecord, with its reason) */
 	const rec = document.getElementById("rec");
 	if (rec && V.caps.liveRecord === false) { rec.disabled = true; rec.title = V.caps.reasons?.liveRecord || rec.title; }
-	if (V.firmware !== lastEng) { if (typeof SELFTEST !== "undefined" && SELFTEST) Bridge.log(`engine: ${txt} at ${Math.round(performance.now())} ms`); lastEng = V.firmware; }
 }
 document.addEventListener("change", e => {
 	if (e.target.id !== "engsel") return;
@@ -1298,123 +1294,3 @@ Keys.bind({ keys: ["ArrowLeft", "ArrowRight"], group: "Values", does: "A focused
 new ResizeObserver(() => redraw()).observe(document.body);
 render();
 Bridge.ready();
-
-/* GEARMULATOR_MDSTUDIO_SELFTEST=1 (?selftest=1): edit a trig, a lock and a kit value through the same
-   commands a click sends, and log what the firmware read back and how long it took. Times are taken
-   when the document arrives (message handler), so page timer throttling does not inflate them. */
-if (/[?&]selftest=1/.test(location.search)) (async () => {
-	const sleep = ms => new Promise(r => setTimeout(r, ms));
-	let waiter = null;
-	Bridge.onMessage(m => {
-		if (m.type === "error") Bridge.log("selftest: page error message: " + m.message);
-		if (waiter && waiter.f()) { const w = waiter; waiter = null; w.done(performance.now()); }
-	});
-	const until = (f, ms) => new Promise(done => {
-		if (f()) { done(performance.now()); return; }
-		waiter = { f, done };
-		setTimeout(() => { if (waiter && waiter.done === done) { waiter = null; done(-1); } }, ms);
-	});
-	const log = t => Bridge.log("selftest: " + t);
-	const pat = () => Docs.patterns[currentPatternSlot()], kit = () => Docs.kits[currentKitSlot()];
-	const idle = () => !(machineState().desk || {}).tx;
-	const status = () => `loaded ${!!(pat() && kit())} firmware ${machineState().desk?.firmware} pattern ${currentPatternSlot()} kit ${currentKitSlot()} docs ${Object.keys(Docs.patterns).length}/${Object.keys(Docs.kits).length}/${Object.keys(Docs.songs).length}`;
-	if (await until(() => pat() && kit() && machineState().desk?.firmware === "ready", 60000) < 0) { log("FAIL: the machine did not load: " + status()); return; }
-	log("loaded: " + status() + " visibility " + document.visibilityState);
-	await sleep(1500);
-	const p = currentPatternSlot(), k = currentKitSlot(), has = () => pat().tracks[0].trigs.includes(8);
-	const ms = (t0, t1) => t1 < 0 ? "TIMEOUT" : (t1 - t0).toFixed(1) + " ms";
-	for (const round of [1, 2, 3, 4, 5]) {
-		const before = has();
-		const t0 = performance.now();
-		const cell = document.querySelector('.st[data-t="0"][data-s="8"]');
-		if (cell) cell.click(); else cmd("trig", { p, t: 0, s: 8, on: !before });	// the grid's own click handler
-		const shown = await until(() => has() !== before, 3000);
-		const confirmed = await until(() => has() !== before && idle(), 3000);
-		log(`trig round ${round}: ${confirmed >= 0 ? "ok" : "FAIL"} click -> view ${ms(t0, shown)}, -> confirmed read-back ${ms(t0, confirmed)} (desk ${Math.round(machineState().desk.roundTripMs)} ms)`);
-		await sleep(400);
-	}
-	if (!has()) { cmd("trig", { p, t: 0, s: 8, on: true }); await until(() => has() && idle(), 3000); }
-	let t0 = performance.now();
-	cmd("lock", { p, t: 0, i: 12, s: 8, v: 99 });
-	let t1 = await until(() => pat().locks.some(l => l.track === 0 && l.param === 12 && l.steps.some(([s, v]) => s === 8 && v === 99)) && idle(), 3000);
-	log(`lock: ${t1 >= 0 ? "ok" : "FAIL"} confirmed ${ms(t0, t1)}`);
-	cmd("lock", { p, t: 0, i: 12, s: 8, v: null }); await until(idle, 3000);
-	const cells = [...document.querySelectorAll(".st.on")].length;
-	log(`page shows ${cells} lit trigs on this page, LCD "${$("#pat").textContent} ${$("#kitname").textContent} ${$("#lcd2").textContent}", lock meter ${$("#lockn").textContent}`);
-	/* The kit value through the Sound workspace: a wheel step on the DIST control. */
-	S.sel = 0; S.ws = "sound"; render();
-	const old = kit().tracks[0].routing[0];
-	const knob = document.querySelector('.pc[data-g="rt"][data-n="DIST"]');
-	t0 = performance.now();
-	for (let n = 0; n < 13; ++n) knob.dispatchEvent(new WheelEvent("wheel", { deltaY: old + 13 > 127 ? 1 : -1, bubbles: true, cancelable: true }));
-	const want = old + 13 > 127 ? old - 13 : old + 13;
-	log(`Sound: DIST control shows ${knob.querySelector("b").textContent}`);
-	t1 = await until(() => kit().tracks[0].routing[0] === want && machineState().kit.working === "edited", 2000);
-	log(`kit DIST ${old} -> ${want}: ${t1 >= 0 ? "ok" : "FAIL"} sent as CC, working copy + "edited" after ${ms(t0, t1)}`);
-	cmd("saveKit"); await sleep(300);
-	delete Docs.kits[k];
-	t0 = performance.now();
-	Bridge.send({ op: "load", kind: "kit", slot: k });
-	t1 = await until(() => kit() && kit().tracks[0].routing[0] === want, 3000);
-	log(`kit read back after SAVE KIT: ${t1 >= 0 ? "ok" : "FAIL"} DIST = ${kit() ? kit().tracks[0].routing[0] : "?"} (${ms(t0, t1)})`);
-	cmd("param", { k, t: 0, i: 16, v: old }); await sleep(200); cmd("saveKit"); await sleep(500);
-	S.ws = "seq"; render();
-	/* P3: working kit from memory, LCD width, REC. The firmware's start-up animation runs for about
-	   20 s after it answers MIDI and eats the first key press: wait it out. */
-	while (performance.now() < 30000) await sleep(500);
-	log(`P3: kit source ${machineState().desk.kitSource}, kit ${machineState().kit.working}, song mode ${machineState().songMode}, mutes ${machineState().desk.mutes}`);
-	const lcdW = () => Math.round(document.querySelector(".lcdpanel").getBoundingClientRect().width * 10) / 10;
-	const widths = [lcdW()];
-	const bpm0 = V.bpm;
-	for (const b of [30, 299.5, bpm0]) { cmd("tempo", { bpm: b }); await sleep(250); widths.push(lcdW()); }
-	await sleep(800);
-	log(`P3: tempo back to ${V.bpm} (was ${bpm0})`);
-	log(`P3: LCD width through tempo changes ${widths.join(" / ")} px`);
-	await document.fonts.ready;
-	const faces = [...document.fonts].map(f => `${f.family.replace(/"/g, "")} ${f.weight} ${f.status}`);
-	const fam = q => getComputedStyle(document.querySelector(q)).fontFamily.split(",")[0].replace(/"/g, "");
-	log(`P3: fonts ${faces.join(", ")}; LCD value ${fam("#bpm")}, workspace keys ${fam("#tabs button")}, grid ruler ${fam(".rul")}`);
-	const rect = q => { const b = document.querySelector(q).getBoundingClientRect(); return `${Math.round(b.left)},${Math.round(b.top)} ${Math.round(b.width)}x${Math.round(b.height)}`; };
-	const rb = $("#rec").getBoundingClientRect(), pb = $("#play").getBoundingClientRect();
-	log(`P3: transport keys REC ${rect("#rec")}, PLAY ${rect("#play")}: ${Math.abs(rb.width - rb.height) < 1 && Math.abs(pb.width - pb.height) < 1 && rb.width > 30 && Math.abs(rb.top - pb.top) < 1 && pb.left > rb.right ? "ok square, side by side" : "FAIL"}; LCD ${rect(".lcdpanel")}, window ${innerWidth}x${innerHeight}`);
-	const recOn = () => !!machineState().desk.recording;
-	t0 = performance.now();
-	$("#play").click();
-	t1 = await until(() => machineState().desk.playing, 3000);
-	log(`P3: PLAY key -> playing ${t1 >= 0 ? "ok" : "FAIL"} ${ms(t0, t1)}, key shows ${$("#playico").textContent}`);
-	t0 = performance.now();
-	$("#play").click();
-	t1 = await until(() => !machineState().desk.playing, 3000);
-	log(`P3: STOP (same key) -> stopped ${t1 >= 0 ? "ok" : "FAIL"} ${ms(t0, t1)}, key shows ${$("#playico").textContent}`);
-	await sleep(300);
-	t0 = performance.now();
-	$("#rec").click();
-	t1 = await until(recOn, 3000);
-	log(`P3: after REC: playing ${machineState().desk.playing} step ${S.step} telemetry ${machineState().desk.telemetry}`);
-	log(`P3: REC -> live recording ${t1 >= 0 ? "ok" : "FAIL"} ${ms(t0, t1)}; LCD ${lcdW()} px, REC key pressed ${$("#rec").getAttribute("aria-pressed")}`);
-	if (t1 >= 0) {
-		const tr = 13, before = (pat().tracks[tr].trigs || []).length;
-		await until(() => S.step >= 2 && S.step <= 4, 3000);
-		document.querySelector(`.st[data-t="${tr}"][data-s="0"]`).click();
-		await sleep(1200);
-		const after = (pat().tracks[tr].trigs || []).length;
-		log(`P3: grid click while recording -> recorded trig on track ${tr + 1}: ${after > before ? "ok" : "FAIL"} (${before} -> ${after} trigs, read back while recording)`);
-		$("#rec").click();
-		t1 = await until(() => !recOn(), 3000);
-		log(`P3: REC again -> recording off ${t1 >= 0 ? "ok" : "FAIL"}, still playing ${machineState().desk.playing}`);
-		/* v49: a queued pattern shows only its name, blinking; a flash when it starts. */
-		const from = currentPatternSlot(), to = (from + 1) % 128, w0 = lcdW();
-		cmd("select", { p: to, force: true });
-		await until(() => machineState().desk.queued === to, 2000); await sleep(150);
-		log(`P3: queued ${patName(to)}: LCD shows "${$("#pat").textContent}" ${getComputedStyle($("#pat")).animationName}, LCD ${w0} -> ${lcdW()} px`);
-		let flashed = false; const obs = new MutationObserver(() => { if ($(".patf").classList.contains("flash")) flashed = true; }); obs.observe($(".patf"), { attributes: true });
-		t0 = performance.now(); t1 = await until(() => machineState().desk.queued == null && currentPatternSlot() === to, 12000); await sleep(100); obs.disconnect();
-		log(`P3: switch heard after ${ms(t0, t1)}: LCD "${$("#pat").textContent}", flash ${flashed ? "ok" : "FAIL"}, LCD ${lcdW()} px`);
-		cmd("stop"); await until(() => !machineState().desk.playing, 3000);
-		cmd("select", { p: from, force: true }); await sleep(500);
-		$("#play").click(); await until(() => !machineState().desk.playing, 3000);
-		log(`P3: PLAY key shows ${$("#playico").textContent} after stop`);
-		cmd("clearSteps", { p: currentPatternSlot(), t: tr, from: 0, to: V.len }); await sleep(400);
-	}
-	log("selftest done; kit " + JSON.stringify(machineState().kit) + ", undo steps " + machineState().desk.undoCount);
-})();
