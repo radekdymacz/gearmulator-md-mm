@@ -21,7 +21,7 @@
   var fileUrl = ready(D.url) ? D.url : rel;
   var name = D.name || (ed === "mm" ? "Monomachine Editor" : "Machinedrum Editor");
   document.querySelector("[data-name]").textContent = name;
-  document.title = "Download " + name + " — Future Native Audio";
+  document.title = "Download " + name + " — MD + MM Editor";
 
   var pay = C.payments || {};
   var ls = (pay.lemonsqueezy || {}).checkoutUrl;

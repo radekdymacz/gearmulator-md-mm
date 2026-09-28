@@ -26,16 +26,44 @@
   /* version, from config (no API call) */
   if (C.version) document.querySelectorAll("[data-version]").forEach(function (el) { el.textContent = "v" + C.version; });
 
-  /* hero: MKI / MKII plate */
+  /* hero: one window; editor tabs (tablist, arrow keys) and the MKI / MKII plate, one image at a time */
   var hero = document.getElementById("hero-shot");
   if (hero) {
-    var btns = hero.querySelectorAll("[data-plate]");
-    btns.forEach(function (b) {
-      b.addEventListener("click", function () {
-        btns.forEach(function (x) { x.setAttribute("aria-pressed", String(x === b)); });
-        hero.querySelectorAll("[data-plate-img]").forEach(function (el) { el.hidden = el.dataset.plateImg !== b.dataset.plate; });
+    var names = { md: "Machinedrum Editor", mm: "Monomachine Editor" };
+    var state = { machine: "md", plate: "mk1" };
+    var tabs = Array.prototype.slice.call(document.querySelectorAll(".wstabs [role=tab]"));
+    var plates = hero.querySelectorAll("[data-plate]");
+    var show = function () {
+      var key = state.machine + "-" + state.plate;
+      hero.querySelectorAll("[data-shot]").forEach(function (el) {
+        var on = el.dataset.shot === key;
+        el.classList.toggle("on", on);
+        if (on) el.removeAttribute("aria-hidden"); else el.setAttribute("aria-hidden", "true");
+        if (on) el.querySelectorAll("img").forEach(function (i) { i.loading = "eager"; });
+      });
+      hero.querySelector("[data-wintitle]").textContent = names[state.machine];
+      tabs.forEach(function (t) {
+        var on = t.dataset.machine === state.machine;
+        t.setAttribute("aria-selected", String(on));
+        t.tabIndex = on ? 0 : -1;
+        if (on) hero.setAttribute("aria-labelledby", t.id);
+      });
+      plates.forEach(function (x) { x.setAttribute("aria-pressed", String(x.dataset.plate === state.plate)); });
+    };
+    tabs.forEach(function (t, i) {
+      t.addEventListener("click", function () { state.machine = t.dataset.machine; show(); });
+      t.addEventListener("keydown", function (e) {
+        var j = null;
+        if (e.key === "ArrowRight" || e.key === "ArrowDown") j = (i + 1) % tabs.length;
+        else if (e.key === "ArrowLeft" || e.key === "ArrowUp") j = (i - 1 + tabs.length) % tabs.length;
+        else if (e.key === "Home") j = 0;
+        else if (e.key === "End") j = tabs.length - 1;
+        if (j === null) return;
+        e.preventDefault();
+        state.machine = tabs[j].dataset.machine; show(); tabs[j].focus();
       });
     });
+    plates.forEach(function (b) { b.addEventListener("click", function () { state.plate = b.dataset.plate; show(); }); });
   }
 
   /* the editor's step keys: one 16-step row, LED bars, an accent and locks,
