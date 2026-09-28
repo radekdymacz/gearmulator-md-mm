@@ -27,6 +27,12 @@ namespace elektronData::json
 
 		const Value& root() const { return m_root; }
 
+		// Coverage the other way (P6): the members a definition declares (its properties, and
+		// those of a member that is an object with properties of its own, as "desk.tx") that none
+		// of _instances has. With additionalProperties false on the same definition, empty means
+		// the definition and what is published are the same set.
+		std::vector<std::string> unseen(const std::string& _definition, const std::vector<Value>& _instances) const;
+
 	private:
 		void check(const Value& _schema, const Value& _v, const std::string& _path, std::vector<std::string>& _errors,
 			int _depth) const;

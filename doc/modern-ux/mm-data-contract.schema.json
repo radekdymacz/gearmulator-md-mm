@@ -968,21 +968,402 @@
         }
       }
     },
+    "lifecycle": {
+      "description": "P6: the machine's life as one value (deskCore::Lifecycle): the engine label and the input gate follow it.",
+      "enum": [
+        "missing",
+        "unsupported",
+        "loading",
+        "booting",
+        "animating",
+        "ready",
+        "hwConnecting",
+        "hwLost"
+      ]
+    },
+    "capabilities": {
+      "type": "object",
+      "description": "P6: what the engine can do, as data (deskCore::Capabilities). A page enables a control when its capability is true and shows reasons[name] otherwise.",
+      "required": [
+        "engine",
+        "label",
+        "about",
+        "reasons",
+        "transport",
+        "panelKeys",
+        "recvSession",
+        "lcd",
+        "workingKitMemory",
+        "telemetry",
+        "midiMutes",
+        "poly",
+        "multiTrig",
+        "multiMap",
+        "portamento",
+        "gridRecord",
+        "dumps"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "engine": {
+          "type": "string",
+          "minLength": 1,
+          "description": "The engine map's id of the engine the desk runs on."
+        },
+        "label": {
+          "type": "string",
+          "description": "The LCD's engine label while ready."
+        },
+        "about": {
+          "type": "string",
+          "description": "The engine label's tooltip while ready."
+        },
+        "transport": {
+          "type": "boolean"
+        },
+        "panelKeys": {
+          "type": "boolean"
+        },
+        "recvSession": {
+          "type": "boolean"
+        },
+        "lcd": {
+          "type": "boolean"
+        },
+        "workingKitMemory": {
+          "type": "boolean"
+        },
+        "telemetry": {
+          "type": "boolean"
+        },
+        "midiMutes": {
+          "type": "boolean"
+        },
+        "poly": {
+          "type": "boolean"
+        },
+        "multiTrig": {
+          "type": "boolean"
+        },
+        "multiMap": {
+          "type": "boolean"
+        },
+        "portamento": {
+          "type": "boolean"
+        },
+        "gridRecord": {
+          "type": "boolean"
+        },
+        "dumps": {
+          "enum": [
+            "recv",
+            "manual"
+          ]
+        },
+        "reasons": {
+          "type": "object",
+          "description": "Why a capability is false (its name -> the text a disabled control shows).",
+          "additionalProperties": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "engines": {
+      "type": "array",
+      "description": "P6: the engine map (the plug-in's engine records), in menu order; empty for a desk outside the plug-in.",
+      "items": {
+        "type": "object",
+        "required": [
+          "id",
+          "label",
+          "available"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "label": {
+            "type": "string"
+          },
+          "available": {
+            "type": "boolean"
+          },
+          "reason": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "history": {
+      "type": "object",
+      "description": "P6: the core's undo history (a gesture is one step).",
+      "required": [
+        "undo",
+        "redo",
+        "undoCount",
+        "redoCount"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "undo": {
+          "type": "boolean"
+        },
+        "redo": {
+          "type": "boolean"
+        },
+        "undoCount": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "redoCount": {
+          "type": "integer",
+          "minimum": 0
+        }
+      }
+    },
     "machine": {
       "type": "object",
       "required": [
         "schema",
-        "version"
+        "version",
+        "engine",
+        "link",
+        "pattern",
+        "kit",
+        "song",
+        "global",
+        "playing",
+        "tempo",
+        "recv",
+        "loading",
+        "roundTripMs",
+        "error",
+        "lifecycle",
+        "capabilities",
+        "engines",
+        "history"
       ],
-      "description": "Read-only machine state from the MM desk (MM-P2): current and queued pattern, kit and its working state, song, SYSEX RECV session, engine.",
+      "description": "Read-only machine state from the MM desk: current and queued pattern, kit and its working state, song, SYSEX RECV session, and the core's parts (P6: every member declared).",
       "properties": {
         "schema": {
           "const": "mm-desk/machine"
         },
         "version": {
           "const": 1
+        },
+        "engine": {
+          "enum": [
+            "missing",
+            "unsupported",
+            "loading",
+            "booting",
+            "ready"
+          ],
+          "description": "Older string, derived from lifecycle."
+        },
+        "link": {
+          "enum": [
+            "local",
+            "connect",
+            "ready",
+            "lost"
+          ],
+          "description": "Older string, derived from lifecycle: local = not HW MIDI."
+        },
+        "pattern": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "current",
+            "queued"
+          ],
+          "properties": {
+            "current": {
+              "oneOf": [
+                {
+                  "type": "null"
+                },
+                {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 127
+                }
+              ]
+            },
+            "queued": {
+              "oneOf": [
+                {
+                  "type": "null"
+                },
+                {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 127
+                }
+              ],
+              "description": "LOAD PATTERN sent while playing: becomes current at the pattern end."
+            }
+          }
+        },
+        "kit": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "current",
+            "working"
+          ],
+          "properties": {
+            "current": {
+              "oneOf": [
+                {
+                  "type": "null"
+                },
+                {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 127
+                }
+              ]
+            },
+            "working": {
+              "enum": [
+                "unknown",
+                "clean",
+                "edited"
+              ]
+            }
+          }
+        },
+        "song": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "current",
+            "songMode"
+          ],
+          "properties": {
+            "current": {
+              "oneOf": [
+                {
+                  "type": "null"
+                },
+                {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 23
+                }
+              ]
+            },
+            "songMode": {
+              "oneOf": [
+                {
+                  "type": "null"
+                },
+                {
+                  "type": "boolean"
+                }
+              ]
+            }
+          }
+        },
+        "global": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 7
+            }
+          ]
+        },
+        "playing": {
+          "type": "boolean"
+        },
+        "tempo": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "type": "number",
+              "minimum": 30,
+              "maximum": 300
+            }
+          ],
+          "description": "BPM from RAM; null while booting."
+        },
+        "recv": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "state",
+            "sending",
+            "received",
+            "errors"
+          ],
+          "properties": {
+            "state": {
+              "type": "string",
+              "minLength": 1,
+              "description": "The SYSEX RECV session's state (mmRecv)."
+            },
+            "sending": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "received": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "errors": {
+              "type": "integer",
+              "minimum": 0
+            }
+          }
+        },
+        "loading": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "done",
+            "total"
+          ],
+          "properties": {
+            "done": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "total": {
+              "type": "integer",
+              "minimum": 0
+            }
+          }
+        },
+        "roundTripMs": {
+          "type": "number"
+        },
+        "error": {
+          "type": "string"
+        },
+        "lifecycle": {
+          "$ref": "#/$defs/lifecycle"
+        },
+        "capabilities": {
+          "$ref": "#/$defs/capabilities"
+        },
+        "engines": {
+          "$ref": "#/$defs/engines"
+        },
+        "history": {
+          "$ref": "#/$defs/history"
         }
-      }
+      },
+      "additionalProperties": false
     },
     "catalogue": {
       "type": "object",

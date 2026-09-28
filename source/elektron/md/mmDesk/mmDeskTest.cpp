@@ -350,6 +350,23 @@ void checkPublished()
 	}
 	std::printf("  %zu published messages of %zu types, %zu off the contract\n", g_published.size(), types.size(), bad);
 	check(bad == 0 && !g_published.empty(), "every published message is on the contract");
+	// ... and the other way: every member the contract declares for the machine document and the
+	// capabilities is published (with additionalProperties false there, the two are the same set).
+	std::vector<ed::json::Value> machines, caps;
+	for(const auto& m : g_published)
+		if(const auto* t = m.find("type"); t && t->isString() && t->asString() == "machine")
+			if(const auto* d = m.find("doc"))
+			{
+				machines.push_back(*d);
+				if(const auto* c = d->find("capabilities"))
+					caps.push_back(*c);
+			}
+	auto unseen = schema.unseen("machine", machines);
+	const auto unseenCaps = schema.unseen("capabilities", caps);
+	unseen.insert(unseen.end(), unseenCaps.begin(), unseenCaps.end());
+	for(const auto& u : unseen)
+		std::printf("    declared, never published: %s\n", u.c_str());
+	check(unseen.empty() && !machines.empty(), "every member the contract declares for the machine and its capabilities is published");
 }
 
 

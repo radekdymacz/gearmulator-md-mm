@@ -271,4 +271,39 @@ namespace elektronData::json
 				check(*then, _v, _path, _errors, _depth + 1);
 		}
 	}
+
+	std::vector<std::string> Schema::unseen(const std::string& _definition, const std::vector<Value>& _instances) const
+	{
+		std::vector<std::string> out;
+		const auto* defs = m_root.find("$defs");
+		const auto* def = defs ? defs->find(_definition) : nullptr;
+		const auto* props = def ? def->find("properties") : nullptr;
+		if(!props || !props->isObject())
+			return out;
+		const auto has = [&](const std::string& _member, const std::string& _sub)
+		{
+			for(const auto& v : _instances)
+			{
+				const auto* m = v.find(_member);
+				if(m && (_sub.empty() || (m->isObject() && m->find(_sub))))
+					return true;
+			}
+			return false;
+		};
+		for(const auto& [name, p] : props->asObject())
+		{
+			if(!has(name, {}))
+			{
+				out.push_back(name);
+				continue;
+			}
+			const auto* sub = p.find("properties");
+			if(!sub || !sub->isObject())
+				continue;
+			for(const auto& [s, sp] : sub->asObject())
+				if(!has(name, s))
+					out.push_back(name + "." + s);
+		}
+		return out;
+	}
 }

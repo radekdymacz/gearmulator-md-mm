@@ -975,6 +975,149 @@
         }
       }
     },
+    "lifecycle": {
+      "description": "P6: the machine's life as one value (deskCore::Lifecycle): the engine label and the input gate follow it.",
+      "enum": [
+        "missing",
+        "unsupported",
+        "loading",
+        "booting",
+        "animating",
+        "ready",
+        "hwConnecting",
+        "hwLost"
+      ]
+    },
+    "capabilities": {
+      "type": "object",
+      "description": "P6: what the engine can do, as data (deskCore::Capabilities). A page enables a control when its capability is true and shows reasons[name] otherwise.",
+      "required": [
+        "engine",
+        "label",
+        "about",
+        "reasons",
+        "transport",
+        "panelKeys",
+        "liveRecord",
+        "chains",
+        "lcd",
+        "workingKitMemory",
+        "mutesFromMemory",
+        "sampleNames",
+        "modulators",
+        "dumps"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "engine": {
+          "type": "string",
+          "minLength": 1,
+          "description": "The engine map's id of the engine the desk runs on."
+        },
+        "label": {
+          "type": "string",
+          "description": "The LCD's engine label while ready."
+        },
+        "about": {
+          "type": "string",
+          "description": "The engine label's tooltip while ready."
+        },
+        "transport": {
+          "type": "boolean"
+        },
+        "panelKeys": {
+          "type": "boolean"
+        },
+        "liveRecord": {
+          "type": "boolean"
+        },
+        "chains": {
+          "type": "boolean"
+        },
+        "lcd": {
+          "type": "boolean"
+        },
+        "workingKitMemory": {
+          "type": "boolean"
+        },
+        "mutesFromMemory": {
+          "type": "boolean"
+        },
+        "sampleNames": {
+          "type": "boolean"
+        },
+        "modulators": {
+          "type": "boolean"
+        },
+        "dumps": {
+          "enum": [
+            "direct"
+          ]
+        },
+        "reasons": {
+          "type": "object",
+          "description": "Why a capability is false (its name -> the text a disabled control shows).",
+          "additionalProperties": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "engines": {
+      "type": "array",
+      "description": "P6: the engine map (the plug-in's engine records), in menu order; empty for a desk outside the plug-in.",
+      "items": {
+        "type": "object",
+        "required": [
+          "id",
+          "label",
+          "available"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "label": {
+            "type": "string"
+          },
+          "available": {
+            "type": "boolean"
+          },
+          "reason": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "history": {
+      "type": "object",
+      "description": "P6: the core's undo history (a gesture is one step).",
+      "required": [
+        "undo",
+        "redo",
+        "undoCount",
+        "redoCount"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "undo": {
+          "type": "boolean"
+        },
+        "redo": {
+          "type": "boolean"
+        },
+        "undoCount": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "redoCount": {
+          "type": "integer",
+          "minimum": 0
+        }
+      }
+    },
     "machine": {
       "type": "object",
       "description": "Read-only machine state from mdDataLink::Session.",
@@ -983,7 +1126,11 @@
         "version",
         "pattern",
         "kit",
-        "song"
+        "song",
+        "lifecycle",
+        "capabilities",
+        "engines",
+        "history"
       ],
       "properties": {
         "schema": {
@@ -1020,7 +1167,8 @@
               ],
               "description": "Selected while playing; becomes current at the end of the current pattern."
             }
-          }
+          },
+          "additionalProperties": false
         },
         "kit": {
           "type": "object",
@@ -1045,7 +1193,8 @@
               ],
               "description": "edited = not saved on the machine: lost on LOAD KIT or a switch to a pattern linked to another kit."
             }
-          }
+          },
+          "additionalProperties": false
         },
         "song": {
           "type": "object",
@@ -1066,7 +1215,8 @@
               "type": "boolean",
               "description": "The current song's slot was rewritten; heard after STOP, LOAD SONG, PLAY."
             }
-          }
+          },
+          "additionalProperties": false
         },
         "globalSlot": {
           "oneOf": [
@@ -1126,7 +1276,7 @@
         },
         "desk": {
           "type": "object",
-          "description": "Added by mdDesk::Desk for the page (optional; readers ignore what they do not know).",
+          "description": "Added by the desk for the page: the adapter's state (P6: every member declared).",
           "properties": {
             "firmware": {
               "enum": [
@@ -1320,9 +1470,23 @@
               ],
               "description": "memory: the current kit document is the working kit read from the machine's memory (P3). tracked: the stored slot plus the edits the desk saw."
             }
-          }
+          },
+          "additionalProperties": false
+        },
+        "lifecycle": {
+          "$ref": "#/$defs/lifecycle"
+        },
+        "capabilities": {
+          "$ref": "#/$defs/capabilities"
+        },
+        "engines": {
+          "$ref": "#/$defs/engines"
+        },
+        "history": {
+          "$ref": "#/$defs/history"
         }
-      }
+      },
+      "additionalProperties": false
     },
     "audioDevices": {
       "type": "object",
