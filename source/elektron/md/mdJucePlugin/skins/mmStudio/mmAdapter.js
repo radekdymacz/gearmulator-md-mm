@@ -8,8 +8,9 @@
      way) and the machine document; they are shown in the mockup's view through MmConvert (the
      pure page <-> contract translation).
    - An edit is sent as the intent the core takes for the Monomachine: the whole document
-     ({"op":"set","kind","doc","g"}), when the view's document is not the one the core shows. The
-     gesture id g makes a drag one undo step; undo and redo are the core's (C++).
+     ({"op":"set","kind","doc","g"}) of each kind the gesture said it edited. The page does not
+     compare documents: the core takes a document equal to its own as no change. The gesture id g
+     makes a drag one undo step; undo and redo are the core's (C++).
    - What the engine cannot do is disabled with the reason, from machine.capabilities. */
 (() => {
 	const V = () => window.MMView;			// the mockup's view: after it ran
@@ -30,16 +31,14 @@
 	const last = { edit: 0, tempoEdit: -1e9, mute: [], ready: false, note: "", noteMs: 0, error: "" };
 	let synced = false;		// the view shows the machine (current pattern and working kit arrived)
 	const wantApply = new Set();
+	const dirty = new Set();	// the working set's kinds a gesture edited ("kit", "pattern", "song", "global")
 	const written = new Set();	// library slots a gesture wrote ("kit:5", "pattern:12")
 	let gesture = Bridge.gesture();
 	let audioDocument = null;
-	/* Documents are values: equal when their JSON members are, whatever the order. */
-	const same = (a, b) => {
-		if (a === b) return true;
-		if (!a || !b || typeof a !== "object" || typeof b !== "object" || Array.isArray(a) !== Array.isArray(b)) return false;
-		const ka = Object.keys(a), kb = Object.keys(b);
-		return ka.length === kb.length && ka.every(k => same(a[k], b[k]));
-	};
+	/* What a gesture edits when it does not name the document: the mockup's two edit kinds. The
+	   kinds are sent in this order (a pattern's locks read their machines from the kit). */
+	const EDITS = { struct: ["pattern", "song"], sound: ["kit"] };
+	const KINDS = ["kit", "pattern", "song", "global"];
 
 	/* ---------------- the machine's documents -> the view ---------------- */
 	const C = () => MmConvert;
@@ -110,11 +109,11 @@
 		const kinds = [...wantApply];
 		wantApply.clear();
 		/* the kit first: the pattern's locks read their machines from it */
-		if (kinds.includes("kit") && (!synced || !same(FW.kit[CUR.kit], kitDoc(CUR.kit)))) { applyCurrentKit(); changed = true; }
+		if (kinds.includes("kit")) { applyCurrentKit(); changed = true; }
 		if (kinds.includes("kit") && FW.machine) V().setKitState(FW.machine.kit.working === "edited" ? "edited" : "clean");
-		if ((kinds.includes("pat") || changed) && FW.pat[CUR.pat] && (!synced || !same(FW.pat[CUR.pat], patDoc(CUR.pat)))) { applyCurrentPattern(); changed = true; }
-		if (kinds.includes("song") && FW.song[CUR.song] && (!synced || !same(FW.song[CUR.song], songDoc()))) { applyCurrentSong(); changed = true; }
-		if (kinds.includes("glob") && FW.glob[CUR.glob] && (!synced || !same(FW.glob[CUR.glob], globDoc()))) { applyCurrentGlobal(); changed = true; }
+		if ((kinds.includes("pat") || changed) && FW.pat[CUR.pat]) { applyCurrentPattern(); changed = true; }
+		if (kinds.includes("song") && FW.song[CUR.song]) { applyCurrentSong(); changed = true; }
+		if (kinds.includes("glob") && FW.glob[CUR.glob]) { applyCurrentGlobal(); changed = true; }
 		if (!synced) {
 			synced = true;
 			S().tracks.forEach((t, i) => last.mute[i] = !V().audible(i));
@@ -182,18 +181,19 @@
 		CUR.pat = CUR.kit = -1; CUR.song = CUR.glob = 0;
 		synced = false;
 		wantApply.clear();
+		dirty.clear();
 		written.clear();
 		last.ready = false;
 		showEngine();
 	}
 
 	/* ---------------- the view -> the core ---------------- */
-	/* After an edit, every document of the working set (and the slots a library gesture wrote)
-	   whose view is not what the core shows goes out whole, tagged with the gesture. */
+	/* After an edit, the working set's documents the gesture edited (and the slots a library
+	   gesture wrote) go out whole, tagged with the gesture. */
 	let syncT = 0;
 	function scheduleSync() { last.edit = now(); if (!syncT) syncT = setTimeout(() => { syncT = 0; sync(); }, 40); }
-	function sendDoc(kind, doc, shown, slot) {
-		if (!doc || same(doc, shown)) return false;
+	function sendDoc(kind, doc, slot) {
+		if (!doc) return false;
 		send({ op: "set", kind, doc, g: gesture }, { key: kind + ":" + slot, onResult: r => {
 			if (!r.ok) { V().toast(r.errors[0] || "The machine did not take it."); log("set " + kind + " " + slot + ": " + r.errors.join("; ")); }
 			else note(r.note);
@@ -207,17 +207,20 @@
 	}
 	function sync() {
 		if (!synced || !V().engReady()) return;
-		sendDoc("kit", kitDoc(CUR.kit), FW.kit[CUR.kit], CUR.kit);	// the working kit: live (CC, NRPN, machine, routing, name)
-		sendDoc("pattern", patDoc(CUR.pat), FW.pat[CUR.pat], CUR.pat);
+		const edited = KINDS.filter(k => dirty.has(k));
+		dirty.clear();
+		/* the working kit goes live (CC, NRPN, machine, routing, name) */
+		if (edited.includes("kit")) sendDoc("kit", kitDoc(CUR.kit), CUR.kit);
+		if (edited.includes("pattern")) sendDoc("pattern", patDoc(CUR.pat), CUR.pat);
 		for (const w of [...written]) {
 			const [kind, s] = w.split(":"), slot = +s;
 			written.delete(w);
 			if (kind === "kit" && slot === CUR.kit) send({ op: "saveKit", k: slot });	// the library wrote the current kit's slot: store it too
-			else if (kind === "kit") sendDoc("kit", kitDoc(slot), FW.kit[slot], slot);
-			else if (kind === "pattern" && slot !== CUR.pat) sendDoc("pattern", patDoc(slot), FW.pat[slot], slot);
+			else if (kind === "kit") sendDoc("kit", kitDoc(slot), slot);
+			else if (kind === "pattern" && slot !== CUR.pat) sendDoc("pattern", patDoc(slot), slot);
 		}
-		sendDoc("song", songDoc(), FW.song[CUR.song], CUR.song);
-		sendDoc("global", globDoc(), FW.glob[CUR.glob], CUR.glob);
+		if (edited.includes("song")) sendDoc("song", songDoc(), CUR.song);
+		if (edited.includes("global")) sendDoc("global", globDoc(), CUR.glob);
 	}
 
 	/* ---------------- the machine's transport and playhead ---------------- */
@@ -226,7 +229,7 @@
 		s.step = step;
 		/* the Control workspace's LFO and Random sources move with the machine's steps */
 		V().ctlTick();
-		if (s.ctl.links.length) scheduleSync();
+		if (s.ctl.links.length) { dirty.add("kit"); scheduleSync(); }
 		const pp = Math.floor(step / 16);
 		$$(".pl").forEach(b => b.classList.toggle("play", +b.dataset.plp === pp && s.playing));
 		if (s.follow && s.ws === "seq" && !s.viewAll && pp !== s.page && !V().busy()) { s.page = pp; V().render(); }
@@ -403,8 +406,12 @@
 			if (document.readyState === "loading") addEventListener("DOMContentLoaded", init);
 			else init();
 		},
-		edited(what) {
-			if (what !== "commit") { scheduleSync(); return; }
+		edited(what, kind) {
+			if (what !== "commit") {
+				for (const k of kind ? [kind] : EDITS[what] || []) dirty.add(k);
+				scheduleSync();
+				return;
+			}
 			/* the gesture ended: what it edited goes out with its id, the next edit is a new undo step */
 			if (syncT) { clearTimeout(syncT); syncT = 0; sync(); }
 			gesture = Bridge.gesture();

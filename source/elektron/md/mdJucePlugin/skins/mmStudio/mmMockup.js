@@ -162,7 +162,10 @@ const kitName=k=>"K"+String(k+1).padStart(2,"0")+" "+((k===S.kit?S.workName:S.ki
    machine plays: its transport, its library, its undo (in C++). The UI hands those actions to
    the host through these calls; a call the host does not have is done the mockup's way.
      start()                          the page is up
-     edited(what)                     a gesture edited the view: "struct", "sound" or "commit" (it ended)
+     edited(what, kind)               a gesture edited the view: "struct", "sound" or "commit" (it ended);
+                                      kind names the document it edited ("pattern", "kit", "song",
+                                      "global") when the gesture knows, else the host takes what
+                                      "struct" (pattern, song) or "sound" (kit) edit
      slotWritten(kind, slot)          a library gesture wrote another slot ("kit" | "pattern")
      undo(), redo(), history()        undo lives with the host; history() = {undo, redo} counts
      togglePlay(), ownsClock          the machine is the sequencer
@@ -189,8 +192,8 @@ function ask(html,btns,cls=""){const d=$("#dlg");d.innerHTML=`<div class="dlgbox
    EMU: the app drives that screen itself (the emulator can press the panel).
    HW: edits queue up until you open the screen and press Send. */
 let pstT;
-function structEdited(){tx();if(HOST.edited){HOST.edited("struct");return}if(S.engine==="emu"){S.patSent="recv";renderPst();clearTimeout(pstT);pstT=setTimeout(()=>{S.patSent="live";renderPst()},650)}else{S.pend++;S.patSent="pend";renderPst()}}
-function soundEdited(){tx();setKitState("edited");if(HOST.edited)HOST.edited("sound")}
+function structEdited(kind){tx();if(HOST.edited){HOST.edited("struct",kind);return}if(S.engine==="emu"){S.patSent="recv";renderPst();clearTimeout(pstT);pstT=setTimeout(()=>{S.patSent="live";renderPst()},650)}else{S.pend++;S.patSent="pend";renderPst()}}
+function soundEdited(kind){tx();setKitState("edited");if(HOST.edited)HOST.edited("sound",kind)}
 function renderPst(){if(HOST.renderPst)return HOST.renderPst();const p=$("#pst");if(!p)return;if(S.engine==="hw"&&S.pend){p.textContent="SEND "+S.pend;p.className="pst warn";p.title="Unsent pattern and song edits. Click to send them."}
  else if(S.patSent==="recv"){p.textContent="RECV";p.className="pst";p.title="The emulator is on SYSEX RECV and takes the dump."}else{p.textContent="";p.className="pst"}}
 function sendDialog(){ask(`<div class="lcdbig recv">SYSEX RECV · WAITING…</div><p>The Monomachine only accepts a dump on its SysEx receive screen. <b>${S.pend}</b> edit${S.pend===1?"":"s"} to send.</p>
@@ -242,7 +245,7 @@ function ref(el){const d=el.dataset,t=d.t!=null?+d.t:S.sel,tr=trk(t),g=d.g;
   case"mmap":{const r=S.mmap[+d.i];return[r,d.n,{name:d.n,...{trn:{max:127,signed:1},ofs:{en:["---",...Array.from({length:64},(_,i)=>String(i).padStart(2,"0"))]},len:{max:64},tim:{en:["DIR","1","2","4","8","16","32"]}}[d.n]},t,g]}}}
 const getV=el=>{const[o,n]=ref(el);return o[n]};
 function setV(el,v){const[o,n,m,t,g]=ref(el);v=clamp(Math.round(v),0,maxOf(m));if(o[n]===v)return;o[n]=v;
- if(PAGES.includes(g)||g==="MID"||g==="lev"||g==="menv"||g==="asg"||g==="cc")soundEdited();else structEdited();
+ if(g==="cc")soundEdited("global");else if(PAGES.includes(g)||g==="MID"||g==="lev"||g==="menv"||g==="asg")soundEdited();else structEdited();
  if(g.startsWith("LF")&&(+el.dataset.n<2)){if(+el.dataset.n===0)o[1]=0;render();return}
  syncControls();redraw()}
 function pc(g,n,{t,label,cls="",extra=""}={}){if(n==null)return`<div class="pc empty" aria-hidden="true"></div>`;
@@ -1207,7 +1210,7 @@ function l2step(k,d,fine){
  if(k==="mult"){const o=["1X","2X","3/4X","3/2X"];S.mult=o[(o.indexOf(S.mult)+d+4)%4];structEdited()}
  if(k==="swing"){S.swingAmt=clamp(S.swingAmt+d,50,80);structEdited()}
   if(k==="ptrn"){S.patTrn=clamp(S.patTrn+d,0,127);structEdited()}
- if(k==="route"){S.routing=ROUTES[(ROUTES.indexOf(S.routing)+d+3)%3];soundEdited()}
+ if(k==="route"){S.routing=ROUTES[(ROUTES.indexOf(S.routing)+d+3)%3];soundEdited("global")}
  if(k==="side"){setSide(S.side==="midi"?"int":"midi");return}
  if(k==="pmode"){const o=PMODES.map(p=>p[0]);S.mode=o[(o.indexOf(S.mode)+d+4)%4]}
  render()}
@@ -1281,7 +1284,7 @@ document.addEventListener("click",e=>{
   if(k==="arpmode"){tr.arp.MODE=+v;structEdited();render();return}if(k==="arpplay"){tr.arp.PLAY=+v;structEdited();render();return}
   if(k==="scale"){tr.tr.SCALE=+v;structEdited();render();return}if(k==="port"){tr.port=+v;soundEdited();render();return}
   if(k==="ltrig"){V(sg.parentElement.dataset.l)[2]=+v;soundEdited();render();return}
-  if(k==="routing"){S.routing=v;soundEdited();render();return}
+  if(k==="routing"){S.routing=v;soundEdited("global");render();return}
   if(k==="mtmode"){S.multi.mode=+v;render();return}if(k==="astab"){S.asTab=v;render();return}if(k==="astrk"){S.sel=+v;render();return}
   if(k==="loopkind"){const r=S.song[S.songSel];r.type=v;if(v==="halt")r.to=S.songSel;if(v==="jump"&&r.to<=S.songSel)r.to=Math.min(S.song.length-1,S.songSel+1);if(v==="loop"){if(!r.count)r.count=2;if(r.to>=S.songSel)r.to=Math.max(0,S.songSel-1)}structEdited();render();return}}
  const at=e.target.closest("[data-arptrig]");if(at){const a=trk(S.sel).arp,k=at.dataset.arptrig;a[k]=a[k]?0:1;structEdited();render();return}
@@ -1344,7 +1347,7 @@ document.addEventListener("change",e=>{const id=e.target.id,v=e.target.value,tr=
  m=id.match(/^asd(\d)$/);if(m){S.tracks[asgT()].assign.tabs[S.asTab][+m[1]].d=+v;soundEdited();return}
  m=id.match(/^mpat(\d+)$/);if(m){S.mmap[+m[1]].pat=+v;render();return}
  if(id==="trigpos"){tr.trigpos=v===""?null:+v;soundEdited();render();return}
- if(id==="mch"){tr.ch=+v;soundEdited();render();return}});
+ if(id==="mch"){tr.ch=+v;soundEdited("global");render();return}});
 
 /* ===== Keys ===== */
 document.addEventListener("keydown",e=>{const mod=e.metaKey||e.ctrlKey,inField=e.target.closest?.("input,select,textarea");

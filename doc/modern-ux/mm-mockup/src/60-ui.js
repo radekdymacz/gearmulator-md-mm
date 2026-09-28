@@ -11,8 +11,8 @@ function ask(html,btns,cls=""){const d=$("#dlg");d.innerHTML=`<div class="dlgbox
    EMU: the app drives that screen itself (the emulator can press the panel).
    HW: edits queue up until you open the screen and press Send. */
 let pstT;
-function structEdited(){tx();if(HOST.edited){HOST.edited("struct");return}if(S.engine==="emu"){S.patSent="recv";renderPst();clearTimeout(pstT);pstT=setTimeout(()=>{S.patSent="live";renderPst()},650)}else{S.pend++;S.patSent="pend";renderPst()}}
-function soundEdited(){tx();setKitState("edited");if(HOST.edited)HOST.edited("sound")}
+function structEdited(kind){tx();if(HOST.edited){HOST.edited("struct",kind);return}if(S.engine==="emu"){S.patSent="recv";renderPst();clearTimeout(pstT);pstT=setTimeout(()=>{S.patSent="live";renderPst()},650)}else{S.pend++;S.patSent="pend";renderPst()}}
+function soundEdited(kind){tx();setKitState("edited");if(HOST.edited)HOST.edited("sound",kind)}
 function renderPst(){if(HOST.renderPst)return HOST.renderPst();const p=$("#pst");if(!p)return;if(S.engine==="hw"&&S.pend){p.textContent="SEND "+S.pend;p.className="pst warn";p.title="Unsent pattern and song edits. Click to send them."}
  else if(S.patSent==="recv"){p.textContent="RECV";p.className="pst";p.title="The emulator is on SYSEX RECV and takes the dump."}else{p.textContent="";p.className="pst"}}
 function sendDialog(){ask(`<div class="lcdbig recv">SYSEX RECV · WAITING…</div><p>The Monomachine only accepts a dump on its SysEx receive screen. <b>${S.pend}</b> edit${S.pend===1?"":"s"} to send.</p>
@@ -64,7 +64,7 @@ function ref(el){const d=el.dataset,t=d.t!=null?+d.t:S.sel,tr=trk(t),g=d.g;
   case"mmap":{const r=S.mmap[+d.i];return[r,d.n,{name:d.n,...{trn:{max:127,signed:1},ofs:{en:["---",...Array.from({length:64},(_,i)=>String(i).padStart(2,"0"))]},len:{max:64},tim:{en:["DIR","1","2","4","8","16","32"]}}[d.n]},t,g]}}}
 const getV=el=>{const[o,n]=ref(el);return o[n]};
 function setV(el,v){const[o,n,m,t,g]=ref(el);v=clamp(Math.round(v),0,maxOf(m));if(o[n]===v)return;o[n]=v;
- if(PAGES.includes(g)||g==="MID"||g==="lev"||g==="menv"||g==="asg"||g==="cc")soundEdited();else structEdited();
+ if(g==="cc")soundEdited("global");else if(PAGES.includes(g)||g==="MID"||g==="lev"||g==="menv"||g==="asg")soundEdited();else structEdited();
  if(g.startsWith("LF")&&(+el.dataset.n<2)){if(+el.dataset.n===0)o[1]=0;render();return}
  syncControls();redraw()}
 function pc(g,n,{t,label,cls="",extra=""}={}){if(n==null)return`<div class="pc empty" aria-hidden="true"></div>`;

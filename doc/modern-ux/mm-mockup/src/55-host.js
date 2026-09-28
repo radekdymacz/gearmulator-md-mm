@@ -5,7 +5,10 @@
    machine plays: its transport, its library, its undo (in C++). The UI hands those actions to
    the host through these calls; a call the host does not have is done the mockup's way.
      start()                          the page is up
-     edited(what)                     a gesture edited the view: "struct", "sound" or "commit" (it ended)
+     edited(what, kind)               a gesture edited the view: "struct", "sound" or "commit" (it ended);
+                                      kind names the document it edited ("pattern", "kit", "song",
+                                      "global") when the gesture knows, else the host takes what
+                                      "struct" (pattern, song) or "sound" (kit) edit
      slotWritten(kind, slot)          a library gesture wrote another slot ("kit" | "pattern")
      undo(), redo(), history()        undo lives with the host; history() = {undo, redo} counts
      togglePlay(), ownsClock          the machine is the sequencer

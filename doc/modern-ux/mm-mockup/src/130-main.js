@@ -47,7 +47,7 @@ function l2step(k,d,fine){
  if(k==="mult"){const o=["1X","2X","3/4X","3/2X"];S.mult=o[(o.indexOf(S.mult)+d+4)%4];structEdited()}
  if(k==="swing"){S.swingAmt=clamp(S.swingAmt+d,50,80);structEdited()}
   if(k==="ptrn"){S.patTrn=clamp(S.patTrn+d,0,127);structEdited()}
- if(k==="route"){S.routing=ROUTES[(ROUTES.indexOf(S.routing)+d+3)%3];soundEdited()}
+ if(k==="route"){S.routing=ROUTES[(ROUTES.indexOf(S.routing)+d+3)%3];soundEdited("global")}
  if(k==="side"){setSide(S.side==="midi"?"int":"midi");return}
  if(k==="pmode"){const o=PMODES.map(p=>p[0]);S.mode=o[(o.indexOf(S.mode)+d+4)%4]}
  render()}
@@ -121,7 +121,7 @@ document.addEventListener("click",e=>{
   if(k==="arpmode"){tr.arp.MODE=+v;structEdited();render();return}if(k==="arpplay"){tr.arp.PLAY=+v;structEdited();render();return}
   if(k==="scale"){tr.tr.SCALE=+v;structEdited();render();return}if(k==="port"){tr.port=+v;soundEdited();render();return}
   if(k==="ltrig"){V(sg.parentElement.dataset.l)[2]=+v;soundEdited();render();return}
-  if(k==="routing"){S.routing=v;soundEdited();render();return}
+  if(k==="routing"){S.routing=v;soundEdited("global");render();return}
   if(k==="mtmode"){S.multi.mode=+v;render();return}if(k==="astab"){S.asTab=v;render();return}if(k==="astrk"){S.sel=+v;render();return}
   if(k==="loopkind"){const r=S.song[S.songSel];r.type=v;if(v==="halt")r.to=S.songSel;if(v==="jump"&&r.to<=S.songSel)r.to=Math.min(S.song.length-1,S.songSel+1);if(v==="loop"){if(!r.count)r.count=2;if(r.to>=S.songSel)r.to=Math.max(0,S.songSel-1)}structEdited();render();return}}
  const at=e.target.closest("[data-arptrig]");if(at){const a=trk(S.sel).arp,k=at.dataset.arptrig;a[k]=a[k]?0:1;structEdited();render();return}
@@ -184,7 +184,7 @@ document.addEventListener("change",e=>{const id=e.target.id,v=e.target.value,tr=
  m=id.match(/^asd(\d)$/);if(m){S.tracks[asgT()].assign.tabs[S.asTab][+m[1]].d=+v;soundEdited();return}
  m=id.match(/^mpat(\d+)$/);if(m){S.mmap[+m[1]].pat=+v;render();return}
  if(id==="trigpos"){tr.trigpos=v===""?null:+v;soundEdited();render();return}
- if(id==="mch"){tr.ch=+v;soundEdited();render();return}});
+ if(id==="mch"){tr.ch=+v;soundEdited("global");render();return}});
 
 /* ===== Keys ===== */
 document.addEventListener("keydown",e=>{const mod=e.metaKey||e.ctrlKey,inField=e.target.closest?.("input,select,textarea");
