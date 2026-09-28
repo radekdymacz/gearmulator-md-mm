@@ -65,22 +65,14 @@ namespace mdJucePlugin
 					m_learn.publish();
 				return;
 			}
-			if(op == "engine")
-				setEngine(_message);
-			else if(op == "recheckFirmware")
-			{
-				const auto fw = m_link.firmware();
-				m_desk.setFirmware(fw);
-				reply(_message, fw == mdDesk::Desk::Firmware::Present, fw == mdDesk::Desk::Firmware::Present ? "Firmware found"
-					: "No MD OS 1.63 ROM is running yet. After adding it, reopen the plug-in.");
-			}
-			else if(op == "revealRomFolder")
-			{
-				const juce::File folder(juce::String::fromUTF8(m_processor.getPublicRomFolder().c_str()));
-				folder.createDirectory();
-				folder.revealToUser();
-				reply(_message, true, {});
-			}
+			// The plug-in's commands (the table's Owner::Host), by op.
+			using Handler = void (MdSession::*)(const Value&);
+			static const std::map<std::string, Handler> handlers{
+				{"engine", &MdSession::setEngine},
+				{"recheckFirmware", &MdSession::recheckFirmware},
+				{"revealRomFolder", &MdSession::revealRomFolder}};
+			if(const auto it = handlers.find(op); it != handlers.end())
+				(this->*(it->second))(_message);
 			else
 				reply(_message, false, "unknown command " + op);
 		}
@@ -233,6 +225,22 @@ namespace mdJucePlugin
 			}
 			reply(_message, true, it->second.externalMidi ? "HW MIDI: the editor talks to a Machinedrum on the plug-in's MIDI in and out"
 				: "The emulated OS 1.63 again");
+		}
+
+		void recheckFirmware(const Value& _message)
+		{
+			const auto fw = m_link.firmware();
+			m_desk.setFirmware(fw);
+			reply(_message, fw == mdDesk::Desk::Firmware::Present, fw == mdDesk::Desk::Firmware::Present ? "Firmware found"
+				: "No MD OS 1.63 ROM is running yet. After adding it, reopen the plug-in.");
+		}
+
+		void revealRomFolder(const Value& _message)
+		{
+			const juce::File folder(juce::String::fromUTF8(m_processor.getPublicRomFolder().c_str()));
+			folder.createDirectory();
+			folder.revealToUser();
+			reply(_message, true, {});
 		}
 
 		// HW MIDI: the wire at DIN speed out, the machine's SysEx in.

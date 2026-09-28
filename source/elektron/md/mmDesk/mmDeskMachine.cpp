@@ -406,6 +406,10 @@ namespace mmDesk
 		const auto from = m_curKit;
 		m_curKit = k;
 		kitSwitched(from, k);
+		// LOAD KIT and SAVE KIT relink the current pattern to the kit (as on the MD): read it back. The
+		// firmware takes MIDI in order, so the answer to this request already shows the relink.
+		if(m_curPattern >= 0)
+			request({Kind::Pattern, static_cast<uint8_t>(m_curPattern)}, true);
 		m_lastStatusMs = now() - 800;
 		return ok();
 	}

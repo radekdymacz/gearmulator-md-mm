@@ -1,4 +1,5 @@
 #include "mdDeskLibrary.h"
+#include "mdDeskModel.h"
 
 #include "elektronData/mdJson.h"
 #include "elektronData/mdValidate.h"
@@ -46,8 +47,8 @@ namespace mdDesk
 
 	bool isLibraryCommand(const std::string& _op)
 	{
-		static const char* ops[] = {"kitCopy", "kitPaste", "kitCopyTo", "kitClear", "kitRename", "patCopy", "patPaste", "patCopyTo", "patClear"};
-		return std::any_of(std::begin(ops), std::end(ops), [&](const char* _o) { return _op == _o; });
+		const auto* c = commandTable().find(_op);
+		return c && std::string(c->group) == "library";
 	}
 
 	ed::MdKit emptyKit(const ed::MdKit& _like, const uint8_t _slot)

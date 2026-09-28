@@ -1,5 +1,6 @@
 #include "mdDeskEdit.h"
 #include "mdDeskLibrary.h"
+#include "mdDeskModel.h"
 
 #include "elektronData/mdJson.h"
 #include "elektronData/mdMachines.h"
@@ -859,12 +860,13 @@ namespace mdDesk
 			return {};
 		}
 
-		bool isOneOf(const std::string& _op, std::initializer_list<const char*> _ops)
+		// The document kind a command edits: the command table's (P6: one vocabulary).
+		std::optional<DocKind> kindOf(const std::string& _op)
 		{
-			for(const auto* o : _ops)
-				if(_op == o)
-					return true;
-			return false;
+			const auto* c = commandTable().find(_op);
+			if(!c || c->kind < 0)
+				return {};
+			return static_cast<DocKind>(c->kind);
 		}
 
 		std::vector<std::string> problemsOf(const Document& _doc)
@@ -890,8 +892,8 @@ namespace mdDesk
 		std::optional<Document> before;
 		std::optional<Document> after;
 
-		if(isOneOf(op, {"trig", "accent", "slide", "lock", "clearLane", "length", "totalLength", "speed", "swing",
-			"accentAmount", "patternKit", "clearSteps", "copySteps", "pasteSteps"}))
+		const auto kind = kindOf(op);
+		if(kind == DocKind::Pattern)
 		{
 			const auto p = args.integer("p", 0, 127);
 			if(!p)
@@ -909,8 +911,7 @@ namespace mdDesk
 			before = it->second;
 			after = edit->value;
 		}
-		else if(isOneOf(op, {"param", "level", "machine", "lfo", "group", "masterFx", "kitName", "copySound",
-			"pasteSound", "clearSound"}))
+		else if(kind == DocKind::Kit)
 		{
 			const auto k = args.integer("k", 0, 63);
 			if(!k)
@@ -927,7 +928,7 @@ namespace mdDesk
 			before = it->second;
 			after = *edit;
 		}
-		else if(isOneOf(op, {"rowSet", "rowInsert", "rowDelete", "rowMove", "copyRow", "pasteRow"}))
+		else if(kind == DocKind::Song)
 		{
 			const auto s = args.integer("s", 0, 31);
 			if(!s)
@@ -944,7 +945,7 @@ namespace mdDesk
 			before = it->second;
 			after = *edit;
 		}
-		else if(isOneOf(op, {"route", "tempo", "extended", "globalSet"}))
+		else if(kind == DocKind::Global)
 		{
 			if(!_docs.global)
 			{

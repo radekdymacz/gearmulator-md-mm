@@ -51,6 +51,7 @@ namespace deskCore
 		int kind = -1;				// the document kind the command edits (the model's enum), -1: none
 		std::vector<Arg> args;
 		const char* help = "";
+		const char* group = "";		// the model's grouping ("library": the MD's kit library and pattern chooser)
 	};
 
 	class CommandTable

@@ -114,12 +114,14 @@ function chainCard() {
 	const known = !!c, active = known && c.active && c.patterns.length > 0;
 	const pads = Array.from({ length: 16 }, (_, k) => { const p = b * 16 + k, n = d.indexOf(p); return `<button class="chk${hasPat(p) ? "" : " empty"}${n >= 0 ? " in" : ""}" data-chainpad="${p}" title="${patName(p)}${n >= 0 ? ": number " + (n + 1) + " in the chain. Click removes it." : ". Click adds it to the chain."}">${patName(p)}<small>${hasPat(p) ? patLen(p) : "empty"}</small>${n >= 0 ? `<em>${n + 1}</em>` : ""}</button>`; }).join("");
 	const playing = V.pat, list = active ? c.patterns : [], at = list.indexOf(playing), next = active ? list[(at + 1) % list.length] : null;
-	const live = !known ? `<span class="note">The chain is not readable on this firmware.</span>` : active ? list.map(p => `<span class="lcdchip${p === playing ? " now" : ""}${V.playing && p === next && at >= 0 ? " nx" : ""}">${patName(p)}</span>`).join("<i>»</i>") + "<i>↺</i>"
+	/* what the engine can do (machine.capabilities.chains, with its reason) */
+	const can = V.caps.chains !== false, why = V.caps.reasons?.chains || "";
+	const live = !can ? `<span class="note">${why}</span>` : !known ? `<span class="note">The chain is not readable on this firmware.</span>` : active ? list.map(p => `<span class="lcdchip${p === playing ? " now" : ""}${V.playing && p === next && at >= 0 ? " nx" : ""}">${patName(p)}</span>`).join("<i>»</i>") + "<i>↺</i>"
 		: `<span class="note">No chain. The machine plays ${patName(playing)} and stays on it.</span>`;
 	return `<section class="card"><header><h3>Chain</h3><span>bank ${bn} · loops · BANK + TRIGs on the machine</span></header>
   <div class="chainp">${pads}</div>
   <div class="irow"><span class="ilab">Plays</span><div class="chainrow">${live}</div></div>
-  <div class="irow"><span class="ilab"></span><span class="chainacts"><button class="cream" data-chain="send"${d.length < 2 || !known ? " disabled" : ""} title="Holds BANK ${bn} and presses the TRIG keys in this order on the machine. ${V.playing ? "It starts at the pattern end." : "PLAY starts at the first one."}">Chain ${d.length ? d.length : ""}</button><button data-chain="undo"${d.length ? "" : " disabled"}>Back</button><button class="danger" data-chain="clear"${active ? "" : " disabled"} title="LOAD PATTERN of the current pattern: the machine's way to end a chain">Clear</button></span>
+  <div class="irow"><span class="ilab"></span><span class="chainacts"><button class="cream" data-chain="send"${d.length < 2 || !known || !can ? " disabled" : ""} title="${can ? "" : why + " "}Holds BANK ${bn} and presses the TRIG keys in this order on the machine. ${V.playing ? "It starts at the pattern end." : "PLAY starts at the first one."}">Chain ${d.length ? d.length : ""}</button><button data-chain="undo"${d.length ? "" : " disabled"}>Back</button><button class="danger" data-chain="clear"${active ? "" : " disabled"} title="LOAD PATTERN of the current pattern: the machine's way to end a chain">Clear</button></span>
   <span class="note">One bank, each pattern once. Picking a pattern ends the chain; editing its patterns does not.</span></div></section>`;
 }
 document.addEventListener("click", e => {

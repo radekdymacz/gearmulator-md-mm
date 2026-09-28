@@ -68,40 +68,50 @@ namespace mdJucePlugin
 				}
 				return;
 			}
-			if(op == "engine")
-				setEngine(_message);
-			else if(op == "midi")
-			{
-				// {"op":"midi","b":[status, data1, data2]}: the page's keyboard and joystick.
-				const auto* b = _message.find("b");
-				std::array<int, 3> v{-1, 0, 0};
-				if(b && b->isArray())
-					for(size_t i = 0; i < 3 && i < b->asArray().size(); ++i)
-						if(b->asArray()[i].isNumber())
-							v[i] = static_cast<int>(b->asArray()[i].asNumber());
-				const bool ok = v[0] >= 0x80 && v[0] < 0xf0 && v[1] >= 0 && v[1] < 128 && v[2] >= 0 && v[2] < 128
-					&& sendMidi(static_cast<uint8_t>(v[0]), static_cast<uint8_t>(v[1]), static_cast<uint8_t>(v[2]));
-				if(!ok)
-					reply(_message, false, "midi: a channel message, [status 0x80-0xef, data, data]");
-			}
-			else if(op == "recheckFirmware")
-			{
-				using E = mmDesk::Desk::Engine;
-				const auto e = m_link.engine();
-				m_desk.setEngine(e);
-				reply(_message, e != E::Missing && e != E::Unsupported, e == E::Missing
-					? "No MM OS 1.32B ROM is running yet. After adding it, reopen the plug-in."
-					: e == E::Unsupported ? "This ROM is not MM OS 1.32B." : "Firmware found");
-			}
-			else if(op == "revealRomFolder")
-			{
-				const juce::File folder(juce::String::fromUTF8(m_processor.getPublicRomFolder().c_str()));
-				folder.createDirectory();
-				folder.revealToUser();
-				reply(_message, true, {});
-			}
+			// The plug-in's commands (the table's Owner::Host), by op.
+			using Handler = void (MmSession::*)(const Value&);
+			static const std::map<std::string, Handler> handlers{
+				{"engine", &MmSession::setEngine},
+				{"midi", &MmSession::midiFromPage},
+				{"recheckFirmware", &MmSession::recheckFirmware},
+				{"revealRomFolder", &MmSession::revealRomFolder}};
+			if(const auto it = handlers.find(op); it != handlers.end())
+				(this->*(it->second))(_message);
 			else
 				reply(_message, false, "unknown command " + op);
+		}
+
+		// {"op":"midi","b":[status, data1, data2]}: the page's keyboard and joystick.
+		void midiFromPage(const Value& _message)
+		{
+			const auto* b = _message.find("b");
+			std::array<int, 3> v{-1, 0, 0};
+			if(b && b->isArray())
+				for(size_t i = 0; i < 3 && i < b->asArray().size(); ++i)
+					if(b->asArray()[i].isNumber())
+						v[i] = static_cast<int>(b->asArray()[i].asNumber());
+			const bool ok = v[0] >= 0x80 && v[0] < 0xf0 && v[1] >= 0 && v[1] < 128 && v[2] >= 0 && v[2] < 128
+				&& sendMidi(static_cast<uint8_t>(v[0]), static_cast<uint8_t>(v[1]), static_cast<uint8_t>(v[2]));
+			if(!ok)
+				reply(_message, false, "midi: a channel message, [status 0x80-0xef, data, data]");
+		}
+
+		void recheckFirmware(const Value& _message)
+		{
+			using E = mmDesk::Desk::Engine;
+			const auto e = m_link.engine();
+			m_desk.setEngine(e);
+			reply(_message, e != E::Missing && e != E::Unsupported, e == E::Missing
+				? "No MM OS 1.32B ROM is running yet. After adding it, reopen the plug-in."
+				: e == E::Unsupported ? "This ROM is not MM OS 1.32B." : "Firmware found");
+		}
+
+		void revealRomFolder(const Value& _message)
+		{
+			const juce::File folder(juce::String::fromUTF8(m_processor.getPublicRomFolder().c_str()));
+			folder.createDirectory();
+			folder.revealToUser();
+			reply(_message, true, {});
 		}
 
 		void step() override

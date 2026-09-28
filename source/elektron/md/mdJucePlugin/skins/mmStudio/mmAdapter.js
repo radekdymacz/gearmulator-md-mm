@@ -422,7 +422,6 @@
 				send({ op: "saveKit", k: s.kit }, { onResult: r => r.ok || V().toast(r.errors[0]) });
 				return;
 			}
-			const relink = () => setTimeout(() => CUR.pat >= 0 && send({ op: "load", kind: "pattern", slot: CUR.pat }), 400);
 			if (op === "reload") {
 				if (s.kitState !== "edited") { V().toast(kitNameOf(s.kit) + " matches its saved slot. Nothing to reload."); return; }
 				V().ask(`Reload <b>${kitNameOf(s.kit)}</b> from the machine? Your edits go to its UNDO KIT.`,
@@ -432,7 +431,7 @@
 			}
 			if (op === "load") {
 				if (k === s.kit) { if (s.kitState === "edited") host.kit("reload", k); else V().toast(kitNameOf(k) + " is already the current kit."); return; }
-				const go = () => { send({ op: "loadKit", k }); relink(); V().toast("Loading " + kitNameOf(k) + " (LOAD KIT)."); V().drawLib(true); };
+				const go = () => { send({ op: "loadKit", k }); V().toast("Loading " + kitNameOf(k) + " (LOAD KIT)."); V().drawLib(true); };
 				if (s.kitState === "edited") {
 					V().ask(`Load <b>${kitNameOf(k)}</b>? Your edits to <b>${kitNameOf(s.kit)}</b> are not saved on the machine. They go to its UNDO KIT.`,
 						[["Save kit, then load", "cream", () => { host.kit("save"); go(); }], ["Load (edits to UNDO KIT)", "danger", go], ["Cancel", "", () => V().drawLib(true)]]);
@@ -443,7 +442,7 @@
 			}
 			if (op === "saveAs") {
 				if (k === s.kit) { V().kitSave(); return; }
-				const go = () => { sync(); send({ op: "saveKit", k }); relink(); V().toast("Saving as " + kitNameOf(k) + " (SAVE KIT). It becomes the current kit."); V().drawLib(true); };
+				const go = () => { sync(); send({ op: "saveKit", k }); V().toast("Saving as " + kitNameOf(k) + " (SAVE KIT). It becomes the current kit."); V().drawLib(true); };
 				if (!s.kits[k].empty) {
 					V().ask(`Overwrite <b>${kitNameOf(k)}</b> with the current kit <b>${kitNameOf(s.kit)}</b>? The machine keeps the overwritten kit in its UNDO KIT.`,
 						[["Overwrite", "danger", go], ["Cancel", "", () => V().drawLib(true)]]);
