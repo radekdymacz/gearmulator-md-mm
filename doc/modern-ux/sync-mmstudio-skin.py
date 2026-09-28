@@ -156,6 +156,14 @@ host_block = host_block[:host_block.index('\n\t};\n')]
 host_methods = set(re.findall(r'^\t\t(\w+)(?:\(|:)', host_block, re.M))
 problems += ['the mockup calls HOST.%s, which mmAdapter.js does not have' % x for x in sorted(host_calls - host_methods)]
 problems += ['mmAdapter.js has host call %s, which the mockup never makes' % x for x in sorted(host_methods - host_calls)]
+# LIFE (machine.lifecycle -> the mockup's engine states) and the message types onMessage handles,
+# both against the contract, both ways.
+life = pc.find_object(adapter, 'LIFE')
+if life is None:
+    problems.append('mmAdapter.js: no LIFE')
+else:
+    problems += pc.check_lifecycle(pc.object_keys(life) or set(), schema, 'mmAdapter.js')
+problems += pc.check_message_types(pc.message_types_handled(adapter), schema, 'mmAdapter.js')
 if problems:
     print('contract check: ' + '; '.join(problems))
     sys.exit(1)

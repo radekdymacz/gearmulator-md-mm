@@ -72,6 +72,7 @@ select{background:var(--plate3);border:1px solid var(--rule);border-radius:3px;p
 .save{display:flex;align-items:center;gap:7px;font-size:12px;letter-spacing:.1em;text-transform:uppercase;color:var(--print2);width:132px}
 .save i{width:8px;height:8px;border-radius:50%;background:var(--key);flex:none;box-shadow:inset 0 0 0 1px var(--rule)}
 .save.dirty i{background:var(--led);box-shadow:0 0 6px var(--led)}
+.save.unknown i{opacity:.4;animation:blink 1s steps(2) infinite}
 .note{font-size:14px;color:var(--print2)}
 .note b{color:var(--print);font-weight:600}
 

@@ -1064,7 +1064,7 @@ document.addEventListener("click", e => {
 	if (mu || so) {
 		const i = +(mu || so).dataset[mu ? "mute" : "solo"], t = V.tracks[i];
 		if (mu) { t.mute ? S.userMutes.delete(i) : S.userMutes.add(i); setMute(i, !t.mute); }
-		else { S.soloSet.has(i) ? S.soloSet.delete(i) : S.soloSet.add(i); V = view(); applySolo(); }	/* solo is UI state the view reads */
+		else { const next = new Set(S.soloSet); next.has(i) ? next.delete(i) : next.add(i); S.soloSet = next; V = view(); applySolo(); }	/* solo is UI state the view reads, replaced per gesture, never mutated in place */
 		refreshAudible(); return;
 	}
 	const st = e.target.closest(".st"); if (st) {

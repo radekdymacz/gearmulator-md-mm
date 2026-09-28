@@ -17,22 +17,55 @@ const DELETE = Overlay.DELETE;
 let failures = 0;
 const check = (ok, what) => { console.log((ok ? "  ok   " : "  FAIL ") + what); if (!ok) failures++; };
 
+/* Fixtures are real $defs/pattern, $defs/kit, $defs/machine and $defs/catalogue documents (the
+   schema check below validates them): every required field is here, even the ones deriveView
+   never reads, so a fixture can never assert behaviour for a document the plug-in could not send. */
+const HEX62 = "0".repeat(62);
 const track = m => ({ machine: m, model: 0, level: 100, synth: Array(8).fill(10), effects: Array(8).fill(20), routing: Array(8).fill(30),
 	lfo: { track: 0, param: 0, shape1: 0, shape2: 0, update: 0 }, muteGroup: null, trigGroup: null });
-const pattern = { kit: 3, length: 16, totalLength: 16, tempoMultiplier: "1X", swingAmount: 0, accentAmount: 0,
-	accent: { editAll: 0, steps: [] }, slide: { editAll: 0, steps: [] },
-	tracks: Array.from({ length: 16 }, (_, i) => ({ trigs: i === 0 ? [0, 4] : [], accent: [], slide: [] })), locks: [{ track: 0, param: 0, steps: [[4, 99]] }] };
-const kit = (name, level = 100) => ({ name, tracks: Array.from({ length: 16 }, () => ({ ...track("GND-EMPTY"), level })),
-	masterFx: { rhythmEcho: Array(8).fill(0), gateBox: Array(8).fill(1), eq: Array(8).fill(2), dynamix: Array(8).fill(3) } });
+const pattern = { schema: "md-desk/pattern", version: 2, slot: 5, kit: 3, length: 16, totalLength: 16, tempoMultiplier: "1X", swingAmount: 0, accentAmount: 0,
+	accent: { editAll: 0, steps: [] }, slide: { editAll: 0, steps: [] }, swing: { editAll: 0, steps: [] },
+	tracks: Array.from({ length: 16 }, (_, i) => ({ trigs: i === 0 ? [0, 4] : [], accent: [], slide: [], swing: [] })), locks: [{ track: 0, param: 0, steps: [[4, 99]] }],
+	firmware: { format: { version: 2, revision: 0 }, lockedRowsField: 0 } };
+const kit = (name, level = 100) => ({ schema: "md-desk/kit", version: 2, slot: 3, name, tracks: Array.from({ length: 16 }, () => ({ ...track("GND-EMPTY"), level })),
+	masterFx: { rhythmEcho: Array(8).fill(0), gateBox: Array(8).fill(1), eq: Array(8).fill(2), dynamix: Array(8).fill(3) },
+	firmware: { format: { version: 2, revision: 0 }, lfoState: Array(16).fill(HEX62) } });
 /* the catalogue's enumerations (contract-r4: the C++ tables) */
 const enums = { tempoMultipliers: ["1X", "2X", "3/4X", "3/2X"], masterFx: ["rhythmEcho", "gateBox", "eq", "dynamix"], outputs: ["MAIN", "A", "B", "C", "D", "E", "F"],
 	lfoFields: ["track", "param", "shape1", "shape2", "update"], lfoUpdates: ["FREE", "TRIG", "HOLD"], lfoParams: { SPD: 21, DEPTH: 22, SHMIX: 23 } };
 const catalogue = { schema: "md-desk/machines", version: 1, machines: [], enums };
-const caps = { engine: "emu", label: "EMU OS 1.63", about: "", can: { transport: true, chains: false }, reasons: { chains: "keys only" }, values: { dumps: "direct" } };
+const caps = { engine: "emu", label: "EMU OS 1.63", about: "",
+	can: { transport: true, panelKeys: true, liveRecord: true, chains: false, lcd: true, workingKitMemory: true, mutesFromMemory: true, sampleNames: true, modulators: true },
+	reasons: { chains: "keys only" }, values: { dumps: "direct" } };
 const docs = (extra = {}) => ({ patterns: { 5: pattern }, kits: { 3: kit("STORED") }, songs: {}, global: null, catalogue, telemetry: null,
 	workingKit: null, sources: { "kit:3": "dump" },
-	machine: { pattern: { current: 5 }, kit: { current: 3, working: "clean" }, song: {}, desk: { playing: true, recording: true }, lifecycle: "ready", input: true, midi: true,
+	machine: { schema: "md-desk/machine", version: 1, pattern: { current: 5 }, kit: { current: 3, working: "clean" }, song: {}, desk: {}, engines: [],
+		history: { undo: false, redo: false, undoCount: 0, redoCount: 0 }, lifecycle: "ready", input: true, midi: true,
 		lifecycleText: "", capabilities: caps, clipboard: { steps: false, sound: true, songRow: false, kit: 7, pattern: null } }, ...extra });
+
+/* the fixtures above, against the schema itself (not just exercised through deriveView): a
+   fixture that drifts from md-data-contract.schema.json is a fixture that tests a document the
+   plug-in could never send. page_contract_check.py carries a small draft-07 subset for this (no
+   schema library dependency); run standalone as
+     python3 doc/modern-ux/page_contract_check.py doc/modern-ux/md-data-contract.schema.json <def> < fixture.json */
+(() => {
+	const { execFileSync } = require("child_process");
+	const root = path.join(__dirname, "..", "..", "..", "..", "..", "..");
+	const schemaPath = path.join(root, "doc", "modern-ux", "md-data-contract.schema.json");
+	const checker = path.join(root, "doc", "modern-ux", "page_contract_check.py");
+	const validate = (defName, instance) => {
+		try {
+			execFileSync("python3", [checker, schemaPath, defName], { input: JSON.stringify(instance) });
+			return [];
+		} catch (e) {
+			return (e.stdout || "").toString().trim().split("\n").filter(Boolean);
+		}
+	};
+	for (const [defName, instance] of [["pattern", pattern], ["kit", kit("STORED")], ["machine", docs().machine], ["catalogue", catalogue]]) {
+		const problems = validate(defName, instance);
+		check(problems.length === 0, "fixture " + defName + " matches the schema" + (problems.length ? ": " + problems.join("; ") : ""));
+	}
+})();
 
 /* pure */
 const a = deriveView(docs(), S);
@@ -40,7 +73,7 @@ Docs.patterns = { 1: { ...pattern, tracks: [] } };	// the page's own documents m
 const b = deriveView(docs(), S);
 check(a.pat === 5 && b.pat === 5 && a.kit === 3 && a.tracks[0].trigs[4] && b.tracks[0].trigs[4], "deriveView reads only the documents it is given");
 check(deriveView(docs({ telemetry: { playing: true, recording: false } }), S).playing, "the telemetry is a document: it gives the transport");
-check(!a.playing && !a.rec, "the transport is the telemetry's only (the machine document's desk.playing is not read)");
+check(!a.playing && !a.rec, "the transport is the telemetry's only (the machine document's desk carries no transport field at all)");
 check(deriveView(docs({ global: { extendedMode: false, tempo: 120, routing: Array(16).fill("MAIN") } }), S).mode === "CLASSIC" && a.mode === "EXTENDED", "the mode is the global's only");
 check(a.input && a.midi && a.clipboard.kit === 7 && a.clipboard.pattern === null && a.clipboard.sound, "input, midi and the clipboard are the machine document's");
 check(canDo(a, "transport") && !canDo(a, "chains") && !canDo(a, "noSuchCapability") && a.caps.reasons.chains === "keys only", "capabilities nested: can[name] true only; an unknown name is not allowed");

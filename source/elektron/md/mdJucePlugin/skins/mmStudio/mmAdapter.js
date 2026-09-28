@@ -100,8 +100,9 @@
 		if (!catalogue) return;
 		V().setKitSlot(k, { name: C().kitName(d), empty: C().kitEmpty(d), data: C().kitToPage(d, globalNow()) });
 	}
-	/* the kit state is the machine's (machine.kit.working), never a guess of the page */
-	const kitState = () => machine?.kit.working === "edited" ? "edited" : "clean";
+	/* the kit state is the machine's (machine.kit.working: "unknown" | "clean" | "edited"),
+	   never a guess of the page -- "unknown" stays its own state, never folded into "clean" */
+	const kitState = () => machine?.kit.working || "unknown";
 	function applyCurrentKit() {
 		const d = kitNow();
 		V().setWorkingKit(C().kitToPage(d, globalNow()), C().kitName(d));

@@ -20,7 +20,11 @@ function setPst(text,tip,warn){const p=$("#pst");if(!p)return;p.textContent=text
 function sendDialog(){ask(`<div class="lcdbig recv">SYSEX RECV · WAITING…</div><p>The Monomachine only accepts a dump on its SysEx receive screen. <b>${S.pend}</b> edit${S.pend===1?"":"s"} to send.</p>
  <ol class="recvsteps"><li>On the Monomachine press <b>FUNCTION + KIT/SONG</b> (GLOBAL), then <b>FILE › SYSEX RECV</b>.</li><li>Set <b>MODE ORIG</b> and press <b>YES</b>. The screen shows <b>WAITING…</b></li><li>Press <b>Send</b> here. Then press <b>EXIT</b> on the machine.</li></ol>`,
  [["Send now","cream",()=>{S.pend=0;S.patSent="live";renderPst();tx();toast("Sent. The pattern and song slots now match the editor. Press EXIT on the Monomachine.")}],["Later","",()=>{}]],"first")}
-function setKitState(st){S.kitState=st;const s=$("#save");if(!s)return;s.classList.toggle("dirty",st==="edited");s.lastElementChild.textContent=st==="edited"?"edited":"saved";s.title=st==="edited"?"Kit edits are not saved on the machine. They are kept in the DAW project.":"The kit matches its saved slot on the machine."}
+/* st: "clean" | "edited" | "unknown" (the machine hasn't said yet -- never shown as "saved") */
+function setKitState(st){S.kitState=st;const s=$("#save");if(!s)return;
+ s.classList.toggle("dirty",st==="edited");s.classList.toggle("unknown",st==="unknown");
+ s.lastElementChild.textContent=st==="edited"?"edited":st==="unknown"?"…":"saved";
+ s.title=st==="edited"?"Kit edits are not saved on the machine. They are kept in the DAW project.":st==="unknown"?"Not yet known: still reading this kit from the machine.":"The kit matches its saved slot on the machine."}
 function saveKit(){if(HOST.kit)return HOST.kit("save",S.kit);S.kits[S.kit]={name:S.workName,empty:false,data:captureKit()};setKitState("clean");tx();toast("Saved "+kitName(S.kit)+" on the machine (SAVE KIT). The overwritten kit went to the UNDO KIT slot.")}
 function goPattern(p,now){p=(p+128)%128;if(p===S.pat&&S.queued==null)return;const kitChange=S.patKit[p]!==S.kit,go=now?()=>switchNow(p):()=>queuePattern(p);
  /* a host's machine asks itself (its ask protocol); the mockup's example engine asks here */

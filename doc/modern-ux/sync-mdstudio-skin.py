@@ -156,6 +156,16 @@ if not cap_table or not cap_info:
     problems.append('mdDeskApp.js: no CAP_CONTROLS / CAP_INFO')
 else:
     problems += pc.check_caps(re.findall(r'^\s*(\w+):', cap_table.group(1), re.M), re.findall(r'"(\w+)"', cap_info.group(1)), schema, 'mdDeskApp.js')
+# LIFE (machine.lifecycle -> the page's words) and the message types onMessage handles, both
+# against the contract, both ways (a page can gate on nothing the contract will never send, and
+# nothing the contract sends can go unhandled).
+life = pc.find_object(app, 'LIFE')
+if life is None:
+    problems.append('mdDeskApp.js: no LIFE')
+else:
+    problems += pc.check_lifecycle(pc.object_keys(life) or set(), schema, 'mdDeskApp.js')
+all_js = ''.join(page_js.values())
+problems += pc.check_message_types(pc.message_types_handled(all_js), schema, 'mdStudio')
 if problems:
     print('contract check: ' + '; '.join(problems))
     sys.exit(1)

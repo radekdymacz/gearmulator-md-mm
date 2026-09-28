@@ -326,6 +326,7 @@ const Overlay = (() => {
 })();
 function view() { return Overlay.over(deriveView(Docs, S)); }
 /* The view the renderers read: view(), replaced on every document and command. Before the first
-   document it is the overlay over deriveView(EMPTY_DOCS, S), set by the page once its UI state
-   (S) and names (nameOf) exist (mdDeskApp.js). */
+   document it is the overlay over deriveView(Docs, S) with Docs still empty (its shape is
+   EMPTY_DOCS's); nameOf is already this file's own, and V is first set once S (the page's UI
+   state, mdDeskApp.js) exists. */
 let V = null;

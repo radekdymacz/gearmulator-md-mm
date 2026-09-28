@@ -153,9 +153,13 @@ function showFwLcd(on) {
 	if (on) { p.classList.remove("fwfade"); p.classList.add("fwboot"); return; }
 	p.classList.remove("fwboot"); p.classList.add("fwfade"); setTimeout(() => p.classList.remove("fwfade"), 700);
 }
+/* modInFlight (mdDeskApp.js) guards an outstanding modSet: it must not survive an engine change
+   (its result will never come) or outlive the machine going from not-ready to ready (a fresh
+   "mod" message follows and any earlier in-flight id is moot). */
+let wasReady = false;
 Bridge.onMessage(m => {
 	/* The engine changed (emulator <-> HW MIDI): the documents start over. */
-	if (m.type === "reset") { resetDocs(Docs); Overlay.clear(); scheduleRender(); return; }
+	if (m.type === "reset") { resetDocs(Docs); Overlay.clear(); modInFlight = 0; wasReady = false; scheduleRender(); return; }
 	/* The firmware's LCD shows while the machine takes no input (machine.input: the firmware starts);
 	   BOOTING OS lasts until keys work: the firmware answers MIDI early, but its start-up animation
 	   ignores panel keys until it is over (about 13 s; the lifecycle's "animating"). */
@@ -164,7 +168,8 @@ Bridge.onMessage(m => {
 		showFwLcd(!!fwLcd.bits && !machineState().input);
 	}
 	else if (m.type === "machine") {
-		if (m.doc.input) showFwLcd(false);
+		if (m.doc.input) { showFwLcd(false); if (!wasReady) modInFlight = 0; wasReady = true; }
+		else wasReady = false;
 		const chain = m.doc.desk ? m.doc.desk.chain : undefined;
 		if (S.ws === "song" && m.doc.desk && !sameValue(chain, chainCard.last)) { chainCard.last = chain; scheduleRender(); }
 	}
