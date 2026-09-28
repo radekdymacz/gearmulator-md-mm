@@ -609,7 +609,10 @@ namespace mdDesk
 		const auto kit = currentKit();
 		if(!kit)
 			return refuse("The current kit is not known yet");
-		if(kitState(_view) != deskCore::KitState::Edited)
+		const auto state = kitState(_view);
+		if(state == deskCore::KitState::Unknown)
+			return refuse("The kit's saved slot is still being read from the machine. Try again in a moment.");
+		if(state != deskCore::KitState::Edited)
 			return refuse("The kit that plays matches its saved slot. Nothing to reload.");
 		m_session.loadKit(*kit);
 		// The working kit is the stored slot again: from memory, or from the slot's next dump.
@@ -1028,11 +1031,17 @@ namespace mdDesk
 			return;
 		slot = _value;
 		// Something else moved the kit that plays: the machine holds it (memory will show it too),
-		// so the next change builds on this one, not on the older image.
-		if(m_working.expect.expecting(now()) && m_working.expect.to && m_working.expect.to->position == k.position)
-			m_working.expect.to = k;
-		else if(m_working.image && m_working.image->position == k.position)
-			m_working.image = k;
+		// so the next change builds on this one. The one value goes into each copy that describes
+		// the kit (the edits expected, the last image); neither is replaced by the other.
+		const auto set = [&](ed::MdKit& _k)
+		{
+			if(_k.position == k.position)
+				(_index == 24 ? _k.levels[_track] : _k.params[_track][_index]) = _value;
+		};
+		if(m_working.expect.to)
+			set(*m_working.expect.to);
+		if(m_working.image)
+			set(*m_working.image);
 		observe(WorkingKit{k}, Source::Tracked);
 	}
 

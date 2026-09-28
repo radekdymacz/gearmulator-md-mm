@@ -753,6 +753,34 @@ namespace
 		}
 		check(!turns.empty() && turns.back().first == 3, "it becomes DATA ENTRY turns of knob D");
 		check(desk.documents().working && desk.documents().working->kit.params[2][3] == 5, "the view keeps the wanted value meanwhile");
+		// Automation (or an app modulator) while the knob turns are on their way: it moves its one
+		// value and leaves the knob's wanted value pending.
+		// Automation (or an app modulator) while the knob turns are on their way: it moves its one
+		// value; an image with only the automation does not settle the knob's edit, one with both does.
+		desk.onHostKitParam(4, 7, 99);
+		const auto imageOf = [](ed::MdKit _k)
+		{
+			const auto img = ed::mdWorkingKitImage(_k);
+			std::vector<uint8_t> r{_k.position, 0};
+			r.insert(r.end(), img.begin(), img.end());
+			return r;
+		};
+		auto onlyAuto = kit;
+		onlyAuto.params[4][7] = 99;
+		desk.onWorkingKitMemory(imageOf(onlyAuto));
+		desk.tick();
+		check(desk.coreState().state({DocKind::WorkingKit, 0})->pending && desk.documents().working->kit.params[2][3] == 5,
+			"automation during knob turns: an image without the knob's value does not settle it");
+		auto both = onlyAuto;
+		both.params[2][3] = 5;
+		for(int i = 0; i < 3; ++i)	// the knob recorder sees its value land, the next image settles
+		{
+			now += 40;
+			desk.onWorkingKitMemory(imageOf(both));
+			desk.tick();
+		}
+		check(!desk.coreState().state({DocKind::WorkingKit, 0})->pending && desk.documents().working->kit.params[2][3] == 5
+			&& desk.documents().working->kit.params[4][7] == 99, "and the image that shows both settles with both");
 		keys.clear();
 		desk.onPageMessage(cmd(R"({"op":"record","id":5})"));
 		check(ok() && keys == std::vector<std::string>{"play"}, "REC while recording presses PLAY: keep playing");

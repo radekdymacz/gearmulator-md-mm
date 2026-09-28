@@ -5,6 +5,7 @@
 #include "deskCore.h"
 #include "deskDesk.h"
 #include "deskLoadQueue.h"
+#include "deskMod.h"
 #include "deskPush.h"
 #include "deskRef.h"
 #include "deskSequence.h"
@@ -390,6 +391,36 @@ int main()
 			&& m.find("message")->asString() == "ends the chain<br>loses kit edits" && m.find("kit")->asNumber() == 3
 			&& !m.find("command")->find("id") && !m.find("command")->find("force"),
 			"two questions of one command are one ask naming both (force answers both)");
+		Outcome n1, n2;
+		n1.note = "first";
+		n2.note = "second";
+		check(withAsk(n1, n2).note == "first. second", "joined outcomes keep both notes");
+	}
+	{
+		ModEngine mods;
+		ModSetup setup;
+		ModSource src;
+		src.id = "lfo1";
+		setup.sources.push_back(src);
+		ModLink link;
+		link.source = "lfo1";
+		setup.links.push_back(link);
+		mods.setSetup(setup);
+		struct Sink { int sent = 0; void sendModulation(uint8_t, uint8_t, uint8_t, int) { ++sent; } } sink;
+		double t = 0;
+		for(int s = 0; s < 32; ++s, t += 100)
+			mods.step(sink, 0, ModLimits{}, s, true, t);
+		mods.setSetup({});
+		bool fellToZero = false;
+		for(int s = 0; s < 40 && !fellToZero; ++s, t += 100)
+		{
+			const auto m = mods.step(sink, 0, ModLimits{}, s, true, t);
+			if(m && m->find("ccPerSecond")->asNumber() == 0)
+				fellToZero = true;
+			else if(!m)
+				break;
+		}
+		check(fellToZero && !mods.step(sink, 0, ModLimits{}, 1, true, t + 100), "the CC readout falls to zero after the last modulator, then stops");
 	}
 	loadQueue();
 	lifecycle();

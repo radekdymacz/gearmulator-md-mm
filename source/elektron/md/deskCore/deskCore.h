@@ -502,8 +502,8 @@ namespace deskCore
 		// A message that goes before everything queued (a reset: the page starts over).
 
 		// The machine started over (or another engine took its place): the page is told at once, and
-		// what was queued from before goes, except the results the page's commands wait for (they
-		// follow the reset, in order). Nothing that was known is kept.
+		// what was queued from before goes, except what answers the page's commands: results and
+		// the questions they came with (they follow the reset, in order). Nothing known is kept.
 		void startOver()
 		{
 			Value reset = Value::object();
@@ -511,7 +511,7 @@ namespace deskCore
 			send(reset);
 			std::vector<Value> kept;
 			for(auto& m : m_out)
-				if(const auto* t = m.find("type"); t && t->isString() && t->asString() == "result")
+				if(const auto* t = m.find("type"); t && t->isString() && (t->asString() == "result" || t->asString() == "ask"))
 					kept.push_back(std::move(m));
 			m_out = std::move(kept);
 			forgetAll();
