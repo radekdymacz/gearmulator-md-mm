@@ -44,14 +44,14 @@ int main()
 	}
 	mdJucePlugin::AudioPluginAudioProcessor b(md::MachineModel::Machinedrum, isolated(), false);
 	juce::AudioProcessor& jb = b;
-	const auto g0 = b.getDeskSetupGeneration();
+	const auto g0 = b.getDeskSetupVersion();
 	jb.setStateInformation(withSetup.getData(), static_cast<int>(withSetup.getSize()));
 	check(b.getDeskSetup() == setup, "the setup comes back with the project, byte for byte");
-	check(b.getDeskSetupGeneration() != g0, "an open editor sees a new generation");
-	const auto g1 = b.getDeskSetupGeneration();
+	check(b.getDeskSetupVersion() != g0, "the session sees a new version");
+	const auto g1 = b.getDeskSetupVersion();
 	jb.setStateInformation(without.getData(), static_cast<int>(without.getSize()));
 	check(b.getDeskSetup().empty(), "a project without it starts from the default setup");
-	check(b.getDeskSetupGeneration() != g1, "and says so");
+	check(b.getDeskSetupVersion() != g1, "and says so");
 	// P4 HW MIDI: the plug-in's MIDI in/out carry the editor's traffic to external hardware.
 	{
 		jb.prepareToPlay(44100.0, 256);

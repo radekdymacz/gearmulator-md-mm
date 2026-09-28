@@ -42,9 +42,6 @@ namespace mdDesk
 			std::function<bool(const std::string& _key)> pressKey;
 			std::function<bool(uint8_t _encoder, int _steps)> turnKnob;
 			std::function<void(const Value& _message)> toPage;
-			// The app modulators run elsewhere: the desk then only edits their setup and shows
-			// these values. Unset: the desk runs them itself.
-			std::function<ModReport()> modulatorsElsewhere;
 			// The editor's setup (md-desk/setup) changed: keep it with the project.
 			std::function<void(const Value& _setup)> saveSetup;
 			std::function<double()> nowMs;

@@ -1,8 +1,7 @@
 #include "mdPluginEditorState.h"
 
 #include "mdEditor.h"
-#include "mdStudioEditor.h"
-#include "mmStudioEditor.h"
+#include "mdPageEditor.h"
 #include "mdPluginProcessor.h"
 #include "mdProductSkinPolicy.h"
 #include "mdStandaloneRendererPolicy.h"
@@ -52,7 +51,7 @@ namespace mdJucePlugin
 				auto* e = getEditor();
 				auto* ui = getUiRoot();
 				logLine(_what + ": current skin \"" + juce::String(getCurrentSkin().displayName) + "\" (" + juce::String(getCurrentSkin().filename)
-					+ "), editor " + (dynamic_cast<StudioEditor*>(e) ? "Machinedrum Editor page" : e ? "panel" : "none")
+					+ "), editor " + (dynamic_cast<PageEditor*>(e) ? "Machinedrum Editor page" : e ? "panel" : "none")
 					+ (ui ? ", " + juce::String(ui->getWidth()) + " x " + juce::String(ui->getHeight()) : juce::String()));
 			};
 			juce::String names;
@@ -91,9 +90,9 @@ namespace mdJucePlugin
 	jucePluginEditorLib::Editor* PluginEditorState::createEditor(const jucePluginEditorLib::Skin& _skin)
 	{
 		const auto& page = getIncludedSkins().front();
-		if(static_cast<AudioPluginAudioProcessor&>(m_processor).getModel() == md::MachineModel::Monomachine)
-			return new MmStudioEditor(m_processor, isMmStudioSkin(_skin.displayName, _skin.filename) ? _skin : page);
-		return new StudioEditor(m_processor, isStudioSkin(_skin.displayName, _skin.filename) ? _skin : page);
+		const bool mm = static_cast<AudioPluginAudioProcessor&>(m_processor).getModel() == md::MachineModel::Monomachine;
+		const bool own = mm ? isMmStudioSkin(_skin.displayName, _skin.filename) : isStudioSkin(_skin.displayName, _skin.filename);
+		return new PageEditor(m_processor, own ? _skin : page);
 	}
 
 	void PluginEditorState::initContextMenu(juceRmlUi::Menu& _menu)

@@ -1,10 +1,10 @@
-// P5: the app modulators run in the processor, with no editor: an LFO on track 2 DIST moves
-// the machine's working kit while the pattern plays. Needs the MD OS 1.63 ROM:
-//   GEARMULATOR_MD_FIRMWARE_BIN=<ROM> mdModRunnerFirmwareTest
+// P5/P6: the app modulators run in the processor's desk session, with no editor: an LFO on
+// track 2 DIST moves the machine's working kit while the pattern plays. Needs the MD OS 1.63 ROM:
+//   GEARMULATOR_MD_FIRMWARE_BIN=<ROM> mdSessionFirmwareTest
 // Exits 77 without it. The config is isolated (EphemeralConfig).
 
 #include "mdPluginProcessor.h"
-#include "mdModRunner.h"
+#include "mdDeskSession.h"
 
 #include "mdLib/mddevice.h"
 
@@ -29,7 +29,7 @@ int main()
 	const auto* rom = std::getenv("GEARMULATOR_MD_FIRMWARE_BIN");
 	if(!rom || !*rom)
 	{
-		std::puts("mdModRunnerFirmwareTest: SKIP (GEARMULATOR_MD_FIRMWARE_BIN not set)");
+		std::puts("mdSessionFirmwareTest: SKIP (GEARMULATOR_MD_FIRMWARE_BIN not set)");
 		return 77;
 	}
 	juce::ScopedJuceInitialiser_GUI juce;
@@ -129,12 +129,6 @@ int main()
 		}
 		if(telemetry && telemetry->playing.load() != 1 && ticks % 10 == 5)
 			pendingStart = 1;	// a replaced device (the processor's own services) starts again
-		if(false)
-		{
-			const auto r = processor->getModRunner()->report();
-			auto* prm = processor->getController().getParameter("Distortion", 1);
-			std::printf("  [step %d playing %d, lfo %d, cc/s %d, param %d]\n", telemetry->step.load(), telemetry->playing.load(), r.values.empty() ? -1 : r.values[0], r.ccPerSecond, prm ? prm->getUnnormalizedValue() : -1);
-		}
 		std::vector<uint8_t> region;
 		uint32_t seq = 0;
 		if(telemetry && telemetry->readWorkingKit(region, seq))
@@ -154,13 +148,16 @@ int main()
 		}
 		return steps < 32 && ticks < 300;
 	};
-	// This thread is the message thread: run the checks and the ModRunner's polls here.
-	auto* runner = processor->getModRunner();
+	// This thread is the message thread: the checks run here, and the session's timer through the
+	// run loop.
+	if(!processor->getDeskSession())
+	{
+		std::puts("mdSessionFirmwareTest: FAIL (no desk session)");
+		return 1;
+	}
 	while(tick())
 		for(int i = 0; i < 12; ++i)
 		{
-			if(runner)
-				runner->poll();
 			// Deliver the message thread's queued work (JUCE on macOS posts to the CFRunLoop).
 #if JUCE_MAC
 			CFRunLoopRunInMode(kCFRunLoopDefaultMode, 0.008, false);
@@ -174,7 +171,7 @@ int main()
 	const bool ok = seen.size() >= 4 && !outside;
 	std::printf("  with no editor, track 2 DIST took %zu values in %d steps (%d..%d)\n", seen.size(), steps, seen.empty() ? -1 : *seen.begin(),
 		seen.empty() ? -1 : *seen.rbegin());
-	std::printf("mdModRunnerFirmwareTest: %s\n", ok ? "PASS" : "FAIL");
+	std::printf("mdSessionFirmwareTest: %s\n", ok ? "PASS" : "FAIL");
 	processor.reset();
 	return ok ? 0 : 1;
 }

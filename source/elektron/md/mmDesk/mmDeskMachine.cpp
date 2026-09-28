@@ -711,7 +711,9 @@ namespace mmDesk
 	void MmMachine::tick(const double _now, const Documents&)
 	{
 		pumpSequence(_now);
-		if(!ready())
+		// The emulator takes requests once its start screen is gone; over HW MIDI the status polls
+		// are what finds the machine.
+		if(!m_profile.wire && !ready())
 			return;
 		// Status: once a second, four times while a pattern is queued.
 		if(_now - m_lastStatusMs > (m_queuedPattern >= 0 ? 250 : 1000))

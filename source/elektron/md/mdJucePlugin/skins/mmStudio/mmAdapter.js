@@ -749,7 +749,8 @@
 			stage = "tel playing";
 			await W(m => m.type === "tel" && m.playing && m.step > 0, 4000);
 			/* the soft playhead column glides with the machine's step (RAM telemetry), POSITION too */
-			const at = () => { const ph = $("#phcol"); return { x: ph ? new DOMMatrix(getComputedStyle(ph).transform).m41 : null, o: ph ? +ph.style.opacity : 0, h: ph ? ph.offsetHeight : 0, pos: $("#pos").textContent, step: S.step }; };
+			/* the column's target (its style): a covered window runs no transitions, so the computed one can stand still */
+			const at = () => { const ph = $("#phcol"); return { x: ph && ph.style.transform ? new DOMMatrix(ph.style.transform).m41 : null, o: ph ? +ph.style.opacity : 0, h: ph ? ph.offsetHeight : 0, pos: $("#pos").textContent, step: S.step }; };
 			await sleep(150); const a = at(); stage = "next step";
 			await W(m => m.type === "tel" && m.playing && m.step > a.step);
 			await sleep(250); const b = at(); stage = "stop";

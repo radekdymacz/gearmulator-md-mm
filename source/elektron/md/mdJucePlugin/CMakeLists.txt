@@ -29,10 +29,12 @@ set(SOURCES
 	mdPluginProcessor.cpp mdPluginProcessor.h
 	mdStorageImage.cpp mdStorageImage.h
 	mdStandaloneApp.cpp
-	mdStudioEditor.cpp mdStudioEditor.h
+	mdDeskSession.cpp mdDeskSession.h
+	mdMidiLearnCommands.cpp mdMidiLearnCommands.h
+	mdPageEditor.cpp mdPageEditor.h
+	mdSessionMd.cpp mdSessionMm.cpp mdSessions.h
 	mdStudioLink.cpp mdStudioLink.h
-	mdModRunner.cpp mdModRunner.h
-	mmStudioEditor.cpp mmStudioEditor.h
+	mdWebPageHost.cpp mdWebPageHost.h
 	mmStudioLink.cpp mmStudioLink.h
 	$<$<PLATFORM_ID:Darwin>:mdStudioWebZoom.mm>
 	mdPluginEntry.cpp
@@ -62,6 +64,13 @@ set(SOURCES
 	mdSettingsAudioInput.cpp mdSettingsAudioInput.h
 	mdAudioMidiLink.cpp mdAudioMidiLink.h
 )
+
+# P6: the editors' diagnostics log (web view, window chrome, the session's state) is an observer
+# of the page view; release packages turn it off and it is not compiled.
+option(gearmulator_MDMM_DIAGNOSTICS "The Machinedrum/Monomachine Editors' diagnostics log" ON)
+if(gearmulator_MDMM_DIAGNOSTICS)
+	list(APPEND SOURCES mdDiagnostics.cpp mdDiagnostics.h)
+endif()
 
 set(COMMON_ASSETS
 	"../../../jucePluginData/elektronKnobBlankAtlas.png"
@@ -110,7 +119,8 @@ foreach(plugin_target mdJucePlugin mmJucePlugin)
 		JUCE_STANDALONE_PLUGIN_AUTO_OPEN_AUDIO_INPUT=0
 		# jucePluginEditorLib/standaloneApp.h: native title bar and menu bar (P4).
 		JUCE_USE_CUSTOM_PLUGIN_STANDALONE_APP=1
-		JUCE_VST3_EMULATE_MIDI_PC_WITH_PROGRAMS=1)
+		JUCE_VST3_EMULATE_MIDI_PC_WITH_PROGRAMS=1
+		MDMM_DIAGNOSTICS=$<BOOL:${gearmulator_MDMM_DIAGNOSTICS}>)
 endforeach()
 
 # JUCE can populate bundle resources after its first ad-hoc signing pass on
@@ -376,15 +386,15 @@ if(BUILD_TESTING)
 	set_property(TARGET mdDeskSetupStateTest PROPERTY FOLDER "Elektron/test")
 
 	# P5: the app modulators in the processor, no editor (manual: needs the ROM).
-	add_executable(mdModRunnerFirmwareTest mdModRunnerFirmwareTest.cpp)
-	target_link_libraries(mdModRunnerFirmwareTest PRIVATE
+	add_executable(mdSessionFirmwareTest mdSessionFirmwareTest.cpp)
+	target_link_libraries(mdSessionFirmwareTest PRIVATE
 		mdJucePlugin jucePluginEditorLib mdLib juce_plugin_modules
 		juce::juce_opengl)
-	target_include_directories(mdModRunnerFirmwareTest PRIVATE
+	target_include_directories(mdSessionFirmwareTest PRIVATE
 		${CMAKE_CURRENT_SOURCE_DIR}/../../..)
-	target_compile_definitions(mdModRunnerFirmwareTest PRIVATE
+	target_compile_definitions(mdSessionFirmwareTest PRIVATE
 		JUCE_GLOBAL_MODULE_SETTINGS_INCLUDED=1)
-	set_property(TARGET mdModRunnerFirmwareTest PROPERTY FOLDER "Elektron/test")
+	set_property(TARGET mdSessionFirmwareTest PROPERTY FOLDER "Elektron/test")
 
 	add_executable(mdProjectStateRestoreTest mdProjectStateRestoreTest.cpp)
 	target_link_libraries(mdProjectStateRestoreTest PRIVATE

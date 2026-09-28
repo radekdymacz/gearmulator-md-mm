@@ -156,10 +156,5 @@ namespace mdDesk
 		bool m_playing = false;
 	};
 
-	// What the page shows of modulators that run elsewhere.
-	struct ModReport
-	{
-		std::vector<int> values;
-		int ccPerSecond = 0;
-	};
+
 }

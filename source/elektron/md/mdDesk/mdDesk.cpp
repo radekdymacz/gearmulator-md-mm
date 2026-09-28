@@ -236,13 +236,12 @@ namespace mdDesk
 		m.set("type", "mod");
 		m.set("doc", modSetupToJson(m_mods.setup()));
 		Value values = Value::array();
-		const auto report = m_port.modulatorsElsewhere ? m_port.modulatorsElsewhere()
-			: ModReport{m_mods.values(), m_mods.ccPerSecond(m_port.nowMs())};
-		for(const auto v : report.values)
+		for(const auto v : m_mods.values())
 			values.push(v);
 		m.set("values", std::move(values));
-		m.set("ccPerSecond", report.ccPerSecond);
-		m.set("runs", m_port.modulatorsElsewhere ? "plug-in" : "editor");
+		m.set("ccPerSecond", m_mods.ccPerSecond(m_port.nowMs()));
+		// The desk is the plug-in's (its processor owns it): the modulators move with the editor closed.
+		m.set("runs", "plug-in");
 		m.set("ccLimit", g_modCcPerSecond);
 		m_core.publish(m);
 	}
@@ -250,12 +249,9 @@ namespace mdDesk
 	// App modulators move on the machine's own steps.
 	void Desk::runModulators()
 	{
-		if(!m_port.modulatorsElsewhere)
-		{
-			const auto& t = m_machine->telemetry();
-			for(const auto& o : m_mods.onPlayhead(t.step, t.playing, m_port.nowMs()))
-				m_machine->sendModulation(o.track, o.param, o.value, m_core.view());
-		}
+		const auto& t = m_machine->telemetry();
+		for(const auto& o : m_mods.onPlayhead(t.step, t.playing, m_port.nowMs()))
+			m_machine->sendModulation(o.track, o.param, o.value, m_core.view());
 		publishModulators();
 	}
 

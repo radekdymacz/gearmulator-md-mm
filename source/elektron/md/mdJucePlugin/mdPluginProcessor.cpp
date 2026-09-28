@@ -1,5 +1,5 @@
 #include "mdPluginProcessor.h"
-#include "mdModRunner.h"
+#include "mdDeskSession.h"
 
 #include "mdController.h"
 #include "mdPluginEditorState.h"
@@ -143,7 +143,6 @@ namespace mdJucePlugin
 		_reader.add("MDSK", 1, [this](baseLib::BinaryStream& _stream, uint32_t)
 		{
 			setDeskSetup(_stream.readString());
-			m_deskSetupGeneration.fetch_add(1, std::memory_order_acq_rel);
 		});
 		_reader.add("RAMF", 1, [this](baseLib::BinaryStream& _stream, uint32_t)
 		{
@@ -165,7 +164,7 @@ namespace mdJucePlugin
 	{
 		const std::lock_guard lock(m_deskSetupMutex);
 		m_deskSetup = std::move(_json);
-		// The ModRunner picks it up on the message thread, whichever thread set it.
+		// The session picks it up on the message thread, whichever thread set it.
 		m_deskSetupVersion.fetch_add(1, std::memory_order_release);
 	}
 
@@ -175,7 +174,6 @@ namespace mdJucePlugin
 		m_ramRecordingModeChunkSeen = false;
 		// A project without the editor's setup starts from the default setup.
 		setDeskSetup({});
-		m_deskSetupGeneration.fetch_add(1, std::memory_order_acq_rel);
 		const bool result = jucePluginEditorLib::Processor::loadCustomData(_sourceBuffer);
 		if(!result)
 		{
@@ -446,8 +444,7 @@ namespace mdJucePlugin
 		}
 		if(m_model == md::MachineModel::Machinedrum || m_startupDiagnosticsEnabled)
 			startTimer(250);
-		if(m_model == md::MachineModel::Machinedrum)
-			m_modRunner = std::make_unique<ModRunner>(*this);
+		m_session = DeskSession::create(*this);
 		m_performanceReport = std::make_unique<synthLib::PerformanceReport>(
 			getPlugin().getRealtimeInstrumentation(), panelEventDetails);
 		// The environment switch is also useful in hosts without an open editor.
@@ -470,7 +467,7 @@ namespace mdJucePlugin
 
 	AudioPluginAudioProcessor::~AudioPluginAudioProcessor()
 	{
-		m_modRunner.reset();
+		m_session.reset();
 		stopTimer();
 		m_performanceReport.reset();
 		destroyEditorState();
