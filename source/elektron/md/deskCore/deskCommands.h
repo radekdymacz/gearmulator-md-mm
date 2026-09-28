@@ -45,6 +45,7 @@ namespace deskCore
 	{
 		Integer, Number, Text, Bool, Object, Array,
 		IntegerOrNull,	// a value, or null to clear
+		Bytes,			// a list of `length` integers in min..max (a MIDI message)
 		Any
 	};
 
@@ -56,6 +57,7 @@ namespace deskCore
 		double max = 0;
 		bool optional = false;
 		std::vector<const char*> oneOf;	// Text: the values allowed (empty: any text)
+		int length = -1;				// Bytes: how many
 	};
 
 	// One row. H is what the table's owner acts with (nothing for a model's table; the plug-in's
@@ -102,12 +104,21 @@ namespace deskCore
 		}
 		const std::vector<Row>& commands() const { return m_commands; }
 
-		// Every message may carry id, g (a gesture) and force besides its arguments.
+		// Every message may carry id, g (a gesture) and force besides its arguments, and nothing else.
 		static std::vector<std::string> check(const Row& _command, const elektronData::json::Value& _message)
 		{
 			std::vector<std::string> errors;
 			for(const auto& a : _command.args)
 				checkArg(a, _message.find(a.name), errors);
+			if(_message.isObject())
+				for(const auto& [k, v] : _message.asObject())
+				{
+					bool declared = k == "op" || k == "id" || k == "g" || k == "force";
+					for(const auto& a : _command.args)
+						declared = declared || k == a.name;
+					if(!declared)
+						errors.push_back(k + ": not an argument of " + _command.op);
+				}
 			return errors;
 		}
 

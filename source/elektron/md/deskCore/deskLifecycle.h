@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cstdint>
+#include <vector>
 
 namespace deskCore
 {
@@ -57,15 +58,19 @@ namespace deskCore
 	// current, the adapter keeps `replied` and the times).
 	Lifecycle lifecycleOf(const LifeFacts& _facts);
 
-	// Loads may run (the firmware answers MIDI).
-	bool takesMidi(Lifecycle _l);
-	// The page's commands are taken.
-	bool takesInput(Lifecycle _l);
+	// One row per state (P6): its name and what it opens. The pages read the machine document's
+	// input/midi flags, and the contract's lifecycle enum is these names.
+	struct LifeRow
+	{
+		Lifecycle lifecycle;
+		const char* name;
+		bool midi;		// loads may run: the firmware answers MIDI
+		bool input;		// the page's commands are taken
+	};
+	const std::vector<LifeRow>& lifecycleRows();
+	const LifeRow& lifecycleRow(Lifecycle _l);
 
-	const char* lifecycleName(Lifecycle _l);	// "missing" .. "hwLost"
-	// The contract's older strings, derived from the one value (md-desk/machine desk.firmware,
-	// desk.boot, desk.link; mm-desk/machine engine).
-	const char* legacyFirmware(Lifecycle _l);	// missing, unsupported, loading, booting, ready
-	const char* legacyBoot(Lifecycle _l);		// off, starting, animation, ready
-	const char* legacyLink(Lifecycle _l, bool _wire);	// local (not HW MIDI), connect, ready, lost
+	inline bool takesMidi(const Lifecycle _l) { return lifecycleRow(_l).midi; }
+	inline bool takesInput(const Lifecycle _l) { return lifecycleRow(_l).input; }
+	inline const char* lifecycleName(const Lifecycle _l) { return lifecycleRow(_l).name; }
 }

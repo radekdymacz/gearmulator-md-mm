@@ -5,6 +5,7 @@
 #include "mmRecv.h"
 
 #include "deskCore/deskAdapter.h"
+#include "deskCore/deskWorkingCopy.h"
 #include "deskCore/deskCore.h"
 #include "deskCore/deskLoadQueue.h"
 #include "deskCore/deskPush.h"
@@ -20,16 +21,6 @@
 
 namespace mmDesk
 {
-	// What the adapter knows of the kit that plays from the machine's memory (P6), one value: an
-	// image not taken yet and the live edits sent and not yet seen. The kit itself is the core's
-	// (Kind::WorkingKit): observed from memory, pending while edits are on their way.
-	struct KitMemory
-	{
-		std::optional<std::vector<uint8_t>> region;
-		std::optional<std::vector<uint8_t>> shown;	// the raw image last published
-		deskCore::Expectation<elektronData::MmKit> expect;
-	};
-
 	// Every byte that differs between _before and _after has _after's value in _image (raw kits).
 	bool reflects(const elektronData::MmKit& _image, const elektronData::MmKit& _before, const elektronData::MmKit& _after);
 
@@ -53,9 +44,11 @@ namespace mmDesk
 		deskCore::Outcome review(const Value& _command, const std::vector<Change>& _changes, const Documents& _view) override;
 		deskCore::Outcome submit(const Change& _change, const Documents& _view) override;
 		deskCore::Outcome command(const Value& _command, const Documents& _view) override;
+		deskCore::Outcome askFor(const Value& _command, const Documents& _view) override;
 		void onSysex(const Bytes& _message) override;
 		void tick(double _nowMs, const Documents& _view) override;
 		Value state(const Documents& _view) const override;
+		Value status() const override;
 		deskCore::Capabilities capabilities() const override;
 		deskCore::Lifecycle lifecycle() const override { return deskCore::lifecycleOf(facts()); }
 		Context context() const override { return {m_curKit}; }
@@ -68,22 +61,24 @@ namespace mmDesk
 		void sendModulation(uint8_t _track, uint8_t _param, uint8_t _value, const Documents& _view) override;
 		const Telemetry& telemetry() const override { return m_tel; }
 		bool playing() const override { return m_playing; }
-		const RecvSession& recv() const override { return m_recv; }
 		int currentPattern() const override { return m_curPattern; }
 		int currentKit() const override { return m_curKit; }
 		int currentSong() const override { return m_curSong; }
 		int currentGlobal() const override { return m_curGlobal; }
-		size_t loaded() const override { return knownCount(); }
-		double lastRoundTripMs() const override { return m_lastRoundTripMs; }
 
 		const Profile& profile() const { return m_profile; }
 		bool ready() const { return deskCore::takesInput(lifecycle()); }
 		// The model's machine commands this adapter runs (tests check them against the table).
 		static std::vector<std::string> commandsHandled();
+		static std::vector<std::string> commandsAsking();
 
 	private:
 		using Handler = deskCore::Outcome (MmMachine::*)(const Value&, const Documents&);
 		static const std::map<std::string, Handler>& handlers();
+		static const std::map<std::string, Handler>& askers();
+		deskCore::Outcome askLoadKit(const Value&, const Documents&);
+		deskCore::Outcome askSaveKit(const Value&, const Documents&);
+		deskCore::Outcome askSelect(const Value&, const Documents&);
 
 		enum class Act : uint8_t { Stop, Play, SelectPattern };
 		struct Push
@@ -106,7 +101,7 @@ namespace mmDesk
 		void pumpLoads(double _now);
 		void pumpRecv(double _now);
 		void pumpSequence(double _now);
-		void applyWorkingKit(double _now);
+		void applyWorkingKit(double _now, const Documents& _view);
 		bool pressKeys(const std::vector<Key>& _keys);
 		std::string kitState(const Documents& _view) const;
 		void setBaseChannel(const elektronData::MmGlobal& _g);
@@ -126,8 +121,9 @@ namespace mmDesk
 		const Profile m_profile;
 		Port m_port;
 		RecvSession m_recv;
-		KitMemory m_memory;
-		bool m_seedWorking = true;		// the working kit comes from the next dump of its slot
+		deskCore::WorkingCopy<elektronData::MmKit> m_working;	// where the kit that plays comes from
+		uint32_t m_nextRecvTag = 1;
+		std::map<uint32_t, Ref> m_recvRefs;		// a dump on the RECV session -> the push it is
 		std::map<Ref, Push> m_pushes;
 
 		deskCore::LoadQueue<Ref> m_loads;

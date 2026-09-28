@@ -6,6 +6,11 @@
 #include "deskCore/deskCommands.h"
 #include "deskCore/deskCore.h"
 
+namespace deskCore
+{
+	template<typename Model> struct KindSpec;
+}
+
 #include <optional>
 #include <string>
 
@@ -41,14 +46,18 @@ namespace mdDesk
 		static EditResult setDocument(const Documents& _docs, const elektronData::json::Value& _command, const Context& _context);
 		// {"type":"doc","kind","slot","pending","source","doc"}
 		static elektronData::json::Value docMessage(const Ref& _ref, const Document& _doc, bool _pending, deskCore::Source _source);
-		// The contract's older places for the core's parts (desk.undo, desk.redo, ...).
-		static void decorate(elektronData::json::Value& _machine, const History& _history);
+		// The document kinds (deskCore::KindSpec): names, counts, dump sizes, JSON.
+		static const std::vector<deskCore::KindSpec<MdModel>>& kinds();
+		// What the clipboard holds, for the page's Paste (machine.clipboard).
+		static std::optional<elektronData::json::Value> clipboardDocument(const Clipboard& _clip);
+		// What the editor does not do yet on any engine: nothing for the Machinedrum.
+		static const std::vector<deskCore::Unsupported>& unsupported() { static const std::vector<deskCore::Unsupported> none; return none; }
 		// The Machinedrum Editor's command vocabulary (every op the page may send).
 		static const Table& commands();
 		// The OS 1.63 machine table as a "md-desk/machines" document (the page gets it on ready).
 		static elektronData::json::Value catalogue();
-		// Why a gated command waits.
-		static std::string refusal(deskCore::Lifecycle _l);
+		// What a lifecycle state means for the user (machine.lifecycleText; also why a gated command waits).
+		static std::string lifecycleText(deskCore::Lifecycle _l);
 	};
 
 	const char* kindName(DocKind _k);

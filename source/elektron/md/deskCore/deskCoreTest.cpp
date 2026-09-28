@@ -75,8 +75,10 @@ namespace
 		check(of(P::Wire, true, A::Absent, 100) == Lifecycle::Ready, "HW: answers");
 		check(of(P::Wire, true, A::Absent, 3600) == Lifecycle::HwLost, "HW: silent for 3.5 s");
 		check(takesInput(Lifecycle::Ready) && !takesInput(Lifecycle::Animating) && takesMidi(Lifecycle::Animating), "gates");
-		check(std::string(legacyBoot(Lifecycle::Animating)) == "animation" && std::string(legacyLink(Lifecycle::Ready, true)) == "ready"
-			&& std::string(legacyLink(Lifecycle::Ready, false)) == "local", "the contract's older strings");
+		bool rows = lifecycleRows().size() == 8;
+		for(const auto& r : lifecycleRows())
+			rows = rows && lifecycleRow(r.lifecycle).name == r.name;
+		check(rows && std::string(lifecycleName(Lifecycle::HwLost)) == "hwLost" && takesInput(Lifecycle::HwLost), "one row per state");
 	}
 
 	enum class Act { Stop, Load, Play };
@@ -182,7 +184,8 @@ namespace
 			m.set("source", sourceName(_s));
 			return m;
 		}
-		static void decorate(Value&, const History<Change>&) {}
+		static std::optional<Value> clipboardDocument(const Clipboard&) { return {}; }
+		static const std::vector<Unsupported>& unsupported() { static const std::vector<Unsupported> u{{"flying", "not yet"}}; return u; }
 		static EditResult setDocument(const Documents& _d, const Value& _cmd, const Context& _c) { return apply(_d, _cmd, {}, _c); }
 
 		// The router's vocabulary: an edit, undo, ready, a machine command that asks, and a gated one.
@@ -198,7 +201,7 @@ namespace
 			return t;
 		}
 		static Value catalogue() { return Value::object(); }
-		static std::string refusal(Lifecycle) { return "not now"; }
+		static std::string lifecycleText(Lifecycle) { return "not now"; }
 	};
 
 	class ToyMachine final : public Machine<ToyModel>
@@ -217,9 +220,9 @@ namespace
 		{
 			if(opOf(_c) != "wipe")
 				return {};
-			Value a = Value::object();
-			a.set("type", "ask");
-			return {{}, {}, a};
+			Outcome o;
+			o.ask = Ask{"wipe", "Wipe it all?", "Wipe"};
+			return o;
 		}
 		void onSysex(const Bytes&) override {}
 		void tick(double, const Documents&) override {}
@@ -267,6 +270,9 @@ namespace
 		check(last("result")->find("ok")->asBool() && m->sent.size() == 1, "an edit goes to the core and the machine");
 		send(R"({"op":"wipe","id":5})");
 		check(last("ask") && m->commands.empty(), "a machine command asks first");
+		check(last("ask")->find("message")->asString() == "Wipe it all?" && last("ask")->find("confirm")->asString() == "Wipe"
+			&& last("ask")->find("command")->find("op")->asString() == "wipe" && !last("ask")->find("command")->find("id"),
+			"the ask carries its words and the command to resend (without its id)");
 		send(R"({"op":"wipe","force":true,"id":6})");
 		check(m->commands.size() == 1, "with force it runs (the core applies force, not the adapter)");
 		m->life = Lifecycle::Booting;
@@ -280,6 +286,15 @@ namespace
 		auto* m2 = second.get();
 		d.setEngine(std::move(second));
 		check(last("reset") && last("catalogue") && d.documents().toys.empty() && &d.machine() == m2, "a new engine: reset, the page starts over");
+		check(!send(R"({"op":"set","s":1,"v":5,"extra":1,"id":9})") || !last("result")->find("ok")->asBool(), "an undeclared argument is refused");
+		const Value* machine = nullptr;
+		for(auto it = page.rbegin(); it != page.rend() && !machine; ++it)
+			if(it->find("type")->asString() == "machine")
+				machine = it->find("doc");
+		check(machine && machine->find("input") && machine->find("lifecycleText")->asString() == "not now"
+			&& machine->find("capabilities")->find("can")->find("flying")->asBool() == false
+			&& machine->find("capabilities")->find("reasons")->find("flying")->asString() == "not yet",
+			"the machine document: input, lifecycle text, capabilities nested with the model's unsupported list");
 	}
 
 	void core()

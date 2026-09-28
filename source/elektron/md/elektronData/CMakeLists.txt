@@ -23,6 +23,7 @@ target_sources(elektronData PRIVATE
 	mdKit.cpp mdKit.h
 	mdWorkingKit.cpp mdWorkingKit.h
 	mdMachines.cpp mdMachines.h
+	mdNames.h
 	mdPattern.cpp mdPattern.h
 	mdSong.cpp mdSong.h
 	mdValidate.cpp mdValidate.h

@@ -2,6 +2,11 @@
 
 #include "deskCore/deskCommands.h"
 #include "deskCore/deskCore.h"
+
+namespace deskCore
+{
+	template<typename Model> struct KindSpec;
+}
 #include "deskCore/deskHistory.h"
 #include "deskCore/deskRef.h"
 
@@ -134,13 +139,18 @@ namespace mmDesk
 		}
 		// {"type":"doc","kind","slot","pending","source","doc"}; the working kit's slot is the kit it came from.
 		static elektronData::json::Value docMessage(const Ref& _ref, const Document& _doc, bool _pending, deskCore::Source _source);
-		static void decorate(elektronData::json::Value&, const deskCore::History<Change>&) {}
+		// The document kinds (deskCore::KindSpec): names, counts, dump sizes, JSON.
+		static const std::vector<deskCore::KindSpec<MmModel>>& kinds();
+		// What the editor does not do yet on any engine (merged into the capabilities).
+		static const std::vector<deskCore::Unsupported>& unsupported();
+		// The Monomachine's page keeps no clipboard in the core.
+		static std::optional<elektronData::json::Value> clipboardDocument(const Clipboard&) { return {}; }
 		// The Monomachine Editor's command vocabulary.
 		static const Table& commands();
 		// The OS 1.32B machine table and enumerations as "mm-desk/catalogue".
 		static elektronData::json::Value catalogue();
-		// Why a gated command waits.
-		static std::string refusal(deskCore::Lifecycle _l);
+		// What a lifecycle state means for the user (machine.lifecycleText; also why a gated command waits).
+		static std::string lifecycleText(deskCore::Lifecycle _l);
 	};
 
 	inline const CommandTable& commandTable() { return MmModel::commands(); }

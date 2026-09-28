@@ -8,6 +8,7 @@
 #include "mdDeskWorkingKit.h"
 
 #include "deskCore/deskAdapter.h"
+#include "deskCore/deskWorkingCopy.h"
 #include "deskCore/deskCore.h"
 #include "deskCore/deskLoadQueue.h"
 #include "deskCore/deskPacer.h"
@@ -46,6 +47,7 @@ namespace mdDesk
 		void tick(double _nowMs, const Documents& _view) override;
 		void pageReady() override;
 		Value state(const Documents& _view) const override;
+		Value status() const override;
 		deskCore::Capabilities capabilities() const override;
 		deskCore::Lifecycle lifecycle() const override { return deskCore::lifecycleOf(facts()); }
 		Context context() const override { return {m_session.state().kit}; }
@@ -67,6 +69,8 @@ namespace mdDesk
 		size_t loading() const { return m_loads.pending(); }
 		// The model's machine commands this adapter runs (tests check them against the table).
 		static std::vector<std::string> commandsHandled();
+		// The commands that may ask first (tests check them against the table).
+		static std::vector<std::string> commandsAsking();
 
 	private:
 		using Handler = deskCore::Outcome (MdMachine::*)(const Value&, const Documents&);
@@ -96,7 +100,7 @@ namespace mdDesk
 		};
 
 		// What the panel-key features need (one fact each, read by capabilities() and the commands).
-		bool panelKeys() const { return m_port.pressKey && !m_profile.wire; }
+		bool panelKeys() const { return m_port.pressKey && m_profile.panel; }
 		bool canLiveRecord() const { return panelKeys() && m_telemetry.valid && m_port.turnKnob; }
 		bool canChain() const { return panelKeys() && m_telemetry.valid; }
 		deskCore::LifeFacts facts() const;
@@ -127,8 +131,12 @@ namespace mdDesk
 		void runSequence(std::vector<deskCore::SeqStep<Act>> _steps);
 
 		// Machine commands (the table's handler column).
+		static const std::map<std::string, Handler>& askers();
+		static Value kitDetails(std::optional<uint8_t> _kit);
 		deskCore::Outcome askSelect(const Value&, const Documents&);
 		deskCore::Outcome askKitLoad(const Value&, const Documents&);
+		deskCore::Outcome askReloadKit(const Value&, const Documents&);
+		deskCore::Outcome askKitSaveAs(const Value&, const Documents&);
 		deskCore::Outcome cmdLoad(const Value&, const Documents&);
 		deskCore::Outcome cmdSelect(const Value&, const Documents&);
 		deskCore::Outcome cmdSaveKit(const Value&, const Documents&);
@@ -156,8 +164,7 @@ namespace mdDesk
 		bool m_backgroundQueued = false;
 		std::map<DocRef, Push> m_pushes;
 
-		KitMemory m_memory;
-		bool m_seedWorking = true;			// the working kit comes from the next dump of its slot (no memory)
+		deskCore::WorkingCopy<elektronData::MdKit> m_working;	// where the kit that plays comes from
 		double m_kitStatusAskedMs = -1e9;
 
 		Probe m_probe = Probe::Running;

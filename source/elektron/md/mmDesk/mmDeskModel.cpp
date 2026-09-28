@@ -1,5 +1,7 @@
 #include "mmDeskModel.h"
 
+#include "deskCore/deskKinds.h"
+
 #include "elektronData/mmJson.h"
 #include "elektronData/mmMachines.h"
 #include "elektronData/mmValidate.h"
@@ -26,43 +28,82 @@ namespace mmDesk
 		return std::visit(Visitor{}, _doc);
 	}
 
+	namespace
+	{
+		template<typename T>
+		std::optional<Document> parsed(std::optional<T> _v, std::vector<std::string>& _errors)
+		{
+			if(!_v)
+				return {};
+			auto problems = ed::validate(*_v);
+			if(!problems.empty())
+			{
+				_errors.insert(_errors.end(), problems.begin(), problems.end());
+				return {};
+			}
+			return Document(*_v);
+		}
+
+		int ownSlot(const Document&, const int _refSlot) { return _refSlot; }
+	}
+
+	// The Monomachine's document kinds, once (P6): names, counts, dump sizes (DIN timeouts), JSON.
+	const std::vector<deskCore::KindSpec<MmModel>>& MmModel::kinds()
+	{
+		static const std::vector<deskCore::KindSpec<MmModel>> k{
+			{Kind::Pattern, "pattern", 128, 3200, true,
+				[](const Document& _d) { return ed::mmPatternToJson(std::get<ed::MmPattern>(_d)); },
+				[](const Value& _v, std::vector<std::string>& _e, const EditContext&) { return parsed(ed::mmPatternFromJson(_v, _e), _e); },
+				ownSlot},
+			{Kind::Kit, "kit", 128, 820, true,
+				[](const Document& _d) { return ed::mmKitToJson(std::get<ed::MmKit>(_d)); },
+				[](const Value& _v, std::vector<std::string>& _e, const EditContext&) { return parsed(ed::mmKitFromJson(_v, _e), _e); },
+				ownSlot},
+			{Kind::Song, "song", 24, 5600, true,
+				[](const Document& _d) { return ed::mmSongToJson(std::get<ed::MmSong>(_d)); },
+				[](const Value& _v, std::vector<std::string>& _e, const EditContext&) { return parsed(ed::mmSongFromJson(_v, _e), _e); },
+				ownSlot},
+			{Kind::Global, "global", 8, 900, true,
+				[](const Document& _d) { return ed::mmGlobalToJson(std::get<ed::MmGlobal>(_d)); },
+				[](const Value& _v, std::vector<std::string>& _e, const EditContext&) { return parsed(ed::mmGlobalFromJson(_v, _e), _e); },
+				ownSlot},
+			// The kit that plays: one identity; its doc message names the kit it was loaded from.
+			{Kind::WorkingKit, "workingKit", 1, 0, false,
+				[](const Document& _d) { return ed::mmKitToJson(std::get<WorkingKit>(_d).kit); },
+				[](const Value& _v, std::vector<std::string>& _e, const EditContext& _c) -> std::optional<Document>
+				{
+					auto k = parsed(ed::mmKitFromJson(_v, _e), _e);
+					if(!k)
+						return {};
+					const auto& kit = std::get<ed::MmKit>(*k);
+					if(kit.position != _c.currentKit)
+					{
+						_e.emplace_back("set: the working kit is the kit that plays");
+						return {};
+					}
+					return Document(WorkingKit{kit});
+				},
+				[](const Document& _d, int) { return static_cast<int>(std::get<WorkingKit>(_d).kit.position); }},
+		};
+		return k;
+	}
+
 	const char* kindName(const Kind _k)
 	{
-		switch(_k)
-		{
-		case Kind::Pattern: return "pattern";
-		case Kind::Kit: return "kit";
-		case Kind::Song: return "song";
-		case Kind::Global: return "global";
-		case Kind::WorkingKit: return "workingKit";
-		}
-		return "";
+		const auto* s = deskCore::kindSpec<MmModel>(_k);
+		return s ? s->name : "";
 	}
 
 	std::optional<Kind> kindFromName(const std::string& _name)
 	{
-		for(const auto k : {Kind::Pattern, Kind::Kit, Kind::Song, Kind::Global, Kind::WorkingKit})
-			if(_name == kindName(k))
-				return k;
-		return {};
+		const auto* s = deskCore::kindSpec<MmModel>(_name);
+		return s ? std::optional<Kind>(s->kind) : std::nullopt;
 	}
 
 	Value documentToJson(const Document& _doc)
 	{
-		return std::visit([](const auto& _v) -> Value
-		{
-			using T = std::decay_t<decltype(_v)>;
-			if constexpr(std::is_same_v<T, ed::MmPattern>)
-				return ed::mmPatternToJson(_v);
-			else if constexpr(std::is_same_v<T, ed::MmKit>)
-				return ed::mmKitToJson(_v);
-			else if constexpr(std::is_same_v<T, ed::MmSong>)
-				return ed::mmSongToJson(_v);
-			else if constexpr(std::is_same_v<T, WorkingKit>)
-				return ed::mmKitToJson(_v.kit);
-			else
-				return ed::mmGlobalToJson(_v);
-		}, _doc);
+		const auto* s = deskCore::kindSpec<MmModel>(refOf(_doc).kind);
+		return s ? s->toJson(_doc) : Value();
 	}
 
 	std::optional<Document> Documents::get(const Ref& _ref) const
@@ -111,75 +152,28 @@ namespace mmDesk
 
 	EditResult setDocument(const Documents& _docs, const Value& _command, const EditContext& _context)
 	{
-		EditResult r;
-		const auto* kindValue = _command.find("kind");
-		const auto* doc = _command.find("doc");
-		const auto kind = kindValue && kindValue->isString() ? kindFromName(kindValue->asString()) : std::nullopt;
-		if(!kind)
-		{
-			r.errors.emplace_back("set: kind must be pattern, kit, workingKit, song or global");
-			return r;
-		}
-		if(!doc)
-		{
-			r.errors.emplace_back("set: no doc");
-			return r;
-		}
-		std::optional<Document> after;
-		switch(*kind)
-		{
-		case Kind::Pattern: if(auto v = ed::mmPatternFromJson(*doc, r.errors)) after = *v; break;
-		case Kind::Kit: if(auto v = ed::mmKitFromJson(*doc, r.errors)) after = *v; break;
-		case Kind::Song: if(auto v = ed::mmSongFromJson(*doc, r.errors)) after = *v; break;
-		case Kind::Global: if(auto v = ed::mmGlobalFromJson(*doc, r.errors)) after = *v; break;
-		case Kind::WorkingKit:
-			if(auto v = ed::mmKitFromJson(*doc, r.errors))
-			{
-				if(v->position != _context.currentKit)
-				{
-					r.errors.emplace_back("set: the working kit is the kit that plays");
-					return r;
-				}
-				after = WorkingKit{*v};
-			}
-			break;
-		}
-		if(!after)
-			return r;
-		const auto problems = std::visit([](const auto& _v)
-		{
-			if constexpr(std::is_same_v<std::decay_t<decltype(_v)>, WorkingKit>)
-				return ed::validate(_v.kit);
-			else
-				return ed::validate(_v);
-		}, *after);
-		if(!problems.empty())
-		{
-			r.errors = std::move(problems);
-			return r;
-		}
-		const auto ref = refOf(*after);
-		const auto before = _docs.get(ref);
-		if(!before)
-		{
-			r.errors.push_back(std::string(kindName(*kind)) + " " + std::to_string(ref.slot + 1) + " is not loaded yet");
-			return r;
-		}
-		if(!(*before == *after))
-			r.changes.push_back({*before, *after});
-		return r;
+		return deskCore::setDocument<MmModel>(_docs, _command, _context);
 	}
 
 	Value MmModel::docMessage(const Ref& _ref, const Document& _doc, const bool _pending, const deskCore::Source _source)
 	{
-		Value m = Value::object();
-		m.set("type", "doc");
-		m.set("kind", kindName(_ref.kind));
-		m.set("slot", _ref.kind == Kind::WorkingKit ? std::get<WorkingKit>(_doc).kit.position : _ref.slot);
-		m.set("pending", _pending);
-		m.set("source", deskCore::sourceName(_source));
-		m.set("doc", documentToJson(_doc));
-		return m;
+		return deskCore::docMessage<MmModel>(_ref, _doc, _pending, _source);
+	}
+
+	const std::vector<deskCore::Unsupported>& MmModel::unsupported()
+	{
+		// What the editor does not do on any engine yet (MM-P3): model data, merged into the capabilities.
+		static const std::vector<deskCore::Unsupported> list{
+			{"midiMutes", "MIDI track mutes are set on the machine (FUNCTION + a track key in MIDI mode). The plug-in has no command for them yet."},
+			{"poly", "POLY is switched on the machine. The editor does not drive it yet."},
+			{"multiTrig", "MULTI TRIG mode, split and timing are settings the editor does not decode yet: set them on the machine. The keys"
+				" here do play on the MULTI TRIG channel."},
+			{"multiMap", "MULTI MAP ranges live in the global slot. The editor reads each range's upper key and pattern; offset, length,"
+				" transpose and timing are not decoded yet, so edit the map on the machine (GLOBAL › CONTROL › MULTIMAP EDIT). The keys"
+				" here do play on the MULTI MAP channel."},
+			{"portamento", "PORTAMENTO mode (ALWAYS / ONLY LEGATO) is not decoded in the kit yet: set it on the machine."},
+			{"gridRecord", "GRID RECORD and LIVE RECORD run on the machine. In the editor you draw steps directly."}};
+		return list;
 	}
 
 	namespace
@@ -242,7 +236,7 @@ namespace mmDesk
 	}
 
 
-	std::string MmModel::refusal(const deskCore::Lifecycle _l)
+	std::string MmModel::lifecycleText(const deskCore::Lifecycle _l)
 	{
 		using deskCore::Lifecycle;
 		switch(_l)
@@ -278,10 +272,10 @@ namespace mmDesk
 			{"ready", Owner::Core, Gate::None, -1, {}, "the page is up: everything is published once more", CoreOp::Ready},
 			{"undo", Owner::Core, Gate::Input, -1, {}, "undo the last step (a gesture is one step)", CoreOp::Undo},
 			{"redo", Owner::Core, Gate::Input, -1, {}, "", CoreOp::Redo},
-			{"set", Owner::Core, Gate::Input, -1, {{"kind", ArgType::Text, 0, 0, false, {"pattern", "kit", "workingKit", "song", "global"}},
+			{"set", Owner::Core, Gate::Input, -1, {{"kind", ArgType::Text, 0, 0, false, deskCore::kindNames<MmModel>()},
 				{"doc", ArgType::Object}}, "a whole document as the intent (workingKit: the kit that plays)", CoreOp::Set},
 			// ---- the machine ----
-			{"load", Owner::Machine, Gate::Input, -1, {{"kind", ArgType::Text, 0, 0, false, {"pattern", "kit", "song", "global"}}, {"slot", ArgType::Integer, 0, 127}}, "read a document now"},
+			{"load", Owner::Machine, Gate::Input, -1, {{"kind", ArgType::Text, 0, 0, false, deskCore::kindNames<MmModel>(true)}, {"slot", ArgType::Integer, 0, 127}}, "read a document now"},
 			{"select", Owner::Machine, Gate::Input, -1, {p, {"now", ArgType::Bool, 0, 0, true}},
 				"LOAD PATTERN (at the pattern end while playing; now: STOP, LOAD, PLAY)"},
 			{"loadKit", Owner::Machine, Gate::Input, -1, {kOpt}, "LOAD KIT (the current kit without k)"},

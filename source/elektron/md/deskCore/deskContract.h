@@ -1,43 +1,53 @@
 #pragma once
 
 #include "deskCommands.h"
+#include "deskLifecycle.h"
 
 #include "elektronData/json.h"
 #include "elektronData/jsonSchema.h"
 
-#include <cstdio>
-#include <fstream>
-#include <iterator>
 #include <map>
-#include <optional>
 #include <set>
 #include <string>
 #include <vector>
 
 namespace deskCore::contract
 {
-	// The executable spec, shared by the Machinedrum and Monomachine tests (P6): the messages a desk
-	// published against the contract's $defs/message, the contract's machine document and
-	// capabilities against what was published (both ways), the command tables against
-	// $defs/command, and a model's machine commands against its adapter's map. Pure; the caller
-	// passes the messages it recorded.
+	// The executable spec, shared by the Machinedrum and Monomachine tests (P6), pure: the caller
+	// reads and writes the schema file. It checks
+	// - the messages a desk published against the contract's $defs/message, and the other way: the
+	//   message types and the machine document's members the contract declares were published;
+	// - the generated parts of the contract: $defs/command (the command tables) and the lifecycle
+	//   names;
+	// - a model's table against the functions its adapter and desk run for it.
 	struct Report
 	{
 		size_t messages = 0;
 		size_t types = 0;
 		std::vector<std::string> off;		// problems of messages off the contract (the first few)
 		size_t offCount = 0;
-		std::vector<std::string> unseen;	// declared members never published
+		std::vector<std::string> unseen;	// declared, never published
 	};
 
-	inline std::optional<elektronData::json::Value> loadSchema(const char* _path)
+	// The message types the contract's $defs/message declares (its oneOf branches' type consts).
+	inline std::set<std::string> messageTypes(const elektronData::json::Value& _root)
 	{
-		std::ifstream in(_path);
-		const std::string text{std::istreambuf_iterator<char>(in), std::istreambuf_iterator<char>()};
-		return elektronData::json::parse(text);
+		std::set<std::string> types;
+		const auto* defs = _root.find("$defs");
+		const auto* message = defs ? defs->find("message") : nullptr;
+		const auto* one = message ? message->find("oneOf") : nullptr;
+		if(one && one->isArray())
+			for(const auto& branch : one->asArray())
+				if(const auto* p = branch.find("properties"))
+					if(const auto* t = p->find("type"))
+						if(const auto* c = t->find("const"); c && c->isString())
+							types.insert(c->asString());
+		return types;
 	}
 
-	inline Report checkMessages(const elektronData::json::Value& _root, const std::vector<elektronData::json::Value>& _published)
+	// _elsewhere: the message types this test cannot publish (the plug-in's host sends them).
+	inline Report checkMessages(const elektronData::json::Value& _root, const std::vector<elektronData::json::Value>& _published,
+		const std::set<std::string>& _elsewhere = {})
 	{
 		using elektronData::json::Value;
 		const elektronData::json::Schema schema(_root);
@@ -63,49 +73,90 @@ namespace deskCore::contract
 				}
 		}
 		r.types = types.size();
-		// The other way: every member declared for the machine document and the capabilities is
-		// published (with additionalProperties false there, the two are the same set).
-		r.unseen = schema.unseen("machine", machines);
-		const auto unseenCaps = schema.unseen("capabilities", caps);
-		r.unseen.insert(r.unseen.end(), unseenCaps.begin(), unseenCaps.end());
+		for(const auto& t : messageTypes(_root))
+			if(!types.count(t) && !_elsewhere.count(t))
+				r.unseen.push_back("message type " + t);
+		// With additionalProperties false on the same definitions, declared == published.
+		r.unseen = [&]
+		{
+			auto u = r.unseen;
+			for(const auto& m : schema.unseen("machine", machines))
+				u.push_back(m);
+			for(const auto& c : schema.unseen("capabilities", caps))
+				u.push_back("capabilities." + c);
+			return u;
+		}();
 		if(machines.empty())
 			r.unseen.emplace_back("(no machine document published)");
 		return r;
 	}
 
-	// The schema's $defs/command is _generated; with _write it is rewritten when it differs. True when
-	// they are the same (or were just written).
-	inline bool checkCommands(elektronData::json::Value& _root, const elektronData::json::Value& _generated, const char* _path,
-		const bool _write)
+	// The schema's $defs/command is _generated.
+	inline bool sameCommands(const elektronData::json::Value& _root, const elektronData::json::Value& _generated)
 	{
-		auto* defs = _root.find("$defs");
+		const auto* defs = _root.find("$defs");
 		const auto* current = defs ? defs->find("command") : nullptr;
-		if(current && *current == _generated)
-			return true;
-		if(!_write || !defs)
+		return current && *current == _generated;
+	}
+
+	// The schema with its generated parts written in: $defs/command and the lifecycle names.
+	inline elektronData::json::Value withGenerated(elektronData::json::Value _root, const elektronData::json::Value& _commands)
+	{
+		if(auto* defs = _root.find("$defs"))
+		{
+			defs->put("command", _commands);
+			if(auto* life = defs->find("lifecycle"))
+			{
+				auto names = elektronData::json::Value::array();
+				for(const auto& row : lifecycleRows())
+					names.push(row.name);
+				life->put("enum", std::move(names));
+			}
+		}
+		return _root;
+	}
+
+	// The contract's lifecycle enum is the lifecycle rows' names.
+	inline bool sameLifecycle(const elektronData::json::Value& _root)
+	{
+		const auto* defs = _root.find("$defs");
+		const auto* life = defs ? defs->find("lifecycle") : nullptr;
+		const auto* e = life ? life->find("enum") : nullptr;
+		if(!e || !e->isArray() || e->asArray().size() != lifecycleRows().size())
 			return false;
-		defs->put("command", _generated);
-		std::ofstream out(_path);
-		out << elektronData::json::write(_root, 2) << "\n";
+		for(size_t i = 0; i < lifecycleRows().size(); ++i)
+			if(!e->asArray()[i].isString() || e->asArray()[i].asString() != lifecycleRows()[i].name)
+				return false;
 		return true;
 	}
 
-	// A model's machine commands and its adapter's map, both ways: rows no function runs, and
-	// functions for ops the table does not have.
+	// A model's rows of one owner and the functions run for them, both ways: rows no function runs,
+	// and functions for ops the table does not have (as that owner).
 	template<typename H>
-	std::vector<std::string> handlerGaps(const CommandTable<H>& _table, const std::vector<std::string>& _handled)
+	std::vector<std::string> handlerGaps(const CommandTable<H>& _table, const Owner _owner, const std::vector<std::string>& _handled)
 	{
 		std::vector<std::string> gaps;
 		const std::set<std::string> handled(_handled.begin(), _handled.end());
 		for(const auto& c : _table.commands())
-			if(c.owner == Owner::Machine && !handled.count(c.op))
-				gaps.push_back(std::string("no adapter function for ") + c.op);
+			if(c.owner == _owner && !handled.count(c.op))
+				gaps.push_back(std::string("no function for the ") + ownerName(_owner) + " command " + c.op);
 		for(const auto& op : _handled)
 		{
 			const auto* c = _table.find(op);
-			if(!c || c->owner != Owner::Machine)
-				gaps.push_back("the adapter runs " + op + ", which is not a machine command of the table");
+			if(!c || c->owner != _owner)
+				gaps.push_back(std::string("a function for ") + op + ", which is not a " + ownerName(_owner) + " command of the table");
 		}
+		return gaps;
+	}
+
+	// Ops some map is keyed by (asks, reviews) that the table does not have at all.
+	template<typename H>
+	std::vector<std::string> unknownOps(const CommandTable<H>& _table, const std::vector<std::string>& _ops)
+	{
+		std::vector<std::string> gaps;
+		for(const auto& op : _ops)
+			if(!_table.find(op))
+				gaps.push_back(op + " is not a command of the table");
 		return gaps;
 	}
 }

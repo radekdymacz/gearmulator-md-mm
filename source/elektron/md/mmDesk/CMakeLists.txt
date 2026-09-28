@@ -9,6 +9,7 @@ add_library(mmDesk STATIC)
 target_sources(mmDesk PRIVATE
 	mmDesk.cpp mmDesk.h
 	mmDeskAdapter.h
+	mmDeskTelemetry.h
 	mmDeskMachine.cpp mmDeskMachine.h
 	mmDeskModel.cpp mmDeskModel.h
 	mmRecv.cpp mmRecv.h
@@ -21,7 +22,8 @@ set_property(TARGET mmDesk PROPERTY FOLDER "Elektron")
 if(BUILD_TESTING)
 	add_executable(mmDeskTest mmDeskTest.cpp)
 	target_link_libraries(mmDeskTest PRIVATE mmDesk deskHost)
-	target_compile_definitions(mmDeskTest PRIVATE MMDESK_SCHEMA="${CMAKE_CURRENT_SOURCE_DIR}/../../../../doc/modern-ux/mm-data-contract.schema.json")
+	target_compile_definitions(mmDeskTest PRIVATE MMDESK_SCHEMA="${CMAKE_CURRENT_SOURCE_DIR}/../../../../doc/modern-ux/mm-data-contract.schema.json"
+		MMDESK_CATALOGUE="${CMAKE_CURRENT_SOURCE_DIR}/../../../../doc/modern-ux/mm-catalogue.json")
 	add_test(NAME mmDeskTest COMMAND mmDeskTest)
 	set_tests_properties(mmDeskTest PROPERTIES LABELS "UnitTest")
 	set_property(TARGET mmDeskTest PROPERTY FOLDER "Elektron/test")

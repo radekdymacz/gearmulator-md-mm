@@ -18,7 +18,8 @@ namespace deskCore
 	// (telemetry, memory, host parameters). Which class implements it is the engine's choice: the
 	// desk holds whatever adapter it is given (setEngine), so an engine with its own protocol is
 	// its own adapter class, not a new desk. Model provides: commands() (the table), catalogue()
-	// (the document the page gets on ready), refusal(lifecycle) (why a gated command waits).
+	// (the document the page gets on ready), lifecycleText(lifecycle) (what the state means for the
+	// user; also why a gated command waits).
 	// Single threaded.
 	template<typename Model, typename Adapter>
 	class Desk
@@ -47,7 +48,7 @@ namespace deskCore
 			const auto lc = m_machine->lifecycle();
 			const bool open = spec->gate == Gate::None || (spec->gate == Gate::Midi ? takesMidi(lc) : takesInput(lc));
 			if(!open)
-				m_core.result(_message, {Model::refusal(lc)}, {});
+				m_core.result(_message, {Model::lifecycleText(lc)}, {});
 			else if(const auto errors = Model::Table::check(*spec, _message); !errors.empty())
 				m_core.result(_message, errors, {});
 			else
@@ -66,7 +67,7 @@ namespace deskCore
 					break;
 				case Owner::Machine: m_core.onMachineCommand(_message); break;
 				case Owner::Setup: onSetup(_message); break;
-				case Owner::Host: m_core.result(_message, {"not a desk command"}, {}); break;
+				default: m_core.result(_message, {"not a desk command"}, {}); break;
 				}
 			}
 			flush();
@@ -83,7 +84,7 @@ namespace deskCore
 			{
 				Value reset = Value::object();
 				reset.set("type", "reset");
-				m_core.publish(reset);
+				m_core.publishNow(reset);
 				onReady({});
 				flush();
 			}
@@ -109,6 +110,7 @@ namespace deskCore
 		{
 			if(!isInputReady())
 				m_core.publish(lcdMessage(_bits));
+			flush();
 		}
 
 		// The page went away (the editor window closed): nothing is published until the next ready.
@@ -128,6 +130,8 @@ namespace deskCore
 		bool isInputReady() const { return takesInput(lifecycle()); }
 		// How many times a page said ready (the plug-in publishes its own parts after each).
 		uint32_t readyCount() const { return m_readyCount; }
+		// What the adapter is doing, for the diagnostics line.
+		Value status() const { return m_machine->status(); }
 		// A page has been up: the machine is polled and read from then on.
 		bool pageSeen() const { return m_core.pageSeen(); }
 

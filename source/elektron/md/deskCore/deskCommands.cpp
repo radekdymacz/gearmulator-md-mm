@@ -61,6 +61,21 @@ namespace deskCore
 				break;
 			}
 			case ArgType::Object: s.set("type", "object"); break;
+			case ArgType::Bytes:
+			{
+				s.set("type", "array");
+				if(_a.length >= 0)
+				{
+					s.set("minItems", _a.length);
+					s.set("maxItems", _a.length);
+				}
+				Value item = Value::object();
+				item.set("type", "integer");
+				item.set("minimum", _a.min);
+				item.set("maximum", _a.max);
+				s.set("items", std::move(item));
+				break;
+			}
 			case ArgType::Array: s.set("type", "array"); break;
 			case ArgType::Any: break;
 			}
@@ -159,6 +174,23 @@ namespace deskCore
 			if(!_v->isArray())
 				_errors.push_back(std::string(_a.name) + ": expected a list");
 			break;
+		case ArgType::Bytes:
+		{
+			const auto bad = [&] { _errors.push_back(std::string(_a.name) + ": expected " + (_a.length >= 0 ? std::to_string(_a.length) + " " : "")
+				+ "integers " + num(_a.min) + ".." + num(_a.max)); };
+			if(!_v->isArray() || (_a.length >= 0 && static_cast<int>(_v->asArray().size()) != _a.length))
+			{
+				bad();
+				break;
+			}
+			for(const auto& x : _v->asArray())
+				if(!x.isNumber() || x.asNumber() != std::floor(x.asNumber()) || x.asNumber() < _a.min || x.asNumber() > _a.max)
+				{
+					bad();
+					break;
+				}
+			break;
+		}
 		case ArgType::Any:
 			break;
 		}
@@ -197,6 +229,8 @@ namespace deskCore
 		s.set("description", std::string(ownerName(_owner)) + (*_help ? std::string(": ") + _help : std::string()));
 		s.set("required", std::move(required));
 		s.set("properties", std::move(props));
+		// Closed: a command carries only its arguments (and op, id, g, force).
+		s.set("additionalProperties", false);
 		return s;
 	}
 }

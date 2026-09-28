@@ -1,4 +1,5 @@
 #include "mdJson.h"
+#include "mdNames.h"
 
 #include "jsonFirmware.h"
 
@@ -22,9 +23,9 @@ namespace elektronData
 	{
 		// The codec's own layout; documents leave as g_mdContractVersion (jsonFirmware.h).
 		constexpr int g_layoutVersion = 1;
-		constexpr std::array<const char*, 4> g_tempoMultipliers{"1X", "2X", "3/4X", "3/2X"};
-		constexpr std::array<const char*, 4> g_fxNames{"gateBox", "rhythmEcho", "eq", "dynamix"};
-		constexpr std::array<const char*, 7> g_outputs{"A", "B", "C", "D", "E", "F", "MAIN"};
+		constexpr const auto& g_tempoMultipliers = g_mdTempoMultipliers;
+		constexpr const auto& g_fxNames = g_mdMasterFx;
+		constexpr const auto& g_outputs = g_mdOutputs;
 
 		Value header(const char* _schema, const uint8_t _slot)
 		{

@@ -1,7 +1,7 @@
 #pragma once
 
 #include "mmDeskModel.h"
-#include "mmRecv.h"
+#include "mmDeskTelemetry.h"
 
 #include "deskCore/deskCore.h"
 
@@ -67,12 +67,9 @@ namespace mmDesk
 		virtual const Telemetry& telemetry() const = 0;
 		// The sequencer plays (the RAM flag, or the step byte advancing).
 		virtual bool playing() const = 0;
-		virtual const RecvSession& recv() const = 0;
 		virtual int currentPattern() const = 0;
 		virtual int currentKit() const = 0;
 		virtual int currentSong() const = 0;
 		virtual int currentGlobal() const = 0;
-		virtual size_t loaded() const = 0;
-		virtual double lastRoundTripMs() const = 0;
 	};
 }

@@ -25,6 +25,7 @@ namespace mdDesk
 		bool wire = false;			// at DIN speed: timeouts follow it, the lifecycle follows replies
 		bool kitsFirst = false;		// background loads: the 64 small kits first (a pattern is 1.7 s over DIN)
 		bool memory = true;			// the device publishes the working kit and the LCD
+		bool panel = true;			// the editor can press the machine's keys (live record, chains, TRIG keys)
 	};
 
 	const Profile& emulatorProfile();	// "emu"

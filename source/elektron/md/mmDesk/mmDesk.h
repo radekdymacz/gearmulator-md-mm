@@ -54,7 +54,9 @@ namespace mmDesk
 		std::vector<std::string> loadSetup(const Value& _setup);
 
 		bool isReady() const { return isInputReady(); }
-		const RecvSession& recv() const { return machine().recv(); }
+		// The adapter's status line (Machine::status), read for tests and diagnostics.
+		std::string recvState() const { const auto s = status(); const auto* v = s.find("recv"); return v && v->isString() ? v->asString() : std::string(); }
+		bool recvParked() const { const auto s = status(); const auto* v = s.find("parked"); return v && v->isBool() && v->asBool(); }
 		std::optional<elektronData::MmPattern> pattern(uint8_t _slot) const;
 		// The stored slot (what a dump holds).
 		std::optional<elektronData::MmKit> kit(uint8_t _slot) const;
@@ -66,8 +68,8 @@ namespace mmDesk
 		int currentKit() const { return machine().currentKit(); }
 		int currentSong() const { return machine().currentSong(); }
 		int currentGlobal() const { return machine().currentGlobal(); }
-		size_t loaded() const { return machine().loaded(); }
-		double lastRoundTripMs() const { return machine().lastRoundTripMs(); }
+		size_t loaded() const { const auto s = status(); const auto* v = s.find("loaded"); return v && v->isNumber() ? static_cast<size_t>(v->asNumber()) : 0; }
+		double lastRoundTripMs() const { const auto s = status(); const auto* v = s.find("roundTripMs"); return v && v->isNumber() ? v->asNumber() : -1; }
 
 	private:
 		void onSetup(const Value& _message) override;

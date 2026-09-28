@@ -1,0 +1,237 @@
+{
+  "schema": "mm-desk/catalogue",
+  "version": 1,
+  "machines": [
+    {
+      "id": 0,
+      "name": "GND-GND",
+      "family": "GND",
+      "synth": ["", "", "", "", "", "", "", ""],
+      "enums": {},
+      "fx": false,
+      "mk2": false
+    },
+    {
+      "id": 1,
+      "name": "GND-SIN",
+      "family": "GND",
+      "synth": ["", "", "", "", "", "", "", "TUNE"],
+      "enums": {},
+      "fx": false,
+      "mk2": false
+    },
+    {
+      "id": 2,
+      "name": "GND-NOIS",
+      "family": "GND",
+      "synth": ["ST", "RED", "STON", "", "", "", "", "TUNE"],
+      "enums": {
+        "2": ["OFF", "ON"]
+      },
+      "fx": false,
+      "mk2": false
+    },
+    {
+      "id": 3,
+      "name": "SID-6581",
+      "family": "SID",
+      "synth": ["PW", "PWAD", "PWRS", "WAVE", "MOD", "MSRC", "MFRQ", "TUNE"],
+      "enums": {
+        "2": ["OFF", "ON"],
+        "3": ["TRI", "SAW", "PULS", "MIX", "NOIS"],
+        "4": ["OFF", "RING", "SYNC", "R+S"],
+        "5": ["MFRQ", "PRCH"]
+      },
+      "fx": false,
+      "mk2": false
+    },
+    {
+      "id": 4,
+      "name": "SWAVE-SAW",
+      "family": "SWAVE",
+      "synth": ["UNIL", "UNIW", "UNIX", "", "SUBX", "SUB1", "SUB2", "TUNE"],
+      "enums": {},
+      "fx": false,
+      "mk2": false
+    },
+    {
+      "id": 5,
+      "name": "SWAVE-PULS",
+      "family": "SWAVE",
+      "synth": ["UNIL", "UNIW", "SUB1", "SUB2", "PW", "PWAD", "PWRS", "TUNE"],
+      "enums": {
+        "6": ["OFF", "ON"]
+      },
+      "fx": false,
+      "mk2": false
+    },
+    {
+      "id": 14,
+      "name": "SWAVE-ENS",
+      "family": "SWAVE",
+      "synth": ["PCH2", "PCH3", "PCH4", "WAVE", "PW", "CHRL", "CHRW", "TUNE"],
+      "enums": {},
+      "fx": false,
+      "mk2": false
+    },
+    {
+      "id": 6,
+      "name": "DPRO-WAVE",
+      "family": "DPRO",
+      "synth": ["WAVE", "WP", "WPM", "WPRS", "SYNC", "SFRQ", "", "TUNE"],
+      "enums": {
+        "0": ["01", "02", "03", "04", "05", "06", "07", "08", "09", "10", "11", "12", "13", "14", "15", "16", "17", "18", "19", "20", "21", "22", "23", "24", "25", "26", "27", "28", "29", "30", "31", "32"],
+        "3": ["OFF", "ON"],
+        "4": ["OFF", "ON"]
+      },
+      "fx": false,
+      "mk2": false
+    },
+    {
+      "id": 7,
+      "name": "DPRO-BBOX",
+      "family": "DPRO",
+      "synth": ["PTCH", "STRT", "", "", "RTRG", "RTIM", "", ""],
+      "enums": {},
+      "fx": false,
+      "mk2": false
+    },
+    {
+      "id": 32,
+      "name": "DPRO-DDRW",
+      "family": "DPRO",
+      "synth": ["WAV1", "MIX", "WAV2", "TIME", "BR1", "WID", "BR2", "TUNE"],
+      "enums": {},
+      "fx": false,
+      "mk2": true
+    },
+    {
+      "id": 33,
+      "name": "DPRO-DENS",
+      "family": "DPRO",
+      "synth": ["PCH2", "PCH3", "PCH4", "WAVE", "", "CHRL", "CHRW", "TUNE"],
+      "enums": {},
+      "fx": false,
+      "mk2": true
+    },
+    {
+      "id": 8,
+      "name": "FM+STAT",
+      "family": "FM+",
+      "synth": ["1FRQ", "1FIN", "1ENV", "1FB", "2FRQ", "2VOL", "TONE", "TUNE"],
+      "enums": {},
+      "fx": false,
+      "mk2": false
+    },
+    {
+      "id": 9,
+      "name": "FM+PAR",
+      "family": "FM+",
+      "synth": ["1FRQ", "1ENV", "2FRQ", "2ENV", "3FRQ", "3ENV", "TONE", "TUNE"],
+      "enums": {},
+      "fx": false,
+      "mk2": false
+    },
+    {
+      "id": 10,
+      "name": "FM+DYN",
+      "family": "FM+",
+      "synth": ["1FRQ", "1FEN", "1VOL", "1VEN", "2FRQ", "2ENV", "2FB", "TUNE"],
+      "enums": {},
+      "fx": false,
+      "mk2": false
+    },
+    {
+      "id": 11,
+      "name": "VO-6",
+      "family": "VO",
+      "synth": ["VOC1", "VOC2", "V-SW", "VOIC", "CONS", "CLEN", "CVOL", "TUNE"],
+      "enums": {
+        "2": ["OFF", "ON"],
+        "4": ["-", "B", "D", "F", "G", "H", "J", "K", "L", "M", "N", "P", "R", "RR", "S", "SJ", "T", "TH", "TJ", "V", "Z"]
+      },
+      "fx": false,
+      "mk2": false
+    },
+    {
+      "id": 12,
+      "name": "FX-THRU",
+      "family": "FX",
+      "synth": ["", "", "", "", "", "", "", "INP"],
+      "enums": {},
+      "fx": true,
+      "mk2": false
+    },
+    {
+      "id": 13,
+      "name": "FX-REVERB",
+      "family": "FX",
+      "synth": ["DEC", "DAMP", "GATE", "MIX", "HP", "LP", "", "INP"],
+      "enums": {},
+      "fx": true,
+      "mk2": false
+    },
+    {
+      "id": 15,
+      "name": "FX-CHORUS",
+      "family": "FX",
+      "synth": ["DEL", "DEP", "SPD", "MIX", "FB", "WID", "LP", "INP"],
+      "enums": {},
+      "fx": true,
+      "mk2": false
+    },
+    {
+      "id": 16,
+      "name": "FX-DYNAMIX",
+      "family": "FX",
+      "synth": ["ATK", "REL", "THRS", "MIX", "RAT", "GAIN", "RMS", "INP"],
+      "enums": {},
+      "fx": true,
+      "mk2": false
+    },
+    {
+      "id": 17,
+      "name": "FX-RINGMOD",
+      "family": "FX",
+      "synth": ["WAVE", "EXT", "", "MIX", "", "", "", "INP"],
+      "enums": {},
+      "fx": true,
+      "mk2": false
+    },
+    {
+      "id": 18,
+      "name": "FX-PHASER",
+      "family": "FX",
+      "synth": ["CNTR", "DEP", "SPD", "MIX", "FB", "WID", "", "INP"],
+      "enums": {},
+      "fx": true,
+      "mk2": false
+    },
+    {
+      "id": 19,
+      "name": "FX-FLANGER",
+      "family": "FX",
+      "synth": ["DEL", "DEP", "SPD", "MIX", "FB", "WID", "", "INP"],
+      "enums": {},
+      "fx": true,
+      "mk2": false
+    }
+  ],
+  "fixedPages": [
+    ["ATK", "HOLD", "DEC", "REL", "DIST", "VOL", "PAN", "PORT"],
+    ["BASE", "WDTH", "HPQ", "LPQ", "ATK", "DEC", "BOFS", "WOFS"],
+    ["EQF", "EQG", "SRR", "DTIM", "DSND", "DFB", "DBAS", "DWID"],
+    ["PAGE", "DEST", "TRIG", "WAVE", "MULT", "SPD", "INTL", "DPTH"],
+    ["PAGE", "DEST", "TRIG", "WAVE", "MULT", "SPD", "INTL", "DPTH"],
+    ["PAGE", "DEST", "TRIG", "WAVE", "MULT", "SPD", "INTL", "DPTH"],
+    ["LEN", "VEL", "PB", "PCHG", "CC1", "CC2", "CC3", "CC4"]
+  ],
+  "lfo": {
+    "pages": ["PTCH", "SYNT", "AMP", "FILT", "EFFX", "LFO1", "LFO2", "LFO3", "MIDI"],
+    "trigs": ["FREE", "TRIG", "HOLD", "ONE", "HALF"],
+    "waves": ["TRI", "ITRI", "SAW", "ISAW", "SQR", "ISQR", "EXP", "IEXP", "RMP", "IRMP", "RND"],
+    "mults": ["1X", "2X", "4X", "8X", "16X", "32X", "64X"],
+    "pitchDests": ["1/12", "2/12", "7/12", "1OCT", "2OCT", "4OCT", "8OCT", "16OCT"]
+  },
+  "enumRule": "index = floor(value * n / 128); value = ceil(index * 128 / n)"
+}

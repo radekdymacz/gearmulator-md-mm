@@ -52,13 +52,42 @@ namespace deskCore
 		const Doc* view() const { return pending ? &*pending : observed ? &*observed : nullptr; }
 	};
 
+	// A question for the user before something is lost (P6: one protocol). The core publishes it as
+	// {"type":"ask","ask":what,"message","confirm","command": the command to resend, ...details}; the
+	// page's answer is that command with force.
+	struct Ask
+	{
+		std::string what;		// its name ("discardKit", "overwriteSlot", ...)
+		std::string message;	// the question, may carry <b>..</b>
+		std::string confirm;	// the words on the button that goes on
+		Value details = Value::object();
+	};
+
 	// What an adapter answers a command or a delivery with.
 	struct Outcome
 	{
 		std::vector<std::string> errors;	// non-empty: refused
 		std::string note;					// one line for the user
-		std::optional<Value> ask;			// a question for the user: nothing was done
+		std::optional<Ask> ask;				// a question for the user: nothing was done
 	};
+
+	inline Value askMessage(const Ask& _ask, const Value& _command)
+	{
+		Value m = Value::object();
+		m.set("type", "ask");
+		m.set("ask", _ask.what);
+		m.set("message", _ask.message);
+		m.set("confirm", _ask.confirm);
+		Value command = Value::object();
+		for(const auto& [k, v] : _command.asObject())
+			if(k != "id" && k != "force")
+				command.set(k, v);
+		m.set("command", std::move(command));
+		if(_ask.details.isObject())
+			for(const auto& [k, v] : _ask.details.asObject())
+				m.put(k, v);
+		return m;
+	}
 
 	// What an adapter tells the core, drained after every call into it (no callbacks
 	// cross the seam).
@@ -71,12 +100,12 @@ namespace deskCore
 			Forget,		// nothing is known about `ref` any more (it will be read again)
 			Settled,	// a submitted change of `ref` is no longer in flight: ok with the value the machine now
 						// holds (doc, when it is known), or failed with `message`
-			Notice,		// a message for the page as it is (telemetry, a failure)
+			Telemetry,	// the machine's playhead for the page ({"type":"telemetry", ...body})
 			Reset		// the machine started over (a reboot, a restored project): nothing it held before is
 						// known any more, and undo steps no longer apply to it
 		};
 
-		Kind kind = Kind::Notice;
+		Kind kind = Kind::Telemetry;
 		std::optional<Doc> doc;
 		Source source = Source::None;
 		Ref ref{};
@@ -121,10 +150,11 @@ namespace deskCore
 			e.message = std::move(_message);
 			return e;
 		}
-		static Event noticeOf(Value _message)
+		static Event telemetry(Value _body)
 		{
 			Event e;
-			e.notice = std::move(_message);
+			e.kind = Kind::Telemetry;
+			e.notice = std::move(_body);
 			return e;
 		}
 		static Event reset()
@@ -168,6 +198,8 @@ namespace deskCore
 		virtual void pageReady() {}
 
 		virtual std::vector<Ev> drain() = 0;
+		// A small object of what the adapter is doing, for the diagnostics line (not the page's).
+		virtual Value status() const { return Value::object(); }
 		// The machine document (the model's schema) without the core's parts.
 		virtual Value state(const Documents& _view) const = 0;
 		virtual Capabilities capabilities() const = 0;
@@ -184,7 +216,7 @@ namespace deskCore
 	// Model provides: Kind, Ref, Document (variant), Documents (the typed view apply
 	// reads), Change {before, after, ref()}, Clipboard, Context, EditResult {changes,
 	// errors, note, optional<Clipboard> clipboard}, and the static functions refOf, get,
-	// set, erase, apply, docMessage, decorate.
+	// set, erase, apply, setDocument, docMessage, lifecycleText, unsupported, clipboardDocument.
 	template<typename Model>
 	class Core
 	{
@@ -234,7 +266,7 @@ namespace deskCore
 			}
 			if(review.ask && !forced(_message))
 			{
-				publish(*review.ask);
+				publish(askMessage(*review.ask, _message));
 				result(_message, {}, {});
 				return;
 			}
@@ -259,7 +291,7 @@ namespace deskCore
 				if(a.ask || !a.errors.empty())
 				{
 					if(a.ask)
-						publish(*a.ask);
+						publish(askMessage(*a.ask, _message));
 					result(_message, a.errors, a.note);
 					return;
 				}
@@ -267,7 +299,7 @@ namespace deskCore
 			const auto o = m_machine->command(_message, m_view);
 			pump();
 			if(o.ask)
-				publish(*o.ask);
+				publish(askMessage(*o.ask, _message));
 			result(_message, o.errors, o.note);
 		}
 
@@ -317,14 +349,21 @@ namespace deskCore
 						publish(m);
 					}
 					break;
-				case Ev::Kind::Notice:
-					publish(e.notice);
+				case Ev::Kind::Telemetry:
+				{
+					Value t = Value::object();
+					t.set("type", "telemetry");
+					if(e.notice.isObject())
+						for(const auto& [k, v] : e.notice.asObject())
+							t.set(k, v);
+					publish(t);
 					break;
+				}
 				case Ev::Kind::Reset:
 				{
 					Value reset = Value::object();
 					reset.set("type", "reset");
-					publish(reset);
+					publishNow(reset);
 					forgetAll();
 					break;
 				}
@@ -346,16 +385,18 @@ namespace deskCore
 
 		void detach() { m_pageReady = false; }
 
-		// Publish the documents that changed and the machine document when its value changed, then
-		// the results of the commands since the last flush: a page that gets a result already has
-		// the documents it refers to.
+		// One ordered outbox (P6): the documents that changed and the machine document when its value
+		// changed, then every other message since the last flush in the order it happened (results,
+		// asks, telemetry, errors). A page that gets a result already has the documents it refers to.
 		void flush()
 		{
+			auto out = std::move(m_out);
+			m_out.clear();
+			if(!m_pageReady)
+				return;
 			publishDocuments();
-			auto results = std::move(m_results);
-			m_results.clear();
-			for(const auto& r : results)
-				publish(r);
+			for(const auto& m : out)
+				send(m);
 		}
 
 	private:
@@ -368,7 +409,7 @@ namespace deskCore
 				const auto it = m_docs.find(ref);
 				if(it == m_docs.end() || !it->second.view())
 					continue;
-				publish(Model::docMessage(ref, *it->second.view(), it->second.pending.has_value(), it->second.source));
+				send(Model::docMessage(ref, *it->second.view(), it->second.pending.has_value(), it->second.source));
 			}
 			m_dirty.clear();
 			auto doc = machineDocument();
@@ -378,7 +419,7 @@ namespace deskCore
 			Value m = Value::object();
 			m.set("type", "machine");
 			m.set("doc", std::move(doc));
-			publish(m);
+			send(m);
 		}
 
 	public:
@@ -393,27 +434,39 @@ namespace deskCore
 			history.set("undoCount", static_cast<int>(m_history.size()));
 			history.set("redoCount", static_cast<int>(m_history.redoSize()));
 			doc.set("history", std::move(history));
-			doc.set("lifecycle", lifecycleName(m_machine->lifecycle()));
-			doc.set("capabilities", m_machine->capabilities().toJson());
+			const auto lc = m_machine->lifecycle();
+			doc.set("lifecycle", lifecycleName(lc));
+			doc.set("input", takesInput(lc));
+			doc.set("midi", takesMidi(lc));
+			doc.set("lifecycleText", Model::lifecycleText(lc));
+			// What the engine can do, and what the editor does not do yet on any engine (the model's).
+			auto caps = m_machine->capabilities();
+			for(const auto& u : Model::unsupported())
+				caps.set(u.name, false, u.reason);
+			doc.set("capabilities", caps.toJson());
 			Value engines = Value::array();
 			for(const auto& e : m_engines)
 				engines.push(e.toJson());
 			doc.set("engines", std::move(engines));
-			Model::decorate(doc, m_history);
+			if(const auto clip = Model::clipboardDocument(m_clipboard))
+				doc.set("clipboard", *clip);
 			return doc;
 		}
 
 		// A command's result: published by the next flush, after the documents it changed.
 		void result(const Value& _message, const std::vector<std::string>& _errors, const std::string& _note)
 		{
-			m_results.push_back(resultMessage(_message, _errors, _note));
+			publish(resultMessage(_message, _errors, _note));
 		}
 
-		void publish(const Value& _message)
+		// A message for the page, in order, at the next flush.
+		void publish(Value _message)
 		{
-			if(m_pageReady && m_toPage)
-				m_toPage(_message);
+			if(m_pageReady)
+				m_out.push_back(std::move(_message));
 		}
+		// A message that goes before everything queued (a reset: the page starts over).
+		void publishNow(const Value& _message) { send(_message); }
 
 		// The engine map's entries, for the page's engine menu (machine.engines).
 		void setEngines(std::vector<EngineChoice> _engines) { m_engines = std::move(_engines); }
@@ -485,6 +538,12 @@ namespace deskCore
 			result(_message, errors, note);
 		}
 
+		void send(const Value& _message)
+		{
+			if(m_pageReady && m_toPage)
+				m_toPage(_message);
+		}
+
 		static bool forced(const Value& _message)
 		{
 			const auto* f = _message.find("force");
@@ -522,6 +581,6 @@ namespace deskCore
 		bool m_pageReady = false;
 		bool m_pageSeen = false;
 		std::vector<EngineChoice> m_engines;
-		std::vector<Value> m_results;	// results waiting for the flush
+		std::vector<Value> m_out;		// messages waiting for the flush, in order
 	};
 }

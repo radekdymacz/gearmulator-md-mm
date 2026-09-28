@@ -576,7 +576,12 @@ namespace
 		desk.onWorkingKitMemory(region(panel));
 		check(desk.documents().working->kit.params[2][5] == panel.params[2][5], "memory edit shows in the working kit");
 		check(desk.linkState().workingKit == mdDataLink::Session::WorkingKit::Edited, "memory differs: edited");
-		check(machine() && machine()->find("desk")->find("kitSource")->asString() == "memory", "the page is told: memory");
+		const Value* wdoc = nullptr;
+		for(auto it = page.rbegin(); it != page.rend() && !wdoc; ++it)
+			if(it->find("type")->asString() == "doc" && it->find("kind")->asString() == "workingKit")
+				wdoc = &*it;
+		check(wdoc && wdoc->find("source")->asString() == "memory" && wdoc->find("slot")->asNumber() == 3,
+			"the page is told: the working kit of K04, from memory");
 		// A stored-slot dump keeps the memory copy.
 		desk.onDeviceSysex(ed::encodeMdKit(kit));
 		check(desk.documents().working->kit.params[2][5] == panel.params[2][5], "a stored dump does not undo memory");
@@ -775,7 +780,7 @@ namespace
 			return nullptr;
 		};
 		const auto ok = [&] { const auto* r = last("result"); return r && r->find("ok")->asBool(); };
-		const auto firmware = [&] { const auto* m = last("machine"); return m ? m->find("doc")->find("desk")->find("firmware")->asString() : std::string(); };
+		const auto firmware = [&] { const auto* m = last("machine"); return m ? m->find("doc")->find("lifecycle")->asString() : std::string(); };
 		Telemetry t;
 		t.valid = true;
 		t.bootAnimation = 1;
@@ -786,7 +791,9 @@ namespace
 		desk.onDeviceSysex({0xf0, 0x00, 0x20, 0x3c, 0x02, 0x00, 0x72, 0x04, 0x02, 0xf7});
 		desk.onDeviceSysex({0xf0, 0x00, 0x20, 0x3c, 0x02, 0x00, 0x72, 0x02, 0x05, 0xf7});
 		desk.tick();
-		check(desk.isReady() && !desk.isInputReady() && firmware() == "booting", "status answered, animation running: BOOTING OS");
+		check(desk.isReady() && !desk.isInputReady() && firmware() == "animating", "status answered, animation running: BOOTING OS");
+		desk.showLcd(std::vector<uint8_t>(1024, 0x0f));
+		check(last("lcd") && last("lcd")->find("bits")->asString().size() == 1368, "while it starts the machine's own LCD goes to the page");
 		desk.onPageMessage(cmd(R"({"op":"play","id":1})"));
 		check(!ok() && keys.empty(), "PLAY is held back during the animation");
 		t.bootAnimation = 0;
@@ -810,8 +817,8 @@ namespace
 		desk.onPageMessage(cmd(R"({"op":"select","p":9,"id":3})"));
 		const auto* ask = last("ask");
 		check(ask && ask->find("ask")->asString() == "breakChain" && wire.empty(), "select while chained asks first");
-		desk.onPageMessage(cmd(R"({"op":"select","p":9,"chainOk":true,"id":4})"));
-		check(!wire.empty() && wire.front() == ed::mdLoadPattern(9), "chainOk: LOAD PATTERN");
+		desk.onPageMessage(cmd(R"({"op":"select","p":9,"force":true,"id":4})"));
+		check(!wire.empty() && wire.front() == ed::mdLoadPattern(9), "the ask answered with force: LOAD PATTERN");
 		wire.clear();
 		desk.onPageMessage(cmd(R"({"op":"chainClear","id":5})"));
 		check(ok() && !wire.empty() && wire.front() == ed::mdLoadPattern(2), "CLEAR = LOAD PATTERN of the current pattern");
@@ -924,20 +931,20 @@ namespace
 		{
 			for(auto it = page.rbegin(); it != page.rend(); ++it)
 				if(it->find("type")->asString() == "machine")
-					return it->find("doc")->find("desk")->find("link")->asString();
+					return it->find("doc")->find("lifecycle")->asString();
 			return std::string();
 		};
 		desk.onPageMessage(cmd(R"({"op":"ready"})"));
-		check(link() == "connect", "HW: connect until the machine answers");
+		check(link() == "hwConnecting", "HW: connect until the machine answers");
 		now += 6000;
 		desk.tick();
-		check(link() == "lost", "HW: nothing answers for 5 s: HW NO MIDI");
+		check(link() == "hwLost", "HW: nothing answers for 5 s: HW NO MIDI");
 		desk.onDeviceSysex({0xf0, 0x00, 0x20, 0x3c, 0x02, 0x00, 0x72, 0x04, 0x00, 0xf7});
 		desk.tick();
 		check(link() == "ready" && desk.isInputReady(), "HW: the first status reply: HW MIDI, input taken");
 		now += 4000;
 		desk.tick();
-		check(link() == "lost", "HW: no reply for 3.5 s: lost");
+		check(link() == "hwLost", "HW: no reply for 3.5 s: lost");
 	}
 
 	// P5: GLOBAL settings by name.
@@ -1019,29 +1026,36 @@ namespace
 	void checkContract(const bool _write)
 	{
 		namespace contract = deskCore::contract;
-		auto root = contract::loadSchema(MDDESK_SCHEMA);
+		std::ifstream in(MDDESK_SCHEMA);
+		const std::string text{std::istreambuf_iterator<char>(in), std::istreambuf_iterator<char>()};
+		auto root = ed::json::parse(text);
 		check(root.has_value(), "the contract schema loads");
 		if(!root)
 			return;
-		const bool same = contract::checkCommands(*root, deskHost::contractCommands(commandTable().schema()), MDDESK_SCHEMA, _write);
+		const auto generated = deskHost::contractCommands(commandTable().schema());
 		if(_write)
+		{
+			std::ofstream out(MDDESK_SCHEMA);
+			out << ed::json::write(contract::withGenerated(*root, generated), 2) << "\n";
 			return;
-		check(same, "the schema's $defs/command is generated from the command tables (mdDeskTest --write-schema)");
-		const ed::json::Schema schema(*root);
-		check(schema.validate(*ed::json::parse(R"({"op":"trig","p":1,"t":0,"s":3,"id":4})"), "command").empty()
-			&& !schema.validate(*ed::json::parse(R"({"op":"trig","p":200,"t":0,"s":3})"), "command").empty(), "commands validate");
-		const auto r = contract::checkMessages(*root, g_published);
+		}
+		check(contract::sameCommands(*root, generated), "the schema's $defs/command is generated from the command tables (--write-schema)");
+		check(contract::sameLifecycle(*root), "the schema's lifecycle enum is the lifecycle rows (--write-schema)");
+		// The plug-in's host sends these; this test has no host.
+		const auto r = contract::checkMessages(*root, g_published, {"learn", "audio", "audioLevel", "openAudio"});
 		for(const auto& p : r.off)
 			std::printf("    %s\n", p.c_str());
 		for(const auto& u : r.unseen)
 			std::printf("    declared, never published: %s\n", u.c_str());
 		std::printf("  %zu published messages of %zu types, %zu off the contract\n", r.messages, r.types, r.offCount);
 		check(r.offCount == 0 && r.messages > 0, "every published message is on the contract");
-		check(r.unseen.empty(), "every member the contract declares for the machine and its capabilities is published");
-		const auto gaps = contract::handlerGaps(commandTable(), MdMachine::commandsHandled());
+		check(r.unseen.empty(), "every message type and machine member the contract declares is published");
+		auto gaps = contract::handlerGaps(commandTable(), deskCore::Owner::Machine, MdMachine::commandsHandled());
+		for(const auto& g : contract::unknownOps(commandTable(), MdMachine::commandsAsking()))
+			gaps.push_back(g);
 		for(const auto& g : gaps)
 			std::printf("    %s\n", g.c_str());
-		check(gaps.empty(), "every machine command of the table has its adapter function, and no other");
+		check(gaps.empty(), "every machine command of the table has its adapter function, and no other; every ask is a command");
 	}
 }
 

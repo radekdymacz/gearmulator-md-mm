@@ -228,12 +228,12 @@ namespace
 		msg(R"({"op":"set","id":7,"kind":"pattern","doc":)" + doc + "}");
 		check(lastResult().find("ok")->asBool(), "set pattern accepted");
 		run(800);
-		check(m.keysPressed >= 28 && d.recv().parked(), "the desk drove the machine to SYSEX RECV");
+		check(m.keysPressed >= 28 && d.recvParked(), "the desk drove the machine to SYSEX RECV");
 		check(m.slots[{0x67, 3}] == ed::encodeMmPattern(p), "the machine holds the edited pattern");
 		run(300);
 		check(d.lastRoundTripMs() > 0, "read back and confirmed");
 		run(3500);
-		check(m.screenWord == mmDesk::Screen::Main && !d.recv().parked(), "left SYSEX RECV when idle");
+		check(m.screenWord == mmDesk::Screen::Main && !d.recvParked(), "left SYSEX RECV when idle");
 
 		// Invalid: 63 locked parameters.
 		auto badDoc = ed::mmPatternToJson(p);
@@ -287,7 +287,7 @@ void playingFromSteps()
 	const auto playing = [&]
 	{
 		for(auto it = page.rbegin(); it != page.rend(); ++it)
-			if(it->find("type")->asString() == "tel")
+			if(it->find("type")->asString() == "telemetry")
 				return it->find("playing")->asBool();
 		return false;
 	};
@@ -385,32 +385,129 @@ void modulators()
 	check(last("mod") && last("mod")->find("values")->asArray().size() == 1, "the page gets the source's value");
 }
 
+// P6: the questions, errors, the machine's own screen and a restart, as the page gets them.
+void asksAndErrors()
+{
+	std::puts("asks, errors, the LCD and a restart");
+	double now = 0;
+	std::vector<Value> page;
+	std::vector<Bytes> wire;
+	mmDesk::Desk::Port port;
+	port.device.sendSysex = [&](const Bytes& _b) { wire.push_back(_b); };
+	port.device.sendParam = [](uint8_t, uint8_t, uint8_t, uint8_t) {};
+	port.device.sendNrpn = [](uint8_t, uint8_t, uint8_t) {};
+	port.device.pressKeys = [](const std::vector<mmDesk::Key>&) { return true; };
+	port.device.nowMs = [&] { return now; };
+	port.toPage = [&](const Value& _v) { page.push_back(_v); g_published.push_back(_v); };
+	const auto last = [&](const char* _type) -> const Value*
+	{
+		for(auto it = page.rbegin(); it != page.rend(); ++it)
+			if(it->find("type")->asString() == _type)
+				return &*it;
+		return nullptr;
+	};
+	const auto status = [](const uint8_t _p, const uint8_t _v) { return Bytes{0xf0, 0, 0x20, 0x3c, 3, 0, 0x72, _p, _v, 0xf7}; };
+	ed::MmKit stored;
+	stored.position = 2;
+	stored.machines.fill(1);
+	stored.trigPos.fill(0xff);
+	stored.name = {'S', 'T', 'O', 'R', 'E', 'D'};
+	ed::MmKit other = stored;
+	other.position = 4;
+	{
+		mmDesk::Desk d(port);
+		const auto msg = [&](const std::string& _json) { d.onPageMessage(*ed::json::parse(_json)); };
+		msg(R"({"op":"ready"})");
+		d.showLcd(Bytes(1024, 0x33));
+		check(last("lcd") != nullptr, "while the machine starts, its own LCD goes to the page");
+		d.setProbe(mmDesk::Desk::Probe::Running);
+		d.onTelemetry(screen(mmDesk::Screen::Main));
+		d.onDeviceSysex(status(0x04, 1));
+		d.onDeviceSysex(status(0x02, 2));
+		d.onDeviceSysex(ed::encodeMmKit(stored));
+		d.onDeviceSysex(ed::encodeMmKit(other));
+		auto edited = stored;
+		edited.tracks[0].pages[2][0] = 99;
+		msg(R"({"op":"set","id":1,"kind":"workingKit","doc":)" + ed::json::write(ed::mmKitToJson(edited)) + "}");
+		msg(R"({"op":"loadKit","k":4,"id":2})");
+		const auto* a = last("ask");
+		check(a && a->find("ask")->asString() == "loadKit" && a->find("command")->find("k")->asNumber() == 4 && !a->find("message")->asString().empty(),
+			"LOAD KIT over unsaved edits asks first, with the command to resend");
+		msg(R"({"op":"saveKit","k":4,"id":3})");
+		check(last("ask") && last("ask")->find("ask")->asString() == "overwriteSlot", "SAVE KIT over a slot that holds a kit asks first");
+		page.clear();
+		d.setProbe(mmDesk::Desk::Probe::Loading);
+		d.setProbe(mmDesk::Desk::Probe::Running);
+		d.flush();
+		check(last("reset") != nullptr && !d.workingKit(), "a restart: the page starts over");
+	}
+	{
+		// Over a wire nothing drives SYSEX RECV: a dump the machine never reads back is an error.
+		mmDesk::Desk d(port, mmDesk::wireProfile());
+		const auto msg = [&](const std::string& _json) { d.onPageMessage(*ed::json::parse(_json)); };
+		msg(R"({"op":"ready"})");
+		d.onDeviceSysex(status(0x04, 1));
+		d.onDeviceSysex(status(0x02, 2));
+		d.onDeviceSysex(ed::encodeMmPattern(emptyPattern(1)));
+		auto p = emptyPattern(1);
+		p.amp[0] = 1;
+		msg(R"({"op":"set","id":4,"kind":"pattern","doc":)" + ed::json::write(ed::mmPatternToJson(p)) + "}");
+		for(int i = 0; i < 100; ++i)
+		{
+			now += 100;
+			d.onDeviceSysex(status(0x04, 1));
+			d.tick();
+		}
+		check(last("error") != nullptr, "a push the machine never reads back is reported");
+	}
+}
+
 // The executable spec (deskCore::contract, shared with the Machinedrum's): every published message
 // against the contract, the contract's machine document against what was published, $defs/command
 // generated from the tables (mmDeskTest --write-schema), the adapter's functions against the table.
 void checkContract(const bool _write)
 {
 	namespace contract = deskCore::contract;
-	auto root = contract::loadSchema(MMDESK_SCHEMA);
+	std::ifstream in(MMDESK_SCHEMA);
+	const std::string text{std::istreambuf_iterator<char>(in), std::istreambuf_iterator<char>()};
+	auto root = ed::json::parse(text);
 	check(root.has_value(), "the contract schema loads");
 	if(!root)
 		return;
-	const bool same = contract::checkCommands(*root, deskHost::contractCommands(mmDesk::commandTable().schema()), MMDESK_SCHEMA, _write);
+	const auto generated = deskHost::contractCommands(mmDesk::commandTable().schema());
+	// The catalogue the page gets (MmModel::catalogue), kept as a file too: the page's own tests
+	// check the mockup's tables against it (mmConvertTest.js).
+	const auto catalogue = ed::json::write(mmDesk::MmModel::catalogue(), 2) + "\n";
 	if(_write)
+	{
+		std::ofstream out(MMDESK_SCHEMA);
+		out << ed::json::write(contract::withGenerated(*root, generated), 2) << "\n";
+		std::ofstream cat(MMDESK_CATALOGUE);
+		cat << catalogue;
 		return;
-	check(same, "the schema's $defs/command is generated from the command tables (mmDeskTest --write-schema)");
-	const auto r = contract::checkMessages(*root, g_published);
+	}
+	{
+		std::ifstream cin(MMDESK_CATALOGUE);
+		const std::string committed{std::istreambuf_iterator<char>(cin), std::istreambuf_iterator<char>()};
+		check(committed == catalogue, "doc/modern-ux/mm-catalogue.json is the catalogue the plug-in sends (--write-schema)");
+	}
+	check(contract::sameCommands(*root, generated), "the schema's $defs/command is generated from the command tables (--write-schema)");
+	check(contract::sameLifecycle(*root), "the schema's lifecycle enum is the lifecycle rows (--write-schema)");
+	// The plug-in's host sends these; this test has no host.
+	const auto r = contract::checkMessages(*root, g_published, {"learn", "audio", "audioLevel", "openAudio"});
 	for(const auto& p : r.off)
 		std::printf("    %s\n", p.c_str());
 	for(const auto& u : r.unseen)
 		std::printf("    declared, never published: %s\n", u.c_str());
 	std::printf("  %zu published messages of %zu types, %zu off the contract\n", r.messages, r.types, r.offCount);
 	check(r.offCount == 0 && r.messages > 0, "every published message is on the contract");
-	check(r.unseen.empty(), "every member the contract declares for the machine and its capabilities is published");
-	const auto gaps = contract::handlerGaps(mmDesk::commandTable(), mmDesk::MmMachine::commandsHandled());
+	check(r.unseen.empty(), "every message type and machine member the contract declares is published");
+	auto gaps = contract::handlerGaps(mmDesk::commandTable(), deskCore::Owner::Machine, mmDesk::MmMachine::commandsHandled());
+	for(const auto& g : contract::unknownOps(mmDesk::commandTable(), mmDesk::MmMachine::commandsAsking()))
+		gaps.push_back(g);
 	for(const auto& g : gaps)
 		std::printf("    %s\n", g.c_str());
-	check(gaps.empty(), "every machine command of the table has its adapter function, and no other");
+	check(gaps.empty(), "every machine command of the table has its adapter function, and no other; every ask is a command");
 }
 
 int main(const int _argc, char** _argv)
@@ -425,6 +522,7 @@ int main(const int _argc, char** _argv)
 	desk();
 	playingFromSteps();
 	modulators();
+	asksAndErrors();
 	checkContract(false);
 	std::printf("%s (%d failures)\n", g_failures ? "FAIL" : "PASS", g_failures);
 	return g_failures ? 1 : 0;

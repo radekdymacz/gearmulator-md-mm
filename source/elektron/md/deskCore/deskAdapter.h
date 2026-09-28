@@ -54,7 +54,8 @@ namespace deskCore
 		}
 		// A submitted change did not reach the machine.
 		void fail(const Ref& _ref, std::string _message) { m_events.push_back(Ev::failed(_ref, std::move(_message))); }
-		void notice(Value _message) { m_events.push_back(Ev::noticeOf(std::move(_message))); }
+		// The playhead for the page: the core publishes it as {"type":"telemetry", ...}.
+		void publishTelemetry(Value _body) { m_events.push_back(Ev::telemetry(std::move(_body))); }
 		// The machine started over: nothing it held is known.
 		void startedOver()
 		{

@@ -1,5 +1,7 @@
 #include "mmMachines.h"
 
+#include <string>
+
 namespace elektronData
 {
 	const std::vector<MmMachineInfo>& mmMachines()
@@ -96,7 +98,15 @@ namespace elektronData
 			if(_slot == 5) return {"MFRQ", "PRCH"};											// MSRC
 			return {};
 		case 5: return _slot == 6 ? onOff : std::vector<std::string>{};						// SWAVE-PULS PWRS
-		case 6: return _slot == 3 || _slot == 4 ? onOff : std::vector<std::string>{};		// DPRO-WAVE WPRS SYNC
+		case 6:																				// DPRO-WAVE
+			if(_slot == 0)																	// WAVE: the 32 DigiPro waveforms, by number
+			{
+				std::vector<std::string> waves;
+				for(int w = 1; w <= 32; ++w)
+					waves.push_back((w < 10 ? "0" : "") + std::to_string(w));
+				return waves;
+			}
+			return _slot == 3 || _slot == 4 ? onOff : std::vector<std::string>{};			// WPRS SYNC
 		case 11:																			// VO-6
 			if(_slot == 2) return onOff;													// V-SW
 			if(_slot == 4) return {"-", "B", "D", "F", "G", "H", "J", "K", "L", "M", "N", "P", "R", "RR", "S", "SJ", "T", "TH", "TJ", "V", "Z"};
