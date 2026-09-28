@@ -1095,14 +1095,6 @@
               ],
               "description": "Selected while playing and not heard yet (clears at the playhead wrap)."
             },
-            "playing": {
-              "type": "boolean",
-              "description": "The playhead moves (md::SequencerState)."
-            },
-            "recording": {
-              "type": "boolean",
-              "description": "Live recording (RECORD held + PLAY): the RECORD LED blinks while playing."
-            },
             "gridEdit": {
               "type": "boolean",
               "description": "Grid edit (RECORD alone): the RECORD LED is steady."

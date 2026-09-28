@@ -1254,9 +1254,7 @@ namespace mdDesk
 		desk.set("loading", static_cast<int>(m_loads.pending()));
 		desk.set("roundTripMs", m_lastRoundTripMs);
 		desk.set("queued", m_audibleQueue ? Value(static_cast<int>(*m_audibleQueue)) : Value());
-		desk.set("playing", m_telemetry.playing);
 		desk.set("telemetry", m_telemetry.valid);
-		desk.set("recording", m_telemetry.recording);
 		desk.set("gridEdit", m_telemetry.gridEdit);
 		desk.set("knobPage", m_telemetry.knobPage);
 		Value mutes = Value::array();

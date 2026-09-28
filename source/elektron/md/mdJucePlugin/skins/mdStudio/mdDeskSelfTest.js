@@ -220,7 +220,7 @@ if (/[?&]selftest=p5(&|$)/.test(location.search)) (async () => {
 	await until(() => runs(), 90000);
 	log(`ready at ${Math.round(performance.now() - t0)} ms, loads queued ${desk().loading}`);
 	/* Times are taken in the message handler (a covered window throttles page timers to 1 s). */
-	let seenAt = -1; Bridge.onMessage(m => { if (m.type === "machine" && m.doc.desk && m.doc.desk.playing && seenAt < 0) seenAt = performance.now(); });
+	let seenAt = -1; Bridge.onMessage(m => { if (m.type === "telemetry" && m.playing && seenAt < 0) seenAt = performance.now(); });
 	for (let i = 0; i < 4; i++) {
 		seenAt = -1; const a = performance.now(); $("#play").click();
 		await until(() => V.playing, 3000);

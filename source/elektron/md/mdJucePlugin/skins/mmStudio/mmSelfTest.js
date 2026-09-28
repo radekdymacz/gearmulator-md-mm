@@ -135,7 +135,7 @@ window.MMDiagnostics = {};
 			V().goWs("seq");
 			await sleep(300);
 			window.togglePlay();
-			await W(m => m.type === "machine" && m.doc.playing, 4000);
+			await W(m => m.type === "telemetry" && m.playing, 4000);
 			stage = "tel playing";
 			await W(m => m.type === "telemetry" && m.playing && m.step > 0, 4000);
 			/* the soft playhead column glides with the machine's step (RAM telemetry), POSITION too */
@@ -145,7 +145,7 @@ window.MMDiagnostics = {};
 			await W(m => m.type === "telemetry" && m.playing && m.step > a.step);
 			await sleep(250); const b = at(); stage = "stop";
 			window.togglePlay();
-			await W(m => m.type === "machine" && !m.doc.playing);
+			await W(m => m.type === "telemetry" && !m.playing);
 			await sleep(300); const c = at();
 			const lane = $("#lane")?.getBoundingClientRect(), roll = $("#seq .nlane.big")?.getBoundingClientRect(), ph = $("#phcol")?.getBoundingClientRect();
 			const spans = lane && roll && ph && ph.top <= roll.top && ph.bottom >= lane.bottom;

@@ -899,7 +899,6 @@ namespace mmDesk
 		Value g = Value::object();
 		g.set("current", m_curGlobal < 0 ? Value() : Value(m_curGlobal));
 		d.set("global", std::move(g));
-		d.set("playing", m_playing);
 		// 30-300 BPM in firmware units (x 24); anything else is not a tempo yet (boot).
 		d.set("tempo", m_tel.tempo >= 720 && m_tel.tempo <= 7200 ? Value(m_tel.tempo / 24.0) : Value());
 		Value r = Value::object();

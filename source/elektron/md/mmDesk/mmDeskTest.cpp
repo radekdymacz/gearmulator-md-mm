@@ -315,16 +315,7 @@ void playingFromSteps()
 	d.tick();
 	for(double e = 0; e < 300; e += 10) { now += 10; d.tick(); }
 	feed(3, 60);
-	bool machineStopped = false;
-	for(auto it = page.rbegin(); it != page.rend(); ++it)
-		if(it->find("type")->asString() == "machine")
-		{
-			const auto* doc = it->find("doc");
-			const auto* p = doc ? doc->find("playing") : nullptr;
-			machineStopped = p && !p->asBool();
-			break;
-		}
-	check(machineStopped, "the step stands still for three step times: stopped");
+	check(!playing(), "the step stands still for three step times: stopped");
 }
 
 // P6: the Control workspace's LFOs run in the plug-in on the machine's steps (deskCore's ModEngine,

@@ -1023,7 +1023,7 @@
     },
     "machine": {
       "type": "object",
-      "required": ["schema", "version", "pattern", "kit", "song", "global", "playing", "tempo", "recv", "loading", "roundTripMs", "lifecycle", "capabilities", "engines", "history", "input", "midi", "lifecycleText"],
+      "required": ["schema", "version", "pattern", "kit", "song", "global", "tempo", "recv", "loading", "roundTripMs", "lifecycle", "capabilities", "engines", "history", "input", "midi", "lifecycleText"],
       "description": "Read-only machine state from the MM desk: current and queued pattern, kit and its working state, song, SYSEX RECV session, and the core's parts (P6: every member declared).",
       "properties": {
         "schema": {
@@ -1133,9 +1133,6 @@
               ]
             }
           }
-        },
-        "playing": {
-          "type": "boolean"
         },
         "tempo": {
           "oneOf": [

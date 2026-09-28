@@ -517,7 +517,7 @@ namespace
 		m.send(ed::encodeMdPattern(next));
 		_rig.run(100);
 		_rig.page(R"({"op":"play"})");
-		_rig.runUntil([&] { return _rig.machineDoc() && _rig.machineDoc()->find("desk")->find("playing")->asBool(); },
+		_rig.runUntil([&] { return _rig.telemetry().playing; },
 			2000);
 		_rig.run(300);
 		const auto q0 = m.now();
@@ -542,7 +542,7 @@ namespace
 		check(clearedAt > statusAt, "the queue clears at the playhead wrap, after the early status switch");
 		_rig.page(R"({"op":"stop"})");
 		_rig.run(300);
-		check(_rig.machineDoc() && !_rig.machineDoc()->find("desk")->find("playing")->asBool(),
+		check(!_rig.telemetry().playing,
 			"the page shows the machine stopped");
 	}
 
@@ -687,11 +687,7 @@ namespace
 		_rig.page("{\"op\":\"trig\",\"p\":" + p + R"(,"t":14,"s":9,"on":true,"id":40})");
 		check(resultOk(_rig), "track 15's note at step 10");
 		_rig.runUntil([&] { return !desk.isBusy(); }, 2000);
-		const auto recording = [&]
-		{
-			const auto& d = _rig.machineDoc();
-			return d && d->find("desk")->find("recording")->asBool();
-		};
+		const auto recording = [&] { return _rig.telemetry().recording; };
 		const auto t0 = m.now();
 		_rig.page(R"({"op":"record","id":42})");
 		check(resultOk(_rig), "REC accepted");
@@ -715,8 +711,7 @@ namespace
 		_rig.runUntil(stepIs(12), 3000);
 		_rig.page(R"({"op":"record","id":47})");
 		check(_rig.runUntil([&] { return !recording(); }, 1000), "REC again leaves recording");
-		const auto& md = _rig.machineDoc();
-		check(md && md->find("desk")->find("playing")->asBool(), "and the pattern keeps playing");
+		check(_rig.telemetry().playing, "and the pattern keeps playing");
 		const auto trigsOf = [&](const Value& _doc, const int _t)
 		{
 			std::vector<int> s;
@@ -1395,7 +1390,7 @@ int main(const int _argc, char** _argv)
 				rig.run(300);
 				const auto t0 = rig.machine().now();
 				rig.page(R"({"op":"play","id":1})");
-				const bool on = rig.runUntil([&] { return rig.machineDoc() && rig.machineDoc()->find("desk")->find("playing")->asBool(); }, 3000);
+				const bool on = rig.runUntil([&] { return rig.telemetry().playing; }, 3000);
 				std::printf("PLAY %d while loading (%zu patterns, %zu songs): %s after %.0f ms\n", i, rig.desk().documents().patterns.size(),
 					rig.desk().documents().songs.size(), on ? "playing" : "NOT playing", ms(rig.machine().now() - t0));
 				rig.page(R"({"op":"stop","id":2})");
