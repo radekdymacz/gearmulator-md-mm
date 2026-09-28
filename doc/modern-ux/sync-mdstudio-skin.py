@@ -132,6 +132,34 @@ if panel:
     print('AUDIO / MIDI panel: ' + '; '.join(panel))
     sys.exit(1)
 
+# ---- the pages against the contract: the ops they send, their arguments, the capabilities ----
+import page_contract_check as pc
+schema = pc.load(R + 'doc/modern-ux/md-data-contract.schema.json')
+table = pc.command_table(schema)
+page_js = {f: open(SK + f).read() for f in SCRIPTS if os.path.exists(SK + f)}
+problems = []
+for f, text in page_js.items():
+    sends = []
+    for args in pc.calls(text, 'cmd'):
+        keys = pc.object_keys(args[1]) if len(args) > 1 and args[1].startswith('{') else (set() if len(args) == 1 else None)
+        sends.append((pc.ops_of(args[0]), keys))
+    for args in pc.calls(text, 'songCmd'):
+        keys = pc.object_keys(args[1]) if len(args) > 1 and args[1].startswith('{') else None
+        sends.append((pc.ops_of(args[0]), None if keys is None else keys | {'s'}))
+    sends += list(pc.literals_with_op(text))
+    problems += pc.check_sends(sends, table, f)
+    problems += pc.check_audio(text, table, f)
+app = page_js['mdDeskApp.js']
+cap_table = re.search(r'const CAP_CONTROLS = \{(.*?)\};', app, re.S)
+cap_info = re.search(r'const CAP_INFO = \[(.*?)\];', app, re.S)
+if not cap_table or not cap_info:
+    problems.append('mdDeskApp.js: no CAP_CONTROLS / CAP_INFO')
+else:
+    problems += pc.check_caps(re.findall(r'^\s*(\w+):', cap_table.group(1), re.M), re.findall(r'"(\w+)"', cap_info.group(1)), schema, 'mdDeskApp.js')
+if problems:
+    print('contract check: ' + '; '.join(problems))
+    sys.exit(1)
+
 if check_only:
     now_html = open(SK + 'mdStudio.html').read()
     now_css = open(SK + 'mdDesk.css').read()
