@@ -1,13 +1,12 @@
 <!doctype html>
-<html lang="en">
+<html lang="en" data-theme="light">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Machinedrum Editor + Monomachine Editor — free, open-source editors | Future Native Audio</title>
-<meta name="description" content="Free, open-source (GPL-3) screen-native editors for the Elektron Machinedrum and Monomachine. VST3, AU and standalone for macOS. They run the real firmware in joelanders' emulator, or talk to your own machine over MIDI. Bring your own ROM.">
-<meta name="color-scheme" content="light dark">
-<meta name="theme-color" content="#fbfbf7" media="(prefers-color-scheme: light)">
-<meta name="theme-color" content="#000000" media="(prefers-color-scheme: dark)">
+<title>Machinedrum Editor + Monomachine Editor — free | Future Native Audio</title>
+<meta name="description" content="Free desktop editors for the Elektron Machinedrum and Monomachine: VST3, AU and app for macOS. They run the real firmware in an emulator, or drive your own machine over MIDI. Bring your own ROM.">
+<meta name="color-scheme" content="light">
+<meta name="theme-color" content="#fbfbf7">
 <link rel="canonical" href="https://mdmm.nativekloud.com/">
 <link rel="icon" href="/favicon.svg" type="image/svg+xml">
 <link rel="icon" href="/favicon-32.png" sizes="32x32" type="image/png">
@@ -15,329 +14,119 @@
 <meta property="og:type" content="website">
 <meta property="og:site_name" content="Future Native Audio">
 <meta property="og:title" content="Machinedrum Editor + Monomachine Editor">
-<meta property="og:description" content="Free, open-source editors for the Elektron Machinedrum and Monomachine. The real firmware in an emulator, or your own machine over MIDI. VST3, AU, standalone.">
+<meta property="og:description" content="Free desktop editors for the Elektron Machinedrum and Monomachine. The real firmware, emulated, or your own machine over MIDI. VST3, AU and app for macOS.">
 <meta property="og:url" content="https://mdmm.nativekloud.com/">
 <meta property="og:image" content="https://mdmm.nativekloud.com/og.png">
 <meta property="og:image:width" content="1200">
 <meta property="og:image:height" content="630">
-<meta property="og:image:alt" content="Editor screenshot: the Machinedrum Editor's Sequence workspace, a 16-track step grid with a drawn lock lane.">
+<meta property="og:image:alt" content="Editor screenshot: the Machinedrum Editor's step grid with a drawn lock lane.">
 <meta name="twitter:card" content="summary_large_image">
 <meta name="twitter:title" content="Machinedrum Editor + Monomachine Editor">
-<meta name="twitter:description" content="Free, open-source editors for the Elektron Machinedrum and Monomachine. VST3, AU, standalone. Bring your own ROM.">
+<meta name="twitter:description" content="Free desktop editors for the Elektron Machinedrum and Monomachine. VST3, AU and app for macOS.">
 <meta name="twitter:image" content="https://mdmm.nativekloud.com/og.png">
-<link rel="preload" as="image" type="image/avif" imagesrcset="/shots/md-seq-mk2-1440.avif 1440w, /shots/md-seq-mk2-2880.avif 2880w" imagesizes="(max-width: 1280px) 100vw, 1216px">
+<link rel="preload" as="image" type="image/avif" imagesrcset="/shots/md-seq-mk1-1440.avif 1440w, /shots/md-seq-mk1-2880.avif 2880w" imagesizes="(max-width: 1280px) 100vw, 1216px">
 <link rel="stylesheet" href="/design/tokens.css">
 <link rel="stylesheet" href="/assets/site.css">
 <script src="/assets/theme.js"></script>
 </head>
 <body>
 <a class="skip" href="#main">Skip to content</a>
-
 <header class="top">
   <div class="wrap">
-    <a class="brand" href="/" aria-label="Future Native Audio — Machinedrum and Monomachine Editors, home">
-      <i class="dot" aria-hidden="true"></i>
-      <span class="brand-txt"><b>Future Native Audio</b><span>MD + MM Editors</span></span>
-    </a>
+    <a class="brand" href="/"><i class="dot" aria-hidden="true"></i><b>Future Native Audio</b><span>Machinedrum + Monomachine Editors</span></a>
     <nav class="nav" aria-label="Main">
-      <a class="hide-s" href="#tour">Tour</a>
-      <a class="hide-s" href="#features">Features</a>
-      <a class="hide-s" href="#limits">Limits</a>
-      <a class="hide-s" href="#credits">Credits</a>
+      <a class="opt" href="/#features">Features</a>
+      <a class="opt" href="/#faq">FAQ</a>
       <button class="themebtn" type="button" data-theme-toggle aria-label="Switch to dark theme"><svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="6.5" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M8 1.5a6.5 6.5 0 0 1 0 13z" fill="currentColor"/></svg></button>
-      <a class="btn btn-primary btn-sm" href="/get/">Download</a>
+      <a class="btn btn-primary btn-sm" href="/get/">Download free</a>
     </nav>
   </div>
 </header>
 
 <main id="main">
-
 <section class="hero">
-  <div class="wrap hero-grid">
-    <div>
-      <div class="kicker"><span class="label ink">Free · open source · GPL-3</span><span class="label">macOS · VST3 · AU · standalone</span></div>
-      <h1>A screen for the machines you <em>love</em>.</h1>
-      <p class="lede"><b>Machinedrum Editor</b> and <b>Monomachine Editor</b> are desktop editors for the Elektron Machinedrum and Monomachine. Each job gets one screen: a step grid, drawn parameter locks, a kit library, a piano roll. Underneath, the machine's real firmware runs in <a href="https://github.com/joelanders/gearmulator-md-mm">joelanders' emulator</a>, or the editor drives your own machine over MIDI.</p>
-      <div class="steps16" aria-hidden="true" data-steps></div>
-      <div class="btns">
-        <a class="btn btn-primary" href="/get/">Download — pay what you want</a>
-        <a class="btn btn-ghost" href="#tour">See the editors</a>
-      </div>
-      <ul class="facts" aria-label="At a glance">
-        <li>Bring your own ROM</li>
-        <li>0 is a fine price</li>
-        <li>No account</li>
-        <li>No tracking</li>
-      </ul>
-    </div>
+  <div class="wrap">
+    <div class="keys" aria-hidden="true" data-keys></div>
+    <h1>Your Machinedrum and Monomachine, on one screen.</h1>
+    <p class="lede">Free editors that run the real firmware, or drive your own machine over MIDI.</p>
+    <div class="btns"><a class="btn btn-key" href="/get/">Download free</a></div>
+    <p class="small meta">macOS · VST3, AU and app · bring your own ROM</p>
 
-    <figure class="shot" id="hero-shot">
-      <div class="frame">
-        <div class="frame-bar">
+    <div class="stage">
+      <div class="win back" aria-hidden="true">
+        <div class="bar"><span class="lights"><i></i><i></i><i></i></span><span class="title">Monomachine Editor</span></div>
+        <picture><source type="image/avif" srcset="/shots/mm-seq-1440.avif 1440w, /shots/mm-seq-2880.avif 2880w" sizes="(max-width: 1280px) 100vw, 1216px"><source type="image/webp" srcset="/shots/mm-seq-1440.webp 1440w, /shots/mm-seq-2880.webp 2880w" sizes="(max-width: 1280px) 100vw, 1216px"><img src="/shots/mm-seq-1440.png" width="1440" height="900" alt="" loading="lazy" decoding="async"></picture>
+      </div>
+      <figure class="win front" id="hero-shot">
+        <div class="bar">
           <span class="lights" aria-hidden="true"><i></i><i></i><i></i></span>
-          <span class="ttl">Machinedrum Editor — Sequence</span>
-          <span class="plates seg" role="group" aria-label="Plate">
-            <button type="button" data-plate="mk1" aria-pressed="false">MKI</button>
-            <button type="button" data-plate="mk2" aria-pressed="true">MKII</button>
+          <span class="title">Machinedrum Editor</span>
+          <span class="seg" role="group" aria-label="Plate">
+            <button type="button" data-plate="mk1" aria-pressed="true">MKI</button>
+            <button type="button" data-plate="mk2" aria-pressed="false">MKII</button>
           </span>
         </div>
-        <div data-plate-img="mk2"><picture><source type="image/avif" srcset="/shots/md-seq-mk2-1440.avif 1440w, /shots/md-seq-mk2-2880.avif 2880w" sizes="(max-width: 1280px) 100vw, 1216px"><source type="image/webp" srcset="/shots/md-seq-mk2-1440.webp 1440w, /shots/md-seq-mk2-2880.webp 2880w" sizes="(max-width: 1280px) 100vw, 1216px"><img src="/shots/md-seq-mk2-1440.png" width="1440" height="900" alt="Editor screenshot: the Machinedrum Editor's Sequence workspace on the black MKII plate. Sixteen tracks on a step grid, with a lock lane for the snare's filter below." fetchpriority="high" decoding="async"></picture></div>
-        <div data-plate-img="mk1" hidden><picture><source type="image/avif" srcset="/shots/md-seq-mk1-1440.avif 1440w, /shots/md-seq-mk1-2880.avif 2880w" sizes="(max-width: 1280px) 100vw, 1216px"><source type="image/webp" srcset="/shots/md-seq-mk1-1440.webp 1440w, /shots/md-seq-mk1-2880.webp 2880w" sizes="(max-width: 1280px) 100vw, 1216px"><img src="/shots/md-seq-mk1-1440.png" width="1440" height="900" alt="Editor screenshot: the same Sequence workspace on the silver MKI plate, playing, with the playhead on step 13." loading="lazy" decoding="async"></picture></div>
-      </div>
-      <figcaption><span class="label">Editor screenshot</span>The real UI design. Switch the plate: MKI silver or MKII black, like the hardware.</figcaption>
-    </figure>
-  </div>
-</section>
-
-<section id="what">
-  <div class="wrap">
-    <div class="three">
-      <div>
-        <span class="label ink">01 · The real firmware</span>
-        <h3>The machine's own OS</h3>
-        <p>The emulator runs Elektron's operating system (Machinedrum OS 1.63, Monomachine OS 1.32B), so the sound engine and the sequencer are the machine's own. The editor reads the playhead, mutes and chains from the machine's memory.</p>
-      </div>
-      <div>
-        <span class="label ink">02 · Screen-native</span>
-        <h3>One screen per job</h3>
-        <p>Not a picture of the front panel. Six workspaces per editor, each laid out for one task, every value visible and editable. Keys 1–6 switch between them; on the Machinedrum, <code>?</code> lists every shortcut.</p>
-      </div>
-      <div>
-        <span class="label ink">03 · Or your machine <span class="badge">Beta</span></span>
-        <h3>Emulator or hardware</h3>
-        <p>Switch the engine to HW MIDI and the same editor drives a real Machinedrum or Monomachine over MIDI. This mode has only been tested against the emulator so far, not on real hardware.</p>
-      </div>
-    </div>
-  </div>
-</section>
-
-<section id="tour">
-  <div class="wrap">
-    <div class="sec-head">
-      <span class="label">Tour · editor screenshots</span>
-      <h2>Ten screens, two machines</h2>
-      <p>These are editor screenshots, taken from the approved UI design that the plug-in's own page is built from. The pattern and kit names in them are sample data.</p>
-    </div>
-
-    <div class="tour-tabs" role="tablist" aria-label="Editor screenshots">
-      <div class="grp"><span class="label">Machinedrum</span>
-        <button class="tab" role="tab" id="t-md-seq" aria-controls="p-md-seq" aria-selected="true">Sequence</button>
-        <button class="tab" role="tab" id="t-md-sound" aria-controls="p-md-sound" aria-selected="false" tabindex="-1">Sound</button>
-        <button class="tab" role="tab" id="t-md-mix" aria-controls="p-md-mix" aria-selected="false" tabindex="-1">Mix</button>
-        <button class="tab" role="tab" id="t-md-song" aria-controls="p-md-song" aria-selected="false" tabindex="-1">Song</button>
-        <button class="tab" role="tab" id="t-md-control" aria-controls="p-md-control" aria-selected="false" tabindex="-1">Control</button>
-        <button class="tab" role="tab" id="t-md-lib" aria-controls="p-md-lib" aria-selected="false" tabindex="-1">Kit library</button>
-      </div>
-      <div class="grp"><span class="label">Monomachine</span>
-        <button class="tab" role="tab" id="t-mm-seq" aria-controls="p-mm-seq" aria-selected="false" tabindex="-1">Sequence</button>
-        <button class="tab" role="tab" id="t-mm-sound" aria-controls="p-mm-sound" aria-selected="false" tabindex="-1">Sound</button>
-        <button class="tab" role="tab" id="t-mm-mix" aria-controls="p-mm-mix" aria-selected="false" tabindex="-1">Mix · routing</button>
-        <button class="tab" role="tab" id="t-mm-perform" aria-controls="p-mm-perform" aria-selected="false" tabindex="-1">Perform</button>
-      </div>
-    </div>
-
-    <div class="tour-panels">
-      <figure class="shot" role="tabpanel" id="p-md-seq" aria-labelledby="t-md-seq">
-        <div class="frame"><div class="frame-bar"><span class="lights" aria-hidden="true"><i></i><i></i><i></i></span><span class="ttl">Machinedrum Editor — Sequence · MKI plate</span></div>
-        <picture><source type="image/avif" srcset="/shots/md-seq-mk1-1440.avif 1440w, /shots/md-seq-mk1-2880.avif 2880w" sizes="(max-width: 1280px) 100vw, 1216px"><source type="image/webp" srcset="/shots/md-seq-mk1-1440.webp 1440w, /shots/md-seq-mk1-2880.webp 2880w" sizes="(max-width: 1280px) 100vw, 1216px"><img src="/shots/md-seq-mk1-1440.png" width="1440" height="900" alt="Editor screenshot: Machinedrum Sequence workspace, MKI plate. A 16 by 16 step grid, the playhead on step 13, and a lock lane with drawn filter values under it." loading="lazy" decoding="async"></picture></div>
-        <figcaption><span class="label">Editor screenshot</span>All 16 tracks on one grid, up to 64 steps. Pick a parameter on the left and draw its locks in the lane under the steps.</figcaption>
-      </figure>
-      <figure class="shot" role="tabpanel" id="p-md-sound" aria-labelledby="t-md-sound" hidden>
-        <div class="frame"><div class="frame-bar"><span class="lights" aria-hidden="true"><i></i><i></i><i></i></span><span class="ttl">Machinedrum Editor — Sound · MKI plate</span></div>
-        <picture><source type="image/avif" srcset="/shots/md-sound-mk1-1440.avif 1440w, /shots/md-sound-mk1-2880.avif 2880w" sizes="(max-width: 1280px) 100vw, 1216px"><source type="image/webp" srcset="/shots/md-sound-mk1-1440.webp 1440w, /shots/md-sound-mk1-2880.webp 2880w" sizes="(max-width: 1280px) 100vw, 1216px"><img src="/shots/md-sound-mk1-1440.png" width="1440" height="900" alt="Editor screenshot: Machinedrum Sound workspace. Synthesis, effects and routing pages for one track with curves, an LFO with its waveform, and mute and trig groups." loading="lazy" decoding="async"></picture></div>
-        <figcaption><span class="label">Editor screenshot</span>One track's machine, effects, routing and LFO on one screen. The curves show what the values do.</figcaption>
-      </figure>
-      <figure class="shot" role="tabpanel" id="p-md-mix" aria-labelledby="t-md-mix" hidden>
-        <div class="frame"><div class="frame-bar"><span class="lights" aria-hidden="true"><i></i><i></i><i></i></span><span class="ttl">Machinedrum Editor — Mix · MKII plate</span></div>
-        <picture><source type="image/avif" srcset="/shots/md-mix-mk2-1440.avif 1440w, /shots/md-mix-mk2-2880.avif 2880w" sizes="(max-width: 1280px) 100vw, 1216px"><source type="image/webp" srcset="/shots/md-mix-mk2-1440.webp 1440w, /shots/md-mix-mk2-2880.webp 2880w" sizes="(max-width: 1280px) 100vw, 1216px"><img src="/shots/md-mix-mk2-1440.png" width="1440" height="900" alt="Editor screenshot: Machinedrum Mix workspace, MKII plate. Sixteen channel strips, then the master effects: rhythm echo, gate box, master EQ and dynamix." loading="lazy" decoding="async"></picture></div>
-        <figcaption><span class="label">Editor screenshot</span>Sixteen strips with level, pan, distortion and sends, then the master effects in the order the signal takes. Tracks on outputs A–F skip them.</figcaption>
-      </figure>
-      <figure class="shot" role="tabpanel" id="p-md-song" aria-labelledby="t-md-song" hidden>
-        <div class="frame"><div class="frame-bar"><span class="lights" aria-hidden="true"><i></i><i></i><i></i></span><span class="ttl">Machinedrum Editor — Song · MKII plate</span></div>
-        <picture><source type="image/avif" srcset="/shots/md-song-mk2-1440.avif 1440w, /shots/md-song-mk2-2880.avif 2880w" sizes="(max-width: 1280px) 100vw, 1216px"><source type="image/webp" srcset="/shots/md-song-mk2-1440.webp 1440w, /shots/md-song-mk2-2880.webp 2880w" sizes="(max-width: 1280px) 100vw, 1216px"><img src="/shots/md-song-mk2-1440.png" width="1440" height="900" alt="Editor screenshot: Machinedrum Song workspace. A pattern bank, the song arrangement grid, the selected row with repeats and mutes, and a chain card." loading="lazy" decoding="async"></picture></div>
-        <figcaption><span class="label">Editor screenshot</span>Drag patterns into a song, set repeats and mutes per row, or build a chain. The chain is the machine's own, read back from its memory.</figcaption>
-      </figure>
-      <figure class="shot" role="tabpanel" id="p-md-control" aria-labelledby="t-md-control" hidden>
-        <div class="frame"><div class="frame-bar"><span class="lights" aria-hidden="true"><i></i><i></i><i></i></span><span class="ttl">Machinedrum Editor — Control · MKI plate</span></div>
-        <picture><source type="image/avif" srcset="/shots/md-control-mk1-1440.avif 1440w, /shots/md-control-mk1-2880.avif 2880w" sizes="(max-width: 1280px) 100vw, 1216px"><source type="image/webp" srcset="/shots/md-control-mk1-1440.webp 1440w, /shots/md-control-mk1-2880.webp 2880w" sizes="(max-width: 1280px) 100vw, 1216px"><img src="/shots/md-control-mk1-1440.png" width="1440" height="900" alt="Editor screenshot: Machinedrum Control workspace. A mapping matrix of eight controller knobs plus an app LFO and a random source against the 16 tracks, with one knob's targets and ranges." loading="lazy" decoding="async"></picture></div>
-        <figcaption><span class="label">Editor screenshot</span>The control matrix: your controller's knobs, app LFOs and random sources across the tracks, each target with its own range and curve.</figcaption>
-      </figure>
-      <figure class="shot" role="tabpanel" id="p-md-lib" aria-labelledby="t-md-lib" hidden>
-        <div class="frame"><div class="frame-bar"><span class="lights" aria-hidden="true"><i></i><i></i><i></i></span><span class="ttl">Machinedrum Editor — Kit library · MKI plate</span></div>
-        <picture><source type="image/avif" srcset="/shots/md-kitlib-mk1-1440.avif 1440w, /shots/md-kitlib-mk1-2880.avif 2880w" sizes="(max-width: 1280px) 100vw, 1216px"><source type="image/webp" srcset="/shots/md-kitlib-mk1-1440.webp 1440w, /shots/md-kitlib-mk1-2880.webp 2880w" sizes="(max-width: 1280px) 100vw, 1216px"><img src="/shots/md-kitlib-mk1-1440.png" width="1440" height="900" alt="Editor screenshot: the Machinedrum kit library, 64 kit slots with names and the patterns that use them, and save, load, copy, paste, clear and rename keys." loading="lazy" decoding="async"></picture></div>
-        <figcaption><span class="label">Editor screenshot</span>All 64 kits, read from the machine. Load, save as, copy, paste, clear, rename, drag to copy; every change can be undone.</figcaption>
-      </figure>
-      <figure class="shot" role="tabpanel" id="p-mm-seq" aria-labelledby="t-mm-seq" hidden>
-        <div class="frame"><div class="frame-bar"><span class="lights" aria-hidden="true"><i></i><i></i><i></i></span><span class="ttl">Monomachine Editor — Sequence</span></div>
-        <picture><source type="image/avif" srcset="/shots/mm-seq-1440.avif 1440w, /shots/mm-seq-2880.avif 2880w" sizes="(max-width: 1280px) 100vw, 1216px"><source type="image/webp" srcset="/shots/mm-seq-1440.webp 1440w, /shots/mm-seq-2880.webp 2880w" sizes="(max-width: 1280px) 100vw, 1216px"><img src="/shots/mm-seq-1440.png" width="1440" height="900" alt="Editor screenshot: Monomachine Sequence workspace. A piano roll with notes of different lengths, the soft playhead column, slide and swing rows, and a lock lane with a slope." loading="lazy" decoding="async"></picture></div>
-        <figcaption><span class="label">Editor screenshot</span>The note sequencer as a piano roll, with note length, slide and swing rows, and a lock lane underneath.</figcaption>
-      </figure>
-      <figure class="shot" role="tabpanel" id="p-mm-sound" aria-labelledby="t-mm-sound" hidden>
-        <div class="frame"><div class="frame-bar"><span class="lights" aria-hidden="true"><i></i><i></i><i></i></span><span class="ttl">Monomachine Editor — Sound</span></div>
-        <picture><source type="image/avif" srcset="/shots/mm-sound-1440.avif 1440w, /shots/mm-sound-2880.avif 2880w" sizes="(max-width: 1280px) 100vw, 1216px"><source type="image/webp" srcset="/shots/mm-sound-1440.webp 1440w, /shots/mm-sound-2880.webp 2880w" sizes="(max-width: 1280px) 100vw, 1216px"><img src="/shots/mm-sound-1440.png" width="1440" height="900" alt="Editor screenshot: Monomachine Sound workspace. Oscillator stack, amp envelope, filter and effects curves, three LFOs, the arpeggiator, transpose and trig setup." loading="lazy" decoding="async"></picture></div>
-        <figcaption><span class="label">Editor screenshot</span>Synthesis, amp, filter and effects, three LFOs, the arpeggiator and transpose for one track.</figcaption>
-      </figure>
-      <figure class="shot" role="tabpanel" id="p-mm-mix" aria-labelledby="t-mm-mix" hidden>
-        <div class="frame"><div class="frame-bar"><span class="lights" aria-hidden="true"><i></i><i></i><i></i></span><span class="ttl">Monomachine Editor — Mix · routing</span></div>
-        <picture><source type="image/avif" srcset="/shots/mm-mix-1440.avif 1440w, /shots/mm-mix-2880.avif 2880w" sizes="(max-width: 1280px) 100vw, 1216px"><source type="image/webp" srcset="/shots/mm-mix-1440.webp 1440w, /shots/mm-mix-2880.webp 2880w" sizes="(max-width: 1280px) 100vw, 1216px"><img src="/shots/mm-mix-1440.png" width="1440" height="900" alt="Editor screenshot: Monomachine Mix workspace. Six strips, then a routing diagram showing tracks summing into the AB, CD and EF buses." loading="lazy" decoding="async"></picture></div>
-        <figcaption><span class="label">Editor screenshot</span>Six strips and a routing view that draws how the tracks sum into the buses, for each routing mode.</figcaption>
-      </figure>
-      <figure class="shot" role="tabpanel" id="p-mm-perform" aria-labelledby="t-mm-perform" hidden>
-        <div class="frame"><div class="frame-bar"><span class="lights" aria-hidden="true"><i></i><i></i><i></i></span><span class="ttl">Monomachine Editor — Perform</span></div>
-        <picture><source type="image/avif" srcset="/shots/mm-perform-1440.avif 1440w, /shots/mm-perform-2880.avif 2880w" sizes="(max-width: 1280px) 100vw, 1216px"><source type="image/webp" srcset="/shots/mm-perform-1440.webp 1440w, /shots/mm-perform-2880.webp 2880w" sizes="(max-width: 1280px) 100vw, 1216px"><img src="/shots/mm-perform-1440.png" width="1440" height="900" alt="Editor screenshot: Monomachine Perform workspace. The multi envelope, joystick assign, synth and MIDI track mutes, and a four-octave on-screen keyboard." loading="lazy" decoding="async"></picture></div>
-        <figcaption><span class="label">Editor screenshot</span>Play from the screen: keyboard with MULTI TRIG, MULTI MAP and POLY, joystick assign, the multi envelope and mutes.</figcaption>
+        <div data-plate-img="mk1"><picture><source type="image/avif" srcset="/shots/md-seq-mk1-1440.avif 1440w, /shots/md-seq-mk1-2880.avif 2880w" sizes="(max-width: 1280px) 100vw, 1216px"><source type="image/webp" srcset="/shots/md-seq-mk1-1440.webp 1440w, /shots/md-seq-mk1-2880.webp 2880w" sizes="(max-width: 1280px) 100vw, 1216px"><img src="/shots/md-seq-mk1-1440.png" width="1440" height="900" alt="Editor screenshot: the Machinedrum Editor's Sequence workspace on the silver MKI plate. Sixteen tracks on a step grid, the playhead on step 13, and a lock lane of drawn filter values below." fetchpriority="high" decoding="async"></picture></div>
+        <div data-plate-img="mk2" hidden><picture><source type="image/avif" srcset="/shots/md-seq-mk2-1440.avif 1440w, /shots/md-seq-mk2-2880.avif 2880w" sizes="(max-width: 1280px) 100vw, 1216px"><source type="image/webp" srcset="/shots/md-seq-mk2-1440.webp 1440w, /shots/md-seq-mk2-2880.webp 2880w" sizes="(max-width: 1280px) 100vw, 1216px"><img src="/shots/md-seq-mk2-1440.png" width="1440" height="900" alt="Editor screenshot: the same Sequence workspace on the black MKII plate." loading="lazy" decoding="async"></picture></div>
       </figure>
     </div>
+    <p class="shotcap">Editor screenshots of the real UI. Switch the plate: MKI or MKII.</p>
   </div>
 </section>
 
 <section id="features">
   <div class="wrap">
-    <div class="sec-head">
-      <span class="label">Features</span>
-      <h2>What is in the box</h2>
-      <p>Only what works today. Where something works only with the emulator, it says so.</p>
-    </div>
-    <div class="features">
-      <article><h3>One-screen workspaces <span class="for">MD · MM</span></h3><p>Sequence, Sound, Mix, Song and Control on both, plus Sampler (MD) and Perform (MM). Switch with keys 1–6. On the MD, <code>?</code> shows all 43 shortcuts.</p></article>
-      <article><h3>The step grid <span class="for">MD · MM</span></h3><p>Every track on one grid, 16 steps a page or all 64 at once. Trigs, accents and slides with a click and a modifier.</p></article>
-      <article><h3>Drawn lock lanes <span class="for">MD · MM</span></h3><p>Pick a parameter and draw its locks under the steps. Pan-like values get a centred, bipolar lane.</p></article>
-      <article><h3>Kit and pattern library <span class="for">MD · MM</span></h3><p>Read from the machine, then load, save as, copy, paste, clear, rename or drag-copy slots. Library writes share one undo history with your edits.</p></article>
-      <article><h3>Chains and mutes <span class="for">MD · MM</span></h3><p>Mutes live on the track keys, and the machine's own mutes are read back. On the MD, Shift prepares several at once, and chains are the firmware's own, read from its memory.</p></article>
-      <article><h3>Note sequencer and piano roll <span class="for">MM</span></h3><p>Notes with length, slide and swing in a piano roll per track. Grid and live recording, with the recorded notes read back as you play (emulator).</p></article>
-      <article><h3>The routing view <span class="for">MD · MM</span></h3><p>The MM draws how tracks sum into its buses in each routing mode. The MD shows the send path and which tracks skip it on outputs A–F.</p></article>
-      <article><h3>App LFOs <span class="for">MD · MM</span></h3><p>LFO and random sources that the app runs and sends as CCs, within 300 per second. In the Machinedrum plug-in they keep running with the editor window closed.</p></article>
-      <article><h3>MIDI learn and the control matrix <span class="for">MD · MM</span></h3><p>Press L and move a knob. The matrix shows every source against every track, each target with its own range and curve.</p></article>
-      <article><h3>Hardware-true plates <span class="for">MD · MM</span></h3><p>The Machinedrum Editor wears the silver MKI or the black MKII plate. The Monomachine keeps one plate, and MKI mode tells you which machines need a MKII.</p></article>
-      <article><h3>Emulator or your machine <span class="badge">Beta</span></h3><p>Run the real firmware in the emulator, or switch to HW MIDI and edit a real machine at MIDI DIN speed. Not tested on real hardware yet.</p></article>
-      <article><h3>Plug-in and standalone <span class="for">MD · MM</span></h3><p>VST3 and AU for your DAW, and a standalone app with its own audio and MIDI panel. On the MD, app modulators and knob CCs are saved with your project.</p></article>
-    </div>
+    <div class="sec-head"><span class="eyebrow">Features</span><h2>Everything on the screen, nothing hidden in menus.</h2></div>
+    <ul class="feats"><li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="square" aria-hidden="true"><rect x="6" y="6" width="12" height="12"/><path d="M9 3v3M12 3v3M15 3v3M9 18v3M12 18v3M15 18v3M3 9h3M3 12h3M3 15h3M18 9h3M18 12h3M18 15h3"/></svg><div><h3>The real firmware</h3><p>The machine's own OS runs in the emulator.</p></div></li><li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="square" aria-hidden="true"><rect x="3" y="4" width="18" height="14"/><path d="M3 8h18M9 8v10M8 21h8"/></svg><div><h3>One screen per job</h3><p>Six workspaces, every value in view.</p></div></li><li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="square" aria-hidden="true"><path d="M3 5h4v4H3zM10 5h4v4h-4zM17 5h4v4h-4zM3 12h4v4H3zM17 12h4v4h-4z"/><path d="M10 20l3-3 3 2 5-5"/></svg><div><h3>Step grid, drawn locks</h3><p>Draw parameter locks under the steps.</p></div></li><li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="square" aria-hidden="true"><path d="M4 7l8-4 8 4-8 4z"/><path d="M4 12l8 4 8-4M4 17l8 4 8-4"/></svg><div><h3>Kit and pattern library</h3><p>Copy, paste, rename. Everything undoes.</p></div></li><li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="square" aria-hidden="true"><rect x="3" y="4" width="18" height="16"/><path d="M8 4v16M13 4v16M18 4v16"/><path d="M6 4v9M11 4v9M16 4v9" stroke-width="3"/></svg><div><h3>Piano roll for the MM</h3><p>Notes, slides and live recording.</p></div></li><li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="square" aria-hidden="true"><circle cx="12" cy="12" r="7"/><path d="M12 12l4-4M4 20l2-2M20 20l-2-2"/></svg><div><h3>MIDI learn, app LFOs</h3><p>Map any knob, modulate any value.</p></div></li></ul>
+    <p class="beta"><span class="tag">Beta</span>Hardware MIDI: edit your own machine over MIDI. Not yet tested on a real one.</p>
   </div>
 </section>
 
-<section id="engine">
-  <div class="wrap split">
-    <div>
-      <span class="label">Two engines</span>
-      <h2>Emulator, or the one on your desk</h2>
-      <p>By default each editor runs its machine's own operating system inside <a href="https://github.com/joelanders/gearmulator-md-mm">joelanders' emulator</a>. That is the most complete mode: the editor can read the playhead, the working kit, mutes and chains straight from the machine's memory, and the start-up screen is the firmware's own.</p>
-      <p><b>HW MIDI</b> <span class="badge">Beta</span> swaps the emulator for your own Machinedrum or Monomachine on the plug-in's MIDI in and out. The editor sends at DIN speed (3,125 bytes a second) and reads back what it changes. It has been tested only with the emulator standing in as the machine. If you try it on a real one, please <a href="https://github.com/radekdymacz/gearmulator-md-mm/issues">tell us how it went</a>.</p>
-    </div>
-    <div class="panel">
-      <h3>What HW MIDI cannot do</h3>
-      <p class="small">The machines have no MIDI message for these, so the editor says so rather than pretending:</p>
-      <ul class="list">
-        <li><b>Sample transfers (MD)</b>No sample sending (SDS), sample names, memory in use, or RAM to ROM over MIDI.</li>
-        <li><b>Memory-only views</b>Live recording, chaining, reading the working kit and the start-up screen need the emulator.</li>
-        <li><b>Monomachine</b>MIDI-track mutes, record modes, playhead and tempo are not reported over MIDI. Pattern, song and global dumps wait until you open SYSEX RECV on the machine; the editor tells you how.</li>
-        <li><b>CLEAR</b>There is no clear command, so the editor writes an empty kit or pattern instead.</li>
-      </ul>
-    </div>
-  </div>
-</section>
-
-<section id="limits">
-  <div class="wrap split">
-    <div>
-      <span class="label">Honest limits</span>
-      <h2>What to expect</h2>
-      <ul class="list">
-        <li><b>Alpha software.</b>Both editors are new. Keep backups of your projects and of your machine's data.</li>
-        <li><b>macOS only for now.</b>Built and tested on Apple silicon (an M4 Pro). Other platforms are not tested.</li>
-        <li><b>Not signed by Apple.</b>The first launch needs right-click → Open. The download page explains it.</li>
-        <li><b>About half a CPU core per instance.</b>On an M4 Pro the emulation takes 44–48% of one core; the standalone with the editor open, about 55%. One audio thread carries two instances at most. Dropouts in a DAW have not been measured yet.</li>
-        <li><b>A few things are unverified.</b>On the MD, local control and TRIG IN A/B are stored and shown but their effect is not confirmed. On the MM, step recording is not in the editor yet.</li>
-      </ul>
-    </div>
-    <div>
-      <div class="panel accent" id="rom">
-        <span class="label ink">Bring your own ROM</span>
-        <h3>No firmware is included</h3>
-        <p>The editors run Elektron's operating system, which is Elektron's copyrighted software. It is not included, we cannot supply it, and please don't ask for it. These editors are for people who own the instruments.</p>
-        <ul class="list">
-          <li><b>Machinedrum</b>OS 1.63 firmware image, 8 MiB. MKI, MKII and UW units use the same image.</li>
-          <li><b>Monomachine</b>OS 1.32B firmware image, 8 MiB.</li>
-        </ul>
-        <p class="small">The editor checks the image's fingerprint and keeps it on your computer only.</p>
-      </div>
-      <div class="panel" id="requirements">
-        <span class="label">System requirements</span>
-        <ul class="list">
-          <li><b>Mac with Apple silicon</b>Tested on an Apple M4 Pro with macOS 27.</li>
-          <li><b>A VST3 or AU host</b>For the plug-in. The standalone app needs nothing else.</li>
-          <li><b>Your own firmware image</b>See above.</li>
-          <li><b>Optional</b>A Machinedrum or Monomachine and a MIDI interface, for HW MIDI (beta).</li>
-        </ul>
-      </div>
-    </div>
-  </div>
-</section>
-
-<section id="credits">
+<section id="tour">
   <div class="wrap">
-    <div class="sec-head">
-      <span class="label">Credits · licence</span>
-      <h2>Standing on the shoulders of</h2>
-      <p>The editors are the new part. The emulation that makes them possible is other people's work, and it is the hard part.</p>
-    </div>
-    <div class="credits">
-      <div>
-        <span class="label ink">Emulation</span>
-        <h3>joelanders</h3>
-        <p><a href="https://github.com/joelanders/gearmulator-md-mm">gearmulator-md-mm</a> — the Machinedrum and Monomachine emulation that runs the real firmware. These editors are built on a fork of it.</p>
-      </div>
-      <div>
-        <span class="label ink">Framework</span>
-        <h3>The Usual Suspects</h3>
-        <p><a href="https://github.com/dsp56300/gearmulator">Gearmulator</a> by dsp56300 and contributors — the emulation and plug-in framework underneath.</p>
-      </div>
-      <div>
-        <span class="label ink">Instruments</span>
-        <h3>Elektron</h3>
-        <p>For designing the Machinedrum and Monomachine, which are still worth building tools for twenty years on.</p>
-      </div>
-    </div>
-    <div class="split">
-      <div>
-        <p class="tm"><b>Licence.</b> Free software under the <a href="https://www.gnu.org/licenses/gpl-3.0.html">GNU GPL v3</a>. Source: <a href="https://github.com/radekdymacz/gearmulator-md-mm">github.com/radekdymacz/gearmulator-md-mm</a> (a release branch is coming). The editors are by Radek Dymacz for Future Native Audio.</p>
-      </div>
-      <div>
-        <p class="tm"><b>Trademarks.</b> Elektron, Machinedrum and Monomachine are trademarks of Elektron Music Machines. This project is independent: it is not affiliated with, endorsed by or sponsored by Elektron, joelanders or The Usual Suspects. The names are used only to say which instruments the editors work with. Please do not contact them for support.</p>
-      </div>
+    <div class="sec-head"><span class="eyebrow">Tour</span><h2>A closer look.</h2><p>Editor screenshots with sample data.</p></div>
+    <div class="tour"><figure><a href="/shots/md-sound-mk1-2880.webp" aria-label="Open the full-size Sound screenshot"><picture><source type="image/avif" srcset="/shots/md-sound-mk1-1440.avif 1440w, /shots/md-sound-mk1-2880.avif 2880w" sizes="(max-width: 760px) 100vw, 600px"><source type="image/webp" srcset="/shots/md-sound-mk1-1440.webp 1440w, /shots/md-sound-mk1-2880.webp 2880w" sizes="(max-width: 760px) 100vw, 600px"><img src="/shots/md-sound-mk1-1440.png" width="1440" height="900" alt="Editor screenshot. Machinedrum Sound workspace: synthesis, effects and routing curves and an LFO for one track." loading="lazy" decoding="async"></picture></a><figcaption><b>Sound</b><span>One track: machine, effects, routing, LFO.</span></figcaption></figure><figure><a href="/shots/mm-mix-2880.webp" aria-label="Open the full-size Routing screenshot"><picture><source type="image/avif" srcset="/shots/mm-mix-1440.avif 1440w, /shots/mm-mix-2880.avif 2880w" sizes="(max-width: 760px) 100vw, 600px"><source type="image/webp" srcset="/shots/mm-mix-1440.webp 1440w, /shots/mm-mix-2880.webp 2880w" sizes="(max-width: 760px) 100vw, 600px"><img src="/shots/mm-mix-1440.png" width="1440" height="900" alt="Editor screenshot. Monomachine Mix workspace: six strips and a routing diagram of tracks into the AB, CD and EF buses." loading="lazy" decoding="async"></picture></a><figcaption><b>Routing</b><span>How the Monomachine sums tracks into buses.</span></figcaption></figure><figure><a href="/shots/md-kitlib-mk1-2880.webp" aria-label="Open the full-size Kit library screenshot"><picture><source type="image/avif" srcset="/shots/md-kitlib-mk1-1440.avif 1440w, /shots/md-kitlib-mk1-2880.avif 2880w" sizes="(max-width: 760px) 100vw, 600px"><source type="image/webp" srcset="/shots/md-kitlib-mk1-1440.webp 1440w, /shots/md-kitlib-mk1-2880.webp 2880w" sizes="(max-width: 760px) 100vw, 600px"><img src="/shots/md-kitlib-mk1-1440.png" width="1440" height="900" alt="Editor screenshot. Machinedrum kit library: 64 kit slots with names and the patterns that use them." loading="lazy" decoding="async"></picture></a><figcaption><b>Kit library</b><span>All 64 kits, read from the machine.</span></figcaption></figure><figure><a href="/shots/md-control-mk1-2880.webp" aria-label="Open the full-size Control screenshot"><picture><source type="image/avif" srcset="/shots/md-control-mk1-1440.avif 1440w, /shots/md-control-mk1-2880.avif 2880w" sizes="(max-width: 760px) 100vw, 600px"><source type="image/webp" srcset="/shots/md-control-mk1-1440.webp 1440w, /shots/md-control-mk1-2880.webp 2880w" sizes="(max-width: 760px) 100vw, 600px"><img src="/shots/md-control-mk1-1440.png" width="1440" height="900" alt="Editor screenshot. Machinedrum Control workspace: a matrix of controller knobs, an app LFO and a random source against 16 tracks." loading="lazy" decoding="async"></picture></a><figcaption><b>Control</b><span>MIDI learn, app LFOs and random sources.</span></figcaption></figure></div>
+  </div>
+</section>
+
+<section id="faq">
+  <div class="wrap">
+    <div class="sec-head"><span class="eyebrow">FAQ</span><h2>Before you download.</h2></div>
+    <div class="faq">
+      <details><summary>Do I need a ROM?</summary><div><p>Yes, your own: Machinedrum OS 1.63 or Monomachine OS 1.32B, a full 8 MiB image. No firmware is included and we can't supply it.</p></div></details>
+      <details><summary>Does it work with my real machine?</summary><div><p>In beta. HW MIDI drives a real Machinedrum or Monomachine over MIDI, but so far it has only been tested against the emulator.</p></div></details>
+      <details><summary>Is it really free?</summary><div><p>Yes, free software under the GPL-3. At download you can name your price; €0 is fine.</p></div></details>
+      <details><summary>Known limits</summary><div><ul>
+        <li>macOS only for now, tested on Apple silicon (M4 Pro).</li>
+        <li>Not notarised by Apple: first launch is right-click → Open.</li>
+        <li>About half a CPU core per instance.</li>
+        <li>Over MIDI: no sample transfers; live recording and chains need the emulator.</li>
+        <li>Alpha software: keep backups.</li>
+      </ul></div></details>
     </div>
   </div>
 </section>
 
 <section class="cta">
   <div class="wrap">
-    <div class="panel">
-      <div>
-        <span class="label ink">Download</span>
-        <h2>Free. Pay what you want, if you want.</h2>
-        <p>Pick the app or the plug-in, choose an amount (zero is fine), and download.</p>
-      </div>
-      <a class="btn btn-primary" href="/get/">Get the editors</a>
-    </div>
+    <span class="eyebrow">Download</span>
+    <h2>Free. Name your price if you like.</h2>
+    <p>One installer per machine: the app, VST3 and AU.</p>
+    <div class="btns"><a class="btn btn-primary" href="/get/">Download free</a></div>
   </div>
 </section>
-
 </main>
 
 <footer class="foot">
-  <div class="wrap">
-    <div>
-      <p><b>Future Native Audio</b> — a NativeKloud Consulting product line.<br>A NativeKloud Consulting project — <a href="https://nativekloud.com">nativekloud.com</a></p>
-    </div>
-    <nav aria-label="Footer">
-      <a href="https://github.com/radekdymacz/gearmulator-md-mm">Source (GPL-3)</a>
-      <a href="https://github.com/radekdymacz/gearmulator-md-mm/issues">Issues</a>
-      <a href="/get/">Download</a>
-      <a href="/#credits">Credits</a>
-    </nav>
-    <p class="small">No cookies, no analytics, no third-party scripts.</p>
+  <div class="wrap grid">
+    <p><b>Future Native Audio</b> · Machinedrum Editor + Monomachine Editor <span data-version></span><br>A NativeKloud Consulting project — <a href="https://nativekloud.com">nativekloud.com</a></p>
+    <p><b>Free software</b> under the <a href="https://www.gnu.org/licenses/gpl-3.0.html">GPL-3</a>. <a href="https://github.com/radekdymacz/gearmulator-md-mm">Source</a> · <a href="https://github.com/radekdymacz/gearmulator-md-mm/releases">All releases</a> · <a href="https://github.com/radekdymacz/gearmulator-md-mm/issues">Issues</a></p>
+    <p><b>Credits.</b> Built on <a href="https://github.com/joelanders/gearmulator-md-mm">gearmulator-md-mm</a> by joelanders (the Machinedrum and Monomachine emulation) and <a href="https://github.com/dsp56300/gearmulator">Gearmulator</a> by The Usual Suspects (dsp56300). Thanks to Elektron for the instruments.</p>
+    <p><b>Trademarks.</b> Elektron, Machinedrum and Monomachine are trademarks of Elektron Music Machines. This project is independent and not affiliated with or endorsed by Elektron, joelanders or The Usual Suspects. No firmware is included. No cookies, no analytics, no third-party scripts.</p>
   </div>
 </footer>
 
+<script src="/config.js"></script>
 <script src="/assets/main.js" defer></script>
 </body>
 </html>

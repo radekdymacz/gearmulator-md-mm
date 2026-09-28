@@ -1,16 +1,13 @@
-/* Shared page behaviour: theme switch, hero plate switch, screenshot tabs, the step motif.
-   No network, no storage beyond the viewer's own theme choice. */
+/* Shared page behaviour: theme toggle, hero plate switch, the step-key accent, version label.
+   No network. The only storage is this visitor's theme choice. */
 (function () {
   "use strict";
   var root = document.documentElement;
+  var C = window.MDMM_CONFIG || {};
 
-  /* ---- theme: light default, dark via OS or the button ---- */
-  function current() {
-    if (root.dataset.theme === "light" || root.dataset.theme === "dark") return root.dataset.theme;
-    return window.matchMedia && matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
-  }
+  /* theme: light by default; dark only when chosen here */
   function label() {
-    var next = current() === "dark" ? "light" : "dark";
+    var next = root.dataset.theme === "dark" ? "light" : "dark";
     document.querySelectorAll("[data-theme-toggle]").forEach(function (b) {
       b.setAttribute("aria-label", "Switch to " + next + " theme");
       b.title = "Switch to " + next + " theme";
@@ -18,7 +15,7 @@
   }
   document.querySelectorAll("[data-theme-toggle]").forEach(function (b) {
     b.addEventListener("click", function () {
-      var next = current() === "dark" ? "light" : "dark";
+      var next = root.dataset.theme === "dark" ? "light" : "dark";
       root.dataset.theme = next;
       try { localStorage.setItem("mdmm.theme", next); } catch (e) {}
       label();
@@ -26,66 +23,50 @@
   });
   label();
 
-  /* ---- hero: MKI / MKII plate ---- */
+  /* version, from config (no API call) */
+  if (C.version) document.querySelectorAll("[data-version]").forEach(function (el) { el.textContent = "v" + C.version; });
+
+  /* hero: MKI / MKII plate */
   var hero = document.getElementById("hero-shot");
   if (hero) {
     var btns = hero.querySelectorAll("[data-plate]");
     btns.forEach(function (b) {
       b.addEventListener("click", function () {
-        var v = b.dataset.plate;
         btns.forEach(function (x) { x.setAttribute("aria-pressed", String(x === b)); });
-        hero.querySelectorAll("[data-plate-img]").forEach(function (el) { el.hidden = el.dataset.plateImg !== v; });
+        hero.querySelectorAll("[data-plate-img]").forEach(function (el) { el.hidden = el.dataset.plateImg !== b.dataset.plate; });
       });
     });
   }
 
-  /* ---- screenshot tabs (WAI-ARIA tabs, roving tabindex) ---- */
-  var list = document.querySelector("[role=tablist]");
-  if (list) {
-    var tabs = Array.prototype.slice.call(list.querySelectorAll("[role=tab]"));
-    var select = function (t, focus) {
-      tabs.forEach(function (x) {
-        var on = x === t;
-        x.setAttribute("aria-selected", String(on));
-        x.tabIndex = on ? 0 : -1;
-        var p = document.getElementById(x.getAttribute("aria-controls"));
-        if (p) p.hidden = !on;
-      });
-      if (focus) t.focus();
-    };
-    tabs.forEach(function (t, i) {
-      t.addEventListener("click", function () { select(t, false); });
-      t.addEventListener("keydown", function (e) {
-        var j = null;
-        if (e.key === "ArrowRight" || e.key === "ArrowDown") j = (i + 1) % tabs.length;
-        else if (e.key === "ArrowLeft" || e.key === "ArrowUp") j = (i - 1 + tabs.length) % tabs.length;
-        else if (e.key === "Home") j = 0;
-        else if (e.key === "End") j = tabs.length - 1;
-        if (j !== null) { e.preventDefault(); select(tabs[j], true); }
-      });
-    });
-  }
-
-  /* ---- 16-step motif: a four-on-the-floor pattern and a walking playhead ---- */
-  var box = document.querySelector("[data-steps]");
+  /* the editor's step keys: one 16-step row, LED bars, an accent and locks,
+     and the soft playhead column gliding at 120 BPM (16ths = 125 ms) */
+  var box = document.querySelector("[data-keys]");
   if (box) {
-    var pattern = [1,0,0,1, 0,0,1,0, 1,0,0,1, 0,1,1,0];
-    var cells = pattern.map(function (on) {
-      var i = document.createElement("i");
-      if (on) i.className = "on";
-      box.appendChild(i);
-      return i;
+    var row = ["on", "", "", "on lk", "", "", "on", "", "on acc", "", "", "on", "", "on lk", "on", ""];
+    var cells = row.map(function (c, i) {
+      var k = document.createElement("i");
+      k.className = (i % 4 === 0 ? "q " : "") + c;
+      box.appendChild(k);
+      return k;
     });
     var reduce = window.matchMedia && matchMedia("(prefers-reduced-motion: reduce)").matches;
     if (!reduce) {
-      var step = 0, prev = null;
+      var ph = document.createElement("span");
+      ph.className = "ph jump";
+      box.appendChild(ph);
+      var step = 0;
+      var place = function () {
+        var c = cells[step];
+        ph.style.width = c.offsetWidth + "px";
+        ph.style.transform = "translateX(" + (c.offsetLeft - 6) + "px)";
+      };
       setInterval(function () {
         if (document.hidden) return;
-        if (prev) prev.classList.remove("ph");
-        prev = cells[step];
-        prev.classList.add("ph");
         step = (step + 1) % 16;
-      }, 125); /* 16ths at 120 BPM */
+        ph.classList.toggle("jump", step === 0);
+        place();
+      }, 125);
+      place();
     }
   }
 })();

@@ -1,43 +1,47 @@
 /*
- * Site configuration: the only file Radek edits to go live.
- * Plain data, loaded before the page scripts. No secrets belong here: it is public.
- *
- * Anything still containing "REPLACE_ME" is treated as not configured:
- * the page then points people at the GitHub Releases page instead of a broken link.
+ * Site configuration: the only file to edit for a release or for payments.
+ * Plain public data (no secrets), loaded before the page scripts.
+ * A value containing "REPLACE_ME" counts as not configured.
  */
 window.MDMM_CONFIG = {
+  // Bumped by the release process. Shown on the page as-is; the page makes no API calls.
+  version: "0.1.0-alpha",
+
   source: "https://github.com/radekdymacz/gearmulator-md-mm",
   releasesPage: "https://github.com/radekdymacz/gearmulator-md-mm/releases",
-  version: "alpha",
 
-  // Direct download links (GitHub Release assets). Fill in when the release is published.
+  // One installer per machine (app + VST3 + AU). GitHub's stable "latest release" redirect:
+  // the release build must publish exactly these asset names.
   downloads: {
-    "md-app":    { label: "Machinedrum Editor — standalone app (macOS)",       url: "https://github.com/radekdymacz/gearmulator-md-mm/releases/download/REPLACE_ME/Machinedrum-Editor-app-macOS.zip" },
-    "md-plugin": { label: "Machinedrum Editor — VST3 + AU plug-in (macOS)",    url: "https://github.com/radekdymacz/gearmulator-md-mm/releases/download/REPLACE_ME/Machinedrum-Editor-plugin-macOS.zip" },
-    "mm-app":    { label: "Monomachine Editor — standalone app (macOS)",       url: "https://github.com/radekdymacz/gearmulator-md-mm/releases/download/REPLACE_ME/Monomachine-Editor-app-macOS.zip" },
-    "mm-plugin": { label: "Monomachine Editor — VST3 + AU plug-in (macOS)",    url: "https://github.com/radekdymacz/gearmulator-md-mm/releases/download/REPLACE_ME/Monomachine-Editor-plugin-macOS.zip" }
+    md: { name: "Machinedrum Editor", url: "https://github.com/radekdymacz/gearmulator-md-mm/releases/latest/download/Machinedrum-Editor-macOS.pkg" },
+    mm: { name: "Monomachine Editor", url: "https://github.com/radekdymacz/gearmulator-md-mm/releases/latest/download/Monomachine-Editor-macOS.pkg" }
   },
 
-  // Donations: a plain link-out to PayPal. No PayPal script is ever loaded.
-  // mode:
-  //   "donate"   -> url like https://www.paypal.com/donate/?business=YOUR_ID&no_recurring=0&currency_code=EUR
-  //                 (the amount is added as &amount=10 and &currency_code=)
-  //   "paypalme" -> url like https://www.paypal.me/YOURNAME  (the amount is added as /10EUR)
-  //   "hosted"   -> url like https://www.paypal.com/donate/?hosted_button_id=XXXX
-  //                 (PayPal does not take a preset amount here: the person types it on PayPal)
-  paypal: {
-    mode: "paypalme",
-    url: "https://www.paypal.me/REPLACE_ME",
+  // Pay what you want, through Lemon Squeezy (merchant of record) as a plain link-out.
+  // No Lemon Squeezy script is loaded. provider: "auto" (Lemon Squeezy when checkoutUrl is set,
+  // otherwise download only) | "lemonsqueezy" | "none".
+  payments: {
+    provider: "auto",
+    lemonsqueezy: {
+      // The product's share link (Products > the product > Share), e.g.
+      // https://YOURSTORE.lemonsqueezy.com/buy/xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx
+      checkoutUrl: "https://REPLACE_ME.lemonsqueezy.com/buy/REPLACE_ME"
+    },
     currency: "EUR",
     symbol: "€",
-    amounts: [5, 10, 20, 35],
+    // What an amount buys: keep these true.
+    amounts: [
+      { value: 5,  label: "Say thanks" },
+      { value: 10, label: "One feature evening" },
+      { value: 25, label: "Towards test hardware" }
+    ],
     preselect: 10
   },
 
-  // A second way to support, off until enabled. Set enabled: true and a real URL.
-  alt: {
-    enabled: false,
-    label: "GitHub Sponsors",            // or "Ko-fi"
-    url: "https://github.com/sponsors/REPLACE_ME"   // or "https://ko-fi.com/REPLACE_ME"
-  }
+  // Honest progress towards a named goal. Off by default: turn on only with real numbers,
+  // updated by hand (raised = what actually came in, in whole euros).
+  goal: { enabled: false, label: "A Monomachine for real-hardware testing", target: 0, raised: 0, updated: "" },
+
+  // Supporters list: opt-in only. List a name only when the person asked to be listed.
+  supporters: { enabled: false, names: [] }
 };
