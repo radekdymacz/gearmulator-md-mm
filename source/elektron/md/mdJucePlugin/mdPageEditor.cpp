@@ -7,6 +7,16 @@
 
 #if MDMM_DIAGNOSTICS
 #include "mdDiagnostics.h"
+#else
+namespace mdJucePlugin
+{
+	// A release build has no diagnostics: the editor's slot for them stays empty.
+	class Diagnostics
+	{
+	public:
+		void tick() {}
+	};
+}
 #endif
 
 #include "jucePluginEditorLib/pluginEditorState.h"
