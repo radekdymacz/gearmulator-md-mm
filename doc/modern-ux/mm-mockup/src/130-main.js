@@ -62,7 +62,7 @@ document.addEventListener("wheel",e=>{const el=e.target.closest(".l2.ed");if(!el
 let drag=null,joyDrag=null,splitDrag=null,arpDrag=null;
 const main=$("#main");
 main.addEventListener("pointerdown",e=>{
- if(S.learn){const el=e.target.closest(".pc[data-g]");if(el&&(PAGES.includes(el.dataset.g)||el.dataset.g==="MID")){e.preventDefault();e.stopPropagation();const t=el.dataset.t!=null?+el.dataset.t:S.sel;S.learnT={t,pid:el.dataset.g+"."+el.dataset.n};toast(`Target: ${tLabel(t)} ${pidLabel(t,S.learnT.pid)}. Now press 1-8 for a knob.`);return}}
+ if(S.learn){const el=e.target.closest(".pc[data-g]");if(el&&(PAGES.includes(el.dataset.g)||el.dataset.g==="MID")){e.preventDefault();e.stopPropagation();const t=el.dataset.t!=null?+el.dataset.t:S.sel;S.learnT={t,pid:el.dataset.g+"."+el.dataset.n};toast(`Target: ${tLabel(t)} ${pidLabel(t,S.learnT.pid)}. Now press 1-8 for a knob.`);if(HOST.learnTarget)HOST.learnTarget({...S.learnT});return}}
  const h=e.target.closest(".lfohandle");if(h){cordStart(e,h);return}
  const roll=e.target.closest("canvas.roll");if(roll){roll.setPointerCapture(e.pointerId);rollDown(roll,e);e.preventDefault();return}
  const c=e.target.closest("canvas.ed");if(c){const hh=nearest(c,e);if(!hh)return;active={c,k:hh.k};c.setPointerCapture(e.pointerId);e.preventDefault();redraw();return}
@@ -84,8 +84,9 @@ main.addEventListener("pointermove",e=>{
  if(kbDown){const k=document.elementFromPoint(e.clientX,e.clientY)?.closest(".kb [data-key]");if(k&&!k.classList.contains("dn"))playKey(+k.dataset.key);return}
  const c=e.target.closest?.("canvas.ed");if(c)c.style.cursor=nearest(c,e)?"grab":"default"});
 function endDrag(e){if(cord){cordEnd(e);return}if(rollDrag)rollUp();if(active){active=null;redraw()}if(drag){drag.el.classList.remove("act");drag=null}endLaneDraw();
+ if(kbDown&&HOST.keyUp)HOST.keyUp();
  if(arpDrag){const a=trk(S.sel).arp;if(!arpDrag.moved){a.rhy[arpDrag.k]=!a.rhy[arpDrag.k];renderArp()}structEdited();arpDrag=null}
- if(joyDrag){joyDrag=false;S.joy={x:0,y:0};const k=$("#knobj");if(k){k.style.left="50%";k.style.top="50%"}}
+ if(joyDrag){joyDrag=false;S.joy={x:0,y:0};const k=$("#knobj");if(k){k.style.left="50%";k.style.top="50%"}if(HOST.joy)HOST.joy(S.joy)}
  if(splitDrag){splitDrag=false;render()}if(kbDown){kbDown=false;$$(".kb .dn").forEach(k=>k.classList.remove("dn"))}}
 main.addEventListener("pointerup",endDrag);main.addEventListener("pointercancel",endDrag);
 function joyAt(e){const r=$("#joy").getBoundingClientRect();S.joy={x:clamp((e.clientX-r.left)/r.width*2-1,-1,1),y:clamp(1-(e.clientY-r.top)/r.height*2,-1,1)};const k=$("#knobj");k.style.left=(50+S.joy.x*42)+"%";k.style.top=(50-S.joy.y*42)+"%";
@@ -166,7 +167,7 @@ document.addEventListener("click",e=>{
  if(e.target.closest("#pst.warn")){sendDialog();return}
  if(e.target.closest("#kitf")){toggleLib("kit");return}
  if(e.target.closest("#pat")){toggleLib("pat");return}
- if(e.target.closest("#learnkey")){S.learn=!S.learn;S.learnT=null;document.body.classList.toggle("learn",S.learn);renderTop();if(S.learn)toast("LEARN: click a value, then press 1-8 for a controller knob.");return}
+ if(e.target.closest("#learnkey")){S.learn=!S.learn;S.learnT=null;document.body.classList.toggle("learn",S.learn);renderTop();if(S.learn)toast("LEARN: click a value, then press 1-8 for a controller knob.");if(HOST.learning)HOST.learning(S.learn);return}
  const tb=e.target.closest("#tabs button");if(tb){goWs(tb.dataset.ws);return}
  if(e.target.closest("#platekey")){setPlate(S.plate==="mk1"?"mk2":"mk1");return}
  if(e.target.closest("#play")){togglePlay();return}
@@ -193,7 +194,7 @@ document.addEventListener("keydown",e=>{const mod=e.metaKey||e.ctrlKey,inField=e
  if(mod&&!inField&&e.key==="y"){e.preventDefault();redo();return}
  if(mod&&!inField&&(e.key==="c"||e.key==="v")){e.preventDefault();secAction(e.key==="c"?"copy":"paste");return}
  if(S.learn&&S.learnT&&/^[1-8]$/.test(e.key)){e.preventDefault();learnBind(+e.key);return}
- if(S.learn&&e.key==="Escape"){S.learn=false;document.body.classList.remove("learn");renderTop();return}
+ if(S.learn&&e.key==="Escape"){S.learn=false;document.body.classList.remove("learn");renderTop();if(HOST.learning)HOST.learning(false);return}
  if(e.target.closest?.("input,select,textarea,[role=slider]")||mod||e.altKey)return;
  if(e.key==="l"||e.key==="L"){$("#learnkey").click();return}
  if(e.key==="r"||e.key==="R"){$("#rec").click();return}
@@ -213,6 +214,8 @@ document.addEventListener("keydown",e=>{const mod=e.metaKey||e.ctrlKey,inField=e
 const ENG={...{norom:["NO ROM","off"],loading:["LOADING ROM","blink"],boot:["BOOTING OS","blink"],ready:["EMU OS 1.32B","on"],hwwait:["HW CONNECT","blink"],hwready:["HW MIDI","on"],hwnone:["HW NO MIDI","off"],error:["ROM ERROR","off"]},...HOST.engineLabels};
 let engT=[];
 function engReady(){return S.eng==="ready"||S.eng==="hwready"}
+/* a host's words for what an engine state means: the label's tooltip */
+function setEngineTip(st,tip){const e=ENG[st];if(!e||e[2]===tip)return;ENG[st]=[e[0],e[1],tip];if(S.eng===st)setEng(st)}
 function setEng(st){S.eng=st;const[txt,led]=ENG[st],b=document.querySelector(".lcdeng"),l=document.getElementById("engled");if(!b)return;
  b.querySelector("span").textContent=txt;l.className="led "+(led==="on"?"on":led==="blink"?"on blink":"");
  const ready=engReady();document.querySelector(".lcdpanel").classList.toggle("engwait",!ready);document.body.classList.toggle("engwait",!ready);
@@ -281,10 +284,12 @@ addEventListener("resize",()=>{if(S.ws==="seq"){fitLane();drawSlides();alignLock
    its engine cannot do it says with disable(capability, reason). */
 const NA_SEL={
  midiMutes:[6,7,8,9,10,11].flatMap(t=>[`[data-mute="${t}"]`,`[data-solo="${t}"]`,`[data-gmute="${t}"]`]).join(","),
- poly:'[data-pmode="poly"]',multiTrig:'[data-set="mtmode"] button,[data-strk],[data-tim],#splitm',
+ transport:"#play",poly:'[data-pmode="poly"]',multiTrig:'[data-set="mtmode"] button,[data-strk],[data-tim],#splitm',
  multiMap:'.maprow [data-mhi],.maprow select,.maprow .kselbtn,.maprow .pc,[data-mdel],[data-madd],[data-band]',
  portamento:'[data-set="port"] button',gridRecord:"#rec"};
 const NA_CARD={multiMap:".maprow"};	// a card that also says the reason in words
+/* capabilities with no control of their own here: they say how the machine is read */
+const NA_INFO=["panelKeys","recvSession","lcd","workingKitMemory","telemetry"];
 const NA={},READING={pattern:new Set(),kit:new Set()},READ_NOTE="Still reading this slot from the machine.";
 function markNa(){
  for(const[cap,sel] of Object.entries(NA_SEL)){const why=NA[cap]||"";for(const el of $$(sel)){
@@ -326,9 +331,24 @@ function setCtlSetup({sources,links}){const cc=S.ctl.sources.filter(x=>x.kind===
 /* the app sources as the host's engine runs them: their values ({id: 0-127}) and the CC rate */
 function setModulation({values,ccPerSecond}){for(const sr of S.ctl.sources)if(values[sr.id]!=null)sr.val=values[sr.id];S.ctl.rate=ccPerSecond;if(S.ws==="control")ctlRefresh()}
 const copy=o=>JSON.parse(JSON.stringify(o));
+/* a host's own LCD picture: the machine's screen, 128 x 64, one bit a pixel in rows of 16 bytes
+   (a Uint8Array); null: back to the editor's fields, cross-faded */
+let lcdFadeT=0;
+function setLcd(bits){const el=$("#bootscr");if(!el)return;clearTimeout(lcdFadeT);
+ if(bits&&bits.length>=1024){let c=el.querySelector("canvas.fwlcd");if(!c){c=document.createElement("canvas");c.className="fwlcd";c.width=128;c.height=64;el.appendChild(c)}
+  const g=c.getContext("2d"),cs=getComputedStyle(el);g.fillStyle=cs.getPropertyValue("--lcd").trim()||"#b7c79a";g.fillRect(0,0,128,64);g.fillStyle=cs.getPropertyValue("--ink").trim()||"#1d2a1a";
+  for(let y=0;y<64;y++)for(let xb=0;xb<16;xb++){const b=bits[y*16+xb];if(b)for(let k=0;k<8;k++)if(b&(0x80>>k))g.fillRect(xb*8+k,y,1,1)}
+  el.classList.remove("fading");el.classList.add("on","fw");return}
+ if(!el.classList.contains("fw"))return;el.classList.add("fading");lcdFadeT=setTimeout(()=>el.classList.remove("on","fw","fading"),460)}
+const dialogOpen=()=>!$("#dlg").hidden;
+/* the firmware screen (an ask with class "first" and the firmware text) closes when the host has a firmware again */
+function closeFirmwareDialog(){const d=$("#dlg");if(!d.hidden&&d.querySelector(".dlgbox.first .lcdbig"))d.hidden=true}
+/* the editor's menu (a host's): right-click an empty part of the header */
+document.addEventListener("contextmenu",e=>{if(!HOST.menu||!e.target.closest(".top")||e.target.closest("button,[role=slider],[role=button],select,input,b,.lcdpanel"))return;e.preventDefault();HOST.menu()});
 window.MMView={
  /* values */
  captureKit,capturePat,clearedKit,emptyPat,audible,engReady,asgT,noteName,pname,machName,kitName,
+ gated:()=>Object.keys(NA_SEL),dialogOpen,
  busy:()=>{try{return !!(drag||laneDraw||rollDrag||active||arpDrag||l2drag||joyDrag||splitDrag||cord||kbDown)}catch(_){return false}},
  libBusy:()=>LIB.renaming!=null||LIB.drag!=null,
  sel:()=>S.sel,mode:()=>S.mode,playing:()=>S.playing,step:()=>S.step,tempo:()=>S.bpm,engineState:()=>S.eng,kitState:()=>S.kitState,workName:()=>S.workName,
@@ -338,9 +358,12 @@ window.MMView={
  /* setters */
  startEmpty,setCurrent:({pattern,kit})=>{if(pattern!=null)S.pat=pattern;if(kit!=null)S.kit=kit},setQueued:q=>{S.queued=q},setTempo:bpm=>{S.bpm=bpm},
  setPlaying,setStep,setPatternSlot,setKitSlot,setWorkingKit,setSong,setRouting:r=>{S.routing=r},setMidiTracks,setMultiMap,
- setEng,setEngineLabel,setEngines,setAudioEntry,setKitState,clearLearnTarget:()=>{S.learnT=null},setModulation,setCtlSetup,disable,setReading,
+ setEng,setEngineLabel,setEngineTip,setEngines,setAudioEntry,setKitState,clearLearnTarget:()=>{S.learnT=null},setModulation,setCtlSetup,disable,setReading,
+ setLcd,setKeyDown,setPst,closeFirmwareDialog,
  /* calls */
  render,renderTop,drawLib,toast,ask,redraw,movePH,setPos,flashTracks,goWs,clickStep,autoRange,kitSave,
- /* the self-tests (diagnostics only) play the user through the state itself, and the panel's own test */
- S,audioSelfTest};
+ redrawAudio:()=>{if(AP.open)drawAudio()},audioLevel,openAudio};
+/* The self-tests (a diagnostics build's bundle sets window.MMDiagnostics before this script) play the
+   user through the view's state and run the panel's own test; a release page exports neither. */
+if(window.MMDiagnostics)Object.assign(window.MMDiagnostics,{S,audioSelfTest});
 render();H.last=snap();if(HOST.start)HOST.start();else startEngine("emu");{const lb=new URLSearchParams(location.hash.slice(1)).get("lib");if(lb)setTimeout(()=>openLib(lb),2000)}

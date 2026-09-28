@@ -60,9 +60,11 @@ function renderPerform(){const pm=PMODES.find(p=>p[0]===S.mode),t=asgT(),tr=S.tr
  syncControls();redraw()}
 let kbDown=null,lampT={};
 function flashTracks(ts){ts.forEach(i=>{const l=$(`[data-lamp="${i}"]`);if(!l)return;l.classList.add("on");clearTimeout(lampT[i]);lampT[i]=setTimeout(()=>l.classList.remove("on"),160)})}
-function playKey(n){if(HOST.playKey)return HOST.playKey(n);$$(".kb .dn").forEach(k=>k.classList.remove("dn"));$(`.kb [data-key="${n}"]`)?.classList.add("dn");const info=$("#kbinfo");let ts=[],msg="";
+/* a key shown held (null: none) and the keyboard's info line (null: unchanged) */
+function setKeyDown(n,info){$$(".kb .dn").forEach(k=>k.classList.remove("dn"));if(n!=null)$(`.kb [data-key="${n}"]`)?.classList.add("dn");const el=$("#kbinfo");if(el&&info!=null)el.textContent=info}
+function playKey(n){if(HOST.playKey)return HOST.playKey(n);setKeyDown(n,null);let ts=[],msg="";
  if(S.mode==="normal"||S.mode==="poly"){const t=asgT();ts=[t];msg=`${S.mode==="poly"?"POLY ":""}T${t+1} ${noteName(n)}`}
  else if(S.mode==="multi"){const m=S.multi.mode;if(m===0){ts=[0,1,2,3,4,5];msg=`All tracks ${noteName(n)}`}else if(m===1){const up=n>=S.multi.splitKey,a=S.multi.splitTrack-1;ts=up?[0,1,2,3,4,5].filter(i=>i>=a):[0,1,2,3,4,5].filter(i=>i<a);msg=`${up?"Upper":"Lower"} zone ${noteName(n)}`}
   else{S.mtTrn=n-60;msg=`${m===2?"Restart":"Transpose"} pattern ${S.mtTrn>=0?"+":""}${S.mtTrn}${S.multi.timing?" at the next "+TIMS[S.multi.timing]:""}`;if(!S.playing)togglePlay();else if(m===2){S.step=-1}ts=[0,1,2,3,4,5]}}
  else{const i=mapRow(n);if(i>=0){const r=S.mmap[i];S.mmapSel=i;msg=`${noteName(n)} › ${r.pat<0?"current":patName(r.pat)} from step ${r.ofs+1}${r.len?", "+r.len+" steps":""}${r.trn!==64&&r.trn?"":""}`;$$(".band").forEach(b=>b.classList.toggle("sel",+b.dataset.band===i))}}
- flashTracks(ts);if(info)info.textContent=msg}
+ flashTracks(ts);setKeyDown(n,msg)}

@@ -15,8 +15,13 @@
 #  3. Script: 40-data.js .. 130-main.js in build.sh order, as they are.
 #  4. Contract check: every MMView member and id mmAdapter.js uses exists (the self-tests,
 #     mmSelfTest.js, are checked on their own), the adapter never touches the view's state
-#     (S(), MMView.S, LIB, ENG, H), and the host calls match both ways: the mockup makes no
-#     HOST.* call the adapter lacks, and the adapter has no host call the mockup never makes.
+#     (S(), MMView.S, LIB, ENG, H, the panel's globals) nor its markup ($(, $$(, document.),
+#     the view exports no state or test (S, audioSelfTest: a diagnostics build's MMDiagnostics
+#     only), and the host calls match both ways: the mockup makes no HOST.* call the adapter
+#     lacks, and the adapter has no host call the mockup never makes.
+#  5. The pages against the contract (page_contract_check.py): every op the adapter sends is in
+#     $defs/command with only its declared arguments, the panel's audioSet arguments too, and the
+#     mockup's NA_SEL plus NA_INFO name exactly the contract's capabilities.
 import os
 import re
 import sys
@@ -36,8 +41,9 @@ title = re.search(r'<title>(.*?)</title>', build).group(1)
 m = open(SRC + body_file).read()
 # The host first (it defines window.MMHost, which the mockup reads when it loads), then the UI, then
 # the translation (it reads the mockup's tables).
-# mmSelfTest.js last: the self-tests, in the plug-in only with the diagnostics (an empty script otherwise).
-SCRIPTS = ['mdDeskBridge.js', 'mmAdapter.js', 'mmMockup.js', 'mmConvert.js', 'mmSelfTest.js']
+# mmSelfTest.js before the mockup: the self-tests, in the plug-in only with the diagnostics (an empty
+# script otherwise); it sets window.MMDiagnostics, where the mockup puts what only tests may touch.
+SCRIPTS = ['mdDeskBridge.js', 'mmAdapter.js', 'mmSelfTest.js', 'mmMockup.js', 'mmConvert.js']
 page = '''<!doctype html>
 <html lang="en">
 <head>
@@ -72,11 +78,6 @@ head = """/* Monomachine Editor stylesheet: the mockup's (doc/modern-ux/mm-mocku
 css = re.sub(r'@import url\([^)]*fonts\.googleapis[^)]*\);?\s*', '', css)
 tail = '''
 /* ===== The real machine's states (not in the mockup) ===== */
-/* While the firmware starts, the LCD shows the machine's own screen (mmAdapter.js). */
-.bootscr.fw{padding:0;gap:0;place-items:center;align-content:center;transition:opacity .45s ease}
-.bootscr.fw>*:not(canvas){display:none}
-.bootscr canvas.fwlcd{height:100%;max-width:100%;image-rendering:pixelated;image-rendering:crisp-edges}
-.bootscr.fading{opacity:0}
 .statusline,.errline{margin:6px 0 0;padding:6px 10px;border-radius:3px;font:12px var(--pix);text-transform:uppercase}
 .statusline{background:var(--lcd);color:var(--ink)}
 .errline{background:var(--rec,#c43);color:#fff}
@@ -125,8 +126,29 @@ problems, used, wanted = seam(adapter, 'mmAdapter.js')
 test_problems, test_used, test_wanted = seam(selftest, 'mmSelfTest.js')
 problems += test_problems
 # the adapter reads the view through values and setters, never its state
-if re.search(r'\bS\(\)|MMView\.S\b|V\(\)\.S\b|(?<![.\w])v\.S\b|\.(?:LIB|ENG|H)\b', adapter):
-    problems.append('mmAdapter.js touches the view\'s state (S(), MMView.S, LIB, ENG or H)')
+if re.search(r'\bS\(\)|MMView\.S\b|V\(\)\.S\b|(?<![.\w])v\.S\b|\.(?:LIB|ENG|H)\b|(?<![.\w"])(?:AP|drawAudio|openAudio|audioLevel)\b(?!")', adapter):
+    problems.append('mmAdapter.js touches the view\'s state (S(), MMView.S, LIB, ENG, H or the panel\'s globals)')
+# ... and never its markup: what it shows goes through MMView's setters
+code = re.sub(r'/\*.*?\*/|//[^\n]*', '', adapter, flags=re.S)
+for pat, what in [(r'(?<![\w.])\$\(', '$('), (r'(?<![\w.])\$\$\(', '$$('), (r'\bdocument\.', 'document.')]:
+    if re.search(pat, code):
+        problems.append('mmAdapter.js uses the markup (%s): show it through an MMView setter' % what)
+# the view exports no state and no test: those are a diagnostics build's (window.MMDiagnostics)
+problems += ['MMView exports %s: only window.MMDiagnostics may carry it' % x for x in sorted(exported & {'S', 'audioSelfTest'})]
+# the pages against the contract: ops, arguments, capabilities
+sys.dont_write_bytecode = True
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import page_contract_check as pc
+schema = pc.load(R + 'doc/modern-ux/mm-data-contract.schema.json')
+table = pc.command_table(schema)
+problems += pc.check_sends(list(pc.literals_with_op(adapter)), table, 'mmAdapter.js')
+problems += pc.check_audio(js, table, 'mmMockup.js')
+na_sel = re.search(r'const NA_SEL=\{(.*?)\};', js, re.S)
+na_info = re.search(r'const NA_INFO=\[(.*?)\];', js, re.S)
+if not na_sel or not na_info:
+    problems.append('the mockup has no NA_SEL / NA_INFO')
+else:
+    problems += pc.check_caps(re.findall(r'(?:^|[,{\n])\s*(\w+):', na_sel.group(1)), re.findall(r'"(\w+)"', na_info.group(1)), schema, 'the mockup')
 # both ways: every host call the mockup makes is one the adapter has, and every one it has is made
 host_calls = set(re.findall(r'HOST\.(\w+)', js))
 host_block = adapter[adapter.index('window.MMHost = {'):]

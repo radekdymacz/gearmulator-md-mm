@@ -1,7 +1,36 @@
 #include "deskHost.h"
 
+#include <array>
+
 namespace deskHost
 {
+	namespace
+	{
+		constexpr std::array<const char*, static_cast<size_t>(AudioSetting::Count)> g_settings{
+			"driver", "output", "input", "mute", "outputChannel", "sampleRate", "bufferSize", "midiInput", "midiOutput"};
+		constexpr std::array<const char*, static_cast<size_t>(AudioAction::Count)> g_actions{"test", "bluetooth"};
+
+		template<size_t N>
+		std::vector<const char*> names(const std::array<const char*, N>& _a)
+		{
+			return {_a.begin(), _a.end()};
+		}
+
+		template<typename E, size_t N>
+		std::optional<E> find(const std::array<const char*, N>& _a, const std::string& _name)
+		{
+			for(size_t i = 0; i < N; ++i)
+				if(_name == _a[i])
+					return static_cast<E>(i);
+			return std::nullopt;
+		}
+	}
+
+	const char* audioSettingName(const AudioSetting _s) { return g_settings[static_cast<size_t>(_s)]; }
+	const char* audioActionName(const AudioAction _a) { return g_actions[static_cast<size_t>(_a)]; }
+	std::optional<AudioSetting> audioSettingOf(const std::string& _name) { return find<AudioSetting>(g_settings, _name); }
+	std::optional<AudioAction> audioActionOf(const std::string& _name) { return find<AudioAction>(g_actions, _name); }
+
 	const Table& commands()
 	{
 		using deskCore::Arg;
@@ -12,29 +41,40 @@ namespace deskHost
 		const Arg t{"t", ArgType::Integer, 0, 15};
 		const Arg pg{"pg", ArgType::Integer, 0, 7, true};
 		const Arg i{"i", ArgType::Integer, 0, 24, true};
-		const Arg index{"index", ArgType::Integer, 0, 1e6};
+		// An entry of the learn document's mappings; the handler checks it against the list.
+		const Arg index{"index", ArgType::Integer, 0, 65535};
 		const Arg on{"on", ArgType::Bool, 0, 0, true};
-		const auto row = [](const char* _op, std::vector<Arg> _args, const char* _help, const Action _a)
+		// A MIDI channel message: status 0x80-0xef, then two data bytes.
+		Arg bytes{"b", ArgType::Bytes, 0, 0xef};
+		bytes.length = 3;
+		// "device" names a device (the request's own "id" is the result's).
+		Arg set{"set", ArgType::Text, 0, 0, true, names(g_settings)};
+		Arg act{"do", ArgType::Text, 0, 0, true, names(g_actions)};
+		const Arg device{"device", ArgType::Text, 0, 0, true};
+		const Arg channel{"index", ArgType::Integer, 0, 255, true};	// an output channel of the device
+		const Arg value{"value", ArgType::Number, 0, 1e6, true};		// a sample rate or a buffer size
+		const auto row = [](const char* _op, std::vector<Arg> _args, const char* _help, const Action _a, const Actor _who = Actor::Session)
 		{
-			return deskCore::Command<Action>{_op, Owner::Host, Gate::None, -1, std::move(_args), _help, CoreOp::Edit, 0, _a};
+			return deskCore::Command<Handler>{_op, Owner::Host, Gate::None, -1, std::move(_args), _help, CoreOp::Edit, 0, {_a, _who}};
 		};
 		static const Table table({
 			row("engine", {{"kind", ArgType::Text}}, "an entry of the engine map (machine.engines)", Action::Engine),
 			row("recheckFirmware", {}, "look for the ROM again", Action::RecheckFirmware),
 			row("revealRomFolder", {}, "", Action::RevealRomFolder),
-			row("midi", {{"b", ArgType::Array}}, "a channel message from the page: [status 0x80-0xef, data, data]", Action::Midi),
-			row("openMenu", {}, "the editor's menu", Action::Menu),
-			row("learnStart", {t, pg, i}, "MIDI learn a track's parameter", Action::LearnStart),
-			row("learnAdd", {{"cc", ArgType::Integer, 0, 127}, t, pg, i, {"ch", ArgType::Integer, 0, 255, true}},
-				"a CC mapping without learning", Action::LearnAdd),
+			row("midi", {bytes}, "a channel message from the page: [status 0x80-0xef, data, data]", Action::Midi),
+			row("openMenu", {}, "the editor's menu", Action::Menu, Actor::Window),
+			row("learnStart", {t, pg, i}, "MIDI learn a track's parameter (learn.doc.limits: which)", Action::LearnStart),
+			row("learnAdd", {{"cc", ArgType::Integer, 0, 127}, t, pg, i, {"ch", ArgType::Integer, 0, 15, true}},
+				"a CC mapping without learning, on channel ch (none: all channels)", Action::LearnAdd),
 			row("learnSetCc", {{"from", ArgType::Integer, 0, 127}, {"to", ArgType::Integer, 0, 127}},
 				"a controller row's CC changed: its mappings follow", Action::LearnSetCc),
 			row("learnCancel", {}, "", Action::LearnCancel),
 			row("learnRemove", {index}, "", Action::LearnRemove),
 			row("learnInvert", {index}, "", Action::LearnInvert),
-			row("audio", {}, "the standalone's audio and MIDI devices", Action::AudioPublish),
-			row("audioSet", {{"set", ArgType::Text, 0, 0, true}, {"do", ArgType::Text, 0, 0, true}}, "", Action::AudioSet),
-			row("audioMeter", {on}, "", Action::AudioMeter),
+			row("audio", {}, "the standalone's audio and MIDI devices", Action::AudioPublish, Actor::Window),
+			row("audioSet", {set, act, device, on, channel, value}, "change one audio or MIDI setting (set), or do something (do)",
+				Action::AudioSet, Actor::Window),
+			row("audioMeter", {on}, "", Action::AudioMeter, Actor::Window),
 		});
 		return table;
 	}
@@ -54,10 +94,5 @@ namespace deskHost
 		*one = std::move(merged);
 		out.put("description", "Generated from the model's command table and the plug-in's (deskHost), P6: every command the page may send.");
 		return out;
-	}
-
-	bool isWindowAction(const Action _a)
-	{
-		return _a == Action::Menu || _a == Action::AudioPublish || _a == Action::AudioSet || _a == Action::AudioMeter;
 	}
 }

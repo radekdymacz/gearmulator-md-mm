@@ -20,6 +20,8 @@
 
 #include "mmDesk/mmDesk.h"
 
+#include "deskWire/mmWire.h"
+
 #include <cmath>
 #include <deque>
 
@@ -67,23 +69,24 @@ namespace
 		std::vector<Value> page;
 		std::unique_ptr<mmDesk::Desk> desk;
 		md::MmTelemetry tel;
+		uint8_t channel = 0;	// the machine's base channel (the adapter's fact)
 
 		explicit Rig(const Bytes& _rom) : m(_rom, "mm", {}, true, g_mm)
 		{
 			mmDesk::Desk::Port port;
 			port.device.sendSysex = [this](const Bytes& _b) { out.push_back(_b); };
+			// Parameters and NRPN as the plug-in's wire encodes them (deskWire), on the base channel.
 			port.device.sendParam = [this](const uint8_t _t, const uint8_t _p, const uint8_t _i, const uint8_t _v)
 			{
-				const md::automation::ParameterChange c{_p, _t, _i, _v};
-				if(const auto cc = md::automation::encodeParameterChange(g_mm, c, 0))
-					out.push_back({(*cc)[0], (*cc)[1], (*cc)[2]});
+				if(const auto cc = deskWire::mm::param(channel, _t, _p, _i, _v))
+					out.push_back(*cc);
 			};
 			port.device.sendNrpn = [this](const uint8_t _t, const uint8_t _p, const uint8_t _v)
 			{
-				out.push_back({0xb0, 99, _t});
-				out.push_back({0xb0, 98, _p});
-				out.push_back({0xb0, 6, _v});
+				for(auto& b : deskWire::mm::nrpn(channel, _t, _p, _v))
+					out.push_back(std::move(b));
 			};
+			port.device.baseChannel = [this](const uint8_t _ch) { channel = _ch; };
 			port.device.pressKeys = [this](const std::vector<mmDesk::Key>& _keys)
 			{
 				uint64_t at = std::max(m.now(), panel.empty() ? 0 : panel.back().first) + 64;

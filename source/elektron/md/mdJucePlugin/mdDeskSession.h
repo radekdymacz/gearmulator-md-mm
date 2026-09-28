@@ -7,18 +7,20 @@
 #include "deskCore/deskCommands.h"
 #include "deskCore/deskLcd.h"
 #include "deskCore/deskLifecycle.h"
-#include "deskCore/deskPacer.h"
 
 #include "deskHost/deskHost.h"
+
+#include "deskWire/deskWire.h"
 
 #include "elektronData/json.h"
 
 #include "juce_events/juce_events.h"
 
-#include <deque>
+#include <algorithm>
+#include <cstdint>
 #include <functional>
-#include <map>
 #include <memory>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -26,6 +28,21 @@ namespace mdJucePlugin
 {
 	class AudioPluginAudioProcessor;
 	pluginLib::Processor& pluginProcessorOf(AudioPluginAudioProcessor& _processor);
+	double sessionNowMs();
+
+	// The session's pace. One step every 8 ms: the playhead (the app modulators move on its steps)
+	// is looked at faster than the fastest step (300 BPM at 2X: 25 ms). The rest is periods in ms.
+	constexpr double g_stepMs = 8;
+	constexpr double g_deskTickMs = 32;			// the desk's own work, about 30 Hz
+	constexpr double g_lcdMs = 64;				// the machine's screen while it starts, about 15 Hz
+	constexpr double g_engineChoicesMs = 1000;	// whether the engines are available (a MIDI out appeared)
+
+	// Due on the session's first step, then once every _periodMs (_tick counts steps from 1).
+	constexpr bool due(const uint64_t _tick, const double _periodMs)
+	{
+		const auto n = std::max<uint64_t>(1, static_cast<uint64_t>(_periodMs / g_stepMs + 0.5));
+		return _tick > 0 && (_tick - 1) % n == 0;
+	}
 
 	// The editor's session (P6), owned by the processor: the desk (core, Machine adapter, the
 	// editor's setup), the engine that feeds it (the device edge and its facts: the emulator, or a
@@ -46,13 +63,15 @@ namespace mdJucePlugin
 		DeskSession(const DeskSession&) = delete;
 		DeskSession& operator=(const DeskSession&) = delete;
 
-		// The Machinedrum or Monomachine session for the processor's model.
+		// The Machinedrum or Monomachine session for the processor's model, built and then started
+		// (its steps begin once it is whole).
 		static std::unique_ptr<DeskSession> create(AudioPluginAudioProcessor& _processor);
 
 		void attach(ToPage _toPage);
 		void detach();
 
-		// A page message: the desk's commands (the model's table) and the plug-in's (deskHost's).
+		// A page message: the desk's commands (the model's table) and the plug-in's session rows
+		// (deskHost's table, actor Session).
 		virtual void onPageMessage(const Value& _message) = 0;
 		// One step of the session: the engine's facts in, the desk's work, the page's messages out.
 		// The timer calls it; tests call it directly.
@@ -67,7 +86,6 @@ namespace mdJucePlugin
 
 	protected:
 		void reply(const Value& _message, bool _ok, const std::string& _note) const;
-		void setExternalMidi(bool _on) const;
 		void revealRomFolder(const Value& _message) const;
 		virtual void onAttach() {}
 		virtual void onDetach() {}
@@ -80,33 +98,54 @@ namespace mdJucePlugin
 		ToPage m_toPage;
 	};
 
-	// A machine at the end of a MIDI wire (HW MIDI, P4), for either model: what goes out is paced at
-	// DIN speed, what comes in is handed over whole. Pure: the plug-in's MIDI out and in are
-	// functions, so a test drives it without a processor.
-	class MidiWire
+	// The editor's setup kept with the project (the processor's setup chunk), for either model: the
+	// session saves into it and hears when a project restore replaced it. Its own saves are not
+	// restores.
+	class SetupStore
 	{
 	public:
-		using Bytes = std::vector<uint8_t>;
-		using Out = std::function<void(const Bytes&)>;
-		using In = std::function<std::vector<Bytes>()>;
+		using Value = elektronData::json::Value;
 
-		MidiWire(Out _out, In _in) : m_out(std::move(_out)), m_in(std::move(_in)) {}
+		explicit SetupStore(AudioPluginAudioProcessor& _processor) : m_processor(_processor) {}
 
-		void send(Bytes _message) { m_pacer.push(std::move(_message)); }
-		// Out at DIN speed (at _nowMs), then what the machine sent to _in.
-		void pump(double _nowMs, const std::function<void(const Bytes&)>& _in);
-
-		// The panel keys a wire has: PLAY and STOP as MIDI Start and Stop (0 when there is none).
-		static uint8_t realtimeOf(const std::string& _key);
+		void save(const Value& _setup);
+		// The project's setup text when it changed outside the session since the last call (the first
+		// call: the project's); "" when the project keeps none.
+		std::optional<std::string> restored();
 
 	private:
-		Out m_out;
-		In m_in;
-		deskCore::DinPacer m_pacer;
+		AudioPluginAudioProcessor& m_processor;
+		std::optional<uint32_t> m_seen;
 	};
 
-	// The plug-in's MIDI out and in as a wire's functions.
-	MidiWire midiWireOf(AudioPluginAudioProcessor& _processor);
+	// The plug-in's MIDI in and out as a wire, for as long as it lives: while it does, the
+	// processor's MIDI goes to the wire (external MIDI on), not to the emulated device. An engine
+	// on a wire owns one, so the routing follows the engine and no one else decides it.
+	class PluginWire
+	{
+	public:
+		explicit PluginWire(AudioPluginAudioProcessor& _processor);
+		~PluginWire();
+
+		PluginWire(const PluginWire&) = delete;
+		PluginWire& operator=(const PluginWire&) = delete;
+
+		deskWire::MidiWire& wire() { return m_wire; }
+
+	private:
+		AudioPluginAudioProcessor& m_processor;
+		deskWire::MidiWire m_wire;
+	};
+
+	// Whether an engine can be chosen now, and why not.
+	struct Availability
+	{
+		bool available = true;
+		std::string reason;
+	};
+
+	// An engine on the plug-in's MIDI: the host or the plug-in's own ports must give a MIDI out.
+	Availability midiOutAvailability(const DeskSession& _session);
 
 	// An engine of the engine map, for a model (P6): the device edge its desk's adapter talks to and
 	// the facts it feeds the desk. Engines queue what the device says and hand it over in step():
@@ -126,25 +165,26 @@ namespace mdJucePlugin
 		// protocol.
 		virtual std::unique_ptr<Adapter> adapter(const Profile& _profile) { return DeskT::defaultAdapter(_profile, device()); }
 		// Feed the desk what the device said since the last step (sysex, telemetry, memory, probes,
-		// its screen). _tick counts the session's 8 ms steps.
+		// its screen). _tick counts the session's steps (g_stepMs) from 1; due() makes periods of it.
 		virtual void step(DeskT& _desk, uint64_t _tick) = 0;
 		// What the device says about the firmware now (Running for a wire: its replies decide).
 		virtual deskCore::LifeFacts::Probe probe() = 0;
 	};
 
-	// One engine of the engine map: its profile (id, label, what it offers) and how to make it. The
-	// plug-in's MIDI in and out go to an engine on a wire (profile.wire).
+	// One engine of the engine map: its profile (id, label, what it offers), how to make it and
+	// whether it can be chosen now (none: always).
 	template<typename DeskT>
 	struct EngineRecord
 	{
 		using Profile = typename DeskT::Profile;
 		Profile profile;
 		std::function<std::unique_ptr<Engine<DeskT>>(DeskSession&)> make;
+		std::function<Availability(const DeskSession&)> available;
 	};
 
 	// The session for one model (P6: one class for both editors). The engine map, the plug-in's
-	// commands and the step are here; a model adds its desk, its engines, its learnable parameters
-	// and what is its own (the setup it keeps, the page's MIDI).
+	// commands, the setup store and the step are here; a model gives its engines, its learnable
+	// parameters, its page and its default setup, and adds what is its own (the page's MIDI).
 	template<typename DeskT>
 	class SessionOf : public DeskSession
 	{
@@ -152,25 +192,29 @@ namespace mdJucePlugin
 		using Record = EngineRecord<DeskT>;
 		using Action = deskHost::Action;
 
+		// _defaultSetup: what a project without a setup gets (none: the desk keeps its own).
 		SessionOf(AudioPluginAudioProcessor& _processor, std::vector<Record> _engines, MidiLearnCommands::Model _learn,
-			WebPageHost::Spec _page, const std::function<std::unique_ptr<DeskT>(std::unique_ptr<typename DeskT::Adapter>)>& _makeDesk)
+			WebPageHost::Spec _page, std::optional<Value> _defaultSetup)
 			: DeskSession(_processor)
 			, m_engines(std::move(_engines))
+			, m_setup(_processor)
+			, m_defaultSetup(std::move(_defaultSetup))
 			, m_learn(pluginProcessorOf(_processor), std::move(_learn), [this](const Value& _m) { toPage(_m); })
 			, m_page(std::move(_page))
 		{
 			m_engine = m_record->make(*this);
-			m_desk = _makeDesk(m_engine->adapter(m_record->profile));
-			m_desk->setEngines(choices());
+			m_desk = std::make_unique<DeskT>(m_engine->adapter(m_record->profile), port());
+			m_choices = choices();
+			m_desk->setEngines(m_choices);
+			restoreSetup();
 		}
-
-		~SessionOf() override { setExternalMidi(false); }
 
 		void onPageMessage(const Value& _message) override
 		{
 			const auto ready = m_desk->readyCount();
 			if(m_desk->onPageMessage(_message))
 			{
+				// After the page's ready the plug-in publishes its own document too.
 				if(m_desk->readyCount() != ready)
 					m_learn.publish();
 				return;
@@ -181,12 +225,17 @@ namespace mdJucePlugin
 				reply(_message, false, "unknown command " + deskCore::opOf(_message));
 				return;
 			}
+			if(row->handler.actor != deskHost::Actor::Session)
+			{
+				reply(_message, false, "the editor window acts on " + deskCore::opOf(_message));
+				return;
+			}
 			if(const auto errors = deskHost::Table::check(*row, _message); !errors.empty())
 			{
 				reply(_message, false, errors.front());
 				return;
 			}
-			switch(row->handler)
+			switch(row->handler.action)
 			{
 			case Action::Engine: setEngine(_message); break;
 			case Action::RecheckFirmware: recheckFirmware(_message); break;
@@ -197,11 +246,8 @@ namespace mdJucePlugin
 			case Action::LearnSetCc:
 			case Action::LearnCancel:
 			case Action::LearnRemove:
-			case Action::LearnInvert: m_learn.handle(row->handler, _message); break;
-			case Action::Menu:
-			case Action::AudioPublish:
-			case Action::AudioSet:
-			case Action::AudioMeter: reply(_message, false, "the editor window acts on " + deskCore::opOf(_message)); break;
+			case Action::LearnInvert: m_learn.handle(row->handler.action, _message); break;
+			default: break;	// the window's rows (actor Window, above)
 			}
 		}
 
@@ -209,14 +255,18 @@ namespace mdJucePlugin
 		{
 			const auto t = ++m_tick;
 			m_engine->step(*m_desk, t);
-			stepExtra(t);
-			if(m_desk->pageSeen() && t % 4 == 0)
+			if(const auto text = m_setup.restored())
+				loadSetup(*text);
+			if(due(t, g_engineChoicesMs))
+				publishChoices();
+			if(m_desk->pageSeen() && due(t, g_deskTickMs))
 				m_desk->tick();
 		}
 
 		std::string status() const override
 		{
-			return "desk: engine " + m_record->profile.id + " " + deskCore::lifecycleName(m_desk->lifecycle()) + " " + statusExtra();
+			return "desk: engine " + m_record->profile.id + " " + deskCore::lifecycleName(m_desk->lifecycle()) + " "
+				+ elektronData::json::write(m_desk->status());
 		}
 
 		const WebPageHost::Spec& pageSpec() const override { return m_page; }
@@ -226,20 +276,59 @@ namespace mdJucePlugin
 		const Record& record() const { return *m_record; }
 
 	protected:
-		virtual void stepExtra(uint64_t) {}
-		virtual std::string statusExtra() const { return {}; }
 		virtual void onMidi(const Value& _message) { reply(_message, false, "midi: this editor's page has no keyboard"); }
 		virtual const char* missingText() const = 0;
 		Engine<DeskT>& currentEngine() { return *m_engine; }
 		void onDetach() override { m_desk->detachPage(); }
 
 	private:
+		// The desk's edges that are the session's: the page and the project's setup (the device
+		// edge is the engine's adapter).
+		typename DeskT::Port port()
+		{
+			typename DeskT::Port p;
+			p.device.nowMs = [] { return sessionNowMs(); };
+			p.toPage = [this](const Value& _m) { toPage(_m); };
+			p.saveSetup = [this](const Value& _setup) { m_setup.save(_setup); };
+			return p;
+		}
+
+		void restoreSetup()
+		{
+			if(const auto text = m_setup.restored())
+				loadSetup(*text);
+		}
+
+		// The editor's setup from the project, or the model's default when the project has none.
+		void loadSetup(const std::string& _text)
+		{
+			const auto doc = _text.empty() ? m_defaultSetup : elektronData::json::parse(_text);
+			if(doc)
+				m_desk->loadSetup(*doc);
+		}
+
 		std::vector<deskCore::EngineChoice> choices() const
 		{
 			std::vector<deskCore::EngineChoice> out;
 			for(const auto& r : m_engines)
-				out.push_back({r.profile.id, r.profile.label, true, {}});
+			{
+				const auto a = r.available ? r.available(*this) : Availability{};
+				out.push_back({r.profile.id, r.profile.label, a.available, a.reason});
+			}
 			return out;
+		}
+
+		void publishChoices()
+		{
+			auto next = choices();
+			const auto same = [](const deskCore::EngineChoice& _a, const deskCore::EngineChoice& _b)
+			{
+				return _a.id == _b.id && _a.label == _b.label && _a.available == _b.available && _a.reason == _b.reason;
+			};
+			if(std::equal(next.begin(), next.end(), m_choices.begin(), m_choices.end(), same))
+				return;
+			m_choices = std::move(next);
+			m_desk->setEngines(m_choices);
 		}
 
 		void setEngine(const Value& _message)
@@ -257,14 +346,20 @@ namespace mdJucePlugin
 			}
 			if(record != m_record)
 			{
+				if(const auto a = record->available ? record->available(*this) : Availability{}; !a.available)
+				{
+					reply(_message, false, a.reason);
+					return;
+				}
 				// The new engine first, then the desk takes its adapter (the old adapter goes with it),
-				// then the old engine: nothing ever points into an engine that is gone.
+				// then the old engine: nothing ever points into an engine that is gone. An engine on a
+				// wire routes the plug-in's MIDI for its own lifetime.
 				auto engine = record->make(*this);
 				m_record = record;
-				setExternalMidi(record->profile.wire);
 				m_desk->setEngine(engine->adapter(record->profile));
 				m_engine = std::move(engine);
-				m_desk->setEngines(choices());
+				m_choices = choices();
+				m_desk->setEngines(m_choices);
 			}
 			reply(_message, true, "Engine: " + record->profile.label);
 		}
@@ -280,15 +375,18 @@ namespace mdJucePlugin
 
 		std::vector<Record> m_engines;
 		const Record* m_record = &m_engines.front();
+		SetupStore m_setup;
+		std::optional<Value> m_defaultSetup;
 		MidiLearnCommands m_learn;
 		WebPageHost::Spec m_page;
 		std::unique_ptr<Engine<DeskT>> m_engine;
 		std::unique_ptr<DeskT> m_desk;
+		std::vector<deskCore::EngineChoice> m_choices;
 		uint64_t m_tick = 0;
 	};
 
-	// The machine's own screen while it starts, as the page's LCD (both models): at most about 15
-	// times a second, only when it changed, through the desk (so it goes out in order with the rest).
+	// The machine's own screen while it starts, as the page's LCD (both models): every g_lcdMs, only
+	// when it changed, through the desk (so it goes out in order with the rest).
 	class LcdFeed
 	{
 	public:
@@ -300,7 +398,7 @@ namespace mdJucePlugin
 				m_last.clear();
 				return;
 			}
-			if(_tick % 8 != 0)
+			if(!due(_tick, g_lcdMs))
 				return;
 			std::vector<uint8_t> bits;
 			if(_read(bits) && bits != m_last)

@@ -7,20 +7,19 @@
 
 #include "mmDesk/mmDesk.h"
 
-#include "mdLib/mdautomation.h"
+#include "deskWire/mmWire.h"
 
-#include "juce_core/juce_core.h"
-
-#include <array>
 #include <deque>
 
 namespace mdJucePlugin
 {
-	namespace json = elektronData::json;
-
 	namespace
 	{
-		double nowMs() { return juce::Time::getMillisecondCounterHiRes(); }
+		double nowMs() { return sessionNowMs(); }
+
+		// How often the emulator engine asks the device for the probe and the working kit.
+		constexpr double g_probeMs = 32;
+		constexpr double g_memoryMs = 32;
 	}
 
 	// A Monomachine engine also plays the page's keyboard and joystick (channel messages).
@@ -66,12 +65,11 @@ namespace mdJucePlugin
 				_desk.onDeviceSysex(m);
 			}
 			_desk.onTelemetry(m_link.readTelemetry());
-			if(_tick % 4 != 0)
-				return;
-			_desk.setProbe(m_link.probe());
+			if(due(_tick, g_probeMs))
+				_desk.setProbe(m_link.probe());
 			m_lcd.step(_desk, _tick, [this](std::vector<uint8_t>& _bits) { return m_link.readLcd(_bits); });
 			std::vector<uint8_t> region;
-			if(m_link.readWorkingKit(region))
+			if(due(_tick, g_memoryMs) && m_link.readWorkingKit(region))
 				_desk.onWorkingKit(region);
 			// The working kit from memory follows host automation by itself.
 			m_link.drainParameterChanges([](uint8_t, uint8_t, uint8_t, uint8_t) {});
@@ -83,43 +81,31 @@ namespace mdJucePlugin
 		LcdFeed m_lcd;
 	};
 
-	// A real Monomachine on the plug-in's MIDI in and out at DIN speed: SysEx, CCs and NRPN out (on the
-	// machine's base channel, a fact the adapter gives), PLAY/STOP as MIDI Start/Stop; no panel, so
-	// dumps need the machine parked on SYSEX RECV by the user (the capabilities say so).
+	// A real Monomachine on the plug-in's MIDI in and out at DIN speed (deskWire): SysEx, CCs and NRPN
+	// out on the machine's base channel (a fact the adapter gives), PLAY/STOP as MIDI Start/Stop. The
+	// plug-in's MIDI is the wire's while this engine lives. No panel, so dumps need the machine parked
+	// on SYSEX RECV by the user (the capabilities say so).
 	class MmWireEngine final : public MmEngine
 	{
 	public:
-		explicit MmWireEngine(DeskSession& _session) : m_wire(midiWireOf(_session.processor())) {}
+		explicit MmWireEngine(DeskSession& _session) : m_wire(_session.processor()) {}
 
 		mmDesk::DevicePort device() override
 		{
 			mmDesk::DevicePort p;
-			p.sendSysex = [this](const std::vector<uint8_t>& _m) { m_wire.send(_m); };
+			p.sendSysex = [this](const std::vector<uint8_t>& _m) { m_wire.wire().send(_m); };
 			p.sendParam = [this](const uint8_t _t, const uint8_t _p, const uint8_t _i, const uint8_t _v)
 			{
-				if(const auto m = md::automation::encodeParameterChange(md::MachineModel::Monomachine, {_p, _t, _i, _v}, m_channel))
-					m_wire.send({(*m)[0], (*m)[1], (*m)[2]});
+				if(const auto m = deskWire::mm::param(m_channel, _t, _p, _i, _v))
+					m_wire.wire().send(*m);
 			};
-			p.sendNrpn = [this](const uint8_t _t, const uint8_t _p, const uint8_t _v)
-			{
-				const auto status = static_cast<uint8_t>(0xb0 | m_channel);
-				m_wire.send({status, 99, static_cast<uint8_t>(_t & 0x7f)});
-				m_wire.send({status, 98, static_cast<uint8_t>(_p & 0x7f)});
-				m_wire.send({status, 6, static_cast<uint8_t>(_v & 0x7f)});
-			};
+			p.sendNrpn = [this](const uint8_t _t, const uint8_t _p, const uint8_t _v) { m_wire.wire().send(deskWire::mm::nrpn(m_channel, _t, _p, _v)); };
 			p.pressKeys = [this](const std::vector<mmDesk::Key>& _k)
 			{
-				std::vector<uint8_t> bytes;
-				for(const auto k : _k)
-				{
-					const auto b = MidiWire::realtimeOf(k == mmDesk::Key::Play ? "play" : k == mmDesk::Key::Stop ? "stop" : "");
-					if(!b)
-						return false;
-					bytes.push_back(b);
-				}
-				for(const auto b : bytes)
-					m_wire.send({b});
-				return true;
+				const auto bytes = deskWire::realtimeOf(_k);
+				if(bytes)
+					m_wire.wire().send(*bytes);
+				return bytes.has_value();
 			};
 			p.baseChannel = [this](const uint8_t _ch) { m_channel = _ch; };
 			p.nowMs = [] { return nowMs(); };
@@ -129,17 +115,17 @@ namespace mdJucePlugin
 		deskCore::LifeFacts::Probe probe() override { return deskCore::LifeFacts::Probe::Running; }
 		bool sendMidi(const uint8_t _s, const uint8_t _d1, const uint8_t _d2) override
 		{
-			m_wire.send({_s, _d1, _d2});
+			m_wire.wire().send(deskWire::Bytes{_s, _d1, _d2});
 			return true;
 		}
 
 		void step(mmDesk::Desk& _desk, uint64_t) override
 		{
-			m_wire.pump(nowMs(), [&_desk](const std::vector<uint8_t>& _m) { _desk.onDeviceSysex(_m); });
+			m_wire.wire().pump(nowMs(), [&_desk](const std::vector<uint8_t>& _m) { _desk.onDeviceSysex(_m); });
 		}
 
 	private:
-		MidiWire m_wire;
+		PluginWire m_wire;
 		uint8_t m_channel = 0;
 	};
 
@@ -149,28 +135,16 @@ namespace mdJucePlugin
 	{
 	public:
 		explicit MmSession(AudioPluginAudioProcessor& _processor)
-			: SessionOf<mmDesk::Desk>(_processor, engines(), learnModel(), page(), [this](std::unique_ptr<mmDesk::MmAdapter> _adapter)
-			{
-				mmDesk::Desk::Port p;
-				p.device.nowMs = [] { return nowMs(); };
-				p.toPage = [this](const Value& _m) { toPage(_m); };
-				p.saveSetup = [this](const Value& _setup)
-				{
-					m_processor.setDeskSetup(json::write(_setup));
-					m_setupVersion = m_processor.getDeskSetupVersion();
-				};
-				return std::make_unique<mmDesk::Desk>(std::move(_adapter), p);
-			})
+			: SessionOf<mmDesk::Desk>(_processor, engines(), learnModel(), page(), std::nullopt)
 		{
-			loadSetup();
 		}
 
 	private:
 		static std::vector<Record> engines()
 		{
 			return {
-				{mmDesk::emulatorProfile(), [](DeskSession& _s) { return std::make_unique<MmEmuEngine>(_s); }},
-				{mmDesk::wireProfile(), [](DeskSession& _s) { return std::make_unique<MmWireEngine>(_s); }}};
+				{mmDesk::emulatorProfile(), [](DeskSession& _s) { return std::make_unique<MmEmuEngine>(_s); }, {}},
+				{mmDesk::wireProfile(), [](DeskSession& _s) { return std::make_unique<MmWireEngine>(_s); }, midiOutAvailability}};
 		}
 
 		static WebPageHost::Spec page()
@@ -178,73 +152,36 @@ namespace mdJucePlugin
 			return {"mmStudio.html", "gearmulator-mmStudio.log", "GEARMULATOR_MMSTUDIO_SELFTEST", {"1", "mmcpu", "p6"}, 1440};
 		}
 
+		// A synth track's DATA page values and level: the parameters that have a plug-in parameter.
 		static MidiLearnCommands::Model learnModel()
 		{
 			MidiLearnCommands::Model m;
 			m.pages = true;
 			m.tracks = 6;
 			m.refusal = "learn: a synth track's DATA page value or level (MIDI page values are NRPN, not learnable)";
-			m.parameter = [](const MidiLearnCommands::Target& _t)
-			{
-				if(_t.pg < 0 || _t.pg > 7 || _t.i < 0 || _t.i > 7)
-					return std::string();
-				return std::string(MmStudioLink::parameterName(static_cast<uint8_t>(_t.pg), static_cast<uint8_t>(_t.i)));
-			};
-			m.targetOf = [](const std::string& _name) -> std::optional<MidiLearnCommands::Target>
-			{
-				for(uint8_t pg = 0; pg <= 7; ++pg)
-					for(uint8_t i = 0; i < 8; ++i)
-						if(*MmStudioLink::parameterName(pg, i) && _name == MmStudioLink::parameterName(pg, i))
-							return MidiLearnCommands::Target{-1, pg, i};
-				return {};
-			};
+			constexpr uint8_t dataPages = 7, levelPage = 7;
+			for(uint8_t pg = 0; pg < dataPages; ++pg)
+				for(uint8_t i = 0; i < 8; ++i)
+					if(const std::string name = MmStudioLink::parameterName(pg, i); !name.empty())
+						m.params.push_back({{-1, pg, i}, name});
+			m.params.push_back({{-1, levelPage, 0}, MmStudioLink::parameterName(levelPage, 0)});
 			return m;
 		}
 
-		// A project restore brings its modulators: the desk takes them.
-		void stepExtra(uint64_t) override
-		{
-			if(m_processor.getDeskSetupVersion() != m_setupVersion)
-				loadSetup();
-		}
-
-		// The app modulators from the project (the processor's setup chunk), if any.
-		void loadSetup()
-		{
-			m_setupVersion = m_processor.getDeskSetupVersion();
-			const auto text = m_processor.getDeskSetup();
-			if(text.empty())
-				return;
-			if(const auto doc = json::parse(text))
-				desk().loadSetup(*doc);
-		}
-
-		// {"op":"midi","b":[status, data1, data2]}: the page's keyboard and joystick, to the engine (the
-		// table checked b is a list; its values are checked here).
+		// {"op":"midi","b":[status, data1, data2]}: the page's keyboard and joystick, to the engine. The
+		// table checked b is three integers 0..0xef; which is the status and which are data is here.
 		void onMidi(const Value& _message) override
 		{
-			const auto* b = _message.find("b");
-			std::array<int, 3> v{-1, 0, 0};
-			for(size_t i = 0; i < 3 && i < b->asArray().size(); ++i)
-				if(b->asArray()[i].isNumber())
-					v[i] = static_cast<int>(b->asArray()[i].asNumber());
+			const auto& b = _message.find("b")->asArray();
+			const auto v = [&](const size_t _i) { return static_cast<int>(b[_i].asNumber()); };
 			auto& engine = static_cast<MmEngine&>(currentEngine());
-			const bool ok = v[0] >= 0x80 && v[0] < 0xf0 && v[1] >= 0 && v[1] < 128 && v[2] >= 0 && v[2] < 128
-				&& engine.sendMidi(static_cast<uint8_t>(v[0]), static_cast<uint8_t>(v[1]), static_cast<uint8_t>(v[2]));
+			const bool ok = v(0) >= 0x80 && v(1) < 0x80 && v(2) < 0x80
+				&& engine.sendMidi(static_cast<uint8_t>(v(0)), static_cast<uint8_t>(v(1)), static_cast<uint8_t>(v(2)));
 			if(!ok)
 				reply(_message, false, "midi: a channel message, [status 0x80-0xef, data, data]");
 		}
 
-		std::string statusExtra() const override
-		{
-			return "pattern " + std::to_string(desk().currentPattern()) + " kit " + std::to_string(desk().currentKit()) + " loaded "
-				+ std::to_string(desk().loaded()) + " recv " + desk().recv().stateName() + " round trip "
-				+ std::to_string(static_cast<int>(desk().lastRoundTripMs())) + " ms";
-		}
-
 		const char* missingText() const override { return "No MM OS 1.32B ROM is running yet. After adding it, reopen the plug-in."; }
-
-		uint32_t m_setupVersion = 0;
 	};
 
 	std::unique_ptr<DeskSession> makeMmSession(AudioPluginAudioProcessor& _processor)

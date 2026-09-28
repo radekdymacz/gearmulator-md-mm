@@ -7,6 +7,7 @@ add_subdirectory(mdDataLink)
 add_subdirectory(mdDesk)
 add_subdirectory(mmDesk)
 add_subdirectory(mdLib)
+add_subdirectory(deskWire)
 
 if(BUILD_TESTING)
 	add_subdirectory(mdLibTest)

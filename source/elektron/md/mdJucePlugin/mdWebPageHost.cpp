@@ -72,6 +72,8 @@ namespace mdJucePlugin
 
 		bool pageLoadHadNetworkError(const juce::String& _error) override
 		{
+			// What a user of any build needs to report a blank editor.
+			juce::Logger::writeToLog("Gearmulator editor page: load error " + _error);
 			m_onLoadEvent("load error " + _error);
 			return false;
 		}
@@ -106,6 +108,9 @@ namespace mdJucePlugin
 		// This instance's page file (P6: one per instance, so two open editors never share one).
 		if(m_file != juce::File())
 			m_file.deleteFile();
+		// And its log, unless a self-test ran: its runner reads the log after the app has gone.
+		if(m_logFile != juce::File() && m_selfTest.isEmpty())
+			m_logFile.deleteFile();
 	}
 
 	juce::Component& WebPageHost::component()
@@ -114,8 +119,10 @@ namespace mdJucePlugin
 	}
 
 	// This instance's log (P6: one per instance, like its page file; two editors never share one).
-	void WebPageHost::log(const juce::String& _line) const
+	// Only diagnostics builds keep one.
+	void WebPageHost::log([[maybe_unused]] const juce::String& _line) const
 	{
+#if MDMM_DIAGNOSTICS
 		if(m_logFile == juce::File())
 		{
 			const juce::String name(m_spec.log);
@@ -123,6 +130,7 @@ namespace mdJucePlugin
 				+ "-" + juce::String::toHexString(juce::Random::getSystemRandom().nextInt()) + ".log");
 		}
 		m_logFile.appendText(juce::Time::getCurrentTime().toString(false, true, true, true) + " " + _line + "\n");
+#endif
 	}
 
 	// WKWebView may only read the one file it loads, so stylesheets, scripts and fonts are inlined.

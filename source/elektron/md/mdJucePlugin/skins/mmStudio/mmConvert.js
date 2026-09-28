@@ -11,7 +11,9 @@
    knob value inside one enumeration step, residue bytes, undecoded fields)
    rides along from the base document untouched.
 
-   Depends on the mockup's tables: MACH, PAGES, EN, INPUTS, machName, clamp.
+   Depends on the mockup's tables: MACH, PAGES, EN, INPUTS, machName, clamp. The enumeration
+   counts (which values are list indices, and how many) are the catalogue's (useCatalogue): the
+   plug-in's one table (MmModel::catalogue), given before any document is converted.
    The modulators (modToFw, modToPage) are the Control workspace's setup <-> md-desk/modulators. */
 const MmConvert = (() => {
 	const clone = o => JSON.parse(JSON.stringify(o));
@@ -21,19 +23,37 @@ const MmConvert = (() => {
 	/* ASSIGN tabs -> firmware source (6 sources x 2 rows; source 1, JOY L, is
 	   what JOY R/L becomes with mirror off and has no tab of its own). */
 	const TABS = [["JOY RL", 0], ["JOY U", 2], ["JOY D", 3], ["VEL", 4], ["KEY", 5]];
-	const LFO_N = [9, 8, 5, 11, 7];	// PAGE DEST TRIG WAVE MULT (mmLfo*, OS 1.32B)
+	/* the catalogue's enumeration counts: lfo = the LFO page's PAGE DEST TRIG WAVE MULT, synth =
+	   {machine: {slot: n}} (none before the catalogue) */
+	let COUNTS = { lfo: [], synth: {} };
+	/* takes the catalogue ("mm-desk/catalogue"); returns where the mockup's own tables (MACH, EN: its
+	   names and labels) differ from it, for a log line and the tests */
+	function useCatalogue(cat) {
+		const lfo = cat.lfo, synth = {}, off = [];
+		for (const m of cat.machines) {
+			synth[m.name] = {};
+			for (const [i, list] of Object.entries(m.enums || {})) synth[m.name][i] = list.length;
+			const mine = MACH[m.name];
+			if (!mine) { off.push("machine " + m.name + " is not in the mockup"); continue; }
+			m.synth.forEach((n, i) => {
+				const name = mine.p[i] || "";
+				if (name !== n) off.push(`${m.name} slot ${i + 1}: mockup ${name || "-"}, catalogue ${n || "-"}`);
+				const en = name && (EN[m.name + "." + name] || EN[name]);
+				if (en && en.length !== (synth[m.name][i] || 0)) off.push(`${m.name} ${name}: mockup ${en.length} values, catalogue ${synth[m.name][i] || 0}`);
+			});
+		}
+		/* the LFO page: PAGE, DEST (a page's parameters), TRIG, WAVE, MULT */
+		COUNTS = { lfo: [lfo.pages.length, cat.machines[0].synth.length, lfo.trigs.length, lfo.waves.length, lfo.mults.length], synth };
+		return off;
+	}
 
-	/* enumerations: index = floor(v * n / 128), value = ceil(i * 128 / n) (MM-P1) */
+	/* enumerations: index = floor(v * n / 128), value = ceil(i * 128 / n) (MM-P1, the catalogue's enumRule) */
 	const eIdx = (v, n) => Math.min(n - 1, Math.floor(v * n / 128));
 	const eVal = (i, n) => Math.min(127, Math.ceil(i * 128 / n));
 	function enumN(machine, page, i) {
-		if (page.startsWith("LF")) return LFO_N[i] || 0;
+		if (page.startsWith("LF")) return COUNTS.lfo[i] || 0;
 		if (page !== "SYN") return 0;
-		const name = MACH[machine]?.p[i];
-		if (!name) return 0;
-		const en = EN[machine + "." + name] || EN[name];
-		if (en) return en.length;
-		return machine === "DPRO-WAVE" && name === "WAVE" ? 32 : 0;
+		return (COUNTS.synth[machine] || {})[i] || 0;
 	}
 	const valueToPage = (m, pg, i, raw) => { const n = enumN(m, pg, i); return n ? eIdx(raw, n) : raw; };
 	/* back to firmware units; an unchanged index keeps the base's raw value */
@@ -356,6 +376,6 @@ const MmConvert = (() => {
 
 	return {
 		kitToPage, kitToFw, kitName, kitEmpty, patternToPage, patternToFw, songToPage, songToFw, globalToFw,
-		modToFw, modToPage, hasTrigs, machineName, enumN, valueToPage, valueToFw, lockKey, parseLockKey, TABS
+		modToFw, modToPage, hasTrigs, machineName, useCatalogue, enumN, valueToPage, valueToFw, lockKey, parseLockKey, TABS
 	};
 })();

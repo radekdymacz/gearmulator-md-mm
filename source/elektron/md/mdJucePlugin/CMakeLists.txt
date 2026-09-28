@@ -96,11 +96,23 @@ file(GLOB MM_SKIN_ASSETS CONFIGURE_DEPENDS
 	"skins/mmStudio/mmMockup.js" "skins/mmStudio/mmConvert.js" "skins/mmStudio/mmAdapter.js"
 	# shared with the Machinedrum Editor: the page bridge and the OFL fonts
 	"skins/mdStudio/mdDeskBridge.js" "skins/mdStudio/fonts/*.ttf")
-# The tests are not the page: node tests never ship, the self-tests only with the diagnostics.
-list(FILTER MD_SKIN_ASSETS EXCLUDE REGEX "Test\\.js$")
+# The tests are not the page, named one by one, not by a file-name pattern: the node tests never
+# ship, the self-tests only with the diagnostics. A test that was renamed or moved stops the
+# configure, so it cannot slip into the glob. The MM glob lists its page files already.
+set(MD_NODE_TESTS "skins/mdStudio/mdDeskModelTest.js")
+set(MD_SELF_TESTS "skins/mdStudio/mdDeskSelfTest.js")
+set(MM_SELF_TESTS "skins/mmStudio/mmSelfTest.js")
+foreach(test ${MD_NODE_TESTS} ${MD_SELF_TESTS} ${MM_SELF_TESTS})
+	if(NOT EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/${test}")
+		message(FATAL_ERROR "${test} is not there: update the editors' test lists in ${CMAKE_CURRENT_LIST_FILE}")
+	endif()
+endforeach()
+foreach(test ${MD_NODE_TESTS} ${MD_SELF_TESTS})
+	list(REMOVE_ITEM MD_SKIN_ASSETS "${CMAKE_CURRENT_SOURCE_DIR}/${test}")
+endforeach()
 if(gearmulator_MDMM_DIAGNOSTICS)
-	list(APPEND MD_SKIN_ASSETS "skins/mdStudio/mdDeskSelfTest.js")
-	list(APPEND MM_SKIN_ASSETS "skins/mmStudio/mmSelfTest.js")
+	list(APPEND MD_SKIN_ASSETS ${MD_SELF_TESTS})
+	list(APPEND MM_SKIN_ASSETS ${MM_SELF_TESTS})
 endif()
 
 juce_add_binary_data(mdJucePlugin_BinaryData SOURCES
@@ -117,8 +129,8 @@ set(GEARMULATOR_ICON_BIG_mmJucePlugin "${CMAKE_CURRENT_SOURCE_DIR}/icons/mm-1024
 set(GEARMULATOR_ICON_SMALL_mmJucePlugin "${CMAKE_CURRENT_SOURCE_DIR}/icons/mm-32.png")
 createJucePlugin(mdJucePlugin "Gearmulator MD" TRUE "Tmdr" mdJucePlugin_BinaryData mdLib)
 createJucePlugin(mmJucePlugin "Gearmulator MM" TRUE "Tmno" mmJucePlugin_BinaryData mdLib)
-target_link_libraries(mdJucePlugin PRIVATE elektronData mdDataLink mdDesk mmDesk deskHost)
-target_link_libraries(mmJucePlugin PRIVATE elektronData mdDataLink mdDesk mmDesk deskHost)
+target_link_libraries(mdJucePlugin PRIVATE elektronData mdDataLink mdDesk mmDesk deskHost deskWire)
+target_link_libraries(mmJucePlugin PRIVATE elektronData mdDataLink mdDesk mmDesk deskHost deskWire)
 
 # MD/MM expose an optional stereo input to plug-in hosts. Starting the
 # standalone with that input active makes CoreAudio combine the built-in input

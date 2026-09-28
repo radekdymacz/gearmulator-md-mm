@@ -38,6 +38,42 @@ namespace mdJucePlugin
 		return {intOf(_message, "t"), m_model.pages ? intOf(_message, "pg") : -1, intOf(_message, "i", m_model.pages ? 0 : -1)};
 	}
 
+	std::string MidiLearnCommands::parameterOf(const Target& _t) const
+	{
+		if(_t.t < 0 || _t.t >= m_model.tracks)
+			return {};
+		for(const auto& p : m_model.params)
+			if(p.at.pg == _t.pg && p.at.i == _t.i)
+				return p.name;
+		return {};
+	}
+
+	std::optional<MidiLearnCommands::Target> MidiLearnCommands::targetOfName(const std::string& _name) const
+	{
+		for(const auto& p : m_model.params)
+			if(p.name == _name)
+				return p.at;
+		return std::nullopt;
+	}
+
+	MidiLearnCommands::Value MidiLearnCommands::limits() const
+	{
+		json::Value params = json::Value::array();
+		for(const auto& p : m_model.params)
+		{
+			json::Value v = json::Value::object();
+			if(m_model.pages)
+				v.set("pg", p.at.pg);
+			v.set("i", p.at.i);
+			v.set("name", p.name);
+			params.push(std::move(v));
+		}
+		json::Value l = json::Value::object();
+		l.set("tracks", m_model.tracks);
+		l.set("params", std::move(params));
+		return l;
+	}
+
 	void MidiLearnCommands::reply(const Value& _message, const bool _ok, const std::string& _note) const
 	{
 		m_publish(deskCore::resultMessage(_message, _ok ? std::vector<std::string>{} : std::vector<std::string>{_note}, _note));
@@ -55,7 +91,7 @@ namespace mdJucePlugin
 			return;
 		}
 		const auto target = targetOf(_message);
-		const auto name = target.t >= 0 && target.t < m_model.tracks ? m_model.parameter(target) : std::string();
+		const auto name = parameterOf(target);
 		const auto save = [&](const pluginLib::MidiLearnPreset& _preset)
 		{
 			translator->setPreset(_preset);
@@ -91,10 +127,11 @@ namespace mdJucePlugin
 		{
 			// A mapping made without LEARN: a controller row x a track's parameter.
 			const int cc = intOf(_message, "cc");
+			// The table checked ch is 0-15; without it, all channels.
 			const int ch = intOf(_message, "ch", pluginLib::MidiLearnMapping::AllChannels);
-			if(name.empty() || (ch > 15 && ch != pluginLib::MidiLearnMapping::AllChannels))
+			if(name.empty())
 			{
-				reply(_message, false, "learnAdd: a learnable parameter of a track, on channel 1-16 or all");
+				reply(_message, false, "learnAdd: a learnable parameter of a track (learn.doc.limits)");
 				return;
 			}
 			pluginLib::MidiLearnMapping mapping;
@@ -163,7 +200,7 @@ namespace mdJucePlugin
 			for(size_t n = 0; n < list.size(); ++n)
 			{
 				const auto& m = list[n];
-				const auto target = m_model.targetOf(m.paramName).value_or(Target{});
+				const auto target = targetOfName(m.paramName).value_or(Target{});
 				json::Value v = json::Value::object();
 				v.set("index", static_cast<int>(n));
 				v.set("t", m.part == pluginLib::MidiLearnMapping::AutoPart ? -1 : static_cast<int>(m.part));
@@ -191,6 +228,7 @@ namespace mdJucePlugin
 		}
 		else
 			doc.set("learning", json::Value());
+		doc.set("limits", limits());
 		json::Value m = json::Value::object();
 		m.set("type", "learn");
 		m.set("doc", std::move(doc));

@@ -26,7 +26,7 @@ namespace mdJucePlugin
 		struct Spec
 		{
 			std::string page;					// the bundled page, e.g. "mdStudio.html"
-			std::string log;					// the log file in the temp folder, e.g. "gearmulator-mdStudio.log"
+			std::string log;					// the diagnostics log in the temp folder, e.g. "gearmulator-mdStudio.log"
 			std::string selfTestVariable;		// GEARMULATOR_MDSTUDIO_SELFTEST
 			std::vector<std::string> selfTests;	// the values (prefixes) that make the page test itself
 			int designWidth = 1440;				// below it the page is zoomed out as a whole
@@ -47,8 +47,8 @@ namespace mdJucePlugin
 		void layout(const juce::Rectangle<int>& _bounds);
 		bool pageReady() const { return m_pageReady; }
 		const juce::String& selfTest() const { return m_selfTest; }
+		// A line of this instance's log (diagnostics builds only: a release build writes no file).
 		void log(const juce::String& _line) const;
-		mutable juce::File m_logFile;
 
 	private:
 		void onBridge(const std::string& _url);
@@ -62,5 +62,6 @@ namespace mdJucePlugin
 		juce::File m_file;
 		juce::String m_selfTest;
 		bool m_pageReady = false;
+		mutable juce::File m_logFile;	// created on the first line
 	};
 }

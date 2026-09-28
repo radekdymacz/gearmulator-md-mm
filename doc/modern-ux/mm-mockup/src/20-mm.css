@@ -526,6 +526,11 @@ body.engwait #main,body.engwait #rail{pointer-events:none;opacity:.6;transition:
 .bootscr .bs2{font-size:10px;letter-spacing:.06em}
 .bootscr .bsbar{width:62%;height:6px;box-shadow:inset 0 0 0 1px var(--ink);border-radius:1px;overflow:hidden}
 .bootscr .bsbar i{display:block;height:100%;width:0;background:var(--ink);transition:width .2s steps(4)}
+/* a host's own LCD picture (MMView.setLcd: the machine's screen while it starts), cross-faded out */
+.bootscr.fw{padding:0;gap:0;place-items:center;align-content:center;transition:opacity .45s ease}
+.bootscr.fw>*:not(canvas){display:none}
+.bootscr canvas.fwlcd{height:100%;max-width:100%;image-rendering:pixelated;image-rendering:crisp-edges}
+.bootscr.fading{opacity:0}
 /* ===== v5: Sequence rebalance: the roll takes what is left, the lock lane gets MD height ===== */
 #seq canvas.roll[data-big]{height:clamp(240px,calc(100vh - 512px),640px)!important}
 .ws-seq .lb{height:170px!important}

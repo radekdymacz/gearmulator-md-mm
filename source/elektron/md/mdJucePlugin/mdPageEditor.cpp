@@ -59,19 +59,19 @@ namespace mdJucePlugin
 
 	void PageEditor::onPageMessage(const json::Value& _message)
 	{
-		// deskHost's table says who acts: the window for its menu and the AUDIO / MIDI panel, the
-		// session for the rest.
-		if(const auto* row = deskHost::commands().find(deskCore::opOf(_message)); row && deskHost::isWindowAction(row->handler))
+		// deskHost's table says who acts (its actor column): the window for its menu and the AUDIO /
+		// MIDI panel, the session for the rest.
+		if(const auto* row = deskHost::commands().find(deskCore::opOf(_message)); row && row->handler.actor == deskHost::Actor::Window)
 		{
 			if(const auto errors = deskHost::Table::check(*row, _message); !errors.empty())
 				m_page->send(deskCore::resultMessage(_message, errors, {}));
-			else if(row->handler == deskHost::Action::Menu)
+			else if(row->handler.action == deskHost::Action::Menu)
 			{
 				// The editor's menu (skins, scale, settings) where the page was right-clicked.
 				if(auto* state = getProcessor().getEditorState())
 					state->createPopupMenu().showMenuAsync(juce::PopupMenu::Options().withMousePosition());
 			}
-			else if(!m_audio || !m_audio->handle(row->handler, _message))
+			else if(!m_audio || !m_audio->handle(row->handler.action, _message))
 				m_page->send(deskCore::resultMessage(_message, {"The audio devices are the standalone app's."}, {}));
 			return;
 		}

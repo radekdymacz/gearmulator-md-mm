@@ -6,24 +6,22 @@
 
 #include "synthLib/midiTypes.h"
 
+#include "juce_core/juce_core.h"
+
 namespace mdJucePlugin
 {
-	namespace
-	{
-		// The session's pace: the playhead (the app modulators move on its steps) is looked at every
-		// 8 ms, faster than the fastest step (300 BPM at 2X: 25 ms); the desk's own work runs at
-		// about 30 Hz (every fourth step).
-		constexpr int g_stepMs = 8;
-	}
-
 	pluginLib::Processor& pluginProcessorOf(AudioPluginAudioProcessor& _processor)
 	{
 		return _processor;
 	}
 
+	double sessionNowMs()
+	{
+		return juce::Time::getMillisecondCounterHiRes();
+	}
+
 	DeskSession::DeskSession(AudioPluginAudioProcessor& _processor) : m_processor(_processor)
 	{
-		startTimer(g_stepMs);
 	}
 
 	DeskSession::~DeskSession()
@@ -33,9 +31,10 @@ namespace mdJucePlugin
 
 	std::unique_ptr<DeskSession> DeskSession::create(AudioPluginAudioProcessor& _processor)
 	{
-		if(_processor.getModel() == md::MachineModel::Monomachine)
-			return makeMmSession(_processor);
-		return makeMdSession(_processor);
+		auto session = _processor.getModel() == md::MachineModel::Monomachine ? makeMmSession(_processor) : makeMdSession(_processor);
+		// Steps start once the whole session exists.
+		session->startTimer(static_cast<int>(g_stepMs));
+		return session;
 	}
 
 	void DeskSession::attach(ToPage _toPage)
@@ -61,11 +60,6 @@ namespace mdJucePlugin
 		toPage(deskCore::resultMessage(_message, _ok ? std::vector<std::string>{} : std::vector<std::string>{_note}, _note));
 	}
 
-	void DeskSession::setExternalMidi(const bool _on) const
-	{
-		m_processor.setExternalMidi(_on);
-	}
-
 	void DeskSession::revealRomFolder(const Value& _message) const
 	{
 		const juce::File folder(juce::String::fromUTF8(m_processor.getPublicRomFolder().c_str()));
@@ -74,45 +68,70 @@ namespace mdJucePlugin
 		reply(_message, true, {});
 	}
 
-	void MidiWire::pump(const double _nowMs, const std::function<void(const Bytes&)>& _in)
+	void SetupStore::save(const Value& _setup)
 	{
-		for(auto& m : m_pacer.take(_nowMs))
-			m_out(m);
-		for(const auto& m : m_in())
-			_in(m);
+		m_processor.setDeskSetup(elektronData::json::write(_setup));
+		m_seen = m_processor.getDeskSetupVersion();
 	}
 
-	uint8_t MidiWire::realtimeOf(const std::string& _key)
+	std::optional<std::string> SetupStore::restored()
 	{
-		static const std::map<std::string, uint8_t> keys{{"play", 0xfa}, {"stop", 0xfc}};
-		const auto it = keys.find(_key);
-		return it == keys.end() ? 0 : it->second;
+		const auto version = m_processor.getDeskSetupVersion();
+		if(m_seen && *m_seen == version)
+			return std::nullopt;
+		m_seen = version;
+		return m_processor.getDeskSetup();
 	}
 
-	MidiWire midiWireOf(AudioPluginAudioProcessor& _processor)
+	namespace
 	{
-		auto* p = &_processor;
-		return MidiWire([p](const MidiWire::Bytes& _m)
+		deskWire::MidiWire wireOf(AudioPluginAudioProcessor& _processor)
 		{
-			synthLib::SMidiEvent e(synthLib::MidiEventSource::Editor);
-			if(!_m.empty() && _m[0] == 0xf0)
-				e.sysex.assign(_m.begin(), _m.end());
-			else
+			auto* p = &_processor;
+			return deskWire::MidiWire([p](const deskWire::Bytes& _m)
 			{
-				e.a = _m.size() > 0 ? _m[0] : 0;
-				e.b = _m.size() > 1 ? _m[1] : 0;
-				e.c = _m.size() > 2 ? _m[2] : 0;
-			}
-			p->sendExternalMidi(e);
-		}, [p]
-		{
-			std::vector<synthLib::SMidiEvent> in;
-			p->drainExternalMidiIn(in);
-			std::vector<MidiWire::Bytes> out;
-			for(const auto& e : in)
-				if(!e.sysex.empty())
-					out.emplace_back(e.sysex.begin(), e.sysex.end());
-			return out;
-		});
+				synthLib::SMidiEvent e(synthLib::MidiEventSource::Editor);
+				if(!_m.empty() && _m[0] == 0xf0)
+					e.sysex.assign(_m.begin(), _m.end());
+				else
+				{
+					e.a = _m.size() > 0 ? _m[0] : 0;
+					e.b = _m.size() > 1 ? _m[1] : 0;
+					e.c = _m.size() > 2 ? _m[2] : 0;
+				}
+				p->sendExternalMidi(e);
+			}, [p]
+			{
+				std::vector<synthLib::SMidiEvent> in;
+				p->drainExternalMidiIn(in);
+				std::vector<deskWire::Bytes> out;
+				for(const auto& e : in)
+					if(!e.sysex.empty())
+						out.emplace_back(e.sysex.begin(), e.sysex.end());
+				return out;
+			});
+		}
+	}
+
+	PluginWire::PluginWire(AudioPluginAudioProcessor& _processor) : m_processor(_processor), m_wire(wireOf(_processor))
+	{
+		m_processor.setExternalMidi(true);
+	}
+
+	PluginWire::~PluginWire()
+	{
+		m_processor.setExternalMidi(false);
+	}
+
+	Availability midiOutAvailability(const DeskSession& _session)
+	{
+		auto& p = _session.processor();
+		// The standalone's MIDI output is chosen in its AUDIO / MIDI panel, after the engine. A plug-in
+		// declares no MIDI out to its host (NEEDS_MIDI_OUTPUT FALSE), so there only the plug-in's own
+		// MIDI port reaches a machine.
+		if(p.wrapperType == juce::AudioProcessor::wrapperType_Standalone || static_cast<const juce::AudioProcessor&>(p).producesMidi()
+			|| p.getMidiPorts().getOutputId().isNotEmpty())
+			return {};
+		return {false, "The plug-in has no MIDI out in this host: HW MIDI works in the standalone app."};
 	}
 }

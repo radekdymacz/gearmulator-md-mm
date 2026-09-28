@@ -15,6 +15,7 @@
 
 #include "mdDesk/mdDesk.h"
 #include "deskCore/deskPacer.h"
+#include "deskWire/mdWire.h"
 
 #include "elektronData/mdCommands.h"
 #include "elektronData/mdJson.h"
@@ -67,15 +68,12 @@ namespace
 		{
 			mdDesk::Desk::Port port;
 			port.device.sendSysex = [this](const Bytes& _b) { m_out.push_back(_b); };
+			// Kit values and mutes as the wire's CCs on the base channel (deskWire, the plug-in's
+			// encoders), the base channel as the adapter gives it.
 			port.device.sendKitParam = [this](const uint8_t _t, const uint8_t _i, const uint8_t _v)
 			{
-				const md::automation::ParameterChange change{
-					static_cast<uint8_t>(_i == 24 ? md::automation::machinedrum::Level : _i / 8), _t,
-					static_cast<uint8_t>(_i == 24 ? 0 : _i % 8), _v};
-				const auto cc = md::automation::encodeParameterChange(md::MachineModel::Machinedrum, change,
-					baseChannel());
-				if(cc)
-					m_out.push_back({(*cc)[0], (*cc)[1], (*cc)[2]});
+				if(const auto cc = deskWire::md::kitParam(m_channel, _t, _i, _v))
+					m_out.push_back(*cc);
 			};
 			port.device.pressKey = [this](const std::string& _key)
 			{
@@ -92,9 +90,10 @@ namespace
 			};
 			port.device.sendMute = [this](const uint8_t _t, const bool _on)
 			{
-				m_out.push_back({static_cast<uint8_t>(0xb0 | (baseChannel() + (_t >> 2))), static_cast<uint8_t>(12 + (_t & 3)),
-					static_cast<uint8_t>(_on ? 1 : 0)});
+				if(const auto cc = deskWire::md::mute(m_channel, _t, _on))
+					m_out.push_back(*cc);
 			};
+			port.device.baseChannel = [this](const uint8_t _ch) { m_channel = _ch; };
 			port.toPage = [this](const Value& _m) { g_contract(_m); onPage(_m); };
 			port.device.nowMs = [this] { return ms(m_machine.now()); };
 			m_desk = std::make_unique<mdDesk::Desk>(port);
@@ -157,11 +156,7 @@ namespace
 		}
 
 	private:
-		uint8_t baseChannel() const
-		{
-			const auto& g = m_desk->documents().global;
-			return g ? g->baseChannel : 0;
-		}
+		uint8_t m_channel = 0;	// the machine's base channel (the adapter's fact)
 
 		void flushOut()
 		{
@@ -1094,29 +1089,31 @@ namespace
 	}
 
 	// P4 HW MIDI against the emulated MD as the MIDI peer ("a real Machinedrum"): the desk has
-	// no telemetry, no memory, no panel keys; SysEx and CCs go both ways at DIN speed
-	// (deskCore::DinPacer, 3125 bytes a second each way).
+	// no telemetry, no memory, no panel keys. The device port is the plug-in's wire engine's
+	// (deskWire: the MidiWire paced at DIN speed, its CCs on the base channel the adapter gives,
+	// PLAY/STOP as realtime); only the cable between it and the machine is the test's.
 	class HwRig
 	{
 	public:
 		HwRig(const Bytes& _rom, const std::string& _romName) : m_machine(_rom, _romName)
 		{
-			mdDesk::Desk::Port port;
-			port.device.sendSysex = [this](const Bytes& _b) { m_out.push(_b); };
-			port.device.sendKitParam = [this](const uint8_t _t, const uint8_t _i, const uint8_t _v)
+			const auto send = [this](const std::optional<Bytes>& _m)
 			{
-				const md::automation::ParameterChange change{static_cast<uint8_t>(_i == 24 ? md::automation::machinedrum::Level : _i / 8), _t,
-					static_cast<uint8_t>(_i == 24 ? 0 : _i % 8), _v};
-				if(const auto cc = md::automation::encodeParameterChange(md::MachineModel::Machinedrum, change, 0))
-					m_out.push({(*cc)[0], (*cc)[1], (*cc)[2]});
+				if(_m)
+					m_wire.send(*_m);
 			};
-			port.device.sendMute = [this](const uint8_t _t, const bool _on) { m_out.push({static_cast<uint8_t>(0xb0 | (_t >> 2)), static_cast<uint8_t>(12 + (_t & 3)), static_cast<uint8_t>(_on ? 1 : 0)}); };
+			mdDesk::Desk::Port port;
+			port.device.sendSysex = [this](const Bytes& _b) { m_wire.send(_b); };
+			port.device.sendKitParam = [this, send](const uint8_t _t, const uint8_t _i, const uint8_t _v) { send(deskWire::md::kitParam(m_channel, _t, _i, _v)); };
+			port.device.sendMute = [this, send](const uint8_t _t, const bool _on) { send(deskWire::md::mute(m_channel, _t, _on)); };
 			port.device.pressKey = [this](const std::string& _k)
 			{
-				if(_k == "play") { m_out.push({0xfa}); return true; }
-				if(_k == "stop") { m_out.push({0xfc}); return true; }
-				return false;
+				const auto b = deskWire::md::realtimeOf(_k);
+				if(b)
+					m_wire.send(Bytes{*b});
+				return b.has_value();
 			};
+			port.device.baseChannel = [this](const uint8_t _ch) { m_channel = _ch; };
 			port.toPage = [this](const Value& _m)
 			{
 				g_contract(_m);
@@ -1175,11 +1172,23 @@ namespace
 			}
 		};
 
+		// The cable's far end: what has arrived at the desk's side by now.
+		std::vector<Bytes> arrived()
+		{
+			std::vector<Bytes> out;
+			while(!m_toDesk.flight.empty() && m_toDesk.flight.front().first <= ms(m_machine.now()))
+			{
+				out.push_back(std::move(m_toDesk.flight.front().second));
+				m_toDesk.flight.pop_front();
+			}
+			return out;
+		}
+
+		// The session's step for the wire engine: the machine's time, then the wire (out at DIN
+		// speed, in whole), then the desk's tick. No telemetry: the wire engine feeds none.
 		void step()
 		{
 			const double now = ms(m_machine.now());
-			for(auto& b : m_out.take(now))
-				m_toMachine.send(now, std::move(b));
 			while(!m_toMachine.flight.empty() && m_toMachine.flight.front().first <= now)
 			{
 				auto b = std::move(m_toMachine.flight.front().second);
@@ -1189,23 +1198,18 @@ namespace
 					m_machine.send(b);
 			}
 			m_machine.step();
-			while(!m_toDesk.flight.empty() && m_toDesk.flight.front().first <= ms(m_machine.now()))
-			{
-				auto b = std::move(m_toDesk.flight.front().second);
-				m_toDesk.flight.pop_front();
-				m_desk->onDeviceSysex(b);
-			}
+			m_wire.pump(ms(m_machine.now()), [this](const Bytes& _b) { m_desk->onDeviceSysex(_b); });
 			if(m_machine.now() - m_lastTick >= g_rate / 30)
 			{
 				m_lastTick = m_machine.now();
-				m_desk->onTelemetry(mdDesk::Telemetry{});
 				m_desk->tick();
 			}
 		}
 
 		Machine m_machine;
 		std::unique_ptr<mdDesk::Desk> m_desk;
-		deskCore::DinPacer m_out;
+		deskWire::MidiWire m_wire{[this](const Bytes& _b) { m_toMachine.send(ms(m_machine.now()), _b); }, [this] { return arrived(); }};
+		uint8_t m_channel = 0;	// the machine's base channel (the adapter's fact)
 		Wire m_toMachine, m_toDesk;
 		std::optional<Value> m_machineDoc, m_result;
 		uint64_t m_lastTick = 0;

@@ -4,7 +4,11 @@
      node mmConvertTest.js <json-dir>...
    The JSON comes from  mmDataCorpusTest --json <json-dir> <dumps>  (factory set
    and programmed read-backs). The mockup's tables are read from mmMockup.js next
-   to this file, so the test runs against exactly what the plug-in ships. */
+   to this file, so the test runs against exactly what the plug-in ships. The
+   enumeration counts are the catalogue the plug-in sends, committed as
+   doc/modern-ux/mm-catalogue.json (mmDeskTest --write-schema writes it and fails
+   when it differs from MmModel::catalogue()); the mockup's own tables must agree
+   with it. */
 const fs = require("fs"), path = require("path"), vm = require("vm");
 
 const here = __dirname;
@@ -16,6 +20,8 @@ const ctx = vm.createContext({ console });
 vm.runInContext(data + "\n" + inputs + "\nfunction clamp(v,a=0,b=127){return Math.max(a,Math.min(b,v))}\n"
 	+ fs.readFileSync(path.join(here, "mmConvert.js"), "utf8") + "\nthis.C=MmConvert;", ctx);
 const C = ctx.C;
+const catalogue = JSON.parse(fs.readFileSync(path.join(here, "../../../../../../doc/modern-ux/mm-catalogue.json"), "utf8"));
+const catalogueOff = C.useCatalogue(catalogue);
 
 function diff(a, b, at = "") {
 	if (typeof a !== typeof b || Array.isArray(a) !== Array.isArray(b) || (a === null) !== (b === null)) return at + ": " + JSON.stringify(a) + " vs " + JSON.stringify(b);
@@ -102,6 +108,10 @@ if (docs["mm-desk/kit"].length) {
 	const back = C.modToPage(m), again = C.modToFw(back);
 	edits.push(["modulators round trip", !diff(again, m) && back.links[0].pid === "AMP.6" && back.sources[0].SHAPE === 2]);
 }
+/* the catalogue's counts are the ones mmConvert used before them (OS 1.32B), and the mockup's tables agree with it */
+edits.push(["catalogue: the mockup's tables agree" + (catalogueOff.length ? " (" + catalogueOff.join("; ") + ")" : ""), catalogueOff.length === 0]);
+edits.push(["catalogue: LFO PAGE DEST TRIG WAVE MULT counts", [0, 1, 2, 3, 4].map(i => C.enumN("GND-GND", "LF1", i)).join() === "9,8,5,11,7"]);
+edits.push(["catalogue: DPRO-WAVE WAVE is 32 waveforms", C.enumN("DPRO-WAVE", "SYN", 0) === 32 && C.enumN("SID-6581", "SYN", 3) === 5]);
 for (const [what, ok] of edits) { n++; if (!ok) { fails++; console.log("FAIL edit:", what); } }
 
 const counts = Object.entries(docs).map(([k, l]) => l.length + " " + k.split("/")[1]).join(", ");

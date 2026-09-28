@@ -3,16 +3,20 @@
    when it is built with gearmulator_MDMM_DIAGNOSTICS (a test or development build); a release
    page has none of it. GEARMULATOR_MMSTUDIO_SELFTEST=<kind> gives the page ?selftest=<kind>; this
    bundle registers itself with the page (MMPage.whenReady) and reads the documents the page holds
-   through MMPage.inspect(). The page knows nothing about it. */
+   through MMPage.inspect(). The page knows nothing about it.
+   It loads after mmAdapter.js and before the mockup: window.MMDiagnostics, set here, is where the
+   mockup puts what only the tests may touch (its state S, the AUDIO / MIDI panel's own test); a
+   release page has no MMDiagnostics, so its view exports neither. */
+window.MMDiagnostics = {};
 (() => {
 	const V = () => window.MMView;
-	const S = () => window.MMView.S;	// the tests play the user: they edit the view's state itself
-	const $ = q => document.querySelector(q);
+	const S = () => window.MMDiagnostics.S;	// the tests play the user: they edit the view's state itself
+	const $ = q => document.querySelector(q), $$ = q => [...document.querySelectorAll(q)];
 	const host = window.MMHost, log = t => Bridge.log(t), now = () => performance.now();
 	const I = () => window.MMPage.inspect();
 	const machine = () => I().machine;
 	/* the current slots, from the machine document */
-	const cur = () => { const m = machine(); return { pat: m.pattern.current, kit: m.kit.current, song: m.song.current ?? 0, glob: m.global ?? 0 }; };
+	const cur = () => { const m = machine(); return { pat: m.pattern.current, kit: m.kit.current, song: m.song.current ?? 0, glob: m.global.current ?? 0 }; };
 	/* the mute commands the page sent (the plug-in's mute parameters), by track */
 	const sentMute = [];
 	const send0 = Bridge.send;
@@ -127,12 +131,12 @@
 			window.togglePlay();
 			await W(m => m.type === "machine" && m.doc.playing, 4000);
 			stage = "tel playing";
-			await W(m => m.type === "tel" && m.playing && m.step > 0, 4000);
+			await W(m => m.type === "telemetry" && m.playing && m.step > 0, 4000);
 			/* the soft playhead column glides with the machine's step (RAM telemetry), POSITION too */
 			/* the column's target (its style): a covered window runs no transitions, so the computed one can stand still */
 			const at = () => { const ph = $("#phcol"); return { x: ph && ph.style.transform ? new DOMMatrix(ph.style.transform).m41 : null, o: ph ? +ph.style.opacity : 0, h: ph ? ph.offsetHeight : 0, pos: $("#pos").textContent, step: s.step }; };
 			await sleep(150); const a = at(); stage = "next step";
-			await W(m => m.type === "tel" && m.playing && m.step > a.step);
+			await W(m => m.type === "telemetry" && m.playing && m.step > a.step);
 			await sleep(250); const b = at(); stage = "stop";
 			window.togglePlay();
 			await W(m => m.type === "machine" && !m.doc.playing);
@@ -167,7 +171,7 @@
 		});
 		await check("capabilities as data (the engine's reasons)", async () => {
 			const caps = machine()?.capabilities;
-			if (!caps || caps.engine !== "emu" || caps.midiMutes !== false || !caps.reasons?.midiMutes) throw new Error(JSON.stringify(caps));
+			if (!caps || caps.engine !== "emu" || caps.can?.midiMutes !== false || !caps.reasons?.midiMutes) throw new Error(JSON.stringify(caps));
 			const el = $('[data-mute="6"]');
 			if (el && el.dataset.na !== "1") throw new Error("MIDI track mute not marked");
 			return Object.keys(caps.reasons).length + " reasons";
@@ -181,8 +185,24 @@
 		1: () => setTimeout(runSelfTest, 500),
 		mmcpu: () => runCpuPhases(),
 		/* ?selftest=p6audio: the AUDIO / MIDI panel's self-test (the mockup's) */
-		p6audio: () => setTimeout(() => V().audioSelfTest({ log: t => log("AUDIO: " + t), play: on => { if (on !== V().playing()) host.togglePlay(); }, step: () => V().step(), playing: () => V().playing() }), 3000)
+		p6audio: () => setTimeout(() => window.MMDiagnostics.audioSelfTest({ log: t => log("AUDIO: " + t), play: on => { if (on !== V().playing()) host.togglePlay(); }, step: () => V().step(), playing: () => V().playing() }), 3000)
 	};
+	/* The page's first render, logged so a blank page fails the self-tests (P5), with its layout checks:
+	   the LCD transport keys must be square and side by side (they collapsed to slivers once). */
+	setTimeout(() => {
+		const a = $(".app"), r = a ? a.getBoundingClientRect() : { width: 0, height: 0 };
+		log(`first render: ${$$("#main *").length} elements in #main, page ${Math.round(r.width)} x ${Math.round(r.height)}, window ${innerWidth} x ${innerHeight}`);
+		const rb = $("#rec")?.getBoundingClientRect(), pb = $("#play")?.getBoundingClientRect();
+		const ok = rb && pb && Math.abs(rb.width - rb.height) < 1 && Math.abs(pb.width - pb.height) < 1 && rb.width > 30 && Math.abs(rb.top - pb.top) < 1 && pb.left > rb.right;
+		log(`transport keys: REC ${rb ? Math.round(rb.width) + "x" + Math.round(rb.height) : "?"}, PLAY ${pb ? Math.round(pb.width) + "x" + Math.round(pb.height) : "?"}: ${ok ? "ok square, side by side" : "FAIL"}`);
+		const mk = getComputedStyle($(".lcdgroup"), "::after"), top = $(".top").getBoundingClientRect(), g = $(".lcdgroup").getBoundingClientRect();
+		log(`MKII print: bottom ${mk.bottom}, LCD group bottom ${Math.round(g.bottom)}, header bottom ${Math.round(top.bottom)}`);
+	}, 1500);
+	/* the catalogue and the page's tables (mmConvert, the mockup's) agree */
+	window.MMPage.whenReady(() => {
+		const cat = I().catalogue, off = cat ? MmConvert.useCatalogue(cat) : ["no catalogue"];
+		log(`catalogue: ${off.length ? "FAIL " + off.join("; ") : "ok, the page's tables agree"}`);
+	});
 	const kind = (location.search.match(/[?&]selftest=(\w+)/) || [])[1];
 	if (kind && TESTS[kind]) window.MMPage.whenReady(TESTS[kind]);
 })();

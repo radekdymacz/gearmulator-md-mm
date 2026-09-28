@@ -17,11 +17,12 @@ namespace pluginLib
 namespace mdJucePlugin
 {
 	// The page's MIDI learn commands on the plug-in's MIDI learn (P6: one implementation for both
-	// editors). Which parameters can be learned is data: a target {t, pg, i} names a plug-in
-	// parameter through the model's table (the Machinedrum has no pages: pg is -1 there).
+	// editors). Which parameters can be learned is data: the model's list of targets {pg, i} with
+	// their plug-in parameter names (the Machinedrum has no pages: pg is -1 there).
 	//   learnStart {t, [pg,] i}, learnAdd {cc, t, [pg,] i, [ch]}, learnSetCc {from, to},
 	//   learnCancel, learnRemove {index}, learnInvert {index}
-	// The published document: {"type":"learn","doc":{"mappings":[...],"learning":{...}|null}}.
+	// The published document: {"type":"learn","doc":{"mappings":[...],"learning":{...}|null,
+	// "limits":{"tracks":n,"params":[{[pg,] i, name}]}}}; the limits are exactly the learnable targets.
 	class MidiLearnCommands
 	{
 	public:
@@ -32,14 +33,18 @@ namespace mdJucePlugin
 			int t = -1, pg = -1, i = -1;
 		};
 
+		// One learnable parameter of a track (t is left -1).
+		struct Param
+		{
+			Target at;
+			std::string name;		// the plug-in parameter
+		};
+
 		struct Model
 		{
 			bool pages = false;			// targets carry pg (Monomachine)
 			int tracks = 16;
-			// The plug-in parameter of a target, "" when it cannot be learned.
-			std::function<std::string(const Target&)> parameter;
-			// The target of a parameter name (for the published mappings), t left -1.
-			std::function<std::optional<Target>(const std::string&)> targetOf;
+			std::vector<Param> params;
 			const char* refusal = "learn: expected a track and a parameter";
 		};
 
@@ -56,6 +61,11 @@ namespace mdJucePlugin
 
 	private:
 		Target targetOf(const Value& _message) const;
+		// The plug-in parameter of a target, "" when it cannot be learned.
+		std::string parameterOf(const Target& _t) const;
+		// The target of a parameter name (for the published mappings).
+		std::optional<Target> targetOfName(const std::string& _name) const;
+		Value limits() const;
 		void reply(const Value& _message, bool _ok, const std::string& _note) const;
 
 		pluginLib::Processor& m_processor;

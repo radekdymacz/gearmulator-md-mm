@@ -27,9 +27,10 @@ namespace mdJucePlugin
 	// Page -> plug-in:  {"op":"audio"}                            publish the document
 	//                   {"op":"audioSet", "set":..., "device"|"value"|"on"|"index"}   change one thing
 	//                   {"op":"audioSet", "do":"test"|"bluetooth"}
+	//                   (the names are deskHost::AudioSetting / AudioAction, the row's oneOf)
 	//                   {"op":"audioMeter", "on":bool}            the input level while the panel is open
 	// Plug-in -> page:  {"type":"audio", "doc":{...}}, {"type":"audioLevel", "in":0..1},
-	//                   {"type":"result", "op":"audioSet", ...}
+	//                   {"type":"result", "op":"audioSet", ...}   its errors are the only report of a failure
 	class AudioMidiLink final : juce::ChangeListener
 	{
 	public:
@@ -53,7 +54,7 @@ namespace mdJucePlugin
 		void changeListenerCallback(juce::ChangeBroadcaster*) override;
 		juce::StandalonePluginHolder* holder() const;
 		elektronData::json::Value document() const;
-		// "" when applied, otherwise why not.
+		// "" when applied, otherwise why not (the command's arguments were checked by deskHost's table).
 		std::string apply(const elektronData::json::Value& _command);
 
 		juce::AudioProcessor& m_processor;
@@ -62,6 +63,5 @@ namespace mdJucePlugin
 		juce::AudioDeviceManager::LevelMeter::Ptr m_inputLevel;
 		bool m_meter = false;
 		int m_meterTicks = 0;
-		std::string m_lastError;
 	};
 }

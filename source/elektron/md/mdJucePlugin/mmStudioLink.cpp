@@ -3,6 +3,8 @@
 #include "mdController.h"
 #include "mdPluginProcessor.h"
 
+#include "deskWire/mmWire.h"
+
 #include "mdLib/mdhardware.h"
 #include "mdLib/mdpanel.h"
 
@@ -110,13 +112,9 @@ namespace mdJucePlugin
 
 	void MmStudioLink::sendNrpn(const uint8_t _track, const uint8_t _param, const uint8_t _value) const
 	{
-		// NRPN on the base channel (manual Appendix B): 99 = track, 98 = parameter, 6 = value.
-		const auto status = static_cast<uint8_t>(0xb0 | (m_controller.getAutomationBaseChannel() & 0x0f));
-		for(const auto& [cc, v] : {std::pair<uint8_t, uint8_t>{99, _track}, {98, _param}, {6, _value}})
-		{
-			synthLib::SMidiEvent e(synthLib::MidiEventSource::Editor, status, cc, static_cast<uint8_t>(v & 0x7f));
-			m_processor.addMidiEvent(e);
-		}
+		// NRPN on the base channel, the wire's own encoding (deskWire::mm::nrpn).
+		for(const auto& m : deskWire::mm::nrpn(static_cast<uint8_t>(m_controller.getAutomationBaseChannel() & 0x0f), _track, _param, _value))
+			m_processor.addMidiEvent(synthLib::SMidiEvent(synthLib::MidiEventSource::Editor, m[0], m[1], m[2]));
 	}
 
 	bool MmStudioLink::sendMidi(const uint8_t _status, const uint8_t _data1, const uint8_t _data2) const

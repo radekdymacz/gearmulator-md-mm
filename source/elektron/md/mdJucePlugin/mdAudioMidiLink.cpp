@@ -153,22 +153,24 @@ namespace mdJucePlugin
 		}
 		d.set("midiOutput", named(str(dm.getDefaultMidiOutputIdentifier()), outList));
 		d.set("bluetooth", juce::BluetoothMidiDevicePairingDialogue::isAvailable());
-		d.set("error", m_lastError);
 		return d;
 	}
 
+	// One audioSet: deskHost's table checked the names (set, do) and the argument types; what each
+	// setting needs is checked here.
 	std::string AudioMidiLink::apply(const json::Value& _c)
 	{
+		using S = deskHost::AudioSetting;
+		using D = deskHost::AudioAction;
 		auto* h = holder();
 		if(!h)
 			return "The host owns audio and MIDI in the plug-in";
 		auto& dm = h->deviceManager;
-		const auto* what = stringOf(_c, "set");
-		const auto* act = stringOf(_c, "do");
-		const auto* id = stringOf(_c, "device");	// "id" is the request's
+		const auto* device = stringOf(_c, "device");
 		const auto* on = _c.find("on");
+		const auto* index = _c.find("index");
 		const auto* value = _c.find("value");
-		const bool onValue = on && on->isBool() && on->asBool();
+		const bool onValue = on && (on->isBool() ? on->asBool() : on->isNumber() && on->asNumber() != 0);
 		const auto setup = [&](const std::function<void(juce::AudioDeviceManager::AudioDeviceSetup&)>& _f) -> std::string
 		{
 			auto s = dm.getAudioDeviceSetup();
@@ -177,69 +179,95 @@ namespace mdJucePlugin
 			h->saveAudioDeviceState();
 			return str(error);
 		};
-		if(act && *act == "test")
+		const auto saved = [&]
 		{
-			dm.playTestSound();
+			h->saveAudioDeviceState();
+			return std::string();
+		};
+
+		if(const auto* act = stringOf(_c, "do"))
+		{
+			const auto d = deskHost::audioActionOf(*act);
+			if(!d)
+				return "audioSet: unknown action " + *act;
+			switch(*d)
+			{
+			case D::Test:
+				dm.playTestSound();
+				return {};
+			case D::Bluetooth:
+				return juce::BluetoothMidiDevicePairingDialogue::open() ? std::string() : "Bluetooth MIDI is not available on this computer";
+			case D::Count: break;
+			}
 			return {};
 		}
-		if(act && *act == "bluetooth")
-		{
-			if(!juce::BluetoothMidiDevicePairingDialogue::open())
-				return "Bluetooth MIDI is not available on this computer";
-			return {};
-		}
+		const auto* what = stringOf(_c, "set");
 		if(!what)
 			return "audioSet: set or do";
-		if(*what == "driver" && id)
+		const auto setting = deskHost::audioSettingOf(*what);
+		if(!setting)
+			return "audioSet: unknown setting " + *what;
+		const auto needs = [&](const char* _args) { return "audioSet " + *what + ": needs " + _args; };
+		switch(*setting)
 		{
-			dm.setCurrentAudioDeviceType(juce::String(*id), true);
-			h->saveAudioDeviceState();
-			return {};
-		}
-		if(*what == "output" && id)
-			return setup([&](auto& s) { s.outputDeviceName = juce::String(*id); s.useDefaultOutputChannels = true; });
-		if(*what == "input" && id)
-			return setup([&](auto& s)
+		case S::Driver:
+			if(!device)
+				return needs("device");
+			dm.setCurrentAudioDeviceType(juce::String(*device), true);
+			return saved();
+		case S::Output:
+			if(!device)
+				return needs("device");
+			return setup([&](auto& _s) { _s.outputDeviceName = juce::String(*device); _s.useDefaultOutputChannels = true; });
+		case S::Input:
+			if(!device)
+				return needs("device");
+			return setup([&](auto& _s)
 			{
-				s.inputDeviceName = juce::String(*id);
-				s.useDefaultInputChannels = !id->empty();
-				if(id->empty())
-					s.inputChannels.clear();
+				_s.inputDeviceName = juce::String(*device);
+				_s.useDefaultInputChannels = !device->empty();
+				if(device->empty())
+					_s.inputChannels.clear();
 			});
-		if(*what == "mute" && on && on->isBool())
-		{
+		case S::Mute:
+			if(!on)
+				return needs("on");
 			h->getMuteInputValue().setValue(onValue);
-			h->saveAudioDeviceState();
-			return {};
-		}
-		if(*what == "outputChannel" && on && _c.find("index") && _c.find("index")->isNumber())
+			return saved();
+		case S::OutputChannel:
 		{
+			if(!on || !index)
+				return needs("index and on");
 			auto* dev = dm.getCurrentAudioDevice();
-			const int index = static_cast<int>(_c.find("index")->asNumber());
-			if(!dev || index < 0 || index >= dev->getOutputChannelNames().size())
+			const int i = static_cast<int>(index->asNumber());
+			if(!dev || i >= dev->getOutputChannelNames().size())
 				return "No such output channel";
 			auto active = dev->getActiveOutputChannels();
-			active.setBit(index, onValue);
+			active.setBit(i, onValue);
 			if(active.isZero())
 				return "At least one output channel stays on";
-			return setup([&](auto& s) { s.useDefaultOutputChannels = false; s.outputChannels = active; });
+			return setup([&](auto& _s) { _s.useDefaultOutputChannels = false; _s.outputChannels = active; });
 		}
-		if(*what == "sampleRate" && value && value->isNumber())
-			return setup([&](auto& s) { s.sampleRate = value->asNumber(); });
-		if(*what == "bufferSize" && value && value->isNumber())
-			return setup([&](auto& s) { s.bufferSize = static_cast<int>(value->asNumber()); });
-		if(*what == "midiInput" && id && on && on->isBool())
-		{
-			dm.setMidiInputDeviceEnabled(juce::String(*id), onValue);
-			h->saveAudioDeviceState();
-			return {};
-		}
-		if(*what == "midiOutput" && id)
-		{
-			dm.setDefaultMidiOutputDevice(juce::String(*id));
+		case S::SampleRate:
+			if(!value)
+				return needs("value");
+			return setup([&](auto& _s) { _s.sampleRate = value->asNumber(); });
+		case S::BufferSize:
+			if(!value)
+				return needs("value");
+			return setup([&](auto& _s) { _s.bufferSize = static_cast<int>(value->asNumber()); });
+		case S::MidiInput:
+			if(!device || !on)
+				return needs("device and on");
+			dm.setMidiInputDeviceEnabled(juce::String(*device), onValue);
+			return saved();
+		case S::MidiOutput:
+			if(!device)
+				return needs("device");
+			dm.setDefaultMidiOutputDevice(juce::String(*device));
 			h->player.setMidiOutput(dm.getDefaultMidiOutput());
-			h->saveAudioDeviceState();
-			return {};
+			return saved();
+		case S::Count: break;
 		}
 		return "audioSet: unknown setting " + *what;
 	}
@@ -257,7 +285,7 @@ namespace mdJucePlugin
 		case A::AudioMeter:
 		{
 			const auto* on = _message.find("on");
-			m_meter = on && ((on->isBool() && on->asBool()) || (on->isNumber() && on->asNumber() != 0)) && holder();
+			m_meter = on && (on->isBool() ? on->asBool() : on->isNumber() && on->asNumber() != 0) && holder();
 			if(m_meter && !m_inputLevel)
 				m_inputLevel = holder()->deviceManager.getInputLevelGetter();
 			if(!m_meter)
@@ -266,10 +294,13 @@ namespace mdJucePlugin
 			return true;
 		}
 		case A::AudioSet:
-			m_lastError = apply(_message);
-			m_toPage(deskCore::resultMessage(_message, m_lastError.empty() ? std::vector<std::string>{} : std::vector<std::string>{m_lastError}, {}));
+		{
+			// Its error is the result's (one channel); the document is the devices as they are now.
+			const auto error = apply(_message);
+			m_toPage(deskCore::resultMessage(_message, error.empty() ? std::vector<std::string>{} : std::vector<std::string>{error}, {}));
 			publish();
 			return true;
+		}
 		default:
 			return false;
 		}

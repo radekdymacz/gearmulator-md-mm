@@ -12,16 +12,19 @@ function ask(html,btns,cls=""){const d=$("#dlg");d.innerHTML=`<div class="dlgbox
    HW: edits queue up until you open the screen and press Send. */
 let pstT;
 function structEdited(kind){tx();if(HOST.edited){HOST.edited("struct",kind);return}if(S.engine==="emu"){S.patSent="recv";renderPst();clearTimeout(pstT);pstT=setTimeout(()=>{S.patSent="live";renderPst()},650)}else{S.pend++;S.patSent="pend";renderPst()}}
-function soundEdited(kind){tx();setKitState("edited");if(HOST.edited)HOST.edited("sound",kind)}
-function renderPst(){if(HOST.renderPst)return HOST.renderPst();const p=$("#pst");if(!p)return;if(S.engine==="hw"&&S.pend){p.textContent="SEND "+S.pend;p.className="pst warn";p.title="Unsent pattern and song edits. Click to send them."}
- else if(S.patSent==="recv"){p.textContent="RECV";p.className="pst";p.title="The emulator is on SYSEX RECV and takes the dump."}else{p.textContent="";p.className="pst"}}
+function soundEdited(kind){tx();if(HOST.edited){HOST.edited("sound",kind);return}setKitState("edited")}	/* a host's kit state is its machine's (MMView.setKitState) */
+function renderPst(){if(HOST.renderPst)return HOST.renderPst();if(S.engine==="hw"&&S.pend)setPst("SEND "+S.pend,"Unsent pattern and song edits. Click to send them.",true);
+ else if(S.patSent==="recv")setPst("RECV","The emulator is on SYSEX RECV and takes the dump.");else setPst("","")}
+/* the pattern field's SYSEX RECV state: its text, tooltip, and warn (a click opens the send dialog) */
+function setPst(text,tip,warn){const p=$("#pst");if(!p)return;p.textContent=text;p.className=warn?"pst warn":"pst";p.title=tip||""}
 function sendDialog(){ask(`<div class="lcdbig recv">SYSEX RECV · WAITING…</div><p>The Monomachine only accepts a dump on its SysEx receive screen. <b>${S.pend}</b> edit${S.pend===1?"":"s"} to send.</p>
  <ol class="recvsteps"><li>On the Monomachine press <b>FUNCTION + KIT/SONG</b> (GLOBAL), then <b>FILE › SYSEX RECV</b>.</li><li>Set <b>MODE ORIG</b> and press <b>YES</b>. The screen shows <b>WAITING…</b></li><li>Press <b>Send</b> here. Then press <b>EXIT</b> on the machine.</li></ol>`,
  [["Send now","cream",()=>{S.pend=0;S.patSent="live";renderPst();tx();toast("Sent. The pattern and song slots now match the editor. Press EXIT on the Monomachine.")}],["Later","",()=>{}]],"first")}
 function setKitState(st){S.kitState=st;const s=$("#save");if(!s)return;s.classList.toggle("dirty",st==="edited");s.lastElementChild.textContent=st==="edited"?"edited":"saved";s.title=st==="edited"?"Kit edits are not saved on the machine. They are kept in the DAW project.":"The kit matches its saved slot on the machine."}
 function saveKit(){if(HOST.kit)return HOST.kit("save",S.kit);S.kits[S.kit]={name:S.workName,empty:false,data:captureKit()};setKitState("clean");tx();toast("Saved "+kitName(S.kit)+" on the machine (SAVE KIT). The overwritten kit went to the UNDO KIT slot.")}
 function goPattern(p,now){p=(p+128)%128;if(p===S.pat&&S.queued==null)return;const kitChange=S.patKit[p]!==S.kit,go=now?()=>switchNow(p):()=>queuePattern(p);
- if(kitChange&&S.kitState==="edited"){ask(`<b>${patName(p)}</b> uses kit <b>${kitName(S.patKit[p])}</b>. Your edits to <b>${kitName(S.kit)}</b> are not saved. The Monomachine keeps them in its UNDO KIT slot, but only until the next unsaved switch.`,
+ /* a host's machine asks itself (its ask protocol); the mockup's example engine asks here */
+ if(kitChange&&S.kitState==="edited"&&!HOST.selectPattern){ask(`<b>${patName(p)}</b> uses kit <b>${kitName(S.patKit[p])}</b>. Your edits to <b>${kitName(S.kit)}</b> are not saved. The Monomachine keeps them in its UNDO KIT slot, but only until the next unsaved switch.`,
   [["Save kit, then switch","cream",()=>{saveKit();go()}],["Switch (edits to UNDO KIT)","danger",go],["Cancel","",()=>{}]]);return}go()}
 function switchNow(p){if(HOST.selectPattern)return HOST.selectPattern(p,true);const was=S.playing;S.queued=null;applyPattern(p);if(was){S.step=-1;toast("Switched now. On the machine this is STOP, LOAD PATTERN, PLAY (not tested).")}}
 function queuePattern(p){if(HOST.selectPattern)return HOST.selectPattern(p,false);if(S.playing){S.queued=p;renderTop();tx();return}applyPattern(p)}
