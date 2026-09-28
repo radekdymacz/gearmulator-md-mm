@@ -3,6 +3,7 @@
 // (observed vs pending, refusal, settle, undo).
 
 #include "deskCore.h"
+#include "deskDesk.h"
 #include "deskLoadQueue.h"
 #include "deskPush.h"
 #include "deskRef.h"
@@ -182,6 +183,22 @@ namespace
 			return m;
 		}
 		static void decorate(Value&, const History<Change>&) {}
+		static EditResult setDocument(const Documents& _d, const Value& _cmd, const Context& _c) { return apply(_d, _cmd, {}, _c); }
+
+		// The router's vocabulary: an edit, undo, ready, a machine command that asks, and a gated one.
+		using Table = CommandTable<>;
+		static const Table& commands()
+		{
+			static const Table t({
+				{"ready", Owner::Core, Gate::None, -1, {}, "", CoreOp::Ready},
+				{"undo", Owner::Core, Gate::Input, -1, {}, "", CoreOp::Undo},
+				{"set", Owner::Core, Gate::Input, 0, {{"s", ArgType::Integer, 0, 9}, {"v", ArgType::Integer, -100, 100}}, ""},
+				{"wipe", Owner::Machine, Gate::Input, -1, {}, "asks first"},
+				{"hold", Owner::Machine, Gate::Midi, -1, {{"mode", ArgType::Text, 0, 0, false, {"a", "b"}}}, ""}});
+			return t;
+		}
+		static Value catalogue() { return Value::object(); }
+		static std::string refusal(Lifecycle) { return "not now"; }
 	};
 
 	class ToyMachine final : public Machine<ToyModel>
@@ -195,19 +212,75 @@ namespace
 			sent.push_back(_c.after);
 			return {};
 		}
-		Outcome command(const Value&, const Documents&) override { return {}; }
+		Outcome command(const Value& _c, const Documents&) override { commands.push_back(opOf(_c)); return {}; }
+		Outcome askFor(const Value& _c, const Documents&) override
+		{
+			if(opOf(_c) != "wipe")
+				return {};
+			Value a = Value::object();
+			a.set("type", "ask");
+			return {{}, {}, a};
+		}
 		void onSysex(const Bytes&) override {}
 		void tick(double, const Documents&) override {}
 		std::vector<Ev> drain() override { auto e = std::move(events); events.clear(); return e; }
 		Value state(const Documents&) const override { Value v = Value::object(); v.set("schema", "toy"); return v; }
 		Capabilities capabilities() const override { Capabilities c; c.engine = "toy"; return c; }
-		Lifecycle lifecycle() const override { return Lifecycle::Ready; }
+		Lifecycle lifecycle() const override { return life; }
 		Context context() const override { return {}; }
 		bool busy() const override { return !sent.empty(); }
 
 		std::vector<Ev> events;
 		std::vector<Toy> sent;
+		std::vector<std::string> commands;
+		Lifecycle life = Lifecycle::Ready;
 	};
+
+	// The one router (deskCore::Desk) against the toy model: gates, argument checks, the core and
+	// machine owners, asks answered with force, and an engine's adapter swapped in.
+	void desk()
+	{
+		std::puts("desk: the router reads the table");
+		std::vector<Value> page;
+		double now = 0;
+		auto first = std::make_unique<ToyMachine>();
+		auto* m = first.get();
+		Desk<ToyModel, Machine<ToyModel>> d(std::move(first), [&](const Value& _m) { page.push_back(_m); }, [&] { return now; });
+		const auto send = [&](const char* _json) { return d.onPageMessage(*elektronData::json::parse(_json)); };
+		const auto last = [&](const char* _type) -> const Value*
+		{
+			for(auto it = page.rbegin(); it != page.rend(); ++it)
+				if(it->find("type")->asString() == _type)
+					return &*it;
+			return nullptr;
+		};
+		check(send(R"({"op":"ready","id":1})") && last("catalogue") && d.readyCount() == 1, "ready: the catalogue, counted");
+		check(!send(R"({"op":"learnStart"})"), "an op the model does not know is the caller's");
+		send(R"({"op":"set","s":42,"v":1,"id":2})");
+		check(!last("result")->find("ok")->asBool() && last("result")->find("errors")->asArray()[0].asString().find("s:") == 0,
+			"arguments are checked against the table");
+		send(R"({"op":"hold","mode":"c","id":3})");
+		check(!last("result")->find("ok")->asBool(), "a text argument outside its values is refused");
+		m->events.push_back(ToyMachine::Ev::observed({1, 10}, Source::Dump));
+		d.flush();
+		send(R"({"op":"set","s":1,"v":5,"id":4})");
+		check(last("result")->find("ok")->asBool() && m->sent.size() == 1, "an edit goes to the core and the machine");
+		send(R"({"op":"wipe","id":5})");
+		check(last("ask") && m->commands.empty(), "a machine command asks first");
+		send(R"({"op":"wipe","force":true,"id":6})");
+		check(m->commands.size() == 1, "with force it runs (the core applies force, not the adapter)");
+		m->life = Lifecycle::Booting;
+		send(R"({"op":"undo","id":7})");
+		check(last("result")->find("errors")->asArray()[0].asString() == "not now", "a gated command waits with the model's refusal");
+		send(R"({"op":"hold","mode":"a","id":8})");
+		check(last("result")->find("ok")->asBool() == false, "Gate::Midi waits while booting too");
+		// An engine switch: the new adapter replaces the old one; the page starts over.
+		page.clear();
+		auto second = std::make_unique<ToyMachine>();
+		auto* m2 = second.get();
+		d.setEngine(std::move(second));
+		check(last("reset") && last("catalogue") && d.documents().toys.empty() && &d.machine() == m2, "a new engine: reset, the page starts over");
+	}
 
 	void core()
 	{
@@ -265,6 +338,7 @@ int main()
 	sequence();
 	commands();
 	core();
+	desk();
 	std::printf("deskCoreTest: %s (%d failures)\n", g_failures ? "FAIL" : "PASS", g_failures);
 	return g_failures ? 1 : 0;
 }

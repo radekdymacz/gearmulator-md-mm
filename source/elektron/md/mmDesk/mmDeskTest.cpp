@@ -5,6 +5,7 @@
 #include "mmDesk.h"
 #include "mmDeskMachine.h"
 
+#include "deskCore/deskContract.h"
 #include "deskHost/deskHost.h"
 
 #include "elektronData/mmCommands.h"
@@ -325,91 +326,106 @@ void playingFromSteps()
 	check(machineStopped, "the step stands still for three step times: stopped");
 }
 
-// The executable spec: every published message validates against the contract's
-// JSON Schema ($defs/message). GEARMULATOR_DUMP_MESSAGES=1 prints one of each type.
-void checkPublished()
+// P6: the Control workspace's LFOs run in the plug-in on the machine's steps (deskCore's ModEngine,
+// as the Machinedrum's): a link moves a kit value by CC, the page gets the source values, and
+// nothing of it is an edit or an undo step.
+void modulators()
 {
-	std::ifstream in(MMDESK_SCHEMA);
-	const std::string text{std::istreambuf_iterator<char>(in), std::istreambuf_iterator<char>()};
-	const auto root = ed::json::parse(text);
-	check(root.has_value(), "the contract schema loads");
-	if(!root)
-		return;
-	const ed::json::Schema schema(*root);
-	std::map<std::string, size_t> types;
-	size_t bad = 0;
-	for(const auto& m : g_published)
+	std::puts("app modulators in the plug-in");
+	double now = 0;
+	std::vector<Value> page;
+	std::vector<std::tuple<uint8_t, uint8_t, uint8_t, uint8_t>> params;
+	mmDesk::Desk::Port port;
+	port.device.sendSysex = [](const Bytes&) {};
+	port.device.sendParam = [&](uint8_t _t, uint8_t _p, uint8_t _i, uint8_t _v) { params.emplace_back(_t, _p, _i, _v); };
+	port.device.sendNrpn = [](uint8_t, uint8_t, uint8_t) {};
+	port.device.pressKeys = [](const std::vector<mmDesk::Key>&) { return true; };
+	port.device.nowMs = [&] { return now; };
+	port.toPage = [&](const Value& _v) { page.push_back(_v); g_published.push_back(_v); };
+	Value saved;
+	port.saveSetup = [&](const Value& _s) { saved = _s; };
+	mmDesk::Desk d(port);
+	const auto msg = [&](const std::string& _json) { d.onPageMessage(*ed::json::parse(_json)); };
+	msg(R"({"op":"ready"})");
+	d.setProbe(mmDesk::Desk::Probe::Running);
+	d.onTelemetry(screen(mmDesk::Screen::Main));
+	d.onDeviceSysex({0xf0, 0, 0x20, 0x3c, 3, 0, 0x72, 0x04, 1, 0xf7});	// pattern 1
+	d.onDeviceSysex({0xf0, 0, 0x20, 0x3c, 3, 0, 0x72, 0x02, 2, 0xf7});	// kit 2
+	ed::MmKit k;
+	k.position = 2;
+	k.machines.fill(1);
+	k.trigPos.fill(0xff);
+	d.onDeviceSysex(ed::encodeMmKit(k));
+	check(d.workingKit() && d.workingKit()->position == 2, "the kit that plays starts as its slot");
+	msg(R"({"op":"modSet","id":1,"doc":{"schema":"mm-desk/modulators","version":1,
+		"sources":[{"id":"l1","kind":"lfo","shape":1,"rate":"1/16","depth":100}],
+		"links":[{"source":"l1","track":0,"param":16,"min":0,"max":127}]}})");
+	const auto last = [&](const char* _type) -> const Value*
 	{
-		const auto* type = m.find("type");
-		const auto name = type && type->isString() ? type->asString() : std::string("?");
-		if(types[name]++ == 0 && std::getenv("GEARMULATOR_DUMP_MESSAGES"))
-			std::printf("%s\n", ed::json::write(m).c_str());
-		const auto problems = schema.validate(m, "message");
-		if(problems.empty())
-			continue;
-		if(bad++ < 5)
-			for(const auto& p : problems)
-				std::printf("    %s: %s\n", name.c_str(), p.c_str());
+		for(auto it = page.rbegin(); it != page.rend(); ++it)
+			if(it->find("type")->asString() == _type)
+				return &*it;
+		return nullptr;
+	};
+	check(last("result") && last("result")->find("ok")->asBool() && saved.isObject(), "modSet is taken and kept with the project");
+	check(last("mod") && last("mod")->find("runs")->asString() == "plug-in", "the page gets the setup back (mod)");
+	for(int step = 0; step < 8; ++step)
+	{
+		now += 125;
+		auto t = screen(mmDesk::Screen::Main);
+		t.step = step;
+		t.running = true;
+		d.onTelemetry(t);
 	}
-	std::printf("  %zu published messages of %zu types, %zu off the contract\n", g_published.size(), types.size(), bad);
-	check(bad == 0 && !g_published.empty(), "every published message is on the contract");
-	// ... and the other way: every member the contract declares for the machine document and the
-	// capabilities is published (with additionalProperties false there, the two are the same set).
-	std::vector<ed::json::Value> machines, caps;
-	for(const auto& m : g_published)
-		if(const auto* t = m.find("type"); t && t->isString() && t->asString() == "machine")
-			if(const auto* d = m.find("doc"))
-			{
-				machines.push_back(*d);
-				if(const auto* c = d->find("capabilities"))
-					caps.push_back(*c);
-			}
-	auto unseen = schema.unseen("machine", machines);
-	const auto unseenCaps = schema.unseen("capabilities", caps);
-	unseen.insert(unseen.end(), unseenCaps.begin(), unseenCaps.end());
-	for(const auto& u : unseen)
-		std::printf("    declared, never published: %s\n", u.c_str());
-	check(unseen.empty() && !machines.empty(), "every member the contract declares for the machine and its capabilities is published");
+	bool moved = false;
+	for(const auto& [t, pg, i, v] : params)
+		moved |= t == 0 && pg == 2 && i == 0;
+	check(moved, "the link moves FLT page value 1 of track 1 by CC on the machine's steps");
+	check(!d.coreState().history().canUndo(), "modulation is not an undo step");
+	check(last("mod") && last("mod")->find("values")->asArray().size() == 1, "the page gets the source's value");
 }
 
-
-// The command table is the vocabulary (P6): the contract's $defs/command must be what it generates.
-// mmDeskTest --write-schema rewrites it.
-void checkCommandSchema(const bool _write)
+// The executable spec (deskCore::contract, shared with the Machinedrum's): every published message
+// against the contract, the contract's machine document against what was published, $defs/command
+// generated from the tables (mmDeskTest --write-schema), the adapter's functions against the table.
+void checkContract(const bool _write)
 {
-	std::ifstream in(MMDESK_SCHEMA);
-	const std::string text{std::istreambuf_iterator<char>(in), std::istreambuf_iterator<char>()};
-	auto root = ed::json::parse(text);
+	namespace contract = deskCore::contract;
+	auto root = contract::loadSchema(MMDESK_SCHEMA);
 	check(root.has_value(), "the contract schema loads");
 	if(!root)
 		return;
-	const auto generated = deskHost::contractCommands(mmDesk::commandTable().schema());
-	auto* defs = root->find("$defs");
-	const auto* current = defs ? defs->find("command") : nullptr;
-	const bool same = current && ed::json::write(*current) == ed::json::write(generated);
-	if(_write && !same && defs)
-	{
-		defs->put("command", generated);
-		std::ofstream out(MMDESK_SCHEMA);
-		out << ed::json::write(*root, 2) << "\n";
-		std::printf("  wrote $defs/command (%zu commands)\n", mmDesk::commandTable().commands().size());
+	const bool same = contract::checkCommands(*root, deskHost::contractCommands(mmDesk::commandTable().schema()), MMDESK_SCHEMA, _write);
+	if(_write)
 		return;
-	}
-	check(same, "the schema's $defs/command is generated from the command table (mmDeskTest --write-schema)");
+	check(same, "the schema's $defs/command is generated from the command tables (mmDeskTest --write-schema)");
+	const auto r = contract::checkMessages(*root, g_published);
+	for(const auto& p : r.off)
+		std::printf("    %s\n", p.c_str());
+	for(const auto& u : r.unseen)
+		std::printf("    declared, never published: %s\n", u.c_str());
+	std::printf("  %zu published messages of %zu types, %zu off the contract\n", r.messages, r.types, r.offCount);
+	check(r.offCount == 0 && r.messages > 0, "every published message is on the contract");
+	check(r.unseen.empty(), "every member the contract declares for the machine and its capabilities is published");
+	const auto gaps = contract::handlerGaps(mmDesk::commandTable(), mmDesk::MmMachine::commandsHandled());
+	for(const auto& g : gaps)
+		std::printf("    %s\n", g.c_str());
+	check(gaps.empty(), "every machine command of the table has its adapter function, and no other");
 }
 
 int main(const int _argc, char** _argv)
 {
 	if(_argc > 1 && std::string(_argv[1]) == "--write-schema")
 	{
-		checkCommandSchema(true);
+		checkContract(true);
+		std::puts("mmDeskTest: wrote $defs/command");
 		return 0;
 	}
 	recvSession();
 	desk();
 	playingFromSteps();
-	checkPublished();
-	checkCommandSchema(false);
+	modulators();
+	checkContract(false);
 	std::printf("%s (%d failures)\n", g_failures ? "FAIL" : "PASS", g_failures);
 	return g_failures ? 1 : 0;
 }

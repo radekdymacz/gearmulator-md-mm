@@ -127,6 +127,8 @@ namespace mdDesk
 		void runSequence(std::vector<deskCore::SeqStep<Act>> _steps);
 
 		// Machine commands (the table's handler column).
+		deskCore::Outcome askSelect(const Value&, const Documents&);
+		deskCore::Outcome askKitLoad(const Value&, const Documents&);
 		deskCore::Outcome cmdLoad(const Value&, const Documents&);
 		deskCore::Outcome cmdSelect(const Value&, const Documents&);
 		deskCore::Outcome cmdSaveKit(const Value&, const Documents&);

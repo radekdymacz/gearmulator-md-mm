@@ -8,6 +8,7 @@
 #include "mdDeskLibrary.h"
 #include "mdDeskMachine.h"
 
+#include "deskCore/deskContract.h"
 #include "deskHost/deskHost.h"
 
 #include "elektronData/jsonSchema.h"
@@ -1003,77 +1004,35 @@ namespace
 	}
 	// The executable spec: every published message validates against the contract's
 	// JSON Schema ($defs/message). GEARMULATOR_DUMP_MESSAGES=1 prints one of each type.
-	void checkPublished()
+	// The executable spec (deskCore::contract): every published message against the contract and the
+	// contract's machine document against what was published; $defs/command generated from the
+	// tables (mdDeskTest --write-schema rewrites it); the adapter's functions against the table.
+	void checkContract(const bool _write)
 	{
-		std::ifstream in(MDDESK_SCHEMA);
-		const std::string text{std::istreambuf_iterator<char>(in), std::istreambuf_iterator<char>()};
-		const auto root = ed::json::parse(text);
+		namespace contract = deskCore::contract;
+		auto root = contract::loadSchema(MDDESK_SCHEMA);
 		check(root.has_value(), "the contract schema loads");
 		if(!root)
 			return;
-		const ed::json::Schema schema(*root);
-		std::map<std::string, size_t> types;
-		size_t bad = 0;
-		for(const auto& m : g_published)
-		{
-			const auto* type = m.find("type");
-			const auto name = type && type->isString() ? type->asString() : std::string("?");
-			if(types[name]++ == 0 && std::getenv("GEARMULATOR_DUMP_MESSAGES"))
-				std::printf("%s\n", ed::json::write(m).c_str());
-			const auto problems = schema.validate(m, "message");
-			if(problems.empty())
-				continue;
-			if(bad++ < 5)
-				for(const auto& p : problems)
-					std::printf("    %s: %s\n", name.c_str(), p.c_str());
-		}
-		std::printf("  %zu published messages of %zu types, %zu off the contract\n", g_published.size(), types.size(), bad);
-		check(bad == 0 && !g_published.empty(), "every published message is on the contract");
-		// ... and the other way: every member the contract declares for the machine document and the
-		// capabilities is published (with additionalProperties false there, the two are the same set).
-		std::vector<ed::json::Value> machines, caps;
-		for(const auto& m : g_published)
-			if(const auto* t = m.find("type"); t && t->isString() && t->asString() == "machine")
-				if(const auto* d = m.find("doc"))
-				{
-					machines.push_back(*d);
-					if(const auto* c = d->find("capabilities"))
-						caps.push_back(*c);
-				}
-		auto unseen = schema.unseen("machine", machines);
-		const auto unseenCaps = schema.unseen("capabilities", caps);
-		unseen.insert(unseen.end(), unseenCaps.begin(), unseenCaps.end());
-		for(const auto& u : unseen)
-			std::printf("    declared, never published: %s\n", u.c_str());
-		check(unseen.empty() && !machines.empty(), "every member the contract declares for the machine and its capabilities is published");
-	}
-	// The command table is the vocabulary (P6): the contract's $defs/command must be what the
-	// table generates. mdDeskTest --write-schema rewrites it.
-	void checkCommandSchema(const bool _write)
-	{
-		std::ifstream in(MDDESK_SCHEMA);
-		const std::string text{std::istreambuf_iterator<char>(in), std::istreambuf_iterator<char>()};
-		auto root = ed::json::parse(text);
-		check(root.has_value(), "the contract schema loads");
-		if(!root)
+		const bool same = contract::checkCommands(*root, deskHost::contractCommands(commandTable().schema()), MDDESK_SCHEMA, _write);
+		if(_write)
 			return;
-		const auto generated = deskHost::contractCommands(commandTable().schema());
-		auto* defs = root->find("$defs");
-		const auto* current = defs ? defs->find("command") : nullptr;
-		const bool same = current && ed::json::write(*current) == ed::json::write(generated);
-		if(_write && !same && defs)
-		{
-			defs->put("command", generated);
-			std::ofstream out(MDDESK_SCHEMA);
-			out << ed::json::write(*root, 2) << "\n";
-			std::printf("  wrote $defs/command (%zu commands)\n", commandTable().commands().size());
-			return;
-		}
-		check(same, "the schema's $defs/command is generated from the command table (mdDeskTest --write-schema)");
-		// Every command the page sends validates against it; so does a bad one not.
+		check(same, "the schema's $defs/command is generated from the command tables (mdDeskTest --write-schema)");
 		const ed::json::Schema schema(*root);
 		check(schema.validate(*ed::json::parse(R"({"op":"trig","p":1,"t":0,"s":3,"id":4})"), "command").empty()
 			&& !schema.validate(*ed::json::parse(R"({"op":"trig","p":200,"t":0,"s":3})"), "command").empty(), "commands validate");
+		const auto r = contract::checkMessages(*root, g_published);
+		for(const auto& p : r.off)
+			std::printf("    %s\n", p.c_str());
+		for(const auto& u : r.unseen)
+			std::printf("    declared, never published: %s\n", u.c_str());
+		std::printf("  %zu published messages of %zu types, %zu off the contract\n", r.messages, r.types, r.offCount);
+		check(r.offCount == 0 && r.messages > 0, "every published message is on the contract");
+		check(r.unseen.empty(), "every member the contract declares for the machine and its capabilities is published");
+		const auto gaps = contract::handlerGaps(commandTable(), MdMachine::commandsHandled());
+		for(const auto& g : gaps)
+			std::printf("    %s\n", g.c_str());
+		check(gaps.empty(), "every machine command of the table has its adapter function, and no other");
 	}
 }
 
@@ -1081,7 +1040,8 @@ int main(const int _argc, char** _argv)
 {
 	if(_argc > 1 && std::string(_argv[1]) == "--write-schema")
 	{
-		checkCommandSchema(true);
+		checkContract(true);
+		std::puts("mdDeskTest: wrote $defs/command");
 		return 0;
 	}
 	testTrigsAndLocks();
@@ -1104,8 +1064,7 @@ int main(const int _argc, char** _argv)
 	testDeskRecording();
 	testSampleName();
 	testModulators();
-	checkPublished();
-	checkCommandSchema(false);
+	checkContract(false);
 	if(g_failures)
 	{
 		std::fprintf(stderr, "mdDeskTest: %d failure(s)\n", g_failures);

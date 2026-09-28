@@ -2,15 +2,21 @@ cmake_minimum_required(VERSION 3.15)
 
 project(elektronData)
 
+# JSON values and the JSON Schema validator (P6): what the engine-neutral deskCore needs, without
+# the Elektron codecs.
+add_library(elektronJson STATIC)
+target_sources(elektronJson PRIVATE json.cpp json.h jsonSchema.cpp jsonSchema.h)
+target_include_directories(elektronJson PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/..)
+target_compile_features(elektronJson PUBLIC cxx_std_17)
+set_property(TARGET elektronJson PROPERTY FOLDER "Elektron")
+
 # Pure value codecs for Elektron MD and MM user data (pattern, kit, song, global dumps). No JUCE,
 # no device: it depends on nothing but the standard library.
 add_library(elektronData STATIC)
 
 target_sources(elektronData PRIVATE
 	dumpIo.h
-	json.cpp json.h
 	jsonFirmware.cpp jsonFirmware.h
-	jsonSchema.cpp jsonSchema.h
 	mdCommands.cpp mdCommands.h
 	mdGlobal.cpp mdGlobal.h
 	mdJson.cpp mdJson.h
@@ -34,6 +40,7 @@ target_sources(elektronData PRIVATE
 	sysex7bit.cpp sysex7bit.h
 )
 
+target_link_libraries(elektronData PUBLIC elektronJson)
 target_include_directories(elektronData PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/..)
 target_compile_features(elektronData PUBLIC cxx_std_17)
 set_property(TARGET elektronData PROPERTY FOLDER "Elektron")

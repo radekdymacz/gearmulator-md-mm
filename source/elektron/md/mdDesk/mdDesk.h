@@ -67,6 +67,8 @@ namespace mdDesk
 
 	private:
 		void onSetup(const Value& _message) override;
+		void setModulators(const Value& _message);
+		void setKnobs(const Value& _message);
 		void onReadyExtra() override;
 		void publishSetup();
 		void publishModulators();

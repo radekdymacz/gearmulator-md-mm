@@ -2,6 +2,8 @@
 
 #include "mdDeskMachine.h"
 
+#include <map>
+
 namespace mdDesk
 {
 	using Value = elektronData::json::Value;
@@ -23,32 +25,42 @@ namespace mdDesk
 
 	// ---- the editor's setup: the app modulators and the knob rows ----
 
+	// The table's Owner::Setup rows, one function each.
 	void Desk::onSetup(const Value& _message)
 	{
-		const auto op = deskCore::opOf(_message);
+		static const std::map<std::string, void (Desk::*)(const Value&)> setups{
+			{"modSet", &Desk::setModulators}, {"knobs", &Desk::setKnobs}};
+		const auto it = setups.find(deskCore::opOf(_message));
+		if(it == setups.end())
+			result(_message, {"no such setup"}, {});
+		else
+			(this->*(it->second))(_message);
+	}
+
+	// App-only LFO and random sources (deskMod.h): the page sends the whole setup.
+	void Desk::setModulators(const Value& _message)
+	{
 		std::vector<std::string> errors;
-		if(op == "modSet")
+		if(const auto setup = modSetupFromJson(*_message.find("doc"), errors, g_mdModLimits))
 		{
-			// App-only LFO and random sources (mdDeskMod.h): the page sends the whole setup.
-			const auto setup = modSetupFromJson(*_message.find("doc"), errors, g_mdModLimits);
-			if(setup)
-			{
-				m_mods.setSetup(*setup);
-				m_setup.modulators = *setup;
-				saveSetup();
-			}
-			result(_message, errors, {});
-			publishModulators();
-			return;
+			m_mods.setSetup(*setup);
+			m_setup.modulators = *setup;
+			saveSetup();
 		}
-		// The Control workspace's knob rows: which CC each of the eight rows is.
+		result(_message, errors, {});
+		publishModulators();
+	}
+
+	// The Control workspace's knob rows: which CC each row is.
+	void Desk::setKnobs(const Value& _message)
+	{
 		std::vector<int> ccs;
 		for(const auto& v : _message.find("ccs")->asArray())
 			ccs.push_back(v.isNumber() ? static_cast<int>(v.asNumber()) : -1);
-		errors = validateKnobCcs(ccs);
+		auto errors = validateKnobCcs(ccs);
 		if(errors.empty())
 		{
-			for(size_t i = 0; i < 8; ++i)
+			for(size_t i = 0; i < m_setup.knobCcs.size() && i < ccs.size(); ++i)
 				m_setup.knobCcs[i] = static_cast<uint8_t>(ccs[i]);
 			saveSetup();
 		}

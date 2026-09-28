@@ -54,7 +54,10 @@
     },
     "format": {
       "type": "object",
-      "required": ["version", "revision"],
+      "required": [
+        "version",
+        "revision"
+      ],
       "properties": {
         "version": {
           "$ref": "#/$defs/u7"
@@ -82,11 +85,17 @@
     },
     "stepFlags": {
       "type": "object",
-      "required": ["editAll", "steps"],
+      "required": [
+        "editAll",
+        "steps"
+      ],
       "properties": {
         "editAll": {
           "type": "integer",
-          "enum": [0, 1],
+          "enum": [
+            0,
+            1
+          ],
           "description": "1 = one pattern-wide set (ALL), 0 = per-track sets in tracks[]."
         },
         "steps": {
@@ -96,7 +105,23 @@
     },
     "pattern": {
       "type": "object",
-      "required": ["schema", "version", "slot", "length", "totalLength", "tempoMultiplier", "kit", "accentAmount", "swingAmount", "accent", "slide", "swing", "tracks", "locks", "firmware"],
+      "required": [
+        "schema",
+        "version",
+        "slot",
+        "length",
+        "totalLength",
+        "tempoMultiplier",
+        "kit",
+        "accentAmount",
+        "swingAmount",
+        "accent",
+        "slide",
+        "swing",
+        "tracks",
+        "locks",
+        "firmware"
+      ],
       "properties": {
         "schema": {
           "const": "md-desk/pattern"
@@ -121,10 +146,20 @@
           "maximum": 64
         },
         "totalLength": {
-          "enum": [16, 32, 48, 64]
+          "enum": [
+            16,
+            32,
+            48,
+            64
+          ]
         },
         "tempoMultiplier": {
-          "enum": ["1X", "2X", "3/4X", "3/2X"]
+          "enum": [
+            "1X",
+            "2X",
+            "3/4X",
+            "3/2X"
+          ]
         },
         "kit": {
           "type": "integer",
@@ -157,7 +192,12 @@
           "maxItems": 16,
           "items": {
             "type": "object",
-            "required": ["trigs", "accent", "slide", "swing"],
+            "required": [
+              "trigs",
+              "accent",
+              "slide",
+              "swing"
+            ],
             "properties": {
               "trigs": {
                 "$ref": "#/$defs/steps64"
@@ -180,7 +220,11 @@
           "maxItems": 64,
           "items": {
             "type": "object",
-            "required": ["track", "param", "steps"],
+            "required": [
+              "track",
+              "param",
+              "steps"
+            ],
             "properties": {
               "track": {
                 "$ref": "#/$defs/track"
@@ -246,13 +290,22 @@
               }
             }
           },
-          "required": ["format", "lockedRowsField"]
+          "required": [
+            "format",
+            "lockedRowsField"
+          ]
         }
       }
     },
     "lfo": {
       "type": "object",
-      "required": ["track", "param", "shape1", "shape2", "update"],
+      "required": [
+        "track",
+        "param",
+        "shape1",
+        "shape2",
+        "update"
+      ],
       "properties": {
         "track": {
           "$ref": "#/$defs/track"
@@ -282,7 +335,15 @@
     },
     "kit": {
       "type": "object",
-      "required": ["schema", "version", "slot", "name", "tracks", "masterFx", "firmware"],
+      "required": [
+        "schema",
+        "version",
+        "slot",
+        "name",
+        "tracks",
+        "masterFx",
+        "firmware"
+      ],
       "properties": {
         "schema": {
           "const": "md-desk/kit"
@@ -304,7 +365,16 @@
           "maxItems": 16,
           "items": {
             "type": "object",
-            "required": ["model", "level", "synth", "effects", "routing", "lfo", "trigGroup", "muteGroup"],
+            "required": [
+              "model",
+              "level",
+              "synth",
+              "effects",
+              "routing",
+              "lfo",
+              "trigGroup",
+              "muteGroup"
+            ],
             "properties": {
               "model": {
                 "type": "integer",
@@ -358,7 +428,12 @@
         },
         "masterFx": {
           "type": "object",
-          "required": ["gateBox", "rhythmEcho", "eq", "dynamix"],
+          "required": [
+            "gateBox",
+            "rhythmEcho",
+            "eq",
+            "dynamix"
+          ],
           "properties": {
             "gateBox": {
               "$ref": "#/$defs/page8",
@@ -400,16 +475,27 @@
               "description": "Per track: the LFO block's opaque running state (was tracks[].lfo.state in version 1)."
             }
           },
-          "required": ["format", "lfoState"]
+          "required": [
+            "format",
+            "lfoState"
+          ]
         }
       }
     },
     "songRow": {
       "type": "object",
-      "required": ["kind"],
+      "required": [
+        "kind"
+      ],
       "properties": {
         "kind": {
-          "enum": ["pattern", "loop", "jump", "halt", "end"]
+          "enum": [
+            "pattern",
+            "loop",
+            "jump",
+            "halt",
+            "end"
+          ]
         },
         "pattern": {
           "type": "integer",
@@ -481,7 +567,14 @@
             }
           },
           "then": {
-            "required": ["pattern", "repeats", "start", "end", "tempo", "mutes"]
+            "required": [
+              "pattern",
+              "repeats",
+              "start",
+              "end",
+              "tempo",
+              "mutes"
+            ]
           }
         },
         {
@@ -493,7 +586,10 @@
             }
           },
           "then": {
-            "required": ["target", "repeats"]
+            "required": [
+              "target",
+              "repeats"
+            ]
           }
         },
         {
@@ -505,14 +601,23 @@
             }
           },
           "then": {
-            "required": ["target"]
+            "required": [
+              "target"
+            ]
           }
         }
       ]
     },
     "song": {
       "type": "object",
-      "required": ["schema", "version", "slot", "name", "rows", "firmware"],
+      "required": [
+        "schema",
+        "version",
+        "slot",
+        "name",
+        "rows",
+        "firmware"
+      ],
       "properties": {
         "schema": {
           "const": "md-desk/song"
@@ -548,13 +653,26 @@
               "$ref": "#/$defs/nameTail"
             }
           },
-          "required": ["format"]
+          "required": [
+            "format"
+          ]
         }
       }
     },
     "global": {
       "type": "object",
-      "required": ["schema", "version", "slot", "routing", "tempo", "extendedMode", "baseChannel", "keymap", "settings", "firmware"],
+      "required": [
+        "schema",
+        "version",
+        "slot",
+        "routing",
+        "tempo",
+        "extendedMode",
+        "baseChannel",
+        "keymap",
+        "settings",
+        "firmware"
+      ],
       "properties": {
         "schema": {
           "const": "md-desk/global"
@@ -572,7 +690,15 @@
           "minItems": 16,
           "maxItems": 16,
           "items": {
-            "enum": ["A", "B", "C", "D", "E", "F", "MAIN"]
+            "enum": [
+              "A",
+              "B",
+              "C",
+              "D",
+              "E",
+              "F",
+              "MAIN"
+            ]
           },
           "description": "Per-track output; A-F skip the master effects."
         },
@@ -608,7 +734,14 @@
         "settings": {
           "type": "object",
           "description": "Round-tripped untouched; not verified individually.",
-          "required": ["unused", "syncFlags", "localControl", "inputSettings", "programChange", "trigMode"],
+          "required": [
+            "unused",
+            "syncFlags",
+            "localControl",
+            "inputSettings",
+            "programChange",
+            "trigMode"
+          ],
           "properties": {
             "unused": {
               "$ref": "#/$defs/u7"
@@ -640,7 +773,10 @@
           "description": "P5: the measured meaning of settings (elektronData::mdGlobalBits), derived and read-only: settings is the value. Change it with {op: globalSet, field, on|v}.",
           "properties": {
             "tempoIn": {
-              "enum": ["internal", "external"]
+              "enum": [
+                "internal",
+                "external"
+              ]
             },
             "ctrlIn": {
               "type": "boolean"
@@ -673,7 +809,11 @@
             "trigMode": {
               "oneOf": [
                 {
-                  "enum": ["gate", "start", "que"]
+                  "enum": [
+                    "gate",
+                    "start",
+                    "que"
+                  ]
                 },
                 {
                   "type": "integer"
@@ -694,14 +834,19 @@
               "$ref": "#/$defs/format"
             }
           },
-          "required": ["format"]
+          "required": [
+            "format"
+          ]
         }
       }
     },
     "modulators": {
       "type": "object",
       "description": "App-only LFO and random sources and their links to kit parameters (page -> desk).",
-      "required": ["schema", "version"],
+      "required": [
+        "schema",
+        "version"
+      ],
       "properties": {
         "schema": {
           "const": "md-desk/modulators"
@@ -714,7 +859,10 @@
           "maxItems": 16,
           "items": {
             "type": "object",
-            "required": ["id", "kind"],
+            "required": [
+              "id",
+              "kind"
+            ],
             "properties": {
               "id": {
                 "type": "string",
@@ -724,7 +872,10 @@
                 "type": "string"
               },
               "kind": {
-                "enum": ["lfo", "random"]
+                "enum": [
+                  "lfo",
+                  "random"
+                ]
               },
               "shape": {
                 "type": "integer",
@@ -732,7 +883,15 @@
                 "maximum": 5
               },
               "rate": {
-                "enum": ["1/16", "1/8", "1/4", "1/2", "1", "2", "4"]
+                "enum": [
+                  "1/16",
+                  "1/8",
+                  "1/4",
+                  "1/2",
+                  "1",
+                  "2",
+                  "4"
+                ]
               },
               "depth": {
                 "type": "integer",
@@ -750,7 +909,11 @@
           "maxItems": 64,
           "items": {
             "type": "object",
-            "required": ["source", "track", "param"],
+            "required": [
+              "source",
+              "track",
+              "param"
+            ],
             "properties": {
               "source": {
                 "type": "string"
@@ -770,7 +933,11 @@
                 "$ref": "#/$defs/u7"
               },
               "curve": {
-                "enum": ["lin", "exp", "log"]
+                "enum": [
+                  "lin",
+                  "exp",
+                  "log"
+                ]
               },
               "invert": {
                 "type": "boolean"
@@ -783,7 +950,10 @@
     "setup": {
       "type": "object",
       "description": "The editor's setup kept with the project (P4, mdDesk/mdDeskSetup.h): the app modulators and the CCs of the eight controller knob rows. Stored by the plug-in as the MDSK chunk of its state.",
-      "required": ["schema", "version"],
+      "required": [
+        "schema",
+        "version"
+      ],
       "properties": {
         "schema": {
           "const": "md-desk/setup"
@@ -807,12 +977,36 @@
     },
     "lifecycle": {
       "description": "P6: the machine's life as one value (deskCore::Lifecycle): the engine label and the input gate follow it.",
-      "enum": ["missing", "unsupported", "loading", "booting", "animating", "ready", "hwConnecting", "hwLost"]
+      "enum": [
+        "missing",
+        "unsupported",
+        "loading",
+        "booting",
+        "animating",
+        "ready",
+        "hwConnecting",
+        "hwLost"
+      ]
     },
     "capabilities": {
       "type": "object",
       "description": "P6: what the engine can do, as data (deskCore::Capabilities). A page enables a control when its capability is true and shows reasons[name] otherwise.",
-      "required": ["engine", "label", "about", "reasons", "transport", "panelKeys", "liveRecord", "chains", "lcd", "workingKitMemory", "mutesFromMemory", "sampleNames", "modulators", "dumps"],
+      "required": [
+        "engine",
+        "label",
+        "about",
+        "reasons",
+        "transport",
+        "panelKeys",
+        "liveRecord",
+        "chains",
+        "lcd",
+        "workingKitMemory",
+        "mutesFromMemory",
+        "sampleNames",
+        "modulators",
+        "dumps"
+      ],
       "additionalProperties": false,
       "properties": {
         "engine": {
@@ -856,7 +1050,9 @@
           "type": "boolean"
         },
         "dumps": {
-          "enum": ["direct"]
+          "enum": [
+            "direct"
+          ]
         },
         "reasons": {
           "type": "object",
@@ -872,7 +1068,11 @@
       "description": "P6: the engine map (the plug-in's engine records), in menu order; empty for a desk outside the plug-in.",
       "items": {
         "type": "object",
-        "required": ["id", "label", "available"],
+        "required": [
+          "id",
+          "label",
+          "available"
+        ],
         "additionalProperties": false,
         "properties": {
           "id": {
@@ -894,7 +1094,12 @@
     "history": {
       "type": "object",
       "description": "P6: the core's undo history (a gesture is one step).",
-      "required": ["undo", "redo", "undoCount", "redoCount"],
+      "required": [
+        "undo",
+        "redo",
+        "undoCount",
+        "redoCount"
+      ],
       "additionalProperties": false,
       "properties": {
         "undo": {
@@ -916,7 +1121,17 @@
     "machine": {
       "type": "object",
       "description": "Read-only machine state from mdDataLink::Session.",
-      "required": ["schema", "version", "pattern", "kit", "song", "lifecycle", "capabilities", "engines", "history"],
+      "required": [
+        "schema",
+        "version",
+        "pattern",
+        "kit",
+        "song",
+        "lifecycle",
+        "capabilities",
+        "engines",
+        "history"
+      ],
       "properties": {
         "schema": {
           "const": "md-desk/machine"
@@ -971,7 +1186,11 @@
               ]
             },
             "working": {
-              "enum": ["unknown", "clean", "edited"],
+              "enum": [
+                "unknown",
+                "clean",
+                "edited"
+              ],
               "description": "edited = not saved on the machine: lost on LOAD KIT or a switch to a pattern linked to another kit."
             }
           },
@@ -1060,20 +1279,43 @@
           "description": "Added by the desk for the page: the adapter's state (P6: every member declared).",
           "properties": {
             "firmware": {
-              "enum": ["missing", "unsupported", "loading", "booting", "ready"],
-              "description": "The engine: NO ROM, ROM ERROR, LOADING ROM, BOOTING OS, EMU OS 1.63. P4: ready only when the start-up animation is over (keys work)."
+              "enum": [
+                "missing",
+                "unsupported",
+                "loading",
+                "booting",
+                "ready"
+              ],
+              "description": "The engine: NO ROM, ROM ERROR, LOADING ROM, BOOTING OS, EMU OS 1.63. P4: ready only when the start-up animation is over (keys work). Deprecated (P6): the pages read machine.lifecycle; kept for older readers, removed in the next contract version.",
+              "deprecated": true
             },
             "engine": {
-              "enum": ["emu", "hw"],
-              "description": "P4: the emulated MD OS 1.63, or HW MIDI: a real Machinedrum on the plug-in's MIDI in/out."
+              "enum": [
+                "emu",
+                "hw"
+              ],
+              "description": "P4: the emulated MD OS 1.63, or HW MIDI: a real Machinedrum on the plug-in's MIDI in/out. Deprecated (P6): the pages read machine.capabilities.engine; kept for older readers, removed in the next contract version.",
+              "deprecated": true
             },
             "link": {
-              "enum": ["local", "connect", "ready", "lost"],
-              "description": "P4, HW MIDI: connect (HW CONNECT, no reply yet), ready (HW MIDI), lost (HW NO MIDI: no reply for 3.5 s, or none in 5 s after choosing it). local for the emulator."
+              "enum": [
+                "local",
+                "connect",
+                "ready",
+                "lost"
+              ],
+              "description": "P4, HW MIDI: connect (HW CONNECT, no reply yet), ready (HW MIDI), lost (HW NO MIDI: no reply for 3.5 s, or none in 5 s after choosing it). local for the emulator. Deprecated (P6): the pages read machine.lifecycle; kept for older readers, removed in the next contract version.",
+              "deprecated": true
             },
             "boot": {
-              "enum": ["off", "starting", "animation", "ready"],
-              "description": "P4: off (no firmware running), starting (no status reply yet), animation (the firmware answers MIDI but its start-up animation ignores panel keys), ready."
+              "enum": [
+                "off",
+                "starting",
+                "animation",
+                "ready"
+              ],
+              "description": "P4: off (no firmware running), starting (no status reply yet), animation (the firmware answers MIDI but its start-up animation ignores panel keys), ready. Deprecated (P6): the pages read machine.lifecycle; kept for older readers, removed in the next contract version.",
+              "deprecated": true
             },
             "tx": {
               "type": "boolean",
@@ -1088,18 +1330,26 @@
               "description": "Last edit -> read-back time; -1 before the first."
             },
             "undo": {
-              "type": "boolean"
+              "type": "boolean",
+              "deprecated": true,
+              "description": "Deprecated (P6): the pages read machine.history; kept for older readers, removed in the next contract version."
             },
             "redo": {
-              "type": "boolean"
+              "type": "boolean",
+              "deprecated": true,
+              "description": "Deprecated (P6): the pages read machine.history; kept for older readers, removed in the next contract version."
             },
             "undoCount": {
               "type": "integer",
-              "minimum": 0
+              "minimum": 0,
+              "deprecated": true,
+              "description": "Deprecated (P6): the pages read machine.history; kept for older readers, removed in the next contract version."
             },
             "redoCount": {
               "type": "integer",
-              "minimum": 0
+              "minimum": 0,
+              "deprecated": true,
+              "description": "Deprecated (P6): the pages read machine.history; kept for older readers, removed in the next contract version."
             },
             "queued": {
               "oneOf": [
@@ -1144,7 +1394,10 @@
               "description": "The machine's pattern mutes (P4: read from RAM 0x28b34a when mutesSource is memory)."
             },
             "mutesSource": {
-              "enum": ["memory", "tracked"],
+              "enum": [
+                "memory",
+                "tracked"
+              ],
               "description": "memory: read from the machine (its MUTE window and CCs show too). tracked: what the desk sent and saw."
             },
             "chain": {
@@ -1155,7 +1408,11 @@
                 {
                   "type": "object",
                   "description": "The firmware's pattern chain (P4, BANK held + TRIG keys). One bank, each pattern once, loops.",
-                  "required": ["active", "next", "patterns"],
+                  "required": [
+                    "active",
+                    "next",
+                    "patterns"
+                  ],
                   "properties": {
                     "active": {
                       "type": "boolean",
@@ -1188,7 +1445,11 @@
                 },
                 {
                   "type": "object",
-                  "required": ["track", "param", "step"],
+                  "required": [
+                    "track",
+                    "param",
+                    "step"
+                  ],
                   "properties": {
                     "track": {
                       "$ref": "#/$defs/track"
@@ -1215,8 +1476,12 @@
               "description": "The machine's BANK GROUP: 0 A-D, 1 E-H, -1 unknown."
             },
             "kitSource": {
-              "enum": ["memory", "tracked"],
-              "description": "memory: the current kit document is the working kit read from the machine's memory (P3). tracked: the stored slot plus the edits the desk saw."
+              "enum": [
+                "memory",
+                "tracked"
+              ],
+              "description": "memory: the current kit document is the working kit read from the machine's memory (P3). tracked: the stored slot plus the edits the desk saw. Deprecated (P6): the pages read the working kit document's source; kept for older readers, removed in the next contract version.",
+              "deprecated": true
             }
           },
           "additionalProperties": false
@@ -1239,7 +1504,11 @@
     "audioDevices": {
       "type": "object",
       "description": "The standalone's audio and MIDI devices (P6, mdJucePlugin/mdAudioMidiLink.cpp; data-contract.md 4.8). Not machine data. In a plug-in only schema, version and standalone:false.",
-      "required": ["schema", "version", "standalone"],
+      "required": [
+        "schema",
+        "version",
+        "standalone"
+      ],
       "properties": {
         "schema": {
           "const": "gm-audio/devices"
@@ -1252,7 +1521,10 @@
         },
         "driver": {
           "type": "object",
-          "required": ["id", "list"],
+          "required": [
+            "id",
+            "list"
+          ],
           "properties": {
             "id": {
               "type": "string"
@@ -1267,7 +1539,10 @@
         },
         "output": {
           "type": "object",
-          "required": ["id", "list"],
+          "required": [
+            "id",
+            "list"
+          ],
           "properties": {
             "id": {
               "type": "string"
@@ -1282,7 +1557,11 @@
         },
         "input": {
           "type": "object",
-          "required": ["id", "list", "muted"],
+          "required": [
+            "id",
+            "list",
+            "muted"
+          ],
           "properties": {
             "id": {
               "type": "string"
@@ -1302,7 +1581,10 @@
           "type": "array",
           "items": {
             "type": "object",
-            "required": ["name", "on"],
+            "required": [
+              "name",
+              "on"
+            ],
             "properties": {
               "name": {
                 "type": "string"
@@ -1315,7 +1597,10 @@
         },
         "sampleRate": {
           "type": "object",
-          "required": ["value", "list"],
+          "required": [
+            "value",
+            "list"
+          ],
           "properties": {
             "value": {
               "type": "number"
@@ -1330,7 +1615,10 @@
         },
         "bufferSize": {
           "type": "object",
-          "required": ["value", "list"],
+          "required": [
+            "value",
+            "list"
+          ],
           "properties": {
             "value": {
               "type": "number"
@@ -1357,7 +1645,11 @@
           "type": "array",
           "items": {
             "type": "object",
-            "required": ["id", "name", "on"],
+            "required": [
+              "id",
+              "name",
+              "on"
+            ],
             "properties": {
               "id": {
                 "type": "string"
@@ -1373,7 +1665,10 @@
         },
         "midiOutput": {
           "type": "object",
-          "required": ["id", "list"],
+          "required": [
+            "id",
+            "list"
+          ],
           "properties": {
             "id": {
               "type": "string"
@@ -1382,7 +1677,10 @@
               "type": "array",
               "items": {
                 "type": "object",
-                "required": ["id", "name"],
+                "required": [
+                  "id",
+                  "name"
+                ],
                 "properties": {
                   "id": {
                     "type": "string"
@@ -1403,7 +1701,11 @@
     "catalogue": {
       "type": "object",
       "description": "The OS 1.63 machine table (mdDesk::Desk::machineCatalogue).",
-      "required": ["schema", "version", "machines"],
+      "required": [
+        "schema",
+        "version",
+        "machines"
+      ],
       "properties": {
         "schema": {
           "const": "md-desk/machines"
@@ -1415,7 +1717,12 @@
           "type": "array",
           "items": {
             "type": "object",
-            "required": ["model", "machine", "family", "params"],
+            "required": [
+              "model",
+              "machine",
+              "family",
+              "params"
+            ],
             "properties": {
               "model": {
                 "type": "integer",
@@ -1433,7 +1740,10 @@
                 "minItems": 24,
                 "maxItems": 24,
                 "items": {
-                  "type": ["string", "null"]
+                  "type": [
+                    "string",
+                    "null"
+                  ]
                 }
               }
             }
@@ -1444,12 +1754,17 @@
     "message": {
       "description": "P6: every message the plug-in sends the Machinedrum Editor page (Bridge gm.recv). Checked by mdDeskTest against what the desk publishes.",
       "type": "object",
-      "required": ["type"],
+      "required": [
+        "type"
+      ],
       "oneOf": [
         {
           "type": "object",
           "description": "The machine table, once after ready.",
-          "required": ["type", "doc"],
+          "required": [
+            "type",
+            "doc"
+          ],
           "properties": {
             "type": {
               "const": "catalogue"
@@ -1461,13 +1776,23 @@
         },
         {
           "type": "object",
-          "required": ["type", "kind", "doc"],
+          "required": [
+            "type",
+            "kind",
+            "doc"
+          ],
           "properties": {
             "type": {
               "const": "doc"
             },
             "kind": {
-              "enum": ["pattern", "kit", "song", "global", "workingKit"]
+              "enum": [
+                "pattern",
+                "kit",
+                "song",
+                "global",
+                "workingKit"
+              ]
             },
             "pending": {
               "type": "boolean",
@@ -1483,7 +1808,12 @@
               "description": "The slot; for the working kit, the kit it was loaded from."
             },
             "source": {
-              "enum": ["none", "dump", "memory", "tracked"],
+              "enum": [
+                "none",
+                "dump",
+                "memory",
+                "tracked"
+              ],
               "description": "P6: where the observed document came from."
             }
           },
@@ -1573,7 +1903,10 @@
         },
         {
           "type": "object",
-          "required": ["type", "doc"],
+          "required": [
+            "type",
+            "doc"
+          ],
           "properties": {
             "type": {
               "const": "machine"
@@ -1585,7 +1918,13 @@
         },
         {
           "type": "object",
-          "required": ["type", "op", "ok", "errors", "note"],
+          "required": [
+            "type",
+            "op",
+            "ok",
+            "errors",
+            "note"
+          ],
           "properties": {
             "type": {
               "const": "result"
@@ -1613,19 +1952,31 @@
         {
           "type": "object",
           "description": "A command that would lose something asks first; the page sends it again with force.",
-          "required": ["type", "ask"],
+          "required": [
+            "type",
+            "ask"
+          ],
           "properties": {
             "type": {
               "const": "ask"
             },
             "ask": {
-              "enum": ["overwriteKit", "relinkKit", "loadKit", "breakChain", "discardKit"]
+              "enum": [
+                "overwriteKit",
+                "relinkKit",
+                "loadKit",
+                "breakChain",
+                "discardKit"
+              ]
             },
             "command": {
               "type": "object"
             },
             "kit": {
-              "type": ["integer", "null"]
+              "type": [
+                "integer",
+                "null"
+              ]
             },
             "p": {
               "type": "integer"
@@ -1637,7 +1988,10 @@
         },
         {
           "type": "object",
-          "required": ["type", "message"],
+          "required": [
+            "type",
+            "message"
+          ],
           "properties": {
             "type": {
               "const": "error"
@@ -1649,7 +2003,14 @@
         },
         {
           "type": "object",
-          "required": ["type", "step", "pattern", "playing", "recording", "valid"],
+          "required": [
+            "type",
+            "step",
+            "pattern",
+            "playing",
+            "recording",
+            "valid"
+          ],
           "properties": {
             "type": {
               "const": "telemetry"
@@ -1675,7 +2036,10 @@
         },
         {
           "type": "object",
-          "required": ["type", "doc"],
+          "required": [
+            "type",
+            "doc"
+          ],
           "properties": {
             "type": {
               "const": "setup"
@@ -1687,7 +2051,14 @@
         },
         {
           "type": "object",
-          "required": ["type", "doc", "values", "ccPerSecond", "runs", "ccLimit"],
+          "required": [
+            "type",
+            "doc",
+            "values",
+            "ccPerSecond",
+            "runs",
+            "ccLimit"
+          ],
           "properties": {
             "type": {
               "const": "mod"
@@ -1706,7 +2077,10 @@
               "minimum": 0
             },
             "runs": {
-              "enum": ["editor", "plug-in"]
+              "enum": [
+                "editor",
+                "plug-in"
+              ]
             },
             "ccLimit": {
               "type": "number"
@@ -1716,7 +2090,10 @@
         {
           "type": "object",
           "description": "The firmware's own LCD while it starts: 128 x 64, one bit a pixel, row-major, base64.",
-          "required": ["type", "bits"],
+          "required": [
+            "type",
+            "bits"
+          ],
           "properties": {
             "type": {
               "const": "lcd"
@@ -1729,21 +2106,29 @@
         {
           "type": "object",
           "description": "The plug-in's MIDI learn mappings (host).",
-          "required": ["type", "doc"],
+          "required": [
+            "type",
+            "doc"
+          ],
           "properties": {
             "type": {
               "const": "learn"
             },
             "doc": {
               "type": "object",
-              "required": ["mappings", "learning"]
+              "required": [
+                "mappings",
+                "learning"
+              ]
             }
           }
         },
         {
           "type": "object",
           "description": "The engine changed: the page starts its documents over.",
-          "required": ["type"],
+          "required": [
+            "type"
+          ],
           "properties": {
             "type": {
               "const": "reset"
@@ -1753,7 +2138,10 @@
         {
           "type": "object",
           "description": "The standalone's audio and MIDI devices (host, mdAudioMidiLink).",
-          "required": ["type", "doc"],
+          "required": [
+            "type",
+            "doc"
+          ],
           "properties": {
             "type": {
               "const": "audio"
@@ -1765,7 +2153,10 @@
         },
         {
           "type": "object",
-          "required": ["type", "in"],
+          "required": [
+            "type",
+            "in"
+          ],
           "properties": {
             "type": {
               "const": "audioLevel"
@@ -1785,7 +2176,9 @@
         {
           "type": "object",
           "description": "core: the page is up: everything is published once more",
-          "required": ["op"],
+          "required": [
+            "op"
+          ],
           "properties": {
             "op": {
               "const": "ready"
@@ -1798,14 +2191,19 @@
               "minimum": 0
             },
             "force": {
-              "type": ["boolean", "integer"]
+              "type": [
+                "boolean",
+                "integer"
+              ]
             }
           }
         },
         {
           "type": "object",
           "description": "core: undo the last step (a drag is one step)",
-          "required": ["op"],
+          "required": [
+            "op"
+          ],
           "properties": {
             "op": {
               "const": "undo"
@@ -1818,14 +2216,19 @@
               "minimum": 0
             },
             "force": {
-              "type": ["boolean", "integer"]
+              "type": [
+                "boolean",
+                "integer"
+              ]
             }
           }
         },
         {
           "type": "object",
           "description": "core",
-          "required": ["op"],
+          "required": [
+            "op"
+          ],
           "properties": {
             "op": {
               "const": "redo"
@@ -1838,14 +2241,21 @@
               "minimum": 0
             },
             "force": {
-              "type": ["boolean", "integer"]
+              "type": [
+                "boolean",
+                "integer"
+              ]
             }
           }
         },
         {
           "type": "object",
           "description": "core: a whole document as the intent",
-          "required": ["op", "kind", "doc"],
+          "required": [
+            "op",
+            "kind",
+            "doc"
+          ],
           "properties": {
             "op": {
               "const": "set"
@@ -1858,11 +2268,20 @@
               "minimum": 0
             },
             "force": {
-              "type": ["boolean", "integer"]
+              "type": [
+                "boolean",
+                "integer"
+              ]
             },
             "kind": {
               "type": "string",
-              "enum": ["pattern", "kit", "workingKit", "song", "global"]
+              "enum": [
+                "pattern",
+                "kit",
+                "workingKit",
+                "song",
+                "global"
+              ]
             },
             "doc": {
               "type": "object"
@@ -1872,7 +2291,12 @@
         {
           "type": "object",
           "description": "core: a trig on or off (toggles without on)",
-          "required": ["op", "p", "t", "s"],
+          "required": [
+            "op",
+            "p",
+            "t",
+            "s"
+          ],
           "properties": {
             "op": {
               "const": "trig"
@@ -1885,7 +2309,10 @@
               "minimum": 0
             },
             "force": {
-              "type": ["boolean", "integer"]
+              "type": [
+                "boolean",
+                "integer"
+              ]
             },
             "p": {
               "type": "integer",
@@ -1903,14 +2330,22 @@
               "maximum": 63
             },
             "on": {
-              "type": ["boolean", "integer"]
+              "type": [
+                "boolean",
+                "integer"
+              ]
             }
           }
         },
         {
           "type": "object",
           "description": "core",
-          "required": ["op", "p", "t", "s"],
+          "required": [
+            "op",
+            "p",
+            "t",
+            "s"
+          ],
           "properties": {
             "op": {
               "const": "accent"
@@ -1923,7 +2358,10 @@
               "minimum": 0
             },
             "force": {
-              "type": ["boolean", "integer"]
+              "type": [
+                "boolean",
+                "integer"
+              ]
             },
             "p": {
               "type": "integer",
@@ -1941,14 +2379,22 @@
               "maximum": 63
             },
             "on": {
-              "type": ["boolean", "integer"]
+              "type": [
+                "boolean",
+                "integer"
+              ]
             }
           }
         },
         {
           "type": "object",
           "description": "core",
-          "required": ["op", "p", "t", "s"],
+          "required": [
+            "op",
+            "p",
+            "t",
+            "s"
+          ],
           "properties": {
             "op": {
               "const": "slide"
@@ -1961,7 +2407,10 @@
               "minimum": 0
             },
             "force": {
-              "type": ["boolean", "integer"]
+              "type": [
+                "boolean",
+                "integer"
+              ]
             },
             "p": {
               "type": "integer",
@@ -1979,14 +2428,24 @@
               "maximum": 63
             },
             "on": {
-              "type": ["boolean", "integer"]
+              "type": [
+                "boolean",
+                "integer"
+              ]
             }
           }
         },
         {
           "type": "object",
           "description": "core: a parameter lock; v null clears it",
-          "required": ["op", "p", "t", "i", "s", "v"],
+          "required": [
+            "op",
+            "p",
+            "t",
+            "i",
+            "s",
+            "v"
+          ],
           "properties": {
             "op": {
               "const": "lock"
@@ -1999,7 +2458,10 @@
               "minimum": 0
             },
             "force": {
-              "type": ["boolean", "integer"]
+              "type": [
+                "boolean",
+                "integer"
+              ]
             },
             "p": {
               "type": "integer",
@@ -2038,7 +2500,12 @@
         {
           "type": "object",
           "description": "core",
-          "required": ["op", "p", "t", "i"],
+          "required": [
+            "op",
+            "p",
+            "t",
+            "i"
+          ],
           "properties": {
             "op": {
               "const": "clearLane"
@@ -2051,7 +2518,10 @@
               "minimum": 0
             },
             "force": {
-              "type": ["boolean", "integer"]
+              "type": [
+                "boolean",
+                "integer"
+              ]
             },
             "p": {
               "type": "integer",
@@ -2073,7 +2543,11 @@
         {
           "type": "object",
           "description": "core",
-          "required": ["op", "p", "v"],
+          "required": [
+            "op",
+            "p",
+            "v"
+          ],
           "properties": {
             "op": {
               "const": "length"
@@ -2086,7 +2560,10 @@
               "minimum": 0
             },
             "force": {
-              "type": ["boolean", "integer"]
+              "type": [
+                "boolean",
+                "integer"
+              ]
             },
             "p": {
               "type": "integer",
@@ -2103,7 +2580,11 @@
         {
           "type": "object",
           "description": "core",
-          "required": ["op", "p", "v"],
+          "required": [
+            "op",
+            "p",
+            "v"
+          ],
           "properties": {
             "op": {
               "const": "totalLength"
@@ -2116,7 +2597,10 @@
               "minimum": 0
             },
             "force": {
-              "type": ["boolean", "integer"]
+              "type": [
+                "boolean",
+                "integer"
+              ]
             },
             "p": {
               "type": "integer",
@@ -2133,7 +2617,11 @@
         {
           "type": "object",
           "description": "core: the tempo multiplier",
-          "required": ["op", "p", "v"],
+          "required": [
+            "op",
+            "p",
+            "v"
+          ],
           "properties": {
             "op": {
               "const": "speed"
@@ -2146,7 +2634,10 @@
               "minimum": 0
             },
             "force": {
-              "type": ["boolean", "integer"]
+              "type": [
+                "boolean",
+                "integer"
+              ]
             },
             "p": {
               "type": "integer",
@@ -2155,14 +2646,23 @@
             },
             "v": {
               "type": "string",
-              "enum": ["1X", "2X", "3/4X", "3/2X"]
+              "enum": [
+                "1X",
+                "2X",
+                "3/4X",
+                "3/2X"
+              ]
             }
           }
         },
         {
           "type": "object",
           "description": "core: percent",
-          "required": ["op", "p", "v"],
+          "required": [
+            "op",
+            "p",
+            "v"
+          ],
           "properties": {
             "op": {
               "const": "swing"
@@ -2175,7 +2675,10 @@
               "minimum": 0
             },
             "force": {
-              "type": ["boolean", "integer"]
+              "type": [
+                "boolean",
+                "integer"
+              ]
             },
             "p": {
               "type": "integer",
@@ -2192,7 +2695,11 @@
         {
           "type": "object",
           "description": "core",
-          "required": ["op", "p", "v"],
+          "required": [
+            "op",
+            "p",
+            "v"
+          ],
           "properties": {
             "op": {
               "const": "accentAmount"
@@ -2205,7 +2712,10 @@
               "minimum": 0
             },
             "force": {
-              "type": ["boolean", "integer"]
+              "type": [
+                "boolean",
+                "integer"
+              ]
             },
             "p": {
               "type": "integer",
@@ -2222,7 +2732,11 @@
         {
           "type": "object",
           "description": "core",
-          "required": ["op", "p", "v"],
+          "required": [
+            "op",
+            "p",
+            "v"
+          ],
           "properties": {
             "op": {
               "const": "patternKit"
@@ -2235,7 +2749,10 @@
               "minimum": 0
             },
             "force": {
-              "type": ["boolean", "integer"]
+              "type": [
+                "boolean",
+                "integer"
+              ]
             },
             "p": {
               "type": "integer",
@@ -2252,7 +2769,13 @@
         {
           "type": "object",
           "description": "core",
-          "required": ["op", "p", "t", "from", "to"],
+          "required": [
+            "op",
+            "p",
+            "t",
+            "from",
+            "to"
+          ],
           "properties": {
             "op": {
               "const": "clearSteps"
@@ -2265,7 +2788,10 @@
               "minimum": 0
             },
             "force": {
-              "type": ["boolean", "integer"]
+              "type": [
+                "boolean",
+                "integer"
+              ]
             },
             "p": {
               "type": "integer",
@@ -2292,7 +2818,13 @@
         {
           "type": "object",
           "description": "core",
-          "required": ["op", "p", "t", "from", "to"],
+          "required": [
+            "op",
+            "p",
+            "t",
+            "from",
+            "to"
+          ],
           "properties": {
             "op": {
               "const": "copySteps"
@@ -2305,7 +2837,10 @@
               "minimum": 0
             },
             "force": {
-              "type": ["boolean", "integer"]
+              "type": [
+                "boolean",
+                "integer"
+              ]
             },
             "p": {
               "type": "integer",
@@ -2332,7 +2867,12 @@
         {
           "type": "object",
           "description": "core",
-          "required": ["op", "p", "t", "from"],
+          "required": [
+            "op",
+            "p",
+            "t",
+            "from"
+          ],
           "properties": {
             "op": {
               "const": "pasteSteps"
@@ -2345,7 +2885,10 @@
               "minimum": 0
             },
             "force": {
-              "type": ["boolean", "integer"]
+              "type": [
+                "boolean",
+                "integer"
+              ]
             },
             "p": {
               "type": "integer",
@@ -2367,7 +2910,10 @@
         {
           "type": "object",
           "description": "core: the pattern chooser",
-          "required": ["op", "p"],
+          "required": [
+            "op",
+            "p"
+          ],
           "properties": {
             "op": {
               "const": "patCopy"
@@ -2380,7 +2926,10 @@
               "minimum": 0
             },
             "force": {
-              "type": ["boolean", "integer"]
+              "type": [
+                "boolean",
+                "integer"
+              ]
             },
             "p": {
               "type": "integer",
@@ -2392,7 +2941,10 @@
         {
           "type": "object",
           "description": "core",
-          "required": ["op", "p"],
+          "required": [
+            "op",
+            "p"
+          ],
           "properties": {
             "op": {
               "const": "patPaste"
@@ -2405,7 +2957,10 @@
               "minimum": 0
             },
             "force": {
-              "type": ["boolean", "integer"]
+              "type": [
+                "boolean",
+                "integer"
+              ]
             },
             "p": {
               "type": "integer",
@@ -2417,7 +2972,11 @@
         {
           "type": "object",
           "description": "core: drag-copy",
-          "required": ["op", "from", "to"],
+          "required": [
+            "op",
+            "from",
+            "to"
+          ],
           "properties": {
             "op": {
               "const": "patCopyTo"
@@ -2430,7 +2989,10 @@
               "minimum": 0
             },
             "force": {
-              "type": ["boolean", "integer"]
+              "type": [
+                "boolean",
+                "integer"
+              ]
             },
             "from": {
               "type": "integer",
@@ -2447,7 +3009,10 @@
         {
           "type": "object",
           "description": "core",
-          "required": ["op", "p"],
+          "required": [
+            "op",
+            "p"
+          ],
           "properties": {
             "op": {
               "const": "patClear"
@@ -2460,7 +3025,10 @@
               "minimum": 0
             },
             "force": {
-              "type": ["boolean", "integer"]
+              "type": [
+                "boolean",
+                "integer"
+              ]
             },
             "p": {
               "type": "integer",
@@ -2472,7 +3040,13 @@
         {
           "type": "object",
           "description": "core: a kit parameter 0-23",
-          "required": ["op", "k", "t", "i", "v"],
+          "required": [
+            "op",
+            "k",
+            "t",
+            "i",
+            "v"
+          ],
           "properties": {
             "op": {
               "const": "param"
@@ -2485,7 +3059,10 @@
               "minimum": 0
             },
             "force": {
-              "type": ["boolean", "integer"]
+              "type": [
+                "boolean",
+                "integer"
+              ]
             },
             "k": {
               "type": "integer",
@@ -2512,7 +3089,12 @@
         {
           "type": "object",
           "description": "core",
-          "required": ["op", "k", "t", "v"],
+          "required": [
+            "op",
+            "k",
+            "t",
+            "v"
+          ],
           "properties": {
             "op": {
               "const": "level"
@@ -2525,7 +3107,10 @@
               "minimum": 0
             },
             "force": {
-              "type": ["boolean", "integer"]
+              "type": [
+                "boolean",
+                "integer"
+              ]
             },
             "k": {
               "type": "integer",
@@ -2547,7 +3132,12 @@
         {
           "type": "object",
           "description": "core",
-          "required": ["op", "k", "t", "model"],
+          "required": [
+            "op",
+            "k",
+            "t",
+            "model"
+          ],
           "properties": {
             "op": {
               "const": "machine"
@@ -2560,7 +3150,10 @@
               "minimum": 0
             },
             "force": {
-              "type": ["boolean", "integer"]
+              "type": [
+                "boolean",
+                "integer"
+              ]
             },
             "k": {
               "type": "integer",
@@ -2578,14 +3171,23 @@
               "maximum": 255
             },
             "keepFx": {
-              "type": ["boolean", "integer"]
+              "type": [
+                "boolean",
+                "integer"
+              ]
             }
           }
         },
         {
           "type": "object",
           "description": "core: an LFO setting",
-          "required": ["op", "k", "t", "field", "v"],
+          "required": [
+            "op",
+            "k",
+            "t",
+            "field",
+            "v"
+          ],
           "properties": {
             "op": {
               "const": "lfo"
@@ -2598,7 +3200,10 @@
               "minimum": 0
             },
             "force": {
-              "type": ["boolean", "integer"]
+              "type": [
+                "boolean",
+                "integer"
+              ]
             },
             "k": {
               "type": "integer",
@@ -2612,7 +3217,13 @@
             },
             "field": {
               "type": "string",
-              "enum": ["track", "param", "shape1", "shape2", "update"]
+              "enum": [
+                "track",
+                "param",
+                "shape1",
+                "shape2",
+                "update"
+              ]
             },
             "v": {
               "type": "integer",
@@ -2624,7 +3235,12 @@
         {
           "type": "object",
           "description": "core: a mute or trig group",
-          "required": ["op", "k", "t", "kind"],
+          "required": [
+            "op",
+            "k",
+            "t",
+            "kind"
+          ],
           "properties": {
             "op": {
               "const": "group"
@@ -2637,7 +3253,10 @@
               "minimum": 0
             },
             "force": {
-              "type": ["boolean", "integer"]
+              "type": [
+                "boolean",
+                "integer"
+              ]
             },
             "k": {
               "type": "integer",
@@ -2651,7 +3270,10 @@
             },
             "kind": {
               "type": "string",
-              "enum": ["mute", "trig"]
+              "enum": [
+                "mute",
+                "trig"
+              ]
             },
             "target": {
               "oneOf": [
@@ -2670,7 +3292,13 @@
         {
           "type": "object",
           "description": "core",
-          "required": ["op", "k", "fx", "i", "v"],
+          "required": [
+            "op",
+            "k",
+            "fx",
+            "i",
+            "v"
+          ],
           "properties": {
             "op": {
               "const": "masterFx"
@@ -2683,7 +3311,10 @@
               "minimum": 0
             },
             "force": {
-              "type": ["boolean", "integer"]
+              "type": [
+                "boolean",
+                "integer"
+              ]
             },
             "k": {
               "type": "integer",
@@ -2692,7 +3323,12 @@
             },
             "fx": {
               "type": "string",
-              "enum": ["gateBox", "rhythmEcho", "eq", "dynamix"]
+              "enum": [
+                "gateBox",
+                "rhythmEcho",
+                "eq",
+                "dynamix"
+              ]
             },
             "i": {
               "type": "integer",
@@ -2709,7 +3345,11 @@
         {
           "type": "object",
           "description": "core: the kit that plays, live (0x55)",
-          "required": ["op", "k", "name"],
+          "required": [
+            "op",
+            "k",
+            "name"
+          ],
           "properties": {
             "op": {
               "const": "kitName"
@@ -2722,7 +3362,10 @@
               "minimum": 0
             },
             "force": {
-              "type": ["boolean", "integer"]
+              "type": [
+                "boolean",
+                "integer"
+              ]
             },
             "k": {
               "type": "integer",
@@ -2737,7 +3380,11 @@
         {
           "type": "object",
           "description": "core",
-          "required": ["op", "k", "t"],
+          "required": [
+            "op",
+            "k",
+            "t"
+          ],
           "properties": {
             "op": {
               "const": "copySound"
@@ -2750,7 +3397,10 @@
               "minimum": 0
             },
             "force": {
-              "type": ["boolean", "integer"]
+              "type": [
+                "boolean",
+                "integer"
+              ]
             },
             "k": {
               "type": "integer",
@@ -2767,7 +3417,11 @@
         {
           "type": "object",
           "description": "core",
-          "required": ["op", "k", "t"],
+          "required": [
+            "op",
+            "k",
+            "t"
+          ],
           "properties": {
             "op": {
               "const": "pasteSound"
@@ -2780,7 +3434,10 @@
               "minimum": 0
             },
             "force": {
-              "type": ["boolean", "integer"]
+              "type": [
+                "boolean",
+                "integer"
+              ]
             },
             "k": {
               "type": "integer",
@@ -2797,7 +3454,11 @@
         {
           "type": "object",
           "description": "core",
-          "required": ["op", "k", "t"],
+          "required": [
+            "op",
+            "k",
+            "t"
+          ],
           "properties": {
             "op": {
               "const": "clearSound"
@@ -2810,7 +3471,10 @@
               "minimum": 0
             },
             "force": {
-              "type": ["boolean", "integer"]
+              "type": [
+                "boolean",
+                "integer"
+              ]
             },
             "k": {
               "type": "integer",
@@ -2827,7 +3491,10 @@
         {
           "type": "object",
           "description": "core: the kit library",
-          "required": ["op", "k"],
+          "required": [
+            "op",
+            "k"
+          ],
           "properties": {
             "op": {
               "const": "kitCopy"
@@ -2840,7 +3507,10 @@
               "minimum": 0
             },
             "force": {
-              "type": ["boolean", "integer"]
+              "type": [
+                "boolean",
+                "integer"
+              ]
             },
             "k": {
               "type": "integer",
@@ -2852,7 +3522,10 @@
         {
           "type": "object",
           "description": "core",
-          "required": ["op", "k"],
+          "required": [
+            "op",
+            "k"
+          ],
           "properties": {
             "op": {
               "const": "kitPaste"
@@ -2865,7 +3538,10 @@
               "minimum": 0
             },
             "force": {
-              "type": ["boolean", "integer"]
+              "type": [
+                "boolean",
+                "integer"
+              ]
             },
             "k": {
               "type": "integer",
@@ -2877,7 +3553,11 @@
         {
           "type": "object",
           "description": "core",
-          "required": ["op", "from", "to"],
+          "required": [
+            "op",
+            "from",
+            "to"
+          ],
           "properties": {
             "op": {
               "const": "kitCopyTo"
@@ -2890,7 +3570,10 @@
               "minimum": 0
             },
             "force": {
-              "type": ["boolean", "integer"]
+              "type": [
+                "boolean",
+                "integer"
+              ]
             },
             "from": {
               "type": "integer",
@@ -2907,7 +3590,10 @@
         {
           "type": "object",
           "description": "core",
-          "required": ["op", "k"],
+          "required": [
+            "op",
+            "k"
+          ],
           "properties": {
             "op": {
               "const": "kitClear"
@@ -2920,7 +3606,10 @@
               "minimum": 0
             },
             "force": {
-              "type": ["boolean", "integer"]
+              "type": [
+                "boolean",
+                "integer"
+              ]
             },
             "k": {
               "type": "integer",
@@ -2932,7 +3621,11 @@
         {
           "type": "object",
           "description": "core",
-          "required": ["op", "k", "name"],
+          "required": [
+            "op",
+            "k",
+            "name"
+          ],
           "properties": {
             "op": {
               "const": "kitRename"
@@ -2945,7 +3638,10 @@
               "minimum": 0
             },
             "force": {
-              "type": ["boolean", "integer"]
+              "type": [
+                "boolean",
+                "integer"
+              ]
             },
             "k": {
               "type": "integer",
@@ -2960,7 +3656,12 @@
         {
           "type": "object",
           "description": "core: song rows",
-          "required": ["op", "s", "i", "row"],
+          "required": [
+            "op",
+            "s",
+            "i",
+            "row"
+          ],
           "properties": {
             "op": {
               "const": "rowSet"
@@ -2973,7 +3674,10 @@
               "minimum": 0
             },
             "force": {
-              "type": ["boolean", "integer"]
+              "type": [
+                "boolean",
+                "integer"
+              ]
             },
             "s": {
               "type": "integer",
@@ -2993,7 +3697,11 @@
         {
           "type": "object",
           "description": "core",
-          "required": ["op", "s", "i"],
+          "required": [
+            "op",
+            "s",
+            "i"
+          ],
           "properties": {
             "op": {
               "const": "rowInsert"
@@ -3006,7 +3714,10 @@
               "minimum": 0
             },
             "force": {
-              "type": ["boolean", "integer"]
+              "type": [
+                "boolean",
+                "integer"
+              ]
             },
             "s": {
               "type": "integer",
@@ -3026,7 +3737,11 @@
         {
           "type": "object",
           "description": "core",
-          "required": ["op", "s", "i"],
+          "required": [
+            "op",
+            "s",
+            "i"
+          ],
           "properties": {
             "op": {
               "const": "rowDelete"
@@ -3039,7 +3754,10 @@
               "minimum": 0
             },
             "force": {
-              "type": ["boolean", "integer"]
+              "type": [
+                "boolean",
+                "integer"
+              ]
             },
             "s": {
               "type": "integer",
@@ -3056,7 +3774,12 @@
         {
           "type": "object",
           "description": "core",
-          "required": ["op", "s", "from", "to"],
+          "required": [
+            "op",
+            "s",
+            "from",
+            "to"
+          ],
           "properties": {
             "op": {
               "const": "rowMove"
@@ -3069,7 +3792,10 @@
               "minimum": 0
             },
             "force": {
-              "type": ["boolean", "integer"]
+              "type": [
+                "boolean",
+                "integer"
+              ]
             },
             "s": {
               "type": "integer",
@@ -3091,7 +3817,11 @@
         {
           "type": "object",
           "description": "core",
-          "required": ["op", "s", "i"],
+          "required": [
+            "op",
+            "s",
+            "i"
+          ],
           "properties": {
             "op": {
               "const": "copyRow"
@@ -3104,7 +3834,10 @@
               "minimum": 0
             },
             "force": {
-              "type": ["boolean", "integer"]
+              "type": [
+                "boolean",
+                "integer"
+              ]
             },
             "s": {
               "type": "integer",
@@ -3121,7 +3854,11 @@
         {
           "type": "object",
           "description": "core",
-          "required": ["op", "s", "i"],
+          "required": [
+            "op",
+            "s",
+            "i"
+          ],
           "properties": {
             "op": {
               "const": "pasteRow"
@@ -3134,7 +3871,10 @@
               "minimum": 0
             },
             "force": {
-              "type": ["boolean", "integer"]
+              "type": [
+                "boolean",
+                "integer"
+              ]
             },
             "s": {
               "type": "integer",
@@ -3151,7 +3891,11 @@
         {
           "type": "object",
           "description": "core: a track's output",
-          "required": ["op", "t", "out"],
+          "required": [
+            "op",
+            "t",
+            "out"
+          ],
           "properties": {
             "op": {
               "const": "route"
@@ -3164,7 +3908,10 @@
               "minimum": 0
             },
             "force": {
-              "type": ["boolean", "integer"]
+              "type": [
+                "boolean",
+                "integer"
+              ]
             },
             "t": {
               "type": "integer",
@@ -3173,14 +3920,25 @@
             },
             "out": {
               "type": "string",
-              "enum": ["A", "B", "C", "D", "E", "F", "MAIN"]
+              "enum": [
+                "A",
+                "B",
+                "C",
+                "D",
+                "E",
+                "F",
+                "MAIN"
+              ]
             }
           }
         },
         {
           "type": "object",
           "description": "core",
-          "required": ["op", "bpm"],
+          "required": [
+            "op",
+            "bpm"
+          ],
           "properties": {
             "op": {
               "const": "tempo"
@@ -3193,7 +3951,10 @@
               "minimum": 0
             },
             "force": {
-              "type": ["boolean", "integer"]
+              "type": [
+                "boolean",
+                "integer"
+              ]
             },
             "bpm": {
               "type": "number",
@@ -3205,7 +3966,10 @@
         {
           "type": "object",
           "description": "core: EXTENDED or CLASSIC",
-          "required": ["op", "on"],
+          "required": [
+            "op",
+            "on"
+          ],
           "properties": {
             "op": {
               "const": "extended"
@@ -3218,17 +3982,26 @@
               "minimum": 0
             },
             "force": {
-              "type": ["boolean", "integer"]
+              "type": [
+                "boolean",
+                "integer"
+              ]
             },
             "on": {
-              "type": ["boolean", "integer"]
+              "type": [
+                "boolean",
+                "integer"
+              ]
             }
           }
         },
         {
           "type": "object",
           "description": "core: a GLOBAL setting by name",
-          "required": ["op", "field"],
+          "required": [
+            "op",
+            "field"
+          ],
           "properties": {
             "op": {
               "const": "globalSet"
@@ -3241,14 +4014,32 @@
               "minimum": 0
             },
             "force": {
-              "type": ["boolean", "integer"]
+              "type": [
+                "boolean",
+                "integer"
+              ]
             },
             "field": {
               "type": "string",
-              "enum": ["baseChannel", "tempoIn", "ctrlIn", "tempoOut", "ctrlOut", "programChangeIn", "programChangeOut", "localControl", "programChangeChannel", "trigMode", "keymap"]
+              "enum": [
+                "baseChannel",
+                "tempoIn",
+                "ctrlIn",
+                "tempoOut",
+                "ctrlOut",
+                "programChangeIn",
+                "programChangeOut",
+                "localControl",
+                "programChangeChannel",
+                "trigMode",
+                "keymap"
+              ]
             },
             "on": {
-              "type": ["boolean", "integer"]
+              "type": [
+                "boolean",
+                "integer"
+              ]
             },
             "v": {},
             "note": {
@@ -3273,7 +4064,11 @@
         {
           "type": "object",
           "description": "machine: read a document now",
-          "required": ["op", "kind", "slot"],
+          "required": [
+            "op",
+            "kind",
+            "slot"
+          ],
           "properties": {
             "op": {
               "const": "load"
@@ -3286,11 +4081,19 @@
               "minimum": 0
             },
             "force": {
-              "type": ["boolean", "integer"]
+              "type": [
+                "boolean",
+                "integer"
+              ]
             },
             "kind": {
               "type": "string",
-              "enum": ["pattern", "kit", "song", "global"]
+              "enum": [
+                "pattern",
+                "kit",
+                "song",
+                "global"
+              ]
             },
             "slot": {
               "type": "integer",
@@ -3302,7 +4105,10 @@
         {
           "type": "object",
           "description": "machine: LOAD PATTERN (queued while playing; now: STOP, LOAD, PLAY)",
-          "required": ["op", "p"],
+          "required": [
+            "op",
+            "p"
+          ],
           "properties": {
             "op": {
               "const": "select"
@@ -3315,7 +4121,10 @@
               "minimum": 0
             },
             "force": {
-              "type": ["boolean", "integer"]
+              "type": [
+                "boolean",
+                "integer"
+              ]
             },
             "p": {
               "type": "integer",
@@ -3323,17 +4132,25 @@
               "maximum": 127
             },
             "now": {
-              "type": ["boolean", "integer"]
+              "type": [
+                "boolean",
+                "integer"
+              ]
             },
             "chainOk": {
-              "type": ["boolean", "integer"]
+              "type": [
+                "boolean",
+                "integer"
+              ]
             }
           }
         },
         {
           "type": "object",
           "description": "machine: SAVE KIT to the current slot",
-          "required": ["op"],
+          "required": [
+            "op"
+          ],
           "properties": {
             "op": {
               "const": "saveKit"
@@ -3346,14 +4163,19 @@
               "minimum": 0
             },
             "force": {
-              "type": ["boolean", "integer"]
+              "type": [
+                "boolean",
+                "integer"
+              ]
             }
           }
         },
         {
           "type": "object",
           "description": "machine: LOAD KIT of the current slot",
-          "required": ["op"],
+          "required": [
+            "op"
+          ],
           "properties": {
             "op": {
               "const": "reloadKit"
@@ -3366,14 +4188,20 @@
               "minimum": 0
             },
             "force": {
-              "type": ["boolean", "integer"]
+              "type": [
+                "boolean",
+                "integer"
+              ]
             }
           }
         },
         {
           "type": "object",
           "description": "machine: LOAD KIT",
-          "required": ["op", "k"],
+          "required": [
+            "op",
+            "k"
+          ],
           "properties": {
             "op": {
               "const": "kitLoad"
@@ -3386,7 +4214,10 @@
               "minimum": 0
             },
             "force": {
-              "type": ["boolean", "integer"]
+              "type": [
+                "boolean",
+                "integer"
+              ]
             },
             "k": {
               "type": "integer",
@@ -3398,7 +4229,10 @@
         {
           "type": "object",
           "description": "machine: SAVE KIT n",
-          "required": ["op", "k"],
+          "required": [
+            "op",
+            "k"
+          ],
           "properties": {
             "op": {
               "const": "kitSaveAs"
@@ -3411,7 +4245,10 @@
               "minimum": 0
             },
             "force": {
-              "type": ["boolean", "integer"]
+              "type": [
+                "boolean",
+                "integer"
+              ]
             },
             "k": {
               "type": "integer",
@@ -3423,7 +4260,9 @@
         {
           "type": "object",
           "description": "machine: REC as on the machine",
-          "required": ["op"],
+          "required": [
+            "op"
+          ],
           "properties": {
             "op": {
               "const": "record"
@@ -3436,14 +4275,20 @@
               "minimum": 0
             },
             "force": {
-              "type": ["boolean", "integer"]
+              "type": [
+                "boolean",
+                "integer"
+              ]
             }
           }
         },
         {
           "type": "object",
           "description": "machine: a TRIG key while recording",
-          "required": ["op", "t"],
+          "required": [
+            "op",
+            "t"
+          ],
           "properties": {
             "op": {
               "const": "recTrig"
@@ -3456,7 +4301,10 @@
               "minimum": 0
             },
             "force": {
-              "type": ["boolean", "integer"]
+              "type": [
+                "boolean",
+                "integer"
+              ]
             },
             "t": {
               "type": "integer",
@@ -3468,7 +4316,10 @@
         {
           "type": "object",
           "description": "machine: BANK held + TRIG keys",
-          "required": ["op", "patterns"],
+          "required": [
+            "op",
+            "patterns"
+          ],
           "properties": {
             "op": {
               "const": "chain"
@@ -3481,7 +4332,10 @@
               "minimum": 0
             },
             "force": {
-              "type": ["boolean", "integer"]
+              "type": [
+                "boolean",
+                "integer"
+              ]
             },
             "patterns": {
               "type": "array"
@@ -3491,7 +4345,9 @@
         {
           "type": "object",
           "description": "machine",
-          "required": ["op"],
+          "required": [
+            "op"
+          ],
           "properties": {
             "op": {
               "const": "chainClear"
@@ -3504,14 +4360,20 @@
               "minimum": 0
             },
             "force": {
-              "type": ["boolean", "integer"]
+              "type": [
+                "boolean",
+                "integer"
+              ]
             }
           }
         },
         {
           "type": "object",
           "description": "machine: the active GLOBAL slot",
-          "required": ["op", "slot"],
+          "required": [
+            "op",
+            "slot"
+          ],
           "properties": {
             "op": {
               "const": "globalSlot"
@@ -3524,7 +4386,10 @@
               "minimum": 0
             },
             "force": {
-              "type": ["boolean", "integer"]
+              "type": [
+                "boolean",
+                "integer"
+              ]
             },
             "slot": {
               "type": "integer",
@@ -3536,7 +4401,10 @@
         {
           "type": "object",
           "description": "machine: LOAD SONG (stopped)",
-          "required": ["op", "s"],
+          "required": [
+            "op",
+            "s"
+          ],
           "properties": {
             "op": {
               "const": "selectSong"
@@ -3549,7 +4417,10 @@
               "minimum": 0
             },
             "force": {
-              "type": ["boolean", "integer"]
+              "type": [
+                "boolean",
+                "integer"
+              ]
             },
             "s": {
               "type": "integer",
@@ -3561,7 +4432,9 @@
         {
           "type": "object",
           "description": "machine: stop, load, play",
-          "required": ["op"],
+          "required": [
+            "op"
+          ],
           "properties": {
             "op": {
               "const": "reloadSong"
@@ -3574,14 +4447,21 @@
               "minimum": 0
             },
             "force": {
-              "type": ["boolean", "integer"]
+              "type": [
+                "boolean",
+                "integer"
+              ]
             }
           }
         },
         {
           "type": "object",
           "description": "machine: 0x73",
-          "required": ["op", "slot", "name"],
+          "required": [
+            "op",
+            "slot",
+            "name"
+          ],
           "properties": {
             "op": {
               "const": "sampleName"
@@ -3594,7 +4474,10 @@
               "minimum": 0
             },
             "force": {
-              "type": ["boolean", "integer"]
+              "type": [
+                "boolean",
+                "integer"
+              ]
             },
             "slot": {
               "type": "integer",
@@ -3609,7 +4492,9 @@
         {
           "type": "object",
           "description": "machine",
-          "required": ["op"],
+          "required": [
+            "op"
+          ],
           "properties": {
             "op": {
               "const": "play"
@@ -3622,14 +4507,19 @@
               "minimum": 0
             },
             "force": {
-              "type": ["boolean", "integer"]
+              "type": [
+                "boolean",
+                "integer"
+              ]
             }
           }
         },
         {
           "type": "object",
           "description": "machine",
-          "required": ["op"],
+          "required": [
+            "op"
+          ],
           "properties": {
             "op": {
               "const": "stop"
@@ -3642,14 +4532,20 @@
               "minimum": 0
             },
             "force": {
-              "type": ["boolean", "integer"]
+              "type": [
+                "boolean",
+                "integer"
+              ]
             }
           }
         },
         {
           "type": "object",
           "description": "machine",
-          "required": ["op", "t"],
+          "required": [
+            "op",
+            "t"
+          ],
           "properties": {
             "op": {
               "const": "mute"
@@ -3662,7 +4558,10 @@
               "minimum": 0
             },
             "force": {
-              "type": ["boolean", "integer"]
+              "type": [
+                "boolean",
+                "integer"
+              ]
             },
             "t": {
               "type": "integer",
@@ -3670,14 +4569,20 @@
               "maximum": 15
             },
             "on": {
-              "type": ["boolean", "integer"]
+              "type": [
+                "boolean",
+                "integer"
+              ]
             }
           }
         },
         {
           "type": "object",
           "description": "setup: the app modulators (md-desk/modulators)",
-          "required": ["op", "doc"],
+          "required": [
+            "op",
+            "doc"
+          ],
           "properties": {
             "op": {
               "const": "modSet"
@@ -3690,7 +4595,10 @@
               "minimum": 0
             },
             "force": {
-              "type": ["boolean", "integer"]
+              "type": [
+                "boolean",
+                "integer"
+              ]
             },
             "doc": {
               "type": "object"
@@ -3700,7 +4608,10 @@
         {
           "type": "object",
           "description": "setup: the eight knob rows' CCs",
-          "required": ["op", "ccs"],
+          "required": [
+            "op",
+            "ccs"
+          ],
           "properties": {
             "op": {
               "const": "knobs"
@@ -3713,7 +4624,10 @@
               "minimum": 0
             },
             "force": {
-              "type": ["boolean", "integer"]
+              "type": [
+                "boolean",
+                "integer"
+              ]
             },
             "ccs": {
               "type": "array"
@@ -3723,7 +4637,10 @@
         {
           "type": "object",
           "description": "host: an entry of the engine map (machine.engines)",
-          "required": ["op", "kind"],
+          "required": [
+            "op",
+            "kind"
+          ],
           "properties": {
             "op": {
               "const": "engine"
@@ -3736,7 +4653,10 @@
               "minimum": 0
             },
             "force": {
-              "type": ["boolean", "integer"]
+              "type": [
+                "boolean",
+                "integer"
+              ]
             },
             "kind": {
               "type": "string"
@@ -3746,7 +4666,9 @@
         {
           "type": "object",
           "description": "host: look for the ROM again",
-          "required": ["op"],
+          "required": [
+            "op"
+          ],
           "properties": {
             "op": {
               "const": "recheckFirmware"
@@ -3759,14 +4681,19 @@
               "minimum": 0
             },
             "force": {
-              "type": ["boolean", "integer"]
+              "type": [
+                "boolean",
+                "integer"
+              ]
             }
           }
         },
         {
           "type": "object",
           "description": "host",
-          "required": ["op"],
+          "required": [
+            "op"
+          ],
           "properties": {
             "op": {
               "const": "revealRomFolder"
@@ -3779,14 +4706,20 @@
               "minimum": 0
             },
             "force": {
-              "type": ["boolean", "integer"]
+              "type": [
+                "boolean",
+                "integer"
+              ]
             }
           }
         },
         {
           "type": "object",
           "description": "host: a channel message from the page: [status 0x80-0xef, data, data]",
-          "required": ["op", "b"],
+          "required": [
+            "op",
+            "b"
+          ],
           "properties": {
             "op": {
               "const": "midi"
@@ -3799,7 +4732,10 @@
               "minimum": 0
             },
             "force": {
-              "type": ["boolean", "integer"]
+              "type": [
+                "boolean",
+                "integer"
+              ]
             },
             "b": {
               "type": "array"
@@ -3809,7 +4745,9 @@
         {
           "type": "object",
           "description": "host: the editor's menu",
-          "required": ["op"],
+          "required": [
+            "op"
+          ],
           "properties": {
             "op": {
               "const": "openMenu"
@@ -3822,14 +4760,20 @@
               "minimum": 0
             },
             "force": {
-              "type": ["boolean", "integer"]
+              "type": [
+                "boolean",
+                "integer"
+              ]
             }
           }
         },
         {
           "type": "object",
           "description": "host: MIDI learn a track's parameter",
-          "required": ["op", "t"],
+          "required": [
+            "op",
+            "t"
+          ],
           "properties": {
             "op": {
               "const": "learnStart"
@@ -3842,7 +4786,10 @@
               "minimum": 0
             },
             "force": {
-              "type": ["boolean", "integer"]
+              "type": [
+                "boolean",
+                "integer"
+              ]
             },
             "t": {
               "type": "integer",
@@ -3864,7 +4811,11 @@
         {
           "type": "object",
           "description": "host: a CC mapping without learning",
-          "required": ["op", "cc", "t"],
+          "required": [
+            "op",
+            "cc",
+            "t"
+          ],
           "properties": {
             "op": {
               "const": "learnAdd"
@@ -3877,7 +4828,10 @@
               "minimum": 0
             },
             "force": {
-              "type": ["boolean", "integer"]
+              "type": [
+                "boolean",
+                "integer"
+              ]
             },
             "cc": {
               "type": "integer",
@@ -3909,7 +4863,11 @@
         {
           "type": "object",
           "description": "host: a controller row's CC changed: its mappings follow",
-          "required": ["op", "from", "to"],
+          "required": [
+            "op",
+            "from",
+            "to"
+          ],
           "properties": {
             "op": {
               "const": "learnSetCc"
@@ -3922,7 +4880,10 @@
               "minimum": 0
             },
             "force": {
-              "type": ["boolean", "integer"]
+              "type": [
+                "boolean",
+                "integer"
+              ]
             },
             "from": {
               "type": "integer",
@@ -3939,7 +4900,9 @@
         {
           "type": "object",
           "description": "host",
-          "required": ["op"],
+          "required": [
+            "op"
+          ],
           "properties": {
             "op": {
               "const": "learnCancel"
@@ -3952,14 +4915,20 @@
               "minimum": 0
             },
             "force": {
-              "type": ["boolean", "integer"]
+              "type": [
+                "boolean",
+                "integer"
+              ]
             }
           }
         },
         {
           "type": "object",
           "description": "host",
-          "required": ["op", "index"],
+          "required": [
+            "op",
+            "index"
+          ],
           "properties": {
             "op": {
               "const": "learnRemove"
@@ -3972,7 +4941,10 @@
               "minimum": 0
             },
             "force": {
-              "type": ["boolean", "integer"]
+              "type": [
+                "boolean",
+                "integer"
+              ]
             },
             "index": {
               "type": "integer",
@@ -3984,7 +4956,10 @@
         {
           "type": "object",
           "description": "host",
-          "required": ["op", "index"],
+          "required": [
+            "op",
+            "index"
+          ],
           "properties": {
             "op": {
               "const": "learnInvert"
@@ -3997,7 +4972,10 @@
               "minimum": 0
             },
             "force": {
-              "type": ["boolean", "integer"]
+              "type": [
+                "boolean",
+                "integer"
+              ]
             },
             "index": {
               "type": "integer",
@@ -4009,7 +4987,9 @@
         {
           "type": "object",
           "description": "host: the standalone's audio and MIDI devices",
-          "required": ["op"],
+          "required": [
+            "op"
+          ],
           "properties": {
             "op": {
               "const": "audio"
@@ -4022,14 +5002,19 @@
               "minimum": 0
             },
             "force": {
-              "type": ["boolean", "integer"]
+              "type": [
+                "boolean",
+                "integer"
+              ]
             }
           }
         },
         {
           "type": "object",
           "description": "host",
-          "required": ["op"],
+          "required": [
+            "op"
+          ],
           "properties": {
             "op": {
               "const": "audioSet"
@@ -4042,7 +5027,10 @@
               "minimum": 0
             },
             "force": {
-              "type": ["boolean", "integer"]
+              "type": [
+                "boolean",
+                "integer"
+              ]
             },
             "set": {
               "type": "string"
@@ -4055,7 +5043,9 @@
         {
           "type": "object",
           "description": "host",
-          "required": ["op"],
+          "required": [
+            "op"
+          ],
           "properties": {
             "op": {
               "const": "audioMeter"
@@ -4068,10 +5058,16 @@
               "minimum": 0
             },
             "force": {
-              "type": ["boolean", "integer"]
+              "type": [
+                "boolean",
+                "integer"
+              ]
             },
             "on": {
-              "type": ["boolean", "integer"]
+              "type": [
+                "boolean",
+                "integer"
+              ]
             }
           }
         }

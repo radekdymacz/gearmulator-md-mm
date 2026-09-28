@@ -13,6 +13,7 @@ target_sources(deskCore PRIVATE
 	deskAdapter.h
 	deskCapabilities.h
 	deskCommands.cpp deskCommands.h
+	deskContract.h
 	deskCore.h
 	deskDesk.h
 	deskLcd.h
@@ -26,7 +27,7 @@ target_sources(deskCore PRIVATE
 	deskSequence.h
 )
 
-target_link_libraries(deskCore PUBLIC elektronData)
+target_link_libraries(deskCore PUBLIC elektronJson)
 target_include_directories(deskCore PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/..)
 target_compile_features(deskCore PUBLIC cxx_std_17)
 set_property(TARGET deskCore PROPERTY FOLDER "Elektron")

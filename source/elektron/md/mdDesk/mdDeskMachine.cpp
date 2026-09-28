@@ -415,33 +415,44 @@ namespace mdDesk
 		return (this->*(it->second))(_command, _view);
 	}
 
-	// What a machine command would lose asks first (the core sends it again with force).
-	Outcome MdMachine::askFor(const Value& _command, const Documents&)
+	// What a machine command would lose asks first (the core sends it again with force): one
+	// question function per command that has one.
+	Outcome MdMachine::askFor(const Value& _command, const Documents& _view)
 	{
-		const auto op = deskCore::opOf(_command);
-		if(op == "select")
+		static const std::map<std::string, Handler> askers{{"select", &MdMachine::askSelect}, {"kitLoad", &MdMachine::askKitLoad}};
+		const auto it = askers.find(deskCore::opOf(_command));
+		return it == askers.end() ? ok() : (this->*(it->second))(_command, _view);
+	}
+
+	// Picking a pattern ends a chain, or drops the unsaved edits of the kit it does not link.
+	Outcome MdMachine::askSelect(const Value& _command, const Documents&)
+	{
+		const auto slot = static_cast<uint8_t>(*intOf(_command, "p"));
+		if(!flagOf(_command, "chainOk") && m_telemetry.chainKnown && m_telemetry.chain.active)
 		{
-			const auto slot = static_cast<uint8_t>(*intOf(_command, "p"));
-			if(!flagOf(_command, "chainOk") && m_telemetry.chainKnown && m_telemetry.chain.active)
-			{
-				Value a = Value::object();
-				a.set("type", "ask");
-				a.set("ask", "breakChain");
-				a.set("p", slot);
-				return ask(a);
-			}
-			if(m_session.selectWouldDiscardKitEdits(slot))
-			{
-				Value a = Value::object();
-				a.set("type", "ask");
-				a.set("ask", "discardKit");
-				a.set("p", slot);
-				a.set("kit", static_cast<int>(*m_session.state().kit));
-				a.set("target", static_cast<int>(m_session.state().patternKits.at(slot)));
-				return ask(a);
-			}
+			Value a = Value::object();
+			a.set("type", "ask");
+			a.set("ask", "breakChain");
+			a.set("p", slot);
+			return ask(a);
 		}
-		if(op == "kitLoad" && m_session.state().workingKit == mdDataLink::Session::WorkingKit::Edited)
+		if(m_session.selectWouldDiscardKitEdits(slot))
+		{
+			Value a = Value::object();
+			a.set("type", "ask");
+			a.set("ask", "discardKit");
+			a.set("p", slot);
+			a.set("kit", static_cast<int>(*m_session.state().kit));
+			a.set("target", static_cast<int>(m_session.state().patternKits.at(slot)));
+			return ask(a);
+		}
+		return ok();
+	}
+
+	// LOAD KIT drops the unsaved edits of the kit that plays.
+	Outcome MdMachine::askKitLoad(const Value& _command, const Documents&)
+	{
+		if(m_session.state().workingKit == mdDataLink::Session::WorkingKit::Edited)
 			return ask(askOf("loadKit", _command, currentKit()));
 		return ok();
 	}
