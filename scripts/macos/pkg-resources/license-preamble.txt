@@ -1,0 +1,20 @@
+Machinedrum Editor and Monomachine Editor
+Copyright (C) The Usual Suspects (Gearmulator), joelanders (Machinedrum and
+Monomachine emulation), and NativeKloud Consulting Radoslaw Dymacz (editors).
+
+This program is free software: you can redistribute it and/or modify it under
+the terms of the GNU General Public License as published by the Free Software
+Foundation, version 3 of the License. It is distributed WITHOUT ANY WARRANTY;
+without even the implied warranty of MERCHANTABILITY or FITNESS FOR A
+PARTICULAR PURPOSE. The complete source code is at
+https://github.com/radekdymacz/gearmulator-md-mm
+
+Accepting this licence is not a purchase and grants you the GPL's rights.
+It does not grant any rights to Elektron firmware, which is not included.
+
+Machinedrum, Monomachine and Elektron are trademarks of Elektron Music
+Machines MAV AB. This project is not affiliated with, endorsed by, or
+supported by Elektron or by The Usual Suspects.
+
+The full text of the GNU General Public License version 3 follows.
+======================================================================

@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html><head><meta charset="utf-8">
+<style>
+body { font: 13px -apple-system, "Helvetica Neue", sans-serif; line-height: 1.45; }
+h1 { font-size: 17px; margin: 0 0 8px; }
+h2 { font-size: 13px; margin: 14px 0 4px; }
+code { font: 12px Menlo, monospace; }
+.small { color: #666; font-size: 11px; }
+</style></head><body>
+<h1>{{APP_NAME}} {{VERSION}} alpha</h1>
+<p>A screen-native editor for the {{MACHINE}}, running the machine's real firmware
+in an emulator. It installs three things, and you can leave any of them out under
+<b>Customize</b>:</p>
+<ul>
+<li><b>{{APP_NAME}}.app</b> into <code>/Applications</code></li>
+<li><b>{{STEM}}.vst3</b> into <code>/Library/Audio/Plug-Ins/VST3</code></li>
+<li><b>{{STEM}}.component</b> (Audio Unit) into <code>/Library/Audio/Plug-Ins/Components</code></li>
+</ul>
+
+<h2>Bring your own ROM</h2>
+<p>No firmware is included, and none can be provided. After installing, copy the
+complete firmware image (<code>.bin</code>, 8 MiB) from your own {{MACHINE}} into:</p>
+<p><code>~/Documents/Gearmulator Preview/{{DATA_FOLDER}}/roms/</code></p>
+<p>If no firmware is found, the editor says so and opens that folder for you. Put
+the file there, then restart the app or reload the plug-in.</p>
+
+<h2>Alpha</h2>
+<p>This is an early release. Save your work often and keep backups of anything
+you care about. HW MIDI (driving a real {{MACHINE}}) is beta and has not been
+tested on real hardware yet.</p>
+
+<p class="small">Free software under the GNU GPL version 3. Built on Gearmulator by
+The Usual Suspects and the Machinedrum/Monomachine emulation by joelanders.
+Machinedrum, Monomachine and Elektron are trademarks of Elektron Music Machines
+MAV AB; this project is not affiliated with or endorsed by Elektron.
+https://mdmm.nativekloud.com</p>
+</body></html>

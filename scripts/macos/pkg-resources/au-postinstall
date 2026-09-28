@@ -1,0 +1,5 @@
+#!/bin/sh
+# Ask macOS to rebuild its Audio Unit list so hosts see the new component
+# without a log-out. Harmless if the registrar is not running.
+/usr/bin/killall -9 AudioComponentRegistrar >/dev/null 2>&1 || true
+exit 0

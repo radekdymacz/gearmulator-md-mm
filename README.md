@@ -1,3 +1,28 @@
+# Machinedrum Editor + Monomachine Editor
+
+This fork adds two screen-native editors on top of joelanders' Machinedrum and Monomachine
+emulation: the whole machine on one page (step grid, parameter-lock lanes, kit and pattern library,
+chains, mutes, app LFOs, and a beta HW MIDI mode for a real machine). They run the real firmware,
+as a standalone app, VST3 and AU on macOS.
+
+- **Site, screenshots, download:** https://mdmm.nativekloud.com
+- **Releases:** https://github.com/radekdymacz/gearmulator-md-mm/releases
+  (first one: [0.1.0 alpha notes](doc/release/v0.1.0-alpha.md))
+- **Bring your own ROM.** No firmware is included; put your machine's image in
+  `~/Documents/Gearmulator Preview/Machinedrum/roms/` or `.../Monomachine/roms/`.
+- **Bugs and questions about the editors:** [this fork's issues](https://github.com/radekdymacz/gearmulator-md-mm/issues),
+  not upstream.
+- **Credits:** the MD/MM emulation is by [joelanders](https://github.com/joelanders/gearmulator-md-mm);
+  Gearmulator, the DSP56300 and 68k emulation are by The Usual Suspects and the
+  [Gearmulator](https://github.com/dsp56300/gearmulator) contributors.
+- GPL-3.0 ([LICENSE.md](LICENSE.md)). Machinedrum, Monomachine and Elektron are trademarks of
+  Elektron Music Machines MAV AB; this project is not affiliated with or endorsed by Elektron.
+
+The editor design and results are in [doc/modern-ux/](doc/modern-ux/). Upstream's README follows
+unchanged.
+
+---
+
 My fork of TUS's Gearmulator project, where I add emulations of Elektron's
 Machinedrum and Monomachine.
 

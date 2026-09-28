@@ -14,3 +14,90 @@ jobs:
 
   build-macos:
     uses: ./.github/workflows/elektron-macos.yml
+    with:
+      upload_bundles: true
+
+  # The website links to releases/latest/download/<name>, so these two file
+  # names are fixed: Machinedrum-Editor-macOS.pkg, Monomachine-Editor-macOS.pkg.
+  macos-installers:
+    name: macOS installer packages
+    needs: build-macos
+    runs-on: macos-14
+    timeout-minutes: 30
+    permissions:
+      contents: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      TAG: ${{ github.ref_name }}
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+          submodules: false
+
+      - name: Check packaging scripts
+        run: |
+          /bin/bash -n scripts/macos/build_mdmm_pkg.sh scripts/macos/verify_mdmm_pkg_install.sh
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: macos-mdmm-universal
+          path: ${{ runner.temp }}/mdmm-zip
+
+      - name: Build the two installer packages
+        run: |
+          set -euo pipefail
+          # mdmm-v0.1.0-alpha -> 0.1.0 (Installer versions are numeric).
+          version="$(printf '%s' "${TAG#mdmm-v}" | sed -E 's/^([0-9]+\.[0-9]+\.[0-9]+).*/\1/')"
+          bundles="${RUNNER_TEMP}/mdmm-bundles"
+          mkdir -p "${bundles}"
+          zip="$(find "${RUNNER_TEMP}/mdmm-zip" -name 'Gearmulator-Elektron-macOS-*.zip' -print -quit)"
+          /usr/bin/ditto -x -k "${zip}" "${bundles}"
+          package_dir="$(dirname "$(find "${bundles}" -maxdepth 2 -name 'Gearmulator MD.app' -print -quit)")"
+          ./scripts/macos/build_mdmm_pkg.sh "${package_dir}" "${RUNNER_TEMP}/mdmm-pkg" "${version}"
+
+      - name: Test-install both packages and run auval
+        run: |
+          set -euo pipefail
+          sudo installer -pkg "${RUNNER_TEMP}/mdmm-pkg/Machinedrum-Editor-macOS.pkg" -target /
+          sudo installer -pkg "${RUNNER_TEMP}/mdmm-pkg/Monomachine-Editor-macOS.pkg" -target /
+          mkdir -p "${RUNNER_TEMP}/empty-data"
+          GEARMULATOR_DATA_ROOT="${RUNNER_TEMP}/empty-data" ./scripts/macos/verify_mdmm_pkg_install.sh
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: macos-mdmm-installers
+          path: ${{ runner.temp }}/mdmm-pkg/*.pkg
+          if-no-files-found: error
+          retention-days: 30
+
+      # A release reviewed and uploaded by hand (from a local, firmware-tested
+      # build) wins: an asset that is already there is never replaced. With no
+      # release yet, a draft pre-release is created for Radek to publish.
+      - name: Attach installers to the GitHub release
+        run: |
+          set -euo pipefail
+          notes="doc/release/v${TAG#mdmm-v}.md"
+          pkgs=("${RUNNER_TEMP}/mdmm-pkg/Machinedrum-Editor-macOS.pkg" \
+                "${RUNNER_TEMP}/mdmm-pkg/Monomachine-Editor-macOS.pkg")
+          if gh release view "${TAG}" --repo "${GITHUB_REPOSITORY}" >/dev/null 2>&1; then
+            existing="$(gh release view "${TAG}" --repo "${GITHUB_REPOSITORY}" --json assets --jq '.assets[].name')"
+            for pkg in "${pkgs[@]}"; do
+              name="$(basename "${pkg}")"
+              if printf '%s\n' "${existing}" | grep -qxF "${name}"; then
+                echo "Keeping the existing ${name} on ${TAG}"
+              else
+                gh release upload "${TAG}" "${pkg}" --repo "${GITHUB_REPOSITORY}"
+              fi
+            done
+          else
+            notes_args=(--generate-notes)
+            if [[ -f "${notes}" ]]; then
+              notes_args=(--notes-file "${notes}")
+            fi
+            gh release create "${TAG}" "${pkgs[@]}" --repo "${GITHUB_REPOSITORY}" \
+              --draft --prerelease --verify-tag \
+              --title "Machinedrum Editor + Monomachine Editor ${TAG#mdmm-v}" \
+              "${notes_args[@]}"
+          fi
