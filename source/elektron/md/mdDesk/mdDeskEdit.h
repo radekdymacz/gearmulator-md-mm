@@ -1,5 +1,7 @@
 #pragma once
 
+#include "deskCore/deskRef.h"
+
 #include "elektronData/json.h"
 #include "elektronData/mdGlobal.h"
 #include "elektronData/mdKit.h"
@@ -28,18 +30,7 @@ namespace mdDesk
 		Global
 	};
 
-	struct DocRef
-	{
-		DocKind kind = DocKind::Pattern;
-		uint8_t slot = 0;
-
-		bool operator==(const DocRef& _o) const { return kind == _o.kind && slot == _o.slot; }
-		bool operator!=(const DocRef& _o) const { return !(*this == _o); }
-		bool operator<(const DocRef& _o) const
-		{
-			return kind != _o.kind ? kind < _o.kind : slot < _o.slot;
-		}
-	};
+	using DocRef = deskCore::Ref<DocKind>;
 
 	using Document = std::variant<elektronData::MdPattern, elektronData::MdKit, elektronData::MdSong,
 		elektronData::MdGlobal>;
