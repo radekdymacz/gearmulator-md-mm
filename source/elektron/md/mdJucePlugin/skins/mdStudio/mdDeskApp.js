@@ -25,13 +25,15 @@ const SHAPES = ["Triangle", "Saw", "Square", "Linear decay", "Exp decay", "Rando
 
 /* ===== State (P6): the UI's own store here; the machine's data is the view V (mdDeskModel.js,
    deriveView), a value replaced on every document ===== */
-const S = { ws: "seq", sel: 0, lane: "FLTF", page: 0, viewAll: false, follow: false, step: -1, soloSet: new Set(), userMutes: new Set(),
+const S = { ws: "seq", sel: 0, lane: "FLTF", page: 0, viewAll: true, follow: false, step: -1, soloSet: new Set(), userMutes: new Set(),
 	songSel: 0, bank: 0, songZoom: "fit", smpSlot: "RAM1", chopTrack: null, capture: {}, keepFx: true, plate: "mk1" };
 S.ctl = { learn: false, learnT: null, sel: null, selT: null, addT: 1 };
 V = view();	/* the view before the first document (mdDeskModel.js) */
 
 /* Pointer capture can fail for a pointer the browser no longer tracks; the gesture still works. */
-function capture(el, e) { try { el.setPointerCapture(e.pointerId); } catch (_) { } }
+/* P7: named apart from the sampler model's capture(n, bins) below, which shadowed it (a later function
+   declaration wins), so no drag ever held the pointer */
+function grabPointer(el, e) { try { el.setPointerCapture(e.pointerId); } catch (_) { } }
 
 /* ===== Commands ===== */
 let gesture = 0;	// non-zero while a drag runs: one undo step
@@ -90,7 +92,12 @@ function showLastError(errors) { const e = $("#errline"); if (!e) return; e.text
 const kitName = k => "K" + String(k + 1).padStart(2, "0") + " " + (V.kitNames[k] || "KIT " + String(k + 1).padStart(2, "0"));
 /* TX LED: lit while the desk has an edit on the wire (machine.desk.tx), and briefly for every command. */
 let txT; function tx() { const l = $("#txled"); if (!l) return; l.classList.add("on"); clearTimeout(txT); txT = setTimeout(syncTx, 90); }
-function syncTx() { const l = $("#txled"); if (!l) return; l.classList.toggle("on", V.tx); if (V.roundTrip >= 0) l.parentElement.parentElement.title = "Synced with the machine · last round trip " + Math.round(V.roundTrip) + " ms"; }
+/* P7: the sync slot on LCD line 2 (fixed width): SEND while an edit is on its way, SYNC when the machine shows them all */
+function syncTx() {
+	const l = $("#txled"), t = $("#synct"), f = $("#syncf"); if (!l) return;
+	l.classList.toggle("on", V.tx); if (t) t.textContent = V.tx ? "Send" : "Sync";
+	if (f) f.title = V.tx ? "Sending edits to the machine" : "In step with the machine" + (V.roundTrip >= 0 ? " · last round trip " + Math.round(V.roundTrip) + " ms" : "");
+}
 function setKitState(st) {
 	const s = $("#save"); if (!s) return;
 	s.classList.toggle("dirty", st === "edited");
@@ -312,14 +319,13 @@ function stepCls(i, s) {
 	if (V.playing && s === S.step) c.push("ph"); return c.join(" ");
 }
 /* The PAGE control sits on the right, above the grid, on the ruler row. */
-function pageCtl() { return `<span class="pagectl rh seqpage"><button class="pgkey" id="pgkey" ${pages16() < 2 ? "disabled" : ""} title="Next page. Shift-click = previous. Keys [ and ].">Page</button><span class="pleds" aria-hidden="true">${[0, 1, 2, 3].map(k => `<span class="pl ${k < pages16() ? "" : "na"} ${!S.viewAll && k === S.page ? "cur" : ""}" data-plp="${k}"><i class="led"></i></span>`).join("")}</span><button class="ptog ${S.viewAll ? "on" : ""}" id="pgall" aria-pressed="${S.viewAll}" title="Show all steps"><i class="led"></i>All</button><button class="ptog ${S.follow ? "on" : ""}" id="pgfollow" aria-pressed="${S.follow}" title="Page follows the play position"><i class="led"></i>Fol</button></span>`; }
+function pageCtl() { return `<span class="pagectl seqpage"><button class="pgkey" id="pgkey" ${pages16() < 2 ? "disabled" : ""} title="Next page. Shift-click = previous. Keys [ and ].">Page</button><span class="pleds" aria-hidden="true">${[0, 1, 2, 3].map(k => `<span class="pl ${k < pages16() ? "" : "na"} ${!S.viewAll && k === S.page ? "cur" : ""}" data-plp="${k}"><i class="led"></i></span>`).join("")}</span><button class="ptog ${S.viewAll ? "on" : ""}" id="pgall" aria-pressed="${S.viewAll}" title="Show all steps"><i class="led"></i>All</button><button class="ptog ${S.follow ? "on" : ""}" id="pgfollow" aria-pressed="${S.follow}" title="Page follows the play position"><i class="led"></i>Fol</button></span>`; }
 function renderSeq() {
 	document.documentElement.classList.toggle("viewall", !!S.viewAll);
-	let h = `<div class="panel ${V.mode === "CLASSIC" ? "classic" : ""}" id="seqp">${pageCtl()}<div class="scroll" id="seqscroll"><div class="seq" id="seq">
+	let h = `<div class="panel ${V.mode === "CLASSIC" ? "classic" : ""}" id="seqp"><div class="scroll" id="seqscroll"><div class="seq" id="seq">
   <div class="r" style="grid-template-columns:${cols()}">${steps().map(s => `<div class="rul ${s % 16 === 0 && s !== vis()[0] ? "gap" : ""}">${s % 4 === 0 ? s + 1 : ""}</div>`).join("")}</div>`;
 	V.tracks.forEach((t, i) => { h += `<div class="r ${i === S.sel ? "sel" : ""} ${audible(i) ? "" : "off"}" data-row="${i}" style="grid-template-columns:${cols()};--c:${FAMC[t.fam]}">${steps().map(s => `<button class="${stepCls(i, s)}" data-t="${i}" data-s="${s}" aria-label="Track ${i + 1} step ${s + 1}" aria-pressed="${t.trigs[s]}"></button>`).join("")}</div>`; });
-	h += `</div></div><div class="lanewrap"><div class="lanetop"><span class="cap">Lock lane · ${S.sel + 1} ${V.tracks[S.sel].name} · <b id="lanename">${laneLabel(S.sel, S.lane)}</b> <span class="lanescale">${bipLane() ? "L 64 · centre · R 63" : "0–127"}</span></span>${V.mode === "CLASSIC" ? `<span class="warnline" title="Locks stay in the pattern but do nothing until you switch to EXTENDED.">CLASSIC: locks muted</span>` : ""}<span class="lanehelp" title="Draw across the bars to lock this parameter per step. Alt-drag erases. Hatched steps have no trig, so they cannot hold a lock. Dashed line = kit value.">Draw to lock · alt-drag erases</span>
-  <div class="legend"><span><i class="lg on"></i>Trig</span><span><i class="lg on acc"></i>Accent: shift-click${V.accAll ? " (all)" : ""}</span><span><i class="lg on sl"></i>Slide: alt-click${V.slideAll ? " (all)" : ""}</span><span><i class="lg on lk"></i>Has locks</span></div></div>
+	h += `</div></div><div class="seqfoot"><span></span><div class="legend"><span><i class="lg on"></i>Trig</span><span><i class="lg on acc"></i>Accent: shift-click${V.accAll ? " (all)" : ""}</span><span><i class="lg on sl"></i>Slide: alt-click${V.slideAll ? " (all)" : ""}</span><span><i class="lg on lk"></i>Has locks</span></div>${pageCtl()}</div><div class="lanewrap"><div class="lanetop"><span class="cap">Lock lane · ${S.sel + 1} ${V.tracks[S.sel].name} · <b id="lanename">${laneLabel(S.sel, S.lane)}</b> <span class="lanescale">${bipLane() ? "L 64 · centre · R 63" : "0–127"}</span></span>${V.mode === "CLASSIC" ? `<span class="warnline" title="Locks stay in the pattern but do nothing until you switch to EXTENDED.">CLASSIC: locks muted</span>` : ""}<span class="lanehelp" title="Draw across the bars to lock this parameter per step. Alt-drag erases. Hatched steps have no trig, so they cannot hold a lock. Dashed line = kit value.">Draw to lock · alt-drag erases</span></div>
 </div>
   <div class="scroll" id="lanescroll"><div class="lane" id="lane" style="grid-template-columns:${cols()}"></div></div></div>`;
 	$("#main").innerHTML = h; renderLane(); syncScroll();
@@ -329,7 +335,7 @@ function renderSeq() {
    MLEV MBAL ILEV IBAL, and the master EQ gains LG HG PG (CTR machines). */
 const BIP = SIGNED;
 function bipLane() { return BIP.has(S.lane); }
-function barHTML(v) { return bipLane() ? (v >= 64 ? `<i class="bp up" style="height:${(v - 64) / 63 * 50}%"></i>` : `<i class="bp dn" style="height:${(64 - v) / 64 * 50}%"></i>`) : `<i style="--h:${v / 127 * 168}px"></i>`; }
+function barHTML(v) { return bipLane() ? (v >= 64 ? `<i class="bp up" style="height:${(v - 64) / 63 * 50}%"></i>` : `<i class="bp dn" style="height:${(64 - v) / 64 * 50}%"></i>`) : `<i style="--f:${(v / 127).toFixed(4)}"></i>`; }
 function renderLane() {
 	const lane = $("#lane"); if (!lane) return;
 	const t = S.sel, tr = V.tracks[t], m = V.locks.get(lk(t, S.lane)), g = grp(t, S.lane), base = g[S.lane] ?? 0;
@@ -342,7 +348,7 @@ function renderLane() {
 	}).join("");
 	lane.innerHTML = steps().map(s => {
 		const on = tr.trigs[s], v = m?.get(s);
-		return `<div class="lb ${on ? "" : "none"} ${s % 16 === 0 && s !== vis()[0] ? "gap" : ""} ${V.playing && s === S.step ? "ph" : ""}" data-s="${s}">${on ? `<div class="base" style="--b:${3 + base / 127 * 168}px"></div>${bipLane() ? `<div class="mid"></div>` : ""}${v != null ? barHTML(v) : ""}` : ""}</div>`;
+		return `<div class="lb ${on ? "" : "none"} ${s % 16 === 0 && s !== vis()[0] ? "gap" : ""} ${V.playing && s === S.step ? "ph" : ""}" data-s="${s}">${on ? `<div class="base" style="--bf:${(base / 127).toFixed(4)}"></div>${bipLane() ? `<div class="mid"></div>` : ""}${v != null ? barHTML(v) : ""}` : ""}</div>`;
 	}).join("");
 }
 function syncScroll() { const a = $("#seqscroll"), b = $("#lanescroll"); if (!a || !b) return; a.onscroll = () => { b.scrollLeft = a.scrollLeft; }; b.onscroll = () => { a.scrollLeft = b.scrollLeft; }; }
@@ -623,6 +629,8 @@ function grid(g, W, H) { g.strokeStyle = inkA(0.13); g.lineWidth = 1; for (let i
 function line(g, W, fy, c, w, dash) { g.strokeStyle = c; g.lineWidth = w; g.setLineDash(dash || []); g.beginPath(); for (let x = 0; x <= W; x += 1) { const y = fy(x); x ? g.lineTo(x, y) : g.moveTo(x, y); } g.stroke(); g.setLineDash([]); }
 function label(g, t) { g.fillStyle = cssv("--ink"); g.font = "10px Silkscreen, ui-monospace, monospace"; g.fillText(t.toUpperCase(), 8, 14); }
 let raf = 0, active = null;
+/* P7: the editors and the playhead follow the window */
+addEventListener("resize", () => { redraw(); if (V && V.playing) movePH(); });
 function redraw() { if (raf) return; raf = requestAnimationFrame(() => { raf = 0; $$("canvas.ed").forEach(drawEd); }); }
 function drawEd(c) {
 	const ed = ED[c.dataset.ed], dpr = devicePixelRatio || 1, W = c.clientWidth, H = c.clientHeight; if (!W || !ed) return;
@@ -791,7 +799,7 @@ ED.rom = {
 	}, handles: () => []
 };
 let chopDrag = null;
-document.getElementById("main").addEventListener("pointerdown", e => { const c = e.target.closest(".cp.on"); if (!c || e.altKey || e.shiftKey) return; const p = +$("#chop").dataset.p, s = +c.dataset.cp, cur = V.locks.get(lk(p, "STRT"))?.get(s) ?? V.tracks[p].syn.STRT; chopDrag = { c, p, s, y: e.clientY, v: cur, moved: false }; gesture = Bridge.gesture(); capture(c, e); });
+document.getElementById("main").addEventListener("pointerdown", e => { const c = e.target.closest(".cp.on"); if (!c || e.altKey || e.shiftKey) return; const p = +$("#chop").dataset.p, s = +c.dataset.cp, cur = V.locks.get(lk(p, "STRT"))?.get(s) ?? V.tracks[p].syn.STRT; chopDrag = { c, p, s, y: e.clientY, v: cur, moved: false }; gesture = Bridge.gesture(); grabPointer(c, e); });
 document.getElementById("main").addEventListener("pointermove", e => { if (!chopDrag) return; if (e.buttons === 0 && e.pointerType === "mouse") { chopDrag = null; gesture = 0; return; } const d = Math.round((chopDrag.y - e.clientY) / 6) * 8; if (!d && !chopDrag.moved) return; chopDrag.moved = true; const v = clamp(chopDrag.v + d); if (setLock(chopDrag.p, "STRT", chopDrag.s, v)) { chopDrag.c.innerHTML = chopInner(chopDrag.p, chopDrag.s); renderTop(); redraw(); } });
 document.addEventListener("pointerup", () => { if (chopDrag) { chopDrag.c.dataset.moved = chopDrag.moved ? "1" : ""; chopDrag = null; gesture = 0; } });
 
@@ -1020,7 +1028,7 @@ function l2set(k, v) {
 	v = k === "swing" ? clamp(v, 50, 80) : clamp(v, 0, 15); if (v === V[k]) return;
 	cmd(k === "swing" ? "swing" : "accentAmount", { p: V.pat, v }, k, [[[k], v]]);
 }
-document.addEventListener("pointerdown", e => { const el = e.target.closest(".l2.ed"); if (!el) return; const k = el.dataset.l2; if (k === "swing" || k === "accAmt") { l2drag = { k, y: e.clientY, v: V[k], moved: false }; gesture = Bridge.gesture(); capture(el, e); e.preventDefault(); } });
+document.addEventListener("pointerdown", e => { const el = e.target.closest(".l2.ed"); if (!el) return; const k = el.dataset.l2; if (k === "swing" || k === "accAmt") { l2drag = { k, y: e.clientY, v: V[k], moved: false }; gesture = Bridge.gesture(); grabPointer(el, e); e.preventDefault(); } });
 document.addEventListener("pointermove", e => {
 	if (!l2drag) return; if (e.buttons === 0 && e.pointerType === "mouse") { l2drag = null; gesture = 0; return; } const d = Math.round((l2drag.y - e.clientY) / (l2drag.k === "swing" ? 3 : 6)); if (d) l2drag.moved = true;
 	const before = V[l2drag.k]; l2set(l2drag.k, l2drag.v + d); if (V[l2drag.k] !== before) renderSub();
@@ -1033,9 +1041,9 @@ document.addEventListener("wheel", e => { const el = e.target.closest(".l2.ed");
 let drag = null;
 const main = $("#main");
 main.addEventListener("pointerdown", e => {
-	const c = e.target.closest("canvas.ed"); if (c) { const h = nearest(c, e); if (!h) return; active = { c, k: h.k }; gesture = Bridge.gesture(); capture(c, e); e.preventDefault(); redraw(); return; }
-	const el = e.target.closest(".pc[data-g],.fader[data-g]"); if (el) { drag = { el, x: e.clientX, y: e.clientY, v: getV(el), vert: el.classList.contains("fader") }; gesture = Bridge.gesture(); capture(el, e); el.classList.add("act"); e.preventDefault(); return; }
-	const lb = e.target.closest(".lb"); if (lb) { laneDraw = { erase: e.altKey, touched: new Set() }; gesture = Bridge.gesture(); capture($("#lane"), e); laneAt(e); e.preventDefault(); }
+	const c = e.target.closest("canvas.ed"); if (c) { const h = nearest(c, e); if (!h) return; active = { c, k: h.k }; gesture = Bridge.gesture(); grabPointer(c, e); e.preventDefault(); redraw(); return; }
+	const el = e.target.closest(".pc[data-g],.fader[data-g]"); if (el) { drag = { el, x: e.clientX, y: e.clientY, v: getV(el), vert: el.classList.contains("fader") }; gesture = Bridge.gesture(); grabPointer(el, e); el.classList.add("act"); e.preventDefault(); return; }
+	const lb = e.target.closest(".lb"); if (lb) { laneDraw = { erase: e.altKey, touched: new Set() }; gesture = Bridge.gesture(); grabPointer($("#lane"), e); laneAt(e); e.preventDefault(); }
 });
 main.addEventListener("pointermove", e => {
 	if (e.buttons === 0 && e.pointerType === "mouse" && (drag || active || laneDraw)) { endDrag(); return; }
@@ -1058,6 +1066,40 @@ main.addEventListener("dblclick", e => { const el = e.target.closest(".pc[data-g
 main.addEventListener("keydown", e => { const el = e.target.closest("[data-g]"); if (!el) return; const d = { ArrowRight: 1, ArrowUp: 1, ArrowLeft: -1, ArrowDown: -1, PageUp: 10, PageDown: -10 }[e.key]; if (d == null) return; e.preventDefault(); setV(el, getV(el) + d * (e.shiftKey ? 10 : 1)); });
 
 function setMute(i, on) { cmd("mute", { t: i, on }, undefined, [[["tracks", i, "mute"], on]]); }
+/* P7: drag across steps paints them: the first step decides (on or off) and every step the pointer
+   crosses becomes that, one undo step for the whole drag. A click is a one-step paint. */
+let paint = null;
+function paintStep(el) {
+	const i = +el.dataset.t, s = +el.dataset.s, t = V.tracks[i], k = i + ":" + s;
+	if (!paint || paint.done.has(k)) return;
+	paint.done.add(k);
+	if (t.trigs[s] === paint.on) return;
+	const w = [[["tracks", i, "trigs", s], paint.on]];
+	if (!paint.on) w.push([["tracks", i, "acc", s], false], [["tracks", i, "slide", s], false], ...clearStep(i, s));
+	cmd("trig", { p: V.pat, t: i, s, on: paint.on }, undefined, w);
+	refreshRow(i);
+	if (!paint.on) paint.locks = true;
+}
+main.addEventListener("pointerdown", e => {
+	const st = e.target.closest(".st"); if (!st || e.button !== 0 || e.shiftKey || e.altKey || V.rec) return;
+	if (!V.loaded) { toast("The pattern is not loaded yet."); return; }
+	const i = +st.dataset.t, s = +st.dataset.s;
+	paint = { on: !V.tracks[i].trigs[s], done: new Set(), first: i };
+	gesture = Bridge.gesture(); grabPointer(main, e); e.preventDefault();
+	paintStep(st);
+}, true);
+main.addEventListener("pointermove", e => {
+	if (!paint) return;
+	if (e.buttons === 0 && e.pointerType === "mouse") { endPaint(); return; }
+	const st = document.elementFromPoint(e.clientX, e.clientY)?.closest(".st"); if (st) paintStep(st);
+});
+function endPaint() {
+	if (!paint) return; const p = paint; paint = null; gesture = 0;
+	if (p.locks) renderTop();
+	if (p.first !== S.sel) select(p.first); else renderLane();
+}
+document.addEventListener("pointerup", endPaint); document.addEventListener("pointercancel", endPaint);
+window.addEventListener("blur", endPaint);
 /* Solo is the page's idea: it mutes every other track on the machine, and un-solo restores the
    mutes the user had set (S.userMutes). */
 function applySolo() {
@@ -1077,6 +1119,8 @@ document.addEventListener("click", e => {
 		if (!V.loaded) { toast("The pattern is not loaded yet."); return; }
 		/* Live recording: a click plays the track like its TRIG key; the machine records it. */
 		if (V.rec) { cmd("recTrig", { t: i }); if (i !== S.sel) select(i); return; }
+		/* a plain mouse click was the paint gesture's (pointerdown); the keyboard's click toggles here */
+		if (!e.shiftKey && !e.altKey && e.detail > 0) return;
 		if (e.shiftKey && t.trigs[s]) cmd("accent", { p: V.pat, t: i, s }, undefined, [[["tracks", i, "acc", s], !t.acc.has(s)]]);
 		else if (e.altKey && t.trigs[s]) cmd("slide", { p: V.pat, t: i, s }, undefined, [[["tracks", i, "slide", s], !t.slide.has(s)]]);
 		else {
@@ -1213,7 +1257,7 @@ function refreshAudible() {
 (() => {
 	const b = $("#bpm"); let d = null;
 	const set = v => { const bpm = clamp(Math.round(v * 10) / 10, 30, 300); cmd("tempo", { bpm }, "tempo", [[["bpm"], bpm]]); renderTop(); };
-	b.addEventListener("pointerdown", e => { d = { y: e.clientY, v: V.bpm }; gesture = Bridge.gesture(); capture(b, e); });
+	b.addEventListener("pointerdown", e => { d = { y: e.clientY, v: V.bpm }; gesture = Bridge.gesture(); grabPointer(b, e); });
 	b.addEventListener("pointermove", e => { if (!d) return; if (e.buttons === 0 && e.pointerType === "mouse") { d = null; gesture = 0; return; } const v = d.v + (d.y - e.clientY) * (e.shiftKey ? .1 : .5); if (Math.abs(v - V.bpm) >= .05) set(v); });
 	b.addEventListener("pointerup", () => { d = null; gesture = 0; });
 	b.addEventListener("keydown", e => { const k = { ArrowUp: 1, ArrowDown: -1 }[e.key]; if (!k) return; e.preventDefault(); set(V.bpm + k * (e.shiftKey ? .1 : 1)); });
@@ -1283,7 +1327,7 @@ function sameValue(a, b) {
 	return ka.length === kb.length && ka.every(k => sameValue(a[k], b[k]));
 }
 const beyondStatus = v => { const o = { ...v }; for (const k of STATUS) delete o[k]; return o; };
-function interacting() { return !!(drag || active || laneDraw || l2drag || chopDrag || drag2); }
+function interacting() { return !!(drag || active || laneDraw || l2drag || chopDrag || drag2 || paint); }
 function scheduleRender() {
 	if (renderRaf) return;
 	/* A timer, not an animation frame: documents must land while the window is covered. */

@@ -34,6 +34,8 @@ namespace mdJucePlugin
 		std::pair<std::string, std::string> getDemoRestrictionText() const override { return {}; }
 		// Audio > Audio/MIDI Settings... in the menu bar opens the page's own panel.
 		bool openAudioMidiSettings() override;
+		// The page lays itself out in any window size (P7): the window resizes freely.
+		bool keepsAspectRatio() const override { return false; }
 
 	private:
 		void timerCallback() override;

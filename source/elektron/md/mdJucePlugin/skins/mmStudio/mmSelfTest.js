@@ -290,6 +290,47 @@ window.MMDiagnostics = {};
 			await sleep(600);
 			return seen.join("; ");
 		});
+		await check("all steps by default, and the page fits the window", async () => {
+			const n = $$('.tc[data-tl="sld"]').length, de = document.documentElement, lane = $("#lanescroll")?.getBoundingClientRect();
+			const note = `${n} of ${s.len} steps, page ${de.scrollHeight} / window ${innerHeight}, lock lane bottom ${lane ? Math.round(lane.bottom) : "?"}`;
+			if (n !== s.len || de.scrollHeight > innerHeight + 1 || !lane || lane.bottom > innerHeight) throw new Error(note);
+			return note;
+		});
+		await check("a drag paints SLIDE steps on, then off, one undo step each", async () => {
+			const p = cur().pat, q = st => $(`.tc[data-tl="sld"][data-s="${st}"]`);
+			const free = [...Array(s.len - 3).keys()].find(st => [0, 1, 2, 3].every(k => !s.tracks[s.sel].slide.has(st + k)));
+			if (free == null) throw new Error("no four free SLIDE steps");
+			const run = [free, free + 1, free + 2, free + 3];
+			const pe = (type, el, o = {}) => { const r = el.getBoundingClientRect(); return new PointerEvent(type, Object.assign({ bubbles: true, cancelable: true, pointerId: 8, pointerType: "mouse", button: 0, clientX: r.left + r.width / 2, clientY: r.top + r.height / 2 }, o)); };
+			const drag = steps => { q(steps[0]).dispatchEvent(pe("pointerdown", q(steps[0]), { buttons: 1 })); for (const st of steps.slice(1)) $("#main").dispatchEvent(pe("pointermove", q(st), { buttons: 1 })); const l = q(steps[steps.length - 1]); l.dispatchEvent(pe("pointerup", l, { buttons: 0 })); l.dispatchEvent(new MouseEvent("click", { bubbles: true, detail: 1 })); };
+			const slides = d => d.tracks[s.sel].slide || [];
+			const u0 = machine().history?.undoCount || 0;
+			drag(run);
+			await waitFor(m => m.type === "doc" && m.kind === "pattern" && m.slot === p && !m.pending && run.every(st => slides(m.doc).includes(st)), 15000).catch(() => { throw new Error("not read back on"); });
+			await sleep(800);
+			const u1 = machine().history?.undoCount || 0;
+			drag([...run].reverse());
+			await waitFor(m => m.type === "doc" && m.kind === "pattern" && m.slot === p && !m.pending && !run.some(st => slides(m.doc).includes(st)), 15000).catch(() => { throw new Error("not read back off"); });
+			await sleep(800);
+			const u2 = machine().history?.undoCount || 0;
+			if (u1 !== u0 + 1 || u2 !== u1 + 1) throw new Error(`undo steps ${u0} -> ${u1} -> ${u2}`);
+			return `steps ${free + 1}-${free + 4}, undo steps ${u0} -> ${u1} -> ${u2}`;
+		});
+		await check("Shift + M prepares mutes; they apply together when Shift comes up", async () => {
+			const a = [0, 1].map(i => V().audible(i));
+			sentMute.length = 0;
+			for (const i of [0, 1]) $(`[data-mute="${i}"]`).dispatchEvent(new MouseEvent("click", { bubbles: true, shiftKey: true, detail: 1 }));
+			await sleep(300);
+			const prep = $$(".ms.m.prep").map(b => b.dataset.mute + b.dataset.prep).join(" "), held = sentMute.filter(x => x != null).length;
+			document.dispatchEvent(new KeyboardEvent("keyup", { key: "Shift", bubbles: true }));
+			await sleep(400);
+			const after = [0, 1].map(i => V().audible(i)), sent = [0, 1].map(i => sentMute[i]);
+			/* and back */
+			for (const i of [0, 1]) $(`[data-mute="${i}"]`).click();
+			await sleep(300);
+			if (prep !== "0X 1X" || held || after.some((x, i) => x === a[i]) || sent.some(x => x !== true)) throw new Error(`prepared ${prep}, ${held} sent while held, audible ${a} -> ${after}, sent ${sent}`);
+			return `prepared ${prep}, nothing sent while held, both muted on release`;
+		});
 		await check("LEN on LCD line 2 changes the steps (click, shift-click)", async () => {
 			lenTest = true;
 			const p = cur().pat, len0 = s.len, seen = [len0];

@@ -212,7 +212,8 @@ function soundEdited(kind){tx();if(HOST.edited){HOST.edited("sound",kind);return
 function renderPst(){if(HOST.renderPst)return HOST.renderPst();if(S.engine==="hw"&&S.pend)setPst("SEND "+S.pend,"Unsent pattern and song edits. Click to send them.",true);
  else if(S.patSent==="recv")setPst("RECV","The emulator is on SYSEX RECV and takes the dump.");else setPst("","")}
 /* the pattern field's SYSEX RECV state: its text, tooltip, and warn (a click opens the send dialog) */
-function setPst(text,tip,warn){const p=$("#pst");if(!p)return;p.textContent=text;p.className=warn?"pst warn":"pst";p.title=tip||""}
+/* P7: the sync slot on LCD line 2: SYNC when nothing is on its way, else the host's word (RECV n, SEND n) */
+function setPst(text,tip,warn){const p=$("#pst"),f=$("#syncf");if(!p||!f)return;p.textContent=text||"Sync";f.classList.toggle("warn",!!warn);f.title=tip||"In step with the machine"}
 function sendDialog(){ask(`<div class="lcdbig recv">SYSEX RECV · WAITING…</div><p>The Monomachine only accepts a dump on its SysEx receive screen. <b>${S.pend}</b> edit${S.pend===1?"":"s"} to send.</p>
  <ol class="recvsteps"><li>On the Monomachine press <b>FUNCTION + KIT/SONG</b> (GLOBAL), then <b>FILE › SYSEX RECV</b>.</li><li>Set <b>MODE ORIG</b> and press <b>YES</b>. The screen shows <b>WAITING…</b></li><li>Press <b>Send</b> here. Then press <b>EXIT</b> on the machine.</li></ol>`,
  [["Send now","cream",()=>{S.pend=0;S.patSent="live";renderPst();tx();toast("Sent. The pattern and song slots now match the editor. Press EXIT on the Monomachine.")}],["Later","",()=>{}]],"first")}
@@ -332,7 +333,7 @@ function shapeIcon(w){const pts=Array.from({length:25},(_,k)=>{const x=k/24;retu
    its envelope trig flags and its parameter locks. The overview shows every track;
    the note lane edits the selected track's trigs by pitch. Under it only the per-track
    SLIDE and SWING rows. The MIDI sequencer is its own workspace with the same editor. */
-S.page=0;S.viewAll=false;S.follow=false;S.dock="locks";
+S.page=0;S.viewAll=true;S.follow=false;S.dock="locks";	/* P7: all steps by default; PAGE pages, ALL goes back */
 const pages16=()=>Math.ceil(S.len/16);
 function vis(){if(S.viewAll)return[0,S.len];S.page=Math.min(S.page,pages16()-1);return[S.page*16,Math.min(S.len,S.page*16+16)]}
 function steps(){const[a,b]=vis();return Array.from({length:b-a},(_,k)=>a+k)}
@@ -344,7 +345,7 @@ const gapC=s=>s%16===0&&s!==vis()[0]?"gap":"";
 const ROLL_H=16*28+15*3;
 function th(t){const tr=trk(t),polyOff=S.mode==="poly"&&t!==S.sel&&t<6;return`<div class="th ${t===S.sel?"sel":""} ${audible(t)?"":"off"} ${polyOff?"poly-off":""}" data-sel="${t}">
  <div class="threw"><div class="sw"></div><div class="n ${t<6?"":"fill"}">${t<6?t+1:"M"+(t-5)}</div><div class="nm" title="${tr.name}"><b>${t<6?tr.m.replace("SWAVE-","SW-"):"CH"+String(tr.ch).padStart(2,"0")}</b></div>
- <button class="ms m" data-mute="${t}" aria-pressed="${tr.mute}" aria-label="Mute ${tLabel(t)}">M</button><button class="ms s" data-solo="${t}" aria-pressed="${tr.solo}" aria-label="Solo ${tLabel(t)}">S</button></div></div>`}
+ <button class="ms m ${ARMED.has(t)?"prep":""}" ${ARMED.has(t)?`data-prep="${ARMED.get(t)?"X":"+"}"`:""} data-mute="${t}" aria-pressed="${tr.mute}" aria-label="Mute ${tLabel(t)}">M</button><button class="ms s" data-solo="${t}" aria-pressed="${tr.solo}" aria-label="Solo ${tLabel(t)}">S</button></div></div>`}
 function pageKeys(){return`<span class="pagectl rh"><button class="pgkey" id="pgkey" ${pages16()<2?"disabled":""} title="Next page. Shift-click = previous. Keys [ and ].">Page</button><span class="pleds" aria-hidden="true">${[0,1,2,3].map(k=>`<span class="pl ${k<pages16()?"":"na"} ${!S.viewAll&&k===S.page?"cur":""}" data-plp="${k}"><i class="led"></i></span>`).join("")}</span><button class="ptog ${S.viewAll?"on":""}" id="pgall" aria-pressed="${S.viewAll}" title="Show all steps"><i class="led"></i>All</button><button class="ptog ${S.follow?"on":""}" id="pgfollow" aria-pressed="${S.follow}" title="Page follows the play position"><i class="led"></i>Fol</button></span>`}
 function lockPicker(t){const midi=isMidiT(t),list=pagesOf(t);if(!list.includes(S.lanePage))S.lanePage=list[0];
  return`<div class="railparams"><div class="rphead"><span class="cap">Lock parameter</span><button id="clearLane" class="iconkey" aria-label="Clear these locks" title="Clear ${pidLabel(t,S.lane)} locks"><svg viewBox="0 0 14 14" aria-hidden="true"><path d="M2 4h10M5.5 4V2.5h3V4M3.5 4l.7 8h5.6l.7-8M6 6.5v3.5M8 6.5v3.5" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg></button></div>
@@ -357,15 +358,15 @@ function rowStatus(t){const tr=trk(t),arp=tr.arp.MODE>0,trn=tr.tr.TRACK-64;retur
 const ROLL_TIP=t=>`${tLabel(t)} notes. Click adds a note or moves its pitch · drag up or down for pitch · shift-click adds a chord note · drag a bar's end to move its ${isMidiT(t)?"LEN":"NOTE OFF"} · alt-click deletes a note, or sets a NOTE OFF on an empty step · scroll = pitch`;
 function renderSeq(){const t=S.sel,tr=trk(t),midi=isMidiT(t);
  const rows=[["env",midi?"VEL":"Env"],["sld","Slide"],["swg","Swing"]];
- let h=`<div class="seqtop">${pageKeys()}</div><div class="scroll" id="seqscroll"><div class="mstack ${S.viewAll?"all":""}" id="seq"><div class="mrowg ruler" style="grid-template-columns:${cols()}">${steps().map(s=>`<div class="rul ${gapC(s)}" data-s="${s}">${s%4===0?s+1:""}</div>`).join("")}<div class="rul"></div></div>
+ let h=`<div class="scroll" id="seqscroll"><div class="mstack ${S.viewAll?"all":""}" id="seq"><div class="mrowg ruler" style="grid-template-columns:${cols()}">${steps().map(s=>`<div class="rul ${gapC(s)}" data-s="${s}">${s%4===0?s+1:""}</div>`).join("")}<div class="rul"></div></div>
   <div class="nlane big"><canvas class="roll" data-ed="lane" data-t="${t}" data-big="1" title="${ROLL_TIP(t)}" aria-label="${ROLL_TIP(t)}"></canvas></div>
   <div class="tlanes" id="tlanes">${rows.map(([k,lab])=>{if(k==="env"&&midi)return`<div class="tlane env" style="grid-template-columns:${cols()}" title="Velocity per note (VEL, lockable)">${steps().map(s=>{const st=tr.steps[s];const v=st&&!st.off?velOf(t,s):null;return`<span class="tc envc ${gapC(s)} ${v==null?"na":""}">${v!=null?`<i class="velbar" style="--v:${v/127*100}%" title="VEL ${v}"></i>`:""}</span>`}).join("")}<span class="tlab">VEL</span></div>`;
    return`<div class="tlane ${k}" style="grid-template-columns:${cols()}" title="${{env:"Which envelopes this trig fires: AMP (red), FILTER (yellow), LFO (green), the manual's trig tracks. No dots = trigless.",sld:"Slide: a locked value glides to its next lock",swg:"Swing: these steps come late by the pattern's swing amount"}[k]}">${steps().map(s=>{const st=tr.steps[s];
     if(k==="env"){const ok=st&&!st.off;return`<span class="tc envc ${gapC(s)} ${ok?"":"na"}" data-s="${s}">${ok?["a","f","l"].map(b=>`<button class="d ${b} ${st[b]?"on":""}" data-env="${b}" data-s="${s}" aria-pressed="${!!st[b]}" aria-label="${{a:"AMP",f:"FILTER",l:"LFO"}[b]} trig step ${s+1}"></button>`).join(""):""}</span>`}
     const on=k==="sld"?tr.slide.has(s):tr.swing.has(s);return`<button class="tc ${on?"on":""} ${gapC(s)}" data-tl="${k}" data-s="${s}" aria-pressed="${on}" aria-label="${lab} step ${s+1}"></button>`}).join("")}<span class="tlab">${k==="env"?`<small class="envlab">A F L</small>`:lab}</span></div>`}).join("")}</div></div></div>
+ <div class="seqfoot"><span></span><div class="legend"><span><i class="lg on"></i>Note</span>${midi?"":`<span><i class="lg on g"></i>Trigless</span>`}<span><i class="lg on y"></i>Note off</span><span><i class="lg on lk"></i>Has locks</span></div>${pageKeys()}</div>
  <div class="lanewrap"><div class="lanetop"><span class="cap">Lock lane · ${tLabel(t)} ${midi?"CH"+String(tr.ch).padStart(2,"0"):tr.m} · <b id="lanename">${pidLabel(t,S.lane)}</b> <span class="lanescale" id="lanescale"></span></span>
-  <span class="lanehelp" title="Draw across the bars to lock this parameter per step. Alt-drag erases. Hatched steps have no trig, so they cannot hold a lock. Dashed line = kit value. A slide step glides to the next lock.">Draw to lock · alt-drag erases</span>
-  <div class="legend"><span><i class="lg on"></i>Note</span>${midi?"":`<span><i class="lg on g"></i>Trigless</span>`}<span><i class="lg on y"></i>Note off</span><span><i class="lg on lk"></i>Has locks</span></div></div>
+  <span class="lanehelp" title="Draw across the bars to lock this parameter per step. Alt-drag erases. Hatched steps have no trig, so they cannot hold a lock. Dashed line = kit value. A slide step glides to the next lock.">Draw to lock · alt-drag erases</span></div>
   <div class="scroll" id="lanescroll"><div class="lanebox"><div class="lane" id="lane" style="grid-template-columns:${cols()}"></div><svg class="lanesvg" id="lanesvg"></svg></div></div></div>`;
  $("#main").innerHTML=h;fitLane();renderLane();syncScroll();syncControls();alignLock()}
 /* as in the MD Editor: the rail's LOCK PARAMETER block starts on the lock lane's title line and ends at its bottom edge */
@@ -679,7 +680,7 @@ function routeSvg(){const T=S.tracks,W=1200,H=256,NW=150,nx=i=>25+200*i,NY=30,NH
   if(tr.trigpos!=null){const j=tr.trigpos;h+=`<path d="M${x+NW/2} ${NY} C${x+NW/2} ${NY-26},${nx(j)+NW/2} ${NY-26},${nx(j)+NW/2} ${NY}" class="cord dot"/><text x="${(x+nx(j))/2+NW/2-18}" y="${NY-18}" font-size="8">TRIG ›T${j+1}</text>`}
   h+=`<g class="node ${fx?"fx":""} ${sel?"sel":""} ${audible(i)?"":"muted"}" data-node="${i}"><rect class="body" x="${x}" y="${NY}" width="${NW}" height="${NH}" rx="3"/>${sel?`<rect class="frame" x="${x-4}" y="${NY-4}" width="${NW+8}" height="${NH+8}" rx="5"/>`:""}
    <text x="${x+8}" y="${NY+16}" font-size="10">T${i+1}${fx?" · FX":""}</text><text x="${x+8}" y="${NY+34}" font-size="12">${shortM(tr.m)}</text><text x="${x+8}" y="${NY+49}" font-size="8" opacity=".8">${tr.name.toUpperCase().slice(0,18)}</text></g>`});
- return`<svg class="route" viewBox="0 0 ${W} ${H}" style="aspect-ratio:${W}/${H};height:auto" role="img" aria-label="Routing: tracks, mix buses, outputs">${h}</svg>`}
+ return`<svg class="route" viewBox="0 0 ${W} ${H}" preserveAspectRatio="xMidYMid meet" role="img" aria-label="Routing: tracks, mix buses, outputs">${h}</svg>`}
 function sv2(tr,n){const i=MACH[tr.m].p.indexOf(n);return i<0?0:tr.v.SYN[i]}
 function renderMix(){const T=S.tracks;
  const flows=BUSES.map(b=>{const f=busFlow(b);return`<span>${b}: ${f.items.join(" + ")||"<i>empty</i>"} <i>›</i> ${outOf(b)}${f.notes.length?" <i>· "+f.notes.join(", ")+"</i>":""}</span>`}).join("");
@@ -690,7 +691,7 @@ function renderMix(){const T=S.tracks;
     <div class="pcs">${pc("AMP",5,{t:i,label:"VOL"})}${pc("AMP",6,{t:i,label:"PAN"})}${pc("AMP",4,{t:i,label:"DIST"})}${pc("EFX",4,{t:i,label:"DSND"})}<div class="v" data-show="${i}" title="LEV"></div></div></div>
    <div class="busrow"><span class="inlab">Out</span><div class="busk">${BUSES.map(b=>`<button data-bus="${b}" data-t="${i}" aria-pressed="${tr.out[b]}" title="${tr.out[b]?"Sends to":"Not sent to"} mix bus ${b}">${b}</button>`).join("")}</div></div>
    <div class="busrow"><span class="inlab">In</span>${fx?`<select id="inp${i}" data-inp="${i}" aria-label="T${i+1} input">${INPUTS.filter(x=>!(x==="NEIBOR"&&i===0)).map(x=>opt(x,x,tr.inp)).join("")}</select>`:`<button class="kselbtn" disabled title="Only FX machines take an input"><span>synth · none</span></button>`}</div>
-   <div class="mrow"><button class="ms m" data-mute="${i}" aria-pressed="${tr.mute}" aria-label="Mute T${i+1}">M</button><button class="ms s" data-solo="${i}" aria-pressed="${tr.solo}" aria-label="Solo T${i+1}">S</button></div></div>`}).join("")}</div>
+   <div class="mrow"><button class="ms m ${ARMED.has(i)?"prep":""}" ${ARMED.has(i)?`data-prep="${ARMED.get(i)?"X":"+"}"`:""} data-mute="${i}" aria-pressed="${tr.mute}" aria-label="Mute T${i+1}">M</button><button class="ms s" data-solo="${i}" aria-pressed="${tr.solo}" aria-label="Solo T${i+1}">S</button></div></div>`}).join("")}</div>
   <div class="routebar"><span class="cap">Routing</span><span class="seg" data-set="routing">${ROUTES.map(r=>`<button data-v="${r}" aria-pressed="${S.routing===r}">${r.replace("+"," + ")}</button>`).join("")}</span>
    <span class="grow"></span><span class="hint">Tracks sum into a bus in track order, so an FX on a bus only hears the tracks before it. Click a node to pick its strip.</span></div>
   ${routeSvg()}<div class="flowl">${flows}</div></div>`;
@@ -1204,7 +1205,7 @@ function snap(){return JSON.stringify({tracks:S.tracks.map(packT),midi:S.midi.ma
  routing:S.routing,multi:S.multi,menv:S.menv,mmap:S.mmap,mode:S.mode,links:S.ctl.links,kitState:S.kitState,kits:S.kits,patData:S.patData,patInfo:S.patInfo,patKit:S.patKit,kit:S.kit,workName:S.workName},(k,v)=>v===Infinity?"∞":v)}
 function restore(str){const o=JSON.parse(str,(k,v)=>v==="∞"?Infinity:v);S.tracks=o.tracks.map(unpackT);S.midi=o.midi.map(unpackT);S.locks=new Map(o.locks.map(([k,m])=>[k,new Map(m)]));
  Object.assign(S,{song:o.song,len:o.len,mult:o.mult,swingAmt:o.swingAmt,patTrn:o.patTrn,routing:o.routing,multi:o.multi,menv:o.menv,mmap:o.mmap,mode:o.mode});S.ctl.links=o.links||[];setKitState(o.kitState);if(o.kits){S.kits=o.kits;S.patData=o.patData;S.patInfo=o.patInfo;S.patKit=o.patKit;S.kit=o.kit;S.workName=o.workName;drawLib()}}
-function commit(){if(laneDraw||rollDrag||drag||active||arpDrag)return;if(HOST.edited){HOST.edited("commit");return}const cur=snap();if(H.last==null){H.last=cur;return}if(cur!==H.last){H.undo.push(H.last);if(H.undo.length>200)H.undo.shift();H.redo=[];H.last=cur;renderTop()}}
+function commit(){if(laneDraw||rollDrag||drag||active||arpDrag||paint)return;if(HOST.edited){HOST.edited("commit");return}const cur=snap();if(H.last==null){H.last=cur;return}if(cur!==H.last){H.undo.push(H.last);if(H.undo.length>200)H.undo.shift();H.redo=[];H.last=cur;renderTop()}}
 function undo(){if(HOST.undo)return HOST.undo();if(!H.undo.length){toast("Nothing to undo.");return}H.redo.push(snap());const prev=H.undo.pop();restore(prev);H.last=prev;tx();render();toast("Undo")}
 function redo(){if(HOST.redo)return HOST.redo();if(!H.redo.length){toast("Nothing to redo.");return}H.undo.push(snap());const nx=H.redo.pop();restore(nx);H.last=nx;tx();render();toast("Redo")}
 ["pointerup","keyup","click","change"].forEach(ev=>document.addEventListener(ev,()=>setTimeout(commit,0)));
@@ -1256,10 +1257,28 @@ document.addEventListener("pointerup",()=>{if(!l2drag)return;const k=l2drag;l2dr
 document.addEventListener("click",e=>{const el=e.target.closest(".l2.ed");if(!el)return;const k=el.dataset.l2;if(k!=="swing"&&k!=="ptrn")l2step(k,e.shiftKey?-1:1)});
 document.addEventListener("wheel",e=>{const el=e.target.closest(".l2.ed");if(!el)return;e.preventDefault();l2step(el.dataset.l2,(e.deltaY||e.deltaX)<0?1:-1,true)},{passive:false});
 
+/* P7, as the MD Editor (v54): Shift + M prepares a mute ("+" unmute, "X" mute, blinking); the prepared
+   mutes apply together when Shift comes up. Leaving the window drops them. */
+const ARMED=new Map();
+function showArmed(){$$(".ms.m[data-mute]").forEach(b=>{const p=ARMED.get(+b.dataset.mute);b.classList.toggle("prep",p!=null);if(p!=null)b.dataset.prep=p?"X":"+";else delete b.dataset.prep})}
+document.addEventListener("keyup",e=>{if(e.key!=="Shift"||!ARMED.size)return;ARMED.forEach((m,i)=>{trk(i).mute=m});ARMED.clear();tx();if(HOST.mutes)HOST.mutes();render()});
+addEventListener("blur",()=>{ARMED.clear();showArmed()});
+/* P7: a drag across the SLIDE, SWING or envelope steps paints them: the first step decides on or off,
+   and the drag is one edit (one undo step). A click is a one-step paint. */
+let paint=null;
+function paintAt(el){if(!paint||!el)return;const s=+el.dataset.s,k=el.dataset.tl||el.dataset.env,key=k+":"+s;if(k!==paint.k||paint.done.has(key))return;paint.done.add(key);
+ const tr=trk(S.sel);
+ if(el.dataset.tl){const set=k==="sld"?tr.slide:tr.swing;if(set.has(s)===paint.on)return;paint.on?set.add(s):set.delete(s)}
+ else{const st=tr.steps[s];if(!st||st.off||!!st[k]===paint.on)return;st[k]=paint.on?1:0;if(!st.n&&!st.a&&!st.f&&!st.l){tr.steps[s]=null;clearStepLocks(S.sel,s)}}
+ el.classList.toggle("on",paint.on);el.setAttribute("aria-pressed",paint.on);paint.moved=true;structEdited()}
+function endPaint(){if(!paint)return;const p=paint;paint=null;if(p.moved)rerenderSeq()}
+document.addEventListener("pointerup",endPaint);document.addEventListener("pointercancel",endPaint);addEventListener("blur",endPaint);
 /* ===== Pointer input in the workspace ===== */
 let drag=null,joyDrag=null,splitDrag=null,arpDrag=null;
 const main=$("#main");
 main.addEventListener("pointerdown",e=>{
+ const pc=e.button===0&&!e.shiftKey&&!e.altKey&&!S.learn&&e.target.closest(".tc[data-tl],.tlane [data-env]");
+ if(pc){const s=+pc.dataset.s,tr=trk(S.sel),k=pc.dataset.tl||pc.dataset.env;const on=pc.dataset.tl?!(k==="sld"?tr.slide:tr.swing).has(s):!tr.steps[s]?.[k];paint={k,on,done:new Set()};try{main.setPointerCapture(e.pointerId)}catch(_){}e.preventDefault();paintAt(pc);return}
  if(S.learn){const el=e.target.closest(".pc[data-g]");if(el&&(PAGES.includes(el.dataset.g)||el.dataset.g==="MID")){e.preventDefault();e.stopPropagation();const t=el.dataset.t!=null?+el.dataset.t:S.sel;S.learnT={t,pid:el.dataset.g+"."+el.dataset.n};toast(`Target: ${tLabel(t)} ${pidLabel(t,S.learnT.pid)}. Now press 1-8 for a knob.`);if(HOST.learnTarget)HOST.learnTarget({...S.learnT});return}}
  const h=e.target.closest(".lfohandle");if(h){cordStart(e,h);return}
  const roll=e.target.closest("canvas.roll");if(roll){roll.setPointerCapture(e.pointerId);rollDown(roll,e);e.preventDefault();return}
@@ -1271,6 +1290,7 @@ main.addEventListener("pointerdown",e=>{
  if(e.target.closest("#splitm")){splitDrag=true;$("#splitm").setPointerCapture(e.pointerId);e.preventDefault();return}
  const key=e.target.closest(".kb [data-key]");if(key){kbDown=true;$("#kb").setPointerCapture(e.pointerId);playKey(+key.dataset.key);e.preventDefault()}});
 main.addEventListener("pointermove",e=>{
+ if(paint){if(e.buttons===0&&e.pointerType==="mouse"){endPaint();return}paintAt(document.elementFromPoint(e.clientX,e.clientY)?.closest(".tc[data-tl],.tlane [data-env]"));return}
  if(e.buttons===0&&e.pointerType==="mouse"&&dragging()){endDrag(e);return}
  if(cord){cordMove(e);return}
  const roll=e.target.closest?.("canvas.roll")||(rollDrag&&$("#roll"));if(roll&&(rollDrag||e.target===roll)){rollMove(roll,e);if(rollDrag)return}
@@ -1312,12 +1332,12 @@ function setSide(sd){S.side=sd;select(S.sel%6+(sd==="midi"?6:0))}
 function select(t){S.sel=t;autoRange(t);const pg=S.lane.split(".")[0];if(isMidiT(t)){if(pg!=="MID"){S.lane="MID.1";S.lanePage="MID"}}else if(pg==="MID"||!pname(t,S.lane)){S.lane="FLT.1";S.lanePage="FLT"}render()}
 document.addEventListener("click",e=>{
  const mu=e.target.closest("[data-mute]"),so=e.target.closest("[data-solo]");
- if(mu||so){const i=+(mu||so).dataset[mu?"mute":"solo"],t=trk(i);if(mu)t.mute=!t.mute;else t.solo=!t.solo;tx();if(HOST.mutes)HOST.mutes();render();return}
+ if(mu||so){const i=+(mu||so).dataset[mu?"mute":"solo"],t=trk(i);if(mu&&e.shiftKey){ARMED.has(i)?ARMED.delete(i):ARMED.set(i,!t.mute);showArmed();return}if(mu)t.mute=!t.mute;else t.solo=!t.solo;tx();if(HOST.mutes)HOST.mutes();render();return}
  const gm=e.target.closest("[data-gmute]");if(gm){const t=trk(+gm.dataset.gmute);t.mute=!t.mute;tx();if(HOST.mutes)HOST.mutes();render();return}
- const ev=e.target.closest("[data-env]");if(ev){clickEnv(ev.dataset.env,+ev.dataset.s);return}
+ const ev=e.target.closest("[data-env]");if(ev){if(e.detail>0)return;clickEnv(ev.dataset.env,+ev.dataset.s);return}	/* a mouse click was the paint gesture's */
  const sd=e.target.closest("[data-side]");if(sd){setSide(sd.dataset.side);return}
  const dk=e.target.closest("[data-dock]");if(dk){S.dock=dk.dataset.dock;rerenderSeq();return}
- const tl=e.target.closest(".tc[data-tl]");if(tl){clickTl(tl.dataset.tl,+tl.dataset.s);return}
+ const tl=e.target.closest(".tc[data-tl]");if(tl){if(e.detail>0)return;clickTl(tl.dataset.tl,+tl.dataset.s);return}
  const nd=e.target.closest("[data-node]");if(nd){S.sel=+nd.dataset.node;render();return}
  const sel=e.target.closest("[data-sel]");if(sel&&!e.target.closest("button,select,.pc,.fader")){select(+sel.dataset.sel);return}
  const lp=e.target.closest("[data-lpage]");if(lp){S.lanePage=lp.dataset.lpage;const n=pnames(S.sel,S.lanePage);S.lane=S.lanePage+"."+Math.max(0,trackLockPids(S.sel).filter(x=>x.startsWith(S.lanePage+".")).map(x=>+x.split(".")[1])[0]??0);if(!n.length){S.lane="FLT.1";S.lanePage="FLT"}render();return}
@@ -1369,7 +1389,7 @@ document.addEventListener("click",e=>{
  if(e.target.closest("#drop")&&!e.target.closest("input")){$("#romfile").click();return}
  if(e.target.closest("#undo")){undo();return}if(e.target.closest("#redo")){redo();return}
  const sc=e.target.closest("[data-sec]");if(sc){secAction(sc.dataset.sec);return}
- if(e.target.closest("#pst.warn")){sendDialog();return}
+ if(e.target.closest("#syncf.warn")){sendDialog();return}
  if(e.target.closest("#kitf")){toggleLib("kit");return}
  if(e.target.closest("#pat")){toggleLib("pat");return}
  if(e.target.closest("#learnkey")){S.learn=!S.learn;S.learnT=null;document.body.classList.toggle("learn",S.learn);renderTop();if(S.learn)toast("LEARN: click a value, then press 1-8 for a controller knob.");if(HOST.learning)HOST.learning(S.learn);return}
@@ -1561,7 +1581,7 @@ window.MMView={
  /* values */
  captureKit,capturePat,clearedKit,emptyPat,audible,engReady,asgT,noteName,pname,machName,kitName,
  gated:()=>Object.keys(NA_SEL),dialogOpen,
- busy:()=>{try{return !!(drag||laneDraw||rollDrag||active||arpDrag||l2drag||joyDrag||splitDrag||cord||kbDown)}catch(_){return false}},
+ busy:()=>{try{return !!(drag||laneDraw||rollDrag||active||arpDrag||l2drag||joyDrag||splitDrag||cord||kbDown||paint)}catch(_){return false}},
  libBusy:()=>LIB.renaming!=null||LIB.drag!=null,
  sel:()=>S.sel,mode:()=>S.mode,playing:()=>S.playing,step:()=>S.step,tempo:()=>S.bpm,engineState:()=>S.eng,kitState:()=>S.kitState,workName:()=>S.workName,
  kitSlot:k=>({...S.kits[k]}),patternSlot:p=>({data:S.patData[p],kit:S.patKit[p],...S.patInfo[p]}),patternLength:p=>p===S.pat?S.len:S.patInfo[p].len,

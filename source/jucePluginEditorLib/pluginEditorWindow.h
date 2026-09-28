@@ -30,9 +30,16 @@ namespace jucePluginEditorLib
 	private:
 		void setGuiScale(float _percent);
 		void setUiRoot(juce::Component* _component);
+		// The configured size: the GUI scale, or a free editor's own width and height.
+		void restoreSize(float _percent);
+		bool fluid() const;
 
 		void timerCallback() override;
 		void fixParentWindowSize() const;
+		// The standalone's window no larger than its screen's visible area (menu bar and Dock
+		// excluded), and inside it (P7).
+		void fitToScreen();
+		bool m_fitting = false;
 
 		PluginEditorState& m_state;
 		juce::PropertiesFile& m_config;

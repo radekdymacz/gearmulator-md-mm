@@ -251,9 +251,6 @@ table.mmap tr.sel td:first-child{box-shadow:inset 3px 0 0 var(--led)}
 .slotgrid{grid-template-columns:34px repeat(16,minmax(0,1fr))!important}
 
 /* ===== sysex receive, the MM's one-way door ===== */
-.lcdpanel .patf small .pst{font:9px var(--pix);letter-spacing:0;margin-left:2px}
-.lcdpanel .patf small .pst.warn{background:var(--ink);color:var(--lcd);padding:0 3px;border-radius:1px;cursor:pointer;animation:blink 1s steps(2) infinite}
-@media (prefers-reduced-motion:reduce){.lcdpanel .patf small .pst.warn{animation:none}}
 .recvsteps{display:grid;gap:6px;margin:0;padding-left:20px}
 .recvsteps li b{font-weight:600}
 .lcdbig.recv{letter-spacing:.06em}
@@ -359,7 +356,6 @@ canvas.roll{width:100%;display:block;border-radius:4px;background:var(--lcd);box
 .attach{width:0;min-width:100%}
 .attach .tlanes{min-width:0!important}
 /* the RECV / SEND n flag has a fixed slot, so the LCD never changes width */
-.lcdpanel .patf small .pst{display:inline-block;width:6.5ch;text-align:left;white-space:nowrap;overflow:hidden}
 
 /* the old .play key style must not resize the page LEDs while playing */
 .pl.play{width:auto!important;height:auto!important;background:none!important;place-items:initial}
@@ -458,7 +454,6 @@ body.engwait #main,body.engwait #rail{pointer-events:none;opacity:.6;transition:
 .mx{grid-template-columns:150px repeat(12,minmax(0,1fr))!important}
 /* the RECV / SEND flag floats in the Pattern field (no reserved width) */
 .lcdpanel .patf{position:relative}
-.lcdpanel .patf small .pst{position:absolute;right:6px;top:4px;width:auto!important}
 .kb{height:clamp(130px,calc(100vh - 620px),250px)!important}
 .kb .b{height:62%!important}
 .perf.map .kb{height:clamp(110px,calc(100vh - 800px),220px)!important}
@@ -608,6 +603,65 @@ body.engwait #main,body.engwait #rail{pointer-events:none;opacity:.6;transition:
  background:linear-gradient(to bottom,color-mix(in srgb,var(--ink) 15%,transparent),color-mix(in srgb,var(--ink) 8%,transparent));
  box-shadow:0 0 0 1px color-mix(in srgb,var(--ink) 55%,transparent),0 0 12px color-mix(in srgb,var(--ink) 25%,transparent);mix-blend-mode:multiply}
 .ws-seq #seq .tc.ph{box-shadow:none!important;outline:none!important}
+/* ===== P7 LAYOUT: the page fills the window and scales with it (as the MD Editor) =====
+   Fixed bars and fluid rows. Sequence: the piano roll takes what the lock lane leaves, the lane keeps
+   at least 150 px and ends at the window's bottom. Mix: the faders and the routing diagram share the
+   height, so the page never runs under the Dock. */
+:root{--seqfoot:34px}
+html,body{height:100%}
+body{box-sizing:border-box;overflow:hidden}
+.app{height:100%;min-height:0;grid-template-rows:auto minmax(0,1fr);max-width:none!important}
+.app>.body{height:100%;min-height:0;align-items:stretch!important}
+#main{min-height:0;overflow:auto;display:flex;flex-direction:column}
+#main>*{flex:none}
+.rail{align-content:start;min-height:0}
+/* Sequence */
+.ws-seq #main>.lanewrap{display:flex;flex-direction:column;flex:1 1 auto;min-height:0}
+.ws-seq .lanewrap>#lanescroll{flex:1 1 auto;min-height:150px;display:flex;flex-direction:column}
+.ws-seq .lanewrap .lanebox{flex:1 1 auto;display:flex;flex-direction:column;min-height:0}
+.ws-seq #lane{flex:1 1 auto;min-height:0;align-items:stretch!important}
+.ws-seq .lb{height:auto!important;min-height:120px}
+#seq canvas.roll[data-big]{height:clamp(180px,calc(100vh - 520px),640px)!important}
+.seqfoot{height:var(--seqfoot);display:grid;grid-template-columns:minmax(0,1fr) auto minmax(0,1fr);align-items:center;gap:14px;border-bottom:2px solid var(--print);box-sizing:border-box}
+.seqfoot .legend{grid-column:2;margin:0!important;flex-wrap:nowrap;white-space:nowrap}
+.seqfoot .pagectl{grid-column:3;justify-self:end;margin:0!important}
+.ws-seq .lanewrap{padding-top:8px!important}
+.ws-seq .lanetop{border-top:0!important;padding-top:0!important}
+/* Mix: the faders and the routing diagram share the height */
+#main>.routewrap{flex:1 1 auto;min-height:0;grid-template-rows:auto auto minmax(140px,1fr) auto}
+.strip6 .fader{height:clamp(120px,calc((100vh - 560px) * .55),300px)!important}
+svg.route{width:100%;height:100%;min-height:0}
+/* Shift + M prepares a mute, as the MD Editor (P7): "+" unmute, "X" mute, blinking until Shift comes up */
+.ms.m.prep{box-shadow:inset 0 0 0 2px var(--led);position:relative;color:transparent!important}
+.ms.m.prep::after{content:attr(data-prep);position:absolute;inset:0;display:grid;place-items:center;font:700 12px var(--pix);color:var(--keytext);animation:blink .5s steps(2) infinite}
+@media (prefers-reduced-motion:reduce){.ms.m.prep::after{animation:none}}
+/* LCD BEGIN (P7): the header's LCD as one real display, the same text in both editors (checked by
+   the sync scripts). One dot grid: labels are 8 px Silkscreen (one dot = 1 px) and values 16 px (two
+   dots), line 2's values 12 px (on the same device-pixel grid at 2x: 2, 3 and 4 pixels a dot), every
+   text line box is its font size; one rule weight (1 px) between all fields; no rule
+   before the first field; a faint dot matrix behind; sync status in a fixed slot on line 2. */
+.lcdpanel{--lrule:1px solid color-mix(in srgb,var(--ink) 34%,transparent);
+ background-image:radial-gradient(circle at 1px 1px,color-mix(in srgb,var(--ink) 9%,transparent) .55px,transparent .75px)!important;background-size:2px 2px!important;
+ grid-template-rows:minmax(0,1fr) auto!important;row-gap:0!important;padding:6px 4px 5px!important;align-content:stretch!important}
+.lcdpanel .f{border-left:var(--lrule)!important;gap:4px!important;padding:0 9px!important;align-content:start!important}
+.lcdpanel .trf,.lcdpanel .f.trf{border-left:0!important;padding:0 10px 0 4px!important}
+.lcdpanel small,.lcdpanel .save,.lcdeng.kselbtn,.lcdsec button,.l2 small{font-size:8px!important;line-height:8px!important;letter-spacing:.06em!important}
+.lcdpanel small{height:8px}
+.lcdpanel .f b{font-size:16px!important;line-height:16px!important}
+.l2,.l2 b{font-size:12px!important;line-height:12px!important}
+.row2{border-top:var(--lrule)!important;padding-top:5px!important;margin-top:0!important;align-items:center!important;height:18px;box-sizing:content-box}
+.row2 .lcd2{padding:0 9px!important;gap:14px!important;align-items:center!important;min-height:0!important}
+.l2{gap:6px!important;align-items:center!important}
+.row2 .lcdsec{border-left:var(--lrule)!important;padding:0 7px!important;align-self:stretch;align-items:center}
+.lcdpanel .led{width:5px!important;height:5px!important;border-radius:50%}
+/* the sync slot: always there, one width, the LED and one word (SYNC, SEND, RECV n) */
+.syncf{flex:none;display:inline-flex;align-items:center;gap:5px;width:9.5ch;padding:0 8px;border-left:var(--lrule);align-self:stretch;font:8px/8px var(--pix);letter-spacing:.06em;text-transform:uppercase;color:var(--ink);white-space:nowrap;overflow:hidden}
+.lcdpanel .syncf b{font:8px/8px var(--pix)!important;letter-spacing:.06em}
+.syncf.warn{cursor:pointer}
+.syncf.warn b{animation:blink 1s steps(2) infinite}
+/* the MKII print sits centred under the display's bezel */
+:root[data-plate="mk2"] .lcdgroup::after{bottom:-15px!important;font:600 9px/9px var(--sans)!important;letter-spacing:.4em!important;padding-left:.4em}
+/* LCD END */
 /* AUDIO-MIDI PANEL BEGIN (P6): the AUDIO / MIDI panel, the plate's own keys, LEDs and dropdowns */
 .ampop{position:absolute;z-index:22;width:min(1180px,calc(100vw - 32px));display:grid;gap:10px;align-content:start;padding:14px;background:var(--plate);border:2px solid var(--print);border-radius:6px;box-shadow:0 18px 40px rgba(0,0,0,.35);overflow:auto;overscroll-behavior:contain;color:var(--print)}
 .ampop[hidden]{display:none}

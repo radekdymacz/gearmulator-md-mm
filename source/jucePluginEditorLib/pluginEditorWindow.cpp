@@ -2,6 +2,7 @@
 
 #include "pluginEditor.h"
 #include "pluginEditorState.h"
+#include "windowFit.h"
 
 #include "dsp56kBase/logging.h"
 
@@ -55,10 +56,15 @@ void EditorWindow::resized()
 	if (!m_state.resizeEditor(w,h))
 		return;
 
-	if(m_scaleRestore.shouldPersistResize())
+	if(m_scaleRestore.shouldPersistResize() && !m_fitting)
 	{
 		const auto percent = 100.f * scale / m_state.getRootScale();
 		m_config.setValue("scale", percent);
+		if(fluid())
+		{
+			m_config.setValue("windowWidth", w);
+			m_config.setValue("windowHeight", h);
+		}
 		m_config.saveIfNeeded();
 	}
 
@@ -131,6 +137,21 @@ void EditorWindow::setGuiScale(const float _percent)
 	m_config.saveIfNeeded();
 }
 
+bool EditorWindow::fluid() const
+{
+	const auto* e = m_state.getEditor();
+	return e && !e->keepsAspectRatio();
+}
+
+void EditorWindow::restoreSize(const float _percent)
+{
+	const int w = m_config.getIntValue("windowWidth", 0), h = m_config.getIntValue("windowHeight", 0);
+	if(fluid() && w > 0 && h > 0)
+		setSize(w, h);
+	else
+		setGuiScale(_percent);
+}
+
 void EditorWindow::setUiRoot(juce::Component* _component)
 {
 	removeAllChildren();
@@ -142,16 +163,25 @@ void EditorWindow::setUiRoot(juce::Component* _component)
 	if(!m_state.getWidth() || !m_state.getHeight())
 		return;
 
-	m_sizeConstrainer.setMinimumSize(m_state.getWidth() / 10, m_state.getHeight() / 10);
+	// A free editor (its page lays itself out) resizes in both directions, down to 60 % of its
+	// design size; a skin drawn to a fixed size keeps its aspect ratio.
+	if(fluid())
+	{
+		m_sizeConstrainer.setMinimumSize(m_state.getWidth() * 6 / 10, m_state.getHeight() * 6 / 10);
+		m_sizeConstrainer.setFixedAspectRatio(0.0);
+	}
+	else
+	{
+		m_sizeConstrainer.setMinimumSize(m_state.getWidth() / 10, m_state.getHeight() / 10);
+		m_sizeConstrainer.setFixedAspectRatio(static_cast<double>(m_state.getWidth()) / static_cast<double>(m_state.getHeight()));
+	}
 	m_sizeConstrainer.setMaximumSize(m_state.getWidth() * 4, m_state.getHeight() * 4);
 
-	m_sizeConstrainer.setFixedAspectRatio(static_cast<double>(m_state.getWidth()) / static_cast<double>(m_state.getHeight()));
-	
 	const auto configuredScale = static_cast<float>(m_config.getDoubleValue("scale", 100));
 	const auto attachAction = m_scaleRestore.attachRoot(
 		juce::JUCEApplicationBase::isStandaloneApp(), configuredScale);
 	if(attachAction.applyConfiguredScale)
-		setGuiScale(configuredScale);
+		restoreSize(configuredScale);
 
 	_component->setSize(getWidth(), getHeight());
 
@@ -185,11 +215,49 @@ void EditorWindow::timerCallback()
 		// A standalone host can impose its small placeholder size after the editor
 		// has loaded. Reapply the configured size once that native parent exists,
 		// and do not persist the placeholder resizes as the user's GUI scale.
-		setGuiScale(restoreScale);
+		restoreSize(restoreScale);
 	}
 
 	fixParentWindowSize();
+	fitToScreen();
 	stopTimer();
+}
+
+void EditorWindow::fitToScreen()
+{
+	if(!juce::JUCEApplicationBase::isStandaloneApp() || m_scaleRestore.isEmbedded())
+		return;
+	auto* top = getTopLevelComponent();
+	if(!top || top == this || !top->isOnDesktop())
+		return;
+	const auto bounds = top->getScreenBounds();
+	const auto* display = juce::Desktop::getInstance().getDisplays().getDisplayForRect(bounds);
+	if(!display)
+		return;
+	windowFit::Frame frame;
+	if(auto* peer = top->getPeer())
+	{
+		const auto b = peer->getFrameSize();
+		frame = {b.getTop(), b.getLeft(), b.getBottom(), b.getRight()};
+	}
+	// What the window holds around the editor (its own bars), kept as it is.
+	const int extraW = bounds.getWidth() - getWidth(), extraH = bounds.getHeight() - getHeight();
+	const auto u = display->userArea;
+	const windowFit::Rect content{bounds.getX(), bounds.getY(), bounds.getWidth(), bounds.getHeight()};
+	const auto r = windowFit::fit(content, frame, {u.getX(), u.getY(), u.getWidth(), u.getHeight()},
+		m_sizeConstrainer.getMinimumWidth() + extraW, m_sizeConstrainer.getMinimumHeight() + extraH, !fluid());
+	if(r == content)
+		return;
+	LOG("Window " << content.w << "x" << content.h << " at " << content.x << "," << content.y << " fitted to the screen: "
+		<< r.w << "x" << r.h << " at " << r.x << "," << r.y);
+	if(r.w != content.w || r.h != content.h)
+	{
+		// Not the user's size: the next screen may have room for it again.
+		m_fitting = true;
+		setSize(r.w - extraW, r.h - extraH);
+		m_fitting = false;
+	}
+	top->setTopLeftPosition(r.x, r.y);
 }
 
 void EditorWindow::fixParentWindowSize() const

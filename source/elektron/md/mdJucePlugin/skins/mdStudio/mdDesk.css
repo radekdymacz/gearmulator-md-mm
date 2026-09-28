@@ -1211,6 +1211,71 @@ html,body{min-width:1280px}
 .amerr{color:var(--led);font-weight:600}
 @media (max-width:900px){.amgrid{grid-template-columns:1fr}.amnote{padding-left:0}}
 /* AUDIO-MIDI PANEL END */
+/* ===== P7 LAYOUT: the page fills the window and scales with it =====
+   One column of fixed bars (the header, the page's own bars) and fluid rows: the Sequence's 16 track
+   rows share the height the lock lane leaves (the lane keeps at least the lock parameter list's height,
+   232 px), the lock lane takes the rest and ends at the window's bottom; the Sound page's editors grow with the height. The rail's track
+   rows are the grid's (--row), so they stay aligned at every size. */
+:root{--seqhead:22px;--seqfoot:34px;--row:clamp(18px,calc((100vh - 445px) / 16 - 3px),40px)!important}
+html,body{height:100%}
+body{box-sizing:border-box;overflow:hidden}
+.app{height:100%;min-height:0;grid-template-rows:auto minmax(0,1fr);max-width:none!important}
+.app>.body{height:100%;min-height:0;align-items:stretch!important}
+#main{min-height:0;overflow:auto;display:flex;flex-direction:column}
+#main>*{flex:none}
+.rail{align-content:start;min-height:0}
+/* Sequence: ruler, 16 rows, the foot (legend in the middle, paging at the right), the lock lane */
+#main>#seqp{flex:1 1 auto;min-height:0;display:flex;flex-direction:column}
+#seqp>#seqscroll,#seqp>.seqfoot{flex:none}
+.rul{height:var(--seqhead)!important;padding-bottom:2px}
+.railhead.tall{height:var(--seqhead)!important}
+.seqfoot{height:var(--seqfoot);display:grid;grid-template-columns:minmax(0,1fr) auto minmax(0,1fr);align-items:center;gap:14px;border-bottom:2px solid var(--print);box-sizing:border-box}
+.seqfoot .legend{grid-column:2;margin:0!important;flex-wrap:nowrap;white-space:nowrap}
+.seqfoot .pagectl{grid-column:3;justify-self:end;position:static!important;height:auto!important;background:none!important;padding:0!important}
+.lanewrap{flex:none;padding-top:8px!important}
+.lanetop{border-top:0!important;padding-top:0!important}
+#lanescroll{flex:1 1 auto;min-height:96px;display:flex;flex-direction:column;box-sizing:border-box}
+#lane{flex:1 1 auto;min-height:0;align-items:stretch!important}
+.lb{height:auto!important;min-height:90px}
+.lb i:not(.bp){height:calc((100% - 6px) * var(--f,0))!important;bottom:3px}
+.lb .base{bottom:calc(3px + (100% - 6px) * var(--bf,0))!important}
+.railparams{margin-top:calc(var(--seqfoot) + 5px)!important;min-height:0;overflow:auto}
+/* Sound: the editors take the height the page has */
+#main>.soundgrid{flex:1 1 auto;min-height:0;grid-template-rows:minmax(0,1.25fr) minmax(0,1fr);align-items:stretch}
+.soundgrid>.card{min-height:0;grid-template-rows:auto minmax(150px,1fr) auto auto!important}
+.soundgrid>.card>canvas.ed{height:100%!important;min-height:150px}
+.soundgrid>.lfocard{grid-template-rows:auto minmax(0,1fr)!important}
+.soundgrid .lfoin{min-height:0;align-items:stretch}
+.soundgrid .lfoin canvas.ed{height:100%!important;min-height:150px}
+/* Mix: the faders take the height the page has left */
+.fader{height:clamp(132px,calc(100vh - 770px),320px)!important}
+/* LCD BEGIN (P7): the header's LCD as one real display, the same text in both editors (checked by
+   the sync scripts). One dot grid: labels are 8 px Silkscreen (one dot = 1 px) and values 16 px (two
+   dots), line 2's values 12 px (on the same device-pixel grid at 2x: 2, 3 and 4 pixels a dot), every
+   text line box is its font size; one rule weight (1 px) between all fields; no rule
+   before the first field; a faint dot matrix behind; sync status in a fixed slot on line 2. */
+.lcdpanel{--lrule:1px solid color-mix(in srgb,var(--ink) 34%,transparent);
+ background-image:radial-gradient(circle at 1px 1px,color-mix(in srgb,var(--ink) 9%,transparent) .55px,transparent .75px)!important;background-size:2px 2px!important;
+ grid-template-rows:minmax(0,1fr) auto!important;row-gap:0!important;padding:6px 4px 5px!important;align-content:stretch!important}
+.lcdpanel .f{border-left:var(--lrule)!important;gap:4px!important;padding:0 9px!important;align-content:start!important}
+.lcdpanel .trf,.lcdpanel .f.trf{border-left:0!important;padding:0 10px 0 4px!important}
+.lcdpanel small,.lcdpanel .save,.lcdeng.kselbtn,.lcdsec button,.l2 small{font-size:8px!important;line-height:8px!important;letter-spacing:.06em!important}
+.lcdpanel small{height:8px}
+.lcdpanel .f b{font-size:16px!important;line-height:16px!important}
+.l2,.l2 b{font-size:12px!important;line-height:12px!important}
+.row2{border-top:var(--lrule)!important;padding-top:5px!important;margin-top:0!important;align-items:center!important;height:18px;box-sizing:content-box}
+.row2 .lcd2{padding:0 9px!important;gap:14px!important;align-items:center!important;min-height:0!important}
+.l2{gap:6px!important;align-items:center!important}
+.row2 .lcdsec{border-left:var(--lrule)!important;padding:0 7px!important;align-self:stretch;align-items:center}
+.lcdpanel .led{width:5px!important;height:5px!important;border-radius:50%}
+/* the sync slot: always there, one width, the LED and one word (SYNC, SEND, RECV n) */
+.syncf{flex:none;display:inline-flex;align-items:center;gap:5px;width:9.5ch;padding:0 8px;border-left:var(--lrule);align-self:stretch;font:8px/8px var(--pix);letter-spacing:.06em;text-transform:uppercase;color:var(--ink);white-space:nowrap;overflow:hidden}
+.lcdpanel .syncf b{font:8px/8px var(--pix)!important;letter-spacing:.06em}
+.syncf.warn{cursor:pointer}
+.syncf.warn b{animation:blink 1s steps(2) infinite}
+/* the MKII print sits centred under the display's bezel */
+:root[data-plate="mk2"] .lcdgroup::after{bottom:-15px!important;font:600 9px/9px var(--sans)!important;letter-spacing:.4em!important;padding-left:.4em}
+/* LCD END */
 
 /* ===== The real machine's states (not in the mockup) ===== */
 .st.past{opacity:.45}

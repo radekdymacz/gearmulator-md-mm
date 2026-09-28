@@ -264,6 +264,12 @@ if(BUILD_TESTING)
 		LABELS "UnitTest;Rendering")
 	set_property(TARGET mdStandaloneRendererPolicyTest PROPERTY FOLDER "Elektron/test")
 
+	add_executable(mdWindowFitTest mdWindowFitTest.cpp)
+	target_include_directories(mdWindowFitTest PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/../../..)
+	add_test(NAME mdWindowFitTest COMMAND mdWindowFitTest)
+	set_tests_properties(mdWindowFitTest PROPERTIES LABELS "UnitTest")
+	set_property(TARGET mdWindowFitTest PROPERTY FOLDER "Elektron/test")
+
 	add_executable(mdPanelRenderingTest mdPanelRenderingTest.cpp mdPixelPerfectPanel.cpp)
 	target_link_libraries(mdPanelRenderingTest PRIVATE juceRmlUi juceUiLib juce_plugin_modules juce::juce_opengl)
 	target_compile_definitions(mdPanelRenderingTest PRIVATE JUCE_GLOBAL_MODULE_SETTINGS_INCLUDED=1)

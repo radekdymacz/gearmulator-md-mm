@@ -244,6 +244,53 @@ if (/[?&]selftest=p5(&|$)/.test(location.search)) (async () => {
 	log("done");
 })();
 
+/* ?selftest=p7: P7 in the plug-in, through the page's own pointer paths. All steps by default; a drag
+   paints steps on and off (the first one decides) as one undo step; a drag whose button comes up outside
+   the page ends; the page fits the window (no scroll, the lock lane ends above the bottom). */
+if (/[?&]selftest=p7(&|$)/.test(location.search)) (async () => {
+	const sleep = ms => new Promise(r => setTimeout(r, ms));
+	const log = t => Bridge.log("P7: " + t);
+	let ok = 0, n = 0;
+	const check = (name, pass, note) => { n++; if (pass) ok++; log(`${pass ? "ok" : "FAIL"} ${name}${note ? ": " + note : ""}`); };
+	const until = async (f, ms) => { const end = performance.now() + ms; while (performance.now() < end) { if (f()) return true; await sleep(30); } return false; };
+	if (!await until(() => runs() && V.loaded, 90000)) { log("FAIL: not ready"); return; }
+	await sleep(2500);
+	const pat = () => Docs.patterns[currentPatternSlot()];
+	check("all steps by default", $$('.st[data-t="0"]').length === V.len && S.viewAll, $$('.st[data-t="0"]').length + " of " + V.len + " steps");
+	const de = document.documentElement, lane = $("#lanescroll")?.getBoundingClientRect();
+	check("the page fits the window", de.scrollHeight <= innerHeight + 1 && lane && lane.bottom <= innerHeight, `page ${de.scrollHeight} / window ${innerHeight}, lock lane bottom ${lane ? Math.round(lane.bottom) : "?"}`);
+	/* a run of four empty steps on a track */
+	let t = -1, s0 = -1;
+	for (let i = 0; i < 16 && t < 0; i++) for (let s = 0; s + 4 <= V.len; s++) if ([0, 1, 2, 3].every(k => !pat().tracks[i].trigs.includes(s + k))) { t = i; s0 = s; break; }
+	if (t < 0) { log("FAIL: no four empty steps"); return; }
+	const cell = s => document.querySelector(`.st[data-t="${t}"][data-s="${s}"]`);
+	const pe = (type, el, o = {}) => { const r = el.getBoundingClientRect(); return new PointerEvent(type, Object.assign({ bubbles: true, cancelable: true, pointerId: 9, pointerType: "mouse", button: 0, clientX: r.left + r.width / 2, clientY: r.top + r.height / 2 }, o)); };
+	const drag = steps => { cell(steps[0]).dispatchEvent(pe("pointerdown", cell(steps[0]), { buttons: 1 })); for (const s of steps.slice(1)) $("#main").dispatchEvent(pe("pointermove", cell(s), { buttons: 1 })); const last = cell(steps[steps.length - 1]); last.dispatchEvent(pe("pointerup", last, { buttons: 0 })); last.dispatchEvent(new MouseEvent("click", { bubbles: true, detail: 1 })); };
+	const run = [s0, s0 + 1, s0 + 2, s0 + 3], has = () => run.map(s => pat().tracks[t].trigs.includes(s));
+	const u0 = V.undoCount;
+	drag(run);
+	check("a drag paints four steps on", await until(() => has().every(Boolean), 8000), `track ${t + 1} steps ${s0 + 1}-${s0 + 4}: ${has().join(" ")}`);
+	await sleep(600);
+	check("as one undo step", V.undoCount === u0 + 1, `undo steps ${u0} -> ${V.undoCount}`);
+	drag([s0 + 3, s0 + 2, s0 + 1, s0]);
+	check("a drag from a lit step paints them off", await until(() => !has().some(Boolean), 8000), has().join(" "));
+	await sleep(600);
+	/* a value drag whose button comes up outside the page after its element was re-drawn */
+	S.ws = "sound"; render(); await sleep(600);
+	const box = $(".pc[data-g]"), sent = [];
+	const send0 = Bridge.send; Bridge.send = (m, o) => { sent.push(m.op); return send0(m, o); };
+	box.dispatchEvent(pe("pointerdown", box, { buttons: 1 }));
+	render();
+	$(".top").dispatchEvent(pe("pointerup", $(".top"), { buttons: 0 }));
+	sent.length = 0;
+	$("#main").dispatchEvent(pe("pointermove", $(".pc[data-g]"), { buttons: 0, clientY: 10 }));
+	await sleep(400);
+	Bridge.send = send0;
+	check("a drag ends where its button comes up", !sent.length && !interacting(), `${sent.length} sends, interacting ${interacting()}`);
+	S.ws = "seq"; render();
+	log(`${ok === n ? "PASS" : "FAIL"} ${ok}/${n}`);
+})();
+
 /* GEARMULATOR_MDSTUDIO_SELFTEST=1 (?selftest=1): edit a trig, a lock and a kit value through the same
    commands a click sends, and log what the firmware read back and how long it took. Times are taken
    when the document arrives (message handler), so page timer throttling does not inflate them. */
