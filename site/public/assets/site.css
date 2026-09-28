@@ -295,3 +295,8 @@ legend { padding: 0; margin-bottom: 12px; color: var(--muted); }
 .stage { max-width: none; }
 .checkout h1 { font-size: clamp(30px, 4vw, 44px); }
 @media (max-width: 560px) { .wskey .long { display: none; } }
+
+/* legal pages */
+.legalpage .wrap > * { max-width: 760px; }
+.legalpage h2 { font-size: 20px; margin: 28px 0 8px; }
+.foot .legal a { margin: 0; }

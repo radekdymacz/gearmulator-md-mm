@@ -7,6 +7,9 @@ window.MDMM_CONFIG = {
   // Bumped by the release process. Shown on the page as-is; the page makes no API calls.
   version: "0.1.0-alpha",
 
+  // Contact address. The pages carry it statically (entity-encoded mailto); keep this in sync.
+  contact: { email: "radekdymacz@gmail.com" },
+
   source: "https://github.com/radekdymacz/gearmulator-md-mm",
   releasesPage: "https://github.com/radekdymacz/gearmulator-md-mm/releases",
 
