@@ -28,7 +28,7 @@ window.MDMM_CONFIG = {
     lemonsqueezy: {
       // The product's share link (Products > the product > Share), e.g.
       // https://YOURSTORE.lemonsqueezy.com/buy/xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx
-      checkoutUrl: "https://REPLACE_ME.lemonsqueezy.com/buy/REPLACE_ME"
+      checkoutUrl: "https://nativekloud.lemonsqueezy.com/checkout/buy/7a9298ee-861d-4f01-b6f1-61030311c6ae"
     },
     currency: "EUR",
     symbol: "€",
