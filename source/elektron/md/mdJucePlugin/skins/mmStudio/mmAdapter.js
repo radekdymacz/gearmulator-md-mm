@@ -564,15 +564,18 @@
 		audioDoc() { return audioDocument && Object.assign({}, audioDocument, { error: audioError }); },
 		audioSend(c) { send(Object.assign({ op: "audioSet" }, c), { onResult: r => { audioError = r.ok ? "" : r.errors[0] || ""; V().redrawAudio(); } }); },
 		audioMeter(on) { send({ op: "audioMeter", on: !!on }); },
-		/* the controller profile (DESIGN-tr06.md, deskController.js): its bar in the CONTROL workspace (its key
-		   opens the panel), and after every render whether the bar shows and the track its knobs move */
-		controllerBar() { return Ctl.barHtml(); },
+		/* the CONTROL workspace (DESIGN-tr06.md, deskController.js): the MIDI input devices as tiles, a device's
+		   view (the TR-06's profile, or the mockup's mapping matrix); after every render whether the TR-06's
+		   view shows and the track its knobs move */
+		controlView(learnHtml) { return Ctl.controlHtml(learnHtml); },
 		selected(t) { Ctl.rendered(); if (t === lastSelected) return; lastSelected = t; send({ op: "ctlTrack", t }); }
 	};
 	let lastSelected = -1;
-	/* the controller's panel asks through the adapter's own commands */
+	/* the CONTROL workspace's devices ask through the adapter's own commands */
+	Ctl.rerender = () => V().render();
 	Ctl.host = {
-		set: a => send({ op: "ctlSet", profile: a.profile, channel: a.channel }),
+		set: a => send({ op: "ctlSet", profile: a.profile, channel: a.channel, knobMode: a.knobMode }),
+		clear: () => send({ op: "ctlClear" }),
 		voice: a => send({ op: "ctlVoice", voice: a.voice, t: a.t, note: a.note }),
 		knob: a => send({ op: "ctlKnob", cc: a.cc, pg: a.pg, i: a.i }),
 		reset: () => send({ op: "ctlReset" }),

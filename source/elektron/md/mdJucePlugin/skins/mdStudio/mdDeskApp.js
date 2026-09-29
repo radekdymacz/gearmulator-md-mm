@@ -976,7 +976,8 @@ function renderControl() {
    <select id="cp">${slots(V.tracks[t].m).map((p, i) => p ? `<option value="${i}">${p}</option>` : "").join("")}<option value="24">LEVEL</option></select><button class="cream" id="caddl">Add target</button></div>
   <div class="irow"><span class="ilab"></span><button data-addsrc="lfo">+ App LFO</button><button data-addsrc="random">+ Random</button></div></section>`;
 	}
-	$("#main").innerHTML = `<div class="ctlui"><section class="card"><header><h3>Mapping matrix</h3><span>rows = controller knobs, learned CCs and app modulators · columns = tracks</span></header>${Ctl.barHtml()}${mx}</section>${insp}</div>`;
+	/* the MIDI input devices as tiles; a device's view: the TR-06's profile, or this mapping matrix (deskController.js) */
+	$("#main").innerHTML = Ctl.controlHtml(`<div class="ctlui"><section class="card"><header><h3>Mapping matrix</h3><span>rows = controller knobs, learned CCs and app modulators · columns = tracks</span></header>${mx}</section>${insp}</div>`);
 	syncControls();
 }
 /* Values and the CC rate while the machine plays: in place, no re-render. */
@@ -1443,9 +1444,11 @@ Keys.bind({ keys: ["ArrowUp", "ArrowDown"], group: "Values", does: "A focused va
 Keys.bind({ keys: ["ArrowLeft", "ArrowRight"], group: "Values", does: "A focused value: one step" });
 new ResizeObserver(() => redraw()).observe(document.body);
 render();
-/* The controller profile (deskController.js: the bar in the Control workspace, its panel) asks through the page's own commands. */
+/* The CONTROL workspace's devices (deskController.js: the tiles, the TR-06's view) ask through the page's own commands. */
+Ctl.rerender = () => render();
 Ctl.host = {
-	set: a => cmd("ctlSet", { profile: a.profile, channel: a.channel }),
+	set: a => cmd("ctlSet", { profile: a.profile, channel: a.channel, knobMode: a.knobMode }),
+	clear: () => cmd("ctlClear", {}),
 	voice: a => cmd("ctlVoice", { voice: a.voice, t: a.t, note: a.note }),
 	knob: a => cmd("ctlKnob", { cc: a.cc, pg: a.pg, i: a.i }),
 	reset: () => cmd("ctlReset", {}),

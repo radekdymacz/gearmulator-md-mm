@@ -49,7 +49,8 @@ function renderControl(){const C=S.ctl,sel=srcById(C.sel)||C.sources[0];
   <div class="irow addrow"><span class="ilab">Add</span><select id="lt" aria-label="Target track">${ALLT.map(i=>opt(i,tLabel(i)+" · "+(i<6?trk(i).m:"MIDI CH"+trk(i).ch),C.addT)).join("")}</select>
    <select id="lp" aria-label="Target value">${targetOpts(C.addT)}</select><button class="cream" id="laddl">Add target</button></div>
   <div class="irow"><span class="ilab"></span><button data-addsrc="lfo">+ App LFO</button><button data-addsrc="rnd">+ Random</button></div></section>`;
- $("#main").innerHTML=`<div class="ctlui"><section class="card"><header><h3>Mapping matrix</h3><span>rows = sources · columns = tracks · drag a knob row to turn it</span></header>${HOST.controllerBar?HOST.controllerBar():""}${mx}</section>${insp}</div>`;
+ const ui=`<div class="ctlui"><section class="card"><header><h3>Mapping matrix</h3><span>rows = sources · columns = tracks · drag a knob row to turn it</span></header>${mx}</section>${insp}</div>`;
+ $("#main").innerHTML=HOST.controlView?HOST.controlView(ui):ui;
  syncControls()}
 let knobDrag=null;
 document.addEventListener("pointerdown",e=>{const h=e.target.closest(".srch.k-cc");if(h){knobDrag={h,src:srcById(h.dataset.src),y:e.clientY,x:e.clientX,v:srcById(h.dataset.src).val,moved:false};h.setPointerCapture(e.pointerId)}},true);

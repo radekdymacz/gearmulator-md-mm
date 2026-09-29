@@ -2018,9 +2018,9 @@ const kitName=k=>"K"+String(k+1).padStart(2,"0")+" "+((k===S.kit?S.workName:S.ki
      chooseRom(), revealRom(), recheck()   the start-up card's keys (P7): the native file chooser for the
                                       firmware, the ROM folder, look again (the page never reads the ROM)
      audioDoc(), audioSend(command), audioMeter(on)   the AUDIO / MIDI panel's devices
-     controllerBar(), selected(t)     the controller profile (DESIGN-tr06.md): its bar in the CONTROL workspace's
-                                      mapping matrix, under its heading (the profile, the channel, what arrives, TR-06 MAP…
-                                      for its panel); the selected track's number 0-5 after every render (its
+     controlView(learnHtml), selected(t)   the CONTROL workspace (DESIGN-tr06.md): the MIDI input devices as tiles,
+                                      a tile's view (the TR-06's profile, or the mapping matrix, learnHtml, for any
+                                      other device); the selected track's number 0-5 after every render (the TR-06's
                                       knobs move that synth track's parameters)
    The view's side, for a host: window.MMView (130-main.js): values to read, setters (the LCD
    picture, the held key, the pattern field's RECV state, the engine words, the machine's mutes,
@@ -2044,7 +2044,7 @@ const Modal = (() => {
 		boot: { outside: false, focusLast: false, esc: false } };
 	const DIALOGS = [["#dlg", "confirm", null], ["#libpop", "panel", "closeLib"], ["#globpop", "panel", "closeGlobal"],
 		["#keyspop", "panel", "toggleKeys"], ["#audiopop", "panel", "closeAudio"], ["#machpop", "panel", "closePicker"], ["#bootcard", "boot", null],
-		["#syxpop", "panel", null], ["#ctlpop", "panel", "closeController"]];
+		["#syxpop", "panel", null]];
 	const stack = [];	// {el, kind, close, back}
 	const FOCUSABLE = 'button:not([disabled]),[href],input:not([disabled]),select:not([disabled]),textarea,[tabindex]:not([tabindex="-1"])';
 	let bg = null;
@@ -2923,7 +2923,8 @@ function renderControl(){const C=S.ctl,sel=srcById(C.sel)||C.sources[0];
   <div class="irow addrow"><span class="ilab">Add</span><select id="lt" aria-label="Target track">${ALLT.map(i=>opt(i,tLabel(i)+" · "+(i<6?trk(i).m:"MIDI CH"+trk(i).ch),C.addT)).join("")}</select>
    <select id="lp" aria-label="Target value">${targetOpts(C.addT)}</select><button class="cream" id="laddl">Add target</button></div>
   <div class="irow"><span class="ilab"></span><button data-addsrc="lfo">+ App LFO</button><button data-addsrc="rnd">+ Random</button></div></section>`;
- $("#main").innerHTML=`<div class="ctlui"><section class="card"><header><h3>Mapping matrix</h3><span>rows = sources · columns = tracks · drag a knob row to turn it</span></header>${HOST.controllerBar?HOST.controllerBar():""}${mx}</section>${insp}</div>`;
+ const ui=`<div class="ctlui"><section class="card"><header><h3>Mapping matrix</h3><span>rows = sources · columns = tracks · drag a knob row to turn it</span></header>${mx}</section>${insp}</div>`;
+ $("#main").innerHTML=HOST.controlView?HOST.controlView(ui):ui;
  syncControls()}
 let knobDrag=null;
 document.addEventListener("pointerdown",e=>{const h=e.target.closest(".srch.k-cc");if(h){knobDrag={h,src:srcById(h.dataset.src),y:e.clientY,x:e.clientX,v:srcById(h.dataset.src).val,moved:false};h.setPointerCapture(e.pointerId)}},true);

@@ -1,12 +1,13 @@
 "use strict";
-/* The controller profile's panel (deskController.js, DESIGN-tr06.md) in a real browser, on both shipped
-   pages (mdStudio.html, mmStudio.html) in their dev mode (?dev=1: the bridge talks to window.gmDev, a
-   fake host here). What node's stand-in document cannot show: the page's own key-style dropdowns
-   (enhanceSelects, openK, the #kpop list) work in the panel, and a pick becomes the host's command; the
-   CONTROL workspace's controller key opens the panel and shows the profile's state; the engine menu no
-   longer lists the controller; a TR-06 among the enabled MIDI inputs and the TR-06's activity are
-   shown. Simulated documents only; nothing of the user's is read or written (a throw-away browser
-   profile in the temp folder).
+/* The CONTROL workspace's MIDI devices (deskController.js, DESIGN-tr06.md) in a real browser, on both shipped
+   pages (mdStudio.html, mmStudio.html) in their dev mode (?dev=1: the bridge talks to window.gmDev, a fake
+   host here). What node's stand-in document cannot show: the workspace opens on a tile per MIDI input, a
+   tile opens its view and DEVICES comes back; a generic device shows the page's own mapping matrix (MIDI
+   Learn); the TR-06's view: the page's key-style dropdowns (enhanceSelects, openK, the #kpop list) work and
+   a pick becomes the host's command, the live MIDI monitor updates in place (nothing blinks), CLEAR, a
+   found TR-06, another channel, a DAW's tiles; the engine menu does not list the controller. Simulated
+   documents only; nothing of the user's is read or written (a throw-away browser profile in the temp
+   folder).
      node deskControllerBrowserTest.js            (exits 77 when no Chrome is found; CHROME=<path> to choose)
 */
 const fs = require("fs"), path = require("path"), http = require("http"), os = require("os");
@@ -25,11 +26,11 @@ function controllerDoc(m) {
 	const mm = m === "mm";
 	return {
 		schema: "desk/controller", version: 1, machine: m, profile: "off", profiles: [{ id: "off", label: "Off" }, { id: "tr06", label: "Roland TR-06" }],
-		channel: 10, about: "shipped mapping", tracks: mm ? 6 : 16, selected: 0, known: true, warning: "",
+		channel: 10, knobMode: "relative", about: "shipped mapping", tracks: mm ? 6 : 16, selected: 0, machineName: mm ? "SWAVE-SAW" : "TRX-BD", known: true, warning: "",
 		voices: VOICES.map(([voice, label, notes], v) => Object.assign({ voice, label, notes, t: mm ? Math.min(v, 5) : v, out: { ch: 1, note: 36 + v } }, mm ? { note: 60 } : {})),
-		knobs: [{ cc: 24, label: "BD LEVEL", i: 0, name: mm ? "SYN A" : "SYN 1" }, { cc: 20, label: "BD TUNE", i: -1, name: "" }].map(k => mm ? Object.assign({ pg: k.i < 0 ? -1 : 0 }, k) : k),
-		targets: mm ? [{ pg: 0, i: 0, name: "SYN A" }, { pg: 2, i: 0, name: "FLTR BASE" }] : [{ i: 0, name: "SYN 1" }, { i: 16, name: "DIST" }],
-		last: null, named: true, device: "", activity: null
+		knobs: [{ cc: 24, label: "BD LEVEL", i: 0, name: mm ? "SYN A" : "SYN 1", own: mm ? "UNIL" : "PTCH" }, { cc: 20, label: "BD TUNE", i: -1, name: "", own: "" }].map(k => mm ? Object.assign({ pg: k.i < 0 ? -1 : 0 }, k) : k),
+		targets: mm ? [{ pg: 0, i: 0, name: "SYN A", own: "UNIL" }, { pg: 2, i: 0, name: "FLTR BASE", own: "" }] : [{ i: 0, name: "SYN 1", own: "PTCH" }, { i: 16, name: "DIST", own: "" }],
+		last: null, named: true, inputs: [{ name: "TR-06", on: true, tr06: true }, { name: "IAC Driver Bus 1", on: true, tr06: false }], device: "", activity: null
 	};
 }
 /* the MD page renders a workspace only once it has the machine's documents (mdDeskModelTest.js's fixtures) */
@@ -72,7 +73,8 @@ const harness = m => `(() => {
 		return "";
 	};
 	const sentOp = (op, f) => sent.some(c => c.op === op && (!f || f(c)));
-	const act = (seq, last, elsewhere) => ({ seq, last, elsewhere: elsewhere ?? null });
+	const act = (seq, last, elsewhere, ccs, notes) => ({ seq, last, elsewhere: elsewhere ?? null, ccs: ccs || [], notes: notes || [] });
+	const tile = kind => document.querySelector('#ctlroot .ctltile[data-kind="' + kind + '"]');
 	(async () => {
 		try {
 			await wait(300);
@@ -82,65 +84,76 @@ const harness = m => `(() => {
 			/* the engine menu no longer lists the controller */
 			const eng = $("#engsel");
 			check(eng && ![...eng.options].some(o => o.value === "ctl" || /CONTROLLER/.test(o.text)), "the engine menu has no CONTROLLER entry");
-			/* the CONTROL workspace: the bar in the mapping matrix's header */
+			/* the CONTROL workspace: the devices, a tile per MIDI input */
 			click([...document.querySelectorAll("#tabs button")].find(t => t.dataset.ws === "control")); await wait(150);
-			check($(".ctlui .card > #ctlbar"), "the CONTROL workspace's mapping matrix card has the controller bar under its heading");
-			check($("#ctlkey") && !$("#ctlkey .led.on") && /TR-06 MAP/.test(text("#ctlkey")), "the bar's key: TR-06 MAP…, its LED dark while the profile is off");
-			check(sentOp("ctlWatch", c => c.on === true), "the bar shows: the page asks for what arrives (ctlWatch on)");
-			/* the bar's own dropdowns */
+			check($("#ctlroot") && document.querySelectorAll("#ctlroot .ctltile").length === 2 && tile("tr06") && /IAC Driver Bus 1/.test(text("#ctlroot")), "the CONTROL workspace opens on the devices: the TR-06 and IAC tiles");
+			check(tile("tr06").querySelector("svg") && tile("tr06").querySelector(".led") && !tile("tr06").querySelector(".led.on") && /PROFILE OFF/.test(tile("tr06").textContent), "the TR-06 tile: its icon, its LED dark (the profile off)");
+			check(!document.querySelector("[id=ctlbar],[id=ctlkey],[id=ctlpop]") && !$(".ctlui"), "no bar, no TR-06 MAP…, no mapping matrix on the devices view");
+			check(!sentOp("ctlWatch", c => c.on === true), "the devices do not watch what arrives");
+			/* a generic device: the page's own mapping matrix (MIDI Learn) */
+			click(tile("dev")); await wait(150);
+			check($("#ctlroot .ctlui") && /Mapping matrix/.test(text("#ctlroot .ctlui")) && $("#ctl-back") && /IAC Driver Bus 1/.test(text("#ctlroot .ctlhead")), "IAC: the mapping matrix (MIDI Learn) behind its tile, a DEVICES key");
+			click($("#ctl-back")); await wait(150);
+			check(tile("tr06") && !$("#ctlroot .ctlui"), "DEVICES: back to the tiles");
+			/* the TR-06's view */
+			click(tile("tr06")); await wait(150);
+			check($("#ctl-profile") && $("#ctl-channel") && $("#ctl-knobmode") && $("#ctl-clear") && $("#ctlmon"), "the TR-06: profile, channel, knob mode, the MIDI monitor, CLEAR");
+			check(sentOp("ctlWatch", c => c.on === true), "the TR-06's view shows: the page asks for what arrives (ctlWatch on)");
 			sent.length = 0;
-			let why = await pick("#ctlbar", "ctl-bar-profile", "tr06");
-			check(!why && sentOp("ctlSet", c => c.profile === "tr06"), "the bar's PROFILE: a pick sends ctlSet profile tr06 " + why);
-			why = await pick("#ctlbar", "ctl-bar-channel", "4");
-			check(!why && sentOp("ctlSet", c => c.channel === 4), "the bar's CH: a pick sends ctlSet channel 4 " + why);
-			/* the key opens the panel */
-			click($("#ctlkey")); await wait(80);
-			check(!$("#ctlpop").hidden, "TR-06 MAP… opens the Controller panel");
-			/* the panel's dropdowns: a pick in the page's own list is the host's command */
-			why = await pick("#ctlpop", "ctl-channel", "5");
-			check(!why && sentOp("ctlSet", c => c.channel === 5), "the panel's CHANNEL: the list opens and a pick sends ctlSet channel 5 " + why);
-			why = await pick("#ctlpop", "ctl-profile", "tr06");
-			check(!why && sentOp("ctlSet", c => c.profile === "tr06"), "the panel's PROFILE: a pick sends ctlSet profile tr06 " + why);
-			why = await pick("#ctlpop", "ctl-knob-24", ${JSON.stringify(m === "mm" ? "2:0" : "-1:16")});
+			let why = await pick("#ctlroot", "ctl-profile", "tr06");
+			check(!why && sentOp("ctlSet", c => c.profile === "tr06"), "PROFILE: a pick sends ctlSet profile tr06 " + why);
+			why = await pick("#ctlroot", "ctl-channel", "4");
+			check(!why && sentOp("ctlSet", c => c.channel === 4), "CHANNEL: a pick sends ctlSet channel 4 " + why);
+			why = await pick("#ctlroot", "ctl-knobmode", "absolute");
+			check(!why && sentOp("ctlSet", c => c.knobMode === "absolute"), "KNOBS: a pick sends ctlSet knobMode absolute " + why);
+			why = await pick("#ctlroot", "ctl-knob-24", ${JSON.stringify(m === "mm" ? "2:0" : "-1:16")});
 			check(!why && sentOp("ctlKnob", c => c.cc === 24 && c.i === ${m === "mm" ? 0 : 16}), "a knob's target: a pick sends ctlKnob " + why);
-			why = await pick("#ctlpop", "ctl-voice-SD", "4");
+			why = await pick("#ctlroot", "ctl-voice-SD", "4");
 			check(!why && sentOp("ctlVoice", c => c.voice === "SD" && c.t === 4), "a voice's track: a pick sends ctlVoice " + why);
 			/* a redraw while a list is open: the pick still lands (stable ids) */
 			{
-				click(document.querySelector('#ctlpop .kselbtn[data-for="ctl-channel"]')); await wait(20);
+				click(document.querySelector('#ctlroot .kselbtn[data-for="ctl-channel"]')); await wait(20);
 				recv(doc({ warning: "redrawn" })); await wait(20);
 				click(document.querySelector('#kpop .kopt[data-v="7"]')); await wait(120);
-				check(sentOp("ctlSet", c => c.channel === 7), "a pick after the panel redrew still sends its command");
+				check(sentOp("ctlSet", c => c.channel === 7), "a pick after the view redrew still sends its command");
 			}
-			/* a TR-06 among the enabled MIDI inputs, the profile off: the bar and the panel say so, one click turns it on */
+			/* a TR-06 among the enabled MIDI inputs, the profile off: the view says so, one click turns it on */
 			sent.length = 0;
 			recv(doc({ device: "TR-06" })); await wait(60);
-			check(/TR-06 connected/.test(text("#ctlpop")) && $("#ctlpop [data-ctl=use]"), "the panel: TR-06 connected — turn the profile on, USE TR-06");
-			check(/TR-06 connected/.test(text("#ctlbar")) && $("#ctlkey.hint") && /turn the profile on/.test($("#ctlkey").title), "the bar: TR-06 connected, the key hints");
+			check(/TR-06 connected/.test(text("#ctlroot")) && $("#ctlroot [data-ctl=use]"), "TR-06 connected — turn the profile on, USE TR-06");
 			check(!sentOp("ctlSet"), "nothing turns the profile on by itself");
-			click($("#ctlbar [data-ctl=use]")); await wait(120);
+			click($("#ctlroot [data-ctl=use]")); await wait(120);
 			check(sentOp("ctlSet", c => c.profile === "tr06"), "USE TR-06 sends ctlSet profile tr06");
-			/* the profile on: the key's LED lights, no hint */
-			recv(doc({ profile: "tr06", device: "TR-06" })); await wait(60);
-			check($("#ctlkey .led.on") && !$("#ctlkey.hint") && !$("#ctlbar [data-ctl=use]") && !$("#ctlpop [data-ctl=use]"), "the profile on: the key's LED is lit, no hint");
-			/* activity: the last message on the channel, its row blinks, the profile off too */
-			recv(doc({ activity: act(1, { kind: "cc", n: 24, v: 87 }) })); await wait(40);
-			check(/CC 24 = 87/.test(text("#ctlpop .ctlact")) && /CC 24 = 87/.test(text("#ctlbar .ctlact")), "activity: CC 24 = 87 in the panel and the bar");
-			check($('#ctlpop tr[data-cc="24"].blink'), "activity: the knob's row blinks");
-			recv(doc({ activity: act(2, { kind: "note", n: 38, v: 100 }) })); await wait(40);
-			check(/NOTE 38/.test(text("#ctlpop .ctlact")) && $('#ctlpop tr[data-voice="SD"].blink'), "activity: NOTE 38, the SD row blinks");
+			/* the live monitor: every CC with its value, name and what it moves; the last notes; in place, no blinking */
+			recv(doc({ profile: "tr06", device: "TR-06", activity: act(1, { kind: "cc", n: 24, v: 87 }, null, [{ ch: 10, cc: 24, v: 87 }, { ch: 3, cc: 71, v: 12 }], [{ ch: 10, n: 38, v: 100 }]) })); await wait(60);
+			const row = $('#ctlmon tr[data-ch="10"][data-cc="24"]');
+			check(row && /CC 24/.test(row.textContent) && /87/.test(row.textContent) && /BD LEVEL/.test(row.textContent) && /→ T1 ${m === "mm" ? "SYN A · UNIL" : "SYN 1 · PTCH"}/.test(row.textContent),
+				"the monitor: CC 24 · 87 · BD LEVEL → T1 with the machine's own name (" + (row ? row.textContent : "no row") + ")");
+			check(/CH 3/.test(text('#ctlmon tr[data-ch="3"]')) && /not the TR-06's channel/.test(text('#ctlmon tr[data-ch="3"]')), "another channel's CC, labelled with its channel");
+			check(text("#ctl-notes").includes("NOTE 38 · 100 (SD)"), "the last note: NOTE 38 · 100 (SD)");
+			const kept = $("#ctl-profile");
+			recv(doc({ profile: "tr06", device: "TR-06", activity: act(2, { kind: "cc", n: 24, v: 90 }, null, [{ ch: 10, cc: 24, v: 90 }, { ch: 3, cc: 71, v: 12 }], [{ ch: 10, n: 38, v: 100 }]) })); await wait(60);
+			check(/90/.test(text('#ctlmon tr[data-cc="24"]')) && $("#ctl-profile") === kept, "a new value updates the monitor in place (the view is not redrawn)");
+			check(!document.querySelector("#ctlroot .blink") && ![...document.querySelectorAll("#ctlroot *")].some(e => getComputedStyle(e).animationName !== "none"), "nothing blinks or animates");
+			sent.length = 0;
+			click($("#ctl-clear")); await wait(120);
+			check(sentOp("ctlClear"), "CLEAR sends ctlClear");
 			/* the TR-06 on another channel */
 			sent.length = 0;
 			recv(doc({ device: "TR-06", activity: act(3, null, 3) })); await wait(40);
-			check(/TR-06 is sending on CH 3 — set CHANNEL to 3/.test(text("#ctlpop")) && /TR-06 is sending on CH 3/.test(text("#ctlbar")), "another channel: TR-06 is sending on CH 3 — set CHANNEL to 3");
-			click($("#ctlpop [data-ctl=setch]")); await wait(120);
+			check(/TR-06 is sending on CH 3 — set CHANNEL to 3/.test(text("#ctlroot")), "another channel: TR-06 is sending on CH 3 — set CHANNEL to 3");
+			click($("#ctlroot [data-ctl=setch]")); await wait(120);
 			check(sentOp("ctlSet", c => c.channel === 3), "SET CH 3 sends ctlSet channel 3");
-			recv(doc({ named: false, activity: act(4, null, 3) })); await wait(40);
-			check(/MIDI in on CH 3/.test(text("#ctlpop")), "a DAW (no names): MIDI in on CH 3, if that is the TR-06");
-			/* closing the panel keeps watching while the bar shows; another workspace stops it */
+			/* a DAW: no device names; back on the devices: Host MIDI in and the TR-06 */
+			recv(doc({ named: false, inputs: null, activity: act(4, null, 3) })); await wait(40);
+			check(/MIDI in on CH 3/.test(text("#ctlroot")), "a DAW (no names): MIDI in on CH 3, if that is the TR-06");
 			sent.length = 0;
-			closeController(); await wait(60);
-			check(!sentOp("ctlWatch"), "the panel closed, the bar still shows: still watching");
+			click($("#ctl-back")); await wait(150);
+			check(/Host MIDI in/.test(text("#ctlroot")) && tile("tr06") && document.querySelectorAll("#ctlroot .ctltile").length === 2, "a DAW's devices: Host MIDI in and the TR-06");
+			check(sentOp("ctlWatch", c => c.on === false), "back on the devices: the page stops watching (ctlWatch off)");
+			/* the TR-06 again, then another workspace stops watching */
+			click(tile("tr06")); await wait(150);
+			sent.length = 0;
 			click([...document.querySelectorAll("#tabs button")].find(t => t.dataset.ws === "seq")); await wait(150);
 			check(sentOp("ctlWatch", c => c.on === false), "another workspace: the page stops watching (ctlWatch off)");
 		} catch (e) { out.errors.push("harness: " + e); }

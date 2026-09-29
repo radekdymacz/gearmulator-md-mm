@@ -35,9 +35,9 @@
      chooseRom(), revealRom(), recheck()   the start-up card's keys (P7): the native file chooser for the
                                       firmware, the ROM folder, look again (the page never reads the ROM)
      audioDoc(), audioSend(command), audioMeter(on)   the AUDIO / MIDI panel's devices
-     controllerBar(), selected(t)     the controller profile (DESIGN-tr06.md): its bar in the CONTROL workspace's
-                                      mapping matrix, under its heading (the profile, the channel, what arrives, TR-06 MAP…
-                                      for its panel); the selected track's number 0-5 after every render (its
+     controlView(learnHtml), selected(t)   the CONTROL workspace (DESIGN-tr06.md): the MIDI input devices as tiles,
+                                      a tile's view (the TR-06's profile, or the mapping matrix, learnHtml, for any
+                                      other device); the selected track's number 0-5 after every render (the TR-06's
                                       knobs move that synth track's parameters)
    The view's side, for a host: window.MMView (130-main.js): values to read, setters (the LCD
    picture, the held key, the pattern field's RECV state, the engine words, the machine's mutes,
