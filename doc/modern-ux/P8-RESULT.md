@@ -62,7 +62,7 @@ readme pages, the release notes and the site's download page say both;
 `verify_mdmm_pkg_install.sh` finds either location and warns when both hold a copy.
 
 Tested for real on this Mac without sudo: `installer -pkg <pkg> -target CurrentUserHomeDirectory`
-for both packages ("Installing at base path /Users/radek"); the receipts are on the home volume
+for both packages ("Installing at base path ~"); the receipts are on the home volume
 (`pkgutil --volume ~ --pkgs`); `verify_mdmm_pkg_install.sh` passed (both bundles universal,
 signatures valid, auval). The install was removed and made again, and left in place for Radek.
 
