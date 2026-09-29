@@ -1,0 +1,123 @@
+/* Vendored verbatim from nativekloud/nativekloud-site public/design/tokens.css
+   (source commit 15282d9, 2026-08-11; copied 2026-09-28). Do not edit here:
+   change the canonical file, then re-vendor. Per-project accent overrides live in /assets/site.css. */
+/*
+ * NativeKloud Design Tokens — THE canonical brand contract.
+ *
+ * Source of truth for every NativeKloud property: nativekloud.com,
+ * NativeKloud Inference dashboard and product pages, future products.
+ *
+ * Contract rules:
+ *  - This file defines tokens (custom properties) and type stacks ONLY.
+ *    Components live in each consumer, built FROM these tokens.
+ *  - Consumers in other repos VENDOR a copy of this file and record the
+ *    source commit in a comment at the top of their copy. Never hot-link
+ *    across sites; never fork values silently.
+ *  - Change the brand here first; consumers re-vendor. One file, one brand.
+ *  - Sovereignty: system/self-hosted fonts only. No Google Fonts, no US CDN,
+ *    ever, on any NativeKloud property.
+ *
+ * Theming mechanics (all three must be honored by consumers):
+ *  - LIGHT is the default identity (2026-08-11 — matches nativekloud.eu).
+ *  - Dark activates via prefers-color-scheme unless data-theme='light' pins light.
+ *  - data-theme='light' | 'dark' on <html> overrides the OS in either direction.
+ *
+ * Per-project accent (2026-08-11): the root brand accent is lime. Each project
+ * landing page (<prefix>.nativekloud.com) keeps every token EXCEPT the accent
+ * group, which it overrides AFTER this vendored file — in both themes — with
+ * its assigned colour from the workspace DOMAINS.md accent table:
+ *   :root { --accent: …; --accent-ink: …; --on-accent: …; --glow: …; }
+ * Override ONLY --accent, --accent-ink, --on-accent, --glow. Nothing else.
+ */
+
+:root {
+  /* -- color: light (default identity) -- */
+  --bg: #fbfbf7;
+  --fg: #0a0a0a;
+  --muted: #6b6b66;
+  --body: #33332e;
+  --line: #e4e4dc;
+  --panel: #fff;
+  --panel-hover: #f6f6ef;
+  --accent: #a8d600;         /* fills, dots, rules — the brand lime, darkened for light ground */
+  --accent-ink: #4a6300;     /* accent used as *text*, must stay readable */
+  --on-accent: #000;
+  --glow: 0 0 0 1px #86ac00;
+  --grain-blend: multiply;
+  --grain-opacity: 0.05;
+  --nav-bg: rgba(251,251,247,0.72);
+  --ghost-border: #c9c9bf;
+
+  /* -- type -- */
+  --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+  --font-mono: ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, 'Liberation Mono', monospace;
+  --font-weight-body: 300;   /* light body weight is part of the identity */
+  --font-weight-strong: 500;
+  --font-weight-logo: 900;
+
+  /* -- layout -- */
+  --container-max: 1280px;
+  --container-pad: 32px;
+  --radius: 0;               /* the brand is sharp-edged; radius is 0 by design */
+  --transition: 0.2s ease;
+}
+
+/* Dark is the first-class alternate: raw lime #c8ff00 returns (it reads on black),
+   the glow becomes a true glow. Activated by OS preference unless light is pinned. */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) {
+    --bg: #000;
+    --fg: #fff;
+    --muted: #8a8a8a;
+    --body: #d4d4d4;
+    --line: #1a1a1a;
+    --panel: #000;
+    --panel-hover: #0a0a0a;
+    --accent: #c8ff00;
+    --accent-ink: #c8ff00;
+    --on-accent: #000;
+    --glow: 0 0 12px var(--accent);
+    --grain-blend: overlay;
+    --grain-opacity: 0.08;
+    --nav-bg: rgba(0,0,0,0.6);
+    --ghost-border: #333;
+  }
+}
+
+:root[data-theme='dark'] {
+  --bg: #000;
+  --fg: #fff;
+  --muted: #8a8a8a;
+  --body: #d4d4d4;
+  --line: #1a1a1a;
+  --panel: #000;
+  --panel-hover: #0a0a0a;
+  --accent: #c8ff00;
+  --accent-ink: #c8ff00;
+  --on-accent: #000;
+  --glow: 0 0 12px var(--accent);
+  --grain-blend: overlay;
+  --grain-opacity: 0.08;
+  --nav-bg: rgba(0,0,0,0.6);
+  --ghost-border: #333;
+}
+
+/* -- destructive actions (added 2026-08-05: the Inference dashboard revokes keys
+      and deletes accounts; consumers were hand-rolling these — now canonical) -- */
+:root {
+  --danger: #a8231a;
+  --danger-ink: #a8231a;
+  --danger-tint: rgba(168, 35, 26, 0.08);
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) {
+    --danger: #ff6f61;
+    --danger-ink: #ff6f61;
+    --danger-tint: rgba(255, 111, 97, 0.12);
+  }
+}
+:root[data-theme='dark'] {
+  --danger: #ff6f61;
+  --danger-ink: #ff6f61;
+  --danger-tint: rgba(255, 111, 97, 0.12);
+}
