@@ -506,7 +506,39 @@ window.MMDiagnostics = {};
 		log(`SELFTEST ${ok === results.length ? "PASS" : "FAIL"} ${ok}/${results.length}`);
 	}
 
+	/* ?selftest=p7sound: the Sound workspace on every track of the machine's kit, clicked as a user
+	   does (the tab, the SYNTH / MIDI switch, the rail): each one renders its cards and draws its
+	   screens, with no page error. */
+	async function runSound() {
+		const s = S(), errs = [];
+		const onErr = e => errs.push(e.message + " @" + e.lineno);
+		window.addEventListener("error", onErr);
+		let bad = 0;
+		for (let t = 0; t < 12; t++) {
+			errs.length = 0;
+			$('#tabs button[data-ws="sound"]').click(); await sleep(150);
+			const side = t < 6 ? "int" : "midi";
+			if (s.side !== side) { $(`[data-side="${side}"]`)?.click(); await sleep(150); }
+			$(`#rail [data-sel="${t}"]`)?.click(); await sleep(400);
+			/* the page's error events say only "Script error." here (a file: page): the view's own throw */
+			try { V().render(); } catch (e) { errs.push(e.message + " " + (e.stack || "").split("\n").slice(0, 3).join(" < ")); }
+			await sleep(200);
+			const cards = $$("#main .card").length, eds = $$("#main canvas.ed");
+			const inked = c => { if (!c.width) return false; const g = c.getContext("2d").getImageData(0, 0, c.width, c.height).data; for (let i = 4; i < g.length; i += 4) if (g[i] !== g[0] || g[i + 1] !== g[1] || g[i + 2] !== g[2]) return true; return false; };
+			const drawn = eds.filter(inked).length, tr = t < 6 ? s.tracks[t] : s.midi[t - 6];
+			/* the LFO PAGE values are the page's indices, not raw firmware values */
+			const pages = t < 6 ? ["LF1", "LF2", "LF3"].map(l => tr.v[l][0]) : [];
+			const ok = s.ws === "sound" && s.sel === t && cards >= 4 && drawn === eds.length && !errs.length && pages.every(p => p < LPAGES.length);
+			if (!ok) bad++;
+			log(`SOUND T${t + 1} ${tr.m}: ws ${s.ws} sel ${s.sel}, ${cards} cards, ${drawn}/${eds.length} screens drawn${pages.length ? ", LFO pages " + pages.join(" ") : ""}${errs.length ? ", errors: " + errs.join(" | ") : ""}`);
+		}
+		window.removeEventListener("error", onErr);
+		log(`SELFTEST ${bad ? "FAIL" : "PASS"} sound ${12 - bad}/12`);
+	}
+
 	const TESTS = {
+		/* ?selftest=p7sound (the p7 prefix the plug-in passes on): the Sound workspace on every track */
+		p7sound: () => setTimeout(runSound, 500),
 		/* ?selftest=1: edits through the mockup's own gestures and its host, each round trip logged */
 		1: () => setTimeout(runSelfTest, 500),
 		p7: () => setTimeout(runP7, 500),
@@ -528,6 +560,10 @@ window.MMDiagnostics = {};
 	}, 1500);
 	/* the catalogue and the page's tables (mmConvert, the mockup's) agree */
 	window.MMPage.whenReady(() => {
+		/* first: the page took the catalogue itself (it once came before MmConvert and was lost, so the
+		   enumerations stayed raw firmware values and Sound threw), before this check takes it again */
+		const cat0 = I().catalogue, taken = !!cat0 && MmConvert.enumN("GND-GND", "LF1", 0) === cat0.lfo.pages.length;
+		log(`catalogue in use at ready: ${taken ? "ok" : "FAIL the page's MmConvert has no catalogue"}`);
 		const cat = I().catalogue, off = cat ? MmConvert.useCatalogue(cat) : ["no catalogue"];
 		log(`catalogue: ${off.length ? "FAIL " + off.join("; ") : "ok, the page's tables agree"}`);
 	});
