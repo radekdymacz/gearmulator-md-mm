@@ -12,9 +12,19 @@ code { font: 12px Menlo, monospace; }
 in an emulator. It installs three things, and you can leave any of them out under
 <b>Customize</b>:</p>
 <ul>
-<li><b>{{APP_NAME}}.app</b> into <code>/Applications</code></li>
-<li><b>{{STEM}}.vst3</b> into <code>/Library/Audio/Plug-Ins/VST3</code></li>
-<li><b>{{STEM}}.component</b> (Audio Unit) into <code>/Library/Audio/Plug-Ins/Components</code></li>
+<li><b>{{APP_NAME}}.app</b> into <code>Applications</code></li>
+<li><b>{{STEM}}.vst3</b> into <code>Library/Audio/Plug-Ins/VST3</code></li>
+<li><b>{{STEM}}.component</b> (Audio Unit) into <code>Library/Audio/Plug-Ins/Components</code></li>
+</ul>
+
+<h2>For all users, or for you only</h2>
+<p>At <b>Destination Select</b> (or <b>Change Install Location…</b>) you choose:</p>
+<ul>
+<li><b>Install for all users of this computer</b>: <code>/Applications</code> and
+<code>/Library/Audio/Plug-Ins</code>. This needs an administrator's password.</li>
+<li><b>Install for me only</b>: <code>~/Applications</code> and
+<code>~/Library/Audio/Plug-Ins</code> in your home folder. No administrator needed,
+so this works on a managed Mac or a standard account too.</li>
 </ul>
 
 <h2>Bring your own ROM</h2>

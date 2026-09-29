@@ -1,15 +1,17 @@
 #!/bin/bash
 #
 # Check an installed Machinedrum Editor / Monomachine Editor package.
-# Run it after installing one or both packages:
+# Run it after installing one or both packages, for all users or for you only:
 #
-#   sudo installer -pkg Machinedrum-Editor-macOS.pkg -target /
-#   sudo installer -pkg Monomachine-Editor-macOS.pkg -target /
+#   sudo installer -pkg Machinedrum-Editor-macOS.pkg -target /                      (all users)
+#   installer -pkg Monomachine-Editor-macOS.pkg -target CurrentUserHomeDirectory    (for me only)
 #   scripts/macos/verify_mdmm_pkg_install.sh [md] [mm]
 #
-# With no arguments it checks both. It needs no sudo. For each machine it
-# checks the Installer receipts, that the three bundles are where expected
-# with valid signatures, and that the installed Audio Unit passes auval.
+# With no arguments it checks both. It needs no sudo. For each machine it finds
+# where it is installed (/ for all users, the home folder for you only; both at
+# once is reported, since a DAW then lists two), and checks the Installer
+# receipts, that the three bundles are there with valid signatures, and that
+# the installed Audio Unit passes auval.
 #
 # auval loads the AU in this process. Set GEARMULATOR_DATA_ROOT to an empty
 # folder to run it without touching your own Gearmulator settings (CI does).
@@ -36,36 +38,46 @@ for machine in "${machines[@]}"; do
   id="com.nativekloud.mdmm.${machine}"
   echo "== ${app}"
 
-  for part in app vst3 au; do
-    if pkgutil --pkg-info "${id}.${part}" >/dev/null 2>&1; then
-      echo "receipt ${id}.${part}: $(pkgutil --pkg-info "${id}.${part}" | awk '/^version:/{print $2}')"
-    else
-      fail "no Installer receipt for ${id}.${part}"
-    fi
-  done
+  # The domain it is installed in: the root of Applications and Library.
+  roots=()
+  [[ -e "/Applications/${app}.app" || -e "/Library/Audio/Plug-Ins/VST3/${stem}.vst3" || -e "/Library/Audio/Plug-Ins/Components/${stem}.component" ]] && roots+=("")
+  [[ -e "${HOME}/Applications/${app}.app" || -e "${HOME}/Library/Audio/Plug-Ins/VST3/${stem}.vst3" || -e "${HOME}/Library/Audio/Plug-Ins/Components/${stem}.component" ]] && roots+=("${HOME}")
+  if [[ ${#roots[@]} -eq 0 ]]; then
+    fail "${app} is installed neither for all users nor for you only"
+    continue
+  fi
+  if [[ ${#roots[@]} -eq 2 ]]; then
+    echo "note: installed for all users and for you only: the DAW lists two; remove one"
+  fi
 
-  for bundle in \
-      "/Applications/${app}.app" \
-      "/Library/Audio/Plug-Ins/VST3/${stem}.vst3" \
-      "/Library/Audio/Plug-Ins/Components/${stem}.component"; do
-    executable="${bundle}/Contents/MacOS/${stem}"
-    if [[ ! -x "${executable}" ]]; then
-      fail "missing ${executable}"
-      continue
-    fi
-    if codesign --verify --deep --strict "${bundle}" 2>/dev/null; then
-      echo "ok  ${bundle} ($(lipo -archs "${executable}"))"
-    else
-      fail "signature does not verify: ${bundle}"
-    fi
-  done
+  for root in "${roots[@]}"; do
+    where="${root:-/}"
+    echo "-- installed in ${where} ($([[ -n "${root}" ]] && echo "for you only" || echo "for all users"))"
+    volume=()
+    [[ -n "${root}" ]] && volume=(--volume "${root}")
+    for part in app vst3 au; do
+      if pkgutil ${volume[@]+"${volume[@]}"} --pkg-info "${id}.${part}" >/dev/null 2>&1; then
+        echo "receipt ${id}.${part}: $(pkgutil ${volume[@]+"${volume[@]}"} --pkg-info "${id}.${part}" | awk '/^version:/{print $2}')"
+      else
+        fail "no Installer receipt for ${id}.${part} in ${where}"
+      fi
+    done
 
-  for copy in \
-      "${HOME}/Library/Audio/Plug-Ins/VST3/${stem}.vst3" \
-      "${HOME}/Library/Audio/Plug-Ins/Components/${stem}.component"; do
-    if [[ -e "${copy}" ]]; then
-      echo "note: a per-user copy also exists and may shadow the installed one: ${copy}"
-    fi
+    for bundle in \
+        "${root}/Applications/${app}.app" \
+        "${root}/Library/Audio/Plug-Ins/VST3/${stem}.vst3" \
+        "${root}/Library/Audio/Plug-Ins/Components/${stem}.component"; do
+      executable="${bundle}/Contents/MacOS/${stem}"
+      if [[ ! -x "${executable}" ]]; then
+        fail "missing ${executable}"
+        continue
+      fi
+      if codesign --verify --deep --strict "${bundle}" 2>/dev/null; then
+        echo "ok  ${bundle} ($(lipo -archs "${executable}"))"
+      else
+        fail "signature does not verify: ${bundle}"
+      fi
+    done
   done
 
   auval_log="$(mktemp "${TMPDIR:-/tmp}/mdmm-auval.XXXXXX")"

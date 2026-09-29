@@ -13,9 +13,13 @@
 #   Machinedrum-Editor-macOS.pkg
 #   Monomachine-Editor-macOS.pkg
 #
-# Each package has three components (standalone app, VST3, AU) that land in
-# /Applications, /Library/Audio/Plug-Ins/VST3 and
-# /Library/Audio/Plug-Ins/Components. The packages are unsigned: there is no
+# Each package has three components (standalone app, VST3, AU). Installed for
+# all users (needs an administrator) they land in /Applications,
+# /Library/Audio/Plug-Ins/VST3 and /Library/Audio/Plug-Ins/Components; with
+# "Install for me only" (no administrator needed, e.g. on a managed Mac) in
+# ~/Applications, ~/Library/Audio/Plug-Ins/VST3 and
+# ~/Library/Audio/Plug-Ins/Components. The payload paths are relative, so the
+# domain the person picks decides the root. The packages are unsigned: there is no
 # Apple Developer ID yet. Firmware is never packaged; the script refuses to
 # build if a firmware-like file is found in any bundle.
 
@@ -187,7 +191,7 @@ for row in "${machines[@]}"; do
   <readme file="readme.html" mime-type="text/html"/>
   <license file="license.txt" mime-type="text/plain"/>
   <options customize="allow" require-scripts="false" hostArchitectures="${archs}"/>
-  <domains enable_anywhere="false" enable_currentUserHome="false" enable_localSystem="true"/>
+  <domains enable_anywhere="false" enable_currentUserHome="true" enable_localSystem="true"/>
   <volume-check>
     <allowed-os-versions>
       <os-version min="10.13"/>
@@ -199,15 +203,15 @@ for row in "${machines[@]}"; do
     <line choice="au"/>
   </choices-outline>
   <choice id="app" title="${app_name} (standalone app)"
-          description="Installs ${app_name}.app into /Applications.">
+          description="Installs ${app_name}.app into Applications (/Applications, or ~/Applications when installed for you only).">
     <pkg-ref id="${identifier}.app"/>
   </choice>
   <choice id="vst3" title="VST3 plug-in"
-          description="Installs ${stem}.vst3 into /Library/Audio/Plug-Ins/VST3.">
+          description="Installs ${stem}.vst3 into Library/Audio/Plug-Ins/VST3 (for all users, or in your home folder when installed for you only).">
     <pkg-ref id="${identifier}.vst3"/>
   </choice>
   <choice id="au" title="Audio Unit plug-in"
-          description="Installs ${stem}.component into /Library/Audio/Plug-Ins/Components.">
+          description="Installs ${stem}.component into Library/Audio/Plug-Ins/Components (for all users, or in your home folder when installed for you only).">
     <pkg-ref id="${identifier}.au"/>
   </choice>
   <pkg-ref id="${identifier}.app" version="${version}">${id_suffix}-app.pkg</pkg-ref>

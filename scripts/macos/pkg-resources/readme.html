@@ -18,13 +18,16 @@ Applications and choose <b>Open</b>, then <b>Open</b> again; or</li>
 <li>open <b>System Settings &rsaquo; Privacy &amp; Security</b>, scroll down and click
 <b>Open Anyway</b> next to the message about {{APP_NAME}}; or</li>
 <li>in Terminal:<br>
-<code>xattr -dr com.apple.quarantine "/Applications/{{APP_NAME}}.app"</code></li>
+<code>xattr -dr com.apple.quarantine "/Applications/{{APP_NAME}}.app"</code><br>
+(installed for you only: <code>"$HOME/Applications/{{APP_NAME}}.app"</code>)</li>
 </ol>
 
 <h2>In your DAW</h2>
 <p>The plug-ins show up as <b>{{STEM}}</b> (VST3 and Audio Unit, instrument).
-Rescan plug-ins or restart the DAW after installing. If you had an earlier copy in
-<code>~/Library/Audio/Plug-Ins</code>, remove it so the DAW does not list two.</p>
+Rescan plug-ins or restart the DAW after installing. Install either for all users
+or for you only, not both: with a copy in <code>/Library/Audio/Plug-Ins</code> and
+another in <code>~/Library/Audio/Plug-Ins</code> the DAW lists two. Remove the one you
+do not want.</p>
 
 <h2>Where your files live</h2>
 <ul>
@@ -35,7 +38,9 @@ Rescan plug-ins or restart the DAW after installing. If you had an earlier copy 
 <h2>Removing it</h2>
 <p>Delete <code>/Applications/{{APP_NAME}}.app</code>,
 <code>/Library/Audio/Plug-Ins/VST3/{{STEM}}.vst3</code> and
-<code>/Library/Audio/Plug-Ins/Components/{{STEM}}.component</code>.
+<code>/Library/Audio/Plug-Ins/Components/{{STEM}}.component</code>; if you installed
+for you only, the same three in <code>~/Applications</code> and
+<code>~/Library/Audio/Plug-Ins</code>.
 Your firmware and settings in Documents are not touched.</p>
 
 <h2>Help and source</h2>
