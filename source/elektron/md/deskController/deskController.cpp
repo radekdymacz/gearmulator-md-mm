@@ -11,6 +11,7 @@
 
 #include <algorithm>
 #include <cassert>
+#include <cctype>
 
 namespace deskController
 {
@@ -485,7 +486,100 @@ namespace deskController
 
 	// ---- the page's document ----
 
-	Value pageDocument(const Setup& _s, const Machine _m, const Route& _r, const int _selected, const Value& _last)
+	bool looksLikeTr06(const std::string& _name)
+	{
+		std::string n;
+		for(const auto c : _name)
+			n.push_back(static_cast<char>(std::tolower(static_cast<unsigned char>(c))));
+		return n.find("tr-06") != std::string::npos || n.find("tr06") != std::string::npos;
+	}
+
+	// ---- the activity ----
+
+	void Activity::start(const Monitor& _monitor, double)
+	{
+		for(uint8_t ch = 0; ch < 16; ++ch)
+		{
+			m_counts[ch] = _monitor.last(ch).count;
+			m_at[ch] = -1e9;
+		}
+		m_hasLast = false;
+		m_channel = -1;
+		m_elsewhere = -1;
+		++m_seq;
+	}
+
+	bool Activity::update(const Monitor& _monitor, const uint8_t _channel, const double _now)
+	{
+		const int channel = _channel & 0x0f;
+		bool changed = false;
+		if(channel != m_channel)
+		{
+			// Another channel: what its predecessor got last is not this one's.
+			m_channel = channel;
+			m_hasLast = false;
+			changed = true;
+		}
+		for(uint8_t ch = 0; ch < 16; ++ch)
+		{
+			const auto l = _monitor.last(ch);
+			if(l.count == m_counts[ch])
+				continue;
+			m_counts[ch] = l.count;
+			m_at[ch] = _now;
+			if(ch == channel)
+			{
+				m_last = l;
+				m_hasLast = true;
+				changed = true;
+			}
+		}
+		// Nothing on the controller's channel lately, something on another: the newest such channel.
+		int elsewhere = -1;
+		if(_now - m_at[channel] > g_elsewhereMs)
+		{
+			double newest = -1e18;
+			for(int ch = 0; ch < 16; ++ch)
+			{
+				if(ch != channel && _now - m_at[ch] <= g_elsewhereMs && m_at[ch] > newest)
+				{
+					newest = m_at[ch];
+					elsewhere = ch;
+				}
+			}
+		}
+		if(elsewhere != m_elsewhere)
+		{
+			m_elsewhere = elsewhere;
+			changed = true;
+		}
+		if(changed)
+			++m_seq;
+		return changed;
+	}
+
+	Value Activity::toJson() const
+	{
+		Value a = Value::object();
+		a.set("seq", static_cast<double>(m_seq));
+		if(m_hasLast)
+		{
+			Value l = Value::object();
+			const uint8_t type = m_last.a & 0xf0;
+			const char* kind = type == 0x90 && m_last.c > 0 ? "note" : type == 0x80 || type == 0x90 ? "off" : type == 0xb0 ? "cc" : "other";
+			l.set("kind", kind);
+			// the note or controller; for any other message its status byte
+			l.set("n", static_cast<int>(std::string(kind) == "other" ? m_last.a : m_last.b));
+			l.set("v", static_cast<int>(std::string(kind) == "other" ? m_last.b : m_last.c));
+			a.set("last", std::move(l));
+		}
+		else
+			a.set("last", Value());
+		a.set("elsewhere", m_elsewhere >= 0 ? Value(m_elsewhere + 1) : Value());
+		return a;
+	}
+
+	Value pageDocument(const Setup& _s, const Machine _m, const Route& _r, const int _selected, const Value& _last, const Seen& _seen)
 	{
 		const auto& p = tr06();
 		Value d = Value::object();
@@ -562,6 +656,9 @@ namespace deskController
 		}
 		d.set("targets", std::move(list));
 		d.set("last", _last);
+		d.set("named", _seen.named);
+		d.set("device", _seen.device);
+		d.set("activity", _seen.activity);
 		return d;
 	}
 

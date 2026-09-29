@@ -257,6 +257,45 @@ namespace
 		check(d.find("warning")->asString().empty(), "no warning");
 	}
 
+	void activity()
+	{
+		std::printf("device names and activity\n");
+		check(looksLikeTr06("TR-06") && looksLikeTr06("Roland tr06 MIDI") && looksLikeTr06("TR-06 CTRL"), "a TR-06's input names");
+		check(!looksLikeTr06("TR-8S") && !looksLikeTr06("IAC Driver Bus 1") && !looksLikeTr06(""), "other inputs are not");
+		Monitor m;
+		m.seen(0xb9, 24, 50);	// before the panel watched: old
+		Activity a;
+		a.start(m, 0);
+		check(!a.toJson().find("last")->isObject(), "what came before the panel opened is not shown");
+		check(a.update(m, 9, 10), "the first look: the channel is set");
+		check(!a.update(m, 9, 20), "nothing new: nothing changes");
+		m.seen(0xb9, 24, 87);
+		check(a.update(m, 9, 30), "a CC on the channel is news");
+		auto j = a.toJson();
+		check(j.find("last")->find("kind")->asString() == "cc" && j.find("last")->find("n")->asNumber() == 24 && j.find("last")->find("v")->asNumber() == 87, "CC 24 = 87");
+		const auto seq = j.find("seq")->asNumber();
+		m.seen(0xb9, 24, 87);
+		check(a.update(m, 9, 40) && a.toJson().find("seq")->asNumber() > seq, "the same message again is news too (the row blinks again)");
+		m.seen(0x99, 38, 100);
+		a.update(m, 9, 50);
+		check(a.toJson().find("last")->find("kind")->asString() == "note" && a.toJson().find("last")->find("n")->asNumber() == 38, "NOTE 38");
+		m.seen(0x99, 38, 0);
+		a.update(m, 9, 60);
+		check(a.toJson().find("last")->find("kind")->asString() == "off", "a note-on of velocity 0 is a note-off");
+		m.seen(0xf8, 0, 0);
+		check(!a.update(m, 9, 70), "the clock is no channel's");
+		check(a.toJson().find("elsewhere")->isNull(), "the channel is busy: nothing elsewhere");
+		// another channel, the controller's quiet for longer than g_elsewhereMs
+		m.seen(0x92, 36, 100);
+		a.update(m, 9, 3000);
+		j = a.toJson();
+		check(j.find("elsewhere")->isNumber() && j.find("elsewhere")->asNumber() == 3, "quiet on CH 10, busy on CH 3: elsewhere 3");
+		check(j.find("last")->find("n")->asNumber() == 38, "the channel's own last message stays");
+		check(a.update(m, 2, 3010) && !a.toJson().find("last")->isObject(), "the channel changed to 3: its last is not the old channel's");
+		check(a.toJson().find("elsewhere")->isNull(), "and nothing is elsewhere");
+		check(!a.update(m, 2, 9000) && a.toJson().find("elsewhere")->isNull(), "long quiet everywhere: nothing elsewhere, nothing new");
+	}
+
 	std::optional<Value> schemaFile(const std::string& _name)
 	{
 		std::ifstream in(std::string(DESK_SCHEMA_DIR) + "/" + _name);
@@ -298,6 +337,20 @@ namespace
 			last.set("cc", 24);
 			last.set("v", 99);
 			doc(s, true, last);
+			{
+				// what is seen: a TR-06 among the inputs, the activity
+				Monitor mon;
+				Activity act;
+				act.start(mon, 0);
+				mon.seen(0xb0, 24, 87);
+				act.update(mon, 0, 10);
+				Seen seen{true, "TR-06", act.toJson()};
+				Value msg = Value::object();
+				msg.set("type", "controller");
+				msg.set("doc", pageDocument(s, m, Route{}, 2, Value(), seen));
+				for(const auto& p : schema.validate(msg, "message"))
+					problems.push_back(p);
+			}
 			for(const auto& p : problems)
 				std::printf("    %s\n", p.c_str());
 			check(problems.empty(), std::string(machineName(m)) + ": the page document is on the contract (off, no global; on, a warning, a knob moved)");
@@ -319,6 +372,7 @@ int main()
 	input();
 	pump();
 	document();
+	activity();
 	contract();
 	std::printf("%s (%d failures)\n", g_failures ? "FAILED" : "passed", g_failures);
 	return g_failures ? 1 : 0;

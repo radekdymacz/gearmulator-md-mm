@@ -28,7 +28,9 @@ namespace mdJucePlugin
 	// processor's MIDI path is exactly what it was. A voice becomes the machine's note at once, in the
 	// same block and at the same offset: into the emulated device, or (an engine on the plug-in's MIDI,
 	// external MIDI on) out with the audio block to the real machine. A knob is kept for the session
-	// (deskController::Input::takeKnob). Nothing ever goes back to the controller.
+	// (deskController::Input::takeKnob). Nothing ever goes back to the controller. While the page shows
+	// the controller (watch), it is in the path with the profile off too, only to count what arrives on
+	// each channel (deskController::Monitor): then it takes nothing.
 	class CtlInputFilter final : public pluginLib::MidiInputFilter
 	{
 	public:
@@ -38,9 +40,12 @@ namespace mdJucePlugin
 		CtlInputFilter(const CtlInputFilter&) = delete;
 		CtlInputFilter& operator=(const CtlInputFilter&) = delete;
 
-		// The message thread: the tables, and whether the filter is in the processor's path.
-		void configure(const deskController::Setup& _setup, const deskController::Route& _route);
+		// The message thread: the tables, and whether the filter is in the processor's path (the profile
+		// on, or the page watching what arrives).
+		void configure(const deskController::Setup& _setup, const deskController::Route& _route, bool _watch = false);
 		deskController::Input& input() { return m_input; }
+		const deskController::Monitor& monitor() const { return m_monitor; }
+		bool installed() const { return m_installed; }
 
 		bool filterIn(const synthLib::SMidiEvent& _ev) override;
 		void flushOut(juce::MidiBuffer& _midiMessages, pluginLib::MidiPorts& _ports) override;
@@ -53,6 +58,7 @@ namespace mdJucePlugin
 
 		pluginLib::Processor& m_processor;
 		deskController::Input m_input;
+		deskController::Monitor m_monitor;
 		RealtimeQueue<Short, 256> m_out;
 		bool m_installed = false;
 	};
@@ -74,6 +80,9 @@ namespace mdJucePlugin
 			std::function<deskController::Route(const deskController::Setup&)> route;
 			// Edits on the machine's edit path (the desk's commands, as the page sends them).
 			std::function<void(const std::vector<deskController::Edit>&)> apply;
+			// The names of the enabled MIDI inputs; none: the host owns them (a DAW). Unset: the
+			// standalone app's (AudioMidiLink::enabledMidiInputs).
+			std::function<std::optional<std::vector<std::string>>()> inputs;
 		};
 
 		ControllerProfile(AudioPluginAudioProcessor& _processor, Hooks _hooks, std::function<void(const Value&)> _publish);
@@ -82,15 +91,23 @@ namespace mdJucePlugin
 		// One session step: a project's setup, the machine's route, the knobs.
 		void step(double _now);
 		void publish();
+		// The page went (its window closed): nothing watches what arrives any more.
+		void detach();
 
 		const deskController::Setup& setup() const { return m_setup; }
 		const deskController::Route& route() const { return m_route; }
 		int selected() const { return m_selected; }
+		bool watching() const { return m_watch; }
+		const CtlInputFilter& filter() const { return m_filter; }
 
 	private:
 		void change(const deskController::Setup& _setup);
 		void restore();
 		void reply(const Value& _message, bool _ok, const std::string& _note) const;
+		void configure();
+		void watch(bool _on);
+		// Whether a TR-06 is among the enabled MIDI inputs (the standalone app); true when that changed.
+		bool lookAtInputs();
 
 		AudioPluginAudioProcessor& m_processor;
 		Hooks m_hooks;
@@ -104,6 +121,11 @@ namespace mdJucePlugin
 		bool m_lastChanged = false;
 		double m_lastPublishMs = -1e9;
 		double m_lastRouteMs = -1e9;
+		double m_lastActivityMs = -1e9;
+		double m_lastInputsMs = -1e9;
+		bool m_watch = false;
+		deskController::Activity m_activity;
+		deskController::Seen m_inputs;
 		std::optional<uint32_t> m_seen;
 	};
 }

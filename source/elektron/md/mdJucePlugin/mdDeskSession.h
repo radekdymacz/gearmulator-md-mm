@@ -281,7 +281,8 @@ namespace mdJucePlugin
 			case Action::CtlVoice:
 			case Action::CtlKnob:
 			case Action::CtlReset:
-			case Action::CtlTrack: m_ctl.handle(row->handler.action, _message); break;
+			case Action::CtlTrack:
+			case Action::CtlWatch: m_ctl.handle(row->handler.action, _message); break;
 			default: break;	// the window's rows (actor Window, above)
 			}
 		}
@@ -332,7 +333,7 @@ namespace mdJucePlugin
 		virtual void onMidi(const Value& _message) { reply(_message, false, "midi: this editor's page has no keyboard"); }
 		virtual const char* missingText() const = 0;
 		EngineT& currentEngine() { return *m_engine; }
-		void onDetach() override { m_desk->detachPage(); }
+		void onDetach() override { m_desk->detachPage(); m_ctl.detach(); }
 
 	private:
 		// The desk's edges that are the session's: the page and the project's setup (the device

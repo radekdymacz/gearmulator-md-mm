@@ -91,6 +91,7 @@ namespace deskHost
 				"a controller knob's target on the selected track (controller.doc.targets); i null: none", Action::CtlKnob),
 			row("ctlReset", {}, "the controller's shipped mapping and channel", Action::CtlReset),
 			row("ctlTrack", {t}, "the page's selected track: the controller's knobs move its parameters", Action::CtlTrack),
+			row("ctlWatch", {{"on", ArgType::Bool, 0, 0, false}}, "while the Controller bar or panel shows: the controller document reports what arrives (activity)", Action::CtlWatch),
 		});
 		return table;
 	}

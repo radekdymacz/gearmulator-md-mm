@@ -1804,7 +1804,7 @@
     },
     "controller": {
       "type": "object",
-      "description": "The controller profile (DESIGN-tr06.md, deskController/deskController.h pageDocument): a Roland TR-06 on one MIDI channel plays the machine. The setup (profile, channel, voices, knobs) is kept with the project as the MDCT chunk; the rest is what it means now: where each voice goes (out, from the machine's active global), every knob's target on the selected track, the targets to choose from, a warning when the channel is one the machine listens on, and the last knob the controller moved.",
+      "description": "The controller profile (DESIGN-tr06.md, deskController/deskController.h pageDocument): a Roland TR-06 on one MIDI channel plays the machine. The setup (profile, channel, voices, knobs) is kept with the project as the MDCT chunk; the rest is what it means now: where each voice goes (out, from the machine's active global), every knob's target on the selected track, the targets to choose from, a warning when the channel is one the machine listens on, the last knob the controller moved, and what the editor sees: a TR-06 among the enabled MIDI inputs (named, device) and, while the page shows the bar or the panel, what arrives (activity).",
       "required": [
         "schema",
         "version",
@@ -1820,7 +1820,10 @@
         "voices",
         "knobs",
         "targets",
-        "last"
+        "last",
+        "named",
+        "device",
+        "activity"
       ],
       "properties": {
         "schema": {
@@ -2018,6 +2021,69 @@
             },
             "v": {
               "$ref": "#/$defs/u7"
+            }
+          }
+        },
+        "named": {
+          "type": "boolean",
+          "description": "The editor sees its MIDI inputs by name (the standalone app). In a DAW the host owns them: no device, only the activity."
+        },
+        "device": {
+          "type": "string",
+          "description": "The enabled MIDI input that looks like the controller (its name has TR-06 or TR06), or empty. The profile is never turned on by it: the panel offers it."
+        },
+        "activity": {
+          "type": [
+            "object",
+            "null"
+          ],
+          "description": "What arrives, while the page shows the controller bar or panel (ctlWatch), whether the profile is on or not; null otherwise. seq grows with every change (a row blinks); last is the controller's channel's last channel message (n: the note or controller, for other its status byte); elsewhere: a channel that got messages lately while the controller's channel got none.",
+          "required": [
+            "seq",
+            "last",
+            "elsewhere"
+          ],
+          "properties": {
+            "seq": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "last": {
+              "type": [
+                "object",
+                "null"
+              ],
+              "required": [
+                "kind",
+                "n",
+                "v"
+              ],
+              "properties": {
+                "kind": {
+                  "enum": [
+                    "note",
+                    "off",
+                    "cc",
+                    "other"
+                  ]
+                },
+                "n": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 255
+                },
+                "v": {
+                  "$ref": "#/$defs/u7"
+                }
+              }
+            },
+            "elsewhere": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "minimum": 1,
+              "maximum": 16
             }
           }
         }
@@ -6085,6 +6151,39 @@
               "type": "integer",
               "minimum": 0,
               "maximum": 15
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "description": "host: while the Controller bar or panel shows: the controller document reports what arrives (activity)",
+          "required": [
+            "op",
+            "on"
+          ],
+          "properties": {
+            "op": {
+              "const": "ctlWatch"
+            },
+            "id": {
+              "type": "integer"
+            },
+            "g": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "force": {
+              "type": [
+                "boolean",
+                "integer"
+              ]
+            },
+            "on": {
+              "type": [
+                "boolean",
+                "integer"
+              ]
             }
           },
           "additionalProperties": false

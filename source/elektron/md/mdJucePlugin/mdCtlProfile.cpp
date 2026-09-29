@@ -1,5 +1,6 @@
 #include "mdCtlProfile.h"
 
+#include "mdAudioMidiLink.h"
 #include "mdDeskHost.h"
 #include "mdDeskSession.h"
 #include "mdPluginProcessor.h"
@@ -20,6 +21,10 @@ namespace mdJucePlugin
 		// that a knob moved (the row it lights).
 		constexpr double g_routeMs = 250;
 		constexpr double g_activityMs = 250;
+		// While the page watches: what arrives, at most about 15 times a second; the MIDI inputs' names
+		// (a TR-06 plugged in or enabled) once a second.
+		constexpr double g_watchMs = 66;
+		constexpr double g_inputsMs = 1000;
 
 		int intOf(const json::Value& _m, const char* _key, const int _default = -1)
 		{
@@ -40,14 +45,15 @@ namespace mdJucePlugin
 			m_processor.getExternalMidi().setInputFilter(nullptr);
 	}
 
-	void CtlInputFilter::configure(const dc::Setup& _setup, const dc::Route& _route)
+	void CtlInputFilter::configure(const dc::Setup& _setup, const dc::Route& _route, const bool _watch)
 	{
 		m_input.configure(_setup, _route);
-		if(_setup.on == m_installed)
+		const bool want = _setup.on || _watch;
+		if(want == m_installed)
 			return;
-		// Off: out of the processor's path altogether (setInputFilter waits for a call in flight).
-		m_processor.getExternalMidi().setInputFilter(_setup.on ? this : nullptr);
-		m_installed = _setup.on;
+		// Off and not watched: out of the processor's path altogether (setInputFilter waits for a call in flight).
+		m_processor.getExternalMidi().setInputFilter(want ? this : nullptr);
+		m_installed = want;
 	}
 
 	bool CtlInputFilter::filterIn(const synthLib::SMidiEvent& _ev)
@@ -57,6 +63,8 @@ namespace mdJucePlugin
 			return false;
 		if(!_ev.sysex.empty())
 			return false;
+		// What arrives, for the page (two relaxed stores); with the profile off the input passes everything.
+		m_monitor.seen(_ev.a, _ev.b, _ev.c);
 		const auto r = m_input.translate(_ev.a, _ev.b, _ev.c);
 		switch(r.verdict)
 		{
@@ -99,6 +107,45 @@ namespace mdJucePlugin
 	{
 		m_route.channel.fill(-1);
 		m_route.note.fill(-1);
+		if(!m_hooks.inputs)
+			m_hooks.inputs = [this] { return AudioMidiLink::enabledMidiInputs(m_processor); };
+	}
+
+	void ControllerProfile::configure()
+	{
+		m_filter.configure(m_setup, m_route, m_watch);
+	}
+
+	void ControllerProfile::watch(const bool _on)
+	{
+		if(_on == m_watch)
+			return;
+		m_watch = _on;
+		// What came before the page looked is not news.
+		if(m_watch)
+			m_activity.start(m_filter.monitor(), sessionNowMs());
+		configure();
+	}
+
+	void ControllerProfile::detach()
+	{
+		watch(false);
+	}
+
+	bool ControllerProfile::lookAtInputs()
+	{
+		const auto names = m_hooks.inputs ? m_hooks.inputs() : std::nullopt;
+		std::string device;
+		if(names)
+			for(const auto& n : *names)
+				if(device.empty() && dc::looksLikeTr06(n))
+					device = n;
+		const bool named = names.has_value();
+		if(named == m_inputs.named && device == m_inputs.device)
+			return false;
+		m_inputs.named = named;
+		m_inputs.device = device;
+		return true;
 	}
 
 	void ControllerProfile::reply(const Value& _message, const bool _ok, const std::string& _note) const
@@ -110,7 +157,7 @@ namespace mdJucePlugin
 	{
 		m_setup = _setup;
 		m_route = m_hooks.route ? m_hooks.route(m_setup) : m_route;
-		m_filter.configure(m_setup, m_route);
+		configure();
 		// Kept with the project; the session's own save is not a restore.
 		auto* host = m_processor.getDeskHost();
 		host->setController(json::write(dc::setupToJson(m_setup, m_hooks.machine)));
@@ -135,7 +182,7 @@ namespace mdJucePlugin
 		}
 		m_setup = s;
 		m_route = m_hooks.route ? m_hooks.route(m_setup) : m_route;
-		m_filter.configure(m_setup, m_route);
+		configure();
 		publish();
 	}
 
@@ -194,6 +241,14 @@ namespace mdJucePlugin
 			s.on = on;
 			break;
 		}
+		case A::CtlWatch:
+		{
+			const auto* on = _message.find("on");
+			watch(on && on->isBool() && on->asBool());
+			reply(_message, true, {});
+			publish();
+			return;
+		}
 		case A::CtlTrack:
 		{
 			const int t = intOf(_message, "t");
@@ -230,9 +285,21 @@ namespace mdJucePlugin
 			if(r != m_route)
 			{
 				m_route = r;
-				m_filter.configure(m_setup, m_route);
+				configure();
 				publish();
 			}
+		}
+		if(_now - m_lastInputsMs >= g_inputsMs)
+		{
+			m_lastInputsMs = _now;
+			if(lookAtInputs())
+				publish();
+		}
+		if(m_watch && _now - m_lastActivityMs >= g_watchMs)
+		{
+			m_lastActivityMs = _now;
+			if(m_activity.update(m_filter.monitor(), m_setup.channel, _now))
+				publish();
 		}
 		auto& in = m_filter.input();
 		if(m_setup.on && in.knobsMoved())
@@ -268,7 +335,9 @@ namespace mdJucePlugin
 		m_lastChanged = false;
 		Value msg = Value::object();
 		msg.set("type", "controller");
-		msg.set("doc", dc::pageDocument(m_setup, m_hooks.machine, m_route, m_selected, m_last));
+		auto seen = m_inputs;
+		seen.activity = m_watch ? m_activity.toJson() : Value();
+		msg.set("doc", dc::pageDocument(m_setup, m_hooks.machine, m_route, m_selected, m_last, seen));
 		m_publish(msg);
 	}
 }

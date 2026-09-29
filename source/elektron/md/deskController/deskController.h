@@ -189,10 +189,85 @@ namespace deskController
 		std::atomic<uint32_t> m_notes{0}, m_blocked{0};
 	};
 
+	// Whether a MIDI input's name is the controller's: "TR-06" or "TR06", any case, anywhere in the name
+	// (macOS names a USB TR-06 "TR-06", a driver may add to it).
+	bool looksLikeTr06(const std::string& _name);
+
+	// What arrives on each MIDI channel, for the Controller panel, whether the profile is on or not
+	// (DESIGN-tr06.md, Activity). The input side (seen: any MIDI input thread) keeps each channel's last
+	// channel message and a count, in atomics: no lock, no allocation. The message thread reads them.
+	class Monitor
+	{
+	public:
+		struct Last
+		{
+			uint32_t count = 0;
+			uint8_t a = 0, b = 0, c = 0;
+		};
+
+		// A channel message (0x80-0xef); anything else is not a channel's and is ignored.
+		void seen(uint8_t _a, uint8_t _b, uint8_t _c)
+		{
+			if(_a < 0x80 || _a >= 0xf0)
+				return;
+			const auto ch = _a & 0x0f;
+			m_msg[ch].store(static_cast<uint32_t>(_a) | static_cast<uint32_t>(_b & 0x7f) << 8 | static_cast<uint32_t>(_c & 0x7f) << 16, std::memory_order_relaxed);
+			m_count[ch].fetch_add(1, std::memory_order_release);
+		}
+		Last last(const uint8_t _ch) const
+		{
+			Last l;
+			l.count = m_count[_ch & 0x0f].load(std::memory_order_acquire);
+			const auto m = m_msg[_ch & 0x0f].load(std::memory_order_relaxed);
+			l.a = static_cast<uint8_t>(m);
+			l.b = static_cast<uint8_t>(m >> 8);
+			l.c = static_cast<uint8_t>(m >> 16);
+			return l;
+		}
+
+	private:
+		std::array<std::atomic<uint32_t>, 16> m_msg{};
+		std::array<std::atomic<uint32_t>, 16> m_count{};
+	};
+
+	// The panel's view of the Monitor (message thread): the last message on the controller's channel, and
+	// a channel the controller seems to send on instead (something arrived there lately, nothing on its
+	// own channel). As JSON: {seq, last: {kind "note"|"off"|"cc"|"other", n, v} | null, elsewhere: 1-16 | null}.
+	class Activity
+	{
+	public:
+		static constexpr double g_elsewhereMs = 2000;
+
+		// From now on: what the monitor counted so far is old.
+		void start(const Monitor& _monitor, double _now);
+		// One look at the monitor (_channel 0-based). True when the page's view changed.
+		bool update(const Monitor& _monitor, uint8_t _channel, double _now);
+		Value toJson() const;
+
+	private:
+		std::array<uint32_t, 16> m_counts{};
+		std::array<double, 16> m_at{};
+		uint32_t m_seq = 0;
+		bool m_hasLast = false;
+		Monitor::Last m_last;
+		int m_channel = -1;
+		int m_elsewhere = -1;
+	};
+
+	// What the editor sees of the MIDI inputs and of the activity, for the page's document: whether it
+	// sees the inputs by name (the standalone app; in a DAW the host owns them), the enabled input that
+	// looks like the controller ("" none), and the activity (null: the panel is not watching).
+	struct Seen
+	{
+		bool named = false;
+		std::string device;
+		Value activity;
+	};
+
 	// The page's document (the "controller" message's doc, doc/modern-ux/DESIGN-tr06.md): the setup, what
-	// each voice reaches now, every knob with its target, the targets to choose from, the selected track
-	// and the last control the controller moved (_last: {cc, v} or {voice}, or null).
-	Value pageDocument(const Setup& _s, Machine _m, const Route& _r, int _selected, const Value& _last);
+	// each voice reaches now, every knob with its target, the targets to choose from, the selected track,
+	// the last control the controller moved (_last: {cc, v} or {voice}, or null) and what is seen (_seen).
+	Value pageDocument(const Setup& _s, Machine _m, const Route& _r, int _selected, const Value& _last, const Seen& _seen = {});
 
 	// One value for the edit path: a target of a track, and the gesture (one undo step) it belongs to.
 	struct Edit

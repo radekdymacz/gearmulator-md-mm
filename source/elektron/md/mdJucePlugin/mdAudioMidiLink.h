@@ -7,7 +7,9 @@
 #include "juce_audio_devices/juce_audio_devices.h"
 
 #include <functional>
+#include <optional>
 #include <string>
+#include <vector>
 
 namespace juce
 {
@@ -49,6 +51,10 @@ namespace mdJucePlugin
 		void publish();
 
 		bool standalone() const { return holder() != nullptr; }
+
+		// The names of the MIDI inputs enabled in the standalone app's AUDIO / MIDI (the controller
+		// profile looks for a TR-06 among them); none in a plug-in, where the host owns MIDI.
+		static std::optional<std::vector<std::string>> enabledMidiInputs(juce::AudioProcessor& _processor);
 
 	private:
 		void changeListenerCallback(juce::ChangeBroadcaster*) override;

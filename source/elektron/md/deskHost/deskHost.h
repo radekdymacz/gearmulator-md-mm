@@ -34,7 +34,8 @@ namespace deskHost
 		CtlVoice,			// a controller voice's track (and note)
 		CtlKnob,			// a controller knob's target
 		CtlReset,			// the controller's shipped mapping
-		CtlTrack			// the page's selected track (the controller's knobs move its parameters)
+		CtlTrack,			// the page's selected track (the controller's knobs move its parameters)
+		CtlWatch			// the page shows the controller's bar or panel: report what arrives
 	};
 
 	// Who acts on a row: the session (it outlives the window) or the window (the menu and the

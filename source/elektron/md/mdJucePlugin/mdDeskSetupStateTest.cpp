@@ -13,6 +13,7 @@
 #include "jucePluginEditorLib/pluginEditorState.h"
 
 #include "juce_audio_processors/juce_audio_processors.h"
+#include "juce_audio_utils/juce_audio_utils.h"
 
 #include <cstdio>
 #include <cstring>
@@ -114,6 +115,68 @@ int main()
 		}
 		b.getExternalMidi().set(false);
 		jb.releaseResources();
+	}
+	// The standalone app's MIDI inputs (AUDIO/MIDI, MIDI INPUTS: a TR-06 enabled): JUCE's standalone
+	// holder registers its AudioProcessorPlayer as the device manager's callback for every enabled input
+	// (addMidiInputDeviceCallback({}, &player)); the player collects what comes in and hands it to
+	// processBlock with the next audio block, as host MIDI, where the processor offers it to the input
+	// filter (ExternalMidi::takeIn). The same player here, on a stand-in audio device, the message as an
+	// enabled input delivers it: with the profile off and the page watching, the filter counts it (what
+	// the Controller panel shows) and the machine still gets it; with the profile on, it is the knob's.
+	{
+		struct Device final : juce::AudioIODevice
+		{
+			Device() : juce::AudioIODevice("stand-in", "test") {}
+			juce::StringArray getOutputChannelNames() override { return {"L", "R"}; }
+			juce::StringArray getInputChannelNames() override { return {}; }
+			juce::Array<double> getAvailableSampleRates() override { return {44100.0}; }
+			juce::Array<int> getAvailableBufferSizes() override { return {256}; }
+			int getDefaultBufferSize() override { return 256; }
+			juce::String open(const juce::BigInteger&, const juce::BigInteger&, double, int) override { return {}; }
+			void close() override {}
+			bool isOpen() override { return true; }
+			void start(juce::AudioIODeviceCallback*) override {}
+			void stop() override {}
+			bool isPlaying() override { return true; }
+			juce::String getLastError() override { return {}; }
+			int getCurrentBufferSizeSamples() override { return 256; }
+			double getCurrentSampleRate() override { return 44100.0; }
+			int getCurrentBitDepth() override { return 32; }
+			juce::BigInteger getActiveOutputChannels() const override { return 3; }
+			juce::BigInteger getActiveInputChannels() const override { return 0; }
+			int getOutputLatencyInSamples() override { return 0; }
+			int getInputLatencyInSamples() override { return 0; }
+		} device;
+		juce::AudioProcessorPlayer player;
+		player.setProcessor(&jb);
+		player.audioDeviceAboutToStart(&device);
+		std::vector<float> l(256), r(256);
+		float* outs[] = {l.data(), r.data()};
+		const auto fromInput = [&](juce::MidiMessage _m)
+		{
+			_m.setTimeStamp(juce::Time::getMillisecondCounterHiRes() * 0.001);	// as a MIDI input stamps it
+			player.handleIncomingMidiMessage(nullptr, _m);
+			player.audioDeviceIOCallbackWithContext(nullptr, 0, outs, 2, 256, {});
+		};
+		auto s = deskController::defaults(deskController::Machine::Md);
+		elektronData::MdGlobal g;
+		g.baseChannel = 0;
+		mdJucePlugin::CtlInputFilter filter(b);
+		filter.configure(s, deskController::mdRoute(s, &g, true), true);
+		check(filter.installed(), "standalone: the profile off, the page watching: the filter is in the path (counting only)");
+		fromInput(juce::MidiMessage::controllerEvent(10, 24, 87));
+		const auto seen = filter.monitor().last(9);
+		check(seen.count == 1 && seen.a == 0xb9 && seen.b == 24 && seen.c == 87, "standalone: a TR-06 CC 24 = 87 from an enabled MIDI input reaches the filter (channel 10)");
+		check(filter.input().takeKnob(24) < 0, "standalone: the profile off takes nothing (the machine gets it as before)");
+		s.on = true;
+		filter.configure(s, deskController::mdRoute(s, &g, true), true);
+		fromInput(juce::MidiMessage::controllerEvent(10, 24, 99));
+		check(filter.input().takeKnob(24) == 99, "standalone: the profile on, the same input's CC 24 is the controller's knob");
+		s.on = false;
+		filter.configure(s, deskController::mdRoute(s, &g, true), false);
+		check(!filter.installed(), "standalone: off and not watching: out of the path again");
+		player.audioDeviceStopped();
+		player.setProcessor(nullptr);
 	}
 	// P4 HW MIDI: the plug-in's MIDI in/out carry the editor's traffic to external hardware.
 	{
