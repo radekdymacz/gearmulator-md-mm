@@ -6,7 +6,7 @@
 #include "deskWire/mmWire.h"
 
 #include "mdLib/mdhardware.h"
-#include "mdLib/mdpanel.h"
+#include "mdLib/mdpanelsequence.h"
 
 #include "jucePluginLib/parameter.h"
 #include "synthLib/plugin.h"
@@ -158,7 +158,7 @@ namespace mdJucePlugin
 		// 10 ms each, in machine time (the audio thread sends them).
 		return m_processor.getPlugin().withDeviceLocked([&](synthLib::Device* _base)
 		{
-			auto* device = dynamic_cast<md::Device*>(_base);
+			auto* device = dynamic_cast<md::DeskDevice*>(_base);
 			return device && device->sendPanelSequence(states, md::g_samplerate * 10 / 1000);
 		});
 	}
@@ -172,7 +172,7 @@ namespace mdJucePlugin
 			m_telemetry = m_processor.getPlugin().withDeviceLocked(
 				[](synthLib::Device* _base) -> std::shared_ptr<const md::MmTelemetry>
 			{
-				auto* device = dynamic_cast<md::Device*>(_base);
+				auto* device = dynamic_cast<md::DeskDevice*>(_base);
 				return device ? device->getMmTelemetry() : nullptr;
 			});
 		}
@@ -212,7 +212,7 @@ namespace mdJucePlugin
 		using P = deskCore::LifeFacts::Probe;
 		return m_processor.getPlugin().withDeviceLocked([](synthLib::Device* _base)
 		{
-			auto* device = dynamic_cast<md::Device*>(_base);
+			auto* device = dynamic_cast<md::DeskDevice*>(_base);
 			// No device yet: not a missing ROM (P5). Only an invalid device is a definite NO ROM.
 			if(!device)
 				return P::Loading;
@@ -231,7 +231,7 @@ namespace mdJucePlugin
 	{
 		return m_processor.getPlugin().withDeviceLocked([&](synthLib::Device* _base)
 		{
-			auto* device = dynamic_cast<md::Device*>(_base);
+			auto* device = dynamic_cast<md::DeskDevice*>(_base);
 			if(!device || !device->isValid())
 				return false;
 			const auto panel = device->getFrontPanelSnapshot();

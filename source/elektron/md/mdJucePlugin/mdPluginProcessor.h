@@ -35,10 +35,6 @@ namespace mdJucePlugin
 	    ~AudioPluginAudioProcessor() override;
 
 		md::MachineModel getModel() const { return m_model; }
-		std::string getStandaloneWindowTitle() const override
-		{
-			return m_model == md::MachineModel::Monomachine ? "Monomachine Editor" : "Machinedrum Editor";
-		}
 		static md::MachineModel getCompiledProductModel();
 		static bool hasEmbeddedProductResource(std::string_view _filename);
 		juce::File getInstalledFactoryStorageImage() const;
@@ -59,16 +55,8 @@ namespace mdJucePlugin
 				m_ramRecordingMode.load(std::memory_order_relaxed));
 		}
 		bool isRamRecordingModeAvailable();
-		// The Machinedrum Editor's own setup (md-desk/setup JSON: app modulators, knob-row
-		// CCs), kept with the project as the "MDSK" chunk. The processor only stores the
-		// text; the session's mdDesk::Desk validates it.
-		std::string getDeskSetup() const;
-		void setDeskSetup(std::string _json);
-		// Changes with every setDeskSetup (the session's saves and project restores).
-		uint32_t getDeskSetupVersion() const { return m_deskSetupVersion.load(std::memory_order_acquire); }
-		// The editor's session (P6): the desk, its adapter, the engine choice and the modulators live
-		// here, as long as the plug-in instance; the editor window is a view that attaches to it.
-		class DeskSession* getDeskSession() const { return m_session.get(); }
+		// The Machinedrum/Monomachine Editors' setup and session (mdDeskHost.h, doc/modern-ux/UPSTREAM.md).
+		class DeskHost* getDeskHost() const { return m_desk.get(); }
 
 	    jucePluginEditorLib::PluginEditorState* createEditorState() override;
 	    synthLib::Device* createDevice() override;
@@ -106,10 +94,7 @@ namespace mdJucePlugin
 		std::atomic<uint8_t> m_ramRecordingMode{
 			static_cast<uint8_t>(md::RamRecordingMode::Original)};
 		bool m_ramRecordingModeChunkSeen = false;
-		mutable std::mutex m_deskSetupMutex;
-		std::string m_deskSetup;
-		std::atomic<uint32_t> m_deskSetupVersion{0};
-		std::unique_ptr<class DeskSession> m_session;
+		std::unique_ptr<class DeskHost> m_desk;
 		JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(AudioPluginAudioProcessor)
 	};
 }

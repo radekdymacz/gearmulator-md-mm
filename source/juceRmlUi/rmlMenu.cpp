@@ -31,28 +31,6 @@ namespace juceRmlUi
 		m_entries.push_back({ _name, _checked, false, _enabled, std::move(_action), {} });
 	}
 
-	juce::PopupMenu Menu::toPopupMenu() const
-	{
-		juce::PopupMenu menu;
-		for(const auto& e : m_entries)
-		{
-			if(e.separator)
-				menu.addSeparator();
-			else if(e.submenu)
-				menu.addSubMenu(juce::String::fromUTF8(e.name.c_str()), e.submenu->toPopupMenu(), e.enabled);
-			else
-			{
-				juce::PopupMenu::Item item(juce::String::fromUTF8(e.name.c_str()));
-				item.setEnabled(e.enabled && e.action != nullptr);
-				item.setTicked(e.checked);
-				if(e.action)
-					item.setAction([action = e.action] { action(); });
-				menu.addItem(std::move(item));
-			}
-		}
-		return menu;
-	}
-
 	void Menu::addSeparator()
 	{
 		m_entries.push_back({ {}, false, true, true, {}, {} });

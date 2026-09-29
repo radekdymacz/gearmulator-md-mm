@@ -4,6 +4,7 @@
 #include "mdRomInstall.h"
 
 #include "mdPluginProcessor.h"
+#include "mdDeskHost.h"
 
 #include "synthLib/midiTypes.h"
 
@@ -101,17 +102,17 @@ namespace mdJucePlugin
 
 	void SetupStore::save(const Value& _setup)
 	{
-		m_processor.setDeskSetup(elektronData::json::write(_setup));
-		m_seen = m_processor.getDeskSetupVersion();
+		m_processor.getDeskHost()->setSetup(elektronData::json::write(_setup));
+		m_seen = m_processor.getDeskHost()->setupVersion();
 	}
 
 	std::optional<std::string> SetupStore::restored()
 	{
-		const auto version = m_processor.getDeskSetupVersion();
+		const auto version = m_processor.getDeskHost()->setupVersion();
 		if(m_seen && *m_seen == version)
 			return std::nullopt;
 		m_seen = version;
-		return m_processor.getDeskSetup();
+		return m_processor.getDeskHost()->setup();
 	}
 
 	namespace
@@ -130,11 +131,11 @@ namespace mdJucePlugin
 					e.b = _m.size() > 1 ? _m[1] : 0;
 					e.c = _m.size() > 2 ? _m[2] : 0;
 				}
-				p->sendExternalMidi(e);
+				p->getExternalMidi().send(e);
 			}, [p]
 			{
 				std::vector<synthLib::SMidiEvent> in;
-				p->drainExternalMidiIn(in);
+				p->getExternalMidi().drainIn(in);
 				std::vector<deskWire::Bytes> out;
 				for(const auto& e : in)
 					if(!e.sysex.empty())
@@ -146,12 +147,12 @@ namespace mdJucePlugin
 
 	PluginWire::PluginWire(AudioPluginAudioProcessor& _processor) : m_processor(_processor), m_wire(wireOf(_processor))
 	{
-		m_processor.setExternalMidi(true);
+		m_processor.getExternalMidi().set(true);
 	}
 
 	PluginWire::~PluginWire()
 	{
-		m_processor.setExternalMidi(false);
+		m_processor.getExternalMidi().set(false);
 	}
 
 	Availability midiOutAvailability(const DeskSession& _session)

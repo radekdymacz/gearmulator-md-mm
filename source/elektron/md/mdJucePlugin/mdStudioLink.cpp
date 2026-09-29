@@ -4,7 +4,7 @@
 #include "mdPluginProcessor.h"
 
 #include "mdLib/mdhardware.h"
-#include "mdLib/mdpanel.h"
+#include "mdLib/mdpanelsequence.h"
 
 #include "elektronData/mdWorkingKit.h"
 
@@ -121,7 +121,7 @@ namespace mdJucePlugin
 	{
 		return m_processor.getPlugin().withDeviceLocked([&](synthLib::Device* _base)
 		{
-			auto* device = dynamic_cast<md::Device*>(_base);
+			auto* device = dynamic_cast<md::DeskDevice*>(_base);
 			return device && device->sendPanelEvent(_row, _mask);
 		});
 	}
@@ -134,7 +134,7 @@ namespace mdJucePlugin
 		// Held 40 ms each in machine time (the audio thread sends them).
 		return m_processor.getPlugin().withDeviceLocked([&](synthLib::Device* _base)
 		{
-			auto* device = dynamic_cast<md::Device*>(_base);
+			auto* device = dynamic_cast<md::DeskDevice*>(_base);
 			return device && device->sendPanelSequence(states, md::g_samplerate * 40 / 1000);
 		});
 	}
@@ -150,7 +150,7 @@ namespace mdJucePlugin
 			md::PanelPacket{*command, static_cast<uint8_t>(_steps > 0 ? 0x01 : 0xff)});
 		return m_processor.getPlugin().withDeviceLocked([&](synthLib::Device* _base)
 		{
-			auto* device = dynamic_cast<md::Device*>(_base);
+			auto* device = dynamic_cast<md::DeskDevice*>(_base);
 			return device && device->sendPanelSequence(steps, 1);
 		});
 	}
@@ -163,14 +163,14 @@ namespace mdJucePlugin
 		{
 			m_telemetryCheckedMs = now;
 			m_telemetry = m_processor.getPlugin().withDeviceLocked(
-				[](synthLib::Device* _base) -> std::shared_ptr<const md::Device::SequencerTelemetry>
+				[](synthLib::Device* _base) -> std::shared_ptr<const md::DeskDevice::SequencerTelemetry>
 			{
-				auto* device = dynamic_cast<md::Device*>(_base);
+				auto* device = dynamic_cast<md::DeskDevice*>(_base);
 				return device ? device->getSequencerTelemetry() : nullptr;
 			});
 			m_panel = m_processor.getPlugin().withDeviceLocked([](synthLib::Device* _base) -> std::shared_ptr<md::FrontPanelPublisher>
 			{
-				auto* device = dynamic_cast<md::Device*>(_base);
+				auto* device = dynamic_cast<md::DeskDevice*>(_base);
 				return device ? device->getFrontPanelPublisher() : nullptr;
 			});
 		}
@@ -211,7 +211,7 @@ namespace mdJucePlugin
 
 	bool StudioLink::readWorkingKit(Bytes& _region)
 	{
-		using T = md::Device::SequencerTelemetry;
+		using T = md::DeskDevice::SequencerTelemetry;
 		static_assert(T::g_workingKitAddress == elektronData::g_mdWorkingKitRegionAddress
 			&& T::g_workingKitSize == elektronData::g_mdWorkingKitRegionSize, "working-kit region: mdLib and elektronData disagree");
 		if(!m_telemetry)
@@ -245,7 +245,7 @@ namespace mdJucePlugin
 		using P = deskCore::LifeFacts::Probe;
 		return m_processor.getPlugin().withDeviceLocked([](synthLib::Device* _base)
 		{
-			auto* device = dynamic_cast<md::Device*>(_base);
+			auto* device = dynamic_cast<md::DeskDevice*>(_base);
 			// No device yet (the processor is still making or replacing it): not a missing ROM.
 			// Only a device that exists and has no valid firmware is a definite NO ROM.
 			if(!device)

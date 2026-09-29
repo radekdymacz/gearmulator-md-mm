@@ -3,6 +3,7 @@
 #include <juce_audio_processors/juce_audio_processors.h>
 
 #include "baseLib/event.h"
+#include "editorWindowFit.h"
 #include "editorWindowScaleRestore.h"
 
 namespace jucePluginEditorLib
@@ -30,16 +31,9 @@ namespace jucePluginEditorLib
 	private:
 		void setGuiScale(float _percent);
 		void setUiRoot(juce::Component* _component);
-		// The configured size: the GUI scale, or a free editor's own width and height.
-		void restoreSize(float _percent);
-		bool fluid() const;
 
 		void timerCallback() override;
 		void fixParentWindowSize() const;
-		// The standalone's window no larger than its screen's visible area (menu bar and Dock
-		// excluded), and inside it (P7).
-		void fitToScreen();
-		bool m_fitting = false;
 
 		PluginEditorState& m_state;
 		juce::PropertiesFile& m_config;
@@ -48,6 +42,7 @@ namespace jucePluginEditorLib
 
 	    juce::ComponentBoundsConstrainer m_sizeConstrainer;
 		EditorWindowScaleRestore m_scaleRestore;
+		EditorWindowFit m_fit;
 
 		JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(EditorWindow)
 	};

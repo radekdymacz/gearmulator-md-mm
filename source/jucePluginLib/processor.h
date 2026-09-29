@@ -8,6 +8,7 @@
 #include "bypassBuffer.h"
 #include "controller.h"
 #include "midiLearnTranslator.h"
+#include "externalMidi.h"
 #include "midiports.h"
 #include "programChangeRouter.h"
 
@@ -75,17 +76,6 @@ namespace pluginLib
 		~Processor() override;
 
 		void addMidiEvent(const synthLib::SMidiEvent& _ev);
-
-		// External MIDI (P4, the Machinedrum Editor's HW MIDI): an editor drives real hardware
-		// through the plug-in's MIDI in and out (the host's and the physical ports) instead of
-		// the emulated device. While it is on, SysEx that comes in is kept for the editor
-		// (not given to the device), what the editor sends goes out in the next audio block,
-		// and the device's own MIDI output is not passed on (it would reach the hardware).
-		// Message thread, except the audio-thread side inside processBlock.
-		void setExternalMidi(bool _on);
-		bool isExternalMidi() const { return m_externalMidi.load(std::memory_order_acquire); }
-		void sendExternalMidi(const synthLib::SMidiEvent& _ev);
-		void drainExternalMidiIn(std::vector<synthLib::SMidiEvent>& _out);
 		bool tryAddRealtimeMidiEvent(const synthLib::SMidiEvent& _ev);
 		// Several legacy controllers batch preset parameter updates and then ask the
 		// wrapper to republish the finished program in one host-visible operation.
@@ -182,6 +172,7 @@ namespace pluginLib
 		bool rebootDevice();
 
 		auto& getMidiPorts() { return m_midiPorts; }
+		ExternalMidi& getExternalMidi() { return m_externalMidi; }
 
 		static std::optional<std::pair<const char*, uint32_t>> findResource(const BinaryDataRef& _binaryData, const std::string& _filename);
 		std::optional<std::pair<const char*, uint32_t>> findResource(const std::string& _filename) const;
@@ -276,6 +267,7 @@ namespace pluginLib
 		synthLib::Resampler::Mode m_resamplerMode = synthLib::Resampler::Mode::Legacy;
 		float m_hostSamplerate = 0.0f;
 		MidiPorts m_midiPorts;
+		ExternalMidi m_externalMidi;
 		BypassBuffer m_bypassBuffer;
 		DeviceType m_deviceType = DeviceType::Local;
 		std::string m_remoteHost;
@@ -287,9 +279,6 @@ namespace pluginLib
 		ProgramChangeRouter m_programChangeRouter;
 
 		// Host MIDI feedback queue (filled from parameter listeners, drained in processBlock)
-		std::atomic<bool> m_externalMidi{false};
-		std::mutex m_externalMidiMutex;
-		std::vector<synthLib::SMidiEvent> m_externalIn, m_externalOut;
 		std::mutex m_hostFeedbackMutex;
 		std::vector<synthLib::SMidiEvent> m_hostFeedbackQueue;
 		std::atomic<bool> m_deviceRecoveryPending{false};

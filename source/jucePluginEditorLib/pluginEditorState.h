@@ -29,7 +29,6 @@ namespace Rml
 namespace juce
 {
 	class Component;
-	class PopupMenu;
 }
 
 namespace jucePluginEditorLib
@@ -65,11 +64,8 @@ namespace jucePluginEditorLib
 		static std::string createSkinDisplayName(std::string _filename);
 
 		virtual void openMenu(const Rml::Event& _event);
-		// The editor's menu (GUI scale, skins, regions, the plug-in's own entries, Settings)
-		// as data, and as a native menu for the standalone's menu bar or a context menu that
-		// is not in RmlUi (a web view page).
+		// The menu openMenu shows, as data (a native menu bar or a menu outside RmlUi shows it too).
 		void fillMenu(juceRmlUi::Menu& _menu);
-		juce::PopupMenu createPopupMenu();
 
 		baseLib::Event<int> evSetGuiScale;
 		baseLib::Event<juce::Component*> evSkinLoaded;

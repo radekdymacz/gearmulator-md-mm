@@ -10,15 +10,17 @@
 // No "Audio input is muted to avoid feedback loop" bar: the input still starts muted
 // (JUCE's default, kept in the settings), and an editor that shows the mute itself (the
 // Machinedrum and Monomachine Editors' AUDIO / MIDI panel) says so there. Audio/MIDI
-// Settings... opens the editor's own panel when it has one (Editor::openAudioMidiSettings),
+// Settings... opens the editor's own panel when it has one (AudioMidiSettingsEditor, editorTraits.h),
 // otherwise JUCE's dialog.
 //
 // Use: define JUCE_USE_CUSTOM_PLUGIN_STANDALONE_APP=1 for the plug-in target and
 // compile one file of the plug-in's shared code with
 //     #include "jucePluginEditorLib/standaloneApp.h"
 //     JUCE_CREATE_APPLICATION_DEFINE(jucePluginEditorLib::StandaloneApp)
-// The window title is Processor::getStandaloneWindowTitle().
+// or with a class derived from StandaloneApp that gives the window its title (getWindowTitle).
 
+#include "editorPopupMenu.h"
+#include "editorTraits.h"
 #include "pluginEditor.h"
 #include "pluginEditorState.h"
 #include "pluginProcessor.h"
@@ -42,12 +44,6 @@ namespace jucePluginEditorLib
 			setUsingNativeTitleBar(true);
 			hideJuceOptionsButton();
 			detachFeedbackBanner();
-			if(auto* p = dynamic_cast<Processor*>(getAudioProcessor()))
-			{
-				const auto title = p->getStandaloneWindowTitle();
-				if(!title.empty())
-					setName(juce::String::fromUTF8(title.c_str()));
-			}
 #if JUCE_MAC
 			juce::PopupMenu appleExtras;
 			appleExtras.addItem("Settings...", [this] { showEditorSettings(); });
@@ -81,7 +77,7 @@ namespace jucePluginEditorLib
 			{
 				if(auto* p = dynamic_cast<Processor*>(getAudioProcessor()))
 					if(auto* state = p->getEditorState())
-						return state->createPopupMenu();
+						return createPopupMenu(*state);
 				return {};
 			}
 			juce::PopupMenu m;
@@ -99,7 +95,7 @@ namespace jucePluginEditorLib
 		{
 			if(auto* p = dynamic_cast<Processor*>(getAudioProcessor()))
 				if(auto* state = p->getEditorState())
-					if(auto* editor = state->getEditor(); editor && editor->openAudioMidiSettings())
+					if(auto* editor = dynamic_cast<AudioMidiSettingsEditor*>(state->getEditor()); editor && editor->openAudioMidiSettings())
 						return;
 			pluginHolder->showAudioSettingsDialog();
 		}
@@ -161,8 +157,17 @@ namespace jucePluginEditorLib
 		void initialise(const juce::String&) override
 		{
 			m_window = std::make_unique<StandaloneWindow>(getApplicationName(), m_appProperties.getUserSettings());
+			if(auto* p = m_window->getAudioProcessor())
+			{
+				const auto title = getWindowTitle(*p);
+				if(title.isNotEmpty())
+					m_window->setName(title);
+			}
 			m_window->setVisible(true);
 		}
+
+		// The window's title; empty: the application name.
+		virtual juce::String getWindowTitle(juce::AudioProcessor&) const { return {}; }
 
 		void shutdown() override
 		{

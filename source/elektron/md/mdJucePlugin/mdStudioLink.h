@@ -4,7 +4,7 @@
 
 #include "deskCore/deskLifecycle.h"
 
-#include "mdLib/mddevice.h"
+#include "mdLib/mddeskdevice.h"
 
 #include "baseLib/event.h"
 #include "synthLib/midiTypes.h"
@@ -88,7 +88,7 @@ namespace mdJucePlugin
 		baseLib::EventListener<synthLib::SysexBuffer> m_sysexListener;
 		std::vector<baseLib::EventListener<pluginLib::Parameter*>> m_paramListeners;
 		std::array<std::atomic<uint32_t>, 16> m_dirtyParams{};		// bit n = index n (0-25)
-		std::shared_ptr<const md::Device::SequencerTelemetry> m_telemetry;
+		std::shared_ptr<const md::DeskDevice::SequencerTelemetry> m_telemetry;
 		std::shared_ptr<md::FrontPanelPublisher> m_panel;
 		double m_telemetryCheckedMs = -1e9;
 		uint32_t m_workingKitSequence = 0;

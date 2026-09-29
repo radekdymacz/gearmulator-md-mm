@@ -31,8 +31,6 @@ namespace jucePluginEditorLib
 		PluginEditorState& getOrCreateEditorState();
 		void destroyEditorState();
 		PluginEditorState* getEditorState() const { return m_editorState.get(); }
-		// The standalone window's title (standaloneApp.h); empty = the application name.
-		virtual std::string getStandaloneWindowTitle() const { return {}; }
 
 		// Composite products cannot safely stack multiple native GPU child views
 		// on every host. This per-instance override leaves the persisted standalone

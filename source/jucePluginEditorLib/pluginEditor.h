@@ -116,16 +116,6 @@ namespace jucePluginEditorLib
 
 		virtual std::pair<std::string, std::string> getDemoRestrictionText() const = 0;
 
-		// The standalone's Audio/MIDI Settings: an editor with its own panel opens it and
-		// returns true; false keeps JUCE's dialog (standaloneApp.h).
-		virtual bool openAudioMidiSettings() { return false; }
-
-		// An editor drawn to its skin's fixed size keeps the skin's aspect ratio when the window is
-		// resized (the default). One whose page lays itself out in any size (the Machinedrum and
-		// Monomachine Editors' web pages) returns false: its window resizes freely and remembers its
-		// width and height (EditorWindow).
-		virtual bool keepsAspectRatio() const { return true; }
-
 		void showDemoRestrictionMessageBox() const;
 
 		Processor& getProcessor() const { return m_processor; }

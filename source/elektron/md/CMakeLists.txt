@@ -1,13 +1,7 @@
 cmake_minimum_required(VERSION 3.15)
 
-add_subdirectory(elektronData)
-add_subdirectory(deskCore)
-add_subdirectory(deskHost)
-add_subdirectory(mdDataLink)
-add_subdirectory(mdDesk)
-add_subdirectory(mmDesk)
 add_subdirectory(mdLib)
-add_subdirectory(deskWire)
+include(mdmmEditors.cmake)  # the Machinedrum/Monomachine Editors (doc/modern-ux/UPSTREAM.md)
 
 if(BUILD_TESTING)
 	add_subdirectory(mdLibTest)

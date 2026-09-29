@@ -5,7 +5,7 @@
 // wait for the UART to drain, collect SysEx replies. Test-only.
 
 #include "mdLib/mdhardware.h"
-#include "mdLib/mdpanel.h"
+#include "mdLib/mdpanelsequence.h"
 #include "mdLib/mdstate.h"
 
 #include <array>

@@ -13,11 +13,6 @@ namespace Rml
 	class Element;
 }
 
-namespace juce
-{
-	class PopupMenu;
-}
-
 namespace juceRmlUi
 {
 	class DelayedCall;
@@ -52,10 +47,12 @@ namespace juceRmlUi
 		}
 
 		bool empty() const { return m_entries.empty(); }
-
-		// The same entries as a native menu (the standalone's menu bar, a context menu outside
-		// RmlUi). Actions run after the menu closed, on the message thread.
-		juce::PopupMenu toPopupMenu() const;
+		// The entries as data, for a menu drawn elsewhere (a native menu): _f(name, checked, separator, enabled, action, submenu).
+		template<typename F> void forEachEntry(const F& _f) const
+		{
+			for(const auto& e : m_entries)
+				_f(e.name, e.checked, e.separator, e.enabled, e.action, e.submenu);
+		}
 
 		void open(const Rml::Element* _parent, const Rml::Vector2f& _position, uint32_t _itemsPerColumn);
 		void close();

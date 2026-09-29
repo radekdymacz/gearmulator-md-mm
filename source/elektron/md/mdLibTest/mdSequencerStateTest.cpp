@@ -1,5 +1,5 @@
 // md::SequencerState and md::panelKeySequence without firmware (P3).
-#include "mdLib/mdpanel.h"
+#include "mdLib/mdpanelsequence.h"
 #include "mdLib/mdsequencerstate.h"
 
 #include <cstdio>

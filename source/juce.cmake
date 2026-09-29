@@ -66,21 +66,6 @@ set_property(TARGET ServerPlugins PROPERTY FOLDER CustomTargets)
 
 add_library(juce_plugin_modules STATIC)
 
-# WebBrowserComponent for HTML editors (MD "studio" editor). On by default
-# where JUCE's backend ships with the OS (WKWebView on macOS, IE/Edge on
-# Windows); Linux would additionally need webkit2gtk and NEEDS_WEB_BROWSER.
-if(APPLE OR WIN32)
-	set(gearmulatorWebBrowserDefault ON)
-else()
-	set(gearmulatorWebBrowserDefault OFF)
-endif()
-option(${CMAKE_PROJECT_NAME}_JUCE_WEB_BROWSER "Compile JUCE WebBrowserComponent into plugins" ${gearmulatorWebBrowserDefault})
-if(${CMAKE_PROJECT_NAME}_JUCE_WEB_BROWSER)
-	set(gearmulatorJuceWebBrowser 1)
-else()
-	set(gearmulatorJuceWebBrowser 0)
-endif()
-
 target_link_libraries(juce_plugin_modules PRIVATE
     juce::juce_core
     juce::juce_audio_basics
@@ -92,7 +77,7 @@ target_link_libraries(juce_plugin_modules PRIVATE
 )
 
 target_compile_definitions(juce_plugin_modules PUBLIC
-	JUCE_WEB_BROWSER=${gearmulatorJuceWebBrowser}  # Linux: also add `NEEDS_WEB_BROWSER TRUE` to `juce_add_plugin`
+	JUCE_WEB_BROWSER=0  # If you remove this, add `NEEDS_WEB_BROWSER TRUE` to the `juce_add_plugin` call
 	JUCE_USE_CURL=0     # If you remove this, add `NEEDS_CURL TRUE` to the `juce_add_plugin` call
 	JUCE_VST3_CAN_REPLACE_VST2=0
 	JUCE_WIN_PER_MONITOR_DPI_AWARE=1
@@ -139,21 +124,14 @@ endmacro()
 
 macro(createJucePlugin targetName productName isSynth plugin4CC binaryDataProject synthLibProject)
 	string(REPLACE " " "" productNameIdentifier "${productName}")
-	# Optional app icons: set GEARMULATOR_ICON_BIG_<target> / GEARMULATOR_ICON_SMALL_<target>
-	# (PNG paths) before createJucePlugin.
-	set(_gmIconArgs)
-	if(DEFINED GEARMULATOR_ICON_BIG_${targetName})
-		list(APPEND _gmIconArgs ICON_BIG "${GEARMULATOR_ICON_BIG_${targetName}}")
-	endif()
-	if(DEFINED GEARMULATOR_ICON_SMALL_${targetName})
-		list(APPEND _gmIconArgs ICON_SMALL "${GEARMULATOR_ICON_SMALL_${targetName}}")
-	endif()
 	juce_add_plugin(${targetName}
 		# VERSION ...                                     # Set this if the plugin version is different to the project version
-		${_gmIconArgs}                                    # ICON_* arguments specify a path to an image file to use as an icon for the Standalone
+		# ICON_BIG ...                                    # ICON_* arguments specify a path to an image file to use as an icon for the Standalone
+		# ICON_SMALL ...
 		COMPANY_NAME "Gearmulator Preview"                 # Specify the name of the plugin's author
 		COMPANY_WEBSITE "https://dsp56300.wordpress.com"
 		IS_SYNTH ${isSynth}                               # Is this a synth or an effect?
+		${GEARMULATOR_PLUGIN_EXTRA_ARGS_${targetName}}   # Optional per-target juce_add_plugin arguments (e.g. ICON_BIG, ICON_SMALL)
 		NEEDS_MIDI_INPUT TRUE                             # Does the plugin need midi input?
 		NEEDS_MIDI_OUTPUT TRUE                            # Does the plugin need midi output?
 		IS_MIDI_EFFECT FALSE                              # Is this plugin a MIDI effect?
