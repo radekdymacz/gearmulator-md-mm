@@ -126,8 +126,11 @@ namespace deskController
 		bool operator==(const Route& _o) const { return known == _o.known && channel == _o.channel && note == _o.note && listens == _o.listens; }
 		bool operator!=(const Route& _o) const { return !(*this == _o); }
 	};
-	// The Machinedrum: every voice on the base channel, the first note its global's keymap gives the track.
-	Route mdRoute(const Setup& _s, const elektronData::MdGlobal* _global);
+	// The Machinedrum: every voice on the base channel, the first note its global's keymap gives the track
+	// (a real Machinedrum over MIDI). _pads: the emulated Machinedrum, which turns every note 36-51 on any
+	// channel into a press of TRIG key (note - 36) (upstream's mdhardware.cpp, pumpScheduledMidi), so a
+	// keymap note there would press another track's key: the voice goes as its track's TRIG note, 36 + track.
+	Route mdRoute(const Setup& _s, const elektronData::MdGlobal* _global, bool _pads = false);
 	// The Monomachine: the track's channel (base + track), the voice's note.
 	Route mmRoute(const Setup& _s, const elektronData::MmGlobal* _global);
 	// A warning when the controller's channel is one the machine listens on (empty: none).

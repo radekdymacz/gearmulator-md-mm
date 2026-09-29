@@ -123,6 +123,8 @@ namespace
 		const auto r = mdRoute(s, &g);
 		check(r.known && r.channel[0] == 4 && r.note[0] == 35, "MD BD: base channel, the first keymap note of track 1 (35)");
 		check(r.channel[1] == 4 && r.note[1] == 38 && r.note[6] == 48, "MD SD track 2 note 38, CH track 7 note 48");
+		const auto pads = mdRoute(s, &g, true);
+		check(pads.channel[1] == 4 && pads.note[0] == 36 && pads.note[1] == 37 && pads.note[6] == 42, "the emulated MD: the track's TRIG note (36 + track), whatever the keymap");
 		auto noKey = g;
 		noKey.keymap.fill(elektronData::MdGlobal::g_unmapped);
 		check(mdRoute(s, &noKey).channel[0] == -1, "MD: a track the keymap has no note for goes nowhere");

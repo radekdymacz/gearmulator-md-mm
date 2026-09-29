@@ -46,8 +46,9 @@ namespace mdJucePlugin
 	template<typename DeskT> struct SyxTraits;
 
 	// A model's side of the controller profile (mdSessionMd.cpp, mdSessionMm.cpp; DESIGN-tr06.md): its
-	// deskController::Machine, route(desk, setup) (where the voices go, from the active global the desk
-	// holds) and apply(desk, edits) (the knobs' edits as the page's own commands).
+	// deskController::Machine, route(desk, setup, wire) (where the voices go, from the active global the
+	// desk holds, for the engine: a wire or the emulator) and apply(desk, edits) (the knobs' edits as the
+	// page's own commands).
 	template<typename DeskT> struct CtlTraits;
 
 	// P7: whether the machine follows the host's tempo and transport: in a DAW's plug-in only.
@@ -352,7 +353,7 @@ namespace mdJucePlugin
 			using Traits = CtlTraits<DeskT>;
 			ControllerProfile::Hooks h;
 			h.machine = Traits::machine;
-			h.route = [this](const deskController::Setup& _s) { return Traits::route(*m_desk, _s); };
+			h.route = [this](const deskController::Setup& _s) { return Traits::route(*m_desk, _s, m_record->profile.wire); };
 			h.apply = [this](const std::vector<deskController::Edit>& _edits) { Traits::apply(*m_desk, _edits); };
 			return h;
 		}

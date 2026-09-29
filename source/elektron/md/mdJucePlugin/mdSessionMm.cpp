@@ -182,7 +182,7 @@ namespace mdJucePlugin
 	{
 		static constexpr deskController::Machine machine = deskController::Machine::Mm;
 
-		static deskController::Route route(const mmDesk::Desk& _desk, const deskController::Setup& _setup)
+		static deskController::Route route(const mmDesk::Desk& _desk, const deskController::Setup& _setup, bool)
 		{
 			const int slot = _desk.currentGlobal();
 			const auto g = slot >= 0 ? _desk.global(static_cast<uint8_t>(slot)) : std::nullopt;

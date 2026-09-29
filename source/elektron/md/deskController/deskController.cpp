@@ -269,7 +269,7 @@ namespace deskController
 		return d;
 	}
 
-	Route mdRoute(const Setup& _s, const elektronData::MdGlobal* _global)
+	Route mdRoute(const Setup& _s, const elektronData::MdGlobal* _global, const bool _pads)
 	{
 		Route r;
 		r.channel.fill(-1);
@@ -283,6 +283,15 @@ namespace deskController
 		for(size_t v = 0; v < g_voices; ++v)
 		{
 			const int t = _s.voices[v].t;
+			if(_pads)
+			{
+				if(t >= 0 && t < 16)
+				{
+					r.channel[v] = base;
+					r.note[v] = 36 + t;
+				}
+				continue;
+			}
 			for(int n = 0; n < 128; ++n)
 				if(_global->keymap[static_cast<size_t>(n)] == t)
 				{

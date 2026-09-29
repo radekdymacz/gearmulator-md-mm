@@ -168,17 +168,18 @@ namespace mdJucePlugin
 	};
 
 	// The controller profile on the Machinedrum (DESIGN-tr06.md): the voices go to the base channel at the
-	// notes the active global's keymap gives their tracks; a knob is the page's own live kit edit (param or
+	// notes the active global's keymap gives their tracks (the emulator: their TRIG notes); a knob is the page's own live kit edit (param or
 	// level) of the kit that plays, so it takes the same path as a drag: pending until memory shows it, a CC
 	// to the emulator or over the wire, never a dump.
 	template<> struct CtlTraits<mdDesk::Desk>
 	{
 		static constexpr deskController::Machine machine = deskController::Machine::Md;
 
-		static deskController::Route route(const mdDesk::Desk& _desk, const deskController::Setup& _setup)
+		// _wire: a real Machinedrum (the keymap's notes); the emulator takes notes 36-51 as TRIG keys (mdRoute).
+		static deskController::Route route(const mdDesk::Desk& _desk, const deskController::Setup& _setup, const bool _wire)
 		{
 			const auto& g = _desk.documents().global;
-			return deskController::mdRoute(_setup, g ? &*g : nullptr);
+			return deskController::mdRoute(_setup, g ? &*g : nullptr, !_wire);
 		}
 
 		static void apply(mdDesk::Desk& _desk, const std::vector<deskController::Edit>& _edits)

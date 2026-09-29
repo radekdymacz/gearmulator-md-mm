@@ -64,7 +64,7 @@
 	},
 	"defaults": {
 		"md": {
-			"about": "The seven voices trigger MD tracks 1-7 (the MD's base channel and its global keymap's note for the track). The seven INST level knobs move synthesis parameters 1-7 of the selected track, ACC parameter 8, DRIVE its DIST, TIME its DEL send, DEPTH its REV send.",
+			"about": "The seven voices trigger MD tracks 1-7 (a real Machinedrum: its base channel at the note its global keymap gives the track; the emulator: the track's TRIG note, 36 + track). The seven INST level knobs move synthesis parameters 1-7 of the selected track, ACC parameter 8, DRIVE its DIST, TIME its DEL send, DEPTH its REV send.",
 			"voices": [
 				{"voice": "BD", "t": 0},
 				{"voice": "SD", "t": 1},
