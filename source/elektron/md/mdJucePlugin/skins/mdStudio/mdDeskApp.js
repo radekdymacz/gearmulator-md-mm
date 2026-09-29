@@ -235,7 +235,7 @@ const LIFE = {
 	ready: { label: "READY", led: "on" } };
 const lifeOf = l => LIFE[l] || LIFE.booting;
 /* the engine menu's own entries (not engines) */
-const ENGINE_ACTIONS = ["global", "audio", "rom"];
+const ENGINE_ACTIONS = ["global", "audio", "ctl", "rom"];
 function engineLabel() {
 	const e = lifeOf(V.lifecycle);
 	if (V.lifecycle === "ready") return [V.caps.label || e.label, e.led, V.caps.about || ""];
@@ -304,6 +304,7 @@ document.addEventListener("change", e => {
 	if (v === "rom") firstRun(true);
 	else if (v === "global") { sel.value = V.caps.engine; openGlobal(); }
 	else if (v === "audio") { sel.value = V.caps.engine; openAudio(); }
+	else if (v === "ctl") { sel.value = V.caps.engine; openController(); }
 	else if ((machineState().engines || []).some(x => x.id === v)) cmd("engine", { kind: v });
 });
 
@@ -1270,7 +1271,7 @@ document.addEventListener("change", e => {
 	if (id === "tg") sendGroup(S.sel, "trig", v === "" ? null : +v);
 });
 
-function select(i) { S.sel = i; if (!params(i).includes(S.lane)) S.lane = params(i).includes("FLTF") ? "FLTF" : params(i)[0] || "FLTF"; render(); }
+function select(i) { S.sel = i; cmd("ctlTrack", { t: i }); if (!params(i).includes(S.lane)) S.lane = params(i).includes("FLTF") ? "FLTF" : params(i)[0] || "FLTF"; render(); }
 function refreshAudible() {
 	$$(".th").forEach(h => { const i = +h.dataset.sel; h.classList.toggle("off", !audible(i)); h.querySelector(".m").setAttribute("aria-pressed", V.tracks[i].mute); h.querySelector(".s").setAttribute("aria-pressed", V.tracks[i].solo); });
 	$$(".r[data-row],.mr[data-row]").forEach(r => r.classList.toggle("off", !audible(+r.dataset.row)));
@@ -1396,6 +1397,7 @@ Bridge.onMessage(m => {
 	}
 	case "ask": onAsk(m); break;
 	case "error": toast(m.message); showLastError([m.message]); break;
+	case "controller": Ctl.onDoc(m.doc); break;
 	case "learn": Docs.learn = m.doc; if (S.ws === "control") scheduleRender(); else syncControls(); if (!m.doc.learning && S.ctl.learnT) { S.ctl.learnT = null; syncControls(); } break;
 	}
 });
@@ -1442,4 +1444,13 @@ Keys.bind({ keys: ["ArrowUp", "ArrowDown"], group: "Values", does: "A focused va
 Keys.bind({ keys: ["ArrowLeft", "ArrowRight"], group: "Values", does: "A focused value: one step" });
 new ResizeObserver(() => redraw()).observe(document.body);
 render();
+/* The controller profile's panel (deskController.js) asks through the page's own commands. */
+Ctl.host = {
+	set: a => cmd("ctlSet", { profile: a.profile, channel: a.channel }),
+	voice: a => cmd("ctlVoice", { voice: a.voice, t: a.t, note: a.note }),
+	knob: a => cmd("ctlKnob", { cc: a.cc, pg: a.pg, i: a.i }),
+	reset: () => cmd("ctlReset", {})
+};
 Bridge.ready();
+/* the controller's knobs move the selected track's parameters: the session hears which one */
+cmd("ctlTrack", { t: S.sel });

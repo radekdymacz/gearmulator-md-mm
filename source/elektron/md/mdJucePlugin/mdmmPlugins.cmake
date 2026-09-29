@@ -66,7 +66,8 @@ list(APPEND SOURCES
 	skins/mdStudio/mdDeskLibrary.js
 	skins/mdStudio/mdDeskKeys.js
 	skins/mdStudio/mdDeskGlobal.js
-	skins/mdStudio/mdDeskAudio.js)
+	skins/mdStudio/mdDeskAudio.js
+	skins/mdStudio/deskController.js)
 
 # P6: the editors' diagnostics (the log of the web view, the window chrome and the session's
 # state, and the pages' self-tests: mdDeskSelfTest.js, mmSelfTest.js) observe the editors. Off by
@@ -90,12 +91,12 @@ file(GLOB MD_SKIN_ASSETS CONFIGURE_DEPENDS
 file(GLOB MM_SKIN_ASSETS CONFIGURE_DEPENDS
 	"skins/mmStudio/*.rml" "skins/mmStudio/*.html" "skins/mmStudio/*.css"
 	"skins/mmStudio/mmMockup.js" "skins/mmStudio/mmConvert.js" "skins/mmStudio/mmAdapter.js"
-	# shared with the Machinedrum Editor: the page bridge and the OFL fonts
-	"skins/mdStudio/mdDeskBridge.js" "skins/mdStudio/fonts/*.ttf")
+	# shared with the Machinedrum Editor: the page bridge, the controller panel and the OFL fonts
+	"skins/mdStudio/mdDeskBridge.js" "skins/mdStudio/deskController.js" "skins/mdStudio/fonts/*.ttf")
 # The tests are not the page, named one by one, not by a file-name pattern: the node tests never
 # ship, the self-tests only with the diagnostics. A test that was renamed or moved stops the
 # configure, so it cannot slip into the glob. The MM glob lists its page files already.
-set(MD_NODE_TESTS "skins/mdStudio/mdDeskModelTest.js")
+set(MD_NODE_TESTS "skins/mdStudio/mdDeskModelTest.js" "skins/mdStudio/deskControllerPageTest.js")
 set(MD_SELF_TESTS "skins/mdStudio/mdDeskSelfTest.js")
 set(MM_SELF_TESTS "skins/mmStudio/mmSelfTest.js")
 foreach(test ${MD_NODE_TESTS} ${MD_SELF_TESTS} ${MM_SELF_TESTS})
@@ -199,6 +200,9 @@ function(mdmm_plugin_targets)
 	if(GEARMULATOR_NODE)
 		add_test(NAME mdDeskModelPageTest COMMAND ${GEARMULATOR_NODE} ${CMAKE_CURRENT_SOURCE_DIR}/skins/mdStudio/mdDeskModelTest.js)
 		set_tests_properties(mdDeskModelPageTest PROPERTIES LABELS "UnitTest" TIMEOUT 60)
+		# The controller profile's panel (DESIGN-tr06.md): its document and its commands against both contracts.
+		add_test(NAME deskControllerPageTest COMMAND ${GEARMULATOR_NODE} ${CMAKE_CURRENT_SOURCE_DIR}/skins/mdStudio/deskControllerPageTest.js)
+		set_tests_properties(deskControllerPageTest PROPERTIES LABELS "UnitTest" TIMEOUT 60)
 	endif()
 
 	# P4: the editor's setup (MDSK chunk) round-trips with the plug-in state.

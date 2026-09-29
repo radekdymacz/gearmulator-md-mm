@@ -563,7 +563,18 @@
 		   only in its result: the panel shows the last one until the next change. */
 		audioDoc() { return audioDocument && Object.assign({}, audioDocument, { error: audioError }); },
 		audioSend(c) { send(Object.assign({ op: "audioSet" }, c), { onResult: r => { audioError = r.ok ? "" : r.errors[0] || ""; V().redrawAudio(); } }); },
-		audioMeter(on) { send({ op: "audioMeter", on: !!on }); }
+		audioMeter(on) { send({ op: "audioMeter", on: !!on }); },
+		/* the controller profile (DESIGN-tr06.md, deskController.js): its panel, and the track its knobs move */
+		controller() { Ctl.open(); },
+		selected(t) { if (t === lastSelected) return; lastSelected = t; send({ op: "ctlTrack", t }); }
+	};
+	let lastSelected = -1;
+	/* the controller's panel asks through the adapter's own commands */
+	Ctl.host = {
+		set: a => send({ op: "ctlSet", profile: a.profile, channel: a.channel }),
+		voice: a => send({ op: "ctlVoice", voice: a.voice, t: a.t, note: a.note }),
+		knob: a => send({ op: "ctlKnob", cc: a.cc, pg: a.pg, i: a.i }),
+		reset: () => send({ op: "ctlReset" })
 	};
 
 	/* What the page holds, read-only, for whoever looks (a diagnostics build's self-tests register
@@ -624,6 +635,7 @@
 		else if (m.type === "audioLevel") V().audioLevel(m.in);
 		else if (m.type === "openAudio") V().openAudio();
 		else if (m.type === "learn") onLearn(m.doc);
+		else if (m.type === "controller") Ctl.onDoc(m.doc);
 		else if (m.type === "ask") onAsk(m);
 			else if (m.type === "romInstall") { V().bootRom(m); V().toast(m.text); }
 			else if (m.type === "syxPreview") V().syxPreview(m);
