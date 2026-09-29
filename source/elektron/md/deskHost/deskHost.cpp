@@ -82,6 +82,15 @@ namespace deskHost
 			row("audioSet", {set, act, device, on, channel, value}, "change one audio or MIDI setting (set), or do something (do)",
 				Action::AudioSet, Actor::Window),
 			row("audioMeter", {on}, "", Action::AudioMeter, Actor::Window),
+			// The controller profile (doc/modern-ux/DESIGN-tr06.md): a drum machine on one channel plays the machine.
+			row("ctlSet", {{"profile", ArgType::Text, 0, 0, true, {"off", "tr06"}}, {"channel", ArgType::Integer, 1, 16, true}},
+				"the controller profile: off or the Roland TR-06, and the controller's MIDI channel (controller.doc)", Action::CtlSet),
+			row("ctlVoice", {{"voice", ArgType::Text, 0, 0, false, {"BD", "SD", "LT", "HT", "CY", "OH", "CH"}}, t, {"note", ArgType::Integer, 0, 127, true}},
+				"a controller voice's track (controller.doc.tracks) and, on the Monomachine, the note it plays", Action::CtlVoice),
+			row("ctlKnob", {{"cc", ArgType::Integer, 0, 127}, pg, {"i", ArgType::IntegerOrNull, 0, 24}},
+				"a controller knob's target on the selected track (controller.doc.targets); i null: none", Action::CtlKnob),
+			row("ctlReset", {}, "the controller's shipped mapping and channel", Action::CtlReset),
+			row("ctlTrack", {t}, "the page's selected track: the controller's knobs move its parameters", Action::CtlTrack),
 		});
 		return table;
 	}

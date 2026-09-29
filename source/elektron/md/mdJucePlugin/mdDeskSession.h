@@ -1,5 +1,6 @@
 #pragma once
 
+#include "mdCtlProfile.h"
 #include "mdMidiLearnCommands.h"
 #include "mdPageSpec.h"
 #include "mdSyxSession.h"
@@ -43,6 +44,14 @@ namespace mdJucePlugin
 	// P7: a model's SysEx import traits (mdSessionMd.cpp, mdSessionMm.cpp): the documents' type, the
 	// file's and the desk's documents, one document as the contract's JSON, and what may be imported.
 	template<typename DeskT> struct SyxTraits;
+
+	// A model's side of the controller profile (mdSessionMd.cpp, mdSessionMm.cpp; DESIGN-tr06.md): its
+	// deskController::Machine, route(desk, setup) (where the voices go, from the active global the desk
+	// holds) and apply(desk, edits) (the knobs' edits as the page's own commands).
+	template<typename DeskT> struct CtlTraits;
+	// The gesture ids of the controller's edits (one undo step per burst of knob moves), apart from the page's
+	// (from 1) and a SysEx import's (0x40000000).
+	constexpr uint32_t g_ctlGestures = 0x50000000u;
 
 	// P7: whether the machine follows the host's tempo and transport: in a DAW's plug-in only.
 	bool followsHost(AudioPluginAudioProcessor& _processor);
@@ -226,6 +235,7 @@ namespace mdJucePlugin
 			, m_defaultSetup(std::move(_defaultSetup))
 			, m_learn(pluginProcessorOf(_processor), std::move(_learn), [this](const Value& _m) { toPage(_m); })
 			, m_page(std::move(_page))
+			, m_ctl(_processor, ctlHooks(), [this](const Value& _m) { toPage(_m); })
 			, m_followHost(followsHost(_processor))
 		{
 			m_engine = m_record->make(*this);
@@ -269,6 +279,11 @@ namespace mdJucePlugin
 			case Action::LearnCancel:
 			case Action::LearnRemove:
 			case Action::LearnInvert: m_learn.handle(row->handler.action, _message); break;
+			case Action::CtlSet:
+			case Action::CtlVoice:
+			case Action::CtlKnob:
+			case Action::CtlReset:
+			case Action::CtlTrack: m_ctl.handle(row->handler.action, _message); break;
 			default: break;	// the window's rows (actor Window, above)
 			}
 		}
@@ -281,6 +296,8 @@ namespace mdJucePlugin
 				loadSetup(*text);
 			if(due(t, g_engineChoicesMs))
 				publishChoices();
+			// The controller profile: its setup from the project, the machine's route, the knobs' edits.
+			m_ctl.step(sessionNowMs());
 			if(m_desk->pageSeen() && due(t, g_deskTickMs))
 				m_desk->tick();
 			// P7: in a DAW the host's tempo and transport reach the machine as MIDI clock, Start and Stop
@@ -329,8 +346,18 @@ namespace mdJucePlugin
 			p.toPage = [this](const Value& _m) { toPage(_m); };
 			p.saveSetup = [this](const Value& _setup) { m_setup.save(_setup); };
 			// After the page's ready the plug-in publishes its own document too.
-			p.ready = [this] { m_learn.publish(); };
+			p.ready = [this] { m_learn.publish(); m_ctl.publish(); };
 			return p;
+		}
+
+		ControllerProfile::Hooks ctlHooks()
+		{
+			using Traits = CtlTraits<DeskT>;
+			ControllerProfile::Hooks h;
+			h.machine = Traits::machine;
+			h.route = [this](const deskController::Setup& _s) { return Traits::route(*m_desk, _s); };
+			h.apply = [this](const std::vector<deskController::Edit>& _edits) { Traits::apply(*m_desk, _edits); };
+			return h;
 		}
 
 		void restoreSetup()
@@ -461,6 +488,7 @@ namespace mdJucePlugin
 		std::optional<Value> m_defaultSetup;
 		MidiLearnCommands m_learn;
 		PageSpec m_page;
+		ControllerProfile m_ctl;
 		std::unique_ptr<EngineT> m_engine;
 		std::unique_ptr<DeskT> m_desk;
 		std::vector<deskCore::EngineChoice> m_choices;

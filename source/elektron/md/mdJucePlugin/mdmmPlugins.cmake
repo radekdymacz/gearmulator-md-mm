@@ -31,6 +31,7 @@ list(APPEND SOURCES
 	mdDeskHost.cpp mdDeskHost.h
 	mdStandaloneApp.cpp
 	mdDeskSession.cpp mdDeskSession.h
+	mdCtlProfile.cpp mdCtlProfile.h
 	mdMidiLearnCommands.cpp mdMidiLearnCommands.h
 	mdPageEditor.cpp mdPageEditor.h
 	mdRomInstall.cpp mdRomInstall.h
@@ -118,7 +119,7 @@ set(GEARMULATOR_PLUGIN_EXTRA_ARGS_mmJucePlugin
 
 function(mdmm_plugin_targets)
 	foreach(plugin_target mdJucePlugin mmJucePlugin)
-		target_link_libraries(${plugin_target} PRIVATE elektronData mdDataLink mdDesk mmDesk deskHost deskWire)
+		target_link_libraries(${plugin_target} PRIVATE elektronData mdDataLink mdDesk mmDesk deskHost deskWire deskController)
 		target_compile_definitions(${plugin_target} PUBLIC
 			# jucePluginEditorLib/standaloneApp.h: native title bar and menu bar (P4).
 			JUCE_USE_CUSTOM_PLUGIN_STANDALONE_APP=1

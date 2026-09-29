@@ -1802,6 +1802,227 @@
         }
       }
     },
+    "controller": {
+      "type": "object",
+      "description": "The controller profile (DESIGN-tr06.md, deskController/deskController.h pageDocument): a Roland TR-06 on one MIDI channel plays the machine. The setup (profile, channel, voices, knobs) is kept with the project as the MDCT chunk; the rest is what it means now: where each voice goes (out, from the machine's active global), every knob's target on the selected track, the targets to choose from, a warning when the channel is one the machine listens on, and the last knob the controller moved.",
+      "required": [
+        "schema",
+        "version",
+        "machine",
+        "profile",
+        "profiles",
+        "channel",
+        "about",
+        "tracks",
+        "selected",
+        "known",
+        "warning",
+        "voices",
+        "knobs",
+        "targets",
+        "last"
+      ],
+      "properties": {
+        "schema": {
+          "const": "desk/controller"
+        },
+        "version": {
+          "const": 1
+        },
+        "machine": {
+          "enum": [
+            "md",
+            "mm"
+          ]
+        },
+        "profile": {
+          "enum": [
+            "off",
+            "tr06"
+          ]
+        },
+        "profiles": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": [
+              "id",
+              "label"
+            ],
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "label": {
+                "type": "string"
+              }
+            }
+          }
+        },
+        "channel": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 16
+        },
+        "about": {
+          "type": "string"
+        },
+        "tracks": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 16
+        },
+        "selected": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 15
+        },
+        "known": {
+          "type": "boolean",
+          "description": "The machine's active global is known: without it the voices go nowhere yet."
+        },
+        "warning": {
+          "type": "string"
+        },
+        "voices": {
+          "type": "array",
+          "minItems": 7,
+          "maxItems": 7,
+          "items": {
+            "type": "object",
+            "required": [
+              "voice",
+              "label",
+              "notes",
+              "t",
+              "out"
+            ],
+            "properties": {
+              "voice": {
+                "enum": [
+                  "BD",
+                  "SD",
+                  "LT",
+                  "HT",
+                  "CY",
+                  "OH",
+                  "CH"
+                ]
+              },
+              "label": {
+                "type": "string"
+              },
+              "notes": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/$defs/u7"
+                }
+              },
+              "t": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 15
+              },
+              "note": {
+                "$ref": "#/$defs/u7"
+              },
+              "out": {
+                "type": [
+                  "object",
+                  "null"
+                ],
+                "required": [
+                  "ch",
+                  "note"
+                ],
+                "properties": {
+                  "ch": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 16
+                  },
+                  "note": {
+                    "$ref": "#/$defs/u7"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "knobs": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": [
+              "cc",
+              "label",
+              "i",
+              "name"
+            ],
+            "properties": {
+              "cc": {
+                "$ref": "#/$defs/u7"
+              },
+              "label": {
+                "type": "string"
+              },
+              "pg": {
+                "type": "integer",
+                "minimum": -1,
+                "maximum": 7
+              },
+              "i": {
+                "type": "integer",
+                "minimum": -1,
+                "maximum": 24
+              },
+              "name": {
+                "type": "string"
+              }
+            }
+          }
+        },
+        "targets": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": [
+              "i",
+              "name"
+            ],
+            "properties": {
+              "pg": {
+                "type": "integer",
+                "minimum": -1,
+                "maximum": 7
+              },
+              "i": {
+                "type": "integer",
+                "minimum": -1,
+                "maximum": 24
+              },
+              "name": {
+                "type": "string"
+              }
+            }
+          }
+        },
+        "last": {
+          "type": [
+            "object",
+            "null"
+          ],
+          "properties": {
+            "cc": {
+              "$ref": "#/$defs/u7"
+            },
+            "v": {
+              "$ref": "#/$defs/u7"
+            }
+          }
+        }
+      }
+    },
     "message": {
       "description": "P6: every message the plug-in sends the Machinedrum Editor page (Bridge gm.recv). Checked by mdDeskTest against what the desk publishes.",
       "type": "object",
@@ -2417,6 +2638,22 @@
           "properties": {
             "type": {
               "const": "openAudio"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "description": "The controller profile's document (DESIGN-tr06.md): after ready, after every ctl* command, when the machine's route changes, and at most 4 times a second while the controller's knobs move.",
+          "required": [
+            "type",
+            "doc"
+          ],
+          "properties": {
+            "type": {
+              "const": "controller"
+            },
+            "doc": {
+              "$ref": "#/$defs/controller"
             }
           }
         }
@@ -5652,6 +5889,202 @@
                 "boolean",
                 "integer"
               ]
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "description": "host: the controller profile: off or the Roland TR-06, and the controller's MIDI channel (controller.doc)",
+          "required": [
+            "op"
+          ],
+          "properties": {
+            "op": {
+              "const": "ctlSet"
+            },
+            "id": {
+              "type": "integer"
+            },
+            "g": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "force": {
+              "type": [
+                "boolean",
+                "integer"
+              ]
+            },
+            "profile": {
+              "type": "string",
+              "enum": [
+                "off",
+                "tr06"
+              ]
+            },
+            "channel": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 16
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "description": "host: a controller voice's track (controller.doc.tracks) and, on the Monomachine, the note it plays",
+          "required": [
+            "op",
+            "voice",
+            "t"
+          ],
+          "properties": {
+            "op": {
+              "const": "ctlVoice"
+            },
+            "id": {
+              "type": "integer"
+            },
+            "g": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "force": {
+              "type": [
+                "boolean",
+                "integer"
+              ]
+            },
+            "voice": {
+              "type": "string",
+              "enum": [
+                "BD",
+                "SD",
+                "LT",
+                "HT",
+                "CY",
+                "OH",
+                "CH"
+              ]
+            },
+            "t": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 15
+            },
+            "note": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 127
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "description": "host: a controller knob's target on the selected track (controller.doc.targets); i null: none",
+          "required": [
+            "op",
+            "cc",
+            "i"
+          ],
+          "properties": {
+            "op": {
+              "const": "ctlKnob"
+            },
+            "id": {
+              "type": "integer"
+            },
+            "g": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "force": {
+              "type": [
+                "boolean",
+                "integer"
+              ]
+            },
+            "cc": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 127
+            },
+            "pg": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 7
+            },
+            "i": {
+              "oneOf": [
+                {
+                  "type": "null"
+                },
+                {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 24
+                }
+              ]
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "description": "host: the controller's shipped mapping and channel",
+          "required": [
+            "op"
+          ],
+          "properties": {
+            "op": {
+              "const": "ctlReset"
+            },
+            "id": {
+              "type": "integer"
+            },
+            "g": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "force": {
+              "type": [
+                "boolean",
+                "integer"
+              ]
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "description": "host: the page's selected track: the controller's knobs move its parameters",
+          "required": [
+            "op",
+            "t"
+          ],
+          "properties": {
+            "op": {
+              "const": "ctlTrack"
+            },
+            "id": {
+              "type": "integer"
+            },
+            "g": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "force": {
+              "type": [
+                "boolean",
+                "integer"
+              ]
+            },
+            "t": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 15
             }
           },
           "additionalProperties": false

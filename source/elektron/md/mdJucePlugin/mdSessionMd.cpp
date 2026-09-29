@@ -167,6 +167,41 @@ namespace mdJucePlugin
 		}
 	};
 
+	// The controller profile on the Machinedrum (DESIGN-tr06.md): the voices go to the base channel at the
+	// notes the active global's keymap gives their tracks; a knob is the page's own live kit edit (param or
+	// level) of the kit that plays, so it takes the same path as a drag: pending until memory shows it, a CC
+	// to the emulator or over the wire, never a dump.
+	template<> struct CtlTraits<mdDesk::Desk>
+	{
+		static constexpr deskController::Machine machine = deskController::Machine::Md;
+
+		static deskController::Route route(const mdDesk::Desk& _desk, const deskController::Setup& _setup)
+		{
+			const auto& g = _desk.documents().global;
+			return deskController::mdRoute(_setup, g ? &*g : nullptr);
+		}
+
+		static void apply(mdDesk::Desk& _desk, const std::vector<deskController::Edit>& _edits)
+		{
+			const auto& working = _desk.documents().working;
+			if(!working)
+				return;
+			for(const auto& e : _edits)
+			{
+				elektronData::json::Value m = elektronData::json::Value::object();
+				const bool level = e.at.i == deskWire::md::g_levelIndex;
+				m.set("op", level ? "level" : "param");
+				m.set("k", static_cast<int>(working->kit.position));
+				m.set("t", static_cast<int>(e.track));
+				if(!level)
+					m.set("i", e.at.i);
+				m.set("v", static_cast<int>(e.value));
+				m.set("g", g_ctlGestures + e.gesture);
+				_desk.onPageMessage(m);
+			}
+		}
+	};
+
 	class MdSession final : public SessionOf<mdDesk::Desk>
 	{
 	public:

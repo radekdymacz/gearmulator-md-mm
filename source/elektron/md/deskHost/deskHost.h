@@ -29,7 +29,12 @@ namespace deskHost
 		ChooseSyx,			// P7: the native file chooser for a .syx to import (its preview follows)
 		SyxImport,			// P7: import the previewed .syx (the kinds chosen)
 		SyxCancel,
-		SyxExport			// P7: the native save dialog, then every document the editor holds as one .syx
+		SyxExport,			// P7: the native save dialog, then every document the editor holds as one .syx
+		CtlSet,				// the controller profile (DESIGN-tr06.md): off or on, the controller's channel
+		CtlVoice,			// a controller voice's track (and note)
+		CtlKnob,			// a controller knob's target
+		CtlReset,			// the controller's shipped mapping
+		CtlTrack			// the page's selected track (the controller's knobs move its parameters)
 	};
 
 	// Who acts on a row: the session (it outlives the window) or the window (the menu and the

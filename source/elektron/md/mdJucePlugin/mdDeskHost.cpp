@@ -33,6 +33,11 @@ namespace mdJucePlugin
 			baseLib::ChunkWriter chunk(_stream, "MDSK", 1);
 			_stream.write(s);
 		}
+		if(const auto c = controller(); !c.empty())
+		{
+			baseLib::ChunkWriter chunk(_stream, "MDCT", 1);
+			_stream.write(c);
+		}
 	}
 
 	void DeskHost::addChunkReaders(baseLib::ChunkReader& _reader)
@@ -40,6 +45,10 @@ namespace mdJucePlugin
 		_reader.add("MDSK", 1, [this](baseLib::BinaryStream& _stream, uint32_t)
 		{
 			setSetup(_stream.readString());
+		});
+		_reader.add("MDCT", 1, [this](baseLib::BinaryStream& _stream, uint32_t)
+		{
+			setController(_stream.readString());
 		});
 	}
 
@@ -55,5 +64,18 @@ namespace mdJucePlugin
 		m_setup = std::move(_json);
 		// The session picks it up on the message thread, whichever thread set it.
 		m_setupVersion.fetch_add(1, std::memory_order_release);
+	}
+
+	std::string DeskHost::controller() const
+	{
+		const std::lock_guard lock(m_setupMutex);
+		return m_controller;
+	}
+
+	void DeskHost::setController(std::string _json)
+	{
+		const std::lock_guard lock(m_setupMutex);
+		m_controller = std::move(_json);
+		m_controllerVersion.fetch_add(1, std::memory_order_release);
 	}
 }
