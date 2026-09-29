@@ -5,6 +5,8 @@
 #include "elektronData/mdGlobal.h"
 #include "elektronData/mdMachines.h"
 #include "elektronData/mmGlobal.h"
+#include "elektronData/mmJson.h"
+#include "elektronData/mmKit.h"
 #include "elektronData/mmMachines.h"
 
 #include <algorithm>
@@ -552,5 +554,50 @@ namespace deskController
 		d.set("targets", std::move(list));
 		d.set("last", _last);
 		return d;
+	}
+
+	// ---- the edits as commands ----
+
+	std::vector<Value> mdCommands(const std::vector<Edit>& _edits, const uint8_t _kit)
+	{
+		std::vector<Value> out;
+		for(const auto& e : _edits)
+		{
+			if(!validTarget(Machine::Md, e.at) || e.track >= 16)
+				continue;
+			Value m = Value::object();
+			const bool level = e.at.i == 24;
+			m.set("op", level ? "level" : "param");
+			m.set("k", static_cast<int>(_kit));
+			m.set("t", static_cast<int>(e.track));
+			if(!level)
+				m.set("i", e.at.i);
+			m.set("v", static_cast<int>(e.value));
+			m.set("g", g_gestures + e.gesture);
+			out.push_back(std::move(m));
+		}
+		return out;
+	}
+
+	std::optional<Value> mmCommand(const std::vector<Edit>& _edits, const elektronData::MmKit& _working)
+	{
+		auto kit = _working;
+		for(const auto& e : _edits)
+		{
+			if(!validTarget(Machine::Mm, e.at) || e.track >= elektronData::MmKit::g_tracks)
+				continue;
+			if(e.at.pg == 7)
+				kit.levels[e.track] = e.value;
+			else
+				kit.tracks[e.track].pages[static_cast<size_t>(e.at.pg)][static_cast<size_t>(e.at.i)] = e.value;
+		}
+		if(_edits.empty() || kit == _working)
+			return std::nullopt;
+		Value m = Value::object();
+		m.set("op", "set");
+		m.set("kind", "workingKit");
+		m.set("doc", elektronData::mmKitToJson(kit));
+		m.set("g", g_gestures + _edits.front().gesture);
+		return m;
 	}
 }

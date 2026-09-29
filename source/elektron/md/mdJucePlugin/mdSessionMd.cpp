@@ -183,22 +183,9 @@ namespace mdJucePlugin
 
 		static void apply(mdDesk::Desk& _desk, const std::vector<deskController::Edit>& _edits)
 		{
-			const auto& working = _desk.documents().working;
-			if(!working)
-				return;
-			for(const auto& e : _edits)
-			{
-				elektronData::json::Value m = elektronData::json::Value::object();
-				const bool level = e.at.i == deskWire::md::g_levelIndex;
-				m.set("op", level ? "level" : "param");
-				m.set("k", static_cast<int>(working->kit.position));
-				m.set("t", static_cast<int>(e.track));
-				if(!level)
-					m.set("i", e.at.i);
-				m.set("v", static_cast<int>(e.value));
-				m.set("g", g_ctlGestures + e.gesture);
-				_desk.onPageMessage(m);
-			}
+			if(const auto& working = _desk.documents().working)
+				for(const auto& c : deskController::mdCommands(_edits, working->kit.position))
+					_desk.onPageMessage(c);
 		}
 	};
 

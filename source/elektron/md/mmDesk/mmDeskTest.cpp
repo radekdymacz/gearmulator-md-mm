@@ -2,6 +2,7 @@
 // against a scripted machine (no firmware). The firmware smoke test is
 // mdLibTest/mmDeskFirmwareTest.
 
+#include "deskController/deskController.h"
 #include "mmDesk.h"
 #include "mmDeskMachine.h"
 
@@ -377,6 +378,86 @@ void modulators()
 	check(last("mod") && last("mod")->find("values")->asArray().size() == 1, "the page gets the source's value");
 }
 
+// The controller profile (DESIGN-tr06.md): TR-06 knobs on the selected synth track become one working-kit
+// set a round (latest wins, 50 ms), delivered as CCs of what changed, never a dump; the filter BASE and the
+// level land; one undo step. Simulated MIDI: the session's pump as the plug-in runs it.
+void controllerKnobs()
+{
+	std::puts("controller knobs (TR-06 profile)");
+	double now = 0;
+	std::vector<Value> page;
+	std::vector<std::tuple<uint8_t, uint8_t, uint8_t, uint8_t>> params;
+	std::vector<Bytes> sysex;
+	mmDesk::Desk::Port port;
+	port.device.sendSysex = [&](const Bytes& _b) { sysex.push_back(_b); };
+	port.device.sendParam = [&](uint8_t _t, uint8_t _p, uint8_t _i, uint8_t _v) { params.emplace_back(_t, _p, _i, _v); };
+	port.device.sendNrpn = [](uint8_t, uint8_t, uint8_t) {};
+	port.device.pressKeys = [](const std::vector<mmDesk::Key>&) { return true; };
+	port.device.nowMs = [&] { return now; };
+	port.toPage = [&](const Value& _v) { page.push_back(_v); g_published.push_back(_v); };
+	mmDesk::Desk d(port);
+	const auto msg = [&](const std::string& _json) { d.onPageMessage(*ed::json::parse(_json)); };
+	msg(R"({"op":"ready"})");
+	d.setProbe(mmDesk::Desk::Probe::Running);
+	d.onTelemetry(screen(mmDesk::Screen::Main));
+	d.onDeviceSysex({0xf0, 0, 0x20, 0x3c, 3, 0, 0x72, 0x04, 1, 0xf7});	// pattern 1
+	d.onDeviceSysex({0xf0, 0, 0x20, 0x3c, 3, 0, 0x72, 0x02, 2, 0xf7});	// kit 2
+	ed::MmKit k;
+	k.position = 2;
+	k.machines.fill(1);
+	k.trigPos.fill(0xff);
+	d.onDeviceSysex(ed::encodeMmKit(k));
+	check(d.workingKit() && d.workingKit()->position == 2, "the kit that plays is known");
+	params.clear();
+	sysex.clear();
+	const auto setup = deskController::defaults(deskController::Machine::Mm);
+	deskController::KnobPump pump;
+	const uint8_t selected = 3;
+	size_t sets = 0;
+	const auto session = [&]
+	{
+		const auto edits = pump.take(now);
+		const auto& w = d.documents().working;
+		if(w)
+			if(const auto c = deskController::mmCommand(edits, w->kit))
+			{
+				d.onPageMessage(*c);
+				++sets;
+			}
+		d.onTelemetry(screen(mmDesk::Screen::Main));
+		d.tick();
+	};
+	// DRIVE (CC 17 -> FLTR BASE) and DEPTH (CC 19 -> level) at 60 moves a second for 1 s each
+	for(int n = 0; n < 60; ++n)
+	{
+		const double at = 1000 + n * 1000.0 / 60;
+		while(now + 8 < at) { now += 8; session(); }
+		now = at;
+		pump.in(selected, setup.knobs[17], static_cast<uint8_t>(n), now);
+		pump.in(selected, setup.knobs[19], static_cast<uint8_t>(127 - n), now);
+	}
+	for(int i = 0; i < 20; ++i) { now += 8; session(); }
+	size_t base = 0, level = 0, other = 0;
+	for(const auto& [t, pg, i, v] : params)
+	{
+		if(t == selected && pg == 2 && i == 0) ++base;
+		else if(t == selected && pg == 7) ++level;
+		else ++other;
+	}
+	int dumps = 0;
+	for(const auto& b : sysex)
+		dumps += b.size() > 6 && (b[6] == 0x52 || b[6] == 0x67) ? 1 : 0;
+	std::printf("  (%zu working-kit sets)\n", sets);
+	check(sets >= 18 && sets <= 22, "60 moves in 1 s: about 20 working-kit sets, one per 50 ms");
+	std::printf("  (%zu BASE CCs, %zu level CCs, %zu others)\n", base, level, other);
+	// the first BASE value (0) is the kit's own: only the level changes in the first set
+	check(base == sets - 1 && level == sets && other == 0, "each set is the CCs of what changed: the filter BASE and the level of track 4, nothing else");
+	check(dumps == 0, "never a kit or pattern dump for a single parameter");
+	const auto w = d.workingKit();
+	check(w && w->tracks[selected].pages[2][0] == 59 && w->levels[selected] == 68, "the working kit ends on the knobs' last values");
+	check(d.coreState().history().size() == 1, "one undo step for the burst");
+}
+
 // P6: the questions, errors, the machine's own screen and a restart, as the page gets them.
 void asksAndErrors()
 {
@@ -542,6 +623,7 @@ int main(const int _argc, char** _argv)
 	desk();
 	playingFromSteps();
 	modulators();
+	controllerKnobs();
 	asksAndErrors();
 	checkContract(false);
 	std::printf("%s (%d failures)\n", g_failures ? "FAIL" : "PASS", g_failures);

@@ -28,7 +28,7 @@ target_link_libraries(mmDeskWirePort INTERFACE mmDesk deskWire)
 
 if(BUILD_TESTING)
 	add_executable(mmDeskTest mmDeskTest.cpp)
-	target_link_libraries(mmDeskTest PRIVATE mmDesk deskHost)
+	target_link_libraries(mmDeskTest PRIVATE mmDesk deskHost deskController)
 	target_compile_definitions(mmDeskTest PRIVATE MMDESK_SCHEMA="${CMAKE_CURRENT_SOURCE_DIR}/../../../../doc/modern-ux/mm-data-contract.schema.json"
 		MMDESK_CATALOGUE="${CMAKE_CURRENT_SOURCE_DIR}/../../../../doc/modern-ux/mm-catalogue.json")
 	add_test(NAME mmDeskTest COMMAND mmDeskTest)

@@ -49,9 +49,6 @@ namespace mdJucePlugin
 	// deskController::Machine, route(desk, setup) (where the voices go, from the active global the desk
 	// holds) and apply(desk, edits) (the knobs' edits as the page's own commands).
 	template<typename DeskT> struct CtlTraits;
-	// The gesture ids of the controller's edits (one undo step per burst of knob moves), apart from the page's
-	// (from 1) and a SysEx import's (0x40000000).
-	constexpr uint32_t g_ctlGestures = 0x50000000u;
 
 	// P7: whether the machine follows the host's tempo and transport: in a DAW's plug-in only.
 	bool followsHost(AudioPluginAudioProcessor& _processor);

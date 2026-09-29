@@ -15,6 +15,7 @@ namespace elektronData
 {
 	struct MdGlobal;
 	struct MmGlobal;
+	struct MmKit;
 }
 
 namespace deskController
@@ -234,4 +235,16 @@ namespace deskController
 		double m_lastIn = -1e9;
 		uint32_t m_gesture = 0;
 	};
+
+	// The gesture ids of the controller's edits (one undo step per burst of knob moves), apart from the
+	// page's (from 1) and a SysEx import's (0x40000000).
+	constexpr uint32_t g_gestures = 0x50000000u;
+
+	// The knobs' edits as the page's own commands, for the machine's edit path (the plug-in's session
+	// hands them to the desk). The Machinedrum: one param (or level, i 24) command each, on the kit that
+	// plays (_kit, its slot): the desk sends each as the live kit edit it is, a CC.
+	std::vector<Value> mdCommands(const std::vector<Edit>& _edits, uint8_t _kit);
+	// The Monomachine: one working-kit set with them all (the adapter sends what changed as CCs); none
+	// when nothing changes.
+	std::optional<Value> mmCommand(const std::vector<Edit>& _edits, const elektronData::MmKit& _working);
 }

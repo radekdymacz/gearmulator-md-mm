@@ -8,6 +8,7 @@
 #include "mdDeskLibrary.h"
 #include "mdDeskMachine.h"
 
+#include "deskController/deskController.h"
 #include "deskCore/deskContract.h"
 #include "deskCore/deskKinds.h"
 #include "deskHost/deskHost.h"
@@ -904,6 +905,93 @@ namespace
 		check(st && st->pending && std::holds_alternative<ed::MdPattern>(*st->pending) && ed::usedLockRows(std::get<ed::MdPattern>(*st->pending)) > 0, "the page shows the last value, pending");
 	}
 
+	// The controller profile (DESIGN-tr06.md): a TR-06 knob turned for a second becomes paced single-parameter
+	// edits of the selected track through the page's own edit path, CCs and never a dump, one undo step, and
+	// the machine ends on the knob's last value. Simulated MIDI: the session's pump as the plug-in runs it.
+	void testControllerKnobs()
+	{
+		std::printf("controller knobs (TR-06 profile)\n");
+		std::vector<std::vector<uint8_t>> wire;
+		std::vector<std::array<uint8_t, 3>> params;
+		double now = 0;
+		Desk::Port port;
+		port.device.sendSysex = [&](const std::vector<uint8_t>& _b) { wire.push_back(_b); };
+		port.device.sendKitParam = [&](uint8_t _t, uint8_t _i, uint8_t _v) { params.push_back({_t, _i, _v}); };
+		port.toPage = [&](const Value& _m) { g_published.push_back(_m); };
+		port.device.nowMs = [&] { return now; };
+		Desk desk(port);
+		desk.onTelemetry(Telemetry{});
+		const auto status = [](const ed::MdStatus _p, const uint8_t _v)
+		{
+			return std::vector<uint8_t>{0xf0, 0x00, 0x20, 0x3c, 0x02, 0x00, 0x72, static_cast<uint8_t>(_p), _v, 0xf7};
+		};
+		auto pattern = *ed::decodeMdPattern(load("programmed_pattern_1.syx"));
+		auto kit = *ed::decodeMdKit(load("programmed_kit_0.syx"));
+		pattern.kit = kit.position;
+		desk.onPageMessage(cmd(R"({"op":"ready"})"));
+		desk.onDeviceSysex(status(ed::MdStatus::Pattern, pattern.position));
+		desk.onDeviceSysex(status(ed::MdStatus::Kit, kit.position));
+		desk.onDeviceSysex(ed::encodeMdPattern(pattern));
+		desk.onDeviceSysex(ed::encodeMdKit(kit));
+		check(desk.documents().working.has_value(), "the kit that plays is known");
+		wire.clear();
+		params.clear();
+		const auto setup = deskController::defaults(deskController::Machine::Md);
+		deskController::KnobPump pump;
+		const uint8_t selected = 2;
+		size_t commands = 0;
+		const auto session = [&]
+		{
+			// one session step: the pump's round, as the page's commands, then the desk's own work
+			const auto edits = pump.take(now);
+			for(const auto& c : deskController::mdCommands(edits, desk.documents().working->kit.position))
+			{
+				desk.onPageMessage(c);
+				++commands;
+			}
+			desk.tick();
+		};
+		// BD LEVEL (CC 24 -> SYN 1) at 60 moves a second for 1 s, the knob's values rising; the ACC knob twice at
+		// the same value; the session stepping every 8 ms.
+		for(int n = 0; n < 60; ++n)
+		{
+			const double at = 1000 + n * 1000.0 / 60;
+			while(now + 8 < at) { now += 8; session(); }
+			now = at;
+			pump.in(selected, setup.knobs[24], static_cast<uint8_t>(40 + n), now);
+			if(n == 10 || n == 11)
+				pump.in(selected, setup.knobs[71], 90, now);
+		}
+		for(int i = 0; i < 20; ++i) { now += 8; session(); }
+		int dumps = 0;
+		for(const auto& m : wire)
+			dumps += m.size() > 6 && (m[6] == ed::g_mdKitDump || m[6] == ed::g_mdPatternDump) ? 1 : 0;
+		size_t syn1 = 0, acc = 0, other = 0;
+		for(const auto& p : params)
+		{
+			if(p[0] == selected && p[1] == 0) ++syn1;
+			else if(p[0] == selected && p[1] == 7) ++acc;
+			else ++other;
+		}
+		std::printf("  (%zu commands: %zu SYN 1 CCs, %zu ACC, %zu others, %d dumps)\n", commands, syn1, acc, other, dumps);
+		check(syn1 >= 18 && syn1 <= 22, "60 moves in 1 s: about 20 CCs, one per 50 ms (" + std::to_string(syn1) + ")");
+		check(acc == 1 && other == 0, "the repeated ACC value went once; nothing else moved");
+		check(dumps == 0, "never a kit or pattern dump for a single parameter");
+		check(!params.empty() && params.back()[1] == 0 ? params.back()[2] == 99 : false, "the machine ends on the knob's last value (99)");
+		check(desk.documents().working->kit.params[selected][0] == 99 && desk.documents().working->kit.params[selected][7] == 90, "the editor shows it");
+		check(desk.coreState().history().size() == 1, "one undo step for the burst (" + std::to_string(desk.coreState().history().size()) + ")");
+		// a pause, then the knob again: a new undo step
+		now += 1000;
+		pump.in(selected, setup.knobs[24], 10, now);
+		session();
+		check(desk.coreState().history().size() == 2 && params.back()[2] == 10, "after a pause: a new undo step");
+		// the level knob: the level command
+		pump.in(5, deskController::Target{-1, 24}, 77, now + 100);
+		now += 100;
+		session();
+		check(params.back()[0] == 5 && params.back()[1] == 24 && params.back()[2] == 77, "a LEVEL target is the track level (CC index 24)");
+	}
+
 	// Control All (manual p.37, DESIGN-edit-flow.md): one tweak intent, the machine's own gesture on the
 	// emulator (FUNCTION held, the knob turned by each tick's net steps, released at quiet), coalesced CCs
 	// over MIDI; one undo step per gesture; the firmware's skips.
@@ -1550,6 +1638,7 @@ int main(const int _argc, char** _argv)
 	testKnobRecorder();
 	testDeskRecording();
 	testPacedLockDraw();
+	testControllerKnobs();
 	testControlAll();
 	testSampleName();
 	testModulators();

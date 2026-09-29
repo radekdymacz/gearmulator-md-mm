@@ -37,7 +37,7 @@ target_link_libraries(mdDeskWirePort INTERFACE mdDesk deskWire)
 
 if(BUILD_TESTING)
 	add_executable(mdDeskTest mdDeskTest.cpp)
-	target_link_libraries(mdDeskTest PRIVATE mdDesk deskHost)
+	target_link_libraries(mdDeskTest PRIVATE mdDesk deskHost deskController)
 	target_compile_definitions(mdDeskTest PRIVATE MDDESK_SCHEMA="${CMAKE_CURRENT_SOURCE_DIR}/../../../../doc/modern-ux/md-data-contract.schema.json")
 	target_compile_definitions(mdDeskTest PRIVATE
 		MDDESK_TESTDATA_DIR="${CMAKE_CURRENT_SOURCE_DIR}/../elektronData/testdata")

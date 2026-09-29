@@ -191,27 +191,9 @@ namespace mdJucePlugin
 
 		static void apply(mmDesk::Desk& _desk, const std::vector<deskController::Edit>& _edits)
 		{
-			const auto& working = _desk.documents().working;
-			if(!working || _edits.empty())
-				return;
-			auto kit = working->kit;
-			for(const auto& e : _edits)
-			{
-				if(e.track >= elektronData::MmKit::g_tracks)
-					continue;
-				if(e.at.pg == 7)
-					kit.levels[e.track] = e.value;
-				else if(e.at.pg >= 0 && e.at.pg < 7 && e.at.i >= 0 && e.at.i < 8)
-					kit.tracks[e.track].pages[static_cast<size_t>(e.at.pg)][static_cast<size_t>(e.at.i)] = e.value;
-			}
-			if(kit == working->kit)
-				return;
-			elektronData::json::Value m = elektronData::json::Value::object();
-			m.set("op", "set");
-			m.set("kind", "workingKit");
-			m.set("doc", elektronData::mmKitToJson(kit));
-			m.set("g", g_ctlGestures + _edits.front().gesture);
-			_desk.onPageMessage(m);
+			if(const auto& working = _desk.documents().working)
+				if(const auto c = deskController::mmCommand(_edits, working->kit))
+					_desk.onPageMessage(*c);
 		}
 	};
 
