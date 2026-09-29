@@ -1,0 +1,117 @@
+{
+	"schema": "desk/controller-profile",
+	"version": 1,
+	"id": "tr06",
+	"label": "Roland TR-06",
+	"about": "Roland TR-06 MIDI Implementation Chart v1.00: one global channel (default 10), Mode 3, no Program Change, no SysEx. Notes with velocity and note off; the Rx aliases are accepted on input.",
+	"channel": 10,
+	"voices": [
+		{"voice": "BD", "label": "BASS DRUM", "notes": [36, 35]},
+		{"voice": "SD", "label": "SNARE DRUM", "notes": [38, 40]},
+		{"voice": "LT", "label": "LOW TOM", "notes": [47, 45]},
+		{"voice": "HT", "label": "HIGH TOM", "notes": [50, 48]},
+		{"voice": "CY", "label": "CYMBAL", "notes": [49]},
+		{"voice": "OH", "label": "OPEN HIHAT", "notes": [46]},
+		{"voice": "CH", "label": "CLOSED HIHAT", "notes": [42, 44]}
+	],
+	"knobs": [
+		{"cc": 12, "label": "MIX IN LVL"},
+		{"cc": 17, "label": "OD DRIVE"},
+		{"cc": 18, "label": "DELAY TIME"},
+		{"cc": 19, "label": "DELAY DEPTH"},
+		{"cc": 20, "label": "BD TUNE"},
+		{"cc": 21, "label": "BD ATTACK"},
+		{"cc": 22, "label": "BD COMP"},
+		{"cc": 23, "label": "BD DECAY"},
+		{"cc": 24, "label": "BD LEVEL"},
+		{"cc": 25, "label": "SD TUNE"},
+		{"cc": 26, "label": "SD SNAPPY"},
+		{"cc": 27, "label": "SD COMP"},
+		{"cc": 28, "label": "SD DECAY"},
+		{"cc": 29, "label": "SD LEVEL"},
+		{"cc": 49, "label": "LT TUNE"},
+		{"cc": 50, "label": "LT DECAY"},
+		{"cc": 51, "label": "LT LEVEL"},
+		{"cc": 52, "label": "HT TUNE"},
+		{"cc": 53, "label": "HT DECAY"},
+		{"cc": 54, "label": "HT LEVEL"},
+		{"cc": 61, "label": "CH TUNE"},
+		{"cc": 62, "label": "CH DECAY"},
+		{"cc": 63, "label": "CH LEVEL"},
+		{"cc": 71, "label": "ACC LEVEL"},
+		{"cc": 80, "label": "OH TUNE"},
+		{"cc": 81, "label": "OH DECAY"},
+		{"cc": 82, "label": "OH LEVEL"},
+		{"cc": 83, "label": "CY TUNE"},
+		{"cc": 84, "label": "CY DECAY"},
+		{"cc": 85, "label": "CY LEVEL"},
+		{"cc": 92, "label": "LT COLOR"},
+		{"cc": 94, "label": "HT COLOR"},
+		{"cc": 96, "label": "BD DELAY SEND"},
+		{"cc": 97, "label": "SD DELAY SEND"},
+		{"cc": 103, "label": "LT DELAY SEND"},
+		{"cc": 104, "label": "HT DELAY SEND"},
+		{"cc": 107, "label": "CH DELAY SEND"},
+		{"cc": 108, "label": "OH DELAY SEND"},
+		{"cc": 109, "label": "CY DELAY SEND"},
+		{"cc": 111, "label": "MIX IN DELAY SEND"},
+		{"cc": 113, "label": "MASTER PROB"}
+	],
+	"blocked": {
+		"cc": [120, 121],
+		"realtime": [254],
+		"why": "All Sound Off and Reset All Controllers (sent on MIDI OFFLINE) and Active Sensing come from the TR-06 itself; the profile keeps them from the machine."
+	},
+	"defaults": {
+		"md": {
+			"about": "The seven voices trigger MD tracks 1-7 (the MD's base channel and its global keymap's note for the track). The seven INST level knobs move synthesis parameters 1-7 of the selected track, ACC parameter 8, DRIVE its DIST, TIME its DEL send, DEPTH its REV send.",
+			"voices": [
+				{"voice": "BD", "t": 0},
+				{"voice": "SD", "t": 1},
+				{"voice": "LT", "t": 2},
+				{"voice": "HT", "t": 3},
+				{"voice": "CY", "t": 4},
+				{"voice": "OH", "t": 5},
+				{"voice": "CH", "t": 6}
+			],
+			"knobs": [
+				{"cc": 24, "i": 0},
+				{"cc": 29, "i": 1},
+				{"cc": 51, "i": 2},
+				{"cc": 54, "i": 3},
+				{"cc": 85, "i": 4},
+				{"cc": 82, "i": 5},
+				{"cc": 63, "i": 6},
+				{"cc": 71, "i": 7},
+				{"cc": 17, "i": 16},
+				{"cc": 18, "i": 19},
+				{"cc": 19, "i": 20}
+			]
+		},
+		"mm": {
+			"about": "BD, SD, LT, HT and CY play MM tracks 1-5, OH and CH track 6, each on the track's channel (base + track) at its pitch: C4 (60), OH C5 (72). The seven INST level knobs move SYN A-G of the selected track, ACC SYN H, DRIVE the filter BASE, TIME the filter WIDTH, DEPTH the track level.",
+			"voices": [
+				{"voice": "BD", "t": 0, "note": 60},
+				{"voice": "SD", "t": 1, "note": 60},
+				{"voice": "LT", "t": 2, "note": 60},
+				{"voice": "HT", "t": 3, "note": 60},
+				{"voice": "CY", "t": 4, "note": 60},
+				{"voice": "OH", "t": 5, "note": 72},
+				{"voice": "CH", "t": 5, "note": 60}
+			],
+			"knobs": [
+				{"cc": 24, "pg": 0, "i": 0},
+				{"cc": 29, "pg": 0, "i": 1},
+				{"cc": 51, "pg": 0, "i": 2},
+				{"cc": 54, "pg": 0, "i": 3},
+				{"cc": 85, "pg": 0, "i": 4},
+				{"cc": 82, "pg": 0, "i": 5},
+				{"cc": 63, "pg": 0, "i": 6},
+				{"cc": 71, "pg": 0, "i": 7},
+				{"cc": 17, "pg": 2, "i": 0},
+				{"cc": 18, "pg": 2, "i": 1},
+				{"cc": 19, "pg": 7, "i": 0}
+			]
+		}
+	}
+}
