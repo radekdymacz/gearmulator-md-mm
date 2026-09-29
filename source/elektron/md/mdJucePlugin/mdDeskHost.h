@@ -55,5 +55,6 @@ namespace mdJucePlugin
 		std::string m_setup;
 		std::atomic<uint32_t> m_setupVersion{0};
 		std::unique_ptr<DeskSession> m_session;
+		std::shared_ptr<void> m_editFlowDriver;	// a test build's edit-flow driver (mdEditFlowDriver.h); gone before the session
 	};
 }

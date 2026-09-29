@@ -29,6 +29,7 @@
 #include "mdLib/mdsequencerstate.h"
 
 #include <algorithm>
+#include <cstdlib>
 #include <deque>
 #include <fstream>
 #include <set>
@@ -81,14 +82,18 @@ namespace
 			port.device.pressKey = [this](const std::string& _key)
 			{
 				const auto states = md::panelKeySequence(md::MachineModel::Machinedrum, _key);
-				m_keys.insert(m_keys.end(), states.begin(), states.end());
+				for(const auto& st : states)
+					m_keys.push_back({st, 40});
 				return !states.empty();
 			};
 			port.device.turnKnob = [this](const uint8_t _e, const int _steps)
 			{
 				const auto command = md::panelEncoderCommand(md::MachineModel::Machinedrum, static_cast<md::PanelEncoder>(_e));
+				// One packet a step, one a 128-frame block, after the keys on their way (FUNCTION held first
+				// for Control All), as md::DeskDevice sends them in the plug-in. (Many at one instant, the
+				// firmware loses steps.)
 				for(int i = 0; command && i < std::abs(_steps); ++i)
-					m_machine.hardware().trySendPanelEvent(*command, _steps > 0 ? 0x01 : 0xff);
+					m_keys.push_back({md::PanelPacket{*command, static_cast<uint8_t>(_steps > 0 ? 0x01 : 0xff)}, 128.0 * 1000 / g_rate});
 				return command.has_value();
 			};
 			port.device.sendMute = [this](const uint8_t _t, const bool _on)
@@ -236,10 +241,10 @@ namespace
 			}
 			else if(!m_keys.empty())
 			{
-				const auto k = m_keys.front();
+				const auto [k, holdMs] = m_keys.front();
 				m_keys.pop_front();
 				m_machine.hardware().trySendPanelEvent(k.row, k.mask);
-				m_machine.run(40);
+				m_machine.run(holdMs);
 			}
 			else
 				m_machine.step();
@@ -343,7 +348,7 @@ namespace
 		std::unique_ptr<mdDesk::Desk> m_desk;
 		std::deque<Bytes> m_out;
 		std::deque<Bytes> m_in;
-		std::deque<md::PanelPacket> m_keys;
+		std::deque<std::pair<md::PanelPacket, double>> m_keys;	// panel states and how long each is held (ms)
 		uint64_t m_lastTick = 0;
 		int m_lastStep = -1;
 		uint64_t m_stepChangedAt = 0;
@@ -1431,6 +1436,159 @@ namespace
 	// P7: in a DAW the plug-in sends the host's transport and tempo as MIDI Start, clock and Stop; the
 	// session sends followHost so the machine's active global takes them (TEMPO IN external), without an
 	// undo step. Steps counted over 4 s of a 100 BPM clock, before and after.
+	// DESIGN-edit-flow.md, Control All against the firmware: what the desk's tweak shows at once (its model's
+	// apply, mdDeskEdit.cpp) must be what FUNCTION + a DATA ENTRY knob does to every track, which is how the
+	// desk delivers it here. A kit with RAM, CTR, MIDI, empty and synthesis machines; values at the ends.
+	void controlAllTruth(Rig& _rig)
+	{
+		std::puts("== Control All: FUNCTION + a DATA ENTRY knob on the firmware, against the model");
+		auto& m = _rig.machine();
+		const auto modelOf = [](const char* _name)
+		{
+			for(uint32_t id = 0; id < 256; ++id)
+				if(ed::mdMachineName(id) == _name)
+					return static_cast<uint8_t>(id);
+			return static_cast<uint8_t>(0);
+		};
+		const auto slot = *_rig.desk().linkState().kit;
+		auto kit = *ed::decodeMdKit(m.request(ed::mdKitRequest(slot), ed::g_mdKitDump));
+		// CTR-AL is left out: the firmware sets its track's LFO track to 16, which elektronData::validate refuses
+		// (a kit with CTR-AL is not editable at all today; DESIGN-edit-flow.md, Built).
+		const char* machines[16] = {"TRX-BD", "RAM-P1", "CTR-RE", "CTR-8P", "MID-01", "GND-EMPTY", "GND-SIN", "GND-NS",
+			"RAM-R1", "TRX-SD", "EFM-BD", "E12-BD", "P-I-BD", "TRX-CP", "TRX-XT", "INP-GA"};
+		for(size_t t = 0; t < 16; ++t)
+		{
+			kit.models[t] = modelOf(machines[t]);
+			for(size_t i = 0; i < 24; ++i)
+				kit.params[t][i] = 60;
+		}
+		kit.params[9][5] = 126;
+		kit.params[10][5] = 1;
+		kit.params[11][8] = 125;
+		kit.params[12][21] = 2;
+		m.send(ed::encodeMdKit(kit));
+		m.send(ed::mdLoadKit(slot));
+		_rig.run(300);
+		const auto memory = [&]
+		{
+			Bytes region(ed::g_mdWorkingKitRegionSize);
+			for(size_t i = 0; i < region.size(); ++i)
+				region[i] = m.read8(ed::g_mdWorkingKitRegionAddress + static_cast<uint32_t>(i));
+			return ed::mdWorkingKitFromMemory(region);
+		};
+		_rig.runUntil([&] { const auto& w = _rig.desk().documents().working; return w && w->kit.models == kit.models; }, 3000);
+		check(_rig.desk().documents().working && _rig.desk().documents().working->kit.models == kit.models, "the test kit plays (memory)");
+		// Which selected track leads the gesture (the firmware tweaks from the selected track): each candidate
+		// selected with SET STATUS, FUNCTION + knob C +1, the tracks that moved counted. Measured: a MIDI, CTR or
+		// RAM recorder machine moves itself alone (MIDI: to 255, which spoils the kit, so it goes last and the
+		// probe runs only when asked: TWEAK_LEADERS=1; the desk selects a track that leads, controlAllLeads).
+		if(std::getenv("TWEAK_LEADERS"))
+			for(const uint8_t lead : {uint8_t(5), uint8_t(6), uint8_t(8), uint8_t(1), uint8_t(0), uint8_t(2), uint8_t(4)})
+			{
+				m.send(ed::mdSetStatus(ed::MdStatus::Track, lead));
+				_rig.run(100);
+				const auto b = memory();
+				_rig.page("{\"op\":\"tweak\",\"k\":" + std::to_string(slot) + ",\"group\":\"fx\",\"knob\":2,\"d\":1,\"g\":" + std::to_string(500 + lead) + "}");
+				_rig.runUntil([&] { return !_rig.desk().isBusy(); }, 3000);
+				_rig.run(100);
+				const auto a = memory();
+				int moved = 0;
+				for(size_t t = 0; t < 16; ++t) moved += a->params[t][10] != b->params[t][10];
+				std::printf("  selected T%d %s: %d tracks moved\n", lead + 1, machines[lead], moved);
+			}
+		// The machine's selected track cannot lead (a RAM recorder), and the first gesture is on it: the desk
+		// selects one that leads.
+		m.send(ed::mdSetStatus(ed::MdStatus::Track, 8));
+		_rig.run(200);
+		struct Case { const char* group; int knob; int d; int t; };
+		const Case cases[] = {{"syn", 5, 3, 8}, {"syn", 5, -5, 9}, {"syn", 4, 7, 2}, {"syn", 1, -61, 0}, {"fx", 0, 4, 4}, {"rt", 5, -3, 1},
+			{"rt", 1, 70, 15}};
+		int id = 990, g = 77;
+		for(const auto& c : cases)
+		{
+			const auto before = memory();
+			if(!before)
+			{
+				check(false, "the working kit reads from memory");
+				return;
+			}
+			mdDesk::Documents docs;
+			docs.working = mdDesk::WorkingKit{*before};
+			const std::string cmd = "{\"op\":\"tweak\",\"k\":" + std::to_string(slot) + ",\"group\":\"" + c.group + "\",\"knob\":"
+				+ std::to_string(c.knob) + ",\"d\":" + std::to_string(c.d) + ",\"t\":" + std::to_string(c.t) + ",\"g\":" + std::to_string(g++)
+				+ ",\"id\":" + std::to_string(id++) + "}";
+			const auto model = mdDesk::apply(docs, parse(cmd), {}, {slot});
+			_rig.page(cmd);
+			const bool settled = _rig.runUntil([&]
+			{
+				const auto* st = _rig.desk().coreState().state({mdDesk::DocKind::WorkingKit, 0});
+				return st && !st->pending && !_rig.desk().isBusy();
+			}, 3000);
+			_rig.run(100);
+			const auto after = memory();
+			if(model.changes.size() != 1 || !after)
+			{
+				for(const auto& e : model.errors)
+					std::printf("  model: %s\n", e.c_str());
+				std::printf("  lfo tracks:");
+				for(size_t t = 0; t < 16; ++t)
+					std::printf(" %d", before->lfos[t].track);
+				std::printf("\n");
+				check(false, std::string("the tweak ") + c.group + " is one change");
+				continue;
+			}
+			const auto& want = std::get<mdDesk::WorkingKit>(model.changes[0].after).kit;
+			const size_t index = (std::string(c.group) == "fx" ? 8u : std::string(c.group) == "rt" ? 16u : 0u) + static_cast<size_t>(c.knob);
+			std::printf("  %s knob %d %+d (gesture on T%d, selected T%d):", c.group, c.knob, c.d, c.t + 1,
+				_rig.desk().linkState().track ? *_rig.desk().linkState().track + 1 : 0);
+			int moved = 0, differ = 0;
+			for(size_t t = 0; t < 16; ++t)
+			{
+				moved += after->params[t][index] != before->params[t][index];
+				if(after->params[t][index] != want.params[t][index])
+				{
+					++differ;
+					std::printf(" [T%zu %s: firmware %d, model %d]", t + 1, machines[t], after->params[t][index], want.params[t][index]);
+				}
+			}
+			std::printf(" %d tracks moved, %d differ from the model, settled %s\n", moved, differ, settled ? "yes" : "no");
+			check(differ == 0 && after->params == want.params, std::string("the firmware's Control All equals the model's (") + c.group + ")");
+			check(settled, "the tweak settles from memory, no read-back");
+		}
+		// A drag: 60 moves a second for 1 s, one tweak each (the page's frame), 1-4 steps a move either way,
+		// into the clamp at 0: the machine ends where the model does, one undo step.
+		{
+			const auto before = memory();
+			mdDesk::Documents docs;
+			docs.working = mdDesk::WorkingKit{*before};
+			const auto undo0 = _rig.desk().coreState().history().size();
+			for(int n = 0; n < 60; ++n)
+			{
+				const int d = (n % 7 == 3 ? -4 : 1 + n % 3) * (n < 30 ? 1 : -1);
+				const std::string cmd = "{\"op\":\"tweak\",\"k\":" + std::to_string(slot) + ",\"group\":\"fx\",\"knob\":3,\"d\":" + std::to_string(d)
+					+ ",\"t\":0,\"g\":900}";
+				auto r = mdDesk::apply(docs, parse(cmd), {}, {slot});
+				if(r.changes.size() == 1)
+					docs.working = std::get<mdDesk::WorkingKit>(r.changes[0].after);
+				_rig.page(cmd);
+				_rig.run(1000.0 / 60);
+			}
+			const bool settled = _rig.runUntil([&]
+			{
+				const auto* st = _rig.desk().coreState().state({mdDesk::DocKind::WorkingKit, 0});
+				return st && !st->pending && !_rig.desk().isBusy();
+			}, 5000);
+			_rig.run(100);
+			const auto after = memory();
+			int differ = 0;
+			for(size_t t = 0; t < 16; ++t)
+				differ += after->params[t][11] != docs.working->kit.params[t][11];
+			std::printf("  drag fx knob 3, 60 moves: T1 %d -> %d (model %d), %d tracks differ, %zu undo step(s), settled %s\n", before->params[0][11],
+				after->params[0][11], docs.working->kit.params[0][11], differ, _rig.desk().coreState().history().size() - undo0, settled ? "yes" : "no");
+			check(differ == 0 && settled && _rig.desk().coreState().history().size() - undo0 == 1, "a Control All drag ends where the model does, one undo step");
+		}
+	}
+
 	void hostClock(const Bytes& _rom, const std::string& _romName)
 	{
 		std::puts("host clock");
@@ -1511,6 +1669,16 @@ int main(const int _argc, char** _argv)
 			syxImport(rom, _argv[1], _argc > 3 ? _argv[3] : "/Users/radek/Downloads/AE_LIVE_ELEKTRONS_BACKUP_010308/md010308.syx");
 			check(g_contract.loaded() && g_contract.bad() == 0, g_contract.summary());
 			std::printf("mdDeskFirmwareTest syximport: %s (%d failure(s))\n", g_failures ? "FAIL" : "PASS", g_failures);
+			return g_failures ? 1 : 0;
+		}
+		if(mode == "tweak")
+		{
+			Rig rig(rom, _argv[1]);
+			rig.page(R"({"op":"ready"})");
+			rig.runUntil([&] { return rig.desk().isInputReady() && rig.desk().linkState().kit && rig.desk().documents().working; }, 8000);
+			controlAllTruth(rig);
+			check(g_contract.loaded() && g_contract.bad() == 0, g_contract.summary());
+			std::printf("mdDeskFirmwareTest tweak: %s (%d failure(s))\n", g_failures ? "FAIL" : "PASS", g_failures);
 			return g_failures ? 1 : 0;
 		}
 		if(mode == "hostclock")

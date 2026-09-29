@@ -75,6 +75,12 @@ option(gearmulator_MDMM_DIAGNOSTICS "The Machinedrum/Monomachine Editors' diagno
 if(gearmulator_MDMM_DIAGNOSTICS)
 	list(APPEND SOURCES mdDiagnostics.cpp mdDiagnostics.h)
 endif()
+# DESIGN-edit-flow.md: the edit-flow driver (mdEditFlowDriver.h) replays the page's messages into the
+# plug-in's session when GEARMULATOR_EDITFLOW_DRIVE is set, for mdVst3EditFlowHost. A test build only.
+option(gearmulator_MDMM_EDITFLOW_DRIVER "The Machinedrum/Monomachine Editors' edit-flow driver (test builds)" OFF)
+if(gearmulator_MDMM_EDITFLOW_DRIVER)
+	list(APPEND SOURCES mdEditFlowDriver.cpp mdEditFlowDriver.h mdEditFlowCounters.h)
+endif()
 
 # The pages instead of the panel skins in the plug-ins' binary data.
 file(GLOB MD_SKIN_ASSETS CONFIGURE_DEPENDS
@@ -116,7 +122,8 @@ function(mdmm_plugin_targets)
 		target_compile_definitions(${plugin_target} PUBLIC
 			# jucePluginEditorLib/standaloneApp.h: native title bar and menu bar (P4).
 			JUCE_USE_CUSTOM_PLUGIN_STANDALONE_APP=1
-			MDMM_DIAGNOSTICS=$<BOOL:${gearmulator_MDMM_DIAGNOSTICS}>)
+			MDMM_DIAGNOSTICS=$<BOOL:${gearmulator_MDMM_DIAGNOSTICS}>
+			MDMM_EDITFLOW_DRIVER=$<BOOL:${gearmulator_MDMM_EDITFLOW_DRIVER}>)
 	endforeach()
 
 	if(APPLE)
@@ -206,6 +213,22 @@ function(mdmm_plugin_targets)
 	# MallocScribble: a use of freed memory (the teardown check) crashes instead of passing by luck.
 	set_tests_properties(mdDeskSetupStateTest PROPERTIES LABELS "UnitTest" TIMEOUT 120 ENVIRONMENT "MallocScribble=1")
 	set_property(TARGET mdDeskSetupStateTest PROPERTY FOLDER "Elektron/test")
+
+	# DESIGN-edit-flow.md: one small edit through the real processor, every hop counted (manual: needs a ROM).
+	add_executable(mdEditFlowPluginTest mdEditFlowPluginTest.cpp)
+	target_link_libraries(mdEditFlowPluginTest PRIVATE mdJucePlugin jucePluginEditorLib mdLib juce_plugin_modules juce::juce_opengl)
+	target_include_directories(mdEditFlowPluginTest PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/../../..)
+	target_compile_definitions(mdEditFlowPluginTest PRIVATE JUCE_GLOBAL_MODULE_SETTINGS_INCLUDED=1)
+	set_property(TARGET mdEditFlowPluginTest PROPERTY FOLDER "Elektron/test")
+
+	# DESIGN-edit-flow.md: a built VST3 bundle in a real host, real-time audio blocks, the bundle's
+	# edit-flow driver playing the page (manual: needs the ROM and gearmulator_MDMM_EDITFLOW_DRIVER).
+	juce_add_console_app(mdVst3EditFlowHost PRODUCT_NAME "mdVst3EditFlowHost")
+	target_sources(mdVst3EditFlowHost PRIVATE mdVst3EditFlowHost.cpp)
+	target_link_libraries(mdVst3EditFlowHost PRIVATE juce::juce_audio_processors juce::juce_events)
+	target_compile_definitions(mdVst3EditFlowHost PRIVATE JUCE_GLOBAL_MODULE_SETTINGS_INCLUDED=1 JUCE_PLUGINHOST_VST3=1
+		JUCE_USE_CURL=0 JUCE_WEB_BROWSER=0 JUCE_STANDALONE_APPLICATION=1)
+	set_property(TARGET mdVst3EditFlowHost PROPERTY FOLDER "Elektron/test")
 
 	# P5: the app modulators in the processor, no editor (manual: needs the ROM).
 	add_executable(mdSessionFirmwareTest mdSessionFirmwareTest.cpp)

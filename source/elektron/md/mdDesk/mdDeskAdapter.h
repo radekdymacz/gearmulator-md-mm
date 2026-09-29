@@ -4,6 +4,7 @@
 #include "mdDeskTelemetry.h"
 
 #include "deskCore/deskCore.h"
+#include "deskCore/deskPush.h"
 
 #include <cstdint>
 #include <functional>
@@ -24,6 +25,9 @@ namespace mdDesk
 		bool kitsFirst = false;		// background loads: the 64 small kits first (a pattern is 1.7 s over DIN)
 		bool memory = true;			// the device publishes the working kit and the LCD
 		bool panel = true;			// the editor can press the machine's keys (live record, chains, TRIG keys)
+		// Whole-document pushes (DESIGN-edit-flow.md): at most one dump per document per interval, one
+		// read-back at quiet. Over a wire the interval is at least the dump's time on it.
+		deskCore::PushPolicy push{200, 150};
 	};
 
 	const Profile& emulatorProfile();	// "emu"
@@ -41,7 +45,8 @@ namespace mdDesk
 		// A panel key press and release; false when not possible here. Keys: "play", "stop",
 		// "record", "recordPlay", "page", "trig1".."trig16". Unset: no panel.
 		std::function<bool(const std::string& _key)> pressKey;
-		// DATA ENTRY knob 0-7 turned by _steps. Unset: no panel.
+		// DATA ENTRY knob 0-7 turned by _steps. Unset: no panel. Held keys (Control All, FUNCTION +
+		// a knob) are "hold:function" and "release:function".
 		std::function<bool(uint8_t _encoder, int _steps)> turnKnob;
 		// The machine's MIDI base channel (the active global's), a fact for an engine that encodes
 		// CCs itself. Unset: not needed.

@@ -412,6 +412,16 @@ namespace mmDesk
 		}
 	}
 
+	deskCore::PushPolicy MmMachine::pushPolicy(const Kind _kind) const
+	{
+		auto p = m_profile.push;
+		if(m_profile.wire)
+			p.minIntervalMs = std::max(p.minIntervalMs, deskCore::DinPacer::wireMs(replyBytes(_kind)));
+		return p;
+	}
+
+	// Paced (DESIGN-edit-flow.md): the dump goes now or waits its turn (latest wins); the read-back is
+	// asked for once the gesture is quiet (pumpPushes).
 	void MmMachine::pushDump(const Ref& _ref, Bytes _dump)
 	{
 		auto& p = m_pushes[_ref];
@@ -422,24 +432,62 @@ namespace mmDesk
 				if(w.ref && *w.ref == _ref)
 					w.bytes = _dump;
 			p.slot.abandon();
-			p.slot.want(_dump);
+			p.slot.want(_dump, now(), pushPolicy(_ref.kind));
 			return;
 		}
-		if(!p.slot.want(_dump))
-			return;	// waits for the read-back in flight; latest wins
-		p.sentMs = now();
+		// A dump still queued on SYSEX RECV goes first; the new one waits its turn.
+		if(p.onRecv)
+		{
+			if(!p.slot.want(_dump, now(), {1e18, pushPolicy(_ref.kind).quietMs}))
+				return;
+		}
+		else if(!p.slot.want(_dump, now(), pushPolicy(_ref.kind)))
+			return;	// waits its turn; latest wins
+		sendDump(_ref, p, std::move(_dump));
+	}
+
+	void MmMachine::sendDump(const Ref& _ref, Push& _p, Bytes _dump)
+	{
 		if(manualDumps())
 		{
 			// HW MIDI: the machine takes a dump only on SYSEX RECV, which only the person can open: it waits
 			// (recv.waiting, SEND n) until the page says the machine is there (hwSend).
-			p.onRecv = true;
+			_p.onRecv = true;
 			m_manual.push_back({std::move(_dump), _ref});
 			return;
 		}
-		p.onRecv = true;
+		_p.onRecv = true;
 		const auto tag = m_nextRecvTag++;
 		m_recvRefs[tag] = _ref;
 		m_recv.want(std::move(_dump), tag);
+	}
+
+	void MmMachine::pumpPushes(const double _now)
+	{
+		for(auto& [ref, push] : m_pushes)
+		{
+			if(!push.slot.busy() || push.onRecv)
+				continue;
+			switch(push.slot.due(_now, pushPolicy(ref.kind)))
+			{
+			case deskCore::PushSlot<Bytes>::Due::Send:
+				sendDump(ref, push, push.slot.takeNext(_now));
+				continue;
+			case deskCore::PushSlot<Bytes>::Due::ReadBack:
+				// The gesture is quiet: one read-back confirms the last dump.
+				push.slot.askedBack(_now);
+				request(ref, true);
+				break;
+			case deskCore::PushSlot<Bytes>::Due::Nothing:
+				break;
+			}
+			// A read-back that never came: give up on that push.
+			if(!push.slot.timedOut(_now, m_profile.wire ? g_wireReadBackTimeoutMs : g_readBackTimeoutMs))
+				continue;
+			push.slot.abandon();
+			fail(ref, std::string("The machine did not read back the ") + kindName(ref.kind) + " that was sent. Showing what it holds.");
+			request(ref, true);
+		}
 	}
 
 	void MmMachine::afterDumps(Bytes _message)
@@ -706,7 +754,7 @@ namespace mmDesk
 			if(const auto it = m_pushes.find(*w.ref); it != m_pushes.end() && it->second.onRecv)
 			{
 				it->second.onRecv = false;
-				it->second.sentMs = now();
+				it->second.slot.askedBack(now());
 				request(*w.ref, true);
 			}
 		}
@@ -781,11 +829,9 @@ namespace mmDesk
 				continue;
 			const auto ref = tagged->second;
 			m_recvRefs.erase(tagged);
+			// On the wire now; its read-back waits for the gesture's quiet (pumpPushes).
 			if(const auto it = m_pushes.find(ref); it != m_pushes.end() && it->second.onRecv)
-			{
 				it->second.onRecv = false;
-				request(ref, true);
-			}
 		}
 	}
 
@@ -840,17 +886,11 @@ namespace mmDesk
 		if(it != m_pushes.end() && it->second.slot.busy() && !it->second.onRecv)
 		{
 			auto& push = it->second;
+			const auto askedMs = push.slot.asked() ? push.slot.askedMs() : push.slot.sentMs();
 			action = deskCore::readBack(push.slot, _sysex);
 			if(action == deskCore::ReadBackAction::Wait)
-				return;	// an older reply: the read-back timeout fails the push
-			m_lastRoundTripMs = now() - push.sentMs;
-			if(action == deskCore::ReadBackAction::ObserveSendNext)
-			{
-				// The newer value goes out through RECV again.
-				auto next = *push.slot.inFlight();
-				push.slot.abandon();
-				pushDump(_r, std::move(next));
-			}
+				return;	// an older reply: the read-back at quiet confirms, or its timeout fails the push
+			m_lastRoundTripMs = now() - askedMs;
 		}
 		if(action == deskCore::ReadBackAction::Settle)
 		{
@@ -1052,15 +1092,7 @@ namespace mmDesk
 		}
 		pumpLoads(_now);
 		applyWorkingKit(_now, _view);
-		// A read-back that never came: give up on that push.
-		for(auto& [ref, push] : m_pushes)
-		{
-			if(!push.slot.busy() || push.onRecv || _now - push.sentMs <= (m_profile.wire ? g_wireReadBackTimeoutMs : g_readBackTimeoutMs))
-				continue;
-			push.slot.abandon();
-			fail(ref, std::string("The machine did not read back the ") + kindName(ref.kind) + " that was sent. Showing what it holds.");
-			request(ref, true);
-		}
+		pumpPushes(_now);
 		// MM-P4, RECORD: the machine writes the current pattern; read it back while it records and once
 		// when it stops, so what the keyboard or the machine's TRIG keys recorded shows.
 		const bool recordChanged = m_tel.recording != m_lastRecording;

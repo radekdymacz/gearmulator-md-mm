@@ -149,6 +149,26 @@ edits.push(["catalogue: DPRO-WAVE WAVE is 32 waveforms", C.enumN("DPRO-WAVE", "S
 	edits.push(["LEN shift-click goes back, 16 -> 64", lenStep(16, -1, false) === 64 && lenStep(64, -1, false) === 48 && lenStep(17, 1, false) === 48]);
 	edits.push(["LEN scroll: one step within 2-64", lenStep(64, 1, true) === 64 && lenStep(64, -1, true) === 63 && lenStep(2, -1, true) === 2]);
 }
+/* Control All on the Sound workspace (the mockup's controlAll, 60-ui.js; DESIGN-edit-flow.md): the same delta on
+   the other synth tracks, a machine without that SYN parameter left out, the MIDI tracks never touched, held at the end */
+{
+	const src = mock.match(/function controlAll\(t0,g,i,d\)\{.*\}/)[0];
+	const holey = vm.runInContext("Object.keys(MACH)", ctx);
+	const machOf = m => vm.runInContext("MACH[" + JSON.stringify(m) + "]", ctx);
+	const gap = holey.find(m => machOf(m).p.slice(0, 8).some((x, i) => !x && holey.some(o => machOf(o).p[i])));
+	const i = gap ? machOf(gap).p.findIndex((x, k) => k < 8 && !x && holey.some(o => machOf(o).p[k])) : -1;
+	const full = gap ? holey.find(o => machOf(o).p[i]) : null;
+	const tracks = Array.from({ length: 6 }, (_, t) => ({ m: t === 2 ? gap : full, v: { SYN: Array(8).fill(t === 4 ? 125 : 60), FLT: Array(8).fill(60) } }));
+	const midi = Array.from({ length: 6 }, () => ({ m: "MIDI", v: { MID: Array(8).fill(60) } }));
+	ctx.CA = { tracks, midi };
+	const controlAll = vm.runInContext("(()=>{const trk=t=>t<6?CA.tracks[t]:CA.midi[t-6],meta=()=>({max:127}),maxOf=m=>m.max;return " + src + "})()", ctx);
+	controlAll(0, "SYN", i, 5);
+	controlAll(0, "FLT", 0, -70);
+	edits.push(["Control All: the other synth tracks move, a machine without that SYN parameter (" + gap + " " + i + ") stays, held at 127",
+		gap && tracks[1].v.SYN[i] === 65 && tracks[2].v.SYN[i] === 60 && tracks[4].v.SYN[i] === 127 && tracks[0].v.SYN[i] === 60]);
+	edits.push(["Control All: the shared pages on every other synth track, held at 0; the MIDI tracks untouched",
+		tracks.slice(1).every(t => t.v.FLT[0] === 0) && midi.every(t => t.v.MID.every(x => x === 60))]);
+}
 for (const [what, ok] of edits) { n++; if (!ok) { fails++; console.log("FAIL edit:", what); } }
 
 const counts = Object.entries(docs).map(([k, l]) => l.length + " " + k.split("/")[1]).join(", ");

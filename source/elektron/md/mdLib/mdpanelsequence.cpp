@@ -50,6 +50,18 @@ namespace md
 	{
 		if(_key.compare(0, 6, "chain:") == 0)
 			return chainSequence(_model, _key.substr(6));
+		// A key held down and let go later (Control All: FUNCTION held while a DATA ENTRY knob turns).
+		const bool hold = _key.compare(0, 5, "hold:") == 0, release = _key.compare(0, 8, "release:") == 0;
+		if(hold || release)
+		{
+			const auto name = _key.substr(hold ? 5 : 8);
+			if(name != "function")
+				return {};
+			const auto packet = panelPacket(_model, PanelControl::Function);
+			if(!packet)
+				return {};
+			return {hold ? *packet : PanelPacket{packet->row, 0}};
+		}
 		std::optional<PanelControl> control;
 		if(_key == "play")
 			control = PanelControl::Play;

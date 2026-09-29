@@ -14,6 +14,9 @@ namespace md
 	// "chain:<k>:<t>,<t>,..." (P4): hold bank key k (0-3 = A/E..D/H), press the TRIG keys
 	// t (0-15) one after another while holding each (they end up held together, which is
 	// what makes a chain; pressed and released one by one they only select), release all.
+	// "hold:function" and "release:function": FUNCTION down, and up again later (Control All, manual
+	// p.37: FUNCTION held while a DATA ENTRY knob turns moves that knob on every track).
 	// Empty if unknown.
 	std::vector<PanelPacket> panelKeySequence(MachineModel _model, const std::string& _key);
+
 }

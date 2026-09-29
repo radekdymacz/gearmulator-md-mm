@@ -40,11 +40,11 @@ let gesture = 0;	// non-zero while a drag runs: one undo step
 /* A command to the plug-in. optimistic: the [path, value] writes into the view the gesture shows at
    once (mdDeskModel.js, Overlay), on the document the command edits (docOf); they are kept over
    every new derivation until its result. */
-function cmd(op, args = {}, key, optimistic, onDone) {
+function cmd(op, args = {}, key, optimistic, onDone, merge) {
 	const msg = Object.assign({ op }, args);
 	if (gesture) msg.g = gesture;
 	let answered = false;	/* a host may answer at once, inside send */
-	const id = Bridge.send(msg, { key, onResult: r => { answered = true; onResult(r); if (onDone) onDone(r); } });
+	const id = Bridge.send(msg, { key, merge, onResult: r => { answered = true; onResult(r); if (onDone) onDone(r); } });
 	if (optimistic && optimistic.length) { if (!answered) Overlay.add(id, optimistic, docOf(op, args)); V = view(); }
 	tx();
 	return id;
@@ -134,6 +134,7 @@ function sendMfx(id, n, v) { const i = MFXD[id].k.indexOf(n), fx = mfxName(id); 
    "to" says where they go (a track's page, or a master effect). */
 function sendEditor(c, vals) {
 	const to = ED[c.dataset.ed].to?.(c); if (!to || !vals) return;
+	if (tweakEditor(to, vals)) return;	/* Alt held: Control All (mdDeskLive.js) */
 	for (const [n, v] of Object.entries(vals)) to.f ? sendMfx(to.f, n, v) : sendParam(to.t, to.g, n, v);
 }
 /* A control (data-g, data-n, data-t, data-f) set to v, sent. */

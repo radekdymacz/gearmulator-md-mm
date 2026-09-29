@@ -1,6 +1,7 @@
 #include "mdStudioLink.h"
 
 #include "mdController.h"
+#include "mdEditFlowCounters.h"
 #include "mdPluginProcessor.h"
 
 #include "mdLib/mdhardware.h"
@@ -79,6 +80,7 @@ namespace mdJucePlugin
 	void StudioLink::sendSysex(const Bytes& _message) const
 	{
 		// Same route as Controller::sendSysEx: editor-sourced MIDI into the device.
+		editFlow::sysexOut(_message);
 		synthLib::SMidiEvent event(synthLib::MidiEventSource::Editor);
 		event.sysex.assign(_message.begin(), _message.end());
 		m_processor.addMidiEvent(event);
@@ -131,6 +133,7 @@ namespace mdJucePlugin
 		const auto states = md::panelKeySequence(md::MachineModel::Machinedrum, _key);
 		if(states.empty())
 			return false;
+		editFlow::panelOut(states.size());
 		// Held 40 ms each in machine time (the audio thread sends them).
 		return m_processor.getPlugin().withDeviceLocked([&](synthLib::Device* _base)
 		{
@@ -145,9 +148,12 @@ namespace mdJucePlugin
 			static_cast<md::PanelEncoder>(_encoder));
 		if(_encoder > 7 || !command || !_steps)
 			return false;
-		// One packet a step, through the device's panel sequence, so its pending fact covers them.
+		// One packet a step, through the device's panel sequence, so its pending fact covers them. (A
+		// packet can carry several steps, but with FUNCTION held the firmware then loses some: measured,
+		// editFlowBenchTest tweak and mdDeskFirmwareTest tweak.)
 		const std::vector<md::PanelPacket> steps(static_cast<size_t>(std::abs(_steps)),
 			md::PanelPacket{*command, static_cast<uint8_t>(_steps > 0 ? 0x01 : 0xff)});
+		editFlow::panelOut(steps.size());
 		return m_processor.getPlugin().withDeviceLocked([&](synthLib::Device* _base)
 		{
 			auto* device = dynamic_cast<md::DeskDevice*>(_base);
