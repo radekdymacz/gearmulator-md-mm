@@ -35,7 +35,8 @@ namespace deskHost
 		CtlKnob,			// a controller knob's target
 		CtlReset,			// the controller's shipped mapping
 		CtlTrack,			// the page's selected track (the controller's knobs move its parameters)
-		CtlWatch			// the page shows the controller's bar or panel: report what arrives
+		CtlWatch,			// the page shows the TR-06's view: report what arrives
+		CtlClear			// empty the MIDI monitor
 	};
 
 	// Who acts on a row: the session (it outlives the window) or the window (the menu and the

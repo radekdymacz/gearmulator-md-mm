@@ -1,5 +1,6 @@
 #pragma once
 
+#include "deskController/deskController.h"
 #include "deskHost/deskHost.h"
 
 #include "elektronData/json.h"
@@ -52,9 +53,10 @@ namespace mdJucePlugin
 
 		bool standalone() const { return holder() != nullptr; }
 
-		// The names of the MIDI inputs enabled in the standalone app's AUDIO / MIDI (the controller
-		// profile looks for a TR-06 among them); none in a plug-in, where the host owns MIDI.
-		static std::optional<std::vector<std::string>> enabledMidiInputs(juce::AudioProcessor& _processor);
+		// The standalone app's MIDI inputs, each with whether it is enabled in AUDIO / MIDI (the CONTROL
+		// workspace's device tiles; the controller profile looks for a TR-06 among the enabled ones); none
+		// in a plug-in, where the host owns MIDI.
+		static std::optional<std::vector<deskController::MidiInput>> midiInputs(juce::AudioProcessor& _processor);
 
 	private:
 		void changeListenerCallback(juce::ChangeBroadcaster*) override;

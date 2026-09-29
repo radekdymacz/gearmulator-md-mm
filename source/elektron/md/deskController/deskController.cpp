@@ -42,6 +42,7 @@ namespace deskController
 			p.label = textOf(*doc, "label");
 			p.about = textOf(*doc, "about");
 			p.channel = static_cast<uint8_t>(intOf(*doc, "channel", 10) - 1);
+			p.relative = textOf(*doc, "knobMode") != "absolute";
 			if(const auto* voices = doc->find("voices"); voices && voices->isArray())
 				for(size_t v = 0; v < g_voices && v < voices->asArray().size(); ++v)
 				{
@@ -91,6 +92,14 @@ namespace deskController
 			return false;
 		}
 
+		// A knob's target in a document ({pg?, i}): the Machinedrum has no pages, only NOTE's pg 8.
+		Target targetOf(const Value& _e, const Machine _m)
+		{
+			const auto* i = _e.find("i");
+			const int pg = intOf(_e, "pg", -1);
+			return {_m == Machine::Md && pg != Target::g_notePg ? -1 : pg, i && i->isNumber() ? static_cast<int>(i->asNumber()) : -1};
+		}
+
 		// The voices and knobs of a mapping document ({voices, knobs}) into _s; errors with JSON paths.
 		void readMapping(const Value& _doc, const Machine _m, Setup& _s, std::vector<std::string>& _errors)
 		{
@@ -131,7 +140,7 @@ namespace deskController
 					const auto at = "$.knobs[" + std::to_string(n) + "]";
 					const int cc = intOf(e, "cc", -1);
 					const auto* i = e.find("i");
-					const Target t{_m == Machine::Md ? -1 : intOf(e, "pg", -1), i && i->isNumber() ? static_cast<int>(i->asNumber()) : -1};
+					const Target t = targetOf(e, _m);
 					if(cc < 0 || cc > 127 || !isKnob(static_cast<uint8_t>(cc)))
 						_errors.push_back(at + ".cc: not a knob of the controller");
 					else if(t.mapped() && !validTarget(_m, t))
@@ -164,6 +173,7 @@ namespace deskController
 				out.push_back({{-1, i}, name});
 			}
 			out.push_back({{-1, 24}, "LEVEL"});
+			out.push_back({Target::note(), "NOTE"});
 			return out;
 		}();
 		static const std::vector<TargetInfo> mm = []
@@ -177,6 +187,7 @@ namespace deskController
 					out.push_back({{pg, i}, std::string(pages[pg]) + " " + name});
 				}
 			out.push_back({{7, 0}, "LEVEL"});
+			out.push_back({Target::note(), "NOTE"});
 			return out;
 		}();
 		return _m == Machine::Md ? md : mm;
@@ -184,6 +195,8 @@ namespace deskController
 
 	bool validTarget(const Machine _m, const Target& _t)
 	{
+		if(_t.isNote())
+			return true;
 		if(_m == Machine::Md)
 			return _t.pg == -1 && _t.i >= 0 && _t.i <= 24;
 		return (_t.pg >= 0 && _t.pg <= 6 && _t.i >= 0 && _t.i <= 7) || (_t.pg == 7 && _t.i == 0);
@@ -197,10 +210,66 @@ namespace deskController
 		return {};
 	}
 
+	int mdPitchParam(const int _model)
+	{
+		if(_model < 0)
+			return -1;
+		const auto names = elektronData::mdMachineParamNames(static_cast<uint32_t>(_model));
+		for(int i = 0; i < 8; ++i)
+		{
+			const auto* n = names[static_cast<size_t>(i)];
+			if(n && (std::string(n) == "PTCH" || std::string(n) == "PITCH" || std::string(n) == "TUNE"))
+				return i;
+		}
+		return -1;
+	}
+
+	std::string modelName(const Machine _m, const int _model)
+	{
+		if(_model < 0)
+			return {};
+		if(_m == Machine::Md)
+			return elektronData::mdMachineName(static_cast<uint32_t>(_model));
+		const auto* info = elektronData::mmMachine(static_cast<uint8_t>(_model));
+		return info && info->name ? info->name : std::string();
+	}
+
+	std::string ownName(const Machine _m, const Target& _t, const int _model)
+	{
+		const auto generic = targetName(_m, _t);
+		if(_model < 0 || generic.empty())
+			return {};
+		if(_t.isNote())
+		{
+			if(_m == Machine::Mm)
+				return {};
+			const int p = mdPitchParam(_model);
+			return p < 0 ? "no pitch on this machine" : elektronData::mdMachineParamNames(static_cast<uint32_t>(_model))[static_cast<size_t>(p)];
+		}
+		std::string own;
+		if(_m == Machine::Md)
+		{
+			if(_t.i >= 24)
+				return {};
+			const auto* n = elektronData::mdMachineParamNames(static_cast<uint32_t>(_model))[static_cast<size_t>(_t.i)];
+			own = n ? n : "";
+		}
+		else
+		{
+			if(_t.pg != 0)
+				return {};	// the fixed pages are the same on every machine
+			own = elektronData::mmParamName(static_cast<uint8_t>(_model), 0, static_cast<uint8_t>(_t.i));
+		}
+		if(own.empty())
+			return "-";
+		return own == generic ? std::string() : own;
+	}
+
 	Setup defaults(const Machine _m)
 	{
 		Setup s;
 		s.channel = tr06().channel;
+		s.relative = tr06().relative;
 		for(size_t v = 0; v < g_voices; ++v)
 			s.voices[v] = {static_cast<int>(v) % tracksOf(_m), _m == Machine::Mm ? 60 : -1};
 		std::vector<std::string> errors;
@@ -228,6 +297,13 @@ namespace deskController
 			_errors.emplace_back("$.channel: expected 1-16");
 		else
 			s.channel = static_cast<uint8_t>(ch - 1);
+		if(_doc.find("knobMode"))
+		{
+			const auto mode = textOf(_doc, "knobMode");
+			if(mode != "relative" && mode != "absolute")
+				_errors.emplace_back("$.knobMode: expected relative or absolute");
+			s.relative = mode != "absolute";
+		}
 		readMapping(_doc, _m, s, _errors);
 		if(_errors.size() != before)
 			return std::nullopt;
@@ -242,6 +318,7 @@ namespace deskController
 		d.set("machine", machineName(_m));
 		d.set("profile", _s.on ? tr06().id : std::string("off"));
 		d.set("channel", _s.channel + 1);
+		d.set("knobMode", _s.relative ? "relative" : "absolute");
 		Value voices = Value::array();
 		for(size_t v = 0; v < g_voices; ++v)
 		{
@@ -261,7 +338,7 @@ namespace deskController
 				continue;
 			Value e = Value::object();
 			e.set("cc", static_cast<int>(k.cc));
-			if(_m == Machine::Mm)
+			if(_m == Machine::Mm || t.isNote())
 				e.set("pg", t.pg);
 			e.set("i", t.i);
 			knobs.push(std::move(e));
@@ -443,7 +520,7 @@ namespace deskController
 
 	// ---- the knob pump ----
 
-	void KnobPump::in(const uint8_t _track, const Target& _at, const uint8_t _value, const double _now)
+	KnobPump::Slot& KnobPump::slot(const uint8_t _track, const Target& _at, const double _now)
 	{
 		if(_now - m_lastIn > g_quietMs)
 		{
@@ -453,35 +530,113 @@ namespace deskController
 		}
 		m_lastIn = _now;
 		auto& s = m_slots[{_track, _at}];
-		s.pending = _value;
 		s.gesture = m_gesture;
+		return s;
+	}
+
+	void KnobPump::in(const uint8_t _track, const Target& _at, const uint8_t _value, const double _now)
+	{
+		auto& s = slot(_track, _at, _now);
+		s.relative = false;
+		s.delta = 0;
+		s.pending = _value;
+	}
+
+	void KnobPump::add(const uint8_t _track, const Target& _at, const int _delta, const double _now)
+	{
+		if(!_delta)
+			return;
+		auto& s = slot(_track, _at, _now);
+		if(!s.relative)
+			s.pending = -1;
+		s.relative = true;
+		s.delta += _delta;
 	}
 
 	bool KnobPump::pending() const
 	{
 		for(const auto& [k, s] : m_slots)
-			if(s.pending >= 0)
+			if(s.pending >= 0 || (s.relative && s.delta))
 				return true;
 		return false;
 	}
 
-	std::vector<Edit> KnobPump::take(const double _now)
+	std::vector<Edit> KnobPump::take(const double _now, const Current& _current)
 	{
 		std::vector<Edit> out;
 		if(_now - m_lastOut < g_intervalMs)
 			return out;
 		for(auto& [k, s] : m_slots)
 		{
-			if(s.pending < 0)
-				continue;
-			if(s.pending != s.sent)
-				out.push_back({k.track, k.at, static_cast<uint8_t>(s.pending), s.gesture});
-			s.sent = s.pending;
-			s.pending = -1;
+			int value = -1;
+			if(s.relative)
+			{
+				if(!s.delta)
+					continue;
+				const int from = s.sent >= 0 ? s.sent : _current ? _current(k.track, k.at) : -1;
+				if(from >= 0)
+					value = std::clamp(from + s.delta, 0, 127);
+				s.delta = 0;
+				if(value < 0)
+					continue;	// the target's value is not known: nothing to move from
+			}
+			else
+			{
+				if(s.pending < 0)
+					continue;
+				value = s.pending;
+				s.pending = -1;
+			}
+			if(value != s.sent)
+				out.push_back({k.track, k.at, static_cast<uint8_t>(value), s.gesture});
+			s.sent = value;
 		}
 		if(!out.empty())
 			m_lastOut = _now;
 		return out;
+	}
+
+	// ---- what a knob does ----
+
+	KnobAction knobAction(const Setup& _s, const Machine _m, const uint8_t _cc, const int _model)
+	{
+		const auto& t = _s.knobs[_cc & 0x7f];
+		if(!t.mapped() || !validTarget(_m, t))
+			return {};
+		if(!t.isNote())
+			return {KnobAction::Kind::Param, t};
+		if(_m == Machine::Mm)
+			return {KnobAction::Kind::Note, t};
+		// The Machinedrum's TRIGs have no pitch: its machine's pitch parameter, or nothing.
+		const int p = mdPitchParam(_model);
+		return p < 0 ? KnobAction{} : KnobAction{KnobAction::Kind::Param, {-1, p}};
+	}
+
+	Setup transposed(const Setup& _s, const int _track, const int _delta, const int _value)
+	{
+		auto s = _s;
+		for(auto& v : s.voices)
+			if(v.t == _track && v.note >= 0)
+				v.note = std::clamp(s.relative ? v.note + _delta : _value, 0, 127);
+		return s;
+	}
+
+	// ---- relative knobs ----
+
+	int RelativeKnobs::in(const uint8_t _cc, const uint8_t _value, const double _now)
+	{
+		const auto cc = static_cast<size_t>(_cc & 0x7f);
+		const int ref = m_ref[cc];
+		const bool fresh = ref < 0 || _now - m_at[cc] > g_idleMs;
+		m_ref[cc] = static_cast<int16_t>(_value & 0x7f);
+		m_at[cc] = _now;
+		return fresh ? 0 : (_value & 0x7f) - ref;
+	}
+
+	void RelativeKnobs::reset()
+	{
+		m_ref.fill(-1);
+		m_at.fill(-1e18);
 	}
 
 	// ---- the page's document ----
@@ -496,8 +651,39 @@ namespace deskController
 
 	// ---- the activity ----
 
-	void Activity::start(const Monitor& _monitor, double)
+	std::vector<Monitor::Note> Monitor::notes() const
 	{
+		std::vector<Note> out;
+		for(const auto& e : m_notes)
+		{
+			const auto v = e.load(std::memory_order_relaxed);
+			if(!v)
+				continue;
+			Note n;
+			n.n = static_cast<uint32_t>(v >> 32);
+			n.ch = static_cast<uint8_t>(v & 0x0f);
+			n.note = static_cast<uint8_t>(v >> 8 & 0x7f);
+			n.velocity = static_cast<uint8_t>(v >> 16 & 0x7f);
+			out.push_back(n);
+		}
+		std::sort(out.begin(), out.end(), [](const Note& _a, const Note& _b) { return _a.n > _b.n; });
+		return out;
+	}
+
+	void Monitor::clear()
+	{
+		// Racing a MIDI thread's store is harmless: that value shows, or it comes again with the next move.
+		for(auto& c : m_ccs)
+			c.store(0, std::memory_order_relaxed);
+		for(auto& n : m_notes)
+			n.store(0, std::memory_order_relaxed);
+	}
+
+	void Activity::start(Monitor& _monitor, double)
+	{
+		_monitor.clear();
+		m_ccs.clear();
+		m_notes.clear();
 		for(uint8_t ch = 0; ch < 16; ++ch)
 		{
 			m_counts[ch] = _monitor.last(ch).count;
@@ -553,6 +739,29 @@ namespace deskController
 			m_elsewhere = elsewhere;
 			changed = true;
 		}
+		// Every CC seen, the controller's channel first, each channel's by CC number; the last notes.
+		std::vector<Cc> ccs;
+		for(int pass = 0; pass < 2; ++pass)
+			for(int ch = 0; ch < 16; ++ch)
+			{
+				if((ch == channel) != (pass == 0))
+					continue;
+				for(int cc = 0; cc < 128; ++cc)
+					if(const int v = _monitor.cc(static_cast<uint8_t>(ch), static_cast<uint8_t>(cc)); v >= 0)
+						ccs.push_back({static_cast<uint8_t>(ch), static_cast<uint8_t>(cc), static_cast<uint8_t>(v)});
+			}
+		if(!(ccs == m_ccs))
+		{
+			m_ccs = std::move(ccs);
+			changed = true;
+		}
+		auto notes = _monitor.notes();
+		const auto sameNotes = notes.size() == m_notes.size() && std::equal(notes.begin(), notes.end(), m_notes.begin(), [](const Monitor::Note& _a, const Monitor::Note& _b) { return _a.n == _b.n; });
+		if(!sameNotes)
+		{
+			m_notes = std::move(notes);
+			changed = true;
+		}
 		if(changed)
 			++m_seq;
 		return changed;
@@ -576,10 +785,30 @@ namespace deskController
 		else
 			a.set("last", Value());
 		a.set("elsewhere", m_elsewhere >= 0 ? Value(m_elsewhere + 1) : Value());
+		Value ccs = Value::array();
+		for(const auto& c : m_ccs)
+		{
+			Value e = Value::object();
+			e.set("ch", c.ch + 1);
+			e.set("cc", static_cast<int>(c.cc));
+			e.set("v", static_cast<int>(c.v));
+			ccs.push(std::move(e));
+		}
+		a.set("ccs", std::move(ccs));
+		Value notes = Value::array();
+		for(const auto& n : m_notes)
+		{
+			Value e = Value::object();
+			e.set("ch", n.ch + 1);
+			e.set("n", static_cast<int>(n.note));
+			e.set("v", static_cast<int>(n.velocity));
+			notes.push(std::move(e));
+		}
+		a.set("notes", std::move(notes));
 		return a;
 	}
 
-	Value pageDocument(const Setup& _s, const Machine _m, const Route& _r, const int _selected, const Value& _last, const Seen& _seen)
+	Value pageDocument(const Setup& _s, const Machine _m, const Route& _r, const int _selected, const Value& _last, const Seen& _seen, const int _model)
 	{
 		const auto& p = tr06();
 		Value d = Value::object();
@@ -600,9 +829,11 @@ namespace deskController
 		}
 		d.set("profiles", std::move(profiles));
 		d.set("channel", _s.channel + 1);
+		d.set("knobMode", _s.relative ? "relative" : "absolute");
 		d.set("about", p.defaultsAbout[index(_m)]);
 		d.set("tracks", tracksOf(_m));
 		d.set("selected", _selected);
+		d.set("machineName", modelName(_m, _model));
 		d.set("known", _r.known);
 		d.set("warning", _s.on ? overlapWarning(_s, _r, _m) : std::string());
 		Value voices = Value::array();
@@ -637,10 +868,11 @@ namespace deskController
 			Value e = Value::object();
 			e.set("cc", static_cast<int>(k.cc));
 			e.set("label", k.label);
-			if(_m == Machine::Mm)
+			if(_m == Machine::Mm || t.isNote())
 				e.set("pg", t.pg);
 			e.set("i", t.i);
 			e.set("name", t.mapped() ? targetName(_m, t) : std::string());
+			e.set("own", t.mapped() ? ownName(_m, t, _model) : std::string());
 			knobs.push(std::move(e));
 		}
 		d.set("knobs", std::move(knobs));
@@ -648,15 +880,31 @@ namespace deskController
 		for(const auto& t : targets(_m))
 		{
 			Value e = Value::object();
-			if(_m == Machine::Mm)
+			if(_m == Machine::Mm || t.at.isNote())
 				e.set("pg", t.at.pg);
 			e.set("i", t.at.i);
 			e.set("name", t.name);
+			e.set("own", ownName(_m, t.at, _model));
 			list.push(std::move(e));
 		}
 		d.set("targets", std::move(list));
 		d.set("last", _last);
 		d.set("named", _seen.named);
+		if(_seen.named)
+		{
+			Value inputs = Value::array();
+			for(const auto& in : _seen.inputs)
+			{
+				Value e = Value::object();
+				e.set("name", in.name);
+				e.set("on", in.on);
+				e.set("tr06", looksLikeTr06(in.name));
+				inputs.push(std::move(e));
+			}
+			d.set("inputs", std::move(inputs));
+		}
+		else
+			d.set("inputs", Value());
 		d.set("device", _seen.device);
 		d.set("activity", _seen.activity);
 		return d;
@@ -669,7 +917,7 @@ namespace deskController
 		std::vector<Value> out;
 		for(const auto& e : _edits)
 		{
-			if(!validTarget(Machine::Md, e.at) || e.track >= 16)
+			if(!validTarget(Machine::Md, e.at) || e.at.isNote() || e.track >= 16)
 				continue;
 			Value m = Value::object();
 			const bool level = e.at.i == 24;
@@ -690,7 +938,7 @@ namespace deskController
 		auto kit = _working;
 		for(const auto& e : _edits)
 		{
-			if(!validTarget(Machine::Mm, e.at) || e.track >= elektronData::MmKit::g_tracks)
+			if(!validTarget(Machine::Mm, e.at) || e.at.isNote() || e.track >= elektronData::MmKit::g_tracks)
 				continue;
 			if(e.at.pg == 7)
 				kit.levels[e.track] = e.value;

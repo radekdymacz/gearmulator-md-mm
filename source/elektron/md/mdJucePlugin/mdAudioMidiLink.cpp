@@ -61,16 +61,15 @@ namespace mdJucePlugin
 		return h && h->processor.get() == &m_processor ? h : nullptr;
 	}
 
-	std::optional<std::vector<std::string>> AudioMidiLink::enabledMidiInputs(juce::AudioProcessor& _processor)
+	std::optional<std::vector<deskController::MidiInput>> AudioMidiLink::midiInputs(juce::AudioProcessor& _processor)
 	{
 		auto* const h = juce::StandalonePluginHolder::getInstance();
 		if(!h || h->processor.get() != &_processor)
 			return std::nullopt;
-		std::vector<std::string> names;
+		std::vector<deskController::MidiInput> inputs;
 		for(const auto& m : juce::MidiInput::getAvailableDevices())
-			if(h->deviceManager.isMidiInputDeviceEnabled(m.identifier))
-				names.push_back(str(m.name));
-		return names;
+			inputs.push_back({str(m.name), h->deviceManager.isMidiInputDeviceEnabled(m.identifier)});
+		return inputs;
 	}
 
 	void AudioMidiLink::changeListenerCallback(juce::ChangeBroadcaster*)

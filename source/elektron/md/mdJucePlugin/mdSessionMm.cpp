@@ -195,6 +195,24 @@ namespace mdJucePlugin
 				if(const auto c = deskController::mmCommand(_edits, working->kit))
 					_desk.onPageMessage(*c);
 		}
+
+		static int current(const mmDesk::Desk& _desk, const uint8_t _t, const deskController::Target& _at)
+		{
+			const auto& working = _desk.documents().working;
+			if(!working || _t >= elektronData::MmKit::g_tracks || _at.i < 0)
+				return -1;
+			if(_at.pg == 7)
+				return working->kit.levels[_t];
+			if(_at.pg < 0 || _at.pg > 6 || _at.i > 7)
+				return -1;
+			return working->kit.tracks[_t].pages[static_cast<size_t>(_at.pg)][static_cast<size_t>(_at.i)];
+		}
+
+		static int model(const mmDesk::Desk& _desk, const uint8_t _t)
+		{
+			const auto& working = _desk.documents().working;
+			return working && _t < elektronData::MmKit::g_tracks ? static_cast<int>(working->kit.machines[_t]) : -1;
+		}
 	};
 
 	class MmSession final : public SessionOf<mmDesk::Desk, MmEngine>

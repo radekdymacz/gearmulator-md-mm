@@ -45,6 +45,7 @@ namespace mdJucePlugin
 		void configure(const deskController::Setup& _setup, const deskController::Route& _route, bool _watch = false);
 		deskController::Input& input() { return m_input; }
 		const deskController::Monitor& monitor() const { return m_monitor; }
+		deskController::Monitor& monitor() { return m_monitor; }
 		bool installed() const { return m_installed; }
 
 		bool filterIn(const synthLib::SMidiEvent& _ev) override;
@@ -66,8 +67,11 @@ namespace mdJucePlugin
 	// The controller profile in the session (both editors; message thread): the setup kept with the
 	// project (DeskHost's MDCT chunk), the plug-in's ctl* commands (deskHost's table), the page's
 	// "controller" document, and the knobs into the machine's own edit path: single-parameter edits,
-	// paced as the Control All pump (deskController::KnobPump), on the page's selected track. What is
-	// the model's (how a voice reaches the machine, how an edit is sent) comes as hooks.
+	// paced as the Control All pump (deskController::KnobPump), on the page's selected track, relative
+	// (deskController::RelativeKnobs: a turn moves the value from where it is) or absolute, as the setup's
+	// knob mode says. A knob on NOTE moves the notes of the voices on the selected track (Monomachine) or
+	// its machine's pitch parameter (Machinedrum). What is the model's (how a voice reaches the machine,
+	// how an edit is sent, what the machine holds) comes as hooks.
 	class ControllerProfile
 	{
 	public:
@@ -80,9 +84,15 @@ namespace mdJucePlugin
 			std::function<deskController::Route(const deskController::Setup&)> route;
 			// Edits on the machine's edit path (the desk's commands, as the page sends them).
 			std::function<void(const std::vector<deskController::Edit>&)> apply;
-			// The names of the enabled MIDI inputs; none: the host owns them (a DAW). Unset: the
-			// standalone app's (AudioMidiLink::enabledMidiInputs).
-			std::function<std::optional<std::vector<std::string>>()> inputs;
+			// A track's target's value in the working kit the desk holds now (-1: not known): where a
+			// relative knob moves it from.
+			std::function<int(uint8_t _track, const deskController::Target&)> current;
+			// A track's machine in the working kit (the MD's model, the MM's machine id; -1 not known):
+			// the targets' names, and the Machinedrum's NOTE (its pitch parameter).
+			std::function<int(uint8_t _track)> model;
+			// The MIDI inputs and whether each is enabled; none: the host owns them (a DAW). Unset: the
+			// standalone app's (AudioMidiLink::midiInputs).
+			std::function<std::optional<std::vector<deskController::MidiInput>>()> inputs;
 		};
 
 		ControllerProfile(AudioPluginAudioProcessor& _processor, Hooks _hooks, std::function<void(const Value&)> _publish);
@@ -106,8 +116,12 @@ namespace mdJucePlugin
 		void reply(const Value& _message, bool _ok, const std::string& _note) const;
 		void configure();
 		void watch(bool _on);
-		// Whether a TR-06 is among the enabled MIDI inputs (the standalone app); true when that changed.
+		// The MIDI inputs (the standalone app) and a TR-06 among the enabled ones; true when that changed.
 		bool lookAtInputs();
+		// One knob's new value (the profile on): a parameter's edit into the pump, or (the Monomachine's
+		// NOTE) the voices on the selected track transposed.
+		void knob(uint8_t _cc, uint8_t _value, double _now);
+		int model() const;
 
 		AudioPluginAudioProcessor& m_processor;
 		Hooks m_hooks;
@@ -116,7 +130,9 @@ namespace mdJucePlugin
 		deskController::Route m_route;
 		CtlInputFilter m_filter;
 		deskController::KnobPump m_pump;
+		deskController::RelativeKnobs m_relative;
 		int m_selected = 0;
+		int m_model = -1;
 		Value m_last;
 		bool m_lastChanged = false;
 		double m_lastPublishMs = -1e9;

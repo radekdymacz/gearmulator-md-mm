@@ -47,8 +47,9 @@ namespace mdJucePlugin
 
 	// A model's side of the controller profile (mdSessionMd.cpp, mdSessionMm.cpp; DESIGN-tr06.md): its
 	// deskController::Machine, route(desk, setup, wire) (where the voices go, from the active global the
-	// desk holds, for the engine: a wire or the emulator) and apply(desk, edits) (the knobs' edits as the
-	// page's own commands).
+	// desk holds, for the engine: a wire or the emulator), apply(desk, edits) (the knobs' edits as the
+	// page's own commands), current(desk, track, target) and model(desk, track) (the working kit's value
+	// and machine: a relative knob's start, the targets' names; -1 not known).
 	template<typename DeskT> struct CtlTraits;
 
 	// P7: whether the machine follows the host's tempo and transport: in a DAW's plug-in only.
@@ -282,7 +283,8 @@ namespace mdJucePlugin
 			case Action::CtlKnob:
 			case Action::CtlReset:
 			case Action::CtlTrack:
-			case Action::CtlWatch: m_ctl.handle(row->handler.action, _message); break;
+			case Action::CtlWatch:
+			case Action::CtlClear: m_ctl.handle(row->handler.action, _message); break;
 			default: break;	// the window's rows (actor Window, above)
 			}
 		}
@@ -356,6 +358,8 @@ namespace mdJucePlugin
 			h.machine = Traits::machine;
 			h.route = [this](const deskController::Setup& _s) { return Traits::route(*m_desk, _s, m_record->profile.wire); };
 			h.apply = [this](const std::vector<deskController::Edit>& _edits) { Traits::apply(*m_desk, _edits); };
+			h.current = [this](const uint8_t _t, const deskController::Target& _at) { return Traits::current(*m_desk, _t, _at); };
+			h.model = [this](const uint8_t _t) { return Traits::model(*m_desk, _t); };
 			return h;
 		}
 

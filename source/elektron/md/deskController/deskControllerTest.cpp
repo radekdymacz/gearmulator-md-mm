@@ -6,6 +6,7 @@
 
 #include "elektronData/jsonSchema.h"
 #include "elektronData/mdGlobal.h"
+#include "elektronData/mdMachines.h"
 #include "elektronData/mmGlobal.h"
 
 #include <cstdio>
@@ -68,17 +69,38 @@ namespace
 		const auto md = defaults(Machine::Md);
 		check(!md.on && md.channel == 9, "defaults are off, channel 10");
 		check(md.voices[0].t == 0 && md.voices[6].t == 6 && md.voices[0].note == -1, "MD: the seven voices on tracks 1-7, the keymap decides the note");
-		check(md.knobs[24] == Target{-1, 0} && md.knobs[63] == Target{-1, 6} && md.knobs[71] == Target{-1, 7}, "MD: INST levels to SYN 1-7, ACC to SYN 8");
+		check(md.knobs[24] == Target{-1, 0} && md.knobs[63] == Target{-1, 6} && md.knobs[71] == Target::note(), "MD: INST levels to SYN 1-7, ACC to NOTE");
+		check(md.relative, "the knobs are relative by default");
 		check(md.knobs[17] == Target{-1, 16} && md.knobs[18] == Target{-1, 19} && md.knobs[19] == Target{-1, 20}, "MD: DRIVE DIST, TIME DEL, DEPTH REV");
 		check(!md.knobs[20].mapped() && !md.knobs[113].mapped(), "MD: the other knobs are not mapped");
 		const auto mm = defaults(Machine::Mm);
 		check(mm.voices[4].t == 4 && mm.voices[5].t == 5 && mm.voices[6].t == 5, "MM: BD-CY tracks 1-5, OH and CH track 6");
 		check(mm.voices[0].note == 60 && mm.voices[5].note == 72, "MM: C4, OH an octave up");
-		check(mm.knobs[24] == Target{0, 0} && mm.knobs[71] == Target{0, 7}, "MM: INST levels to SYN A-G, ACC SYN H");
+		check(mm.knobs[24] == Target{0, 0} && mm.knobs[71] == Target::note(), "MM: INST levels to SYN A-G, ACC NOTE");
 		check(mm.knobs[17] == Target{2, 0} && mm.knobs[18] == Target{2, 1} && mm.knobs[19] == Target{7, 0}, "MM: DRIVE filter BASE, TIME WIDTH, DEPTH level");
 		check(targetName(Machine::Md, {-1, 16}) == "DIST" && targetName(Machine::Md, {-1, 24}) == "LEVEL" && targetName(Machine::Mm, {2, 0}) == "FLTR BASE",
 			"target names");
-		check(targets(Machine::Md).size() == 25 && targets(Machine::Mm).size() == 57, "every target of each machine");
+		check(targets(Machine::Md).size() == 26 && targets(Machine::Mm).size() == 58, "every target of each machine, NOTE too");
+		check(validTarget(Machine::Md, Target::note()) && validTarget(Machine::Mm, Target::note()) && !validTarget(Machine::Md, {8, 1}), "NOTE is a target on both");
+	}
+
+	void names()
+	{
+		std::printf("the machine's own names on the selected track\n");
+		const int saw = 4;	// SWAVE-SAW: SYN H is TUNE
+		check(ownName(Machine::Mm, {0, 7}, saw) == "TUNE", "MM SWAVE-SAW: SYN H is TUNE (" + ownName(Machine::Mm, {0, 7}, saw) + ")");
+		check(ownName(Machine::Mm, {0, 3}, saw) == "-", "MM SWAVE-SAW: SYN D is not used");
+		check(ownName(Machine::Mm, {2, 0}, saw).empty() && ownName(Machine::Mm, {0, 7}, -1).empty(), "fixed pages and an unknown machine: only the slot's name");
+		check(modelName(Machine::Mm, saw) == "SWAVE-SAW", "the MM machine by name");
+		const auto bd = elektronData::mdMachineModel("TRX-BD");
+		check(bd.has_value(), "TRX-BD is a Machinedrum machine");
+		if(!bd)
+			return;
+		const int pitch = mdPitchParam(static_cast<int>(*bd));
+		check(pitch == 0 && ownName(Machine::Md, {-1, 0}, static_cast<int>(*bd)) == "PTCH", "MD TRX-BD: SYN 1 is PTCH (" + ownName(Machine::Md, {-1, 0}, static_cast<int>(*bd)) + ")");
+		check(ownName(Machine::Md, Target::note(), static_cast<int>(*bd)) == "PTCH", "MD TRX-BD: NOTE moves PTCH");
+		check(mdPitchParam(0) == -1 && ownName(Machine::Md, Target::note(), 0) == "no pitch on this machine", "MD GND-EMPTY: no pitch, NOTE does nothing");
+		check(modelName(Machine::Md, static_cast<int>(*bd)) == "TRX-BD", "the MD machine by name");
 	}
 
 	void json()
@@ -112,6 +134,14 @@ namespace
 		const auto unmapped = setupFromJson(*elektronData::json::parse(R"({"schema":"desk/controller","version":1,"machine":"md","profile":"tr06","channel":10,"knobs":[{"cc":24,"i":null}]})"),
 			Machine::Md, errors);
 		check(unmapped && unmapped->on && !unmapped->knobs[24].mapped() && !unmapped->knobs[71].mapped(), "a knob list replaces the defaults; null unmaps");
+		check(unmapped && unmapped->relative, "no knobMode: relative");
+		bad(R"({"schema":"desk/controller","version":1,"machine":"md","profile":"off","channel":10,"knobMode":"jump"})", "$.knobMode");
+		auto md = defaults(Machine::Md);
+		md.relative = false;
+		md.knobs[20] = Target::note();
+		errors.clear();
+		const auto mdBack = setupFromJson(setupToJson(md, Machine::Md), Machine::Md, errors);
+		check(mdBack && *mdBack == md && !mdBack->relative && mdBack->knobs[20].isNote(), "MD: absolute and NOTE on another knob round-trip");
 	}
 
 	void routes()
@@ -180,6 +210,7 @@ namespace
 		check(in.translate(0xb9, 24, 70).verdict == V::Knob && in.translate(0xb9, 24, 71).verdict == V::Knob, "BD LEVEL is a knob");
 		check(in.knobsMoved() && !in.knobsMoved(), "a knob move is flagged once");
 		check(in.takeKnob(24) == 71 && in.takeKnob(24) == -1, "latest wins, taken once");
+		check(in.translate(0xb9, 71, 64).verdict == V::Knob, "ACC LEVEL (NOTE) is a knob");
 		check(in.translate(0xb9, 20, 5).verdict == V::Block, "BD TUNE (unmapped) is blocked, not passed raw");
 		check(in.translate(0xb9, 120, 0).verdict == V::Block && in.translate(0xb9, 121, 0).verdict == V::Block, "All Sound Off and Reset All Controllers are blocked");
 		check(in.translate(0xfe, 0, 0).verdict == V::Block, "Active Sensing is blocked");
@@ -204,6 +235,19 @@ namespace
 		const auto oh = mm.translate(0x99, 46, 80);
 		const auto ch = mm.translate(0x99, 42, 80);
 		check(cy.a == 0x94 && cy.b == 60 && oh.a == 0x95 && oh.b == 72 && ch.a == 0x95 && ch.b == 60, "MM: CY track 5, OH and CH track 6 at their pitches");
+
+		// NOTE transposes the voices on the selected track; a sounding note's note-off stays paired
+		const auto bdOn = mm.translate(0x99, 36, 100);
+		const auto up = transposed(ms, 0, 2, 0);
+		check(up.voices[0].note == 62 && up.voices[1].note == 60, "NOTE +2 on track 1: BD plays 62, SD (track 2) stays");
+		mm.configure(up, mmRoute(up, &mg));
+		const auto bdOff = mm.translate(0x89, 36, 0);
+		check(bdOn.b == 60 && bdOff.b == 60 && bdOff.a == 0x80, "the BD that sounded (60) gets its note-off at 60, not 62");
+		check(mm.translate(0x99, 36, 100).b == 62, "the next BD plays 62");
+		check(transposed(up, 0, 100, 0).voices[0].note == 127 && transposed(up, 0, -100, 0).voices[0].note == 0, "NOTE is held at 0-127");
+		auto absolute = up;
+		absolute.relative = false;
+		check(transposed(absolute, 5, 0, 48).voices[5].note == 48 && transposed(absolute, 5, 0, 48).voices[6].note == 48, "absolute: the knob's value is the note (OH and CH on track 6)");
 	}
 
 	void pump()
@@ -241,6 +285,63 @@ namespace
 		edits += q.take(8000).size();
 		check(edits <= 42 && edits >= 38, "a 60 Hz knob for 2 s becomes about 40 edits (" + std::to_string(edits) + ")");
 		check(!q.pending(), "nothing left once taken");
+
+		// relative: the changes of a round add up, from the target's value, held at 0-127
+		KnobPump r;
+		int machine = 100;
+		const auto current = [&](uint8_t, const Target&) { return machine; };
+		r.add(1, syn1, 3, 9000);
+		out = r.take(9000, current);
+		check(out.size() == 1 && out[0].value == 103, "relative: +3 from the machine's 100 is 103");
+		r.add(1, syn1, 5, 9010);
+		r.add(1, syn1, 4, 9020);
+		r.add(1, syn1, -2, 9030);
+		check(r.take(9030, current).empty(), "within 50 ms: waits");
+		out = r.take(9060, current);
+		check(out.size() == 1 && out[0].value == 110, "the round's changes add up (+5 +4 -2 from 103 is 110), not latest wins");
+		r.add(1, syn1, 40, 9070);
+		out = r.take(9120, current);
+		check(out.size() == 1 && out[0].value == 127, "held at 127");
+		r.add(1, syn1, 1, 9130);
+		check(r.take(9180, current).empty(), "at 127 already: nothing to send");
+		machine = 20;
+		r.add(1, syn1, -30, 10000);
+		out = r.take(10000, current);
+		check(out.size() == 1 && out[0].value == 0 && out[0].gesture == 2, "after a pause: from the machine's value again (20 - 30 is 0), a new gesture");
+		KnobPump u;
+		u.add(0, syn1, 5, 0);
+		check(u.take(0, [](uint8_t, const Target&) { return -1; }).empty() && !u.pending(), "the target's value not known: nothing, and nothing left");
+	}
+
+	void relative()
+	{
+		std::printf("relative knobs\n");
+		RelativeKnobs k;
+		check(k.in(24, 90, 0) == 0, "the first message only sets the reference: no move");
+		check(k.in(24, 95, 10) == 5 && k.in(24, 93, 20) == -2, "then the difference to the last value");
+		check(k.in(29, 10, 20) == 0, "each CC has its own reference");
+		check(k.in(24, 100, 2100) == 0 && k.in(24, 101, 2110) == 1, "after 2 s without it: the reference again, no move");
+		k.reset();
+		check(k.in(24, 0, 2120) == 0 && k.in(24, 5, 2130) == 5, "a reset (a track or mapping change): the next value only sets the reference");
+		// a knob swept from 20 to 79 after its reference: the changes sum to the sweep
+		RelativeKnobs sweep;
+		int total = 0;
+		sweep.in(24, 20, 0);
+		for(int v = 21; v <= 79; ++v)
+			total += sweep.in(24, static_cast<uint8_t>(v), v);
+		check(total == 59, "a sweep 20-79 is +59 in all");
+	}
+
+	void actions()
+	{
+		std::printf("what a knob does\n");
+		const auto md = defaults(Machine::Md);
+		const auto bd = static_cast<int>(elektronData::mdMachineModel("TRX-BD").value_or(0));
+		const auto a = knobAction(md, Machine::Md, 71, bd);
+		check(a.kind == KnobAction::Kind::Param && a.at == Target{-1, 0}, "MD NOTE on TRX-BD: its PTCH (synthesis 1)");
+		check(knobAction(md, Machine::Md, 71, 0).kind == KnobAction::Kind::None, "MD NOTE on GND-EMPTY (no pitch): nothing");
+		check(knobAction(md, Machine::Md, 24, bd).at == Target{-1, 0} && knobAction(md, Machine::Md, 20, bd).kind == KnobAction::Kind::None, "a parameter; an unmapped knob does nothing");
+		check(knobAction(defaults(Machine::Mm), Machine::Mm, 71, 4).kind == KnobAction::Kind::Note, "MM NOTE: the voices' notes");
 	}
 
 	void document()
@@ -255,6 +356,49 @@ namespace
 		const auto& k = d.find("knobs")->asArray();
 		check(k.size() == 41 && k[1].find("name")->asString() == "FLTR BASE", "every knob with its target's name");
 		check(d.find("warning")->asString().empty(), "no warning");
+	}
+
+	void monitor()
+	{
+		std::printf("the MIDI monitor\n");
+		Monitor m;
+		m.seen(0xb9, 24, 87);
+		m.seen(0xb9, 12, 5);
+		m.seen(0xb9, 24, 88);
+		m.seen(0xb2, 24, 40);
+		check(m.cc(9, 24) == 88 && m.cc(9, 12) == 5 && m.cc(2, 24) == 40 && m.cc(9, 25) == -1, "every CC's latest value, per channel");
+		m.seen(0x99, 36, 100);
+		m.seen(0x99, 38, 0);	// a note-off
+		m.seen(0x99, 42, 70);
+		const auto n = m.notes();
+		check(n.size() == 2 && n[0].note == 42 && n[0].velocity == 70 && n[1].note == 36 && n[1].ch == 9, "the last notes, newest first (note-offs are not notes)");
+		for(int i = 0; i < 20; ++i)
+			m.seen(0x90, static_cast<uint8_t>(i), 1);
+		check(m.notes().size() == Monitor::g_notes && m.notes()[0].note == 19, "a ring of the last " + std::to_string(Monitor::g_notes));
+		Activity a;
+		a.start(m, 0);
+		check(m.cc(9, 24) == -1 && m.notes().empty(), "a new look clears the monitor");
+		m.seen(0xb9, 71, 3);
+		m.seen(0xb9, 24, 87);
+		m.seen(0xb2, 5, 9);
+		m.seen(0xb2, 2, 1);
+		m.seen(0x99, 36, 100);
+		check(a.update(m, 9, 10), "news");
+		const auto j = a.toJson();
+		const auto& ccs = j.find("ccs")->asArray();
+		const auto cc = [&](const size_t _i, const int _ch, const int _cc, const int _v)
+		{
+			return ccs.size() > _i && ccs[_i].find("ch")->asNumber() == _ch && ccs[_i].find("cc")->asNumber() == _cc && ccs[_i].find("v")->asNumber() == _v;
+		};
+		check(ccs.size() == 4 && cc(0, 10, 24, 87) && cc(1, 10, 71, 3) && cc(2, 3, 2, 1) && cc(3, 3, 5, 9), "the controller's channel first, then the others, each by CC number");
+		const auto& notes = j.find("notes")->asArray();
+		check(notes.size() == 1 && notes[0].find("n")->asNumber() == 36 && notes[0].find("v")->asNumber() == 100 && notes[0].find("ch")->asNumber() == 10, "the last note, with its velocity");
+		check(!a.update(m, 9, 20), "the same values: nothing new");
+		m.seen(0xb9, 24, 90);
+		check(a.update(m, 9, 30) && a.toJson().find("ccs")->asArray()[0].find("v")->asNumber() == 90, "a new value in place");
+		a.start(m, 40);
+		a.update(m, 9, 50);
+		check(a.toJson().find("ccs")->asArray().empty() && a.toJson().find("notes")->asArray().empty(), "CLEAR (a new start): empty");
 	}
 
 	void activity()
@@ -275,7 +419,7 @@ namespace
 		check(j.find("last")->find("kind")->asString() == "cc" && j.find("last")->find("n")->asNumber() == 24 && j.find("last")->find("v")->asNumber() == 87, "CC 24 = 87");
 		const auto seq = j.find("seq")->asNumber();
 		m.seen(0xb9, 24, 87);
-		check(a.update(m, 9, 40) && a.toJson().find("seq")->asNumber() > seq, "the same message again is news too (the row blinks again)");
+		check(a.update(m, 9, 40) && a.toJson().find("seq")->asNumber() > seq, "the same message again is news too");
 		m.seen(0x99, 38, 100);
 		a.update(m, 9, 50);
 		check(a.toJson().find("last")->find("kind")->asString() == "note" && a.toJson().find("last")->find("n")->asNumber() == 38, "NOTE 38");
@@ -344,10 +488,10 @@ namespace
 				act.start(mon, 0);
 				mon.seen(0xb0, 24, 87);
 				act.update(mon, 0, 10);
-				Seen seen{true, "TR-06", act.toJson()};
+				Seen seen{true, {{"TR-06", true}, {"IAC Driver Bus 1", false}}, "TR-06", act.toJson()};
 				Value msg = Value::object();
 				msg.set("type", "controller");
-				msg.set("doc", pageDocument(s, m, Route{}, 2, Value(), seen));
+				msg.set("doc", pageDocument(s, m, Route{}, 2, Value(), seen, m == Machine::Md ? 0 : 4));
 				for(const auto& p : schema.validate(msg, "message"))
 					problems.push_back(p);
 			}
@@ -367,11 +511,15 @@ namespace
 int main()
 {
 	data();
+	names();
 	json();
 	routes();
 	input();
 	pump();
+	relative();
+	actions();
 	document();
+	monitor();
 	activity();
 	contract();
 	std::printf("%s (%d failures)\n", g_failures ? "FAILED" : "passed", g_failures);

@@ -1338,8 +1338,8 @@
     },
     "controller": {
       "type": "object",
-      "description": "The controller profile (DESIGN-tr06.md, deskController/deskController.h pageDocument): a Roland TR-06 on one MIDI channel plays the machine. The setup (profile, channel, voices, knobs) is kept with the project as the MDCT chunk; the rest is what it means now: where each voice goes (out, from the machine's active global), every knob's target on the selected track, the targets to choose from, a warning when the channel is one the machine listens on, the last knob the controller moved, and what the editor sees: a TR-06 among the enabled MIDI inputs (named, device) and, while the page shows the bar or the panel, what arrives (activity).",
-      "required": ["schema", "version", "machine", "profile", "profiles", "channel", "about", "tracks", "selected", "known", "warning", "voices", "knobs", "targets", "last", "named", "device", "activity"],
+      "description": "The controller profile (DESIGN-tr06.md, deskController/deskController.h pageDocument): a Roland TR-06 on one MIDI channel plays the machine. The setup (profile, channel, knobMode, voices, knobs) is kept with the project as the MDCT chunk; the rest is what it means now: where each voice goes (out, from the machine's active global), every knob's target on the selected track (named for the machine on it, machineName), the targets to choose from, a warning when the channel is one the machine listens on, the last knob the controller moved, and what the editor sees: the MIDI inputs (the CONTROL workspace's device tiles; null in a DAW, where the host owns them), a TR-06 among the enabled ones (named, device) and, while the page shows the TR-06's view, what arrives (activity).",
+      "required": ["schema", "version", "machine", "profile", "profiles", "channel", "knobMode", "about", "tracks", "selected", "machineName", "known", "warning", "voices", "knobs", "targets", "last", "named", "inputs", "device", "activity"],
       "properties": {
         "schema": {
           "const": "desk/controller"
@@ -1373,6 +1373,10 @@
           "minimum": 1,
           "maximum": 16
         },
+        "knobMode": {
+          "enum": ["relative", "absolute"],
+          "description": "How the knobs apply: relative (the TR-06 sends its knob's position; a turn moves the value by the difference from where it is, the first value after a start, a track or mapping change or 2 s without that knob only sets its reference) or absolute (the value jumps to the knob's position)."
+        },
         "about": {
           "type": "string"
         },
@@ -1385,6 +1389,10 @@
           "type": "integer",
           "minimum": 0,
           "maximum": 15
+        },
+        "machineName": {
+          "type": "string",
+          "description": "The machine on the selected track (\"SWAVE-SAW\", \"TRX-BD\"), empty while not known: the knobs' and targets' names are its own."
         },
         "known": {
           "type": "boolean",
@@ -1442,7 +1450,7 @@
           "type": "array",
           "items": {
             "type": "object",
-            "required": ["cc", "label", "i", "name"],
+            "required": ["cc", "label", "i", "name", "own"],
             "properties": {
               "cc": {
                 "$ref": "#/$defs/u7"
@@ -1453,7 +1461,7 @@
               "pg": {
                 "type": "integer",
                 "minimum": -1,
-                "maximum": 7
+                "maximum": 8
               },
               "i": {
                 "type": "integer",
@@ -1461,7 +1469,12 @@
                 "maximum": 24
               },
               "name": {
-                "type": "string"
+                "type": "string",
+                "description": "The target's slot (SYN H, FLTR BASE, LEVEL; NOTE, pg 8 i 0: the Monomachine's voices' notes on the track, the Machinedrum's pitch parameter); empty when unmapped."
+              },
+              "own": {
+                "type": "string",
+                "description": "The machine's own name for the slot on the selected track where it differs from name (SYN H is TUNE on a SWAVE-SAW; NOTE is PTCH on a TRX-BD, or: no pitch on this machine), - for a slot the machine does not use, empty otherwise. ASCII; the page joins name and own with a middle dot."
               }
             }
           }
@@ -1470,12 +1483,12 @@
           "type": "array",
           "items": {
             "type": "object",
-            "required": ["i", "name"],
+            "required": ["i", "name", "own"],
             "properties": {
               "pg": {
                 "type": "integer",
                 "minimum": -1,
-                "maximum": 7
+                "maximum": 8
               },
               "i": {
                 "type": "integer",
@@ -1484,6 +1497,10 @@
               },
               "name": {
                 "type": "string"
+              },
+              "own": {
+                "type": "string",
+                "description": "The machine's own name for the slot on the selected track where it differs from name (SYN H is TUNE on a SWAVE-SAW; NOTE is PTCH on a TRX-BD, or: no pitch on this machine), - for a slot the machine does not use, empty otherwise. ASCII; the page joins name and own with a middle dot."
               }
             }
           }
@@ -1501,7 +1518,26 @@
         },
         "named": {
           "type": "boolean",
-          "description": "The editor sees its MIDI inputs by name (the standalone app). In a DAW the host owns them: no device, only the activity."
+          "description": "The editor sees its MIDI inputs by name (the standalone app). In a DAW the host owns them: no inputs, no device, only the activity."
+        },
+        "inputs": {
+          "type": ["array", "null"],
+          "description": "Every MIDI input of the standalone app, enabled in AUDIO / MIDI or not (on), and whether its name is the controller's (tr06); null in a DAW.",
+          "items": {
+            "type": "object",
+            "required": ["name", "on", "tr06"],
+            "properties": {
+              "name": {
+                "type": "string"
+              },
+              "on": {
+                "type": "boolean"
+              },
+              "tr06": {
+                "type": "boolean"
+              }
+            }
+          }
         },
         "device": {
           "type": "string",
@@ -1509,8 +1545,8 @@
         },
         "activity": {
           "type": ["object", "null"],
-          "description": "What arrives, while the page shows the controller bar or panel (ctlWatch), whether the profile is on or not; null otherwise. seq grows with every change (a row blinks); last is the controller's channel's last channel message (n: the note or controller, for other its status byte); elsewhere: a channel that got messages lately while the controller's channel got none.",
-          "required": ["seq", "last", "elsewhere"],
+          "description": "What arrives, while the page shows the TR-06's view (ctlWatch), whether the profile is on or not; null otherwise. seq grows with every change; last is the controller's channel's last channel message (n: the note or controller, for other its status byte); elsewhere: a channel that got messages lately while the controller's channel got none; ccs: every CC seen since the look started or the monitor was cleared (ctlClear), with its latest value, the controller's channel first, each channel's by CC number; notes: the last note-ons, newest first.",
+          "required": ["seq", "last", "elsewhere", "ccs", "notes"],
           "properties": {
             "seq": {
               "type": "integer",
@@ -1537,6 +1573,46 @@
               "type": ["integer", "null"],
               "minimum": 1,
               "maximum": 16
+            },
+            "ccs": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "required": ["ch", "cc", "v"],
+                "properties": {
+                  "ch": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 16
+                  },
+                  "cc": {
+                    "$ref": "#/$defs/u7"
+                  },
+                  "v": {
+                    "$ref": "#/$defs/u7"
+                  }
+                }
+              }
+            },
+            "notes": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "required": ["ch", "n", "v"],
+                "properties": {
+                  "ch": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 16
+                  },
+                  "n": {
+                    "$ref": "#/$defs/u7"
+                  },
+                  "v": {
+                    "$ref": "#/$defs/u7"
+                  }
+                }
+              }
             }
           }
         }
@@ -3049,7 +3125,7 @@
         },
         {
           "type": "object",
-          "description": "host: the controller profile: off or the Roland TR-06, and the controller's MIDI channel (controller.doc)",
+          "description": "host: the controller profile: off or the Roland TR-06, the controller's MIDI channel, and how its knobs apply (relative: a turn moves the value from where it is; absolute: to the knob's position) (controller.doc)",
           "required": ["op"],
           "properties": {
             "op": {
@@ -3073,6 +3149,10 @@
               "type": "integer",
               "minimum": 1,
               "maximum": 16
+            },
+            "knobMode": {
+              "type": "string",
+              "enum": ["relative", "absolute"]
             }
           },
           "additionalProperties": false
@@ -3114,7 +3194,7 @@
         },
         {
           "type": "object",
-          "description": "host: a controller knob's target on the selected track (controller.doc.targets); i null: none",
+          "description": "host: a controller knob's target on the selected track (controller.doc.targets; pg 8, i 0: NOTE); i null: none",
           "required": ["op", "cc", "i"],
           "properties": {
             "op": {
@@ -3138,7 +3218,7 @@
             "pg": {
               "type": "integer",
               "minimum": 0,
-              "maximum": 7
+              "maximum": 8
             },
             "i": {
               "oneOf": [
@@ -3204,7 +3284,7 @@
         },
         {
           "type": "object",
-          "description": "host: while the Controller bar or panel shows: the controller document reports what arrives (activity)",
+          "description": "host: while the TR-06's view shows: the controller document reports what arrives (activity)",
           "required": ["op", "on"],
           "properties": {
             "op": {
@@ -3221,6 +3301,27 @@
               "type": ["boolean", "integer"]
             },
             "on": {
+              "type": ["boolean", "integer"]
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "description": "host: empty the MIDI monitor (controller.doc.activity: its CCs and notes)",
+          "required": ["op"],
+          "properties": {
+            "op": {
+              "const": "ctlClear"
+            },
+            "id": {
+              "type": "integer"
+            },
+            "g": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "force": {
               "type": ["boolean", "integer"]
             }
           },

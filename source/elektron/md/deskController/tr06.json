@@ -5,6 +5,7 @@
 	"label": "Roland TR-06",
 	"about": "Roland TR-06 MIDI Implementation Chart v1.00: one global channel (default 10), Mode 3, no Program Change, no SysEx. Notes with velocity and note off; the Rx aliases are accepted on input.",
 	"channel": 10,
+	"knobMode": "relative",
 	"voices": [
 		{"voice": "BD", "label": "BASS DRUM", "notes": [36, 35]},
 		{"voice": "SD", "label": "SNARE DRUM", "notes": [38, 40]},
@@ -64,7 +65,7 @@
 	},
 	"defaults": {
 		"md": {
-			"about": "The seven voices trigger MD tracks 1-7 (a real Machinedrum: its base channel at the note its global keymap gives the track; the emulator: the track's TRIG note, 36 + track). The seven INST level knobs move synthesis parameters 1-7 of the selected track, ACC parameter 8, DRIVE its DIST, TIME its DEL send, DEPTH its REV send.",
+			"about": "The seven voices trigger MD tracks 1-7 (a real Machinedrum: its base channel at the note its global keymap gives the track; the emulator: the track's TRIG note, 36 + track). The seven INST level knobs move synthesis parameters 1-7 of the selected track, ACC its NOTE (the machine's pitch parameter, PTCH or TUNE, where it has one), DRIVE its DIST, TIME its DEL send, DEPTH its REV send.",
 			"voices": [
 				{"voice": "BD", "t": 0},
 				{"voice": "SD", "t": 1},
@@ -82,14 +83,14 @@
 				{"cc": 85, "i": 4},
 				{"cc": 82, "i": 5},
 				{"cc": 63, "i": 6},
-				{"cc": 71, "i": 7},
+				{"cc": 71, "pg": 8, "i": 0},
 				{"cc": 17, "i": 16},
 				{"cc": 18, "i": 19},
 				{"cc": 19, "i": 20}
 			]
 		},
 		"mm": {
-			"about": "BD, SD, LT, HT and CY play MM tracks 1-5, OH and CH track 6, each on the track's channel (base + track) at its pitch: C4 (60), OH C5 (72). The seven INST level knobs move SYN A-G of the selected track, ACC SYN H, DRIVE the filter BASE, TIME the filter WIDTH, DEPTH the track level.",
+			"about": "BD, SD, LT, HT and CY play MM tracks 1-5, OH and CH track 6, each on the track's channel (base + track) at its pitch: C4 (60), OH C5 (72). The seven INST level knobs move SYN A-G of the selected track, ACC the NOTE the voices on that track play (in semitones), DRIVE the filter BASE, TIME the filter WIDTH, DEPTH the track level.",
 			"voices": [
 				{"voice": "BD", "t": 0, "note": 60},
 				{"voice": "SD", "t": 1, "note": 60},
@@ -107,7 +108,7 @@
 				{"cc": 85, "pg": 0, "i": 4},
 				{"cc": 82, "pg": 0, "i": 5},
 				{"cc": 63, "pg": 0, "i": 6},
-				{"cc": 71, "pg": 0, "i": 7},
+				{"cc": 71, "pg": 8, "i": 0},
 				{"cc": 17, "pg": 2, "i": 0},
 				{"cc": 18, "pg": 2, "i": 1},
 				{"cc": 19, "pg": 7, "i": 0}

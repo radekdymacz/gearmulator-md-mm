@@ -10,6 +10,8 @@
 #include "jucePluginLib/processor.h"
 #include "synthLib/plugin.h"
 
+#include <algorithm>
+
 namespace mdJucePlugin
 {
 	namespace dc = deskController;
@@ -108,7 +110,7 @@ namespace mdJucePlugin
 		m_route.channel.fill(-1);
 		m_route.note.fill(-1);
 		if(!m_hooks.inputs)
-			m_hooks.inputs = [this] { return AudioMidiLink::enabledMidiInputs(m_processor); };
+			m_hooks.inputs = [this] { return AudioMidiLink::midiInputs(m_processor); };
 	}
 
 	void ControllerProfile::configure()
@@ -134,18 +136,57 @@ namespace mdJucePlugin
 
 	bool ControllerProfile::lookAtInputs()
 	{
-		const auto names = m_hooks.inputs ? m_hooks.inputs() : std::nullopt;
+		const auto inputs = m_hooks.inputs ? m_hooks.inputs() : std::nullopt;
 		std::string device;
-		if(names)
-			for(const auto& n : *names)
-				if(device.empty() && dc::looksLikeTr06(n))
-					device = n;
-		const bool named = names.has_value();
-		if(named == m_inputs.named && device == m_inputs.device)
+		if(inputs)
+			for(const auto& in : *inputs)
+				if(device.empty() && in.on && dc::looksLikeTr06(in.name))
+					device = in.name;
+		const bool named = inputs.has_value();
+		const auto list = inputs ? *inputs : std::vector<dc::MidiInput>{};
+		if(named == m_inputs.named && device == m_inputs.device && list == m_inputs.inputs)
 			return false;
 		m_inputs.named = named;
 		m_inputs.device = device;
+		m_inputs.inputs = list;
 		return true;
+	}
+
+	int ControllerProfile::model() const
+	{
+		return m_hooks.model ? m_hooks.model(static_cast<uint8_t>(m_selected)) : -1;
+	}
+
+	void ControllerProfile::knob(const uint8_t _cc, const uint8_t _value, const double _now)
+	{
+		const auto action = dc::knobAction(m_setup, m_hooks.machine, _cc, model());
+		const int delta = m_setup.relative ? m_relative.in(_cc, _value, _now) : 0;
+		if(m_setup.relative && !delta)
+			return;	// the first value (or the same again) only sets the knob's reference
+		const auto track = static_cast<uint8_t>(m_selected);
+		switch(action.kind)
+		{
+		case dc::KnobAction::Kind::None:
+			return;
+		case dc::KnobAction::Kind::Note:
+		{
+			// The input's note-offs go where their note-ons went (deskController::Input): a sounding note
+			// still ends when the voice plays another one now.
+			const auto s = dc::transposed(m_setup, m_selected, delta, _value);
+			if(s != m_setup)
+			{
+				change(s);
+				m_lastChanged = true;
+			}
+			return;
+		}
+		case dc::KnobAction::Kind::Param:
+			if(m_setup.relative)
+				m_pump.add(track, action.at, delta, _now);
+			else
+				m_pump.in(track, action.at, _value, _now);
+			return;
+		}
 	}
 
 	void ControllerProfile::reply(const Value& _message, const bool _ok, const std::string& _note) const
@@ -182,6 +223,7 @@ namespace mdJucePlugin
 		}
 		m_setup = s;
 		m_route = m_hooks.route ? m_hooks.route(m_setup) : m_route;
+		m_relative.reset();
 		configure();
 		publish();
 	}
@@ -199,6 +241,8 @@ namespace mdJucePlugin
 				s.on = p->asString() != "off";
 			if(const int ch = intOf(_message, "channel"); ch >= 1)
 				s.channel = static_cast<uint8_t>(ch - 1);
+			if(const auto* k = _message.find("knobMode"); k && k->isString())
+				s.relative = k->asString() != "absolute";
 			break;
 		}
 		case A::CtlVoice:
@@ -222,7 +266,8 @@ namespace mdJucePlugin
 		{
 			const int cc = intOf(_message, "cc");
 			const auto* i = _message.find("i");
-			const dc::Target t{m == dc::Machine::Md ? -1 : intOf(_message, "pg"), i && i->isNumber() ? static_cast<int>(i->asNumber()) : -1};
+			const int pg = intOf(_message, "pg");
+			const dc::Target t{m == dc::Machine::Md && pg != dc::Target::g_notePg ? -1 : pg, i && i->isNumber() ? static_cast<int>(i->asNumber()) : -1};
 			bool knob = false;
 			for(const auto& k : dc::tr06().knobs)
 				knob |= k.cc == cc;
@@ -240,6 +285,16 @@ namespace mdJucePlugin
 			s = dc::defaults(m);
 			s.on = on;
 			break;
+		}
+		case A::CtlClear:
+		{
+			if(m_watch)
+				m_activity.start(m_filter.monitor(), sessionNowMs());
+			else
+				m_filter.monitor().clear();
+			reply(_message, true, {});
+			publish();
+			return;
 		}
 		case A::CtlWatch:
 		{
@@ -259,6 +314,9 @@ namespace mdJucePlugin
 			}
 			const bool same = t == m_selected;
 			m_selected = t;
+			// Another track: no knob carries a change over (the next value only sets its reference).
+			if(!same)
+				m_relative.reset();
 			reply(_message, true, {});
 			if(!same)
 				publish();
@@ -269,7 +327,11 @@ namespace mdJucePlugin
 			return;
 		}
 		if(s != m_setup)
+		{
+			// A mapping or a mode change: the knobs start again from where they are.
+			m_relative.reset();
 			change(s);
+		}
 		reply(_message, true, {});
 		publish();
 	}
@@ -282,12 +344,15 @@ namespace mdJucePlugin
 			m_lastRouteMs = _now;
 			// The machine's global decides where a voice goes (its base channel, its keymap): follow it.
 			const auto r = m_hooks.route(m_setup);
+			const int md = model();
 			if(r != m_route)
 			{
 				m_route = r;
 				configure();
 				publish();
 			}
+			else if(md != m_model)
+				publish();	// the selected track's machine changed: the targets' names
 		}
 		if(_now - m_lastInputsMs >= g_inputsMs)
 		{
@@ -309,9 +374,7 @@ namespace mdJucePlugin
 				const int v = in.takeKnob(k.cc);
 				if(v < 0)
 					continue;
-				const auto& target = m_setup.knobs[k.cc];
-				if(target.mapped())
-					m_pump.in(static_cast<uint8_t>(m_selected), target, static_cast<uint8_t>(v), _now);
+				knob(k.cc, static_cast<uint8_t>(v), _now);
 				Value last = Value::object();
 				last.set("cc", static_cast<int>(k.cc));
 				last.set("v", v);
@@ -321,7 +384,7 @@ namespace mdJucePlugin
 		}
 		if(m_pump.pending())
 		{
-			const auto edits = m_pump.take(_now);
+			const auto edits = m_pump.take(_now, m_hooks.current ? [this](const uint8_t _t, const dc::Target& _at) { return m_hooks.current(_t, _at); } : dc::KnobPump::Current());
 			if(!edits.empty() && m_hooks.apply)
 				m_hooks.apply(edits);
 		}
@@ -337,7 +400,8 @@ namespace mdJucePlugin
 		msg.set("type", "controller");
 		auto seen = m_inputs;
 		seen.activity = m_watch ? m_activity.toJson() : Value();
-		msg.set("doc", dc::pageDocument(m_setup, m_hooks.machine, m_route, m_selected, m_last, seen));
+		m_model = model();
+		msg.set("doc", dc::pageDocument(m_setup, m_hooks.machine, m_route, m_selected, m_last, seen, m_model));
 		m_publish(msg);
 	}
 }

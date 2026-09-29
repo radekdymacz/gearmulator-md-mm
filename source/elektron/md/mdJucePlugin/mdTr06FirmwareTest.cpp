@@ -10,7 +10,11 @@
 //  - profile on: every voice and its aliases play the mapped track: MD by the note the machine itself sends
 //    for the track it played (its keymap note), MM by sound; a mapping edit moves BD to track 9 (MD);
 //  - a TR-06 knob moves the page's selected track's parameter in the machine's working kit (from its
-//    memory), and a 60 Hz burst ends on the knob's last value;
+//    memory): relative (the default) its first value only sets the reference, then it moves by the change
+//    and a 60 Hz turn ends at the start value + the total change, a track change moves nothing; absolute:
+//    a burst ends on the knob's last value;
+//  - ACC LEVEL (CC 71) is NOTE: MM the voices on the selected track play higher (the route follows, the note
+//    sounds); MD the track's machine's pitch parameter, or nothing on a machine without one;
 //  - the controller documents the session publishes are on the contract;
 //  - profile off again: the channel is raw once more (silence).
 
@@ -18,7 +22,9 @@
 #include "mdDeskHost.h"
 #include "mdDeskSession.h"
 
+#include "deskController/deskController.h"
 #include "elektronData/json.h"
+#include "elektronData/mdMachines.h"
 #include "elektronData/jsonSchema.h"
 
 #include "juce_audio_utils/juce_audio_utils.h"
@@ -315,33 +321,126 @@ int main(const int _argc, char** _argv)
 		pump(400);
 	}
 
-	// a knob: the page's selected track 3, BD LEVEL (CC 24) -> MD SYN 1 / MM SYN A
+	// a knob: the page's selected track 3, BD LEVEL (CC 24) -> MD SYN 1 / MM SYN A; relative (the default)
 	session->onPageMessage(parseJson(R"({"op":"ctlTrack","id":2,"t":2})"));
-	const std::vector<std::string> path = mm ? std::vector<std::string>{"doc", "tracks", "2", "pages", "0", "0"} : std::vector<std::string>{"doc", "tracks", "2", "synth", "0"};
-	const auto kitValue = [&]() -> int
+	const auto workingKit = [&]() -> const Value*
 	{
-		const auto* w = last("doc", [&](const Value& _m)
+		return last("doc", [&](const Value& _m)
 		{
 			const auto* k = _m.find("kind");
 			const auto* p = _m.find("pending");
 			return k && k->asString() == "workingKit" && !(p && p->isBool() && p->asBool());
 		});
+	};
+	const auto kitAt = [&](const int _t, const int _i) -> int
+	{
+		const auto* w = workingKit();
+		const auto path = mm ? std::vector<std::string>{"doc", "tracks", std::to_string(_t), "pages", "0", std::to_string(_i)}
+			: std::vector<std::string>{"doc", "tracks", std::to_string(_t), "synth", std::to_string(_i)};
 		const auto* v = w ? at(*w, path) : nullptr;
 		return v && v->isNumber() ? static_cast<int>(v->asNumber()) : -1;
 	};
+	const auto kitValue = [&] { return kitAt(2, 0); };
 	const int before = kitValue();
-	const int want = before == 100 ? 101 : 100;
-	send(juce::MidiMessage::controllerEvent(10, 24, want));
+	send(juce::MidiMessage::controllerEvent(10, 24, 64));
+	pump(400);
+	check(before >= 0 && kitValue() == before, "relative: the knob's first value (64) only sets its reference: track 3's " + std::string(mm ? "SYN A" : "SYN 1") + " stays " + std::to_string(before)
+		+ " (now " + std::to_string(kitValue()) + ")");
+	const int d = before <= 100 ? 5 : -5;
+	const int want = before + d;
+	send(juce::MidiMessage::controllerEvent(10, 24, 64 + d));
 	const bool moved = waitFor([&] { return kitValue() == want; }, 4000);
-	check(moved, "BD LEVEL (CC 24) moves track 3's " + std::string(mm ? "SYN A" : "SYN 1") + " to " + std::to_string(want) + " in the machine's memory (was " + std::to_string(before) + ", now "
+	check(moved, "relative: CC 24 at " + std::to_string(64 + d) + " moves it by " + std::to_string(d) + " from where it was, to " + std::to_string(want) + " (not to the knob's 64 + d; now "
 		+ std::to_string(kitValue()) + ")");
+	// a 60 Hz turn of 40 steps: the changes add up, the value ends 40 steps on
+	const int step = want + 40 <= 127 ? 1 : -1;
+	for(int n = 1; n <= 40; ++n)
+	{
+		send(juce::MidiMessage::controllerEvent(10, 24, 64 + d + n * step));
+		pump(1000.0 / 60);
+	}
+	const int end = want + 40 * step;
+	const bool burst = waitFor([&] { return kitValue() == end; }, 4000);
+	check(burst, "a 60 Hz turn of 40 steps ends 40 steps on: the start value + the total change (" + std::to_string(end) + "; now " + std::to_string(kitValue()) + ")");
+	// another track selected: nothing moves; its first value only sets the reference again
+	session->onPageMessage(parseJson(R"({"op":"ctlTrack","id":6,"t":3})"));
+	pump(200);
+	const int other = kitAt(3, 0);
+	send(juce::MidiMessage::controllerEvent(10, 24, 10));
+	pump(400);
+	check(kitAt(3, 0) == other && kitValue() == end, "a track change moves nothing, and the knob's next value only sets its reference");
+	session->onPageMessage(parseJson(R"({"op":"ctlTrack","id":7,"t":2})"));
+	// absolute: the value jumps to the knob's position; a burst ends on its last value
+	session->onPageMessage(parseJson(R"({"op":"ctlSet","id":8,"knobMode":"absolute"})"));
+	pump(200);
 	for(int n = 0; n < 60; ++n)
 	{
 		send(juce::MidiMessage::controllerEvent(10, 24, 20 + n));
 		pump(1000.0 / 60);
 	}
-	const bool burst = waitFor([&] { return kitValue() == 79; }, 4000);
-	check(burst, "a 60 Hz knob burst ends on its last value (79; now " + std::to_string(kitValue()) + ")");
+	const bool jumped = waitFor([&] { return kitValue() == 79; }, 4000);
+	check(jumped, "absolute: a 60 Hz knob burst ends on its last value (79; now " + std::to_string(kitValue()) + ")");
+	session->onPageMessage(parseJson(R"({"op":"ctlSet","id":9,"knobMode":"relative"})"));
+	pump(200);
+
+	// ACC LEVEL (CC 71) is NOTE
+	const auto knobOwn = [&](const int _cc) -> std::string
+	{
+		const auto* c = ctl();
+		const auto* k = c ? at(*c, {"doc", "knobs"}) : nullptr;
+		if(k && k->isArray())
+			for(const auto& e : k->asArray())
+				if(e.find("cc") && static_cast<int>(e.find("cc")->asNumber()) == _cc)
+					return e.find("name")->asString() + (e.find("own")->asString().empty() ? "" : " / " + e.find("own")->asString());
+		return {};
+	};
+	if(mm)
+	{
+		// the voices on the selected track (track 1: BD) play 2 semitones higher; the note sounds
+		session->onPageMessage(parseJson(R"({"op":"ctlTrack","id":10,"t":0})"));
+		pump(200);
+		const auto bdNote = [&]() -> int
+		{
+			const auto* c = ctl();
+			const auto* n = c ? at(*c, {"doc", "voices", "0", "note"}) : nullptr;
+			return n && n->isNumber() ? static_cast<int>(n->asNumber()) : -1;
+		};
+		const int from = bdNote();
+		send(juce::MidiMessage::controllerEvent(10, 71, 64));
+		pump(200);
+		send(juce::MidiMessage::controllerEvent(10, 71, 66));
+		const bool up = waitFor([&] { return bdNote() == from + 2; }, 3000);
+		check(from == 60 && up, "MM: CC 71 (NOTE) +2 on track 1: BD plays " + std::to_string(bdNote()) + " (was " + std::to_string(from) + ")");
+		const auto* out = ctl() ? at(*ctl(), {"doc", "voices", "0", "out", "note"}) : nullptr;
+		check(out && out->isNumber() && static_cast<int>(out->asNumber()) == from + 2, "MM: the route follows: BD goes out at 62");
+		check(loudest(note(36), 700) > 0.01f, "MM: the transposed BD sounds");
+		send(juce::MidiMessage::controllerEvent(10, 71, 64));
+		waitFor([&] { return bdNote() == from; }, 3000);
+		check(bdNote() == from, "MM: NOTE back down: 60 again");
+		session->onPageMessage(parseJson(R"({"op":"ctlTrack","id":11,"t":2})"));
+	}
+	else
+	{
+		// the selected track's machine's pitch parameter, or nothing where it has none
+		const auto* w = workingKit();
+		const auto* m = w ? at(*w, {"doc", "tracks", "2", "model"}) : nullptr;
+		const int model = m && m->isNumber() ? static_cast<int>(m->asNumber()) : -1;
+		const int p = deskController::mdPitchParam(model);
+		std::printf("  MD track 3: %s, CC 71 moves %s\n", deskController::modelName(deskController::Machine::Md, model).c_str(), knobOwn(71).c_str());
+		const int pitchFrom = p >= 0 ? kitAt(2, p) : -1;
+		send(juce::MidiMessage::controllerEvent(10, 71, 64));
+		pump(200);
+		const int pd = pitchFrom <= 100 ? 3 : -3;
+		send(juce::MidiMessage::controllerEvent(10, 71, 64 + pd));
+		if(p >= 0)
+			check(waitFor([&] { return kitAt(2, p) == pitchFrom + pd; }, 3000) && knobOwn(71) == "NOTE / " + std::string(elektronData::mdMachineParamNames(static_cast<uint32_t>(model))[static_cast<size_t>(p)]),
+				"MD: CC 71 (NOTE) moves the machine's pitch parameter by " + std::to_string(pd) + " (" + knobOwn(71) + ", now " + std::to_string(kitAt(2, p)) + ")");
+		else
+		{
+			pump(400);
+			check(knobOwn(71) == "NOTE / no pitch on this machine", "MD: a machine without a pitch parameter: NOTE does nothing (" + knobOwn(71) + ")");
+		}
+	}
 	// All Sound Off and Reset All Controllers from the TR-06 are blocked: the machine still plays
 	send(juce::MidiMessage::controllerEvent(10, 121, 0));
 	send(juce::MidiMessage::controllerEvent(10, 120, 0));

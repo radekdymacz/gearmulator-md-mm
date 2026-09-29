@@ -951,8 +951,8 @@ namespace
 			}
 			desk.tick();
 		};
-		// BD LEVEL (CC 24 -> SYN 1) at 60 moves a second for 1 s, the knob's values rising; the ACC knob twice at
-		// the same value; the session stepping every 8 ms.
+		// BD LEVEL (CC 24 -> SYN 1) at 60 moves a second for 1 s, the knob's values rising (the absolute knob
+		// mode); a knob on SYN 8 twice at the same value; the session stepping every 8 ms.
 		for(int n = 0; n < 60; ++n)
 		{
 			const double at = 1000 + n * 1000.0 / 60;
@@ -960,7 +960,7 @@ namespace
 			now = at;
 			pump.in(selected, setup.knobs[24], static_cast<uint8_t>(40 + n), now);
 			if(n == 10 || n == 11)
-				pump.in(selected, setup.knobs[71], 90, now);
+				pump.in(selected, deskController::Target{-1, 7}, 90, now);
 		}
 		for(int i = 0; i < 20; ++i) { now += 8; session(); }
 		int dumps = 0;
@@ -975,7 +975,7 @@ namespace
 		}
 		std::printf("  (%zu commands: %zu SYN 1 CCs, %zu ACC, %zu others, %d dumps)\n", commands, syn1, acc, other, dumps);
 		check(syn1 >= 18 && syn1 <= 22, "60 moves in 1 s: about 20 CCs, one per 50 ms (" + std::to_string(syn1) + ")");
-		check(acc == 1 && other == 0, "the repeated ACC value went once; nothing else moved");
+		check(acc == 1 && other == 0, "the repeated SYN 8 value went once; nothing else moved");
 		check(dumps == 0, "never a kit or pattern dump for a single parameter");
 		check(!params.empty() && params.back()[1] == 0 ? params.back()[2] == 99 : false, "the machine ends on the knob's last value (99)");
 		check(desk.documents().working->kit.params[selected][0] == 99 && desk.documents().working->kit.params[selected][7] == 90, "the editor shows it");
@@ -990,6 +990,18 @@ namespace
 		now += 100;
 		session();
 		check(params.back()[0] == 5 && params.back()[1] == 24 && params.back()[2] == 77, "a LEVEL target is the track level (CC index 24)");
+		// relative (the TR-06's default): changes from the value the kit holds, added up per round
+		now += 1000;
+		const int from = desk.documents().working->kit.params[selected][1];
+		const auto current = [&](const uint8_t _t, const deskController::Target& _at) { return static_cast<int>(desk.documents().working->kit.params[_t][static_cast<size_t>(_at.i)]); };
+		pump.add(selected, deskController::Target{-1, 1}, 3, now);
+		pump.add(selected, deskController::Target{-1, 1}, 4, now);
+		const auto edits = pump.take(now, current);
+		for(const auto& c : deskController::mdCommands(edits, desk.documents().working->kit.position))
+			desk.onPageMessage(c);
+		desk.tick();
+		const int want = std::min(127, from + 7);
+		check(params.back()[0] == selected && params.back()[1] == 1 && params.back()[2] == want, "relative: +3 +4 moves SYN 2 from the kit's " + std::to_string(from) + " to " + std::to_string(want));
 	}
 
 	// Control All (manual p.37, DESIGN-edit-flow.md): one tweak intent, the machine's own gesture on the

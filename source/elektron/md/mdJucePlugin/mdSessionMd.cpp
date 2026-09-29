@@ -188,6 +188,20 @@ namespace mdJucePlugin
 				for(const auto& c : deskController::mdCommands(_edits, working->kit.position))
 					_desk.onPageMessage(c);
 		}
+
+		static int current(const mdDesk::Desk& _desk, const uint8_t _t, const deskController::Target& _at)
+		{
+			const auto& working = _desk.documents().working;
+			if(!working || _t >= 16 || _at.pg != -1 || _at.i < 0 || _at.i > 24)
+				return -1;
+			return _at.i == 24 ? working->kit.levels[_t] : working->kit.params[_t][static_cast<size_t>(_at.i)];
+		}
+
+		static int model(const mdDesk::Desk& _desk, const uint8_t _t)
+		{
+			const auto& working = _desk.documents().working;
+			return working && _t < 16 ? static_cast<int>(working->kit.models[_t]) : -1;
+		}
 	};
 
 	class MdSession final : public SessionOf<mdDesk::Desk>
