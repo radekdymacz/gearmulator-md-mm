@@ -74,21 +74,28 @@ jobs:
 
       # A release reviewed and uploaded by hand (from a local, firmware-tested
       # build) wins: an asset that is already there is never replaced. With no
-      # release yet, a draft pre-release is created for Radek to publish.
+      # release yet, a draft is created for Radek to publish. A draft release
+      # counts as existing: `gh release view <tag>` does not see drafts (the
+      # API's tag lookup skips them), so the release is looked up in the list,
+      # drafts included, and never created twice.
       - name: Attach installers to the GitHub release
         run: |
           set -euo pipefail
           notes="doc/release/v${TAG#mdmm-v}.md"
           pkgs=("${RUNNER_TEMP}/mdmm-pkg/Machinedrum-Editor-macOS.pkg" \
                 "${RUNNER_TEMP}/mdmm-pkg/Monomachine-Editor-macOS.pkg")
-          if gh release view "${TAG}" --repo "${GITHUB_REPOSITORY}" >/dev/null 2>&1; then
-            existing="$(gh release view "${TAG}" --repo "${GITHUB_REPOSITORY}" --json assets --jq '.assets[].name')"
+          release_id="$(gh api --paginate "repos/${GITHUB_REPOSITORY}/releases?per_page=100" \
+            --jq ".[] | select(.tag_name == \"${TAG}\") | .id" | head -n 1)"
+          if [[ -n "${release_id}" ]]; then
+            existing="$(gh api "repos/${GITHUB_REPOSITORY}/releases/${release_id}" --jq '.assets[].name')"
             for pkg in "${pkgs[@]}"; do
               name="$(basename "${pkg}")"
               if printf '%s\n' "${existing}" | grep -qxF "${name}"; then
-                echo "Keeping the existing ${name} on ${TAG}"
+                echo "Keeping the existing ${name} on release ${release_id} (${TAG})"
               else
-                gh release upload "${TAG}" "${pkg}" --repo "${GITHUB_REPOSITORY}"
+                gh api --method POST -H "Content-Type: application/octet-stream" \
+                  "https://uploads.github.com/repos/${GITHUB_REPOSITORY}/releases/${release_id}/assets?name=${name}" \
+                  --input "${pkg}" --jq '.name'
               fi
             done
           else
