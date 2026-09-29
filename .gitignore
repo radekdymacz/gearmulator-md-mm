@@ -19,3 +19,7 @@ _copilot.bat
 target/logs/
 claude*.bat
 .mcp.json
+
+# Local tool output (wrangler/miniflare cache holds the caller's IP location)
+site/node_modules/
+site/.wrangler/

@@ -193,5 +193,5 @@ cutoff/resonance response curve, and all 3x LFO shapes (below).
 ---
 
 Both PDFs saved at:
-`/Users/radek/Documents/Github/audio/gearmulator-md-mm/doc/manuals/machinedrum_manual_OS1.63.pdf`
-`/Users/radek/Documents/Github/audio/gearmulator-md-mm/doc/manuals/monomachine_manual_OS1.32.pdf`
+`doc/manuals/machinedrum_manual_OS1.63.pdf` (local, not committed)
+`doc/manuals/monomachine_manual_OS1.32.pdf` (local, not committed)
