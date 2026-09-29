@@ -514,7 +514,7 @@
     },
     "kit": {
       "type": "object",
-      "required": ["schema", "version", "slot", "name", "levels", "tracks", "trackMasks", "firmware"],
+      "required": ["schema", "version", "slot", "name", "levels", "tracks", "trackMasks", "multiTrig", "firmware"],
       "properties": {
         "schema": {
           "const": "mm-desk/kit"
@@ -562,6 +562,9 @@
             "lpf": {
               "$ref": "#/$defs/byte"
             },
+            "portamento": {
+              "$ref": "#/$defs/byte"
+            },
             "legatoAmp": {
               "$ref": "#/$defs/byte"
             },
@@ -570,6 +573,33 @@
             },
             "legatoLfo": {
               "$ref": "#/$defs/byte"
+            }
+          },
+          "description": "Per-track bits (bit t = track t). MM-P4 corrected MM-P1's guess: mirror is the JOY mirror at 0x1d0; 0x2aa-0x2ac are key tracking LPF, HPF and PORTAMENTO (set = ALWAYS, clear = ONLY LEGATO)."
+        },
+        "multiTrig": {
+          "type": "object",
+          "description": "MULTI TRIG (MM-P4, panel): mode 0 ALL TRK, 1 SPLIT KEY, 2 SEQ START, 3 SEQ TRNSP; timing 0 DIRECT, 1/16 2/16 4/16 8/16 16/16 32/16; splitKey the first key of the upper zone; splitTrack the first upper track, 0-based.",
+          "required": ["mode", "timing", "splitKey", "splitTrack"],
+          "additionalProperties": false,
+          "properties": {
+            "mode": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 3
+            },
+            "timing": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 6
+            },
+            "splitKey": {
+              "$ref": "#/$defs/value"
+            },
+            "splitTrack": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 5
             }
           }
         },
@@ -583,8 +613,8 @@
             "x1cd": {
               "$ref": "#/$defs/hex"
             },
-            "x2b6": {
-              "$ref": "#/$defs/hex"
+            "x1d1": {
+              "$ref": "#/$defs/byte"
             }
           },
           "required": ["format"]
@@ -709,7 +739,7 @@
     },
     "global": {
       "type": "object",
-      "required": ["schema", "version", "slot", "channels", "midiSeq", "routingMode", "masterTune", "multiMap", "control", "firmware"],
+      "required": ["schema", "version", "slot", "channels", "midiSeq", "routingMode", "masterTune", "multiMap", "control", "controlIn", "firmware"],
       "properties": {
         "schema": {
           "const": "mm-desk/global"
@@ -794,6 +824,20 @@
         },
         "control": {
           "$ref": "#/$defs/hex"
+        },
+        "controlIn": {
+          "type": "object",
+          "description": "CONTROL IN (MM-P4, panel): tempoSync 0 INTERNAL, 1 EXT MIDI CLK; transport 0 IGNORE, 1 ACCEPT (MIDI Start/Stop).",
+          "required": ["tempoSync", "transport"],
+          "additionalProperties": false,
+          "properties": {
+            "tempoSync": {
+              "$ref": "#/$defs/byte"
+            },
+            "transport": {
+              "$ref": "#/$defs/byte"
+            }
+          }
         },
         "firmware": {
           "type": "object",
@@ -1023,7 +1067,7 @@
     },
     "machine": {
       "type": "object",
-      "required": ["schema", "version", "pattern", "kit", "song", "global", "tempo", "recv", "loading", "roundTripMs", "lifecycle", "capabilities", "engines", "history", "input", "midi", "lifecycleText"],
+      "required": ["schema", "version", "pattern", "kit", "song", "global", "tempo", "mutes", "poly", "recv", "loading", "roundTripMs", "lifecycle", "capabilities", "engines", "history", "input", "midi", "lifecycleText"],
       "description": "Read-only machine state from the MM desk: current and queued pattern, kit and its working state, song, SYSEX RECV session, and the core's parts (P6: every member declared).",
       "properties": {
         "schema": {
@@ -1147,15 +1191,63 @@
           ],
           "description": "BPM from RAM; null while booting."
         },
+        "mutes": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["synth", "midi"],
+          "description": "MM-P4: the machine's own mutes from RAM (made on its panel too), bit t = track t; null where the engine cannot read them (HW MIDI).",
+          "properties": {
+            "synth": {
+              "oneOf": [
+                {
+                  "type": "null"
+                },
+                {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 63
+                }
+              ]
+            },
+            "midi": {
+              "oneOf": [
+                {
+                  "type": "null"
+                },
+                {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 63
+                }
+              ]
+            }
+          }
+        },
+        "poly": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "type": "boolean"
+            }
+          ],
+          "description": "MM-P4: POLY, the machine's audio mode (status 0x20); null until it answers."
+        },
         "recv": {
           "type": "object",
           "additionalProperties": false,
-          "required": ["state", "sending", "received", "errors"],
+          "required": ["state", "waiting", "sending", "received", "errors"],
           "properties": {
             "state": {
               "type": "string",
               "minLength": 1,
-              "description": "The SYSEX RECV session's state (mmRecv)."
+              "description": "The SYSEX RECV session's state (mmRecv); without the panel (HW MIDI) idle or waitingUser."
+            },
+            "waiting": {
+              "type": "integer",
+              "minimum": 0,
+              "description": "MM-P4, HW MIDI: messages that wait for the person to open SYSEX RECV (hwSend sends them)."
             },
             "sending": {
               "type": "integer",
@@ -1413,7 +1505,7 @@
         },
         {
           "type": "object",
-          "required": ["type", "step", "playing"],
+          "required": ["type", "step", "playing", "record"],
           "properties": {
             "type": {
               "const": "telemetry"
@@ -1424,6 +1516,17 @@
             },
             "playing": {
               "type": "boolean"
+            },
+            "record": {
+              "oneOf": [
+                {
+                  "type": "null"
+                },
+                {
+                  "enum": ["off", "grid", "live"]
+                }
+              ],
+              "description": "MM-P4: the recording mode (RAM): GRID RECORDING, LIVE RECORDING or off; null where the engine cannot read it."
             }
           }
         },
@@ -1610,13 +1713,13 @@
               "const": "ask"
             },
             "ask": {
-              "enum": ["loadKit", "reloadKit", "overwriteSlot", "discardKit"]
+              "enum": ["loadKit", "reloadKit", "overwriteSlot", "discardKit", "transportIgnore"]
             },
             "also": {
               "type": "array",
               "description": "Other questions this one answers too (force answers all of them).",
               "items": {
-                "enum": ["loadKit", "reloadKit", "overwriteSlot", "discardKit"]
+                "enum": ["loadKit", "reloadKit", "overwriteSlot", "discardKit", "transportIgnore"]
               }
             },
             "message": {
@@ -2098,6 +2201,105 @@
               "maximum": 5
             },
             "on": {
+              "type": ["boolean", "integer"]
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "description": "machine: a MIDI sequencer track's mute (the MUTE window: FUNCTION + BANK GROUP, TRIG 9-14)",
+          "required": ["op", "t"],
+          "properties": {
+            "op": {
+              "const": "muteMidi"
+            },
+            "id": {
+              "type": "integer"
+            },
+            "g": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "force": {
+              "type": ["boolean", "integer"]
+            },
+            "t": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 5
+            },
+            "on": {
+              "type": ["boolean", "integer"]
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "description": "machine: POLY, the machine's audio mode (SET STATUS 0x20)",
+          "required": ["op", "on"],
+          "properties": {
+            "op": {
+              "const": "poly"
+            },
+            "id": {
+              "type": "integer"
+            },
+            "g": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "force": {
+              "type": ["boolean", "integer"]
+            },
+            "on": {
+              "type": ["boolean", "integer"]
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "description": "machine: GRID RECORDING (RECORD), LIVE RECORDING (RECORD + PLAY) or off",
+          "required": ["op", "mode"],
+          "properties": {
+            "op": {
+              "const": "record"
+            },
+            "id": {
+              "type": "integer"
+            },
+            "g": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "force": {
+              "type": ["boolean", "integer"]
+            },
+            "mode": {
+              "type": "string",
+              "enum": ["off", "grid", "live"]
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "description": "machine: HW MIDI: the machine is on SYSEX RECV; send the dumps that wait for it",
+          "required": ["op"],
+          "properties": {
+            "op": {
+              "const": "hwSend"
+            },
+            "id": {
+              "type": "integer"
+            },
+            "g": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "force": {
               "type": ["boolean", "integer"]
             }
           },

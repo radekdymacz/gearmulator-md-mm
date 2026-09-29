@@ -141,14 +141,15 @@ namespace mmDesk
 		static elektronData::json::Value docMessage(const Ref& _ref, const Document& _doc, bool _pending, deskCore::Source _source);
 		// The document kinds (deskCore::KindSpec): names, counts, dump sizes, JSON.
 		static const std::vector<deskCore::KindSpec<MmModel>>& kinds();
-		// What the editor does not do yet on any engine (merged into the capabilities).
+		// What the editor does not do yet on any engine (merged into the capabilities): nothing since MM-P4
+		// (what one engine cannot do is that engine's capability, with the reason).
 		static const std::vector<deskCore::Unsupported>& unsupported();
 		// The Monomachine's page keeps no clipboard in the core.
 		static std::optional<elektronData::json::Value> clipboardDocument(const Clipboard&) { return {}; }
 		// The Monomachine Editor's command vocabulary.
 		static const Table& commands();
 		// P7: the active global as it must be for the machine to follow a DAW's tempo and transport (MIDI
-		// clock, Start, Stop): GLOBAL › MIDI SYNC CLOCK IN and TRANSPORT IN on (raw 0x05 and 0x06, x05[0..1];
+		// clock, Start, Stop): GLOBAL › MIDI SYNC CLOCK IN and TRANSPORT IN on (raw 0x05 and 0x06, tempoSync and transportIn;
 		// as booted both are off). Nothing when it already does. Pure (measured: mmDeskFirmwareTest hostclock).
 		static std::optional<elektronData::MmGlobal> hostFollowing(const elektronData::MmGlobal& _global);
 		// The OS 1.32B machine table and enumerations as "mm-desk/catalogue".
@@ -158,7 +159,7 @@ namespace mmDesk
 		// The questions the MM adapter may ask (deskCore::Ask::what): the contract's ask enum.
 		static const std::vector<std::string>& asks()
 		{
-			static const std::vector<std::string> a{"loadKit", "reloadKit", "overwriteSlot", "discardKit"};
+			static const std::vector<std::string> a{"loadKit", "reloadKit", "overwriteSlot", "discardKit", "transportIgnore"};
 			return a;
 		}
 	};

@@ -140,5 +140,10 @@ A model's SysEx rules (what its OS takes as it is) are its `SyxTraits`, in `mdSe
 Configure a test build with `-DBUILD_TESTING=ON -Dgearmulator_MDMM_DIAGNOSTICS=ON`; diagnostics (the log, the self-tests) are off by default for every generator. Then:
 - `ctest -E "Plugin|_AU|VST|FirmwareTest"` runs the unit tests.
 - `mdDeskFirmwareTest <MD ROM> [hw|p4|playload]` and `mmDeskFirmwareTest <MM ROM>` run the firmware smoke tests, including the contract check; `GEARMULATOR_MD_FIRMWARE_BIN=<MD ROM> ctest -R mdSessionFirmwareTest` runs the session without an editor.
-- `GEARMULATOR_MDSTUDIO_SELFTEST=1|p4|p4hw|p5|p6audio|p7` and `GEARMULATOR_MMSTUDIO_SELFTEST=1|mmcpu|p6audio|p7` run the in-plugin self-tests on the standalone apps.
+- `GEARMULATOR_MDSTUDIO_SELFTEST=1|p4|p4hw|p5|p6audio|p7` and `GEARMULATOR_MMSTUDIO_SELFTEST=1|mmcpu|p4|p6audio|p7` run the in-plugin self-tests on the standalone apps (MM `p4`: the MM-P4 features ported in P8).
 - `mdDeskFirmwareTest <MD ROM> hostclock` and `mmDeskFirmwareTest <MM ROM> hostclock` check that the machines follow a host's clock after `followHost`.
+- `mmDeskFirmwareTest <MM ROM> p4` checks the MM-P4 features on the firmware (POLY, MIDI track mutes through the MUTE window, LIVE and GRID RECORDING, MULTI TRIG, PORTAMENTO, the MULTI MAP, another song, undo of a slot write); `mmDeskFirmwareTest <MM ROM> hw` drives a second emulated Monomachine as the HW MIDI peer through the plug-in's `wirePort` at DIN speed, with the test playing the person at the machine (SYSEX RECV, `hwSend`, TRANSPORT ACCEPT).
+
+## HW MIDI without the panel (P8, from MM-P4)
+
+Where the editor cannot press the machine's keys (`Profile.panel` false), a dump reaches the Monomachine only if the person has opened GLOBAL › FILE › SYSEX RECV. The adapter keeps such dumps (and the LOAD KIT that follows a kit dump) in order and publishes `machine.recv.waiting`; the page shows **SEND n** and a dialog with the steps, and its **Send now** is the `hwSend` command. What the machine has no MIDI message for (the MIDI track mutes, RECORD) is a capability that is false, with the reason; never a branch on the engine.

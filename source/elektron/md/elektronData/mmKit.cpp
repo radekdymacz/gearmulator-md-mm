@@ -22,17 +22,22 @@ namespace elektronData
 			_io.bytes(_k.machines);
 			_io.bytes(_k.routing);
 			_io.bytes(_k.x1cd);
+			_io.u8(_k.mirrorMask);
+			_io.u8(_k.x1d1);
 			_io.bytes(_k.assignPage);
 			_io.bytes(_k.assignDest);
 			_io.bytes(_k.assignAdd);
-			_io.u8(_k.mirrorMask);
-			_io.u8(_k.hpfMask);
 			_io.u8(_k.lpfMask);
+			_io.u8(_k.hpfMask);
+			_io.u8(_k.portamentoMask);
 			_io.bytes(_k.trigPos);
 			_io.u8(_k.legatoAmp);
 			_io.u8(_k.legatoFilter);
 			_io.u8(_k.legatoLfo);
-			_io.bytes(_k.x2b6);
+			_io.u8(_k.multiTrigMode);
+			_io.u8(_k.multiTrigTiming);
+			_io.u8(_k.splitKey);
+			_io.u8(_k.splitTrack);
 		}
 	}
 

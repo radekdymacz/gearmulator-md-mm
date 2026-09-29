@@ -162,18 +162,10 @@ namespace mmDesk
 
 	const std::vector<deskCore::Unsupported>& MmModel::unsupported()
 	{
-		// What the editor does not do on any engine yet (MM-P3): model data, merged into the capabilities.
-		static const std::vector<deskCore::Unsupported> list{
-			{"midiMutes", "MIDI track mutes are set on the machine (FUNCTION + a track key in MIDI mode). The plug-in has no command for them yet."},
-			{"poly", "POLY is switched on the machine. The editor does not drive it yet."},
-			{"multiTrig", "MULTI TRIG mode, split and timing are settings the editor does not decode yet: set them on the machine. The keys"
-				" here do play on the MULTI TRIG channel."},
-			{"multiMap", "MULTI MAP ranges live in the global slot. The editor reads each range's upper key and pattern; offset, length,"
-				" transpose and timing are not decoded yet, so edit the map on the machine (GLOBAL › CONTROL › MULTIMAP EDIT). The keys"
-				" here do play on the MULTI MAP channel."},
-			{"portamento", "PORTAMENTO mode (ALWAYS / ONLY LEGATO) is not decoded in the kit yet: set it on the machine."},
-			{"gridRecord", "GRID RECORD and LIVE RECORD run on the machine. In the editor you draw steps directly."}};
-		return list;
+		// MM-P4 made every feature MM-P3 disabled real; what an engine cannot do (over HW MIDI the MIDI
+		// track mutes and RECORD) is its capability (MmMachine::capabilities).
+		static const std::vector<deskCore::Unsupported> none;
+		return none;
 	}
 
 	namespace
@@ -291,6 +283,13 @@ namespace mmDesk
 			{"modSet", Owner::Setup, Gate::None, -1, {{"doc", ArgType::Object}}, "the app modulators (mm-desk/modulators)"},
 			// ---- the machine ----
 			{"mute", Owner::Machine, Gate::Input, -1, {t6, {"on", ArgType::Bool, 0, 0, true}}, "a synth track's mute"},
+			// MM-P4
+			{"muteMidi", Owner::Machine, Gate::Input, -1, {t6, {"on", ArgType::Bool, 0, 0, true}},
+				"a MIDI sequencer track's mute (the MUTE window: FUNCTION + BANK GROUP, TRIG 9-14)"},
+			{"poly", Owner::Machine, Gate::Input, -1, {{"on", ArgType::Bool}}, "POLY, the machine's audio mode (SET STATUS 0x20)"},
+			{"record", Owner::Machine, Gate::Input, -1, {{"mode", ArgType::Text, 0, 0, false, {"off", "grid", "live"}}},
+				"GRID RECORDING (RECORD), LIVE RECORDING (RECORD + PLAY) or off"},
+			{"hwSend", Owner::Machine, Gate::Input, -1, {}, "HW MIDI: the machine is on SYSEX RECV; send the dumps that wait for it"},
 			{"followHost", Owner::Machine, Gate::Input, -1, {}, "in a DAW: the active GLOBAL follows the host's clock and transport"},
 		});
 		return table;
@@ -298,11 +297,11 @@ namespace mmDesk
 
 	std::optional<ed::MmGlobal> MmModel::hostFollowing(const ed::MmGlobal& _global)
 	{
-		if(_global.x05[0] == 1 && _global.x05[1] == 1)
+		if(_global.tempoSync == 1 && _global.transportIn == 1)
 			return std::nullopt;
 		auto g = _global;
-		g.x05[0] = 1;	// CLOCK IN
-		g.x05[1] = 1;	// TRANSPORT IN
+		g.tempoSync = 1;	// EXT MIDI CLK (CLOCK IN)
+		g.transportIn = 1;	// ACCEPT (TRANSPORT IN)
 		return g;
 	}
 }

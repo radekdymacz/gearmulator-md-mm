@@ -179,12 +179,134 @@ window.MMDiagnostics = {};
 			if (!I().doc("song", CUR.song) || !I().doc("global", CUR.glob)) throw new Error("not loaded");
 			return s.song.length + " rows, routing " + s.routing;
 		});
-		await check("capabilities as data (the engine's reasons)", async () => {
+		await check("capabilities as data: the emulator can do every gated control (MM-P4)", async () => {
 			const caps = machine()?.capabilities;
-			if (!caps || caps.engine !== "emu" || caps.can?.midiMutes !== false || !caps.reasons?.midiMutes) throw new Error(JSON.stringify(caps));
+			const off = V().gated().filter(c => caps?.can?.[c] !== true);
+			if (!caps || caps.engine !== "emu" || off.length) throw new Error("not allowed: " + off.join(", ") + " " + JSON.stringify(caps?.reasons));
 			const el = $('[data-mute="6"]');
-			if (el && el.dataset.na !== "1") throw new Error("MIDI track mute not marked");
-			return Object.keys(caps.reasons).length + " reasons";
+			if (el && el.dataset.na === "1") throw new Error("MIDI track mute still marked: " + el.title);
+			return V().gated().length + " capabilities allowed";
+		});
+		const ok = results.filter(Boolean).length;
+		log(`SELFTEST ${ok === results.length ? "PASS" : "FAIL"} ${ok}/${results.length}`);
+	}
+
+	/* ?selftest=p4: MM-P4's features, ported onto the P6 page in P8, through the user's own paths: MIDI track
+	   mutes (the MUTE window), POLY, GRID RECORDING, MULTI TRIG and PORTAMENTO, the MULTI MAP, another song,
+	   undo of a library write, HW MIDI with nothing attached. */
+	async function runP4() {
+		const s = S(), results = [];
+		const check = async (name, fn) => {
+			const t0 = now();
+			try { const n = await fn(); results.push(true); log(`SELFTEST ok ${name} ${Math.round(now() - t0)} ms${n ? " " + n : ""}`); }
+			catch (e) { results.push(false); log(`SELFTEST FAIL ${name}: ${e.message}`); }
+			await sleep(1200);
+		};
+		while (!machine() || machine().loading.done < machine().loading.total) await sleep(200);
+		await sleep(2000);
+		const CUR = cur();
+		const machineIs = test => waitFor(m => m.type === "machine" && test(m.doc), 8000);
+		const docIs = (kind, slot, test) => waitFor(m => m.type === "doc" && m.kind === kind && m.slot === slot && !m.pending && test(m.doc), 12000);
+		log(`SELFTEST p4 start: pattern ${CUR.pat} kit ${CUR.kit} song ${CUR.song} global ${CUR.glob}`);
+		await check("MIDI track mute (the MUTE window, read back from RAM)", async () => {
+			{ const w = machineIs(d => d.mutes.midi != null && ((d.mutes.midi >> 2) & 1) === 1);
+			s.midi[2].mute = true; host.mutes();
+			await w; }
+			{ const w = machineIs(d => ((d.mutes.midi >> 2) & 1) === 0);
+			s.midi[2].mute = false; host.mutes();
+			await w; }
+		});
+		await check("POLY (SET STATUS 0x20)", async () => {
+			V().goWs("perform"); await sleep(300);
+			{ const w = machineIs(d => d.poly === true);
+			$('[data-pmode="poly"]').click();
+			await w; }
+			{ const w = machineIs(d => d.poly === false);
+			$('[data-pmode="normal"]').click();
+			await w; }
+			V().goWs("seq");
+		});
+		await check("GRID RECORDING on and off (the RECORD key)", async () => {
+			{ const w = waitFor(m => m.type === "telemetry" && m.record === "grid", 6000);
+			$("#rec").click();
+			await w; }
+			await sleep(300);
+			{ const w = waitFor(m => m.type === "telemetry" && m.record === "off", 6000);
+			$("#rec").click();
+			await w; }
+		});
+		await check("MULTI TRIG and PORTAMENTO in the kit that plays", async () => {
+			const m0 = { ...s.multi }, p0 = s.tracks[1].port;
+			s.multi = { ...s.multi, mode: 1, splitKey: 55, splitTrack: 4, timing: 2 };
+			s.tracks[1].port = p0 === 1 ? 0 : 1;
+			const w1 = waitFor(m => m.type === "doc" && m.kind === "workingKit" && !m.pending && m.doc.multiTrig.mode === 1 && m.doc.multiTrig.splitKey === 55
+				&& m.doc.multiTrig.splitTrack === 3 && m.doc.multiTrig.timing === 2 && ((m.doc.trackMasks.portamento >> 1) & 1) === (p0 === 1 ? 1 : 0), 12000);
+			host.edited("sound"); host.edited("commit");
+			await w1;
+			s.multi = m0; s.tracks[1].port = p0;
+			{ const w = waitFor(m => m.type === "doc" && m.kind === "workingKit" && !m.pending && m.doc.multiTrig.mode === m0.mode, 12000);
+			host.edited("sound"); host.edited("commit");
+			await w; }
+		});
+		await check("a MULTI MAP row in the global", async () => {
+			const r0 = { ...s.mmap[0] };
+			Object.assign(s.mmap[0], { ofs: 3, len: 12, trn: 66, tim: 2 });
+			{ const w = docIs("global", CUR.glob, d => d.multiMap[2][0] === 2 && d.multiMap[3][0] === 12 && d.multiMap[4][0] === 2 && d.multiMap[5][0] === 2);
+			host.edited("struct", "global"); host.edited("commit");
+			await w; }
+			Object.assign(s.mmap[0], r0);
+			{ const w = docIs("global", CUR.glob, d => d.multiMap[5][0] === r0.tim);
+			host.edited("struct", "global"); host.edited("commit");
+			await w; }
+		});
+		await check("another song than the machine's (S24), from the picker", async () => {
+			V().goWs("song"); await sleep(300);
+			const sel = $("#songsel");
+			if (!sel) throw new Error("no song picker");
+			sel.value = "23"; sel.dispatchEvent(new Event("change", { bubbles: true }));
+			await sleep(500);
+			const before = s.song.length;
+			{ const w = docIs("song", 23, d => d.rows.length === before + 1 && d.rows[0].pattern === 7);
+			s.song.splice(0, 0, { pat: 7, rep: 2 }); host.edited("struct", "song"); host.edited("commit");
+			await w; }
+			{ const w = docIs("song", 23, d => d.rows.length === before);
+			s.song.splice(0, 1); host.edited("struct", "song"); host.edited("commit");
+			await w; }
+			host.songSlot(CUR.song);
+			V().goWs("seq");
+			return `${before} rows`;
+		});
+		await check("undo a library write (a kit copied into K100)", async () => {
+			const I0 = I(), before = I0.doc("kit", 99);
+			const from = [...Array(99).keys()].find(k => k !== cur().kit && I0.doc("kit", k) && !MmConvert.kitEmpty(I0.doc("kit", k))
+				&& MmConvert.kitName(I0.doc("kit", k)) !== MmConvert.kitName(before || {}));
+			const src = from != null ? I0.doc("kit", from) : null;
+			if (!before || !src) throw new Error("kits not read");
+			log(`SELFTEST p4: kit copy K${from + 1} "${MmConvert.kitName(src)}" into K100 "${MmConvert.kitName(before)}"`);
+			const written = docIs("kit", 99, d => MmConvert.kitName(d) === MmConvert.kitName(src));
+			window.kitPut(99, window.kitSrc(from), "Copy");
+			await sleep(150);
+			$('#dlg [data-dlg="0"]')?.click();
+			await written;
+			host.edited("commit");
+			const undone = docIs("kit", 99, d => MmConvert.kitName(d) === MmConvert.kitName(before));
+			host.undo();
+			await undone;
+			return `"${MmConvert.kitName(src)}" then back to "${MmConvert.kitName(before)}"`;
+		});
+		await check("HW MIDI with no Monomachine attached: HW NO MIDI, then the emulator again", async () => {
+			const hw = (machine().engines || []).find(e => e.id === "hw");
+			if (!hw) throw new Error("no hw engine");
+			if (!hw.available) return "not offered here: " + hw.reason;
+			{ const w = waitFor(m => m.type === "machine" && m.doc.capabilities?.engine === "hw" && m.doc.lifecycle === "hwLost", 12000);
+			host.engine("hw");
+			await w; }
+			const caps = machine().capabilities;
+			if (caps.can.midiMutes || caps.can.gridRecord) throw new Error("MIDI track mutes or RECORD allowed over MIDI");
+			{ const w = waitFor(m => m.type === "machine" && m.doc.capabilities?.engine === "emu" && m.doc.lifecycle === "ready", 20000);
+			host.engine("emu");
+			await w; }
+			return "HW NO MIDI, the reasons, then EMU OS 1.32B";
 		});
 		const ok = results.filter(Boolean).length;
 		log(`SELFTEST ${ok === results.length ? "PASS" : "FAIL"} ${ok}/${results.length}`);
@@ -388,6 +510,7 @@ window.MMDiagnostics = {};
 		/* ?selftest=1: edits through the mockup's own gestures and its host, each round trip logged */
 		1: () => setTimeout(runSelfTest, 500),
 		p7: () => setTimeout(runP7, 500),
+		p4: () => setTimeout(runP4, 500),
 		mmcpu: () => runCpuPhases(),
 		/* ?selftest=p6audio: the AUDIO / MIDI panel's self-test (the mockup's) */
 		p6audio: () => setTimeout(() => window.MMDiagnostics.audioSelfTest({ log: t => log("AUDIO: " + t), play: on => { if (on !== V().playing()) host.togglePlay(); }, step: () => V().step(), playing: () => V().playing() }), 3000)

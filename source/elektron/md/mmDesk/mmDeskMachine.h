@@ -31,6 +31,8 @@ namespace mmDesk
 	//   the working kit: CC per changed parameter and level, NRPN for the MIDI page, 0x5B machine,
 	//     0x5C routing, 0x55 name; what has no live path is a kit dump to the current slot plus
 	//     LOAD KIT (which also saves it there). It is pending until memory shows it.
+	// Without the panel (HW MIDI) only the person can open SYSEX RECV: the dumps wait (the machine
+	// document's recv.waiting, "SEND n") until the page says the machine is on it ("hwSend").
 	class MmMachine final : public deskCore::AdapterBase<MmModel, MmAdapter>
 	{
 	public:
@@ -79,6 +81,7 @@ namespace mmDesk
 		deskCore::Outcome askLoadKit(const Value&, const Documents&);
 		deskCore::Outcome askSaveKit(const Value&, const Documents&);
 		deskCore::Outcome askSelect(const Value&, const Documents&);
+		deskCore::Outcome askPlay(const Value&, const Documents&);
 
 		enum class Act : uint8_t { Stop, Play, SelectPattern };
 		struct Push
@@ -94,6 +97,10 @@ namespace mmDesk
 		void request(const Ref& _ref, bool _urgent);
 		void requestStatus();
 		void pushDump(const Ref& _ref, Bytes _dump);
+		// A message that must follow the dumps queued before it on SYSEX RECV (LOAD KIT after a kit dump).
+		void afterDumps(Bytes _message);
+		// The dumps wait for the person to open SYSEX RECV (no panel keys: HW MIDI).
+		bool manualDumps() const { return !m_profile.panel; }
 		void deliverKitLive(const elektronData::MmKit& _from, const elektronData::MmKit& _to, std::vector<std::string>& _notes);
 		void onDump(const Ref& _ref, const Bytes& _sysex);
 		void onStatus(uint8_t _param, uint8_t _value);
@@ -118,6 +125,12 @@ namespace mmDesk
 		deskCore::Outcome cmdStop(const Value&, const Documents&);
 		deskCore::Outcome cmdMute(const Value&, const Documents&);
 		deskCore::Outcome cmdFollowHost(const Value&, const Documents&);
+		deskCore::Outcome cmdMuteMidi(const Value&, const Documents&);
+		deskCore::Outcome cmdPoly(const Value&, const Documents&);
+		deskCore::Outcome cmdRecord(const Value&, const Documents&);
+		deskCore::Outcome cmdHwSend(const Value&, const Documents&);
+		// The machine's own state is known: its RAM (mutes, recording) and its keys.
+		bool machineState() const { return m_profile.telemetry && m_profile.panel && m_port.pressKeys; }
 
 		const Profile m_profile;
 		Port m_port;
@@ -126,6 +139,14 @@ namespace mmDesk
 		uint32_t m_nextRecvTag = 1;
 		std::map<uint32_t, Ref> m_recvRefs;		// a dump on the RECV session -> the push it is
 		std::map<Ref, Push> m_pushes;
+		// Without the panel: what waits for the person's SYSEX RECV, in order (a dump names its push).
+		struct Waiting
+		{
+			Bytes bytes;
+			std::optional<Ref> ref;
+		};
+		std::vector<Waiting> m_manual;
+		bool m_reactivateGlobal = false;	// HW MIDI: the active global was written; SET ACTIVE GLOBAL before PLAY
 
 		deskCore::LoadQueue<Ref> m_loads;
 		bool m_backgroundQueued = false;
@@ -141,6 +162,9 @@ namespace mmDesk
 		deskCore::WireFacts m_wire;
 		int m_curPattern = -1, m_curKit = -1, m_curSong = -1, m_curGlobal = -1, m_songMode = -1;
 		int m_activateGlobal = -1;	// the active global's slot to make active again (0x56) once RECV is left
+		int m_poly = -1;			// the audio mode (SET STATUS 0x20): 0 mono, 1 POLY; -1 unknown
+		int m_lastRecording = -1;	// the recording mode last seen (Telemetry::recording)
+		double m_lastRecordReadMs = -1e9;
 		int m_queuedPattern = -1;
 		int m_lastStep = -1;
 		bool m_lastPlaying = false;

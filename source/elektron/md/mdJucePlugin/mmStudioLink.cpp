@@ -44,6 +44,11 @@ namespace mdJucePlugin
 			case K::Play: return C::Play;
 			case K::Stop: return C::Stop;
 			case K::Global: return C::Kit;
+			case K::Record: return C::Record;
+			case K::LiveRecord: return C::Play;	// with RECORD held
+			case K::MuteWindow: return C::BankGroup;	// with FUNCTION
+			case K::Trig9: case K::Trig10: case K::Trig11: case K::Trig12: case K::Trig13: case K::Trig14:
+				return static_cast<C>(static_cast<int>(C::Trigger1) + 8 + (static_cast<int>(_k) - static_cast<int>(K::Trig9)));
 			}
 			return std::nullopt;
 		}
@@ -129,19 +134,22 @@ namespace mdJucePlugin
 	{
 		std::vector<md::PanelPacket> states;
 		const auto fn = md::panelPacket(md::MachineModel::Monomachine, md::PanelControl::Function);
+		const auto rec = md::panelPacket(md::MachineModel::Monomachine, md::PanelControl::Record);
 		for(const auto k : _keys)
 		{
 			const auto c = control(k);
 			const auto pk = c ? md::panelPacket(md::MachineModel::Monomachine, *c) : std::nullopt;
-			if(!pk || !fn)
+			if(!pk || !fn || !rec)
 				return false;
-			if(k == mmDesk::Key::Global)
+			if(mmDesk::isChord(k))
 			{
+				// FUNCTION (or RECORD for LIVE RECORDING) held while the key goes down and up
+				const auto held = mmDesk::heldIsRecord(k) ? *rec : *fn;
 				md::PanelRowState rows;
-				states.push_back(rows.press(*fn));
+				states.push_back(rows.press(held));
 				states.push_back(rows.press(*pk));
 				states.push_back(rows.release(*pk));
-				states.push_back(rows.release(*fn));
+				states.push_back(rows.release(held));
 				continue;
 			}
 			states.push_back(*pk);
@@ -180,6 +188,8 @@ namespace mdJucePlugin
 		t.recvErrors = m_telemetry->recvErrors.load(std::memory_order_relaxed);
 		t.recvActive = m_telemetry->recvActive.load(std::memory_order_relaxed) == 1;
 		t.tempo = m_telemetry->tempo.load(std::memory_order_relaxed);
+		t.mutes = m_telemetry->mutes.load(std::memory_order_relaxed);
+		t.recording = m_telemetry->recording.load(std::memory_order_relaxed);
 		return t;
 	}
 

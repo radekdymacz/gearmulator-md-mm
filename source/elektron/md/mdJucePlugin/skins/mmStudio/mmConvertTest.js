@@ -64,7 +64,7 @@ for (const { d, f } of docs["mm-desk/pattern"]) {
 for (const { d, f } of docs["mm-desk/song"]) check("song", f, C.songToFw(C.songToPage(d, lenOf), d, lenOf), d);
 for (const { d, f } of docs["mm-desk/global"]) {
 	const midi = d.midiSeq.channels.map((c, t) => ({ ch: c + 1, cc: [...d.midiSeq.ccs[t]] }));
-	check("global", f, C.globalToFw(d, d.routingMode, midi), d);
+	check("global", f, C.globalToFw(d, d.routingMode, midi, C.mapToPage(d)), d);
 }
 
 /* edits land where they should */
@@ -107,6 +107,33 @@ if (docs["mm-desk/kit"].length) {
 		&& m.sources[1].kind === "random" && m.sources[1].smooth === 30 && m.links.length === 2 && m.links[0].param === 14 && m.links[1].param === 49 && m.links[1].invert]);
 	const back = C.modToPage(m), again = C.modToFw(back);
 	edits.push(["modulators round trip", !diff(again, m) && back.links[0].pid === "AMP.6" && back.sources[0].SHAPE === 2]);
+}
+/* MM-P4: MULTI MAP, MULTI TRIG and PORTAMENTO, and a song row more with its residue after END kept inside */
+if (docs["mm-desk/global"].length) {
+	const d = docs["mm-desk/global"][0].d, rows = C.mapToPage(d);
+	rows[0] = { ...rows[0], pat: 2, ofs: 3, len: 8, trn: 61, tim: 3 };
+	const o = C.globalToFw(d, d.routingMode, d.midiSeq.channels.map((c, t) => ({ ch: c + 1, cc: d.midiSeq.ccs[t] })), rows);
+	edits.push(["multi map row", o.multiMap[1][0] === 2 && o.multiMap[2][0] === 2 && o.multiMap[3][0] === 8 && o.multiMap[4][0] === 253 && o.multiMap[5][0] === 3]);
+	const two = C.mapToPage(d).slice(0, 1).map(r => ({ ...r, hi: 60 })).concat([{ hi: 127, pat: -1, ofs: 0, len: 16, trn: 64, tim: 0 }]);
+	const o2 = C.globalToFw(d, d.routingMode, d.midiSeq.channels.map((c, t) => ({ ch: c + 1, cc: d.midiSeq.ccs[t] })), two);
+	edits.push(["multi map split: two ranges, the rest repeat the last upper key", C.mapToPage(o2).length === 2 && o2.multiMap[0][31] === 127]);
+	const k = docs["mm-desk/kit"][0]?.d;
+	if (k) {
+		const p = C.kitToPage(k, d);
+		edits.push(["multi trig to the page (split track from 1)", p.multi && p.multi.splitTrack === k.multiTrig.splitTrack + 1 && p.multi.mode === k.multiTrig.mode]);
+		p.multi = { mode: 1, splitKey: 48, splitTrack: 3, timing: 6 };
+		p.tracks[2].port = 1;
+		const o3 = C.kitToFw(p, k, C.kitName(k));
+		edits.push(["multi trig and portamento", o3.multiTrig.mode === 1 && o3.multiTrig.splitTrack === 2 && o3.multiTrig.timing === 6 && !((o3.trackMasks.portamento >> 2) & 1)]);
+	}
+}
+if (docs["mm-desk/song"].length) {
+	const d = docs["mm-desk/song"].find(x => ((x.d.firmware || x.d.hidden || {}).rowsAfterEnd || []).length)?.d || docs["mm-desk/song"][0].d;
+	const rows = C.songToPage(d, lenOf);
+	rows.splice(0, 0, { pat: 3, rep: 2 });
+	const o = C.songToFw(rows, d, lenOf), fw = o.firmware || o.hidden;
+	const size = (200 - o.rows.length) * 24;
+	edits.push(["song row added, residue kept inside the region", o.rows.length === d.rows.length + 1 && (fw.rowsAfterEnd || []).every(([i, h]) => i * 2 + h.length <= size * 2)]);
 }
 /* the catalogue's counts are the ones mmConvert used before them (OS 1.32B), and the mockup's tables agree with it */
 edits.push(["catalogue: the mockup's tables agree" + (catalogueOff.length ? " (" + catalogueOff.join("; ") + ")" : ""), catalogueOff.length === 0]);

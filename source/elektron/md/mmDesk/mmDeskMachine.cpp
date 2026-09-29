@@ -23,6 +23,8 @@ namespace mmDesk
 	namespace
 	{
 		constexpr double g_readBackTimeoutMs = 8000;
+		constexpr double g_wireReadBackTimeoutMs = 15000;	// DIN speed, behind the library's background read
+		constexpr double g_recordReadMs = 1000;				// while recording: the current pattern read back this often
 		constexpr deskCore::LoadQueue<Ref>::Policy g_loadPolicy{25, 2};
 		constexpr double g_loadTimeoutMs = 400;
 
@@ -69,7 +71,8 @@ namespace mmDesk
 	const Profile& wireProfile()
 	{
 		static const Profile p{"hw", "HW MIDI", "Engine: a real Monomachine on the plug-in's MIDI in and out, at MIDI speed. "
-			"Pattern, song and global dumps need it on GLOBAL › FILE › SYSEX RECV; PLAY/STOP are MIDI Start/Stop.", true, false, false, false};
+			"Pattern, song, global and stored-kit dumps need it on GLOBAL › FILE › SYSEX RECV: they wait (SEND n in the pattern field) "
+			"until you put it there. PLAY/STOP are MIDI Start/Stop.", true, false, false, false};
 		return p;
 	}
 
@@ -130,6 +133,9 @@ namespace mmDesk
 		m_loads = {};
 		m_backgroundQueued = false;
 		m_recv = {};
+		m_manual.clear();
+		m_reactivateGlobal = false;
+		m_poly = m_lastRecording = -1;
 		m_curPattern = m_curKit = m_curSong = m_curGlobal = m_songMode = m_queuedPattern = -1;
 		m_sequence.clear();
 		startedOver();
@@ -149,7 +155,18 @@ namespace mmDesk
 		c.set("lcd", m_profile.memory, "The machine's own LCD is on the machine.");
 		c.set("workingKitMemory", m_profile.memory, "The working kit is the stored slot plus the edits the editor saw.");
 		c.set("telemetry", m_profile.telemetry, "This engine reports no playhead to follow.");
-		c.values.emplace_back("dumps", m_profile.panel ? "recv" : "manual");
+		// MM-P4: what only the machine's panel and RAM reach (the MUTE window, RECORD). Over MIDI the
+		// Monomachine has no message for them (Appendix B and C).
+		c.set("midiMutes", machineState(), "Over MIDI the MIDI track mutes cannot be set: the Monomachine has no MIDI message for them"
+			" (Appendix B: CC 3 mutes the six synth tracks only; Appendix C has no mute SysEx). Use FUNCTION + BANK GROUP on the machine.");
+		c.set("gridRecord", machineState(), "Over MIDI the recording modes cannot be switched: RECORD has no MIDI message (Appendix C)."
+			" Press RECORD on the Monomachine.");
+		// SysEx and kit or global data on every engine.
+		c.set("poly", true);
+		c.set("multiTrig", true);
+		c.set("multiMap", true);
+		c.set("portamento", true);
+		c.values.emplace_back("dumps", manualDumps() ? "manual" : "recv");
 		return c;
 	}
 
@@ -209,7 +226,7 @@ namespace mmDesk
 	const std::map<std::string, MmMachine::Handler>& MmMachine::askers()
 	{
 		static const std::map<std::string, Handler> map{{"loadKit", &MmMachine::askLoadKit}, {"saveKit", &MmMachine::askSaveKit},
-			{"select", &MmMachine::askSelect}};
+			{"select", &MmMachine::askSelect}, {"play", &MmMachine::askPlay}};
 		return map;
 	}
 
@@ -266,6 +283,27 @@ namespace mmDesk
 			return ok();
 		return ask("overwriteSlot", "Overwrite <b>" + kitLabel(_view, k) + "</b> with the kit that plays, <b>" + kitLabel(_view, m_curKit)
 			+ "</b>? The machine keeps the overwritten kit in its UNDO KIT.", "Overwrite");
+	}
+
+	namespace
+	{
+		const ed::MmGlobal* activeGlobal(const Documents& _view, const int _current)
+		{
+			const auto it = _current < 0 ? _view.globals.end() : _view.globals.find(static_cast<uint8_t>(_current & 7));
+			return it == _view.globals.end() ? nullptr : &it->second;
+		}
+	}
+
+	// Over MIDI PLAY is MIDI Start, which the machine ignores with CONTROL IN TRANSPORT IGNORE (the
+	// factory global): offer to set it (MM-P4). Confirmed, cmdPlay writes it to the active global.
+	Outcome MmMachine::askPlay(const Value&, const Documents& _view)
+	{
+		const auto* g = m_profile.wire ? activeGlobal(_view, m_curGlobal) : nullptr;
+		if(!g || g->transportIn != 0 || m_pushes[{Kind::Global, g->position}].slot.busy())
+			return ok();
+		return ask("transportIgnore", "PLAY is <b>MIDI Start</b> over MIDI. This Monomachine ignores it: <b>GLOBAL › CONTROL IN › "
+			"TRANSPORT</b> is <b>IGNORE</b> in GLOBAL " + std::to_string(g->position + 1) + ". Set it to ACCEPT? It goes out as a global dump,"
+			" so it waits for SYSEX RECV (SEND in the pattern field).", "Set TRANSPORT to ACCEPT");
 	}
 
 	bool MmMachine::pressKeys(const std::vector<Key>& _keys)
@@ -369,10 +407,7 @@ namespace mmDesk
 			auto k = _to;
 			k.position = static_cast<uint8_t>(m_curKit);
 			pushDump({Kind::Kit, k.position}, ed::encodeMmKit(k));
-			if(m_profile.wire)
-				m_port.sendSysex(ed::mmLoadKit(k.position));
-			else
-				m_recv.want(ed::mmLoadKit(k.position));
+			afterDumps(ed::mmLoadKit(k.position));
 			_notes.push_back("Written to the kit slot and loaded (no live SysEx for this setting).");
 		}
 	}
@@ -380,21 +415,39 @@ namespace mmDesk
 	void MmMachine::pushDump(const Ref& _ref, Bytes _dump)
 	{
 		auto& p = m_pushes[_ref];
+		if(manualDumps() && p.onRecv)
+		{
+			// Still waiting for the person's SYSEX RECV: the newer dump takes its place (latest wins).
+			for(auto& w : m_manual)
+				if(w.ref && *w.ref == _ref)
+					w.bytes = _dump;
+			p.slot.abandon();
+			p.slot.want(_dump);
+			return;
+		}
 		if(!p.slot.want(_dump))
 			return;	// waits for the read-back in flight; latest wins
 		p.sentMs = now();
-		if(m_profile.wire)
+		if(manualDumps())
 		{
-			// HW MIDI: straight to the wire; the machine takes it only on SYSEX RECV (the user parks it there).
-			m_port.sendSysex(_dump);
-			p.onRecv = false;
-			request(_ref, true);
+			// HW MIDI: the machine takes a dump only on SYSEX RECV, which only the person can open: it waits
+			// (recv.waiting, SEND n) until the page says the machine is there (hwSend).
+			p.onRecv = true;
+			m_manual.push_back({std::move(_dump), _ref});
 			return;
 		}
 		p.onRecv = true;
 		const auto tag = m_nextRecvTag++;
 		m_recvRefs[tag] = _ref;
 		m_recv.want(std::move(_dump), tag);
+	}
+
+	void MmMachine::afterDumps(Bytes _message)
+	{
+		if(manualDumps())
+			m_manual.push_back({std::move(_message), std::nullopt});
+		else
+			m_recv.want(std::move(_message));
 	}
 
 	// ---- machine commands ----
@@ -405,7 +458,8 @@ namespace mmDesk
 			{"load", &MmMachine::cmdLoad}, {"select", &MmMachine::cmdSelect}, {"loadKit", &MmMachine::cmdLoadKit},
 			{"saveKit", &MmMachine::cmdSaveKit}, {"loadSong", &MmMachine::cmdLoadSong}, {"saveSong", &MmMachine::cmdSaveSong},
 			{"tempo", &MmMachine::cmdTempo}, {"play", &MmMachine::cmdPlay}, {"stop", &MmMachine::cmdStop},
-			{"mute", &MmMachine::cmdMute}, {"followHost", &MmMachine::cmdFollowHost}};
+			{"mute", &MmMachine::cmdMute}, {"followHost", &MmMachine::cmdFollowHost}, {"muteMidi", &MmMachine::cmdMuteMidi},
+			{"poly", &MmMachine::cmdPoly}, {"record", &MmMachine::cmdRecord}, {"hwSend", &MmMachine::cmdHwSend}};
 		return map;
 	}
 
@@ -480,7 +534,16 @@ namespace mmDesk
 			request({Kind::Kit, static_cast<uint8_t>(_k)}, true);	// the stored slot now
 		}
 		else
+		{
 			m_port.sendSysex(ed::mmLoadKit(static_cast<uint8_t>(_k)));
+			// Without memory (HW MIDI) a reload is known only from its slot: the kit that plays starts
+			// over as the slot's next dump
+			if(!m_profile.memory && _k == m_curKit)
+			{
+				m_working = deskCore::switched(m_working);
+				request({Kind::Kit, static_cast<uint8_t>(_k)}, true);
+			}
+		}
 		// The current kit is what the machine reports (status, memory). LOAD KIT and SAVE KIT relink the
 		// current pattern to the kit (as on the MD): read it back; the firmware takes MIDI in order, so
 		// the answer already shows the relink.
@@ -522,13 +585,31 @@ namespace mmDesk
 		return ok();
 	}
 
-	Outcome MmMachine::cmdPlay(const Value&, const Documents& _view)
+	Outcome MmMachine::cmdPlay(const Value& _m, const Documents& _view)
 	{
+		const auto* g = activeGlobal(_view, m_curGlobal);
+		// Over MIDI with TRANSPORT IGNORE, confirmed (askPlay): TRANSPORT ACCEPT in the active global, the
+		// machine's own setting (as followHost: no undo step)
+		const auto* force = _m.find("force");
+		const auto ref = g ? Ref{Kind::Global, g->position} : Ref{Kind::Global, 0};
+		if(m_profile.wire && g && g->transportIn == 0 && force && force->isBool() && force->asBool() && !m_pushes[ref].slot.busy())
+		{
+			auto accept = *g;
+			accept.transportIn = 1;
+			pushDump(ref, ed::encodeMmGlobal(accept));
+			return ok("TRANSPORT ACCEPT waits for SYSEX RECV (SEND in the pattern field). Press PLAY again once it is in.");
+		}
+		if(m_reactivateGlobal && m_curGlobal >= 0)
+		{
+			// HW MIDI: the active global was written while the machine was on SYSEX RECV, which applies
+			// it only when made active again (P7): now, before MIDI Start
+			m_port.sendSysex(ed::mmSetActiveGlobal(static_cast<uint8_t>(m_curGlobal & 7)));
+			m_reactivateGlobal = false;
+		}
 		if(!pressKeys({Key::Play}))
 			return refuse("The panel is busy (SYSEX RECV); try again.");
 		// P7: a machine that follows the host's clock (in a DAW) plays with the host's transport
-		const auto it = m_curGlobal < 0 ? _view.globals.end() : _view.globals.find(static_cast<uint8_t>(m_curGlobal & 7));
-		const bool follows = it != _view.globals.end() && it->second.x05[0] == 1;
+		const bool follows = g && g->tempoSync == 1;
 		return ok(follows ? "The machine follows the host: it plays when the host's transport runs." : "");
 	}
 
@@ -557,8 +638,81 @@ namespace mmDesk
 
 	Outcome MmMachine::cmdMute(const Value& _m, const Documents&)
 	{
-		m_port.sendParam(static_cast<uint8_t>(num(_m, "t")), 8, 0, num(_m, "on", 0) ? 1 : 0);
+		const auto* on = _m.find("on");
+		m_port.sendParam(static_cast<uint8_t>(num(_m, "t")), 8, 0, on && on->isBool() && on->asBool() ? 1 : 0);
 		return ok();
+	}
+
+	// MM-P4: a MIDI sequencer track's mute. The MUTE window (FUNCTION + BANK GROUP) and its TRIG 9-14
+	// keys, pressed only when the machine's mutes (RAM) differ; EXIT closes the window.
+	Outcome MmMachine::cmdMuteMidi(const Value& _m, const Documents&)
+	{
+		if(!machineState())
+			return refuse(capabilities().reason("midiMutes"));
+		if(m_tel.mutes < 0)
+			return refuse("The machine's mutes are not known yet.");
+		const auto t = num(_m, "t");
+		const auto* on = _m.find("on");
+		const bool mute = on && on->isBool() && on->asBool();
+		if(((m_tel.mutes >> (6 + t)) & 1) == (mute ? 1 : 0))
+			return ok();
+		return pressKeys({Key::MuteWindow, static_cast<Key>(static_cast<int>(Key::Trig9) + t), Key::Exit}) ? ok()
+			: refuse("The panel is busy (SYSEX RECV); try again.");
+	}
+
+	// MM-P4: POLY is the machine's audio mode, SET STATUS 0x20 (0 mono, 1 POLY), read back by status.
+	Outcome MmMachine::cmdPoly(const Value& _m, const Documents&)
+	{
+		const auto* on = _m.find("on");
+		m_port.sendSysex(ed::mmSetStatus(ed::MmStatus::Poly, on && on->isBool() && on->asBool() ? 1 : 0));
+		m_port.sendSysex(ed::mmStatusRequest(ed::MmStatus::Poly));
+		return ok();
+	}
+
+	// MM-P4: GRID RECORDING (RECORD) and LIVE RECORDING (RECORD + PLAY), as the machine's keys from the
+	// mode it is in (RAM). RECORD from LIVE goes to GRID (measured), so off from live is RECORD twice.
+	Outcome MmMachine::cmdRecord(const Value& _m, const Documents&)
+	{
+		if(!machineState())
+			return refuse(capabilities().reason("gridRecord"));
+		if(m_tel.recording < 0)
+			return refuse("The machine's recording mode is not known yet.");
+		const auto* m = _m.find("mode");
+		const auto mode = m && m->isString() ? m->asString() : std::string();
+		const int want = mode == "live" ? 2 : mode == "grid" ? 1 : 0;
+		const int cur = m_tel.recording;
+		if(want == cur)
+			return ok();
+		// from -> to (0 off, 1 grid, 2 live): the keys
+		static const std::vector<Key> R{Key::Record}, LR{Key::LiveRecord}, R_LR{Key::Record, Key::LiveRecord}, RR{Key::Record, Key::Record};
+		const auto& keys = cur == 0 ? (want == 1 ? R : LR) : cur == 1 ? (want == 0 ? R : R_LR) : (want == 0 ? RR : R);
+		return pressKeys(keys) ? ok() : refuse("The panel is busy (SYSEX RECV); try again.");
+	}
+
+	// MM-P4, HW MIDI: the person says the machine is on SYSEX RECV. What waited goes out, in order; the
+	// dumps are read back.
+	Outcome MmMachine::cmdHwSend(const Value&, const Documents&)
+	{
+		if(!manualDumps())
+			return refuse("The editor opens SYSEX RECV on this engine by itself.");
+		if(m_manual.empty())
+			return ok("Nothing waits for SYSEX RECV.");
+		const auto n = m_manual.size();
+		for(auto& w : m_manual)
+		{
+			m_port.sendSysex(w.bytes);
+			if(!w.ref)
+				continue;
+			if(const auto it = m_pushes.find(*w.ref); it != m_pushes.end() && it->second.onRecv)
+			{
+				it->second.onRecv = false;
+				it->second.sentMs = now();
+				request(*w.ref, true);
+			}
+		}
+		m_manual.clear();
+		return ok(std::to_string(n) + (n == 1 ? " message" : " messages") + " sent. Press EXIT on the Monomachine when the editor has read"
+			" them back (the pattern field is empty again).");
 	}
 
 	void MmMachine::pumpSequence(const double _now)
@@ -594,7 +748,8 @@ namespace mmDesk
 
 	void MmMachine::requestStatus()
 	{
-		for(const auto p : {ed::MmStatus::Pattern, ed::MmStatus::Kit, ed::MmStatus::Song, ed::MmStatus::Global, ed::MmStatus::SongMode})
+		for(const auto p : {ed::MmStatus::Pattern, ed::MmStatus::Kit, ed::MmStatus::Song, ed::MmStatus::Global, ed::MmStatus::SongMode,
+			ed::MmStatus::Poly})
 			m_port.sendSysex(ed::mmStatusRequest(p));
 	}
 
@@ -704,7 +859,10 @@ namespace mmDesk
 			// machine is on SYSEX RECV (P7, measured with MIDI SYNC's CLOCK IN, mmDeskFirmwareTest
 			// hostclock): the active slot's push ends with 0x56 once the panel is back on its main screen.
 			if(_r.kind == Kind::Global && static_cast<int>(_r.slot) == (m_curGlobal & 7))
+			{
 				m_activateGlobal = static_cast<int>(_r.slot);
+				m_reactivateGlobal = manualDumps();	// the person may still be on SYSEX RECV: again before PLAY
+			}
 		}
 		else
 			observe(*doc, Source::Dump);
@@ -777,6 +935,9 @@ namespace mmDesk
 		case ed::MmStatus::SongMode:
 			m_songMode = _value;
 			break;
+		case ed::MmStatus::Poly:
+			m_poly = _value;
+			return;
 		default:
 			return;
 		}
@@ -894,22 +1055,34 @@ namespace mmDesk
 		// A read-back that never came: give up on that push.
 		for(auto& [ref, push] : m_pushes)
 		{
-			if(!push.slot.busy() || push.onRecv || _now - push.sentMs <= g_readBackTimeoutMs)
+			if(!push.slot.busy() || push.onRecv || _now - push.sentMs <= (m_profile.wire ? g_wireReadBackTimeoutMs : g_readBackTimeoutMs))
 				continue;
 			push.slot.abandon();
 			fail(ref, std::string("The machine did not read back the ") + kindName(ref.kind) + " that was sent. Showing what it holds.");
 			request(ref, true);
 		}
-		// The playhead, at most every 25 ms.
+		// MM-P4, RECORD: the machine writes the current pattern; read it back while it records and once
+		// when it stops, so what the keyboard or the machine's TRIG keys recorded shows.
+		const bool recordChanged = m_tel.recording != m_lastRecording;
+		if(m_tel.recording >= 0 && m_curPattern >= 0
+			&& ((m_tel.recording >= 1 && _now - m_lastRecordReadMs > g_recordReadMs) || (m_lastRecording >= 1 && m_tel.recording == 0)))
+		{
+			m_lastRecordReadMs = _now;
+			request({Kind::Pattern, static_cast<uint8_t>(m_curPattern)}, true);
+		}
+		m_lastRecording = m_tel.recording;
+		// The playhead, at most every 25 ms, and the recording mode when it changes (the transport).
 		const bool playing = m_playing;
-		if(m_tel.valid && (m_tel.step != m_lastStep || playing != m_lastPlaying) && _now - m_lastTelemetryMs > 25)
+		if(m_tel.valid && (recordChanged || ((m_tel.step != m_lastStep || playing != m_lastPlaying) && _now - m_lastTelemetryMs > 25)))
 		{
 			m_lastStep = m_tel.step;
 			m_lastPlaying = playing;
 			m_lastTelemetryMs = _now;
+			static const char* modes[] = {"off", "grid", "live"};
 			Value t = Value::object();
 			t.set("step", m_tel.step);
 			t.set("playing", playing);
+			t.set("record", m_tel.recording < 0 || m_tel.recording > 2 ? Value() : Value(modes[m_tel.recording]));
 			publishTelemetry(std::move(t));
 		}
 	}
@@ -938,8 +1111,15 @@ namespace mmDesk
 		d.set("global", std::move(g));
 		// 30-300 BPM in firmware units (x 24); anything else is not a tempo yet (boot).
 		d.set("tempo", m_tel.tempo >= 720 && m_tel.tempo <= 7200 ? Value(m_tel.tempo / 24.0) : Value());
+		// MM-P4: the machine's own mutes (RAM; made on its panel too) and its audio mode
+		Value mutes = Value::object();
+		mutes.set("synth", m_tel.mutes < 0 ? Value() : Value(m_tel.mutes & 0x3f));
+		mutes.set("midi", m_tel.mutes < 0 ? Value() : Value((m_tel.mutes >> 6) & 0x3f));
+		d.set("mutes", std::move(mutes));
+		d.set("poly", m_poly < 0 ? Value() : Value(m_poly == 1));
 		Value r = Value::object();
-		r.set("state", m_recv.stateName());
+		r.set("state", manualDumps() ? (m_manual.empty() ? "idle" : "waitingUser") : m_recv.stateName());
+		r.set("waiting", static_cast<unsigned long>(m_manual.size()));
 		size_t inFlight = 0;
 		for(const auto& [ref, push] : m_pushes)
 			inFlight += push.slot.busy();

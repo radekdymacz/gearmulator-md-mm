@@ -90,9 +90,10 @@ NOTE OFF.
 | `tracks[t].input` | 0 NEIGHBOR, 1 INP A, 2 INP B, 3 INP A+B, 4-6 BUS AB/CD/EF. Used by FX machines | factory set, 0x5C |
 | `tracks[t].assign` | ASSIGN: `page`, `dest`, `add` for 6 sources x 2 rows: JOY R/L, JOY L, JOY U, JOY D, VELOCITY, KEY TRACKING. `add` is signed | panel (knobs A-H, every tab) |
 | `tracks[t].trigPos` | TRIG POS: the track that forwards its notes, `null` = --- | panel |
-| `trackMasks` | per-track bits: JOY mirror, key tracking HPF / LPF, LEGATO AMP / FLT / LFO | LEGATO AMP by panel, the rest from the factory set |
+| `trackMasks` | per-track bits: JOY mirror (0x1d0), key tracking HPF / LPF, PORTAMENTO (set = ALWAYS, clear = ONLY LEGATO), LEGATO AMP / FLT / LFO. **Corrected in MM-P4:** MM-P1 had inferred mirror/hpf/lpf at 0x2aa-0x2ac; the panel shows 0x2aa LPF, 0x2ab HPF, 0x2ac PORTAMENTO | panel (every bit) |
+| `multiTrig` | MULTI TRIG: `mode` 0 ALL TRK, 1 SPLIT KEY, 2 SEQ START, 3 SEQ TRNSP; `timing` 0 DIRECT, 1/16 2/16 4/16 8/16 16/16 32/16; `splitKey` (note, the first key of the upper zone); `splitTrack` (0-based, the first upper track) | panel (MM-P4) |
 | `tracks[t].multiEnv[6]` | MULTI ENV: ATK DEC SUS REL PORT and one more (NRPN 0x40-0x45 on the track). The factory set has the same values on all six tracks | live (NRPN and a kit diff) |
-| `tracks[t].extra`, `hidden.x1cd`, `hidden.x2b6` | not decoded, kept | |
+| `tracks[t].extra`, `firmware.x1cd`, `firmware.x1d1` | not decoded, kept | |
 
 **The working kit** (the one that plays, unsaved edits included) is the kit's raw
 payload in patch RAM at `0x700028`. A kit dump writes the stored slot only; LOAD
@@ -121,8 +122,14 @@ after it ride in `hidden.rowsAfterEnd`.
 | `routingMode` | `3xSTEREO+AB=MIX`, `3xSTEREO`, `6xMONO` | panel |
 | `masterTune` | tenths of Hz | panel |
 | `midiSeq.channels`, `midiSeq.ccs` | the MIDI sequencer tracks' channels and CL1-4 CC numbers | factory set (10-15; 1 2 7 10) |
-| `multiMap` | 6 fields x 32 ranges: upper key, pattern (255 = current), then four fields (OFS LEN TRN TIM in some order, not verified) | factory set |
-| `control`, `hidden` | CONTROL OUT1/OUT2/IN and the rest, kept | |
+| `multiMap` | 6 fields x 32 ranges: upper key; pattern (255 = CUR); offset (255 = ---); length; transpose (signed byte); timing (0 DIR, 1 2 4 8 16 32). Unused ranges repeat the last upper key | panel (MULTIMAP EDIT, MM-P4) |
+| `controlIn` | CONTROL IN: `tempoSync` 0 INTERNAL, 1 EXT MIDI CLK; `transport` 0 IGNORE, 1 ACCEPT (MIDI Start/Stop). A DAW's plug-in sets both (P7, `followHost`) | panel (MM-P4) |
+| `control`, `firmware` | CONTROL OUT1/OUT2 and the rest, kept | |
+
+A dump writes the stored global slot; the active global takes it only when its slot is made
+active again (SET ACTIVE GLOBAL, 0x56), and not while the machine is on SYSEX RECV. The desk
+sends 0x56 once the active slot's dump is read back and the panel is back on the main screen;
+over HW MIDI once more before PLAY (the person may still have been on SYSEX RECV).
 
 ### 4.5 `mm-desk/machine` (read-only, from the desk, MM-P2)
 
@@ -135,21 +142,27 @@ The machine state the page shows, published by `mmDesk::Desk` whenever it change
 | `kit.current`, `kit.working` | the kit slot, and `clean` / `edited`: the working kit in patch RAM against the stored slot |
 | `song.current`, `song.songMode` | the current song; song mode when known |
 | `global` | the active global slot |
-| `playing` | the sequencer runs (RAM telemetry) |
-| `recv` | the SYSEX RECV session: `state` (`idle`, `toMain`, `entering`, `parked`, `leaving`, `failed`), `sending` (dumps in flight), `received` / `errors` (the firmware's own counters) |
+| `mutes` | MM-P4: `synth` and `midi`, bit t = track t muted, from RAM (the MUTE window and CC 3; made on the machine's panel too); `null` where the engine cannot read them (HW MIDI) |
+| `poly` | MM-P4: POLY, the machine's audio mode (status 0x20); `null` until it answers |
+| `recv` | the SYSEX RECV session: `state` (`idle`, `toMain`, `entering`, `parked`, `leaving`, `failed`; over HW MIDI `idle` or `waitingUser`), `waiting` (HW MIDI: messages that wait for the person to open SYSEX RECV, sent by `hwSend`), `sending` (dumps in flight), `received` / `errors` (the firmware's own counters) |
 | `loading` | `done` / `total` documents read (288) |
 | `roundTripMs`, `error` | the last dump's send-to-read-back time; the last problem, if any |
 
 Other messages to the page: `doc` (`kind`, `slot`, `pending` = sent but not yet
-read back, `working` = the current kit's working copy, `doc`), `tel` (`step`,
-`playing`, at most every 25 ms), `lcd` (the firmware's 128 x 64 LCD as 2048 hex
+read back, `working` = the current kit's working copy, `doc`), `telemetry` (`step`,
+`playing`, at most every 25 ms, and `record`: `off`, `grid`, `live` or `null`; the transport is
+only here, never in the machine document), `lcd` (the firmware's 128 x 64 LCD as 2048 hex
 digits, row by row, MSB = left pixel, while the engine is not ready),
 `catalogue`, `learn` and `result` (`op`, `id`, `ok`, `errors`, `note`).
 
 Commands from the page: `ready`, `set` (`kind`, `doc`), `load` (`kind`, `slot`),
 `select` (`p`), `loadKit` / `saveKit` (`k`), `loadSong` / `saveSong` (`s`),
-`tempo` (`bpm`), `play`, `stop`, `mute` (`t`, `on`), `revealRomFolder`,
-`recheckFirmware`, and the `learn*` family.
+`tempo` (`bpm`), `play`, `stop`, `mute` (`t`, `on`), `muteMidi` (`t`, `on`: the MUTE window),
+`poly` (`on`), `record` (`mode`: `off`, `grid`, `live`), `hwSend` (HW MIDI: the machine is on
+SYSEX RECV), `followHost`, `revealRomFolder`, `recheckFirmware`, and the `learn*` family. The
+schema's `$defs/command` is generated from the command tables (`mmDeskTest --write-schema`).
+Over HW MIDI `play` asks first (`transportIgnore`) while the active global's CONTROL IN TRANSPORT
+is IGNORE; confirmed, it writes TRANSPORT ACCEPT (a global dump, so it waits for SYSEX RECV).
 
 ## 5. Hardware limits (`validate`)
 

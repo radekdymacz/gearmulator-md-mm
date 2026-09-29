@@ -1765,6 +1765,10 @@ svg.route{width:100%;height:100%;min-height:0}
 .amerr{color:var(--led);font-weight:600}
 @media (max-width:900px){.amgrid{grid-template-columns:1fr}.amnote{padding-left:0}}
 /* AUDIO-MIDI PANEL END */
+/* The Song workspace edits any of the 24 songs (MM-P4, P8): the picker and LOAD SONG in the arrangement's header */
+.songpick{display:inline-flex;gap:6px;align-items:center;margin-left:auto}
+.songpick .kselbtn{height:24px;min-width:0;width:auto}
+.songpick #songload{height:24px;padding:0 9px;font-size:12px;white-space:nowrap}
 </style>
 <div class="app">
   <header class="top">
@@ -1897,7 +1901,7 @@ const note=(n,bits=[1,1,1])=>({n:Array.isArray(n)?n:[n],a:bits[0],f:bits[1],l:bi
 
 const S={ws:"seq",sel:0,side:"int",len:32,mult:"1X",swingAmt:58,playing:false,step:-1,bpm:120,pat:0,kit:0,kitState:"clean",queued:null,trigSel:"ALL",
  lane:"FLT.1",lanePage:"FLT",locks:new Map(),patTrn:64,routing:"3xSTEREO+AB=MIX",plate:"mk2",engine:"emu",pend:0,patSent:"live",rec:false,
- mode:"normal",multi:{mode:0,splitKey:60,splitTrack:3,timing:4},menv:{ATK:0,DEC:127,SUS:127,REL:127,PORT:0},kbOct:3,
+ mode:"normal",songs:{names:["DEMO SONG",...Array(23).fill("EMPTY")],slot:0,current:0},multi:{mode:0,splitKey:60,splitTrack:3,timing:4},menv:{ATK:0,DEC:127,SUS:127,REL:127,PORT:0},kbOct:3,
  mmap:[{hi:47,pat:0,ofs:0,len:0,trn:64,tim:4},{hi:59,pat:1,ofs:0,len:16,trn:64,tim:4},{hi:71,pat:0,ofs:0,len:0,trn:69,tim:4},{hi:127,pat:2,ofs:8,len:8,trn:64,tim:1}],mmapSel:1,
  gmutes:null,rollLo:36,ghost:true,asTab:"JOY RL",joy:{x:0,y:0},
  /* whether the machine takes input (machine.input); null while no host has said (the standalone
@@ -1993,7 +1997,14 @@ const kitName=k=>"K"+String(k+1).padStart(2,"0")+" "+((k===S.kit?S.workName:S.ki
      togglePlay(), ownsClock          the machine is the sequencer
      selectPattern(p, now)            LOAD PATTERN (now: STOP, LOAD PATTERN, PLAY)
      kit(op, k)                       "save" | "load" | "saveAs" | "reload"
-     tempo(bpm), mutes()              the machine's tempo; the synth tracks' mutes changed
+     tempo(bpm), mutes()              the machine's tempo; the tracks' mutes changed (synth and MIDI)
+     keyMode(mode)                    the keyboard mode changed ("normal" | "multi" | "map" | "poly"): POLY
+                                      is the machine's audio mode
+     record()                         the RECORD key: the host picks GRID or LIVE RECORDING, or off
+     songSlot(slot), loadSong(slot)   the Song workspace edits another of the 24 songs; LOAD SONG makes it
+                                      the machine's
+     waiting(), sendNow()             HW MIDI: how many messages wait for the machine's SYSEX RECV, and the
+                                      person says it is there (the pattern field's SEND n dialog)
      playKey(note), keyUp(), joy(xy)  the keyboard (a key pressed, the keys let go) and the joystick
      learning(on), learnTarget(target), learnBind(target, knob)
                                       LEARN on or off, the value clicked, the knob pressed for it
@@ -2008,7 +2019,8 @@ const kitName=k=>"K"+String(k+1).padStart(2,"0")+" "+((k===S.kit?S.workName:S.ki
                                       firmware, the ROM folder, look again (the page never reads the ROM)
      audioDoc(), audioSend(command), audioMeter(on)   the AUDIO / MIDI panel's devices
    The view's side, for a host: window.MMView (130-main.js): values to read, setters (the LCD
-   picture, the held key, the pattern field's RECV state, the engine words), and
+   picture, the held key, the pattern field's RECV state, the engine words, the machine's mutes,
+   keyboard mode, RECORD state and songs), and
    disable(capability, reason) for what the host's engine cannot do (NA_SEL maps each capability
    to its controls, NA_INFO lists those with none). */
 const HOST=window.MMHost||{};
@@ -2302,9 +2314,10 @@ function renderPst(){if(HOST.renderPst)return HOST.renderPst();if(S.engine==="hw
 function setPst(text,tip,warn,read){const p=$("#pst"),f=$("#syncf");if(!p||!f)return;p.textContent=text||"Sync";f.classList.toggle("warn",!!warn);f.title=tip||"In step with the machine";
  /* read: the background read's fraction (a thin bar under the word), or nothing */
  f.classList.toggle("read",read!=null);f.style.setProperty("--rf",read??0)}
-function sendDialog(){ask(`<div class="lcdbig recv">SYSEX RECV · WAITING…</div><p>The Monomachine only accepts a dump on its SysEx receive screen. <b>${S.pend}</b> edit${S.pend===1?"":"s"} to send.</p>
- <ol class="recvsteps"><li>On the Monomachine press <b>FUNCTION + KIT/SONG</b> (GLOBAL), then <b>FILE › SYSEX RECV</b>.</li><li>Set <b>MODE ORIG</b> and press <b>YES</b>. The screen shows <b>WAITING…</b></li><li>Press <b>Send</b> here. Then press <b>EXIT</b> on the machine.</li></ol>`,
- [["Send now","cream",()=>{S.pend=0;S.patSent="live";renderPst();tx();toast("Sent. The pattern and song slots now match the editor. Press EXIT on the Monomachine.")}],["Later","",()=>{}]],"first")}
+/* HW MIDI: what waits for the machine's SYSEX RECV (a host counts its own: waiting(), sendNow()) */
+function sendDialog(){const n=HOST.waiting?HOST.waiting():S.pend;ask(`<div class="lcdbig recv">SYSEX RECV · WAITING…</div><p>The Monomachine only accepts a dump on its SysEx receive screen. <b>${n}</b> message${n===1?"":"s"} to send.</p>
+ <ol class="recvsteps"><li>On the Monomachine press <b>FUNCTION + KIT/SONG</b> (GLOBAL), then <b>FILE › SYSEX RECV</b>.</li><li>Set <b>MODE ORIG</b> and press <b>YES</b>. The screen shows <b>WAITING…</b></li><li>Press <b>Send now</b> here. When the pattern field is empty again, press <b>EXIT</b> on the machine.</li></ol>`,
+ [["Send now","cream",()=>{if(HOST.sendNow)return HOST.sendNow();S.pend=0;S.patSent="live";renderPst();tx();toast("Sent. The pattern and song slots now match the editor. Press EXIT on the Monomachine.")}],["Later","",()=>{}]],"first")}
 /* st: "clean" | "edited" | "unknown" (the machine hasn't said yet -- never shown as "saved") */
 function setKitState(st){S.kitState=st;const s=$("#save");if(!s)return;
  s.classList.toggle("dirty",st==="edited");s.classList.toggle("unknown",st==="unknown");
@@ -2356,7 +2369,7 @@ function ref(el){const d=el.dataset,t=d.t!=null?+d.t:S.sel,tr=trk(t),g=d.g;
   case"mmap":{const r=S.mmap[+d.i];return[r,d.n,{name:d.n,...{trn:{max:127,signed:1},ofs:{en:["---",...Array.from({length:64},(_,i)=>String(i).padStart(2,"0"))]},len:{max:64},tim:{en:["DIR","1","2","4","8","16","32"]}}[d.n]},t,g]}}}
 const getV=el=>{const[o,n]=ref(el);return o[n]};
 function setV(el,v){const[o,n,m,t,g]=ref(el);v=clamp(Math.round(v),0,maxOf(m));if(o[n]===v)return;o[n]=v;
- if(g==="cc")soundEdited("global");else if(PAGES.includes(g)||g==="MID"||g==="lev"||g==="menv"||g==="asg")soundEdited();else if(g==="src"||g==="link")ctlChanged();else structEdited();
+ if(g==="cc")soundEdited("global");else if(PAGES.includes(g)||g==="MID"||g==="lev"||g==="menv"||g==="asg")soundEdited();else if(g==="src"||g==="link")ctlChanged();else if(g==="mmap")structEdited("global");else structEdited();
  if(g.startsWith("LF")&&(+el.dataset.n<2)){if(+el.dataset.n===0)o[1]=0;render();return}
  syncControls();redraw()}
 function pc(g,n,{t,label,cls="",extra=""}={}){if(n==null)return`<div class="pc empty" aria-hidden="true"></div>`;
@@ -2927,6 +2940,10 @@ function songSteps(){let n=0;S.song.forEach(r=>{if(!r.type)n+=rowLen(r)*r.rep});
 function songTime(){const sec=songSteps()*60/S.bpm/4;return`${Math.floor(sec/60)}:${String(Math.round(sec%60)).padStart(2,"0")}`}
 function loopOf(i){return S.song.findIndex((r,k)=>r.type==="loop"&&k>i&&r.to<=i)}
 const hasTtr=r=>r.ttr&&r.ttr.some(v=>v!==64);
+/* the song to edit: any of the 24; LOAD SONG makes it the machine's (only while stopped) */
+function songPick(){const g=S.songs;if(!g)return"";const nn=i=>String(i+1).padStart(2,"0");
+ return`<span class="songpick"><select id="songsel" aria-label="Song to edit">${g.names.map((n,i)=>`<option value="${i}"${i===g.slot?" selected":""}>S${nn(i)} ${n}${i===g.current?" · on the machine":""}</option>`).join("")}</select>
+  <button id="songload"${g.slot===g.current?" disabled":""} title="LOAD SONG: the machine plays this song in song mode. Only while stopped.">Load on the machine</button></span>`}
 function renderSong(){const sel=S.song[S.songSel]||S.song[0];
  const palette=`<div class="banks">${[..."ABCDEFGH"].map((b,k)=>`<button class="bank ${k===S.bank?"on":""}" data-bank="${k}"><i class="led"></i>${b}</button>`).join("")}</div>
   <div class="pgridp">${Array.from({length:16},(_,k)=>{const p=S.bank*16+k;return`<button class="padd ${hasPat(p)?"has":""} ${!sel.type&&sel.pat===p?"cur":""}" data-addpat="${p}" draggable="true" title="Drag into the arrangement. Click adds after the selected row.">${patName(p)}<small>${hasPat(p)?patLen(p):"empty"}</small></button>`}).join("")}</div>`;
@@ -2949,7 +2966,7 @@ function renderSong(){const sel=S.song[S.songSel]||S.song[0];
  const lines=Math.ceil(200/16);
  $("#main").innerHTML=`<div class="songui lay2"><div class="songleft"><section class="card"><header><h3>Patterns</h3><span>drag onto the grid · click = add after row ${String(S.songSel+1).padStart(3,"0")}</span></header>${palette}</section>
    <section class="card"><header><h3>Selected row</h3><span class="rowacts"><button data-rowact="up" title="Move left">←</button><button data-rowact="down" title="Move right">→</button><button data-rowact="dup">Duplicate</button><button data-rowact="loop">Add loop</button><button data-rowact="del" class="danger">Delete</button></span></header><div class="insp">${insp}</div></section></div>
-  <section class="card"><header><h3>Arrangement</h3><span class="note">${S.songSlot!=null?`Song ${String(S.songSlot+1).padStart(2,"0")} (the machine's current song) · `:""}${S.song.length} of 200 rows · T track transpose · M mutes · B tempo</span></header>
+  <section class="card"><header><h3>Arrangement</h3><span class="note">${S.song.length} of 200 rows · T track transpose · M mutes · B tempo</span>${songPick()}</header>
    <div class="durbar" title="Song shape by time (length × repeats)">${S.song.map((r,i)=>r.type?`<i class="db dbm"></i>`:`<i class="db ${i===S.songSel?"sel":""}" data-row="${i}" style="flex:${rowLen(r)*r.rep} 1 0"></i>`).join("")}</div>
    <div class="slotgrid" id="tl">${Array.from({length:lines},(_,line)=>`<span class="sglab">${String(line*16+1).padStart(3,"0")}</span>${Array.from({length:16},(_,c)=>{const i=line*16+c,r=S.song[i];if(i>=200)return`<span></span>`;
      if(!r)return`<div class="scell empty" data-i="${i}"></div>`;
@@ -3374,7 +3391,7 @@ function endDrag(e){if(cord){cordEnd(e);return}if(rollDrag)rollUp();if(active){a
  if(kbDown&&HOST.keyUp)HOST.keyUp();
  if(arpDrag){const a=trk(S.sel).arp;if(!arpDrag.moved){a.rhy[arpDrag.k]=!a.rhy[arpDrag.k];renderArp()}structEdited();arpDrag=null}
  if(joyDrag){joyDrag=false;S.joy={x:0,y:0};const k=$("#knobj");if(k){k.style.left="50%";k.style.top="50%"}if(HOST.joy)HOST.joy(S.joy)}
- if(splitDrag){splitDrag=false;render()}if(kbDown){kbDown=false;$$(".kb .dn").forEach(k=>k.classList.remove("dn"))}}
+ if(splitDrag){splitDrag=false;soundEdited();render()}if(kbDown){kbDown=false;$$(".kb .dn").forEach(k=>k.classList.remove("dn"))}}
 /* P7: a gesture ends wherever the button comes up. A render during a drag (a pattern load, the machine's
    documents) removes the element that held the pointer, and its pointerup then lands outside #main: the drag
    stayed on and every mouse move edited the value (the kit showed "edited" after each pattern load). So the end
@@ -3416,7 +3433,7 @@ document.addEventListener("click",e=>{
   if(k==="scale"){tr.tr.SCALE=+v;structEdited();render();return}if(k==="port"){tr.port=+v;soundEdited();render();return}
   if(k==="ltrig"){V(sg.parentElement.dataset.l)[2]=+v;soundEdited();render();return}
   if(k==="routing"){S.routing=v;soundEdited("global");render();return}
-  if(k==="mtmode"){S.multi.mode=+v;render();return}if(k==="astab"){S.asTab=v;render();return}if(k==="astrk"){S.sel=+v;render();return}
+  if(k==="mtmode"){S.multi.mode=+v;soundEdited();render();return}if(k==="astab"){S.asTab=v;render();return}if(k==="astrk"){S.sel=+v;render();return}
   if(k==="loopkind"){const r=S.song[S.songSel];r.type=v;if(v==="halt")r.to=S.songSel;if(v==="jump"&&r.to<=S.songSel)r.to=Math.min(S.song.length-1,S.songSel+1);if(v==="loop"){if(!r.count)r.count=2;if(r.to>=S.songSel)r.to=Math.max(0,S.songSel-1)}structEdited();render();return}}
  const at=e.target.closest("[data-arptrig]");if(at){const a=trk(S.sel).arp,k=at.dataset.arptrig;a[k]=a[k]?0:1;structEdited();render();return}
  const lg=e.target.closest("[data-leg]");if(lg){const l=trk(S.sel).leg,k=lg.dataset.leg;l[k]=l[k]?0:1;soundEdited();render();return}
@@ -3426,15 +3443,15 @@ document.addEventListener("click",e=>{
  const lw=e.target.closest("[data-lwave]");if(lw){V(lw.dataset.lwave)[3]=+lw.dataset.w;soundEdited();render();return}
  const gt=e.target.closest("[data-goto]");if(gt){S.ws="sound";S.side="int";select(+gt.dataset.goto);return}
  const bs=e.target.closest("[data-bus]");if(bs){const tr=S.tracks[+bs.dataset.t];tr.out[bs.dataset.bus]=!tr.out[bs.dataset.bus];soundEdited();render();return}
- const pmk=e.target.closest("[data-pmode]");if(pmk){S.mode=pmk.dataset.pmode;if(S.mode==="poly")toast("POLY: T"+(asgT()+1)+" now plays six voices. The other five tracks are off until you leave POLY.");render();return}
- const so2=e.target.closest("[data-strk]");if(so2){S.multi.splitTrack=clamp(S.multi.splitTrack+ +so2.dataset.strk,2,6);render();return}
- const tm=e.target.closest("[data-tim]");if(tm){S.multi.timing=clamp(S.multi.timing+ +tm.dataset.tim,0,6);render();return}
+ const pmk=e.target.closest("[data-pmode]");if(pmk){S.mode=pmk.dataset.pmode;if(HOST.keyMode)HOST.keyMode(S.mode);if(S.mode==="poly")toast("POLY: T"+(asgT()+1)+" now plays six voices. The other five tracks are off until you leave POLY.");render();return}
+ const so2=e.target.closest("[data-strk]");if(so2){S.multi.splitTrack=clamp(S.multi.splitTrack+ +so2.dataset.strk,2,6);soundEdited();render();return}
+ const tm=e.target.closest("[data-tim]");if(tm){S.multi.timing=clamp(S.multi.timing+ +tm.dataset.tim,0,6);soundEdited();render();return}
  const ko=e.target.closest("[data-kboct]");if(ko){S.kbOct=clamp(S.kbOct+ +ko.dataset.kboct,0,6);render();return}
  const bd=e.target.closest("[data-band]");if(bd){S.mmapSel=+bd.dataset.band;render();return}
  const mr=e.target.closest("tr[data-mrow]");if(mr&&!e.target.closest("button,.pc,.kselbtn")){S.mmapSel=+mr.dataset.mrow;render();return}
- const mh=e.target.closest("[data-mhi]");if(mh){const i=+mh.dataset.i,r=S.mmap[i],lo=i?S.mmap[i-1].hi+1:0,nx=S.mmap[i+1];r.hi=clamp(r.hi+ +mh.dataset.mhi,lo,nx?nx.hi-1:127);render();return}
- const md=e.target.closest("[data-mdel]");if(md){const i=+md.dataset.mdel;if(S.mmap.length<2)return;const r=S.mmap.splice(i,1)[0];if(i===S.mmap.length)S.mmap[i-1].hi=127;S.mmapSel=Math.max(0,i-1);render();return}
- if(e.target.closest("[data-madd]")){const i=S.mmapSel,r=S.mmap[i],lo=i?S.mmap[i-1].hi+1:0;if(r.hi-lo<1){toast("A one-key range cannot be split.");return}const mid=Math.floor((lo+r.hi)/2);S.mmap.splice(i,0,{...r,hi:mid});render();return}
+ const mh=e.target.closest("[data-mhi]");if(mh){const i=+mh.dataset.i,r=S.mmap[i],lo=i?S.mmap[i-1].hi+1:0,nx=S.mmap[i+1];r.hi=clamp(r.hi+ +mh.dataset.mhi,lo,nx?nx.hi-1:127);structEdited("global");render();return}
+ const md=e.target.closest("[data-mdel]");if(md){const i=+md.dataset.mdel;if(S.mmap.length<2)return;const r=S.mmap.splice(i,1)[0];if(i===S.mmap.length)S.mmap[i-1].hi=127;S.mmapSel=Math.max(0,i-1);structEdited("global");render();return}
+ if(e.target.closest("[data-madd]")){const i=S.mmapSel,r=S.mmap[i],lo=i?S.mmap[i-1].hi+1:0;if(r.hi-lo<1){toast("A one-key range cannot be split.");return}const mid=Math.floor((lo+r.hi)/2);S.mmap.splice(i,0,{...r,hi:mid});structEdited("global");render();return}
  const mi=e.target.closest("[data-mirr]");if(mi){const A=S.tracks[asgT()].assign;A.mirr=!A.mirr;soundEdited();render();return}
  const kt=e.target.closest("[data-ktrk]");if(kt){const A=S.tracks[asgT()].assign;A[kt.dataset.ktrk]=!A[kt.dataset.ktrk];soundEdited();render();return}
  const pl=e.target.closest(".pl");if(pl&&S.ws==="seq"){const k=+pl.dataset.plp;if(k<pages16()){S.page=k;S.viewAll=false;render()}return}
@@ -3464,11 +3481,13 @@ document.addEventListener("click",e=>{
  const tb=e.target.closest("#tabs button");if(tb){goWs(tb.dataset.ws);return}
  if(e.target.closest("#platekey")){setPlate(S.plate==="mk1"?"mk2":"mk1");return}
  if(e.target.closest("#play")){togglePlay();return}
- if(e.target.closest("#rec")){S.rec=!S.rec;renderTop();if(S.rec)toast("GRID RECORD on. On the machine: hold a trig to see its note, turn a knob to lock it. Here: just click and draw.");return}
+ if(e.target.closest("#rec")){if(HOST.record)return HOST.record();S.rec=!S.rec;renderTop();if(S.rec)toast("GRID RECORD on. On the machine: hold a trig to see its note, turn a knob to lock it. Here: just click and draw.");return}
+ if(e.target.closest("#songload")){if(HOST.loadSong)return HOST.loadSong(S.songs.slot);S.songs.current=S.songs.slot;render();toast("LOAD SONG: the machine plays song "+String(S.songs.slot+1).padStart(2,"0")+" in song mode (only while stopped).");return}
  if(e.target.closest("#patPrev")){goPattern((S.queued??S.pat)-1);return}
  if(e.target.closest("#patNext")){goPattern((S.queued??S.pat)+1);return}});
 document.addEventListener("change",e=>{const id=e.target.id,v=e.target.value,tr=trk(S.sel);
  if(id==="romfile"){checkRom(e.target.files[0]);return}
+ if(id==="songsel"){if(HOST.songSlot)return HOST.songSlot(+v);S.songs.slot=+v;S.songSlot=+v;render();return}
  if(id==="engsel"){const btn=document.querySelector(".lcdeng");if(v==="audio"){e.target.value=S.engine;btn.querySelector("span").textContent=e.target.selectedOptions[0].text;openAudio();return}if(v==="rom"){e.target.value=S.engine;btn.querySelector("span").textContent=e.target.selectedOptions[0].text;firstRun();return}
   S.engine=v;S.pend=0;renderPst();if(HOST.engine)HOST.engine(v);else startEngine(v);return}
  let m=id.match(/^lp(\d)$/);if(m){const l=V("LF"+m[1]);l[0]=+v;l[1]=0;soundEdited();render();return}
@@ -3476,7 +3495,7 @@ document.addEventListener("change",e=>{const id=e.target.id,v=e.target.value,tr=
  m=id.match(/^inp(\d)$/);if(m){S.tracks[+m[1]].inp=v;soundEdited();render();return}
  m=id.match(/^asp(\d)$/);if(m){const r=S.tracks[asgT()].assign.tabs[S.asTab][+m[1]];r.pg=+v;r.d=0;soundEdited();render();return}
  m=id.match(/^asd(\d)$/);if(m){S.tracks[asgT()].assign.tabs[S.asTab][+m[1]].d=+v;soundEdited();return}
- m=id.match(/^mpat(\d+)$/);if(m){S.mmap[+m[1]].pat=+v;render();return}
+ m=id.match(/^mpat(\d+)$/);if(m){S.mmap[+m[1]].pat=+v;structEdited("global");render();return}
  if(id==="trigpos"){tr.trigpos=v===""?null:+v;soundEdited();render();return}
  if(id==="mch"){tr.ch=+v;soundEdited("global");render();return}});
 
@@ -3618,6 +3637,15 @@ function setWorkingKit(page,name){applyKit({...page,multi:page.multi??S.multi});
 function setSong(rows,slot){S.song=rows;S.songSlot=slot;S.songSel=Math.min(S.songSel||0,rows.length-1)}
 function setMidiTracks(list){S.midi.forEach((x,t)=>{x.ch=list[t].ch;x.cc=[...list[t].cc]})}
 function setMultiMap(rows){S.mmap=rows;S.mmapSel=Math.min(S.mmapSel||0,rows.length-1)}
+/* the machine's own mutes (12 booleans: T1-T6, M1-M6; null: unknown) */
+function setMutes(list){let ch=false;list.forEach((m,i)=>{if(m==null)return;const t=trk(i);if(!!t.mute!==m){t.mute=m;ch=true}});if(ch&&!busyNow())render()}
+const busyNow=()=>{try{return !!(drag||laneDraw||rollDrag||active||arpDrag||l2drag||joyDrag||splitDrag||cord||kbDown||paint)}catch(_){return false}};
+/* the keyboard mode the machine is in (POLY is its audio mode) */
+function setMode(m){if(S.mode===m)return;S.mode=m;if(S.ws==="perform"&&!busyNow())render()}
+/* RECORD as the machine is in it: "off" | "grid" | "live" */
+function setRecord(mode){const on=mode==="grid"||mode==="live";S.recMode=mode;if(!!S.rec!==on){S.rec=on;renderTop()}const b=$("#rec");if(b)b.title=mode==="live"?"LIVE RECORDING: notes you play are recorded. Click to stop recording.":mode==="grid"?"GRID RECORDING: the machine's TRIG keys write steps. Click to leave.":"RECORD: stopped = GRID RECORDING, playing = LIVE RECORDING (the keyboard's notes are recorded)."}
+/* the 24 songs for the Song workspace's picker: {names, slot (the one edited), current (the machine's)} */
+function setSongs(v){const same=JSON.stringify(v)===JSON.stringify(S.songs);S.songs=v;if(!same&&S.ws==="song"&&!busyNow())render()}
 /* an engine state's LCD label: [text, led "on" | "blink" | "off", tooltip] */
 function setEngineLabel(st,label){ENG[st]=label;if(S.eng===st)setEng(st)}
 /* a host's engine map ([{id, label, available, reason}]) in the engine menu, before the menu's own entries */
@@ -3664,18 +3692,19 @@ Boot.host={chooseRom:()=>{if(HOST.chooseRom)return HOST.chooseRom();Boot.rom({ok
 document.addEventListener("contextmenu",e=>{if(!HOST.menu||!e.target.closest(".top")||e.target.closest("button,[role=slider],[role=button],select,input,b,.lcdpanel"))return;e.preventDefault();HOST.menu()});
 window.MMView={
  /* values */
- captureKit,capturePat,clearedKit,emptyPat,audible,engReady,asgT,noteName,pname,machName,kitName,
+ captureKit,capturePat,clearedKit,emptyPat,audible,soloed:()=>[...S.tracks,...S.midi].some(x=>x.solo),engReady,asgT,noteName,pname,machName,kitName,
  gated:()=>Object.keys(NA_SEL),dialogOpen,
- busy:()=>{try{return !!(drag||laneDraw||rollDrag||active||arpDrag||l2drag||joyDrag||splitDrag||cord||kbDown||paint)}catch(_){return false}},
+ busy:busyNow,
  libBusy:()=>LIB.renaming!=null||LIB.drag!=null,
  sel:()=>S.sel,mode:()=>S.mode,playing:()=>S.playing,step:()=>S.step,tempo:()=>S.bpm,engineState:()=>S.eng,kitState:()=>S.kitState,workName:()=>S.workName,
  kitSlot:k=>({...S.kits[k]}),patternSlot:p=>({data:S.patData[p],kit:S.patKit[p],...S.patInfo[p]}),patternLength:p=>p===S.pat?S.len:S.patInfo[p].len,
- song:()=>copy(S.song),routing:()=>S.routing,midiTracks:()=>S.midi.map(x=>({ch:x.ch,cc:[...x.cc]})),multi:()=>copy(S.multi),
+ song:()=>copy(S.song),routing:()=>S.routing,midiTracks:()=>S.midi.map(x=>({ch:x.ch,cc:[...x.cc]})),multi:()=>copy(S.multi),multiMap:()=>copy(S.mmap),
  learnTarget:()=>S.learn&&S.learnT?{...S.learnT}:null,learning:()=>!!S.learn,ctlSetup,
  /* setters */
  startEmpty,setCurrent:({pattern,kit})=>{if(pattern!=null)S.pat=pattern;if(kit!=null)S.kit=kit},setQueued:q=>{S.queued=q},setTempo:bpm=>{S.bpm=bpm},setInput,
  setPlaying,setStep,setPatternSlot,setKitSlot,setWorkingKit,setSong,setRouting:r=>{S.routing=r},setMidiTracks,setMultiMap,
  setEng,setEngineLabel,setEngineTip,setEngines,setAudioEntry,setKitState,clearLearnTarget:()=>{S.learnT=null},setModulation,setCtlSetup,disable,setReading,
+ setMutes,setMode,setRecord,setSongs,
  setLcd,setKeyDown,setPst,closeFirmwareDialog,bootRom:r=>Boot.rom(r),syxPreview:m=>Syx.preview(m),syxProgress:m=>Syx.progress(m),
  /* calls */
  render,renderTop,drawLib,toast,ask,redraw,movePH,setPos,flashTracks,goWs,clickStep,autoRange,kitSave,

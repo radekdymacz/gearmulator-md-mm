@@ -14,7 +14,14 @@
      togglePlay(), ownsClock          the machine is the sequencer
      selectPattern(p, now)            LOAD PATTERN (now: STOP, LOAD PATTERN, PLAY)
      kit(op, k)                       "save" | "load" | "saveAs" | "reload"
-     tempo(bpm), mutes()              the machine's tempo; the synth tracks' mutes changed
+     tempo(bpm), mutes()              the machine's tempo; the tracks' mutes changed (synth and MIDI)
+     keyMode(mode)                    the keyboard mode changed ("normal" | "multi" | "map" | "poly"): POLY
+                                      is the machine's audio mode
+     record()                         the RECORD key: the host picks GRID or LIVE RECORDING, or off
+     songSlot(slot), loadSong(slot)   the Song workspace edits another of the 24 songs; LOAD SONG makes it
+                                      the machine's
+     waiting(), sendNow()             HW MIDI: how many messages wait for the machine's SYSEX RECV, and the
+                                      person says it is there (the pattern field's SEND n dialog)
      playKey(note), keyUp(), joy(xy)  the keyboard (a key pressed, the keys let go) and the joystick
      learning(on), learnTarget(target), learnBind(target, knob)
                                       LEARN on or off, the value clicked, the knob pressed for it
@@ -29,7 +36,8 @@
                                       firmware, the ROM folder, look again (the page never reads the ROM)
      audioDoc(), audioSend(command), audioMeter(on)   the AUDIO / MIDI panel's devices
    The view's side, for a host: window.MMView (130-main.js): values to read, setters (the LCD
-   picture, the held key, the pattern field's RECV state, the engine words), and
+   picture, the held key, the pattern field's RECV state, the engine words, the machine's mutes,
+   keyboard mode, RECORD state and songs), and
    disable(capability, reason) for what the host's engine cannot do (NA_SEL maps each capability
    to its controls, NA_INFO lists those with none). */
 const HOST=window.MMHost||{};

@@ -706,13 +706,20 @@ namespace elektronData
 		masks.set("mirror", _k.mirrorMask);
 		masks.set("hpf", _k.hpfMask);
 		masks.set("lpf", _k.lpfMask);
+		masks.set("portamento", _k.portamentoMask);
 		masks.set("legatoAmp", _k.legatoAmp);
 		masks.set("legatoFilter", _k.legatoFilter);
 		masks.set("legatoLfo", _k.legatoLfo);
 		v.set("trackMasks", std::move(masks));
+		Value multi = Value::object();
+		multi.set("mode", _k.multiTrigMode);
+		multi.set("timing", _k.multiTrigTiming);
+		multi.set("splitKey", _k.splitKey);
+		multi.set("splitTrack", _k.splitTrack);
+		v.set("multiTrig", std::move(multi));
 		Value hidden = Value::object();
 		hidden.set("x1cd", hex(_k.x1cd));
-		hidden.set("x2b6", hex(_k.x2b6));
+		hidden.set("x1d1", _k.x1d1);
 		v.set("hidden", std::move(hidden));
 		return v;
 	}
@@ -773,12 +780,18 @@ namespace elektronData
 		masks.integer("mirror", k.mirrorMask, 0, 255);
 		masks.integer("hpf", k.hpfMask, 0, 255);
 		masks.integer("lpf", k.lpfMask, 0, 255);
+		masks.integer("portamento", k.portamentoMask, 0, 255);
 		masks.integer("legatoAmp", k.legatoAmp, 0, 255);
 		masks.integer("legatoFilter", k.legatoFilter, 0, 255);
 		masks.integer("legatoLfo", k.legatoLfo, 0, 255);
+		const auto multi = in.child("multiTrig");
+		multi.integer("mode", k.multiTrigMode, 0, 255);
+		multi.integer("timing", k.multiTrigTiming, 0, 255);
+		multi.integer("splitKey", k.splitKey, 0, 255);
+		multi.integer("splitTrack", k.splitTrack, 0, 255);
 		const auto hidden = in.child("hidden");
 		hidden.hexBytes("x1cd", k.x1cd);
-		hidden.hexBytes("x2b6", k.x2b6);
+		hidden.integer("x1d1", k.x1d1, 0, 255);
 		if(_errors.size() != before)
 			return std::nullopt;
 		for(const auto& e : validate(k))
@@ -943,8 +956,12 @@ namespace elektronData
 			map.push(numbers(f));
 		v.set("multiMap", std::move(map));
 		v.set("control", hex(_g.control));
+		Value controlIn = Value::object();
+		controlIn.set("tempoSync", _g.tempoSync);
+		controlIn.set("transport", _g.transportIn);
+		v.set("controlIn", std::move(controlIn));
 		Value hidden = Value::object();
-		hidden.set("x05", hex(_g.x05));
+		hidden.set("x07", hex(_g.x07));
 		hidden.set("x30", hex(_g.x30));
 		hidden.set("xfd", hex(_g.xfd));
 		v.set("hidden", std::move(hidden));
@@ -1009,8 +1026,11 @@ namespace elektronData
 				m.toInteger(m.value().asArray()[i], "value", g.multiMap[f][i], 0, 255);
 		}
 		in.hexBytes("control", g.control);
+		const auto controlIn = in.child("controlIn");
+		controlIn.integer("tempoSync", g.tempoSync, 0, 255);
+		controlIn.integer("transport", g.transportIn, 0, 255);
 		const auto hidden = in.child("hidden");
-		hidden.hexBytes("x05", g.x05);
+		hidden.hexBytes("x07", g.x07);
 		hidden.hexBytes("x30", g.x30);
 		hidden.hexBytes("xfd", g.xfd);
 		if(_errors.size() != before)

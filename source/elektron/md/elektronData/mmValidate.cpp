@@ -158,6 +158,10 @@ namespace elektronData
 				p.range(_kit.assignDest[t][i], 0, 127, base + ".assign.dest");
 			}
 		}
+		p.range(_kit.multiTrigMode, 0, 3, "multiTrig.mode");
+		p.range(_kit.multiTrigTiming, 0, 6, "multiTrig.timing");
+		p.range(_kit.splitKey, 0, 127, "multiTrig.splitKey");
+		p.range(_kit.splitTrack, 0, 5, "multiTrig.splitTrack");
 		return p.take();
 	}
 

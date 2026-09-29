@@ -434,7 +434,8 @@ void asksAndErrors()
 		check(last("reset") != nullptr && !d.workingKit(), "a restart: the page starts over");
 	}
 	{
-		// Over a wire nothing drives SYSEX RECV: a dump the machine never reads back is an error.
+		// Over a wire nothing drives SYSEX RECV (MM-P4): a dump waits for the person (recv.waiting, SEND n) until
+		// the page says the machine is on it (hwSend); one the machine then never reads back is an error.
 		mmDesk::Desk d(port, mmDesk::wireProfile());
 		const auto msg = [&](const std::string& _json) { d.onPageMessage(*ed::json::parse(_json)); };
 		msg(R"({"op":"ready"})");
@@ -444,7 +445,26 @@ void asksAndErrors()
 		auto p = emptyPattern(1);
 		p.amp[0] = 1;
 		msg(R"({"op":"set","id":4,"kind":"pattern","doc":)" + ed::json::write(ed::mmPatternToJson(p)) + "}");
-		for(int i = 0; i < 100; ++i)
+		const auto sent = wire.size();
+		for(int i = 0; i < 20; ++i)
+		{
+			now += 100;
+			d.onDeviceSysex(status(0x04, 1));
+			d.tick();
+		}
+		const auto* m = last("machine");
+		const auto* recv = m ? m->find("doc")->find("recv") : nullptr;
+		bool dumped = false;
+		for(size_t i = sent; i < wire.size(); ++i)
+			dumped = dumped || (wire[i].size() > 6 && wire[i][6] == ed::g_mmPatternDump);
+		check(recv && recv->find("state")->asString() == "waitingUser" && recv->find("waiting")->asNumber() == 1 && !dumped,
+			"over HW MIDI the pattern dump waits for the person's SYSEX RECV (SEND 1)");
+		msg(R"({"op":"hwSend","id":5})");
+		dumped = false;
+		for(size_t i = sent; i < wire.size(); ++i)
+			dumped = dumped || (wire[i].size() > 6 && wire[i][6] == ed::g_mmPatternDump);
+		check(dumped, "hwSend sends it");
+		for(int i = 0; i < 200; ++i)
 		{
 			now += 100;
 			d.onDeviceSysex(status(0x04, 1));

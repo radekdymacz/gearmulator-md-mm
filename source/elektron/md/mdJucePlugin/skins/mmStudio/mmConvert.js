@@ -84,7 +84,7 @@ const MmConvert = (() => {
 			return {
 				m, name: machName(m), v, lev: d.levels[t],
 				out: { AB: !!(x.outputs & 1), CD: !!(x.outputs & 2), EF: !!(x.outputs & 4) },
-				inp: INPUTS[x.input] ?? INPUTS[0], trigpos: x.trigPos ?? null, port: 0,
+				inp: INPUTS[x.input] ?? INPUTS[0], trigpos: x.trigPos ?? null, port: bit(M.portamento, t) ? 0 : 1,
 				leg: { amp: bit(M.legatoAmp, t), flt: bit(M.legatoFilter, t), lfo: bit(M.legatoLfo, t) },
 				assign: { mirr: !!bit(M.mirror, t), hpf: !!bit(M.hpf, t), lpf: !!bit(M.lpf, t), tabs }
 			};
@@ -96,7 +96,10 @@ const MmConvert = (() => {
 			name: "MIDI " + (t + 1)
 		}));
 		const e = d.tracks[0].multiEnv || [0, 0, 0, 0, 0, 0];
-		return { tracks, midi, menv: { ATK: e[0], DEC: e[1], SUS: e[2], REL: e[3], PORT: e[4] } };
+		/* MULTI TRIG (MM-P4): the page counts the split track from 1 */
+		const mt = d.multiTrig;
+		const multi = mt ? { mode: mt.mode, splitKey: mt.splitKey, splitTrack: mt.splitTrack + 1, timing: mt.timing } : undefined;
+		return { tracks, midi, multi, menv: { ATK: e[0], DEC: e[1], SUS: e[2], REL: e[3], PORT: e[4] } };
 	}
 	const kitName = d => d.nameBytes && /^ff/i.test(d.nameBytes) ? "" : d.name;
 	/* An unused slot: the firmware marks it with a first name byte of 0xff. */
@@ -123,6 +126,8 @@ const MmConvert = (() => {
 			M.mirror = setBit(M.mirror, t, x.assign.mirr);
 			M.hpf = setBit(M.hpf, t, x.assign.hpf);
 			M.lpf = setBit(M.lpf, t, x.assign.lpf);
+			/* PORTAMENTO: set = ALWAYS (the page's 0), clear = ONLY LEGATO (1) */
+			M.portamento = setBit(M.portamento, t, x.port !== 1);
 			TABS.forEach(([tab, src]) => x.assign.tabs[tab].forEach((r, n) => {
 				const i = src * 2 + n, ba = bt.assign.add[i];
 				o.assign.page[i] = cl(r.pg);
@@ -135,6 +140,8 @@ const MmConvert = (() => {
 		const e = k.menv, keys = ["ATK", "DEC", "SUS", "REL", "PORT"];
 		const b0 = b.tracks[0].multiEnv;
 		if (b0) keys.forEach((key, i) => { if (cl(e[key]) !== b0[i]) d.tracks.forEach(o => o.multiEnv[i] = cl(e[key])); });
+		if (k.multi && d.multiTrig) Object.assign(d.multiTrig, { mode: cl(k.multi.mode, 0, 3), splitKey: cl(k.multi.splitKey),
+			splitTrack: cl(k.multi.splitTrack - 1, 0, 5), timing: cl(k.multi.timing, 0, 6) });
 		if (name !== kitName(b)) { d.name = name; delete d.nameBytes; }
 		return d;
 	}
@@ -324,13 +331,54 @@ const MmConvert = (() => {
 			return o;
 		});
 		if (!d.rows.length || d.rows[d.rows.length - 1].kind !== "end") d.rows.push({ ...clone(ROW0), kind: "end", pattern: 255 });
+		/* the bytes after END (firmware residue) start after the last row: move them with it (MM-P4) */
+		const fw = d.firmware || d.hidden, delta = d.rows.length - b.rows.length, runs = fw && fw.rowsAfterEnd;
+		if (delta && Array.isArray(runs)) {
+			const size = (200 - d.rows.length) * 24;
+			fw.rowsAfterEnd = runs.map(([i, hex]) => {
+				let at = i - delta * 24, h = hex;
+				if (at < 0) { h = h.slice(-at * 2); at = 0; }
+				if (at * 2 + h.length > size * 2) h = h.slice(0, Math.max(0, size * 2 - at * 2));
+				return [at, h];
+			}).filter(([, h]) => h.length);
+		}
 		return d;
 	}
 
 	/* ---------------- global ---------------- */
-	/* only what the page shows: routing mode and the MIDI sequencer tracks' channel and CCs */
-	function globalToFw(g, routing, midi) {
+	/* MULTI MAP (MULTIMAP EDIT, MM-P4): the page's rows {hi, pat (-1 = CUR), ofs (0 = ---, else offset + 1),
+	   len, trn (64-centred), tim (0 DIR, 1 2 4 8 16 32)}; the ranges end where an upper key repeats */
+	const s8 = v => v > 127 ? v - 256 : v;
+	function mapToPage(g) {
+		const [hi, pat, ofs, len, trn, tim] = g.multiMap, rows = [];
+		for (let r = 0; r < hi.length; r++) {
+			if (r && hi[r] <= hi[r - 1]) break;
+			rows.push({ hi: hi[r], pat: pat[r] === 255 ? -1 : pat[r], ofs: ofs[r] === 255 ? 0 : ofs[r] + 1, len: len[r], trn: cl(s8(trn[r]) + 64), tim: tim[r] });
+		}
+		return rows;
+	}
+	function mapToFw(rows, g) {
+		const m = clone(g.multiMap), base = mapToPage(g);
+		rows.slice(0, 32).forEach((r, i) => {
+			const b = base[i];
+			m[0][i] = cl(r.hi);
+			m[1][i] = r.pat < 0 ? 255 : cl(r.pat);
+			m[2][i] = r.ofs ? cl(r.ofs - 1, 0, 63) : 255;
+			m[3][i] = cl(r.len, 0, 64);
+			m[4][i] = b && b.trn === r.trn ? g.multiMap[4][i] : (cl(r.trn) - 64) & 255;
+			m[5][i] = cl(r.tim, 0, 6);
+		});
+		/* the unused ranges past the last repeat its upper key, as the machine keeps them */
+		const n = Math.min(32, rows.length);
+		if (n < base.length || rows.length !== base.length)
+			for (let i = n; i < 32; i++) { m[0][i] = m[0][n - 1]; m[1][i] = 255; m[2][i] = 255; m[3][i] = 16; m[4][i] = 0; m[5][i] = 0; }
+		return m;
+	}
+
+	/* only what the page shows: routing mode, the MIDI sequencer tracks' channel and CCs, the MULTI MAP */
+	function globalToFw(g, routing, midi, mmap) {
 		const d = clone(g);
+		if (mmap) d.multiMap = mapToFw(mmap, g);
 		d.routingMode = routing;
 		midi.forEach((x, t) => {
 			const bc = g.midiSeq.channels[t];
@@ -375,7 +423,7 @@ const MmConvert = (() => {
 	}
 
 	return {
-		kitToPage, kitToFw, kitName, kitEmpty, patternToPage, patternToFw, songToPage, songToFw, globalToFw,
+		kitToPage, kitToFw, kitName, kitEmpty, patternToPage, patternToFw, songToPage, songToFw, globalToFw, mapToPage, mapToFw,
 		modToFw, modToPage, hasTrigs, machineName, useCatalogue, enumN, valueToPage, valueToFw, lockKey, parseLockKey, TABS
 	};
 })();

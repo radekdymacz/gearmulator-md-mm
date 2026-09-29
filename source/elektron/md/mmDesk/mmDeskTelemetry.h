@@ -20,8 +20,17 @@ namespace mmDesk
 		Right,
 		Global,		// FUNCTION + KIT/SONG: the GLOBAL menu
 		Play,
-		Stop
+		Stop,
+		Record,			// [RECORD] (MM-P4)
+		MuteWindow,		// FUNCTION + BANK GROUP: the MUTE window
+		Trig9, Trig10, Trig11, Trig12, Trig13, Trig14,	// TRIG 9-14: the MIDI tracks in the MUTE window
+		LiveRecord		// hold RECORD, press PLAY: LIVE RECORDING
 	};
+
+	// Keys pressed with another held: FUNCTION for Global and MuteWindow, RECORD for LiveRecord.
+	constexpr bool isChord(const Key _k) { return _k == Key::Global || _k == Key::MuteWindow || _k == Key::LiveRecord; }
+	// The key held for a chord.
+	constexpr bool heldIsRecord(const Key _k) { return _k == Key::LiveRecord; }
 
 	using Screen = elektronData::MmScreen;
 
@@ -36,5 +45,7 @@ namespace mmDesk
 		uint32_t recvErrors = 0;
 		bool recvActive = false;	// SYSEX RECV takes dumps (RAM 0x26a3c3)
 		int tempo = 0;				// BPM x 24 (RAM 0x2bc2a6), 0 = unknown
+		int mutes = -1;				// bit t: synth track t, bit 6 + t: MIDI track t (RAM, MM-P4); -1 = unknown
+		int recording = -1;			// 0 off, 1 GRID RECORDING (RAM 0x26bbb3), 2 LIVE RECORDING (0x2bff01); -1 = unknown
 	};
 }

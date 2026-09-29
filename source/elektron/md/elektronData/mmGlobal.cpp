@@ -15,7 +15,9 @@ namespace elektronData
 			_io.u8(_g.channelSpan);
 			_io.u8(_g.multiTrigChannel);
 			_io.u8(_g.multiMapChannel);
-			_io.bytes(_g.x05);
+			_io.u8(_g.tempoSync);
+			_io.u8(_g.transportIn);
+			_io.bytes(_g.x07);
 			_io.bytes(_g.midiSeqChannels);
 			_io.bytes(_g.midiSeqCcs);
 			_io.bytes(_g.x30);

@@ -12,16 +12,18 @@ namespace elektronData
 	// value. The raw payload is 264 bytes (MM-P1-RESULT §5).
 	//   0x00  auto track channel, base channel, channel span, multi trig channel,
 	//         multi map channel (0-based; the order follows the MIDI CHANNELS screen's values)
-	//   0x05   1  GLOBAL › MIDI SYNC CLOCK IN: 1 plays at the MIDI clock's tempo (P7, measured:
-	//              mmDeskFirmwareTest hostclock; kept in x05[0])
-	//   0x06   1  TRANSPORT IN: 1 takes MIDI Start/Stop (x05[1]); both 0 as booted
+	//   0x05   1  CONTROL IN TEMPO SYNC (GLOBAL › MIDI SYNC CLOCK IN): 0 INTERNAL, 1 EXT MIDI CLK
+	//              (panel, MM-P4; measured by mmDeskFirmwareTest hostclock, P7)
+	//   0x06   1  CONTROL IN TRANSPORT (TRANSPORT IN): 0 IGNORE, 1 ACCEPT (MIDI Start/Stop)
+	//              (panel, MM-P4); both 0 as booted
 	//   0x07  11  unknown (kept)
 	//   0x12   6  MIDI sequencer track channels (inferred)
 	//   0x18  24  MIDI sequencer CC numbers CL1-4, 6 x 4 (inferred)
 	//   0x30   6  unknown (kept)
 	//   0x36   6  CONTROL OUT1 / OUT2 / IN settings (kept, not decoded)
-	//   0x3c 192  multi map, 6 fields x 32 ranges: upper key, pattern (0xff = current), then four
-	//             fields the manual names OFS LEN TRN TIM (order not verified)
+	//   0x3c 192  multi map, 6 fields x 32 ranges (MULTIMAP EDIT, panel, MM-P4): upper key; pattern
+	//             (0xff CUR); offset (0xff ---); length; transpose (signed); timing (0 DIR, 1 2 4
+	//             8 16 32). Ranges past the last repeat its upper key
 	//   0xfc   1  routing mode: 0 3xSTEREO + AB=MIX, 1 3xSTEREO, 2 6xMONO (panel)
 	//   0xfd   9  unknown (kept)
 	//   0x106  2  master tune, tenths of Hz (4400 = 440.0 Hz) (panel)
@@ -36,7 +38,8 @@ namespace elektronData
 		uint8_t position = 0;
 
 		uint8_t autoChannel = 8, baseChannel = 0, channelSpan = 6, multiTrigChannel = 6, multiMapChannel = 7;
-		std::array<uint8_t, 13> x05{};
+		uint8_t tempoSync = 0, transportIn = 0;
+		std::array<uint8_t, 11> x07{};
 		std::array<uint8_t, 6> midiSeqChannels{};
 		std::array<std::array<uint8_t, 4>, 6> midiSeqCcs{};
 		std::array<uint8_t, 6> x30{};
