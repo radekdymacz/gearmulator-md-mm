@@ -9,11 +9,13 @@
 #include "elektronData/mdGlobal.h"
 #include "elektronData/mdJson.h"
 #include "elektronData/mdMachines.h"
+#include "elektronData/mdValidate.h"
 #include "elektronData/mdWorkingKit.h"
 
 #include <cassert>
 #include <algorithm>
 #include <cstdio>
+#include <utility>
 
 namespace mdDesk
 {
@@ -31,6 +33,16 @@ namespace mdDesk
 		// Keys the device never reports as pending (no telemetry, a stopped device) are over after this.
 		constexpr double g_keysTimeoutMs = 1000;
 		constexpr deskCore::LoadQueue<DocRef>::Policy g_loadPolicy{30, 1};	// P1: ~30 ms per pattern in the background
+		// Control All (DESIGN-edit-flow.md): FUNCTION is let go this long after the last turn; the page
+		// key waits as long as the knob recorder's; without the panel, one CC per value per this.
+		constexpr double g_tweakQuietMs = 150;
+		constexpr double g_tweakPageGapMs = KnobRecorder::g_pageGapMs;
+		constexpr double g_coalesceMs = 50;
+		constexpr double g_tweakSelectMs = 100;		// SET STATUS track again if the status did not follow
+		// The device sends one panel packet a block (DeskDevice, 128 at most queued): a turn waits while more
+		// than this are on their way, and sends at most this many steps.
+		constexpr int g_tweakMaxPending = 4;
+		constexpr int g_tweakMaxSteps = 16;
 
 		// The dump a request brings back, for timeouts at DIN speed (the kind's record).
 		size_t replyBytes(const DocKind _k)
@@ -177,6 +189,9 @@ namespace mdDesk
 		m_knobs.reset();
 		m_recLock.reset();
 		m_sequence.clear();
+		m_intent.reset();
+		m_tweak = {};
+		m_coalesced.clear();
 		m_telemetrySeen = false;
 		m_session = mdDataLink::Session([this](const Bytes& _b)
 		{
@@ -214,6 +229,9 @@ namespace mdDesk
 		for(const auto& [ref, push] : m_pushes)
 			if(push.slot.busy())
 				return true;
+		// Control All on its way (FUNCTION held: no dump may be asked for meanwhile), or its CCs.
+		if(m_tweak.active() || !m_coalesced.empty())
+			return true;
 		// A live edit the machine's memory does not show yet is on the wire too.
 		return m_working.expect.expecting(now());
 	}
@@ -260,6 +278,16 @@ namespace mdDesk
 
 	Outcome MdMachine::review(const Value& _command, const std::vector<Change>& _changes, const Documents& _view)
 	{
+		// Control All: the intent the next submit() delivers (its change is the whole working kit).
+		m_intent.reset();
+		if(deskCore::opOf(_command) == "tweak")
+		{
+			const auto* g = _command.find("group");
+			const std::string group = g && g->isString() ? g->asString() : "syn";
+			const auto t = intOf(_command, "t");
+			m_intent = TweakIntent{group == "fx" ? 1 : group == "rt" ? 2 : 0, static_cast<uint8_t>(intOf(_command, "knob").value_or(0)),
+				intOf(_command, "d").value_or(0), t && *t >= 0 && *t < 16 ? std::optional<uint8_t>(static_cast<uint8_t>(*t)) : std::nullopt};
+		}
 		// While live recording the firmware writes the playing pattern itself; a dump from the
 		// editor would overwrite what it just recorded.
 		if(m_telemetry.recording)
@@ -309,21 +337,34 @@ namespace mdDesk
 		return d;
 	}
 
+	deskCore::PushPolicy MdMachine::pushPolicy(const DocKind _kind) const
+	{
+		auto p = m_profile.push;
+		// Over a wire a dump takes its time on it: no faster than that.
+		if(m_profile.wire)
+			p.minIntervalMs = std::max(p.minIntervalMs, deskCore::DinPacer::wireMs(replyBytes(_kind)));
+		return p;
+	}
+
+	// Paced (DESIGN-edit-flow.md): the dump goes now or waits its turn (latest wins); the read-back is
+	// asked for once the gesture is quiet (pumpPushes).
 	Outcome MdMachine::pushDump(const Document& _doc)
 	{
 		const auto ref = refOf(_doc);
-		auto& push = m_pushes[ref];
-		if(!push.slot.want(_doc))
-			return ok();	// waits for the read-back in flight; latest wins
-		const auto problems = ref.kind == DocKind::Pattern ? m_session.pushPattern(std::get<ed::MdPattern>(_doc))
-			: m_session.pushSong(std::get<ed::MdSong>(_doc));
+		auto problems = ref.kind == DocKind::Pattern ? ed::validate(std::get<ed::MdPattern>(_doc)) : ed::validate(std::get<ed::MdSong>(_doc));
 		if(!problems.empty())
-		{
-			push.slot.abandon();
 			return {problems, {}, {}};
-		}
-		push.sentMs = now();
+		if(m_pushes[ref].slot.want(_doc, now(), pushPolicy(ref.kind)))
+			sendDump(_doc);
 		return ok();
+	}
+
+	void MdMachine::sendDump(const Document& _doc)
+	{
+		if(refOf(_doc).kind == DocKind::Pattern)
+			m_session.pushPattern(std::get<ed::MdPattern>(_doc), false);
+		else
+			m_session.pushSong(std::get<ed::MdSong>(_doc), false);
 	}
 
 	Outcome MdMachine::submit(const Change& _change, const Documents&)
@@ -364,6 +405,16 @@ namespace mdDesk
 				return refuse("Only the kit that plays can be edited live" + (kit ? " (kit " + std::to_string(*kit + 1) + " plays)"
 					: std::string()));
 			const auto delivery = kitDelivery(before, after);
+			const auto intent = std::exchange(m_intent, std::nullopt);
+			// Control All (manual p.37): the machine's own FUNCTION + DATA ENTRY gesture moves every track;
+			// the edit is pending until memory shows it, like any live edit. No CCs.
+			const auto lead = intent ? tweakLead(before, intent->track) : std::nullopt;
+			if(intent && lead && tweakByPanel())
+			{
+				m_tweak.want(intent->page, intent->knob, intent->d, *lead, now());
+				m_working.expect.sent(before, after, now());
+				return ok();
+			}
 			// While live recording a parameter becomes DATA ENTRY turns: the firmware records knob
 			// turns as locks, not CCs (P3). Which route is data: the machine's mode, then a pure split.
 			const auto route = routeKitEdits(delivery.edits, m_telemetry.recording && static_cast<bool>(m_port.turnKnob));
@@ -371,8 +422,16 @@ namespace mdDesk
 				m_knobs.want(e.track, e.index, e.value);
 			for(const auto& e : route.live)
 			{
-				if(e.kind == LiveEdit::Kind::Param || e.kind == LiveEdit::Kind::Level)
+				if(e.kind == LiveEdit::Kind::Param && intent)
 				{
+					// Control All without the panel: coalesced, one CC per value per tick (pumpCoalesced).
+					m_coalesced[{e.track, e.index}] = e.value;
+				}
+				else if(e.kind == LiveEdit::Kind::Param || e.kind == LiveEdit::Kind::Level)
+				{
+					// A plain edit goes at once; a coalesced value for it would come later and undo it.
+					if(e.kind == LiveEdit::Kind::Param)
+						m_coalesced.erase({e.track, e.index});
 					if(m_port.sendKitParam)
 						m_port.sendKitParam(e.track, e.kind == LiveEdit::Kind::Level ? 24 : e.index, e.value);
 				}
@@ -413,10 +472,11 @@ namespace mdDesk
 				// shows them.
 				m_session.requestGlobal(ref.slot);
 			}
+			// The global's read-back is asked for with it (pushGlobal, requestGlobal): not paced.
 			auto& push = m_pushes[ref];
 			push.slot.abandon();
-			push.slot.want(_change.after);
-			push.sentMs = now();
+			push.slot.want(_change.after, now(), pushPolicy(ref.kind));
+			push.slot.askedBack(now());
 			return ok();
 		}
 		}
@@ -891,8 +951,21 @@ namespace mdDesk
 		{
 			if(!push.slot.busy())
 				continue;
+			switch(push.slot.due(_now, pushPolicy(ref.kind)))
+			{
+			case PushSlot<Document>::Due::Send:
+				sendDump(push.slot.takeNext(_now));
+				break;
+			case PushSlot<Document>::Due::ReadBack:
+				// The gesture is quiet: one read-back confirms the last dump.
+				push.slot.askedBack(_now);
+				request(ref);
+				break;
+			case PushSlot<Document>::Due::Nothing:
+				break;
+			}
 			const double timeout = g_pushTimeoutMs + (m_profile.wire ? 2.5 * deskCore::DinPacer::wireMs(replyBytes(ref.kind)) : 0);
-			if(_now - push.sentMs < timeout)
+			if(!push.slot.timedOut(_now, timeout))
 				continue;
 			push.slot.abandon();
 			fail(ref, std::string("Push failed: the machine did not read back ") + kindName(ref.kind)
@@ -907,9 +980,13 @@ namespace mdDesk
 	void MdMachine::onSysex(const Bytes& _message)
 	{
 		m_wire.heard(now());
-		if(ed::parseMdStatusResponse(_message) && (m_profile.wire || m_probe == Probe::Running))
+		const auto status = ed::parseMdStatusResponse(_message);
+		if(status && (m_profile.wire || m_probe == Probe::Running))
 			m_wire.statusReply(now());
 		m_session.onSysex(_message);
+		// Control All: the machine said which track is selected (the one its gesture leads from).
+		if(status && status->param == ed::MdStatus::Track)
+			m_tweak.trackKnownMs = now();
 	}
 
 	void MdMachine::onDumpReadBack(const Document& _doc)
@@ -923,24 +1000,15 @@ namespace mdDesk
 			return;
 		}
 		auto& push = it->second;
-		const auto t = now();
+		const auto askedMs = push.slot.asked() ? push.slot.askedMs() : push.slot.sentMs();
 		switch(deskCore::readBack(push.slot, _doc))
 		{
 		case deskCore::ReadBackAction::Observe:
 			observe(_doc, Source::Dump);
 			break;
 		case deskCore::ReadBackAction::Settle:
-			m_lastRoundTripMs = t - push.sentMs;
+			m_lastRoundTripMs = now() - askedMs;
 			settle(_doc, Source::Dump);
-			break;
-		case deskCore::ReadBackAction::ObserveSendNext:
-			m_lastRoundTripMs = t - push.sentMs;
-			observe(_doc, Source::Dump);
-			if(ref.kind == DocKind::Pattern)
-				m_session.pushPattern(std::get<ed::MdPattern>(*push.slot.inFlight()));
-			else
-				m_session.pushSong(std::get<ed::MdSong>(*push.slot.inFlight()));
-			push.sentMs = t;
 			break;
 		case deskCore::ReadBackAction::Wait:
 			break;
@@ -949,10 +1017,13 @@ namespace mdDesk
 
 	void MdMachine::onPattern(const ed::MdPattern& _p)
 	{
+		const auto it = m_pushes.find({DocKind::Pattern, _p.position});
+		const bool ownPush = it != m_pushes.end() && it->second.slot.busy();
 		onDumpReadBack(_p);
-		// The current pattern names the kit the Sound and Mix workspaces edit.
+		// The current pattern names the kit the Sound and Mix workspaces edit. The read-back of the
+		// editor's own push re-reads it only when the pattern links another kit than the one that plays.
 		if(m_session.state().pattern == _p.position)
-			if(const auto kit = currentKit())
+			if(const auto kit = currentKit(); kit && (!ownPush || _p.kit != *kit))
 				load({DocKind::Kit, *kit}, true);
 	}
 
@@ -987,7 +1058,7 @@ namespace mdDesk
 		// The read-back after a global edit: what the firmware stored, whatever it normalised.
 		if(const auto it = m_pushes.find(ref); it != m_pushes.end() && it->second.slot.busy())
 		{
-			m_lastRoundTripMs = now() - it->second.sentMs;
+			m_lastRoundTripMs = now() - it->second.slot.askedMs();
 			it->second.slot.abandon();
 			settle(_g, Source::Dump);
 		}
@@ -1267,7 +1338,118 @@ namespace mdDesk
 			pumpLoads(_now);
 		takeWorkingKit(&_view);
 		pumpRecording(_now, _view);
+		pumpTweak(_now);
+		pumpCoalesced(_now);
 		pumpPushes(_now);
+	}
+
+	std::optional<uint8_t> MdMachine::tweakLead(const ed::MdKit& _kit, const std::optional<uint8_t> _preferred)
+	{
+		if(_preferred && controlAllLeads(_kit.models[*_preferred]))
+			return _preferred;
+		for(uint8_t t = 0; t < ed::MdKit::g_tracks; ++t)
+			if(controlAllLeads(_kit.models[t]))
+				return t;
+		return std::nullopt;
+	}
+
+	bool MdMachine::tweakByPanel() const
+	{
+		return panelKeys() && m_port.turnKnob && m_telemetry.valid && m_telemetry.knobPage >= 0 && !m_telemetry.recording
+			&& !m_telemetry.gridEdit;
+	}
+
+	// Control All on the machine (manual p.37): FUNCTION held, the knob turned by the net steps of each
+	// tick, FUNCTION let go at quiet. The knob page is the group's first (the page key, with FUNCTION
+	// up); keys wait while the firmware builds a dump (they would be lost).
+	void MdMachine::pumpTweak(const double _now)
+	{
+		auto& w = m_tweak;
+		if(!w.turns.empty())
+		{
+			auto& turn = w.turns.front();
+			if(turn.steps == 0)
+			{
+				w.turns.pop_front();
+				return;
+			}
+			if(m_telemetry.knobPage != turn.page)
+			{
+				if(w.held)
+				{
+					m_port.pressKey("release:function");
+					w.held = false;
+					m_keys.pressed(_now);
+				}
+				if(!m_loads.loading() && _now - w.pageKeyMs >= g_tweakPageGapMs && m_port.pressKey("page"))
+				{
+					w.pageKeyMs = _now;
+					m_keys.pressed(_now);
+				}
+				return;
+			}
+			if(!w.held)
+			{
+				if(m_loads.loading() || _now - w.pageKeyMs < g_tweakPageGapMs)
+					return;
+				// The firmware tweaks from its selected track: ask which it is (once a gesture: the panel
+				// may have changed it), make it one that leads, and wait for the machine's status to say so.
+				if(w.trackKnownMs < w.startMs)
+				{
+					if(_now - w.selectMs >= g_tweakSelectMs && m_port.sendSysex)
+					{
+						m_port.sendSysex(ed::mdStatusRequest(ed::MdStatus::Track));
+						w.selectMs = _now;
+					}
+					return;
+				}
+				if(m_session.state().track != turn.lead)
+				{
+					if(_now - w.selectMs >= g_tweakSelectMs && m_port.sendSysex)
+					{
+						m_port.sendSysex(ed::mdSetStatus(ed::MdStatus::Track, turn.lead));
+						m_port.sendSysex(ed::mdStatusRequest(ed::MdStatus::Track));
+						w.selectMs = _now;
+					}
+					return;
+				}
+				if(!m_port.pressKey("hold:function"))
+				{
+					w = {};
+					return;
+				}
+				w.held = true;
+			}
+			// One packet a step, one a block on the device: turn when what went before is nearly through,
+			// at most g_tweakMaxSteps at once; steps that come meanwhile add up (the latest total wins).
+			if(m_telemetry.panelPending > g_tweakMaxPending)
+				return;
+			const int n = std::clamp(turn.steps, -g_tweakMaxSteps, g_tweakMaxSteps);
+			m_port.turnKnob(turn.knob, n);
+			m_keys.pressed(_now);
+			w.lastMs = _now;
+			turn.steps -= n;
+			if(turn.steps == 0)
+				w.turns.pop_front();
+			return;
+		}
+		if(w.held && _now - w.lastMs >= g_tweakQuietMs)
+		{
+			m_port.pressKey("release:function");
+			m_keys.pressed(_now);
+			w.held = false;
+		}
+	}
+
+	void MdMachine::pumpCoalesced(const double _now)
+	{
+		if(m_coalesced.empty() || _now - m_coalescedMs < g_coalesceMs)
+			return;
+		m_coalescedMs = _now;
+		if(m_port.sendKitParam)
+			for(const auto& [key, v] : m_coalesced)
+				m_port.sendKitParam(key.first, key.second, v);
+		m_coalesced.clear();
 	}
 
 	// ---- the machine document ----

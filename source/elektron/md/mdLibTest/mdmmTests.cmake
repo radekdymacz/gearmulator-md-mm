@@ -39,6 +39,11 @@ function(mdmm_add_lib_tests _dir)
 	target_link_libraries(mdEditorProbeFirmwareTest PRIVATE mdLib elektronData)
 	set_property(TARGET mdEditorProbeFirmwareTest PROPERTY FOLDER "Elektron/test")
 
+	# DESIGN-edit-flow.md: the firmware and the desk under a stream of page edits (manual: needs a ROM).
+	add_executable(editFlowBenchTest ${_dir}/editFlowBenchTest.cpp ${_dir}/mdFirmwareSession.h)
+	target_link_libraries(editFlowBenchTest PRIVATE mdLib mdDesk mmDesk deskWire)
+	set_property(TARGET editFlowBenchTest PROPERTY FOLDER "Elektron/test")
+
 	# P4: CPU per emulated MD instance, headless (manual: needs a user-supplied ROM).
 	add_executable(mdCpuBenchTest ${_dir}/mdCpuBenchTest.cpp ${_dir}/mdFirmwareSession.h)
 	target_link_libraries(mdCpuBenchTest PRIVATE mdLib elektronData)

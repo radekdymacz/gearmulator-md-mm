@@ -1,4 +1,5 @@
 #include "mmStudioLink.h"
+#include "mdEditFlowCounters.h"
 
 #include "mdController.h"
 #include "mdPluginProcessor.h"
@@ -101,6 +102,7 @@ namespace mdJucePlugin
 
 	void MmStudioLink::sendSysex(const Bytes& _message) const
 	{
+		editFlow::sysexOut(_message);
 		synthLib::SMidiEvent event(synthLib::MidiEventSource::Editor);
 		event.sysex.assign(_message.begin(), _message.end());
 		m_processor.addMidiEvent(event);
@@ -155,6 +157,7 @@ namespace mdJucePlugin
 			states.push_back(*pk);
 			states.push_back({pk->row, 0});
 		}
+		editFlow::panelOut(states.size());
 		// 10 ms each, in machine time (the audio thread sends them).
 		return m_processor.getPlugin().withDeviceLocked([&](synthLib::Device* _base)
 		{

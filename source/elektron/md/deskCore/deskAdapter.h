@@ -142,8 +142,8 @@ namespace deskCore
 	{
 		Observe,		// nothing in flight: an ordinary refresh
 		Settle,			// the machine holds what was sent: the change is done
-		ObserveSendNext,// it holds what was sent, a newer value waits: observe, then send inFlight()
-		Wait			// something else (an older reply): wait; the read-back timeout fails the push
+		Wait			// something else (an older reply, or a newer value waits for its turn): wait; the
+						// read-back asked for at quiet confirms it, or its timeout fails the push
 	};
 
 	template<typename T>
@@ -154,7 +154,6 @@ namespace deskCore
 		{
 		case R::NotWaiting: return ReadBackAction::Observe;
 		case R::Confirmed: return ReadBackAction::Settle;
-		case R::ConfirmedSendNext: return ReadBackAction::ObserveSendNext;
 		case R::Other: return ReadBackAction::Wait;
 		}
 		return ReadBackAction::Wait;

@@ -258,6 +258,8 @@ namespace mdDesk
 			{"copySound", Owner::Core, Gate::Input, W, {k, t}, ""},
 			{"pasteSound", Owner::Core, Gate::Input, W, {k, t}, ""},
 			{"clearSound", Owner::Core, Gate::Input, W, {k, t}, ""},
+			{"tweak", Owner::Core, Gate::Input, W, {k, {"group", ArgType::Text, 0, 0, false, {"syn", "fx", "rt"}}, {"knob", ArgType::Integer, 0, 7},
+				{"d", ArgType::Integer, -127, 127}, opt(t)}, "Control All (FUNCTION + a DATA ENTRY knob): that knob on every track, moved by d; t: the gesture's track"},
 			{"kitCopy", Owner::Core, Gate::Input, K, {k}, "the kit library", CoreOp::Edit, g_library},
 			{"kitPaste", Owner::Core, Gate::Input, K, {k}, "", CoreOp::Edit, g_library},
 			{"kitCopyTo", Owner::Core, Gate::Input, K, {slot("from", DocKind::Kit), slot("to", DocKind::Kit)}, "", CoreOp::Edit, g_library},

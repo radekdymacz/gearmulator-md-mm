@@ -34,7 +34,7 @@ document.addEventListener("keyup", e => { if (e.key === "Shift") applyPrep(); })
 Keys.bind({ keys: ["1–8", "Q–I"], mod: "alt", group: "Mutes", does: "Mute or unmute track 1–16, in any workspace" });
 Keys.bind({ keys: ["1–8", "Q–I"], mod: "alt+shift", group: "Mutes", does: "Prepare a mute (+ / X); applied when ⇧ is let go" });
 Keys.bind({ keys: ["M key"], mod: "shift", group: "Mutes", does: "Click: prepare that track's mute" });
-Keys.bind({ keys: ["drag a value"], mod: "alt", group: "Values", does: "Move that knob on every track (parameter tweaking)" });
+Keys.bind({ keys: ["drag a value"], mod: "alt", group: "Values", does: "Control All: move that knob on every track (FUNCTION + knob on the machine)" });
 const MKEYS = ["Digit1", "Digit2", "Digit3", "Digit4", "Digit5", "Digit6", "Digit7", "Digit8", "KeyQ", "KeyW", "KeyE", "KeyR", "KeyT", "KeyY", "KeyU", "KeyI"];
 document.addEventListener("keydown", e => {
 	if (!e.altKey || e.metaKey || e.ctrlKey || e.target.closest?.("input,select,textarea")) return;
@@ -74,28 +74,44 @@ Keys.bind({ keys: ["T"], group: "Transport", does: "Tap tempo (the average of th
 	else toast("Tap tempo: keep tapping T");
 } });
 
-/* ===== Parameter tweaking (manual p.37, FUNCTION + a DATA ENTRY knob): Alt held while moving a track
-   value moves the same knob on every track by the same amount. As on the machine, RAM machines, MIDI and
-   CTR tracks are left out, and a value that hits 0 or 127 does not come back symmetrically. ===== */
+/* ===== Control All (manual p.37, FUNCTION + a DATA ENTRY knob; "CTRL + ALL"): Alt held while moving a track
+   value moves the same knob on every track by the same amount. One intent, not sixteen: a tweak command
+   per frame (its steps summed in the frame), one undo step per gesture; the plug-in makes it the machine's
+   own gesture on the emulator, or coalesced CCs over MIDI. As on the machine (measured), MIDI and CTR
+   machines are left out, a RAM recorder on its synthesis page too (tweakWrites, mdDeskModel.js), and a
+   value that hits 0 or 127 does not come back symmetrically. t is the gesture's track: the machine tweaks
+   from its selected track, so the plug-in selects it first (or another that can lead). The LFO section's SPD, DEPTH and SHMIX are the
+   routing page's LFOS, LFOD, LFOM; a curve editor's handle tweaks each value it moves. ===== */
 let tweak = null;
-document.addEventListener("pointerdown", e => { const el = e.target.closest?.("#main .pc[data-g],#main .fader[data-g]"); tweak = el && e.altKey && ["syn", "fx", "rt"].includes(el.dataset.g) ? { el, t: el.dataset.t != null ? +el.dataset.t : S.sel } : null; }, true);
-document.addEventListener("pointerup", () => { if (tweak) { tweak = null; } }, true);
-const skipTweak = m => /^(RAM|MID|CTR)/.test(m);
+function tweakKnob(g, n, t) {
+	if (g === "lfo") { const pi = Enums().lfoParams[n]; return pi != null && pi >= 16 ? { g: "rt", knob: pi - 16 } : null; }
+	const p = TWEAK_PAGES[g], k = p && V.tracks[t] ? pages(V.tracks[t].m)[p].indexOf(n) : -1;
+	return k >= 0 ? { g, knob: k } : null;
+}
+document.addEventListener("pointerdown", e => {
+	tweak = null; if (!e.altKey) return;
+	const el = e.target.closest?.("#main .pc[data-g],#main .fader[data-g]");
+	if (el) { const t = el.dataset.t != null ? +el.dataset.t : S.sel, k = tweakKnob(el.dataset.g, el.dataset.n, t); if (k) tweak = { el, t, ...k }; return; }
+	if (e.target.closest?.("#main canvas.ed")) tweak = { editor: true };
+}, true);
+document.addEventListener("pointerup", () => { tweak = null; }, true);
+function sendTweak(g, knob, d, t) {
+	if (!d) return;
+	cmd("tweak", { k: V.kit, group: g, knob, d, t }, "tweak:" + g + ":" + knob, tweakWrites(V, g, knob, d, Enums()), undefined,
+		(waiting, next) => Object.assign(next, { d: clamp(waiting.d + next.d, -127, 127) }));
+}
 const setV0 = setV;
 setV = function (el, v) {
 	if (!tweak || tweak.el !== el) return setV0(el, v);
-	const g = el.dataset.g, n = el.dataset.n, t0 = tweak.t, before = V.tracks[t0][g][n];
-	setV0(el, v);
-	const delta = V.tracks[t0][g][n] - before; if (!delta) return;
-	const slot = g === "syn" ? pages(V.tracks[t0].m).s.indexOf(n) : -1;
-	V.tracks.forEach((tr, t) => {
-		if (t === t0 || skipTweak(tr.m)) return;
-		const name = g === "syn" ? pages(tr.m).s[slot] : n;	/* synthesis: the same knob, whatever it is on that machine */
-		if (!name || !(name in tr[g])) return;
-		sendParam(t, g, name, clamp(tr[g][name] + delta));
-	});
-	syncControls();
+	sendTweak(tweak.g, tweak.knob, clamp(Math.round(v)) - getV(el), tweak.t);
+	syncControls(); redraw();
 };
+/* sendEditor (mdDeskApp.js) asks first: Alt held on a curve editor, each value its handle moves is a tweak. */
+function tweakEditor(to, vals) {
+	if (!tweak || !tweak.editor || to.f || !TWEAK_PAGES[to.g]) return false;
+	for (const [n, v] of Object.entries(vals)) { const k = tweakKnob(to.g, n, to.t); if (k) sendTweak(k.g, k.knob, clamp(Math.round(v)) - V.tracks[to.t][to.g][n], to.t); }
+	return true;
+}
 
 /* ===== The editor's menu (skins, GUI scale, settings): right-click an empty part of the header
    (P4; the standalone also has it in the native menu bar). ===== */

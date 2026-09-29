@@ -1,0 +1,401 @@
+# Design: the edit flow under fast gestures (knob drags, lock draws, all-track tweaks)
+
+- Worktree `review/edit-flow` (from `chore/upstream-seams` @ 7b75a809), 2026-09-29. Hammock style: facts first, then candidates, critique and a recommendation. Control All (§4.3) and paced whole-document delivery (§4.4, pacing only) are built, uncommitted: see **Built** below.
+- **The owner's report:** dragging a knob or drawing locks in the Machinedrum or Monomachine Editor makes the VST3 glitch in a DAW, "because it is busy updating parameters". The follow-up: "even a small parameter change seems to flood".
+- **Evidence marks:**
+  - **[measured]**: by the rigs in §1.1, on this Mac (Apple M4 Pro).
+  - **[code]**: read in the source, cited as file:line.
+  - **[inferred]**: reasoned, not measured. DAW behaviour is always this, because no DAW was run; a DAW was simulated.
+
+## Built (2026-09-29, uncommitted)
+
+The owner's two items; the rest of §4 (host-value dedupe, DAW gesture grouping, 30 Hz publishing, the loop guard) is not built.
+
+**Control All (FUNCTION + a DATA ENTRY knob, "CTRL + ALL"; Alt/Option-drag on the page).**
+- One intent: the `tweak` row in `MdModel::commands()` (`{k, group: syn|fx|rt, knob 0-7, d, t?}`, schema regenerated), a pure edit in `mdDeskEdit.cpp` (`tweak`, `controlAllReaches`, `controlAllLeads`): one working-kit change, one undo step per `g`.
+- The firmware's own rules, measured (`mdDeskFirmwareTest <ROM> tweak`, 7 cases and a 60-move drag, all equal to the model, clamps at 0 and 127 included): MIDI and CTR machines never move; a RAM recorder (RAM-R) not on its synthesis page; every other machine moves on every knob, also one it has no name for (GND-EMPTY, GND-SIN knob 5, INP-GA knob 5). The firmware tweaks from its **selected track**: with a MIDI, CTR or RAM-R track selected only that track moves (a MIDI track's value becomes 255). So the adapter asks the machine which track is selected once a gesture, selects one that leads (the gesture's track `t` if it can) and waits for the status.
+- Delivery (`MdMachine`, chosen by facts: panel keys, knob-page telemetry, not recording): the emulator gets its own gesture: `hold:function` (new in `md::panelKeySequence`), the page key if the knob page differs, one encoder packet a step for each tick's net steps (at most 16 a turn, only when ≤ 4 packets are still on their way), `release:function` 150 ms after the last turn; pending until the memory image shows every track (`Expectation`), no read-back, no CCs. Without the panel (HW MIDI, no telemetry): the changed values coalesced, one CC per (track, knob) per 50 ms.
+- A multi-step encoder packet (value +5) works alone, but loses steps less than ~10 ms apart and after SET STATUS track (`editFlowBenchTest tweak`): the plug-in keeps one packet a step.
+- Page: `mdDeskLive.js` (Alt on any `syn`/`fx`/`rt` box, the LFO section's SPD/DEPTH/SHMIX as `rt` knobs 5-7, the curve editors' handles through `sendEditor` → `tweakEditor`), one `tweak` per frame with its steps summed (`Bridge.send` `merge`), the view's writes from `tweakWrites` (`mdDeskModel.js`, tested in `mdDeskModelTest.js`). MM: the mockup's `controlAll` / `controlAllFrom` (`src/60-ui.js`, `src/130-main.js`, synced): Alt-drag on a Sound value or a curve editor handle moves the other synth tracks by the same delta (a machine without that SYN parameter stays, MIDI tracks never); the host gets one working-kit `set` a frame, one undo step (tested in `mmConvertTest.js`).
+
+**Paced whole-document delivery.** `deskCore::PushSlot` (`deskPush.h`) with `PushPolicy {minIntervalMs 200, quietMs 150}` in both Profiles: a dump at once or latest-wins after 200 ms, no read-back while values keep coming, one read-back request at 150 ms of quiet (or over a wire: no faster than the dump's DIN time); the timeout counts from the request. MD: `mdDataLink::Session::pushPattern/pushSong(_, askBack=false)`; the read-back of the editor's own pattern push re-reads the kit only when the pattern links another kit. MM: the same slot around SYSEX RECV (a dump still queued on RECV goes first).
+
+**The proof in a real host** (`mdVst3EditFlowHost`, our target: the built VST3 bundle through JUCE's VST3 hosting, `processBlock` on a real-time time-constraint thread, 48 kHz; the page's messages replayed by the bundle's env-gated edit-flow driver `mdEditFlowDriver.cpp`, built only with `-Dgearmulator_MDMM_EDITFLOW_DRIVER=ON`; 4 s at 60 moves/s, two interleaved runs before/after, the same driver in both bundles; before = this worktree's base with the page's old 16-param tweak):
+
+| | MD 128 before → after | MD 512 before → after | MM 128 before → after | MM 512 before → after |
+|---|---|---|---|---|
+| Control All: CCs / host notifications / gestures (4 s) | 3,840 / 3,840 / 3,840 → **0 / 0 / 0** (≈230 panel packets) | same | 1,440 → 1,440 (6 a move, 1 per track per frame) | same |
+| Control All: session time per move | 2.19 ms → **0.18-0.20 ms** | 2.0 → 0.16-0.18 ms | 0.31 → 0.30 ms | 0.28 → 0.28-0.30 ms |
+| Control All: load vs idle | +1.1/-1.0 → +0.0/-0.5 pts | +1.4/+2.2 → +2.9/+2.7 | +1.6/+1.9 → +1.1/+2.3 | +2.5/+3.4 → +2.9/+3.8 |
+| Control All: to the page (4 s) | 21.6 MB → 1.4 MB | 20.9 → 1.3 MB | 0.9 → 0.9 MB | 0.8 → 0.8 MB |
+| Lock draw: dumps / read-backs (5.5 s) | 70 / 70 → **21 / 1** | 64-66 / same → **21 / 1** | 67-69 / same → **18 / 1** | 50-52 / same → **18 / 1** |
+| Lock draw: load vs idle | **+22.7 / +19.5 → +0.9 / +0.4 pts** | **+21.9 / +24.9 → +4.3 / +4.2** | +7.0 / +7.1 → +1.3 / +2.7 | +7.6 / +9.6 → +2.1 / +2.8 |
+| Lock draw: worst 512-frame block | | 9.0-9.3 ms → 9.0-9.3 ms (< 10.67) | | 8.8-9.2 → 8.5-8.7 ms |
+| Undo steps per gesture | 1 → 1 | | | |
+
+At 128 frames this Mac already misses 2-6 % of the 2.67 ms deadlines with no edits in this host (both bundles, within noise); the draws add none beyond that after the change.
+
+**pluginval 1.x (JUCE 8.0.3), strictness 10, 48 kHz, blocks 128 and 512, seed 0x1234, scratch HOME with the ROMs:** MD and MM VST3, before (the base's bundles) and after (driver inert): all 24 test groups pass, no crash, no hang; per-group times equal within 0.6 s (MD 123.0 s → 122.6 s in all, MM 46.5 → 47.2 s; `Plugin state restoration` dominates: 104 s MD, 30 s MM). AU not built in this worktree, not run.
+
+**Other rigs:** `mdEditFlowPluginTest` (in-process, not real-time; `tweak60` now sends `tweak`, `lock60` added, MM `tweak60` added): MD tweak60 0 CCs, 0 host notifications, 0.25 ms a move (was 3.1 ms); lock60 1 read-back, load +1.4 (128) / +2.6 (512) points; two 512-frame blocks over (12.7 ms) in that rig, none in the real-time host. `editFlowBenchTest md`: lock 60/s 15 dumps in 3 s, 0 requests while drawing, load 52.3 % vs idle 48.0 %, worst 512-window 82 % (was 93-163 %). The bench's MM lock asks mid-draw (6 in 3 s) because its rig sends each dump synchronously and emulated time jumps past the 150 ms quiet; the plug-in paths ask once.
+
+**Found on the way (not fixed):** a kit with CTR-AL is refused whole: the firmware sets that track's LFO track to 16 and `elektronData::validate` allows 0-15, so every edit of such a kit fails and its doc message is off the contract.
+
+**Tests:** `ctest -E "Plugin|_AU|VST|FirmwareTest"` 76 of 78 (the two known `synthLib` failures), the VST/Plugin ctests 7/7, `mdDeskTest` (paced pushes, a 2 s draw, Control All emulator, wire and skips), `mdDeskModelTest.js`, `mmConvertTest`, `mdDeskFirmwareTest` default, `p4`, `hw`, `hostclock`, `playload`, `tweak`; `mmDeskFirmwareTest` default, `p4`, `hw`, `hostclock`; `mdSessionFirmwareTest`; both sync scripts' checks; `scripts/mdmm-upstream-footprint.sh` 17 files, 0 deleted (no upstream file changed by this work). Standalone MD and MM apps (this worktree, scratch HOME): launch, run 45 s, quit, no crash report.
+
+**Not done or unverified:** the Control All drag and the lock draw by hand (or by a page self-test) in the standalone apps: the page's gesture code is checked in node only (`tweakWrites`, `controlAll`), the session paths through the replayed messages; a DAW; the HW MIDI engines on a real machine (coalesced CCs are unit-tested only); the page's commit as a read-back trigger (the MD page has no commit message; quiet only).
+
+## 0. The short answer
+
+**One small kit change does not flood the emulator [measured].** Through the real processor (the code the VST3 wraps) it is:
+- 1 CC (3 bytes) to the firmware;
+- 1 host parameter notification inside its own begin/end gesture;
+- 2-3 documents to the page (MD 17-18 KB of JSON, MM 7.6 KB).
+
+The firmware echoes nothing back, and nothing is read back or re-pushed. Emulator load does not move: 60.2 → 60.7 % of a 128-frame block, 52.1 → 53.4 % at 512.
+
+**The floods are elsewhere.** Each one multiplies a change, or repeats it every audio block:
+
+| # | Flood | 1 user action → | Measured cost | Root cause |
+|---|---|---|---|---|
+| 1 | **DAW automation read / host echo.** Every value the host writes becomes a CC, even when unchanged | **1 CC per automated parameter per audio block**: 375 CC/s per parameter at 128 frames; 16 lanes = 6,000 CC/s, 54 KB/s into the firmware (17× DIN). A drag with the host echoing its values sends **2 CCs per change** | MD +7 points (1 lane) and **+17** (16 lanes) at 128 frames; MM +6 and **+12** | `mdController.cpp:27` (`shouldSendRepeatedHostValues` true) → `parameter.cpp:285-298` (every host value → `sendParameterChangeNow`, no dedupe) → `mdController.cpp:397-414,441-492` (every publication is a new revision, so it is transmitted) |
+| 2 | **Lock-lane draws.** A whole pattern goes out, plus a read-back, per edit | ~20 dumps + 20 read-backs/s, 107 KB/s each way (MD) | MD **+31 to +35 points**, 512-frame windows at 163 % | `mdDataLink.cpp:66-73`, `mdDeskMachine.cpp:312-327,937-957`, `mmDeskMachine.cpp:415-443`; `PushSlot` is paced only by the emulator's ~50 ms round trip |
+| 3 | **MD all-track tweak (Alt-drag = FUNCTION + knob).** The page sends one `param` per track | **16 messages per mouse move**: 960 CCs/s, 960 host notifications and 960 gestures/s, 91 KB of JSON to the page per move, 3.1 ms of message-thread time per move | emulator +0 points (CCs are cheap); message thread ~19 % at 60 moves/s; the DAW gets 960 automation touches/s | `mdDeskLive.js:80-97` (a `sendParam` per track, line 95) |
+| 4 | **One DAW gesture per value.** Every UI value is wrapped in its own begin/end | 60 begin/end pairs/s during a drag (960 with a tweak) | inferred: the DAW's UI and undo churn, with a write pass per touch | `parameter.cpp:195-207` + `ScopedChangeGesture` `parameter.cpp:433-441` (Origin::Ui), called from `mdStudioLink.cpp:92`, `mmStudioLink.cpp:114` |
+| 5 | **Whole documents to the page** on every flush | MD drag: 10.5 KB/change (the 5.3 KB working kit twice, plus a 2.2 KB machine document); MM 3.6 KB/change | message thread 0.25-0.4 ms/change (MD), 0.45-0.6 ms (MM); page JS ~1 ms per re-render | `deskCore.h:437-458`, `deskDesk.h:76-123` |
+| 6 | **Device MIDI out looped back** (only if the user routes the device's output to the host, and the DAW routes it back in) | The MD's note output echoes back and grows **62 → 1,084 → 3,998** notes per 3-4 s | MD +7 to +9 points | `processor.cpp:911-919`. Device→Host is **off** by default (`midiRoutingMatrix.cpp:37-58`), so this needs a user routing change |
+
+**Baseline, not caused by edits:** at 48 kHz and 128 frames the emulator already needs 60 % (MD) and 68-74 % (MM) of each block. Blocks go over their 2.67 ms deadline 0-27 times per 3 s **with no edits** (max 3.2-18 ms) [measured]. At 512 frames, idle blocks never went over. **Any extra audio-thread work at 128 frames glitches**, and flood 1 is extra audio-thread work at the rate of the audio blocks themselves.
+
+**Order of the fixes by value:**
+1. dedupe host values (flood 1);
+2. pace whole-document delivery (flood 2);
+3. the tweak as one intent (flood 3);
+4. one DAW gesture per page gesture (flood 4);
+5. publish on the page's clock (flood 5);
+6. a loop guard (flood 6).
+
+Section 4 has the details; the total is about 7.5-8 days.
+
+## 1. The facts
+
+### 1.1 The rigs (all uncommitted)
+
+- **`source/elektron/md/mdJucePlugin/mdEditFlowPluginTest.cpp`** (a target in our `mdmmPlugins.cmake`) runs **the real plug-in path**:
+  - `AudioPluginAudioProcessor`, with its desk session and controller;
+  - an audio thread calling `processBlock` at real time (48 kHz; 128 or 512 frames), like a DAW;
+  - the page's exact messages replayed on the message thread (the CFRunLoop, so the session's and controller's timers run).
+
+  It counts every hop:
+  - messages and bytes, session → page;
+  - host parameter notifications, gestures and `updateHostDisplay` (an `AudioProcessorListener`, which is what the VST3 wrapper is);
+  - the controller's CCs and sync requests;
+  - bytes the firmware consumed (`midiRxConsumedCount`);
+  - what the device sends: SysEx via `evDeviceSysex`; CCs and notes through a tap that turns Device → Host routing on;
+  - parameter changes by origin;
+  - `processBlock` time.
+
+  It also has DAW modes:
+  - **echo**: the host plays back each notified value on the audio thread, as a VST3 host feeds edits to the processor;
+  - **read**: automation lanes, the value every block;
+  - **loop**: MIDI out → MIDI in.
+
+  Run: `mdEditFlowPluginTest md|mm <ROM> 48000 128|512`; optionally `EDITFLOW_RECORD=<file>` records what the session publishes on ready.
+- **`source/elektron/md/mdLibTest/editFlowBenchTest.cpp`** (a target in `mdmmTests.cmake`) runs the firmware and the desk headless, at the adapter level: dumps, read-backs, 64-frame block times. Its `tweak` mode probes FUNCTION + encoder on the MD firmware.
+- **The page replay** (`temp/pagereplay/`, gitignored): the shipped MD skin files plus a fake host (`replayHost.js`), fed the real session's recorded documents, run in a browser. It counts what the page sends for a real gesture and times the page's own work.
+- Build notes:
+  - `temp/cmake_ef` is headless; `temp/cmake_efp` has `-Dgearmulator_BUILD_JUCEPLUGIN=ON` and VST3.
+  - Both need `SDKROOT=<Xcode MacOSX26.2.sdk>`: the CommandLineTools 27.0 SDK does not link.
+  - The submodules were initialised from `../upstream-seams` (no network).
+
+### 1.2 One change through the real plug-in, hop by hop [measured, MD at 48 kHz / 128 frames unless noted]
+
+| Hop | One click or arrow step on a kit value | Knob drag, 60 values/s (per value) |
+|---|---|---|
+| Page → session | **1** `param` message (the real page: a click with no movement sends **0**; a drag sends 1 per pointer move, 53 for 60 moves) | 1 |
+| Session work (message thread) | 0.29-0.39 ms (MD), 0.5-0.6 ms (MM) | 0.25-0.29 ms (MD), 0.45-0.52 ms (MM: the whole kit parsed and diffed) |
+| Host (DAW) | 1 parameter notification + **1 begin/end gesture** | 1 notification + 1 gesture **per value** |
+| Controller → firmware | **1 CC** (`getTransmittedAutomationChangeCount` +1) | 1 CC |
+| Firmware MIDI in | 3 B above the idle status polls (the desk polls status about 7/s, ~190 B per 3 s) | 5 B per change |
+| Firmware → out | **nothing new**: no CC or SysEx echo; its note output (MD) and clock (MM) unchanged | nothing new |
+| Controller sync | nothing per change: the 5 s status poll and a global refresh (`0x50`) stay | nothing |
+| Read-back or kit re-push | **none**: the working kit comes from the memory image (`mdDeskMachine.cpp:387-390`, `Expectation`) | none |
+| Session → page | 2 `workingKit` docs (pending, then from memory) + 1-2 machine documents: MD 17-18 KB, MM 7.6 KB | MD 10.5 KB/change at 128 frames (6.2 KB at 512), MM 3.6 KB |
+| Page's own work | ~1 ms of JS per full re-render (Chrome, the shipped MD page) | a partial render while the gesture runs |
+| `processBlock` | 60.7 % average, as idle (60.2 %) | 58-61 % (MD); MM 68-71 % against 71 % idle |
+
+**With the DAW in the loop [measured, simulated host]:**
+
+| Scenario | CCs to the firmware | Load (128 frames) | Note |
+|---|---|---|---|
+| drag + host echo | 240 per 120 changes (**2×**) | MD 62 %, MM 69 % | the echo equals the value, and is sent again |
+| automation read, 1 parameter | **1,121 in 3 s = 375/s** | MD 67.6 % (+7), MM 74.8 % (+6) | nothing changed; the host re-asserted the lane every block |
+| automation read, 16 parameters | **18,000 in 3 s = 6,000/s**, 54 KB/s | MD **77.3 %** (+17), MM **80.3 %** (+12) | at 512 frames: 4,500 in 3 s, +6 points |
+| page tweak (MD Alt-drag), 60 moves/s | 960 per 60 moves (16 a move) | MD 60 % (CCs are cheap) | 960 host notifications + 960 gestures; 5.5 MB of JSON in 3.2 s; 3.1 ms of session time per move |
+| loop, 1 change (the Device → Host tap on) | 1 | MD 67-69 % | device notes 62 → 1,084 in 3 s, then 3,998: feedback |
+
+Other findings:
+- **`updateHostDisplay`** fires only when the controller applies a kit dump it asked for (program change, sync), never per edit [measured: 0 in every edit scenario].
+- **The MM page does not drift:** the working kit round-trips through `MmConvert.kitToPage` → `kitToFw` with 0 differences, so an MM change stays a CC and never becomes a kit dump plus LOAD KIT [measured, node over the kit the session published].
+- **Rare 20-25 ms `processBlock` outliers** appeared at 512 frames in 4 of 22 edit scenarios and in none of 8 idle ones. The rig's audio thread is not real-time priority, so they are not attributed [measured; cause inferred: scheduling].
+
+### 1.3 Lock draws and the background read (the desk bench) [measured]
+
+`editFlowBenchTest` timed each 64-frame block (deadline 1,451 µs) and summed 512-frame windows (11.6 ms). Each scenario lasted 3 s while the pattern played. The MD ran twice; compare within one run.
+
+In the table:
+- **load** is emulator wall time over audio time;
+- **p99** is the 99th percentile of block time in µs;
+- **over** counts blocks past their deadline;
+- **worst 512** is the worst window, as a percentage of its deadline;
+- **win > 100 %** counts the windows past theirs.
+
+| Run | Scenario | Load | p99 | Over | Worst 512 | Win > 100 % | SysEx to the machine | To the page |
+|---|---|---|---|---|---|---|---|---|
+| MD #1 | idle (playing) | 58.6 % | 1502 | 33 | 87 % | 0 | 7/s status polls | 728 B/s |
+| | knob 60/s | 59.4 % | 1517 | 35 | 94 % | 0 | CCs only | **767 KB/s**, 273 msg/s |
+| | **lock 60/s** | **93.4 %** | **1976** | **267** | **163 %** | **14** | 20 dumps/s + 20 requests/s, 107 KB/s | 215 KB/s |
+| | background library read | 89.8 % | 3316 | 2217 | **436 %** (one block 24.5 ms) | 236 | 36 requests/s, 98 KB/s back | 144 KB/s |
+| MD #2 | idle | 47.5 % | 1141 | 1 | 65 % | 0 | | |
+| | knob 60/s | 49.3 % | 1147 | 0 | 58 % | 0 | | 767 KB/s |
+| | **lock 60/s** | **78.9 %** | 1325 | 5 | 96 % | 0 | 20 dumps/s, 107 KB/s | 215 KB/s |
+| | lock 10/s | 69.3 % | 1322 | 1 | 83 % | 0 | 10 dumps + 10 pattern requests + 10 kit requests /s, 54 KB/s | 164 KB/s |
+| | lock 4/s | 55.4 % | 1260 | 1 | 83 % | 0 | 4 + 4 + 4 /s, 22 KB/s | 65 KB/s |
+| | dumps only 20/s, no read-back | 65.2 % | 1297 | 6 | 87 % | 0 | 108 KB/s | |
+| | dumps only 4/s, no read-back | 51.0 % | 1226 | 0 | 81 % | 0 | 22 KB/s | |
+| | background library read | 63.4 % | 1455 | 56 | 235 % (one block 13.2 ms) | 7 | | |
+| MM | idle | 63.8 % | 1672 | 36 | (one 13 ms outlier) | 2 | | |
+| | knob 60/s | 65.9 % | 1467 | 23 | 112 % | 1 | CCs only | 178 KB/s |
+| | **lock 60/s** | **72.5 %** | 1539 | 45 | 124 % | 2 | 4.7 dumps/s via SYSEX RECV, 10 KB/s | 209 KB/s |
+| | background library read | 81.6 % | 1994 | 793 | 193 % | 31 | 34 requests/s | 162 KB/s |
+
+- **The cost is linear in SysEx through the firmware.** On the MD, a 5.4 KB dump costs about 0.9 points of one core per dump a second; its read-back (request, reply and the kit re-read) about as much again. So a lock draw at 60 edits/s adds +31 to +35 points, at 4 edits/s +8, and 4 dumps/s with no read-back +3.5.
+- **Why SysEx costs CPU:** the firmware's idle fast-forward is off while MIDI arrives (`mdhardware.cpp:1366-1394`), and parsing and building dumps is real emulated work [code].
+- **The background library read** runs on every first ready of a page, and after an engine change or reset, with single blocks of 13-24 ms. Its long blocks are not isolated yet.
+- **The MM** is gentler only because SYSEX RECV throttles it (~210 ms a round trip). Its desk parses, validates and re-encodes an 11 KB pattern JSON per lock move: 0.9 ms an edit.
+
+### 1.4 Who does what, on which thread [code]
+
+- **Page → session.** A `gmbridge://` navigation → `json::parse` → `SessionOf::onPageMessage` → `Desk::onPageMessage` → `flush` → the `WebPageHost` outbox → `javascript:gm.recv(...)`. All on the message thread (`mdWebPageHost.cpp:190-217`, `deskDesk.h:46-78`).
+- **Kit value.** `StudioLink::setKitParam` → `Parameter::setUnnormalizedValueNotifyingHost(Ui)`:
+  1. `ScopedChangeGesture` begins the host gesture;
+  2. `setUnnormalizedValue` → `sendToSynth` → `Controller::sendParameterChange` → `publishAutomationIntent` + drain → `transmitParameterChange` → `Processor::addMidiEvent` (Editor → Device) → the `Plugin` ring;
+  3. the device takes it inside `processBlock`, on the audio thread;
+  4. `notifyHost`, and the gesture ends.
+
+  Code: `mdStudioLink.cpp:86-94`, `parameter.cpp:195-207,303-315`, `mdController.cpp:397-414,538-553`, `processor.cpp:68-98`, `plugin.cpp:37-47,109-155`.
+- **Host values.** The host's `setValue` on the audio thread → `AutomationParameter` (`shouldSendRepeatedHostValues` true) → `sendParameterChangeNow(HostAutomation)` on **every** call, equal or not → a new publication revision → a CC in the block's drain (`processBlock` → `processRealtimeParameterChanges`). Code: `parameter.cpp:276-301`, `mdController.cpp:21-28,441-492,715-718`, `processor.cpp:869`.
+- **Device output.** It is fed to `addMidiEvent` (Device → Editor: the controller, `evDeviceSysex` → the desk). It goes to the host only if Device → Host is enabled (`processor.cpp:911-919`).
+- **The firmware** runs in `Plugin::process` under `Plugin::m_lock` on the audio thread. The message thread takes that lock only for the probe (~10/s), panel keys and knob turns, never per kit edit (`mdStudioLink.cpp:122-171,247-268`).
+- **Per flush:** the desk rebuilds and compares the machine document on every flush, 5-10 per 8 ms step, and sends each dirty document whole (`deskCore.h:437-458`).
+
+## 2. The MD all-track tweak (FUNCTION + a DATA ENTRY knob, manual p.37), and the same on the MM
+
+### 2.1 What the MD page does today [measured, code]
+
+- `mdDeskLive.js:80-97` wraps `setV`: with Alt held, a move of one value sends the same delta for every other track as its own `param` (line 95). RAM, MIDI and CTR machines are skipped.
+- **One move = 16 page messages** (replay: 30 moves → 480 messages, 25.9 KB) → 16 core edits, 16 CCs, 16 host notifications and 16 gestures, ~16 working-kit publishes (91 KB). Session time is 3.1 ms per move.
+- Undo is already **one step**: the same `g` merges per document (`deskHistory.h:31-55`).
+- **Coverage on the Sound page** (the real page's controls, listed by the replay):
+
+  | Controls | Covered? |
+  |---|---|
+  | value boxes of groups `syn` (8), `fx` (8), `rt` (8) | yes |
+  | the LFO section's boxes (`lfo`: SPD, DEPTH, SHMIX; the same kit parameters as routing's LFOS/LFOD/LFOM) | **no** |
+  | the four curve editors (`canvas.ed` synth, fx, route, lfo: `sendEditor`, never `setV`) | **no** |
+  | the LFO fields (TRCK, PARAM, SHP, UPDTE) | no (they are not DATA ENTRY knobs on the machine either) |
+  | the Mix page's level faders | no; the machine's tweak is the DATA ENTRY knobs, not LEVEL [inferred from the manual; not probed] |
+
+### 2.2 What the MD firmware does itself [measured]
+
+`editFlowBenchTest tweak <MD ROM>` held FUNCTION (a panel row state), turned DATA ENTRY B by +5 (5 encoder packets) and released:
+
+```
+param 2, before         74   7  15  24  27 106   0  48   8  61   0  35  64  64   0  64
+B +5, plain             79   7  15  24  27 106   0  48   8  61   0  35  64  64   0  64
+FUNCTION + B +5         84  12  20  29  32 111   5  53  13  66   5  40  69  69   5  69
+tracks moved by the one panel gesture: 16 of 16 (7 panel packets)
+```
+
+- The firmware applies the relative change to every track, with its own skip and clamp rules.
+- **7 panel packets replace 5 × 16 = 80 CCs.**
+- The working-kit memory image then shows all 16 tracks at once, so `Expectation` settles the edit with no read-back.
+
+### 2.3 The tweak as one intent
+
+- **The intent (a new core row):** `{"op":"tweak","k":kit,"group":"syn"|"fx"|"rt","knob":0-7,"d":delta,"g":gesture}`.
+- **The pure `apply`** builds the new working kit:
+  - every track, the same knob of that page;
+  - `clamp(v + d)`;
+  - the firmware's skips: RAM, MIDI and CTR machines, and a synthesis knob that machine lacks.
+
+  It makes one `Change` of the working kit, and the history merges it per `g`, so a gesture is one undo step.
+- **The page** sends `tweak` once per frame, keyed; the frame's deltas are summed, so the latest wins. It replaces the 16 `param` messages. The optimistic overlay shows every track.
+- **Delivery:** the adapter chooses by the engine's capabilities (a Profile fact, never a branch on the engine id).
+  - **Emulator with panel keys and knob-page telemetry:**
+    1. make the machine's DATA ENTRY page the group's (the `page` key until telemetry's `knobPage` says so);
+    2. hold FUNCTION;
+    3. `turnKnob(knob, d)` for each tick's net delta;
+    4. release FUNCTION at quiet.
+
+    This needs a hold/release key pair in `md::panelKeySequence` (`hold:function`, `release:function`). The edit is pending until the memory image reflects it. No read-back, no CCs. The panel-keys rule stays: no dump requests while keys are pending (`panelPending`).
+  - **HW MIDI (no panel):** the changed tracks' CCs, **coalesced to one CC per track per tick**, within the DIN budget (16 × 3 B per tick; at 15 Hz that is 720 B/s, 23 % of DIN).
+  - **Fallback when FUNCTION + encoder is not possible** (another OS, no telemetry): the same coalesced CCs.
+- **Wider Sound-page coverage:**
+  - the LFO section's SPD/DEPTH/SHMIX map to `group:"rt", knob:5-7` (the same kit parameters);
+  - the curve editors' handle drags go through `tweak` when Alt is held (each handle moves values of one group);
+  - level and the LFO fields stay out, because the machine has no tweak for them.
+
+### 2.4 The same on the MM Sound workspace (an editor feature; the MM firmware has none)
+
+- **The rule:** Alt-drag on a Sound knob applies the same delta to all six synth tracks, on the same page and knob index.
+  - It skips a track whose machine has no parameter there (the catalogue's empty names).
+  - It never touches the MIDI tracks (7-12).
+  - The shared pages (AMP, FLT, EFX, LFO) apply to every synth track.
+- **Delivery:** the MM's intent is already the whole working kit, so the page sends **one** `set` per frame, keyed per document, which is latest-wins. `deliverKitLive` turns it into at most 6 CCs or NRPNs per tick. It is one undo step (`g`), and no firmware path is needed.
+- **The page change:** `mmAdapter.js` handles Alt on the mockup's Sound knobs through a `HOST.tweak(page, index, delta)` host call that edits the view's six tracks. It needs a line in the mockup's host seam list (`src/55-host.js`) and a sync.
+- **The joystick and MULTI TRIG ALL TRK** are the MM's own "all tracks" features. They are unchanged, and not the same thing.
+
+## 3. Candidate designs
+
+The contracts to keep:
+- `Expectation` (a live edit is pending until memory shows it);
+- one undo step per gesture (`g`);
+- results after their documents;
+- pending/observed;
+- the HW engine at 31.25 kbaud;
+- the host automation contract: DAW automation must still reach the machine, and must re-assert after the machine changed.
+
+| Candidate | Verdict |
+|---|---|
+| **A.** Throttle in the pages | rejected as the fix: it cannot bound the host path (flood 1) or the adapter's dumps, and every page would do it differently. The 16 ms per-key bridge batch stays |
+| **B.** Live messages during a gesture, one SysEx at the end | kept for kits (already so). Impossible for locks: no live lock message on either machine |
+| **C.** Pace whole-document delivery in the adapter (a budgeted `PushSlot`: at most 1 dump per interval, one read-back at quiet, a byte budget shared with the `LoadQueue`) | **adopted** for flood 2 and the background read |
+| **D.** Write locks into emulated RAM | rejected: a second delivery path with no HW twin, and firmware internals |
+| **E.** Move the desk off the message thread | rejected: the glitch is the audio thread; flood 3's message-thread cost goes with the tweak intent |
+| **F.** Publish on the page's clock (F1), later diffs (F2) | **F1 adopted** (flood 5; the tweak's 16 publishes also collapse to 1 per frame); F2 later, if measured necessary |
+| **G.** Dedupe host values at the device boundary: send a CC only when the host's value differs from the last one the device was given, or when the firmware's value is known to have moved since | **adopted** for flood 1. A blanket rate limit (the alternative) would drop real automation ramps |
+| **H.** One DAW gesture per page gesture (begin at the first value of `g`, end at quiet or at the page's `commit`) instead of one per value | **adopted** for flood 4 |
+| **I.** The tweak as one intent, delivered by the engine (FUNCTION + encoder on the emulator, coalesced CCs on HW) | **adopted** for flood 3 (§2.3, §2.4) |
+
+## 4. Recommendation
+
+### 4.1 Host values: dedupe at the device boundary (flood 1)
+
+**The rule:** a host write for a slot is transmitted when its value differs from the slot's *last delivered* value, or when the firmware's value is known to have moved since (a kit dump, a panel turn, a CC from the device, a kit or program switch). Equal host values are dropped **before** they become a publication.
+
+- **Data:**
+  - `AutomationSlot` gains `lastDelivered` (value + epoch, one atomic `uint64`).
+  - The controller bumps a per-slot `firmwareEpoch` wherever it already observes firmware values: `publishFirmwareValue`, `applyKitParameters`, a kit status change (`mdController.cpp:510-536,720-742,821-856`).
+  - `AutomationParameter::setValue` compares against it on the audio thread, lock-free.
+- **Why the repeated path existed:** it re-asserts DAW automation after the machine changed. The epoch keeps that; the flood (the same value in the same epoch) is gone.
+- **Budget:**
+  - automation read with 16 lanes and constant values sends **0 CCs/s**, not 6,000;
+  - a ramp sends at most 1 CC per slot per block, and only on a change;
+  - a host echo of a UI value adds 0 CCs.
+- **Tests:**
+  - a unit test for `AutomationParameter`: the same value ×N gives 1 CC; the same value after a kit-dump epoch gives 1 more;
+  - `mdEditFlowPluginTest read16`: firmware MIDI in ≤ idle + 1 KB per 3 s, and load within 1 point of idle;
+  - `drag+echo`: CCs = changes;
+  - `mdAutomationSoakTest` and `mdAutomationRobustnessTest` stay green (the realtime contract).
+- **Where:** `mdController.cpp` (ours). `jucePluginLib/parameter.cpp` is upstream's, so it gets a hook only: a virtual `shouldSendHostValue(value)` beside `shouldSendRepeatedHostValues` (`UPSTREAM.md`).
+
+### 4.2 One DAW gesture per page gesture (flood 4)
+
+- `StudioLink` and `MmStudioLink` hold a gesture per parameter and page gesture: `pushChangeGesture()` at the first value of a new `g`, `popChangeGesture()` at quiet (150 ms) or at the page's `commit`. The existing API is at `parameter.h:111-112`.
+- The per-value `ScopedChangeGesture` then nests and adds no host calls.
+- The session passes `g` down; the desk already has it.
+- **Test:** `mdEditFlowPluginTest drag60` shows gestures **1/1** (not 120/120), with notifications = changes.
+
+### 4.3 The tweak intent (flood 3)
+
+As specified in §2.3 (MD) and §2.4 (MM).
+
+**Tests:**
+- `mdDeskTest`:
+  - a `tweak` of +5 on `syn:1` gives one working-kit change with 16 tracks, the skips honoured, and one undo step;
+  - the emulator profile delivers the FUNCTION hold, 5 encoder steps and the release, and **0** CCs;
+  - the wire profile delivers at most 16 CCs per tick.
+- `mdDeskFirmwareTest tweak`: after the gesture, the firmware's memory image equals `apply`'s kit, on a kit with RAM and CTR machines too.
+- `mmConvertTest` and `mmDeskTest`: the page tweak over the catalogue's machines leaves skipped tracks and the MIDI tracks unchanged; one `set` → at most 6 CCs, one pending working kit, one undo step.
+- `mdEditFlowPluginTest tweak60`, emulator:
+  - at most 1 host notification per track per tick;
+  - at most 1 working-kit doc per frame;
+  - session time ≤ 0.5 ms per move.
+- The page self-tests: an Alt-drag on SPD in the LFO section, and on a curve editor, tweaks all tracks.
+
+### 4.4 Paced whole-document delivery (flood 2) and publishing on the page's clock (flood 5)
+
+```cpp
+namespace deskCore {
+  struct PushPolicy { double minIntervalMs; double quietMs; };   // per engine, in the Profile
+  template<typename T> class PushSlot {                           // pure: the caller gives the time
+  public:
+    bool want(const T& _value, double _nowMs);                    // send now, or keep as next (latest wins)
+    enum class Due { Nothing, Send, ReadBack };
+    Due due(double _nowMs) const;                                 // the adapter's tick asks
+    const std::optional<T>& next() const;
+    void sent(double _nowMs);
+    void askedBack(double _nowMs);
+    ReadBack onReadBack(const T& _firmware);                      // Confirmed only for the LAST value sent
+    void abandon();
+  };
+  class ByteBudget { public: bool spend(size_t _bytes, double _nowMs); double bytesPerSecond; };
+}
+```
+
+- **`Profile`** gains `push {minIntervalMs, quietMs}` and `sysexBytesPerSecond`:
+  - emulator: `{250, 150}` and 32,000 B/s;
+  - HW MIDI: `{DinPacer::wireMs(dump), 150}` and 3,125 B/s.
+- **`mdDataLink::Session::pushPattern`, `pushSong` and `pushKit`** send the dump only; the read-back request is made on `Due::ReadBack`.
+- **`MdMachine::onPattern`** re-reads the kit only when the pattern's `kit` field changed.
+- **`MmMachine::pushDump`**: the same rules through `RecvSession`.
+- **The `LoadQueue`** spends only what pushes leave.
+- **Publishing:** `Desk::flush()` becomes `pump()`. The session's page transport publishes after each bridge batch and at 30 Hz (the `WebPageHost` timer): each dirty document once, then the machine document if it changed, then results, asks and errors in order.
+
+**Budgets:**
+- at most 4 dumps/s per document, and exactly 1 read-back per gesture;
+- a lock draw costs at most idle + 8 points (today +31 to +35);
+- the background read: no block over 3 ms;
+- at most 30 docs/s per document;
+- an MD knob drag at most 200 KB/s to the page (today 767 KB/s at 60 edits/s);
+- a tweak at most 30 working-kit docs/s.
+
+**Tests:**
+- `deskCoreTest`: pure `PushSlot` cases;
+- `mdDeskTest`/`mmDeskTest`: dumps, requests and publishes counted per fake second;
+- `editFlowBenchTest`: the budgets.
+
+### 4.5 Guard the device-out loop (flood 6)
+
+- While Device → Host is on, the processor keeps a short ring of the device's own outgoing channel messages. The same bytes coming back from the host within 50 ms are dropped.
+- The routing panel warns that Device → Host plus a DAW MIDI loop feeds back.
+- **Test:** `mdEditFlowPluginTest one+loop` keeps the device's note count at idle's.
+- **Priority: low.** It needs a user routing change.
+
+### 4.6 The baseline at small buffers
+
+This is not an edit bug, but it is the stage the floods land on. At 128 frames the MD needs ~60 % and the MM ~70 % of each block, with overruns even at idle.
+- The AUDIO/MIDI panel should recommend 256 frames or more.
+- The diagnostics log should record the DSP load (`realtimeInstrumentation`).
+- `mdEditFlowPluginTest idle` at 128 and at 512 is the reference.
+
+### 4.7 Effort
+
+| Step | Effort |
+|---|---|
+| 4.1 host-value dedupe (controller + one upstream hook) + unit and soak tests | 1 day |
+| 4.2 one DAW gesture per page gesture | 0.5 day |
+| 4.3 the tweak intent: model row + `apply`; the MD page (Alt-drag → `tweak`, the LFO section, the curve editors); the adapter's FUNCTION + encoder path (a hold-key sequence) and the coalesced-CC fallback; the MM Sound tweak; tests | 2 days |
+| 4.4 paced `PushSlot` + `ByteBudget` + publishing on the page's clock | 2.5-3 days |
+| 4.5 the loop guard | 0.5 day |
+| The rigs as manual firmware tests with pass/fail budgets; one DAW check (Live or Reaper, 128 frames, automation in latch) | 1 day |
+| **Total** | **about 7.5-8 days** |
+
+## 5. Open questions
+
+- **Which DAWs re-send constant automation every block?** This was simulated (every block), not observed. Flood 1 costs the same for a moving ramp, which every DAW sends. Confirm in one DAW with a lane in read mode.
+- **The MD tweak's skip and clamp rules** were measured on one kit only. `mdDeskFirmwareTest tweak` should cover RAM and CTR machines before `apply` claims to match.
+- **The 20-25 ms outliers at 512 frames:** repeat on a real-time audio thread (in a DAW) before attributing them.
+- **The background read's 13-24 ms single blocks:** bisect by request kind before tuning the budget.
+- **4 Hz or 6 Hz audible feedback for lock draws:** Radek's ear decides.

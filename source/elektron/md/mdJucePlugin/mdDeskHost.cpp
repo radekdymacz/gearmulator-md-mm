@@ -1,6 +1,9 @@
 #include "mdDeskHost.h"
 
 #include "mdDeskSession.h"
+#if MDMM_EDITFLOW_DRIVER
+#include "mdEditFlowDriver.h"
+#endif
 
 #include "baseLib/binarystream.h"
 
@@ -10,11 +13,17 @@ namespace mdJucePlugin
 	{
 	}
 
-	DeskHost::~DeskHost() = default;
+	DeskHost::~DeskHost()
+	{
+		m_editFlowDriver.reset();
+	}
 
 	void DeskHost::startSession()
 	{
 		m_session = DeskSession::create(m_processor);
+#if MDMM_EDITFLOW_DRIVER
+		m_editFlowDriver = startEditFlowDriver(m_processor, *m_session);
+#endif
 	}
 
 	void DeskHost::saveChunks(baseLib::BinaryStream& _stream) const

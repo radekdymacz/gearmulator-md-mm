@@ -148,6 +148,16 @@ namespace mdDesk
 	// checks them against the command table's Core/Edit rows, both ways.
 	std::vector<std::string> editOps();
 
+	// Control All (the tweak command, manual p.37): whether FUNCTION + a DATA ENTRY knob moves kit
+	// parameter _index (0-23) of a track with machine _model. As the MD OS 1.63 firmware does it
+	// (mdDeskFirmwareTest tweak): never MIDI and CTR machines, a RAM recorder (RAM-R) not on its
+	// synthesis page; every other machine on every knob, also one its machine has no name for.
+	bool controlAllReaches(uint32_t _model, size_t _index);
+	// Whether a track with machine _model can be the selected track the firmware tweaks from: with a
+	// MIDI, CTR or RAM recorder machine selected, FUNCTION + a knob moves that track alone (a MIDI
+	// track's value becomes 255).
+	bool controlAllLeads(uint32_t _model);
+
 	// The values "clear sound" uses: the machine's own defaults live in the firmware and
 	// cannot be read without saving the kit.
 	const std::array<uint8_t, 24>& neutralTrackValues();

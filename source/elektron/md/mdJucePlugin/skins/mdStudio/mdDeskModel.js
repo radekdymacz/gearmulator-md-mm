@@ -67,6 +67,25 @@ function laneLabel(t, n) { const a = slots(V.tracks[t].m); if (!a.includes("SYNÂ
 /* Three pages of 8 slots; an unused slot is null. */
 function pages(m) { const a = slots(m); return { s: a.slice(0, 8), e: a.slice(8, 16), r: a.slice(16, 24) }; }
 const names = list => list.filter(Boolean);
+/* Control All (the tweak command, manual p.37: FUNCTION + a DATA ENTRY knob): the view's writes for knob 0-7
+   of group g ("syn", "fx", "rt") moved by d on every track the machine's gesture reaches, as the model's
+   controlAllReaches (mdDeskEdit.cpp, measured on the firmware): never MIDI or CTR machines, a RAM recorder
+   not on its synthesis page; held at 0..127. The view writes the values it shows (a machine without a name
+   for the knob moves too; its value comes with the document). The LFO section shows LFOS, LFOD, LFOM as
+   SPD, DEPTH, SHMIX (lfoParams). */
+const TWEAK_PAGES = { syn: "s", fx: "e", rt: "r" }, TWEAK_BASE = { syn: 0, fx: 8, rt: 16 };
+function tweakWrites(v, g, knob, d, E = NO_ENUMS, cat = Cat) {
+	const out = [], lfoName = Object.keys(E.lfoParams).find(n => E.lfoParams[n] === 16 + knob);
+	v.tracks.forEach((tr, t) => {
+		if (/^(MID|CTR)-/.test(tr.m) || (g === "syn" && /^RAM-R/.test(tr.m))) return;
+		const n = slots(tr.m, cat)[TWEAK_BASE[g] + knob];
+		if (!n || !(n in tr[g])) return;
+		const to = Math.max(0, Math.min(127, tr[g][n] + d));
+		out.push([["tracks", t, g, n], to]);
+		if (g === "rt" && lfoName && tr.lfo) out.push([["tracks", t, "lfo", lfoName], to]);
+	});
+	return out;
+}
 /* Family keys: the picker's (TRX EFM E12 PI GND INP MID CTR ROM RAM) and the colour's (ROM/RAM = SMP). */
 function famKey(m, cat = Cat) { const c = cat.byName[m]; const f = c ? c.family : m.split("-")[0]; return f === "P-I" ? "PI" : f; }
 function famOf(m, cat = Cat) { const f = famKey(m, cat); return f === "ROM" || f === "RAM" ? "SMP" : f; }

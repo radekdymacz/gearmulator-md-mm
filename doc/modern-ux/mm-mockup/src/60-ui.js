@@ -74,7 +74,16 @@ function ref(el){const d=el.dataset,t=d.t!=null?+d.t:S.sel,tr=trk(t),g=d.g;
   case"cc":return[tr.cc,+d.n,{name:"CC"+(+d.n+1),en:[...Array.from({length:128},(_,k)=>"CC"+k),"AFT"]},t,g];
   case"mmap":{const r=S.mmap[+d.i];return[r,d.n,{name:d.n,...{trn:{max:127,signed:1},ofs:{en:["---",...Array.from({length:64},(_,i)=>String(i).padStart(2,"0"))]},len:{max:64},tim:{en:["DIR","1","2","4","8","16","32"]}}[d.n]},t,g]}}}
 const getV=el=>{const[o,n]=ref(el);return o[n]};
-function setV(el,v){const[o,n,m,t,g]=ref(el);v=clamp(Math.round(v),0,maxOf(m));if(o[n]===v)return;o[n]=v;
+/* Control All (the Machinedrum's FUNCTION + a DATA ENTRY knob, manual p.37; an editor feature here, the
+   Monomachine has none): Alt held while dragging a Sound value, or a curve editor's handle, moves the same
+   value of every synth track by the same amount. A machine without that SYN parameter is left out, the
+   MIDI tracks are never touched, a value that hits its end does not come back symmetrically. The host
+   gets it as one kit edit per frame (edited "sound"): one undo step per gesture. */
+function controlAll(t0,g,i,d){for(let t=0;t<6;t++){if(t===t0)continue;const tr=trk(t);if(g==="SYN"&&!MACH[tr.m].p[i])continue;tr.v[g][i]=clamp(tr.v[g][i]+d,0,maxOf(meta(t,g,i)))}}
+function pagesCopy(t){const v=trk(t).v,o={};PAGES.forEach(pg=>o[pg]=[...v[pg]]);return o}
+function controlAllFrom(t0,before){PAGES.forEach(pg=>trk(t0).v[pg].forEach((x,i)=>{if(x!==before[pg][i])controlAll(t0,pg,i,x-before[pg][i])}))}
+function setV(el,v){const[o,n,m,t,g]=ref(el);v=clamp(Math.round(v),0,maxOf(m));if(o[n]===v)return;const d=v-o[n];o[n]=v;
+ if(drag&&drag.all&&drag.el===el&&PAGES.includes(g))controlAll(t,g,+n,d);
  if(g==="cc")soundEdited("global");else if(PAGES.includes(g)||g==="MID"||g==="lev"||g==="menv"||g==="asg")soundEdited();else if(g==="src"||g==="link")ctlChanged();else if(g==="mmap")structEdited("global");else structEdited();
  if(g.startsWith("LF")&&(+el.dataset.n<2)){if(+el.dataset.n===0)o[1]=0;render();return}
  syncControls();redraw()}

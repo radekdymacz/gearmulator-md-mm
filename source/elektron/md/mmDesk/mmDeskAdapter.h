@@ -4,6 +4,7 @@
 #include "mmDeskTelemetry.h"
 
 #include "deskCore/deskCore.h"
+#include "deskCore/deskPush.h"
 
 #include <cstdint>
 #include <functional>
@@ -23,6 +24,9 @@ namespace mmDesk
 		bool memory = true;			// the device publishes the working kit and the LCD
 		bool telemetry = true;		// the device publishes the playhead and the screen
 		bool panel = true;			// the editor can press the machine's keys (SYSEX RECV, transport)
+		// Whole-document pushes (DESIGN-edit-flow.md): at most one dump per document per interval, one
+		// read-back at quiet. Over a wire the interval is at least the dump's time on it.
+		deskCore::PushPolicy push{200, 150};
 	};
 
 	const Profile& emulatorProfile();	// "emu"

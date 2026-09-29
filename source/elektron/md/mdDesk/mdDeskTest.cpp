@@ -41,6 +41,7 @@ namespace
 		std::fprintf(stderr, "FAIL: %s\n", _what);
 		++g_failures;
 	}
+	void check(const bool _condition, const std::string& _what) { check(_condition, _what.c_str()); }
 
 	// The machine document's kit.working, as the page reads it.
 	std::string kitWorking(const Desk& _desk)
@@ -421,16 +422,41 @@ namespace
 		check(step && std::get<ed::MdPattern>(step->at(0).after) == start, "undoing the gesture restores its start");
 	}
 
+	// DESIGN-edit-flow.md: paced, latest wins, one read-back at quiet.
 	void testPushSlot()
 	{
 		PushSlot<int> slot;
 		using R = PushSlot<int>::ReadBack;
+		using D = PushSlot<int>::Due;
+		const deskCore::PushPolicy p{200, 150};
 		check(slot.onReadBack(1) == R::NotWaiting, "a refresh while idle");
-		check(slot.want(1), "first edit goes out");
-		check(!slot.want(2) && !slot.want(3), "later edits wait");
-		check(slot.onReadBack(0) == R::Other, "an older reply does not confirm");
-		check(slot.onReadBack(1) == R::ConfirmedSendNext && slot.inFlight() == 3, "latest edit wins, one in flight");
-		check(slot.onReadBack(3) == R::Confirmed && !slot.busy(), "confirmed and idle");
+		check(slot.want(1, 0, p), "first edit goes out at once");
+		check(!slot.want(2, 16, p) && !slot.want(3, 33, p) && slot.next() == 3, "later edits wait, the latest wins");
+		check(slot.due(100, p) == D::Nothing, "no dump before the interval, no read-back mid-gesture");
+		check(slot.due(200, p) == D::Send && slot.takeNext(200) == 3 && !slot.next(), "the waiting value goes after 200 ms");
+		check(slot.onReadBack(1) == R::Other, "an older value does not confirm");
+		check(!slot.want(4, 250, p) && slot.due(399, p) == D::Nothing && slot.due(400, p) == D::Send, "the next dump 200 ms after the last");
+		slot.takeNext(400);
+		check(slot.due(399 + 1, p) == D::ReadBack, "the read-back once the gesture is quiet (150 ms since the last edit)");
+		check(slot.inFlight() == 4, "the last value is the one in flight");
+		slot.askedBack(350);
+		check(slot.due(400, p) == D::Nothing, "asked once");
+		check(!slot.timedOut(2000, 2000) && slot.timedOut(2351, 2000), "the timeout counts from the ask");
+		check(slot.onReadBack(3) == R::Other && slot.onReadBack(4) == R::Confirmed && !slot.busy(), "the last value confirms: idle");
+		// 60 edits a second for 2 s: at most 5 dumps a second, one read-back.
+		int dumps = 0, asks = 0;
+		for(int ms = 1000; ms < 3500; ms += 2)
+		{
+			if(ms < 3000 && ms % 16 == 0 && slot.want(ms, ms, p)) ++dumps;
+			switch(slot.due(ms, p))
+			{
+			case D::Send: slot.takeNext(ms); ++dumps; break;
+			case D::ReadBack: slot.askedBack(ms); ++asks; break;
+			case D::Nothing: break;
+			}
+		}
+		check(dumps <= 11 && dumps >= 9 && asks == 1 && slot.inFlight() && *slot.inFlight() == 2992, "a 2 s draw: "
+			+ std::to_string(dumps) + " dumps, 1 read-back, the last value");
 	}
 
 	// The Desk against a scripted device: the page's view of one edit.
@@ -487,17 +513,29 @@ namespace
 		check(doc && doc->find("pending")->asBool(), "the page sees the edit as pending");
 		check(desk.isBusy(), "TX: busy while the read-back is due");
 
-		// A second edit while the first is in flight waits for the read-back.
+		check(wire.size() == 1, "the dump alone: no read-back while the gesture may go on (DESIGN-edit-flow.md)");
+		// A second edit within 200 ms waits its turn (latest wins); one read-back once the gesture is quiet.
 		wire.clear();
 		desk.onPageMessage(cmd(R"({"op":"trig","p":1,"t":0,"s":2,"id":3,"g":5})"));
-		check(wire.empty(), "no second dump while one is in flight");
-		now = 148;
+		check(wire.empty(), "no second dump within 200 ms of the first");
+		now = 200;
+		desk.tick();
+		check(wire.empty(), "still waiting its turn at 100 ms");
+		now = 300;
+		desk.tick();
+		check(wire.size() == 1 && ed::mdDumpCommand(wire[0]) == ed::g_mdPatternDump
+			&& ed::hasTrig(*ed::decodeMdPattern(wire[0]), 0, 2) != ed::hasTrig(pattern, 0, 2), "the waiting edit goes out 200 ms after the first");
+		const auto second = wire[0];
+		now = 310;
+		desk.tick();
+		check(wire.size() == 2 && wire[1].size() > 6 && wire[1][6] == 0x68, "one read-back request once the gesture is quiet");
+		now = 358;
 		desk.onDeviceSysex(ed::encodeMdPattern(sent));
-		check(!wire.empty() && ed::hasTrig(*ed::decodeMdPattern(wire[0]), 0, 2) != ed::hasTrig(pattern, 0, 2),
-			"the waiting edit goes out on the read-back");
-		check(desk.lastRoundTripMs() == 48, "round trip measured from the read-back");
-		desk.onDeviceSysex(wire[0]);
-		check(!desk.isBusy() || now - 100 < 120, "idle after the last read-back");
+		check(desk.isBusy(), "the older value does not confirm");
+		desk.onDeviceSysex(second);
+		check(desk.lastRoundTripMs() == 48, "round trip measured from the read-back request");
+		desk.tick();
+		check(!desk.isBusy(), "idle after the read-back of the last dump");
 
 		// A live kit edit is a CC, marks the kit edited, never a dump.
 		wire.clear();
@@ -536,7 +574,10 @@ namespace
 		page.clear();
 		wire.clear();
 		desk.onPageMessage(cmd(R"({"op":"trig","p":1,"t":3,"s":3,"id":10})"));
-		now += 2500;
+		now += 200;
+		desk.tick();
+		check(lastOf("error") == nullptr, "the read-back is asked for at quiet");
+		now += 2100;
 		desk.tick();
 		check(lastOf("error") != nullptr, "a push without a read-back is reported");
 	}
@@ -805,6 +846,232 @@ namespace
 		wire.clear();
 		desk.onPageMessage(cmd(R"({"op":"selectSong","s":3,"id":8})"));
 		check(ok() && !wire.empty() && wire[0] == ed::mdLoadSong(3) && desk.linkState().song == 3, "LOAD SONG 4 when stopped");
+	}
+
+	// DESIGN-edit-flow.md: a lock lane drawn at 60 edits a second: at most 5 dumps a second, one read-back.
+	void testPacedLockDraw()
+	{
+		std::vector<std::vector<uint8_t>> wire;
+		double now = 0;
+		Desk::Port port;
+		port.device.sendSysex = [&](const std::vector<uint8_t>& _b) { wire.push_back(_b); };
+		port.device.sendKitParam = [](uint8_t, uint8_t, uint8_t) {};
+		port.toPage = [&](const Value& _m) { g_published.push_back(_m); };
+		port.device.nowMs = [&] { return now; };
+		Desk desk(port);
+		desk.onTelemetry(Telemetry{});
+		const auto status = [](const ed::MdStatus _p, const uint8_t _v)
+		{
+			return std::vector<uint8_t>{0xf0, 0x00, 0x20, 0x3c, 0x02, 0x00, 0x72, static_cast<uint8_t>(_p), _v, 0xf7};
+		};
+		auto pattern = *ed::decodeMdPattern(load("programmed_pattern_1.syx"));
+		auto kit = *ed::decodeMdKit(load("programmed_kit_0.syx"));
+		pattern.kit = kit.position;
+		for(size_t s = 0; s < 16; ++s)
+			pattern = ed::withTrig(pattern, 0, s, true);
+		desk.onPageMessage(cmd(R"({"op":"ready"})"));
+		desk.onDeviceSysex(status(ed::MdStatus::Pattern, pattern.position));
+		desk.onDeviceSysex(status(ed::MdStatus::Kit, kit.position));
+		desk.onDeviceSysex(ed::encodeMdPattern(pattern));
+		desk.onDeviceSysex(ed::encodeMdKit(kit));
+		wire.clear();
+		int dumps = 0, requests = 0;
+		const auto count = [&]
+		{
+			for(const auto& m : wire)
+			{
+				if(m.size() > 6 && m[6] == ed::g_mdPatternDump) ++dumps;
+				if(m.size() > 6 && m[6] == 0x68) ++requests;
+			}
+			wire.clear();
+		};
+		const double start = 1000;
+		for(int n = 0; n < 120; ++n)	// 2 s at 60 edits a second, the session ticking every 8 ms
+		{
+			const double at = start + n * 1000.0 / 60;
+			while(now + 8 < at) { now += 8; desk.tick(); }
+			now = at;
+			desk.onPageMessage(cmd("{\"op\":\"lock\",\"p\":" + std::to_string(pattern.position) + ",\"t\":0,\"i\":1,\"s\":"
+				+ std::to_string(n % 16) + ",\"v\":" + std::to_string(n) + ",\"g\":9}"));
+		}
+		count();
+		check(dumps >= 9 && dumps <= 11 && requests == 0, "a 2 s draw: at most 5 dumps a second (" + std::to_string(dumps) + "), no read-back mid-gesture");
+		for(int i = 0; i < 40; ++i) { now += 8; desk.tick(); }
+		count();
+		check(dumps <= 12 && requests == 1, "then exactly one read-back (" + std::to_string(requests) + ")");
+		check(desk.coreState().history().size() == 1, "one undo step");
+		const auto* st = desk.coreState().state({DocKind::Pattern, pattern.position});
+		check(st && st->pending && std::holds_alternative<ed::MdPattern>(*st->pending) && ed::usedLockRows(std::get<ed::MdPattern>(*st->pending)) > 0, "the page shows the last value, pending");
+	}
+
+	// Control All (manual p.37, DESIGN-edit-flow.md): one tweak intent, the machine's own gesture on the
+	// emulator (FUNCTION held, the knob turned by each tick's net steps, released at quiet), coalesced CCs
+	// over MIDI; one undo step per gesture; the firmware's skips.
+	void testControlAll()
+	{
+		const auto modelOf = [](const char* _name)
+		{
+			for(uint32_t m = 0; m < 256; ++m)
+				if(ed::mdMachineName(m) == _name)
+					return static_cast<uint8_t>(m);
+			return static_cast<uint8_t>(0);
+		};
+		auto kit = *ed::decodeMdKit(load("programmed_kit_0.syx"));
+		for(size_t t = 0; t < 16; ++t)
+		{
+			kit.models[t] = modelOf("TRX-BD");
+			kit.params[t][1] = static_cast<uint8_t>(10 + t);
+			kit.params[t][9] = static_cast<uint8_t>(10 + t);
+		}
+		kit.models[0] = modelOf("RAM-R1");
+		kit.models[1] = modelOf("CTR-AL");
+		kit.models[2] = modelOf("MID-01");
+		kit.models[3] = modelOf("GND-SIN");	// no synthesis parameter 5
+		kit.params[4][1] = 125;
+		check(!controlAllReaches(kit.models[0], 1) && controlAllReaches(kit.models[0], 9) && !controlAllReaches(kit.models[1], 9)
+			&& !controlAllReaches(kit.models[2], 20) && controlAllReaches(kit.models[3], 4) && controlAllReaches(kit.models[5], 4)
+			&& !controlAllLeads(kit.models[0]) && !controlAllLeads(kit.models[1]) && !controlAllLeads(kit.models[2]) && controlAllLeads(kit.models[3]),
+			"Control All as the firmware: not CTR or MIDI, a RAM recorder not on synthesis; they cannot lead either");
+		{
+			Documents docs;
+			docs.working = WorkingKit{kit};
+			Clipboard clip;
+			const auto r = apply(docs, cmd("{\"op\":\"tweak\",\"k\":" + std::to_string(kit.position) + R"(,"group":"syn","knob":1,"d":5})"), clip,
+				{kit.position});
+			check(r.errors.empty() && r.changes.size() == 1, "a tweak is one change of the working kit");
+			if(r.changes.size() == 1)
+			{
+				const auto& k = std::get<WorkingKit>(r.changes[0].after).kit;
+				check(k.params[0][1] == 10 && k.params[1][1] == 11 && k.params[2][1] == 12, "RAM, CTR, MIDI tracks stay");
+				check(k.params[3][1] == 18 && k.params[4][1] == 127 && k.params[15][1] == 30, "the others move by 5, held at 127");
+			}
+		}
+
+		std::vector<std::vector<uint8_t>> wire;
+		std::vector<std::string> keys;
+		std::vector<std::pair<uint8_t, int>> turns;
+		std::vector<std::array<uint8_t, 3>> params;
+		double now = 0;
+		Desk::Port port;
+		port.device.sendSysex = [&](const std::vector<uint8_t>& _b) { wire.push_back(_b); };
+		port.device.sendKitParam = [&](uint8_t _t, uint8_t _i, uint8_t _v) { params.push_back({_t, _i, _v}); };
+		port.device.pressKey = [&](const std::string& _k) { keys.push_back(_k); return true; };
+		port.device.turnKnob = [&](uint8_t _e, int _s) { turns.emplace_back(_e, _s); return true; };
+		port.toPage = [&](const Value& _m) { g_published.push_back(_m); };
+		port.device.nowMs = [&] { return now; };
+		const auto status = [](const ed::MdStatus _p, const uint8_t _v)
+		{
+			return std::vector<uint8_t>{0xf0, 0x00, 0x20, 0x3c, 0x02, 0x00, 0x72, static_cast<uint8_t>(_p), _v, 0xf7};
+		};
+		auto pattern = *ed::decodeMdPattern(load("programmed_pattern_1.syx"));
+		pattern.kit = kit.position;
+		const auto tweak = [&](Desk& _d, const char* _group, const int _knob, const int _delta)
+		{
+			_d.onPageMessage(cmd("{\"op\":\"tweak\",\"k\":" + std::to_string(kit.position) + ",\"group\":\"" + _group + "\",\"knob\":"
+				+ std::to_string(_knob) + ",\"d\":" + std::to_string(_delta) + ",\"g\":42}"));
+		};
+		const auto imageOf = [](const ed::MdKit& _k)
+		{
+			const auto img = ed::mdWorkingKitImage(_k);
+			std::vector<uint8_t> r{_k.position, 0};
+			r.insert(r.end(), img.begin(), img.end());
+			return r;
+		};
+		{
+			Desk desk(port);
+			desk.onPageMessage(cmd(R"({"op":"ready"})"));
+			desk.onDeviceSysex(status(ed::MdStatus::Pattern, pattern.position));
+			desk.onDeviceSysex(status(ed::MdStatus::Kit, kit.position));
+			desk.onDeviceSysex(ed::encodeMdPattern(pattern));
+			desk.onDeviceSysex(ed::encodeMdKit(kit));
+			desk.onWorkingKitMemory(imageOf(kit));
+			Telemetry t;
+			t.valid = true;
+			t.bootAnimation = 0;
+			t.knobPage = 0;
+			t.panelPending = 0;
+			desk.onTelemetry(t);
+			desk.tick();
+			keys.clear(); turns.clear(); params.clear(); wire.clear();
+			tweak(desk, "syn", 1, 2);
+			tweak(desk, "syn", 1, 3);
+			tweak(desk, "syn", 1, -1);
+			check(desk.documents().working && desk.documents().working->kit.params[5][1] == 19 && desk.documents().working->kit.params[0][1] == 10,
+				"the page sees every track at once (pending)");
+			// The keys wait for a dump request in flight (the library's background read here; this fake never answers);
+			// the first track that can lead (T4, GND-SIN) is selected first, and the machine's status says so.
+			// The machine answers the track status (T1 selected until the SET STATUS to T4).
+			uint8_t selected = 0;
+			const auto machineTicks = [&](const int _n, const bool _untilTurn)
+			{
+				for(int i = 0; i < _n && !(_untilTurn && !turns.empty()); ++i)
+				{
+					now += 8;
+					desk.tick();
+					for(const auto& m : wire)
+						if(m == ed::mdSetStatus(ed::MdStatus::Track, 3))
+							selected = 3;
+					for(const auto& m : wire)
+						if(m == ed::mdStatusRequest(ed::MdStatus::Track))
+							desk.onDeviceSysex(status(ed::MdStatus::Track, selected));
+					wire.erase(std::remove(wire.begin(), wire.end(), ed::mdStatusRequest(ed::MdStatus::Track)), wire.end());
+				}
+			};
+			machineTicks(400, true);
+			check(std::find(wire.begin(), wire.end(), ed::mdSetStatus(ed::MdStatus::Track, 3)) != wire.end(), "the leading track is selected first");
+			check(keys == std::vector<std::string>{"hold:function"} && turns.size() == 1 && turns[0] == std::make_pair(uint8_t(1), 4),
+				"the emulator: FUNCTION held, knob B turned once by the tick's net steps (+4)");
+			check(params.empty() && std::none_of(wire.begin(), wire.end(), [](const std::vector<uint8_t>& _m) { return _m.size() > 6 && (_m[6] == 0x52 || _m[6] == 0x67 || _m[6] == 0x5b); }),
+				"no CCs, no dump");
+			for(int i = 0; i < 25; ++i) { now += 8; desk.tick(); }
+			check(keys.size() == 2 && keys[1] == "release:function", "FUNCTION let go at quiet");
+			auto moved = desk.documents().working->kit;
+			desk.onWorkingKitMemory(imageOf(moved));
+			desk.tick();
+			check(!desk.coreState().state({DocKind::WorkingKit, 0})->pending, "settled when memory shows every track");
+			check(desk.coreState().history().size() == 1, "one undo step per gesture");
+			// Another page: the knob page first, with FUNCTION up.
+			keys.clear(); turns.clear();
+			tweak(desk, "fx", 1, 1);
+			now += 8;
+			desk.tick();
+			check(keys == std::vector<std::string>{"page"} && turns.empty(), "the effects knob: the page key first");
+			t.knobPage = 1;
+			desk.onTelemetry(t);
+			machineTicks(50, false);
+			check(keys.size() == 3 && keys[1] == "hold:function" && keys[2] == "release:function" && turns.size() == 1
+				&& turns[0] == std::make_pair(uint8_t(1), 1), "then FUNCTION held, knob B of the effects page turned, FUNCTION let go");
+		}
+		{
+			// HW MIDI (no panel): coalesced CCs, at most one per track per tick.
+			Desk desk(port);
+			desk.setEngine(Desk::defaultAdapter(wireProfile(), port.device));
+			desk.onTelemetry(Telemetry{});
+			desk.onPageMessage(cmd(R"({"op":"ready"})"));
+			desk.onDeviceSysex(status(ed::MdStatus::Pattern, pattern.position));
+			desk.onDeviceSysex(status(ed::MdStatus::Kit, kit.position));
+			desk.onDeviceSysex(ed::encodeMdPattern(pattern));
+			desk.onDeviceSysex(ed::encodeMdKit(kit));
+			now += 100;
+			desk.tick();
+			params.clear(); keys.clear(); turns.clear();
+			size_t most = 0;
+			for(int n = 0; n < 60; ++n)	// 1 s at 60 moves a second
+			{
+				tweak(desk, "fx", 1, n % 2 ? 1 : 2);
+				params.clear();
+				now += 1000.0 / 60;
+				desk.tick();
+				most = std::max(most, params.size());
+				std::map<uint8_t, int> perTrack;
+				for(const auto& p : params)
+					++perTrack[p[0]];
+				for(const auto& [tr, c] : perTrack)
+					check(c <= 1, "HW: at most one CC per track per tick");
+			}
+			check(keys.empty() && turns.empty() && most > 0 && most <= 14, "HW: CCs only, at most 14 a tick here (14 tracks reached)");
+			check(desk.coreState().history().size() == 1, "HW: one undo step");
+		}
 	}
 
 	// P4: the start-up animation holds input; chaining, mutes from memory.
@@ -1233,6 +1500,8 @@ int main(const int _argc, char** _argv)
 	testWorkingKitMemory();
 	testKnobRecorder();
 	testDeskRecording();
+	testPacedLockDraw();
+	testControlAll();
 	testSampleName();
 	testModulators();
 	testFakeAdapter();

@@ -7,7 +7,7 @@ as a standalone app, VST3 and AU on macOS.
 
 - **Site, screenshots, download:** https://mdmm.nativekloud.com
 - **Releases:** https://github.com/radekdymacz/gearmulator-md-mm/releases
-  (latest: [0.2.0 notes](doc/release/v0.2.0.md); first: [0.1.0 alpha](doc/release/v0.1.0-alpha.md))
+  (latest: [0.2.1 notes](doc/release/v0.2.1.md); [0.2.0](doc/release/v0.2.0.md); first: [0.1.0 alpha](doc/release/v0.1.0-alpha.md))
 - **Bring your own ROM.** No firmware is included; drag your machine's image onto the
   editor's window (or copy it to `~/Documents/Gearmulator Preview/Machinedrum/roms/` or `.../Monomachine/roms/`).
 - **Bugs and questions about the editors:** [this fork's issues](https://github.com/radekdymacz/gearmulator-md-mm/issues),

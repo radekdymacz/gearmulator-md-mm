@@ -17,6 +17,7 @@
 #include "mdDataLink/mdDataLink.h"
 
 #include <array>
+#include <deque>
 #include <functional>
 #include <map>
 #include <optional>
@@ -83,7 +84,41 @@ namespace mdDesk
 		struct Push
 		{
 			PushSlot<Document> slot;
-			double sentMs = 0;
+		};
+		// Control All (manual p.37, DESIGN-edit-flow.md): the tweak command's intent, seen by review()
+		// before submit() delivers its change. On the emulated machine it is the firmware's own gesture:
+		// FUNCTION held, the DATA ENTRY knob turned by each tick's net steps, released at quiet. The
+		// page (0 synthesis, 1 effects, 2 routing) is made the machine's knob page first.
+		struct TweakIntent
+		{
+			int page = 0;
+			uint8_t knob = 0;
+			int d = 0;
+			std::optional<uint8_t> track;	// the gesture's track, the preferred lead
+		};
+		// The firmware tweaks from its selected track, which must lead (controlAllLeads): the adapter
+		// selects one first (SET STATUS, then the machine's status says it is selected).
+		struct TweakTurns
+		{
+			struct Turn { int page; uint8_t knob; int steps; uint8_t lead; };
+			std::deque<Turn> turns;		// net steps per knob, in order
+			bool held = false;			// FUNCTION is held on the machine
+			double lastMs = -1e9;		// the last turn
+			double pageKeyMs = -1e9;	// the last page key
+			double selectMs = -1e9;		// the last SET STATUS track or track status request
+			double startMs = 0;			// the gesture began (nothing held, nothing waiting)
+			double trackKnownMs = -1e9;	// the machine last said which track is selected
+
+			void want(const int _page, const uint8_t _knob, const int _steps, const uint8_t _lead, const double _nowMs)
+			{
+				if(!active())
+					startMs = _nowMs;
+				if(!turns.empty() && turns.back().page == _page && turns.back().knob == _knob && turns.back().lead == _lead)
+					turns.back().steps += _steps;
+				else
+					turns.push_back({_page, _knob, _steps, _lead});
+			}
+			bool active() const { return held || !turns.empty(); }
 		};
 		struct RecLock
 		{
@@ -145,6 +180,14 @@ namespace mdDesk
 		void setBaseChannel(const elektronData::MdGlobal& _g);
 		void pumpLoads(double _now);
 		void pumpPushes(double _now);
+		void pumpTweak(double _now);
+		void pumpCoalesced(double _now);
+		// Whether Control All can be the machine's own gesture now (panel keys, knob page telemetry, not
+		// recording: while recording a turn is a lock).
+		bool tweakByPanel() const;
+		static std::optional<uint8_t> tweakLead(const elektronData::MdKit& _kit, std::optional<uint8_t> _preferred);
+		deskCore::PushPolicy pushPolicy(DocKind _kind) const;
+		void sendDump(const Document& _doc);
 		void pumpRecording(double _now, const Documents& _view);
 		void pumpSequence(double _now);
 		void runSequence(std::vector<deskCore::SeqStep<Act>> _steps);
@@ -203,5 +246,11 @@ namespace mdDesk
 		std::optional<RecLock> m_recLock;
 		double m_recordPollMs = -1e9;
 		deskCore::Sequencer<Act> m_sequence;
+		std::optional<TweakIntent> m_intent;	// the command review() saw, for the submit() that follows
+		TweakTurns m_tweak;
+		// Control All without the panel (HW MIDI, no telemetry): the latest value per (track, index),
+		// sent as at most one CC each per coalescing tick, within the wire's budget.
+		std::map<std::pair<uint8_t, uint8_t>, uint8_t> m_coalesced;
+		double m_coalescedMs = -1e9;
 	};
 }

@@ -574,12 +574,26 @@ namespace mdDesk
 			return _k;
 		}
 
+		// Control All (manual p.37, FUNCTION + a DATA ENTRY knob): the same knob of one page on every track
+		// the machine's own gesture reaches, moved by d and held at 0..127 (controlAllReaches). "t", the
+		// track the gesture is on, only says which track leads it on the machine (the adapter's).
+		std::optional<ed::MdKit> tweak(ed::MdKit _k, const In& _in)
+		{
+			const auto& g = _in.a.text("group");
+			const size_t index = (g == "fx" ? 8u : g == "rt" ? 16u : 0u) + size_t(*_in.a.integer("knob"));
+			const int d = *_in.a.integer("d");
+			for(size_t t = 0; t < ed::MdKit::g_tracks; ++t)
+				if(controlAllReaches(_k.models[t], index))
+					_k.params[t][index] = uint8_t(std::clamp(int(_k.params[t][index]) + d, 0, 127));
+			return _k;
+		}
+
 		const Edits<ed::MdKit>& kitEdits()
 		{
 			static const Edits<ed::MdKit> edits{
 				{"param", param}, {"level", level}, {"machine", machine}, {"lfo", lfo}, {"group", group},
 				{"masterFx", masterFx}, {"kitName", kitName}, {"copySound", copySound}, {"pasteSound", pasteSound},
-				{"clearSound", clearSound}};
+				{"clearSound", clearSound}, {"tweak", tweak}};
 			return edits;
 		}
 
@@ -1089,6 +1103,22 @@ namespace mdDesk
 		if(result.errors.empty() && !(clipboard == _clipboard))
 			result.clipboard = std::move(clipboard);
 		return result;
+	}
+
+	bool controlAllReaches(const uint32_t _model, const size_t _index)
+	{
+		if(_index >= 24)
+			return false;
+		const auto name = ed::mdMachineName(_model);
+		if(name.rfind("MID-", 0) == 0 || name.rfind("CTR-", 0) == 0)
+			return false;
+		// A RAM recorder's synthesis page is its recording setup: left out; its effects and routing move.
+		return name.rfind("RAM-R", 0) != 0 || _index >= 8;
+	}
+
+	bool controlAllLeads(const uint32_t _model)
+	{
+		return controlAllReaches(_model, 0);
 	}
 
 	const std::array<uint8_t, 24>& neutralTrackValues() { return g_neutral; }

@@ -86,9 +86,11 @@ namespace mdDataLink
 		// Pushes store the value in its own slot (the value's position), then ask
 		// for it back so callers see what the firmware holds. Values that fail
 		// elektronData::validate are refused: the result lists the problems.
-		std::vector<std::string> pushPattern(const elektronData::MdPattern& _pattern);
+		// _askBack false: the dump only; the caller asks for it back when it wants
+		// (a paced push reads back once, at the gesture's end: DESIGN-edit-flow.md).
+		std::vector<std::string> pushPattern(const elektronData::MdPattern& _pattern, bool _askBack = true);
 		std::vector<std::string> pushKit(const elektronData::MdKit& _kit, KitApply _apply);
-		std::vector<std::string> pushSong(const elektronData::MdSong& _song);
+		std::vector<std::string> pushSong(const elektronData::MdSong& _song, bool _askBack = true);
 		std::vector<std::string> pushGlobal(const elektronData::MdGlobal& _global);
 
 		// Machine commands.

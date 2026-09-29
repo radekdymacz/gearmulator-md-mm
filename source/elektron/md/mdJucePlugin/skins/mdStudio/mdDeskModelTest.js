@@ -11,8 +11,8 @@ const fs = require("fs"), path = require("path"), vm = require("vm");
 const ctx = vm.createContext({ console });
 vm.runInContext(fs.readFileSync(path.join(__dirname, "mdDeskModel.js"), "utf8")
 	+ "\nconst S = { soloSet: new Set() };"
-	+ "\nthis.T = { deriveView, Overlay, view, Docs, S, EMPTY_DOCS, storeDoc, resetDocs, canDo, docOf, multFactor, mfxName, nameOf, get V() { return V; } };", ctx);
-const { deriveView, Overlay, Docs, S, EMPTY_DOCS, storeDoc, resetDocs, canDo, docOf, multFactor, nameOf } = ctx.T;
+	+ "\nthis.T = { deriveView, Overlay, view, Docs, S, EMPTY_DOCS, storeDoc, resetDocs, canDo, docOf, multFactor, mfxName, nameOf, tweakWrites, catalogueIndex, get V() { return V; } };", ctx);
+const { deriveView, Overlay, Docs, S, EMPTY_DOCS, storeDoc, resetDocs, canDo, docOf, multFactor, nameOf, tweakWrites, catalogueIndex } = ctx.T;
 const DELETE = Overlay.DELETE;
 let failures = 0;
 const check = (ok, what) => { console.log((ok ? "  ok   " : "  FAIL ") + what); if (!ok) failures++; };
@@ -139,6 +139,27 @@ row.rep = 5;
 V = Overlay.over(deriveView(docs(), S));
 check(V.song[0].pat === 2 && V.song[0].rep === 1, "an entry holds a copy of its value");
 Overlay.clear();
+
+/* Control All (the tweak command): the view's writes for every track the machine's gesture reaches, as the
+   model's controlAllReaches: RAM, CTR and MIDI machines stay, a synthesis knob moves only where the machine
+   has it, values are held at 0..127, and a routing LFO knob also moves the LFO section's box. */
+{
+	const FXRT = ["AMD", "AMF", "EQF", "EQG", "FLTF", "FLTW", "FLTQ", "SRR", "DIST", "VOL", "PAN", "DEL", "REV", "LFOS", "LFOD", "LFOM"];
+	const cat2 = { schema: "md-desk/machines", version: 1, enums, machines: [
+		{ model: 16, machine: "TRX-BD", family: "TRX", params: ["PTCH", "DEC", "RAMP", "RDEC", "STRT", "NOIS", "HARM", "CLIP", ...FXRT] },
+		{ model: 1, machine: "GND-SIN", family: "GND", params: ["PTCH", "DEC", "RAMP", "RDEC", null, null, null, null, ...FXRT] }] };
+	const k = kit("TW");
+	k.tracks.forEach(t => { t.machine = "TRX-BD"; t.model = 16; });
+	k.tracks[0].machine = "RAM-R1"; k.tracks[1].machine = "CTR-AL"; k.tracks[2].machine = "MID-01"; k.tracks[3].machine = "GND-SIN";
+	k.tracks[4].synth[5] = 125;
+	const tv = deriveView(docs({ kits: { 3: k }, catalogue: cat2 }), S);
+	const ci = catalogueIndex(cat2), syn = tweakWrites(tv, "syn", 5, 5, enums, ci), fx = tweakWrites(tv, "fx", 0, -15, enums, ci), rt = tweakWrites(tv, "rt", 5, 3, enums, ci);
+	check(syn.length === 12 && !syn.some(([p]) => p[1] < 4) && syn.find(([p]) => p[1] === 4)[1] === 127 && syn.find(([p]) => p[1] === 5)[1] === 15,
+		"Control All: synthesis NOIS shown on the 12 TRX tracks, not the RAM recorder, CTR or MIDI (GND-SIN shows no NOIS), held at 127");
+	check(fx.length === 14 && fx.every(([p, v]) => p[2] === "fx" && p[3] === "AMD" && v === 5) && fx.some(([p]) => p[1] === 0),
+		"Control All: an effects knob on the 14 tracks it reaches, the RAM recorder's too");
+	check(rt.length === 28 && rt.some(([p, v]) => p[2] === "lfo" && p[3] === "SPD" && v === 33), "Control All: routing LFOS also moves the LFO section's SPD");
+}
 
 console.log("mdDeskModelTest: " + (failures ? "FAIL" : "PASS") + " (" + failures + " failures)");
 process.exit(failures ? 1 : 0);

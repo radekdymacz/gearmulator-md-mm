@@ -63,13 +63,14 @@ namespace mdDataLink
 		send(ed::mdGlobalRequest(_slot));
 	}
 
-	std::vector<std::string> Session::pushPattern(const ed::MdPattern& _pattern)
+	std::vector<std::string> Session::pushPattern(const ed::MdPattern& _pattern, const bool _askBack)
 	{
 		auto problems = ed::validate(_pattern);
 		if(!problems.empty())
 			return problems;
 		send(ed::encodeMdPattern(_pattern));
-		requestPattern(_pattern.position);
+		if(_askBack)
+			requestPattern(_pattern.position);
 		return {};
 	}
 
@@ -96,7 +97,7 @@ namespace mdDataLink
 		return {};
 	}
 
-	std::vector<std::string> Session::pushSong(const ed::MdSong& _song)
+	std::vector<std::string> Session::pushSong(const ed::MdSong& _song, const bool _askBack)
 	{
 		auto problems = ed::validate(_song);
 		if(!problems.empty())
@@ -105,7 +106,8 @@ namespace mdDataLink
 		send(ed::encodeMdSong(_song));
 		if(m_state.song == _song.position)
 			m_state.songReloadNeeded = true;
-		requestSong(_song.position);
+		if(_askBack)
+			requestSong(_song.position);
 		changed(before);
 		return {};
 	}

@@ -87,7 +87,6 @@ namespace mmDesk
 		struct Push
 		{
 			deskCore::PushSlot<Bytes> slot;
-			double sentMs = 0;
 			bool onRecv = false;	// queued on the RECV session, not on the wire yet
 		};
 
@@ -97,6 +96,10 @@ namespace mmDesk
 		void request(const Ref& _ref, bool _urgent);
 		void requestStatus();
 		void pushDump(const Ref& _ref, Bytes _dump);
+		// The dump the slot lets go now: onto SYSEX RECV (or the person's, HW MIDI).
+		void sendDump(const Ref& _ref, Push& _push, Bytes _dump);
+		deskCore::PushPolicy pushPolicy(Kind _kind) const;
+		void pumpPushes(double _now);
 		// A message that must follow the dumps queued before it on SYSEX RECV (LOAD KIT after a kit dump).
 		void afterDumps(Bytes _message);
 		// The dumps wait for the person to open SYSEX RECV (no panel keys: HW MIDI).

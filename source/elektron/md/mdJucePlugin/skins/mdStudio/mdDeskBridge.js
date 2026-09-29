@@ -31,11 +31,13 @@ const Bridge = (() => {
 		if (native) navigate("gmbridge://c/" + encodeURIComponent(text));
 		else if (window.gmDev) window.gmDev(batch);
 	}
-	/* send(msg, {key, onResult}): a message with the same key still waiting in
+	/* send(msg, {key, onResult, merge}): a message with the same key still waiting in
 	   this frame is replaced (a drag sends its latest value once per frame); the
-	   replacement keeps its id, so one result answers both. */
+	   replacement keeps its id, so one result answers both. merge(waiting, msg)
+	   makes the replacement from both (a relative change sums its steps). */
 	function send(msg, opt = {}) {
 		const i = opt.key ? queue.findIndex(q => q.key === opt.key) : -1;
+		if (i >= 0 && opt.merge) msg = opt.merge(queue[i].msg, msg);
 		msg.id = i >= 0 ? queue[i].msg.id : nextId++;
 		if (opt.onResult) pending.set(msg.id, { op: msg.op, onResult: opt.onResult });
 		if (i >= 0) { queue[i] = { key: opt.key, msg }; return msg.id; }
