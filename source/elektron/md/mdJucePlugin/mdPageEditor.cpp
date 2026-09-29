@@ -3,6 +3,7 @@
 #include "mdAudioMidiLink.h"
 #include "mdDeskSession.h"
 #include "mdPluginProcessor.h"
+#include "mdDeskHost.h"
 #include "mdWebPageHost.h"
 
 #if MDMM_DIAGNOSTICS
@@ -19,6 +20,7 @@ namespace mdJucePlugin
 }
 #endif
 
+#include "jucePluginEditorLib/editorPopupMenu.h"
 #include "jucePluginEditorLib/pluginEditorState.h"
 #include "juceRmlUi/juceRmlComponent.h"
 
@@ -71,7 +73,7 @@ namespace mdJucePlugin
 	{
 		jucePluginEditorLib::Editor::create();
 		auto& processor = dynamic_cast<AudioPluginAudioProcessor&>(getProcessor());
-		m_session = processor.getDeskSession();
+		m_session = processor.getDeskHost()->session();
 		m_page = std::make_unique<WebPageHost>(m_session ? m_session->pageSpec() : WebPageHost::Spec{},
 			[this](const std::string& _name)
 			{
@@ -121,7 +123,7 @@ namespace mdJucePlugin
 			{
 				// The editor's menu (skins, scale, settings) where the page was right-clicked.
 				if(auto* state = getProcessor().getEditorState())
-					state->createPopupMenu().showMenuAsync(juce::PopupMenu::Options().withMousePosition());
+					jucePluginEditorLib::createPopupMenu(*state).showMenuAsync(juce::PopupMenu::Options().withMousePosition());
 			}
 			else if(!m_audio || !m_audio->handle(row->handler.action, _message))
 				m_page->send(deskCore::resultMessage(_message, {"The audio devices are the standalone app's."}, {}));

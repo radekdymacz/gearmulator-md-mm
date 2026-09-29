@@ -1,13 +1,6 @@
 cmake_minimum_required(VERSION 3.15)
 
-# The Machinedrum and Monomachine Editors have their own release version, apart from
-# Gearmulator's (the bundles, the AU version, the installers and the site use it).
-set(MDMM_EDITOR_VERSION 0.2.0)
-project(mdJucePlugin VERSION ${MDMM_EDITOR_VERSION})
-set(CMAKE_PROJECT_VERSION ${PROJECT_VERSION})
-set(CMAKE_PROJECT_VERSION_MAJOR ${PROJECT_VERSION_MAJOR})
-set(CMAKE_PROJECT_VERSION_MINOR ${PROJECT_VERSION_MINOR})
-set(CMAKE_PROJECT_VERSION_PATCH ${PROJECT_VERSION_PATCH})
+project(mdJucePlugin VERSION ${CMAKE_PROJECT_VERSION})
 
 execute_process(COMMAND git rev-parse --short=12 HEAD WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
 	OUTPUT_VARIABLE MDMM_DIAGNOSTICS_REVISION OUTPUT_STRIP_TRAILING_WHITESPACE ERROR_QUIET)
@@ -35,58 +28,20 @@ set(SOURCES
 	mdProductSkins.h
 	mdPluginProcessor.cpp mdPluginProcessor.h
 	mdStorageImage.cpp mdStorageImage.h
-	mdStandaloneApp.cpp
-	mdDeskSession.cpp mdDeskSession.h
-	mdMidiLearnCommands.cpp mdMidiLearnCommands.h
-	mdPageEditor.cpp mdPageEditor.h
-	mdRomInstall.cpp mdRomInstall.h
-	mdSessionMd.cpp mdSessionMm.cpp mdSessions.h
-	mdStudioLink.cpp mdStudioLink.h
-	mdWebPageHost.cpp mdWebPageHost.h
-	mmStudioLink.cpp mmStudioLink.h
-	$<$<PLATFORM_ID:Darwin>:mdStudioWebZoom.mm>
 	mdPluginEntry.cpp
 
 	parameterDescriptions_md.json parameterDescriptions_mm.json
 
-	skins/mdStudio/mdStudio.rml
-	skins/mdStudio/mdStudio.html
-	skins/mdStudio/mdDesk.css
-	skins/mdStudio/mdDeskApp.js
-	skins/mdStudio/mdDeskBridge.js
-	skins/mdStudio/mdDeskModal.js
-	skins/mdStudio/mdDeskBoot.js
-	skins/mdStudio/mdDeskSyx.js
-	skins/mdStudio/mdDeskModel.js
-	skins/mdStudio/mdDeskMod.js
-	skins/mmStudio/mmStudio.rml
-	skins/mmStudio/mmStudio.html
-	skins/mmStudio/mmStudio.css
-	skins/mmStudio/mmMockup.js
-	skins/mmStudio/mmConvert.js
-	skins/mmStudio/mmAdapter.js
-	skins/mmStudio/mmConvertTest.js
-	skins/mmStudio/mmSelfTest.js
-	skins/mdStudio/mdDeskSelfTest.js
-	skins/mdStudio/mdDeskModelTest.js
-	skins/mdStudio/mdDeskLive.js
-	skins/mdStudio/mdDeskLibrary.js
-	skins/mdStudio/mdDeskKeys.js
-	skins/mdStudio/mdDeskGlobal.js
-	skins/mdStudio/mdDeskAudio.js
+	skins/mdDefault/mdDefault.rml
+	skins/mdDefault/mdKnobs.rcss
+	skins/mdDefault/mdDefault.rcss
+	skins/mmSfx60/mmSfx60.rml
+	skins/mmSfx60/mmKnobAtlas.svg
+	skins/mmSfx60/mmKnobs.rcss
+	skins/mmSfx60/mmSfx60.rcss
 	mdSettingsPanelFeel.cpp mdSettingsPanelFeel.h
 	mdSettingsAudioInput.cpp mdSettingsAudioInput.h
-	mdAudioMidiLink.cpp mdAudioMidiLink.h
 )
-
-# P6: the editors' diagnostics (the log of the web view, the window chrome and the session's
-# state, and the pages' self-tests: mdDeskSelfTest.js, mmSelfTest.js) observe the editors. Off by
-# default for every generator and configuration (single- and multi-config), so a release package
-# has none of it; a test or development build turns it on (-Dgearmulator_MDMM_DIAGNOSTICS=ON).
-option(gearmulator_MDMM_DIAGNOSTICS "The Machinedrum/Monomachine Editors' diagnostics log and self-tests" OFF)
-if(gearmulator_MDMM_DIAGNOSTICS)
-	list(APPEND SOURCES mdDiagnostics.cpp mdDiagnostics.h)
-endif()
 
 set(COMMON_ASSETS
 	"../../../jucePluginData/elektronKnobBlankAtlas.png"
@@ -100,31 +55,12 @@ set(COMMON_ASSETS
 	"../../../jucePluginData/elektron_panel.rcss"
 	"../../../jucePluginData/elektron_materials.rcss")
 file(GLOB MD_SKIN_ASSETS CONFIGURE_DEPENDS
-	"skins/mdStudio/*.rml" "skins/mdStudio/*.html" "skins/mdStudio/*.css" "skins/mdStudio/*.js"
-	"skins/mdStudio/fonts/*.woff2" "skins/mdStudio/fonts/*.ttf")
+	"skins/mdDefault/*.png" "skins/mdDefault/*.rml" "skins/mdDefault/*.rcss"
+	"skins/mdDefault/*.ttf" "skins/mdDefault/*.lua")
 file(GLOB MM_SKIN_ASSETS CONFIGURE_DEPENDS
-	"skins/mmStudio/*.rml" "skins/mmStudio/*.html" "skins/mmStudio/*.css"
-	"skins/mmStudio/mmMockup.js" "skins/mmStudio/mmConvert.js" "skins/mmStudio/mmAdapter.js"
-	# shared with the Machinedrum Editor: the page bridge and the OFL fonts
-	"skins/mdStudio/mdDeskBridge.js" "skins/mdStudio/fonts/*.ttf")
-# The tests are not the page, named one by one, not by a file-name pattern: the node tests never
-# ship, the self-tests only with the diagnostics. A test that was renamed or moved stops the
-# configure, so it cannot slip into the glob. The MM glob lists its page files already.
-set(MD_NODE_TESTS "skins/mdStudio/mdDeskModelTest.js")
-set(MD_SELF_TESTS "skins/mdStudio/mdDeskSelfTest.js")
-set(MM_SELF_TESTS "skins/mmStudio/mmSelfTest.js")
-foreach(test ${MD_NODE_TESTS} ${MD_SELF_TESTS} ${MM_SELF_TESTS})
-	if(NOT EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/${test}")
-		message(FATAL_ERROR "${test} is not there: update the editors' test lists in ${CMAKE_CURRENT_LIST_FILE}")
-	endif()
-endforeach()
-foreach(test ${MD_NODE_TESTS} ${MD_SELF_TESTS})
-	list(REMOVE_ITEM MD_SKIN_ASSETS "${CMAKE_CURRENT_SOURCE_DIR}/${test}")
-endforeach()
-if(gearmulator_MDMM_DIAGNOSTICS)
-	list(APPEND MD_SKIN_ASSETS ${MD_SELF_TESTS})
-	list(APPEND MM_SKIN_ASSETS ${MM_SELF_TESTS})
-endif()
+	"skins/mmSfx60/*.png" "skins/mmSfx60/*.rml" "skins/mmSfx60/*.rcss"
+	"skins/mmSfx60/*.ttf" "skins/mmSfx60/*.lua")
+include(mdmmPlugins.cmake)  # the Machinedrum/Monomachine Editors: their sources, skins and targets (doc/modern-ux/UPSTREAM.md)
 
 juce_add_binary_data(mdJucePlugin_BinaryData SOURCES
 	${COMMON_ASSETS} "tus_settings_gui_Machinedrum.rml"
@@ -133,15 +69,8 @@ juce_add_binary_data(mmJucePlugin_BinaryData SOURCES
 	${COMMON_ASSETS} "tus_settings_gui_Monomachine.rml"
 	"tus_settings_dspaudio_Monomachine.rml" ${MM_SKIN_ASSETS})
 
-# App icons (doc/modern-ux/icons, built with build-icons.sh).
-set(GEARMULATOR_ICON_BIG_mdJucePlugin "${CMAKE_CURRENT_SOURCE_DIR}/icons/md-1024.png")
-set(GEARMULATOR_ICON_SMALL_mdJucePlugin "${CMAKE_CURRENT_SOURCE_DIR}/icons/md-32.png")
-set(GEARMULATOR_ICON_BIG_mmJucePlugin "${CMAKE_CURRENT_SOURCE_DIR}/icons/mm-1024.png")
-set(GEARMULATOR_ICON_SMALL_mmJucePlugin "${CMAKE_CURRENT_SOURCE_DIR}/icons/mm-32.png")
 createJucePlugin(mdJucePlugin "Gearmulator MD" TRUE "Tmdr" mdJucePlugin_BinaryData mdLib)
 createJucePlugin(mmJucePlugin "Gearmulator MM" TRUE "Tmno" mmJucePlugin_BinaryData mdLib)
-target_link_libraries(mdJucePlugin PRIVATE elektronData mdDataLink mdDesk mmDesk deskHost deskWire)
-target_link_libraries(mmJucePlugin PRIVATE elektronData mdDataLink mdDesk mmDesk deskHost deskWire)
 
 # MD/MM expose an optional stereo input to plug-in hosts. Starting the
 # standalone with that input active makes CoreAudio combine the built-in input
@@ -151,10 +80,7 @@ target_link_libraries(mmJucePlugin PRIVATE elektronData mdDataLink mdDesk mmDesk
 foreach(plugin_target mdJucePlugin mmJucePlugin)
 	target_compile_definitions(${plugin_target} PUBLIC
 		JUCE_STANDALONE_PLUGIN_AUTO_OPEN_AUDIO_INPUT=0
-		# jucePluginEditorLib/standaloneApp.h: native title bar and menu bar (P4).
-		JUCE_USE_CUSTOM_PLUGIN_STANDALONE_APP=1
-		JUCE_VST3_EMULATE_MIDI_PC_WITH_PROGRAMS=1
-		MDMM_DIAGNOSTICS=$<BOOL:${gearmulator_MDMM_DIAGNOSTICS}>)
+		JUCE_VST3_EMULATE_MIDI_PC_WITH_PROGRAMS=1)
 endforeach()
 
 # JUCE can populate bundle resources after its first ad-hoc signing pass on
@@ -166,22 +92,6 @@ if(APPLE)
 		mdJucePlugin_AU mmJucePlugin_AU
 		mdJucePlugin_Standalone mmJucePlugin_Standalone)
 		if(TARGET ${plugin_target})
-			# The app icon on the VST3 and AU bundles too: JUCE copies Icon.icns into every
-			# bundle but names it in the Info.plist of the standalone only.
-			if(plugin_target MATCHES "^(md|mm)JucePlugin_(VST3|AU)$")
-				add_custom_command(TARGET ${plugin_target} POST_BUILD
-					COMMAND /bin/sh -c "/usr/libexec/PlistBuddy -c 'Delete :CFBundleIconFile' \"$1\" 2>/dev/null; /usr/libexec/PlistBuddy -c 'Add :CFBundleIconFile string Icon.icns' \"$1\"" sh
-						"$<TARGET_BUNDLE_DIR:${plugin_target}>/Contents/Info.plist"
-					COMMENT "App icon on ${plugin_target}"
-					VERBATIM
-				)
-			endif()
-			# Finder and the Dock cache a bundle's icon by its folder date: touch the bundle so
-			# a rebuilt app with a new icon shows it (P5: the MD app showed none).
-			add_custom_command(TARGET ${plugin_target} POST_BUILD
-				COMMAND /usr/bin/touch "$<TARGET_BUNDLE_DIR:${plugin_target}>"
-				VERBATIM
-			)
 			add_custom_command(TARGET ${plugin_target} POST_BUILD
 				COMMAND /usr/bin/codesign --force --deep --sign -
 					"$<TARGET_BUNDLE_DIR:${plugin_target}>"
@@ -267,27 +177,32 @@ if(BUILD_TESTING)
 		set_property(TARGET mdLcdInteractionCorpusTest PROPERTY FOLDER "Elektron/test")
 	endif()
 
-	# The panel editor's pointer tests (mdLcdEditorPointerTest.cpp) went with the panel skins (P5):
-	# the editor page is the only UI.
+	add_executable(mdLcdEditorPointerTest mdLcdEditorPointerTest.cpp)
+	target_include_directories(mdLcdEditorPointerTest PRIVATE
+		"${CMAKE_SOURCE_DIR}/source" "${CMAKE_SOURCE_DIR}/source/elektron/md")
+	target_link_libraries(mdLcdEditorPointerTest PRIVATE mdJucePlugin
+		jucePluginEditorLib juceRmlUi juceUiLib juce_plugin_modules mdLib)
+	add_test(NAME mdLcdEditorPointerTest COMMAND mdLcdEditorPointerTest)
+	set_tests_properties(mdLcdEditorPointerTest PROPERTIES
+		LABELS "IntegrationTest;LcdInteraction;PointerInput")
+	set_property(TARGET mdLcdEditorPointerTest PROPERTY FOLDER "Elektron/test")
+
+	add_executable(mmLcdEditorPointerTest mdLcdEditorPointerTest.cpp)
+	target_compile_definitions(mmLcdEditorPointerTest PRIVATE MD_LCD_POINTER_TEST_MM=1)
+	target_include_directories(mmLcdEditorPointerTest PRIVATE
+		"${CMAKE_SOURCE_DIR}/source" "${CMAKE_SOURCE_DIR}/source/elektron/md")
+	target_link_libraries(mmLcdEditorPointerTest PRIVATE mmJucePlugin
+		jucePluginEditorLib juceRmlUi juceUiLib juce_plugin_modules mdLib)
+	add_test(NAME mmLcdEditorPointerTest COMMAND mmLcdEditorPointerTest)
+	set_tests_properties(mmLcdEditorPointerTest PROPERTIES
+		LABELS "IntegrationTest;LcdInteraction;PointerInput")
+	set_property(TARGET mmLcdEditorPointerTest PROPERTY FOLDER "Elektron/test")
+
 	add_executable(mdStandaloneRendererPolicyTest mdStandaloneRendererPolicyTest.cpp)
 	add_test(NAME mdStandaloneRendererPolicyTest COMMAND mdStandaloneRendererPolicyTest)
 	set_tests_properties(mdStandaloneRendererPolicyTest PROPERTIES
 		LABELS "UnitTest;Rendering")
 	set_property(TARGET mdStandaloneRendererPolicyTest PROPERTY FOLDER "Elektron/test")
-
-	add_executable(mdRomInstallTest mdRomInstallTest.cpp mdRomInstall.cpp)
-	target_include_directories(mdRomInstallTest PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/..)
-	target_link_libraries(mdRomInstallTest PRIVATE juce::juce_core)
-	target_compile_definitions(mdRomInstallTest PRIVATE JUCE_GLOBAL_MODULE_SETTINGS_INCLUDED=1 JUCE_STANDALONE_APPLICATION=1)
-	add_test(NAME mdRomInstallTest COMMAND mdRomInstallTest)
-	set_tests_properties(mdRomInstallTest PROPERTIES LABELS "UnitTest")
-	set_property(TARGET mdRomInstallTest PROPERTY FOLDER "Elektron/test")
-
-	add_executable(mdWindowFitTest mdWindowFitTest.cpp)
-	target_include_directories(mdWindowFitTest PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/../../..)
-	add_test(NAME mdWindowFitTest COMMAND mdWindowFitTest)
-	set_tests_properties(mdWindowFitTest PROPERTIES LABELS "UnitTest")
-	set_property(TARGET mdWindowFitTest PROPERTY FOLDER "Elektron/test")
 
 	add_executable(mdPanelRenderingTest mdPanelRenderingTest.cpp mdPixelPerfectPanel.cpp)
 	target_link_libraries(mdPanelRenderingTest PRIVATE juceRmlUi juceUiLib juce_plugin_modules juce::juce_opengl)
@@ -323,9 +238,7 @@ if(BUILD_TESTING)
 		juce::juce_opengl)
 	target_compile_definitions(mdAudioIoLayoutTest PRIVATE
 		JUCE_GLOBAL_MODULE_SETTINGS_INCLUDED=1
-		JUCE_STANDALONE_PLUGIN_AUTO_OPEN_AUDIO_INPUT=0
-		# jucePluginEditorLib/standaloneApp.h: native title bar and menu bar (P4).
-		JUCE_USE_CUSTOM_PLUGIN_STANDALONE_APP=1)
+		JUCE_STANDALONE_PLUGIN_AUTO_OPEN_AUDIO_INPUT=0)
 	set_property(TARGET mdAudioIoLayoutTest PROPERTY FOLDER "Elektron/test")
 	add_test(NAME mdAudioIoLayoutTest COMMAND mdAudioIoLayoutTest)
 	set_tests_properties(mdAudioIoLayoutTest PROPERTIES LABELS "UnitTest;AudioIo")
@@ -419,41 +332,6 @@ if(BUILD_TESTING)
 			LABELS "Integration;FirmwareTest;Soak"
 			SKIP_RETURN_CODE 77 TIMEOUT 900)
 	endif()
-
-	# P6: the Machinedrum page's model (the pure view and the optimistic overlay), when node is here.
-	find_program(GEARMULATOR_NODE node)
-	if(GEARMULATOR_NODE)
-		add_test(NAME mdDeskModelPageTest COMMAND ${GEARMULATOR_NODE} ${CMAKE_CURRENT_SOURCE_DIR}/skins/mdStudio/mdDeskModelTest.js)
-		set_tests_properties(mdDeskModelPageTest PROPERTIES LABELS "UnitTest" TIMEOUT 60)
-	endif()
-
-	# P4: the editor's setup (MDSK chunk) round-trips with the plug-in state.
-	add_executable(mdDeskSetupStateTest mdDeskSetupStateTest.cpp)
-	target_link_libraries(mdDeskSetupStateTest PRIVATE
-		mdJucePlugin jucePluginEditorLib mdLib juce_plugin_modules
-		juce::juce_opengl)
-	target_include_directories(mdDeskSetupStateTest PRIVATE
-		${CMAKE_CURRENT_SOURCE_DIR}/../../..)
-	target_compile_definitions(mdDeskSetupStateTest PRIVATE
-		JUCE_GLOBAL_MODULE_SETTINGS_INCLUDED=1)
-	add_test(NAME mdDeskSetupStateTest COMMAND mdDeskSetupStateTest)
-	set_tests_properties(mdDeskSetupStateTest PROPERTIES LABELS "UnitTest" TIMEOUT 120)
-	set_property(TARGET mdDeskSetupStateTest PROPERTY FOLDER "Elektron/test")
-
-	# P5: the app modulators in the processor, no editor (manual: needs the ROM).
-	add_executable(mdSessionFirmwareTest mdSessionFirmwareTest.cpp)
-	target_link_libraries(mdSessionFirmwareTest PRIVATE
-		mdJucePlugin jucePluginEditorLib mdLib juce_plugin_modules
-		juce::juce_opengl)
-	target_include_directories(mdSessionFirmwareTest PRIVATE
-		${CMAKE_CURRENT_SOURCE_DIR}/../../..)
-	target_compile_definitions(mdSessionFirmwareTest PRIVATE
-		JUCE_GLOBAL_MODULE_SETTINGS_INCLUDED=1
-		MDDESK_SCHEMA="${CMAKE_CURRENT_SOURCE_DIR}/../../../../doc/modern-ux/md-data-contract.schema.json")
-	set_property(TARGET mdSessionFirmwareTest PROPERTY FOLDER "Elektron/test")
-	# P6: in ctest; it skips (77) without GEARMULATOR_MD_FIRMWARE_BIN in the environment.
-	add_test(NAME mdSessionFirmwareTest COMMAND mdSessionFirmwareTest)
-	set_tests_properties(mdSessionFirmwareTest PROPERTIES LABELS "Integration;FirmwareTest" SKIP_RETURN_CODE 77 TIMEOUT 300)
 
 	add_executable(mdProjectStateRestoreTest mdProjectStateRestoreTest.cpp)
 	target_link_libraries(mdProjectStateRestoreTest PRIVATE

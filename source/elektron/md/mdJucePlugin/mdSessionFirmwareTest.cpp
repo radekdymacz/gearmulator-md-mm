@@ -4,10 +4,11 @@
 // Exits 77 without it. The config is isolated (EphemeralConfig).
 
 #include "mdPluginProcessor.h"
+#include "mdDeskHost.h"
 #include "mdDeskSession.h"
 #include "mdAudioMidiLink.h"
 
-#include "mdLib/mddevice.h"
+#include "mdLib/mddeskdevice.h"
 
 #include "deskCore/deskContract.h"
 #include "deskHost/deskHost.h"
@@ -56,7 +57,7 @@ namespace
 			std::puts("  contract: the schema did not load");
 			return false;
 		}
-		auto* session = _processor.getDeskSession();
+		auto* session = _processor.getDeskHost()->session();
 		if(!session)
 		{
 			std::puts("  contract: no desk session");
@@ -149,7 +150,7 @@ int main()
 		}
 	});
 	std::set<int> seen;
-	std::shared_ptr<const md::Device::SequencerTelemetry> telemetry;
+	std::shared_ptr<const md::DeskDevice::SequencerTelemetry> telemetry;
 	std::function<bool()> tick;
 	int phase = 0, ticks = 0;
 	bool outside = false;
@@ -162,7 +163,7 @@ int main()
 		{
 			const bool ready = processor->getPlugin().withDeviceLocked([](synthLib::Device* _d)
 			{
-				auto* d = dynamic_cast<md::Device*>(_d);
+				auto* d = dynamic_cast<md::DeskDevice*>(_d);
 				return d && d->getHardware().isFirmwareMidiReady();
 			});
 			if(ready) { phase = 1; ticks = 0; std::puts("  firmware takes MIDI"); }
@@ -176,7 +177,7 @@ int main()
 			const void* now = nullptr;
 			const bool ready = processor->getPlugin().withDeviceLocked([&](synthLib::Device* _d)
 			{
-				auto* d = dynamic_cast<md::Device*>(_d);
+				auto* d = dynamic_cast<md::DeskDevice*>(_d);
 				now = d ? &d->getHardware() : nullptr;
 				return d && d->getHardware().isFirmwareMidiReady();
 			});
@@ -189,12 +190,12 @@ int main()
 			}
 			if(ticks < 170)
 				return true;
-			processor->setDeskSetup(R"({"schema":"md-desk/setup","version":1,"modulators":{"schema":"md-desk/modulators","version":1,)"
+			processor->getDeskHost()->setSetup(R"({"schema":"md-desk/setup","version":1,"modulators":{"schema":"md-desk/modulators","version":1,)"
 				R"("sources":[{"id":"lfo1","label":"LFO A","kind":"lfo","shape":0,"rate":"1/2","depth":100}],)"
 				R"("links":[{"source":"lfo1","track":1,"param":16,"min":10,"max":110,"curve":"lin"}]}})");
 			telemetry = processor->getPlugin().withDeviceLocked([](synthLib::Device* _d)
 			{
-				auto* d = dynamic_cast<md::Device*>(_d);
+				auto* d = dynamic_cast<md::DeskDevice*>(_d);
 				return d ? d->getSequencerTelemetry() : nullptr;
 			});
 			pendingStart = 1;
@@ -205,7 +206,7 @@ int main()
 		const void* current = nullptr;
 		telemetry = processor->getPlugin().withDeviceLocked([&](synthLib::Device* _d)
 		{
-			auto* d = dynamic_cast<md::Device*>(_d);
+			auto* d = dynamic_cast<md::DeskDevice*>(_d);
 			current = d ? &d->getHardware() : nullptr;
 			return d ? d->getSequencerTelemetry() : nullptr;
 		});
@@ -239,7 +240,7 @@ int main()
 	};
 	// This thread is the message thread: the checks run here, and the session's timer through the
 	// run loop.
-	if(!processor->getDeskSession())
+	if(!processor->getDeskHost()->session())
 	{
 		std::puts("mdSessionFirmwareTest: FAIL (no desk session)");
 		return 1;

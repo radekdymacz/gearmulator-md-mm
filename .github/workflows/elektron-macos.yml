@@ -2,12 +2,6 @@ name: Elektron macOS universal artifacts
 
 on:
   workflow_call:
-    inputs:
-      upload_bundles:
-        description: Upload the fixture-free universal ZIP for a caller to package
-        required: false
-        type: boolean
-        default: false
   workflow_dispatch:
   push:
     branches:
@@ -86,15 +80,5 @@ jobs:
           "${{ runner.temp }}/gearmulator-elektron-build"
           "${{ github.workspace }}/artifacts/macos-mdmm"
 
-      # The fixture-free CI package normally remains on the ephemeral runner.
-      # Release artifacts preferably come from a local run with both pinned
-      # firmware images. Only the tag caller (elektron-prerelease.yml) asks for
-      # the bundles, and it uploads installers only where the release has none.
-      - name: Upload universal bundles for installer packaging
-        if: ${{ inputs.upload_bundles }}
-        uses: actions/upload-artifact@v4
-        with:
-          name: macos-mdmm-universal
-          path: artifacts/macos-mdmm/Gearmulator-Elektron-macOS-*.zip
-          if-no-files-found: error
-          retention-days: 7
+      # The fixture-free CI package remains on the ephemeral runner. Release
+      # artifacts come only from a local run with both pinned firmware images.

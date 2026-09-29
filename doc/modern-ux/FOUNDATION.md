@@ -137,6 +137,8 @@ A model's SysEx rules (what its OS takes as it is) are its `SyxTraits`, in `mdSe
 
 ## Build and check
 
+Code of ours goes in files of ours; upstream's files carry hooks only ([UPSTREAM.md](UPSTREAM.md), checked by `scripts/mdmm-upstream-footprint.sh`).
+
 Configure a test build with `-DBUILD_TESTING=ON -Dgearmulator_MDMM_DIAGNOSTICS=ON`; diagnostics (the log, the self-tests) are off by default for every generator. Then:
 - `ctest -E "Plugin|_AU|VST|FirmwareTest"` runs the unit tests.
 - `mdDeskFirmwareTest <MD ROM> [hw|p4|playload]` and `mmDeskFirmwareTest <MM ROM>` run the firmware smoke tests, including the contract check; `GEARMULATOR_MD_FIRMWARE_BIN=<MD ROM> ctest -R mdSessionFirmwareTest` runs the session without an editor.

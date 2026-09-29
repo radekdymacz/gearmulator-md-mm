@@ -1,6 +1,5 @@
 #pragma once
 
-#include "baseLib/event.h"
 #include "jucePluginLib/controller.h"
 #include "mdLib/mdautomation.h"
 #include "mdLib/mdautomationsync.h"
@@ -22,10 +21,7 @@ namespace mdJucePlugin
 	public:
 		explicit Controller(AudioPluginAudioProcessor& _p);
 		~Controller() override;
-
-		// Every SysEx message the machine sends, observed before it is parsed here.
-		// Fired on whichever thread drains controller MIDI (usually the message
-		// thread, but offline renders drain elsewhere); listeners must marshal.
+		// Every SysEx the machine sends, before it is parsed here (the editor pages; any thread: listeners marshal).
 		baseLib::Event<pluginLib::SysEx> evDeviceSysex;
 
 		void onStateLoaded() override;

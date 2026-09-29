@@ -1,5 +1,5 @@
 #include "mdPluginProcessor.h"
-#include "mdDeskSession.h"
+#include "mdDeskHost.h"
 
 #include "mdController.h"
 #include "mdPluginEditorState.h"
@@ -116,11 +116,7 @@ namespace mdJucePlugin
 			baseLib::ChunkWriter chunk(_stream, "RAMF", 1);
 			_stream.write(static_cast<uint8_t>(getRamRecordingMode()));
 		}
-		if(const auto setup = getDeskSetup(); !setup.empty())
-		{
-			baseLib::ChunkWriter chunk(_stream, "MDSK", 1);
-			_stream.write(setup);
-		}
+		m_desk->saveChunks(_stream);
 		const auto& controller = dynamic_cast<const Controller&>(getController());
 		const auto snapshot = controller.createAutomationSnapshot();
 		if(!snapshot.empty())
@@ -140,10 +136,7 @@ namespace mdJucePlugin
 			auto& controller = dynamic_cast<Controller&>(getController());
 			(void)controller.restoreAutomationSnapshot(snapshot);
 		});
-		_reader.add("MDSK", 1, [this](baseLib::BinaryStream& _stream, uint32_t)
-		{
-			setDeskSetup(_stream.readString());
-		});
+		m_desk->addChunkReaders(_reader);
 		_reader.add("RAMF", 1, [this](baseLib::BinaryStream& _stream, uint32_t)
 		{
 			m_ramRecordingModeChunkSeen = true;
@@ -154,26 +147,11 @@ namespace mdJucePlugin
 		});
 	}
 
-	std::string AudioPluginAudioProcessor::getDeskSetup() const
-	{
-		const std::lock_guard lock(m_deskSetupMutex);
-		return m_deskSetup;
-	}
-
-	void AudioPluginAudioProcessor::setDeskSetup(std::string _json)
-	{
-		const std::lock_guard lock(m_deskSetupMutex);
-		m_deskSetup = std::move(_json);
-		// The session picks it up on the message thread, whichever thread set it.
-		m_deskSetupVersion.fetch_add(1, std::memory_order_release);
-	}
-
 	bool AudioPluginAudioProcessor::loadCustomData(const std::vector<uint8_t>& _sourceBuffer)
 	{
 		const auto previous = getRamRecordingMode();
 		m_ramRecordingModeChunkSeen = false;
-		// A project without the editor's setup starts from the default setup.
-		setDeskSetup({});
+		m_desk->beginProjectLoad();
 		const bool result = jucePluginEditorLib::Processor::loadCustomData(_sourceBuffer);
 		if(!result)
 		{
@@ -444,7 +422,8 @@ namespace mdJucePlugin
 		}
 		if(m_model == md::MachineModel::Machinedrum || m_startupDiagnosticsEnabled)
 			startTimer(250);
-		m_session = DeskSession::create(*this);
+		m_desk = std::make_unique<DeskHost>(*this);
+		m_desk->startSession();
 		m_performanceReport = std::make_unique<synthLib::PerformanceReport>(
 			getPlugin().getRealtimeInstrumentation(), panelEventDetails);
 		// The environment switch is also useful in hosts without an open editor.
@@ -467,10 +446,10 @@ namespace mdJucePlugin
 
 	AudioPluginAudioProcessor::~AudioPluginAudioProcessor()
 	{
-		m_session.reset();
 		stopTimer();
 		m_performanceReport.reset();
 		destroyEditorState();
+		m_desk.reset();	// after the editor: the editor page detaches from the session the desk host owns
 	}
 
 	juce::File AudioPluginAudioProcessor::performanceDiagnosticsFolder() const
@@ -857,7 +836,7 @@ namespace mdJucePlugin
 		synthLib::DeviceCreateParams params;
 		params.customData = md::deviceCustomData(m_model);
 		params.homePath = m_deviceHomePath ? *m_deviceHomePath : getDataFolder();
-		auto d = std::make_unique<md::Device>(params, m_initialPatchRam);
+		auto d = std::make_unique<md::DeskDevice>(params, m_initialPatchRam);
 		if(!d->isValid())
 			throw synthLib::DeviceException(synthLib::DeviceError::FirmwareMissing,
 				std::string("A ") + productName(m_model) +

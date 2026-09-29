@@ -1,5 +1,6 @@
 #pragma once
 
+#include "jucePluginEditorLib/editorTraits.h"
 #include "jucePluginEditorLib/pluginEditor.h"
 
 #include "elektronData/json.h"
@@ -23,7 +24,8 @@ namespace mdJucePlugin
 	// choice and the modulators are the session's, so they outlive the window.
 	class DropZone;
 
-	class PageEditor final : public jucePluginEditorLib::Editor, juce::Timer
+	class PageEditor final : public jucePluginEditorLib::Editor, public jucePluginEditorLib::FreeSizeEditor,
+		public jucePluginEditorLib::AudioMidiSettingsEditor, juce::Timer
 	{
 	public:
 		PageEditor(jucePluginEditorLib::Processor& _processor, const jucePluginEditorLib::Skin& _skin);
@@ -34,10 +36,9 @@ namespace mdJucePlugin
 
 		void create() override;
 		std::pair<std::string, std::string> getDemoRestrictionText() const override { return {}; }
-		// Audio > Audio/MIDI Settings... in the menu bar opens the page's own panel.
+		// Audio > Audio/MIDI Settings... in the menu bar opens the page's own panel. The page lays
+		// itself out in any window size (P7, FreeSizeEditor): the window resizes freely.
 		bool openAudioMidiSettings() override;
-		// The page lays itself out in any window size (P7): the window resizes freely.
-		bool keepsAspectRatio() const override { return false; }
 
 		// P7: a firmware file (.bin, or a .zip with it) dropped anywhere on the window installs it
 		// (DeskSession::installRom); the web view passes drops on to the editor's drop zone around it.

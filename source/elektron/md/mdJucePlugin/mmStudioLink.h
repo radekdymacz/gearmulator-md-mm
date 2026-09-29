@@ -2,7 +2,7 @@
 
 #include "mmDesk/mmDesk.h"
 
-#include "mdLib/mddevice.h"
+#include "mdLib/mddeskdevice.h"
 
 #include "baseLib/event.h"
 #include "synthLib/midiTypes.h"
