@@ -493,3 +493,76 @@ if (/[?&]selftest=p6audio/.test(location.search)) (async () => {
 	await new Promise(r => setTimeout(r, 3000));
 	await audioSelfTest({ log: t => Bridge.log("AUDIO: " + t), play: on => { if (on !== V.playing) cmd(on ? "play" : "stop"); }, step: () => S.step, playing: () => V.playing });
 })();
+
+/* ?selftest=p7tweak: Control All (Alt-drag, manual p.37) on the Sound workspace in the plug-in, as the user does it:
+   a synthesis, an effects and an LFO section box, and a curve editor's handle. Each gesture's delta must land on
+   every track the machine's own FUNCTION + knob reaches (tweakWrites), in the working kit read from memory. */
+if (/[?&]selftest=p7tweak/.test(location.search)) (async () => {
+	const sleep = ms => new Promise(r => setTimeout(r, ms));
+	const log = t => Bridge.log("TWEAK: " + t);
+	const until = async (f, ms) => { const end = performance.now() + ms; while (performance.now() < end) { if (f()) return true; await sleep(30); } return false; };
+	let ok = 0, n = 0;
+	const check = (name, pass, note) => { n++; if (pass) ok++; log(`${pass ? "ok" : "FAIL"} ${name}${note ? ": " + note : ""}`); };
+	if (!await until(() => runs() && V.loaded, 120000)) { log("FAIL: not ready"); return; }
+	/* as the user does it: soon after the start (the library still reading) and playing; p7tweakidle waits */
+	if (/selftest=p7tweakidle/.test(location.search)) { await until(() => !((machineState().desk || {}).loading), 60000); await sleep(1500); }
+	else { if (!V.playing) cmd("play"); await sleep(1000); }
+	log(`start: playing ${V.playing}, library left ${(machineState().desk || {}).loading || 0}, knob page ${(machineState().desk || {}).knobPage}`);
+	S.ws = "sound"; render(); await sleep(800);
+	const pe = (type, el, x, y) => el.dispatchEvent(new PointerEvent(type, { bubbles: true, cancelable: true, pointerId: 11, pointerType: "mouse", button: 0,
+		buttons: type === "pointerup" ? 0 : 1, clientX: x, clientY: y, altKey: true }));
+	const snap = () => JSON.parse(JSON.stringify(V.tracks.map(t => ({ m: t.m, syn: t.syn, fx: t.fx, rt: t.rt, lfo: t.lfo }))));
+	const settle = async () => { await sleep(300); await until(() => !V.tx && !(Docs.workingKit && Docs.workingKit.pending), 5000); await sleep(1500); };
+	/* the view's value g/name of every track, before and after; the gesture's delta is the dragged track's */
+	const verify = (name, before, g, n0, t0) => {
+		const after = snap(), d = after[t0][g][n0] - before[t0][g][n0];
+		const knob = g === "lfo" ? Enums().lfoParams[n0] - 16 : pages(before[t0].m)[TWEAK_PAGES[g]].indexOf(n0);
+		const gg = g === "lfo" ? "rt" : g;
+		const want = tweakWrites({ tracks: before }, gg, knob, d, Enums());
+		const wrong = want.filter(([p, v]) => after[p[1]][p[2]][p[3]] !== v).map(([p, v]) => `T${p[1] + 1} ${p[3]} ${after[p[1]][p[2]][p[3]]}/${v}`);
+		check(name, d !== 0 && want.length > 1 && !wrong.length, `delta ${d}, ${want.length} values want it, wrong: ${wrong.join(" ") || "none"}`);
+	};
+	const dragBox = async (sel, name) => {
+		const el = $(sel); if (!el) { check(name, false, "no " + sel); return; }
+		const g = el.dataset.g, n0 = el.dataset.n, t0 = S.sel, before = snap(), r = el.getBoundingClientRect(), x = r.left + r.width / 2, y = r.top + r.height / 2;
+		const dir = getV(el) > 64 ? -1 : 1;	/* away from the end it is nearer */
+		pe("pointerdown", el, x, y);
+		for (let i = 1; i <= 6; i++) { pe("pointermove", el, x + dir * i * 2, y); await sleep(20); }
+		pe("pointerup", el, x + dir * 12, y);
+		await settle();
+		verify(name, before, g, n0, t0);
+	};
+	/* first the Mix page, as the owner did (the machine is left on its routing page), then the Sound page */
+	S.ws = "mix"; render(); await sleep(800);
+	{
+		const fd = [...document.querySelectorAll(".strip")][6]?.querySelector('.fader[data-g="rt"]');
+		if (!fd) check("Mix: a VOL fader", false, "no fader");
+		else {
+			const before = snap(), r = fd.getBoundingClientRect(), x = r.left + r.width / 2, y = r.top + r.height / 2, dir = getV(fd) > 64 ? 1 : -1;
+			pe("pointerdown", fd, x, y);
+			for (let i = 1; i <= 6; i++) { pe("pointermove", fd, x, y + dir * i * 4); await sleep(20); }
+			pe("pointerup", fd, x, y + dir * 24);
+			await settle();
+			verify("Mix: a VOL fader", before, "rt", "VOL", +fd.dataset.t);
+		}
+	}
+	S.ws = "sound"; render(); await sleep(800);
+	await dragBox('#main .pc[data-g="syn"]', "Sound: a synthesis box");
+	await dragBox('#main .pc[data-g="fx"]', "Sound: an effects box");
+	await dragBox('#main .pc[data-g="lfo"][data-n="SPD"]', "Sound: the LFO section's SPD");
+	/* a curve editor: the effects filter's first handle (FLTF, FLTQ) */
+	{
+		const c = $('#main canvas.ed[data-ed="fx"]');
+		if (!c) check("Sound: a curve editor", false, "no effects editor");
+		else {
+			const before = snap(), r = c.getBoundingClientRect(), h = ED.fx.handles(r.width, r.height, c)[0];
+			const x = r.left + h.x, y = r.top + h.y;
+			pe("pointerdown", c, x, y);
+			for (let i = 1; i <= 6; i++) { $("#main").dispatchEvent(new PointerEvent("pointermove", { bubbles: true, pointerId: 11, pointerType: "mouse", buttons: 1, clientX: x + i * 3, clientY: y, altKey: true })); await sleep(20); }
+			pe("pointerup", c, x + 18, y);
+			await settle();
+			verify("Sound: the effects curve editor (FLTF)", before, "fx", "FLTF", S.sel);
+		}
+	}
+	log(`${ok === n ? "PASS" : "FAIL"} ${ok}/${n}`);
+})();

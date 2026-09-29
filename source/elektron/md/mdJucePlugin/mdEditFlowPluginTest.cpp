@@ -18,6 +18,7 @@
 #include "mdLib/mddeskdevice.h"
 
 #include "elektronData/json.h"
+#include "mdDesk/mdDeskEdit.h"
 #include "elektronData/mdJson.h"
 #include "elektronData/mmPattern.h"
 #include "elektronData/mmJson.h"
@@ -467,6 +468,39 @@ namespace
 		_r.page(m);
 	}
 
+	// Control All through the real processor: one tweak per case, the working kit from memory after it,
+	// against the model's rule (mdDesk::controlAllReaches). Returns the failures.
+	int controlAllTruth(Rig& _r)
+	{
+		struct Case { const char* group; int knob; int d; int t; };
+		const Case cases[] = {{"rt", 1, 5, 0}, {"syn", 0, 6, 0}, {"fx", 0, 4, 0}, {"syn", 1, -3, 5}, {"rt", 5, -3, 2}, {"syn", 2, 2, 0}};
+		int fails = 0;
+		for(const auto& c : cases)
+		{
+			std::vector<std::string> errors;
+			const auto before = _r.workingKit ? ed::kitFromJson(*_r.workingKit, errors) : std::nullopt;
+			if(!before) { std::puts("  controlall: no working kit"); return 1; }
+			_r.pageText("{\"op\":\"tweak\",\"k\":" + std::to_string(_r.currentKit()) + ",\"group\":\"" + c.group + "\",\"knob\":"
+				+ std::to_string(c.knob) + ",\"d\":" + std::to_string(c.d) + ",\"t\":" + std::to_string(c.t) + ",\"g\":" + std::to_string(4000 + c.knob) + "}");
+			pumpMessages(2500);
+			const auto after = ed::kitFromJson(*_r.workingKit, errors);
+			const size_t index = (std::string(c.group) == "fx" ? 8u : std::string(c.group) == "rt" ? 16u : 0u) + static_cast<size_t>(c.knob);
+			int moved = 0, wrong = 0;
+			for(size_t t = 0; t < 16; ++t)
+			{
+				const int want = mdDesk::controlAllReaches(before->models[t], index) ? std::clamp(before->params[t][index] + c.d, 0, 127) : before->params[t][index];
+				moved += after->params[t][index] != before->params[t][index];
+				wrong += after->params[t][index] != want;
+			}
+			const auto* d = _r.machine ? _r.machine->find("desk") : nullptr;
+			std::printf("  controlall %s knob %d %+d: %d tracks moved, %d differ from the model (knobPage %d, tx %d)\n", c.group, c.knob, c.d, moved, wrong,
+				d && d->find("knobPage") ? static_cast<int>(d->find("knobPage")->asNumber()) : -9, d && d->find("tx") && d->find("tx")->asBool());
+			fails += wrong != 0;
+		}
+		std::printf("controlall: %s\n", fails ? "FAIL" : "PASS");
+		return fails;
+	}
+
 	void scenario(Rig& _r, const char* _name, const int _changes, const double _spacingMs, const double _tailMs, const int _kind = 0)
 	{
 		Counts c;
@@ -538,6 +572,8 @@ int main(const int _argc, char** _argv)
 		scenario(r, "steps10", 10, 300, 2000);
 		scenario(r, "drag60", 120, 1000.0 / 60, 2000);
 		scenario(r, "tweak60", 60, 1000.0 / 60, 2000, 1);
+		if(model == md::MachineModel::Machinedrum && std::getenv("EDITFLOW_CONTROLALL") && controlAllTruth(r))
+			return 1;
 		// The lock lane: trigs on track 1's steps 1-16 first (the MD holds locks on trigs; the MM notes).
 		r.prepareLockLane();
 		pumpMessages(1500);

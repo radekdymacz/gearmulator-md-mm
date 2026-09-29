@@ -43,6 +43,12 @@ namespace mdDesk
 		// than this are on their way, and sends at most this many steps.
 		constexpr int g_tweakMaxPending = 4;
 		constexpr int g_tweakMaxSteps = 16;
+		// The machine's gesture is a fact to check, not a promise: page keys or track selections that the
+		// machine does not follow end it, and once it is over (or given up) memory must show every value
+		// it wanted; what it does not show goes as CCs (the path without the panel).
+		constexpr int g_tweakMaxPageKeys = 4;
+		constexpr int g_tweakMaxSelects = 5;
+		constexpr double g_tweakCheckMs = 300;
 
 		// The dump a request brings back, for timeouts at DIN speed (the kind's record).
 		size_t replyBytes(const DocKind _k)
@@ -1115,6 +1121,11 @@ namespace mdDesk
 		const auto kit = currentKit();
 		if(!kit || _track > 15 || _index > 24)
 			return;
+		// Control All on the machine: FUNCTION + a knob steps every track, and the machine reports each step
+		// (its CCs through the plug-in's parameters). Folded in, the steps would replace the gesture's values
+		// (0.2.1: the Sound page's drags ended part way). Memory settles the gesture instead.
+		if(_index < 24 && (m_tweak.guard & (1u << _index)))
+			return;
 		const auto* w = heldKit(_view);
 		if(!w)
 			return;
@@ -1183,7 +1194,10 @@ namespace mdDesk
 		const auto* shown = _view && kit ? _view->workingKitOf(*kit) : nullptr;
 		const std::optional<int> current = kit ? std::optional<int>(*kit) : std::nullopt;
 		// Knob turns still on their way while recording keep the live edit pending over the image.
-		auto r = deskCore::fromImage(std::move(m_working), *image, image->position, current, shown, now(), m_knobs.pending(), reflects);
+		// Control All on its way holds them too: the machine's gesture may wait (a dump request in flight, the
+		// track selection), and an image of the kit before it must not win over the page's values meanwhile.
+		auto r = deskCore::fromImage(std::move(m_working), *image, image->position, current, shown, now(), m_knobs.pending() || m_tweak.active(),
+			reflects);
 		m_working = std::move(r.next);
 		if(r.askStatus && now() - m_kitStatusAskedMs > 200 && m_port.sendSysex)
 		{
@@ -1365,6 +1379,19 @@ namespace mdDesk
 	void MdMachine::pumpTweak(const double _now)
 	{
 		auto& w = m_tweak;
+		const auto giveUp = [&]
+		{
+			if(w.held)
+			{
+				m_port.pressKey("release:function");
+				m_keys.pressed(_now);
+				w.held = false;
+			}
+			w.turns.clear();
+			w.pageKeys = w.selects = 0;
+			w.checkMs = _now;
+		};
+		checkTweak(_now);
 		if(!w.turns.empty())
 		{
 			auto& turn = w.turns.front();
@@ -1381,13 +1408,20 @@ namespace mdDesk
 					w.held = false;
 					m_keys.pressed(_now);
 				}
-				if(!m_loads.loading() && _now - w.pageKeyMs >= g_tweakPageGapMs && m_port.pressKey("page"))
+				if(!m_loads.loading() && _now - w.pageKeyMs >= g_tweakPageGapMs)
 				{
+					// Three presses go round the pages: a machine that does not follow is not on its pages.
+					if(++w.pageKeys > g_tweakMaxPageKeys || !m_port.pressKey("page"))
+					{
+						giveUp();
+						return;
+					}
 					w.pageKeyMs = _now;
 					m_keys.pressed(_now);
 				}
 				return;
 			}
+			w.pageKeys = 0;
 			if(!w.held)
 			{
 				if(m_loads.loading() || _now - w.pageKeyMs < g_tweakPageGapMs)
@@ -1407,6 +1441,11 @@ namespace mdDesk
 				{
 					if(_now - w.selectMs >= g_tweakSelectMs && m_port.sendSysex)
 					{
+						if(++w.selects > g_tweakMaxSelects)
+						{
+							giveUp();
+							return;
+						}
 						m_port.sendSysex(ed::mdSetStatus(ed::MdStatus::Track, turn.lead));
 						m_port.sendSysex(ed::mdStatusRequest(ed::MdStatus::Track));
 						w.selectMs = _now;
@@ -1428,6 +1467,9 @@ namespace mdDesk
 			m_port.turnKnob(turn.knob, n);
 			m_keys.pressed(_now);
 			w.lastMs = _now;
+			// The edit is on its way from now: memory has until a second from here to show it.
+			if(m_working.expect.from && m_working.expect.to)
+				m_working.expect.sent(*m_working.expect.from, *m_working.expect.to, _now);
 			turn.steps -= n;
 			if(turn.steps == 0)
 				w.turns.pop_front();
@@ -1438,7 +1480,48 @@ namespace mdDesk
 			m_port.pressKey("release:function");
 			m_keys.pressed(_now);
 			w.held = false;
+			w.selects = 0;
+			w.checkMs = _now + g_tweakCheckMs;
 		}
+	}
+
+	// The gesture is over: every value it wanted that memory does not show (a knob page the machine did
+	// not reach, a FUNCTION it lost, a track it did not select) goes as a CC, and the edit stays pending
+	// until memory shows it.
+	void MdMachine::checkTweak(const double _now)
+	{
+		auto& w = m_tweak;
+		// The guard lasts until memory showed the gesture (or the edit is too old to wait for).
+		if(!w.active() && w.checkMs < 0 && !m_working.expect.expecting(_now))
+			w.guard = 0;
+		if(w.checkMs < 0 || _now < w.checkMs || w.active())
+			return;
+		const auto indexes = std::exchange(w.indexes, 0u);
+		w.checkMs = -1;
+		auto& expect = m_working.expect;
+		if(!expect.to || !expect.from)
+			return;	// settled: memory showed it
+		std::optional<ed::MdKit> memory;
+		if(m_working.region)
+			memory = ed::mdWorkingKitFromMemory(*m_working.region);
+		if(!memory && m_working.image)
+			memory = m_working.image;
+		if(!memory || memory->position != expect.to->position)
+			return;
+		int sent = 0;
+		for(uint8_t i = 0; i < 24; ++i)
+		{
+			if(!(indexes & (1u << i)))
+				continue;
+			for(uint8_t t = 0; t < ed::MdKit::g_tracks; ++t)
+				if(memory->params[t][i] != expect.to->params[t][i])
+				{
+					m_coalesced[{t, i}] = expect.to->params[t][i];
+					++sent;
+				}
+		}
+		if(sent)
+			expect.sent(*expect.from, *expect.to, _now);
 	}
 
 	void MdMachine::pumpCoalesced(const double _now)
