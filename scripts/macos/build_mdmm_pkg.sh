@@ -29,7 +29,7 @@ script_dir="$(cd "$(dirname "$0")" && pwd)"
 source_dir="$(cd "${script_dir}/../.." && pwd)"
 bundle_dir="$(cd "${1:?usage: build_mdmm_pkg.sh BUNDLE_DIR OUTPUT_DIR [VERSION]}" && pwd)"
 output_dir_input="${2:?usage: build_mdmm_pkg.sh BUNDLE_DIR OUTPUT_DIR [VERSION]}"
-version="${3:-0.2.0}"
+version="${3:-0.2.1}"
 resources_src="${script_dir}/pkg-resources"
 
 if [[ ! "${version}" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
