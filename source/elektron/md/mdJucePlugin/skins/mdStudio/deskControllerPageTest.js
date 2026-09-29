@@ -13,7 +13,8 @@ const check = (ok, what) => { console.log((ok ? "  ok   " : "  FAIL ") + what); 
 /* the page's document, as far as the panel touches it */
 const element = () => ({ className: "", id: "", hidden: false, innerHTML: "", textContent: "", style: { setProperty() {} }, offsetWidth: 800,
 	setAttribute() {}, appendChild() {}, addEventListener() {}, querySelector: () => null, querySelectorAll: () => [], getBoundingClientRect: () => ({ bottom: 100 }) });
-const document = { createElement: element, body: element(), head: element(), documentElement: { clientWidth: 1400 }, querySelector: () => null };
+const document = { createElement: element, body: element(), head: element(), documentElement: { clientWidth: 1400 }, querySelector: () => null,
+	querySelectorAll: () => [], getElementById: () => null, addEventListener() {} };
 const ctx = vm.createContext({ console, document, scrollX: 0, scrollY: 0, innerHeight: 900 });
 vm.runInContext(fs.readFileSync(path.join(__dirname, "deskController.js"), "utf8") + "\nthis.Ctl = Ctl; this.closeController = closeController;", ctx);
 const { Ctl } = ctx;
@@ -39,12 +40,14 @@ const doc = m => {
 		voices: VOICES.map(([voice, label, notes], v) => Object.assign({ voice, label, notes, t: mm ? Math.min(v, 5) : v, out: { ch: 1 + (mm ? Math.min(v, 5) : 0), note: mm ? 60 : 36 + v } }, mm ? { note: 60 } : {})),
 		knobs: [{ cc: 24, label: "BD LEVEL", i: 0, name: mm ? "SYN A" : "SYN 1" }, { cc: 20, label: "BD TUNE", i: -1, name: "" }].map(k => mm ? Object.assign({ pg: k.i < 0 ? -1 : 0 }, k) : k),
 		targets: mm ? [{ pg: 0, i: 0, name: "SYN A" }, { pg: 2, i: 0, name: "FLTR BASE" }, { pg: 7, i: 0, name: "LEVEL" }] : [{ i: 0, name: "SYN 1" }, { i: 16, name: "DIST" }, { i: 24, name: "LEVEL" }],
-		last: null
+		last: null, named: true, device: "", activity: null
 	};
 };
+/* what is seen: a TR-06 among the inputs, the activity (deskController::Activity's shape) */
+const seen = m => Object.assign(doc(m), { profile: "off", device: "TR-06", activity: { seq: 3, last: { kind: "cc", n: 24, v: 87 }, elsewhere: 3 } });
 for (const m of ["md", "mm"]) {
-	const problems = validate(m, "message", { type: "controller", doc: doc(m) });
-	check(problems.length === 0, m + ": the fixture is a controller message of the contract" + (problems.length ? ": " + problems.join("; ") : ""));
+	const problems = validate(m, "message", { type: "controller", doc: doc(m) }).concat(validate(m, "message", { type: "controller", doc: seen(m) }));
+	check(problems.length === 0, m + ": the fixtures are controller messages of the contract" + (problems.length ? ": " + problems.join("; ") : ""));
 }
 
 /* the commands a host call becomes (mdDeskApp.js's cmd, mmAdapter.js's send: the same members) */
@@ -54,12 +57,13 @@ const commands = m => {
 	for (const c of s.$defs.command.oneOf) out[c.properties.op.const] = new Set(Object.keys(c.properties).filter(k => k !== "op"));
 	return out;
 };
-const HOST_OP = { set: "ctlSet", voice: "ctlVoice", knob: "ctlKnob", reset: "ctlReset" };
+const HOST_OP = { set: "ctlSet", voice: "ctlVoice", knob: "ctlKnob", reset: "ctlReset", watch: "ctlWatch" };
 for (const m of ["md", "mm"]) {
 	const table = commands(m), d = doc(m);
 	const sends = [
 		Ctl.intent(d, "profile", "off", {}), Ctl.intent(d, "channel", "3", {}),
 		Ctl.intent(d, "voice", "4", { voice: "SD" }), Ctl.intent(d, "knob", m === "mm" ? "2:0" : "-1:16", { cc: "24" }), Ctl.intent(d, "knob", "-1:-1", { cc: "24" })];
+	sends.push(Ctl.intent(d, "use", "", {}), Ctl.intent(d, "setch", "", { ch: "3" }), ["watch", { on: true }]);
 	if (m === "mm") sends.push(Ctl.intent(d, "note", "200", { voice: "OH", t: "5" }));
 	const off = sends.filter(([f, a]) => !table[HOST_OP[f]] || Object.keys(a).some(k => !table[HOST_OP[f]].has(k)));
 	check(off.length === 0, m + ": every change is a ctl command with declared arguments" + (off.length ? " (" + JSON.stringify(off) + ")" : ""));
@@ -69,7 +73,8 @@ for (const m of ["md", "mm"]) {
 	check(voice.voice === "SD" && voice.t === 4 && (m === "md" ? !("note" in voice) : voice.note === 60), m + ": a voice's track (MM: its note kept)");
 	check(m === "md" ? knob.cc === 24 && knob.i === 16 && !("pg" in knob) : knob.pg === 2 && knob.i === 0, m + ": a knob's target");
 	check(none.i === null, m + ": a knob's target cleared (i null)");
-	if (m === "mm") check(sends[5][1].note === 127 && sends[5][1].t === 5, "mm: a note is held at 0..127");
+	check(sends[5][1].profile === "tr06" && sends[6][1].channel === 3, m + ": Use TR-06 turns the profile on, SET CH the channel");
+	if (m === "mm") check(sends[8][1].note === 127 && sends[8][1].t === 5, "mm: a note is held at 0..127");
 }
 
 /* a change reaches the host the page set after this script loaded (mdDeskApp.js, mmAdapter.js assign Ctl.host) */
@@ -95,6 +100,29 @@ for (const m of ["md", "mm"]) {
 	check(Ctl.html().includes("Off: MIDI in reaches the machine as it always did") && !Ctl.html().includes('data-ctl="note"'), "off, and the MD has no note column");
 	ctx.closeController();
 	check(!Ctl.isOpen(), "closeController closes it (the MODAL layer's close function)");
+}
+
+/* the bar in the CONTROL workspace: the profile and channel inline, a found TR-06, what arrives, the key */
+{
+	Ctl.onDoc(seen("md"));
+	const bar = Ctl.barHtml();
+	check(bar.includes('id="ctlbar"') && bar.includes('id="ctl-bar-profile"') && bar.includes('id="ctl-bar-channel"'), "the bar: profile and channel, each select with its id");
+	check(bar.includes('data-ctl="use"') && bar.includes("TR-06 connected") && bar.includes('id="ctlkey"') && bar.includes("hint"), "the bar: TR-06 connected, Use TR-06, the key hints");
+	check(bar.includes("CC 24 = 87") && bar.includes("TR-06 is sending on CH 3"), "the bar: what arrives, and the other channel");
+	Ctl.onDoc(Object.assign(seen("md"), { profile: "tr06" }));
+	check(!Ctl.barHtml().includes('data-ctl="use"') && Ctl.barHtml().includes('class="led on"'), "the profile on: no Use TR-06, the key's LED lit");
+	Ctl.onDoc(Object.assign(seen("md"), { named: false, device: "" }));
+	check(Ctl.barHtml().includes("MIDI in on CH 3"), "a host without names: MIDI in on CH 3");
+	const ids = [...(Ctl.barHtml() + (Ctl.open(), Ctl.html())).matchAll(/<select([^>]*)>/g)].map(x => x[1]);
+	check(ids.length > 4 && ids.every(a => / id="ctl-[\w-]+"/.test(a)), "every select of the bar and the panel has an id (the page's dropdowns find it)");
+	Ctl.close();
+}
+
+/* the engine menu is the engines' and the window's: the controller is not in it (both pages, the mockups) */
+{
+	const root2 = path.join(__dirname, "..");
+	const files = [path.join(__dirname, "mdStudio.html"), path.join(root2, "mmStudio", "mmStudio.html"), path.join(root2, "mmStudio", "mmMockup.js"), path.join(__dirname, "mdDeskApp.js")];
+	check(files.every(f => !/CONTROLLER…|value="ctl"|"ctl"\]|"ctl",/.test(fs.readFileSync(f, "utf8"))), "no CONTROLLER… in the engine menu");
 }
 
 console.log("deskControllerPageTest: " + (failures ? "FAIL" : "PASS") + " (" + failures + " failures)");

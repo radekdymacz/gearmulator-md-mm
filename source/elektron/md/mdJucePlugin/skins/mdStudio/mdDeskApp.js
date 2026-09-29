@@ -235,7 +235,7 @@ const LIFE = {
 	ready: { label: "READY", led: "on" } };
 const lifeOf = l => LIFE[l] || LIFE.booting;
 /* the engine menu's own entries (not engines) */
-const ENGINE_ACTIONS = ["global", "audio", "ctl", "rom"];
+const ENGINE_ACTIONS = ["global", "audio", "rom"];
 function engineLabel() {
 	const e = lifeOf(V.lifecycle);
 	if (V.lifecycle === "ready") return [V.caps.label || e.label, e.led, V.caps.about || ""];
@@ -304,7 +304,6 @@ document.addEventListener("change", e => {
 	if (v === "rom") firstRun(true);
 	else if (v === "global") { sel.value = V.caps.engine; openGlobal(); }
 	else if (v === "audio") { sel.value = V.caps.engine; openAudio(); }
-	else if (v === "ctl") { sel.value = V.caps.engine; openController(); }
 	else if ((machineState().engines || []).some(x => x.id === v)) cmd("engine", { kind: v });
 });
 
@@ -977,7 +976,7 @@ function renderControl() {
    <select id="cp">${slots(V.tracks[t].m).map((p, i) => p ? `<option value="${i}">${p}</option>` : "").join("")}<option value="24">LEVEL</option></select><button class="cream" id="caddl">Add target</button></div>
   <div class="irow"><span class="ilab"></span><button data-addsrc="lfo">+ App LFO</button><button data-addsrc="random">+ Random</button></div></section>`;
 	}
-	$("#main").innerHTML = `<div class="ctlui"><section class="card"><header><h3>Mapping matrix</h3><span>rows = controller knobs, learned CCs and app modulators · columns = tracks</span></header>${mx}</section>${insp}</div>`;
+	$("#main").innerHTML = `<div class="ctlui"><section class="card"><header><h3>Mapping matrix</h3><span>rows = controller knobs, learned CCs and app modulators · columns = tracks</span></header>${Ctl.barHtml()}${mx}</section>${insp}</div>`;
 	syncControls();
 }
 /* Values and the CC rate while the machine plays: in place, no re-render. */
@@ -1412,11 +1411,11 @@ function logFirstRender() {
 function render() {
 	closePicker(); closeK(); const sl = $("#seqscroll")?.scrollLeft || 0; renderTop();
 	const full = S.ws === "mix" || S.ws === "song" || S.ws === "control"; $("#body").classList.toggle("full", full); $("#rail").hidden = full;
-	if (!Base) { $("#main").innerHTML = ""; renderSub(); return; }	/* no document yet */
+	if (!Base) { $("#main").innerHTML = ""; renderSub(); Ctl.rendered(); return; }	/* no document yet */
 	if (!full) renderRail(); renderSub();
 	({ seq: renderSeq, sound: renderSound, mix: renderMix, song: renderSong, sampler: renderSampler, control: renderControl })[S.ws]();
 	const sc = $("#seqscroll"); if (sc) { sc.scrollLeft = sl; $("#lanescroll").scrollLeft = sl; } enhanceSelects(document.getElementById("main"));
-	markCapabilities(); phLast = -1; movePH(); logFirstRender();
+	markCapabilities(); phLast = -1; movePH(); logFirstRender(); Ctl.rendered();
 }
 function setPlate(v) { S.plate = v; document.documentElement.dataset.plate = v; try { localStorage.setItem("mddesk.plate", v); } catch (_) { } renderTop(); redraw(); }
 (() => { let v = null; try { v = localStorage.getItem("mddesk.plate"); } catch (_) { } if (!v) v = matchMedia("(prefers-color-scheme: dark)").matches ? "mk2" : "mk1"; S.plate = v; document.documentElement.dataset.plate = v; })();
@@ -1444,12 +1443,13 @@ Keys.bind({ keys: ["ArrowUp", "ArrowDown"], group: "Values", does: "A focused va
 Keys.bind({ keys: ["ArrowLeft", "ArrowRight"], group: "Values", does: "A focused value: one step" });
 new ResizeObserver(() => redraw()).observe(document.body);
 render();
-/* The controller profile's panel (deskController.js) asks through the page's own commands. */
+/* The controller profile (deskController.js: the bar in the Control workspace, its panel) asks through the page's own commands. */
 Ctl.host = {
 	set: a => cmd("ctlSet", { profile: a.profile, channel: a.channel }),
 	voice: a => cmd("ctlVoice", { voice: a.voice, t: a.t, note: a.note }),
 	knob: a => cmd("ctlKnob", { cc: a.cc, pg: a.pg, i: a.i }),
-	reset: () => cmd("ctlReset", {})
+	reset: () => cmd("ctlReset", {}),
+	watch: a => cmd("ctlWatch", { on: a.on })
 };
 Bridge.ready();
 /* the controller's knobs move the selected track's parameters: the session hears which one */

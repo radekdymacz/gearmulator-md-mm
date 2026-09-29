@@ -2,7 +2,10 @@
 /* The controller profile's panel (deskController.js, DESIGN-tr06.md) in a real browser, on both shipped
    pages (mdStudio.html, mmStudio.html) in their dev mode (?dev=1: the bridge talks to window.gmDev, a
    fake host here). What node's stand-in document cannot show: the page's own key-style dropdowns
-   (enhanceSelects, openK, the #kpop list) work in the panel, and a pick becomes the host's command. Simulated documents only; nothing of the user's is read or written (a throw-away browser
+   (enhanceSelects, openK, the #kpop list) work in the panel, and a pick becomes the host's command; the
+   CONTROL workspace's controller key opens the panel and shows the profile's state; the engine menu no
+   longer lists the controller; a TR-06 among the enabled MIDI inputs and the TR-06's activity are
+   shown. Simulated documents only; nothing of the user's is read or written (a throw-away browser
    profile in the temp folder).
      node deskControllerBrowserTest.js            (exits 77 when no Chrome is found; CHROME=<path> to choose)
 */
@@ -18,19 +21,35 @@ if (!CHROME) { console.log("deskControllerBrowserTest: SKIP (no Chrome; set CHRO
 /* the plug-in's "controller" document, as deskController::pageDocument makes it (the node page test checks
    the same shape against both contracts) */
 const VOICES = [["BD", "BASS DRUM", [36, 35]], ["SD", "SNARE DRUM", [38, 40]], ["LT", "LOW TOM", [47, 45]], ["HT", "HIGH TOM", [50, 48]], ["CY", "CYMBAL", [49]], ["OH", "OPEN HIHAT", [46]], ["CH", "CLOSED HIHAT", [42, 44]]];
-function controllerDoc(m, extra) {
+function controllerDoc(m) {
 	const mm = m === "mm";
-	return Object.assign({
+	return {
 		schema: "desk/controller", version: 1, machine: m, profile: "off", profiles: [{ id: "off", label: "Off" }, { id: "tr06", label: "Roland TR-06" }],
 		channel: 10, about: "shipped mapping", tracks: mm ? 6 : 16, selected: 0, known: true, warning: "",
 		voices: VOICES.map(([voice, label, notes], v) => Object.assign({ voice, label, notes, t: mm ? Math.min(v, 5) : v, out: { ch: 1, note: 36 + v } }, mm ? { note: 60 } : {})),
 		knobs: [{ cc: 24, label: "BD LEVEL", i: 0, name: mm ? "SYN A" : "SYN 1" }, { cc: 20, label: "BD TUNE", i: -1, name: "" }].map(k => mm ? Object.assign({ pg: k.i < 0 ? -1 : 0 }, k) : k),
 		targets: mm ? [{ pg: 0, i: 0, name: "SYN A" }, { pg: 2, i: 0, name: "FLTR BASE" }] : [{ i: 0, name: "SYN 1" }, { i: 16, name: "DIST" }],
-		last: null, devices: [], activity: null
-	}, extra || {});
+		last: null, named: true, device: "", activity: null
+	};
 }
+/* the MD page renders a workspace only once it has the machine's documents (mdDeskModelTest.js's fixtures) */
+const HEX62 = "0".repeat(62);
+const mdTrack = () => ({ machine: "GND-EMPTY", model: 0, level: 100, synth: Array(8).fill(10), effects: Array(8).fill(20), routing: Array(8).fill(30),
+	lfo: { track: 0, param: 0, shape1: 0, shape2: 0, update: 0 }, muteGroup: null, trigGroup: null });
+const MD_DOCS = [
+	{ type: "catalogue", doc: { schema: "md-desk/machines", version: 1, machines: [], enums: { tempoMultipliers: ["1X", "2X", "3/4X", "3/2X"], masterFx: ["rhythmEcho", "gateBox", "eq", "dynamix"],
+		outputs: ["MAIN", "A", "B", "C", "D", "E", "F"], lfoFields: ["track", "param", "shape1", "shape2", "update"], lfoUpdates: ["FREE", "TRIG", "HOLD"], lfoParams: { SPD: 21, DEPTH: 22, SHMIX: 23 } } } },
+	{ type: "doc", kind: "pattern", doc: { schema: "md-desk/pattern", version: 2, slot: 5, kit: 3, length: 16, totalLength: 16, tempoMultiplier: "1X", swingAmount: 0, accentAmount: 0,
+		accent: { editAll: 0, steps: [] }, slide: { editAll: 0, steps: [] }, swing: { editAll: 0, steps: [] },
+		tracks: Array.from({ length: 16 }, () => ({ trigs: [], accent: [], slide: [], swing: [] })), locks: [], firmware: { format: { version: 2, revision: 0 }, lockedRowsField: 0 } } },
+	{ type: "doc", kind: "kit", doc: { schema: "md-desk/kit", version: 2, slot: 3, name: "KIT", tracks: Array.from({ length: 16 }, mdTrack),
+		masterFx: { rhythmEcho: Array(8).fill(0), gateBox: Array(8).fill(1), eq: Array(8).fill(2), dynamix: Array(8).fill(3) }, firmware: { format: { version: 2, revision: 0 }, lfoState: Array(16).fill(HEX62) } } },
+	{ type: "machine", doc: { schema: "md-desk/machine", version: 1, pattern: { current: 5 }, kit: { current: 3, working: "clean" }, song: {}, desk: {}, engines: [],
+		history: { undo: false, redo: false, undoCount: 0, redoCount: 0 }, lifecycle: "ready", input: true, midi: true, lifecycleText: "",
+		capabilities: { engine: "emu", label: "EMU OS 1.63", about: "", can: { transport: true, panelKeys: true, liveRecord: true, chains: false, lcd: true, workingKitMemory: true, mutesFromMemory: true, sampleNames: true, modulators: true },
+			reasons: {}, values: { dumps: "direct" } }, clipboard: { steps: false, sound: true, songRow: false, kit: 7, pattern: null } } }];
 
-/* runs in the page, after its own scripts: the scenario, its findings in <pre id="ctltest"> */
+/* runs in the page, after its own scripts: the scenario, its findings in window.__ctlResult */
 const harness = m => `(() => {
 	const out = { errors: [], checks: [] }, sent = [];
 	addEventListener("error", e => out.errors.push(String(e.message || e)));
@@ -40,48 +59,92 @@ const harness = m => `(() => {
 	const doc = extra => Object.assign(${JSON.stringify(controllerDoc(m))}, extra || {});
 	const recv = d => gm.recv([{ type: "controller", doc: d }]);
 	const click = el => el && el.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
-	const pick = async (id, value) => {
-		const b = document.querySelector('#ctlpop .kselbtn[data-for="' + id + '"]');
+	const $ = q => document.querySelector(q), text = q => ($(q) || {}).textContent || "";
+	/* a pick in the page's own dropdown: its key (.kselbtn, data-for the select's id), then the option in #kpop */
+	const pick = async (scope, id, value) => {
+		const b = document.querySelector(scope + ' .kselbtn[data-for="' + id + '"]');
 		if (!b) return "no key for " + id;
 		click(b); await wait(20);
-		if (document.querySelector("#kpop").hidden) return "the list did not open for " + id;
+		if ($("#kpop").hidden) return "the list did not open for " + id;
 		const o = document.querySelector('#kpop .kopt[data-v="' + value + '"]');
 		if (!o) return "no option " + value + " for " + id;
 		click(o); await wait(120);
 		return "";
 	};
 	const sentOp = (op, f) => sent.some(c => c.op === op && (!f || f(c)));
-	const ctlKey = () => document.querySelector("#ctlkey");
-	const toControl = async () => {
-		const tab = [...document.querySelectorAll("[data-ws]")].find(t => t.dataset.ws === "control");
-		click(tab); await wait(80);
-	};
+	const act = (seq, last, elsewhere) => ({ seq, last, elsewhere: elsewhere ?? null });
 	(async () => {
 		try {
 			await wait(300);
+			${m === "md" ? `gm.recv(${JSON.stringify(MD_DOCS)}); await wait(100);` : ""}
 			recv(doc());
 			await wait(50);
-			openController(); await wait(50);
-			check(!document.querySelector("#ctlpop").hidden, "the Controller panel is open");
+			/* the engine menu no longer lists the controller */
+			const eng = $("#engsel");
+			check(eng && ![...eng.options].some(o => o.value === "ctl" || /CONTROLLER/.test(o.text)), "the engine menu has no CONTROLLER entry");
+			/* the CONTROL workspace: the bar in the mapping matrix's header */
+			click([...document.querySelectorAll("#tabs button")].find(t => t.dataset.ws === "control")); await wait(150);
+			check($(".ctlui .card > #ctlbar"), "the CONTROL workspace's mapping matrix card has the controller bar under its heading");
+			check($("#ctlkey") && !$("#ctlkey .led.on") && /TR-06 MAP/.test(text("#ctlkey")), "the bar's key: TR-06 MAP…, its LED dark while the profile is off");
+			check(sentOp("ctlWatch", c => c.on === true), "the bar shows: the page asks for what arrives (ctlWatch on)");
+			/* the bar's own dropdowns */
+			sent.length = 0;
+			let why = await pick("#ctlbar", "ctl-bar-profile", "tr06");
+			check(!why && sentOp("ctlSet", c => c.profile === "tr06"), "the bar's PROFILE: a pick sends ctlSet profile tr06 " + why);
+			why = await pick("#ctlbar", "ctl-bar-channel", "4");
+			check(!why && sentOp("ctlSet", c => c.channel === 4), "the bar's CH: a pick sends ctlSet channel 4 " + why);
+			/* the key opens the panel */
+			click($("#ctlkey")); await wait(80);
+			check(!$("#ctlpop").hidden, "TR-06 MAP… opens the Controller panel");
 			/* the panel's dropdowns: a pick in the page's own list is the host's command */
-			let why = await pick("ctl-channel", "5");
-			check(!why && sentOp("ctlSet", c => c.channel === 5), "CHANNEL: the list opens and a pick sends ctlSet channel 5 " + why);
-			why = await pick("ctl-profile", "tr06");
-			check(!why && sentOp("ctlSet", c => c.profile === "tr06"), "PROFILE: a pick sends ctlSet profile tr06 " + why);
-			why = await pick("ctl-knob-24", ${JSON.stringify(m === "mm" ? "2:0" : "-1:16")});
+			why = await pick("#ctlpop", "ctl-channel", "5");
+			check(!why && sentOp("ctlSet", c => c.channel === 5), "the panel's CHANNEL: the list opens and a pick sends ctlSet channel 5 " + why);
+			why = await pick("#ctlpop", "ctl-profile", "tr06");
+			check(!why && sentOp("ctlSet", c => c.profile === "tr06"), "the panel's PROFILE: a pick sends ctlSet profile tr06 " + why);
+			why = await pick("#ctlpop", "ctl-knob-24", ${JSON.stringify(m === "mm" ? "2:0" : "-1:16")});
 			check(!why && sentOp("ctlKnob", c => c.cc === 24 && c.i === ${m === "mm" ? 0 : 16}), "a knob's target: a pick sends ctlKnob " + why);
-			why = await pick("ctl-voice-SD", "4");
+			why = await pick("#ctlpop", "ctl-voice-SD", "4");
 			check(!why && sentOp("ctlVoice", c => c.voice === "SD" && c.t === 4), "a voice's track: a pick sends ctlVoice " + why);
 			/* a redraw while a list is open: the pick still lands (stable ids) */
 			{
-				const b = document.querySelector('#ctlpop .kselbtn[data-for="ctl-channel"]');
-				click(b); await wait(20);
+				click(document.querySelector('#ctlpop .kselbtn[data-for="ctl-channel"]')); await wait(20);
 				recv(doc({ warning: "redrawn" })); await wait(20);
 				click(document.querySelector('#kpop .kopt[data-v="7"]')); await wait(120);
 				check(sentOp("ctlSet", c => c.channel === 7), "a pick after the panel redrew still sends its command");
 			}
+			/* a TR-06 among the enabled MIDI inputs, the profile off: the bar and the panel say so, one click turns it on */
+			sent.length = 0;
+			recv(doc({ device: "TR-06" })); await wait(60);
+			check(/TR-06 connected/.test(text("#ctlpop")) && $("#ctlpop [data-ctl=use]"), "the panel: TR-06 connected — turn the profile on, USE TR-06");
+			check(/TR-06 connected/.test(text("#ctlbar")) && $("#ctlkey.hint") && /turn the profile on/.test($("#ctlkey").title), "the bar: TR-06 connected, the key hints");
+			check(!sentOp("ctlSet"), "nothing turns the profile on by itself");
+			click($("#ctlbar [data-ctl=use]")); await wait(120);
+			check(sentOp("ctlSet", c => c.profile === "tr06"), "USE TR-06 sends ctlSet profile tr06");
+			/* the profile on: the key's LED lights, no hint */
+			recv(doc({ profile: "tr06", device: "TR-06" })); await wait(60);
+			check($("#ctlkey .led.on") && !$("#ctlkey.hint") && !$("#ctlbar [data-ctl=use]") && !$("#ctlpop [data-ctl=use]"), "the profile on: the key's LED is lit, no hint");
+			/* activity: the last message on the channel, its row blinks, the profile off too */
+			recv(doc({ activity: act(1, { kind: "cc", n: 24, v: 87 }) })); await wait(40);
+			check(/CC 24 = 87/.test(text("#ctlpop .ctlact")) && /CC 24 = 87/.test(text("#ctlbar .ctlact")), "activity: CC 24 = 87 in the panel and the bar");
+			check($('#ctlpop tr[data-cc="24"].blink'), "activity: the knob's row blinks");
+			recv(doc({ activity: act(2, { kind: "note", n: 38, v: 100 }) })); await wait(40);
+			check(/NOTE 38/.test(text("#ctlpop .ctlact")) && $('#ctlpop tr[data-voice="SD"].blink'), "activity: NOTE 38, the SD row blinks");
+			/* the TR-06 on another channel */
+			sent.length = 0;
+			recv(doc({ device: "TR-06", activity: act(3, null, 3) })); await wait(40);
+			check(/TR-06 is sending on CH 3 — set CHANNEL to 3/.test(text("#ctlpop")) && /TR-06 is sending on CH 3/.test(text("#ctlbar")), "another channel: TR-06 is sending on CH 3 — set CHANNEL to 3");
+			click($("#ctlpop [data-ctl=setch]")); await wait(120);
+			check(sentOp("ctlSet", c => c.channel === 3), "SET CH 3 sends ctlSet channel 3");
+			recv(doc({ named: false, activity: act(4, null, 3) })); await wait(40);
+			check(/MIDI in on CH 3/.test(text("#ctlpop")), "a DAW (no names): MIDI in on CH 3, if that is the TR-06");
+			/* closing the panel keeps watching while the bar shows; another workspace stops it */
+			sent.length = 0;
+			closeController(); await wait(60);
+			check(!sentOp("ctlWatch"), "the panel closed, the bar still shows: still watching");
+			click([...document.querySelectorAll("#tabs button")].find(t => t.dataset.ws === "seq")); await wait(150);
+			check(sentOp("ctlWatch", c => c.on === false), "another workspace: the page stops watching (ctlWatch off)");
 		} catch (e) { out.errors.push("harness: " + e); }
-		const pre = document.createElement("pre"); pre.id = "ctltest"; pre.textContent = JSON.stringify(out); document.body.appendChild(pre); window.__ctlResult = out;
+		window.__ctlResult = out;
 	})();
 })();`;
 

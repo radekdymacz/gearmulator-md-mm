@@ -564,9 +564,10 @@
 		audioDoc() { return audioDocument && Object.assign({}, audioDocument, { error: audioError }); },
 		audioSend(c) { send(Object.assign({ op: "audioSet" }, c), { onResult: r => { audioError = r.ok ? "" : r.errors[0] || ""; V().redrawAudio(); } }); },
 		audioMeter(on) { send({ op: "audioMeter", on: !!on }); },
-		/* the controller profile (DESIGN-tr06.md, deskController.js): its panel, and the track its knobs move */
-		controller() { Ctl.open(); },
-		selected(t) { if (t === lastSelected) return; lastSelected = t; send({ op: "ctlTrack", t }); }
+		/* the controller profile (DESIGN-tr06.md, deskController.js): its bar in the CONTROL workspace (its key
+		   opens the panel), and after every render whether the bar shows and the track its knobs move */
+		controllerBar() { return Ctl.barHtml(); },
+		selected(t) { Ctl.rendered(); if (t === lastSelected) return; lastSelected = t; send({ op: "ctlTrack", t }); }
 	};
 	let lastSelected = -1;
 	/* the controller's panel asks through the adapter's own commands */
@@ -574,7 +575,8 @@
 		set: a => send({ op: "ctlSet", profile: a.profile, channel: a.channel }),
 		voice: a => send({ op: "ctlVoice", voice: a.voice, t: a.t, note: a.note }),
 		knob: a => send({ op: "ctlKnob", cc: a.cc, pg: a.pg, i: a.i }),
-		reset: () => send({ op: "ctlReset" })
+		reset: () => send({ op: "ctlReset" }),
+		watch: a => send({ op: "ctlWatch", on: a.on })
 	};
 
 	/* What the page holds, read-only, for whoever looks (a diagnostics build's self-tests register

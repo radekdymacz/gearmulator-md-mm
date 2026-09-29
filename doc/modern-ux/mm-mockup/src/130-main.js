@@ -205,7 +205,7 @@ document.addEventListener("click",e=>{
 document.addEventListener("change",e=>{const id=e.target.id,v=e.target.value,tr=trk(S.sel);
  if(id==="romfile"){checkRom(e.target.files[0]);return}
  if(id==="songsel"){if(HOST.songSlot)return HOST.songSlot(+v);S.songs.slot=+v;S.songSlot=+v;render();return}
- if(id==="engsel"){const btn=document.querySelector(".lcdeng");if(v==="audio"){e.target.value=S.engine;btn.querySelector("span").textContent=e.target.selectedOptions[0].text;openAudio();return}if(v==="ctl"){e.target.value=S.engine;btn.querySelector("span").textContent=e.target.selectedOptions[0].text;if(HOST.controller)HOST.controller();else toast("The controller profile is the plug-in's.");return}if(v==="rom"){e.target.value=S.engine;btn.querySelector("span").textContent=e.target.selectedOptions[0].text;firstRun();return}
+ if(id==="engsel"){const btn=document.querySelector(".lcdeng");if(v==="audio"){e.target.value=S.engine;btn.querySelector("span").textContent=e.target.selectedOptions[0].text;openAudio();return}if(v==="rom"){e.target.value=S.engine;btn.querySelector("span").textContent=e.target.selectedOptions[0].text;firstRun();return}
   S.engine=v;S.pend=0;renderPst();if(HOST.engine)HOST.engine(v);else startEngine(v);return}
  let m=id.match(/^lp(\d)$/);if(m){const l=V("LF"+m[1]);l[0]=+v;l[1]=0;soundEdited();render();return}
  m=id.match(/^ld(\d)$/);if(m){V("LF"+m[1])[1]=+v;soundEdited();render();return}
@@ -366,7 +366,7 @@ function setSongs(v){const same=JSON.stringify(v)===JSON.stringify(S.songs);S.so
 /* an engine state's LCD label: [text, led "on" | "blink" | "off", tooltip] */
 function setEngineLabel(st,label){ENG[st]=label;if(S.eng===st)setEng(st)}
 /* a host's engine map ([{id, label, available, reason}]) in the engine menu, before the menu's own entries */
-function setEngines(list,current){const sel=$("#engsel");if(!sel)return;const own=["audio","ctl","rom"];
+function setEngines(list,current){const sel=$("#engsel");if(!sel)return;const own=["audio","rom"];
  for(const o of [...sel.options])if(!own.includes(o.value)&&!list.some(e=>e.id===o.value))o.remove();
  const first=[...sel.options].find(o=>own.includes(o.value))||null;
  for(const e of list){let o=sel.querySelector(`option[value="${e.id}"]`);if(!o){o=document.createElement("option");o.value=e.id}sel.insertBefore(o,first);o.textContent=e.label;o.disabled=!e.available;o.title=e.available?"":e.reason||""}
