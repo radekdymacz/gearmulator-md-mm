@@ -998,6 +998,12 @@ namespace
 			tweak(desk, "syn", 1, -1);
 			check(desk.documents().working && desk.documents().working->kit.params[5][1] == 19 && desk.documents().working->kit.params[0][1] == 10,
 				"the page sees every track at once (pending)");
+			// The machine reports its gesture's steps as CCs (the plug-in's parameters): they are its way to the
+			// values, not new edits (0.2.1: folded in, a Sound page drag ended part way).
+			desk.onHostKitParam(5, 1, 16);
+			desk.onHostKitParam(7, 1, 18);
+			check(desk.documents().working->kit.params[5][1] == 19 && desk.documents().working->kit.params[7][1] == 21,
+				"the machine's own steps while Control All is on its way do not replace its values");
 			// The keys wait for a dump request in flight (the library's background read here; this fake never answers);
 			// the first track that can lead (T4, GND-SIN) is selected first, and the machine's status says so.
 			// The machine answers the track status (T1 selected until the SET STATUS to T4).
@@ -1041,6 +1047,49 @@ namespace
 			machineTicks(50, false);
 			check(keys.size() == 3 && keys[1] == "hold:function" && keys[2] == "release:function" && turns.size() == 1
 				&& turns[0] == std::make_pair(uint8_t(1), 1), "then FUNCTION held, knob B of the effects page turned, FUNCTION let go");
+
+			// The Sound workspace's regression (0.2.1): the machine's gesture is a fact to check. A knob page the
+			// machine never reaches (its page key does nothing where it is), or a FUNCTION it lost (only the
+			// selected track moved): once the gesture is over, every value memory does not show goes as a CC.
+			const auto wantedCcs = [&](const uint8_t _index, const std::optional<uint8_t> _except)
+			{
+				const auto& want = desk.documents().working->kit;
+				int missing = 0, extra = 0;
+				for(uint8_t tr = 0; tr < 16; ++tr)
+				{
+					const bool reached = controlAllReaches(want.models[tr], _index) && (!_except || tr != *_except);
+					const bool got = std::any_of(params.begin(), params.end(), [&](const std::array<uint8_t, 3>& _p)
+						{ return _p[0] == tr && _p[1] == _index && _p[2] == want.params[tr][_index]; });
+					missing += reached && !got;
+					extra += !reached && got;
+				}
+				return missing == 0 && extra == 0;
+			};
+			desk.onWorkingKitMemory(imageOf(desk.documents().working->kit));
+			machineTicks(20, false);
+			t.knobPage = 2;
+			desk.onTelemetry(t);
+			keys.clear(); turns.clear(); params.clear();
+			tweak(desk, "syn", 2, 3);
+			machineTicks(200, false);
+			const auto pageKeys = std::count(keys.begin(), keys.end(), std::string("page"));
+			check(turns.empty() && pageKeys >= 1 && pageKeys <= 5 && wantedCcs(2, std::nullopt),
+				"Sound, a synthesis knob the machine's page key never reaches: given up after " + std::to_string(pageKeys) + " page keys, the values as CCs");
+			desk.onWorkingKitMemory(imageOf(desk.documents().working->kit));
+			machineTicks(5, false);
+			check(!desk.coreState().state({DocKind::WorkingKit, 0})->pending, "Sound: and memory showing them settles the edit");
+			// FUNCTION lost: the knob turned the selected track (T4) alone.
+			t.knobPage = 0;
+			desk.onTelemetry(t);
+			keys.clear(); turns.clear(); params.clear();
+			const auto start = desk.documents().working->kit;
+			tweak(desk, "syn", 3, 2);
+			machineTicks(400, true);	// after the library's request in flight (this fake never answers)
+			auto lone = start;
+			lone.params[3][3] = desk.documents().working->kit.params[3][3];
+			desk.onWorkingKitMemory(imageOf(lone));
+			machineTicks(80, false);
+			check(turns.size() == 1 && wantedCcs(3, uint8_t(3)), "Sound: FUNCTION lost, only the lead moved: the other tracks' values as CCs");
 		}
 		{
 			// HW MIDI (no panel): coalesced CCs, at most one per track per tick.

@@ -108,11 +108,20 @@ namespace mdDesk
 			double selectMs = -1e9;		// the last SET STATUS track or track status request
 			double startMs = 0;			// the gesture began (nothing held, nothing waiting)
 			double trackKnownMs = -1e9;	// the machine last said which track is selected
+			int pageKeys = 0;			// page keys pressed without the knob page following
+			int selects = 0;			// SET STATUS track sent without the status following
+			uint32_t indexes = 0;		// the kit parameters (bit 0-23) this gesture tweaked
+			// The kit parameters the machine's own gesture is moving: the CCs the machine sends while it
+			// steps them (the plug-in's parameters report them) are its way there, not new edits.
+			uint32_t guard = 0;
+			double checkMs = -1;		// when to check that memory shows the gesture (-1: no check due)
 
 			void want(const int _page, const uint8_t _knob, const int _steps, const uint8_t _lead, const double _nowMs)
 			{
 				if(!active())
 					startMs = _nowMs;
+				indexes |= 1u << (_page * 8 + _knob);
+				guard |= 1u << (_page * 8 + _knob);
 				if(!turns.empty() && turns.back().page == _page && turns.back().knob == _knob && turns.back().lead == _lead)
 					turns.back().steps += _steps;
 				else
@@ -181,6 +190,7 @@ namespace mdDesk
 		void pumpLoads(double _now);
 		void pumpPushes(double _now);
 		void pumpTweak(double _now);
+		void checkTweak(double _now);
 		void pumpCoalesced(double _now);
 		// Whether Control All can be the machine's own gesture now (panel keys, knob page telemetry, not
 		// recording: while recording a turn is a lock).

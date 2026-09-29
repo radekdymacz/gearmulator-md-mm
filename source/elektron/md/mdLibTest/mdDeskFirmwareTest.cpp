@@ -82,6 +82,8 @@ namespace
 			port.device.pressKey = [this](const std::string& _key)
 			{
 				const auto states = md::panelKeySequence(md::MachineModel::Machinedrum, _key);
+				if(_key == "hold:function" || _key == "release:function")
+					m_functionHeld = _key == "hold:function";
 				for(const auto& st : states)
 					m_keys.push_back({st, 40});
 				return !states.empty();
@@ -89,11 +91,17 @@ namespace
 			port.device.turnKnob = [this](const uint8_t _e, const int _steps)
 			{
 				const auto command = md::panelEncoderCommand(md::MachineModel::Machinedrum, static_cast<md::PanelEncoder>(_e));
-				// One packet a step, one a 128-frame block, after the keys on their way (FUNCTION held first
-				// for Control All), as md::DeskDevice sends them in the plug-in. (Many at one instant, the
-				// firmware loses steps.)
+				// One packet a step. Control All (FUNCTION held): one a 128-frame block after the keys on their
+				// way, as md::DeskDevice sends them in the plug-in (many at one instant, the firmware loses steps
+				// then). The knob recorder's turns (live recording) at once, as this rig always sent them.
 				for(int i = 0; command && i < std::abs(_steps); ++i)
-					m_keys.push_back({md::PanelPacket{*command, static_cast<uint8_t>(_steps > 0 ? 0x01 : 0xff)}, 128.0 * 1000 / g_rate});
+				{
+					const md::PanelPacket step{*command, static_cast<uint8_t>(_steps > 0 ? 0x01 : 0xff)};
+					if(!m_functionHeld && m_keys.empty())
+						m_machine.hardware().trySendPanelEvent(step.row, step.mask);
+					else
+						m_keys.push_back({step, 128.0 * 1000 / g_rate});
+				}
 				return command.has_value();
 			};
 			port.device.sendMute = [this](const uint8_t _t, const bool _on)
@@ -348,7 +356,8 @@ namespace
 		std::unique_ptr<mdDesk::Desk> m_desk;
 		std::deque<Bytes> m_out;
 		std::deque<Bytes> m_in;
-		std::deque<std::pair<md::PanelPacket, double>> m_keys;	// panel states and how long each is held (ms)
+		std::deque<std::pair<md::PanelPacket, double>> m_keys;
+		bool m_functionHeld = false;	// hold:function pressed and not released (Control All)	// panel states and how long each is held (ms)
 		uint64_t m_lastTick = 0;
 		int m_lastStep = -1;
 		uint64_t m_stepChangedAt = 0;
@@ -1455,7 +1464,7 @@ namespace
 		// CTR-AL is left out: the firmware sets its track's LFO track to 16, which elektronData::validate refuses
 		// (a kit with CTR-AL is not editable at all today; DESIGN-edit-flow.md, Built).
 		const char* machines[16] = {"TRX-BD", "RAM-P1", "CTR-RE", "CTR-8P", "MID-01", "GND-EMPTY", "GND-SIN", "GND-NS",
-			"RAM-R1", "TRX-SD", "EFM-BD", "E12-BD", "P-I-BD", "TRX-CP", "TRX-XT", "INP-GA"};
+			"RAM-R1", "TRX-SD", "EFM-BD", "E12-BD", "P-I-BD", "ROM-01", "TRX-XT", "INP-GA"};
 		for(size_t t = 0; t < 16; ++t)
 		{
 			kit.models[t] = modelOf(machines[t]);
@@ -1483,19 +1492,52 @@ namespace
 		// RAM recorder machine moves itself alone (MIDI: to 255, which spoils the kit, so it goes last and the
 		// probe runs only when asked: TWEAK_LEADERS=1; the desk selects a track that leads, controlAllLeads).
 		if(std::getenv("TWEAK_LEADERS"))
-			for(const uint8_t lead : {uint8_t(5), uint8_t(6), uint8_t(8), uint8_t(1), uint8_t(0), uint8_t(2), uint8_t(4)})
+			for(const char* group : {"syn", "fx"})
+				for(const uint8_t lead : {uint8_t(0), uint8_t(5), uint8_t(6), uint8_t(7), uint8_t(10), uint8_t(11), uint8_t(12), uint8_t(13), uint8_t(15), uint8_t(1)})
+				{
+					const size_t index = std::string(group) == "fx" ? 10 : 0;
+					const auto b = memory();
+					_rig.page("{\"op\":\"tweak\",\"k\":" + std::to_string(slot) + ",\"group\":\"" + group + "\",\"knob\":" + std::to_string(index % 8)
+						+ ",\"d\":1,\"t\":" + std::to_string(lead) + ",\"g\":" + std::to_string(500 + lead) + "}");
+					_rig.runUntil([&] { return !_rig.desk().isBusy(); }, 3000);
+					_rig.run(100);
+					const auto a = memory();
+					int moved = 0;
+					for(size_t t = 0; t < 16; ++t) moved += a->params[t][index] != b->params[t][index];
+					std::printf("  %s: gesture on T%d %s (selected T%d): %d tracks moved\n", group, lead + 1, machines[lead],
+						_rig.desk().linkState().track ? *_rig.desk().linkState().track + 1 : 0, moved);
+				}
+		// The machine left on another page with a track selected that cannot lead (a MIDI or CTR track: its page key
+		// does not reach the synthesis page), as the Sound workspace finds it: the desk selects a leading track
+		// first, then the page, then holds FUNCTION.
+		int gSel = 700;
+		for(const uint8_t sel : {uint8_t(4), uint8_t(2), uint8_t(3)})
+		{
+			for(const char* group : {"rt", "syn"})
 			{
-				m.send(ed::mdSetStatus(ed::MdStatus::Track, lead));
+				m.send(ed::mdSetStatus(ed::MdStatus::Track, sel));
+				_rig.run(200);
+				const auto before = memory();
+				mdDesk::Documents docs;
+				docs.working = mdDesk::WorkingKit{*before};
+				const std::string cmd = "{\"op\":\"tweak\",\"k\":" + std::to_string(slot) + ",\"group\":\"" + group + "\",\"knob\":0,\"d\":2,\"t\":"
+					+ std::to_string(sel) + ",\"g\":" + std::to_string(gSel++) + "}";
+				const auto model = mdDesk::apply(docs, parse(cmd), {}, {slot});
+				_rig.page(cmd);
+				const bool settled = _rig.runUntil([&]
+				{
+					const auto* st = _rig.desk().coreState().state({mdDesk::DocKind::WorkingKit, 0});
+					return st && !st->pending && !_rig.desk().isBusy();
+				}, 4000);
 				_rig.run(100);
-				const auto b = memory();
-				_rig.page("{\"op\":\"tweak\",\"k\":" + std::to_string(slot) + ",\"group\":\"fx\",\"knob\":2,\"d\":1,\"g\":" + std::to_string(500 + lead) + "}");
-				_rig.runUntil([&] { return !_rig.desk().isBusy(); }, 3000);
-				_rig.run(100);
-				const auto a = memory();
-				int moved = 0;
-				for(size_t t = 0; t < 16; ++t) moved += a->params[t][10] != b->params[t][10];
-				std::printf("  selected T%d %s: %d tracks moved\n", lead + 1, machines[lead], moved);
+				const auto after = memory();
+				const auto& want = std::get<mdDesk::WorkingKit>(model.changes.at(0).after).kit;
+				const bool same = after->params == want.params;
+				std::printf("  %s knob 0 +2 with T%d %s selected (knob page %d): %s, settled %s\n", group, sel + 1, machines[sel],
+					m.read8(md::SequencerState::g_knobPageAddress), same ? "as the model" : "NOT as the model", settled ? "yes" : "no");
+				check(same && settled, std::string("Control All from a non-leading selected track (") + machines[sel] + ", " + group + ")");
 			}
+		}
 		// The machine's selected track cannot lead (a RAM recorder), and the first gesture is on it: the desk
 		// selects one that leads.
 		m.send(ed::mdSetStatus(ed::MdStatus::Track, 8));
@@ -1586,6 +1628,42 @@ namespace
 			std::printf("  drag fx knob 3, 60 moves: T1 %d -> %d (model %d), %d tracks differ, %zu undo step(s), settled %s\n", before->params[0][11],
 				after->params[0][11], docs.working->kit.params[0][11], differ, _rig.desk().coreState().history().size() - undo0, settled ? "yes" : "no");
 			check(differ == 0 && settled && _rig.desk().coreState().history().size() - undo0 == 1, "a Control All drag ends where the model does, one undo step");
+		}
+		// The owner's sequence (0.2.1): a Mix fader (routing VOL), then the Sound page's boxes (synthesis, effects),
+		// each a short drag of six moves 20 ms apart, as the page sends them.
+		{
+			struct Drag { const char* group; int knob; int d; int t; };
+			const Drag drags[] = {{"rt", 1, -4, 6}, {"syn", 0, 2, 0}, {"fx", 0, 2, 0}, {"rt", 5, -2, 0}, {"fx", 4, -6, 0}};
+			int gd = 950;
+			for(const auto& dr : drags)
+			{
+				const auto before = memory();
+				mdDesk::Documents docs;
+				docs.working = mdDesk::WorkingKit{*before};
+				for(int n = 0; n < 6; ++n)
+				{
+					const std::string cmd = "{\"op\":\"tweak\",\"k\":" + std::to_string(slot) + ",\"group\":\"" + dr.group + "\",\"knob\":"
+						+ std::to_string(dr.knob) + ",\"d\":" + std::to_string(dr.d) + ",\"t\":" + std::to_string(dr.t) + ",\"g\":" + std::to_string(gd) + "}";
+					auto r = mdDesk::apply(docs, parse(cmd), {}, {slot});
+					if(r.changes.size() == 1)
+						docs.working = std::get<mdDesk::WorkingKit>(r.changes[0].after);
+					_rig.page(cmd);
+					_rig.run(20);
+				}
+				++gd;
+				const bool settled = _rig.runUntil([&]
+				{
+					const auto* st = _rig.desk().coreState().state({mdDesk::DocKind::WorkingKit, 0});
+					return st && !st->pending && !_rig.desk().isBusy();
+				}, 5000);
+				_rig.run(100);
+				const auto after = memory();
+				const bool same = after->params == docs.working->kit.params;
+				const size_t index = (std::string(dr.group) == "fx" ? 8u : std::string(dr.group) == "rt" ? 16u : 0u) + static_cast<size_t>(dr.knob);
+				std::printf("  drag %s knob %d, 6 x %+d: T1 %d -> %d (model %d), %s, settled %s\n", dr.group, dr.knob, dr.d, before->params[0][index],
+					after->params[0][index], docs.working->kit.params[0][index], same ? "as the model" : "NOT as the model", settled ? "yes" : "no");
+				check(same && settled, std::string("Mix then Sound: a short drag ends where the model does (") + dr.group + ")");
+			}
 		}
 	}
 
