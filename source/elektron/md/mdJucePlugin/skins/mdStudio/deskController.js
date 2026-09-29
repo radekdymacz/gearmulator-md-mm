@@ -5,7 +5,10 @@
    engine menu (CONTROLLER…). It only renders the plug-in's "controller" document (Ctl.onDoc) and asks
    its host for changes; the host is the page's own sender, so the pages' contract checks see every op:
      Ctl.host = { set({profile, channel}), voice({voice, t, note}), knob({cc, pg, i}), reset() }
-   The panel is #ctlpop (made here), a "panel" dialog of the MODAL layer (closeController). */
+   The panel is #ctlpop (made here), a "panel" dialog of the MODAL layer (closeController).
+   Every select and input has a stable id (ctl-profile, ctl-channel, ctl-voice-<voice>, ctl-knob-<cc>):
+   the pages' key-style dropdowns (enhanceSelects, openK) find a select by its id, and a redraw while a
+   list is open keeps it pointing at the new select. */
 const Ctl = (() => {
 	let doc = null, open = false, lastCc = -1, host = {};
 	const esc = t => String(t ?? "").replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
@@ -40,14 +43,14 @@ const Ctl = (() => {
 		if (!doc) { pop.innerHTML = head(`<span class="note">Waiting for the editor…</span>`); pop.hidden = false; place(); return; }
 		const on = doc.profile !== "off", mm = doc.machine === "mm";
 		const voices = doc.voices.map(v => `<tr class="${on ? "" : "off"}"><td><b>${esc(v.voice)}</b> ${esc(v.label)}</td><td class="mono">${v.notes.join(", ")}</td>
-			<td><select data-ctl="voice" data-voice="${esc(v.voice)}" aria-label="${esc(v.voice)} track">${opts(tracks(), v.t)}</select></td>
-			${mm ? `<td><input type="number" min="0" max="127" value="${v.note}" data-ctl="note" data-voice="${esc(v.voice)}" data-t="${v.t}" aria-label="${esc(v.voice)} note"></td>` : ""}
+			<td><select id="ctl-voice-${esc(v.voice)}" data-ctl="voice" data-voice="${esc(v.voice)}" aria-label="${esc(v.voice)} track">${opts(tracks(), v.t)}</select></td>
+			${mm ? `<td><input id="ctl-note-${esc(v.voice)}" type="number" min="0" max="127" value="${v.note}" data-ctl="note" data-voice="${esc(v.voice)}" data-t="${v.t}" aria-label="${esc(v.voice)} note"></td>` : ""}
 			<td class="mono">${v.out ? "CH " + v.out.ch + " · " + v.out.note : "—"}</td></tr>`).join("");
 		const knobs = doc.knobs.map(k => `<tr class="${k.cc === lastCc ? "hot" : ""} ${on && k.i >= 0 ? "" : "off"}" data-cc="${k.cc}"><td>${esc(k.label)}</td><td class="mono">CC ${k.cc}</td>
-			<td><select data-ctl="knob" data-cc="${k.cc}" aria-label="${esc(k.label)} target">${opts(targetList(), targetKey(k))}</select></td></tr>`).join("");
+			<td><select id="ctl-knob-${k.cc}" data-ctl="knob" data-cc="${k.cc}" aria-label="${esc(k.label)} target">${opts(targetList(), targetKey(k))}</select></td></tr>`).join("");
 		pop.innerHTML = head(`<span class="note">${esc(on ? "The " + doc.profiles.find(p => p.id === doc.profile)?.label + " plays the machine on channel " + doc.channel + ". Its knobs move track " + (doc.selected + 1) + " (the selected track)." : "Off: MIDI in reaches the machine as it always did.")}</span>`) + `
-		<div class="grow2"><span class="ilab">Profile</span><select data-ctl="profile" aria-label="Controller profile">${opts(doc.profiles.map(p => [p.id, p.label]), doc.profile)}</select>
-			<span class="ilab">Channel</span><select data-ctl="channel" aria-label="Controller channel">${opts(Array.from({ length: 16 }, (_, c) => [c + 1, String(c + 1)]), doc.channel)}</select>
+		<div class="grow2"><span class="ilab">Profile</span><select id="ctl-profile" data-ctl="profile" aria-label="Controller profile">${opts(doc.profiles.map(p => [p.id, p.label]), doc.profile)}</select>
+			<span class="ilab">Channel</span><select id="ctl-channel" data-ctl="channel" aria-label="Controller channel">${opts(Array.from({ length: 16 }, (_, c) => [c + 1, String(c + 1)]), doc.channel)}</select>
 			<button class="amkey" data-ctl="reset" title="The TR-06's shipped mapping and channel 10; the profile stays on or off">RESET TO DEFAULTS</button></div>
 		${doc.warning ? `<p class="ctlwarn" role="alert">${esc(doc.warning)}</p>` : ""}
 		${on && !doc.known ? `<p class="note">Waiting for the machine's global settings: the voices play once the editor has read them.</p>` : ""}
@@ -99,7 +102,7 @@ const Ctl = (() => {
 		if (el && el.dataset.ctl === "close") { closeController(); return; }
 		if (el && el.dataset.ctl === "reset") { if (typeof host.reset === "function") host.reset(); return; }
 		/* a click on a knob's row opens its target list */
-		const row = e.target.closest("tr[data-cc]"); if (row && !e.target.closest("select,button,input")) { const s = row.querySelector("select,.kselbtn"); if (s) { s.focus(); if (s.click) s.click(); } }
+		const row = e.target.closest("tr[data-cc]"); if (row && !e.target.closest("select,button,input")) { const s = row.querySelector(".kselbtn") || row.querySelector("select"); if (s) { s.focus(); if (s.click) s.click(); } }
 	});
 	return {
 		get host() { return host; }, set host(_h) { host = _h || {}; },

@@ -96,7 +96,7 @@ file(GLOB MM_SKIN_ASSETS CONFIGURE_DEPENDS
 # The tests are not the page, named one by one, not by a file-name pattern: the node tests never
 # ship, the self-tests only with the diagnostics. A test that was renamed or moved stops the
 # configure, so it cannot slip into the glob. The MM glob lists its page files already.
-set(MD_NODE_TESTS "skins/mdStudio/mdDeskModelTest.js" "skins/mdStudio/deskControllerPageTest.js")
+set(MD_NODE_TESTS "skins/mdStudio/mdDeskModelTest.js" "skins/mdStudio/deskControllerPageTest.js" "skins/mdStudio/deskControllerBrowserTest.js")
 set(MD_SELF_TESTS "skins/mdStudio/mdDeskSelfTest.js")
 set(MM_SELF_TESTS "skins/mmStudio/mmSelfTest.js")
 foreach(test ${MD_NODE_TESTS} ${MD_SELF_TESTS} ${MM_SELF_TESTS})
@@ -203,6 +203,10 @@ function(mdmm_plugin_targets)
 		# The controller profile's panel (DESIGN-tr06.md): its document and its commands against both contracts.
 		add_test(NAME deskControllerPageTest COMMAND ${GEARMULATOR_NODE} ${CMAKE_CURRENT_SOURCE_DIR}/skins/mdStudio/deskControllerPageTest.js)
 		set_tests_properties(deskControllerPageTest PROPERTIES LABELS "UnitTest" TIMEOUT 60)
+		# The same panel on both shipped pages in a headless Chrome (dev mode, a fake host): the page's own
+		# dropdowns, the CONTROL workspace's key, the device and activity hints. Skips (77) without Chrome.
+		add_test(NAME deskControllerBrowserTest COMMAND ${GEARMULATOR_NODE} ${CMAKE_CURRENT_SOURCE_DIR}/skins/mdStudio/deskControllerBrowserTest.js)
+		set_tests_properties(deskControllerBrowserTest PROPERTIES LABELS "UnitTest" TIMEOUT 240 SKIP_RETURN_CODE 77)
 	endif()
 
 	# P4: the editor's setup (MDSK chunk) round-trips with the plug-in state.
