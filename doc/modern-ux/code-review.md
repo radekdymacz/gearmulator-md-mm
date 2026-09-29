@@ -1,6 +1,6 @@
 # Feasibility: a screen-native UI for the MD/MM emulator (gearmulator-md-mm)
 
-Repo: `/Users/radek/Documents/Github/audio/gearmulator-md-mm` (shallow clone, HEAD `8cea052`; submodules not initialised; JUCE/dsp56300/mc68k/RmlUi sources therefore not inspected). All paths below are relative to the repo root. Read-only review, date 2026-09-27.
+Repo: `gearmulator-md-mm` (shallow clone, HEAD `8cea052`; submodules not initialised; JUCE/dsp56300/mc68k/RmlUi sources therefore not inspected). All paths below are relative to the repo root. Read-only review, date 2026-09-27.
 
 **Bottom line:** it is feasible. The firmware is the only thing that knows how to play a Machinedrum pattern correctly, so the recommended design keeps the **firmware as the sequencer**. Our UI owns a *decoded document model* of Elektron's own pattern, kit and song SysEx. Structural edits go back to the machine as SysEx dumps. Live knob moves use the existing CC parameter layer. A telemetry channel (LED transitions now, RAM reads later) drives the playhead.
 

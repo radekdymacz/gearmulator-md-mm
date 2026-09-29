@@ -448,8 +448,10 @@ namespace mdJucePlugin
 	{
 		stopTimer();
 		m_performanceReport.reset();
+		// The editor is a view over the session and keeps a pointer to it (PageEditor detaches on
+		// destruction): the view goes first, then the desk host and its session.
 		destroyEditorState();
-		m_desk.reset();	// after the editor: the editor page detaches from the session the desk host owns
+		m_desk.reset();
 	}
 
 	juce::File AudioPluginAudioProcessor::performanceDiagnosticsFolder() const

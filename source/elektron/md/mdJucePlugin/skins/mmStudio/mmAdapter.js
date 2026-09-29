@@ -417,8 +417,13 @@
 			ccSource: "On-screen knob: it drives its targets through the editor. Your controller's knobs reach the machine through LEARN (the plug-in's MIDI learn).",
 			appSource: "Runs in the plug-in on the machine's own steps and sends CCs, at most 300 a second, also with the editor closed. A lock wins on its step. Targets on MIDI tracks are not moved."
 		},
-		/* the mockup calls it at the end of its script: its markup and view are there */
-		start() { init(); },
+		/* the mockup calls it at the end of its script: its markup and view are there, MmConvert not
+		   yet (mmConvert.js loads after the mockup: it reads the mockup's tables). init() says ready,
+		   and the plug-in answers with the catalogue at once: a catalogue that came before MmConvert
+		   was lost (useCatalogue threw), so every document showed the enumerations as raw firmware
+		   values (LFO PAGE 15 for SYN) and Sound threw on such a track. The page speaks only once
+		   MmConvert is there. */
+		start() { const go = () => typeof MmConvert === "undefined" ? setTimeout(go, 0) : init(); go(); },
 		edited(what, kind) {
 			if (what === "commit") {
 				/* the gesture ended: the next edit is a new undo step, and the view may show the core again */
