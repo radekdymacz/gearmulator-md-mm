@@ -653,7 +653,7 @@ function line(g, W, fy, c, w, dash) { g.strokeStyle = c; g.lineWidth = w; g.setL
 function label(g, t) { g.fillStyle = cssv("--ink"); g.font = "10px Silkscreen, ui-monospace, monospace"; g.fillText(t.toUpperCase(), 8, 14); }
 let raf = 0, active = null;
 /* P7: the editors and the playhead follow the window */
-addEventListener("resize", () => { redraw(); if (V && V.playing) movePH(); });
+addEventListener("resize", () => { redraw(); alignLock(); if (V && V.playing) movePH(); });
 function redraw() { if (raf) return; raf = requestAnimationFrame(() => { raf = 0; $$("canvas.ed").forEach(drawEd); }); }
 function drawEd(c) {
 	const ed = ED[c.dataset.ed], dpr = devicePixelRatio || 1, W = c.clientWidth, H = c.clientHeight; if (!W || !ed) return;
@@ -1425,11 +1425,28 @@ function render() {
 	if (!full) renderRail(); renderSub();
 	({ seq: renderSeq, sound: renderSound, mix: renderMix, song: renderSong, sampler: renderSampler, control: renderControl })[S.ws]();
 	const sc = $("#seqscroll"); if (sc) { sc.scrollLeft = sl; $("#lanescroll").scrollLeft = sl; } enhanceSelects(document.getElementById("main"));
-	markCapabilities(); phLast = -1; movePH(); logFirstRender();
+	markCapabilities(); phLast = -1; movePH(); logFirstRender(); alignLock();
+}
+/* The rail's LOCK PARAMETER block lines up with the lock lane: its title with the lane's title, its first key with the
+   top of the bars and its last key with their bottom (the keys' rows share the height the lane has). */
+function alignLock() {
+	const rp = $("#rail .railparams"), lt = $(".lanetop"), ln = $("#lane"), ch = $("#chips");
+	if (!rp || !lt || !ln || !ch || S.ws !== "seq") return;
+	const keys = [...ch.querySelectorAll(".pk")], lab = ch.querySelector(".plab"), top = e => e.getBoundingClientRect().top;
+	rp.style.removeProperty("margin-top"); ch.style.removeProperty("grid-template-rows"); ch.style.marginTop = ""; ch.style.height = "";
+	keys.forEach(k => k.style.removeProperty("height"));
+	rp.style.setProperty("margin-top", (parseFloat(getComputedStyle(rp).marginTop) + top(lt) - top(rp)) + "px", "important");
+	const rows = getComputedStyle(ch).gridTemplateRows.split(" ").length, lh = lab ? lab.getBoundingClientRect().height : 0;
+	ch.style.setProperty("grid-template-rows", `${lh}px repeat(${Math.max(1, rows - 1)}, minmax(0, 1fr))`, "important");
+	keys.forEach(k => k.style.setProperty("height", "auto", "important"));
+	if (keys[0]) ch.style.marginTop = (top(ln) - top(keys[0])) + "px";
+	ch.style.height = Math.max(0, ln.getBoundingClientRect().bottom - top(ch)) + "px";
+	if (keys[0]) ch.style.marginTop = (parseFloat(ch.style.marginTop) + top(ln) - top(keys[0])) + "px";
+	ch.style.height = Math.max(0, ln.getBoundingClientRect().bottom - top(ch)) + "px";
 }
 function setPlate(v) { S.plate = v; document.documentElement.dataset.plate = v; try { localStorage.setItem("mddesk.plate", v); } catch (_) { } renderTop(); redraw(); }
 (() => { let v = null; try { v = localStorage.getItem("mddesk.plate"); } catch (_) { } if (!v) v = matchMedia("(prefers-color-scheme: dark)").matches ? "mk2" : "mk1"; S.plate = v; document.documentElement.dataset.plate = v; })();
-document.fonts && document.fonts.ready.then(() => redraw());
+document.fonts && document.fonts.ready.then(() => { redraw(); alignLock(); });
 /* The editor's keys (mdDeskKeys.js: dispatched from this map, and listed by ?). */
 const dlgOpen = () => !$("#dlg").hidden && $("#dlg").dataset.first !== "1";
 Keys.bind({ keys: ["Escape"], group: "Anywhere", does: "Close the dialog", when: dlgOpen, field: true, run: () => { $("#dlg").hidden = true; $("#dlg").dataset.first = ""; } });
