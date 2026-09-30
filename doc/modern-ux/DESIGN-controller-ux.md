@@ -3,11 +3,56 @@
 - Branch `feat/tr06-profile`, 2026-09-30. A proposal and a prototype, not built. It builds on [DESIGN-tr06.md](DESIGN-tr06.md), which stays the authority for what is built today.
 - **Prototype:** [mockup/controller-prototype.html](mockup/controller-prototype.html). It is one file with fake data and no host, and needs no sibling files.
   - It opens over http or from `file://`. Fonts come from the mockups' Google Fonts link; offline it falls back to system fonts.
-  - The strip at the bottom (PROTOTYPE) is not part of the design. It plugs and unplugs devices, switches the machine (MM or MD) and the DAW case, and plays the hardware. To play the hardware, drag a row's meter left or right, or click a pad row's square.
+  - The strip at the bottom (PROTOTYPE) is not part of the design. It plugs and unplugs devices, switches the machine (MM or MD) and the DAW case, and plays the hardware. It also switches v2 / v3. To play the hardware in v3, drag across a cell (a pad cell is hit on the first move); in v2, drag a row's meter or click a pad row's square.
 - **The feedback it answers:**
   - Centre the device tiles. Show a device only while it is connected, and follow hot-plug.
   - Map through a control matrix, not a table of CC rows and not a drawing of the device (second round: "a beautiful control matrix"). The matrix gives ranges, inverse, macros, randomise, knob mode, track pinning and steady live feedback.
   - Use the same configurator for every MIDI input, with the TR-06 as a device that has a built-in profile. It replaces the old MIDI Learn matrix.
+
+## 0. Current proposal: v3, the instrument grid (one page)
+
+The prototype opens on v3. The **v2 / v3** keys in the prototype bar switch to the v2 track matrix (section 2) for comparison. Sections 1 and 3-7 apply to both.
+
+### What was wrong with v2 (self-critique)
+
+1. **SELECTED and "T1 · SEL" were two columns for the same track**, which is redundant and confusing.
+2. **The track matrix was about 90% empty.** Almost every mapping goes to the selected track, so 6-16 track columns wasted width and forced vertical scrolling. Tracks are the wrong axis for the main grid: pinning is the exception.
+3. **Rows were about 60 px** (name, meter and badges), so one group filled the screen.
+4. **Five chrome rows before any data:** the device bar, the track bar, the controls header, the filters, the column header. The selected-track bar also duplicated the page's own track selection.
+5. **The permanent right-hand inspector duplicated the cell**, and its large LCD took space.
+
+### v3
+
+- **One header line:**
+  - ‹ DEVICES, the device, PROFILE (or MAPPING) with its LED, CH, KNOBS;
+  - **MOVES [T1 · SWAVE-SAW ▾]**, a small key-style chip for the page's selected track. It is what "selected" means, and it can be changed here without a second track bar;
+  - SELECT ON TOUCH, RESET.
+- **The TR-06 grid mirrors its own CC chart** instead of drawing the device.
+  - **Columns** are the instruments AC, BD, SD, LT, HT, CY, OH, CH, then EFFECT (DRIVE, TIME, DEPTH) and GLOBAL (MIX IN, PROB), under the page's bracket labels (INSTRUMENT, EFFECT, GLOBAL).
+  - **Rows** are the functions: VOICE (the notes to a track: the old voices matrix folded into one row, "NOTE 36·35 → T1 C4"), LEVEL (for EFFECT and GLOBAL: the knob), TUNE, DECAY, TONE (BD attack, SD snappy, LT and HT color), COMP, DELAY SEND (and MIX IN's send). Each row says how the hardware reaches it (MENU + knob, STEP LOOP + DEPTH).
+  - A slot the TR-06 has no CC for is hatched.
+  - **Each cell is one CC** (about 58 px high):
+    - the CC number, a knob-mode tag only when it differs from the device's, and the incoming value;
+    - a thin live meter along the bottom edge;
+    - its parameter chips: the machine's short name, the resulting value, and a 2 px range bar (dashed = inverse, red tick = value now);
+    - a dark **T2** tag only when a chip is pinned to a track other than the selected one.
+    - A macro stacks 2-3 mini chips with a rust edge ("+n more" beyond three). Randomise and amount cells show the dashed dice chip ("Timbre 35%", "ROLL").
+  - Seven rows, the header and the monitor fit on one page.
+- **Editing is an anchored popover**, not a permanent panel. A click on a cell opens it next to the cell; Escape or a click outside closes it. It holds:
+  - the name, CC and channel, and a slim IN / OUT readout;
+  - TYPE (Off, Direct, Macro, Randomise, Rnd amount), and KNOB with a per-control override and DEFAULT;
+  - a card per parameter: picker, two-handle range, INV, remove, track (follow or pin);
+  - "+ Add a parameter (macro)";
+  - for randomise: the set, its track, AMOUNT, around now or anywhere, the parameter chips, ROLL NOW and the last roll.
+  - A VOICE cell's popover has the track pads and, on the MM, the note steps.
+  - With SELECT ON TOUCH, moving another control while the popover is open moves the popover to it.
+- **Generic devices** (BeatStep, Host MIDI in, Any MIDI input) use the same cells and popover, auto-flowed in a responsive grid: KNOBS AND FADERS, PADS AND KEYS, and a "+ LEARN" cell. A control appears the first time it sends.
+- **MD:** the same grid. The voices go to TRIG n, and pins and the MOVES chip offer T1-T16.
+- **Live feedback:** the cell that moved last keeps a steady warm fill and red values until another moves. The voice that played last is lit the same way. Nothing blinks.
+- The MIDI monitor stays as a one-line strip ("MIDI IN") at the bottom. The device tiles, the empty state and REFRESH are unchanged.
+- **Measured** (headless Chrome, 1500 x 900 viewport, the prototype bar included): the TR-06 page's `scrollHeight` is 900 on both MM and MD, with or without a popover open, so there is no vertical scroll.
+  - At 1000 x 900, `scrollHeight` is 929. RESET wraps to a second header line, so the page scrolls by 29 px.
+  - At 1000 px the grid scrolls sideways (at least 1200 px wide, EFFECT and GLOBAL are off to the right), and the popover places itself where there is room.
 
 ## 1. The devices (the CONTROL workspace's first view)
 
@@ -25,7 +70,7 @@
   - A plug or unplug shows the page's toast ("TR-06 connected", "… disconnected · its mapping is kept"). Nothing blinks.
 - **DAW:** the host owns MIDI and names no device. The tiles are **Host MIDI in**, plus Any MIDI input when learned mappings exist. Host MIDI in opens the generic matrix, where a PROFILE choice ("Roland TR-06") gives it the TR-06's rows, names and defaults. There is no hot-plug in a DAW.
 
-## 2. The configurator: one control matrix for every device
+## 2. v2 (kept for comparison): one track matrix for every device
 
 Every tile opens the same view, top to bottom:
 
