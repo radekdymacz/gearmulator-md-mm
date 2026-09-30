@@ -1,6 +1,7 @@
 # Design proposal: the controller configurator (CONTROL workspace)
 
 - Branch `feat/tr06-profile`, 2026-09-30. A proposal and a prototype, not built. It builds on [DESIGN-tr06.md](DESIGN-tr06.md), which stays the authority for what is built today.
+- **Status: paused 2026-09-30** — open questions: TAP / instrument selection on hardware, layer display, final layout (v7b on the first design).
 - **Prototype:** [mockup/controller-prototype.html](mockup/controller-prototype.html). It is one file with fake data and no host, and needs no sibling files.
   - It opens over http or from `file://`. Fonts come from the mockups' Google Fonts link; offline it falls back to system fonts.
   - The strip at the bottom (PROTOTYPE) is not part of the design. It plugs and unplugs devices, switches the machine (MM or MD) and the DAW case, and plays the hardware. It also switches v2 / v3 / v4. To play the hardware in v4, drag across a row label (a pad row is hit on the first move); in v3, drag across a cell (a pad cell is hit on the first move); in v2, drag a row's meter or click a pad row's square.
