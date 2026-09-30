@@ -9,9 +9,53 @@
   - Map through a control matrix, not a table of CC rows and not a drawing of the device (second round: "a beautiful control matrix"). The matrix gives ranges, inverse, macros, randomise, knob mode, track pinning and steady live feedback.
   - Use the same configurator for every MIDI input, with the TR-06 as a device that has a built-in profile. It replaces the old MIDI Learn matrix.
 
-## 000. Current proposal: v5, tracks × controls × parameters, everything a pin
+## 0000. Current proposal: v6, "what each knob does"
 
-The prototype opens on v5. The **v2 / v3 / v4 / v5** keys in the prototype bar switch between the versions. Sections 1 and 3-7 apply to all of them.
+The prototype opens on v6. The prototype bar now offers only **v5 matrix** (kept as the Overview, also reached by the OVERVIEW key in the header) and **v6 list**. v2-v4 are still in the file's history and this document, but are off the switch.
+
+**Why a v6.** Radek's requirement: "I need to understand it quickly; I don't want to strain my brain just to understand the mapping." v5 is complete but it is a grid: to learn what DRIVE does you find its column, then look down it for pins, then read the row names. v6 is built to be readable in three seconds: one control, one sentence.
+
+### What is on screen
+
+- **One header line:** ‹ DEVICES, the device, PROFILE on/off, CH, KNOBS mode, **Knobs act on: Selected track · T1 SWAVE-SAW** (changeable), Find, SELECT ON TOUCH, OVERVIEW, RESET. The MIDI IN strip stays at the bottom.
+- **Left, the list (most of the width): one row per TR-06 control, in hardware order**, under group titles: PADS (BD SD LT HT CY OH CH), LEVEL KNOBS (ACC, BD to CH), EFFECT KNOBS (DRIVE, DELAY TIME, DELAY DEPTH), then TUNE, DECAY, TONE, COMP, DELAY SEND, GLOBAL and EDITOR (RANDOM, APP LFO).
+  - A row is a plain sentence in 15 px type, with the control's name and CC on the left and the current value as a small bar and a number at the right end.
+  - "BD LEVEL knob → Unison level", with a small grey "SYN A · UNIL · selected track".
+  - "DRIVE knob → 3 things: Base frequency, Distortion, Sample rate T2" (the T2 tag says one of them is pinned to track 2).
+  - "BD pad → plays Track 1 (C4) · velocity → Volume"; "OH pad → plays Track 6 (C5)".
+  - "ACC LEVEL knob → Note (transposes the track)".
+  - "MASTER PROB knob → sets how far "Timbre" randomises"; "RANDOM → randomises "Timbre"".
+  - Unmapped: dimmed italic "does nothing — click to set". A slot the machine does not use reads "Synth slot D (unused on SWAVE-SAW)".
+  - Full parameter names come from one table (`LONG5`, for both machines): UNIL to Unison level, BASE to Filter base (Base frequency), DIST to Distortion, SRR to Sample rate reduction, ATK to Attack, and so on, with the short name kept small beside it.
+- **Right, the detail of one control** (the selected one, or the last one moved):
+  - the readout (IN / OUT), then **a small picture of only this control's fan-out**: the knob on the left, one curved cable per target to a small encoder knob showing the name, the value, a range arc, a dashed cable when inverse, and a T tag when pinned to a track. A randomise set is drawn with dotted green cables. Cables of other controls are never drawn.
+  - under it TYPE (normal / randomise / rnd amount) and KNOB (relative / absolute);
+  - a card per target: parameter picker, two-handle range, INV, track (follow or pin), remove;
+  - **+ Add another thing** opens a searchable picker grouped by page with full names (Synth, Amp, Filter, Effects, LFO, Track); a second target makes it a macro.
+- **Generic devices** use the same layout: rows are the controls seen, and "+ Learn a control" sits under the list.
+
+### How to click through
+
+- Open CONTROL, then the Roland TR-06 tile. BD LEVEL is selected.
+- Drag across a row (or click DRIVE, or use the bar's Hit BD / Hit CH) to turn or play it. Its row gets a steady highlight and the right panel shows its fan-out. Nothing blinks or animates.
+- Click a row, then **+ Choose what it does** (or Add another thing), type "decay" in the picker and click a result.
+- Switch MM / MD (the names and the fan-out change), or open the BeatStep tile for the generic layout.
+
+### v6 against v5
+
+- **v6 wins on reading:** a control's whole effect is one sentence, and the detail is one small picture, not a grid to scan. The unit of understanding is a control, which is how the user meets the hardware.
+- **v6 loses the whole-routing overview:** it cannot show at a glance which parameter of the track is driven by anything. That is what v5 (the OVERVIEW key) is for, and the two show the same data.
+- **Same data and gestures:** everything is still a pin (pads included), so the data contract of v5 does not change.
+
+### Measured (headless Chrome, prototype bar included)
+
+- **1500 x 900, MM TR-06:** the page `scrollHeight` is 900 and `scrollWidth` 1500, so there is no page scroll. The list holds 50 rows: 1810 px of content in a 636 px window, so it scrolls internally (about 20 rows are visible at once, group titles stay on top). The detail scrolls inside its own 636 px when a control has many targets. MD is the same. A device with the "not enabled" banner (BeatStep) is also 900.
+- **1000 x 900:** `scrollHeight` 900 as well (the detail column narrows to 400 px, sentences wrap to two lines). The header wraps to two lines.
+- No console errors at either size.
+
+## 000. v5, tracks × controls × parameters, everything a pin (kept as the Overview)
+
+The **v5** key in the prototype bar (or OVERVIEW in the v6 header) shows it. The v2 / v3 / v4 keys were taken off the switch. Sections 1 and 3-7 apply to all of them.
 
 ### Layout
 
