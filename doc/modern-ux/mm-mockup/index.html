@@ -2336,7 +2336,7 @@ function applyPattern(p){const kc=S.patKit[p]!==S.kit;
 /* ===== Top bar ===== */
 function renderTop(){
  $$("#tabs button").forEach(b=>b.setAttribute("aria-selected",b.dataset.ws===S.ws));
- const lkk=$("#learnkey");lkk.setAttribute("aria-pressed",S.learn);lkk.classList.toggle("on",!!S.learn);
+ const lkk=$("#learnkey");if(lkk){lkk.setAttribute("aria-pressed",S.learn);lkk.classList.toggle("on",!!S.learn)}
  $("#platekey span").textContent=S.plate==="mk1"?"MKI":"MKII";
  const n=S.locks.size,m=$("#meter");$("#lockn").textContent=String(n).padStart(2,"0")+"/62";m.className="f meter"+(n>=62?" full":n>=52?" warn":"");
  $("#bpm").textContent=S.bpm.toFixed(1);$("#pat").textContent=patName(S.queued??S.pat);$("#pat").parentElement.classList.toggle("queued",S.queued!=null);
