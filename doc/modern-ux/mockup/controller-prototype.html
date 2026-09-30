@@ -40,7 +40,8 @@
 *{box-sizing:border-box}
 [hidden]{display:none!important}
 html,body{background:var(--plate)}
-body{color:var(--body);font:500 15px/1.35 var(--sans);padding:14px 16px 90px;margin:0}
+body{color:var(--body);font:500 15px/1.35 var(--sans);padding:14px 16px 62px;margin:0}
+@media (max-width:1200px){body{padding-bottom:96px}}
 button,select,input{font:inherit;color:inherit}
 button{background:var(--key);color:var(--keytext);border:0;border-radius:3px;padding:5px 11px;cursor:pointer;font-weight:600;letter-spacing:.04em;box-shadow:inset 0 -2px 0 rgba(0,0,0,.35)}
 button:hover{background:var(--key2)}
@@ -371,7 +372,86 @@ button:disabled{opacity:.4;cursor:default}
 .pop3 .tcard{padding:6px}
 .mon3{display:flex;align-items:stretch;gap:8px}
 .mon3 .ilab{align-self:center}
+
+/* ===== v4: the pin matrix (sources x destinations, a dark board like a synth's modulation matrix) ===== */
+.v4{display:grid;gap:10px}
+.to4{display:flex;flex-wrap:wrap;align-items:center;gap:6px 12px}
+.to4 .grow{flex:1}
+.tabs4{display:flex;flex-wrap:wrap;gap:3px}
+.tabs4 button{height:26px;padding:0 8px;display:inline-flex;align-items:center;gap:6px;font:600 11px var(--sans);letter-spacing:.08em;text-transform:uppercase}
+.tabs4 button[aria-pressed=true]{background:var(--cream);color:var(--creamtext)}
+.tabs4 button small{font:500 10px var(--mono);letter-spacing:0;opacity:.8}
+.tabs4 button i{font:normal 600 9px var(--mono);letter-spacing:0;min-width:15px;padding:0 3px;border-radius:7px;background:var(--led);color:#fff;text-align:center}
+.tabs4 button i.z{background:transparent;color:inherit;opacity:.45}
+.md .tabs4 button{padding:0 5px;gap:4px}
+.board{--bd:#20211e;--sock:#0b0c0a;--btxt:#dedcd2;--bdim:#85847c;--brule:#3a3b36;--bhov:rgba(255,255,255,.055);--cw:20px;--lw:206px;
+  background:var(--bd);border-radius:6px;box-shadow:0 0 0 3px var(--bezel),inset 0 0 0 1px #000;padding:6px 8px 8px;overflow-x:auto;color:var(--btxt)}
+:root[data-m="md"] .board{--bd:#101110;--sock:#000;--cw:28px}
+.b4{display:grid;min-width:max-content}
+.r4{display:grid;grid-template-columns:var(--lw) repeat(var(--n),var(--cw));align-items:center;height:20px}
+.r4 .pc{height:20px;display:grid;place-items:center;cursor:pointer;position:relative}
+.r4 .pc.g0{margin-left:8px}
+.r4 .pc.dis{cursor:default}
+.r4 .pc.dis .pin{opacity:.25}
+.r4 .lab{position:sticky;left:0;z-index:2;background:var(--bd);height:20px;display:grid;grid-template-columns:minmax(0,1fr) auto auto;gap:6px;align-items:center;padding:0 8px 0 4px;cursor:pointer;border-radius:2px}
+.r4 .lab b{font:600 12px var(--sans);letter-spacing:.06em;color:var(--btxt);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.r4 .lab small{font:500 9px var(--mono);color:var(--bdim);white-space:nowrap}
+.r4 .lab em{font:normal 600 8px var(--mono);letter-spacing:.06em;padding:1px 4px;border-radius:2px;background:var(--rust);color:#fff}
+.r4 .lab em.rnd{background:var(--ledg);color:#1d2413}
+.r4 .lab .mt{position:absolute;left:4px;right:8px;bottom:1px;height:2px;background:rgba(255,255,255,.07);border-radius:1px;cursor:ew-resize}
+.r4 .lab .mt i{position:absolute;left:0;top:0;bottom:0;background:var(--bdim);border-radius:1px}
+.r4 .lab .mt.pad{right:auto;width:14px}
+.r4 .lab .mt.pad i{right:0}
+.r4:hover .lab,.r4:hover .pc{background-color:var(--bhov)}
+.r4.hot .lab{background:color-mix(in srgb,var(--led) 26%,var(--bd));box-shadow:inset 3px 0 0 var(--led)}
+.r4.hot .lab .mt i{background:var(--led)}
+.r4.hot .lab small{color:var(--btxt)}
+.r4.sel .lab{box-shadow:inset 3px 0 0 var(--btxt)}
+.r4.hot.sel .lab{box-shadow:inset 3px 0 0 var(--led)}
+/* pins */
+.pin{width:13px;height:13px;border-radius:50%;background:var(--sock);box-shadow:inset 0 1px 2px rgba(0,0,0,.9),0 0 0 1px rgba(255,255,255,.07);position:relative}
+.pc:hover .pin:not(.on){box-shadow:inset 0 1px 2px rgba(0,0,0,.9),0 0 0 1px var(--bdim)}
+.pin.on{background:var(--led);box-shadow:0 0 5px 1px color-mix(in srgb,var(--led) 70%,transparent)}
+.pin.part{background:radial-gradient(circle,var(--led) 0 2.6px,var(--sock) 3px);box-shadow:inset 0 0 0 2px var(--led),0 0 4px color-mix(in srgb,var(--led) 50%,transparent)}
+.pin.inv::after{content:"";position:absolute;left:3px;right:3px;top:5.5px;height:2px;border-radius:1px;background:var(--sock)}
+.pin.part.inv::after{background:var(--btxt);left:2px;right:2px}
+.pin.rnd{background:var(--ledg);box-shadow:0 0 5px 1px color-mix(in srgb,var(--ledg) 60%,transparent)}
+.pin.pinned::before{content:"";position:absolute;right:-2px;top:-2px;width:4px;height:4px;border-radius:1px;background:var(--btxt)}
+.pin.cur{outline:2px solid var(--btxt);outline-offset:2px}
+.pin.mini{width:5px;height:5px;box-shadow:none;background:transparent}
+.pin.mini.on{background:var(--led);box-shadow:none}
+.pin.mini.rnd{background:var(--ledg);box-shadow:none}
+.r4.hot .pin.on,.r4.hot .pin.part{outline:1px solid color-mix(in srgb,var(--btxt) 55%,transparent);outline-offset:1px}
+/* heads */
+.r4.gh4{height:16px}
+.r4.gh4 .gname{grid-column:span var(--span);display:flex;align-items:center;gap:6px;font:600 9px var(--sans);letter-spacing:.2em;text-transform:uppercase;color:var(--btxt);padding-right:4px}
+.r4.gh4 .gname::after{content:"";flex:1;height:5px;border-top:1px solid var(--bdim);border-right:1px solid var(--bdim)}
+.r4.gh4 .gname.g0{margin-left:8px}
+.r4.vh4{height:44px;align-items:end;border-bottom:1px solid var(--brule);margin-bottom:3px}
+.r4.vh4 .vl{height:44px;display:flex;justify-content:center;padding-bottom:3px}
+.r4.vh4 .vl span{writing-mode:vertical-rl;transform:rotate(180deg);font:600 10px var(--sans);letter-spacing:.08em;color:var(--btxt);white-space:nowrap}
+.r4.vh4 .vl.dim span{color:var(--bdim);opacity:.6}
+.r4.vh4 .vl.g0{margin-left:8px}
+.r4.vh4 .corner{position:sticky;left:0;z-index:2;background:var(--bd);height:44px;display:grid;align-content:end;padding:0 4px 4px;font:500 10px var(--mono);color:var(--bdim)}
+.r4.vh4 .corner b{font:600 11px var(--sans);letter-spacing:.14em;text-transform:uppercase;color:var(--btxt)}
+.r4.sg4{height:18px;margin-top:2px}
+.r4.sg4 .lab{grid-template-columns:auto minmax(0,1fr);gap:5px;background:var(--bd);color:var(--bdim);font:600 9px var(--sans);letter-spacing:.18em;text-transform:uppercase;box-shadow:none;border:0;padding:0 4px;text-align:left;height:18px;border-radius:0}
+.r4.sg4 .lab:hover{background:var(--bhov)}
+.r4.sg4 .lab svg{width:8px;height:8px;transition:transform .15s}
+.r4.sg4 .lab[aria-expanded=false] svg{transform:rotate(-90deg)}
+.r4.sg4 .lab small{font:500 9px var(--mono);letter-spacing:0;text-transform:none}
+.r4.sg4 .pc{cursor:default;height:18px}
+.r4.learn4 .lab{color:var(--bdim);font:600 10px var(--sans);letter-spacing:.14em;text-transform:uppercase;background:transparent;box-shadow:none;padding:0 4px;text-align:left}
+.board .rollk{height:15px;padding:0 5px;font:600 8px var(--sans);letter-spacing:.12em;background:var(--ledg);color:#1d2413;box-shadow:none}
+/* voices strip */
+.vs4{display:flex;flex-wrap:wrap;align-items:center;gap:4px}
+.vs4 button{height:26px;padding:0 9px;display:inline-flex;gap:6px;align-items:center;font:600 11px var(--sans);letter-spacing:.08em}
+.vs4 button small{font:500 10px var(--mono);letter-spacing:0;opacity:.75}
+.vs4 button b{font:500 11px var(--mono);letter-spacing:0;background:var(--lcd);color:var(--ink);padding:0 4px;border-radius:2px}
+.vs4 button.hot b{box-shadow:0 0 0 2px var(--led)}
+.vs4 button[aria-pressed=true]{background:var(--cream);color:var(--creamtext)}
 </style>
+<style id="cross4"></style>
 <style id="crosshair"></style>
 </head>
 <body>
@@ -393,7 +473,7 @@ button:disabled{opacity:.4;cursor:default}
 
 <div class="dev" id="dev" aria-label="Prototype controls">
   <b>Prototype</b>
-  <span class="seg" id="devver"><button data-dev="ver" data-v="v2">v2</button><button data-dev="ver" data-v="v3">v3</button></span>
+  <span class="seg" id="devver"><button data-dev="ver" data-v="v2">v2</button><button data-dev="ver" data-v="v3">v3</button><button data-dev="ver" data-v="v4">v4</button></span>
   <span class="sep"></span>
   <span>Machine</span><span class="seg" id="devm"><button data-dev="m" data-v="mm">MM</button><button data-dev="m" data-v="md">MD</button></span>
   <span class="sep"></span>
@@ -420,7 +500,8 @@ const MM_SYN = {
 	"DPRO-BBOX": ["PTCH", "STRT", "", "", "RTRG", "RTIM", "", ""],
 	"FX-REVERB": ["DEC", "DAMP", "GATE", "MIX", "HP", "LP", "", "INP"]
 };
-const MM_FIXED = { AMP: ["ATK", "HOLD", "DEC", "REL", "DIST", "VOL", "PAN", "PORT"], FLT: ["BASE", "WDTH", "HPQ", "LPQ", "ATK", "DEC", "BOFS", "WOFS"], EFX: ["EQF", "EQG", "SRR", "DTIM", "DSND", "DFB", "DBAS", "DWID"] };
+const MM_FIXED = { AMP: ["ATK", "HOLD", "DEC", "REL", "DIST", "VOL", "PAN", "PORT"], FLT: ["BASE", "WDTH", "HPQ", "LPQ", "ATK", "DEC", "BOFS", "WOFS"], EFX: ["EQF", "EQG", "SRR", "DTIM", "DSND", "DFB", "DBAS", "DWID"],
+	LF1: ["PAGE", "DEST", "TRIG", "WAVE", "MULT", "SPD", "INTL", "DPTH"], LF2: ["PAGE", "DEST", "TRIG", "WAVE", "MULT", "SPD", "INTL", "DPTH"], LF3: ["PAGE", "DEST", "TRIG", "WAVE", "MULT", "SPD", "INTL", "DPTH"] };
 const MD_SYN = {
 	"TRX-BD": ["PTCH", "DEC", "RAMP", "RDEC", "STRT", "NOIS", "HARM", "CLIP"], "TRX-B2": ["PTCH", "DEC", "RAMP", "HOLD", "TICK", "NOIS", "DIRT", "DIST"],
 	"TRX-SD": ["PTCH", "DEC", "BUMP", "BENV", "SNAP", "TONE", "TUNE", "CLIP"], "TRX-XT": ["PTCH", "DEC", "RAMP", "RDEC", "DAMP", "DIST", "DTYP", ""],
@@ -520,7 +601,7 @@ function defaults(m) {
 	return { tr06, beatstep, any, sets };
 }
 const S = {
-	ver: "v3", pop: null,
+	ver: "v4", pop: null, to: "sel", used4: { src: false, dst: false }, coll4: { Tune: true, Decay: true, Tone: true, Comp: true, "Delay send": true },
 	m: "mm", sel: 0, view: "", daw: false,
 	conn: { tr06: true, beatstep: true },			/* what the OS reports (hot-plug) */
 	enabled: { tr06: true, beatstep: false },		/* AUDIO / MIDI's inputs */
@@ -668,6 +749,7 @@ const TYPE_TXT = { none: "Off", direct: "Direct", macro: "Macro", roll: "Randomi
 const MODE_TXT = { rel: "REL", abs: "ABS", enc: "ENC" };
 
 function cfgHtml() {
+	if (S.ver === "v4") return cfg4Html();
 	if (S.ver === "v3") return cfg3Html();
 	const d = S.view, D = DEVICES[d], tr = d === "tr06";
 	const connected = d === "any" || d === "host" || S.conn[d];
@@ -1001,11 +1083,11 @@ function pop3Html() {
 }
 function placePop() {
 	let pop = $("#pop3");
-	if (!S.pop || S.ver !== "v3" || !S.view) { if (pop) pop.remove(); return; }
-	const anchor = S.pop.voice != null ? $(`[data-cellv="${S.pop.voice}"]`) : $(`[data-cell3="${S.pop.id}"]`);
+	if (!S.pop || (S.ver !== "v3" && S.ver !== "v4") || !S.view) { if (pop) pop.remove(); return; }
+	const anchor = S.ver === "v4" ? anchor4() : S.pop.voice != null ? $(`[data-cellv="${S.pop.voice}"]`) : $(`[data-cell3="${S.pop.id}"]`);
 	if (!anchor) { S.pop = null; if (pop) pop.remove(); return; }
 	if (!pop) { pop = document.createElement("div"); pop.id = "pop3"; pop.className = "pop3"; pop.setAttribute("role", "dialog"); document.body.appendChild(pop); }
-	pop.innerHTML = pop3Html();
+	pop.innerHTML = S.ver === "v4" ? pop4Html() : pop3Html();
 	const r = anchor.getBoundingClientRect(), w = pop.offsetWidth, h = pop.offsetHeight;
 	let left = r.right + 8; if (left + w > innerWidth - 12) left = r.left - w - 8; if (left < 12) left = Math.max(12, Math.min(r.left, innerWidth - w - 12));
 	let top = r.top; if (top + h > innerHeight - 56) top = Math.max(8, innerHeight - 56 - h);
@@ -1018,6 +1100,154 @@ function live3() {
 	if (c && c.targets) c.targets.forEach((x, k) => { const now = val(trackOf(x), x.p); const n = $(`#pop3 [data-now="${k}"]`); if (n) n.style.left = now / 127 * 100 + "%"; const tx = $(`#pop3 [data-nowtxt="${k}"]`); if (tx) tx.textContent = "NOW " + now; });
 	const m = $("#monlcd"); if (m) m.innerHTML = monInner();
 }
+
+/* ============================================================================================
+   v4: the pin matrix. Rows are sources (the device's controls, then RANDOM and APP LFO), columns are the
+   destinations (the destination track's machine's parameters, grouped by page), a lit pin is a connection.
+   ============================================================================================ */
+const VIRT4 = [["rnd:1", "RANDOM"], ["lfo:1", "APP LFO"]];
+const PAGE4 = { SYN: "SYN", AMP: "AMP", FLT: "FILT", EFX: "EFX", LF1: "LFO 1", LF2: "LFO 2", LF3: "LFO 3", FX: "FX", ROUTE: "ROUTE", OTHER: "TRACK" };
+function ensureVirt(map) {
+	if (!map["rnd:1"]) map["rnd:1"] = { role: "roll", set: "rs1", targets: [], virt: true };
+	if (!map["lfo:1"]) map["lfo:1"] = { targets: S.m === "mm" ? [tgt("FLT.3", 20, 90)] : [tgt("FX.6", 20, 90)], virt: true };
+}
+const destT = () => S.to === "sel" ? S.sel : S.to;
+function srcGroups4(d) {
+	let g;
+	if (d === "tr06") g = TR06_GROUPS.map(([n, list]) => [n === "Other" ? "Global" : n, list.map(([cc]) => "cc:" + cc)]);
+	else g = rowGroups(d);
+	return [...g, ["Editor sources", VIRT4.map(v => v[0])]];
+}
+const name4 = (d, id) => { const v = VIRT4.find(x => x[0] === id); return v ? v[1] : ctlName(d, id); };
+/* the pins a row has on the shown destination track: {pid: {k, x}} or {pid: "rnd"} */
+function pinsOf(d, id) {
+	const c = mapOf(d)[id], role = roleOf(c), out = {};
+	if (!c) return out;
+	if (role === "roll" || role === "amount") {
+		const s = M().sets.find(x => x.id === c.set);
+		if (s && colKey(s.t) === colKey(S.to)) s.params.forEach(p => out[p] = "rnd");
+		return out;
+	}
+	c.targets.forEach((x, k) => { if (colKey(x.t) === colKey(S.to)) out[x.p] = { k, x }; });
+	return out;
+}
+function tabCount(d, tab) {
+	const map = mapOf(d); let n = 0; const sets = new Set();
+	for (const id in map) { const c = map[id], role = roleOf(c); if (role === "roll" || role === "amount") { const s = M().sets.find(x => x.id === c.set); if (s && colKey(s.t) === colKey(tab)) sets.add(s); } else if (c.targets) n += c.targets.filter(x => colKey(x.t) === colKey(tab)).length; }
+	for (const s of sets) n += s.params.length;
+	return n;
+}
+function destCols4(d) {
+	const t = destT(), map = mapOf(d);
+	let cols = [];
+	for (const [g, list] of paramGroups(S.m, t)) list.forEach(([pid, own, slot], i) => cols.push({ g, pid, own, slot, first: i === 0 }));
+	if (S.used4.dst) {
+		const used = new Set();
+		for (const [, ids] of srcGroups4(d)) for (const id of ids) Object.keys(pinsOf(d, id)).forEach(p => used.add(p));
+		cols = cols.filter(c => used.has(c.pid));
+		cols.forEach((c, i) => c.first = i === 0 || cols[i - 1].g !== c.g);
+	}
+	return cols;
+}
+function pinHtml(d, id, col, p, cur) {
+	const c = mapOf(d)[id];
+	const own = col.pid === "NOTE.0" ? pinfo(S.m, destT(), col.pid).own : col.own;
+	const dis = !own;
+	let cls = "pin", title = `${name4(d, id)} → ${col.slot}${own && own !== col.slot ? " · " + own : ""}`;
+	if (p === "rnd") { cls += " rnd"; title += " · in the randomise set"; }
+	else if (p) {
+		const x = p.x, lo = Math.min(x.lo, x.hi), hi = Math.max(x.lo, x.hi), full = lo === 0 && hi === 127;
+		cls += full ? " on" : " part"; if (x.inv) cls += " inv"; if (x.t !== "sel") cls += " pinned";
+		title += ` · ${lo}-${hi}${x.inv ? " inverse" : ""} · now ${val(trackOf(x), x.p)}`;
+	}
+	if (cur) cls += " cur";
+	return `<span class="pc${col.first ? " g0" : ""}${dis ? " dis" : ""}" data-c="${col.pid}" ${dis ? "" : `data-a="pin" data-id="${id}" data-pid="${col.pid}" data-pin4="${id}|${col.pid}"`} title="${esc(title)}${dis ? " · unused on this machine" : ""}"><i class="${cls}"></i></span>`;
+}
+function board4Inner(d) {
+	const map = mapOf(d); ensureVirt(map);
+	const cols = destCols4(d), n = cols.length, t = destT();
+	const groupsOf = []; cols.forEach(c => { if (c.first) groupsOf.push([c.g, 1]); else groupsOf[groupsOf.length - 1][1]++; });
+	let h = `<div class="r4 gh4" style="--n:${n}"><span class="lab" style="cursor:default"></span>${groupsOf.map(([g, k], i) => `<span class="gname${i ? " g0" : " g0"}" style="--span:${k}">${esc(PAGE4[g] || g)}</span>`).join("")}</div>`;
+	h += `<div class="r4 vh4" style="--n:${n}"><span class="corner"><b>${S.to === "sel" ? "Selected" : "T" + (t + 1)}</b>T${t + 1} · ${esc(KIT[S.m][t])}</span>${cols.map(c => {
+		const label = c.g === "SYN" ? (c.own || "—") : c.pid === "NOTE.0" ? "NOTE" : c.own;
+		return `<span class="vl${c.first ? " g0" : ""}${c.own ? "" : " dim"}" data-c="${c.pid}" title="${esc(c.slot)}"><span>${esc(label)}</span></span>`;
+	}).join("")}</div>`;
+	for (const [g, ids0] of srcGroups4(d)) {
+		const ids = S.used4.src ? ids0.filter(id => roleOf(map[id]) !== "none") : ids0;
+		if (!ids.length && !(g.startsWith("Knobs") && d !== "tr06")) continue;
+		const open = !S.coll4[g];
+		const pinsN = ids0.reduce((a, id) => a + Object.keys(pinsOf(d, id)).length, 0);
+		const summary = open ? cols.map(c => `<span class="pc${c.first ? " g0" : ""}"></span>`).join("") : cols.map(c => { const any = ids0.map(id => pinsOf(d, id)[c.pid]).filter(Boolean); return `<span class="pc${c.first ? " g0" : ""}">${any.length ? `<i class="pin mini ${any.includes("rnd") && any.length === 1 ? "rnd" : "on"}"></i>` : ""}</span>`; }).join("");
+		h += `<div class="r4 sg4" style="--n:${n}"><button class="lab" data-a="g4" data-v="${esc(g)}" aria-expanded="${open}"><svg viewBox="0 0 10 10" aria-hidden="true"><path d="M1 3l4 4 4-4" fill="none" stroke="currentColor" stroke-width="1.6"/></svg><span>${esc(g)} <small>${ids0.length} · ${pinsN} pins</small></span></button>${summary}</div>`;
+		if (!open) continue;
+		for (const id of ids) {
+			const c = map[id], role = roleOf(c), pins = pinsOf(d, id), v = S.inv[d + "|" + id];
+			const hot = isHot(d, id), sel = S.pop && S.pop.id === id;
+			const virt = id.includes("rnd:") || id.includes("lfo:");
+			const tag = role === "macro" ? `<em>MACRO ${c.targets.length}</em>` : role === "roll" ? `<em class="rnd">RND</em>` : role === "amount" ? `<em class="rnd">AMT</em>` : "<span></span>";
+			const meter = virt ? (id === "rnd:1" ? "" : "") : isPad(id) ? `<span class="mt pad"><i style="opacity:${v == null ? 0 : 1}"></i></span>` : `<span class="mt"><i style="width:${(v ?? 0) / 127 * 100}%"></i></span>`;
+			const sub = virt ? (id === "rnd:1" ? `<button class="rollk" data-a="roll4" data-id="${id}">ROLL</button>` : `<small>1/2 · SINE</small>`) : `<small>${esc(id.replace(":", " ").toUpperCase())}${v == null ? "" : " · " + v}${c && c.mode ? " · " + MODE_TXT[c.mode] : ""}</small>`;
+			h += `<div class="r4${hot ? " hot" : ""}${sel ? " sel" : ""}" style="--n:${n}"><span class="lab" data-a="row4" data-id="${id}" data-row4="${id}" ${virt ? "" : `data-cell3="${id}"`} title="${esc(name4(d, id))}: row settings"><b>${esc(name4(d, id))}</b>${sub}${tag}${meter}</span>${cols.map(col => pinHtml(d, id, col, pins[col.pid], S.pop && S.pop.id === id && S.pop.pid === col.pid)).join("")}</div>`;
+		}
+		if (g.startsWith("Knobs") && d !== "tr06" && d !== "any") h += `<div class="r4 learn4" style="--n:${n}"><button class="lab" data-a="learn">${S.learn ? "Move a control…" : "+ Learn a control"}</button></div>`;
+	}
+	return h;
+}
+function cfg4Html() {
+	const d = S.view, mapped = mapOf(d); ensureVirt(mapped);
+	const tabs = [["sel", "Selected", `T${S.sel + 1} ${short(KIT[S.m][S.sel])}`], ...KIT[S.m].map((m, t) => [t, "T" + (t + 1), ""])];
+	const to = `<div class="to4 ${S.m}"><span class="ilab">To</span><div class="tabs4" role="group" aria-label="Destination track">${tabs.map(([k, b, s]) => { const n = tabCount(d, k); return `<button data-a="to4" data-v="${k}" aria-pressed="${colKey(S.to) === colKey(k)}" title="${k === "sel" ? "Follows the selected track" : "Pinned to track " + (k + 1) + " · " + KIT[S.m][k]}">${b}${s ? `<small>${esc(s)}</small>` : ""}<i class="${n ? "" : "z"}">${n}</i></button>`; }).join("")}</div>
+		<span class="grow"></span><span class="ilab">Used only</span><span class="seg"><button data-a="used4" data-v="src" aria-pressed="${S.used4.src}">Sources</button><button data-a="used4" data-v="dst" aria-pressed="${S.used4.dst}">Destinations</button></span>
+		<button class="amkey" data-a="coll4">${Object.values(S.coll4).some(Boolean) ? "Expand all" : "Collapse all"}</button></div>`;
+	const mm = S.m === "mm";
+	const voices = d === "tr06" ? `<div class="vs4"><span class="ilab">Voices</span>${VOICES.map(([v, , notes], i) => { const x = S.voices[S.m][i]; return `<button class="${S.hotVoice === v ? "hot" : ""}" data-a="v4" data-voice="${i}" data-cellv="${i}" aria-pressed="${!!(S.pop && S.pop.voice === i)}">${v}<small>${notes[0]}</small><b>T${x.t + 1}${mm ? " " + noteName(x.note) : ""}</b></button>`; }).join("")}
+		<span class="note" style="font-size:12px;margin-left:8px">pin: <span class="mono">● full range · ◉ limited · − inverse · green = randomise · ▪ pinned track</span></span></div>` : `<div class="vs4"><span class="note" style="font-size:12px">pin: <span class="mono">● full range · ◉ limited · − inverse · green = randomise</span></span></div>`;
+	return `<div class="v4">${head3(d)}${to}${S.learn ? `<p class="learnline" role="status"><i class="led on"></i>LEARN: move a knob or hit a pad on the ${esc(DEVICES[d].name)}. <button class="amkey" data-a="learn">Cancel</button></p>` : ""}
+		<div class="board" id="b4w"><div class="b4" id="b4">${board4Inner(d)}</div></div>${voices}${mon3()}</div>`;
+}
+/* the popover of a pin: its range, INV, track, remove, and the row's knob mode */
+function pop4Html() {
+	const d = S.view;
+	if (S.pop.voice != null || !S.pop.pid) return pop3Html();
+	const id = S.pop.id, c = mapOf(d)[id], x = c && c.targets[S.pop.k];
+	if (!x) return pop3Html();
+	const t = trackOf(x), p = pinfo(S.m, t, x.p), mode = modeOf(d, id), own = c.mode;
+	const close = `<span class="grow"></span><button class="xkey" data-a="closepop" aria-label="Close">×</button>`;
+	return `<div class="ph"><b>${esc(name4(d, id))} → ${esc(p.own)}</b><span>${x.t === "sel" ? "selected T" + (S.sel + 1) : "pinned T" + (x.t + 1)}</span>${close}</div>
+		<div class="readout" id="readout">${readoutHtml(d, id)}</div>
+		<div class="tcards">${tcardHtml(x, S.pop.k)}</div>
+		${isPad(id) || id.includes(":1") && !id.startsWith("cc") ? "" : `<div class="irow"><span class="ilab">Row knob</span><span class="seg">${modeOpts(d).map(([m, tx]) => `<button data-a="mode" data-v="${m}" aria-pressed="${mode === m}" title="${MODE_HELP[m]}">${tx}</button>`).join("")}</span>${own ? `<button class="amkey" data-a="mode" data-v="">Default</button>` : ""}</div>`}
+		<div class="irow"><button class="amkey" data-a="rowpop">Row settings ›</button><span class="note" style="font-size:12px">${c.targets.length > 1 ? "Macro: " + c.targets.length + " pins in this row" : "Shift-click a pin to remove it"}</span></div>`;
+}
+function anchor4() {
+	if (S.pop.voice != null) return $(`[data-cellv="${S.pop.voice}"]`);
+	if (S.pop.pid) return $(`[data-pin4="${S.pop.id}|${S.pop.pid}"]`);
+	return $(`[data-row4="${S.pop.id}"]`);
+}
+function pinClick(el, ev) {
+	const d = S.view, id = el.dataset.id, pid = el.dataset.pid, map = mapOf(d);
+	const c = map[id] || (map[id] = { targets: [] }), role = roleOf(c);
+	S.selCtl[d] = id;
+	if (role === "roll" || role === "amount") {
+		const s = M().sets.find(x => x.id === c.set);
+		if (s) { if (colKey(s.t) !== colKey(S.to)) { s.t = S.to; s.params = []; } s.params = s.params.includes(pid) ? s.params.filter(p => p !== pid) : [...s.params, pid]; toast(`${s.name}: ${s.params.length} parameters (shared by every row that uses it).`); }
+		S.pop = null; return;
+	}
+	const k = c.targets.findIndex(x => colKey(x.t) === colKey(S.to) && x.p === pid);
+	if (k >= 0 && (ev.shiftKey || ev.altKey)) { c.targets.splice(k, 1); if (!c.targets.length && !c.mode && !c.virt) delete map[id]; S.pop = null; return; }
+	if (k >= 0) { S.pop = (S.pop && S.pop.id === id && S.pop.pid === pid) ? null : { id, pid, k }; return; }
+	c.targets.push(tgt(pid, pid === "NOTE.0" ? 48 : 0, pid === "NOTE.0" ? 72 : 127, { t: S.to === "sel" ? "sel" : S.to }));
+	S.pop = { id, pid, k: c.targets.length - 1 };
+}
+function live4() {
+	const b = $("#b4"); if (b) b.innerHTML = board4Inner(S.view);
+	const ro = $("#readout"); if (ro && S.pop && S.pop.id) ro.innerHTML = readoutHtml(S.view, S.pop.id);
+	const c = S.pop && S.pop.id ? mapOf(S.view)[S.pop.id] : null;
+	if (c && c.targets) c.targets.forEach((x, k) => { const now = val(trackOf(x), x.p); const n = $(`#pop3 [data-now="${k}"]`); if (n) n.style.left = now / 127 * 100 + "%"; const tx = $(`#pop3 [data-nowtxt="${k}"]`); if (tx) tx.textContent = "NOW " + now; });
+	const m = $("#monlcd"); if (m) m.innerHTML = monInner();
+}
+/* the crosshair on the board: the hovered pin's column across all rows (its row by CSS :hover) */
+document.addEventListener("mouseover", e => { const b = e.target.closest(".b4"); if (!b) return; const c = e.target.closest("[data-c]"); const k = c ? c.dataset.c : ""; if (b.dataset.hc !== k) { b.dataset.hc = k; $("#cross4").textContent = k ? `.b4 [data-c="${k}"]{background:var(--bhov)} .b4 .vl[data-c="${k}"] span{color:#fff}` : ""; } });
 
 /* ---- the MIDI monitor, one strip ---- */
 function monHtml() { return `<section class="card"><header><h3>MIDI monitor</h3><span>what arrives, newest first</span></header><div class="monstrip"><div class="monlcd" id="monlcd">${monInner()}</div><button class="amkey" data-a="clear">Clear</button></div></section>`; }
@@ -1090,6 +1320,7 @@ function hitVoice(note) {
 /* the values in place: the matrix body and the readouts, never the inspector's lists (open dropdowns and drags stay) */
 function live() {
 	if (!S.view) return;
+	if (S.ver === "v4") { live4(); return; }
 	if (S.ver === "v3") { live3(); return; }
 	const mx = $("#mx"); if (mx) mx.innerHTML = matrixInner(S.view);
 	const ins = $("#insp");
@@ -1116,7 +1347,7 @@ function renderTop() {
 	$("#plug-beatstep").textContent = S.conn.beatstep ? "Unplug BeatStep" : "Plug in BeatStep";
 	$("#dev-daw").setAttribute("aria-pressed", S.daw);
 	$$("#devver button").forEach(b => b.setAttribute("aria-pressed", b.dataset.v === S.ver));
-	$("#devhint").textContent = S.ver === "v3" ? "Drag across a cell to turn that control; click it to map." : "Drag a row's meter left / right to play the hardware; click a pad row's square to hit it.";
+	$("#devhint").textContent = S.ver === "v4" ? "Click a dot to connect, shift-click to remove; drag a row's thin meter to play the hardware." : S.ver === "v3" ? "Drag across a cell to turn that control; click it to map." : "Drag a row's meter left / right to play the hardware; click a pad row's square to hit it.";
 }
 function render() {
 	closeK();
@@ -1133,9 +1364,11 @@ $("#crosshair").textContent = ["sel", ...Array.from({ length: 16 }, (_, i) => St
 document.addEventListener("mouseover", e => { const c = e.target.closest(".mx [data-c]"), mx = e.target.closest(".mx"); if (mx) mx.dataset.hc = c ? c.dataset.c : ""; });
 document.addEventListener("mouseleave", () => $$(".mx").forEach(m => m.dataset.hc = ""), true);
 
+let lastEv = null;
 document.addEventListener("click", e => {
+	lastEv = e;
 	if (suppress3) { suppress3 = false; if (e.target.closest("[data-cell3]")) return; }
-	if (S.pop && !e.target.closest("#pop3,#kpop,.dev") && !e.target.closest("[data-a=c3],[data-a=v3]")) { S.pop = null; placePop(); $$(".c3.open").forEach(x => x.classList.remove("open")); }
+	if (S.pop && !e.target.closest("#pop3,#kpop,.dev") && !e.target.closest("[data-a=c3],[data-a=v3],[data-a=pin],[data-a=row4],[data-a=v4]")) { S.pop = null; placePop(); $$(".c3.open").forEach(x => x.classList.remove("open")); }
 	const kb = e.target.closest(".kselbtn");
 	if (kb) { const same = kFor === kb && !$("#kpop").hidden; closeK(); if (!same) openK(kb); return; }
 	const o = e.target.closest("#kpop .kopt");
@@ -1163,6 +1396,15 @@ function act(a, el) {
 		case "c3": S.selCtl[d] = el.dataset.id; S.pop = (S.pop && S.pop.id === el.dataset.id) ? null : { id: el.dataset.id }; break;
 		case "v3": S.pop = (S.pop && S.pop.voice === +el.dataset.voice) ? null : { voice: +el.dataset.voice }; break;
 		case "closepop": S.pop = null; break;
+		case "pin": pinClick(el, lastEv || {}); break;
+		case "row4": S.selCtl[d] = el.dataset.id; S.pop = (S.pop && S.pop.id === el.dataset.id && !S.pop.pid) ? null : { id: el.dataset.id }; break;
+		case "rowpop": S.pop = { id: S.pop.id }; break;
+		case "v4": S.pop = (S.pop && S.pop.voice === +el.dataset.voice) ? null : { voice: +el.dataset.voice }; break;
+		case "to4": S.to = el.dataset.v === "sel" ? "sel" : +el.dataset.v; S.pop = null; break;
+		case "used4": S.used4[el.dataset.v] = !S.used4[el.dataset.v]; break;
+		case "g4": S.coll4[el.dataset.v] = !S.coll4[el.dataset.v]; break;
+		case "coll4": { const any = Object.values(S.coll4).some(Boolean); for (const [g] of srcGroups4(d)) S.coll4[g] = !any && g !== "Editor sources"; break; }
+		case "roll4": { const s = M().sets.find(x => x.id === mapOf(d)[el.dataset.id].set); if (s) { roll(s); S.hot = { dev: d, id: el.dataset.id }; toast("Rolled " + s.name + ": " + s.params.length + " parameters, one undo step."); } break; }
 		case "refresh": toast(`Looked again: ${["tr06", "beatstep"].filter(x => S.conn[x]).length} MIDI devices connected.`); break;
 		case "audiomidi": toast("Prototype: AUDIO / MIDI opens here."); return;
 		case "enable": S.enabled[d] = true; toast(DEVICES[d].name + " enabled in AUDIO / MIDI."); break;

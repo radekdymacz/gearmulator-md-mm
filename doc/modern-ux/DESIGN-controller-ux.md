@@ -3,15 +3,66 @@
 - Branch `feat/tr06-profile`, 2026-09-30. A proposal and a prototype, not built. It builds on [DESIGN-tr06.md](DESIGN-tr06.md), which stays the authority for what is built today.
 - **Prototype:** [mockup/controller-prototype.html](mockup/controller-prototype.html). It is one file with fake data and no host, and needs no sibling files.
   - It opens over http or from `file://`. Fonts come from the mockups' Google Fonts link; offline it falls back to system fonts.
-  - The strip at the bottom (PROTOTYPE) is not part of the design. It plugs and unplugs devices, switches the machine (MM or MD) and the DAW case, and plays the hardware. It also switches v2 / v3. To play the hardware in v3, drag across a cell (a pad cell is hit on the first move); in v2, drag a row's meter or click a pad row's square.
+  - The strip at the bottom (PROTOTYPE) is not part of the design. It plugs and unplugs devices, switches the machine (MM or MD) and the DAW case, and plays the hardware. It also switches v2 / v3 / v4. To play the hardware in v4, drag across a row label (a pad row is hit on the first move); in v3, drag across a cell (a pad cell is hit on the first move); in v2, drag a row's meter or click a pad row's square.
 - **The feedback it answers:**
   - Centre the device tiles. Show a device only while it is connected, and follow hot-plug.
   - Map through a control matrix, not a table of CC rows and not a drawing of the device (second round: "a beautiful control matrix"). The matrix gives ranges, inverse, macros, randomise, knob mode, track pinning and steady live feedback.
   - Use the same configurator for every MIDI input, with the TR-06 as a device that has a built-in profile. It replaces the old MIDI Learn matrix.
 
-## 0. Current proposal: v3, the instrument grid (one page)
+## 00. Current proposal: v4, the pin matrix
 
-The prototype opens on v3. The **v2 / v3** keys in the prototype bar switch to the v2 track matrix (section 2) for comparison. Sections 1 and 3-7 apply to both.
+The prototype opens on v4. The **v2 / v3 / v4** keys in the prototype bar switch between the three for comparison. Sections 1 and 3-7 apply to all of them.
+
+**Why a v4:** macros run out of room in v3's cells, because three stacked chips already fill one. A synth's modulation pin matrix (Reason Malström / Thor style) has unlimited connections per source and shows the whole routing at once.
+
+- **One header line**, as in v3 (with the MOVES track chip). Under it, one line:
+  - **TO: [SELECTED T1 SW-SAW n] [T1 n] … [T6 n]**, the destination track. SELECTED is the default and follows the selected track. A Tn tab shows and edits the connections pinned to that track. Each tab carries a count of its pins (red when non-zero), so pinned routings on other tracks are never invisible.
+  - **USED ONLY: SOURCES / DESTINATIONS**, one filter per axis;
+  - EXPAND ALL / COLLAPSE ALL.
+- **Rows are sources:** the device's controls in collapsible groups.
+  - TR-06: INSTRUMENT LEVEL (AC-CH), EFFECT (DRIVE, TIME, DEPTH), TUNE, DECAY, TONE, COMP, DELAY SEND, GLOBAL. Generic devices: the controls seen, with a "+ LEARN A CONTROL" row.
+  - Two editor sources at the bottom: **RANDOM** (with a ROLL key; its pins are a randomise set) and **APP LFO** (static here: nothing animates).
+  - A row label shows the name, the CC and the incoming value, a thin steady meter along its bottom edge, and a tag: **MACRO n** (two or more pins), **RND** or **AMT**.
+  - Secondary groups start collapsed (TUNE, DECAY, TONE, COMP, DELAY SEND). A collapsed group's line still shows a small dot under every column its members connect to, so hidden routing is visible.
+- **Columns are destinations:** the destination track's machine's parameters with their real short names, as vertical labels under page brackets.
+  - MM: SYN (UNIL UNIW … TUNE; an unused slot is dimmed and cannot take a pin), AMP, FILT, EFX, LFO 1-3, TRACK (LEVEL, NOTE): 58 columns.
+  - MD: SYN (PTCH DEC …), FX, ROUTE, TRACK: 26 columns.
+  - The names follow the track: on the SELECTED tab they change with the selected track's machine.
+- **The board** is a dark panel of 13 px sockets, in both plates.
+  - Hovering lights a crosshair (the row, and the column including its label).
+  - A pin's look encodes its settings:
+    - **full red** = full range;
+    - **red ring with a centre** = a limited range;
+    - **a bar across the pin** = inverse;
+    - **green** = in a randomise set;
+    - **a small square at the corner** = pinned to a track (on a Tn tab).
+  - Each pin's tooltip gives the parameter, the range, inverse and the value now.
+- **Editing:**
+  - A click on an empty socket connects it (full range, following the tab's track) and opens an anchored popover. It has the parameter picker, the two-handle range, INV, remove, the track (follow or pin, which moves the pin to that tab), and the row's knob-mode override.
+  - A click on a lit pin opens its popover. **Shift- or alt-click** removes a pin at once.
+  - On a RANDOMISE or AMOUNT row (and on RANDOM), a click adds the parameter to, or removes it from, the shared set: green pins.
+  - A click on a row label opens the row's settings: type, knob mode, targets, or the randomise set with amount and ROLL.
+  - Escape or a click outside closes the popover.
+- **Voices** are not parameters, so they sit in one compact strip under the board (`BD 36 [T1 C4]` …). A click opens the voice popover (track pads, and the MM note steps).
+- **Live:** the row that moved last stays lit (a warm label, a red meter, a thin ring round its pins) until another moves. The popover's readout and NOW marker update in place. Nothing blinks.
+- **Measured** (headless Chrome, the prototype bar included):
+  - 1500 x 900 on the MM TR-06 (21 rows open, 58 columns): `scrollHeight` 900 = viewport, and the board's `scrollWidth` 1468 = its `clientWidth` (no scroll either way). The same holds with a popover open, on MD (26 columns), on the BeatStep and with USED ONLY on.
+  - 1000 x 900: `scrollHeight` 1027, because the header wraps RESET and the prototype bar wraps to two lines. The board scrolls sideways (1382 in 968) with the row labels sticky.
+
+### v3 against v4, honestly
+
+- **v4 loses the numbers at a glance.** A v3 cell shows each parameter's name, value and range bar. A v4 pin shows only that a connection exists and whether it is full, limited, inverse or randomise. The range needs a hover or a click.
+- **v4 loses the TR-06-shaped layout.** v3's rows and columns mirror the TR-06's own chart (instrument x function); v4 lists the controls as rows.
+- **v4 loses the whole picture of a pinned macro.** A macro that mixes SELECTED and pinned tracks spreads over TO tabs. The tab counts and the MACRO n tag say so, but you switch tabs to see it.
+- **v4 gains unlimited macros:** a row takes as many pins as it has columns.
+- **v4 gains the whole routing of a track on one board:** every source against every destination, collapsed groups included (their summary dots).
+- **v4 gains room for many destinations:** 58 MM destinations fit at 1500 px without a scroll.
+- **v4 gains one gesture for everything:** connecting, disconnecting (shift-click) and randomise membership are all a click on a dot.
+- **v4 gains uniformity:** one layout for the TR-06, any controller and the editor's own sources (RANDOM, APP LFO).
+
+## 0. v3, the instrument grid (one page), kept for comparison
+
+The **v2 / v3 / v4** keys in the prototype bar switch between the three.
 
 ### What was wrong with v2 (self-critique)
 
