@@ -40,11 +40,13 @@ function renderSeq(){const t=S.sel,tr=trk(t),midi=isMidiT(t);
   <span class="lanehelp" title="Draw across the bars to lock this parameter per step. Alt-drag erases. Hatched steps have no trig, so they cannot hold a lock. Dashed line = kit value. A slide step glides to the next lock.">Draw to lock · alt-drag erases</span></div>
   <div class="scroll" id="lanescroll"><div class="lanebox"><div class="lane" id="lane" style="grid-template-columns:${cols()}"></div><svg class="lanesvg" id="lanesvg"></svg></div></div></div>`;
  $("#main").innerHTML=h;fitLane();renderLane();syncScroll();syncControls();alignLock()}
-/* as in the MD Editor: the rail's LOCK PARAMETER block starts on the lock lane's title line and ends at its bottom edge */
+/* as in the MD Editor: the rail's LOCK PARAMETER block starts on the line above the lock lane (the foot's border) and ends at its bottom edge */
 function alignLock(){const rp=$("#rail .railparams"),lt=$(".lanetop"),ls=$("#lanescroll");if(!rp||!lt||!ls||S.ws!=="seq")return;
  const roll=$("#seq canvas.roll[data-big]"),tb=rp.querySelector(".pagetabs"),ln=$("#lane");
- const size=()=>{rp.style.marginTop="0px";rp.style.height="auto";const dy=lt.getBoundingClientRect().top-rp.getBoundingClientRect().top;
-  rp.style.marginTop=Math.max(0,dy)+"px";rp.style.height=Math.max(0,ls.getBoundingClientRect().bottom-lt.getBoundingClientRect().top)+"px"};
+ const size=()=>{rp.style.marginTop="0px";rp.style.height="auto";const sf=$(".seqfoot"),dy=(sf?sf.getBoundingClientRect().bottom-2:lt.getBoundingClientRect().top)-rp.getBoundingClientRect().top;
+  rp.style.marginTop=Math.max(0,dy)+"px";rp.style.height=Math.max(0,ls.getBoundingClientRect().bottom-rp.getBoundingClientRect().top)+"px";titles()};
+ /* the lane's title sits on the LOCK PARAMETER title's line */
+ const titles=()=>{const a=rp.querySelector(".rphead .cap"),b=lt.querySelector(".cap");if(!a||!b)return;const c=e=>{const q=e.getBoundingClientRect();return q.top+q.height/2};lt.style.marginTop="0px";const d=c(a)-c(b);if(Math.abs(d)>.5)lt.style.marginTop=d+"px"};
  const gap=()=>tb&&ln?tb.getBoundingClientRect().top-ln.getBoundingClientRect().top:0;
  /* the lock lane is as tall as the LOCK PARAMETER keys; the space above them goes to the piano roll, which pushes the lane down */
  ls.style.marginTop="0px";if(roll)roll.style.removeProperty("height");size();

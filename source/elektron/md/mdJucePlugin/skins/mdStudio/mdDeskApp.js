@@ -1427,7 +1427,7 @@ function render() {
 	const sc = $("#seqscroll"); if (sc) { sc.scrollLeft = sl; $("#lanescroll").scrollLeft = sl; } enhanceSelects(document.getElementById("main"));
 	markCapabilities(); phLast = -1; movePH(); logFirstRender(); alignLock();
 }
-/* The rail's LOCK PARAMETER block lines up with the lock lane: its title with the lane's title, its first key with the
+/* The rail's LOCK PARAMETER block lines up with the lock lane: its top border with the line above the lane, its first key with the
    top of the bars and its last key with their bottom (the keys' rows share the height the lane has). */
 function alignLock() {
 	const rp = $("#rail .railparams"), lt = $(".lanetop"), ln = $("#lane"), ch = $("#chips");
@@ -1435,7 +1435,11 @@ function alignLock() {
 	const keys = [...ch.querySelectorAll(".pk")], lab = ch.querySelector(".plab"), top = e => e.getBoundingClientRect().top;
 	rp.style.removeProperty("margin-top"); ch.style.removeProperty("grid-template-rows"); ch.style.marginTop = ""; ch.style.height = "";
 	keys.forEach(k => k.style.removeProperty("height"));
-	rp.style.setProperty("margin-top", (parseFloat(getComputedStyle(rp).marginTop) + top(lt) - top(rp)) + "px", "important");
+	const sf = $(".seqfoot"), line = sf ? sf.getBoundingClientRect().bottom - 2 : top(lt);	/* the foot's border: the line above the lane */
+	rp.style.setProperty("margin-top", (parseFloat(getComputedStyle(rp).marginTop) + line - top(rp)) + "px", "important");
+	const a = rp.querySelector(".rphead .cap"), b = lt.querySelector(".cap"), mid = e => { const q = e.getBoundingClientRect(); return q.top + q.height / 2; };
+	lt.style.marginTop = "0px";	/* the lane's title sits on the LOCK PARAMETER title's line */
+	if (a && b) lt.style.marginTop = (mid(a) - mid(b)) + "px";
 	const rows = getComputedStyle(ch).gridTemplateRows.split(" ").length, lh = lab ? lab.getBoundingClientRect().height : 0;
 	ch.style.setProperty("grid-template-rows", `${lh}px repeat(${Math.max(1, rows - 1)}, minmax(0, 1fr))`, "important");
 	keys.forEach(k => k.style.setProperty("height", "auto", "important"));
