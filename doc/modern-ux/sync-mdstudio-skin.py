@@ -118,7 +118,9 @@ wanted = (set(re.findall(r'\$\("#([A-Za-z][\w-]*)', scripts)) | set(re.findall(r
 made = (set(re.findall(r'id="([A-Za-z][\w-]*)"', scripts)) | set(re.findall(r'id=\\"([\w-]+)', scripts))
         | set(re.findall(r'\.id\s*=\s*"([\w-]+)"', scripts)))
 present = set(re.findall(r'id="([\w-]+)"', m))
-missing = sorted(wanted - present - made)
+# the MIDI mapping UI (the Control tab, LEARN) is out of the markup until the controller feature (FOUNDATION.md)
+optional = {'learnkey'}
+missing = sorted(wanted - present - made - optional)
 if missing:
     print('contract check: the page looks up ids the mockup markup no longer has:', ', '.join(missing))
     sys.exit(1)
