@@ -108,6 +108,22 @@ namespace
 
 namespace mdJucePlugin
 {
+	void AudioPluginAudioProcessor::getStateInformation(juce::MemoryBlock& _dest)
+	{
+		if(!m_desk->heldState(_dest)) Processor::getStateInformation(_dest);	// no ROM: the project as it was (mdDeskHost.h)
+	}
+
+	void AudioPluginAudioProcessor::setStateInformation(const void* _data, const int _size)
+	{
+		if(!m_desk->holdState(_data, _size)) Processor::setStateInformation(_data, _size);
+	}
+
+	void AudioPluginAudioProcessor::restoreHeldState()
+	{
+		std::vector<uint8_t> held;
+		if(m_desk->takeHeldState(held)) Processor::setStateInformation(held.data(), static_cast<int>(held.size()));
+	}
+
 	void AudioPluginAudioProcessor::saveChunkData(baseLib::BinaryStream& _stream)
 	{
 		jucePluginEditorLib::Processor::saveChunkData(_stream);

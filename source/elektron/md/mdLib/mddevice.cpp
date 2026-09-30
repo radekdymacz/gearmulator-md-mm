@@ -291,7 +291,10 @@ namespace md
 		std::shared_ptr<const std::vector<uint8_t>> _state,
 		const synthLib::StateType _type)
 	{
-		if(!_state)
+		// An empty payload is what the no-ROM stand-in leaves behind: synthLib::Plugin puts its
+		// version/type header on a state even when the device has none to give, and hands it to the
+		// machine that replaces the stand-in. There is nothing to restore, and nothing failed.
+		if(!_state || _state->empty())
 			return {};
 		FactoryFlashSnapshot factoryFlash;
 		if(m_model == MachineModel::Machinedrum)

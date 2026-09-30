@@ -212,8 +212,10 @@ namespace pluginLib
 
 		//==============================================================================
 		bool isBusesLayoutSupported(const BusesLayout&) const override;
+	protected:	// mdJucePlugin's processor keeps the project while there is no ROM (doc/modern-ux/UPSTREAM.md)
 	    void getStateInformation (juce::MemoryBlock& destData) override;
 	    void setStateInformation (const void* _data, int _sizeInBytes) override;
+	private:
 	    void getCurrentProgramStateInformation (juce::MemoryBlock& destData) override;
 	    void setCurrentProgramStateInformation (const void* data, int sizeInBytes) override;
 		const juce::String getName() const override;

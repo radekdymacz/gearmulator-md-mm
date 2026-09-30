@@ -1,5 +1,6 @@
 #pragma once
 
+#include "juce_audio_processors/juce_audio_processors.h"
 #include <atomic>
 #include <cstdint>
 #include <memory>
@@ -58,6 +59,14 @@ namespace mdJucePlugin
 		// host only stores the text; the session's mdDesk::Desk validates it. Any thread.
 		std::string setup() const;
 		void setSetup(std::string _json);
+		// No ROM, no project: the stand-in has no machine to give the project to, and saving it would
+		// overwrite the saved one (with an empty state and stale automation). While the stand-in runs the
+		// host keeps the project it was given, hands the same bytes back when the host asks to save, and
+		// gives it to the machine that replaces the stand-in (takeHeldState; the processor's hooks).
+		bool holdState(const void* _data, int _size);
+		bool heldState(juce::MemoryBlock& _out) const;
+		bool takeHeldState(std::vector<uint8_t>& _out);
+
 		// Changes with every setSetup (the session's saves and project restores).
 		uint32_t setupVersion() const { return m_setupVersion.load(std::memory_order_acquire); }
 
@@ -65,6 +74,8 @@ namespace mdJucePlugin
 		AudioPluginAudioProcessor& m_processor;
 		mutable std::mutex m_setupMutex;
 		std::string m_setup;
+		mutable std::mutex m_heldMutex;
+		std::vector<uint8_t> m_held;
 		std::atomic<uint32_t> m_setupVersion{0};
 		std::unique_ptr<DeskSession> m_session;
 		std::shared_ptr<void> m_editFlowDriver;	// a test build's edit-flow driver (mdEditFlowDriver.h); gone before the session

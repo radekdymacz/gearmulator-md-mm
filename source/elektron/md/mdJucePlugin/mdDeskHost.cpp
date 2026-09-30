@@ -1,6 +1,7 @@
 #include "mdDeskHost.h"
 
 #include "mdDeskSession.h"
+#include "mdPluginProcessor.h"
 #if MDMM_EDITFLOW_DRIVER
 #include "mdEditFlowDriver.h"
 #endif
@@ -27,6 +28,32 @@ namespace mdJucePlugin
 	DeskHost::~DeskHost()
 	{
 		m_editFlowDriver.reset();
+	}
+
+	bool DeskHost::holdState(const void* const _data, const int _size)
+	{
+		if(!m_processor.getPlugin().withDeviceLocked([](synthLib::Device* const _d) { return isNoRomDevice(_d); }))
+			return false;
+		const std::lock_guard lock(m_heldMutex);
+		m_held.assign(static_cast<const uint8_t*>(_data), static_cast<const uint8_t*>(_data) + std::max(_size, 0));
+		return true;
+	}
+
+	bool DeskHost::heldState(juce::MemoryBlock& _out) const
+	{
+		if(!m_processor.getPlugin().withDeviceLocked([](synthLib::Device* const _d) { return isNoRomDevice(_d); }))
+			return false;
+		const std::lock_guard lock(m_heldMutex);
+		_out.append(m_held.data(), m_held.size());
+		return true;
+	}
+
+	bool DeskHost::takeHeldState(std::vector<uint8_t>& _out)
+	{
+		const std::lock_guard lock(m_heldMutex);
+		_out = std::move(m_held);
+		m_held.clear();
+		return !_out.empty();
 	}
 
 	void DeskHost::startSession()

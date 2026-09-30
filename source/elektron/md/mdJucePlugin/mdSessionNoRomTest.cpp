@@ -70,6 +70,17 @@ namespace
 		return {};
 	}
 
+	// kit.working ("clean", "edited", "unknown") in the last machine document, empty if none came.
+	std::string kitWorkingOf(const std::vector<Value>& _published)
+	{
+		for(auto it = _published.rbegin(); it != _published.rend(); ++it)
+			if(str(*it, "type") == "machine")
+				if(const auto* doc = it->find("doc"))
+					if(const auto* kit = doc->find("kit"))
+						return str(*kit, "working");
+		return {};
+	}
+
 	int count(const std::vector<Value>& _published, const char* _type)
 	{
 		int n = 0;
@@ -143,6 +154,19 @@ int main(const int _argc, char** const _argv)
 	check(stand(), "no ROM: the processor runs the silent stand-in (no exception, so no alert)");
 	check(lifecycleOf(published) == "missing", "the page is told the ROM is missing (lifecycle '" + lifecycleOf(published) + "'), not left loading");
 
+	// The project the app was opened with is kept while there is no ROM (saving must not overwrite it
+	// with the stand-in's empty state) and nothing is saved when there was none.
+	const char kept[] = "the saved project, as the host gave it";
+	{
+		juce::MemoryBlock none;
+		ap.getStateInformation(none);
+		check(none.getSize() == 0, "no ROM and no project given: nothing to save");
+		ap.setStateInformation(kept, sizeof(kept));
+		juce::MemoryBlock back;
+		ap.getStateInformation(back);
+		check(back.getSize() == sizeof(kept) && std::memcmp(back.getData(), kept, sizeof(kept)) == 0, "no ROM: saving hands back the project it was given");
+	}
+
 	if(install && session)
 	{
 		published.clear();
@@ -161,6 +185,46 @@ int main(const int _argc, char** const _argv)
 			pump(40);
 		check(!stand() && running(), "the machine boots with the installed ROM and takes MIDI");
 		pump(500);
+		{
+			juce::MemoryBlock now;
+			ap.getStateInformation(now);
+			check(now.getSize() > sizeof(kept) && std::memcmp(now.getData(), kept, sizeof(kept)) != 0, "with the ROM the machine's own state is saved");
+		}
+		// The stand-in had no state: the new machine must not try to restore one (the "state restore"
+		// alert on a first run came from the stand-in's bare header being applied to the real device).
+		std::string restoreError;
+		bool restoreFailed = true;
+		processor->getPlugin().withDeviceLocked([&](synthLib::Device* _d)
+		{
+			if(auto* d = dynamic_cast<md::Device*>(_d))
+			{
+				restoreError = d->projectStateRestoreError();
+				restoreFailed = d->projectStateRestoreStatus() == md::Device::ProjectStateRestoreStatus::Failed;
+			}
+		});
+		check(!restoreFailed && restoreError.empty(), "no state restore failed after the install ('" + restoreError + "')");
+		// Nothing was edited: after a first boot the playing kit matches its stored slot. Give the
+		// session time to read both (it asks the machine once it is up), then it must say "clean".
+		std::string working;
+		for(int i = 0; i < 400 && (working = kitWorkingOf(published)) != "clean"; ++i)
+			pump(100);
+		pump(15000);
+		working = kitWorkingOf(published);
+		{
+			std::string seq, last;
+			for(const auto& m : published)
+				if(str(m, "type") == "machine")
+					if(const auto* doc = m.find("doc"))
+						if(const auto* kit = doc->find("kit"))
+						{
+							const auto w = str(*kit, "working");
+							if(w != last)
+								seq += (seq.empty() ? "" : " > ") + w;
+							last = w;
+						}
+			std::printf("  kit.working over time: %s\n", seq.c_str());
+		}
+		check(working == "clean", "the playing kit is not edited after the first boot (kit.working '" + working + "')");
 		const auto life = lifecycleOf(published);
 		check(life != "missing" && life != "loading" && !life.empty(), "the page's lifecycle moved on ('" + life + "')");
 	}

@@ -66,6 +66,10 @@ namespace mdJucePlugin
 		void saveChunkData(baseLib::BinaryStream& _stream) override;
 		void loadChunkData(baseLib::ChunkReader& _reader) override;
 		bool loadCustomData(const std::vector<uint8_t>& _sourceBuffer) override;
+		// No ROM: the project stays as it was (DeskHost::holdState, UPSTREAM.md); the ROM's arrival restores it.
+		void getStateInformation(juce::MemoryBlock& _dest) override;
+		void setStateInformation(const void* _data, int _size) override;
+		void restoreHeldState();
 
 	private:
 		static BusesProperties createBusesProperties();

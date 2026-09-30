@@ -82,6 +82,8 @@ namespace mdJucePlugin
 		// The machine starts again with the new firmware, without reopening the plug-in; the page's boot
 		// card shows its start-up.
 		const bool restarted = pluginProcessorOf(m_processor).rebootDevice();
+		if(restarted)
+			m_processor.restoreHeldState();	// the project the app was opened with (no ROM held it)
 		if(!restarted)
 		{
 			Value e = Value::object();
