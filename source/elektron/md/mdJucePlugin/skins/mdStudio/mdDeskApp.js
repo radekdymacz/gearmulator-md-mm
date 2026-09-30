@@ -1041,13 +1041,10 @@ function firstRun(manual) {
 function romMenu() { if (V.lifecycle === "missing") { firstRun(true); return; } cmd("romInfo"); }
 function showRomInfo(m) {
 	if (!m.installed) { firstRun(true); return; }
-	const mib = (m.size / 1048576).toFixed(1);
-	ask(`<b>FIRMWARE</b><br>The machine runs <b>${escH(m.os)}</b> from <span class="mono">${escH(m.name)}</span> (${mib} MiB)${m.inFolder ? "" : ", which is outside the editor's ROM folder"}.<br>Replace it with another image (choose it, or drop it on the window), or remove it and the editor asks for a firmware again. Your project stays.`,
-		[["Replace…", "cream", () => cmd("chooseRom")],
-			["Remove", "danger", () => { if (!m.inFolder) { toast("This image is outside the editor's ROM folder (" + m.folder + "); remove it there yourself."); return; } askRemoveRom(m); }],
-			["Show ROM folder", "", () => cmd("revealRomFolder")], ["Close", "", () => {}]]);
+	Boot.showInstalled({ machine: "Machinedrum", os: m.os, name: m.name, size: m.size, inFolder: m.inFolder, folder: m.folder });
 }
 function askRemoveRom(m) {
+	if (!m.inFolder) { toast("This image is outside the editor's ROM folder (" + m.folder + "); remove it there yourself."); return; }
 	ask(`Remove <b>${escH(m.os)}</b> from the ROM folder? The machine stops and the editor asks for a firmware again. Your project stays.`,
 		[["Remove", "danger", () => cmd("removeRom")], ["Cancel", "", () => {}]]);
 }
@@ -1068,7 +1065,8 @@ function pumpNotices() {
 Bridge.onMessage(m => { if (m.type === "romInfo") showRomInfo(m); else if (m.type === "notice") showNotice(m); });
 
 /* the start-up card's keys: the host's native file chooser, the ROM folder, a new look (the ROM stays on this computer) */
-Boot.host = { chooseRom: () => cmd("chooseRom"), revealRom: () => cmd("revealRomFolder"), recheck: () => cmd("recheckFirmware") };
+Boot.host = { chooseRom: () => cmd("chooseRom"), revealRom: () => cmd("revealRomFolder"), recheck: () => cmd("recheckFirmware"),
+	romBytes: (msg, done) => cmd("romBytes", msg, undefined, undefined, done), removeRom: askRemoveRom, log: t => Bridge.log(t), say: toast };
 Bridge.onMessage(m => { if (m.type === "romInstall") { Boot.rom(m); toast(m.text); } });
 /* SysEx import and export: the host's file dialogs and document writes (the page never reads the file) */
 Syx.host = { choose: () => cmd("chooseSyx"), exportAll: () => cmd("syxExport"), start: kinds => cmd("syxImport", { kinds }), stop: () => cmd("syxCancel") };

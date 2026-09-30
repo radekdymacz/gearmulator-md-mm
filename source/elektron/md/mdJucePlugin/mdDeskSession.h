@@ -109,6 +109,13 @@ namespace mdJucePlugin
 		// dialog; REMOVE deletes the images in the ROM folder and starts the stand-in (the start-up card asks again).
 		void romInfo(const Value& _message) const;
 		void removeRom(const Value& _message);
+		// A firmware file dropped on the page arrives in pieces (romBytes); the last one installs it (installRom).
+		void romBytes(const Value& _message);
+	public:
+		// A line for the editor's log (diagnostics builds); set by the window while it is open.
+		void setLog(std::function<void(const std::string&)> _log) { m_log = std::move(_log); }
+	protected:
+		void log(const std::string& _line) const { if(m_log) m_log(_line); }
 		virtual void onAttach() {}
 		virtual void onDetach() {}
 
@@ -118,6 +125,9 @@ namespace mdJucePlugin
 		void timerCallback() override { step(); }
 
 		ToPage m_toPage;
+		std::function<void(const std::string&)> m_log;
+		struct Incoming { std::string name; size_t size = 0; int count = 0; int next = 0; std::vector<uint8_t> bytes; };
+		Incoming m_incoming;
 	};
 
 	// The editor's setup kept with the project (the processor's setup chunk), for either model: the
@@ -266,6 +276,7 @@ namespace mdJucePlugin
 			case Action::RevealRomFolder: revealRomFolder(_message); break;
 			case Action::RomInfo: romInfo(_message); break;
 			case Action::RemoveRom: removeRom(_message); break;
+			case Action::RomBytes: romBytes(_message); break;
 			case Action::SyxImport: syxImport(_message); break;
 			case Action::SyxCancel: m_syx.cancel(); toPage(m_syx.progress("Import stopped.")); reply(_message, true, "Import stopped."); break;
 			case Action::Midi: onMidi(_message); break;

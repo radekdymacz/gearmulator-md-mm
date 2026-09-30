@@ -7,7 +7,11 @@
      Boot.update({state, machine, text})  state: "loading" | "booting" | "missing" | "unsupported" | "ready"
      Boot.lcd(bytes)                     the firmware's 128 x 64 screen (1024 bytes, rows of 16, MSB first)
      Boot.rom({ok, text})                the host's verdict on a chosen or dropped file
-     Boot.host = {chooseRom(), revealRom(), recheck()}   the app's host calls */
+     Boot.showInstalled({machine, os, name, size, inFolder})   the same card while a firmware runs (LOAD ROM):
+                                         the current image, a drop zone to replace it, Remove, Show the ROM folder, Close
+     Boot.host = {chooseRom(), revealRom(), recheck(), romBytes(msg, done), removeRom(info), log(text), say(text)}   the app's host calls
+   A file dropped anywhere on the page (HTML5 drag and drop; the web view takes the drag, the page reads the file
+   and sends it in pieces, romBytes) is checked here and installed by the host like a chosen one. */
 const Boot = (() => {
 	const EXPECT = { Machinedrum: 14000, Monomachine: 11000 };	// ms from the first BOOTING OS to input (measured)
 	const card = document.createElement("div");
@@ -19,14 +23,15 @@ const Boot = (() => {
  <div class="bootbar" id="bootbar" role="progressbar" aria-valuemin="0" aria-valuemax="100"><i></i></div>
  <p class="bootline" id="bootline">Keys work when the start-up animation ends.</p>
  <div class="bootrom" id="bootrom" hidden>
+  <p class="bootcur" id="bootcur" hidden></p>
   <button class="bootzone" data-bootrom="choose" aria-describedby="bootres"><b id="bootzone"></b><span>A <span class="mono">.bin</span>, or a <span class="mono">.zip</span> with it. Drop it anywhere on this window, or click here to choose it.</span></button>
   <p class="bootres" id="bootres" role="status"></p>
-  <p class="bootpriv">The firmware stays on this computer: the editor checks it and copies it into its ROM folder, and sends it nowhere. <button class="linkkey" data-bootrom="folder">Show the ROM folder</button> <button class="linkkey" data-bootrom="recheck">Check again</button></p>
+  <p class="bootpriv">The firmware stays on this computer: the editor checks it and copies it into its ROM folder, and sends it nowhere. <button class="linkkey" data-bootrom="folder">Show the ROM folder</button> <button class="linkkey" data-bootrom="recheck">Check again</button> <button class="linkkey" data-bootrom="remove" hidden>Remove the ROM</button> <button class="linkkey" data-bootrom="close" hidden>Close</button></p>
  </div>
 </div>`;
 	document.body.appendChild(card);
 	const $b = id => card.querySelector("#" + id);
-	let shown = null, t0 = 0, raf = 0, machine = "Machinedrum", lastBits = null;
+	let shown = null, t0 = 0, raf = 0, machine = "Machinedrum", lastBits = null, manage = null;
 	const cssv = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
 	function draw() {
 		const c = $b("bootlcd"), g = c.getContext("2d");
@@ -44,9 +49,31 @@ const Boot = (() => {
 		raf = requestAnimationFrame(tick);
 	}
 	function romName(m) { return m === "Monomachine" ? "Monomachine SFX-60 OS 1.32B" : "Machinedrum OS 1.63"; }
+	const esc = t => String(t).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
+	const links = (m) => {	// which of the card's links show: the first-run ones, or the installed firmware's
+		card.querySelector('[data-bootrom="recheck"]').hidden = m;
+		card.querySelector('[data-bootrom="remove"]').hidden = !m;
+		card.querySelector('[data-bootrom="close"]').hidden = !m;
+	};
+	function leaveManage() { if (!manage) return; manage = null; card.classList.remove("manage"); $b("bootcur").hidden = true; links(false); }
+	/* LOAD ROM with a firmware running: the same card, the current image on one line */
+	function showInstalled(o) {
+		machine = o.machine || machine; manage = o; shown = "manage";
+		card.classList.remove("out", "ind"); card.classList.add("rom", "manage");
+		$b("boott").textContent = `${machine} firmware`;
+		$b("bootline").hidden = true; $b("bootrom").hidden = false;
+		$b("bootzone").textContent = "Drop another ROM here to replace it, or choose it";
+		const cur = $b("bootcur");
+		cur.innerHTML = `<b>${esc(o.os)}</b><span class="bootfile" title="${esc(o.name)}${o.inFolder ? "" : " (outside the editor's ROM folder)"}">${esc(o.name)}</span><i>${(o.size / 1048576).toFixed(1)} MiB</i>`;
+		cur.hidden = false;
+		$b("bootres").textContent = ""; $b("bootres").className = "bootres";
+		links(true);
+		card.hidden = false;
+	}
 	function update(o) {
 		machine = o.machine || machine;
 		const st = o.state === "animating" ? "booting" : o.state;
+		if (manage) { if (st === "ready" || !st) return; leaveManage(); shown = null; }
 		if (st === "ready" || !st) {
 			if (shown && !card.hidden) { card.classList.add("out"); setTimeout(() => { if (shown === null) { card.hidden = true; card.classList.remove("out"); } }, 380); }
 			shown = null; return;
@@ -70,6 +97,7 @@ const Boot = (() => {
 	}
 	function lcd(bits) { lastBits = bits; if (!card.hidden) draw(); }
 	function rom(r) {
+		if (manage && r.ok) { leaveManage(); shown = null; card.hidden = true; return; }	// the machine starts again on the new image
 		const el = $b("bootres");
 		el.textContent = r.text || ""; el.className = "bootres " + (r.ok ? "ok" : "bad");
 		if (r.ok) { $b("boott").textContent = `Starting the ${machine}…`; t0 = performance.now(); }
@@ -78,7 +106,53 @@ const Boot = (() => {
 		const k = e.target.closest("[data-bootrom]"); if (!k || !Boot.host) return;
 		const a = k.dataset.bootrom;
 		if (a === "choose") Boot.host.chooseRom(); else if (a === "recheck") Boot.host.recheck(); else if (a === "folder") Boot.host.revealRom();
+		else if (a === "remove" && manage && Boot.host.removeRom) Boot.host.removeRom(manage);
+		else if (a === "close") { leaveManage(); shown = null; card.hidden = true; }
 	});
-	return { update, lcd, rom, host: null, state: () => shown };
+	/* ROMDROP BEGIN: what a dropped file must be, and its pieces for the bridge (pure: a File in, a plan out) */
+	function romDropPlan(file, want) {
+		const ROM = 0x800000, LIMIT = 64 * 1048576, PIECE = 196608;	// 192 KiB of bytes = 256 KiB of base64 per bridge message
+		if (!file) return Promise.resolve({ ok: false, text: "Drop the firmware image: a .bin (or a .zip with it) from your own machine." });
+		const name = file.name || "", ext = ((/\.([A-Za-z0-9]+)$/.exec(name) || [])[1] || "").toLowerCase();
+		if (ext !== "bin" && ext !== "zip") return Promise.resolve({ ok: false, text: `"${name || "This"}" is not a firmware image. Drop the ${want} .bin (or a .zip with it).` });
+		if (ext === "bin" && file.size !== ROM) return Promise.resolve({ ok: false, text: `This file is ${(file.size / 1048576).toFixed(2)} MiB. The ${want} image is exactly 8 MiB.` });
+		if (file.size > LIMIT) return Promise.resolve({ ok: false, text: "This file is far larger than a firmware image." });
+		return file.arrayBuffer().then(ab => {
+			const buf = new Uint8Array(ab), count = Math.max(1, Math.ceil(buf.length / PIECE));
+			const piece = i => { const p = buf.subarray(i * PIECE, (i + 1) * PIECE); let s = ""; for (let k = 0; k < p.length; k += 0x8000) s += String.fromCharCode.apply(null, p.subarray(k, k + 0x8000)); return btoa(s); };
+			return { ok: true, name, size: buf.length, count, piece };
+		}, () => ({ ok: false, text: "The file could not be read." }));
+	}
+	/* ROMDROP END */
+	function said(text, ok) { if (card.hidden || $b("bootrom").hidden) { if (Boot.host && Boot.host.say) Boot.host.say(text); } else rom({ ok, text }); }
+	async function dropped(file) {
+		const h = Boot.host || {}, log = t => h.log && h.log(t);
+		log(`drop: page got ${file ? file.name + " " + file.size : "no file"}`);
+		const plan = await romDropPlan(file, romName(machine));
+		if (!plan.ok) { log("drop: refused: " + plan.text); said(plan.text, false); return; }
+		if (!h.romBytes) { said("This page has no host to install the firmware.", false); return; }
+		said(`Sending ${plan.name}…`, true);
+		for (let i = 0; i < plan.count; i++) {
+			const r = await new Promise(done => h.romBytes({ name: plan.name, size: plan.size, index: i, count: plan.count, data: plan.piece(i) }, done));
+			if (!r || !r.ok) { const t = (r && r.errors && r.errors[0]) || "The plug-in did not take the file."; log("drop: failed: " + t); said(t, false); return; }
+		}
+		log("drop: all pieces sent");
+	}
+	/* the web view takes the drag: it shows on the card and the page reads the file (Finder puts a file, no path, on the pasteboard) */
+	let over = 0;
+	const files = e => e.dataTransfer && Array.prototype.indexOf.call(e.dataTransfer.types || [], "Files") >= 0;
+	const hover = on => { card.classList.toggle("dropping", on); document.documentElement.classList.toggle("romdrop", on); };
+	document.addEventListener("dragenter", e => { if (!files(e)) return; e.preventDefault(); over++; hover(true); }, true);
+	document.addEventListener("dragover", e => { if (!files(e)) return; e.preventDefault(); e.dataTransfer.dropEffect = "copy"; }, true);
+	document.addEventListener("dragleave", e => { if (!files(e)) return; over = Math.max(0, over - 1); if (!over) hover(false); }, true);
+	document.addEventListener("drop", e => {
+		if (!files(e)) return;
+		over = 0; hover(false);
+		const f = e.dataTransfer.files && e.dataTransfer.files[0];
+		if (f && /\.syx$/i.test(f.name || "")) return;	// a SysEx file: the window opens it (the web view's own navigation, cancelled by the host)
+		e.preventDefault();
+		dropped(f);
+	}, true);
+	return { update, lcd, rom, showInstalled, romDropPlan, host: null, state: () => shown };
 })();
 /* BOOT END */

@@ -5238,6 +5238,58 @@
         },
         {
           "type": "object",
+          "description": "host: a firmware file dropped on the page: piece index of count (base64, in order); the last piece installs it like a chosen file (romInstall)",
+          "required": [
+            "op",
+            "name",
+            "size",
+            "index",
+            "count",
+            "data"
+          ],
+          "properties": {
+            "op": {
+              "const": "romBytes"
+            },
+            "id": {
+              "type": "integer"
+            },
+            "g": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "force": {
+              "type": [
+                "boolean",
+                "integer"
+              ]
+            },
+            "name": {
+              "type": "string"
+            },
+            "size": {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 67108864
+            },
+            "index": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 4096
+            },
+            "count": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 4096
+            },
+            "data": {
+              "type": "string"
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
           "description": "host: delete the firmware from the editor's ROM folder (never outside it); the machine stops and the start-up card asks for a ROM again",
           "required": [
             "op"

@@ -27,8 +27,6 @@ namespace mdJucePlugin
 
 namespace mdJucePlugin
 {
-	juce::String describeDragTargets(juce::Component& _web);	// mdStudioWebZoom.mm
-	int passFileDropsToEditor(juce::Component& _web);	// mdStudioWebZoom.mm: how many views still took drags
 	namespace json = elektronData::json;
 
 	// The web view's parent: it takes the files dropped on the window (the web view does not).
@@ -82,7 +80,10 @@ namespace mdJucePlugin
 		genericUI::messageRoute::setSink({});
 		m_diagnostics.reset();
 		if(m_session)
+		{
+			m_session->setLog({});
 			m_session->detach();
+		}
 		m_audio.reset();
 		m_page.reset();
 		m_dropZone.reset();
@@ -102,6 +103,8 @@ namespace mdJucePlugin
 			},
 			[this](const json::Value& _m) { onPageMessage(_m); });
 		m_audio = std::make_unique<AudioMidiLink>(getProcessor(), [this](json::Value _m) { m_page->send(std::move(_m)); });
+		if(m_session)
+			m_session->setLog([this](const std::string& _l) { if(m_page) m_page->log(juce::String(_l)); });
 		if(m_session)
 			m_session->attach([this](const json::Value& _m) { m_page->send(_m); });
 		// The plug-in's questions and warnings are the page's modals, not native alerts (messageRoute.h).
@@ -143,9 +146,6 @@ namespace mdJucePlugin
 		getRmlComponent()->addAndMakeVisible(*m_dropZone);
 		layout();
 		m_page->load();
-#if JUCE_MAC
-		m_page->log("drop: the web view takes drags in " + juce::String(passFileDropsToEditor(m_page->component())) + " views before the page loads");
-#endif
 #if MDMM_DIAGNOSTICS
 		if(m_session)
 			m_diagnostics = std::make_unique<Diagnostics>(*m_page, *m_session, *getRmlComponent(), getProcessor());
@@ -260,15 +260,6 @@ namespace mdJucePlugin
 	void PageEditor::timerCallback()
 	{
 		layout();
-#if JUCE_MAC
-		// WKWebView registers for drags again when its page loads or its process restarts: keep the
-		// window's drops with the editor (checked twice a second; a finding is logged).
-		if(m_page && (m_dropCheck == 89 || m_dropCheck == 900))
-			m_page->log("drop: views taking file drags after " + juce::String(m_dropCheck / 30) + " s: " + describeDragTargets(m_page->component()));
-		if(m_page && ++m_dropCheck % 15 == 0)
-			if(const auto n = passFileDropsToEditor(m_page->component()); n > 0)
-				m_page->log("drop: the web view had taken drags again in " + juce::String(n) + " views, given back to the window");
-#endif
 		if(m_audio)
 			m_audio->tick();
 		if(m_diagnostics)

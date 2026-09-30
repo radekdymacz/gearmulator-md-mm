@@ -407,18 +407,17 @@
 		const again = () => { const c = Object.assign({}, m.command, { force: true }); delete c.id; send(c); };
 		V().ask(m.message || "The machine asks before it goes on.", m.command ? [[m.confirm || "Go on", "danger", again], ["Cancel", "", () => {}]] : [["OK", "", () => {}]]);
 	}
-	/* LOAD ROM with a firmware installed: the ROM folder is the editor's; nothing outside it is touched */
+	/* LOAD ROM with a firmware installed: the start-up card in its installed form (Boot.showInstalled); the ROM
+	   folder is the editor's, nothing outside it is touched */
 	function onRomInfo(m) {
 		if (!m.installed) { host.firstRun(); return; }
+		V().bootInstalled({ machine: "Monomachine", os: m.os, name: m.name, size: m.size, inFolder: m.inFolder, folder: m.folder });
+	}
+	function askRemoveRom(m) {
+		if (!m.inFolder) { V().toast("This image is outside the editor's ROM folder (" + m.folder + "); remove it there yourself."); return; }
 		const esc = t => String(t).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
-		V().ask(`<b>FIRMWARE</b><br>The machine runs <b>${esc(m.os)}</b> from <span class="mono">${esc(m.name)}</span> (${(m.size / 1048576).toFixed(1)} MiB)${m.inFolder ? "" : ", which is outside the editor's ROM folder"}.<br>Replace it with another image (choose it, or drop it on the window), or remove it and the editor asks for a firmware again. Your project stays.`,
-			[["Replace…", "cream", () => send({ op: "chooseRom" })],
-				["Remove", "danger", () => {
-					if (!m.inFolder) { V().toast("This image is outside the editor's ROM folder (" + m.folder + "); remove it there yourself."); return; }
-					V().ask(`Remove <b>${esc(m.os)}</b> from the ROM folder? The machine stops and the editor asks for a firmware again. Your project stays.`,
-						[["Remove", "danger", () => send({ op: "removeRom" }, { onResult: r => { if (!r.ok) V().toast(r.errors[0]); } })], ["Cancel", "", () => {}]]);
-				}],
-				["Show ROM folder", "", () => send({ op: "revealRomFolder" })], ["Close", "", () => {}]]);
+		V().ask(`Remove <b>${esc(m.os)}</b> from the ROM folder? The machine stops and the editor asks for a firmware again. Your project stays.`,
+			[["Remove", "danger", () => send({ op: "removeRom" }, { onResult: r => { if (!r.ok) V().toast(r.errors[0]); } })], ["Cancel", "", () => {}]]);
 	}
 	/* what the plug-in has to say to the user (a question, a warning): its modal, never a native alert; one at a time */
 	const notices = [];
@@ -548,6 +547,10 @@
 		/* the start-up card's keys (P7): the window's native file chooser for the firmware (the page never reads
 		   it), the ROM folder, and a new look */
 		chooseRom() { send({ op: "chooseRom" }); },
+		/* a firmware file dropped on the page, in pieces (Boot): each answered before the next goes */
+		romBytes(msg, done) { send(Object.assign({ op: "romBytes" }, msg), { onResult: done }); },
+		removeRom(info) { askRemoveRom(info); },
+		log(text) { log(text); },
 		/* LOAD ROM in the engine menu: which firmware runs, REPLACE or REMOVE it (the reply is the romInfo message) */
 		romManage() { if (machine?.lifecycle === "missing") host.firstRun(); else send({ op: "romInfo" }); },
 		/* SysEx import and export (P7): the window's file dialogs; the plug-in parses and writes */

@@ -6,6 +6,8 @@
 //   mdSessionNoRomTest <md|mm>            no ROM: the state the page sees
 //   mdSessionNoRomTest <md|mm> manage     the same, then LOAD ROM: romInfo, REPLACE with another copy, REMOVE (the
 //                                         machine stops, the folder is empty, the page is told "missing" again)
+//   mdSessionNoRomTest <md|mm> bytes      a file dropped on the page arrives in pieces (romBytes): out of order and
+//                                         wrong sizes are refused, the real ROM in pieces installs and boots
 //   mdSessionNoRomTest <md|mm> install    then the ROM (GEARMULATOR_MD_FIRMWARE_BIN / _MM_): exits 77 without it
 #include "mdPluginProcessor.h"
 #include "mdDeskHost.h"
@@ -96,8 +98,9 @@ namespace
 int main(const int _argc, char** const _argv)
 {
 	const bool mm = _argc > 1 && std::strcmp(_argv[1], "mm") == 0;
+	const bool bytes = _argc > 2 && std::strcmp(_argv[2], "bytes") == 0;
 	const bool manage = _argc > 2 && std::strcmp(_argv[2], "manage") == 0;
-	const bool install = manage || (_argc > 2 && std::strcmp(_argv[2], "install") == 0);
+	const bool install = bytes || manage || (_argc > 2 && std::strcmp(_argv[2], "install") == 0);
 	const auto model = mm ? md::MachineModel::Monomachine : md::MachineModel::Machinedrum;
 	const char* rom = std::getenv(mm ? "GEARMULATOR_MM_FIRMWARE_BIN" : "GEARMULATOR_MD_FIRMWARE_BIN");
 	if(install && (!rom || !juce::File(rom).existsAsFile()))
@@ -171,7 +174,56 @@ int main(const int _argc, char** const _argv)
 		check(back.getSize() == sizeof(kept) && std::memcmp(back.getData(), kept, sizeof(kept)) == 0, "no ROM: saving hands back the project it was given");
 	}
 
-	if(install && session)
+	const auto piece = [&](const char* _name, size_t _size, int _index, int _count, const juce::String& _b64)
+	{
+		auto m = elektronData::json::parse(R"({"op":"romBytes","id":5})");
+		m->set("name", std::string(_name));
+		m->set("size", static_cast<double>(_size));
+		m->set("index", _index);
+		m->set("count", _count);
+		m->set("data", _b64.toStdString());
+		published.clear();
+		session->onPageMessage(*m);
+		bool ok = false;
+		for(const auto& r : published)
+			if(str(r, "type") == "result")
+				ok = r.find("ok") && r.find("ok")->asBool();
+		return ok;
+	};
+	if(bytes && session)
+	{
+		// refused: a file of the wrong size (the bytes are not a ROM), and a piece out of order
+		piece("small.bin", 3, 0, 1, juce::Base64::toBase64("abc", 3));
+		bool refusedText = false;
+		for(const auto& m : published)
+			if(str(m, "type") == "romInstall")
+				refusedText = m.find("ok") && !m.find("ok")->asBool() && !str(m, "text").empty();
+		check(refusedText && stand(), "a small file dropped as bytes is refused with a text for the card, and nothing starts");
+		check(!piece("late.bin", 10, 1, 2, "AAAA"), "a piece out of order is refused");
+		check(!piece("bad.bin", 4, 0, 1, "!!!not base64"), "damaged data is refused");
+		juce::MemoryBlock img;
+		juce::File(rom).loadFileAsData(img);
+		const size_t part = 300000;
+		const int n = static_cast<int>((img.getSize() + part - 1) / part);
+		bool all = true;
+		for(int i = 0; i < n; ++i)
+		{
+			const auto len = std::min(part, img.getSize() - i * part);
+			all = piece("dropped-rom.bin", img.getSize(), i, n, juce::Base64::toBase64(static_cast<const char*>(img.getData()) + i * part, len)) && all;
+		}
+		check(all, "every piece of the real ROM is taken");
+		bool installed = false;
+		for(const auto& m : published)
+			if(str(m, "type") == "romInstall")
+				installed = m.find("ok") && m.find("ok")->asBool();
+		check(installed, "the last piece installs it (romInstall ok)");
+		const juce::File romFolder(juce::String::fromUTF8(processor->getPublicRomFolder().c_str()));
+		check(romFolder.getChildFile("dropped-rom.bin").existsAsFile(), "and it is in the ROM folder under the dropped name");
+		for(int i = 0; i < 1500 && !running(); ++i)
+			pump(40);
+		check(!stand() && running(), "the machine boots with the dropped ROM");
+	}
+	else if(install && session)
 	{
 		published.clear();
 		session->installRom(juce::File(rom));
@@ -319,6 +371,6 @@ int main(const int _argc, char** const _argv)
 	ap.releaseResources();
 	processor.reset();
 	root.deleteRecursively();
-	std::printf("mdSessionNoRomTest %s%s: %s\n", mm ? "mm" : "md", manage ? " manage" : install ? " install" : "", g_failures ? "FAIL" : "PASS");
+	std::printf("mdSessionNoRomTest %s%s: %s\n", mm ? "mm" : "md", bytes ? " bytes" : manage ? " manage" : install ? " install" : "", g_failures ? "FAIL" : "PASS");
 	return g_failures ? 1 : 0;
 }

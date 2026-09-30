@@ -407,7 +407,8 @@ Syx.host={choose:()=>{if(HOST.syxChoose)return HOST.syxChoose();Syx.preview({ok:
    example pretends an install */
 Boot.host={chooseRom:()=>{if(HOST.chooseRom)return HOST.chooseRom();Boot.rom({ok:true,text:"\u2713 Monomachine OS 1.32B found (example)"});setTimeout(()=>startEngine("emu"),900)},
  revealRom:()=>{if(HOST.revealRom)return HOST.revealRom();toast("In the plug-in: the ROM folder opens in Finder.")},
- recheck:()=>{if(HOST.recheck)return HOST.recheck();startEngine("emu")}};
+ recheck:()=>{if(HOST.recheck)return HOST.recheck();startEngine("emu")},
+ romBytes:(m,done)=>{if(HOST.romBytes)return HOST.romBytes(m,done);done({ok:false,errors:["The example has no plug-in to take the file."]})},removeRom:i=>{if(HOST.removeRom)return HOST.removeRom(i)},log:t=>{if(HOST.log)HOST.log(t)},say:t=>toast(t)};
 /* the editor's menu (a host's): right-click an empty part of the header */
 document.addEventListener("contextmenu",e=>{if(!HOST.menu||!e.target.closest(".top")||e.target.closest("button,[role=slider],[role=button],select,input,b,.lcdpanel"))return;e.preventDefault();HOST.menu()});
 window.MMView={
@@ -425,7 +426,7 @@ window.MMView={
  setPlaying,setStep,setPatternSlot,setKitSlot,setWorkingKit,setSong,setRouting:r=>{S.routing=r},setMidiTracks,setMultiMap,
  setEng,dlgOpen:()=>!$("#dlg").hidden,setEngineLabel,setEngineTip,setEngines,setAudioEntry,setKitState,clearLearnTarget:()=>{S.learnT=null},setMapping,setModulation,setCtlSetup,disable,setReading,
  setMutes,setMode,setRecord,setSongs,
- setLcd,setKeyDown,setPst,closeFirmwareDialog,bootRom:r=>Boot.rom(r),syxPreview:m=>Syx.preview(m),syxProgress:m=>Syx.progress(m),
+ setLcd,setKeyDown,setPst,closeFirmwareDialog,bootRom:r=>Boot.rom(r),bootInstalled:o=>Boot.showInstalled(o),syxPreview:m=>Syx.preview(m),syxProgress:m=>Syx.progress(m),
  /* calls */
  render,renderTop,drawLib,toast,ask,redraw,movePH,setPos,flashTracks,goWs,clickStep,autoRange,kitSave,
  redrawAudio:()=>{if(AP.open)drawAudio()},audioLevel,openAudio};

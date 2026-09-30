@@ -11,6 +11,7 @@
 #include "synthLib/midiTypes.h"
 
 #include "juce_core/juce_core.h"
+#include <algorithm>
 
 namespace mdJucePlugin
 {
@@ -79,6 +80,7 @@ namespace mdJucePlugin
 		m.set("ok", r.ok);
 		m.set("text", r.text);
 		toPage(m);
+		log(std::string("drop: install ") + (r.ok ? "ok: " : "failed: ") + r.text);
 		if(!r.ok)
 			return;
 		// The machine starts again with the new firmware, without reopening the plug-in; the page's boot
@@ -124,6 +126,71 @@ namespace mdJucePlugin
 		m.set("folder", folder.getFullPathName().toStdString());
 		m.set("inFolder", found != juce::File() && found.isAChildOf(folder));
 		toPage(m);
+		reply(_message, true, {});
+	}
+
+	void DeskSession::romBytes(const Value& _message)
+	{
+		const auto text = [&](const char* k) { const auto* v = _message.find(k); return v && v->isString() ? v->asString() : std::string(); };
+		const auto num = [&](const char* k) { const auto* v = _message.find(k); return v && v->isNumber() ? v->asNumber() : -1.0; };
+		const auto name = text("name");
+		const int index = static_cast<int>(num("index")), count = static_cast<int>(num("count"));
+		const auto size = static_cast<size_t>(std::max(num("size"), 0.0));
+		const auto fail = [&](const std::string& _why)
+		{
+			log("drop: refused: " + _why);
+			m_incoming = {};
+			Value m = Value::object();
+			m.set("type", "romInstall");
+			m.set("ok", false);
+			m.set("text", _why);
+			toPage(m);
+			reply(_message, false, _why);
+		};
+		if(index == 0)
+		{
+			m_incoming = {};
+			m_incoming.name = name;
+			m_incoming.size = size;
+			m_incoming.count = count;
+			log("drop: page got " + name + " " + std::to_string(size) + " bytes in " + std::to_string(count) + " pieces");
+		}
+		if(m_incoming.count == 0 || index != m_incoming.next || count != m_incoming.count || name != m_incoming.name)
+			return fail("The file did not arrive in order. Drop it again.");
+		if(m_incoming.size > 64u * 1024u * 1024u)
+			return fail("This file is far larger than a firmware image.");
+		juce::MemoryOutputStream out;
+		if(!juce::Base64::convertFromBase64(out, juce::String(text("data"))))
+			return fail("The file could not be read (its data was damaged on the way).");
+		const auto* p = static_cast<const uint8_t*>(out.getData());
+		m_incoming.bytes.insert(m_incoming.bytes.end(), p, p + out.getDataSize());
+		if(m_incoming.bytes.size() > m_incoming.size)
+			return fail("The file is larger than it said.");
+		++m_incoming.next;
+		if(m_incoming.next < m_incoming.count)
+		{
+			reply(_message, true, {});
+			return;
+		}
+		log("drop: bytes received " + std::to_string(m_incoming.bytes.size()));
+		if(m_incoming.bytes.size() != m_incoming.size)
+			return fail("The file arrived incomplete. Drop it again.");
+		// Into a temp folder under its own (legal) name, then the same path as a chosen file; gone afterwards.
+		const auto dir = juce::File::createTempFile("gmrom");
+		dir.createDirectory();
+		auto legal = juce::File::createLegalFileName(juce::String::fromUTF8(m_incoming.name.c_str()));
+		if(legal.isEmpty())
+			legal = "dropped.bin";
+		const auto file = dir.getChildFile(legal);
+		const bool written = file.replaceWithData(m_incoming.bytes.data(), m_incoming.bytes.size());
+		m_incoming = {};
+		if(!written)
+		{
+			dir.deleteRecursively();
+			return fail("The file could not be written to a temporary folder.");
+		}
+		installRom(file);
+		dir.deleteRecursively();
 		reply(_message, true, {});
 	}
 
