@@ -1,0 +1,1037 @@
+<!doctype html>
+<html lang="en" data-m="mm">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<link rel="icon" href="data:,">
+<title>Controller Configurator</title>
+<!-- Clickable prototype of the CONTROL workspace's controller configurator (doc/modern-ux/DESIGN-controller-ux.md).
+     Fake data only, no host. One file: open it from file:// or any static server. The fonts are the pages' own
+     (skins/mdStudio/fonts, relative to this file inside the repo), with the mockups' Google Fonts link as a fallback.
+     Nothing here is product code. -->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600&family=IBM+Plex+Mono:wght@400;500&family=Silkscreen&display=swap">
+<style>
+@font-face{font-family:"Barlow Condensed";font-weight:500;src:url("../../../source/elektron/md/mdJucePlugin/skins/mdStudio/fonts/BarlowCondensed-Medium.ttf") format("truetype")}
+@font-face{font-family:"Barlow Condensed";font-weight:600 700;src:url("../../../source/elektron/md/mdJucePlugin/skins/mdStudio/fonts/BarlowCondensed-SemiBold.ttf") format("truetype")}
+@font-face{font-family:"IBM Plex Mono";font-weight:400;src:url("../../../source/elektron/md/mdJucePlugin/skins/mdStudio/fonts/IBMPlexMono-Regular.ttf") format("truetype")}
+@font-face{font-family:"IBM Plex Mono";font-weight:500 700;src:url("../../../source/elektron/md/mdJucePlugin/skins/mdStudio/fonts/IBMPlexMono-Medium.ttf") format("truetype")}
+@font-face{font-family:"Silkscreen";font-weight:400 700;src:url("../../../source/elektron/md/mdJucePlugin/skins/mdStudio/fonts/Silkscreen-Regular.ttf") format("truetype")}
+
+/* ===== tokens: the Monomachine Editor's SFX-60 plate and the Machinedrum Editor's MKII plate, as shipped ===== */
+:root{
+  --sans:"Barlow Condensed","Arial Narrow",system-ui,sans-serif;
+  --mono:"IBM Plex Mono",ui-monospace,Menlo,monospace;
+  --pix:"Silkscreen",ui-monospace,monospace;
+}
+:root[data-m="mm"]{
+  color-scheme:light;
+  --plate:#d4d5d0;--plate2:#c8cac2;--plate3:#e2e1d9;--print:#383934;--print2:#56574f;--print3:#74756f;--rule:#aaaba5;--body:#292a26;
+  --key:#3a3b36;--key2:#4b4d47;--keytext:#efefe8;--keydim:#aeb0a8;--cream:#efefe8;--creamtext:#292a26;
+  --led:#e65d42;--ledoff:#7b4035;--ledg:#9fc568;--rec:#cf4f39;
+  --lcd:#b9c4b0;--ink:#172014;--bezel:#0d0f0c;--rust:#a04d39;--oxblood:var(--rust);
+}
+:root[data-m="md"]{
+  color-scheme:dark;
+  --plate:#161716;--plate2:#0f100f;--plate3:#232422;--print:#f1f0ea;--print2:#c9c8c1;--print3:#94938c;--rule:#5d5e59;--body:#ecebe5;
+  --key:#232423;--key2:#30312f;--keytext:#ecebe5;--keydim:#8f908b;--cream:#ece6d6;--creamtext:#1f1e1b;
+  --led:#ff3b2f;--ledoff:#4d1714;--ledg:#9fc568;--rec:#e0472e;
+  --lcd:#ef5a39;--ink:#3a0e08;--bezel:transparent;--rust:#ee613f;--oxblood:#ee613f;
+}
+
+/* ===== the pages' base (mmStudio.css / mdDesk.css) ===== */
+*{box-sizing:border-box}
+[hidden]{display:none!important}
+html,body{background:var(--plate)}
+body{color:var(--body);font:500 15px/1.35 var(--sans);padding:14px 16px 90px;margin:0}
+button,select,input{font:inherit;color:inherit}
+button{background:var(--key);color:var(--keytext);border:0;border-radius:3px;padding:5px 11px;cursor:pointer;font-weight:600;letter-spacing:.04em;box-shadow:inset 0 -2px 0 rgba(0,0,0,.35)}
+button:hover{background:var(--key2)}
+button:active{box-shadow:none;transform:translateY(1px)}
+button:disabled{opacity:.4;cursor:default}
+:focus-visible{outline:2px solid var(--led);outline-offset:2px}
+select{background:var(--plate3);border:1px solid var(--rule);border-radius:3px;padding:4px 8px;color:var(--print)}
+.mono{font-family:var(--mono);font-variant-numeric:tabular-nums}
+.note{font-size:14px;color:var(--print2)}
+.app{max-width:1600px;margin:0 auto;display:grid;gap:14px;grid-template-columns:minmax(0,1fr)}
+.led{display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--ledoff);flex:none;vertical-align:middle}
+.led.on{background:var(--led);box-shadow:0 0 6px 1px var(--led)}
+.led.g.on{background:var(--ledg);box-shadow:0 0 6px 1px var(--ledg)}
+.card{border-top:2px solid var(--print);padding-top:8px;display:grid;gap:10px;align-content:start;min-width:0}
+.card header{display:flex;justify-content:space-between;align-items:baseline;gap:8px;flex-wrap:wrap}
+.card h3,.cap{margin:0;font-size:12px;font-weight:600;letter-spacing:.18em;text-transform:uppercase;color:var(--print)}
+.card header span{font:12px var(--mono);color:var(--print3)}
+.ilab{font:600 11px var(--sans);letter-spacing:.14em;text-transform:uppercase;color:var(--print2)}
+.amkey{height:26px;padding:0 10px;font:600 11px var(--sans);letter-spacing:.12em;white-space:nowrap;text-transform:uppercase;display:inline-flex;align-items:center;gap:6px}
+.amkey[aria-pressed=true]{background:var(--cream);color:var(--creamtext)}
+.amkey .led{width:7px;height:7px}
+.chip{padding:3px 10px;font:500 12px var(--mono);letter-spacing:0}
+.chip[aria-pressed=true]{background:var(--cream);color:var(--creamtext)}
+.toast{position:fixed;left:50%;bottom:70px;transform:translateX(-50%);background:var(--lcd);color:var(--ink);font:12px var(--pix);padding:10px 16px;border-radius:3px;opacity:0;transition:opacity .2s;pointer-events:none;z-index:40;box-shadow:0 0 0 3px var(--key)}
+.toast.on{opacity:1}
+@media (prefers-reduced-motion:reduce){*{transition:none!important}}
+
+/* top bar: brand, workspace keys, the LCD, setup keys */
+.top{display:grid;grid-template-columns:auto 1fr auto;gap:12px 22px;align-items:end;padding:4px 0 12px;border-bottom:2px solid var(--print)}
+.top .left{display:flex;gap:18px;align-items:end}
+.brand{display:grid;gap:4px}
+.brand b{font:600 22px/1 var(--sans);letter-spacing:.08em;color:var(--print)}
+.brand small{font:600 12px var(--sans);letter-spacing:.5em;color:var(--oxblood);text-transform:uppercase}
+.wsgroup{display:grid;justify-items:center;gap:4px}
+.grplabel{font:600 10px var(--sans);letter-spacing:.18em;text-transform:uppercase;color:var(--print);display:flex;align-items:center;gap:8px;width:100%}
+.grplabel::before,.grplabel::after{content:"";flex:1;height:6px;border-top:1px solid var(--print)}
+.grplabel::before{border-left:1px solid var(--print)}.grplabel::after{border-right:1px solid var(--print)}
+.tabs{display:flex;gap:5px}
+.tabs button{position:relative;display:grid;justify-items:center;gap:4px;padding:6px 12px 7px;font:600 12px var(--sans);letter-spacing:.12em;text-transform:uppercase}
+.tabs button .led{width:7px;height:7px}
+.tabs button small{position:absolute;right:4px;top:3px;font:10px var(--mono);letter-spacing:0;opacity:.55}
+.tabs button[aria-selected=true]{background:var(--cream);color:var(--creamtext)}
+.tabs button[aria-selected=true] .led{background:var(--led);box-shadow:0 0 6px 1px var(--led)}
+.lcdpanel{display:flex;justify-self:center;background:var(--lcd);color:var(--ink);border-radius:4px;padding:5px 4px;box-shadow:0 0 0 3px var(--bezel),inset 0 0 0 1px color-mix(in srgb,var(--ink) 14%,transparent);user-select:none}
+.lcdpanel .f{display:grid;gap:1px;padding:0 9px;border-left:1px solid color-mix(in srgb,var(--ink) 35%,transparent)}
+.lcdpanel .f:first-child{border-left:0}
+.lcdpanel small{font:9px var(--pix);letter-spacing:.04em;text-transform:uppercase;opacity:.8}
+.lcdpanel b{font:14px var(--pix);font-weight:400;white-space:nowrap}
+@media (max-width:1400px){.top{grid-template-columns:auto 1fr}.top .setkeys{display:none}}
+@media (max-width:1100px){.top{grid-template-columns:1fr}.lcdpanel{justify-self:start}}
+@media (max-width:1060px){.lcdpanel .f.opt{display:none}}
+
+/* key-style dropdowns (enhanceSelects / openK / #kpop, as on the pages) */
+.kselbtn{display:flex;align-items:center;justify-content:space-between;gap:10px;height:28px;padding:0 10px;font:500 13px var(--sans);letter-spacing:.03em;min-width:0;width:100%}
+.kselbtn span{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.kselbtn svg{width:10px;height:6px;flex:none}
+.kselbtn[aria-expanded=true]{background:var(--key2)}
+.kpop{position:absolute;z-index:25;padding:8px;background:var(--plate);border:2px solid var(--print);border-radius:6px;box-shadow:0 14px 34px rgba(0,0,0,.35);max-width:calc(100vw - 32px)}
+.klist{display:grid;gap:3px}
+.kgrp{grid-column:1/-1;font:600 10px var(--sans);letter-spacing:.16em;text-transform:uppercase;color:var(--print);padding:6px 2px 2px}
+.kopt{text-align:left;height:28px;padding:0 9px;font:500 13px var(--sans);letter-spacing:.02em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.kopt[aria-selected=true]{background:var(--cream);color:var(--creamtext)}
+
+/* ===== the CONTROL workspace: devices ===== */
+.ctlhead{display:flex;flex-wrap:wrap;align-items:center;gap:8px 12px}
+.ctlhead h3{margin:0;font:600 15px var(--sans);letter-spacing:.06em;color:var(--print)}
+.devs{min-height:56vh;display:grid;place-content:center;justify-items:center;gap:18px;text-align:center}
+.devs .ctlhead{justify-content:center}
+.ctltiles{display:flex;flex-wrap:wrap;justify-content:center;gap:14px;max-width:900px}
+.ctltile{width:200px;display:flex;flex-direction:column;align-items:center;gap:7px;padding:16px 10px 12px;border:1px solid var(--rule);border-radius:4px;background:transparent;color:var(--body);box-shadow:none;font:600 12px var(--sans)}
+.ctltile:hover,.ctltile:focus-visible{border-color:var(--print);background:transparent;outline:none}
+.ctltile svg{width:104px;height:60px;color:var(--print)}
+.ctltile .tname{font:600 14px var(--sans);letter-spacing:.04em;color:var(--print)}
+.ctltile .tstate{display:flex;align-items:center;gap:6px;font:600 10px var(--pix);text-transform:uppercase;color:var(--print2)}
+.ctltile.virt{border-style:dashed}
+.ctltile.dis{opacity:.62}
+.empty{display:grid;justify-items:center;gap:12px;max-width:520px;padding:26px 28px;border:1px dashed var(--rule);border-radius:6px}
+.empty svg{width:120px;height:70px;color:var(--print3)}
+.empty h4{margin:0;font:600 18px var(--sans);letter-spacing:.06em;color:var(--print)}
+.empty ol{margin:0;padding-left:20px;text-align:left;color:var(--print2);font-size:14px;display:grid;gap:3px}
+.devfoot{display:flex;gap:10px;align-items:center;justify-content:center;flex-wrap:wrap}
+
+/* ===== a device's configurator ===== */
+.cfg{display:grid;gap:14px}
+.cfgbar{display:flex;flex-wrap:wrap;align-items:center;gap:8px 12px;padding-bottom:10px;border-bottom:1px solid var(--rule)}
+.cfgbar .kselbtn{width:100%}
+.cfgbar .grow{flex:1}
+.trackstrip{display:flex;flex-wrap:wrap;align-items:center;gap:4px}
+.tp{display:grid;justify-items:center;gap:2px;min-width:44px;height:38px;padding:3px 6px;font:500 11px var(--mono);letter-spacing:0}
+.tp small{font:500 9px var(--sans);letter-spacing:.06em;opacity:.8;max-width:64px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.tp[aria-pressed=true]{background:var(--cream);color:var(--creamtext)}
+.md .tp{min-width:34px;padding:3px 3px}
+.cfggrid{display:grid;grid-template-columns:minmax(0,1.55fr) minmax(330px,1fr);gap:18px;align-items:start}
+@media (max-width:1180px){.cfggrid{grid-template-columns:minmax(0,1fr)}}
+
+/* the drawing */
+.panelwrap{background:var(--plate2);border-radius:6px;padding:8px;box-shadow:inset 0 0 0 1px var(--rule)}
+svg.front{display:block;width:100%;height:auto;user-select:none;-webkit-user-select:none;touch-action:none}
+.front text{font-family:var(--sans);font-weight:600;letter-spacing:.08em;fill:var(--print)}
+.front .body{fill:var(--plate3);stroke:var(--print);stroke-width:2}
+.front .strip{fill:var(--key)}
+.front .striptext{fill:var(--keytext)}
+.front .ctl{cursor:pointer}
+.front .ctl .cap0{fill:var(--key);stroke:var(--print);stroke-width:1.5}
+.front .ctl .ptr{stroke:var(--keytext);stroke-width:2.5;stroke-linecap:round}
+.front .ctl .arc{fill:none;stroke:var(--rule);stroke-width:3}
+.front .ctl .arcv{fill:none;stroke:var(--print);stroke-width:3}
+.front .ctl .lab{font-size:11px}
+.front .ctl .labbg{fill:transparent}
+.front .ctl .cc{font:500 9px var(--mono);letter-spacing:0;fill:var(--print3)}
+.front .ctl .mapled{fill:var(--ledoff)}
+.front .ctl.mapped .mapled{fill:var(--led)}
+.front .ctl .badge{font:600 9px var(--mono);letter-spacing:0;fill:var(--creamtext)}
+.front .ctl .badgebg{fill:var(--cream);stroke:var(--print);stroke-width:1}
+.front .ctl:hover .cap0{stroke-width:2.5}
+.front .ctl.sel .labbg{fill:var(--cream)}
+.front .ctl.sel .lab{fill:var(--creamtext)}
+.front .ctl.sel .ring{stroke:var(--print);stroke-width:2;fill:none;stroke-dasharray:3 3}
+.front .ctl.hot .hotring{fill:none;stroke:var(--led);stroke-width:3}
+.front .ctl.hot .val{fill:var(--led)}
+.front .ctl .val{font:600 10px var(--mono);letter-spacing:0;fill:transparent}
+.front .ctl.dead{cursor:help;opacity:.38}
+.front .ctl.dead .cap0{fill:none;stroke-dasharray:3 2}
+.front .ctl.unk .cap0{stroke-dasharray:4 2}
+.front .pad0{fill:var(--key);stroke:var(--print);stroke-width:1.2}
+.front .ctl.hot .pad0{fill:var(--led)}
+.front .ctl.sel .pad0{stroke-width:2.5;stroke:var(--print)}
+.front .step0{fill:var(--key2);stroke:var(--print3);stroke-width:1.2}
+.front .stepled{fill:var(--ledoff)}
+.front .dim{fill:var(--print3)}
+.layers{display:flex;flex-wrap:wrap;align-items:center;gap:6px 10px;margin:8px 2px 2px}
+.seg{display:inline-flex;gap:3px;flex-wrap:wrap}
+.seg button{height:26px;padding:0 9px;font:600 11px var(--sans);letter-spacing:.1em;text-transform:uppercase}
+.seg button[aria-pressed=true]{background:var(--cream);color:var(--creamtext)}
+.other{display:flex;flex-wrap:wrap;gap:4px;align-items:center;margin:6px 2px 0}
+
+/* voices: the instrument row onto the machine's tracks */
+.voices{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:6px}
+.vk{display:grid;gap:3px;justify-items:center;padding:6px 4px;height:auto;font:600 12px var(--sans);letter-spacing:.1em}
+.vk small{font:500 10px var(--mono);letter-spacing:0;opacity:.75}
+.vk .to{font:500 11px var(--mono);letter-spacing:0;background:var(--lcd);color:var(--ink);border-radius:2px;padding:1px 5px}
+.vk[aria-pressed=true]{background:var(--cream);color:var(--creamtext)}
+.vk.hot .to{box-shadow:0 0 0 2px var(--led)}
+@media (max-width:700px){.voices{grid-template-columns:repeat(4,minmax(0,1fr))}}
+
+/* generic: controls seen */
+.seen{display:grid;grid-template-columns:repeat(8,minmax(0,1fr));gap:6px;padding:10px;background:var(--plate2);border-radius:6px;box-shadow:inset 0 0 0 1px var(--rule)}
+.seen .sc{position:relative;display:grid;justify-items:center;gap:3px;padding:8px 4px 6px;height:auto;font:600 11px var(--sans);letter-spacing:.06em}
+.seen .sc svg{width:34px;height:34px}
+.seen .sc small{font:500 10px var(--mono);letter-spacing:0;opacity:.75}
+.seen .sc[aria-pressed=true]{background:var(--cream);color:var(--creamtext)}
+.seen .sc.hot{box-shadow:inset 0 -2px 0 rgba(0,0,0,.35),0 0 0 2px var(--led)}
+.seen .sc .mled{position:absolute;left:6px;top:6px;width:6px;height:6px}
+.seen .sc .bdg{position:absolute;right:5px;top:4px;font:600 9px var(--mono)}
+.seen .ghost{border:1px dashed var(--rule);background:transparent;color:var(--print2);box-shadow:none}
+.seen .sep{grid-column:1/-1;font:600 10px var(--sans);letter-spacing:.16em;text-transform:uppercase;color:var(--print2);padding-top:4px}
+@media (max-width:760px){.seen{grid-template-columns:repeat(4,minmax(0,1fr))}}
+.learnline{display:flex;align-items:center;gap:8px;margin:0;padding:6px 10px;border-radius:3px;background:var(--lcd);color:var(--ink);font:12px var(--pix)}
+
+/* the inspector */
+.insp{position:sticky;top:10px}
+.ihead{display:grid;gap:6px}
+.ititle{display:flex;align-items:baseline;gap:8px;flex-wrap:wrap}
+.ititle b{font:600 18px var(--sans);letter-spacing:.05em;color:var(--print)}
+.ititle span{font:12px var(--mono);color:var(--print3)}
+.readout{display:grid;grid-template-columns:auto 1fr;gap:2px 10px;background:var(--lcd);color:var(--ink);border-radius:4px;padding:7px 10px;box-shadow:0 0 0 3px var(--bezel);font:12px var(--pix)}
+.readout small{font:9px var(--pix);opacity:.75;text-transform:uppercase;align-self:center}
+.readout b{font:13px var(--pix);font-weight:400;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.irow{display:flex;align-items:center;gap:8px 10px;flex-wrap:wrap}
+.irow .ilab{min-width:52px}
+.tcards{display:grid;gap:8px}
+.tcard{display:grid;gap:6px;padding:8px;border:1px solid var(--rule);border-radius:4px;background:var(--plate3)}
+.tcard .trow{display:grid;grid-template-columns:auto minmax(0,1fr) auto auto;gap:5px;align-items:center}
+.tcard .trow .kselbtn{height:26px}
+.tpin{height:26px;padding:0 8px;font:500 11px var(--mono);letter-spacing:0;min-width:56px}
+.tpin.pinned{background:var(--cream);color:var(--creamtext)}
+.xkey{width:26px;height:26px;padding:0;font:600 13px var(--mono)}
+.range{position:relative;height:26px;margin:0 8px;touch-action:none;cursor:pointer}
+.range .rt{position:absolute;left:0;right:0;top:11px;height:4px;border-radius:2px;background:var(--rule)}
+.range .rf{position:absolute;top:9px;height:8px;border-radius:2px;background:var(--print2)}
+.range .rf.inv{background:repeating-linear-gradient(90deg,var(--print2) 0 6px,transparent 6px 9px)}
+.range .rn{position:absolute;top:4px;width:3px;height:18px;margin-left:-1px;background:var(--led);border-radius:1px}
+.range .rh{position:absolute;top:3px;width:14px;height:20px;margin-left:-7px;border-radius:3px;background:var(--key);box-shadow:inset 0 -2px 0 rgba(0,0,0,.35),0 0 0 1px var(--plate3);cursor:ew-resize}
+.range .rh::after{content:attr(data-l);position:absolute;top:-1px;left:0;right:0;text-align:center;font:600 8px/20px var(--mono);color:var(--keytext)}
+.rnums{display:flex;justify-content:space-between;font:11px var(--mono);color:var(--print2);gap:6px}
+.rnums b{color:var(--body);font-weight:500}
+.rnums .now{color:var(--led)}
+.addrow{display:flex;gap:6px;flex-wrap:wrap}
+.pchips{display:grid;gap:6px}
+.pchips .grp{display:flex;flex-wrap:wrap;gap:3px;align-items:center}
+.pchips .grp .ilab{min-width:44px}
+.pchips .chip{min-width:48px}
+.explain{margin:0;font-size:13px;color:var(--print2)}
+.explain b{color:var(--body);font-weight:600}
+.warnline{margin:0;padding:6px 10px;border-radius:3px;background:var(--rec);color:#fff;font:600 12px var(--sans)}
+.segbar{display:inline-flex;gap:1px;padding:3px;background:var(--key);border-radius:3px;cursor:pointer;touch-action:none;box-shadow:inset 0 -2px 0 rgba(0,0,0,.35)}
+.segbar i{width:6px;height:12px;border-radius:1px;background:var(--ledoff)}
+.segbar i.on{background:var(--led);box-shadow:0 0 4px var(--led)}
+
+/* the monitor: one LCD strip */
+.monstrip{display:flex;align-items:stretch;gap:8px}
+.monlcd{flex:1;min-width:0;display:flex;gap:0;overflow:hidden;background:var(--lcd);color:var(--ink);border-radius:4px;box-shadow:0 0 0 3px var(--bezel);padding:5px 4px;font:11px var(--pix)}
+.monlcd .ev{display:grid;gap:1px;padding:0 9px;border-left:1px solid color-mix(in srgb,var(--ink) 35%,transparent);white-space:nowrap}
+.monlcd .ev:first-child{border-left:0}
+.monlcd .ev small{font:9px var(--pix);opacity:.75}
+.monlcd .ev.off{opacity:.5}
+.monlcd .none{padding:0 9px;align-self:center}
+
+/* the prototype's own controls (not part of the design) */
+.dev{position:fixed;left:0;right:0;bottom:0;z-index:30;display:flex;flex-wrap:wrap;gap:6px 10px;align-items:center;padding:8px 16px;background:repeating-linear-gradient(135deg,#2a2a26 0 10px,#26261f 10px 20px);color:#e9e6da;font:600 11px var(--sans);letter-spacing:.1em;text-transform:uppercase;border-top:2px solid #d9b44a}
+.dev b{color:#d9b44a;letter-spacing:.18em}
+.dev button{height:24px;padding:0 9px;font:600 11px var(--sans);letter-spacing:.08em;background:#44443c;color:#f1eee2;box-shadow:none}
+.dev button[aria-pressed=true]{background:#d9b44a;color:#1d1c17}
+.dev .sep{width:1px;height:18px;background:#6a6a5e}
+.dev .hint{font:500 12px var(--sans);letter-spacing:.02em;text-transform:none;color:#cfcab8}
+</style>
+</head>
+<body>
+<div class="app">
+  <header class="top">
+    <div class="left"><div class="brand" id="brand"></div>
+    <div class="wsgroup"><span class="grplabel">Workspace</span>
+      <nav class="tabs" id="tabs" aria-label="Workspaces (prototype: only CONTROL)"></nav>
+    </div></div>
+    <div class="lcdpanel" id="lcd"></div>
+    <div class="wsgroup setkeys"><span class="grplabel">Setup</span>
+      <div class="tabs"><button disabled><i class="led"></i>Undo</button><button disabled><i class="led"></i>Redo</button><button disabled><i class="led"></i>Learn</button></div>
+    </div>
+  </header>
+  <main id="main"></main>
+</div>
+<div class="kpop" id="kpop" role="listbox" hidden></div>
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+<div class="dev" id="dev" aria-label="Prototype controls">
+  <b>Prototype</b>
+  <span>Machine</span><span class="seg" id="devm"><button data-dev="m" data-v="mm">MM</button><button data-dev="m" data-v="md">MD</button></span>
+  <span class="sep"></span>
+  <button data-dev="plug" data-v="tr06" id="plug-tr06"></button>
+  <button data-dev="plug" data-v="beatstep" id="plug-beatstep"></button>
+  <button data-dev="daw" id="dev-daw">DAW plug-in</button>
+  <span class="sep"></span>
+  <button data-dev="hit" data-v="36" title="The TR-06 plays BD (note 36)">Hit BD</button>
+  <button data-dev="hit" data-v="42" title="The TR-06 plays CH (note 42)">Hit CH</button>
+  <button data-dev="bs" title="The BeatStep sends CC 77 (a control the editor has not seen yet)">BeatStep: new knob</button>
+  <span class="hint">Drag a knob on the drawing (up / down) to play the hardware.</span>
+</div>
+
+<script>
+"use strict";
+/* ============================================================================================
+   Fake data. Parameter names are the machines' own (elektronData/mmMachines.cpp, mdMachines.cpp).
+   ============================================================================================ */
+const MM_SYN = {
+	"SWAVE-SAW": ["UNIL", "UNIW", "UNIX", "", "SUBX", "SUB1", "SUB2", "TUNE"],
+	"FX-CHORUS": ["DEL", "DEP", "SPD", "MIX", "FB", "WID", "LP", "INP"],
+	"SID-6581": ["PW", "PWAD", "PWRS", "WAVE", "MOD", "MSRC", "MFRQ", "TUNE"],
+	"VO-6": ["VOC1", "VOC2", "V-SW", "VOIC", "CONS", "CLEN", "CVOL", "TUNE"],
+	"DPRO-BBOX": ["PTCH", "STRT", "", "", "RTRG", "RTIM", "", ""],
+	"FX-REVERB": ["DEC", "DAMP", "GATE", "MIX", "HP", "LP", "", "INP"]
+};
+const MM_FIXED = { AMP: ["ATK", "HOLD", "DEC", "REL", "DIST", "VOL", "PAN", "PORT"], FLT: ["BASE", "WDTH", "HPQ", "LPQ", "ATK", "DEC", "BOFS", "WOFS"], EFX: ["EQF", "EQG", "SRR", "DTIM", "DSND", "DFB", "DBAS", "DWID"] };
+const MD_SYN = {
+	"TRX-BD": ["PTCH", "DEC", "RAMP", "RDEC", "STRT", "NOIS", "HARM", "CLIP"], "TRX-B2": ["PTCH", "DEC", "RAMP", "HOLD", "TICK", "NOIS", "DIRT", "DIST"],
+	"TRX-SD": ["PTCH", "DEC", "BUMP", "BENV", "SNAP", "TONE", "TUNE", "CLIP"], "TRX-XT": ["PTCH", "DEC", "RAMP", "RDEC", "DAMP", "DIST", "DTYP", ""],
+	"TRX-CP": ["CLPY", "TONE", "HARD", "RICH", "RATE", "ROOM", "RSIZ", "RTUN"], "TRX-RS": ["PTCH", "DEC", "DIST", "", "", "", "", ""],
+	"TRX-CB": ["PTCH", "DEC", "ENH", "DAMP", "TONE", "BUMP", "", ""], "TRX-CH": ["GAP", "DEC", "HPF", "LPF", "MTAL", "", "", ""],
+	"TRX-OH": ["GAP", "DEC", "HPF", "LPF", "MTAL", "", "", ""], "TRX-CY": ["RICH", "DEC", "TOP", "TTUN", "SIZE", "PEAK", "", ""],
+	"EFM-BD": ["PTCH", "DEC", "RAMP", "RDEC", "MOD", "MFRQ", "MDEC", "MFB"], "EFM-SD": ["PTCH", "DEC", "NOISE", "NDEC", "MOD", "MFRQ", "MDEC", "HPF"],
+	"EFM-HH": ["PTCH", "DEC", "TREM", "TFRQ", "MOD", "MFRQ", "MDEC", "FB"], "EFM-CB": ["PTCH", "DEC", "SNAP", "FB", "MOD", "MFRQ", "MDEC", ""],
+	"E12-BD": ["PTCH", "DEC", "SNAP", "SPLEN", "START", "RTRG", "RTIM", "BEND"]
+};
+const MD_FX = ["AMD", "AMF", "EQF", "EQG", "FLTF", "FLTW", "FLTQ", "SRR"], MD_RT = ["DIST", "VOL", "PAN", "DEL", "REV", "LFOS", "LFOD", "LFOM"];
+const KIT = {
+	mm: ["SWAVE-SAW", "FX-CHORUS", "SID-6581", "VO-6", "DPRO-BBOX", "FX-REVERB"],
+	md: ["TRX-BD", "TRX-SD", "TRX-XT", "TRX-XT", "TRX-CY", "TRX-OH", "TRX-CH", "TRX-CP", "TRX-RS", "TRX-CB", "EFM-BD", "EFM-SD", "EFM-HH", "EFM-CB", "E12-BD", "TRX-B2"]
+};
+const short = m => m.replace("SWAVE-", "SW-").replace("DPRO-", "DP-");
+
+/* the parameters a target can be, grouped as the page shows them; pid "PG.i" */
+function paramGroups(m, t) {
+	const mach = KIT[m][t];
+	if (m === "mm") return [
+		["SYN", MM_SYN[mach].map((n, i) => ["SYN." + i, n, "SYN " + "ABCDEFGH"[i]])],
+		...Object.entries(MM_FIXED).map(([pg, a]) => [pg, a.map((n, i) => [pg + "." + i, n, pg + " " + n])]),
+		["OTHER", [["LEV.0", "LEVEL", "LEVEL"], ["NOTE.0", "NOTE", "NOTE"]]]
+	];
+	return [
+		["SYN", MD_SYN[mach].map((n, i) => ["SYN." + i, n, "SYN " + (i + 1)])],
+		["FX", MD_FX.map((n, i) => ["FX." + i, n, n])],
+		["ROUTE", MD_RT.map((n, i) => ["RT." + i, n, n])],
+		["OTHER", [["LEV.0", "LEVEL", "LEVEL"], ["NOTE.0", "NOTE", "NOTE"]]]
+	];
+}
+/* a parameter's name on track t: the machine's own name, and the slot where it differs ("UNIL", "SYN A · UNIL") */
+function pinfo(m, t, pid) {
+	for (const [, list] of paramGroups(m, t)) for (const [id, own, slot] of list) if (id === pid) {
+		if (pid === "NOTE.0") {
+			if (m === "mm") return { own: "NOTE", long: "NOTE · voices' pitch", ok: true };
+			const p = MD_SYN[KIT.md[t]].findIndex(n => n === "PTCH" || n === "TUNE");
+			return p < 0 ? { own: "NOTE", long: "NOTE · no pitch on this machine", ok: false } : { own: MD_SYN[KIT.md[t]][p], long: "NOTE · " + MD_SYN[KIT.md[t]][p], ok: true };
+		}
+		if (!own) return { own: "—", long: slot + " · unused on " + KIT[m][t], ok: false };
+		return { own, long: own === slot || pid.startsWith("AMP") || pid.startsWith("FLT") || pid.startsWith("EFX") || !pid.startsWith("SYN") ? slot : slot + " · " + own, ok: true };
+	}
+	return { own: "?", long: pid, ok: false };
+}
+
+/* the TR-06's front panel, from Roland's MIDI Implementation Chart v1.00 and the owner's manual. Positions are a
+   stylised layout; which knob sends which CC in each layer is to be confirmed on the hardware (DESIGN-tr06.md). */
+const INST = ["ACC", "BD", "SD", "LT", "HT", "CY", "OH", "CH"];
+const LAYERS = {
+	LEVEL: { ACC: [71, "ACC LEVEL"], BD: [24, "BD LEVEL"], SD: [29, "SD LEVEL"], LT: [51, "LT LEVEL"], HT: [54, "HT LEVEL"], CY: [85, "CY LEVEL"], OH: [82, "OH LEVEL"], CH: [63, "CH LEVEL"] },
+	TUNE: { BD: [20, "BD TUNE"], SD: [25, "SD TUNE"], LT: [49, "LT TUNE"], HT: [52, "HT TUNE"], CY: [83, "CY TUNE"], OH: [80, "OH TUNE"], CH: [61, "CH TUNE"] },
+	DECAY: { BD: [23, "BD DECAY"], SD: [28, "SD DECAY"], LT: [50, "LT DECAY"], HT: [53, "HT DECAY"], CY: [84, "CY DECAY"], OH: [81, "OH DECAY"], CH: [62, "CH DECAY"] },
+	TONE: { BD: [21, "BD ATTACK"], SD: [26, "SD SNAPPY"], LT: [92, "LT COLOR"], HT: [94, "HT COLOR"] },
+	COMP: { BD: [22, "BD COMP"], SD: [27, "SD COMP"] },
+	SEND: { BD: [96, "BD DELAY SEND"], SD: [97, "SD DELAY SEND"], LT: [103, "LT DELAY SEND"], HT: [104, "HT DELAY SEND"], CY: [109, "CY DELAY SEND"], OH: [108, "OH DELAY SEND"], CH: [107, "CH DELAY SEND"] }
+};
+const LAYER_HOW = { LEVEL: "turn", TUNE: "MENU + turn", DECAY: "MENU + turn", TONE: "MENU + turn", COMP: "MENU + turn", SEND: "STEP LOOP + DEPTH" };
+const FXK = [["DRIVE", 17, "OD DRIVE"], ["TIME", 18, "DELAY TIME"], ["DEPTH", 19, "DELAY DEPTH"]];
+const OTHER_CC = [[12, "MIX IN LVL"], [111, "MIX IN DELAY SEND"], [113, "MASTER PROB"]];
+const VOICES = [["BD", "BASS DRUM", [36, 35]], ["SD", "SNARE DRUM", [38, 40]], ["LT", "LOW TOM", [47, 45]], ["HT", "HIGH TOM", [50, 48]], ["CY", "CYMBAL", [49]], ["OH", "OPEN HIHAT", [46]], ["CH", "CLOSED HIHAT", [42, 44]]];
+const TR06_CC = {};
+for (const [layer, row] of Object.entries(LAYERS)) for (const [inst, [cc, label]] of Object.entries(row)) TR06_CC[cc] = { label, inst, layer };
+for (const [k, cc, label] of FXK) TR06_CC[cc] = { label, fx: k };
+for (const [cc, label] of OTHER_CC) TR06_CC[cc] = { label, other: true };
+
+/* ============================================================================================
+   State. A mapping is per editor (the MD Editor and the MM Editor each keep their own), per device.
+   ============================================================================================ */
+const tgt = (p, lo = 0, hi = 127, o = {}) => Object.assign({ t: "sel", p, lo, hi, inv: false }, o);
+function defaults(m) {
+	const mm = m === "mm";
+	const syn = [24, 29, 51, 54, 85, 82, 63];
+	const tr06 = {};
+	syn.forEach((cc, i) => tr06["cc:" + cc] = { targets: [tgt("SYN." + i)] });
+	tr06["cc:71"] = { targets: [tgt("NOTE.0", 48, 72)] };
+	if (mm) {
+		/* DRIVE as a macro: three parameters, one of them inverted */
+		tr06["cc:17"] = { targets: [tgt("FLT.0", 20, 110), tgt("AMP.4", 0, 80), tgt("EFX.2", 127, 60, { inv: true })] };
+		tr06["cc:18"] = { targets: [tgt("FLT.1")] };
+		tr06["cc:19"] = { targets: [tgt("LEV.0")] };
+		tr06["cc:20"] = { targets: [tgt("SYN.7", 40, 88)] };
+		tr06["cc:80"] = { targets: [tgt("AMP.3", 0, 127, { t: 5 })] };	/* pinned: OH TUNE moves track 6's AMP REL */
+	} else {
+		tr06["cc:17"] = { targets: [tgt("RT.0", 0, 96), tgt("FX.7", 0, 60)] };
+		tr06["cc:18"] = { targets: [tgt("RT.3")] };
+		tr06["cc:19"] = { targets: [tgt("RT.4")] };
+		tr06["cc:20"] = { targets: [tgt("SYN.0", 0, 127, { t: 0 })] };
+		tr06["cc:61"] = { targets: [tgt("SYN.2", 0, 127, { t: 6 })] };
+	}
+	tr06["cc:113"] = { role: "amount", set: "rs1", targets: [] };
+	const beatstep = {
+		"cc:10": { targets: [tgt(mm ? "FLT.0" : "FX.4")] },
+		"cc:74": { targets: [tgt(mm ? "FLT.1" : "FX.5", 127, 0, { inv: true })] },
+		"note:51": { role: "roll", set: "rs1", targets: [] }
+	};
+	/* MIDI Learn mappings made before the configurator: CC → one target, from any input (they keep working) */
+	const any = { "cc:21": { targets: [tgt(mm ? "FLT.1" : "FX.4", 0, 127, { t: mm ? 0 : 1 })], legacy: true }, "cc:22": { targets: [tgt(mm ? "EFX.4" : "RT.3", 0, 127, { t: 2, inv: true })], legacy: true } };
+	const sets = [
+		{ id: "rs1", name: mm ? "Timbre" : "Tone", t: "sel", params: mm ? ["SYN.0", "SYN.1", "SYN.4", "FLT.0", "FLT.1", "FLT.3"] : ["SYN.1", "SYN.2", "SYN.3", "FX.4", "FX.5"], amount: 35, how: "around", last: [] },
+		{ id: "rs2", name: "Envelope", t: "sel", params: mm ? ["AMP.0", "AMP.2", "AMP.3", "FLT.4", "FLT.5"] : ["SYN.1", "RT.0"], amount: 60, how: "anywhere", last: [] }
+	];
+	return { tr06, beatstep, any, sets };
+}
+const S = {
+	m: "mm", sel: 0, view: "", daw: false,
+	conn: { tr06: true, beatstep: true },			/* what the OS reports (hot-plug) */
+	enabled: { tr06: true, beatstep: false },		/* AUDIO / MIDI's inputs */
+	on: { tr06: true, beatstep: true, any: true, host: true },
+	ch: { tr06: 10, beatstep: 1 },
+	mode: { tr06: "rel", beatstep: "abs", any: "abs", host: "abs" },	/* the device's default knob mode */
+	layer: "LEVEL", touch: true, learn: false,
+	selCtl: { tr06: "cc:24", beatstep: "cc:10", any: "cc:21", host: null },
+	hot: null,						/* the control that moved last: {dev, id} (steady, until another moves) */
+	hotVoice: null,
+	inv: {},						/* incoming value per dev|id */
+	seen: {
+		beatstep: [["cc:10", "Knob 1"], ["cc:74", "Knob 2"], ["cc:71", ""], ["cc:76", ""], ["note:44", "Pad 1"], ["note:45", ""], ["note:51", "Pad 8"]],
+		host: []
+	},
+	maps: { mm: defaults("mm"), md: defaults("md") },
+	voices: {
+		mm: VOICES.map((v, i) => ({ t: [0, 1, 2, 3, 4, 5, 5][i], note: i === 5 ? 72 : 60 })),
+		md: VOICES.map((v, i) => ({ t: i }))
+	},
+	selVoice: null,
+	vals: {},
+	mon: []
+};
+const M = () => S.maps[S.m];
+const tracks = () => KIT[S.m].length;
+function hash(s) { let h = 2166136261; for (const c of s) h = Math.imul(h ^ c.charCodeAt(0), 16777619); return (h >>> 0) % 128; }
+function val(t, pid) { const k = S.m + t + pid; if (S.vals[k] == null) S.vals[k] = pid === "NOTE.0" ? 60 : hash(k); return S.vals[k]; }
+function setVal(t, pid, v) { S.vals[S.m + t + pid] = Math.max(0, Math.min(127, Math.round(v))); }
+const trackOf = x => x.t === "sel" ? S.sel : x.t;
+
+/* ============================================================================================
+   Helpers: escaping, the page's key-style dropdowns, the toast
+   ============================================================================================ */
+const $ = q => document.querySelector(q), $$ = q => [...document.querySelectorAll(q)];
+const esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
+const CHEV = `<svg viewBox="0 0 10 6" aria-hidden="true"><path d="M1 1l4 4 4-4" fill="none" stroke="currentColor" stroke-width="1.5"/></svg>`;
+/* a key-style dropdown: {id, label, value, groups:[[title, [[v, text]]]] | options:[[v, text]]}; picks go to onPick(id, v) */
+const KS = {};
+function kselect(id, label, value, groups) {
+	KS[id] = { value: String(value), groups };
+	let text = "";
+	for (const [, list] of groups) for (const [v, t] of list) if (String(v) === String(value)) text = t;
+	return `<button class="kselbtn" type="button" data-ks="${esc(id)}" aria-haspopup="listbox" aria-expanded="false" aria-label="${esc(label)}: ${esc(text)}"><span>${esc(text)}</span>${CHEV}</button>`;
+}
+let kFor = null;
+function openK(btn) {
+	const d = KS[btn.dataset.ks]; if (!d) return;
+	kFor = btn; const pop = $("#kpop"); let n = 0, h = "";
+	for (const [title, list] of d.groups) { if (title) h += `<div class="kgrp">${esc(title)}</div>`; for (const [v, t, dis] of list) { h += `<button class="kopt" role="option" data-v="${esc(v)}" aria-selected="${String(v) === d.value}"${dis ? " disabled" : ""}>${esc(t)}</button>`; n++; } }
+	const cols = n > 24 ? 4 : n > 16 ? 3 : n > 8 ? 2 : 1;
+	pop.innerHTML = `<div class="klist" style="grid-template-columns:repeat(${cols},minmax(0,1fr))">${h}</div>`;
+	pop.hidden = false; pop.style.minWidth = Math.max(btn.offsetWidth, cols * 110) + "px";
+	const r = btn.getBoundingClientRect();
+	let top = r.bottom + scrollY + 4; if (r.bottom + pop.offsetHeight + 8 > innerHeight && r.top > pop.offsetHeight + 8) top = r.top + scrollY - pop.offsetHeight - 4;
+	pop.style.top = top + "px"; pop.style.left = Math.max(16, Math.min(r.left + scrollX, innerWidth - pop.offsetWidth - 16)) + "px";
+	btn.setAttribute("aria-expanded", "true");
+	(pop.querySelector(".kopt[aria-selected=true]") || pop.querySelector(".kopt"))?.focus();
+}
+function closeK() { const pop = $("#kpop"); if (pop.hidden) return; pop.hidden = true; kFor?.setAttribute("aria-expanded", "false"); }
+let toastT = 0;
+function toast(t) { const el = $("#toast"); el.textContent = t; el.classList.add("on"); clearTimeout(toastT); toastT = setTimeout(() => el.classList.remove("on"), 2600); }
+
+/* ============================================================================================
+   Devices: what is connected (the OS's list, hot-plug), and the virtual "any input" for learned mappings
+   ============================================================================================ */
+const DEVICES = {
+	tr06: { name: "TR-06", full: "Roland TR-06", profile: "Roland TR-06", icon: "tr06" },
+	beatstep: { name: "Arturia BeatStep", full: "Arturia BeatStep", profile: "", icon: "midi" },
+	any: { name: "Any MIDI input", full: "Any MIDI input", profile: "", icon: "any", virt: true },
+	host: { name: "Host MIDI in", full: "Host MIDI in (the track's MIDI)", profile: "", icon: "midi" }
+};
+function tiles() {
+	if (S.daw) return ["host", ...(Object.keys(M().any).length ? ["any"] : [])];
+	const list = ["tr06", "beatstep"].filter(d => S.conn[d]);
+	if (Object.keys(M().any).length) list.push("any");
+	return list;
+}
+const ICON = {
+	tr06: `<svg viewBox="0 0 104 60" aria-hidden="true"><rect x="2" y="6" width="100" height="48" rx="4" fill="none" stroke="currentColor" stroke-width="2"/>
+		${INST.map((_, i) => `<circle cx="${13 + i * 10}" cy="20" r="3.6" fill="none" stroke="currentColor" stroke-width="1.6"/>`).join("")}
+		<circle cx="96" cy="20" r="4" fill="none" stroke="currentColor" stroke-width="1.6"/>
+		${Array.from({ length: 16 }, (_, i) => `<rect x="${8 + i * 5.6}" y="38" width="4" height="8" rx="1" fill="currentColor" opacity="${i % 4 ? .45 : .9}"/>`).join("")}</svg>`,
+	midi: `<svg viewBox="0 0 104 60" aria-hidden="true"><rect x="2" y="6" width="100" height="48" rx="4" fill="none" stroke="currentColor" stroke-width="2"/>
+		${Array.from({ length: 8 }, (_, i) => `<circle cx="${12 + i * 11.5}" cy="19" r="4" fill="none" stroke="currentColor" stroke-width="1.6"/><line x1="${12 + i * 11.5}" y1="19" x2="${12 + i * 11.5}" y2="15.5" stroke="currentColor" stroke-width="1.6"/>`).join("")}
+		${Array.from({ length: 8 }, (_, i) => `<rect x="${7 + i * 11.5}" y="32" width="9" height="13" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.3"/>`).join("")}</svg>`,
+	any: `<svg viewBox="0 0 104 60" aria-hidden="true"><circle cx="52" cy="30" r="20" fill="none" stroke="currentColor" stroke-width="2"/>
+		${[[42, 26], [62, 26], [52, 18], [45, 36], [59, 36]].map(([x, y]) => `<circle cx="${x}" cy="${y}" r="2.2" fill="currentColor"/>`).join("")}<rect x="48" y="7" width="8" height="5" fill="currentColor"/></svg>`,
+	none: `<svg viewBox="0 0 120 70" aria-hidden="true"><rect x="10" y="12" width="70" height="44" rx="4" fill="none" stroke="currentColor" stroke-width="2" stroke-dasharray="5 4"/>
+		<path d="M80 34h14c6 0 8 4 8 8v8" fill="none" stroke="currentColor" stroke-width="2"/><rect x="96" y="50" width="12" height="10" rx="1" fill="none" stroke="currentColor" stroke-width="2"/></svg>`
+};
+function tileState(d) {
+	const map = M()[d === "host" ? "any" : d] || {};
+	const n = Object.keys(d === "host" ? {} : map).length;
+	if (d === "any") return `${n} LEARNED · ANY INPUT`;
+	if (d === "host") return "THE TRACK'S MIDI";
+	if (!S.enabled[d]) return "CONNECTED · NOT ENABLED";
+	const led = `<i class="led${S.on[d] ? " on" : ""}"></i>`;
+	return d === "tr06" ? `${led}PROFILE ${S.on[d] ? "ON" : "OFF"} · CH ${S.ch.tr06}` : `${led}${n} MAPPED`;
+}
+function devicesHtml() {
+	const list = tiles();
+	const head = `<div class="ctlhead"><h3>MIDI devices</h3><span class="note">${S.daw ? "In a DAW the host owns MIDI: route the controller to this track." : "Connected controllers. Open one to map it."}</span></div>`;
+	const hw = list.filter(d => !DEVICES[d].virt);
+	if (!hw.length) {
+		return `<div class="devs">${head}<div class="empty" role="status">${ICON.none}<h4>No MIDI controller connected</h4>
+			<ol><li>Connect the controller by USB (a TR-06 needs Roland's USB driver).</li><li>Turn it on. It appears here by itself.</li><li>If it does not, open AUDIO / MIDI and enable it, or press REFRESH.</li></ol>
+			<div class="devfoot"><button class="amkey" data-a="refresh">Refresh</button><button class="amkey" data-a="audiomidi">Audio / MIDI…</button></div>
+			${list.includes("any") ? `<p class="note">Your ${Object.keys(M().any).length} learned mappings still work from any MIDI input.</p>` : ""}</div>
+			${list.includes("any") ? `<div class="ctltiles">${tileHtml("any")}</div>` : ""}</div>`;
+	}
+	return `<div class="devs">${head}<div class="ctltiles">${list.map(tileHtml).join("")}</div>
+		<div class="devfoot">${S.daw ? "" : `<button class="amkey" data-a="refresh" title="Look for MIDI devices again (the list also follows plugging and unplugging by itself)">Refresh</button><button class="amkey" data-a="audiomidi">Audio / MIDI…</button>`}</div></div>`;
+}
+function tileHtml(d) {
+	const D = DEVICES[d];
+	return `<button class="ctltile${D.virt ? " virt" : ""}${!D.virt && d !== "host" && !S.enabled[d] ? " dis" : ""}" data-a="open" data-d="${d}" id="tile-${d}">
+		${ICON[D.icon]}<span class="tname">${esc(D.name)}</span><span class="tstate">${tileState(d)}</span></button>`;
+}
+
+/* ============================================================================================
+   The configurator: one view for every device. The TR-06 has a built-in profile (a drawing, names, defaults);
+   any other device builds its controls from what it sends (and LEARN).
+   ============================================================================================ */
+const mapOf = d => M()[d === "host" ? "any" : d];
+function ctlName(d, id) {
+	const [kind, n] = id.split(":");
+	if (d === "tr06") return kind === "cc" ? (TR06_CC[+n]?.label || "CC " + n) : "NOTE " + n;
+	const s = (S.seen[d] || []).find(x => x[0] === id);
+	return (s && s[1]) || (kind === "cc" ? "CC " + n : "NOTE " + n);
+}
+const isPad = id => id.startsWith("note:");
+function roleOf(c) { if (!c) return "none"; if (c.role) return c.role; return c.targets.length > 1 ? "macro" : c.targets.length ? "direct" : "none"; }
+function modeOf(d, id) { const c = mapOf(d)[id]; return (c && c.mode) || S.mode[d]; }
+
+function cfgHtml() {
+	const d = S.view, D = DEVICES[d], tr = d === "tr06";
+	const connected = d === "any" || d === "host" || S.conn[d];
+	const ledOn = S.on[d];
+	const bar = `<div class="cfgbar">
+		<button class="amkey" data-a="back">‹ Devices</button>
+		<h3 style="margin:0;font:600 17px var(--sans);letter-spacing:.06em">${esc(D.full)}</h3>
+		${d === "any" ? `<span class="note">MIDI Learn mappings: they listen to every input, as before.</span>` : `<button class="amkey" data-a="toggleOn" aria-pressed="${ledOn}" title="${tr ? "The profile: off, the TR-06's MIDI reaches the machine as it always did" : "The mapping: off, this device's MIDI reaches the machine as ordinary MIDI"}"><i class="led${ledOn ? " on" : ""}"></i>${tr ? "Profile" : "Mapping"} ${ledOn ? "on" : "off"}</button>`}
+		${tr || d === "beatstep" ? `<span class="ilab">Channel</span><span style="width:74px">${kselect("ch", "Channel", S.ch[d], [["", Array.from({ length: 16 }, (_, c) => [c + 1, String(c + 1)])]])}</span>` : ""}
+		<span class="ilab">Knobs</span><span style="width:${d === "tr06" ? 110 : 128}px">${kselect("devmode", "Default knob mode", S.mode[d], [["", modeOpts(d)]])}</span>
+		<span class="grow"></span>
+		<button class="amkey" data-a="touch" aria-pressed="${S.touch}" title="On: moving a control on the device opens it here. Off: the inspector stays on the control you clicked."><i class="led${S.touch ? " on" : ""}"></i>Select on touch</button>
+		${tr ? `<button class="amkey" data-a="reset" title="The TR-06's shipped mapping and channel 10; the profile stays on or off">Reset to defaults</button>` : ""}
+		</div>
+		${d !== "any" && d !== "host" && !S.enabled[d] ? `<p class="warnline" role="alert">${esc(D.name)} is connected but not enabled in AUDIO / MIDI: nothing it sends arrives. <button class="amkey" data-a="enable">Enable</button></p>` : ""}
+		${!connected ? `<p class="warnline">Disconnected. The mapping is kept and comes back when it is plugged in again.</p>` : ""}`;
+	const tracksHtml = `<div class="irow"><span class="ilab">Selected track</span><div class="trackstrip ${S.m}" role="group" aria-label="The page's selected track">${KIT[S.m].map((mach, t) =>
+		`<button class="tp" data-a="track" data-t="${t}" aria-pressed="${t === S.sel}" title="Track ${t + 1}: ${mach}"><span>T${t + 1}</span><small>${esc(short(mach))}</small></button>`).join("")}</div>
+		<span class="note">Targets follow the selected track unless pinned.</span></div>`;
+	const left = tr ? tr06Html() : genericHtml(d);
+	return `<div class="cfg">${bar}${tracksHtml}<div class="cfggrid"><div style="display:grid;gap:14px;min-width:0">${left}</div><aside class="card insp" id="insp">${inspHtml()}</aside></div>${monHtml()}</div>`;
+}
+function modeOpts(d) {
+	const o = [["rel", "Relative"], ["abs", "Absolute"]];
+	if (d !== "tr06") o.push(["enc", "Encoder (±)"]);
+	return o;
+}
+
+/* ---- the TR-06: the drawing ---- */
+function tr06Html() {
+	const lay = `<div class="layers"><span class="ilab">Knob layer</span><span class="seg" role="group" aria-label="Which function of the instrument knobs the drawing shows">${Object.keys(LAYERS).map(l =>
+		`<button data-a="layer" data-v="${l}" aria-pressed="${S.layer === l}" title="${LAYER_HOW[l]} on the TR-06">${l === "SEND" ? "Delay send" : l.toLowerCase()}</button>`).join("")}</span>
+		<span class="note">${esc(LAYER_HOW[S.layer])} on the TR-06: each function sends its own CC.</span></div>`;
+	const other = `<div class="other"><span class="ilab">Also sends</span>${OTHER_CC.map(([cc, label]) => chipCtl("tr06", "cc:" + cc, label + " · CC " + cc)).join("")}<span class="note">panel position not known yet</span></div>`;
+	return `<section class="card"><header><h3>Front panel</h3><span>click a control to map it · the lit ring is the one that moved last</span></header>
+		<div class="panelwrap"><svg class="front" id="front" viewBox="0 0 1000 400" role="img" aria-label="Roland TR-06 front panel">${frontSvg()}</svg>${lay}${other}</div></section>
+		<section class="card"><header><h3>Voices</h3><span>the instrument row plays the machine's tracks</span></header><div class="voices" id="voices">${voicesHtml()}</div></section>`;
+}
+function chipCtl(d, id, text) {
+	const c = mapOf(d)[id], sel = S.selCtl[d] === id, hot = S.hot && S.hot.dev === d && S.hot.id === id;
+	return `<button class="chip" data-a="ctl" data-id="${id}" aria-pressed="${sel}" style="${hot ? "box-shadow:0 0 0 2px var(--led)" : ""}"><i class="led${c && roleOf(c) !== "none" ? " on" : ""}" style="width:6px;height:6px;margin-right:6px"></i>${esc(text)}</button>`;
+}
+function knobSvg(x, y, r, id, label, opt = {}) {
+	const d = opt.dev || "tr06", dead = !id, c = id ? mapOf(d)[id] : null;
+	const role = roleOf(c), sel = id && S.selCtl[d] === id, hot = id && S.hot && S.hot.dev === d && S.hot.id === id;
+	const v = id ? (S.inv[d + "|" + id] ?? 64) : 64;
+	const a0 = -225, a1 = 45, a = a0 + (a1 - a0) * v / 127;
+	const pt = (ang, rr) => [x + rr * Math.cos(ang * Math.PI / 180), y + rr * Math.sin(ang * Math.PI / 180)];
+	const arc = (from, to, rr) => { const [sx, sy] = pt(from, rr), [ex, ey] = pt(to, rr); return `M${sx.toFixed(1)} ${sy.toFixed(1)}A${rr} ${rr} 0 ${to - from > 180 ? 1 : 0} 1 ${ex.toFixed(1)} ${ey.toFixed(1)}`; };
+	const [px, py] = pt(a, r - 4), [qx, qy] = pt(a, r * .25);
+	const badge = role === "macro" ? "M" + c.targets.length : role === "roll" ? "RND" : role === "amount" ? "AMT" : "";
+	const cls = ["ctl", dead ? "dead" : "", role !== "none" ? "mapped" : "", sel ? "sel" : "", hot ? "hot" : "", opt.unk ? "unk" : ""].join(" ");
+	const lw = Math.max(34, label.length * 6.4 + 10);
+	return `<g class="${cls}" ${id ? `data-a="ctl" data-id="${id}" data-knob="1" tabindex="0" role="button" aria-label="${esc(label)}${id ? " CC " + id.split(":")[1] : ""}"` : `data-a="dead" data-v="${esc(opt.why || "Sends no MIDI")}" role="img" aria-label="${esc(label)}: sends no MIDI"`}>
+		<title>${esc(label)}${id ? " · CC " + id.split(":")[1] : " · " + (opt.why || "sends no MIDI")}</title>
+		<path class="arc" d="${arc(a0, a1, r + 6)}"/>${id ? `<path class="arcv" d="${arc(a0, Math.max(a0 + .5, a), r + 6)}"/>` : ""}
+		${hot ? `<circle class="hotring" cx="${x}" cy="${y}" r="${r + 11}"/>` : ""}${sel ? `<circle class="ring" cx="${x}" cy="${y}" r="${r + 15}"/>` : ""}
+		<circle class="cap0" cx="${x}" cy="${y}" r="${r}"/><line class="ptr" x1="${qx.toFixed(1)}" y1="${qy.toFixed(1)}" x2="${px.toFixed(1)}" y2="${py.toFixed(1)}"/>
+		${id ? `<circle class="mapled" cx="${x}" cy="${y - r - 20}" r="3.5"/>` : ""}
+		${badge ? `<rect class="badgebg" x="${x + r - 4}" y="${y - r - 10}" width="${badge.length * 6.5 + 8}" height="13" rx="2"/><text class="badge" x="${x + r}" y="${y - r}">${badge}</text>` : ""}
+		<rect class="labbg" x="${x - lw / 2}" y="${y + r + 9}" width="${lw}" height="16" rx="2"/><text class="lab" x="${x}" y="${y + r + 21}" text-anchor="middle">${esc(label)}</text>
+		${id ? `<text class="cc" x="${x}" y="${y + r + 36}" text-anchor="middle">CC ${id.split(":")[1]}</text><text class="val" x="${x + r + 4}" y="${y + r + 2}">${hot ? v : ""}</text>` : `<text class="cc" x="${x}" y="${y + r + 36}" text-anchor="middle">NO MIDI</text>`}
+	</g>`;
+}
+function keySvg(x, y, w, h, label, opt = {}) {
+	return `<g class="ctl ${opt.id ? "" : "dead"}" ${opt.id ? "" : `data-a="dead" data-v="${esc(opt.why || "Sends no MIDI")}"`} role="img" aria-label="${esc(label)}: ${esc(opt.why || "")}"><title>${esc(label)} · ${esc(opt.why || "")}</title>
+		<rect class="cap0" x="${x}" y="${y}" width="${w}" height="${h}" rx="3"/><text class="lab" x="${x + w / 2}" y="${y + h + 16}" text-anchor="middle">${esc(label)}</text>
+		${opt.sub ? `<text class="cc" x="${x + w / 2}" y="${y + h + 29}" text-anchor="middle">${esc(opt.sub)}</text>` : ""}</g>`;
+}
+function frontSvg() {
+	const L = LAYERS[S.layer];
+	let s = `<rect class="body" x="4" y="4" width="992" height="392" rx="10"/>
+		<rect class="strip" x="4" y="4" width="992" height="34" rx="10"/><rect class="strip" x="4" y="24" width="992" height="14"/>
+		<text class="striptext" x="24" y="27" style="font-size:18px;letter-spacing:.2em">TR-06</text>
+		<text class="striptext" x="118" y="27" style="font-size:11px;letter-spacing:.24em;opacity:.8">RHYTHM COMPOSER</text>
+		<text class="striptext" x="976" y="27" text-anchor="end" style="font-size:10px;letter-spacing:.2em;opacity:.7">STYLISED · CHECK ON THE HARDWARE</text>`;
+	/* the instrument knobs, a row of eight (ACC first), and the effect knobs */
+	s += `<text x="112" y="62" class="dim" style="font-size:10px;letter-spacing:.24em">INSTRUMENT · ${S.layer === "SEND" ? "DELAY SEND" : S.layer}</text>`;
+	INST.forEach((k, i) => {
+		const e = L[k], x = 132 + i * 74;
+		s += knobSvg(x, 116, 22, e ? "cc:" + e[0] : null, e ? e[1] : k, { why: k === "ACC" ? "ACCENT has only a level" : "No " + S.layer.toLowerCase() + " on " + k });
+	});
+	s += `<text x="746" y="62" class="dim" style="font-size:10px;letter-spacing:.24em">EFFECT</text>`;
+	FXK.forEach(([k, cc], i) => s += knobSvg(772 + i * 76, 116, 22, "cc:" + cc, k));
+	s += knobSvg(52, 116, 20, null, "VOLUME", { why: "Audio volume: sends no MIDI" });
+	/* the lower row: selectors that send no MIDI, the keys */
+	s += `<line x1="24" y1="190" x2="976" y2="190" stroke="var(--rule)" stroke-width="1"/>`;
+	s += knobSvg(62, 244, 20, null, "TEMPO", { why: "Tempo goes out as MIDI clock only (passed to the machine by its sync settings)" });
+	s += knobSvg(152, 244, 17, null, "INSTRUMENT", { why: "Selects the instrument on the TR-06: sends no MIDI" });
+	s += knobSvg(236, 244, 17, null, "MODE", { why: "Mode selector: sends no MIDI" });
+	s += knobSvg(320, 244, 17, null, "VALUE", { why: "Value knob: sends no MIDI" });
+	s += keySvg(404, 228, 54, 26, "MENU", { why: "Shift key: sends no MIDI; with a knob it reaches TUNE, DECAY, ..." });
+	s += keySvg(472, 228, 54, 26, "STEP LOOP", { why: "Sends no MIDI; with DEPTH it sets the delay sends" });
+	s += keySvg(812, 222, 64, 32, "TAP", { why: "Whether TAP sends notes in playback is unknown (check on the hardware)", sub: "UNKNOWN" });
+	s += keySvg(892, 222, 84, 32, "RUN / STOP", { why: "Start / Stop: passed on to the machine by its own sync settings, not mappable", sub: "START · STOP" });
+	/* the 16 step keys */
+	for (let i = 0; i < 16; i++) {
+		const x = 36 + i * 58 + Math.floor(i / 4) * 4;
+		s += `<g class="ctl dead" data-a="dead" data-v="The step keys edit the TR-06's own pattern: they send no MIDI"><title>Step ${i + 1} · sends no MIDI</title><rect class="step0" x="${x}" y="318" width="44" height="30" rx="3"/><rect class="stepled" x="${x + 17}" y="306" width="10" height="5" rx="1"/><text class="cc" x="${x + 22}" y="366" text-anchor="middle">${i + 1}</text></g>`;
+	}
+	s += `<text x="560" y="303" class="dim" text-anchor="middle" style="font-size:10px;letter-spacing:.24em">STEPS 1-16 · NO MIDI</text>`;
+	return s;
+}
+function voicesHtml() {
+	const mm = S.m === "mm";
+	return VOICES.map(([v, label, notes], i) => {
+		const x = S.voices[S.m][i];
+		return `<button class="vk${S.hotVoice === v ? " hot" : ""}" data-a="voice" data-v="${v}" aria-pressed="${S.selVoice === v}" title="${label}: notes ${notes.join(", ")}"><span>${v}</span><small>${notes.join(" · ")}</small><span class="to">T${x.t + 1}${mm ? " " + noteName(x.note) : ""}</span></button>`;
+	}).join("");
+}
+const noteName = n => ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"][n % 12] + (Math.floor(n / 12) - 1);
+
+/* ---- a device without a profile: the controls it has sent, and LEARN ---- */
+function genericHtml(d) {
+	const seen = d === "any" ? Object.keys(M().any).map(id => [id, ""]) : (S.seen[d] || []);
+	const knobs = seen.filter(([id]) => !isPad(id)), pads = seen.filter(([id]) => isPad(id));
+	const cell = ([id]) => {
+		const c = mapOf(d)[id], role = roleOf(c), sel = S.selCtl[d] === id, hot = S.hot && S.hot.dev === d && S.hot.id === id;
+		const v = S.inv[d + "|" + id] ?? 0, a = -225 + 270 * v / 127, rad = a * Math.PI / 180;
+		const icon = isPad(id) ? `<svg viewBox="0 0 34 34" aria-hidden="true"><rect x="4" y="4" width="26" height="26" rx="3" fill="${hot ? "var(--led)" : "none"}" stroke="currentColor" stroke-width="2"/></svg>`
+			: `<svg viewBox="0 0 34 34" aria-hidden="true"><circle cx="17" cy="17" r="12" fill="none" stroke="currentColor" stroke-width="2"/><line x1="17" y1="17" x2="${(17 + 10 * Math.cos(rad)).toFixed(1)}" y2="${(17 + 10 * Math.sin(rad)).toFixed(1)}" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/></svg>`;
+		const badge = role === "macro" ? "M" + c.targets.length : role === "roll" ? "RND" : role === "amount" ? "AMT" : "";
+		return `<button class="sc${hot ? " hot" : ""}" data-a="ctl" data-id="${id}" ${isPad(id) ? "" : `data-knob="1"`} aria-pressed="${sel}"><i class="led mled${role !== "none" ? " on" : ""}"></i>${badge ? `<span class="bdg">${badge}</span>` : ""}${icon}<span>${esc(ctlName(d, id))}</span><small>${id.replace(":", " ").toUpperCase()}${hot ? " · " + v : ""}</small></button>`;
+	};
+	const ghost = `<button class="sc ghost" data-a="learn" aria-pressed="${S.learn}" title="Move a control on the device: it becomes a control here"><svg viewBox="0 0 34 34" aria-hidden="true"><path d="M17 8v18M8 17h18" stroke="currentColor" stroke-width="2"/></svg><span>${S.learn ? "Move a control…" : "Learn"}</span><small>${S.learn ? "waiting" : "add a control"}</small></button>`;
+	const intro = d === "any" ? "Mappings made with MIDI Learn before this view existed. They listen to every input, exactly as before; edit them here like any other control."
+		: d === "host" ? "The DAW does not say which device sends. Controls appear as their MIDI arrives; choose a profile if it is a TR-06."
+			: "No built-in profile for this device: each control appears the first time it sends. Move a knob or hit a pad, or press LEARN.";
+	return `<section class="card"><header><h3>Controls seen</h3><span>${seen.length} controls · click one to map it</span></header>
+		<p class="explain">${esc(intro)}</p>
+		${S.learn ? `<p class="learnline" role="status"><i class="led on"></i>LEARN: move a knob or hit a pad on the ${esc(DEVICES[d].name)}. <button class="amkey" data-a="learn">Cancel</button></p>` : ""}
+		<div class="seen" id="seen"><div class="sep">Knobs and faders</div>${knobs.map(cell).join("")}${d === "any" ? "" : ghost}${pads.length ? `<div class="sep">Pads and keys</div>${pads.map(cell).join("")}` : ""}</div></section>
+		${d === "host" ? `<section class="card"><header><h3>Profile</h3></header><div class="irow"><span class="ilab">This is a</span><span style="width:160px">${kselect("hostprofile", "Profile", "none", [["", [["none", "Generic controller"], ["tr06", "Roland TR-06"]]]])}</span></div></section>` : ""}`;
+}
+
+/* ---- the inspector: the selected control's mapping ---- */
+function inspHtml() {
+	const d = S.view;
+	if (d === "tr06" && S.selVoice) return voiceInsp();
+	const id = S.selCtl[d];
+	if (!id) return `<header><h3>Control</h3></header><p class="explain">Click a control on the left to map it${d === "tr06" ? "" : ", or move one on the device"}.</p>`;
+	const map = mapOf(d), c = map[id], role = roleOf(c), cc = id.split(":");
+	const pad = isPad(id);
+	const name = ctlName(d, id);
+	const renameable = d === "beatstep";
+	const head = `<header><h3>Control</h3><span>${esc(cc[0].toUpperCase() + " " + cc[1])}${d === "tr06" || d === "beatstep" ? " · CH " + S.ch[d] : ""}</span></header>
+		<div class="ihead"><div class="ititle"><b>${esc(name)}</b>${renameable ? `<button class="amkey" data-a="rename" title="Name this control">Rename</button>` : ""}${c && c.legacy ? `<span>learned with MIDI Learn</span>` : ""}</div>
+		<div class="readout" id="readout">${readoutHtml(d, id)}</div></div>`;
+	const roles = pad ? [["none", "Off"], ["direct", "Direct"], ["macro", "Macro"], ["roll", "Randomise"]] : [["none", "Off"], ["direct", "Direct"], ["macro", "Macro"], ["roll", "Randomise"], ["amount", "Rnd amount"]];
+	const roleRow = `<div class="irow"><span class="ilab">Does</span><span class="seg" role="group" aria-label="What the control does">${roles.map(([r, t]) =>
+		`<button data-a="role" data-v="${r}" aria-pressed="${role === r}" title="${ROLE_HELP[r]}">${t}</button>`).join("")}</span></div>`;
+	const mode = modeOf(d, id), own = c && c.mode;
+	const modeRow = pad ? "" : `<div class="irow"><span class="ilab">Knob</span><span class="seg" role="group" aria-label="Knob mode">${modeOpts(d).map(([m, t]) =>
+		`<button data-a="mode" data-v="${m}" aria-pressed="${mode === m}" title="${MODE_HELP[m]}">${t}</button>`).join("")}</span><span class="note">${own ? `own setting · <button class="amkey" data-a="mode" data-v="">Use device default</button>` : "device default"}</span></div>`;
+	let body = "";
+	if (role === "roll" || role === "amount") body = setHtml(d, id, c, role);
+	else if (role === "none") body = `<p class="explain">Not mapped: ${pad ? "the pad" : "the knob"} does nothing on the machine${d === "tr06" && S.on.tr06 ? " (the profile keeps it from the machine)" : ""}. Choose <b>Direct</b> for one parameter, <b>Macro</b> for several.</p>`;
+	else body = `<div class="tcards" id="tcards">${c.targets.map((x, k) => tcardHtml(d, id, x, k)).join("")}</div>
+		<div class="addrow"><button class="amkey" data-a="addt">+ Add target</button>${role === "macro" ? `<span class="note">${c.targets.length} parameters move together, each in its own range.</span>` : `<span class="note">Add a second target to make it a macro.</span>`}</div>`;
+	return head + roleRow + modeRow + body;
+}
+const ROLE_HELP = {
+	none: "Not mapped", direct: "One parameter, in a range", macro: "Several parameters at once, each with its own range and direction",
+	roll: "A press (or a turn past half way) randomises a set of parameters", amount: "The knob sets how far a randomise set may move"
+};
+const MODE_HELP = {
+	rel: "Relative: a turn moves the value from where it is (no jump). For knobs with a fixed position, like the TR-06's.",
+	abs: "Absolute: the value jumps to the knob's position.",
+	enc: "Encoder: the controller sends steps (64 ± n), for endless knobs."
+};
+function readoutHtml(d, id) {
+	const c = mapOf(d)[id], role = roleOf(c), v = S.inv[d + "|" + id];
+	const inTxt = v == null ? "—" : String(v);
+	let out = "—";
+	if (role === "direct" || role === "macro") out = c.targets.map(x => { const t = trackOf(x), p = pinfo(S.m, t, x.p); return `T${t + 1} ${p.own} ${val(t, x.p)}`; }).join(" · ");
+	else if (role === "amount") { const s = M().sets.find(x => x.id === c.set); out = s ? `${s.name.toUpperCase()} AMOUNT ${s.amount}%` : "—"; }
+	else if (role === "roll") { const s = M().sets.find(x => x.id === c.set); out = s ? `ROLLS ${s.name.toUpperCase()} (${s.params.length})` : "—"; }
+	return `<small>In</small><b>${isPad(id) ? (v == null ? "—" : "VEL " + v) : inTxt}${S.hot && S.hot.dev === d && S.hot.id === id ? " · LAST MOVED" : ""}</b><small>Out</small><b>${esc(out)}</b>`;
+}
+function targetGroups(t) {
+	return paramGroups(S.m, t).map(([g, list]) => [g, list.map(([pid, own, slot]) => {
+		const p = pinfo(S.m, t, pid);
+		return [pid, g === "SYN" ? slot + (own ? " · " + own : " · —") : pid === "NOTE.0" ? p.long : slot];
+	})]);
+}
+function tcardHtml(d, id, x, k) {
+	const t = trackOf(x), p = pinfo(S.m, t, x.p), now = val(t, x.p);
+	const lo = Math.min(x.lo, x.hi), hi = Math.max(x.lo, x.hi);
+	const trackTxt = x.t === "sel" ? "SEL T" + (S.sel + 1) : "T" + (x.t + 1);
+	const pinList = [["sel", "Selected track (T" + (S.sel + 1) + " now)"], ...KIT[S.m].map((mach, i) => [i, "T" + (i + 1) + " · " + mach])];
+	return `<div class="tcard" data-k="${k}">
+		<div class="trow"><span style="width:78px">${kselect("pin:" + k, "Track", x.t, [["", pinList]]).replace('class="kselbtn"', `class="kselbtn tpin${x.t === "sel" ? "" : " pinned"}"`).replace(/<span>[^<]*<\/span>/, `<span>${trackTxt}</span>`)}</span>
+			${kselect("param:" + k, "Parameter", x.p, targetGroups(t))}
+			<button class="amkey" data-a="inv" data-k="${k}" aria-pressed="${x.inv}" title="Inverse: the top of the knob gives the bottom of the range">Inv</button>
+			<button class="xkey" data-a="delt" data-k="${k}" aria-label="Remove this target" title="Remove">×</button></div>
+		${p.ok ? "" : `<p class="note" style="margin:0">${esc(p.long)}: this target does nothing on T${t + 1}.</p>`}
+		<div class="range" data-k="${k}" title="Drag the handles: the range this knob sweeps">
+			<div class="rt"></div><div class="rf${x.inv ? " inv" : ""}" style="left:${lo / 127 * 100}%;width:${(hi - lo) / 127 * 100}%"></div>
+			<div class="rn" data-now="${k}" style="left:${now / 127 * 100}%"></div>
+			<div class="rh" data-h="lo" data-l="${x.inv ? "▶" : "◀"}" style="left:${lo / 127 * 100}%"></div><div class="rh" data-h="hi" data-l="${x.inv ? "◀" : "▶"}" style="left:${hi / 127 * 100}%"></div></div>
+		<div class="rnums"><span>${x.inv ? "KNOB MAX →" : "KNOB MIN →"} <b>${lo}</b></span><span class="now" data-nowtxt="${k}">NOW ${now}</span><span><b>${hi}</b> ${x.inv ? "← KNOB MIN" : "← KNOB MAX"}</span></div></div>`;
+}
+function setHtml(d, id, c, role) {
+	const sets = M().sets, s = sets.find(x => x.id === c.set) || sets[0];
+	if (!c.set) c.set = s.id;
+	const t = s.t === "sel" ? S.sel : s.t;
+	const setPick = kselect("set", "Randomise set", s.id, [["", [...sets.map(x => [x.id, x.name + " · " + x.params.length + " parameters"]), ["new", "+ New set"]]]]);
+	const groups = paramGroups(S.m, t).map(([g, list]) => `<div class="grp"><span class="ilab">${g}</span>${list.map(([pid, own, slot]) => {
+		const label = g === "SYN" ? (own || "—") : own;
+		return `<button class="chip" data-a="setp" data-v="${pid}" aria-pressed="${s.params.includes(pid)}" ${g === "SYN" && !own ? "disabled" : ""} title="${esc(slot)}">${esc(label)}</button>`;
+	}).join("")}</div>`).join("");
+	const amt = Math.round(s.amount / 100 * 16);
+	const last = s.last.length ? s.last.map(r => `${r.own} ${r.from}→${r.to}`).join(" · ") : "not rolled yet";
+	return `<p class="explain">${role === "roll" ? `A ${isPad(id) ? "hit" : "turn past half way"} randomises the set <b>${esc(s.name)}</b> on the ${s.t === "sel" ? "selected track" : "track " + (s.t + 1)}.` : `Turning sets how far <b>${esc(s.name)}</b> may move when it is rolled (0-100%).`}</p>
+		<div class="irow"><span class="ilab">Set</span><span style="flex:1;min-width:180px">${setPick}</span><button class="amkey" data-a="setname">Rename</button></div>
+		<div class="irow"><span class="ilab">Track</span><span style="width:170px">${kselect("settrack", "Set track", s.t, [["", [["sel", "Selected track"], ...KIT[S.m].map((mach, i) => [i, "T" + (i + 1) + " · " + mach])]]])}</span></div>
+		<div class="irow"><span class="ilab">Amount</span><span class="segbar" id="amtbar" role="slider" aria-label="Amount" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${s.amount}" tabindex="0">${Array.from({ length: 16 }, (_, i) => `<i class="${i < amt ? "on" : ""}"></i>`).join("")}</span><b class="mono" id="amtv">${s.amount}%</b>
+			<span class="seg" role="group" aria-label="How a roll moves">${[["around", "Around now"], ["anywhere", "Anywhere"]].map(([h, tx]) => `<button data-a="sethow" data-v="${h}" aria-pressed="${s.how === h}" title="${h === "around" ? "Each value moves up to the amount from where it is" : "Each value may land anywhere; the amount blends from the current value"}">${tx}</button>`).join("")}</span></div>
+		<div class="pchips" aria-label="Parameters in the set">${groups}</div>
+		<div class="irow"><button class="amkey" data-a="roll">Roll now</button><span class="note mono" id="lastroll" style="font-size:12px">${esc(last)}</span></div>
+		<p class="explain">Rolls are ordinary edits: one undo step each.</p>`;
+}
+function voiceInsp() {
+	const i = VOICES.findIndex(v => v[0] === S.selVoice), [v, label, notes] = VOICES[i], x = S.voices[S.m][i], mm = S.m === "mm";
+	return `<header><h3>Voice</h3><span>notes ${notes.join(", ")} · CH ${S.ch.tr06}</span></header>
+		<div class="ihead"><div class="ititle"><b>${v} · ${label}</b></div><div class="readout"><small>Plays</small><b>T${x.t + 1} ${esc(KIT[S.m][x.t])}${mm ? " · " + noteName(x.note) + " (" + x.note + ")" : ""}</b><small>Out</small><b>${mm ? "CH " + (1 + x.t) + " NOTE " + x.note : S.m === "md" ? "TRIG " + (x.t + 1) + " (NOTE " + (36 + x.t) + ")" : ""}</b></div></div>
+		<div class="irow"><span class="ilab">Track</span><div class="trackstrip ${S.m}">${KIT[S.m].map((mach, t) => `<button class="tp" data-a="vtrack" data-t="${t}" aria-pressed="${x.t === t}" title="${mach}"><span>T${t + 1}</span><small>${esc(short(mach))}</small></button>`).join("")}</div></div>
+		${mm ? `<div class="irow"><span class="ilab">Note</span><button class="xkey" data-a="vnote" data-v="-12" title="Octave down">«</button><button class="xkey" data-a="vnote" data-v="-1">‹</button><span class="readout" style="padding:4px 10px"><b>${noteName(x.note)} · ${x.note}</b></span><button class="xkey" data-a="vnote" data-v="1">›</button><button class="xkey" data-a="vnote" data-v="12" title="Octave up">»</button></div>` : `<p class="explain">The Machinedrum's trigs have no pitch: a voice plays its track.</p>`}
+		<div class="irow"><button class="amkey" data-a="voiceclose">Done</button></div>`;
+}
+
+/* ---- the MIDI monitor, one strip ---- */
+function monHtml() { return `<section class="card"><header><h3>MIDI monitor</h3><span>what arrives, newest first</span></header><div class="monstrip"><div class="monlcd" id="monlcd">${monInner()}</div><button class="amkey" data-a="clear">Clear</button></div></section>`; }
+function monInner() {
+	const list = S.mon.filter(e => S.view === "any" || S.view === "host" || e.dev === S.view);
+	if (!list.length) return `<span class="none">NOTHING YET · TURN A KNOB OR HIT A PAD</span>`;
+	return list.slice(0, 8).map(e => `<span class="ev${e.used ? "" : " off"}"><small>CH${e.ch} ${e.what}</small><b>${esc(e.text)}</b></span>`).join("");
+}
+
+/* ============================================================================================
+   Input: what a control does with an incoming value (the rules DESIGN-controller-ux.md proposes)
+   ============================================================================================ */
+const lastIn = {};
+function apply(d, id, v) {
+	const c = mapOf(d)[id], role = roleOf(c), key = d + "|" + id;
+	const prev = lastIn[key]; lastIn[key] = v; S.inv[key] = v;
+	const on = d === "any" || S.on[d];
+	let out = [];
+	if (!on || role === "none") return { out, used: false };
+	if (role === "direct" || role === "macro") {
+		const mode = modeOf(d, id);
+		for (const x of c.targets) {
+			const t = trackOf(x), lo = Math.min(x.lo, x.hi), hi = Math.max(x.lo, x.hi), cur = val(t, x.p);
+			let nv;
+			if (mode === "abs") { let f = v / 127; if (x.inv) f = 1 - f; nv = lo + (hi - lo) * f; }
+			else if (mode === "enc") nv = cur + (v - 64) * (x.inv ? -1 : 1);
+			else { if (prev == null) { out.push(pinfo(S.m, t, x.p).own + " " + cur); continue; } nv = cur + (v - prev) * (hi - lo) / 127 * (x.inv ? -1 : 1); }
+			nv = Math.max(lo, Math.min(hi, nv));
+			setVal(t, x.p, nv);
+			out.push(pinfo(S.m, t, x.p).own + " " + val(t, x.p));
+		}
+	} else if (role === "amount") {
+		const s = M().sets.find(x => x.id === c.set); if (s) { s.amount = Math.round(v / 127 * 100); out.push(s.name.toUpperCase() + " " + s.amount + "%"); }
+	} else if (role === "roll") {
+		if (isPad(id) || (prev != null && prev < 64 && v >= 64)) { const s = M().sets.find(x => x.id === c.set); if (s) { roll(s); out.push("ROLL " + s.name.toUpperCase()); } }
+	}
+	return { out, used: true };
+}
+function roll(s) {
+	const t = s.t === "sel" ? S.sel : s.t;
+	s.last = s.params.map(pid => {
+		const from = val(t, pid), a = s.amount / 100;
+		const to = s.how === "around" ? from + (Math.random() * 2 - 1) * a * 64 : from + (Math.random() * 127 - from) * a;
+		setVal(t, pid, to);
+		return { own: pinfo(S.m, t, pid).own, from, to: val(t, pid) };
+	});
+}
+/* a message from a device: the monitor, the steady "last moved" mark, select-on-touch, the values in place */
+function incoming(d, id, v) {
+	const [kind, n] = id.split(":");
+	if (d !== "any" && d !== "host" && !S.enabled[d]) return;
+	if (S.learn && S.view === d && d !== "tr06") {
+		if (!S.seen[d].some(x => x[0] === id)) S.seen[d].push([id, ""]);
+		S.learn = false; S.selCtl[d] = id; toast(id.replace(":", " ").toUpperCase() + " is now a control. Map it on the right.");
+	} else if (d !== "tr06" && !S.seen[d].some(x => x[0] === id)) S.seen[d].push([id, ""]);
+	const r = apply(d, id, v);
+	S.hot = { dev: d, id };
+	const label = d === "tr06" ? (TR06_CC[+n]?.label || "") : ctlName(d, id);
+	S.mon.unshift({ dev: d, ch: S.ch[d] || 1, what: kind === "cc" ? "CC " + n + " " + v : "NOTE " + n, text: label + (r.out.length ? " → " + r.out.join(", ") : r.used ? "" : " · not mapped"), used: r.used && r.out.length > 0 });
+	S.mon.length = Math.min(S.mon.length, 40);
+	if (S.touch && S.view === d && S.selCtl[d] !== id && !dragging) { S.selCtl[d] = id; S.selVoice = null; render(); return; }
+	live();
+}
+function hitVoice(note) {
+	const i = VOICES.findIndex(v => v[2].includes(note)); if (i < 0) return;
+	const [v] = VOICES[i], x = S.voices[S.m][i];
+	S.hotVoice = v;
+	S.mon.unshift({ dev: "tr06", ch: S.ch.tr06, what: "NOTE " + note + " 100", text: v + (S.on.tr06 ? " → T" + (x.t + 1) + " " + KIT[S.m][x.t] : " · profile off"), used: S.on.tr06 });
+	if (S.view === "tr06") { const el = $("#voices"); if (el) el.innerHTML = voicesHtml(); const m = $("#monlcd"); if (m) m.innerHTML = monInner(); }
+}
+/* the values in place, without a redraw (open dropdowns and drags stay) */
+function live() {
+	if (!S.view) return;
+	const f = $("#front"); if (f) f.innerHTML = frontSvg();
+	if (S.view !== "tr06") { const s = $("#seen"); if (s && !dragging) { render(); return; } }
+	const ro = $("#readout"); if (ro) ro.innerHTML = readoutHtml(S.view, S.selCtl[S.view]);
+	const c = mapOf(S.view)[S.selCtl[S.view]];
+	if (c && c.targets) c.targets.forEach((x, k) => { const now = val(trackOf(x), x.p); const n = $(`[data-now="${k}"]`); if (n) n.style.left = now / 127 * 100 + "%"; const tx = $(`[data-nowtxt="${k}"]`); if (tx) tx.textContent = "NOW " + now; });
+	const m = $("#monlcd"); if (m) m.innerHTML = monInner();
+	if (c && (c.role === "amount" || c.role === "roll") && !dragging) { const s = M().sets.find(x => x.id === c.set); if (s) { const b = $("#amtbar"); if (b) [...b.children].forEach((e, i) => e.classList.toggle("on", i < Math.round(s.amount / 100 * 16))); const av = $("#amtv"); if (av) av.textContent = s.amount + "%"; const lr = $("#lastroll"); if (lr) lr.textContent = s.last.length ? s.last.map(r => `${r.own} ${r.from}→${r.to}`).join(" · ") : "not rolled yet"; } }
+}
+
+/* ============================================================================================
+   Rendering and events
+   ============================================================================================ */
+function renderTop() {
+	const mm = S.m === "mm";
+	document.documentElement.dataset.m = S.m;
+	$("#brand").innerHTML = `<b>${mm ? "MONOMACHINE" : "MACHINEDRUM"}</b><small>Editor</small>`;
+	$("#tabs").innerHTML = ["Sequence", "Sound", "Mix", mm ? "Perform" : "Sampler", "Song", "Control"].map((w, i) =>
+		`<button role="tab" aria-selected="${w === "Control"}" ${w === "Control" ? "" : "disabled"} title="${w === "Control" ? "" : "Prototype: only CONTROL"}"><i class="led"></i><span>${w}</span><small>${i + 1}</small></button>`).join("");
+	$("#lcd").innerHTML = `<div class="f"><small>Tempo</small><b>120.0</b></div><div class="f opt"><small>Pattern</small><b>A01</b></div><div class="f"><small>Kit</small><b>${mm ? "K01 MONOMACHINE" : "K01 KIT 01"}</b></div><div class="f"><small>Track</small><b>T${S.sel + 1} ${KIT[S.m][S.sel]}</b></div><div class="f opt"><small>Engine</small><b>${mm ? "EMU OS 1.32B" : "EMU OS 1.63"}</b></div>`;
+	$$("#devm button").forEach(b => b.setAttribute("aria-pressed", b.dataset.v === S.m));
+	$("#plug-tr06").textContent = S.conn.tr06 ? "Unplug TR-06" : "Plug in TR-06";
+	$("#plug-beatstep").textContent = S.conn.beatstep ? "Unplug BeatStep" : "Plug in BeatStep";
+	$("#dev-daw").setAttribute("aria-pressed", S.daw);
+}
+function render() {
+	closeK();
+	renderTop();
+	$("#main").innerHTML = S.view ? cfgHtml() : devicesHtml();
+}
+
+document.addEventListener("click", e => {
+	const kb = e.target.closest(".kselbtn");
+	if (kb) { const same = kFor === kb && !$("#kpop").hidden; closeK(); if (!same) openK(kb); return; }
+	const o = e.target.closest("#kpop .kopt");
+	if (o && kFor) { const id = kFor.dataset.ks, v = o.dataset.v; closeK(); pick(id, v); return; }
+	if (!e.target.closest("#kpop")) closeK();
+	const el = e.target.closest("[data-a],[data-dev]");
+	if (!el || (el.dataset.knob && suppressClick)) { suppressClick = false; return; }
+	if (el.dataset.dev) { devAction(el); return; }
+	act(el.dataset.a, el);
+});
+document.addEventListener("keydown", e => {
+	if (!$("#kpop").hidden) {
+		if (e.key === "Escape") { closeK(); kFor?.focus(); return; }
+		const opts = $$("#kpop .kopt"), i = opts.indexOf(document.activeElement), d = { ArrowDown: 1, ArrowRight: 1, ArrowUp: -1, ArrowLeft: -1 }[e.key];
+		if (d && opts.length) { e.preventDefault(); opts[(i + d + opts.length) % opts.length].focus(); }
+		return;
+	}
+	const g = e.target.closest && e.target.closest("g[data-a]");
+	if (g && (e.key === "Enter" || e.key === " ")) { e.preventDefault(); act(g.dataset.a, g); }
+});
+
+function curCtl() { const d = S.view; return { d, id: S.selCtl[d], map: mapOf(d) }; }
+function act(a, el) {
+	const { d, id, map } = curCtl();
+	switch (a) {
+		case "open": S.view = el.dataset.d; S.selVoice = null; S.learn = false; break;
+		case "back": S.view = ""; S.learn = false; break;
+		case "refresh": toast(`Looked again: ${["tr06", "beatstep"].filter(x => S.conn[x]).length} MIDI devices connected.`); break;
+		case "audiomidi": toast("Prototype: AUDIO / MIDI opens here."); return;
+		case "enable": S.enabled[d] = true; toast(DEVICES[d].name + " enabled in AUDIO / MIDI."); break;
+		case "toggleOn": S.on[d] = !S.on[d]; break;
+		case "touch": S.touch = !S.touch; break;
+		case "reset": S.maps[S.m].tr06 = defaults(S.m).tr06; S.ch.tr06 = 10; S.mode.tr06 = "rel"; toast("TR-06: shipped mapping, channel 10, relative knobs."); break;
+		case "track": S.sel = +el.dataset.t; break;
+		case "layer": S.layer = el.dataset.v; break;
+		case "ctl": S.selCtl[d] = el.dataset.id; S.selVoice = null; break;
+		case "dead": toast(el.dataset.v); return;
+		case "voice": S.selVoice = S.selVoice === el.dataset.v ? null : el.dataset.v; break;
+		case "voiceclose": S.selVoice = null; break;
+		case "vtrack": S.voices[S.m][VOICES.findIndex(v => v[0] === S.selVoice)].t = +el.dataset.t; break;
+		case "vnote": { const x = S.voices[S.m][VOICES.findIndex(v => v[0] === S.selVoice)]; x.note = Math.max(0, Math.min(127, x.note + +el.dataset.v)); break; }
+		case "learn": S.learn = !S.learn; break;
+		case "rename": { const s = S.seen[d].find(x => x[0] === id); const nm = prompt("Name this control", ctlName(d, id)); if (s && nm != null) s[1] = nm.trim().slice(0, 16); break; }
+		case "role": {
+			const r = el.dataset.v, c = map[id] || (map[id] = { targets: [] });
+			delete c.role;
+			if (r === "none") c.targets = [];
+			else if (r === "direct") { c.targets = c.targets.slice(0, 1); if (!c.targets.length) c.targets.push(tgt(S.m === "mm" ? "FLT.0" : "SYN.0")); }
+			else if (r === "macro") { if (!c.targets.length) c.targets.push(tgt(S.m === "mm" ? "FLT.0" : "SYN.0")); if (c.targets.length < 2) c.targets.push(tgt(S.m === "mm" ? "AMP.4" : "RT.0")); }
+			else { c.role = r; c.set = c.set || M().sets[0].id; c.targets = []; }
+			if (r === "none") delete map[id];
+			break;
+		}
+		case "mode": { const c = map[id] || (map[id] = { targets: [] }); if (el.dataset.v) c.mode = el.dataset.v; else delete c.mode; break; }
+		case "addt": map[id].targets.push(tgt(S.m === "mm" ? "AMP.2" : "RT.1")); break;
+		case "delt": map[id].targets.splice(+el.dataset.k, 1); if (!map[id].targets.length) delete map[id]; break;
+		case "inv": { const x = map[id].targets[+el.dataset.k]; x.inv = !x.inv; break; }
+		case "setp": { const s = curSet(); const p = el.dataset.v; s.params = s.params.includes(p) ? s.params.filter(x => x !== p) : [...s.params, p]; break; }
+		case "sethow": curSet().how = el.dataset.v; break;
+		case "setname": { const s = curSet(); const nm = prompt("Name the set", s.name); if (nm) s.name = nm.trim().slice(0, 16); break; }
+		case "roll": { const s = curSet(); roll(s); toast("Rolled " + s.name + ": " + s.params.length + " parameters, one undo step."); break; }
+		case "clear": S.mon = S.mon.filter(e => !(S.view === "any" || S.view === "host" || e.dev === S.view)); break;
+		default: return;
+	}
+	render();
+}
+const curSet = () => { const { id, map } = curCtl(); return M().sets.find(x => x.id === map[id].set) || M().sets[0]; };
+function pick(ks, v) {
+	const { d, id, map } = curCtl();
+	if (ks === "ch") S.ch[d] = +v;
+	else if (ks === "devmode") S.mode[d] = v;
+	else if (ks === "hostprofile") { if (v === "tr06") toast("Prototype: the Host MIDI in now reads as a TR-06 (its drawing and names)."); }
+	else if (ks.startsWith("pin:")) { const x = map[id].targets[+ks.slice(4)]; x.t = v === "sel" ? "sel" : +v; }
+	else if (ks.startsWith("param:")) { const x = map[id].targets[+ks.slice(6)]; x.p = v; if (v === "NOTE.0") { x.lo = 48; x.hi = 72; } }
+	else if (ks === "set") {
+		if (v === "new") { const n = M().sets.length + 1; M().sets.push({ id: "rs" + Date.now(), name: "Set " + n, t: "sel", params: [], amount: 50, how: "around", last: [] }); map[id].set = M().sets[M().sets.length - 1].id; }
+		else map[id].set = v;
+	}
+	else if (ks === "settrack") curSet().t = v === "sel" ? "sel" : +v;
+	render();
+}
+
+/* dragging: a knob on the drawing (the hardware, simulated), a range handle, the amount bar */
+let dragging = null, suppressClick = false;
+document.addEventListener("pointerdown", e => {
+	const h = e.target.closest(".range");
+	if (h) {
+		const { id, map } = curCtl(), k = +h.dataset.k, x = map[id].targets[k];
+		const r = h.getBoundingClientRect(), at = Math.round((e.clientX - r.left) / r.width * 127);
+		const lo = Math.min(x.lo, x.hi), hi = Math.max(x.lo, x.hi);
+		const which = e.target.dataset.h || (Math.abs(at - lo) < Math.abs(at - hi) ? "lo" : "hi");
+		dragging = { kind: "range", el: h, k, which, lo, hi };
+		h.setPointerCapture(e.pointerId); e.preventDefault(); moveRange(e); return;
+	}
+	const b = e.target.closest("#amtbar");
+	if (b) { dragging = { kind: "amt", el: b }; b.setPointerCapture(e.pointerId); moveAmt(e); e.preventDefault(); return; }
+	const g = e.target.closest("[data-knob]");
+	if (g) { const d = S.view; dragging = { kind: "knob", el: g, id: g.dataset.id, d, y: e.clientY, v0: S.inv[d + "|" + g.dataset.id] ?? 64, moved: false }; g.setPointerCapture?.(e.pointerId); e.preventDefault(); return; }
+	const p = e.target.closest(".sc[data-id]");
+	if (p && isPad(p.dataset.id) && S.view !== "tr06") incoming(S.view, p.dataset.id, 100);
+});
+document.addEventListener("pointermove", e => {
+	if (!dragging) return;
+	if (dragging.kind === "range") moveRange(e);
+	else if (dragging.kind === "amt") moveAmt(e);
+	else if (dragging.kind === "knob") {
+		const dy = dragging.y - e.clientY; if (Math.abs(dy) < 3 && !dragging.moved) return;
+		dragging.moved = true;
+		const v = Math.max(0, Math.min(127, Math.round(dragging.v0 + dy * .8)));
+		if (v !== S.inv[dragging.d + "|" + dragging.id]) incoming(dragging.d, dragging.id, v);
+	}
+});
+document.addEventListener("pointerup", () => {
+	if (!dragging) return;
+	const was = dragging; dragging = null;
+	if (was.kind === "knob" && was.moved) { suppressClick = true; if (S.touch && S.selCtl[was.d] !== was.id) { S.selCtl[was.d] = was.id; S.selVoice = null; } render(); }
+	if (was.kind === "range" || was.kind === "amt") render();
+});
+function moveRange(e) {
+	const { id, map } = curCtl(), x = map[id].targets[dragging.k], r = dragging.el.getBoundingClientRect();
+	const at = Math.max(0, Math.min(127, Math.round((e.clientX - r.left) / r.width * 127)));
+	if (dragging.which === "lo") dragging.lo = Math.min(at, dragging.hi); else dragging.hi = Math.max(at, dragging.lo);
+	x.lo = x.inv ? dragging.hi : dragging.lo; x.hi = x.inv ? dragging.lo : dragging.hi;
+	if (!x.inv) { x.lo = dragging.lo; x.hi = dragging.hi; }
+	const card = dragging.el.closest(".tcard"), lo = dragging.lo, hi = dragging.hi;
+	card.querySelector(".rf").style.cssText = `left:${lo / 127 * 100}%;width:${(hi - lo) / 127 * 100}%`;
+	card.querySelector('[data-h="lo"]').style.left = lo / 127 * 100 + "%"; card.querySelector('[data-h="hi"]').style.left = hi / 127 * 100 + "%";
+	const bs = card.querySelectorAll(".rnums b"); bs[0].textContent = lo; bs[1].textContent = hi;
+}
+function moveAmt(e) {
+	const s = curSet(), r = dragging.el.getBoundingClientRect();
+	s.amount = Math.max(0, Math.min(100, Math.round((e.clientX - r.left) / r.width * 100)));
+	[...dragging.el.children].forEach((c, i) => c.classList.toggle("on", i < Math.round(s.amount / 100 * 16)));
+	$("#amtv").textContent = s.amount + "%";
+}
+
+/* the prototype's own controls: hot-plug, the DAW, the machine, simulated hardware */
+function devAction(el) {
+	const a = el.dataset.dev, v = el.dataset.v;
+	if (a === "m") { S.m = v; S.sel = Math.min(S.sel, tracks() - 1); S.selVoice = null; }
+	else if (a === "plug") {
+		S.conn[v] = !S.conn[v];
+		toast(DEVICES[v].name + (S.conn[v] ? " connected" : " disconnected · its mapping is kept"));
+		if (!S.conn[v] && S.view === v) S.view = "";
+	}
+	else if (a === "daw") { S.daw = !S.daw; S.view = ""; }
+	else if (a === "hit") { if (S.conn.tr06 && !S.daw) hitVoice(+v); else toast("The TR-06 is not connected."); return; }
+	else if (a === "bs") { if (!S.conn.beatstep || S.daw) { toast("The BeatStep is not connected."); return; } if (!S.enabled.beatstep) { toast("The BeatStep is not enabled in AUDIO / MIDI: nothing arrives."); return; } incoming("beatstep", "cc:77", 30 + Math.floor(Math.random() * 60)); return; }
+	render();
+}
+
+render();
+</script>
+</body>
+</html>
