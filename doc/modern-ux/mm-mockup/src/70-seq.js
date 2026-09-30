@@ -43,7 +43,9 @@ function renderSeq(){const t=S.sel,tr=trk(t),midi=isMidiT(t);
 /* as in the MD Editor: the rail's LOCK PARAMETER block starts on the lock lane's title line and ends at its bottom edge */
 function alignLock(){const rp=$("#rail .railparams"),lt=$(".lanetop"),ls=$("#lanescroll");if(!rp||!lt||!ls||S.ws!=="seq")return;
  rp.style.marginTop="0px";rp.style.height="auto";const dy=lt.getBoundingClientRect().top-rp.getBoundingClientRect().top;
- rp.style.marginTop=Math.max(0,dy)+"px";rp.style.height=Math.max(0,ls.getBoundingClientRect().bottom-lt.getBoundingClientRect().top)+"px"}
+ rp.style.marginTop=Math.max(0,dy)+"px";rp.style.height=Math.max(0,ls.getBoundingClientRect().bottom-lt.getBoundingClientRect().top)+"px";
+ /* the lane's bars span the parameter keys: they start level with the page tabs and end with the last key */
+ ls.style.marginTop="0px";const tb=rp.querySelector(".pagetabs"),ln=$("#lane");if(tb&&ln){const off=tb.getBoundingClientRect().top-ln.getBoundingClientRect().top;if(off>0)ls.style.marginTop=off+"px"}}
 function dockInfo(t){return{locks:`<span class="cap" style="font-size:11px">${pidLabel(t,S.lane)}</span> <span class="lanescale" id="lanescale"></span> <span class="hint">draw to lock · alt-drag erases · slide trigs glide</span>`,arp:"FUNCTION + ARP · one per track, 12 per pattern",trn:"FUNCTION + TRANSPOSE · live, the notes stay",trig:"KIT › TRIG",midipage:"GLOBAL › MIDI SEQ › MIDISEQ SET · page stored in the kit"}[S.dock]}
 function dockBody(t){if(S.dock==="locks")return`<div class="scroll" id="lanescroll"><div class="lanebox"><div class="lane" id="lane" style="grid-template-columns:${cols()}"></div><svg class="lanesvg" id="lanesvg"></svg></div></div>`;
  if(S.dock==="arp")return arpPanel(t);if(S.dock==="trn")return trnPanel(t);if(S.dock==="trig")return trigPanel(t);return midiPanel(t)}
