@@ -9,9 +9,42 @@
   - Map through a control matrix, not a table of CC rows and not a drawing of the device (second round: "a beautiful control matrix"). The matrix gives ranges, inverse, macros, randomise, knob mode, track pinning and steady live feedback.
   - Use the same configurator for every MIDI input, with the TR-06 as a device that has a built-in profile. It replaces the old MIDI Learn matrix.
 
+## 00000. Current proposal: v7, the hardware panel with the mapping written on it
+
+The prototype opens on v7; the bar keeps **v5 matrix**, **v6 list** and **v7 panel**. Radek's verdict on v6: the list does not fit the window, and "maybe the hardware view was best and we just didn't do it properly". v7 is that, with one change: the panel says what every control does, in words, right under it.
+
+### Why it works
+
+- **Spatial memory:** the user already knows where DRIVE and the BD knob are on the TR-06. The panel puts the same controls in the same places, so finding a control costs nothing.
+- **Text answers the question:** an earlier front panel (28c12798) was only a drawing of knobs, and the user had to click each one to learn what it did. Under every knob and pad v7 writes the answer: "→ Unison level", "→ 3 things" (with a count badge), "→ Note", "→ Release · T6" (pinned to track 6), "nothing" (dim), and under a pad "→ Track 1 · C4" (MD: "→ Track 1 · trig"). The whole mapping reads in about three seconds, with no click.
+- **Fits without scrolling:** 8 + 3 knobs and 7 pads are a fixed small set, so the panel has no list to scroll (v6's 50 rows needed one). The hardware's own layers replace the rows.
+
+### Layout
+
+- **Header line** as in v6, with LIST and MATRIX keys to reach the other views. MIDI IN strip at the bottom.
+- **Left (about 64%):** the LAYER switch, then the instrument knobs (ACC BD SD LT HT CY OH CH) and, at the right, the effect knobs (DRIVE TIME DEPTH). Below 1250 px the effect knobs wrap to a second row. Under them a strip of small grey circles and squares for the controls that send no MIDI (VOLUME, TEMPO, MODE, INSTRUMENT, VALUE, MENU, STEP LOOP, the 16 steps), then the seven instrument keys BD to CH. One legend line: "grey = sends no MIDI".
+- **LAYER switch:** LEVEL, TUNE (MENU + DRIVE), DECAY (MENU + TIME), TONE (MENU + DEPTH), COMP, DELAY SEND (STEP LOOP + DEPTH) and GLOBAL (MIX IN, PROB, MIX IN SEND and the editor's RANDOM and APP LFO). Switching relabels the eight instrument knobs, as the TR-06 does (each layer sends its own CCs). A knob the layer does not have is drawn ghosted ("not here"). Each tab carries the number of mapped controls in it. Turning a shifted CC on the device switches the layer by itself.
+- **Knob:** a name (BD), a small knob whose arc shows where its target is now, and the label. A macro label carries a badge with its count. A selected control has a steady ring, and the one that moved last a tinted cell and a red arc. Nothing blinks.
+- **Right (about 35%):** v6's detail for the selected control: name and CC, IN / OUT, the one-control fan-out picture, TYPE, KNOB, a card per target (picker with full names by page, two-handle range, INV, track, remove) and "+ Add another thing". With nothing selected it shows three how-to lines.
+- **Generic device (BeatStep):** the same cells, laid out as a grid: KNOBS AND FADERS, a dashed "+ LEARN" tile, PADS AND KEYS, EDITOR SOURCES.
+- **MD:** the same panel with the MD's names; pads read "→ Track n · trig".
+
+### Clicking through
+
+- Open CONTROL, then the TR-06 tile. Click any knob or pad (a pad click plays it). Drag across a knob to turn it: the cell selects, the arc and the fan-out move. Switch LAYER; use Hit BD or the bar's MM / MD; open the BeatStep tile.
+
+### v7 against v6 and v5
+
+- **v7 wins on recall and fit:** it shows position, name and meaning at once and fits the window. v6 reads best as a sentence, but it lists 50 rows and scrolls.
+- **v7 loses the full list:** only one layer of eight knobs is visible at a time. The tab counts and the auto-switch make up for it, and LIST and MATRIX are one key away.
+
+### Measured (headless Chrome, prototype bar included)
+
+- **1500 x 900:** `scrollHeight` 900 (no page scroll); the panel is about 414 px high with no internal scroll. **1000 x 900:** `scrollHeight` 900, panel about 497 px. **800 x 900:** `scrollHeight` 902, panel about 483 px. The detail column may scroll inside itself when a control has many targets. Smallest text on the panel is 12 px. No console errors at any size.
+
 ## 0000. Current proposal: v6, "what each knob does"
 
-The prototype opens on v6. The prototype bar now offers only **v5 matrix** (kept as the Overview, also reached by the OVERVIEW key in the header) and **v6 list**. v2-v4 are still in the file's history and this document, but are off the switch.
+The prototype bar offers only **v5 matrix** (kept as the Overview, also reached by the OVERVIEW key in the header) and **v6 list**. v2-v4 are still in the file's history and this document, but are off the switch.
 
 **Why a v6.** Radek's requirement: "I need to understand it quickly; I don't want to strain my brain just to understand the mapping." v5 is complete but it is a grid: to learn what DRIVE does you find its column, then look down it for pins, then read the row names. v6 is built to be readable in three seconds: one control, one sentence.
 

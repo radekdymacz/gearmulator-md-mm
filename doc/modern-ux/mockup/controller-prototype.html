@@ -649,6 +649,55 @@ button:disabled{opacity:.4;cursor:default}
 .pk6 .pb{display:flex;flex-wrap:wrap;gap:3px}
 .pk6 .pb button{height:24px;padding:0 8px;font:500 12px var(--sans);letter-spacing:.02em}
 .pk6 .pb button small{font:500 10px var(--mono);opacity:.7;margin-left:4px}
+
+/* ===== v7: the hardware panel with the mapping written on it ===== */
+.body7{display:grid;grid-template-columns:minmax(0,1.8fr) minmax(0,1fr);gap:16px;align-items:start}
+.pn7{border-top:2px solid var(--print);padding-top:8px;display:grid;gap:14px;align-content:start;min-width:0}
+.det7{height:calc(100vh - 262px)}
+.pn7 h5{margin:0 0 4px;font:600 11px var(--sans);letter-spacing:.18em;text-transform:uppercase;color:var(--print2)}
+.lay7{display:flex;flex-wrap:wrap;align-items:center;gap:6px 10px}
+.lay7 .seg button{height:28px;padding:0 9px;font-size:11px;display:inline-flex;align-items:center;gap:6px}
+.lay7 .seg button em{font:600 10.5px var(--mono);font-style:normal;opacity:.75;background:rgba(255,255,255,.14);border-radius:8px;padding:0 5px}
+.lay7 .seg button[aria-pressed=true] em{background:rgba(0,0,0,.12)}
+.hw7{font:12px var(--sans);color:var(--print3)}
+.top7{display:grid;grid-template-columns:8fr 3fr;gap:10px 22px;padding:8px 10px;background:var(--plate2);border-radius:6px;box-shadow:inset 0 0 0 1px var(--rule)}
+.gin7{display:grid;grid-template-columns:repeat(8,minmax(0,1fr));gap:2px}
+.gfx7{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:2px}
+.gauto7{display:grid;grid-template-columns:repeat(auto-fill,minmax(88px,1fr));gap:4px}
+.k7,.p7{display:grid;justify-items:center;align-content:start;gap:1px;min-width:0;padding:3px 2px 4px;background:transparent;box-shadow:none;border-radius:6px;color:var(--body);letter-spacing:0;font:inherit;text-align:center;touch-action:none}
+.k7:hover,.p7:hover{background:color-mix(in srgb,var(--plate3) 75%,transparent)}
+.k7 .cap7,.p7 .cap7{font:600 12px var(--sans);letter-spacing:.06em;color:var(--print);white-space:nowrap}
+.k7 svg{width:clamp(42px,4.6vw,72px);height:auto;display:block}
+.k7 .body{fill:var(--key)}.k7 .tr{fill:none;stroke:color-mix(in srgb,var(--rule) 80%,transparent);stroke-width:3.5}
+.k7 .va{fill:none;stroke:var(--print2);stroke-width:3.5;stroke-linecap:round}
+.k7 .pt{stroke:var(--keytext);stroke-width:2.5;stroke-linecap:round}
+.k7 .ring{fill:none;stroke:var(--print);stroke-width:2.5}
+.k7.hot .va{stroke:var(--led)}.k7.hot .ring{stroke:var(--led)}.k7.hot{background:color-mix(in srgb,var(--led) 11%,transparent)}
+.k7.sel{background:var(--plate3)}
+.lb7{font:500 clamp(12px,.9vw,14px)/1.2 var(--sans);color:var(--body);min-height:2.4em;display:block;overflow:hidden;overflow-wrap:anywhere;max-width:100%}
+.k7.off .lb7,.p7.off .lb7{color:var(--print3);font-style:italic}
+.k7.off svg{opacity:.55}
+.k7.ghost{opacity:.4}
+.bd7{font:600 10.5px var(--mono);font-style:normal;background:var(--key);color:var(--keytext);border-radius:8px;padding:0 5px;margin-left:4px;vertical-align:1px}
+.k7.learn{border:1px dashed var(--print3)}
+.k7.learn .plus7{width:44px;height:44px;border-radius:50%;border:2px dashed var(--print3);display:grid;place-items:center;font:600 22px var(--sans);color:var(--print2)}
+.k7.learn .plus7 .led{display:none}
+.grey7{display:flex;align-items:center;gap:8px;padding:2px 10px;opacity:.9}
+.gkn7{width:16px;height:16px;border-radius:50%;background:color-mix(in srgb,var(--rule) 70%,transparent);display:inline-block}
+.gst7{width:14px;height:12px;border-radius:2px;background:color-mix(in srgb,var(--rule) 55%,transparent);display:inline-block}
+.gbt7{width:22px;height:12px;border-radius:2px;background:color-mix(in srgb,var(--rule) 70%,transparent);display:inline-block}
+.gsep7{width:14px}
+.gpad7{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:4px}
+.p7 .key7{width:min(100%,84px);height:clamp(34px,4vw,54px);border-radius:5px;background:var(--key);box-shadow:inset 0 -3px 0 rgba(0,0,0,.35)}
+.p7.hot .key7{background:var(--led)}
+.p7.sel{background:var(--plate3);box-shadow:inset 0 0 0 2px var(--print)}
+.p7.hot.sel{box-shadow:inset 0 0 0 2px var(--led)}
+.leg7{margin:0;font:12px var(--sans);color:var(--print3);display:flex;align-items:center;gap:6px}
+.det7 .howto{display:grid;gap:8px;padding:10px 4px;font:500 15px/1.35 var(--sans);color:var(--body)}
+.det7 .howto b{color:var(--print)}
+@media(max-width:1250px){.top7{grid-template-columns:1fr}.gfx7{width:calc(37.5% - 2px)}.body7{grid-template-columns:minmax(0,1.5fr) minmax(0,1fr)}.det7{height:calc(100vh - 377px)}.v7.ban .det7{height:calc(100vh - 421px)}}
+@media(max-width:1100px){.hw7{display:none}.pn7{gap:10px}.leg7{font-size:12px}}
+.v7.ban .det7{height:calc(100vh - 306px)}
 </style>
 <style id="cross4"></style>
 <style id="cross5"></style>
@@ -673,7 +722,7 @@ button:disabled{opacity:.4;cursor:default}
 
 <div class="dev" id="dev" aria-label="Prototype controls">
   <b>Prototype</b>
-  <span class="seg" id="devver"><button data-dev="ver" data-v="v5">v5 matrix</button><button data-dev="ver" data-v="v6">v6 list</button></span>
+  <span class="seg" id="devver"><button data-dev="ver" data-v="v5">v5 matrix</button><button data-dev="ver" data-v="v6">v6 list</button><button data-dev="ver" data-v="v7">v7 panel</button></span>
   <span class="sep"></span>
   <span>Machine</span><span class="seg" id="devm"><button data-dev="m" data-v="mm">MM</button><button data-dev="m" data-v="md">MD</button></span>
   <span class="sep"></span>
@@ -804,7 +853,7 @@ function defaults(m) {
 	return { tr06, beatstep, any, sets };
 }
 const S = {
-	ver: "v6", sel6: null, pk6: false, pq: "", used5: false, coll5c: {}, pg5: {}, q: "", pop: null, to: "sel", used4: { src: false, dst: false }, coll4: { Tune: true, Decay: true, Tone: true, Comp: true, "Delay send": true },
+	ver: "v7", layer7: "LEVEL", sel6: null, pk6: false, pq: "", used5: false, coll5c: {}, pg5: {}, q: "", pop: null, to: "sel", used4: { src: false, dst: false }, coll4: { Tune: true, Decay: true, Tone: true, Comp: true, "Delay send": true },
 	m: "mm", sel: 0, view: "", daw: false,
 	conn: { tr06: true, beatstep: true },			/* what the OS reports (hot-plug) */
 	enabled: { tr06: true, beatstep: false },		/* AUDIO / MIDI's inputs */
@@ -952,6 +1001,7 @@ const TYPE_TXT = { none: "Off", direct: "Direct", macro: "Macro", roll: "Randomi
 const MODE_TXT = { rel: "REL", abs: "ABS", enc: "ENC" };
 
 function cfgHtml() {
+	if (S.ver === "v7") return cfg7Html();
 	if (S.ver === "v6") return cfg6Html();
 	if (S.ver === "v5") return cfg5Html();
 	if (S.ver === "v4") return cfg4Html();
@@ -1767,7 +1817,7 @@ function picker6(d, id) {
 }
 function detail6(d) {
 	const id = S.sel6;
-	if (!id) return `<p>Turn a knob on the ${esc(DEVICES[d].name)}, or click a row: its connections show here.</p>`;
+	if (!id) return `<div class="howto"><span><b>Click</b> a knob or pad on the panel to see what it does.</span><span><b>Turn</b> a knob on the ${esc(DEVICES[d].name)}: it selects itself here.</span><span>Under every control is what it does now. <b>“nothing”</b> means it is free: click it and choose.</span></div>`;
 	const c = mapOf(d)[id], role = roleOf(c), vi = voiceIdx(id), pad = vi >= 0 || isPad(id), virt = id.startsWith("rnd:") || id.startsWith("lfo:");
 	const kind = role === "roll" ? "roll" : role === "amount" ? "amount" : "normal";
 	const types = pad ? [["normal", "Normal"], ["roll", "Randomise"]] : [["normal", "Normal"], ["roll", "Randomise"], ["amount", "Rnd amount"]];
@@ -1828,6 +1878,116 @@ document.addEventListener("input", e => {
 });
 
 /* ---- the MIDI monitor, one strip ---- */
+/* ============================================================================================
+   v7: the hardware panel with the mapping written on it. Left: the TR-06's front panel (or a grid of the
+   controls a generic device sent); under every knob and pad a short label of what it does. Right: v6's detail.
+   ============================================================================================ */
+const is6 = () => S.ver === "v6" || S.ver === "v7";
+const LAYERS7 = [
+	["LEVEL", "Level", "turn the knob", [71, 24, 29, 51, 54, 85, 82, 63]],
+	["TUNE", "Tune", "MENU + DRIVE", [0, 20, 25, 49, 52, 83, 80, 61]],
+	["DECAY", "Decay", "MENU + TIME", [0, 23, 28, 50, 53, 84, 81, 62]],
+	["TONE", "Tone", "MENU + DEPTH", [0, 21, 26, 92, 94, 0, 0, 0]],
+	["COMP", "Comp", "MENU + knob", [0, 22, 27, 0, 0, 0, 0, 0]],
+	["SEND", "Delay send", "STEP LOOP + DEPTH", [0, 96, 97, 103, 104, 109, 108, 107]],
+	["GLOBAL", "Global", "MIX IN, PROB", null]
+];
+const GLOBAL7 = [["cc:12", "MIX IN"], ["cc:113", "PROB"], ["cc:111", "MIX IN SEND"], ["rnd:1", "RANDOM"], ["lfo:1", "APP LFO"]];
+const CAP7 = { TONE: ["", "BD attack", "SD snappy", "LT color", "HT color"] };
+const INST7 = ["ACC", "BD", "SD", "LT", "HT", "CY", "OH", "CH"];
+function layerIds7(l) {
+	const L = LAYERS7.find(x => x[0] === l);
+	if (!L[3]) return GLOBAL7.map(x => x[0]);
+	return L[3].map(cc => cc ? "cc:" + cc : null);
+}
+function layerOf7(id) { for (const L of LAYERS7) if (layerIds7(L[0]).includes(id)) return L[0]; return null; }
+function lab7(d, id) {
+	const c = mapOf(d)[id], role = roleOf(c);
+	if (!c || role === "none") return { t: "nothing", off: true };
+	if (role === "roll" || role === "amount") { const s = M().sets.find(x => x.id === c.set); return { t: role === "roll" ? "randomises “" + s.name + "”" : "“" + s.name + "” amount", badge: role === "roll" ? s.params.length : "" }; }
+	const plays = c.targets.filter(x => x.p === "PLAY.0"), params = c.targets.filter(x => x.p !== "PLAY.0");
+	if (plays.length) {
+		const x = plays[0], t = trackOf(x);
+		return { t: "Track " + (t + 1) + (S.m === "mm" ? " · " + noteName(x.note ?? 60) : " · trig"), badge: plays.length + params.length > 1 ? "+" + (plays.length + params.length - 1) : "" };
+	}
+	if (params.length > 1) return { t: params.length + " things", badge: params.length };
+	const x = params[0], t = trackOf(x), p = pinfo(S.m, t, x.p);
+	const nm = p.own === "—" ? "unused slot" : full6(x).replace(/ \(.*\)$/, "");
+	return { t: nm + (x.t === "sel" ? "" : " · T" + (t + 1)), off: p.own === "—" };
+}
+function dest7(d, id) {
+	const c = mapOf(d)[id]; if (!c || !c.targets) return null;
+	const x = c.targets.find(y => y.p !== "PLAY.0"); return x ? val(trackOf(x), x.p) : null;
+}
+const arc7 = (cx, cy, r, a0, a1) => { const p = a => [cx + r * Math.cos(a * Math.PI / 180), cy + r * Math.sin(a * Math.PI / 180)]; const [x0, y0] = p(a0), [x1, y1] = p(a1); return `M${x0.toFixed(1)} ${y0.toFixed(1)} A${r} ${r} 0 ${a1 - a0 > 180 ? 1 : 0} 1 ${x1.toFixed(1)} ${y1.toFixed(1)}`; };
+function knobSvg7(v, sel, hot, ghost) {
+	const A = f => -225 + 270 * f, f = v == null ? 0 : v / 127;
+	const pa = A(v == null ? .5 : f) * Math.PI / 180;
+	return `<svg viewBox="0 0 56 56" aria-hidden="true">${sel ? `<circle cx="28" cy="28" r="26" class="ring"/>` : ""}
+		<path class="tr" d="${arc7(28, 28, 22, -225, 45)}"/>${v != null ? `<path class="va" d="${arc7(28, 28, 22, -225, Math.max(-224.5, A(f)))}"/>` : ""}
+		<circle cx="28" cy="28" r="15" class="body"/>${ghost ? "" : `<line x1="${(28 + 4 * Math.cos(pa)).toFixed(1)}" y1="${(28 + 4 * Math.sin(pa)).toFixed(1)}" x2="${(28 + 13 * Math.cos(pa)).toFixed(1)}" y2="${(28 + 13 * Math.sin(pa)).toFixed(1)}" class="pt"/>`}</svg>`;
+}
+function knob7(d, id, cap, ghostWhy) {
+	if (!id) return `<div class="k7 ghost" title="${esc(ghostWhy || "")}"><b class="cap7">${esc(cap)}</b>${knobSvg7(null, false, false, true)}<span class="lb7">${esc(ghostWhy ? "not here" : "")}</span></div>`;
+	const l = lab7(d, id), hot = isHot(d, id), sel = S.sel6 === id, v = dest7(d, id);
+	return `<button class="k7${sel ? " sel" : ""}${hot ? " hot" : ""}${l.off ? " off" : ""}" data-a="sel6" data-id="${id}" ${id.startsWith("rnd:") || id.startsWith("lfo:") ? "" : `data-cell3="${id}"`} title="${esc(ctlName(d, id) || name4(d, id))}${id.startsWith("cc:") ? " · CC " + id.slice(3) : ""} · click: what it does · drag: turn it">
+		<b class="cap7">${esc(cap)}</b>${knobSvg7(v, sel, hot)}<span class="lb7">${l.off ? "" : "→ "}${esc(l.t)}${l.badge ? `<i class="bd7">${l.badge}</i>` : ""}</span></button>`;
+}
+function pad7(d, id, cap) {
+	const l = lab7(d, id), hot = isHot(d, id) || S.hotVoice === cap && isHot(d, id), sel = S.sel6 === id, vi = voiceIdx(id);
+	return `<button class="p7${sel ? " sel" : ""}${isHot(d, id) ? " hot" : ""}${l.off ? " off" : ""}" data-a="sel6" data-id="${id}" title="${vi >= 0 ? esc(VOICES[vi][1]) + " · notes " + VOICES[vi][2].join(", ") + " · click: plays it and shows what it does" : esc(cap) + " · click: what it does"}">
+		<b class="cap7">${esc(cap)}</b><span class="key7"></span><span class="lb7">${l.off ? "" : "→ "}${esc(l.t)}${l.badge ? `<i class="bd7">${l.badge}</i>` : ""}</span></button>`;
+}
+function layerCount7(d, l) { return layerIds7(l).filter(id => id && roleOf(mapOf(d)[id]) !== "none").length; }
+function panel7Inner(d) {
+	if (d !== "tr06") return generic7(d);
+	const L = LAYERS7.find(x => x[0] === S.layer7), ids = layerIds7(L[0]);
+	const tabs = `<div class="lay7"><span class="ilab">Layer</span><span class="seg" role="group" aria-label="The knobs' function, as on the TR-06">${LAYERS7.map(([k, t, how]) => `<button data-a="layer7" data-v="${k}" aria-pressed="${S.layer7 === k}" title="${esc(how)} on the TR-06">${esc(t)}<em>${layerCount7(d, k)}</em></button>`).join("")}</span><span class="note hw7">${esc(L[2])}</span></div>`;
+	const inst = ids.map((id, i) => L[3] ? (id ? knob7(d, id, (CAP7[L[0]] && CAP7[L[0]][i]) || INST7[i]) : knob7(d, null, INST7[i], "This instrument has no " + L[1].toLowerCase() + " knob")) : (GLOBAL7[i] ? knob7(d, id, GLOBAL7[i][1]) : "")).join("");
+	const fx = [[17, "DRIVE"], [18, "TIME"], [19, "DEPTH"]].map(([cc, n]) => knob7(d, "cc:" + cc, n)).join("");
+	const grey = `<div class="grey7" title="Sends no MIDI: VOLUME, TEMPO, MODE, INSTRUMENT, VALUE, MENU, STEP LOOP and the 16 steps">${Array.from({ length: 4 }, () => `<i class="gkn7"></i>`).join("")}<span class="gsep7"></span>${Array.from({ length: 16 }, () => `<i class="gst7"></i>`).join("")}<span class="gsep7"></span><i class="gbt7"></i><i class="gbt7"></i></div>`;
+	const pads = VOICES.map(v => pad7(d, "v:" + v[0], v[0])).join("");
+	return `${tabs}<div class="top7"><div class="inst7"><h5>${L[3] ? "Instrument · " + esc(L[1]) : "Global"}</h5><div class="gin7">${inst}</div></div><div class="fx7"><h5>Effect</h5><div class="gfx7">${fx}</div></div></div>
+		${grey}<div class="pads7"><h5>Instrument keys</h5><div class="gpad7">${pads}</div></div>
+		<p class="leg7"><i class="gkn7"></i> grey = sends no MIDI · the arc on a knob is where its target is now · a number badge = several things</p>`;
+}
+function generic7(d) {
+	ensureVirt(mapOf(d));
+	const g = rowGroups(d), knobs = (g.find(x => x[0].startsWith("Knobs")) || [0, []])[1], pads = (g.find(x => x[0].startsWith("Pads")) || [0, []])[1];
+	const ed = VIRT4.map(v => v[0]);
+	const learn = d !== "any" && d !== "host" ? `<button class="k7 learn" data-a="learn" aria-pressed="${S.learn}"><b class="cap7">${S.learn ? "MOVE IT" : "LEARN"}</b><span class="plus7"><i class="led${S.learn ? " on" : ""}"></i>+</span><span class="lb7">${S.learn ? "move a control…" : "a control"}</span></button>` : "";
+	return `<div class="top7 gen7"><div class="inst7"><h5>Knobs and faders</h5><div class="gauto7">${knobs.map(id => knob7(d, id, ctlName(d, id) || name4(d, id))).join("")}${learn}</div></div></div>
+		${pads.length ? `<div class="pads7"><h5>Pads and keys</h5><div class="gauto7">${pads.map(id => pad7(d, id, ctlName(d, id) || name4(d, id))).join("")}</div></div>` : ""}
+		<div class="pads7"><h5>Editor sources</h5><div class="gauto7">${ed.map(id => knob7(d, id, name4(d, id))).join("")}</div></div>
+		<p class="leg7">A control appears here the first time it sends, or with + Learn.</p>`;
+}
+function cfg7Html() {
+	const d = S.view, D = DEVICES[d], tr = d === "tr06"; ensureVirt(mapOf(d));
+	if (S.sel6 && !(S.sel6 in mapOf(d) || groups6(d).some(([, ids]) => ids.includes(S.sel6)))) S.sel6 = null;
+	const trackList = [["", KIT[S.m].map((mach, t) => [t, "Selected track · T" + (t + 1) + " " + mach])]];
+	const head = `<div class="hd6"><button class="amkey" data-a="back">‹ Devices</button><h3>${esc(D.full)}</h3>
+		${d === "any" ? "" : `<button class="amkey" data-a="toggleOn" aria-pressed="${S.on[d]}"><i class="led${S.on[d] ? " on" : ""}"></i>${tr ? "Profile" : "Mapping"} ${S.on[d] ? "on" : "off"}</button>`}
+		${tr || d === "beatstep" ? `<span class="ilab">Ch</span><span style="width:64px">${kselect("ch", "Channel", S.ch[d], [["", Array.from({ length: 16 }, (_, c) => [c + 1, String(c + 1)])]])}</span>` : ""}
+		<span class="ilab">Knobs</span><span style="width:${tr ? 104 : 124}px">${kselect("devmode", "Default knob mode", S.mode[d], [["", modeOpts(d)]])}</span>
+		<span class="ilab">Knobs act on</span><span style="width:250px">${kselect("track3", "The track the knobs act on", S.sel, trackList)}</span>
+		<span class="grow"></span>
+		<button class="amkey" data-a="touch" aria-pressed="${S.touch}" title="Turning a control selects it here"><i class="led${S.touch ? " on" : ""}"></i>Select on touch</button>
+		<button class="amkey" data-a="gover" data-v="v6" title="Every control as a sentence">List</button><button class="amkey" data-a="gover" data-v="v5" title="Every control against every parameter">Matrix</button>
+		${tr ? `<button class="amkey" data-a="reset">Reset</button>` : ""}</div>
+		${d !== "any" && d !== "host" && !S.enabled[d] ? `<p class="warnline" role="alert">${esc(D.name)} is connected but not enabled in AUDIO / MIDI: nothing it sends arrives. <button class="amkey" data-a="enable">Enable</button></p>` : ""}`;
+	return `<div class="v6 v7${d !== "any" && d !== "host" && !S.enabled[d] ? " ban" : ""}">${head}<div class="body7"><div class="pn7" id="pn7">${panel7Inner(d)}</div><aside class="det6 det7" id="det6">${detail6(d)}</aside></div>${mon3()}</div>`;
+}
+function live7() {
+	const p = $("#pn7"); if (p) p.innerHTML = panel7Inner(S.view);
+	const det = $("#det6");
+	if (det && det.dataset.for !== String(S.sel6) && (!dragging || dragging.kind === "cell3" || dragging.kind === "knob") && $("#kpop").hidden) { det.innerHTML = detail6(S.view); det.dataset.for = String(S.sel6); }
+	const f = $("#fan6"); if (f && S.sel6) f.outerHTML = fan6(S.view, S.sel6);
+	const ro = $("#det6 #readout"); if (ro && S.sel6) ro.innerHTML = readoutHtml(S.view, S.sel6);
+	const c = S.sel6 ? mapOf(S.view)[S.sel6] : null;
+	if (c && c.targets) c.targets.forEach((x, k) => { const now = val(trackOf(x), x.p); const n = $(`#det6 [data-now="${k}"]`); if (n) n.style.left = now / 127 * 100 + "%"; const tx = $(`#det6 [data-nowtxt="${k}"]`); if (tx) tx.textContent = "NOW " + now; });
+	const m = $("#monlcd"); if (m) m.innerHTML = monInner();
+}
+
 function monHtml() { return `<section class="card"><header><h3>MIDI monitor</h3><span>what arrives, newest first</span></header><div class="monstrip"><div class="monlcd" id="monlcd">${monInner()}</div><button class="amkey" data-a="clear">Clear</button></div></section>`; }
 function monInner() {
 	const list = S.mon.filter(e => S.view === "any" || S.view === "host" || e.dev === S.view);
@@ -1887,12 +2047,13 @@ function incoming(d, id, v) {
 	S.mon.length = Math.min(S.mon.length, 40);
 	if (S.touch && S.view === d && S.selCtl[d] !== id) { S.selCtl[d] = id; S.selCol = S.selCol ?? "sel"; if (S.ver === "v3" && S.pop && S.pop.id !== id) { S.pop = { id }; live(); placePop(); return; } }
 	if (S.touch && S.view === d && S.ver === "v5" && !(S.pop && S.pop.id === id)) S.pop = { id };
-	if (S.touch && S.view === d && S.ver === "v6" && S.sel6 !== id && !dragging) { S.sel6 = id; S.pk6 = false; }
+	if (S.touch && S.view === d && is6() && S.sel6 !== id && !dragging) { S.sel6 = id; S.pk6 = false; }
+	if (S.ver === "v7" && d === "tr06") { const L = layerOf7(id); if (L) S.layer7 = L; }
 	if (S.view === d && S.mappedOnly === false) { const g = rowGroups(d).find(([, ids]) => ids.includes(id)); if (g && S.collapsed[g[0]]) S.collapsed[g[0]] = false; }
 	live();
 }
 function hitVoice(note) {
-	if (S.ver === "v5" || S.ver === "v6") { const vi = VOICES.findIndex(v => v[2].includes(note)); if (vi >= 0) { S.hotVoice = VOICES[vi][0]; incoming("tr06", "v:" + VOICES[vi][0], 100); } return; }
+	if (S.ver === "v5" || is6()) { const vi = VOICES.findIndex(v => v[2].includes(note)); if (vi >= 0) { S.hotVoice = VOICES[vi][0]; incoming("tr06", "v:" + VOICES[vi][0], 100); } return; }
 	const i = VOICES.findIndex(v => v[2].includes(note)); if (i < 0) return;
 	const [v] = VOICES[i], x = S.voices[S.m][i];
 	S.hotVoice = v;
@@ -1902,6 +2063,7 @@ function hitVoice(note) {
 /* the values in place: the matrix body and the readouts, never the inspector's lists (open dropdowns and drags stay) */
 function live() {
 	if (!S.view) return;
+	if (S.ver === "v7") { live7(); return; }
 	if (S.ver === "v6") { live6(); return; }
 	if (S.ver === "v5") { live5(); return; }
 	if (S.ver === "v4") { live4(); return; }
@@ -1931,7 +2093,7 @@ function renderTop() {
 	$("#plug-beatstep").textContent = S.conn.beatstep ? "Unplug BeatStep" : "Plug in BeatStep";
 	$("#dev-daw").setAttribute("aria-pressed", S.daw);
 	$$("#devver button").forEach(b => b.setAttribute("aria-pressed", b.dataset.v === S.ver));
-	$("#devhint").textContent = S.ver === "v6" ? "Drag across a knob's row to turn it; Hit BD / CH play pads." : S.ver === "v5" ? "Click a socket to connect, shift-click to remove; drag across a column name to play the hardware." : S.ver === "v4" ? "Click a socket to connect, shift-click to remove; drag across a row name to play the hardware." : S.ver === "v3" ? "Drag across a cell to turn that control; click it to map." : "Drag a row's meter left / right to play the hardware; click a pad row's square to hit it.";
+	$("#devhint").textContent = S.ver === "v7" ? "Click a knob or pad to see what it does; drag a knob to turn it; a pad click plays it." : S.ver === "v6" ? "Drag across a knob's row to turn it; Hit BD / CH play pads." : S.ver === "v5" ? "Click a socket to connect, shift-click to remove; drag across a column name to play the hardware." : S.ver === "v4" ? "Click a socket to connect, shift-click to remove; drag across a row name to play the hardware." : S.ver === "v3" ? "Drag across a cell to turn that control; click it to map." : "Drag a row's meter left / right to play the hardware; click a pad row's square to hit it.";
 }
 function render() {
 	closeK();
@@ -1971,7 +2133,7 @@ document.addEventListener("keydown", e => {
 	if (d && opts.length) { e.preventDefault(); opts[(i + d + opts.length) % opts.length].focus(); }
 });
 
-function curCtl() { const d = S.view; return { d, id: S.ver === "v6" ? S.sel6 : S.selCtl[d], map: mapOf(d) }; }
+function curCtl() { const d = S.view; return { d, id: is6() ? S.sel6 : S.selCtl[d], map: mapOf(d) }; }
 function act(a, el) {
 	const { d, id, map } = curCtl();
 	switch (a) {
@@ -1985,7 +2147,9 @@ function act(a, el) {
 		case "selpin": { const x = mapOf(d)[el.dataset.id].targets[+el.dataset.k]; S.to = x.t; S.pop = { id: el.dataset.id, pid: x.p, k: +el.dataset.k }; break; }
 		case "rowpop": S.pop = { id: S.pop.id }; break;
 		case "v4": S.pop = { voice: +el.dataset.voice }; break;
-		case "sel6": S.sel6 = el.dataset.id; S.pk6 = false; S.pq = ""; break;
+		case "sel6": S.sel6 = el.dataset.id; S.pk6 = false; S.pq = ""; if (S.ver === "v7" && voiceIdx(el.dataset.id) >= 0) hitVoice(VOICES[voiceIdx(el.dataset.id)][2][0]); break;
+		case "layer7": S.layer7 = el.dataset.v; break;
+		case "gover": S.ver = el.dataset.v; S.pop = null; break;
 		case "pk6": S.pk6 = !S.pk6; S.pq = ""; break;
 		case "add6": {
 			const id = S.sel6, map = mapOf(d), c = map[id] && !map[id].role ? map[id] : (map[id] = Object.assign({ targets: [] }, map[id] && map[id].mode ? { mode: map[id].mode } : {}));
@@ -2090,11 +2254,11 @@ document.addEventListener("pointerdown", e => {
 	const b = e.target.closest("#amtbar");
 	if (b) { dragging = { kind: "amt", el: b }; b.setPointerCapture(e.pointerId); moveAmt(e); e.preventDefault(); return; }
 	const c3 = e.target.closest("[data-cell3]");
-	if (c3 && !e.target.closest("#pop3")) { const d = S.view, id = c3.dataset.cell3; dragging = { kind: "cell3", id, d, x: e.clientX, v0: S.inv[d + "|" + id] ?? 64, moved: false }; if (S.ver === "v6" && S.touch && S.sel6 !== id) { S.sel6 = id; S.pk6 = false; } return; }
+	if (c3 && !e.target.closest("#pop3")) { const d = S.view, id = c3.dataset.cell3; dragging = { kind: "cell3", id, d, x: e.clientX, v0: S.inv[d + "|" + id] ?? 64, moved: false }; if (is6() && S.touch && S.sel6 !== id) { S.sel6 = id; S.pk6 = false; } return; }
 	const p = e.target.closest("[data-hit]");
 	if (p) { incoming(S.view, p.dataset.hit, 100); e.preventDefault(); return; }
 	const g = e.target.closest("[data-knob]");
-	if (g) { const d = S.view, id = g.dataset.knob; dragging = { kind: "knob", id, d, x: e.clientX, v0: S.inv[d + "|" + id] ?? 64, moved: false }; if (S.ver === "v6" && S.touch && S.sel6 !== id) { S.sel6 = id; S.pk6 = false; } e.preventDefault(); }
+	if (g) { const d = S.view, id = g.dataset.knob; dragging = { kind: "knob", id, d, x: e.clientX, v0: S.inv[d + "|" + id] ?? 64, moved: false }; if (is6() && S.touch && S.sel6 !== id) { S.sel6 = id; S.pk6 = false; } e.preventDefault(); }
 });
 document.addEventListener("pointermove", e => {
 	if (!dragging) return;
