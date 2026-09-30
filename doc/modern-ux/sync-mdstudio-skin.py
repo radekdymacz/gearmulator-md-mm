@@ -166,6 +166,10 @@ if life is None:
     problems.append('mdDeskApp.js: no LIFE')
 else:
     problems += pc.check_lifecycle(pc.object_keys(life) or set(), schema, 'mdDeskApp.js')
+problems += pc.check_mapping_gate(app, ['S.mapping = false;', 'applyMapping(m.doc.enabled)', 'when: () => S.mapping && S.ctl.learn',
+                                        'mapping: ws === "control", when: ws === "control" ? () => S.mapping : null',
+                                        'does: "LEARN: map a value to a controller knob", mapping: true, when: () => S.mapping',
+                                        'tb.dataset.ws === "control" && !S.mapping'], 'mdDeskApp.js')
 all_js = ''.join(page_js.values())
 problems += pc.check_message_types(pc.message_types_handled(all_js), schema, 'mdStudio')
 if problems:

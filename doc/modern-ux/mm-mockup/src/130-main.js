@@ -129,7 +129,10 @@ main.addEventListener("keydown",e=>{const el=e.target.closest("[data-g]");if(!el
 
 /* ===== Clicks ===== */
 function autoRange(t){const ns=trk(t).steps.flatMap(x=>x?.n||[]);if(!ns.length)return;const lo=Math.min(...ns),hi=Math.max(...ns),cur=S.rollLoT[t];if(cur==null||lo<cur||hi>cur+ROWS-1)S.rollLoT[t]=clamp(Math.round((lo+hi)/2)-Math.floor(ROWS/2),0,127-ROWS)}
-function goWs(ws){S.ws=ws;const t=S.sel%6+((ws==="seq"||ws==="sound")&&S.side==="midi"?6:0);select(t)}
+/* MIDI mapping (the CONTROL workspace and LEARN) is hidden until the host says it is on (the learn document's
+   "enabled", mmAdapter.js); the mockup on its own shows it. */
+function setMapping(on){S.mapping=!!on;$("#tabs [data-ws=control]").hidden=!on;$("#learnkey").hidden=!on;if(!on){S.learn=false;S.learnT=null;document.body.classList.remove("learn");if(S.ws==="control")S.ws="seq"}}
+function goWs(ws){if(ws==="control"&&!S.mapping)return;S.ws=ws;const t=S.sel%6+((ws==="seq"||ws==="sound")&&S.side==="midi"?6:0);select(t)}
 function setSide(sd){S.side=sd;select(S.sel%6+(sd==="midi"?6:0))}
 function select(t){S.sel=t;autoRange(t);const pg=S.lane.split(".")[0];if(isMidiT(t)){if(pg!=="MID"){S.lane="MID.1";S.lanePage="MID"}}else if(pg==="MID"||!pname(t,S.lane)){S.lane="FLT.1";S.lanePage="FLT"}render()}
 document.addEventListener("click",e=>{
@@ -225,7 +228,7 @@ document.addEventListener("keydown",e=>{const mod=e.metaKey||e.ctrlKey,inField=e
  if(S.learn&&S.learnT&&/^[1-8]$/.test(e.key)){e.preventDefault();learnBind(+e.key);return}
  if(S.learn&&e.key==="Escape"){S.learn=false;document.body.classList.remove("learn");renderTop();if(HOST.learning)HOST.learning(false);return}
  if(e.target.closest?.("input,select,textarea,[role=slider]")||mod||e.altKey)return;
- if(e.key==="l"||e.key==="L"){$("#learnkey").click();return}
+ if(S.mapping&&(e.key==="l"||e.key==="L")){$("#learnkey").click();return}
  if(e.key==="r"||e.key==="R"){$("#rec").click();return}
  const ws=["seq","sound","mix","perform","song","control"][+e.key-1];if(ws){goWs(ws);return}
  if((S.ws==="song"||S.ws==="seq")&&(e.key==="Delete"||e.key==="Backspace")){e.preventDefault();S.ws==="song"?songAction("del"):secAction("clear");return}
@@ -420,7 +423,7 @@ window.MMView={
  /* setters */
  startEmpty,setCurrent:({pattern,kit})=>{if(pattern!=null)S.pat=pattern;if(kit!=null)S.kit=kit},setQueued:q=>{S.queued=q},setTempo:bpm=>{S.bpm=bpm},setInput,
  setPlaying,setStep,setPatternSlot,setKitSlot,setWorkingKit,setSong,setRouting:r=>{S.routing=r},setMidiTracks,setMultiMap,
- setEng,setEngineLabel,setEngineTip,setEngines,setAudioEntry,setKitState,clearLearnTarget:()=>{S.learnT=null},setModulation,setCtlSetup,disable,setReading,
+ setEng,setEngineLabel,setEngineTip,setEngines,setAudioEntry,setKitState,clearLearnTarget:()=>{S.learnT=null},setMapping,setModulation,setCtlSetup,disable,setReading,
  setMutes,setMode,setRecord,setSongs,
  setLcd,setKeyDown,setPst,closeFirmwareDialog,bootRom:r=>Boot.rom(r),syxPreview:m=>Syx.preview(m),syxProgress:m=>Syx.progress(m),
  /* calls */
@@ -429,4 +432,4 @@ window.MMView={
 /* The self-tests (a diagnostics build's bundle sets window.MMDiagnostics before this script) play the
    user through the view's state and run the panel's own test; a release page exports neither. */
 if(window.MMDiagnostics)Object.assign(window.MMDiagnostics,{S,audioSelfTest});
-render();H.last=snap();if(HOST.start)HOST.start();else startEngine("emu");{const lb=new URLSearchParams(location.hash.slice(1)).get("lib");if(lb)setTimeout(()=>openLib(lb),2000)}
+setMapping(!window.MMHost);render();H.last=snap();if(HOST.start)HOST.start();else startEngine("emu");{const lb=new URLSearchParams(location.hash.slice(1)).get("lib");if(lb)setTimeout(()=>openLib(lb),2000)}

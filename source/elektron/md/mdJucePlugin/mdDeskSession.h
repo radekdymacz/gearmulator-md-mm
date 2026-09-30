@@ -276,6 +276,7 @@ namespace mdJucePlugin
 		void step() override
 		{
 			const auto t = ++m_tick;
+			m_learn.enforce();	// MIDI mapping off: none applied, whatever the disk or the project brought
 			m_engine->step(*m_desk, t);
 			if(const auto text = m_setup.restored())
 				loadSetup(*text);

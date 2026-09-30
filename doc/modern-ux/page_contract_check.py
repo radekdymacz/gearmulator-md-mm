@@ -199,6 +199,12 @@ def message_types_handled(text):
     return types
 
 
+def check_mapping_gate(text, needles, where):
+    """MIDI mapping (the CONTROL workspace, LEARN) is hidden until the learn document says
+    "enabled" (mdmm::midiMappingEnabled, deskHost.h): the pages must keep the gate."""
+    return ['%s: the MIDI mapping gate is gone (missing: %s)' % (where, n) for n in needles if n not in text]
+
+
 def check_lifecycle(life_keys, schema, where):
     names = lifecycle_values(schema)
     problems = ['%s: LIFE has "%s", which the contract\'s lifecycle does not declare' % (where, x) for x in sorted(set(life_keys) - names)]

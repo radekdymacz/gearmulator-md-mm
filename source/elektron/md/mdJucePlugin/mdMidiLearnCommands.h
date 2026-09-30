@@ -46,6 +46,7 @@ namespace mdJucePlugin
 			int tracks = 16;
 			std::vector<Param> params;
 			const char* refusal = "learn: expected a track and a parameter";
+			bool enabled = deskHost::midiMappingEnabled;	// off: commands refused, no mapping applied (deskHost.h)
 		};
 
 		MidiLearnCommands(pluginLib::Processor& _processor, Model _model, std::function<void(const Value&)> _publish);
@@ -58,6 +59,10 @@ namespace mdJucePlugin
 		// document are published.
 		void handle(deskHost::Action _action, const Value& _message);
 		void publish();
+		// Off: the plug-in applies no mapping. Drops any the translator holds (the disk preset or a
+		// project's state may have brought some) and cancels a learn in progress; nothing when on.
+		void enforce();
+		bool enabled() const { return m_model.enabled; }
 
 	private:
 		Target targetOf(const Value& _message) const;

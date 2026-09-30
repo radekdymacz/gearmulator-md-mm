@@ -84,6 +84,11 @@ namespace mdJucePlugin
 	void MidiLearnCommands::handle(const deskHost::Action _action, const Value& _message)
 	{
 		using A = deskHost::Action;
+		if(!m_model.enabled)
+		{
+			reply(_message, false, "MIDI mapping is not available in this version");
+			return;
+		}
 		auto* translator = m_processor.getMidiLearnTranslator();
 		if(!translator)
 		{
@@ -189,10 +194,25 @@ namespace mdJucePlugin
 		publish();
 	}
 
+	void MidiLearnCommands::enforce()
+	{
+		if(m_model.enabled)
+			return;
+		auto* translator = m_processor.getMidiLearnTranslator();
+		if(!translator)
+			return;
+		if(translator->isLearning())
+			translator->cancelLearning();
+		if(!translator->getPreset().getMappings().empty())
+			translator->setPreset(pluginLib::MidiLearnPreset());
+	}
+
 	void MidiLearnCommands::publish()
 	{
-		auto* translator = m_processor.getMidiLearnTranslator();
+		enforce();
+		auto* translator = m_model.enabled ? m_processor.getMidiLearnTranslator() : nullptr;
 		json::Value doc = json::Value::object();
+		doc.set("enabled", m_model.enabled);
 		json::Value mappings = json::Value::array();
 		if(translator)
 		{
@@ -228,7 +248,8 @@ namespace mdJucePlugin
 		}
 		else
 			doc.set("learning", json::Value());
-		doc.set("limits", limits());
+		if(m_model.enabled)
+			doc.set("limits", limits());
 		json::Value m = json::Value::object();
 		m.set("type", "learn");
 		m.set("doc", std::move(doc));
