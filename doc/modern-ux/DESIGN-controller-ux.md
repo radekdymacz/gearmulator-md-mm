@@ -1,8 +1,13 @@
 # Design proposal: the controller configurator (CONTROL workspace)
 
 - Branch `feat/tr06-profile`, 2026-09-30. A proposal and a prototype, not built. It builds on [DESIGN-tr06.md](DESIGN-tr06.md), which stays the authority for what is built today.
-- **Prototype:** [mockup/controller-prototype.html](mockup/controller-prototype.html). It is one self-contained file with fake data and no host. Open it from `file://` or any static server. The strip at the bottom (PROTOTYPE) is not part of the design: it plugs and unplugs devices, switches the machine (MM or MD) and the DAW case, and plays the hardware. To play the hardware, drag a knob on the drawing up or down.
-- **The feedback it answers:** centre the device tiles. Show a device only while it is connected. Follow hot-plug. Make mapping richer than a table of CC rows (ranges, inverse, macros, randomise, knob mode, track pinning, steady live feedback). Use the same configurator for every MIDI input, with the TR-06 as a device that has a built-in profile. Replace the old MIDI Learn matrix.
+- **Prototype:** [mockup/controller-prototype.html](mockup/controller-prototype.html). It is one file with fake data and no host, and needs no sibling files.
+  - It opens over http or from `file://`. Fonts come from the mockups' Google Fonts link; offline it falls back to system fonts.
+  - The strip at the bottom (PROTOTYPE) is not part of the design. It plugs and unplugs devices, switches the machine (MM or MD) and the DAW case, and plays the hardware. To play the hardware, drag a row's meter left or right, or click a pad row's square.
+- **The feedback it answers:**
+  - Centre the device tiles. Show a device only while it is connected, and follow hot-plug.
+  - Map through a control matrix, not a table of CC rows and not a drawing of the device (second round: "a beautiful control matrix"). The matrix gives ranges, inverse, macros, randomise, knob mode, track pinning and steady live feedback.
+  - Use the same configurator for every MIDI input, with the TR-06 as a device that has a built-in profile. It replaces the old MIDI Learn matrix.
 
 ## 1. The devices (the CONTROL workspace's first view)
 
@@ -18,9 +23,9 @@
   - The one-second look stays, because enabling or disabling an input in AUDIO / MIDI changes no device list. `AudioMidiLink` already listens to the device manager and can trigger it too.
   - **REFRESH** is a new command, `ctlRefresh`, that runs the same look at once. It is the fallback for a system that misses a notification.
   - A plug or unplug shows the page's toast ("TR-06 connected", "… disconnected · its mapping is kept"). Nothing blinks.
-- **DAW:** the host owns MIDI and names no device. The tiles are **Host MIDI in**, plus Any MIDI input when learned mappings exist. Host MIDI in opens the generic configurator, where a PROFILE choice ("Roland TR-06") gives it the TR-06's drawing, names and defaults. There is no hot-plug in a DAW.
+- **DAW:** the host owns MIDI and names no device. The tiles are **Host MIDI in**, plus Any MIDI input when learned mappings exist. Host MIDI in opens the generic matrix, where a PROFILE choice ("Roland TR-06") gives it the TR-06's rows, names and defaults. There is no hot-plug in a DAW.
 
-## 2. The configurator: one view for every device
+## 2. The configurator: one control matrix for every device
 
 Every tile opens the same view, top to bottom:
 
@@ -30,61 +35,89 @@ Every tile opens the same view, top to bottom:
   - KNOBS (the device's default knob mode);
   - SELECT ON TOUCH;
   - RESET TO DEFAULTS (profiles only).
-- **SELECTED TRACK:** the page's selected track, as pads (MM: 6, MD: 16) with each track's machine. Targets follow it unless they are pinned. In the product the page's own track selection drives it. The strip is there so the prototype can show the names changing.
-- **Left: the device.**
-  - **With a profile (the TR-06):** a stylised front-panel drawing (inline SVG, the page's tokens, so it follows both plates).
-  - **Without a profile:** **Controls seen**. A CC becomes a knob cell the first time it arrives, and a note becomes a pad cell. LEARN turns "the next control you move" into a cell and selects it. Cells can be renamed ("Knob 1").
-- **Right: the inspector** for the selected control (or voice).
+- **SELECTED TRACK:** the page's selected track, as pads (MM: 6, MD: 16) with each track's machine. In the product the page's own track selection drives it. The strip is there so the prototype can show names and the SELECTED column changing.
+- **Left: the control matrix**, then (TR-06) the voices matrix.
+- **Right: the inspector.** It is a side panel from 1180 px up. Narrower, it is a drawer from the right with CLOSE (and Escape), opened by a click in the matrix.
 - **Bottom: the MIDI monitor**, reduced to one LCD strip: the last 8 messages, newest first, each as `CH10 CC 24 90 · BD LEVEL → UNIL 97`. A message that does nothing is shown dim. CLEAR empties it.
 
-### The TR-06 drawing
+### The control matrix
 
-- **The instrument row:** ACC, BD, SD, LT, HT, CY, OH and CH, each with its own LEVEL CC from the chart. The TR-06 sends a separate CC per function, so a **KNOB LAYER** switch redraws the row for LEVEL, TUNE, DECAY, TONE (BD ATTACK, SD SNAPPY, LT/HT COLOR), COMP (BD, SD) and DELAY SEND. Each layer's caption says how the hardware reaches it (MENU + turn; STEP LOOP + DEPTH).
-  - A slot with no CC in a layer (ACC TUNE, for example) is drawn grey and says why.
-- **EFFECT:** DRIVE 17, TIME 18, DEPTH 19.
-- **ALSO SENDS:** CCs that are in the chart but have no known place on the panel (MIX IN LVL 12, MIX IN DELAY SEND 111, MASTER PROB 113). They are chips that are mapped like any knob.
-- **Sends no MIDI** (grey, dashed; a click says why): VOLUME, TEMPO (clock only), INSTRUMENT, MODE, VALUE, MENU, STEP LOOP, the 16 step keys.
-  - RUN / STOP is Start / Stop: the machine's own sync settings decide, and it is not mappable.
-  - TAP is marked UNKNOWN (DESIGN-tr06.md, On the hardware 3).
-  - The drawing says **STYLISED · CHECK ON THE HARDWARE**. Its positions come from the chart and the manual, not from a measured panel.
-- **On each control:**
-  - a mapped LED (lit when it does something);
-  - a badge: M3 (a macro of three), RND (rolls a set), AMT (sets a set's amount);
-  - an arc showing the last value it sent;
-  - the CC under its name.
-  - The selected control has a dashed ring and a cream label.
-- **Voices:** the instrument row as seven keys under the drawing. Each shows its notes and where it plays (LCD chip "T1 C4"). A click opens the voice in the inspector: the track as pads, and the MM note with semitone and octave steps.
+- **Rows are the device's controls.**
+  - **With a profile (the TR-06)**, rows are named from the chart and grouped:
+    - INSTRUMENT LEVEL (ACC, BD … CH LEVEL);
+    - EFFECT (DRIVE, DELAY TIME, DELAY DEPTH);
+    - TUNE, DECAY, TONE (BD ATTACK, SD SNAPPY, LT/HT COLOR), COMP;
+    - DELAY SEND (the sends, and MIX IN's);
+    - OTHER (MIX IN LVL, MASTER PROB).
+    - Controls that send no MIDI (VOLUME, TEMPO, INSTRUMENT, MODE, VALUE, MENU, STEP LOOP, the steps) are not rows; a line under the matrix says so. RUN / STOP is Start / Stop, passed on by the machine's sync settings.
+  - **Without a profile**, rows are the controls seen, grouped as KNOBS AND FADERS and PADS AND KEYS. A CC or a note becomes a row the first time it arrives (a toast says so).
+    - "+ LEARN A CONTROL" turns the next control moved into a row and selects it.
+    - Rows can be renamed ("Knob 1").
+  - **Any MIDI input** has one group: the controls learned with MIDI Learn.
+- **A row head** holds:
+  - the name and its CC or note;
+  - a live meter: a thin bar with its value (for a pad, a square and its velocity);
+  - the knob mode badge (REL / ABS / ENC; outlined dim is the device default, solid is the row's own);
+  - the row type with a small colour mark: OFF, DIRECT, MACRO n (rust), RANDOMISE and RND AMOUNT (green).
+  - A click on the row head opens the row's settings.
+- **Columns are destinations.**
+  - **SELECTED** comes first. It follows the page's selected track, and its head shows the track now ("T1 · SWAVE-SAW").
+  - Then T1-T6 (MM) or T1-T16 (MD), headed with the number and the machine. The column of the selected track says "· SEL".
+  - A mapping in a track column is pinned to that track.
+  - The row heads and the SELECTED column stay put (sticky) while the MD's 16 columns scroll sideways.
+- **Cells:**
+  - An empty cell shows a quiet "+" on hover.
+  - A mapped cell holds a chip per parameter:
+    - the parameter's short name, which is the machine's own ("UNIL", "PTCH", "BASE"), with "—" for a slot the machine does not use, dimmed;
+    - the live resulting value;
+    - a thin range bar: min to max filled, dashed when inverse, with a red tick at the value now.
+  - A row with several chips is a macro. Its chips share the row's rust accent on the left edge, wherever they sit: DRIVE moves SELECTED BASE and DIST and T2's SRR.
+  - A randomise or amount row shows its set as a dashed dice chip ("Timbre · 6P", or "Timbre 35%") in the set's column, and nothing elsewhere.
+- **Calm by construction:**
+  - an aligned grid with generous rows;
+  - the pages' tokens, on both plates;
+  - a hover crosshair (the row and the column under the pointer are lit, softly);
+  - groups that collapse (TONE, COMP, DECAY and DELAY SEND start collapsed, each saying "n of m mapped"; EXPAND ALL / COLLAPSE ALL);
+  - a **MAPPED ONLY** filter.
+
+### The voices matrix (the TR-06)
+
+- A second, smaller matrix. Rows are the voices (BD … CH with their notes); columns are the tracks.
+- There is one dot per row, like a radio button, in the track the voice plays. A click on another cell moves it.
+- On the MM the dot carries the note ("C4"), and the row head has ‹ › semitone steps. The PLAYS column spells out where the voice goes (`T1 · CH 1 · C4`, MD `T1 · TRIG 1`).
+- The voice that played last has its row lit steadily.
 
 ### The inspector
 
 - **The readout**, in LCD style:
   - IN: the last value, and LAST MOVED when this was the last control to move;
-  - OUT: every target's result, `T1 BASE 110 · T1 DIST 80 · T1 SRR 60`.
-- **DOES:** OFF, DIRECT, MACRO, RANDOMISE, RND AMOUNT (a pad has no RND AMOUNT).
-  - DIRECT and MACRO are the same thing with one target or several. "+ ADD TARGET" on a direct control makes it a macro, and removing targets goes back.
-- **KNOB:** RELATIVE, ABSOLUTE, and for devices without a profile ENCODER (±). It shows "device default" or "own setting · USE DEVICE DEFAULT".
-- **Target cards**, one per target:
-  - **Track:** SEL T1 (follows the selection) or a pinned track (cream key, "T6"). A key-style list offers "Selected track" and T1-T6 / T1-T16 with their machines.
+  - OUT: every target's result, `T1 BASE 110 · T1 DIST 80 · T2 SRR 69`.
+- **A cell** ("DRIVE → Selected track (T1 now)") holds a card per parameter in that cell:
   - **Parameter:** a key-style list grouped as the page groups them. MM: SYN (slot and the machine's own name, "SYN A · UNIL"), AMP, FLT, EFX, OTHER (LEVEL, NOTE). MD: SYN (numbered, with names), FX, ROUTE, OTHER.
-    - A slot the machine does not use says so: "SYN D · unused on SWAVE-SAW: this target does nothing on T1".
-  - **INV:** inverse. The range bar turns dashed, and its labels read KNOB MAX → 60 … 127 ← KNOB MIN.
-  - **×** removes the target.
-  - **The range bar:** two handles (min, max) and a red marker at the parameter's current value, updated in place. The numbers read `KNOB MIN → 20 · NOW 110 · 110 ← KNOB MAX`.
-- **RANDOMISE / RND AMOUNT:**
-  - a set (key-style list, "+ New set", RENAME) and its track (selected or pinned);
-  - AMOUNT, drawn as the page's 16-LED segment bar;
-  - AROUND NOW or ANYWHERE;
-  - the set's parameters as toggle chips per page (the machine's own names; unused slots disabled);
-  - ROLL NOW, and the last roll written out (`UNIL 67→33 · SUBX 15→26 …`).
-  - A set is shared by every control that uses it: a TR-06 knob can set its amount while a BeatStep pad rolls it.
+  - **INV:** inverse. The bar turns dashed, and its labels read KNOB MAX → … ← KNOB MIN.
+  - **×** removes the parameter.
+  - **The two-handle range bar**, with the value now as a red marker, updated in place.
+  - **TRACK:** move the chip to another column (Selected track, or a pinned track).
+  - Under the cards, "Choose a parameter" / "+ Another parameter here" adds one. A second parameter anywhere in the row makes the row a macro.
+  - ROW SETTINGS › leads to the row.
+- **A row** (a click on its head):
+  - **TYPE:** OFF, DIRECT, MACRO, RANDOMISE, RND AMOUNT (a pad has no RND AMOUNT);
+  - **KNOB:** RELATIVE, ABSOLUTE, and for devices without a profile ENCODER (±), with "the device's default" or "own setting · DEVICE DEFAULT";
+  - a direct or macro row lists its mappings ("SELECTED · BASE 20-110 ›", "T2 · SRR 60-127 INV ›"), each opening its cell;
+  - a RANDOMISE or RND AMOUNT row edits its set:
+    - the set (key-style list, "+ New set", RENAME) and its track;
+    - AMOUNT on the page's 16-LED segment bar;
+    - AROUND NOW or ANYWHERE;
+    - the set's parameters as toggle chips per page, unused slots disabled;
+    - ROLL NOW, and the last roll written out (`UNIL 67→36 · SUBX 15→0 …`).
+  - A set is shared by every row that uses it: a TR-06 knob can set its amount while a BeatStep pad rolls it.
 
 ### Live feedback (no flashing)
 
-- The control that moved last keeps a **steady** red ring, and its value is shown next to it, until another control moves. There is no timer, no blink and no animation.
-- Values change in place: the arc, the readout, the NOW markers and the monitor strip. The rest of the view is not redrawn, so an open list or a drag is not disturbed.
+- The row that moved last stays lit, with a pale warm row, a red left edge, a red meter and red values, until another row moves. There is no timer, no blink and no animation.
+- Values change in place: the meters, the chips' values and ticks, the readout, the inspector's NOW markers and the monitor strip. The inspector's lists are not redrawn under an open dropdown or a drag.
 - The product keeps today's rates: the page document at most about 15 times a second while watching, the knobs through `KnobPump` at most one round per 50 ms.
-- **SELECT ON TOUCH** (on by default): moving a control on the device selects it in the inspector, the quickest way to map ("touch it, then choose"). Off, the inspector stays on what was clicked, and only the ring moves.
-- A voice that plays gets a steady ring round its chip, until another voice plays.
+- **SELECT ON TOUCH** (on by default): moving a control on the device selects its row, and opens its collapsed group. Off, the inspector stays on what was clicked, and only the lit row moves.
 
 ## 3. Behaviour
 
@@ -121,7 +154,7 @@ The setup is kept, as now, in the MDCT chunk and written only once the user chan
         { "src": { "cc": 17 }, "targets": [
             { "t": "sel", "pg": 2, "i": 0, "lo": 20, "hi": 110 },
             { "t": "sel", "pg": 1, "i": 4, "lo": 0, "hi": 80 },
-            { "t": "sel", "pg": 3, "i": 2, "lo": 60, "hi": 127, "inv": true }] },
+            { "t": 1, "pg": 3, "i": 2, "lo": 60, "hi": 127, "inv": true }] },
         { "src": { "cc": 80 }, "targets": [{ "t": 5, "pg": 1, "i": 3 }] },
         { "src": { "cc": 113 }, "amount": "rs1" }
       ] },
@@ -209,4 +242,4 @@ The setup is kept, as now, in the MDCT chunk and written only once the user chan
 2. **Where a device's mapping lives:** with the project or the saved state (MDCT, as today, so a DAW project carries its mappings), or per device in the app's settings so a controller behaves the same in every project? The proposal is the project, with a later "save as this device's default".
 3. **Randomise while recording:** should a roll during live record become parameter locks on the current step, or stay a kit edit only? The proposal is a kit edit only, one undo step.
 
-Hardware unknowns (which physical knob sends which layer, TAP, OH/CH sharing a knob) stay in DESIGN-tr06.md, On the hardware. The drawing is marked stylised until they are checked.
+Hardware unknowns (which physical knob sends which CC, TAP, OH/CH sharing a knob) stay in DESIGN-tr06.md, On the hardware. The matrix names rows from the chart, so it does not depend on them.

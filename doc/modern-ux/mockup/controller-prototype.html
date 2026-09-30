@@ -6,17 +6,12 @@
 <link rel="icon" href="data:,">
 <title>Controller Configurator</title>
 <!-- Clickable prototype of the CONTROL workspace's controller configurator (doc/modern-ux/DESIGN-controller-ux.md).
-     Fake data only, no host. One file: open it from file:// or any static server. The fonts are the pages' own
-     (skins/mdStudio/fonts, relative to this file inside the repo), with the mockups' Google Fonts link as a fallback.
+     Fake data only, no host. One file with no siblings needed: open it over http or from file://. The fonts come from
+     the mockups' Google Fonts link (the same families the pages bundle); offline it falls back to system fonts.
      Nothing here is product code. -->
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600&family=IBM+Plex+Mono:wght@400;500&family=Silkscreen&display=swap">
 <style>
-@font-face{font-family:"Barlow Condensed";font-weight:500;src:url("../../../source/elektron/md/mdJucePlugin/skins/mdStudio/fonts/BarlowCondensed-Medium.ttf") format("truetype")}
-@font-face{font-family:"Barlow Condensed";font-weight:600 700;src:url("../../../source/elektron/md/mdJucePlugin/skins/mdStudio/fonts/BarlowCondensed-SemiBold.ttf") format("truetype")}
-@font-face{font-family:"IBM Plex Mono";font-weight:400;src:url("../../../source/elektron/md/mdJucePlugin/skins/mdStudio/fonts/IBMPlexMono-Regular.ttf") format("truetype")}
-@font-face{font-family:"IBM Plex Mono";font-weight:500 700;src:url("../../../source/elektron/md/mdJucePlugin/skins/mdStudio/fonts/IBMPlexMono-Medium.ttf") format("truetype")}
-@font-face{font-family:"Silkscreen";font-weight:400 700;src:url("../../../source/elektron/md/mdJucePlugin/skins/mdStudio/fonts/Silkscreen-Regular.ttf") format("truetype")}
 
 /* ===== tokens: the Monomachine Editor's SFX-60 plate and the Machinedrum Editor's MKII plate, as shipped ===== */
 :root{
@@ -30,13 +25,15 @@
   --key:#3a3b36;--key2:#4b4d47;--keytext:#efefe8;--keydim:#aeb0a8;--cream:#efefe8;--creamtext:#292a26;
   --led:#e65d42;--ledoff:#7b4035;--ledg:#9fc568;--rec:#cf4f39;
   --lcd:#b9c4b0;--ink:#172014;--bezel:#0d0f0c;--rust:#a04d39;--oxblood:var(--rust);
+  --hover:color-mix(in srgb,var(--plate3) 70%,transparent);--hot:color-mix(in srgb,var(--led) 10%,var(--plate3));
 }
 :root[data-m="md"]{
   color-scheme:dark;
-  --plate:#161716;--plate2:#0f100f;--plate3:#232422;--print:#f1f0ea;--print2:#c9c8c1;--print3:#94938c;--rule:#5d5e59;--body:#ecebe5;
+  --plate:#161716;--plate2:#0f100f;--plate3:#232422;--print:#f1f0ea;--print2:#c9c8c1;--print3:#94938c;--rule:#3e3f3b;--body:#ecebe5;
   --key:#232423;--key2:#30312f;--keytext:#ecebe5;--keydim:#8f908b;--cream:#ece6d6;--creamtext:#1f1e1b;
   --led:#ff3b2f;--ledoff:#4d1714;--ledg:#9fc568;--rec:#e0472e;
   --lcd:#ef5a39;--ink:#3a0e08;--bezel:transparent;--rust:#ee613f;--oxblood:#ee613f;
+  --hover:#1d1e1c;--hot:color-mix(in srgb,var(--led) 12%,var(--plate));
 }
 
 /* ===== the pages' base (mmStudio.css / mdDesk.css) ===== */
@@ -50,16 +47,14 @@ button:hover{background:var(--key2)}
 button:active{box-shadow:none;transform:translateY(1px)}
 button:disabled{opacity:.4;cursor:default}
 :focus-visible{outline:2px solid var(--led);outline-offset:2px}
-select{background:var(--plate3);border:1px solid var(--rule);border-radius:3px;padding:4px 8px;color:var(--print)}
 .mono{font-family:var(--mono);font-variant-numeric:tabular-nums}
 .note{font-size:14px;color:var(--print2)}
 .app{max-width:1600px;margin:0 auto;display:grid;gap:14px;grid-template-columns:minmax(0,1fr)}
 .led{display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--ledoff);flex:none;vertical-align:middle}
 .led.on{background:var(--led);box-shadow:0 0 6px 1px var(--led)}
-.led.g.on{background:var(--ledg);box-shadow:0 0 6px 1px var(--ledg)}
 .card{border-top:2px solid var(--print);padding-top:8px;display:grid;gap:10px;align-content:start;min-width:0}
 .card header{display:flex;justify-content:space-between;align-items:baseline;gap:8px;flex-wrap:wrap}
-.card h3,.cap{margin:0;font-size:12px;font-weight:600;letter-spacing:.18em;text-transform:uppercase;color:var(--print)}
+.card h3{margin:0;font-size:12px;font-weight:600;letter-spacing:.18em;text-transform:uppercase;color:var(--print)}
 .card header span{font:12px var(--mono);color:var(--print3)}
 .ilab{font:600 11px var(--sans);letter-spacing:.14em;text-transform:uppercase;color:var(--print2)}
 .amkey{height:26px;padding:0 10px;font:600 11px var(--sans);letter-spacing:.12em;white-space:nowrap;text-transform:uppercase;display:inline-flex;align-items:center;gap:6px}
@@ -93,15 +88,14 @@ select{background:var(--plate3);border:1px solid var(--rule);border-radius:3px;p
 .lcdpanel small{font:9px var(--pix);letter-spacing:.04em;text-transform:uppercase;opacity:.8}
 .lcdpanel b{font:14px var(--pix);font-weight:400;white-space:nowrap}
 @media (max-width:1400px){.top{grid-template-columns:auto 1fr}.top .setkeys{display:none}}
-@media (max-width:1100px){.top{grid-template-columns:1fr}.lcdpanel{justify-self:start}}
-@media (max-width:1060px){.lcdpanel .f.opt{display:none}}
+@media (max-width:1100px){.top{grid-template-columns:1fr}.lcdpanel{justify-self:start}.lcdpanel .f.opt{display:none}}
 
 /* key-style dropdowns (enhanceSelects / openK / #kpop, as on the pages) */
 .kselbtn{display:flex;align-items:center;justify-content:space-between;gap:10px;height:28px;padding:0 10px;font:500 13px var(--sans);letter-spacing:.03em;min-width:0;width:100%}
 .kselbtn span{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .kselbtn svg{width:10px;height:6px;flex:none}
 .kselbtn[aria-expanded=true]{background:var(--key2)}
-.kpop{position:absolute;z-index:25;padding:8px;background:var(--plate);border:2px solid var(--print);border-radius:6px;box-shadow:0 14px 34px rgba(0,0,0,.35);max-width:calc(100vw - 32px)}
+.kpop{position:absolute;z-index:45;padding:8px;background:var(--plate);border:2px solid var(--print);border-radius:6px;box-shadow:0 14px 34px rgba(0,0,0,.35);max-width:calc(100vw - 32px)}
 .klist{display:grid;gap:3px}
 .kgrp{grid-column:1/-1;font:600 10px var(--sans);letter-spacing:.16em;text-transform:uppercase;color:var(--print);padding:6px 2px 2px}
 .kopt{text-align:left;height:28px;padding:0 9px;font:500 13px var(--sans);letter-spacing:.02em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
@@ -127,7 +121,7 @@ select{background:var(--plate3);border:1px solid var(--rule);border-radius:3px;p
 .devfoot{display:flex;gap:10px;align-items:center;justify-content:center;flex-wrap:wrap}
 
 /* ===== a device's configurator ===== */
-.cfg{display:grid;gap:14px}
+.cfg{display:grid;gap:16px}
 .cfgbar{display:flex;flex-wrap:wrap;align-items:center;gap:8px 12px;padding-bottom:10px;border-bottom:1px solid var(--rule)}
 .cfgbar .kselbtn{width:100%}
 .cfgbar .grow{flex:1}
@@ -135,76 +129,114 @@ select{background:var(--plate3);border:1px solid var(--rule);border-radius:3px;p
 .tp{display:grid;justify-items:center;gap:2px;min-width:44px;height:38px;padding:3px 6px;font:500 11px var(--mono);letter-spacing:0}
 .tp small{font:500 9px var(--sans);letter-spacing:.06em;opacity:.8;max-width:64px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .tp[aria-pressed=true]{background:var(--cream);color:var(--creamtext)}
-.md .tp{min-width:34px;padding:3px 3px}
-.cfggrid{display:grid;grid-template-columns:minmax(0,1.55fr) minmax(330px,1fr);gap:18px;align-items:start}
-@media (max-width:1180px){.cfggrid{grid-template-columns:minmax(0,1fr)}}
+.md .tp{min-width:34px;padding:3px}
+.cfggrid{display:grid;grid-template-columns:minmax(0,1fr) 360px;gap:22px;align-items:start}
+.warnline{margin:0;padding:6px 10px;border-radius:3px;background:var(--rec);color:#fff;font:600 12px var(--sans)}
 
-/* the drawing */
-.panelwrap{background:var(--plate2);border-radius:6px;padding:8px;box-shadow:inset 0 0 0 1px var(--rule)}
-svg.front{display:block;width:100%;height:auto;user-select:none;-webkit-user-select:none;touch-action:none}
-.front text{font-family:var(--sans);font-weight:600;letter-spacing:.08em;fill:var(--print)}
-.front .body{fill:var(--plate3);stroke:var(--print);stroke-width:2}
-.front .strip{fill:var(--key)}
-.front .striptext{fill:var(--keytext)}
-.front .ctl{cursor:pointer}
-.front .ctl .cap0{fill:var(--key);stroke:var(--print);stroke-width:1.5}
-.front .ctl .ptr{stroke:var(--keytext);stroke-width:2.5;stroke-linecap:round}
-.front .ctl .arc{fill:none;stroke:var(--rule);stroke-width:3}
-.front .ctl .arcv{fill:none;stroke:var(--print);stroke-width:3}
-.front .ctl .lab{font-size:11px}
-.front .ctl .labbg{fill:transparent}
-.front .ctl .cc{font:500 9px var(--mono);letter-spacing:0;fill:var(--print3)}
-.front .ctl .mapled{fill:var(--ledoff)}
-.front .ctl.mapped .mapled{fill:var(--led)}
-.front .ctl .badge{font:600 9px var(--mono);letter-spacing:0;fill:var(--creamtext)}
-.front .ctl .badgebg{fill:var(--cream);stroke:var(--print);stroke-width:1}
-.front .ctl:hover .cap0{stroke-width:2.5}
-.front .ctl.sel .labbg{fill:var(--cream)}
-.front .ctl.sel .lab{fill:var(--creamtext)}
-.front .ctl.sel .ring{stroke:var(--print);stroke-width:2;fill:none;stroke-dasharray:3 3}
-.front .ctl.hot .hotring{fill:none;stroke:var(--led);stroke-width:3}
-.front .ctl.hot .val{fill:var(--led)}
-.front .ctl .val{font:600 10px var(--mono);letter-spacing:0;fill:transparent}
-.front .ctl.dead{cursor:help;opacity:.38}
-.front .ctl.dead .cap0{fill:none;stroke-dasharray:3 2}
-.front .ctl.unk .cap0{stroke-dasharray:4 2}
-.front .pad0{fill:var(--key);stroke:var(--print);stroke-width:1.2}
-.front .ctl.hot .pad0{fill:var(--led)}
-.front .ctl.sel .pad0{stroke-width:2.5;stroke:var(--print)}
-.front .step0{fill:var(--key2);stroke:var(--print3);stroke-width:1.2}
-.front .stepled{fill:var(--ledoff)}
-.front .dim{fill:var(--print3)}
-.layers{display:flex;flex-wrap:wrap;align-items:center;gap:6px 10px;margin:8px 2px 2px}
-.seg{display:inline-flex;gap:3px;flex-wrap:wrap}
-.seg button{height:26px;padding:0 9px;font:600 11px var(--sans);letter-spacing:.1em;text-transform:uppercase}
-.seg button[aria-pressed=true]{background:var(--cream);color:var(--creamtext)}
-.other{display:flex;flex-wrap:wrap;gap:4px;align-items:center;margin:6px 2px 0}
-
-/* voices: the instrument row onto the machine's tracks */
-.voices{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:6px}
-.vk{display:grid;gap:3px;justify-items:center;padding:6px 4px;height:auto;font:600 12px var(--sans);letter-spacing:.1em}
-.vk small{font:500 10px var(--mono);letter-spacing:0;opacity:.75}
-.vk .to{font:500 11px var(--mono);letter-spacing:0;background:var(--lcd);color:var(--ink);border-radius:2px;padding:1px 5px}
-.vk[aria-pressed=true]{background:var(--cream);color:var(--creamtext)}
-.vk.hot .to{box-shadow:0 0 0 2px var(--led)}
-@media (max-width:700px){.voices{grid-template-columns:repeat(4,minmax(0,1fr))}}
-
-/* generic: controls seen */
-.seen{display:grid;grid-template-columns:repeat(8,minmax(0,1fr));gap:6px;padding:10px;background:var(--plate2);border-radius:6px;box-shadow:inset 0 0 0 1px var(--rule)}
-.seen .sc{position:relative;display:grid;justify-items:center;gap:3px;padding:8px 4px 6px;height:auto;font:600 11px var(--sans);letter-spacing:.06em}
-.seen .sc svg{width:34px;height:34px}
-.seen .sc small{font:500 10px var(--mono);letter-spacing:0;opacity:.75}
-.seen .sc[aria-pressed=true]{background:var(--cream);color:var(--creamtext)}
-.seen .sc.hot{box-shadow:inset 0 -2px 0 rgba(0,0,0,.35),0 0 0 2px var(--led)}
-.seen .sc .mled{position:absolute;left:6px;top:6px;width:6px;height:6px}
-.seen .sc .bdg{position:absolute;right:5px;top:4px;font:600 9px var(--mono)}
-.seen .ghost{border:1px dashed var(--rule);background:transparent;color:var(--print2);box-shadow:none}
-.seen .sep{grid-column:1/-1;font:600 10px var(--sans);letter-spacing:.16em;text-transform:uppercase;color:var(--print2);padding-top:4px}
-@media (max-width:760px){.seen{grid-template-columns:repeat(4,minmax(0,1fr))}}
+/* ===== the matrix ===== */
+.mxtools{display:flex;flex-wrap:wrap;gap:8px 14px;align-items:center}
+.mxtools .grow{flex:1}
+.legend{display:flex;gap:14px;flex-wrap:wrap;align-items:center;font-size:13px;color:var(--print2)}
+.legend span{display:inline-flex;gap:6px;align-items:center}
+.mxscroll{overflow-x:auto;border-top:2px solid var(--print)}
+.mx{--rh:224px;--sc:124px;--cw:100px;display:grid;min-width:max-content}
+.mx.md{--rh:224px;--sc:118px;--cw:84px}
+.mr{display:grid;grid-template-columns:var(--rh) var(--sc) repeat(var(--n),minmax(var(--cw),1fr));min-height:44px}
+.mr>*{border-bottom:1px solid var(--rule);min-width:0}
+.mr .cell{border-left:1px solid color-mix(in srgb,var(--rule) 55%,transparent)}
+.mr .sc0{position:sticky;left:var(--rh);z-index:2;background:var(--plate);border-left:1px solid var(--rule);border-right:1px solid var(--rule)}
+.mr .rh0{position:sticky;left:0;z-index:3;background:var(--plate)}
+/* the column heads */
+.mr.head{min-height:52px;position:sticky;top:0;z-index:4}
+.mr.head>*{background:var(--plate);display:grid;align-content:end;justify-items:start;gap:2px;padding:6px 10px 7px;border-bottom:1px solid var(--print)}
+.mr.head b{font:600 12px var(--sans);letter-spacing:.16em;text-transform:uppercase;color:var(--print)}
+.mr.head small{font:500 11px var(--mono);color:var(--print3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%}
+.mr.head .issel small{color:var(--print)}
+.mr.head .issel b::after{content:" · SEL";color:var(--print3);letter-spacing:.1em}
+.mr.head .sc0 b{display:flex;gap:6px;align-items:center}
+/* group rows */
+.mr.grp{min-height:34px}
+.mr.grp>*{background:var(--plate2);border-bottom:1px solid var(--rule)}
+.mr.grp .gh{grid-column:1/-1;position:sticky;left:0;display:flex;align-items:center;gap:10px;padding:0 10px;background:transparent;box-shadow:none;border-radius:0;color:var(--print);font:600 11px var(--sans);letter-spacing:.18em;text-transform:uppercase;height:34px;width:max-content;min-width:100%;text-align:left}
+.mr.grp .gh:hover{background:var(--hover)}
+.mr.grp .gh svg{width:10px;height:10px;transition:transform .15s}
+.mr.grp .gh[aria-expanded=false] svg{transform:rotate(-90deg)}
+.mr.grp .gh small{font:500 11px var(--mono);letter-spacing:0;color:var(--print3);text-transform:none}
+/* a control's row head */
+.rh{display:grid;grid-template-columns:minmax(0,1fr) auto;grid-template-rows:auto auto;gap:4px 8px;align-items:center;padding:7px 10px;cursor:pointer;text-align:left;background:var(--plate);color:var(--body);box-shadow:none;border-radius:0;font:inherit;letter-spacing:0;height:100%;width:100%}
+.rh:hover{background:var(--plate)}
+.rh .nm{display:flex;align-items:baseline;gap:8px;min-width:0}
+.rh .nm b{font:600 14px var(--sans);letter-spacing:.05em;color:var(--print);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.rh .nm small{font:500 11px var(--mono);color:var(--print3);white-space:nowrap}
+.rh .tags{display:flex;gap:5px;align-items:center;justify-self:end}
+.badge{font:600 9px var(--mono);letter-spacing:.04em;padding:1px 5px;border-radius:2px;border:1px solid var(--rule);color:var(--print3)}
+.badge.own{border-color:var(--print2);color:var(--body)}
+.type{display:inline-flex;align-items:center;gap:5px;font:600 10px var(--sans);letter-spacing:.14em;text-transform:uppercase;color:var(--print2)}
+.type i{width:7px;height:7px;border-radius:2px;background:var(--rule)}
+.type.direct i{background:var(--print2)}
+.type.macro i{background:var(--rust)}
+.type.roll i,.type.amount i{background:var(--ledg)}
+.meter{grid-column:1/-1;display:grid;grid-template-columns:1fr 28px;gap:8px;align-items:center;cursor:ew-resize;touch-action:none}
+.meter .bar{height:4px;border-radius:2px;background:color-mix(in srgb,var(--rule) 60%,transparent);position:relative;overflow:hidden}
+.meter .bar i{position:absolute;left:0;top:0;bottom:0;background:var(--print2)}
+.meter .pad{height:10px;width:28px;border-radius:2px;border:1px solid var(--rule)}
+.meter.pads{grid-template-columns:28px 1fr;cursor:pointer}
+.meter b{font:500 11px var(--mono);color:var(--print3);text-align:right}
+/* the row that moved last: steady */
+.mr.hot .rh0,.mr.hot .sc0{background:var(--hot)}
+.mr.hot .rh{background:transparent;box-shadow:inset 3px 0 0 var(--led)}
+.mr.hot .meter .bar i{background:var(--led)}
+.mr.hot .meter .pad{background:var(--led);border-color:var(--led)}
+.mr.hot .meter b{color:var(--led)}
+/* the selected row / cell */
+.mr.selrow .rh{box-shadow:inset 3px 0 0 var(--print)}
+.mr.hot.selrow .rh{box-shadow:inset 3px 0 0 var(--led)}
+/* cells */
+.cell{position:relative;display:grid;align-content:center;gap:4px;padding:6px 7px;background:transparent;box-shadow:none;border-radius:0;color:var(--body);font:inherit;letter-spacing:0;text-align:left;cursor:pointer}
+.cell:hover{background:var(--hover)}
+.mr:not(.head):not(.grp):hover>.cell,.mr:not(.head):not(.grp):hover>.sc0{background:var(--hover)}
+.cell .plus{justify-self:center;font:400 16px var(--mono);color:var(--print3);opacity:0}
+.cell:hover .plus,.cell:focus-visible .plus{opacity:1}
+.cell.cur{box-shadow:inset 0 0 0 2px var(--print)}
+.cell.off{cursor:default}
+.cell.off .plus{display:none}
+/* a mapped parameter in a cell */
+.pchip{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:3px 6px;align-items:center;padding:4px 7px 5px;border-radius:3px;background:var(--plate3);border:1px solid var(--rule);min-width:0}
+.pchip b{font:600 12px var(--sans);letter-spacing:.06em;color:var(--print);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.pchip em{font:normal 500 11px var(--mono);color:var(--print2)}
+.pchip .rb{grid-column:1/-1;position:relative;height:3px;border-radius:2px;background:color-mix(in srgb,var(--rule) 55%,transparent)}
+.pchip .rb i{position:absolute;top:0;bottom:0;background:var(--print2);border-radius:2px}
+.pchip .rb i.inv{background:repeating-linear-gradient(90deg,var(--print2) 0 4px,transparent 4px 6px)}
+.pchip .rb u{position:absolute;top:-2px;width:2px;height:7px;margin-left:-1px;background:var(--led);border-radius:1px}
+.pchip .dir{font:600 9px var(--mono);color:var(--print3)}
+.mr.macro .pchip{border-left:3px solid var(--rust);padding-left:5px}
+.mr.hot .pchip em{color:var(--led)}
+.pchip.nope{opacity:.55}
+.mx.md .pchip b{font-size:11px}
+.dice{display:flex;align-items:center;gap:6px;padding:4px 7px;border-radius:3px;border:1px dashed var(--print3);background:transparent}
+.dice svg{width:14px;height:14px;flex:none;color:var(--print2)}
+.dice b{font:600 12px var(--sans);letter-spacing:.06em;color:var(--print);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.dice em{font:normal 500 11px var(--mono);color:var(--print2);margin-left:auto}
+.mr.hot .dice em{color:var(--led)}
+.learnrow{grid-column:1/-1;position:sticky;left:0;display:flex;gap:10px;align-items:center;padding:8px 10px;width:max-content}
 .learnline{display:flex;align-items:center;gap:8px;margin:0;padding:6px 10px;border-radius:3px;background:var(--lcd);color:var(--ink);font:12px var(--pix)}
 
-/* the inspector */
+/* the voices matrix */
+.vx .mr{min-height:36px}
+.vx .rh{grid-template-rows:auto;grid-template-columns:minmax(0,1fr) auto}
+.vstep{display:inline-flex;gap:2px;align-items:center}
+.vstep button{width:20px;height:20px;padding:0;font:600 11px var(--mono)}
+.vstep span{font:500 11px var(--mono);min-width:48px;text-align:center;color:var(--body)}
+.vdot{justify-items:center}
+.vdot i{width:12px;height:12px;border-radius:50%;border:1.5px solid var(--rule);opacity:0}
+.vdot:hover i{opacity:1}
+.vdot.on i{opacity:1;background:var(--print);border-color:var(--print)}
+.vdot small{font:500 10px var(--mono);color:var(--print2)}
+.vx .mr.hot .vdot.on i{background:var(--led);border-color:var(--led)}
+
+/* the inspector (a side panel; a drawer below 1180 px) */
 .insp{position:sticky;top:10px}
+.insp .close{display:none}
 .ihead{display:grid;gap:6px}
 .ititle{display:flex;align-items:baseline;gap:8px;flex-wrap:wrap}
 .ititle b{font:600 18px var(--sans);letter-spacing:.05em;color:var(--print)}
@@ -214,38 +246,46 @@ svg.front{display:block;width:100%;height:auto;user-select:none;-webkit-user-sel
 .readout b{font:13px var(--pix);font-weight:400;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .irow{display:flex;align-items:center;gap:8px 10px;flex-wrap:wrap}
 .irow .ilab{min-width:52px}
+.seg{display:inline-flex;gap:3px;flex-wrap:wrap}
+.seg button{height:26px;padding:0 9px;font:600 11px var(--sans);letter-spacing:.1em;text-transform:uppercase}
+.seg button[aria-pressed=true]{background:var(--cream);color:var(--creamtext)}
 .tcards{display:grid;gap:8px}
 .tcard{display:grid;gap:6px;padding:8px;border:1px solid var(--rule);border-radius:4px;background:var(--plate3)}
-.tcard .trow{display:grid;grid-template-columns:auto minmax(0,1fr) auto auto;gap:5px;align-items:center}
+.tcard .trow{display:grid;grid-template-columns:minmax(0,1fr) auto auto;gap:5px;align-items:center}
 .tcard .trow .kselbtn{height:26px}
-.tpin{height:26px;padding:0 8px;font:500 11px var(--mono);letter-spacing:0;min-width:56px}
-.tpin.pinned{background:var(--cream);color:var(--creamtext)}
 .xkey{width:26px;height:26px;padding:0;font:600 13px var(--mono)}
 .range{position:relative;height:26px;margin:0 8px;touch-action:none;cursor:pointer}
 .range .rt{position:absolute;left:0;right:0;top:11px;height:4px;border-radius:2px;background:var(--rule)}
 .range .rf{position:absolute;top:9px;height:8px;border-radius:2px;background:var(--print2)}
 .range .rf.inv{background:repeating-linear-gradient(90deg,var(--print2) 0 6px,transparent 6px 9px)}
 .range .rn{position:absolute;top:4px;width:3px;height:18px;margin-left:-1px;background:var(--led);border-radius:1px}
-.range .rh{position:absolute;top:3px;width:14px;height:20px;margin-left:-7px;border-radius:3px;background:var(--key);box-shadow:inset 0 -2px 0 rgba(0,0,0,.35),0 0 0 1px var(--plate3);cursor:ew-resize}
-.range .rh::after{content:attr(data-l);position:absolute;top:-1px;left:0;right:0;text-align:center;font:600 8px/20px var(--mono);color:var(--keytext)}
+.range .rh2{position:absolute;top:3px;width:14px;height:20px;margin-left:-7px;border-radius:3px;background:var(--key);box-shadow:inset 0 -2px 0 rgba(0,0,0,.35),0 0 0 1px var(--plate3);cursor:ew-resize}
+.range .rh2::after{content:attr(data-l);position:absolute;top:-1px;left:0;right:0;text-align:center;font:600 8px/20px var(--mono);color:var(--keytext)}
 .rnums{display:flex;justify-content:space-between;font:11px var(--mono);color:var(--print2);gap:6px}
 .rnums b{color:var(--body);font-weight:500}
 .rnums .now{color:var(--led)}
-.addrow{display:flex;gap:6px;flex-wrap:wrap}
+.addrow{display:flex;gap:6px;flex-wrap:wrap;align-items:center}
+.summary{display:grid;gap:3px}
+.summary button{display:flex;justify-content:space-between;gap:8px;height:28px;padding:0 9px;font:500 12px var(--mono);letter-spacing:0;text-align:left}
 .pchips{display:grid;gap:6px}
 .pchips .grp{display:flex;flex-wrap:wrap;gap:3px;align-items:center}
 .pchips .grp .ilab{min-width:44px}
 .pchips .chip{min-width:48px}
 .explain{margin:0;font-size:13px;color:var(--print2)}
 .explain b{color:var(--body);font-weight:600}
-.warnline{margin:0;padding:6px 10px;border-radius:3px;background:var(--rec);color:#fff;font:600 12px var(--sans)}
 .segbar{display:inline-flex;gap:1px;padding:3px;background:var(--key);border-radius:3px;cursor:pointer;touch-action:none;box-shadow:inset 0 -2px 0 rgba(0,0,0,.35)}
 .segbar i{width:6px;height:12px;border-radius:1px;background:var(--ledoff)}
 .segbar i.on{background:var(--led);box-shadow:0 0 4px var(--led)}
+@media (max-width:1180px){
+  .cfggrid{grid-template-columns:minmax(0,1fr)}
+  .insp{position:fixed;top:0;right:0;bottom:44px;width:min(380px,94vw);z-index:35;overflow:auto;background:var(--plate);padding:14px 16px;border-left:2px solid var(--print);box-shadow:-14px 0 34px rgba(0,0,0,.25)}
+  .insp.closed{display:none}
+  .insp .close{display:inline-flex}
+}
 
 /* the monitor: one LCD strip */
 .monstrip{display:flex;align-items:stretch;gap:8px}
-.monlcd{flex:1;min-width:0;display:flex;gap:0;overflow:hidden;background:var(--lcd);color:var(--ink);border-radius:4px;box-shadow:0 0 0 3px var(--bezel);padding:5px 4px;font:11px var(--pix)}
+.monlcd{flex:1;min-width:0;display:flex;overflow:hidden;background:var(--lcd);color:var(--ink);border-radius:4px;box-shadow:0 0 0 3px var(--bezel);padding:5px 4px;font:11px var(--pix)}
 .monlcd .ev{display:grid;gap:1px;padding:0 9px;border-left:1px solid color-mix(in srgb,var(--ink) 35%,transparent);white-space:nowrap}
 .monlcd .ev:first-child{border-left:0}
 .monlcd .ev small{font:9px var(--pix);opacity:.75}
@@ -260,6 +300,7 @@ svg.front{display:block;width:100%;height:auto;user-select:none;-webkit-user-sel
 .dev .sep{width:1px;height:18px;background:#6a6a5e}
 .dev .hint{font:500 12px var(--sans);letter-spacing:.02em;text-transform:none;color:#cfcab8}
 </style>
+<style id="crosshair"></style>
 </head>
 <body>
 <div class="app">
@@ -289,7 +330,7 @@ svg.front{display:block;width:100%;height:auto;user-select:none;-webkit-user-sel
   <button data-dev="hit" data-v="36" title="The TR-06 plays BD (note 36)">Hit BD</button>
   <button data-dev="hit" data-v="42" title="The TR-06 plays CH (note 42)">Hit CH</button>
   <button data-dev="bs" title="The BeatStep sends CC 77 (a control the editor has not seen yet)">BeatStep: new knob</button>
-  <span class="hint">Drag a knob on the drawing (up / down) to play the hardware.</span>
+  <span class="hint">Drag a row's meter left / right to play the hardware; click a pad row's square to hit it.</span>
 </div>
 
 <script>
@@ -347,30 +388,25 @@ function pinfo(m, t, pid) {
 			return p < 0 ? { own: "NOTE", long: "NOTE · no pitch on this machine", ok: false } : { own: MD_SYN[KIT.md[t]][p], long: "NOTE · " + MD_SYN[KIT.md[t]][p], ok: true };
 		}
 		if (!own) return { own: "—", long: slot + " · unused on " + KIT[m][t], ok: false };
-		return { own, long: own === slot || pid.startsWith("AMP") || pid.startsWith("FLT") || pid.startsWith("EFX") || !pid.startsWith("SYN") ? slot : slot + " · " + own, ok: true };
+		return { own, long: pid.startsWith("SYN") && own !== slot ? slot + " · " + own : slot, ok: true };
 	}
 	return { own: "?", long: pid, ok: false };
 }
 
-/* the TR-06's front panel, from Roland's MIDI Implementation Chart v1.00 and the owner's manual. Positions are a
-   stylised layout; which knob sends which CC in each layer is to be confirmed on the hardware (DESIGN-tr06.md). */
-const INST = ["ACC", "BD", "SD", "LT", "HT", "CY", "OH", "CH"];
-const LAYERS = {
-	LEVEL: { ACC: [71, "ACC LEVEL"], BD: [24, "BD LEVEL"], SD: [29, "SD LEVEL"], LT: [51, "LT LEVEL"], HT: [54, "HT LEVEL"], CY: [85, "CY LEVEL"], OH: [82, "OH LEVEL"], CH: [63, "CH LEVEL"] },
-	TUNE: { BD: [20, "BD TUNE"], SD: [25, "SD TUNE"], LT: [49, "LT TUNE"], HT: [52, "HT TUNE"], CY: [83, "CY TUNE"], OH: [80, "OH TUNE"], CH: [61, "CH TUNE"] },
-	DECAY: { BD: [23, "BD DECAY"], SD: [28, "SD DECAY"], LT: [50, "LT DECAY"], HT: [53, "HT DECAY"], CY: [84, "CY DECAY"], OH: [81, "OH DECAY"], CH: [62, "CH DECAY"] },
-	TONE: { BD: [21, "BD ATTACK"], SD: [26, "SD SNAPPY"], LT: [92, "LT COLOR"], HT: [94, "HT COLOR"] },
-	COMP: { BD: [22, "BD COMP"], SD: [27, "SD COMP"] },
-	SEND: { BD: [96, "BD DELAY SEND"], SD: [97, "SD DELAY SEND"], LT: [103, "LT DELAY SEND"], HT: [104, "HT DELAY SEND"], CY: [109, "CY DELAY SEND"], OH: [108, "OH DELAY SEND"], CH: [107, "CH DELAY SEND"] }
-};
-const LAYER_HOW = { LEVEL: "turn", TUNE: "MENU + turn", DECAY: "MENU + turn", TONE: "MENU + turn", COMP: "MENU + turn", SEND: "STEP LOOP + DEPTH" };
-const FXK = [["DRIVE", 17, "OD DRIVE"], ["TIME", 18, "DELAY TIME"], ["DEPTH", 19, "DELAY DEPTH"]];
-const OTHER_CC = [[12, "MIX IN LVL"], [111, "MIX IN DELAY SEND"], [113, "MASTER PROB"]];
-const VOICES = [["BD", "BASS DRUM", [36, 35]], ["SD", "SNARE DRUM", [38, 40]], ["LT", "LOW TOM", [47, 45]], ["HT", "HIGH TOM", [50, 48]], ["CY", "CYMBAL", [49]], ["OH", "OPEN HIHAT", [46]], ["CH", "CLOSED HIHAT", [42, 44]]];
+/* the TR-06's controls, from Roland's MIDI Implementation Chart v1.00, grouped by function */
+const TR06_GROUPS = [
+	["Instrument level", [[71, "ACC LEVEL"], [24, "BD LEVEL"], [29, "SD LEVEL"], [51, "LT LEVEL"], [54, "HT LEVEL"], [85, "CY LEVEL"], [82, "OH LEVEL"], [63, "CH LEVEL"]]],
+	["Effect", [[17, "DRIVE"], [18, "DELAY TIME"], [19, "DELAY DEPTH"]]],
+	["Tune", [[20, "BD TUNE"], [25, "SD TUNE"], [49, "LT TUNE"], [52, "HT TUNE"], [83, "CY TUNE"], [80, "OH TUNE"], [61, "CH TUNE"]]],
+	["Decay", [[23, "BD DECAY"], [28, "SD DECAY"], [50, "LT DECAY"], [53, "HT DECAY"], [84, "CY DECAY"], [81, "OH DECAY"], [62, "CH DECAY"]]],
+	["Tone", [[21, "BD ATTACK"], [26, "SD SNAPPY"], [92, "LT COLOR"], [94, "HT COLOR"]]],
+	["Comp", [[22, "BD COMP"], [27, "SD COMP"]]],
+	["Delay send", [[96, "BD DELAY SEND"], [97, "SD DELAY SEND"], [103, "LT DELAY SEND"], [104, "HT DELAY SEND"], [109, "CY DELAY SEND"], [108, "OH DELAY SEND"], [107, "CH DELAY SEND"], [111, "MIX IN DELAY SEND"]]],
+	["Other", [[12, "MIX IN LVL"], [113, "MASTER PROB"]]]
+];
 const TR06_CC = {};
-for (const [layer, row] of Object.entries(LAYERS)) for (const [inst, [cc, label]] of Object.entries(row)) TR06_CC[cc] = { label, inst, layer };
-for (const [k, cc, label] of FXK) TR06_CC[cc] = { label, fx: k };
-for (const [cc, label] of OTHER_CC) TR06_CC[cc] = { label, other: true };
+for (const [, list] of TR06_GROUPS) for (const [cc, label] of list) TR06_CC[cc] = label;
+const VOICES = [["BD", "BASS DRUM", [36, 35]], ["SD", "SNARE DRUM", [38, 40]], ["LT", "LOW TOM", [47, 45]], ["HT", "HIGH TOM", [50, 48]], ["CY", "CYMBAL", [49]], ["OH", "OPEN HIHAT", [46]], ["CH", "CLOSED HIHAT", [42, 44]]];
 
 /* ============================================================================================
    State. A mapping is per editor (the MD Editor and the MM Editor each keep their own), per device.
@@ -378,13 +414,12 @@ for (const [cc, label] of OTHER_CC) TR06_CC[cc] = { label, other: true };
 const tgt = (p, lo = 0, hi = 127, o = {}) => Object.assign({ t: "sel", p, lo, hi, inv: false }, o);
 function defaults(m) {
 	const mm = m === "mm";
-	const syn = [24, 29, 51, 54, 85, 82, 63];
 	const tr06 = {};
-	syn.forEach((cc, i) => tr06["cc:" + cc] = { targets: [tgt("SYN." + i)] });
+	[24, 29, 51, 54, 85, 82, 63].forEach((cc, i) => tr06["cc:" + cc] = { targets: [tgt("SYN." + i)] });
 	tr06["cc:71"] = { targets: [tgt("NOTE.0", 48, 72)] };
 	if (mm) {
-		/* DRIVE as a macro: three parameters, one of them inverted */
-		tr06["cc:17"] = { targets: [tgt("FLT.0", 20, 110), tgt("AMP.4", 0, 80), tgt("EFX.2", 127, 60, { inv: true })] };
+		/* DRIVE as a macro: three parameters, one of them inverted, one on a pinned track */
+		tr06["cc:17"] = { targets: [tgt("FLT.0", 20, 110), tgt("AMP.4", 0, 80), tgt("EFX.2", 60, 127, { inv: true, t: 1 })] };
 		tr06["cc:18"] = { targets: [tgt("FLT.1")] };
 		tr06["cc:19"] = { targets: [tgt("LEV.0")] };
 		tr06["cc:20"] = { targets: [tgt("SYN.7", 40, 88)] };
@@ -399,7 +434,7 @@ function defaults(m) {
 	tr06["cc:113"] = { role: "amount", set: "rs1", targets: [] };
 	const beatstep = {
 		"cc:10": { targets: [tgt(mm ? "FLT.0" : "FX.4")] },
-		"cc:74": { targets: [tgt(mm ? "FLT.1" : "FX.5", 127, 0, { inv: true })] },
+		"cc:74": { targets: [tgt(mm ? "FLT.1" : "FX.5", 0, 127, { inv: true })] },
 		"note:51": { role: "roll", set: "rs1", targets: [] }
 	};
 	/* MIDI Learn mappings made before the configurator: CC → one target, from any input (they keep working) */
@@ -417,9 +452,12 @@ const S = {
 	on: { tr06: true, beatstep: true, any: true, host: true },
 	ch: { tr06: 10, beatstep: 1 },
 	mode: { tr06: "rel", beatstep: "abs", any: "abs", host: "abs" },	/* the device's default knob mode */
-	layer: "LEVEL", touch: true, learn: false,
+	touch: true, learn: false, mappedOnly: false,
+	collapsed: { Decay: true, Tone: true, Comp: true, "Delay send": true },
 	selCtl: { tr06: "cc:24", beatstep: "cc:10", any: "cc:21", host: null },
-	hot: null,						/* the control that moved last: {dev, id} (steady, until another moves) */
+	selCol: "sel",					/* the cell's column in the inspector ("sel" | track), null: the row's settings */
+	inspOpen: false,				/* the drawer below 1180 px */
+	hot: null,						/* the row that moved last: {dev, id} (steady, until another moves) */
 	hotVoice: null,
 	inv: {},						/* incoming value per dev|id */
 	seen: {
@@ -431,7 +469,6 @@ const S = {
 		mm: VOICES.map((v, i) => ({ t: [0, 1, 2, 3, 4, 5, 5][i], note: i === 5 ? 72 : 60 })),
 		md: VOICES.map((v, i) => ({ t: i }))
 	},
-	selVoice: null,
 	vals: {},
 	mon: []
 };
@@ -441,6 +478,7 @@ function hash(s) { let h = 2166136261; for (const c of s) h = Math.imul(h ^ c.ch
 function val(t, pid) { const k = S.m + t + pid; if (S.vals[k] == null) S.vals[k] = pid === "NOTE.0" ? 60 : hash(k); return S.vals[k]; }
 function setVal(t, pid, v) { S.vals[S.m + t + pid] = Math.max(0, Math.min(127, Math.round(v))); }
 const trackOf = x => x.t === "sel" ? S.sel : x.t;
+const colKey = c => c === "sel" ? "sel" : String(c);
 
 /* ============================================================================================
    Helpers: escaping, the page's key-style dropdowns, the toast
@@ -448,12 +486,13 @@ const trackOf = x => x.t === "sel" ? S.sel : x.t;
 const $ = q => document.querySelector(q), $$ = q => [...document.querySelectorAll(q)];
 const esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
 const CHEV = `<svg viewBox="0 0 10 6" aria-hidden="true"><path d="M1 1l4 4 4-4" fill="none" stroke="currentColor" stroke-width="1.5"/></svg>`;
-/* a key-style dropdown: {id, label, value, groups:[[title, [[v, text]]]] | options:[[v, text]]}; picks go to onPick(id, v) */
+const DICE = `<svg viewBox="0 0 14 14" aria-hidden="true"><rect x="1" y="1" width="12" height="12" rx="2.5" fill="none" stroke="currentColor" stroke-width="1.4"/><circle cx="4.5" cy="4.5" r="1.1" fill="currentColor"/><circle cx="9.5" cy="9.5" r="1.1" fill="currentColor"/><circle cx="7" cy="7" r="1.1" fill="currentColor"/></svg>`;
+/* a key-style dropdown: {id, label, value, groups:[[title, [[v, text]]]]}; picks go to pick(id, v) */
 const KS = {};
-function kselect(id, label, value, groups) {
+function kselect(id, label, value, groups, shown) {
 	KS[id] = { value: String(value), groups };
-	let text = "";
-	for (const [, list] of groups) for (const [v, t] of list) if (String(v) === String(value)) text = t;
+	let text = shown || "";
+	if (!shown) for (const [, list] of groups) for (const [v, t] of list) if (String(v) === String(value)) text = t;
 	return `<button class="kselbtn" type="button" data-ks="${esc(id)}" aria-haspopup="listbox" aria-expanded="false" aria-label="${esc(label)}: ${esc(text)}"><span>${esc(text)}</span>${CHEV}</button>`;
 }
 let kFor = null;
@@ -478,10 +517,10 @@ function toast(t) { const el = $("#toast"); el.textContent = t; el.classList.add
    Devices: what is connected (the OS's list, hot-plug), and the virtual "any input" for learned mappings
    ============================================================================================ */
 const DEVICES = {
-	tr06: { name: "TR-06", full: "Roland TR-06", profile: "Roland TR-06", icon: "tr06" },
-	beatstep: { name: "Arturia BeatStep", full: "Arturia BeatStep", profile: "", icon: "midi" },
-	any: { name: "Any MIDI input", full: "Any MIDI input", profile: "", icon: "any", virt: true },
-	host: { name: "Host MIDI in", full: "Host MIDI in (the track's MIDI)", profile: "", icon: "midi" }
+	tr06: { name: "TR-06", full: "Roland TR-06", icon: "tr06" },
+	beatstep: { name: "Arturia BeatStep", full: "Arturia BeatStep", icon: "midi" },
+	any: { name: "Any MIDI input", full: "Any MIDI input", icon: "any", virt: true },
+	host: { name: "Host MIDI in", full: "Host MIDI in (the track's MIDI)", icon: "midi" }
 };
 function tiles() {
 	if (S.daw) return ["host", ...(Object.keys(M().any).length ? ["any"] : [])];
@@ -491,7 +530,7 @@ function tiles() {
 }
 const ICON = {
 	tr06: `<svg viewBox="0 0 104 60" aria-hidden="true"><rect x="2" y="6" width="100" height="48" rx="4" fill="none" stroke="currentColor" stroke-width="2"/>
-		${INST.map((_, i) => `<circle cx="${13 + i * 10}" cy="20" r="3.6" fill="none" stroke="currentColor" stroke-width="1.6"/>`).join("")}
+		${Array.from({ length: 8 }, (_, i) => `<circle cx="${13 + i * 10}" cy="20" r="3.6" fill="none" stroke="currentColor" stroke-width="1.6"/>`).join("")}
 		<circle cx="96" cy="20" r="4" fill="none" stroke="currentColor" stroke-width="1.6"/>
 		${Array.from({ length: 16 }, (_, i) => `<rect x="${8 + i * 5.6}" y="38" width="4" height="8" rx="1" fill="currentColor" opacity="${i % 4 ? .45 : .9}"/>`).join("")}</svg>`,
 	midi: `<svg viewBox="0 0 104 60" aria-hidden="true"><rect x="2" y="6" width="100" height="48" rx="4" fill="none" stroke="currentColor" stroke-width="2"/>
@@ -503,8 +542,7 @@ const ICON = {
 		<path d="M80 34h14c6 0 8 4 8 8v8" fill="none" stroke="currentColor" stroke-width="2"/><rect x="96" y="50" width="12" height="10" rx="1" fill="none" stroke="currentColor" stroke-width="2"/></svg>`
 };
 function tileState(d) {
-	const map = M()[d === "host" ? "any" : d] || {};
-	const n = Object.keys(d === "host" ? {} : map).length;
+	const n = Object.keys(M()[d] || {}).length;
 	if (d === "any") return `${n} LEARNED · ANY INPUT`;
 	if (d === "host") return "THE TRACK'S MIDI";
 	if (!S.enabled[d]) return "CONNECTED · NOT ENABLED";
@@ -532,41 +570,48 @@ function tileHtml(d) {
 }
 
 /* ============================================================================================
-   The configurator: one view for every device. The TR-06 has a built-in profile (a drawing, names, defaults);
-   any other device builds its controls from what it sends (and LEARN).
+   The configurator: one matrix for every device. Rows: the device's controls (a profile names and groups them;
+   otherwise they are the controls seen). Columns: SELECTED (follows the page's selected track), then the tracks.
    ============================================================================================ */
 const mapOf = d => M()[d === "host" ? "any" : d];
 function ctlName(d, id) {
 	const [kind, n] = id.split(":");
-	if (d === "tr06") return kind === "cc" ? (TR06_CC[+n]?.label || "CC " + n) : "NOTE " + n;
+	if (d === "tr06") return kind === "cc" ? (TR06_CC[+n] || "CC " + n) : "NOTE " + n;
 	const s = (S.seen[d] || []).find(x => x[0] === id);
 	return (s && s[1]) || (kind === "cc" ? "CC " + n : "NOTE " + n);
 }
 const isPad = id => id.startsWith("note:");
 function roleOf(c) { if (!c) return "none"; if (c.role) return c.role; return c.targets.length > 1 ? "macro" : c.targets.length ? "direct" : "none"; }
 function modeOf(d, id) { const c = mapOf(d)[id]; return (c && c.mode) || S.mode[d]; }
+function rowGroups(d) {
+	if (d === "tr06") return TR06_GROUPS.map(([g, list]) => [g, list.map(([cc]) => "cc:" + cc)]);
+	if (d === "any") return [["Learned with MIDI Learn", Object.keys(M().any)]];
+	const seen = S.seen[d] || [];
+	return [["Knobs and faders", seen.filter(([id]) => !isPad(id)).map(x => x[0])], ["Pads and keys", seen.filter(([id]) => isPad(id)).map(x => x[0])]];
+}
+const TYPE_TXT = { none: "Off", direct: "Direct", macro: "Macro", roll: "Randomise", amount: "Rnd amount" };
+const MODE_TXT = { rel: "REL", abs: "ABS", enc: "ENC" };
 
 function cfgHtml() {
 	const d = S.view, D = DEVICES[d], tr = d === "tr06";
 	const connected = d === "any" || d === "host" || S.conn[d];
-	const ledOn = S.on[d];
 	const bar = `<div class="cfgbar">
 		<button class="amkey" data-a="back">‹ Devices</button>
-		<h3 style="margin:0;font:600 17px var(--sans);letter-spacing:.06em">${esc(D.full)}</h3>
-		${d === "any" ? `<span class="note">MIDI Learn mappings: they listen to every input, as before.</span>` : `<button class="amkey" data-a="toggleOn" aria-pressed="${ledOn}" title="${tr ? "The profile: off, the TR-06's MIDI reaches the machine as it always did" : "The mapping: off, this device's MIDI reaches the machine as ordinary MIDI"}"><i class="led${ledOn ? " on" : ""}"></i>${tr ? "Profile" : "Mapping"} ${ledOn ? "on" : "off"}</button>`}
+		<h3 style="margin:0;font:600 17px var(--sans);letter-spacing:.06em;color:var(--print)">${esc(D.full)}</h3>
+		${d === "any" ? `<span class="note">MIDI Learn mappings: they listen to every input, as before.</span>` : `<button class="amkey" data-a="toggleOn" aria-pressed="${S.on[d]}" title="${tr ? "The profile: off, the TR-06's MIDI reaches the machine as it always did" : "The mapping: off, this device's MIDI reaches the machine as ordinary MIDI"}"><i class="led${S.on[d] ? " on" : ""}"></i>${tr ? "Profile" : "Mapping"} ${S.on[d] ? "on" : "off"}</button>`}
 		${tr || d === "beatstep" ? `<span class="ilab">Channel</span><span style="width:74px">${kselect("ch", "Channel", S.ch[d], [["", Array.from({ length: 16 }, (_, c) => [c + 1, String(c + 1)])]])}</span>` : ""}
-		<span class="ilab">Knobs</span><span style="width:${d === "tr06" ? 110 : 128}px">${kselect("devmode", "Default knob mode", S.mode[d], [["", modeOpts(d)]])}</span>
+		<span class="ilab">Knobs</span><span style="width:${tr ? 110 : 128}px">${kselect("devmode", "Default knob mode", S.mode[d], [["", modeOpts(d)]])}</span>
 		<span class="grow"></span>
-		<button class="amkey" data-a="touch" aria-pressed="${S.touch}" title="On: moving a control on the device opens it here. Off: the inspector stays on the control you clicked."><i class="led${S.touch ? " on" : ""}"></i>Select on touch</button>
+		<button class="amkey" data-a="touch" aria-pressed="${S.touch}" title="On: moving a control on the device selects its row. Off: the inspector stays where you clicked."><i class="led${S.touch ? " on" : ""}"></i>Select on touch</button>
 		${tr ? `<button class="amkey" data-a="reset" title="The TR-06's shipped mapping and channel 10; the profile stays on or off">Reset to defaults</button>` : ""}
 		</div>
 		${d !== "any" && d !== "host" && !S.enabled[d] ? `<p class="warnline" role="alert">${esc(D.name)} is connected but not enabled in AUDIO / MIDI: nothing it sends arrives. <button class="amkey" data-a="enable">Enable</button></p>` : ""}
 		${!connected ? `<p class="warnline">Disconnected. The mapping is kept and comes back when it is plugged in again.</p>` : ""}`;
 	const tracksHtml = `<div class="irow"><span class="ilab">Selected track</span><div class="trackstrip ${S.m}" role="group" aria-label="The page's selected track">${KIT[S.m].map((mach, t) =>
 		`<button class="tp" data-a="track" data-t="${t}" aria-pressed="${t === S.sel}" title="Track ${t + 1}: ${mach}"><span>T${t + 1}</span><small>${esc(short(mach))}</small></button>`).join("")}</div>
-		<span class="note">Targets follow the selected track unless pinned.</span></div>`;
-	const left = tr ? tr06Html() : genericHtml(d);
-	return `<div class="cfg">${bar}${tracksHtml}<div class="cfggrid"><div style="display:grid;gap:14px;min-width:0">${left}</div><aside class="card insp" id="insp">${inspHtml()}</aside></div>${monHtml()}</div>`;
+		<span class="note">The SELECTED column follows it; a track column is pinned.</span></div>`;
+	return `<div class="cfg">${bar}${tracksHtml}<div class="cfggrid"><div style="display:grid;gap:22px;min-width:0">${matrixCard(d)}${tr ? voicesCard() : ""}</div>
+		<aside class="card insp${S.inspOpen ? "" : " closed"}" id="insp">${inspHtml()}</aside></div>${monHtml()}</div>`;
 }
 function modeOpts(d) {
 	const o = [["rel", "Relative"], ["abs", "Absolute"]];
@@ -574,138 +619,125 @@ function modeOpts(d) {
 	return o;
 }
 
-/* ---- the TR-06: the drawing ---- */
-function tr06Html() {
-	const lay = `<div class="layers"><span class="ilab">Knob layer</span><span class="seg" role="group" aria-label="Which function of the instrument knobs the drawing shows">${Object.keys(LAYERS).map(l =>
-		`<button data-a="layer" data-v="${l}" aria-pressed="${S.layer === l}" title="${LAYER_HOW[l]} on the TR-06">${l === "SEND" ? "Delay send" : l.toLowerCase()}</button>`).join("")}</span>
-		<span class="note">${esc(LAYER_HOW[S.layer])} on the TR-06: each function sends its own CC.</span></div>`;
-	const other = `<div class="other"><span class="ilab">Also sends</span>${OTHER_CC.map(([cc, label]) => chipCtl("tr06", "cc:" + cc, label + " · CC " + cc)).join("")}<span class="note">panel position not known yet</span></div>`;
-	return `<section class="card"><header><h3>Front panel</h3><span>click a control to map it · the lit ring is the one that moved last</span></header>
-		<div class="panelwrap"><svg class="front" id="front" viewBox="0 0 1000 400" role="img" aria-label="Roland TR-06 front panel">${frontSvg()}</svg>${lay}${other}</div></section>
-		<section class="card"><header><h3>Voices</h3><span>the instrument row plays the machine's tracks</span></header><div class="voices" id="voices">${voicesHtml()}</div></section>`;
+/* ---- the control matrix ---- */
+function matrixCard(d) {
+	const n = tracks();
+	const legend = `<div class="legend"><span class="type direct"><i></i>direct</span><span class="type macro"><i></i>macro</span><span class="type roll"><i></i>randomise</span>
+		<span><svg width="30" height="8" aria-hidden="true"><rect x="0" y="3" width="30" height="3" rx="1.5" fill="var(--rule)"/><rect x="6" y="3" width="18" height="3" rx="1.5" fill="var(--print2)"/></svg>range</span>
+		<span><svg width="30" height="8" aria-hidden="true"><rect x="0" y="3" width="30" height="3" rx="1.5" fill="var(--rule)"/>${[6, 11, 16, 21].map(x => `<rect x="${x}" y="3" width="3" height="3" fill="var(--print2)"/>`).join("")}</svg>inverse</span></div>`;
+	const tools = `<div class="mxtools"><button class="amkey" data-a="mapped" aria-pressed="${S.mappedOnly}"><i class="led${S.mappedOnly ? " on" : ""}"></i>Mapped only</button>
+		<button class="amkey" data-a="collapseall">${Object.values(S.collapsed).some(Boolean) ? "Expand all" : "Collapse all"}</button><span class="grow"></span>${legend}</div>`;
+	return `<section class="card"><header><h3>Controls</h3><span>rows: what the ${esc(DEVICES[d].name)} sends · columns: where it goes · click a cell to map it</span></header>
+		${tools}${S.learn ? `<p class="learnline" role="status"><i class="led on"></i>LEARN: move a knob or hit a pad on the ${esc(DEVICES[d].name)}. <button class="amkey" data-a="learn">Cancel</button></p>` : ""}
+		<div class="mxscroll" id="mxw"><div class="mx ${S.m}" id="mx" style="--n:${n}">${matrixInner(d)}</div></div>
+		${d === "tr06" ? `<p class="explain">Controls that send no MIDI (VOLUME, TEMPO, INSTRUMENT, MODE, VALUE, MENU, STEP LOOP, the step keys) are not listed. RUN / STOP is Start / Stop, passed on by the machine's own sync settings.</p>` : ""}</section>`;
 }
-function chipCtl(d, id, text) {
-	const c = mapOf(d)[id], sel = S.selCtl[d] === id, hot = S.hot && S.hot.dev === d && S.hot.id === id;
-	return `<button class="chip" data-a="ctl" data-id="${id}" aria-pressed="${sel}" style="${hot ? "box-shadow:0 0 0 2px var(--led)" : ""}"><i class="led${c && roleOf(c) !== "none" ? " on" : ""}" style="width:6px;height:6px;margin-right:6px"></i>${esc(text)}</button>`;
+function headRow(first, sub) {
+	const cols = [["sel", "Selected", `T${S.sel + 1} · ${KIT[S.m][S.sel]}`], ...KIT[S.m].map((mach, t) => [String(t), "T" + (t + 1), S.m === "md" ? short(mach) : mach])];
+	return `<div class="mr head"><div class="rh0"><b>${esc(first)}</b><small>${esc(sub)}</small></div>${cols.map(([c, b, s], i) =>
+		`<div class="${i === 0 ? "sc0" : ""}${c === String(S.sel) ? " issel" : ""}" data-c="${c}"><b>${i === 0 ? `<svg width="10" height="10" viewBox="0 0 10 10" aria-hidden="true"><path d="M1 5h6M5 2l3 3-3 3" fill="none" stroke="currentColor" stroke-width="1.5"/></svg>` : ""}${esc(b)}</b><small>${esc(s)}</small></div>`).join("")}</div>`;
 }
-function knobSvg(x, y, r, id, label, opt = {}) {
-	const d = opt.dev || "tr06", dead = !id, c = id ? mapOf(d)[id] : null;
-	const role = roleOf(c), sel = id && S.selCtl[d] === id, hot = id && S.hot && S.hot.dev === d && S.hot.id === id;
-	const v = id ? (S.inv[d + "|" + id] ?? 64) : 64;
-	const a0 = -225, a1 = 45, a = a0 + (a1 - a0) * v / 127;
-	const pt = (ang, rr) => [x + rr * Math.cos(ang * Math.PI / 180), y + rr * Math.sin(ang * Math.PI / 180)];
-	const arc = (from, to, rr) => { const [sx, sy] = pt(from, rr), [ex, ey] = pt(to, rr); return `M${sx.toFixed(1)} ${sy.toFixed(1)}A${rr} ${rr} 0 ${to - from > 180 ? 1 : 0} 1 ${ex.toFixed(1)} ${ey.toFixed(1)}`; };
-	const [px, py] = pt(a, r - 4), [qx, qy] = pt(a, r * .25);
-	const badge = role === "macro" ? "M" + c.targets.length : role === "roll" ? "RND" : role === "amount" ? "AMT" : "";
-	const cls = ["ctl", dead ? "dead" : "", role !== "none" ? "mapped" : "", sel ? "sel" : "", hot ? "hot" : "", opt.unk ? "unk" : ""].join(" ");
-	const lw = Math.max(34, label.length * 6.4 + 10);
-	return `<g class="${cls}" ${id ? `data-a="ctl" data-id="${id}" data-knob="1" tabindex="0" role="button" aria-label="${esc(label)}${id ? " CC " + id.split(":")[1] : ""}"` : `data-a="dead" data-v="${esc(opt.why || "Sends no MIDI")}" role="img" aria-label="${esc(label)}: sends no MIDI"`}>
-		<title>${esc(label)}${id ? " · CC " + id.split(":")[1] : " · " + (opt.why || "sends no MIDI")}</title>
-		<path class="arc" d="${arc(a0, a1, r + 6)}"/>${id ? `<path class="arcv" d="${arc(a0, Math.max(a0 + .5, a), r + 6)}"/>` : ""}
-		${hot ? `<circle class="hotring" cx="${x}" cy="${y}" r="${r + 11}"/>` : ""}${sel ? `<circle class="ring" cx="${x}" cy="${y}" r="${r + 15}"/>` : ""}
-		<circle class="cap0" cx="${x}" cy="${y}" r="${r}"/><line class="ptr" x1="${qx.toFixed(1)}" y1="${qy.toFixed(1)}" x2="${px.toFixed(1)}" y2="${py.toFixed(1)}"/>
-		${id ? `<circle class="mapled" cx="${x}" cy="${y - r - 20}" r="3.5"/>` : ""}
-		${badge ? `<rect class="badgebg" x="${x + r - 4}" y="${y - r - 10}" width="${badge.length * 6.5 + 8}" height="13" rx="2"/><text class="badge" x="${x + r}" y="${y - r}">${badge}</text>` : ""}
-		<rect class="labbg" x="${x - lw / 2}" y="${y + r + 9}" width="${lw}" height="16" rx="2"/><text class="lab" x="${x}" y="${y + r + 21}" text-anchor="middle">${esc(label)}</text>
-		${id ? `<text class="cc" x="${x}" y="${y + r + 36}" text-anchor="middle">CC ${id.split(":")[1]}</text><text class="val" x="${x + r + 4}" y="${y + r + 2}">${hot ? v : ""}</text>` : `<text class="cc" x="${x}" y="${y + r + 36}" text-anchor="middle">NO MIDI</text>`}
-	</g>`;
-}
-function keySvg(x, y, w, h, label, opt = {}) {
-	return `<g class="ctl ${opt.id ? "" : "dead"}" ${opt.id ? "" : `data-a="dead" data-v="${esc(opt.why || "Sends no MIDI")}"`} role="img" aria-label="${esc(label)}: ${esc(opt.why || "")}"><title>${esc(label)} · ${esc(opt.why || "")}</title>
-		<rect class="cap0" x="${x}" y="${y}" width="${w}" height="${h}" rx="3"/><text class="lab" x="${x + w / 2}" y="${y + h + 16}" text-anchor="middle">${esc(label)}</text>
-		${opt.sub ? `<text class="cc" x="${x + w / 2}" y="${y + h + 29}" text-anchor="middle">${esc(opt.sub)}</text>` : ""}</g>`;
-}
-function frontSvg() {
-	const L = LAYERS[S.layer];
-	let s = `<rect class="body" x="4" y="4" width="992" height="392" rx="10"/>
-		<rect class="strip" x="4" y="4" width="992" height="34" rx="10"/><rect class="strip" x="4" y="24" width="992" height="14"/>
-		<text class="striptext" x="24" y="27" style="font-size:18px;letter-spacing:.2em">TR-06</text>
-		<text class="striptext" x="118" y="27" style="font-size:11px;letter-spacing:.24em;opacity:.8">RHYTHM COMPOSER</text>
-		<text class="striptext" x="976" y="27" text-anchor="end" style="font-size:10px;letter-spacing:.2em;opacity:.7">STYLISED · CHECK ON THE HARDWARE</text>`;
-	/* the instrument knobs, a row of eight (ACC first), and the effect knobs */
-	s += `<text x="112" y="62" class="dim" style="font-size:10px;letter-spacing:.24em">INSTRUMENT · ${S.layer === "SEND" ? "DELAY SEND" : S.layer}</text>`;
-	INST.forEach((k, i) => {
-		const e = L[k], x = 132 + i * 74;
-		s += knobSvg(x, 116, 22, e ? "cc:" + e[0] : null, e ? e[1] : k, { why: k === "ACC" ? "ACCENT has only a level" : "No " + S.layer.toLowerCase() + " on " + k });
-	});
-	s += `<text x="746" y="62" class="dim" style="font-size:10px;letter-spacing:.24em">EFFECT</text>`;
-	FXK.forEach(([k, cc], i) => s += knobSvg(772 + i * 76, 116, 22, "cc:" + cc, k));
-	s += knobSvg(52, 116, 20, null, "VOLUME", { why: "Audio volume: sends no MIDI" });
-	/* the lower row: selectors that send no MIDI, the keys */
-	s += `<line x1="24" y1="190" x2="976" y2="190" stroke="var(--rule)" stroke-width="1"/>`;
-	s += knobSvg(62, 244, 20, null, "TEMPO", { why: "Tempo goes out as MIDI clock only (passed to the machine by its sync settings)" });
-	s += knobSvg(152, 244, 17, null, "INSTRUMENT", { why: "Selects the instrument on the TR-06: sends no MIDI" });
-	s += knobSvg(236, 244, 17, null, "MODE", { why: "Mode selector: sends no MIDI" });
-	s += knobSvg(320, 244, 17, null, "VALUE", { why: "Value knob: sends no MIDI" });
-	s += keySvg(404, 228, 54, 26, "MENU", { why: "Shift key: sends no MIDI; with a knob it reaches TUNE, DECAY, ..." });
-	s += keySvg(472, 228, 54, 26, "STEP LOOP", { why: "Sends no MIDI; with DEPTH it sets the delay sends" });
-	s += keySvg(812, 222, 64, 32, "TAP", { why: "Whether TAP sends notes in playback is unknown (check on the hardware)", sub: "UNKNOWN" });
-	s += keySvg(892, 222, 84, 32, "RUN / STOP", { why: "Start / Stop: passed on to the machine by its own sync settings, not mappable", sub: "START · STOP" });
-	/* the 16 step keys */
-	for (let i = 0; i < 16; i++) {
-		const x = 36 + i * 58 + Math.floor(i / 4) * 4;
-		s += `<g class="ctl dead" data-a="dead" data-v="The step keys edit the TR-06's own pattern: they send no MIDI"><title>Step ${i + 1} · sends no MIDI</title><rect class="step0" x="${x}" y="318" width="44" height="30" rx="3"/><rect class="stepled" x="${x + 17}" y="306" width="10" height="5" rx="1"/><text class="cc" x="${x + 22}" y="366" text-anchor="middle">${i + 1}</text></g>`;
+function matrixInner(d) {
+	const map = mapOf(d);
+	let h = headRow("Control", d === "tr06" ? "CC · live value · mode · type" : "as the device sends it");
+	for (const [g, ids] of rowGroups(d)) {
+		const rows = S.mappedOnly ? ids.filter(id => roleOf(map[id]) !== "none") : ids;
+		if (!ids.length || (S.mappedOnly && !rows.length)) continue;
+		const mapped = ids.filter(id => roleOf(map[id]) !== "none").length, open = !S.collapsed[g];
+		h += `<div class="mr grp"><button class="gh" data-a="group" data-v="${esc(g)}" aria-expanded="${open}"><svg viewBox="0 0 10 10" aria-hidden="true"><path d="M1 3l4 4 4-4" fill="none" stroke="currentColor" stroke-width="1.6"/></svg>${esc(g)}<small>${mapped} of ${ids.length} mapped</small></button></div>`;
+		if (open) h += rows.map(id => rowHtml(d, id)).join("");
 	}
-	s += `<text x="560" y="303" class="dim" text-anchor="middle" style="font-size:10px;letter-spacing:.24em">STEPS 1-16 · NO MIDI</text>`;
-	return s;
+	if (d !== "tr06" && d !== "any") h += `<div class="mr"><div class="learnrow"><button class="amkey" data-a="learn" aria-pressed="${S.learn}"><i class="led${S.learn ? " on" : ""}"></i>${S.learn ? "Move a control…" : "+ Learn a control"}</button><span class="note">A control also appears by itself the first time it sends.</span></div></div>`;
+	return h;
 }
-function voicesHtml() {
-	const mm = S.m === "mm";
-	return VOICES.map(([v, label, notes], i) => {
-		const x = S.voices[S.m][i];
-		return `<button class="vk${S.hotVoice === v ? " hot" : ""}" data-a="voice" data-v="${v}" aria-pressed="${S.selVoice === v}" title="${label}: notes ${notes.join(", ")}"><span>${v}</span><small>${notes.join(" · ")}</small><span class="to">T${x.t + 1}${mm ? " " + noteName(x.note) : ""}</span></button>`;
+function rowHtml(d, id) {
+	const c = mapOf(d)[id], role = roleOf(c), pad = isPad(id);
+	const hot = S.hot && S.hot.dev === d && S.hot.id === id, selRow = S.selCtl[d] === id;
+	const v = S.inv[d + "|" + id];
+	const mode = modeOf(d, id), own = c && c.mode;
+	const meter = pad ? `<span class="meter pads" data-hit="${id}" title="Hit it (simulates the device)"><i class="pad"></i><b style="text-align:left">${v == null ? "" : "VEL " + v}</b></span>`
+		: `<span class="meter" data-knob="${id}" title="Drag left / right: simulates turning it"><span class="bar"><i style="width:${(v ?? 0) / 127 * 100}%"></i></span><b>${v ?? "—"}</b></span>`;
+	const typeTxt = TYPE_TXT[role] + (role === "macro" ? " " + c.targets.length : "");
+	const head = `<div class="rh0"><button class="rh" data-a="row" data-id="${id}" aria-label="${esc(ctlName(d, id))}: row settings">
+		<span class="nm"><b>${esc(ctlName(d, id))}</b><small>${esc(id.replace(":", " ").toUpperCase())}</small></span>
+		<span class="tags">${pad ? "" : `<span class="badge${own ? " own" : ""}" title="${own ? "Its own knob mode" : "The device's default knob mode"}">${MODE_TXT[mode]}</span>`}<span class="type ${role}"><i></i>${esc(typeTxt)}</span></span>
+		${meter}</button></div>`;
+	const cols = ["sel", ...KIT[S.m].map((_, t) => t)];
+	const cells = cols.map((col, i) => {
+		const cur = selRow && S.selCol !== null && colKey(S.selCol) === colKey(col);
+		let inner = "", off = false;
+		if (role === "roll" || role === "amount") {
+			const s = M().sets.find(x => x.id === c.set);
+			if (s && colKey(s.t) === colKey(col)) inner = `<span class="dice">${DICE}<b>${esc(s.name)}</b><em>${role === "amount" ? s.amount + "%" : s.params.length + "P"}</em></span>`;
+			else off = true;
+		} else {
+			const here = (c ? c.targets : []).map((x, k) => [x, k]).filter(([x]) => colKey(x.t) === colKey(col));
+			inner = here.length ? here.map(([x]) => pchipHtml(x)).join("") : `<span class="plus" aria-hidden="true">+</span>`;
+		}
+		return `<button class="cell${i === 0 ? " sc0" : ""}${cur ? " cur" : ""}${off ? " off" : ""}" data-a="cell" data-id="${id}" data-col="${colKey(col)}" data-c="${colKey(col)}" aria-label="${esc(ctlName(d, id))} to ${col === "sel" ? "the selected track" : "track " + (col + 1)}">${inner}</button>`;
 	}).join("");
+	return `<div class="mr${hot ? " hot" : ""}${selRow ? " selrow" : ""}${role === "macro" ? " macro" : ""}" data-row="${id}">${head}${cells}</div>`;
+}
+function pchipHtml(x) {
+	const t = trackOf(x), p = pinfo(S.m, t, x.p), now = val(t, x.p);
+	const lo = Math.min(x.lo, x.hi), hi = Math.max(x.lo, x.hi);
+	return `<span class="pchip${p.ok ? "" : " nope"}" title="${esc(p.long)} on T${t + 1} · ${lo}-${hi}${x.inv ? " inverse" : ""}"><b>${esc(p.own)}</b><em>${now}</em>
+		<span class="rb"><i class="${x.inv ? "inv" : ""}" style="left:${lo / 127 * 100}%;width:${Math.max(2, (hi - lo) / 127 * 100)}%"></i><u style="left:${now / 127 * 100}%"></u></span></span>`;
+}
+
+/* ---- the voices: a second, smaller matrix (one dot per row) ---- */
+function voicesCard() {
+	const mm = S.m === "mm";
+	let h = `<div class="mr head"><div class="rh0"><b>Voice</b><small>notes${mm ? " · pitch" : ""}</small></div><div class="sc0"><b>Plays</b><small>where it goes</small></div>${KIT[S.m].map((mach, t) =>
+		`<div data-c="${t}"><b>T${t + 1}</b><small>${esc(mm ? mach : short(mach))}</small></div>`).join("")}</div>`;
+	h += VOICES.map(([v, label, notes], i) => {
+		const x = S.voices[S.m][i];
+		const head = `<div class="rh0"><div class="rh" style="cursor:default"><span class="nm"><b>${v}</b><small>${notes.join(" · ")}</small></span>
+			${mm ? `<span class="vstep"><button data-a="vnote" data-voice="${i}" data-v="-1" aria-label="${v} a semitone down">‹</button><span>${noteName(x.note)} ${x.note}</span><button data-a="vnote" data-voice="${i}" data-v="1" aria-label="${v} a semitone up">›</button></span>` : `<span class="type"><i></i>${label}</span>`}</div></div>`;
+		const plays = `<div class="sc0 cell off" style="cursor:default"><span class="mono" style="font-size:12px">T${x.t + 1}${mm ? " · CH " + (x.t + 1) + " · " + noteName(x.note) : " · TRIG " + (x.t + 1)}</span></div>`;
+		const dots = KIT[S.m].map((_, t) => `<button class="cell vdot${x.t === t ? " on" : ""}" data-a="vtrack" data-voice="${i}" data-t="${t}" data-c="${t}" aria-label="${v} plays track ${t + 1}" aria-pressed="${x.t === t}"><i></i>${x.t === t && mm ? `<small>${noteName(x.note)}</small>` : ""}</button>`).join("");
+		return `<div class="mr${S.hotVoice === v ? " hot" : ""}">${head}${plays}${dots}</div>`;
+	}).join("");
+	return `<section class="card"><header><h3>Voices</h3><span>the instrument row plays the machine's tracks · one track per voice</span></header>
+		<div class="mxscroll"><div class="mx vx ${S.m}" id="vx" style="--n:${tracks()}">${h}</div></div></section>`;
 }
 const noteName = n => ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"][n % 12] + (Math.floor(n / 12) - 1);
 
-/* ---- a device without a profile: the controls it has sent, and LEARN ---- */
-function genericHtml(d) {
-	const seen = d === "any" ? Object.keys(M().any).map(id => [id, ""]) : (S.seen[d] || []);
-	const knobs = seen.filter(([id]) => !isPad(id)), pads = seen.filter(([id]) => isPad(id));
-	const cell = ([id]) => {
-		const c = mapOf(d)[id], role = roleOf(c), sel = S.selCtl[d] === id, hot = S.hot && S.hot.dev === d && S.hot.id === id;
-		const v = S.inv[d + "|" + id] ?? 0, a = -225 + 270 * v / 127, rad = a * Math.PI / 180;
-		const icon = isPad(id) ? `<svg viewBox="0 0 34 34" aria-hidden="true"><rect x="4" y="4" width="26" height="26" rx="3" fill="${hot ? "var(--led)" : "none"}" stroke="currentColor" stroke-width="2"/></svg>`
-			: `<svg viewBox="0 0 34 34" aria-hidden="true"><circle cx="17" cy="17" r="12" fill="none" stroke="currentColor" stroke-width="2"/><line x1="17" y1="17" x2="${(17 + 10 * Math.cos(rad)).toFixed(1)}" y2="${(17 + 10 * Math.sin(rad)).toFixed(1)}" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/></svg>`;
-		const badge = role === "macro" ? "M" + c.targets.length : role === "roll" ? "RND" : role === "amount" ? "AMT" : "";
-		return `<button class="sc${hot ? " hot" : ""}" data-a="ctl" data-id="${id}" ${isPad(id) ? "" : `data-knob="1"`} aria-pressed="${sel}"><i class="led mled${role !== "none" ? " on" : ""}"></i>${badge ? `<span class="bdg">${badge}</span>` : ""}${icon}<span>${esc(ctlName(d, id))}</span><small>${id.replace(":", " ").toUpperCase()}${hot ? " · " + v : ""}</small></button>`;
-	};
-	const ghost = `<button class="sc ghost" data-a="learn" aria-pressed="${S.learn}" title="Move a control on the device: it becomes a control here"><svg viewBox="0 0 34 34" aria-hidden="true"><path d="M17 8v18M8 17h18" stroke="currentColor" stroke-width="2"/></svg><span>${S.learn ? "Move a control…" : "Learn"}</span><small>${S.learn ? "waiting" : "add a control"}</small></button>`;
-	const intro = d === "any" ? "Mappings made with MIDI Learn before this view existed. They listen to every input, exactly as before; edit them here like any other control."
-		: d === "host" ? "The DAW does not say which device sends. Controls appear as their MIDI arrives; choose a profile if it is a TR-06."
-			: "No built-in profile for this device: each control appears the first time it sends. Move a knob or hit a pad, or press LEARN.";
-	return `<section class="card"><header><h3>Controls seen</h3><span>${seen.length} controls · click one to map it</span></header>
-		<p class="explain">${esc(intro)}</p>
-		${S.learn ? `<p class="learnline" role="status"><i class="led on"></i>LEARN: move a knob or hit a pad on the ${esc(DEVICES[d].name)}. <button class="amkey" data-a="learn">Cancel</button></p>` : ""}
-		<div class="seen" id="seen"><div class="sep">Knobs and faders</div>${knobs.map(cell).join("")}${d === "any" ? "" : ghost}${pads.length ? `<div class="sep">Pads and keys</div>${pads.map(cell).join("")}` : ""}</div></section>
-		${d === "host" ? `<section class="card"><header><h3>Profile</h3></header><div class="irow"><span class="ilab">This is a</span><span style="width:160px">${kselect("hostprofile", "Profile", "none", [["", [["none", "Generic controller"], ["tr06", "Roland TR-06"]]]])}</span></div></section>` : ""}`;
-}
-
-/* ---- the inspector: the selected control's mapping ---- */
+/* ---- the inspector: a cell (targets in one column) or a row (its settings) ---- */
 function inspHtml() {
-	const d = S.view;
-	if (d === "tr06" && S.selVoice) return voiceInsp();
-	const id = S.selCtl[d];
-	if (!id) return `<header><h3>Control</h3></header><p class="explain">Click a control on the left to map it${d === "tr06" ? "" : ", or move one on the device"}.</p>`;
-	const map = mapOf(d), c = map[id], role = roleOf(c), cc = id.split(":");
-	const pad = isPad(id);
-	const name = ctlName(d, id);
-	const renameable = d === "beatstep";
-	const head = `<header><h3>Control</h3><span>${esc(cc[0].toUpperCase() + " " + cc[1])}${d === "tr06" || d === "beatstep" ? " · CH " + S.ch[d] : ""}</span></header>
-		<div class="ihead"><div class="ititle"><b>${esc(name)}</b>${renameable ? `<button class="amkey" data-a="rename" title="Name this control">Rename</button>` : ""}${c && c.legacy ? `<span>learned with MIDI Learn</span>` : ""}</div>
+	const d = S.view, id = S.selCtl[d];
+	const close = `<button class="amkey close" data-a="closeinsp" aria-label="Close">Close</button>`;
+	if (!id) return `<header><h3>Mapping</h3>${close}</header><p class="explain">Click a cell to map a control to a track, or a row's name for its settings.</p>`;
+	const c = mapOf(d)[id], role = roleOf(c), [kind, num] = id.split(":");
+	const rowMode = S.selCol === null || role === "roll" || role === "amount";
+	const colTxt = S.selCol === "sel" ? `Selected track (T${S.sel + 1} now)` : S.selCol === null ? "" : `T${+S.selCol + 1} · ${KIT[S.m][+S.selCol]}`;
+	const head = `<header><h3>${rowMode ? "Row" : "Cell"}</h3><span>${esc(kind.toUpperCase() + " " + num)}${S.ch[d] ? " · CH " + S.ch[d] : ""}</span>${close}</header>
+		<div class="ihead"><div class="ititle"><b>${esc(ctlName(d, id))}</b>${rowMode ? "" : `<span>→ ${esc(colTxt)}</span>`}${d === "beatstep" ? `<button class="amkey" data-a="rename">Rename</button>` : ""}${c && c.legacy ? `<span>learned with MIDI Learn</span>` : ""}</div>
 		<div class="readout" id="readout">${readoutHtml(d, id)}</div></div>`;
-	const roles = pad ? [["none", "Off"], ["direct", "Direct"], ["macro", "Macro"], ["roll", "Randomise"]] : [["none", "Off"], ["direct", "Direct"], ["macro", "Macro"], ["roll", "Randomise"], ["amount", "Rnd amount"]];
-	const roleRow = `<div class="irow"><span class="ilab">Does</span><span class="seg" role="group" aria-label="What the control does">${roles.map(([r, t]) =>
-		`<button data-a="role" data-v="${r}" aria-pressed="${role === r}" title="${ROLE_HELP[r]}">${t}</button>`).join("")}</span></div>`;
+	return head + (rowMode ? rowInsp(d, id, c, role) : cellInsp(d, id, c));
+}
+function cellInsp(d, id, c) {
+	const col = S.selCol, t = col === "sel" ? S.sel : +col;
+	const here = (c ? c.targets : []).map((x, k) => [x, k]).filter(([x]) => colKey(x.t) === colKey(col));
+	const add = kselect("add:" + colKey(col), "Add a parameter", "", targetGroups(t), here.length ? "+ Another parameter here" : "Choose a parameter");
+	const count = c ? c.targets.length : 0;
+	return `${here.length ? `<div class="tcards" id="tcards">${here.map(([x, k]) => tcardHtml(x, k)).join("")}</div>` : `<p class="explain">Nothing mapped here yet. Pick what this control moves on ${col === "sel" ? "whichever track is selected" : "track " + (t + 1) + ", whatever is selected"}.</p>`}
+		<div class="addrow" style="display:grid">${add}</div>
+		<p class="explain">${count > 1 ? `<b>Macro:</b> this control moves ${count} parameters, each in its own range.` : "Map it in a second cell to make it a macro."} <button class="amkey" data-a="rowinsp">Row settings ›</button></p>`;
+}
+function rowInsp(d, id, c, role) {
+	const pad = isPad(id);
+	const roles = pad ? ["none", "direct", "macro", "roll"] : ["none", "direct", "macro", "roll", "amount"];
+	const roleRow = `<div class="irow"><span class="ilab">Type</span><span class="seg" role="group" aria-label="What the control does">${roles.map(r =>
+		`<button data-a="role" data-v="${r}" aria-pressed="${role === r}" title="${ROLE_HELP[r]}">${TYPE_TXT[r]}</button>`).join("")}</span></div>`;
 	const mode = modeOf(d, id), own = c && c.mode;
 	const modeRow = pad ? "" : `<div class="irow"><span class="ilab">Knob</span><span class="seg" role="group" aria-label="Knob mode">${modeOpts(d).map(([m, t]) =>
-		`<button data-a="mode" data-v="${m}" aria-pressed="${mode === m}" title="${MODE_HELP[m]}">${t}</button>`).join("")}</span><span class="note">${own ? `own setting · <button class="amkey" data-a="mode" data-v="">Use device default</button>` : "device default"}</span></div>`;
+		`<button data-a="mode" data-v="${m}" aria-pressed="${mode === m}" title="${MODE_HELP[m]}">${t}</button>`).join("")}</span><span class="note">${own ? `own setting · <button class="amkey" data-a="mode" data-v="">Device default</button>` : "the device's default"}</span></div>`;
 	let body = "";
-	if (role === "roll" || role === "amount") body = setHtml(d, id, c, role);
-	else if (role === "none") body = `<p class="explain">Not mapped: ${pad ? "the pad" : "the knob"} does nothing on the machine${d === "tr06" && S.on.tr06 ? " (the profile keeps it from the machine)" : ""}. Choose <b>Direct</b> for one parameter, <b>Macro</b> for several.</p>`;
-	else body = `<div class="tcards" id="tcards">${c.targets.map((x, k) => tcardHtml(d, id, x, k)).join("")}</div>
-		<div class="addrow"><button class="amkey" data-a="addt">+ Add target</button>${role === "macro" ? `<span class="note">${c.targets.length} parameters move together, each in its own range.</span>` : `<span class="note">Add a second target to make it a macro.</span>`}</div>`;
-	return head + roleRow + modeRow + body;
+	if (role === "roll" || role === "amount") body = setHtml(id, c, role);
+	else if (role === "none") body = `<p class="explain">Not mapped. Click a cell in its row to choose a parameter; two or more cells make it a macro.</p>`;
+	else body = `<div class="summary">${c.targets.map(x => { const t = trackOf(x), p = pinfo(S.m, t, x.p); return `<button data-a="cell" data-id="${id}" data-col="${colKey(x.t)}"><span>${x.t === "sel" ? "SELECTED" : "T" + (x.t + 1)} · ${esc(p.own)}</span><span>${Math.min(x.lo, x.hi)}-${Math.max(x.lo, x.hi)}${x.inv ? " INV" : ""} ›</span></button>`; }).join("")}</div>`;
+	return roleRow + modeRow + body;
 }
 const ROLE_HELP = {
 	none: "Not mapped", direct: "One parameter, in a range", macro: "Several parameters at once, each with its own range and direction",
@@ -718,63 +750,47 @@ const MODE_HELP = {
 };
 function readoutHtml(d, id) {
 	const c = mapOf(d)[id], role = roleOf(c), v = S.inv[d + "|" + id];
-	const inTxt = v == null ? "—" : String(v);
 	let out = "—";
 	if (role === "direct" || role === "macro") out = c.targets.map(x => { const t = trackOf(x), p = pinfo(S.m, t, x.p); return `T${t + 1} ${p.own} ${val(t, x.p)}`; }).join(" · ");
 	else if (role === "amount") { const s = M().sets.find(x => x.id === c.set); out = s ? `${s.name.toUpperCase()} AMOUNT ${s.amount}%` : "—"; }
 	else if (role === "roll") { const s = M().sets.find(x => x.id === c.set); out = s ? `ROLLS ${s.name.toUpperCase()} (${s.params.length})` : "—"; }
-	return `<small>In</small><b>${isPad(id) ? (v == null ? "—" : "VEL " + v) : inTxt}${S.hot && S.hot.dev === d && S.hot.id === id ? " · LAST MOVED" : ""}</b><small>Out</small><b>${esc(out)}</b>`;
+	return `<small>In</small><b>${isPad(id) ? (v == null ? "—" : "VEL " + v) : v ?? "—"}${S.hot && S.hot.dev === d && S.hot.id === id ? " · LAST MOVED" : ""}</b><small>Out</small><b>${esc(out)}</b>`;
 }
 function targetGroups(t) {
-	return paramGroups(S.m, t).map(([g, list]) => [g, list.map(([pid, own, slot]) => {
-		const p = pinfo(S.m, t, pid);
-		return [pid, g === "SYN" ? slot + (own ? " · " + own : " · —") : pid === "NOTE.0" ? p.long : slot];
-	})]);
+	return paramGroups(S.m, t).map(([g, list]) => [g, list.map(([pid, own, slot]) => [pid, g === "SYN" ? slot + (own ? " · " + own : " · —") : pid === "NOTE.0" ? pinfo(S.m, t, pid).long : slot])]);
 }
-function tcardHtml(d, id, x, k) {
+function tcardHtml(x, k) {
 	const t = trackOf(x), p = pinfo(S.m, t, x.p), now = val(t, x.p);
 	const lo = Math.min(x.lo, x.hi), hi = Math.max(x.lo, x.hi);
-	const trackTxt = x.t === "sel" ? "SEL T" + (S.sel + 1) : "T" + (x.t + 1);
-	const pinList = [["sel", "Selected track (T" + (S.sel + 1) + " now)"], ...KIT[S.m].map((mach, i) => [i, "T" + (i + 1) + " · " + mach])];
 	return `<div class="tcard" data-k="${k}">
-		<div class="trow"><span style="width:78px">${kselect("pin:" + k, "Track", x.t, [["", pinList]]).replace('class="kselbtn"', `class="kselbtn tpin${x.t === "sel" ? "" : " pinned"}"`).replace(/<span>[^<]*<\/span>/, `<span>${trackTxt}</span>`)}</span>
-			${kselect("param:" + k, "Parameter", x.p, targetGroups(t))}
+		<div class="trow">${kselect("param:" + k, "Parameter", x.p, targetGroups(t))}
 			<button class="amkey" data-a="inv" data-k="${k}" aria-pressed="${x.inv}" title="Inverse: the top of the knob gives the bottom of the range">Inv</button>
-			<button class="xkey" data-a="delt" data-k="${k}" aria-label="Remove this target" title="Remove">×</button></div>
-		${p.ok ? "" : `<p class="note" style="margin:0">${esc(p.long)}: this target does nothing on T${t + 1}.</p>`}
+			<button class="xkey" data-a="delt" data-k="${k}" aria-label="Remove this parameter" title="Remove">×</button></div>
+		${p.ok ? "" : `<p class="note" style="margin:0">${esc(p.long)}: this does nothing on T${t + 1}.</p>`}
 		<div class="range" data-k="${k}" title="Drag the handles: the range this knob sweeps">
 			<div class="rt"></div><div class="rf${x.inv ? " inv" : ""}" style="left:${lo / 127 * 100}%;width:${(hi - lo) / 127 * 100}%"></div>
 			<div class="rn" data-now="${k}" style="left:${now / 127 * 100}%"></div>
-			<div class="rh" data-h="lo" data-l="${x.inv ? "▶" : "◀"}" style="left:${lo / 127 * 100}%"></div><div class="rh" data-h="hi" data-l="${x.inv ? "◀" : "▶"}" style="left:${hi / 127 * 100}%"></div></div>
-		<div class="rnums"><span>${x.inv ? "KNOB MAX →" : "KNOB MIN →"} <b>${lo}</b></span><span class="now" data-nowtxt="${k}">NOW ${now}</span><span><b>${hi}</b> ${x.inv ? "← KNOB MIN" : "← KNOB MAX"}</span></div></div>`;
+			<div class="rh2" data-h="lo" data-l="${x.inv ? "▶" : "◀"}" style="left:${lo / 127 * 100}%"></div><div class="rh2" data-h="hi" data-l="${x.inv ? "◀" : "▶"}" style="left:${hi / 127 * 100}%"></div></div>
+		<div class="rnums"><span>${x.inv ? "KNOB MAX →" : "KNOB MIN →"} <b>${lo}</b></span><span class="now" data-nowtxt="${k}">NOW ${now}</span><span><b>${hi}</b> ${x.inv ? "← KNOB MIN" : "← KNOB MAX"}</span></div>
+		<div class="irow"><span class="ilab">Track</span><span style="flex:1">${kselect("pin:" + k, "Track", x.t, [["", [["sel", "Selected track (T" + (S.sel + 1) + " now)"], ...KIT[S.m].map((mach, i) => [i, "T" + (i + 1) + " · " + mach])]]])}</span></div></div>`;
 }
-function setHtml(d, id, c, role) {
+function setHtml(id, c, role) {
 	const sets = M().sets, s = sets.find(x => x.id === c.set) || sets[0];
 	if (!c.set) c.set = s.id;
 	const t = s.t === "sel" ? S.sel : s.t;
 	const setPick = kselect("set", "Randomise set", s.id, [["", [...sets.map(x => [x.id, x.name + " · " + x.params.length + " parameters"]), ["new", "+ New set"]]]]);
-	const groups = paramGroups(S.m, t).map(([g, list]) => `<div class="grp"><span class="ilab">${g}</span>${list.map(([pid, own, slot]) => {
-		const label = g === "SYN" ? (own || "—") : own;
-		return `<button class="chip" data-a="setp" data-v="${pid}" aria-pressed="${s.params.includes(pid)}" ${g === "SYN" && !own ? "disabled" : ""} title="${esc(slot)}">${esc(label)}</button>`;
-	}).join("")}</div>`).join("");
+	const groups = paramGroups(S.m, t).map(([g, list]) => `<div class="grp"><span class="ilab">${g}</span>${list.map(([pid, own, slot]) =>
+		`<button class="chip" data-a="setp" data-v="${pid}" aria-pressed="${s.params.includes(pid)}" ${g === "SYN" && !own ? "disabled" : ""} title="${esc(slot)}">${esc(own || "—")}</button>`).join("")}</div>`).join("");
 	const amt = Math.round(s.amount / 100 * 16);
 	const last = s.last.length ? s.last.map(r => `${r.own} ${r.from}→${r.to}`).join(" · ") : "not rolled yet";
-	return `<p class="explain">${role === "roll" ? `A ${isPad(id) ? "hit" : "turn past half way"} randomises the set <b>${esc(s.name)}</b> on the ${s.t === "sel" ? "selected track" : "track " + (s.t + 1)}.` : `Turning sets how far <b>${esc(s.name)}</b> may move when it is rolled (0-100%).`}</p>
-		<div class="irow"><span class="ilab">Set</span><span style="flex:1;min-width:180px">${setPick}</span><button class="amkey" data-a="setname">Rename</button></div>
-		<div class="irow"><span class="ilab">Track</span><span style="width:170px">${kselect("settrack", "Set track", s.t, [["", [["sel", "Selected track"], ...KIT[S.m].map((mach, i) => [i, "T" + (i + 1) + " · " + mach])]]])}</span></div>
+	return `<p class="explain">${role === "roll" ? `A ${isPad(id) ? "hit" : "turn past half way"} randomises <b>${esc(s.name)}</b> on the ${s.t === "sel" ? "selected track" : "track " + (s.t + 1)}.` : `Turning sets how far <b>${esc(s.name)}</b> may move when it is rolled (0-100%).`}</p>
+		<div class="irow"><span class="ilab">Set</span><span style="flex:1;min-width:170px">${setPick}</span><button class="amkey" data-a="setname">Rename</button></div>
+		<div class="irow"><span class="ilab">Track</span><span style="width:180px">${kselect("settrack", "Set track", s.t, [["", [["sel", "Selected track"], ...KIT[S.m].map((mach, i) => [i, "T" + (i + 1) + " · " + mach])]]])}</span></div>
 		<div class="irow"><span class="ilab">Amount</span><span class="segbar" id="amtbar" role="slider" aria-label="Amount" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${s.amount}" tabindex="0">${Array.from({ length: 16 }, (_, i) => `<i class="${i < amt ? "on" : ""}"></i>`).join("")}</span><b class="mono" id="amtv">${s.amount}%</b>
 			<span class="seg" role="group" aria-label="How a roll moves">${[["around", "Around now"], ["anywhere", "Anywhere"]].map(([h, tx]) => `<button data-a="sethow" data-v="${h}" aria-pressed="${s.how === h}" title="${h === "around" ? "Each value moves up to the amount from where it is" : "Each value may land anywhere; the amount blends from the current value"}">${tx}</button>`).join("")}</span></div>
 		<div class="pchips" aria-label="Parameters in the set">${groups}</div>
 		<div class="irow"><button class="amkey" data-a="roll">Roll now</button><span class="note mono" id="lastroll" style="font-size:12px">${esc(last)}</span></div>
-		<p class="explain">Rolls are ordinary edits: one undo step each.</p>`;
-}
-function voiceInsp() {
-	const i = VOICES.findIndex(v => v[0] === S.selVoice), [v, label, notes] = VOICES[i], x = S.voices[S.m][i], mm = S.m === "mm";
-	return `<header><h3>Voice</h3><span>notes ${notes.join(", ")} · CH ${S.ch.tr06}</span></header>
-		<div class="ihead"><div class="ititle"><b>${v} · ${label}</b></div><div class="readout"><small>Plays</small><b>T${x.t + 1} ${esc(KIT[S.m][x.t])}${mm ? " · " + noteName(x.note) + " (" + x.note + ")" : ""}</b><small>Out</small><b>${mm ? "CH " + (1 + x.t) + " NOTE " + x.note : S.m === "md" ? "TRIG " + (x.t + 1) + " (NOTE " + (36 + x.t) + ")" : ""}</b></div></div>
-		<div class="irow"><span class="ilab">Track</span><div class="trackstrip ${S.m}">${KIT[S.m].map((mach, t) => `<button class="tp" data-a="vtrack" data-t="${t}" aria-pressed="${x.t === t}" title="${mach}"><span>T${t + 1}</span><small>${esc(short(mach))}</small></button>`).join("")}</div></div>
-		${mm ? `<div class="irow"><span class="ilab">Note</span><button class="xkey" data-a="vnote" data-v="-12" title="Octave down">«</button><button class="xkey" data-a="vnote" data-v="-1">‹</button><span class="readout" style="padding:4px 10px"><b>${noteName(x.note)} · ${x.note}</b></span><button class="xkey" data-a="vnote" data-v="1">›</button><button class="xkey" data-a="vnote" data-v="12" title="Octave up">»</button></div>` : `<p class="explain">The Machinedrum's trigs have no pitch: a voice plays its track.</p>`}
-		<div class="irow"><button class="amkey" data-a="voiceclose">Done</button></div>`;
+		<p class="explain">A roll is one round of ordinary edits: one undo step.</p>`;
 }
 
 /* ---- the MIDI monitor, one strip ---- */
@@ -793,7 +809,7 @@ function apply(d, id, v) {
 	const c = mapOf(d)[id], role = roleOf(c), key = d + "|" + id;
 	const prev = lastIn[key]; lastIn[key] = v; S.inv[key] = v;
 	const on = d === "any" || S.on[d];
-	let out = [];
+	const out = [];
 	if (!on || role === "none") return { out, used: false };
 	if (role === "direct" || role === "macro") {
 		const mode = modeOf(d, id);
@@ -803,8 +819,7 @@ function apply(d, id, v) {
 			if (mode === "abs") { let f = v / 127; if (x.inv) f = 1 - f; nv = lo + (hi - lo) * f; }
 			else if (mode === "enc") nv = cur + (v - 64) * (x.inv ? -1 : 1);
 			else { if (prev == null) { out.push(pinfo(S.m, t, x.p).own + " " + cur); continue; } nv = cur + (v - prev) * (hi - lo) / 127 * (x.inv ? -1 : 1); }
-			nv = Math.max(lo, Math.min(hi, nv));
-			setVal(t, x.p, nv);
+			setVal(t, x.p, Math.max(lo, Math.min(hi, nv)));
 			out.push(pinfo(S.m, t, x.p).own + " " + val(t, x.p));
 		}
 	} else if (role === "amount") {
@@ -823,20 +838,20 @@ function roll(s) {
 		return { own: pinfo(S.m, t, pid).own, from, to: val(t, pid) };
 	});
 }
-/* a message from a device: the monitor, the steady "last moved" mark, select-on-touch, the values in place */
+/* a message from a device: the monitor, the steady "last moved" row, select-on-touch, the values in place */
 function incoming(d, id, v) {
 	const [kind, n] = id.split(":");
 	if (d !== "any" && d !== "host" && !S.enabled[d]) return;
-	if (S.learn && S.view === d && d !== "tr06") {
-		if (!S.seen[d].some(x => x[0] === id)) S.seen[d].push([id, ""]);
-		S.learn = false; S.selCtl[d] = id; toast(id.replace(":", " ").toUpperCase() + " is now a control. Map it on the right.");
-	} else if (d !== "tr06" && !S.seen[d].some(x => x[0] === id)) S.seen[d].push([id, ""]);
+	let learned = false;
+	if (d !== "tr06" && d !== "any" && !S.seen[d].some(x => x[0] === id)) { S.seen[d].push([id, ""]); learned = true; }
+	if (S.learn && S.view === d && d !== "tr06") { S.learn = false; S.selCtl[d] = id; S.selCol = "sel"; toast(id.replace(":", " ").toUpperCase() + " is now a row. Click a cell to map it."); }
+	else if (learned && S.view === d) toast(id.replace(":", " ").toUpperCase() + " arrived: it is a new row.");
 	const r = apply(d, id, v);
 	S.hot = { dev: d, id };
-	const label = d === "tr06" ? (TR06_CC[+n]?.label || "") : ctlName(d, id);
-	S.mon.unshift({ dev: d, ch: S.ch[d] || 1, what: kind === "cc" ? "CC " + n + " " + v : "NOTE " + n, text: label + (r.out.length ? " → " + r.out.join(", ") : r.used ? "" : " · not mapped"), used: r.used && r.out.length > 0 });
+	S.mon.unshift({ dev: d, ch: S.ch[d] || 1, what: kind === "cc" ? "CC " + n + " " + v : "NOTE " + n, text: ctlName(d, id) + (r.out.length ? " → " + r.out.join(", ") : r.used ? "" : " · not mapped"), used: r.used && r.out.length > 0 });
 	S.mon.length = Math.min(S.mon.length, 40);
-	if (S.touch && S.view === d && S.selCtl[d] !== id && !dragging) { S.selCtl[d] = id; S.selVoice = null; render(); return; }
+	if (S.touch && S.view === d && S.selCtl[d] !== id) { S.selCtl[d] = id; S.selCol = S.selCol ?? "sel"; }
+	if (S.view === d && S.mappedOnly === false) { const g = rowGroups(d).find(([, ids]) => ids.includes(id)); if (g && S.collapsed[g[0]]) S.collapsed[g[0]] = false; }
 	live();
 }
 function hitVoice(note) {
@@ -844,13 +859,14 @@ function hitVoice(note) {
 	const [v] = VOICES[i], x = S.voices[S.m][i];
 	S.hotVoice = v;
 	S.mon.unshift({ dev: "tr06", ch: S.ch.tr06, what: "NOTE " + note + " 100", text: v + (S.on.tr06 ? " → T" + (x.t + 1) + " " + KIT[S.m][x.t] : " · profile off"), used: S.on.tr06 });
-	if (S.view === "tr06") { const el = $("#voices"); if (el) el.innerHTML = voicesHtml(); const m = $("#monlcd"); if (m) m.innerHTML = monInner(); }
+	if (S.view === "tr06") render();
 }
-/* the values in place, without a redraw (open dropdowns and drags stay) */
+/* the values in place: the matrix body and the readouts, never the inspector's lists (open dropdowns and drags stay) */
 function live() {
 	if (!S.view) return;
-	const f = $("#front"); if (f) f.innerHTML = frontSvg();
-	if (S.view !== "tr06") { const s = $("#seen"); if (s && !dragging) { render(); return; } }
+	const mx = $("#mx"); if (mx) mx.innerHTML = matrixInner(S.view);
+	const ins = $("#insp");
+	if (ins && !dragging && $("#kpop").hidden && ins.dataset.for !== S.selCtl[S.view] + "|" + S.selCol) { ins.innerHTML = inspHtml(); ins.dataset.for = S.selCtl[S.view] + "|" + S.selCol; }
 	const ro = $("#readout"); if (ro) ro.innerHTML = readoutHtml(S.view, S.selCtl[S.view]);
 	const c = mapOf(S.view)[S.selCtl[S.view]];
 	if (c && c.targets) c.targets.forEach((x, k) => { const now = val(trackOf(x), x.p); const n = $(`[data-now="${k}"]`); if (n) n.style.left = now / 127 * 100 + "%"; const tx = $(`[data-nowtxt="${k}"]`); if (tx) tx.textContent = "NOW " + now; });
@@ -876,8 +892,15 @@ function renderTop() {
 function render() {
 	closeK();
 	renderTop();
+	const keep = $("#mxw") ? $("#mxw").scrollLeft : 0;
 	$("#main").innerHTML = S.view ? cfgHtml() : devicesHtml();
+	const w = $("#mxw"); if (w) w.scrollLeft = keep;
+	const ins = $("#insp"); if (ins) ins.dataset.for = S.selCtl[S.view] + "|" + S.selCol;
 }
+/* the crosshair: the hovered cell's column is lit across both matrices (its row by CSS :hover) */
+$("#crosshair").textContent = ["sel", ...Array.from({ length: 16 }, (_, i) => String(i))].map(c => `.mx[data-hc="${c}"] [data-c="${c}"]:not(.sc0){background:var(--hover)}`).join("\n");
+document.addEventListener("mouseover", e => { const c = e.target.closest(".mx [data-c]"), mx = e.target.closest(".mx"); if (mx) mx.dataset.hc = c ? c.dataset.c : ""; });
+document.addEventListener("mouseleave", () => $$(".mx").forEach(m => m.dataset.hc = ""), true);
 
 document.addEventListener("click", e => {
 	const kb = e.target.closest(".kselbtn");
@@ -885,27 +908,24 @@ document.addEventListener("click", e => {
 	const o = e.target.closest("#kpop .kopt");
 	if (o && kFor) { const id = kFor.dataset.ks, v = o.dataset.v; closeK(); pick(id, v); return; }
 	if (!e.target.closest("#kpop")) closeK();
+	if (e.target.closest("[data-knob],[data-hit]")) return;
 	const el = e.target.closest("[data-a],[data-dev]");
-	if (!el || (el.dataset.knob && suppressClick)) { suppressClick = false; return; }
+	if (!el) return;
 	if (el.dataset.dev) { devAction(el); return; }
 	act(el.dataset.a, el);
 });
 document.addEventListener("keydown", e => {
-	if (!$("#kpop").hidden) {
-		if (e.key === "Escape") { closeK(); kFor?.focus(); return; }
-		const opts = $$("#kpop .kopt"), i = opts.indexOf(document.activeElement), d = { ArrowDown: 1, ArrowRight: 1, ArrowUp: -1, ArrowLeft: -1 }[e.key];
-		if (d && opts.length) { e.preventDefault(); opts[(i + d + opts.length) % opts.length].focus(); }
-		return;
-	}
-	const g = e.target.closest && e.target.closest("g[data-a]");
-	if (g && (e.key === "Enter" || e.key === " ")) { e.preventDefault(); act(g.dataset.a, g); }
+	if ($("#kpop").hidden) { if (e.key === "Escape" && S.inspOpen) { S.inspOpen = false; render(); } return; }
+	if (e.key === "Escape") { closeK(); kFor?.focus(); return; }
+	const opts = $$("#kpop .kopt"), i = opts.indexOf(document.activeElement), d = { ArrowDown: 1, ArrowRight: 1, ArrowUp: -1, ArrowLeft: -1 }[e.key];
+	if (d && opts.length) { e.preventDefault(); opts[(i + d + opts.length) % opts.length].focus(); }
 });
 
 function curCtl() { const d = S.view; return { d, id: S.selCtl[d], map: mapOf(d) }; }
 function act(a, el) {
 	const { d, id, map } = curCtl();
 	switch (a) {
-		case "open": S.view = el.dataset.d; S.selVoice = null; S.learn = false; break;
+		case "open": S.view = el.dataset.d; S.learn = false; S.selCol = "sel"; S.inspOpen = false; break;
 		case "back": S.view = ""; S.learn = false; break;
 		case "refresh": toast(`Looked again: ${["tr06", "beatstep"].filter(x => S.conn[x]).length} MIDI devices connected.`); break;
 		case "audiomidi": toast("Prototype: AUDIO / MIDI opens here."); return;
@@ -914,13 +934,15 @@ function act(a, el) {
 		case "touch": S.touch = !S.touch; break;
 		case "reset": S.maps[S.m].tr06 = defaults(S.m).tr06; S.ch.tr06 = 10; S.mode.tr06 = "rel"; toast("TR-06: shipped mapping, channel 10, relative knobs."); break;
 		case "track": S.sel = +el.dataset.t; break;
-		case "layer": S.layer = el.dataset.v; break;
-		case "ctl": S.selCtl[d] = el.dataset.id; S.selVoice = null; break;
-		case "dead": toast(el.dataset.v); return;
-		case "voice": S.selVoice = S.selVoice === el.dataset.v ? null : el.dataset.v; break;
-		case "voiceclose": S.selVoice = null; break;
-		case "vtrack": S.voices[S.m][VOICES.findIndex(v => v[0] === S.selVoice)].t = +el.dataset.t; break;
-		case "vnote": { const x = S.voices[S.m][VOICES.findIndex(v => v[0] === S.selVoice)]; x.note = Math.max(0, Math.min(127, x.note + +el.dataset.v)); break; }
+		case "mapped": S.mappedOnly = !S.mappedOnly; break;
+		case "group": S.collapsed[el.dataset.v] = !S.collapsed[el.dataset.v]; break;
+		case "collapseall": { const any = Object.values(S.collapsed).some(Boolean); for (const [g] of rowGroups(d)) S.collapsed[g] = !any; break; }
+		case "cell": S.selCtl[d] = el.dataset.id; S.selCol = el.dataset.col === "sel" ? "sel" : +el.dataset.col; S.inspOpen = true; break;
+		case "row": S.selCtl[d] = el.dataset.id; S.selCol = null; S.inspOpen = true; break;
+		case "rowinsp": S.selCol = null; break;
+		case "closeinsp": S.inspOpen = false; break;
+		case "vtrack": S.voices[S.m][+el.dataset.voice].t = +el.dataset.t; break;
+		case "vnote": { const x = S.voices[S.m][+el.dataset.voice]; x.note = Math.max(0, Math.min(127, x.note + +el.dataset.v)); break; }
 		case "learn": S.learn = !S.learn; break;
 		case "rename": { const s = S.seen[d].find(x => x[0] === id); const nm = prompt("Name this control", ctlName(d, id)); if (s && nm != null) s[1] = nm.trim().slice(0, 16); break; }
 		case "role": {
@@ -934,8 +956,7 @@ function act(a, el) {
 			break;
 		}
 		case "mode": { const c = map[id] || (map[id] = { targets: [] }); if (el.dataset.v) c.mode = el.dataset.v; else delete c.mode; break; }
-		case "addt": map[id].targets.push(tgt(S.m === "mm" ? "AMP.2" : "RT.1")); break;
-		case "delt": map[id].targets.splice(+el.dataset.k, 1); if (!map[id].targets.length) delete map[id]; break;
+		case "delt": map[id].targets.splice(+el.dataset.k, 1); if (!map[id].targets.length && !map[id].mode) delete map[id]; break;
 		case "inv": { const x = map[id].targets[+el.dataset.k]; x.inv = !x.inv; break; }
 		case "setp": { const s = curSet(); const p = el.dataset.v; s.params = s.params.includes(p) ? s.params.filter(x => x !== p) : [...s.params, p]; break; }
 		case "sethow": curSet().how = el.dataset.v; break;
@@ -951,8 +972,12 @@ function pick(ks, v) {
 	const { d, id, map } = curCtl();
 	if (ks === "ch") S.ch[d] = +v;
 	else if (ks === "devmode") S.mode[d] = v;
-	else if (ks === "hostprofile") { if (v === "tr06") toast("Prototype: the Host MIDI in now reads as a TR-06 (its drawing and names)."); }
-	else if (ks.startsWith("pin:")) { const x = map[id].targets[+ks.slice(4)]; x.t = v === "sel" ? "sel" : +v; }
+	else if (ks.startsWith("add:")) {
+		const col = ks.slice(4), c = map[id] && !map[id].role ? map[id] : (map[id] = { targets: [], mode: map[id] && map[id].mode });
+		if (!c.mode) delete c.mode;
+		c.targets.push(tgt(v, v === "NOTE.0" ? 48 : 0, v === "NOTE.0" ? 72 : 127, { t: col === "sel" ? "sel" : +col }));
+	}
+	else if (ks.startsWith("pin:")) { const x = map[id].targets[+ks.slice(4)]; x.t = v === "sel" ? "sel" : +v; S.selCol = x.t; }
 	else if (ks.startsWith("param:")) { const x = map[id].targets[+ks.slice(6)]; x.p = v; if (v === "NOTE.0") { x.lo = 48; x.hi = 72; } }
 	else if (ks === "set") {
 		if (v === "new") { const n = M().sets.length + 1; M().sets.push({ id: "rs" + Date.now(), name: "Set " + n, t: "sel", params: [], amount: 50, how: "around", last: [] }); map[id].set = M().sets[M().sets.length - 1].id; }
@@ -962,8 +987,8 @@ function pick(ks, v) {
 	render();
 }
 
-/* dragging: a knob on the drawing (the hardware, simulated), a range handle, the amount bar */
-let dragging = null, suppressClick = false;
+/* dragging: a row's meter (the hardware, simulated), a range handle, the amount bar */
+let dragging = null;
 document.addEventListener("pointerdown", e => {
 	const h = e.target.closest(".range");
 	if (h) {
@@ -976,38 +1001,37 @@ document.addEventListener("pointerdown", e => {
 	}
 	const b = e.target.closest("#amtbar");
 	if (b) { dragging = { kind: "amt", el: b }; b.setPointerCapture(e.pointerId); moveAmt(e); e.preventDefault(); return; }
+	const p = e.target.closest("[data-hit]");
+	if (p) { incoming(S.view, p.dataset.hit, 100); e.preventDefault(); return; }
 	const g = e.target.closest("[data-knob]");
-	if (g) { const d = S.view; dragging = { kind: "knob", el: g, id: g.dataset.id, d, y: e.clientY, v0: S.inv[d + "|" + g.dataset.id] ?? 64, moved: false }; g.setPointerCapture?.(e.pointerId); e.preventDefault(); return; }
-	const p = e.target.closest(".sc[data-id]");
-	if (p && isPad(p.dataset.id) && S.view !== "tr06") incoming(S.view, p.dataset.id, 100);
+	if (g) { const d = S.view, id = g.dataset.knob; dragging = { kind: "knob", id, d, x: e.clientX, v0: S.inv[d + "|" + id] ?? 64, moved: false }; e.preventDefault(); }
 });
 document.addEventListener("pointermove", e => {
 	if (!dragging) return;
 	if (dragging.kind === "range") moveRange(e);
 	else if (dragging.kind === "amt") moveAmt(e);
 	else if (dragging.kind === "knob") {
-		const dy = dragging.y - e.clientY; if (Math.abs(dy) < 3 && !dragging.moved) return;
+		const dx = e.clientX - dragging.x; if (Math.abs(dx) < 3 && !dragging.moved) return;
 		dragging.moved = true;
-		const v = Math.max(0, Math.min(127, Math.round(dragging.v0 + dy * .8)));
+		const v = Math.max(0, Math.min(127, Math.round(dragging.v0 + dx * .7)));
 		if (v !== S.inv[dragging.d + "|" + dragging.id]) incoming(dragging.d, dragging.id, v);
 	}
 });
 document.addEventListener("pointerup", () => {
 	if (!dragging) return;
 	const was = dragging; dragging = null;
-	if (was.kind === "knob" && was.moved) { suppressClick = true; if (S.touch && S.selCtl[was.d] !== was.id) { S.selCtl[was.d] = was.id; S.selVoice = null; } render(); }
-	if (was.kind === "range" || was.kind === "amt") render();
+	if (was.kind === "range" || was.kind === "amt" || (was.kind === "knob" && was.moved)) render();
 });
 function moveRange(e) {
 	const { id, map } = curCtl(), x = map[id].targets[dragging.k], r = dragging.el.getBoundingClientRect();
 	const at = Math.max(0, Math.min(127, Math.round((e.clientX - r.left) / r.width * 127)));
 	if (dragging.which === "lo") dragging.lo = Math.min(at, dragging.hi); else dragging.hi = Math.max(at, dragging.lo);
-	x.lo = x.inv ? dragging.hi : dragging.lo; x.hi = x.inv ? dragging.lo : dragging.hi;
-	if (!x.inv) { x.lo = dragging.lo; x.hi = dragging.hi; }
+	x.lo = dragging.lo; x.hi = dragging.hi;
 	const card = dragging.el.closest(".tcard"), lo = dragging.lo, hi = dragging.hi;
 	card.querySelector(".rf").style.cssText = `left:${lo / 127 * 100}%;width:${(hi - lo) / 127 * 100}%`;
 	card.querySelector('[data-h="lo"]').style.left = lo / 127 * 100 + "%"; card.querySelector('[data-h="hi"]').style.left = hi / 127 * 100 + "%";
 	const bs = card.querySelectorAll(".rnums b"); bs[0].textContent = lo; bs[1].textContent = hi;
+	const mx = $("#mx"); if (mx) mx.innerHTML = matrixInner(S.view);
 }
 function moveAmt(e) {
 	const s = curSet(), r = dragging.el.getBoundingClientRect();
@@ -1019,7 +1043,7 @@ function moveAmt(e) {
 /* the prototype's own controls: hot-plug, the DAW, the machine, simulated hardware */
 function devAction(el) {
 	const a = el.dataset.dev, v = el.dataset.v;
-	if (a === "m") { S.m = v; S.sel = Math.min(S.sel, tracks() - 1); S.selVoice = null; }
+	if (a === "m") { S.m = v; S.sel = Math.min(S.sel, tracks() - 1); }
 	else if (a === "plug") {
 		S.conn[v] = !S.conn[v];
 		toast(DEVICES[v].name + (S.conn[v] ? " connected" : " disconnected · its mapping is kept"));
@@ -1027,7 +1051,7 @@ function devAction(el) {
 	}
 	else if (a === "daw") { S.daw = !S.daw; S.view = ""; }
 	else if (a === "hit") { if (S.conn.tr06 && !S.daw) hitVoice(+v); else toast("The TR-06 is not connected."); return; }
-	else if (a === "bs") { if (!S.conn.beatstep || S.daw) { toast("The BeatStep is not connected."); return; } if (!S.enabled.beatstep) { toast("The BeatStep is not enabled in AUDIO / MIDI: nothing arrives."); return; } incoming("beatstep", "cc:77", 30 + Math.floor(Math.random() * 60)); return; }
+	else if (a === "bs") { if (!S.conn.beatstep || S.daw) { toast("The BeatStep is not connected."); return; } if (!S.enabled.beatstep) { toast("The BeatStep is not enabled in AUDIO / MIDI: nothing arrives."); return; } incoming("beatstep", "cc:77", 30 + Math.floor(Math.random() * 60)); render(); return; }
 	render();
 }
 
