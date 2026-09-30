@@ -9,9 +9,80 @@
   - Map through a control matrix, not a table of CC rows and not a drawing of the device (second round: "a beautiful control matrix"). The matrix gives ranges, inverse, macros, randomise, knob mode, track pinning and steady live feedback.
   - Use the same configurator for every MIDI input, with the TR-06 as a device that has a built-in profile. It replaces the old MIDI Learn matrix.
 
-## 00. Current proposal: v4, the pin matrix
+## 000. Current proposal: v5, tracks × controls × parameters, everything a pin
 
-The prototype opens on v4. The **v2 / v3 / v4** keys in the prototype bar switch between the three for comparison. Sections 1 and 3-7 apply to all of them.
+The prototype opens on v5. The **v2 / v3 / v4 / v5** keys in the prototype bar switch between the versions. Sections 1 and 3-7 apply to all of them.
+
+### Layout
+
+- **One header line:** ‹ DEVICES, the device, PROFILE, CH, KNOBS, MOVES (the page's selected track), **Find a parameter** (a search box that filters the rows by short name, long name or page), **USED ONLY** (one toggle, off by default), SELECT ON TOUCH, RESET.
+- **Left: the tracks**, a vertical list.
+  - **FOLLOW SELECTED** comes first ("T1 · SWAVE-SAW"): the pins that follow the page's selection, together with those pinned to that track.
+  - Then T1-T6 (MD: T1-T16, compact), each with its machine and a pin count.
+  - Each track also shows, read-only, which pads play it ("T6 FX-REVERB · OH CH"). This is derived from the pins; there is no separate voice editor.
+  - Picking a track shows that track's routing. This replaces v4's TO tabs and the SELECTED / "T1 · SEL" confusion.
+- **Across the top: MIDI IN**, the device's controls as columns under group brackets.
+  - TR-06: NOTES (BD 36, SD 38 … CH 42), LEVEL (AC … CH), EFFECT (DRIVE, TIME, DEPTH), TUNE, DECAY, TONE, COMP, DELAY SEND, GLOBAL, then EDITOR (RANDOM, APP LFO). That is 50 columns.
+  - Generic devices: NOTES (the pads seen), the knobs seen, "+LEARN", EDITOR.
+  - Each column head has a cap (M n for a macro, R randomise, A amount), a vertical label, the CC (or the note) and a thin steady meter.
+- **Down the side: the chosen track's parameters**, grouped by page with horizontal, readable names ("UNIL unison level", "BASE base frequency").
+  - PLAY (MM "PLAY NOTE") or TRIG (MD) comes first. Then MM: SYN, AMP, FILT, EFX, LFO 1-3, TRACK (LEVEL, NOTE), 59 rows. MD: SYN, FX, ROUTE, TRACK, 27 rows.
+  - An unused SYN slot says "unused on SWAVE-SAW" and cannot take a pin.
+- **The board** is on the page's own plate, as in v4b, with the same pins and a crosshair hover.
+- **Right: the settings panel** (280 px):
+  - **nothing selected:** a one-line summary, three how-to lines and a compact pin key;
+  - **a control:** "BD LEVEL selected — click a parameter row to connect it", its readout, type, knob mode, its pins as a list (or its randomise set with amount and ROLL);
+  - **a pin:** source → destination, readout, parameter, two-handle range, INV, track, remove, knob mode, the macro's other pins;
+  - **a PLAY pin:** note (MM, ‹ › and octave steps, "Follow ACC → NOTE"), track, remove.
+  - Below 1180 px the panel becomes a drawer.
+- **Nothing is hidden by default** (Radek: "the matrix should show all options").
+  - All 50 columns and all rows of the chosen track are there, every socket visible.
+  - Groups can be collapsed by hand (a click on a bracket or page tag), but everything starts expanded. USED ONLY is optional and off.
+
+### One model: everything is a pin
+
+- The voices are no longer a separate mapping. A note is a source like a knob: the **NOTES** columns.
+- **Note × PLAY/TRIG row:** "this pad plays (MM) or triggers (MD) this track". The defaults reproduce the shipped profile: BD → T1 … CY → T5, OH and CH → T6, with OH at C5 (MD: BD → T1 … CH → T7).
+- **Layering is free:** pin one pad on two tracks' PLAY rows. The track list's counts and "played by" hints show it.
+- **Velocity as a source:** a note column pinned to a parameter row means the pad's velocity drives that parameter across its range. The example is BD's velocity → T1 AMP VOL 40-127 (MD: VOL). It is the same pin; the panel says "velocity".
+- One gesture (a pin) now covers triggering, layering, velocity, knobs, macros and randomise. The data contract gets simpler too: a voice row `{voice, t, note}` becomes a control `{src: {note}, targets: [{t, pg: "play", note}]}` (the `PLAY` target), and the old voices table migrates into that.
+
+### Touch to map
+
+- Turn a TR-06 knob (with SELECT ON TOUCH) or click a column head. The column is selected and highlighted, and the panel says what to do.
+- A click on a **row name** (or on any socket in that row) connects it. A second row adds a pin, making a macro. Escape ends.
+- The matrix stays the overview: touching a control never hides or collapses anything.
+
+### Measured (headless Chrome, the prototype bar included)
+
+- **1500 x 900, MM TR-06, everything expanded** (50 columns x 59 rows):
+  - the page `scrollHeight` is 900 = viewport, and the board's `scrollWidth` is 968 = its `clientWidth`;
+  - the board's content is **932 px high in a 630 px board**, so the board scrolls internally (column heads stay on top, and the row names, track list, header and panel stay fixed).
+  - 59 rows at a 14 px pitch plus the column heads do not fit the 630 px left under the app's own top bar and the monitor. The full board would need rows about 9 px high.
+- **1500 x 900, MD** (50 x 27): fits entirely (board 630 in 630).
+- **Search "dec":** 2 rows.
+- **1000 x 900:** page `scrollHeight` 1009 (the header wraps, the prototype bar takes two lines). The board is 968 wide in 786 and scrolls sideways with sticky row names; the panel is a drawer.
+
+### Self-critique of v5 (what is still confusing, what next)
+
+- **Still confusing:**
+  - FOLLOW SELECTED shows two kinds of pins, the ones that follow the selection and the ones pinned to that track (with the small square). That is right, but it is subtle. A legend line at the top of the rows would help.
+  - MOVES in the header and FOLLOW SELECTED in the track list both name the selected track. One of them should go (keep FOLLOW SELECTED, let the page's own track selection drive it).
+  - 50 narrow columns at a 16 px pitch are dense. The column labels are 9.5 px vertical text, readable but at the limit.
+  - A pin's range is still only visible on hover or in the panel (v3's strength).
+  - The dark track keys are heavy next to the light board.
+- **Next:**
+  - make the track list lighter (plate-coloured rows, a lit LED for the chosen one);
+  - a "rows with pins first" sort as an alternative to USED ONLY;
+  - a compact range tick inside a pin's socket;
+  - try the MD's 16 tracks with the list folding to two columns;
+  - test touch-to-map with the real TR-06 (whether one knob sends one CC per layer, as the chart suggests).
+
+### v4b (kept on the switch as v4)
+
+The v4 board moved to the page's own plate (light on the MM, the MD's own theme), with recessed sockets and pins in the same encoding. The popovers became a fixed settings panel on the right. The pitch is 18 px, so all 58 MM destinations fit at 1500 px without scrolling.
+
+## 00. v4, the pin matrix (kept for comparison)
 
 **Why a v4:** macros run out of room in v3's cells, because three stacked chips already fill one. A synth's modulation pin matrix (Reason Malström / Thor style) has unlimited connections per source and shows the whole routing at once.
 
@@ -331,6 +402,20 @@ The setup is kept, as now, in the MDCT chunk and written only once the user chan
   - Now: RESET TO DEFAULTS in the TR-06 view (`ctlReset`) writes the defaults over it.
   - In code: `setupFromJson` treats a v1 setup without `knobMode` as the old format and returns the defaults (or the version goes to 2 and old chunks fall back). A test loads such a chunk.
   - The configurator can also mark a control that differs from its profile's default (a small "changed" dot), so a stale mapping shows.
+
+### (c) The TR-06 does not come back after unplugging and re-plugging it (installed app)
+
+The prototype's re-plug works, so this comes from reading the code; no app was run.
+
+- **Enabled inputs are stored by identifier.** The standalone's AUDIO / MIDI keeps its enabled MIDI inputs by JUCE device identifier (`<MIDIINPUT name="TR-06" identifier="…"/>` in the app's settings, `AudioDeviceManager::setMidiInputDeviceEnabled(identifier, …)`).
+  - On macOS, a USB MIDI device that is unplugged and plugged back in can come back under a new CoreMIDI identifier. Its old identifier no longer matches, so the device manager does not re-enable it, and nothing it sends arrives.
+- **No hot-plug.** The controller document looks at the inputs only once a second (`ControllerProfile::step` → `lookAtInputs`). It has no hot-plug notification, so the list refreshes but the input stays disabled.
+- **The fix to build:**
+  1. **Hot-plug:** a `juce::MidiDeviceListConnection` in `ControllerProfile` (JUCE 7.0.10 has it). Its callback runs on the message thread, looks again and republishes the device list.
+  2. **Re-enable by name:** remember the enabled inputs by name as well as by identifier. When a device appears whose name matches an input that was enabled (and whose old identifier is gone), enable it under its new identifier and update the saved setting. This is in `AudioMidiLink`, on the standalone holder's device manager.
+  3. **Republish** the device list after it, so the tile comes back ("TR-06 connected").
+  4. **REFRESH** (`ctlRefresh`) runs the same look on demand.
+  5. **A test** with a simulated device list change: the TR-06 disappears and returns with a new identifier. It must be enabled again and the document must list it. (`mdDeskSetupStateTest`-style, with a stand-in device list.)
 
 ## 7. Open questions for Radek
 
