@@ -29,46 +29,6 @@ namespace mdJucePlugin
 {
 	namespace json = elektronData::json;
 
-	// The web view's parent: it takes the files dropped on the window (the web view does not).
-	class DropZone final : public juce::Component, public juce::FileDragAndDropTarget
-	{
-	public:
-		std::function<void(const juce::File&)> onFile;
-		std::function<void(const juce::String&)> onLog;
-		bool isInterestedInFileDrag(const juce::StringArray& _files) override
-		{
-			for(const auto& f : _files)
-				if(PageEditor::wantsFile(juce::File(f)))
-				{
-					if(!m_announced && onLog)
-						onLog("drop: a file is over the window (" + juce::File(f).getFileName() + "), taken");
-					m_announced = true;
-					return true;
-				}
-			if(!m_announced && onLog)
-				onLog("drop: a file is over the window but it is not a .bin, .zip or .syx (" + _files.joinIntoString(", ") + ")");
-			m_announced = true;
-			return false;
-		}
-		void fileDragExit(const juce::StringArray&) override { m_announced = false; }
-		void filesDropped(const juce::StringArray& _files, int, int) override
-		{
-			m_announced = false;
-			if(onLog)
-				onLog("drop: dropped " + _files.joinIntoString(", "));
-			for(const auto& f : _files)
-				if(juce::File(f).existsAsFile() && PageEditor::wantsFile(juce::File(f)))
-				{
-					if(onFile)
-						onFile(juce::File(f));
-					return;
-				}
-		}
-
-	private:
-		bool m_announced = false;
-	};
-
 	PageEditor::PageEditor(jucePluginEditorLib::Processor& _processor, const jucePluginEditorLib::Skin& _skin)
 		: jucePluginEditorLib::Editor(_processor, _skin)
 	{
@@ -86,7 +46,6 @@ namespace mdJucePlugin
 		}
 		m_audio.reset();
 		m_page.reset();
-		m_dropZone.reset();
 	}
 
 	void PageEditor::create()
@@ -129,21 +88,7 @@ namespace mdJucePlugin
 				m_page->send(std::move(m));
 			});
 		});
-		m_dropZone = std::make_unique<DropZone>();
-		m_dropZone->onFile = [this](const juce::File& _f) { openFile(_f); };
-		m_dropZone->onLog = [this](const juce::String& _l) { m_page->log(_l); };
-		// The web view's own way in: WKWebView navigates to a dropped file (mdWebPageHost.cpp).
-		m_page->onFileNavigation([this](const juce::File& _f)
-		{
-			if(wantsFile(_f))
-				juce::MessageManager::callAsync([this, _f, alive = std::weak_ptr<int>(m_alive)]
-				{
-					if(!alive.expired())
-						openFile(_f);
-				});
-		});
-		m_dropZone->addAndMakeVisible(m_page->component());
-		getRmlComponent()->addAndMakeVisible(*m_dropZone);
+		getRmlComponent()->addAndMakeVisible(m_page->component());
 		layout();
 		m_page->load();
 #if MDMM_DIAGNOSTICS
@@ -207,7 +152,7 @@ namespace mdJucePlugin
 			{
 				const auto f = _c.getResult();
 				if(f.existsAsFile())
-					openFile(f);
+					m_session->installRom(f);
 			});
 	}
 
@@ -228,21 +173,6 @@ namespace mdJucePlugin
 			else if(f.existsAsFile())
 				m_session->openSyx(f);
 		});
-	}
-
-	void PageEditor::openFile(const juce::File& _file)
-	{
-		if(!m_session)
-			return;
-		if(_file.hasFileExtension("syx"))
-			m_session->openSyx(_file);
-		else if(_file.hasFileExtension("bin") || _file.hasFileExtension("zip"))
-			m_session->installRom(_file);
-	}
-
-	bool PageEditor::wantsFile(const juce::File& _file)
-	{
-		return _file.hasFileExtension("bin") || _file.hasFileExtension("zip") || _file.hasFileExtension("syx");
 	}
 
 	bool PageEditor::openAudioMidiSettings()
@@ -271,9 +201,7 @@ namespace mdJucePlugin
 	{
 		if(auto* root = getRmlComponent(); root && m_page)
 		{
-			if(m_dropZone && m_dropZone->getBounds() != root->getLocalBounds())
-				m_dropZone->setBounds(root->getLocalBounds());
-			m_page->layout(m_dropZone ? m_dropZone->getLocalBounds() : root->getLocalBounds());
+			m_page->layout(root->getLocalBounds());
 		}
 	}
 }

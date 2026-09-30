@@ -36,9 +36,6 @@ namespace mdJucePlugin
 		juce::Component& component();
 		// Writes this instance's page file and loads it (with ?selftest= when asked for).
 		void load();
-		// A file dropped on the web view: WKWebView answers a dropped file by navigating to it; the host
-		// cancels that and hands the file over (the window-wide drop's second way in, beside DropZone).
-		void onFileNavigation(std::function<void(const juce::File&)> _f) { m_onFile = std::move(_f); }
 		void send(Value _message) { m_outbox.push_back(std::move(_message)); }
 		void flush();
 		void layout(const juce::Rectangle<int>& _bounds);
@@ -54,7 +51,6 @@ namespace mdJucePlugin
 		const Spec m_spec;
 		std::function<std::string(const std::string&)> m_resource;
 		std::function<void(const Value&)> m_onMessage;
-		std::function<void(const juce::File&)> m_onFile;
 		std::unique_ptr<PageWebView> m_web;
 		std::vector<Value> m_outbox;
 		juce::File m_file;

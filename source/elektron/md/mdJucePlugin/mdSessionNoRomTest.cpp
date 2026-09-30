@@ -6,8 +6,6 @@
 //   mdSessionNoRomTest <md|mm>            no ROM: the state the page sees
 //   mdSessionNoRomTest <md|mm> manage     the same, then LOAD ROM: romInfo, REPLACE with another copy, REMOVE (the
 //                                         machine stops, the folder is empty, the page is told "missing" again)
-//   mdSessionNoRomTest <md|mm> bytes      a file dropped on the page arrives in pieces (romBytes): out of order and
-//                                         wrong sizes are refused, the real ROM in pieces installs and boots
 //   mdSessionNoRomTest <md|mm> install    then the ROM (GEARMULATOR_MD_FIRMWARE_BIN / _MM_): exits 77 without it
 #include "mdPluginProcessor.h"
 #include "mdDeskHost.h"
@@ -98,9 +96,8 @@ namespace
 int main(const int _argc, char** const _argv)
 {
 	const bool mm = _argc > 1 && std::strcmp(_argv[1], "mm") == 0;
-	const bool bytes = _argc > 2 && std::strcmp(_argv[2], "bytes") == 0;
 	const bool manage = _argc > 2 && std::strcmp(_argv[2], "manage") == 0;
-	const bool install = bytes || manage || (_argc > 2 && std::strcmp(_argv[2], "install") == 0);
+	const bool install = manage || (_argc > 2 && std::strcmp(_argv[2], "install") == 0);
 	const auto model = mm ? md::MachineModel::Monomachine : md::MachineModel::Machinedrum;
 	const char* rom = std::getenv(mm ? "GEARMULATOR_MM_FIRMWARE_BIN" : "GEARMULATOR_MD_FIRMWARE_BIN");
 	if(install && (!rom || !juce::File(rom).existsAsFile()))
@@ -174,75 +171,7 @@ int main(const int _argc, char** const _argv)
 		check(back.getSize() == sizeof(kept) && std::memcmp(back.getData(), kept, sizeof(kept)) == 0, "no ROM: saving hands back the project it was given");
 	}
 
-	// One piece as the page sends it (romBytes); the acknowledgement it gets: 1 taken, 0 refused, -1 none.
-	const auto piece = [&](double _tid, const char* _name, size_t _size, int _index, int _count, size_t _offset, const juce::String& _b64)
-	{
-		auto m = elektronData::json::parse(R"({"op":"romBytes","id":5})");
-		m->set("tid", _tid);
-		m->set("name", std::string(_name));
-		m->set("size", static_cast<double>(_size));
-		m->set("index", _index);
-		m->set("count", _count);
-		m->set("offset", static_cast<double>(_offset));
-		m->set("data", _b64.toStdString());
-		published.clear();
-		session->onPageMessage(*m);
-		int ack = -1;
-		for(const auto& r : published)
-			if(str(r, "type") == "romBytesAck" && r.find("tid") && r.find("tid")->asNumber() == _tid)
-				ack = r.find("ok") && r.find("ok")->asBool() ? 1 : 0;
-		return ack;
-	};
-	if(bytes && session)
-	{
-		// refused: a file of the wrong size (the bytes are not a ROM), damaged data, a piece outside the file
-		piece(1, "small.bin", 3, 0, 1, 0, juce::Base64::toBase64("abc", 3));
-		bool refusedText = false;
-		for(const auto& m : published)
-			if(str(m, "type") == "romInstall")
-				refusedText = m.find("ok") && !m.find("ok")->asBool() && !str(m, "text").empty();
-		check(refusedText && stand(), "a small file dropped as bytes is refused with a text for the card, and nothing starts");
-		check(piece(2, "bad.bin", 4, 0, 1, 0, "!!!not base64") == 0, "damaged data is refused, and acknowledged as refused");
-		check(piece(3, "wild.bin", 10, 0, 2, 9999, "AAAA") == 0, "a piece outside the file is refused");
-		juce::MemoryBlock img;
-		juce::File(rom).loadFileAsData(img);
-		const auto sz = img.getSize();
-		const size_t part = 1048576;
-		const int n = static_cast<int>((sz + part - 1) / part);
-		const auto data = [&](int i) { const auto at = i * part; return juce::Base64::toBase64(static_cast<const char*>(img.getData()) + at, std::min(part, sz - at)); };
-		// the page's loop, four in flight, pieces arriving in any order; a second drop starts half way
-		const auto t0 = juce::Time::getMillisecondCounterHiRes();
-		bool all = true;
-		const int order[] = {2, 0, 3, 1, 5, 4, 7, 6};
-		for(int k = 0; k < n / 2; ++k)
-			all = piece(10, "cancelled.bin", sz, order[k], n, order[k] * part, data(order[k])) == 1 && all;
-		// the second drop, a newer transfer id: the first is over
-		check(piece(11, "dropped-rom.bin", sz, 3, n, 3 * part, data(3)) == 1, "a newer transfer starts at once");
-		check(piece(10, "cancelled.bin", sz, order[n / 2], n, order[n / 2] * part, data(order[n / 2])) == 0, "a piece of the cancelled transfer is refused quietly");
-		check(count(published, "romInstall") == 0, "and it does not disturb the card");
-		for(int k = 0; k < n; ++k)
-		{
-			const int i = order[k];
-			if(i == 3)
-				continue;
-			all = piece(11, "dropped-rom.bin", sz, i, n, i * part, data(i)) == 1 && all;
-		}
-		const auto ms = juce::Time::getMillisecondCounterHiRes() - t0;
-		check(all, "every piece is acknowledged, in any order");
-		bool installed = false;
-		for(const auto& m : published)
-			if(str(m, "type") == "romInstall")
-				installed = m.find("ok") && m.find("ok")->asBool();
-		check(installed, "the last piece installs it (romInstall ok)");
-		std::printf("  session side: %d pieces, %zu bytes, %d ms (incl. install)\n", n, sz, static_cast<int>(ms));
-		const juce::File romFolder(juce::String::fromUTF8(processor->getPublicRomFolder().c_str()));
-		check(romFolder.getChildFile("dropped-rom.bin").existsAsFile() && !romFolder.getChildFile("cancelled.bin").existsAsFile(), "it is in the ROM folder under the dropped name");
-		check(piece(11, "dropped-rom.bin", sz, 0, n, 0, data(0)) == 0, "a repeat of a finished transfer is refused");
-		for(int i = 0; i < 1500 && !running(); ++i)
-			pump(40);
-		check(!stand() && running(), "the machine boots with the dropped ROM");
-	}
-	else if(install && session)
+	if(install && session)
 	{
 		published.clear();
 		session->installRom(juce::File(rom));
@@ -390,6 +319,6 @@ int main(const int _argc, char** const _argv)
 	ap.releaseResources();
 	processor.reset();
 	root.deleteRecursively();
-	std::printf("mdSessionNoRomTest %s%s: %s\n", mm ? "mm" : "md", bytes ? " bytes" : manage ? " manage" : install ? " install" : "", g_failures ? "FAIL" : "PASS");
+	std::printf("mdSessionNoRomTest %s%s: %s\n", mm ? "mm" : "md", manage ? " manage" : install ? " install" : "", g_failures ? "FAIL" : "PASS");
 	return g_failures ? 1 : 0;
 }

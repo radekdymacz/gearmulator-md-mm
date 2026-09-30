@@ -547,10 +547,7 @@
 		/* the start-up card's keys (P7): the window's native file chooser for the firmware (the page never reads
 		   it), the ROM folder, and a new look */
 		chooseRom() { send({ op: "chooseRom" }); },
-		/* a firmware file dropped on the page, in pieces (Boot): each answered before the next goes */
-		romBytes(msg) { send(Object.assign({ op: "romBytes" }, msg)); },
 		removeRom(info) { askRemoveRom(info); },
-		log(text) { log(text); },
 		/* LOAD ROM in the engine menu: which firmware runs, REPLACE or REMOVE it (the reply is the romInfo message) */
 		romManage() { if (machine?.lifecycle === "missing") host.firstRun(); else send({ op: "romInfo" }); },
 		/* SysEx import and export (P7): the window's file dialogs; the plug-in parses and writes */
@@ -565,7 +562,7 @@
 			log("NO ROM dialog shown (lifecycle " + machine?.lifecycle + ")");
 			V().ask(`<div class="lcdbig">MONOMACHINE FIRMWARE NEEDED</div>
  <p>Monomachine Editor runs the real Monomachine operating system. Elektron's firmware cannot ship with the plug-in, so you add the one from your own machine.</p>
- <ol class="recvsteps"><li>Dump the <b>OS 1.32B</b> flash image from your Monomachine (<span class="mono">.bin</span>).</li><li>Choose it here, or drop it on the window: the editor checks it and copies it into its ROM folder.</li><li>The machine starts with it at once. It stays on this computer only.</li></ol>`,
+ <ol class="recvsteps"><li>Dump the <b>OS 1.32B</b> flash image from your Monomachine (<span class="mono">.bin</span>).</li><li>Choose it here: the editor checks it and copies it into its ROM folder.</li><li>The machine starts with it at once. It stays on this computer only.</li></ol>`,
 				[["Choose ROM file…", "cream", () => send({ op: "chooseRom" })], ["Show ROM folder", "", () => send({ op: "revealRomFolder" })],
 					["Check again", "", () => send({ op: "recheckFirmware" }, { onResult: r => { V().toast(r.ok ? r.note : r.errors[0]); if (!r.ok) { noRomShown = false; showEngine(); } } })], ["Close", "", () => {}]], "first");
 		},
@@ -657,7 +654,6 @@
 		else if (m.type === "ask") onAsk(m);
 			else if (m.type === "romInstall") { V().bootRom(m); V().toast(m.text); }
 			else if (m.type === "romInfo") onRomInfo(m);
-			else if (m.type === "romBytesAck") V().bootAck(m);
 			else if (m.type === "notice") onNotice(m);
 			else if (m.type === "syxPreview") V().syxPreview(m);
 			else if (m.type === "syxProgress") V().syxProgress(m);

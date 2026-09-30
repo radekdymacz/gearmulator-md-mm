@@ -1711,7 +1711,8 @@ svg.route{width:100%;height:100%;min-height:0}
 .bootcard.rom .bootbar{display:none}
 .bootline{margin:0;font:500 13px var(--sans);color:var(--print2);max-width:48ch}
 .bootrom{display:grid;gap:10px;justify-items:center;width:100%}
-.bootzone{all:unset;box-sizing:border-box;width:100%;display:grid;gap:6px;justify-items:center;padding:26px 20px;border:2px dashed var(--print2);border-radius:8px;background:color-mix(in srgb,var(--print) 6%,transparent);cursor:pointer;text-align:center}
+.bootzone{all:unset;box-sizing:border-box;width:100%;display:grid;gap:6px;justify-items:center;padding:20px;border:2px solid var(--print);border-radius:8px;background:color-mix(in srgb,var(--print) 8%,var(--plate));box-shadow:0 3px 0 var(--print2);cursor:pointer;text-align:center}
+.bootzone:active{transform:translateY(2px);box-shadow:0 1px 0 var(--print2)}
 .bootzone:hover,.bootzone:focus-visible{border-color:var(--led);background:color-mix(in srgb,var(--led) 10%,transparent)}
 .bootzone b{font:600 15px/1.35 var(--sans);color:var(--print)}
 .bootzone span{font:500 12px var(--sans);color:var(--print2)}
@@ -1725,8 +1726,7 @@ svg.route{width:100%;height:100%;min-height:0}
 .bootcur b{font:600 13px var(--sans);color:var(--print);flex:none}
 .bootcur .bootfile{font:500 12px var(--mono);min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--print)}
 .bootcur i{font-style:normal;flex:none}
-.bootcard.dropping .bootzone{border-color:var(--led);background:color-mix(in srgb,var(--led) 16%,transparent)}
-html.romdrop body{outline:3px dashed var(--led);outline-offset:-6px}
+
 @media (prefers-reduced-motion:reduce){.bootcard{transition:none}.bootcard.ind .bootbar i{animation:none}}
 /* BOOT END */
 /* P7: the workspace and setup keys: one minimum width each, so the rows look even (MIX was a sliver) */

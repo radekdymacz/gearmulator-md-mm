@@ -64,10 +64,6 @@ namespace deskHost
 			row("chooseRom", {}, "choose the firmware file (.bin, or a .zip with it): the window's native file chooser; the file stays on this computer",
 				Action::ChooseRom, Actor::Window),
 			row("romInfo", {}, "which firmware is installed (answered with a romInfo message): the LOAD ROM dialog", Action::RomInfo),
-			row("romBytes", {{"tid", ArgType::Integer, 0, 4e9}, {"name", ArgType::Text}, {"size", ArgType::Number, 0, 67108864}, {"count", ArgType::Integer, 1, 4096},
-				{"index", ArgType::Integer, 0, 4095}, {"offset", ArgType::Number, 0, 67108864}, {"data", ArgType::Text}},
-				"a firmware file dropped on the page: piece index of count at offset (base64), a few in flight, any order; transfer tid (a newer one cancels the older); "
-				"each is answered with a romBytesAck message, the last one installs the file like a chosen one (romInstall)", Action::RomBytes),
 			row("removeRom", {}, "delete the firmware from the editor's ROM folder (never outside it); the machine stops and the start-up card asks for a ROM again",
 				Action::RemoveRom),
 			row("noticeAnswer", {{"id", ArgType::Integer, 0, 1e9}, {"button", ArgType::Integer, 0, 8}},

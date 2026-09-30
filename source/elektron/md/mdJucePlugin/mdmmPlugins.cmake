@@ -61,7 +61,6 @@ list(APPEND SOURCES
 	skins/mmStudio/mmSelfTest.js
 	skins/mdStudio/mdDeskSelfTest.js
 	skins/mdStudio/mdDeskModelTest.js
-	skins/mdStudio/mdDeskBootDropTest.js
 	skins/mdStudio/mdDeskLive.js
 	skins/mdStudio/mdDeskLibrary.js
 	skins/mdStudio/mdDeskKeys.js
@@ -95,7 +94,7 @@ file(GLOB MM_SKIN_ASSETS CONFIGURE_DEPENDS
 # The tests are not the page, named one by one, not by a file-name pattern: the node tests never
 # ship, the self-tests only with the diagnostics. A test that was renamed or moved stops the
 # configure, so it cannot slip into the glob. The MM glob lists its page files already.
-set(MD_NODE_TESTS "skins/mdStudio/mdDeskModelTest.js" "skins/mdStudio/mdDeskBootDropTest.js")
+set(MD_NODE_TESTS "skins/mdStudio/mdDeskModelTest.js")
 set(MD_SELF_TESTS "skins/mdStudio/mdDeskSelfTest.js")
 set(MM_SELF_TESTS "skins/mmStudio/mmSelfTest.js")
 foreach(test ${MD_NODE_TESTS} ${MD_SELF_TESTS} ${MM_SELF_TESTS})
@@ -199,8 +198,6 @@ function(mdmm_plugin_targets)
 	if(GEARMULATOR_NODE)
 		add_test(NAME mdDeskModelPageTest COMMAND ${GEARMULATOR_NODE} ${CMAKE_CURRENT_SOURCE_DIR}/skins/mdStudio/mdDeskModelTest.js)
 		set_tests_properties(mdDeskModelPageTest PROPERTIES LABELS "UnitTest" TIMEOUT 60)
-		add_test(NAME mdDeskBootDropPageTest COMMAND ${GEARMULATOR_NODE} ${CMAKE_CURRENT_SOURCE_DIR}/skins/mdStudio/mdDeskBootDropTest.js)
-		set_tests_properties(mdDeskBootDropPageTest PROPERTIES LABELS "UnitTest" TIMEOUT 60)
 	endif()
 
 	# P4: the editor's setup (MDSK chunk) round-trips with the plug-in state.
@@ -261,8 +258,6 @@ function(mdmm_plugin_targets)
 	foreach(m md mm)
 		add_test(NAME mdSessionNoRomTest_${m} COMMAND mdSessionNoRomTest ${m})
 		set_tests_properties(mdSessionNoRomTest_${m} PROPERTIES LABELS "Integration" TIMEOUT 120)
-		add_test(NAME mdSessionNoRomBytesFirmwareTest_${m} COMMAND mdSessionNoRomTest ${m} bytes)
-		set_tests_properties(mdSessionNoRomBytesFirmwareTest_${m} PROPERTIES LABELS "Integration;FirmwareTest" SKIP_RETURN_CODE 77 TIMEOUT 300)
 		add_test(NAME mdSessionNoRomManageFirmwareTest_${m} COMMAND mdSessionNoRomTest ${m} manage)
 		set_tests_properties(mdSessionNoRomManageFirmwareTest_${m} PROPERTIES LABELS "Integration;FirmwareTest" SKIP_RETURN_CODE 77 TIMEOUT 400)
 		add_test(NAME mdSessionNoRomInstallFirmwareTest_${m} COMMAND mdSessionNoRomTest ${m} install)

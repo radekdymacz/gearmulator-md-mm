@@ -41,7 +41,6 @@ namespace deskHost
 		SyxCancel,
 		SyxExport,			// P7: the native save dialog, then every document the editor holds as one .syx
 		RomInfo,			// the installed firmware: name, OS, size, where (answered with a romInfo message)
-		RomBytes,			// a firmware file dropped on the page, sent in pieces (the page cannot pass a path): installed like a chosen file
 		RemoveRom,			// delete the firmware from the editor's ROM folder (the page asked the user first)
 		NoticeAnswer		// the button the user pressed on a notice (a message the plug-in has for the user)
 	};

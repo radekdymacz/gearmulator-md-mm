@@ -36,8 +36,8 @@ function secAction(kind){const t=S.sel,tr=trk(t),e2melody=false;
 /* ===== First run: firmware needed ===== */
 function firstRun(){if(HOST.firstRun)return HOST.firstRun();ask(`<div class="lcdbig">MONOMACHINE FIRMWARE NEEDED</div>
  <p>Monomachine Editor runs the real Monomachine operating system. Elektron's firmware cannot ship with the app, so you add the one from your own machine.</p>
- <ol class="recvsteps"><li>Dump the <b>OS 1.32B</b> flash image from your Monomachine (8 MiB, <span class="mono">.bin</span>).</li><li>Drop it here. The editor checks its size and fingerprint.</li><li>It stays on this computer only.</li></ol>
- <label class="drop" id="drop" tabindex="0"><input type="file" id="romfile" accept=".bin" hidden><span id="droptxt">Drop the .bin here, or click to choose it</span></label>
+ <ol class="recvsteps"><li>Dump the <b>OS 1.32B</b> flash image from your Monomachine (8 MiB, <span class="mono">.bin</span>).</li><li>Choose it here. The editor checks its size and fingerprint.</li><li>It stays on this computer only.</li></ol>
+ <label class="drop" id="drop" tabindex="0"><input type="file" id="romfile" accept=".bin" hidden><span id="droptxt">Click to choose the .bin</span></label>
  <p class="hint">SFX-6, SFX-60 MKI and MKII use the same OS. The MKII adds the user waveforms and the DigiPRO draw machines.</p>`,[["Close preview","cream",()=>{}]],"first")}
 function checkRom(f){const t=$("#droptxt");if(!f)return;const ok=f.size===8388608;t.textContent=ok?`✓ ${f.name}: 8 MiB. In the real app: check the OS 1.32B fingerprint, then start.`:`✗ ${f.name}: ${(f.size/1048576).toFixed(2)} MiB. The OS 1.32B image is exactly 8 MiB.`;$("#drop").classList.toggle("ok",ok);$("#drop").classList.toggle("bad",!ok)}
 
@@ -408,7 +408,7 @@ Syx.host={choose:()=>{if(HOST.syxChoose)return HOST.syxChoose();Syx.preview({ok:
 Boot.host={chooseRom:()=>{if(HOST.chooseRom)return HOST.chooseRom();Boot.rom({ok:true,text:"\u2713 Monomachine OS 1.32B found (example)"});setTimeout(()=>startEngine("emu"),900)},
  revealRom:()=>{if(HOST.revealRom)return HOST.revealRom();toast("In the plug-in: the ROM folder opens in Finder.")},
  recheck:()=>{if(HOST.recheck)return HOST.recheck();startEngine("emu")},
- romBytes:m=>{if(HOST.romBytes)return HOST.romBytes(m);Boot.ack({tid:m.tid,index:m.index,ok:false,text:"The example has no plug-in to take the file."})},removeRom:i=>{if(HOST.removeRom)return HOST.removeRom(i)},log:t=>{if(HOST.log)HOST.log(t)},say:t=>toast(t)};
+ removeRom:i=>{if(HOST.removeRom)return HOST.removeRom(i)},say:t=>toast(t)};
 /* the editor's menu (a host's): right-click an empty part of the header */
 document.addEventListener("contextmenu",e=>{if(!HOST.menu||!e.target.closest(".top")||e.target.closest("button,[role=slider],[role=button],select,input,b,.lcdpanel"))return;e.preventDefault();HOST.menu()});
 window.MMView={
@@ -426,7 +426,7 @@ window.MMView={
  setPlaying,setStep,setPatternSlot,setKitSlot,setWorkingKit,setSong,setRouting:r=>{S.routing=r},setMidiTracks,setMultiMap,
  setEng,dlgOpen:()=>!$("#dlg").hidden,setEngineLabel,setEngineTip,setEngines,setAudioEntry,setKitState,clearLearnTarget:()=>{S.learnT=null},setMapping,setModulation,setCtlSetup,disable,setReading,
  setMutes,setMode,setRecord,setSongs,
- setLcd,setKeyDown,setPst,closeFirmwareDialog,bootRom:r=>Boot.rom(r),bootInstalled:o=>Boot.showInstalled(o),bootAck:m=>Boot.ack(m),bootDrop:(f,o)=>Boot.drop(f,o),syxPreview:m=>Syx.preview(m),syxProgress:m=>Syx.progress(m),
+ setLcd,setKeyDown,setPst,closeFirmwareDialog,bootRom:r=>Boot.rom(r),bootInstalled:o=>Boot.showInstalled(o),syxPreview:m=>Syx.preview(m),syxProgress:m=>Syx.progress(m),
  /* calls */
  render,renderTop,drawLib,toast,ask,redraw,movePH,setPos,flashTracks,goWs,clickStep,autoRange,kitSave,
  redrawAudio:()=>{if(AP.open)drawAudio()},audioLevel,openAudio};

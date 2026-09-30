@@ -32,7 +32,7 @@
      engine(kind), firstRun(), bootScreen(on), renderPst(), engineLabels, menu()
      syxChoose(), syxExport(), syxStart(kinds), syxStop()   SysEx import and export (P7): the host's file
                                       dialogs; the preview and progress come back through MMView
-     romBytes(msg), removeRom(info), log(text)   a dropped firmware file in pieces (Boot), REMOVE, a line for the log
+     removeRom(info)   REMOVE in the LOAD ROM card
      romManage()   LOAD ROM in the engine menu (a host shows which firmware runs, REPLACE and REMOVE; none: the start-up card)
      chooseRom(), revealRom(), recheck()   the start-up card's keys (P7): the native file chooser for the
                                       firmware, the ROM folder, look again (the page never reads the ROM)

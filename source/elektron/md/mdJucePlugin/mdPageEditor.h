@@ -24,7 +24,6 @@ namespace mdJucePlugin
 	// DeskSession. The view owns only what belongs to the window: the page host, the editor's
 	// menu, the standalone's AUDIO / MIDI panel and the diagnostics. Documents, undo, the engine
 	// choice and the modulators are the session's, so they outlive the window.
-	class DropZone;
 
 	class PageEditor final : public jucePluginEditorLib::Editor, public jucePluginEditorLib::FreeSizeEditor,
 		public jucePluginEditorLib::AudioMidiSettingsEditor, juce::Timer
@@ -42,16 +41,11 @@ namespace mdJucePlugin
 		// itself out in any window size (P7, FreeSizeEditor): the window resizes freely.
 		bool openAudioMidiSettings() override;
 
-		// P7: a firmware file (.bin, or a .zip with it) dropped anywhere on the window installs it
-		// (DeskSession::installRom); the page takes the drag itself (Boot, mdDeskBoot.js) and sends the file in pieces; a file the web view is asked to open is handed over here.
-		static bool wantsFile(const juce::File& _file);
-
 	private:
 		void timerCallback() override;
 		void onPageMessage(const elektronData::json::Value& _message);
 		void chooseRom();
 		void chooseSyx(bool _save);
-		void openFile(const juce::File& _file);
 		void layout() const;
 
 		DeskSession* m_session = nullptr;
@@ -59,7 +53,6 @@ namespace mdJucePlugin
 		std::unique_ptr<AudioMidiLink> m_audio;
 		std::unique_ptr<Diagnostics> m_diagnostics;
 		std::unique_ptr<juce::FileChooser> m_chooser;
-		std::unique_ptr<DropZone> m_dropZone;
 		int m_noticeId = 0;
 		std::shared_ptr<int> m_alive = std::make_shared<int>(0);	// callbacks that outlive the window check it
 		std::map<int, std::function<void(int)>> m_notices;	// the plug-in's questions the page has not answered yet

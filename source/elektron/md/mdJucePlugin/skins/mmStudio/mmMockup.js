@@ -195,7 +195,7 @@ const kitName=k=>"K"+String(k+1).padStart(2,"0")+" "+((k===S.kit?S.workName:S.ki
      engine(kind), firstRun(), bootScreen(on), renderPst(), engineLabels, menu()
      syxChoose(), syxExport(), syxStart(kinds), syxStop()   SysEx import and export (P7): the host's file
                                       dialogs; the preview and progress come back through MMView
-     romBytes(msg), removeRom(info), log(text)   a dropped firmware file in pieces (Boot), REMOVE, a line for the log
+     removeRom(info)   REMOVE in the LOAD ROM card
      romManage()   LOAD ROM in the engine menu (a host shows which firmware runs, REPLACE and REMOVE; none: the start-up card)
      chooseRom(), revealRom(), recheck()   the start-up card's keys (P7): the native file chooser for the
                                       firmware, the ROM folder, look again (the page never reads the ROM)
@@ -324,17 +324,16 @@ const Modal = (() => {
    the firmware starts, a modal card over the whole window (the modal layer's "boot" kind: nothing behind it
    takes a key or a click) shows the machine's own LCD, mirrored big and pixel for pixel, a progress bar and
    what to wait for; it fades out when the machine takes input. The same card is the first run: NO ROM and
-   ROM ERROR show the firmware steps, a native file chooser, a drop target for the whole window, and the
-   ROM folder. The page reads no ROM bytes: the host opens, checks and copies the file (Boot.host).
+   ROM ERROR show a clear "choose your ROM" button (the host's native file chooser) and the ROM folder. The page
+   reads no ROM bytes: the host opens, checks and copies the file (Boot.host).
      Boot.update({state, machine, text})  state: "loading" | "booting" | "missing" | "unsupported" | "ready"
      Boot.lcd(bytes)                     the firmware's 128 x 64 screen (1024 bytes, rows of 16, MSB first)
-     Boot.rom({ok, text})                the host's verdict on a chosen or dropped file
+     Boot.rom({ok, text})                the host's verdict on a chosen file
      Boot.showInstalled({machine, os, name, size, inFolder})   the same card while a firmware runs (LOAD ROM):
-                                         the current image, a drop zone to replace it, Remove, Show the ROM folder, Close
-     Boot.host = {chooseRom(), revealRom(), recheck(), romBytes(msg), removeRom(info), log(text), say(text)}   the app's host calls;
-     Boot.ack(m) hands it the plug-in's romBytesAck
-   A file dropped anywhere on the page (HTML5 drag and drop; the web view takes the drag, the page reads the file
-   and sends it in pieces, romBytes, a few in flight, each acknowledged) is checked here and installed by the host like a chosen one. */
+                                         the current image, a button to choose another, Remove, Show the ROM folder, Close
+     Boot.host = {chooseRom(), revealRom(), recheck(), removeRom(info), say(text)}   the app's host calls
+   A file dragged onto the page is not opened by the web view (that would replace the page): the card says to click
+   the button instead. */
 const Boot = (() => {
 	const EXPECT = { Machinedrum: 14000, Monomachine: 11000 };	// ms from the first BOOTING OS to input (measured)
 	const card = document.createElement("div");
@@ -347,7 +346,7 @@ const Boot = (() => {
  <p class="bootline" id="bootline">Keys work when the start-up animation ends.</p>
  <div class="bootrom" id="bootrom" hidden>
   <p class="bootcur" id="bootcur" hidden></p>
-  <button class="bootzone" data-bootrom="choose" aria-describedby="bootres"><b id="bootzone"></b><span>A <span class="mono">.bin</span>, or a <span class="mono">.zip</span> with it. Drop it anywhere on this window, or click here to choose it.</span></button>
+  <button class="bootzone" data-bootrom="choose" aria-describedby="bootres"><b id="bootzone"></b><span>Click here to choose the file. The editor checks it and copies it into its ROM folder.</span></button>
   <p class="bootres" id="bootres" role="status"></p>
   <p class="bootpriv">The firmware stays on this computer: the editor checks it and copies it into its ROM folder, and sends it nowhere. <button class="linkkey" data-bootrom="folder">Show the ROM folder</button> <button class="linkkey" data-bootrom="recheck">Check again</button> <button class="linkkey" data-bootrom="remove" hidden>Remove the ROM</button> <button class="linkkey" data-bootrom="close" hidden>Close</button></p>
  </div>
@@ -385,7 +384,7 @@ const Boot = (() => {
 		card.classList.remove("out", "ind"); card.classList.add("rom", "manage");
 		$b("boott").textContent = `${machine} firmware`;
 		$b("bootline").hidden = true; $b("bootrom").hidden = false;
-		$b("bootzone").textContent = "Drop another ROM here to replace it, or choose it";
+		$b("bootzone").textContent = `Choose another ${romName(machine)} ROM (.bin or .zip) to replace it`;
 		const cur = $b("bootcur");
 		cur.innerHTML = `<b>${esc(o.os)}</b><span class="bootfile" title="${esc(o.name)}${o.inFolder ? "" : " (outside the editor's ROM folder)"}">${esc(o.name)}</span><i>${(o.size / 1048576).toFixed(1)} MiB</i>`;
 		cur.hidden = false;
@@ -413,7 +412,7 @@ const Boot = (() => {
 		$b("bootline").textContent = st === "unsupported" ? "The ROM in the ROM folder is another OS or a damaged dump." : rom ? "" : "Keys work when the start-up animation ends.";
 		$b("bootline").hidden = st === "missing";
 		$b("bootrom").hidden = !rom;
-		if (rom) $b("bootzone").textContent = `Drop your ${romName(machine)} ROM (.bin, 8 MB) here, or choose it`;
+		if (rom) $b("bootzone").textContent = `Choose your ${romName(machine)} ROM (.bin or .zip, 8 MB)`;
 		card.hidden = false;
 		draw();
 		if (!raf && st === "booting") raf = requestAnimationFrame(tick);
@@ -432,92 +431,24 @@ const Boot = (() => {
 		else if (a === "remove" && manage && Boot.host.removeRom) Boot.host.removeRom(manage);
 		else if (a === "close") { leaveManage(); shown = null; card.hidden = true; }
 	});
-	/* ROMDROP BEGIN: what a dropped file must be, and its pieces for the bridge (pure: a File in, a plan out) */
-	function romDropPlan(file, want, piece = 262144) {
-		const ROM = 0x800000, LIMIT = 64 * 1048576;
-		if (!file) return Promise.resolve({ ok: false, text: "Drop the firmware image: a .bin (or a .zip with it) from your own machine." });
-		const name = file.name || "", ext = ((/\.([A-Za-z0-9]+)$/.exec(name) || [])[1] || "").toLowerCase();
-		if (ext !== "bin" && ext !== "zip") return Promise.resolve({ ok: false, text: `"${name || "This"}" is not a firmware image. Drop the ${want} .bin (or a .zip with it).` });
-		if (ext === "bin" && file.size !== ROM) return Promise.resolve({ ok: false, text: `This file is ${(file.size / 1048576).toFixed(2)} MiB. The ${want} image is exactly 8 MiB.` });
-		if (file.size > LIMIT) return Promise.resolve({ ok: false, text: "This file is far larger than a firmware image." });
-		return file.arrayBuffer().then(ab => {
-			const buf = new Uint8Array(ab), count = Math.max(1, Math.ceil(buf.length / piece));
-			const at = i => i * piece;
-			const data = i => { const p = buf.subarray(at(i), at(i) + piece); let s = ""; for (let k = 0; k < p.length; k += 0x8000) s += String.fromCharCode.apply(null, p.subarray(k, k + 0x8000)); return btoa(s); };
-			return { ok: true, name, size: buf.length, count, at, data };
-		}, () => ({ ok: false, text: "The file could not be read." }));
-	}
-	/* ROMDROP END */
-	function said(text, ok) { if (card.hidden || $b("bootrom").hidden) { if (Boot.host && Boot.host.say) Boot.host.say(text); } else rom({ ok, text }); }
-	/* One transfer at a time: a small window of pieces in flight, each acknowledged by the plug-in (romBytesAck);
-	   a new drop cancels the running one (its id is older, the plug-in drops its pieces), and 5 s without an
-	   acknowledgement ends it with a message in the card instead of hanging. */
-	const WINDOW = 4, ACK_MS = 5000;
-	let xfer = null, tidLast = 0;
-	function endTransfer(text, ok) {
-		if (!xfer) return;
-		clearTimeout(xfer.timer); const x = xfer; xfer = null;
-		if (text) { if (Boot.host.log) Boot.host.log(`drop: ${ok ? "sent" : "failed"}: ${text}`); said(text, ok); }
-		return x;
-	}
-	function pump() {
-		const x = xfer; if (!x) return;
-		while (x.next < x.plan.count && x.next - x.done < WINDOW) {
-			const i = x.next++;
-			Boot.host.romBytes({ tid: x.tid, name: x.plan.name, size: x.plan.size, count: x.plan.count, index: i, offset: x.plan.at(i), data: x.plan.data(i) });
-		}
-		clearTimeout(x.timer);
-		x.timer = setTimeout(() => { if (xfer === x) endTransfer("The plug-in did not answer while the file was sent. Drop it again.", false); }, ACK_MS);
-	}
-	/* the plug-in's acknowledgement of a piece: {tid, index, ok, text} */
-	function ack(m) {
-		const x = xfer; if (!x || m.tid !== x.tid) return;
-		if (!m.ok) { endTransfer(m.text || "The plug-in refused the file.", false); return; }
-		x.done++;
-		if (x.done >= x.plan.count) {
-			const ms = Math.round(performance.now() - x.t0);
-			if (Boot.host.log) Boot.host.log(`drop: ${x.plan.size} bytes in ${x.plan.count} pieces, ${(ms / 1000).toFixed(2)} s`);
-			endTransfer("", true); return;
-		}
-		said(`Sending ${x.plan.name}… ${x.done}/${x.plan.count}`, true);
-		pump();
-	}
-	async function dropped(file, opt = {}) {
-		const h = Boot.host || {}, log = t => h.log && h.log(t);
-		if (xfer) endTransfer("", false), log("drop: an earlier transfer was replaced");
-		log(`drop: page got ${file ? file.name + " " + file.size : "no file"}`);
-		const plan = await romDropPlan(file, romName(machine), opt.piece);
-		if (!plan.ok) { log("drop: refused: " + plan.text); said(plan.text, false); return; }
-		if (!h.romBytes) { said("This page has no host to install the firmware.", false); return; }
-		if (xfer) endTransfer("", false);
-		tidLast = Math.max(tidLast + 1, Date.now() % 1000000000);
-		xfer = { tid: tidLast, plan, next: 0, done: 0, t0: performance.now(), timer: 0 };
-		said(`Sending ${plan.name}…`, true);
-		pump();
-	}
-	/* the web view takes the drag: it shows on the card and the page reads the file (Finder puts a file, no path, on the pasteboard) */
-	let over = 0;
+	/* a dragged file: the web view must not open it (it would replace the page), and the card points at the button */
 	const files = e => e.dataTransfer && Array.prototype.indexOf.call(e.dataTransfer.types || [], "Files") >= 0;
-	const hover = on => { card.classList.toggle("dropping", on); document.documentElement.classList.toggle("romdrop", on); };
-	document.addEventListener("dragenter", e => { if (!files(e)) return; e.preventDefault(); over++; hover(true); }, true);
-	document.addEventListener("dragover", e => { if (!files(e)) return; e.preventDefault(); e.dataTransfer.dropEffect = "copy"; }, true);
-	document.addEventListener("dragleave", e => { if (!files(e)) return; over = Math.max(0, over - 1); if (!over) hover(false); }, true);
+	document.addEventListener("dragover", e => { if (files(e)) { e.preventDefault(); e.dataTransfer.dropEffect = "none"; } }, true);
 	document.addEventListener("drop", e => {
 		if (!files(e)) return;
-		over = 0; hover(false);
-		const f = e.dataTransfer.files && e.dataTransfer.files[0];
-		if (f && /\.syx$/i.test(f.name || "")) return;	// a SysEx file: the window opens it (the web view's own navigation, cancelled by the host)
 		e.preventDefault();
-		dropped(f);
+		const f = e.dataTransfer.files && e.dataTransfer.files[0], open = !card.hidden && !$b("bootrom").hidden;
+		const text = f && /\.syx$/i.test(f.name || "") ? "Use Import SysEx… in the menu to open a .syx." : open ? "Click here to choose the ROM." : "Use LOAD ROM in the engine menu to choose a ROM.";
+		if (!open) { if (Boot.host && Boot.host.say) Boot.host.say(text); } else rom({ ok: false, text });
 	}, true);
-	return { update, lcd, rom, showInstalled, romDropPlan, ack, drop: dropped, host: null, state: () => shown };
+	return { update, lcd, rom, showInstalled, host: null, state: () => shown };
 })();
 /* BOOT END */
 
 /* ---- 59-syx.js ---- */
 /* SYX BEGIN (P7): SysEx import and export, the same text in both editors (checked by the sync scripts).
    The host opens, parses and writes the files (the page never reads their bytes): a .syx chosen with
-   "Import SysEx…" or dropped on the window comes back as a preview, here a panel of the modal layer with
+   "Import SysEx…" comes back as a preview, here a panel of the modal layer with
    what is in the file and what it overwrites; "Import" sends the chosen kinds as ordinary document writes
    (one undo step), a few at a time, with progress and a Stop key.
      Syx.keys()            the library's two keys (markup)
@@ -583,7 +514,7 @@ const Syx = (() => {
 		else if (a === "close") pop.hidden = true;
 	});
 	return {
-		keys: () => `<span class="syxkeys"><button class="amkey" data-syx="import" title="Open a .syx (a backup, or dumps from any source) and choose what to import. Or drop it on the window.">Import SysEx…</button><button class="amkey" data-syx="export" title="Every pattern, kit, song and the global the editor holds, as one .syx">Export SysEx…</button></span>`,
+		keys: () => `<span class="syxkeys"><button class="amkey" data-syx="import" title="Open a .syx (a backup, or dumps from any source) and choose what to import.">Import SysEx…</button><button class="amkey" data-syx="export" title="Every pattern, kit, song and the global the editor holds, as one .syx">Export SysEx…</button></span>`,
 		preview, progress, exported: m => m, host: null
 	};
 })();
@@ -1655,8 +1586,8 @@ function secAction(kind){const t=S.sel,tr=trk(t),e2melody=false;
 /* ===== First run: firmware needed ===== */
 function firstRun(){if(HOST.firstRun)return HOST.firstRun();ask(`<div class="lcdbig">MONOMACHINE FIRMWARE NEEDED</div>
  <p>Monomachine Editor runs the real Monomachine operating system. Elektron's firmware cannot ship with the app, so you add the one from your own machine.</p>
- <ol class="recvsteps"><li>Dump the <b>OS 1.32B</b> flash image from your Monomachine (8 MiB, <span class="mono">.bin</span>).</li><li>Drop it here. The editor checks its size and fingerprint.</li><li>It stays on this computer only.</li></ol>
- <label class="drop" id="drop" tabindex="0"><input type="file" id="romfile" accept=".bin" hidden><span id="droptxt">Drop the .bin here, or click to choose it</span></label>
+ <ol class="recvsteps"><li>Dump the <b>OS 1.32B</b> flash image from your Monomachine (8 MiB, <span class="mono">.bin</span>).</li><li>Choose it here. The editor checks its size and fingerprint.</li><li>It stays on this computer only.</li></ol>
+ <label class="drop" id="drop" tabindex="0"><input type="file" id="romfile" accept=".bin" hidden><span id="droptxt">Click to choose the .bin</span></label>
  <p class="hint">SFX-6, SFX-60 MKI and MKII use the same OS. The MKII adds the user waveforms and the DigiPRO draw machines.</p>`,[["Close preview","cream",()=>{}]],"first")}
 function checkRom(f){const t=$("#droptxt");if(!f)return;const ok=f.size===8388608;t.textContent=ok?`✓ ${f.name}: 8 MiB. In the real app: check the OS 1.32B fingerprint, then start.`:`✗ ${f.name}: ${(f.size/1048576).toFixed(2)} MiB. The OS 1.32B image is exactly 8 MiB.`;$("#drop").classList.toggle("ok",ok);$("#drop").classList.toggle("bad",!ok)}
 
@@ -2027,7 +1958,7 @@ Syx.host={choose:()=>{if(HOST.syxChoose)return HOST.syxChoose();Syx.preview({ok:
 Boot.host={chooseRom:()=>{if(HOST.chooseRom)return HOST.chooseRom();Boot.rom({ok:true,text:"\u2713 Monomachine OS 1.32B found (example)"});setTimeout(()=>startEngine("emu"),900)},
  revealRom:()=>{if(HOST.revealRom)return HOST.revealRom();toast("In the plug-in: the ROM folder opens in Finder.")},
  recheck:()=>{if(HOST.recheck)return HOST.recheck();startEngine("emu")},
- romBytes:m=>{if(HOST.romBytes)return HOST.romBytes(m);Boot.ack({tid:m.tid,index:m.index,ok:false,text:"The example has no plug-in to take the file."})},removeRom:i=>{if(HOST.removeRom)return HOST.removeRom(i)},log:t=>{if(HOST.log)HOST.log(t)},say:t=>toast(t)};
+ removeRom:i=>{if(HOST.removeRom)return HOST.removeRom(i)},say:t=>toast(t)};
 /* the editor's menu (a host's): right-click an empty part of the header */
 document.addEventListener("contextmenu",e=>{if(!HOST.menu||!e.target.closest(".top")||e.target.closest("button,[role=slider],[role=button],select,input,b,.lcdpanel"))return;e.preventDefault();HOST.menu()});
 window.MMView={
@@ -2045,7 +1976,7 @@ window.MMView={
  setPlaying,setStep,setPatternSlot,setKitSlot,setWorkingKit,setSong,setRouting:r=>{S.routing=r},setMidiTracks,setMultiMap,
  setEng,dlgOpen:()=>!$("#dlg").hidden,setEngineLabel,setEngineTip,setEngines,setAudioEntry,setKitState,clearLearnTarget:()=>{S.learnT=null},setMapping,setModulation,setCtlSetup,disable,setReading,
  setMutes,setMode,setRecord,setSongs,
- setLcd,setKeyDown,setPst,closeFirmwareDialog,bootRom:r=>Boot.rom(r),bootInstalled:o=>Boot.showInstalled(o),bootAck:m=>Boot.ack(m),bootDrop:(f,o)=>Boot.drop(f,o),syxPreview:m=>Syx.preview(m),syxProgress:m=>Syx.progress(m),
+ setLcd,setKeyDown,setPst,closeFirmwareDialog,bootRom:r=>Boot.rom(r),bootInstalled:o=>Boot.showInstalled(o),syxPreview:m=>Syx.preview(m),syxProgress:m=>Syx.progress(m),
  /* calls */
  render,renderTop,drawLib,toast,ask,redraw,movePH,setPos,flashTracks,goWs,clickStep,autoRange,kitSave,
  redrawAudio:()=>{if(AP.open)drawAudio()},audioLevel,openAudio};

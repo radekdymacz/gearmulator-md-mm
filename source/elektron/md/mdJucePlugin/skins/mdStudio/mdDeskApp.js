@@ -1062,11 +1062,11 @@ function pumpNotices() {
 	ask(`<b>${escH(m.title)}</b><br>${escH(m.text).replace(/\n/g, "<br>")}`,
 		names.map((t, i) => [escH(t), i === 0 && names.length > 1 ? "cream" : "", () => { cmd("noticeAnswer", { id: m.id, button: i }); setTimeout(pumpNotices, 0); }]));
 }
-Bridge.onMessage(m => { if (m.type === "romInfo") showRomInfo(m); else if (m.type === "notice") showNotice(m); else if (m.type === "romBytesAck") Boot.ack(m); });
+Bridge.onMessage(m => { if (m.type === "romInfo") showRomInfo(m); else if (m.type === "notice") showNotice(m); });
 
 /* the start-up card's keys: the host's native file chooser, the ROM folder, a new look (the ROM stays on this computer) */
 Boot.host = { chooseRom: () => cmd("chooseRom"), revealRom: () => cmd("revealRomFolder"), recheck: () => cmd("recheckFirmware"),
-	romBytes: msg => Bridge.send(Object.assign({ op: "romBytes" }, msg)), removeRom: askRemoveRom, log: t => Bridge.log(t), say: toast };
+	removeRom: askRemoveRom, say: toast };
 Bridge.onMessage(m => { if (m.type === "romInstall") { Boot.rom(m); toast(m.text); } });
 /* SysEx import and export: the host's file dialogs and document writes (the page never reads the file) */
 Syx.host = { choose: () => cmd("chooseSyx"), exportAll: () => cmd("syxExport"), start: kinds => cmd("syxImport", { kinds }), stop: () => cmd("syxCancel") };

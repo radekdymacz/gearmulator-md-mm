@@ -1,6 +1,6 @@
 /* SYX BEGIN (P7): SysEx import and export, the same text in both editors (checked by the sync scripts).
    The host opens, parses and writes the files (the page never reads their bytes): a .syx chosen with
-   "Import SysEx…" or dropped on the window comes back as a preview, here a panel of the modal layer with
+   "Import SysEx…" comes back as a preview, here a panel of the modal layer with
    what is in the file and what it overwrites; "Import" sends the chosen kinds as ordinary document writes
    (one undo step), a few at a time, with progress and a Stop key.
      Syx.keys()            the library's two keys (markup)
@@ -66,7 +66,7 @@ const Syx = (() => {
 		else if (a === "close") pop.hidden = true;
 	});
 	return {
-		keys: () => `<span class="syxkeys"><button class="amkey" data-syx="import" title="Open a .syx (a backup, or dumps from any source) and choose what to import. Or drop it on the window.">Import SysEx…</button><button class="amkey" data-syx="export" title="Every pattern, kit, song and the global the editor holds, as one .syx">Export SysEx…</button></span>`,
+		keys: () => `<span class="syxkeys"><button class="amkey" data-syx="import" title="Open a .syx (a backup, or dumps from any source) and choose what to import.">Import SysEx…</button><button class="amkey" data-syx="export" title="Every pattern, kit, song and the global the editor holds, as one .syx">Export SysEx…</button></span>`,
 		preview, progress, exported: m => m, host: null
 	};
 })();

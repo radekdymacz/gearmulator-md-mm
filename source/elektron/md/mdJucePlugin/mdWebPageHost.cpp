@@ -106,14 +106,14 @@ namespace mdJucePlugin
 			[this](const juce::String& _e) { log("web view: " + _e); },
 			[this](const juce::String& _url)
 			{
-				// A file that is not this page: a drop on the web view (the page never links to files).
-				if(!m_onFile || !_url.startsWithIgnoreCase("file:"))
+				// A file the web view is asked to open (one dragged onto it) is not this page: cancelled quietly, the
+				// page's own handler says where to click.
+				if(!_url.startsWithIgnoreCase("file:"))
 					return false;
 				const auto file = juce::URL(_url).getLocalFile();
 				if(file == juce::File() || file == m_file)
 					return false;
-				log("drop: the web view was asked to open " + file.getFullPathName());
-				m_onFile(file);
+				log("a file was dragged onto the page: not opened (" + file.getFileName() + ")");
 				return true;
 			});
 	}
