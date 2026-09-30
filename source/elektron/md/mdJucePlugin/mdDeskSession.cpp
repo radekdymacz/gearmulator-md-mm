@@ -12,6 +12,7 @@
 
 #include "juce_core/juce_core.h"
 #include <algorithm>
+#include <array>
 
 namespace mdJucePlugin
 {
@@ -129,51 +130,122 @@ namespace mdJucePlugin
 		reply(_message, true, {});
 	}
 
+	namespace
+	{
+		// base64 straight into the buffer (no intermediate stream); false if the text is damaged or too long for the room
+		bool decodeBase64(const std::string& _in, uint8_t* const _out, const size_t _room, size_t& _written)
+		{
+			static const auto table = []
+			{
+				std::array<int8_t, 256> t{};
+				t.fill(-1);
+				const char* a = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+				for(int i = 0; i < 64; ++i)
+					t[static_cast<uint8_t>(a[i])] = static_cast<int8_t>(i);
+				return t;
+			}();
+			uint32_t acc = 0;
+			int bits = 0;
+			size_t n = 0;
+			for(const char c : _in)
+			{
+				if(c == '=')
+					break;
+				const int v = table[static_cast<uint8_t>(c)];
+				if(v < 0)
+					return false;
+				acc = (acc << 6) | static_cast<uint32_t>(v);
+				bits += 6;
+				if(bits >= 8)
+				{
+					bits -= 8;
+					if(n >= _room)
+						return false;
+					_out[n++] = static_cast<uint8_t>((acc >> bits) & 0xff);
+				}
+			}
+			_written = n;
+			return true;
+		}
+	}
+
 	void DeskSession::romBytes(const Value& _message)
 	{
 		const auto text = [&](const char* k) { const auto* v = _message.find(k); return v && v->isString() ? v->asString() : std::string(); };
 		const auto num = [&](const char* k) { const auto* v = _message.find(k); return v && v->isNumber() ? v->asNumber() : -1.0; };
-		const auto name = text("name");
+		const double tid = num("tid");
 		const int index = static_cast<int>(num("index")), count = static_cast<int>(num("count"));
-		const auto size = static_cast<size_t>(std::max(num("size"), 0.0));
+		const auto ack = [&](const bool _ok, const std::string& _text)
+		{
+			Value a = Value::object();
+			a.set("type", "romBytesAck");
+			a.set("tid", tid);
+			a.set("index", index);
+			a.set("ok", _ok);
+			if(!_ok)
+				a.set("text", _text);
+			toPage(a);
+		};
 		const auto fail = [&](const std::string& _why)
 		{
 			log("drop: refused: " + _why);
 			m_incoming = {};
+			m_incoming.tid = tid;		// the rest of this transfer's pieces are answered, not restarted
+			m_incoming.count = 0;
 			Value m = Value::object();
 			m.set("type", "romInstall");
 			m.set("ok", false);
 			m.set("text", _why);
 			toPage(m);
+			ack(false, _why);
 			reply(_message, false, _why);
 		};
-		if(index == 0)
+		// a newer transfer replaces the running one; a piece of an older one is dropped without a word
+		if(tid < m_incoming.tid)
 		{
-			m_incoming = {};
-			m_incoming.name = name;
-			m_incoming.size = size;
-			m_incoming.count = count;
-			log("drop: page got " + name + " " + std::to_string(size) + " bytes in " + std::to_string(count) + " pieces");
-		}
-		if(m_incoming.count == 0 || index != m_incoming.next || count != m_incoming.count || name != m_incoming.name)
-			return fail("The file did not arrive in order. Drop it again.");
-		if(m_incoming.size > 64u * 1024u * 1024u)
-			return fail("This file is far larger than a firmware image.");
-		juce::MemoryOutputStream out;
-		if(!juce::Base64::convertFromBase64(out, juce::String(text("data"))))
-			return fail("The file could not be read (its data was damaged on the way).");
-		const auto* p = static_cast<const uint8_t*>(out.getData());
-		m_incoming.bytes.insert(m_incoming.bytes.end(), p, p + out.getDataSize());
-		if(m_incoming.bytes.size() > m_incoming.size)
-			return fail("The file is larger than it said.");
-		++m_incoming.next;
-		if(m_incoming.next < m_incoming.count)
-		{
-			reply(_message, true, {});
+			ack(false, "cancelled");
 			return;
 		}
-		log("drop: bytes received " + std::to_string(m_incoming.bytes.size()));
-		if(m_incoming.bytes.size() != m_incoming.size)
+		if(tid > m_incoming.tid)
+		{
+			m_incoming = {};
+			m_incoming.tid = tid;
+			m_incoming.name = text("name");
+			m_incoming.size = static_cast<size_t>(std::max(num("size"), 0.0));
+			m_incoming.count = count;
+			m_incoming.t0 = juce::Time::getMillisecondCounterHiRes();
+			if(m_incoming.size > 64u * 1024u * 1024u || count < 1 || count > 4096)
+				return fail("This file is far larger than a firmware image.");
+			m_incoming.have.assign(static_cast<size_t>(count), false);
+			m_incoming.bytes.assign(m_incoming.size, 0);
+			log("drop: " + m_incoming.name + " " + std::to_string(m_incoming.size) + " bytes in " + std::to_string(count) + " pieces");
+		}
+		if(m_incoming.count == 0)
+		{
+			ack(false, "This transfer is over or was refused. Drop the file again.");
+			return;
+		}
+		if(index < 0 || index >= m_incoming.count || text("name") != m_incoming.name || count != m_incoming.count)
+			return fail("The file did not arrive as announced. Drop it again.");
+		const double offset = num("offset");
+		size_t wrote = 0;
+		if(offset < 0 || static_cast<size_t>(offset) > m_incoming.size
+			|| !decodeBase64(text("data"), m_incoming.bytes.data() + static_cast<size_t>(offset), m_incoming.size - static_cast<size_t>(offset), wrote))
+			return fail("The file could not be read (its data was damaged on the way, or is larger than announced).");
+		if(!m_incoming.have[static_cast<size_t>(index)])
+		{
+			m_incoming.have[static_cast<size_t>(index)] = true;
+			++m_incoming.got;
+			m_incoming.received += wrote;
+		}
+		if(m_incoming.got < m_incoming.count)
+		{
+			ack(true, {});
+			return;
+		}
+		const auto ms = juce::Time::getMillisecondCounterHiRes() - m_incoming.t0;
+		log("drop: bytes received " + std::to_string(m_incoming.received) + " in " + std::to_string(static_cast<int>(ms)) + " ms");
+		if(m_incoming.received != m_incoming.size)
 			return fail("The file arrived incomplete. Drop it again.");
 		// Into a temp folder under its own (legal) name, then the same path as a chosen file; gone afterwards.
 		const auto dir = juce::File::createTempFile("gmrom");
@@ -183,7 +255,10 @@ namespace mdJucePlugin
 			legal = "dropped.bin";
 		const auto file = dir.getChildFile(legal);
 		const bool written = file.replaceWithData(m_incoming.bytes.data(), m_incoming.bytes.size());
+		const double keep = m_incoming.tid;
 		m_incoming = {};
+		m_incoming.tid = keep;
+		m_incoming.count = 0;		// finished: a repeat of its pieces is refused, a newer transfer starts fresh
 		if(!written)
 		{
 			dir.deleteRecursively();
@@ -191,6 +266,7 @@ namespace mdJucePlugin
 		}
 		installRom(file);
 		dir.deleteRecursively();
+		ack(true, {});
 		reply(_message, true, {});
 	}
 

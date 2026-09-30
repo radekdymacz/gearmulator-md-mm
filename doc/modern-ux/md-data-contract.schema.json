@@ -2274,6 +2274,33 @@
         },
         {
           "type": "object",
+          "description": "The plug-in's answer to one romBytes piece of a firmware file dropped on the page: taken (ok) or the transfer is over (text says why). The page sends the next piece on each ack.",
+          "required": [
+            "type",
+            "tid",
+            "index",
+            "ok"
+          ],
+          "properties": {
+            "type": {
+              "const": "romBytesAck"
+            },
+            "tid": {
+              "type": "number"
+            },
+            "index": {
+              "type": "integer"
+            },
+            "ok": {
+              "type": "boolean"
+            },
+            "text": {
+              "type": "string"
+            }
+          }
+        },
+        {
+          "type": "object",
           "description": "P7: a .syx file the user chose or dropped, parsed by the plug-in: what it holds and what it overwrites.",
           "required": [
             "type",
@@ -5238,13 +5265,15 @@
         },
         {
           "type": "object",
-          "description": "host: a firmware file dropped on the page: piece index of count (base64, in order); the last piece installs it like a chosen file (romInstall)",
+          "description": "host: a firmware file dropped on the page: piece index of count at offset (base64), a few in flight, any order; transfer tid (a newer one cancels the older); each is answered with a romBytesAck message, the last one installs the file like a chosen one (romInstall)",
           "required": [
             "op",
+            "tid",
             "name",
             "size",
-            "index",
             "count",
+            "index",
+            "offset",
             "data"
           ],
           "properties": {
@@ -5264,6 +5293,11 @@
                 "integer"
               ]
             },
+            "tid": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 4000000000
+            },
             "name": {
               "type": "string"
             },
@@ -5272,15 +5306,20 @@
               "minimum": 0,
               "maximum": 67108864
             },
-            "index": {
-              "type": "integer",
-              "minimum": 0,
-              "maximum": 4096
-            },
             "count": {
               "type": "integer",
               "minimum": 1,
               "maximum": 4096
+            },
+            "index": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 4095
+            },
+            "offset": {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 67108864
             },
             "data": {
               "type": "string"

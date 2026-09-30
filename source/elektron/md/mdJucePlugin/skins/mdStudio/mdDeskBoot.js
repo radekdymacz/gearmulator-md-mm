@@ -10,9 +10,10 @@
      Boot.rom({ok, text})                the host's verdict on a chosen or dropped file
      Boot.showInstalled({machine, os, name, size, inFolder})   the same card while a firmware runs (LOAD ROM):
                                          the current image, a drop zone to replace it, Remove, Show the ROM folder, Close
-     Boot.host = {chooseRom(), revealRom(), recheck(), romBytes(msg, done), removeRom(info), log(text), say(text)}   the app's host calls
+     Boot.host = {chooseRom(), revealRom(), recheck(), romBytes(msg), removeRom(info), log(text), say(text)}   the app's host calls;
+     Boot.ack(m) hands it the plug-in's romBytesAck
    A file dropped anywhere on the page (HTML5 drag and drop; the web view takes the drag, the page reads the file
-   and sends it in pieces, romBytes) is checked here and installed by the host like a chosen one. */
+   and sends it in pieces, romBytes, a few in flight, each acknowledged) is checked here and installed by the host like a chosen one. */
 const Boot = (() => {
 	const EXPECT = { Machinedrum: 14000, Monomachine: 11000 };	// ms from the first BOOTING OS to input (measured)
 	const card = document.createElement("div");
@@ -111,33 +112,67 @@ const Boot = (() => {
 		else if (a === "close") { leaveManage(); shown = null; card.hidden = true; }
 	});
 	/* ROMDROP BEGIN: what a dropped file must be, and its pieces for the bridge (pure: a File in, a plan out) */
-	function romDropPlan(file, want) {
-		const ROM = 0x800000, LIMIT = 64 * 1048576, PIECE = 196608;	// 192 KiB of bytes = 256 KiB of base64 per bridge message
+	function romDropPlan(file, want, piece = 262144) {
+		const ROM = 0x800000, LIMIT = 64 * 1048576;
 		if (!file) return Promise.resolve({ ok: false, text: "Drop the firmware image: a .bin (or a .zip with it) from your own machine." });
 		const name = file.name || "", ext = ((/\.([A-Za-z0-9]+)$/.exec(name) || [])[1] || "").toLowerCase();
 		if (ext !== "bin" && ext !== "zip") return Promise.resolve({ ok: false, text: `"${name || "This"}" is not a firmware image. Drop the ${want} .bin (or a .zip with it).` });
 		if (ext === "bin" && file.size !== ROM) return Promise.resolve({ ok: false, text: `This file is ${(file.size / 1048576).toFixed(2)} MiB. The ${want} image is exactly 8 MiB.` });
 		if (file.size > LIMIT) return Promise.resolve({ ok: false, text: "This file is far larger than a firmware image." });
 		return file.arrayBuffer().then(ab => {
-			const buf = new Uint8Array(ab), count = Math.max(1, Math.ceil(buf.length / PIECE));
-			const piece = i => { const p = buf.subarray(i * PIECE, (i + 1) * PIECE); let s = ""; for (let k = 0; k < p.length; k += 0x8000) s += String.fromCharCode.apply(null, p.subarray(k, k + 0x8000)); return btoa(s); };
-			return { ok: true, name, size: buf.length, count, piece };
+			const buf = new Uint8Array(ab), count = Math.max(1, Math.ceil(buf.length / piece));
+			const at = i => i * piece;
+			const data = i => { const p = buf.subarray(at(i), at(i) + piece); let s = ""; for (let k = 0; k < p.length; k += 0x8000) s += String.fromCharCode.apply(null, p.subarray(k, k + 0x8000)); return btoa(s); };
+			return { ok: true, name, size: buf.length, count, at, data };
 		}, () => ({ ok: false, text: "The file could not be read." }));
 	}
 	/* ROMDROP END */
 	function said(text, ok) { if (card.hidden || $b("bootrom").hidden) { if (Boot.host && Boot.host.say) Boot.host.say(text); } else rom({ ok, text }); }
-	async function dropped(file) {
+	/* One transfer at a time: a small window of pieces in flight, each acknowledged by the plug-in (romBytesAck);
+	   a new drop cancels the running one (its id is older, the plug-in drops its pieces), and 5 s without an
+	   acknowledgement ends it with a message in the card instead of hanging. */
+	const WINDOW = 4, ACK_MS = 5000;
+	let xfer = null, tidLast = 0;
+	function endTransfer(text, ok) {
+		if (!xfer) return;
+		clearTimeout(xfer.timer); const x = xfer; xfer = null;
+		if (text) { if (Boot.host.log) Boot.host.log(`drop: ${ok ? "sent" : "failed"}: ${text}`); said(text, ok); }
+		return x;
+	}
+	function pump() {
+		const x = xfer; if (!x) return;
+		while (x.next < x.plan.count && x.next - x.done < WINDOW) {
+			const i = x.next++;
+			Boot.host.romBytes({ tid: x.tid, name: x.plan.name, size: x.plan.size, count: x.plan.count, index: i, offset: x.plan.at(i), data: x.plan.data(i) });
+		}
+		clearTimeout(x.timer);
+		x.timer = setTimeout(() => { if (xfer === x) endTransfer("The plug-in did not answer while the file was sent. Drop it again.", false); }, ACK_MS);
+	}
+	/* the plug-in's acknowledgement of a piece: {tid, index, ok, text} */
+	function ack(m) {
+		const x = xfer; if (!x || m.tid !== x.tid) return;
+		if (!m.ok) { endTransfer(m.text || "The plug-in refused the file.", false); return; }
+		x.done++;
+		if (x.done >= x.plan.count) {
+			const ms = Math.round(performance.now() - x.t0);
+			if (Boot.host.log) Boot.host.log(`drop: ${x.plan.size} bytes in ${x.plan.count} pieces, ${(ms / 1000).toFixed(2)} s`);
+			endTransfer("", true); return;
+		}
+		said(`Sending ${x.plan.name}… ${x.done}/${x.plan.count}`, true);
+		pump();
+	}
+	async function dropped(file, opt = {}) {
 		const h = Boot.host || {}, log = t => h.log && h.log(t);
+		if (xfer) endTransfer("", false), log("drop: an earlier transfer was replaced");
 		log(`drop: page got ${file ? file.name + " " + file.size : "no file"}`);
-		const plan = await romDropPlan(file, romName(machine));
+		const plan = await romDropPlan(file, romName(machine), opt.piece);
 		if (!plan.ok) { log("drop: refused: " + plan.text); said(plan.text, false); return; }
 		if (!h.romBytes) { said("This page has no host to install the firmware.", false); return; }
+		if (xfer) endTransfer("", false);
+		tidLast = Math.max(tidLast + 1, Date.now() % 1000000000);
+		xfer = { tid: tidLast, plan, next: 0, done: 0, t0: performance.now(), timer: 0 };
 		said(`Sending ${plan.name}…`, true);
-		for (let i = 0; i < plan.count; i++) {
-			const r = await new Promise(done => h.romBytes({ name: plan.name, size: plan.size, index: i, count: plan.count, data: plan.piece(i) }, done));
-			if (!r || !r.ok) { const t = (r && r.errors && r.errors[0]) || "The plug-in did not take the file."; log("drop: failed: " + t); said(t, false); return; }
-		}
-		log("drop: all pieces sent");
+		pump();
 	}
 	/* the web view takes the drag: it shows on the card and the page reads the file (Finder puts a file, no path, on the pasteboard) */
 	let over = 0;
@@ -154,6 +189,6 @@ const Boot = (() => {
 		e.preventDefault();
 		dropped(f);
 	}, true);
-	return { update, lcd, rom, showInstalled, romDropPlan, host: null, state: () => shown };
+	return { update, lcd, rom, showInstalled, romDropPlan, ack, drop: dropped, host: null, state: () => shown };
 })();
 /* BOOT END */

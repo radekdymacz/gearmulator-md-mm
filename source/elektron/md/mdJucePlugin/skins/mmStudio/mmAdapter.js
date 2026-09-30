@@ -548,7 +548,7 @@
 		   it), the ROM folder, and a new look */
 		chooseRom() { send({ op: "chooseRom" }); },
 		/* a firmware file dropped on the page, in pieces (Boot): each answered before the next goes */
-		romBytes(msg, done) { send(Object.assign({ op: "romBytes" }, msg), { onResult: done }); },
+		romBytes(msg) { send(Object.assign({ op: "romBytes" }, msg)); },
 		removeRom(info) { askRemoveRom(info); },
 		log(text) { log(text); },
 		/* LOAD ROM in the engine menu: which firmware runs, REPLACE or REMOVE it (the reply is the romInfo message) */
@@ -657,6 +657,7 @@
 		else if (m.type === "ask") onAsk(m);
 			else if (m.type === "romInstall") { V().bootRom(m); V().toast(m.text); }
 			else if (m.type === "romInfo") onRomInfo(m);
+			else if (m.type === "romBytesAck") V().bootAck(m);
 			else if (m.type === "notice") onNotice(m);
 			else if (m.type === "syxPreview") V().syxPreview(m);
 			else if (m.type === "syxProgress") V().syxProgress(m);

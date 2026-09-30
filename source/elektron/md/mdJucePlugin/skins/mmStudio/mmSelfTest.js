@@ -536,6 +536,24 @@ window.MMDiagnostics = {};
 		log(`SELFTEST ${bad ? "FAIL" : "PASS"} sound ${12 - bad}/12`);
 	}
 
+	/* ?selftest=p7romdrop: a dropped 8 MiB file, sent to the plug-in as the page does, timed in the real web view for a
+	   few piece sizes (no ROM installed: the plug-in refuses the image at the end, which is what ends each run) */
+	async function runRomDrop() {
+		let bad = 0;
+		for (const piece of [262144, 1048576, 2097152]) {
+			const bytes = new Uint8Array(0x800000);
+			for (let i = 0; i < bytes.length; i += 7) bytes[i] = (i * 2654435761) >>> 24;
+			const file = new File([bytes], "measure-" + piece + ".bin");
+			const end = waitFor(m => m.type === "romInstall" || (m.type === "romBytesAck" && !m.ok), 60000);
+			const t0 = now();
+			await V().bootDrop(file, { piece });
+			try { const m = await end; log(`SELFTEST ok romdrop piece ${piece}: ${Math.round(now() - t0)} ms to the plug-in's answer (${m.type}: ${m.text || ""})`); }
+			catch (e) { bad++; log(`SELFTEST FAIL romdrop piece ${piece}: ${e.message}`); }
+			await sleep(500);
+		}
+		log(`SELFTEST ${bad ? "FAIL" : "PASS"} romdrop`);
+	}
+
 	const TESTS = {
 		/* ?selftest=p7sound (the p7 prefix the plug-in passes on): the Sound workspace on every track */
 		p7sound: () => setTimeout(runSound, 500),
@@ -569,6 +587,8 @@ window.MMDiagnostics = {};
 	});
 	const kind = (location.search.match(/[?&]selftest=(\w+)/) || [])[1];
 	if (kind && TESTS[kind]) window.MMPage.whenReady(TESTS[kind]);
+	if (kind === "p7romdrop") { log("romdrop: scheduled"); setTimeout(() => runRomDrop().catch(e => log("SELFTEST FAIL romdrop: " + (e && e.stack || e))), 3000); }	// needs no machine: the ROM is missing
+
 	/* p7, from the page's start: the start-up card covers the window and blocks input while the machine starts */
 	if (kind === "p7") (async () => {
 		const until = async (f, ms) => { const end = now() + ms; while (now() < end) { if (f()) return true; await sleep(30); } return false; };

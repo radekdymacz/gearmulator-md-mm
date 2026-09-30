@@ -126,7 +126,7 @@ namespace mdJucePlugin
 
 		ToPage m_toPage;
 		std::function<void(const std::string&)> m_log;
-		struct Incoming { std::string name; size_t size = 0; int count = 0; int next = 0; std::vector<uint8_t> bytes; };
+		struct Incoming { double tid = -1; std::string name; size_t size = 0; int count = 0; int got = 0; size_t received = 0; std::vector<bool> have; std::vector<uint8_t> bytes; double t0 = 0; };
 		Incoming m_incoming;
 	};
 
