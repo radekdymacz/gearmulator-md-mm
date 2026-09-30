@@ -2,7 +2,7 @@
 /* ===== Feedback: toast, TX lamp, dialogs ===== */
 let toastT;function toast(m){const e=$("#toast");e.textContent=m;e.classList.add("on");clearTimeout(toastT);toastT=setTimeout(()=>e.classList.remove("on"),3000)}
 let txT;function tx(){const l=$("#txled");if(!l)return;l.classList.add("on");clearTimeout(txT);txT=setTimeout(()=>l.classList.remove("on"),70)}
-function ask(html,btns,cls=""){const d=$("#dlg");d.innerHTML=`<div class="dlgbox ${cls}" role="alertdialog" aria-modal="true">${html.startsWith("<")?html:`<p>${html}</p>`}<div class="btnrow">${btns.map(([t,c],i)=>`<button class="${c}" data-dlg="${i}">${t}</button>`).join("")}</div></div>`;d.hidden=false;d._btns=btns;d.querySelector(".btnrow button:last-child")?.focus()}
+function ask(html,btns,cls=""){const d=$("#dlg");d.innerHTML=`<div class="dlgbox ${cls}" role="alertdialog" aria-modal="true">${/^<(p|div|ol|ul|h[1-6]|section|form)[\s>]/i.test(html)?html:`<p>${html}</p>`}<div class="btnrow">${btns.map(([t,c],i)=>`<button class="${c}" data-dlg="${i}">${t}</button>`).join("")}</div></div>`;d.hidden=false;d._btns=btns;d.querySelector(".btnrow button:last-child")?.focus()}
 
 /* ===== Honest machine state =====
    Sound edits go out as CCs at once (Appendix B) but stay unsaved in the kit.

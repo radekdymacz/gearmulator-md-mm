@@ -92,12 +92,16 @@ const Modal = (() => {
 		if (!el || !lcd) return;
 		if (el.title) { el.dataset.tip = el.title; el.removeAttribute("title"); }
 		tipT = setTimeout(() => {
+			/* never over an open menu (its list opens where the tip would show) */
+			if (document.querySelector("#kpop:not([hidden])") || el.closest("[aria-expanded=true]")) return;
 			const r = el.getBoundingClientRect(), l = lcd.getBoundingClientRect();
 			tip.textContent = el.dataset.tip; tip.hidden = false;
 			tip.style.top = (l.bottom + 8) + "px";
 			tip.style.left = Math.max(8, Math.min(innerWidth - tip.offsetWidth - 8, r.left + r.width / 2 - tip.offsetWidth / 2)) + "px";
 		}, 450);
 	});
+	/* a press ends the tip at once: the press may open a menu */
+	document.addEventListener("pointerdown", () => { clearTimeout(tipT); tip.hidden = true; }, true);
 	document.addEventListener("mouseout", e => { if (e.target.closest?.(".lcdpanel")) { clearTimeout(tipT); tip.hidden = true; } });
 	/* a title set later (a state's new words) moves to the tip too */
 	new MutationObserver(ms => { for (const m of ms) { const el = m.target; if (el.title && el.closest?.(".lcdpanel")) { el.dataset.tip = el.title; el.removeAttribute("title"); } } })

@@ -2118,12 +2118,16 @@ const Modal = (() => {
 		if (!el || !lcd) return;
 		if (el.title) { el.dataset.tip = el.title; el.removeAttribute("title"); }
 		tipT = setTimeout(() => {
+			/* never over an open menu (its list opens where the tip would show) */
+			if (document.querySelector("#kpop:not([hidden])") || el.closest("[aria-expanded=true]")) return;
 			const r = el.getBoundingClientRect(), l = lcd.getBoundingClientRect();
 			tip.textContent = el.dataset.tip; tip.hidden = false;
 			tip.style.top = (l.bottom + 8) + "px";
 			tip.style.left = Math.max(8, Math.min(innerWidth - tip.offsetWidth - 8, r.left + r.width / 2 - tip.offsetWidth / 2)) + "px";
 		}, 450);
 	});
+	/* a press ends the tip at once: the press may open a menu */
+	document.addEventListener("pointerdown", () => { clearTimeout(tipT); tip.hidden = true; }, true);
 	document.addEventListener("mouseout", e => { if (e.target.closest?.(".lcdpanel")) { clearTimeout(tipT); tip.hidden = true; } });
 	/* a title set later (a state's new words) moves to the tip too */
 	new MutationObserver(ms => { for (const m of ms) { const el = m.target; if (el.title && el.closest?.(".lcdpanel")) { el.dataset.tip = el.title; el.removeAttribute("title"); } } })
@@ -2292,7 +2296,7 @@ const Syx = (() => {
 /* ===== Feedback: toast, TX lamp, dialogs ===== */
 let toastT;function toast(m){const e=$("#toast");e.textContent=m;e.classList.add("on");clearTimeout(toastT);toastT=setTimeout(()=>e.classList.remove("on"),3000)}
 let txT;function tx(){const l=$("#txled");if(!l)return;l.classList.add("on");clearTimeout(txT);txT=setTimeout(()=>l.classList.remove("on"),70)}
-function ask(html,btns,cls=""){const d=$("#dlg");d.innerHTML=`<div class="dlgbox ${cls}" role="alertdialog" aria-modal="true">${html.startsWith("<")?html:`<p>${html}</p>`}<div class="btnrow">${btns.map(([t,c],i)=>`<button class="${c}" data-dlg="${i}">${t}</button>`).join("")}</div></div>`;d.hidden=false;d._btns=btns;d.querySelector(".btnrow button:last-child")?.focus()}
+function ask(html,btns,cls=""){const d=$("#dlg");d.innerHTML=`<div class="dlgbox ${cls}" role="alertdialog" aria-modal="true">${/^<(p|div|ol|ul|h[1-6]|section|form)[\s>]/i.test(html)?html:`<p>${html}</p>`}<div class="btnrow">${btns.map(([t,c],i)=>`<button class="${c}" data-dlg="${i}">${t}</button>`).join("")}</div></div>`;d.hidden=false;d._btns=btns;d.querySelector(".btnrow button:last-child")?.focus()}
 
 /* ===== Honest machine state =====
    Sound edits go out as CCs at once (Appendix B) but stay unsaved in the kit.
