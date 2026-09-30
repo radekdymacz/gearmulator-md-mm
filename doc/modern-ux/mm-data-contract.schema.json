@@ -1657,8 +1657,12 @@
             },
             "doc": {
               "type": "object",
-              "required": ["mappings", "learning"],
+              "required": ["enabled", "mappings", "learning"],
               "properties": {
+                "enabled": {
+                  "type": "boolean",
+                  "description": "MIDI mapping (MIDI learn and the Control workspace) is on; the pages hide both unless true (mdmm::midiMappingEnabled, deskHost.h)."
+                },
                 "limits": {
                   "type": "object",
                   "description": "P6: exactly the learnable targets.",

@@ -154,6 +154,8 @@ if not na_sel or not na_info:
     problems.append('the mockup has no NA_SEL / NA_INFO')
 else:
     problems += pc.check_caps(re.findall(r'(?:^|[,{\n])\s*(\w+):', na_sel.group(1)), re.findall(r'"(\w+)"', na_info.group(1)), schema, 'the mockup')
+problems += pc.check_mapping_gate(js, ['setMapping(!window.MMHost)', 'if(ws==="control"&&!S.mapping)return', 'S.mapping&&(e.key==="l"'], 'the mockup')
+problems += pc.check_mapping_gate(adapter, ['V().setMapping(!!doc.enabled)'], 'mmAdapter.js')
 # both ways: every host call the mockup makes is one the adapter has, and every one it has is made
 host_calls = set(re.findall(r'HOST\.(\w+)', js))
 host_block = adapter[adapter.index('window.MMHost = {'):]

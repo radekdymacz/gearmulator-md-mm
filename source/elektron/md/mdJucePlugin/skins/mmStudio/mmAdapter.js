@@ -392,6 +392,7 @@
 	function onLearn(doc) {
 		const prev = learn;
 		learn = doc;
+		V().setMapping(!!doc.enabled);	/* MIDI mapping is off unless the plug-in says so (deskHost.h) */
 		if (prev && prev.learning && !doc.learning && doc.mappings.length > prev.mappings.length) {
 			const m = doc.mappings[doc.mappings.length - 1];
 			V().toast(`Learned: CC ${m.cc} → T${m.t + 1} ${PAGES[m.pg] || ""} ${V().pname(m.t, PAGES[m.pg] + "." + m.i) || ""}. Stored with the plug-in.`);

@@ -135,6 +135,15 @@ A model's SysEx rules (what its OS takes as it is) are its `SyxTraits`, in `mdSe
 - **In a DAW** the plug-in sends the host's transport and tempo to the firmware as MIDI clock (`synthLib::MidiClock`). Each model says what its active global must be to follow them (`hostFollowing`, pure), and the `followHost` machine command sets it without an undo step. The session sends that command every 2 s, in a DAW's plug-in only (`followsHost`).
 - **A new machine** gets a `hostFollowing` of its own, plus the command row. See [DESIGN-P7-sync.md](DESIGN-P7-sync.md).
 
+## MIDI mapping is hidden for now
+
+The editors ship without MIDI mapping (MIDI Learn and the CONTROL workspace) until the controller feature lands. All of the code stays; one switch hides it:
+
+- **The switch:** `deskHost::midiMappingEnabled` in `deskHost/deskHost.h`, false unless the compile definition `MDMM_MIDI_MAPPING=1` is set (or its default changed there).
+- **Off:** the learn commands are refused (`MidiLearnCommands::handle`); the session drops any mapping the translator holds every step (`MidiLearnCommands::enforce`, so MIDI reaches the machine raw whatever the disk preset or a project brought); the learn document says `enabled: false` (no mappings, no limits), and the pages hide the CONTROL tab (MD and MM, workspace 6), the LEARN key and their shortcuts (`applyMapping` in `mdDeskApp.js`; `setMapping` in the MM mockup source `130-main.js`, called from `mmAdapter.js`). The pages are hidden by default and show mapping only when the document says `enabled: true`. Host automation, the machine's own CC map, Control All and HW MIDI are unchanged.
+- **Back on:** turn the switch on; nothing else. The app LFOs and Random sources live on the CONTROL tab, so they return with it.
+- **Checks:** `sync-*-skin.py` keep the pages' gate (`page_contract_check.py: check_mapping_gate`); `mdSessionFirmwareTest` checks the document and the refusals while the switch is off.
+
 ## Build and check
 
 Code of ours goes in files of ours; upstream's files carry hooks only ([UPSTREAM.md](UPSTREAM.md), checked by `scripts/mdmm-upstream-footprint.sh`).

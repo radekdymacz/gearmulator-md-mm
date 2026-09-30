@@ -28,6 +28,17 @@ const SHAPES = ["Triangle", "Saw", "Square", "Linear decay", "Exp decay", "Rando
 const S = { ws: "seq", sel: 0, lane: "FLTF", page: 0, viewAll: true, follow: false, step: -1, soloSet: new Set(), userMutes: new Set(),
 	songSel: 0, bank: 0, songZoom: "fit", smpSlot: "RAM1", chopTrack: null, capture: {}, keepFx: true, plate: "mk1" };
 S.ctl = { learn: false, learnT: null, sel: null, selT: null, addT: 1 };
+/* MIDI mapping (the CONTROL workspace and LEARN) is hidden until the plug-in's learn document says
+   "enabled" (mdmm::midiMappingEnabled, deskHost.h). Off: no tab, no LEARN key, the keys do nothing. */
+S.mapping = false;
+function applyMapping(on) {
+	S.mapping = !!on;
+	const tab = document.querySelector('#tabs [data-ws="control"]'), key = document.getElementById("learnkey");
+	if (tab) tab.hidden = !on;
+	if (key) key.hidden = !on;
+	if (!on) { S.ctl.learn = false; S.ctl.learnT = null; document.body.classList.remove("learn"); if (S.ws === "control") S.ws = "seq"; }
+}
+applyMapping(false);
 V = view();	/* the view before the first document (mdDeskModel.js) */
 
 /* Pointer capture can fail for a pointer the browser no longer tracks; the gesture still works. */
@@ -1254,7 +1265,7 @@ document.addEventListener("click", e => {
 		const asrc = e.target.closest(".srch[data-src^='app:']"); if (asrc) { C.sel = asrc.dataset.src; C.selT = null; render(); return; }
 		const ld = e.target.closest("[data-ldel]"); if (ld) { cmd("learnRemove", { index: +ld.dataset.ldel }); return; }
 	}
-	const tb = e.target.closest("#tabs button"); if (tb) { S.ws = tb.dataset.ws; render(); return; }
+	const tb = e.target.closest("#tabs button"); if (tb) { if (tb.dataset.ws === "control" && !S.mapping) return; S.ws = tb.dataset.ws; render(); return; }
 	if (e.target.closest("#platekey")) { setPlate(S.plate === "mk2" ? "mk1" : "mk2"); return; }
 	if (e.target.closest("#play")) { cmd(V.playing ? "stop" : "play"); return; }
 	if (e.target.closest("#rec")) { cmd("record"); return; }
@@ -1396,7 +1407,7 @@ Bridge.onMessage(m => {
 	}
 	case "ask": onAsk(m); break;
 	case "error": toast(m.message); showLastError([m.message]); break;
-	case "learn": Docs.learn = m.doc; if (S.ws === "control") scheduleRender(); else syncControls(); if (!m.doc.learning && S.ctl.learnT) { S.ctl.learnT = null; syncControls(); } break;
+	case "learn": Docs.learn = m.doc; applyMapping(m.doc.enabled); if (!S.mapping) break; if (S.ws === "control") scheduleRender(); else syncControls(); if (!m.doc.learning && S.ctl.learnT) { S.ctl.learnT = null; syncControls(); } break;
 	}
 });
 
@@ -1427,11 +1438,11 @@ Keys.bind({ keys: ["Z"], mod: "cmd+shift", group: "Anywhere", does: "Redo", run:
 Keys.bind({ keys: ["Y"], mod: "cmd", group: "Anywhere", does: "Redo", run: () => cmd("redo") });
 Keys.bind({ keys: ["C"], mod: "cmd", group: "Anywhere", does: "Copy (track page, sound, song row)", run: () => secAction("copy") });
 Keys.bind({ keys: ["V"], mod: "cmd", group: "Anywhere", does: "Paste", run: () => secAction("paste") });
-Keys.bind({ keys: ["Escape"], group: "Anywhere", does: "Leave LEARN", when: () => S.ctl.learn, run: () => toggleLearn() });
+Keys.bind({ keys: ["Escape"], group: "Anywhere", does: "Leave LEARN", mapping: true, when: () => S.mapping && S.ctl.learn, run: () => toggleLearn() });
 Keys.bind({ keys: ["Space"], group: "Transport", does: "Play / stop", run: () => cmd(V.playing ? "stop" : "play") });
 Keys.bind({ keys: ["R"], group: "Transport", does: "Live recording (RECORD + PLAY)", run: () => cmd("record") });
-["seq", "sound", "mix", "sampler", "song", "control"].forEach((ws, i) => Keys.bind({ keys: [String(i + 1)], group: "Workspaces", does: ["Sequence", "Sound", "Mix", "Sampler", "Song", "Control"][i], run: () => { S.ws = ws; render(); } }));
-Keys.bind({ keys: ["L"], group: "Workspaces", does: "LEARN: map a value to a controller knob", run: () => toggleLearn() });
+["seq", "sound", "mix", "sampler", "song", "control"].forEach((ws, i) => Keys.bind({ keys: [String(i + 1)], group: "Workspaces", does: ["Sequence", "Sound", "Mix", "Sampler", "Song", "Control"][i], mapping: ws === "control", when: ws === "control" ? () => S.mapping : null, run: () => { S.ws = ws; render(); } }));
+Keys.bind({ keys: ["L"], group: "Workspaces", does: "LEARN: map a value to a controller knob", mapping: true, when: () => S.mapping, run: () => toggleLearn() });
 Keys.bind({ keys: ["[", "]"], group: "Sequence", does: "Previous / next page", when: () => S.ws === "seq" && pages16() > 1, run: e => { const n = pages16(); S.viewAll = false; S.page = (S.page + (e.key === "]" ? 1 : -1) + n) % n; render(); } });
 Keys.bind({ keys: ["Delete", "Backspace"], group: "Sequence", does: "Clear the selected steps (Song: delete the row)", when: () => S.ws === "song" || S.ws === "seq", run: () => S.ws === "song" ? songAction("del") : secAction("clear") });
 Keys.bind({ keys: ["ArrowLeft", "ArrowRight"], group: "Song", does: "Previous / next row", when: () => S.ws === "song", run: e => { S.songSel = Math.max(0, Math.min(V.song.length - 1, S.songSel + (e.key === "ArrowRight" ? 1 : -1))); render(); } });

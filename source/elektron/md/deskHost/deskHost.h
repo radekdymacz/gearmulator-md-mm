@@ -8,6 +8,16 @@
 
 namespace deskHost
 {
+	// THE switch for MIDI mapping (MIDI learn and the pages' CONTROL workspace). Off while the
+	// controller feature is being reworked: the learn commands are refused, the plug-in applies no
+	// learned mappings (MIDI reaches the machine raw), and the learn document tells the pages
+	// ("enabled") to hide the CONTROL workspace and the LEARN key. All of the code stays. Turn it on
+	// with -DMDMM_MIDI_MAPPING=1 (or change the default here); nothing else is needed.
+#ifndef MDMM_MIDI_MAPPING
+#define MDMM_MIDI_MAPPING 0
+#endif
+	inline constexpr bool midiMappingEnabled = MDMM_MIDI_MAPPING != 0;
+
 	// What the plug-in does for one of its commands: the handler column of its table.
 	enum class Action : uint8_t
 	{

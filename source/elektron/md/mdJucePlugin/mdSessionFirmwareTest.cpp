@@ -68,6 +68,38 @@ namespace
 		// "ready": everything the session publishes once a page attaches, "learn" among it.
 		session->onPageMessage(parseJson(R"({"op":"ready"})"));
 
+		// MIDI mapping is a switch (deskHost::midiMappingEnabled): off, the learn document says so with no
+		// mappings, and a learn command is refused. On, this part of the test does not apply.
+		if(!deskHost::midiMappingEnabled)
+		{
+			bool told = false, refused = false;
+			for(const auto& m : published)
+				if(const auto* type = m.find("type"); type && type->isString() && type->asString() == "learn")
+				{
+					const auto* doc = m.find("doc");
+					const auto* enabled = doc ? doc->find("enabled") : nullptr;
+					const auto* maps = doc ? doc->find("mappings") : nullptr;
+					told = enabled && enabled->isBool() && !enabled->asBool() && maps && maps->isArray() && maps->asArray().empty();
+				}
+			const auto before = published.size();
+			session->onPageMessage(parseJson(R"({"op":"learnStart","id":90,"t":0,"i":0})"));
+			session->onPageMessage(parseJson(R"({"op":"learnAdd","id":91,"cc":21,"t":0,"i":0})"));
+			int refusals = 0;
+			for(size_t n = before; n < published.size(); ++n)
+			{
+				const auto* ok = published[n].find("ok");
+				if(ok && ok->isBool() && !ok->asBool())
+					++refusals;
+			}
+			refused = refusals == 2;
+			if(!told || !refused)
+			{
+				std::printf("  FAIL: MIDI mapping off: learn document says off %d, both learn commands refused %d\n", told, refused);
+				return false;
+			}
+			std::puts("  MIDI mapping off: the learn document says so, learn commands refused");
+		}
+
 		// AUDIO/MIDI is the editor window's, not the session's (mdPageEditor.h owns it); built the
 		// same way here, on the same processor, so its messages are the real ones.
 		mdJucePlugin::AudioMidiLink audio(_ap, [&](Value _m) { published.push_back(std::move(_m)); });

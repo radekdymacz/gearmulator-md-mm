@@ -26,7 +26,7 @@ const Keys = (() => {
 function drawKeys() {
 	const pop = $("#keyspop"); if (!pop) return;
 	const groups = [];
-	for (const b of Keys.list()) { let g = groups.find(x => x.name === b.group); if (!g) groups.push(g = { name: b.group, rows: [] }); g.rows.push(b); }
+	for (const b of Keys.list()) { if (b.mapping && !S.mapping) continue; let g = groups.find(x => x.name === b.group); if (!g) groups.push(g = { name: b.group, rows: [] }); g.rows.push(b); }
 	pop.innerHTML = `<div class="libhead"><span class="cap">Keys</span><span class="note">Every shortcut of the editor, from its key map. ? or Esc closes.</span><button class="libx" data-keysx="1">Esc</button></div>
 	<div class="keysgrid">${groups.map(g => `<section class="card"><header><h3>${g.name}</h3></header><div class="keyrows">${g.rows.map(b => `<div class="keyrow"><kbd>${Keys.label(b)}</kbd><span>${b.does}</span></div>`).join("")}</div></section>`).join("")}</div>`;
 	pop.hidden = false;
