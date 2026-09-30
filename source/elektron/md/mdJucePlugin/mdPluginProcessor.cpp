@@ -1,4 +1,5 @@
 #include "mdPluginProcessor.h"
+#include "juceUiLib/messageBox.h"
 #include "mdDeskHost.h"
 
 #include "mdController.h"
@@ -785,8 +786,7 @@ namespace mdJucePlugin
 		updateHostDisplay(juce::AudioProcessorListener::ChangeDetails()
 			.withNonParameterStateChanged(true));
 		if(getActiveEditor())
-			juce::NativeMessageBox::showMessageBoxAsync(
-				juce::MessageBoxIconType::WarningIcon,
+			genericUI::MessageBox::showOk(genericUI::MessageBox::Icon::Warning,	// the page shows it (messageRoute.h)
 				std::string(productName(m_model)) + " state restore", _error);
 	}
 

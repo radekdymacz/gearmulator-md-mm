@@ -1,4 +1,5 @@
 #include "messageBox.h"
+#include "messageRoute.h"
 
 #include <memory>
 
@@ -31,21 +32,25 @@ namespace genericUI
 
 	void MessageBox::showYesNo(const Icon _icon, const std::string& _header, const std::string& _message, Callback _callback)
 	{
+		if(messageRoute::offerAsk(_header, _message, {"Yes", "No"}, _callback)) return;	// an editor's page shows it (messageRoute.h)
 		juce::NativeMessageBox::showYesNoBox(toJuceIcon(_icon), _header.c_str(), _message.c_str(), nullptr, addCallback(std::move(_callback)));
 	}
 
 	void MessageBox::showOkCancel(const Icon _icon, const std::string& _header, const std::string& _message, Callback _callback)
 	{
+		if(messageRoute::offerAsk(_header, _message, {"OK", "Cancel"}, _callback)) return;
 		juce::NativeMessageBox::showOkCancelBox(toJuceIcon(_icon), _header.c_str(), _message.c_str(), nullptr, addCallback(std::move(_callback)));
 	}
 
 	void MessageBox::showOk(const Icon _icon, const std::string& _header, const std::string& _message, juce::Component* _associatedComponent/* = nullptr*/)
 	{
+		if(messageRoute::offerOk(_header, _message)) return;
 		juce::NativeMessageBox::showMessageBoxAsync(toJuceIcon(_icon), _header.c_str(), _message.c_str(), _associatedComponent);
 	}
 
 	void MessageBox::showOk(Icon _icon, const std::string& _header, const std::string& _message, juce::Component* _associatedComponent, std::function<void()> _callback)
 	{
+		if(messageRoute::offerOk(_header, _message, _callback)) return;
 		juce::NativeMessageBox::showMessageBoxAsync(toJuceIcon(_icon), _header.c_str(), _message.c_str(), _associatedComponent, 
 			juce::ModalCallbackFunction::create([_callback = std::move(_callback)](int)
 			{

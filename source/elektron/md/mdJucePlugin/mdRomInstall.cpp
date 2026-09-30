@@ -84,4 +84,69 @@ namespace mdJucePlugin
 			return {false, "The ROM could not be written to " + target.getFullPathName().toStdString(), {}};
 		return {true, check.text, target};
 	}
+
+	std::vector<juce::File> romsInFolder(const md::MachineModel _model, const juce::File& _romFolder)
+	{
+		std::vector<juce::File> found;
+		if(!_romFolder.isDirectory())
+			return found;
+		for(const auto& f : _romFolder.findChildFiles(juce::File::findFiles, true, "*.bin"))
+		{
+			if(!f.isAChildOf(_romFolder) || f.getSize() != static_cast<juce::int64>(md::g_romSize))
+				continue;
+			juce::MemoryBlock mb;
+			if(!f.loadFileAsData(mb))
+				continue;
+			const std::vector<uint8_t> bytes(static_cast<const uint8_t*>(mb.getData()), static_cast<const uint8_t*>(mb.getData()) + mb.getSize());
+			if(md::checkRom(bytes, _model).ok)
+				found.push_back(f);
+		}
+		return found;
+	}
+
+	namespace
+	{
+		int deleteAllBut(const md::MachineModel _model, const juce::File& _romFolder, const juce::File& _keep, std::string& _failed)
+		{
+			int n = 0;
+			for(const auto& f : romsInFolder(_model, _romFolder))
+			{
+				if(_keep != juce::File() && f == _keep)
+					continue;
+				if(f.deleteFile())
+					++n;
+				else
+					_failed += (_failed.empty() ? "" : ", ") + f.getFileName().toStdString();
+			}
+			return n;
+		}
+	}
+
+	RomInstall replaceRom(const juce::File& _file, const md::MachineModel _model, const juce::File& _romFolder)
+	{
+		auto r = installRom(_file, _model, _romFolder);
+		if(!r.ok)
+			return r;
+		std::string failed;
+		const auto gone = deleteAllBut(_model, _romFolder, r.installed, failed);
+		if(gone > 0)
+			r.text += " (replaced the earlier image)";
+		if(!failed.empty())
+			r.text += ". The earlier image could not be removed: " + failed;
+		return r;
+	}
+
+	RomRemoval removeRoms(const md::MachineModel _model, const juce::File& _romFolder)
+	{
+		std::string failed;
+		RomRemoval r;
+		r.removed = deleteAllBut(_model, _romFolder, {}, failed);
+		if(!failed.empty())
+			r.text = "Could not remove " + failed + " from the ROM folder.";
+		else if(r.removed == 0)
+			r.text = "There is no firmware image in the ROM folder to remove.";
+		else
+			r.text = "Removed the firmware image from the ROM folder.";
+		return r;
+	}
 }

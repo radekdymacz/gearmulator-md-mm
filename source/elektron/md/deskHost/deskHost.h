@@ -39,7 +39,10 @@ namespace deskHost
 		ChooseSyx,			// P7: the native file chooser for a .syx to import (its preview follows)
 		SyxImport,			// P7: import the previewed .syx (the kinds chosen)
 		SyxCancel,
-		SyxExport			// P7: the native save dialog, then every document the editor holds as one .syx
+		SyxExport,			// P7: the native save dialog, then every document the editor holds as one .syx
+		RomInfo,			// the installed firmware: name, OS, size, where (answered with a romInfo message)
+		RemoveRom,			// delete the firmware from the editor's ROM folder (the page asked the user first)
+		NoticeAnswer		// the button the user pressed on a notice (a message the plug-in has for the user)
 	};
 
 	// Who acts on a row: the session (it outlives the window) or the window (the menu and the

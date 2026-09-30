@@ -2207,6 +2207,73 @@
         },
         {
           "type": "object",
+          "description": "LOAD ROM: which firmware image the machine runs and where it is (the answer to romInfo). REMOVE only deletes inside the editor's ROM folder (inFolder).",
+          "required": [
+            "type",
+            "installed",
+            "os",
+            "name",
+            "size",
+            "folder",
+            "inFolder"
+          ],
+          "properties": {
+            "type": {
+              "const": "romInfo"
+            },
+            "installed": {
+              "type": "boolean"
+            },
+            "os": {
+              "type": "string"
+            },
+            "name": {
+              "type": "string"
+            },
+            "size": {
+              "type": "number"
+            },
+            "folder": {
+              "type": "string"
+            },
+            "inFolder": {
+              "type": "boolean"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "description": "Something the plug-in has for the user (a question or a warning), shown as the page's modal instead of a native alert; the button pressed goes back as noticeAnswer. The first button is the answer to a question, the last the safe one.",
+          "required": [
+            "type",
+            "id",
+            "title",
+            "text",
+            "buttons"
+          ],
+          "properties": {
+            "type": {
+              "const": "notice"
+            },
+            "id": {
+              "type": "integer"
+            },
+            "title": {
+              "type": "string"
+            },
+            "text": {
+              "type": "string"
+            },
+            "buttons": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          }
+        },
+        {
+          "type": "object",
           "description": "P7: a .syx file the user chose or dropped, parsed by the plug-in: what it holds and what it overwrites.",
           "required": [
             "type",
@@ -5139,6 +5206,93 @@
                 "boolean",
                 "integer"
               ]
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "description": "host: which firmware is installed (answered with a romInfo message): the LOAD ROM dialog",
+          "required": [
+            "op"
+          ],
+          "properties": {
+            "op": {
+              "const": "romInfo"
+            },
+            "id": {
+              "type": "integer"
+            },
+            "g": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "force": {
+              "type": [
+                "boolean",
+                "integer"
+              ]
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "description": "host: delete the firmware from the editor's ROM folder (never outside it); the machine stops and the start-up card asks for a ROM again",
+          "required": [
+            "op"
+          ],
+          "properties": {
+            "op": {
+              "const": "removeRom"
+            },
+            "id": {
+              "type": "integer"
+            },
+            "g": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "force": {
+              "type": [
+                "boolean",
+                "integer"
+              ]
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "description": "host: the button pressed on a notice message (the plug-in's own question or warning, shown by the page)",
+          "required": [
+            "op",
+            "id",
+            "button"
+          ],
+          "properties": {
+            "op": {
+              "const": "noticeAnswer"
+            },
+            "id": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 1000000000
+            },
+            "g": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "force": {
+              "type": [
+                "boolean",
+                "integer"
+              ]
+            },
+            "button": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 8
             }
           },
           "additionalProperties": false

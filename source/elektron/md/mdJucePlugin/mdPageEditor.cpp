@@ -23,10 +23,12 @@ namespace mdJucePlugin
 #include "jucePluginEditorLib/editorPopupMenu.h"
 #include "jucePluginEditorLib/pluginEditorState.h"
 #include "juceRmlUi/juceRmlComponent.h"
+#include "juceUiLib/messageRoute.h"
 
 namespace mdJucePlugin
 {
-	bool passFileDropsToEditor(juce::Component& _web);	// mdStudioWebZoom.mm
+	juce::String describeDragTargets(juce::Component& _web);	// mdStudioWebZoom.mm
+	int passFileDropsToEditor(juce::Component& _web);	// mdStudioWebZoom.mm: how many views still took drags
 	namespace json = elektronData::json;
 
 	// The web view's parent: it takes the files dropped on the window (the web view does not).
@@ -34,15 +36,28 @@ namespace mdJucePlugin
 	{
 	public:
 		std::function<void(const juce::File&)> onFile;
+		std::function<void(const juce::String&)> onLog;
 		bool isInterestedInFileDrag(const juce::StringArray& _files) override
 		{
 			for(const auto& f : _files)
 				if(PageEditor::wantsFile(juce::File(f)))
+				{
+					if(!m_announced && onLog)
+						onLog("drop: a file is over the window (" + juce::File(f).getFileName() + "), taken");
+					m_announced = true;
 					return true;
+				}
+			if(!m_announced && onLog)
+				onLog("drop: a file is over the window but it is not a .bin, .zip or .syx (" + _files.joinIntoString(", ") + ")");
+			m_announced = true;
 			return false;
 		}
+		void fileDragExit(const juce::StringArray&) override { m_announced = false; }
 		void filesDropped(const juce::StringArray& _files, int, int) override
 		{
+			m_announced = false;
+			if(onLog)
+				onLog("drop: dropped " + _files.joinIntoString(", "));
 			for(const auto& f : _files)
 				if(juce::File(f).existsAsFile() && PageEditor::wantsFile(juce::File(f)))
 				{
@@ -51,6 +66,9 @@ namespace mdJucePlugin
 					return;
 				}
 		}
+
+	private:
+		bool m_announced = false;
 	};
 
 	PageEditor::PageEditor(jucePluginEditorLib::Processor& _processor, const jucePluginEditorLib::Skin& _skin)
@@ -61,6 +79,7 @@ namespace mdJucePlugin
 	PageEditor::~PageEditor()
 	{
 		stopTimer();
+		genericUI::messageRoute::setSink({});
 		m_diagnostics.reset();
 		if(m_session)
 			m_session->detach();
@@ -85,14 +104,47 @@ namespace mdJucePlugin
 		m_audio = std::make_unique<AudioMidiLink>(getProcessor(), [this](json::Value _m) { m_page->send(std::move(_m)); });
 		if(m_session)
 			m_session->attach([this](const json::Value& _m) { m_page->send(_m); });
+		// The plug-in's questions and warnings are the page's modals, not native alerts (messageRoute.h).
+		genericUI::messageRoute::setSink([this, alive = std::weak_ptr<int>(m_alive)](genericUI::messageRoute::Notice _n)
+		{
+			juce::MessageManager::callAsync([this, alive, n = std::move(_n)]() mutable
+			{
+				if(alive.expired() || !m_page)
+					return;
+				const int id = ++m_noticeId;
+				json::Value m = json::Value::object();
+				m.set("type", "notice");
+				m.set("id", id);
+				m.set("title", n.title);
+				m.set("text", n.text);
+				auto buttons = json::Value::array();
+				for(const auto& b : n.buttons)
+					buttons.push(json::Value(b));
+				m.set("buttons", std::move(buttons));
+				m_notices[id] = std::move(n.answered);
+				m_page->log("notice " + juce::String(id) + ": " + juce::String(n.title) + " - " + juce::String(n.text).substring(0, 200));
+				m_page->send(std::move(m));
+			});
+		});
 		m_dropZone = std::make_unique<DropZone>();
 		m_dropZone->onFile = [this](const juce::File& _f) { openFile(_f); };
+		m_dropZone->onLog = [this](const juce::String& _l) { m_page->log(_l); };
+		// The web view's own way in: WKWebView navigates to a dropped file (mdWebPageHost.cpp).
+		m_page->onFileNavigation([this](const juce::File& _f)
+		{
+			if(wantsFile(_f))
+				juce::MessageManager::callAsync([this, _f, alive = std::weak_ptr<int>(m_alive)]
+				{
+					if(!alive.expired())
+						openFile(_f);
+				});
+		});
 		m_dropZone->addAndMakeVisible(m_page->component());
 		getRmlComponent()->addAndMakeVisible(*m_dropZone);
 		layout();
 		m_page->load();
 #if JUCE_MAC
-		passFileDropsToEditor(m_page->component());
+		m_page->log("drop: the web view takes drags in " + juce::String(passFileDropsToEditor(m_page->component())) + " views before the page loads");
 #endif
 #if MDMM_DIAGNOSTICS
 		if(m_session)
@@ -112,6 +164,19 @@ namespace mdJucePlugin
 			else if(row->handler.action == deskHost::Action::ChooseRom)
 			{
 				chooseRom();
+				m_page->send(deskCore::resultMessage(_message, {}, {}));
+			}
+			else if(row->handler.action == deskHost::Action::NoticeAnswer)
+			{
+				const auto id = static_cast<int>(_message.find("id")->asNumber());
+				const auto button = static_cast<int>(_message.find("button")->asNumber());
+				if(const auto it = m_notices.find(id); it != m_notices.end())
+				{
+					auto answered = std::move(it->second);
+					m_notices.erase(it);
+					if(answered)
+						answered(button);
+				}
 				m_page->send(deskCore::resultMessage(_message, {}, {}));
 			}
 			else if(row->handler.action == deskHost::Action::ChooseSyx || row->handler.action == deskHost::Action::SyxExport)
@@ -195,6 +260,15 @@ namespace mdJucePlugin
 	void PageEditor::timerCallback()
 	{
 		layout();
+#if JUCE_MAC
+		// WKWebView registers for drags again when its page loads or its process restarts: keep the
+		// window's drops with the editor (checked twice a second; a finding is logged).
+		if(m_page && (m_dropCheck == 89 || m_dropCheck == 900))
+			m_page->log("drop: views taking file drags after " + juce::String(m_dropCheck / 30) + " s: " + describeDragTargets(m_page->component()));
+		if(m_page && ++m_dropCheck % 15 == 0)
+			if(const auto n = passFileDropsToEditor(m_page->component()); n > 0)
+				m_page->log("drop: the web view had taken drags again in " + juce::String(n) + " views, given back to the window");
+#endif
 		if(m_audio)
 			m_audio->tick();
 		if(m_diagnostics)

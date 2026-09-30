@@ -46,14 +46,17 @@ namespace mdJucePlugin
 	class PageWebView final : public juce::WebBrowserComponent
 	{
 	public:
-		PageWebView(std::function<void(const std::string&)> _onBridge, std::function<void(const juce::String&)> _onLoadEvent)
+		PageWebView(std::function<void(const std::string&)> _onBridge, std::function<void(const juce::String&)> _onLoadEvent,
+			std::function<bool(const juce::String&)> _onFileUrl)
 			: juce::WebBrowserComponent(juce::WebBrowserComponent::Options{}.withKeepPageLoadedWhenBrowserIsHidden())
-			, m_onBridge(std::move(_onBridge)), m_onLoadEvent(std::move(_onLoadEvent))
+			, m_onBridge(std::move(_onBridge)), m_onLoadEvent(std::move(_onLoadEvent)), m_onFileUrl(std::move(_onFileUrl))
 		{
 		}
 
 		bool pageAboutToLoad(const juce::String& _url) override
 		{
+			if(m_onFileUrl && m_onFileUrl(_url))
+				return false;
 			if(!_url.startsWith("gmbridge://"))
 			{
 				if(!_url.startsWith("javascript:"))
@@ -81,12 +84,13 @@ namespace mdJucePlugin
 	private:
 		std::function<void(const std::string&)> m_onBridge;
 		std::function<void(const juce::String&)> m_onLoadEvent;
+		std::function<bool(const juce::String&)> m_onFileUrl;
 	};
 #else
 	class PageWebView final : public juce::Label
 	{
 	public:
-		PageWebView(std::function<void(const std::string&)>, std::function<void(const juce::String&)>)
+		PageWebView(std::function<void(const std::string&)>, std::function<void(const juce::String&)>, std::function<bool(const juce::String&)>)
 			: juce::Label({}, "This build has JUCE_WEB_BROWSER=0; the editor needs a web view.")
 		{
 		}
@@ -99,7 +103,19 @@ namespace mdJucePlugin
 		: m_spec(std::move(_spec)), m_resource(std::move(_resource)), m_onMessage(std::move(_onMessage))
 	{
 		m_web = std::make_unique<PageWebView>([this](const std::string& _url) { onBridge(_url); },
-			[this](const juce::String& _e) { log("web view: " + _e); });
+			[this](const juce::String& _e) { log("web view: " + _e); },
+			[this](const juce::String& _url)
+			{
+				// A file that is not this page: a drop on the web view (the page never links to files).
+				if(!m_onFile || !_url.startsWithIgnoreCase("file:"))
+					return false;
+				const auto file = juce::URL(_url).getLocalFile();
+				if(file == juce::File() || file == m_file)
+					return false;
+				log("drop: the web view was asked to open " + file.getFullPathName());
+				m_onFile(file);
+				return true;
+			});
 	}
 
 	WebPageHost::~WebPageHost()

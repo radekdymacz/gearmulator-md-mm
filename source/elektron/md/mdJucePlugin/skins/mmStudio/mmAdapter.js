@@ -407,6 +407,30 @@
 		const again = () => { const c = Object.assign({}, m.command, { force: true }); delete c.id; send(c); };
 		V().ask(m.message || "The machine asks before it goes on.", m.command ? [[m.confirm || "Go on", "danger", again], ["Cancel", "", () => {}]] : [["OK", "", () => {}]]);
 	}
+	/* LOAD ROM with a firmware installed: the ROM folder is the editor's; nothing outside it is touched */
+	function onRomInfo(m) {
+		if (!m.installed) { host.firstRun(); return; }
+		const esc = t => String(t).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
+		V().ask(`<b>FIRMWARE</b><br>The machine runs <b>${esc(m.os)}</b> from <span class="mono">${esc(m.name)}</span> (${(m.size / 1048576).toFixed(1)} MiB)${m.inFolder ? "" : ", which is outside the editor's ROM folder"}.<br>Replace it with another image (choose it, or drop it on the window), or remove it and the editor asks for a firmware again. Your project stays.`,
+			[["Replace…", "cream", () => send({ op: "chooseRom" })],
+				["Remove", "danger", () => {
+					if (!m.inFolder) { V().toast("This image is outside the editor's ROM folder (" + m.folder + "); remove it there yourself."); return; }
+					V().ask(`Remove <b>${esc(m.os)}</b> from the ROM folder? The machine stops and the editor asks for a firmware again. Your project stays.`,
+						[["Remove", "danger", () => send({ op: "removeRom" }, { onResult: r => { if (!r.ok) V().toast(r.errors[0]); } })], ["Cancel", "", () => {}]]);
+				}],
+				["Show ROM folder", "", () => send({ op: "revealRomFolder" })], ["Close", "", () => {}]]);
+	}
+	/* what the plug-in has to say to the user (a question, a warning): its modal, never a native alert; one at a time */
+	const notices = [];
+	function onNotice(m) { notices.push(m); pumpNotices(); }
+	function pumpNotices() {
+		if (!notices.length) return;
+		if (V().dlgOpen()) { setTimeout(pumpNotices, 400); return; }
+		const m = notices.shift(), names = m.buttons && m.buttons.length ? m.buttons : ["OK"];
+		const esc = t => String(t).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
+		V().ask(`<b>${esc(m.title)}</b><br>${esc(m.text).replace(/\n/g, "<br>")}`,
+			names.map((t, i) => [esc(t), i === 0 && names.length > 1 ? "cream" : "", () => { send({ op: "noticeAnswer", id: m.id, button: i }); setTimeout(pumpNotices, 0); }]));
+	}
 	function onError(m) { log("error: " + m.message); V().toast(m.message); }
 	const noteOf = r => { if (r.ok && r.note) V().toast(r.note); };
 
@@ -524,6 +548,8 @@
 		/* the start-up card's keys (P7): the window's native file chooser for the firmware (the page never reads
 		   it), the ROM folder, and a new look */
 		chooseRom() { send({ op: "chooseRom" }); },
+		/* LOAD ROM in the engine menu: which firmware runs, REPLACE or REMOVE it (the reply is the romInfo message) */
+		romManage() { if (machine?.lifecycle === "missing") host.firstRun(); else send({ op: "romInfo" }); },
 		/* SysEx import and export (P7): the window's file dialogs; the plug-in parses and writes */
 		syxChoose() { send({ op: "chooseSyx" }); },
 		syxExport() { send({ op: "syxExport" }); },
@@ -627,6 +653,8 @@
 		else if (m.type === "learn") onLearn(m.doc);
 		else if (m.type === "ask") onAsk(m);
 			else if (m.type === "romInstall") { V().bootRom(m); V().toast(m.text); }
+			else if (m.type === "romInfo") onRomInfo(m);
+			else if (m.type === "notice") onNotice(m);
 			else if (m.type === "syxPreview") V().syxPreview(m);
 			else if (m.type === "syxProgress") V().syxProgress(m);
 			else if (m.type === "syxExport") V().toast(m.text);

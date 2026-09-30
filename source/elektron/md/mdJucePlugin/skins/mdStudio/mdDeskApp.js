@@ -312,7 +312,7 @@ for (const ev of ["pointerdown", "click", "wheel", "keydown", "dblclick"])
 document.addEventListener("change", e => {
 	if (e.target.id !== "engsel") return;
 	const sel = e.target, v = sel.value; renderEngine();
-	if (v === "rom") firstRun(true);
+	if (v === "rom") romMenu();
 	else if (v === "global") { sel.value = V.caps.engine; openGlobal(); }
 	else if (v === "audio") { sel.value = V.caps.engine; openAudio(); }
 	else if ((machineState().engines || []).some(x => x.id === v)) cmd("engine", { kind: v });
@@ -1035,6 +1035,37 @@ function firstRun(manual) {
 	if (mode === "manual") d.querySelector(".btnrow").insertAdjacentHTML("beforeend", `<button data-firstclose="1">Close</button>`);
 	d.hidden = false; d.dataset.first = mode;
 }
+
+/* LOAD ROM with a firmware installed: which one, and REPLACE or REMOVE it (the ROM folder is the editor's:
+   nothing outside it is touched). Without one, the start-up card's own words. */
+function romMenu() { if (V.lifecycle === "missing") { firstRun(true); return; } cmd("romInfo"); }
+function showRomInfo(m) {
+	if (!m.installed) { firstRun(true); return; }
+	const mib = (m.size / 1048576).toFixed(1);
+	ask(`<b>FIRMWARE</b><br>The machine runs <b>${escH(m.os)}</b> from <span class="mono">${escH(m.name)}</span> (${mib} MiB)${m.inFolder ? "" : ", which is outside the editor's ROM folder"}.<br>Replace it with another image (choose it, or drop it on the window), or remove it and the editor asks for a firmware again. Your project stays.`,
+		[["Replace…", "cream", () => cmd("chooseRom")],
+			["Remove", "danger", () => { if (!m.inFolder) { toast("This image is outside the editor's ROM folder (" + m.folder + "); remove it there yourself."); return; } askRemoveRom(m); }],
+			["Show ROM folder", "", () => cmd("revealRomFolder")], ["Close", "", () => {}]]);
+}
+function askRemoveRom(m) {
+	ask(`Remove <b>${escH(m.os)}</b> from the ROM folder? The machine stops and the editor asks for a firmware again. Your project stays.`,
+		[["Remove", "danger", () => cmd("removeRom")], ["Cancel", "", () => {}]]);
+}
+/* what the plug-in has to say to the user (a question, a warning): its modal, never a native alert. One at a
+   time: a notice waits while another dialog is open. */
+const noticeQueue = [];
+function showNotice(m) {
+	noticeQueue.push(m);
+	pumpNotices();
+}
+function pumpNotices() {
+	if (!noticeQueue.length) return;
+	if (!$("#dlg").hidden) { setTimeout(pumpNotices, 400); return; }
+	const m = noticeQueue.shift(), names = m.buttons && m.buttons.length ? m.buttons : ["OK"];
+	ask(`<b>${escH(m.title)}</b><br>${escH(m.text).replace(/\n/g, "<br>")}`,
+		names.map((t, i) => [escH(t), i === 0 && names.length > 1 ? "cream" : "", () => { cmd("noticeAnswer", { id: m.id, button: i }); setTimeout(pumpNotices, 0); }]));
+}
+Bridge.onMessage(m => { if (m.type === "romInfo") showRomInfo(m); else if (m.type === "notice") showNotice(m); });
 
 /* the start-up card's keys: the host's native file chooser, the ROM folder, a new look (the ROM stays on this computer) */
 Boot.host = { chooseRom: () => cmd("chooseRom"), revealRom: () => cmd("revealRomFolder"), recheck: () => cmd("recheckFirmware") };

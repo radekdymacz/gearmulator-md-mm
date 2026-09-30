@@ -7,6 +7,8 @@
 
 #include "juce_gui_basics/juce_gui_basics.h"
 
+#include <functional>
+#include <map>
 #include <memory>
 #include <string>
 
@@ -58,5 +60,9 @@ namespace mdJucePlugin
 		std::unique_ptr<Diagnostics> m_diagnostics;
 		std::unique_ptr<juce::FileChooser> m_chooser;
 		std::unique_ptr<DropZone> m_dropZone;
+		int m_dropCheck = 0;
+		int m_noticeId = 0;
+		std::shared_ptr<int> m_alive = std::make_shared<int>(0);	// callbacks that outlive the window check it
+		std::map<int, std::function<void(int)>> m_notices;	// the plug-in's questions the page has not answered yet
 	};
 }

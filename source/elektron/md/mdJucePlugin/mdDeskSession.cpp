@@ -1,4 +1,6 @@
 #include "mdDeskSession.h"
+#include "synthLib/romLoader.h"
+#include "mdLib/mdromcheck.h"
 
 #include "mdSessions.h"
 #include "mdRomInstall.h"
@@ -71,7 +73,7 @@ namespace mdJucePlugin
 	void DeskSession::installRom(const juce::File& _file)
 	{
 		const juce::File folder(juce::String::fromUTF8(m_processor.getPublicRomFolder().c_str()));
-		const auto r = mdJucePlugin::installRom(_file, m_processor.getModel(), folder);
+		const auto r = mdJucePlugin::replaceRom(_file, m_processor.getModel(), folder);
 		Value m = Value::object();
 		m.set("type", "romInstall");
 		m.set("ok", r.ok);
@@ -92,6 +94,59 @@ namespace mdJucePlugin
 			e.set("text", r.text + ". The machine did not start with it: close and reopen the plug-in.");
 			toPage(e);
 		}
+	}
+
+	void DeskSession::romInfo(const Value& _message) const
+	{
+		const auto model = m_processor.getModel();
+		const juce::File folder(juce::String::fromUTF8(m_processor.getPublicRomFolder().c_str()));
+		// The image the machine would start with: the first valid one along the same search paths.
+		juce::File found;
+		for(const auto& path : synthLib::RomLoader::findFiles(".bin", md::g_romSize, md::g_romSize))
+		{
+			const juce::File f(juce::String::fromUTF8(path.c_str()));
+			juce::MemoryBlock mb;
+			if(!f.loadFileAsData(mb))
+				continue;
+			const std::vector<uint8_t> bytes(static_cast<const uint8_t*>(mb.getData()), static_cast<const uint8_t*>(mb.getData()) + mb.getSize());
+			if(md::checkRom(bytes, model).ok)
+			{
+				found = f;
+				break;
+			}
+		}
+		Value m = Value::object();
+		m.set("type", "romInfo");
+		m.set("installed", found != juce::File());
+		m.set("os", std::string(md::firmwareName(model)));
+		m.set("name", found.getFileName().toStdString());
+		m.set("size", static_cast<double>(found.getSize()));
+		m.set("folder", folder.getFullPathName().toStdString());
+		m.set("inFolder", found != juce::File() && found.isAChildOf(folder));
+		toPage(m);
+		reply(_message, true, {});
+	}
+
+	void DeskSession::removeRom(const Value& _message)
+	{
+		const juce::File folder(juce::String::fromUTF8(m_processor.getPublicRomFolder().c_str()));
+		const auto r = mdJucePlugin::removeRoms(m_processor.getModel(), folder);
+		if(r.removed == 0)
+		{
+			reply(_message, false, r.text);
+			return;
+		}
+		// The machine stops (the stand-in takes its place) and the page's start-up card asks for a ROM. The
+		// project stays with the app meanwhile (DeskHost::holdState): the next ROM gets it back.
+		juce::MemoryBlock project;
+		m_processor.getStateInformation(project);
+		if(!pluginProcessorOf(m_processor).rebootDevice())
+		{
+			reply(_message, false, r.text + " The machine did not stop: close and reopen the plug-in.");
+			return;
+		}
+		m_processor.getDeskHost()->holdState(project.getData(), static_cast<int>(project.getSize()));
+		reply(_message, true, r.text);
 	}
 
 	void DeskSession::revealRomFolder(const Value& _message) const

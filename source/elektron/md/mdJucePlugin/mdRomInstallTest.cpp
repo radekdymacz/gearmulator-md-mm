@@ -85,6 +85,31 @@ int main()
 		auto zipped = zipWith(dir, "zipped.zip", "inside/" + rom.getFileName(), img);
 		r = mdJucePlugin::installRom(zipped, model, roms.getChildFile("z"));
 		check(r.ok, "the image inside a .zip is accepted", r.text);
+
+		// REPLACE and REMOVE act inside the ROM folder only
+		const auto mine = dir.getChildFile("manage");
+		const auto folder = mine.getChildFile("roms");
+		folder.createDirectory();
+		const auto decoy = mine.getChildFile("outside.bin");		// an image outside the folder: never touched
+		decoy.replaceWithData(img.getData(), img.getSize());
+		const auto note = folder.getChildFile("readme.txt");		// not an image: never touched
+		note.replaceWithText("keep me");
+		const auto oldName = folder.getChildFile("old-name.bin");
+		oldName.replaceWithData(img.getData(), img.getSize());
+		check(mdJucePlugin::romsInFolder(model, folder).size() == 1, "the folder holds one image of this machine");
+		check(mdJucePlugin::romsInFolder(other, folder).empty(), "and none of the other machine's");
+		const auto fresh = dir.getChildFile("new-dump.bin");
+		fresh.replaceWithData(img.getData(), img.getSize());
+		r = mdJucePlugin::replaceRom(fresh, model, folder);
+		const auto now = mdJucePlugin::romsInFolder(model, folder);
+		check(r.ok && now.size() == 1 && now[0].getFileName() == "new-dump.bin" && !oldName.existsAsFile() && fresh.existsAsFile(),
+			"REPLACE installs the new image and drops the earlier one (the chosen file itself stays where it was)", r.text);
+		r = mdJucePlugin::replaceRom(dir.getChildFile("nothing.bin"), model, folder);
+		check(!r.ok && mdJucePlugin::romsInFolder(model, folder).size() == 1, "a failed REPLACE leaves the installed image");
+		const auto gone = mdJucePlugin::removeRoms(model, folder);
+		check(gone.removed == 1 && mdJucePlugin::romsInFolder(model, folder).empty(), "REMOVE deletes the image", gone.text);
+		check(decoy.existsAsFile() && fresh.existsAsFile() && note.existsAsFile(), "REMOVE touched nothing outside the folder and no other file");
+		check(mdJucePlugin::removeRoms(model, folder).removed == 0, "REMOVE with nothing to remove says so");
 	}
 	dir.deleteRecursively();
 	std::printf("mdRomInstallTest: %s (%d failures)\n", g_failures ? "FAIL" : "PASS", g_failures);

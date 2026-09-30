@@ -105,6 +105,10 @@ namespace mdJucePlugin
 	protected:
 		void reply(const Value& _message, bool _ok, const std::string& _note) const;
 		void revealRomFolder(const Value& _message) const;
+		// LOAD ROM: {"type":"romInfo", installed, name, os, size, file, folder, inFolder} for the page's firmware
+		// dialog; REMOVE deletes the images in the ROM folder and starts the stand-in (the start-up card asks again).
+		void romInfo(const Value& _message) const;
+		void removeRom(const Value& _message);
 		virtual void onAttach() {}
 		virtual void onDetach() {}
 
@@ -260,6 +264,8 @@ namespace mdJucePlugin
 			case Action::Engine: setEngine(_message); break;
 			case Action::RecheckFirmware: recheckFirmware(_message); break;
 			case Action::RevealRomFolder: revealRomFolder(_message); break;
+			case Action::RomInfo: romInfo(_message); break;
+			case Action::RemoveRom: removeRom(_message); break;
 			case Action::SyxImport: syxImport(_message); break;
 			case Action::SyxCancel: m_syx.cancel(); toPage(m_syx.progress("Import stopped.")); reply(_message, true, "Import stopped."); break;
 			case Action::Midi: onMidi(_message); break;

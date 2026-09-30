@@ -7,6 +7,7 @@
 #endif
 
 #include "baseLib/binarystream.h"
+#include "juceUiLib/messageRoute.h"
 #include "jucePluginLib/dummydevice.h"
 
 namespace mdJucePlugin
@@ -23,6 +24,7 @@ namespace mdJucePlugin
 
 	DeskHost::DeskHost(AudioPluginAudioProcessor& _processor) : m_processor(_processor)
 	{
+		genericUI::messageRoute::enable();	// no native alerts: the page shows what the plug-in has to say
 	}
 
 	DeskHost::~DeskHost()

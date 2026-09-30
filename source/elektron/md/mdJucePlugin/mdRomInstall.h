@@ -25,4 +25,19 @@ namespace mdJucePlugin
 	std::optional<std::vector<uint8_t>> readRomImage(const juce::File& _file, std::string& _why);
 
 	RomInstall installRom(const juce::File& _file, md::MachineModel _model, const juce::File& _romFolder);
+
+	// The firmware images of this machine inside the ROM folder (any name; judged by their contents).
+	std::vector<juce::File> romsInFolder(md::MachineModel _model, const juce::File& _romFolder);
+
+	// REPLACE: the chosen file is installed as above, and then every other image of this machine in the ROM
+	// folder goes (the new one stays if anything fails first). Only files inside the ROM folder are touched.
+	RomInstall replaceRom(const juce::File& _file, md::MachineModel _model, const juce::File& _romFolder);
+
+	// REMOVE: every image of this machine in the ROM folder is deleted; nothing outside the folder is.
+	struct RomRemoval
+	{
+		int removed = 0;
+		std::string text;
+	};
+	RomRemoval removeRoms(md::MachineModel _model, const juce::File& _romFolder);
 }
