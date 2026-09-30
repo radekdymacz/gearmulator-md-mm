@@ -19,11 +19,9 @@ const Boot = (() => {
  <div class="bootbar" id="bootbar" role="progressbar" aria-valuemin="0" aria-valuemax="100"><i></i></div>
  <p class="bootline" id="bootline">Keys work when the start-up animation ends.</p>
  <div class="bootrom" id="bootrom" hidden>
-  <ol class="bootsteps" id="bootsteps"></ol>
-  <div class="btnrow"><button class="cream" data-bootrom="choose">Choose ROM file…</button><button data-bootrom="recheck">Check again</button></div>
-  <p class="bootdrop">…or drop the <span class="mono">.bin</span>, or a <span class="mono">.zip</span> with it, anywhere on this window.</p>
+  <button class="bootzone" data-bootrom="choose" aria-describedby="bootres"><b id="bootzone"></b><span>A <span class="mono">.bin</span>, or a <span class="mono">.zip</span> with it. Drop it anywhere on this window, or click here to choose it.</span></button>
   <p class="bootres" id="bootres" role="status"></p>
-  <p class="bootpriv">The firmware stays on this computer: the editor checks it and copies it into its ROM folder, and sends it nowhere. <button class="linkkey" data-bootrom="folder">Show the ROM folder</button></p>
+  <p class="bootpriv">The firmware stays on this computer: the editor checks it and copies it into its ROM folder, and sends it nowhere. <button class="linkkey" data-bootrom="folder">Show the ROM folder</button> <button class="linkkey" data-bootrom="recheck">Check again</button></p>
  </div>
 </div>`;
 	document.body.appendChild(card);
@@ -45,10 +43,7 @@ const Boot = (() => {
 		$b("bootbar").setAttribute("aria-valuenow", Math.round(f * 100));
 		raf = requestAnimationFrame(tick);
 	}
-	function steps(m) {
-		const os = m === "Monomachine" ? "OS 1.32B" : "OS 1.63", units = m === "Monomachine" ? "SFX-6, SFX-60 MKI and MKII use the same image" : "UW, MKII and MKI units use the same image";
-		return `<li>Dump the <b>${os}</b> flash image from your ${m} (8 MiB, <span class="mono">.bin</span>). ${units}.</li><li>Choose it here, or drop it on this window. The editor checks that it is the ${m}'s ${os} before it copies it.</li><li>The machine starts at once: no need to reopen the editor.</li>`;
-	}
+	function romName(m) { return m === "Monomachine" ? "Monomachine SFX-60 OS 1.32B" : "Machinedrum OS 1.63"; }
 	function update(o) {
 		machine = o.machine || machine;
 		const st = o.state === "animating" ? "booting" : o.state;
@@ -65,10 +60,10 @@ const Boot = (() => {
 		card.classList.toggle("rom", rom);
 		card.classList.toggle("ind", st === "loading");
 		$b("boott").textContent = rom ? (st === "missing" ? `${machine} firmware needed` : `This is not the ${machine}'s firmware`) : st === "loading" ? `Preparing the ${machine}…` : `Starting the ${machine}…`;
-		$b("bootline").textContent = rom ? (st === "unsupported" ? "The ROM in the folder is another OS or a damaged dump. Choose the right image." : "The editor runs the real firmware, which cannot ship with it: you add the one from your own machine.")
-			: "Keys work when the start-up animation ends.";
+		$b("bootline").textContent = st === "unsupported" ? "The ROM in the ROM folder is another OS or a damaged dump." : rom ? "" : "Keys work when the start-up animation ends.";
+		$b("bootline").hidden = st === "missing";
 		$b("bootrom").hidden = !rom;
-		if (rom) $b("bootsteps").innerHTML = steps(machine);
+		if (rom) $b("bootzone").textContent = `Drop your ${romName(machine)} ROM (.bin, 8 MB) here, or choose it`;
 		card.hidden = false;
 		draw();
 		if (!raf && st === "booting") raf = requestAnimationFrame(tick);

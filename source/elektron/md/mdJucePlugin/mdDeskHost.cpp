@@ -6,9 +6,20 @@
 #endif
 
 #include "baseLib/binarystream.h"
+#include "jucePluginLib/dummydevice.h"
 
 namespace mdJucePlugin
 {
+	synthLib::Device* makeNoRomDevice()
+	{
+		return new pluginLib::DummyDevice({});
+	}
+
+	bool isNoRomDevice(const synthLib::Device* const _device)
+	{
+		return dynamic_cast<const pluginLib::DummyDevice*>(_device) != nullptr;
+	}
+
 	DeskHost::DeskHost(AudioPluginAudioProcessor& _processor) : m_processor(_processor)
 	{
 	}

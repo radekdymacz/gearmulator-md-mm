@@ -244,6 +244,23 @@ function(mdmm_plugin_targets)
 	# P6: in ctest; it skips (77) without GEARMULATOR_MD_FIRMWARE_BIN in the environment.
 	add_test(NAME mdSessionFirmwareTest COMMAND mdSessionFirmwareTest)
 	set_tests_properties(mdSessionFirmwareTest PROPERTIES LABELS "Integration;FirmwareTest" SKIP_RETURN_CODE 77 TIMEOUT 300)
+
+	# A machine without its ROM is not an error: the session says "missing", the page's card takes the ROM,
+	# and the machine starts in place. The plain runs need no ROM; "install" needs the user's own (skips, 77, without).
+	add_executable(mdSessionNoRomTest mdSessionNoRomTest.cpp)
+	target_link_libraries(mdSessionNoRomTest PRIVATE
+		mdJucePlugin jucePluginEditorLib mdLib juce_plugin_modules
+		juce::juce_opengl)
+	target_include_directories(mdSessionNoRomTest PRIVATE
+		${CMAKE_CURRENT_SOURCE_DIR}/../../..)
+	target_compile_definitions(mdSessionNoRomTest PRIVATE JUCE_GLOBAL_MODULE_SETTINGS_INCLUDED=1)
+	set_property(TARGET mdSessionNoRomTest PROPERTY FOLDER "Elektron/test")
+	foreach(m md mm)
+		add_test(NAME mdSessionNoRomTest_${m} COMMAND mdSessionNoRomTest ${m})
+		set_tests_properties(mdSessionNoRomTest_${m} PROPERTIES LABELS "Integration" TIMEOUT 120)
+		add_test(NAME mdSessionNoRomInstallFirmwareTest_${m} COMMAND mdSessionNoRomTest ${m} install)
+		set_tests_properties(mdSessionNoRomInstallFirmwareTest_${m} PROPERTIES LABELS "Integration;FirmwareTest" SKIP_RETURN_CODE 77 TIMEOUT 300)
+	endforeach()
 endfunction()
 
 cmake_language(DEFER CALL mdmm_plugin_targets)

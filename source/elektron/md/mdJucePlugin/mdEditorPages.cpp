@@ -83,6 +83,10 @@ namespace mdJucePlugin
 	jucePluginEditorLib::Editor* createEditorPage(jucePluginEditorLib::PluginEditorState& _state,
 		jucePluginEditorLib::Processor& _processor, const jucePluginEditorLib::Skin& _skin)
 	{
+		// No licence notice to accept: upstream's "I Agree" box (Editor::showDisclaimer) is a native alert,
+		// and the editors show none. Its config value is what it reads, and the editor's constructor
+		// reads it, so it is set before the editor is made.
+		_processor.getConfig().setValue("disclaimerSeen", true);
 		const auto& page = _state.getIncludedSkins().front();
 		const bool own = isMonomachine(_processor) ? isMmStudioSkin(_skin.displayName, _skin.filename) : isStudioSkin(_skin.displayName, _skin.filename);
 		return new PageEditor(_processor, own ? _skin : page);

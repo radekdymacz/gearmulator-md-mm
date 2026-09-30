@@ -14,10 +14,22 @@ namespace baseLib
 	class ChunkReader;
 }
 
+namespace synthLib
+{
+	class Device;
+}
+
 namespace mdJucePlugin
 {
 	class AudioPluginAudioProcessor;
 	class DeskSession;
+
+	// A machine without its ROM is not an error (no alert, no exception): the processor runs this silent
+	// stand-in and the editor's page asks for the ROM (lifecycle "missing"; the page's start-up card takes
+	// a chosen or dropped file, DeskSession::installRom, and the machine starts in its place). The
+	// processor's createDevice calls the first (doc/modern-ux/UPSTREAM.md); the studio links' probes ask the second.
+	synthLib::Device* makeNoRomDevice();
+	bool isNoRomDevice(const synthLib::Device* _device);
 
 	// The editors' part of the plug-in processor (doc/modern-ux/UPSTREAM.md): the editor's setup,
 	// kept with the project as the "MDSK" chunk, and the editor's session (P6), which lives as long

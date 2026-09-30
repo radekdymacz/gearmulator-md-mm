@@ -128,6 +128,8 @@ The files never pass through the page:
 - `DeskSession::installRom` checks and copies a ROM, then restarts the machine;
 - `openSyx` sends the preview, the `syxImport` row queues the import (`SyxJob`, `mdSyxSession.h`), and `exportSyx` writes the file.
 
+A missing ROM is not an error and never a native alert: `createDevice` runs a silent stand-in (`makeNoRomDevice`, `mdDeskHost.h`), the studio links' probes say `Missing` for it, and the BOOT card opens at once with a drop zone ("Drop your ... ROM (.bin, 8 MB) here, or choose it"); a wrong file is refused inside the card, a right one starts the machine in place (`mdSessionNoRomTest`). The editors show no licence notice to accept (`createEditorPage` sets upstream's `disclaimerSeen`).
+
 A model's SysEx rules (what its OS takes as it is) are its `SyxTraits`, in `mdSessionMd.cpp` and `mdSessionMm.cpp`.
 
 ## The host's clock (P7)

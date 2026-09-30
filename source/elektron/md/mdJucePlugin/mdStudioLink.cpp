@@ -3,6 +3,7 @@
 #include "mdController.h"
 #include "mdEditFlowCounters.h"
 #include "mdPluginProcessor.h"
+#include "mdDeskHost.h"
 
 #include "mdLib/mdhardware.h"
 #include "mdLib/mdpanelsequence.h"
@@ -255,7 +256,7 @@ namespace mdJucePlugin
 			// No device yet (the processor is still making or replacing it): not a missing ROM.
 			// Only a device that exists and has no valid firmware is a definite NO ROM.
 			if(!device)
-				return P::Loading;
+				return isNoRomDevice(_base) ? P::Missing : P::Loading;
 			if(!device->isValid())
 				return P::Missing;
 			const auto& hw = device->getHardware();

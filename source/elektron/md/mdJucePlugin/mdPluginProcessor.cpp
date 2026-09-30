@@ -840,12 +840,7 @@ namespace mdJucePlugin
 		params.homePath = m_deviceHomePath ? *m_deviceHomePath : getDataFolder();
 		auto d = std::make_unique<md::DeskDevice>(params, m_initialPatchRam);
 		if(!d->isValid())
-			throw synthLib::DeviceException(synthLib::DeviceError::FirmwareMissing,
-				std::string("A ") + productName(m_model) +
-				" firmware rom (8 MB .bin) is required, but was not found.\n\n"
-				"Do NOT discuss firmware or ROMs in Discord. "
-				"Do not request or share files or download links, "
-				"or ask for help obtaining or installing firmware.");
+			return makeNoRomDevice();	// no ROM is the page's to ask for, not an alert (mdDeskHost.h, UPSTREAM.md)
 		d->setRamRecordingMode(getRamRecordingMode());
 		return d.release();
 	}

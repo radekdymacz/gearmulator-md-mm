@@ -1311,8 +1311,11 @@ body{box-sizing:border-box;overflow:hidden}
 .bootcard.rom .bootbar{display:none}
 .bootline{margin:0;font:500 13px var(--sans);color:var(--print2);max-width:48ch}
 .bootrom{display:grid;gap:10px;justify-items:center;width:100%}
-.bootsteps{margin:0;padding-left:1.4em;text-align:left;font:500 13px/1.5 var(--sans);max-width:52ch}
-.bootdrop,.bootpriv{margin:0;font:500 12px var(--sans);color:var(--print2);max-width:56ch}
+.bootzone{all:unset;box-sizing:border-box;width:100%;display:grid;gap:6px;justify-items:center;padding:26px 20px;border:2px dashed var(--print2);border-radius:8px;background:color-mix(in srgb,var(--print) 6%,transparent);cursor:pointer;text-align:center}
+.bootzone:hover,.bootzone:focus-visible{border-color:var(--led);background:color-mix(in srgb,var(--led) 10%,transparent)}
+.bootzone b{font:600 15px/1.35 var(--sans);color:var(--print)}
+.bootzone span{font:500 12px var(--sans);color:var(--print2)}
+.bootpriv{margin:0;font:500 12px var(--sans);color:var(--print2);max-width:56ch}
 .bootres{margin:0;min-height:1.3em;font:600 13px var(--sans)}
 .bootres.ok{color:var(--print)}
 .bootres.bad{color:var(--led)}

@@ -27,7 +27,7 @@ in a file he owns is a future conflict; a file we add is not.
 | `source/elektron/md/mdJucePlugin/CMakeLists.txt` | `include(mdmmPlugins.cmake)` after the skin globs | the editors' version (0.2.0), sources, page files in the binary data (instead of the panel skins) and icons must be values before his `juce_add_binary_data` and `createJucePlugin`; the rest (libraries, definitions, bundle steps, tests, the disabled panel pointer tests) runs deferred at the end of his file |
 | `source/juce.cmake` | `${GEARMULATOR_PLUGIN_EXTRA_ARGS_<target>}` in `juce_add_plugin` | JUCE takes the app icons only as `juce_add_plugin` arguments, at configure time |
 | `mdJucePlugin/mdPluginProcessor.h` | `getDeskHost()`, `m_desk` | the processor owns the editors' state (`mdDeskHost.h`: the setup chunk and the session) |
-| `mdJucePlugin/mdPluginProcessor.cpp` | 8 lines: include; the `MDSK` chunk saved and read; a load starts from the default setup; the host made and started; the host destroyed **after** `destroyEditorState()` (the page detaches from the session); `md::DeskDevice` in `createDevice` | the processor's lifetime and state are upstream's |
+| `mdJucePlugin/mdPluginProcessor.cpp` | 9 lines: include; the `MDSK` chunk saved and read; a load starts from the default setup; the host made and started; the host destroyed **after** `destroyEditorState()` (the page detaches from the session); `md::DeskDevice` in `createDevice`; with no ROM `createDevice` returns `makeNoRomDevice()` (`mdDeskHost.h`) instead of throwing `FirmwareMissing` (the throw ended in `jucePluginLib/processor.cpp`'s native "Device Initialization failed" alert and Finder; now the page asks for the ROM) | the processor's lifetime and state are upstream's |
 | `mdJucePlugin/mdPluginEditorState.cpp` | include; `editorPageSkins`, `keepEditorPage`, `createEditorPage` (`mdEditorPages.h`) | the editor page is the only UI; his panel skins and skin policy stay unchanged |
 | `mdJucePlugin/mdController.h`, `.cpp` | `evDeviceSysex` and its one call in `parseSysexMessage` | the only place every SysEx from the machine passes |
 | `jucePluginLib/processor.h`, `.cpp` | `ExternalMidi` member and accessor; `takeIn`, the device output dropped, `flushOut` | HW MIDI: the processor's MIDI paths (`externalMidi.h` holds the logic) |
@@ -40,7 +40,7 @@ What moved out of upstream's files: `md::Device`'s telemetry and panel sequences
 the processor's setup chunk and session into `mdJucePlugin/mdDeskHost.*`; the skin choice into
 `mdJucePlugin/mdEditorPages.*`; the window title, Audio/MIDI Settings and free size into
 `mdStandaloneApp.cpp` and `jucePluginEditorLib/editorTraits.h` (`FreeSizeEditor`,
-`AudioMidiSettingsEditor`: the page says so, `Editor` stays his); our mdLibTest and mdJucePlugin
+`AudioMidiSettingsEditor`: the page says so, `Editor` stays his; his "I Agree" disclaimer alert is silenced by `createEditorPage` setting its config value `disclaimerSeen`, no hook); our mdLibTest and mdJucePlugin
 tests into `mdLibTest/mdmmTests.cmake` and `mdJucePlugin/mdmmPlugins.cmake` (same targets, labels
 and output folders); the tag-time installers into `.github/workflows/mdmm-editors-release.yml`
 (his `elektron-prerelease.yml` and `elektron-macos.yml` are his again; a tag also runs his, which

@@ -3,6 +3,7 @@
 
 #include "mdController.h"
 #include "mdPluginProcessor.h"
+#include "mdDeskHost.h"
 
 #include "deskWire/mmWire.h"
 
@@ -218,7 +219,7 @@ namespace mdJucePlugin
 			auto* device = dynamic_cast<md::DeskDevice*>(_base);
 			// No device yet: not a missing ROM (P5). Only an invalid device is a definite NO ROM.
 			if(!device)
-				return P::Loading;
+				return isNoRomDevice(_base) ? P::Missing : P::Loading;
 			if(!device->isValid())
 				return P::Missing;
 			const auto& hw = device->getHardware();
