@@ -384,65 +384,90 @@ button:disabled{opacity:.4;cursor:default}
 .tabs4 button i{font:normal 600 9px var(--mono);letter-spacing:0;min-width:15px;padding:0 3px;border-radius:7px;background:var(--led);color:#fff;text-align:center}
 .tabs4 button i.z{background:transparent;color:inherit;opacity:.45}
 .md .tabs4 button{padding:0 5px;gap:4px}
-.board{--bd:#20211e;--sock:#0b0c0a;--btxt:#dedcd2;--bdim:#85847c;--brule:#3a3b36;--bhov:rgba(255,255,255,.055);--cw:20px;--lw:206px;
-  background:var(--bd);border-radius:6px;box-shadow:0 0 0 3px var(--bezel),inset 0 0 0 1px #000;padding:6px 8px 8px;overflow-x:auto;color:var(--btxt)}
-:root[data-m="md"] .board{--bd:#101110;--sock:#000;--cw:28px}
+.v4{--bd:var(--plate);--sock:color-mix(in srgb,var(--plate2) 80%,var(--print) 6%);--rim:color-mix(in srgb,var(--rule) 80%,var(--print));--btxt:var(--print);--bdim:var(--print3);--brule:var(--rule);--bhov:color-mix(in srgb,var(--print) 8%,transparent);--cw:18px;--lw:96px}
+.board{background:var(--bd);border-top:2px solid var(--print);padding:4px 0 6px;overflow-x:auto;color:var(--btxt)}
+:root[data-m="md"] .v4{--cw:26px;--lw:170px;--sock:color-mix(in srgb,var(--plate) 70%,#000);--rim:var(--rule)}
 .b4{display:grid;min-width:max-content}
 .r4{display:grid;grid-template-columns:var(--lw) repeat(var(--n),var(--cw));align-items:center;height:20px}
 .r4 .pc{height:20px;display:grid;place-items:center;cursor:pointer;position:relative}
-.r4 .pc.g0{margin-left:8px}
+.r4 .pc.g0,.r4.vh4 .vl.g0{box-shadow:inset 1px 0 0 var(--brule)}
 .r4 .pc.dis{cursor:default}
 .r4 .pc.dis .pin{opacity:.25}
-.r4 .lab{position:sticky;left:0;z-index:2;background:var(--bd);height:20px;display:grid;grid-template-columns:minmax(0,1fr) auto auto;gap:6px;align-items:center;padding:0 8px 0 4px;cursor:pointer;border-radius:2px}
-.r4 .lab b{font:600 12px var(--sans);letter-spacing:.06em;color:var(--btxt);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.r4 .lab{position:sticky;left:0;z-index:2;background:var(--bd);height:20px;display:grid;grid-template-columns:minmax(0,1fr) auto;gap:4px;align-items:center;padding:0 5px 0 4px;cursor:pointer;border-radius:2px}
+.r4 .lab small{display:none}
+:root[data-m="md"] .r4 .lab{grid-template-columns:minmax(0,1fr) auto auto}
+:root[data-m="md"] .r4 .lab small{display:inline}
+.r4 .lab b{font:600 11.5px var(--sans);letter-spacing:.04em;color:var(--btxt);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .r4 .lab small{font:500 9px var(--mono);color:var(--bdim);white-space:nowrap}
 .r4 .lab em{font:normal 600 8px var(--mono);letter-spacing:.06em;padding:1px 4px;border-radius:2px;background:var(--rust);color:#fff}
 .r4 .lab em.rnd{background:var(--ledg);color:#1d2413}
-.r4 .lab .mt{position:absolute;left:4px;right:8px;bottom:1px;height:2px;background:rgba(255,255,255,.07);border-radius:1px;cursor:ew-resize}
+.r4 .lab .mt{position:absolute;left:4px;right:5px;bottom:1px;height:2px;background:color-mix(in srgb,var(--rule) 45%,transparent);border-radius:1px;cursor:ew-resize}
 .r4 .lab .mt i{position:absolute;left:0;top:0;bottom:0;background:var(--bdim);border-radius:1px}
 .r4 .lab .mt.pad{right:auto;width:14px}
 .r4 .lab .mt.pad i{right:0}
 .r4:hover .lab,.r4:hover .pc{background-color:var(--bhov)}
-.r4.hot .lab{background:color-mix(in srgb,var(--led) 26%,var(--bd));box-shadow:inset 3px 0 0 var(--led)}
+.r4.hot .lab{background:color-mix(in srgb,var(--led) 14%,var(--bd));box-shadow:inset 3px 0 0 var(--led)}
 .r4.hot .lab .mt i{background:var(--led)}
 .r4.hot .lab small{color:var(--btxt)}
 .r4.sel .lab{box-shadow:inset 3px 0 0 var(--btxt)}
 .r4.hot.sel .lab{box-shadow:inset 3px 0 0 var(--led)}
 /* pins */
-.pin{width:13px;height:13px;border-radius:50%;background:var(--sock);box-shadow:inset 0 1px 2px rgba(0,0,0,.9),0 0 0 1px rgba(255,255,255,.07);position:relative}
-.pc:hover .pin:not(.on){box-shadow:inset 0 1px 2px rgba(0,0,0,.9),0 0 0 1px var(--bdim)}
-.pin.on{background:var(--led);box-shadow:0 0 5px 1px color-mix(in srgb,var(--led) 70%,transparent)}
-.pin.part{background:radial-gradient(circle,var(--led) 0 2.6px,var(--sock) 3px);box-shadow:inset 0 0 0 2px var(--led),0 0 4px color-mix(in srgb,var(--led) 50%,transparent)}
-.pin.inv::after{content:"";position:absolute;left:3px;right:3px;top:5.5px;height:2px;border-radius:1px;background:var(--sock)}
-.pin.part.inv::after{background:var(--btxt);left:2px;right:2px}
-.pin.rnd{background:var(--ledg);box-shadow:0 0 5px 1px color-mix(in srgb,var(--ledg) 60%,transparent)}
-.pin.pinned::before{content:"";position:absolute;right:-2px;top:-2px;width:4px;height:4px;border-radius:1px;background:var(--btxt)}
+.pin{width:12px;height:12px;border-radius:50%;background:var(--sock);box-shadow:inset 0 1px 2px color-mix(in srgb,var(--print) 35%,transparent),0 0 0 1px var(--rim);position:relative}
+.pc:hover .pin:not(.on){box-shadow:inset 0 1px 2px color-mix(in srgb,var(--print) 35%,transparent),0 0 0 1.5px var(--print)}
+.pin.on{background:var(--led);box-shadow:0 0 0 1px color-mix(in srgb,var(--led) 60%,var(--print)),0 0 4px color-mix(in srgb,var(--led) 55%,transparent)}
+.pin.part{background:radial-gradient(circle,var(--led) 0 2.4px,var(--plate3) 2.8px);box-shadow:inset 0 0 0 2px var(--led),0 0 0 1px color-mix(in srgb,var(--led) 60%,var(--print))}
+.pin.inv::after{content:"";position:absolute;left:2.5px;right:2.5px;top:5px;height:2px;border-radius:1px;background:var(--plate3)}
+.pin.part.inv::after{background:var(--print);left:2px;right:2px}
+.pin.rnd{background:var(--ledg);box-shadow:0 0 0 1px color-mix(in srgb,var(--ledg) 50%,var(--print))}
+.pin.pinned::before{content:"";position:absolute;right:-3px;top:-3px;width:5px;height:5px;border-radius:1px;background:var(--print);box-shadow:0 0 0 1px var(--plate)}
 .pin.cur{outline:2px solid var(--btxt);outline-offset:2px}
 .pin.mini{width:5px;height:5px;box-shadow:none;background:transparent}
 .pin.mini.on{background:var(--led);box-shadow:none}
 .pin.mini.rnd{background:var(--ledg);box-shadow:none}
-.r4.hot .pin.on,.r4.hot .pin.part{outline:1px solid color-mix(in srgb,var(--btxt) 55%,transparent);outline-offset:1px}
+.r4.hot .pin.on,.r4.hot .pin.part{outline:1px solid color-mix(in srgb,var(--led) 70%,transparent);outline-offset:1px}
+.pin.cur{outline:2px solid var(--print)!important;outline-offset:2px}
 /* heads */
 .r4.gh4{height:16px}
-.r4.gh4 .gname{grid-column:span var(--span);display:flex;align-items:center;gap:6px;font:600 9px var(--sans);letter-spacing:.2em;text-transform:uppercase;color:var(--btxt);padding-right:4px}
+.r4.gh4 .gname{grid-column:span var(--span);display:flex;align-items:center;gap:5px;font:600 9px var(--sans);letter-spacing:.14em;overflow:hidden;white-space:nowrap;text-transform:uppercase;color:var(--btxt);padding-right:4px}
 .r4.gh4 .gname::after{content:"";flex:1;height:5px;border-top:1px solid var(--bdim);border-right:1px solid var(--bdim)}
-.r4.gh4 .gname.g0{margin-left:8px}
+.r4.gh4 .gname.g0{padding-left:2px}
 .r4.vh4{height:44px;align-items:end;border-bottom:1px solid var(--brule);margin-bottom:3px}
 .r4.vh4 .vl{height:44px;display:flex;justify-content:center;padding-bottom:3px}
-.r4.vh4 .vl span{writing-mode:vertical-rl;transform:rotate(180deg);font:600 10px var(--sans);letter-spacing:.08em;color:var(--btxt);white-space:nowrap}
+.r4.vh4 .vl span{writing-mode:vertical-rl;transform:rotate(180deg);font:600 10px var(--sans);letter-spacing:.06em;color:var(--btxt);white-space:nowrap}
 .r4.vh4 .vl.dim span{color:var(--bdim);opacity:.6}
-.r4.vh4 .vl.g0{margin-left:8px}
-.r4.vh4 .corner{position:sticky;left:0;z-index:2;background:var(--bd);height:44px;display:grid;align-content:end;padding:0 4px 4px;font:500 10px var(--mono);color:var(--bdim)}
+.r4.vh4 .corner{position:sticky;left:0;z-index:2;background:var(--bd);height:44px;display:grid;align-content:end;padding:0 4px 4px;font:500 9px var(--mono);color:var(--bdim);overflow:hidden;white-space:nowrap}
 .r4.vh4 .corner b{font:600 11px var(--sans);letter-spacing:.14em;text-transform:uppercase;color:var(--btxt)}
 .r4.sg4{height:18px;margin-top:2px}
-.r4.sg4 .lab{grid-template-columns:auto minmax(0,1fr);gap:5px;background:var(--bd);color:var(--bdim);font:600 9px var(--sans);letter-spacing:.18em;text-transform:uppercase;box-shadow:none;border:0;padding:0 4px;text-align:left;height:18px;border-radius:0}
+.r4.sg4 .lab{grid-template-columns:auto minmax(0,1fr);gap:4px;background:var(--bd);color:var(--print2);font:600 9px var(--sans);letter-spacing:.08em;overflow:visible;white-space:nowrap;text-transform:uppercase;box-shadow:none;border:0;padding:0 4px;text-align:left;height:18px;border-radius:0}
 .r4.sg4 .lab:hover{background:var(--bhov)}
 .r4.sg4 .lab svg{width:8px;height:8px;transition:transform .15s}
 .r4.sg4 .lab[aria-expanded=false] svg{transform:rotate(-90deg)}
-.r4.sg4 .lab small{font:500 9px var(--mono);letter-spacing:0;text-transform:none}
+.r4.sg4 .lab small{display:inline;font:500 9px var(--mono);letter-spacing:0;text-transform:none;color:var(--print3)}
+.r4.sg4 .lab span{overflow:visible}
 .r4.sg4 .pc{cursor:default;height:18px}
 .r4.learn4 .lab{color:var(--bdim);font:600 10px var(--sans);letter-spacing:.14em;text-transform:uppercase;background:transparent;box-shadow:none;padding:0 4px;text-align:left}
 .board .rollk{height:15px;padding:0 5px;font:600 8px var(--sans);letter-spacing:.12em;background:var(--ledg);color:#1d2413;box-shadow:none}
+/* the settings panel on the right (a drawer below 1180 px) */
+.body4{display:grid;grid-template-columns:minmax(0,1fr) 300px;gap:12px;align-items:stretch}
+.p4{border-top:2px solid var(--print);padding-top:8px;display:grid;gap:9px;align-content:start;height:0;min-height:100%;overflow:auto;min-width:0}
+.p4 .ph{display:flex;align-items:baseline;gap:8px;flex-wrap:wrap}
+.p4 .ph b{font:600 16px var(--sans);letter-spacing:.05em;color:var(--print)}
+.p4 .ph span{font:12px var(--mono);color:var(--print3)}
+.p4 .ph .grow{flex:1}
+.p4 .readout{padding:4px 8px;box-shadow:0 0 0 2px var(--bezel)}
+.p4 .tcard{padding:6px}
+.p4 h4{margin:0;font:600 11px var(--sans);letter-spacing:.18em;text-transform:uppercase;color:var(--print)}
+.p4 .kv{display:grid;grid-template-columns:auto 1fr;gap:3px 10px;font-size:13px;color:var(--print2)}
+.p4 .kv b{font:500 12px var(--mono);color:var(--body)}
+.leg4{display:grid;gap:5px;font-size:13px;color:var(--print2)}
+.leg4 span{display:flex;align-items:center;gap:8px}
+.leg4 .pin{flex:none}
+.p4 ol{margin:0;padding-left:18px;font-size:13px;color:var(--print2);display:grid;gap:2px}
+.p4 .close4{display:none}
+.macro4{display:grid;gap:3px}
+.macro4 button{display:flex;justify-content:space-between;gap:8px;height:26px;padding:0 8px;font:500 11px var(--mono);letter-spacing:0;text-align:left}
+.macro4 button[aria-pressed=true]{background:var(--cream);color:var(--creamtext)}
+@media (max-width:1180px){.body4{grid-template-columns:minmax(0,1fr)}.p4{position:fixed;top:0;right:0;bottom:44px;width:min(340px,94vw);height:auto;min-height:0;max-height:none;z-index:35;background:var(--plate);padding:14px 16px;border-left:2px solid var(--print);box-shadow:-14px 0 34px rgba(0,0,0,.25)}.p4.none4{display:none}.p4 .close4{display:inline-flex}}
 /* voices strip */
 .vs4{display:flex;flex-wrap:wrap;align-items:center;gap:4px}
 .vs4 button{height:26px;padding:0 9px;display:inline-flex;gap:6px;align-items:center;font:600 11px var(--sans);letter-spacing:.08em}
@@ -1083,7 +1108,7 @@ function pop3Html() {
 }
 function placePop() {
 	let pop = $("#pop3");
-	if (!S.pop || (S.ver !== "v3" && S.ver !== "v4") || !S.view) { if (pop) pop.remove(); return; }
+	if (!S.pop || S.ver !== "v3" || !S.view) { if (pop) pop.remove(); return; }
 	const anchor = S.ver === "v4" ? anchor4() : S.pop.voice != null ? $(`[data-cellv="${S.pop.voice}"]`) : $(`[data-cell3="${S.pop.id}"]`);
 	if (!anchor) { S.pop = null; if (pop) pop.remove(); return; }
 	if (!pop) { pop = document.createElement("div"); pop.id = "pop3"; pop.className = "pop3"; pop.setAttribute("role", "dialog"); document.body.appendChild(pop); }
@@ -1187,7 +1212,7 @@ function board4Inner(d) {
 			const tag = role === "macro" ? `<em>MACRO ${c.targets.length}</em>` : role === "roll" ? `<em class="rnd">RND</em>` : role === "amount" ? `<em class="rnd">AMT</em>` : "<span></span>";
 			const meter = virt ? (id === "rnd:1" ? "" : "") : isPad(id) ? `<span class="mt pad"><i style="opacity:${v == null ? 0 : 1}"></i></span>` : `<span class="mt"><i style="width:${(v ?? 0) / 127 * 100}%"></i></span>`;
 			const sub = virt ? (id === "rnd:1" ? `<button class="rollk" data-a="roll4" data-id="${id}">ROLL</button>` : `<small>1/2 · SINE</small>`) : `<small>${esc(id.replace(":", " ").toUpperCase())}${v == null ? "" : " · " + v}${c && c.mode ? " · " + MODE_TXT[c.mode] : ""}</small>`;
-			h += `<div class="r4${hot ? " hot" : ""}${sel ? " sel" : ""}" style="--n:${n}"><span class="lab" data-a="row4" data-id="${id}" data-row4="${id}" ${virt ? "" : `data-cell3="${id}"`} title="${esc(name4(d, id))}: row settings"><b>${esc(name4(d, id))}</b>${sub}${tag}${meter}</span>${cols.map(col => pinHtml(d, id, col, pins[col.pid], S.pop && S.pop.id === id && S.pop.pid === col.pid)).join("")}</div>`;
+			h += `<div class="r4${hot ? " hot" : ""}${sel ? " sel" : ""}" style="--n:${n}"><span class="lab" data-a="row4" data-id="${id}" data-row4="${id}" ${virt ? "" : `data-cell3="${id}"`} title="${esc(name4(d, id))} · ${esc(id.replace(":", " ").toUpperCase())}${v == null ? "" : " · in " + v} · click for the row's settings, drag to play it"><b>${esc(name4(d, id))}</b>${sub}${tag}${meter}</span>${cols.map(col => pinHtml(d, id, col, pins[col.pid], S.pop && S.pop.id === id && S.pop.pid === col.pid)).join("")}</div>`;
 		}
 		if (g.startsWith("Knobs") && d !== "tr06" && d !== "any") h += `<div class="r4 learn4" style="--n:${n}"><button class="lab" data-a="learn">${S.learn ? "Move a control…" : "+ Learn a control"}</button></div>`;
 	}
@@ -1201,11 +1226,29 @@ function cfg4Html() {
 		<button class="amkey" data-a="coll4">${Object.values(S.coll4).some(Boolean) ? "Expand all" : "Collapse all"}</button></div>`;
 	const mm = S.m === "mm";
 	const voices = d === "tr06" ? `<div class="vs4"><span class="ilab">Voices</span>${VOICES.map(([v, , notes], i) => { const x = S.voices[S.m][i]; return `<button class="${S.hotVoice === v ? "hot" : ""}" data-a="v4" data-voice="${i}" data-cellv="${i}" aria-pressed="${!!(S.pop && S.pop.voice === i)}">${v}<small>${notes[0]}</small><b>T${x.t + 1}${mm ? " " + noteName(x.note) : ""}</b></button>`; }).join("")}
-		<span class="note" style="font-size:12px;margin-left:8px">pin: <span class="mono">● full range · ◉ limited · − inverse · green = randomise · ▪ pinned track</span></span></div>` : `<div class="vs4"><span class="note" style="font-size:12px">pin: <span class="mono">● full range · ◉ limited · − inverse · green = randomise</span></span></div>`;
+		</div>` : "";
 	return `<div class="v4">${head3(d)}${to}${S.learn ? `<p class="learnline" role="status"><i class="led on"></i>LEARN: move a knob or hit a pad on the ${esc(DEVICES[d].name)}. <button class="amkey" data-a="learn">Cancel</button></p>` : ""}
-		<div class="board" id="b4w"><div class="b4" id="b4">${board4Inner(d)}</div></div>${voices}${mon3()}</div>`;
+		<div class="body4"><div class="board" id="b4w"><div class="b4" id="b4">${board4Inner(d)}</div></div><aside class="p4${S.pop ? "" : " none4"}" id="p4" aria-label="Settings">${panel4Html()}</aside></div>${voices}${mon3()}</div>`;
 }
-/* the popover of a pin: its range, INV, track, remove, and the row's knob mode */
+/* the settings panel: nothing selected (the device, the legend, how to), a pin, a row or a voice */
+const LEG4 = `<div class="leg4"><span><i class="pin on"></i>connected, full range</span><span><i class="pin part"></i>connected, a limited range</span><span><i class="pin on inv"></i>inverse (the knob's top gives the range's bottom)</span>
+	<span><i class="pin rnd"></i>in a randomise set</span><span><i class="pin on pinned"></i>pinned to a track (on a T tab)</span><span><i class="pin"></i>free socket: click to connect</span></div>`;
+function panel4Html() {
+	const d = S.view, clear = `<button class="amkey close4" data-a="closepop">Close</button>`;
+	if (!S.pop) {
+		const map = mapOf(d), rows = Object.keys(map).filter(id => roleOf(map[id]) !== "none"), macros = rows.filter(id => roleOf(map[id]) === "macro").length;
+		return `<div class="ph"><b>${esc(DEVICES[d].full)}</b><span class="grow"></span>${clear}</div>
+			<div class="kv"><span>${d === "tr06" ? "Profile" : "Mapping"}</span><b>${S.on[d] ? "on" : "off"}${S.ch[d] ? " · CH " + S.ch[d] : ""}</b><span>Knobs</span><b>${{ rel: "relative", abs: "absolute", enc: "encoder" }[S.mode[d]]} (default; a row can differ)</b>
+			<span>Moves</span><b>T${S.sel + 1} · ${esc(KIT[S.m][S.sel])}</b><span>Mapped</span><b>${rows.length} rows · ${macros} macros · ${tabCount(d, S.to)} pins here</b></div>
+			<h4>Pins</h4>${LEG4}
+			<h4>How to</h4><ol><li>Click a socket to connect a control to a parameter; click a lit pin to edit it here.</li><li>Shift- or alt-click a pin to remove it.</li><li>Click a row name for the row: type, knob mode, randomise.</li><li>Pins in several columns make a macro; a T tab pins them to one track.</li><li>Escape clears the selection.</li></ol>`;
+	}
+	return pop4Html().replace('<button class="xkey" data-a="closepop" aria-label="Close">×</button>', `<button class="amkey" data-a="closepop" title="Escape">Clear</button>`);
+}
+function macro4Html(d, id, c, k0) {
+	if (!c || !c.targets || c.targets.length < 2) return "";
+	return `<h4>Macro · ${c.targets.length} pins in this row</h4><div class="macro4">${c.targets.map((x, k) => { const t = trackOf(x), p = pinfo(S.m, t, x.p); return `<button data-a="selpin" data-id="${id}" data-k="${k}" aria-pressed="${k === k0}"><span>${x.t === "sel" ? "SELECTED" : "T" + (x.t + 1)} · ${esc(p.own)}</span><span>${Math.min(x.lo, x.hi)}-${Math.max(x.lo, x.hi)}${x.inv ? " INV" : ""}</span></button>`; }).join("")}</div>`;
+}
 function pop4Html() {
 	const d = S.view;
 	if (S.pop.voice != null || !S.pop.pid) return pop3Html();
@@ -1217,7 +1260,8 @@ function pop4Html() {
 		<div class="readout" id="readout">${readoutHtml(d, id)}</div>
 		<div class="tcards">${tcardHtml(x, S.pop.k)}</div>
 		${isPad(id) || id.includes(":1") && !id.startsWith("cc") ? "" : `<div class="irow"><span class="ilab">Row knob</span><span class="seg">${modeOpts(d).map(([m, tx]) => `<button data-a="mode" data-v="${m}" aria-pressed="${mode === m}" title="${MODE_HELP[m]}">${tx}</button>`).join("")}</span>${own ? `<button class="amkey" data-a="mode" data-v="">Default</button>` : ""}</div>`}
-		<div class="irow"><button class="amkey" data-a="rowpop">Row settings ›</button><span class="note" style="font-size:12px">${c.targets.length > 1 ? "Macro: " + c.targets.length + " pins in this row" : "Shift-click a pin to remove it"}</span></div>`;
+		${macro4Html(d, id, c, S.pop.k)}
+		<div class="irow"><button class="amkey" data-a="rowpop">Row settings ›</button><span class="note" style="font-size:12px">Shift-click a pin to remove it</span></div>`;
 }
 function anchor4() {
 	if (S.pop.voice != null) return $(`[data-cellv="${S.pop.voice}"]`);
@@ -1231,11 +1275,11 @@ function pinClick(el, ev) {
 	if (role === "roll" || role === "amount") {
 		const s = M().sets.find(x => x.id === c.set);
 		if (s) { if (colKey(s.t) !== colKey(S.to)) { s.t = S.to; s.params = []; } s.params = s.params.includes(pid) ? s.params.filter(p => p !== pid) : [...s.params, pid]; toast(`${s.name}: ${s.params.length} parameters (shared by every row that uses it).`); }
-		S.pop = null; return;
+		S.pop = { id }; return;
 	}
 	const k = c.targets.findIndex(x => colKey(x.t) === colKey(S.to) && x.p === pid);
 	if (k >= 0 && (ev.shiftKey || ev.altKey)) { c.targets.splice(k, 1); if (!c.targets.length && !c.mode && !c.virt) delete map[id]; S.pop = null; return; }
-	if (k >= 0) { S.pop = (S.pop && S.pop.id === id && S.pop.pid === pid) ? null : { id, pid, k }; return; }
+	if (k >= 0) { S.pop = { id, pid, k }; return; }
 	c.targets.push(tgt(pid, pid === "NOTE.0" ? 48 : 0, pid === "NOTE.0" ? 72 : 127, { t: S.to === "sel" ? "sel" : S.to }));
 	S.pop = { id, pid, k: c.targets.length - 1 };
 }
@@ -1243,7 +1287,8 @@ function live4() {
 	const b = $("#b4"); if (b) b.innerHTML = board4Inner(S.view);
 	const ro = $("#readout"); if (ro && S.pop && S.pop.id) ro.innerHTML = readoutHtml(S.view, S.pop.id);
 	const c = S.pop && S.pop.id ? mapOf(S.view)[S.pop.id] : null;
-	if (c && c.targets) c.targets.forEach((x, k) => { const now = val(trackOf(x), x.p); const n = $(`#pop3 [data-now="${k}"]`); if (n) n.style.left = now / 127 * 100 + "%"; const tx = $(`#pop3 [data-nowtxt="${k}"]`); if (tx) tx.textContent = "NOW " + now; });
+	if (c && c.targets) c.targets.forEach((x, k) => { const now = val(trackOf(x), x.p); const n = $(`#p4 [data-now="${k}"]`); if (n) n.style.left = now / 127 * 100 + "%"; const tx = $(`#p4 [data-nowtxt="${k}"]`); if (tx) tx.textContent = "NOW " + now; });
+	if (!S.pop) { const p = $("#p4"); if (p) p.innerHTML = panel4Html(); }
 	const m = $("#monlcd"); if (m) m.innerHTML = monInner();
 }
 /* the crosshair on the board: the hovered pin's column across all rows (its row by CSS :hover) */
@@ -1347,7 +1392,7 @@ function renderTop() {
 	$("#plug-beatstep").textContent = S.conn.beatstep ? "Unplug BeatStep" : "Plug in BeatStep";
 	$("#dev-daw").setAttribute("aria-pressed", S.daw);
 	$$("#devver button").forEach(b => b.setAttribute("aria-pressed", b.dataset.v === S.ver));
-	$("#devhint").textContent = S.ver === "v4" ? "Click a dot to connect, shift-click to remove; drag a row's thin meter to play the hardware." : S.ver === "v3" ? "Drag across a cell to turn that control; click it to map." : "Drag a row's meter left / right to play the hardware; click a pad row's square to hit it.";
+	$("#devhint").textContent = S.ver === "v4" ? "Click a socket to connect, shift-click to remove; drag across a row name to play the hardware." : S.ver === "v3" ? "Drag across a cell to turn that control; click it to map." : "Drag a row's meter left / right to play the hardware; click a pad row's square to hit it.";
 }
 function render() {
 	closeK();
@@ -1368,7 +1413,7 @@ let lastEv = null;
 document.addEventListener("click", e => {
 	lastEv = e;
 	if (suppress3) { suppress3 = false; if (e.target.closest("[data-cell3]")) return; }
-	if (S.pop && !e.target.closest("#pop3,#kpop,.dev") && !e.target.closest("[data-a=c3],[data-a=v3],[data-a=pin],[data-a=row4],[data-a=v4]")) { S.pop = null; placePop(); $$(".c3.open").forEach(x => x.classList.remove("open")); }
+	if (S.pop && S.ver === "v3" && !e.target.closest("#pop3,#kpop,.dev") && !e.target.closest("[data-a=c3],[data-a=v3],[data-a=pin],[data-a=row4],[data-a=v4]")) { S.pop = null; placePop(); $$(".c3.open").forEach(x => x.classList.remove("open")); }
 	const kb = e.target.closest(".kselbtn");
 	if (kb) { const same = kFor === kb && !$("#kpop").hidden; closeK(); if (!same) openK(kb); return; }
 	const o = e.target.closest("#kpop .kopt");
@@ -1397,9 +1442,10 @@ function act(a, el) {
 		case "v3": S.pop = (S.pop && S.pop.voice === +el.dataset.voice) ? null : { voice: +el.dataset.voice }; break;
 		case "closepop": S.pop = null; break;
 		case "pin": pinClick(el, lastEv || {}); break;
-		case "row4": S.selCtl[d] = el.dataset.id; S.pop = (S.pop && S.pop.id === el.dataset.id && !S.pop.pid) ? null : { id: el.dataset.id }; break;
+		case "row4": S.selCtl[d] = el.dataset.id; S.pop = { id: el.dataset.id }; break;
+		case "selpin": { const x = mapOf(d)[el.dataset.id].targets[+el.dataset.k]; S.to = x.t; S.pop = { id: el.dataset.id, pid: x.p, k: +el.dataset.k }; break; }
 		case "rowpop": S.pop = { id: S.pop.id }; break;
-		case "v4": S.pop = (S.pop && S.pop.voice === +el.dataset.voice) ? null : { voice: +el.dataset.voice }; break;
+		case "v4": S.pop = { voice: +el.dataset.voice }; break;
 		case "to4": S.to = el.dataset.v === "sel" ? "sel" : +el.dataset.v; S.pop = null; break;
 		case "used4": S.used4[el.dataset.v] = !S.used4[el.dataset.v]; break;
 		case "g4": S.coll4[el.dataset.v] = !S.coll4[el.dataset.v]; break;
