@@ -11,36 +11,50 @@
 
 ## 00000. Current proposal: v7, the hardware panel with the mapping written on it
 
-The prototype opens on v7; the bar keeps **v5 matrix**, **v6 list** and **v7 panel**. Radek's verdict on v6: the list does not fit the window, and "maybe the hardware view was best and we just didn't do it properly". v7 is that, with one change: the panel says what every control does, in words, right under it.
+The prototype opens on v7; the bar keeps **v5 matrix**, **v6 list** and **v7 panel**. Radek's verdict on v6: the list does not fit the window, and "maybe the hardware view was best and we just didn't do it properly". v7 is that. Its base is the first prototype's front panel (28c12798: the dark "TR-06 RHYTHM COMPOSER" strip, knobs with LEDs, the greyed no-MIDI controls, the 16 step keys, KNOB LAYER, ALSO SENDS, VOICES, the inspector with its green LCD), with what we learned since: the mapping is written in words under every control.
 
 ### Why it works
 
-- **Spatial memory:** the user already knows where DRIVE and the BD knob are on the TR-06. The panel puts the same controls in the same places, so finding a control costs nothing.
-- **Text answers the question:** an earlier front panel (28c12798) was only a drawing of knobs, and the user had to click each one to learn what it did. Under every knob and pad v7 writes the answer: "→ Unison level", "→ 3 things" (with a count badge), "→ Note", "→ Release · T6" (pinned to track 6), "nothing" (dim), and under a pad "→ Track 1 · C4" (MD: "→ Track 1 · trig"). The whole mapping reads in about three seconds, with no click.
-- **Fits without scrolling:** 8 + 3 knobs and 7 pads are a fixed small set, so the panel has no list to scroll (v6's 50 rows needed one). The hardware's own layers replace the rows.
+- **Spatial memory:** the user already knows where DRIVE and the BD knob are on the TR-06. The panel puts the same controls in the same places.
+- **Text answers the question:** the first drawing showed only names and CC numbers; the user had to click each knob to learn what it did. v7 writes it under the knob: "→ Unison level", "→ 3 things" (with a count badge), "→ Note · LT", "→ Release · T6" (pinned to track 6), a dim "nothing". Each instrument key carries "→ T1 · C4" (MD: "→ T1"). The whole mapping reads in about three seconds, with no click.
+- **Fits without scrolling:** 11 knobs, 7 keys and a few chips are a small fixed set, so nothing scrolls.
 
 ### Layout
 
-- **Header line** as in v6, with LIST and MATRIX keys to reach the other views. MIDI IN strip at the bottom.
-- **Left (about 64%):** the LAYER switch, then the instrument knobs (ACC BD SD LT HT CY OH CH) and, at the right, the effect knobs (DRIVE TIME DEPTH). Below 1250 px the effect knobs wrap to a second row. Under them a strip of small grey circles and squares for the controls that send no MIDI (VOLUME, TEMPO, MODE, INSTRUMENT, VALUE, MENU, STEP LOOP, the 16 steps), then the seven instrument keys BD to CH. One legend line: "grey = sends no MIDI".
-- **LAYER switch:** LEVEL, TUNE (MENU + DRIVE), DECAY (MENU + TIME), TONE (MENU + DEPTH), COMP, DELAY SEND (STEP LOOP + DEPTH) and GLOBAL (MIX IN, PROB, MIX IN SEND and the editor's RANDOM and APP LFO). Switching relabels the eight instrument knobs, as the TR-06 does (each layer sends its own CCs). A knob the layer does not have is drawn ghosted ("not here"). Each tab carries the number of mapped controls in it. Turning a shifted CC on the device switches the layer by itself.
-- **Knob:** a name (BD), a small knob whose arc shows where its target is now, and the label. A macro label carries a badge with its count. A selected control has a steady ring, and the one that moved last a tinted cell and a red arc. Nothing blinks.
-- **Right (about 35%):** v6's detail for the selected control: name and CC, IN / OUT, the one-control fan-out picture, TYPE, KNOB, a card per target (picker with full names by page, two-handle range, INV, track, remove) and "+ Add another thing". With nothing selected it shows three how-to lines.
-- **Generic device (BeatStep):** the same cells, laid out as a grid: KNOBS AND FADERS, a dashed "+ LEARN" tile, PADS AND KEYS, EDITOR SOURCES.
-- **MD:** the same panel with the MD's names; pads read "→ Track n · trig".
+- **Header line** as in v6, with LIST and MATRIX keys. "Knobs act on" now has the default **TR-06 instrument (last touched)** and shows "Now: BD → T1 SWAVE-SAW". MIDI IN strip at the bottom.
+- **Left (about 64%):**
+  - **The panel:** the strip, then the eight instrument knobs (ACC BD SD LT HT CY OH CH) and the three effect knobs (DRIVE TIME DEPTH) in one row, each with its name and the mapping label; below them the greyed no-MIDI controls (VOLUME, TEMPO, INSTRUMENT, MODE, VALUE, MENU, STEP LOOP, TAP, RUN / STOP) and the 16 step keys, no labels except their names.
+  - **KNOB LAYER:** LEVEL, TUNE, DECAY, TONE, COMP, DELAY SEND, each with a count of mapped controls. Turning a shifted CC on the device switches the layer by itself.
+  - **ALSO SENDS:** MIX IN LVL, MIX IN DELAY SEND, MASTER PROB, and the editor's RANDOM and APP LFO, each with its mapping in words.
+  - **VOICES:** the seven instrument keys with their notes and the "→ T1 · C4" tag.
+- **Right (about 35%):** the inspector as in the first design: CONTROL header with CC and channel, the control's name, the green IN / OUT LCD, DOES (normal / randomise / rnd amount), KNOB (relative / absolute; the encoder too on a generic device), a card per target (parameter picker with full names by page, two-handle range, INV, ×, track) and "+ Add another thing". The one-control fan-out picture that v6 had was taken out of v6 and v7 (Radek: unnecessary). With nothing selected: three how-to lines.
+- **Generic device (BeatStep):** the same panel style with the controls seen as knobs and keys, a dashed "+ LEARN" tile and the editor sources.
+- **Steady highlight, no blinking:** the selected control has a dashed ring, the last-moved one a red ring and tint.
 
-### Clicking through
+### Shifted layers are one physical knob (per Roland's chart; check on the hardware)
 
-- Open CONTROL, then the TR-06 tile. Click any knob or pad (a pad click plays it). Drag across a knob to turn it: the cell selects, the arc and the fan-out move. Switch LAYER; use Hit BD or the bar's MM / MD; open the BeatStep tile.
+Only LEVEL (eight knobs, fixed CCs) and the EFFECT knobs (DRIVE 17, TIME 18, DEPTH 19) are physical per-CC knobs. In TUNE (MENU + DRIVE), DECAY (MENU + TIME), TONE (MENU + DEPTH) and DELAY SEND (STEP LOOP + DEPTH) there is **one** knob whose CC depends on the INSTRUMENT selection (TUNE: BD 20, SD 25, LT 49, HT 52, CY 83, OH 80, CH 61). So in those layers v7 draws the eight per-instrument CCs as smaller **slots** under the instrument names, with the caption "MENU + DRIVE · one physical knob: the INSTRUMENT knob picks which slot it moves" and a frame round the physical source (DRIVE, TIME or DEPTH). Mappings stay per CC. COMP's shift is not known and is marked "check on the hardware".
+
+### The selected instrument
+
+The TR-06 does not send which instrument is selected, so the prototype infers it:
+
+- **Rule:** the "selected instrument" is the last instrument the user touched: a per-instrument CC (LEVEL BD 24, SD 29, ... and the shifted TUNE / DECAY / TONE / COMP / DELAY SEND CCs), or, **only while the transport is stopped**, a pad note (TAP, manual hits). While a pattern plays, notes do **not** change it, because the sequencer streams notes. ACC is not an instrument.
+- **Instrument to track** comes from the voice mapping (BD to T1, ...).
+- **"Knobs act on" ➜ "TR-06 instrument (last touched)"** is the default for the TR-06 profile: the page's selected track follows the instrument. The header reads "Now: BD → T1 SWAVE-SAW"; the panel shows the current instrument in the layer row and marks its knob and voice key.
+- **ACC (CC 71) → NOTE by default** now means: transpose the note of the track the current instrument plays (MM: that voice's note; MD: that track's pitch, PTCH). Its label reads "→ Note · LT".
+- **Any target card can choose track = "Follows the instrument"** next to "Selected track" and a pinned Tn. In the data it is `t: "inst"` beside `"sel"` and a track number.
+- **Prototype:** Hit BD / Hit CH (while stopped), dragging a LEVEL knob and shifted CCs change the instrument. A **Pattern playing** toggle in the prototype bar shows that notes then leave it alone.
+- **Caveat, needs the hardware:** confirm that the LEVEL knobs really send their CCs, and that no instrument-select message is sent.
 
 ### v7 against v6 and v5
 
-- **v7 wins on recall and fit:** it shows position, name and meaning at once and fits the window. v6 reads best as a sentence, but it lists 50 rows and scrolls.
-- **v7 loses the full list:** only one layer of eight knobs is visible at a time. The tab counts and the auto-switch make up for it, and LIST and MATRIX are one key away.
+- **v7 wins on recall and fit:** position, name and meaning at once, in the window. v6 reads best as a sentence but lists 50 rows and scrolls.
+- **v7 loses the full list:** one layer of knobs is visible at a time. The tab counts and the layer auto-switch make up for it, and LIST and MATRIX are one key away. In v5 a pin that follows the instrument (`t: "inst"`) is not drawn as a column of its own.
 
 ### Measured (headless Chrome, prototype bar included)
 
-- **1500 x 900:** `scrollHeight` 900 (no page scroll); the panel is about 414 px high with no internal scroll. **1000 x 900:** `scrollHeight` 900, panel about 497 px. **800 x 900:** `scrollHeight` 902, panel about 483 px. The detail column may scroll inside itself when a control has many targets. Smallest text on the panel is 12 px. No console errors at any size.
+- **1500 x 900:** `scrollHeight` 900, `scrollWidth` 1500; the left panel column is about 462 px high with nothing scrolling. **1000 x 900:** `scrollHeight` 900, about 457 px. The inspector may scroll inside itself when a control has many targets. Smallest text on the panel is 11 px. No console errors.
 
 ## 0000. Current proposal: v6, "what each knob does"
 
