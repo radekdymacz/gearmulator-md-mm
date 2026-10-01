@@ -241,13 +241,41 @@ for one with `{"op":"chain","patterns":[...]}`; the desk checks the machine's ru
 (`mdDesk/mdDeskChain.h`: 2-16 patterns, one bank, each once) and presses the keys
 the manual describes: BANK held, the TRIG keys held one after another in play
 order (pressed and released one by one they only select), with BANK GROUP first
-for the other half of the banks. The chain loops. A LOAD PATTERN or a single TRIG
+for the other half of the banks, after SET STATUS pattern mode (a chain is pattern
+mode's; in SONG mode the firmware plays it but stays in SONG mode). The chain loops and
+is what plays next: once the firmware holds it, `pattern.queued` (a pick still waiting
+for the pattern end, which the chain replaced, measured) is dropped and the pattern and
+sequencer mode are read again. A LOAD PATTERN or a single TRIG
 ends it; a pattern dump into a chained pattern does not (measured). So `select`
 while a chain is active answers `{"type":"ask","ask":"breakChain","p"}` and sends
 nothing; `select` with `chainOk` (or `force`) goes ahead. `chainClear` is LOAD
 PATTERN of the current pattern. `machine.desk.mutes` is the machine's pattern mute
 mask (main RAM 0x28b34a, 16 bits big-endian, bit 0 = track 1), so mutes made in the
 machine's MUTE window or by CC 12-15 show too (`mutesSource` = `memory`).
+
+**What plays (the Song page).** The page states it from this document alone
+(`mdDeskModel.js playsOf`): `CHAIN A03»A05` while `desk.chain.active` (also in SONG
+mode, where the firmware plays the chain), else `SONG nn` (`song.current`) while
+`songMode` is true, else `PATTERN` with `pattern.current` (`songMode` null counts as
+pattern mode). The Song page has one pattern palette: ARRANGE adds a pad to the song,
+CHAIN numbers it into the chain the `chain` command makes.
+
+**Generators and mutation** ([DESIGN-generators.md](DESIGN-generators.md)). The page computes
+(`mdDeskGen.js`, pure) and sends the result as two plain edits; the core never sees a recipe.
+`{"op":"steps","p","rows":[{t, on:[step...], acc?:[step...]}],"from"?,"to"?}`: 1-16 rows, each
+track's trigs in `[from, to)` (default the visible steps) become exactly `on`; a step turned off
+loses its locks and marks (as `trig` off), a kept step keeps them, slides stay; `acc` sets the
+track's accents in the range (only on its steps), and with `accent.editAll` = 1 it is left out with
+a note. One pattern change: one paced dump, one undo step. `{"op":"params","k","values":[[t, i, v]...]}`:
+up to 384 kit parameters (i 0-23) of the working kit in one change; `kitDelivery` sends a CC for each
+value that changed. A mutation trial sends every apply with one `g`, so it is one undo step back to
+the sound before it.
+`{"op":"rotate","p","t","by"}` (-63..63): track t's trigs, its own accents, slides and swings and every
+lock of the track move `by` steps, wrapping at the pattern's length; steps from the length on stay, the
+pattern-wide marks (EDIT ALL) stay. The page sends a train of Alt + arrow presses with one `g`: one undo step.
+`{"op":"doublePattern","p"}`: length x2 and the total length grown to hold it, the new half a copy of every
+track's trigs, marks and locks and the pattern-wide marks (no new lock rows); refused above 64 steps, and above
+32 for a CLASSIC (short) pattern.
 
 **Kit library and pattern chooser (P4).** The desk loads all 64 kits (stored
 slots) in the background too. Commands (`mdDesk/mdDeskLibrary.h`, pure):

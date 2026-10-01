@@ -134,6 +134,16 @@ namespace mdDataLink
 		changed(before);
 	}
 
+	void Session::noteChained()
+	{
+		const auto before = m_state;
+		m_state.queuedPattern.reset();
+		send(ed::mdStatusRequest(ed::MdStatus::Pattern));
+		send(ed::mdStatusRequest(ed::MdStatus::Kit));
+		send(ed::mdStatusRequest(ed::MdStatus::SequencerMode));
+		changed(before);
+	}
+
 	void Session::loadKit(const uint8_t _slot)
 	{
 		const auto before = m_state;

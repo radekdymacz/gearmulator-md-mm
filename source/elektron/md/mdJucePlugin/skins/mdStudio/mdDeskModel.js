@@ -141,6 +141,20 @@ function songSlotOf(docs) { const m = machineOf(docs); return m.song && m.song.c
 function lengthIn(docs, p) { const d = docs.patterns[p]; return d ? d.length : 16; }
 /* the transport: one source, the telemetry (stopped until it comes) */
 function transportOf(docs) { const t = docs.telemetry; return { playing: !!(t && t.playing), rec: !!(t && t.recording) }; }
+/* What the machine plays (the Song page says it): its own chain (machine.desk.chain) while one is
+   active, also in SONG mode (the firmware plays a chain there and stays in SONG mode); else the song
+   in SONG mode (songMode, song.current); else the current pattern. A long chain is shortened in the
+   label (first two, last); patterns has it all. songMode null (not reported yet) counts as pattern. */
+function playsOf(docs) {
+	const m = machineOf(docs), c = m.desk && m.desk.chain;
+	if (c && c.active && c.patterns.length) {
+		const p = c.patterns.map(patName), short = p.length > 4 ? [p[0], p[1], "…", p[p.length - 1]] : p;
+		return { kind: "chain", label: "CHAIN " + short.join("»"), patterns: c.patterns.slice() };
+	}
+	if (m.songMode === true) { const s = songSlotOf(docs); return { kind: "song", label: "SONG " + String(s + 1).padStart(2, "0"), song: s }; }
+	const p = patternSlotOf(docs);
+	return { kind: "pattern", label: "PATTERN " + patName(p), pattern: p };
+}
 const machineState = () => machineOf(Docs);
 const currentPatternSlot = () => patternSlotOf(Docs);
 const currentKitSlot = () => kitSlotOf(Docs);

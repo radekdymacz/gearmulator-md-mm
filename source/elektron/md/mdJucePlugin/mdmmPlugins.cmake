@@ -50,6 +50,7 @@ list(APPEND SOURCES
 	skins/mdStudio/mdDeskBoot.js
 	skins/mdStudio/mdDeskSyx.js
 	skins/mdStudio/mdDeskModel.js
+	skins/mdStudio/mdDeskGen.js
 	skins/mdStudio/mdDeskMod.js
 	skins/mmStudio/mmStudio.rml
 	skins/mmStudio/mmStudio.html
@@ -61,6 +62,7 @@ list(APPEND SOURCES
 	skins/mmStudio/mmSelfTest.js
 	skins/mdStudio/mdDeskSelfTest.js
 	skins/mdStudio/mdDeskModelTest.js
+	skins/mdStudio/mdDeskGenTest.js
 	skins/mdStudio/mdDeskLive.js
 	skins/mdStudio/mdDeskLibrary.js
 	skins/mdStudio/mdDeskKeys.js
@@ -94,7 +96,7 @@ file(GLOB MM_SKIN_ASSETS CONFIGURE_DEPENDS
 # The tests are not the page, named one by one, not by a file-name pattern: the node tests never
 # ship, the self-tests only with the diagnostics. A test that was renamed or moved stops the
 # configure, so it cannot slip into the glob. The MM glob lists its page files already.
-set(MD_NODE_TESTS "skins/mdStudio/mdDeskModelTest.js")
+set(MD_NODE_TESTS "skins/mdStudio/mdDeskModelTest.js" "skins/mdStudio/mdDeskGenTest.js")
 set(MD_SELF_TESTS "skins/mdStudio/mdDeskSelfTest.js")
 set(MM_SELF_TESTS "skins/mmStudio/mmSelfTest.js")
 foreach(test ${MD_NODE_TESTS} ${MD_SELF_TESTS} ${MM_SELF_TESTS})
@@ -198,6 +200,9 @@ function(mdmm_plugin_targets)
 	if(GEARMULATOR_NODE)
 		add_test(NAME mdDeskModelPageTest COMMAND ${GEARMULATOR_NODE} ${CMAKE_CURRENT_SOURCE_DIR}/skins/mdStudio/mdDeskModelTest.js)
 		set_tests_properties(mdDeskModelPageTest PROPERTIES LABELS "UnitTest" TIMEOUT 60)
+		# the generators and the mutation (DESIGN-generators.md): pure, pinned
+		add_test(NAME mdDeskGenPageTest COMMAND ${GEARMULATOR_NODE} ${CMAKE_CURRENT_SOURCE_DIR}/skins/mdStudio/mdDeskGenTest.js)
+		set_tests_properties(mdDeskGenPageTest PROPERTIES LABELS "UnitTest" TIMEOUT 60)
 	endif()
 
 	# P4: the editor's setup (MDSK chunk) round-trips with the plug-in state.

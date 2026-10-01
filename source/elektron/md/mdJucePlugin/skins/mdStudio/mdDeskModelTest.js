@@ -11,8 +11,8 @@ const fs = require("fs"), path = require("path"), vm = require("vm");
 const ctx = vm.createContext({ console });
 vm.runInContext(fs.readFileSync(path.join(__dirname, "mdDeskModel.js"), "utf8")
 	+ "\nconst S = { soloSet: new Set() };"
-	+ "\nthis.T = { deriveView, Overlay, view, Docs, S, EMPTY_DOCS, storeDoc, resetDocs, canDo, docOf, multFactor, mfxName, nameOf, tweakWrites, catalogueIndex, waveBins, waveWant, waveColumns, auditionAt, WAVE_MAX_BINS, get V() { return V; } };", ctx);
-const { deriveView, Overlay, Docs, S, EMPTY_DOCS, storeDoc, resetDocs, canDo, docOf, multFactor, nameOf, tweakWrites, catalogueIndex, waveBins, waveWant, waveColumns, auditionAt, WAVE_MAX_BINS } = ctx.T;
+	+ "\nthis.T = { deriveView, Overlay, view, Docs, S, EMPTY_DOCS, storeDoc, resetDocs, canDo, docOf, multFactor, mfxName, nameOf, tweakWrites, catalogueIndex, waveBins, waveWant, waveColumns, auditionAt, WAVE_MAX_BINS, playsOf, get V() { return V; } };", ctx);
+const { deriveView, Overlay, Docs, S, EMPTY_DOCS, storeDoc, resetDocs, canDo, docOf, multFactor, nameOf, tweakWrites, catalogueIndex, waveBins, waveWant, waveColumns, auditionAt, WAVE_MAX_BINS, playsOf } = ctx.T;
 const DELETE = Overlay.DELETE;
 let failures = 0;
 const check = (ok, what) => { console.log((ok ? "  ok   " : "  FAIL ") + what); if (!ok) failures++; };
@@ -44,6 +44,10 @@ const docs = (extra = {}) => ({ patterns: { 5: pattern }, kits: { 3: kit("STORED
 		history: { undo: false, redo: false, undoCount: 0, redoCount: 0 }, lifecycle: "ready", input: true, midi: true,
 		lifecycleText: "", capabilities: caps, clipboard: { steps: false, sound: true, songRow: false, kit: 7, pattern: null } }, ...extra });
 
+/* what the machine plays: SONG mode (songMode, song.current) and its own chain (desk.chain) */
+const songDocs = (mode = true) => docs({ machine: { ...docs().machine, songMode: mode, song: { current: 2, reloadNeeded: false } } });
+const chainDocs = (patterns, mode = false, active = true) => docs({ machine: { ...docs().machine, songMode: mode, desk: { chain: { active, next: 1, patterns } } } });
+
 /* the fixtures above, against the schema itself (not just exercised through deriveView): a
    fixture that drifts from md-data-contract.schema.json is a fixture that tests a document the
    plug-in could never send. page_contract_check.py carries a small draft-07 subset for this (no
@@ -69,12 +73,21 @@ const docs = (extra = {}) => ({ patterns: { 5: pattern }, kits: { 3: kit("STORED
 	/* P9: a slot's detail (sampleWave, 16-bit) and the audition's two messages */
 	const wave = { type: "sampleWave", bank: "rom", slot: 0, length: 6349, rate: 44100, bins: 2, scale: 32767, peaks: [-1200, 3000, -32767, 32767] };
 	const auditionMsg = state => ({ type: "audition", state, bank: "ram", slot: 1, length: 6349, rate: 44100 });
-	for (const [defName, instance] of [["pattern", pattern], ["kit", kit("STORED")], ["machine", docs().machine], ["catalogue", catalogue], ["samples", samples],
+	for (const [defName, instance] of [["pattern", pattern], ["kit", kit("STORED")], ["machine", docs().machine], ["machine", songDocs().machine], ["machine", chainDocs([2, 4]).machine],
+		["catalogue", catalogue], ["samples", samples],
 		["message", wave], ["message", auditionMsg("playing")], ["message", auditionMsg("stopped")]]) {
 		const problems = validate(defName, instance);
 		check(problems.length === 0, "fixture " + defName + " matches the schema" + (problems.length ? ": " + problems.join("; ") : ""));
 	}
 })();
+
+/* what the machine plays (the Song page's header) */
+check(playsOf(docs()).kind === "pattern" && playsOf(docs()).label === "PATTERN A06", "plays: no song mode reported, no chain: the current pattern");
+check(playsOf(songDocs()).kind === "song" && playsOf(songDocs()).label === "SONG 03" && playsOf(songDocs(false)).label === "PATTERN A06", "plays: SONG mode: the current song (song.current); pattern mode: the pattern");
+check(playsOf(chainDocs([2, 4])).label === "CHAIN A03»A05" && playsOf(chainDocs([2, 4], true)).kind === "chain", "plays: an active chain wins, also in SONG mode (the firmware plays it there)");
+check(playsOf(chainDocs([2, 4], true, false)).kind === "song" && playsOf(chainDocs([], false)).kind === "pattern", "plays: an inactive or empty chain is not played");
+check(playsOf(chainDocs([0, 1, 2, 3, 15])).label === "CHAIN A01»A02»…»A16" && playsOf(chainDocs([0, 1, 2, 3, 15])).patterns.length === 5, "plays: a long chain is shortened in the label only");
+check(playsOf(EMPTY_DOCS).label === "PATTERN A01", "plays: no machine document yet: pattern A01");
 
 /* pure */
 const a = deriveView(docs(), S);

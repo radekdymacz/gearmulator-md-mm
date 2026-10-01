@@ -66,11 +66,12 @@ if (/[?&]selftest=p4(&|$)/.test(location.search)) (async () => {
 	log(`Shift-prepared ${prep}: nothing sent while held ${held ? "ok" : "FAIL"}, applied together on release ${p1 >= 0 ? "ok" : "FAIL"}`);
 	document.querySelector('.ms.m[data-mute="6"]').click(); await until(() => !(desk().mutes || []).length, 2000);
 	/* Chain: A02 A03 A04 in Song, then PLAY; the machine's chain and the order it plays. */
-	S.ws = "song"; S.bank = 0; render(); await sleep(200);
+	S.ws = "song"; S.bank = 0; S.songPick = "chain"; render(); await sleep(200);
 	[1, 2, 3].forEach(p => document.querySelector(`[data-chainpad="${p}"]`).click());
 	document.querySelector('[data-chain="send"]').click();
 	p1 = await until(() => desk().chain && desk().chain.active && desk().chain.patterns.join() === "1,2,3", 3000);
 	log(`chain A02 A03 A04 -> firmware chain ${p1 >= 0 ? "ok" : "FAIL"} (${JSON.stringify(desk().chain)})`);
+	render(); log(`the header says what plays: ${$("#songPlays")?.textContent === "CHAIN A02»A03»A04" ? "ok" : "FAIL"} "${$("#songPlays")?.textContent}"`);
 	$("#play").click(); await until(() => V.playing, 3000);
 	const seen = []; let last = -1;
 	await until(() => { const p = Docs.telemetry ? Docs.telemetry.pattern : -1; if (p !== last && p >= 0) { seen.push(p); last = p; } return seen.length >= 5; }, 20000);

@@ -75,6 +75,15 @@ namespace
 		check(s.queuedPattern == uint8_t{5}, "still queued while the old pattern plays");
 		w.session.onSysex(statusReply(ed::MdStatus::Pattern, 5));
 		check(!s.queuedPattern && s.pattern == uint8_t{5}, "queue clears when the firmware reports the switch");
+
+		// A chain made on the panel replaces a pick still waiting for the pattern end.
+		w.session.selectPattern(7);
+		check(s.queuedPattern == uint8_t{7}, "picked while playing: queued");
+		w.sent.clear();
+		w.session.noteChained();
+		check(!s.queuedPattern, "a chain drops the queued pick: the chain plays next");
+		check(w.sent.size() == 3 && w.command(0) == 0x70 && w.sent[2][7] == static_cast<uint8_t>(ed::MdStatus::SequencerMode),
+			"and asks for the pattern, kit and sequencer mode again");
 	}
 
 	void testKitLifecycle()

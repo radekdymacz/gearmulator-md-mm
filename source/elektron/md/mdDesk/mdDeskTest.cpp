@@ -229,6 +229,23 @@ namespace
 			empty &= !ed::hasTrig(pat(r), 0, s);
 		check(r.errors.empty() && empty, "clear empties the track page");
 
+		// Alt + the lock lane's clear key: every lock of the track; Alt + CLR: the whole pattern. One edit each.
+		const auto& before = docs.patterns[0];
+		size_t lt = 0, other = 0;
+		while(lt < 15 && before.lockMasks[lt] == 0) ++lt;
+		other = lt + 1;
+		while(other < 15 && before.lockMasks[other] == 0) ++other;
+		check(before.lockMasks[lt] != 0 && before.lockMasks[other] != 0, "pattern A01 has locks on two tracks");
+		r = run(docs, cmd(R"({"op":"clearLocks","p":0,"t":)" + std::to_string(lt) + "}"), clip);
+		check(r.errors.empty() && r.changes.size() == 1 && pat(r).lockMasks[lt] == 0 && pat(r).trigs[lt] == before.trigs[lt]
+			&& pat(r).lockMasks[other] == before.lockMasks[other] && ed::validate(pat(r)).empty(), "clearLocks: every lock of the track, its trigs and other tracks stay");
+		r = run(docs, cmd(R"({"op":"clearPattern","p":0})"), clip);
+		bool cleared = true;
+		for(size_t t = 0; t < 16; ++t)
+			cleared &= pat(r).trigs[t] == 0 && pat(r).lockMasks[t] == 0 && pat(r).trackAccent[t] == 0 && pat(r).trackSlide[t] == 0;
+		check(r.errors.empty() && r.changes.size() == 1 && cleared && ed::usedLockRows(pat(r)) == 0 && pat(r).length == before.length
+			&& pat(r).kit == before.kit && ed::validate(pat(r)).empty(), "clearPattern: no trigs, marks or locks on any track; length and kit stay");
+
 		Clipboard none;
 		r = run(docs, cmd(R"({"op":"pasteSteps","p":1,"t":0,"from":0})"), none);
 		check(!r.errors.empty(), "paste without a copy is refused");
@@ -424,6 +441,257 @@ namespace
 		}
 		const auto step = g.next(History::Direction::Undo);
 		check(step && std::get<ed::MdPattern>(step->at(0).after) == start, "undoing the gesture restores its start");
+	}
+
+	// DESIGN-generators.md §4.3: the two plain edits the generators and the mutation hand their values to.
+	// steps: rows of {t, on, acc?} in a range, one pattern change; params: many kit values, one working-kit change.
+	void testStepsAndParams()
+	{
+		auto docs = fixtureDocs();
+		Clipboard clip;
+		const auto steps = [](const std::string& _rows, const std::string& _extra = "") { return cmd(R"({"op":"steps","p":0,"rows":)" + _rows + _extra + "}"); };
+		const auto& full = docs.patterns[0];	// 64 locks
+		// A track with a locked trig: turning that step off drops its locks, a kept step keeps them.
+		size_t lt = 16, ls = 0, lp = 0;
+		[&]
+		{
+			for(size_t t = 0; t < 16; ++t)
+				for(size_t s = 0; s < ed::visibleSteps(full); ++s)
+					for(size_t i = 0; i < 24; ++i)
+						if(ed::hasTrig(full, t, s) && ed::lockValue(full, t, i, s))
+						{
+							lt = t; ls = s; lp = i;
+							return;
+						}
+		}();
+		check(lt < 16, "pattern A01 has a locked trig");
+		if(lt == 16)
+			return;
+		std::string on, keepOn;
+		uint64_t want = 0;
+		for(size_t s = 0; s < ed::visibleSteps(full); ++s)
+		{
+			if(ed::hasTrig(full, lt, s) && s != ls)
+			{
+				on += (on.empty() ? "" : ",") + std::to_string(s);
+				want |= uint64_t{1} << s;
+			}
+		}
+		const auto rowsOf = [&](const std::string& _on) { return "[{\"t\":" + std::to_string(lt) + ",\"on\":[" + _on + "]}]"; };
+		auto r = run(docs, steps(rowsOf(on)), clip);
+		check(r.errors.empty() && r.changes.size() == 1 && pat(r).trigs[lt] == want && !ed::lockValue(pat(r), lt, lp, ls)
+			&& ed::validate(pat(r)).empty(), "steps: the step turned off loses its locks");
+		bool kept = true;
+		for(size_t s = 0; s < ed::visibleSteps(full); ++s)
+			for(size_t i = 0; i < 24; ++i)
+				if(s != ls)
+					kept &= ed::lockValue(pat(r), lt, i, s) == ed::lockValue(full, lt, i, s);
+		check(kept, "steps: every step kept on keeps its locks");
+		for(size_t t = 0; t < 16; ++t)
+			kept &= t == lt || (pat(r).trigs[t] == full.trigs[t] && pat(r).lockMasks[t] == full.lockMasks[t]);
+		check(kept, "steps: tracks without a row stay");
+		keepOn = on + (on.empty() ? "" : ",") + std::to_string(ls);
+		r = run(docs, steps(rowsOf(keepOn)), clip);
+		check(r.errors.empty() && r.changes.empty(), "steps: the same steps change nothing");
+
+		// A range: only [from, to) moves; one change for 16 rows (one dump, one undo step).
+		const auto& p1 = docs.patterns[1];
+		std::string all = "[";
+		for(int t = 0; t < 16; ++t)
+			all += std::string(t ? "," : "") + "{\"t\":" + std::to_string(t) + ",\"on\":[" + std::to_string(16 + t % 4) + ",20,28]}";
+		all += "]";
+		r = run(docs, cmd(R"({"op":"steps","p":1,"from":16,"to":32,"rows":)" + all + "}"), clip);
+		bool range = r.errors.empty() && r.changes.size() == 1;
+		for(size_t t = 0; range && t < 16; ++t)
+			for(size_t s = 0; s < 64; ++s)
+			{
+				const bool in = s >= 16 && s < 32;
+				const bool on2 = s == 16 + t % 4 || s == 20 || s == 28;
+				range &= ed::hasTrig(pat(r), t, s) == (in ? on2 : ed::hasTrig(p1, t, s));
+			}
+		check(range, "steps: 16 rows in steps 17-32, one change, the steps outside the range stay");
+
+		// Accents: exactly acc in the range; EDIT ALL leaves them and says so.
+		r = run(docs, cmd(R"({"op":"steps","p":1,"from":0,"to":16,"rows":[{"t":2,"on":[0,4,8,12],"acc":[4,12]}]})"), clip);
+		check(r.errors.empty() && (pat(r).trackAccent[2] & 0xffff) == ((1u << 4) | (1u << 12)) && (pat(r).trigs[2] & 0xffff) == 0x1111,
+			"steps: acc sets the track's accents in the range");
+		{
+			auto d2 = docs;
+			d2.patterns[1].accentEditAll = 1;
+			d2.patterns[1].trackAccent[2] = 0;
+			const auto before = d2.patterns[1].accentPattern;
+			r = run(d2, cmd(R"({"op":"steps","p":1,"from":0,"to":16,"rows":[{"t":2,"on":[0,4,8,12],"acc":[4,12]}]})"), clip);
+			check(r.errors.empty() && r.changes.size() == 1 && pat(r).accentPattern == before && pat(r).trackAccent[2] == 0
+				&& (pat(r).trigs[2] & 0xffff) == 0x1111 && r.note.find("EDIT ALL") != std::string::npos, "steps: with EDIT ALL on, acc is refused with a note (accent is pattern-wide)");
+		}
+		check(!run(docs, cmd(R"({"op":"steps","p":1,"from":0,"to":16,"rows":[{"t":2,"on":[16]}]})"), clip).errors.empty(), "steps: a step outside the range is refused");
+		check(!run(docs, cmd(R"({"op":"steps","p":1,"rows":[{"t":2,"on":[1]},{"t":2,"on":[2]}]})"), clip).errors.empty(), "steps: a track in two rows is refused");
+		check(!run(docs, cmd(R"({"op":"steps","p":1,"rows":[{"t":2,"on":[1],"acc":[2]}]})"), clip).errors.empty(), "steps: an accent without a trig is refused");
+		check(!run(docs, cmd(R"({"op":"steps","p":1,"rows":[]})"), clip).errors.empty(), "steps: no rows is refused");
+		check(!run(docs, cmd(R"({"op":"steps","p":1,"rows":[{"t":16,"on":[]}]})"), clip).errors.empty(), "steps: track 17 is refused");
+
+		// params: one working-kit change, a CC for each value that changed and nothing else.
+		const EditContext plays{uint8_t{0}};
+		const auto& k = docs.kits[0];
+		docs.working = WorkingKit{k};
+		const int v1 = (k.params[1][2] + 9) & 127, v2 = (k.params[5][9] + 40) & 127;
+		r = run(docs, cmd("{\"op\":\"params\",\"k\":0,\"values\":[[1,2," + std::to_string(v1) + "],[5,9," + std::to_string(v2) + "],[3,4,"
+			+ std::to_string(k.params[3][4]) + "]]}"), clip, plays);
+		check(r.errors.empty() && r.changes.size() == 1, "params: one working-kit change");
+		auto d = kitDelivery(k, std::get<WorkingKit>(r.changes[0].after).kit);
+		check(d.edits.size() == 2 && d.edits[0].kind == LiveEdit::Kind::Param && d.edits[1].kind == LiveEdit::Kind::Param
+			&& d.edits[0].track == 1 && d.edits[0].index == 2 && d.edits[0].value == v1 && d.edits[1].track == 5 && d.edits[1].value == v2,
+			"params: two CCs for the two changed values, none for the unchanged one");
+		check(!run(docs, cmd(R"({"op":"params","k":0,"values":[[1,24,3]]})"), clip, plays).errors.empty(), "params: parameter 25 is refused");
+		check(!run(docs, cmd(R"({"op":"params","k":0,"values":[[1,2,128]]})"), clip, plays).errors.empty(), "params: 128 is refused");
+		check(!run(docs, cmd(R"({"op":"params","k":0,"values":[[1,2]]})"), clip, plays).errors.empty(), "params: a pair is refused");
+		check(!run(docs, cmd(R"({"op":"params","k":1,"values":[[1,2,3]]})"), clip, plays).errors.empty(), "params: a kit that does not play is refused");
+
+		// A mutation trial: three applies from the base with one gesture are one undo step back to the base.
+		History h;
+		auto trial = docs;
+		for(int n = 0; n < 3; ++n)
+		{
+			r = run(trial, cmd("{\"op\":\"params\",\"k\":0,\"values\":[[0,0," + std::to_string(10 + n) + "],[0,1," + std::to_string(20 + n) + "]]}"), clip, plays);
+			trial.set(r.changes.at(0).after);
+			h.record(r.changes, 42);
+		}
+		const auto undo = h.next(History::Direction::Undo);
+		check(h.size() == 1 && undo && std::get<WorkingKit>(undo->at(0).after).kit == k, "params: a three-apply trial with one g is one undo step, back to the base");
+	}
+
+	// Through the Desk: a whole-pattern generator (16 rows) is one pattern dump and one undo step; a
+	// mutation trial (three params with one g) is CCs only and one undo step back to the base.
+	// DESIGN-generators.md §7: rotate a track (Alt + arrows) and double the pattern, one pattern change each.
+	void testRotateAndDouble()
+	{
+		auto docs = fixtureDocs();
+		Clipboard clip;
+		const auto& full = docs.patterns[0];
+		size_t lt = 0;
+		while(lt < 15 && full.lockMasks[lt] == 0)
+			++lt;
+		const size_t len = std::min<size_t>(full.length, ed::visibleSteps(full));
+		const auto rot = [&](const Documents& _d, const int _by) { return run(_d, cmd("{\"op\":\"rotate\",\"p\":0,\"t\":" + std::to_string(lt) + ",\"by\":" + std::to_string(_by) + "}"), clip); };
+		auto r = rot(docs, 1);
+		bool moved = r.errors.empty() && r.changes.size() == 1 && full.lockMasks[lt] != 0;
+		for(size_t s = 0; moved && s < len; ++s)
+		{
+			const auto to = (s + 1) % len;
+			moved &= ed::hasTrig(pat(r), lt, to) == ed::hasTrig(full, lt, s) && ((pat(r).trackAccent[lt] >> to & 1) == (full.trackAccent[lt] >> s & 1));
+			for(size_t i = 0; i < 24; ++i)
+				moved &= ed::lockValue(pat(r), lt, i, to) == ed::lockValue(full, lt, i, s);
+		}
+		for(size_t t = 0; t < 16; ++t)
+			moved &= t == lt || (pat(r).trigs[t] == full.trigs[t] && pat(r).lockMasks[t] == full.lockMasks[t]);
+		check(moved && ed::usedLockRows(pat(r)) == ed::usedLockRows(full) && ed::validate(pat(r)).empty(),
+			"rotate: the track's trigs, accents and locks move one step later, wrapping at the length; other tracks stay");
+		auto later = docs;
+		later.set(r.changes.at(0).after);
+		r = rot(later, -1);
+		check(r.errors.empty() && pat(r) == full, "rotate: one step later then one earlier is the pattern again");
+		check(rot(docs, int(len)).changes.empty(), "rotate: by the length changes nothing");
+		{
+			History h;
+			auto d = docs;
+			for(int n = 0; n < 3; ++n)
+			{
+				r = rot(d, 1);
+				d.set(r.changes.at(0).after);
+				h.record(r.changes, 77);
+			}
+			const auto undo = h.next(History::Direction::Undo);
+			check(h.size() == 1 && undo && std::get<ed::MdPattern>(undo->at(0).after) == full, "rotate: a train of presses with one g is one undo step");
+		}
+
+		// Double: 16 steps (total 16) become 32 (total 32), the new half a copy of the first.
+		auto d2 = docs;
+		auto& q = d2.patterns[0];
+		q.length = 16;
+		q.scale = 0;
+		r = run(d2, cmd(R"({"op":"doublePattern","p":0})"), clip);
+		bool copied = r.errors.empty() && r.changes.size() == 1 && pat(r).length == 32 && ed::visibleSteps(pat(r)) == 32;
+		for(size_t t = 0; copied && t < 16; ++t)
+			for(size_t s = 0; s < 16; ++s)
+			{
+				copied &= ed::hasTrig(pat(r), t, s) == ed::hasTrig(q, t, s) && ed::hasTrig(pat(r), t, s + 16) == ed::hasTrig(q, t, s);
+				copied &= accentOn(pat(r), t, s + 16) == accentOn(q, t, s) && slideOn(pat(r), t, s + 16) == slideOn(q, t, s);
+				for(size_t i = 0; i < 24; ++i)
+					copied &= ed::lockValue(pat(r), t, i, s + 16) == ed::lockValue(q, t, i, s) && ed::lockValue(pat(r), t, i, s) == ed::lockValue(q, t, i, s);
+			}
+		check(copied && ed::validate(pat(r)).empty(), "doublePattern: length and total 16 -> 32, every track's trigs, marks and locks copied into the new half");
+		check(r.note.find("16 to 32") != std::string::npos, "doublePattern: the note says what it did");
+		q.length = 48;
+		q.scale = 3;
+		check(!run(d2, cmd(R"({"op":"doublePattern","p":0})"), clip).errors.empty(), "doublePattern: 48 steps cannot double (64 is the longest)");
+		q.extended = false;
+		q.length = 32;
+		q.scale = 1;
+		check(!run(d2, cmd(R"({"op":"doublePattern","p":0})"), clip).errors.empty(), "doublePattern: above 32 steps needs EXTENDED");
+	}
+
+	void testStepsAndParamsDesk()
+	{
+		std::vector<std::vector<uint8_t>> wire;
+		std::vector<Value> page;
+		std::vector<std::array<uint8_t, 3>> params;
+		double now = 0;
+		Desk::Port port;
+		port.device.sendSysex = [&](const std::vector<uint8_t>& _b) { wire.push_back(_b); };
+		port.device.sendKitParam = [&](uint8_t _t, uint8_t _i, uint8_t _v) { params.push_back({_t, _i, _v}); };
+		port.toPage = [&](const Value& _m) { page.push_back(_m); g_published.push_back(_m); };
+		port.device.nowMs = [&] { return now; };
+		Desk desk(port);
+		desk.onTelemetry(Telemetry{});
+		const auto status = [](const ed::MdStatus _p, const uint8_t _v)
+		{
+			return std::vector<uint8_t>{0xf0, 0x00, 0x20, 0x3c, 0x02, 0x00, 0x72, static_cast<uint8_t>(_p), _v, 0xf7};
+		};
+		const auto undoCount = [&]
+		{
+			for(auto it = page.rbegin(); it != page.rend(); ++it)
+				if(const auto* t = it->find("type"); t && t->asString() == "machine")
+					return static_cast<int>(it->find("doc")->find("history")->find("undoCount")->asNumber());
+			return -1;
+		};
+		desk.onPageMessage(cmd(R"({"op":"ready"})"));
+		auto pattern = *ed::decodeMdPattern(load("programmed_pattern_1.syx"));
+		const auto kit = *ed::decodeMdKit(load("programmed_kit_0.syx"));
+		pattern.kit = kit.position;
+		desk.onDeviceSysex(status(ed::MdStatus::Pattern, pattern.position));
+		desk.onDeviceSysex(status(ed::MdStatus::Kit, kit.position));
+		desk.onDeviceSysex(status(ed::MdStatus::LockMode, 1));
+		desk.onDeviceSysex(ed::encodeMdPattern(pattern));
+		desk.onDeviceSysex(ed::encodeMdKit(kit));
+		now = 100;
+		wire.clear();
+		const int undo0 = undoCount();
+		std::string rows = "[";
+		for(int t = 0; t < 16; ++t)
+			rows += std::string(t ? "," : "") + "{\"t\":" + std::to_string(t) + ",\"on\":[0," + std::to_string(4 + t % 8) + "]}";
+		desk.onPageMessage(cmd("{\"op\":\"steps\",\"p\":1,\"from\":0,\"to\":16,\"rows\":" + rows + "],\"g\":300,\"id\":1}"));
+		size_t dumps = 0;
+		for(const auto& w : wire)
+			dumps += ed::mdDumpCommand(w) == ed::g_mdPatternDump;
+		check(dumps == 1 && undoCount() == undo0 + 1, "steps through the desk: 16 rows are one pattern dump and one undo step");
+		const auto sent = *ed::decodeMdPattern(wire.at(0));
+		check(ed::hasTrig(sent, 15, 11) && ed::hasTrig(sent, 0, 0), "the dump carries every row");
+
+		params.clear();
+		wire.clear();
+		const int undo1 = undoCount();
+		for(int n = 0; n < 3; ++n)
+			desk.onPageMessage(cmd("{\"op\":\"params\",\"k\":0,\"values\":[[2,0," + std::to_string(30 + n) + "],[2,1," + std::to_string(kit.params[2][1])
+				+ "]],\"g\":301,\"id\":" + std::to_string(10 + n) + "}"));
+		bool ccOnly = true;
+		for(const auto& w : wire)
+			ccOnly &= ed::mdDumpCommand(w) != ed::g_mdKitDump;
+		check(ccOnly && params.size() == 3 && params[2] == std::array<uint8_t, 3>{2, 0, 32} && undoCount() == undo1 + 1,
+			"a params trial: one CC per changed value per apply, no kit dump, one undo step");
+		params.clear();
+		desk.onPageMessage(cmd(R"({"op":"undo","id":20})"));
+		check(params.size() == 1 && params[0] == std::array<uint8_t, 3>{2, 0, kit.params[2][0]} && desk.documents().working->kit.params[2] == kit.params[2],
+			"undo returns the trial to the base in one step");
 	}
 
 	// DESIGN-edit-flow.md: paced, latest wins, one read-back at quiet.
@@ -1176,14 +1444,26 @@ namespace
 		desk.onTelemetry(t);
 		desk.tick();
 		check(desk.isInputReady() && firmware() == "ready", "animation over: ready");
+		// A pick still waiting for the pattern end (queued), then a chain: the chain is what plays.
+		desk.onPageMessage(cmd(R"({"op":"select","p":7,"id":20})"));
+		desk.tick();
+		const auto queued = [&]
+		{
+			const auto* q = last("machine")->find("doc")->find("pattern")->find("queued");
+			return q && q->isNumber() ? static_cast<int>(q->asNumber()) : -1;
+		};
+		check(queued() == 7, "A08 picked: queued");
+		wire.clear();
 		desk.onPageMessage(cmd(R"({"op":"chain","patterns":[3,1,4],"id":2})"));
 		check(ok() && keys.back() == "chain:0:3,1,4", "chain command: the machine's keys");
+		check(!wire.empty() && wire.front() == ed::mdSetStatus(ed::MdStatus::SequencerMode, 0), "pattern mode first: SONG mode gives way to the chain");
 		t.chain.active = true;
 		t.chain.patterns = {3, 1, 4};
 		t.chain.next = 1;
 		t.mutes = 0x0005;
 		desk.onTelemetry(t);
 		desk.tick();
+		check(queued() == -1, "the firmware holds the chain: the queued A08 is dropped (the chain plays next)");
 		const auto* m = last("machine");
 		const auto& d = *m->find("doc")->find("desk");
 		check(d.find("chain")->find("active")->asBool() && d.find("chain")->find("patterns")->asArray().size() == 3,
@@ -1947,6 +2227,9 @@ int main(const int _argc, char** _argv)
 	testSongEdits();
 	testGlobal();
 	testHistory();
+	testStepsAndParams();
+	testRotateAndDouble();
+	testStepsAndParamsDesk();
 	testPushSlot();
 	testDesk();
 	testLive();

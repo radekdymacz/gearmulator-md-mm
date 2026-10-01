@@ -292,6 +292,247 @@ namespace mdDesk
 			return ed::withoutLockRow(_p, size_t(*_in.a.integer("t")), size_t(*_in.a.integer("i")));
 		}
 
+		// Every lock of track t (all its parameters), in one edit.
+		ed::MdPattern withoutTrackLocks(ed::MdPattern _p, const size_t _t)
+		{
+			for(size_t param = 0; param < ed::MdKit::g_paramsPerTrack; ++param)
+				_p = ed::withoutLockRow(_p, _t, param);
+			return _p;
+		}
+
+		std::optional<ed::MdPattern> clearLocks(ed::MdPattern _p, const In& _in)
+		{
+			const auto t = size_t(*_in.a.integer("t"));
+			_in.note = "Cleared every lock of " + trackName(t);
+			return withoutTrackLocks(std::move(_p), t);
+		}
+
+		// The whole pattern's steps: every track's trigs, accents, slides, swings and locks, and the
+		// pattern-wide marks. Length, speed, swing and accent amounts and the kit stay.
+		std::optional<ed::MdPattern> clearPattern(ed::MdPattern _p, const In& _in)
+		{
+			for(size_t t = 0; t < ed::MdPattern::g_tracks; ++t)
+			{
+				_p = withoutTrackLocks(std::move(_p), t);
+				_p.trigs[t] = 0;
+				_p.trackAccent[t] = _p.trackSlide[t] = _p.trackSwing[t] = 0;
+			}
+			_p.accentPattern = _p.slidePattern = _p.swingPattern = 0;
+			_in.note = "Cleared the pattern: every track's trigs and locks";
+			return _p;
+		}
+
+		// An integer member of a row the table cannot see into (an array's elements): _min.._max or nothing.
+		std::optional<int> intIn(const Value* _v, const int _min, const int _max)
+		{
+			if(!_v || !_v->isNumber())
+				return {};
+			const double d = _v->asNumber();
+			if(d != std::floor(d) || d < _min || d > _max)
+				return {};
+			return static_cast<int>(d);
+		}
+
+		// A row's step list as bits, every step in [_from, _to); nothing (and an error line) otherwise.
+		std::optional<uint64_t> stepBits(const Value* _list, const std::string& _where, const size_t _from, const size_t _to,
+			std::vector<std::string>& _errors)
+		{
+			if(!_list || !_list->isArray())
+			{
+				_errors.push_back(_where + ": expected a list of steps");
+				return {};
+			}
+			uint64_t bits = 0;
+			for(const auto& s : _list->asArray())
+			{
+				const auto step = intIn(&s, static_cast<int>(_from), static_cast<int>(_to) - 1);
+				if(!step)
+				{
+					_errors.push_back(_where + ": a step outside " + std::to_string(_from) + ".." + std::to_string(_to - 1));
+					return {};
+				}
+				bits |= uint64_t{1} << *step;
+			}
+			return bits;
+		}
+
+		// The generators' edit (DESIGN-generators.md §4.3): each row's track has exactly its steps on in
+		// [from, to) (default: the visible steps). A step turned off loses its locks and marks, as a trig
+		// turned off does (clearStep); a step kept on keeps them; slides stay. acc: the track's accents in
+		// the range become exactly those (only on its steps); with EDIT ALL on, accent is pattern-wide, so
+		// acc is left out and the note says so. One pattern change for every row: one dump, one undo step.
+		std::optional<ed::MdPattern> steps(ed::MdPattern _p, const In& _in)
+		{
+			const int visible = visibleOf(_p);
+			const auto from = _in.a.value("from") ? _in.a.within("from", 0, visible - 1) : std::optional<int>(0);
+			const auto to = _in.a.value("to") ? _in.a.within("to", 1, visible) : std::optional<int>(visible);
+			if(!from || !to)
+				return {};
+			if(*to <= *from)
+			{
+				_in.errors.push_back("Empty step range");
+				return {};
+			}
+			const auto& rows = _in.a.value("rows")->asArray();
+			if(rows.empty() || rows.size() > ed::MdPattern::g_tracks)
+			{
+				_in.errors.push_back("rows: 1 to 16 rows");
+				return {};
+			}
+			uint64_t range = 0;
+			for(auto s = size_t(*from); s < size_t(*to); ++s)
+				range |= uint64_t{1} << s;
+			struct Row { size_t t; uint64_t on; std::optional<uint64_t> acc; };
+			std::vector<Row> parsed;
+			uint32_t seen = 0;
+			for(size_t j = 0; j < rows.size(); ++j)
+			{
+				const auto where = "rows[" + std::to_string(j) + "]";
+				const auto& r = rows[j];
+				const auto t = r.isObject() ? intIn(r.find("t"), 0, 15) : std::nullopt;
+				if(!t)
+				{
+					_in.errors.push_back(where + ": expected {t: 0-15, on: [...]}");
+					return {};
+				}
+				if(seen >> *t & 1)
+				{
+					_in.errors.push_back(where + ": " + trackName(size_t(*t)) + " is in two rows");
+					return {};
+				}
+				seen |= 1u << *t;
+				const auto on = stepBits(r.find("on"), where + ".on", size_t(*from), size_t(*to), _in.errors);
+				if(!on)
+					return {};
+				std::optional<uint64_t> acc;
+				if(const auto* a = r.find("acc"); a && !a->isNull())
+				{
+					acc = stepBits(a, where + ".acc", size_t(*from), size_t(*to), _in.errors);
+					if(!acc)
+						return {};
+					if(*acc & ~*on)
+					{
+						_in.errors.push_back(where + ".acc: an accent on a step without a trig");
+						return {};
+					}
+				}
+				parsed.push_back({size_t(*t), *on, acc});
+			}
+			bool accentsLeft = false;
+			for(const auto& r : parsed)
+			{
+				for(auto s = size_t(*from); s < size_t(*to); ++s)
+				{
+					const bool want = r.on >> s & 1, have = ed::hasTrig(_p, r.t, s);
+					if(have && !want)
+						_p = clearStep(_p, r.t, s);
+					else if(!have && want)
+						_p = ed::withTrig(_p, r.t, s, true);
+				}
+				if(!r.acc)
+					continue;
+				if(_p.accentEditAll)
+					accentsLeft = true;
+				else
+					_p.trackAccent[r.t] = (_p.trackAccent[r.t] & ~range) | *r.acc;
+			}
+			_in.note = parsed.size() == 1 ? "Set the steps of " + trackName(parsed[0].t) : "Set the steps of " + std::to_string(parsed.size()) + " tracks";
+			if(accentsLeft)
+				_in.note += ". Accents left as they are: EDIT ALL is on (accent is pattern-wide)";
+			return _p;
+		}
+
+		// The bits of [0, _len) moved _by steps later, wrapping inside [0, _len); the bits from _len on stay.
+		uint64_t rotated(const uint64_t _bits, const int _by, const size_t _len)
+		{
+			const uint64_t inside = _len >= 64 ? ~uint64_t{0} : (uint64_t{1} << _len) - 1;
+			uint64_t out = _bits & ~inside;
+			for(size_t s = 0; s < _len; ++s)
+				if(_bits >> s & 1)
+					out |= uint64_t{1} << size_t(((int(s) + _by) % int(_len) + int(_len)) % int(_len));
+			return out;
+		}
+
+		// DESIGN-generators.md §7.2: track t's steps move _by steps later (earlier when negative), wrapping at
+		// the pattern's length: its trigs, its accents, slides and swings and every lock of the track go with
+		// them. Steps from the length on stay. The pattern-wide marks (EDIT ALL) belong to every track and stay.
+		std::optional<ed::MdPattern> rotate(ed::MdPattern _p, const In& _in)
+		{
+			const auto t = size_t(*_in.a.integer("t"));
+			const int by = *_in.a.integer("by");
+			const size_t len = std::min<size_t>(_p.length, ed::visibleSteps(_p));
+			if(len < 2 || by % int(len) == 0)
+				return _p;
+			_p.trigs[t] = rotated(_p.trigs[t], by, len);
+			_p.trackAccent[t] = rotated(_p.trackAccent[t], by, len);
+			_p.trackSlide[t] = rotated(_p.trackSlide[t], by, len);
+			_p.trackSwing[t] = rotated(_p.trackSwing[t], by, len);
+			for(size_t param = 0; param < ed::MdKit::g_paramsPerTrack; ++param)
+			{
+				const auto row = ed::lockRowIndex(_p, t, param);
+				if(!row)
+					continue;
+				auto& r = _p.lockRows[*row];
+				const auto was = r;
+				for(size_t s = 0; s < len; ++s)
+					r[size_t(((int(s) + by) % int(len) + int(len)) % int(len))] = was[s];
+			}
+			_in.note = "Rotated " + trackName(t) + (by > 0 ? " later" : " earlier");
+			const bool shared = (_p.accentEditAll && _p.accentPattern) || (_p.slideEditAll && _p.slidePattern) || (_p.swingEditAll && _p.swingPattern);
+			if(shared)
+				_in.note += ". Pattern-wide accents, slides and swings stay (EDIT ALL)";
+			return _p;
+		}
+
+		// DESIGN-generators.md §7.6: the pattern twice as long, its steps copied into the new half: every track's
+		// trigs, marks and locks, and the pattern-wide marks. The total length grows to hold it; above 32 steps
+		// only an EXTENDED pattern can. Hidden steps that the longer pattern would show are cleared first.
+		std::optional<ed::MdPattern> doublePattern(ed::MdPattern _p, const In& _in)
+		{
+			const size_t len = _p.length, was = ed::visibleSteps(_p), most = _p.extended ? 64 : 32;
+			if(len * 2 > most)
+			{
+				_in.errors.push_back(_p.extended ? "A pattern of " + std::to_string(len) + " steps cannot double: 64 steps is the longest"
+					: "Doubling above 32 steps needs an EXTENDED pattern");
+				return {};
+			}
+			const size_t total = std::max(was, (len * 2 + 15) / 16 * 16);
+			_p.scale = uint8_t(total / 16 - 1);
+			const auto bit = [](const size_t _s) { return uint64_t{1} << _s; };
+			const auto copy = [&](uint64_t& _bits)
+			{
+				for(size_t s = std::max(was, len * 2); s < total; ++s)
+					_bits &= ~bit(s);
+				for(size_t s = 0; s < len; ++s)
+					_bits = (_bits & ~bit(len + s)) | ((_bits >> s & 1) << (len + s));
+			};
+			for(size_t t = 0; t < ed::MdPattern::g_tracks; ++t)
+				for(auto* bits : {&_p.trigs[t], &_p.trackAccent[t], &_p.trackSlide[t], &_p.trackSwing[t]})
+					copy(*bits);
+			copy(_p.accentPattern);
+			copy(_p.slidePattern);
+			copy(_p.swingPattern);
+			for(size_t t = 0; t < ed::MdPattern::g_tracks; ++t)
+			{
+				for(size_t param = 0; param < ed::MdKit::g_paramsPerTrack; ++param)
+				{
+					const auto row = ed::lockRowIndex(_p, t, param);
+					if(!row)
+						continue;
+					auto& r = _p.lockRows[*row];
+					for(size_t s = std::max(was, len * 2); s < total; ++s)
+						r[s] = ed::MdPattern::g_noLock;
+					for(size_t s = 0; s < len; ++s)
+						r[len + s] = r[s];
+					if(std::all_of(r.begin(), r.begin() + std::ptrdiff_t(total), [](const uint8_t _v) { return _v == ed::MdPattern::g_noLock; }))
+						_p = ed::withoutLockRow(_p, t, param);
+				}
+			}
+			_p.length = uint8_t(len * 2);
+			_in.note = "Doubled the pattern: " + std::to_string(len) + " to " + std::to_string(len * 2) + " steps, the new half a copy";
+			return _p;
+		}
+
 		std::optional<ed::MdPattern> length(ed::MdPattern _p, const In& _in)
 		{
 			const auto v = _in.a.within("v", 1, visibleOf(_p));
@@ -449,7 +690,7 @@ namespace mdDesk
 				{"trig", trig}, {"accent", accent}, {"slide", slide}, {"lock", lock}, {"clearLane", clearLane},
 				{"length", length}, {"totalLength", totalLength}, {"speed", speed}, {"swing", swing},
 				{"accentAmount", accentAmount}, {"patternKit", patternKit}, {"clearSteps", clearSteps},
-				{"copySteps", copySteps}, {"pasteSteps", pasteSteps}};
+				{"clearLocks", clearLocks}, {"clearPattern", clearPattern}, {"steps", steps}, {"rotate", rotate}, {"doublePattern", doublePattern}, {"copySteps", copySteps}, {"pasteSteps", pasteSteps}};
 			return edits;
 		}
 
@@ -458,6 +699,35 @@ namespace mdDesk
 		std::optional<ed::MdKit> param(ed::MdKit _k, const In& _in)
 		{
 			_k.params[size_t(*_in.a.integer("t"))][size_t(*_in.a.integer("i"))] = uint8_t(*_in.a.integer("v"));
+			return _k;
+		}
+
+		// Many kit parameters in one working-kit change (DESIGN-generators.md §4.3, sound mutation): every
+		// [t, i, v] is checked, then set; kitDelivery sends a CC for each value that changed, nothing else.
+		std::optional<ed::MdKit> params(ed::MdKit _k, const In& _in)
+		{
+			const auto& values = _in.a.value("values")->asArray();
+			if(values.size() > ed::MdKit::g_tracks * ed::MdKit::g_paramsPerTrack)
+			{
+				_in.errors.push_back("values: at most 384 (every parameter of the kit once)");
+				return {};
+			}
+			std::vector<std::array<int, 3>> set;
+			for(size_t j = 0; j < values.size(); ++j)
+			{
+				const auto& e = values[j];
+				const auto* a = e.isArray() && e.asArray().size() == 3 ? &e.asArray() : nullptr;
+				const auto t = a ? intIn(&(*a)[0], 0, 15) : std::nullopt, i = a ? intIn(&(*a)[1], 0, 23) : std::nullopt,
+					v = a ? intIn(&(*a)[2], 0, 127) : std::nullopt;
+				if(!t || !i || !v)
+				{
+					_in.errors.push_back("values[" + std::to_string(j) + "]: expected [t 0-15, i 0-23, v 0-127]");
+					return {};
+				}
+				set.push_back({*t, *i, *v});
+			}
+			for(const auto& [t, i, v] : set)
+				_k.params[size_t(t)][size_t(i)] = uint8_t(v);
 			return _k;
 		}
 
@@ -591,7 +861,7 @@ namespace mdDesk
 		const Edits<ed::MdKit>& kitEdits()
 		{
 			static const Edits<ed::MdKit> edits{
-				{"param", param}, {"level", level}, {"machine", machine}, {"lfo", lfo}, {"group", group},
+				{"param", param}, {"params", params}, {"level", level}, {"machine", machine}, {"lfo", lfo}, {"group", group},
 				{"masterFx", masterFx}, {"kitName", kitName}, {"copySound", copySound}, {"pasteSound", pasteSound},
 				{"clearSound", clearSound}, {"tweak", tweak}};
 			return edits;

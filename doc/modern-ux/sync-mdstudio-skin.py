@@ -47,7 +47,7 @@ for a, b in HONEST:
     m = m.replace(a, b)
 # The page's modules, in load order (a module that does not exist yet is skipped).
 # mdDeskSelfTest.js last: the self-tests, in the plug-in only with the diagnostics (an empty script otherwise).
-SCRIPTS = ['mdDeskModal.js', 'mdDeskBoot.js', 'mdDeskSyx.js', 'mdDeskBridge.js', 'mdDeskModel.js', 'mdDeskKeys.js', 'mdDeskMod.js', 'mdDeskApp.js', 'mdDeskLive.js', 'mdDeskLibrary.js', 'mdDeskGlobal.js', 'mdDeskAudio.js', 'mdDeskSelfTest.js']
+SCRIPTS = ['mdDeskModal.js', 'mdDeskBoot.js', 'mdDeskSyx.js', 'mdDeskBridge.js', 'mdDeskModel.js', 'mdDeskGen.js', 'mdDeskKeys.js', 'mdDeskMod.js', 'mdDeskApp.js', 'mdDeskLive.js', 'mdDeskLibrary.js', 'mdDeskGlobal.js', 'mdDeskAudio.js', 'mdDeskSelfTest.js']
 title = re.search(r'<title>(.*?)</title>', src).group(1)
 page = '''<!doctype html>
 <html lang="en">
@@ -281,6 +281,78 @@ body.liverec .st,body.liverec .lb{cursor:cell}
 .sg>.sgabout{align-self:start}
 @media (max-width:1150px){.sgrow,.sgrow.flat{display:flex;flex-wrap:wrap;gap:12px 14px;max-height:none;flex:none}.sgcol{display:flex;flex-direction:column;gap:7px;flex:1 1 150px}.sg>.plot{height:110px;flex:none}.sndhelp{display:none}}
 @media (max-width:720px){.sndhead{flex-wrap:wrap;gap:10px}}
+/* Alt held (a global modifier): the keys it widens say so (mdDeskApp.js altLabels): CLR clears the whole
+   pattern, the lock lane's clear key every lock of the track */
+body.althold .lcdsec button[data-sec=clear]{opacity:1;background:var(--ink);color:var(--lcd)}
+body.althold #clearLane{color:var(--led);box-shadow:inset 0 0 0 1px var(--led)}
+/* Song: the arrangement's 256 slots fill the page across and down (16 rows share the height); the left
+   column (patterns, selected row) scrolls on its own. One column below 1100 px: the page scrolls. */
+@media (min-width:1101px){
+#main>.songui.lay2{flex:1 1 auto;min-height:0;align-items:stretch}
+.songui.lay2>.songleft{min-height:0;overflow:auto;padding-right:6px}
+.songui.lay2>.card{min-height:0;grid-template-rows:auto auto minmax(0,1fr)}
+.songui.lay2 .slotgrid{min-height:0;grid-template-rows:repeat(16,minmax(22px,1fr));align-content:stretch}
+.songui.lay2 .slotgrid .scell{height:auto!important;min-height:0}
+}
+/* Song: one palette, two ways to play its pads (mdDeskApp.js renderSong): ARRANGE adds to the song, CHAIN
+   numbers the machine's chain (the Plays line below the pads); the header says what the machine plays */
+.card header.phead{align-items:center;gap:14px}
+.card header.phead .seg{gap:10px;color:inherit;font:inherit}
+.card header .playschip{margin-left:auto;font:12px var(--pix);color:var(--ink);min-width:0;overflow:hidden;text-overflow:ellipsis}
+.card header .playschip.chain{box-shadow:inset 0 0 0 2px var(--led)}
+.padd em{position:absolute;right:5px;bottom:4px;font:700 12px var(--pix);font-style:normal;color:var(--led)}
+.padd.in{box-shadow:inset 0 0 0 2px var(--led)}
+.songleft .pnote{margin:8px 0 0;font-size:12px;color:var(--print3)}
+.chainfoot{display:grid;gap:4px;margin-top:8px}
+.chainfoot .irow .note{padding-left:0;flex-basis:auto}
+.morebtn{margin-left:0}
+.morebtn small{font:12px var(--mono);letter-spacing:0;text-transform:none;color:var(--print3)}
+/* Generators and mutation (DESIGN-generators.md, mdDeskApp.js genStripHtml / mutStripHtml): the GEN strip
+   takes the Sequence foot's row (the legend gives way), the MUTATE strip the Sound head's help line; values
+   are small LCD windows (drag, wheel, arrows). Ghost steps: a dim LED and a dashed rim in the track's
+   colour for a trig that would come, the trig struck through for one that would go. */
+.seqfoot.genon{grid-template-columns:minmax(0,1fr)}
+.seqfoot.genon .legend{display:none}
+.genhost,.muthost{display:flex;align-items:center;min-width:0}
+.muthost{margin-left:auto}
+.gkey{height:22px;padding:0 10px;font-size:10px;margin:0}
+.genstrip{display:flex;align-items:center;gap:7px;min-width:0;width:100%;white-space:nowrap;font:12px var(--mono);color:var(--print2)}
+.genstrip .gcap{font:600 11px var(--sans);letter-spacing:.14em;text-transform:uppercase;color:var(--print);display:inline-flex;align-items:center;gap:5px}
+.genstrip .gcap b{font:400 12px var(--pix);color:var(--ink);background:var(--lcd);padding:1px 5px;border-radius:2px;letter-spacing:0}
+.genstrip button{height:24px;padding:0 9px;font:600 11px var(--sans);letter-spacing:.1em;text-transform:uppercase;flex:none}
+.genstrip button:disabled{opacity:.4;cursor:default}
+.genstrip .seg{gap:2px;flex:none}
+.genstrip .seg button{padding:0 7px;letter-spacing:.06em}
+.genstrip .ptog{margin-left:0;display:inline-flex;gap:5px;align-items:center}
+.gv{display:inline-flex;align-items:baseline;gap:5px;height:24px;line-height:24px;padding:0 7px;background:var(--lcd);color:var(--ink);border-radius:3px;font:12px var(--pix);cursor:ns-resize;user-select:none;text-transform:uppercase;flex:none}
+.gv small{font:9px var(--pix);opacity:.75}
+.gv b{font-weight:400;min-width:2ch;text-align:right}
+.gv:focus-visible{outline:2px solid var(--led);outline-offset:1px}
+.genstrip .gnote{overflow:hidden;text-overflow:ellipsis;min-width:0;flex:0 1 auto;color:var(--print3)}
+.genstrip .gx{margin-left:auto}
+.mutstrip{width:auto}
+@media (max-width:1400px){.genstrip{gap:5px}.genstrip button,.genstrip .seg button{padding:0 6px;letter-spacing:.04em}.genstrip .gv{padding:0 5px}.genstrip .gnote{display:none}}
+.th .nm:has(.gtag){gap:4px}
+.th .nm .gtag{font:10px var(--pix);font-style:normal;color:var(--ink);background:var(--lcd);padding:0 3px;border-radius:2px;margin-left:auto;flex:none;align-self:center;white-space:nowrap}
+.st.ghost{background-image:linear-gradient(color-mix(in srgb,var(--led) 45%,transparent),color-mix(in srgb,var(--led) 45%,transparent));background-repeat:no-repeat;background-position:center 5px;background-size:62% 5px;outline:2px dashed var(--c,var(--led));outline-offset:-2px}
+.st.ghost.gacc{background-size:88% 9px}
+.st.on.ghostoff{background-image:linear-gradient(var(--led),var(--led)),linear-gradient(to top right,transparent calc(50% - 1.5px),var(--print) calc(50% - 1.5px),var(--print) calc(50% + 1.5px),transparent calc(50% + 1.5px));background-size:62% 5px,100% 100%;background-position:center 5px,0 0;filter:saturate(.35) brightness(.8)}
+.st.on.gaccx{outline:2px dashed var(--c,var(--led));outline-offset:-2px}
+.snd.mutating .mutg{all:unset;cursor:pointer;border-bottom:1px dashed currentColor}
+.snd.mutating .mutg[aria-pressed=true]{background:var(--lcd);color:var(--ink);padding:0 5px;border-radius:2px;border-bottom:0}
+/* Small comforts (DESIGN-generators.md §7, mdDeskApp.js): the lock budget over the lock lane (as the top bar's
+   meter: dark from 52, blinking at 64), the tracks marked for a paste to many, the rail's M/S off key, a ramp
+   while it is drawn */
+.lockbudget{font:12px var(--mono);color:var(--print2);white-space:nowrap;cursor:help}
+.lockbudget b{font-weight:500;color:var(--print)}
+.lockbudget.warn b,.lockbudget.full b{background:var(--ink);color:var(--lcd);padding:0 3px;border-radius:2px}
+.lockbudget.full b{animation:blink 1s steps(2) infinite}
+@media (prefers-reduced-motion:reduce){.lockbudget.full b{animation:none}}
+.th.multi{box-shadow:inset 0 0 0 2px var(--led)}
+.railhead .allon{width:auto;padding:0 6px;margin-left:auto;font:600 9px var(--sans);letter-spacing:.08em}
+.railhead .allon:disabled{opacity:.35;cursor:default}
+.railhead .allon:disabled:hover{background:none;color:inherit}
+.lb.ramp i{opacity:.75}
 '''
 out_css = head + css.strip('\n') + '\n' + tail
 

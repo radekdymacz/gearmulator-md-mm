@@ -22,6 +22,7 @@
 #include "elektronData/mdCommands.h"
 #include "elektronData/mdJson.h"
 #include "elektronData/mdMachines.h"
+#include "elektronData/mdSong.h"
 #include "elektronData/mdWorkingKit.h"
 #include "elektronData/syxImport.h"
 
@@ -75,7 +76,7 @@ namespace
 			: m_machine(_rom, _romName, _patchRam, _waitSplash)
 		{
 			mdDesk::Desk::Port port;
-			port.device.sendSysex = [this](const Bytes& _b) { m_out.push_back(_b); };
+			port.device.sendSysex = [this](const Bytes& _b) { m_patternDumps += _b.size() > 6 && _b[6] == 0x67; m_out.push_back(_b); };
 			// Kit values and mutes as the wire's CCs on the base channel (deskWire, the plug-in's
 			// encoders), the base channel as the adapter gives it.
 			port.device.sendKitParam = [this](const uint8_t _t, const uint8_t _i, const uint8_t _v)
@@ -216,6 +217,9 @@ namespace
 			return ed::decodeMdKit(m_machine.request(ed::mdKitRequest(_slot), ed::g_mdKitDump));
 		}
 
+		// The pattern dumps the desk sent (the pacing: one per pattern change at most).
+		size_t patternDumps() const { return m_patternDumps; }
+
 		std::optional<ed::MdPattern> readPattern(const uint8_t _slot)
 		{
 			flushOut();
@@ -224,6 +228,7 @@ namespace
 
 	private:
 		uint8_t m_channel = 0;	// the machine's base channel (the adapter's fact)
+		size_t m_patternDumps = 0;
 
 		void flushOut()
 		{
@@ -1049,6 +1054,103 @@ namespace
 		_rig.run(300);
 		_rig.page(R"({"op":"chain","patterns":[1,17],"id":935})");
 		check(_rig.lastResult() && !_rig.lastResult()->find("ok")->asBool(), "a chain across banks is refused (the machine's rule)");
+		// SONG mode: the machine plays its song and ignores a pattern chain. Asking for a chain
+		// switches whatever plays (song or pattern) to the chain.
+		{
+			auto p7 = _rig.readPattern(7);
+			require(p7.has_value(), "pattern");
+			p7->length = 16;
+			m.send(ed::encodeMdPattern(*p7));
+			ed::MdSong s;
+			s.position = 5;
+			s.rows.clear();
+			ed::MdSongRow r;
+			r.pattern = 7;
+			r.end = 16;
+			r.repeats = 63;
+			s.rows.push_back(r);
+			s.rows.push_back(ed::MdSongRow{});
+			m.send(ed::encodeMdSong(s));
+			m.send(ed::mdLoadSong(5));
+			m.send(ed::mdSetStatus(ed::MdStatus::SequencerMode, 1));
+			_rig.run(300);
+			_rig.page(R"({"op":"play","id":936})");
+			_rig.runUntil([&] { return _rig.pageTelemetry().playing; }, 2000);
+			const auto song = wrapPatterns(_rig, 2);
+			check(song.size() == 2 && song[1] == 7, "song mode: the machine plays the song's A08");
+			_rig.page(R"({"op":"chain","patterns":[1,3],"id":937})");
+			check(resultOk(_rig), "chain A02 A04 in song mode accepted");
+			_rig.runUntil([&] { return chainOf(_rig) == std::vector<int>{1, 3}; }, 3000);
+			const auto played = wrapPatterns(_rig, 4);
+			std::printf("  song mode, then chain A02 A04: plays");
+			for(const int p : played) std::printf(" %d", p);
+			std::printf("\n");
+			check(played.size() == 4 && std::count(played.begin(), played.end(), 1) >= 1 && std::count(played.begin(), played.end(), 3) >= 1
+				&& played.back() != 7, "a chain asked for in song mode plays the chain, not the song");
+			m.send(ed::mdStatusRequest(ed::MdStatus::SequencerMode));
+			_rig.run(200);
+			const auto sm = _rig.desk().linkState().songMode;
+			std::printf("  sequencer mode after the chain: %s\n", sm ? (*sm ? "song" : "pattern") : "unknown");
+			check(sm == false, "and the machine is in pattern mode (the desk knows it)");
+			_rig.page(R"({"op":"stop","id":950})");
+			_rig.runUntil([&] { return !_rig.pageTelemetry().playing; }, 2000);
+			_rig.run(300);
+			_rig.page(R"({"op":"play","id":951})");
+			_rig.runUntil([&] { return _rig.pageTelemetry().playing; }, 2000);
+			const auto again = wrapPatterns(_rig, 3);
+			std::printf("  STOP, PLAY:");
+			for(const int p : again) std::printf(" %d", p);
+			std::printf("\n");
+			check(again.size() == 3 && std::find(again.begin(), again.end(), 7) == again.end(), "STOP, PLAY plays the chain again, not the song");
+			_rig.page(R"({"op":"chainClear","id":938})");
+			_rig.page(R"({"op":"stop","id":939})");
+			_rig.run(500);
+			m.send(ed::mdSetStatus(ed::MdStatus::SequencerMode, 0));
+			m.send(ed::mdLoadPattern(0));
+			_rig.run(300);
+		}
+		// Stopped on A01, which is not in the chain: the chain is what plays next.
+		{
+			_rig.page(R"({"op":"chain","patterns":[2,4],"id":940})");
+			check(resultOk(_rig), "chain A03 A05 while stopped on A01 accepted");
+			_rig.runUntil([&] { return chainOf(_rig) == std::vector<int>{2, 4}; }, 3000);
+			_rig.run(300);
+			std::printf("  stopped on A01, chain A03 A05: current %d\n", _rig.pageTelemetry().pattern);
+			_rig.page(R"({"op":"play","id":941})");
+			_rig.runUntil([&] { return _rig.pageTelemetry().playing; }, 2000);
+			_rig.run(100);
+			const int first = _rig.pageTelemetry().pattern;
+			const auto then = wrapPatterns(_rig, 3);
+			std::printf("  then PLAY: %d, then", first);
+			for(const int p : then) std::printf(" %d", p);
+			std::printf("\n");
+			check(first == 2 && then.size() == 3 && then[0] == 4 && then[1] == 2, "stopped: PLAY starts the chain at A03, not the selected A01");
+			_rig.page(R"({"op":"chainClear","id":942})");
+			_rig.page(R"({"op":"stop","id":943})");
+			_rig.run(500);
+		}
+		// Playing A01 with A08 picked (queued for the pattern end): the chain replaces the pick.
+		{
+			m.send(ed::mdLoadPattern(0));
+			_rig.run(300);
+			_rig.page(R"({"op":"play","id":944})");
+			_rig.runUntil([&] { return _rig.pageTelemetry().playing; }, 2000);
+			_rig.run(200);
+			_rig.page(R"({"op":"select","p":7,"id":945})");
+			_rig.run(100);
+			_rig.page(R"({"op":"chain","patterns":[2,4],"id":946})");
+			check(resultOk(_rig), "chain A03 A05 with A08 queued accepted");
+			check(_rig.runUntil([&] { return chainOf(_rig) == std::vector<int>{2, 4}; }, 3000), "the firmware holds the chain");
+			const auto then = wrapPatterns(_rig, 4);
+			std::printf("  then plays:");
+			for(const int p : then) std::printf(" %d", p);
+			std::printf("\n");
+			check(then.size() == 4 && then[0] == 2 && then[1] == 4 && then[2] == 2, "the chain replaces the queued A08: A03 A05 play");
+			check(!_rig.desk().linkState().queuedPattern, "and the desk drops the queued A08 (the page shows the chain, not NEXT A08)");
+			_rig.page(R"({"op":"chainClear","id":947})");
+			_rig.page(R"({"op":"stop","id":948})");
+			_rig.run(500);
+		}
 	}
 
 	// P4: while live recording, a value moved in the page locks the trig the desk names.
@@ -1992,12 +2094,85 @@ namespace
 		check(chops && ed::hasTrig(*chops, 13, 12) && ed::lockValue(*chops, 13, 4, 12) == uint8_t{96}, "and the chops (trig + STRT lock)");
 	}
 
+	// DESIGN-generators.md slice 1: the generators' one edit (steps) on the firmware. The rows the page's
+	// GEN strip sends (E(3,8) with accents, E(5,8), a track cleared) in one pattern dump, read back.
+	void generatorsTruth(Rig& _rig)
+	{
+		std::puts("== GEN: a steps edit (the generators' rows), read back from the firmware");
+		auto& desk = _rig.desk();
+		const auto p = *desk.linkState().pattern;
+		const auto ps = std::to_string(p);
+		const auto settle = [&] { _rig.runUntil([&] { return !desk.isBusy() && !_rig.pageTx(); }, 3000); };
+		// Locks on track 1 steps 2 and 4: the generator keeps step 4 (E(3,8): 1, 4, 7) and turns step 2 off.
+		for(const int s : {1, 3})
+		{
+			_rig.page("{\"op\":\"trig\",\"p\":" + ps + ",\"t\":0,\"s\":" + std::to_string(s) + ",\"on\":true}");
+			_rig.page("{\"op\":\"lock\",\"p\":" + ps + ",\"t\":0,\"i\":12,\"s\":" + std::to_string(s) + ",\"v\":" + std::to_string(20 + s) + "}");
+		}
+		settle();
+		// Accents per track (EDIT ALL off), so acc is the track's own: the pattern goes to the machine
+		// with the flag off and the desk reads it again.
+		if(desk.documents().patterns.at(p).accentEditAll)
+		{
+			auto own = desk.documents().patterns.at(p);
+			own.accentEditAll = 0;
+			_rig.machine().send(ed::encodeMdPattern(own));
+			_rig.run(100);
+			_rig.page("{\"op\":\"load\",\"kind\":\"pattern\",\"slot\":" + ps + "}");
+			_rig.runUntil([&] { return desk.documents().patterns.at(p).accentEditAll == 0; }, 2000);
+		}
+		const bool editAll = desk.documents().patterns.at(p).accentEditAll != 0;
+		const auto dumps0 = _rig.patternDumps();
+		_rig.page("{\"op\":\"steps\",\"p\":" + ps + ",\"from\":0,\"to\":16,\"g\":700,\"rows\":[{\"t\":0,\"on\":[0,3,6,8,11,14],\"acc\":[0,8]},"
+			"{\"t\":1,\"on\":[0,2,4,5,7,8,10,12,13,15]},{\"t\":2,\"on\":[]}]}");
+		check(resultOk(_rig), "steps accepted");
+		settle();
+		std::printf("  pattern dumps for the edit: %zu\n", _rig.patternDumps() - dumps0);
+		check(_rig.patternDumps() - dumps0 == 1, "one pattern dump for three rows");
+		const auto want = desk.documents().patterns.at(p);
+		const auto back = _rig.readPattern(p);
+		check(back.has_value(), "the pattern reads back");
+		if(!back)
+			return;
+		const auto bits = [](const ed::MdPattern& _p, const size_t _t) { return _p.trigs[_t] & 0xffff; };
+		check(bits(*back, 0) == 0x4949 && bits(*back, 1) == 0xb5b5 && bits(*back, 2) == 0, "the firmware holds E(3,8), E(5,8) and the cleared track");
+		check(editAll || (back->trackAccent[0] & 0xffff) == 0x0101, editAll ? "EDIT ALL: accents left" : "the firmware holds the accents on the first hit of each cycle");
+		check(back->trigs == want.trigs && back->trackAccent == want.trackAccent && back->lockMasks == want.lockMasks, "the read-back equals the desk's pattern (trigs, accents, locked rows)");
+		check(ed::lockValue(*back, 0, 12, 3) == uint8_t{23} && !ed::lockValue(*back, 0, 12, 1), "a kept step keeps its lock, a step turned off lost it");
+		check(*back == want, "the read-back equals the edit, byte for byte in the codec");
+		_rig.page(R"({"op":"undo"})");
+		settle();
+		const auto undone = _rig.readPattern(p);
+		check(undone && ed::lockValue(*undone, 0, 12, 1) == uint8_t{21} && ed::hasTrig(*undone, 0, 1), "one undo brings back the steps and the lock");
+
+		// QoL (§7): rotate (Alt + arrows, a train of presses with one g) and double, read back.
+		_rig.page("{\"op\":\"totalLength\",\"p\":" + ps + ",\"v\":16}");
+		settle();
+		const auto before = desk.documents().patterns.at(p);
+		for(int n = 0; n < 2; ++n)
+			_rig.page("{\"op\":\"rotate\",\"p\":" + ps + ",\"t\":0,\"by\":1,\"g\":701}");
+		settle();
+		const auto turned = _rig.readPattern(p);
+		check(turned && *turned == desk.documents().patterns.at(p) && ed::hasTrig(*turned, 0, 3) && ed::lockValue(*turned, 0, 12, 5) == uint8_t{23},
+			"rotate twice: the firmware holds track 1 two steps later, its lock with it");
+		_rig.page(R"({"op":"undo"})");
+		settle();
+		check(desk.documents().patterns.at(p).trigs == before.trigs, "one undo takes back the whole train of rotations");
+		_rig.page("{\"op\":\"doublePattern\",\"p\":" + ps + "}");
+		check(resultOk(_rig), "doublePattern accepted");
+		settle();
+		const auto doubled = _rig.readPattern(p);
+		check(doubled && doubled->length == 32 && ed::visibleSteps(*doubled) == 32 && *doubled == desk.documents().patterns.at(p)
+			&& (doubled->trigs[0] >> 16 & 0xffff) == (doubled->trigs[0] & 0xffff) && ed::lockValue(*doubled, 0, 12, 19) == uint8_t{23},
+			"double: the firmware holds 32 steps, the second half a copy (trigs and locks)");
+	}
+
 int main(const int _argc, char** _argv)
 {
 	std::setvbuf(stdout, nullptr, _IOLBF, 0);
 	if(_argc < 2)
 	{
-		std::puts("usage: mdDeskFirmwareTest <MD-1.63-ROM> [probe|hw|p4|tweak|sampler|samples|hostclock|playload|syximport]");
+		std::puts("usage: mdDeskFirmwareTest <MD-1.63-ROM> [probe|hw|p4|tweak|sampler|samples|gen|hostclock|playload|syximport]");
 		return 77;
 	}
 	try
@@ -2052,6 +2227,16 @@ int main(const int _argc, char** _argv)
 			samplerSetup(rig);
 			check(g_contract.loaded() && g_contract.bad() == 0, g_contract.summary());
 			std::printf("mdDeskFirmwareTest sampler: %s (%d failure(s))\n", g_failures ? "FAIL" : "PASS", g_failures);
+			return g_failures ? 1 : 0;
+		}
+		if(mode == "gen")
+		{
+			Rig rig(rom, _argv[1]);
+			rig.page(R"({"op":"ready"})");
+			rig.runUntil([&] { return rig.desk().isInputReady() && rig.desk().linkState().pattern && rig.desk().documents().patterns.count(*rig.desk().linkState().pattern); }, 8000);
+			generatorsTruth(rig);
+			check(g_contract.loaded() && g_contract.bad() == 0, g_contract.summary());
+			std::printf("mdDeskFirmwareTest gen: %s (%d failure(s))\n", g_failures ? "FAIL" : "PASS", g_failures);
 			return g_failures ? 1 : 0;
 		}
 		if(mode == "samples")

@@ -99,6 +99,11 @@ namespace mdDataLink
 		void saveKit(uint8_t _slot);
 		void loadSong(uint8_t _slot);
 		void saveSong(uint8_t _slot);
+		// The firmware now holds a pattern chain (BANK + TRIG keys, mdDesk/mdDeskChain.h). The
+		// chain is what plays next: the firmware drops a LOAD PATTERN still waiting for the
+		// pattern end (measured, mdDeskFirmwareTest p4), so the queued pattern goes and the
+		// pattern, kit and sequencer mode are asked again.
+		void noteChained();
 
 		// The UI changed the working kit live (CC / parameter edits). The session
 		// cannot see those itself.

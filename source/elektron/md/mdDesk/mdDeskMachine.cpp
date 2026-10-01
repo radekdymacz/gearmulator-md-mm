@@ -870,6 +870,11 @@ namespace mdDesk
 			errors.emplace_back("The machine's BANK GROUP (A-D / E-H) is not known yet");
 		if(!errors.empty())
 			return {errors, {}, {}};
+		// Whatever plays switches to the chain. A chain is pattern mode's: in SONG mode the firmware
+		// plays it but stays in SONG mode (measured), so the song would be back after CLEAR, which says
+		// the pattern plays on. Pattern mode first (SET STATUS, harmless when already there).
+		if(m_port.sendSysex)
+			m_port.sendSysex(ed::mdSetStatus(ed::MdStatus::SequencerMode, 0));
 		bool pressed = true;
 		for(const auto& k : keys)
 			pressed = pressed && pressKey(k);
@@ -1343,7 +1348,16 @@ namespace mdDesk
 	TelemetryEvents MdMachine::onTelemetry(const Telemetry& _t)
 	{
 		const auto e = diff(m_telemetry, _t);
+		// A chain the firmware now holds (made here or on the panel) is what plays next: whatever was
+		// picked or playing gives way to it (a queued LOAD PATTERN, SONG mode; Session::noteChained).
+		const bool chained = _t.chainKnown && _t.chain.active
+			&& (!m_telemetry.chainKnown || !m_telemetry.chain.active || m_telemetry.chain.patterns != _t.chain.patterns);
 		m_telemetry = _t;
+		if(chained)
+		{
+			m_audibleQueue.reset();
+			m_session.noteChained();
+		}
 		m_telemetrySeen = true;
 		// The keys' fact: the device reports them pending, then none left.
 		m_keys.onPending(_t.panelPending);
