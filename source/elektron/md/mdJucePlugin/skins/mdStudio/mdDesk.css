@@ -1453,3 +1453,37 @@ body.liverec .st,body.liverec .lb{cursor:cell}
 .romtile.nowave .twhead{padding-right:56px}
 .romtile.nowave .aud{bottom:4px}
 .romtile .twload{position:absolute;right:4px;bottom:4px;height:18px;padding:0 7px;font-size:11px}
+/* The Sampler's RAM view fills the workspace: the take grows with the window, the steps, the source and
+   the playback keep their size. The slot's bar (state, Live / Freeze / Capture, why there is no file load,
+   the audition key) sits on the take, so the key never covers a STRT or END handle. */
+#main>.smpmain.ram{flex:1 1 auto;grid-template-rows:1fr auto auto}
+.smpmain.ram>.ramtop{grid-template-rows:auto minmax(170px,1fr);align-content:stretch}
+.ramwave{display:grid;grid-template-rows:auto minmax(140px,1fr);gap:8px;min-height:0}
+.ramwave .slotbar{flex-wrap:nowrap;min-width:0}
+.ramwave .slotbar>button,.ramwave .slotbar>.stbox{flex:none}
+.ramwave .ramna{flex:0 1 auto;min-width:0;font:11px var(--mono);color:var(--print3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;cursor:help}
+.ramwave .aud{position:static!important;flex:none;height:28px!important;padding:0 10px!important}
+.ramwave .wavecv{position:relative;min-height:0}
+.ramwave .wavecv>canvas.ed.smpwave{position:absolute;inset:0;width:100%;height:100%!important}
+/* the steps: the Sequence's grid (.seq, .rul, .st, .seqfoot with its PAGE control), a label column on the
+   left like its track column; RECORD ON (the recorder's trigs, its label in rec red) over CHOP (the player's,
+   each trig key with its slice number), one column grid under one ruler */
+.ramsteps{gap:6px}
+.smpseq{--srlab:118px;--row:40px;position:relative;min-width:0!important}
+.smpseq .r{gap:3px}
+.srlab{display:grid;gap:1px;align-content:center;height:var(--row);padding:0 8px 0 2px;border-left:3px solid transparent;background:var(--plate);min-width:0;overflow:hidden;white-space:nowrap}
+.srlab b{font:600 11px var(--sans);letter-spacing:.14em;text-transform:uppercase;color:var(--print2)}
+.srlab small{display:flex;gap:6px;font:500 12px var(--mono);color:var(--print)}
+.srlab small em{font-style:normal;color:var(--print3)}
+.srlab.rec{border-left-color:var(--rec)}
+.srlab.rec b{color:var(--rec)}
+.smpseq [data-cp].on{cursor:ns-resize;touch-action:none}
+.smpseq [data-cp]{overflow:hidden}
+.smpseq .cpn{position:absolute;left:0;right:0;top:12px;text-align:center;font:13px var(--pix);color:var(--print)}
+.smpseq .cpfx{position:absolute;left:2px;right:10px;bottom:4px;text-align:left;font:8px var(--pix);color:var(--cream);white-space:nowrap;overflow:hidden}
+.ramsteps .seqfoot{border-bottom:0}
+/* the Playback card's take line stands where the Source card's input keys stand, so the knob rows are level */
+.smp2>.card{grid-template-rows:auto 30px auto}
+.pbtake{font:12px var(--mono);color:var(--print2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
+/* a value in the manual's units (RAM-R LEN, RATE) beside the raw one */
+.pc .pu{position:relative;margin-left:auto;margin-right:8px;font:11px var(--mono);font-style:normal;color:var(--keydim);white-space:nowrap}

@@ -391,9 +391,9 @@ function laneAt(e) {
 function endLaneDraw() { if (!laneDraw) return; laneDraw = null; gesture = 0; refreshRow(S.sel); renderLane(); }
 
 /* ===== Sound ===== */
-function pc(g, n, { t, f, color } = {}) {
+function pc(g, n, { t, f, color, unit } = {}) {
 	if (!n) return `<div class="pc empty" aria-hidden="true"></div>`;
-	return `<div class="pc" role="slider" tabindex="0" aria-label="${n}" aria-valuemin="0" aria-valuemax="127" data-g="${g}" data-n="${n}"${t != null ? ` data-t="${t}"` : ""}${f ? ` data-f="${f}"` : ""}${color ? ` style="--pc:${color}"` : ""}><span>${n}</span><b></b></div>`;
+	return `<div class="pc" role="slider" tabindex="0" aria-label="${n}" aria-valuemin="0" aria-valuemax="127" data-g="${g}" data-n="${n}"${t != null ? ` data-t="${t}"` : ""}${f ? ` data-f="${f}"` : ""}${color ? ` style="--pc:${color}"` : ""}><span>${n}</span>${unit ? `<i class="pu" data-unit="${unit}"></i>` : ""}<b></b></div>`;
 }
 function eight(g, list, o) { const a = [...list]; while (a.length < 8) a.push(null); return a.map(n => pc(g, n, o)).join(""); }
 function shapeIcon(i, inv) { const pts = Array.from({ length: 25 }, (_, k) => { const x = k / 24; return [(x * 26 + 1).toFixed(1), (11 - 7 * shape(i, x, inv)).toFixed(1)]; }); return `<svg width="28" height="22" viewBox="0 0 28 22" aria-hidden="true"><polyline fill="none" stroke="currentColor" stroke-width="1.6" points="${pts.map(p => p.join(",")).join(" ")}"/></svg>`; }
@@ -553,6 +553,7 @@ function syncControls() {
 		const f = v / 127 * 100 + "%"; el.style.setProperty("--f", f); el.setAttribute("aria-valuenow", v);
 		if (el.classList.contains("pc") && SIGNED.has(el.dataset.n)) { const q = v / 127 * 100; el.classList.add("bip"); el.style.setProperty("--pl", Math.min(q, 50.4) + "%"); el.style.setProperty("--pw", v === 64 ? "0%" : Math.max(3, Math.abs(q - 50.4)) + "%"); }
 		const b = el.querySelector("b"); if (b) b.textContent = SIGNED.has(el.dataset.n) && el.dataset.g !== "mfx" ? (v - 64 > 0 ? "+" : "") + (v - 64) : v;
+		const u = el.querySelector(".pu"); if (u) { const [txt, tip] = UNITS[u.dataset.unit](v); u.textContent = txt; el.title = tip; }
 		if (["syn", "fx", "rt"].includes(el.dataset.g)) {
 			const tt = el.dataset.t != null ? +el.dataset.t : S.sel, idx = pidx(tt, el.dataset.n, el.dataset.g);
 			const mp = (Docs.learn?.mappings || []).filter(m => m.t === tt && m.i === idx);
@@ -762,7 +763,7 @@ function syncAud() {
 function audTick() {
 	audRaf = 0; if (!Aud) return;
 	const u = auditionAt(Aud, performance.now() - Aud.t0);
-	for (const b of $$("[data-aud]")) { const p = b.parentElement.querySelector(".audph"); if (!p) continue; p.hidden = Aud.key !== b.dataset.aud || u >= 1; p.style.width = (u * 100).toFixed(2) + "%"; }
+	for (const b of $$("[data-aud]")) { const p = (b.closest(".wavebox,.romtile") || b.parentElement).querySelector(".audph"); if (!p) continue; p.hidden = Aud.key !== b.dataset.aud || u >= 1; p.style.width = (u * 100).toFixed(2) + "%"; }
 	if (u < 1) audRaf = requestAnimationFrame(audTick);
 }
 /* after a render: an audition whose waveform is gone (or can no longer play) stops */
@@ -823,10 +824,9 @@ ED.slot = {
 	},
 	handles(W, H, c) { const p = playTrack(+c.dataset.n); if (p < 0) return []; const y = V.tracks[p].syn; return [{ x: y.STRT / 127 * W, y: H - 12, k: "STRT", c: cssv("--ink"), drag: x => ({ STRT: clamp(Math.round(x / W * 127)) }) }, { x: y.END / 127 * W, y: 26, k: "END", c: cssv("--ink"), drag: x => ({ END: clamp(Math.round(x / W * 127)) }) }]; }
 };
-function chopCls(p, s) { const t = V.tracks[p], c = ["cp"]; if (s % 4 === 0) c.push("q"); if (s % 16 === 0 && s) c.push("gap"); if (t.trigs[s]) c.push("on"); if (V.playing && s === S.step) c.push("ph"); return c.join(" "); }
 function chopInner(p, s) {
 	const t = V.tracks[p]; if (!t.trigs[s]) return ""; const st = V.locks.get(lk(p, "STRT"))?.get(s), en = V.locks.get(lk(p, "END"))?.get(s), rt = V.locks.get(lk(p, "RTRG"))?.get(s);
-	const v = st ?? t.syn.STRT, rev = (en ?? t.syn.END) < v; return `<span class="sl">${Math.floor(v / 8) + 1}</span><span class="fx">${rev ? "REV" : ""}${rt ? " RTRG" : ""}</span>`;
+	const v = st ?? t.syn.STRT, rev = (en ?? t.syn.END) < v; return `<span class="cpn">${Math.floor(v / 8) + 1}</span><span class="cpfx">${rev ? "REV" : ""}${rt ? " RTRG" : ""}</span>`;
 }
 
 /* ===== LCD line 2: the workspace's own values ===== */
@@ -855,7 +855,6 @@ function renderSlots() {
 		return `<button class="slotk rom ${used.length ? "has" : ""}" data-slot="ROM${k}" aria-pressed="${S.smpSlot === "ROM" + k}" ${s && s.empty ? 'style="opacity:.55"' : ""} title="${romCode(k)}${romName(k) ? " · " + romName(k) + (s ? "" : " (sent this session)") : ""}${s ? " · " + smpInfo(s) : ""}${used.length ? " · played by track " + used.join(", ") : ""}">${romName(k) || String(k).padStart(2, "0")}</button>`; }).join("")}</div>
  <div class="scap" title="${smpBank() ? "" : NA.names + " " + NA.memory}">${smpBank() ? "Lit: used by this kit. Faint: an empty slot." : "Lit: used by this kit. " + (smpWhy() || "")}</div></div>`;
 }
-function pageKeys() { return `<span class="pagectl mini"><button class="pgkey" id="pgkey" ${pages16() < 2 ? "disabled" : ""} title="Next page. Shift-click = previous.">Page</button><span class="pleds" aria-hidden="true">${[0, 1, 2, 3].map(k => `<span class="pl ${k < pages16() ? "" : "na"} ${k === S.page ? "cur" : ""}" data-plp="${k}"><i class="led"></i><small>${k + 1}:4</small></span>`).join("")}</span></span>`; }
 /* P4: an empty RAM slot is one call to action. It shows what changes (which machines are replaced,
    which trigs stay), does it as one undo step, and then the recorder is ready below. */
 function setupTracks() {
@@ -895,6 +894,23 @@ const SOURCES = [["main", "Main mix", { MLEV: 64, MBAL: 64, ILEV: 0, IBAL: 64 }]
 	["b", "Input B", { MLEV: 0, MBAL: 64, ILEV: 64, IBAL: 127 }], ["ab", "A + B", { MLEV: 0, MBAL: 64, ILEV: 64, IBAL: 64 }]];
 function sourceOf(t) { const y = V.tracks[t].syn; const hit = SOURCES.find(([, , v]) => Object.keys(v).every(k => y[k] === v[k])); return hit ? hit[0] : "custom"; }
 function sourceSeg(t) { const cur = sourceOf(t); return `<span class="seg srcseg">${SOURCES.map(([id, label]) => `<button data-recsrc="${id}" data-t="${t}" aria-pressed="${cur === id}">${label}</button>`).join("")}</span>${cur === "custom" ? `<span class="note">custom levels</span>` : ""}`; }
+/* RAM-R LEN and RATE in the manual's units (A-15). LEN: "each parameter value is ¼ of step", 127 records
+   2 bars (the tutorial: 64 = one bar); the time is at the pattern's tempo and speed. RATE: the manual says
+   only that turning it down lowers the quality, 127 = maximum quality (the tutorial); it gives no rate per
+   value, so below 127 the raw value stands. The rate a take was recorded at is the machine's own (the DSP
+   table, Docs.samples), shown with the take. */
+const lenSteps = v => v >= 127 ? 32 : v / 4;
+function stepsTxt(st) { const w = Math.floor(st), q = ["", "¼", "½", "¾"][Math.round((st - w) * 4)]; return (w || !q ? String(w) : "") + q; }
+const UNITS = {
+	len: v => { const st = lenSteps(v), sec = st * stepMs() / 1000;
+		return [st && st % 16 === 0 ? st / 16 + (st === 16 ? " bar" : " bars") : stepsTxt(st) + " st",
+			`LEN ${v}: records ${stepsTxt(st)} step${st === 1 ? "" : "s"}, ${sec.toFixed(2)} s at ${(+V.bpm || 120).toFixed(1)} BPM ${V.mult} (manual A-15: each value is ¼ step, 127 = 2 bars)`]; },
+	rate: v => [v >= 127 ? "full" : "reduced", `RATE ${v}: ${v >= 127 ? "maximum recording quality" : "below 127 the recording quality is lower"} (manual A-15). The manual gives no sample rate per value; the take's own rate shows under Playback.`]
+};
+/* The RAM view's steps are the Sequence's grid: its ruler, its keys (stepCls), its page control (pageCtl, the
+   same S.page / S.viewAll / S.follow), one row for the recorder's trigs and one for the player's chops. */
+const smpLab = (t, what, cls = "") => `<span class="srlab ${cls}" title="${what} · track ${t + 1} · ${V.tracks[t].m}"><b>${what}</b><small><em>${t + 1}</em>${V.tracks[t].m}</small></span>`;
+const smpCols = () => `var(--srlab) ${cols()}`;
 /* Every ROM slot as a tile: its overview wave (no detail asked), number, name, lit when this kit plays
    it, faint when empty, its own audition key; an empty one offers Load sample…. A click selects it. */
 function romTiles(sel, sending) {
@@ -919,26 +935,31 @@ function drawTile(c) {
 	for (let x = 0; x < c.width; x++) { const j = Math.min(n - 1, Math.floor(x * n / c.width)), y0 = Math.round(mid - col[2 * j + 1] * half), y1 = Math.round(mid - col[2 * j] * half); g.fillRect(x, y0, 1, Math.max(1, y1 - y0)); }
 }
 function renderSampler() {
-	S.viewAll = false; const id = S.smpSlot; let h = "";
+	document.documentElement.classList.toggle("viewall", !!S.viewAll); const id = S.smpSlot; let h = "", ram = false;
 	if (id.startsWith("RAM")) {
 		const n = +id.slice(3), r = recTrack(n), ps = players(n), st = slotState(n);
 		if (!V.midi) { h = `<div class="smpempty"><div class="edblank big">${V.lifecycle === "unsupported" ? "This firmware is not MD OS 1.63 UW: the Sampler needs the UW's ROM and RAM machines." : "The machine is not running yet. The Sampler works with the UW machine once it is ready."}</div></div>`; }
 		else if (r < 0) h = setupCard(n);
 		else {
-			if (S.chopTrack == null || !ps.includes(S.chopTrack)) S.chopTrack = ps[0] ?? null; const p = S.chopTrack, R = V.tracks[r];
-			const recSteps = R.trigs.slice(0, V.len).map((x, i) => x ? i + 1 : 0).filter(Boolean);
-			h = `<section class="card"><header><h3>RAM ${n} · RAM-R${n} → RAM-P${n}</h3><span>records on track ${r + 1}, step ${recSteps.join(", ") || "— (no trig)"} · plays on ${ps.length ? ps.map(i => "track " + (i + 1)).join(", ") : "no track"}</span></header>
-    <div class="slotbar"><span class="stbox st-${st}"><i class="led"></i>${STATE_TXT[st]}</span>
+			if (S.chopTrack == null || !ps.includes(S.chopTrack)) S.chopTrack = ps[0] ?? null; const p = S.chopTrack, at = ["ram", n - 1], take = smpSlotOf("ram", n - 1);
+			const plays = ps.length ? ps.map(i => i + 1).join(", ") : "none";
+			const pTrigs = p != null ? V.tracks[p].trigs.slice(0, V.len).filter(Boolean).length : 0;
+			/* the slot (its state, its take and audition key on one bar above the take), the steps (where the recorder
+			   records, where the player plays and from where), then the recorder's and the player's values side by side */
+			ram = true; h = `<section class="card ramtop"><header><h3>RAM ${n} · RAM-R${n} → RAM-P${n}</h3><span>record track ${r + 1} · play track ${plays}</span></header>
+    <div class="wavebox ramwave"><div class="slotbar"><span class="stbox st-${st}"><i class="led"></i>${STATE_TXT[st]}</span>
      <button class="${st === "live" ? "cream" : ""}" data-slotmode="live" aria-pressed="${st === "live"}" title="Record again on every loop (unmutes the recorder track)">Live</button>
      <button class="${st === "frozen" ? "cream" : ""}" data-slotmode="frozen" aria-pressed="${st === "frozen"}" title="Mute the recorder track and keep this take">Freeze</button>
      <button class="rec" data-capture="${n}" title="Record one loop, then freeze">Capture next loop</button>
-     <span class="grow"></span><button data-na="ramload" disabled title="${NA.ramLoad}">Load sample…</button><button data-na="rom" disabled title="${NA.rom}">Copy RAM to ROM</button></div>
-    ${waveBox(`<canvas class="ed smpwave" data-ed="slot" data-n="${n}" aria-label="Captured audio with start and end markers"></canvas>`, ["ram", n - 1])}</section>
-   ${p != null ? `<section class="card"><header><h3>Chop</h3><span class="chophead">${ps.length > 1 ? ps.map(i => `<button class="${i === p ? "cream" : ""}" data-choptrk="${i}">Track ${i + 1}</button>`).join("") : "track " + (p + 1)}${pageKeys()}</span></header>
-    <div class="chop" id="chop" data-p="${p}" style="grid-template-columns:repeat(16,minmax(0,1fr))">${steps().map(s => `<button class="${chopCls(p, s)}" data-cp="${s}" aria-label="Chop step ${s + 1}">${chopInner(p, s)}</button>`).join("")}</div>
-    <div class="edhint">Click = trig. Drag a trig up or down = slice (a STRT lock). Alt-click = reverse. Shift-click = retrig roll.</div></section>` : `<div class="edblank">No track plays RAM-P${n}. Put RAM-P${n} on a track in Sound.</div>`}
-   <div class="smp2"><section class="card"><header><h3>Source</h3><span>recorder · track ${r + 1}</span></header><div class="irow">${sourceSeg(r)}</div><div class="ctl four">${RAMR.map(k => pc("syn", k, { t: r })).join("")}</div></section>
-    ${p != null ? `<section class="card"><header><h3>Playback</h3><span>player · track ${p + 1}</span></header><div class="ctl four">${SMPL.map(k => pc("syn", k, { t: p })).join("")}</div></section>` : ""}</div>`;
+     <span class="grow"></span><span class="note ramna" title="${NA.ramLoad} ${NA.rom}">RAM holds only what RAM-R records: no file load, no copy to ROM from here</span>${audBtn(at)}</div>
+     <div class="wavecv"><canvas class="ed smpwave" data-ed="slot" data-n="${n}" aria-label="Captured audio with start and end markers"></canvas><i class="audph" aria-hidden="true" hidden></i></div></div></section>
+   <section class="card ramsteps"><header><h3>Steps</h3><span class="chophead">${ps.length > 1 ? ps.map(i => `<button class="${i === p ? "cream" : ""}" data-choptrk="${i}">Track ${i + 1}</button>`).join("") : ""}</span></header>
+    <div class="seq smpseq"><div class="r" style="grid-template-columns:${smpCols()}"><span></span>${steps().map(s => `<div class="rul ${s % 16 === 0 && s !== vis()[0] ? "gap" : ""}">${s % 4 === 0 ? s + 1 : ""}</div>`).join("")}</div>
+     <div class="r" id="recon" data-r="${r}" style="grid-template-columns:${smpCols()}">${smpLab(r, "Record on", "rec")}${steps().map(s => `<button class="${stepCls(r, s)}" data-rc="${s}" aria-pressed="${V.tracks[r].trigs[s]}" aria-label="Record on step ${s + 1}"></button>`).join("")}</div>
+     ${p != null ? `<div class="r" id="chop" data-p="${p}" style="grid-template-columns:${smpCols()}">${smpLab(p, "Chop")}${steps().map(s => `<button class="${stepCls(p, s)}" data-cp="${s}" aria-pressed="${V.tracks[p].trigs[s]}" aria-label="Chop step ${s + 1}">${chopInner(p, s)}</button>`).join("")}</div>` : `<div class="r" style="grid-template-columns:var(--srlab) minmax(0,1fr)"><span class="srlab"><b>Chop</b></span><div class="edblank">No track plays RAM-P${n}. Put RAM-P${n} on a track in Sound.</div></div>`}</div>
+    <div class="seqfoot"><span></span><div class="legend"><span><i class="lg on"></i>Trig: click</span>${p != null ? `<span>Chop slice: drag up / down</span><span>Reverse: alt-click</span><span>Retrig: shift-click</span>` : ""}<span><i class="lg on lk"></i>Has locks</span></div>${pageCtl()}</div></section>
+   <div class="smp2"><section class="card"><header><h3>Source</h3><span>recorder · track ${r + 1}</span></header><div class="irow">${sourceSeg(r)}</div><div class="ctl four">${RAMR.map(k => pc("syn", k, { t: r, unit: k === "LEN" ? "len" : k === "RATE" ? "rate" : "" })).join("")}</div></section>
+    ${p != null ? `<section class="card"><header><h3>Playback</h3><span>player · track ${p + 1}</span></header><div class="irow"><span class="ilab">Take</span><span class="note pbtake">${take ? (take.empty ? "empty: nothing recorded yet" : smpInfo(take)) : smpWhy(at) || "not read"} · ${pTrigs} trig${pTrigs === 1 ? "" : "s"}</span></div><div class="ctl four">${SMPL.map(k => pc("syn", k, { t: p })).join("")}</div></section>` : ""}</div>`;
 		}
 	}
 	else {
@@ -954,7 +975,7 @@ function renderSampler() {
    ${smpLoadCard(k)}</section>
    ${romTiles(k, sending)}`;
 	}
-	$("#main").innerHTML = `<div class="smpmain">${h}</div>`; syncControls(); redraw();
+	$("#main").innerHTML = `<div class="smpmain ${ram ? "ram" : ""}">${h}</div>`; syncControls(); redraw();
 }
 ED.rom = {
 	draw(g, W, H, c) {
@@ -963,7 +984,7 @@ ED.rom = {
 	}, handles: () => []
 };
 let chopDrag = null;
-document.getElementById("main").addEventListener("pointerdown", e => { const c = e.target.closest(".cp.on"); if (!c || e.altKey || e.shiftKey) return; const p = +$("#chop").dataset.p, s = +c.dataset.cp, cur = V.locks.get(lk(p, "STRT"))?.get(s) ?? V.tracks[p].syn.STRT; chopDrag = { c, p, s, y: e.clientY, v: cur, moved: false }; gesture = Bridge.gesture(); grabPointer(c, e); });
+document.getElementById("main").addEventListener("pointerdown", e => { const c = e.target.closest("[data-cp].on"); if (!c || e.altKey || e.shiftKey) return; const p = +$("#chop").dataset.p, s = +c.dataset.cp, cur = V.locks.get(lk(p, "STRT"))?.get(s) ?? V.tracks[p].syn.STRT; chopDrag = { c, p, s, y: e.clientY, v: cur, moved: false }; gesture = Bridge.gesture(); grabPointer(c, e); });
 document.getElementById("main").addEventListener("pointermove", e => { if (!chopDrag) return; if (e.buttons === 0 && e.pointerType === "mouse") { chopDrag = null; gesture = 0; return; } const d = Math.round((chopDrag.y - e.clientY) / 6) * 8; if (!d && !chopDrag.moved) return; chopDrag.moved = true; const v = clamp(chopDrag.v + d); if (setLock(chopDrag.p, "STRT", chopDrag.s, v)) { chopDrag.c.innerHTML = chopInner(chopDrag.p, chopDrag.s); renderTop(); redraw(); } });
 document.addEventListener("pointerup", () => { if (chopDrag) { chopDrag.c.dataset.moved = chopDrag.moved ? "1" : ""; chopDrag = null; gesture = 0; } });
 
@@ -1285,7 +1306,7 @@ function paintStep(el) {
 	if (!paint.on) paint.locks = true;
 }
 main.addEventListener("pointerdown", e => {
-	const st = e.target.closest(".st"); if (!st || e.button !== 0 || e.shiftKey || e.altKey || V.rec) return;
+	const st = e.target.closest("#seq .st"); if (!st || e.button !== 0 || e.shiftKey || e.altKey || V.rec) return;
 	if (!V.loaded) { toast("The pattern is not loaded yet."); return; }
 	const i = +st.dataset.t, s = +st.dataset.s;
 	paint = { on: !V.tracks[i].trigs[s], done: new Set(), first: i };
@@ -1295,7 +1316,7 @@ main.addEventListener("pointerdown", e => {
 main.addEventListener("pointermove", e => {
 	if (!paint) return;
 	if (e.buttons === 0 && e.pointerType === "mouse") { endPaint(); return; }
-	const st = document.elementFromPoint(e.clientX, e.clientY)?.closest(".st"); if (st) paintStep(st);
+	const st = document.elementFromPoint(e.clientX, e.clientY)?.closest("#seq .st"); if (st) paintStep(st);
 });
 function endPaint() {
 	if (!paint) return; const p = paint; paint = null; gesture = 0;
@@ -1318,7 +1339,7 @@ document.addEventListener("click", e => {
 		else { const next = new Set(S.soloSet); next.has(i) ? next.delete(i) : next.add(i); S.soloSet = next; V = view(); applySolo(); }	/* solo is UI state the view reads, replaced per gesture, never mutated in place */
 		refreshAudible(); return;
 	}
-	const st = e.target.closest(".st"); if (st) {
+	const st = e.target.closest("#seq .st"); if (st) {
 		const i = +st.dataset.t, s = +st.dataset.s, t = V.tracks[i];
 		if (!V.loaded) { toast("The pattern is not loaded yet."); return; }
 		/* Live recording: a click plays the track like its TRIG key; the machine records it. */
@@ -1347,12 +1368,17 @@ document.addEventListener("click", e => {
 	const ch = e.target.closest("[data-lane]"); if (ch) { S.lane = ch.dataset.lane; render(); return; }
 	if (e.target.closest("#clearLane")) { const i = pidx(S.sel, S.lane); if (i >= 0) cmd("clearLane", { p: V.pat, t: S.sel, i }, undefined, [[["locks", lk(S.sel, S.lane)], DELETE]]); renderTop(); refreshRow(S.sel); renderLane(); return; }
 	const sh = e.target.closest("[data-shape]"); if (sh) { sendLfo(S.sel, sh.dataset.slot, +sh.dataset.shape); $$(`[data-slot="${sh.dataset.slot}"]`).forEach(b => b.setAttribute("aria-pressed", b === sh)); redraw(); return; }
-	const cp = e.target.closest(".cp"); if (cp) {
+	const rc = e.target.closest("[data-rc]"); if (rc) {
+		const r = +$("#recon").dataset.r, s = +rc.dataset.rc, on = !V.tracks[r].trigs[s];
+		cmd("trig", { p: V.pat, t: r, s, on }, undefined, [[["tracks", r, "trigs", s], on], ...(on ? [] : clearStep(r, s))]);
+		renderTop(); rc.className = stepCls(r, s); rc.setAttribute("aria-pressed", on); return;
+	}
+	const cp = e.target.closest("[data-cp]"); if (cp) {
 		if (cp.dataset.moved) { cp.dataset.moved = ""; return; } const p = +$("#chop").dataset.p, s = +cp.dataset.cp, t = V.tracks[p];
 		if (t.trigs[s] && e.altKey) { const st = V.locks.get(lk(p, "STRT"))?.get(s) ?? t.syn.STRT, en = V.locks.get(lk(p, "END"))?.get(s); if (en != null && en < st) eraseLock(p, "END", s); else setLock(p, "END", s, Math.max(0, st - 8)); }
 		else if (t.trigs[s] && e.shiftKey) { const r = V.locks.get(lk(p, "RTRG"))?.get(s); if (r) { eraseLock(p, "RTRG", s); eraseLock(p, "RTIM", s); } else { setLock(p, "RTRG", s, 20); setLock(p, "RTIM", s, 10); } }
 		else { const on = !t.trigs[s]; cmd("trig", { p: V.pat, t: p, s, on }, undefined, [[["tracks", p, "trigs", s], on], ...(on ? [] : clearStep(p, s))]); if (on) setLock(p, "STRT", s, t.syn.STRT); }
-		renderTop(); cp.className = chopCls(p, s); cp.innerHTML = chopInner(p, s); redraw(); return;
+		renderTop(); cp.className = stepCls(p, s); cp.setAttribute("aria-pressed", t.trigs[s]); cp.innerHTML = chopInner(p, s); redraw(); return;
 	}
 	const stt = e.target.closest("[data-setupt]"); if (stt) {
 		const [r, p] = setupTracks(), d = +stt.dataset.d;
@@ -1494,10 +1520,10 @@ function onTelemetry(m) {
 	const pp = Math.floor(Math.max(0, S.step) / 16);
 	if (S.ws === "mix" && S.step >= 0) V.tracks.forEach((t, i) => { if (t.trigs[S.step] && audible(i)) { const l = document.querySelector(`.act[data-act="${i}"]`); if (l) { l.classList.add("on"); setTimeout(() => l.classList.remove("on"), 90); } } });
 	$$(".pl").forEach(b => b.classList.toggle("play", +b.dataset.plp === pp && V.playing));
-	if (S.follow && S.ws === "seq" && !S.viewAll && pp !== S.page && !laneDraw && V.playing) { S.page = pp; render(); }
+	if (S.follow && (S.ws === "seq" || S.ws === "sampler") && !S.viewAll && pp !== S.page && !laneDraw && V.playing) { S.page = pp; render(); }
 	$("#tempoled").classList.toggle("on", V.playing && S.step % 4 === 0); setPos(); queueMicrotask(movePH); $("#playled")?.classList.toggle("on", V.playing && S.step % 4 === 0);
-	$$(`.st[data-s="${prev}"],.lb[data-s="${prev}"],.cp[data-cp="${prev}"]`).forEach(c => c.classList.remove("ph"));
-	if (V.playing) $$(`.st[data-s="${S.step}"],.lb[data-s="${S.step}"],.cp[data-cp="${S.step}"]`).forEach(c => c.classList.add("ph"));
+	$$(`.st[data-s="${prev}"],.lb[data-s="${prev}"],[data-cp="${prev}"],[data-rc="${prev}"]`).forEach(c => c.classList.remove("ph"));
+	if (V.playing) $$(`.st[data-s="${S.step}"],.lb[data-s="${S.step}"],[data-cp="${S.step}"],[data-rc="${S.step}"]`).forEach(c => c.classList.add("ph"));
 }
 
 /* Soft playhead (mockup v45): one glowing column over the grid that glides from step to step.
@@ -1506,11 +1532,11 @@ function onTelemetry(m) {
 let phLast = -1;
 function stepMs() { const m = multFactor(V.mult); return 60000 / (V.bpm || 120) / 4 / m; }
 function movePH() {
-	const seq = document.getElementById("seq"); if (!seq) return; let ph = document.getElementById("phcol");
-	const c = V.playing && S.step >= 0 ? seq.querySelector(`.st[data-t="0"][data-s="${S.step}"]`) : null;
+	const seq = document.getElementById("seq") || document.querySelector(".smpseq"); if (!seq) return; let ph = document.getElementById("phcol");
+	const col = V.playing && S.step >= 0 ? seq.querySelectorAll(`.st[data-s="${S.step}"],[data-rc="${S.step}"],[data-cp="${S.step}"]`) : [], c = col[0];
 	if (!c) { if (ph) ph.style.opacity = "0"; phLast = -1; return; }
 	let fresh = false; if (!ph) { fresh = true; ph = document.createElement("div"); ph.id = "phcol"; ph.setAttribute("aria-hidden", "true"); seq.appendChild(ph); }
-	const last = seq.querySelector(`.st[data-t="${V.tracks.length - 1}"][data-s="${S.step}"]`) || c;
+	const last = col[col.length - 1];
 	const wrap = fresh || phLast < 0 || c.offsetLeft < phLast;
 	ph.style.transition = wrap ? "opacity .15s" : `transform ${Math.round(Math.min(stepMs() * .85, 140))}ms cubic-bezier(.2,.7,.3,1),opacity .15s`;
 	ph.style.width = c.offsetWidth + "px"; ph.style.top = (c.offsetTop - 3) + "px"; ph.style.height = (last.offsetTop + last.offsetHeight - c.offsetTop + 6) + "px";
@@ -1642,7 +1668,7 @@ Keys.bind({ keys: ["Space"], group: "Transport", does: "Play / stop", run: () =>
 Keys.bind({ keys: ["R"], group: "Transport", does: "Live recording (RECORD + PLAY)", run: () => cmd("record") });
 ["seq", "sound", "mix", "sampler", "song", "control"].forEach((ws, i) => Keys.bind({ keys: [String(i + 1)], group: "Workspaces", does: ["Sequence", "Sound", "Mix", "Sampler", "Song", "Control"][i], mapping: ws === "control", when: ws === "control" ? () => S.mapping : null, run: () => { S.ws = ws; render(); } }));
 Keys.bind({ keys: ["L"], group: "Workspaces", does: "LEARN: map a value to a controller knob", mapping: true, when: () => S.mapping, run: () => toggleLearn() });
-Keys.bind({ keys: ["[", "]"], group: "Sequence", does: "Previous / next page", when: () => S.ws === "seq" && pages16() > 1, run: e => { const n = pages16(); S.viewAll = false; S.page = (S.page + (e.key === "]" ? 1 : -1) + n) % n; render(); } });
+Keys.bind({ keys: ["[", "]"], group: "Sequence", does: "Previous / next page", when: () => (S.ws === "seq" || S.ws === "sampler") && pages16() > 1, run: e => { const n = pages16(); S.viewAll = false; S.page = (S.page + (e.key === "]" ? 1 : -1) + n) % n; render(); } });
 Keys.bind({ keys: ["Delete", "Backspace"], group: "Sequence", does: "Clear the selected steps (Song: delete the row)", when: () => S.ws === "song" || S.ws === "seq", run: () => S.ws === "song" ? songAction("del") : secAction("clear") });
 Keys.bind({ keys: ["ArrowLeft", "ArrowRight"], group: "Song", does: "Previous / next row", when: () => S.ws === "song", run: e => { S.songSel = Math.max(0, Math.min(V.song.length - 1, S.songSel + (e.key === "ArrowRight" ? 1 : -1))); render(); } });
 Keys.bind({ keys: ["step"], mod: "shift", group: "Sequence", does: "Click: accent" });
