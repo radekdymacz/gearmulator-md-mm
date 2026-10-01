@@ -134,17 +134,25 @@ function sendParam(t, g, n, v) {
    lfoUpdates). SPD DEPTH SHMIX are kit parameters (the catalogue's lfoParams), the rest lfo fields. */
 function sendLfo(t, n, v) {
 	const w = [[["tracks", t, "lfo", n], v]], E = Enums(), pi = E.lfoParams[n];
-	if (pi != null) { cmd("param", { k: V.kit, t, i: pi, v }, "param:" + t + ":" + pi, w); return; }
+	if (pi != null) { const rn = lfoRtName(n, t); if (rn && rn in V.tracks[t].rt) w.push([["tracks", t, "rt", rn], v]); cmd("param", { k: V.kit, t, i: pi, v }, "param:" + t + ":" + pi, w); return; }
 	const field = lfoField(n, E); if (!field) return;
 	const c = n === "PARAM" ? slots(V.tracks[V.tracks[t].lfo.TRCK].m).indexOf(v) : n === "UPDTE" ? E.lfoUpdates.indexOf(v) : v;
 	if (c >= 0) cmd("lfo", { k: V.kit, t, field, v: c }, undefined, w);
 }
+/* SPD, DEPTH, SHMIX's names on track t's routing page (LFOS, LFOD, LFOM), from the catalogue's lfoParams. */
+function lfoRtName(n, t) { const pi = Enums().lfoParams[n], tr = V.tracks[t]; return pi != null && tr ? slots(tr.m)[pi] || null : null; }
 function sendGroup(t, kind, target) { cmd("group", { k: V.kit, t, kind, target }, undefined, [[["tracks", t, kind === "mute" ? "muteGroup" : "trigGroup"], target]]); }
 function sendMfx(id, n, v) { const i = MFXD[id].k.indexOf(n), fx = mfxName(id); if (i >= 0 && fx) cmd("masterFx", { k: V.kit, fx, i, v }, "mfx:" + id + ":" + i, [[["mfx", id, "v", n], v]]); }
 /* A curve editor's handle moved: its drag gives the values it moves ({name: value}); the editor's
    "to" says where they go (a track's page, or a master effect). */
 function sendEditor(c, vals) {
 	const to = ED[c.dataset.ed].to?.(c); if (!to || !vals) return;
+	/* the LFO's SPD DEPTH SHMIX are its routing page's LFOS LFOD LFOM: those are what Alt moves on every track */
+	if (to.g === "lfo") {
+		if (tweakEditor({ t: to.t, g: "rt" }, Object.fromEntries(Object.entries(vals).map(([n, v]) => [lfoRtName(n, to.t), v]).filter(([n]) => n)))) return;
+		for (const [n, v] of Object.entries(vals)) sendLfo(to.t, n, v);
+		return;
+	}
 	if (tweakEditor(to, vals)) return;	/* Alt held: Control All (mdDeskLive.js) */
 	for (const [n, v] of Object.entries(vals)) to.f ? sendMfx(to.f, n, v) : sendParam(to.t, to.g, n, v);
 }
@@ -395,43 +403,224 @@ function pc(g, n, { t, f, color, unit } = {}) {
 	if (!n) return `<div class="pc empty" aria-hidden="true"></div>`;
 	return `<div class="pc" role="slider" tabindex="0" aria-label="${n}" aria-valuemin="0" aria-valuemax="127" data-g="${g}" data-n="${n}"${t != null ? ` data-t="${t}"` : ""}${f ? ` data-f="${f}"` : ""}${color ? ` style="--pc:${color}"` : ""}><span>${n}</span>${unit ? `<i class="pu" data-unit="${unit}"></i>` : ""}<b></b></div>`;
 }
-function eight(g, list, o) { const a = [...list]; while (a.length < 8) a.push(null); return a.map(n => pc(g, n, o)).join(""); }
 function shapeIcon(i, inv) { const pts = Array.from({ length: 25 }, (_, k) => { const x = k / 24; return [(x * 26 + 1).toFixed(1), (11 - 7 * shape(i, x, inv)).toFixed(1)]; }); return `<svg width="28" height="22" viewBox="0 0 28 22" aria-hidden="true"><polyline fill="none" stroke="currentColor" stroke-width="1.6" points="${pts.map(p => p.join(",")).join(" ")}"/></svg>`; }
 const RND = [.35, -.7, .9, -.25, .55, -.9, .1, .7];
 function shape(i, x, inv) { const v = [1 - 4 * Math.abs(x - .5), 2 * x - 1, x < .5 ? 1 : -1, 1 - 2 * x, 2 * Math.exp(-4 * x) - 1, RND[Math.floor(x * 8) % 8]][i] ?? 0; return inv ? -v : v; }
-const isFxPage = e => e.join() === FX.join();
 function machButton(tr) {
 	const fk = famKey(tr.m), fam = FAMS.find(x => x[0] === fk) || ["", ""];
 	return `<button class="machbtn" id="machbtn" aria-haspopup="dialog" aria-expanded="false" aria-label="Change machine"><span class="lcdtxt">${tr.m}</span><span class="mfam">${fam[0].replace("PI", "P-I")} · ${fam[1]}</span><svg viewBox="0 0 10 6" aria-hidden="true"><path d="M1 1l4 4 4-4" fill="none" stroke="currentColor" stroke-width="1.5"/></svg></button>`;
 }
+/* Sound (round 5): the track's sound in small groups of a few knobs, in the page's section look (a
+   title on a rule, the Machinedrum page its knobs are on at the right, no frame). Three rows, in the
+   Machinedrum's order: the SYNTHESIS page's groups, then EFFECTS (amp mod, EQ, filter, sample rate)
+   and ROUTING (drive, level and pan, sends), then the LFO. Each row is one grid of three lines: the
+   titles, the screens, the boxes, so every title, screen and box row is level across the row. A group
+   whose knobs draw a picture has a screen; two groups without one share a column (the upper one's
+   boxes at the screens' top, the lower one's on the row's box line); a lone one says what its knobs
+   do where the screen would be. A row without screens is compact. Every knob of the machine is in
+   exactly one group: the synthesis page's groups are per machine (SYN_TAB, from the manual's
+   Appendix A), a name the table does not know goes to SYNTHESIS. */
+const SND_TAG = { syn: ["synth", "SYNTHESIS"], fx: ["fx", "EFFECTS"], rt: ["route", "ROUTING"], lfo: ["lfo", "LFO"], kit: ["kit", "kit (EDIT KIT → RELATE)"] };
+/* a synthesis group: its title, its knobs (the page's names, unqualified), its screen (or null) and,
+   for a group without one, what its knobs do */
+const SG = (title, knobs, ed, note) => ({ title, knobs: knobs.split(" "), ed, note });
+const AENV = k => SG("Amp env", k, "env");
+/* E12: pitch and bend, the start and decay, the filter (or the machine's own tone knob), retrigs */
+function e12Groups(m) {
+	const x = (Cat.byName[m]?.params || [])[3];
+	if (m === "E12-BD") return [SG("Pitch", "PTCH BEND", "pitch"), AENV("START DEC"), SG("Snap", "SNAP SPLEN", "atk"), SG("Retrig", "RTRG RTIM", "rtrg")];
+	const flt = x === "HPQ" ? SG("Filter", "HP HPQ", "resp") : x === "STOP" ? SG("Filter", "HP", "resp") : SG("Tone", "HP " + x, "resp");
+	return [SG("Pitch", "PTCH BEND", "pitch"), AENV(x === "STOP" ? "STRT DEC STOP" : "STRT DEC"), flt, SG("Retrig", "RTRG RTIM", "rtrg")];
+}
+const OUT_NOTE = { MONO: "MONO sums the echo to mono", LEV: "LEV is the effect's output level", GATE: "GATE gates the reverb's tail", GAIN: "GAIN is the EQ's output gain",
+	HP: "HP high-passes the compressor's side chain", OUTG: "OUTG is the output gain", MIX: "MIX blends the dry signal back in" };
+const outG = k => SG("Output", k, null, k.split(" ").map(n => OUT_NOTE[n]).join(". ") + ".");
+const SMP_G = [SG("Pitch", "PTCH", null), SG("Sample", "STRT END", "sample"), AENV("DEC HOLD"), SG("Retrig", "RTRG RTIM", "rtrg"), SG("Bit rate", "BRR", null)];
+const SYN_TAB = {
+	"TRX-BD": [SG("Pitch", "PTCH RAMP RDEC", "pitch"), AENV("DEC"), SG("Attack", "STRT NOIS", "atk"), SG("Tone", "HARM CLIP", "wave")],
+	"TRX-B2": [SG("Pitch", "PTCH RAMP", "pitch"), AENV("DEC HOLD"), SG("Attack", "TICK NOIS", "atk"), SG("Tone", "DIRT DIST", "wave")],
+	"TRX-SD": [SG("Pitch", "PTCH BUMP BENV TUNE", "pitch"), AENV("DEC"), SG("Snap", "SNAP", "noise"), SG("Tone", "TONE CLIP", "wave")],
+	"TRX-XT": [SG("Pitch", "PTCH RAMP RDEC", "pitch"), AENV("DEC DAMP"), SG("Distortion", "DIST DTYP", "wave")],
+	"TRX-CP": [SG("Claps", "CLPY RATE HARD", "claps"), SG("Tone", "TONE RICH", "spec"), SG("Room", "ROOM RSIZ RTUN", "room")],
+	"TRX-RS": [SG("Body", "PTCH DEC", "osc"), SG("Distortion", "DIST", "wave")],
+	"TRX-CB": [SG("Pitch", "PTCH BUMP", "pitch"), AENV("DEC DAMP"), SG("Tone", "TONE ENH", "spec")],
+	"TRX-CH": [SG("Metal", "GAP MTAL", "metal"), SG("Filter", "HPF LPF", "resp"), AENV("DEC")],
+	"TRX-CY": [SG("Body", "RICH SIZE PEAK", "metal"), SG("Top", "TOP TTUN", "spec"), AENV("DEC")],
+	"TRX-MA": [SG("Shake", "ATT SUS REV", "env"), SG("Rattle", "RATL DAMP RTYP", "grains"), SG("Tone", "TONE HARD", "spec")],
+	"TRX-CL": [SG("Body", "PTCH DEC TUNE ENH", "osc"), SG("Attack", "CLIC DUAL", "atk")],
+	"EFM-BD": [SG("Pitch", "PTCH RAMP RDEC", "pitch"), AENV("DEC"), SG("FM", "MOD MFRQ MDEC MFB", "fm")],
+	"EFM-SD": [SG("Body", "PTCH DEC", "osc"), SG("Noise", "NOISE NDEC HPF", "noise"), SG("FM", "MOD MFRQ MDEC", "fm")],
+	"EFM-XT": [SG("Pitch", "PTCH RAMP RDEC", "pitch"), AENV("DEC CLIC"), SG("FM", "MOD MFRQ MDEC", "fm")],
+	"EFM-CP": [SG("Body", "PTCH DEC HPF", "osc"), SG("Claps", "CLPS CDEC", "claps"), SG("FM", "MOD MFRQ MDEC", "fm")],
+	"EFM-RS": [SG("Rim", "PTCH DEC MOD HPF", "fm"), SG("Snare", "SNAR SPTC SDEC SMOD", "fm")],
+	"EFM-CB": [SG("Body", "PTCH DEC SNAP", "osc"), SG("FM", "MOD MFRQ MDEC FB", "fm")],
+	"EFM-HH": [SG("Body", "PTCH DEC", "osc"), SG("Tremolo", "TREM TFRQ", "trem"), SG("FM", "MOD MFRQ MDEC FB", "fm")],
+	"EFM-CY": [SG("Body", "PTCH DEC HPF", "osc"), SG("FM", "MOD MFRQ MDEC FB", "fm")],
+	"P-I-BD": [SG("Body", "PTCH DEC DAMP", "osc"), SG("Strike", "HARD HAMR TENS", "strike")],
+	"P-I-SD": [SG("Body", "PTCH DEC RING", "osc"), SG("Strike", "HARD TENS", "strike"), SG("Snares", "RVOL RDEC", "noise")],
+	"P-I-MT": [SG("Body", "PTCH DEC DAMP", "osc"), SG("Strike", "HARD HAMR POS", "strike"), SG("Shell", "TUNE SIZE", "metal")],
+	"P-I-RS": [SG("Body", "PTCH DEC RING", "osc"), SG("Strike", "HARD", "strike"), SG("Snares", "RVOL RDEC", "noise")],
+	"P-I-ML": [SG("Body", "PTCH DEC", "osc"), SG("Strike", "HARD TENS", "strike")],
+	"P-I-MA": [AENV("DEC"), SG("Grains", "GRNS GLEN SIZE HARD", "grains")],
+	"P-I-HH": [SG("Metal", "PTCH CLSN RING", "metal"), SG("Decay · close", "DEC CLOS", "env"), SG("EQ", "BR AU AG", "spec")],
+	"P-I-RC": [SG("Metal", "PTCH HARD RING", "metal"), SG("Decay · grab", "DEC GRAB", "env"), SG("EQ", "BR AU AG", "spec")],
+	"GND-SIN": [SG("Pitch", "PTCH RAMP RDEC", "pitch"), AENV("DEC")],
+	"GND-NS": [AENV("DEC")],
+	"GND-IM": [SG("Impulse", "UP UVAL DOWN DVAL", "imp")],
+	"INP-GA": [SG("Input", "VOL GATE", "ingate"), SG("Gate env", "ATCK HLD DEC", "env")],
+	"INP-FA": [SG("Input", "ALEV GATE", "ingate"), SG("Filter env", "FATK FHLD FDEC FDPH", "env"), SG("Filter", "FFRQ FQ", "resp")],
+	"INP-EA": [SG("Amp env", "AVOL AHLD ADEC", "env"), SG("Filter env", "FDPH FHLD FDEC", "env"), SG("Filter", "FFRQ FQ", "resp")],
+	MID: [SG("Notes", "NOTE N2 N3", "chord"), SG("Length · velocity", "LEN VEL", "note"), SG("Controllers", "PB MW AT", "bars")],
+	CTR: [SG("Parameters", "P1 P2 P3 P4 P5 P6 P7 P8", null)],
+	"CTR-RE": [SG("Delay", "TIME FB", "taps"), SG("Modulation", "MOD MFRQ", "trem"), SG("Filter", "FILTF FILTW", "resp"), outG("MONO LEV")],
+	"CTR-GB": [SG("Reverb", "DVOL PRED DEC DAMP", "verb"), SG("Filter", "HP LP", "resp"), outG("GATE LEV")],
+	"CTR-EQ": [SG("EQ", "LF LG PF PG PQ HF HG", "eq3"), outG("GAIN")],
+	"CTR-DX": [SG("Curve", "TRHD RTIO KNEE", "comp"), SG("Attack · release", "ATCK REL", "env"), outG("HP OUTG MIX")],
+	ROM: SMP_G, "RAM-P": SMP_G,
+	"RAM-R": [SG("Main in", "MLEV MBAL", "lvbal"), SG("Input", "ILEV IBAL", "lvbal"), SG("Cue", "CUE1 CUE2", "bars"), SG("Record", "LEN RATE", "rec")] };
+/* machines that share a synthesis page */
+const SYN_SAME = { "TRX-XC": "TRX-XT", "TRX-OH": "TRX-CH", "P-I-CC": "P-I-RC", "INP-GB": "INP-GA", "INP-FB": "INP-FA", "INP-EB": "INP-EA" };
+function synTable(m) {
+	const f = famKey(m), k = SYN_SAME[m] || m;
+	if (f === "E12") return e12Groups(m);
+	return SYN_TAB[k] || SYN_TAB[m.slice(0, 5)] || SYN_TAB[f] || [];
+}
+/* the effects and routing pages' groups: key → [title, screen] (MID's CC pairs and CTR-8P's targets by pattern) */
+const FXRT_GRP = { am: ["Amp mod", "am"], eq: ["EQ", "peq"], flt: ["Filter", "flt"], srr: ["Sample rate", "srr"], drv: ["Drive", "dist"], mix: ["Level · pan", "pan"], snd: ["Sends", "sends"], prog: ["Program", null] };
+const FXRT_BY = { AMD: "am", AMF: "am", EQF: "eq", EQG: "eq", FLTF: "flt", FLTW: "flt", FLTQ: "flt", SRR: "srr", DIST: "drv", VOL: "mix", PAN: "mix", DEL: "snd", REV: "snd", PCHG: "prog" };
+function fxrtKey(n, g) {
+	const cc = /^CC(\d)[DV]$/.exec(n), p = /^P(\d)(TR|PA)$/.exec(n);
+	if (cc) return ["cc" + cc[1], "CC " + cc[1], null];
+	if (p) return ["p" + p[1], "P" + p[1] + " target", null];
+	const k = FXRT_BY[n]; return k ? [k, ...FXRT_GRP[k]] : [g + "page", g === "fx" ? "Effects page" : "Routing page", null];
+}
+/* LFOS LFOD LFOM are the LFO's SPD DEPTH SHMIX (the same kit parameters, lfoParams) */
+const LFO_RT = ["LFOS", "LFOD", "LFOM"];
+/* each screen's help: its tooltip */
+const SND_TIP = {
+	sample: "Drag STRT and END. Ticks = STRT locks per step (the chops). END left of STRT = reverse. The waveform is the slot's own, read from the machine.",
+	rec: "Drag LEN to set the recording length (127 = 2 bars). The waveform is the last take, read from the machine.",
+	env: "The level after a trig: the attack rises, HOLD keeps it, the decay lets it fall; STOP, CLOS or GRAB cut it, STRT skips the start (dashed). Drag the dots; a dot on a rail at the foot is a knob the curve shows.",
+	pitch: "The pitch after a trig: the dashed line is PTCH; RAMP or BUMP start above it and fall at RDEC or BENV, BEND bends up or down into it. Drag the dots.",
+	atk: "The first moments of the hit: the click (STRT, TICK, CLIC, SNAP) and its length, the noise burst (NOIS, dashed), a second attack (DUAL), over the body (faint). Drag the dots up.",
+	wave: "Two cycles through the tone stage (dashed = clean): harmonics, drive, its hardness, fewer bits. Drag the dots.",
+	claps: "The clap: how many hands (the last one), how far apart (the second), how hard (the first); the last one's tail. Drag the dots.",
+	room: "The claps (faint), then the room: ROOM how loud, RSIZ how long, RTUN its tone. Drag the dots.",
+	spec: "The tone, low to high: where its colour sits and how much (the dot), or the lows and highs. Drag the dots.",
+	metal: "The partials, low to high: pitch and spread move them sideways, the amounts lift them. Drag the dots.",
+	osc: "The body after a trig: how fast it swings (the first peak, sideways), how long (dashed, sideways); knobs on the rails at the foot shape it. Drag the dots.",
+	fm: "The carrier after a trig and the modulation that moves its tone (dotted: how much, how long). The modulator's frequency and feedback are on the rails. Drag the dots.",
+	noise: "The noise burst: how loud (up), how long (sideways); HPF thins it. Drag the dots.",
+	strike: "The mallet's hit: how hard (up), how soft a mallet (sideways), the skin's tension (dashed). Drag the dots.",
+	grains: "The grains: how many, how long the shake, how hard each. Drag the dots.",
+	trem: "The level the tremolo leaves: the dot is its speed (sideways) and depth (down).",
+	resp: "The filter's response, low to high. Drag the edges sideways; up for the peak where the filter has a Q.",
+	imp: "The impulse: how long and how far it goes up, then down. Drag the corners.",
+	ingate: "The input (faint) and what passes the gate: louder than GATE (dashed), at the input's volume. Drag the dots up.",
+	chord: "The notes a trig sends: NOTE on the keyboard at the foot, N2 and N3 semitones above it. Drag the dots.",
+	note: "One note: LEN how long, VEL how loud. Drag the corner.",
+	bars: "One bar a knob. Drag the bars' tops.",
+	lvbal: "The input in the stereo field: balance sideways, level up. Drag the dot.",
+	taps: "The repeats: TIME apart, FB how much each keeps. Drag the second one.",
+	verb: "The dry hit (DVOL), then PRED later the tail, DEC long, DAMP smoother. Drag the dots.",
+	eq3: "The master EQ from this machine: the shelves and the peak, sideways for the frequency, up to boost. PQ is the peak's width.",
+	comp: "The compressor, input to output (dashed = unchanged): TRHD where it starts, RTIO how much, KNEE how softly. Drag the dots.",
+	rtrg: "Retrigs: RTRG is how many (drag the last hit sideways), RTIM the time between them, relative to the tempo (drag the second hit).",
+	am: "Tremolo: the level the amplitude modulator leaves. Dot = AMF (sideways) and AMD (up).",
+	peq: "One band: EQF moves it, EQG boosts (up) or cuts (down).",
+	flt: "24 dB filter: the pass band from FLTF to FLTF + FLTW. Left dot = FLTF (drag up for FLTQ), right dot = FLTW.",
+	srr: "Sample-rate reduction: more SRR, longer held steps. Drag the dot sideways.",
+	dist: "Distortion: input to output (dashed = clean). Drag the dot.",
+	pan: "The track in the stereo field: PAN sideways, VOL up. Drag the dot.",
+	sends: "Sends to the master effects: DEL = Rhythm Echo, REV = Gate Box. Drag the bars' dots.",
+	lshape: "One cycle of the LFO: solid = SHP1 and SHP2 (inverted) mixed by SHMIX; faint = the two shapes. Drag the dot sideways for SHMIX.",
+	lmotion: "The LFO across one bar of this track: SPD cycles it faster, DEPTH scales it (dashed). UPDTE TRIG restarts it on every trig (the ticks), HOLD keeps the value a trig takes. Dot = SPD (sideways) and DEPTH (up). Speed in 1/128 notes; 16 LFOs per kit." };
+const attr = s => String(s).replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;");
+const sndPlot = (inner, tip, note) => `<div class="plot" title="${attr(tip)}">${inner}${note ? `<span class="plotnote">${note}</span>` : ""}</div>`;
+/* a group's screen, or "": its canvas knows the group's knobs (data-k), so one editor serves every
+   machine that has them */
+function sndScreen(ed, tr, at, knobs = []) {
+	if (!ed) return "";
+	if (ed === "sample") return sndPlot(waveBox(`<canvas class="ed" data-ed="sample" aria-label="Sample with start and end markers. Drag the markers."></canvas>`, at), SND_TIP.sample, smpWhy(at));
+	if (ed === "rec") return sndPlot(waveBox(`<canvas class="ed" data-ed="rec" aria-label="Recording window. Drag LEN."></canvas>`, at), SND_TIP.rec, smpWhy(at));
+	const tip = SND_TIP[ed] || "Drag the dots.";
+	return sndPlot(`<canvas class="ed" data-ed="${ed}" data-k="${knobs.join(" ")}" aria-label="${attr(tip)}"></canvas>`, tip);
+}
+/* The track's groups: { key, title, g, knobs, ed } per row. Synthesis: the machine's table (its knobs
+   by their page names: SYN·DIST where the routing page has a DIST too), then any knob it leaves out. */
+function sndGroups(tr) {
+	const pg = pages(tr.m), have = names(pg.s), syn = [], fxrt = [], used = new Set();
+	const qual = n => have.includes(n) ? n : have.includes("SYN·" + n) ? "SYN·" + n : null;
+	for (const d of synTable(tr.m)) {
+		const knobs = d.knobs.map(qual).filter(n => n && !used.has(n)); if (!knobs.length) continue;
+		knobs.forEach(n => used.add(n));
+		syn.push({ key: d.title.toLowerCase().replace(/[^a-z0-9]+/g, "-"), title: d.title, g: "syn", knobs, ed: d.ed, note: d.note });
+	}
+	const rest = have.filter(n => !used.has(n));
+	if (rest.length) syn.push({ key: "syn", title: "Synthesis", g: "syn", knobs: rest, ed: null });
+	const add = (list, key, title, g, n, ed) => { let x = list.find(a => a.key === key && a.g === g); if (!x) list.push(x = { key, title, g, knobs: [], ed }); x.knobs.push(n); };
+	for (const [g, p] of [["fx", "e"], ["rt", "r"]]) for (const n of names(pg[p])) { if (g === "rt" && LFO_RT.includes(n)) continue; const [k, title, ed] = fxrtKey(n, g); add(fxrt, k, title, g, n, ed); }
+	return [syn, fxrt];
+}
+const SND_COL = { fx: "var(--e12)", rt: "var(--gnd)", lfo: "var(--teal)" };
+/* a group: its title on the rule, its screen (or what its knobs do), its boxes; its page's word only on
+   the first group of that page in its row (tag false). Each part is a cell of the row's grid. */
+function sgHtml(x, cols, color, tag, note) {
+	const page = SND_TAG[x.g][1];
+	const body = x.body || `<div class="ctl" style="grid-template-columns:repeat(${cols},minmax(0,1fr))">${x.knobs.map(n => pc(x.g, n, { color: SND_COL[x.g] || color })).join("")}</div>`;
+	return `<section class="sg" data-sg="${x.key}"><header><h3>${x.title}</h3>${tag ? `<span title="${attr(x.tagTip || "Its knobs are on the Machinedrum's " + page + " page")}">${SND_TAG[x.g][0]}</span>` : ""}</header>${x.plot || (note ? `<p class="sgnote">${note}</p>` : "")}${body}</section>`;
+}
+/* One row: a grid of columns over three lines (titles, screens, boxes). A group with a screen is a
+   column of its own (as wide as its boxes, but never narrower than about two of them, a waveform
+   wider); the ones without pair up in one column (a lone one says what its knobs do). A row without
+   any screen is two lines, its groups side by side. */
+function sgRow(list, cls, color) {
+	if (!list.length) return "";
+	let prev = ""; const first = x => prev !== x.g && (prev = x.g), n = x => x.n ?? x.knobs.length;
+	const narrow = list.reduce((a, x) => a + n(x), 0) > 10 ? 1.8 : 2.6, w = x => x.w ?? (x.ed === "sample" ? 6 : x.ed === "rec" ? 5 : x.plot ? Math.max(n(x), narrow) : n(x));
+	const tracks = cols => `grid-template-columns:${cols.map(c => `minmax(min-content,${c}fr)`).join(" ")}`;
+	if (!list.some(x => x.plot)) {
+		const ws = list.map(x => Math.max(1.4, w(x)));
+		return `<div class="sgrow flat ${cls}" style="${tracks(list.about ? [...ws, 4] : ws)}">${list.map(x => `<div class="sgcol">${sgHtml(x, n(x), color, first(x))}</div>`).join("")}${list.about ? `<p class="sgabout">${list.about}</p>` : ""}</div>`;
+	}
+	const cols = [], stacks = [];
+	for (const x of list) {
+		if (x.plot) { cols.push([x]); continue; }
+		const s = stacks[stacks.length - 1];
+		if (s && s.length < 2) s.push(x); else { const c = [x]; stacks.push(c); cols.push(c); }
+	}
+	return `<div class="sgrow ${cls}" style="${tracks(cols.map(c => Math.max(...c.map(w))))}">${cols.map(c => {
+		const cn = Math.max(...c.map(n)), kind = c[0].plot ? "" : c.length > 1 ? " stack" : " lone";
+		return `<div class="sgcol${kind}">${c.map(x => sgHtml(x, cn, color, first(x), kind === " lone" ? x.note || about(V.tracks[S.sel].m) : "")).join("")}</div>`;
+	}).join("")}</div>`;
+}
 function renderSound() {
-	const t = S.sel, tr = V.tracks[t], l = tr.lfo, c = FAMC[tr.fam], pg = pages(tr.m), en = names(pg.e), rn = names(pg.r);
-	const synthScreen = isSampler(tr.m) ? `${waveBox(`<canvas class="ed" data-ed="sample" aria-label="Sample with start and end markers. Drag the markers."></canvas>`, smpOfMachine(tr.m))}<div class="edhint">Drag STRT and END. Ticks = STRT locks per step (the chops). END left of STRT = reverse. ${smpWhy(smpOfMachine(tr.m)) || "The waveform is the slot's own, read from the machine."}</div>`
-		: isRec(tr.m) ? `${waveBox(`<canvas class="ed" data-ed="rec" aria-label="Recording window. Drag LEN."></canvas>`, smpOfMachine(tr.m))}<div class="edhint">Drag LEN to set the recording length (127 = 2 bars). ${smpWhy(smpOfMachine(tr.m)) || "The waveform is the last take, read from the machine."}</div>`
-			: "DEC" in tr.syn || "RAMP" in tr.syn ? `<canvas class="ed" data-ed="synth" aria-label="Amp decay and pitch ramp. Drag the dots."></canvas><div class="edhint">${"RAMP" in tr.syn ? "Solid = amp decay (DEC). Dashed = pitch ramp (RAMP, RDEC)." : "Curve = amp decay (DEC)."}</div>`
-				: `<div class="edblank">${about(tr.m) || "No curve for this machine."}</div>`;
-	$("#main").innerHTML = `<div class="soundgrid">
-  <section class="card"><header><h3>Synthesis</h3>${machButton(tr)}</header>
-   ${synthScreen}<div class="ctl four">${eight("syn", pg.s, { color: c })}</div></section>
-  ${en.length ? `<section class="card"><header><h3>Effects</h3><span>${isFxPage(pg.e) ? "Track effects page" : "CC page"}</span></header>
-   ${isFxPage(pg.e) ? `<canvas class="ed" data-ed="fx" aria-label="Filter and EQ response. Drag the dots."></canvas><div class="edhint">Left dot = FLTF (drag up for FLTQ). Right dot = FLTW. Middle dot = EQF and EQG.</div>` : `<div class="edblank">MIDI CC pages: each pair picks a CC number (D) and sends its value (V).</div>`}
-   <div class="ctl four">${eight("fx", pg.e, { color: "var(--e12)" })}</div></section>` : `<section class="card"><header><h3>Effects</h3><span>none</span></header><div class="edblank">This control machine has no track effects or routing. It drives the master effect directly.</div></section>`}
-  <section class="card"><header><h3>Routing</h3><span>Level, pan and sends</span></header>
-   ${"PAN" in tr.rt ? `<canvas class="ed" data-ed="route" aria-label="Distortion curve and stereo position. Drag the dots."></canvas><div class="edhint">Curve = DIST drive. Dot = PAN (sideways) and VOL (up and down).</div>` : `<div class="edblank">No audio routing for this machine.</div>`}
-   ${rn.length ? `<div class="ctl four">${eight("rt", pg.r, { color: "var(--gnd)" })}</div>` : ""}</section>
-  <section class="card lfocard"><header><h3>LFO ${t + 1}</h3><span>Speed in 1/128 notes · 16 LFOs per kit</span></header>
-   <div class="lfoin"><canvas class="ed" data-ed="lfo" aria-label="LFO waveform"></canvas>
-    <div class="lfoctl">
-     <div class="kv"><span class="mono" style="width:52px">TARGET</span><select id="lfoT">${V.tracks.map((x, i) => `<option value="${i}" ${i === l.TRCK ? "selected" : ""}>TRCK ${i + 1} ${x.name}</option>`).join("")}</select>
-      <select id="lfoP">${params(l.TRCK).map(p => `<option ${p === l.PARAM ? "selected" : ""}>${p}</option>`).join("")}</select></div>
-     ${["SHP1", "SHP2"].map(sl => `<div class="kv"><span class="mono" style="width:52px">${sl}</span><div class="shapes">${SHAPES.map((n, i) => `<button data-slot="${sl}" data-shape="${i}" aria-pressed="${l[sl] === i}" title="${n}${sl === "SHP2" ? ", inverted" : ""}" aria-label="${sl} ${n}">${shapeIcon(i, sl === "SHP2")}</button>`).join("")}</div></div>`).join("")}
-     <div class="kv"><span class="mono" style="width:52px">UPDTE</span><span class="seg" data-set="upd">${["FREE", "TRIG", "HOLD"].map(u => `<button data-v="${u}" aria-pressed="${l.UPDTE === u}">${u}</button>`).join("")}</span></div>
-     <div class="ctl" style="grid-template-columns:repeat(3,minmax(0,1fr))">${["SPD", "DEPTH", "SHMIX"].map(n => pc("lfo", n, { color: "var(--teal)" })).join("")}</div></div></div></section>
-  <section class="card"><header><h3>Relations</h3><span>Kit · EDIT KIT → RELATE</span></header>
-   <div class="two" style="grid-template-columns:1fr">
-    <label>Mute group<select id="mg"><option value="">none</option>${V.tracks.map((x, i) => i !== t ? `<option value="${i}" ${tr.muteGroup === i ? "selected" : ""}>mutes ${i + 1} ${x.name}</option>` : "").join("")}</select></label>
-    <label>Trig group<select id="tg"><option value="">none</option>${V.tracks.map((x, i) => i !== t ? `<option value="${i}" ${tr.trigGroup === i ? "selected" : ""}>trigs ${i + 1} ${x.name}</option>` : "").join("")}</select></label></div>
-   <div class="note">Mute groups interleave sounds, like open and closed hihats. Trig groups layer two tracks from one trig. Trig relations do not chain.</div></section>
+	const t = S.sel, tr = V.tracks[t], l = tr.lfo, at = smpOfMachine(tr.m), color = FAMC[tr.fam];
+	const relSel = (id, kind, word) => `<select id="${id}"><option value="">none</option>${V.tracks.map((x, i) => i !== t ? `<option value="${i}" ${tr[kind] === i ? "selected" : ""}>${word} ${i + 1} ${x.name}</option>` : "").join("")}</select>`;
+	const [syn, fxrt] = sndGroups(tr);
+	[...syn, ...fxrt].forEach(x => { x.plot = sndScreen(x.ed, tr, at, x.knobs.map(n => n.replace(/^SYN·/, ""))); });
+	if (!syn.length) syn.push({ key: "syn", title: "Synthesis", g: "syn", knobs: [], n: 0, w: 8, body: `<p class="sgabout">${about(tr.m) || "This machine has no synthesis knobs."}</p>` });
+	else if (!syn.some(x => x.plot)) syn.about = about(tr.m);
+	const lfoTip = "SPD DEPTH SHMIX are LFOS LFOD LFOM on the Machinedrum's ROUTING page; the shapes, the target and UPDTE are its LFO page";
+	const shapeRow = sl => `<div class="kv"><span class="mono">${sl}</span><div class="shapes">${SHAPES.map((n, i) => `<button data-slot="${sl}" data-shape="${i}" aria-pressed="${l[sl] === i}" title="${n}${sl === "SHP2" ? ", inverted" : ""}" aria-label="${sl} ${n}">${shapeIcon(i, sl === "SHP2")}</button>`).join("")}</div></div>`;
+	const lfo = [
+		{ key: "lshape", title: `LFO ${t + 1} shape`, g: "lfo", knobs: ["SHMIX"], w: 5, tagTip: lfoTip,
+			plot: sndPlot(`<canvas class="ed" data-ed="lshape" aria-label="One cycle of the LFO's shape. Drag the dot for SHMIX."></canvas>`, SND_TIP.lshape),
+			body: `<div class="sgline lfoshape">${shapeRow("SHP1")}${shapeRow("SHP2")}${pc("lfo", "SHMIX", { color: SND_COL.lfo })}</div>` },
+		{ key: "lmotion", title: "LFO motion", g: "lfo", knobs: ["SPD", "DEPTH"], w: 3.4, tagTip: lfoTip,
+			plot: sndPlot(`<canvas class="ed" data-ed="lmotion" aria-label="The LFO across one bar. Drag the dot for SPD and DEPTH."></canvas>`, SND_TIP.lmotion),
+			body: `<div class="sgline">${["SPD", "DEPTH"].map(n => pc("lfo", n, { color: SND_COL.lfo })).join("")}<span class="seg" data-set="upd" title="UPDTE: FREE runs on, TRIG restarts it on every trig, HOLD keeps the value a trig takes">${["FREE", "TRIG", "HOLD"].map(u => `<button data-v="${u}" aria-pressed="${l.UPDTE === u}">${u}</button>`).join("")}</span></div>` },
+		{ key: "ltarget", title: "LFO target", g: "lfo", knobs: [], w: 2, tagTip: lfoTip,
+			body: `<div class="sgsel" title="The parameter this LFO moves: a track, then one of its parameters"><select id="lfoT">${V.tracks.map((x, i) => `<option value="${i}" ${i === l.TRCK ? "selected" : ""}>T${i + 1} ${x.name}</option>`).join("")}</select><select id="lfoP">${params(l.TRCK).map(p => `<option ${p === l.PARAM ? "selected" : ""}>${p}</option>`).join("")}</select></div>` },
+		{ key: "rel", title: "Relations", g: "kit", knobs: [], w: 2, tagTip: "Kit relations: EDIT KIT → RELATE",
+			body: `<div class="sgsel pair"><label title="Mute group: this track's trig mutes the chosen track, as open and closed hihats.">Mute${relSel("mg", "muteGroup", "mutes")}</label>
+			<label title="Trig group: this track's trig also trigs the chosen track. Trig relations do not chain.">Trig${relSel("tg", "trigGroup", "trigs")}</label></div>` }];
+	$("#main").innerHTML = `<div class="snd">
+  <div class="sndhead">${machButton(tr)}
+   <span class="sndhelp" title="The groups follow the sound's path: synthesis, effects, routing, then the LFO and the track's relations. The word at a group's right is the Machinedrum page its knobs are on. Drag a dot or a box; hold Alt to move the same knob on every track (Control All).">Drag a dot or a box · Alt-drag = all tracks</span></div>
+  ${sgRow(syn, "synrow", color)}
+  ${sgRow(fxrt, "fxrow", color)}
+  ${sgRow(lfo, "lforow", color)}
  </div>`;
 	syncControls(); redraw();
 }
@@ -554,14 +743,15 @@ function syncControls() {
 		if (el.classList.contains("pc") && SIGNED.has(el.dataset.n)) { const q = v / 127 * 100; el.classList.add("bip"); el.style.setProperty("--pl", Math.min(q, 50.4) + "%"); el.style.setProperty("--pw", v === 64 ? "0%" : Math.max(3, Math.abs(q - 50.4)) + "%"); }
 		const b = el.querySelector("b"); if (b) b.textContent = SIGNED.has(el.dataset.n) && el.dataset.g !== "mfx" ? (v - 64 > 0 ? "+" : "") + (v - 64) : v;
 		const u = el.querySelector(".pu"); if (u) { const [txt, tip] = UNITS[u.dataset.unit](v); u.textContent = txt; el.title = tip; }
-		if (["syn", "fx", "rt"].includes(el.dataset.g)) {
-			const tt = el.dataset.t != null ? +el.dataset.t : S.sel, idx = pidx(tt, el.dataset.n, el.dataset.g);
+		if (["syn", "fx", "rt", "lfo"].includes(el.dataset.g)) {
+			const tt = el.dataset.t != null ? +el.dataset.t : S.sel, idx = el.dataset.g === "lfo" ? Enums().lfoParams[el.dataset.n] ?? -1 : pidx(tt, el.dataset.n, el.dataset.g);
 			const mp = (Docs.learn?.mappings || []).filter(m => m.t === tt && m.i === idx);
 			el.classList.toggle("mapped", mp.length > 0);
 			el.classList.toggle("learnt", !!S.ctl.learnT && S.ctl.learnT.t === tt && S.ctl.learnT.p === el.dataset.n);
 			if (mp.length) el.title = "Mapped: " + mp.map(m => "CC " + m.cc).join(", ");
 		}
-		if (el.classList.contains("pc") && el.dataset.g !== "mfx" && el.dataset.g !== "lfo" && el.dataset.g !== "src" && el.dataset.g !== "link") el.classList.toggle("lk", V.locks.has(lk(el.dataset.t != null ? +el.dataset.t : S.sel, el.dataset.n)));
+		/* a lock on LFOS, LFOD or LFOM shows on the LFO section's SPD, DEPTH, SHMIX (the same kit parameters) */
+		if (el.classList.contains("pc") && el.dataset.g !== "mfx" && el.dataset.g !== "src" && el.dataset.g !== "link") el.classList.toggle("lk", V.locks.has(lk(el.dataset.t != null ? +el.dataset.t : S.sel, el.dataset.g === "lfo" ? lfoRtName(el.dataset.n, el.dataset.t != null ? +el.dataset.t : S.sel) : el.dataset.n)));
 	});
 	$$("#main [data-show]").forEach(el => el.textContent = V.tracks[+el.dataset.show].rt.VOL ?? "—");
 }
@@ -571,46 +761,38 @@ function syncControls() {
 const toTrack = g => () => ({ t: S.sel, g }), toMfx = f => () => ({ f });
 const cssv = v => getComputedStyle(document.documentElement).getPropertyValue(v).trim();
 const ED = {
-	synth: {
-		to: toTrack("syn"),
+	/* LFO SHAPE: one cycle of what the LFO sends: SHP1 and SHP2 (inverted, faint) mixed by SHMIX (solid).
+	   Dot = SHMIX sideways. */
+	lshape: {
+		to: () => ({ t: S.sel, g: "lfo" }),
 		draw(g, W, H) {
-			const tr = V.tracks[S.sel], s = tr.syn, Y = v => H - 12 - v * (H - 30); grid(g, W, H);
-			const k = .03 + (s.DEC ?? 64) / 127 * .35; line(g, W, x => { const t = x / W; return Y(t < .01 ? t / .01 : Math.exp(-(t - .01) / k)); }, cssv("--ink"), 2.2);
-			if ("RAMP" in s) { const r = s.RAMP / 127, rd = .01 + (s.RDEC ?? 0) / 127 * .3; line(g, W, x => Y(.25 + r * .65 * Math.exp(-(x / W) / rd)), cssv("--ink"), 1.5, [5, 4]); }
-			label(g, "amp" + ("RAMP" in s ? " + pitch" : ""));
+			const l = V.tracks[S.sel].lfo, mix = l.SHMIX / 127, A = H / 2 - 16, y = (p, w) => H / 2 + 4 - ((1 - w) * shape(l.SHP1, p, false) + w * shape(l.SHP2, p, true)) * A; grid(g, W, H);
+			line(g, W, x => y(x / W, 0), inkA(.3), 1.2); line(g, W, x => y(x / W, 1), inkA(.3), 1.2, [3, 3]); line(g, W, x => y(x / W, mix), cssv("--ink"), 2.2);
+			label(g, `${SHAPES[l.SHP1] || "?"} ${Math.round((1 - mix) * 100)}% · ${(SHAPES[l.SHP2] || "?").toLowerCase()} inv ${Math.round(mix * 100)}%`);
+		},
+		handles(W, H) { return [{ x: 8 + V.tracks[S.sel].lfo.SHMIX / 127 * (W - 16), y: H - 10, k: "SHMIX", c: cssv("--ink"), drag: x => ({ SHMIX: clamp(Math.round((x - 8) / (W - 16) * 127)) }) }]; }
+	},
+	/* LFO MOTION: the LFO across one bar of this track: SPD cycles (more as it rises), DEPTH high (dashed
+	   bounds); UPDTE TRIG restarts it on every trig (the ticks), HOLD keeps the value a trig takes. Dot = SPD
+	   sideways, DEPTH up. */
+	lmotion: {
+		to: () => ({ t: S.sel, g: "lfo" }),
+		geo(W, H) { return { x0: 8, x1: W - 8, A: H / 2 - 18, mid: H / 2 + 2 }; },
+		draw(g, W, H) {
+			const tr = V.tracks[S.sel], l = tr.lfo, G = this.geo(W, H), mix = l.SHMIX / 127, dep = l.DEPTH / 127, cyc = .5 + l.SPD / 127 * 7.5, ink = cssv("--ink"); grid(g, W, H);
+			const wave = u => ((1 - mix) * shape(l.SHP1, ((u % 1) + 1) % 1, false) + mix * shape(l.SHP2, ((u % 1) + 1) % 1, true)) * dep;
+			const trigs = Array.from({ length: 16 }, (_, s) => tr.trigs[s] ? s : -1).filter(s => s >= 0), last = s => trigs.filter(x => x <= s).pop();
+			const at = x => { const s = x / W * 16, k = last(s); if (l.UPDTE === "FREE" || k == null) return l.UPDTE === "HOLD" ? 0 : wave(s / 16 * cyc); return l.UPDTE === "TRIG" ? wave((s - k) / 16 * cyc) : wave(k / 16 * cyc); };
+			g.strokeStyle = inkA(.45); g.lineWidth = 1; g.setLineDash([2, 4]); g.beginPath(); g.moveTo(0, G.mid - dep * G.A); g.lineTo(W, G.mid - dep * G.A); g.moveTo(0, G.mid + dep * G.A); g.lineTo(W, G.mid + dep * G.A); g.stroke(); g.setLineDash([]);
+			line(g, W, x => G.mid - at(x) * G.A, ink, 2.2);
+			g.fillStyle = ink; trigs.forEach(s => g.fillRect(Math.round(s / 16 * W) + 1, H - 6, 3, 6));
+			label(g, `${l.UPDTE} · one bar`);
 		},
 		handles(W, H) {
-			const s = V.tracks[S.sel].syn, Y = v => H - 12 - v * (H - 30), out = []; const k = .03 + (s.DEC ?? 64) / 127 * .35, td = .01 + k * Math.log(4);
-			if ("DEC" in s) out.push({ x: td * W, y: Y(.25), k: "DEC", c: cssv("--ink"), drag: (x) => ({ DEC: clamp(Math.round(((x / W - .01) / Math.log(4) - .03) / .35 * 127)) }) });
-			if ("RAMP" in s) {
-				const r = s.RAMP / 127, rd = .01 + (s.RDEC ?? 0) / 127 * .3;
-				out.push({ x: 6, y: Y(.25 + r * .65), k: "RAMP", c: cssv("--ink"), drag: (x, y) => ({ RAMP: clamp(Math.round(((H - 12 - y) / (H - 30) - .25) / .65 * 127)) }) });
-				if ("RDEC" in s) out.push({ x: rd * W, y: Y(.25 + r * .65 / Math.E), k: "RDEC", c: cssv("--ink"), drag: (x) => ({ RDEC: clamp(Math.round((x / W - .01) / .3 * 127)) }) });
-			}
-			return out;
+			const l = V.tracks[S.sel].lfo, G = this.geo(W, H);
+			return [{ x: G.x0 + l.SPD / 127 * (G.x1 - G.x0), y: G.mid - l.DEPTH / 127 * G.A, k: "SPD · DEPTH", c: cssv("--ink"),
+				drag: (x, y) => ({ SPD: clamp(Math.round((x - G.x0) / (G.x1 - G.x0) * 127)), DEPTH: clamp(Math.round((G.mid - y) / G.A * 127)) }) }];
 		}
-	},
-	fx: {
-		to: toTrack("fx"),
-		resp(u) {
-			const f = V.tracks[S.sel].fx, hp = f.FLTF / 127, lp = Math.min(1, hp + f.FLTW / 127), q = f.FLTQ / 127; let d = 0;
-			if (u < hp) d -= Math.pow((hp - u) * 7, 2); if (u > lp) d -= Math.pow((u - lp) * 7, 2);
-			d += q * 1.6 * (Math.exp(-Math.pow((u - hp) * 28, 2)) * (hp > .01 ? 1 : 0) + Math.exp(-Math.pow((u - lp) * 28, 2)) * (lp < .99 ? 1 : 0)); d += (f.EQG - 64) / 64 * .9 * Math.exp(-Math.pow((u - f.EQF / 127) * 9, 2)); return d;
-		},
-		draw(g, W, H) { grid(g, W, H); line(g, W, x => clamp(H / 2 - this.resp(x / W) * (H / 4), 6, H - 6), cssv("--ink"), 2.2); label(g, "filter + EQ"); },
-		handles(W, H) {
-			const f = V.tracks[S.sel].fx, hp = f.FLTF / 127, lp = Math.min(1, hp + f.FLTW / 127), yy = u => clamp(H / 2 - this.resp(u) * (H / 4), 6, H - 6);
-			return [{ x: Math.max(6, hp * W), y: yy(hp), k: "FLTF", c: cssv("--ink"), drag: (x, y) => ({ FLTF: clamp(Math.round(x / W * 127)), FLTQ: clamp(Math.round((H / 2 - y) / (H / 2) * 127)) }) },
-			{ x: Math.min(W - 6, lp * W), y: yy(lp), k: "FLTW", c: cssv("--ink"), drag: (x) => ({ FLTW: clamp(Math.round((x / W - f.FLTF / 127) * 127)) }) },
-			{ x: f.EQF / 127 * W, y: yy(f.EQF / 127), k: "EQ", c: cssv("--ink"), drag: (x, y) => ({ EQF: clamp(Math.round(x / W * 127)), EQG: clamp(Math.round(64 + (H / 2 - y) / (H / 4) / .9 * 64)) }) }];
-		}
-	},
-	lfo: {
-		draw(g, W, H) {
-			const l = V.tracks[S.sel].lfo, mix = l.SHMIX / 127, cyc = 1 + Math.round((127 - l.SPD) / 40), dep = .2 + .8 * l.DEPTH / 127; grid(g, W, H);
-			line(g, W, x => { const p = (x / W * cyc) % 1; return H / 2 - ((1 - mix) * shape(l.SHP1, p, false) + mix * shape(l.SHP2, p, true)) * (H / 2 - 10) * dep; }, cssv("--ink"), 2.2);
-			label(g, `${SHAPES[l.SHP1] || "?"} to ${(SHAPES[l.SHP2] || "?").toLowerCase()} (inverted) · ${l.UPDTE}`);
-		}, handles: () => []
 	},
 	eq: {
 		to: toMfx("eq"),
@@ -635,22 +817,491 @@ const ED = {
 	}
 };
 function inkA(a) { const h = cssv("--ink").replace("#", ""); const n = parseInt(h.length === 3 ? h.split("").map(c => c + c).join("") : h, 16); return `rgba(${n >> 16 & 255},${n >> 8 & 255},${n & 255},${a})`; }
-ED.route = {
-	to: toTrack("rt"),
-	g() { return 1 + (V.tracks[S.sel].rt.DIST || 0) / 127 * 8; }, sh(x, g) { return Math.tanh(x * g) / Math.tanh(g); },
+/* The Sound chain's small screens, one per module (renderSound): each draws one stage of the track's
+   sound and its dots move that stage's knobs. */
+const fxOf = () => V.tracks[S.sel].fx, rtOf = () => V.tracks[S.sel].rt;
+/* AMP MOD: the level the tremolo leaves (1 down to 1 - AMD), AMF cycles across. Dot = AMF sideways, AMD up. */
+ED.am = {
+	to: toTrack("fx"),
+	geo(W, H) { return { x0: 8, x1: W - 8, y0: 24, y1: H - 8 }; },
 	draw(g, W, H) {
-		const r = V.tracks[S.sel].rt, G = this.g(); grid(g, W, H);
-		g.strokeStyle = inkA(.35); g.setLineDash([3, 3]); g.beginPath(); g.moveTo(0, H - 8); g.lineTo(W, 8); g.stroke(); g.setLineDash([]);
-		line(g, W, x => { const u = x / W * 2 - 1; return H / 2 - this.sh(u, G) * (H / 2 - 8); }, cssv("--ink"), 2.2);
-		const px = r.PAN / 127 * W; g.strokeStyle = inkA(.5); g.beginPath(); g.moveTo(px + .5, 0); g.lineTo(px + .5, H); g.stroke();
-		label(g, "dist · pan × vol");
+		const f = fxOf(), G = this.geo(W, H), dep = f.AMD / 127, cyc = 1 + f.AMF / 127 * 7; grid(g, W, H);
+		line(g, W, x => { const u = clamp((x - G.x0) / (G.x1 - G.x0), 0, 1); return G.y1 - (1 - dep * (.5 - .5 * Math.cos(2 * Math.PI * cyc * u))) * (G.y1 - G.y0); }, cssv("--ink"), 2);
+		label(g, "tremolo");
 	},
 	handles(W, H) {
-		const r = V.tracks[S.sel].rt, self = this; const G = this.g(), u = .4, yD = H / 2 - this.sh(u, G) * (H / 2 - 8);
-		return [{ x: r.PAN / 127 * W, y: H - 10 - r.VOL / 127 * (H - 24), k: "PAN · VOL", c: cssv("--ink"), drag: (x, y) => ({ PAN: clamp(Math.round(x / W * 127)), VOL: clamp(Math.round((H - 10 - y) / (H - 24) * 127)) }) },
-		{ x: (u + 1) / 2 * W, y: yD, k: "DIST", c: cssv("--ink"), drag: (x, y) => { const want = (H / 2 - y) / (H / 2 - 8); let best = 0, bd = 9; for (let d = 0; d <= 127; d++) { const o = self.sh(u, 1 + d / 127 * 8); if (Math.abs(o - want) < bd) { bd = Math.abs(o - want); best = d; } } return { DIST: best }; } }];
+		const f = fxOf(), G = this.geo(W, H);
+		return [{ x: G.x0 + f.AMF / 127 * (G.x1 - G.x0), y: G.y1 - (1 - f.AMD / 127) * (G.y1 - G.y0), k: "AM", c: cssv("--ink"),
+			drag: (x, y) => ({ AMF: clamp(Math.round((x - G.x0) / (G.x1 - G.x0) * 127)), AMD: 127 - clamp(Math.round((G.y1 - y) / (G.y1 - G.y0) * 127)) }) }];
 	}
 };
+/* EQ: one bell at EQF, EQG up = boost, down = cut. */
+ED.peq = {
+	to: toTrack("fx"),
+	y(u, H) { const f = fxOf(); return H / 2 - (f.EQG - 64) / 64 * (H / 2 - 18) * Math.exp(-Math.pow((u - f.EQF / 127) * 7, 2)); },
+	draw(g, W, H) {
+		grid(g, W, H); g.strokeStyle = inkA(.35); g.setLineDash([3, 3]); g.beginPath(); g.moveTo(0, H / 2 + .5); g.lineTo(W, H / 2 + .5); g.stroke(); g.setLineDash([]);
+		line(g, W, x => this.y(x / W, H), cssv("--ink"), 2); label(g, "eq");
+	},
+	handles(W, H) {
+		const f = fxOf();
+		return [{ x: f.EQF / 127 * W, y: this.y(f.EQF / 127, H), k: "EQ", c: cssv("--ink"), drag: (x, y) => ({ EQF: clamp(Math.round(x / W * 127)), EQG: clamp(Math.round(64 + (H / 2 - y) / (H / 2 - 18) * 64)) }) }];
+	}
+};
+/* FILTER: the response of the 24 dB filter, a pass band from FLTF to FLTF + FLTW with FLTQ peaks at its edges. */
+ED.flt = {
+	to: toTrack("fx"),
+	resp(u) {
+		const f = fxOf(), hp = f.FLTF / 127, lp = Math.min(1, hp + f.FLTW / 127), q = f.FLTQ / 127; let d = 0;
+		if (u < hp) d -= Math.pow((hp - u) * 7, 2); if (u > lp) d -= Math.pow((u - lp) * 7, 2);
+		d += q * 1.6 * (Math.exp(-Math.pow((u - hp) * 28, 2)) * (hp > .01 ? 1 : 0) + Math.exp(-Math.pow((u - lp) * 28, 2)) * (lp < .99 ? 1 : 0)); return d;
+	},
+	yy(u, H) { return clamp(H / 2 - this.resp(u) * (H / 4), 6, H - 6); },
+	draw(g, W, H) { grid(g, W, H); line(g, W, x => this.yy(x / W, H), cssv("--ink"), 2.2); label(g, "filter"); },
+	handles(W, H) {
+		const f = fxOf(), hp = f.FLTF / 127, lp = Math.min(1, hp + f.FLTW / 127);
+		return [{ x: Math.max(6, hp * W), y: this.yy(hp, H), k: "FLTF", c: cssv("--ink"), drag: (x, y) => ({ FLTF: clamp(Math.round(x / W * 127)), FLTQ: clamp(Math.round((H / 2 - y) / (H / 2) * 127)) }) },
+		{ x: Math.min(W - 6, lp * W), y: this.yy(lp, H), k: "FLTW", c: cssv("--ink"), drag: x => ({ FLTW: clamp(Math.round((x / W - fxOf().FLTF / 127) * 127)) }) }];
+	}
+};
+/* CRUSH: a sine held for longer steps as SRR rises (0 = smooth). Dot = SRR sideways. */
+ED.srr = {
+	to: toTrack("fx"),
+	draw(g, W, H) {
+		const f = fxOf(), step = 1 + f.SRR / 127 * W / 5, y = h => H / 2 + 4 - .4 * (H - 30) * Math.sin(2 * Math.PI * 1.5 * h / W); grid(g, W, H);
+		line(g, W, x => y(Math.floor(x / step) * step), cssv("--ink"), 2); label(g, "srr");
+	},
+	handles(W, H) { return [{ x: 8 + fxOf().SRR / 127 * (W - 16), y: H - 12, k: "SRR", c: cssv("--ink"), drag: x => ({ SRR: clamp(Math.round((x - 8) / (W - 16) * 127)) }) }]; }
+};
+/* DRIVE: DIST's transfer curve, input to output (dashed = clean). */
+ED.dist = {
+	to: toTrack("rt"),
+	g() { return 1 + (rtOf().DIST || 0) / 127 * 8; }, sh(x, g) { return Math.tanh(x * g) / Math.tanh(g); },
+	draw(g, W, H) {
+		const G = this.g(); grid(g, W, H);
+		g.strokeStyle = inkA(.35); g.setLineDash([3, 3]); g.beginPath(); g.moveTo(0, H - 8); g.lineTo(W, 8); g.stroke(); g.setLineDash([]);
+		line(g, W, x => { const u = x / W * 2 - 1; return H / 2 - this.sh(u, G) * (H / 2 - 8); }, cssv("--ink"), 2.2);
+		label(g, "drive");
+	},
+	handles(W, H) {
+		const self = this, G = this.g(), u = .4, yD = H / 2 - this.sh(u, G) * (H / 2 - 8);
+		return [{ x: (u + 1) / 2 * W, y: yD, k: "DIST", c: cssv("--ink"), drag: (x, y) => { const want = (H / 2 - y) / (H / 2 - 8); let best = 0, bd = 9; for (let d = 0; d <= 127; d++) { const o = self.sh(u, 1 + d / 127 * 8); if (Math.abs(o - want) < bd) { bd = Math.abs(o - want); best = d; } } return { DIST: best }; } }];
+	}
+};
+/* MIX: the track in the stereo field: PAN sideways, VOL up. */
+ED.pan = {
+	to: toTrack("rt"),
+	geo(W, H) { return { x0: 12, x1: W - 12, yt: 26, yb: H - 18 }; },
+	draw(g, W, H) {
+		const r = rtOf(), G = this.geo(W, H), ink = cssv("--ink"), x = G.x0 + (r.PAN ?? 64) / 127 * (G.x1 - G.x0), y = G.yb - (r.VOL ?? 0) / 127 * (G.yb - G.yt), pan = (r.PAN ?? 64) - 64; grid(g, W, H);
+		g.strokeStyle = inkA(.45); g.lineWidth = 1; g.setLineDash([3, 3]); g.beginPath(); g.moveTo(W / 2 + .5, G.yt - 6); g.lineTo(W / 2 + .5, G.yb); g.stroke(); g.setLineDash([]);
+		g.fillStyle = inkA(.22); g.fillRect(x - 7, y, 14, G.yb - y); g.fillStyle = ink; g.fillRect(G.x0, G.yb, G.x1 - G.x0, 1.5);
+		g.font = "10px Silkscreen, ui-monospace, monospace"; g.fillText("L", G.x0, H - 5); g.fillText("R", G.x1 - 6, H - 5);
+		label(g, "pan " + (pan ? (pan < 0 ? "L" : "R") + Math.abs(pan) : "C"));
+	},
+	handles(W, H) {
+		const r = rtOf(), G = this.geo(W, H);
+		return [{ x: G.x0 + (r.PAN ?? 64) / 127 * (G.x1 - G.x0), y: G.yb - (r.VOL ?? 0) / 127 * (G.yb - G.yt), k: "PAN · VOL", c: cssv("--ink"),
+			drag: (x, y) => ({ ...("PAN" in r ? { PAN: clamp(Math.round((x - G.x0) / (G.x1 - G.x0) * 127)) } : {}), ...("VOL" in r ? { VOL: clamp(Math.round((G.yb - y) / (G.yb - G.yt) * 127)) } : {}) }) }];
+	}
+};
+/* SENDS: the DEL and REV send levels as two bars. */
+ED.sends = {
+	to: toTrack("rt"),
+	geo(W, H) { return { yt: 26, yb: H - 18, col: i => W * (i ? .7 : .3) }; },
+	draw(g, W, H) {
+		const r = rtOf(), G = this.geo(W, H), ink = cssv("--ink"); grid(g, W, H); g.font = "10px Silkscreen, ui-monospace, monospace";
+		[["DEL", r.DEL], ["REV", r.REV]].forEach(([k, v], i) => {
+			const cx = G.col(i), w = Math.min(22, W / 6), y = G.yb - (v ?? 0) / 127 * (G.yb - G.yt);
+			g.fillStyle = inkA(.18); g.fillRect(cx - w / 2, G.yt, w, G.yb - G.yt); g.fillStyle = ink; g.fillRect(cx - w / 2, y, w, G.yb - y);
+			g.fillText(k, cx - g.measureText(k).width / 2, H - 5);
+		});
+		label(g, "sends");
+	},
+	handles(W, H) {
+		const r = rtOf(), G = this.geo(W, H), vy = y => clamp(Math.round((G.yb - y) / (G.yb - G.yt) * 127));
+		return ["DEL", "REV"].map((k, i) => k in r && { x: G.col(i), y: G.yb - r[k] / 127 * (G.yb - G.yt), k, c: cssv("--ink"), drag: (x, y) => ({ [k]: vy(y) }) }).filter(Boolean);
+	}
+};
+/* RETRIG: the trig, then RTRG more hits RTIM apart, fading. Dots = RTIM (the second hit) and RTRG (the last). */
+ED.rtrg = {
+	to: toTrack("syn"),
+	geo(W, H) { const s = V.tracks[S.sel].syn, span = (W - 20) / 3; return { x0: 10, span, sp: 6 + (s.RTIM ?? 0) / 127 * span, n: s.RTRG ?? 0, yt: 24, yb: H - 10 }; },
+	draw(g, W, H) {
+		const G = this.geo(W, H); grid(g, W, H);
+		for (let i = 0; i <= G.n; i++) {
+			const x = G.x0 + i * G.sp; if (x > W - 4) break; const a = 1 - .7 * i / Math.max(1, G.n), top = G.yt + (1 - a) * (G.yb - G.yt);
+			g.fillStyle = i ? inkA(.3 + .6 * a) : cssv("--ink"); g.fillRect(Math.round(x) - 1.5, top, 3, G.yb - top);
+		}
+		label(g, G.n ? "retrig ×" + G.n : "no retrig");
+	},
+	handles(W, H) {
+		const G = this.geo(W, H);
+		return [{ x: G.x0 + G.sp, y: G.yt + 4, k: "RTIM", c: cssv("--ink"), drag: x => ({ RTIM: clamp(Math.round((x - G.x0 - 6) / G.span * 127)) }) },
+		{ x: Math.min(W - 6, G.x0 + G.n * G.sp), y: G.yb - 6, k: "RTRG", c: cssv("--ink"), drag: x => ({ RTRG: clamp(Math.round((x - G.x0) / G.sp)) }) }];
+	}
+};
+/* ===== The synthesis groups' screens (SYN_TAB): one editor per kind of picture, for every machine
+   whose group has its knobs (the canvas's data-k, the page's names). An editor is a model: from the
+   knobs' values (P, with one value tried in place: P.with) it gives what to paint and its dots, each
+   a knob ("x", "y") or two ([nx, ny]) at a point of the picture. A dot's drag tries the knob's 128
+   values and keeps the one whose point is nearest the pointer, so every dot stays on its picture. ===== */
+const synOf = () => V.tracks[S.sel].syn;
+/* a knob's value by its plain name (the page may call it SYN·NAME), and the name it is sent by */
+const synQ = n => ("SYN·" + n) in synOf() ? "SYN·" + n : n;
+const synV = n => synOf()[synQ(n)];
+function synEd(model) {
+	const run = (c, W, H, over) => {
+		const ks = (c.dataset.k || "").split(" ").filter(Boolean), P = n => over && n in over ? over[n] : synV(n) ?? 64;
+		const role = (...l) => l.find(n => ks.includes(n)) || null;
+		const G = { W, H, X: u => 8 + u * (W - 16), Y: v => H - 10 - v * (H - 34), mid: H / 2 + 7, amp: H / 2 - 19 };
+		return model(P, role, G, ks);
+	};
+	const pick = (c, W, H, key, part, n, px, py) => {
+		let best = synV(n) ?? 0, bd = Infinity;
+		for (let v = 0; v < 128; v++) { const h = run(c, W, H, { [n]: v }).h.find(e => String(e[0]) === key); if (!h) continue; const d = part === "x" ? Math.abs(h[1] - px) : Math.abs(h[2] - py); if (d < bd) { bd = d; best = v; } }
+		return best;
+	};
+	return {
+		to: toTrack("syn"),
+		draw(g, W, H, c) { grid(g, W, H); const m = run(c, W, H); m.paint(g); if (m.label) label(g, m.label); },
+		handles(W, H, c) {
+			return run(c, W, H).h.map(([n, x, y, ax]) => ({ x, y, k: [].concat(n).join(" · "), c: cssv("--ink"),
+				drag: (px, py) => Array.isArray(n) ? { [synQ(n[0])]: pick(c, W, H, String(n), "x", n[0], px, py), [synQ(n[1])]: pick(c, W, H, String(n), "y", n[1], px, py) } : { [synQ(n)]: pick(c, W, H, String(n), ax, n, px, py) } }));
+		}
+	};
+}
+/* painting helpers: a curve over u = 0..1, a dashed level, noise that is the same on every draw */
+const inkL = () => cssv("--ink");
+function curveU(g, G, f, c, w, dash) { line(g, G.W, x => f(clamp((x - 8) / (G.W - 16), 0, 1)), c, w, dash); }
+function hLine(g, y, W, a = .35) { g.strokeStyle = inkA(a); g.lineWidth = 1; g.setLineDash([3, 3]); g.beginPath(); g.moveTo(0, Math.round(y) + .5); g.lineTo(W, Math.round(y) + .5); g.stroke(); g.setLineDash([]); }
+const rnd = i => { const s = Math.sin(i * 12.9898 + 78.233) * 43758.5453; return (s - Math.floor(s)) * 2 - 1; };
+/* a knob without a place in the picture: a dot on a short rail at the screen's foot, its name beside */
+function rail(G, i, n, P) { const y = G.H - 10 - i * 14, x0 = G.W * .62, x1 = G.W - 10; return { n, x0, x1, y, x: x0 + P(n) / 127 * (x1 - x0) }; }
+function paintRails(g, rails) {
+	g.font = "9px Silkscreen, ui-monospace, monospace";
+	if (!rails.length) return;
+	const lw = Math.max(...rails.map(r => g.measureText(r.n).width)), top = Math.min(...rails.map(r => r.y)) - 8;
+	g.fillStyle = cssv("--lcd"); g.globalAlpha = .85; g.fillRect(rails[0].x0 - lw - 14, top, rails[0].x1 - rails[0].x0 + lw + 22, rails[0].y + 7 - top); g.globalAlpha = 1;
+	rails.forEach(r => { g.fillStyle = inkA(.25); g.fillRect(r.x0, r.y - 1, r.x1 - r.x0, 2); g.fillStyle = inkA(.7); g.fillText(r.n, r.x0 - g.measureText(r.n).width - 8, r.y + 3); });
+}
+/* PITCH: the pitch after a trig: PTCH the note (dashed), RAMP or BUMP above it falling back at RDEC or
+   BENV, BEND up or down into it. */
+ED.pitch = synEd((P, role, G) => {
+	const p = role("PTCH"), a = role("RAMP", "BUMP", "BEND"), t = role("RDEC", "BENV");
+	const b = p ? .12 + .5 * P(p) / 127 : .3, amt = !a ? 0 : a === "BEND" ? (P(a) - 64) / 64 * .3 : P(a) / 127 * .38, tau = t ? .01 + P(t) / 127 * .3 : a === "BEND" ? .12 : .05;
+	const f = u => b + amt * Math.exp(-u / tau), h = [];
+	if (p) h.push([p, G.X(1) - 4, G.Y(b), "y"]);
+	if (a) h.push([a, G.X(0) + 2, G.Y(f(0)), "y"]);
+	if (t) h.push([t, G.X(tau), G.Y(b + amt / Math.E), "x"]);
+	return { h, label: a === "BEND" ? "pitch bend" : a ? "pitch " + a.toLowerCase() : "pitch", paint(g) { hLine(g, G.Y(b), G.W); curveU(g, G, u => G.Y(f(u)), inkL(), 2.2); } };
+});
+/* ENVELOPE: a level after a trig (or the input's gate): ATT rises, HOLD keeps it, DEC lets it fall;
+   DAMP shortens the tail, STOP CLOS GRAB cut it (127 = never), CLIC adds a click, STRT skips the start
+   (dashed: what is skipped), REV plays the shake backwards. AVOL FDPH set its height. */
+ED.env = synEd((P, role, G) => {
+	const at = role("ATT", "ATCK", "FATK"), ho = role("HOLD", "SUS", "HLD", "AHLD", "FHLD"), de = role("DEC", "ADEC", "FDEC", "REL"), lv = role("AVOL", "FDPH");
+	const cu = role("STOP", "CLOS", "GRAB"), dm = role("DAMP"), ck = role("CLIC"), st = role("STRT", "START"), rv = role("REV");
+	const a = at ? .004 + P(at) / 127 * .25 : .008, hd = ho ? P(ho) / 127 * .4 : 0, k = (.03 + (de ? P(de) : 64) / 127 * .35) * (dm ? 1 - .7 * P(dm) / 127 : 1);
+	const L = (lv ? P(lv) / 127 : 1) * (ck ? .78 : 1), cut = cu && P(cu) < 127 ? .04 + P(cu) / 127 * .9 : 2, s = st ? P(st) / 127 * .35 : 0;
+	const lvl0 = u => u < 0 ? 0 : u < a ? u / a : u < a + hd ? 1 : Math.exp(-(u - a - hd) / k), lvl = u => (u > cut ? 0 : lvl0(u + s)) * L;
+	const h = [], rails = [];
+	if (at) h.push([at, G.X(a), G.Y(L), "x"]);
+	if (ho) h.push([ho, G.X(a + hd), G.Y(L), "x"]);
+	if (de) h.push([de, G.X(clamp(a + hd + k * Math.log(4) - s, 0, 1)), G.Y(L / 4), "x"]);
+	if (lv) h.push([lv, G.X(a + hd * .5) + (ho ? 0 : 10), G.Y(L), "y"]);
+	if (cu) h.push([cu, Math.min(G.X(cut), G.W - 6), G.Y(0) - 4, "x"]);
+	if (ck) h.push([ck, G.X(0) + 2, G.Y(L + P(ck) / 127 * .22), "y"]);
+	if (st) h.push([st, G.X(s), G.Y(lvl0(s) * L), "x"]);
+	if (dm) rails.push(rail(G, 0, dm, P));
+	if (rv) rails.push(rail(G, rails.length, rv, P));
+	rails.forEach(r => h.push([r.n, r.x, r.y, "x"]));
+	const parts = [st && "start", at && "attack", ho && "hold", de === "REL" ? "release" : "decay", cu && cu.toLowerCase()].filter(Boolean);
+	return { h, label: parts.join(" · "), paint(g) {
+		if (s) curveU(g, G, u => G.Y(lvl0(u) * L), inkA(.35), 1.2, [3, 3]);
+		if (rv) curveU(g, G, u => G.Y(lvl(1 - u) * P(rv) / 127), inkA(.4), 1.2, [2, 3]);
+		curveU(g, G, u => G.Y(lvl(u)), inkL(), 2.2);
+		if (ck) { g.fillStyle = inkL(); g.fillRect(G.X(0), G.Y(L + P(ck) / 127 * .22), 3, G.Y(0) - G.Y(L + P(ck) / 127 * .22)); }
+		paintRails(g, rails);
+	} };
+});
+/* ATTACK: the first moments of the hit: a click (STRT TICK CLIC SNAP) SPLEN long, a noise burst (NOIS),
+   a second attack (DUAL) over the body's first cycles (faint). */
+ED.atk = synEd((P, role, G) => {
+	const ck = role("STRT", "TICK", "CLIC", "SNAP"), nz = role("NOIS"), du = role("DUAL"), ln = role("SPLEN");
+	const c = ck ? P(ck) / 127 : 0, w = .012 + (ln ? P(ln) / 127 * .12 : .025), z = nz ? P(nz) / 127 : 0, d = du ? P(du) / 127 : 0;
+	const body = u => .5 * Math.exp(-u / .7) * Math.sin(2 * Math.PI * 6 * u), clk = u => u < w ? c * (1 - u / w) : 0, ne = u => z * Math.exp(-u / .08), dl = u => u > .09 && u < .09 + w ? d * .8 * (1 - (u - .09) / w) : 0;
+	const h = [];
+	if (ck) h.push([ck, G.X(0) + 2, G.mid - G.amp * c, "y"]);
+	if (ln) h.push([ln, G.X(w), G.mid, "x"]);
+	if (nz) h.push([nz, G.X(.14), G.mid - G.amp * ne(.14), "y"]);
+	if (du) h.push([du, G.X(.09) + 2, G.mid - G.amp * d * .8, "y"]);
+	return { h, label: "attack", paint(g) {
+		curveU(g, G, u => G.mid - G.amp * body(u), inkA(.35), 1.2);
+		if (nz) curveU(g, G, u => G.mid - G.amp * ne(u), inkA(.45), 1, [3, 3]);
+		curveU(g, G, u => G.mid - G.amp * Math.max(-1, Math.min(1, body(u) + clk(u) + dl(u) + ne(u) * rnd(Math.round(u * 400)))), inkL(), 1.8);
+	} };
+});
+/* WAVE: two cycles through the tone stage: HARM TONE add harmonics, CLIP DIST drive it, DTYP from soft
+   to hard, DIRT reduces its bits (dashed = clean). */
+ED.wave = synEd((P, role, G) => {
+	const hm = role("HARM", "TONE"), cl = role("CLIP", "DIST"), ht = role("DTYP"), dr = role("DIRT");
+	const H_ = hm ? P(hm) / 127 : 0, gain = 1 + (cl ? P(cl) / 127 : 0) * 7, hard = ht ? P(ht) / 127 : 0, bits = dr ? 2 + (1 - P(dr) / 127) * 30 : 0;
+	const src = u => (Math.sin(2 * Math.PI * 2 * u) + H_ * .45 * Math.sin(2 * Math.PI * 6 * u)) / (1 + H_ * .3);
+	const shp = x => { const s = Math.tanh(gain * x) / Math.tanh(gain), q = clamp(gain * x, -1, 1); let y = (1 - hard) * s + hard * q; if (bits) y = Math.round(y * bits) / bits; return y; };
+	const rails = [], h = [];
+	if (cl) h.push([cl, G.X(.06), G.mid - G.amp * shp(src(.06)), "y"]);
+	if (hm) h.push([hm, G.X(.208), G.mid - G.amp * shp(src(.208)), "y"]);
+	if (ht) rails.push(rail(G, 0, ht, P));
+	if (dr) rails.push(rail(G, rails.length, dr, P));
+	rails.forEach(r => h.push([r.n, r.x, r.y, "x"]));
+	return { h, label: dr ? "bits · drive" : cl && !hm ? "drive" : "tone", paint(g) {
+		curveU(g, G, u => G.mid - G.amp * src(u), inkA(.35), 1.2, [3, 3]);
+		curveU(g, G, u => G.mid - G.amp * shp(src(u)), inkL(), 2.2); paintRails(g, rails);
+	} };
+});
+/* CLAPS: the hands one after another: CLPY CLPS how many, RATE how far apart, HARD how sharp, CDEC the
+   last one's tail. */
+function clapsOf(P, cnt, rate, hard, cdec) {
+	const n = 1 + Math.round((cnt ? P(cnt) : 64) / 127 * 7), sp = .025 + (rate ? P(rate) / 127 : .4) * .1, hd = hard ? P(hard) / 127 : .5, dk = .02 + (cdec ? P(cdec) / 127 : .4) * .2;
+	const env = u => { let e = 0; for (let i = 0; i < n; i++) { const d = u - i * sp; if (d < 0) break; const last = i === n - 1; e = Math.max(e, (last ? 1 : .55 + .35 * hd) * Math.exp(-d / (last ? dk : .006 + .012 * (1 - hd)))); } return e; };
+	return { n, sp, hd, dk, env, end: (n - 1) * sp };
+}
+ED.claps = synEd((P, role, G) => {
+	const cnt = role("CLPY", "CLPS"), rate = role("RATE"), hard = role("HARD"), cdec = role("CDEC"), C = clapsOf(P, cnt, rate, hard, cdec), h = [];
+	if (cnt) h.push([cnt, G.X(C.end), G.mid - G.amp, "x"]);
+	if (rate && C.n > 1) h.push([rate, G.X(C.sp), G.mid - G.amp * (.55 + .35 * C.hd), "x"]);
+	if (hard) h.push([hard, G.X(0) + 2, G.mid - G.amp * (C.n > 1 ? .55 + .35 * C.hd : 1), "y"]);
+	if (cdec) h.push([cdec, G.X(C.end + C.dk), G.mid - G.amp / Math.E, "x"]);
+	return { h, label: `${C.n} ${C.n > 1 ? "claps" : "clap"}`, paint(g) {
+		curveU(g, G, u => G.mid - G.amp * C.env(u), inkA(.45), 1, [3, 3]);
+		curveU(g, G, u => G.mid - G.amp * C.env(u) * rnd(Math.round(u * 500)), inkL(), 1.6);
+	} };
+});
+/* ROOM: the claps (faint), then the room: ROOM how loud, RSIZ how long, RTUN its tone (smoother lower). */
+ED.room = synEd((P, role, G) => {
+	const C = clapsOf(P, "CLPY", "RATE", "HARD"), R = P("ROOM") / 127 * .8, len = .06 + P("RSIZ") / 127 * .5, sm = 1 + Math.round((1 - P("RTUN") / 127) * 6), t0 = C.end + .02;
+	const tail = u => u < t0 ? 0 : R * Math.exp(-(u - t0) / len) * Math.min(1, (u - t0) / .03);
+	const nz = u => { let s = 0; const i = Math.round(u * 500); for (let k = 0; k < sm; k++) s += rnd(i - k); return s / Math.sqrt(sm); };
+	const r = rail(G, 0, "RTUN", P);
+	return { h: [["ROOM", G.X(t0 + .05), G.mid - G.amp * tail(t0 + .05), "y"], ["RSIZ", G.X(t0 + .03 + len), G.mid - G.amp * tail(t0 + .03 + len), "x"], ["RTUN", r.x, r.y, "x"]], label: "room", paint(g) {
+		curveU(g, G, u => G.mid - G.amp * C.env(u) * rnd(Math.round(u * 500)), inkA(.35), 1.2);
+		curveU(g, G, u => G.mid - G.amp * tail(u), inkA(.45), 1, [3, 3]);
+		curveU(g, G, u => G.mid - G.amp * clamp(tail(u) * nz(u), -1, 1), inkL(), 1.6); paintRails(g, [r]);
+	} };
+});
+/* SPECTRUM: the sound's tone, low to high: TONE TTUN where its colour sits, RICH TOP ENH HARD how much
+   of it; BR the lows, AU less highs, AG more highs. */
+ED.spec = synEd((P, role, G) => {
+	const ce = role("TONE", "TTUN"), lv = role("RICH", "TOP", "ENH", "HARD"), br = role("BR"), au = role("AU"), ag = role("AG");
+	const c = ce ? .15 + P(ce) / 127 * .75 : .5, L = lv ? P(lv) / 127 : 0, sg = x => 1 / (1 + Math.exp(-x));
+	const f = u => .45 - .2 * u + (ce || lv ? L * .4 * Math.exp(-Math.pow((u - c) / .1, 2)) : 0) + (br ? P(br) / 127 * .3 * sg((.25 - u) * 18) : 0) - (au ? P(au) / 127 * .3 * sg((u - .6) * 14) : 0) + (ag ? P(ag) / 127 * .3 * sg((u - .8) * 22) : 0);
+	const h = [];
+	if (ce && lv) h.push([[ce, lv], G.X(c), G.Y(f(c)), "xy"]);
+	if (br) h.push([br, G.X(.06), G.Y(f(.06)), "y"]);
+	if (au) h.push([au, G.X(.72), G.Y(f(.72)), "y"]);
+	if (ag) h.push([ag, G.X(.97), G.Y(f(.97)), "y"]);
+	return { h, label: br ? "low · high" : "tone", paint(g) {
+		g.fillStyle = inkA(.12); g.beginPath(); g.moveTo(0, G.H); for (let x = 0; x <= G.W; x++) g.lineTo(x, G.Y(f(clamp((x - 8) / (G.W - 16), 0, 1)))); g.lineTo(G.W, G.H); g.fill();
+		curveU(g, G, u => G.Y(f(u)), inkL(), 2.2);
+	} };
+});
+/* METAL: the partials of a metal or a shell, low to high: PTCH moves them, GAP TUNE spread them, SIZE
+   makes the body bigger (lower), MTAL RICH CLSN HARD lift the upper ones, RING PEAK add the highest. */
+ED.metal = synEd((P, role, G) => {
+	const pt = role("PTCH"), sp = role("GAP", "TUNE"), sz = role("SIZE"), a1 = role("MTAL", "RICH", "CLSN", "HARD"), a2 = role("RING", "PEAK");
+	const R = [1, 1.47, 1.93, 2.41, 2.88, 3.36, 3.83, 4.3, 4.9, 5.4, 5.9, 6.5];
+	const f0 = (.05 + (pt ? P(pt) / 127 : .3) * .2) * (sz ? 1.4 - P(sz) / 127 * .8 : 1), spr = .45 + (sp ? P(sp) / 127 : .4) * .7;
+	const up = a1 ? P(a1) / 127 : .5, hi = a2 ? P(a2) / 127 : 0;
+	const parts = R.map((r, k) => ({ u: f0 * (1 + (r - 1) * spr), v: k === 0 ? .85 : k < 8 ? (.2 + .65 * up) * (1 - k / 11) * (.75 + .25 * Math.abs(rnd(k))) : hi * (.8 - (k - 8) * .12) })).filter(p => p.u <= 1);
+	const at = k => parts[Math.min(k, parts.length - 1)], h = [];
+	if (pt) h.push([pt, G.X(at(0).u), G.Y(at(0).v), "x"]);
+	if (sz) h.push([sz, G.X(at(0).u), G.Y(at(0).v), "x"]);
+	if (sp) h.push([sp, G.X(at(3).u), G.Y(at(3).v), "x"]);
+	if (a1) h.push([a1, G.X(at(2).u), G.Y(at(2).v), "y"]);
+	if (a2 && parts.length > 8) h.push([a2, G.X(parts[8].u), G.Y(parts[8].v), "y"]);
+	else if (a2) h.push([a2, G.X(.98), G.Y(hi * .8), "y"]);
+	return { h, label: "partials", paint(g) { g.fillStyle = inkL(); parts.forEach(p => { const x = G.X(p.u), y = G.Y(p.v); g.fillRect(Math.round(x) - 1.5, y, 3, G.Y(0) - y); }); g.fillStyle = inkA(.4); g.fillRect(0, G.Y(0), G.W, 1.5); } };
+});
+/* OSC: the drum's body after a trig: PTCH how fast it swings, DEC how long (dashed), DAMP shortens it,
+   TUNE beats against a second skin, RING ENH add overtones, SNAP a snap at the start. */
+ED.osc = synEd((P, role, G) => {
+	const pt = role("PTCH"), de = role("DEC"), dm = role("DAMP"), tu = role("TUNE"), rg = role("RING", "ENH"), sn = role("SNAP");
+	const cyc = 2 + (pt ? P(pt) : 64) / 127 * 14, k = (.04 + (de ? P(de) : 64) / 127 * .55) * (dm ? 1 - .65 * P(dm) / 127 : 1);
+	const tn = tu ? P(tu) / 127 : 0, rr = rg ? P(rg) / 127 : 0, s = sn ? P(sn) / 127 : 0, e = u => Math.exp(-u / k);
+	const w = u => e(u) * ((Math.sin(2 * Math.PI * cyc * u) * (1 - .3 * tn) + .3 * tn * Math.sin(2 * Math.PI * cyc * (1 + .08 * tn) * u) + rr * .35 * Math.sin(2 * Math.PI * cyc * 2.7 * u)) / (1 + rr * .35)) + (u < .02 ? s * .6 * (1 - u / .02) : 0);
+	const h = [], rails = [], q = 1 / (4 * cyc);
+	if (pt) h.push([pt, G.X(q), G.mid - G.amp * w(q), "x"]);
+	if (de) h.push([de, G.X(Math.min(1, k * Math.log(4))), G.mid - G.amp * .25, "x"]);
+	if (sn) h.push([sn, G.X(0) + 2, G.mid - G.amp * clamp(w(0), -1, 1), "y"]);
+	[dm, tu, rg].filter(Boolean).forEach(n => rails.push(rail(G, rails.length, n, P)));
+	rails.forEach(r => h.push([r.n, r.x, r.y, "x"]));
+	return { h, label: "body", paint(g) {
+		curveU(g, G, u => G.mid - G.amp * e(u), inkA(.45), 1, [3, 3]); curveU(g, G, u => G.mid + G.amp * e(u), inkA(.45), 1, [3, 3]);
+		curveU(g, G, u => G.mid - G.amp * clamp(w(u), -1, 1), inkL(), 1.8); paintRails(g, rails);
+	} };
+});
+/* FM: the carrier after a trig, its tone moved by the modulator: MOD SMOD how much (dashed: the
+   modulation index), MDEC how long, MFRQ its frequency, MFB FB its feedback; SNAR SPTC SDEC the snare
+   voice's level, pitch and decay. The carrier's pitch and decay are the track's PTCH and DEC. */
+ED.fm = synEd((P, role, G) => {
+	const md = role("MOD", "SMOD"), mf = role("MFRQ"), mk = role("MDEC"), fb = role("MFB", "FB"), lv = role("SNAR"), pt = role("SPTC", "PTCH"), de = role("SDEC", "DEC"), hp = role("HPF");
+	const cyc = 2 + (pt ? P(pt) : synV("PTCH") ?? 64) / 127 * 12, k = .05 + (de ? P(de) : synV("DEC") ?? 64) / 127 * .55, L = lv ? .15 + P(lv) / 127 * .85 : 1;
+	const I = u => (md ? P(md) : 64) / 127 * 5 * Math.exp(-u / (mk ? .02 + P(mk) / 127 * .5 : .15)), ratio = .5 + (mf ? P(mf) : 40) / 127 * 7.5, F = fb ? P(fb) / 127 * 1.4 : 0;
+	const N = 600, ys = []; let prev = 0;
+	for (let i = 0; i <= N; i++) { const u = i / N, y = L * Math.exp(-u / k) * Math.sin(2 * Math.PI * cyc * u + I(u) * Math.sin(2 * Math.PI * cyc * ratio * u) + F * prev); ys.push(y); prev = y; }
+	const yI = u => G.Y(.55 + .45 * Math.min(1, I(u) / 5)), h = [], rails = [];
+	if (md) h.push([md, G.X(0) + 2, yI(0), "y"]);
+	if (mk) { const t = .02 + P(mk) / 127 * .5; h.push([mk, G.X(Math.min(1, t)), yI(t), "x"]); }
+	if (lv) h.push([lv, G.X(.5), G.mid - G.amp * L * Math.exp(-.5 / k), "y"]);
+	if (de) h.push([de, G.X(Math.min(1, k * Math.log(4))), G.mid + G.amp * L * .25, "x"]);
+	[mf, fb, pt, hp].filter(Boolean).forEach(n => rails.push(rail(G, rails.length, n, P)));
+	rails.forEach(r => h.push([r.n, r.x, r.y, "x"]));
+	return { h, label: lv ? "snare voice · fm" : "fm", paint(g) {
+		curveU(g, G, u => G.mid + G.amp * L * Math.exp(-u / k), inkA(.4), 1, [3, 3]);
+		curveU(g, G, yI, inkA(.55), 1.2, [2, 3]);
+		curveU(g, G, u => G.mid - G.amp * ys[Math.round(u * N)], inkL(), 1.6); paintRails(g, rails);
+	} };
+});
+/* NOISE: a noise burst after a trig: NOISE RVOL SNAP how loud, NDEC RDEC how long, HPF thins it. */
+ED.noise = synEd((P, role, G) => {
+	const lv = role("NOISE", "RVOL", "SNAP"), de = role("NDEC", "RDEC"), hp = role("HPF");
+	const L = lv ? P(lv) / 127 : .6, k = de ? .02 + P(de) / 127 * .4 : .07, sm = hp ? 1 + Math.round((1 - P(hp) / 127) * 5) : 3, e = u => L * Math.exp(-u / k);
+	const nz = u => { let s = 0; const i = Math.round(u * 500); for (let j = 0; j < sm; j++) s += rnd(i - j); return s / Math.sqrt(sm); };
+	const h = [], rails = [];
+	if (lv) h.push([lv, G.X(0) + 2, G.mid - G.amp * L, "y"]);
+	if (de) h.push([de, G.X(Math.min(1, k)), G.mid - G.amp * e(k), "x"]);
+	if (hp) { rails.push(rail(G, 0, hp, P)); h.push([hp, rails[0].x, rails[0].y, "x"]); }
+	return { h, label: "noise", paint(g) { curveU(g, G, u => G.mid - G.amp * e(u), inkA(.45), 1, [3, 3]); curveU(g, G, u => G.mid - G.amp * clamp(e(u) * nz(u), -1, 1), inkL(), 1.4); paintRails(g, rails); } };
+});
+/* STRIKE: the mallet's hit: HARD how hard (taller), HAMR a softer mallet (wider), TENS the skin's pitch
+   rising under a hard hit (dashed), POS from the centre to the edge. */
+ED.strike = synEd((P, role, G) => {
+	const hd = role("HARD"), hm = role("HAMR"), te = role("TENS"), po = role("POS");
+	const A = .3 + (hd ? P(hd) : 64) / 127 * .65, w = .02 + (hm ? P(hm) / 127 : .3) * .2, T = te ? P(te) / 127 : 0, ps = po ? P(po) / 127 : 0;
+	const pulse = u => u < w ? A * Math.sin(Math.PI * u / w) : 0, ring = u => u < w ? 0 : A * .35 * Math.exp(-(u - w) / .25) * Math.sin(2 * Math.PI * (5 + 6 * ps) * (u - w)) * (1 - .5 * ps) + A * .15 * ps * Math.exp(-(u - w) / .25) * Math.sin(2 * Math.PI * 17 * (u - w));
+	const pit = u => .62 + T * .3 * Math.exp(-u / .08), h = [], rails = [];
+	if (hd) h.push([hd, G.X(w / 2), G.Y(A), "y"]);
+	if (hm) h.push([hm, G.X(w), G.Y(.2), "x"]);
+	if (te) h.push([te, G.X(0) + 2, G.Y(pit(0)), "y"]);
+	if (po) { rails.push(rail(G, 0, po, P)); h.push([po, rails[0].x, rails[0].y, "x"]); }
+	return { h, label: "strike", paint(g) {
+		if (te) curveU(g, G, u => G.Y(pit(u)), inkA(.55), 1.2, [3, 3]);
+		curveU(g, G, u => G.Y(.2 + pulse(u) * .78 + ring(u) * .5), inkL(), 2); hLine(g, G.Y(.2), G.W, .25); paintRails(g, rails);
+	} };
+});
+/* GRAINS: the maraca's grains or rattle: GRNS RATL how many, DAMP fewer, GLEN how long each, SIZE how
+   long the shake, HARD how loud each, RTYP the kind of rattle. */
+ED.grains = synEd((P, role, G) => {
+	const cn = role("GRNS", "RATL"), dm = role("DAMP"), gl = role("GLEN"), sz = role("SIZE"), hd = role("HARD"), ty = role("RTYP");
+	const n = Math.round(6 + (cn ? P(cn) : 64) / 127 * 60 * (dm ? 1 - .75 * P(dm) / 127 : 1)), span = .2 + (sz ? P(sz) / 127 : .6) * .78, lw = 1 + (gl ? P(gl) / 127 : .3) * 5;
+	const A = .3 + (hd ? P(hd) : 64) / 127 * .65, seed = ty ? Math.round(P(ty) / 16) * 31 : 0;
+	const gr = Array.from({ length: n }, (_, i) => { const u = (i + .5 + rnd(i + seed) * .45) / n * span; return { u, v: A * Math.exp(-u / span * 1.4) * (.55 + .45 * Math.abs(rnd(i * 7 + seed))) }; });
+	const h = [], rails = [];
+	if (sz) h.push([sz, G.X(span), G.Y(0) - 2, "x"]);
+	if (hd) h.push([hd, G.X(gr[0].u), G.Y(gr[0].v), "y"]);
+	[cn, dm, gl, ty].filter(Boolean).forEach(x => rails.push(rail(G, rails.length, x, P)));
+	rails.forEach(r => h.push([r.n, r.x, r.y, "x"]));
+	return { h, label: `${n} grains`, paint(g) { g.fillStyle = inkL(); gr.forEach(p => { const y = G.Y(p.v); g.fillRect(Math.round(G.X(p.u)), y, lw, G.Y(0) - y); }); g.fillStyle = inkA(.4); g.fillRect(0, G.Y(0), G.W, 1.5); paintRails(g, rails); } };
+});
+/* TREMOLO: the level the modulation leaves: TREM MOD how deep (the dot's height), TFRQ MFRQ how fast. */
+ED.trem = synEd((P, role, G) => {
+	const dp = role("TREM", "MOD"), fq = role("TFRQ", "MFRQ"), d = P(dp) / 127, cyc = 1 + P(fq) / 127 * 9;
+	return { h: [[[fq, dp], G.X(P(fq) / 127), G.Y(1 - d) + 2, "xy"]], label: "tremolo", paint(g) { curveU(g, G, u => G.Y(1 - d * (.5 - .5 * Math.cos(2 * Math.PI * cyc * u))), inkL(), 2); hLine(g, G.Y(1 - d), G.W, .3); } };
+});
+/* RESPONSE: a filter, low to high: HP HPF FILTF from below, LPF LP FFRQ from above (FILTW the band's
+   width), HPQ FQ the peak at its edge. */
+ED.resp = synEd((P, role, G) => {
+	const hpn = role("HP", "HPF", "FILTF"), lpn = role("LPF", "LP", "FFRQ"), bw = role("FILTW"), qn = role("HPQ", "FQ");
+	const hp = hpn ? P(hpn) / 127 : 0, lp = bw ? Math.min(1, hp + P(bw) / 127) : lpn ? P(lpn) / 127 : 1, q = qn ? P(qn) / 127 : 0, qAt = hpn && !lpn ? hp : lp;
+	const d = u => (u < hp ? -Math.pow((hp - u) * 7, 2) : 0) + (u > lp ? -Math.pow((u - lp) * 7, 2) : 0) + q * 1.6 * Math.exp(-Math.pow((u - qAt) * 26, 2));
+	const yy = u => clamp(G.H / 2 + 4 - d(u) * (G.H / 4), 6, G.H - 6), h = [];
+	if (hpn) h.push(qn && !lpn ? [[hpn, qn], G.X(hp), yy(hp), "xy"] : [hpn, G.X(hp), yy(hp), "x"]);
+	if (lpn) h.push(qn ? [[lpn, qn], G.X(lp), yy(lp), "xy"] : [lpn, G.X(lp), yy(lp), "x"]);
+	if (bw) h.push([bw, G.X(lp), yy(lp), "x"]);
+	return { h, label: hpn && (lpn || bw) ? "band" : hpn ? "high pass" : "low pass", paint(g) { curveU(g, G, yy, inkL(), 2.2); } };
+});
+/* IMPULSE: UP and DOWN how long it stays positive and negative, UVAL and DVAL how far. */
+ED.imp = synEd((P, role, G) => {
+	const u0 = .05, up = .02 + P("UP") / 127 * .42, dn = .02 + P("DOWN") / 127 * .42, uv = P("UVAL") / 127, dv = P("DVAL") / 127;
+	const f = u => u < u0 ? 0 : u < u0 + up ? uv : u < u0 + up + dn ? -dv : 0;
+	return { h: [[["UP", "UVAL"], G.X(u0 + up), G.mid - G.amp * uv, "xy"], [["DOWN", "DVAL"], G.X(Math.min(1, u0 + up + dn)), G.mid + G.amp * dv, "xy"]], label: "impulse",
+		paint(g) { hLine(g, G.mid, G.W, .3); curveU(g, G, u => G.mid - G.amp * f(u), inkL(), 2.2); } };
+});
+/* INPUT GATE: the input's level (faint) and what passes: above GATE (dashed), at VOL ALEV. */
+ED.ingate = synEd((P, role, G) => {
+	const vo = role("VOL", "ALEV"), ga = role("GATE"), th = P(ga) / 127, V_ = P(vo) / 127;
+	const hits = [[.04, 1], [.3, .45], [.52, .8], [.78, .3]], e = u => Math.max(0, ...hits.map(([t, a]) => u < t ? 0 : a * Math.exp(-(u - t) / .07))), o = u => e(u) > th ? e(u) * V_ : 0;
+	return { h: [[ga, G.X(.97), G.Y(th * .9), "y"], [vo, G.X(.04) + 3, G.Y(o(.041) * .9), "y"]], label: "input gate",
+		paint(g) { curveU(g, G, u => G.Y(e(u) * .9), inkA(.35), 1.2); hLine(g, G.Y(th * .9), G.W, .5); curveU(g, G, u => G.Y(o(u) * .9), inkL(), 2); } };
+});
+const NOTE_N = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"];
+const noteName = v => NOTE_N[v % 12] + (Math.floor(v / 12) - 2);
+/* CHORD: the notes a trig sends: NOTE (the keyboard at the foot), N2 and N3 semitones above it. */
+ED.chord = synEd((P, role, G) => {
+	const nt = P("NOTE"), top = 26, bot = G.H - 22, sy = s => bot - Math.min(24, s) / 24 * (bot - top), len = .15 + synV("LEN") / 127 * .8;
+	const h = [["NOTE", G.X(nt / 127), G.H - 8, "x"], ["N2", G.X(.5), sy(P("N2")), "y"], ["N3", G.X(.7), sy(P("N3")), "y"]];
+	return { h, label: [noteName(nt), P("N2") && "+" + P("N2"), P("N3") && "+" + P("N3")].filter(Boolean).join(" "), paint(g) {
+		for (let s = 0; s <= 24; s++) { g.fillStyle = inkA([1, 3, 6, 8, 10].includes((nt + s) % 12) ? .1 : .04); g.fillRect(0, sy(s) - (bot - top) / 48, G.W, (bot - top) / 24); }
+		g.fillStyle = inkL(); [0, P("N2"), P("N3")].forEach((s, i) => { if (i && !s) return; g.fillRect(G.X(.04), sy(s) - 3, G.X(len) - G.X(.04), 6); });
+		for (let k = 0; k < 128; k++) { g.fillStyle = [1, 3, 6, 8, 10].includes(k % 12) ? inkA(.6) : inkA(.18); g.fillRect(G.X(k / 127), G.H - 12, Math.max(1, (G.W - 16) / 128 - .4), 8); }
+	} };
+});
+/* NOTE: one note as a bar: LEN how long, VEL how loud (the corner). */
+ED.note = synEd((P, role, G) => {
+	const x1 = G.X(.04 + P("LEN") / 127 * .92), y = G.Y(P("VEL") / 127);
+	return { h: [[["LEN", "VEL"], x1, y, "xy"]], label: "note", paint(g) { g.fillStyle = inkA(.22); g.fillRect(G.X(.04), y, x1 - G.X(.04), G.Y(0) - y); g.fillStyle = inkL(); g.fillRect(G.X(.04), y, x1 - G.X(.04), 2.5); g.fillRect(G.X(.04), G.Y(0), G.W - 16, 1.5); } };
+});
+/* BARS: one bar a knob (PB from the middle, as the wheel). */
+ED.bars = synEd((P, role, G, ks) => {
+	const bip = n => n === "PB", xs = ks.map((_, i) => G.X((i + .5) / ks.length)), bw = Math.min(26, (G.W - 16) / ks.length * .45);
+	const top = n => bip(n) ? G.Y(.5 + (P(n) - 64) / 127) : G.Y(P(n) / 127), base = n => bip(n) ? G.Y(.5) : G.Y(0);
+	return { h: ks.map((n, i) => [n, xs[i], top(n), "y"]), label: ks.length > 2 ? "controllers" : "cue sends", paint(g) {
+		g.font = "10px Silkscreen, ui-monospace, monospace";
+		ks.forEach((n, i) => { g.fillStyle = inkA(.15); g.fillRect(xs[i] - bw / 2, G.Y(1), bw, G.Y(0) - G.Y(1)); g.fillStyle = inkL(); const a = top(n), b = base(n); g.fillRect(xs[i] - bw / 2, Math.min(a, b), bw, Math.max(2, Math.abs(b - a))); });
+	} };
+});
+/* LEVEL · BALANCE: an input in the stereo field: BAL sideways, LEV up. */
+ED.lvbal = synEd((P, role, G, ks) => {
+	const lv = ks.find(n => /LEV$/.test(n)), bl = ks.find(n => /BAL$/.test(n)), x = G.X(P(bl) / 127), y = G.Y(P(lv) / 127);
+	return { h: [[[bl, lv], x, y, "xy"]], label: lv.startsWith("M") ? "main out" : "inputs a/b", paint(g) {
+		hLine(g, G.Y(.5), G.W, .2); g.strokeStyle = inkA(.45); g.setLineDash([3, 3]); g.beginPath(); g.moveTo(G.W / 2 + .5, G.Y(1)); g.lineTo(G.W / 2 + .5, G.Y(0)); g.stroke(); g.setLineDash([]);
+		g.fillStyle = inkA(.22); g.fillRect(x - 7, y, 14, G.Y(0) - y); g.fillStyle = inkL(); g.fillRect(8, G.Y(0), G.W - 16, 1.5);
+	} };
+});
+/* ECHO: the repeats: TIME apart, FB how much each keeps (the second tap). */
+ED.taps = synEd((P, role, G) => {
+	const t = .03 + P("TIME") / 127 * .3, fb = P("FB") / 127 * .95, taps = [];
+	for (let k = 0; .04 + k * t <= 1 && k < 40; k++) { const a = .9 * Math.pow(fb, k); if (k && a < .02) break; taps.push([.04 + k * t, a]); }
+	return { h: [[["TIME", "FB"], G.X(.04 + t), G.Y(.9 * fb), "xy"]], label: "echo", paint(g) { g.fillStyle = inkL(); taps.forEach(([u, a], i) => { const y = G.Y(a); g.fillStyle = i ? inkL() : inkA(.5); g.fillRect(Math.round(G.X(u)) - 2, y, 4, G.Y(0) - y); }); } };
+});
+/* REVERB: the dry hit (DVOL), PRED later the tail, DEC long, DAMP smoother. */
+ED.verb = synEd((P, role, G) => {
+	const dry = P("DVOL") / 127 * .9, s = .05 + P("PRED") / 127 * .3, k = .03 + P("DEC") / 127 * .45, sm = 1 + Math.round(P("DAMP") / 127 * 6), tail = u => u < s ? 0 : .6 * Math.exp(-(u - s) / k) * Math.min(1, (u - s) / .02);
+	const nz = u => { let a = 0; const i = Math.round(u * 500); for (let j = 0; j < sm; j++) a += Math.abs(rnd(i - j)); return a / sm * 1.6; }, r = rail(G, 0, "DAMP", P);
+	return { h: [["DVOL", G.X(.03), G.Y(dry), "y"], ["PRED", G.X(s), G.Y(.6), "x"], ["DEC", G.X(Math.min(1, s + k)), G.Y(tail(s + k)), "x"], ["DAMP", r.x, r.y, "x"]], label: "gate box", paint(g) {
+		g.fillStyle = inkL(); g.fillRect(G.X(.03) - 2, G.Y(dry), 4, G.Y(0) - G.Y(dry));
+		curveU(g, G, u => G.Y(tail(u)), inkA(.45), 1, [3, 3]); curveU(g, G, u => G.Y(Math.min(1, tail(u) * nz(u))), inkL(), 1.4); paintRails(g, [r]);
+	} };
+});
+/* EQ (CTR-EQ): the master EQ's curve from this machine's knobs: the shelves at LF and HF, the peak at
+   PF with its width PQ; the gains LG PG HG up to boost. */
+ED.eq3 = synEd((P, role, G) => {
+	const r = u => (P("LG") - 64) / 64 / (1 + Math.exp((u - P("LF") / 127) * 18)) + (P("HG") - 64) / 64 / (1 + Math.exp(-(u - P("HF") / 127) * 18)) + (P("PG") - 64) / 64 * Math.exp(-Math.pow((u - P("PF") / 127) * (4 + P("PQ") / 8), 2));
+	const y = u => G.H / 2 + 4 - r(u) * (G.H / 3), rq = rail(G, 0, "PQ", P);
+	return { h: [[["LF", "LG"], G.X(P("LF") / 127), y(P("LF") / 127), "xy"], [["PF", "PG"], G.X(P("PF") / 127), y(P("PF") / 127), "xy"], [["HF", "HG"], G.X(P("HF") / 127), y(P("HF") / 127), "xy"], ["PQ", rq.x, rq.y, "x"]],
+		label: "master eq", paint(g) { hLine(g, G.H / 2 + 4, G.W, .3); curveU(g, G, y, inkL(), 2.2); paintRails(g, [rq]); } };
+});
+/* CURVE (CTR-DX): the compressor, input to output (dashed = unchanged): TRHD where it starts, RTIO how
+   much it holds back, KNEE how softly. */
+ED.comp = synEd((P, role, G) => {
+	const th = P("TRHD") / 127, ra = 1 + P("RTIO") / 127 * 9, kn = Math.max(.001, P("KNEE") / 127 * .25);
+	const o = i => i <= th - kn ? i : i >= th + kn ? th + (i - th) / ra : i + ((1 / ra - 1) * Math.pow(i - th + kn, 2)) / (4 * kn), rk = rail(G, 0, "KNEE", P);
+	return { h: [["TRHD", G.X(th), G.Y(o(th)), "x"], ["RTIO", G.X(1) - 2, G.Y(o(1)), "y"], ["KNEE", rk.x, rk.y, "x"]], label: "in → out", paint(g) {
+		g.strokeStyle = inkA(.45); g.setLineDash([3, 3]); g.beginPath(); g.moveTo(G.X(0), G.Y(0)); g.lineTo(G.X(1), G.Y(1)); g.stroke(); g.setLineDash([]);
+		curveU(g, G, u => G.Y(o(u)), inkL(), 2.2); paintRails(g, [rk]);
+	} };
+});
 function grid(g, W, H) { g.strokeStyle = inkA(0.13); g.lineWidth = 1; for (let i = 1; i < 4; i++) { g.beginPath(); g.moveTo(0, Math.round(H * i / 4) + .5); g.lineTo(W, Math.round(H * i / 4) + .5); g.stroke(); } for (let i = 1; i < 8; i++) { g.beginPath(); g.moveTo(Math.round(W * i / 8) + .5, 0); g.lineTo(Math.round(W * i / 8) + .5, H); g.stroke(); } }
 function line(g, W, fy, c, w, dash) { g.strokeStyle = c; g.lineWidth = w; g.setLineDash(dash || []); g.beginPath(); for (let x = 0; x <= W; x += 1) { const y = fy(x); x ? g.lineTo(x, y) : g.moveTo(x, y); } g.stroke(); g.setLineDash([]); }
 function label(g, t) { g.fillStyle = cssv("--ink"); g.font = "10px Silkscreen, ui-monospace, monospace"; g.fillText(t.toUpperCase(), 8, 14); }
@@ -1037,10 +1688,26 @@ function openK(btn) {
 	const sel = document.getElementById(btn.dataset.for); kFor = btn; const pop = $("#kpop"); let n = 0, h = "";
 	for (const node of sel.children) { if (node.tagName === "OPTGROUP") { h += `<div class="kgrp">${node.label}</div>`; for (const o of node.children) { h += kopt(o, sel); n++; } } else { h += kopt(node, sel); n++; } }
 	const cols = n > 18 ? 3 : n > 9 ? 2 : 1; pop.innerHTML = `<div class="klist" style="grid-template-columns:repeat(${cols},minmax(0,1fr))">${h}</div>`;
-	pop.hidden = false; pop.style.minWidth = Math.max(btn.offsetWidth, cols * 150) + "px"; const r = btn.getBoundingClientRect();
-	pop.style.top = (r.bottom + scrollY + 4) + "px"; pop.style.left = Math.max(16, Math.min(r.left + scrollX, innerWidth - pop.offsetWidth - 16)) + "px"; btn.setAttribute("aria-expanded", "true");
-	(pop.querySelector(".kopt[aria-selected=true]") || pop.querySelector(".kopt"))?.focus();
+	pop.hidden = false; pop.style.minWidth = Math.max(btn.offsetWidth, cols * 150) + "px"; placeK(); btn.setAttribute("aria-expanded", "true");
+	(pop.querySelector(".kopt[aria-selected=true]") || pop.querySelector(".kopt"))?.focus({ preventScroll: true });
 }
+/* The popup beside its button, inside the window: below when it fits, else above; neither: the side
+   with more room, its height capped (the list scrolls). Fixed to the viewport, placed again on resize
+   and scroll. */
+function placeK() {
+	const pop = $("#kpop"), btn = kFor; if (pop.hidden || !btn) return;
+	if (!btn.isConnected) { closeK(); return; }
+	const M = 8, G = 4, r = btn.getBoundingClientRect(), vw = document.documentElement.clientWidth, vh = document.documentElement.clientHeight;
+	pop.style.position = "fixed"; pop.style.maxHeight = ""; pop.style.overflowY = ""; pop.style.top = "0px"; pop.style.left = "0px";
+	const h = pop.offsetHeight, w = pop.offsetWidth, below = vh - r.bottom - G - M, above = r.top - G - M;
+	const down = h <= below || (h > above && below >= above);
+	if (h > (down ? below : above)) { pop.style.maxHeight = Math.max(80, down ? below : above) + "px"; pop.style.overflowY = "auto"; }
+	const hh = pop.offsetHeight;
+	pop.style.top = Math.round(down ? r.bottom + G : Math.max(M, r.top - G - hh)) + "px";
+	pop.style.left = Math.round(Math.max(M, Math.min(r.left, vw - w - M))) + "px";
+}
+addEventListener("resize", placeK);
+addEventListener("scroll", e => { if (!$("#kpop").contains(e.target)) placeK(); }, true);
 function kopt(o, sel) { if (o.hidden) return ""; return `<button class="kopt" role="option" data-v="${o.value}" aria-selected="${o.value === sel.value}"${o.disabled ? ` disabled aria-disabled="true" title="${o.title || "Not available"}"` : ""}>${o.text}</button>`; }
 function closeK() { const pop = $("#kpop"); if (pop.hidden) return; pop.hidden = true; kFor?.setAttribute("aria-expanded", "false"); }
 document.addEventListener("click", e => {

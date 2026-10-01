@@ -550,12 +550,12 @@ if (/[?&]selftest=p7tweak/.test(location.search)) (async () => {
 	await dragBox('#main .pc[data-g="syn"]', "Sound: a synthesis box");
 	await dragBox('#main .pc[data-g="fx"]', "Sound: an effects box");
 	await dragBox('#main .pc[data-g="lfo"][data-n="SPD"]', "Sound: the LFO section's SPD");
-	/* a curve editor: the effects filter's first handle (FLTF, FLTQ) */
+	/* a curve editor: the FILTER module's first handle (FLTF, FLTQ) */
 	{
-		const c = $('#main canvas.ed[data-ed="fx"]');
+		const c = $('#main canvas.ed[data-ed="flt"]');
 		if (!c) check("Sound: a curve editor", false, "no effects editor");
 		else {
-			const before = snap(), r = c.getBoundingClientRect(), h = ED.fx.handles(r.width, r.height, c)[0];
+			const before = snap(), r = c.getBoundingClientRect(), h = ED.flt.handles(r.width, r.height, c)[0];
 			const x = r.left + h.x, y = r.top + h.y;
 			pe("pointerdown", c, x, y);
 			for (let i = 1; i <= 6; i++) { $("#main").dispatchEvent(new PointerEvent("pointermove", { bubbles: true, pointerId: 11, pointerType: "mouse", buttons: 1, clientX: x + i * 3, clientY: y, altKey: true })); await sleep(20); }

@@ -1374,8 +1374,6 @@ body.liverec .st,body.liverec .lb{cursor:cell}
    canvas' place, so the Sound screen's stretch rules apply to it. */
 .wavebox{position:relative;min-width:0}
 .wavebox>canvas.ed{width:100%}
-.soundgrid>.card>.wavebox{min-height:150px}
-.soundgrid>.card>.wavebox>canvas.ed{height:100%!important;min-height:150px}
 .wavebox .aud,.romtile .aud{all:unset;position:absolute;top:6px;right:6px;cursor:pointer;display:inline-flex;align-items:center;gap:4px;height:18px;padding:0 6px;border-radius:2px;
   font:12px var(--pix);text-transform:uppercase;color:var(--ink);background:var(--lcd);box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--ink) 55%,transparent)}
 .wavebox .aud svg,.romtile .aud svg{width:8px;height:8px;fill:currentColor}
@@ -1487,3 +1485,61 @@ body.liverec .st,body.liverec .lb{cursor:cell}
 .pbtake{font:12px var(--mono);color:var(--print2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
 /* a value in the manual's units (RAM-R LEN, RATE) beside the raw one */
 .pc .pu{position:relative;margin-left:auto;margin-right:8px;font:11px var(--mono);font-style:normal;color:var(--keydim);white-space:nowrap}
+/* Sound (round 5): the track's sound in small groups (renderSound), in the page's section look: a title
+   on a rule, the Machinedrum page at its right, no frame. Each row is one grid of three lines (titles,
+   screens, boxes) its columns share (subgrid), so a row's titles, screens and boxes are level. Two
+   groups without a screen share a column: the upper one's boxes at the screens' top, the lower one's
+   title at their foot and its boxes on the box line; a lone one says what its knobs do in the screen's
+   place. The rows with screens share the free height evenly, so every screen on the page is as tall;
+   a row without screens is two lines. A group's width follows its box count. Each screen's help is its
+   tooltip. */
+#main>.snd{flex:1 1 auto;min-height:0}
+.snd{display:flex;flex-direction:column;gap:16px;min-height:0}
+.sndhead{display:flex;align-items:center;gap:22px;min-width:0}
+.sndhelp{margin-left:auto;font:12px var(--mono);color:var(--print3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0;cursor:help}
+.sgrow{flex:1 1 0;min-height:0;max-height:420px;display:grid;grid-template-rows:auto minmax(0,1fr) 34px;column-gap:14px;row-gap:7px;min-width:0}
+.sgrow.flat{flex:none;grid-template-rows:auto 34px}
+.sgcol{grid-row:1/-1;display:grid;grid-template-rows:subgrid;row-gap:7px;min-width:0}
+.sg{display:contents}
+.sg>*{grid-column:1}
+.sg>header{grid-row:1;border-top:2px solid var(--print);padding-top:7px;display:flex;justify-content:space-between;align-items:baseline;gap:8px;min-width:0}
+.sg h3{margin:0;font:600 12px var(--sans);letter-spacing:.18em;text-transform:uppercase;color:var(--print);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
+.sg>header>span{font:12px var(--mono);color:var(--print3);white-space:nowrap;cursor:help}
+.sg>.plot{grid-row:2;position:relative;min-height:0;border-radius:4px;overflow:hidden}
+.sg>:is(.ctl,.sgline,.sgsel,.sgabout){grid-row:3;align-self:start;min-width:0}
+.sgrow.flat .sg>:is(.ctl,.sgline,.sgsel,.sgabout){grid-row:2}
+/* two groups in one column: the upper one's boxes at the screens' top, the lower one's title at their foot */
+.sgcol.stack>.sg:first-child>:not(header){grid-row:2;align-self:start}
+.sgcol.stack>.sg:last-child>header{grid-row:2;align-self:end}
+/* a lone group: what its knobs do where the screen would be */
+.sgnote{grid-row:2;margin:0;align-self:start;font:12px var(--mono);line-height:1.5;color:var(--print3);overflow:hidden;min-height:0}
+.sg .plot>canvas.ed,.sg .plot>.wavebox{position:absolute;inset:0;width:100%;height:100%!important;min-height:0!important}
+.sg .plot>.wavebox>canvas.ed{height:100%!important;min-height:0!important}
+.plotnote{position:absolute;left:8px;right:60px;bottom:5px;font:10px var(--pix);text-transform:uppercase;color:var(--ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;pointer-events:none}
+.sg>.ctl{gap:4px}
+/* the boxes a little tighter than elsewhere: the effects row holds thirteen */
+.snd .pc{padding:0 6px}
+.snd .pc span{font-size:11px;letter-spacing:.05em}
+.snd .pc b{font-size:13px}
+/* a line of other controls (the LFO's): as tall as a row of boxes */
+.sgline{display:flex;align-items:center;gap:4px;height:34px;min-width:0}
+.sgline>.pc{flex:1 1 0;min-width:0}
+.sgline>.seg{flex:none;margin-left:10px}
+/* the LFO row: the shape keys a little smaller, so they fit the box line */
+.lfoshape{gap:14px}
+.lfoshape .kv{gap:6px;flex-wrap:nowrap}
+.lfoshape .shapes{flex-wrap:nowrap;gap:2px}
+.lfoshape .shapes button{padding:3px}
+.lfoshape .shapes svg{width:22px;height:18px}
+.lfoshape>.pc{min-width:84px}
+@media (max-width:1380px){.lfoshape{gap:10px}.lfoshape .shapes svg{width:18px;height:16px}.lfoshape>.pc{min-width:76px}}
+/* a group of menus (the LFO's target): one under the other; the relations side by side on the box line */
+.sgsel{display:flex;flex-direction:column;gap:4px;min-width:0}
+.sgsel.pair{flex-direction:row;gap:8px;height:34px;align-items:center}
+.sgsel>label{display:flex;align-items:center;gap:8px;font:600 11px var(--sans);letter-spacing:.12em;text-transform:uppercase;color:var(--print2);white-space:nowrap;cursor:help;flex:1 1 0;min-width:0}
+.sgsel .kselbtn{height:24px;width:100%;min-width:0;font-size:12px}
+.sgsel>label>.kselbtn{flex:1 1 auto;width:auto}
+.sgabout{grid-row:1/-1;margin:0;align-self:end;font:12px var(--mono);line-height:1.5;color:var(--print3)}
+.sg>.sgabout{align-self:start}
+@media (max-width:1150px){.sgrow,.sgrow.flat{display:flex;flex-wrap:wrap;gap:12px 14px;max-height:none;flex:none}.sgcol{display:flex;flex-direction:column;gap:7px;flex:1 1 150px}.sg>.plot{height:110px;flex:none}.sndhelp{display:none}}
+@media (max-width:720px){.sndhead{flex-wrap:wrap;gap:10px}}
