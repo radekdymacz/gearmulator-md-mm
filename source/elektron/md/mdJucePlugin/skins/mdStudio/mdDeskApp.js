@@ -656,7 +656,7 @@ function label(g, t) { g.fillStyle = cssv("--ink"); g.font = "10px Silkscreen, u
 let raf = 0, active = null;
 /* P7: the editors and the playhead follow the window */
 addEventListener("resize", () => { redraw(); alignLock(); if (V && V.playing) movePH(); });
-function redraw() { if (raf) return; raf = requestAnimationFrame(() => { raf = 0; $$("canvas.ed").forEach(drawEd); }); }
+function redraw() { if (raf) return; raf = requestAnimationFrame(() => { raf = 0; $$("canvas.ed").forEach(drawEd); $$("canvas.tw").forEach(drawTile); }); }
 function drawEd(c) {
 	const ed = ED[c.dataset.ed], dpr = devicePixelRatio || 1, W = c.clientWidth, H = c.clientHeight; if (!W || !ed) return;
 	if (c.width !== Math.round(W * dpr) || c.height !== Math.round(H * dpr)) { c.width = Math.round(W * dpr); c.height = Math.round(H * dpr); }
@@ -765,9 +765,9 @@ function audTick() {
 	for (const b of $$("[data-aud]")) { const p = b.parentElement.querySelector(".audph"); if (!p) continue; p.hidden = Aud.key !== b.dataset.aud || u >= 1; p.style.width = (u * 100).toFixed(2) + "%"; }
 	if (u < 1) audRaf = requestAnimationFrame(audTick);
 }
-/* after a render: an audition whose waveform is gone stops */
+/* after a render: an audition whose waveform is gone (or can no longer play) stops */
 function audKeep() {
-	if (Aud && !$$("[data-aud]").some(b => b.dataset.aud === Aud.key)) { cmd("auditionStop", {}); Aud = null; }
+	if (Aud && !$$("[data-aud]").some(b => b.dataset.aud === Aud.key && !b.disabled)) { cmd("auditionStop", {}); Aud = null; }
 	syncAud();
 }
 /* P9: the sample on its way to a ROM slot (sampleLoad), shown on that slot's card. */
@@ -866,14 +866,27 @@ function setupTracks() {
 function setupCard(n) {
 	const [rt, pt] = setupTracks(), R = V.tracks[rt], P = V.tracks[pt];
 	const rtr = R.trigs.slice(0, V.len).filter(Boolean).length, ptr = P.trigs.slice(0, V.len).filter(Boolean).length;
-	const step = (w, v) => `<span class="stepper"><button data-setupt="${w}" data-d="-1" aria-label="Previous track">‹</button><b class="mono">${v + 1}</b><button data-setupt="${w}" data-d="1" aria-label="Next track">›</button></span>`;
+	const pl = k => k + " trig" + (k === 1 ? "" : "s"), choice = rtr > 1 || (rtr === 1 && !R.trigs[0]), once = S.smpOnce && rtr;
+	/* one side of the flow: its track (the LCD window between ‹ ›), the machine it changes, its trigs; the
+	   option row is always there (hidden when there is no choice), so stepping never moves anything */
+	const side = (w, cap, t, from, to, trigs, opt, tip) => `<div class="spside" title="${tip}">
+    <div class="sphead"><span class="ilab">${cap}</span><small>track</small></div>
+    <div class="sptrk"><button data-setupt="${w}" data-d="-1" aria-label="Previous ${cap.toLowerCase()} track">‹</button><b class="sptn" aria-live="polite">${String(t + 1).padStart(2, "0")}</b><button data-setupt="${w}" data-d="1" aria-label="Next ${cap.toLowerCase()} track">›</button></div>
+    <div class="spmach"><span class="from" title="${from}">${from}</span><i aria-hidden="true">→</i><b>${to}</b></div>
+    <div class="sptrig">${trigs}</div>
+    <div class="spopt">${opt}</div></div>`;
+	const recTrig = !rtr ? "no trig · one goes on step 1" : once ? `${pl(rtr)} cleared · one on step 1` : `${pl(rtr)} · records on ${rtr > 1 ? "each" : "it"}`;
+	const recOpt = `<span class="seg" ${choice ? "" : 'style="visibility:hidden" aria-hidden="true"'}><button data-smponce="0" aria-pressed="${!S.smpOnce}" ${choice ? "" : 'tabindex="-1"'} title="The recorder keeps its trigs and records on each">Keep</button><button data-smponce="1" aria-pressed="${!!S.smpOnce}" ${choice ? "" : 'tabindex="-1"'} title="Clear the recorder's trigs and put one on step 1: it records once a loop">Once, on step 1</button></span>`;
+	const playTrig = ptr ? `${pl(ptr)} · plays on ${ptr > 1 ? "each" : "it"}` : "no trig · add them in the chop grid";
+	const fx = S.keepFx ? "effects and routing kept · " : "";
 	return `<section class="card smpsetup"><header><h3>Set up sampling · RAM ${n}</h3><span>the UW's RAM machines: one records, one plays</span></header>
-  <div class="insp">
-   <div class="irow"><span class="ilab">Records</span>${step("r", rt)}<span class="note">Track ${rt + 1}: <b>${R.m}</b> becomes <b>RAM-R${n}</b>. ${!rtr ? "It has no trig, so one goes on step 1 (a recorder records on its trigs)." : S.smpOnce ? `Its ${rtr} trig${rtr > 1 ? "s are" : " is"} cleared; one goes on step 1: it records once a loop.` : `Its ${rtr} trig${rtr > 1 ? "s stay" : " stays"}: it records on ${rtr > 1 ? "each" : "it"}.`}</span></div>
-   ${rtr > 1 || (rtr === 1 && !R.trigs[0]) ? `<div class="irow"><span class="ilab">Recorder trigs</span><span class="seg"><button data-smponce="0" aria-pressed="${!S.smpOnce}">Keep</button><button data-smponce="1" aria-pressed="${!!S.smpOnce}">Once, on step 1</button></span></div>` : ""}
-   <div class="irow"><span class="ilab">Plays</span>${step("p", pt)}<span class="note">Track ${pt + 1}: <b>${P.m}</b> becomes <b>RAM-P${n}</b>. ${ptr ? `Its ${ptr} trig${ptr > 1 ? "s stay" : " stays"}: it plays the take on ${ptr > 1 ? "each" : "it"}.` : "It has no trig yet: add them in the chop grid."}</span></div>
-   <div class="irow"><span class="ilab"></span><button class="cream" data-setupgo="${n}">Set up sampling</button><span class="note">One step: Undo takes it back. The two tracks' machines are replaced${S.keepFx ? " (effects and routing kept)" : ""}${S.smpOnce && rtr ? `; track ${rt + 1}'s trigs are cleared` : "; no trig is cleared"}.</span></div>
-  </div></section>`;
+  <div class="spflow">
+   ${side("r", "Recorder", rt, R.m, "RAM-R" + n, recTrig, recOpt, `Track ${rt + 1}'s machine (${R.m}) becomes RAM-R${n}: it records into RAM ${n} on its trigs.`)}
+   <div class="spbuf" aria-hidden="true"><i class="ln"></i><b>RAM ${n}</b><small>buffer</small><i class="ln"></i></div>
+   ${side("p", "Player", pt, P.m, "RAM-P" + n, playTrig, `<span class="sphint">plays what RAM ${n} holds</span>`, `Track ${pt + 1}'s machine (${P.m}) becomes RAM-P${n}: it plays what RAM ${n} holds on its trigs.`)}
+  </div>
+  <div class="spgo"><button class="cream" data-setupgo="${n}">Set up sampling</button><span class="note" title="Both tracks' machines are replaced${S.keepFx ? " (effects and routing kept)" : ""}${once ? `; track ${rt + 1}'s trigs are cleared` : "; no trig is cleared"}. Undo takes it all back.">One undo step · ${fx}${once ? `track ${rt + 1}'s trigs cleared` : "no trig cleared"}</span></div>
+</section>`;
 }
 /* The recorder's source, from its levels: MLEV/MBAL = the machine's own mix, ILEV/IBAL = inputs A/B. */
 /* Manual A-15: MLEV/ILEV 0 records "as is", -64 records nothing (stored 64 and 0); the balances are
@@ -882,6 +895,29 @@ const SOURCES = [["main", "Main mix", { MLEV: 64, MBAL: 64, ILEV: 0, IBAL: 64 }]
 	["b", "Input B", { MLEV: 0, MBAL: 64, ILEV: 64, IBAL: 127 }], ["ab", "A + B", { MLEV: 0, MBAL: 64, ILEV: 64, IBAL: 64 }]];
 function sourceOf(t) { const y = V.tracks[t].syn; const hit = SOURCES.find(([, , v]) => Object.keys(v).every(k => y[k] === v[k])); return hit ? hit[0] : "custom"; }
 function sourceSeg(t) { const cur = sourceOf(t); return `<span class="seg srcseg">${SOURCES.map(([id, label]) => `<button data-recsrc="${id}" data-t="${t}" aria-pressed="${cur === id}">${label}</button>`).join("")}</span>${cur === "custom" ? `<span class="note">custom levels</span>` : ""}`; }
+/* Every ROM slot as a tile: its overview wave (no detail asked), number, name, lit when this kit plays
+   it, faint when empty, its own audition key; an empty one offers Load sample…. A click selects it. */
+function romTiles(sel, sending) {
+	const b = smpBank(), why = smpWhy(), inKit = new Set(V.tracks.map(t => t.m));
+	const used = b ? b.rom.filter(s => !s.empty).length : null;
+	return `<section class="card"><header><h3>ROM slots</h3><span>${used != null ? `${used} of 48 hold a sample · ` : ""}lit: used by this kit${why ? " · " + why : ""}</span></header>
+  <div class="romtiles">${Array.from({ length: 48 }, (_, i) => {
+		const k = i + 1, s = b ? b.rom[i] : null, code = romCode(k), name = romName(k), empty = !!(s && s.empty), lit = inKit.has(code);
+		const face = s && !empty ? `<canvas class="tw" data-k="${k}" aria-hidden="true"></canvas>` : empty ? `<span class="twno">empty</span>` : "";
+		const act = empty ? `<button class="twload" data-smpload="${k}" ${sending ? "disabled" : ""} title="Choose a WAV or AIFF file for ${code}">Load…</button>` : audBtn(["rom", i]);
+		return `<div class="romtile ${lit ? "has" : ""} ${empty ? "empty" : ""} ${s ? "" : "nowave"}"><button class="twsel" data-romtile="${k}" aria-pressed="${sel === k}" title="${code}${name ? " · " + name : ""}${s ? " · " + smpInfo(s) : ""}${lit ? " · used by this kit" : ""}"><span class="twhead"><i class="led ${lit ? "on" : ""}"></i><b>${String(k).padStart(2, "0")}</b><span>${name}</span><small>${smpTime(s)}</small></span>${face}</button>${act}<i class="audph" aria-hidden="true" hidden></i></div>`;
+	}).join("")}</div></section>`;
+}
+/* a tile's wave: the overview at a bin every WAVE_CSS_PX (the detail view's solid look), drawn again only
+   when the slot, the size or the plate changed */
+function drawTile(c) {
+	const dpr = devicePixelRatio || 1, W = c.clientWidth, H = c.clientHeight, s = smpSlotOf("rom", +c.dataset.k - 1); if (!W || !H || !s || s.empty) return;
+	const ink = cssv("--ink"), sig = [W, H, dpr, ink, s.length, s.peaks.length, s.peaks[0], s.peaks[s.peaks.length >> 1]].join(":"); if (c._sig === sig) return; c._sig = sig;
+	c.width = Math.round(W * dpr); c.height = Math.round(H * dpr);
+	const g = c.getContext("2d"); g.setTransform(1, 0, 0, 1, 0, 0); g.clearRect(0, 0, c.width, c.height); g.fillStyle = ink;
+	const n = Math.max(1, Math.round(W / WAVE_CSS_PX)), col = waveColumns(s.peaks, 127, n), mid = c.height / 2, half = c.height / 2 - Math.round(2 * dpr);
+	for (let x = 0; x < c.width; x++) { const j = Math.min(n - 1, Math.floor(x * n / c.width)), y0 = Math.round(mid - col[2 * j + 1] * half), y1 = Math.round(mid - col[2 * j] * half); g.fillRect(x, y0, 1, Math.max(1, y1 - y0)); }
+}
 function renderSampler() {
 	S.viewAll = false; const id = S.smpSlot; let h = "";
 	if (id.startsWith("RAM")) {
@@ -908,12 +944,15 @@ function renderSampler() {
 	else {
 		const k = +id.slice(3), code = romCode(k), users = V.tracks.map((t, i) => t.m === code ? i : -1).filter(i => i >= 0), u = users[0];
 		const s = smpSlotOf("rom", k - 1), sending = smpLoad && smpLoad.state === "sending";
-		h = `<section class="card"><header><h3>${code}${s && s.name ? ` <span class="note">${s.name}</span>` : romName(k) ? ` <span class="note" title="Sent this session with Rename; a real machine cannot report names">sent: ${romName(k)}</span>` : ""}</h3><span title="${s ? "" : NA.names}">${s ? smpInfo(s) : smpWhy() || ""}</span></header>
-   <div class="slotbar"><span class="note">${users.length ? "Used by " + users.map(i => "track " + (i + 1)).join(", ") : "Not used in this kit"}</span><span class="grow"></span>
-    <button class="cream" data-romput="${k}">Put on track ${S.sel + 1}</button><button data-smpload="${k}" ${sending ? "disabled" : ""} title="Choose a WAV or AIFF file for ${code}. The plug-in reads it, makes it mono 16-bit (44.1 kHz at most), cuts it to the memory left and sends it as SDS with a 4-letter name from the file name. It replaces what the slot holds.">Load sample…</button><button data-na="send" disabled title="${NA.send}">Send</button><button data-rename="${k}" title="Send a new name (4 letters) to the machine, SysEx 0x73">Rename</button></div>
-   ${smpLoadCard(k)}
-   ${waveBox(`<canvas class="ed smpwave" data-ed="rom" data-k="${k}" aria-label="${code} waveform"></canvas>`, ["rom", k - 1])}</section>
-   ${u != null ? `<div class="smp2"><section class="card"><header><h3>Playback</h3><span>track ${u + 1}</span></header><div class="ctl four">${SMPL.map(q => pc("syn", q, { t: u })).join("")}</div></section></div>` : ""}`;
+		/* The selected slot on top (its waveform, its actions, the playback of the track that plays it),
+		   every ROM slot under it (romTiles). */
+		h = `<section class="card romsel"><header><h3>${code}${s && s.name ? ` <span class="note">${s.name}</span>` : romName(k) ? ` <span class="note" title="Sent this session with Rename; a real machine cannot report names">sent: ${romName(k)}</span>` : ""}</h3><span title="${s ? "" : NA.names}">${s ? smpInfo(s) : smpWhy() || ""}</span></header>
+   <div class="romtop">${waveBox(`<canvas class="ed smpwave" data-ed="rom" data-k="${k}" aria-label="${code} waveform"></canvas>`, ["rom", k - 1])}
+    <div class="romside"><div class="slotbar"><span class="note">${users.length ? "Used by " + users.map(i => "track " + (i + 1)).join(", ") : "Not used in this kit"}</span></div>
+     <div class="slotbar"><button class="cream" data-romput="${k}">Put on track ${S.sel + 1}</button><button data-smpload="${k}" ${sending ? "disabled" : ""} title="Choose a WAV or AIFF file for ${code}. The plug-in reads it, makes it mono 16-bit (44.1 kHz at most), cuts it to the memory left and sends it as SDS with a 4-letter name from the file name. It replaces what the slot holds.">Load sample…</button><button data-na="send" disabled title="${NA.send}">Send</button><button data-rename="${k}" title="Send a new name (4 letters) to the machine, SysEx 0x73">Rename</button></div>
+     ${u != null ? `<div class="romplay"><div class="cap">Playback · track ${u + 1}</div><div class="ctl four">${SMPL.map(q => pc("syn", q, { t: u })).join("")}</div></div>` : `<div class="romplay"><div class="cap">Playback</div><span class="note">No track in this kit plays ${code}. Put it on a track to set its pitch, decay, start and end here.</span></div>`}</div></div>
+   ${smpLoadCard(k)}</section>
+   ${romTiles(k, sending)}`;
 	}
 	$("#main").innerHTML = `<div class="smpmain">${h}</div>`; syncControls(); redraw();
 }
@@ -1353,6 +1392,7 @@ document.addEventListener("click", e => {
 	const sl = e.target.closest("[data-smpload]"); if (sl) { if (!sl.disabled) cmd("chooseSample", { slot: +sl.dataset.smpload - 1 }); return; }
 	if (e.target.closest("[data-smpstop]")) { cmd("sampleCancel", {}); return; }
 	const au = e.target.closest("[data-aud]"); if (au) { if (!au.disabled) toggleAud(au); return; }
+	const rt = e.target.closest("[data-romtile]"); if (rt) { S.smpSlot = "ROM" + rt.dataset.romtile; render(); return; }
 	const rp = e.target.closest("[data-romput]"); if (rp) { S.keepFx = true; setMachine(romCode(+rp.dataset.romput)); toast("Track " + (S.sel + 1) + " now plays " + romCode(+rp.dataset.romput) + "."); return; }
 	if (S.ws === "song") {
 		const bk = e.target.closest("[data-bank]"); if (bk) { S.bank = +bk.dataset.bank; render(); return; }

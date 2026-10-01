@@ -114,16 +114,83 @@ body.liverec .st,body.liverec .lb{cursor:cell}
 .wavebox>canvas.ed{width:100%}
 .soundgrid>.card>.wavebox{min-height:150px}
 .soundgrid>.card>.wavebox>canvas.ed{height:100%!important;min-height:150px}
-.wavebox .aud{all:unset;position:absolute;top:6px;right:6px;cursor:pointer;display:inline-flex;align-items:center;gap:4px;height:18px;padding:0 6px;border-radius:2px;
+.wavebox .aud,.romtile .aud{all:unset;position:absolute;top:6px;right:6px;cursor:pointer;display:inline-flex;align-items:center;gap:4px;height:18px;padding:0 6px;border-radius:2px;
   font:12px var(--pix);text-transform:uppercase;color:var(--ink);background:var(--lcd);box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--ink) 55%,transparent)}
-.wavebox .aud svg{width:8px;height:8px;fill:currentColor}
-.wavebox .aud:hover{background:color-mix(in srgb,var(--ink) 15%,var(--lcd))}
-.wavebox .aud[aria-pressed=true]{background:var(--ink);color:var(--lcd)}
-.wavebox .aud:focus-visible{outline:2px solid var(--ink);outline-offset:1px}
-.wavebox .aud:disabled{opacity:.45;cursor:not-allowed}
-.wavebox .audph{position:absolute;left:0;top:0;bottom:0;width:0;pointer-events:none;border-radius:4px 0 0 4px;
+.wavebox .aud svg,.romtile .aud svg{width:8px;height:8px;fill:currentColor}
+.wavebox .aud:hover,.romtile .aud:hover{background:color-mix(in srgb,var(--ink) 15%,var(--lcd))}
+.wavebox .aud[aria-pressed=true],.romtile .aud[aria-pressed=true]{background:var(--ink);color:var(--lcd)}
+.wavebox .aud:focus-visible,.romtile .aud:focus-visible{outline:2px solid var(--ink);outline-offset:1px}
+.wavebox .aud:disabled,.romtile .aud:disabled{opacity:.45;cursor:not-allowed}
+.wavebox .audph,.romtile .audph{position:absolute;left:0;top:0;bottom:0;width:0;pointer-events:none;border-radius:4px 0 0 4px;
   background:color-mix(in srgb,var(--ink) 12%,transparent);box-shadow:inset -2px 0 0 var(--ink)}
-.wavebox .audph[hidden]{display:none}
+.wavebox .audph[hidden],.romtile .audph[hidden]{display:none}
+/* The Sampler's ROM view: the selected slot on top (its waveform beside its actions and playback), then
+   every ROM slot as a tile (its overview wave, lit when this kit plays it, faint when empty). */
+.romtop{display:grid;grid-template-columns:minmax(0,1.7fr) minmax(300px,1fr);gap:16px;align-items:start}
+@media (max-width:1100px){.romtop{grid-template-columns:minmax(0,1fr)}}
+.romtop canvas.ed.smpwave{height:172px}
+.romside{display:grid;gap:10px;align-content:start;min-width:0}
+.romplay{display:grid;gap:6px}
+.romplay .cap{font:600 12px var(--sans);letter-spacing:.12em;text-transform:uppercase;color:var(--print2)}
+/* Set up sampling: the card, as one block, in the middle of the workspace (across and down) */
+#main>.smpmain:has(> .smpsetup){flex:1 1 auto;min-height:0;place-content:center;justify-items:center}
+/* a fixed size, whatever its sentences say or whether the recorder-trigs row shows */
+.smpsetup{box-sizing:border-box;width:920px;max-width:100%;height:392px;grid-template-rows:auto 1fr auto;gap:18px}
+/* the flow, RECORD -> RAM n -> PLAY: two equal sides and the buffer between, every row a fixed height */
+.smpsetup .spflow{display:grid;grid-template-columns:minmax(0,1fr) 132px minmax(0,1fr);align-items:stretch;min-height:0}
+.smpsetup .spside{display:grid;grid-template-rows:16px 64px 30px 18px 26px;gap:10px;align-content:center;justify-items:center;padding:16px 18px;
+  min-width:0;border-radius:4px;background:color-mix(in srgb,var(--print) 4%,transparent);box-shadow:inset 0 0 0 1px var(--rule)}
+.smpsetup .sphead{display:flex;align-items:baseline;gap:8px}
+.smpsetup .sphead .ilab{min-width:0;color:var(--print)}
+.smpsetup .sphead small{font:11px var(--mono);color:var(--print3)}
+.smpsetup .sptrk{display:flex;align-items:center;gap:8px}
+.smpsetup .sptrk button{width:34px;height:52px;padding:0;font-size:18px}
+.smpsetup .sptn{box-sizing:border-box;width:104px;height:64px;display:grid;place-items:center;border-radius:3px;background:var(--lcd);color:var(--ink);
+  font:400 40px/1 var(--pix);letter-spacing:.04em;box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--ink) 30%,transparent),inset 0 2px 6px color-mix(in srgb,var(--ink) 25%,transparent)}
+.smpsetup .spmach{display:grid;grid-template-columns:minmax(0,96px) 18px 96px;align-items:center;gap:6px;max-width:100%;font:12px var(--pix);text-transform:uppercase}
+.smpsetup .spmach>*{box-sizing:border-box;height:26px;display:grid;place-items:center;border-radius:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;padding:0 6px}
+.smpsetup .spmach .from{display:block;line-height:26px;text-align:center;color:var(--print3);box-shadow:inset 0 0 0 1px var(--rule);text-decoration:line-through;text-decoration-color:color-mix(in srgb,var(--print3) 60%,transparent)}
+.smpsetup .spmach i{font-style:normal;color:var(--print2);padding:0}
+.smpsetup .spmach b{font-weight:400;background:var(--lcd);color:var(--ink)}
+.smpsetup .sptrig{max-width:100%;font:12px var(--mono);color:var(--print2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.smpsetup .spopt{display:flex;align-items:center;justify-content:center;min-width:0}
+.smpsetup .sphint{font:11px var(--mono);color:var(--print3);white-space:nowrap}
+.smpsetup .spbuf{display:grid;grid-template-columns:1fr auto 1fr;grid-template-rows:auto auto;align-items:center;align-content:center;column-gap:6px;row-gap:4px}
+.smpsetup .spbuf .ln{height:2px;background:var(--print2);position:relative;grid-row:1}
+.smpsetup .spbuf .ln:last-child::after{content:"";position:absolute;right:-1px;top:-4px;border:5px solid transparent;border-left:7px solid var(--print2);border-right:0}
+.smpsetup .spbuf b{grid-row:1;grid-column:2;padding:5px 8px;border-radius:3px;font:400 12px var(--pix);text-transform:uppercase;white-space:nowrap;background:var(--key);color:var(--keytext);box-shadow:inset 0 -2px 0 rgba(0,0,0,.35)}
+.smpsetup .spbuf small{grid-row:2;grid-column:1/-1;text-align:center;font:10px var(--mono);color:var(--print3);letter-spacing:.08em}
+/* the one action, centred under the flow, its one-line note under it */
+.smpsetup .spgo{display:grid;justify-items:center;gap:8px}
+.smpsetup .spgo button{height:38px;padding:0 34px;font-size:13px;letter-spacing:.14em;text-transform:uppercase}
+.smpsetup .spgo .note{max-width:100%;font:11px var(--mono);color:var(--print3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.romtiles{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:6px}
+.romtile{position:relative;min-width:0}
+.romtile .twsel{all:unset;box-sizing:border-box;display:grid;grid-template-rows:18px 44px;width:100%;border-radius:3px;cursor:pointer;
+  background:var(--lcd);color:var(--ink);overflow:hidden}
+.romtile .twsel:hover{background:color-mix(in srgb,var(--ink) 10%,var(--lcd))}
+.romtile .twsel:focus-visible{outline:2px solid var(--print);outline-offset:2px}
+.romtile .twsel[aria-pressed=true]{box-shadow:0 0 0 2px var(--plate),0 0 0 4px var(--print)}
+.romtile .twhead{display:flex;align-items:center;gap:5px;padding:0 6px;min-width:0;font:10px var(--pix);text-transform:uppercase;white-space:nowrap}
+.romtile .twhead b{font:11px var(--pix)}
+.romtile .twhead span{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis}
+.romtile .twhead small{font:10px var(--pix);opacity:.75}
+.romtile .twhead .led{width:6px;height:6px;background:color-mix(in srgb,var(--ink) 22%,transparent);box-shadow:none}
+.romtile .twhead .led.on{background:var(--ink)}
+.romtile.has .twhead{background:var(--ink);color:var(--lcd)}
+.romtile.has .twhead .led.on{background:var(--lcd)}
+.romtile canvas.tw{display:block;width:100%;height:44px}
+.romtile .twno{display:grid;place-items:center;font:10px var(--pix);text-transform:uppercase;opacity:.6}
+.romtile.empty .twsel{background:transparent;color:var(--print3);box-shadow:inset 0 0 0 1px var(--rule)}
+.romtile.empty .twsel[aria-pressed=true]{box-shadow:inset 0 0 0 1px var(--rule),0 0 0 2px var(--plate),0 0 0 4px var(--print)}
+.romtile.empty .twhead .led{background:transparent}
+.romtile .aud{top:auto!important;bottom:4px;right:4px!important;height:16px!important;padding:0 5px!important;font-size:10px!important}
+.romtile .audph{top:18px!important;border-radius:0 0 0 3px!important}
+/* no audio from this engine (HW MIDI): a tile is its head only */
+.romtile.nowave .twsel{grid-template-rows:24px}
+.romtile.nowave .twhead{padding-right:56px}
+.romtile.nowave .aud{bottom:4px}
+.romtile .twload{position:absolute;right:4px;bottom:4px;height:18px;padding:0 7px;font-size:11px}
 '''
 out_css = head + css.strip('\n') + '\n' + tail
 
