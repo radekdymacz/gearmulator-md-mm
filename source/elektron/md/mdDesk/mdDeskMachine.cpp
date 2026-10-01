@@ -138,8 +138,67 @@ namespace mdDesk
 				m_port.sendSysex(_b);
 		})
 	{
+		// P9: while a sample goes out (SDS) nothing else may come between its packets; other SysEx waits.
+		m_rawSysex = m_port.sendSysex;
+		if(m_rawSysex)
+			m_port.sendSysex = [this](const Bytes& _b)
+			{
+				if(m_sds.active())
+					m_heldSysex.push_back(_b);
+				else
+					m_rawSysex(_b);
+			};
 		wireSession();
 		m_wire = deskCore::WireFacts(m_port.nowMs ? m_port.nowMs() : 0);
+	}
+
+	void MdMachine::sendRaw(const Bytes& _message) const
+	{
+		if(m_rawSysex)
+			m_rawSysex(_message);
+	}
+
+	// ---- P9: a sample to a ROM slot (SDS) ----
+
+	std::string MdMachine::sendSample(const uint8_t _slot, const ed::MdSampleUpload& _upload)
+	{
+		if(!m_rawSysex)
+			return "This engine cannot send SysEx to the machine.";
+		if(m_sds.active())
+			return "A sample is already on its way. Wait for it, or stop it.";
+		if(m_telemetry.recording)
+			return "The machine is recording. Stop it first.";
+		auto dump = ed::mdSdsDump(_slot, _upload.samples, _upload.rate, _upload.name);
+		if(!dump)
+			return "The sample could not be made into SDS (ROM slot 1-48, 1 to 2 million samples).";
+		m_sds.start(_slot, std::move(*dump), now(), [this](const Bytes& _b) { sendRaw(_b); });
+		return {};
+	}
+
+	void MdMachine::cancelSample()
+	{
+		m_sds.cancel([this](const Bytes& _b) { sendRaw(_b); });
+		pumpSample(now());
+	}
+
+	Outcome MdMachine::cmdSampleCancel(const Value&, const Documents&)
+	{
+		if(!m_sds.active())
+			return refuse("No sample is on its way.");
+		cancelSample();
+		return ok("Stopped sending the sample.");
+	}
+
+	// The transfer's timeouts; once it is over, the SysEx held meanwhile goes out.
+	void MdMachine::pumpSample(const double _now)
+	{
+		m_sds.pump(_now, [this](const Bytes& _b) { sendRaw(_b); });
+		while(!m_sds.active() && !m_heldSysex.empty())
+		{
+			const auto b = std::move(m_heldSysex.front());
+			m_heldSysex.pop_front();
+			sendRaw(b);
+		}
 	}
 
 	void MdMachine::wireSession()
@@ -225,6 +284,11 @@ namespace mdDesk
 		c.set("workingKitMemory", m_profile.memory, "The working kit is the stored slot plus the edits the editor saw.");
 		c.set("mutesFromMemory", m_profile.memory && m_telemetry.mutes >= 0, "The mutes are the ones the editor sent.");
 		c.set("sampleNames", true);
+		// P9: the waveforms come from the emulated machine's memory; a real Machinedrum ignores SDS dump
+		// requests (measured on OS 1.63, P3), so its sample audio cannot be read.
+		c.set("sampleAudio", m_profile.memory, "A real Machinedrum does not send its samples: it ignores SDS dump requests "
+			"(measured on OS 1.63), so the editor cannot show their waveforms or play them.");
+		c.set("sampleLoad", static_cast<bool>(m_rawSysex), "This engine cannot send SysEx to the machine.");
 		c.set("modulators", telemetry, "The app modulators move with the machine's playhead; this engine reports none.");
 		c.values.emplace_back("dumps", "direct");
 		return c;
@@ -232,6 +296,8 @@ namespace mdDesk
 
 	bool MdMachine::busy() const
 	{
+		if(m_sds.active())
+			return true;
 		for(const auto& [ref, push] : m_pushes)
 			if(push.slot.busy())
 				return true;
@@ -354,33 +420,72 @@ namespace mdDesk
 
 	// Paced (DESIGN-edit-flow.md): the dump goes now or waits its turn (latest wins); the read-back is
 	// asked for once the gesture is quiet (pumpPushes).
-	Outcome MdMachine::pushDump(const Document& _doc)
+	Outcome MdMachine::pushDump(const Document& _doc, const Documents& _view)
 	{
 		const auto ref = refOf(_doc);
 		auto problems = ref.kind == DocKind::Pattern ? ed::validate(std::get<ed::MdPattern>(_doc)) : ed::validate(std::get<ed::MdSong>(_doc));
 		if(!problems.empty())
 			return {problems, {}, {}};
 		if(m_pushes[ref].slot.want(_doc, now(), pushPolicy(ref.kind)))
-			sendDump(_doc);
+			sendDump(_doc, _view);
 		return ok();
 	}
 
-	void MdMachine::sendDump(const Document& _doc)
+	void MdMachine::sendDump(const Document& _doc, const Documents& _view)
 	{
-		if(refOf(_doc).kind == DocKind::Pattern)
-			m_session.pushPattern(std::get<ed::MdPattern>(_doc), false);
-		else
+		if(refOf(_doc).kind != DocKind::Pattern)
+		{
 			m_session.pushSong(std::get<ed::MdSong>(_doc), false);
+			return;
+		}
+		const auto& pattern = std::get<ed::MdPattern>(_doc);
+		// A dump over the current pattern makes OS 1.63 load the kit it links from its slot, also when that
+		// is the kit that plays (measured, mdDeskFirmwareTest sampler): the unsaved edits of the working kit
+		// are gone. Taken before the dump, they go again as live edits right after it.
+		const auto kit = currentKit();
+		const bool reloads = m_session.state().pattern == pattern.position && kit && pattern.kit == *kit;
+		const auto stored = reloads ? _view.kits.find(*kit) : _view.kits.end();
+		const auto* held = stored != _view.kits.end() ? heldKit(_view) : nullptr;
+		const auto working = held ? std::optional<ed::MdKit>(*held) : std::nullopt;
+		m_session.pushPattern(pattern, false);
+		if(working)
+			restoreWorkingKit(stored->second, *working);
 	}
 
-	Outcome MdMachine::submit(const Change& _change, const Documents&)
+	// The machine just loaded the kit that plays from its slot (_stored): what it held before (_working)
+	// goes again as live edits, pending until memory shows it (the image of the slot is not taken meanwhile).
+	void MdMachine::restoreWorkingKit(const ed::MdKit& _stored, const ed::MdKit& _working)
+	{
+		const auto delivery = kitDelivery(_stored, _working);
+		if(delivery.edits.empty())
+			return;
+		for(const auto& e : delivery.edits)
+		{
+			if(e.kind == LiveEdit::Kind::Param || e.kind == LiveEdit::Kind::Level)
+			{
+				if(e.kind == LiveEdit::Kind::Param)
+					m_coalesced.erase({e.track, e.index});
+				if(m_port.sendKitParam)
+					m_port.sendKitParam(e.track, e.kind == LiveEdit::Kind::Level ? 24 : e.index, e.value);
+			}
+			else if(const auto sysex = liveEditSysex(e); !sysex.empty() && m_port.sendSysex)
+				m_port.sendSysex(sysex);
+		}
+		if(!m_profile.memory)
+			return;
+		// From the slot the machine now holds, not from before the edits still on their way.
+		m_working.expect.clear();
+		m_working.expect.sent(_stored, _working, now());
+	}
+
+	Outcome MdMachine::submit(const Change& _change, const Documents& _view)
 	{
 		const auto ref = _change.ref();
 		switch(ref.kind)
 		{
 		case DocKind::Pattern:
 		case DocKind::Song:
-			return pushDump(_change.after);
+			return pushDump(_change.after, _view);
 		case DocKind::Kit:
 		{
 			// A stored-slot dump (the kit library); into the kit that plays also LOAD KIT.
@@ -499,7 +604,7 @@ namespace mdDesk
 			{"record", &MdMachine::cmdRecord}, {"recTrig", &MdMachine::cmdRecTrig}, {"chain", &MdMachine::cmdChain},
 			{"chainClear", &MdMachine::cmdChainClear}, {"globalSlot", &MdMachine::cmdGlobalSlot},
 			{"selectSong", &MdMachine::cmdSelectSong}, {"reloadSong", &MdMachine::cmdReloadSong},
-			{"sampleName", &MdMachine::cmdSampleName}, {"play", &MdMachine::cmdPlay}, {"stop", &MdMachine::cmdStop},
+			{"sampleName", &MdMachine::cmdSampleName}, {"sampleCancel", &MdMachine::cmdSampleCancel}, {"play", &MdMachine::cmdPlay}, {"stop", &MdMachine::cmdStop},
 			{"mute", &MdMachine::cmdMute}, {"followHost", &MdMachine::cmdFollowHost}};
 		return map;
 	}
@@ -823,7 +928,8 @@ namespace mdDesk
 		return ok("Song reloaded: stop, load, play");
 	}
 
-	// UW ROM slot names: the firmware takes 0x73 but never reports names.
+	// UW ROM slot names: the firmware takes 0x73 but never reports names over MIDI (the emulated machine's
+	// are read from its memory with its samples, P9).
 	Outcome MdMachine::cmdSampleName(const Value& _m, const Documents&)
 	{
 		const auto slot = *intOf(_m, "slot");
@@ -836,8 +942,8 @@ namespace mdDesk
 			m_port.sendSysex(bytes);
 		char label[8];
 		std::snprintf(label, sizeof(label), "ROM-%02d", slot + 1);
-		return ok(std::string("Sent the name to ") + label + ". The Machinedrum shows it in SAMPLE MGR; it cannot report "
-			"names back, so the editor does not read them.");
+		return ok(std::string("Sent the name to ") + label + ". The Machinedrum shows it in SAMPLE MGR; a real one cannot report "
+			"names back over MIDI.");
 	}
 
 	Outcome MdMachine::cmdPlay(const Value&, const Documents& _view)
@@ -951,7 +1057,7 @@ namespace mdDesk
 			request(*next);
 	}
 
-	void MdMachine::pumpPushes(const double _now)
+	void MdMachine::pumpPushes(const double _now, const Documents& _view)
 	{
 		for(auto& [ref, push] : m_pushes)
 		{
@@ -960,7 +1066,7 @@ namespace mdDesk
 			switch(push.slot.due(_now, pushPolicy(ref.kind)))
 			{
 			case PushSlot<Document>::Due::Send:
-				sendDump(push.slot.takeNext(_now));
+				sendDump(push.slot.takeNext(_now), _view);
 				break;
 			case PushSlot<Document>::Due::ReadBack:
 				// The gesture is quiet: one read-back confirms the last dump.
@@ -986,6 +1092,11 @@ namespace mdDesk
 	void MdMachine::onSysex(const Bytes& _message)
 	{
 		m_wire.heard(now());
+		if(m_sds.onReply(_message, now(), [this](const Bytes& _b) { sendRaw(_b); }))
+		{
+			pumpSample(now());
+			return;
+		}
 		const auto status = ed::parseMdStatusResponse(_message);
 		if(status && (m_profile.wire || m_probe == Probe::Running))
 			m_wire.statusReply(now());
@@ -1335,6 +1446,11 @@ namespace mdDesk
 
 	void MdMachine::tick(const double _now, const Documents& _view)
 	{
+		// A sample on its way owns the wire: no status polls or loads meanwhile (their replies would come
+		// late and their timeouts would run out).
+		pumpSample(_now);
+		if(m_sds.active())
+			return;
 		pumpSequence(_now);
 		if(!m_profile.wire && m_probe != Probe::Running)
 			return;
@@ -1354,7 +1470,7 @@ namespace mdDesk
 		pumpRecording(_now, _view);
 		pumpTweak(_now);
 		pumpCoalesced(_now);
-		pumpPushes(_now);
+		pumpPushes(_now, _view);
 	}
 
 	std::optional<uint8_t> MdMachine::tweakLead(const ed::MdKit& _kit, const std::optional<uint8_t> _preferred)

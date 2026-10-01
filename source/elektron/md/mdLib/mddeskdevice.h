@@ -5,7 +5,11 @@
 #include <cstddef>
 #include <cstdint>
 #include <memory>
+#include <mutex>
 #include <vector>
+
+#include "elektronData/mdAudition.h"
+#include "elektronData/mdSamples.h"
 
 #include "mddevice.h"
 #include "mdsequencerstate.h"
@@ -13,6 +17,10 @@
 
 namespace md
 {
+	// P9: the UW sample memory of _hardware (flash, patch RAM, DSP2's X memory) for elektronData's
+	// sample reader. On the thread that owns the hardware only.
+	elektronData::MdSampleMemory sampleMemoryOf(Hardware& _hardware);
+
 	// The emulated machine as the Machinedrum and Monomachine Editors see it: md::Device, plus the
 	// machine's state published for the editor pages and the timed panel key presses they send. The
 	// plug-in makes this device (doc/modern-ux/UPSTREAM.md); md::Device itself is upstream's, unchanged.
@@ -85,6 +93,21 @@ namespace md
 			}
 		};
 		std::shared_ptr<const SequencerTelemetry> getSequencerTelemetry() const { return m_sequencerTelemetry; }
+		// P9: the UW's samples (elektronData/mdSamples.h) for the editor: every ROM slot from flash, the RAM
+		// buffers from DSP2's memory. Read on the audio thread a slot a block, only once someone has
+		// asked (readSampleBank) and when the memory changed and has been quiet a moment (an SDS import
+		// writes flash, a RAM-R recording grows its buffer). _sequence: the publication (0 = none yet);
+		// the bank is null until the first one. Any thread.
+		std::shared_ptr<const elektronData::MdSampleBank> readSampleBank(uint32_t& _sequence) const;
+		// Read the samples again now, also when the memory did not change.
+		void refreshSampleBank() { m_sampleRefresh.fetch_add(1, std::memory_order_relaxed); }
+
+		// P9: a sample slot heard once (elektronData::AuditionMixer), mixed into the main output after the
+		// machine's own audio, so it is the plug-in's output (a DAW hears it). _clip's pcm null: stop. The
+		// request's id. Needs the device lock; the audio thread takes no lock and allocates nothing for it.
+		uint64_t audition(const elektronData::AuditionClip& _clip) { return m_audition.play(_clip); }
+		elektronData::AuditionStatus auditionStatus() const { return m_audition.status(); }
+
 		// MM OS 1.32B state for the Monomachine Editor (md::MmTelemetry).
 		std::shared_ptr<const MmTelemetry> getMmTelemetry() const { return m_mmTelemetry; }
 
@@ -94,6 +117,29 @@ namespace md
 	private:
 		void sendPanelPackets();
 		void publishSequencerTelemetry(size_t _frames);
+		void scanSamples();
+
+		// P9 sample bank: what the audio thread reads (a slot a block) and what it published.
+		struct SampleScan
+		{
+			const Hardware* of = nullptr;
+			uint64_t blocks = 0;
+			uint64_t seen = 0;			// the signature at the last look
+			uint32_t stable = 0;		// looks it has been the same
+			uint64_t published = 0;		// the signature of the published bank
+			uint32_t refresh = 0;		// the refresh requests done
+			bool scanning = false;
+			size_t next = 0;
+			elektronData::MdSampleIndex index;
+			elektronData::MdSampleBank bank;
+		} m_samples;
+		mutable std::mutex m_sampleMutex;
+		std::shared_ptr<const elektronData::MdSampleBank> m_sampleBank;
+		uint32_t m_sampleSequence = 0;
+		mutable std::atomic<bool> m_sampleWanted{false};
+		std::atomic<uint32_t> m_sampleRefresh{0};
+
+		elektronData::AuditionMixer m_audition;
 
 		std::shared_ptr<SequencerTelemetry> m_sequencerTelemetry = std::make_shared<SequencerTelemetry>();
 		std::shared_ptr<MmTelemetry> m_mmTelemetry = std::make_shared<MmTelemetry>();

@@ -25,6 +25,8 @@ namespace mdJucePlugin
 
 		// How often the emulator engine asks the device whether the firmware runs.
 		constexpr double g_probeMs = 96;
+		// P9: how often it looks for a new UW sample bank (the device reads it only when its memory changed).
+		constexpr double g_samplesMs = 250;
 
 		// StudioLink's parameter index of a track's mute (after the 24 kit parameters and the level).
 		constexpr uint8_t g_muteParam = 25;
@@ -52,6 +54,8 @@ namespace mdJucePlugin
 			p.pressKey = [this](const std::string& _key) { return m_link.pressKey(_key); };
 			p.turnKnob = [this](const uint8_t _e, const int _s) { return m_link.turnKnob(_e, _s); };
 			p.nowMs = [] { return nowMs(); };
+			p.audition = [this](const elektronData::AuditionClip& _clip) { return m_link.audition(_clip); };
+			p.auditionStatus = [this] { return m_link.auditionStatus(); };
 			return p;
 		}
 
@@ -72,6 +76,9 @@ namespace mdJucePlugin
 			std::vector<uint8_t> region;
 			if(m_link.readWorkingKit(region))
 				_desk.onWorkingKitMemory(region);
+			std::shared_ptr<const elektronData::MdSampleBank> bank;
+			if(_desk.pageSeen() && due(_tick, g_samplesMs) && m_link.readSampleBank(bank))
+				_desk.onSampleBank(*bank);
 			m_link.drainParameterChanges([&_desk](const uint8_t _t, const uint8_t _i, const uint8_t _v)
 			{
 				if(_i == g_muteParam)
@@ -201,6 +208,20 @@ namespace mdJucePlugin
 		}
 
 		const char* missingText() const override { return "No MD OS 1.63 ROM is running yet. After adding it, reopen the plug-in."; }
+
+		// P9: a sample file the user chose for a UW ROM slot: read here (never through the page), then the
+		// desk converts it and sends it as SDS; the page hears sampleLoad messages.
+		void loadSampleFile(const uint8_t _slot, const juce::File& _file) override
+		{
+			juce::MemoryBlock mb;
+			if(_file.getSize() > 512 * 1024 * 1024 || !_file.loadFileAsData(mb))
+			{
+				desk().loadSample(_slot, _file.getFileName().toStdString(), {});
+				return;
+			}
+			const auto* d = static_cast<const uint8_t*>(mb.getData());
+			desk().loadSample(_slot, _file.getFileName().toStdString(), std::vector<uint8_t>(d, d + mb.getSize()));
+		}
 	};
 
 	std::unique_ptr<DeskSession> makeMdSession(AudioPluginAudioProcessor& _processor)

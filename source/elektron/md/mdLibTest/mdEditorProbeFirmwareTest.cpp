@@ -3,6 +3,8 @@
 // (mdDeskFirmwareTest) checks.
 //
 //   mdEditorProbeFirmwareTest <ROM> [workkit|liverec|samples|sds]
+//   mdEditorProbeFirmwareTest <ROM> samplemap <dir>                 P9: flash, patch RAM and DSP2 dumps around SDS imports
+//   mdEditorProbeFirmwareTest <ROM> rammap <dir> <LEN> <frames>     P9: DSP2 memory before/after a RAM-R1 take
 //
 // Exits 77 (skip) without arguments.
 
@@ -598,6 +600,120 @@ namespace
 		std::printf(" (%d)\n", shown);
 	}
 
+	// ---- P9, UW sample map (discovery): flash and DSP2 memory before/after SDS imports. What it found is
+	// elektronData/mdSamples.h; the last import (SDS sample 48, a RAM slot) gets no answer and stores nothing.
+
+	void sampleMap(const Bytes& _rom, const std::string& _dir)
+	{
+		std::puts("== probe: UW sample map, flash + DSP2 memory dumps around SDS imports");
+		Machine m(_rom, g_romName);
+		for(int i = 0; i < 600 && !m.hardware().isFactoryFlashReadyForReboot(); ++i)
+			m.run(100);
+		std::printf("  factory flash ready %d\n", int(m.hardware().isFactoryFlashReadyForReboot()));
+		const auto dumpAll = [&](const std::string& _tag)
+		{
+			save(_dir + "/flash-" + _tag + ".bin", m.hardware().copyFlashData());
+			auto& mem = m.hardware().getDspProducer().dsp().memory();
+			for(const auto area : {dsp56k::MemArea_X, dsp56k::MemArea_Y, dsp56k::MemArea_P})
+			{
+				Bytes b;
+				const auto size = mem.size(area);
+				b.reserve(size * 3);
+				for(uint32_t a = 0; a < size; ++a)
+				{
+					const auto w = mem.get(area, a);
+					b.push_back(uint8_t(w >> 16)); b.push_back(uint8_t(w >> 8)); b.push_back(uint8_t(w));
+				}
+				save(_dir + "/dsp2-" + std::string(1, dsp56k::g_memAreaNames[area]) + "-" + _tag + ".bin", b);
+			}
+			save(_dir + "/ram-" + _tag + ".bin", m.snapshotRam());
+			save(_dir + "/patch-" + _tag + ".bin", m.hardware().copyPatchRam());
+			std::printf("  dumped %s\n", _tag.c_str());
+		};
+		const auto import = [&](const Bytes& _sds)
+		{
+			auto prepared = md::prepareMidiSysexTransfer(_sds);
+			require(prepared && m.hardware().startMidiSysexTransfer(*prepared), "SDS transfer start");
+			for(int i = 0; i < 40000; ++i)
+			{
+				m.step();
+				const auto st = m.hardware().getMidiSysexTransferProgress().state;
+				if(st == md::MidiSysexTransferState::Complete || st == md::MidiSysexTransferState::Failed
+					|| st == md::MidiSysexTransferState::Cancelled)
+					break;
+			}
+			std::printf("  SDS state %d\n", int(m.hardware().getMidiSysexTransferProgress().state));
+			m.run(10000);
+		};
+		dumpAll("0");
+		import(md::test::sdsSample(4097, 16, 0, 2));
+		dumpAll("1");
+		import(md::test::sdsSample(9001, 16, 0, 5));
+		dumpAll("2");
+		import(md::test::sdsSample(2001, 16, 0, 2));
+		dumpAll("3");
+		// A RAM slot as the SDS sample number (48 = RAM 1 after the 48 ROM slots)?
+		import(md::test::sdsSample(3001, 16, 0, 48));
+		dumpAll("4");
+	}
+
+	// RAM-R1 records a known external ramp: where in DSP2 memory, and which words say how long.
+	void ramMap(const Bytes& _rom, const std::string& _dir, const uint32_t _lenParam, const uint32_t _frames)
+	{
+		std::puts("== probe: RAM-R1 buffer in DSP2 memory");
+		Machine m(_rom, g_romName);
+		for(int i = 0; i < 600 && !m.hardware().isFactoryFlashReadyForReboot(); ++i)
+			m.run(100);
+		auto& hw = m.hardware();
+		auto& mem = hw.getDspProducer().dsp().memory();
+		const auto snap = [&](const std::string& _tag)
+		{
+			for(const auto area : {dsp56k::MemArea_X, dsp56k::MemArea_Y})
+			{
+				Bytes b;
+				for(uint32_t a = 0; a < 0x200000; ++a)
+				{
+					const auto w = mem.get(area, a);
+					b.push_back(uint8_t(w >> 16)); b.push_back(uint8_t(w >> 8)); b.push_back(uint8_t(w));
+				}
+				save(_dir + "/ram-" + std::string(1, dsp56k::g_memAreaNames[area]) + "-" + _tag + ".bin", b);
+			}
+		};
+		m.send({0xf0, 0x00, 0x20, 0x3c, 0x02, 0x00, 0x5b, 0, 32, 0x01, 0xf7});	// T1 RAM-R1
+		m.run(200);
+		const uint8_t values[] = {0, 64, 64, 0, 0, 0, uint8_t(_lenParam), 127};
+		for(uint8_t i = 0; i < 8; ++i)
+		{
+			m.send({0xb0, uint8_t(0x10 + i), values[i]});
+			m.run(100);
+		}
+		snap("before");
+		std::vector<float> inL(_frames), inR(_frames), o0(_frames), o1(_frames);
+		for(uint32_t i = 0; i < _frames; ++i)
+		{
+			inL[i] = float(i % 97) / 97.0f - 0.5f;
+			inR[i] = inL[i];
+		}
+		synthLib::TAudioInputs inputs{};
+		inputs[0] = inL.data(); inputs[1] = inR.data();
+		synthLib::TAudioOutputs outputs{};
+		outputs[0] = o0.data(); outputs[1] = o1.data();
+		hw.processAudio(outputs, 0, 1);
+		hw.processAudio(outputs, 0, 0);
+		const auto trig = md::panelPacket(md::MachineModel::Machinedrum, md::PanelControl::Trigger1);
+		hw.sendPanelEvent(trig->row, trig->mask);
+		for(uint32_t off = 0; off < _frames; off += 256)
+		{
+			hw.processAudio(inputs, outputs, 256, 0);
+			for(auto& in : inputs) if(in) in += 256;
+			for(auto& out : outputs) if(out) out += 256;
+		}
+		hw.sendPanelEvent(trig->row, 0);
+		m.run(500);
+		snap("after");
+		std::puts("  dumped");
+	}
+
 	// ---- UW samples: names, memory, SDS ----
 
 	void printFound(const char* _what, const Bytes& _needle, Machine& _m)
@@ -855,7 +971,7 @@ int main(const int _argc, char** _argv)
 	std::setvbuf(stdout, nullptr, _IOLBF, 0);
 	if(_argc < 2)
 	{
-		std::puts("usage: mdEditorProbeFirmwareTest <ROM> [workkit|liverec|samples|sds]");
+		std::puts("usage: mdEditorProbeFirmwareTest <ROM> [workkit|liverec|samples|sds|samplemap <dir>|rammap <dir> <LEN> <frames>]");
 		return 77;
 	}
 	try
@@ -870,6 +986,13 @@ int main(const int _argc, char** _argv)
 			liveRecording(rom);
 		if(only.empty() || only == "samples")
 			samples(rom, _argc > 3 ? patchRamFromState(_argv[3], rom) : Bytes{});
+		if(only == "rammap")
+		{
+			require(_argc > 5, "rammap <dir> <LEN> <frames>");
+			ramMap(rom, _argv[3], uint32_t(std::atoi(_argv[4])), uint32_t(std::atoi(_argv[5])));
+		}
+		if(only == "samplemap")
+			sampleMap(rom, _argc > 3 ? _argv[3] : ".");
 		if(only.empty() || only == "playing")
 			playingFlag(rom);
 		if(only.empty() || only == "recknobs")

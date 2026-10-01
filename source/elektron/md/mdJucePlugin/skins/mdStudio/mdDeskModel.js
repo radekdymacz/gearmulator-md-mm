@@ -9,7 +9,7 @@
    pending, doc}, the slot it was loaded from); sources: each stored document's "source"
    ("kit:3" -> "dump"); telemetry: the last telemetry notice (the transport and the playhead).
    The catalogue and the MIDI learn document are the model's and the plug-in's: they stay. */
-const emptyDocs = () => ({ patterns: {}, kits: {}, songs: {}, global: null, machine: null, workingKit: null, sources: {}, telemetry: null });
+const emptyDocs = () => ({ patterns: {}, kits: {}, songs: {}, global: null, machine: null, workingKit: null, sources: {}, telemetry: null, samples: null });
 const EMPTY_DOCS = Object.freeze(emptyDocs());
 const Docs = Object.assign(emptyDocs(), { catalogue: null, learn: null });
 /* the engine changed: its documents start over */
@@ -344,6 +344,43 @@ const Overlay = (() => {
 	};
 })();
 function view() { return Overlay.over(deriveView(Docs, S)); }
+
+/* P9: a slot's waveform at the canvas' device pixels (data-contract.md 4.9). The overview (Docs.samples:
+   128 min, max pairs a slot, -127..127) draws at once; the detail (sampleWave, asked for one slot at the
+   bins it is drawn at, 16-bit) takes its place when it comes. Pure. */
+const WAVE_MAX_BINS = 8192;
+/* the bins to ask for a canvas cols device pixels wide: a step of 256 (a small resize asks nothing),
+   at most a bin a sample and WAVE_MAX_BINS */
+function waveBins(cols, length) { return Math.max(1, Math.min(WAVE_MAX_BINS, length || 1, Math.ceil(Math.max(1, cols) / 256) * 256)); }
+/* the detail to ask for slot (its overview entry) at cols, or 0 when held (a detail held or asked for:
+   {bins, length}) does: the same sample (length) and enough bins */
+function waveWant(held, slot, cols) {
+	if (!slot || slot.empty || !slot.length) return 0;
+	const want = waveBins(cols, slot.length);
+	return held && held.length === slot.length && held.bins >= want ? 0 : want;
+}
+/* min, max pairs at full scale scale onto cols columns: [lo, hi] per column, -1..1. More bins than
+   columns: a column is the min and max of its bins; fewer: each column shows the bin under it. */
+function waveColumns(peaks, scale, cols) {
+	const bins = Math.floor(peaks.length / 2), out = new Float32Array(cols * 2);
+	if (!bins) return out;
+	for (let x = 0; x < cols; x++) {
+		const a = Math.min(bins - 1, Math.floor(x * bins / cols)), b = Math.min(bins, Math.max(a + 1, Math.floor((x + 1) * bins / cols)));
+		let lo = peaks[2 * a], hi = peaks[2 * a + 1];
+		for (let i = a + 1; i < b; i++) { if (peaks[2 * i] < lo) lo = peaks[2 * i]; if (peaks[2 * i + 1] > hi) hi = peaks[2 * i + 1]; }
+		out[2 * x] = lo / scale; out[2 * x + 1] = hi / scale;
+	}
+	/* A column of about one sample is a point: the wave passes between two neighbours, so each reaches
+	   halfway to the other and the trace is one joined line, not dots. */
+	for (let x = 1; x < cols; x++) {
+		const pl = out[2 * x - 2], ph = out[2 * x - 1], l = out[2 * x], h = out[2 * x + 1];
+		if (l > ph) { const m = (l + ph) / 2; out[2 * x] = m; out[2 * x - 1] = m; }
+		else if (h < pl) { const m = (h + pl) / 2; out[2 * x + 1] = m; out[2 * x - 2] = m; }
+	}
+	return out;
+}
+/* the audition's playhead, 0..1 of the slot, ms after it started at the sample's own rate */
+function auditionAt(aud, ms) { return aud && aud.length && aud.rate ? Math.min(1, Math.max(0, ms / 1000 * aud.rate / aud.length)) : 0; }
 /* The view the renderers read: view(), replaced on every document and command. Before the first
    document it is the overlay over deriveView(Docs, S) with Docs still empty (its shape is
    EMPTY_DOCS's); nameOf is already this file's own, and V is first set once S (the page's UI

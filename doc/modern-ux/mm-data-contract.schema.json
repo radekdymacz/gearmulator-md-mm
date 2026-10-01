@@ -2563,6 +2563,32 @@
         },
         {
           "type": "object",
+          "description": "host: choose a sample (WAV or AIFF) for UW ROM slot slot: the window's native file chooser; the plug-in reads the file, converts it and sends it as SDS (sampleLoad messages follow); the file never passes through the page",
+          "required": ["op", "slot"],
+          "properties": {
+            "op": {
+              "const": "chooseSample"
+            },
+            "id": {
+              "type": "integer"
+            },
+            "g": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "force": {
+              "type": ["boolean", "integer"]
+            },
+            "slot": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 47
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
           "description": "host: import the previewed .syx: the kinds chosen (global, kit, pattern, song), as document writes, one undo step",
           "required": ["op", "kinds"],
           "properties": {

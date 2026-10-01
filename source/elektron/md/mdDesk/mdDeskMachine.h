@@ -62,6 +62,11 @@ namespace mdDesk
 		void onHostMute(uint8_t _track, bool _muted) override;
 		void sendModulation(uint8_t _track, uint8_t _param, uint8_t _value, const Documents& _view) override;
 		const Telemetry& telemetry() const override { return m_telemetry; }
+		std::string sendSample(uint8_t _slot, const elektronData::MdSampleUpload& _upload) override;
+		void cancelSample() override;
+		const SdsSender::Progress& sampleProgress() const override { return m_sds.progress(); }
+		uint64_t audition(const elektronData::AuditionClip& _clip) override { return m_port.audition ? m_port.audition(_clip) : 0; }
+		elektronData::AuditionStatus auditionStatus() const override { return m_port.auditionStatus ? m_port.auditionStatus() : elektronData::AuditionStatus{}; }
 		// The protocol facts (not MdAdapter's: the desk reads them for tests and diagnostics).
 		const mdDataLink::Session::State& linkState() const { return m_session.state(); }
 		bool replied() const { return m_wire.replied; }
@@ -175,7 +180,7 @@ namespace mdDesk
 		void load(const DocRef& _ref, bool _urgent);
 		void request(const DocRef& _ref);
 		std::optional<uint8_t> currentKit() const { return m_session.state().kit; }
-		deskCore::Outcome pushDump(const Document& _doc);
+		deskCore::Outcome pushDump(const Document& _doc, const Documents& _view);
 
 		void onPattern(const elektronData::MdPattern& _p);
 		void onKit(const elektronData::MdKit& _k);
@@ -188,7 +193,7 @@ namespace mdDesk
 		const elektronData::MdKit* heldKit(const Documents& _view) const;
 		void setBaseChannel(const elektronData::MdGlobal& _g);
 		void pumpLoads(double _now);
-		void pumpPushes(double _now);
+		void pumpPushes(double _now, const Documents& _view);
 		void pumpTweak(double _now);
 		void checkTweak(double _now);
 		void pumpCoalesced(double _now);
@@ -197,7 +202,8 @@ namespace mdDesk
 		bool tweakByPanel() const;
 		static std::optional<uint8_t> tweakLead(const elektronData::MdKit& _kit, std::optional<uint8_t> _preferred);
 		deskCore::PushPolicy pushPolicy(DocKind _kind) const;
-		void sendDump(const Document& _doc);
+		void sendDump(const Document& _doc, const Documents& _view);
+		void restoreWorkingKit(const elektronData::MdKit& _stored, const elektronData::MdKit& _working);
 		void pumpRecording(double _now, const Documents& _view);
 		void pumpSequence(double _now);
 		void runSequence(std::vector<deskCore::SeqStep<Act>> _steps);
@@ -224,6 +230,9 @@ namespace mdDesk
 		deskCore::Outcome cmdSelectSong(const Value&, const Documents&);
 		deskCore::Outcome cmdReloadSong(const Value&, const Documents&);
 		deskCore::Outcome cmdSampleName(const Value&, const Documents&);
+		deskCore::Outcome cmdSampleCancel(const Value&, const Documents&);
+		void sendRaw(const Bytes& _message) const;
+		void pumpSample(double _now);
 		deskCore::Outcome cmdPlay(const Value&, const Documents&);
 		deskCore::Outcome cmdStop(const Value&, const Documents&);
 		deskCore::Outcome cmdMute(const Value&, const Documents&);
@@ -231,6 +240,10 @@ namespace mdDesk
 
 		const Profile m_profile;
 		Port m_port;
+		// P9: the device's own SysEx out (m_port.sendSysex holds other SysEx while a sample goes out)
+		std::function<void(const Bytes&)> m_rawSysex;
+		SdsSender m_sds;
+		std::deque<Bytes> m_heldSysex;
 		mdDataLink::Session m_session;
 
 		deskCore::LoadQueue<DocRef> m_loads;

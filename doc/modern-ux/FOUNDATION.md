@@ -126,7 +126,8 @@ Four blocks of script and stylesheet are the same text in the MD mockup, the MM 
 The files never pass through the page:
 - the native choosers (`mdPageEditor.cpp`) hand them to the session;
 - `DeskSession::installRom` checks and copies a ROM, then restarts the machine;
-- `openSyx` sends the preview, the `syxImport` row queues the import (`SyxJob`, `mdSyxSession.h`), and `exportSyx` writes the file.
+- `openSyx` sends the preview, the `syxImport` row queues the import (`SyxJob`, `mdSyxSession.h`), and `exportSyx` writes the file;
+- P9: `chooseSample {slot}` opens the chooser for a WAV or AIFF; `DeskSession::loadSampleFile` reads it and `mdDesk::Desk::loadSample` converts it and sends it as SDS (`mdDesk/mdDeskSds.h`, data-contract.md 4.9).
 
 A missing ROM is not an error and never a native alert: `createDevice` runs a silent stand-in (`makeNoRomDevice`, `mdDeskHost.h`), the studio links' probes say `Missing` for it, and the BOOT card opens at once with a button ("Choose your ... ROM (.bin or .zip, 8 MB)"); a wrong file is refused inside the card, a right one starts the machine in place (`mdSessionNoRomTest`). The editors show no licence notice to accept (`createEditorPage` sets upstream's `disclaimerSeen`).
 
@@ -156,6 +157,8 @@ Configure a test build with `-DBUILD_TESTING=ON -Dgearmulator_MDMM_DIAGNOSTICS=O
 - `ctest -E "Plugin|_AU|VST|FirmwareTest"` runs the unit tests.
 - `mdDeskFirmwareTest <MD ROM> [hw|p4|playload]` and `mmDeskFirmwareTest <MM ROM>` run the firmware smoke tests, including the contract check; `GEARMULATOR_MD_FIRMWARE_BIN=<MD ROM> ctest -R mdSessionFirmwareTest` runs the session without an editor.
 - `GEARMULATOR_MDSTUDIO_SELFTEST=1|p4|p4hw|p5|p6audio|p7` and `GEARMULATOR_MMSTUDIO_SELFTEST=1|mmcpu|p4|p6audio|p7` run the in-plugin self-tests on the standalone apps (MM `p4`: the MM-P4 features ported in P8).
+- `mdDeskFirmwareTest <MD ROM> sampler` does what the SAMPLER card's Set up sampling and the chop grid do (RAM-R1/RAM-P1 over unsaved ROM machines, then trigs and STRT locks) and checks the working kit keeps every unsaved edit across the pattern dumps.
+- `mdDeskFirmwareTest <MD ROM> samples` (P9) loads generated WAV files into UW ROM slots through the desk (SDS with the machine's handshake), checks the waveforms read back from memory against what was sent (the overview and the `sampleWave` detail), that an audition is the sent samples resampled, that a RAM slot is refused, and that a RAM-R1 take shows in RAM 1.
 - `mdDeskFirmwareTest <MD ROM> hostclock` and `mmDeskFirmwareTest <MM ROM> hostclock` check that the machines follow a host's clock after `followHost`.
 - `mmDeskFirmwareTest <MM ROM> p4` checks the MM-P4 features on the firmware (POLY, MIDI track mutes through the MUTE window, LIVE and GRID RECORDING, MULTI TRIG, PORTAMENTO, the MULTI MAP, another song, undo of a slot write); `mmDeskFirmwareTest <MM ROM> hw` drives a second emulated Monomachine as the HW MIDI peer through the plug-in's `wirePort` at DIN speed, with the test playing the person at the machine (SYSEX RECV, `hwSend`, TRANSPORT ACCEPT).
 

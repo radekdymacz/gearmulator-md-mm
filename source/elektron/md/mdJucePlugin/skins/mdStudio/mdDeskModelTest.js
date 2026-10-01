@@ -11,8 +11,8 @@ const fs = require("fs"), path = require("path"), vm = require("vm");
 const ctx = vm.createContext({ console });
 vm.runInContext(fs.readFileSync(path.join(__dirname, "mdDeskModel.js"), "utf8")
 	+ "\nconst S = { soloSet: new Set() };"
-	+ "\nthis.T = { deriveView, Overlay, view, Docs, S, EMPTY_DOCS, storeDoc, resetDocs, canDo, docOf, multFactor, mfxName, nameOf, tweakWrites, catalogueIndex, get V() { return V; } };", ctx);
-const { deriveView, Overlay, Docs, S, EMPTY_DOCS, storeDoc, resetDocs, canDo, docOf, multFactor, nameOf, tweakWrites, catalogueIndex } = ctx.T;
+	+ "\nthis.T = { deriveView, Overlay, view, Docs, S, EMPTY_DOCS, storeDoc, resetDocs, canDo, docOf, multFactor, mfxName, nameOf, tweakWrites, catalogueIndex, waveBins, waveWant, waveColumns, auditionAt, WAVE_MAX_BINS, get V() { return V; } };", ctx);
+const { deriveView, Overlay, Docs, S, EMPTY_DOCS, storeDoc, resetDocs, canDo, docOf, multFactor, nameOf, tweakWrites, catalogueIndex, waveBins, waveWant, waveColumns, auditionAt, WAVE_MAX_BINS } = ctx.T;
 const DELETE = Overlay.DELETE;
 let failures = 0;
 const check = (ok, what) => { console.log((ok ? "  ok   " : "  FAIL ") + what); if (!ok) failures++; };
@@ -35,7 +35,8 @@ const enums = { tempoMultipliers: ["1X", "2X", "3/4X", "3/2X"], masterFx: ["rhyt
 	lfoFields: ["track", "param", "shape1", "shape2", "update"], lfoUpdates: ["FREE", "TRIG", "HOLD"], lfoParams: { SPD: 21, DEPTH: 22, SHMIX: 23 } };
 const catalogue = { schema: "md-desk/machines", version: 1, machines: [], enums };
 const caps = { engine: "emu", label: "EMU OS 1.63", about: "",
-	can: { transport: true, panelKeys: true, liveRecord: true, chains: false, lcd: true, workingKitMemory: true, mutesFromMemory: true, sampleNames: true, modulators: true },
+	can: { transport: true, panelKeys: true, liveRecord: true, chains: false, lcd: true, workingKitMemory: true, mutesFromMemory: true, sampleNames: true, modulators: true,
+		sampleAudio: true, sampleLoad: true },
 	reasons: { chains: "keys only" }, values: { dumps: "direct" } };
 const docs = (extra = {}) => ({ patterns: { 5: pattern }, kits: { 3: kit("STORED") }, songs: {}, global: null, catalogue, telemetry: null,
 	workingKit: null, sources: { "kit:3": "dump" },
@@ -61,7 +62,15 @@ const docs = (extra = {}) => ({ patterns: { 5: pattern }, kits: { 3: kit("STORED
 			return (e.stdout || "").toString().trim().split("\n").filter(Boolean);
 		}
 	};
-	for (const [defName, instance] of [["pattern", pattern], ["kit", kit("STORED")], ["machine", docs().machine], ["catalogue", catalogue]]) {
+	/* P9: the samples document the Sampler draws (peaksWave reads min, max pairs) */
+	const slot = (i, full) => ({ slot: i, empty: !full, length: full ? 6349 : 0, rate: full ? 44100 : 0, loop: null, name: full ? "BD01" : null, peaks: full ? [-12, 30, -127, 127] : [] });
+	const samples = { schema: "md-desk/samples", version: 1, bins: 2, capacity: 1441792, used: 6349, rom: Array.from({ length: 48 }, (_, i) => slot(i, i === 0)),
+		ram: Array.from({ length: 4 }, (_, i) => slot(i, false)), ramReadable: true, ramReason: "" };
+	/* P9: a slot's detail (sampleWave, 16-bit) and the audition's two messages */
+	const wave = { type: "sampleWave", bank: "rom", slot: 0, length: 6349, rate: 44100, bins: 2, scale: 32767, peaks: [-1200, 3000, -32767, 32767] };
+	const auditionMsg = state => ({ type: "audition", state, bank: "ram", slot: 1, length: 6349, rate: 44100 });
+	for (const [defName, instance] of [["pattern", pattern], ["kit", kit("STORED")], ["machine", docs().machine], ["catalogue", catalogue], ["samples", samples],
+		["message", wave], ["message", auditionMsg("playing")], ["message", auditionMsg("stopped")]]) {
 		const problems = validate(defName, instance);
 		check(problems.length === 0, "fixture " + defName + " matches the schema" + (problems.length ? ": " + problems.join("; ") : ""));
 	}
@@ -159,6 +168,29 @@ Overlay.clear();
 	check(fx.length === 14 && fx.every(([p, v]) => p[2] === "fx" && p[3] === "AMD" && v === 5) && fx.some(([p]) => p[1] === 0),
 		"Control All: an effects knob on the 14 tracks it reaches, the RAM recorder's too");
 	check(rt.length === 28 && rt.some(([p, v]) => p[2] === "lfo" && p[3] === "SPD" && v === 33), "Control All: routing LFOS also moves the LFO section's SPD");
+}
+
+/* P9: sharp waveforms: the detail at the canvas' device pixels, asked for once, drawn column by column */
+{
+	const slot = { empty: false, length: 100000, peaks: [] };
+	check(waveBins(1200 * 2, 100000) === 2560 && waveBins(1201, 100000) === 1280 && waveBins(3000, 1000) === 1000 && waveBins(99999, 1e7) === WAVE_MAX_BINS,
+		"waveBins: the canvas' device pixels in steps of 256, at most a bin a sample and 8192");
+	check(waveWant(null, slot, 2400) === 2560 && waveWant({ bins: 2560, length: 100000 }, slot, 2400) === 0 && waveWant({ bins: 2560, length: 100000 }, slot, 2500) === 0,
+		"waveWant: asks once; a small resize asks nothing");
+	check(waveWant({ bins: 1280, length: 100000 }, slot, 2400) === 2560 && waveWant({ bins: 2560, length: 99999 }, slot, 2400) === 2560,
+		"waveWant: a wider canvas or another sample (a new length) asks again");
+	check(waveWant(null, { empty: true, length: 0 }, 2400) === 0 && waveWant({ bins: 300, length: 300 }, { empty: false, length: 300 }, 2400) === 0,
+		"waveWant: nothing for an empty slot; a short sample's every sample is enough");
+	const f32 = Math.fround;
+	const fine = waveColumns([-10, 10, -20, 5, -1, 30, 0, 0], 32767, 2);
+	check(fine[0] === f32(-20 / 32767) && fine[1] === f32(10 / 32767) && fine[2] === f32(-1 / 32767) && fine[3] === f32(30 / 32767), "waveColumns: more bins than columns: min and max of a column's bins");
+	const coarse = waveColumns([-127, 127, 0, 64], 127, 4);
+	check(coarse.length === 8 && coarse[0] === -1 && coarse[3] === 1 && coarse[4] === 0 && coarse[7] === f32(64 / 127), "waveColumns: fewer bins (the overview): the bin under each column");
+	check(waveColumns([], 127, 3).every(v => v === 0), "waveColumns: no peaks, a flat line");
+	const joined = waveColumns([-100, -100, 100, 100], 100, 2);
+	check(joined[0] === -1 && joined[1] === 0 && joined[2] === 0 && joined[3] === 1, "waveColumns: columns of one sample each reach halfway to their neighbour (a joined trace)");
+	const aud = { length: 44100, rate: 22050 };
+	check(auditionAt(aud, 0) === 0 && auditionAt(aud, 1000) === 0.5 && auditionAt(aud, 5000) === 1 && auditionAt(null, 10) === 0, "auditionAt: the playhead from the sample's own rate");
 }
 
 console.log("mdDeskModelTest: " + (failures ? "FAIL" : "PASS") + " (" + failures + " failures)");

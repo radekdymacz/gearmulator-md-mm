@@ -234,6 +234,44 @@ namespace mdJucePlugin
 		return true;
 	}
 
+	bool StudioLink::readSampleBank(std::shared_ptr<const elektronData::MdSampleBank>& _bank)
+	{
+		uint32_t sequence = 0;
+		const void* source = nullptr;
+		auto bank = m_processor.getPlugin().withDeviceLocked([&](synthLib::Device* _base) -> std::shared_ptr<const elektronData::MdSampleBank>
+		{
+			auto* device = dynamic_cast<md::DeskDevice*>(_base);
+			if(!device)
+				return nullptr;
+			source = device;
+			return device->readSampleBank(sequence);
+		});
+		if(!bank || (sequence == m_sampleSequence && source == m_sampleSource))
+			return false;
+		m_sampleSequence = sequence;
+		m_sampleSource = source;
+		_bank = std::move(bank);
+		return true;
+	}
+
+	uint64_t StudioLink::audition(const elektronData::AuditionClip& _clip)
+	{
+		return m_processor.getPlugin().withDeviceLocked([&](synthLib::Device* _base) -> uint64_t
+		{
+			auto* device = dynamic_cast<md::DeskDevice*>(_base);
+			return device && device->isValid() ? device->audition(_clip) : 0;
+		});
+	}
+
+	elektronData::AuditionStatus StudioLink::auditionStatus() const
+	{
+		return m_processor.getPlugin().withDeviceLocked([](synthLib::Device* _base)
+		{
+			auto* device = dynamic_cast<md::DeskDevice*>(_base);
+			return device ? device->auditionStatus() : elektronData::AuditionStatus{};
+		});
+	}
+
 	bool StudioLink::readLcd(std::vector<uint8_t>& _bits)
 	{
 		if(!m_panel)

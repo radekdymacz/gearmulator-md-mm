@@ -3,8 +3,13 @@
 #include "mdDeskModel.h"
 #include "mdDeskTelemetry.h"
 
+#include "mdDeskSds.h"
+
 #include "deskCore/deskCore.h"
 #include "deskCore/deskPush.h"
+
+#include "elektronData/mdAudition.h"
+#include "elektronData/mdSamples.h"
 
 #include <cstdint>
 #include <functional>
@@ -52,6 +57,10 @@ namespace mdDesk
 		// CCs itself. Unset: not needed.
 		std::function<void(uint8_t _channel)> baseChannel;
 		std::function<double()> nowMs;
+		// P9: play a slot's samples once on the plug-in's own output (a null pcm stops); the request's id,
+		// 0 = not possible. Unset: this engine has no sound of its own (a real Machinedrum).
+		std::function<uint64_t(const elektronData::AuditionClip&)> audition;
+		std::function<elektronData::AuditionStatus()> auditionStatus;
 	};
 
 	// The Machinedrum's adapter interface (P6): deskCore's Machine protocol plus the facts a
@@ -76,5 +85,16 @@ namespace mdDesk
 		virtual void sendModulation(uint8_t _track, uint8_t _param, uint8_t _value, const Documents& _view) = 0;
 
 		virtual const Telemetry& telemetry() const = 0;
+
+		// P9, UW samples: _upload to ROM slot _slot (0-47) as SDS, paced by the machine's handshake
+		// (SdsSender); the device's other SysEx waits meanwhile. The reason when it cannot start ("" =
+		// started).
+		virtual std::string sendSample(uint8_t _slot, const elektronData::MdSampleUpload& _upload) = 0;
+		virtual void cancelSample() = 0;
+		virtual const SdsSender::Progress& sampleProgress() const = 0;
+		// P9: _clip heard once on the plug-in's own output (null pcm: stop), the request's id; 0 = this
+		// engine cannot. The status of the latest request (another id: it is gone, e.g. a new device).
+		virtual uint64_t audition(const elektronData::AuditionClip&) { return 0; }
+		virtual elektronData::AuditionStatus auditionStatus() const { return {}; }
 	};
 }

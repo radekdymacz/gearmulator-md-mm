@@ -25,8 +25,11 @@ namespace mdDesk
 				|| !fieldOk(_image.trigGroups[t], _before.trigGroups[t], _after.trigGroups[t])
 				|| !fieldOk(_image.muteGroups[t], _before.muteGroups[t], _after.muteGroups[t]))
 				return false;
+			// A new machine starts from its own defaults: its synthesis values are sent again after it
+			// (kitDelivery), so the image shows them only once they are _after's, changed or not.
+			const bool newMachine = _before.models[t] != _after.models[t];
 			for(size_t i = 0; i < ed::MdKit::g_paramsPerTrack; ++i)
-				if(!fieldOk(_image.params[t][i], _before.params[t][i], _after.params[t][i]))
+				if(newMachine && i < 8 ? _image.params[t][i] != _after.params[t][i] : !fieldOk(_image.params[t][i], _before.params[t][i], _after.params[t][i]))
 					return false;
 			const auto& a = _after.lfos[t];
 			const auto& b = _before.lfos[t];

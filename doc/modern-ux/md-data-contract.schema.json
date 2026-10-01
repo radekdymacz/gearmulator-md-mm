@@ -1022,7 +1022,9 @@
             "workingKitMemory",
             "mutesFromMemory",
             "sampleNames",
-            "modulators"
+            "modulators",
+            "sampleAudio",
+            "sampleLoad"
           ],
           "additionalProperties": false,
           "properties": {
@@ -1052,6 +1054,14 @@
             },
             "modulators": {
               "type": "boolean"
+            },
+            "sampleAudio": {
+              "type": "boolean",
+              "description": "P9: the UW sample slots can be read and heard (the emulated machine's memory: their waveforms, sampleWave, and audition on the plug-in's own output; a real Machinedrum ignores SDS dump requests)."
+            },
+            "sampleLoad": {
+              "type": "boolean",
+              "description": "P9: a sample file can be sent to a UW ROM slot (SDS)."
             }
           }
         },
@@ -2489,6 +2499,198 @@
           "properties": {
             "type": {
               "const": "openAudio"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "description": "P9: the UW sample slots (md-desk/samples).",
+          "required": [
+            "type",
+            "doc"
+          ],
+          "properties": {
+            "type": {
+              "const": "samples"
+            },
+            "doc": {
+              "$ref": "#/$defs/samples"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "description": "P9: one slot's waveform at the width the page draws it (after sampleWave): min, max per bin of its own samples, 16-bit. The overview in md-desk/samples has 128 bins a slot; this is the detail, for one slot, on demand.",
+          "required": [
+            "type",
+            "bank",
+            "slot",
+            "length",
+            "rate",
+            "bins",
+            "scale",
+            "peaks"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "type": {
+              "const": "sampleWave"
+            },
+            "bank": {
+              "enum": [
+                "rom",
+                "ram"
+              ]
+            },
+            "slot": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 47,
+              "description": "0-based: ROM 0-47, RAM 0-3."
+            },
+            "length": {
+              "type": "integer",
+              "minimum": 0,
+              "description": "Samples."
+            },
+            "rate": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "bins": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 8192,
+              "description": "Pairs in peaks: the bins asked for, at most the slot's length (a bin is at least one sample); 0 for an empty slot."
+            },
+            "scale": {
+              "const": 32767,
+              "description": "Full scale of peaks."
+            },
+            "peaks": {
+              "type": "array",
+              "description": "min, max per bin, -32767..32767.",
+              "items": {
+                "type": "integer",
+                "minimum": -32767,
+                "maximum": 32767
+              }
+            }
+          }
+        },
+        {
+          "type": "object",
+          "description": "P9: the audition (after audition): playing when it starts (from the start, at the slot's own rate, on the plug-in's own output), stopped when it is stopped, plays out, is replaced by another or the device is gone. Two messages an audition, never per frame: the page moves its playhead from rate itself.",
+          "required": [
+            "type",
+            "state",
+            "bank",
+            "slot",
+            "length",
+            "rate"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "type": {
+              "const": "audition"
+            },
+            "state": {
+              "enum": [
+                "playing",
+                "stopped"
+              ]
+            },
+            "bank": {
+              "enum": [
+                "rom",
+                "ram"
+              ]
+            },
+            "slot": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 47
+            },
+            "length": {
+              "type": "integer",
+              "minimum": 0,
+              "description": "Samples."
+            },
+            "rate": {
+              "type": "integer",
+              "minimum": 0,
+              "description": "Hz: the sample's own."
+            }
+          }
+        },
+        {
+          "type": "object",
+          "description": "P9: a sample file on its way to a ROM slot (SDS), after chooseSample: sending (sent of total packets), then done, failed or cancelled. A refusal before it starts is failed with only slot, file and text.",
+          "required": [
+            "type",
+            "slot",
+            "state",
+            "file",
+            "text"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "type": {
+              "const": "sampleLoad"
+            },
+            "slot": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 51,
+              "description": "The ROM slot, 0-47 (48-51: a RAM slot asked for, refused)."
+            },
+            "state": {
+              "enum": [
+                "sending",
+                "done",
+                "failed",
+                "cancelled"
+              ]
+            },
+            "file": {
+              "type": "string"
+            },
+            "name": {
+              "type": "string"
+            },
+            "rate": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "length": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "sent": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "total": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "handshake": {
+              "type": "boolean",
+              "description": "false: the machine did not answer the header, the packets go without a handshake (open loop)."
+            },
+            "retries": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "notes": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              },
+              "description": "What the conversion changed (mono, rate, cut), in plain words."
+            },
+            "text": {
+              "type": "string"
             }
           }
         }
@@ -4928,6 +5130,32 @@
         },
         {
           "type": "object",
+          "description": "machine: stop the sample on its way to a ROM slot (SDS CANCEL); the file is chosen with chooseSample",
+          "required": [
+            "op"
+          ],
+          "properties": {
+            "op": {
+              "const": "sampleCancel"
+            },
+            "id": {
+              "type": "integer"
+            },
+            "g": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "force": {
+              "type": [
+                "boolean",
+                "integer"
+              ]
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
           "description": "machine",
           "required": [
             "op"
@@ -5098,6 +5326,118 @@
             },
             "ccs": {
               "type": "array"
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "description": "setup: a slot's waveform at the width it is drawn at: {\"type\":\"sampleWave\"} with up to bins min, max pairs (16-bit)",
+          "required": [
+            "op",
+            "bank",
+            "slot",
+            "bins"
+          ],
+          "properties": {
+            "op": {
+              "const": "sampleWave"
+            },
+            "id": {
+              "type": "integer"
+            },
+            "g": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "force": {
+              "type": [
+                "boolean",
+                "integer"
+              ]
+            },
+            "bank": {
+              "type": "string",
+              "enum": [
+                "rom",
+                "ram"
+              ]
+            },
+            "slot": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 47
+            },
+            "bins": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 8192
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "description": "setup: play a slot's sample once from the start on the plug-in's own output (the emulator); another audition stops; {\"type\":\"audition\"} says when it plays and stops",
+          "required": [
+            "op",
+            "bank",
+            "slot"
+          ],
+          "properties": {
+            "op": {
+              "const": "audition"
+            },
+            "id": {
+              "type": "integer"
+            },
+            "g": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "force": {
+              "type": [
+                "boolean",
+                "integer"
+              ]
+            },
+            "bank": {
+              "type": "string",
+              "enum": [
+                "rom",
+                "ram"
+              ]
+            },
+            "slot": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 47
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "description": "setup: stop the audition",
+          "required": [
+            "op"
+          ],
+          "properties": {
+            "op": {
+              "const": "auditionStop"
+            },
+            "id": {
+              "type": "integer"
+            },
+            "g": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "force": {
+              "type": [
+                "boolean",
+                "integer"
+              ]
             }
           },
           "additionalProperties": false
@@ -5319,6 +5659,38 @@
                 "boolean",
                 "integer"
               ]
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "description": "host: choose a sample (WAV or AIFF) for UW ROM slot slot: the window's native file chooser; the plug-in reads the file, converts it and sends it as SDS (sampleLoad messages follow); the file never passes through the page",
+          "required": [
+            "op",
+            "slot"
+          ],
+          "properties": {
+            "op": {
+              "const": "chooseSample"
+            },
+            "id": {
+              "type": "integer"
+            },
+            "g": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "force": {
+              "type": [
+                "boolean",
+                "integer"
+              ]
+            },
+            "slot": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 47
             }
           },
           "additionalProperties": false
@@ -5816,6 +6188,148 @@
           "additionalProperties": false
         }
       ]
+    },
+    "sampleSlot": {
+      "type": "object",
+      "required": [
+        "slot",
+        "empty",
+        "length",
+        "rate",
+        "loop",
+        "name",
+        "peaks"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "slot": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 47,
+          "description": "0-based: ROM 0-47, RAM 0-3."
+        },
+        "empty": {
+          "type": "boolean"
+        },
+        "length": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Samples."
+        },
+        "rate": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Hz (0 for an empty slot)."
+        },
+        "loop": {
+          "description": "The loop the sample was stored with, in samples; null: none.",
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "type": "object",
+              "required": [
+                "start",
+                "end"
+              ],
+              "additionalProperties": false,
+              "properties": {
+                "start": {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                "end": {
+                  "type": "integer",
+                  "minimum": 0
+                }
+              }
+            }
+          ]
+        },
+        "name": {
+          "description": "The slot name (4 characters at most, from patch RAM, only for a ROM slot); null: none known.",
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "type": "string",
+              "maxLength": 4
+            }
+          ]
+        },
+        "peaks": {
+          "type": "array",
+          "description": "min, max per bin (bins pairs), -127..127 of full scale; empty for an empty slot.",
+          "items": {
+            "type": "integer",
+            "minimum": -127,
+            "maximum": 127
+          }
+        }
+      }
+    },
+    "samples": {
+      "type": "object",
+      "description": "P9 (data-contract.md 4.9): the UW sample slots as read from the emulated machine's memory: ROM slots from flash, RAM buffers from DSP2's memory. Published when it changes and after every ready; a real Machinedrum has none (capabilities.sampleAudio).",
+      "required": [
+        "schema",
+        "version",
+        "bins",
+        "capacity",
+        "used",
+        "rom",
+        "ram",
+        "ramReadable",
+        "ramReason"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "schema": {
+          "const": "md-desk/samples"
+        },
+        "version": {
+          "const": 1
+        },
+        "bins": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "capacity": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Samples DSP2's sample memory holds in all (ROM slots and the four RAM buffers share it)."
+        },
+        "used": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Samples the ROM slots hold."
+        },
+        "rom": {
+          "type": "array",
+          "minItems": 48,
+          "maxItems": 48,
+          "items": {
+            "$ref": "#/$defs/sampleSlot"
+          }
+        },
+        "ram": {
+          "type": "array",
+          "minItems": 4,
+          "maxItems": 4,
+          "items": {
+            "$ref": "#/$defs/sampleSlot"
+          }
+        },
+        "ramReadable": {
+          "type": "boolean"
+        },
+        "ramReason": {
+          "type": "string",
+          "description": "Why the RAM buffers are not shown (empty when they are)."
+        }
+      }
     }
   }
 }

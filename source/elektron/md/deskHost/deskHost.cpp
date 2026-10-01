@@ -69,6 +69,10 @@ namespace deskHost
 			row("noticeAnswer", {{"id", ArgType::Integer, 0, 1e9}, {"button", ArgType::Integer, 0, 8}},
 				"the button pressed on a notice message (the plug-in's own question or warning, shown by the page)", Action::NoticeAnswer, Actor::Window),
 			row("chooseSyx", {}, "choose a .syx to import: the window's native file chooser; a preview follows (syxPreview)", Action::ChooseSyx, Actor::Window),
+			row("chooseSample", {{"slot", ArgType::Integer, 0, 47}},
+				"choose a sample (WAV or AIFF) for UW ROM slot slot: the window's native file chooser; the plug-in reads the file, "
+				"converts it and sends it as SDS (sampleLoad messages follow); the file never passes through the page",
+				Action::ChooseSample, Actor::Window),
 			row("syxImport", {{"kinds", ArgType::Array}}, "import the previewed .syx: the kinds chosen (global, kit, pattern, song), as document writes, one undo step",
 				Action::SyxImport),
 			row("syxCancel", {}, "stop an import between items", Action::SyxCancel),

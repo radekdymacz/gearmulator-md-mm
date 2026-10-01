@@ -1370,3 +1370,19 @@ body.liverec .st,body.liverec .lb{cursor:cell}
 .lcdpanel .trf{display:flex!important;flex-direction:column!important;justify-content:flex-start!important;align-items:flex-start!important;gap:3px!important}
 .lcdt{display:flex!important;flex-direction:row!important;flex-wrap:nowrap!important;align-items:flex-start!important;align-self:flex-start!important;gap:5px!important}
 .lcdt .lt{flex:0 0 var(--ltk)!important;width:var(--ltk)!important;height:var(--ltk)!important;min-width:var(--ltk)!important;min-height:var(--ltk)!important;aspect-ratio:auto!important;box-sizing:border-box!important;display:flex!important;align-items:center!important;justify-content:center!important;padding:0!important}
+/* P9: a slot's waveform with its audition key (the LCD keys' look) and playhead. The box takes the
+   canvas' place, so the Sound screen's stretch rules apply to it. */
+.wavebox{position:relative;min-width:0}
+.wavebox>canvas.ed{width:100%}
+.soundgrid>.card>.wavebox{min-height:150px}
+.soundgrid>.card>.wavebox>canvas.ed{height:100%!important;min-height:150px}
+.wavebox .aud{all:unset;position:absolute;top:6px;right:6px;cursor:pointer;display:inline-flex;align-items:center;gap:4px;height:18px;padding:0 6px;border-radius:2px;
+  font:12px var(--pix);text-transform:uppercase;color:var(--ink);background:var(--lcd);box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--ink) 55%,transparent)}
+.wavebox .aud svg{width:8px;height:8px;fill:currentColor}
+.wavebox .aud:hover{background:color-mix(in srgb,var(--ink) 15%,var(--lcd))}
+.wavebox .aud[aria-pressed=true]{background:var(--ink);color:var(--lcd)}
+.wavebox .aud:focus-visible{outline:2px solid var(--ink);outline-offset:1px}
+.wavebox .aud:disabled{opacity:.45;cursor:not-allowed}
+.wavebox .audph{position:absolute;left:0;top:0;bottom:0;width:0;pointer-events:none;border-radius:4px 0 0 4px;
+  background:color-mix(in srgb,var(--ink) 12%,transparent);box-shadow:inset -2px 0 0 var(--ink)}
+.wavebox .audph[hidden]{display:none}

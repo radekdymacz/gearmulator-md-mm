@@ -26,9 +26,87 @@ namespace md
 	void DeskDevice::processAudio(const synthLib::TAudioInputs& _inputs, const synthLib::TAudioOutputs& _outputs, const size_t _samples)
 	{
 		Device::processAudio(_inputs, _outputs, _samples);
+		// P9: the audition on the main output (Main A/B), from its rate to the machine's.
+		m_audition.mix(_outputs[0], _outputs[1], _samples, getSamplerate());
 		publishSequencerTelemetry(_samples);
+		scanSamples();
 		m_frames += _samples;
 		sendPanelPackets();
+	}
+
+	std::shared_ptr<const elektronData::MdSampleBank> DeskDevice::readSampleBank(uint32_t& _sequence) const
+	{
+		m_sampleWanted.store(true, std::memory_order_relaxed);
+		std::lock_guard lock(m_sampleMutex);
+		_sequence = m_sampleSequence;
+		return m_sampleBank;
+	}
+
+	// P9: the UW sample memory as elektronData reads it, on the thread that owns the hardware.
+	elektronData::MdSampleMemory sampleMemoryOf(Hardware& _hardware)
+	{
+		elektronData::MdSampleMemory m;
+		auto& uc = _hardware.getUC();
+		m.flash = [&uc](const uint32_t _offset, const size_t _size, uint8_t* _out) { return uc.copyFlashDataRangeRealtime(_out, _offset, _size); };
+		m.patch = [&uc](const uint32_t _offset) { return uc.read8(0x700000 + _offset); };
+		auto& memory = _hardware.getDspProducer().dsp().memory();
+		m.dspX = [&memory](const uint32_t _address) { return static_cast<uint32_t>(memory.get(dsp56k::MemArea_X, _address)); };
+		return m;
+	}
+
+	void DeskDevice::scanSamples()
+	{
+		auto& hardware = getHardware();
+		auto& s = m_samples;
+		if(s.of != &hardware)
+			s = SampleScan{&hardware};
+		if(!m_sampleWanted.load(std::memory_order_relaxed) || getModel() != MachineModel::Machinedrum
+			|| hardware.firmwareFingerprint() != g_mdOs163Fingerprint || !hardware.isFirmwareMidiReady())
+			return;
+		const auto memory = sampleMemoryOf(hardware);
+		if(s.scanning)
+		{
+			// One slot a block: ROM 1-48, then RAM 1-4.
+			if(s.next < elektronData::g_mdRomSlots)
+				s.bank.rom.push_back(elektronData::readMdRomSample(memory, s.index, static_cast<uint8_t>(s.next)));
+			else
+				s.bank.ram.push_back(elektronData::readMdRamSample(memory, s.index, static_cast<uint8_t>(s.next - elektronData::g_mdRomSlots)));
+			if(++s.next < size_t(elektronData::g_mdRomSlots) + elektronData::g_mdRamSlots)
+				return;
+			std::unique_lock lock(m_sampleMutex, std::try_to_lock);
+			if(!lock.owns_lock())
+			{
+				--s.next;	// the last slot again next block, then publish
+				s.bank.ram.pop_back();
+				return;
+			}
+			m_sampleBank = std::make_shared<const elektronData::MdSampleBank>(std::move(s.bank));
+			++m_sampleSequence;
+			s.published = s.index.signature;
+			s.scanning = false;
+			return;
+		}
+		// Look at the memory about 10 times a second (64-frame blocks); read it once it is the same twice
+		// and flash has been quiet for 0.3 s, or when asked.
+		if(s.blocks++ % 64)
+			return;
+		const auto signature = elektronData::mdSampleSignature(memory);
+		s.stable = signature == s.seen ? s.stable + 1 : 0;
+		s.seen = signature;
+		const auto refresh = m_sampleRefresh.load(std::memory_order_relaxed);
+		const bool asked = refresh != s.refresh;
+		auto& uc = hardware.getUC();
+		const bool quiet = !uc.flashDirty() || uc.flashIdleCycles() > 12'000'000;
+		if(!asked && (s.stable < 1 || !quiet || (m_sampleSequence && signature == s.published)))
+			return;
+		s.refresh = refresh;
+		s.index = elektronData::indexMdSamples(memory);
+		s.bank = {};
+		s.bank.signature = s.index.signature;
+		s.bank.ramReadable = s.index.ramReadable;
+		s.bank.ramReason = s.index.ramReason;
+		s.next = 0;
+		s.scanning = true;
 	}
 
 	void DeskDevice::sendPanelPackets()

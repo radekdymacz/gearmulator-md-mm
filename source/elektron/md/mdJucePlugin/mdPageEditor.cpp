@@ -124,6 +124,11 @@ namespace mdJucePlugin
 				}
 				m_page->send(deskCore::resultMessage(_message, {}, {}));
 			}
+			else if(row->handler.action == deskHost::Action::ChooseSample)
+			{
+				chooseSample(static_cast<uint8_t>(_message.find("slot")->asNumber()));
+				m_page->send(deskCore::resultMessage(_message, {}, {}));
+			}
 			else if(row->handler.action == deskHost::Action::ChooseSyx || row->handler.action == deskHost::Action::SyxExport)
 			{
 				chooseSyx(row->handler.action == deskHost::Action::SyxExport);
@@ -153,6 +158,22 @@ namespace mdJucePlugin
 				const auto f = _c.getResult();
 				if(f.existsAsFile())
 					m_session->installRom(f);
+			});
+	}
+
+	// P9: a sample for a UW ROM slot; the session reads the file, the page only hears the progress.
+	void PageEditor::chooseSample(const uint8_t _slot)
+	{
+		char title[64];
+		std::snprintf(title, sizeof(title), "Choose a sample for ROM-%02d (WAV or AIFF)", _slot + 1);
+		m_chooser = std::make_unique<juce::FileChooser>(title, juce::File::getSpecialLocation(juce::File::userMusicDirectory),
+			"*.wav;*.wave;*.aif;*.aiff;*.aifc");
+		m_chooser->launchAsync(juce::FileBrowserComponent::openMode | juce::FileBrowserComponent::canSelectFiles,
+			[this, _slot](const juce::FileChooser& _c)
+			{
+				const auto f = _c.getResult();
+				if(f.existsAsFile() && m_session)
+					m_session->loadSampleFile(_slot, f);
 			});
 	}
 

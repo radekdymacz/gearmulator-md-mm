@@ -16,11 +16,13 @@ add_library(elektronData STATIC)
 
 target_sources(elektronData PRIVATE
 	dumpIo.h
+	mdAudition.cpp mdAudition.h
 	jsonFirmware.cpp jsonFirmware.h
 	mdCommands.cpp mdCommands.h
 	mdGlobal.cpp mdGlobal.h
 	mdJson.cpp mdJson.h
 	mdKit.cpp mdKit.h
+	mdSamples.cpp mdSamples.h
 	mdWorkingKit.cpp mdWorkingKit.h
 	mdMachines.cpp mdMachines.h
 	mdNames.h

@@ -101,6 +101,9 @@ namespace mdJucePlugin
 		// the editor holds written to a .syx (syxExport). The model's session does both.
 		virtual void openSyx(const juce::File& _file) = 0;
 		virtual void exportSyx(const juce::File& _file) = 0;
+		// P9: a sample file (WAV, AIFF) the user chose for UW ROM slot _slot. The Machinedrum's session
+		// sends it (sampleLoad messages follow); a model without a sampler ignores it.
+		virtual void loadSampleFile(uint8_t _slot, const juce::File& _file) { (void)_slot; (void)_file; }
 
 	protected:
 		void reply(const Value& _message, bool _ok, const std::string& _note) const;

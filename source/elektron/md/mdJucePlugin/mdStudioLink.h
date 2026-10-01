@@ -59,6 +59,12 @@ namespace mdJucePlugin
 		// The working-kit region (elektronData::mdWorkingKitFromMemory) when it changed
 		// since the last call; lock-free, MD OS 1.63 only.
 		bool readWorkingKit(Bytes& _region);
+		// P9: the UW sample bank (md::DeskDevice::readSampleBank) when the device published a new one since
+		// the last call. Asking is what makes the device read its samples.
+		bool readSampleBank(std::shared_ptr<const elektronData::MdSampleBank>& _bank);
+		// P9: a slot heard once on the plug-in's output (md::DeskDevice::audition); 0 without a device.
+		uint64_t audition(const elektronData::AuditionClip& _clip);
+		elektronData::AuditionStatus auditionStatus() const;
 		// The firmware's LCD, 128 x 64, one bit per pixel, row-major (16 bytes a row, bit 7 =
 		// the left pixel). False without a local device.
 		bool readLcd(std::vector<uint8_t>& _bits);
@@ -92,6 +98,8 @@ namespace mdJucePlugin
 		std::shared_ptr<md::FrontPanelPublisher> m_panel;
 		double m_telemetryCheckedMs = -1e9;
 		uint32_t m_workingKitSequence = 0;
+		uint32_t m_sampleSequence = 0;
+		const void* m_sampleSource = nullptr;
 		const void* m_workingKitSource = nullptr;
 		std::shared_ptr<StudioLink*> m_alive;
 	};

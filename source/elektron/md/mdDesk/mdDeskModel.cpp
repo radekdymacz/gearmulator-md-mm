@@ -5,6 +5,7 @@
 #include "elektronData/mdJson.h"
 #include "elektronData/mdMachines.h"
 #include "elektronData/mdNames.h"
+#include "elektronData/mdSamples.h"
 #include "elektronData/mdValidate.h"
 
 namespace mdDesk
@@ -292,6 +293,7 @@ namespace mdDesk
 			{"selectSong", Owner::Machine, Gate::Input, -1, {s}, "LOAD SONG (stopped)"},
 			{"reloadSong", Owner::Machine, Gate::Input, -1, {}, "stop, load, play"},
 			{"sampleName", Owner::Machine, Gate::Input, -1, {{"slot", ArgType::Integer, 0, 47}, {"name", ArgType::Text}}, "0x73"},
+			{"sampleCancel", Owner::Machine, Gate::None, -1, {}, "stop the sample on its way to a ROM slot (SDS CANCEL); the file is chosen with chooseSample"},
 			{"play", Owner::Machine, Gate::Input, -1, {}, ""},
 			{"stop", Owner::Machine, Gate::Input, -1, {}, ""},
 			{"mute", Owner::Machine, Gate::Input, -1, {t, on}, ""},
@@ -299,6 +301,13 @@ namespace mdDesk
 			// ---- the editor's setup ----
 			{"modSet", Owner::Setup, Gate::None, -1, {{"doc", ArgType::Object}}, "the app modulators (md-desk/modulators)"},
 			{"knobs", Owner::Setup, Gate::None, -1, {{"ccs", ArgType::Array}}, "the eight knob rows' CCs"},
+			// ---- P9: the samples the desk read (the emulated machine's memory), the desk's own ----
+			{"sampleWave", Owner::Setup, Gate::None, -1, {{"bank", ArgType::Text, 0, 0, false, {"rom", "ram"}}, {"slot", ArgType::Integer, 0, 47},
+				{"bins", ArgType::Integer, 1, static_cast<double>(ed::g_mdSampleWaveMaxBins)}},
+				"a slot's waveform at the width it is drawn at: {\"type\":\"sampleWave\"} with up to bins min, max pairs (16-bit)"},
+			{"audition", Owner::Setup, Gate::None, -1, {{"bank", ArgType::Text, 0, 0, false, {"rom", "ram"}}, {"slot", ArgType::Integer, 0, 47}},
+				"play a slot's sample once from the start on the plug-in's own output (the emulator); another audition stops; {\"type\":\"audition\"} says when it plays and stops"},
+			{"auditionStop", Owner::Setup, Gate::None, -1, {}, "stop the audition"},
 		});
 		return table;
 	}

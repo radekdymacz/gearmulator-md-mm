@@ -214,12 +214,13 @@ The desk names the trig it expects (`mdDesk::nextLockStep`) as
 read-back shows the real lock. Checked on firmware: the desk said step 9, the
 firmware locked step 9.
 
-**UW samples (P3).** `sampleName` (slot 0-47, 1-4 characters) sends the
-manual's 0x73. That is all the firmware offers: it has no request for names,
-memory in use or sample audio, and it ignores SDS dump requests (measured, no
-reply for three slots). Names, memory and audio are therefore not part of the
-contract; the page shows the controls that cannot work as disabled, with the
-reason.
+**UW samples (P3, P9).** `sampleName` (slot 0-47, 1-4 characters) sends the
+manual's 0x73. Over MIDI that is all the firmware offers: it has no request for
+names, memory in use or sample audio, and it ignores SDS dump requests (measured,
+no reply for three slots). So on a real Machinedrum the waveforms, names and
+memory cannot be shown (`capabilities.sampleAudio` false, with the reason). P9:
+the emulated machine's memory has all of it; see 4.9 for the `md-desk/samples`
+document, and a sample file into a ROM slot (`chooseSample`, SDS) on both engines.
 
 **Start-up (P4).** MD OS 1.63 answers MIDI about 13 s before it takes panel keys:
 its start-up animation ignores them (PLAY first taken 12.7 s after MIDI ready on a
@@ -265,7 +266,9 @@ firmware (`mdP4ProbeFirmwareTest library`, smoke test p4):
 - Rename: the kit that plays live (0x55, SAVE stores it); another slot: its dump
   written back with the new name.
 - A pattern dump over the current pattern that links another kit makes the machine
-  load that kit. Slot writes that would lose unsaved kit edits answer
+  load that kit. One that links the kit that plays loads it again from its slot, so
+  its unsaved edits go; the desk sends them again as live edits right after the dump
+  (`MdMachine::restoreWorkingKit`, `mdDeskFirmwareTest <MD ROM> sampler`). Slot writes that would lose unsaved kit edits answer
   `{"type":"ask","ask":"overwriteKit"|"relinkKit"|"loadKit","command"}`; the page
   sends the command again with `force`.
 Slot writes are undoable in the editor; LOAD and SAVE are the machine's (it keeps
@@ -357,6 +360,91 @@ and `on`, `midiInput` with `device` and `on`; or `do` = `test` (a test tone) or
 `bluetooth` (the system's pairing dialog). Each gets a `result` and a fresh document;
 changes are saved with the standalone's settings at once. `{"op":"audioMeter","on"}`
 starts or stops `{"type":"audioLevel","in":0-1}` (the input before the mute, 15 Hz).
+
+### 4.9 `md-desk/samples` and loading a sample (P9, UW)
+
+Read from the emulated MD OS 1.63 UW's memory (`elektronData/mdSamples.h`, found with
+`mdEditorProbeFirmwareTest samplemap` and `rammap`): never streamed, published as
+`{"type":"samples","doc"}` when it changed and after every ready. `md::DeskDevice` reads it on the
+audio thread, one slot a block, once the editor has asked, and only when the memory changed and has
+been quiet a moment: the flash sector heads, the slot names and the RAM table make a signature it
+looks at about 10 times a second; it reads when the signature is the same twice and flash has been
+idle for 0.3 s (an SDS import, then the firmware's CLEANING / LOADING, writes flash; a RAM-R take
+grows its buffer). The emulator engine picks a new bank up every 250 ms.
+
+| Field | Meaning |
+|---|---|
+| `bins` | 128: peaks per slot (the overview: light, every slot; the detail is `sampleWave`, below) |
+| `capacity`, `used` | DSP2's sample memory in samples (1441792: 12-bit, two to a 24-bit word, X 0x150000-0x1fffff) and what the ROM slots hold. The four RAM buffers share the rest |
+| `rom[48]`, `ram[4]` | `{slot, empty, length, rate, loop {start, end} or null, name or null, peaks}`. `peaks` is min, max per bin, -127..127 of full scale; empty for an empty slot |
+| `ramReadable`, `ramReason` | The RAM buffers' table was found (else why not) |
+
+Where it is (OS 1.63 UW, measured):
+- **ROM slots: the 8 MiB NOR flash**, 0x200000-0x79ffff, a record per slot from a 64 KiB sector:
+  `+0` 0x18 (0x7a: a free sector; 0x1a: the record's next sector), `+1` the slot 0-47, `+2` bits (16),
+  `+4` period (ns), `+8` length, `+12` loop start, `+16` loop end (32-bit, the low 16-bit word first),
+  `+21` loop type (0x7f none), `+22` a word not decoded, `+24` the samples, signed 16-bit big-endian. A
+  longer sample goes on in the next sectors, each after a 4-byte head (0x1a, slot, 0xff, 0xff). An SDS
+  import writes a new record into a free sector and frees the old one. The 1.63 factory image fills
+  slots 1-32.
+- **Names: patch RAM 0x7244a**, 5 bytes a ROM slot: 4 characters and their sum (unset slots hold
+  noise, which the sum refuses). 0x73 writes them; an SDS sample carries its own 0x73 after its header.
+- **RAM slots: DSP2's memory only** (lost at power-off, as on the machine). X 0x147e00 is a table of 64
+  entries `{start, length, loop start, rate}` (rate 0x040000 = 44.1 kHz); entries 0-31 are ROM 1-32 as
+  played, 32-35 RAM 1-4 (RAM 1 starts right after the ROM samples). The samples are 12-bit codes, two
+  to a word, high first, expanded through the 4096-word table at X 0x146000 (signed 24-bit, rising,
+  code 0x800 = silence). The ROM samples in DSP memory are the same codes after the firmware's filter
+  and companding, so the page's ROM waveforms come from flash, exactly what was stored.
+
+**A slot's detail** (`sampleWave {bank: "rom"|"ram", slot, bins}`, the desk's own row; `bins` 1-8192):
+`{"type":"sampleWave", bank, slot, length, rate, bins, scale: 32767, peaks}`, min, max per bin of the
+slot's own samples, 16-bit, at most a bin a sample (`elektronData::mdWavePeaks`). The page asks for one
+slot at the canvas' width in device pixels (`waveBins`: steps of 256, so a small resize asks nothing),
+draws the overview until it comes, and drops what it holds with every new `samples` document. The
+desk computes it from the bank it holds (the device keeps each slot's samples with the bank: ROM from
+flash as stored, RAM through the expander as 16-bit), on the message thread, never on the audio thread.
+
+**Audition** (`audition {bank, slot}`, `auditionStop`; the desk's rows): the slot plays once from the
+start at its own rate on the plug-in's own output, so a DAW hears it: `md::DeskDevice` mixes it into
+Main A/B after the machine's audio (`elektronData::AuditionMixer`: linear resampling to the machine's
+44.1 kHz, which the plug-in resamples to the host's rate like the machine's own audio; a 64-frame fade
+when one replaces another). One at a time: another audition replaces it; the page stops it when its
+waveform leaves the page (another slot, track or workspace). Hand-off: the message thread owns every
+request (the samples, shared and never changed) and publishes it through one atomic pointer; the
+audio thread takes no lock and allocates or frees nothing, and says which requests it may still read,
+so the message thread frees only older ones. `{"type":"audition", state: "playing"|"stopped", bank,
+slot, length, rate}`: playing when it starts, stopped when it is stopped, played out or replaced (or
+the device is gone); never per frame, the page moves its playhead from `rate` itself. A real
+Machinedrum has no sound of its own here: `capabilities.sampleAudio` is false, the page's PLAY keys
+are disabled with its reason and the desk refuses both rows with it. Measured on the emulator
+(`mdDeskFirmwareTest <MD ROM> samples`): ROM-41's detail at 4096 bins is exactly the peaks of what was
+sent, and its audition is the sent samples resampled 32 -> 44.1 kHz to within 1e-4.
+
+**Loading a sample** (`chooseSample {slot}`, the window's row): the window's native chooser
+(WAV or AIFF; drag and drop is not offered, see P7), the session reads the file and hands its bytes
+to `mdDesk::Desk::loadSample`; nothing passes through the page. Pure steps (`elektronData`):
+`decodeAudioFile` (WAV PCM 8/16/24/32, float 32/64, extensible; AIFF / AIFC PCM, `sowt`, `fl32`),
+`prepareMdSample` (channels mixed to mono; above 44.1 kHz a short low-pass and linear interpolation
+down to 44.1 kHz, lower rates kept; cut to the memory left: capacity minus the other ROM slots minus a
+second for each RAM buffer; on a real machine the free memory is not known; peaks above full scale
+clipped), the name from the file name (`mdSampleNameFrom`: 1-4 of A-Z 0-9 -, else `SMPL`), and
+`mdSdsDump` (16-bit SDS: header, 0x73 name, packets of 40 samples). `mdDesk::SdsSender` sends it
+paced by the machine's handshake: the header, after its ACK the name and packet 0, then each packet
+after the ACK of the one before; NAK sends it again (3 times at most), WAIT holds (30 s at most),
+CANCEL ends it, and a NAK for the next packet after a resend counts as the ACK (OS 1.63 does that
+when an ACK was lost). A machine that does not answer the header within 2 s gets the packets
+without a handshake, one every 60 ms (the SDS rule). While a sample goes out the adapter sends no
+other SysEx (they wait and follow it) and polls nothing. Measured on the emulator: 400 packets (0.5 s at
+32 kHz) in 0.63 s of machine time, no retries; the waveform read back matches what was sent bin for
+bin (`mdDeskFirmwareTest <MD ROM> samples`).
+
+`{"type":"sampleLoad", slot, state, file, name, rate, length, sent, total, handshake, retries, notes,
+text}`: `sending` (at most one message a per cent), then `done`, `failed` or `cancelled`; a refusal
+before anything is sent is `failed` with slot, file and text. `sampleCancel` stops it (SDS CANCEL).
+
+**A RAM slot cannot take a file**: an SDS sample numbered 48 (the first slot after the ROM slots)
+gets no answer and nothing is stored, flash or DSP table (measured, `samplemap`). The page shows Load
+sample disabled on a RAM slot with that reason; `loadSample` refuses slots 48-51 the same way.
 
 ## 5. Hardware limits (`elektronData::validate`)
 

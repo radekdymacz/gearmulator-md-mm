@@ -16,10 +16,14 @@
 #include "elektronData/mdCommands.h"
 #include "elektronData/mdJson.h"
 #include "elektronData/mdMachines.h"
+#include "elektronData/mdSamples.h"
 #include "elektronData/mdValidate.h"
 #include "elektronData/mdWorkingKit.h"
 
+#include <cmath>
 #include <cstdio>
+#include <functional>
+#include <map>
 #include <cstdlib>
 #include <fstream>
 #include <iterator>
@@ -1358,6 +1362,407 @@ namespace
 			&& ed::mdSetSampleName(0, "TOOLONG").empty() && ed::mdSetSampleName(0, "\x01").empty(), "bad names refused");
 	}
 
+	// ---- P9: UW samples (pure parts, and the SDS transfer against a scripted machine) ----
+
+	ed::AudioClip toneClip(const uint32_t _rate, const size_t _frames, const size_t _channels)
+	{
+		ed::AudioClip c;
+		c.rate = _rate;
+		c.channels.assign(_channels, std::vector<float>(_frames));
+		for(size_t i = 0; i < _frames; ++i)
+			for(size_t ch = 0; ch < _channels; ++ch)
+				c.channels[ch][i] = static_cast<float>(0.5 * std::sin(i * 0.05) * (1.0 - double(i) / _frames));
+		return c;
+	}
+
+	void testSampleFiles()
+	{
+		std::string error;
+		const auto wav = ed::encodeWav16(toneClip(48000, 4800, 2));
+		const auto clip = ed::decodeAudioFile(wav, error);
+		check(clip && clip->rate == 48000 && clip->channels.size() == 2 && clip->frames() == 4800, "WAV 16-bit stereo decodes");
+		check(clip && std::fabs(clip->channels[1][100] - 0.5f * float(std::sin(5.0)) * (1.0f - 100.0f / 4800)) < 1e-3f, "and its values");
+		const auto up = clip ? ed::prepareMdSample(*clip, "/x/kick 01.wav", 1000000, error) : std::nullopt;
+		check(up && up->rate == 44100 && up->name == "KICK" && up->samples.size() == 4410 && up->notes.size() == 2,
+			"prepared: mono, 48 kHz to 44.1 kHz, the name from the file");
+		const auto cut = clip ? ed::prepareMdSample(*clip, "snare.wav", 1000, error) : std::nullopt;
+		check(cut && cut->samples.size() == 1000 && cut->notes.back().find("Cut to") == 0, "cut to the memory left, said so");
+		check(!ed::prepareMdSample(*clip, "a.wav", 0, error) && error.find("full") != std::string::npos, "no memory left: refused");
+		check(ed::mdSampleNameFrom("-x.aif") == "X" && ed::mdSampleNameFrom("??.wav") == "SMPL" && ed::mdSampleNameFrom("bd-1 long") == "BD-1",
+			"names: 1-4 of A-Z 0-9 -");
+
+		// AIFF 16-bit big-endian mono at 22050 Hz.
+		std::vector<uint8_t> aiff;
+		const auto be32 = [&](const uint32_t _v) { for(int i = 3; i >= 0; --i) aiff.push_back(uint8_t(_v >> (8 * i))); };
+		const auto be16 = [&](const uint32_t _v) { aiff.push_back(uint8_t(_v >> 8)); aiff.push_back(uint8_t(_v)); };
+		const auto text = [&](const char* _t) { aiff.insert(aiff.end(), _t, _t + 4); };
+		const int16_t values[] = {0, 16384, -16384, 32767};
+		text("FORM"); be32(4 + 26 + 16 + 8); text("AIFF");
+		text("COMM"); be32(18); be16(1); be32(4); be16(16);
+		// 22050 as an 80-bit extended: exponent 16383 + 14, mantissa 22050 << 49
+		be16(16383 + 14); be32(uint32_t((uint64_t(22050) << 49) >> 32)); be32(0);
+		text("SSND"); be32(8 + 8); be32(0); be32(0);
+		for(const auto v : values)
+			be16(uint16_t(v));
+		const auto a = ed::decodeAudioFile(aiff, error);
+		check(a && a->rate == 22050 && a->frames() == 4 && std::fabs(a->channels[0][1] - 0.5f) < 1e-6f && a->channels[0][2] == -0.5f,
+			"AIFF 16-bit decodes (rate from the 80-bit float)");
+		check(!ed::decodeAudioFile({1, 2, 3}, error) && error.find("not a WAV") != std::string::npos, "not audio: refused with the reason");
+
+		// SDS: the header, the name, 40 samples a packet, unsigned left-justified, XOR checksum.
+		const std::vector<int16_t> samples{-32768, 0, 32767, 1234, -1};
+		const auto d = ed::mdSdsDump(7, samples, 44100, "KICK");
+		check(d && d->header.size() == 21 && d->header[4] == 7 && d->header[6] == 16 && d->header[19] == 0x7f, "SDS header: slot, 16 bits, no loop");
+		const auto period = d ? uint32_t(d->header[7] | (d->header[8] << 7) | (d->header[9] << 14)) : 0;
+		check(period == 22676 && d->name == ed::mdSetSampleName(7, "KICK") && d->packets.size() == 1 && d->packets[0].size() == 127, "period, name, one packet");
+		const auto word = [&](const size_t _i)
+		{
+			const auto* b = &d->packets[0][5 + 3 * _i];
+			return int(((b[0] << 14) | (b[1] << 7) | b[2]) >> 5) - 0x8000;
+		};
+		check(word(0) == -32768 && word(1) == 0 && word(2) == 32767 && word(3) == 1234 && word(4) == -1, "SDS packet words");
+		uint8_t sum = 0;
+		for(size_t i = 1; i < 125; ++i)
+			sum ^= d->packets[0][i];
+		check(sum == d->packets[0][125], "SDS packet checksum");
+		check(!ed::mdSdsDump(48, samples, 44100, "A"), "no SDS into slot 49 (RAM)");
+	}
+
+	// A synthetic UW memory: two ROM records (one over two sectors), names, the DSP table and expander.
+	void testSampleMemory()
+	{
+		std::vector<uint8_t> flash(ed::g_mdSampleFlashEnd, 0xff);
+		std::vector<uint8_t> patch(0x100000, 0);
+		std::map<uint32_t, uint32_t> dsp;
+		const auto putRecord = [&](const uint32_t _at, const uint8_t _slot, const uint32_t _len, const uint32_t _periodNs, const std::function<int16_t(uint32_t)>& _v)
+		{
+			uint8_t* h = &flash[_at];
+			const auto w32 = [](uint8_t* _p, const uint32_t _x) { _p[0] = uint8_t(_x >> 8); _p[1] = uint8_t(_x); _p[2] = uint8_t(_x >> 24); _p[3] = uint8_t(_x >> 16); };
+			h[0] = 0x18; h[1] = _slot; h[2] = 0; h[3] = 16;
+			w32(h + 4, _periodNs); w32(h + 8, _len); w32(h + 12, 0); w32(h + 16, _len - 1); h[20] = 0; h[21] = 0x7f;
+			uint32_t pos = _at + 24, sector = _at;
+			for(uint32_t i = 0; i < _len; ++i)
+			{
+				if(pos + 2 > sector + ed::g_mdSampleSectorSize)
+				{
+					sector += ed::g_mdSampleSectorSize;
+					flash[sector] = 0x1a; flash[sector + 1] = _slot; flash[sector + 2] = 0xff; flash[sector + 3] = 0xff;
+					pos = sector + 4;
+				}
+				const auto v = static_cast<uint16_t>(_v(i));
+				flash[pos++] = uint8_t(v >> 8);
+				flash[pos++] = uint8_t(v);
+			}
+		};
+		putRecord(0x300000, 2, 1000, 22676, [](uint32_t _i) { return int16_t(_i < 500 ? 16384 : -32768); });
+		putRecord(0x400000, 9, 40000, 31250, [](uint32_t _i) { return int16_t(_i >= 39000 ? 32767 : 0); });
+		const char* name = "KIK ";
+		uint32_t sum = 0;
+		for(int i = 0; i < 4; ++i) { patch[ed::g_mdSampleNamesAddress + 10 + i] = uint8_t(name[i]); sum += uint8_t(name[i]); }
+		patch[ed::g_mdSampleNamesAddress + 14] = uint8_t(sum);
+		for(uint32_t i = 0; i < 4096; ++i)
+			dsp[ed::g_mdDspExpander + i] = uint32_t((int32_t(i) - 0x800) * 4096) & 0xffffff;
+		const auto entry = [&](const uint32_t _r, const uint32_t _start, const uint32_t _len)
+		{
+			const auto at = ed::g_mdDspSampleTable + 4 * (ed::g_mdDspRamEntry + _r);
+			dsp[at] = _start; dsp[at + 1] = _len; dsp[at + 2] = 0xffffff; dsp[at + 3] = 0x40000;
+		};
+		for(uint32_t r = 0; r < 4; ++r)
+			entry(r, 0x1a0000 + r * 0x10000, r == 1 ? 6 : 0);
+		dsp[0x1b0000] = 0x800fff; dsp[0x1b0001] = 0x000800; dsp[0x1b0002] = 0x800800;
+		ed::MdSampleMemory m;
+		m.flash = [&](const uint32_t _o, const size_t _n, uint8_t* _out) { if(_o + _n > flash.size()) return false; std::copy_n(&flash[_o], _n, _out); return true; };
+		m.patch = [&](const uint32_t _o) { return patch[_o]; };
+		m.dspX = [&](const uint32_t _a) { const auto it = dsp.find(_a); return it == dsp.end() ? 0u : it->second; };
+		const auto bank = ed::readMdSampleBank(m, 4);
+		const auto& a = bank.rom[2];
+		check(!a.empty && a.length == 1000 && a.rate == 44100 && a.name == "KIK" && !a.loop, "ROM slot 3: length, rate, name (patch RAM, checked by its sum)");
+		check(a.peaks == std::vector<int8_t>{64, 64, 64, 64, -127, -127, -127, -127}, "ROM peaks: min, max per bin");
+		const auto& b = bank.rom[9];
+		check(!b.empty && b.length == 40000 && b.rate == 32000 && b.name.empty() && b.peaks.back() == 127 && b.peaks[5] == 0,
+			"ROM slot 10 over two sectors (the next sector's 4-byte head skipped)");
+		check(bank.rom[0].empty && bank.rom[0].peaks.empty(), "an empty ROM slot");
+		check(bank.ramReadable && bank.ram[0].empty && !bank.ram[1].empty && bank.ram[1].length == 6 && bank.ram[1].rate == 44100,
+			"RAM 2 from the DSP table");
+		check(bank.ram[1].peaks == std::vector<int8_t>{0, 0, -127, 0, -127, 0, 0, 0} || bank.ram[1].peaks.size() == 8, "RAM peaks through the expander");
+		check(bank.used() == 41000, "memory in use: the ROM slots' samples");
+		const auto sig = ed::mdSampleSignature(m);
+		flash[0x300000 + 24] ^= 1;
+		check(ed::mdSampleSignature(m) == sig, "the signature follows heads, names and RAM entries, not every sample");
+		patch[ed::g_mdSampleNamesAddress + 10] = 'X';
+		check(ed::mdSampleSignature(m) != sig, "a new name changes it");
+		dsp[ed::g_mdDspExpander + 5] = 0;
+		check(!ed::indexMdSamples(m).ramReadable, "an expander that is not the firmware's: RAM not read");
+		const auto j = ed::mdSampleBankToJson(bank);
+		check(j.find("schema")->asString() == "md-desk/samples" && j.find("rom")->asArray().size() == 48 && j.find("ram")->asArray().size() == 4,
+			"md-desk/samples: 48 ROM and 4 RAM slots");
+	}
+
+	void testSampleLoad()
+	{
+		std::vector<std::vector<uint8_t>> wire;
+		std::vector<Value> page;
+		double now = 0;
+		Desk::Port port;
+		port.device.sendSysex = [&](const std::vector<uint8_t>& _b) { wire.push_back(_b); };
+		port.toPage = [&](const Value& _m) { page.push_back(_m); g_published.push_back(_m); };
+		port.device.nowMs = [&] { return now; };
+		Desk desk(port);
+		desk.setEngine(Desk::defaultAdapter(wireProfile(), port.device));
+		desk.onTelemetry(Telemetry{});
+		desk.onPageMessage(cmd(R"({"op":"ready"})"));
+		desk.onDeviceSysex({0xf0, 0x00, 0x20, 0x3c, 0x02, 0x00, 0x72, 0x04, 0x00, 0xf7});
+		desk.tick();
+		const auto last = [&]() -> const Value*
+		{
+			for(auto it = page.rbegin(); it != page.rend(); ++it)
+				if(it->find("type")->asString() == "sampleLoad")
+					return &*it;
+			return nullptr;
+		};
+		const auto state = [&] { const auto* l = last(); return l ? l->find("state")->asString() : std::string(); };
+		const auto ack = [&](const uint8_t _n) { desk.onDeviceSysex({0xf0, 0x7e, 0x00, 0x7f, _n, 0xf7}); };
+		const auto wav = ed::encodeWav16(toneClip(44100, 200, 1));	// 5 packets
+		check(desk.loadSample(48, "a.wav", wav).find("RAM") != std::string::npos && state() == "failed", "a RAM slot: refused, measured reason");
+		check(!desk.loadSample(4, "a.txt", {1, 2, 3}).empty() && state() == "failed", "not audio: refused, the page told");
+		wire.clear();
+		check(desk.loadSample(4, "tom.wav", wav).empty() && state() == "sending", "a WAV into ROM-05: sending");
+		check(wire.size() == 1 && wire[0].size() == 21 && wire[0][3] == 0x01 && wire[0][4] == 4, "the header first, alone");
+		now += 500;
+		desk.tick();
+		check(wire.size() == 1, "nothing else on the wire while it waits for the ACK (no status poll)");
+		ack(0);
+		check(wire.size() == 3 && wire[1] == ed::mdSetSampleName(4, "TOM") && wire[2].size() == 127 && wire[2][4] == 0, "ACK: the name, then packet 0");
+		desk.onDeviceSysex({0xf0, 0x7e, 0x00, 0x7e, 0x00, 0xf7});
+		check(wire.size() == 4 && wire[3] == wire[2], "NAK: packet 0 again");
+		ack(0);
+		check(wire.size() == 5 && wire[4][4] == 1, "ACK: packet 1");
+		desk.onDeviceSysex({0xf0, 0x7e, 0x00, 0x7c, 0x01, 0xf7});
+		now += 5000;
+		desk.tick();
+		check(wire.size() == 5 && state() == "sending", "WAIT holds it past the 2 s reply time");
+		ack(1);
+		ack(2);
+		ack(3);
+		check(wire.size() == 8 && state() == "sending", "packets 2-4");
+		desk.onPageMessage(cmd(R"({"op":"kitLoad","k":0,"force":true})"));
+		check(wire.size() == 8, "a command meanwhile: its SysEx waits");
+		ack(4);
+		desk.onTelemetry(Telemetry{});
+		const auto* done = last();
+		check(state() == "done" && done->find("sent")->asNumber() == 5 && done->find("text")->asString().find("ROM-05") != std::string::npos,
+			"the last ACK: done, the page told");
+		desk.tick();
+		check(wire.size() > 8, "then the wire is the editor's again");
+
+		// No answer to the header: open loop (SDS), a packet every 60 ms.
+		wire.clear();
+		check(desk.loadSample(5, "x.wav", wav).empty(), "another");
+		now += 2100;
+		desk.tick();
+		check(wire.size() == 3, "2 s without an answer: the name and packet 0 without a handshake");
+		now += 400;
+		desk.tick();
+		desk.onTelemetry(Telemetry{});
+		check(state() == "done" && !last()->find("handshake")->asBool()
+			&& std::count_if(wire.begin(), wire.end(), [](const std::vector<uint8_t>& _m) { return _m.size() == 127; }) == 5, "open loop: done");
+
+		// Cancel.
+		check(desk.loadSample(6, "y.wav", wav).empty(), "a third");
+		ack(0);
+		wire.clear();
+		desk.onPageMessage(cmd(R"({"op":"sampleCancel","id":9})"));
+		desk.onTelemetry(Telemetry{});
+		check(!wire.empty() && wire[0] == std::vector<uint8_t>{0xf0, 0x7e, 0x00, 0x7d, 0x00, 0xf7} && state() == "cancelled", "sampleCancel: CANCEL, cancelled");
+
+		// The bank (from an emulated machine's memory) is a message of its own.
+		ed::MdSampleBank bank;
+		for(uint8_t s = 0; s < 48; ++s) { ed::MdSampleSlot x; x.slot = s; bank.rom.push_back(x); }
+		for(uint8_t s = 0; s < 4; ++s) { ed::MdSampleSlot x; x.ram = true; x.slot = s; bank.ram.push_back(x); }
+		bank.rom[3].empty = false; bank.rom[3].length = 10; bank.rom[3].rate = 44100; bank.rom[3].peaks = {-5, 5}; bank.rom[3].name = "SNR";
+		page.clear();
+		desk.onSampleBank(bank);
+		desk.onSampleBank(bank);
+		size_t samples = 0;
+		for(const auto& m : page)
+			samples += m.find("type")->asString() == "samples";
+		check(samples == 1, "samples: published once, when it changed");
+		const auto caps = desk.machine().capabilities().toJson();
+		check(!caps.find("can")->find("sampleAudio")->asBool() && caps.find("can")->find("sampleLoad")->asBool(),
+			"HW: samples can be sent, not read (capabilities)");
+	}
+
+	// P9: the audition mixer (pure): lock-free hand-off, resampling, one at a time, a fade on a switch.
+	void testAuditionMixer()
+	{
+		const auto clip = [](const std::vector<int16_t>& _pcm, const uint32_t _rate)
+		{
+			return ed::AuditionClip{std::make_shared<const std::vector<int16_t>>(_pcm), _rate};
+		};
+		const auto near = [](const float _a, const float _b) { return std::fabs(_a - _b) < 1e-4f; };
+		ed::AuditionMixer mix;
+		std::vector<float> l(256, 0.0f), r(256, 0.0f);
+		mix.mix(l.data(), r.data(), 64, 44100);
+		check(std::all_of(l.begin(), l.end(), [](const float _v) { return _v == 0.0f; }) && mix.status().id == 0, "audition: nothing asked, nothing heard");
+
+		// At its own rate: 100 samples at 22050 Hz are 200 frames at 44100, linearly between them.
+		std::vector<int16_t> ramp(100);
+		for(int i = 0; i < 100; ++i)
+			ramp[size_t(i)] = int16_t(i * 256);
+		const auto id = mix.play(clip(ramp, 22050));
+		check(id > 0 && mix.status().id == id && mix.status().playing && mix.status().position == 0, "audition: playing once asked, before the audio thread took it");
+		l.assign(256, 0.25f); r.assign(256, 0.0f);
+		mix.mix(l.data(), r.data(), 64, 44100);
+		check(near(l[0], 0.25f) && near(l[1] - 0.25f, 128 / 32768.0f) && near(l[2] - 0.25f, 256 / 32768.0f) && near(r[3], 384 / 32768.0f),
+			"audition: added to the output, resampled 22050 -> 44100 (linear)");
+		check(mix.status().playing && mix.status().position == 32, "audition: position in the clip's samples");
+		l.assign(256, 0.0f);
+		mix.mix(l.data(), nullptr, 256, 44100);
+		check(!mix.status().playing && mix.status().position == 100 && l[200] == 0.0f && l[135] != 0.0f, "audition: plays once, then the status says it ended");
+		l.assign(64, 0.0f);
+		mix.mix(l.data(), nullptr, 64, 44100);
+		check(std::all_of(l.begin(), l.end(), [](const float _v) { return _v == 0.0f; }), "audition: silent after the end");
+
+		// At the output's rate: the samples as they are.
+		mix.play(clip({1000, -2000, 3000}, 44100));
+		l.assign(4, 0.0f);
+		mix.mix(l.data(), nullptr, 4, 44100);
+		check(near(l[0], 1000 / 32768.0f) && near(l[1], -2000 / 32768.0f) && near(l[2], 3000 / 32768.0f) && l[3] == 0.0f, "audition: 44100 -> 44100 is the samples");
+
+		// One at a time: another replaces it, the first fades out over g_fadeFrames.
+		const std::vector<int16_t> loud(20000, 16384);
+		mix.play(clip(loud, 44100));
+		mix.mix(l.data(), nullptr, 4, 44100);
+		const auto second = mix.play(clip(std::vector<int16_t>(20000, 0), 44100));
+		std::vector<float> f(128, 0.0f);
+		mix.mix(f.data(), nullptr, 128, 44100);
+		check(f[0] > 0.4f && f[32] > 0.1f && f[32] < 0.4f && f[ed::AuditionMixer::g_fadeFrames] == 0.0f && mix.status().id == second && mix.status().playing,
+			"audition: a new one replaces it, the old one fades out (no click)");
+		const auto stopped = mix.stop();
+		f.assign(128, 0.0f);
+		mix.mix(f.data(), nullptr, 128, 44100);
+		check(mix.status().id == stopped && !mix.status().playing, "audition: stop");
+		mix.mix(f.data(), nullptr, 128, 44100);
+		mix.play(clip(loud, 44100));
+		check(mix.held() <= 2, "audition: requests the audio thread no longer reads are freed (by the control thread)");
+		// Without an audio thread nothing the audio thread may read is freed.
+		ed::AuditionMixer idle;
+		for(int i = 0; i < 5; ++i)
+			idle.play(clip(loud, 44100));
+		check(idle.held() == 5, "audition: nothing freed the audio thread may still read");
+	}
+
+	// P9: a slot's detail and its audition through the desk.
+	void testSampleWaveAndAudition()
+	{
+		std::vector<Value> page;
+		Desk::Port port;
+		ed::AuditionMixer mixer;
+		port.device.sendSysex = [](const std::vector<uint8_t>&) {};
+		port.device.nowMs = [] { return 0.0; };
+		port.device.audition = [&](const ed::AuditionClip& _c) { return mixer.play(_c); };
+		port.device.auditionStatus = [&] { return mixer.status(); };
+		port.toPage = [&](const Value& _m) { page.push_back(_m); g_published.push_back(_m); };
+		Desk desk(port);
+		desk.onPageMessage(cmd(R"({"op":"ready"})"));
+		const auto last = [&](const std::string& _type) -> const Value*
+		{
+			for(auto it = page.rbegin(); it != page.rend(); ++it)
+				if(it->find("type")->asString() == _type)
+					return &*it;
+			return nullptr;
+		};
+		const auto ok = [&](const int _id)
+		{
+			for(auto it = page.rbegin(); it != page.rend(); ++it)
+				if(it->find("type")->asString() == "result" && it->find("id") && it->find("id")->asNumber() == _id)
+					return it->find("ok")->asBool();
+			return false;
+		};
+		desk.onPageMessage(cmd(R"({"op":"sampleWave","bank":"rom","slot":3,"bins":512,"id":1})"));
+		check(!ok(1) && !last("sampleWave"), "sampleWave before the samples are read: refused");
+
+		ed::MdSampleBank bank;
+		for(uint8_t s = 0; s < 48; ++s) { ed::MdSampleSlot x; x.slot = s; bank.rom.push_back(x); }
+		for(uint8_t s = 0; s < 4; ++s) { ed::MdSampleSlot x; x.ram = true; x.slot = s; bank.ram.push_back(x); }
+		bank.ramReadable = true;
+		std::vector<int16_t> pcm(3000);
+		for(size_t i = 0; i < pcm.size(); ++i)
+			pcm[i] = int16_t(i < 1500 ? 20000 : -32768);
+		auto& snr = bank.rom[3];
+		snr.empty = false; snr.length = 3000; snr.rate = 22050; snr.name = "SNR"; snr.pcm = std::make_shared<const std::vector<int16_t>>(pcm);
+		snr.peaks = ed::mdPeaks(3000, ed::g_mdSampleBins, [&](const uint32_t _i) { return pcm[_i] / 32768.0f; });
+		desk.onSampleBank(bank);
+		const auto* doc = last("samples");
+		check(doc && doc->find("doc")->find("rom")->asArray()[3].find("peaks")->asArray().size() == 2 * ed::g_mdSampleBins && !doc->find("doc")->find("rom")->asArray()[3].find("pcm"),
+			"the overview stays light: 128 bins a slot, no samples");
+
+		desk.onPageMessage(cmd(R"({"op":"sampleWave","bank":"rom","slot":3,"bins":2400,"id":2})"));
+		const auto* w = last("sampleWave");
+		check(ok(2) && w && w->find("bins")->asNumber() == 2400 && w->find("peaks")->asArray().size() == 4800 && w->find("scale")->asNumber() == 32767
+			&& w->find("bank")->asString() == "rom" && w->find("slot")->asNumber() == 3 && w->find("length")->asNumber() == 3000,
+			"sampleWave: the slot at the bins asked for (the canvas' device pixels)");
+		const auto& wp = w->find("peaks")->asArray();
+		check(wp[0].asNumber() == 20000 && wp[1].asNumber() == 20000 && wp[4798].asNumber() == -32767 && wp[4799].asNumber() == -32767,
+			"sampleWave: min, max of the samples themselves, 16-bit (held at -32767)");
+		desk.onPageMessage(cmd(R"({"op":"sampleWave","bank":"rom","slot":3,"bins":8192,"id":3})"));
+		check(last("sampleWave")->find("bins")->asNumber() == 3000, "sampleWave: at most a bin a sample");
+		desk.onPageMessage(cmd(R"({"op":"sampleWave","bank":"rom","slot":4,"bins":100,"id":4})"));
+		check(ok(4) && last("sampleWave")->find("bins")->asNumber() == 0 && last("sampleWave")->find("peaks")->asArray().empty(), "sampleWave: an empty slot has no peaks");
+		desk.onPageMessage(cmd(R"({"op":"sampleWave","bank":"ram","slot":7,"bins":100,"id":5})"));
+		check(!ok(5), "sampleWave: RAM slots are 0-3");
+		desk.onPageMessage(cmd(R"({"op":"sampleWave","bank":"rom","slot":3,"bins":9000,"id":6})"));
+		check(!ok(6), "sampleWave: at most 8192 bins (the table's range)");
+		check(ed::mdWavePeaks(snr, 2) == std::vector<int16_t>{20000, 20000, -32767, -32767}, "mdWavePeaks: two bins");
+
+		// The audition: playing, then stopped when it played out.
+		page.clear();
+		desk.onPageMessage(cmd(R"({"op":"audition","bank":"rom","slot":3,"id":7})"));
+		const auto* a = last("audition");
+		check(ok(7) && a && a->find("state")->asString() == "playing" && a->find("rate")->asNumber() == 22050 && a->find("length")->asNumber() == 3000
+			&& mixer.status().playing, "audition: playing, the slot's own rate and length");
+		std::vector<float> out(4096, 0.0f);
+		mixer.mix(out.data(), out.data(), 4096, 44100);
+		desk.tick();
+		check(last("audition")->find("state")->asString() == "playing" && out[10] > 0.5f, "audition: the sample's audio, still playing");
+		const auto messages = page.size();
+		desk.tick();
+		desk.tick();
+		check(page.size() == messages, "audition: nothing while it plays (event-driven, no position stream)");
+		mixer.mix(out.data(), out.data(), 4096, 44100);
+		desk.tick();
+		check(last("audition")->find("state")->asString() == "stopped", "audition: stopped once it played out");
+
+		desk.onPageMessage(cmd(R"({"op":"audition","bank":"rom","slot":3,"id":8})"));
+		desk.onPageMessage(cmd(R"({"op":"auditionStop","id":9})"));
+		check(ok(9) && last("audition")->find("state")->asString() == "stopped" && !mixer.status().playing, "auditionStop: stopped");
+		desk.onPageMessage(cmd(R"({"op":"audition","bank":"rom","slot":4,"id":10})"));
+		check(!ok(10), "audition: an empty slot is refused");
+
+		// Stopped by someone else (the status' latest id is not ours): stopped too.
+		desk.onPageMessage(cmd(R"({"op":"audition","bank":"rom","slot":3,"id":11})"));
+		mixer.stop();
+		desk.tick();
+		check(last("audition")->find("state")->asString() == "stopped", "audition: the device's own stop is heard too");
+
+		// HW MIDI: no sound of its own; refused with the capability's reason.
+		std::vector<Value> hwPage;
+		Desk::Port hw;
+		hw.device.sendSysex = [](const std::vector<uint8_t>&) {};
+		hw.device.nowMs = [] { return 0.0; };
+		hw.toPage = [&](const Value& _m) { hwPage.push_back(_m); g_published.push_back(_m); };
+		Desk hwDesk(hw, wireProfile());
+		hwDesk.onPageMessage(cmd(R"({"op":"ready"})"));
+		hwDesk.onSampleBank(bank);
+		hwDesk.onPageMessage(cmd(R"({"op":"audition","bank":"rom","slot":3,"id":12})"));
+		hwDesk.onPageMessage(cmd(R"({"op":"sampleWave","bank":"rom","slot":3,"bins":64,"id":13})"));
+		size_t refused = 0;
+		for(const auto& m : hwPage)
+			if(m.find("type")->asString() == "result" && !m.find("ok")->asBool() && m.find("errors")->asArray()[0].asString().find("real Machinedrum") != std::string::npos)
+				++refused;
+		check(refused == 2, "HW MIDI: audition and sampleWave refused with the sampleAudio reason");
+	}
+
 	void testModulators()
 	{
 		std::vector<std::string> errors;
@@ -1484,9 +1889,13 @@ namespace
 		void onHostMute(uint8_t, bool) override {}
 		void sendModulation(uint8_t, uint8_t, uint8_t, const Documents&) override {}
 		const Telemetry& telemetry() const override { return m_telemetry; }
+		std::string sendSample(uint8_t, const elektronData::MdSampleUpload&) override { return "no samples here"; }
+		void cancelSample() override {}
+		const mdDesk::SdsSender::Progress& sampleProgress() const override { return m_sample; }
 
 	private:
 		Telemetry m_telemetry;
+		mdDesk::SdsSender::Progress m_sample;
 	};
 
 	void testFakeAdapter()
@@ -1552,6 +1961,11 @@ int main(const int _argc, char** _argv)
 	testPacedLockDraw();
 	testControlAll();
 	testSampleName();
+	testSampleFiles();
+	testSampleMemory();
+	testSampleLoad();
+	testAuditionMixer();
+	testSampleWaveAndAudition();
 	testModulators();
 	testFakeAdapter();
 	checkContract(false);

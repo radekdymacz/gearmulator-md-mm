@@ -46,6 +46,7 @@ namespace mdJucePlugin
 		void onPageMessage(const elektronData::json::Value& _message);
 		void chooseRom();
 		void chooseSyx(bool _save);
+		void chooseSample(uint8_t _slot);
 		void layout() const;
 
 		DeskSession* m_session = nullptr;
