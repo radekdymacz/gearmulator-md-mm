@@ -976,8 +976,10 @@ S.page=0;S.viewAll=true;S.follow=false;S.dock="locks";	/* P7: all steps by defau
 const pages16=()=>Math.ceil(S.len/16);
 function vis(){if(S.viewAll)return[0,S.len];S.page=Math.min(S.page,pages16()-1);return[S.page*16,Math.min(S.len,S.page*16+16)]}
 function steps(){const[a,b]=vis();return Array.from({length:b-a},(_,k)=>a+k)}
-/* ALL shows 64 steps in the width: columns may shrink below 18 px there (no horizontal scroll at 1280 px) */
-function cols(){return`repeat(${steps().length},minmax(${S.viewAll?0:18}px,1fr)) 50px`}
+/* ALL shows 64 steps in the width: columns may shrink below 18 px there (no horizontal scroll at 1280 px).
+   One 50 px gutter on the LEFT of every row, as a DAW's piano roll: the roll's keys, the A F L / SLIDE / SWING
+   names, the lock lane's scale and the dock panels' scale all sit in it, so the step columns line up. */
+function cols(){return`50px repeat(${steps().length},minmax(${S.viewAll?0:18}px,1fr))`}
 const gapC=s=>s%16===0&&s!==vis()[0]?"gap":"";
 /* MD Editor Sequence layout: rail = tracks + SYNTH/MIDI + lock parameter; main = page keys, ruler,
    ONE piano roll for the selected track (the height of the MD's 16-row grid), ENV/SLIDE/SWING rows, lock lane. */
@@ -995,15 +997,15 @@ function renderRail(){const r=$("#rail"),withSide=S.ws==="seq"||S.ws==="sound";
  const anyMs=[...S.tracks,...S.midi].some(x=>x.mute||x.solo);
  r.innerHTML=`<div class="railhead">Track<button class="iconkey allon" id="allon" ${anyMs?"":"disabled"} title="Unmute and unsolo every track (0)">M/S off</button></div>`+side().map(th).join("")+(withSide?`<div style="margin-top:4px">${sideSw()}</div>`:"")+(S.ws==="seq"?lockPicker(S.sel):"");altLabels()}
 function rowStatus(t){const tr=trk(t),arp=tr.arp.MODE>0,trn=tr.tr.TRACK-64;return[arp?"ARP":"",t<6&&tr.tr.SCALE?["","FIX","MAJ","MIN"][tr.tr.SCALE]:(trn?(trn>0?"+":"")+trn:"")].filter(Boolean).join(" ")}
-const ROLL_TIP=t=>`${tLabel(t)} notes. Click adds a note or moves its pitch · drag up or down for pitch · shift-click adds a chord note · drag a bar's end to move its ${isMidiT(t)?"LEN":"NOTE OFF"} · alt-click deletes a note, or sets a NOTE OFF on an empty step · scroll = pitch${(()=>{const a=trk(t).arp;return a.MODE&&a.SPD?` · light notes: what the arpeggiator plays${a.PLAY===4?" (random order: outlined, the pitches vary)":""}`:""})()}`;
+const ROLL_TIP=t=>`${tLabel(t)} notes. Click adds a note or moves its pitch · drag up or down for pitch · shift-click adds a chord note · drag a bar's end to move its ${isMidiT(t)?"LEN":"NOTE OFF"} · alt-click deletes a note, or sets a NOTE OFF on an empty step · scroll = pitch${isMidiT(t)?"":" · the keys on the left play the note"}${(()=>{const a=trk(t).arp;return a.MODE&&a.SPD?` · light notes: what the arpeggiator plays${a.PLAY===4?" (random order: outlined, the pitches vary)":""}`:""})()}`;
 function renderSeq(){const t=S.sel,tr=trk(t),midi=isMidiT(t);dockOf(t);
  const rows=[["env",midi?"VEL":"Env"],["sld","Slide"],["swg","Swing"]];
- let h=`<div class="scroll" id="seqscroll"><div class="mstack ${S.viewAll?"all":""}" id="seq"><div class="mrowg ruler" style="grid-template-columns:${cols()}">${steps().map(s=>`<div class="rul ${gapC(s)}" data-s="${s}">${s%4===0?s+1:""}</div>`).join("")}<div class="rul"></div></div>
+ let h=`<div class="scroll" id="seqscroll"><div class="mstack ${S.viewAll?"all":""}" id="seq"><div class="mrowg ruler" style="grid-template-columns:${cols()}"><div class="rul"></div>${steps().map(s=>`<div class="rul ${gapC(s)}" data-s="${s}">${s%4===0?s+1:""}</div>`).join("")}</div>
   <div class="nlane big"><canvas class="roll" data-ed="lane" data-t="${t}" data-big="1" title="${ROLL_TIP(t)}" aria-label="${ROLL_TIP(t)}"></canvas></div>
-  <div class="tlanes" id="tlanes">${rows.map(([k,lab])=>{if(k==="env"&&midi)return`<div class="tlane env" style="grid-template-columns:${cols()}" title="Velocity per note (VEL, lockable)">${steps().map(s=>{const st=tr.steps[s];const v=st&&!st.off?velOf(t,s):null;return`<span class="tc envc ${gapC(s)} ${v==null?"na":""}">${v!=null?`<i class="velbar" style="--v:${v/127*100}%" title="VEL ${v}"></i>`:""}</span>`}).join("")}<span class="tlab">VEL</span></div>`;
-   return`<div class="tlane ${k}" style="grid-template-columns:${cols()}" title="${{env:"Which envelopes this trig fires: AMP (red), FILTER (yellow), LFO (green), the manual's trig tracks. No dots = trigless.",sld:"Slide: a locked value glides to its next lock",swg:"Swing: these steps come late by the pattern's swing amount"}[k]}">${steps().map(s=>{const st=tr.steps[s];
+  <div class="tlanes" id="tlanes">${rows.map(([k,lab])=>{if(k==="env"&&midi)return`<div class="tlane env" style="grid-template-columns:${cols()}" title="Velocity per note (VEL, lockable)"><span class="tlab">VEL</span>${steps().map(s=>{const st=tr.steps[s];const v=st&&!st.off?velOf(t,s):null;return`<span class="tc envc ${gapC(s)} ${v==null?"na":""}">${v!=null?`<i class="velbar" style="--v:${v/127*100}%" title="VEL ${v}"></i>`:""}</span>`}).join("")}</div>`;
+   return`<div class="tlane ${k}" style="grid-template-columns:${cols()}" title="${{env:"Which envelopes this trig fires: AMP (red), FILTER (yellow), LFO (green), the manual's trig tracks. No dots = trigless.",sld:"Slide: a locked value glides to its next lock",swg:"Swing: these steps come late by the pattern's swing amount"}[k]}"><span class="tlab">${k==="env"?`<small class="envlab">A F L</small>`:lab}</span>${steps().map(s=>{const st=tr.steps[s];
     if(k==="env"){const ok=st&&!st.off;return`<span class="tc envc ${gapC(s)} ${ok?"":"na"}" data-s="${s}">${ok?["a","f","l"].map(b=>`<button class="d ${b} ${st[b]?"on":""}" data-env="${b}" data-s="${s}" aria-pressed="${!!st[b]}" aria-label="${{a:"AMP",f:"FILTER",l:"LFO"}[b]} trig step ${s+1}"></button>`).join(""):""}</span>`}
-    const on=k==="sld"?tr.slide.has(s):tr.swing.has(s);return`<button class="tc ${on?"on":""} ${gapC(s)}" data-tl="${k}" data-s="${s}" aria-pressed="${on}" aria-label="${lab} step ${s+1}"></button>`}).join("")}<span class="tlab">${k==="env"?`<small class="envlab">A F L</small>`:lab}</span></div>`}).join("")}</div></div></div>
+    const on=k==="sld"?tr.slide.has(s):tr.swing.has(s);return`<button class="tc ${on?"on":""} ${gapC(s)}" data-tl="${k}" data-s="${s}" aria-pressed="${on}" aria-label="${lab} step ${s+1}"></button>`}).join("")}</div>`}).join("")}</div></div></div>
  ${genBarHtml()}
  <div class="lanewrap"><div class="lanetop">${S.dock==="locks"?`<span class="cap">Lock lane · ${tLabel(t)} ${midi?"CH"+String(tr.ch).padStart(2,"0"):tr.m} · <b id="lanename">${pidLabel(t,S.lane)}</b> <span class="lanescale" id="lanescale"></span></span>
   <span class="lockbudget" id="lockbudget"></span><span class="lanehelp" title="Draw across the bars to lock this parameter per step. Alt-drag erases. Shift-drag draws a ramp, a straight line from where you press to where you let go. The wheel over a step with a trig moves its lock (Shift: fine). Hatched steps have no trig, so they cannot hold a lock. Dashed line = kit value. A slide step glides to the next lock.">Draw to lock · ⇧ ramp · alt erases</span>`:(()=>{const[h,hl]=dockHelp(t,S.dock);return`<span class="cap">${DOCKN[S.dock]} · ${tLabel(t)} ${midi?"CH"+String(tr.ch).padStart(2,"0"):tr.m}</span><span class="lockbudget dkread" id="dkread">${dockRead(t,S.dock)}</span><span class="lanehelp dkhelp" title="${dkAttr(hl)}">${h}</span>`})()}${dockTabs(t)}</div>
@@ -1044,14 +1046,14 @@ function barHTML(v){const{mx,bip}=laneMeta(),f=v/mx;if(bip)return f>=.5?`<i clas
 function baseHTML(v,mx){return`<div class="base" style="bottom:calc(6px + ${IN}*${(v/mx).toFixed(4)})"></div>`}
 function renderLane(){const lane=$("#lane");if(!lane)return;const t=S.sel,tr=trk(t),pid=S.lane,[pg,i]=pid.split("."),m=meta(t,pg,+i),mx=maxOf(m),lm=S.locks.get(lkKey(t,pid)),base=getP(t,pid);
  const sc=$("#lanescale");if(sc)sc.textContent=m.en?`${m.en[0]}…${m.en[mx]}`:m.signed?"−64…+63":"0–127";
- lane.innerHTML=steps().map(s=>{const st=tr.steps[s],on=st&&!st.off,v=lm?.get(s);
-  return`<div class="lb ${on?"":"none"} ${on?"k-"+(isMidiT(t)?"full":stepKind(st)):""} ${gapC(s)} ${S.playing&&s===S.step?"ph":""}" data-s="${s}" title="${on?(v!=null?"Locked "+fmt(m,v):"Kit value "+fmt(m,base)):"No trig here: add one (a trigless trig with alt-click keeps the envelopes quiet)"}">${on?`${baseHTML(base,mx)}${m.signed?`<div class="mid"></div>`:""}${v!=null?barHTML(v):""}`:""}</div>`}).join("")+`<div class="lbscale"><b>${fmt(m,mx)}</b><span>${fmt(m,base)}<small>kit</small></span><b>${fmt(m,0)}</b></div>`;
+ lane.innerHTML=`<div class="lbscale"><b>${fmt(m,mx)}</b><span>${fmt(m,base)}<small>kit</small></span><b>${fmt(m,0)}</b></div>`+steps().map(s=>{const st=tr.steps[s],on=st&&!st.off,v=lm?.get(s);
+  return`<div class="lb ${on?"":"none"} ${on?"k-"+(isMidiT(t)?"full":stepKind(st)):""} ${gapC(s)} ${S.playing&&s===S.step?"ph":""}" data-s="${s}" title="${on?(v!=null?"Locked "+fmt(m,v):"Kit value "+fmt(m,base)):"No trig here: add one (a trigless trig with alt-click keeps the envelopes quiet)"}">${on?`${baseHTML(base,mx)}${m.signed?`<div class="mid"></div>`:""}${v!=null?barHTML(v):""}`:""}</div>`}).join("");
  requestAnimationFrame(drawSlides)}
 function drawSlides(){const svg=$("#lanesvg"),lane=$("#lane");if(!svg||!lane)return;const t=S.sel,tr=trk(t),lm=S.locks.get(lkKey(t,S.lane));svg.innerHTML="";if(!lm)return;
  const[pg,i]=S.lane.split("."),mx=maxOf(meta(t,pg,+i)),box=lane.getBoundingClientRect(),ink=cssv("--ink");let d="";const locked=[...lm.keys()].sort((a,b)=>a-b);
  locked.forEach(s=>{if(!tr.slide.has(s))return;const nx=locked.find(x=>x>s);if(nx==null)return;const a=lane.querySelector(`.lb[data-s="${s}"]`),b=lane.querySelector(`.lb[data-s="${nx}"]`);if(!a)return;
   const ra=a.getBoundingClientRect(),y=v=>ra.bottom-box.top-6-v/mx*(ra.height-14),xa=ra.left-box.left+ra.width/2;
-  const xb=b?b.getBoundingClientRect().left-box.left+b.getBoundingClientRect().width/2:box.width-50;d+=`<path d="M${xa} ${y(lm.get(s))} L${xb} ${y(lm.get(nx))}" fill="none" stroke="${ink}" stroke-width="2.5" stroke-dasharray="6 3"/><circle cx="${xa}" cy="${y(lm.get(s))}" r="4" fill="${ink}"/>`});
+  const xb=b?b.getBoundingClientRect().left-box.left+b.getBoundingClientRect().width/2:box.width;d+=`<path d="M${xa} ${y(lm.get(s))} L${xb} ${y(lm.get(nx))}" fill="none" stroke="${ink}" stroke-width="2.5" stroke-dasharray="6 3"/><circle cx="${xa}" cy="${y(lm.get(s))}" r="4" fill="${ink}"/>`});
  svg.setAttribute("width",box.width);svg.setAttribute("height",box.height);svg.innerHTML=d}
 function syncScroll(){const a=$("#seqscroll"),b=$("#lanescroll");if(!a||!b)return;a.onscroll=()=>{b.scrollLeft=a.scrollLeft};b.onscroll=()=>{a.scrollLeft=b.scrollLeft}}
 function refreshRow(t){redraw();return;const gate={},am=ampSteps(t);noteSpans(t).forEach(sp=>{for(let k=sp.s;k<sp.e;k++)gate[k]=(k===sp.s?(sp.e-sp.s>1?"gs":"g1"):k===sp.e-1?"ge":"gm")+(k-sp.s>=am?" gd":"")});$$(`.mst[data-t="${t}"]`).forEach(b=>{const s=+b.dataset.s,st=trk(t).steps[s];b.className=stepCls(t,s);b.setAttribute("aria-pressed",!!st);b.title=stepTitle(t,s,st);b.innerHTML=`<span class="nt">${stepText(t,s,st)}</span>${gate[s]?`<span class="gt ${gate[s]}"></span>`:""}`})}
@@ -1075,19 +1077,25 @@ function endLaneDraw(){if(!laneDraw)return;const d=laneDraw;if(d.ramp){const ok=
 const ROWS=24;
 S.rollLoT={};
 function laneGeom(c){const t=+c.dataset.t,big=!!c.dataset.big,tr=trk(t),cr=c.getBoundingClientRect(),arp=big&&tr.arp.MODE>0&&tr.arp.SPD>0,H=cr.height;const col={};
- document.querySelectorAll("#seq .ruler .rul[data-s]").forEach(b=>{const r=b.getBoundingClientRect();col[+b.dataset.s]={x0:r.left-cr.left,x1:r.right-cr.left}});const vs=steps();const lastX=vs.length&&col[vs[vs.length-1]]?col[vs[vs.length-1]].x1:0;
+ document.querySelectorAll("#seq .ruler .rul[data-s]").forEach(b=>{const r=b.getBoundingClientRect();col[+b.dataset.s]={x0:r.left-cr.left,x1:r.right-cr.left}});const vs=steps();const lastX=vs.length&&col[vs[vs.length-1]]?col[vs[vs.length-1]].x1:0,firstX=vs.length&&col[vs[0]]?col[vs[0]].x0:0;
  let lo,rows;if(big){lo=S.rollLoT[t]??S.rollLo;rows=ROWS}else{const ns=tr.steps.slice(0,S.len).flatMap(x=>x?.n||[]);const mn=ns.length?Math.min(...ns):60,mx=ns.length?Math.max(...ns):60;rows=Math.max(6,Math.min(24,mx-mn+3));lo=Math.round((mn+mx)/2)-Math.floor(rows/2)}
  const top=big?4:2,rh=(H-top-(big?4:2))/rows;
- return{t,big,col,vs,a:vs[0],b:vs[vs.length-1]+1,top,rh,rows,lastX,arp,H,lo,hi:lo+rows-1,y:n=>top+(lo+rows-1-n)*rh}}
+ return{t,big,col,vs,a:vs[0],b:vs[vs.length-1]+1,top,rh,rows,firstX,lastX,kw:Math.max(0,firstX-3),arp,H,lo,hi:lo+rows-1,y:n=>top+(lo+rows-1-n)*rh}}
 function inScale(tr,n){if(!tr.tr||tr.tr.SCALE<2)return true;const sc=tr.tr.SCALE===2?MAJ:MIN;return sc.includes(((n-tr.tr.KEY)%12+12)%12)}
 function velOf(t,s){return velOf2(t,s)}
 function velOf2(t,s){return S.locks.get(lkKey(t,"MID.1"))?.get(s)??trk(t).v.MID[1]}
 ED.lane={draw(g,W,H,c){const G=laneGeom(c),t=G.t,tr=trk(t),ink=cssv("--ink");if(!G.vs.length)return;const midi=isMidiT(t);if(G.big){const tp=ROLL_TIP(t);if(c.title!==tp){c.title=tp;c.setAttribute("aria-label",tp)}}
   if(!audible(t))g.globalAlpha=.45;
-  if(G.big)for(let n=G.lo;n<=G.hi;n++){const y=G.y(n),blk=[1,3,6,8,10].includes(n%12);if(blk){g.fillStyle=inkA(.05);g.fillRect(0,y,G.lastX,G.rh)}
-   if(!inScale(tr,n)){g.fillStyle=inkA(.07);for(let x=0;x<G.lastX;x+=6)g.fillRect(x,y,3,G.rh)}
-   if(n%12===0){g.fillStyle=inkA(.3);g.fillRect(0,y+G.rh-.5,G.lastX,1)}
-   g.fillStyle=blk?ink:inkA(.12);g.fillRect(G.lastX+6,y+.5,blk?14:22,G.rh-1);if(n%12===0||n===G.hi){g.fillStyle=ink;g.font="9px Silkscreen, monospace";g.fillText(noteName(n),G.lastX+30,y+G.rh-2)}}
+  /* the keys sit in the rows' left gutter, as a DAW's piano roll: white keys the gutter's width, black keys from
+     its left edge; C and the top row are named on the key's right end. The hovered row is lit, the key held lit more */
+  if(G.big){const X0=G.firstX,KW=G.kw,BW=Math.round(KW*.55),led=cssv("--led"),hov=S.rollHov?.t===t?S.rollHov.n:null,held=rollDrag?.mode==="key"?rollDrag.n:null;
+   for(let n=G.lo;n<=G.hi;n++){const y=G.y(n),blk=[1,3,6,8,10].includes(n%12);if(blk){g.fillStyle=inkA(.05);g.fillRect(X0,y,G.lastX-X0,G.rh)}
+   if(!inScale(tr,n)){g.fillStyle=inkA(.07);for(let x=X0;x<G.lastX;x+=6)g.fillRect(x,y,3,G.rh)}
+   if(n%12===0){g.fillStyle=inkA(.3);g.fillRect(X0,y+G.rh-.5,G.lastX-X0,1)}
+   if(n===hov||n===held){g.fillStyle=inkA(n===held?.16:.09);g.fillRect(X0,y,G.lastX-X0,G.rh)}
+   g.fillStyle=inkA(.12);g.fillRect(0,y+.5,KW,G.rh-1);if(blk){g.fillStyle=ink;g.fillRect(0,y+.5,BW,G.rh-1)}
+   if(n===hov||n===held){g.save();g.globalAlpha=n===held?.85:.45;g.fillStyle=led;g.fillRect(0,y+.5,blk?BW:KW,G.rh-1);g.restore()}
+   if(n%12===0||n===G.hi){g.fillStyle=ink;g.font="9px Silkscreen, monospace";g.textAlign="right";g.fillText(noteName(n),KW-3,y+G.rh/2+3.5);g.textAlign="left"}}}
   else{g.fillStyle=ink;g.font="8px Silkscreen, monospace";const ns=tr.steps.slice(0,S.len).flatMap(x=>x?.n||[]);if(ns.length){const mn=Math.min(...ns),mx=Math.max(...ns);g.fillText(mn===mx?noteName(mn).replace("-",""):noteName(mn).replace("-","")+"-"+noteName(mx).replace("-",""),G.lastX+4,11)}const st=rowStatus(t);if(st)g.fillText(st,G.lastX+4,H-5)}
   G.vs.forEach(s=>{const x=G.col[s];if(!x)return;if(s%4===0){g.fillStyle=inkA(G.big?.1:.07);g.fillRect(x.x0,0,x.x1-x.x0,G.H)}if(S.playing&&s===S.step&&!G.big){g.fillStyle=inkA(.2);g.fillRect(x.x0,0,x.x1-x.x0,H)}});
   if(G.big&&S.ghost)side().forEach(o=>{if(o===t||(o<6&&(isFx(trk(o).m)||trk(o).m==="DPRO-BBOX")))return;noteSpans(o).forEach(sp=>{const r=spanX(G,sp);if(!r||sp.n[0]<G.lo||sp.n[0]>G.hi)return;g.fillStyle=inkA(.14);g.fillRect(r[0]+2,G.y(sp.n[0])+3,r[1]-r[0]-4,G.rh-6)})});
@@ -1113,7 +1121,15 @@ function laneHit(c,e){const G=laneGeom(c),r=c.getBoundingClientRect(),x=e.client
  const n=G.lo+G.rows-1-Math.floor((y-G.top)/G.rh),t=G.t;
  for(const sp of noteSpans(t)){const rr=spanX(G,sp);if(!rr)continue;for(let k=0;k<sp.n.length;k++){if(sp.n[k]!==n)continue;const c0=G.col[sp.s];const x1=k===0||isMidiT(t)?rr[1]:(c0?c0.x1:-1),x0=k===0||isMidiT(t)?rr[0]:(c0?c0.x0:-1);if(x>=x0&&x<=x1)return{s:sp.s,n,k,edge:k===0&&!sp.clipR&&x>x1-8,cell:s}}}
  return{s,n,k:-1,cell:s}}
-function rollDown(c,e){const t=+c.dataset.t;if(t!==S.sel){select(t);return}const h=laneHit(c,e);if(!h)return;const tr=trk(t);
+/* the row under the pointer (hover light) and a press on the keys: play that note on the track, as the home-row keys do */
+S.rollHov=null;
+const rollRow=(c,G,e)=>{const r=c.getBoundingClientRect(),n=G.lo+G.rows-1-Math.floor((e.clientY-r.top-G.top)/G.rh);return n>=G.lo&&n<=G.hi?n:null};
+const onKeys=(c,G,e)=>e.clientX-c.getBoundingClientRect().left<G.firstX-1.5;
+function rollKey(t,n){rollDrag.n=n;if(n!=null)keyNote(t,n,KB.vel)}
+document.addEventListener("pointerout",e=>{const c=e.target.closest?.("canvas.roll");if(c&&!c.contains(e.relatedTarget)&&S.rollHov){S.rollHov=null;drawEd(c)}});
+function rollDown(c,e){const t=+c.dataset.t;if(t!==S.sel){select(t);return}
+ {const G=laneGeom(c);if(e.button===0&&onKeys(c,G,e)){const n=rollRow(c,G,e);if(n==null)return;if(isMidiT(t)){kbTell("midi","The keys play the synth tracks: a MIDI track's notes go to the MIDI OUT only.");return}rollDrag={mode:"key",t,c};rollKey(t,n);drawEd(c);return}}
+ const h=laneHit(c,e);if(!h)return;const tr=trk(t);
  if(e.metaKey||e.ctrlKey){fillEvery(t,h.cell,e.shiftKey?4:2,h.n);return}
  if(h.k>=0&&e.altKey){const st=tr.steps[h.s];if(h.k>0||(st.n&&st.n.length>1))st.n.splice(h.k,1);else{tr.steps[h.s]=null;clearStepLocks(t,h.s)}structEdited();rerenderSeq();return}
  if(h.k<0&&e.altKey){const st=tr.steps[h.cell];if(!st||st.off){tr.steps[h.cell]=st?.off?null:{off:1};structEdited();rerenderSeq()}return}
@@ -1124,14 +1140,17 @@ function rollDown(c,e){const t=+c.dataset.t;if(t!==S.sel){select(t);return}const
  else if(e.shiftKey){if(!st.n)st.n=[h.n];else if(!st.n.includes(h.n))st.n.push(h.n);rollDrag={mode:"pitch",s:h.cell,k:st.n.length-1,c,moved:true}}
  else{if(!st.n)st.n=[h.n];else st.n[0]=h.n;rollDrag={mode:"pitch",s:h.cell,k:0,c,moved:true}}
  redraw()}
-function rollMove(c,e){const t=+c.dataset.t;if(!rollDrag){if(t!==S.sel){c.style.cursor="pointer";return}const h=laneHit(c,e);c.style.cursor=h?.edge?"ew-resize":h?.k>=0?"ns-resize":"crosshair";return}
+function rollMove(c,e){const t=+c.dataset.t;if(!rollDrag){if(t!==S.sel){c.style.cursor="pointer";return}const G=laneGeom(c),n=rollRow(c,G,e),key=onKeys(c,G,e);
+  if((S.rollHov?.n??null)!==n||S.rollHov?.t!==t){S.rollHov=n==null?null:{t,n};drawEd(c)}
+  if(key){c.style.cursor=n==null?"default":"pointer";return}const h=laneHit(c,e);c.style.cursor=h?.edge?"ew-resize":h?.k>=0?"ns-resize":"crosshair";return}
+ if(rollDrag.mode==="key"){const d=rollDrag,n=rollRow(d.c,laneGeom(d.c),e);if(n!==d.n){if(d.n!=null)keyNote(d.t,d.n,0);rollKey(d.t,n);S.rollHov=n==null?null:{t:d.t,n};drawEd(d.c)}return}
  c=rollDrag.c;const r=c.getBoundingClientRect(),G=laneGeom(c),tr=trk(S.sel),st=tr.steps[rollDrag.s];if(!st)return;
  if(rollDrag.mode==="pitch"){const n=clamp(G.lo+G.rows-1-Math.floor((e.clientY-r.top-G.top)/G.rh),0,127);if(st.n&&st.n[rollDrag.k]!==n){st.n[rollDrag.k]=n;rollDrag.moved=true;redraw()}}
  else{const x=e.clientX-r.left;let e2=rollDrag.s+1;for(const k of G.vs){if(k<=rollDrag.s)continue;const q=G.col[k];if(q&&x>(q.x0+q.x1)/2)e2=k+1}if(x>G.lastX)e2=G.b;e2=clamp(e2,rollDrag.s+1,S.len);if(e2===rollDrag.e)return;rollDrag.e=e2;rollDrag.moved=true;
   if(isMidiT(S.sel))setLock(S.sel,"MID.0",rollDrag.s,clamp((e2-rollDrag.s)*8,1,126));
   else{for(let k=rollDrag.s+1;k<S.len;k++){if(tr.steps[k]&&!tr.steps[k].off)break;if(tr.steps[k]?.off)tr.steps[k]=null}if(e2<S.len&&!tr.steps[e2])tr.steps[e2]={off:1}}
   redraw()}}
-function rollUp(){const d=rollDrag;rollDrag=null;if(d?.moved){structEdited();rerenderSeq()}}
+function rollUp(){const d=rollDrag;rollDrag=null;if(d?.mode==="key"){if(d.n!=null)keyNote(d.t,d.n,0);drawEd(d.c);return}if(d?.moved){structEdited();rerenderSeq()}}
 
 /* ---- 75-comforts.js ---- */
 /* ===== From the Machinedrum Editor (2026-10, MM-PORT-PLAN.md a-c): Alt as the global "all", the key map's
@@ -1610,7 +1629,7 @@ document.addEventListener("pointerout",e=>{const c=e.target.closest?.('canvas[da
 function trnUp(){if(!trnHeld)return;const h=trnHeld;trnHeld=null;keyNote(h.t,h.note,0)}
 const noteName12=n=>KEYS[((n%12)+12)%12];
 function dockVis(t,d){if(d==="trn")return`<canvas class="ed dkplot" data-ed="dktrn" aria-label="Transpose on a one-octave keyboard"></canvas>`;if(d==="trig")return`<canvas class="ed dkplot" data-ed="dktrig" aria-label="One gate's AMP envelope and the glide between two notes; drag the dots"></canvas>`;return""}
-/* the lane's right-hand scale column, beside the picture */
+/* the lane's scale column, in the left gutter beside the picture */
 const dkScale=(a,b,c)=>`<div class="dkscale" aria-hidden="true"><b>${a}</b><b>${b}</b><b>${c}</b></div>`;
 /* a value box moved: the picture and the readout follow (called from syncControls). A canvas is redrawn in
    place, so a dot being dragged keeps its canvas. */

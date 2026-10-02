@@ -140,7 +140,7 @@ document.addEventListener("pointerout",e=>{const c=e.target.closest?.('canvas[da
 function trnUp(){if(!trnHeld)return;const h=trnHeld;trnHeld=null;keyNote(h.t,h.note,0)}
 const noteName12=n=>KEYS[((n%12)+12)%12];
 function dockVis(t,d){if(d==="trn")return`<canvas class="ed dkplot" data-ed="dktrn" aria-label="Transpose on a one-octave keyboard"></canvas>`;if(d==="trig")return`<canvas class="ed dkplot" data-ed="dktrig" aria-label="One gate's AMP envelope and the glide between two notes; drag the dots"></canvas>`;return""}
-/* the lane's right-hand scale column, beside the picture */
+/* the lane's scale column, in the left gutter beside the picture */
 const dkScale=(a,b,c)=>`<div class="dkscale" aria-hidden="true"><b>${a}</b><b>${b}</b><b>${c}</b></div>`;
 /* a value box moved: the picture and the readout follow (called from syncControls). A canvas is redrawn in
    place, so a dot being dragged keeps its canvas. */

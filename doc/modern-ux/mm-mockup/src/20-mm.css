@@ -260,8 +260,8 @@ body.learn .pc.mapped{outline:2px solid var(--led)}
 .rowst{height:40px;display:grid;align-content:center;gap:3px;padding-left:6px;font:600 10px var(--sans);letter-spacing:.1em;color:var(--print2)}
 .rowst span{display:flex;gap:4px;align-items:center;white-space:nowrap}
 .rowst .led{width:6px;height:6px}
-.tlane .tlab{padding:0 0 0 6px;font-size:9.5px}
-.lbscale{height:150px;display:grid;align-content:space-between;padding:0 0 0 6px;font:9px var(--pix);color:var(--ink)}
+.tlane .tlab{padding:0 6px 0 0;font-size:9.5px;justify-content:flex-end}	/* the rows' names in the left gutter, by their cells */
+.lbscale{height:150px;display:grid;align-content:space-between;justify-items:end;text-align:right;padding:0 6px 0 0;font:9px var(--pix);color:var(--ink)}
 .lbscale b{font-weight:400}
 .lbscale span{display:grid;opacity:.75}.lbscale small{font:8px var(--pix)}
 .ws-seq .rail .th,.ws-midi .rail .th{height:32px}
@@ -966,7 +966,7 @@ body.dockother #rail .railparams>:is(.lpspace,.pagetabs,.pkcol),body.dockother #
 #rail .dkk:disabled{opacity:.35;cursor:default}
 .dkna{display:block;height:26px;font:11px/26px var(--mono);color:var(--print3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .ws-seq .lanewrap>#lanescroll,.ws-seq .lanewrap>.dockbody{flex:1 1 0;min-height:140px}
-.ws-seq .lanewrap>.dockbody{height:auto;padding:0 53px 0 0;box-sizing:border-box;overflow:hidden;display:grid;grid-template-rows:34px minmax(0,1fr);row-gap:8px}
+.ws-seq .lanewrap>.dockbody{height:auto;padding:0 0 0 53px;box-sizing:border-box;overflow:hidden;display:grid;grid-template-rows:34px minmax(0,1fr);row-gap:8px}
 .lanetop .dkread{flex:none}
 .lanetop .dkhelp{flex:1 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis}
 .dkvals{display:grid;grid-template-columns:repeat(8,minmax(0,1fr));gap:4px;height:34px;min-width:0}
@@ -988,7 +988,7 @@ body.dockother #rail .railparams>:is(.lpspace,.pagetabs,.pkcol),body.dockother #
 .dkvis .arplenrow{padding:0;gap:3px;flex:none}
 .dkvis .arplenrow button{height:10px}
 .dkvals2 .dkcell{display:block}
-.dkscale{position:absolute;top:0;bottom:14px;right:-53px;width:50px;box-sizing:border-box;padding:0 0 0 6px;display:grid;align-content:space-between;font:9px var(--pix);color:var(--print2);pointer-events:none}
+.dkscale{position:absolute;top:0;bottom:14px;left:-53px;width:50px;box-sizing:border-box;padding:0 6px 0 0;justify-items:end;text-align:right;display:grid;align-content:space-between;font:9px var(--pix);color:var(--print2);pointer-events:none}
 .dkscale b{font-weight:400;opacity:.75}
 /* TRIG SETUP and TRANSPOSE: an LCD plate (the Sound page's plots) filling the picture area */
 .dkvis canvas.dkplot{flex:1 1 0;height:auto;min-height:0;width:100%}
