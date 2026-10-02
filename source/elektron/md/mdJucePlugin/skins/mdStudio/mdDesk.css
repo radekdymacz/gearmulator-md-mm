@@ -1392,6 +1392,8 @@ body.liverec .st,body.liverec .lb{cursor:cell}
 .romside{display:grid;gap:10px;align-content:start;min-width:0}
 .romplay{display:grid;gap:6px}
 .romplay .cap{font:600 12px var(--sans);letter-spacing:.12em;text-transform:uppercase;color:var(--print2)}
+/* A narrow window (1280): the top bar fits, so MKII is not cut off: tighter gaps and workspace keys */
+@media (max-width:1340px){header.top{column-gap:8px!important}header.top .left{gap:8px!important}header.top .tabs>button{min-width:0!important;padding-left:6px!important;padding-right:6px!important}}
 /* Set up sampling: the card, as one block, in the middle of the workspace (across and down) */
 #main>.smpmain:has(> .smpsetup){flex:1 1 auto;min-height:0;place-content:center;justify-items:center}
 /* a fixed size, whatever its sentences say or whether the recorder-trigs row shows */

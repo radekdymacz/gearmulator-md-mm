@@ -85,6 +85,7 @@ main.addEventListener("pointerdown",e=>{
  if(pc){const s=+pc.dataset.s,tr=trk(S.sel),k=pc.dataset.tl||pc.dataset.env;const on=pc.dataset.tl?!(k==="sld"?tr.slide:tr.swing).has(s):!tr.steps[s]?.[k];paint={k,on,done:new Set()};try{main.setPointerCapture(e.pointerId)}catch(_){}e.preventDefault();paintAt(pc);return}
  if(S.learn){const el=e.target.closest(".pc[data-g]");if(el&&(PAGES.includes(el.dataset.g)||el.dataset.g==="MID")){e.preventDefault();e.stopPropagation();const t=el.dataset.t!=null?+el.dataset.t:S.sel;S.learnT={t,pid:el.dataset.g+"."+el.dataset.n};toast(`Target: ${tLabel(t)} ${pidLabel(t,S.learnT.pid)}. Now press 1-8 for a knob.`);if(HOST.learnTarget)HOST.learnTarget({...S.learnT});return}}
  const h=e.target.closest(".lfohandle");if(h){cordStart(e,h);return}
+ const pk=e.button===0&&e.target.closest('canvas[data-ed="dktrn"]');if(pk){trnDown(pk,e);e.preventDefault();return}
  const roll=e.target.closest("canvas.roll");if(roll){roll.setPointerCapture(e.pointerId);rollDown(roll,e);e.preventDefault();return}
  const c=e.target.closest("canvas.ed");if(c){const hh=nearest(c,e);if(!hh)return;active={c,k:hh.k,all:e.altKey&&!isMidiT(S.sel)};if(active.all)allTip();c.setPointerCapture(e.pointerId);e.preventDefault();redraw();return}
  const el=e.target.closest(".pc[data-g],.fader[data-g]");if(el){const t=el.dataset.t!=null?+el.dataset.t:S.sel;drag={el,x:e.clientX,y:e.clientY,v:getV(el),vert:el.classList.contains("fader"),mx:maxOf(ref(el)[2]),all:e.altKey&&!isMidiT(t)&&PAGES.includes(el.dataset.g)};if(drag.all)allTip();el.setPointerCapture(e.pointerId);el.classList.add("act");e.preventDefault();return}
@@ -107,7 +108,7 @@ main.addEventListener("pointermove",e=>{
  if(kbDown){const k=document.elementFromPoint(e.clientX,e.clientY)?.closest(".kb [data-key]");if(k&&!k.classList.contains("dn"))playKey(+k.dataset.key);return}
  const c=e.target.closest?.("canvas.ed");if(c)c.style.cursor=ED[c.dataset.ed]?.cursor?.(c,e)||(nearest(c,e)?"grab":"default")});
 function allTip(){if(S.allTold)return;S.allTold=1;toast("Control All: this value moves on all six synth tracks by the same amount (MIDI tracks stay).")}
-function endDrag(e){if(cord){cordEnd(e);return}if(rollDrag)rollUp();if(active){active=null;redraw()}if(drag){drag.el.classList.remove("act");drag=null}endLaneDraw();
+function endDrag(e){trnUp();if(cord){cordEnd(e);return}if(rollDrag)rollUp();if(active){active=null;redraw()}if(drag){drag.el.classList.remove("act");drag=null}endLaneDraw();
  if(kbDown&&HOST.keyUp)HOST.keyUp();
  if(arpDrag){const a=trk(S.sel).arp;if(!arpDrag.moved){a.rhy[arpDrag.k]=!a.rhy[arpDrag.k];renderArp()}structEdited();arpDrag=null}
  if(joyDrag){joyDrag=false;S.joy={x:0,y:0};const k=$("#knobj");if(k){k.style.left="50%";k.style.top="50%"}if(HOST.joy)HOST.joy(S.joy)}
@@ -152,7 +153,7 @@ document.addEventListener("click",e=>{
  const lp=e.target.closest("[data-lpage]");if(lp){S.lanePage=lp.dataset.lpage;const n=pnames(S.sel,S.lanePage);S.lane=S.lanePage+"."+Math.max(0,trackLockPids(S.sel).filter(x=>x.startsWith(S.lanePage+".")).map(x=>+x.split(".")[1])[0]??0);if(!n.length){S.lane="FLT.1";S.lanePage="FLT"}render();return}
  const ch=e.target.closest("[data-lane]");if(ch){S.lane=ch.dataset.lane;render();return}
  if(e.target.closest("#clearLane")){if(e.altKey){clearTrackLocks(S.sel);return}S.locks.delete(lkKey(S.sel,S.lane));structEdited();render();return}
- const pk=e.target.closest('canvas[data-ed="dktrn"]');if(pk){const tr=trk(S.sel),n=ED.dktrn.keyAt(pk,e);if(n!=null&&tr.tr.SCALE>1&&n!==tr.tr.KEY){tr.tr.KEY=n;structEdited();render()}return}
+ if(e.target.closest('canvas[data-ed="dktrn"]'))return;	/* the plate plays on pointerdown (trnDown) */
  const sg=e.target.closest(".seg[data-set] button,.dkrow[data-set] button");if(sg){const k=sg.parentElement.dataset.set,v=sg.dataset.v,tr=trk(S.sel);
   if(k==="arpmode"){tr.arp.MODE=+v;structEdited();render();return}if(k==="arpplay"){tr.arp.PLAY=+v;structEdited();render();return}
   if(k==="scale"){tr.tr.SCALE=+v;structEdited();render();return}

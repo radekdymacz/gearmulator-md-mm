@@ -1516,7 +1516,7 @@ function dockRead(t,d){const tr=trk(t);
  if(d==="trn"){const n=tr.tr.TRACK-64+(tr.tr.SCALE===1?0:S.patTrn-64);return`plays ${n>0?"+":""}${n} semitones${tr.tr.SCALE===1?" · FIX: pattern ignored":""}`}
  if(d==="trig"){const a=ampSteps(t);return a===Infinity?"the gate sustains":`a gate sounds ≈ ${a<10?a.toFixed(1):Math.round(a)} steps`}
  return"CH "+String(tr.ch).padStart(2,"0")}
-const TRNHELP=["<b>---</b> no transpose scale: track, pattern, song and multi-trig transpose add up and any note can sound.","<b>FIX</b> only track transpose applies. Use it for drums and FX.","<b>MAJ</b> transposed notes stay in the major scale of KEY: click a key to set it. Out-of-scale keys and roll rows are hatched.","<b>MIN</b> transposed notes stay in the minor scale of KEY: click a key to set it. Out-of-scale keys and roll rows are hatched."];
+const TRNHELP=["<b>---</b> no transpose scale: track, pattern, song and multi-trig transpose add up and any note can sound. Click a key: C plays it (up from C; Alt-click: down to it).","<b>FIX</b> only track transpose applies. Use it for drums and FX. Click a key: C plays it (up from C; Alt-click: down to it).","<b>MAJ</b> transposed notes stay in the major scale of KEY: click a key to set it. Out-of-scale keys and roll rows are hatched.","<b>MIN</b> transposed notes stay in the minor scale of KEY: click a key to set it. Out-of-scale keys and roll rows are hatched."];
 function dockHelp(t,d){const tr=trk(t);
  if(d==="arp"){const h=dkPlain(ARPHELP[tr.arp.MODE]);return[h,h+" SPD 6 = a 16th. Chords come from the trig: shift-click in the roll. The light notes in the roll are what it plays. In the strip: click a step to mute it, drag it up or down for an offset, click past the end or the LEN row under it to set the length. FUNCTION + ARP: one per track, 12 per pattern."]}
  if(d==="trn"){const h=dkPlain(TRNHELP[tr.tr.SCALE]);return[h,h+" Transpose is live: the programmed notes do not change. Song rows and multi trig add their own. FUNCTION + TRANSPOSE."]}
@@ -1573,13 +1573,14 @@ const BLK=[1,3,6,8,10];
 ED.dktrn={geo(W,H){const T=22,B=H-6,kh=B-T,ww=clamp(Math.round(kh*.5),30,64);return{T,B,kh,ww,x0:12,bw:ww*.62,bh:kh*.58}},
  keys(W,H){const G=this.geo(W,H),out=[];let wi=0;for(let n=0;n<=12;n++){if(BLK.includes(n%12))out.push({n,blk:1,x:G.x0+wi*G.ww-G.bw/2,y:G.T,w:G.bw,h:G.bh});else{out.push({n,blk:0,x:G.x0+wi*G.ww,y:G.T,w:G.ww,h:G.kh});wi++}}return out},
  keyAt(c,e){const r=c.getBoundingClientRect(),x=e.clientX-r.left,y=e.clientY-r.top,K=this.keys(r.width,r.height),hit=k=>x>=k.x&&x<k.x+k.w&&y>=k.y&&y<k.y+k.h;
-  const k=K.find(k=>k.blk&&hit(k))||K.find(k=>!k.blk&&hit(k));return k?k.n%12:null},
+  const k=K.find(k=>k.blk&&hit(k))||K.find(k=>!k.blk&&hit(k));return k?k.n:null},	/* 0-12: the upper C is 12 */
  shift(tr){return tr.tr.TRACK-64+(tr.tr.SCALE===1?0:S.patTrn-64)},
  draw(g,W,H){const G=this.geo(W,H),K=this.keys(W,H),tr=trk(S.sel),sc=tr.tr.SCALE,key=tr.tr.KEY,ink=cssv("--ink"),lcd=cssv("--lcd"),N=this.shift(tr),sv=sc>1;
   const src=N<0?12:0,dst=src+(N%12===0&&N?(N>0?12:-12):N%12),cx=n=>{const k=K.find(k=>k.n===n);return k.x+k.w/2},kOf=n=>K.find(k=>k.n===n);g.font=SFONT;
   const hatch=k=>{g.save();g.beginPath();g.rect(k.x+1,k.y+1,k.w-2,k.h-2);g.clip();g.strokeStyle=inkA(.22);g.lineWidth=1;for(let d=-k.h;d<k.w;d+=5){g.beginPath();g.moveTo(k.x+d,k.y+k.h);g.lineTo(k.x+d+k.h,k.y);g.stroke()}g.restore()};
   K.filter(k=>!k.blk).forEach(k=>{if(sv&&!inScale(tr,k.n))hatch(k);g.strokeStyle=ink;g.lineWidth=1.2;g.strokeRect(k.x+.5,k.y+.5,k.w-1,k.h-1)});
   K.filter(k=>k.blk).forEach(k=>{g.fillStyle=sv&&!inScale(tr,k.n)?inkA(.4):ink;g.fillRect(k.x,k.y,k.w,k.h)});
+  const hk=this.hov!=null&&kOf(+this.hov.split("|")[0]);if(hk){g.fillStyle=hk.blk?lcd:inkA(.14);g.globalAlpha=hk.blk?.35:1;g.fillRect(hk.x+2,hk.y+2,hk.w-4,hk.h-4);g.globalAlpha=1}
   const dot=(n,fill,r=4.5)=>{const k=kOf(n),x=k.x+k.w/2,y=k.blk?k.y+k.h-10:k.y+k.h-24;g.beginPath();g.arc(x,y,r,0,7);if(fill){g.fillStyle=k.blk?lcd:ink;g.fill()}else{g.strokeStyle=k.blk?lcd:ink;g.lineWidth=1.6;g.stroke()}};
   K.filter(k=>!k.blk).forEach(k=>{const r=sv&&k.n%12===key;g.fillStyle=r?ink:inkA(.6);g.fillText(KEYS[k.n%12],k.x+k.w/2-3,k.y+k.h-6)});
   if(sv){for(let n=0;n<=12;n++)if(inScale(tr,n%12))dot(n,1,n%12===key?5.5:3.5);
@@ -1590,9 +1591,23 @@ ED.dktrn={geo(W,H){const T=22,B=H-6,kh=B-T,ww=clamp(Math.round(kh*.5),30,64);ret
   const tx=G.x0+8*G.ww+22,big="16px Silkscreen, monospace",xo=Math.floor((Math.abs(N)-1)/12),oct=N&&xo?`, ${N>0?"+":"−"}${xo} oct`:"";
   const lines=sv?[[`${KEYS[key]} ${sc===2?"major":"minor"}`,`lit keys are in the scale · ${N?"shifted "+(N>0?"+":"")+N+", then kept in it":"no shift"}`,"click a key to set the root (KEY)"]]
    :[[N?`plays ${N>0?"+":""}${N} semitone${Math.abs(N)>1?"s":""}`:"no shift",sc===1?`FIX: track ${tr.tr.TRACK-64>0?"+":""}${tr.tr.TRACK-64} only · pattern, song and multi trig ignored`:`track ${tr.tr.TRACK-64>0?"+":""}${tr.tr.TRACK-64} + pattern ${S.patTrn-64>0?"+":""}${S.patTrn-64} · no scale: every note can sound`,N?`C plays the ${noteName12(dst)} ${N>0?"above":"below"}${oct}`:"KEY is only for MAJ and MIN"]];
-  const [l1,l2,l3]=lines[0];g.fillStyle=ink;g.font=big;g.fillText(l1.toUpperCase(),tx,G.T+18);g.font="10px Silkscreen, monospace";g.fillStyle=inkA(.8);g.fillText(l2.toUpperCase(),tx,G.T+40);g.fillText(l3.toUpperCase(),tx,G.T+58);
+  const hv=this.hov&&this.hov.split("|"),[l1,l2,l3]=hv?[lines[0][0],lines[0][1],this.effect(tr,+hv[0],hv[1]==="1").tip]:lines[0];g.fillStyle=ink;g.font=big;g.fillText(l1.toUpperCase(),tx,G.T+18);g.font="10px Silkscreen, monospace";g.fillStyle=inkA(.8);g.fillText(l2.toUpperCase(),tx,G.T+40);g.fillText(l3.toUpperCase(),tx,G.T+58);
   label(g,"transpose · "+(["no scale","fix","maj","min"][sc]))},
- cursor(c,e){return trk(S.sel).tr.SCALE>1&&this.keyAt(c,e)!=null?"pointer":"default"}};
+ /* what a click on key n (0-12) does. MAJ/MIN: KEY = n. --- and FIX: the track transpose so that C plays n, up
+    from C (0..+12), or with Alt down to it (−12..0); in --- the pattern's own shift is counted in. */
+ effect(tr,n,alt){const sc=tr.tr.SCALE;if(sc>1){const key=n%12;return{key,note:key,tip:key===tr.tr.KEY?`${KEYS[key]} is the root (KEY)`:`click: root (KEY) ${KEYS[key]}`}}
+  const want=alt?n-12:n,pat=sc===1?0:S.patTrn-64,TRACK=clamp(64+want-pat,0,127),N=TRACK-64+pat,sg=v=>(v>0?"+":"")+v;
+  return{TRACK,note:N,tip:`click: C plays ${noteName12(N)} ${N>0?"above":N<0?"below":"(no shift)"} · track ${sg(TRACK-64)}${pat?` + pattern ${sg(pat)} = ${sg(N)}`:""}${alt?"":" · Alt-click: down"}`}},
+ hov:null,
+ cursor(c,e){const n=this.keyAt(c,e),k=n==null?null:n+"|"+(e.altKey?1:0);if(k!==this.hov){this.hov=k;c.title=n==null?"":this.effect(trk(S.sel),n,e.altKey).tip;drawEd(c)}return n!=null?"pointer":"default"}};
+/* a press on the plate: set KEY or TRACK (one undo step) and play the note it makes on the selected synth track
+   until the button comes up, as the home-row keys do */
+let trnHeld=null;
+function trnDown(c,e){const t=S.sel,tr=trk(t),x=ED.dktrn.keyAt(c,e);if(x==null)return;const n=ED.dktrn.effect(tr,x,e.altKey);
+ if(n.key!=null?n.key!==tr.tr.KEY:n.TRACK!==tr.tr.TRACK){if(n.key!=null)tr.tr.KEY=n.key;else tr.tr.TRACK=n.TRACK;structEdited();render()}
+ if(isMidiT(t))return;const note=clamp(KEYS_BASE+12*KB.oct+n.note);trnHeld={t,note};keyNote(t,note,KB.vel)}
+document.addEventListener("pointerout",e=>{const c=e.target.closest?.('canvas[data-ed="dktrn"]');if(c&&!c.contains(e.relatedTarget)&&ED.dktrn.hov){ED.dktrn.hov=null;c.title="";drawEd(c)}});
+function trnUp(){if(!trnHeld)return;const h=trnHeld;trnHeld=null;keyNote(h.t,h.note,0)}
 const noteName12=n=>KEYS[((n%12)+12)%12];
 function dockVis(t,d){if(d==="trn")return`<canvas class="ed dkplot" data-ed="dktrn" aria-label="Transpose on a one-octave keyboard"></canvas>`;if(d==="trig")return`<canvas class="ed dkplot" data-ed="dktrig" aria-label="One gate's AMP envelope and the glide between two notes; drag the dots"></canvas>`;return""}
 /* the lane's right-hand scale column, beside the picture */
@@ -1963,22 +1978,24 @@ function busFlow(b){const T=S.tracks;let items=[];const notes=[];
   if(tr.out[b]&&!tr.mute)items.push(lab)});
  return{items,notes}}
 function outOf(b){if(S.routing==="6xMONO")return"not sent out";if(b==="AB")return"OUT A/B";return S.routing==="3xSTEREO+AB=MIX"?`OUT ${b[0]}/${b[1]} + A/B`:`OUT ${b[0]}/${b[1]}`}
-function routeSvg(){const T=S.tracks,W=1200,H=256,NW=150,nx=i=>25+200*i,NY=30,NH=56,by={AB:124,CD:152,EF:180},mono=S.routing==="6xMONO";let h="";
- const IX=10,IY=206;h+=`<g><rect x="${IX}" y="${IY}" width="96" height="44" rx="3" class="jack"/><text x="${IX+8}" y="${IY+18}" font-size="10">INPUT</text><text x="${IX+8}" y="${IY+36}" font-size="13">A  B</text></g>`;
- BUSES.forEach(b=>{h+=`<line x1="12" y1="${by[b]}" x2="1146" y2="${by[b]}" class="bus ${mono?"dim":""}"/><text x="4" y="${by[b]-5}" font-size="9">${b}</text>`});
- h+=`<text x="1146" y="${IY+18}" font-size="9" text-anchor="end">${mono?"6 X MONO":S.routing==="3xSTEREO"?"3 X STEREO":"3 X STEREO · AB = MIX"}</text>`;
- if(!mono)BUSES.forEach(b=>{h+=`<circle cx="1158" cy="${by[b]}" r="7" class="jack ${busFlow(b).items.length?"live":""}"/><text x="1170" y="${by[b]+4}" font-size="10">${b}</text>`;
-  if(S.routing==="3xSTEREO+AB=MIX"&&b!=="AB")h+=`<path d="M1146 ${by[b]} C1126 ${by[b]-14},1126 ${by.AB+10},1146 ${by.AB}" class="cord dash"/>`});
+/* compact: the node row, then the three buses close under it with the INPUT jack inline on their left, the
+   outputs on their right and the mode label in the bottom corner */
+function routeSvg(){const T=S.tracks,W=1200,NW=140,nx=i=>118+172*i,NY=30,NH=44,by={AB:94,CD:110,EF:126},H=146,BX=110,mono=S.routing==="6xMONO";let h="";
+ const IX=6,IY=by.AB-10,IW=78,IH=by.EF-by.AB+20;h+=`<g><rect x="${IX}" y="${IY}" width="${IW}" height="${IH}" rx="3" class="jack"/><text x="${IX+8}" y="${IY+15}" font-size="9">INPUT</text><text x="${IX+8}" y="${IY+IH-9}" font-size="12">A  B</text></g>`;
+ BUSES.forEach(b=>{h+=`<line x1="${BX}" y1="${by[b]}" x2="1146" y2="${by[b]}" class="bus ${mono?"dim":""}"/><text x="${BX-4}" y="${by[b]+3}" font-size="8" text-anchor="end">${b}</text>`});
+ h+=`<text x="1194" y="${H-3}" font-size="8" text-anchor="end">${mono?"6 X MONO":S.routing==="3xSTEREO"?"3 X STEREO":"3 X STEREO · AB = MIX"}</text>`;
+ if(!mono)BUSES.forEach(b=>{h+=`<circle cx="1158" cy="${by[b]}" r="6" class="jack ${busFlow(b).items.length?"live":""}"/><text x="1169" y="${by[b]+4}" font-size="9">${b}</text>`;
+  if(S.routing==="3xSTEREO+AB=MIX"&&b!=="AB")h+=`<path d="M1146 ${by[b]} C1130 ${by[b]-8},1130 ${by.AB+6},1146 ${by.AB}" class="cord dash"/>`});
  T.forEach((tr,i)=>{const x=nx(i),fx=isFx(tr.m),sel=i===S.sel;
-  if(mono)h+=`<path d="M${x+NW/2} ${NY+NH} L${x+NW/2} 196" class="cord ${tr.mute?"dash":""}" opacity=".5"/><text x="${x+NW/2+4}" y="194" font-size="9">OUT ${"ABCDEF"[i]}</text>`;
-  BUSES.forEach((b,k)=>{if(!tr.out[b])return;const dx=x+26+k*20;h+=`<line x1="${dx}" y1="${NY+NH}" x2="${dx}" y2="${by[b]}" class="cord ${mono?"dash":""}"/><circle cx="${dx}" cy="${by[b]}" r="4.5" class="tap"/>`});
-  if(fx&&tr.inp.startsWith("BUS")){const b=tr.inp.slice(4),dx=x+NW-22;h+=`<path d="M${dx} ${by[b]} L${dx} ${NY+NH+8}" class="cord dash"/><path d="M${dx-5} ${NY+NH+10} L${dx} ${NY+NH+2} L${dx+5} ${NY+NH+10}" class="cord"/><circle cx="${dx}" cy="${by[b]}" r="4" class="jack"/><text x="${dx+8}" y="${NY+NH+14}" font-size="9">IN ${b}</text>`}
-  if(fx&&tr.inp==="NEIBOR"&&i>0)h+=`<path d="M${nx(i-1)+NW} ${NY+NH/2} L${x-4} ${NY+NH/2}" class="cord"/><path d="M${x-10} ${NY+NH/2-5} L${x-3} ${NY+NH/2} L${x-10} ${NY+NH/2+5}" class="cord"/><text x="${x-25}" y="${NY+NH/2-8}" font-size="8" text-anchor="middle">NEIBOR</text>`;
-  if(fx&&tr.inp.startsWith("INP"))h+=`<path d="M${IX+96} ${IY+22} C${x} ${IY+22},${x+NW/2} ${IY-20},${x+NW/2} ${NY+NH}" class="cord dash"/><text x="${x+NW/2+6}" y="${NY+NH+30}" font-size="9">${tr.inp}</text>`;
-  if(tr.m==="SID-6581"&&i>0&&sv2(tr,"MOD")&&sv2(tr,"MSRC")===1)h+=`<path d="M${nx(i-1)+NW-10} ${NY} C${nx(i-1)+NW} ${NY-20},${x+10} ${NY-20},${x+18} ${NY}" class="cord dot"/><text x="${x-10}" y="${NY-14}" font-size="8">PRCH</text>`;
-  if(tr.trigpos!=null){const j=tr.trigpos;h+=`<path d="M${x+NW/2} ${NY} C${x+NW/2} ${NY-26},${nx(j)+NW/2} ${NY-26},${nx(j)+NW/2} ${NY}" class="cord dot"/><text x="${(x+nx(j))/2+NW/2-18}" y="${NY-18}" font-size="8">TRIG ›T${j+1}</text>`}
+  if(mono)h+=`<path d="M${x+NW/2} ${NY+NH} L${x+NW/2} ${H-12}" class="cord ${tr.mute?"dash":""}" opacity=".5"/><text x="${x+NW/2+4}" y="${H-3}" font-size="8">OUT ${"ABCDEF"[i]}</text>`;
+  BUSES.forEach((b,k)=>{if(!tr.out[b])return;const dx=x+24+k*18;h+=`<line x1="${dx}" y1="${NY+NH}" x2="${dx}" y2="${by[b]}" class="cord ${mono?"dash":""}"/><circle cx="${dx}" cy="${by[b]}" r="4" class="tap"/>`});
+  if(fx&&tr.inp.startsWith("BUS")){const b=tr.inp.slice(4),dx=x+NW-20;h+=`<path d="M${dx} ${by[b]} L${dx} ${NY+NH+6}" class="cord dash"/><path d="M${dx-4} ${NY+NH+8} L${dx} ${NY+NH+2} L${dx+4} ${NY+NH+8}" class="cord"/><circle cx="${dx}" cy="${by[b]}" r="3.5" class="jack"/><text x="${dx-7}" y="${NY+NH+13}" font-size="8" text-anchor="end">IN ${b}</text>`}
+  if(fx&&tr.inp==="NEIBOR"&&i>0)h+=`<path d="M${nx(i-1)+NW} ${NY+NH/2} L${x-3} ${NY+NH/2}" class="cord"/><path d="M${x-9} ${NY+NH/2-5} L${x-2} ${NY+NH/2} L${x-9} ${NY+NH/2+5}" class="cord"/><text x="${x-16}" y="${NY-5}" font-size="7" text-anchor="middle">NEIBOR</text>`;
+  if(fx&&tr.inp.startsWith("INP"))h+=`<path d="M${IX+IW} ${by.EF+6} L${x+NW/2-8} ${by.EF+9} Q${x+NW/2} ${by.EF+9},${x+NW/2} ${by.EF}L${x+NW/2} ${NY+NH}" class="cord dash"/><text x="${x+NW/2+6}" y="${NY+NH+13}" font-size="8">${tr.inp}</text>`;
+  if(tr.m==="SID-6581"&&i>0&&sv2(tr,"MOD")&&sv2(tr,"MSRC")===1)h+=`<path d="M${nx(i-1)+NW-10} ${NY} C${nx(i-1)+NW} ${NY-18},${x+10} ${NY-18},${x+18} ${NY}" class="cord dot"/><text x="${x-10}" y="${NY-17}" font-size="7">PRCH</text>`;
+  if(tr.trigpos!=null){const j=tr.trigpos;h+=`<path d="M${x+NW/2} ${NY} C${x+NW/2} ${NY-24},${nx(j)+NW/2} ${NY-24},${nx(j)+NW/2} ${NY}" class="cord dot"/><text x="${(x+nx(j))/2+NW/2-18}" y="${NY-20}" font-size="7">TRIG ›T${j+1}</text>`}
   h+=`<g class="node ${fx?"fx":""} ${sel?"sel":""} ${audible(i)?"":"muted"}" data-node="${i}"><rect class="body" x="${x}" y="${NY}" width="${NW}" height="${NH}" rx="3"/>${sel?`<rect class="frame" x="${x-4}" y="${NY-4}" width="${NW+8}" height="${NH+8}" rx="5"/>`:""}
-   <text x="${x+8}" y="${NY+16}" font-size="10">T${i+1}${fx?" · FX":""}</text><text x="${x+8}" y="${NY+34}" font-size="12">${shortM(tr.m)}</text><text x="${x+8}" y="${NY+49}" font-size="8" opacity=".8">${tr.name.toUpperCase().slice(0,18)}</text></g>`});
+   <text x="${x+8}" y="${NY+13}" font-size="9">T${i+1}${fx?" · FX":""}</text><text x="${x+8}" y="${NY+28}" font-size="11">${shortM(tr.m)}</text><text x="${x+8}" y="${NY+39}" font-size="7" opacity=".8">${tr.name.toUpperCase().slice(0,18)}</text></g>`});
  return`<svg class="route" viewBox="0 0 ${W} ${H}" preserveAspectRatio="xMidYMid meet" role="img" aria-label="Routing: tracks, mix buses, outputs">${h}</svg>`}
 function sv2(tr,n){const i=MACH[tr.m].p.indexOf(n);return i<0?0:tr.v.SYN[i]}
 function renderMix(){const T=S.tracks;
@@ -2026,12 +2043,12 @@ function renderPerform(){const pm=PMODES.find(p=>p[0]===S.mode),t=asgT(),tr=S.tr
  const joy=S.asTab.startsWith("JOY");
  $("#main").innerHTML=`<div class="perf ${S.mode==="map"?"map":""}">
   <div class="perf3">
-   <section class="card"><header><h3>Multi envelope</h3><span>both DATA PAGE keys · multi trig only</span></header><canvas class="ed" data-ed="menv" aria-label="Multi envelope. Drag the dots."></canvas>
+   <section class="card menvcard"><header><h3>Multi envelope</h3><span>both DATA PAGE keys · multi trig only</span></header><canvas class="ed" data-ed="menv" aria-label="Multi envelope. Drag the dots."></canvas>
     <div class="ctl" style="grid-template-columns:repeat(5,minmax(0,1fr))">${["ATK","DEC","SUS","REL","PORT"].map(n=>pc("menv",n,{})).join("")}</div>
     <div class="hint">On top of every track's own envelope. For no effect: ATK 0, DEC, SUS and REL at 127.</div></section>
-   <section class="card"><header><h3>Assign · T${t+1} ${shortM(tr.m)}</h3><span class="seg" data-set="astrk">${[0,1,2,3,4,5].map(k=>`<button data-v="${k}" aria-pressed="${k===t}">${k+1}</button>`).join("")}</span></header>
+   <section class="card asgcard"><header><h3>Assign · T${t+1} ${shortM(tr.m)}</h3><span class="seg" data-set="astrk">${[0,1,2,3,4,5].map(k=>`<button data-v="${k}" aria-pressed="${k===t}">${k+1}</button>`).join("")}</span></header>
     <span class="seg" data-set="astab">${Object.keys(A.tabs).map(k=>`<button data-v="${k}" aria-pressed="${S.asTab===k}">${k}</button>`).join("")}</span>
-    <div class="asgn">${joy?`<div class="joy" id="joy" title="Drag the stick. It springs back."><span class="cross"></span><span class="cross2"></span><small style="left:4px;top:66px">L</small><small style="right:4px;top:66px">R</small><small style="left:68px;top:3px">U</small><small style="left:68px;bottom:3px">D</small><span class="knobj" id="knobj" style="left:${50+S.joy.x*42}%;top:${50-S.joy.y*42}%"></span></div>`:""}
+    <div class="asgn">${joy?`<div class="joy" id="joy" title="Drag the stick. It springs back."><span class="cross"></span><span class="cross2"></span><small class="jl">L</small><small class="jr">R</small><small class="ju">U</small><small class="jd">D</small><span class="knobj" id="knobj" style="left:${50+S.joy.x*42}%;top:${50-S.joy.y*42}%"></span></div>`:""}
      <div style="display:grid;gap:6px">${rows.map(asRow).join("")}
       ${S.asTab==="JOY RL"?`<button class="lkey" data-mirr="1" aria-pressed="${A.mirr}"><i class="led"></i>MIRR (left = −right)</button>`:""}
       ${S.asTab==="KEY"?`<span class="keyrow"><button class="lkey" data-ktrk="hpf" aria-pressed="${A.hpf}"><i class="led"></i>HPF tracks keys</button><button class="lkey" data-ktrk="lpf" aria-pressed="${A.lpf}"><i class="led"></i>LPF tracks keys</button></span>`:""}
@@ -2055,7 +2072,7 @@ function renderPerform(){const pm=PMODES.find(p=>p[0]===S.mode),t=asgT(),tr=S.tr
   <div class="kbwrap">${S.mode==="map"?`<div class="mapbands">${mapBands()}</div>`:""}<div class="kb" id="kb">${renderKb()}</div>
    <div class="trklamps" id="trklamps">${S.tracks.map((x,i)=>`<span><i class="led" data-lamp="${i}"></i>T${i+1} ${shortM(x.m)}</span>`).join("")}<span class="hint" id="kbinfo" style="margin-left:auto">Click or drag across the keys to play.</span></div></div>
   </div></div>`;
- tipify(".perf .card .hint");
+ /* the cards keep their hints in view (tipify went with the Sound page's groups) */
  syncControls();redraw()}
 let kbDown=null,lampT={};
 function flashTracks(ts){ts.forEach(i=>{const l=$(`[data-lamp="${i}"]`);if(!l)return;l.classList.add("on");clearTimeout(lampT[i]);lampT[i]=setTimeout(()=>l.classList.remove("on"),160)})}
@@ -2229,7 +2246,7 @@ function renderSong(){const sel=S.song[S.songSel]||S.song[0],chain=S.songPick===
  const lines=Math.ceil(200/16);
  $("#main").innerHTML=`<div class="songui lay2"><div class="songleft"><section class="card ${chain?"chainmode":""}">${head}${palette}</section>
    <section class="card"><header><h3>Selected row</h3><span class="rowacts"><button data-rowact="up" title="Move left">←</button><button data-rowact="down" title="Move right">→</button><button data-rowact="dup">Duplicate</button><button data-rowact="loop">Add loop</button><button data-rowact="del" class="danger">Delete</button></span></header><div class="insp">${insp}</div></section></div>
-  <section class="card"><header><h3>Arrangement</h3><span class="note">${S.song.length} of 200 rows · T track transpose · M mutes · B tempo</span>${songPick()}</header>
+  <section class="card"><header><h3>Arrangement</h3><span class="note" title="${S.song.length} of 200 rows · T track transpose · M mutes · B tempo · ~ part">${S.song.length} of 200 rows · T track transpose · M mutes · B tempo</span>${songPick()}</header>
    <div class="durbar" title="Song shape by time (length × repeats)">${S.song.map((r,i)=>r.type?`<i class="db dbm"></i>`:`<i class="db ${i===S.songSel?"sel":""}" data-row="${i}" style="flex:${rowLen(r)*r.rep} 1 0"></i>`).join("")}</div>
    <div class="slotgrid" id="tl">${Array.from({length:lines},(_,line)=>`<span class="sglab">${String(line*16+1).padStart(3,"0")}</span>${Array.from({length:16},(_,c)=>{const i=line*16+c,r=S.song[i];if(i>=200)return`<span></span>`;
      if(!r)return`<div class="scell empty" data-i="${i}"></div>`;
@@ -2647,6 +2664,7 @@ main.addEventListener("pointerdown",e=>{
  if(pc){const s=+pc.dataset.s,tr=trk(S.sel),k=pc.dataset.tl||pc.dataset.env;const on=pc.dataset.tl?!(k==="sld"?tr.slide:tr.swing).has(s):!tr.steps[s]?.[k];paint={k,on,done:new Set()};try{main.setPointerCapture(e.pointerId)}catch(_){}e.preventDefault();paintAt(pc);return}
  if(S.learn){const el=e.target.closest(".pc[data-g]");if(el&&(PAGES.includes(el.dataset.g)||el.dataset.g==="MID")){e.preventDefault();e.stopPropagation();const t=el.dataset.t!=null?+el.dataset.t:S.sel;S.learnT={t,pid:el.dataset.g+"."+el.dataset.n};toast(`Target: ${tLabel(t)} ${pidLabel(t,S.learnT.pid)}. Now press 1-8 for a knob.`);if(HOST.learnTarget)HOST.learnTarget({...S.learnT});return}}
  const h=e.target.closest(".lfohandle");if(h){cordStart(e,h);return}
+ const pk=e.button===0&&e.target.closest('canvas[data-ed="dktrn"]');if(pk){trnDown(pk,e);e.preventDefault();return}
  const roll=e.target.closest("canvas.roll");if(roll){roll.setPointerCapture(e.pointerId);rollDown(roll,e);e.preventDefault();return}
  const c=e.target.closest("canvas.ed");if(c){const hh=nearest(c,e);if(!hh)return;active={c,k:hh.k,all:e.altKey&&!isMidiT(S.sel)};if(active.all)allTip();c.setPointerCapture(e.pointerId);e.preventDefault();redraw();return}
  const el=e.target.closest(".pc[data-g],.fader[data-g]");if(el){const t=el.dataset.t!=null?+el.dataset.t:S.sel;drag={el,x:e.clientX,y:e.clientY,v:getV(el),vert:el.classList.contains("fader"),mx:maxOf(ref(el)[2]),all:e.altKey&&!isMidiT(t)&&PAGES.includes(el.dataset.g)};if(drag.all)allTip();el.setPointerCapture(e.pointerId);el.classList.add("act");e.preventDefault();return}
@@ -2669,7 +2687,7 @@ main.addEventListener("pointermove",e=>{
  if(kbDown){const k=document.elementFromPoint(e.clientX,e.clientY)?.closest(".kb [data-key]");if(k&&!k.classList.contains("dn"))playKey(+k.dataset.key);return}
  const c=e.target.closest?.("canvas.ed");if(c)c.style.cursor=ED[c.dataset.ed]?.cursor?.(c,e)||(nearest(c,e)?"grab":"default")});
 function allTip(){if(S.allTold)return;S.allTold=1;toast("Control All: this value moves on all six synth tracks by the same amount (MIDI tracks stay).")}
-function endDrag(e){if(cord){cordEnd(e);return}if(rollDrag)rollUp();if(active){active=null;redraw()}if(drag){drag.el.classList.remove("act");drag=null}endLaneDraw();
+function endDrag(e){trnUp();if(cord){cordEnd(e);return}if(rollDrag)rollUp();if(active){active=null;redraw()}if(drag){drag.el.classList.remove("act");drag=null}endLaneDraw();
  if(kbDown&&HOST.keyUp)HOST.keyUp();
  if(arpDrag){const a=trk(S.sel).arp;if(!arpDrag.moved){a.rhy[arpDrag.k]=!a.rhy[arpDrag.k];renderArp()}structEdited();arpDrag=null}
  if(joyDrag){joyDrag=false;S.joy={x:0,y:0};const k=$("#knobj");if(k){k.style.left="50%";k.style.top="50%"}if(HOST.joy)HOST.joy(S.joy)}
@@ -2714,7 +2732,7 @@ document.addEventListener("click",e=>{
  const lp=e.target.closest("[data-lpage]");if(lp){S.lanePage=lp.dataset.lpage;const n=pnames(S.sel,S.lanePage);S.lane=S.lanePage+"."+Math.max(0,trackLockPids(S.sel).filter(x=>x.startsWith(S.lanePage+".")).map(x=>+x.split(".")[1])[0]??0);if(!n.length){S.lane="FLT.1";S.lanePage="FLT"}render();return}
  const ch=e.target.closest("[data-lane]");if(ch){S.lane=ch.dataset.lane;render();return}
  if(e.target.closest("#clearLane")){if(e.altKey){clearTrackLocks(S.sel);return}S.locks.delete(lkKey(S.sel,S.lane));structEdited();render();return}
- const pk=e.target.closest('canvas[data-ed="dktrn"]');if(pk){const tr=trk(S.sel),n=ED.dktrn.keyAt(pk,e);if(n!=null&&tr.tr.SCALE>1&&n!==tr.tr.KEY){tr.tr.KEY=n;structEdited();render()}return}
+ if(e.target.closest('canvas[data-ed="dktrn"]'))return;	/* the plate plays on pointerdown (trnDown) */
  const sg=e.target.closest(".seg[data-set] button,.dkrow[data-set] button");if(sg){const k=sg.parentElement.dataset.set,v=sg.dataset.v,tr=trk(S.sel);
   if(k==="arpmode"){tr.arp.MODE=+v;structEdited();render();return}if(k==="arpplay"){tr.arp.PLAY=+v;structEdited();render();return}
   if(k==="scale"){tr.tr.SCALE=+v;structEdited();render();return}

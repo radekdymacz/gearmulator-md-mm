@@ -46,7 +46,7 @@ function dockRead(t,d){const tr=trk(t);
  if(d==="trn"){const n=tr.tr.TRACK-64+(tr.tr.SCALE===1?0:S.patTrn-64);return`plays ${n>0?"+":""}${n} semitones${tr.tr.SCALE===1?" · FIX: pattern ignored":""}`}
  if(d==="trig"){const a=ampSteps(t);return a===Infinity?"the gate sustains":`a gate sounds ≈ ${a<10?a.toFixed(1):Math.round(a)} steps`}
  return"CH "+String(tr.ch).padStart(2,"0")}
-const TRNHELP=["<b>---</b> no transpose scale: track, pattern, song and multi-trig transpose add up and any note can sound.","<b>FIX</b> only track transpose applies. Use it for drums and FX.","<b>MAJ</b> transposed notes stay in the major scale of KEY: click a key to set it. Out-of-scale keys and roll rows are hatched.","<b>MIN</b> transposed notes stay in the minor scale of KEY: click a key to set it. Out-of-scale keys and roll rows are hatched."];
+const TRNHELP=["<b>---</b> no transpose scale: track, pattern, song and multi-trig transpose add up and any note can sound. Click a key: C plays it (up from C; Alt-click: down to it).","<b>FIX</b> only track transpose applies. Use it for drums and FX. Click a key: C plays it (up from C; Alt-click: down to it).","<b>MAJ</b> transposed notes stay in the major scale of KEY: click a key to set it. Out-of-scale keys and roll rows are hatched.","<b>MIN</b> transposed notes stay in the minor scale of KEY: click a key to set it. Out-of-scale keys and roll rows are hatched."];
 function dockHelp(t,d){const tr=trk(t);
  if(d==="arp"){const h=dkPlain(ARPHELP[tr.arp.MODE]);return[h,h+" SPD 6 = a 16th. Chords come from the trig: shift-click in the roll. The light notes in the roll are what it plays. In the strip: click a step to mute it, drag it up or down for an offset, click past the end or the LEN row under it to set the length. FUNCTION + ARP: one per track, 12 per pattern."]}
  if(d==="trn"){const h=dkPlain(TRNHELP[tr.tr.SCALE]);return[h,h+" Transpose is live: the programmed notes do not change. Song rows and multi trig add their own. FUNCTION + TRANSPOSE."]}
@@ -103,13 +103,14 @@ const BLK=[1,3,6,8,10];
 ED.dktrn={geo(W,H){const T=22,B=H-6,kh=B-T,ww=clamp(Math.round(kh*.5),30,64);return{T,B,kh,ww,x0:12,bw:ww*.62,bh:kh*.58}},
  keys(W,H){const G=this.geo(W,H),out=[];let wi=0;for(let n=0;n<=12;n++){if(BLK.includes(n%12))out.push({n,blk:1,x:G.x0+wi*G.ww-G.bw/2,y:G.T,w:G.bw,h:G.bh});else{out.push({n,blk:0,x:G.x0+wi*G.ww,y:G.T,w:G.ww,h:G.kh});wi++}}return out},
  keyAt(c,e){const r=c.getBoundingClientRect(),x=e.clientX-r.left,y=e.clientY-r.top,K=this.keys(r.width,r.height),hit=k=>x>=k.x&&x<k.x+k.w&&y>=k.y&&y<k.y+k.h;
-  const k=K.find(k=>k.blk&&hit(k))||K.find(k=>!k.blk&&hit(k));return k?k.n%12:null},
+  const k=K.find(k=>k.blk&&hit(k))||K.find(k=>!k.blk&&hit(k));return k?k.n:null},	/* 0-12: the upper C is 12 */
  shift(tr){return tr.tr.TRACK-64+(tr.tr.SCALE===1?0:S.patTrn-64)},
  draw(g,W,H){const G=this.geo(W,H),K=this.keys(W,H),tr=trk(S.sel),sc=tr.tr.SCALE,key=tr.tr.KEY,ink=cssv("--ink"),lcd=cssv("--lcd"),N=this.shift(tr),sv=sc>1;
   const src=N<0?12:0,dst=src+(N%12===0&&N?(N>0?12:-12):N%12),cx=n=>{const k=K.find(k=>k.n===n);return k.x+k.w/2},kOf=n=>K.find(k=>k.n===n);g.font=SFONT;
   const hatch=k=>{g.save();g.beginPath();g.rect(k.x+1,k.y+1,k.w-2,k.h-2);g.clip();g.strokeStyle=inkA(.22);g.lineWidth=1;for(let d=-k.h;d<k.w;d+=5){g.beginPath();g.moveTo(k.x+d,k.y+k.h);g.lineTo(k.x+d+k.h,k.y);g.stroke()}g.restore()};
   K.filter(k=>!k.blk).forEach(k=>{if(sv&&!inScale(tr,k.n))hatch(k);g.strokeStyle=ink;g.lineWidth=1.2;g.strokeRect(k.x+.5,k.y+.5,k.w-1,k.h-1)});
   K.filter(k=>k.blk).forEach(k=>{g.fillStyle=sv&&!inScale(tr,k.n)?inkA(.4):ink;g.fillRect(k.x,k.y,k.w,k.h)});
+  const hk=this.hov!=null&&kOf(+this.hov.split("|")[0]);if(hk){g.fillStyle=hk.blk?lcd:inkA(.14);g.globalAlpha=hk.blk?.35:1;g.fillRect(hk.x+2,hk.y+2,hk.w-4,hk.h-4);g.globalAlpha=1}
   const dot=(n,fill,r=4.5)=>{const k=kOf(n),x=k.x+k.w/2,y=k.blk?k.y+k.h-10:k.y+k.h-24;g.beginPath();g.arc(x,y,r,0,7);if(fill){g.fillStyle=k.blk?lcd:ink;g.fill()}else{g.strokeStyle=k.blk?lcd:ink;g.lineWidth=1.6;g.stroke()}};
   K.filter(k=>!k.blk).forEach(k=>{const r=sv&&k.n%12===key;g.fillStyle=r?ink:inkA(.6);g.fillText(KEYS[k.n%12],k.x+k.w/2-3,k.y+k.h-6)});
   if(sv){for(let n=0;n<=12;n++)if(inScale(tr,n%12))dot(n,1,n%12===key?5.5:3.5);
@@ -120,9 +121,23 @@ ED.dktrn={geo(W,H){const T=22,B=H-6,kh=B-T,ww=clamp(Math.round(kh*.5),30,64);ret
   const tx=G.x0+8*G.ww+22,big="16px Silkscreen, monospace",xo=Math.floor((Math.abs(N)-1)/12),oct=N&&xo?`, ${N>0?"+":"−"}${xo} oct`:"";
   const lines=sv?[[`${KEYS[key]} ${sc===2?"major":"minor"}`,`lit keys are in the scale · ${N?"shifted "+(N>0?"+":"")+N+", then kept in it":"no shift"}`,"click a key to set the root (KEY)"]]
    :[[N?`plays ${N>0?"+":""}${N} semitone${Math.abs(N)>1?"s":""}`:"no shift",sc===1?`FIX: track ${tr.tr.TRACK-64>0?"+":""}${tr.tr.TRACK-64} only · pattern, song and multi trig ignored`:`track ${tr.tr.TRACK-64>0?"+":""}${tr.tr.TRACK-64} + pattern ${S.patTrn-64>0?"+":""}${S.patTrn-64} · no scale: every note can sound`,N?`C plays the ${noteName12(dst)} ${N>0?"above":"below"}${oct}`:"KEY is only for MAJ and MIN"]];
-  const [l1,l2,l3]=lines[0];g.fillStyle=ink;g.font=big;g.fillText(l1.toUpperCase(),tx,G.T+18);g.font="10px Silkscreen, monospace";g.fillStyle=inkA(.8);g.fillText(l2.toUpperCase(),tx,G.T+40);g.fillText(l3.toUpperCase(),tx,G.T+58);
+  const hv=this.hov&&this.hov.split("|"),[l1,l2,l3]=hv?[lines[0][0],lines[0][1],this.effect(tr,+hv[0],hv[1]==="1").tip]:lines[0];g.fillStyle=ink;g.font=big;g.fillText(l1.toUpperCase(),tx,G.T+18);g.font="10px Silkscreen, monospace";g.fillStyle=inkA(.8);g.fillText(l2.toUpperCase(),tx,G.T+40);g.fillText(l3.toUpperCase(),tx,G.T+58);
   label(g,"transpose · "+(["no scale","fix","maj","min"][sc]))},
- cursor(c,e){return trk(S.sel).tr.SCALE>1&&this.keyAt(c,e)!=null?"pointer":"default"}};
+ /* what a click on key n (0-12) does. MAJ/MIN: KEY = n. --- and FIX: the track transpose so that C plays n, up
+    from C (0..+12), or with Alt down to it (−12..0); in --- the pattern's own shift is counted in. */
+ effect(tr,n,alt){const sc=tr.tr.SCALE;if(sc>1){const key=n%12;return{key,note:key,tip:key===tr.tr.KEY?`${KEYS[key]} is the root (KEY)`:`click: root (KEY) ${KEYS[key]}`}}
+  const want=alt?n-12:n,pat=sc===1?0:S.patTrn-64,TRACK=clamp(64+want-pat,0,127),N=TRACK-64+pat,sg=v=>(v>0?"+":"")+v;
+  return{TRACK,note:N,tip:`click: C plays ${noteName12(N)} ${N>0?"above":N<0?"below":"(no shift)"} · track ${sg(TRACK-64)}${pat?` + pattern ${sg(pat)} = ${sg(N)}`:""}${alt?"":" · Alt-click: down"}`}},
+ hov:null,
+ cursor(c,e){const n=this.keyAt(c,e),k=n==null?null:n+"|"+(e.altKey?1:0);if(k!==this.hov){this.hov=k;c.title=n==null?"":this.effect(trk(S.sel),n,e.altKey).tip;drawEd(c)}return n!=null?"pointer":"default"}};
+/* a press on the plate: set KEY or TRACK (one undo step) and play the note it makes on the selected synth track
+   until the button comes up, as the home-row keys do */
+let trnHeld=null;
+function trnDown(c,e){const t=S.sel,tr=trk(t),x=ED.dktrn.keyAt(c,e);if(x==null)return;const n=ED.dktrn.effect(tr,x,e.altKey);
+ if(n.key!=null?n.key!==tr.tr.KEY:n.TRACK!==tr.tr.TRACK){if(n.key!=null)tr.tr.KEY=n.key;else tr.tr.TRACK=n.TRACK;structEdited();render()}
+ if(isMidiT(t))return;const note=clamp(KEYS_BASE+12*KB.oct+n.note);trnHeld={t,note};keyNote(t,note,KB.vel)}
+document.addEventListener("pointerout",e=>{const c=e.target.closest?.('canvas[data-ed="dktrn"]');if(c&&!c.contains(e.relatedTarget)&&ED.dktrn.hov){ED.dktrn.hov=null;c.title="";drawEd(c)}});
+function trnUp(){if(!trnHeld)return;const h=trnHeld;trnHeld=null;keyNote(h.t,h.note,0)}
 const noteName12=n=>KEYS[((n%12)+12)%12];
 function dockVis(t,d){if(d==="trn")return`<canvas class="ed dkplot" data-ed="dktrn" aria-label="Transpose on a one-octave keyboard"></canvas>`;if(d==="trig")return`<canvas class="ed dkplot" data-ed="dktrig" aria-label="One gate's AMP envelope and the glide between two notes; drag the dots"></canvas>`;return""}
 /* the lane's right-hand scale column, beside the picture */

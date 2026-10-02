@@ -1635,15 +1635,18 @@ body{box-sizing:border-box;overflow:hidden}
 .ws-seq .lanewrap{padding-top:8px!important}
 .ws-seq .lanetop{border-top:0!important;padding-top:0!important}
 /* Mix: the faders and the routing diagram share the height */
-#main>.routewrap{flex:1 1 auto;min-height:0;grid-template-rows:auto auto minmax(140px,1fr) auto}
+/* the routing graph is as tall as its width needs (no letterbox); the strips' faders take the rest of the page */
+#main>.routewrap{flex:1 1 auto;min-height:0;grid-template-rows:minmax(0,1fr) auto auto auto;align-content:start}
+#main>.routewrap>.strips6{min-height:0;max-height:470px}
+#main>.routewrap .strip6{grid-template-rows:auto minmax(0,1fr) auto auto auto;align-content:stretch}
 /* a strip: the fader and its LEV value in one column, as tall as the four value boxes beside it (no gap) */
-.strip6 .frow{height:clamp(124px,calc((100vh - 560px) * .55),300px);align-items:stretch!important}
+.strip6 .frow{height:auto;min-height:124px;align-items:stretch!important}
 .strip6 .fcol{display:grid;grid-template-rows:minmax(0,1fr) auto;justify-items:center;gap:5px;min-height:0}
 .strip6 .fcol .fader{height:auto!important;min-height:0;width:100%}
 .strip6 .fcol .v{font:500 13px/1 var(--mono);color:var(--body);text-align:center;min-width:3ch}
 .strip6 .pcs{grid-template-rows:repeat(4,minmax(0,1fr));align-content:stretch!important;min-height:0}
 .strip6 .pcs .pc{height:auto!important;min-height:0}
-svg.route{width:100%;height:100%;min-height:0}
+svg.route{width:100%;height:auto;aspect-ratio:1200/146;min-height:0}
 /* Shift + M prepares a mute, as the MD Editor (P7): "+" unmute, "X" mute, blinking until Shift comes up */
 .ms.m.prep{box-shadow:inset 0 0 0 2px var(--led);position:relative;color:transparent!important}
 .ms.m.prep::after{content:attr(data-prep);position:absolute;inset:0;display:grid;place-items:center;font:700 12px var(--pix);color:var(--keytext);animation:blink .5s steps(2) infinite}
@@ -1997,6 +2000,45 @@ body.dockother #rail .railparams>:is(.lpspace,.pagetabs,.pkcol),body.dockother #
 .dkscale b{font-weight:400;opacity:.75}
 /* TRIG SETUP and TRANSPOSE: an LCD plate (the Sound page's plots) filling the picture area */
 .dkvis canvas.dkplot{flex:1 1 0;height:auto;min-height:0;width:100%}
+
+/* ===== Perform v2: a short keyboard at the bottom; the joystick a big square in the middle, its rows beside it.
+   The controls row takes the height the keyboard leaves; the stick is sized from the page height. ===== */
+#main>.perf{flex:1 1 auto;min-height:0;grid-template-rows:minmax(0,1fr);grid-auto-rows:auto}
+.perf3{grid-template-columns:minmax(0,1fr) auto minmax(0,1fr)!important;min-height:0}
+.perf3>.card{min-height:0}
+.perf3 .menvcard{grid-template-rows:auto minmax(0,1fr) auto auto;align-content:stretch}
+.perf3 .menvcard canvas.ed{height:100%!important;min-height:96px}
+.perf3 .asgcard{--joy:clamp(200px,calc(100vh - 500px),440px);grid-template-rows:auto auto minmax(0,1fr)}
+.perf3 .asgcard .asgn{grid-template-columns:var(--joy) 270px;align-items:start}
+.perf3 .asgcard .asgn:not(:has(.joy)){grid-template-columns:calc(var(--joy) + 284px)}
+.perf3 .asgcard .joy{width:var(--joy)!important;height:var(--joy)!important}
+.joy small.jl{left:5px;top:50%;transform:translateY(-50%)}
+.joy small.jr{right:5px;top:50%;transform:translateY(-50%)}
+.joy small.ju{left:50%;top:4px;transform:translateX(-50%)}
+.joy small.jd{left:50%;bottom:4px;transform:translateX(-50%)}
+.joy .knobj{width:28px;height:28px;margin:-14px 0 0 -14px}
+.perf3 .joy small{font-size:11px}
+.perf3 .card header{flex-wrap:nowrap;white-space:nowrap;min-width:0}
+.perf3 .card header>span:not(.seg){min-width:0;overflow:hidden;text-overflow:ellipsis}
+.perf3 .mutes12 button{height:40px}
+.perf .kb{height:clamp(96px,20vh,190px)!important}
+.perf.map .kb{height:clamp(84px,14vh,150px)!important}
+/* Song, as the Machinedrum Editor's: the arrangement's 200 slots fill the page across and down (13 rows of 16
+   share the height); the left column (patterns, selected row) scrolls on its own. One column below 1100 px. */
+@media (min-width:1101px){
+#main>.songui.lay2{flex:1 1 auto;min-height:0;align-items:stretch}
+.songui.lay2>.songleft{min-height:0;overflow:auto;padding-right:6px}
+.songui.lay2>.card{min-height:0;grid-template-rows:auto auto minmax(0,1fr);padding:0 2px 2px 0}	/* room for the grid's bezel inside #main's clip */
+.songui.lay2 .slotgrid{min-height:0;grid-template-rows:repeat(13,minmax(22px,1fr));align-content:stretch}
+.songui.lay2 .slotgrid .scell{height:auto!important;min-height:0}
+}
+/* the arrangement's header stays one line, as the MD's: the legend shortens first */
+.songui.lay2>.card>header{flex-wrap:nowrap;min-width:0;align-items:center}
+.songui.lay2>.card>header>.note{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0;flex:1 1 auto}
+.songui.lay2>.card>header>.songpick{flex:none}
+
+/* A narrow window (1280): the top bar fits, so MKII is not cut off: tighter gaps and workspace keys */
+@media (max-width:1340px){header.top{column-gap:8px!important}header.top .left{gap:8px!important}header.top .tabs>button{min-width:0!important;padding-left:6px!important;padding-right:6px!important}}
 
 /* ===== The real machine's states (not in the mockup) ===== */
 .statusline,.errline{margin:6px 0 0;padding:6px 10px;border-radius:3px;font:12px var(--pix);text-transform:uppercase}

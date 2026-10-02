@@ -27,12 +27,12 @@ function renderPerform(){const pm=PMODES.find(p=>p[0]===S.mode),t=asgT(),tr=S.tr
  const joy=S.asTab.startsWith("JOY");
  $("#main").innerHTML=`<div class="perf ${S.mode==="map"?"map":""}">
   <div class="perf3">
-   <section class="card"><header><h3>Multi envelope</h3><span>both DATA PAGE keys · multi trig only</span></header><canvas class="ed" data-ed="menv" aria-label="Multi envelope. Drag the dots."></canvas>
+   <section class="card menvcard"><header><h3>Multi envelope</h3><span>both DATA PAGE keys · multi trig only</span></header><canvas class="ed" data-ed="menv" aria-label="Multi envelope. Drag the dots."></canvas>
     <div class="ctl" style="grid-template-columns:repeat(5,minmax(0,1fr))">${["ATK","DEC","SUS","REL","PORT"].map(n=>pc("menv",n,{})).join("")}</div>
     <div class="hint">On top of every track's own envelope. For no effect: ATK 0, DEC, SUS and REL at 127.</div></section>
-   <section class="card"><header><h3>Assign · T${t+1} ${shortM(tr.m)}</h3><span class="seg" data-set="astrk">${[0,1,2,3,4,5].map(k=>`<button data-v="${k}" aria-pressed="${k===t}">${k+1}</button>`).join("")}</span></header>
+   <section class="card asgcard"><header><h3>Assign · T${t+1} ${shortM(tr.m)}</h3><span class="seg" data-set="astrk">${[0,1,2,3,4,5].map(k=>`<button data-v="${k}" aria-pressed="${k===t}">${k+1}</button>`).join("")}</span></header>
     <span class="seg" data-set="astab">${Object.keys(A.tabs).map(k=>`<button data-v="${k}" aria-pressed="${S.asTab===k}">${k}</button>`).join("")}</span>
-    <div class="asgn">${joy?`<div class="joy" id="joy" title="Drag the stick. It springs back."><span class="cross"></span><span class="cross2"></span><small style="left:4px;top:66px">L</small><small style="right:4px;top:66px">R</small><small style="left:68px;top:3px">U</small><small style="left:68px;bottom:3px">D</small><span class="knobj" id="knobj" style="left:${50+S.joy.x*42}%;top:${50-S.joy.y*42}%"></span></div>`:""}
+    <div class="asgn">${joy?`<div class="joy" id="joy" title="Drag the stick. It springs back."><span class="cross"></span><span class="cross2"></span><small class="jl">L</small><small class="jr">R</small><small class="ju">U</small><small class="jd">D</small><span class="knobj" id="knobj" style="left:${50+S.joy.x*42}%;top:${50-S.joy.y*42}%"></span></div>`:""}
      <div style="display:grid;gap:6px">${rows.map(asRow).join("")}
       ${S.asTab==="JOY RL"?`<button class="lkey" data-mirr="1" aria-pressed="${A.mirr}"><i class="led"></i>MIRR (left = −right)</button>`:""}
       ${S.asTab==="KEY"?`<span class="keyrow"><button class="lkey" data-ktrk="hpf" aria-pressed="${A.hpf}"><i class="led"></i>HPF tracks keys</button><button class="lkey" data-ktrk="lpf" aria-pressed="${A.lpf}"><i class="led"></i>LPF tracks keys</button></span>`:""}
@@ -56,7 +56,7 @@ function renderPerform(){const pm=PMODES.find(p=>p[0]===S.mode),t=asgT(),tr=S.tr
   <div class="kbwrap">${S.mode==="map"?`<div class="mapbands">${mapBands()}</div>`:""}<div class="kb" id="kb">${renderKb()}</div>
    <div class="trklamps" id="trklamps">${S.tracks.map((x,i)=>`<span><i class="led" data-lamp="${i}"></i>T${i+1} ${shortM(x.m)}</span>`).join("")}<span class="hint" id="kbinfo" style="margin-left:auto">Click or drag across the keys to play.</span></div></div>
   </div></div>`;
- tipify(".perf .card .hint");
+ /* the cards keep their hints in view (tipify went with the Sound page's groups) */
  syncControls();redraw()}
 let kbDown=null,lampT={};
 function flashTracks(ts){ts.forEach(i=>{const l=$(`[data-lamp="${i}"]`);if(!l)return;l.classList.add("on");clearTimeout(lampT[i]);lampT[i]=setTimeout(()=>l.classList.remove("on"),160)})}
