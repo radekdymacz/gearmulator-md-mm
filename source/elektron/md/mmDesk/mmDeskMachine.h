@@ -132,6 +132,18 @@ namespace mmDesk
 		deskCore::Outcome cmdPoly(const Value&, const Documents&);
 		deskCore::Outcome cmdRecord(const Value&, const Documents&);
 		deskCore::Outcome cmdHwSend(const Value&, const Documents&);
+		// MM-P8: pattern chaining as on the machine (hold BANK, press the TRIG keys; manual 1-46)
+		deskCore::Outcome cmdChain(const Value&, const Documents&);
+		deskCore::Outcome cmdChainClear(const Value&, const Documents&);
+		deskCore::Outcome sendChain(const std::vector<int>& _patterns);
+		void pumpChain();
+		// BANK (+ BANK GROUP from the half the machine is in) and the TRIG keys of _patterns (one bank).
+		bool pressBankTrigs(const std::vector<int>& _patterns);
+		// Panel keys the desk pressed are still on their way (their own hold times), or the panel is
+		// on SYSEX RECV's way: a chain waits (the latest wins).
+		bool keysOnTheirWay() const;
+		bool canChain() const { return machineState() && static_cast<bool>(m_port.pressBankTrigs); }
+		bool chained() const { return m_tel.chainKnown && m_tel.chain.active && !m_tel.chain.patterns.empty(); }
 		// The machine's own state is known: its RAM (mutes, recording) and its keys.
 		bool machineState() const { return m_profile.telemetry && m_profile.panel && m_port.pressKeys; }
 
@@ -175,5 +187,8 @@ namespace mmDesk
 		double m_lastTelemetryMs = -1e9;
 		double m_lastRoundTripMs = -1;
 		deskCore::Sequencer<Act> m_sequence;
+		// MM-P8: the chain (empty: CLEAR) the page asked for while keys were on their way, sent after them
+		std::optional<std::vector<int>> m_chainQueued;
+		double m_keysUntilMs = -1e9;	// the desk's last panel keys are through by then
 	};
 }

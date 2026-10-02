@@ -39,6 +39,14 @@ namespace deskWire::md
 		return Bytes{(*cc)[0], (*cc)[1], (*cc)[2]};
 	}
 
+	// A note on (_velocity 1-127) or note off (0) on MIDI channel _channel (0-15).
+	inline std::optional<Bytes> note(const uint8_t _channel, const uint8_t _note, const uint8_t _velocity)
+	{
+		if(_channel > 15 || _note > 127 || _velocity > 127)
+			return std::nullopt;
+		return Bytes{static_cast<uint8_t>((_velocity ? 0x90 : 0x80) | _channel), _note, _velocity};
+	}
+
 	// The MD adapter's panel keys are its key names (mdDesk::DevicePort::pressKey); over a wire only
 	// "play" and "stop" exist.
 	inline std::optional<uint8_t> realtimeOf(const std::string& _key)

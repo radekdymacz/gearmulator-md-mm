@@ -1364,7 +1364,7 @@ body{box-sizing:border-box;overflow:hidden}
         <div class="lcdpanel">
           <div class="lcdfw" id="lcdfw" aria-hidden="true"><canvas id="lcdfwc" width="128" height="64"></canvas></div>
           <div class="f trf"><small class="engf"><select id="engsel" data-k="1" hidden><option value="emu">EMU OS 1.63</option><option value="hw">HW MIDI</option><option value="global">GLOBAL…</option><option value="audio">AUDIO/MIDI…</option><option value="rom">LOAD ROM</option></select><button class="kselbtn lcdeng" type="button" data-for="engsel" aria-haspopup="listbox" aria-expanded="false" aria-label="Engine: emulator or hardware" title="Engine: run the emulator, or edit a real Machinedrum over MIDI"><i class="led on" id="engled"></i><span>EMU OS 1.63</span><svg viewBox="0 0 10 6" aria-hidden="true"><path d="M1 1l4 4 4-4" fill="none" stroke="currentColor" stroke-width="1.5"/></svg></button></small><span class="lcdt">
-            <button class="lt rec" id="rec" aria-pressed="false" aria-label="Record" title="Record (R)"><i class="led" id="recled"></i>●</button>
+            <button class="lt rec" id="rec" aria-pressed="false" aria-label="Record" title="Record (Alt+Space)"><i class="led" id="recled"></i>●</button>
             <button class="lt" id="play" aria-pressed="false" aria-label="Play" title="Play / stop (Space)"><i class="led" id="playled"></i><span id="playico">▶</span></button>
 </span></div>
           <div class="f"><small>Tempo <i class="led" id="tempoled" aria-hidden="true"></i></small><b id="bpm" role="slider" tabindex="0" aria-label="Tempo in bpm" title="Drag up or down">124.0</b></div>
@@ -2749,18 +2749,18 @@ const renderP0=render;render=function(){renderP0();showPrep()};
    the chained patterns does not. STOP then PLAY starts at the cued pattern. Built in the Song workspace. */
 S.chain={active:false,list:[],pos:0,draft:[]};
 function chainCard(){const c=S.chain,b=S.bank,bn="ABCDEFGH"[b];
- const pads=Array.from({length:16},(_,k)=>{const p=b*16+k,n=c.draft.indexOf(p);return`<button class="chk${hasPat(p)?"":" empty"}${n>=0?" in":""}" data-chainpad="${p}" title="${patName(p)}${n>=0?": number "+(n+1)+" in the chain. Click removes it.":". Click adds it to the chain."}">${patName(p)}<small>${hasPat(p)?patLen(p):"empty"}</small>${n>=0?`<em>${n+1}</em>`:""}</button>`}).join("");
+ const pads=Array.from({length:16},(_,k)=>{const p=b*16+k,n=c.draft.indexOf(p);return`<button class="chk${hasPat(p)?"":" empty"}${n>=0?" in":""}" data-chainpad="${p}" title="${patName(p)}${n>=0?": number "+(n+1)+" in the chain. Click takes it out, and the rest plays.":". Click adds it: the chain plays at once."}">${patName(p)}<small>${hasPat(p)?patLen(p):"empty"}</small>${n>=0?`<em>${n+1}</em>`:""}</button>`}).join("");
  const live=c.active?c.list.map((p,i)=>`<span class="lcdchip${p===S.pat?" now":""}${p===S.queued?" nx":""}">${patName(p)}</span>`).join("<i>»</i>")+"<i>↺</i>":`<span class="note">No chain. The machine plays ${patName(S.pat)} and stays on it.</span>`;
  return`<section class="card"><header><h3>Chain</h3><span>bank ${bn} · loops · BANK + TRIGs on the machine</span></header>
   <div class="chainp">${pads}</div>
   <div class="irow"><span class="ilab">Plays</span><div class="chainrow">${live}</div></div>
-  <div class="irow"><span class="ilab"></span><span class="chainacts"><button class="cream" data-chain="send"${c.draft.length<2?" disabled":""} title="Hold BANK ${bn}, press the TRIG keys in this order. ${S.playing?"Starts at the pattern end.":"PLAY starts at the first one."}">Chain ${c.draft.length?c.draft.length:""}</button><button data-chain="undo"${c.draft.length?"":" disabled"}>Back</button><button class="danger" data-chain="clear"${c.active?"":" disabled"} title="LOAD PATTERN of the current pattern: the machine's way to end a chain">Clear</button></span>
-  <span class="note">One bank, each pattern once. Picking a pattern ends the chain; editing its patterns does not.</span></div></section>`}
+  <div class="irow"><span class="ilab"></span><span class="chainacts"><button data-chain="undo"${c.draft.length?"":" disabled"} title="Takes the last pad out and chains the rest at once">Back</button><button class="danger" data-chain="clear"${c.active||c.draft.length?"":" disabled"} title="LOAD PATTERN of the current pattern: the machine's way to end a chain. The pads start over">Clear</button></span>
+  <span class="note">Each pad chains at once (BANK ${bn} held, the TRIG keys in order; ${S.playing?"from the pattern end":"PLAY starts at the first"}). One bank, each pattern once. Picking a pattern ends the chain; editing its patterns does not.</span></div></section>`}
 function chainAct(a){const c=S.chain;
- if(a==="send"){if(c.draft.length<2)return;c.list=[...c.draft];c.active=true;c.pos=0;S.queued=c.list[0];if(!S.playing){applyPattern(c.list[0]);c.pos=1;S.queued=c.list[1%c.list.length]}toast("Chained "+c.list.map(patName).join(" » ")+", looping.");render();return}
- if(a==="undo"){c.draft.pop();render();return}
- if(a==="clear"){c.active=false;c.list=[];S.queued=null;toast("Chain cleared: "+patName(S.pat)+" plays on.");render()}}
-document.addEventListener("click",e=>{const p=e.target.closest("[data-chainpad]");if(p){const c=S.chain,n=+p.dataset.chainpad,i=c.draft.indexOf(n);if(i>=0)c.draft.splice(i,1);else if(c.draft.length<16)c.draft.push(n);render();return}
+ if(a==="send"){if(c.draft.length<2){if(c.active)chainAct("clear");return}c.list=[...c.draft];c.active=true;c.pos=0;S.queued=c.list[0];if(!S.playing){applyPattern(c.list[0]);c.pos=1;S.queued=c.list[1%c.list.length]}toast("Chained "+c.list.map(patName).join(" » ")+", looping.");render();return}
+ if(a==="undo"){c.draft.pop();render();chainAct("send");return}
+ if(a==="clear"){c.draft=[];c.active=false;c.list=[];S.queued=null;toast("Chain cleared: "+patName(S.pat)+" plays on.");render()}}
+document.addEventListener("click",e=>{const p=e.target.closest("[data-chainpad]");if(p){const c=S.chain,n=+p.dataset.chainpad,i=c.draft.indexOf(n);if(i>=0)c.draft.splice(i,1);else if(c.draft.length<16)c.draft.push(n);render();chainAct("send");return}
  const a=e.target.closest("[data-chain]");if(a&&!a.disabled)chainAct(a.dataset.chain)});
 /* At the pattern end the chain cues its next pattern (the machine does this itself). */
 const chainTick0=tick;tick=function(){const wrap=(S.step+1)%S.len===0;chainTick0();if(wrap&&S.chain.active&&S.queued==null){const c=S.chain,i=c.list.indexOf(S.pat);S.queued=c.list[(i+1)%c.list.length];renderTop();if(S.ws==="song")render()}};

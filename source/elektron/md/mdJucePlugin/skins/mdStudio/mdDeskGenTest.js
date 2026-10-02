@@ -8,8 +8,8 @@ const fs = require("fs"), path = require("path"), vm = require("vm");
 
 const ctx = vm.createContext({ console });
 vm.runInContext(fs.readFileSync(path.join(__dirname, "mdDeskGen.js"), "utf8")
-	+ "\nthis.T = { hash32, genU, euclid, euclidHit, generate, genRole, genDefault, genTag, mutate, GEN_ROLES, genRotStep, genEveryN, genRamp };", ctx);
-const { hash32, genU, euclid, generate, genRole, genDefault, genTag, mutate, genRotStep, genEveryN, genRamp } = ctx.T;
+	+ "\nthis.T = { hash32, genU, euclid, euclidHit, generate, genRole, genDefault, genTag, mutate, GEN_ROLES, genRotStep, genEveryN, genRamp, genRunFor, genFit, genRepeats, genSummary };", ctx);
+const { hash32, genU, euclid, generate, genRole, genDefault, genTag, mutate, genRotStep, genEveryN, genRamp, genRunFor, genFit, genRepeats, genSummary } = ctx.T;
 let failures = 0;
 const check = (ok, what) => { console.log((ok ? "  ok   " : "  FAIL ") + what); if (!ok) failures++; };
 const str = a => a.map(x => x ? "x" : ".").join("");
@@ -73,6 +73,24 @@ check(["TRX-SD", "TRX-CP", "TRX-RS", "TRX-CL", "E12-BR"].every(m => genRole(m) =
 check(["TRX-CH", "EFM-HH", "E12-CH", "P-I-HH"].every(m => genRole(m) === "hat") && genDefault("TRX-CH").acc.k === 4, "closed hats: euclid 8/16, 4 accents");
 check(["TRX-OH", "E12-OH"].every(m => genRole(m) === "open"), "open hats: off-beats");
 check(["E12-HT", "E12-LT", "P-I-MT", "TRX-XT", "TRX-XC"].every(m => genRole(m) === "perc") && genTag(genDefault("E12-HT")) === "R 15%", "toms and percussion: random 15 % (E12-HT is a hi tom)");
+/* ---- STEPS and the pattern's length: the default cycle is min(16, length), never longer than the pattern ---- */
+check(genDefault("TRX-BD", 32).n === 16 && genDefault("TRX-BD", 12).n === 12 && genDefault("TRX-BD", 8).n === 8, "a role's default STEPS is min(16, pattern length)");
+check(genTag(genDefault("TRX-CH", 6)) === "E 6/6" && genDefault("TRX-CH", 6).acc.k === 4, "a default on a short pattern: hits inside the cycle (hats 8/16 on 6 steps: 6/6)");
+check(genDefault("EFM-SD", 4).rot === 0 && genDefault("TRX-OH", 2).rot === 0, "a default's rotation inside a short cycle");
+check(genDefault("E12-HT", 8).kind === "random" && genDefault("MID-01", 8).kind === "keep", "random and keep defaults do not depend on the length");
+{
+	const sp = { kind: "euclid", k: 5, n: 16, rot: 9, acc: { k: 5, rot: 0 } };
+	check(genFit(sp, 32) === sp, "a spec that fits is the same value");
+	const f = genFit(sp, 8);
+	check(f !== sp && sp.n === 16 && f.n === 8 && f.k === 5 && f.rot === 1 && f.acc.k === 5, "a shorter pattern clamps STEPS to it, the rotation wraps, the spec itself is left alone");
+	const g = genFit({ kind: "euclid", k: 12, n: 16, rot: 0, acc: { k: 9, rot: 0 } }, 4);
+	check(g.n === 4 && g.k === 4 && g.acc.k === 4, "hits and accents clamp with STEPS");
+	const r = { kind: "random", density: 20, seed: 3, mode: "replace" };
+	check(genFit(r, 4) === r && genFit(sp, 0) === sp && genFit(null, 8) === null, "random, no length and no spec are left alone");
+}
+check(genRepeats(8, 32) === "×4" && genRepeats(16, 16) === "×1" && genRepeats(5, 16) === "×3+1" && genRepeats(12, 32) === "×2+8", "the repeats: length / steps, +the remainder");
+check(genSummary({ kind: "euclid", k: 3, n: 8, rot: 0 }, 32) === "E 3/8 · ×4", "the summary: E 3/8 · ×4");
+check(genSummary({ kind: "euclid", k: 2, n: 16, rot: 4 }, 24) === "E 2/16+4 · ×1+8" && genSummary({ kind: "random", density: 9, seed: 1, mode: "replace" }, 16) === "", "the summary with a rotation and a remainder; none for random");
 const counts = {};
 for (const m of all) counts[genRole(m)] = (counts[genRole(m)] || 0) + 1;
 console.log("  roles over " + all.length + " machines: " + Object.entries(counts).map(([r, n]) => r + " " + n).join(", "));
@@ -110,7 +128,7 @@ const moved = base.map((tr, t) => ({ m: tr.m, v: tr.v.slice() }));
 for (const [t, i, v] of m40) moved[t].v[i] = v;
 const walk = mutate(M({ seed: 99 }), moved, names), again = mutate(M({ seed: 99 }), base, names);
 check(!same(walk, again) && again.every(([t, i, v]) => Math.abs(v - base[t].v[i]) <= Math.abs(Math.round(genU(99, t, i) * 127) - base[t].v[i]) + 1),
-	"from base (Again) and from current (Walk) differ; Again pulls from the base");
+	"from the base and from a moved kit differ; Again pulls from the base");
 
 /* ---- small comforts (§7) ---- */
 check(genRotStep(0, 1, 16) === 1 && genRotStep(15, 1, 16) === 0 && genRotStep(0, -1, 16) === 15, "rotate: one step later wraps at the length, earlier wraps back");
@@ -126,6 +144,25 @@ check(same(genRamp(4, 100, 0, 0), [[0, 0], [1, 25], [2, 50], [3, 75], [4, 100]])
 check(same(genRamp(0, 10, 6, 70, s => s % 2 === 0), [[0, 10], [2, 30], [4, 50], [6, 70]]), "ramp: only the steps with a trig");
 check(same(genRamp(3, 0, 3, 64), [[3, 64]]), "ramp: a click is one step at its value");
 check(genRamp(0, -40, 2, 300).every(([, v]) => v >= 0 && v <= 127), "ramp: values stay 0..127");
+
+/* ---- the live GEN run (§4.6): one key, one gesture, one base; values moved back give the steps back ---- */
+{
+	let g = 0, bases = 0;
+	const gesture = () => ++g, pat = Array(64).fill(false); [0, 4, 8, 12].forEach(s => pat[s] = true);
+	const base = () => { bases++; return [pat.slice()]; };
+	const r1 = genRunFor(null, "seq:2:5", base, gesture), r2 = genRunFor(r1, "seq:2:5", base, gesture);
+	check(r1 === r2 && r1.g === 1 && g === 1 && bases === 1, "run: changes in one context are one run, one gesture, one base");
+	const r3 = genRunFor(r2, "seq:3:5", base, gesture);
+	check(r3 !== r2 && r3.g === 2 && r3.applied === 0 && bases === 2, "run: another track is a new run, a new gesture and base");
+	check(genRunFor(r3, "sound:3:5", base, gesture).g === 3 && genRunFor(r3, "seq:3:6", base, gesture).g === 4, "run: another workspace or pattern is a new run");
+	/* ADD over a live run: from the base, 10% -> 40% -> 10% is the same as 10% at once (no pile-up) */
+	const add = d => generate({ kind: "random", density: d, seed: 77, mode: "add" }, 0, 0, 32, r1.base[0]).on;
+	const now = add(10); let cur = r1.base[0].slice();
+	for (const d of [10, 40, 10]) { cur = Array(64).fill(false); add(d).forEach(s => cur[s] = true); }
+	check(same(cur.flatMap((x, s) => x ? [s] : []), now) && now.length >= 4, "run: ADD from the base, a value moved back gives the same steps");
+	const thin = generate({ kind: "random", density: 0, seed: 77, mode: "thin" }, 0, 0, 32, r1.base[0]).on;
+	check(thin.length === 0 && same(generate({ kind: "random", density: 100, seed: 77, mode: "thin" }, 0, 0, 32, r1.base[0]).on, [0, 4, 8, 12]), "run: THIN from the base keeps only the base's steps");
+}
 
 console.log(failures ? `mdDeskGenTest: ${failures} failure(s)` : "mdDeskGenTest: PASS");
 process.exit(failures ? 1 : 0);

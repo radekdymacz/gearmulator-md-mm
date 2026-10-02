@@ -44,4 +44,11 @@ def check(root):
         problems.append('the MM mockup SYX script (src/59-syx.js) differs from the MD mockup')
     if RS.findall(open(root + 'source/elektron/md/mdJucePlugin/skins/mdStudio/mdDeskSyx.js').read()) != [mds[1]]:
         problems.append('the MD skin SYX script (mdDeskSyx.js) differs from the MD mockup')
+    # the key map's dispatcher (KEYS block): the MD skin's mdDeskKeys.js and the MM mockup's src/56-keys.js
+    RK = re.compile(r'/\* KEYS BEGIN.*?/\* KEYS END \*/', re.S)
+    mdk = RK.findall(open(root + 'source/elektron/md/mdJucePlugin/skins/mdStudio/mdDeskKeys.js').read())
+    if len(mdk) != 1:
+        return problems + ['the MD skin needs one KEYS block in mdDeskKeys.js, has %d' % len(mdk)]
+    if RK.findall(open(root + 'doc/modern-ux/mm-mockup/src/56-keys.js').read()) != mdk:
+        problems.append('the MM mockup KEYS block (src/56-keys.js) differs from the MD skin (mdDeskKeys.js)')
     return problems

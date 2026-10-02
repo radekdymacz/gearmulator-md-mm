@@ -87,6 +87,15 @@ namespace mdJucePlugin
 		m_processor.addMidiEvent(event);
 	}
 
+	void StudioLink::sendNote(const uint8_t _channel, const uint8_t _note, const uint8_t _velocity) const
+	{
+		synthLib::SMidiEvent event(synthLib::MidiEventSource::Editor);
+		event.a = static_cast<uint8_t>((_velocity ? 0x90 : 0x80) | (_channel & 0x0f));
+		event.b = static_cast<uint8_t>(_note & 0x7f);
+		event.c = static_cast<uint8_t>(_velocity & 0x7f);
+		m_processor.addMidiEvent(event);
+	}
+
 	bool StudioLink::setKitParam(const uint8_t _track, const uint8_t _index, const uint8_t _value) const
 	{
 		auto* p = parameter(_track, _index);

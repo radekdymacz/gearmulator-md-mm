@@ -66,6 +66,7 @@ namespace
 		case K::Record: return C::Record;
 		case K::LiveRecord: return C::Play;	// with RECORD held
 		case K::MuteWindow: return C::BankGroup;	// with FUNCTION
+		case K::BankGroup: return C::BankGroup;
 		case K::Trig9: case K::Trig10: case K::Trig11: case K::Trig12: case K::Trig13: case K::Trig14:
 			return static_cast<C>(static_cast<int>(C::Trigger1) + 8 + (static_cast<int>(_k) - static_cast<int>(K::Trig9)));
 		}
@@ -102,6 +103,7 @@ namespace
 			};
 			port.device.baseChannel = [this](const uint8_t _ch) { channel = _ch; };
 			port.device.pressKeys = [this](const std::vector<mmDesk::Key>& _keys) { return userKeys(_keys); };
+			port.device.pressBankTrigs = [this](const uint8_t _b, const std::vector<uint8_t>& _t) { return userBankTrigs(_b, _t); };
 			port.device.nowMs = [this] { return ms(); };
 			if(hw)
 				port.device = mmDesk::wirePort(wire, channel, [this] { return ms(); });
@@ -149,6 +151,25 @@ namespace
 				panel.emplace_back(at, pk);
 				at += hold;
 				panel.emplace_back(at, md::PanelPacket{pk.row, 0});
+				at += hold;
+			}
+			return true;
+		}
+
+		// MM-P8: BANK held, the TRIG keys in order, held (the plug-in's md::panelKeySequence "chain:").
+		bool userBankTrigs(const uint8_t _bank, const std::vector<uint8_t>& _trigs)
+		{
+			std::string spec = "chain:" + std::to_string(_bank & 3) + ":";
+			for(size_t i = 0; i < _trigs.size(); ++i)
+				spec += (i ? "," : "") + std::to_string(_trigs[i]);
+			const auto states = md::panelKeySequence(g_mm, spec);
+			if(states.empty())
+				return false;
+			uint64_t at = std::max(m.now(), panel.empty() ? 0 : panel.back().first) + 64;
+			const auto hold = static_cast<uint64_t>(g_rate / 100);	// 10 ms
+			for(const auto& st : states)
+			{
+				panel.emplace_back(at, st);
 				at += hold;
 			}
 			return true;
@@ -203,6 +224,8 @@ namespace
 			t.tempo = tel.tempo.load();
 			t.mutes = tel.mutes.load();
 			t.recording = tel.recording.load();
+			t.bankGroup = tel.bankGroup.load();
+			t.chainKnown = tel.readChain(t.chain.active, t.chain.next, t.chain.patterns);
 			return t;
 		}
 
@@ -316,6 +339,51 @@ namespace
 		std::printf("  all 288 documents loaded after %.0f ms\n", r.ms() - t0);
 		check(r.desk->loaded() == 288, "every pattern, kit, song and global loads");
 
+		// The library's names (MM-PORT-PLAN f): a fresh machine's kit slots. Written ones hold their name
+		// as text up to a NUL; a never-written one is marked by a first name byte of 0xff (what the page's
+		// kitEmpty reads). Anything else (other bytes outside 0x20..0x7e before the NUL) would be junk the
+		// page shows as a name, as the Machinedrum's never-written K17-K64 are (its kitNameText).
+		{
+			int text = 0, unused = 0, junk = 0;
+			std::string which, sample;
+			for(uint8_t s = 0; s < 128; ++s)
+			{
+				const auto k = r.desk->kit(s);
+				if(!k)
+					continue;
+				const auto& n = k->name;
+				if(n[0] == 0xff)
+				{
+					++unused;
+					if(sample.empty())
+					{
+						char b[64];
+						std::snprintf(b, sizeof(b), "K%02d %02x %02x %02x %02x machines %d %d", s + 1, n[0], n[1], n[2], n[3], k->machines[0], k->machines[1]);
+						sample = b;
+					}
+					continue;
+				}
+				bool ok = true;
+				for(const auto c : n)
+				{
+					if(c == 0)
+						break;
+					if(c < 0x20 || c >= 0x7f)
+						ok = false;
+				}
+				if(ok)
+					++text;
+				else
+				{
+					++junk;
+					if(which.size() < 60)
+						which += " K" + std::to_string(s + 1);
+				}
+			}
+			std::printf("  kit names: %d text, %d unused (first byte 0xff%s%s), %d other bytes%s\n", text, unused, sample.empty() ? "" : ", e.g. ", sample.c_str(), junk, which.c_str());
+			check(junk == 0, "every kit slot's name is text, or the slot is marked unused (no junk name bytes)");
+		}
+
 		// Play pattern 1 (a factory demo), then edit it through the desk.
 		r.msgConfirmed(R"({"op":"select","p":1})");
 		r.run(300);
@@ -427,6 +495,55 @@ namespace
 	{
 		const auto m = lastMachine(_r);
 		return m.isObject() ? m.find("kit")->find("working")->asString() : "";
+	}
+
+	// The kit library's click (MM-PORT-PLAN f): LOAD KIT over unsaved edits asks, and its "Save and load"
+	// (SAVE KIT to the current slot, then LOAD KIT with force, as the page sends them) keeps the edit in the
+	// slot and loads the other kit, clean.
+	void library(const Bytes& _rom)
+	{
+		std::puts("library");
+		Rig r(_rom);
+		r.msg(R"({"op":"ready"})");
+		r.desk->setProbe(mmDesk::Desk::Probe::Running);
+		r.run(600);
+		while(r.desk->loaded() < 288)
+			r.run(100);
+		r.run(1500);
+		const auto from = r.desk->currentKit();
+		const int to = from == 3 ? 4 : 3;
+		auto k = *r.desk->workingKit();
+		const auto v = static_cast<uint8_t>(k.tracks[0].pages[2][0] == 97 ? 98 : 97);	// FLT BASE of track 1
+		k.tracks[0].pages[2][0] = v;
+		r.msg(R"({"op":"set","id":1,"kind":"workingKit","doc":)" + ed::json::write(ed::mmKitToJson(k)) + "}");
+		r.run(800);
+		check(kitWorking(r) == "edited", "an edit makes the kit that plays edited");
+		const auto at = r.page.size();
+		r.msg(R"({"op":"loadKit","id":2,"k":)" + std::to_string(to) + "}");
+		const Value* q = nullptr;
+		for(size_t i = at; i < r.page.size(); ++i)
+			if(r.page[i].find("type")->asString() == "ask")
+				q = &r.page[i];
+		const auto* alts = q ? q->find("alternatives") : nullptr;
+		check(q && q->find("ask")->asString() == "loadKit" && alts && alts->isArray() && alts->asArray().size() == 1
+			&& alts->asArray()[0].find("label")->asString() == "Save and load", "LOAD KIT over the edit asks, with Save and load");
+		check(r.desk->currentKit() == from, "nothing is done before the answer");
+		if(q && alts)
+		{
+			const Value alt = alts->asArray()[0];
+			Value c = *q->find("command");
+			for(const auto& f : alt.find("first")->asArray())
+				r.msg(ed::json::write(f));
+			c.put("force", true);
+			r.msg(ed::json::write(c));
+		}
+		const auto t0 = r.ms();
+		while((r.desk->currentKit() != to || kitWorking(r) != "clean") && r.ms() - t0 < 8000)
+			r.run(100);
+		r.run(1500);
+		const auto saved = r.desk->kit(static_cast<uint8_t>(from));
+		check(r.desk->currentKit() == to && kitWorking(r) == "clean", "Save and load: K" + std::to_string(to + 1) + " plays, clean");
+		check(saved && saved->tracks[0].pages[2][0] == v, "and the edit is in K" + std::to_string(from + 1) + " (read back from the slot)");
 	}
 
 	// P7: loading a pattern (which loads its kit) leaves the kit that plays clean, and no question
@@ -973,6 +1090,153 @@ namespace
 		check(r.desk->kit(99)->name == k99.name, "undo writes K100 back");
 	}
 
+	// MM-P8: pattern chaining through the desk on the firmware (hold BANK, press the TRIG keys; manual
+	// 1-46): from stopped and while playing, sent again quickly (the latest wins), CLEAR, the other bank
+	// group, a pick that ends a chain, and from song mode.
+	struct Plays
+	{
+		std::vector<int> patterns;
+		std::string text() const
+		{
+			std::string t;
+			for(const auto p : patterns)
+				t += (t.empty() ? "" : " ") + (p < 0 ? std::string("?") : ed::mmPatternName(static_cast<uint8_t>(p)));
+			return t;
+		}
+	};
+
+	// The pattern the machine plays after each of the next _wraps pattern ends (status asked at the wrap).
+	Plays wraps(Rig& _r, const int _wraps)
+	{
+		Plays out;
+		int last = _r.tel.step.load();
+		for(double t = 0; static_cast<int>(out.patterns.size()) < _wraps && t < 40000; t += 10)
+		{
+			_r.run(10);
+			const int s = _r.tel.step.load();
+			if(s < last)
+			{
+				_r.run(60);
+				_r.out.push_back(ed::mmStatusRequest(ed::MmStatus::Pattern));
+				_r.run(60);
+				out.patterns.push_back(_r.desk->currentPattern());
+			}
+			last = s;
+		}
+		return out;
+	}
+
+	std::vector<int> chainOf(const Rig& _r, bool& _active)
+	{
+		_active = false;
+		const auto m = lastMachine(_r);
+		const auto* c = m.find("desk") ? m.find("desk")->find("chain") : nullptr;
+		std::vector<int> v;
+		if(!c || !c->isObject())
+			return v;
+		_active = c->find("active")->asBool();
+		for(const auto& p : c->find("patterns")->asArray())
+			v.push_back(static_cast<int>(p.asNumber()));
+		return v;
+	}
+
+	void chains(const Bytes& _rom)
+	{
+		std::puts("chain");
+		Rig r(_rom);
+		r.msg(R"({"op":"ready"})");
+		r.desk->setProbe(mmDesk::Desk::Probe::Running);
+		r.run(600);
+		while(r.desk->loaded() < 288)
+			r.run(100);
+		check(lastMachine(r).find("capabilities")->find("can")->find("chains")->asBool(), "the emulator can chain");
+		bool active = false;
+		check(chainOf(r, active).empty() && !active && lastMachine(r).find("desk")->find("bankGroup")->asNumber() == 0,
+			"no chain at boot, BANK GROUP A-D (RAM)");
+
+		// from stopped: the first pattern is picked, PLAY plays the chain
+		r.msg(R"({"op":"chain","patterns":[2,4]})");
+		r.run(600);
+		auto c = chainOf(r, active);
+		check(active && c == std::vector<int>{2, 4}, "stopped: chain A03 A05 is the machine's (RAM 0x2bc2c4)");
+		check(r.desk->currentPattern() == 2, "and A03 is the current pattern");
+		r.msg(R"({"op":"play"})");
+		r.run(300);
+		auto w = wraps(r, 3);
+		check(w.patterns == std::vector<int>{4, 2, 4}, "PLAY: A03, then A05, A03, A05 (" + w.text() + ")");
+
+		// sent again quickly, as the page does at every pad: the latest wins
+		r.msg(R"({"op":"chain","patterns":[5,6]})");
+		r.msg(R"({"op":"chain","patterns":[5,6,7]})");
+		r.msg(R"({"op":"chain","patterns":[7,5]})");
+		r.run(800);
+		c = chainOf(r, active);
+		check(active && c == std::vector<int>{7, 5}, "three chains in a row: the machine holds the last, A08 A06");
+		w = wraps(r, 3);
+		check(w.patterns == std::vector<int>{7, 5, 7}, "and plays it from the pattern end (" + w.text() + ")");
+
+		// CLEAR: the pattern that plays goes on
+		r.msg(R"({"op":"chainClear"})");
+		r.run(600);
+		chainOf(r, active);
+		const int on = r.desk->currentPattern();
+		check(!active, "CLEAR ends the chain (BANK + the TRIG key of the pattern that plays)");
+		w = wraps(r, 2);
+		check(w.patterns == std::vector<int>{on, on}, "and " + ed::mmPatternName(static_cast<uint8_t>(on)) + " plays on (" + w.text() + ")");
+
+		// a chain, then CLEAR at once (it waits for the chain's keys)
+		r.msg(R"({"op":"chain","patterns":[9,10]})");
+		r.msg(R"({"op":"chainClear"})");
+		r.run(800);
+		chainOf(r, active);
+		check(!active, "CLEAR right after a chain: no chain once its keys are through");
+
+		// E-H: BANK GROUP first
+		r.msg(R"({"op":"chain","patterns":[66,64,65]})");
+		r.run(800);
+		c = chainOf(r, active);
+		check(active && c == std::vector<int>{66, 64, 65} && lastMachine(r).find("desk")->find("bankGroup")->asNumber() == 1,
+			"chain E03 E01 E02: BANK GROUP pressed to E-H first");
+		w = wraps(r, 3);
+		check(w.patterns == std::vector<int>{66, 64, 65} || w.patterns == std::vector<int>{64, 65, 66}, "it plays (" + w.text() + ")");
+
+		// a pick while chained asks, and ends the chain
+		const auto from = r.page.size();
+		r.msg(R"({"op":"select","p":3})");
+		bool asked = false;
+		for(size_t i = from; i < r.page.size(); ++i)
+			asked = asked || (r.page[i].find("type")->asString() == "ask" && r.page[i].find("ask")->asString() == "breakChain");
+		check(asked, "a pick while chained asks first (breakChain)");
+		r.msgConfirmed(R"({"op":"select","p":3,"force":true})");
+		r.run(800);
+		chainOf(r, active);
+		check(!active && lastMachine(r).find("desk")->find("bankGroup")->asNumber() == 0, "confirmed: the chain ends (BANK GROUP back to A-D)");
+		w = wraps(r, 2);
+		check(w.patterns == std::vector<int>{3, 3}, "and A04 plays, the chain is gone (" + w.text() + ")");
+
+		// from song mode: pattern mode first, then the chain plays
+		r.msg(R"({"op":"stop"})");
+		r.run(400);
+		r.out.push_back(ed::mmSetStatus(ed::MmStatus::SongMode, 1));
+		r.run(1500);
+		check(lastMachine(r).find("song")->find("songMode")->asBool(), "song mode (SET STATUS)");
+		r.msg(R"({"op":"play"})");
+		r.run(500);
+		r.msg(R"({"op":"chain","patterns":[12,13]})");
+		r.run(1500);
+		c = chainOf(r, active);
+		check(active && c == std::vector<int>{12, 13} && !lastMachine(r).find("song")->find("songMode")->asBool(),
+			"a chain from song mode: pattern mode, chain A13 A14");
+		w = wraps(r, 3);
+		check(w.patterns.size() == 3 && w.patterns[1] != w.patterns[2] && (w.patterns[2] == 12 || w.patterns[2] == 13), "the chain plays, not the song (" + w.text() + ")");
+		r.msg(R"({"op":"stop"})");
+		r.run(300);
+		r.msg(R"({"op":"stop"})");
+		r.run(500);
+		chainOf(r, active);
+		check(!active, "STOP twice ends it, as on the machine");
+	}
+
 	// MM-P4 (ported in P8): HW MIDI. The desk drives the emulated machine through the plug-in's wire port as if
 	// it were a real one on MIDI: DIN speed, no panel keys, no telemetry, no memory. The test plays the person
 	// at the machine.
@@ -1114,10 +1378,14 @@ int main(const int _argc, char** _argv)
 			hostClock(rom);
 		if(only.empty() || only == "patterns")
 			patterns(rom);
+		if(only.empty() || only == "library")
+			library(rom);
 		if(only.empty() || only == "p4")
 			p4(rom);
 		if(only.empty() || only == "hw")
 			hwLink(rom);
+		if(only.empty() || only == "chain")
+			chains(rom);
 		check(g_contract.loaded() && g_contract.bad() == 0, g_contract.summary());
 		std::printf("%s (%d failures)\n", g_failures ? "FAIL" : "PASS", g_failures);
 		return g_failures ? 1 : 0;

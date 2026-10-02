@@ -291,6 +291,9 @@ namespace mmDesk
 				"GRID RECORDING (RECORD), LIVE RECORDING (RECORD + PLAY) or off"},
 			{"hwSend", Owner::Machine, Gate::Input, -1, {}, "HW MIDI: the machine is on SYSEX RECV; send the dumps that wait for it"},
 			{"followHost", Owner::Machine, Gate::Input, -1, {}, "in a DAW: the active GLOBAL follows the host's clock and transport"},
+			// MM-P8
+			{"chain", Owner::Machine, Gate::Input, -1, {{"patterns", ArgType::Array}}, "BANK held + TRIG keys: the machine's pattern chain"},
+			{"chainClear", Owner::Machine, Gate::Input, -1, {}, "BANK + the TRIG key of the pattern that plays: ends the chain"},
 		});
 		return table;
 	}

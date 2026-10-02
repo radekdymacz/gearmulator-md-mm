@@ -1569,37 +1569,79 @@ body.althold #clearLane{color:var(--led);box-shadow:inset 0 0 0 1px var(--led)}
 .chainfoot .irow .note{padding-left:0;flex-basis:auto}
 .morebtn{margin-left:0}
 .morebtn small{font:12px var(--mono);letter-spacing:0;text-transform:none;color:var(--print3)}
-/* Generators and mutation (DESIGN-generators.md, mdDeskApp.js genStripHtml / mutStripHtml): the GEN strip
-   takes the Sequence foot's row (the legend gives way), the MUTATE strip the Sound head's help line; values
-   are small LCD windows (drag, wheel, arrows). Ghost steps: a dim LED and a dashed rim in the track's
-   colour for a trig that would come, the trig struck through for one that would go. */
-.seqfoot.genon{grid-template-columns:minmax(0,1fr)}
-.seqfoot.genon .legend{display:none}
-.genhost,.muthost{display:flex;align-items:center;min-width:0}
-.muthost{margin-left:auto}
-.gkey{height:22px;padding:0 10px;font-size:10px;margin:0}
-.genstrip{display:flex;align-items:center;gap:7px;min-width:0;width:100%;white-space:nowrap;font:12px var(--mono);color:var(--print2)}
-.genstrip .gcap{font:600 11px var(--sans);letter-spacing:.14em;text-transform:uppercase;color:var(--print);display:inline-flex;align-items:center;gap:5px}
-.genstrip .gcap b{font:400 12px var(--pix);color:var(--ink);background:var(--lcd);padding:1px 5px;border-radius:2px;letter-spacing:0}
-.genstrip button{height:24px;padding:0 9px;font:600 11px var(--sans);letter-spacing:.1em;text-transform:uppercase;flex:none}
-.genstrip button:disabled{opacity:.4;cursor:default}
-.genstrip .seg{gap:2px;flex:none}
-.genstrip .seg button{padding:0 7px;letter-spacing:.06em}
-.genstrip .ptog{margin-left:0;display:inline-flex;gap:5px;align-items:center}
-.gv{display:inline-flex;align-items:baseline;gap:5px;height:24px;line-height:24px;padding:0 7px;background:var(--lcd);color:var(--ink);border-radius:3px;font:12px var(--pix);cursor:ns-resize;user-select:none;text-transform:uppercase;flex:none}
-.gv small{font:9px var(--pix);opacity:.75}
-.gv b{font-weight:400;min-width:2ch;text-align:right}
+/* Generators and mutation (DESIGN-generators.md §5, mdDeskApp.js genStripHtml / mutStripHtml): the GEN bar is
+   the one bar under the step grid, always there: GEN, a divider, the step gestures behind a small ? key, then
+   PAGE (its LEDs, ALL, FOL) at the far right; the MUTATE bar takes the rest of the Sound head's row. Left to
+   right: a title with its target (Alt: all, in the LED's colour), groups (a title on a thin rule over their
+   controls: LED radio rows, LCD value windows with the label inside, drag / wheel / arrows), a muted summary,
+   then the keys: small square caps with the keyboard key on them and a tiny label over them, in the groups'
+   title row (Again cream). The bar replaced the old foot row: its height went half to the grid's rows, half to
+   the lock lane. Under 1400 px the hints go and the gaps narrow; the summary shrinks to what fits. */
+:root{--genband:58px;--row:clamp(18px,calc((100vh - 428px - var(--genband) / 2) / 16 - 3px),40px)!important}
+.genbar{display:flex;align-items:flex-end;gap:14px;min-width:0;height:var(--genband);box-sizing:border-box;margin:5px 0 0;padding:6px 10px 7px 12px;background:var(--plate3);border-radius:4px;position:relative;flex:none;white-space:nowrap}
+.genbar>.genband{flex:1 1 auto;align-self:stretch;height:auto;margin:0;padding:0;background:none;border-radius:0}
+.gdiv{align-self:stretch;width:1px;flex:none;background:var(--rule)}
+.genbar .pagectl{position:static!important;height:30px!important;background:none!important;padding:0!important;margin:0!important;flex:none}
+.genbar .pgkey{height:30px;padding:0 10px;font:600 11px var(--sans);letter-spacing:.12em;text-transform:uppercase}
+.genbar .ptog{margin-left:2px}
+#seqp>.genbar{flex:none}
+#seqp>.lanewrap{border-top:2px solid var(--print);margin-top:5px}
+.steplegend{position:relative;flex:none;height:30px;display:flex;align-items:center}
+.glegkey{width:22px;height:22px;padding:0;border-radius:50%;font:700 12px var(--sans);letter-spacing:0;display:grid;place-items:center}
+.glegpop.legend{display:none;position:absolute;right:-6px;bottom:calc(100% + 24px);z-index:30;flex-direction:column;align-items:stretch;gap:7px;margin:0;padding:10px 12px;background:var(--plate);border-radius:4px;box-shadow:0 6px 24px rgba(0,0,0,.45),inset 0 0 0 1px var(--rule);white-space:normal;width:300px;font:12px var(--sans);color:var(--print2)}
+.glegpop.legend>span{display:grid;grid-template-columns:16px 66px 1fr;gap:8px;align-items:start}
+.glegpop.legend b{font-weight:600;color:var(--print)}
+.glegpop.legend i.lg.none{background:none}
+.glegpop.legend small{font:11px var(--mono);color:var(--print3);padding-top:2px;border-top:1px solid var(--rule)}
+.steplegend:hover .glegpop,.glegkey:focus-visible+.glegpop{display:flex}
+.genband{display:flex;align-items:flex-end;gap:16px;min-width:0;height:var(--genband);box-sizing:border-box;margin:5px 0 0;padding:6px 10px 7px 12px;background:var(--plate3);border-radius:4px;white-space:nowrap;overflow:hidden;flex:none;font:12px var(--mono);color:var(--print2)}
+.gbt{display:grid;gap:4px;flex:none;align-self:center;min-width:92px}
+.gbt b{font:700 13px var(--sans);letter-spacing:.22em;text-transform:uppercase;color:var(--print)}
+.gbt span{font:12px var(--mono);color:var(--print2)}
+.gbt span.all{color:var(--led)}
+.gbg{display:grid;gap:4px;flex:none;min-width:0}
+.gbl{font:600 10px var(--sans);letter-spacing:.18em;text-transform:uppercase;color:var(--print2);display:flex;align-items:center;gap:7px;line-height:12px}
+.gbl::after{content:"";flex:1;min-width:12px;border-top:1px solid var(--rule)}
+.gbc{display:flex;align-items:center;gap:6px;height:30px}
+.gbc .seg{gap:12px;margin-right:4px}
+.gbc .seg button{height:30px;padding:0 2px;font:600 11px var(--sans);letter-spacing:.12em;text-transform:uppercase}
+.gv{display:inline-grid;grid-template-rows:auto auto;align-content:center;gap:1px;height:30px;box-sizing:border-box;min-width:54px;padding:0 8px;background:var(--lcd);color:var(--ink);border-radius:3px;box-shadow:inset 0 0 0 2px color-mix(in srgb,var(--ink) 18%,transparent);font:14px var(--pix);cursor:ns-resize;user-select:none;-webkit-user-select:none;touch-action:none;text-transform:uppercase;flex:none}
+.gv small{font:9px var(--pix);letter-spacing:.04em;opacity:.8;line-height:1}
+.gv b{font-weight:400;text-align:right;line-height:1}
+.gv:hover{box-shadow:inset 0 0 0 2px color-mix(in srgb,var(--ink) 40%,transparent)}
 .gv:focus-visible{outline:2px solid var(--led);outline-offset:1px}
-.genstrip .gnote{overflow:hidden;text-overflow:ellipsis;min-width:0;flex:0 1 auto;color:var(--print3)}
-.genstrip .gx{margin-left:auto}
-.mutstrip{width:auto}
-@media (max-width:1400px){.genstrip{gap:5px}.genstrip button,.genstrip .seg button{padding:0 6px;letter-spacing:.04em}.genstrip .gv{padding:0 5px}.genstrip .gnote{display:none}}
+.gdice{width:30px;height:30px;padding:0;display:inline-grid;place-items:center;flex:none}
+.gdice svg{width:15px;height:15px;fill:currentColor}
+.genband .gsum{flex:1 1 auto;min-width:0;height:30px;line-height:30px;overflow:hidden;text-overflow:ellipsis;color:var(--print3)}
+.genband .gsum em{font-style:normal;color:var(--print2)}
+.gbc .gsum{height:auto;line-height:normal}
+.gkeys{display:flex;align-items:flex-end;gap:9px;flex:none;margin-left:auto}
+.kc{display:grid;justify-items:center;gap:4px;padding:0;background:none!important;box-shadow:none!important;color:var(--print2);min-width:30px}
+.kc small{font:600 9px var(--sans);letter-spacing:.1em;text-transform:uppercase;line-height:12px;color:var(--print2)}
+.kc kbd{width:30px;height:30px;box-sizing:border-box;display:grid;place-items:center;border-radius:3px;background:var(--key);color:var(--keytext);box-shadow:inset 0 -2px 0 rgba(0,0,0,.35);font:600 12px var(--sans);letter-spacing:0}
+.kc:hover kbd{background:var(--key2)}
+.kc:active kbd{box-shadow:none;transform:translateY(1px)}
+.kc:active{transform:none}
+.kc.cream kbd{background:var(--cream);color:var(--creamtext)}
+.kc.on kbd{box-shadow:inset 0 0 0 2px var(--led),inset 0 -2px 0 rgba(0,0,0,.35)}
+.kc small em{font-style:normal;letter-spacing:.04em;text-transform:none;color:var(--print3,var(--print2));opacity:.8;margin-left:3px}
+.kc.on small{color:var(--led)}
+.kc:disabled{cursor:default}
+.kc:disabled kbd,.kc:disabled small{opacity:.4}
+.kc:focus-visible{outline:none}
+.kc:focus-visible kbd{outline:2px solid var(--led);outline-offset:1px}
+.gkeys .gmut{height:30px;padding:0 11px;margin-right:4px;font:600 11px var(--sans);letter-spacing:.1em;text-transform:uppercase;flex:none}
+.ghint{font:11px var(--mono);color:var(--print3)}
+.sndhead .mutband{flex:1 1 auto;margin:0}
+/* a control surface: nothing selects on a drag but the text fields (mdDeskApp.js refuses selectstart there too) */
+body{-webkit-user-select:none;user-select:none}
+input,textarea,select,[contenteditable]:not([contenteditable=false]),.selectable{-webkit-user-select:text;user-select:text}
+img,svg,canvas{-webkit-user-drag:none}
+@media (max-width:1400px){.genband{gap:12px;padding-inline:10px}.genbar{gap:10px}.genbar>.genband{padding:0}.gbt{min-width:0}.gbc .seg{gap:9px}.gkeys{gap:7px}.ghint{display:none}.genbar .pgkey{padding:0 7px}}
+@media (max-width:1340px){.genband{gap:8px}.genbar{gap:8px}.gkeys{gap:5px}.gbc{gap:4px}.gbc .seg{gap:6px;margin-right:0}.gbc .seg button{letter-spacing:.06em}.gv{padding:0 6px;min-width:50px}.genbar .pgkey{padding:0 6px}.genbar .ptog{margin-left:0}}
+@media (max-width:1500px){.genband:has(.gwrite) .gsum{display:none}}
 .th .nm:has(.gtag){gap:4px}
 .th .nm .gtag{font:10px var(--pix);font-style:normal;color:var(--ink);background:var(--lcd);padding:0 3px;border-radius:2px;margin-left:auto;flex:none;align-self:center;white-space:nowrap}
-.st.ghost{background-image:linear-gradient(color-mix(in srgb,var(--led) 45%,transparent),color-mix(in srgb,var(--led) 45%,transparent));background-repeat:no-repeat;background-position:center 5px;background-size:62% 5px;outline:2px dashed var(--c,var(--led));outline-offset:-2px}
-.st.ghost.gacc{background-size:88% 9px}
-.st.on.ghostoff{background-image:linear-gradient(var(--led),var(--led)),linear-gradient(to top right,transparent calc(50% - 1.5px),var(--print) calc(50% - 1.5px),var(--print) calc(50% + 1.5px),transparent calc(50% + 1.5px));background-size:62% 5px,100% 100%;background-position:center 5px,0 0;filter:saturate(.35) brightness(.8)}
-.st.on.gaccx{outline:2px dashed var(--c,var(--led));outline-offset:-2px}
 .snd.mutating .mutg{all:unset;cursor:pointer;border-bottom:1px dashed currentColor}
 .snd.mutating .mutg[aria-pressed=true]{background:var(--lcd);color:var(--ink);padding:0 5px;border-radius:2px;border-bottom:0}
 /* Small comforts (DESIGN-generators.md §7, mdDeskApp.js): the lock budget over the lock lane (as the top bar's

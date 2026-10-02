@@ -198,6 +198,23 @@ if(BUILD_TESTING)
 		LABELS "IntegrationTest;LcdInteraction;PointerInput")
 	set_property(TARGET mmLcdEditorPointerTest PROPERTY FOLDER "Elektron/test")
 
+	# The Machinedrum Editor page's key map (skins/mdStudio/mdDeskKeys.js): its rules and no two keys on one
+	# chord, from every Keys.bind of the page's scripts, when node is there.
+	find_program(GEARMULATOR_NODE node)
+	if(GEARMULATOR_NODE)
+		add_test(NAME mdDeskKeysTest COMMAND ${GEARMULATOR_NODE} ${CMAKE_CURRENT_SOURCE_DIR}/skins/mdStudio/mdDeskKeysTest.js)
+		set_tests_properties(mdDeskKeysTest PROPERTIES LABELS "UnitTest")
+		# the Monomachine Editor's: the same map and rules on its page (skins/mmStudio/mmKeysTest.js, the generated mmMockup.js)
+		add_test(NAME mmKeysTest COMMAND ${GEARMULATOR_NODE} ${CMAKE_CURRENT_SOURCE_DIR}/skins/mmStudio/mmKeysTest.js)
+		set_tests_properties(mmKeysTest PROPERTIES LABELS "UnitTest")
+		# its GEN and MUTATE on MM data (skins/mmStudio/mmGenTest.js: the shared GEN block of mdDeskGen.js, 52-gen.js)
+		add_test(NAME mmGenTest COMMAND ${GEARMULATOR_NODE} ${CMAKE_CURRENT_SOURCE_DIR}/skins/mmStudio/mmGenTest.js)
+		set_tests_properties(mmGenTest PROPERTIES LABELS "UnitTest")
+		# its Sound page by function: every machine's knobs in exactly one group (skins/mmStudio/mmSoundTest.js, 85-sound-groups.js)
+		add_test(NAME mmSoundTest COMMAND ${GEARMULATOR_NODE} ${CMAKE_CURRENT_SOURCE_DIR}/skins/mmStudio/mmSoundTest.js)
+		set_tests_properties(mmSoundTest PROPERTIES LABELS "UnitTest")
+	endif()
+
 	add_executable(mdStandaloneRendererPolicyTest mdStandaloneRendererPolicyTest.cpp)
 	add_test(NAME mdStandaloneRendererPolicyTest COMMAND mdStandaloneRendererPolicyTest)
 	set_tests_properties(mdStandaloneRendererPolicyTest PROPERTIES

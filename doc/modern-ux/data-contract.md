@@ -205,6 +205,18 @@ selected track, after SET STATUS track and the page key (`mdDesk::KnobRecorder`)
 so the firmware locks it on the track's next note. `recTrig` plays a track like
 its TRIG key.
 
+**The keyboard (P10).** `keyNote` {t, vel, i?, v?} plays track t as the note the
+active global's MAP EDITOR gives it (the manual's default map without a global: C2
+track 1 … D4 track 16), on its base channel, at vel 1-127; vel 0 is the key let
+go (note off). The velocity is heard (firmware test: 30 is about a quarter of 127's
+peak; the page's C / V step it 20 40 60 80 100 127, from 100). i, v: a kit value the machine holds while the key is down (the page sends
+the sample machines' PTCH, manual Appendix A: 3 steps a semitone in the first
+octave), sent as a live value before the note and given back when the key is let
+go: the value it replaced, or what something else moved it to meanwhile. It is not
+an edit: no undo step, the kit document keeps its value. A new key on the same
+track ends the one before it. While live recording the page sends `recTrig`
+instead (a plain trig, as a click on the track).
+
 Which note (P4, `mdP4ProbeFirmwareTest lockwindow`): the track's next programmed
 trig whose step has not started when the turn lands. A turn 8 ms before the step
 locks it; at or after the step start it is too late and the lock goes to the
@@ -249,7 +261,12 @@ sequencer mode are read again. A LOAD PATTERN or a single TRIG
 ends it; a pattern dump into a chained pattern does not (measured). So `select`
 while a chain is active answers `{"type":"ask","ask":"breakChain","p"}` and sends
 nothing; `select` with `chainOk` (or `force`) goes ahead. `chainClear` is LOAD
-PATTERN of the current pattern. `machine.desk.mutes` is the machine's pattern mute
+PATTERN of the current pattern. The Song page's CHAIN palette sends the chain again
+at every pad added or taken away (BACK too; 150 ms debounce, the latest wins); while
+the keys of one chain are still on their way the next waits in the desk, only the
+latest is pressed once the device reports none left (so key runs never interleave and
+BANK GROUP is pressed from the group the machine is in then), and `chainClear` waits
+for them too. A pick (`select`) drops a chain still waiting. `machine.desk.mutes` is the machine's pattern mute
 mask (main RAM 0x28b34a, 16 bits big-endian, bit 0 = track 1), so mutes made in the
 machine's MUTE window or by CC 12-15 show too (`mutesSource` = `memory`).
 
@@ -298,7 +315,16 @@ firmware (`mdP4ProbeFirmwareTest library`, smoke test p4):
   its unsaved edits go; the desk sends them again as live edits right after the dump
   (`MdMachine::restoreWorkingKit`, `mdDeskFirmwareTest <MD ROM> sampler`). Slot writes that would lose unsaved kit edits answer
   `{"type":"ask","ask":"overwriteKit"|"relinkKit"|"loadKit","command"}`; the page
-  sends the command again with `force`.
+  sends the command again with `force`. An ask may carry `alternatives`
+  (`[{"label","first":[commands]}]`): other ways to go on, a button each, which send
+  their `first` commands and then the command with `force`. `kitLoad` over unsaved
+  edits offers "Save and load" (`saveKit` first; the wire keeps their order) beside
+  "Load without saving". The kit library loads a slot on click (or Enter); arrows only
+  move the highlight, since every LOAD KIT relinks the current pattern in EXTENDED.
+- Kit names: the bytes up to the NUL, when each is printable ASCII
+  (`mdDeskLibrary.h kitNameText`). A slot never written holds the battery RAM's
+  bytes (OS 1.63, a fresh machine's K17-K64: DEL 0x7f bytes, or 0x7f then left-overs
+  such as `MX KIT 1`, every track GND-EMPTY): no name, so the slot is empty.
 Slot writes are undoable in the editor; LOAD and SAVE are the machine's (it keeps
 one UNDO KIT).
 

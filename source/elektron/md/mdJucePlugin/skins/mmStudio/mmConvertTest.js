@@ -169,6 +169,15 @@ edits.push(["catalogue: DPRO-WAVE WAVE is 32 waveforms", C.enumN("DPRO-WAVE", "S
 	edits.push(["Control All: the shared pages on every other synth track, held at 0; the MIDI tracks untouched",
 		tracks.slice(1).every(t => t.v.FLT[0] === 0) && midi.every(t => t.v.MID.every(x => x === 60))]);
 }
+/* A never-written kit slot (measured on the emulator, mmDeskFirmwareTest smoke: K65-K128 of a fresh machine): a
+   first name byte of 0xff and battery-RAM bytes after it. The library shows it EMPTY (no name), never those bytes;
+   a written slot keeps its name. (MM-PORT-PLAN f: the Machinedrum needs kitNameText for its K17-K64; the MM's
+   firmware marks its unused slots, so the page reads the mark.) */
+{
+	const unused = { name: "?", nameBytes: "ff00415600000000000000" }, junk = { name: "?A", nameBytes: "ff4100560000000000000000".slice(0, 22) };
+	edits.push(["a never-written kit slot (first name byte 0xff) has no name and is empty", C.kitName(unused) === "" && C.kitEmpty(unused) && C.kitName(junk) === "" && C.kitEmpty(junk)]);
+	edits.push(["a written kit slot keeps its name and is not empty", C.kitName({ name: "ACID BATH" }) === "ACID BATH" && !C.kitEmpty({ name: "ACID BATH" })]);
+}
 for (const [what, ok] of edits) { n++; if (!ok) { fails++; console.log("FAIL edit:", what); } }
 
 const counts = Object.entries(docs).map(([k, l]) => l.length + " " + k.split("/")[1]).join(", ");

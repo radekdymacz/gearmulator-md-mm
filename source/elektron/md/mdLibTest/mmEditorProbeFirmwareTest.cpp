@@ -16,6 +16,7 @@
 //   burst      back-to-back dumps; the RECV message and error counters
 //   macro      how fast the SYSEX RECV panel macro can run
 //   recvflag, recvcount, workkit, boot   RAM searches
+//   chain [hex] MM-P8: BANK + TRIG, BANK GROUP and pattern chaining in RAM (with an address: its life)
 //   queue      a queued pattern switch against status and the playhead
 //   screens    the firmware's screen word across screens
 //   lab <script>      MM-P1 layout lab: panel/MIDI actions with dump diffs (see labMode)
@@ -1646,6 +1647,262 @@ namespace
 			_m.send({static_cast<uint8_t>(0xb0 | ch), _cc, _v});
 	}
 
+	// ---- chain: BANK held + TRIG keys (MM-PORT-PLAN f, manual 1-46) ----
+
+	// Main RAM, internal SRAM and patch RAM, in one buffer (addrOf maps back).
+	Bytes chainSnapshot(Machine& _m)
+	{
+		Bytes s;
+		s.reserve(0x100000 + 0x10000 + 0x100000);
+		for(uint32_t a = 0x200000; a < 0x300000; ++a) s.push_back(_m.read8(a));
+		for(uint32_t a = 0x1000000; a < 0x1010000; ++a) s.push_back(_m.read8(a));
+		for(uint32_t a = 0x700000; a < 0x800000; ++a) s.push_back(_m.read8(a));
+		return s;
+	}
+
+	uint32_t addrOf(const size_t _i)
+	{
+		if(_i < 0x100000) return static_cast<uint32_t>(0x200000 + _i);
+		if(_i < 0x110000) return static_cast<uint32_t>(0x1000000 + _i - 0x100000);
+		return static_cast<uint32_t>(0x700000 + _i - 0x110000);
+	}
+
+	void rawKey(Machine& _m, const md::PanelPacket _p, const double _ms)
+	{
+		_m.hardware().trySendPanelEvent(_p.row, _p.mask);
+		_m.run(_ms);
+	}
+
+	// Hold BANK (_bank 0-3), the TRIG keys pressed in order and held together (_hold) or each let go
+	// after its press but the first (the manual's gesture), then release everything.
+	void chainGesture(Machine& _m, const int _bank, const std::vector<int>& _trigs, const bool _holdAll)
+	{
+		const auto bank = *md::panelPacket(g_mm, static_cast<md::PanelControl>(static_cast<int>(md::PanelControl::BankA) + _bank));
+		rawKey(_m, bank, 100);
+		uint8_t rows[2] = {0, 0};
+		for(size_t i = 0; i < _trigs.size(); ++i)
+		{
+			const int t = _trigs[i];
+			rows[t >> 3] = static_cast<uint8_t>(rows[t >> 3] | (1u << (t & 7)));
+			rawKey(_m, {static_cast<uint8_t>(0x20 + (t >> 3)), rows[t >> 3]}, 150);
+			if(!_holdAll && i > 0)
+			{
+				rows[t >> 3] = static_cast<uint8_t>(rows[t >> 3] & ~(1u << (t & 7)));
+				rawKey(_m, {static_cast<uint8_t>(0x20 + (t >> 3)), rows[t >> 3]}, 100);
+			}
+		}
+		rawKey(_m, {0x20, 0}, 60);
+		rawKey(_m, {0x21, 0}, 60);
+		rawKey(_m, {bank.row, 0}, 100);
+	}
+
+	std::vector<int> wrapPatterns(Machine& _m, const int _wraps)
+	{
+		std::vector<int> seen;
+		int last = _m.read8(0x257e57);
+		for(double t = 0; static_cast<int>(seen.size()) < _wraps && t < 40000; t += 10)
+		{
+			_m.run(10);
+			const int s = _m.read8(0x257e57);
+			if(s < last)
+			{
+				_m.run(40);
+				seen.push_back(status(_m, 0x04));
+			}
+			last = s;
+		}
+		return seen;
+	}
+
+	void printPatterns(const char* _what, const std::vector<int>& _v)
+	{
+		std::printf("  %s:", _what);
+		for(const int p : _v)
+			std::printf(" %c%02d", p < 0 ? '?' : 'A' + p / 16, p < 0 ? 0 : p % 16 + 1);
+		std::printf("\n");
+	}
+
+	void dumpRegion(Machine& _m, const uint32_t _from, const uint32_t _to, const char* _what)
+	{
+		std::printf("  %-26s", _what);
+		for(uint32_t a = _from; a < _to; ++a)
+			std::printf("%s%02x", (a & 7) == 0 ? " " : "", _m.read8(a));
+		std::printf("\n");
+	}
+
+	void chainMode(const Bytes& _rom, const std::string& _region)
+	{
+		std::puts("== MM chain probe");
+		auto m = boot(_rom);
+		using C = md::PanelControl;
+		std::printf("  pattern %d, song mode %d\n", status(*m, 0x04), status(*m, 0x10));
+		// 1. BANK + TRIG selects (stopped): A05.
+		{
+			const auto bank = *md::panelPacket(g_mm, C::BankA);
+			const auto trig = *md::panelPacket(g_mm, C::Trigger5);
+			md::PanelRowState rows;
+			for(const auto pk : {rows.press(bank), rows.press(trig), rows.release(trig), rows.release(bank)})
+				rawKey(*m, pk, 80);
+			m->run(200);
+			check(status(*m, 0x04) == 4, "BANK A + TRIG 5 selects A05 (stopped)");
+		}
+		// 2. BANK GROUP: what toggles in RAM.
+		{
+			const auto s0 = chainSnapshot(*m);
+			m->run(300);
+			const auto s0b = chainSnapshot(*m);
+			key(*m, C::BankGroup, 60, 300);
+			const auto s1 = chainSnapshot(*m);
+			key(*m, C::BankGroup, 60, 300);
+			const auto s2 = chainSnapshot(*m);
+			key(*m, C::BankGroup, 60, 300);
+			const auto s3 = chainSnapshot(*m);
+			std::printf("  BANK GROUP toggles:");
+			int n = 0;
+			for(size_t i = 0; i < s0.size(); ++i)
+				if(s0[i] == s0b[i] && s0[i] == s2[i] && s1[i] == s3[i] && s1[i] != s0[i] && n++ < 40)
+					std::printf(" %06x:%02x/%02x", addrOf(i), s0[i], s1[i]);
+			std::printf(" (%d)\n", n);
+			// Now in E-H: BANK A/E + TRIG 1 selects E01?
+			const auto bank = *md::panelPacket(g_mm, C::BankA);
+			const auto trig = *md::panelPacket(g_mm, C::Trigger1);
+			md::PanelRowState rows;
+			for(const auto pk : {rows.press(bank), rows.press(trig), rows.release(trig), rows.release(bank)})
+				rawKey(*m, pk, 80);
+			m->run(200);
+			std::printf("  group toggled 3 times, BANK A/E + TRIG 1: pattern %d\n", status(*m, 0x04));
+			const auto t0 = chainSnapshot(*m);
+			std::printf("  after selecting E01, the toggling bytes:");
+			n = 0;
+			for(size_t i = 0; i < s0.size(); ++i)
+				if(s0[i] == s0b[i] && s0[i] == s2[i] && s1[i] == s3[i] && s1[i] != s0[i] && n++ < 40)
+					std::printf(" %06x:%02x", addrOf(i), t0[i]);
+			std::printf("\n");
+			// A SysEx LOAD PATTERN A01: does the group follow?
+			m->send(mmRequest(0x57, 0));
+			m->run(300);
+			const auto t1 = chainSnapshot(*m);
+			std::printf("  after SysEx LOAD A01 (pattern %d):", status(*m, 0x04));
+			n = 0;
+			for(size_t i = 0; i < s0.size(); ++i)
+				if(s0[i] == s0b[i] && s0[i] == s2[i] && s1[i] == s3[i] && s1[i] != s0[i] && n++ < 40)
+					std::printf(" %06x:%02x", addrOf(i), t1[i]);
+			std::printf("\n");
+			key(*m, C::BankGroup, 60, 300);	// back to A-D
+		}
+		// 3. Chains while playing: where is the list?
+		key(*m, C::Play, 60, 400);
+		const std::vector<std::vector<int>> chains = {{2, 4, 1}, {6, 3}, {9, 12, 0, 5}, {14, 2, 7, 1, 11}};
+		std::vector<Bytes> snaps;
+		const auto before = chainSnapshot(*m);
+		for(const auto& c : chains)
+		{
+			chainGesture(*m, 0, c, true);
+			m->run(100);
+			snaps.push_back(chainSnapshot(*m));
+			std::printf("  chain of %zu: pattern %d\n", c.size(), status(*m, 0x04));
+		}
+		for(const int k : {0, 1, 0x80})
+		{
+			for(const size_t stride : {size_t(1), size_t(2), size_t(4)})
+			{
+				std::map<size_t, int> hits;
+				for(size_t i = 0; i < chains.size(); ++i)
+				{
+					const auto& c = chains[i];
+					const auto& s = snaps[i];
+					for(size_t b = 0; b + stride * 16 < s.size(); ++b)
+					{
+						bool ok = true;
+						for(size_t j = 0; j < c.size() && ok; ++j)
+							ok = s[b + j * stride + (stride - 1)] == static_cast<uint8_t>(c[j] + k);
+						if(ok) ++hits[b];
+					}
+				}
+				for(const auto& [a, n] : hits)
+					if(n >= 3)
+						std::printf("  list (stride %zu, +%d) in %d of 4 chains at 0x%06x\n", stride, k, n, addrOf(a));
+			}
+		}
+		std::printf("  bytes changed with every chain:");
+		{
+			size_t shown = 0;
+			for(size_t a = 0; a < before.size() && shown < 80; ++a)
+			{
+				bool all = before[a] != snaps[0][a];
+				for(size_t i = 1; i < snaps.size() && all; ++i)
+					all = snaps[i][a] != snaps[i - 1][a];
+				if(!all)
+					continue;
+				++shown;
+				std::printf(" %06x:%02x", addrOf(a), before[a]);
+				for(const auto& sn : snaps)
+					std::printf(">%02x", sn[a]);
+			}
+		}
+		std::printf("\n");
+		if(_region.empty())
+			return;
+		// 4. A region around the list, through the chain's life (address from step 3, given as hex).
+		const uint32_t from = static_cast<uint32_t>(std::stoul(_region, nullptr, 16)) & ~7u;
+		const uint32_t to = from + 0x60;
+		auto r = boot(_rom);
+		dumpRegion(*r, from, to, "idle A01");
+		key(*r, C::Play, 60, 400);
+		dumpRegion(*r, from, to, "playing A01");
+		chainGesture(*r, 0, {2, 4, 1}, true);
+		dumpRegion(*r, from, to, "chain A03 A05 A02 (held)");
+		printPatterns("wraps", wrapPatterns(*r, 5));
+		dumpRegion(*r, from, to, "after 5 wraps");
+		chainGesture(*r, 0, {6, 3, 8}, false);
+		dumpRegion(*r, from, to, "chain A07 A04 A09 (manual)");
+		printPatterns("wraps", wrapPatterns(*r, 4));
+		chainGesture(*r, 0, {6, 3}, true);
+		dumpRegion(*r, from, to, "chain A07 A04 (again)");
+		chainGesture(*r, 0, {5, 9}, true);
+		dumpRegion(*r, from, to, "chain A06 A10 (right after)");
+		printPatterns("wraps", wrapPatterns(*r, 3));
+		r->send(mmRequest(0x57, 11));
+		r->run(100);
+		dumpRegion(*r, from, to, "SysEx LOAD A12");
+		printPatterns("wraps", wrapPatterns(*r, 2));
+		chainGesture(*r, 0, {0, 1}, true);
+		dumpRegion(*r, from, to, "chain A01 A02");
+		key(*r, C::Stop, 60, 300);
+		dumpRegion(*r, from, to, "STOP once");
+		std::printf("  pattern %d\n", status(*r, 0x04));
+		key(*r, C::Stop, 60, 300);
+		dumpRegion(*r, from, to, "STOP twice");
+		std::printf("  pattern %d\n", status(*r, 0x04));
+		key(*r, C::Play, 60, 300);
+		printPatterns("PLAY after STOP twice, wraps", wrapPatterns(*r, 3));
+		chainGesture(*r, 0, {3, 4}, true);
+		dumpRegion(*r, from, to, "chain A04 A05");
+		chainGesture(*r, 0, {7}, true);
+		dumpRegion(*r, from, to, "one key A08");
+		printPatterns("wraps", wrapPatterns(*r, 2));
+		key(*r, C::Stop, 60, 300);
+		key(*r, C::Stop, 60, 300);
+		// From stopped.
+		chainGesture(*r, 1, {0, 2}, true);
+		dumpRegion(*r, from, to, "stopped: chain B01 B03");
+		std::printf("  pattern %d\n", status(*r, 0x04));
+		key(*r, C::Play, 60, 300);
+		printPatterns("PLAY, wraps", wrapPatterns(*r, 3));
+		key(*r, C::Stop, 60, 300);
+		key(*r, C::Stop, 60, 300);
+		// Song mode: SET STATUS song mode 1, then a chain.
+		r->send(mmCommand(0x71, {0x10, 0x01}));
+		r->run(200);
+		std::printf("  song mode %d\n", status(*r, 0x10));
+		key(*r, C::Play, 60, 300);
+		chainGesture(*r, 0, {2, 4}, true);
+		dumpRegion(*r, from, to, "song mode: chain A03 A05");
+		std::printf("  song mode %d\n", status(*r, 0x10));
+		printPatterns("wraps", wrapPatterns(*r, 3));
+		printLcd(*r, "LCD in song mode after the chain");
+	}
+
 	void recvMode(const Bytes& _rom)
 	{
 		auto m = boot(_rom);
@@ -1763,6 +2020,7 @@ int main(const int _argc, char** _argv)
 		else if(mode == "program") programMode(rom, dir);
 		else if(mode == "statebytes") stateBytesMode(rom);
 		else if(mode == "recvflag2") recvFlag2Mode(rom);
+		else if(mode == "chain") chainMode(rom, dir);
 		else if(mode == "enums")
 		{
 			require(_argc >= 7, "enums <outdir> <machine> <page> <param>...");

@@ -47,6 +47,10 @@ namespace mdDesk
 		// Live kit parameter: index 0-23, or 24 for the track level (CCs).
 		std::function<void(uint8_t _track, uint8_t _index, uint8_t _value)> sendKitParam;
 		std::function<void(uint8_t _track, bool _muted)> sendMute;
+		// A MIDI note into the machine on MIDI channel _channel (0-15): note on at _velocity 1-127, note off
+		// at 0. The firmware's MAP EDITOR turns a note into a track's trig (the page's keyboard). It goes
+		// after any kit value sent before it. Unset: this engine cannot play notes.
+		std::function<void(uint8_t _channel, uint8_t _note, uint8_t _velocity)> sendNote;
 		// A panel key press and release; false when not possible here. Keys: "play", "stop",
 		// "record", "recordPlay", "page", "trig1".."trig16". Unset: no panel.
 		std::function<bool(const std::string& _key)> pressKey;

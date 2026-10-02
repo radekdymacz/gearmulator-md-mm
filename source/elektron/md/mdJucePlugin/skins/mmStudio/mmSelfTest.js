@@ -507,7 +507,7 @@ window.MMDiagnostics = {};
 	}
 
 	/* ?selftest=p7sound: the Sound workspace on every track of the machine's kit, clicked as a user
-	   does (the tab, the SYNTH / MIDI switch, the rail): each one renders its cards and draws its
+	   does (the tab, the SYNTH / MIDI switch, the rail): each one renders its groups and draws its
 	   screens, with no page error. */
 	async function runSound() {
 		const s = S(), errs = [];
@@ -523,14 +523,15 @@ window.MMDiagnostics = {};
 			/* the page's error events say only "Script error." here (a file: page): the view's own throw */
 			try { V().render(); } catch (e) { errs.push(e.message + " " + (e.stack || "").split("\n").slice(0, 3).join(" < ")); }
 			await sleep(200);
-			const cards = $$("#main .card").length, eds = $$("#main canvas.ed");
+			/* the Sound page by function (MM-PORT-PLAN e): its groups (.sg), each with a title on a rule */
+			const cards = $$("#main .sg").length, eds = $$("#main canvas.ed");
 			const inked = c => { if (!c.width) return false; const g = c.getContext("2d").getImageData(0, 0, c.width, c.height).data; for (let i = 4; i < g.length; i += 4) if (g[i] !== g[0] || g[i + 1] !== g[1] || g[i + 2] !== g[2]) return true; return false; };
 			const drawn = eds.filter(inked).length, tr = t < 6 ? s.tracks[t] : s.midi[t - 6];
 			/* the LFO PAGE values are the page's indices, not raw firmware values */
 			const pages = t < 6 ? ["LF1", "LF2", "LF3"].map(l => tr.v[l][0]) : [];
 			const ok = s.ws === "sound" && s.sel === t && cards >= 4 && drawn === eds.length && !errs.length && pages.every(p => p < LPAGES.length);
 			if (!ok) bad++;
-			log(`SOUND T${t + 1} ${tr.m}: ws ${s.ws} sel ${s.sel}, ${cards} cards, ${drawn}/${eds.length} screens drawn${pages.length ? ", LFO pages " + pages.join(" ") : ""}${errs.length ? ", errors: " + errs.join(" | ") : ""}`);
+			log(`SOUND T${t + 1} ${tr.m}: ws ${s.ws} sel ${s.sel}, ${cards} groups, ${drawn}/${eds.length} screens drawn${pages.length ? ", LFO pages " + pages.join(" ") : ""}${errs.length ? ", errors: " + errs.join(" | ") : ""}`);
 		}
 		window.removeEventListener("error", onErr);
 		log(`SELFTEST ${bad ? "FAIL" : "PASS"} sound ${12 - bad}/12`);

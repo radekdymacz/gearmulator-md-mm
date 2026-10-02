@@ -6,8 +6,9 @@ namespace md
 	{
 		std::vector<PanelPacket> chainSequence(const MachineModel _model, const std::string& _spec)
 		{
-			// _spec = "<k>:<t>,<t>,..."
-			if(_model != MachineModel::Machinedrum || _spec.size() < 3 || _spec[1] != ':' || _spec[0] < '0' || _spec[0] > '3')
+			// _spec = "<k>:<t>,<t>,..." (the Machinedrum's and, MM-P8, the Monomachine's: the same gesture,
+			// its own bank key packets; mmEditorProbeFirmwareTest chain)
+			if(_spec.size() < 3 || _spec[1] != ':' || _spec[0] < '0' || _spec[0] > '3')
 				return {};
 			const auto bank = panelPacket(_model, static_cast<PanelControl>(static_cast<int>(PanelControl::BankA) + (_spec[0] - '0')));
 			if(!bank)

@@ -11,8 +11,8 @@ const fs = require("fs"), path = require("path"), vm = require("vm");
 const ctx = vm.createContext({ console });
 vm.runInContext(fs.readFileSync(path.join(__dirname, "mdDeskModel.js"), "utf8")
 	+ "\nconst S = { soloSet: new Set() };"
-	+ "\nthis.T = { deriveView, Overlay, view, Docs, S, EMPTY_DOCS, storeDoc, resetDocs, canDo, docOf, multFactor, mfxName, nameOf, tweakWrites, catalogueIndex, waveBins, waveWant, waveColumns, auditionAt, WAVE_MAX_BINS, playsOf, get V() { return V; } };", ctx);
-const { deriveView, Overlay, Docs, S, EMPTY_DOCS, storeDoc, resetDocs, canDo, docOf, multFactor, nameOf, tweakWrites, catalogueIndex, waveBins, waveWant, waveColumns, auditionAt, WAVE_MAX_BINS, playsOf } = ctx.T;
+	+ "\nthis.T = { deriveView, Overlay, view, Docs, S, EMPTY_DOCS, storeDoc, resetDocs, canDo, docOf, multFactor, mfxName, nameOf, tweakWrites, catalogueIndex, waveBins, waveWant, waveColumns, auditionAt, WAVE_MAX_BINS, playsOf, keyPlan, keyVel, KEYS_VEL, ptchSemis, semisPtch, kitNameText, get V() { return V; } };", ctx);
+const { deriveView, Overlay, Docs, S, EMPTY_DOCS, storeDoc, resetDocs, canDo, docOf, multFactor, nameOf, tweakWrites, catalogueIndex, waveBins, waveWant, waveColumns, auditionAt, WAVE_MAX_BINS, playsOf, keyPlan, keyVel, KEYS_VEL, ptchSemis, semisPtch, kitNameText } = ctx.T;
 const DELETE = Overlay.DELETE;
 let failures = 0;
 const check = (ok, what) => { console.log((ok ? "  ok   " : "  FAIL ") + what); if (!ok) failures++; };
@@ -116,6 +116,8 @@ resetDocs(d0);
 check(!Object.keys(d0.patterns).length && d0.workingKit === null && d0.catalogue === catalogue && d0.learn && Object.keys(EMPTY_DOCS).every(k => k in d0), "a reset starts the engine's documents over (EMPTY_DOCS), the catalogue and learn stay");
 
 /* the working kit */
+check(kitNameText("TRX UW") === "TRX UW" && kitNameText("\x7fMX KIT 1") === "" && kitNameText("\x7f\x7f\x7f\x7f") === "" && kitNameText(undefined) === "",
+	"kit names: printable ASCII; an unwritten slot's DEL bytes are no name");
 check(a.kitNames[3] === "STORED" && a.kitSource === "dump", "no working kit yet: the current kit is the stored slot");
 const w = deriveView(docs({ workingKit: { slot: 3, source: "memory", pending: false, doc: kit("PLAYING", 77) } }), S);
 check(w.kitNames[3] === "PLAYING" && w.tracks[0].level === 77 && w.kitSource === "memory", "the kit that plays is the working kit document");
@@ -204,6 +206,24 @@ Overlay.clear();
 	check(joined[0] === -1 && joined[1] === 0 && joined[2] === 0 && joined[3] === 1, "waveColumns: columns of one sample each reach halfway to their neighbour (a joined trace)");
 	const aud = { length: 44100, rate: 22050 };
 	check(auditionAt(aud, 0) === 0 && auditionAt(aud, 1000) === 0.5 && auditionAt(aud, 5000) === 1 && auditionAt(null, 10) === 0, "auditionAt: the playhead from the sample's own rate");
+}
+
+/* P10: the keyboard's white keys, pitched by PTCH on the sample machines only (manual: 3 steps a semitone in the first octave) */
+{
+	const v = (m, k, o, p) => { const r = keyPlan(m, k, o, p); return r && r.v; };
+	check(v("ROM-01", "A", 0, 64) === 64 && v("ROM-01", "S", 0, 64) === 70 && v("ROM-01", "K", 0, 64) === 100 && v("ROM-01", "A", -1, 64) === 28,
+		"keyPlan: C D, the C an octave up and down are PTCH 64 70 100 28 (3 steps a semitone)");
+	check(v("RAM-P2", "G", 0, 70) === 91, "keyPlan: key C is the sound as tuned (PTCH 70), G is 7 semitones (21 steps) above it");
+	check(v("ROM-12", "A", 2, 64) === 127 && v("ROM-12", "A", -2, 64) === 0, "keyPlan: two octaves are the ends of PTCH");
+	check(v("ROM-12", "L", 1, 64) === 127 && v("ROM-12", "A", -2, 10) === 0, "keyPlan: beyond the scale, the ends");
+	check(semisPtch(ptchSemis(110)) === 110 && semisPtch(ptchSemis(15)) === 15, "ptchSemis and semisPtch invert each other in the second octave");
+	check(keyPlan("TRX-BD", "D", 0, 64).kind === "trig" && keyPlan("MID-01", "A", 0, 64).kind === "trig" && keyPlan("CTR-AL", "A", 0, 0).kind === "trig",
+		"keyPlan: synthesis, MIDI and control machines are played at their own pitch");
+	check(keyPlan("GND-EMPTY", "A", 0, 0).kind === "none" && keyPlan("RAM-R1", "A", 0, 0).kind === "none" && keyPlan("ROM-01", "W", 0, 64) === null,
+		"keyPlan: GND-EMPTY and the recorders are left alone; W is not a key of the keyboard");
+	check(KEYS_VEL === 100 && keyVel(100, -1) === 80 && keyVel(100, 1) === 127 && keyVel(20, -1) === 20 && keyVel(127, 1) === 127,
+		"keyVel: C / V step the velocity 20 40 60 80 100 127 from 100, held at the ends");
+	check(keyVel(90, 1) === 100 && keyVel(90, -1) === 80, "keyVel: a velocity between steps goes to the next step");
 }
 
 console.log("mdDeskModelTest: " + (failures ? "FAIL" : "PASS") + " (" + failures + " failures)");

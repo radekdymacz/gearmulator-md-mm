@@ -49,6 +49,7 @@ namespace mdJucePlugin
 			case K::Record: return C::Record;
 			case K::LiveRecord: return C::Play;	// with RECORD held
 			case K::MuteWindow: return C::BankGroup;	// with FUNCTION
+			case K::BankGroup: return C::BankGroup;
 			case K::Trig9: case K::Trig10: case K::Trig11: case K::Trig12: case K::Trig13: case K::Trig14:
 				return static_cast<C>(static_cast<int>(C::Trigger1) + 8 + (static_cast<int>(_k) - static_cast<int>(K::Trig9)));
 			}
@@ -167,6 +168,22 @@ namespace mdJucePlugin
 		});
 	}
 
+	bool MmStudioLink::pressBankTrigs(const uint8_t _bank, const std::vector<uint8_t>& _trigs) const
+	{
+		std::string spec = "chain:" + std::to_string(_bank & 3) + ":";
+		for(size_t i = 0; i < _trigs.size(); ++i)
+			spec += (i ? "," : "") + std::to_string(_trigs[i]);
+		const auto states = md::panelKeySequence(md::MachineModel::Monomachine, spec);
+		if(states.empty())
+			return false;
+		editFlow::panelOut(states.size());
+		return m_processor.getPlugin().withDeviceLocked([&](synthLib::Device* _base)
+		{
+			auto* device = dynamic_cast<md::DeskDevice*>(_base);
+			return device && device->sendPanelSequence(states, md::g_samplerate * 10 / 1000);
+		});
+	}
+
 	mmDesk::Telemetry MmStudioLink::readTelemetry()
 	{
 		const auto now = nowMs();
@@ -194,6 +211,8 @@ namespace mdJucePlugin
 		t.tempo = m_telemetry->tempo.load(std::memory_order_relaxed);
 		t.mutes = m_telemetry->mutes.load(std::memory_order_relaxed);
 		t.recording = m_telemetry->recording.load(std::memory_order_relaxed);
+		t.bankGroup = m_telemetry->bankGroup.load(std::memory_order_relaxed);
+		t.chainKnown = m_telemetry->readChain(t.chain.active, t.chain.next, t.chain.patterns);
 		return t;
 	}
 

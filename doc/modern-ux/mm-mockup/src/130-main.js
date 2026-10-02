@@ -6,21 +6,23 @@ function snap(){return JSON.stringify({tracks:S.tracks.map(packT),midi:S.midi.ma
  routing:S.routing,multi:S.multi,menv:S.menv,mmap:S.mmap,mode:S.mode,links:S.ctl.links,kitState:S.kitState,kits:S.kits,patData:S.patData,patInfo:S.patInfo,patKit:S.patKit,kit:S.kit,workName:S.workName},(k,v)=>v===Infinity?"∞":v)}
 function restore(str){const o=JSON.parse(str,(k,v)=>v==="∞"?Infinity:v);S.tracks=o.tracks.map(unpackT);S.midi=o.midi.map(unpackT);S.locks=new Map(o.locks.map(([k,m])=>[k,new Map(m)]));
  Object.assign(S,{song:o.song,len:o.len,mult:o.mult,swingAmt:o.swingAmt,patTrn:o.patTrn,routing:o.routing,multi:o.multi,menv:o.menv,mmap:o.mmap,mode:o.mode});S.ctl.links=o.links||[];setKitState(o.kitState);if(o.kits){S.kits=o.kits;S.patData=o.patData;S.patInfo=o.patInfo;S.patKit=o.patKit;S.kit=o.kit;S.workName=o.workName;drawLib()}}
-function commit(){if(laneDraw||rollDrag||drag||active||arpDrag||paint)return;if(HOST.edited){HOST.edited("commit");return}const cur=snap();if(H.last==null){H.last=cur;return}if(cur!==H.last){H.undo.push(H.last);if(H.undo.length>200)H.undo.shift();H.redo=[];H.last=cur;renderTop()}}
-function undo(){if(HOST.undo)return HOST.undo();if(!H.undo.length){toast("Nothing to undo.");return}H.redo.push(snap());const prev=H.undo.pop();restore(prev);H.last=prev;tx();render();toast("Undo")}
-function redo(){if(HOST.redo)return HOST.redo();if(!H.redo.length){toast("Nothing to redo.");return}H.undo.push(snap());const nx=H.redo.pop();restore(nx);H.last=nx;tx();render();toast("Redo")}
+function commit(){if(laneDraw||rollDrag||drag||active||arpDrag||paint||rotHold)return;genStale();if(genHeld())return;if(HOST.edited){HOST.edited("commit");return}const cur=snap();if(H.last==null){H.last=cur;return}if(cur!==H.last){H.undo.push(H.last);if(H.undo.length>200)H.undo.shift();H.redo=[];H.last=cur;renderTop()}}
+function undo(){genEnd();if(HOST.undo)return HOST.undo();if(!H.undo.length){toast("Nothing to undo.");return}H.redo.push(snap());const prev=H.undo.pop();restore(prev);H.last=prev;tx();render();toast("Undo")}
+function redo(){genEnd();if(HOST.redo)return HOST.redo();if(!H.redo.length){toast("Nothing to redo.");return}H.undo.push(snap());const nx=H.redo.pop();restore(nx);H.last=nx;tx();render();toast("Redo")}
 ["pointerup","keyup","click","change"].forEach(ev=>document.addEventListener(ev,()=>setTimeout(commit,0)));
 
 /* ===== COPY CLEAR PASTE, per workspace, as the manual scopes them ===== */
 let CLIP=null;
+/* the copied page into track t's steps a..b (its notes, slides and locks); the locks of parameters its machine has not are skipped (their count) */
+function pastePage(t,a,b){const tr=trk(t);for(let i=a;i<b;i++){tr.steps[i]=CLIP.steps[i-a]&&JSON.parse(JSON.stringify(CLIP.steps[i-a]));tr.slide.delete(i);clearStepLocks(t,i)}CLIP.slide.forEach(x=>{if(x+a<b)tr.slide.add(x+a)});
+ let skip=0;CLIP.locks.forEach(([pid,st])=>{if(!pname(t,pid)){skip++;return}st.forEach(([s,v])=>{if(s+a<b)setLock(t,pid,s+a,v,true)})});return skip}
 function secAction(kind){const t=S.sel,tr=trk(t),e2melody=false;
  if(S.ws==="seq"){const[a,b]=vis(),where=`${tLabel(t)}, steps ${a+1}–${b}`;
   if(kind==="copy"){CLIP={type:"page",midi:isMidiT(t),steps:tr.steps.slice(a,b).map(x=>x&&JSON.parse(JSON.stringify(x))),slide:[...tr.slide].filter(x=>x>=a&&x<b).map(x=>x-a),
    locks:[...S.locks].filter(([k])=>+k.split("|")[0]===t).map(([k,m])=>[k.split("|")[1],[...m].filter(([s])=>s>=a&&s<b).map(([s,v])=>[s-a,v])])};toast("COPY PAGE: "+where+".");return}
   if(kind==="clear"){for(let i=a;i<b;i++){tr.steps[i]=null;tr.slide.delete(i);clearStepLocks(t,i)}structEdited();render();toast("CLEAR PAGE: "+where+".");return}
-  if(kind==="paste"){if(CLIP?.type!=="page"){toast("Copy a track page first.");return}if(CLIP.midi!==isMidiT(t)){toast("Track pages paste between synth tracks or between MIDI tracks.");return}
-   for(let i=a;i<b;i++){tr.steps[i]=CLIP.steps[i-a]&&JSON.parse(JSON.stringify(CLIP.steps[i-a]));tr.slide.delete(i);clearStepLocks(t,i)}CLIP.slide.forEach(x=>tr.slide.add(x+a));
-   let skip=0;CLIP.locks.forEach(([pid,st])=>{if(!pname(t,pid)){skip++;return}st.forEach(([s,v])=>setLock(t,pid,s+a,v,true))});structEdited();render();toast("PASTE PAGE into "+where+"."+(skip?" "+skip+" lock(s) skipped: this machine has no such parameter.":""));return}}
+  if(kind==="paste"){if(S.marks.size){pasteToMany();return}if(CLIP?.type!=="page"){toast("Copy a track page first.");return}if(CLIP.midi!==isMidiT(t)){toast("Track pages paste between synth tracks or between MIDI tracks.");return}
+   const skip=pastePage(t,a,b);structEdited();render();toast("PASTE PAGE into "+where+"."+(skip?" "+skip+" lock(s) skipped: this machine has no such parameter.":""));return}}
  if(S.ws==="seq"&&e2melody){if(kind==="copy"){CLIP={type:"melody",steps:tr.steps.map(x=>x&&JSON.parse(JSON.stringify(x)))};toast("MELODY copy: all pitches of "+tLabel(t)+", no locks, no machine.");return}
   if(kind==="clear"){tr.steps=tr.steps.map(()=>null);[...S.locks.keys()].forEach(k=>{if(+k.split("|")[0]===t)S.locks.delete(k)});structEdited();render();toast("Cleared the notes of "+tLabel(t)+".");return}
   if(kind==="paste"){if(CLIP?.type!=="melody"){toast("Copy a melody first.");return}tr.steps=CLIP.steps.map(x=>x&&JSON.parse(JSON.stringify(x)));structEdited();render();toast("Pasted the melody into "+tLabel(t)+". Its locks and machine stay.");return}}
@@ -49,6 +51,7 @@ function l2step(k,d,fine){
   if(k==="ptrn"){S.patTrn=clamp(S.patTrn+d,0,127);structEdited()}
  if(k==="route"){S.routing=ROUTES[(ROUTES.indexOf(S.routing)+d+3)%3];soundEdited("global")}
  if(k==="side"){setSide(S.side==="midi"?"int":"midi");return}
+ if(k==="dbl"){if(!fine)doublePattern();return}
  if(k==="pmode"){const o=PMODES.map(p=>p[0]);S.mode=o[(o.indexOf(S.mode)+d+4)%4]}
  render()}
 let l2drag=null;
@@ -85,7 +88,7 @@ main.addEventListener("pointerdown",e=>{
  const roll=e.target.closest("canvas.roll");if(roll){roll.setPointerCapture(e.pointerId);rollDown(roll,e);e.preventDefault();return}
  const c=e.target.closest("canvas.ed");if(c){const hh=nearest(c,e);if(!hh)return;active={c,k:hh.k,all:e.altKey&&!isMidiT(S.sel)};if(active.all)allTip();c.setPointerCapture(e.pointerId);e.preventDefault();redraw();return}
  const el=e.target.closest(".pc[data-g],.fader[data-g]");if(el){const t=el.dataset.t!=null?+el.dataset.t:S.sel;drag={el,x:e.clientX,y:e.clientY,v:getV(el),vert:el.classList.contains("fader"),mx:maxOf(ref(el)[2]),all:e.altKey&&!isMidiT(t)&&PAGES.includes(el.dataset.g)};if(drag.all)allTip();el.setPointerCapture(e.pointerId);el.classList.add("act");e.preventDefault();return}
- const lb=e.target.closest(".lb");if(lb){laneDraw={erase:e.altKey,touched:false};$("#lane").setPointerCapture(e.pointerId);laneAt(e);e.preventDefault();return}
+ const lb=e.target.closest(".lb");if(lb){laneDraw=e.shiftKey&&!e.altKey?{ramp:true,touched:false}:{erase:e.altKey,touched:false};$("#lane").setPointerCapture(e.pointerId);laneAt(e);e.preventDefault();return}
  const ac=e.target.closest(".ac");if(ac){const k=+ac.dataset.ac,a=trk(S.sel).arp;if(k>=a.len){a.len=k+1;structEdited();renderArp();return}arpDrag={k,y:e.clientY,moved:false};$("#arptrack").setPointerCapture(e.pointerId);e.preventDefault();return}
  if(e.target.closest("#joy")){joyDrag=true;$("#joy").setPointerCapture(e.pointerId);joyAt(e);e.preventDefault();return}
  if(e.target.closest("#splitm")){splitDrag=true;$("#splitm").setPointerCapture(e.pointerId);e.preventDefault();return}
@@ -102,7 +105,7 @@ main.addEventListener("pointermove",e=>{
  if(joyDrag){joyAt(e);return}
  if(splitDrag){const kb=$("#kb").getBoundingClientRect(),[lo,hi]=kbRange(),whites=[];for(let n=lo;n<=hi;n++)if(!isBlack(n))whites.push(n);const i=clamp(Math.round((e.clientX-kb.left)/kb.width*whites.length),1,whites.length-1);if(S.multi.splitKey!==whites[i]){S.multi.splitKey=whites[i];$("#kb").innerHTML=renderKb();$("#splitm").setPointerCapture?.(e.pointerId)}return}
  if(kbDown){const k=document.elementFromPoint(e.clientX,e.clientY)?.closest(".kb [data-key]");if(k&&!k.classList.contains("dn"))playKey(+k.dataset.key);return}
- const c=e.target.closest?.("canvas.ed");if(c)c.style.cursor=nearest(c,e)?"grab":"default"});
+ const c=e.target.closest?.("canvas.ed");if(c)c.style.cursor=ED[c.dataset.ed]?.cursor?.(c,e)||(nearest(c,e)?"grab":"default")});
 function allTip(){if(S.allTold)return;S.allTold=1;toast("Control All: this value moves on all six synth tracks by the same amount (MIDI tracks stay).")}
 function endDrag(e){if(cord){cordEnd(e);return}if(rollDrag)rollUp();if(active){active=null;redraw()}if(drag){drag.el.classList.remove("act");drag=null}endLaneDraw();
  if(kbDown&&HOST.keyUp)HOST.keyUp();
@@ -142,18 +145,22 @@ document.addEventListener("click",e=>{
  const ev=e.target.closest("[data-env]");if(ev){if(e.detail>0)return;clickEnv(ev.dataset.env,+ev.dataset.s);return}	/* a mouse click was the paint gesture's */
  const sd=e.target.closest("[data-side]");if(sd){setSide(sd.dataset.side);return}
  const dk=e.target.closest("[data-dock]");if(dk){S.dock=dk.dataset.dock;rerenderSeq();return}
+ const sdk=e.target.closest("[data-snddock]");if(sdk){S.dock=sdk.dataset.snddock;goWs("seq");return}
  const tl=e.target.closest(".tc[data-tl]");if(tl){if(e.detail>0)return;clickTl(tl.dataset.tl,+tl.dataset.s);return}
  const nd=e.target.closest("[data-node]");if(nd){S.sel=+nd.dataset.node;render();return}
  const sel=e.target.closest("[data-sel]");if(sel&&!e.target.closest("button,select,.pc,.fader")){select(+sel.dataset.sel);return}
  const lp=e.target.closest("[data-lpage]");if(lp){S.lanePage=lp.dataset.lpage;const n=pnames(S.sel,S.lanePage);S.lane=S.lanePage+"."+Math.max(0,trackLockPids(S.sel).filter(x=>x.startsWith(S.lanePage+".")).map(x=>+x.split(".")[1])[0]??0);if(!n.length){S.lane="FLT.1";S.lanePage="FLT"}render();return}
  const ch=e.target.closest("[data-lane]");if(ch){S.lane=ch.dataset.lane;render();return}
- if(e.target.closest("#clearLane")){S.locks.delete(lkKey(S.sel,S.lane));structEdited();render();return}
- const sg=e.target.closest(".seg[data-set] button");if(sg){const k=sg.parentElement.dataset.set,v=sg.dataset.v,tr=trk(S.sel);
+ if(e.target.closest("#clearLane")){if(e.altKey){clearTrackLocks(S.sel);return}S.locks.delete(lkKey(S.sel,S.lane));structEdited();render();return}
+ const pk=e.target.closest('canvas[data-ed="dktrn"]');if(pk){const tr=trk(S.sel),n=ED.dktrn.keyAt(pk,e);if(n!=null&&tr.tr.SCALE>1&&n!==tr.tr.KEY){tr.tr.KEY=n;structEdited();render()}return}
+ const sg=e.target.closest(".seg[data-set] button,.dkrow[data-set] button");if(sg){const k=sg.parentElement.dataset.set,v=sg.dataset.v,tr=trk(S.sel);
   if(k==="arpmode"){tr.arp.MODE=+v;structEdited();render();return}if(k==="arpplay"){tr.arp.PLAY=+v;structEdited();render();return}
-  if(k==="scale"){tr.tr.SCALE=+v;structEdited();render();return}if(k==="port"){tr.port=+v;soundEdited();render();return}
+  if(k==="scale"){tr.tr.SCALE=+v;structEdited();render();return}
+  if(k==="trigpos"){tr.trigpos=v===""?null:+v;soundEdited();render();return}if(k==="mch"){tr.ch=+v;soundEdited("global");render();return}if(k==="port"){tr.port=+v;soundEdited();render();return}
   if(k==="ltrig"){V(sg.parentElement.dataset.l)[2]=+v;soundEdited();render();return}
   if(k==="routing"){S.routing=v;soundEdited("global");render();return}
   if(k==="mtmode"){S.multi.mode=+v;soundEdited();render();return}if(k==="astab"){S.asTab=v;render();return}if(k==="astrk"){S.sel=+v;render();return}
+  if(k==="songpick"){S.songPick=v;render();return}
   if(k==="loopkind"){const r=S.song[S.songSel];r.type=v;if(v==="halt")r.to=S.songSel;if(v==="jump"&&r.to<=S.songSel)r.to=Math.min(S.song.length-1,S.songSel+1);if(v==="loop"){if(!r.count)r.count=2;if(r.to>=S.songSel)r.to=Math.max(0,S.songSel-1)}structEdited();render();return}}
  const at=e.target.closest("[data-arptrig]");if(at){const a=trk(S.sel).arp,k=at.dataset.arptrig;a[k]=a[k]?0:1;structEdited();render();return}
  const lg=e.target.closest("[data-leg]");if(lg){const l=trk(S.sel).leg,k=lg.dataset.leg;l[k]=l[k]?0:1;soundEdited();render();return}
@@ -180,6 +187,8 @@ document.addEventListener("click",e=>{
  if(e.target.closest("#pgfollow")){S.follow=!S.follow;render();return}
  if(S.ws==="song"){
   const bk=e.target.closest("[data-bank]");if(bk){S.bank=+bk.dataset.bank;render();return}
+  const cp=e.target.closest("[data-chainpad]");if(cp){chainPad(+cp.dataset.chainpad);return}
+  const ca=e.target.closest("[data-chain]");if(ca){if(!ca.disabled)chainAct(ca.dataset.chain);return}
   const ap=e.target.closest("[data-addpat]");if(ap){if(S.song.length>=200){toast("A song holds 200 rows.");return}let at2=S.songSel+1;if(S.song[S.songSel]?.type==="end")at2=S.songSel;S.song.splice(at2,0,{pat:+ap.dataset.addpat,rep:1});S.songSel=at2;structEdited();render();return}
   const rw=e.target.closest(".scell:not(.empty),.db[data-row]");if(rw){S.songSel=+rw.dataset.row;render();return}
   const ra=e.target.closest("[data-rowact]");if(ra){songAction(ra.dataset.rowact);return}
@@ -187,13 +196,14 @@ document.addEventListener("click",e=>{
   const tt=e.target.closest("[data-ttr]");if(tt){const r=S.song[S.songSel];r.ttr=r.ttr||T64();const k=+tt.dataset.ttr;r.ttr[k]=clamp(r.ttr[k]+ +tt.dataset.d,28,100);structEdited();render();return}
   const mk=e.target.closest("[data-rowmute]");if(mk){const r=S.song[S.songSel],k=+mk.dataset.rowmute;r.mutes=r.mutes||[];r.mutes=r.mutes.includes(k)?r.mutes.filter(x=>x!==k):[...r.mutes,k];structEdited();render();return}
   if(e.target.closest("[data-bpmkeep]")){const r=S.song[S.songSel];r.bpm=r.bpm?undefined:Math.round(S.bpm);structEdited();render();return}
+  if(e.target.closest("[data-rowmore]")){S.songMore=!S.songMore;render();return}
   if(e.target.closest("[data-fullpat]")){const r=S.song[S.songSel];delete r.ofs;delete r.len;structEdited();render();return}
   if(e.target.closest("[data-inf]")){const r=S.song[S.songSel];r.count=r.count===Infinity?2:Infinity;structEdited();render();return}}
  const dl=e.target.closest("[data-dlg]");if(dl){const d=$("#dlg"),f=d._btns[+dl.dataset.dlg][2];d.hidden=true;f();return}
  if(e.target.id==="dlg"){$("#dlg").hidden=true;return}
  if(e.target.closest("#drop")&&!e.target.closest("input")){$("#romfile").click();return}
  if(e.target.closest("#undo")){undo();return}if(e.target.closest("#redo")){redo();return}
- const sc=e.target.closest("[data-sec]");if(sc){secAction(sc.dataset.sec);return}
+ const sc=e.target.closest("[data-sec]");if(sc){if(e.altKey&&sc.dataset.sec==="clear")clearPattern();else secAction(sc.dataset.sec);return}
  if(e.target.closest("#syncf.warn")){sendDialog();return}
  if(e.target.closest("#kitf")){toggleLib("kit");return}
  if(e.target.closest("#pat")){toggleLib("pat");return}
@@ -219,22 +229,42 @@ document.addEventListener("change",e=>{const id=e.target.id,v=e.target.value,tr=
  if(id==="trigpos"){tr.trigpos=v===""?null:+v;soundEdited();render();return}
  if(id==="mch"){tr.ch=+v;soundEdited("global");render();return}});
 
-/* ===== Keys ===== */
-document.addEventListener("keydown",e=>{const mod=e.metaKey||e.ctrlKey,inField=e.target.closest?.("input,select,textarea");
- if(!$("#dlg").hidden&&e.key==="Escape"){$("#dlg").hidden=true;return}
- if(mod&&!inField&&(e.key==="z"||e.key==="Z")){e.preventDefault();e.shiftKey?redo():undo();return}
- if(mod&&!inField&&e.key==="y"){e.preventDefault();redo();return}
- if(mod&&!inField&&(e.key==="c"||e.key==="v")){e.preventDefault();secAction(e.key==="c"?"copy":"paste");return}
- if(S.learn&&S.learnT&&/^[1-8]$/.test(e.key)){e.preventDefault();learnBind(+e.key);return}
- if(S.learn&&e.key==="Escape"){S.learn=false;document.body.classList.remove("learn");renderTop();if(HOST.learning)HOST.learning(false);return}
- if(e.target.closest?.("input,select,textarea,[role=slider]")||mod||e.altKey)return;
- if(S.mapping&&(e.key==="l"||e.key==="L")){$("#learnkey").click();return}
- if(e.key==="r"||e.key==="R"){$("#rec").click();return}
- const ws=["seq","sound","mix","perform","song","control"][+e.key-1];if(ws){goWs(ws);return}
- if((S.ws==="song"||S.ws==="seq")&&(e.key==="Delete"||e.key==="Backspace")){e.preventDefault();S.ws==="song"?songAction("del"):secAction("clear");return}
- if(S.ws==="song"&&(e.key==="ArrowLeft"||e.key==="ArrowRight")){S.songSel=clamp(S.songSel+(e.key==="ArrowRight"?1:-1),0,S.song.length-1);render();return}
- if(e.key===" "){e.preventDefault();togglePlay()}
- if((e.key==="["||e.key==="]")&&S.ws==="seq"&&pages16()>1){const n=pages16();S.viewAll=false;S.page=(S.page+(e.key==="]"?1:-1)+n)%n;render()}});
+/* ===== Keys: the Machinedrum Editor's mnemonic map (DESIGN-generators.md §5, MM-PORT-PLAN.md b), every key an
+   entry of Keys (56-keys.js). LEARN's knob digits are its own (capture: while a value waits for its knob, 1-8 are
+   knobs, not workspaces). ===== */
+document.addEventListener("keydown",e=>{if(!(S.learn&&S.learnT&&/^[1-8]$/.test(e.key))||e.metaKey||e.ctrlKey||e.altKey||e.target.closest?.("input,select,textarea"))return;e.preventDefault();e.stopImmediatePropagation();learnBind(+e.key)},true);
+function leaveLearn(){S.learn=false;document.body.classList.remove("learn");renderTop();if(HOST.learning)HOST.learning(false)}
+Keys.bind({keys:["Escape"],group:"Anywhere",does:"Close the dialog",when:()=>dialogOpen(),field:true,run:()=>{$("#dlg").hidden=true}});
+Keys.bind({keys:["Z"],mod:"cmd",group:"Anywhere",does:"Undo",run:()=>undo()});
+Keys.bind({keys:["Z"],mod:"cmd+shift",group:"Anywhere",does:"Redo",run:()=>redo()});
+Keys.bind({keys:["Y"],mod:"cmd",group:"Anywhere",does:"Redo",run:()=>redo()});
+Keys.bind({keys:["C"],mod:"cmd",group:"Anywhere",does:"Copy (Sequence: the page shown of the track; Sound: the machine; Perform: the assign; Song: the row)",run:()=>secAction("copy")});
+Keys.bind({keys:["V"],mod:"cmd",group:"Anywhere",does:"Paste (Sequence: into every track marked for paste too)",run:()=>secAction("paste")});
+Keys.bind({keys:["Escape"],group:"Anywhere",does:"Leave LEARN",mapping:true,when:()=>S.mapping&&S.learn,run:()=>leaveLearn()});
+Keys.bind({keys:["1 – 8"],group:"Anywhere",does:"LEARN: the controller knob for the value clicked",mapping:true});
+Keys.bind({keys:[","],group:"Anywhere",does:"AUDIO / MIDI settings (also in the engine menu)"});
+Keys.bind({keys:["Space"],group:"Transport",does:"Play / stop",run:()=>togglePlay()});
+Keys.bind({keys:["Space"],code:"Space",mod:"alt",group:"Transport",does:"Live recording (RECORD + PLAY): Alt + play, the other Alt that is not \"all\". Again: recording off",run:()=>liveRecord()});
+["seq","sound","mix","perform","song","control"].forEach((ws,i)=>Keys.bind({keys:[String(i+1)],group:"Workspaces",does:["Sequence","Sound","Mix","Perform","Song","Control"][i],mapping:ws==="control",when:ws==="control"?()=>S.mapping:null,run:()=>goWs(ws)}));
+Keys.bind({keys:["[","]"],group:"Sequence",does:"Previous / next page",when:()=>S.ws==="seq"&&pages16()>1,run:e=>{const n=pages16();S.viewAll=false;S.page=(S.page+(e.key==="]"?1:-1)+n)%n;render()}});
+Keys.bind({keys:["Delete","Backspace"],group:"Sequence",does:"Clear the page shown of the selected track (Song: delete the row)",when:()=>S.ws==="song"||S.ws==="seq",run:()=>S.ws==="song"?songAction("del"):secAction("clear")});
+Keys.bind({keys:["Delete","Backspace"],mod:"alt",group:"All",does:"Sequence: clear the whole pattern: every track's notes, slides and locks (one undo step)",when:()=>S.ws==="seq",run:()=>clearPattern()});
+Keys.bind({keys:["CLR"],mod:"alt",group:"All",does:"Click: clear the whole pattern, every track's notes, slides and locks (one undo step)"});
+Keys.bind({keys:["ArrowLeft","ArrowRight"],group:"Song",does:"Previous / next row",when:()=>S.ws==="song",run:e=>{S.songSel=clamp(S.songSel+(e.key==="ArrowRight"?1:-1),0,S.song.length-1);render()}});
+Keys.bind({keys:["ArrowUp","ArrowDown"],group:"Values",does:"A focused value, tempo or bar: one step (⇧: ×10, tempo: fine)"});
+Keys.bind({keys:["ArrowLeft","ArrowRight"],group:"Values",does:"A focused value: one step"});
+Keys.bind({keys:["drag a value"],mod:"alt",group:"All",does:"Control All: move that value on every synth track (FUNCTION + knob on the Machinedrum)"});
+Keys.bind({keys:["M key"],mod:"shift",group:"Anywhere",does:"Click: prepare that track's mute (+ / X); applied when ⇧ is let go"});
+Keys.bind({keys:["roll"],mod:"shift",group:"Sequence",does:"Click: a chord note on the step"});
+Keys.bind({keys:["roll"],mod:"alt",group:"Sequence",does:"Click: delete a note, or a NOTE OFF on an empty step"});
+Keys.bind({keys:["lock lane"],mod:"alt",group:"Sequence",does:"Drag: erase locks"});
+Keys.bind({keys:["lock lane clear"],mod:"alt",group:"Sequence",does:"Click: clear every lock of the track (all its parameters)"});
+
+/* a control surface: nothing selects on a drag but the text fields (the stylesheet has user-select none on the body,
+   text on the fields); selectstart is refused outside them too (WebKit, the plug-in's engine) */
+const textField=el=>!!el?.closest?.("input,textarea,select,[contenteditable]:not([contenteditable=false]),.selectable");
+document.addEventListener("selectstart",e=>{if(!textField(e.target))e.preventDefault()},true);
+document.addEventListener("dragstart",e=>{if(e.target.closest?.("img,svg,canvas")&&!e.target.closest?.("[draggable=true]"))e.preventDefault()},true);
 
 /* BPM: drag or arrows */
 (()=>{const b=$("#bpm");let d=null;b.addEventListener("pointerdown",e=>{d={y:e.clientY,v:S.bpm};b.setPointerCapture(e.pointerId)});
@@ -275,10 +305,10 @@ function startEngine(kind){engT.forEach(clearTimeout);engT=[];if(S.playing)toggl
  setEng("loading");engT.push(setTimeout(()=>setEng("boot"),700));engT.push(setTimeout(()=>{setEng("ready");toast("Emulator ready: the real OS 1.32B is running")},1800))}
 /* ===== Transport ===== */
 let clock=null;
-function tick(){const prev=S.step;S.step=(S.step+1)%S.len;ctlTick();if(S.step===0&&S.queued!=null){applyPattern(S.queued);return}stepShown(prev)}
+function tick(){const prev=S.step;S.step=(S.step+1)%S.len;ctlTick();if(S.step===0){const q=S.queued??chainWrap();if(q!=null){applyPattern(q);return}}stepShown(prev)}
 /* the playhead, POSITION, the page LEDs and the lamps at S.step (the step before it was prev) */
 function stepShown(prev){const pp=Math.floor(S.step/16);$$(".pl").forEach(b=>b.classList.toggle("play",+b.dataset.plp===pp&&S.playing));
- if(S.follow&&S.ws==="seq"&&!S.viewAll&&pp!==S.page&&!laneDraw){S.page=pp;render()}
+ if(S.follow&&S.ws==="seq"&&!S.viewAll&&pp!==S.page&&!laneDraw&&!menuOpen()){S.page=pp;render()}
  $("#tempoled").classList.toggle("on",S.step%4===0);setPos();queueMicrotask(movePH);
  $$(`.mst[data-s="${prev}"],.lb[data-s="${prev}"],.tc[data-s="${prev}"]`).forEach(c=>c.classList.remove("ph"));$$(`.mst[data-s="${S.step}"],.lb[data-s="${S.step}"],.tc[data-s="${S.step}"]`).forEach(c=>c.classList.add("ph"));
  if(S.ws==="seq")redraw();
@@ -330,7 +360,7 @@ const NA_SEL={
  midiMutes:[6,7,8,9,10,11].flatMap(t=>[`[data-mute="${t}"]`,`[data-solo="${t}"]`,`[data-gmute="${t}"]`]).join(","),
  transport:"#play",poly:'[data-pmode="poly"]',multiTrig:'[data-set="mtmode"] button,[data-strk],[data-tim],#splitm',
  multiMap:'.maprow [data-mhi],.maprow select,.maprow .kselbtn,.maprow .pc,[data-mdel],[data-madd],[data-band]',
- portamento:'[data-set="port"] button',gridRecord:"#rec"};
+ portamento:'[data-set="port"] button',gridRecord:"#rec",chains:'[data-chainpad],[data-chain]'};
 const NA_CARD={multiMap:".maprow"};	// a card that also says the reason in words
 /* capabilities with no control of their own here: they say how the machine is read */
 const NA_INFO=["panelKeys","recvSession","lcd","workingKitMemory","telemetry"];
@@ -359,13 +389,16 @@ function setMidiTracks(list){S.midi.forEach((x,t)=>{x.ch=list[t].ch;x.cc=[...lis
 function setMultiMap(rows){S.mmap=rows;S.mmapSel=Math.min(S.mmapSel||0,rows.length-1)}
 /* the machine's own mutes (12 booleans: T1-T6, M1-M6; null: unknown) */
 function setMutes(list){let ch=false;list.forEach((m,i)=>{if(m==null)return;const t=trk(i);if(!!t.mute!==m){t.mute=m;ch=true}});if(ch&&!busyNow())render()}
-const busyNow=()=>{try{return !!(drag||laneDraw||rollDrag||active||arpDrag||l2drag||joyDrag||splitDrag||cord||kbDown||paint)}catch(_){return false}};
+/* busy: a gesture, or a menu open (a render would close it under the person: the core's documents wait for it, as for a drag) */
+const busyNow=()=>{try{return !!(S.genEnding||drag||laneDraw||rollDrag||active||arpDrag||l2drag||joyDrag||splitDrag||cord||kbDown||paint)||menuOpen()}catch(_){return false}};
 /* the keyboard mode the machine is in (POLY is its audio mode) */
 function setMode(m){if(S.mode===m)return;S.mode=m;if(S.ws==="perform"&&!busyNow())render()}
 /* RECORD as the machine is in it: "off" | "grid" | "live" */
 function setRecord(mode){const on=mode==="grid"||mode==="live";S.recMode=mode;if(!!S.rec!==on){S.rec=on;renderTop()}const b=$("#rec");if(b)b.title=mode==="live"?"LIVE RECORDING: notes you play are recorded. Click to stop recording.":mode==="grid"?"GRID RECORDING: the machine's TRIG keys write steps. Click to leave.":"RECORD: stopped = GRID RECORDING, playing = LIVE RECORDING (the keyboard's notes are recorded)."}
 /* the 24 songs for the Song workspace's picker: {names, slot (the one edited), current (the machine's)} */
 function setSongs(v){const same=JSON.stringify(v)===JSON.stringify(S.songs);S.songs=v;if(!same&&S.ws==="song"&&!busyNow())render()}
+/* what the machine plays (MM-P8): {chain: {active, next, patterns} | null (not readable), songMode, song} */
+function setPlays(v){const same=JSON.stringify(v)===JSON.stringify(S.plays);S.plays=v;if(!same&&S.ws==="song"&&!busyNow())render()}
 /* an engine state's LCD label: [text, led "on" | "blink" | "off", tooltip] */
 function setEngineLabel(st,label){ENG[st]=label;if(S.eng===st)setEng(st)}
 /* a host's engine map ([{id, label, available, reason}]) in the engine menu, before the menu's own entries */
@@ -425,7 +458,7 @@ window.MMView={
  startEmpty,setCurrent:({pattern,kit})=>{if(pattern!=null)S.pat=pattern;if(kit!=null)S.kit=kit},setQueued:q=>{S.queued=q},setTempo:bpm=>{S.bpm=bpm},setInput,
  setPlaying,setStep,setPatternSlot,setKitSlot,setWorkingKit,setSong,setRouting:r=>{S.routing=r},setMidiTracks,setMultiMap,
  setEng,dlgOpen:()=>!$("#dlg").hidden,setEngineLabel,setEngineTip,setEngines,setAudioEntry,setKitState,clearLearnTarget:()=>{S.learnT=null},setMapping,setModulation,setCtlSetup,disable,setReading,
- setMutes,setMode,setRecord,setSongs,
+ setMutes,setMode,setRecord,setSongs,setPlays,
  setLcd,setKeyDown,setPst,closeFirmwareDialog,bootRom:r=>Boot.rom(r),bootInstalled:o=>Boot.showInstalled(o),syxPreview:m=>Syx.preview(m),syxProgress:m=>Syx.progress(m),
  /* calls */
  render,renderTop,drawLib,toast,ask,redraw,movePH,setPos,flashTracks,goWs,clickStep,autoRange,kitSave,

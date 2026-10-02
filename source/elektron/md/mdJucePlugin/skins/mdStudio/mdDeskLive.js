@@ -10,8 +10,9 @@
 /* ===== Mutes on the track keys (manual p.44, mockup v54) =====
    The rail M keys and the Mix strips are the machine's pattern mutes (RAM, machine.desk.mutes).
    Shift held is the machine's FUNCTION in its MUTE window: clicks only prepare ("+" unmute,
-   "X" mute, blinking) and all apply together when Shift is let go. Option+1-8 / Option+Q-I
-   toggle tracks 1-16 in any workspace; without track keys on screen LCD line 2 says what changed. */
+   "X" mute, blinking) and all apply together when Shift is let go. M mutes or unmutes the selected
+   track, Alt+M every track (any audible: mute all; none: unmute all), in any workspace; without
+   track keys on screen LCD line 2 says what changed. */
 const PREP = new Map();
 function showPrep() { $$(".ms.m[data-mute]").forEach(b => { const i = +b.dataset.mute, p = PREP.get(i); b.classList.toggle("prep", p != null); if (p != null) b.dataset.prep = p ? "X" : "+"; else delete b.dataset.prep; }); }
 function muteSet(i, on) { on ? S.userMutes.add(i) : S.userMutes.delete(i); setMute(i, on); }
@@ -32,18 +33,22 @@ function applyPrep() {
 function prepToggle(i) { if (!V.tracks[i]) return; if (PREP.has(i)) PREP.delete(i); else PREP.set(i, !V.tracks[i].mute); showPrep(); }
 document.addEventListener("click", e => { const b = e.target.closest(".ms.m[data-mute]"); if (!b || !e.shiftKey) return; e.stopImmediatePropagation(); e.preventDefault(); prepToggle(+b.dataset.mute); }, true);
 document.addEventListener("keyup", e => { if (e.key === "Shift") applyPrep(); });
-Keys.bind({ keys: ["1–8", "Q–I"], mod: "alt", group: "Mutes", does: "Mute or unmute track 1–16, in any workspace" });
-Keys.bind({ keys: ["1–8", "Q–I"], mod: "alt+shift", group: "Mutes", does: "Prepare a mute (+ / X); applied when ⇧ is let go" });
-Keys.bind({ keys: ["M key"], mod: "shift", group: "Mutes", does: "Click: prepare that track's mute" });
-Keys.bind({ keys: ["drag a value"], mod: "alt", group: "Values", does: "Control All: move that knob on every track (FUNCTION + knob on the machine)" });
-const MKEYS = ["Digit1", "Digit2", "Digit3", "Digit4", "Digit5", "Digit6", "Digit7", "Digit8", "KeyQ", "KeyW", "KeyE", "KeyR", "KeyT", "KeyY", "KeyU", "KeyI"];
-document.addEventListener("keydown", e => {
-	if (!e.altKey || e.metaKey || e.ctrlKey || e.target.closest?.("input,select,textarea")) return;
-	const i = MKEYS.indexOf(e.code); if (i < 0 || !V.tracks[i]) return;
-	e.preventDefault(); e.stopImmediatePropagation();
-	if (e.shiftKey) { prepToggle(i); return; }
-	const on = !V.tracks[i].mute; muteSet(i, on); refreshAudible(); lcdSay([[i, on]]);
-}, true);
+Keys.bind({ keys: ["M key"], mod: "shift", group: "Anywhere", does: "Click: prepare that track's mute (+ / X); applied when ⇧ is let go" });
+Keys.bind({ keys: ["drag a value"], mod: "alt", group: "All", does: "Control All: move that knob on every track (FUNCTION + knob on the machine)" });
+/* M: the selected track; Alt+M: every track, one toggle (matched on e.code: with Alt macOS types µ) */
+function muteSel() { const t = S.sel; if (!V.tracks[t]) return; const on = !V.tracks[t].mute; muteSet(t, on); refreshAudible(); lcdSay([[t, on]]); }
+function muteAllToggle() {
+	const on = V.tracks.some(t => !t.mute), ch = [];
+	V.tracks.forEach((t, i) => { if (t.mute !== on) { muteSet(i, on); ch.push([i, on]); } });
+	refreshAudible(); if (ch.length) lcdSay(ch);
+	toast(on ? "Every track muted (Alt+M again: unmute all)" : "Every track unmuted");
+}
+Keys.bind({ keys: ["M"], code: "KeyM", group: "Selected track", does: "Mute or unmute the selected track", when: () => kbOn(), run: () => muteSel() });
+Keys.bind({ keys: ["M"], code: "KeyM", mod: "alt", group: "All", does: "Mute every track; when none is audible, unmute every track", when: () => kbOn(), run: () => muteAllToggle() });
+/* ↑ / ↓: the previous / next track, while no value has the keys (a focused value, tempo or bar keeps them:
+   the dispatcher leaves [role=slider] alone, a bar's value stops them itself) */
+Keys.bind({ keys: ["ArrowUp", "ArrowDown"], group: "Selected track", does: "Select the previous / next track (a focused value keeps ↑ / ↓ for itself)",
+	when: () => kbOn() && $("#kpop").hidden && $("#keyspop").hidden, run: e => select((S.sel + (e.key === "ArrowDown" ? 1 : 15)) % 16) });
 const refreshAudible0 = refreshAudible; refreshAudible = function () { refreshAudible0(); showPrep(); };
 const renderP0 = render; render = function () { renderP0(); showPrep(); markRecLock(); };
 
@@ -167,3 +172,45 @@ Bridge.onMessage(m => {
 		if (S.ws === "song" && !sameValue(plays, playsLast)) { playsLast = plays; scheduleRender(); }
 	}
 });
+
+/* ===== The keyboard (P10): the home row always plays the selected track =====
+   A S D F G H J K L are white keys C D E F G A B C D, Z / X the octave down / up (−2..+2), C / V the
+   velocity a step down / up (20 40 60 80 100 127, from 100: keyVel, mdDeskModel.js), in every
+   workspace while no text field or dialog has the keys. A key is the track's MAP EDITOR note into the
+   machine (keyNote, at KB.vel): the firmware trigs it as a MIDI note, also while the sequencer plays.
+   On the sample machines (ROM, RAM-P) the key's pitch is a PTCH the machine holds while the key is down
+   and is given back after (keyPlan, mdDeskModel.js): not an edit, no undo step. Others play at their own
+   pitch (said once). While live recording a key is the track's TRIG key (recTrig), as a click on the
+   track: the firmware records a plain trig. Key repeat is ignored; a key let go ends its note. */
+const KB = { oct: 0, vel: KEYS_VEL, held: new Map(), last: new Map(), told: new Set() };
+function kbOn() { return dlgClosed() && !LIB.open && !(typeof GP !== "undefined" && GP.open) && !document.activeElement?.closest?.("input,select,textarea,[contenteditable]"); }
+function kbTell(key, text) { if (KB.told.has(key)) return; KB.told.add(key); toast(text); }
+function kbDown(e) {
+	if (e.repeat || KB.held.has(e.code)) return;
+	const t = S.sel, tr = V.tracks[t], key = e.code.replace(/^Key/, ""); if (!tr) return;
+	const plan = keyPlan(tr.m, key, KB.oct, tr.syn.PTCH); if (!plan) return;
+	if (plan.kind === "none") { kbTell("none:" + tr.m, `${tr.m} is not played from the keyboard (${tr.m === "GND-EMPTY" ? "it has no sound" : "a recorder records on its trigs"}).`); return; }
+	if (V.rec) { cmd("recTrig", { t }); kbTell("rec", "Recording: a key records a plain trig on the track, at the kit's pitch."); return; }
+	if (plan.kind === "trig") kbTell("trig:" + tr.m, `${tr.m} has no semitone scale for PTCH: the keys play it at its own pitch.`);
+	/* the sample machines' PTCH is their first synthesis parameter (SMPL, mdDeskModel.js) */
+	cmd("keyNote", plan.kind === "pitch" ? { t, vel: KB.vel, i: Math.max(0, pidx(t, "PTCH", "syn")), v: plan.v } : { t, vel: KB.vel });
+	KB.held.set(e.code, t); KB.last.set(t, e.code);
+}
+function kbUp(code) {
+	const t = KB.held.get(code); if (t == null) return;
+	KB.held.delete(code);
+	if (KB.last.get(t) !== code) return;	/* a later key on the track still sounds */
+	KB.last.delete(t); cmd("keyNote", { t, vel: 0 });
+}
+function kbVel(d) { KB.vel = keyVel(KB.vel, d); toast(`Keyboard velocity ${KB.vel}`); }
+function kbOct(d) { KB.oct = clamp(KB.oct + d, KEYS_OCT[0], KEYS_OCT[1]); toast(`Keyboard octave ${KB.oct > 0 ? "+" : ""}${KB.oct}`); }
+document.addEventListener("keyup", e => kbUp(e.code));
+addEventListener("blur", () => [...KB.held.keys()].forEach(kbUp));
+Keys.bind({ keys: [...KEYS_WHITE], group: "Playing", hidden: true, field: true, when: kbOn, run: kbDown, does: "" });
+Keys.bind({ keys: ["Z"], group: "Playing", hidden: true, field: true, when: kbOn, run: () => kbOct(-1), does: "" });
+Keys.bind({ keys: ["X"], group: "Playing", hidden: true, field: true, when: kbOn, run: () => kbOct(1), does: "" });
+Keys.bind({ keys: ["C"], group: "Playing", hidden: true, field: true, when: kbOn, run: () => kbVel(-1), does: "" });
+Keys.bind({ keys: ["V"], group: "Playing", hidden: true, field: true, when: kbOn, run: () => kbVel(1), does: "" });
+Keys.bind({ keys: ["A S D F G H J K L"], group: "Playing", does: "Play the selected track: white keys C D E F G A B C D, from any workspace. ROM and RAM-P machines are pitched (PTCH, 3 steps a semitone; given back when the key is let go), others play at their own pitch. While recording: records the trig" });
+Keys.bind({ keys: ["Z", "X"], group: "Playing", does: () => `Octave down / up, −2 to +2 (now ${KB.oct > 0 ? "+" : ""}${KB.oct})` });
+Keys.bind({ keys: ["C", "V"], group: "Playing", does: () => `Velocity down / up: 20 40 60 80 100 127 (now ${KB.vel})` });

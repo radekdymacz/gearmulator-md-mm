@@ -2,6 +2,7 @@
 
 #include "elektronData/mmScreen.h"
 
+#include <algorithm>
 #include <array>
 #include <atomic>
 #include <cstddef>
@@ -31,6 +32,16 @@ namespace md
 		static constexpr uint32_t g_midiMuteAddress = 0x2bfedd;
 		static constexpr uint32_t g_gridRecordAddress = 0x26bbb3;	// 1 in GRID RECORDING (MM-P4)
 		static constexpr uint32_t g_liveRecordAddress = 0x2bff01;	// 1 in LIVE RECORDING (MM-P4)
+		// MM-P8 (mmEditorProbeFirmwareTest chain): the pattern chain (BANK held + TRIG keys, manual 1-46),
+		// 32-bit big-endian values: 0x2bc2c4 active (0/1), 0x2bc2c8 the next entry to queue, 0x2bc2cc
+		// the length, 0x2bc2d0 + 4 n the patterns 0-127. One bank, each pattern once: at most 16. A
+		// BANK + one TRIG pick or STOP twice clears "active"; a SysEx LOAD PATTERN does not (the
+		// pattern plays once, then the chain goes on). In song mode "active" stays but the song plays.
+		static constexpr uint32_t g_chainAddress = 0x2bc2c4;
+		static constexpr size_t g_maxChain = 16;
+		// MM-P8: BANK GROUP (patch RAM): 0 A-D, 1 E-H. The BANK GROUP key toggles it; a SysEx LOAD
+		// PATTERN leaves it.
+		static constexpr uint32_t g_bankGroupAddress = 0x70000b;
 		// Patch RAM: 0x700023 is the current kit number, 0x700028 the working kit
 		// (the kit dump's raw payload, 698 bytes, unsaved edits included).
 		static constexpr uint32_t g_workingKitAddress = 0x700023;
@@ -60,6 +71,11 @@ namespace md
 		std::atomic<int> tempo{0};			// BPM x 24, 0 = unknown
 		std::atomic<int> mutes{-1};			// bit t: synth track t (0-5), MIDI track t - 6 (6-11); -1 = unknown
 		std::atomic<int> recording{-1};		// 0 off, 1 grid, 2 live; -1 = unknown
+		std::atomic<int> bankGroup{-1};		// 0 A-D, 1 E-H; -1 = unknown
+		std::atomic<int> chainActive{-1};	// 1 a chain plays (pattern mode), 0 none; -1 = unknown
+		std::atomic<int> chainNext{-1};
+		std::atomic<int> chainLength{0};
+		std::array<std::atomic<uint8_t>, g_maxChain> chain{};
 		std::atomic<uint64_t> blocks{0};
 
 		std::atomic<uint32_t> workingKitSequence{0};		// odd while written, 0 = never
@@ -79,6 +95,21 @@ namespace md
 			if(workingKitSequence.load(std::memory_order_relaxed) != before)
 				return false;
 			_sequence = before;
+			return true;
+		}
+
+		// The chain as last published: false while unknown (another firmware, not booted).
+		bool readChain(bool& _active, int& _next, std::vector<uint8_t>& _patterns) const
+		{
+			const auto a = chainActive.load(std::memory_order_relaxed);
+			if(a < 0)
+				return false;
+			const auto n = std::min<int>(chainLength.load(std::memory_order_relaxed), static_cast<int>(g_maxChain));
+			_active = a == 1;
+			_next = chainNext.load(std::memory_order_relaxed);
+			_patterns.clear();
+			for(int i = 0; i < n; ++i)
+				_patterns.push_back(chain[static_cast<size_t>(i)].load(std::memory_order_relaxed));
 			return true;
 		}
 
@@ -106,6 +137,18 @@ namespace md
 			}
 			mutes.store(m, std::memory_order_relaxed);
 			recording.store(_read8(g_liveRecordAddress) ? 2 : _read8(g_gridRecordAddress) ? 1 : 0, std::memory_order_relaxed);
+			{
+				const auto group = _read8(g_bankGroupAddress);
+				bankGroup.store(group <= 1 ? group : -1, std::memory_order_relaxed);
+				const auto active = read32(g_chainAddress), next = read32(g_chainAddress + 4), length = read32(g_chainAddress + 8);
+				const bool sane = active <= 1 && length <= g_maxChain && next <= g_maxChain;
+				// the list first, then what says it is there (a reader takes active/length, then the list)
+				for(uint32_t i = 0; sane && i < length; ++i)
+					chain[i].store(static_cast<uint8_t>(read32(g_chainAddress + 12 + 4 * i) & 0x7f), std::memory_order_relaxed);
+				chainLength.store(sane ? static_cast<int>(length) : 0, std::memory_order_relaxed);
+				chainNext.store(sane ? static_cast<int>(next) : -1, std::memory_order_relaxed);
+				chainActive.store(sane ? static_cast<int>(active) : -1, std::memory_order_relaxed);
+			}
 			const auto n = blocks.fetch_add(1, std::memory_order_release);
 			if(n % 8)
 				return;
@@ -130,6 +173,10 @@ namespace md
 			tempo.store(0, std::memory_order_relaxed);
 			mutes.store(-1, std::memory_order_relaxed);
 			recording.store(-1, std::memory_order_relaxed);
+			bankGroup.store(-1, std::memory_order_relaxed);
+			chainActive.store(-1, std::memory_order_relaxed);
+			chainNext.store(-1, std::memory_order_relaxed);
+			chainLength.store(0, std::memory_order_relaxed);
 		}
 	};
 }

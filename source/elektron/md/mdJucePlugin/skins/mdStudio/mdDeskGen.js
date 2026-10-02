@@ -4,6 +4,9 @@
    hands them to the two plain edits (steps, params) and never sends a recipe. The same spec on the same
    pattern or kit gives the same result, here and in node (mdDeskGenTest.js). Nothing here reads the page. */
 
+/* GEN BEGIN: the generators without a machine in them, the same text in the Monomachine Editor's page:
+   doc/modern-ux/mm-mockup/build.sh and sync-mmstudio-skin.py include this block from this file (one source).
+   Nothing here names a machine, reads the page or keeps state. */
 /* ---- seeds: u(seed, a, b) in [0, 1), keyed by (track, step) or (track, param), so a scope change never
    reshuffles the others. hash32 mixes the three into one 32-bit word (murmur3's finaliser constants);
    mulberry32's first draw from it is u. */
@@ -60,63 +63,37 @@ function generate(spec, t, from, to, cur = []) {
 	return null;
 }
 
-/* ---- defaults per machine role (DESIGN-generators.md §4.2), on the machine's name, first match wins.
-   Checked against the catalogue's machines in mdDeskGenTest.js: every drum machine has a role, the
-   MIDI, CTR and input machines, the empty track and the RAM recorders are left alone. */
-const GEN_ROLES = [
-	["keep", /^(MID-|CTR-|INP-|RAM-R|GND-EMPTY$)/],
-	["kick", /-(BD|B2)$/],
-	["snare", /-(SD|CP|RS|CL|BR)$/],
-	["hat", /-(CH|HH)$/],
-	["open", /-OH$/],
-	["cymbal", /-(CY|RC|CC|CB)$/],
-	["perc", /-(XT|XC|LT|MT|HT|MA|ML|TA|TR|SH|BC)$/],
-	["other", /./]];
-const GEN_DEFAULTS = {
-	kick: () => ({ kind: "euclid", k: 4, n: 16, rot: 0 }),
-	snare: () => ({ kind: "euclid", k: 2, n: 16, rot: 4 }),
-	hat: () => ({ kind: "euclid", k: 8, n: 16, rot: 0, acc: { k: 4, rot: 0 } }),
-	open: () => ({ kind: "euclid", k: 2, n: 16, rot: 2 }),
-	cymbal: () => ({ kind: "random", density: 12, seed: genSeed(), mode: "replace" }),
-	perc: () => ({ kind: "random", density: 15, seed: genSeed(), mode: "replace" }),
-	other: () => ({ kind: "random", density: 10, seed: genSeed(), mode: "replace" }),
-	keep: () => ({ kind: "keep" }) };
-function genRole(m) { return (GEN_ROLES.find(([, re]) => re.test(m || "GND-EMPTY")) || ["other"])[0]; }
-function genDefault(m) { return GEN_DEFAULTS[genRole(m)](); }
+/* a euclid spec that fits a pattern of len steps: STEPS never longer than the pattern, the hits, the rotation and
+   the accents inside the cycle. The same spec when it fits already (and for random, keep, or no length). */
+function genFit(spec, len) {
+	if (!spec || spec.kind !== "euclid" || !(len > 0)) return spec;
+	const n = Math.max(1, Math.min(spec.n | 0, len | 0)), k = Math.max(0, Math.min(spec.k | 0, n)), rot = genMod(spec.rot | 0, n);
+	const acc = spec.acc ? Math.min(spec.acc.k | 0, k) : 0;
+	if (n === spec.n && k === spec.k && rot === spec.rot && (!spec.acc || acc === spec.acc.k)) return spec;
+	const out = { ...spec, n, k, rot };
+	if (spec.acc) { if (acc) out.acc = { ...spec.acc, k: acc }; else delete out.acc; }
+	return out;
+}
+/* how often a cycle of n steps fits a pattern of len: "×4", or "×2+4" when it does not divide (the remainder
+   starts the cycle again and stops) */
+function genRepeats(n, len) { const q = Math.floor(len / n), r = len % n; return `×${q}${r ? "+" + r : ""}`; }
+/* the GEN bar's summary of a spec on a pattern of len steps: "E 3/8 · ×4" (euclid: hits / steps and the repeats) */
+function genSummary(spec, len) { return spec && spec.kind === "euclid" ? `${genTag(spec)} · ${genRepeats(spec.n, len)}` : ""; }
 /* the spec's short tag for the track header: E 4/16, R 15%, — */
 function genTag(spec) {
 	if (!spec || spec.kind === "keep") return "—";
 	return spec.kind === "euclid" ? `E ${spec.k}/${spec.n}${spec.rot ? "+" + spec.rot : ""}` : `R ${spec.density}%${spec.mode === "replace" ? "" : spec.mode === "add" ? "+" : "−"}`;
 }
+/* The live GEN run (DESIGN-generators.md §4.6): the changes made in one context (key: the workspace, the track,
+   the pattern) are one run, one gesture (one undo step), and each generates from the run's base, the pattern
+   before the run, so a value moved back gives its steps back and ADD / THIN do not pile up. Another key starts
+   a new run: a new gesture, a new base. base() and gesture() are called only then. */
+function genRunFor(run, key, base, gesture) { return run && run.key === key ? run : { key, g: gesture(), base: base(), applied: 0 }; }
 
-/* ---- mutation (DESIGN-generators.md §4.5): each named knob in scope pulled toward a random target,
-   v' = round(v + amount / 100 * (u(seed, t, i) * 127 - v)): 0 % moves nothing, 100 % is fully random,
-   never out of 0..127. Values in, values out:
-     spec: { tracks: [t...], groups: ["syn" | "fx" | "rt" | "<g>:<key>" ...], amount 0..100, seed, protect: ["VOL"] }
-     base: 16 tracks of { m: machine name, v: [24 values] } (the kit before the trial, or now for Walk)
-     names(m): the machine's 24 parameter names (null where it has none; "SYN·DIST" for a synthesis DIST)
-     groupKnobs(t, id): the names of a Sound-page group ("syn:pitch", "fx:flt"...) on that track, or []
-   -> [[t, i, v]...] for every knob in scope (an unmoved one too, so an Again from the base resets it). */
-const MUT_SKIP = /^(MID-|CTR-|GND-EMPTY$)/;
-const MUT_PAGE = { syn: 0, fx: 8, rt: 16 };
-function mutate(spec, base, names, groupKnobs = () => []) {
-	const out = [], protect = new Set(spec.protect || ["VOL"]), plain = n => String(n).replace(/^SYN·/, "");
-	for (const t of spec.tracks) {
-		const tr = base[t];
-		if (!tr || MUT_SKIP.test(tr.m || "GND-EMPTY")) continue;
-		const slots = names(tr.m), idx = new Set();
-		for (const g of spec.groups) {
-			if (g in MUT_PAGE) { for (let i = MUT_PAGE[g]; i < MUT_PAGE[g] + 8; i++) idx.add(i); continue; }
-			for (const n of groupKnobs(t, g)) { const i = slots.indexOf(n); if (i >= 0) idx.add(i); }
-		}
-		for (const i of [...idx].sort((a, b) => a - b)) {
-			if (!slots[i] || protect.has(plain(slots[i]))) continue;
-			const v = tr.v[i], target = genU(spec.seed, t, i) * 127;
-			out.push([t, i, Math.max(0, Math.min(127, Math.round(v + spec.amount / 100 * (target - v))))]);
-		}
-	}
-	return out;
-}
+/* ---- mutation's pull (DESIGN-generators.md §4.5): a value v in 0..max pulled toward a random target u * max by
+   amount (0..100): v' = round(v + amount / 100 * (u * max - v)). 0 % moves nothing, 100 % is the target, never out
+   of 0..max. u in [0, 1), from genU keyed by (seed, track, parameter). */
+function mutPull(v, amount, u, max = 127) { return Math.max(0, Math.min(max, Math.round(v + amount / 100 * (u * max - v)))); }
 
 /* ---- small comforts (DESIGN-generators.md §7): pure step arithmetic the Sequence page sends as plain edits ---- */
 /* rotate: where step s goes when a track moves by steps, wrapping inside [0, len); steps from len on stay */
@@ -136,6 +113,93 @@ function genRamp(s0, v0, s1, v1, keep = () => true) {
 		if (!keep(s)) continue;
 		const v = s1 === s0 ? v1 : v0 + (v1 - v0) * (s - s0) / (s1 - s0);
 		out.push([s, Math.max(0, Math.min(127, Math.round(v)))]);
+	}
+	return out;
+}
+
+/* ---- notes for a rhythm (the Monomachine Editor's GEN NOTES, MM-PORT-PLAN.md d): the rhythm decides when, the
+   notes what. genNotes gives a note to each hit, in step order:
+     spec: { root: MIDI note (the lowest note: the root at its octave), scale: a GEN_SCALES name, range: octaves
+             1..2, motion: "step" (a random walk of 1 or 2 scale degrees up or down from the root, mirrored at the
+             range's ends, the musical default for bass and lead) | "leap" (any note of the range) }
+           | { pool: [MIDI notes] }   (a drum box: each hit picks one of the pool, as BD SD CH OH)
+     hits: the steps, ascending; seed and t (the track) key the draws, so a track keeps its notes when another
+   changes. -> [[step, note]...]. The same spec, hits and seed give the same notes. */
+const GEN_SCALES = { MAJ: [0, 2, 4, 5, 7, 9, 11], MIN: [0, 2, 3, 5, 7, 8, 10], PENT: [0, 3, 5, 7, 10], DORIAN: [0, 2, 3, 5, 7, 9, 10] };
+/* the notes of a scale from root over range octaves, the top root too, ascending, inside MIDI 0..127 */
+function genScale(root, scale, range = 1) {
+	const deg = GEN_SCALES[scale] || GEN_SCALES.MIN, out = [];
+	for (let o = 0; o < range; o++) for (const d of deg) out.push(root + 12 * o + d);
+	out.push(root + 12 * range);
+	return out.filter(n => n >= 0 && n <= 127);
+}
+function genNotes(spec, hits, seed, t = 0) {
+	if (spec.pool) return hits.map(s => [s, spec.pool[Math.floor(genU(seed ^ 0xd2a, t, s) * spec.pool.length)]]);
+	const sc = genScale(spec.root, spec.scale, spec.range), top = sc.length - 1;
+	if (spec.motion === "leap") return hits.map(s => [s, sc[Math.floor(genU(seed ^ 0x1ea9, t, s) * sc.length)]]);
+	let i = 0;
+	return hits.map((s, k) => {
+		if (k > 0 && top > 0) {
+			const r = genU(seed ^ 0x57e9, t, s), d = (r < 0.5 ? -1 : 1) * (r * 4 % 2 < 1 ? 1 : 2);
+			i += d;
+			if (i < 0) i = -i; if (i > top) i = 2 * top - i;
+			i = Math.max(0, Math.min(top, i));
+		}
+		return [s, sc[i]];
+	});
+}
+/* GEN END */
+
+/* ---- the Machinedrum's own: the roles of its machines and the mutation of its kit (24 values a track) ---- */
+/* ---- defaults per machine role (DESIGN-generators.md §4.2), on the machine's name, first match wins.
+   Checked against the catalogue's machines in mdDeskGenTest.js: every drum machine has a role, the
+   MIDI, CTR and input machines, the empty track and the RAM recorders are left alone. */
+const GEN_ROLES = [
+	["keep", /^(MID-|CTR-|INP-|RAM-R|GND-EMPTY$)/],
+	["kick", /-(BD|B2)$/],
+	["snare", /-(SD|CP|RS|CL|BR)$/],
+	["hat", /-(CH|HH)$/],
+	["open", /-OH$/],
+	["cymbal", /-(CY|RC|CC|CB)$/],
+	["perc", /-(XT|XC|LT|MT|HT|MA|ML|TA|TR|SH|BC)$/],
+	["other", /./]];
+/* a euclid default's cycle: 16 steps, or the pattern's length when it is shorter */
+const GEN_DEFAULTS = {
+	kick: n => ({ kind: "euclid", k: 4, n, rot: 0 }),
+	snare: n => ({ kind: "euclid", k: 2, n, rot: 4 }),
+	hat: n => ({ kind: "euclid", k: 8, n, rot: 0, acc: { k: 4, rot: 0 } }),
+	open: n => ({ kind: "euclid", k: 2, n, rot: 2 }),
+	cymbal: () => ({ kind: "random", density: 12, seed: genSeed(), mode: "replace" }),
+	perc: () => ({ kind: "random", density: 15, seed: genSeed(), mode: "replace" }),
+	other: () => ({ kind: "random", density: 10, seed: genSeed(), mode: "replace" }),
+	keep: () => ({ kind: "keep" }) };
+function genRole(m) { return (GEN_ROLES.find(([, re]) => re.test(m || "GND-EMPTY")) || ["other"])[0]; }
+/* len: the pattern's length (1..64) */
+function genDefault(m, len = 64) { return genFit(GEN_DEFAULTS[genRole(m)](Math.min(16, len)), len); }
+/* ---- mutation (DESIGN-generators.md §4.5): each named knob in scope pulled toward a random target,
+   v' = round(v + amount / 100 * (u(seed, t, i) * 127 - v)): 0 % moves nothing, 100 % is fully random,
+   never out of 0..127. Values in, values out:
+     spec: { tracks: [t...], groups: ["syn" | "fx" | "rt" | "<g>:<key>" ...], amount 0..100, seed, protect: ["VOL"] }
+     base: 16 tracks of { m: machine name, v: [24 values] } (the kit before the trial)
+     names(m): the machine's 24 parameter names (null where it has none; "SYN·DIST" for a synthesis DIST)
+     groupKnobs(t, id): the names of a Sound-page group ("syn:pitch", "fx:flt"...) on that track, or []
+   -> [[t, i, v]...] for every knob in scope (an unmoved one too, so an Again from the base resets it). */
+const MUT_SKIP = /^(MID-|CTR-|GND-EMPTY$)/;
+const MUT_PAGE = { syn: 0, fx: 8, rt: 16 };
+function mutate(spec, base, names, groupKnobs = () => []) {
+	const out = [], protect = new Set(spec.protect || ["VOL"]), plain = n => String(n).replace(/^SYN·/, "");
+	for (const t of spec.tracks) {
+		const tr = base[t];
+		if (!tr || MUT_SKIP.test(tr.m || "GND-EMPTY")) continue;
+		const slots = names(tr.m), idx = new Set();
+		for (const g of spec.groups) {
+			if (g in MUT_PAGE) { for (let i = MUT_PAGE[g]; i < MUT_PAGE[g] + 8; i++) idx.add(i); continue; }
+			for (const n of groupKnobs(t, g)) { const i = slots.indexOf(n); if (i >= 0) idx.add(i); }
+		}
+		for (const i of [...idx].sort((a, b) => a - b)) {
+			if (!slots[i] || protect.has(plain(slots[i]))) continue;
+			out.push([t, i, mutPull(tr.v[i], spec.amount, genU(spec.seed, t, i))]);
+		}
 	}
 	return out;
 }

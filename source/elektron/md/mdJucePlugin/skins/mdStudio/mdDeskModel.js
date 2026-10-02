@@ -135,6 +135,10 @@ function kitSlotOf(docs) {
 /* The current kit's document: the working kit when it is the current slot's, else the stored slot
    (until the first working kit arrives, and while a kit change has not brought the new one yet). */
 function workingKitOf(docs) { const w = docs.workingKit; return w && w.slot === kitSlotOf(docs) ? w : null; }
+/* A kit name as text: printable ASCII only (the core's kitNameText, mdDeskLibrary.h). A slot never
+   written holds the battery RAM's bytes (OS 1.63: DEL 0x7f, or 0x7f then left-overs like "MX KIT 1"):
+   no name, so the library shows it EMPTY. */
+function kitNameText(n) { return typeof n === "string" && /^[\x20-\x7e]*$/.test(n) ? n : ""; }
 function kitDocOf(docs) { const w = workingKitOf(docs); return w ? w.doc : docs.kits[kitSlotOf(docs)]; }
 function kitSourceOf(docs) { const w = workingKitOf(docs); return w ? w.source : docs.sources["kit:" + kitSlotOf(docs)] || "none"; }
 function songSlotOf(docs) { const m = machineOf(docs); return m.song && m.song.current != null ? m.song.current : 0; }
@@ -229,8 +233,8 @@ function deriveView(docs, ui) {
 		clipboard: Object.assign({ steps: false, sound: false, songRow: false, kit: null, pattern: null }, M.clipboard || {}),
 		canUndo: !!hist.undo, canRedo: !!hist.redo, undoCount: hist.undoCount || 0, redoCount: hist.redoCount || 0,
 		songReload: !!(M.song && M.song.reloadNeeded), len: 16, length: 16, mult: "1X", swing: 50, accAmt: 0, accAll: false, slideAll: false };
-	for (const k in docs.kits) v.kitNames[k] = docs.kits[k].name;
-	if (K) v.kitNames[kit] = K.name;
+	for (const k in docs.kits) v.kitNames[k] = kitNameText(docs.kits[k].name);
+	if (K) v.kitNames[kit] = kitNameText(K.name);
 	const mutes = new Set(desk.mutes || []);
 	if (P) {
 		v.len = P.totalLength;
@@ -400,3 +404,37 @@ function auditionAt(aud, ms) { return aud && aud.length && aud.rate ? Math.min(1
    EMPTY_DOCS's); nameOf is already this file's own, and V is first set once S (the page's UI
    state, mdDeskApp.js) exists. */
 let V = null;
+
+/* ===== The keyboard (P10): the home row plays the selected track, pure =====
+   A S D F G H J K L are white keys C D E F G A B C D; Z / X move the octave (KEYS_OCT), C / V the velocity
+   a step down / up (KEYS_VELS, from KEYS_VEL; keyVel). OS 1.63 has no
+   chromatic mode: a key is the track's MAP EDITOR note (a trig), and on the sample machines (ROM-nn,
+   RAM-Pn) the pitch is PTCH, which the manual scales (Appendix A, ROM): two octaves up or down, the first
+   octave every third step a semitone (64 ± 36). The second octave's 27 (up) and 28 (down) steps are
+   spread evenly here: the manual gives no step for them. Key C is the sound as its PTCH has it now.
+   The other machines have no semitone scale for PTCH in the manual: the keys trig them at their own
+   pitch; GND-EMPTY is silent and RAM-Rn records on its trigs, so the keys leave both alone. */
+const KEYS_WHITE = "ASDFGHJKL", KEYS_SEMIS = [0, 2, 4, 5, 7, 9, 11, 12, 14], KEYS_OCT = [-2, 2], KEYS_VEL = 100,
+	KEYS_VELS = [20, 40, 60, 80, 100, 127];
+/* the velocity a step d (−1 / +1) from v: the next of KEYS_VELS, held at the ends (a v between steps goes to the nearer one first) */
+function keyVel(v, d) {
+	const up = KEYS_VELS.find(x => x > v), down = [...KEYS_VELS].reverse().find(x => x < v);
+	return d > 0 ? up ?? KEYS_VELS[KEYS_VELS.length - 1] : down ?? KEYS_VELS[0];
+}
+function ptchSemis(v) {
+	const d = v - 64;
+	if (Math.abs(d) <= 36) return d / 3;
+	return d > 0 ? 12 + (d - 36) * 12 / 27 : -12 - (-d - 36) * 12 / 28;
+}
+function semisPtch(s) {
+	const v = Math.abs(s) <= 12 ? 64 + 3 * s : s > 0 ? 100 + (s - 12) * 27 / 12 : 28 - (-s - 12) * 28 / 12;
+	return Math.max(0, Math.min(127, Math.round(v)));
+}
+function keyKind(m) { return /^(ROM-\d+|RAM-P\d)$/.test(m) ? "pitch" : m === "GND-EMPTY" || /^RAM-R\d$/.test(m) ? "none" : "trig"; }
+/* what a white key does on a machine: {kind: "pitch", v: the PTCH to hold} | {kind: "trig"} | {kind: "none"} */
+function keyPlan(m, key, oct, ptch) {
+	const k = KEYS_WHITE.indexOf(key), kind = keyKind(m);
+	if (k < 0) return null;
+	if (kind !== "pitch") return { kind };
+	return { kind, v: semisPtch(ptchSemis(ptch == null ? 64 : ptch) + 12 * oct + KEYS_SEMIS[k]) };
+}

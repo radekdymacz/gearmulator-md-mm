@@ -46,6 +46,11 @@ namespace mmDesk
 		// Press these keys one after another (10 ms held, 10 ms apart, machine time). Over HW
 		// MIDI only Play and Stop exist (MIDI Start / Stop).
 		std::function<bool(const std::vector<Key>&)> pressKeys;
+		// MM-P8: hold BANK _bank (0-3: A/E..D/H) and press the TRIG keys _trigs (0-15) in order, each
+		// held until all are let go (md::panelKeySequence "chain:"), after the keys pressed before. Two
+		// or more make the machine's chain; one is a pattern pick, which ends a chain. Unset: none
+		// (HW MIDI: no message reaches them).
+		std::function<bool(uint8_t _bank, const std::vector<uint8_t>& _trigs)> pressBankTrigs;
 		// The machine's MIDI base channel (the active global's), a fact for an engine that encodes
 		// CCs itself. Unset: not needed.
 		std::function<void(uint8_t _channel)> baseChannel;

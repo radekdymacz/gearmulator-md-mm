@@ -59,10 +59,14 @@ list(APPEND SOURCES
 	skins/mmStudio/mmConvert.js
 	skins/mmStudio/mmAdapter.js
 	skins/mmStudio/mmConvertTest.js
+	skins/mmStudio/mmKeysTest.js
+	skins/mmStudio/mmGenTest.js
+	skins/mmStudio/mmSoundTest.js
 	skins/mmStudio/mmSelfTest.js
 	skins/mdStudio/mdDeskSelfTest.js
 	skins/mdStudio/mdDeskModelTest.js
 	skins/mdStudio/mdDeskGenTest.js
+	skins/mdStudio/mdDeskKeysTest.js
 	skins/mdStudio/mdDeskLive.js
 	skins/mdStudio/mdDeskLibrary.js
 	skins/mdStudio/mdDeskKeys.js
@@ -96,10 +100,12 @@ file(GLOB MM_SKIN_ASSETS CONFIGURE_DEPENDS
 # The tests are not the page, named one by one, not by a file-name pattern: the node tests never
 # ship, the self-tests only with the diagnostics. A test that was renamed or moved stops the
 # configure, so it cannot slip into the glob. The MM glob lists its page files already.
-set(MD_NODE_TESTS "skins/mdStudio/mdDeskModelTest.js" "skins/mdStudio/mdDeskGenTest.js")
+set(MD_NODE_TESTS "skins/mdStudio/mdDeskModelTest.js" "skins/mdStudio/mdDeskGenTest.js" "skins/mdStudio/mdDeskKeysTest.js")
 set(MD_SELF_TESTS "skins/mdStudio/mdDeskSelfTest.js")
 set(MM_SELF_TESTS "skins/mmStudio/mmSelfTest.js")
-foreach(test ${MD_NODE_TESTS} ${MD_SELF_TESTS} ${MM_SELF_TESTS})
+# the MM glob names its page files, so its node tests (mmConvertTest.js, mmKeysTest.js, mmGenTest.js, mmSoundTest.js) never ship; checked to be there
+set(MM_NODE_TESTS "skins/mmStudio/mmConvertTest.js" "skins/mmStudio/mmKeysTest.js" "skins/mmStudio/mmGenTest.js" "skins/mmStudio/mmSoundTest.js")
+foreach(test ${MD_NODE_TESTS} ${MD_SELF_TESTS} ${MM_SELF_TESTS} ${MM_NODE_TESTS})
 	if(NOT EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/${test}")
 		message(FATAL_ERROR "${test} is not there: update the editors' test lists in ${CMAKE_CURRENT_LIST_FILE}")
 	endif()

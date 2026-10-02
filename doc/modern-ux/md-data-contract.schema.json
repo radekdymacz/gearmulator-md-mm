@@ -2012,7 +2012,7 @@
         },
         {
           "type": "object",
-          "description": "P6: a question before something is lost. The page shows message with a confirm button; confirm resends command with force, which answers every question the command raised: a command that loses two things asks once, naming both (also).",
+          "description": "P6: a question before something is lost. The page shows message with a confirm button; confirm resends command with force, which answers every question the command raised: a command that loses two things asks once, naming both (also). alternatives: other ways to go on, each its own button: the page sends its first commands, then command with force (loadKit: Save and load = saveKit first).",
           "required": [
             "type",
             "ask",
@@ -2075,6 +2075,31 @@
             },
             "target": {
               "type": "integer"
+            },
+            "alternatives": {
+              "type": "array",
+              "description": "Other ways to go on, each a button: label, and the commands sent before command with force.",
+              "items": {
+                "type": "object",
+                "required": [
+                  "label",
+                  "first"
+                ],
+                "properties": {
+                  "label": {
+                    "type": "string"
+                  },
+                  "first": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "required": [
+                        "op"
+                      ]
+                    }
+                  }
+                }
+              }
             }
           }
         },
@@ -5170,6 +5195,54 @@
               "type": "integer",
               "minimum": 0,
               "maximum": 15
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "description": "machine: the page's keyboard: track t's MAP EDITOR note at vel (0 = the key let go); i, v: a kit value held while the key is down, restored after (not an edit)",
+          "required": [
+            "op",
+            "t",
+            "vel"
+          ],
+          "properties": {
+            "op": {
+              "const": "keyNote"
+            },
+            "id": {
+              "type": "integer"
+            },
+            "g": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "force": {
+              "type": [
+                "boolean",
+                "integer"
+              ]
+            },
+            "t": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 15
+            },
+            "vel": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 127
+            },
+            "i": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 23
+            },
+            "v": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 127
             }
           },
           "additionalProperties": false

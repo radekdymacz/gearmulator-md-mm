@@ -67,8 +67,8 @@ if (/[?&]selftest=p4(&|$)/.test(location.search)) (async () => {
 	document.querySelector('.ms.m[data-mute="6"]').click(); await until(() => !(desk().mutes || []).length, 2000);
 	/* Chain: A02 A03 A04 in Song, then PLAY; the machine's chain and the order it plays. */
 	S.ws = "song"; S.bank = 0; S.songPick = "chain"; render(); await sleep(200);
+	/* each pad chains at once (150 ms after the last click, the latest wins) */
 	[1, 2, 3].forEach(p => document.querySelector(`[data-chainpad="${p}"]`).click());
-	document.querySelector('[data-chain="send"]').click();
 	p1 = await until(() => desk().chain && desk().chain.active && desk().chain.patterns.join() === "1,2,3", 3000);
 	log(`chain A02 A03 A04 -> firmware chain ${p1 >= 0 ? "ok" : "FAIL"} (${JSON.stringify(desk().chain)})`);
 	render(); log(`the header says what plays: ${$("#songPlays")?.textContent === "CHAIN A02»A03»A04" ? "ok" : "FAIL"} "${$("#songPlays")?.textContent}"`);

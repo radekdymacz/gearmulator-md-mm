@@ -873,7 +873,7 @@
         },
         "can": {
           "type": "object",
-          "required": ["transport", "panelKeys", "recvSession", "lcd", "workingKitMemory", "telemetry", "midiMutes", "poly", "multiTrig", "multiMap", "portamento", "gridRecord"],
+          "required": ["transport", "panelKeys", "recvSession", "lcd", "workingKitMemory", "telemetry", "midiMutes", "poly", "multiTrig", "multiMap", "portamento", "gridRecord", "chains"],
           "additionalProperties": false,
           "properties": {
             "transport": {
@@ -910,6 +910,9 @@
               "type": "boolean"
             },
             "gridRecord": {
+              "type": "boolean"
+            },
+            "chains": {
               "type": "boolean"
             }
           }
@@ -1067,7 +1070,7 @@
     },
     "machine": {
       "type": "object",
-      "required": ["schema", "version", "pattern", "kit", "song", "global", "tempo", "mutes", "poly", "recv", "loading", "roundTripMs", "lifecycle", "capabilities", "engines", "history", "input", "midi", "lifecycleText"],
+      "required": ["schema", "version", "pattern", "kit", "song", "global", "tempo", "mutes", "poly", "desk", "recv", "loading", "roundTripMs", "lifecycle", "capabilities", "engines", "history", "input", "midi", "lifecycleText"],
       "description": "Read-only machine state from the MM desk: current and queued pattern, kit and its working state, song, SYSEX RECV session, and the core's parts (P6: every member declared).",
       "properties": {
         "schema": {
@@ -1233,6 +1236,55 @@
             }
           ],
           "description": "MM-P4: POLY, the machine's audio mode (status 0x20); null until it answers."
+        },
+        "desk": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["chain", "bankGroup"],
+          "description": "MM-P8: the machine's own sequencer state from RAM, as the Machinedrum's machine.desk.",
+          "properties": {
+            "chain": {
+              "oneOf": [
+                {
+                  "type": "null"
+                },
+                {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "description": "The firmware's pattern chain (BANK held + TRIG keys, manual 1-46; RAM 0x2bc2c4). One bank, each pattern once, loops. Played in pattern mode only: in song mode active can stay true while the song plays.",
+                  "required": ["active", "next", "patterns"],
+                  "properties": {
+                    "active": {
+                      "type": "boolean",
+                      "description": "False after a pick (BANK + one TRIG) or STOP twice; a SysEx LOAD PATTERN leaves it (measured)."
+                    },
+                    "next": {
+                      "type": "integer",
+                      "minimum": -1,
+                      "maximum": 16,
+                      "description": "The entry the firmware queues next."
+                    },
+                    "patterns": {
+                      "type": "array",
+                      "maxItems": 16,
+                      "items": {
+                        "type": "integer",
+                        "minimum": 0,
+                        "maximum": 127
+                      }
+                    }
+                  }
+                }
+              ],
+              "description": "null: not readable on this engine (HW MIDI)."
+            },
+            "bankGroup": {
+              "type": "integer",
+              "minimum": -1,
+              "maximum": 1,
+              "description": "The machine's BANK GROUP: 0 A-D, 1 E-H, -1 unknown (RAM 0x70000b)."
+            }
+          }
         },
         "recv": {
           "type": "object",
@@ -1763,20 +1815,20 @@
         },
         {
           "type": "object",
-          "description": "P6: a question before something is lost. The page shows message with a confirm button; confirm resends command with force, which answers every question the command raised: a command that loses two things asks once, naming both (also).",
+          "description": "P6: a question before something is lost. The page shows message with a confirm button; confirm resends command with force, which answers every question the command raised: a command that loses two things asks once, naming both (also). alternatives: other ways to go on, each its own button: the page sends its first commands, then command with force (loadKit: Save and load = saveKit first).",
           "required": ["type", "ask", "message", "confirm", "command"],
           "properties": {
             "type": {
               "const": "ask"
             },
             "ask": {
-              "enum": ["loadKit", "reloadKit", "overwriteSlot", "discardKit", "transportIgnore"]
+              "enum": ["loadKit", "reloadKit", "overwriteSlot", "discardKit", "transportIgnore", "breakChain"]
             },
             "also": {
               "type": "array",
               "description": "Other questions this one answers too (force answers all of them).",
               "items": {
-                "enum": ["loadKit", "reloadKit", "overwriteSlot", "discardKit", "transportIgnore"]
+                "enum": ["loadKit", "reloadKit", "overwriteSlot", "discardKit", "transportIgnore", "breakChain"]
               }
             },
             "message": {
@@ -1797,6 +1849,26 @@
             },
             "target": {
               "type": "integer"
+            },
+            "alternatives": {
+              "type": "array",
+              "description": "Other ways to go on, each a button: label, and the commands sent before command with force.",
+              "items": {
+                "type": "object",
+                "required": ["label", "first"],
+                "properties": {
+                  "label": {
+                    "type": "string"
+                  },
+                  "first": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "required": ["op"]
+                    }
+                  }
+                }
+              }
             }
           }
         },
@@ -2369,6 +2441,51 @@
           "properties": {
             "op": {
               "const": "followHost"
+            },
+            "id": {
+              "type": "integer"
+            },
+            "g": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "force": {
+              "type": ["boolean", "integer"]
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "description": "machine: BANK held + TRIG keys: the machine's pattern chain",
+          "required": ["op", "patterns"],
+          "properties": {
+            "op": {
+              "const": "chain"
+            },
+            "id": {
+              "type": "integer"
+            },
+            "g": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "force": {
+              "type": ["boolean", "integer"]
+            },
+            "patterns": {
+              "type": "array"
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "description": "machine: BANK + the TRIG key of the pattern that plays: ends the chain",
+          "required": ["op"],
+          "properties": {
+            "op": {
+              "const": "chainClear"
             },
             "id": {
               "type": "integer"

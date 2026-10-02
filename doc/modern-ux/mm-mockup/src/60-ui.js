@@ -11,8 +11,8 @@ function ask(html,btns,cls=""){const d=$("#dlg");d.innerHTML=`<div class="dlgbox
    EMU: the app drives that screen itself (the emulator can press the panel).
    HW: edits queue up until you open the screen and press Send. */
 let pstT;
-function structEdited(kind){tx();if(HOST.edited){HOST.edited("struct",kind);return}if(S.engine==="emu"){S.patSent="recv";renderPst();clearTimeout(pstT);pstT=setTimeout(()=>{S.patSent="live";renderPst()},650)}else{S.pend++;S.patSent="pend";renderPst()}}
-function soundEdited(kind){tx();if(HOST.edited){HOST.edited("sound",kind);return}setKitState("edited")}	/* a host's kit state is its machine's (MMView.setKitState) */
+function structEdited(kind){if(!S.genOwn)genEnd();tx();if(HOST.edited){HOST.edited("struct",kind);return}if(S.engine==="emu"){S.patSent="recv";renderPst();clearTimeout(pstT);pstT=setTimeout(()=>{S.patSent="live";renderPst()},650)}else{S.pend++;S.patSent="pend";renderPst()}}
+function soundEdited(kind){if(!S.genOwn)genEnd();tx();if(HOST.edited){HOST.edited("sound",kind);return}setKitState("edited")}	/* a host's kit state is its machine's (MMView.setKitState) */
 function renderPst(){if(HOST.renderPst)return HOST.renderPst();if(S.engine==="hw"&&S.pend)setPst("SEND "+S.pend,"Unsent pattern and song edits. Click to send them.",true);
  else if(S.patSent==="recv")setPst("RECV","The emulator is on SYSEX RECV and takes the dump.");else setPst("","")}
 /* the pattern field's SYSEX RECV state: its text, tooltip, and warn (a click opens the send dialog) */
@@ -34,8 +34,8 @@ function goPattern(p,now){p=(p+128)%128;if(p===S.pat&&S.queued==null)return;cons
  /* a host's machine asks itself (its ask protocol); the mockup's example engine asks here */
  if(kitChange&&S.kitState==="edited"&&!HOST.selectPattern){ask(`<b>${patName(p)}</b> uses kit <b>${kitName(S.patKit[p])}</b>. Your edits to <b>${kitName(S.kit)}</b> are not saved. The Monomachine keeps them in its UNDO KIT slot, but only until the next unsaved switch.`,
   [["Save kit, then switch","cream",()=>{saveKit();go()}],["Switch (edits to UNDO KIT)","danger",go],["Cancel","",()=>{}]]);return}go()}
-function switchNow(p){if(HOST.selectPattern)return HOST.selectPattern(p,true);const was=S.playing;S.queued=null;applyPattern(p);if(was){S.step=-1;toast("Switched now. On the machine this is STOP, LOAD PATTERN, PLAY (not tested).")}}
-function queuePattern(p){if(HOST.selectPattern)return HOST.selectPattern(p,false);if(S.playing){S.queued=p;renderTop();tx();return}applyPattern(p)}
+function switchNow(p){if(HOST.selectPattern)return HOST.selectPattern(p,true);S.plays.chain=null;const was=S.playing;S.queued=null;applyPattern(p);if(was){S.step=-1;toast("Switched now. On the machine this is STOP, LOAD PATTERN, PLAY (not tested).")}}
+function queuePattern(p){if(HOST.selectPattern)return HOST.selectPattern(p,false);S.plays.chain=null;/* a pick ends a chain */if(S.playing){S.queued=p;renderTop();tx();return}applyPattern(p)}
 function applyPattern(p){const kc=S.patKit[p]!==S.kit;
  if(p!==S.pat){S.patData[S.pat]=capturePat();S.patInfo[S.pat]={has:curHas(),len:S.len};S.pat=p;applyPat(S.patData[p]||emptyPat(S.patInfo[p].len))}
  S.queued=null;if(kc){S.kit=S.patKit[p];applyKit(kitData(S.kit));S.workName=S.kits[S.kit].name;setKitState("clean");toast("Loaded "+kitName(S.kit)+" with "+patName(p)+".")}autoRange(S.sel);render();H.last=snap();
@@ -50,11 +50,11 @@ function renderTop(){
  $("#bpm").textContent=S.bpm.toFixed(1);$("#pat").textContent=patName(S.queued??S.pat);$("#pat").parentElement.classList.toggle("queued",S.queued!=null);
  $("#kitname").textContent=kitName(S.kit);const hc=HOST.history?HOST.history():{undo:H.undo.length,redo:H.redo.length};$("#undo").disabled=!hc.undo;$("#redo").disabled=!hc.redo;$("#undon").textContent=hc.undo||"";$("#redon").textContent=hc.redo||"";
  $("#play").setAttribute("aria-pressed",S.playing);$("#playico").textContent=S.playing?"■":"▶";$("#play").setAttribute("aria-label",S.playing?"Stop":"Play");$("#rec").setAttribute("aria-pressed",!!S.rec);$("#recled").classList.toggle("on",!!S.rec);
- renderPst()}
+ renderPst();syncLockBudget()}
 /* line 2: fixed-width slots (as in the MD Editor v46), so values never push into COPY / CLR / PASTE */
 function L2(k,lab,val,title,ed,w=8,id=""){return`<span class="l2 ${ed?"ed":""}" style="width:${w}ch" ${k?`data-l2="${k}"`:""} ${title?`title="${title}"`:""}><small>${lab}</small><b ${id?`id="${id}"`:""}>${val}</b></span>`}
 function renderSub(){const t=S.sel,tr=trk(t);let h="";
- if(S.ws==="seq")h=L2("side","SEQ",S.side==="midi"?"MIDI":"SYNTH","SYNTH or MIDI: which six tracks the rail and the roll show. Click to switch.",1,10)+L2("len","LEN",S.len,"Pattern length 2-64 steps, shared by all tracks. Click = next page (16, 32, 48, 64, then 16 again), shift-click = back, scroll = one step.",1,6)+L2("mult","SPD",S.mult,"Tempo multiplier: 1X, 2X, 3/4X, 3/2X. Click to step.",1,8)+L2("swing","SWG",S.swingAmt+"%","Swing 50-80 %, one amount per pattern. Drag or scroll.",1,7);
+ if(S.ws==="seq")h=L2("side","SEQ",S.side==="midi"?"MIDI":"SYNTH","SYNTH or MIDI: which six tracks the rail and the roll show. Click to switch.",1,9)+L2("len","LEN",S.len,"Pattern length 2-64 steps, shared by all tracks. Click = next page (16, 32, 48, 64, then 16 again), shift-click = back, scroll = one step.",1,6)+L2("dbl","","×2",`Double the pattern: ${S.len} to ${S.len*2} steps, the new half a copy of every track's steps and locks. One undo step.`,1,3)+L2("mult","SPD",S.mult,"Tempo multiplier: 1X, 2X, 3/4X, 3/2X. Click to step.",1,7)+L2("swing","SWG",S.swingAmt+"%","Swing 50-80 %, one amount per pattern. Drag or scroll.",1,7);
  else if(S.ws==="sound")h=L2("","TRK",tLabel(t),"",0,6)+L2("","",isMidiT(t)?"MIDI CH"+String(tr.ch).padStart(2,"0"):tr.m,isMidiT(t)?"LFOs are shared with T"+(t-5):machName(tr.m),0,11);
  else if(S.ws==="mix")h=L2("route","ROUTE",S.routing.replace("3xSTEREO+AB=MIX","3xST+AB=MIX"),"Global routing: 3xSTEREO, 3xSTEREO+AB=MIX or 6xMONO. Click to step.",1,17)+L2("","IN","A B","",0,6);
  else if(S.ws==="perform")h=L2("pmode","MODE",{normal:"AUTO",multi:"MULTI",map:"MAP",poly:"POLY"}[S.mode],"Keyboard mode: auto track, multi trig, multi map or poly. Click to step.",1,10)+L2("","",S.mode==="multi"?["ALL TRK","SPLIT","SEQ STRT","SEQ TRNS"][S.multi.mode]:"","",0,9)+L2("","CH",{normal:"09",multi:"07",map:"08",poly:"09"}[S.mode],"MIDI channel of this keyboard mode","",5);
@@ -99,7 +99,8 @@ function syncControls(){
   if(PAGES.includes(g)||g==="MID"){const pid=g+"."+n;el.classList.toggle("lk",S.locks.has(lkKey(t,pid)));const mb=modBy(t,g,+n);let md=el.querySelector(".mod");
    if(mb.length){if(!md){md=document.createElement("i");md.className="mod";el.appendChild(md)}md.textContent="~"+mb.join("");el.title=`Modulated by LFO ${mb.join(" + ")}`}else if(md)md.remove();
    const mp=S.ctl.links.filter(l=>l.t===t&&l.pid===pid);el.classList.toggle("mapped",mp.length>0)}});
- $$("#main [data-show]").forEach(el=>{const t=+el.dataset.show;el.textContent=trk(t).lev})}
+ $$("#main [data-show]").forEach(el=>{const t=+el.dataset.show;el.textContent=trk(t).lev});
+ if(typeof syncDock==="function")syncDock()}
 
 /* ===== Key-style dropdowns (from the MD Editor) ===== */
 let kFor=null;
@@ -110,10 +111,20 @@ function enhanceSelects(root){root.querySelectorAll("select").forEach(sel=>{if(s
 function openK(btn){const sel=document.getElementById(btn.dataset.for);kFor=btn;const pop=$("#kpop");let n=0,h="";
  for(const node of sel.children){if(node.tagName==="OPTGROUP"){h+=`<div class="kgrp">${node.label}</div>`;for(const o of node.children){h+=kopt(o,sel);n++}}else{h+=kopt(node,sel);n++}}
  const cols=n>24?4:n>18?3:n>9?2:1;pop.innerHTML=`<div class="klist" style="grid-template-columns:repeat(${cols},minmax(0,1fr))">${h}</div>`;
- pop.hidden=false;pop.style.minWidth=Math.max(btn.offsetWidth,cols*110)+"px";const r=btn.getBoundingClientRect();
- let top=r.bottom+scrollY+4;if(r.bottom+pop.offsetHeight+8>innerHeight&&r.top>pop.offsetHeight+8)top=r.top+scrollY-pop.offsetHeight-4;
- pop.style.top=top+"px";pop.style.left=Math.max(16,Math.min(r.left+scrollX,innerWidth-pop.offsetWidth-16))+"px";btn.setAttribute("aria-expanded","true");
- (pop.querySelector(".kopt[aria-selected=true]")||pop.querySelector(".kopt"))?.focus()}
+ pop.hidden=false;pop.style.minWidth=Math.max(btn.offsetWidth,cols*110)+"px";placeK();btn.setAttribute("aria-expanded","true");
+ (pop.querySelector(".kopt[aria-selected=true]")||pop.querySelector(".kopt"))?.focus({preventScroll:true})}
+/* The popup beside its button, inside the window (from the MD Editor): below when it fits, else above; neither:
+   the side with more room, its height capped (the list scrolls). Fixed to the viewport, placed again on resize
+   and scroll. */
+function placeK(){const pop=$("#kpop"),btn=kFor;if(pop.hidden||!btn)return;if(!btn.isConnected){closeK();return}
+ const M=8,G=4,r=btn.getBoundingClientRect(),vw=document.documentElement.clientWidth,vh=document.documentElement.clientHeight;
+ pop.style.position="fixed";pop.style.maxHeight="";pop.style.overflowY="";pop.style.top="0px";pop.style.left="0px";
+ const h=pop.offsetHeight,w=pop.offsetWidth,below=vh-r.bottom-G-M,above=r.top-G-M,down=h<=below||(h>above&&below>=above);
+ if(h>(down?below:above)){pop.style.maxHeight=Math.max(80,down?below:above)+"px";pop.style.overflowY="auto"}
+ const hh=pop.offsetHeight;pop.style.top=Math.round(down?r.bottom+G:Math.max(M,r.top-G-hh))+"px";pop.style.left=Math.round(Math.max(M,Math.min(r.left,vw-w-M)))+"px"}
+addEventListener("resize",placeK);addEventListener("scroll",e=>{if(!$("#kpop").contains(e.target))placeK()},true);
+/* a menu or a picker is open: renders wait for it (busyNow), as for a drag */
+function menuOpen(){return!$("#kpop")?.hidden||!$("#machpop")?.hidden}
 function kopt(o,sel){if(o.hidden)return"";return`<button class="kopt" role="option" data-v="${o.value}" aria-selected="${o.value===sel.value}" ${o.disabled?"disabled":""}>${o.text}</button>`}
 function closeK(){const pop=$("#kpop");if(pop.hidden)return;pop.hidden=true;kFor?.setAttribute("aria-expanded","false")}
 document.addEventListener("click",e=>{const b=e.target.closest(".kselbtn");if(b){const same=kFor===b&&!$("#kpop").hidden;closeK();if(!same)openK(b);return}

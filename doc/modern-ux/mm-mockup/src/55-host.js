@@ -17,12 +17,18 @@
      tempo(bpm), mutes()              the machine's tempo; the tracks' mutes changed (synth and MIDI)
      keyMode(mode)                    the keyboard mode changed ("normal" | "multi" | "map" | "poly"): POLY
                                       is the machine's audio mode
-     record()                         the RECORD key: the host picks GRID or LIVE RECORDING, or off
+     record(live)                     the RECORD key: the host picks GRID or LIVE RECORDING, or off; live
+                                      (Alt+Space): LIVE RECORDING, also when stopped
      songSlot(slot), loadSong(slot)   the Song workspace edits another of the 24 songs; LOAD SONG makes it
                                       the machine's
+     chain(patterns), chainClear()    MM-P8: the Song palette's CHAIN: the machine's own pattern chain (one
+                                      bank, each pattern once, played in order and looped), and its end; what
+                                      the machine then plays comes back through MMView.setPlays
      waiting(), sendNow()             HW MIDI: how many messages wait for the machine's SYSEX RECV, and the
                                       person says it is there (the pattern field's SEND n dialog)
      playKey(note), keyUp(), joy(xy)  the keyboard (a key pressed, the keys let go) and the joystick
+     noteKey(t, note, vel)            the home row: synth track t's note on (vel 1-127) or off (0), real MIDI
+                                      on the track's own channel
      learning(on), learnTarget(target), learnBind(target, knob)
                                       LEARN on or off, the value clicked, the knob pressed for it
      modulators(setup)                the Control workspace's app sources or links changed: the
@@ -39,7 +45,7 @@
      audioDoc(), audioSend(command), audioMeter(on)   the AUDIO / MIDI panel's devices
    The view's side, for a host: window.MMView (130-main.js): values to read, setters (the LCD
    picture, the held key, the pattern field's RECV state, the engine words, the machine's mutes,
-   keyboard mode, RECORD state and songs), and
+   keyboard mode, RECORD state, songs and what plays: its chain, song mode), and
    disable(capability, reason) for what the host's engine cannot do (NA_SEL maps each capability
    to its controls, NA_INFO lists those with none). */
 const HOST=window.MMHost||{};

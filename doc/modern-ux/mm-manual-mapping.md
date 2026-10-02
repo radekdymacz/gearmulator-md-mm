@@ -89,7 +89,7 @@ Measured at 1280 px:
 
 | Manual feature | Control | Firmware path | vs MD Editor |
 |---|---|---|---|
-| SYNTHESIS page, up to 8 per machine; TUNE on every synth machine (1-25) | Sound › Synthesis: 8 keys + a machine-specific screen. SWAVE saw/pulse: oscillator stack, drag UNIW · UNIL. SWAVE-ENS / DPRO-DENS: chord keyboard from PCH2-4. SID: waveform with PW and MOD / MSRC in the title. VO-6: vowel map, drag VOC1 · VOC2, with the tutorial's O / A / I points. DPRO-WAVE / DDRW: morph (WP / MIX). FM+: modulator bars into the carrier. FX: input → machine → track FX | CC 48-55 | Different screens per engine. The MD draws drum decay curves |
+| SYNTHESIS page, up to 8 per machine; TUNE on every synth machine (1-25) | Sound › the machine's groups (MM-PORT-PLAN e, `85-sound-groups.js`: each knob in one group, a small screen per group). SWAVE saw/pulse: oscillator stack, drag UNIW · UNIL. SWAVE-ENS / DPRO-DENS: chord keyboard from PCH2-4. SID: waveform with PW and MOD / MSRC in the title. VO-6: vowel map, drag VOC1 · VOC2, with the tutorial's O / A / I points. DPRO-WAVE / DDRW: morph (WP / MIX). FM+: modulator bars into the carrier. FX: input → machine → track FX | CC 48-55 | Different screens per engine. The MD draws drum decay curves |
 | AMPLIFICATION: ATK HOLD DEC REL (AHDR, HOLD instead of sustain), DIST (headroom below 0), VOL, PAN, PORT (1-26..1-29) | Sound › Amp: AHDR screen with 4 handles and a NOTE OFF marker. DEC 127 is drawn as "holds until note off" (the VO tutorial's setting). DIST and PAN are bipolar | CC 56-63 | New page. The MD has no amp envelope |
 | LEVEL knob, not lockable, not modulated (1-26) | Mix: LEV fader per strip. Its tooltip says it cannot be locked | CC 7 | — |
 | FILTER: BASE / WDTH gap filter, HPQ / LPQ, env ATK / DEC, BOFS / WOFS, key tracking (1-29..1-31) | Sound › Filter: response curve. Drag BASE · HPQ and WDTH · LPQ. A dashed curve shows the envelope peak (BOFS / WOFS added) | CC 72-79 | MD: FLTF / FLTW / FLTQ with one Q; the MM has two Qs and an envelope |
@@ -133,7 +133,7 @@ Measured at 1280 px:
 
 | Manual feature | Control | Firmware path | vs MD Editor |
 |---|---|---|---|
-| ARPEGGIATOR per track (12 per pattern): SPD (6 = 16th), MODE OFF / KEY / SID / ADD, PLAY TRUE / UP / DOWN / CYCLE / RND, RNGE, OJMP, envelope switches AMP / FLT / LFO (1-61..1-63) | Sound › Arpeggiator: MODE and PLAY segs, TRIG keys (disabled on MIDI tracks), SPD RNGE OJMP, a state box in plain words per mode. **The ARP strip at the bottom of the Sequence roll draws what the arpeggiator plays** from the trig's chord | pattern dump | New (no arpeggiator on the MD) |
+| ARPEGGIATOR per track (12 per pattern): SPD (6 = 16th), MODE OFF / KEY / SID / ADD, PLAY TRUE / UP / DOWN / CYCLE / RND, RNGE, OJMP, envelope switches AMP / FLT / LFO (1-61..1-63) | Sequence dock › Arp (the Sound page's Arp key goes there): MODE and PLAY segs, TRIG keys (disabled on MIDI tracks), SPD RNGE OJMP, a state box in plain words per mode. **The ARP strip at the bottom of the Sequence roll draws what the arpeggiator plays** from the trig's chord | pattern dump | New (no arpeggiator on the MD) |
 | Arp RHYTHM + OFFSET track, up to 16 steps, LEVEL = length (1-63) | A 16-cell strip: click = mute, drag = offset (±24), the strip below = length | pattern dump | New |
 | TRANSPOSE: TRACK, PAT (shared), SCALE --- / FIX / MAJ / MIN, KEY (1-63, 1-64) | Sound › Transpose: TRACK, PAT, SCALE, KEY, and the sum it plays. MAJ / MIN hatch the out-of-scale rows in the lane. The Sound › Transpose card shows the sum it plays | pattern dump | New |
 | SWING: amount per pattern (50-80 %), a swing track per track, default every 2nd 16th (1-64, 1-65) | LCD `SWG`, and the SWING row under the lane | pattern dump | MD: swing per pattern or per track; here one amount and a row per track |
@@ -249,3 +249,7 @@ Uncertain, to verify against the ROM or the hardware:
 - **Perform as a first-class workspace.** The MM is played: multi trig split zones, multi map bands, seq start / transpose, the multi envelope, joystick assign and global mutes, with the keyboard at the bottom like the SFX-6.
 - **Control, as in the MD Editor**, mapped onto the MM's own CC table: 7 DATA pages per synth track plus the MIDI page, across 12 tracks.
 - **SysEx honesty.** A `RECV` / `SEND n` state and a guided SYSEX RECV dialog. The MD Editor's live pattern dumps do not exist on the MM.
+
+## Manual errata
+
+- **TRIG SELECT NRPN bit order.** The manual gives the value as `%XXXXALF`; the machine reads it as `%XXXXFLA` (bit 0 = AMP, bit 1 = LFO, bit 2 = FILTER). Reported by a user on Discord (2026-10-01), found by ear on hardware; not yet measured on the emulator. The editor does not send this NRPN today: the trig tracks travel in the pattern dump as separate amp, filter and lfo masks (`mmPattern`). Use `%XXXXFLA` if a live TRIG SELECT is ever sent.

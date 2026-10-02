@@ -85,10 +85,7 @@ namespace mdDesk
 
 		std::string kitNameOf(const ed::MdKit& _k)
 		{
-			std::string n;
-			for(const auto c : _k.name)
-				if(c)
-					n += static_cast<char>(c);
+			const auto n = kitNameText(_k);
 			return n.empty() ? "KIT " + std::to_string(_k.position + 1) : n;
 		}
 
@@ -248,6 +245,7 @@ namespace mdDesk
 		m_pushes.clear();
 		m_working = deskCore::switched<ed::MdKit>();
 		m_keys = {};
+		m_chainQueued.reset();
 		m_lastKit.reset();
 		m_lastPattern.reset();
 		m_audibleQueue.reset();
@@ -601,7 +599,7 @@ namespace mdDesk
 		static const std::map<std::string, Handler> map{
 			{"load", &MdMachine::cmdLoad}, {"select", &MdMachine::cmdSelect}, {"saveKit", &MdMachine::cmdSaveKit},
 			{"reloadKit", &MdMachine::cmdReloadKit}, {"kitLoad", &MdMachine::cmdKitLoad}, {"kitSaveAs", &MdMachine::cmdKitSaveAs},
-			{"record", &MdMachine::cmdRecord}, {"recTrig", &MdMachine::cmdRecTrig}, {"chain", &MdMachine::cmdChain},
+			{"record", &MdMachine::cmdRecord}, {"recTrig", &MdMachine::cmdRecTrig}, {"keyNote", &MdMachine::cmdKeyNote}, {"chain", &MdMachine::cmdChain},
 			{"chainClear", &MdMachine::cmdChainClear}, {"globalSlot", &MdMachine::cmdGlobalSlot},
 			{"selectSong", &MdMachine::cmdSelectSong}, {"reloadSong", &MdMachine::cmdReloadSong},
 			{"sampleName", &MdMachine::cmdSampleName}, {"sampleCancel", &MdMachine::cmdSampleCancel}, {"play", &MdMachine::cmdPlay}, {"stop", &MdMachine::cmdStop},
@@ -688,9 +686,17 @@ namespace mdDesk
 		if(kitState(_view) != deskCore::KitState::Edited)
 			return ok();
 		const auto kit = currentKit();
-		return ask("loadKit", "Load <b>" + kitLabel(_view, static_cast<uint8_t>(*intOf(_command, "k"))) + "</b>? The unsaved edits of <b>"
-			+ (kit ? kitLabel(_view, *kit) : std::string("the kit that plays")) + "</b> go to the machine's UNDO KIT.", "Load (edits to UNDO KIT)",
-			kitDetails(kit));
+		auto o = ask("loadKit", "<b>" + (kit ? kitLabel(_view, *kit) : std::string("The kit that plays")) + "</b> has unsaved changes. Load <b>"
+			+ kitLabel(_view, static_cast<uint8_t>(*intOf(_command, "k"))) + "</b>? Without saving, the machine keeps the edits in its UNDO KIT.",
+			"Load without saving", kitDetails(kit));
+		// Save and load: SAVE KIT to the current slot, then LOAD KIT (the wire keeps their order).
+		if(kit)
+		{
+			Value save = Value::object();
+			save.set("op", "saveKit");
+			o.ask->alternatives.push_back({"Save and load", {std::move(save)}});
+		}
+		return o;
 	}
 
 	Outcome MdMachine::askReloadKit(const Value&, const Documents& _view)
@@ -726,6 +732,8 @@ namespace mdDesk
 	Outcome MdMachine::cmdSelect(const Value& _m, const Documents&)
 	{
 		const auto slot = static_cast<uint8_t>(*intOf(_m, "p"));
+		// A pick ends a chain: one still waiting for its keys is not made.
+		m_chainQueued.reset();
 		if(flagOf(_m, "now") && m_telemetry.playing)
 		{
 			// Switch now: STOP, LOAD PATTERN, PLAY, each step when the machine shows the one before.
@@ -854,8 +862,71 @@ namespace mdDesk
 		return pressKey("trig" + std::to_string(t + 1)) ? ok() : refuse("TRIG keys need the local emulated machine");
 	}
 
+	// The page's keyboard (P10): a key plays track t as a MIDI note from the active global's MAP EDITOR
+	// (the manual's default map: C2 track 1 ... D4 track 16) on its base channel, so the firmware trigs it
+	// at the note's velocity. i, v: a kit value (the sample machines' PTCH, the page's semitone) sent as a
+	// live value just before the note and put back when the key is let go: the machine's momentary state,
+	// never an edit (no undo step, the kit document keeps its value). What it puts back is the value the
+	// key replaced, unless something else moved it meanwhile (then that).
+	Outcome MdMachine::cmdKeyNote(const Value& _m, const Documents& _view)
+	{
+		if(!m_port.sendNote)
+			return refuse("This engine cannot play notes");
+		const auto t = static_cast<size_t>(*intOf(_m, "t"));
+		const auto vel = static_cast<uint8_t>(*intOf(_m, "vel"));
+		const auto release = [&]
+		{
+			auto& h = m_heldKeys[t];
+			if(!h)
+				return;
+			m_port.sendNote(h->channel, h->note, 0);
+			if(h->value && m_port.sendKitParam)
+			{
+				const auto [index, before, sent] = *h->value;
+				const auto* k = heldKit(_view);
+				const auto now = k ? k->params[t][index] : sent;
+				m_port.sendKitParam(static_cast<uint8_t>(t), index, now != sent ? now : before);
+			}
+			h.reset();
+		};
+		release();
+		if(!vel)
+			return ok();
+		static constexpr std::array<uint8_t, 16> defaults{36, 38, 40, 41, 43, 45, 47, 48, 50, 52, 53, 55, 57, 59, 60, 62};
+		std::optional<uint8_t> note;
+		if(_view.global)
+		{
+			for(size_t n = 0; n < 128 && !note; ++n)
+				if(_view.global->keymap[n] == t)
+					note = static_cast<uint8_t>(n);
+		}
+		else
+			note = defaults[t];
+		if(!note)
+			return refuse("Track " + std::to_string(t + 1) + " has no MIDI note in the MAP EDITOR (GLOBAL settings)");
+		const auto channel = static_cast<uint8_t>(_view.global ? _view.global->baseChannel & 0x0f : 0);
+		HeldKey h{channel, *note, std::nullopt};
+		const auto i = intOf(_m, "i"), v = intOf(_m, "v");
+		if(i && v && m_port.sendKitParam)
+			if(const auto* k = heldKit(_view))
+			{
+				const auto index = static_cast<uint8_t>(*i), before = k->params[t][index], sent = static_cast<uint8_t>(*v);
+				if(sent != before)
+				{
+					m_port.sendKitParam(static_cast<uint8_t>(t), index, sent);
+					h.value = std::array<uint8_t, 3>{index, before, sent};
+				}
+			}
+		m_port.sendNote(channel, *note, vel);
+		m_heldKeys[t] = h;
+		return ok();
+	}
+
 	// Chaining as on the machine: hold BANK, press the TRIG keys (mdDeskChain.h). The chain is
-	// the firmware's; the page sees it through the telemetry.
+	// the firmware's; the page sees it through the telemetry. The page sends the chain again at
+	// every pad it adds or takes away: while the keys of the one before are still on their way the
+	// latest waits (one at a time, the latest wins, pumpChain), so two key runs never interleave
+	// and BANK GROUP is pressed from the group the machine is in after the run before.
 	Outcome MdMachine::cmdChain(const Value& _m, const Documents&)
 	{
 		std::vector<int> patterns;
@@ -865,11 +936,21 @@ namespace mdDesk
 		auto errors = validateChain(patterns);
 		if(errors.empty() && !canChain())
 			errors.emplace_back(g_noChains);
-		const auto keys = errors.empty() ? chainKeys(patterns, m_telemetry.bankGroup) : std::vector<std::string>{};
-		if(errors.empty() && keys.empty())
-			errors.emplace_back("The machine's BANK GROUP (A-D / E-H) is not known yet");
 		if(!errors.empty())
 			return {errors, {}, {}};
+		if(keysOnTheirWay())
+		{
+			m_chainQueued = patterns;
+			return ok("Chain next: the machine is still taking the keys before it");
+		}
+		return sendChain(patterns);
+	}
+
+	Outcome MdMachine::sendChain(const std::vector<int>& _patterns)
+	{
+		const auto keys = chainKeys(_patterns, m_telemetry.bankGroup);
+		if(keys.empty())
+			return refuse("The machine's BANK GROUP (A-D / E-H) is not known yet");
 		// Whatever plays switches to the chain. A chain is pattern mode's: in SONG mode the firmware
 		// plays it but stays in SONG mode (measured), so the song would be back after CLEAR, which says
 		// the pattern plays on. Pattern mode first (SET STATUS, harmless when already there).
@@ -882,15 +963,39 @@ namespace mdDesk
 		if(!pressed)
 			return refuse("The panel did not take the keys");
 		return ok(m_telemetry.playing ? "Chained: the machine plays them in this order from the pattern end, and loops"
-			: "Chained: PLAY starts at " + ed::mdPatternName(static_cast<uint8_t>(patterns.front())) + ", then loops");
+			: "Chained: PLAY starts at " + ed::mdPatternName(static_cast<uint8_t>(_patterns.front())) + ", then loops");
 	}
 
-	// CLEAR is LOAD PATTERN of the current pattern, which is what ends a chain on the machine.
+	// The chain (or CLEAR, an empty list) the page asked for while keys were on their way.
+	void MdMachine::pumpChain()
+	{
+		if(!m_chainQueued || keysOnTheirWay())
+			return;
+		const auto patterns = std::move(*m_chainQueued);
+		m_chainQueued.reset();
+		if(patterns.empty())
+		{
+			if(const auto current = m_session.state().pattern)
+				m_session.selectPattern(*current);
+			return;
+		}
+		if(canChain())
+			(void)sendChain(patterns);
+	}
+
+	// CLEAR is LOAD PATTERN of the current pattern, which is what ends a chain on the machine. After
+	// the chain keys still on their way (a LOAD PATTERN before them would be undone by them).
 	Outcome MdMachine::cmdChainClear(const Value&, const Documents&)
 	{
 		const auto current = m_session.state().pattern;
 		if(!current)
 			return refuse("The current pattern is not known yet");
+		if(keysOnTheirWay())
+		{
+			m_chainQueued = std::vector<int>{};
+			return ok("Chain cleared once the machine has taken the keys before it: " + ed::mdPatternName(*current) + " plays on");
+		}
+		m_chainQueued.reset();
 		m_session.selectPattern(*current);
 		return ok("Chain cleared: " + ed::mdPatternName(*current) + " plays on");
 	}
@@ -1336,7 +1441,17 @@ namespace mdDesk
 		const auto kit = currentKit();
 		const auto stored = kit ? _view.kits.find(*kit) : _view.kits.end();
 		return deskCore::kitStateOf(kit ? _view.workingKitOf(*kit) : nullptr, stored == _view.kits.end() ? nullptr : &stored->second,
-			[](const ed::MdKit& _a, const ed::MdKit& _b) { return ed::mdSameKitSound(_a, _b); });
+			[](const ed::MdKit& _a, const ed::MdKit& _b)
+		{
+			// Names as text. LOAD KIT of a slot whose name bytes are no text (never written) names the
+			// working kit NEW KIT (measured, mdDeskFirmwareTest p4): that is the slot as it loads, not an edit.
+			const auto nameOf = [](const ed::MdKit& _k) { const auto t = kitNameText(_k); return t.empty() && _k.name[0] ? std::string("NEW KIT") : t; };
+			if(nameOf(_a) != nameOf(_b))
+				return false;
+			auto b = _b;
+			b.name = _a.name;
+			return ed::mdSameKitSound(_a, b);
+		});
 	}
 
 	void MdMachine::setBaseChannel(const ed::MdGlobal& _g)
@@ -1469,6 +1584,7 @@ namespace mdDesk
 		if(!m_profile.wire && m_probe != Probe::Running)
 			return;
 		releaseKeys();
+		pumpChain();
 		const auto statusEvery = m_wire.replied && m_audibleQueue ? g_statusQueuedMs : g_statusIdleMs;
 		if(_now - m_lastStatusMs >= statusEvery && !keysOnTheirWay())
 		{

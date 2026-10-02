@@ -59,7 +59,7 @@
 	   the first working kit arrives, and while a kit change has not brought the new one yet) */
 	const kitNow = () => working && working.slot === cur("kit") ? working.doc : DOCS.kit[cur("kit")];
 	const globalNow = () => DOCS.global[cur("global")];
-	const last = { mute: [], muteMs: -1e9, poly: null, polyMs: -1e9, record: null, songs: "", ready: false, readyLabel: "", caps: null, modSent: null, note: { g: 0, text: "" } };
+	const last = { mute: [], muteMs: -1e9, poly: null, polyMs: -1e9, record: null, songs: "", plays: null, ready: false, readyLabel: "", caps: null, modSent: null, note: { g: 0, text: "" } };
 	/* the song the Song workspace edits (MM-P4): any of the 24; null = the machine's current one */
 	let songEdit = null;
 	const songSlot = () => songEdit ?? cur("song");
@@ -213,6 +213,7 @@
 		if (changed("global") && DOCS.global[cur("global")]) wantApply.add("global");
 		if (catalogue) showSongs();
 		machineStates(d);
+		showPlays(d);
 		if (queuedIn(d) !== queuedIn(prev)) { V().setQueued(queuedIn(d)); V().renderTop(); V().drawLib(); }
 		/* whether the machine takes input (as the MD page gates: machine.input, not a lifecycle
 		   guess) -- playing is telemetry's only, never the machine document's (P6) */
@@ -233,6 +234,15 @@
 		last.caps = caps;
 		const can = caps.can || {}, why = caps.reasons || {};
 		for (const cap of V().gated()) V().disable(cap, can[cap] === true ? "" : why[cap] || "Not available with this engine.");
+	}
+
+	/* MM-P8: what the machine plays, for the Song page (its header and CHAIN's Plays line): its own chain
+	   (machine.desk.chain, from RAM; null where not readable), song mode and the machine's song */
+	function showPlays(d) {
+		const v = { chain: d.desk?.chain ?? null, songMode: d.song?.songMode === true, song: d.song?.current ?? 0 };
+		if (sameValue(v, last.plays)) return;
+		last.plays = copy(v);
+		V().setPlays(v);
 	}
 
 	/* MM-P4: the machine's own mutes (RAM; made on its panel too) and POLY, unless the page's own change is
@@ -260,6 +270,7 @@
 		songEdit = null;
 		last.record = last.poly = null;
 		last.songs = "";
+		last.plays = null;
 		synced = false;
 		wantApply.clear();
 		last.ready = false;
@@ -371,6 +382,7 @@
 	const trackChannel = t => { const c = chan(); const ch = c ? c.base + t : -1; return ch >= 0 && ch < 16 ? ch : null; };
 	const midi = (b, key) => send({ op: "midi", b }, key ? { key } : {});
 	let held = null;
+	const keysHeld = new Map();	// the home row's sounding notes: "t:n" -> the channel their note on went to
 	function noteOff() { if (held) { midi([0x80 | held.ch, held.n, 0]); held = null; } }
 	function joySend(x, y) {
 		const ch = trackChannel(V().asgT());
@@ -401,11 +413,14 @@
 	}
 
 	/* ---------------- what the plug-in asks, and what it refused ---------------- */
-	/* {type:"ask", ask, message, confirm, command}: its words and two keys; confirm sends the command
-	   again with force */
+	/* {type:"ask", ask, message, confirm, command, alternatives}: its words and its keys; confirm sends the
+	   command again with force; an alternative ("Save and load") sends its first commands, then the same
+	   (as the Machinedrum Editor's onAsk) */
 	function onAsk(m) {
-		const again = () => { const c = Object.assign({}, m.command, { force: true }); delete c.id; send(c); };
-		V().ask(m.message || "The machine asks before it goes on.", m.command ? [[m.confirm || "Go on", "danger", again], ["Cancel", "", () => {}]] : [["OK", "", () => {}]]);
+		const strip = c => { const o = Object.assign({}, c); delete o.id; delete o.force; return o; };
+		const again = () => send(Object.assign(strip(m.command), { force: true }));
+		const alts = m.command ? (m.alternatives || []).map(a => [a.label, "cream", () => { (a.first || []).forEach(c => send(strip(c))); again(); }]) : [];
+		V().ask(m.message || "The machine asks before it goes on.", m.command ? [...alts, [m.confirm || "Go on", "danger", again], ["Cancel", "", () => {}]] : [["OK", "", () => {}]]);
 	}
 	/* LOAD ROM with a firmware installed: the start-up card in its installed form (Boot.showInstalled); the ROM
 	   folder is the editor's, nothing outside it is touched */
@@ -497,10 +512,11 @@
 			last.polyMs = now();
 			send({ op: "poly", on: poly }, { onResult: noteOf });
 		},
-		/* the RECORD key: stopped = GRID RECORDING, playing = LIVE RECORDING, recording = off */
-		record() {
+		/* the RECORD key: stopped = GRID RECORDING, playing = LIVE RECORDING, recording = off; live (Alt+Space,
+		   RECORD + PLAY): LIVE RECORDING also when stopped (the machine starts playing) */
+		record(live) {
 			if (!V().engReady()) return;
-			const mode = last.record && last.record !== "off" ? "off" : V().playing() ? "live" : "grid";
+			const mode = last.record && last.record !== "off" ? "off" : live || V().playing() ? "live" : "grid";
 			send({ op: "record", mode }, { onResult: r => V().toast(!r.ok ? r.errors[0] : mode === "off" ? "Recording off."
 				: mode === "live" ? "LIVE RECORDING: play the keyboard; the notes are recorded to the nearest step."
 				: "GRID RECORDING on the machine: its TRIG keys write steps; the editor reads them back.") });
@@ -511,6 +527,13 @@
 			if (DOCS.song[slot]) { applyCurrentSong(); V().render(); }
 			else send({ op: "load", kind: "song", slot });
 			showSongs();
+		},
+		/* MM-P8: the machine's pattern chain (the Song palette's CHAIN), and its end */
+		chain(patterns) {
+			send({ op: "chain", patterns }, { onResult: r => { if (!r.ok) V().toast(r.errors[0] || "The machine did not take the chain."); } });
+		},
+		chainClear() {
+			send({ op: "chainClear" }, { onResult: r => { if (!r.ok) V().toast(r.errors[0] || "The chain did not end."); } });
 		},
 		loadSong(slot) {
 			send({ op: "loadSong", s: slot }, { onResult: r => V().toast(r.ok ? `S${String(slot + 1).padStart(2, "0")} is the machine's song now.` : r.errors[0]) });
@@ -529,6 +552,20 @@
 			V().setKeyDown(n, `${what} · ${V().noteName(n)} · MIDI channel ${ch + 1}`);
 		},
 		keyUp() { noteOff(); },
+		/* the home row (MM-PORT-PLAN.md b): a note on (vel 1-127) or off (0) for synth track t on its own MIDI
+		   channel (GLOBAL › MIDI › CHANNELS: base + t, while t < span); the off goes where its on went */
+		noteKey(t, n, vel) {
+			const key = t + ":" + n;
+			if (!vel) { const ch = keysHeld.get(key); if (ch != null) { keysHeld.delete(key); midi([0x80 | ch, n, 0]); } return; }
+			const c = chan(), ch = c && t < SYNTH_TRACKS && t < c.span ? c.base + t : -1;
+			if (!(ch >= 0 && ch < 16)) {
+				V().toast(c ? `T${t + 1} has no MIDI channel of its own: CHANNEL SPAN is ${c.span} (GLOBAL › MIDI › CHANNELS).` : "The global is not read yet.");
+				return;
+			}
+			if (keysHeld.has(key)) midi([0x80 | keysHeld.get(key), n, 0]);
+			keysHeld.set(key, ch);
+			midi([0x90 | ch, n, vel]);
+		},
 		joy(xy) { joySend(xy.x, xy.y); },
 		learning(on) { if (!on) send({ op: "learnCancel" }); },
 		learnTarget(lt) {

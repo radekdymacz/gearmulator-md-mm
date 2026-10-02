@@ -37,6 +37,11 @@ namespace mdDesk
 
 	elektronData::MdKit emptyKit(const elektronData::MdKit& _like, uint8_t _slot);
 	elektronData::MdPattern emptyPattern(const elektronData::MdPattern& _like);
-	// A kit counts as empty in the library: no name and every track GND-EMPTY.
+	// A kit's name as text: the bytes up to the NUL when each is printable ASCII (0x20-0x7e), else
+	// none. A slot never written holds what the battery RAM held (measured on OS 1.63: K17-K64 of a
+	// fresh machine hold DEL bytes, 7f 7f 7f 7f 00 10 7f.., or 7f then left-overs like "MX KIT 1",
+	// every track GND-EMPTY): not a name.
+	std::string kitNameText(const elektronData::MdKit& _kit);
+	// A kit counts as empty in the library: no name (kitNameText) and every track GND-EMPTY.
 	bool isEmptyKit(const elektronData::MdKit& _kit);
 }

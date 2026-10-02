@@ -6,6 +6,9 @@ cat src/10-md-base.css src/20-mm.css
 printf '</style>\n'
 cat src/30-body.html
 printf '<script>\n'
-cat src/40-data.js src/50-state.js src/55-host.js src/57-modal.js src/58-boot.js src/59-syx.js src/60-ui.js src/70-seq.js src/80-notes.js src/90-sound.js src/100-mix.js src/110-perform.js src/115-control.js src/120-song.js src/125-lib.js src/127-audio.js src/130-main.js
+cat src/40-data.js src/50-state.js
+# the generators without a machine in them: the Machinedrum Editor's GEN block, from its one source
+sed -n '/^\/\* GEN BEGIN/,/^\/\* GEN END \*\//p' ../../../source/elektron/md/mdJucePlugin/skins/mdStudio/mdDeskGen.js
+cat src/52-gen.js src/55-host.js src/56-keys.js src/57-modal.js src/58-boot.js src/59-syx.js src/60-ui.js src/70-seq.js src/75-comforts.js src/76-gen.js src/80-notes.js src/85-sound-groups.js src/90-sound.js src/100-mix.js src/110-perform.js src/115-control.js src/120-song.js src/125-lib.js src/127-audio.js src/130-main.js
 printf '</script>\n'
 } > index.html

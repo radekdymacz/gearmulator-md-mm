@@ -57,6 +57,14 @@ namespace deskCore
 	// {"type":"ask","ask":what,"also":[...],"message","confirm","command": the command to resend,
 	// ...details}; the page's answer is that command with force. Force answers every question the
 	// command raises, so a command that loses two things asks one question naming both (withAsk).
+	// An alternative is another way to go on: its commands first, then the command with force
+	// ("Save and load": saveKit, then kitLoad with force). Published as
+	// "alternatives":[{"label","first":[commands]}].
+	struct AskAlternative
+	{
+		std::string label;
+		std::vector<Value> first;
+	};
 	struct Ask
 	{
 		std::string what;		// its name ("discardKit", "overwriteSlot", ...)
@@ -64,6 +72,7 @@ namespace deskCore
 		std::string confirm;	// the words on the button that goes on
 		Value details = Value::object();
 		std::vector<std::string> also;	// the other questions this one answers too
+		std::vector<AskAlternative> alternatives;
 	};
 
 	// What an adapter answers a command or a delivery with.
@@ -98,6 +107,9 @@ namespace deskCore
 			for(const auto& [k, v] : b.details.asObject())
 				if(!a.details.find(k))
 					a.details.set(k, v);
+		for(const auto& alt : b.alternatives)
+			if(std::none_of(a.alternatives.begin(), a.alternatives.end(), [&](const AskAlternative& _x) { return _x.label == alt.label; }))
+				a.alternatives.push_back(alt);
 		return _o;
 	}
 
@@ -115,6 +127,21 @@ namespace deskCore
 		}
 		m.set("message", _ask.message);
 		m.set("confirm", _ask.confirm);
+		if(!_ask.alternatives.empty())
+		{
+			Value alts = Value::array();
+			for(const auto& alt : _ask.alternatives)
+			{
+				Value a = Value::object();
+				a.set("label", alt.label);
+				Value first = Value::array();
+				for(const auto& c : alt.first)
+					first.push(c);
+				a.set("first", std::move(first));
+				alts.push(std::move(a));
+			}
+			m.set("alternatives", std::move(alts));
+		}
 		Value command = Value::object();
 		for(const auto& [k, v] : _command.asObject())
 			if(k != "id" && k != "force")

@@ -51,6 +51,7 @@ namespace mdJucePlugin
 			p.sendSysex = [this](const std::vector<uint8_t>& _m) { m_link.sendSysex(_m); };
 			p.sendKitParam = [this](const uint8_t _t, const uint8_t _i, const uint8_t _v) { m_link.setKitParam(_t, _i, _v); };
 			p.sendMute = [this](const uint8_t _t, const bool _on) { m_link.setMute(_t, _on); };
+			p.sendNote = [this](const uint8_t _ch, const uint8_t _n, const uint8_t _v) { m_link.sendNote(_ch, _n, _v); };
 			p.pressKey = [this](const std::string& _key) { return m_link.pressKey(_key); };
 			p.turnKnob = [this](const uint8_t _e, const int _s) { return m_link.turnKnob(_e, _s); };
 			p.nowMs = [] { return nowMs(); };

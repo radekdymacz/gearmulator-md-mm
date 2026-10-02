@@ -30,6 +30,7 @@ namespace mdDesk
 		p.sendSysex = [&_wire](const std::vector<uint8_t>& _m) { _wire.send(_m); };
 		p.sendKitParam = [&_channel, send](const uint8_t _t, const uint8_t _i, const uint8_t _v) { send(deskWire::md::kitParam(_channel, _t, _i, _v)); };
 		p.sendMute = [&_channel, send](const uint8_t _t, const bool _on) { send(deskWire::md::mute(_channel, _t, _on)); };
+		p.sendNote = [send](const uint8_t _ch, const uint8_t _note, const uint8_t _vel) { send(deskWire::md::note(_ch, _note, _vel)); };
 		p.pressKey = [&_wire](const std::string& _key)
 		{
 			const auto b = deskWire::md::realtimeOf(_key);

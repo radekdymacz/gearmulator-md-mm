@@ -425,6 +425,18 @@ void asksAndErrors()
 		const auto* a = last("ask");
 		check(a && a->find("ask")->asString() == "loadKit" && a->find("command")->find("k")->asNumber() == 4 && !a->find("message")->asString().empty(),
 			"LOAD KIT over unsaved edits asks first, with the command to resend");
+		{
+			// its other way on: Save and load = SAVE KIT to the current slot first (MM-PORT-PLAN f)
+			const auto* alts = a ? a->find("alternatives") : nullptr;
+			const auto* alt = alts && alts->isArray() && alts->asArray().size() == 1 ? &alts->asArray()[0] : nullptr;
+			const auto* first = alt ? alt->find("first") : nullptr;
+			check(alt && alt->find("label")->asString() == "Save and load" && first && first->isArray() && first->asArray().size() == 1
+				&& first->asArray()[0].find("op")->asString() == "saveKit" && !first->asArray()[0].find("k"),
+				"LOAD KIT's question offers Save and load: SAVE KIT to the current slot, then the load with force");
+			msg(R"({"op":"loadKit","k":2,"id":4})");
+			const auto* re = last("ask");
+			check(re && re->find("ask")->asString() == "reloadKit" && !re->find("alternatives"), "a reload asks without it (there is nothing to save first)");
+		}
 		msg(R"({"op":"saveKit","k":4,"id":3})");
 		check(last("ask") && last("ask")->find("ask")->asString() == "overwriteSlot", "SAVE KIT over a slot that holds a kit asks first");
 		page.clear();
@@ -471,6 +483,162 @@ void asksAndErrors()
 			d.tick();
 		}
 		check(last("error") != nullptr, "a push the machine never reads back is reported");
+	}
+}
+
+// MM-P8: pattern chaining as on the machine (hold BANK, press the TRIG keys): the keys a chain is, the
+// latest wins while keys are on their way, CLEAR is a pick of the pattern that plays, a pick asks
+// while a chain plays and ends it with its own keys, and HW MIDI refuses with the reason.
+void chains()
+{
+	std::puts("pattern chaining");
+	double now = 0;
+	std::vector<Value> page;
+	std::vector<Bytes> wire;
+	std::vector<std::pair<uint8_t, std::vector<uint8_t>>> bankTrigs;
+	std::vector<mmDesk::Key> keys;
+	mmDesk::Desk::Port port;
+	port.device.sendSysex = [&](const Bytes& _b) { wire.push_back(_b); };
+	port.device.sendParam = [](uint8_t, uint8_t, uint8_t, uint8_t) {};
+	port.device.sendNrpn = [](uint8_t, uint8_t, uint8_t) {};
+	port.device.pressKeys = [&](const std::vector<mmDesk::Key>& _k) { keys.insert(keys.end(), _k.begin(), _k.end()); return true; };
+	port.device.pressBankTrigs = [&](const uint8_t _b, const std::vector<uint8_t>& _t) { bankTrigs.emplace_back(_b, _t); return true; };
+	port.device.nowMs = [&] { return now; };
+	port.toPage = [&](const Value& _v) { page.push_back(_v); g_published.push_back(_v); };
+	const auto last = [&](const char* _type) -> const Value*
+	{
+		for(auto it = page.rbegin(); it != page.rend(); ++it)
+			if(it->find("type")->asString() == _type)
+				return &*it;
+		return nullptr;
+	};
+	const auto status = [](const uint8_t _p, const uint8_t _v) { return Bytes{0xf0, 0, 0x20, 0x3c, 3, 0, 0x72, _p, _v, 0xf7}; };
+	mmDesk::Desk d(port);
+	const auto msg = [&](const std::string& _json) { d.onPageMessage(*ed::json::parse(_json)); };
+	auto tel = screen(mmDesk::Screen::Main);
+	tel.bankGroup = 0;
+	tel.chainKnown = true;
+	const auto run = [&](const double _ms)
+	{
+		for(double e = 0; e < _ms; e += 10)
+		{
+			now += 10;
+			d.onTelemetry(tel);
+			d.tick();
+		}
+	};
+	msg(R"({"op":"ready"})");
+	d.setProbe(mmDesk::Desk::Probe::Running);
+	d.onTelemetry(tel);
+	d.onDeviceSysex(status(0x04, 4));	// A05
+	d.onDeviceSysex(status(0x02, 2));
+	d.onDeviceSysex(status(0x10, 0));	// pattern mode
+	run(20);
+	const auto* m = last("machine");
+	const auto* can = m ? m->find("doc")->find("capabilities")->find("can") : nullptr;
+	check(can && can->find("chains")->asBool(), "the emulator can chain (capabilities.chains)");
+	const auto* desk = m ? m->find("doc")->find("desk") : nullptr;
+	check(desk && desk->find("chain")->isObject() && desk->find("bankGroup")->asNumber() == 0, "the machine document has the chain and BANK GROUP (desk)");
+
+	msg(R"({"op":"chain","id":1,"patterns":[2,4]})");
+	check(bankTrigs.size() == 1 && bankTrigs[0].first == 0 && bankTrigs[0].second == std::vector<uint8_t>{2, 4} && keys.empty(),
+		"a chain in A-D: BANK A held, TRIG 3 and 5 (no BANK GROUP)");
+	msg(R"({"op":"chain","id":2,"patterns":[2,4,1]})");
+	msg(R"({"op":"chain","id":3,"patterns":[2,4,1,7]})");
+	check(bankTrigs.size() == 1 && last("result")->find("note")->asString().find("Chain next") == 0, "re-sent while its keys are on their way: it waits");
+	run(300);
+	check(bankTrigs.size() == 2 && bankTrigs[1].second == std::vector<uint8_t>{2, 4, 1, 7}, "then only the latest goes out (latest wins)");
+	tel.chain = {true, 0, {2, 4, 1, 7}};
+	run(20);
+	desk = last("machine")->find("doc")->find("desk");
+	check(desk->find("chain")->find("active")->asBool() && desk->find("chain")->find("patterns")->asArray().size() == 4, "the machine's chain shows (desk.chain)");
+
+	// E-H: BANK GROUP first; then the group is E-H
+	msg(R"({"op":"chain","id":4,"patterns":[66,64]})");
+	run(300);
+	check(keys.size() == 1 && keys[0] == mmDesk::Key::BankGroup && bankTrigs.size() == 3 && bankTrigs[2].first == 0
+		&& bankTrigs[2].second == std::vector<uint8_t>{2, 0}, "a chain in E-H: BANK GROUP, then BANK A/E held, TRIG 3 and 1");
+	tel.bankGroup = 1;
+	run(20);
+
+	// refusals: the machine's rules
+	msg(R"({"op":"chain","id":5,"patterns":[3]})");
+	check(!last("result")->find("ok")->asBool(), "one pattern is not a chain");
+	msg(R"({"op":"chain","id":6,"patterns":[3,20]})");
+	check(!last("result")->find("ok")->asBool(), "two banks are refused");
+	msg(R"({"op":"chain","id":7,"patterns":[3,5,3]})");
+	check(!last("result")->find("ok")->asBool(), "a pattern twice is refused");
+
+	// a pick while chained: asks, then ends the chain with its own keys (BANK + its TRIG) and LOAD PATTERN
+	tel.chain = {true, 1, {66, 64}};
+	run(20);
+	page.clear();
+	msg(R"({"op":"select","id":8,"p":67})");
+	check(last("ask") && last("ask")->find("ask")->asString() == "breakChain", "a pick while a chain plays asks first (breakChain)");
+	const auto picks = bankTrigs.size();
+	wire.clear();
+	msg(R"({"op":"select","id":9,"p":67,"force":true})");
+	bool load = false;
+	for(const auto& b : wire)
+		load = load || (b.size() > 7 && b[6] == 0x57 && b[7] == 67);
+	check(bankTrigs.size() == picks + 1 && bankTrigs.back().first == 0 && bankTrigs.back().second == std::vector<uint8_t>{3} && load,
+		"confirmed: BANK + TRIG 4 ends the chain (a SysEx LOAD PATTERN alone would not), and LOAD PATTERN E04");
+	tel.chain.active = false;
+	run(300);
+
+	// CLEAR: a pick of the pattern that plays
+	tel.chain = {true, 0, {66, 64}};
+	d.onDeviceSysex(status(0x04, 66));
+	run(20);
+	msg(R"({"op":"chainClear","id":10})");
+	check(bankTrigs.back().second == std::vector<uint8_t>{2} && last("result")->find("note")->asString().find("E03 plays on") != std::string::npos,
+		"CLEAR: BANK + the TRIG key of the pattern that plays (E03 plays on)");
+	// CLEAR right after a chain: after its keys
+	msg(R"({"op":"chain","id":11,"patterns":[68,69]})");
+	const auto before = bankTrigs.size();
+	msg(R"({"op":"chainClear","id":12})");
+	check(bankTrigs.size() == before, "CLEAR while the chain's keys are on their way waits");
+	run(300);
+	check(bankTrigs.size() == before + 1 && bankTrigs.back().second == std::vector<uint8_t>{2}, "then picks the pattern that plays");
+
+	// song mode: a chain switches to pattern mode first (the machine plays no chain in song mode)
+	d.onDeviceSysex(status(0x10, 1));
+	run(20);
+	wire.clear();
+	msg(R"({"op":"chain","id":13,"patterns":[64,65]})");
+	bool patternMode = false;
+	for(const auto& b : wire)
+		patternMode = patternMode || (b.size() > 8 && b[6] == 0x71 && b[7] == 0x10 && b[8] == 0);
+	check(patternMode, "from song mode: SET STATUS pattern mode first");
+	run(300);
+
+	// a new chain drops a queued pick
+	d.onDeviceSysex(status(0x10, 0));
+	tel.chain.active = false;
+	run(20);
+	tel.running = true;
+	run(20);
+	msg(R"({"op":"select","id":14,"p":70})");
+	check(last("machine")->find("doc")->find("pattern")->find("queued")->asNumber() == 70, "a pick while playing is queued");
+	tel.chain = {true, 0, {71, 72}};
+	run(20);
+	check(last("machine")->find("doc")->find("pattern")->find("queued")->isNull(), "a chain the machine now holds drops the queued pick");
+	tel.running = false;
+	run(20);
+
+	// HW MIDI: no keys reach the machine
+	{
+		mmDesk::Desk w(port, mmDesk::wireProfile());
+		page.clear();
+		w.onPageMessage(*ed::json::parse(R"({"op":"ready"})"));
+		w.onDeviceSysex(status(0x04, 1));
+		w.onPageMessage(*ed::json::parse(R"({"op":"chain","id":1,"patterns":[1,2]})"));
+		const auto* r = last("result");
+		check(r && !r->find("ok")->asBool() && r->find("errors")->asArray()[0].asString().find("Appendix C") != std::string::npos,
+			"over HW MIDI a chain is refused with the reason");
+		const auto* mw = last("machine");
+		check(mw && !mw->find("doc")->find("capabilities")->find("can")->find("chains")->asBool() && mw->find("doc")->find("desk")->find("chain")->isNull(),
+			"and capabilities.chains is false, desk.chain null");
 	}
 }
 
@@ -543,6 +711,7 @@ int main(const int _argc, char** _argv)
 	playingFromSteps();
 	modulators();
 	asksAndErrors();
+	chains();
 	checkContract(false);
 	std::printf("%s (%d failures)\n", g_failures ? "FAIL" : "PASS", g_failures);
 	return g_failures ? 1 : 0;

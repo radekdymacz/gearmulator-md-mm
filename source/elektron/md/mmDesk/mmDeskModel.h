@@ -159,7 +159,7 @@ namespace mmDesk
 		// The questions the MM adapter may ask (deskCore::Ask::what): the contract's ask enum.
 		static const std::vector<std::string>& asks()
 		{
-			static const std::vector<std::string> a{"loadKit", "reloadKit", "overwriteSlot", "discardKit", "transportIgnore"};
+			static const std::vector<std::string> a{"loadKit", "reloadKit", "overwriteSlot", "discardKit", "transportIgnore", "breakChain"};
 			return a;
 		}
 	};

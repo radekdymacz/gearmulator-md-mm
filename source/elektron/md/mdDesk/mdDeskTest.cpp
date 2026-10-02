@@ -558,6 +558,30 @@ namespace
 		}
 		const auto undo = h.next(History::Direction::Undo);
 		check(h.size() == 1 && undo && std::get<WorkingKit>(undo->at(0).after).kit == k, "params: a three-apply trial with one g is one undo step, back to the base");
+
+		// A live GEN run (DESIGN-generators.md §4.6): every change of the GEN bar sends steps at once, each from
+		// the pattern the last one made, all with the run's g: one undo step back to the pattern before the run.
+		// The next run (another g) is its own step.
+		{
+			History hg;
+			auto live = docs;
+			const auto before = live.patterns[1];
+			for(int n = 0; n < 4; ++n)
+			{
+				const auto rows = "[{\"t\":3,\"on\":[" + std::to_string(n) + "," + std::to_string(n + 4) + ",12]}" + (n == 3 ? ",{\"t\":5,\"on\":[1,9]}" : "") + "]";
+				r = run(live, cmd(R"({"op":"steps","p":1,"from":0,"to":16,"rows":)" + rows + "}"), clip);
+				check(r.errors.empty() && r.changes.size() == 1, "steps: a live GEN change is one pattern change");
+				if(r.changes.empty())
+					return;
+				live.set(r.changes.at(0).after);
+				hg.record(r.changes, 77);
+			}
+			const auto u = hg.next(History::Direction::Undo);
+			check(hg.size() == 1 && u && std::get<ed::MdPattern>(u->at(0).after) == before, "steps: a four-change GEN run with one g (one change on two tracks) is one undo step, back to the pattern before the run");
+			r = run(live, cmd(R"({"op":"steps","p":1,"from":0,"to":16,"rows":[{"t":3,"on":[2]}]})"), clip);
+			hg.record(r.changes, 78);
+			check(hg.size() == 2, "steps: the next run (another g) is its own undo step");
+		}
 	}
 
 	// Through the Desk: a whole-pattern generator (16 rows) is one pattern dump and one undo step; a
@@ -815,6 +839,15 @@ namespace
 		check(params.size() == 1 && params[0] == std::array<uint8_t, 3>{1, 4, 77}, "kit param goes to the CC path");
 		check(wire.empty(), "no kit dump for a live edit");
 		check(kitWorking(desk) == "edited", "kit is edited");
+		// LOAD KIT over the edits asks: load without saving (the command with force), or save and load.
+		desk.onPageMessage(cmd(R"({"op":"kitLoad","k":3,"id":40})"));
+		const auto* la = lastOf("ask");
+		const auto* alts = la ? la->find("alternatives") : nullptr;
+		check(la && la->find("ask")->asString() == "loadKit" && la->find("confirm")->asString() == "Load without saving" && wire.empty()
+			&& alts && alts->asArray().size() == 1 && alts->asArray()[0].find("label")->asString() == "Save and load"
+			&& alts->asArray()[0].find("first")->asArray()[0].find("op")->asString() == "saveKit"
+			&& la->find("message")->asString().find("unsaved changes") != std::string::npos,
+			"LOAD KIT over unsaved edits asks: Save and load (saveKit first) or Load without saving");
 		// A stored-slot dump does not overwrite the working copy.
 		desk.onDeviceSysex(ed::encodeMdKit(kit));
 		check(desk.documents().working && desk.documents().working->kit.params[1][4] == 77 && desk.documents().kits.at(0).params[1][4] == kit.params[1][4],
@@ -1480,6 +1513,67 @@ namespace
 		check(ok() && !wire.empty() && wire.front() == ed::mdLoadPattern(2), "CLEAR = LOAD PATTERN of the current pattern");
 		desk.onPageMessage(cmd(R"({"op":"chain","patterns":[1,17],"id":6})"));
 		check(!ok(), "a chain across banks is refused");
+
+		// The page sends the chain again at every pad: while the keys of one are on their way the
+		// next waits, and only the latest is pressed (the device reports its keys pending, then none).
+		const auto workOff = [&](const int _bankGroup)
+		{
+			t.panelPending = 2;
+			desk.onTelemetry(t);
+			desk.tick();
+			t.panelPending = 0;
+			t.bankGroup = _bankGroup;
+			desk.onTelemetry(t);
+			desk.tick();
+		};
+		// Keys wait while a dump request is in flight: answer the background loads first.
+		for(int round = 0; round < 4000; ++round)
+		{
+			auto sent = std::move(wire);
+			wire.clear();
+			for(const auto& m : sent)
+			{
+				if(m.size() != 9)
+					continue;
+				const auto s = m[7];
+				if(m == ed::mdKitRequest(s)) { ed::MdKit k; k.position = s; desk.onDeviceSysex(ed::encodeMdKit(k)); }
+				else if(m == ed::mdPatternRequest(s)) { ed::MdPattern p; p.position = s; desk.onDeviceSysex(ed::encodeMdPattern(p)); }
+				else if(m == ed::mdSongRequest(s)) { ed::MdSong g; g.position = s; desk.onDeviceSysex(ed::encodeMdSong(g)); }
+				else if(m == ed::mdGlobalRequest(s)) { ed::MdGlobal g; g.position = s; desk.onDeviceSysex(ed::encodeMdGlobal(g)); }
+			}
+			now += 20;
+			desk.tick();
+			if(!desk.isBusy() && desk.documents().kits.size() == 64 && desk.documents().patterns.size() == 128 && wire.empty())
+				break;
+		}
+		check(desk.documents().kits.size() == 64, "the background loads answered");
+		t.panelPending = 0;
+		desk.onTelemetry(t);
+		now += 5000;
+		desk.tick();
+		wire.clear();
+		keys.clear();
+		desk.onPageMessage(cmd(R"({"op":"chain","patterns":[65,64],"id":7})"));
+		check(ok() && keys == std::vector<std::string>{"bankGroup", "chain:0:1,0"}, "chain E02 E01 from A-D: BANK GROUP, then the chain");
+		desk.onPageMessage(cmd(R"({"op":"chain","patterns":[65,64,66],"id":8})"));
+		desk.onPageMessage(cmd(R"({"op":"chain","patterns":[65,64,66,67],"id":9})"));
+		desk.tick();
+		check(ok() && keys.size() == 2, "chains sent while the keys before are on their way wait");
+		workOff(1);
+		check(keys.size() == 3 && keys.back() == "chain:0:1,0,2,3", "then only the latest is pressed, from the group the machine is in now (no second BANK GROUP)");
+		wire.clear();
+		desk.onPageMessage(cmd(R"({"op":"chainClear","id":10})"));
+		check(ok() && std::none_of(wire.begin(), wire.end(), [](const std::vector<uint8_t>& _b) { return _b == ed::mdLoadPattern(2); }),
+			"CLEAR while the chain keys are on their way waits for them");
+		workOff(1);
+		check(std::any_of(wire.begin(), wire.end(), [](const std::vector<uint8_t>& _b) { return _b == ed::mdLoadPattern(2); }) && keys.size() == 3,
+			"then LOAD PATTERN ends the chain");
+		now += 2000;
+		desk.onPageMessage(cmd(R"({"op":"chain","patterns":[65,64],"id":11})"));
+		desk.onPageMessage(cmd(R"({"op":"chain","patterns":[65,66],"id":12})"));
+		desk.onPageMessage(cmd(R"({"op":"select","p":5,"force":true,"id":13})"));
+		workOff(1);
+		check(keys.size() == 4, "a pick drops a chain still waiting for its keys");
 	}
 
 	// P4: the editor's setup (modulators, knob CCs) is saved with the project.
@@ -1560,6 +1654,18 @@ namespace
 			"kit paste: a slot write into K10");
 		r = run(docs, cmd(R"({"op":"kitClear","k":9})"), clip);
 		check(r.changes.size() == 1 && isEmptyKit(std::get<ed::MdKit>(r.changes[0].after)), "kit clear: an empty kit");
+		{
+			// A slot never written (OS 1.63, a fresh machine's K41): DEL bytes, every track GND-EMPTY.
+			ed::MdKit unused;
+			unused.name = {0x7f, 0x7f, 0x7f, 0x7f, 0x00, 0x10, 0x7f, 0, 0, 0, 0x7f, 0x7f, 0x7f, 0x7f, 0x00, 0x10};
+			auto leftover = unused;
+			leftover.name = {0x7f, 'M', 'X', ' ', 'K', 'I', 'T', ' ', '1', 0, 0, 0x7f, 0x17, 0x18, 0x7f, 0x19};
+			auto named = unused;
+			named.name = {'T', 'R', 'X', ' ', 'U', 'W', 0, 'B', 'E', 'T', 0, 0x7f, 0x17, 0x18, 0x7f, 0x19};
+			check(kitNameText(unused).empty() && isEmptyKit(unused) && kitNameText(leftover).empty() && isEmptyKit(leftover),
+				"an unwritten slot's bytes are no name: the slot is empty");
+			check(kitNameText(named) == "TRX UW" && !isEmptyKit(named), "a name ends at its NUL (the bytes after it are not the name)");
+		}
 		r = run(docs, cmd(R"({"op":"kitRename","k":9,"name":"new kit"})"), clip);
 		check(r.changes.size() == 1 && std::get<ed::MdKit>(r.changes[0].after).name[0] == 'N', "rename: upper case, 16 characters");
 		check(!run(docs, cmd(R"({"op":"kitCopyTo","from":9,"to":9})"), clip).errors.empty(), "same slot refused");
@@ -2080,6 +2186,75 @@ namespace
 	// The executable spec (deskCore::contract): every published message against the contract and the
 	// contract's machine document against what was published; $defs/command generated from the
 	// tables (mdDeskTest --write-schema rewrites it); the adapter's functions against the table.
+	// P10, the page's keyboard: a key is the track's MAP EDITOR note on the base channel, a held PTCH is a live
+	// value sent before it and put back when the key is let go (not an edit: the kit document keeps its value).
+	void testKeyNote()
+	{
+		std::vector<std::array<uint8_t, 3>> params, notes;
+		std::vector<Value> page;
+		double now = 0;
+		Desk::Port port;
+		std::vector<std::string> order;
+		port.device.sendSysex = [](const std::vector<uint8_t>&) {};
+		port.device.sendKitParam = [&](uint8_t _t, uint8_t _i, uint8_t _v) { params.push_back({_t, _i, _v}); order.push_back("cc"); };
+		port.toPage = [&](const Value& _m) { page.push_back(_m); g_published.push_back(_m); };
+		port.device.nowMs = [&] { return now; };
+		{
+			Desk none(port);
+			none.onPageMessage(cmd(R"({"op":"ready"})"));
+			Telemetry tel;
+			tel.valid = true;
+			tel.bootAnimation = 0;
+			none.onTelemetry(tel);
+			none.onPageMessage(cmd(R"({"op":"keyNote","t":0,"vel":100,"id":1})"));
+			const Value* r = nullptr;
+			for(auto it = page.rbegin(); it != page.rend() && !r; ++it)
+				if(it->find("type") && it->find("type")->asString() == "result")
+					r = &*it;
+			check(r && !r->find("ok")->asBool(), "keyNote: an engine without notes refuses");
+		}
+		port.device.sendNote = [&](uint8_t _c, uint8_t _n, uint8_t _v) { notes.push_back({_c, _n, _v}); order.push_back("note"); };
+		Desk desk(port);
+		const auto status = [](const ed::MdStatus _p, const uint8_t _v)
+		{
+			return std::vector<uint8_t>{0xf0, 0x00, 0x20, 0x3c, 0x02, 0x00, 0x72, static_cast<uint8_t>(_p), _v, 0xf7};
+		};
+		const auto ok = [&]
+		{
+			for(auto it = page.rbegin(); it != page.rend(); ++it)
+				if(it->find("type") && it->find("type")->asString() == "result")
+					return it->find("ok")->asBool();
+			return false;
+		};
+		auto kit = *ed::decodeMdKit(load("programmed_kit_0.syx"));
+		desk.onPageMessage(cmd(R"({"op":"ready"})"));
+		desk.onDeviceSysex(status(ed::MdStatus::Kit, kit.position));
+		desk.onDeviceSysex(ed::encodeMdKit(kit));
+		Telemetry tel;
+		tel.valid = true;
+		tel.bootAnimation = 0;
+		desk.onTelemetry(tel);
+		const auto before = kit.params[4][0];
+		const auto held = static_cast<uint8_t>(before == 70 ? 73 : 70);
+		desk.onPageMessage(cmd(R"({"op":"keyNote","t":4,"vel":100,"id":2})"));
+		check(ok() && notes.size() == 1 && notes[0] == std::array<uint8_t, 3>{0, 43, 100} && params.empty(),
+			"keyNote: track 5 is G2 (43, the manual's default map) on the base channel, no kit value");
+		desk.onPageMessage(cmd(R"({"op":"keyNote","t":4,"vel":0,"id":3})"));
+		check(ok() && notes.size() == 2 && notes[1] == std::array<uint8_t, 3>{0, 43, 0}, "keyNote: let go is the note off");
+		order.clear();
+		desk.onPageMessage(cmd("{\"op\":\"keyNote\",\"t\":4,\"vel\":127,\"i\":0,\"v\":" + std::to_string(held) + ",\"id\":4}"));
+		check(ok() && params.size() == 1 && params[0] == std::array<uint8_t, 3>{4, 0, held} && order == std::vector<std::string>{"cc", "note"},
+			"keyNote: the held PTCH goes before the note");
+		const auto* w = desk.documents().working ? &desk.documents().working->kit : nullptr;
+		check(w && w->params[4][0] == before, "keyNote: the kit document keeps its PTCH (not an edit)");
+		desk.onPageMessage(cmd(R"({"op":"undo","id":5})"));
+		desk.onPageMessage(cmd(R"({"op":"keyNote","t":4,"vel":0,"id":6})"));
+		check(ok() && params.size() == 2 && params[1] == std::array<uint8_t, 3>{4, 0, before} && notes.back()[2] == 0,
+			"keyNote: let go puts the PTCH back");
+		desk.onPageMessage(cmd(R"({"op":"keyNote","t":4,"vel":0,"id":7})"));
+		check(ok() && params.size() == 2, "keyNote: a second let go sends no value");
+	}
+
 	void checkContract(const bool _write)
 	{
 		namespace contract = deskCore::contract;
@@ -2250,6 +2425,7 @@ int main(const int _argc, char** _argv)
 	testAuditionMixer();
 	testSampleWaveAndAudition();
 	testModulators();
+	testKeyNote();
 	testFakeAdapter();
 	checkContract(false);
 	if(g_failures)

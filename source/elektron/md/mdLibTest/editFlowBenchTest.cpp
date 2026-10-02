@@ -320,6 +320,7 @@ namespace
 		case K::Record: return C::Record;
 		case K::LiveRecord: return C::Play;
 		case K::MuteWindow: return C::BankGroup;
+		case K::BankGroup: return C::BankGroup;
 		case K::Trig9: case K::Trig10: case K::Trig11: case K::Trig12: case K::Trig13: case K::Trig14:
 			return static_cast<C>(static_cast<int>(C::Trigger1) + 8 + (static_cast<int>(_k) - static_cast<int>(K::Trig9)));
 		}

@@ -27,6 +27,12 @@ namespace mmDesk
 		constexpr double g_recordReadMs = 1000;				// while recording: the current pattern read back this often
 		constexpr deskCore::LoadQueue<Ref>::Policy g_loadPolicy{25, 2};
 		constexpr double g_loadTimeoutMs = 400;
+		// A panel key state is held 10 ms (DevicePort::pressKeys); the keys are through after their states
+		// and a little more (the telemetry shows what they did).
+		constexpr double g_keyStateMs = 10;
+		constexpr double g_keysMarginMs = 60;
+		constexpr const char* g_noChains = "A chain is made with the Monomachine's keys (hold BANK, press the TRIG keys; manual 1-46), and over"
+			" MIDI no message reaches them: Appendix C has no SysEx for chaining or for the keys. Chain on the machine's panel.";
 
 		// The dump a request brings back, for timeouts at DIN speed (the kind's record).
 		size_t replyBytes(const Kind _k)
@@ -138,6 +144,8 @@ namespace mmDesk
 		m_poly = m_lastRecording = -1;
 		m_curPattern = m_curKit = m_curSong = m_curGlobal = m_songMode = m_queuedPattern = -1;
 		m_sequence.clear();
+		m_chainQueued.reset();
+		m_keysUntilMs = -1e9;
 		startedOver();
 	}
 
@@ -161,6 +169,8 @@ namespace mmDesk
 			" (Appendix B: CC 3 mutes the six synth tracks only; Appendix C has no mute SysEx). Use FUNCTION + BANK GROUP on the machine.");
 		c.set("gridRecord", machineState(), "Over MIDI the recording modes cannot be switched: RECORD has no MIDI message (Appendix C)."
 			" Press RECORD on the Monomachine.");
+		// MM-P8: pattern chaining is the machine's keys, and the chain is read from its RAM.
+		c.set("chains", canChain(), g_noChains);
 		// SysEx and kit or global data on every engine.
 		c.set("poly", true);
 		c.set("multiTrig", true);
@@ -253,23 +263,40 @@ namespace mmDesk
 		if(k == m_curKit)
 			return ask("reloadKit", "Reload <b>" + kitLabel(_view, k) + "</b> from the machine? Your edits go to its UNDO KIT.",
 				"Reload (discard edits)");
-		return ask("loadKit", "Load <b>" + kitLabel(_view, k) + "</b>? Your edits to <b>" + kitLabel(_view, m_curKit)
-			+ "</b> are not saved on the machine. They go to its UNDO KIT.", "Load (edits to UNDO KIT)");
+		auto o = ask("loadKit", "Load <b>" + kitLabel(_view, k) + "</b>? Your edits to <b>" + kitLabel(_view, m_curKit)
+			+ "</b> are not saved on the machine. Without saving, they go to its UNDO KIT.", "Load without saving");
+		// Save and load (MM-PORT-PLAN f, as the Machinedrum's): SAVE KIT to the current slot, then LOAD KIT
+		// with force (the wire keeps their order).
+		Value save = Value::object();
+		save.set("op", "saveKit");
+		o.ask->alternatives.push_back({"Save and load", {std::move(save)}});
+		return o;
 	}
 
 	// A pattern that links another kit loads it: the unsaved edits of the kit that plays are lost.
 	Outcome MmMachine::askSelect(const Value& _command, const Documents& _view)
 	{
 		const auto p = num(_command, "p");
+		Outcome chain;
+		// MM-P8: a pick ends the machine's chain (manual 1-46), so it asks first
+		if(chained())
+		{
+			std::string list;
+			for(const auto c : m_tel.chain.patterns)
+				list += (list.empty() ? "" : " » ") + ed::mmPatternName(c);
+			chain = ask("breakChain", "Picking <b>" + ed::mmPatternName(static_cast<uint8_t>(p)) + "</b> ends the chain <b>" + list + "</b>, as on the machine.",
+				"Pick it, end the chain");
+			chain.ask->details.set("p", p);
+		}
 		const auto it = _view.patterns.find(static_cast<uint8_t>(p));
 		if(it == _view.patterns.end() || static_cast<int>(it->second.kit) == m_curKit || kitState(_view) != deskCore::KitState::Edited)
-			return ok();
+			return chain;
 		Outcome o = ask("discardKit", "<b>" + ed::mmPatternName(static_cast<uint8_t>(p)) + "</b> uses kit <b>" + kitLabel(_view, it->second.kit)
 			+ "</b>. Your edits to <b>" + kitLabel(_view, m_curKit) + "</b> are not saved on the machine and will be lost.", "Switch and lose edits");
 		o.ask->details.set("p", p);
 		o.ask->details.set("kit", m_curKit);
 		o.ask->details.set("target", static_cast<int>(it->second.kit));
-		return o;
+		return deskCore::withAsk(std::move(chain), o);
 	}
 
 	// SAVE KIT n over another slot that holds a kit.
@@ -311,7 +338,38 @@ namespace mmDesk
 		const auto s = m_recv.state();
 		if(s == RecvSession::State::Entering || s == RecvSession::State::ToMain || s == RecvSession::State::Leaving)
 			return false;
-		return m_port.pressKeys && m_port.pressKeys(_keys);
+		if(!m_port.pressKeys || !m_port.pressKeys(_keys))
+			return false;
+		size_t states = 0;
+		for(const auto k : _keys)
+			states += isChord(k) ? 4 : 2;
+		m_keysUntilMs = std::max(m_keysUntilMs, now()) + static_cast<double>(states) * g_keyStateMs + g_keysMarginMs;
+		return true;
+	}
+
+	bool MmMachine::pressBankTrigs(const std::vector<int>& _patterns)
+	{
+		if(_patterns.empty() || !m_port.pressBankTrigs || m_tel.bankGroup < 0)
+			return false;
+		const int bank = _patterns.front() >> 4;
+		// BANK GROUP first when the patterns are in the other half (A-D / E-H share the BANK keys)
+		if((bank >= 4 ? 1 : 0) != m_tel.bankGroup && !pressKeys({Key::BankGroup}))
+			return false;
+		std::vector<uint8_t> trigs;
+		for(const auto p : _patterns)
+			trigs.push_back(static_cast<uint8_t>(p & 15));
+		if(!m_port.pressBankTrigs(static_cast<uint8_t>(bank & 3), trigs))
+			return false;
+		// BANK, each TRIG, the TRIG rows let go, BANK let go
+		const auto states = 2 + trigs.size() + 2;
+		m_keysUntilMs = std::max(m_keysUntilMs, now()) + static_cast<double>(states) * g_keyStateMs + g_keysMarginMs;
+		return true;
+	}
+
+	bool MmMachine::keysOnTheirWay() const
+	{
+		const auto r = m_recv.state();
+		return now() < m_keysUntilMs || (r != RecvSession::State::Idle && r != RecvSession::State::Failed);
 	}
 
 	// ---- core -> machine ----
@@ -507,7 +565,8 @@ namespace mmDesk
 			{"saveKit", &MmMachine::cmdSaveKit}, {"loadSong", &MmMachine::cmdLoadSong}, {"saveSong", &MmMachine::cmdSaveSong},
 			{"tempo", &MmMachine::cmdTempo}, {"play", &MmMachine::cmdPlay}, {"stop", &MmMachine::cmdStop},
 			{"mute", &MmMachine::cmdMute}, {"followHost", &MmMachine::cmdFollowHost}, {"muteMidi", &MmMachine::cmdMuteMidi},
-			{"poly", &MmMachine::cmdPoly}, {"record", &MmMachine::cmdRecord}, {"hwSend", &MmMachine::cmdHwSend}};
+			{"poly", &MmMachine::cmdPoly}, {"record", &MmMachine::cmdRecord}, {"hwSend", &MmMachine::cmdHwSend},
+			{"chain", &MmMachine::cmdChain}, {"chainClear", &MmMachine::cmdChainClear}};
 		return map;
 	}
 
@@ -542,6 +601,12 @@ namespace mmDesk
 		const auto p = num(_m, "p");
 		const auto* nowFlag = _m.find("now");
 		const bool playing = m_playing;
+		// MM-P8: a pick ends a chain; one still waiting for its keys is not made. A SysEx LOAD PATTERN
+		// leaves the machine's chain (the pattern plays once, then the chain goes on, measured): the pick
+		// is the machine's own, BANK + its TRIG key, which ends it (the LOAD PATTERN below picks the same).
+		m_chainQueued.reset();
+		if(chained() && canChain() && !pressBankTrigs({p}))
+			return refuse("The panel did not take the keys that end the chain; try again.");
 		if(nowFlag && nowFlag->isBool() && nowFlag->asBool() && playing)
 		{
 			// The machine only switches at the pattern end: STOP, LOAD PATTERN, PLAY, each when the
@@ -761,6 +826,109 @@ namespace mmDesk
 		m_manual.clear();
 		return ok(std::to_string(n) + (n == 1 ? " message" : " messages") + " sent. Press EXIT on the Monomachine when the editor has read"
 			" them back (the pattern field is empty again).");
+	}
+
+	// MM-P8: chaining as on the machine (manual 1-46): hold BANK, press the TRIG keys (one bank, each
+	// pattern once; DevicePort::pressBankTrigs). The chain is the firmware's; the page sees it in the
+	// machine document (desk.chain, from RAM). The page sends the chain again at every pad it adds or
+	// takes away: while the keys of the one before are still on their way the latest waits (one at a
+	// time, the latest wins, pumpChain), so two key runs never interleave and BANK GROUP is pressed from
+	// the half the machine is in after the run before.
+	Outcome MmMachine::cmdChain(const Value& _m, const Documents&)
+	{
+		std::vector<int> patterns;
+		if(const auto* list = _m.find("patterns"); list && list->isArray())
+			for(const auto& v : list->asArray())
+				patterns.push_back(v.isNumber() ? static_cast<int>(v.asNumber()) : -1);
+		std::vector<std::string> errors;
+		if(patterns.size() < 2)
+			errors.emplace_back("A chain needs at least two patterns");
+		if(patterns.size() > 16)
+			errors.emplace_back("A chain holds at most 16 patterns (one bank)");
+		std::set<int> seen;
+		for(const int p : patterns)
+		{
+			if(p < 0 || p > 127)
+			{
+				errors.emplace_back("patterns: " + std::to_string(p) + " is not a pattern 0-127");
+				break;
+			}
+			if(!seen.insert(p).second)
+				errors.emplace_back("Each pattern can be in the chain once (the machine's rule)");
+			if((p >> 4) != (patterns.front() >> 4))
+			{
+				errors.emplace_back("The machine chains patterns from one bank only");
+				break;
+			}
+		}
+		if(errors.empty() && !canChain())
+			errors.emplace_back(g_noChains);
+		if(!errors.empty())
+			return {errors, {}, {}};
+		if(keysOnTheirWay())
+		{
+			m_chainQueued = patterns;
+			return ok(now() >= m_keysUntilMs ? "Chain next: the machine is on its way to or from SYSEX RECV"
+				: "Chain next: the machine is still taking the keys before it");
+		}
+		return sendChain(patterns);
+	}
+
+	Outcome MmMachine::sendChain(const std::vector<int>& _patterns)
+	{
+		if(m_tel.bankGroup < 0)
+			return refuse("The machine's BANK GROUP (A-D / E-H) is not known yet");
+		// A chain is pattern mode's: in song mode the machine keeps the chain but plays the song (measured).
+		// Pattern mode first (SET STATUS), as the Machinedrum's.
+		if(m_songMode != 0)
+		{
+			m_port.sendSysex(ed::mmSetStatus(ed::MmStatus::SongMode, 0));
+			m_port.sendSysex(ed::mmStatusRequest(ed::MmStatus::SongMode));
+		}
+		if(!pressBankTrigs(_patterns))
+			return refuse("The panel did not take the keys");
+		m_queuedPattern = -1;
+		return ok(m_playing ? "Chained: the machine plays them in this order from the pattern end, and loops"
+			: "Chained: PLAY starts at " + ed::mmPatternName(static_cast<uint8_t>(_patterns.front())) + ", then loops");
+	}
+
+	// The chain (or CLEAR, an empty list) the page asked for while keys were on their way.
+	void MmMachine::pumpChain()
+	{
+		if(!m_chainQueued || keysOnTheirWay())
+			return;
+		const auto patterns = std::move(*m_chainQueued);
+		m_chainQueued.reset();
+		if(!canChain())
+			return;
+		if(patterns.empty())
+		{
+			if(m_curPattern >= 0)
+				pressBankTrigs({m_curPattern});
+			return;
+		}
+		(void)sendChain(patterns);
+	}
+
+	// CLEAR is the machine's own way to end a chain: BANK + the TRIG key of the pattern that plays (a pick
+	// of it; measured: "active" clears and it plays on). A SysEx LOAD PATTERN would not end it. After the
+	// chain keys still on their way.
+	Outcome MmMachine::cmdChainClear(const Value&, const Documents&)
+	{
+		if(!canChain())
+			return refuse(g_noChains);
+		if(m_curPattern < 0)
+			return refuse("The current pattern is not known yet");
+		const auto name = ed::mmPatternName(static_cast<uint8_t>(m_curPattern));
+		if(keysOnTheirWay())
+		{
+			m_chainQueued = std::vector<int>{};
+			return ok("Chain cleared once the machine has taken the keys before it: " + name + " plays on");
+		}
+		m_chainQueued.reset();
+		if(!pressBankTrigs({m_curPattern}))
+			return refuse(m_tel.bankGroup < 0 ? "The machine's BANK GROUP (A-D / E-H) is not known yet" : "The panel did not take the keys");
+		return ok("Chain cleared: " + name + " plays on");
 	}
 
 	void MmMachine::pumpSequence(const double _now)
@@ -993,7 +1161,20 @@ namespace mmDesk
 
 	bool MmMachine::onTelemetry(const Telemetry& _t)
 	{
+		// MM-P8: a chain the firmware now holds (made here or on the panel) is what plays next: a queued
+		// pick gives way to it, and the machine's pattern and mode are asked again.
+		const bool newChain = _t.chainKnown && _t.chain.active && !_t.chain.patterns.empty()
+			&& (!m_tel.chainKnown || !m_tel.chain.active || m_tel.chain.patterns != _t.chain.patterns);
 		m_tel = _t;
+		if(newChain)
+		{
+			m_queuedPattern = -1;
+			if(ready())
+			{
+				requestStatus();
+				m_lastStatusMs = now();
+			}
+		}
 		const bool stepped = _t.valid && _t.step != m_rawStep;
 		// Playing = the RAM flag, or the step byte advancing: two single steps forward (or a wrap to 0)
 		// in a row, each within three step times at the tempo (a 3/4X pattern included). A stop that
@@ -1085,6 +1266,7 @@ namespace mmDesk
 			requestStatus();
 		}
 		pumpRecv(_now);
+		pumpChain();
 		if(m_activateGlobal >= 0 && (m_profile.wire || m_recv.state() == RecvSession::State::Idle))
 		{
 			m_port.sendSysex(ed::mmSetActiveGlobal(static_cast<uint8_t>(m_activateGlobal)));
@@ -1149,6 +1331,23 @@ namespace mmDesk
 		mutes.set("midi", m_tel.mutes < 0 ? Value() : Value((m_tel.mutes >> 6) & 0x3f));
 		d.set("mutes", std::move(mutes));
 		d.set("poly", m_poly < 0 ? Value() : Value(m_poly == 1));
+		// MM-P8: the machine's own chain and BANK GROUP (RAM), as the Machinedrum's machine.desk
+		Value desk = Value::object();
+		if(m_tel.chainKnown)
+		{
+			Value chain = Value::object();
+			chain.set("active", m_tel.chain.active);
+			chain.set("next", m_tel.chain.next);
+			Value list = Value::array();
+			for(const auto p : m_tel.chain.patterns)
+				list.push(static_cast<int>(p));
+			chain.set("patterns", std::move(list));
+			desk.set("chain", std::move(chain));
+		}
+		else
+			desk.set("chain", Value());
+		desk.set("bankGroup", m_tel.bankGroup);
+		d.set("desk", std::move(desk));
 		Value r = Value::object();
 		r.set("state", manualDumps() ? (m_manual.empty() ? "idle" : "waitingUser") : m_recv.stateName());
 		r.set("waiting", static_cast<unsigned long>(m_manual.size()));

@@ -294,6 +294,8 @@ namespace mdDesk
 			{"kitSaveAs", Owner::Machine, Gate::Input, -1, {k}, "SAVE KIT n"},
 			{"record", Owner::Machine, Gate::Input, -1, {}, "REC as on the machine"},
 			{"recTrig", Owner::Machine, Gate::Input, -1, {t}, "a TRIG key while recording"},
+			{"keyNote", Owner::Machine, Gate::Input, -1, {t, {"vel", ArgType::Integer, 0, 127}, opt(i24), opt(v127)},
+				"the page's keyboard: track t's MAP EDITOR note at vel (0 = the key let go); i, v: a kit value held while the key is down, restored after (not an edit)"},
 			{"chain", Owner::Machine, Gate::Input, -1, {{"patterns", ArgType::Array}}, "BANK held + TRIG keys"},
 			{"chainClear", Owner::Machine, Gate::Input, -1, {}, ""},
 			{"globalSlot", Owner::Machine, Gate::Input, -1, {slot("slot", DocKind::Global)}, "the active GLOBAL slot"},

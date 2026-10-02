@@ -285,9 +285,23 @@ namespace mdDesk
 		return p;
 	}
 
+	std::string kitNameText(const ed::MdKit& _kit)
+	{
+		std::string n;
+		for(const auto c : _kit.name)
+		{
+			if(!c)
+				break;
+			if(c < 0x20 || c > 0x7e)
+				return {};
+			n += static_cast<char>(c);
+		}
+		return n;
+	}
+
 	bool isEmptyKit(const ed::MdKit& _kit)
 	{
-		return _kit.name[0] == 0 && std::all_of(_kit.models.begin(), _kit.models.end(), [](const uint32_t _m) { return _m == 0; });
+		return kitNameText(_kit).empty() && std::all_of(_kit.models.begin(), _kit.models.end(), [](const uint32_t _m) { return _m == 0; });
 	}
 
 	std::vector<std::string> libraryOps()

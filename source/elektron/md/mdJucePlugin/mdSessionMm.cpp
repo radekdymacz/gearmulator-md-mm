@@ -54,6 +54,7 @@ namespace mdJucePlugin
 			p.sendParam = [this](const uint8_t _t, const uint8_t _p, const uint8_t _i, const uint8_t _v) { m_link.setParam(_t, _p, _i, _v); };
 			p.sendNrpn = [this](const uint8_t _t, const uint8_t _p, const uint8_t _v) { m_link.sendNrpn(_t, _p, _v); };
 			p.pressKeys = [this](const std::vector<mmDesk::Key>& _k) { return m_link.pressKeys(_k); };
+			p.pressBankTrigs = [this](const uint8_t _b, const std::vector<uint8_t>& _t) { return m_link.pressBankTrigs(_b, _t); };
 			p.nowMs = [] { return nowMs(); };
 			return p;
 		}

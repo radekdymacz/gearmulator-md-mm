@@ -177,6 +177,8 @@ namespace mdDesk
 		bool keysOnTheirWay() const;
 		bool pressKey(const std::string& _key);
 		void releaseKeys();
+		deskCore::Outcome sendChain(const std::vector<int>& _patterns);
+		void pumpChain();
 		void load(const DocRef& _ref, bool _urgent);
 		void request(const DocRef& _ref);
 		std::optional<uint8_t> currentKit() const { return m_session.state().kit; }
@@ -224,6 +226,7 @@ namespace mdDesk
 		deskCore::Outcome kitSwitchedBy(uint8_t _slot, bool _load);
 		deskCore::Outcome cmdRecord(const Value&, const Documents&);
 		deskCore::Outcome cmdRecTrig(const Value&, const Documents&);
+		deskCore::Outcome cmdKeyNote(const Value&, const Documents&);
 		deskCore::Outcome cmdChain(const Value&, const Documents&);
 		deskCore::Outcome cmdChainClear(const Value&, const Documents&);
 		deskCore::Outcome cmdGlobalSlot(const Value&, const Documents&);
@@ -260,11 +263,17 @@ namespace mdDesk
 		double m_lastRoundTripMs = -1;
 		Keys m_keys;
 		std::optional<uint8_t> m_audibleQueue;
+		// The chain the page asked for while keys were on their way (empty: CLEAR), sent after them.
+		std::optional<std::vector<int>> m_chainQueued;
 		double m_switchReportedMs = -1;
 		std::optional<uint8_t> m_lastKit;
 		std::optional<uint8_t> m_lastPattern;
 		Telemetry m_telemetry;
 		std::array<bool, 16> m_mutes{};
+		// The page's keyboard: per track, the note sounding and the kit value it holds (index, the value it
+		// replaced, the value sent), restored when the key is let go.
+		struct HeldKey { uint8_t channel = 0; uint8_t note = 0; std::optional<std::array<uint8_t, 3>> value; };
+		std::array<std::optional<HeldKey>, 16> m_heldKeys{};
 		KnobRecorder m_knobs;
 		std::optional<RecLock> m_recLock;
 		double m_recordPollMs = -1e9;

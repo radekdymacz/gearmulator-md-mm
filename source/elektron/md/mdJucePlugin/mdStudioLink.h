@@ -48,6 +48,8 @@ namespace mdJucePlugin
 		// Kit parameter 0-23, 24 = level, through pluginLib::Parameter (Origin::Ui).
 		bool setKitParam(uint8_t _track, uint8_t _index, uint8_t _value) const;
 		bool setMute(uint8_t _track, bool _muted) const;
+		// A note on (_velocity 1-127) or off (0) on MIDI channel _channel, editor-sourced, after what was sent before.
+		void sendNote(uint8_t _channel, uint8_t _note, uint8_t _velocity) const;
 		// Press and release a front-panel key: "play", "stop", "record", "recordPlay"
 		// (hold RECORD, press PLAY), "page", "trig1".."trig16". Local MD only.
 		bool pressKey(const std::string& _key);

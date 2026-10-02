@@ -15,6 +15,7 @@
 #include "mdFirmwareSession.h"
 
 #include "mdDesk/mdDesk.h"
+#include "mdDesk/mdDeskLibrary.h"
 #include "mdDesk/mdDeskWirePort.h"
 #include "deskCore/deskPacer.h"
 #include "deskWire/mdWire.h"
@@ -114,6 +115,11 @@ namespace
 				if(const auto cc = deskWire::md::mute(m_channel, _t, _on))
 					m_out.push_back(*cc);
 			};
+			port.device.sendNote = [this](const uint8_t _ch, const uint8_t _n, const uint8_t _v)
+			{
+				if(const auto b = deskWire::md::note(_ch, _n, _v))
+					m_out.push_back(*b);
+			};
 			port.device.baseChannel = [this](const uint8_t _ch) { m_channel = _ch; };
 			port.toPage = [this](const Value& _m) { g_contract(_m); onPage(_m); };
 			port.device.nowMs = [this] { return ms(m_machine.now()); };
@@ -169,6 +175,8 @@ namespace
 		}
 
 		const std::optional<Value>& lastResult() const { return m_lastResult; }
+		const std::optional<Value>& lastAsk() const { return m_lastAsk; }
+		void clearAsk() { m_lastAsk.reset(); }
 		const std::optional<Value>& lastError() const { return m_lastError; }
 		bool pageTx() const { return m_tx; }
 		std::optional<Value> pageDoc(const std::string& _kind, const int _slot) const
@@ -841,6 +849,60 @@ namespace
 		_rig.run(300);
 	}
 
+	// P10, the page's keyboard: a key is the track's MAP EDITOR note (the machine trigs it, at the note's
+	// velocity), and a PTCH held while the key is down is the machine's for that time only: put back after.
+	void keyboard(Rig& _rig)
+	{
+		auto& m = _rig.machine();
+		auto& desk = _rig.desk();
+		std::puts("== P10 keyboard: a key plays the selected track, a held PTCH is put back");
+		_rig.page(R"({"op":"stop","id":90})");
+		_rig.run(600);
+		const int t = 0;
+		_rig.page(R"({"op":"mute","t":0,"on":false,"id":91})");
+		_rig.run(100);
+		const auto ptchAt = ed::g_mdWorkingKitAddress + ed::g_mdWorkingKitParamsOffset + t * 24 + 0;
+		const auto peakOf = [&](const std::string& _press, const double _ms)
+		{
+			const auto from = m.left().size();
+			_rig.page(_press);
+			check(resultOk(_rig), "keyNote accepted: " + _press);
+			_rig.run(_ms);
+			float peak = 0;
+			for(size_t i = from; i < m.left().size(); ++i)
+				peak = std::max({peak, std::abs(m.left()[i]), std::abs(m.right()[i])});
+			return peak;
+		};
+		float quiet = 0;
+		{
+			const auto from = m.left().size();
+			_rig.run(200);
+			for(size_t i = from; i < m.left().size(); ++i)
+				quiet = std::max(quiet, std::abs(m.left()[i]));
+		}
+		const auto loud = peakOf(R"({"op":"keyNote","t":0,"vel":127,"id":92})", 250);
+		_rig.page(R"({"op":"keyNote","t":0,"vel":0,"id":93})");
+		_rig.run(600);
+		const auto soft = peakOf(R"({"op":"keyNote","t":0,"vel":30,"id":94})", 250);
+		_rig.page(R"({"op":"keyNote","t":0,"vel":0,"id":95})");
+		_rig.run(600);
+		std::printf("  track 1 by its note: stopped %.4f, velocity 127 peak %.4f, velocity 30 peak %.4f\n", quiet, loud, soft);
+		check(loud > 0.01f && loud > quiet * 4, "a key plays the track (its MAP EDITOR note) while stopped");
+		check(soft < loud * 0.8f, "the note's velocity is heard (30 softer than 127)");
+		const auto before = m.read8(ptchAt);
+		const auto held = static_cast<uint8_t>(before > 64 ? before - 24 : before + 24);
+		_rig.page("{\"op\":\"keyNote\",\"t\":0,\"vel\":100,\"i\":0,\"v\":" + std::to_string(held) + ",\"id\":96}");
+		check(resultOk(_rig), "a key with a held PTCH accepted");
+		check(_rig.runUntil([&] { return m.read8(ptchAt) == held; }, 1000), "the machine holds the key's PTCH while it is down");
+		_rig.run(200);
+		_rig.page(R"({"op":"keyNote","t":0,"vel":0,"id":97})");
+		check(_rig.runUntil([&] { return m.read8(ptchAt) == before; }, 1000), "let go: the machine's PTCH is put back");
+		_rig.run(400);
+		const auto* w = desk.documents().working ? &desk.documents().working->kit : nullptr;
+		check(w && w->params[t][0] == before, "the kit document has the PTCH it had (the key was not an edit)");
+		std::printf("  PTCH %d, held %d, after %d\n", before, held, m.read8(ptchAt));
+	}
+
 	// P3 control: an app LFO moves a kit parameter on the machine's steps.
 	void appModulators(Rig& _rig)
 	{
@@ -1023,6 +1085,27 @@ namespace
 		check(_rig.runUntil([&] { return !_rig.telemetry().chain.active; }, 1000), "CLEAR ends the chain");
 		_rig.page(R"({"op":"chain","patterns":[1,3],"id":927})");
 		check(resultOk(_rig) && _rig.runUntil([&] { return chainOf(_rig) == std::vector<int>{1, 3}; }, 3000), "chain A02 A04");
+		// The page sends the chain again at every pad: quick re-sends, one in bank E from A-D (BANK GROUP
+		// first). Only the latest is pressed once the keys before are worked off, so the group is right.
+		{
+			const auto t1 = m.now();
+			_rig.page(R"({"op":"chain","patterns":[65,64],"id":980})");
+			_rig.run(20);
+			_rig.page(R"({"op":"chain","patterns":[65,64,66],"id":981})");
+			_rig.page(R"({"op":"chain","patterns":[65,64,66,67],"id":982})");
+			check(resultOk(_rig), "re-sent chains accepted while the keys before are on their way");
+			const bool latest = _rig.runUntil([&] { return chainOf(_rig) == std::vector<int>{65, 64, 66, 67}; }, 4000);
+			std::printf("  three chain sends in a row -> firmware chain %s after %.0f ms\n", latest ? "E02 E01 E03 E04" : "other", ms(m.now() - t1));
+			check(latest, "the firmware holds the latest chain, in bank E");
+			_rig.run(300);
+			check(chainOf(_rig) == std::vector<int>{65, 64, 66, 67}, "and keeps it (no older key run lands after it)");
+			_rig.page(R"({"op":"chain","patterns":[65,66],"id":983})");
+			_rig.page(R"({"op":"chainClear","id":984})");
+			_rig.run(1500);
+			check(!_rig.telemetry().chain.active, "CLEAR right after a chain: it waits for the chain's keys, then the chain ends");
+			_rig.page(R"({"op":"chain","patterns":[1,3],"id":985})");
+			check(_rig.runUntil([&] { return chainOf(_rig) == std::vector<int>{1, 3}; }, 3000), "chain A02 A04 again");
+		}
 		_rig.page(R"({"op":"stop","id":928})");
 		_rig.runUntil([&] { return !_rig.pageTelemetry().playing; }, 2000);
 		_rig.run(300);
@@ -1223,6 +1306,18 @@ namespace
 		std::puts("== P4 kit library and pattern chooser");
 		const bool all = _rig.runUntil([&] { return desk.documents().kits.size() == 64 && desk.documents().patterns.size() == 128 && !desk.isBusy(); }, 30000);
 		check(all, "all 64 kits and 128 patterns loaded in the background");
+		// Slots never written hold battery-RAM bytes for a name (7f..): no name, so the library shows them empty.
+		{
+			int unwritten = 0, garbled = 0;
+			for(const auto& [slot, k] : desk.documents().kits)
+			{
+				const bool raw = k.name[0] != 0 && mdDesk::kitNameText(k).empty();
+				garbled += raw;
+				unwritten += raw && mdDesk::isEmptyKit(k);
+			}
+			std::printf("  kit slots with non-text name bytes: %d, of them every track GND-EMPTY (unwritten): %d\n", garbled, unwritten);
+			check(desk.documents().kits.count(63) && mdDesk::isEmptyKit(desk.documents().kits.at(63)), "K64, never written, is an empty slot (its name bytes are no name)");
+		}
 		const auto kitStatus = [&] { return ed::parseMdStatusResponse(m.request(ed::mdStatusRequest(ed::MdStatus::Kit), 0x72))->value; };
 		const auto readKit = [&](const uint8_t _k) { return *ed::decodeMdKit(m.request(ed::mdKitRequest(_k), ed::g_mdKitDump)); };
 		const auto cur = *desk.linkState().kit;
@@ -1256,6 +1351,41 @@ namespace
 		_rig.pageConfirmed("{\"op\":\"kitLoad\",\"k\":" + std::to_string(cur) + ",\"force\":true,\"id\":957}");
 		settle();
 		check(kitStatus() == cur, "LOAD KIT back to the first kit");
+		// A click in the library over unsaved edits: the ask offers Save and load (saveKit, then kitLoad with force).
+		{
+			auto stored = readKit(cur);
+			const int want = stored.params[2][1] == 33 ? 34 : 33;
+			_rig.page("{\"op\":\"param\",\"k\":" + std::to_string(cur) + ",\"t\":2,\"i\":1,\"v\":" + std::to_string(want) + ",\"id\":958}");
+			settle();
+			_rig.clearAsk();
+			_rig.page(R"({"op":"kitLoad","k":43,"id":959})");
+			const auto& a = _rig.lastAsk();
+			const auto* alts = a ? a->find("alternatives") : nullptr;
+			check(a && a->find("ask")->asString() == "loadKit" && alts && alts->asArray().size() == 1 && kitStatus() == cur,
+				"LOAD KIT over unsaved edits asks first (Save and load offered), nothing sent");
+			if(alts && alts->asArray().size() == 1)
+			{
+				const auto t0 = m.now();
+				for(const auto& c : alts->asArray()[0].find("first")->asArray())
+					_rig.page(ed::json::write(c));
+				_rig.page(R"({"op":"kitLoad","k":43,"force":true,"id":960})");
+				settle();
+				std::printf("  save and load: %.0f ms\n", ms(m.now() - t0));
+				check(kitStatus() == 43 && readKit(cur).params[2][1] == want, "Save and load: the edit is in the stored slot, K44 is the current kit");
+			}
+			// K44 was never written: the firmware names its working kit NEW KIT, which is not an edit.
+			const auto working = [&] { return _rig.machineDoc() ? _rig.machineDoc()->find("kit")->find("working")->asString() : std::string("?"); };
+			const bool saved = _rig.runUntil([&] { return working() == "clean"; }, 2000);
+			std::printf("  K44 (never written) loaded: kit %s\n", working().c_str());
+			check(saved, "an unwritten slot just loaded is clean, not edited (the firmware's NEW KIT name)");
+			_rig.clearAsk();
+			_rig.page("{\"op\":\"kitLoad\",\"k\":" + std::to_string(cur) + ",\"id\":961}");
+			const bool asked = _rig.lastAsk().has_value();
+			if(asked)
+				_rig.page("{\"op\":\"kitLoad\",\"k\":" + std::to_string(cur) + ",\"force\":true,\"id\":962}");
+			settle();
+			check(kitStatus() == cur && !asked, "with no edits a click on another slot loads it at once, no ask");
+		}
 		// Paste into the kit that plays: a dump plus LOAD KIT, heard at once.
 		_rig.pageConfirmed("{\"op\":\"kitCopy\",\"k\":40,\"id\":970}");
 		_rig.pageConfirmed("{\"op\":\"kitPaste\",\"k\":" + std::to_string(cur) + ",\"force\":true,\"id\":971}");
@@ -2292,6 +2422,7 @@ int main(const int _argc, char** _argv)
 			restoredKitTruth(rom, _argv[1], patch, kit, rig.desk().documents().working->kit.params[0][2]);
 		}
 		liveRecording(rig);
+		keyboard(rig);
 		sampleName(rig);
 		{
 			std::puts("== P3 song selection");

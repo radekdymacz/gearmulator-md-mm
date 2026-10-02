@@ -55,7 +55,10 @@ function cmd(op, args = {}, key, optimistic, onDone, merge) {
 	const msg = Object.assign({ op }, args);
 	if (gesture) msg.g = gesture;
 	/* any other edit (and undo, redo) closes a mutation trial's gesture: the trial ends (DESIGN-generators.md §4.6) */
-	if (S.mut && S.mut.trial && !(op === "params" && args.g === S.mut.trial.g) && (op === "undo" || op === "redo" || docOf(op, args))) S.mut.trial = null;
+	const edit = op === "undo" || op === "redo" || docOf(op, args);
+	if (S.mut && S.mut.trial && !(op === "params" && args.g === S.mut.trial.g) && edit) S.mut.trial = null;
+	/* the same for a GEN run: its own steps edits carry its gesture, anything else ends it */
+	if (S.gen && S.gen.run && !(op === "steps" && args.g === S.gen.run.g) && edit) S.gen.run = null;
 	let answered = false;	/* a host may answer at once, inside send */
 	const id = Bridge.send(msg, { key, merge, onResult: r => { answered = true; onResult(r); if (onDone) onDone(r); } });
 	if (optimistic && optimistic.length) { if (!answered) Overlay.add(id, optimistic, docOf(op, args)); V = view(); }
@@ -172,11 +175,14 @@ function goPattern(p) {
 }
 function saveKit() { cmd("saveKit"); }
 /* The plug-in asks before a command would lose something (P6: one protocol, the plug-in's): its
-   message, its confirm button, Cancel. Confirm sends the command again with force; the page decides
-   and words no question of its own. */
+   message, its alternatives, its confirm button, Cancel. Confirm sends the command again with force; an
+   alternative ("Save and load") sends its first commands, then the same. The page decides and words no
+   question of its own. */
 function onAsk(m) {
-	const again = () => { const c = Object.assign({}, m.command, { force: true }); delete c.id; const { op, ...args } = c; cmd(op, args); };
-	ask(m.message || "Go on?", [[m.confirm || "Go on", "danger", again], ["Cancel", "", () => { }]]);
+	const send = c => { const { op, id, ...args } = c; cmd(op, args); };
+	const again = () => send(Object.assign({}, m.command, { force: true }));
+	const alts = (m.alternatives || []).map(a => [a.label, "cream", () => { (a.first || []).forEach(send); again(); }]);
+	ask(m.message || "Go on?", [...alts, [m.confirm || "Go on", "danger", again], ["Cancel", "", () => { }]]);
 }
 function ask(html, btns) { const d = $("#dlg"); d.innerHTML = `<div class="dlgbox" role="alertdialog" aria-modal="true"><p>${html}</p><div class="btnrow">${btns.map(([t, c], i) => `<button class="${c}" data-dlg="${i}">${t}</button>`).join("")}</div></div>`; d.hidden = false; d._btns = btns; d.querySelector(".btnrow button:last-child")?.focus(); }
 
@@ -218,7 +224,7 @@ function renderTop() {
 	/* One key: PLAY while stopped, STOP while playing (the icon follows the machine). */
 	$("#play").setAttribute("aria-pressed", V.playing); $("#playico").textContent = V.playing ? "■" : "▶"; $("#play").setAttribute("aria-label", V.playing ? "Stop" : "Play");
 	$("#rec").setAttribute("aria-pressed", !!V.rec); $("#recled").classList.toggle("on", !!V.rec);
-	$("#rec").title = V.rec ? "Live recording: click a track's steps to play it, move a value to lock it. A moved value locks the track's next trig whose step has not started yet (the editor marks it). REC again: stop recording, keep playing (R)" : "Live recording, as RECORD + PLAY on the machine (R)";
+	$("#rec").title = V.rec ? "Live recording: click a track's steps to play it, move a value to lock it. A moved value locks the track's next trig whose step has not started yet (the editor marks it). REC again: stop recording, keep playing (Alt+Space)" : "Live recording, as RECORD + PLAY on the machine (Alt+Space: Alt + play)";
 	document.body.classList.toggle("liverec", !!V.rec);
 	renderEngine();
 	syncTx();
@@ -297,7 +303,7 @@ function renderEngine() {
 const CAP_CONTROLS = {
 	transport: "#play,#rec",
 	liveRecord: "#rec",
-	chains: '[data-chain="send"]',
+	chains: "[data-chainpad]",
 	sampleNames: "[data-rename]",
 	sampleLoad: "[data-smpload]",
 	sampleAudio: "[data-aud]",
@@ -333,7 +339,7 @@ document.addEventListener("change", e => {
 /* ===== Track header (one component, used by rail and grid) ===== */
 function th(i, extra = "") {
 	const t = V.tracks[i]; return `<div class="th ${i === S.sel ? "sel" : ""} ${S.multi.has(i) && S.ws === "seq" ? "multi" : ""} ${audible(i) ? "" : "off"} ${extra}" data-sel="${i}" style="--c:${FAMC[t.fam]}">
- <div class="sw"></div><div class="n ${i % 4 === 0 ? "fill" : ""}">${i + 1}</div><div class="nm" title="${t.name}">${S.gen.open && S.ws === "seq" ? `<b>${codeOf(t.m)}</b><i class="gtag" title="${t.m}: its generator (GEN strip)">${genTag(genSpec(i))}</i>` : `<b>${t.m}</b>`}</div>
+ <div class="sw"></div><div class="n ${i % 4 === 0 ? "fill" : ""}">${i + 1}</div><div class="nm" title="${t.name}">${S.ws === "seq" ? `<b>${codeOf(t.m)}</b><i class="gtag" title="${t.m}: its generator (GEN bar)">${genTag(genSpec(i))}</i>` : `<b>${t.m}</b>`}</div>
  <button class="ms m" data-mute="${i}" aria-pressed="${t.mute}" aria-label="Mute track ${i + 1}">M</button><button class="ms s" data-solo="${i}" aria-pressed="${t.solo}" aria-label="Solo track ${i + 1}">S</button></div>`;
 }
 function renderRail() {
@@ -351,17 +357,21 @@ function cols() { return S.viewAll ? `repeat(${steps().length},minmax(0,1fr))` :
 function stepCls(i, s) {
 	const t = V.tracks[i], c = ["st"]; if (s % 4 === 0) c.push("q"); if (s % 16 === 0 && s !== vis()[0]) c.push("gap"); if (s >= V.length) c.push("past");
 	if (t.trigs[s]) { c.push("on"); if (t.acc.has(s)) c.push("acc"); if (t.slide.has(s)) c.push("sl"); if (stepLocked(i, s)) c.push("lk"); }
-	if (V.playing && s === S.step) c.push("ph"); return c.join(" ") + ghostCls(i, s);
+	if (V.playing && s === S.step) c.push("ph"); return c.join(" ");
 }
 /* The PAGE control sits on the right, above the grid, on the ruler row. */
+/* the step gestures, behind a small ? key at the right of the bar under the grid (a click: the list of keys) */
+function stepLegend() {
+	const row = (cls, what, how) => `<span>${cls != null ? `<i class="lg on ${cls}"></i>` : `<i class="lg none"></i>`}<b>${what}</b>${how}</span>`;
+	return `<span class="steplegend"><button class="glegkey" id="steplegend" aria-label="Step gestures" aria-describedby="steplegpop">?</button><span class="legend glegpop" id="steplegpop" role="tooltip">${row("", "Trig", "click")}${row("acc", "Accent", "shift-click" + (V.accAll ? " (all)" : ""))}${row("sl", "Slide", "alt-click" + (V.slideAll ? " (all)" : ""))}${row("lk", "Has locks", "a lock on the step")}${row(null, "Fill", "⌘-click: every 2nd step from there to the end comes on (from a trig: off); ⌘⇧-click: every 4th")}<small>? the list of keys</small></span></span>`;
+}
 function pageCtl() { return `<span class="pagectl seqpage"><button class="pgkey" id="pgkey" ${pages16() < 2 ? "disabled" : ""} title="Next page. Shift-click = previous. Keys [ and ].">Page</button><span class="pleds" aria-hidden="true">${[0, 1, 2, 3].map(k => `<span class="pl ${k < pages16() ? "" : "na"} ${!S.viewAll && k === S.page ? "cur" : ""}" data-plp="${k}"><i class="led"></i></span>`).join("")}</span><button class="ptog ${S.viewAll ? "on" : ""}" id="pgall" aria-pressed="${S.viewAll}" title="Show all steps"><i class="led"></i>All</button><button class="ptog ${S.follow ? "on" : ""}" id="pgfollow" aria-pressed="${S.follow}" title="Page follows the play position"><i class="led"></i>Fol</button></span>`; }
 function renderSeq() {
 	document.documentElement.classList.toggle("viewall", !!S.viewAll);
-	genRefresh();
 	let h = `<div class="panel ${V.mode === "CLASSIC" ? "classic" : ""}" id="seqp"><div class="scroll" id="seqscroll"><div class="seq" id="seq">
   <div class="r" style="grid-template-columns:${cols()}">${steps().map(s => `<div class="rul ${s % 16 === 0 && s !== vis()[0] ? "gap" : ""}">${s % 4 === 0 ? s + 1 : ""}</div>`).join("")}</div>`;
 	V.tracks.forEach((t, i) => { h += `<div class="r ${i === S.sel ? "sel" : ""} ${audible(i) ? "" : "off"}" data-row="${i}" style="grid-template-columns:${cols()};--c:${FAMC[t.fam]}">${steps().map(s => `<button class="${stepCls(i, s)}" data-t="${i}" data-s="${s}" aria-label="Track ${i + 1} step ${s + 1}" aria-pressed="${t.trigs[s]}"></button>`).join("")}</div>`; });
-	h += `</div></div><div class="seqfoot ${S.gen.open ? "genon" : ""}"><span class="genhost" id="genhost">${genStripHtml()}</span><div class="legend"><span><i class="lg on"></i>Trig</span><span><i class="lg on acc"></i>Accent: shift-click${V.accAll ? " (all)" : ""}</span><span><i class="lg on sl"></i>Slide: alt-click${V.slideAll ? " (all)" : ""}</span><span><i class="lg on lk"></i>Has locks</span><span title="⌘-click a step: every 2nd step from there to the end comes on (from a trig: goes off). ⌘⇧-click: every 4th. One undo step.">Fill: ⌘-click</span></div>${pageCtl()}</div><div class="lanewrap"><div class="lanetop"><span class="cap">Lock lane · ${S.sel + 1} ${V.tracks[S.sel].name} · <b id="lanename">${laneLabel(S.sel, S.lane)}</b> <span class="lanescale">${bipLane() ? "L 64 · centre · R 63" : "0–127"}</span></span><span class="lockbudget" id="lockbudget"></span>${V.mode === "CLASSIC" ? `<span class="warnline" title="Locks stay in the pattern but do nothing until you switch to EXTENDED.">CLASSIC: locks muted</span>` : ""}<span class="lanehelp" title="Draw across the bars to lock this parameter per step. Alt-drag erases. Shift-drag draws a ramp, a straight line from where you press to where you let go. The wheel over a step with a trig moves its lock (Shift: fine). Hatched steps have no trig, so they cannot hold a lock. Dashed line = kit value.">Draw to lock · ⇧ ramp · alt erases</span></div>
+	h += `</div></div><div class="genbar"><div class="genband" id="genband">${genStripHtml()}</div><span class="gdiv" aria-hidden="true"></span>${stepLegend()}${pageCtl()}</div><div class="lanewrap"><div class="lanetop"><span class="cap">Lock lane · ${S.sel + 1} ${V.tracks[S.sel].name} · <b id="lanename">${laneLabel(S.sel, S.lane)}</b> <span class="lanescale">${bipLane() ? "L 64 · centre · R 63" : "0–127"}</span></span><span class="lockbudget" id="lockbudget"></span>${V.mode === "CLASSIC" ? `<span class="warnline" title="Locks stay in the pattern but do nothing until you switch to EXTENDED.">CLASSIC: locks muted</span>` : ""}<span class="lanehelp" title="Draw across the bars to lock this parameter per step. Alt-drag erases. Shift-drag draws a ramp, a straight line from where you press to where you let go. The wheel over a step with a trig moves its lock (Shift: fine). Hatched steps have no trig, so they cannot hold a lock. Dashed line = kit value.">Draw to lock · ⇧ ramp · alt erases</span></div>
 </div>
   <div class="scroll" id="lanescroll"><div class="lane" id="lane" style="grid-template-columns:${cols()}"></div></div></div>`;
 	$("#main").innerHTML = h; renderLane(); syncScroll();
@@ -619,9 +629,9 @@ function renderSound() {
 		{ key: "rel", title: "Relations", g: "kit", knobs: [], w: 2, tagTip: "Kit relations: EDIT KIT → RELATE",
 			body: `<div class="sgsel pair"><label title="Mute group: this track's trig mutes the chosen track, as open and closed hihats.">Mute${relSel("mg", "muteGroup", "mutes")}</label>
 			<label title="Trig group: this track's trig also trigs the chosen track. Trig relations do not chain.">Trig${relSel("tg", "trigGroup", "trigs")}</label></div>` }];
-	$("#main").innerHTML = `<div class="snd ${S.mut.open ? "mutating" : ""}">
+	$("#main").innerHTML = `<div class="snd mutating">
   <div class="sndhead">${machButton(tr)}
-   <span class="muthost" id="muthost">${mutStripHtml()}</span>${S.mut.open ? "" : `<span class="sndhelp" title="The groups follow the sound's path: synthesis, effects, routing, then the LFO and the track's relations. The word at a group's right is the Machinedrum page its knobs are on. Drag a dot or a box; hold Alt to move the same knob on every track (Control All).">Drag a dot or a box · Alt-drag = all tracks</span>`}</div>
+   <div class="genband mutband" id="mutband" title="The groups follow the sound's path: synthesis, effects, routing, then the LFO and the track's relations. Drag a dot or a box; hold Alt to move the same knob on every track (Control All).">${mutStripHtml()}</div></div>
   ${sgRow(syn, "synrow", color)}
   ${sgRow(fxrt, "fxrow", color)}
   ${sgRow(lfo, "lforow", color)}
@@ -663,8 +673,20 @@ function rowSet(i, r) { songCmd("rowSet", { i, row: rowToContract(r, patLen) }, 
    song (stored, any bank, loops and jumps; heard after STOP + reload), CHAIN numbers it into the machine's
    own chain (live, one bank, loops; chainFooter, the Plays line). The header says which one the machine
    plays (playsOf: CHAIN, SONG or PATTERN). */
-S.songPick = "arrange"; S.songMore = false; S.chainDraft = [];
+S.songPick = "arrange"; S.songMore = false; S.chainDraft = []; S.chainTimer = 0; S.chainSent = false;
 function chainDoc() { const d = machineState().desk || {}; return d.chain || null; }
+/* Every pad (and BACK) chains at once: the pads are sent as the machine's chain 150 ms after the last
+   click (the latest wins; the desk also holds a chain back while the keys of the one before are on
+   their way, MdMachine::cmdChain). Fewer than two pads: the chain the machine plays ends. */
+function chainSoon() {
+	clearTimeout(S.chainTimer);
+	S.chainTimer = setTimeout(() => {
+		const d = S.chainDraft.slice(), c = chainDoc();
+		if (!canDo(V, "chains")) return;
+		if (d.length >= 2) { if (!(c && c.active && c.patterns.length === d.length && c.patterns.every((p, i) => p === d[i]))) { cmd("chain", { patterns: d }); S.chainSent = true; } }
+		else if ((c && c.active) || S.chainSent) { cmd("chainClear"); S.chainSent = false; }
+	}, 150);
+}
 function chainFooter() {
 	const c = chainDoc(), bn = "ABCDEFGH"[S.bank], d = S.chainDraft;
 	const known = !!c, active = known && c.active && c.patterns.length > 0;
@@ -674,8 +696,8 @@ function chainFooter() {
 	const live = !can ? `<span class="note">${why}</span>` : !known ? `<span class="note">The chain is not readable on this firmware.</span>` : active ? list.map(p => `<span class="lcdchip${p === playing ? " now" : ""}${V.playing && p === next && at >= 0 ? " nx" : ""}">${patName(p)}</span>`).join("<i>»</i>") + "<i>↺</i>"
 		: `<span class="note">No chain. The machine plays ${patName(playing)} and stays on it.</span>`;
 	return `<div class="chainfoot"><div class="irow"><span class="ilab">Plays</span><div class="chainrow">${live}</div></div>
-  <div class="irow"><span class="ilab"></span><span class="chainacts"><button class="cream" data-chain="send"${d.length < 2 || !known || !can ? " disabled" : ""} title="${can ? "" : why + " "}Holds BANK ${bn} and presses the TRIG keys in this order on the machine. ${V.playing ? "It starts at the pattern end." : "PLAY starts at the first one."}">Chain ${d.length ? d.length : ""}</button><button data-chain="undo"${d.length ? "" : " disabled"}>Back</button><button class="danger" data-chain="clear"${active ? "" : " disabled"} title="LOAD PATTERN of the current pattern: the machine's way to end a chain">Clear</button></span>
-  <span class="note">One bank, each pattern once. Picking a pattern ends the chain; editing its patterns does not.</span></div></div>`;
+  <div class="irow"><span class="ilab"></span><span class="chainacts"><button data-chain="undo"${d.length ? "" : " disabled"} title="Takes the last pad out and chains the rest at once">Back</button><button class="danger" data-chain="clear"${active || d.length ? "" : " disabled"} title="LOAD PATTERN of the current pattern: the machine's way to end a chain. The pads start over">Clear</button></span>
+  <span class="note">${d.length === 1 ? `One more pad and the machine plays the chain (BANK ${bn} held, the TRIG keys in order; ${V.playing ? "from the pattern end" : "PLAY starts at the first"}).` : "Each pad chains at once: the machine plays them in order and loops."} One bank, each pattern once. Picking a pattern ends the chain; editing its patterns does not.</span></div></div>`;
 }
 function renderSong() {
 	const sel = V.song[S.songSel] || V.song[0], chain = S.songPick === "chain", plays = playsOf(Docs);
@@ -685,7 +707,7 @@ function renderSong() {
 		const info = `${patName(p)}<small>${Docs.patterns[p] ? (hasPat(p) ? patLen(p) : "empty") : "…"}</small>`;
 		if (!chain) return `<button class="padd ${hasPat(p) ? "has" : ""} ${!sel.type && sel.pat === p ? "cur" : ""}" data-addpat="${p}" draggable="true" title="Drag into the arrangement. Click adds after the selected row.">${info}</button>`;
 		const n = S.chainDraft.indexOf(p);
-		return `<button class="padd ${hasPat(p) ? "has" : ""}${n >= 0 ? " in" : ""}" data-chainpad="${p}" title="${patName(p)}${n >= 0 ? ": number " + (n + 1) + " in the chain. Click removes it." : ". Click adds it to the chain."}">${info}${n >= 0 ? `<em>${n + 1}</em>` : ""}</button>`;
+		return `<button class="padd ${hasPat(p) ? "has" : ""}${n >= 0 ? " in" : ""}" data-chainpad="${p}" title="${patName(p)}${n >= 0 ? ": number " + (n + 1) + " in the chain. Click takes it out, and the machine plays the rest." : ". Click adds it: the machine plays the chain at once."}">${info}${n >= 0 ? `<em>${n + 1}</em>` : ""}</button>`;
 	};
 	const palette = `<div class="banks">${[..."ABCDEFGH"].map((b, k) => `<button class="bank ${k === S.bank ? "on" : ""}" data-bank="${k}"><i class="led"></i>${b}</button>`).join("")}</div>
   <div class="pgridp">${Array.from({ length: 16 }, (_, k) => pad(S.bank * 16 + k)).join("")}</div>
@@ -1520,7 +1542,7 @@ function renderSub() {
 	const t = S.sel, tr = V.tracks[t]; let h = "";
 	if (S.ws === "seq") h = L2("len", "LEN", V.length === V.len ? V.len : V.length + "/" + V.len, "Pattern length (total length " + V.len + "). Click to step 16 / 32 / 48 / 64; alt-click steps the length inside it.", 1) + L2("mult", "SPD", V.mult, "Tempo multiplier. Click to step 1X / 2X / 3/4X / 3/2X.", 1)
 		+ L2("swing", "SWG", V.swing + "%", "Swing 50–80 %. Drag up or down, or scroll.", 1) + L2("accAmt", "ACC", V.accAmt, "Accent 0–15. Drag up or down, or scroll.", 1) + L2("mode", "MODE", V.mode === "EXTENDED" ? "EXT" : "CLASSIC", "Classic or Extended. Locks only play in Extended. Click to switch.", 1)
-		+ L2("dbl", "LEN", "×2", `Double the pattern: ${V.length} to ${V.length * 2} steps, the new half a copy of the steps and locks (D). Above 32 steps only in EXTENDED. One undo step.`, 1);
+		+ L2("dbl", "LEN", "×2", `Double the pattern: ${V.length} to ${V.length * 2} steps, the new half a copy of the steps and locks. Above 32 steps only in EXTENDED. One undo step.`, 1);
 	else if (S.ws === "sound") h = L2("", "TRACK", String(t + 1).padStart(2, "0")) + L2("", "MACHINE", tr.m) + L2("", "", tr.name.toUpperCase());
 	else if (S.ws === "mix") h = L2("", "PATH", "SEND›ECHO›GATE›EQ›DYN›MAIN", "Sends feed the master effects. Tracks on outputs A–F skip them.");
 	else if (S.ws === "sampler") { const used = V.tracks.filter(t => /^ROM/.test(t.m)).length; const b = smpBank(); h = L2("", "MEM", b ? Math.round(b.used / b.capacity * 100) + "%" : "n/a", b ? `Sample memory: the ROM slots hold ${b.used} of ${b.capacity} samples (${(b.used / 44100).toFixed(1)} of ${(b.capacity / 44100).toFixed(1)} s at 44.1 kHz); the four RAM buffers share the rest.` : canDo(V, "sampleAudio") ? "Reading the samples from the machine…" : NA.memory) + L2("", "KIT", used + " ROM", "Tracks in this kit that play a ROM slot") + L2("", "SLOT", S.smpSlot.replace(/^RAM/, "RAM ").replace(/^ROM/, "ROM ")); }
@@ -1681,7 +1703,7 @@ function openPicker() {
 	const tr = V.tracks[S.sel]; S.pickFam = S.pickFam && S.pickOpenFor === S.sel ? S.pickFam : famKey(tr.m); S.pickOpenFor = S.sel; drawPicker();
 	const pop = $("#machpop"), b = $("#machbtn").getBoundingClientRect(); pop.hidden = false; pop.style.top = (b.bottom + scrollY + 6) + "px"; pop.style.left = Math.max(16, Math.min(b.left + scrollX, innerWidth - pop.offsetWidth - 16)) + "px"; $("#machbtn").setAttribute("aria-expanded", "true"); pop.querySelector(".mk[aria-pressed=true],.mk")?.focus();
 }
-function closePicker() { const pop = $("#machpop"); if (pop.hidden) return; pop.hidden = true; $("#machbtn")?.setAttribute("aria-expanded", "false"); }
+function closePicker() { const pop = $("#machpop"); if (pop.hidden) return; pop.hidden = true; $("#machbtn")?.setAttribute("aria-expanded", "false"); if (pendingRender) scheduleRender(); }
 function drawPicker() {
 	const tr = V.tracks[S.sel], list = machList(S.pickFam), small = list.length > 16;
 	$("#machpop").innerHTML = `<div class="mp-fams">${FAMS.map(([f, n]) => `<button class="mf" data-fam="${f}" aria-pressed="${f === S.pickFam}"><i class="led"></i><b>${f === "PI" ? "P-I" : f}</b><span>${n}</span></button>`).join("")}</div>
@@ -1744,7 +1766,7 @@ function placeK() {
 addEventListener("resize", placeK);
 addEventListener("scroll", e => { if (!$("#kpop").contains(e.target)) placeK(); }, true);
 function kopt(o, sel) { if (o.hidden) return ""; return `<button class="kopt" role="option" data-v="${o.value}" aria-selected="${o.value === sel.value}"${o.disabled ? ` disabled aria-disabled="true" title="${o.title || "Not available"}"` : ""}>${o.text}</button>`; }
-function closeK() { const pop = $("#kpop"); if (pop.hidden) return; pop.hidden = true; kFor?.setAttribute("aria-expanded", "false"); }
+function closeK() { const pop = $("#kpop"); if (pop.hidden) return; pop.hidden = true; kFor?.setAttribute("aria-expanded", "false"); if (pendingRender) scheduleRender(); }
 document.addEventListener("click", e => {
 	const b = e.target.closest(".kselbtn"); if (b) { const same = kFor === b && !$("#kpop").hidden; closeK(); if (!same) openK(b); return; }
 	const o = e.target.closest("#kpop .kopt"); if (o && o.disabled) return; if (o && kFor) { const sel = document.getElementById(kFor.dataset.for); sel.value = o.dataset.v; kFor.querySelector("span").textContent = sel.selectedOptions[0].text; closeK(); kFor.focus(); sel.dispatchEvent(new Event("change", { bubbles: true })); return; }
@@ -1843,7 +1865,7 @@ function renderControl() {
 		const t = C.selT != null ? C.selT : C.addT;
 		insp = `<section class="card"><header><h3>${row.label} · CC ${row.cc}</h3><span>${row.ch === 255 ? "any channel" : "channel " + (row.ch + 1)} · from your MIDI controller · saved with the plug-in's MIDI Learn preset</span></header>
   ${row.knob >= 0 ? `<div class="irow"><span class="ilab">CC</span><span class="stepper"><button data-knobcc="-1" aria-label="Lower CC number">−</button><b class="mono">${row.cc}</b><button data-knobcc="1" aria-label="Higher CC number">+</button></span><span class="note">the CC your controller's knob ${row.knob + 1} sends; its targets follow</span></div>` : ""}
-  <div class="note">${L.learning ? `Learning <b>track ${L.learning.t + 1} ${slots(V.tracks[L.learning.t].m)[L.learning.i] || L.learning.name}</b>: turn a knob both ways.` : "Pick a target below, or press LEARN (L), click any value and turn a knob. The mapping moves the value through the plug-in's parameters, like host automation."}</div>
+  <div class="note">${L.learning ? `Learning <b>track ${L.learning.t + 1} ${slots(V.tracks[L.learning.t].m)[L.learning.i] || L.learning.name}</b>: turn a knob both ways.` : "Pick a target below, or press LEARN, click any value and turn a knob. The mapping moves the value through the plug-in's parameters, like host automation."}</div>
   <div class="lhead"><span class="cap">Targets</span>${C.selT != null ? `<button class="ptog on" data-selt="all"><i class="led"></i>Track ${C.selT + 1} only</button>` : `<span class="note">${selMaps.length} target${selMaps.length === 1 ? "" : "s"}</span>`}</div>
   <div class="lnks">${selMaps.map(l => `<div class="lnk"><span class="lcdchip" title="${V.tracks[l.t].name}">T${l.t + 1} ${slots(V.tracks[l.t].m)[l.i] || l.name}</span><span class="note">${l.mode}</span><span></span>
    <button class="ptog ${l.invert ? "on" : ""}" data-linv="${l.index}"><i class="led"></i>Inv</button><button class="iconkey" data-ldel="${l.index}" aria-label="Remove mapping" title="Remove">×</button></div>`).join("") || `<div class="note">Not mapped: this row does nothing yet.</div>`}</div>
@@ -1905,50 +1927,51 @@ function altLabels() {
 	if (cl) { const t = S.alt ? `Clear every lock of track ${S.sel + 1}` : `Clear ${S.lane} locks. Alt: every lock of track ${S.sel + 1}`; cl.title = t; cl.setAttribute("aria-label", t); }
 }
 S.alt = false;
-function showAlt(on) { if (S.alt === on) return; S.alt = on; document.body.classList.toggle("althold", on); altLabels(); if (S.gen.open && S.ws === "seq") genDraw(); if (S.mut.open && S.ws === "sound") renderMutStrip(); }
+function showAlt(on) { if (S.alt === on) return; S.alt = on; document.body.classList.toggle("althold", on); altLabels(); if (S.ws === "seq") genDraw(); if (S.ws === "sound") renderMutStrip(); }
 addEventListener("keydown", e => showAlt(e.altKey), true);
 addEventListener("keyup", e => showAlt(e.altKey), true);
 addEventListener("blur", () => showAlt(false));
 document.addEventListener("pointermove", e => showAlt(e.altKey), { passive: true, capture: true });
 
-/* ===== Generators and mutation (DESIGN-generators.md): the GEN strip on the Sequence page (E), the
-   MUTATE strip on the Sound page (M). The results come from mdDeskGen.js (pure); the page sends them as
-   the two plain edits: steps (one pattern change, one dump, one undo step) and params (one working-kit
-   change, CCs). Alt is the global "all": Alt + Apply every track, Alt + Mutate the whole kit. ===== */
-S.gen = { open: false, specs: null, last: [] };
-S.mut = { open: false, amount: 20, seed: genSeed(), walk: false, scope: new Set(["syn"]), trial: null, note: "" };
+/* ===== Generators and mutation (DESIGN-generators.md): the GEN bar, always on the Sequence page, and the
+   MUTATE bar, always on the Sound page. Both are live: a change writes at once, and a run of changes is one
+   gesture (one undo step) that one Undo takes back. The results come from mdDeskGen.js (pure); the page sends
+   them as the two plain edits: steps (one pattern change, one dump) and params (one working-kit change, CCs).
+   Alt is the global "all": Alt + a GEN change every track. One randomise action (R, the bars' R key) means what
+   the workspace edits: a new GEN variation of the selected track (Sequence, and every workspace but Sound), a fresh
+   mutation of the selected track from the trial's base (Sound); Alt+R or Alt-click on the R key: every track (the
+   whole kit). ===== */
+S.gen = { specs: null, last: [], run: null };
+S.mut = { amount: 20, seed: genSeed(), scope: new Set(["syn"]), trial: null, note: "" };
 const GEN_TRACKS = Array.from({ length: 16 }, (_, t) => t);
 /* every track's spec, from its machine's role the first time (and on Defaults) */
 function genSpecs(fill) {
-	if (!S.gen.specs || fill) { S.gen.specs = V.tracks.map(t => genDefault(t.m)); S.gen.last = V.tracks.map(() => ({})); }
+	const len = V.len || 64;
+	if (!S.gen.specs || fill) { S.gen.specs = V.tracks.map(t => genDefault(t.m, len)); S.gen.last = V.tracks.map(() => ({})); }
+	S.gen.specs.forEach((sp, t) => { S.gen.specs[t] = genFit(sp, len); });	/* STEPS never longer than the pattern, also when it got shorter */
 	return S.gen.specs;
 }
 function genSpec(t = S.sel) { return genSpecs()[t]; }
 /* the range a generator writes: the steps shown (one page, or all), Alt: the whole pattern */
 function genRange(all) { const [a, b] = vis(); return all ? [0, V.len] : [a, Math.min(b, V.len)]; }
-/* the ghost trigs: the selected track's result (Alt held: every track's), shown until Apply or Esc */
-function genGhost(t) {
-	if (!S.gen.open || S.ws !== "seq" || !(t === S.sel || S.alt)) return null;
-	const [from, to] = genRange(S.alt), r = generate(genSpec(t), t, from, to, V.tracks[t].trigs);
-	return r && { from, to, on: new Set(r.on), acc: r.acc && !V.accAll ? new Set(r.acc) : null };
+/* A run (the GEN bar) or a trial (the MUTATE bar) lives in one context: the workspace, the selected track and
+   the pattern (kit). Selecting another track, another workspace or another pattern ends it; so does any other
+   edit, undo or redo (cmd). */
+const genKey = () => `${S.ws}:${S.sel}:${V.pat}`, mutKey = () => `${S.ws}:${S.sel}:${V.kit}`;
+function endStaleRuns() {
+	if (S.gen.run && S.gen.run.key !== genKey()) S.gen.run = null;
+	if (S.mut.trial && S.mut.trial.key !== mutKey()) { S.mut.trial = null; S.mut.note = ""; }
 }
-const genCache = new Map();
-function ghostCls(i, s) {
-	const g = genCache.get(i); if (!g || s < g.from || s >= g.to) return "";
-	const t = V.tracks[i], want = g.on.has(s);
-	if (want && !t.trigs[s]) return g.acc && g.acc.has(s) ? " ghost gacc" : " ghost";
-	if (!want && t.trigs[s]) return " ghostoff";
-	if (want && g.acc && g.acc.has(s) !== t.acc.has(s)) return " gaccx";
-	return "";
-}
-function genRefresh() { genCache.clear(); for (const t of GEN_TRACKS) { const g = genGhost(t); if (g) genCache.set(t, g); } }
-/* the one edit, its optimistic writes shown at once */
-function genApply(all) {
-	if (V.rec) { toast("The generators wait while the machine records live."); return; }
-	if (!V.loaded) { toast("The pattern is not loaded yet."); return; }
+/* Live: every change of a GEN control writes at once. The run's changes share one gesture (one undo step back
+   to the pattern before the run) and generate from that pattern, so a value moved back gives its steps back.
+   Alt held: every track's spec over the whole pattern, in the same run. */
+function genLive(all = S.alt) {
+	if (V.rec) { toast("The generators wait while the machine records live."); return false; }
+	if (!V.loaded) { toast("The pattern is not loaded yet."); return false; }
+	const run = genRunFor(S.gen.run, genKey(), () => V.tracks.map(x => x.trigs.slice()), Bridge.gesture);
 	const [from, to] = genRange(all), rows = [], w = [];
 	for (const t of all ? GEN_TRACKS : [S.sel]) {
-		const r = generate(genSpec(t), t, from, to, V.tracks[t].trigs); if (!r) continue;
+		const r = genResult(t, from, to, run); if (!r) continue;
 		const tr = V.tracks[t], on = new Set(r.on), row = { t, on: r.on };
 		if (r.acc && !V.accAll) row.acc = r.acc;
 		const acc = row.acc ? new Set(row.acc) : null;
@@ -1960,60 +1983,99 @@ function genApply(all) {
 		}
 		rows.push(row);
 	}
-	if (!rows.length) { toast(all ? "Every track is set to keep: nothing to generate." : `Track ${S.sel + 1} is set to keep.`); return; }
-	cmd("steps", { p: V.pat, from, to, rows, g: Bridge.gesture() }, "gen", w);
+	if (!rows.length) { if (all) toast("Every track is set to keep: nothing to generate."); genDraw(); return false; }
+	S.gen.run = run;
+	cmd("steps", { p: V.pat, from, to, rows, g: run.g }, "gen", w);
+	run.applied++;
 	render();
+	return true;
 }
-/* Again: a new seed (random) or the next rotation (euclid) */
-function genAgain() {
-	const sp = genSpec();
-	if (sp.kind === "random") sp.seed = genSeed(); else if (sp.kind === "euclid") sp.rot = (sp.rot + 1) % sp.n; else return;
-	genDraw();
+/* a track's result in a run: its spec from the run's base; Keep during a run gives the base back */
+function genResult(t, from, to, run) {
+	const base = run ? run.base[t] : V.tracks[t].trigs, r = generate(genSpec(t), t, from, to, base);
+	if (r || !run || !run.applied) return r;
+	const on = []; for (let s = from; s < to; s++) if (base[s]) on.push(s);
+	return { on };
 }
+/* Defaults (the GEN bar's Defaults key): every track's spec from its machine, written as a change */
+function genDefaults() { genSpecs(true); toast("Every track's spec from its machine."); genLive(); }
+/* GEN randomise: a new variation of a track's spec: a new seed (random), random hits and rotation inside the
+   cycle (euclid); keep stays. False: nothing to vary. */
+function genVary(t) {
+	const sp = genSpec(t), r = n => Math.floor(Math.random() * n);
+	if (sp.kind === "random") sp.seed = genSeed();
+	else if (sp.kind === "euclid") { sp.k = 1 + r(sp.n); sp.rot = r(sp.n); if (sp.acc) sp.acc.k = Math.min(sp.acc.k, sp.k); }
+	else return false;
+	return true;
+}
+/* R on Sequence (and every workspace but Sound): the selected track; all: every track's spec, the whole pattern */
+function genAgain(all = false) {
+	const varied = (all ? GEN_TRACKS : [S.sel]).filter(genVary).length;
+	if (!varied) { toast(all ? "Every track is set to keep: nothing to randomise." : `Track ${S.sel + 1} is set to keep: nothing to randomise.`); return; }
+	if (genLive(all) && S.ws !== "seq") toast(all ? "GEN: a new variation of every track." : `GEN: a new variation of track ${S.sel + 1}.`);
+}
+/* the one randomise action (R; Alt+R or Alt-click the R key: all), by workspace */
+function randomise(all) { if (S.ws === "sound") mutAgain(all); else genAgain(all); }
 function genKind(kind) {
 	const t = S.sel, sp = genSpec(t), last = S.gen.last[t];
 	if (sp.kind === kind) return;
 	last[sp.kind] = sp;
-	S.gen.specs[t] = last[kind] || (kind === "euclid" ? { kind, k: 4, n: 16, rot: 0 } : kind === "random" ? { kind, density: 25, seed: genSeed(), mode: "replace" } : { kind });
-	genDraw();
+	S.gen.specs[t] = genFit(last[kind], V.len || 64) || (kind === "euclid" ? { kind, k: 4, n: Math.min(16, V.len || 64), rot: 0 } : kind === "random" ? { kind, density: 25, seed: genSeed(), mode: "replace" } : { kind });
+	genLive();
 }
-/* a value of the strip moved by d (wheel, arrows, click, drag): the spec's own ranges */
+/* a value of a bar moved by d (wheel, arrows, click, drag): the spec's own ranges */
 function genVal(k, d) {
 	const sp = genSpec(), lim = (v, a, b) => Math.max(a, Math.min(b, v));
+	if (k === "amt") { S.mut.amount = lim(S.mut.amount + d, 0, 100); mutLive(); renderMutStrip(); return; }
 	if (k === "k") sp.k = lim(sp.k + d, 0, sp.n);
-	if (k === "n") { sp.n = lim(sp.n + d, 1, 64); sp.k = Math.min(sp.k, sp.n); sp.rot = Math.min(sp.rot, sp.n - 1); if (sp.acc) sp.acc.k = Math.min(sp.acc.k, sp.k); }
+	if (k === "n") { sp.n = lim(sp.n + d, 1, Math.min(64, V.len || 64)); sp.k = Math.min(sp.k, sp.n); sp.rot = Math.min(sp.rot, sp.n - 1); if (sp.acc) sp.acc.k = Math.min(sp.acc.k, sp.k); }
 	if (k === "rot") sp.rot = ((sp.rot + d) % sp.n + sp.n) % sp.n;
 	if (k === "acc") { const a = lim((sp.acc ? sp.acc.k : 0) + d, 0, sp.k); if (a) sp.acc = { k: a, rot: 0 }; else delete sp.acc; }
 	if (k === "dens") sp.density = lim(sp.density + d, 0, 100);
 	if (k === "racc") { const a = lim((sp.acc ? sp.acc.density : 0) + d, 0, 100); if (a) sp.acc = { density: a }; else delete sp.acc; }
 	if (k === "seed") sp.seed = ((sp.seed - 1 + d) % 99999 + 99999) % 99999 + 1;
-	if (k === "amt") { S.mut.amount = lim(S.mut.amount + d, 0, 100); mutLive(); }
-	if (k === "amt") renderMutStrip(); else genDraw();
+	genLive();
 }
+/* The bars' pieces: a group (a title on a thin rule over its controls), a value (an LCD window, its label inside),
+   a key hint. */
+const gbg = (label, body, cls = "", tip = "") => `<div class="gbg ${cls}"${tip ? ` title="${tip}"` : ""}><span class="gbl">${label}</span><div class="gbc">${body}</div></div>`;
 const gv = (k, label, v, tip) => `<span class="gv" data-gv="${k}" role="spinbutton" tabindex="0" aria-label="${label}" aria-valuenow="${parseInt(v) || 0}" title="${tip}. Drag up or down, scroll, or click (⇧-click: down)."><small>${label}</small><b>${v}</b></span>`;
+const kbd = k => `<kbd>${k}</kbd>`;
+/* a key of a bar: a small square cap with its key on it (the keyboard shortcut too) and a tiny label over it */
+const kc = (attr, act, cap, label, tip, off = false, cls = "", on = null) => `<button class="kc ${cls}${on ? " on" : ""}" ${attr}="${act}" ${off ? "disabled" : ""}${on != null ? ` aria-pressed="${on}"` : ""} title="${tip}" aria-label="${label}"><small>${label}</small><kbd>${cap}</kbd></button>`;
+/* the bars' one randomise key: R, with its "all" chord under it */
+const randKey = tip => `<button class="kc cream krand" data-rand="1" title="${tip}" aria-label="Randomise"><small>Random <em>⌥R all</em></small><kbd>R</kbd></button>`;
+const gtitle = (name, target, all, tip) => `<div class="gbt" title="${tip}"><b>${name}</b><span class="${all ? "all" : ""}">${target}</span></div>`;
 function genStripHtml() {
-	if (!S.gen.open) return `<button class="pgkey gkey" data-gen="open" title="Generators: euclid and random steps for a track or the whole pattern (E)">Gen</button>`;
-	const sp = genSpec(), t = S.sel, tr = V.tracks[t], [from, to] = genRange(S.alt), r = generate(sp, t, from, to, tr.trigs);
-	const kinds = `<span class="seg gkind">${[["euclid", "Euclid"], ["random", "Random"], ["keep", "Keep"]].map(([k, n]) => `<button data-genkind="${k}" aria-pressed="${sp.kind === k}" title="${{ euclid: "k hits spread evenly over n steps, rotated", random: "each step on by chance, from a seed", keep: "leave this track as it is (whole pattern)" }[k]}">${n}</button>`).join("")}</span>`;
-	const vals = sp.kind === "euclid" ? gv("k", "Hits", sp.k, "How many hits in a cycle") + gv("n", "Steps", sp.n, "The cycle's length in steps; it repeats over the pattern") + gv("rot", "Rot", sp.rot, "Rotation: moves the hits later") + gv("acc", "Acc", sp.acc ? sp.acc.k : "off", "Accents spread over the hits" + (V.accAll ? " (EDIT ALL is on: accents are pattern-wide and stay)" : ""))
-		: sp.kind === "random" ? gv("dens", "Dens", sp.density + "%", "The chance of each step") + `<span class="seg gmode">${["replace", "add", "thin"].map(m => `<button data-genmode="${m}" aria-pressed="${sp.mode === m}" title="${{ replace: "the track becomes the result", add: "only steps that are off may turn on", thin: "only steps that are on may turn off" }[m]}">${m}</button>`).join("")}</span>` + gv("racc", "Acc", sp.acc ? sp.acc.density + "%" : "off", "Accents by chance on the hits") + gv("seed", "Seed", sp.seed, "The seed: the same seed gives the same steps")
-		: `<span class="gnote">Track ${t + 1} is left as it is.</span>`;
-	const note = r ? `${S.alt ? "All tracks, " : ""}steps ${from + 1}–${to} · ${r.on.length} on` : "";
-	return `<div class="genstrip" id="genstrip"><span class="gcap" title="Generators: the result shows as ghost steps; nothing reaches the machine until Apply">Gen <b>${t + 1}</b></span>${kinds}${vals}
-  <button data-gen="again" title="Again: ${sp.kind === "random" ? "a new seed" : "the next rotation"} (A)" ${sp.kind === "keep" ? "disabled" : ""}>Again</button>
-  <button class="cream" data-gen="apply" id="genapply" title="Apply to track ${t + 1} (Enter). Alt: every track's spec, the whole pattern, one undo step (⌥Enter)">${S.alt ? "Apply all" : "Apply"}</button>
-  <button data-gen="fill" title="Every track's spec from its machine: kicks 4/16, snares on 2 and 4, hats 8/16, the rest random; MIDI, CTR and inputs kept">Defaults</button>
-  <span class="gnote">${note}</span><button class="gx" data-gen="close" title="Close and drop the ghosts (Esc)">Esc</button></div>`;
+	const sp = genSpec(), t = S.sel, tr = V.tracks[t], all = S.alt, run = S.gen.run && S.gen.run.key === genKey() ? S.gen.run : null;
+	const [from, to] = genRange(all), r = genResult(t, from, to, run), base = run ? run.base[t] : tr.trigs;
+	const seg = (attr, cur, items, tips) => `<span class="seg">${items.map(([k, n]) => `<button ${attr}="${k}" aria-pressed="${cur === k}" title="${tips[k]}">${n}</button>`).join("")}</span>`;
+	const mode = gbg("Mode", seg("data-genkind", sp.kind, [["euclid", "Euclid"], ["random", "Random"], ["keep", "Keep"]], { euclid: "k hits spread evenly over n steps, rotated", random: "each step on by chance, from a seed", keep: "leave this track as it is (in a run: as it was before the run)" }), "gmode");
+	const params = sp.kind === "euclid"
+		? gbg("Euclid", gv("k", "Hits", sp.k, "How many hits in a cycle") + gv("n", "Steps", sp.n, "The cycle's length in steps, at most the pattern's; it repeats over the pattern") + gv("rot", "Rotate", sp.rot, "Moves the hits later") + gv("acc", "Accent", sp.acc ? sp.acc.k : "off", "Accents spread over the hits" + (V.accAll ? " (EDIT ALL is on: accents are pattern-wide and stay)" : "")))
+		: sp.kind === "random"
+		? gbg("Random", gv("dens", "Density", sp.density + "%", "The chance of each step") + gv("racc", "Accent", sp.acc ? sp.acc.density + "%" : "off", "Accents by chance on the hits")
+			+ gv("seed", "Seed", sp.seed, "The same seed gives the same steps") )
+			+ gbg("Write", seg("data-genmode", sp.mode, [["replace", "Replace"], ["add", "Add"], ["thin", "Thin"]], { replace: "the track becomes the result", add: "only steps that are off may turn on", thin: "only steps that are on may turn off" }), "gwrite")
+		: gbg("Keep", `<span class="gsum">Track ${t + 1} is left as it is.</span>`);
+	let sum = "";
+	if (r) {
+		const b = new Set(); for (let s = from; s < to; s++) if (base[s]) b.add(s);
+		const add = r.on.filter(s => !b.has(s)).length, gone = [...b].filter(s => !r.on.includes(s)).length;
+		sum = all ? `every track · steps ${from + 1}–${to}` : `${sp.kind === "euclid" ? genSummary(sp, V.len) + " · " : ""}${r.on.length} on${run ? ` <em>+${add} −${gone}</em>` : ""} · steps ${from + 1}–${to}`;
+	} else if (all) sum = `every track · steps ${from + 1}–${to}`;
+	const live = run && run.applied;
+	return `${gtitle("Gen", all ? "all tracks" : `track ${t + 1} · ${codeOf(tr.m)}`, all, "Generators: every change writes to the pattern at once. A run of changes on this track is one undo step; Undo takes it back in one step. Alt: every track's spec, the whole pattern.")}
+  ${mode}${params}
+  <div class="gsum" title="${live ? "What the run changed, against the pattern before it" : "What a change writes"}">${sum}</div>
+  <div class="gkeys">${randKey(all ? "Randomise every track: a new variation of each spec, the whole pattern (Alt+R)" : `Randomise track ${t + 1}: a new variation, ${sp.kind === "random" ? "a new seed" : sp.kind === "euclid" ? "random hits and rotation in the cycle" : "nothing while it is set to Keep"} (R). Alt+R or Alt-click: every track`)}${kc("data-gen", "fill", "↺", "Defaults", "Defaults: every track's spec from its machine: kicks 4/16, snares on 2 and 4, hats 8/16, the rest random; MIDI, CTR and inputs kept. Writes this track (Alt: every track)")}</div>`;
 }
-/* the strip and the ghosts again, without a full render */
+/* the bar again (and the rail's spec tags), without a full render */
 function genDraw() {
 	if (S.ws !== "seq") return;
-	genRefresh();
-	const host = $("#genhost"); if (host) host.innerHTML = genStripHtml();
+	const host = $("#genband"); if (host) host.innerHTML = genStripHtml();
 	$$(".th[data-sel]").forEach(h => { const i = +h.dataset.sel, g = h.querySelector(".gtag"); if (g) g.textContent = genTag(genSpec(i)); });
-	for (const i of GEN_TRACKS) refreshRow(i);
 }
-function genOpen(on) { S.gen.open = on ?? !S.gen.open; if (S.gen.open) genSpecs(); render(); }
 
 /* ---- mutation ---- */
 /* the kit as values: 16 tracks of {m, v[24]} (the working kit document) */
@@ -2025,26 +2087,26 @@ function mutGroupKnobs(t, id) {
 	const [g, key] = id.split(":"), [syn, fxrt] = sndGroups(V.tracks[t]);
 	return ([...syn, ...fxrt].find(x => x.g === g && x.key === key) || { knobs: [] }).knobs;
 }
-/* one apply of the trial: from its base (or now, Walk), the trial's gesture, so the trial is one undo step */
+/* one apply of the trial: always from its base (R randomises the sound, it never walks away), the trial's gesture, so the trial is one undo step */
 function mutApply(all) {
 	if (!S.mut.scope.size) { toast("Pick what to move: SYN, FX, RTG or a group's title."); return; }
 	let tr = S.mut.trial;
-	if (!tr || tr.kit !== V.kit) {
+	if (!tr || tr.key !== mutKey()) {
 		const base = kitValues(); if (!base) { toast("The kit is not loaded yet."); return; }
 		S.mut.seed = genSeed();	/* a new trial, a new seed */
-		tr = S.mut.trial = { g: Bridge.gesture(), kit: V.kit, base, cur: base.map(x => ({ m: x.m, v: x.v.slice() })), touched: new Set(), all: false, applied: 0 };
+		tr = S.mut.trial = { key: mutKey(), g: Bridge.gesture(), kit: V.kit, base, touched: new Set(), all: false, applied: 0 };
 	}
 	tr.all = all;
 	const tracks = all ? GEN_TRACKS : [S.sel];
 	const spec = { tracks, groups: [...S.mut.scope], amount: S.mut.amount, seed: S.mut.seed, protect: ["VOL"] };
-	const values = mutate(spec, S.mut.walk ? tr.cur : tr.base, m => slots(m), mutGroupKnobs);
+	const values = mutate(spec, tr.base, m => slots(m), mutGroupKnobs);
 	/* Again from the base: what an earlier apply moved and this one does not goes back to the base */
 	const now = new Set(values.map(([t, i]) => t + ":" + i));
 	for (const k of tr.touched) if (!now.has(k)) { const [t, i] = k.split(":").map(Number); values.push([t, i, tr.base[t].v[i]]); }
 	if (!values.length) { toast("Nothing to move here: no named knobs in that scope (MIDI and CTR tracks are left alone)."); return; }
 	const w = [], L = { 21: "SPD", 22: "DEPTH", 23: "SHMIX" };
 	for (const [t, i, v] of values) {
-		tr.cur[t].v[i] = v; if (v !== tr.base[t].v[i]) tr.touched.add(t + ":" + i); else tr.touched.delete(t + ":" + i);
+		if (v !== tr.base[t].v[i]) tr.touched.add(t + ":" + i); else tr.touched.delete(t + ":" + i);
 		const n = slots(V.tracks[t].m)[i]; if (n) w.push([["tracks", t, i < 8 ? "syn" : i < 16 ? "fx" : "rt", n], v]);
 		if (L[i]) w.push([["tracks", t, "lfo", L[i]], v]);
 	}
@@ -2055,47 +2117,37 @@ function mutApply(all) {
 	if (S.ws === "sound") { syncControls(); redraw(); renderMutStrip(); }
 }
 /* amount or scope moved during a trial: heard at once, the same seed */
-function mutLive() { if (S.mut.trial) mutApply(S.mut.trial.all); }
-function mutAgain() { S.mut.seed = genSeed(); mutApply(S.mut.trial ? S.mut.trial.all : S.alt); }
-function mutKeep() { if (!S.mut.trial) return; S.mut.trial = null; S.mut.note = "kept · ⌘Z returns to the sound before"; renderMutStrip(); }
-/* Esc: the trial undone (one step back to its base), the strip closed */
-function mutClose() { const tr = S.mut.trial; if (tr && tr.applied) cmd("undo"); S.mut.trial = null; S.mut.note = ""; S.mut.open = false; render(); }
+function mutLive() { if (S.mut.trial && S.mut.trial.key === mutKey()) mutApply(S.mut.trial.all); }
+/* R on Sound: a fresh random mutation (a new seed) from the trial's base; all: the whole kit */
+function mutAgain(all = false) { S.mut.seed = genSeed(); mutApply(all); }
 function mutStripHtml() {
-	if (!S.mut.open) return `<button class="pgkey gkey" data-mut="open" title="Mutate: move this track's sound (or the kit's) by an amount, from a seed; one undo step (M)">Mutate</button>`;
-	const tr = S.mut.trial, chips = [["syn", "Syn"], ["fx", "Fx"], ["rt", "Rtg"]].map(([g, n]) => `<button data-mutg="${g}" aria-pressed="${S.mut.scope.has(g)}" title="Every named knob of the ${{ syn: "SYNTHESIS", fx: "EFFECTS", rt: "ROUTING" }[g]} page${g === "rt" ? " (VOL is kept)" : ""}">${n}</button>`).join("");
-	return `<div class="genstrip mutstrip" id="mutstrip"><span class="gcap" title="Mutate: each knob in scope is pulled toward a random target by the amount. Click a group's title to add it to the scope.">Mutate</span><span class="seg gkind">${chips}</span>
-  ${gv("amt", "Amt", S.mut.amount + "%", "How far each knob moves toward its random target")}
-  <button class="cream" data-mut="go" id="mutgo" title="Mutate track ${S.sel + 1}${tr ? " again with this seed" : ""}. Alt: the whole kit">${S.alt ? "Kit" : "Mutate"}</button>
-  <button data-mut="again" title="Again: a new seed, from the sound before the trial${S.mut.walk ? " (Walk: from the sound now)" : ""} (A)">Again</button>
-  <button class="ptog ${S.mut.walk ? "on" : ""}" data-mut="walk" aria-pressed="${S.mut.walk}" title="Walk: Again starts from the sound now, not from the base"><i class="led"></i>Walk</button>
-  <button data-mut="keep" ${tr ? "" : "disabled"} title="Keep the sound: the trial ends (Enter). ⌘Z after it returns to the sound before">Keep</button>
-  <span class="gnote">${S.mut.note}</span><button class="gx" data-mut="close" title="Close; a trial is undone (Esc)">Esc</button></div>`;
+	const tr = S.mut.trial && S.mut.trial.key === mutKey() ? S.mut.trial : null, t = S.sel, all = S.alt;
+	const chips = [["syn", "Syn"], ["fx", "Fx"], ["rt", "Rtg"]].map(([g, n]) => `<button data-mutg="${g}" aria-pressed="${S.mut.scope.has(g)}" title="Every named knob of the ${{ syn: "SYNTHESIS", fx: "EFFECTS", rt: "ROUTING" }[g]} page${g === "rt" ? " (VOL is kept)" : ""}">${n}</button>`).join("");
+	const groups = [...S.mut.scope].filter(x => x.includes(":")).length;
+	return `${gtitle("Mutate", all ? "whole kit" : `track ${t + 1} · ${codeOf(V.tracks[t].m)}`, all, "Mutate: each knob in scope is pulled toward a random target by the amount, from a seed. A trial is one undo step; Undo takes it back in one step. Alt: the whole kit.")}
+  ${gbg("Move", gv("amt", "Amount", S.mut.amount + "%", "How far each knob moves toward its random target"))}
+  ${gbg("Scope", `<span class="seg">${chips}</span><span class="ghint">${groups ? `+ ${groups} group${groups === 1 ? "" : "s"}` : "+ a group's title"}</span>`, "gscope", "Click a group's title below to add that group to the scope")}
+  <div class="gsum" title="${S.mut.note}">${S.mut.note}</div>
+  <div class="gkeys">${randKey(`${all ? "Randomise the whole kit" : `Randomise track ${t + 1}`}: a fresh random mutation, from the sound before the trial${tr ? "" : " (this sound)"}. One trial is one undo step (R; Alt+R or Alt-click: the whole kit)`)}</div>`;
 }
 function renderMutStrip() {
-	const host = $("#muthost"); if (host) host.innerHTML = mutStripHtml();
+	const host = $("#mutband"); if (host) host.innerHTML = mutStripHtml();
 	$$("[data-mutsg]").forEach(b => b.setAttribute("aria-pressed", S.mut.scope.has(b.dataset.mutsg)));
-	document.querySelector(".snd")?.classList.toggle("mutating", S.mut.open);
 }
-/* a group's title as a scope chip while the strip is open */
-function mutTitle(x) { return S.mut.open && ["syn", "fx", "rt"].includes(x.g) ? `<button class="mutg" data-mutsg="${x.g}:${x.key}" aria-pressed="${S.mut.scope.has(x.g + ":" + x.key)}" title="Add ${x.title} to what Mutate moves">${x.title}</button>` : x.title; }
+/* a group's title as a scope chip on the Sound page */
+function mutTitle(x) { return ["syn", "fx", "rt"].includes(x.g) ? `<button class="mutg" data-mutsg="${x.g}:${x.key}" aria-pressed="${S.mut.scope.has(x.g + ":" + x.key)}" title="Add ${x.title} to what Mutate moves">${x.title}</button>` : x.title; }
 
-/* the strips' clicks, values (drag, wheel, arrows) and keys */
+/* the bars' clicks, values (drag, wheel, arrows) and keys */
 document.addEventListener("click", e => {
 	const g = e.target.closest("[data-gen]"); if (g && !g.disabled) {
 		const a = g.dataset.gen;
-		if (a === "open") genOpen(true); else if (a === "close") genOpen(false); else if (a === "apply") genApply(e.altKey); else if (a === "again") genAgain();
-		else if (a === "fill") { genSpecs(true); toast("Every track's spec from its machine."); genDraw(); }
+		if (a === "fill") genDefaults();
 		return;
 	}
+	const rk = e.target.closest("[data-rand]"); if (rk && !rk.disabled) { randomise(e.altKey || e.metaKey || e.ctrlKey); return; }
 	const k = e.target.closest("[data-genkind]"); if (k) { genKind(k.dataset.genkind); return; }
-	const md = e.target.closest("[data-genmode]"); if (md) { genSpec().mode = md.dataset.genmode; genDraw(); return; }
+	const md = e.target.closest("[data-genmode]"); if (md) { if (genSpec().mode !== md.dataset.genmode) { genSpec().mode = md.dataset.genmode; genLive(); } return; }
 	const v = e.target.closest(".gv[data-gv]"); if (v && !v.dataset.dragged) { genVal(v.dataset.gv, e.shiftKey ? -1 : 1); return; }
-	const m = e.target.closest("[data-mut]"); if (m && !m.disabled) {
-		const a = m.dataset.mut;
-		if (a === "open") { S.mut.open = true; render(); } else if (a === "close") mutClose(); else if (a === "go") mutApply(e.altKey);
-		else if (a === "again") mutAgain(); else if (a === "keep") mutKeep(); else if (a === "walk") { S.mut.walk = !S.mut.walk; renderMutStrip(); }
-		return;
-	}
 	const c = e.target.closest("[data-mutg],[data-mutsg]"); if (c) {
 		const id = c.dataset.mutg || c.dataset.mutsg; S.mut.scope.has(id) ? S.mut.scope.delete(id) : S.mut.scope.add(id);
 		renderMutStrip(); mutLive(); e.stopPropagation(); return;
@@ -2106,27 +2158,25 @@ document.addEventListener("pointerdown", e => { const v = e.target.closest(".gv[
 document.addEventListener("pointermove", e => {
 	if (!gvDrag) return; const d = Math.trunc((gvDrag.y - e.clientY) / 6) - gvDrag.acc; if (!d) return;
 	gvDrag.acc += d; gvDrag.v.dataset.dragged = "1"; genVal(gvDrag.k, d * (gvDrag.k === "dens" || gvDrag.k === "amt" || gvDrag.k === "racc" ? 2 : 1));
+	const n = document.querySelector(`.gv[data-gv="${gvDrag.k}"]`); if (n) { n.dataset.dragged = "1"; gvDrag.v = n; }
 });
-document.addEventListener("pointerup", () => { if (!gvDrag) return; const v = gvDrag.v; gvDrag = null; setTimeout(() => { const n = document.querySelector(`.gv[data-gv="${v.dataset.gv}"]`); if (n) delete n.dataset.dragged; }, 0); });
+document.addEventListener("pointerup", () => { if (!gvDrag) return; const k = gvDrag.k; gvDrag = null; setTimeout(() => { const n = document.querySelector(`.gv[data-gv="${k}"]`); if (n) delete n.dataset.dragged; }, 0); });
 document.addEventListener("wheel", e => { const v = e.target.closest(".gv[data-gv]"); if (!v) return; e.preventDefault(); genVal(v.dataset.gv, ((e.deltaY || e.deltaX) < 0 ? 1 : -1) * (e.shiftKey ? 10 : 1)); }, { passive: false });
 document.addEventListener("keydown", e => {
 	const v = e.target.closest?.(".gv[data-gv]"); if (!v) return; const d = { ArrowUp: 1, ArrowRight: 1, ArrowDown: -1, ArrowLeft: -1 }[e.key]; if (d == null) return;
 	e.preventDefault(); e.stopPropagation(); const k = v.dataset.gv; genVal(k, d * (e.shiftKey ? 10 : 1)); document.querySelector(`.gv[data-gv="${k}"]`)?.focus();
 }, true);
 const dlgClosed = () => $("#dlg").hidden;
-const genOn = () => S.ws === "seq" && S.gen.open, mutOn = () => S.ws === "sound" && S.mut.open;
-Keys.bind({ keys: ["E"], group: "Generators", does: "Sequence: open or close the GEN strip (euclid and random steps)", when: () => S.ws === "seq", run: () => genOpen() });
-Keys.bind({ keys: ["M"], group: "Generators", does: "Sound: open or close the MUTATE strip", when: () => S.ws === "sound", run: () => { if (S.mut.open) mutClose(); else { S.mut.open = true; render(); } } });
-Keys.bind({ keys: ["A"], group: "Generators", does: "Again: a new seed or rotation (GEN), a new seed from the base (MUTATE)", when: () => genOn() || mutOn(), run: () => genOn() ? genAgain() : mutAgain() });
-Keys.bind({ keys: ["Enter"], group: "Generators", does: "GEN: apply to the selected track. MUTATE: keep the sound", when: () => (genOn() || mutOn()) && dlgClosed(), run: () => genOn() ? genApply(false) : mutKeep() });
-Keys.bind({ keys: ["Enter"], mod: "alt", group: "Generators", does: "GEN: apply every track's spec, the whole pattern, one undo step", when: () => genOn() && dlgClosed(), run: () => genApply(true) });
-Keys.bind({ keys: ["Escape"], group: "Generators", does: "Close the strip: GEN drops its ghosts, MUTATE undoes the trial", when: () => (genOn() || mutOn()) && dlgClosed() && $("#keyspop").hidden, run: () => genOn() ? genOpen(false) : mutClose() });
-Keys.bind({ keys: ["Apply"], mod: "alt", group: "Generators", does: "Click: every track's spec, the whole pattern (one pattern change, one undo step)" });
-Keys.bind({ keys: ["Mutate"], mod: "alt", group: "Generators", does: "Click: mutate the whole kit (MIDI and CTR tracks are left alone; VOL is kept)" });
+const genRunOn = () => S.ws === "seq" && !!S.gen.run && S.gen.run.applied > 0 && S.gen.run.key === genKey();
+const mutRunOn = () => S.ws === "sound" && !!S.mut.trial && S.mut.trial.applied > 0 && S.mut.trial.key === mutKey();
+Keys.bind({ keys: ["R"], code: "KeyR", when: () => dlgClosed() && !LIB.open, group: "Selected track", does: "Randomise the selected track: on Sound a fresh random sound (MUTATE, from the sound before the trial); everywhere else a new GEN variation, a new seed or random hits and rotation", run: () => randomise(false) });
+Keys.bind({ keys: ["R"], code: "KeyR", mod: "alt", when: () => dlgClosed() && !LIB.open, group: "All", does: "Randomise every track: on Sound the whole kit, everywhere else every track's GEN spec over the whole pattern", run: () => randomise(true) });
+Keys.bind({ keys: ["GEN value"], mod: "alt", group: "All", does: "Change a GEN value: every track's spec, the whole pattern (one pattern change, one undo step per run)" });
+Keys.bind({ keys: ["R key"], mod: "alt", group: "All", does: "Click: randomise every track (Sound: the whole kit; MIDI and CTR tracks are left alone, VOL is kept)" });
 
 /* ===== Small comforts (DESIGN-generators.md §7), each one undo step, each a plain edit the machine takes on any
    engine: the lock budget in the lane's header, rotate a track (Alt + arrows), the every-N fill (⌘-click), the
-   wheel on a step moves its lock, a ramp in the lock lane (Shift-drag), double the pattern (D), paste to many
+   wheel on a step moves its lock, a ramp in the lock lane (Shift-drag), double the pattern (LEN ×2), paste to many
    tracks (Shift-click the headers, ⌘V), unmute and unsolo all (0). The step arithmetic is mdDeskGen.js's. ===== */
 S.multi = new Set();
 /* "41 / 64 locked parameters" over the lock lane: the machine's budget per pattern, as the top bar's meter */
@@ -2140,7 +2190,7 @@ function syncLockBudget() {
 const seqReady = () => { if (!V.loaded) { toast("The pattern is not loaded yet."); return false; } if (V.rec) { toast("Wait until live recording stops."); return false; } return true; };
 const patLenNow = () => Math.min(V.length, V.len);
 
-/* ---- rotate: Alt + Left / Right moves the selected track's trigs, accents, slides and locks one step, wrapping
+/* ---- rotate: Alt + Left / Right (the one Alt that is not "all": FUNCTION + arrows on the machine) moves the selected track's trigs, accents, slides and locks one step, wrapping
    at the length. Every press is one rotate edit; the presses while Alt stays down share one g: one undo step. */
 let rotG = 0;
 addEventListener("keyup", e => { if (e.key === "Alt") rotG = 0; }, true);
@@ -2231,7 +2281,7 @@ function rampSend() {
 	renderTop();
 }
 
-/* ---- double the pattern (D, or LEN ×2 on the LCD): length × 2, the new half a copy; the core refuses what the
+/* ---- double the pattern (LEN ×2 on the LCD): length × 2, the new half a copy; the core refuses what the
    machine cannot hold (64 steps, or above 32 in CLASSIC) and says why. */
 function doublePattern() {
 	if (!seqReady()) return;
@@ -2265,10 +2315,9 @@ function unmuteAll() {
 }
 document.addEventListener("click", e => { if (e.target.closest("#allon")) unmuteAll(); });
 const seqKeys = () => S.ws === "seq" && dlgClosed() && $("#keyspop").hidden;
-Keys.bind({ keys: ["ArrowLeft", "ArrowRight"], mod: "alt", group: "Sequence", does: "Rotate the selected track one step earlier / later: trigs, accents and locks, wrapping at the length. Presses while ⌥ is down are one undo step", when: seqKeys, run: e => rotateTrack(e.key === "ArrowRight" ? 1 : -1) });
-Keys.bind({ keys: ["D"], group: "Sequence", does: "Double the pattern: length × 2, the new half a copy of the steps and locks", when: seqKeys, run: () => doublePattern() });
-Keys.bind({ keys: ["0"], group: "Mutes", does: "Unmute and unsolo every track", run: () => unmuteAll() });
-Keys.bind({ keys: ["Escape"], group: "Sequence", does: "Unmark the tracks marked for paste", when: () => seqKeys() && S.multi.size > 0 && !S.gen.open, run: () => { S.multi.clear(); renderRail(); renderLane(); } });
+Keys.bind({ keys: ["ArrowLeft", "ArrowRight"], mod: "alt", group: "Selected track", does: "Sequence: rotate the selected track one step earlier / later: trigs, accents and locks, wrapping at the length. Presses while ⌥ is down are one undo step. The one Alt that is not \"all\": FUNCTION + arrows on the machine", when: seqKeys, run: e => rotateTrack(e.key === "ArrowRight" ? 1 : -1) });
+Keys.bind({ keys: ["0"], group: "All", does: "Unmute and unsolo every track", run: () => unmuteAll() });
+Keys.bind({ keys: ["Escape"], group: "Sequence", does: "Unmark the tracks marked for paste", when: () => seqKeys() && S.multi.size > 0 && !genRunOn(), run: () => { S.multi.clear(); renderRail(); renderLane(); } });
 Keys.bind({ keys: ["step"], mod: "cmd", group: "Sequence", does: "Click: every 2nd step from there to the end on (from a trig: off), one undo step" });
 Keys.bind({ keys: ["step"], mod: "cmd+shift", group: "Sequence", does: "Click: every 4th step from there to the end" });
 Keys.bind({ keys: ["wheel on a step"], group: "Sequence", does: "Move its lock in the lane's parameter, 4 a notch (⇧: 1)" });
@@ -2504,6 +2553,7 @@ document.addEventListener("click", e => {
 			[["Send name", "cream", () => { const v = ($("#rname")?.value || "").toUpperCase(); if (!v) return; SENT_NAMES[k] = v; cmd("sampleName", { slot: k - 1, name: v }); render(); }], ["Cancel", "", () => { }]]);
 		setTimeout(() => $("#rname")?.focus(), 0); return;
 	}
+	if (e.target.closest("#steplegend")) { toggleKeys(true); return; }
 	const pgk2 = e.target.closest("#pgkey"); if (pgk2 && !pgk2.disabled) { const n = pages16(); S.viewAll = false; S.page = (S.page + (e.shiftKey ? -1 : 1) + n) % n; render(); return; }
 	const plp = e.target.closest(".pl[data-plp]"); if (plp && !plp.classList.contains("na")) { S.page = +plp.dataset.plp; S.viewAll = false; render(); return; }
 	if (e.target.closest("#pgall")) { S.viewAll = !S.viewAll; render(); return; }
@@ -2519,12 +2569,11 @@ document.addEventListener("click", e => {
 	const rp = e.target.closest("[data-romput]"); if (rp) { S.keepFx = true; setMachine(romCode(+rp.dataset.romput)); toast("Track " + (S.sel + 1) + " now plays " + romCode(+rp.dataset.romput) + "."); return; }
 	if (S.ws === "song") {
 		const bk = e.target.closest("[data-bank]"); if (bk) { S.bank = +bk.dataset.bank; render(); return; }
-		const cp = e.target.closest("[data-chainpad]"); if (cp) { const n = +cp.dataset.chainpad, i = S.chainDraft.indexOf(n); if (i >= 0) S.chainDraft.splice(i, 1); else if (S.chainDraft.length < 16) S.chainDraft.push(n); render(); return; }
+		const cp = e.target.closest("[data-chainpad]"); if (cp) { if (cp.disabled) return; const n = +cp.dataset.chainpad, i = S.chainDraft.indexOf(n); if (i >= 0) S.chainDraft.splice(i, 1); else if (S.chainDraft.length < 16) S.chainDraft.push(n); render(); chainSoon(); return; }
 		const ca = e.target.closest("[data-chain]"); if (ca) {
 			if (ca.disabled) return;
-			if (ca.dataset.chain === "send") cmd("chain", { patterns: S.chainDraft.slice() });
-			else if (ca.dataset.chain === "undo") { S.chainDraft.pop(); render(); }
-			else if (ca.dataset.chain === "clear") cmd("chainClear");
+			if (ca.dataset.chain === "undo") { S.chainDraft.pop(); render(); chainSoon(); }
+			else if (ca.dataset.chain === "clear") { clearTimeout(S.chainTimer); S.chainDraft = []; render(); if (chainDoc()?.active || S.chainSent) { cmd("chainClear"); S.chainSent = false; } }
 			return;
 		}
 		if (e.target.closest("[data-rowmore]")) { S.songMore = !S.songMore; render(); return; }
@@ -2669,7 +2718,9 @@ function sameValue(a, b) {
 	return ka.length === kb.length && ka.every(k => sameValue(a[k], b[k]));
 }
 const beyondStatus = v => { const o = { ...v }; for (const k of STATUS) delete o[k]; return o; };
-function interacting() { return !!(drag || active || laneDraw || l2drag || chopDrag || drag2 || paint); }
+/* an open menu (the machine picker, a key-style dropdown) holds renders too: a document landing would rebuild what it belongs to and close it */
+function menuOpen() { return !$("#machpop")?.hidden || !$("#kpop")?.hidden; }
+function interacting() { return !!(drag || active || laneDraw || l2drag || chopDrag || drag2 || paint) || menuOpen(); }
 function scheduleRender() {
 	if (renderRaf) return;
 	/* A timer, not an animation frame: documents must land while the window is covered. */
@@ -2730,7 +2781,7 @@ function logFirstRender() {
 	Bridge.log(`first render: ${S.ws}, ${document.querySelectorAll("#main *").length} elements in #main, page ${Math.round(r.width)} x ${Math.round(r.height)}, window ${innerWidth} x ${innerHeight}, ${Math.round(performance.now())} ms`);
 }
 function render() {
-	closePicker(); closeK(); const sl = $("#seqscroll")?.scrollLeft || 0; renderTop();
+	endStaleRuns(); closePicker(); closeK(); const sl = $("#seqscroll")?.scrollLeft || 0; renderTop();
 	const full = S.ws === "mix" || S.ws === "song" || S.ws === "control"; $("#body").classList.toggle("full", full); $("#rail").hidden = full;
 	if (!Base) { $("#main").innerHTML = ""; renderSub(); return; }	/* no document yet */
 	if (!full) renderRail(); renderSub();
@@ -2746,7 +2797,7 @@ function alignLock() {
 	const keys = [...ch.querySelectorAll(".pk")], lab = ch.querySelector(".plab"), top = e => e.getBoundingClientRect().top;
 	rp.style.removeProperty("margin-top"); ch.style.removeProperty("grid-template-rows"); ch.style.marginTop = ""; ch.style.height = "";
 	keys.forEach(k => k.style.removeProperty("height"));
-	const sf = $(".seqfoot"), line = sf ? sf.getBoundingClientRect().bottom - 2 : top(lt);	/* the foot's border: the line above the lane */
+	const lw = lt.closest(".lanewrap"), line = lw ? lw.getBoundingClientRect().top : top(lt);	/* the lane's top border: the line above the lane */
 	rp.style.setProperty("margin-top", (parseFloat(getComputedStyle(rp).marginTop) + line - top(rp)) + "px", "important");
 	const a = rp.querySelector(".rphead .cap"), b = lt.querySelector(".cap"), mid = e => { const q = e.getBoundingClientRect(); return q.top + q.height / 2; };
 	lt.style.marginTop = "0px";	/* the lane's title sits on the LOCK PARAMETER title's line */
@@ -2762,6 +2813,17 @@ function alignLock() {
 function setPlate(v) { S.plate = v; document.documentElement.dataset.plate = v; try { localStorage.setItem("mddesk.plate", v); } catch (_) { } renderTop(); redraw(); }
 (() => { let v = null; try { v = localStorage.getItem("mddesk.plate"); } catch (_) { } if (!v) v = matchMedia("(prefers-color-scheme: dark)").matches ? "mk2" : "mk1"; S.plate = v; document.documentElement.dataset.plate = v; })();
 document.fonts && document.fonts.ready.then(() => { redraw(); alignLock(); });
+/* No page selection from a drag (an LCD value, a knob box, a plot, steps, the lock lane): the page is a control
+   surface, so nothing selects but the text fields (the CSS has user-select: none on the body, text on the
+   fields). selectstart is refused outside them (WebKit, the plug-in's engine, too), and a press outside them
+   clears what was selected. */
+const textField = n => !!(n && (n.nodeType === 1 ? n : n.parentElement)?.closest?.("input,textarea,select,[contenteditable]:not([contenteditable=false]),.selectable"));
+document.addEventListener("selectstart", e => { if (!textField(e.target)) e.preventDefault(); }, true);
+document.addEventListener("pointerdown", e => {
+	if (textField(e.target)) return;
+	const sel = getSelection(); if (sel && sel.rangeCount && !sel.isCollapsed && !textField(sel.anchorNode)) sel.removeAllRanges();
+}, true);
+document.addEventListener("dragstart", e => { if (!e.target.closest?.("[draggable=true]")) e.preventDefault(); }, true);
 /* The editor's keys (mdDeskKeys.js: dispatched from this map, and listed by ?). */
 const dlgOpen = () => !$("#dlg").hidden && $("#dlg").dataset.first !== "1";
 Keys.bind({ keys: ["Escape"], group: "Anywhere", does: "Close the dialog", when: dlgOpen, field: true, run: () => { $("#dlg").hidden = true; $("#dlg").dataset.first = ""; } });
@@ -2772,13 +2834,12 @@ Keys.bind({ keys: ["C"], mod: "cmd", group: "Anywhere", does: "Copy (track page,
 Keys.bind({ keys: ["V"], mod: "cmd", group: "Anywhere", does: "Paste", run: () => secAction("paste") });
 Keys.bind({ keys: ["Escape"], group: "Anywhere", does: "Leave LEARN", mapping: true, when: () => S.mapping && S.ctl.learn, run: () => toggleLearn() });
 Keys.bind({ keys: ["Space"], group: "Transport", does: "Play / stop", run: () => cmd(V.playing ? "stop" : "play") });
-Keys.bind({ keys: ["R"], group: "Transport", does: "Live recording (RECORD + PLAY)", run: () => cmd("record") });
+Keys.bind({ keys: ["Space"], code: "Space", mod: "alt", group: "Transport", does: "Live recording (RECORD + PLAY): Alt + play, the other Alt that is not \"all\"", run: () => cmd("record") });
 ["seq", "sound", "mix", "sampler", "song", "control"].forEach((ws, i) => Keys.bind({ keys: [String(i + 1)], group: "Workspaces", does: ["Sequence", "Sound", "Mix", "Sampler", "Song", "Control"][i], mapping: ws === "control", when: ws === "control" ? () => S.mapping : null, run: () => { S.ws = ws; render(); } }));
-Keys.bind({ keys: ["L"], group: "Workspaces", does: "LEARN: map a value to a controller knob", mapping: true, when: () => S.mapping, run: () => toggleLearn() });
 Keys.bind({ keys: ["[", "]"], group: "Sequence", does: "Previous / next page", when: () => (S.ws === "seq" || S.ws === "sampler") && pages16() > 1, run: e => { const n = pages16(); S.viewAll = false; S.page = (S.page + (e.key === "]" ? 1 : -1) + n) % n; render(); } });
 Keys.bind({ keys: ["Delete", "Backspace"], group: "Sequence", does: "Clear the selected steps (Song: delete the row)", when: () => S.ws === "song" || S.ws === "seq", run: () => S.ws === "song" ? songAction("del") : secAction("clear") });
-Keys.bind({ keys: ["Delete", "Backspace"], mod: "alt", group: "Sequence", does: "Clear the whole pattern: every track's trigs and locks", when: () => S.ws === "seq", run: () => clearPattern() });
-Keys.bind({ keys: ["CLR"], mod: "alt", group: "Anywhere", does: "Click: clear the whole pattern, every track's trigs and locks (one undo step)" });
+Keys.bind({ keys: ["Delete", "Backspace"], mod: "alt", group: "All", does: "Sequence: clear the whole pattern: every track's trigs and locks", when: () => S.ws === "seq", run: () => clearPattern() });
+Keys.bind({ keys: ["CLR"], mod: "alt", group: "All", does: "Click: clear the whole pattern, every track's trigs and locks (one undo step)" });
 Keys.bind({ keys: ["ArrowLeft", "ArrowRight"], group: "Song", does: "Previous / next row", when: () => S.ws === "song", run: e => { S.songSel = Math.max(0, Math.min(V.song.length - 1, S.songSel + (e.key === "ArrowRight" ? 1 : -1))); render(); } });
 Keys.bind({ keys: ["step"], mod: "shift", group: "Sequence", does: "Click: accent" });
 Keys.bind({ keys: ["step"], mod: "alt", group: "Sequence", does: "Click: slide" });

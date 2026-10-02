@@ -144,6 +144,7 @@ The machine state the page shows, published by `mmDesk::Desk` whenever it change
 | `global` | the active global slot |
 | `mutes` | MM-P4: `synth` and `midi`, bit t = track t muted, from RAM (the MUTE window and CC 3; made on the machine's panel too); `null` where the engine cannot read them (HW MIDI) |
 | `poly` | MM-P4: POLY, the machine's audio mode (status 0x20); `null` until it answers |
+| `desk` | MM-P8: `chain` (the firmware's pattern chain from RAM: `active`, `next`, `patterns`; `null` where not readable, HW MIDI) and `bankGroup` (0 A-D, 1 E-H, -1 unknown) |
 | `recv` | the SYSEX RECV session: `state` (`idle`, `toMain`, `entering`, `parked`, `leaving`, `failed`; over HW MIDI `idle` or `waitingUser`), `waiting` (HW MIDI: messages that wait for the person to open SYSEX RECV, sent by `hwSend`), `sending` (dumps in flight), `received` / `errors` (the firmware's own counters) |
 | `loading` | `done` / `total` documents read (288) |
 | `roundTripMs`, `error` | the last dump's send-to-read-back time; the last problem, if any |
@@ -161,7 +162,7 @@ Commands from the page: `ready`, `set` (`kind`, `doc`), `load` (`kind`, `slot`),
 `poly` (`on`), `record` (`mode`: `off`, `grid`, `live`), `hwSend` (HW MIDI: the machine is on
 SYSEX RECV), `followHost`, `revealRomFolder`, `recheckFirmware`, and the `learn*` family. The
 schema's `$defs/command` is generated from the command tables (`mmDeskTest --write-schema`).
-Over HW MIDI `play` asks first (`transportIgnore`) while the active global's CONTROL IN TRANSPORT
+`chain` (`patterns`) and `chainClear`: see Chaining below. Over HW MIDI `play` asks first (`transportIgnore`) while the active global's CONTROL IN TRANSPORT
 is IGNORE; confirmed, it writes TRANSPORT ACCEPT (a global dump, so it waits for SYSEX RECV).
 
 ## 5. Hardware limits (`validate`)
@@ -189,3 +190,20 @@ if(pattern)
 ```
 
 `mmDataCorpusTest [--json <dir>] <dir>` checks byte-exact, JSON-exact and valid on every MM dump under a directory.
+
+**Chaining (MM-P8).** `machine.desk.chain` is the firmware's own pattern chain (manual 1-46: hold
+BANK, press the TRIG keys), read from RAM (`md::MmTelemetry`, measured with
+`mmEditorProbeFirmwareTest chain`): 0x2bc2c4 active, 0x2bc2c8 the next entry, 0x2bc2cc the length,
+0x2bc2d0 + 4 n the patterns, 32-bit big-endian; BANK GROUP is 0x70000b. `{"op":"chain","patterns":[...]}`
+checks the machine's rules (at least two, one bank, each once), switches to pattern mode first
+(SET STATUS 0x10 = 0: in song mode the firmware keeps the chain but plays the song, measured), presses
+BANK GROUP when the chain is in the other half and then BANK + the TRIG keys
+(`DevicePort::pressBankTrigs`). Unlike the Machinedrum, a SysEx LOAD PATTERN does **not** end the
+chain (the pattern plays once, then the chain goes on, measured); a pick (BANK + one TRIG) or STOP
+twice does. So `select` while a chain plays asks first (`breakChain`) and, confirmed, ends it with the
+pick's own keys before the LOAD PATTERN; `chainClear` is the pick of the pattern that plays. While the
+desk's keys are on their way (or the panel is on its way to or from SYSEX RECV) the latest `chain` /
+`chainClear` waits (one at a time, the latest wins). A chain the machine now holds drops a queued pick.
+Over HW MIDI `capabilities.chains` is false: Appendix C has no message for chaining or for the keys.
+The Song page's palette has ARRANGE | CHAIN; its header says what plays: `SONG nn` in song mode, else
+`CHAIN A03»A05` while a chain is active, else `PATTERN A06`.

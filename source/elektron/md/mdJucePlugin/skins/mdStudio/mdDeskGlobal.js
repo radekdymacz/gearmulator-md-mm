@@ -1,6 +1,6 @@
 "use strict";
 /* v61 (P5): GLOBAL settings (manual pp.57-62, 80-81): the machine's FUNCTION + PATTERN/SONG menu as one panel,
-   opened from the engine menu (GLOBAL…) or with G. glob() gives the view, globSend(field, value) changes one
+   opened from the engine menu (GLOBAL…). glob() gives the view, globSend(field, value) changes one
    setting; both are the host's (example state in the mockup, the desk's documents in the plug-in). What was
    measured on the firmware is plain; what could not be is marked "not verified". */
 var GP={open:false};
@@ -75,5 +75,4 @@ function globSend(f, v) {
 	else cmd("globalSet", { field: f, v });
 }
 Bridge.onMessage(m => { if (GP.open && (m.type === "doc" && m.kind === "global" || m.type === "result" && !m.ok)) setTimeout(drawGlobal, 20); });
-Keys.bind({ keys: ["G"], group: "Anywhere", does: "GLOBAL settings (also in the engine menu)", run: () => GP.open ? closeGlobal() : openGlobal() });
 Keys.bind({ keys: ["Escape"], group: "Anywhere", does: "Close the GLOBAL settings", when: () => GP.open, run: () => closeGlobal() });
