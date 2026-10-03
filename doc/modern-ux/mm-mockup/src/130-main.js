@@ -64,6 +64,31 @@ const ARMED=new Map();
 function showArmed(){$$(".ms.m[data-mute]").forEach(b=>{const p=ARMED.get(+b.dataset.mute);b.classList.toggle("prep",p!=null);if(p!=null)b.dataset.prep=p?"X":"+";else delete b.dataset.prep})}
 document.addEventListener("keyup",e=>{if(e.key!=="Shift"||!ARMED.size)return;ARMED.forEach((m,i)=>{trk(i).mute=m});ARMED.clear();tx();if(HOST.mutes)HOST.mutes();render()});
 addEventListener("blur",()=>{ARMED.clear();showArmed()});
+/* As the MD Editor: a drag across the M (or S) keys paints them (shared/deskTogglePaint.js), rail, Mix and the
+   Perform page's mutes alike: the pressed key toggles where the pointer goes down and its new state is the paint;
+   every other key of its kind on the same side (synth T1-T6, MIDI M1-M6) the pointer crosses becomes that, once.
+   Every point between two pointer events is looked at (no key skipped on a fast drag); the page's mutes go out
+   once per event through HOST.mutes, which sends only the tracks that differ from the machine's (FieldExpectation).
+   A click is a one-key paint and the click after the press is the gesture's; the keyboard's click and Shift-click
+   (prepare) stay the click's. msPaint: {group, value, seen, at} or null. */
+let msPaint=null,msClickEaten=false;
+function msKeyAt(el){const b=el?.closest?.("[data-mute],[data-solo],[data-gmute]");if(!b||b.disabled||b.closest("[data-na]"))return null;
+ const kind=b.dataset.mute!=null?"mute":b.dataset.solo!=null?"solo":"gmute",i=+b.dataset[kind];if(!trk(i))return null;return{group:kind+(i<6?":synth":":midi"),kind,i}}
+const msOn=k=>!!trk(k.i)[k.kind==="solo"?"solo":"mute"];
+function msSet(k,on){trk(k.i)[k.kind==="solo"?"solo":"mute"]=on}
+function msSend(){tx();if(HOST.mutes)HOST.mutes();render()}
+addEventListener("pointerdown",e=>{msClickEaten=false;if(e.button!==0||e.shiftKey||e.altKey||e.metaKey||e.ctrlKey)return;const k=msKeyAt(e.target);if(!k)return;
+ const r=TogglePaint.begin(k.group,k.i,msOn(k));msPaint=Object.assign(r.paint,{at:{x:e.clientX,y:e.clientY}});msClickEaten=true;
+ try{document.body.setPointerCapture(e.pointerId)}catch(_){}e.preventDefault();msSet(k,r.change);msSend()},true);
+document.addEventListener("pointermove",e=>{if(!msPaint)return;if(e.buttons===0&&e.pointerType==="mouse"){endMsPaint();return}let sent=false;
+ const co=e.getCoalescedEvents?.()||[];for(const ev of co.length?co:[e]){const at={x:ev.clientX,y:ev.clientY};
+  for(const pt of TogglePaint.points(msPaint.at,at)){const k=msKeyAt(document.elementFromPoint(pt.x,pt.y));if(!k)continue;const r=TogglePaint.visit(msPaint,k.group,k.i,msOn(k));
+   if(r.paint!==msPaint)msPaint=Object.assign(r.paint,{at:msPaint.at});if(r.change!=null){msSet(k,r.change);sent=true}}
+  msPaint=Object.assign({},msPaint,{at})}
+ if(sent)msSend()});
+function endMsPaint(){if(!msPaint)return;msPaint=null;setTimeout(()=>{msClickEaten=false},0)}
+document.addEventListener("pointerup",endMsPaint);document.addEventListener("pointercancel",endMsPaint);addEventListener("blur",endMsPaint);
+addEventListener("click",e=>{if(!msClickEaten)return;msClickEaten=false;e.stopImmediatePropagation();e.preventDefault()},true);
 /* P7: a drag across the SLIDE, SWING or envelope steps paints them: the first step decides on or off,
    and the drag is one edit (one undo step). A click is a one-step paint. */
 let paint=null;
@@ -256,6 +281,7 @@ Keys.bind({keys:["ArrowUp","ArrowDown"],group:"Values",does:"A focused value, te
 Keys.bind({keys:["ArrowLeft","ArrowRight"],group:"Values",does:"A focused value: one step"});
 Keys.bind({keys:["drag a value"],mod:"alt",group:"All",does:"Control All: move that value on every synth track (FUNCTION + knob on the Machinedrum)"});
 Keys.bind({keys:["M key"],mod:"shift",group:"Anywhere",does:"Click: prepare that track's mute (+ / X); applied when ⇧ is let go"});
+Keys.bind({keys:["drag M / S keys"],group:"Anywhere",does:"Mute (solo) or unmute every track the drag crosses, as the first key became"});
 Keys.bind({keys:["roll"],mod:"shift",group:"Sequence",does:"Click: a chord note on the step"});
 Keys.bind({keys:["roll"],mod:"alt",group:"Sequence",does:"Click: delete a note, or a NOTE OFF on an empty step"});
 Keys.bind({keys:["lock lane"],mod:"alt",group:"Sequence",does:"Drag: erase locks"});

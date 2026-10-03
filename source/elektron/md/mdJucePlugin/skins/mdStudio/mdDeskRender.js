@@ -22,7 +22,7 @@ const beyondStatus = v => { const o = { ...v }; for (const k of STATUS) delete o
 function menuOpen() { return !$("#machpop")?.hidden || !$("#kpop")?.hidden; }
 /* a gesture that holds the page (a drag, a paint, a dragged pad): documents re-derive the view, the page renders
    once it ends (pendingRender) */
-const HOLDS = new Set(["value", "editor", "lane", "l2", "chop", "song", "paint"]);
+const HOLDS = new Set(["value", "editor", "lane", "l2", "chop", "song", "paint", "mutePaint"]);
 function interacting() { const h = Held.now; return !!(h && HOLDS.has(h.kind)) || menuOpen(); }
 function scheduleRender() {
 	if (renderRaf) return;

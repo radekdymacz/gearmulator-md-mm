@@ -52,6 +52,57 @@ Keys.bind({ keys: ["ArrowUp", "ArrowDown"], group: "Selected track", does: "Sele
 const refreshAudible0 = refreshAudible; refreshAudible = function () { refreshAudible0(); showPrep(); };
 const renderP0 = render; render = function () { renderP0(); showPrep(); markRecLock(); };
 
+/* ===== A drag across the M (or S) keys paints them, rail and Mix alike (shared/deskTogglePaint.js): the pressed
+   key toggles where the pointer goes down and its new state is the paint; every other M key (S key) the pointer
+   crosses becomes that, once; a key already so sends nothing. The pointer is the page's (held on the body) and
+   every point between two of its events is looked at, so a fast drag skips no key. Held: {kind: "mutePaint",
+   group: "mute"|"solo", value, seen, at: the last point}. Each changed track's mute goes as a click's does
+   (muteSet, applySolo); mutes are no undo step. A click is a one-key paint; the click that follows the press is
+   the gesture's. The keyboard's click (Enter, Space) and Shift-click (prepare) stay the click's: Shift takes no
+   drag, as the machine's MUTE window takes one key at a time. ===== */
+const MS_KEY = ".ms[data-mute],.ms[data-solo]";
+function msKeyAt(el) {
+	const b = el?.closest?.(MS_KEY); if (!b || b.disabled || b.dataset.capna != null) return null;
+	const k = b.dataset.mute != null ? { group: "mute", i: +b.dataset.mute } : { group: "solo", i: +b.dataset.solo };
+	return V.tracks[k.i] ? k : null;
+}
+const msOn = k => k.group === "mute" ? !!V.tracks[k.i].mute : S.soloSet.has(k.i);
+function msSet(k, on) {
+	if (k.group === "mute") muteSet(k.i, on);
+	else { const next = new Set(S.soloSet); on ? next.add(k.i) : next.delete(k.i); S.soloSet = next; V = view(); applySolo(); }
+	refreshAudible();
+}
+let msClickEaten = false;
+addEventListener("pointerdown", e => {
+	msClickEaten = false;
+	if (e.button !== 0 || e.shiftKey || e.altKey || e.metaKey || e.ctrlKey) return;
+	const k = msKeyAt(e.target); if (!k) return;
+	const { paint, change } = TogglePaint.begin(k.group, k.i, msOn(k));
+	Held.begin("mutePaint", Object.assign(paint, { at: { x: e.clientX, y: e.clientY } }));
+	msClickEaten = true; grabPointer(document.body, e); e.preventDefault();
+	msSet(k, change);
+}, true);
+document.addEventListener("pointermove", e => {
+	if (!Held.as("mutePaint")) return;
+	if (e.buttons === 0 && e.pointerType === "mouse") { endMutePaint(); return; }
+	const co = e.getCoalescedEvents?.() || [];	/* none for a made-up event: the event itself */
+	for (const ev of co.length ? co : [e]) {
+		const at = { x: ev.clientX, y: ev.clientY };
+		for (const pt of TogglePaint.points(Held.as("mutePaint").at, at)) {
+			const k = msKeyAt(document.elementFromPoint(pt.x, pt.y)), p = Held.as("mutePaint"); if (!k) continue;
+			const r = TogglePaint.visit(p, k.group, k.i, msOn(k));
+			if (r.paint !== p) Held.with("mutePaint", { seen: r.paint.seen });
+			if (r.change != null) msSet(k, r.change);
+		}
+		Held.with("mutePaint", { at });
+	}
+});
+function endMutePaint() { if (!Held.end("mutePaint")) return; setTimeout(() => { msClickEaten = false; }, 0); if (pendingRender) scheduleRender(); }
+document.addEventListener("pointerup", endMutePaint); document.addEventListener("pointercancel", endMutePaint);
+window.addEventListener("blur", endMutePaint);
+addEventListener("click", e => { if (!msClickEaten) return; msClickEaten = false; e.stopImmediatePropagation(); e.preventDefault(); }, true);
+Keys.bind({ keys: ["drag M / S keys"], group: "Anywhere", does: "Mute (solo) or unmute every track the drag crosses, as the first key became" });
+
 /* ===== Knob locks while live recording (P4): the firmware locks the track's next trig whose step has
    not started when the turn lands; the desk says which (machine.desk.recLock), the cell shows it until
    the read-back brings the real lock. ===== */

@@ -65,7 +65,7 @@ const Gesture = (() => {
    own kind (replacing whatever was held), replaces it as it moves (with) and ends only its own (end). The
    kinds (mdDeskGestures.js): "value" a knob or fader drag, "editor" a curve editor's handle, "lane" the lock
    lane's draw or ramp, "paint" steps, "chop" a chop slice, "l2" an LCD line 2 value, "song" a song pad or row
-   dragged, "gv" a GEN or MUTATE value, "bpm" the tempo; "wheel" a run of wheel notches on one step's lock and
+   dragged, "gv" a GEN or MUTATE value, "bpm" the tempo, "mutePaint" a drag across the M or S keys (mdDeskLive.js); "wheel" a run of wheel notches on one step's lock and
    "rotate" the rotate presses while Alt is down (their undo step g). interacting() (mdDeskRender.js) reads it. */
 const Held = (() => {
 	let now = null;

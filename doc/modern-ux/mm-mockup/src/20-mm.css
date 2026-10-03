@@ -229,7 +229,7 @@ table.mmap td{padding:4px 6px;border-bottom:1px solid var(--rule);white-space:no
 table.mmap tr.sel td{background:var(--plate3)}
 table.mmap tr.sel td:first-child{box-shadow:inset 3px 0 0 var(--led)}
 .mutes12{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:3px}
-.mutes12 button{height:30px;padding:0;display:grid;justify-items:center;align-content:center;gap:2px;font:500 11px var(--mono);letter-spacing:0}
+.mutes12 button{height:30px;padding:0;touch-action:none;display:grid;justify-items:center;align-content:center;gap:2px;font:500 11px var(--mono);letter-spacing:0}
 .mutes12 button .led{width:6px;height:6px}
 .mutes12 button.on .led{background:var(--ledg);box-shadow:0 0 5px var(--ledg)}
 .mutes12 button:not(.on){background:var(--rec);color:#fff}
