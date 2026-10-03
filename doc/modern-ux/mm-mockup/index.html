@@ -1192,10 +1192,6 @@ svg.route .jack.live{fill:var(--ink)}
 .strip6 .shead{display:flex;justify-content:space-between;align-items:baseline;gap:6px}
 .strip6 .shead b{font:500 13px var(--mono);color:var(--body)}
 .strip6 .shead span{font-size:12px;color:var(--print2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.strip6 .frow{display:grid;grid-template-columns:48px minmax(0,1fr);gap:8px;align-items:stretch}
-.strip6 .fader{height:150px}
-.strip6 .pcs{display:grid;gap:3px;align-content:start}
-.strip6 .pc{height:28px}
 .busk{display:grid;grid-template-columns:repeat(3,1fr);gap:3px}
 .busk button{height:24px;padding:0;font:600 11px var(--mono);letter-spacing:0}
 .busk button[aria-pressed=true]{background:var(--cream);color:var(--creamtext)}
@@ -1427,8 +1423,6 @@ canvas.roll{width:100%;display:block;border-radius:4px;background:var(--lcd);box
 .routewrap{gap:10px!important}
 .mixrow{border-bottom:2px solid var(--print);padding-bottom:10px}
 .strip6{padding:4px 6px 6px!important;gap:4px!important}
-.strip6 .fader{height:128px!important}
-.strip6 .pc{height:26px!important}
 .busrow{display:grid;grid-template-columns:28px minmax(0,1fr);gap:6px;align-items:center}
 .busrow .kselbtn{height:24px}
 .flowl{padding:5px 12px!important;line-height:1.6!important}
@@ -1576,13 +1570,10 @@ body.engwait #main,body.engwait #rail{pointer-events:none;opacity:.6;transition:
 /* fill the height on Perform, Mix and Control too */
 .kb{height:clamp(130px,calc(100vh - 424px),560px)!important}
 .perf.map .kb{height:clamp(110px,calc(100vh - 752px),420px)!important}
-.strip6 .fader{height:clamp(128px,calc(100vh - 638px),300px)!important}
 .srch,.mxc{height:clamp(36px,calc((100vh - 222px)/10 - 3px),72px)!important}
 .kb{height:clamp(130px,calc(100vh - 436px),560px)!important}
-.strip6 .fader{height:clamp(128px,calc(100vh - 648px),300px)!important}
 .perf.map .kb{height:clamp(110px,calc(100vh - 740px),420px)!important}
 .kb{height:clamp(130px,calc(100vh - 436px),680px)!important}
-.strip6 .fader{height:clamp(128px,calc(100vh - 648px),286px)!important}
 .srch,.mxc{height:clamp(36px,calc((100vh - 222px)/10 - 3px),90px)!important}
 #seq .nlane{width:0;min-width:100%}
 #seq canvas.roll{width:100%!important;min-width:0;max-width:100%}
@@ -1637,19 +1628,47 @@ body{box-sizing:border-box;overflow:hidden}
 /* the routing graph is as tall as its width needs (no letterbox); the strips' faders take the rest of the page */
 #main>.routewrap{flex:1 1 auto;min-height:0;grid-template-rows:minmax(0,1fr) auto auto auto;align-content:start}
 #main>.routewrap>.strips6{min-height:0;max-height:470px}
-#main>.routewrap .strip6{grid-template-rows:auto minmax(0,1fr) auto auto auto;align-content:stretch}
-/* a strip: the fader and its LEV value in one column, as tall as the four value boxes beside it (no gap) */
-.strip6 .frow{height:auto;min-height:124px;align-items:stretch!important}
-.strip6 .fcol{display:grid;grid-template-rows:minmax(0,1fr) auto;justify-items:center;gap:5px;min-height:0}
-.strip6 .fcol .fader{height:auto!important;min-height:0;width:100%}
-.strip6 .fcol .v{font:500 13px/1 var(--mono);color:var(--body);text-align:center;min-width:3ch}
-.strip6 .pcs{grid-template-rows:repeat(4,minmax(0,1fr));align-content:stretch!important;min-height:0}
-.strip6 .pcs .pc{height:auto!important;min-height:0}
 svg.route{width:100%;height:auto;aspect-ratio:1200/146;min-height:0}
 /* Shift + M prepares a mute, as the MD Editor (P7): "+" unmute, "X" mute, blinking until Shift comes up */
 .ms.m.prep{box-shadow:inset 0 0 0 2px var(--led);position:relative;color:transparent!important}
 .ms.m.prep::after{content:attr(data-prep);position:absolute;inset:0;display:grid;place-items:center;font:700 12px var(--pix);color:var(--keytext);animation:blink .5s steps(2) infinite}
 @media (prefers-reduced-motion:reduce){.ms.m.prep::after{animation:none}}
+/* ===== Mix: a channel strip (signal order, top to bottom) =====
+   head · trim (AMP VOL, DIST, DSND: the sound's own values) · PAN bar · LEVEL fader with its scale and readout ·
+   OUT buses · IN · M / S. Every row has a fixed height except the fader's, so the six strips line up. */
+#main>.routewrap .strip6{grid-template-rows:auto auto auto minmax(0,1fr) auto auto auto;align-content:stretch}
+.strip6 .shead{justify-content:flex-start;gap:6px;min-width:0}
+.strip6 .shead .mc{font-weight:600}
+.strip6 .shead span{margin-left:auto;font-size:11px;min-width:0}
+/* trim: three small two-line boxes, label over value */
+.strip6 .trim{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:3px}
+.strip6 .pc.mini{height:32px;padding:2px 6px 4px;display:grid;grid-template-rows:auto auto;align-content:center;justify-content:stretch;gap:1px}
+.strip6 .pc.mini span{font-size:9px;letter-spacing:.08em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.strip6 .pc.mini b{font-size:13px;line-height:1}
+.strip6 .pc.mini .mod{top:2px;right:3px}
+/* PAN: one bar, L to R, with the centre detent */
+.strip6 .pc.pan{height:24px;padding:0 6px;display:flex;justify-content:flex-start;gap:6px;align-items:center;cursor:ew-resize}
+.strip6 .pc.pan span{flex:none;order:0}.strip6 .pc.pan .pt{flex:1 1 auto;order:2}.strip6 .pc.pan b{flex:none;order:3;width:3.4ch}
+.strip6 .pc.pan::after,.strip6 .pc.pan.bip::before{display:none!important}
+.strip6 .pc.pan span{font-size:9px;letter-spacing:.08em}
+.strip6 .pc.pan b{font-size:12px;text-align:right}
+.strip6 .pc.pan .pt{position:relative;height:6px;border-radius:1px;background:color-mix(in srgb,var(--keytext) 16%,transparent)}
+.strip6 .pc.pan .pt::before{content:"";position:absolute;left:50%;top:-4px;bottom:-4px;width:1px;background:var(--keydim)}
+.strip6 .pc.pan .pt::after{content:"";position:absolute;top:0;bottom:0;left:var(--pl);width:var(--pw);background:var(--trig)}
+.strip6 .pc.pan .mod{position:static;order:1;flex:none}
+/* LEVEL: the scale, the fader, the readout */
+.strip6 .lvl{display:grid;grid-template-columns:minmax(0,1fr) 44px minmax(0,1fr);align-items:stretch;min-height:96px;padding:9px 0 7px;border-top:1px solid var(--rule)}
+.strip6 .lvl .scale{position:relative;margin-right:4px}
+.strip6 .lvl .scale i{position:absolute;right:0;transform:translateY(50%);font:500 9px/1 var(--mono);font-style:normal;color:var(--print2);display:flex;align-items:center;gap:3px}
+.strip6 .lvl .scale i::after{content:"";width:6px;border-top:1px solid var(--print2)}
+.strip6 .lvl .fader{height:auto!important;min-height:0;width:100%}
+/* the LEVEL value rides beside the fader cap; the column's caption names the fader */
+.strip6 .lvl .fader .lread{position:absolute;left:calc(50% + 22px);bottom:var(--f);transform:translateY(50%);font:13px/1 var(--pix);background:var(--lcd);color:var(--ink);border-radius:2px;padding:2px 4px;min-width:3ch;text-align:right;box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--ink) 18%,transparent);pointer-events:none}
+.strip6 .lcap{align-self:start;justify-self:start;font:600 9px/1 var(--sans);letter-spacing:.12em;color:var(--print2);margin-top:-3px;cursor:default}
+.strip6 .busrow{grid-template-columns:24px minmax(0,1fr);gap:4px}
+.strip6 .busk button,.strip6 .busrow .kselbtn{height:22px}
+.strip6 .mrow{display:grid;grid-template-columns:1fr 1fr;gap:3px}
+.strip6 .mrow .ms{width:auto;height:22px}
 /* The header's LCD as one real display (P7), one stylesheet for both editors (skins/shared/). One dot grid: labels are 8 px Silkscreen (one dot = 1 px) and values 16 px (two
    dots), line 2's values 12 px (on the same device-pixel grid at 2x: 2, 3 and 4 pixels a dot), every
    text line box is its font size; one rule weight (1 px) between all fields; no rule
@@ -3149,7 +3168,9 @@ function syncControls(){
  $$("#main [data-g]").forEach(el=>{if(!el.classList.contains("pc")&&!el.classList.contains("fader"))return;const r=ref(el);if(!r)return;const[o,n,m,t,g]=r,v=o[n];
   const mx=maxOf(m);el.style.setProperty("--f",(v==null?0:v/mx*100)+"%");el.setAttribute("aria-valuenow",v);el.setAttribute("aria-valuemax",mx);
   if(m.signed&&el.classList.contains("pc")){const q=v/mx*100;el.classList.add("bip");el.style.setProperty("--pl",Math.min(q,50.4)+"%");el.style.setProperty("--pw",Math.max(1.5,Math.abs(q-50.4))+"%")}
-  const b=el.querySelector("b");if(b)b.textContent=fmt(m,v);el.setAttribute("aria-valuetext",fmt(m,v));
+  /* a PAN bar reads as a mixer does: L / C / R */
+  const txt=el.classList.contains("pan")&&m.signed?(v===64?"C":(v<64?"L":"R")+Math.abs(v-64)):fmt(m,v);
+  const b=el.querySelector("b");if(b)b.textContent=txt;el.setAttribute("aria-valuetext",txt);
   if(PAGES.includes(g)||g==="MID"){const pid=g+"."+n;el.classList.toggle("lk",S.locks.has(lkKey(t,pid)));const mb=modBy(t,g,+n);let md=el.querySelector(".mod");
    if(mb.length){if(!md){md=document.createElement("i");md.className="mod";el.appendChild(md)}md.textContent="~"+mb.join("");el.title=`Modulated by LFO ${mb.join(" + ")}`}else if(md)md.remove();
    const mp=S.ctl.links.filter(l=>l.t===t&&l.pid===pid);el.classList.toggle("mapped",mp.length>0)}});
@@ -4252,16 +4273,33 @@ function routeSvg(){const T=S.tracks,W=1200,NW=140,nx=i=>118+172*i,NY=30,NH=44,b
    <text x="${x+8}" y="${NY+13}" font-size="9">T${i+1}${fx?" · FX":""}</text><text x="${x+8}" y="${NY+28}" font-size="11">${shortM(tr.m)}</text><text x="${x+8}" y="${NY+39}" font-size="7" opacity=".8">${tr.name.toUpperCase().slice(0,18)}</text></g>`});
  return`<svg class="route" viewBox="0 0 ${W} ${H}" preserveAspectRatio="xMidYMid meet" role="img" aria-label="Routing: tracks, mix buses, outputs">${h}</svg>`}
 function sv2(tr,n){const i=MACH[tr.m].p.indexOf(n);return i<0?0:tr.v.SYN[i]}
+/* A channel strip, top to bottom in signal order (manual 1-26..1-29, 1-33): the sound's own mix values, then PAN,
+   then the LEVEL fader at the end of the track's path, then where it goes (OUT buses, IN for an FX machine) and
+   M / S. AMP VOL is part of the sound (lockable, LFO-able), so it sits with DIST and DSND as the strip's trim;
+   the fader is LEVEL (the LEVEL knob, CC 7), the track's mix level, which can be neither locked nor modulated.
+   Every row is the same height on every strip, so the six line up. */
+const MIXTIP={
+ VOL:"AMP VOL: the voice's volume, part of the sound (AMP page). It comes before LEVEL, can be locked per step and moved by an LFO. Balance tracks with the LEVEL fader; use AMP VOL for movement inside the sound.",
+ DIST:"DIST: overload distortion and headroom (AMP page). Below 0 adds headroom: quieter and cleaner.",
+ DSND:"DSND: delay send, into this track's own delay (EFFECTS page). Minus keeps the stereo image, plus is ping-pong. 0: no delay.",
+ PAN:"PAN: the track's place in the stereo field (AMP page), L64 to R63. Drag sideways, double-click for centre.",
+ LEV:"LEVEL: the track's mix level (the LEVEL knob, CC 7), at the end of its path, after AMP VOL. It cannot be locked or modulated."};
+const mixBox=(g,n,i,label,tip)=>pc(g,n,{t:i,label,cls:"mini",extra:`title="${tip}"`});
+function mixStrip(tr,i){const fx=isFx(tr.m);
+ return`<div class="strip6 ${i===S.sel?"sel":""}" data-sel="${i}" style="${audible(i)?"":"opacity:.5"}">
+   <div class="shead"><b>T${i+1}</b><b class="mc">${shortM(tr.m)}</b><span title="${tr.name}">${tr.name}</span></div>
+   <div class="trim">${mixBox("AMP",5,i,"AMP VOL",MIXTIP.VOL)}${mixBox("AMP",4,i,"DIST",MIXTIP.DIST)}${mixBox("EFX",4,i,"DSND",MIXTIP.DSND)}</div>
+   <div class="pc pan hz" role="slider" tabindex="0" data-g="AMP" data-n="6" data-t="${i}" aria-label="T${i+1} PAN" title="${MIXTIP.PAN}"><span>PAN</span><i class="pt"></i><b></b></div>
+   <div class="lvl"><div class="scale" aria-hidden="true">${[127,96,64,32,0].map(v=>`<i style="bottom:${v/127*100}%">${v}</i>`).join("")}</div>
+    <div class="fader" role="slider" tabindex="0" aria-label="T${i+1} LEVEL" data-g="lev" data-t="${i}" title="${MIXTIP.LEV}"><div class="tr"><i></i></div><div class="cap2"></div><b class="lread" data-show="${i}"></b></div>
+    <small class="lcap" title="${MIXTIP.LEV}">LEVEL</small></div>
+   <div class="busrow"><span class="inlab">Out</span><div class="busk">${BUSES.map(b=>`<button data-bus="${b}" data-t="${i}" aria-pressed="${tr.out[b]}" title="${tr.out[b]?"Sends to":"Not sent to"} mix bus ${b}">${b}</button>`).join("")}</div></div>
+   <div class="busrow"><span class="inlab">In</span>${fx?`<select id="inp${i}" data-inp="${i}" aria-label="T${i+1} input">${INPUTS.filter(x=>!(x==="NEIBOR"&&i===0)).map(x=>opt(x,x,tr.inp)).join("")}</select>`:`<button class="kselbtn" disabled title="Only FX machines take an input"><span>synth · none</span></button>`}</div>
+   <div class="mrow"><button class="ms m ${ARMED.has(i)?"prep":""}" ${ARMED.has(i)?`data-prep="${ARMED.get(i)?"X":"+"}"`:""} data-mute="${i}" aria-pressed="${tr.mute}" aria-label="Mute T${i+1}">M</button><button class="ms s" data-solo="${i}" aria-pressed="${tr.solo}" aria-label="Solo T${i+1}">S</button></div></div>`}
 function renderMix(){const T=S.tracks;
  const flows=BUSES.map(b=>{const f=busFlow(b);return`<span>${b}: ${f.items.join(" + ")||"<i>empty</i>"} <i>›</i> ${outOf(b)}${f.notes.length?" <i>· "+f.notes.join(", ")+"</i>":""}</span>`}).join("");
  $("#main").innerHTML=`<div class="routewrap">
-  <div class="strips6 mixrow">${T.map((tr,i)=>{const fx=isFx(tr.m);return`<div class="strip6 ${i===S.sel?"sel":""}" data-sel="${i}" style="${audible(i)?"":"opacity:.5"}">
-   <div class="shead"><b>T${i+1} ${shortM(tr.m)}</b><span>${tr.name}</span></div>
-   <div class="frow"><div class="fcol"><div class="fader" role="slider" tabindex="0" aria-label="T${i+1} level" data-g="lev" data-t="${i}" title="LEV: the track's master level. It cannot be locked or modulated."><div class="tr"><i></i></div><div class="cap2"></div></div><div class="v" data-show="${i}" title="LEV: the track's level"></div></div>
-    <div class="pcs">${pc("AMP",5,{t:i,label:"VOL"})}${pc("AMP",6,{t:i,label:"PAN"})}${pc("AMP",4,{t:i,label:"DIST"})}${pc("EFX",4,{t:i,label:"DSND"})}</div></div>
-   <div class="busrow"><span class="inlab">Out</span><div class="busk">${BUSES.map(b=>`<button data-bus="${b}" data-t="${i}" aria-pressed="${tr.out[b]}" title="${tr.out[b]?"Sends to":"Not sent to"} mix bus ${b}">${b}</button>`).join("")}</div></div>
-   <div class="busrow"><span class="inlab">In</span>${fx?`<select id="inp${i}" data-inp="${i}" aria-label="T${i+1} input">${INPUTS.filter(x=>!(x==="NEIBOR"&&i===0)).map(x=>opt(x,x,tr.inp)).join("")}</select>`:`<button class="kselbtn" disabled title="Only FX machines take an input"><span>synth · none</span></button>`}</div>
-   <div class="mrow"><button class="ms m ${ARMED.has(i)?"prep":""}" ${ARMED.has(i)?`data-prep="${ARMED.get(i)?"X":"+"}"`:""} data-mute="${i}" aria-pressed="${tr.mute}" aria-label="Mute T${i+1}">M</button><button class="ms s" data-solo="${i}" aria-pressed="${tr.solo}" aria-label="Solo T${i+1}">S</button></div></div>`}).join("")}</div>
+  <div class="strips6 mixrow">${T.map((tr,i)=>mixStrip(tr,i)).join("")}</div>
   <div class="routebar"><span class="cap">Routing</span><span class="seg" data-set="routing">${ROUTES.map(r=>`<button data-v="${r}" aria-pressed="${S.routing===r}">${r.replace("+"," + ")}</button>`).join("")}</span>
    <span class="grow"></span><span class="hint">Tracks sum into a bus in track order, so an FX on a bus only hears the tracks before it. Click a node to pick its strip.</span></div>
   ${routeSvg()}<div class="flowl">${flows}</div></div>`;
@@ -4925,7 +4963,7 @@ main.addEventListener("pointerdown",e=>{
  const pk=e.button===0&&e.target.closest('canvas[data-ed="dktrn"]');if(pk){trnDown(pk,e);e.preventDefault();return}
  const roll=e.target.closest("canvas.roll");if(roll){roll.setPointerCapture(e.pointerId);rollDown(roll,e);e.preventDefault();return}
  const c=e.target.closest("canvas.ed");if(c){const hh=nearest(c,e);if(!hh)return;active={c,k:hh.k,all:e.altKey&&!isMidiT(S.sel)};if(active.all)allTip();c.setPointerCapture(e.pointerId);e.preventDefault();redraw();return}
- const el=e.target.closest(".pc[data-g],.fader[data-g]");if(el){const t=el.dataset.t!=null?+el.dataset.t:S.sel;drag={el,x:e.clientX,y:e.clientY,v:getV(el),vert:el.classList.contains("fader"),mx:maxOf(ref(el)[2]),all:e.altKey&&!isMidiT(t)&&PAGES.includes(el.dataset.g)};if(drag.all)allTip();el.setPointerCapture(e.pointerId);el.classList.add("act");e.preventDefault();return}
+ const el=e.target.closest(".pc[data-g],.fader[data-g]");if(el){const t=el.dataset.t!=null?+el.dataset.t:S.sel;drag={el,x:e.clientX,y:e.clientY,v:getV(el),vert:el.classList.contains("fader"),hz:el.classList.contains("hz")&&el.getBoundingClientRect().width,mx:maxOf(ref(el)[2]),all:e.altKey&&!isMidiT(t)&&PAGES.includes(el.dataset.g)};if(drag.all)allTip();el.setPointerCapture(e.pointerId);el.classList.add("act");e.preventDefault();return}
  const lb=e.target.closest(".lb");if(lb){laneDraw=e.shiftKey&&!e.altKey?{ramp:true,touched:false}:{erase:e.altKey,touched:false};$("#lane").setPointerCapture(e.pointerId);laneAt(e);e.preventDefault();return}
  const ac=e.target.closest(".ac");if(ac){const k=+ac.dataset.ac,a=trk(S.sel).arp;if(k>=a.len){a.len=k+1;edit("arp",{t:S.sel,field:"length",v:a.len});renderArp();return}arpDrag={k,y:e.clientY,moved:false};$("#arptrack").setPointerCapture(e.pointerId);e.preventDefault();return}
  if(e.target.closest("#joy")){joyDrag=true;$("#joy").setPointerCapture(e.pointerId);joyAt(e);e.preventDefault();return}
@@ -4939,7 +4977,8 @@ main.addEventListener("pointermove",e=>{
  if(active){const r=active.c.getBoundingClientRect(),hh=ED[active.c.dataset.ed].handles(r.width,r.height,active.c).find(h=>h.k===active.k);if(hh){const before=active.all?pagesCopy(S.sel):null,was={},menvWas={...S.menv};if(!isMidiT(S.sel))for(let k=0;k<6;k++)was[k]=pagesCopy(k);hh.drag(clamp(e.clientX-r.left,0,r.width),clamp(e.clientY-r.top,0,r.height));if(before)controlAllFrom(S.sel,before);
   /* a screen's handle moves kit values: their param intents; MULTI ENV's its own */
   if(!editParams(was))editMenv(menvWas);syncControls();redraw()}return}
- if(drag){const fine=e.shiftKey?.25:1,scale=drag.mx<16?drag.mx/127*1.6:1;const d=drag.vert?(drag.y-e.clientY)*127/150:((e.clientX-drag.x)+(drag.y-e.clientY))/2;setV(drag.el,drag.v+d*fine*scale);return}
+ if(drag){const fine=e.shiftKey?.25:1,scale=drag.mx<16?drag.mx/127*1.6:1;/* a horizontal bar (the Mix PAN): its width is the whole range */
+  const d=drag.vert?(drag.y-e.clientY)*127/150:drag.hz?(e.clientX-drag.x)*drag.mx/drag.hz:((e.clientX-drag.x)+(drag.y-e.clientY))/2;setV(drag.el,drag.v+d*fine*scale);return}
  if(laneDraw){laneAt(e);return}
  if(arpDrag){const a=trk(S.sel).arp,dd=Math.round((arpDrag.y-e.clientY)/4);if(Math.abs(dd)>0||arpDrag.moved){arpDrag.moved=true;a.ofs[arpDrag.k]=clamp((arpDrag.v0??(arpDrag.v0=a.ofs[arpDrag.k]))+dd,-24,24);renderArp()}return}
  if(joyDrag){joyAt(e);return}

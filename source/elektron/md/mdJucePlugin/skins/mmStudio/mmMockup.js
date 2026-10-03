@@ -1089,7 +1089,9 @@ function syncControls(){
  $$("#main [data-g]").forEach(el=>{if(!el.classList.contains("pc")&&!el.classList.contains("fader"))return;const r=ref(el);if(!r)return;const[o,n,m,t,g]=r,v=o[n];
   const mx=maxOf(m);el.style.setProperty("--f",(v==null?0:v/mx*100)+"%");el.setAttribute("aria-valuenow",v);el.setAttribute("aria-valuemax",mx);
   if(m.signed&&el.classList.contains("pc")){const q=v/mx*100;el.classList.add("bip");el.style.setProperty("--pl",Math.min(q,50.4)+"%");el.style.setProperty("--pw",Math.max(1.5,Math.abs(q-50.4))+"%")}
-  const b=el.querySelector("b");if(b)b.textContent=fmt(m,v);el.setAttribute("aria-valuetext",fmt(m,v));
+  /* a PAN bar reads as a mixer does: L / C / R */
+  const txt=el.classList.contains("pan")&&m.signed?(v===64?"C":(v<64?"L":"R")+Math.abs(v-64)):fmt(m,v);
+  const b=el.querySelector("b");if(b)b.textContent=txt;el.setAttribute("aria-valuetext",txt);
   if(PAGES.includes(g)||g==="MID"){const pid=g+"."+n;el.classList.toggle("lk",S.locks.has(lkKey(t,pid)));const mb=modBy(t,g,+n);let md=el.querySelector(".mod");
    if(mb.length){if(!md){md=document.createElement("i");md.className="mod";el.appendChild(md)}md.textContent="~"+mb.join("");el.title=`Modulated by LFO ${mb.join(" + ")}`}else if(md)md.remove();
    const mp=S.ctl.links.filter(l=>l.t===t&&l.pid===pid);el.classList.toggle("mapped",mp.length>0)}});
@@ -2206,16 +2208,33 @@ function routeSvg(){const T=S.tracks,W=1200,NW=140,nx=i=>118+172*i,NY=30,NH=44,b
    <text x="${x+8}" y="${NY+13}" font-size="9">T${i+1}${fx?" · FX":""}</text><text x="${x+8}" y="${NY+28}" font-size="11">${shortM(tr.m)}</text><text x="${x+8}" y="${NY+39}" font-size="7" opacity=".8">${tr.name.toUpperCase().slice(0,18)}</text></g>`});
  return`<svg class="route" viewBox="0 0 ${W} ${H}" preserveAspectRatio="xMidYMid meet" role="img" aria-label="Routing: tracks, mix buses, outputs">${h}</svg>`}
 function sv2(tr,n){const i=MACH[tr.m].p.indexOf(n);return i<0?0:tr.v.SYN[i]}
+/* A channel strip, top to bottom in signal order (manual 1-26..1-29, 1-33): the sound's own mix values, then PAN,
+   then the LEVEL fader at the end of the track's path, then where it goes (OUT buses, IN for an FX machine) and
+   M / S. AMP VOL is part of the sound (lockable, LFO-able), so it sits with DIST and DSND as the strip's trim;
+   the fader is LEVEL (the LEVEL knob, CC 7), the track's mix level, which can be neither locked nor modulated.
+   Every row is the same height on every strip, so the six line up. */
+const MIXTIP={
+ VOL:"AMP VOL: the voice's volume, part of the sound (AMP page). It comes before LEVEL, can be locked per step and moved by an LFO. Balance tracks with the LEVEL fader; use AMP VOL for movement inside the sound.",
+ DIST:"DIST: overload distortion and headroom (AMP page). Below 0 adds headroom: quieter and cleaner.",
+ DSND:"DSND: delay send, into this track's own delay (EFFECTS page). Minus keeps the stereo image, plus is ping-pong. 0: no delay.",
+ PAN:"PAN: the track's place in the stereo field (AMP page), L64 to R63. Drag sideways, double-click for centre.",
+ LEV:"LEVEL: the track's mix level (the LEVEL knob, CC 7), at the end of its path, after AMP VOL. It cannot be locked or modulated."};
+const mixBox=(g,n,i,label,tip)=>pc(g,n,{t:i,label,cls:"mini",extra:`title="${tip}"`});
+function mixStrip(tr,i){const fx=isFx(tr.m);
+ return`<div class="strip6 ${i===S.sel?"sel":""}" data-sel="${i}" style="${audible(i)?"":"opacity:.5"}">
+   <div class="shead"><b>T${i+1}</b><b class="mc">${shortM(tr.m)}</b><span title="${tr.name}">${tr.name}</span></div>
+   <div class="trim">${mixBox("AMP",5,i,"AMP VOL",MIXTIP.VOL)}${mixBox("AMP",4,i,"DIST",MIXTIP.DIST)}${mixBox("EFX",4,i,"DSND",MIXTIP.DSND)}</div>
+   <div class="pc pan hz" role="slider" tabindex="0" data-g="AMP" data-n="6" data-t="${i}" aria-label="T${i+1} PAN" title="${MIXTIP.PAN}"><span>PAN</span><i class="pt"></i><b></b></div>
+   <div class="lvl"><div class="scale" aria-hidden="true">${[127,96,64,32,0].map(v=>`<i style="bottom:${v/127*100}%">${v}</i>`).join("")}</div>
+    <div class="fader" role="slider" tabindex="0" aria-label="T${i+1} LEVEL" data-g="lev" data-t="${i}" title="${MIXTIP.LEV}"><div class="tr"><i></i></div><div class="cap2"></div><b class="lread" data-show="${i}"></b></div>
+    <small class="lcap" title="${MIXTIP.LEV}">LEVEL</small></div>
+   <div class="busrow"><span class="inlab">Out</span><div class="busk">${BUSES.map(b=>`<button data-bus="${b}" data-t="${i}" aria-pressed="${tr.out[b]}" title="${tr.out[b]?"Sends to":"Not sent to"} mix bus ${b}">${b}</button>`).join("")}</div></div>
+   <div class="busrow"><span class="inlab">In</span>${fx?`<select id="inp${i}" data-inp="${i}" aria-label="T${i+1} input">${INPUTS.filter(x=>!(x==="NEIBOR"&&i===0)).map(x=>opt(x,x,tr.inp)).join("")}</select>`:`<button class="kselbtn" disabled title="Only FX machines take an input"><span>synth · none</span></button>`}</div>
+   <div class="mrow"><button class="ms m ${ARMED.has(i)?"prep":""}" ${ARMED.has(i)?`data-prep="${ARMED.get(i)?"X":"+"}"`:""} data-mute="${i}" aria-pressed="${tr.mute}" aria-label="Mute T${i+1}">M</button><button class="ms s" data-solo="${i}" aria-pressed="${tr.solo}" aria-label="Solo T${i+1}">S</button></div></div>`}
 function renderMix(){const T=S.tracks;
  const flows=BUSES.map(b=>{const f=busFlow(b);return`<span>${b}: ${f.items.join(" + ")||"<i>empty</i>"} <i>›</i> ${outOf(b)}${f.notes.length?" <i>· "+f.notes.join(", ")+"</i>":""}</span>`}).join("");
  $("#main").innerHTML=`<div class="routewrap">
-  <div class="strips6 mixrow">${T.map((tr,i)=>{const fx=isFx(tr.m);return`<div class="strip6 ${i===S.sel?"sel":""}" data-sel="${i}" style="${audible(i)?"":"opacity:.5"}">
-   <div class="shead"><b>T${i+1} ${shortM(tr.m)}</b><span>${tr.name}</span></div>
-   <div class="frow"><div class="fcol"><div class="fader" role="slider" tabindex="0" aria-label="T${i+1} level" data-g="lev" data-t="${i}" title="LEV: the track's master level. It cannot be locked or modulated."><div class="tr"><i></i></div><div class="cap2"></div></div><div class="v" data-show="${i}" title="LEV: the track's level"></div></div>
-    <div class="pcs">${pc("AMP",5,{t:i,label:"VOL"})}${pc("AMP",6,{t:i,label:"PAN"})}${pc("AMP",4,{t:i,label:"DIST"})}${pc("EFX",4,{t:i,label:"DSND"})}</div></div>
-   <div class="busrow"><span class="inlab">Out</span><div class="busk">${BUSES.map(b=>`<button data-bus="${b}" data-t="${i}" aria-pressed="${tr.out[b]}" title="${tr.out[b]?"Sends to":"Not sent to"} mix bus ${b}">${b}</button>`).join("")}</div></div>
-   <div class="busrow"><span class="inlab">In</span>${fx?`<select id="inp${i}" data-inp="${i}" aria-label="T${i+1} input">${INPUTS.filter(x=>!(x==="NEIBOR"&&i===0)).map(x=>opt(x,x,tr.inp)).join("")}</select>`:`<button class="kselbtn" disabled title="Only FX machines take an input"><span>synth · none</span></button>`}</div>
-   <div class="mrow"><button class="ms m ${ARMED.has(i)?"prep":""}" ${ARMED.has(i)?`data-prep="${ARMED.get(i)?"X":"+"}"`:""} data-mute="${i}" aria-pressed="${tr.mute}" aria-label="Mute T${i+1}">M</button><button class="ms s" data-solo="${i}" aria-pressed="${tr.solo}" aria-label="Solo T${i+1}">S</button></div></div>`}).join("")}</div>
+  <div class="strips6 mixrow">${T.map((tr,i)=>mixStrip(tr,i)).join("")}</div>
   <div class="routebar"><span class="cap">Routing</span><span class="seg" data-set="routing">${ROUTES.map(r=>`<button data-v="${r}" aria-pressed="${S.routing===r}">${r.replace("+"," + ")}</button>`).join("")}</span>
    <span class="grow"></span><span class="hint">Tracks sum into a bus in track order, so an FX on a bus only hears the tracks before it. Click a node to pick its strip.</span></div>
   ${routeSvg()}<div class="flowl">${flows}</div></div>`;
@@ -2895,7 +2914,7 @@ main.addEventListener("pointerdown",e=>{
  const pk=e.button===0&&e.target.closest('canvas[data-ed="dktrn"]');if(pk){trnDown(pk,e);e.preventDefault();return}
  const roll=e.target.closest("canvas.roll");if(roll){roll.setPointerCapture(e.pointerId);rollDown(roll,e);e.preventDefault();return}
  const c=e.target.closest("canvas.ed");if(c){const hh=nearest(c,e);if(!hh)return;active={c,k:hh.k,all:e.altKey&&!isMidiT(S.sel)};if(active.all)allTip();c.setPointerCapture(e.pointerId);e.preventDefault();redraw();return}
- const el=e.target.closest(".pc[data-g],.fader[data-g]");if(el){const t=el.dataset.t!=null?+el.dataset.t:S.sel;drag={el,x:e.clientX,y:e.clientY,v:getV(el),vert:el.classList.contains("fader"),mx:maxOf(ref(el)[2]),all:e.altKey&&!isMidiT(t)&&PAGES.includes(el.dataset.g)};if(drag.all)allTip();el.setPointerCapture(e.pointerId);el.classList.add("act");e.preventDefault();return}
+ const el=e.target.closest(".pc[data-g],.fader[data-g]");if(el){const t=el.dataset.t!=null?+el.dataset.t:S.sel;drag={el,x:e.clientX,y:e.clientY,v:getV(el),vert:el.classList.contains("fader"),hz:el.classList.contains("hz")&&el.getBoundingClientRect().width,mx:maxOf(ref(el)[2]),all:e.altKey&&!isMidiT(t)&&PAGES.includes(el.dataset.g)};if(drag.all)allTip();el.setPointerCapture(e.pointerId);el.classList.add("act");e.preventDefault();return}
  const lb=e.target.closest(".lb");if(lb){laneDraw=e.shiftKey&&!e.altKey?{ramp:true,touched:false}:{erase:e.altKey,touched:false};$("#lane").setPointerCapture(e.pointerId);laneAt(e);e.preventDefault();return}
  const ac=e.target.closest(".ac");if(ac){const k=+ac.dataset.ac,a=trk(S.sel).arp;if(k>=a.len){a.len=k+1;edit("arp",{t:S.sel,field:"length",v:a.len});renderArp();return}arpDrag={k,y:e.clientY,moved:false};$("#arptrack").setPointerCapture(e.pointerId);e.preventDefault();return}
  if(e.target.closest("#joy")){joyDrag=true;$("#joy").setPointerCapture(e.pointerId);joyAt(e);e.preventDefault();return}
@@ -2909,7 +2928,8 @@ main.addEventListener("pointermove",e=>{
  if(active){const r=active.c.getBoundingClientRect(),hh=ED[active.c.dataset.ed].handles(r.width,r.height,active.c).find(h=>h.k===active.k);if(hh){const before=active.all?pagesCopy(S.sel):null,was={},menvWas={...S.menv};if(!isMidiT(S.sel))for(let k=0;k<6;k++)was[k]=pagesCopy(k);hh.drag(clamp(e.clientX-r.left,0,r.width),clamp(e.clientY-r.top,0,r.height));if(before)controlAllFrom(S.sel,before);
   /* a screen's handle moves kit values: their param intents; MULTI ENV's its own */
   if(!editParams(was))editMenv(menvWas);syncControls();redraw()}return}
- if(drag){const fine=e.shiftKey?.25:1,scale=drag.mx<16?drag.mx/127*1.6:1;const d=drag.vert?(drag.y-e.clientY)*127/150:((e.clientX-drag.x)+(drag.y-e.clientY))/2;setV(drag.el,drag.v+d*fine*scale);return}
+ if(drag){const fine=e.shiftKey?.25:1,scale=drag.mx<16?drag.mx/127*1.6:1;/* a horizontal bar (the Mix PAN): its width is the whole range */
+  const d=drag.vert?(drag.y-e.clientY)*127/150:drag.hz?(e.clientX-drag.x)*drag.mx/drag.hz:((e.clientX-drag.x)+(drag.y-e.clientY))/2;setV(drag.el,drag.v+d*fine*scale);return}
  if(laneDraw){laneAt(e);return}
  if(arpDrag){const a=trk(S.sel).arp,dd=Math.round((arpDrag.y-e.clientY)/4);if(Math.abs(dd)>0||arpDrag.moved){arpDrag.moved=true;a.ofs[arpDrag.k]=clamp((arpDrag.v0??(arpDrag.v0=a.ofs[arpDrag.k]))+dd,-24,24);renderArp()}return}
  if(joyDrag){joyAt(e);return}

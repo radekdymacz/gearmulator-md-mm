@@ -1192,10 +1192,6 @@ svg.route .jack.live{fill:var(--ink)}
 .strip6 .shead{display:flex;justify-content:space-between;align-items:baseline;gap:6px}
 .strip6 .shead b{font:500 13px var(--mono);color:var(--body)}
 .strip6 .shead span{font-size:12px;color:var(--print2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.strip6 .frow{display:grid;grid-template-columns:48px minmax(0,1fr);gap:8px;align-items:stretch}
-.strip6 .fader{height:150px}
-.strip6 .pcs{display:grid;gap:3px;align-content:start}
-.strip6 .pc{height:28px}
 .busk{display:grid;grid-template-columns:repeat(3,1fr);gap:3px}
 .busk button{height:24px;padding:0;font:600 11px var(--mono);letter-spacing:0}
 .busk button[aria-pressed=true]{background:var(--cream);color:var(--creamtext)}
@@ -1427,8 +1423,6 @@ canvas.roll{width:100%;display:block;border-radius:4px;background:var(--lcd);box
 .routewrap{gap:10px!important}
 .mixrow{border-bottom:2px solid var(--print);padding-bottom:10px}
 .strip6{padding:4px 6px 6px!important;gap:4px!important}
-.strip6 .fader{height:128px!important}
-.strip6 .pc{height:26px!important}
 .busrow{display:grid;grid-template-columns:28px minmax(0,1fr);gap:6px;align-items:center}
 .busrow .kselbtn{height:24px}
 .flowl{padding:5px 12px!important;line-height:1.6!important}
@@ -1576,13 +1570,10 @@ body.engwait #main,body.engwait #rail{pointer-events:none;opacity:.6;transition:
 /* fill the height on Perform, Mix and Control too */
 .kb{height:clamp(130px,calc(100vh - 424px),560px)!important}
 .perf.map .kb{height:clamp(110px,calc(100vh - 752px),420px)!important}
-.strip6 .fader{height:clamp(128px,calc(100vh - 638px),300px)!important}
 .srch,.mxc{height:clamp(36px,calc((100vh - 222px)/10 - 3px),72px)!important}
 .kb{height:clamp(130px,calc(100vh - 436px),560px)!important}
-.strip6 .fader{height:clamp(128px,calc(100vh - 648px),300px)!important}
 .perf.map .kb{height:clamp(110px,calc(100vh - 740px),420px)!important}
 .kb{height:clamp(130px,calc(100vh - 436px),680px)!important}
-.strip6 .fader{height:clamp(128px,calc(100vh - 648px),286px)!important}
 .srch,.mxc{height:clamp(36px,calc((100vh - 222px)/10 - 3px),90px)!important}
 #seq .nlane{width:0;min-width:100%}
 #seq canvas.roll{width:100%!important;min-width:0;max-width:100%}
@@ -1637,19 +1628,47 @@ body{box-sizing:border-box;overflow:hidden}
 /* the routing graph is as tall as its width needs (no letterbox); the strips' faders take the rest of the page */
 #main>.routewrap{flex:1 1 auto;min-height:0;grid-template-rows:minmax(0,1fr) auto auto auto;align-content:start}
 #main>.routewrap>.strips6{min-height:0;max-height:470px}
-#main>.routewrap .strip6{grid-template-rows:auto minmax(0,1fr) auto auto auto;align-content:stretch}
-/* a strip: the fader and its LEV value in one column, as tall as the four value boxes beside it (no gap) */
-.strip6 .frow{height:auto;min-height:124px;align-items:stretch!important}
-.strip6 .fcol{display:grid;grid-template-rows:minmax(0,1fr) auto;justify-items:center;gap:5px;min-height:0}
-.strip6 .fcol .fader{height:auto!important;min-height:0;width:100%}
-.strip6 .fcol .v{font:500 13px/1 var(--mono);color:var(--body);text-align:center;min-width:3ch}
-.strip6 .pcs{grid-template-rows:repeat(4,minmax(0,1fr));align-content:stretch!important;min-height:0}
-.strip6 .pcs .pc{height:auto!important;min-height:0}
 svg.route{width:100%;height:auto;aspect-ratio:1200/146;min-height:0}
 /* Shift + M prepares a mute, as the MD Editor (P7): "+" unmute, "X" mute, blinking until Shift comes up */
 .ms.m.prep{box-shadow:inset 0 0 0 2px var(--led);position:relative;color:transparent!important}
 .ms.m.prep::after{content:attr(data-prep);position:absolute;inset:0;display:grid;place-items:center;font:700 12px var(--pix);color:var(--keytext);animation:blink .5s steps(2) infinite}
 @media (prefers-reduced-motion:reduce){.ms.m.prep::after{animation:none}}
+/* ===== Mix: a channel strip (signal order, top to bottom) =====
+   head · trim (AMP VOL, DIST, DSND: the sound's own values) · PAN bar · LEVEL fader with its scale and readout ·
+   OUT buses · IN · M / S. Every row has a fixed height except the fader's, so the six strips line up. */
+#main>.routewrap .strip6{grid-template-rows:auto auto auto minmax(0,1fr) auto auto auto;align-content:stretch}
+.strip6 .shead{justify-content:flex-start;gap:6px;min-width:0}
+.strip6 .shead .mc{font-weight:600}
+.strip6 .shead span{margin-left:auto;font-size:11px;min-width:0}
+/* trim: three small two-line boxes, label over value */
+.strip6 .trim{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:3px}
+.strip6 .pc.mini{height:32px;padding:2px 6px 4px;display:grid;grid-template-rows:auto auto;align-content:center;justify-content:stretch;gap:1px}
+.strip6 .pc.mini span{font-size:9px;letter-spacing:.08em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.strip6 .pc.mini b{font-size:13px;line-height:1}
+.strip6 .pc.mini .mod{top:2px;right:3px}
+/* PAN: one bar, L to R, with the centre detent */
+.strip6 .pc.pan{height:24px;padding:0 6px;display:flex;justify-content:flex-start;gap:6px;align-items:center;cursor:ew-resize}
+.strip6 .pc.pan span{flex:none;order:0}.strip6 .pc.pan .pt{flex:1 1 auto;order:2}.strip6 .pc.pan b{flex:none;order:3;width:3.4ch}
+.strip6 .pc.pan::after,.strip6 .pc.pan.bip::before{display:none!important}
+.strip6 .pc.pan span{font-size:9px;letter-spacing:.08em}
+.strip6 .pc.pan b{font-size:12px;text-align:right}
+.strip6 .pc.pan .pt{position:relative;height:6px;border-radius:1px;background:color-mix(in srgb,var(--keytext) 16%,transparent)}
+.strip6 .pc.pan .pt::before{content:"";position:absolute;left:50%;top:-4px;bottom:-4px;width:1px;background:var(--keydim)}
+.strip6 .pc.pan .pt::after{content:"";position:absolute;top:0;bottom:0;left:var(--pl);width:var(--pw);background:var(--trig)}
+.strip6 .pc.pan .mod{position:static;order:1;flex:none}
+/* LEVEL: the scale, the fader, the readout */
+.strip6 .lvl{display:grid;grid-template-columns:minmax(0,1fr) 44px minmax(0,1fr);align-items:stretch;min-height:96px;padding:9px 0 7px;border-top:1px solid var(--rule)}
+.strip6 .lvl .scale{position:relative;margin-right:4px}
+.strip6 .lvl .scale i{position:absolute;right:0;transform:translateY(50%);font:500 9px/1 var(--mono);font-style:normal;color:var(--print2);display:flex;align-items:center;gap:3px}
+.strip6 .lvl .scale i::after{content:"";width:6px;border-top:1px solid var(--print2)}
+.strip6 .lvl .fader{height:auto!important;min-height:0;width:100%}
+/* the LEVEL value rides beside the fader cap; the column's caption names the fader */
+.strip6 .lvl .fader .lread{position:absolute;left:calc(50% + 22px);bottom:var(--f);transform:translateY(50%);font:13px/1 var(--pix);background:var(--lcd);color:var(--ink);border-radius:2px;padding:2px 4px;min-width:3ch;text-align:right;box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--ink) 18%,transparent);pointer-events:none}
+.strip6 .lcap{align-self:start;justify-self:start;font:600 9px/1 var(--sans);letter-spacing:.12em;color:var(--print2);margin-top:-3px;cursor:default}
+.strip6 .busrow{grid-template-columns:24px minmax(0,1fr);gap:4px}
+.strip6 .busk button,.strip6 .busrow .kselbtn{height:22px}
+.strip6 .mrow{display:grid;grid-template-columns:1fr 1fr;gap:3px}
+.strip6 .mrow .ms{width:auto;height:22px}
 /* The header's LCD as one real display (P7), one stylesheet for both editors (skins/shared/). One dot grid: labels are 8 px Silkscreen (one dot = 1 px) and values 16 px (two
    dots), line 2's values 12 px (on the same device-pixel grid at 2x: 2, 3 and 4 pixels a dot), every
    text line box is its font size; one rule weight (1 px) between all fields; no rule

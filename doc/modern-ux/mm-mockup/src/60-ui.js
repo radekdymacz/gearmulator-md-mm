@@ -127,7 +127,9 @@ function syncControls(){
  $$("#main [data-g]").forEach(el=>{if(!el.classList.contains("pc")&&!el.classList.contains("fader"))return;const r=ref(el);if(!r)return;const[o,n,m,t,g]=r,v=o[n];
   const mx=maxOf(m);el.style.setProperty("--f",(v==null?0:v/mx*100)+"%");el.setAttribute("aria-valuenow",v);el.setAttribute("aria-valuemax",mx);
   if(m.signed&&el.classList.contains("pc")){const q=v/mx*100;el.classList.add("bip");el.style.setProperty("--pl",Math.min(q,50.4)+"%");el.style.setProperty("--pw",Math.max(1.5,Math.abs(q-50.4))+"%")}
-  const b=el.querySelector("b");if(b)b.textContent=fmt(m,v);el.setAttribute("aria-valuetext",fmt(m,v));
+  /* a PAN bar reads as a mixer does: L / C / R */
+  const txt=el.classList.contains("pan")&&m.signed?(v===64?"C":(v<64?"L":"R")+Math.abs(v-64)):fmt(m,v);
+  const b=el.querySelector("b");if(b)b.textContent=txt;el.setAttribute("aria-valuetext",txt);
   if(PAGES.includes(g)||g==="MID"){const pid=g+"."+n;el.classList.toggle("lk",S.locks.has(lkKey(t,pid)));const mb=modBy(t,g,+n);let md=el.querySelector(".mod");
    if(mb.length){if(!md){md=document.createElement("i");md.className="mod";el.appendChild(md)}md.textContent="~"+mb.join("");el.title=`Modulated by LFO ${mb.join(" + ")}`}else if(md)md.remove();
    const mp=S.ctl.links.filter(l=>l.t===t&&l.pid===pid);el.classList.toggle("mapped",mp.length>0)}});

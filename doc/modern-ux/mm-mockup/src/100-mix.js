@@ -28,16 +28,33 @@ function routeSvg(){const T=S.tracks,W=1200,NW=140,nx=i=>118+172*i,NY=30,NH=44,b
    <text x="${x+8}" y="${NY+13}" font-size="9">T${i+1}${fx?" · FX":""}</text><text x="${x+8}" y="${NY+28}" font-size="11">${shortM(tr.m)}</text><text x="${x+8}" y="${NY+39}" font-size="7" opacity=".8">${tr.name.toUpperCase().slice(0,18)}</text></g>`});
  return`<svg class="route" viewBox="0 0 ${W} ${H}" preserveAspectRatio="xMidYMid meet" role="img" aria-label="Routing: tracks, mix buses, outputs">${h}</svg>`}
 function sv2(tr,n){const i=MACH[tr.m].p.indexOf(n);return i<0?0:tr.v.SYN[i]}
+/* A channel strip, top to bottom in signal order (manual 1-26..1-29, 1-33): the sound's own mix values, then PAN,
+   then the LEVEL fader at the end of the track's path, then where it goes (OUT buses, IN for an FX machine) and
+   M / S. AMP VOL is part of the sound (lockable, LFO-able), so it sits with DIST and DSND as the strip's trim;
+   the fader is LEVEL (the LEVEL knob, CC 7), the track's mix level, which can be neither locked nor modulated.
+   Every row is the same height on every strip, so the six line up. */
+const MIXTIP={
+ VOL:"AMP VOL: the voice's volume, part of the sound (AMP page). It comes before LEVEL, can be locked per step and moved by an LFO. Balance tracks with the LEVEL fader; use AMP VOL for movement inside the sound.",
+ DIST:"DIST: overload distortion and headroom (AMP page). Below 0 adds headroom: quieter and cleaner.",
+ DSND:"DSND: delay send, into this track's own delay (EFFECTS page). Minus keeps the stereo image, plus is ping-pong. 0: no delay.",
+ PAN:"PAN: the track's place in the stereo field (AMP page), L64 to R63. Drag sideways, double-click for centre.",
+ LEV:"LEVEL: the track's mix level (the LEVEL knob, CC 7), at the end of its path, after AMP VOL. It cannot be locked or modulated."};
+const mixBox=(g,n,i,label,tip)=>pc(g,n,{t:i,label,cls:"mini",extra:`title="${tip}"`});
+function mixStrip(tr,i){const fx=isFx(tr.m);
+ return`<div class="strip6 ${i===S.sel?"sel":""}" data-sel="${i}" style="${audible(i)?"":"opacity:.5"}">
+   <div class="shead"><b>T${i+1}</b><b class="mc">${shortM(tr.m)}</b><span title="${tr.name}">${tr.name}</span></div>
+   <div class="trim">${mixBox("AMP",5,i,"AMP VOL",MIXTIP.VOL)}${mixBox("AMP",4,i,"DIST",MIXTIP.DIST)}${mixBox("EFX",4,i,"DSND",MIXTIP.DSND)}</div>
+   <div class="pc pan hz" role="slider" tabindex="0" data-g="AMP" data-n="6" data-t="${i}" aria-label="T${i+1} PAN" title="${MIXTIP.PAN}"><span>PAN</span><i class="pt"></i><b></b></div>
+   <div class="lvl"><div class="scale" aria-hidden="true">${[127,96,64,32,0].map(v=>`<i style="bottom:${v/127*100}%">${v}</i>`).join("")}</div>
+    <div class="fader" role="slider" tabindex="0" aria-label="T${i+1} LEVEL" data-g="lev" data-t="${i}" title="${MIXTIP.LEV}"><div class="tr"><i></i></div><div class="cap2"></div><b class="lread" data-show="${i}"></b></div>
+    <small class="lcap" title="${MIXTIP.LEV}">LEVEL</small></div>
+   <div class="busrow"><span class="inlab">Out</span><div class="busk">${BUSES.map(b=>`<button data-bus="${b}" data-t="${i}" aria-pressed="${tr.out[b]}" title="${tr.out[b]?"Sends to":"Not sent to"} mix bus ${b}">${b}</button>`).join("")}</div></div>
+   <div class="busrow"><span class="inlab">In</span>${fx?`<select id="inp${i}" data-inp="${i}" aria-label="T${i+1} input">${INPUTS.filter(x=>!(x==="NEIBOR"&&i===0)).map(x=>opt(x,x,tr.inp)).join("")}</select>`:`<button class="kselbtn" disabled title="Only FX machines take an input"><span>synth · none</span></button>`}</div>
+   <div class="mrow"><button class="ms m ${ARMED.has(i)?"prep":""}" ${ARMED.has(i)?`data-prep="${ARMED.get(i)?"X":"+"}"`:""} data-mute="${i}" aria-pressed="${tr.mute}" aria-label="Mute T${i+1}">M</button><button class="ms s" data-solo="${i}" aria-pressed="${tr.solo}" aria-label="Solo T${i+1}">S</button></div></div>`}
 function renderMix(){const T=S.tracks;
  const flows=BUSES.map(b=>{const f=busFlow(b);return`<span>${b}: ${f.items.join(" + ")||"<i>empty</i>"} <i>›</i> ${outOf(b)}${f.notes.length?" <i>· "+f.notes.join(", ")+"</i>":""}</span>`}).join("");
  $("#main").innerHTML=`<div class="routewrap">
-  <div class="strips6 mixrow">${T.map((tr,i)=>{const fx=isFx(tr.m);return`<div class="strip6 ${i===S.sel?"sel":""}" data-sel="${i}" style="${audible(i)?"":"opacity:.5"}">
-   <div class="shead"><b>T${i+1} ${shortM(tr.m)}</b><span>${tr.name}</span></div>
-   <div class="frow"><div class="fcol"><div class="fader" role="slider" tabindex="0" aria-label="T${i+1} level" data-g="lev" data-t="${i}" title="LEV: the track's master level. It cannot be locked or modulated."><div class="tr"><i></i></div><div class="cap2"></div></div><div class="v" data-show="${i}" title="LEV: the track's level"></div></div>
-    <div class="pcs">${pc("AMP",5,{t:i,label:"VOL"})}${pc("AMP",6,{t:i,label:"PAN"})}${pc("AMP",4,{t:i,label:"DIST"})}${pc("EFX",4,{t:i,label:"DSND"})}</div></div>
-   <div class="busrow"><span class="inlab">Out</span><div class="busk">${BUSES.map(b=>`<button data-bus="${b}" data-t="${i}" aria-pressed="${tr.out[b]}" title="${tr.out[b]?"Sends to":"Not sent to"} mix bus ${b}">${b}</button>`).join("")}</div></div>
-   <div class="busrow"><span class="inlab">In</span>${fx?`<select id="inp${i}" data-inp="${i}" aria-label="T${i+1} input">${INPUTS.filter(x=>!(x==="NEIBOR"&&i===0)).map(x=>opt(x,x,tr.inp)).join("")}</select>`:`<button class="kselbtn" disabled title="Only FX machines take an input"><span>synth · none</span></button>`}</div>
-   <div class="mrow"><button class="ms m ${ARMED.has(i)?"prep":""}" ${ARMED.has(i)?`data-prep="${ARMED.get(i)?"X":"+"}"`:""} data-mute="${i}" aria-pressed="${tr.mute}" aria-label="Mute T${i+1}">M</button><button class="ms s" data-solo="${i}" aria-pressed="${tr.solo}" aria-label="Solo T${i+1}">S</button></div></div>`}).join("")}</div>
+  <div class="strips6 mixrow">${T.map((tr,i)=>mixStrip(tr,i)).join("")}</div>
   <div class="routebar"><span class="cap">Routing</span><span class="seg" data-set="routing">${ROUTES.map(r=>`<button data-v="${r}" aria-pressed="${S.routing===r}">${r.replace("+"," + ")}</button>`).join("")}</span>
    <span class="grow"></span><span class="hint">Tracks sum into a bus in track order, so an FX on a bus only hears the tracks before it. Click a node to pick its strip.</span></div>
   ${routeSvg()}<div class="flowl">${flows}</div></div>`;
