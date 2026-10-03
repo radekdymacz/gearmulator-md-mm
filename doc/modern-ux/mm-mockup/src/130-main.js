@@ -1,39 +1,36 @@
 
-/* ===== Undo / redo: plain snapshots of everything the user edits ===== */
-const H={undo:[],redo:[],last:null};
-const packT=t=>({...t,slide:[...t.slide],swing:[...t.swing]}),unpackT=t=>({...t,slide:new Set(t.slide),swing:new Set(t.swing)});
-function snap(){return JSON.stringify({tracks:S.tracks.map(packT),midi:S.midi.map(packT),locks:[...S.locks].map(([k,m])=>[k,[...m]]),song:S.song,len:S.len,mult:S.mult,swingAmt:S.swingAmt,patTrn:S.patTrn,
- routing:S.routing,multi:S.multi,menv:S.menv,mmap:S.mmap,mode:S.mode,links:S.ctl.links,kitState:S.kitState,kits:S.kits,patData:S.patData,patInfo:S.patInfo,patKit:S.patKit,kit:S.kit,workName:S.workName},(k,v)=>v===Infinity?"∞":v)}
-function restore(str){const o=JSON.parse(str,(k,v)=>v==="∞"?Infinity:v);S.tracks=o.tracks.map(unpackT);S.midi=o.midi.map(unpackT);S.locks=new Map(o.locks.map(([k,m])=>[k,new Map(m)]));
- Object.assign(S,{song:o.song,len:o.len,mult:o.mult,swingAmt:o.swingAmt,patTrn:o.patTrn,routing:o.routing,multi:o.multi,menv:o.menv,mmap:o.mmap,mode:o.mode});S.ctl.links=o.links||[];setKitState(o.kitState);if(o.kits){S.kits=o.kits;S.patData=o.patData;S.patInfo=o.patInfo;S.patKit=o.patKit;S.kit=o.kit;S.workName=o.workName;drawLib()}}
-function commit(){if(laneDraw||rollDrag||drag||active||arpDrag||paint||rotHold)return;genStale();if(genHeld())return;if(HOST.edited){HOST.edited("commit");return}const cur=snap();if(H.last==null){H.last=cur;return}if(cur!==H.last){H.undo.push(H.last);if(H.undo.length>200)H.undo.shift();H.redo=[];H.last=cur;renderTop()}}
-function undo(){genEnd();if(HOST.undo)return HOST.undo();if(!H.undo.length){toast("Nothing to undo.");return}H.redo.push(snap());const prev=H.undo.pop();restore(prev);H.last=prev;tx();render();toast("Undo")}
-function redo(){genEnd();if(HOST.redo)return HOST.redo();if(!H.redo.length){toast("Nothing to redo.");return}H.undo.push(snap());const nx=H.redo.pop();restore(nx);H.last=nx;tx();render();toast("Redo")}
+/* ===== Undo / redo: the host's, one step per gesture (the plug-in's core; on its own the demo host's snapshots,
+   54-demo.js). A gesture ends on the events below, unless a drag, a hold or a GEN run or MUTATE trial holds it. ===== */
+function commit(){if(laneDraw||rollDrag||drag||active||arpDrag||paint||rotHold)return;genStale();if(genHeld())return;if(HOST.commit)HOST.commit()}
+function undo(){genEnd();if(HOST.undo)HOST.undo()}
+function redo(){genEnd();if(HOST.redo)HOST.redo()}
 ["pointerup","keyup","click","change"].forEach(ev=>document.addEventListener(ev,()=>setTimeout(commit,0)));
 
-/* ===== COPY CLEAR PASTE, per workspace, as the manual scopes them ===== */
+/* ===== COPY CLEAR PASTE, per workspace, as the manual scopes them =====
+   The machine's clipboard is the core's (copySteps, copySound, copyRow); the page keeps what it copied too (CLIP), to
+   say what a paste would do and to show it at once. */
 let CLIP=null;
 /* the copied page into track t's steps a..b (its notes, slides and locks); the locks of parameters its machine has not are skipped (their count) */
 function pastePage(t,a,b){const tr=trk(t);for(let i=a;i<b;i++){tr.steps[i]=CLIP.steps[i-a]&&JSON.parse(JSON.stringify(CLIP.steps[i-a]));tr.slide.delete(i);clearStepLocks(t,i)}CLIP.slide.forEach(x=>{if(x+a<b)tr.slide.add(x+a)});
  let skip=0;CLIP.locks.forEach(([pid,st])=>{if(!pname(t,pid)){skip++;return}st.forEach(([s,v])=>{if(s+a<b)setLock(t,pid,s+a,v,true)})});return skip}
-function secAction(kind){const t=S.sel,tr=trk(t),e2melody=false;
+/* ASSIGN's rows of a track as intents: page, dest and add of each tab's two rows, and its switches */
+function editAssign(t,A){Object.entries(A.tabs).forEach(([tab,rows])=>rows.forEach((r,row)=>edit("assign",{t,src:ASRC[tab],row,page:r.pg,dest:r.d,add:r.add-64})));
+ edit("assign",{t,mirror:!!A.mirr,hpf:!!A.hpf,lpf:!!A.lpf})}
+function secAction(kind){const t=S.sel,tr=trk(t);
  if(S.ws==="seq"){const[a,b]=vis(),where=`${tLabel(t)}, steps ${a+1}–${b}`;
   if(kind==="copy"){CLIP={type:"page",midi:isMidiT(t),steps:tr.steps.slice(a,b).map(x=>x&&JSON.parse(JSON.stringify(x))),slide:[...tr.slide].filter(x=>x>=a&&x<b).map(x=>x-a),
-   locks:[...S.locks].filter(([k])=>+k.split("|")[0]===t).map(([k,m])=>[k.split("|")[1],[...m].filter(([s])=>s>=a&&s<b).map(([s,v])=>[s-a,v])])};toast("COPY PAGE: "+where+".");return}
-  if(kind==="clear"){for(let i=a;i<b;i++){tr.steps[i]=null;tr.slide.delete(i);clearStepLocks(t,i)}structEdited();render();toast("CLEAR PAGE: "+where+".");return}
+   locks:[...S.locks].filter(([k])=>+k.split("|")[0]===t).map(([k,m])=>[k.split("|")[1],[...m].filter(([s])=>s>=a&&s<b).map(([s,v])=>[s-a,v])])};edit("copySteps",{t,from:a,to:b});toast("COPY PAGE: "+where+".");return}
+  if(kind==="clear"){for(let i=a;i<b;i++){tr.steps[i]=null;tr.slide.delete(i);clearStepLocks(t,i)}edit("clearSteps",{t,from:a,to:b});render();toast("CLEAR PAGE: "+where+".");return}
   if(kind==="paste"){if(S.marks.size){pasteToMany();return}if(CLIP?.type!=="page"){toast("Copy a track page first.");return}if(CLIP.midi!==isMidiT(t)){toast("Track pages paste between synth tracks or between MIDI tracks.");return}
-   const skip=pastePage(t,a,b);structEdited();render();toast("PASTE PAGE into "+where+"."+(skip?" "+skip+" lock(s) skipped: this machine has no such parameter.":""));return}}
- if(S.ws==="seq"&&e2melody){if(kind==="copy"){CLIP={type:"melody",steps:tr.steps.map(x=>x&&JSON.parse(JSON.stringify(x)))};toast("MELODY copy: all pitches of "+tLabel(t)+", no locks, no machine.");return}
-  if(kind==="clear"){tr.steps=tr.steps.map(()=>null);[...S.locks.keys()].forEach(k=>{if(+k.split("|")[0]===t)S.locks.delete(k)});structEdited();render();toast("Cleared the notes of "+tLabel(t)+".");return}
-  if(kind==="paste"){if(CLIP?.type!=="melody"){toast("Copy a melody first.");return}tr.steps=CLIP.steps.map(x=>x&&JSON.parse(JSON.stringify(x)));structEdited();render();toast("Pasted the melody into "+tLabel(t)+". Its locks and machine stay.");return}}
- if(S.ws==="sound"&&!isMidiT(t)){if(kind==="copy"){CLIP={type:"machine",m:tr.m,v:JSON.parse(JSON.stringify(tr.v))};toast("COPY MACHINE: "+tr.m+" and all seven DATA pages.");return}
-  if(kind==="clear"){tr.m="GND-SIN";tr.v={SYN:synDefaults("GND-SIN"),AMP:[...DEFV.AMP],FLT:[...DEFV.FLT],EFX:[...DEFV.EFX],LF1:[...DEFV.LFO],LF2:[...DEFV.LFO],LF3:[...DEFV.LFO]};soundEdited();render();toast("CLEAR MACHINE: "+tLabel(t)+" is GND-SIN again.");return}
-  if(kind==="paste"){if(CLIP?.type!=="machine"){toast("Copy a machine first.");return}tr.m=CLIP.m;tr.v=JSON.parse(JSON.stringify(CLIP.v));soundEdited();render();toast("PASTE MACHINE: "+CLIP.m+" onto "+tLabel(t)+".");return}}
+   const skip=pastePage(t,a,b);edit("pasteSteps",{t,from:a,to:b});render();toast("PASTE PAGE into "+where+"."+(skip?" "+skip+" lock(s) skipped: this machine has no such parameter.":""));return}}
+ if(S.ws==="sound"&&!isMidiT(t)){if(kind==="copy"){CLIP={type:"machine",m:tr.m,v:JSON.parse(JSON.stringify(tr.v))};edit("copySound",{t});toast("COPY MACHINE: "+tr.m+" and all seven DATA pages.");return}
+  if(kind==="clear"){tr.m="GND-SIN";tr.name=machName("GND-SIN");tr.v={SYN:synDefaults("GND-SIN"),AMP:[...DEFV.AMP],FLT:[...DEFV.FLT],EFX:[...DEFV.EFX],LF1:[...DEFV.LFO],LF2:[...DEFV.LFO],LF3:[...DEFV.LFO]};edit("clearSound",{t});render();toast("CLEAR MACHINE: "+tLabel(t)+" is GND-SIN again.");return}
+  if(kind==="paste"){if(CLIP?.type!=="machine"){toast("Copy a machine first.");return}tr.m=CLIP.m;tr.name=machName(CLIP.m);tr.v=JSON.parse(JSON.stringify(CLIP.v));edit("pasteSound",{t});render();toast("PASTE MACHINE: "+CLIP.m+" onto "+tLabel(t)+".");return}}
  if(S.ws==="perform"){const A=S.tracks[asgT()];if(kind==="copy"){CLIP={type:"assign",a:JSON.parse(JSON.stringify(A.assign))};toast("Copied the assign tabs of T"+(asgT()+1)+".");return}
-  if(kind==="clear"){A.assign=newAssign();soundEdited();render();return}if(kind==="paste"){if(CLIP?.type!=="assign"){toast("Copy an assign first.");return}A.assign=JSON.parse(JSON.stringify(CLIP.a));soundEdited();render();toast("Pasted the assign tabs.");return}}
- if(S.ws==="song"){const i=S.songSel,r=S.song[i];if(kind==="copy"){if(r.type==="end"){toast("END cannot be copied.");return}CLIP={type:"row",row:JSON.parse(JSON.stringify(r))};toast("Copied row "+String(i+1).padStart(3,"0")+".");return}
-  if(kind==="clear"){songAction("del");return}if(kind==="paste"){if(CLIP?.type!=="row"){toast("Copy a song row first.");return}if(S.song.length>=200){toast("A song holds 200 rows.");return}const at=r.type==="end"?i:i+1;S.song.splice(at,0,JSON.parse(JSON.stringify(CLIP.row)));S.songSel=at;structEdited();render();return}}
- toast("Copy, clear and paste work in Sequence (page), Notes (melody), Sound (machine), Perform (assign) and Song (row).")}
+  if(kind==="clear"){A.assign=newAssign();editAssign(asgT(),A.assign);render();return}if(kind==="paste"){if(CLIP?.type!=="assign"){toast("Copy an assign first.");return}A.assign=JSON.parse(JSON.stringify(CLIP.a));editAssign(asgT(),A.assign);render();toast("Pasted the assign tabs.");return}}
+ if(S.ws==="song"){const i=S.songSel,r=S.song[i];if(kind==="copy"){if(r.type==="end"){toast("END cannot be copied.");return}CLIP={type:"row",row:JSON.parse(JSON.stringify(r))};edit("copyRow",{i});toast("Copied row "+String(i+1).padStart(3,"0")+".");return}
+  if(kind==="clear"){songAction("del");return}if(kind==="paste"){if(CLIP?.type!=="row"){toast("Copy a song row first.");return}if(S.song.length>=200){toast("A song holds 200 rows.");return}const at=r.type==="end"?i:i+1;S.song.splice(at,0,JSON.parse(JSON.stringify(CLIP.row)));S.songSel=at;edit("pasteRow",{i:at});render();return}}
+ toast("Copy, clear and paste work in Sequence (page), Sound (machine), Perform (assign) and Song (row).")}
 
 /* ===== First run: firmware needed ===== */
 function firstRun(){if(HOST.firstRun)return HOST.firstRun();ask(`<div class="lcdbig">MONOMACHINE FIRMWARE NEEDED</div>
@@ -45,11 +42,11 @@ function checkRom(f){const t=$("#droptxt");if(!f)return;const ok=f.size===838860
 
 /* ===== LCD line 2 ===== */
 function l2step(k,d,fine){
- if(k==="len"){S.len=lenStep(S.len,d,fine);structEdited()}
- if(k==="mult"){const o=["1X","2X","3/4X","3/2X"];S.mult=o[(o.indexOf(S.mult)+d+4)%4];structEdited()}
- if(k==="swing"){S.swingAmt=clamp(S.swingAmt+d,50,80);structEdited()}
-  if(k==="ptrn"){S.patTrn=clamp(S.patTrn+d,0,127);structEdited()}
- if(k==="route"){S.routing=ROUTES[(ROUTES.indexOf(S.routing)+d+3)%3];soundEdited("global")}
+ if(k==="len"){S.len=lenStep(S.len,d,fine);edit("length",{v:S.len})}
+ if(k==="mult"){const o=["1X","2X","3/4X","3/2X"];S.mult=o[(o.indexOf(S.mult)+d+4)%4];edit("speed",{v:S.mult})}
+ if(k==="swing"){S.swingAmt=clamp(S.swingAmt+d,50,80);edit("swing",{v:S.swingAmt})}
+  if(k==="ptrn"){S.patTrn=clamp(S.patTrn+d,0,127);edit("transpose",{v:S.patTrn-64})}
+ if(k==="route"){S.routing=ROUTES[(ROUTES.indexOf(S.routing)+d+3)%3];edit("routing",{v:S.routing})}
  if(k==="side"){setSide(S.side==="midi"?"int":"midi");return}
  if(k==="dbl"){if(!fine)doublePattern();return}
  if(k==="pmode"){const o=PMODES.map(p=>p[0]);S.mode=o[(o.indexOf(S.mode)+d+4)%4]}
@@ -57,7 +54,7 @@ function l2step(k,d,fine){
 let l2drag=null;
 document.addEventListener("pointerdown",e=>{const el=e.target.closest(".l2.ed");if(!el)return;const k=el.dataset.l2;if(k==="swing"||k==="ptrn"){l2drag={k,y:e.clientY,v:k==="swing"?S.swingAmt:S.patTrn,moved:false};el.setPointerCapture(e.pointerId);e.preventDefault()}});
 document.addEventListener("pointermove",e=>{if(!l2drag)return;if(e.buttons===0&&e.pointerType==="mouse"){l2drag=null;return}const d=Math.round((l2drag.y-e.clientY)/4);if(d)l2drag.moved=true;if(l2drag.k==="swing")S.swingAmt=clamp(l2drag.v+d,50,80);else S.patTrn=clamp(l2drag.v+d,0,127);renderSub()});
-document.addEventListener("pointerup",()=>{if(!l2drag)return;const k=l2drag;l2drag=null;if(!k.moved)l2step(k.k,1);else{structEdited();render()}});
+document.addEventListener("pointerup",()=>{if(!l2drag)return;const k=l2drag;l2drag=null;if(!k.moved)l2step(k.k,1);else{if(k.k==="swing")edit("swing",{v:S.swingAmt});else edit("transpose",{v:S.patTrn-64});render()}});
 document.addEventListener("click",e=>{const el=e.target.closest(".l2.ed");if(!el)return;const k=el.dataset.l2;if(k!=="swing"&&k!=="ptrn")l2step(k,e.shiftKey?-1:1)});
 document.addEventListener("wheel",e=>{const el=e.target.closest(".l2.ed");if(!el)return;e.preventDefault();l2step(el.dataset.l2,(e.deltaY||e.deltaX)<0?1:-1,true)},{passive:false});
 
@@ -72,9 +69,9 @@ addEventListener("blur",()=>{ARMED.clear();showArmed()});
 let paint=null;
 function paintAt(el){if(!paint||!el)return;const s=+el.dataset.s,k=el.dataset.tl||el.dataset.env,key=k+":"+s;if(k!==paint.k||paint.done.has(key))return;paint.done.add(key);
  const tr=trk(S.sel);
- if(el.dataset.tl){const set=k==="sld"?tr.slide:tr.swing;if(set.has(s)===paint.on)return;paint.on?set.add(s):set.delete(s)}
- else{const st=tr.steps[s];if(!st||st.off||!!st[k]===paint.on)return;st[k]=paint.on?1:0;if(!st.n&&!st.a&&!st.f&&!st.l){tr.steps[s]=null;clearStepLocks(S.sel,s)}}
- el.classList.toggle("on",paint.on);el.setAttribute("aria-pressed",paint.on);paint.moved=true;structEdited()}
+ if(el.dataset.tl){const set=k==="sld"?tr.slide:tr.swing;if(set.has(s)===paint.on)return;paint.on?set.add(s):set.delete(s);edit(k==="sld"?"slide":"swingStep",{t:S.sel,s,on:paint.on})}
+ else{const st=tr.steps[s];if(!st||st.off||!!st[k]===paint.on)return;st[k]=paint.on?1:0;if(!st.n&&!st.a&&!st.f&&!st.l){tr.steps[s]=null;clearStepLocks(S.sel,s)}editStep(S.sel,s)}
+ el.classList.toggle("on",paint.on);el.setAttribute("aria-pressed",paint.on);paint.moved=true}
 function endPaint(){if(!paint)return;const p=paint;paint=null;if(p.moved)rerenderSeq()}
 document.addEventListener("pointerup",endPaint);document.addEventListener("pointercancel",endPaint);addEventListener("blur",endPaint);
 /* ===== Pointer input in the workspace ===== */
@@ -90,7 +87,7 @@ main.addEventListener("pointerdown",e=>{
  const c=e.target.closest("canvas.ed");if(c){const hh=nearest(c,e);if(!hh)return;active={c,k:hh.k,all:e.altKey&&!isMidiT(S.sel)};if(active.all)allTip();c.setPointerCapture(e.pointerId);e.preventDefault();redraw();return}
  const el=e.target.closest(".pc[data-g],.fader[data-g]");if(el){const t=el.dataset.t!=null?+el.dataset.t:S.sel;drag={el,x:e.clientX,y:e.clientY,v:getV(el),vert:el.classList.contains("fader"),mx:maxOf(ref(el)[2]),all:e.altKey&&!isMidiT(t)&&PAGES.includes(el.dataset.g)};if(drag.all)allTip();el.setPointerCapture(e.pointerId);el.classList.add("act");e.preventDefault();return}
  const lb=e.target.closest(".lb");if(lb){laneDraw=e.shiftKey&&!e.altKey?{ramp:true,touched:false}:{erase:e.altKey,touched:false};$("#lane").setPointerCapture(e.pointerId);laneAt(e);e.preventDefault();return}
- const ac=e.target.closest(".ac");if(ac){const k=+ac.dataset.ac,a=trk(S.sel).arp;if(k>=a.len){a.len=k+1;structEdited();renderArp();return}arpDrag={k,y:e.clientY,moved:false};$("#arptrack").setPointerCapture(e.pointerId);e.preventDefault();return}
+ const ac=e.target.closest(".ac");if(ac){const k=+ac.dataset.ac,a=trk(S.sel).arp;if(k>=a.len){a.len=k+1;edit("arp",{t:S.sel,field:"length",v:a.len});renderArp();return}arpDrag={k,y:e.clientY,moved:false};$("#arptrack").setPointerCapture(e.pointerId);e.preventDefault();return}
  if(e.target.closest("#joy")){joyDrag=true;$("#joy").setPointerCapture(e.pointerId);joyAt(e);e.preventDefault();return}
  if(e.target.closest("#splitm")){splitDrag=true;$("#splitm").setPointerCapture(e.pointerId);e.preventDefault();return}
  const key=e.target.closest(".kb [data-key]");if(key){kbDown=true;$("#kb").setPointerCapture(e.pointerId);playKey(+key.dataset.key);e.preventDefault()}});
@@ -99,7 +96,9 @@ main.addEventListener("pointermove",e=>{
  if(e.buttons===0&&e.pointerType==="mouse"&&dragging()){endDrag(e);return}
  if(cord){cordMove(e);return}
  const roll=e.target.closest?.("canvas.roll")||(rollDrag&&$("#roll"));if(roll&&(rollDrag||e.target===roll)){rollMove(roll,e);if(rollDrag)return}
- if(active){const r=active.c.getBoundingClientRect(),hh=ED[active.c.dataset.ed].handles(r.width,r.height,active.c).find(h=>h.k===active.k);if(hh){const before=active.all?pagesCopy(S.sel):null;hh.drag(clamp(e.clientX-r.left,0,r.width),clamp(e.clientY-r.top,0,r.height));if(before)controlAllFrom(S.sel,before);soundEdited();syncControls();redraw()}return}
+ if(active){const r=active.c.getBoundingClientRect(),hh=ED[active.c.dataset.ed].handles(r.width,r.height,active.c).find(h=>h.k===active.k);if(hh){const before=active.all?pagesCopy(S.sel):null,was={},menvWas={...S.menv};if(!isMidiT(S.sel))for(let k=0;k<6;k++)was[k]=pagesCopy(k);hh.drag(clamp(e.clientX-r.left,0,r.width),clamp(e.clientY-r.top,0,r.height));if(before)controlAllFrom(S.sel,before);
+  /* a screen's handle moves kit values: their param intents; MULTI ENV's its own */
+  if(!editParams(was))editMenv(menvWas);syncControls();redraw()}return}
  if(drag){const fine=e.shiftKey?.25:1,scale=drag.mx<16?drag.mx/127*1.6:1;const d=drag.vert?(drag.y-e.clientY)*127/150:((e.clientX-drag.x)+(drag.y-e.clientY))/2;setV(drag.el,drag.v+d*fine*scale);return}
  if(laneDraw){laneAt(e);return}
  if(arpDrag){const a=trk(S.sel).arp,dd=Math.round((arpDrag.y-e.clientY)/4);if(Math.abs(dd)>0||arpDrag.moved){arpDrag.moved=true;a.ofs[arpDrag.k]=clamp((arpDrag.v0??(arpDrag.v0=a.ofs[arpDrag.k]))+dd,-24,24);renderArp()}return}
@@ -110,9 +109,9 @@ main.addEventListener("pointermove",e=>{
 function allTip(){if(S.allTold)return;S.allTold=1;toast("Control All: this value moves on all six synth tracks by the same amount (MIDI tracks stay).")}
 function endDrag(e){trnUp();if(cord){cordEnd(e);return}if(rollDrag)rollUp();if(active){active=null;redraw()}if(drag){drag.el.classList.remove("act");drag=null}endLaneDraw();
  if(kbDown&&HOST.keyUp)HOST.keyUp();
- if(arpDrag){const a=trk(S.sel).arp;if(!arpDrag.moved){a.rhy[arpDrag.k]=!a.rhy[arpDrag.k];renderArp()}structEdited();arpDrag=null}
+ if(arpDrag){const a=trk(S.sel).arp,k=arpDrag.k;if(!arpDrag.moved){a.rhy[k]=!a.rhy[k];renderArp()}edit("arp",{t:S.sel,field:"step",i:k,v:a.rhy[k]?clamp(64+a.ofs[k]):255});arpDrag=null}
  if(joyDrag){joyDrag=false;S.joy={x:0,y:0};const k=$("#knobj");if(k){k.style.left="50%";k.style.top="50%"}if(HOST.joy)HOST.joy(S.joy)}
- if(splitDrag){splitDrag=false;soundEdited();render()}if(kbDown){kbDown=false;$$(".kb .dn").forEach(k=>k.classList.remove("dn"))}}
+ if(splitDrag){splitDrag=false;edit("multiTrig",{splitKey:S.multi.splitKey});render()}if(kbDown){kbDown=false;$$(".kb .dn").forEach(k=>k.classList.remove("dn"))}}
 /* P7: a gesture ends wherever the button comes up. A render during a drag (a pattern load, the machine's
    documents) removes the element that held the pointer, and its pointerup then lands outside #main: the drag
    stayed on and every mouse move edited the value (the kit showed "edited" after each pattern load). So the end
@@ -126,7 +125,7 @@ function joyAt(e){const r=$("#joy").getBoundingClientRect();S.joy={x:clamp((e.cl
 function renderArp(){const el=$("#arptrack");if(!el)return;const a=trk(S.sel).arp;el.innerHTML=arpCells(a);$$(".arplenrow button").forEach((b,k)=>b.classList.toggle("on",k<a.len));const c2=$("#arpcap");if(c2)c2.textContent="Rhythm + offset · "+a.len+" steps";$$(".mrowg .rowst").length&&0;redraw()}
 main.addEventListener("wheel",e=>{
  const el=e.target.closest(".pc[data-g],.fader[data-g]");if(el){e.preventDefault();const d=(e.deltaY||e.deltaX)<0?1:-1;setV(el,getV(el)+d*(e.shiftKey?10:1));return}
- const st=e.target.closest(".mst");if(st){const t=+st.dataset.t,s=+st.dataset.s,x=trk(t).steps[s];if(!x?.n)return;e.preventDefault();const d=((e.deltaY||e.deltaX)<0?1:-1)*(e.shiftKey?12:1);x.n=x.n.map(n=>clamp(n+d));structEdited();refreshRow(t);return}
+ const st=e.target.closest(".mst");if(st){const t=+st.dataset.t,s=+st.dataset.s,x=trk(t).steps[s];if(!x?.n)return;e.preventDefault();const d=((e.deltaY||e.deltaX)<0?1:-1)*(e.shiftKey?12:1);x.n=x.n.map(n=>clamp(n+d));editStep(t,s);refreshRow(t);return}
  const roll=e.target.closest("canvas.roll[data-big]");if(roll){e.preventDefault();const t=+roll.dataset.t;S.rollLoT[t]=clamp((S.rollLoT[t]??S.rollLo)+((e.deltaY)<0?1:-1)*(e.shiftKey?12:2),0,127-ROWS);redraw()}},{passive:false});
 main.addEventListener("dblclick",e=>{const el=e.target.closest(".pc[data-g]");if(el){const m=ref(el)[2];setV(el,m.en?0:m.signed?64:64)}});
 main.addEventListener("keydown",e=>{const el=e.target.closest("[data-g]");if(!el)return;const d={ArrowRight:1,ArrowUp:1,ArrowLeft:-1,ArrowDown:-1,PageUp:10,PageDown:-10}[e.key];if(d==null)return;e.preventDefault();setV(el,getV(el)+d*(e.shiftKey?10:1))});
@@ -152,36 +151,36 @@ document.addEventListener("click",e=>{
  const sel=e.target.closest("[data-sel]");if(sel&&!e.target.closest("button,select,.pc,.fader")){select(+sel.dataset.sel);return}
  const lp=e.target.closest("[data-lpage]");if(lp){S.lanePage=lp.dataset.lpage;const n=pnames(S.sel,S.lanePage);S.lane=S.lanePage+"."+Math.max(0,trackLockPids(S.sel).filter(x=>x.startsWith(S.lanePage+".")).map(x=>+x.split(".")[1])[0]??0);if(!n.length){S.lane="FLT.1";S.lanePage="FLT"}render();return}
  const ch=e.target.closest("[data-lane]");if(ch){S.lane=ch.dataset.lane;render();return}
- if(e.target.closest("#clearLane")){if(e.altKey){clearTrackLocks(S.sel);return}S.locks.delete(lkKey(S.sel,S.lane));structEdited();render();return}
+ if(e.target.closest("#clearLane")){if(e.altKey){clearTrackLocks(S.sel);return}S.locks.delete(lkKey(S.sel,S.lane));edit("clearLane",{t:S.sel,...pidArgs(S.lane)});render();return}
  if(e.target.closest('canvas[data-ed="dktrn"]'))return;	/* the plate plays on pointerdown (trnDown) */
  const sg=e.target.closest(".seg[data-set] button,.dkrow[data-set] button");if(sg){const k=sg.parentElement.dataset.set,v=sg.dataset.v,tr=trk(S.sel);
-  if(k==="arpmode"){tr.arp.MODE=+v;structEdited();render();return}if(k==="arpplay"){tr.arp.PLAY=+v;structEdited();render();return}
-  if(k==="scale"){tr.tr.SCALE=+v;structEdited();render();return}
-  if(k==="trigpos"){tr.trigpos=v===""?null:+v;soundEdited();render();return}if(k==="mch"){tr.ch=+v;soundEdited("global");render();return}if(k==="port"){tr.port=+v;soundEdited();render();return}
-  if(k==="ltrig"){V(sg.parentElement.dataset.l)[2]=+v;soundEdited();render();return}
-  if(k==="routing"){S.routing=v;soundEdited("global");render();return}
-  if(k==="mtmode"){S.multi.mode=+v;soundEdited();render();return}if(k==="astab"){S.asTab=v;render();return}if(k==="astrk"){S.sel=+v;render();return}
+  if(k==="arpmode"){tr.arp.MODE=+v;edit("arp",{t:S.sel,field:"mode",v:+v});render();return}if(k==="arpplay"){tr.arp.PLAY=+v;edit("arp",{t:S.sel,field:"play",v:+v});render();return}
+  if(k==="scale"){tr.tr.SCALE=+v;edit("transpose",{t:S.sel,scale:+v});render();return}
+  if(k==="trigpos"){tr.trigpos=v===""?null:+v;edit("trigPos",{t:S.sel,v:tr.trigpos});render();return}if(k==="mch"){tr.ch=+v;edit("midiTrack",{t:S.sel-6,ch:+v-1});render();return}if(k==="port"){tr.port=+v;edit("portamento",{t:S.sel,v:+v?"legato":"always"});render();return}
+  if(k==="ltrig"){editTrack(S.sel,()=>{V(sg.parentElement.dataset.l)[2]=+v});render();return}
+  if(k==="routing"){S.routing=v;edit("routing",{v});render();return}
+  if(k==="mtmode"){S.multi.mode=+v;edit("multiTrig",{mode:+v});render();return}if(k==="astab"){S.asTab=v;render();return}if(k==="astrk"){S.sel=+v;render();return}
   if(k==="songpick"){S.songPick=v;render();return}
-  if(k==="loopkind"){const r=S.song[S.songSel];r.type=v;if(v==="halt")r.to=S.songSel;if(v==="jump"&&r.to<=S.songSel)r.to=Math.min(S.song.length-1,S.songSel+1);if(v==="loop"){if(!r.count)r.count=2;if(r.to>=S.songSel)r.to=Math.max(0,S.songSel-1)}structEdited();render();return}}
- const at=e.target.closest("[data-arptrig]");if(at){const a=trk(S.sel).arp,k=at.dataset.arptrig;a[k]=a[k]?0:1;structEdited();render();return}
- const lg=e.target.closest("[data-leg]");if(lg){const l=trk(S.sel).leg,k=lg.dataset.leg;l[k]=l[k]?0:1;soundEdited();render();return}
- const al=e.target.closest("[data-arplen]");if(al){trk(S.sel).arp.len=+al.dataset.arplen;structEdited();renderArp();return}
+  if(k==="loopkind"){const r=S.song[S.songSel];r.type=v;if(v==="halt")r.to=S.songSel;if(v==="jump"&&r.to<=S.songSel)r.to=Math.min(S.song.length-1,S.songSel+1);if(v==="loop"){if(!r.count)r.count=2;if(r.to>=S.songSel)r.to=Math.max(0,S.songSel-1)}editRow();render();return}}
+ const at=e.target.closest("[data-arptrig]");if(at){const a=trk(S.sel).arp,k=at.dataset.arptrig;a[k]=a[k]?0:1;edit("arp",{t:S.sel,field:"trigs",v:(a.amp?1:0)|(a.flt?2:0)|(a.lfo?4:0)});render();return}
+ const lg=e.target.closest("[data-leg]");if(lg){const l=trk(S.sel).leg,k=lg.dataset.leg;l[k]=l[k]?0:1;edit("legato",{t:S.sel,env:{amp:"amp",flt:"filter",lfo:"lfo"}[k],on:!!l[k]});render();return}
+ const al=e.target.closest("[data-arplen]");if(al){trk(S.sel).arp.len=+al.dataset.arplen;edit("arp",{t:S.sel,field:"length",v:+al.dataset.arplen});renderArp();return}
  const rl=e.target.closest("[data-roll]");if(rl){S.rollLo=clamp(S.rollLo+ +rl.dataset.roll,0,127-ROWS);render();return}
  if(e.target.closest("#ghost")){S.ghost=!S.ghost;render();return}
- const lw=e.target.closest("[data-lwave]");if(lw){V(lw.dataset.lwave)[3]=+lw.dataset.w;soundEdited();render();return}
+ const lw=e.target.closest("[data-lwave]");if(lw){editTrack(S.sel,()=>{V(lw.dataset.lwave)[3]=+lw.dataset.w});render();return}
  const gt=e.target.closest("[data-goto]");if(gt){S.ws="sound";S.side="int";select(+gt.dataset.goto);return}
- const bs=e.target.closest("[data-bus]");if(bs){const tr=S.tracks[+bs.dataset.t];tr.out[bs.dataset.bus]=!tr.out[bs.dataset.bus];soundEdited();render();return}
+ const bs=e.target.closest("[data-bus]");if(bs){const t=+bs.dataset.t,tr=S.tracks[t];tr.out[bs.dataset.bus]=!tr.out[bs.dataset.bus];edit("route",{t,out:(tr.out.AB?1:0)|(tr.out.CD?2:0)|(tr.out.EF?4:0)});render();return}
  const pmk=e.target.closest("[data-pmode]");if(pmk){S.mode=pmk.dataset.pmode;if(HOST.keyMode)HOST.keyMode(S.mode);if(S.mode==="poly")toast("POLY: T"+(asgT()+1)+" now plays six voices. The other five tracks are off until you leave POLY.");render();return}
- const so2=e.target.closest("[data-strk]");if(so2){S.multi.splitTrack=clamp(S.multi.splitTrack+ +so2.dataset.strk,2,6);soundEdited();render();return}
- const tm=e.target.closest("[data-tim]");if(tm){S.multi.timing=clamp(S.multi.timing+ +tm.dataset.tim,0,6);soundEdited();render();return}
+ const so2=e.target.closest("[data-strk]");if(so2){S.multi.splitTrack=clamp(S.multi.splitTrack+ +so2.dataset.strk,2,6);edit("multiTrig",{splitTrack:S.multi.splitTrack-1});render();return}
+ const tm=e.target.closest("[data-tim]");if(tm){S.multi.timing=clamp(S.multi.timing+ +tm.dataset.tim,0,6);edit("multiTrig",{timing:S.multi.timing});render();return}
  const ko=e.target.closest("[data-kboct]");if(ko){S.kbOct=clamp(S.kbOct+ +ko.dataset.kboct,0,6);render();return}
  const bd=e.target.closest("[data-band]");if(bd){S.mmapSel=+bd.dataset.band;render();return}
  const mr=e.target.closest("tr[data-mrow]");if(mr&&!e.target.closest("button,.pc,.kselbtn")){S.mmapSel=+mr.dataset.mrow;render();return}
- const mh=e.target.closest("[data-mhi]");if(mh){const i=+mh.dataset.i,r=S.mmap[i],lo=i?S.mmap[i-1].hi+1:0,nx=S.mmap[i+1];r.hi=clamp(r.hi+ +mh.dataset.mhi,lo,nx?nx.hi-1:127);structEdited("global");render();return}
- const md=e.target.closest("[data-mdel]");if(md){const i=+md.dataset.mdel;if(S.mmap.length<2)return;const r=S.mmap.splice(i,1)[0];if(i===S.mmap.length)S.mmap[i-1].hi=127;S.mmapSel=Math.max(0,i-1);structEdited("global");render();return}
- if(e.target.closest("[data-madd]")){const i=S.mmapSel,r=S.mmap[i],lo=i?S.mmap[i-1].hi+1:0;if(r.hi-lo<1){toast("A one-key range cannot be split.");return}const mid=Math.floor((lo+r.hi)/2);S.mmap.splice(i,0,{...r,hi:mid});structEdited("global");render();return}
- const mi=e.target.closest("[data-mirr]");if(mi){const A=S.tracks[asgT()].assign;A.mirr=!A.mirr;soundEdited();render();return}
- const kt=e.target.closest("[data-ktrk]");if(kt){const A=S.tracks[asgT()].assign;A[kt.dataset.ktrk]=!A[kt.dataset.ktrk];soundEdited();render();return}
+ const mh=e.target.closest("[data-mhi]");if(mh){const i=+mh.dataset.i,r=S.mmap[i],lo=i?S.mmap[i-1].hi+1:0,nx=S.mmap[i+1];r.hi=clamp(r.hi+ +mh.dataset.mhi,lo,nx?nx.hi-1:127);edit("multiMap",{i,hi:r.hi});render();return}
+ const md=e.target.closest("[data-mdel]");if(md){const i=+md.dataset.mdel;if(S.mmap.length<2)return;S.mmap.splice(i,1);if(i===S.mmap.length)S.mmap[i-1].hi=127;S.mmapSel=Math.max(0,i-1);edit("multiMapDelete",{i});render();return}
+ if(e.target.closest("[data-madd]")){const i=S.mmapSel,r=S.mmap[i],lo=i?S.mmap[i-1].hi+1:0;if(r.hi-lo<1){toast("A one-key range cannot be split.");return}const mid=Math.floor((lo+r.hi)/2);S.mmap.splice(i,0,{...r,hi:mid});edit("multiMapSplit",{i});render();return}
+ const mi=e.target.closest("[data-mirr]");if(mi){const A=S.tracks[asgT()].assign;A.mirr=!A.mirr;edit("assign",{t:asgT(),mirror:A.mirr});render();return}
+ const kt=e.target.closest("[data-ktrk]");if(kt){const A=S.tracks[asgT()].assign,k=kt.dataset.ktrk;A[k]=!A[k];edit("assign",{t:asgT(),[k]:A[k]});render();return}
  const pl=e.target.closest(".pl");if(pl&&S.ws==="seq"){const k=+pl.dataset.plp;if(k<pages16()){S.page=k;S.viewAll=false;render()}return}
  const pgk=e.target.closest("#pgkey");if(pgk&&!pgk.disabled){const n=pages16();S.viewAll=false;S.page=(S.page+(e.shiftKey?-1:1)+n)%n;render();return}
  if(e.target.closest("#pgall")){S.viewAll=!S.viewAll;render();return}
@@ -190,16 +189,16 @@ document.addEventListener("click",e=>{
   const bk=e.target.closest("[data-bank]");if(bk){S.bank=+bk.dataset.bank;render();return}
   const cp=e.target.closest("[data-chainpad]");if(cp){chainPad(+cp.dataset.chainpad);return}
   const ca=e.target.closest("[data-chain]");if(ca){if(!ca.disabled)chainAct(ca.dataset.chain);return}
-  const ap=e.target.closest("[data-addpat]");if(ap){if(S.song.length>=200){toast("A song holds 200 rows.");return}let at2=S.songSel+1;if(S.song[S.songSel]?.type==="end")at2=S.songSel;S.song.splice(at2,0,{pat:+ap.dataset.addpat,rep:1});S.songSel=at2;structEdited();render();return}
+  const ap=e.target.closest("[data-addpat]");if(ap){if(S.song.length>=200){toast("A song holds 200 rows.");return}let at2=S.songSel+1;if(S.song[S.songSel]?.type==="end")at2=S.songSel;S.song.splice(at2,0,{pat:+ap.dataset.addpat,rep:1});S.songSel=at2;edit("rowInsert",{i:at2,row:S.song[at2]});render();return}
   const rw=e.target.closest(".scell:not(.empty),.db[data-row]");if(rw){S.songSel=+rw.dataset.row;render();return}
   const ra=e.target.closest("[data-rowact]");if(ra){songAction(ra.dataset.rowact);return}
   const stp=e.target.closest("[data-step]");if(stp){songStep(stp.dataset.step,+stp.dataset.d*(e.shiftKey?10:1));return}
-  const tt=e.target.closest("[data-ttr]");if(tt){const r=S.song[S.songSel];r.ttr=r.ttr||T64();const k=+tt.dataset.ttr;r.ttr[k]=clamp(r.ttr[k]+ +tt.dataset.d,28,100);structEdited();render();return}
-  const mk=e.target.closest("[data-rowmute]");if(mk){const r=S.song[S.songSel],k=+mk.dataset.rowmute;r.mutes=r.mutes||[];r.mutes=r.mutes.includes(k)?r.mutes.filter(x=>x!==k):[...r.mutes,k];structEdited();render();return}
-  if(e.target.closest("[data-bpmkeep]")){const r=S.song[S.songSel];r.bpm=r.bpm?undefined:Math.round(S.bpm);structEdited();render();return}
+  const tt=e.target.closest("[data-ttr]");if(tt){const r=S.song[S.songSel];r.ttr=r.ttr||T64();const k=+tt.dataset.ttr;r.ttr[k]=clamp(r.ttr[k]+ +tt.dataset.d,28,100);editRow();render();return}
+  const mk=e.target.closest("[data-rowmute]");if(mk){const r=S.song[S.songSel],k=+mk.dataset.rowmute;r.mutes=r.mutes||[];r.mutes=r.mutes.includes(k)?r.mutes.filter(x=>x!==k):[...r.mutes,k];editRow();render();return}
+  if(e.target.closest("[data-bpmkeep]")){const r=S.song[S.songSel];r.bpm=r.bpm?undefined:Math.round(S.bpm);editRow();render();return}
   if(e.target.closest("[data-rowmore]")){S.songMore=!S.songMore;render();return}
-  if(e.target.closest("[data-fullpat]")){const r=S.song[S.songSel];delete r.ofs;delete r.len;structEdited();render();return}
-  if(e.target.closest("[data-inf]")){const r=S.song[S.songSel];r.count=r.count===Infinity?2:Infinity;structEdited();render();return}}
+  if(e.target.closest("[data-fullpat]")){const r=S.song[S.songSel];delete r.ofs;delete r.len;editRow();render();return}
+  if(e.target.closest("[data-inf]")){const r=S.song[S.songSel];r.count=r.count===Infinity?2:Infinity;editRow();render();return}}
  const dl=e.target.closest("[data-dlg]");if(dl){const d=$("#dlg"),f=d._btns[+dl.dataset.dlg][2];d.hidden=true;f();return}
  if(e.target.id==="dlg"){$("#dlg").hidden=true;return}
  if(e.target.closest("#drop")&&!e.target.closest("input")){$("#romfile").click();return}
@@ -221,14 +220,14 @@ document.addEventListener("change",e=>{const id=e.target.id,v=e.target.value,tr=
  if(id==="songsel"){if(HOST.songSlot)return HOST.songSlot(+v);S.songs.slot=+v;S.songSlot=+v;render();return}
  if(id==="engsel"){const btn=document.querySelector(".lcdeng");if(v==="audio"){e.target.value=S.engine;btn.querySelector("span").textContent=e.target.selectedOptions[0].text;openAudio();return}if(v==="rom"){e.target.value=S.engine;btn.querySelector("span").textContent=e.target.selectedOptions[0].text;if(HOST.romManage)HOST.romManage();else firstRun();return}
   S.engine=v;S.pend=0;renderPst();if(HOST.engine)HOST.engine(v);else startEngine(v);return}
- let m=id.match(/^lp(\d)$/);if(m){const l=V("LF"+m[1]);l[0]=+v;l[1]=0;soundEdited();render();return}
- m=id.match(/^ld(\d)$/);if(m){V("LF"+m[1])[1]=+v;soundEdited();render();return}
- m=id.match(/^inp(\d)$/);if(m){S.tracks[+m[1]].inp=v;soundEdited();render();return}
- m=id.match(/^asp(\d)$/);if(m){const r=S.tracks[asgT()].assign.tabs[S.asTab][+m[1]];r.pg=+v;r.d=0;soundEdited();render();return}
- m=id.match(/^asd(\d)$/);if(m){S.tracks[asgT()].assign.tabs[S.asTab][+m[1]].d=+v;soundEdited();return}
- m=id.match(/^mpat(\d+)$/);if(m){S.mmap[+m[1]].pat=+v;structEdited("global");render();return}
- if(id==="trigpos"){tr.trigpos=v===""?null:+v;soundEdited();render();return}
- if(id==="mch"){tr.ch=+v;soundEdited("global");render();return}});
+ let m=id.match(/^lp(\d)$/);if(m){editTrack(S.sel,()=>{const l=V("LF"+m[1]);l[0]=+v;l[1]=0});render();return}
+ m=id.match(/^ld(\d)$/);if(m){editTrack(S.sel,()=>{V("LF"+m[1])[1]=+v});render();return}
+ m=id.match(/^inp(\d)$/);if(m){S.tracks[+m[1]].inp=v;edit("input",{t:+m[1],v:Math.max(0,INPUTS.indexOf(v))});render();return}
+ m=id.match(/^asp(\d)$/);if(m){const r=S.tracks[asgT()].assign.tabs[S.asTab][+m[1]];r.pg=+v;r.d=0;edit("assign",{t:asgT(),src:ASRC[S.asTab],row:+m[1],page:r.pg,dest:0});render();return}
+ m=id.match(/^asd(\d)$/);if(m){S.tracks[asgT()].assign.tabs[S.asTab][+m[1]].d=+v;edit("assign",{t:asgT(),src:ASRC[S.asTab],row:+m[1],dest:+v});return}
+ m=id.match(/^mpat(\d+)$/);if(m){S.mmap[+m[1]].pat=+v;edit("multiMap",{i:+m[1],pat:mmapFw("pat",+v)});render();return}
+ if(id==="trigpos"){tr.trigpos=v===""?null:+v;edit("trigPos",{t:S.sel,v:tr.trigpos});render();return}
+ if(id==="mch"){tr.ch=+v;edit("midiTrack",{t:S.sel-6,ch:+v-1});render();return}});
 
 /* ===== Keys: the Machinedrum Editor's mnemonic map (DESIGN-generators.md §5, MM-PORT-PLAN.md b), every key an
    entry of Keys (56-keys.js). LEARN's knob digits are its own (capture: while a value waits for its knob, 1-8 are
@@ -367,15 +366,13 @@ const NA_CARD={multiMap:".maprow"};	// a card that also says the reason in words
 const NA_INFO=["panelKeys","recvSession","lcd","workingKitMemory","telemetry"];
 const NA={},READING={pattern:new Set(),kit:new Set()},READ_NOTE="Still reading this slot from the machine.";
 function markNa(){
- for(const[cap,sel] of Object.entries(NA_SEL)){const why=NA[cap]||"";for(const el of $$(sel)){
-  if(why&&el.dataset.na!=="1"){el.dataset.na="1";el.title=why;el.setAttribute("aria-disabled","true")}
-  else if(!why&&el.dataset.na==="1"){delete el.dataset.na;el.removeAttribute("aria-disabled")}}}
- for(const[cap,sel] of Object.entries(NA_CARD)){const card=$(sel);if(card&&NA[cap]&&!card.querySelector(".statusline"))card.querySelector("header").insertAdjacentHTML("afterend",`<p class="statusline">${NA[cap]}</p>`)}
+ /* one routine for both editors (shared/deskCaps.js): this page's look is [data-na], and a card that says why */
+ DeskCaps.mark({controls:NA_SEL,reason:cap=>NA[cap]||"",attr:"na",cards:NA_CARD,all:$$,one:$});
  for(const[kind,attr] of [["pattern","ps"],["kit","ks"]])for(const el of $$(`#libpop .${attr}[data-${attr}]`)){const miss=READING[kind].has(+el.dataset[attr]);
   if(miss!==(el.dataset.na==="1")){if(miss){el.dataset.na="1";el.title=READ_NOTE}else delete el.dataset.na}}}
 let naQueued=false;
 new MutationObserver(()=>{if(!naQueued){naQueued=true;queueMicrotask(()=>{naQueued=false;markNa()})}}).observe(document.body,{childList:true,subtree:true});
-for(const ev of["pointerdown","click","change","wheel","keydown","dragstart"])document.addEventListener(ev,e=>{const el=e.target.closest?.("[data-na]");if(!el)return;e.preventDefault();e.stopImmediatePropagation();if(e.type==="click")toast(el.title)},{capture:true,passive:false});
+DeskCaps.guard({attr:"na",events:["pointerdown","click","change","wheel","keydown","dragstart"],say:t=>toast(t)});
 function disable(cap,why){NA[cap]=why||"";markNa()}
 function setReading(kind,slots){READING[kind]=new Set(slots);markNa()}
 /* start with nothing: no example kit, pattern, song or mappings */
@@ -384,22 +381,56 @@ function startEmpty(){applyKit({...clearedKit(),multi:S.multi});S.tracks.forEach
  S.kit=0;S.pat=0;S.queued=null;S.playing=false;S.step=-1;S.ctl.links=[];S.ctl.sources=S.ctl.sources.filter(x=>x.kind==="cc")}
 function setPatternSlot(p,{data,kit,has,len}){S.patKit[p]=kit;S.patInfo[p]={has,len};if(p===S.pat)applyPat(data);else S.patData[p]=data}
 function setKitSlot(k,{name,empty,data}){S.kits[k]={name,empty,data}}
-function setWorkingKit(page,name){applyKit({...page,multi:page.multi??S.multi});S.workName=name}
-function setSong(rows,slot){S.song=rows;S.songSlot=slot;S.songSel=Math.min(S.songSel||0,rows.length-1)}
-function setMidiTracks(list){S.midi.forEach((x,t)=>{x.ch=list[t].ch;x.cc=[...list[t].cc]})}
-function setMultiMap(rows){S.mmap=rows;S.mmapSel=Math.min(S.mmapSel||0,rows.length-1)}
-/* the machine's own mutes (12 booleans: T1-T6, M1-M6; null: unknown) */
-function setMutes(list){let ch=false;list.forEach((m,i)=>{if(m==null)return;const t=trk(i);if(!!t.mute!==m){t.mute=m;ch=true}});if(ch&&!busyNow())render()}
-/* busy: a gesture, or a menu open (a render would close it under the person: the core's documents wait for it, as for a drag) */
+/* ===== The machine's documents, shown (DESIGN-UNIFY.md 4.3-4.5, phase 1) =====
+   A host's view of the documents (mmView.js: derived from the documents it holds, with the documents and the
+   values the page sent over them until they are answered) reaches S here, and nowhere else: show(v) is the
+   one writer of S's document members. A member the view does not have yet (undefined) is left as it is; one
+   equal to what was shown last is not written again, so a gesture under way keeps its objects and its value
+   (what it sent is what the view shows anyway). What is written is a copy: S is the gestures' to change, the
+   view never is. all: write every member again (a reset, an edit that was not taken). The drawing waits while
+   a gesture or a menu is open (a render would close a menu under the person) and comes with the next show
+   once they are closed; the state itself is always current. The mutes are the machine's unless a solo holds
+   (the solo drives them). */
+let SHOWN={},showLater=false;
+const KIT_F=["m","name","v","lev","out","inp","trigpos","port","leg","assign"],MIDI_KIT_F=["v","cc","ch","name"],SEQ_F=["steps","slide","swing","arp","tr"];
+const isSet=x=>x instanceof Set,isMap=x=>x instanceof Map;
+function sameV(a,b){if(a===b)return true;if(a==null||b==null||typeof a!=="object"||typeof b!=="object")return false;
+ if(isSet(a)||isSet(b))return isSet(a)&&isSet(b)&&a.size===b.size&&[...a].every(x=>b.has(x));
+ if(isMap(a)||isMap(b))return isMap(a)&&isMap(b)&&a.size===b.size&&[...a].every(([k,x])=>b.has(k)&&sameV(x,b.get(k)));
+ if(Array.isArray(a)!==Array.isArray(b))return false;const ka=Object.keys(a),kb=Object.keys(b);return ka.length===kb.length&&ka.every(k=>sameV(a[k],b[k]))}
+function copyV(x){if(isSet(x))return new Set(x);if(isMap(x))return new Map([...x].map(([k,y])=>[k,copyV(y)]));if(Array.isArray(x))return x.map(copyV);
+ if(x&&typeof x==="object")return Object.fromEntries(Object.entries(x).map(([k,y])=>[k,copyV(y)]));return x}
+function show(v,all){
+ if(all)SHOWN={};
+ let doc=false,top=false,seq=false;
+ if(v){const was=SHOWN;SHOWN=v;
+  /* o[k] = a copy of x, unless the view has none or showed the same last time */
+  const put=(o,k,x,y)=>{if(x===undefined||sameV(x,y))return false;o[k]=copyV(x);return true};
+  for(const[k,f] of [["tracks",[...KIT_F,...SEQ_F]],["midi",[...MIDI_KIT_F,...SEQ_F]]])if(v[k])v[k].forEach((x,t)=>{const y=was[k]?.[t]||{};for(const n of f)if(put(S[k][t],n,x[n],y[n])){doc=true;if(SEQ_F.includes(n))seq=true}});
+  for(const k of["len","mult","swingAmt","patTrn","locks"])if(put(S,k,v[k],was[k])){doc=true;seq=true}
+  for(const k of["multi","menv","routing","plays"])if(put(S,k,v[k],was[k]))doc=true;
+  if(put(S,"workName",v.workName,was.workName))top=true;
+  for(const k of["pat","kit","queued","bpm"])if(put(S,k,v[k],was[k]))top=true;
+  if(v.kitState!==undefined&&v.kitState!==was.kitState){setKitState(v.kitState);top=true}
+  if(v.patSlot&&!sameV(v.patSlot,was.patSlot)){S.patKit[v.patSlot.p]=v.patSlot.kit;S.patInfo[v.patSlot.p]={has:v.patSlot.has,len:v.patSlot.len}}
+  if(put(S,"song",v.song,was.song)||v.song!==undefined&&v.songSlot!==was.songSlot){S.songSlot=v.songSlot;S.songSel=Math.min(S.songSel||0,S.song.length-1);doc=true}
+  if(put(S,"songs",v.songs,was.songs))doc=true;
+  if(put(S,"mmap",v.mmap,was.mmap)){S.mmapSel=Math.min(S.mmapSel||0,S.mmap.length-1);doc=true}
+  /* the machine's own mutes (T1-T6, M1-M6; null: not known) */
+  const solo=[...S.tracks,...S.midi].some(x=>x.solo);
+  if(v.mutes&&!solo)v.mutes.forEach((m,i)=>{if(m!=null&&m!==was.mutes?.[i]&&!!trk(i).mute!==m){trk(i).mute=m;doc=true}});
+  /* POLY is the machine's audio mode; the keyboard's other modes are the page's */
+  if(v.poly!=null&&v.poly!==was.poly){const m=v.poly?"poly":S.mode==="poly"?"normal":S.mode;if(m!==S.mode){S.mode=m;doc=true}}
+  if(doc)pruneLocks();
+  if(seq)autoRange(S.sel)}
+ if(top)renderTop();
+ if(!doc&&!showLater)return;
+ if(busyNow()){showLater=true;return}
+ showLater=false;render();drawLib()}
+/* busy: a gesture, or a menu open (a render would close it under the person: the drawing waits for it, as for a drag) */
 const busyNow=()=>{try{return !!(S.genEnding||drag||laneDraw||rollDrag||active||arpDrag||l2drag||joyDrag||splitDrag||cord||kbDown||paint)||menuOpen()}catch(_){return false}};
-/* the keyboard mode the machine is in (POLY is its audio mode) */
-function setMode(m){if(S.mode===m)return;S.mode=m;if(S.ws==="perform"&&!busyNow())render()}
 /* RECORD as the machine is in it: "off" | "grid" | "live" */
 function setRecord(mode){const on=mode==="grid"||mode==="live";S.recMode=mode;if(!!S.rec!==on){S.rec=on;renderTop()}const b=$("#rec");if(b)b.title=mode==="live"?"LIVE RECORDING: notes you play are recorded. Click to stop recording.":mode==="grid"?"GRID RECORDING: the machine's TRIG keys write steps. Click to leave.":"RECORD: stopped = GRID RECORDING, playing = LIVE RECORDING (the keyboard's notes are recorded)."}
-/* the 24 songs for the Song workspace's picker: {names, slot (the one edited), current (the machine's)} */
-function setSongs(v){const same=JSON.stringify(v)===JSON.stringify(S.songs);S.songs=v;if(!same&&S.ws==="song"&&!busyNow())render()}
-/* what the machine plays (MM-P8): {chain: {active, next, patterns} | null (not readable), songMode, song} */
-function setPlays(v){const same=JSON.stringify(v)===JSON.stringify(S.plays);S.plays=v;if(!same&&S.ws==="song"&&!busyNow())render()}
 /* an engine state's LCD label: [text, led "on" | "blink" | "off", tooltip] */
 function setEngineLabel(st,label){ENG[st]=label;if(S.eng===st)setEng(st)}
 /* a host's engine map ([{id, label, available, reason}]) in the engine menu, before the menu's own entries */
@@ -447,24 +478,25 @@ Boot.host={chooseRom:()=>{if(HOST.chooseRom)return HOST.chooseRom();Boot.rom({ok
 document.addEventListener("contextmenu",e=>{if(!HOST.menu||!e.target.closest(".top")||e.target.closest("button,[role=slider],[role=button],select,input,b,.lcdpanel"))return;e.preventDefault();HOST.menu()});
 window.MMView={
  /* values */
- captureKit,capturePat,clearedKit,emptyPat,audible,soloed:()=>[...S.tracks,...S.midi].some(x=>x.solo),engReady,asgT,noteName,pname,machName,kitName,
- gated:()=>Object.keys(NA_SEL),dialogOpen,
+ audible,soloed:()=>[...S.tracks,...S.midi].some(x=>x.solo),engReady,asgT,noteName,pname,machName,kitName,
+ gated:()=>Object.keys(NA_SEL),
  busy:busyNow,
- libBusy:()=>LIB.renaming!=null||LIB.drag!=null,
- sel:()=>S.sel,mode:()=>S.mode,playing:()=>S.playing,step:()=>S.step,tempo:()=>S.bpm,engineState:()=>S.eng,kitState:()=>S.kitState,workName:()=>S.workName,
- kitSlot:k=>({...S.kits[k]}),patternSlot:p=>({data:S.patData[p],kit:S.patKit[p],...S.patInfo[p]}),patternLength:p=>p===S.pat?S.len:S.patInfo[p].len,
- song:()=>copy(S.song),routing:()=>S.routing,midiTracks:()=>S.midi.map(x=>({ch:x.ch,cc:[...x.cc]})),multi:()=>copy(S.multi),multiMap:()=>copy(S.mmap),
+ sel:()=>S.sel,mode:()=>S.mode,playing:()=>S.playing,step:()=>S.step,tempo:()=>S.bpm,engineState:()=>S.eng,kitState:()=>S.kitState,
  learnTarget:()=>S.learn&&S.learnT?{...S.learnT}:null,learning:()=>!!S.learn,ctlSetup,
  /* setters */
- startEmpty,setCurrent:({pattern,kit})=>{if(pattern!=null)S.pat=pattern;if(kit!=null)S.kit=kit},setQueued:q=>{S.queued=q},setTempo:bpm=>{S.bpm=bpm},setInput,
- setPlaying,setStep,setPatternSlot,setKitSlot,setWorkingKit,setSong,setRouting:r=>{S.routing=r},setMidiTracks,setMultiMap,
- setEng,dlgOpen:()=>!$("#dlg").hidden,setEngineLabel,setEngineTip,setEngines,setAudioEntry,setKitState,clearLearnTarget:()=>{S.learnT=null},setMapping,setModulation,setCtlSetup,disable,setReading,
- setMutes,setMode,setRecord,setSongs,setPlays,
+ /* the machine's documents: show(view) is the one writer of S's document members (DESIGN-UNIFY.md phase 1); the
+    library's other slots keep their own cheap setters; setTempo is the BPM gesture's own write (the self-test's) */
+ show,startEmpty,setPatternSlot,setKitSlot,setReading,setTempo:bpm=>{S.bpm=bpm},
+ setInput,setPlaying,setStep,
+ setEng,dlgOpen:()=>!$("#dlg").hidden,setEngineLabel,setEngineTip,setEngines,setAudioEntry,clearLearnTarget:()=>{S.learnT=null},setMapping,setModulation,setCtlSetup,disable,
+ setRecord,
  setLcd,setKeyDown,setPst,closeFirmwareDialog,bootRom:r=>Boot.rom(r),bootInstalled:o=>Boot.showInstalled(o),syxPreview:m=>Syx.preview(m),syxProgress:m=>Syx.progress(m),
  /* calls */
  render,renderTop,drawLib,toast,ask,redraw,movePH,setPos,flashTracks,goWs,clickStep,autoRange,kitSave,
  redrawAudio:()=>{if(AP.open)drawAudio()},audioLevel,openAudio};
+/* the view gives exactly the seam's members (53-seam.js) */
+{const have=Object.keys(window.MMView),odd=[...MM_SEAM.view.filter(k=>!have.includes(k)),...have.filter(k=>!MM_SEAM.view.includes(k))];if(odd.length)console.warn("MMView and 53-seam.js differ: "+odd.join(", "))}
 /* The self-tests (a diagnostics build's bundle sets window.MMDiagnostics before this script) play the
    user through the view's state and run the panel's own test; a release page exports neither. */
 if(window.MMDiagnostics)Object.assign(window.MMDiagnostics,{S,audioSelfTest});
-setMapping(!window.MMHost);render();H.last=snap();if(HOST.start)HOST.start();else startEngine("emu");{const lb=new URLSearchParams(location.hash.slice(1)).get("lib");if(lb)setTimeout(()=>openLib(lb),2000)}
+setMapping(!window.MMHost);render();if(HOST.start)HOST.start();else startEngine("emu");{const lb=new URLSearchParams(location.hash.slice(1)).get("lib");if(lb)setTimeout(()=>openLib(lb),2000)}

@@ -253,10 +253,13 @@ function drawPicker(){const tr=trk(S.sel),list=machList(S.pickFam);
   <div class="mp-right"><div class="mp-head"><span class="cap">${FAMS.find(x=>x[0]===S.pickFam)[1]}</span><span class="note">${list.length} machine${list.length>1?"s":""} · SysEx 0x5B</span></div>
   <div class="mp-grid">${list.map(m=>{const off=MACH[m].mk2&&S.plate==="mk1";return`<button class="mk" data-mach="${m}" aria-pressed="${m===tr.m}" ${off?"disabled title='MKII only'":""}><b>${m.replace(/^[A-Z]+\+?-?/,"")||m}</b><span>${off?"MKII only":machName(m)}</span></button>`}).join("")}</div>
   <div class="mp-foot"><div class="mp-prev" id="mpprev">${prevText(tr.m)}</div><button class="mp-keep" id="mpkeep" aria-pressed="${S.keepFx}"><i class="led ${S.keepFx?"on":""}"></i>Keep track effects + LFOs</button></div></div>`}
-function setMachine(v){const t=S.sel,tr=trk(t);const old=tr.m;tr.m=v;tr.v.SYN=synDefaults(v);if(!S.keepFx){tr.v.AMP=[...DEFV.AMP];tr.v.FLT=[...DEFV.FLT];tr.v.EFX=[...DEFV.EFX];tr.v.LF1=[...DEFV.LFO];tr.v.LF2=[...DEFV.LFO];tr.v.LF3=[...DEFV.LFO]}
+/* MACHINE: the machine intent (its start values are the core's; keep: the effects and LFOs stay); the SYN locks of the
+   track go with the old machine (clearLane each) */
+function setMachine(v){const t=S.sel,tr=trk(t);const old=tr.m,synLocks=trackLockPids(t).filter(p=>p.startsWith("SYN."));tr.m=v;tr.name=machName(v);tr.v.SYN=synDefaults(v);if(!S.keepFx){tr.v.AMP=[...DEFV.AMP];tr.v.FLT=[...DEFV.FLT];tr.v.EFX=[...DEFV.EFX];tr.v.LF1=[...DEFV.LFO];tr.v.LF2=[...DEFV.LFO];tr.v.LF3=[...DEFV.LFO]}
  for(const k of [...S.locks.keys()]){const[x,p]=k.split("|");if(+x===t&&p.startsWith("SYN."))S.locks.delete(k)}
  if(isFx(v)&&!isFx(old)){tr.inp=t===0?"INP AB":"NEIBOR";tr.v.AMP[2]=127;tr.v.AMP[3]=127;toast(`${v} needs audio in: input ${tr.inp}. AMP DEC and REL are at 127 so the sound passes.`)}
- if(!S.lane.startsWith("SYN.")||pname(t,S.lane))0;else S.lane="FLT.1";soundEdited();closePicker();render()}
+ if(!S.lane.startsWith("SYN.")||pname(t,S.lane))0;else S.lane="FLT.1";
+ edit("machine",{t,model:MACH[v].id,keepFx:!!S.keepFx});synLocks.forEach(pid=>edit("clearLane",{t,...pidArgs(pid)}));closePicker();render()}
 document.addEventListener("click",e=>{
  if(e.target.closest("#machbtn")){$("#machpop").hidden?openPicker():closePicker();return}
  const pop=$("#machpop");if(pop.hidden)return;const f=e.target.closest(".mf");if(f){S.pickFam=f.dataset.fam;drawPicker();return}
@@ -273,4 +276,4 @@ function cordStart(e,h){const r=h.getBoundingClientRect();cord={l:h.dataset.cord
 function cordMove(e){if(!cord)return;const ink=cssv("--led");$("#cordsvg").innerHTML=`<path d="M${cord.x0} ${cord.y0} C${cord.x0} ${cord.y0-60},${e.clientX} ${e.clientY-60},${e.clientX} ${e.clientY}" fill="none" stroke="${ink}" stroke-width="3" stroke-linecap="round"/><circle cx="${e.clientX}" cy="${e.clientY}" r="5" fill="${ink}"/>`;
  $$(".pc.dropok").forEach(p=>p.classList.remove("dropok"));const el=document.elementFromPoint(e.clientX,e.clientY)?.closest(".pc.droptarget");if(el)el.classList.add("dropok")}
 function cordEnd(e){if(!cord)return;const el=document.elementFromPoint(e.clientX,e.clientY)?.closest(".pc.droptarget");$("#cordsvg").innerHTML="";$$(".droptarget,.dropok").forEach(p=>p.classList.remove("droptarget","dropok"));
- if(el){const v=V(cord.l);v[0]=LPAGES.indexOf(el.dataset.g);v[1]=+el.dataset.n;if(!v[7])v[7]=32;soundEdited();toast(`LFO ${cord.l[2]} → ${el.dataset.g} ${pname(S.sel,el.dataset.g+"."+el.dataset.n)} (PAGE and DEST set).`);cord=null;render();return}cord=null}
+ if(el){editTrack(S.sel,()=>{const v=V(cord.l);v[0]=LPAGES.indexOf(el.dataset.g);v[1]=+el.dataset.n;if(!v[7])v[7]=32});toast(`LFO ${cord.l[2]} → ${el.dataset.g} ${pname(S.sel,el.dataset.g+"."+el.dataset.n)} (PAGE and DEST set).`);cord=null;render();return}cord=null}

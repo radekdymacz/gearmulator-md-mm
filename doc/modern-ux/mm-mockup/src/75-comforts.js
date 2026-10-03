@@ -1,7 +1,7 @@
 /* ===== From the Machinedrum Editor (2026-10, MM-PORT-PLAN.md a-c): Alt as the global "all", the key map's
    track and transport keys, the home-row keyboard, and the small comforts. On the Monomachine every edit here
-   is a change of the view's own state followed by structEdited(): the host sends the whole pattern, one gesture
-   is one undo step (a commit ends it). ===== */
+   is a change of the view's own state followed by its intent (edit(), the Machinedrum's ops: clearPattern,
+   clearLocks, rotate, doublePattern, lock, pasteSteps, steps): one gesture is one undo step (a commit ends it). ===== */
 
 /* ---- Alt, a global modifier: Alt + CLR (or Alt + Delete in Sequence) clears the whole pattern, Alt + the lock
    lane's clear key every lock of the selected track. While Alt is held the keys it changes say so. ---- */
@@ -11,8 +11,8 @@ function altLabels(){const c=$('[data-sec="clear"]');if(c){c.textContent=S.alt?"
 function showAlt(on){if(S.alt===on)return;S.alt=on;document.body.classList.toggle("althold",on);altLabels();if(S.gen&&S.ws==="seq")genDraw();if(S.gen&&S.ws==="sound")renderMutStrip()}
 addEventListener("keydown",e=>showAlt(e.altKey),true);addEventListener("keyup",e=>showAlt(e.altKey),true);addEventListener("blur",()=>showAlt(false));
 document.addEventListener("pointermove",e=>showAlt(e.altKey),{passive:true,capture:true});
-function clearPattern(){[...S.tracks,...S.midi].forEach(tr=>{tr.steps=tr.steps.map(()=>null);tr.slide=new Set()});S.locks.clear();structEdited();render();toast(`Cleared ${patName(S.pat)}: every track's notes, slides and locks.`)}
-function clearTrackLocks(t){const n=trackLockPids(t).length;[...S.locks.keys()].forEach(k=>{if(+k.split("|")[0]===t)S.locks.delete(k)});if(!n){toast(tLabel(t)+" has no locks.");return}structEdited();render();toast(`Cleared every lock of ${tLabel(t)} (${n} parameter${n>1?"s":""}).`)}
+function clearPattern(){[...S.tracks,...S.midi].forEach(tr=>{tr.steps=tr.steps.map(()=>null);tr.slide=new Set()});S.locks.clear();edit("clearPattern",{});render();toast(`Cleared ${patName(S.pat)}: every track's notes, slides and locks.`)}
+function clearTrackLocks(t){const n=trackLockPids(t).length;[...S.locks.keys()].forEach(k=>{if(+k.split("|")[0]===t)S.locks.delete(k)});if(!n){toast(tLabel(t)+" has no locks.");return}edit("clearLocks",{t});render();toast(`Cleared every lock of ${tLabel(t)} (${n} parameter${n>1?"s":""}).`)}
 
 /* ---- the lock budget over the lock lane: the machine's 62 locked parameters in a pattern, pooled over all
    twelve tracks (manual 1-58), as the LCD's meter (dark from 52, blinking at 62) ---- */
@@ -30,14 +30,14 @@ function rotateTrack(by){const t=S.sel,tr=trk(t),len=S.len;if(len<2)return;
  const st=tr.steps.slice(0,len),sl=new Set();for(let s=0;s<len;s++){tr.steps[rotStep(s,by,len)]=st[s];if(tr.slide.has(s))sl.add(rotStep(s,by,len))}
  for(const s of tr.slide)if(s>=len)sl.add(s);tr.slide=sl;
  for(const[k,m] of S.locks){if(+k.split("|")[0]!==t)continue;const n=new Map();for(const[s,v] of m)n.set(s<len?rotStep(s,by,len):s,v);S.locks.set(k,n)}
- rotHold=true;structEdited();rerenderSeq()}
+ rotHold=true;edit("rotate",{t,by});rerenderSeq()}
 
 /* ---- every-N fill: ⌘-click a step in the roll, every 2nd step from there to the end gets a note at that pitch
    (⌘⇧: every 4th); from a step with a note they go off, with their locks. A NOTE OFF is left alone. ---- */
 function fillEvery(t,s,n,pitch){const tr=trk(t),end=S.len,on=!(tr.steps[s]&&!tr.steps[s].off);let ch=0;
  for(let k=s;k<end;k+=n){const st=tr.steps[k];if(st?.off)continue;if(on&&!st){tr.steps[k]=note(pitch);ch++}else if(!on&&st){tr.steps[k]=null;tr.slide.delete(k);clearStepLocks(t,k);ch++}}
  const nth=n===2?"2nd":"4th";if(!ch){toast(`${tLabel(t)} already has every ${nth} step ${on?"on":"off"} from step ${s+1}.`);return}
- structEdited();renderTop();rerenderSeq();toast(`${on?"Filled every":"Cleared every"} ${nth} step of ${tLabel(t)}, steps ${s+1}–${end}${on?" with "+noteName(pitch):""}.`)}
+ edit("steps",{from:s,to:end,rows:[rangeRow(t,s,end)]});renderTop();rerenderSeq();toast(`${on?"Filled every":"Cleared every"} ${nth} step of ${tLabel(t)}, steps ${s+1}–${end}${on?" with "+noteName(pitch):""}.`)}
 
 /* ---- the wheel over a lock-lane step with a trig moves its lock in the lane's parameter (from the kit value when
    it has none): 4 a notch (1 on a short list), ⇧ 1. A run of notches on one step is one undo step. The roll's own
@@ -47,7 +47,7 @@ $("#main").addEventListener("wheel",e=>{const el=e.target.closest("#lane .lb");i
  if(!d||!st||st.off)return;e.preventDefault();const[pg,i]=S.lane.split("."),m=meta(t,pg,+i),mx=maxOf(m),now=performance.now(),key=t+"|"+S.lane+"|"+s;
  if(!wheelLock||wheelLock.key!==key||now-wheelLock.at>700){commit();wheelLock={key}}wheelLock.at=now;
  const had=S.locks.get(lkKey(t,S.lane))?.get(s),cur=had??getP(t,S.lane)??0,v=clamp(cur+(d<0?1:-1)*(e.shiftKey||mx<16?1:4),0,mx);if(had!=null&&v===had)return;
- if(!setLock(t,S.lane,s,v))return;structEdited();renderTop();renderLane();toast(`${pidLabel(t,S.lane)} ${fmt(m,v)} · ${tLabel(t)}, step ${s+1}`)},{passive:false});
+ if(!setLock(t,S.lane,s,v))return;edit("lock",{t,...pidArgs(S.lane),s,v});renderTop();renderLane();toast(`${pidLabel(t,S.lane)} ${fmt(m,v)} · ${tLabel(t)}, step ${s+1}`)},{passive:false});
 
 /* ---- a ramp in the lock lane: ⇧-drag draws a straight line from the press to the pointer, shown as it moves; at
    the release every step with a trig under it is locked on the line, one gesture. ---- */
@@ -57,14 +57,14 @@ function rampPoints(){const d=laneDraw,tr=trk(S.sel);if(!d||!d.from)return[];con
  for(let s=a;s<=b;s++){const st=tr.steps[s];if(!st||st.off)continue;const v=d.to.s===d.from.s?d.to.v:d.from.v+(d.to.v-d.from.v)*(s-d.from.s)/(d.to.s-d.from.s);out.push([s,clamp(Math.round(v),0,mx)])}return out}
 function rampAt(e){const p=lanePoint(e);if(!p)return;if(!laneDraw.from)laneDraw.from=p;laneDraw.to=p;renderLane();
  for(const[s,v] of rampPoints()){const el=document.querySelector(`#lane .lb[data-s="${s}"]`);if(!el)continue;el.querySelector("i")?.remove();el.insertAdjacentHTML("beforeend",barHTML(v));el.classList.add("ramp")}}
-function rampSend(){let n=0;for(const[s,v] of rampPoints()){if(!setLock(S.sel,S.lane,s,v,n>0))break;n++}return n>0}
+function rampSend(){let n=0;for(const[s,v] of rampPoints()){if(!setLock(S.sel,S.lane,s,v,n>0))break;edit("lock",{t:S.sel,...pidArgs(S.lane),s,v});n++}return n>0}
 
 /* ---- double the pattern (LEN ×2 on LCD line 2): length × 2, the new half a copy of every track's steps, slides,
    swing and locks (64 steps is the longest) ---- */
 function doublePattern(){const len=S.len;if(len*2>64){toast(`A pattern of ${len} steps cannot double: 64 steps is the longest.`);return}
  [...S.tracks,...S.midi].forEach(tr=>{for(let s=0;s<len;s++){tr.steps[s+len]=tr.steps[s]&&JSON.parse(JSON.stringify(tr.steps[s]));for(const set of[tr.slide,tr.swing])set.has(s)?set.add(s+len):set.delete(s+len)}});
  for(const m of S.locks.values()){for(let s=len;s<2*len;s++)m.delete(s);for(const[s,v] of[...m])if(s<len)m.set(s+len,v)}
- S.len=len*2;structEdited();render();toast(`Doubled ${patName(S.pat)}: ${len} to ${len*2} steps, the new half a copy.`)}
+ S.len=len*2;edit("doublePattern",{});render();toast(`Doubled ${patName(S.pat)}: ${len} to ${len*2} steps, the new half a copy.`)}
 
 /* ---- paste to many: ⇧-click track headers to mark them, then ⌘V pastes the copied page into each one (from the
    page shown), one gesture. A plain click on a header, or Esc, unmarks them. (S.multi is MULTI TRIG here.) ---- */
@@ -73,7 +73,7 @@ function markToggle(t){S.marks.has(t)?S.marks.delete(t):S.marks.add(t);renderRai
 document.addEventListener("click",e=>{const th=e.target.closest("#rail .th[data-sel]");if(!th||e.target.closest("button,select,.pc,.fader")||S.ws!=="seq")return;
  if(e.shiftKey){e.preventDefault();e.stopImmediatePropagation();markToggle(+th.dataset.sel);return}if(S.marks.size)S.marks.clear()},true);
 function pasteToMany(){const[a,b]=vis();if(CLIP?.type!=="page"){toast("Copy a track page first.");return}const ts=[...S.marks].sort((x,y)=>x-y),ok=ts.filter(t=>isMidiT(t)===CLIP.midi);
- ok.forEach(t=>pastePage(t,a,b));if(ok.length){structEdited();render()}
+ ok.forEach(t=>{pastePage(t,a,b);edit("pasteSteps",{t,from:a,to:b})});if(ok.length)render()
  toast((ok.length?`Pasted steps ${a+1}–${b} into ${ok.map(tLabel).join(" ")} (one undo step).`:"")+(ok.length<ts.length?` ${ts.length-ok.length} marked track(s) skipped: pages paste between synth tracks or between MIDI tracks.`:""))}
 
 /* ---- mutes from the keys: M the selected track, Alt+M every track (any audible: mute all; none: unmute all), 0
@@ -106,8 +106,8 @@ function homeDown(e){if(e.repeat||KB.held.has(e.code))return;const t=S.sel,k=KEY
  if(isMidiT(t)){kbTell("midi","The keys play the synth tracks: a MIDI track's notes go to the MIDI OUT only.");return}
  const n=clamp(KEYS_BASE+12*KB.oct+KEYS_SEMIS[k]);KB.held.set(e.code,{t,n});keyNote(t,n,KB.vel)}
 function homeUp(code){const h=KB.held.get(code);if(!h)return;KB.held.delete(code);keyNote(h.t,h.n,0)}
-/* a host plays the machine; the example only shows the track's lamp */
-function keyNote(t,n,vel){if(HOST.noteKey)return HOST.noteKey(t,n,vel);if(vel){flashTracks([t]);kbTell("eg","Example: in the plug-in the keys play the machine.")}}
+/* a host plays the machine (the note intent: pitch in semitones from KEYS_BASE, C3); the example only shows the track's lamp */
+function keyNote(t,n,vel){if(HOST.noteOn){const p=n-KEYS_BASE;return vel?HOST.noteOn(t,p,vel):HOST.noteOff(t,p)}if(vel){flashTracks([t]);kbTell("eg","Example: in the plug-in the keys play the machine.")}}
 function kbVel(d){KB.vel=keyVel(KB.vel,d);toast(`Keyboard velocity ${KB.vel}`)}
 function kbOct(d){KB.oct=clamp(KB.oct+d,KEYS_OCT[0],KEYS_OCT[1]);toast(`Keyboard octave ${KB.oct>0?"+":""}${KB.oct}: A plays ${noteName(KEYS_BASE+12*KB.oct)}`)}
 document.addEventListener("keyup",e=>homeUp(e.code));addEventListener("blur",()=>[...KB.held.keys()].forEach(homeUp));

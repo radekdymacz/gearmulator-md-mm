@@ -14,6 +14,9 @@
 #include <optional>
 #include <set>
 #include <string>
+#include <type_traits>
+#include <utility>
+#include <variant>
 #include <vector>
 
 namespace deskCore
@@ -81,6 +84,30 @@ namespace deskCore
 		std::vector<std::string> errors;	// non-empty: refused
 		std::string note;					// one line for the user
 		std::optional<Ask> ask;				// a question for the user: nothing was done
+	};
+
+	// What a command means to the machine beyond its changes (the model's Intent, e.g. the MD's Control
+	// All gesture): review() reads it from the command, the core hands it to submit() with each change
+	// of that command. A model without one has none (std::monostate); undo and redo carry none.
+	template<typename Model, typename = void>
+	struct IntentOf
+	{
+		using type = std::monostate;
+	};
+	template<typename Model>
+	struct IntentOf<Model, std::void_t<typename Model::Intent>>
+	{
+		using type = typename Model::Intent;
+	};
+
+	// review()'s answer: the outcome (refuse, ask, or go on) and the intent the changes are delivered with.
+	template<typename Intent>
+	struct Reviewed
+	{
+		Outcome outcome;
+		Intent intent{};
+
+		Reviewed(Outcome _outcome = {}, Intent _intent = {}) : outcome(std::move(_outcome)), intent(std::move(_intent)) {}
 	};
 
 	// _o with _next's question joined to its own (the first names the ask and its button; the
@@ -244,13 +271,17 @@ namespace deskCore
 		using Documents = typename Model::Documents;
 		using Context = typename Model::Context;
 		using Ev = Event<Doc, Ref>;
+		using Intent = typename IntentOf<Model>::type;
+		using Review = Reviewed<Intent>;
 
 		virtual ~Machine() = default;
 
-		// Before a command's changes are delivered: refuse them (errors) or ask first (ask).
-		virtual Outcome review(const Value& _command, const std::vector<Change>& _changes, const Documents& _view) = 0;
-		// Deliver one change. Errors refuse it; nothing was sent then.
-		virtual Outcome submit(const Change& _change, const Documents& _view) = 0;
+		// Before a command's changes are delivered: refuse them (errors) or ask first (ask); and the
+		// command's intent, which the core hands to submit() with each of its changes.
+		virtual Review review(const Value& _command, const std::vector<Change>& _changes, const Documents& _view) = 0;
+		// Deliver one change, with the intent review() gave its command (none for undo and redo). Errors
+		// refuse it; nothing was sent then.
+		virtual Outcome submit(const Change& _change, const Intent& _intent, const Documents& _view) = 0;
 		// A machine-owned command (the command table's Owner::Machine).
 		virtual Outcome command(const Value& _command, const Documents& _view) = 0;
 		// Before a machine command runs: a question for the user (ask), or nothing. The core asks
@@ -323,20 +354,20 @@ namespace deskCore
 				return;
 			}
 			const auto review = m_machine->review(_message, r.changes, m_view);
-			if(!review.errors.empty())
+			if(!review.outcome.errors.empty())
 			{
-				result(_message, review.errors, {});
+				result(_message, review.outcome.errors, {});
 				return;
 			}
-			if(review.ask && !forced(_message))
+			if(review.outcome.ask && !forced(_message))
 			{
-				publish(askMessage(*review.ask, _message));
+				publish(askMessage(*review.outcome.ask, _message));
 				result(_message, {}, {});
 				return;
 			}
 			std::vector<std::string> errors;
 			std::string note = r.note;
-			const auto delivered = deliver(r.changes, errors, note);
+			const auto delivered = deliver(r.changes, review.intent, errors, note);
 			const auto* g = _message.find("g");
 			m_history.record(delivered, g && g->isNumber() && g->asNumber() > 0 ? static_cast<uint64_t>(g->asNumber()) : 0);
 			result(_message, errors, note);
@@ -489,6 +520,8 @@ namespace deskCore
 		Value machineDocument() const
 		{
 			auto doc = m_machine->state(m_view);
+			// The page protocol's version (DESIGN-REVIEW-2026-10-02 finding 15): what a page reads first.
+			doc.set("contract", Model::contractVersion);
 			Value history = Value::object();
 			history.set("undo", m_history.canUndo());
 			history.set("redo", m_history.canRedo());
@@ -569,14 +602,15 @@ namespace deskCore
 		}
 
 	private:
-		std::vector<Change> deliver(const std::vector<Change>& _changes, std::vector<std::string>& _errors, std::string& _note)
+		std::vector<Change> deliver(const std::vector<Change>& _changes, const typename Adapter::Intent& _intent,
+			std::vector<std::string>& _errors, std::string& _note)
 		{
 			std::vector<Change> delivered;
 			for(const auto& c : _changes)
 			{
 				if(c.before == c.after)
 					continue;	// the page shows it already (an undo of something the machine already undid)
-				const auto o = m_machine->submit(c, m_view);
+				const auto o = m_machine->submit(c, _intent, m_view);
 				if(!o.errors.empty())
 				{
 					_errors.insert(_errors.end(), o.errors.begin(), o.errors.end());
@@ -610,7 +644,7 @@ namespace deskCore
 					c.before = *now;
 			std::vector<std::string> errors;
 			std::string note = _redo ? "Redo" : "Undo";
-			m_history.done(d, deliver(*changes, errors, note));
+			m_history.done(d, deliver(*changes, typename Adapter::Intent{}, errors, note));
 			result(_message, errors, note);
 		}
 

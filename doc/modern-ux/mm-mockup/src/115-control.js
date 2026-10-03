@@ -53,7 +53,9 @@ function renderControl(){const C=S.ctl,sel=srcById(C.sel)||C.sources[0];
  syncControls()}
 let knobDrag=null;
 document.addEventListener("pointerdown",e=>{const h=e.target.closest(".srch.k-cc");if(h){knobDrag={h,src:srcById(h.dataset.src),y:e.clientY,x:e.clientX,v:srcById(h.dataset.src).val,moved:false};h.setPointerCapture(e.pointerId)}},true);
-document.addEventListener("pointermove",e=>{if(!knobDrag)return;if(e.buttons===0&&e.pointerType==="mouse"){knobDrag=null;return}const d=((e.clientX-knobDrag.x)+(knobDrag.y-e.clientY))/2;if(Math.abs(d)>2)knobDrag.moved=true;knobDrag.src.val=clamp(Math.round(knobDrag.v+d));applySrc(knobDrag.src);soundEdited();ctlRefresh()});
+document.addEventListener("pointermove",e=>{if(!knobDrag)return;if(e.buttons===0&&e.pointerType==="mouse"){knobDrag=null;return}const d=((e.clientX-knobDrag.x)+(knobDrag.y-e.clientY))/2;if(Math.abs(d)>2)knobDrag.moved=true;knobDrag.src.val=clamp(Math.round(knobDrag.v+d));
+ /* the knob row drives its targets through the editor: the kit values it moved, as param intents */
+ const was={};for(let t=0;t<6;t++)was[t]=pagesCopy(t);applySrc(knobDrag.src);editParams(was);ctlRefresh()});
 document.addEventListener("pointerup",()=>{if(knobDrag){const k=knobDrag;knobDrag=null;if(k.moved)k.h.dataset.moved="1"}},true);
 document.addEventListener("click",e=>{if(S.ws!=="control")return;const C=S.ctl;
  const sh=e.target.closest(".srch");if(sh){if(sh.dataset.moved){sh.dataset.moved="";return}C.sel=sh.dataset.src;C.selT=null;render();return}

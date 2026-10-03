@@ -1,4 +1,5 @@
 #include "mdWebPageHost.h"
+#include "mdPageBridge.h"
 
 #include "juce_gui_extra/juce_gui_extra.h"
 
@@ -16,9 +17,6 @@ namespace mdJucePlugin
 
 	namespace
 	{
-		constexpr const char* g_bridgeCommand = "gmbridge://c/";
-		constexpr const char* g_bridgeLog = "gmbridge://log/";
-
 		// Replaces every "<open>NAME<close>" with _make(NAME).
 		std::string replaceAll(const std::string& _text, const std::string& _open, const std::string& _close,
 			const std::function<std::string(const std::string&)>& _make)
@@ -101,6 +99,7 @@ namespace mdJucePlugin
 	WebPageHost::WebPageHost(Spec _spec, std::function<std::string(const std::string&)> _resource,
 		std::function<void(const Value&)> _onMessage)
 		: m_spec(std::move(_spec)), m_resource(std::move(_resource)), m_onMessage(std::move(_onMessage))
+		, m_pieces(std::make_unique<pageBridge::Pieces>())
 	{
 		m_web = std::make_unique<PageWebView>([this](const std::string& _url) { onBridge(_url); },
 			[this](const juce::String& _e) { log("web view: " + _e); },
@@ -197,14 +196,20 @@ namespace mdJucePlugin
 
 	void WebPageHost::onBridge(const std::string& _url)
 	{
-		if(_url.rfind(g_bridgeLog, 0) == 0)
+		namespace bridge = pageBridge;
+		if(bridge::startsWith(_url, bridge::g_log))
 		{
-			log("page: " + juce::URL::removeEscapeChars(juce::String(_url.substr(std::strlen(g_bridgeLog)))));
+			log("page: " + juce::URL::removeEscapeChars(juce::String(_url.substr(std::strlen(bridge::g_log)))));
 			return;
 		}
-		if(_url.rfind(g_bridgeCommand, 0) != 0)
-			return;
-		const auto text = juce::URL::removeEscapeChars(juce::String(_url.substr(std::strlen(g_bridgeCommand))));
+		std::string escaped;
+		if(bridge::startsWith(_url, bridge::g_command))
+			escaped = _url.substr(std::strlen(bridge::g_command));
+		else if(const auto joined = m_pieces->add(_url))
+			escaped = *joined;
+		else
+			return;	// a piece of a batch still coming, or not the bridge's
+		const auto text = juce::URL::removeEscapeChars(juce::String::fromUTF8(escaped.c_str(), static_cast<int>(escaped.size())));
 		std::string error;
 		const auto batch = json::parse(text.toStdString(), &error);
 		if(!batch || !batch->isArray())
@@ -227,9 +232,10 @@ namespace mdJucePlugin
 	{
 		if(!m_pageReady || m_outbox.empty())
 			return;
-		json::Value batch(json::Value::Array(m_outbox.begin(), m_outbox.end()));
+		const auto scripts = pageBridge::recvScripts(m_outbox);
 		m_outbox.clear();
-		m_web->goToURL("javascript:window.gm&&gm.recv(" + json::write(batch) + ")");
+		for(const auto& s : scripts)
+			m_web->goToURL(juce::String::fromUTF8(s.c_str(), static_cast<int>(s.size())));
 	}
 
 	void WebPageHost::layout(const juce::Rectangle<int>& _bounds)

@@ -1,29 +1,8 @@
 /* ===== Keys (from the Machinedrum Editor, P5 and its mnemonic map, DESIGN-generators.md §5) =====
    Every shortcut is an entry of Keys: the ? overlay is generated from it, so it lists what the keys really do.
    An entry with run() is dispatched by the one handler (in order, the first match wins); one without run() is
-   handled next to its own code and only described. The dispatcher is the MD page's own text (KEYS block). */
-/* KEYS BEGIN: the dispatcher, the same text in the MM mockup (src/56-keys.js); modal_check.py keeps them equal */
-const Keys = (() => {
-	const list = [];
-	const norm = e => e.key === " " ? "Space" : e.key.length === 1 ? e.key.toUpperCase() : e.key;
-	/* {keys: ["Z"], mod: "cmd"|"alt"|"shift"|"cmd+shift"|"", group, does (text, or () => text when it shows state), when?: () => bool,
-	   run?: e => void, field?: true, hidden?: true (dispatched, but another entry describes it in the ? overlay),
-	   code?: "KeyR" (matched on the physical key, e.code: with Alt or Cmd held macOS types another character)} */
-	function bind(entry) { list.push(Object.assign({ mod: "", when: null, field: false }, entry)); }
-	function modOf(e) { return [e.metaKey || e.ctrlKey ? "cmd" : "", e.altKey ? "alt" : "", e.shiftKey ? "shift" : ""].filter(Boolean).join("+"); }
-	document.addEventListener("keydown", e => {
-		const inField = e.target.closest?.("input,select,textarea,[role=slider]"), k = norm(e), m = modOf(e);
-		for (const b of list) {
-			if (!b.run || !(b.code ? e.code === b.code : b.keys.includes(k))) continue;
-			const want = b.mod || "", ok = want === m || (want === "" && m === "shift" && k.length === 1 && !/[A-Z]/.test(k));
-			if (!ok || (inField && !b.field) || (b.when && !b.when())) continue;
-			e.preventDefault(); b.run(e); return;
-		}
-	});
-	const label = b => [...(b.mod ? b.mod.split("+").map(x => ({ cmd: "⌘", alt: "⌥", shift: "⇧" }[x])) : []), b.keys.map(k => ({ Space: "Space", ArrowLeft: "←", ArrowRight: "→", ArrowUp: "↑", ArrowDown: "↓", Escape: "Esc", Delete: "Delete", Backspace: "⌫", Enter: "Enter" }[k] || k)).join(" / ")].join("");
-	return { bind, list: () => list.slice(), label };
-})();
-/* KEYS END */
+   handled next to its own code and only described. The dispatcher (Keys) is skins/shared/deskKeys.js, both
+   editors' one file, included just before this one (build.sh). */
 
 /* ===== The ? overlay =====
    The map's rules, as the MD Editor's: plain keys play (the home row, Z / X octave, C / V velocity, Space); a plain

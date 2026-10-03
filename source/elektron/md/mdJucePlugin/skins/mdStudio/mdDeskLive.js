@@ -1,10 +1,10 @@
 "use strict";
 /* P4 live controls on the machine (mockup v52-v54): mutes on the track keys, the pattern chain and the
-   firmware's own LCD while it boots. Loaded after mdDeskApp.js; uses its state (S), its
+   firmware's own LCD while it boots. Loaded after the app's files (mdDeskApp.js lists them); uses their state (S), their
    render functions and its commands (cmd, setMute). What the page shows is the machine's:
    - mutes: machine.desk.mutes, read from RAM (mutesSource "memory"), whoever set them;
    - chain: machine.desk.chain, read from the firmware's own chain (active, patterns, next), shown and
-     made in the Song page (mdDeskApp.js renderSong);
+     made in the Song page (mdDeskSong.js renderSong);
    - LCD: "lcd" messages with the 128 x 64 display while the engine says BOOTING OS. */
 
 /* ===== Mutes on the track keys (manual p.44, mockup v54) =====
@@ -91,7 +91,7 @@ Keys.bind({ keys: ["T"], group: "Transport", does: "Tap tempo (the average of th
 let tweak = null;
 function tweakKnob(g, n, t) {
 	if (g === "lfo") { const pi = Enums().lfoParams[n]; return pi != null && pi >= 16 ? { g: "rt", knob: pi - 16 } : null; }
-	const p = TWEAK_PAGES[g], k = p && V.tracks[t] ? pages(V.tracks[t].m)[p].indexOf(n) : -1;
+	const p = TWEAK_PAGES[g], k = p && V.tracks[t] ? pages(V.tracks[t].m, Cat)[p].indexOf(n) : -1;
 	return k >= 0 ? { g, knob: k } : null;
 }
 document.addEventListener("pointerdown", e => {
@@ -103,7 +103,7 @@ document.addEventListener("pointerdown", e => {
 document.addEventListener("pointerup", () => { tweak = null; }, true);
 function sendTweak(g, knob, d, t) {
 	if (!d) return;
-	cmd("tweak", { k: V.kit, group: g, knob, d, t }, "tweak:" + g + ":" + knob, tweakWrites(V, g, knob, d, Enums()), undefined,
+	cmd("tweak", { k: V.kit, group: g, knob, d, t }, "tweak:" + g + ":" + knob, tweakWrites(V, g, knob, d, Enums(), Cat), undefined,
 		(waiting, next) => Object.assign(next, { d: clamp(waiting.d + next.d, -127, 127) }));
 }
 const setV0 = setV;
@@ -126,7 +126,7 @@ document.addEventListener("contextmenu", e => {
 	e.preventDefault(); Bridge.send({ op: "openMenu" });
 });
 
-/* The pattern chain (manual p.37) is made in the Song page's palette, CHAIN (mdDeskApp.js renderSong,
+/* The pattern chain (manual p.37) is made in the Song page's palette, CHAIN (mdDeskSong.js renderSong,
    chainFooter); what the machine plays (playsOf) shows in its header. A new chain or sequencer mode
    re-renders the Song page (below). */
 let playsLast;
@@ -150,7 +150,7 @@ function showFwLcd(on) {
 	if (on) { p.classList.remove("fwfade"); p.classList.add("fwboot"); return; }
 	p.classList.remove("fwboot"); p.classList.add("fwfade"); setTimeout(() => p.classList.remove("fwfade"), 700);
 }
-/* modInFlight (mdDeskApp.js) guards an outstanding modSet: it must not survive an engine change
+/* modInFlight (mdDeskControl.js) guards an outstanding modSet: it must not survive an engine change
    (its result will never come) or outlive the machine going from not-ready to ready (a fresh
    "mod" message follows and any earlier in-flight id is moot). */
 let wasReady = false;
@@ -176,31 +176,27 @@ Bridge.onMessage(m => {
 /* ===== The keyboard (P10): the home row always plays the selected track =====
    A S D F G H J K L are white keys C D E F G A B C D, Z / X the octave down / up (−2..+2), C / V the
    velocity a step down / up (20 40 60 80 100 127, from 100: keyVel, mdDeskModel.js), in every
-   workspace while no text field or dialog has the keys. A key is the track's MAP EDITOR note into the
-   machine (keyNote, at KB.vel): the firmware trigs it as a MIDI note, also while the sequencer plays.
-   On the sample machines (ROM, RAM-P) the key's pitch is a PTCH the machine holds while the key is down
-   and is given back after (keyPlan, mdDeskModel.js): not an edit, no undo step. Others play at their own
-   pitch (said once). While live recording a key is the track's TRIG key (recTrig), as a click on the
-   track: the firmware records a plain trig. Key repeat is ignored; a key let go ends its note. */
-const KB = { oct: 0, vel: KEYS_VEL, held: new Map(), last: new Map(), told: new Set() };
+   workspace while no text field or dialog has the keys. A key is the note intent: noteOn {t, vel, pitch}
+   (pitch: semitones from the sound, keyPitch) and noteOff {t, pitch} when it is let go. The core plays it:
+   the track's MAP EDITOR note, on the sample machines (ROM, RAM-P) a PTCH held while the key is down and
+   given back after (not an edit, no undo step); others at their own pitch; GND-EMPTY and the recorders
+   not at all; while live recording the track's TRIG key. What the core says about it (a refusal, "at its
+   own pitch", recording) is said once. Key repeat is ignored; a key let go ends its own note (the core
+   keeps one note per track: a later key replaces it). */
+const KB = { oct: 0, vel: KEYS_VEL, held: new Map(), told: new Set() };
 function kbOn() { return dlgClosed() && !LIB.open && !(typeof GP !== "undefined" && GP.open) && !document.activeElement?.closest?.("input,select,textarea,[contenteditable]"); }
 function kbTell(key, text) { if (KB.told.has(key)) return; KB.told.add(key); toast(text); }
+function kbSaid(r) { const say = r.ok ? r.note : (r.errors || [])[0]; if (say) kbTell(say, say); }
 function kbDown(e) {
 	if (e.repeat || KB.held.has(e.code)) return;
-	const t = S.sel, tr = V.tracks[t], key = e.code.replace(/^Key/, ""); if (!tr) return;
-	const plan = keyPlan(tr.m, key, KB.oct, tr.syn.PTCH); if (!plan) return;
-	if (plan.kind === "none") { kbTell("none:" + tr.m, `${tr.m} is not played from the keyboard (${tr.m === "GND-EMPTY" ? "it has no sound" : "a recorder records on its trigs"}).`); return; }
-	if (V.rec) { cmd("recTrig", { t }); kbTell("rec", "Recording: a key records a plain trig on the track, at the kit's pitch."); return; }
-	if (plan.kind === "trig") kbTell("trig:" + tr.m, `${tr.m} has no semitone scale for PTCH: the keys play it at its own pitch.`);
-	/* the sample machines' PTCH is their first synthesis parameter (SMPL, mdDeskModel.js) */
-	cmd("keyNote", plan.kind === "pitch" ? { t, vel: KB.vel, i: Math.max(0, pidx(t, "PTCH", "syn")), v: plan.v } : { t, vel: KB.vel });
-	KB.held.set(e.code, t); KB.last.set(t, e.code);
+	const t = S.sel, pitch = keyPitch(e.code.replace(/^Key/, ""), KB.oct); if (!V.tracks[t] || pitch == null) return;
+	Bridge.send({ op: "noteOn", t, vel: KB.vel, pitch }, { onResult: kbSaid }); tx();
+	KB.held.set(e.code, { t, pitch });
 }
 function kbUp(code) {
-	const t = KB.held.get(code); if (t == null) return;
+	const h = KB.held.get(code); if (!h) return;
 	KB.held.delete(code);
-	if (KB.last.get(t) !== code) return;	/* a later key on the track still sounds */
-	KB.last.delete(t); cmd("keyNote", { t, vel: 0 });
+	Bridge.send({ op: "noteOff", t: h.t, pitch: h.pitch });
 }
 function kbVel(d) { KB.vel = keyVel(KB.vel, d); toast(`Keyboard velocity ${KB.vel}`); }
 function kbOct(d) { KB.oct = clamp(KB.oct + d, KEYS_OCT[0], KEYS_OCT[1]); toast(`Keyboard octave ${KB.oct > 0 ? "+" : ""}${KB.oct}`); }

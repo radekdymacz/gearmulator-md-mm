@@ -2,7 +2,11 @@
 /* ===== Kit library + Pattern chooser (from the MD Editor v50), adapted to the Monomachine =====
    MM: 128 kits (plus the UNDO KIT), 128 patterns in 8 banks A-H of 16, kit names 11 characters (SysEx 0x55).
    Every MM pattern recalls its kit (1-18); there is no CLASSIC mode. A kit or pattern DUMP is only taken on
-   GLOBAL > FILE > SYSEX RECV, so every write that is a dump goes through the RECV / SEND flow (structEdited). */
+   GLOBAL > FILE > SYSEX RECV, so every write that is a dump goes through the RECV / SEND flow.
+   With a host the slot ops are its machine's intents (HOST.library: kitCopy, kitPaste, kitCopyTo, kitClear, kitRename,
+   patCopy, patPaste, patCopyTo, patClear, DESIGN-UNIFY.md phase 7): its core asks before one loses something, and
+   the slots come back as its documents (MMView.setKitSlot, setPatternSlot). On its own the example engine's library
+   below plays them, with its own questions. */
 var LIB={open:null,sel:0,renaming:null,drag:null,sig:""};
 const clone=o=>JSON.parse(JSON.stringify(o));
 const nn=k=>String(k+1).padStart(2,"0");
@@ -92,41 +96,46 @@ function relinkCur(k){S.patKit[S.pat]=k}
 
 /* ----- kit actions (all editor state, so all undoable) ----- */
 function kitLoad(k){if(HOST.kit)return HOST.kit("load",k);if(k===S.kit){if(S.kitState==="edited")kitReload();else toast(kitName(k)+" is already the current kit.");return}
- const go=()=>{S.kit=k;applyKit(kitData(k));S.workName=S.kits[k].name;relinkCur(k);setKitState("clean");tx();render();drawLib(true);toast("Loaded "+kitName(k)+". "+patName(S.pat)+" now uses it.")};
+ const go=()=>{S.kit=k;applyKit(kitData(k));S.workName=S.kits[k].name;relinkCur(k);setKitState("clean");demoRebase(true);tx();render();drawLib(true);toast("Loaded "+kitName(k)+". "+patName(S.pat)+" now uses it.")};
  if(S.kitState==="edited"){ask(`Load <b>${kitName(k)}</b>? Your edits to <b>${kitName(S.kit)}</b> are not saved on the machine. Without saving, they go to its UNDO KIT.`,[["Save and load","cream",()=>{saveKit();go()}],["Load without saving","danger",go],["Cancel","",()=>drawLib(true)]]);return}go()}
 function kitSave(){saveKit();drawLib(true)}
 function kitSaveAs(k){if(HOST.kit)return HOST.kit("saveAs",k);if(k===S.kit){kitSave();return}
- const go=()=>{const from=S.kit;S.kits[k]={name:S.workName,empty:false,data:captureKit()};S.kit=k;relinkCur(k);setKitState("clean");tx();render();drawLib(true);toast("Saved as "+kitName(k)+". It is now the current kit; K"+nn(from)+" keeps its saved version.")};
+ const go=()=>{const from=S.kit;S.kits[k]={name:S.workName,empty:false,data:captureKit()};S.kit=k;relinkCur(k);setKitState("clean");demoRebase(true);tx();render();drawLib(true);toast("Saved as "+kitName(k)+". It is now the current kit; K"+nn(from)+" keeps its saved version.")};
  if(!S.kits[k].empty){ask(`Overwrite <b>${kitName(k)}</b> with the current kit <b>${kitName(S.kit)}</b>? The machine keeps the overwritten kit in its UNDO KIT.`,[["Overwrite","danger",go],["Cancel","",()=>drawLib(true)]]);return}go()}
 function kitSrc(k){return k===S.kit?{from:k,name:S.workName,empty:false,data:captureKit()}:{from:k,name:S.kits[k].name,empty:S.kits[k].empty,data:S.kits[k].data?clone(S.kits[k].data):null}}
-function kitCopy(k){LCLIP={type:"kit",...kitSrc(k)};drawLib(true);toast("Copied "+kitName(k)+(k===S.kit&&S.kitState==="edited"?" with its unsaved edits.":"."))}
+function kitCopy(k){LCLIP={type:"kit",...kitSrc(k)};if(HOST.library)HOST.library("kitCopy",{k});drawLib(true);toast("Copied "+kitName(k)+(k===S.kit&&S.kitState==="edited"?" with its unsaved edits.":"."))}
 function kitPut(k,src,verb){if(src.from===k){toast("That is the same slot.");return}
  if(READING.kit.has(k)){toast(READ_NOTE);return}
- const go=()=>{S.kits[k]={name:src.name,empty:src.empty,data:src.data?clone(src.data):src.empty?null:kitData(src.from)};if(k===S.kit){applyKit(kitData(k));S.workName=S.kits[k].name;setKitState("clean")}if(HOST.slotWritten)HOST.slotWritten("kit",k);structEdited();render();drawLib(true);toast(verb+" K"+nn(src.from)+" into "+kitName(k)+" (kit dump through SYSEX RECV).")};
+ if(HOST.library){HOST.library(verb==="Paste"?"kitPaste":"kitCopyTo",verb==="Paste"?{k}:{from:src.from,to:k});return}
+ const go=()=>{S.kits[k]={name:src.name,empty:src.empty,data:src.data?clone(src.data):src.empty?null:kitData(src.from)};if(k===S.kit){applyKit(kitData(k));S.workName=S.kits[k].name;setKitState("clean")}exampleDump();demoRebase(true);render();drawLib(true);toast(verb+" K"+nn(src.from)+" into "+kitName(k)+" (kit dump through SYSEX RECV).")};
  const busy=!S.kits[k].empty||k===S.kit;if(busy){ask(`${verb} <b>K${nn(src.from)} ${escH(src.name||"EMPTY")}</b> over <b>${kitName(k)}</b>?${k===S.kit?" It is the current kit"+(S.kitState==="edited"?": its unsaved edits are lost.":", so it is loaded too."):""}`,[["Overwrite","danger",go],["Cancel","",()=>drawLib(true)]]);return}go()}
 function kitPaste(k){if(LCLIP?.type!=="kit"){toast("Copy a kit first.");return}kitPut(k,LCLIP,"Paste")}
 function kitClear(k){if(S.kits[k].empty&&k!==S.kit){toast(kitName(k)+" is already empty.");return}
  if(READING.kit.has(k)){toast(READ_NOTE);return}
- ask(`Clear <b>${kitName(k)}</b>?${k===S.kit?" It is the current kit: all six tracks go back to GND-SIN"+(S.kitState==="edited"?" and the unsaved edits are lost.":"."):""}${linked(k).length?" "+linked(k).length+" pattern(s) link to it.":""}`,[["Clear kit","danger",()=>{S.kits[k]={name:"",empty:true,data:null};if(k===S.kit){applyKit(clearedKit());S.workName="";setKitState("clean")}if(HOST.slotWritten)HOST.slotWritten("kit",k);structEdited();render();drawLib(true);toast("Cleared K"+nn(k)+".")}],["Cancel","",()=>drawLib(true)]])}
+ if(HOST.library){HOST.library("kitClear",{k});return}
+ ask(`Clear <b>${kitName(k)}</b>?${k===S.kit?" It is the current kit: all six tracks go back to GND-SIN"+(S.kitState==="edited"?" and the unsaved edits are lost.":"."):""}${linked(k).length?" "+linked(k).length+" pattern(s) link to it.":""}`,[["Clear kit","danger",()=>{S.kits[k]={name:"",empty:true,data:null};if(k===S.kit){applyKit(clearedKit());S.workName="";setKitState("clean")}exampleDump();demoRebase(true);render();drawLib(true);toast("Cleared K"+nn(k)+".")}],["Cancel","",()=>drawLib(true)]])}
 function kitReload(){if(HOST.kit)return HOST.kit("reload",S.kit);if(S.kitState!=="edited"){toast(kitName(S.kit)+" matches its saved slot. Nothing to reload.");return}
- ask(`Reload <b>${kitName(S.kit)}</b> from the machine? Your edits go to its UNDO KIT.`,[["Reload (discard edits)","danger",()=>{applyKit(kitData(S.kit));S.workName=S.kits[S.kit].name;setKitState("clean");tx();render();drawLib(true);toast("Reloaded "+kitName(S.kit)+" from the machine.")}],["Cancel","",()=>drawLib(true)]])}
+ ask(`Reload <b>${kitName(S.kit)}</b> from the machine? Your edits go to its UNDO KIT.`,[["Reload (discard edits)","danger",()=>{applyKit(kitData(S.kit));S.workName=S.kits[S.kit].name;setKitState("clean");demoRebase(true);tx();render();drawLib(true);toast("Reloaded "+kitName(S.kit)+" from the machine.")}],["Cancel","",()=>drawLib(true)]])}
 function startRename(k){if(LIB.open!=="kit")return;LIB.sel=k;LIB.renaming=k;drawLib(true)}
 function finishRename(ok){const k=LIB.renaming;if(k==null)return;const v=($("#lsin")?.value||"").toUpperCase().replace(KBAD,"").slice(0,KNAME).trimEnd();LIB.renaming=null;
- if(ok&&v!==kDisp(k)){if(k===S.kit){S.workName=v;setKitState("edited");tx();toast("Renamed the working kit (SysEx 0x55). SAVE stores the name on the machine.")}
+ if(ok&&v!==kDisp(k)){if(k===S.kit){S.workName=v;setKitState("edited");edit("kitName",{name:v});toast("Renamed the working kit (SysEx 0x55). SAVE stores the name on the machine.")}
   else if(READING.kit.has(k)){toast(READ_NOTE)}
-  else{const s=S.kits[k];if(s.empty&&!s.data)s.data=clearedKit();s.empty=false;s.name=v;if(HOST.slotWritten)HOST.slotWritten("kit",k);structEdited();toast("Renamed K"+nn(k)+" (kit dump through SYSEX RECV).")}renderTop()}
+  else if(HOST.library)HOST.library("kitRename",{k,name:v});
+  else{const s=S.kits[k];if(s.empty&&!s.data)s.data=clearedKit();s.empty=false;s.name=v;exampleDump();demoRebase(true);toast("Renamed K"+nn(k)+" (kit dump through SYSEX RECV).")}renderTop()}
  drawLib(true)}
 /* ----- pattern actions ----- */
 function patSrc(p){return{from:p,has:hasPat(p),kit:S.patKit[p],data:p===S.pat?capturePat():clone(S.patData[p]||emptyPat(S.patInfo[p].len))}}
-function patCopy(p){LCLIP={type:"pat",...patSrc(p)};drawLib(true);toast("Copied "+patName(p)+": notes, locks, arp, transpose, swing, slide and its kit link.")}
+function patCopy(p){LCLIP={type:"pat",...patSrc(p)};if(HOST.library)HOST.library("patCopy",{p});drawLib(true);toast("Copied "+patName(p)+": notes, locks, arp, transpose, swing, slide and its kit link.")}
 function patPut(p,src,verb){if(src.from===p){toast("That is the same slot.");return}
  if(READING.pattern.has(p)){toast(READ_NOTE);return}
- const go=()=>{const d=clone(src.data);S.patData[p]=d;S.patInfo[p]={has:src.has,len:d.len};S.patKit[p]=src.kit;if(p===S.pat)applyPat(d);if(HOST.slotWritten)HOST.slotWritten("pattern",p);structEdited();render();drawLib(true);toast(verb+" "+patName(src.from)+" into "+patName(p)+" (pattern dump through SYSEX RECV).")};
+ if(HOST.library){HOST.library(verb==="Paste"?"patPaste":"patCopyTo",verb==="Paste"?{p}:{from:src.from,to:p});return}
+ const go=()=>{const d=clone(src.data);S.patData[p]=d;S.patInfo[p]={has:src.has,len:d.len};S.patKit[p]=src.kit;if(p===S.pat)applyPat(d);exampleDump();demoRebase(true);render();drawLib(true);toast(verb+" "+patName(src.from)+" into "+patName(p)+" (pattern dump through SYSEX RECV).")};
  if(hasPat(p)){ask(`${verb} <b>${patName(src.from)}</b> over <b>${patName(p)}</b>? Its notes and locks are replaced.`,[["Overwrite","danger",go],["Cancel","",()=>drawLib(true)]]);return}go()}
 function patPaste(p){if(LCLIP?.type!=="pat"){toast("Copy a pattern first.");return}patPut(p,LCLIP,"Paste")}
 function patClear(p){if(!hasPat(p)){toast(patName(p)+" is already empty.");return}
  if(READING.pattern.has(p)){toast(READ_NOTE);return}
- ask(`Clear <b>${patName(p)}</b>? Its notes and locks are removed. It keeps its kit link, as on the machine.`,[["Clear pattern","danger",()=>{const e=emptyPat(patLen(p));S.patData[p]=e;S.patInfo[p]={has:false,len:e.len};if(p===S.pat)applyPat(e);if(HOST.slotWritten)HOST.slotWritten("pattern",p);structEdited();render();drawLib(true);toast("Cleared "+patName(p)+".")}],["Cancel","",()=>drawLib(true)]])}
+ if(HOST.library){HOST.library("patClear",{p});return}
+ ask(`Clear <b>${patName(p)}</b>? Its notes and locks are removed. It keeps its kit link, as on the machine.`,[["Clear pattern","danger",()=>{const e=emptyPat(patLen(p));S.patData[p]=e;S.patInfo[p]={has:false,len:e.len};if(p===S.pat)applyPat(e);exampleDump();demoRebase(true);render();drawLib(true);toast("Cleared "+patName(p)+".")}],["Cancel","",()=>drawLib(true)]])}
 function patGo(p,now){LIB.sel=p;if(p===S.pat&&S.queued==null){drawLib(true);return}goPattern(p,now);drawLib(true)}
 function libAct(a){const k=LIB.sel,kit=LIB.open==="kit";
  ({close:()=>closeLib(true),load:()=>kitLoad(k),save:kitSave,saveas:()=>kitSaveAs(k),reload:kitReload,rename:()=>startRename(k),

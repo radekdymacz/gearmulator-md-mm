@@ -999,7 +999,7 @@
         "reasons",
         "values"
       ],
-      "additionalProperties": false,
+      "additionalProperties": true,
       "properties": {
         "engine": {
           "type": "string",
@@ -1026,7 +1026,7 @@
             "sampleAudio",
             "sampleLoad"
           ],
-          "additionalProperties": false,
+          "additionalProperties": true,
           "properties": {
             "transport": {
               "type": "boolean"
@@ -1077,7 +1077,7 @@
           "required": [
             "dumps"
           ],
-          "additionalProperties": false,
+          "additionalProperties": true,
           "properties": {
             "dumps": {
               "enum": [
@@ -1098,7 +1098,7 @@
           "label",
           "available"
         ],
-        "additionalProperties": false,
+        "additionalProperties": true,
         "properties": {
           "id": {
             "type": "string",
@@ -1125,7 +1125,7 @@
         "undoCount",
         "redoCount"
       ],
-      "additionalProperties": false,
+      "additionalProperties": true,
       "properties": {
         "undo": {
           "type": "boolean"
@@ -1159,7 +1159,8 @@
         "input",
         "midi",
         "lifecycleText",
-        "clipboard"
+        "clipboard",
+        "contract"
       ],
       "properties": {
         "schema": {
@@ -1197,7 +1198,7 @@
               "description": "Selected while playing; becomes current at the end of the current pattern."
             }
           },
-          "additionalProperties": false
+          "additionalProperties": true
         },
         "kit": {
           "type": "object",
@@ -1223,7 +1224,7 @@
               "description": "edited = not saved on the machine: lost on LOAD KIT or a switch to a pattern linked to another kit."
             }
           },
-          "additionalProperties": false
+          "additionalProperties": true
         },
         "song": {
           "type": "object",
@@ -1245,7 +1246,7 @@
               "description": "The current song's slot was rewritten; heard after STOP, LOAD SONG, PLAY."
             }
           },
-          "additionalProperties": false
+          "additionalProperties": true
         },
         "globalSlot": {
           "oneOf": [
@@ -1436,7 +1437,7 @@
               "description": "The machine's BANK GROUP: 0 A-D, 1 E-H, -1 unknown."
             }
           },
-          "additionalProperties": false
+          "additionalProperties": true
         },
         "lifecycle": {
           "$ref": "#/$defs/lifecycle"
@@ -1472,7 +1473,7 @@
             "kit",
             "pattern"
           ],
-          "additionalProperties": false,
+          "additionalProperties": true,
           "properties": {
             "steps": {
               "type": "boolean"
@@ -1496,9 +1497,13 @@
               ]
             }
           }
+        },
+        "contract": {
+          "description": "The page protocol's version (the contract document's): bumped when a member is renamed, removed or re-meant; adding one keeps it. A page reads it first.",
+          "const": 2
         }
       },
-      "additionalProperties": false
+      "additionalProperties": true
     },
     "audioDevices": {
       "type": "object",
@@ -2556,7 +2561,7 @@
             "scale",
             "peaks"
           ],
-          "additionalProperties": false,
+          "additionalProperties": true,
           "properties": {
             "type": {
               "const": "sampleWave"
@@ -2614,7 +2619,7 @@
             "length",
             "rate"
           ],
-          "additionalProperties": false,
+          "additionalProperties": true,
           "properties": {
             "type": {
               "const": "audition"
@@ -2658,7 +2663,7 @@
             "file",
             "text"
           ],
-          "additionalProperties": false,
+          "additionalProperties": true,
           "properties": {
             "type": {
               "const": "sampleLoad"
@@ -5201,15 +5206,16 @@
         },
         {
           "type": "object",
-          "description": "machine: the page's keyboard: track t's MAP EDITOR note at vel (0 = the key let go); i, v: a kit value held while the key is down, restored after (not an edit)",
+          "description": "machine: the page's keyboard: play track t (its MAP EDITOR note), pitch semitones from its sound (ROM, RAM-P: a PTCH held while the key is down, not an edit)",
           "required": [
             "op",
             "t",
-            "vel"
+            "vel",
+            "pitch"
           ],
           "properties": {
             "op": {
-              "const": "keyNote"
+              "const": "noteOn"
             },
             "id": {
               "type": "integer"
@@ -5231,18 +5237,50 @@
             },
             "vel": {
               "type": "integer",
-              "minimum": 0,
+              "minimum": 1,
               "maximum": 127
             },
-            "i": {
+            "pitch": {
               "type": "integer",
-              "minimum": 0,
-              "maximum": 23
+              "minimum": -48,
+              "maximum": 48
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "description": "machine: the key let go: track t's note (of that pitch), and what it held",
+          "required": [
+            "op",
+            "t"
+          ],
+          "properties": {
+            "op": {
+              "const": "noteOff"
             },
-            "v": {
+            "id": {
+              "type": "integer"
+            },
+            "g": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "force": {
+              "type": [
+                "boolean",
+                "integer"
+              ]
+            },
+            "t": {
               "type": "integer",
               "minimum": 0,
-              "maximum": 127
+              "maximum": 15
+            },
+            "pitch": {
+              "type": "integer",
+              "minimum": -48,
+              "maximum": 48
             }
           },
           "additionalProperties": false
@@ -6501,7 +6539,7 @@
         "name",
         "peaks"
       ],
-      "additionalProperties": false,
+      "additionalProperties": true,
       "properties": {
         "slot": {
           "type": "integer",
@@ -6534,7 +6572,7 @@
                 "start",
                 "end"
               ],
-              "additionalProperties": false,
+              "additionalProperties": true,
               "properties": {
                 "start": {
                   "type": "integer",
@@ -6585,7 +6623,7 @@
         "ramReadable",
         "ramReason"
       ],
-      "additionalProperties": false,
+      "additionalProperties": true,
       "properties": {
         "schema": {
           "const": "md-desk/samples"

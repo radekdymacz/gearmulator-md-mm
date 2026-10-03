@@ -94,16 +94,17 @@ function clickStep(t,s,e){const tr=trk(t),st=tr.steps[s];
  if(e.shiftKey){tr.steps[s]=st?.off?null:{off:1};if(!st?.off)clearStepLocks(t,s)}
  else if(e.altKey&&!isMidiT(t)){if(!st||st.off)tr.steps[s]={n:[lastNote(t,s)],a:0,f:0,l:0};else{const k=stepKind(st);Object.assign(st,k==="full"?{a:0,f:0,l:0}:{a:1,f:1,l:1})}}
  else{if(st&&!st.off){tr.steps[s]=null;clearStepLocks(t,s)}else tr.steps[s]=note(lastNote(t,s))}
- structEdited();renderTop();if(t!==S.sel){S.sel=t;autoRange(t);render()}else rerenderSeq()}
-function clickTl(k,s){const tr=trk(S.sel);if(k==="sld"){tr.slide.has(s)?tr.slide.delete(s):tr.slide.add(s)}else{tr.swing.has(s)?tr.swing.delete(s):tr.swing.add(s)}structEdited();rerenderSeq()}
-function clickEnv(b,s){const t=S.sel,st=trk(t).steps[s];if(!st||st.off)return;st[b]=st[b]?0:1;if(!st.n&&!st.a&&!st.f&&!st.l){trk(t).steps[s]=null;clearStepLocks(t,s)}structEdited();rerenderSeq()}
+ editStep(t,s);renderTop();if(t!==S.sel){S.sel=t;autoRange(t);render()}else rerenderSeq()}
+function clickTl(k,s){const tr=trk(S.sel),set=k==="sld"?tr.slide:tr.swing,on=!set.has(s);on?set.add(s):set.delete(s);edit(k==="sld"?"slide":"swingStep",{t:S.sel,s,on});rerenderSeq()}
+function clickEnv(b,s){const t=S.sel,st=trk(t).steps[s];if(!st||st.off)return;st[b]=st[b]?0:1;if(!st.n&&!st.a&&!st.f&&!st.l){trk(t).steps[s]=null;clearStepLocks(t,s)}editStep(t,s);rerenderSeq()}
 let laneDraw=null;
 function laneAt(e){const lane=$("#lane");if(!lane)return;if(laneDraw.ramp){rampAt(e);return}const el=document.elementFromPoint(e.clientX,e.clientY)?.closest(".lb");if(!el||!lane.contains(el))return;
  const s=+el.dataset.s,t=S.sel,st=trk(t).steps[s];if(!st||st.off)return;const[pg,i]=S.lane.split("."),mx=maxOf(meta(t,pg,+i));const r=el.getBoundingClientRect();const v=clamp(Math.round((r.bottom-6-e.clientY)/(r.height-14)*mx),0,mx);
- if(laneDraw.erase){const m=S.locks.get(lkKey(t,S.lane));if(m){m.delete(s);if(!m.size)S.locks.delete(lkKey(t,S.lane))}}else if(!setLock(t,S.lane,s,v))return;
+ if(laneDraw.erase){const m=S.locks.get(lkKey(t,S.lane));if(!m?.has(s))return;m.delete(s);if(!m.size)S.locks.delete(lkKey(t,S.lane));edit("lock",{t,...pidArgs(S.lane),s,v:null})}
+ else{if(S.locks.get(lkKey(t,S.lane))?.get(s)===v)return;if(!setLock(t,S.lane,s,v))return;edit("lock",{t,...pidArgs(S.lane),s,v})}
  el.querySelector("i")?.remove();if(!laneDraw.erase)el.insertAdjacentHTML("beforeend",barHTML(v));
  laneDraw.touched=true;renderTop();drawSlides()}
-function endLaneDraw(){if(!laneDraw)return;const d=laneDraw;if(d.ramp){const ok=rampSend();laneDraw=null;if(ok)structEdited();renderTop();rerenderSeq();return}laneDraw=null;if(d.touched){structEdited();rerenderSeq()}}
+function endLaneDraw(){if(!laneDraw)return;const d=laneDraw;if(d.ramp){rampSend();laneDraw=null;renderTop();rerenderSeq();return}laneDraw=null;if(d.touched)rerenderSeq()}
 
 /* ===== the note lane: the selected track's trigs by pitch, same columns as the overview ===== */
 const ROWS=24;
@@ -163,9 +164,9 @@ function rollDown(c,e){const t=+c.dataset.t;if(t!==S.sel){select(t);return}
  {const G=laneGeom(c);if(e.button===0&&onKeys(c,G,e)){const n=rollRow(c,G,e);if(n==null)return;if(isMidiT(t)){kbTell("midi","The keys play the synth tracks: a MIDI track's notes go to the MIDI OUT only.");return}rollDrag={mode:"key",t,c};rollKey(t,n);drawEd(c);return}}
  const h=laneHit(c,e);if(!h)return;const tr=trk(t);
  if(e.metaKey||e.ctrlKey){fillEvery(t,h.cell,e.shiftKey?4:2,h.n);return}
- if(h.k>=0&&e.altKey){const st=tr.steps[h.s];if(h.k>0||(st.n&&st.n.length>1))st.n.splice(h.k,1);else{tr.steps[h.s]=null;clearStepLocks(t,h.s)}structEdited();rerenderSeq();return}
- if(h.k<0&&e.altKey){const st=tr.steps[h.cell];if(!st||st.off){tr.steps[h.cell]=st?.off?null:{off:1};structEdited();rerenderSeq()}return}
- if(h.k>=0&&h.edge){rollDrag={mode:"len",s:h.s,c};return}
+ if(h.k>=0&&e.altKey){const st=tr.steps[h.s];if(h.k>0||(st.n&&st.n.length>1))st.n.splice(h.k,1);else{tr.steps[h.s]=null;clearStepLocks(t,h.s)}editStep(t,h.s);rerenderSeq();return}
+ if(h.k<0&&e.altKey){const st=tr.steps[h.cell];if(!st||st.off){tr.steps[h.cell]=st?.off?null:{off:1};editStep(t,h.cell);rerenderSeq()}return}
+ if(h.k>=0&&h.edge){rollDrag={mode:"len",s:h.s,c,touched:new Set()};return}
  if(h.k>=0){rollDrag={mode:"pitch",s:h.s,k:h.k,c};return}
  const st=tr.steps[h.cell];
  if(!st||st.off){tr.steps[h.cell]=note(h.n);rollDrag={mode:"pitch",s:h.cell,k:0,c,moved:true}}
@@ -180,6 +181,10 @@ function rollMove(c,e){const t=+c.dataset.t;if(!rollDrag){if(t!==S.sel){c.style.
  if(rollDrag.mode==="pitch"){const n=clamp(G.lo+G.rows-1-Math.floor((e.clientY-r.top-G.top)/G.rh),0,127);if(st.n&&st.n[rollDrag.k]!==n){st.n[rollDrag.k]=n;rollDrag.moved=true;redraw()}}
  else{const x=e.clientX-r.left;let e2=rollDrag.s+1;for(const k of G.vs){if(k<=rollDrag.s)continue;const q=G.col[k];if(q&&x>(q.x0+q.x1)/2)e2=k+1}if(x>G.lastX)e2=G.b;e2=clamp(e2,rollDrag.s+1,S.len);if(e2===rollDrag.e)return;rollDrag.e=e2;rollDrag.moved=true;
   if(isMidiT(S.sel))setLock(S.sel,"MID.0",rollDrag.s,clamp((e2-rollDrag.s)*8,1,126));
-  else{for(let k=rollDrag.s+1;k<S.len;k++){if(tr.steps[k]&&!tr.steps[k].off)break;if(tr.steps[k]?.off)tr.steps[k]=null}if(e2<S.len&&!tr.steps[e2])tr.steps[e2]={off:1}}
+  else{for(let k=rollDrag.s+1;k<S.len;k++){if(tr.steps[k]&&!tr.steps[k].off)break;if(tr.steps[k]?.off){tr.steps[k]=null;rollDrag.touched.add(k)}}if(e2<S.len&&!tr.steps[e2]){tr.steps[e2]={off:1};rollDrag.touched.add(e2)}}
   redraw()}}
-function rollUp(){const d=rollDrag;rollDrag=null;if(d?.mode==="key"){if(d.n!=null)keyNote(d.t,d.n,0);drawEd(d.c);return}if(d?.moved){structEdited();rerenderSeq()}}
+/* the drag's edit, when it ends: the dragged step's notes, or its length (a MIDI track's LEN lock; a synth track's
+   NOTE OFFs, each step it moved) */
+function rollUp(){const d=rollDrag;rollDrag=null;if(d?.mode==="key"){if(d.n!=null)keyNote(d.t,d.n,0);drawEd(d.c);return}if(!d?.moved)return;const t=S.sel;
+ if(d.mode!=="len")editStep(t,d.s);else if(isMidiT(t)){const v=S.locks.get(lkKey(t,"MID.0"))?.get(d.s);if(v!=null)edit("lock",{t,page:7,i:0,s:d.s,v})}else[...d.touched].sort((a,b)=>a-b).forEach(s=>editStep(t,s));
+ rerenderSeq()}

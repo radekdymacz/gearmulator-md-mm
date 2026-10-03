@@ -102,6 +102,12 @@ namespace
 					out.push_back(std::move(b));
 			};
 			port.device.baseChannel = [this](const uint8_t _ch) { channel = _ch; };
+			// The keyboard's notes (noteOn) as the plug-in's wire encodes them.
+			port.device.sendNote = [this](const uint8_t _ch, const uint8_t _n, const uint8_t _v)
+			{
+				if(const auto b = deskWire::note(_ch, _n, _v))
+					out.push_back(*b);
+			};
 			port.device.pressKeys = [this](const std::vector<mmDesk::Key>& _keys) { return userKeys(_keys); };
 			port.device.pressBankTrigs = [this](const uint8_t _b, const std::vector<uint8_t>& _t) { return userBankTrigs(_b, _t); };
 			port.device.nowMs = [this] { return ms(); };
@@ -382,6 +388,20 @@ namespace
 			}
 			std::printf("  kit names: %d text, %d unused (first byte 0xff%s%s), %d other bytes%s\n", text, unused, sample.empty() ? "" : ", e.g. ", sample.c_str(), junk, which.c_str());
 			check(junk == 0, "every kit slot's name is text, or the slot is marked unused (no junk name bytes)");
+		}
+
+		// The keyboard (the note intent): a key plays synth track 1 on its own channel while stopped.
+		{
+			r.run(300);
+			const double silent = r.rms(200);
+			r.msg(R"({"op":"noteOn","id":90,"t":0,"vel":127,"pitch":12})");
+			check(r.lastResult().find("ok")->asBool(), "noteOn accepted");
+			r.run(300);
+			const double sounding = r.rms(250);
+			r.msg(R"({"op":"noteOff","id":91,"t":0,"pitch":12})");
+			r.run(300);
+			std::printf("  keyboard: stopped rms %.4f, a key held %.4f\n", silent, sounding);
+			check(sounding > 0.002 && sounding > silent * 4, "noteOn: a key plays T1 (rms " + std::to_string(sounding) + ")");
 		}
 
 		// Play pattern 1 (a factory demo), then edit it through the desk.
@@ -934,6 +954,8 @@ namespace
 
 	// MM-P4 (ported onto the P6 desk in P8): POLY, MIDI track mutes, RECORD, MULTI TRIG and PORTAMENTO in
 	// the kit, the MULTI MAP, another song.
+	void intents(Rig& r);
+
 	void p4(const Bytes& _rom)
 	{
 		std::puts("p4");
@@ -996,6 +1018,13 @@ namespace
 		noteOns.clear();
 		r.run(2000);
 		check(((r.tel.mutes.load() >> 6) & 1) == 0 && noteOns[ch] >= 3, "unmuted: its notes again (" + std::to_string(noteOns[ch]) + ")");
+		// Taken back at once (the page's self-test does this): the second press follows the first's keys, so the
+		// track ends unmuted (it stayed muted while the desk compared with memory alone).
+		r.msg(R"({"op":"muteMidi","t":0,"on":true})");
+		r.msg(R"({"op":"muteMidi","t":0,"on":false})");
+		r.run(1200);
+		check(((r.tel.mutes.load() >> 6) & 1) == 0 && lastMachine(r).find("mutes")->find("midi")->asNumber() == 0,
+			"a mute taken back at once: unmuted in RAM and in the machine document");
 		// Synth track mute: CC 3 through the mute parameter; the RAM shows it.
 		r.msg(R"({"op":"mute","t":2,"on":true})");
 		r.run(300);
@@ -1088,6 +1117,144 @@ namespace
 		r.msg(R"({"op":"undo"})");
 		r.run(2500);
 		check(r.desk->kit(99)->name == k99.name, "undo writes K100 back");
+
+		intents(r);
+	}
+
+	// DESIGN-UNIFY.md phases 4-7 on the firmware: the Sound, Perform, global, Song and library gestures as intents
+	// (mmDeskEdit.cpp), each read back from the machine (memory for the kit that plays, dumps for the slots).
+	void intents(Rig& r)
+	{
+		std::puts("intents: Sound, Perform, the global, Song and the library");
+		const auto kitId = r.desk->currentKit();
+		const auto k = std::to_string(kitId);
+		// MACHINE: a machine on track 5 with its start values (assign machine 0x5B, then its SYN page)
+		r.msg(R"({"op":"machine","g":910,"k":)" + k + R"(,"t":4,"model":3,"keepFx":true})");
+		r.run(3000);
+		{
+			const auto& w = *r.desk->workingKit();
+			check(w.machines[4] == 3 && w.tracks[4].pages[0][7] == 64, "machine: SID-6581 on track 5 in the working kit (memory), TUNE at its start");
+		}
+		// ASSIGN, MULTI TRIG, PORTAMENTO: no live message (a dump to the kit's slot, LOAD KIT), one gesture each
+		r.msg(R"({"op":"assign","g":911,"k":)" + k + R"(,"t":0,"src":2,"row":0,"page":3,"dest":1,"add":20})");
+		r.run(4000);
+		{
+			const auto& w = *r.desk->workingKit();
+			check(w.assignPage[0][4] == 3 && w.assignDest[0][4] == 1 && w.assignAdd[0][4] == 20, "assign: JOY U row 1 of track 1 in the working kit (memory)");
+		}
+		r.msg(R"({"op":"multiTrig","g":912,"k":)" + k + R"(,"mode":1,"splitKey":50,"splitTrack":3,"timing":3})");
+		r.run(4000);
+		{
+			const auto& w = *r.desk->workingKit();
+			check(w.multiTrigMode == 1 && w.splitKey == 50 && w.splitTrack == 3 && w.multiTrigTiming == 3,
+				"multiTrig in the working kit (memory): mode " + std::to_string(w.multiTrigMode) + " key " + std::to_string(w.splitKey)
+				+ " track " + std::to_string(w.splitTrack) + " timing " + std::to_string(w.multiTrigTiming));
+		}
+		const auto port0 = r.desk->workingKit()->portamentoMask;
+		r.msg(R"({"op":"portamento","g":913,"k":)" + k + R"(,"t":1,"v":"legato"})");
+		r.run(4000);
+		check(r.desk->workingKit()->portamentoMask == (port0 & ~2), "portamento: track 2 ONLY LEGATO in the working kit (memory): "
+			+ std::to_string(port0) + " -> " + std::to_string(r.desk->workingKit()->portamentoMask));
+		// two kit edits without a live message one after the other (two gestures, the second before the first's dump is
+		// back): both are in the working kit
+		r.msg(R"({"op":"multiTrig","g":9121,"k":)" + k + R"(,"mode":2})");
+		r.run(50);
+		r.msg(R"({"op":"multiTrig","g":9122,"k":)" + k + R"(,"timing":5})");
+		r.run(5000);
+		check(r.desk->workingKit()->multiTrigMode == 2 && r.desk->workingKit()->multiTrigTiming == 5, "two kit edits in quick succession: both in the working kit (memory): mode "
+			+ std::to_string(r.desk->workingKit()->multiTrigMode) + " timing " + std::to_string(r.desk->workingKit()->multiTrigTiming));
+		// MULTI ENV: NRPN, every track's copy
+		r.msg(R"({"op":"multiEnv","g":9130,"k":)" + k + R"(,"i":0,"v":30})");
+		r.run(2000);
+		{
+			const auto& w = *r.desk->workingKit();
+			bool all = true;
+			for(const auto& tr : w.tracks)
+				all = all && tr.multiEnv[0] == 30;
+			check(all, "multiEnv: ATK 30 on every track (NRPN, memory)");
+		}
+		// MUTATE: many values at once
+		r.msg(R"({"op":"params","g":914,"k":)" + k + R"(,"values":[[0,1,5,77],[2,2,0,33]]})");
+		r.run(2000);
+		check(r.desk->workingKit()->tracks[0].pages[1][5] == 77 && r.desk->workingKit()->tracks[2].pages[2][0] == 33, "params: two values at once (CC, memory)");
+		// CLEAR MACHINE, then undo it in one step
+		const auto before = *r.desk->workingKit();
+		r.msg(R"({"op":"clearSound","g":915,"k":)" + k + R"(,"t":1})");
+		r.run(2500);
+		check(r.desk->workingKit()->machines[1] == 1, "clearSound: track 2 is GND-SIN (memory)");
+		r.msg(R"({"op":"undo"})");
+		r.run(3000);
+		check(r.desk->workingKit()->machines[1] == before.machines[1] && r.desk->workingKit()->tracks[1].pages == before.tracks[1].pages,
+			"undo: track 2's machine and pages again");
+
+		// the MULTI MAP of the active global
+		const auto gi = static_cast<uint8_t>(std::max(0, r.desk->currentGlobal()));
+		r.msg(R"({"op":"multiMap","g":916,"i":0,"len":4,"tim":2})");
+		r.run(3000);
+		check(r.desk->global(gi)->multiMap[3][0] == 4 && r.desk->global(gi)->multiMap[5][0] == 2, "multiMap: range 1's length and timing read back");
+		const auto ranges = [&] { const auto& h = r.desk->global(gi)->multiMap[0]; size_t n = 1; while(n < 32 && h[n] > h[n - 1]) ++n; return n; };
+		const auto n0 = ranges();
+		r.msg(R"({"op":"multiMapSplit","g":917,"i":0})");
+		r.run(3000);
+		check(ranges() == n0 + 1, "multiMapSplit: one range more (" + std::to_string(n0) + " -> " + std::to_string(ranges()) + "), read back");
+
+		// Song rows on song 24 (not the machine's)
+		Value row = Value::object();
+		for(const auto& [key, v] : std::vector<std::pair<std::string, Value>>{{"kind", "pattern"}, {"pattern", 6}, {"target", 0}, {"repeats", 1},
+			{"mutes", 0}, {"midiMutes", 0}, {"offset", 0}, {"length", 16}, {"transpose", 0}, {"tempo", Value()}, {"x3", 0}, {"x21", 0}})
+			row.set(key, v);
+		Value zeros = Value::array();
+		for(int i = 0; i < 6; ++i) zeros.push(0);
+		row.set("trackTranspose", zeros);
+		row.set("midiTranspose", zeros);
+		const auto rows = [&] { return ed::mmSongUsedRows(*r.desk->song(23)); };
+		const auto r0 = rows();
+		r.msg(R"({"op":"rowInsert","g":918,"s":23,"i":0,"row":)" + ed::json::write(row) + "}");
+		r.run(2500);
+		check(rows() == r0 + 1 && r.desk->song(23)->rows[0].bytes[0] == 6, "rowInsert: song 24 has the row, read back");
+		r.msg(R"({"op":"rowDelete","g":919,"s":23,"i":0})");
+		r.run(2500);
+		check(rows() == r0, "rowDelete: the row goes, read back");
+
+		// the library: a stored kit copied over another (it asks), renamed, undone; a pattern copied
+		const auto k98 = *r.desk->kit(98), k99 = *r.desk->kit(99);
+		r.msgConfirmed(R"({"op":"kitCopyTo","g":920,"from":98,"to":99})");
+		r.run(2500);
+		check(r.desk->kit(99)->name == k98.name && r.desk->kit(99)->machines == k98.machines, "kitCopyTo: K99 into K100, read back");
+		r.msg(R"({"op":"kitRename","g":921,"k":99,"name":"intent"})");
+		r.run(2500);
+		{
+			const auto named = *r.desk->kit(99);
+			check(std::string(named.name.begin(), named.name.begin() + 6) == "INTENT", "kitRename: K100 is INTENT, read back (no question)");
+		}
+		r.msg(R"({"op":"undo"})");
+		r.run(2500);
+		r.msg(R"({"op":"undo"})");
+		r.run(2500);
+		check(r.desk->kit(99)->name == k99.name, "undo twice: K100 as it was");
+		r.msgConfirmed(R"({"op":"patCopyTo","g":922,"from":64,"to":66})");
+		r.run(3000);
+		check(r.desk->pattern(66)->midiTrig[0] == r.desk->pattern(64)->midiTrig[0] && r.desk->pattern(66)->midiNoteCount == r.desk->pattern(64)->midiNoteCount,
+			"patCopyTo: E01 into E03, read back");
+		// into the kit that plays: it is loaded too (the slot's dump, LOAD KIT)
+		r.msgConfirmed(R"({"op":"kitCopyTo","g":923,"from":98,"to":)" + k + "}");
+		r.run(4000);
+		{
+			const auto w = *r.desk->workingKit();
+			const auto slot = *r.desk->kit(static_cast<uint8_t>(kitId));
+			check(slot.name == k98.name && slot.machines == k98.machines, "kitCopyTo into the kit that plays: its slot holds K99 (read back)");
+			const auto text = [](const ed::MmKit& _k) { std::string n; for(const auto c : _k.name) if(c >= 0x20 && c < 0x7f) n += static_cast<char>(c); return n; };
+			bool same = w.machines == k98.machines && w.levels == k98.levels;
+			for(size_t t = 0; t < 6; ++t)
+				same = same && w.tracks[t].pages == k98.tracks[t].pages;
+			check(r.desk->currentKit() == kitId && same, "and it plays K99's sound (LOAD KIT; memory): \"" + text(w) + "\" vs \"" + text(k98)
+				+ "\", level 1 " + std::to_string(w.levels[0]) + " vs " + std::to_string(k98.levels[0]));
+			// K99 is a never-written slot (name byte 0 is 0xff): LOAD KIT plays it as NEW KIT (measured: the memory
+			// image's name bytes 0-7 are "NEW KIT", the rest as stored). Loaded and untouched, the kit is clean.
+			check(w.name == ed::mmKitAsLoaded(k98).name && (k98.name[0] != 0xff || text(w).rfind("NEW KIT", 0) == 0),
+				"the kit that plays has the name LOAD KIT gives it (\"" + text(w) + "\")");
+			check(kitWorking(r) == "clean", "loaded and untouched, the kit that plays is clean (not edited)");
+		}
 	}
 
 	// MM-P8: pattern chaining through the desk on the firmware (hold BANK, press the TRIG keys; manual
@@ -1353,6 +1520,156 @@ namespace
 		check(lifecycle() == "ready", "back: HW MIDI");
 		std::printf("  %zu bytes out, %zu bytes in, at DIN speed both ways\n", r.hwBytesOut, r.hwBytesIn);
 	}
+
+	// The result the page got for a command id (a null Value when none came yet).
+	Value resultFor(const Rig& _r, const int _id)
+	{
+		for(auto it = _r.page.rbegin(); it != _r.page.rend(); ++it)
+			if(it->find("type")->asString() == "result" && it->find("id") && static_cast<int>(it->find("id")->asNumber()) == _id)
+				return *it;
+		return {};
+	}
+	bool resultOk(const Rig& _r, const int _id)
+	{
+		const auto v = resultFor(_r, _id);
+		if(v.isObject() && !v.find("ok")->asBool())
+			std::printf("    result %d: %s\n", _id, v.find("errors")->asArray().empty() ? "" : v.find("errors")->asArray()[0].asString().c_str());
+		return v.isObject() && v.find("ok")->asBool();
+	}
+
+	// DESIGN-UNIFY.md 1 and phase 3, the lost update: the machine writes a step itself (LIVE RECORDING from the
+	// keyboard, GRID RECORDING from its TRIG keys); the page then edits other steps as intents (step, lock). The core
+	// applies them to its own pattern, which holds the recorded step (read back while the machine records), so the
+	// pattern it pushes keeps it. Before the intents the page sent its whole copy of the pattern, which did not.
+	void recording(const Bytes& _rom)
+	{
+		std::puts("recording");
+		Rig r(_rom);
+		r.msg(R"({"op":"ready"})");
+		r.desk->setProbe(mmDesk::Desk::Probe::Running);
+		r.run(600);
+		while(r.desk->loaded() < 288)
+			r.run(100);
+
+		// E02: T1 trigs on steps 0 and 8 (C-3), nothing else
+		constexpr uint8_t slot = 65;
+		auto p = *r.desk->pattern(slot);
+		p.length = 16;
+		for(auto* m : {&p.amp, &p.filter, &p.lfo, &p.noteOff, &p.midiTrig, &p.midiNoteOff, &p.pitch, &p.chord, &p.midiNote, &p.slide, &p.midiSlide})
+			m->fill(0);
+		for(auto& n : p.notes)
+			n.fill(ed::MmPattern::g_noNote);
+		for(auto& m : p.lockMasks)
+			m.fill(0);
+		for(auto& row : p.lockRows)
+			row.fill(ed::MmPattern::g_noLock);
+		p.lockRowCount = 0;
+		p.chordNotes.fill(0xffff);
+		p.chordNoteCount = 0;
+		p.midiNotes.fill(0xffff);
+		p.midiNoteCount = 0;
+		for(const uint8_t st : {0, 8})
+		{
+			for(auto* m : {&p.pitch, &p.amp, &p.filter, &p.lfo})
+				(*m)[0] |= ed::mmStepBit(st);
+			p.notes[0][st] = 48;
+		}
+		const auto problems = ed::validate(p);
+		check(problems.empty(), "the pattern validates" + (problems.empty() ? std::string() : ": " + problems.front()));
+		r.msg(R"({"op":"set","kind":"pattern","doc":)" + ed::json::write(ed::mmPatternToJson(p)) + "}");
+		r.run(2000);
+		r.msgConfirmed(R"({"op":"select","p":65})");
+		r.run(500);
+		const auto g = *r.desk->global(static_cast<uint8_t>(std::max(0, r.desk->currentGlobal())));
+		const uint8_t base = g.baseChannel & 15;
+
+		// LIVE RECORDING: a note from the keyboard on T1's channel lands on a step
+		r.msg(R"({"op":"play"})");
+		r.run(1500);
+		r.msg(R"({"op":"record","mode":"live"})");
+		r.run(500);
+		check(r.tel.recording.load() == 2, "LIVE RECORDING on");
+		// what T1 holds now, step by step: its trig and its note (a recorded note may land on a step that had a trig)
+		const auto t1 = [&r] { const auto q = *r.desk->pattern(slot); std::map<size_t, int> m; for(size_t s = 0; s < 64; ++s) if(ed::mmStepSet(q.pitch[0], s)) m[s] = q.notes[0][s]; return m; };
+		const auto before = t1();
+		r.out.push_back({static_cast<uint8_t>(0x90 | base), 67, 100});
+		r.run(120);
+		r.out.push_back({static_cast<uint8_t>(0x80 | base), 67, 0});
+		r.run(2500);
+		std::map<size_t, int> recorded;
+		for(const auto& [st, n] : t1())
+			if(!before.count(st) || before.at(st) != n)
+				recorded[st] = n;
+		std::string where;
+		for(const auto& [st, n] : recorded)
+			where += " step " + std::to_string(st + 1) + " note " + std::to_string(n);
+		check(!recorded.empty(), "the machine recorded the note on T1 and the core read it back:" + (where.empty() ? std::string(" nothing") : where));
+		const auto survived = [&recorded](const ed::MmPattern& _q)
+		{
+			for(const auto& [st, n] : recorded)
+				if(!ed::mmStepSet(_q.pitch[0], st) || _q.notes[0][st] != n)
+					return false;
+			return true;
+		};
+		// the page, which may not have seen that step yet, edits other steps: T2 step 5 a note, a FILTER lock on T1 step 0
+		r.msg(R"({"op":"step","id":9001,"g":901,"p":65,"t":1,"s":5,"v":{"n":[60],"a":1,"f":1,"l":1}})");
+		r.msg(R"({"op":"lock","id":9002,"g":901,"p":65,"t":0,"page":2,"i":1,"s":0,"v":99})");
+		r.run(300);
+		check(resultOk(r, 9001) && resultOk(r, 9002), "the page's step and lock intents are taken while the machine records");
+		r.run(3000);
+		r.msg(R"({"op":"record","mode":"off"})");
+		r.run(1500);
+		r.msg(R"({"op":"stop"})");
+		r.run(4000);
+		// the machine's own pattern, read again
+		r.msg(R"({"op":"load","kind":"pattern","slot":65})");
+		r.run(3000);
+		auto after = *r.desk->pattern(slot);
+		check(!recorded.empty() && survived(after), "LIVE: the recorded note survived the page's edits of other steps (no lost update)");
+		check(ed::mmStepSet(after.pitch[1], 5) && after.notes[1][5] == 60, "LIVE: the page's step is on the machine (T2 step 6, C-4)");
+		const auto row = ed::mmLockRow(after, {0, 2, 1});
+		check(row >= 0 && after.lockRows[static_cast<size_t>(row)][0] == 99, "LIVE: the page's lock is on the machine (T1 step 1, FILTER)");
+		check(r.desk->pattern(slot)->pitch[0] == after.pitch[0], "the core's pattern is the machine's");
+
+		// GRID RECORDING (stopped): a TRIG key writes a step; the page then edits another track's step
+		r.msg(R"({"op":"record","mode":"grid"})");
+		r.run(600);
+		check(r.tel.recording.load() == 1, "GRID RECORDING on");
+		const auto gridBefore = r.desk->pattern(slot)->pitch[0];
+		{
+			const auto pk = *md::panelPacket(g_mm, md::PanelControl::Trigger12);
+			r.panel.emplace_back(r.m.now() + 64, pk);
+			r.panel.emplace_back(r.m.now() + 64 + 441, md::PanelPacket{pk.row, 0});
+		}
+		r.run(2500);
+		const auto gridRecorded = r.desk->pattern(slot)->pitch[0] ^ gridBefore;
+		check(gridRecorded == ed::mmStepBit(11), "a TRIG key in GRID RECORDING wrote T1 step 12; the core read it back");
+		r.msg(R"({"op":"step","id":9003,"g":902,"p":65,"t":2,"s":3,"v":{"n":[55],"a":1,"f":1,"l":1}})");
+		r.run(300);
+		check(resultOk(r, 9003), "the page's step intent is taken while the machine grid-records");
+		r.run(3000);
+		r.msg(R"({"op":"record","mode":"off"})");
+		r.run(4000);
+		r.msg(R"({"op":"load","kind":"pattern","slot":65})");
+		r.run(3000);
+		after = *r.desk->pattern(slot);
+		check((after.pitch[0] & gridRecorded) == gridRecorded && survived(after),
+			"GRID: the recorded steps survived the page's edit of another track's step");
+		check(ed::mmStepSet(after.pitch[2], 3) && after.notes[2][3] == 55, "GRID: the page's step is on the machine (T3 step 4)");
+		// one undo step per gesture: undoing the GRID gesture takes T3's step away, the recorded steps stay
+		r.msg(R"({"op":"undo","id":9004})");
+		r.run(4000);
+		after = *r.desk->pattern(slot);
+		check(resultOk(r, 9004) && !ed::mmStepSet(after.pitch[2], 3) && (after.pitch[0] & gridRecorded) == gridRecorded,
+			"undo: the page's last gesture goes, the recorded steps stay");
+		// for contrast, the path the intents replace: the page's whole copy of the pattern from before the recording
+		// (a set, as the page sent every Sequence gesture) overwrites what the machine recorded
+		r.msg(R"({"op":"set","id":9005,"g":903,"kind":"pattern","doc":)" + ed::json::write(ed::mmPatternToJson(p)) + "}");
+		r.run(4000);
+		r.msg(R"({"op":"load","kind":"pattern","slot":65})");
+		r.run(3000);
+		check(resultOk(r, 9005) && !survived(*r.desk->pattern(slot)), "the old whole-document set from the page's stale copy loses the recorded note (the bug the intents fix)");
+	}
 }
 
 int main(const int _argc, char** _argv)
@@ -1386,6 +1703,8 @@ int main(const int _argc, char** _argv)
 			hwLink(rom);
 		if(only.empty() || only == "chain")
 			chains(rom);
+		if(only.empty() || only == "record")
+			recording(rom);
 		check(g_contract.loaded() && g_contract.bad() == 0, g_contract.summary());
 		std::printf("%s (%d failures)\n", g_failures ? "FAIL" : "PASS", g_failures);
 		return g_failures ? 1 : 0;

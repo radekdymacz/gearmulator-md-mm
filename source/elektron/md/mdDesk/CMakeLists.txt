@@ -11,6 +11,7 @@ target_sources(mdDesk PRIVATE
 	mdDesk.cpp mdDesk.h
 	mdDeskAdapter.h
 	mdDeskChain.cpp mdDeskChain.h
+	mdDeskKeys.h
 	mdDeskDelivery.cpp mdDeskDelivery.h
 	mdDeskEdit.cpp mdDeskEdit.h
 	mdDeskHistory.h

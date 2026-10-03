@@ -33,6 +33,11 @@ namespace elektronData::json
 		// the definition and what is published are the same set.
 		std::vector<std::string> unseen(const std::string& _definition, const std::vector<Value>& _instances) const;
 
+		// What our own writer is held to (DESIGN-REVIEW-2026-10-02 finding 15): the contracts open what the plug-in
+		// writes for readers ("additionalProperties": true: a reader ignores a member it does not know), and the
+		// writer's tests validate against this, where every such object is closed again.
+		static Value closedForWriter(Value _root);
+
 	private:
 		void check(const Value& _schema, const Value& _v, const std::string& _path, std::vector<std::string>& _errors,
 			int _depth) const;

@@ -46,12 +46,109 @@ namespace deskCore::contract
 		return types;
 	}
 
+	// Open and closed (DESIGN-REVIEW-2026-10-02 finding 15). What the page sends ($defs/command) is closed: an
+	// undeclared argument is refused. What the plug-in writes (every other $def: the documents, the machine
+	// document, the messages) is open for readers: a reader ignores a member it does not know, so a newer writer's
+	// member does not fail an older reader. Such an object says so with "additionalProperties": true, and our own
+	// writer is still held to what it declares: the tests validate against writerSchema, where those are false.
+	namespace detail
+	{
+		inline void setAdditional(elektronData::json::Value& _node, const bool _from, const bool _to)
+		{
+			if(_node.isObject())
+			{
+				if(auto* a = _node.find("additionalProperties"); a && a->isBool() && a->asBool() == _from)
+					_node.put("additionalProperties", elektronData::json::Value(_to));
+				for(auto& [k, v] : _node.asObject())
+					setAdditional(v, _from, _to);
+			}
+			else if(_node.isArray())
+				for(auto& v : _node.asArray())
+					setAdditional(v, _from, _to);
+		}
+
+		inline void closedPaths(const elektronData::json::Value& _node, const std::string& _path, std::vector<std::string>& _out)
+		{
+			if(_node.isObject())
+			{
+				if(const auto* a = _node.find("additionalProperties"); a && a->isBool() && !a->asBool())
+					_out.push_back(_path);
+				for(const auto& [k, v] : _node.asObject())
+					closedPaths(v, _path + "/" + k, _out);
+			}
+			else if(_node.isArray())
+				for(size_t i = 0; i < _node.asArray().size(); ++i)
+					closedPaths(_node.asArray()[i], _path + "/" + std::to_string(i), _out);
+		}
+	}
+
+	// The schema with every closed object outside $defs/command opened (--write-schema).
+	inline elektronData::json::Value withOpenDocuments(elektronData::json::Value _root)
+	{
+		if(auto* defs = _root.find("$defs"); defs && defs->isObject())
+			for(auto& [name, def] : defs->asObject())
+				if(name != "command")
+					detail::setAdditional(def, false, true);
+		return _root;
+	}
+
+	// The closed objects outside $defs/command (empty: the documents are open).
+	inline std::vector<std::string> closedDocuments(const elektronData::json::Value& _root)
+	{
+		std::vector<std::string> out;
+		if(const auto* defs = _root.find("$defs"); defs && defs->isObject())
+			for(const auto& [name, def] : defs->asObject())
+				if(name != "command")
+					detail::closedPaths(def, "#/$defs/" + name, out);
+		return out;
+	}
+
+	// The schema our own writer is held to: every open object ("additionalProperties": true) closed.
+	inline elektronData::json::Value writerSchema(elektronData::json::Value _root)
+	{
+		return elektronData::json::Schema::closedForWriter(std::move(_root));
+	}
+
+	// The machine document's contract member: the model's contractVersion as a const (--write-schema).
+	inline elektronData::json::Value withContractVersion(elektronData::json::Value _root, const int _version)
+	{
+		auto* defs = _root.find("$defs");
+		auto* machine = defs ? defs->find("machine") : nullptr;
+		auto* props = machine ? machine->find("properties") : nullptr;
+		if(!props)
+			return _root;
+		auto c = elektronData::json::Value::object();
+		c.set("description", "The page protocol's version (the contract document's): bumped when a member is renamed, removed or"
+			" re-meant; adding one keeps it. A page reads it first.");
+		c.set("const", _version);
+		props->put("contract", std::move(c));
+		if(auto* req = machine->find("required"); req && req->isArray())
+		{
+			bool has = false;
+			for(const auto& r : req->asArray())
+				has = has || (r.isString() && r.asString() == "contract");
+			if(!has)
+				req->push("contract");
+		}
+		return _root;
+	}
+
+	inline bool sameContractVersion(const elektronData::json::Value& _root, const int _version)
+	{
+		const auto* defs = _root.find("$defs");
+		const auto* machine = defs ? defs->find("machine") : nullptr;
+		const auto* props = machine ? machine->find("properties") : nullptr;
+		const auto* c = props ? props->find("contract") : nullptr;
+		const auto* v = c ? c->find("const") : nullptr;
+		return v && v->isNumber() && static_cast<int>(v->asNumber()) == _version;
+	}
+
 	// _elsewhere: the message types this test cannot publish (the plug-in's host sends them).
 	inline Report checkMessages(const elektronData::json::Value& _root, const std::vector<elektronData::json::Value>& _published,
 		const std::set<std::string>& _elsewhere = {})
 	{
 		using elektronData::json::Value;
-		const elektronData::json::Schema schema(_root);
+		const elektronData::json::Schema schema(writerSchema(_root));
 		Report r;
 		std::map<std::string, size_t> types;
 		std::vector<Value> machines, caps;
@@ -77,7 +174,7 @@ namespace deskCore::contract
 		for(const auto& t : messageTypes(_root))
 			if(!types.count(t) && !_elsewhere.count(t))
 				r.unseen.push_back("message type " + t);
-		// With additionalProperties false on the same definitions, declared == published.
+		// Validated against writerSchema (closed), so declared == published.
 		r.unseen = [&]
 		{
 			auto u = r.unseen;

@@ -2,29 +2,8 @@
 /* The page's key map (P5): every shortcut is an entry here. The ? overlay is generated from it, so it
    lists what the keys really do. An entry with run() is dispatched by the one handler below (in order,
    the first match wins); an entry without run() is handled next to its own code (a panel, a focused
-   control) and only described here. Nothing here knows the DOM of the workspaces. */
-/* KEYS BEGIN: the dispatcher, the same text in the MM mockup (src/56-keys.js); modal_check.py keeps them equal */
-const Keys = (() => {
-	const list = [];
-	const norm = e => e.key === " " ? "Space" : e.key.length === 1 ? e.key.toUpperCase() : e.key;
-	/* {keys: ["Z"], mod: "cmd"|"alt"|"shift"|"cmd+shift"|"", group, does (text, or () => text when it shows state), when?: () => bool,
-	   run?: e => void, field?: true, hidden?: true (dispatched, but another entry describes it in the ? overlay),
-	   code?: "KeyR" (matched on the physical key, e.code: with Alt or Cmd held macOS types another character)} */
-	function bind(entry) { list.push(Object.assign({ mod: "", when: null, field: false }, entry)); }
-	function modOf(e) { return [e.metaKey || e.ctrlKey ? "cmd" : "", e.altKey ? "alt" : "", e.shiftKey ? "shift" : ""].filter(Boolean).join("+"); }
-	document.addEventListener("keydown", e => {
-		const inField = e.target.closest?.("input,select,textarea,[role=slider]"), k = norm(e), m = modOf(e);
-		for (const b of list) {
-			if (!b.run || !(b.code ? e.code === b.code : b.keys.includes(k))) continue;
-			const want = b.mod || "", ok = want === m || (want === "" && m === "shift" && k.length === 1 && !/[A-Z]/.test(k));
-			if (!ok || (inField && !b.field) || (b.when && !b.when())) continue;
-			e.preventDefault(); b.run(e); return;
-		}
-	});
-	const label = b => [...(b.mod ? b.mod.split("+").map(x => ({ cmd: "⌘", alt: "⌥", shift: "⇧" }[x])) : []), b.keys.map(k => ({ Space: "Space", ArrowLeft: "←", ArrowRight: "→", ArrowUp: "↑", ArrowDown: "↓", Escape: "Esc", Delete: "Delete", Backspace: "⌫", Enter: "Enter" }[k] || k)).join(" / ")].join("");
-	return { bind, list: () => list.slice(), label };
-})();
-/* KEYS END */
+   control) and only described here. Nothing here knows the DOM of the workspaces. The dispatcher (Keys)
+   is skins/shared/deskKeys.js, loaded before this file and shared with the Monomachine Editor. */
 
 /* ===== The ? overlay =====
    The map's rules: plain keys play (the home row, Z / X octave, C / V velocity, Space); a plain letter off the

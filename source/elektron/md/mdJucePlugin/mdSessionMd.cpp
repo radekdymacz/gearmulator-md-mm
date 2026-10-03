@@ -52,6 +52,13 @@ namespace mdJucePlugin
 			p.sendKitParam = [this](const uint8_t _t, const uint8_t _i, const uint8_t _v) { m_link.setKitParam(_t, _i, _v); };
 			p.sendMute = [this](const uint8_t _t, const bool _on) { m_link.setMute(_t, _on); };
 			p.sendNote = [this](const uint8_t _ch, const uint8_t _n, const uint8_t _v) { m_link.sendNote(_ch, _n, _v); };
+			// The keyboard's held PTCH as the machine's CC, not the plug-in's parameter: no DAW sees it.
+			p.sendHeldParam = [this](const uint8_t _t, const uint8_t _i, const uint8_t _v)
+			{
+				if(const auto cc = deskWire::md::kitParam(m_channel, _t, _i, _v))
+					m_link.sendChannel(*cc);
+			};
+			p.baseChannel = [this](const uint8_t _ch) { m_channel = _ch; };
 			p.pressKey = [this](const std::string& _key) { return m_link.pressKey(_key); };
 			p.turnKnob = [this](const uint8_t _e, const int _s) { return m_link.turnKnob(_e, _s); };
 			p.nowMs = [] { return nowMs(); };
@@ -93,6 +100,7 @@ namespace mdJucePlugin
 		StudioLink m_link;
 		std::deque<std::vector<uint8_t>> m_in;
 		LcdFeed m_lcd;
+		uint8_t m_channel = 0;	// the machine's base channel (the adapter's fact, baseChannel)
 	};
 
 	// A real Machinedrum on the plug-in's MIDI in and out at DIN speed (deskWire): SysEx and CCs out

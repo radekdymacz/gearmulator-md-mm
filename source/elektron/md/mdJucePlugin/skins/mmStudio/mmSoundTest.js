@@ -12,9 +12,9 @@ let failures = 0;
 const check = (ok, what) => { console.log((ok ? "  ok   " : "  FAIL ") + what); if (!ok) failures++; };
 
 const page = fs.readFileSync(path.join(__dirname, "mmMockup.js"), "utf8");
-const HEAD = /\n\/\* ---- (?:\d+-[\w-]+\.js|mdDeskGen\.js: the GEN block) ---- \*\/\n/g;
+const HEAD = /\n\/\* ---- (?:\d+-[\w-]+\.js|shared\/[\w-]+\.js) ---- \*\/\n/g;
 const part = name => { const a = page.indexOf(`/* ---- ${name} ---- */\n`); if (a < 0) return ""; HEAD.lastIndex = a + 10; const m = HEAD.exec(page); return page.slice(a, m ? m.index : undefined); };
-const data = part("40-data.js"), groups = part("85-sound-groups.js"), sound = part("90-sound.js"), genBlock = part("mdDeskGen.js: the GEN block"), mmGen = part("52-gen.js");
+const data = part("40-data.js"), groups = part("85-sound-groups.js"), sound = part("90-sound.js"), genBlock = part("shared/deskGen.js"), mmGen = part("52-gen.js");
 check(data && groups && sound && genBlock && mmGen, "the page has 40-data.js, 85-sound-groups.js, 90-sound.js and the generators");
 
 const ctx = vm.createContext({ console });

@@ -59,7 +59,7 @@ window.MMDiagnostics = {};
 		const CUR = cur(), p = CUR.pat;
 		const readBack = test => waitFor(m => m.type === "doc" && m.kind === "pattern" && m.slot === p && !m.pending && test(m.doc));
 		const free = () => [...Array(s.len).keys()].find(st => !s.tracks[0].steps[st]);
-		const clickStep = (t, st, e) => { V().clickStep(t, st, e); host.edited("commit"); };
+		const clickStep = (t, st, e) => { V().clickStep(t, st, e); host.commit(); };
 		log(`SELFTEST start: pattern ${p} kit ${CUR.kit} song ${CUR.song} global ${CUR.glob}, loaded ${machine()?.loading.done}/${machine()?.loading.total}`);
 		await check("pattern trig (SYSEX RECV round trip)", async () => {
 			const st = free();
@@ -100,10 +100,10 @@ window.MMDiagnostics = {};
 			   fresh alt-click always adds one. A direct write is the only way in (kept, per the
 			   round's own rule for a case with no named call or DOM event). */
 			s.tracks[0].steps[st] = { a: 1, f: 1, l: 1 };
-			window.structEdited();
+			host.intent("step", { t: 0, s: st, v: { a: 1, f: 1, l: 1 } });	/* the step intent (DESIGN-UNIFY.md phase 3) */
 			await readBack(d => d.tracks[0].trig.includes(st) && !d.tracks[0].notes.some(n => n[0] === st));
 			s.tracks[0].steps[st] = null;
-			window.structEdited();
+			host.intent("step", { t: 0, s: st, v: null });
 			await readBack(d => !d.tracks[0].trig.includes(st));
 		});
 		await check("kit value live (AMP VOL, CC)", async () => {
@@ -114,10 +114,10 @@ window.MMDiagnostics = {};
 			/* AMP VOL has no exact-value gesture (only the knob's relative pointer drag, 115-control.js):
 			   a direct write is the only way to land on a precise value (kept, as above). */
 			s.tracks[0].v.AMP[5] = v;
-			window.soundEdited();
+			host.intent("param", { t: 0, page: 1, i: 5, v }); host.commit();
 			await got;
 			s.tracks[0].v.AMP[5] = v0;
-			window.soundEdited();
+			host.intent("param", { t: 0, page: 1, i: 5, v: v0 }); host.commit();
 			await waitFor(m => playing(m) && m.doc.tracks[0].pages[1][5] === v0, 5000);
 		});
 		await check("pattern switch (LOAD PATTERN)", async () => {
@@ -239,24 +239,26 @@ window.MMDiagnostics = {};
 			const m0 = { ...s.multi }, p0 = s.tracks[1].port;
 			s.multi = { ...s.multi, mode: 1, splitKey: 55, splitTrack: 4, timing: 2 };
 			s.tracks[1].port = p0 === 1 ? 0 : 1;
+			const sendKit = (m, port) => { host.intent("multiTrig", { mode: m.mode, splitKey: m.splitKey, splitTrack: m.splitTrack - 1, timing: m.timing });
+				host.intent("portamento", { t: 1, v: port === 1 ? "legato" : "always" }); host.commit(); };
 			const w1 = waitFor(m => m.type === "doc" && m.kind === "workingKit" && !m.pending && m.doc.multiTrig.mode === 1 && m.doc.multiTrig.splitKey === 55
 				&& m.doc.multiTrig.splitTrack === 3 && m.doc.multiTrig.timing === 2 && ((m.doc.trackMasks.portamento >> 1) & 1) === (p0 === 1 ? 1 : 0), 12000);
-			host.edited("sound"); host.edited("commit");
+			sendKit(s.multi, s.tracks[1].port);
 			await w1;
 			s.multi = m0; s.tracks[1].port = p0;
 			{ const w = waitFor(m => m.type === "doc" && m.kind === "workingKit" && !m.pending && m.doc.multiTrig.mode === m0.mode, 12000);
-			host.edited("sound"); host.edited("commit");
+			sendKit(m0, p0);
 			await w; }
 		});
 		await check("a MULTI MAP row in the global", async () => {
 			const r0 = { ...s.mmap[0] };
 			Object.assign(s.mmap[0], { ofs: 3, len: 12, trn: 66, tim: 2 });
 			{ const w = docIs("global", CUR.glob, d => d.multiMap[2][0] === 2 && d.multiMap[3][0] === 12 && d.multiMap[4][0] === 2 && d.multiMap[5][0] === 2);
-			host.edited("struct", "global"); host.edited("commit");
+			host.intent("multiMap", { i: 0, ofs: 2, len: 12, trn: 2, tim: 2 }); host.commit();
 			await w; }
 			Object.assign(s.mmap[0], r0);
 			{ const w = docIs("global", CUR.glob, d => d.multiMap[5][0] === r0.tim);
-			host.edited("struct", "global"); host.edited("commit");
+			host.intent("multiMap", { i: 0, ofs: r0.ofs ? r0.ofs - 1 : 255, len: r0.len, trn: r0.trn - 64, tim: r0.tim }); host.commit();
 			await w; }
 		});
 		await check("another song than the machine's (S24), from the picker", async () => {
@@ -267,10 +269,10 @@ window.MMDiagnostics = {};
 			await sleep(500);
 			const before = s.song.length;
 			{ const w = docIs("song", 23, d => d.rows.length === before + 1 && d.rows[0].pattern === 7);
-			s.song.splice(0, 0, { pat: 7, rep: 2 }); host.edited("struct", "song"); host.edited("commit");
+			s.song.splice(0, 0, { pat: 7, rep: 2 }); host.intent("rowInsert", { i: 0, row: { pat: 7, rep: 2 } }); host.commit();
 			await w; }
 			{ const w = docIs("song", 23, d => d.rows.length === before);
-			s.song.splice(0, 1); host.edited("struct", "song"); host.edited("commit");
+			s.song.splice(0, 1); host.intent("rowDelete", { i: 0 }); host.commit();
 			await w; }
 			host.songSlot(CUR.song);
 			V().goWs("seq");
@@ -284,11 +286,11 @@ window.MMDiagnostics = {};
 			if (!before || !src) throw new Error("kits not read");
 			log(`SELFTEST p4: kit copy K${from + 1} "${MmConvert.kitName(src)}" into K100 "${MmConvert.kitName(before)}"`);
 			const written = docIs("kit", 99, d => MmConvert.kitName(d) === MmConvert.kitName(src));
-			window.kitPut(99, window.kitSrc(from), "Copy");
-			await sleep(150);
+			window.kitPut(99, window.kitSrc(from), "Copy");	/* the library's drag-copy: kitCopyTo, which the core asks about */
+			await sleep(400);
 			$('#dlg [data-dlg="0"]')?.click();
 			await written;
-			host.edited("commit");
+			host.commit();
 			const undone = docIs("kit", 99, d => MmConvert.kitName(d) === MmConvert.kitName(before));
 			host.undo();
 			await undone;
@@ -472,7 +474,7 @@ window.MMDiagnostics = {};
 				const want = shift ? len0 : null;
 				log("p7: LEN click" + (shift ? " (shift)" : "") + " at " + s.len);
 				key().dispatchEvent(new MouseEvent("click", { bubbles: true, shiftKey: shift }));
-				host.edited("commit");
+				host.commit();
 				const n = s.len;
 				if (want == null && n === len0) throw new Error("the click left LEN at " + n);
 				await readBack(n);

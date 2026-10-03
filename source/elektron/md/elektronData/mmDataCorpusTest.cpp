@@ -206,7 +206,7 @@ int main(const int _argc, char** _argv)
 				std::fprintf(stderr, "FAIL cannot read the schema %s\n", path);
 				return 1;
 			}
-			g_schema.emplace(*root);
+			g_schema.emplace(elektronData::json::Schema::closedForWriter(*root));
 			continue;
 		}
 		if(std::string(_argv[i]) == "--json" && i + 1 < _argc)

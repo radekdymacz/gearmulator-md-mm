@@ -1,6 +1,6 @@
 "use strict";
 /* The Monomachine Editor's GEN and MUTATE (MM-PORT-PLAN.md d) on MM data, from the generated page (mmMockup.js):
-   the shared GEN block (the Machinedrum Editor's mdDeskGen.js, included as it is: checked to be the same text),
+   the shared generators (skins/shared/deskGen.js, the Machinedrum Editor's too: one file, both pages load it),
    genNotes (the NOTES group: in the scale and the range, STEP never more than two degrees, the same seed the same
    notes, a drum box only BD SD CH OH), the roles of the MM's machines (every machine of the page's table has one),
    a track's steps from a spec (hits on, trigs off, pitches kept or written, NOTE OFFs kept), and the mutation of
@@ -13,15 +13,11 @@ const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
 
 const page = fs.readFileSync(path.join(__dirname, "mmMockup.js"), "utf8");
 /* a part of the page as sync-mmstudio-skin.py heads it: "/* ---- 52-gen.js ---- *\/" (comments inside a part may look alike) */
-const HEAD = /\n\/\* ---- (?:\d+-[\w-]+\.js|mdDeskGen\.js: the GEN block) ---- \*\/\n/g;
+const HEAD = /\n\/\* ---- (?:\d+-[\w-]+\.js|shared\/[\w-]+\.js) ---- \*\/\n/g;
 const part = name => { const a = page.indexOf(`/* ---- ${name} ---- */\n`); if (a < 0) return ""; HEAD.lastIndex = a + 10; const m = HEAD.exec(page); return page.slice(a, m ? m.index : undefined); };
-const genBlock = part("mdDeskGen.js: the GEN block"), mmGen = part("52-gen.js"), data = part("40-data.js");
-check(genBlock && mmGen && data, "the page has the GEN block, 52-gen.js and 40-data.js");
-/* one source: the block in the page is the Machinedrum Editor's own text */
-const mdSrc = fs.readFileSync(path.join(__dirname, "../mdStudio/mdDeskGen.js"), "utf8");
-const mdBlock = (mdSrc.match(/^\/\* GEN BEGIN[\s\S]*?^\/\* GEN END \*\/\n/m) || [""])[0];
-check(mdBlock && genBlock.includes(mdBlock), "the page's GEN block is mdDeskGen.js's, the same text (run sync-mmstudio-skin.py when it differs)");
-check(!/MACH|\bS\.|\$\(|document|DPRO|SWAVE|-BD|GND-/.test(mdBlock), "the shared block names no machine and reads no page");
+const genBlock = part("shared/deskGen.js"), mmGen = part("52-gen.js"), data = part("40-data.js");
+check(genBlock && mmGen && data, "the page has the shared generators (shared/deskGen.js), 52-gen.js and 40-data.js");
+check(!/MACH|\bS\.|\$\(|document|DPRO|SWAVE|-BD|GND-/.test(genBlock.replace(/^\/\* ---- .*\n/, "")), "the shared generators name no machine and read no page");
 
 const ctx = vm.createContext({ console });
 vm.runInContext(data.replace(/^"use strict";/m, "") + "\n" + genBlock + "\n" + mmGen

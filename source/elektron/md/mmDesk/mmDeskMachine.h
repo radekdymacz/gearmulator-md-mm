@@ -3,8 +3,10 @@
 #include "mmDeskAdapter.h"
 #include "mmDeskModel.h"
 #include "mmRecv.h"
+#include "mmDeskWatch.h"
 
 #include "deskCore/deskAdapter.h"
+#include "deskCore/deskChain.h"
 #include "deskCore/deskWorkingCopy.h"
 #include "deskCore/deskCore.h"
 #include "deskCore/deskLoadQueue.h"
@@ -24,7 +26,10 @@ namespace mmDesk
 	// Every byte that differs between _before and _after has _after's value in _image (raw kits).
 	bool reflects(const elektronData::MmKit& _image, const elektronData::MmKit& _before, const elektronData::MmKit& _after);
 
-	// The Monomachine adapter (P6) behind deskCore's Machine protocol. Delivery:
+	// The Monomachine adapter (P6) behind deskCore's Machine protocol. Its sources are split along the MD's seams:
+	// mmDeskMachine.cpp (facts, capabilities, tick, the machine document), mmDeskDelivery.cpp, mmDeskLoad.cpp,
+	// mmDeskCommands.cpp, mmDeskChain.cpp, mmDeskNotes.cpp, mmDeskRecord.cpp; small state values with pure steps
+	// in mmDeskWatch.h. Delivery:
 	//   pattern, song, global, a stored kit: a dump on SYSEX RECV (RecvSession drives the panel
 	//     there on the emulator; over HW MIDI the user parks the machine on it), then a dump
 	//     request to confirm what the firmware holds;
@@ -43,8 +48,8 @@ namespace mmDesk
 		MmMachine(Profile _profile, Port _port);
 
 		// ---- deskCore::Machine ----
-		deskCore::Outcome review(const Value& _command, const std::vector<Change>& _changes, const Documents& _view) override;
-		deskCore::Outcome submit(const Change& _change, const Documents& _view) override;
+		Review review(const Value& _command, const std::vector<Change>& _changes, const Documents& _view) override;
+		deskCore::Outcome submit(const Change& _change, const Intent& _intent, const Documents& _view) override;
 		deskCore::Outcome command(const Value& _command, const Documents& _view) override;
 		deskCore::Outcome askFor(const Value& _command, const Documents& _view) override;
 		void onSysex(const Bytes& _message) override;
@@ -53,7 +58,7 @@ namespace mmDesk
 		Value status() const override;
 		deskCore::Capabilities capabilities() const override;
 		deskCore::Lifecycle lifecycle() const override { return deskCore::lifecycleOf(facts()); }
-		Context context() const override { return {m_curKit}; }
+		Context context() const override { return {m_curKit, m_curGlobal}; }
 		bool busy() const override;
 
 		// ---- MmAdapter: Monomachine facts from the device ----
@@ -84,20 +89,28 @@ namespace mmDesk
 		deskCore::Outcome askPlay(const Value&, const Documents&);
 
 		enum class Act : uint8_t { Stop, Play, SelectPattern };
-		struct Push
-		{
-			deskCore::PushSlot<Bytes> slot;
-			bool onRecv = false;	// queued on the RECV session, not on the wire yet
-		};
+		// A push is parked while its dump is queued on the RECV session (or waits for the person's SYSEX
+		// RECV, HW MIDI), not on the wire yet: a newer dump waits for it (PushPolicy::Mode::Held).
+		using Pushes = deskCore::Pushes<Ref, Bytes>;
 
 		deskCore::LifeFacts facts() const;
 		void startOver();
 		double now() const { return m_port.nowMs(); }
+		// the session's clock where an engine may have none (a test's port)
+		double clock() const { return m_port.nowMs ? m_port.nowMs() : 0; }
+		// memory's mute of track t (0-5 synth, 6-11 MIDI), POLY and tempo (BPM x 24); nullopt: not known
+		std::optional<bool> muteInMemory(const int _t) const { if(m_tel.mutes < 0) return std::nullopt; return ((m_tel.mutes >> _t) & 1) != 0; }
+		std::optional<bool> polyInMemory() const { if(m_poly < 0) return std::nullopt; return m_poly == 1; }
+		std::optional<int> tempoInMemory() const { if(m_tel.tempo < 720 || m_tel.tempo > 7200) return std::nullopt; return m_tel.tempo; }
 		void request(const Ref& _ref, bool _urgent);
 		void requestStatus();
-		void pushDump(const Ref& _ref, Bytes _dump);
+		// True when the dump went on its way now; false when it waits its turn behind one still on its way.
+		bool pushDump(const Ref& _ref, Bytes _dump);
+		// LOAD KIT after the dump of a kit slot (a write into the kit that plays): at once when the dump went now,
+		// else right after it when it goes (pumpPushes), so the machine never loads the dump before it.
+		void loadKitAfter(const Ref& _ref, bool _sent);
 		// The dump the slot lets go now: onto SYSEX RECV (or the person's, HW MIDI).
-		void sendDump(const Ref& _ref, Push& _push, Bytes _dump);
+		void sendDump(const Ref& _ref, Bytes _dump);
 		deskCore::PushPolicy pushPolicy(Kind _kind) const;
 		void pumpPushes(double _now);
 		// A message that must follow the dumps queued before it on SYSEX RECV (LOAD KIT after a kit dump).
@@ -111,6 +124,10 @@ namespace mmDesk
 		void pumpLoads(double _now);
 		void pumpRecv(double _now);
 		void pumpSequence(double _now);
+		// RECORD: the current pattern read back while the machine records (true: the mode changed).
+		bool readWhileRecording(double _now);
+		// The transport's telemetry message (the playhead, playing, the recording mode).
+		void publishTransport(double _now, bool _recordChanged);
 		void applyWorkingKit(double _now, const Documents& _view);
 		bool pressKeys(const std::vector<Key>& _keys);
 		deskCore::KitState kitState(const Documents& _view) const;
@@ -135,7 +152,12 @@ namespace mmDesk
 		// MM-P8: pattern chaining as on the machine (hold BANK, press the TRIG keys; manual 1-46)
 		deskCore::Outcome cmdChain(const Value&, const Documents&);
 		deskCore::Outcome cmdChainClear(const Value&, const Documents&);
+		// The page's keyboard: the note intent (deskCore/deskNotes.h), a MIDI note on the track's channel.
+		deskCore::Outcome cmdNoteOn(const Value&, const Documents&);
+		deskCore::Outcome cmdNoteOff(const Value&, const Documents&);
 		deskCore::Outcome sendChain(const std::vector<int>& _patterns);
+		// CLEAR: BANK + the TRIG key of the pattern that plays (false: the panel did not take them).
+		bool clearChain();
 		void pumpChain();
 		// BANK (+ BANK GROUP from the half the machine is in) and the TRIG keys of _patterns (one bank).
 		bool pressBankTrigs(const std::vector<int>& _patterns);
@@ -153,7 +175,8 @@ namespace mmDesk
 		deskCore::WorkingCopy<elektronData::MmKit> m_working;	// where the kit that plays comes from
 		uint32_t m_nextRecvTag = 1;
 		std::map<uint32_t, Ref> m_recvRefs;		// a dump on the RECV session -> the push it is
-		std::map<Ref, Push> m_pushes;
+		Pushes m_pushes;
+		std::set<Ref> m_loadAfter;				// kit slots to LOAD KIT once their waiting dump goes
 		// Without the panel: what waits for the person's SYSEX RECV, in order (a dump names its push).
 		struct Waiting
 		{
@@ -167,28 +190,29 @@ namespace mmDesk
 		bool m_backgroundQueued = false;
 
 		Telemetry m_tel;
-		// The step byte moving: in the plug-in the RAM running flag (0x26b46e) can stay 0 while the
-		// sequencer plays, so "playing" is the flag or the step advancing (onTelemetry).
+		// "playing" is the RAM flag or the step byte advancing (watchStep, onTelemetry)
 		bool m_playing = false;
-		int m_rawStep = -1;
-		int m_stepMoves = 0;
-		double m_stepMovedMs = -1e9;
+		StepWatch m_steps;
 		Probe m_probe = Probe::Missing;
 		deskCore::WireFacts m_wire;
 		int m_curPattern = -1, m_curKit = -1, m_curSong = -1, m_curGlobal = -1, m_songMode = -1;
 		int m_activateGlobal = -1;	// the active global's slot to make active again (0x56) once RECV is left
 		int m_poly = -1;			// the audio mode (SET STATUS 0x20): 0 mono, 1 POLY; -1 unknown
-		int m_lastRecording = -1;	// the recording mode last seen (Telemetry::recording)
-		double m_lastRecordReadMs = -1e9;
+		// DESIGN-UNIFY.md 4.4: what the editor set and memory has not shown yet: the twelve mutes (bit t of
+		// Telemetry::mutes), POLY and the tempo (BPM x 24). The machine document says these until then.
+		std::array<deskCore::FieldExpectation<bool>, 12> m_expectMute{};
+		deskCore::FieldExpectation<bool> m_expectPoly;
+		deskCore::FieldExpectation<int> m_expectTempo;
+		RecordReads m_recordReads;		// RECORD's read-backs (watchRecord)
 		int m_queuedPattern = -1;
-		int m_lastStep = -1;
-		bool m_lastPlaying = false;
+		TelemetryOut m_telemetryOut;	// the transport message last published (telemetryDue)
 		double m_lastStatusMs = -1e9;
-		double m_lastTelemetryMs = -1e9;
 		double m_lastRoundTripMs = -1;
 		deskCore::Sequencer<Act> m_sequence;
-		// MM-P8: the chain (empty: CLEAR) the page asked for while keys were on their way, sent after them
-		std::optional<std::vector<int>> m_chainQueued;
+		// MM-P8: the chain (or CLEAR) the page asked for while keys were on their way, sent after them
+		deskCore::Latest<deskCore::ChainRequest> m_chain;
 		double m_keysUntilMs = -1e9;	// the desk's last panel keys are through by then
+		// The keyboard's sounding notes (pressNote / releaseNotes)
+		SoundingNotes m_notes;
 	};
 }

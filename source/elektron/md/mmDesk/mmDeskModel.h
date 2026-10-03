@@ -16,6 +16,7 @@ namespace deskCore
 #include "elektronData/mmPattern.h"
 #include "elektronData/mmSong.h"
 
+#include <array>
 #include <map>
 #include <optional>
 #include <string>
@@ -25,8 +26,9 @@ namespace deskCore
 namespace mmDesk
 {
 	// The Monomachine model for deskCore::Core (P6): the same pipeline as the Machinedrum's.
-	// Its page sends whole documents as the intent ({"op":"set","kind","doc","g"}); setDocument is
-	// the pure transform "replace it with this validated value"; undo is the core's.
+	// Its page sends edit intents (DESIGN-UNIFY.md: every gesture, mmDeskEdit.cpp); a whole document
+	// ({"op":"set","kind","doc","g"}; setDocument is the pure transform "replace it with this validated value") is
+	// the intent of an import or a restore only; undo is the core's, one step per gesture (g).
 	enum class Kind : uint8_t
 	{
 		Pattern,
@@ -85,14 +87,61 @@ namespace mmDesk
 		Ref ref() const { return refOf(after); }
 	};
 
+	// What a step of a track holds, as the page shows it (DESIGN-UNIFY.md 4.1, the step intent's value): empty, a
+	// NOTE OFF, or a trig with its envelope trigs (a, f, l), its pitch or chord (notes, the base note first; none:
+	// pitchless) and whether it carries the trig bit (an envelope-only step, TRIG SELECT, has none).
+	struct StepValue
+	{
+		enum class Kind : uint8_t { Empty, Off, On };
+		Kind kind = Kind::Empty;
+		bool trig = true;
+		bool a = false, f = false, l = false;
+		std::vector<uint8_t> notes;
+
+		bool operator==(const StepValue& _o) const
+		{
+			return kind == _o.kind && (kind != Kind::On || (trig == _o.trig && a == _o.a && f == _o.f && l == _o.l && notes == _o.notes));
+		}
+	};
+
+	// What copy puts aside for paste: a track page (copySteps, pasteSteps), a track's sound (copySound, pasteSound), a
+	// song row (copyRow, pasteRow), a stored kit or pattern (the library's kitCopy, patCopy). Values only; nothing
+	// refers back.
 	struct Clipboard
 	{
-		bool operator==(const Clipboard&) const { return true; }
+		// A synth track's machine and its seven DATA pages (SYN AMP FLT EFX LF1-3).
+		struct Sound
+		{
+			uint8_t machine = 0;
+			std::array<std::array<uint8_t, 8>, 7> pages{};
+
+			bool operator==(const Sound& _o) const { return machine == _o.machine && pages == _o.pages; }
+		};
+		struct Steps
+		{
+			bool midi = false;								// a MIDI sequencer track's page (pastes onto MIDI tracks only)
+			std::vector<StepValue> steps;					// the page's steps, from its first
+			uint64_t slide = 0;								// bit = step from the first
+			std::map<std::pair<uint8_t, uint8_t>, std::map<uint8_t, uint8_t>> locks;	// (page, param) -> step -> value
+
+			bool operator==(const Steps& _o) const { return midi == _o.midi && steps == _o.steps && slide == _o.slide && locks == _o.locks; }
+		};
+		std::optional<Steps> steps;
+		std::optional<Sound> sound;
+		std::optional<elektronData::json::Value> songRow;	// a contract row
+		std::optional<elektronData::MmKit> kit;				// the kit library
+		std::optional<elektronData::MmPattern> pattern;		// the pattern library
+
+		bool operator==(const Clipboard& _o) const
+		{
+			return steps == _o.steps && sound == _o.sound && songRow == _o.songRow && kit == _o.kit && pattern == _o.pattern;
+		}
 	};
 
 	struct EditContext
 	{
-		int currentKit = -1;
+		int currentKit = -1;		// the kit that plays: the live kit edits change only its working kit
+		int currentGlobal = -1;		// the active global: the global edits change it
 	};
 
 	struct EditResult
@@ -107,8 +156,30 @@ namespace mmDesk
 	// the desk shows (the working kit is the kit that plays). Pure.
 	EditResult setDocument(const Documents& _docs, const elektronData::json::Value& _command, const EditContext& _context);
 
+	// One edit intent (DESIGN-UNIFY.md 4.1, mmDeskEdit.cpp), pure: the documents and the clipboard in, the changes
+	// (and a new clipboard after a copy) out. The command's row in the table says which document it edits (its
+	// kind column) and checks its arguments; pattern edits carry p, the live kit edits k (the kit that plays: they
+	// change its working kit), the global edits change the active global. Every changed document is validated
+	// (elektronData::validate) before it is returned; an edit that would make an invalid one is refused.
+	EditResult apply(const Documents& _docs, const elektronData::json::Value& _command, const Clipboard& _clipboard,
+		const EditContext& _context);
+	// The ops the edits have a function for: the contract test checks them against the table's Core/Edit rows.
+	std::vector<std::string> editOps();
+
+	// The library's cleared slots (kitClear, patClear): a kit of six GND-SIN tracks at their start values, no name (the
+	// rest of the slot stays); a pattern without notes, slides or locks (its length, speed, swing, arpeggiator,
+	// transposes and kit link stay). What the machine's own CLEAR leaves is not known.
+	elektronData::MmKit emptyKit(const elektronData::MmKit& _like, uint8_t _slot);
+	elektronData::MmPattern emptyPattern(const elektronData::MmPattern& _like);
+	// A slot the library shows as empty: a kit without a name (or the firmware's unused mark), a pattern without a trig.
+	bool kitIsEmpty(const elektronData::MmKit& _kit);
+	bool patternHasTrigs(const elektronData::MmPattern& _pattern);
+
 	// The Monomachine's command vocabulary (P6): data only; the adapter maps its ops to its own functions.
 	using CommandTable = deskCore::CommandTable<>;
+	// The command table's group of the library's slot ops (kitCopy ... patClear): the machine asks before they lose
+	// something (MmMachine::review).
+	constexpr int g_library = 1;
 
 	struct MmModel
 	{
@@ -126,12 +197,10 @@ namespace mmDesk
 		static std::optional<Document> get(const Documents& _docs, const Ref& _ref) { return _docs.get(_ref); }
 		static void set(Documents& _docs, const Document& _d) { _docs.set(_d); }
 		static void erase(Documents& _docs, const Ref& _ref) { _docs.erase(_ref); }
-		// The Monomachine's page edits nothing in small steps: every edit is a whole document (set).
-		static EditResult apply(const Documents&, const elektronData::json::Value& _command, const Clipboard&, const Context&)
+		// The edit intents (DESIGN-UNIFY.md 4.1), mmDeskEdit.cpp.
+		static EditResult apply(const Documents& _docs, const elektronData::json::Value& _command, const Clipboard& _clip, const Context& _c)
 		{
-			EditResult r;
-			r.errors.push_back("unknown command " + deskCore::opOf(_command));
-			return r;
+			return mmDesk::apply(_docs, _command, _clip, _c);
 		}
 		static EditResult setDocument(const Documents& _docs, const elektronData::json::Value& _command, const Context& _c)
 		{
@@ -144,6 +213,9 @@ namespace mmDesk
 		// What the editor does not do yet on any engine (merged into the capabilities): nothing since MM-P4
 		// (what one engine cannot do is that engine's capability, with the reason).
 		static const std::vector<deskCore::Unsupported>& unsupported();
+		// The page protocol's version (mm-data-contract.md 2, machine.contract): bumped when a member is renamed,
+		// removed or re-meant; adding one keeps it.
+		static constexpr int contractVersion = 2;
 		// The Monomachine's page keeps no clipboard in the core.
 		static std::optional<elektronData::json::Value> clipboardDocument(const Clipboard&) { return {}; }
 		// The Monomachine Editor's command vocabulary.
@@ -159,7 +231,7 @@ namespace mmDesk
 		// The questions the MM adapter may ask (deskCore::Ask::what): the contract's ask enum.
 		static const std::vector<std::string>& asks()
 		{
-			static const std::vector<std::string> a{"loadKit", "reloadKit", "overwriteSlot", "discardKit", "transportIgnore", "breakChain"};
+			static const std::vector<std::string> a{"loadKit", "reloadKit", "overwriteSlot", "clearSlot", "discardKit", "transportIgnore", "breakChain"};
 			return a;
 		}
 	};

@@ -27,6 +27,9 @@ namespace mmDesk
 		// Whole-document pushes (DESIGN-edit-flow.md): at most one dump per document per interval, one
 		// read-back at quiet. Over a wire the interval is at least the dump's time on it.
 		deskCore::PushPolicy push{200, 150};
+		// DESIGN-UNIFY.md 4.4: how long a field the editor set (a mute, POLY, the tempo) is shown while
+		// memory still disagrees; then memory wins (deskCore::FieldExpectation).
+		double settleMs = 1500;
 	};
 
 	const Profile& emulatorProfile();	// "emu"
@@ -54,6 +57,9 @@ namespace mmDesk
 		// The machine's MIDI base channel (the active global's), a fact for an engine that encodes
 		// CCs itself. Unset: not needed.
 		std::function<void(uint8_t _channel)> baseChannel;
+		// A MIDI note into the machine on MIDI channel _channel (0-15): note on at _velocity 1-127, note off
+		// at 0 (the page's keyboard, noteOn). Unset: this engine cannot play notes.
+		std::function<void(uint8_t _channel, uint8_t _note, uint8_t _velocity)> sendNote;
 		std::function<double()> nowMs;
 	};
 

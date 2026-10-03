@@ -1,0 +1,31 @@
+/* The header's LCD as one real display (P7), one stylesheet for both editors (skins/shared/). One dot grid: labels are 8 px Silkscreen (one dot = 1 px) and values 16 px (two
+   dots), line 2's values 12 px (on the same device-pixel grid at 2x: 2, 3 and 4 pixels a dot), every
+   text line box is its font size; one rule weight (1 px) between all fields; no rule
+   before the first field; a faint dot matrix behind; sync status in a fixed slot on line 2. */
+.lcdpanel{--lrule:1px solid color-mix(in srgb,var(--ink) 34%,transparent);
+ background-image:radial-gradient(circle at 1px 1px,color-mix(in srgb,var(--ink) 9%,transparent) .55px,transparent .75px)!important;background-size:2px 2px!important;
+ grid-template-rows:minmax(0,1fr) auto!important;row-gap:0!important;padding:6px 4px 5px!important;align-content:stretch!important}
+.lcdpanel .f{border-left:var(--lrule)!important;gap:4px!important;padding:0 9px!important;align-content:start!important}
+.lcdpanel .trf,.lcdpanel .f.trf{border-left:0!important;padding:0 10px 0 4px!important}
+.lcdpanel small,.lcdpanel .save,.lcdeng.kselbtn,.lcdsec button,.l2 small{font-size:8px!important;line-height:8px!important;letter-spacing:.06em!important}
+.lcdpanel small{height:8px}
+.lcdpanel .f b{font-size:16px!important;line-height:16px!important}
+.l2,.l2 b{font-size:12px!important;line-height:12px!important}
+.row2{border-top:var(--lrule)!important;padding-top:5px!important;margin-top:0!important;align-items:center!important;height:18px;box-sizing:content-box}
+.row2 .lcd2{padding:0 9px!important;gap:14px!important;align-items:center!important;min-height:0!important}
+.l2{gap:6px!important;align-items:center!important}
+.row2 .lcdsec{border-left:var(--lrule)!important;padding:0 7px!important;align-self:stretch;align-items:center}
+.lcdpanel .led{width:5px!important;height:5px!important;border-radius:50%}
+/* the sync slot: always there, one width, the LED and one word (SYNC, SEND, RECV n) */
+.syncf{flex:none;display:inline-flex;align-items:center;gap:6px;box-sizing:border-box;width:calc(8ch + 29px);padding:0 9px;border-left:var(--lrule);align-self:stretch;font:12px/12px var(--pix);letter-spacing:normal;text-transform:uppercase;color:var(--ink);white-space:nowrap;overflow:hidden}
+.lcdpanel .syncf b{font:12px/12px var(--pix)!important;letter-spacing:normal;font-weight:400}
+.lcdpanel .syncf .led{flex:none}
+/* the LCD's own tips: under the display, never over it (see Tips in deskModal.js) */
+.lcdtip{position:fixed;z-index:130;max-width:360px;padding:6px 9px;border-radius:4px;background:var(--plate);color:var(--body);border:1px solid var(--print2);font:500 12px/1.35 var(--sans);box-shadow:0 8px 20px rgba(0,0,0,.3);pointer-events:none}
+.lcdtip[hidden]{display:none}
+.syncf.warn{cursor:pointer}
+.syncf.warn b{animation:blink 1s steps(2) infinite}
+/* the background read of the library (READ n/m): a thin bar along the slot's foot */
+.syncf.read{background:linear-gradient(color-mix(in srgb,var(--ink) 70%,transparent),color-mix(in srgb,var(--ink) 70%,transparent)) no-repeat left bottom/calc(var(--rf,0) * 100%) 2px}
+/* the MKII print sits centred under the display's bezel */
+:root[data-plate="mk2"] .lcdgroup::after{bottom:-14px!important;font:600 8px/8px var(--sans)!important;letter-spacing:.4em!important;padding-left:.4em}

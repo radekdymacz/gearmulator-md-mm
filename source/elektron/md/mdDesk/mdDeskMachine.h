@@ -8,6 +8,7 @@
 #include "mdDeskWorkingKit.h"
 
 #include "deskCore/deskAdapter.h"
+#include "deskCore/deskChain.h"
 #include "deskCore/deskWorkingCopy.h"
 #include "deskCore/deskCore.h"
 #include "deskCore/deskLoadQueue.h"
@@ -40,8 +41,8 @@ namespace mdDesk
 		MdMachine(Profile _profile, Port _port);
 
 		// ---- deskCore::Machine ----
-		deskCore::Outcome review(const Value& _command, const std::vector<Change>& _changes, const Documents& _view) override;
-		deskCore::Outcome submit(const Change& _change, const Documents& _view) override;
+		Review review(const Value& _command, const std::vector<Change>& _changes, const Documents& _view) override;
+		deskCore::Outcome submit(const Change& _change, const Intent& _intent, const Documents& _view) override;
 		deskCore::Outcome command(const Value& _command, const Documents& _view) override;
 		deskCore::Outcome askFor(const Value& _command, const Documents& _view) override;
 		void onSysex(const Bytes& _message) override;
@@ -86,21 +87,7 @@ namespace mdDesk
 
 		// What a sequence step does (deskCore::Sequencer, facts instead of fixed delays).
 		enum class Act : uint8_t { Stop, Play, RecordPlay, LoadSong, SelectPattern };
-		struct Push
-		{
-			PushSlot<Document> slot;
-		};
-		// Control All (manual p.37, DESIGN-edit-flow.md): the tweak command's intent, seen by review()
-		// before submit() delivers its change. On the emulated machine it is the firmware's own gesture:
-		// FUNCTION held, the DATA ENTRY knob turned by each tick's net steps, released at quiet. The
-		// page (0 synthesis, 1 effects, 2 routing) is made the machine's knob page first.
-		struct TweakIntent
-		{
-			int page = 0;
-			uint8_t knob = 0;
-			int d = 0;
-			std::optional<uint8_t> track;	// the gesture's track, the preferred lead
-		};
+		using Pushes = deskCore::Pushes<DocRef, Document>;
 		// The firmware tweaks from its selected track, which must lead (controlAllLeads): the adapter
 		// selects one first (SET STATUS, then the machine's status says it is selected).
 		struct TweakTurns
@@ -178,6 +165,8 @@ namespace mdDesk
 		bool pressKey(const std::string& _key);
 		void releaseKeys();
 		deskCore::Outcome sendChain(const std::vector<int>& _patterns);
+		// CLEAR: LOAD PATTERN of the current pattern (false: it is not known).
+		bool clearChain();
 		void pumpChain();
 		void load(const DocRef& _ref, bool _urgent);
 		void request(const DocRef& _ref);
@@ -226,7 +215,15 @@ namespace mdDesk
 		deskCore::Outcome kitSwitchedBy(uint8_t _slot, bool _load);
 		deskCore::Outcome cmdRecord(const Value&, const Documents&);
 		deskCore::Outcome cmdRecTrig(const Value&, const Documents&);
-		deskCore::Outcome cmdKeyNote(const Value&, const Documents&);
+		deskCore::Outcome cmdNoteOn(const Value&, const Documents&);
+		deskCore::Outcome cmdNoteOff(const Value&, const Documents&);
+		// The keyboard's held layer: let track _t's note go and put back what its key held (the document's
+		// value); restore() puts back every held value, the notes sound on.
+		void releaseNote(uint8_t _t, const Documents& _view);
+		void restore(std::vector<deskCore::HeldOverride> _held, const Documents& _view);
+		void sendHeld(uint8_t _t, uint8_t _index, uint8_t _value);
+		// A memory image without the keyboard's held layer.
+		elektronData::MdKit unheld(elektronData::MdKit _image, const Documents* _view) const;
 		deskCore::Outcome cmdChain(const Value&, const Documents&);
 		deskCore::Outcome cmdChainClear(const Value&, const Documents&);
 		deskCore::Outcome cmdGlobalSlot(const Value&, const Documents&);
@@ -234,7 +231,9 @@ namespace mdDesk
 		deskCore::Outcome cmdReloadSong(const Value&, const Documents&);
 		deskCore::Outcome cmdSampleName(const Value&, const Documents&);
 		deskCore::Outcome cmdSampleCancel(const Value&, const Documents&);
-		void sendRaw(const Bytes& _message) const;
+		// Every SysEx but a sample's goes here (m_out holds it while a sample is on its way).
+		void sendSysex(const Bytes& _message);
+		bool canSendSysex() const { return m_out.open(); }
 		void pumpSample(double _now);
 		deskCore::Outcome cmdPlay(const Value&, const Documents&);
 		deskCore::Outcome cmdStop(const Value&, const Documents&);
@@ -243,15 +242,14 @@ namespace mdDesk
 
 		const Profile m_profile;
 		Port m_port;
-		// P9: the device's own SysEx out (m_port.sendSysex holds other SysEx while a sample goes out)
-		std::function<void(const Bytes&)> m_rawSysex;
+		// P9: the device's own SysEx out, sample > held > normal (SysexOut)
+		SysexOut m_out;
 		SdsSender m_sds;
-		std::deque<Bytes> m_heldSysex;
 		mdDataLink::Session m_session;
 
 		deskCore::LoadQueue<DocRef> m_loads;
 		bool m_backgroundQueued = false;
-		std::map<DocRef, Push> m_pushes;
+		Pushes m_pushes;
 
 		deskCore::WorkingCopy<elektronData::MdKit> m_working;	// where the kit that plays comes from
 		double m_kitStatusAskedMs = -1e9;
@@ -263,22 +261,21 @@ namespace mdDesk
 		double m_lastRoundTripMs = -1;
 		Keys m_keys;
 		std::optional<uint8_t> m_audibleQueue;
-		// The chain the page asked for while keys were on their way (empty: CLEAR), sent after them.
-		std::optional<std::vector<int>> m_chainQueued;
+		// The chain (or CLEAR) the page asked for while keys were on their way, sent after them.
+		deskCore::Latest<deskCore::ChainRequest> m_chain;
 		double m_switchReportedMs = -1;
 		std::optional<uint8_t> m_lastKit;
 		std::optional<uint8_t> m_lastPattern;
 		Telemetry m_telemetry;
 		std::array<bool, 16> m_mutes{};
-		// The page's keyboard: per track, the note sounding and the kit value it holds (index, the value it
-		// replaced, the value sent), restored when the key is let go.
-		struct HeldKey { uint8_t channel = 0; uint8_t note = 0; std::optional<std::array<uint8_t, 3>> value; };
-		std::array<std::optional<HeldKey>, 16> m_heldKeys{};
+		// The page's keyboard: per track, the note sounding (one at a time; a later key replaces it). The kit
+		// value a key holds is the working copy's held layer (m_working.held).
+		struct SoundingNote { uint8_t channel = 0; uint8_t note = 0; int pitch = 0; };
+		std::array<std::optional<SoundingNote>, 16> m_notes{};
 		KnobRecorder m_knobs;
 		std::optional<RecLock> m_recLock;
 		double m_recordPollMs = -1e9;
 		deskCore::Sequencer<Act> m_sequence;
-		std::optional<TweakIntent> m_intent;	// the command review() saw, for the submit() that follows
 		TweakTurns m_tweak;
 		// Control All without the panel (HW MIDI, no telemetry): the latest value per (track, index),
 		// sent as at most one CC each per coalescing tick, within the wire's budget.

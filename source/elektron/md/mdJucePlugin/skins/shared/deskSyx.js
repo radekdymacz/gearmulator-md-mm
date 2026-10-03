@@ -1,5 +1,5 @@
 "use strict";
-/* SYX BEGIN (P7): SysEx import and export, the same text in both editors (checked by the sync scripts).
+/* SysEx import and export (P7), one file for both editors and both mockups (skins/shared/).
    The host opens, parses and writes the files (the page never reads their bytes): a .syx chosen with
    "Import SysEx…" comes back as a preview, here a panel of the modal layer with
    what is in the file and what it overwrites; "Import" sends the chosen kinds as ordinary document writes
@@ -71,4 +71,3 @@ const Syx = (() => {
 		preview, progress, exported: m => m, host: null
 	};
 })();
-/* SYX END */

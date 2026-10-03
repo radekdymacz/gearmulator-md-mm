@@ -1,0 +1,34 @@
+/* The start-up and first-run card (P7, deskBoot.js) */
+.bootcard{position:fixed;inset:0;z-index:var(--mz,60);display:grid;place-items:center;padding:24px;background:transparent;transition:opacity .35s}
+.bootcard[hidden]{display:none}
+.bootcard.out{opacity:0}
+.bootbox{width:min(600px,calc(100vw - 48px));max-height:calc(100vh - 48px);overflow:auto;box-sizing:border-box;display:grid;gap:14px;justify-items:center;text-align:center;padding:22px 24px;background:var(--plate);border:2px solid var(--print);border-radius:8px;box-shadow:0 24px 60px rgba(0,0,0,.45);color:var(--body)}
+.bootbox:focus{outline:none}
+.bootlcd{padding:10px;background:var(--lcd);border-radius:6px;box-shadow:inset 0 0 0 2px color-mix(in srgb,var(--ink) 25%,transparent)}
+.bootlcd canvas{display:block;width:512px;height:256px;max-width:calc(100vw - 110px);height:auto;aspect-ratio:2/1;image-rendering:pixelated;image-rendering:crisp-edges}
+.bootcard.rom .bootlcd{display:none}
+.bootbox h2{margin:0;font:600 18px var(--sans);letter-spacing:.14em;text-transform:uppercase;color:var(--print)}
+.bootbar{width:min(420px,100%);height:8px;border-radius:4px;background:var(--ledoff);overflow:hidden;box-shadow:inset 0 0 0 1px var(--rule)}
+.bootbar i{display:block;height:100%;width:0;background:var(--led);transition:width .25s linear}
+.bootcard.ind .bootbar i{width:30%!important;animation:bootind 1.2s ease-in-out infinite}
+@keyframes bootind{0%{transform:translateX(-100%)}100%{transform:translateX(340%)}}
+.bootcard.rom .bootbar{display:none}
+.bootline{margin:0;font:500 13px var(--sans);color:var(--print2);max-width:48ch}
+.bootrom{display:grid;gap:10px;justify-items:center;width:100%}
+.bootzone{all:unset;box-sizing:border-box;width:100%;display:grid;gap:6px;justify-items:center;padding:20px;border:2px solid var(--print);border-radius:8px;background:color-mix(in srgb,var(--print) 8%,var(--plate));box-shadow:0 3px 0 var(--print2);cursor:pointer;text-align:center}
+.bootzone:active{transform:translateY(2px);box-shadow:0 1px 0 var(--print2)}
+.bootzone:hover,.bootzone:focus-visible{border-color:var(--led);background:color-mix(in srgb,var(--led) 10%,transparent)}
+.bootzone b{font:600 15px/1.35 var(--sans);color:var(--print)}
+.bootzone span{font:500 12px var(--sans);color:var(--print2)}
+.bootpriv{margin:0;font:500 12px var(--sans);color:var(--print2);max-width:56ch}
+.bootres{margin:0;min-height:1.3em;font:600 13px var(--sans)}
+.bootres.ok{color:var(--print)}
+.bootres.bad{color:var(--led)}
+.linkkey{all:unset;cursor:pointer;text-decoration:underline;color:var(--print)}
+.linkkey[hidden]{display:none}
+.bootcur{margin:0;display:flex;gap:8px;align-items:baseline;justify-content:center;max-width:100%;font:500 13px var(--sans);color:var(--print2);white-space:nowrap}
+.bootcur b{font:600 13px var(--sans);color:var(--print);flex:none}
+.bootcur .bootfile{font:500 12px var(--mono);min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--print)}
+.bootcur i{font-style:normal;flex:none}
+
+@media (prefers-reduced-motion:reduce){.bootcard{transition:none}.bootcard.ind .bootbar i{animation:none}}

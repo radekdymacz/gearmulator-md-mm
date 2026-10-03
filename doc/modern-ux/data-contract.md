@@ -38,6 +38,18 @@ Rules:
 - Readers ignore members they do not know. Adding an optional member keeps the version.
 - Renaming, removing or re-meaning a member makes it the next version. `fromJson` refuses
   versions it does not know.
+- **The contract's own version** (DESIGN-REVIEW-2026-10-02 finding 15): the machine document's
+  `contract` (2, this document's) is the page protocol's version: the messages and the commands
+  together. `MdModel::contractVersion` holds it; the core writes it into every machine document and
+  `mdDeskTest --write-schema` writes it into the schema as a `const`. A page reads it first. It goes up
+  with the rule above (a member renamed, removed or re-meant); an added member keeps it.
+- **Open for readers, closed for commands.** What the page sends (`$defs/command`) is closed: an
+  undeclared argument is refused. What the plug-in writes (every other `$def`: the documents, the
+  machine document, the messages) is open: an object the schema lists the members of says
+  `"additionalProperties": true`, so a newer writer's member does not fail an older reader. Our own
+  writer is still held to what it declares: the tests validate against the schema with those objects
+  closed again (`json::Schema::closedForWriter`), and `--write-schema` keeps the documents open
+  (`mdDeskTest` fails on a closed one).
 - `firmware.format.version` / `revision` are the firmware's own dump format bytes
   (pattern 3/1, kit 4/1, song 2/2, global 6/1). Keep them as received.
 - The schema's `$defs/message` is every message the plug-in sends the page and
@@ -173,6 +185,7 @@ and selects the active slot with `{"op":"globalSlot","slot"}`.
 
 | Field | Meaning |
 |---|---|
+| `contract` | The page protocol's version (2; section 2) |
 | `pattern.current` | The last reported current pattern |
 | `pattern.queued` | Requested with `selectPattern` while playing. Becomes current at the end of the current pattern (P1-RESULT §4) |
 | `kit.current` | The current kit number |
@@ -205,17 +218,36 @@ selected track, after SET STATUS track and the page key (`mdDesk::KnobRecorder`)
 so the firmware locks it on the track's next note. `recTrig` plays a track like
 its TRIG key.
 
-**The keyboard (P10).** `keyNote` {t, vel, i?, v?} plays track t as the note the
-active global's MAP EDITOR gives it (the manual's default map without a global: C2
-track 1 … D4 track 16), on its base channel, at vel 1-127; vel 0 is the key let
-go (note off). The velocity is heard (firmware test: 30 is about a quarter of 127's
-peak; the page's C / V step it 20 40 60 80 100 127, from 100). i, v: a kit value the machine holds while the key is down (the page sends
-the sample machines' PTCH, manual Appendix A: 3 steps a semitone in the first
-octave), sent as a live value before the note and given back when the key is let
-go: the value it replaced, or what something else moved it to meanwhile. It is not
-an edit: no undo step, the kit document keeps its value. A new key on the same
-track ends the one before it. While live recording the page sends `recTrig`
-instead (a plain trig, as a click on the track).
+**The keyboard (P10), the note intent.** `noteOn` {t, vel 1-127, pitch} plays track t;
+`noteOff` {t, pitch?} lets it go (without pitch: whatever the track sounds). The
+same two commands play the Monomachine (mm-data-contract.md). pitch is semitones
+from the track's sound; the page knows no parameter index and no MIDI byte, the
+core maps it (`mdDesk/mdDeskKeys.h`, `deskCore/deskNotes.h`):
+
+- the note is the one the active global's MAP EDITOR gives the track (the manual's
+  default map without a global: C2 track 1 … D4 track 16), on its base channel, at
+  vel (firmware test: 30 is about a quarter of 127's peak; the page's C / V step it
+  20 40 60 80 100 127, from 100);
+- on the sample machines (ROM-nn, RAM-Pn) pitch is a PTCH the machine holds while
+  the key is down (manual Appendix A: 3 steps a semitone in the first octave, the
+  second octave's 27 / 28 steps spread evenly, 0-127 at the ends), sent before the
+  note as the machine's CC (`DevicePort::sendHeldParam`: past the plug-in's
+  parameter, so a DAW sees no move and records no automation; an engine without it
+  sends it as the live value). It is the working copy's held layer
+  (`WorkingCopy::held`), not an edit: no undo step, no expectation, and a memory
+  image taken while the key is down is masked with it (it reports the document's
+  value there, so the kit never shows the held PTCH as a change). Letting go puts
+  back the document's value: an edit made meanwhile is in the document, so it
+  wins. SAVE KIT (and SAVE KIT n) puts held values back first; another kit drops
+  them;
+- other machines play at their own pitch (the result's `note` says so); GND-EMPTY
+  and the recorders (RAM-Rn) are refused with the reason;
+- one note sounds per track: a later key ends the one before it, and a `noteOff`
+  whose pitch is not the sounding one does nothing;
+- while live recording `noteOn` is the track's TRIG key (as `recTrig`: a plain
+  trig), and the result's `note` says so.
+
+The page says each `note` and refusal once.
 
 Which note (P4, `mdP4ProbeFirmwareTest lockwindow`): the track's next programmed
 trig whose step has not started when the turn lands. A turn 8 ms before the step

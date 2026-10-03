@@ -10,7 +10,15 @@ target_sources(mmDesk PRIVATE
 	mmDesk.cpp mmDesk.h
 	mmDeskAdapter.h
 	mmDeskTelemetry.h
-	mmDeskMachine.cpp mmDeskMachine.h
+	mmDeskChain.cpp
+	mmDeskCommands.cpp
+	mmDeskDelivery.cpp
+	mmDeskEdit.cpp
+	mmDeskLoad.cpp
+	mmDeskMachine.cpp mmDeskMachine.h mmDeskMachineParts.h
+	mmDeskNotes.cpp
+	mmDeskRecord.cpp
+	mmDeskWatch.h
 	mmDeskModel.cpp mmDeskModel.h
 	mmRecv.cpp mmRecv.h
 )
@@ -30,7 +38,8 @@ if(BUILD_TESTING)
 	add_executable(mmDeskTest mmDeskTest.cpp)
 	target_link_libraries(mmDeskTest PRIVATE mmDesk deskHost)
 	target_compile_definitions(mmDeskTest PRIVATE MMDESK_SCHEMA="${CMAKE_CURRENT_SOURCE_DIR}/../../../../doc/modern-ux/mm-data-contract.schema.json"
-		MMDESK_CATALOGUE="${CMAKE_CURRENT_SOURCE_DIR}/../../../../doc/modern-ux/mm-catalogue.json")
+		MMDESK_CATALOGUE="${CMAKE_CURRENT_SOURCE_DIR}/../../../../doc/modern-ux/mm-catalogue.json"
+		MMDESK_INTENT_CASES="${CMAKE_CURRENT_SOURCE_DIR}/../../../../doc/modern-ux/intent-cases.json")
 	add_test(NAME mmDeskTest COMMAND mmDeskTest)
 	set_tests_properties(mmDeskTest PROPERTIES LABELS "UnitTest")
 	set_property(TARGET mmDeskTest PROPERTY FOLDER "Elektron/test")

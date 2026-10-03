@@ -134,7 +134,7 @@ ED.dktrn={geo(W,H){const T=22,B=H-6,kh=B-T,ww=clamp(Math.round(kh*.5),30,64);ret
    until the button comes up, as the home-row keys do */
 let trnHeld=null;
 function trnDown(c,e){const t=S.sel,tr=trk(t),x=ED.dktrn.keyAt(c,e);if(x==null)return;const n=ED.dktrn.effect(tr,x,e.altKey);
- if(n.key!=null?n.key!==tr.tr.KEY:n.TRACK!==tr.tr.TRACK){if(n.key!=null)tr.tr.KEY=n.key;else tr.tr.TRACK=n.TRACK;structEdited();render()}
+ if(n.key!=null?n.key!==tr.tr.KEY:n.TRACK!==tr.tr.TRACK){if(n.key!=null){tr.tr.KEY=n.key;edit("transpose",{t,key:n.key})}else{tr.tr.TRACK=n.TRACK;edit("transpose",{t,v:n.TRACK-64})}render()}
  if(isMidiT(t))return;const note=clamp(KEYS_BASE+12*KB.oct+n.note);trnHeld={t,note};keyNote(t,note,KB.vel)}
 document.addEventListener("pointerout",e=>{const c=e.target.closest?.('canvas[data-ed="dktrn"]');if(c&&!c.contains(e.relatedTarget)&&ED.dktrn.hov){ED.dktrn.hov=null;c.title="";drawEd(c)}});
 function trnUp(){if(!trnHeld)return;const h=trnHeld;trnHeld=null;keyNote(h.t,h.note,0)}

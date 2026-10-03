@@ -2,6 +2,8 @@
 #include "mdDeskLibrary.h"
 #include "mdDeskModel.h"
 
+#include "deskCore/deskEdits.h"
+
 #include "elektronData/mdJson.h"
 #include "elektronData/mdMachines.h"
 #include "elektronData/mdNames.h"
@@ -134,6 +136,8 @@ namespace mdDesk
 		{
 		public:
 			Args(const Value& _cmd, std::vector<std::string>& _errors) : m_cmd(_cmd), m_errors(_errors) {}
+
+			const Value& command() const { return m_cmd; }
 
 			// A number the table has checked; an optional argument that is absent is an error here.
 			std::optional<int> integer(const char* _key) const
@@ -442,17 +446,6 @@ namespace mdDesk
 			return _p;
 		}
 
-		// The bits of [0, _len) moved _by steps later, wrapping inside [0, _len); the bits from _len on stay.
-		uint64_t rotated(const uint64_t _bits, const int _by, const size_t _len)
-		{
-			const uint64_t inside = _len >= 64 ? ~uint64_t{0} : (uint64_t{1} << _len) - 1;
-			uint64_t out = _bits & ~inside;
-			for(size_t s = 0; s < _len; ++s)
-				if(_bits >> s & 1)
-					out |= uint64_t{1} << size_t(((int(s) + _by) % int(_len) + int(_len)) % int(_len));
-			return out;
-		}
-
 		// DESIGN-generators.md §7.2: track t's steps move _by steps later (earlier when negative), wrapping at
 		// the pattern's length: its trigs, its accents, slides and swings and every lock of the track go with
 		// them. Steps from the length on stay. The pattern-wide marks (EDIT ALL) belong to every track and stay.
@@ -463,19 +456,16 @@ namespace mdDesk
 			const size_t len = std::min<size_t>(_p.length, ed::visibleSteps(_p));
 			if(len < 2 || by % int(len) == 0)
 				return _p;
-			_p.trigs[t] = rotated(_p.trigs[t], by, len);
-			_p.trackAccent[t] = rotated(_p.trackAccent[t], by, len);
-			_p.trackSlide[t] = rotated(_p.trackSlide[t], by, len);
-			_p.trackSwing[t] = rotated(_p.trackSwing[t], by, len);
+			_p.trigs[t] = deskCore::rotatedBits(_p.trigs[t], by, len);
+			_p.trackAccent[t] = deskCore::rotatedBits(_p.trackAccent[t], by, len);
+			_p.trackSlide[t] = deskCore::rotatedBits(_p.trackSlide[t], by, len);
+			_p.trackSwing[t] = deskCore::rotatedBits(_p.trackSwing[t], by, len);
 			for(size_t param = 0; param < ed::MdKit::g_paramsPerTrack; ++param)
 			{
 				const auto row = ed::lockRowIndex(_p, t, param);
 				if(!row)
 					continue;
-				auto& r = _p.lockRows[*row];
-				const auto was = r;
-				for(size_t s = 0; s < len; ++s)
-					r[size_t(((int(s) + by) % int(len) + int(len)) % int(len))] = was[s];
+				deskCore::rotateRow(_p.lockRows[*row], by, len);
 			}
 			_in.note = "Rotated " + trackName(t) + (by > 0 ? " later" : " earlier");
 			const bool shared = (_p.accentEditAll && _p.accentPattern) || (_p.slideEditAll && _p.slidePattern) || (_p.swingEditAll && _p.swingPattern);
@@ -498,14 +488,8 @@ namespace mdDesk
 			}
 			const size_t total = std::max(was, (len * 2 + 15) / 16 * 16);
 			_p.scale = uint8_t(total / 16 - 1);
-			const auto bit = [](const size_t _s) { return uint64_t{1} << _s; };
-			const auto copy = [&](uint64_t& _bits)
-			{
-				for(size_t s = std::max(was, len * 2); s < total; ++s)
-					_bits &= ~bit(s);
-				for(size_t s = 0; s < len; ++s)
-					_bits = (_bits & ~bit(len + s)) | ((_bits >> s & 1) << (len + s));
-			};
+			const size_t clearFrom = std::max(was, len * 2);	// steps the longer pattern shows that held hidden residue
+			const auto copy = [&](uint64_t& _bits) { _bits = deskCore::doubledBits(_bits, len, clearFrom, total); };
 			for(size_t t = 0; t < ed::MdPattern::g_tracks; ++t)
 				for(auto* bits : {&_p.trigs[t], &_p.trackAccent[t], &_p.trackSlide[t], &_p.trackSwing[t]})
 					copy(*bits);
@@ -520,10 +504,7 @@ namespace mdDesk
 					if(!row)
 						continue;
 					auto& r = _p.lockRows[*row];
-					for(size_t s = std::max(was, len * 2); s < total; ++s)
-						r[s] = ed::MdPattern::g_noLock;
-					for(size_t s = 0; s < len; ++s)
-						r[len + s] = r[s];
+					deskCore::doubleRow(r, len, ed::MdPattern::g_noLock, clearFrom, total);
 					if(std::all_of(r.begin(), r.begin() + std::ptrdiff_t(total), [](const uint8_t _v) { return _v == ed::MdPattern::g_noLock; }))
 						_p = ed::withoutLockRow(_p, t, param);
 				}
@@ -867,183 +848,22 @@ namespace mdDesk
 			return edits;
 		}
 
-		// ---- song (edited as contract rows, so row semantics stay in mdJson) ----
+		// ---- song (edited as contract rows, so row semantics stay in mdJson; the row ops are deskCore's, shared
+		// with the Monomachine: deskCore/deskEdits.h) ----
 
-		using Rows = std::vector<Value>;
+		using Rows = deskCore::songRows::Rows;
+		using deskCore::songRows::withMember;
 
-		Value withMember(const Value& _object, const std::string& _key, Value _value)
-		{
-			Value out = Value::object();
-			bool replaced = false;
-			for(const auto& [k, v] : _object.asObject())
-			{
-				if(k == _key)
-				{
-					out.set(k, _value);
-					replaced = true;
-				}
-				else
-					out.set(k, v);
-			}
-			if(!replaced)
-				out.set(_key, std::move(_value));
-			return out;
-		}
-
-		bool isEnd(const Value& _row)
-		{
-			const auto* kind = _row.find("kind");
-			return kind && kind->isString() && kind->asString() == "end";
-		}
-
-		// Loop and jump targets follow their rows: _map[old] = new index.
-		Rows remapTargets(Rows _rows, const std::vector<size_t>& _map)
-		{
-			for(auto& row : _rows)
-			{
-				const auto* kind = row.find("kind");
-				const auto* target = row.find("target");
-				if(!kind || !target || !target->isNumber())
-					continue;
-				if(kind->asString() != "loop" && kind->asString() != "jump")
-					continue;
-				const auto old = static_cast<size_t>(target->asNumber());
-				if(old < _map.size())
-					row = withMember(row, "target", static_cast<int>(_map[old]));
-			}
-			return _rows;
-		}
-
-		std::optional<int> rowArg(const Rows& _rows, const In& _in, const char* _key)
-		{
-			return _in.a.within(_key, 0, static_cast<int>(_rows.size()) - 1);
-		}
-
-		std::optional<Rows> copyRow(Rows _rows, const In& _in)
-		{
-			const auto i = rowArg(_rows, _in, "i");
-			if(!i)
-				return {};
-			if(isEnd(_rows[size_t(*i)]))
-			{
-				_in.errors.push_back("END cannot be copied");
-				return {};
-			}
-			_in.clip.songRow = _rows[size_t(*i)];
-			_in.note = "Copied row " + std::to_string(*i + 1);
-			return _rows;
-		}
-
-		std::optional<Rows> rowSet(Rows _rows, const In& _in)
-		{
-			const auto i = rowArg(_rows, _in, "i");
-			if(!i)
-				return {};
-			_rows[size_t(*i)] = *_in.a.value("row");
-			return _rows;
-		}
-
-		// Insert at i; the END row can only move down.
-		std::optional<Rows> insertRow(Rows _rows, const In& _in, const Value& _row)
-		{
-			if(_rows.size() >= ed::MdSong::g_maxRows)
-			{
-				_in.errors.push_back("A song holds 256 rows");
-				return {};
-			}
-			const auto at = size_t(*_in.a.integer("i"));
-			std::vector<size_t> map(_rows.size());
-			for(size_t j = 0; j < map.size(); ++j)
-				map[j] = j < at ? j : j + 1;
-			_rows = remapTargets(std::move(_rows), map);
-			_rows.insert(_rows.begin() + static_cast<std::ptrdiff_t>(at), _row);
-			return _rows;
-		}
-
-		std::optional<Rows> rowInsert(Rows _rows, const In& _in)
-		{
-			if(!rowArg(_rows, _in, "i"))
-				return {};
-			const auto* row = _in.a.value("row");
-			if(!row)
-			{
-				_in.errors.push_back("row: missing object");
-				return {};
-			}
-			return insertRow(std::move(_rows), _in, *row);
-		}
-
-		std::optional<Rows> pasteRow(Rows _rows, const In& _in)
-		{
-			if(!rowArg(_rows, _in, "i"))
-				return {};
-			if(!_in.clip.songRow)
-			{
-				_in.errors.push_back("Copy a song row first");
-				return {};
-			}
-			return insertRow(std::move(_rows), _in, *_in.clip.songRow);
-		}
-
-		std::optional<Rows> rowDelete(Rows _rows, const In& _in)
-		{
-			const auto i = rowArg(_rows, _in, "i");
-			if(!i)
-				return {};
-			if(isEnd(_rows[size_t(*i)]))
-			{
-				_in.errors.push_back("END cannot be deleted");
-				return {};
-			}
-			const auto at = size_t(*i);
-			std::vector<size_t> map(_rows.size());
-			for(size_t j = 0; j < map.size(); ++j)
-				map[j] = j <= at ? j : j - 1;
-			_rows.erase(_rows.begin() + static_cast<std::ptrdiff_t>(at));
-			return remapTargets(std::move(_rows), map);
-		}
-
-		std::optional<Rows> rowMove(Rows _rows, const In& _in)
-		{
-			const auto from = rowArg(_rows, _in, "from"), to = rowArg(_rows, _in, "to");
-			if(!from || !to)
-				return {};
-			if(isEnd(_rows[size_t(*from)]) || isEnd(_rows[size_t(*to)]))
-			{
-				_in.errors.push_back("END stays the last row");
-				return {};
-			}
-			std::vector<size_t> order(_rows.size());
-			for(size_t j = 0; j < order.size(); ++j)
-				order[j] = j;
-			const auto moved = order[size_t(*from)];
-			order.erase(order.begin() + *from);
-			order.insert(order.begin() + *to, moved);
-			std::vector<size_t> map(_rows.size());
-			for(size_t j = 0; j < order.size(); ++j)
-				map[order[j]] = j;
-			_rows = remapTargets(std::move(_rows), map);
-			Rows reordered;
-			for(const auto j : order)
-				reordered.push_back(_rows[j]);
-			return reordered;
-		}
-
-		const Edits<Rows>& songEdits()
-		{
-			static const Edits<Rows> edits{
-				{"copyRow", copyRow}, {"rowSet", rowSet}, {"rowInsert", rowInsert}, {"pasteRow", pasteRow},
-				{"rowDelete", rowDelete}, {"rowMove", rowMove}};
-			return edits;
-		}
+		const std::map<std::string, deskCore::songRows::Fn>& songEdits() { return deskCore::songRows::edits(); }
 
 		// A song edit runs on its contract rows; the song comes back through the codec.
-		std::optional<ed::MdSong> editSong(const ed::MdSong& _song, const EditFn<Rows> _fn, const In& _in)
+		std::optional<ed::MdSong> editSong(const ed::MdSong& _song, const deskCore::songRows::Fn _fn, const In& _in)
 		{
 			const auto doc = ed::songToJson(_song);
 			const auto* rowsValue = doc.find("rows");
 			const Rows rows = rowsValue ? rowsValue->asArray() : Rows{};
-			const auto edited = _fn(rows, _in);
+			const deskCore::songRows::Edit e{_in.a.command(), _in.errors, _in.note, _in.clip.songRow, ed::MdSong::g_maxRows};
+			const auto edited = _fn(rows, e);
 			if(!edited)
 				return {};
 			if(*edited == rows)
@@ -1263,10 +1083,13 @@ namespace mdDesk
 				_in.errors.push_back(slotName("song", s) + " is not loaded yet");
 				return {};
 			}
-			const auto fn = editFor(songEdits(), _op, _in.errors);
-			if(!fn)
+			const auto fn = songEdits().find(_op);
+			if(fn == songEdits().end())
+			{
+				_in.errors.push_back("no edit for command " + _op);	// a table row without its function
 				return {};
-			const auto after = editSong(it->second, *fn, _in);
+			}
+			const auto after = editSong(it->second, fn->second, _in);
 			if(!after)
 				return {};
 			return Edited{it->second, *after};
@@ -1379,11 +1202,11 @@ namespace mdDesk
 	{
 		if(_index >= 24)
 			return false;
-		const auto name = ed::mdMachineName(_model);
-		if(name.rfind("MID-", 0) == 0 || name.rfind("CTR-", 0) == 0)
+		const auto facts = ed::mdMachineFacts(_model);
+		if(!facts.audio)
 			return false;
 		// A RAM recorder's synthesis page is its recording setup: left out; its effects and routing move.
-		return name.rfind("RAM-R", 0) != 0 || _index >= 8;
+		return !facts.recorder || _index >= 8;
 	}
 
 	bool controlAllLeads(const uint32_t _model)

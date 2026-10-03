@@ -87,6 +87,17 @@ namespace mdJucePlugin
 		m_processor.addMidiEvent(event);
 	}
 
+	void StudioLink::sendChannel(const Bytes& _message) const
+	{
+		if(_message.size() != 3)
+			return;
+		synthLib::SMidiEvent event(synthLib::MidiEventSource::Editor);
+		event.a = _message[0];
+		event.b = _message[1];
+		event.c = _message[2];
+		m_processor.addMidiEvent(event);
+	}
+
 	void StudioLink::sendNote(const uint8_t _channel, const uint8_t _note, const uint8_t _velocity) const
 	{
 		synthLib::SMidiEvent event(synthLib::MidiEventSource::Editor);

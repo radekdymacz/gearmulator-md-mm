@@ -61,6 +61,7 @@ namespace elektronData::json
 		const Array& asArray() const { return m_array; }
 		Array& asArray() { return m_array; }
 		const Object& asObject() const { return m_object; }
+		Object& asObject() { return m_object; }
 
 		// Object access: nullptr when absent or not an object.
 		const Value* find(const std::string& _key) const;

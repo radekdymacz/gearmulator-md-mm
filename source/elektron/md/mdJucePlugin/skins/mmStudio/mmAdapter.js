@@ -4,20 +4,23 @@
    everything the machine does to its host, window.MMHost, which this file defines before the
    mockup loads: transport, patterns, the kit library, undo, tempo, mutes, the keyboard, the
    Control workspace's modulators and the AUDIO / MIDI panel. Nothing of the mockup is replaced.
-   Its view is used through window.MMView only: values to read, named setters, and
-   disable(capability, reason); never its state and never its markup (no DOM here:
-   sync-mmstudio-skin.py checks that).
+   Its view is used through window.MMView only: values to read, show(view) for the documents,
+   named setters for the rest, and disable(capability, reason); never its state and never its
+   markup (no DOM here: sync-mmstudio-skin.py checks that).
    - The plug-in publishes the core's documents (observed, or pending while an edit is on its
      way), keyed by the contract's kinds: pattern, kit (the stored slots), workingKit (the kit
      that plays), song, global; and the machine document, which says which slots are current.
-     They are shown in the view through MmConvert (the pure page <-> contract translation, its
-     enumerations from the catalogue).
-   - An edit is sent at its gesture as the intent the core takes for the Monomachine: the whole
-     document ({"op":"set","kind","doc","g"}) of each kind the gesture said it edited:
-     "workingKit" for the kit that plays, "kit" for a slot the library wrote (the plug-in decides
-     how a slot write reaches the machine). The send is keyed per document, so a drag's latest
-     value wins. The page does not compare documents: the core takes a document equal to its own
-     as no change. The gesture id g makes a drag one undo step; undo and redo are the core's (C++).
+     They are kept in one store (deskDocs.js) and shown as one derived view (mmView.js, through
+     MmConvert: the pure page <-> contract translation, its enumerations from the catalogue),
+     DESIGN-UNIFY.md phase 1.
+   - An edit is sent at its gesture as an intent the core applies to its own documents (DESIGN-UNIFY.md 4.1:
+     every gesture, host.intent; the library's slot ops, host.library): {op, args, g}, one vocabulary with the
+     Machinedrum Editor (mmDeskEdit.cpp), so a step the machine recorded meanwhile is never overwritten. What
+     it shows at once are the view writes MmView.writes makes of it (Overlay, owned by its id until answered;
+     a paste from the page's own copy of the core's clipboard); the mutes, POLY and the tempo likewise. A drag's
+     sends are keyed per what it moves, so its latest value wins. The gesture id g makes a gesture one undo
+     step; undo and redo are the core's (C++). The page never builds a document: a whole document ("set") is
+     the intent of an import, which is the plug-in's.
    - The plug-in asks before a command would lose something (the "ask" message); the page shows
      its words and sends the command again with force. The page asks nothing itself.
    - The Control workspace's LFO and Random sources run in the plug-in ("modSet", the "mod"
@@ -28,7 +31,6 @@
 	const C = () => MmConvert;
 	const send = (msg, opt) => Bridge.send(msg, opt);
 	const log = t => Bridge.log(t);
-	const now = () => performance.now();
 	/* documents are JSON values: equal when their members are */
 	function sameValue(a, b) {
 		if (a === b) return true;
@@ -42,188 +44,114 @@
 	let SYNTH_TRACKS = 6;
 	let SLOTS = 128;
 
-	/* ---------------- what the core shows ---------------- */
-	const KINDS = ["kit", "pattern", "song", "global"];
-	const DOCS = { pattern: [], kit: [], song: [], global: [] };	// by slot, as the plug-in published them
-	let working = null;		// the workingKit message: {slot, source, pending, doc}
-	let machine = null, catalogue = null, learn = null;
-	/* the current slot of a kind, from a machine document ({current} per kind; null: not known yet).
-	   One song and one global are always selected on the machine: slot 0 until it says. */
+	/* ---------------- what the core shows (DESIGN-UNIFY.md 4.3, 4.4) ---------------- */
+	/* The documents as the plug-in published them: one store (deskDocs.js), never written by a gesture, with
+	   the machine document. Over the view derived from them (mmView.js), until their commands are answered: the
+	   page's optimistic values (Overlay: each intent's writes, the mutes, POLY, the tempo). MMView.show is the
+	   one writer of the mockup's document members:  V = Overlay.over(MmView.derive(DOCS, ui)).
+	   An answer comes after the documents its command changed, so when it comes the entries go and the
+	   documents carry the edit, or, refused, show what the machine has. No clock, no gating. */
+	const KINDS = [{ kind: "pattern", at: "patterns" }, { kind: "kit", at: "kits" }, { kind: "song", at: "songs" },
+		{ kind: "global", at: "globals" }, { kind: "workingKit", working: "workingKit" }];
+	const STORE = docStore(KINDS);
+	const AT = { pattern: "patterns", kit: "kits", song: "songs", global: "globals" };
+	const noDocs = () => ({ patterns: {}, kits: {}, songs: {}, globals: {}, workingKit: null, sources: {}, machine: null });
+	let DOCS = noDocs();
+	let machine = null, catalogue = null, learn = null;	// machine: DOCS.machine, the machine document
+	const docs = () => DOCS;
+	/* the current slot of a kind (mmView.js's rule; here too: the mockup's first render asks before mmView.js is there) */
 	function slotIn(d, kind) {
 		const c = d && d[kind] ? d[kind].current : null;
 		return c != null ? c : kind === "song" || kind === "global" ? (d ? 0 : null) : null;
 	}
 	const cur = kind => slotIn(machine, kind);
-	const queuedIn = d => { const q = d?.pattern.queued; return q != null && q !== d.pattern.current ? q : null; };
-	/* the kit that plays: the working kit when it is the current slot's, else the stored slot (until
-	   the first working kit arrives, and while a kit change has not brought the new one yet) */
-	const kitNow = () => working && working.slot === cur("kit") ? working.doc : DOCS.kit[cur("kit")];
-	const globalNow = () => DOCS.global[cur("global")];
-	const last = { mute: [], muteMs: -1e9, poly: null, polyMs: -1e9, record: null, songs: "", plays: null, ready: false, readyLabel: "", caps: null, modSent: null, note: { g: 0, text: "" } };
+	const kitNow = () => { const d = docs(), k = cur("kit"); return k == null ? null : d.workingKit && d.workingKit.slot === k ? d.workingKit.doc : d.kits[k] || null; };
+	const globalNow = () => docs().globals[cur("global")];
 	/* the song the Song workspace edits (MM-P4): any of the 24; null = the machine's current one */
 	let songEdit = null;
 	const songSlot = () => songEdit ?? cur("song");
-	let synced = false;		// the view shows the machine (current pattern and working kit arrived)
-	const wantApply = new Set();	// the current kinds whose documents the view has not shown yet
+	const view = () => { const v = MmView.derive(docs(), { songEdit }); return Overlay.over(Overlay.size() ? MmView.own(v) : v); };
+	/* the view shows the machine: the catalogue (MmConvert's enumerations), the current pattern and the kit that plays */
+	const ready = () => !!catalogue && !!(docs().patterns[cur("pattern")] && kitNow());
+	const last = { record: null, ready: false, readyLabel: "", caps: null, modSent: null, note: { g: 0, text: "" } };
 	let gesture = Bridge.gesture();
-	let tempoInFlight = 0, modInFlight = 0;	// the id of a tempo or modSet command not answered yet
+	let modInFlight = 0;	// the id of a modSet command not answered yet
+	let clip = null;	// the page's copy of what the core's clipboard holds (MmView.copied): a paste shows at once
 	let audioDocument = null, audioError = "";
 	let lcdBits = null, lcdShown = null;	// the firmware's last LCD picture, and the one the view shows
 	let noRomShown = false;
+	let libDirty = false;	// a library slot changed: drawn when no gesture holds the page
+	let unsent = false;	// a gesture's edit could not go out (the view did not show the machine yet)
 	const readyHooks = [];
-	/* What a gesture edits when it does not name the document: the mockup's two edit kinds. */
-	const EDITS = { struct: ["pattern", "song"], sound: ["kit"] };
 
-	/* ---------------- the machine's documents -> the view ---------------- */
-	const kitPageOf = k => k === cur("kit") && synced ? V().captureKit() : V().kitSlot(k).data || (DOCS.kit[k] ? C().kitToPage(DOCS.kit[k], globalNow()) : null);
-	const lenOf = p => p === cur("pattern") && synced ? V().patternLength(p) : DOCS.pattern[p]?.length ?? V().patternLength(p);
-	/* what the view's state is as the contract's documents. b is that slot's own base (its
-	   firmware pass-through fields): never another slot's, even the current one's -- no base, no
-	   send (sendDoc shows why). */
-	function patDoc(p) {
-		const b = DOCS.pattern[p];
-		if (!b) return null;
-		const slot = V().patternSlot(p), data = p === cur("pattern") ? V().capturePat() : slot.data;
-		return data ? C().patternToFw(data, b, slot.kit, kitPageOf(slot.kit), p) : null;
+	/* the view, shown; all: every member written again (a reset, an edit the machine did not take) */
+	function refresh(all) {
+		if (!window.MMView || !catalogue) return;
+		V().show(view(), all);
+		if (libDirty && !V().busy()) { libDirty = false; V().drawLib(); }
+		showEngine();
 	}
-	function kitDoc(k) {
-		const b = k === cur("kit") ? kitNow() : DOCS.kit[k];
-		if (!b) return null;
-		if (k === cur("kit")) return C().kitToFw(V().captureKit(), b, V().workName(), k);
-		const s = V().kitSlot(k);
-		return C().kitToFw(s.data || V().clearedKit(), b, s.empty ? "" : s.name, k);
+	/* a command's answer: its entries leave; a refused one shows the documents again */
+	function answered(r) {
+		const had = Overlay.answered(r.id);
+		refresh(!r.ok && had);
 	}
-	const songDoc = () => DOCS.song[songSlot()] ? C().songToFw(V().song(), DOCS.song[songSlot()], lenOf) : null;
-	const globDoc = () => globalNow() ? C().globalToFw(globalNow(), V().routing(), V().midiTracks(), V().multiMap()) : null;
 
+	/* ---------------- the machine's documents -> the library's other slots ---------------- */
+	/* a kit as the page shows it, for a stored pattern's locks (the kit that plays: its working kit) */
+	const kitPageOf = k => { const d = MmView.kitDocOf(docs(), k); return d ? C().kitToPage(d, globalNow()) : null; };
+
+	/* a stored slot the library shows (the current pattern is the view's: MMView.show) */
 	function setSlotPattern(p) {
-		const d = DOCS.pattern[p];
+		const d = docs().patterns[p];
 		if (!d || p === cur("pattern") || !catalogue) return;
 		V().setPatternSlot(p, { data: C().patternToPage(d, kitPageOf(d.kit)), kit: d.kit, has: C().hasTrigs(d), len: d.length });
+		libDirty = true;
 	}
 	function setSlotKit(k) {
-		const d = DOCS.kit[k];
-		if (!catalogue) return;
+		const d = docs().kits[k];
+		if (!d || !catalogue) return;
 		V().setKitSlot(k, { name: C().kitName(d), empty: C().kitEmpty(d), data: C().kitToPage(d, globalNow()) });
-	}
-	/* the kit state is the machine's (machine.kit.working: "unknown" | "clean" | "edited"),
-	   never a guess of the page -- "unknown" stays its own state, never folded into "clean" */
-	const kitState = () => machine?.kit.working || "unknown";
-	function applyCurrentKit() {
-		const d = kitNow();
-		V().setWorkingKit(C().kitToPage(d, globalNow()), C().kitName(d));
-		if (machine) V().setKitState(kitState());
-	}
-	function applyCurrentPattern() {
-		const d = DOCS.pattern[cur("pattern")];
-		V().setPatternSlot(cur("pattern"), { data: C().patternToPage(d, V().captureKit()), kit: d.kit, has: C().hasTrigs(d), len: d.length });
-	}
-	const applyCurrentSong = () => V().setSong(C().songToPage(DOCS.song[songSlot()], lenOf), songSlot());
-	/* the 24 songs for the Song workspace's picker: the one edited and the machine's */
-	function showSongs() {
-		const names = Array.from({ length: 24 }, (_, i) => DOCS.song[i] ? (C().kitEmpty(DOCS.song[i]) ? "EMPTY" : C().kitName(DOCS.song[i])) : "…");
-		const v = { names, slot: songSlot(), current: cur("song") };
-		if (JSON.stringify(v) === last.songs) return;
-		last.songs = JSON.stringify(v);
-		V().setSongs(v);
-	}
-	function applyCurrentGlobal() {
-		const g = globalNow();
-		V().setRouting(g.routingMode);
-		V().setMidiTracks(g.midiSeq.channels.map((c, t) => ({ ch: c + 1, cc: [...g.midiSeq.ccs[t]] })));
-		mapFromGlobal(g);
-	}
-	/* ---- MULTI MAP: the global's ranges (MULTIMAP EDIT, MM-P4) ---- */
-	function mapFromGlobal(g) {
-		if (g.multiMap) V().setMultiMap(C().mapToPage(g));
-	}
-
-	/* Show what the core holds, unless the user is in a gesture, a dialog or a library edit (the
-	   gesture's own documents are already on their way; the core then shows them). The view needs
-	   the catalogue first: MmConvert's enumerations come from it. */
-	function applyPending() {
-		if (!wantApply.size || !catalogue) return;
-		if (DOCS.pattern[cur("pattern")] == null || kitNow() == null) return;
-		if (synced && (V().busy() || V().dialogOpen() || V().libBusy())) return;
-		const kinds = [...wantApply];
-		wantApply.clear();
-		/* the kit first: the pattern's locks read their machines from it */
-		const kit = kinds.includes("kit"), song = kinds.includes("song") && DOCS.song[songSlot()], glob = kinds.includes("global") && globalNow();
-		if (kit) applyCurrentKit();
-		if (kinds.includes("pattern") || kit) applyCurrentPattern();
-		if (song) applyCurrentSong();
-		if (glob) applyCurrentGlobal();
-		if (!synced) {
-			synced = true;
-			for (let i = 0; i < SYNTH_TRACKS; i++) last.mute[i] = !V().audible(i);
-		}
-		V().autoRange(V().sel());
-		V().render();
-		V().drawLib();
-		showEngine();
+		libDirty = true;
 	}
 
 	/* the library slots not read yet */
 	function markReading() {
-		for (const kind of ["pattern", "kit"]) V().setReading(kind, [...Array(SLOTS).keys()].filter(s => !DOCS[kind][s]));
+		for (const kind of ["pattern", "kit"]) V().setReading(kind, [...Array(SLOTS).keys()].filter(s => !DOCS[AT[kind]][s]));
 	}
 	/* the stored slots the view shows once the catalogue is there */
 	function showSlots() {
-		DOCS.kit.forEach((d, k) => d && setSlotKit(k));
-		DOCS.pattern.forEach((d, p) => d && setSlotPattern(p));
-		libDirty = true;
+		Object.keys(DOCS.kits).forEach(k => setSlotKit(+k));
+		Object.keys(DOCS.patterns).forEach(p => setSlotPattern(+p));
 	}
 	function onDoc(m) {
-		const { kind, slot, doc } = m;
-		if (kind === "workingKit") {
-			working = { slot, source: m.source, pending: !!m.pending, doc };
-			if (slot === cur("kit")) wantApply.add("kit");
-		}
-		else if (DOCS[kind]) {
-			const first = !DOCS[kind][slot];
-			DOCS[kind][slot] = doc;
-			if (kind === "pattern") { if (slot === cur("pattern")) wantApply.add("pattern"); else setSlotPattern(slot); }
-			else if (kind === "kit") { setSlotKit(slot); if (slot === cur("kit") && !(working && working.slot === slot)) wantApply.add("kit"); }
-			else if (kind === "song") { if (slot === songSlot()) wantApply.add(kind); if (catalogue) showSongs(); }
-			else if (slot === cur(kind)) wantApply.add(kind);
-			if (first && (kind === "pattern" || kind === "kit")) markReading();
-		}
+		const { kind } = m;
+		const first = AT[kind] && !DOCS[AT[kind]][m.slot];
+		const slot = storeDoc(DOCS, m, STORE);
+		if (slot == null) return;
+		if (kind === "pattern") setSlotPattern(slot);
+		else if (kind === "kit") setSlotKit(slot);
 		/* the patterns that play this kit read their locks' machines from it */
 		if (kind === "kit" || kind === "workingKit")
-			DOCS.pattern.forEach((d, p) => { if (d && d.kit === slot) setSlotPattern(p); });
-		libDirty = true;
-		/* the current documents are shown right away (the 120 ms timer only catches up after a gesture) */
-		if (wantApply.size && !applyT) applyT = setTimeout(() => { applyT = 0; applyPending(); }, 0);
+			Object.entries(DOCS.patterns).forEach(([p, d]) => { if (d.kit === slot) setSlotPattern(+p); });
+		if (first && (kind === "pattern" || kind === "kit")) markReading();
+		refresh();
 	}
-	let applyT = 0;
-	let libDirty = false;
 
 	function onMachine(d) {
 		const prev = machine;
-		machine = d;
-		const changed = kind => slotIn(d, kind) != null && slotIn(d, kind) !== slotIn(prev, kind);
-		if (changed("kit")) { V().setCurrent({ kit: cur("kit") }); if (kitNow()) wantApply.add("kit"); }
-		if (changed("pattern")) {
-			const old = slotIn(prev, "pattern");
-			V().setCurrent({ pattern: cur("pattern") });
-			if (old != null) setSlotPattern(old);
-			if (DOCS.pattern[cur("pattern")]) wantApply.add("pattern");
-		}
-		if (changed("song")) { if (songEdit === cur("song")) songEdit = null; if (songEdit == null && DOCS.song[cur("song")]) wantApply.add("song"); }
-		if (changed("global") && DOCS.global[cur("global")]) wantApply.add("global");
-		if (catalogue) showSongs();
-		machineStates(d);
-		showPlays(d);
-		if (queuedIn(d) !== queuedIn(prev)) { V().setQueued(queuedIn(d)); V().renderTop(); V().drawLib(); }
+		DOCS.machine = machine = d;
+		const old = slotIn(prev, "pattern");
+		if (old != null && old !== cur("pattern")) setSlotPattern(old);	// the pattern that played goes back to the library
+		if (slotIn(prev, "song") !== cur("song") && songEdit === cur("song")) songEdit = null;
+		if ((d.pattern?.queued ?? null) !== (prev?.pattern?.queued ?? null)) libDirty = true;
 		/* whether the machine takes input (as the MD page gates: machine.input, not a lifecycle
 		   guess) -- playing is telemetry's only, never the machine document's (P6) */
 		V().setInput(!!d.input);
-		/* the machine's tempo (RAM), unless a tempo the user set is still on its way */
-		if (!tempoInFlight && d.tempo != null && d.tempo !== V().tempo()) { V().setTempo(d.tempo); V().renderTop(); }
-		if (synced) V().setKitState(kitState());
 		host.renderPst();
 		V().setEngines(d.engines || [], d.capabilities?.engine);
 		markCapabilities(d.capabilities);
+		refresh();
 		showEngine();
 		V().renderTop();
 	}
@@ -236,75 +164,63 @@
 		for (const cap of V().gated()) V().disable(cap, can[cap] === true ? "" : why[cap] || "Not available with this engine.");
 	}
 
-	/* MM-P8: what the machine plays, for the Song page (its header and CHAIN's Plays line): its own chain
-	   (machine.desk.chain, from RAM; null where not readable), song mode and the machine's song */
-	function showPlays(d) {
-		const v = { chain: d.desk?.chain ?? null, songMode: d.song?.songMode === true, song: d.song?.current ?? 0 };
-		if (sameValue(v, last.plays)) return;
-		last.plays = copy(v);
-		V().setPlays(v);
-	}
-
-	/* MM-P4: the machine's own mutes (RAM; made on its panel too) and POLY, unless the page's own change is
-	   still on its way or a solo holds (the solo drives the mutes) */
-	function machineStates(d) {
-		if (d.mutes && now() - last.muteMs > 1200 && !V().soloed() && !V().busy()) {
-			const bits = [d.mutes.synth, d.mutes.midi];
-			const list = Array.from({ length: 12 }, (_, i) => { const b = bits[i < 6 ? 0 : 1]; return b == null ? null : !!((b >> (i % 6)) & 1); });
-			list.forEach((m, i) => { if (m != null) last.mute[i] = m; });
-			V().setMutes(list);
-		}
-		if (d.poly != null && now() - last.polyMs > 1500) {
-			last.poly = d.poly;
-			const mode = V().mode();
-			if (d.poly && mode !== "poly") V().setMode("poly");
-			else if (!d.poly && mode === "poly") V().setMode("normal");
-		}
-	}
-
 	/* the plug-in's engine changed (HW MIDI or the emulator): its documents start over */
 	function onReset() {
-		for (const k of KINDS) DOCS[k] = [];
-		working = null;
+		DOCS = noDocs();
 		machine = null;
 		songEdit = null;
-		last.record = last.poly = null;
-		last.songs = "";
-		last.plays = null;
-		synced = false;
-		wantApply.clear();
+		clip = null;
+		Overlay.clear();
+		last.record = null;
 		last.ready = false;
 		lcdBits = null;
-		if (window.MMView) V().setInput(false);
+		if (window.MMView) { V().setInput(false); V().show(null, true); }
 		markReading();
 		showEngine();
 	}
 
 	/* ---------------- the view -> the core: at the gesture ---------------- */
 	/* the view shows the machine and the machine takes input: an edit can go out */
-	const canSend = () => synced && !!catalogue && V().engReady();
-	function sendDoc(kind, doc, slot) {
-		/* no base document for this slot (patDoc/kitDoc): never borrow another slot's, and never
-		   send silently -- the same reason the library shows while a slot is still coming in */
-		if (!doc) { V().toast("Still reading this slot from the machine."); log("no base for " + kind + " " + slot + ": not sent"); return; }
-		const g = gesture;
-		send({ op: "set", kind, doc, g }, { key: kind + ":" + slot, onResult: r => {
-			if (!r.ok) { V().toast(r.errors[0] || "The machine did not take it."); log("set " + kind + " " + slot + ": " + r.errors.join("; ")); }
-			else note(r.note, g);
-		} });
-	}
+	const canSend = () => ready() && V().engReady();
 	/* a result's note, once a gesture */
 	function note(t, g) {
 		if (!t || (last.note.g === g && last.note.text === t)) return;
 		last.note = { g, text: t };
 		V().toast(t);
 	}
-	/* the working set's documents of one kind, built from the view now */
-	function sendKind(kind) {
-		if (kind === "kit") sendDoc("workingKit", kitDoc(cur("kit")), cur("kit"));	// the kit that plays goes live (CC, NRPN, machine, routing, name)
-		else if (kind === "pattern") sendDoc("pattern", patDoc(cur("pattern")), cur("pattern"));
-		else if (kind === "song") sendDoc("song", songDoc(), songSlot());
-		else if (kind === "global") sendDoc("global", globDoc(), cur("global"));
+	/* a command whose value the view shows at once (the mutes, POLY, the tempo): [path, value] writes owned by its id */
+	function expect(id, writes) { Overlay.add(id, writes); }
+
+	/* ---------------- edit intents (DESIGN-UNIFY.md 4.1) ---------------- */
+	/* a drag's latest value replaces its waiting one (per what it moves); a click is its own command */
+	const fields = c => Object.keys(c).filter(k => !["op", "p", "k", "s", "g", "id"].includes(k)).sort();
+	const KEYED = { level: c => c.t, param: c => [c.t, c.page, c.i], lock: c => [c.t, c.page, c.i, c.s], step: c => [c.t, c.s],
+		arp: c => [c.t, c.field, c.i], transpose: c => [c.t, c.v != null, c.scale != null, c.key != null], length: () => 0, swing: () => 0,
+		speed: () => 0, routing: () => 0, midiTrack: c => [c.t, c.ch != null], steps: c => [c.from, c.to, c.rows.map(r => r.t)],
+		params: () => 0, assign: c => [c.t, c.src, c.row, fields(c)], multiEnv: c => c.i, multiTrig: fields, kitName: () => 0,
+		multiMap: c => [c.i, fields(c)], rowSet: c => c.i };
+	/* the documents an intent's values come from (MmView.toFw): the pattern and the kit that play, the song edited */
+	const fwDocs = () => ({ pattern: docs().patterns[cur("pattern")], kit: kitNow(), song: docs().songs[songSlot()] });
+	/* an edit intent of a gesture: sent with the gesture's id, shown at once (MmView.writes, Overlay) until its
+	   answer, which comes after the documents it changed; refused: the view shows the documents again. The op
+	   names its document (MmView.kindOf): the kit that plays gets k, a song row op s (the song the Song workspace
+	   edits), a pattern op p; the global's and the library's ops name their own. */
+	function intent(op, args) {
+		if (!canSend()) { unsent = true; return; }
+		const g = gesture, v = view(), kind = MmView.kindOf(op), c = MmView.toFw(Object.assign({ op }, structuredClone(args)), v, fwDocs());
+		if (kind === "kit") c.k = cur("kit");
+		else if (kind === "song") c.s = songSlot();
+		else if (kind === "pattern") c.p = cur("pattern");
+		c.g = g;
+		const key = KEYED[op] ? op + ":" + JSON.stringify(KEYED[op](c)) : null;
+		const id = send(c, { key, onResult: r => {
+			answered(r);
+			if (!r.ok) { V().toast(r.errors[0] || "The machine did not take it."); log(op + ": " + r.errors.join("; ")); }
+			else note(r.note, g);
+		} });
+		clip = MmView.copied(v, c) || clip;
+		Overlay.add(id, MmView.writes(v, c, clip), docOf(op, c));
+		refresh();
 	}
 
 	/* ---------------- the Control workspace's modulators: run by the plug-in ---------------- */
@@ -338,7 +254,7 @@
 	   editors) shows while the machine takes no input yet or the view is still reading it */
 	function showLcd() {
 		if (!window.MMView) return;
-		const want = lcdBits && (!machine || !machine.input || !synced) ? lcdBits : null;
+		const want = lcdBits && (!machine || !machine.input || !ready()) ? lcdBits : null;
 		if (want === lcdShown) return;
 		lcdShown = want;
 		V().setLcd(want);
@@ -352,7 +268,7 @@
 		   and while the library fills in the background it says how far; what a state means is the
 		   plug-in's words (machine.lifecycleText) */
 		const caps = machine?.capabilities, life = LIFE[machine?.lifecycle || "loading"] || "boot";
-		const st = life === "ready" && !synced ? "sync" : life;
+		const st = life === "ready" && !ready() ? "sync" : life;
 		if (caps) {
 			/* the engine's own label only: the background read is in the sync slot (renderPst) */
 			const text = caps.label;
@@ -382,7 +298,6 @@
 	const trackChannel = t => { const c = chan(); const ch = c ? c.base + t : -1; return ch >= 0 && ch < 16 ? ch : null; };
 	const midi = (b, key) => send({ op: "midi", b }, key ? { key } : {});
 	let held = null;
-	const keysHeld = new Map();	// the home row's sounding notes: "t:n" -> the channel their note on went to
 	function noteOff() { if (held) { midi([0x80 | held.ch, held.n, 0]); held = null; } }
 	function joySend(x, y) {
 		const ch = trackChannel(V().asgT());
@@ -462,18 +377,20 @@
 		   was lost (useCatalogue threw), so every document showed the enumerations as raw firmware
 		   values (LFO PAGE 15 for SYN) and Sound threw on such a track. The page speaks only once
 		   MmConvert is there. */
-		start() { const go = () => typeof MmConvert === "undefined" ? setTimeout(go, 0) : init(); go(); },
-		edited(what, kind) {
-			if (what === "commit") {
-				/* the gesture ended: the next edit is a new undo step, and the view may show the core again */
-				gesture = Bridge.gesture();
-				applyPending();
-				return;
-			}
-			if (canSend()) for (const k of kind ? [kind] : EDITS[what] || []) sendKind(k);
+		start() { const go = () => typeof MmConvert === "undefined" || typeof MmView === "undefined" ? setTimeout(go, 0) : init(); go(); },
+		/* the gesture ended: the next edit is a new undo step; the drawing it held comes now, and an edit that
+		   could not go out is undone on the screen (the view shows the documents again) */
+		commit() {
+			gesture = Bridge.gesture();
+			refresh(unsent);
+			unsent = false;
 		},
-		/* a library gesture wrote a slot: that slot's document, as "kit" or "pattern" */
-		slotWritten(kind, slot) { if (canSend()) sendDoc(kind, kind === "kit" ? kitDoc(slot) : patDoc(slot), slot); },
+		/* a gesture's edit intent (op and arguments in the contract's vocabulary; knob and lock values and song rows
+		   in the page's units), DESIGN-UNIFY.md 4.1 */
+		intent(op, args) { intent(op, args); },
+		/* the library's slot ops (kitCopy ... patClear, kitRename): intents too; what they would lose the machine
+		   asks first (the "ask" message), and the result brings the slots */
+		library(op, args) { intent(op, args); },
 		undo() { send({ op: "undo" }, { onResult: r => r.ok ? V().toast(r.note || "Undo") : V().toast(r.errors[0]) }); },
 		redo() { send({ op: "redo" }, { onResult: r => r.ok ? V().toast(r.note || "Redo") : V().toast(r.errors[0]) }); },
 		history() { const h = machine?.history; return { undo: h?.undoCount || 0, redo: h?.redoCount || 0 }; },
@@ -486,31 +403,33 @@
 			else if (op === "load") send({ op: "loadKit", k }, { onResult: noteOf });
 			else if (op === "saveAs") send({ op: "saveKit", k }, { onResult: noteOf });
 		},
-		/* the machine's tempo: the machine document's tempo is shown again once this is answered */
+		/* the machine's tempo: shown at once (Overlay); the machine document says it from when the core took it
+		   until its memory does (deskCore::FieldExpectation) */
 		tempo(bpm) {
-			tempoInFlight = send({ op: "tempo", bpm }, { key: "tempo", onResult: r => { if (r.id === tempoInFlight) tempoInFlight = 0; } });
+			expect(send({ op: "tempo", bpm }, { key: "tempo", onResult: answered }), [[["bpm"], bpm]]);
 		},
 		mutes() {
 			/* mutes and solos: the synth tracks' mute parameters (CC 3); the MIDI tracks' MUTE window (MM-P4),
-			   where the engine can reach it (machine.capabilities) */
-			last.muteMs = now();
+			   where the engine can reach it (machine.capabilities). A track is sent when the page's differs from the
+			   machine's (the view's: memory, or what the core expects; not known: sent) */
+			const machineMutes = view().mutes || [];
 			for (let i = 0; i < SYNTH_TRACKS; i++) {
 				const off = !V().audible(i);
-				if (off !== last.mute[i]) { last.mute[i] = off; send({ op: "mute", t: i, on: off }); }
+				if (off !== machineMutes[i]) expect(send({ op: "mute", t: i, on: off }, { onResult: answered }), [[["mutes", i], off]]);
 			}
-			if (machine?.capabilities?.can?.midiMutes !== true) return;
-			for (let i = 0; i < 6; i++) {
-				const t = SYNTH_TRACKS + i, off = !V().audible(t);
-				if (off !== last.mute[t]) { last.mute[t] = off; send({ op: "muteMidi", t: i, on: off }, { onResult: r => { if (!r.ok) V().toast(r.errors[0]); } }); }
-			}
+			if (machine?.capabilities?.can?.midiMutes === true)
+				for (let i = 0; i < 6; i++) {
+					const t = SYNTH_TRACKS + i, off = !V().audible(t);
+					if (off !== machineMutes[t]) expect(send({ op: "muteMidi", t: i, on: off }, { onResult: r => { answered(r); if (!r.ok) V().toast(r.errors[0]); } }), [[["mutes", t], off]]);
+				}
+			refresh();
 		},
 		/* POLY is the machine's audio mode (SET STATUS 0x20): entering or leaving it */
 		keyMode(mode) {
 			const poly = mode === "poly";
-			if (poly === last.poly) return;
-			last.poly = poly;
-			last.polyMs = now();
-			send({ op: "poly", on: poly }, { onResult: noteOf });
+			if (poly === view().poly) return;
+			expect(send({ op: "poly", on: poly }, { onResult: r => { answered(r); noteOf(r); } }), [[["poly"], poly]]);
+			refresh();
 		},
 		/* the RECORD key: stopped = GRID RECORDING, playing = LIVE RECORDING, recording = off; live (Alt+Space,
 		   RECORD + PLAY): LIVE RECORDING also when stopped (the machine starts playing) */
@@ -524,9 +443,8 @@
 		/* the Song workspace: another of the 24 songs to edit; LOAD SONG makes it the machine's */
 		songSlot(slot) {
 			songEdit = slot === cur("song") ? null : slot;
-			if (DOCS.song[slot]) { applyCurrentSong(); V().render(); }
-			else send({ op: "load", kind: "song", slot });
-			showSongs();
+			if (!DOCS.songs[slot]) send({ op: "load", kind: "song", slot });
+			refresh();
 		},
 		/* MM-P8: the machine's pattern chain (the Song palette's CHAIN), and its end */
 		chain(patterns) {
@@ -552,20 +470,11 @@
 			V().setKeyDown(n, `${what} · ${V().noteName(n)} · MIDI channel ${ch + 1}`);
 		},
 		keyUp() { noteOff(); },
-		/* the home row (MM-PORT-PLAN.md b): a note on (vel 1-127) or off (0) for synth track t on its own MIDI
-		   channel (GLOBAL › MIDI › CHANNELS: base + t, while t < span); the off goes where its on went */
-		noteKey(t, n, vel) {
-			const key = t + ":" + n;
-			if (!vel) { const ch = keysHeld.get(key); if (ch != null) { keysHeld.delete(key); midi([0x80 | ch, n, 0]); } return; }
-			const c = chan(), ch = c && t < SYNTH_TRACKS && t < c.span ? c.base + t : -1;
-			if (!(ch >= 0 && ch < 16)) {
-				V().toast(c ? `T${t + 1} has no MIDI channel of its own: CHANNEL SPAN is ${c.span} (GLOBAL › MIDI › CHANNELS).` : "The global is not read yet.");
-				return;
-			}
-			if (keysHeld.has(key)) midi([0x80 | keysHeld.get(key), n, 0]);
-			keysHeld.set(key, ch);
-			midi([0x90 | ch, n, vel]);
-		},
+		/* the home row, the piano roll's and the transpose keyboard's keys: the note intent, as on the MD
+		   (noteOn / noteOff, mm-data-contract.md). The core plays synth track t's note on its own MIDI channel
+		   (GLOBAL › MIDI › CHANNELS: base + t, while t < span) and says why not when it cannot */
+		noteOn(t, pitch, vel) { send({ op: "noteOn", t, vel, pitch }, { onResult: r => { if (!r.ok) V().toast(r.errors[0]); } }); },
+		noteOff(t, pitch) { send({ op: "noteOff", t, pitch }); },
 		joy(xy) { joySend(xy.x, xy.y); },
 		learning(on) { if (!on) send({ op: "learnCancel" }); },
 		learnTarget(lt) {
@@ -635,8 +544,8 @@
 	   ready. */
 	window.MMPage = {
 		inspect() {
-			return { machine: copy(machine), workingKit: copy(working), learn: copy(learn), catalogue: copy(catalogue),
-				doc: (kind, slot) => copy(DOCS[kind]?.[slot]), slots: kind => DOCS[kind] ? DOCS[kind].map((d, s) => d ? s : -1).filter(s => s >= 0) : [] };
+			return { machine: copy(machine), workingKit: copy(DOCS.workingKit), learn: copy(learn), catalogue: copy(catalogue),
+				doc: (kind, slot) => copy(DOCS[AT[kind]]?.[slot]), slots: kind => DOCS[AT[kind]] ? Object.keys(DOCS[AT[kind]]).map(Number).sort((a, b) => a - b) : [] };
 		},
 		whenReady(f) { if (last.ready) f(); else readyHooks.push(f); }
 	};
@@ -646,15 +555,10 @@
 		const v = V();
 		/* start empty, not with the mockup's example */
 		v.startEmpty();
-		for (let i = 0; i < SYNTH_TRACKS; i++) last.mute[i] = !v.audible(i);
 		markReading();
 		Bridge.onMessage(m => {
 			try { onMessage(m); } catch (e) { log("page error in " + m.type + ": " + e.message + " " + (e.stack || "").split("\n")[0]); }
 		});
-		setInterval(() => {
-			applyPending();
-			if (libDirty && !v.busy()) { libDirty = false; v.drawLib(); }
-		}, 120);
 		v.setAudioEntry(false);
 		v.setEng("loading");
 		send({ op: "audio" });
@@ -668,8 +572,7 @@
 		const off = C().useCatalogue(doc);
 		if (off.length) log("catalogue: the page's tables differ: " + off.join("; "));
 		showSlots();
-		showSongs();
-		applyPending();
+		refresh(true);
 	}
 	function onMessage(m) {
 		if (m.type === "doc") onDoc(m);

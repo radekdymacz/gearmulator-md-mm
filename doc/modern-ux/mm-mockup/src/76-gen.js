@@ -5,8 +5,9 @@
    the selected track, the pattern or the kit) is one gesture, one undo step: the commits after each click wait
    (genHeld, like rotate's rotHold) until the run ends, on another context, any other edit, undo or redo. Each change
    generates from the run's base, the pattern before it, so a value moved back gives its steps back. The results
-   come from the pure functions (mdDeskGen.js's GEN block, 52-gen.js); here they become the view's own state, and
-   structEdited() / soundEdited() hand the whole document to the host. Alt is the global "all": Alt + a GEN change
+   come from the pure functions (skins/shared/deskGen.js, 52-gen.js); here they become the view's own state, and
+   GEN's are the steps intent of the tracks it wrote (their steps, slides and locks over the range, so a value moved
+   back gives its steps back); MUTATE's are the params intent of the values it moved. Alt is the global "all": Alt + a GEN change
    every track of the side shown over the whole pattern, Alt+R every track (Sound: every synth track). ===== */
 S.gen={specs:null,last:[],m:[],run:null};
 S.mut={amount:20,seed:genSeed(),scope:new Set(["SYN"]),trial:null,note:""};
@@ -25,10 +26,9 @@ const genEdited=(t=S.sel)=>{S.gen.last[t].edited=true};
 function genRange(all){const[a,b]=vis();return all?[0,S.len]:[a,Math.min(b,S.len)]}
 /* a run or a trial with changes in the context shown holds the commits: one undo step */
 function genHeld(){return !!(S.gen&&((S.gen.run?.applied&&S.gen.run.key===genKey())||(S.mut.trial?.applied&&S.mut.trial.key===mutKey())))}
-/* the run or the trial ends: its gesture closes (a host: the next edit is a new undo step; on its own the mockup
-   takes the state after the run's last change as its undo step) */
+/* the run or the trial ends: its gesture closes (the next edit is a new undo step) */
 function genEnd(){if(!S.gen)return;const r=S.gen.run,m=S.mut.trial,live=(r&&r.applied)||(m&&m.applied);S.gen.run=null;S.mut.trial=null;S.mut.note="";if(!live)return;
- if(HOST.edited){S.genEnding=true;try{HOST.edited("commit")}finally{S.genEnding=false}return}const after=(m&&m.after)||(r&&r.after);if(after&&after!==H.last){H.undo.push(H.last);if(H.undo.length>200)H.undo.shift();H.redo=[];H.last=after;renderTop()}}
+ S.genEnding=true;try{if(HOST.commit)HOST.commit()}finally{S.genEnding=false}}
 function genStale(){if(S.gen&&((S.gen.run&&S.gen.run.key!==genKey())||(S.mut.trial&&S.mut.trial.key!==mutKey())))genEnd()}
 /* a run's base: every track's steps, slides and locks before the run */
 function genBase(){return[...Array(12).keys()].map(t=>{const tr=trk(t);return{steps:tr.steps.map(x=>x&&JSON.parse(JSON.stringify(x))),slide:new Set(tr.slide),
@@ -47,12 +47,11 @@ function genWrite(t,from,to,run){const b=run.base[t],tr=trk(t),r=mmGenSteps(genS
 function genLive(all=S.alt){
  if(S.rec){toast("The generators wait while the machine records live.");return false}
  genStale();genStart(genKey());
- const run=genRunFor(S.gen.run,genKey(),genBase,()=>0),[from,to]=genRange(all);let n=0;
- for(const t of all?side():[S.sel])if(genWrite(t,from,to,run))n++;
- if(!n){toast(all?"Every track is set to keep: nothing to generate.":`${tLabel(S.sel)} is set to keep.`);genDraw();return false}
+ const run=genRunFor(S.gen.run,genKey(),genBase,()=>0),[from,to]=genRange(all),wrote=[];
+ for(const t of all?side():[S.sel])if(genWrite(t,from,to,run))wrote.push(t);
+ if(!wrote.length){toast(all?"Every track is set to keep: nothing to generate.":`${tLabel(S.sel)} is set to keep.`);genDraw();return false}
  S.gen.run=run;run.applied++;
- S.genOwn=true;try{structEdited("pattern")}finally{S.genOwn=false}
- if(!HOST.edited)run.after=snap();
+ S.genOwn=true;try{edit("steps",{from,to,rows:wrote.map(t=>rangeRow(t,from,to,true))})}finally{S.genOwn=false}
  autoRange(S.sel);if(S.ws==="seq")rerenderSeq();else renderTop();
  return true}
 /* the result of a track's spec for the summary: its trigs over the range from the run's base (or now) */
@@ -150,8 +149,8 @@ function mutApply(all){
  for(const k of tr.touched)if(!now.has(k)){const[t,pg,i]=k.split(":");values.push([+t,pg,+i,tr.base[+t].v[pg][+i]])}
  if(!values.length){toast("Nothing to move here: no knobs in that scope.");return}
  for(const[t,pg,i,v] of values){S.tracks[t].v[pg][i]=v;const k=t+":"+pg+":"+i;v!==tr.base[t].v[pg][i]?tr.touched.add(k):tr.touched.delete(k)}
- S.genOwn=true;try{soundEdited("kit")}finally{S.genOwn=false}
- tr.applied++;if(!HOST.edited)tr.after=snap();
+ S.genOwn=true;try{edit("params",{values:values.map(([t,pg,i,v])=>[t,PAGES.indexOf(pg),i,v])})}finally{S.genOwn=false}
+ tr.applied++;
  const moved=new Set(values.map(([t])=>t)).size;S.mut.note=`seed ${S.mut.seed} · ${moved} track${moved===1?"":"s"}, ${values.length} values`;
  if(S.ws==="sound")render();else{renderTop();toast(`MUTATE: ${all?"every synth track":tLabel(S.sel)}, ${S.mut.note}.`)}}
 /* amount or scope moved during a trial: heard at once, the same seed */

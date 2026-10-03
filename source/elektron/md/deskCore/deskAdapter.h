@@ -136,6 +136,35 @@ namespace deskCore
 		}
 	};
 
+	// The same idea for one machine field read from memory (DESIGN-UNIFY.md 4.4: a mute, POLY, the
+	// tempo): the value a command set is what the machine document says from the moment the command
+	// is taken, until memory shows it (settled) or until memory has disagreed for _settleMs (given up:
+	// memory wins, so a press on the machine's panel shows). The clock is the caller's (the session's
+	// step clock; a fake one in tests). Pure.
+	template<typename T>
+	struct FieldExpectation
+	{
+		std::optional<T> to;
+		double atMs = 0;
+
+		static FieldExpectation sent(const T& _value, const double _nowMs) { return {_value, _nowMs}; }
+		// still waiting for memory to show it
+		bool holds(const std::optional<T>& _memory, const double _nowMs, const double _settleMs) const
+		{
+			return to && !(_memory && *_memory == *to) && _nowMs - atMs < _settleMs;
+		}
+		// what the machine says now (nullopt: not known)
+		std::optional<T> shown(const std::optional<T>& _memory, const double _nowMs, const double _settleMs) const
+		{
+			return holds(_memory, _nowMs, _settleMs) ? to : _memory;
+		}
+		// memory was read: settled or given up, nothing is expected any more
+		FieldExpectation observed(const std::optional<T>& _memory, const double _nowMs, const double _settleMs) const
+		{
+			return holds(_memory, _nowMs, _settleMs) ? *this : FieldExpectation{};
+		}
+	};
+
 	// What a dump that arrives means for the push of its document (P6: one policy for every
 	// adapter).
 	enum class ReadBackAction : uint8_t

@@ -27,7 +27,8 @@ namespace mdJucePlugin
 		constexpr double g_memoryMs = 32;
 	}
 
-	// A Monomachine engine also plays the page's keyboard and joystick (channel messages).
+	// A Monomachine engine also plays the on-screen keyboard's MULTI TRIG / MULTI MAP keys and the joystick (channel
+	// messages); the keyboard's notes are the desk's noteOn (the port's sendNote).
 	class MmEngine : public Engine<mmDesk::Desk>
 	{
 	public:
@@ -55,6 +56,10 @@ namespace mdJucePlugin
 			p.sendNrpn = [this](const uint8_t _t, const uint8_t _p, const uint8_t _v) { m_link.sendNrpn(_t, _p, _v); };
 			p.pressKeys = [this](const std::vector<mmDesk::Key>& _k) { return m_link.pressKeys(_k); };
 			p.pressBankTrigs = [this](const uint8_t _b, const std::vector<uint8_t>& _t) { return m_link.pressBankTrigs(_b, _t); };
+			p.sendNote = [this](const uint8_t _ch, const uint8_t _n, const uint8_t _v)
+			{
+				m_link.sendMidi(static_cast<uint8_t>((_v ? 0x90 : 0x80) | (_ch & 0x0f)), _n & 0x7f, _v & 0x7f);
+			};
 			p.nowMs = [] { return nowMs(); };
 			return p;
 		}

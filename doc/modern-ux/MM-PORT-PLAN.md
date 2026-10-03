@@ -133,7 +133,7 @@ table per machine, data only, checked by a node test that every SYN parameter of
 - b) `56-keys.js` (the MD's dispatcher as the shared `KEYS` block, the ? list, `#keyspop`); the old hard-wired
   handler replaced by `Keys.bind` entries (`130-main.js`, `75-comforts.js`, the library's rows in `125-lib.js`;
   the pattern chooser's ⇧Enter went, as on the MD); the home row through the new host call
-  `noteKey(t, note, vel)` (`mmAdapter.js`: note on / off on `base + t`, the off on the on's channel);
+  `noteOn(t, pitch, vel)` / `noteOff(t, pitch)` (since the note intent, finding 5 of DESIGN-REVIEW-2026-10-02: the core's `noteOn` / `noteOff` commands, note on / off on `base + t`, the off on the on's channel);
   `record(live)` for Alt+Space. R / Alt+R wait for phase 2.
 - c) all eight comforts in `75-comforts.js`, hooks in `70-seq.js` (roll ⌘-click, lane ramp, header marks, M/S
   OFF, the lock budget) and `60-ui.js` (LEN ×2).

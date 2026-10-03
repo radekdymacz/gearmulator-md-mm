@@ -184,6 +184,18 @@ namespace elektronData
 		return name.substr(0, 3);
 	}
 
+	MdMachineFacts mdMachineFacts(const uint32_t _model)
+	{
+		MdMachineFacts f;
+		const auto name = mdMachineName(_model);
+		f.family = mdMachineFamily(_model);
+		f.sampler = f.family == "ROM" || name.rfind("RAM-P", 0) == 0;
+		f.recorder = name.rfind("RAM-R", 0) == 0;
+		f.audio = f.family != "MID" && f.family != "CTR";
+		f.empty = name == "GND-EMPTY";
+		return f;
+	}
+
 	MdParamNames mdMachineParamNames(const uint32_t _model)
 	{
 		MdParamNames out{};
@@ -191,12 +203,13 @@ namespace elektronData
 		put(out, 1, g_effects);
 		put(out, 2, g_routing);
 		const auto name = mdMachineName(_model);
-		const auto family = mdMachineFamily(_model);
+		const auto facts = mdMachineFacts(_model);
+		const auto& family = facts.family;
 		if(name.empty())
 			return out;
-		if(family == "ROM" || name.rfind("RAM-P", 0) == 0)
+		if(facts.sampler)
 			put(out, 0, g_sample);
-		else if(name.rfind("RAM-R", 0) == 0)
+		else if(facts.recorder)
 			put(out, 0, g_ramRecord);
 		else if(family == "MID")
 		{

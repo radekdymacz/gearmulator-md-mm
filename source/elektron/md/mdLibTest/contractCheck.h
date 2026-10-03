@@ -23,7 +23,7 @@ namespace contractCheck
 			std::ifstream in(_schemaPath);
 			const std::string text{std::istreambuf_iterator<char>(in), std::istreambuf_iterator<char>()};
 			if(const auto root = elektronData::json::parse(text))
-				m_schema.emplace(*root);
+				m_schema.emplace(elektronData::json::Schema::closedForWriter(*root));	// our writer: open objects closed
 		}
 
 		void operator()(const elektronData::json::Value& _message)

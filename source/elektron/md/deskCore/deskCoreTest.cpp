@@ -2,10 +2,12 @@
 // the command table, undo, and the core against a toy model and a scripted adapter
 // (observed vs pending, refusal, settle, undo).
 
+#include "deskChain.h"
 #include "deskCore.h"
 #include "deskDesk.h"
 #include "deskLoadQueue.h"
 #include "deskMod.h"
+#include "deskNotes.h"
 #include "deskPush.h"
 #include "deskRef.h"
 #include "deskSequence.h"
@@ -25,6 +27,103 @@ namespace
 		std::printf("  %s %s\n", _ok ? "ok  " : "FAIL", _what);
 		if(!_ok)
 			++g_failures;
+	}
+
+	// The note intent and the held layer (deskNotes.h).
+	void noteIntent()
+	{
+		std::puts("notes");
+		struct Kit
+		{
+			uint8_t v[2][2]{};
+			bool operator==(const Kit& _o) const { return v[0][0] == _o.v[0][0] && v[0][1] == _o.v[0][1] && v[1][0] == _o.v[1][0] && v[1][1] == _o.v[1][1]; }
+		};
+		const auto at = [](auto& _k, const uint8_t _t, const uint8_t _i) -> auto& { return _k.v[_t][_i]; };
+		const auto on = noteOnOf(*elektronData::json::parse(R"({"op":"noteOn","t":3,"vel":90,"pitch":-5})"));
+		const auto off = noteOffOf(*elektronData::json::parse(R"({"op":"noteOff","t":3})"));
+		const auto off7 = noteOffOf(*elektronData::json::parse(R"({"op":"noteOff","t":3,"pitch":7})"));
+		check(on.track == 3 && on.velocity == 90 && on.pitch == -5, "noteOn as a value");
+		check(off.releases(-5) && off.releases(7) && off7.releases(7) && !off7.releases(-5), "noteOff: without pitch every note, with pitch that one");
+		HeldOverrides held;
+		check(!held.any(), "nothing held");
+		held.hold({1, 0, 90, 64});
+		held.hold({1, 0, 100, 64});
+		check(held.list().size() == 1 && held.list()[0].value == 100, "one override per (track, index): the later key's");
+		check(held.echo(1, 0, 100) && !held.echo(1, 0, 64) && !held.echo(0, 0, 100), "the held value reported back is an echo; another is not");
+		Kit image, document;
+		image.v[1][0] = 100;
+		image.v[0][1] = 9;
+		document.v[1][0] = 50;
+		const auto masked = held.masked(image, &document, at);
+		check(masked.v[1][0] == 50 && masked.v[0][1] == 9, "masked: the document's value where a key holds one, the rest as the image");
+		check(held.masked(image, static_cast<const Kit*>(nullptr), at).v[1][0] == 64, "masked without a document: the value the key replaced");
+		const auto released = held.release(1);
+		check(released.size() == 1 && !held.any(), "release: the track's overrides, taken out");
+		check(HeldOverrides::restoreValue(released[0], &document, at) == 50 && HeldOverrides::restoreValue(released[0], static_cast<const Kit*>(nullptr), at) == 64,
+			"restore: the document's value (an edit made meanwhile wins), else the value replaced");
+		WorkingCopy<Kit> w;
+		w.held.hold({0, 1, 3, 4});
+		check(!switched(w).held.any(), "another kit plays: nothing is held any more");
+	}
+
+	void mailboxes()
+	{
+		std::puts("mailboxes");
+		Latest<int> l;
+		check(l.offer(1, false) == std::optional<int>(1) && !l.waiting(), "nothing on its way: the value starts now");
+		check(!l.offer(2, true) && !l.offer(3, true) && l.waiting(), "a run on its way: the value waits");
+		check(!l.takeWhen(false) && l.waiting(), "still on its way: nothing is taken");
+		check(l.takeWhen(true) == std::optional<int>(3) && !l.waiting(), "the latest wins, once");
+		(void)l.offer(4, true);
+		check(l.offer(5, false) == std::optional<int>(5) && !l.takeWhen(true), "a value started now replaces what waited");
+		(void)l.offer(6, true);
+		l.drop();
+		check(!l.takeWhen(true), "dropped: nothing waits");
+
+		ChainRequest c = ChainClear{};
+		Latest<ChainRequest> chains;
+		(void)chains.offer(ChainOf{{1, 2}}, true);
+		(void)chains.offer(c, true);
+		const auto taken = chains.takeWhen(true);
+		check(taken && std::holds_alternative<ChainClear>(*taken), "CLEAR is a variant of its own, and it wins over the chain before it");
+
+		check(validateChain({1, 3}, 16, 128).empty(), "a chain of two in one bank");
+		check(!validateChain({1}, 16, 128).empty() && !validateChain({1, 17}, 16, 128).empty() && !validateChain({2, 2}, 16, 128).empty()
+			&& !validateChain({1, 128}, 16, 128).empty(), "too short, two banks, twice, out of range");
+		check(validateChain({0, 1, 2, 3, 4, 5, 6, 7, 8}, 8, 64).size() == 2, "the bank size is the model's: nine is too many and two banks");
+		Value cmd = Value::object();
+		Value list = Value::array();
+		list.push(Value(3));
+		list.push(Value("x"));
+		cmd.set("patterns", list);
+		check(chainPatterns(cmd) == std::vector<int>{3, -1}, "the patterns of a chain command; not a number is -1");
+
+		std::puts("pushes");
+		using R = Ref<int>;
+		Pushes<R, int> pushes;
+		const PushPolicy policy{200, 150};
+		const auto policyOf = [&](const R&) { return policy; };
+		const auto timeoutOf = [](const R&) { return 1000.0; };
+		check(pushes.want({0, 1}, 10, 0, policy), "the first value goes at once");
+		check(!pushes.want({0, 1}, 11, 50, policy) && !pushes.want({0, 1}, 12, 60, policy), "newer values wait their turn");
+		auto e = pushes.pump(100, policyOf, timeoutOf);
+		check(e.empty(), "before minIntervalMs: nothing");
+		e = pushes.pump(200, policyOf, timeoutOf);
+		check(e.size() == 1 && e[0].kind == Pushes<R, int>::Effect::Kind::Send && e[0].value == std::optional<int>(12), "the latest waiting goes");
+		e = pushes.pump(400, policyOf, timeoutOf);
+		check(e.size() == 1 && e[0].kind == Pushes<R, int>::Effect::Kind::AskBack, "quiet: the read-back is asked for, once");
+		check(pushes.pump(500, policyOf, timeoutOf).empty(), "asked: nothing more");
+		e = pushes.pump(1500, policyOf, timeoutOf);
+		check(e.size() == 1 && e[0].kind == Pushes<R, int>::Effect::Kind::TimedOut && !pushes.busy({0, 1}), "no read-back: given up");
+
+		check(pushes.want({0, 2}, 20, 0, policy), "a second document");
+		pushes[{0, 2}].parked = true;
+		check(!pushes.want({0, 2}, 21, 5000, policy), "parked: a newer value waits, however long after (Held)");
+		check(pushes.pump(6000, policyOf, timeoutOf).empty(), "parked: the pump leaves it alone");
+		pushes[{0, 2}].parked = false;
+		e = pushes.pump(6000, policyOf, timeoutOf);
+		check(e.size() == 1 && e[0].value == std::optional<int>(21), "unparked: the value that waited goes");
+		check(pushes.anyBusy(), "busy until the read-back");
 	}
 
 	void loadQueue()
@@ -187,6 +286,7 @@ namespace
 			return m;
 		}
 		static std::optional<Value> clipboardDocument(const Clipboard&) { return {}; }
+		static constexpr int contractVersion = 1;
 		static const std::vector<Unsupported>& unsupported() { static const std::vector<Unsupported> u{{"flying", "not yet"}}; return u; }
 		static EditResult setDocument(const Documents& _d, const Value& _cmd, const Context& _c) { return apply(_d, _cmd, {}, _c); }
 
@@ -209,8 +309,8 @@ namespace
 	class ToyMachine final : public Machine<ToyModel>
 	{
 	public:
-		Outcome review(const Value&, const std::vector<Change>&, const Documents&) override { return {}; }
-		Outcome submit(const Change& _c, const Documents&) override
+		Review review(const Value&, const std::vector<Change>&, const Documents&) override { return {}; }
+		Outcome submit(const Change& _c, const Intent&, const Documents&) override
 		{
 			if(_c.after.value < 0)
 				return {{"negative values are refused"}, {}, {}};
@@ -380,6 +480,7 @@ namespace
 int main()
 {
 	workingCopy();
+	noteIntent();
 	{
 		Outcome a, b, none;
 		a.ask = Ask{"breakChain", "ends the chain", "Go", Value::object(), {}};
@@ -423,6 +524,7 @@ int main()
 		check(fellToZero && !mods.step(sink, 0, ModLimits{}, 1, true, t + 100), "the CC readout falls to zero after the last modulator, then stops");
 	}
 	loadQueue();
+	mailboxes();
 	lifecycle();
 	sequence();
 	commands();

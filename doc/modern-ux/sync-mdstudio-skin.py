@@ -2,40 +2,66 @@
 # Regenerates the Machinedrum Editor skin's markup and stylesheet
 # (source/elektron/md/mdJucePlugin/skins/mdStudio/mdStudio.html, mdDesk.css)
 # from the approved mockup, doc/modern-ux/mockup/index.html, so a design round
-# needs this script plus the behaviour the round changed in mdDeskApp.js.
+# needs this script plus the behaviour the round changed in the page's scripts (APP below).
 #   python3 doc/modern-ux/sync-mdstudio-skin.py          write the skin
 #   python3 doc/modern-ux/sync-mdstudio-skin.py --check  only report drift
 #
 # What it does, in order:
 #  1. Markup: the mockup's <div class="app"> as is, plus the real machine's
 #     status and error lines. Mockup-only elements (the first-run preview link,
-#     the rules footer) are dropped if a round brings them back. Controls the
-#     real machine cannot do yet are marked disabled here (HONEST below), so
-#     the page never offers them.
-#  2. Stylesheet: the mockup's, with local fonts instead of Google Fonts, then
-#     the P2/P3 states at the end.
+#     the rules footer) must not come back. Controls the real machine cannot do
+#     yet are marked disabled here (HONEST below), so the page never offers them.
+#  2. Stylesheet: the mockup's, in its order: its own <style> blocks and the
+#     shared stylesheets it links (skins/shared/*.css: the LCD, the modal layer,
+#     the start-up card, SysEx import, the AUDIO / MIDI panel), with the bundled
+#     fonts (skins/shared/deskFonts.css) instead of Google Fonts, then the real
+#     machine's states (skins/mdStudio/mdOverrides.css). Every text replacement
+#     is asserted to match.
 #  3. Contract check: every element id the page's scripts look up must exist
 #     in the markup or be made by the scripts. A design round that renames or
 #     drops one fails here instead of in the plug-in.
-# The mockup's script is example state and is never copied.
+# The mockup's own script is example state and is never copied; the page files
+# both editors share (skins/shared/*.js) are loaded by the mockup and the page
+# alike, so there is nothing to copy or compare.
 import os
 import re
 import sys
 
 R = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', '..') + '/'
 SK = R + 'source/elektron/md/mdJucePlugin/skins/mdStudio/'
+SHARED = R + 'source/elektron/md/mdJucePlugin/skins/shared/'
+MOCKUP = R + 'doc/modern-ux/mockup/index.html'
 check_only = '--check' in sys.argv
 
-src = open(R + 'doc/modern-ux/mockup/index.html').read()
-css = src[src.index('<style>') + 7:src.index('</style>')]
-m = src[src.index('<div class="app">'):src.index('<script>')]
+src = open(MOCKUP).read()
+m = src[src.index('<div class="app">'):src.index('<script')]
+
+
+def mockup_css(page):
+    """The mockup's stylesheet in cascade order: its <style> blocks and the local stylesheets it links,
+    read from their files (a shared block replaced its own text in the mockup at the same place)."""
+    head = page[page.index('<style>'):page.index('<div class="app">')]
+    out, prev = '', None
+    for x in re.finditer(r'<style>(.*?)</style>|<link rel="stylesheet" href="([^"]+)">', head, re.S):
+        if x.group(1) is not None:
+            text = x.group(1)
+            if prev == 'link':	# the newline after a linked block is the file's own last one
+                assert text.startswith('\n'), 'mockup: a <style> after a linked stylesheet starts on a new line'
+                text = text[1:]
+            out, prev = out + text, 'style'
+        else:
+            out, prev = out + open(os.path.join(os.path.dirname(MOCKUP), x.group(2))).read(), 'link'
+    return out
+
+
+css = mockup_css(src)
 
 # ---- 1. markup ----
-MOCK_ONLY = [r'<p class="firstlink">.*?</p>\s*', r'<details class="rules">.*?</details>\s*']
+MOCK_ONLY = [r'<p class="firstlink">', r'<details class="rules">']
 for pattern in MOCK_ONLY:
-    m = re.sub(pattern, '', m, flags=re.S)
+    assert not re.search(pattern, m), 'mockup: a mockup-only element came back (%s): drop it in the mockup' % pattern
 BODY = '  <div class="body" id="body">'
-assert BODY in m, 'mockup: no #body'
+assert m.count(BODY) == 1, 'mockup: no #body, or more than one'
 m = m.replace(BODY, '  <p class="statusline" id="status" role="status" hidden></p>\n'
               '  <p class="errline" id="errline" role="alert" hidden></p>\n' + BODY)
 # Controls the machine cannot do yet: (mockup text, skin text). Each must match.
@@ -47,7 +73,27 @@ for a, b in HONEST:
     m = m.replace(a, b)
 # The page's modules, in load order (a module that does not exist yet is skipped).
 # mdDeskSelfTest.js last: the self-tests, in the plug-in only with the diagnostics (an empty script otherwise).
-SCRIPTS = ['mdDeskModal.js', 'mdDeskBoot.js', 'mdDeskSyx.js', 'mdDeskBridge.js', 'mdDeskModel.js', 'mdDeskGen.js', 'mdDeskKeys.js', 'mdDeskMod.js', 'mdDeskApp.js', 'mdDeskLive.js', 'mdDeskLibrary.js', 'mdDeskGlobal.js', 'mdDeskAudio.js', 'mdDeskSelfTest.js']
+# desk*.js are the files both editors share (skins/shared/, the editor finds a page file by its name);
+# deskAudioSelfTest.js goes with the self-tests (diagnostics builds only).
+# APP is the page's own app, one file a concern (mdDeskApp.js says what each holds), in load order: each only
+# defines at load, and mdDeskRender.js (last) renders the page and says it is ready.
+APP = ['mdDeskApp.js', 'mdDeskSoundGroups.js', 'mdDeskTop.js', 'mdDeskSeq.js', 'mdDeskSound.js', 'mdDeskEditors.js', 'mdDeskMix.js',
+       'mdDeskSampler.js', 'mdDeskSong.js', 'mdDeskPicker.js', 'mdDeskControl.js', 'mdDeskGenUi.js', 'mdDeskComforts.js', 'mdDeskRom.js',
+       'mdDeskGestures.js', 'mdDeskRender.js']
+SCRIPTS = ['deskModal.js', 'deskCaps.js', 'deskBoot.js', 'deskSyx.js', 'deskBridge.js', 'deskDocs.js', 'deskOverlay.js', 'mdDeskModel.js', 'deskGen.js', 'mdDeskGen.js',
+           'deskKeys.js', 'mdDeskKeys.js', 'mdDeskMod.js'] + APP + ['mdDeskLive.js', 'mdDeskLibrary.js', 'mdDeskGlobal.js', 'deskAudio.js', 'mdDeskAudio.js',
+           'deskAudioSelfTest.js', 'mdDeskSelfTest.js']
+for f in APP:
+    assert os.path.exists(SK + f), 'APP lists %s, which is not in skins/mdStudio/' % f
+# every page script in the skin is loaded (a new file not in SCRIPTS would never run), the node tests apart
+unlisted = sorted(f for f in os.listdir(SK) if f.endswith('.js') and not f.endswith('Test.js') and f not in SCRIPTS)
+assert not unlisted, 'skins/mdStudio has page scripts SCRIPTS does not load: ' + ', '.join(unlisted)
+
+
+def script_path(f):
+    return (SHARED if f.startswith('desk') else SK) + f
+
+
 title = re.search(r'<title>(.*?)</title>', src).group(1)
 page = '''<!doctype html>
 <html lang="en">
@@ -66,342 +112,26 @@ page = '''<!doctype html>
 %s
 </body>
 </html>
-''' % (title, m.rstrip(), '\n'.join('<script src="%s"></script>' % f for f in SCRIPTS if os.path.exists(SK + f)))
+''' % (title, m.rstrip(), '\n'.join('<script src="%s"></script>' % f for f in SCRIPTS if os.path.exists(script_path(f))))
 
 # ---- 2. stylesheet ----
-head = """/* Machinedrum Editor stylesheet: the mockup's (doc/modern-ux/mockup/index.html)
-   as is, with bundled fonts instead of Google Fonts and the real machine's
-   states at the end. Generated by doc/modern-ux/sync-mdstudio-skin.py. Fonts:
-   Barlow Condensed, IBM Plex Mono and Silkscreen, SIL Open Font License 1.1,
-   in skins/mdStudio/fonts/ with their OFL-*.txt; the editor inlines them. */
-@font-face{font-family:"Barlow Condensed";font-weight:500;src:url("fonts/BarlowCondensed-Medium.ttf") format("truetype")}
-@font-face{font-family:"Barlow Condensed";font-weight:600 700;src:url("fonts/BarlowCondensed-SemiBold.ttf") format("truetype")}
-@font-face{font-family:"IBM Plex Mono";font-weight:400;src:url("fonts/IBMPlexMono-Regular.ttf") format("truetype")}
-@font-face{font-family:"IBM Plex Mono";font-weight:500 700;src:url("fonts/IBMPlexMono-Medium.ttf") format("truetype")}
-@font-face{font-family:"Silkscreen";font-weight:400 700;src:url("fonts/Silkscreen-Regular.ttf") format("truetype")}
-"""
+head = """/* Machinedrum Editor stylesheet: the mockup's (doc/modern-ux/mockup/index.html, with the shared
+   stylesheets it links) as is, with bundled fonts instead of Google Fonts and the real machine's states
+   at the end. Generated by doc/modern-ux/sync-mdstudio-skin.py. Fonts: Barlow Condensed, IBM Plex Mono and
+   Silkscreen, SIL Open Font License 1.1, in skins/mdStudio/fonts/ with their OFL-*.txt; the editor inlines them. */
+""" + open(SHARED + 'deskFonts.css').read()
 for a, b in [('--sans:"Barlow Condensed","Arial Narrow",system-ui,sans-serif;',
               '--sans:"Barlow Condensed","Avenir Next Condensed","Arial Narrow",system-ui,sans-serif;'),
              ('--mono:"IBM Plex Mono",ui-monospace,Menlo,monospace;', '--mono:"IBM Plex Mono",Menlo,ui-monospace,monospace;'),
              ('--pix:"Silkscreen",ui-monospace,monospace;', '--pix:"Silkscreen",Menlo,ui-monospace,monospace;')]:
-    assert a in css, a
+    assert css.count(a) == 1, 'mockup stylesheet: ' + a
     css = css.replace(a, b)
-css = re.sub(r'@import url\([^)]*fonts\.googleapis[^)]*\);?\s*', '', css)
-tail = '''
-/* ===== The real machine's states (not in the mockup) ===== */
-.st.past{opacity:.45}
-.st.lkpend{outline:2px dashed var(--led);outline-offset:-2px}
-.statusline,.errline{margin:6px 0 0;padding:6px 10px;border-radius:3px;font:12px var(--pix);text-transform:uppercase}
-.statusline{background:var(--lcd);color:var(--ink)}
-.errline{background:var(--rec);color:#fff}
-.kopt:disabled,button[data-na]{opacity:.45;cursor:not-allowed}
-.lcdeng .led:not(.on){opacity:.35}
-body.liverec .st,body.liverec .lb{cursor:cell}
-.recbadge{font:10px var(--pix);text-transform:uppercase;color:var(--rec)}
-/* Control side panel: the title on one line, the description under it. */
-.ctlui .card>header{flex-direction:column!important;align-items:flex-start!important;gap:2px!important}
-.ctlui .card>header h3{white-space:nowrap}
-/* LCD transport keys: an explicit square tied to the LCD height. The mockup's
-   aspect-ratio on a stretched height collapsed to slivers in the plug-in's
-   WebKit, so no aspect-ratio and no stretch here. */
-.top{--ltk:calc(var(--lcdh) - 28px)}
-.lcdpanel .trf{display:flex!important;flex-direction:column!important;justify-content:flex-start!important;align-items:flex-start!important;gap:3px!important}
-.lcdt{display:flex!important;flex-direction:row!important;flex-wrap:nowrap!important;align-items:flex-start!important;align-self:flex-start!important;gap:5px!important}
-.lcdt .lt{flex:0 0 var(--ltk)!important;width:var(--ltk)!important;height:var(--ltk)!important;min-width:var(--ltk)!important;min-height:var(--ltk)!important;aspect-ratio:auto!important;box-sizing:border-box!important;display:flex!important;align-items:center!important;justify-content:center!important;padding:0!important}
-/* P9: a slot's waveform with its audition key (the LCD keys' look) and playhead. The box takes the
-   canvas' place, so the Sound screen's stretch rules apply to it. */
-.wavebox{position:relative;min-width:0}
-.wavebox>canvas.ed{width:100%}
-.wavebox .aud,.romtile .aud{all:unset;position:absolute;top:6px;right:6px;cursor:pointer;display:inline-flex;align-items:center;gap:4px;height:18px;padding:0 6px;border-radius:2px;
-  font:12px var(--pix);text-transform:uppercase;color:var(--ink);background:var(--lcd);box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--ink) 55%,transparent)}
-.wavebox .aud svg,.romtile .aud svg{width:8px;height:8px;fill:currentColor}
-.wavebox .aud:hover,.romtile .aud:hover{background:color-mix(in srgb,var(--ink) 15%,var(--lcd))}
-.wavebox .aud[aria-pressed=true],.romtile .aud[aria-pressed=true]{background:var(--ink);color:var(--lcd)}
-.wavebox .aud:focus-visible,.romtile .aud:focus-visible{outline:2px solid var(--ink);outline-offset:1px}
-.wavebox .aud:disabled,.romtile .aud:disabled{opacity:.45;cursor:not-allowed}
-.wavebox .audph,.romtile .audph{position:absolute;left:0;top:0;bottom:0;width:0;pointer-events:none;border-radius:4px 0 0 4px;
-  background:color-mix(in srgb,var(--ink) 12%,transparent);box-shadow:inset -2px 0 0 var(--ink)}
-.wavebox .audph[hidden],.romtile .audph[hidden]{display:none}
-/* The Sampler's ROM view: the selected slot on top (its waveform beside its actions and playback), then
-   every ROM slot as a tile (its overview wave, lit when this kit plays it, faint when empty). */
-.romtop{display:grid;grid-template-columns:minmax(0,1.7fr) minmax(300px,1fr);gap:16px;align-items:start}
-@media (max-width:1100px){.romtop{grid-template-columns:minmax(0,1fr)}}
-.romtop canvas.ed.smpwave{height:172px}
-.romside{display:grid;gap:10px;align-content:start;min-width:0}
-.romplay{display:grid;gap:6px}
-.romplay .cap{font:600 12px var(--sans);letter-spacing:.12em;text-transform:uppercase;color:var(--print2)}
-/* A narrow window (1280): the top bar fits, so MKII is not cut off: tighter gaps and workspace keys */
-@media (max-width:1340px){header.top{column-gap:8px!important}header.top .left{gap:8px!important}header.top .tabs>button{min-width:0!important;padding-left:6px!important;padding-right:6px!important}}
-/* Set up sampling: the card, as one block, in the middle of the workspace (across and down) */
-#main>.smpmain:has(> .smpsetup){flex:1 1 auto;min-height:0;place-content:center;justify-items:center}
-/* a fixed size, whatever its sentences say or whether the recorder-trigs row shows */
-.smpsetup{box-sizing:border-box;width:920px;max-width:100%;height:392px;grid-template-rows:auto 1fr auto;gap:18px}
-/* the flow, RECORD -> RAM n -> PLAY: two equal sides and the buffer between, every row a fixed height */
-.smpsetup .spflow{display:grid;grid-template-columns:minmax(0,1fr) 132px minmax(0,1fr);align-items:stretch;min-height:0}
-.smpsetup .spside{display:grid;grid-template-rows:16px 64px 30px 18px 26px;gap:10px;align-content:center;justify-items:center;padding:16px 18px;
-  min-width:0;border-radius:4px;background:color-mix(in srgb,var(--print) 4%,transparent);box-shadow:inset 0 0 0 1px var(--rule)}
-.smpsetup .sphead{display:flex;align-items:baseline;gap:8px}
-.smpsetup .sphead .ilab{min-width:0;color:var(--print)}
-.smpsetup .sphead small{font:11px var(--mono);color:var(--print3)}
-.smpsetup .sptrk{display:flex;align-items:center;gap:8px}
-.smpsetup .sptrk button{width:34px;height:52px;padding:0;font-size:18px}
-.smpsetup .sptn{box-sizing:border-box;width:104px;height:64px;display:grid;place-items:center;border-radius:3px;background:var(--lcd);color:var(--ink);
-  font:400 40px/1 var(--pix);letter-spacing:.04em;box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--ink) 30%,transparent),inset 0 2px 6px color-mix(in srgb,var(--ink) 25%,transparent)}
-.smpsetup .spmach{display:grid;grid-template-columns:minmax(0,96px) 18px 96px;align-items:center;gap:6px;max-width:100%;font:12px var(--pix);text-transform:uppercase}
-.smpsetup .spmach>*{box-sizing:border-box;height:26px;display:grid;place-items:center;border-radius:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;padding:0 6px}
-.smpsetup .spmach .from{display:block;line-height:26px;text-align:center;color:var(--print3);box-shadow:inset 0 0 0 1px var(--rule);text-decoration:line-through;text-decoration-color:color-mix(in srgb,var(--print3) 60%,transparent)}
-.smpsetup .spmach i{font-style:normal;color:var(--print2);padding:0}
-.smpsetup .spmach b{font-weight:400;background:var(--lcd);color:var(--ink)}
-.smpsetup .sptrig{max-width:100%;font:12px var(--mono);color:var(--print2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.smpsetup .spopt{display:flex;align-items:center;justify-content:center;min-width:0}
-.smpsetup .sphint{font:11px var(--mono);color:var(--print3);white-space:nowrap}
-.smpsetup .spbuf{display:grid;grid-template-columns:1fr auto 1fr;grid-template-rows:auto auto;align-items:center;align-content:center;column-gap:6px;row-gap:4px}
-.smpsetup .spbuf .ln{height:2px;background:var(--print2);position:relative;grid-row:1}
-.smpsetup .spbuf .ln:last-child::after{content:"";position:absolute;right:-1px;top:-4px;border:5px solid transparent;border-left:7px solid var(--print2);border-right:0}
-.smpsetup .spbuf b{grid-row:1;grid-column:2;padding:5px 8px;border-radius:3px;font:400 12px var(--pix);text-transform:uppercase;white-space:nowrap;background:var(--key);color:var(--keytext);box-shadow:inset 0 -2px 0 rgba(0,0,0,.35)}
-.smpsetup .spbuf small{grid-row:2;grid-column:1/-1;text-align:center;font:10px var(--mono);color:var(--print3);letter-spacing:.08em}
-/* the one action, centred under the flow, its one-line note under it */
-.smpsetup .spgo{display:grid;justify-items:center;gap:8px}
-.smpsetup .spgo button{height:38px;padding:0 34px;font-size:13px;letter-spacing:.14em;text-transform:uppercase}
-.smpsetup .spgo .note{max-width:100%;font:11px var(--mono);color:var(--print3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.romtiles{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:6px}
-.romtile{position:relative;min-width:0}
-.romtile .twsel{all:unset;box-sizing:border-box;display:grid;grid-template-rows:18px 44px;width:100%;border-radius:3px;cursor:pointer;
-  background:var(--lcd);color:var(--ink);overflow:hidden}
-.romtile .twsel:hover{background:color-mix(in srgb,var(--ink) 10%,var(--lcd))}
-.romtile .twsel:focus-visible{outline:2px solid var(--print);outline-offset:2px}
-.romtile .twsel[aria-pressed=true]{box-shadow:0 0 0 2px var(--plate),0 0 0 4px var(--print)}
-.romtile .twhead{display:flex;align-items:center;gap:5px;padding:0 6px;min-width:0;font:10px var(--pix);text-transform:uppercase;white-space:nowrap}
-.romtile .twhead b{font:11px var(--pix)}
-.romtile .twhead span{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis}
-.romtile .twhead small{font:10px var(--pix);opacity:.75}
-.romtile .twhead .led{width:6px;height:6px;background:color-mix(in srgb,var(--ink) 22%,transparent);box-shadow:none}
-.romtile .twhead .led.on{background:var(--ink)}
-.romtile.has .twhead{background:var(--ink);color:var(--lcd)}
-.romtile.has .twhead .led.on{background:var(--lcd)}
-.romtile canvas.tw{display:block;width:100%;height:44px}
-.romtile .twno{display:grid;place-items:center;font:10px var(--pix);text-transform:uppercase;opacity:.6}
-.romtile.empty .twsel{background:transparent;color:var(--print3);box-shadow:inset 0 0 0 1px var(--rule)}
-.romtile.empty .twsel[aria-pressed=true]{box-shadow:inset 0 0 0 1px var(--rule),0 0 0 2px var(--plate),0 0 0 4px var(--print)}
-.romtile.empty .twhead .led{background:transparent}
-.romtile .aud{top:auto!important;bottom:4px;right:4px!important;height:16px!important;padding:0 5px!important;font-size:10px!important}
-.romtile .audph{top:18px!important;border-radius:0 0 0 3px!important}
-/* no audio from this engine (HW MIDI): a tile is its head only */
-.romtile.nowave .twsel{grid-template-rows:24px}
-.romtile.nowave .twhead{padding-right:56px}
-.romtile.nowave .aud{bottom:4px}
-.romtile .twload{position:absolute;right:4px;bottom:4px;height:18px;padding:0 7px;font-size:11px}
-/* The Sampler's RAM view fills the workspace: the take grows with the window, the steps, the source and
-   the playback keep their size. The slot's bar (state, Live / Freeze / Capture, why there is no file load,
-   the audition key) sits on the take, so the key never covers a STRT or END handle. */
-#main>.smpmain.ram{flex:1 1 auto;grid-template-rows:1fr auto auto}
-.smpmain.ram>.ramtop{grid-template-rows:auto minmax(170px,1fr);align-content:stretch}
-.ramwave{display:grid;grid-template-rows:auto minmax(140px,1fr);gap:8px;min-height:0}
-.ramwave .slotbar{flex-wrap:nowrap;min-width:0}
-.ramwave .slotbar>button,.ramwave .slotbar>.stbox{flex:none}
-.ramwave .ramna{flex:0 1 auto;min-width:0;font:11px var(--mono);color:var(--print3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;cursor:help}
-.ramwave .aud{position:static!important;flex:none;height:28px!important;padding:0 10px!important}
-.ramwave .wavecv{position:relative;min-height:0}
-.ramwave .wavecv>canvas.ed.smpwave{position:absolute;inset:0;width:100%;height:100%!important}
-/* the steps: the Sequence's grid (.seq, .rul, .st, .seqfoot with its PAGE control), a label column on the
-   left like its track column; RECORD ON (the recorder's trigs, its label in rec red) over CHOP (the player's,
-   each trig key with its slice number), one column grid under one ruler */
-.ramsteps{gap:6px}
-.smpseq{--srlab:118px;--row:40px;position:relative;min-width:0!important}
-.smpseq .r{gap:3px}
-.srlab{display:grid;gap:1px;align-content:center;height:var(--row);padding:0 8px 0 2px;border-left:3px solid transparent;background:var(--plate);min-width:0;overflow:hidden;white-space:nowrap}
-.srlab b{font:600 11px var(--sans);letter-spacing:.14em;text-transform:uppercase;color:var(--print2)}
-.srlab small{display:flex;gap:6px;font:500 12px var(--mono);color:var(--print)}
-.srlab small em{font-style:normal;color:var(--print3)}
-.srlab.rec{border-left-color:var(--rec)}
-.srlab.rec b{color:var(--rec)}
-.smpseq [data-cp].on{cursor:ns-resize;touch-action:none}
-.smpseq [data-cp]{overflow:hidden}
-.smpseq .cpn{position:absolute;left:0;right:0;top:12px;text-align:center;font:13px var(--pix);color:var(--print)}
-.smpseq .cpfx{position:absolute;left:2px;right:10px;bottom:4px;text-align:left;font:8px var(--pix);color:var(--cream);white-space:nowrap;overflow:hidden}
-.ramsteps .seqfoot{border-bottom:0}
-/* the Playback card's take line stands where the Source card's input keys stand, so the knob rows are level */
-.smp2>.card{grid-template-rows:auto 30px auto}
-.pbtake{font:12px var(--mono);color:var(--print2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
-/* a value in the manual's units (RAM-R LEN, RATE) beside the raw one */
-.pc .pu{position:relative;margin-left:auto;margin-right:8px;font:11px var(--mono);font-style:normal;color:var(--keydim);white-space:nowrap}
-/* Sound (round 5): the track's sound in small groups (renderSound), in the page's section look: a title
-   on a rule, the Machinedrum page at its right, no frame. Each row is one grid of three lines (titles,
-   screens, boxes) its columns share (subgrid), so a row's titles, screens and boxes are level. Two
-   groups without a screen share a column: the upper one's boxes at the screens' top, the lower one's
-   title at their foot and its boxes on the box line; a lone one says what its knobs do in the screen's
-   place. The rows with screens share the free height evenly, so every screen on the page is as tall;
-   a row without screens is two lines. A group's width follows its box count. Each screen's help is its
-   tooltip. */
-#main>.snd{flex:1 1 auto;min-height:0}
-.snd{display:flex;flex-direction:column;gap:16px;min-height:0}
-.sndhead{display:flex;align-items:center;gap:22px;min-width:0}
-.sndhelp{margin-left:auto;font:12px var(--mono);color:var(--print3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0;cursor:help}
-.sgrow{flex:1 1 0;min-height:0;max-height:420px;display:grid;grid-template-rows:auto minmax(0,1fr) 34px;column-gap:14px;row-gap:7px;min-width:0}
-.sgrow.flat{flex:none;grid-template-rows:auto 34px}
-.sgcol{grid-row:1/-1;display:grid;grid-template-rows:subgrid;row-gap:7px;min-width:0}
-.sg{display:contents}
-.sg>*{grid-column:1}
-.sg>header{grid-row:1;border-top:2px solid var(--print);padding-top:7px;display:flex;justify-content:space-between;align-items:baseline;gap:8px;min-width:0}
-.sg h3{margin:0;font:600 12px var(--sans);letter-spacing:.18em;text-transform:uppercase;color:var(--print);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
-.sg>header>span{font:12px var(--mono);color:var(--print3);white-space:nowrap;cursor:help}
-.sg>.plot{grid-row:2;position:relative;min-height:0;border-radius:4px;overflow:hidden}
-.sg>:is(.ctl,.sgline,.sgsel,.sgabout){grid-row:3;align-self:start;min-width:0}
-.sgrow.flat .sg>:is(.ctl,.sgline,.sgsel,.sgabout){grid-row:2}
-/* two groups in one column: the upper one's boxes at the screens' top, the lower one's title at their foot */
-.sgcol.stack>.sg:first-child>:not(header){grid-row:2;align-self:start}
-.sgcol.stack>.sg:last-child>header{grid-row:2;align-self:end}
-/* a lone group: what its knobs do where the screen would be */
-.sgnote{grid-row:2;margin:0;align-self:start;font:12px var(--mono);line-height:1.5;color:var(--print3);overflow:hidden;min-height:0}
-.sg .plot>canvas.ed,.sg .plot>.wavebox{position:absolute;inset:0;width:100%;height:100%!important;min-height:0!important}
-.sg .plot>.wavebox>canvas.ed{height:100%!important;min-height:0!important}
-.plotnote{position:absolute;left:8px;right:60px;bottom:5px;font:10px var(--pix);text-transform:uppercase;color:var(--ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;pointer-events:none}
-.sg>.ctl{gap:4px}
-/* the boxes a little tighter than elsewhere: the effects row holds thirteen */
-.snd .pc{padding:0 6px}
-.snd .pc span{font-size:11px;letter-spacing:.05em}
-.snd .pc b{font-size:13px}
-/* a line of other controls (the LFO's): as tall as a row of boxes */
-.sgline{display:flex;align-items:center;gap:4px;height:34px;min-width:0}
-.sgline>.pc{flex:1 1 0;min-width:0}
-.sgline>.seg{flex:none;margin-left:10px}
-/* the LFO row: the shape keys a little smaller, so they fit the box line */
-.lfoshape{gap:14px}
-.lfoshape .kv{gap:6px;flex-wrap:nowrap}
-.lfoshape .shapes{flex-wrap:nowrap;gap:2px}
-.lfoshape .shapes button{padding:3px}
-.lfoshape .shapes svg{width:22px;height:18px}
-.lfoshape>.pc{min-width:84px}
-@media (max-width:1380px){.lfoshape{gap:10px}.lfoshape .shapes svg{width:18px;height:16px}.lfoshape>.pc{min-width:76px}}
-/* a group of menus (the LFO's target): one under the other; the relations side by side on the box line */
-.sgsel{display:flex;flex-direction:column;gap:4px;min-width:0}
-.sgsel.pair{flex-direction:row;gap:8px;height:34px;align-items:center}
-.sgsel>label{display:flex;align-items:center;gap:8px;font:600 11px var(--sans);letter-spacing:.12em;text-transform:uppercase;color:var(--print2);white-space:nowrap;cursor:help;flex:1 1 0;min-width:0}
-.sgsel .kselbtn{height:24px;width:100%;min-width:0;font-size:12px}
-.sgsel>label>.kselbtn{flex:1 1 auto;width:auto}
-.sgabout{grid-row:1/-1;margin:0;align-self:end;font:12px var(--mono);line-height:1.5;color:var(--print3)}
-.sg>.sgabout{align-self:start}
-@media (max-width:1150px){.sgrow,.sgrow.flat{display:flex;flex-wrap:wrap;gap:12px 14px;max-height:none;flex:none}.sgcol{display:flex;flex-direction:column;gap:7px;flex:1 1 150px}.sg>.plot{height:110px;flex:none}.sndhelp{display:none}}
-@media (max-width:720px){.sndhead{flex-wrap:wrap;gap:10px}}
-/* Alt held (a global modifier): the keys it widens say so (mdDeskApp.js altLabels): CLR clears the whole
-   pattern, the lock lane's clear key every lock of the track */
-body.althold .lcdsec button[data-sec=clear]{opacity:1;background:var(--ink);color:var(--lcd)}
-body.althold #clearLane{color:var(--led);box-shadow:inset 0 0 0 1px var(--led)}
-/* Song: the arrangement's 256 slots fill the page across and down (16 rows share the height); the left
-   column (patterns, selected row) scrolls on its own. One column below 1100 px: the page scrolls. */
-@media (min-width:1101px){
-#main>.songui.lay2{flex:1 1 auto;min-height:0;align-items:stretch}
-.songui.lay2>.songleft{min-height:0;overflow:auto;padding-right:6px}
-.songui.lay2>.card{min-height:0;grid-template-rows:auto auto minmax(0,1fr)}
-.songui.lay2 .slotgrid{min-height:0;grid-template-rows:repeat(16,minmax(22px,1fr));align-content:stretch}
-.songui.lay2 .slotgrid .scell{height:auto!important;min-height:0}
-}
-/* Song: one palette, two ways to play its pads (mdDeskApp.js renderSong): ARRANGE adds to the song, CHAIN
-   numbers the machine's chain (the Plays line below the pads); the header says what the machine plays */
-.card header.phead{align-items:center;gap:14px}
-.card header.phead .seg{gap:10px;color:inherit;font:inherit}
-.card header .playschip{margin-left:auto;font:12px var(--pix);color:var(--ink);min-width:0;overflow:hidden;text-overflow:ellipsis}
-.card header .playschip.chain{box-shadow:inset 0 0 0 2px var(--led)}
-.padd em{position:absolute;right:5px;bottom:4px;font:700 12px var(--pix);font-style:normal;color:var(--led)}
-.padd.in{box-shadow:inset 0 0 0 2px var(--led)}
-.songleft .pnote{margin:8px 0 0;font-size:12px;color:var(--print3)}
-.chainfoot{display:grid;gap:4px;margin-top:8px}
-.chainfoot .irow .note{padding-left:0;flex-basis:auto}
-.morebtn{margin-left:0}
-.morebtn small{font:12px var(--mono);letter-spacing:0;text-transform:none;color:var(--print3)}
-/* Generators and mutation (DESIGN-generators.md §5, mdDeskApp.js genStripHtml / mutStripHtml): the GEN bar is
-   the one bar under the step grid, always there: GEN, a divider, the step gestures behind a small ? key, then
-   PAGE (its LEDs, ALL, FOL) at the far right; the MUTATE bar takes the rest of the Sound head's row. Left to
-   right: a title with its target (Alt: all, in the LED's colour), groups (a title on a thin rule over their
-   controls: LED radio rows, LCD value windows with the label inside, drag / wheel / arrows), a muted summary,
-   then the keys: small square caps with the keyboard key on them and a tiny label over them, in the groups'
-   title row (Again cream). The bar replaced the old foot row: its height went half to the grid's rows, half to
-   the lock lane. Under 1400 px the hints go and the gaps narrow; the summary shrinks to what fits. */
-:root{--genband:58px;--row:clamp(18px,calc((100vh - 428px - var(--genband) / 2) / 16 - 3px),40px)!important}
-.genbar{display:flex;align-items:flex-end;gap:14px;min-width:0;height:var(--genband);box-sizing:border-box;margin:5px 0 0;padding:6px 10px 7px 12px;background:var(--plate3);border-radius:4px;position:relative;flex:none;white-space:nowrap}
-.genbar>.genband{flex:1 1 auto;align-self:stretch;height:auto;margin:0;padding:0;background:none;border-radius:0}
-.gdiv{align-self:stretch;width:1px;flex:none;background:var(--rule)}
-.genbar .pagectl{position:static!important;height:30px!important;background:none!important;padding:0!important;margin:0!important;flex:none}
-.genbar .pgkey{height:30px;padding:0 10px;font:600 11px var(--sans);letter-spacing:.12em;text-transform:uppercase}
-.genbar .ptog{margin-left:2px}
-#seqp>.genbar{flex:none}
-#seqp>.lanewrap{border-top:2px solid var(--print);margin-top:5px}
-.steplegend{position:relative;flex:none;height:30px;display:flex;align-items:center}
-.glegkey{width:22px;height:22px;padding:0;border-radius:50%;font:700 12px var(--sans);letter-spacing:0;display:grid;place-items:center}
-.glegpop.legend{display:none;position:absolute;right:-6px;bottom:calc(100% + 24px);z-index:30;flex-direction:column;align-items:stretch;gap:7px;margin:0;padding:10px 12px;background:var(--plate);border-radius:4px;box-shadow:0 6px 24px rgba(0,0,0,.45),inset 0 0 0 1px var(--rule);white-space:normal;width:300px;font:12px var(--sans);color:var(--print2)}
-.glegpop.legend>span{display:grid;grid-template-columns:16px 66px 1fr;gap:8px;align-items:start}
-.glegpop.legend b{font-weight:600;color:var(--print)}
-.glegpop.legend i.lg.none{background:none}
-.glegpop.legend small{font:11px var(--mono);color:var(--print3);padding-top:2px;border-top:1px solid var(--rule)}
-.steplegend:hover .glegpop,.glegkey:focus-visible+.glegpop{display:flex}
-.genband{display:flex;align-items:flex-end;gap:16px;min-width:0;height:var(--genband);box-sizing:border-box;margin:5px 0 0;padding:6px 10px 7px 12px;background:var(--plate3);border-radius:4px;white-space:nowrap;overflow:hidden;flex:none;font:12px var(--mono);color:var(--print2)}
-.gbt{display:grid;gap:4px;flex:none;align-self:center;min-width:92px}
-.gbt b{font:700 13px var(--sans);letter-spacing:.22em;text-transform:uppercase;color:var(--print)}
-.gbt span{font:12px var(--mono);color:var(--print2)}
-.gbt span.all{color:var(--led)}
-.gbg{display:grid;gap:4px;flex:none;min-width:0}
-.gbl{font:600 10px var(--sans);letter-spacing:.18em;text-transform:uppercase;color:var(--print2);display:flex;align-items:center;gap:7px;line-height:12px}
-.gbl::after{content:"";flex:1;min-width:12px;border-top:1px solid var(--rule)}
-.gbc{display:flex;align-items:center;gap:6px;height:30px}
-.gbc .seg{gap:12px;margin-right:4px}
-.gbc .seg button{height:30px;padding:0 2px;font:600 11px var(--sans);letter-spacing:.12em;text-transform:uppercase}
-.gv{display:inline-grid;grid-template-rows:auto auto;align-content:center;gap:1px;height:30px;box-sizing:border-box;min-width:54px;padding:0 8px;background:var(--lcd);color:var(--ink);border-radius:3px;box-shadow:inset 0 0 0 2px color-mix(in srgb,var(--ink) 18%,transparent);font:14px var(--pix);cursor:ns-resize;user-select:none;-webkit-user-select:none;touch-action:none;text-transform:uppercase;flex:none}
-.gv small{font:9px var(--pix);letter-spacing:.04em;opacity:.8;line-height:1}
-.gv b{font-weight:400;text-align:right;line-height:1}
-.gv:hover{box-shadow:inset 0 0 0 2px color-mix(in srgb,var(--ink) 40%,transparent)}
-.gv:focus-visible{outline:2px solid var(--led);outline-offset:1px}
-.gdice{width:30px;height:30px;padding:0;display:inline-grid;place-items:center;flex:none}
-.gdice svg{width:15px;height:15px;fill:currentColor}
-.genband .gsum{flex:1 1 auto;min-width:0;height:30px;line-height:30px;overflow:hidden;text-overflow:ellipsis;color:var(--print3)}
-.genband .gsum em{font-style:normal;color:var(--print2)}
-.gbc .gsum{height:auto;line-height:normal}
-.gkeys{display:flex;align-items:flex-end;gap:9px;flex:none;margin-left:auto}
-.kc{display:grid;justify-items:center;gap:4px;padding:0;background:none!important;box-shadow:none!important;color:var(--print2);min-width:30px}
-.kc small{font:600 9px var(--sans);letter-spacing:.1em;text-transform:uppercase;line-height:12px;color:var(--print2)}
-.kc kbd{width:30px;height:30px;box-sizing:border-box;display:grid;place-items:center;border-radius:3px;background:var(--key);color:var(--keytext);box-shadow:inset 0 -2px 0 rgba(0,0,0,.35);font:600 12px var(--sans);letter-spacing:0}
-.kc:hover kbd{background:var(--key2)}
-.kc:active kbd{box-shadow:none;transform:translateY(1px)}
-.kc:active{transform:none}
-.kc.cream kbd{background:var(--cream);color:var(--creamtext)}
-.kc.on kbd{box-shadow:inset 0 0 0 2px var(--led),inset 0 -2px 0 rgba(0,0,0,.35)}
-.kc small em{font-style:normal;letter-spacing:.04em;text-transform:none;color:var(--print3,var(--print2));opacity:.8;margin-left:3px}
-.kc.on small{color:var(--led)}
-.kc:disabled{cursor:default}
-.kc:disabled kbd,.kc:disabled small{opacity:.4}
-.kc:focus-visible{outline:none}
-.kc:focus-visible kbd{outline:2px solid var(--led);outline-offset:1px}
-.gkeys .gmut{height:30px;padding:0 11px;margin-right:4px;font:600 11px var(--sans);letter-spacing:.1em;text-transform:uppercase;flex:none}
-.ghint{font:11px var(--mono);color:var(--print3)}
-.sndhead .mutband{flex:1 1 auto;margin:0}
-/* a control surface: nothing selects on a drag but the text fields (mdDeskApp.js refuses selectstart there too) */
-body{-webkit-user-select:none;user-select:none}
-input,textarea,select,[contenteditable]:not([contenteditable=false]),.selectable{-webkit-user-select:text;user-select:text}
-img,svg,canvas{-webkit-user-drag:none}
-@media (max-width:1400px){.genband{gap:12px;padding-inline:10px}.genbar{gap:10px}.genbar>.genband{padding:0}.gbt{min-width:0}.gbc .seg{gap:9px}.gkeys{gap:7px}.ghint{display:none}.genbar .pgkey{padding:0 7px}}
-@media (max-width:1340px){.genband{gap:8px}.genbar{gap:8px}.gkeys{gap:5px}.gbc{gap:4px}.gbc .seg{gap:6px;margin-right:0}.gbc .seg button{letter-spacing:.06em}.gv{padding:0 6px;min-width:50px}.genbar .pgkey{padding:0 6px}.genbar .ptog{margin-left:0}}
-@media (max-width:1500px){.genband:has(.gwrite) .gsum{display:none}}
-.th .nm:has(.gtag){gap:4px}
-.th .nm .gtag{font:10px var(--pix);font-style:normal;color:var(--ink);background:var(--lcd);padding:0 3px;border-radius:2px;margin-left:auto;flex:none;align-self:center;white-space:nowrap}
-.snd.mutating .mutg{all:unset;cursor:pointer;border-bottom:1px dashed currentColor}
-.snd.mutating .mutg[aria-pressed=true]{background:var(--lcd);color:var(--ink);padding:0 5px;border-radius:2px;border-bottom:0}
-/* Small comforts (DESIGN-generators.md §7, mdDeskApp.js): the lock budget over the lock lane (as the top bar's
-   meter: dark from 52, blinking at 64), the tracks marked for a paste to many, the rail's M/S off key, a ramp
-   while it is drawn */
-.lockbudget{font:12px var(--mono);color:var(--print2);white-space:nowrap;cursor:help}
-.lockbudget b{font-weight:500;color:var(--print)}
-.lockbudget.warn b,.lockbudget.full b{background:var(--ink);color:var(--lcd);padding:0 3px;border-radius:2px}
-.lockbudget.full b{animation:blink 1s steps(2) infinite}
-@media (prefers-reduced-motion:reduce){.lockbudget.full b{animation:none}}
-.th.multi{box-shadow:inset 0 0 0 2px var(--led)}
-.railhead .allon{width:auto;padding:0 6px;margin-left:auto;font:600 9px var(--sans);letter-spacing:.08em}
-.railhead .allon:disabled{opacity:.35;cursor:default}
-.railhead .allon:disabled:hover{background:none;color:inherit}
-.lb.ramp i{opacity:.75}
-'''
+assert 'fonts.googleapis' not in css, 'mockup stylesheet: Google Fonts belong in the mockup\'s <link>, not its stylesheet'
+tail = '\n' + open(SK + 'mdOverrides.css').read()
 out_css = head + css.strip('\n') + '\n' + tail
 
 # ---- 3. contract check: ids the scripts look up ----
-scripts = ''.join(open(SK + f).read() for f in os.listdir(SK) if f.endswith('.js'))
+scripts = ''.join(open(d + f).read() for d in (SK, SHARED) for f in sorted(os.listdir(d)) if f.endswith('.js'))
 wanted = (set(re.findall(r'\$\("#([A-Za-z][\w-]*)', scripts)) | set(re.findall(r'getElementById\("([\w-]+)"\)', scripts))
           | set(re.findall(r'closest\("#([A-Za-z][\w-]*)"\)', scripts)))
 made = (set(re.findall(r'id="([A-Za-z][\w-]*)"', scripts)) | set(re.findall(r'id=\\"([\w-]+)', scripts))
@@ -414,22 +144,13 @@ if missing:
     print('contract check: the page looks up ids the mockup markup no longer has:', ', '.join(missing))
     sys.exit(1)
 
-# ---- the shared AUDIO / MIDI panel: one text in every copy ----
+# ---- the pages against the contract: the ops they send, their arguments, the capabilities ----
 sys.dont_write_bytecode = True
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-import audio_panel_check
-panel = audio_panel_check.check(R)
-import modal_check
-panel += modal_check.check(R)
-if panel:
-    print('AUDIO / MIDI panel: ' + '; '.join(panel))
-    sys.exit(1)
-
-# ---- the pages against the contract: the ops they send, their arguments, the capabilities ----
 import page_contract_check as pc
 schema = pc.load(R + 'doc/modern-ux/md-data-contract.schema.json')
 table = pc.command_table(schema)
-page_js = {f: open(SK + f).read() for f in SCRIPTS if os.path.exists(SK + f)}
+page_js = {f: open(script_path(f)).read() for f in SCRIPTS if os.path.exists(script_path(f))}
 problems = []
 for f, text in page_js.items():
     sends = []
@@ -442,24 +163,24 @@ for f, text in page_js.items():
     sends += list(pc.literals_with_op(text))
     problems += pc.check_sends(sends, table, f)
     problems += pc.check_audio(text, table, f)
-app = page_js['mdDeskApp.js']
+app = ''.join(page_js[f] for f in APP)	# the app's files, as one text (each table is in one of them)
 cap_table = re.search(r'const CAP_CONTROLS = \{(.*?)\};', app, re.S)
 cap_info = re.search(r'const CAP_INFO = \[(.*?)\];', app, re.S)
 if not cap_table or not cap_info:
-    problems.append('mdDeskApp.js: no CAP_CONTROLS / CAP_INFO')
+    problems.append('the app: no CAP_CONTROLS / CAP_INFO')
 else:
-    problems += pc.check_caps(re.findall(r'^\s*(\w+):', cap_table.group(1), re.M), re.findall(r'"(\w+)"', cap_info.group(1)), schema, 'mdDeskApp.js')
+    problems += pc.check_caps(re.findall(r'^\s*(\w+):', cap_table.group(1), re.M), re.findall(r'"(\w+)"', cap_info.group(1)), schema, 'the app (mdDeskTop.js)')
 # LIFE (machine.lifecycle -> the page's words) and the message types onMessage handles, both
 # against the contract, both ways (a page can gate on nothing the contract will never send, and
 # nothing the contract sends can go unhandled).
 life = pc.find_object(app, 'LIFE')
 if life is None:
-    problems.append('mdDeskApp.js: no LIFE')
+    problems.append('the app: no LIFE')
 else:
-    problems += pc.check_lifecycle(pc.object_keys(life) or set(), schema, 'mdDeskApp.js')
+    problems += pc.check_lifecycle(pc.object_keys(life) or set(), schema, 'the app (mdDeskTop.js)')
 problems += pc.check_mapping_gate(app, ['S.mapping = false;', 'applyMapping(m.doc.enabled)', 'when: () => S.mapping && S.ctl.learn',
                                         'mapping: ws === "control", when: ws === "control" ? () => S.mapping : null',
-                                        'tb.dataset.ws === "control" && !S.mapping'], 'mdDeskApp.js')
+                                        'tb.dataset.ws === "control" && !S.mapping'], 'the app')
 all_js = ''.join(page_js.values())
 problems += pc.check_message_types(pc.message_types_handled(all_js), schema, 'mdStudio')
 if problems:

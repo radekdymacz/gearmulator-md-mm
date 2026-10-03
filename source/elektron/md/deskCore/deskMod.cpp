@@ -28,7 +28,7 @@ namespace deskCore
 			return static_cast<int>(v->asNumber());
 		}
 
-		// The page's LFO shapes (mdDeskApp.js shape()), -1..1 over one cycle.
+		// The page's LFO shapes (mdDeskSound.js shape()), -1..1 over one cycle.
 		double shape(const int _i, const double _x)
 		{
 			static constexpr double rnd[] = {.35, -.7, .9, -.25, .55, -.9, .1, .7};

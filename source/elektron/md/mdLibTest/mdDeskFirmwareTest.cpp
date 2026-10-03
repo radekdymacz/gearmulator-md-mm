@@ -15,6 +15,7 @@
 #include "mdFirmwareSession.h"
 
 #include "mdDesk/mdDesk.h"
+#include "mdDesk/mdDeskKeys.h"
 #include "mdDesk/mdDeskLibrary.h"
 #include "mdDesk/mdDeskWirePort.h"
 #include "deskCore/deskPacer.h"
@@ -183,6 +184,12 @@ namespace
 		{
 			const auto it = m_docs.find(_kind + ":" + std::to_string(_slot));
 			return it == m_docs.end() ? std::nullopt : std::optional<Value>(it->second);
+		}
+		// How many documents of a kind the page was sent.
+		int pageDocCount(const std::string& _kind) const
+		{
+			const auto it = m_docCounts.find(_kind);
+			return it == m_docCounts.end() ? 0 : it->second;
 		}
 		// Where the last document of a kind came from ("memory", "dump", ...).
 		std::string pageDocSource(const std::string& _kind) const
@@ -373,6 +380,7 @@ namespace
 			{
 				const auto& doc = *_m.find("doc");
 				m_docs[_m.find("kind")->asString() + ":" + std::to_string(int(doc.find("slot")->asNumber()))] = doc;
+				++m_docCounts[_m.find("kind")->asString()];
 				if(const auto* src = _m.find("source"); src && src->isString())
 					m_sources[_m.find("kind")->asString()] = src->asString();
 			}
@@ -409,6 +417,7 @@ namespace
 		std::optional<Value> m_lastResult;
 		std::optional<Value> m_lastError;
 		std::map<std::string, Value> m_docs;
+		std::map<std::string, int> m_docCounts;
 		std::map<std::string, std::string> m_sources;
 		std::optional<Value> m_lastAsk;
 		std::optional<Value> m_machineDoc;
@@ -849,24 +858,26 @@ namespace
 		_rig.run(300);
 	}
 
-	// P10, the page's keyboard: a key is the track's MAP EDITOR note (the machine trigs it, at the note's
-	// velocity), and a PTCH held while the key is down is the machine's for that time only: put back after.
+	// P10, the page's keyboard as the note intent (noteOn / noteOff): a key is the track's MAP EDITOR note
+	// (the machine trigs it, at the note's velocity); on a ROM machine the pitch is a PTCH the machine holds
+	// while the key is down, the working copy's held layer: memory images read meanwhile report no kit
+	// edit, and letting go puts the document's PTCH back.
 	void keyboard(Rig& _rig)
 	{
 		auto& m = _rig.machine();
 		auto& desk = _rig.desk();
-		std::puts("== P10 keyboard: a key plays the selected track, a held PTCH is put back");
+		std::puts("== P10 keyboard: a key plays the selected track, a held PTCH is not a kit edit and is put back");
 		_rig.page(R"({"op":"stop","id":90})");
 		_rig.run(600);
 		const int t = 0;
 		_rig.page(R"({"op":"mute","t":0,"on":false,"id":91})");
 		_rig.run(100);
-		const auto ptchAt = ed::g_mdWorkingKitAddress + ed::g_mdWorkingKitParamsOffset + t * 24 + 0;
+		const auto ptchAt = ed::g_mdWorkingKitAddress + ed::g_mdWorkingKitParamsOffset + t * 24 + mdDesk::keys::g_ptchIndex;
 		const auto peakOf = [&](const std::string& _press, const double _ms)
 		{
 			const auto from = m.left().size();
 			_rig.page(_press);
-			check(resultOk(_rig), "keyNote accepted: " + _press);
+			check(resultOk(_rig), "noteOn accepted: " + _press);
 			_rig.run(_ms);
 			float peak = 0;
 			for(size_t i = from; i < m.left().size(); ++i)
@@ -880,27 +891,47 @@ namespace
 			for(size_t i = from; i < m.left().size(); ++i)
 				quiet = std::max(quiet, std::abs(m.left()[i]));
 		}
-		const auto loud = peakOf(R"({"op":"keyNote","t":0,"vel":127,"id":92})", 250);
-		_rig.page(R"({"op":"keyNote","t":0,"vel":0,"id":93})");
+		const auto loud = peakOf(R"({"op":"noteOn","t":0,"vel":127,"pitch":0,"id":92})", 250);
+		_rig.page(R"({"op":"noteOff","t":0,"pitch":0,"id":93})");
 		_rig.run(600);
-		const auto soft = peakOf(R"({"op":"keyNote","t":0,"vel":30,"id":94})", 250);
-		_rig.page(R"({"op":"keyNote","t":0,"vel":0,"id":95})");
+		const auto soft = peakOf(R"({"op":"noteOn","t":0,"vel":30,"pitch":0,"id":94})", 250);
+		_rig.page(R"({"op":"noteOff","t":0,"pitch":0,"id":95})");
 		_rig.run(600);
 		std::printf("  track 1 by its note: stopped %.4f, velocity 127 peak %.4f, velocity 30 peak %.4f\n", quiet, loud, soft);
 		check(loud > 0.01f && loud > quiet * 4, "a key plays the track (its MAP EDITOR note) while stopped");
 		check(soft < loud * 0.8f, "the note's velocity is heard (30 softer than 127)");
-		const auto before = m.read8(ptchAt);
-		const auto held = static_cast<uint8_t>(before > 64 ? before - 24 : before + 24);
-		_rig.page("{\"op\":\"keyNote\",\"t\":0,\"vel\":100,\"i\":0,\"v\":" + std::to_string(held) + ",\"id\":96}");
-		check(resultOk(_rig), "a key with a held PTCH accepted");
+
+		// Track 1 becomes ROM-01 (a sample machine: pitched by PTCH).
+		const auto kit = *desk.linkState().kit;
+		const auto model = desk.documents().working->kit.models[t];
+		_rig.page("{\"op\":\"machine\",\"k\":" + std::to_string(kit) + ",\"t\":0,\"model\":" + std::to_string(*ed::mdMachineModel("ROM-01"))
+			+ ",\"keepFx\":true,\"id\":96}");
+		check(resultOk(_rig), "track 1 is ROM-01");
+		_rig.runUntil([&] { return !desk.coreState().state({mdDesk::DocKind::WorkingKit, 0})->pending; }, 3000);
+		_rig.run(300);
+		const auto working = [&] { return _rig.machineDoc() ? _rig.machineDoc()->find("kit")->find("working")->asString() : std::string("?"); };
+		const auto kitState = working();
+		const auto before = desk.documents().working->kit.params[t][mdDesk::keys::g_ptchIndex];
+		const int pitch = before > 90 ? -12 : 12;
+		const auto held = mdDesk::keys::heldPtch(before, pitch);
+		const auto imagesBefore = _rig.pageDocCount("workingKit");
+		_rig.page("{\"op\":\"noteOn\",\"t\":0,\"vel\":100,\"pitch\":" + std::to_string(pitch) + ",\"id\":97}");
+		check(resultOk(_rig), "a pitched key accepted");
 		check(_rig.runUntil([&] { return m.read8(ptchAt) == held; }, 1000), "the machine holds the key's PTCH while it is down");
-		_rig.run(200);
-		_rig.page(R"({"op":"keyNote","t":0,"vel":0,"id":97})");
-		check(_rig.runUntil([&] { return m.read8(ptchAt) == before; }, 1000), "let go: the machine's PTCH is put back");
-		_rig.run(400);
+		_rig.run(400);	// memory images are read meanwhile (the region changed)
 		const auto* w = desk.documents().working ? &desk.documents().working->kit : nullptr;
-		check(w && w->params[t][0] == before, "the kit document has the PTCH it had (the key was not an edit)");
+		check(w && w->params[t][mdDesk::keys::g_ptchIndex] == before && !desk.coreState().state({mdDesk::DocKind::WorkingKit, 0})->pending,
+			"held: the memory image read during the hold leaves the kit document's PTCH as it was");
+		check(working() == kitState, "held: the kit's edited/clean state is unchanged (the key is no kit edit): " + working());
+		std::printf("  workingKit documents published during the hold: %d\n", _rig.pageDocCount("workingKit") - imagesBefore);
+		_rig.page("{\"op\":\"noteOff\",\"t\":0,\"pitch\":" + std::to_string(pitch) + ",\"id\":98}");
+		check(_rig.runUntil([&] { return m.read8(ptchAt) == before; }, 1000), "let go: the machine's PTCH is the document's again");
+		_rig.run(400);
+		w = desk.documents().working ? &desk.documents().working->kit : nullptr;
+		check(w && w->params[t][mdDesk::keys::g_ptchIndex] == before && working() == kitState, "after: the kit document and its state as they were");
 		std::printf("  PTCH %d, held %d, after %d\n", before, held, m.read8(ptchAt));
+		_rig.page("{\"op\":\"machine\",\"k\":" + std::to_string(kit) + ",\"t\":0,\"model\":" + std::to_string(model) + ",\"keepFx\":true,\"id\":99}");
+		_rig.run(300);
 	}
 
 	// P3 control: an app LFO moves a kit parameter on the machine's steps.
@@ -2138,7 +2169,7 @@ namespace
 			+ std::to_string(int(slotDoc("ram", 0).find("length")->asNumber())) + " samples)");
 	}
 
-	// The SAMPLER card's "Set up sampling" (mdDeskApp.js, [data-setupgo]): two machine ops in one gesture put
+	// The SAMPLER card's "Set up sampling" (mdDeskSampler.js, [data-setupgo]): two machine ops in one gesture put
 	// RAM-R1 and RAM-P1 on two tracks that played ROM machines, a trig on the recorder; then the chop grid's
 	// trigs + STRT locks on the player. A pattern dump over the current pattern makes OS 1.63 load the kit it
 	// links from its slot, also the kit that plays: the desk sends the unsaved edits again after it

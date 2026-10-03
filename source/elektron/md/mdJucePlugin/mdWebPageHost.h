@@ -14,12 +14,14 @@
 namespace mdJucePlugin
 {
 	class PageWebView;
+	namespace pageBridge { class Pieces; }
 
 	// A web page in the plug-in (P6: one host for both editors): bundling (stylesheets, scripts
 	// and fonts inlined into one file, which WKWebView may read), the bridge (page -> C++ as
 	// gmbridge:// navigations, C++ -> page as gm.recv([...])), the outbox (messages wait until
 	// the page said ready, then go out in batches), a temp file per instance, and the zoom that
-	// fits the page's design width into the window. It knows nothing about documents.
+	// fits the page's design width into the window. It knows nothing about documents. How a message travels
+	// is mdPageBridge.h (the transport, pure).
 	class WebPageHost
 	{
 	public:
@@ -52,6 +54,7 @@ namespace mdJucePlugin
 		std::function<std::string(const std::string&)> m_resource;
 		std::function<void(const Value&)> m_onMessage;
 		std::unique_ptr<PageWebView> m_web;
+		std::unique_ptr<pageBridge::Pieces> m_pieces;	// the page's long batches, joined (mdPageBridge.h)
 		std::vector<Value> m_outbox;
 		juce::File m_file;
 		juce::String m_selfTest;

@@ -24,7 +24,8 @@ namespace mdDesk
 		bool operator!=(const Chain& _o) const { return !(*this == _o); }
 	};
 
-	// Problems with a chain request, as messages for the page; empty = it can be sent.
+	// Problems with a chain request, as messages for the page; empty = it can be sent (deskCore::validateChain
+	// with the Machinedrum's 8 banks of 16 patterns).
 	std::vector<std::string> validateChain(const std::vector<int>& _patterns);
 
 	// The panel keys (md::panelKeySequence names) that make the chain. _bankGroup is the

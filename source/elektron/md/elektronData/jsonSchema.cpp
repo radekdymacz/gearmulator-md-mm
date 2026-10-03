@@ -270,4 +270,27 @@ namespace elektronData::json
 		}
 		return out;
 	}
+
+	namespace
+	{
+		void closeOpen(Value& _node)
+		{
+			if(_node.isObject())
+			{
+				if(const auto* a = _node.find("additionalProperties"); a && a->isBool() && a->asBool())
+					_node.put("additionalProperties", Value(false));
+				for(auto& [k, v] : _node.asObject())
+					closeOpen(v);
+			}
+			else if(_node.isArray())
+				for(auto& v : _node.asArray())
+					closeOpen(v);
+		}
+	}
+
+	Value Schema::closedForWriter(Value _root)
+	{
+		closeOpen(_root);
+		return _root;
+	}
 }

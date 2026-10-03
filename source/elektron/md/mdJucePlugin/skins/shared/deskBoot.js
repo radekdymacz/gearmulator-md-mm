@@ -1,4 +1,5 @@
-/* BOOT BEGIN (P7): the start-up card, the same text in both editors (checked by the sync scripts). While
+"use strict";
+/* The start-up card (P7), one file for both editors and both mockups (skins/shared/). While
    the firmware starts, a modal card over the whole window (the modal layer's "boot" kind: nothing behind it
    takes a key or a click) shows the machine's own LCD, mirrored big and pixel for pixel, a progress bar and
    what to wait for; it fades out when the machine takes input. The same card is the first run: NO ROM and
@@ -121,4 +122,3 @@ const Boot = (() => {
 	}, true);
 	return { update, lcd, rom, showInstalled, host: null, state: () => shown };
 })();
-/* BOOT END */

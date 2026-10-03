@@ -1,7 +1,7 @@
 
 /* ===== Song (from the MD Editor, with the MM's per-row transpose, 6 + 6 mutes, 200 rows) ===== */
 const T64=()=>Array(12).fill(64);
-S.song=[{pat:0,rep:2},{pat:1,rep:2,trn:69},{pat:0,rep:2,mutes:[3]},{pat:2,rep:1,ofs:16,len:16},{pat:1,rep:2,ttr:[64,64,64,71,64,64,64,64,64,64,64,64]},{pat:3,rep:1,bpm:124,mutes:[4,7]},{type:"loop",to:1,count:2},{type:"end"}];
+S.song=[{pat:0,rep:2},{pat:1,rep:2,trn:69},{pat:0,rep:2,mutes:[3]},{pat:2,rep:1,ofs:8,len:16},{pat:1,rep:2,ttr:[64,64,64,71,64,64,64,64,64,64,64,64]},{pat:3,rep:1,bpm:124,mutes:[4,7]},{type:"loop",to:1,count:2},{type:"end"}];
 S.songSel=1;S.bank=0;
 /* the row's rarer settings (per-track transpose, part, mutes) behind MORE, as the Machinedrum Editor's Song (2026-10) */
 S.songMore=false;
@@ -19,7 +19,7 @@ function songPick(){const g=S.songs;if(!g)return"";const nn=i=>String(i+1).padSt
 /* ===== Chain (MM-P8, as the Machinedrum Editor's Song): one palette, two ways to play its pads. ARRANGE adds
    to the song; CHAIN numbers the pads into the machine's own chain (hold BANK, press the TRIG keys; manual
    1-46: one bank, each pattern once, loops), sent at once. The header says what the machine plays (playsOf).
-   The machine's chain comes from the host (MMView.setPlays: machine.desk.chain, song mode); on its own the
+   The machine's chain comes from the host (MMView.show: machine.desk.chain, song mode); on its own the
    example engine plays it at the pattern ends (chainWrap). */
 S.songPick="arrange";S.chainDraft=[];S.chainTimer=0;S.chainSent=false;
 S.plays={chain:null,songMode:false,song:0};
@@ -95,13 +95,19 @@ function renderSong(){const sel=S.song[S.songSel]||S.song[0],chain=S.songPick===
      const txt=r.type==="end"?"END":r.type==="loop"?`↺${String(r.to+1).padStart(3,"0")}`:r.type==="jump"?`→${String(r.to+1).padStart(3,"0")}`:r.type==="halt"?"HALT":patName(r.pat);
      const sub=r.type==="loop"?(r.count===Infinity?"∞":"×"+r.count):!r.type?`${r.rep>1?"×"+r.rep:""}${(r.trn??64)!==64?" "+((r.trn-64)>0?"+":"")+(r.trn-64):""}${hasTtr(r)?" T":""}${r.mutes?.length?" M":""}${r.bpm?" B":""}${r.ofs||r.len?"~":""}`:"";
      return`<button class="${cls}" data-row="${i}" data-i="${i}" draggable="${r.type==="end"?"false":"true"}" title="Row ${String(i+1).padStart(3,"0")}${r.type?"":" · "+patName(r.pat)+" ×"+r.rep+" · "+rowLen(r)+" steps"}"><b>${txt}</b><small>${sub}</small></button>`}).join("")}`).join("")}</div></section></div>`}
+/* a row as the song's intent: rowSet of the selected row (the page's row; the host makes the song's) */
+function editRow(i=S.songSel){edit("rowSet",{i,row:S.song[i]})}
+/* the page's rows after a move or a removal: loop and jump targets follow their rows (map: old place -> new), a HALT
+   row's target is its own place (as the core's song rows, deskCore/deskEdits.h) */
+function songRetarget(map){S.song.forEach((r,j)=>{if(r.type==="loop"||r.type==="jump")r.to=map(r.to);else if(r.type==="halt")r.to=j})}
+function songMove(from,to){const order=S.song.map((_,j)=>j),[m]=order.splice(from,1);order.splice(to,0,m);const map=[],was=S.song.slice();order.forEach((j,n)=>{map[j]=n;S.song[n]=was[j]});songRetarget(j=>map[j]??j);S.songSel=to;edit("rowMove",{from,to})}
 function songAction(a){const i=S.songSel,r=S.song[i];
- if(a==="del"){if(r.type==="end")return;S.song.splice(i,1);S.songSel=Math.min(i,S.song.length-1)}
- if(a==="dup"&&!r.type){if(S.song.length>=200){toast("A song holds 200 rows.");return}S.song.splice(i+1,0,JSON.parse(JSON.stringify(r)));S.songSel=i+1}
- if(a==="up"&&i>0&&r.type!=="end"){[S.song[i-1],S.song[i]]=[S.song[i],S.song[i-1]];S.songSel=i-1}
- if(a==="down"&&i<S.song.length-2&&r.type!=="end"){[S.song[i+1],S.song[i]]=[S.song[i],S.song[i+1]];S.songSel=i+1}
- if(a==="loop"){const at=r.type==="end"?i:i+1;S.song.splice(at,0,{type:"loop",to:Math.max(0,i-1),count:2});S.songSel=at}
- structEdited();render()}
+ if(a==="del"){if(r.type==="end")return;S.song.splice(i,1);songRetarget(j=>j<=i?j:j-1);S.songSel=Math.min(i,S.song.length-1);edit("rowDelete",{i})}
+ if(a==="dup"&&!r.type){if(S.song.length>=200){toast("A song holds 200 rows.");return}S.song.splice(i+1,0,JSON.parse(JSON.stringify(r)));songRetarget(j=>j<=i?j:j+1);S.songSel=i+1;edit("rowInsert",{i:i+1,row:S.song[i+1]})}
+ if(a==="up"&&i>0&&r.type!=="end")songMove(i,i-1);
+ if(a==="down"&&i<S.song.length-2&&r.type!=="end")songMove(i,i+1);
+ if(a==="loop"){const at=r.type==="end"?i:i+1;S.song.splice(at,0,{type:"loop",to:Math.max(0,i-1),count:2});songRetarget(j=>j<at?j:j+1);S.songSel=at;edit("rowInsert",{i:at,row:S.song[at]})}
+ render()}
 function songStep(k,d){const r=S.song[S.songSel];
  if(k==="pat")r.pat=(r.pat+d+128)%128;if(k==="rep")r.rep=Math.max(1,Math.min(64,r.rep+d));if(k==="bpm")r.bpm=Math.max(30,Math.min(300,(r.bpm||S.bpm)+d));
  if(k==="trn")r.trn=clamp((r.trn??64)+d,28,100);
@@ -109,7 +115,7 @@ function songStep(k,d){const r=S.song[S.songSel];
  if(k==="len"){const L=patLen(r.pat);r.len=Math.max(1,Math.min(L-(r.ofs||0),rowLen(r)+d))}
  if(k==="to")r.to=Math.max(0,Math.min(r.type==="jump"?S.song.length-1:S.songSel-(r.type==="loop"?1:0),r.to+d));
  if(k==="count")r.count=r.count===Infinity?(d<0?63:Infinity):Math.max(1,Math.min(63,r.count+d));
- structEdited();render()}
+ editRow();render()}
 let drag2=null;
 function dropTarget(el){const c=el?.closest?.(".scell");if(!c)return null;const i=+c.dataset.i,endI=S.song.length-1;return i<endI?{i,mode:"onto"}:{i:endI,mode:"append"}}
 function showTarget(t){$$(".scell.over,.scell.appendto").forEach(x=>x.classList.remove("over","appendto"));if(!t)return;const c=document.querySelector(`.scell[data-i="${t.mode==="append"?S.song.length:t.i}"]`);c&&c.classList.add(t.mode==="append"?"appendto":"over")}
@@ -118,7 +124,8 @@ document.addEventListener("dragstart",e=>{const b=e.target.closest?.(".scell:not
  e.dataTransfer.effectAllowed=drag2.kind==="row"?"move":"copy";try{e.dataTransfer.setData("text/plain",String(drag2.v))}catch(_){}});
 document.addEventListener("dragover",e=>{if(!drag2)return;const t=dropTarget(e.target);if(!t)return;e.preventDefault();showTarget(t)});
 document.addEventListener("drop",e=>{if(!drag2)return;const t=dropTarget(e.target);if(!t)return;e.preventDefault();
- if(drag2.kind==="pat"){if(S.song.length>=200)toast("A song holds 200 rows.");else if(t.mode==="onto"&&!S.song[t.i].type){S.song[t.i].pat=drag2.v;S.songSel=t.i}else{const at=t.mode==="onto"?t.i:S.song.length-1;S.song.splice(at,0,{pat:drag2.v,rep:1});S.songSel=at}}
- else{const from=drag2.v;let to=t.mode==="onto"?t.i:S.song.length-1;if(from!==to){const[r]=S.song.splice(from,1);if(from<to&&t.mode==="onto")to--;if(t.mode==="append")to=S.song.length-1;S.song.splice(to,0,r);S.songSel=to}}
- drag2=null;structEdited();render()});
+ if(drag2.kind==="pat"){if(S.song.length>=200)toast("A song holds 200 rows.");else if(t.mode==="onto"&&!S.song[t.i].type){S.song[t.i].pat=drag2.v;S.songSel=t.i;editRow(t.i)}
+  else{const at=t.mode==="onto"?t.i:S.song.length-1;S.song.splice(at,0,{pat:drag2.v,rep:1});songRetarget(j=>j<at?j:j+1);S.songSel=at;edit("rowInsert",{i:at,row:S.song[at]})}}
+ else{const from=drag2.v;let to=t.mode==="onto"?t.i:S.song.length-1;if(t.mode==="onto"&&from<to)to--;if(t.mode==="append")to=S.song.length-2;if(from!==to&&to>=0)songMove(from,to)}
+ drag2=null;render()});
 document.addEventListener("dragend",()=>{drag2=null;showTarget(null);$$(".dragging").forEach(x=>x.classList.remove("dragging"))});

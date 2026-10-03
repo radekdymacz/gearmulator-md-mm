@@ -3,7 +3,7 @@
    from the LCD's KIT field or pattern name. Everything is the machine's: 64 kits and 128 patterns from
    the desk's documents (it loads them all in the background), and every action a firmware command or
    dump (mdDesk/mdDeskLibrary.h, measured in mdP4ProbeFirmwareTest library). What the firmware has no
-   command for says so in its tooltip. Loaded after mdDeskApp.js; uses its state and commands.
+   command for says so in its tooltip. Loaded after the app's files (mdDeskApp.js lists them); uses their state and commands.
    P6: the library asks nothing itself. A command that would lose something (a load over edits, a
    write over a slot, a clear) is sent as it is, and the plug-in asks (mdDeskApp.js, onAsk). What
    the clipboard holds is the plug-in's (machine.clipboard). */

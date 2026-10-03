@@ -9,10 +9,11 @@
 const fs = require("fs"), path = require("path"), vm = require("vm");
 
 const ctx = vm.createContext({ console });
-vm.runInContext(fs.readFileSync(path.join(__dirname, "mdDeskModel.js"), "utf8")
+/* the page's model with the shared modules it is loaded after (sync-mdstudio-skin.py SCRIPTS) */
+vm.runInContext(["../shared/deskDocs.js", "../shared/deskOverlay.js", "mdDeskModel.js"].map(f => fs.readFileSync(path.join(__dirname, f), "utf8")).join("\n")
 	+ "\nconst S = { soloSet: new Set() };"
-	+ "\nthis.T = { deriveView, Overlay, view, Docs, S, EMPTY_DOCS, storeDoc, resetDocs, canDo, docOf, multFactor, mfxName, nameOf, tweakWrites, catalogueIndex, waveBins, waveWant, waveColumns, auditionAt, WAVE_MAX_BINS, playsOf, keyPlan, keyVel, KEYS_VEL, ptchSemis, semisPtch, kitNameText, get V() { return V; } };", ctx);
-const { deriveView, Overlay, Docs, S, EMPTY_DOCS, storeDoc, resetDocs, canDo, docOf, multFactor, nameOf, tweakWrites, catalogueIndex, waveBins, waveWant, waveColumns, auditionAt, WAVE_MAX_BINS, playsOf, keyPlan, keyVel, KEYS_VEL, ptchSemis, semisPtch, kitNameText } = ctx.T;
+	+ "\nthis.T = { deriveView, Overlay, view, Docs, S, EMPTY_DOCS, storeDoc, resetDocs, canDo, docOf, multFactor, mfxName, nameOf, machineFacts, tweakWrites, catalogueIndex, waveBins, waveWant, waveColumns, auditionAt, WAVE_MAX_BINS, playsOf, keyPitch, keyVel, KEYS_VEL, kitNameText, get V() { return V; } };", ctx);
+const { deriveView, Overlay, Docs, S, EMPTY_DOCS, storeDoc, resetDocs, canDo, docOf, multFactor, nameOf, machineFacts, tweakWrites, catalogueIndex, waveBins, waveWant, waveColumns, auditionAt, WAVE_MAX_BINS, playsOf, keyPitch, keyVel, KEYS_VEL, kitNameText } = ctx.T;
 const DELETE = Overlay.DELETE;
 let failures = 0;
 const check = (ok, what) => { console.log((ok ? "  ok   " : "  FAIL ") + what); if (!ok) failures++; };
@@ -40,7 +41,7 @@ const caps = { engine: "emu", label: "EMU OS 1.63", about: "",
 	reasons: { chains: "keys only" }, values: { dumps: "direct" } };
 const docs = (extra = {}) => ({ patterns: { 5: pattern }, kits: { 3: kit("STORED") }, songs: {}, global: null, catalogue, telemetry: null,
 	workingKit: null, sources: { "kit:3": "dump" },
-	machine: { schema: "md-desk/machine", version: 1, pattern: { current: 5 }, kit: { current: 3, working: "clean" }, song: {}, desk: {}, engines: [],
+	machine: { schema: "md-desk/machine", version: 1, contract: 2, pattern: { current: 5 }, kit: { current: 3, working: "clean" }, song: {}, desk: {}, engines: [],
 		history: { undo: false, redo: false, undoCount: 0, redoCount: 0 }, lifecycle: "ready", input: true, midi: true,
 		lifecycleText: "", capabilities: caps, clipboard: { steps: false, sound: true, songRow: false, kit: 7, pattern: null } }, ...extra });
 
@@ -99,7 +100,18 @@ check(!a.playing && !a.rec, "the transport is the telemetry's only (the machine 
 check(deriveView(docs({ global: { extendedMode: false, tempo: 120, routing: Array(16).fill("MAIN") } }), S).mode === "CLASSIC" && a.mode === "EXTENDED", "the mode is the global's only");
 check(a.input && a.midi && a.clipboard.kit === 7 && a.clipboard.pattern === null && a.clipboard.sound, "input, midi and the clipboard are the machine document's");
 check(canDo(a, "transport") && !canDo(a, "chains") && !canDo(a, "noSuchCapability") && a.caps.reasons.chains === "keys only", "capabilities nested: can[name] true only; an unknown name is not allowed");
-check(nameOf("TRX-BD") === "Bass drum" && nameOf("MID-03") === "MIDI channel 3" && nameOf("ROM-25") === "ROM sample 25", "nameOf is the model's own (no call up into the app)");
+const noCat = catalogueIndex(null);
+check(nameOf("TRX-BD", noCat) === "Bass drum" && nameOf("MID-03", noCat) === "MIDI channel 3" && nameOf("ROM-25", noCat) === "ROM sample 25", "nameOf is the model's own (no call up into the app)");
+{
+	/* a machine's facts: one record from the catalogue (or the name before it), what the page asks instead of a name test */
+	const f = m => machineFacts(m, noCat), rom = f("ROM-25"), rp = f("RAM-P3"), rr = f("RAM-R2"), ctr = f("CTR-EQ"), mid = f("MID-01"), pi = f("P-I-BD"), gnd = f("GND-EMPTY");
+	check(rom.sampler && !rom.player && rom.slot.join() === "rom,24" && rp.sampler && rp.player && rp.slot.join() === "ram,2" && rr.recorder && !rr.sampler && rr.slot.join() === "ram,1"
+		&& !rr.reach.syn && rr.reach.fx && !ctr.audio && ctr.masterFx && !f("CTR-AL").masterFx && !mid.audio && !mid.reach.rt && gnd.audio && gnd.reach.syn && gnd.slot === null,
+		"machineFacts: sample slots, players, recorders, sound and Control All's reach from the family and the code");
+	const known = machineFacts("P-I-BD", catalogueIndex({ machines: [{ model: 9, machine: "P-I-BD", family: "P-I", params: [] }] }));
+	check(pi.family === "P" && known.family === "P-I" && known.key === "PI" && known.code === "BD",
+		"machineFacts: the catalogue's family wins over the name (P-I)");
+}
 check(!canDo(deriveView(EMPTY_DOCS, S), "transport"), "no machine document: nothing is allowed");
 check(a.tracks[0].lfo.UPDTE === "FREE" && a.tracks[0].lfo.SPD === 30 && a.mfx.gate.v.DVOL === 1 && a.mfx.dyn.v.ATCK === 3, "LFO updates, LFO parameters and the master effects come from the catalogue's enumerations");
 check(multFactor("3/4X") === 0.75 && multFactor("2X") === 2 && multFactor("1X") === 1, "a tempo multiplier's factor is read from its name");
@@ -208,19 +220,12 @@ Overlay.clear();
 	check(auditionAt(aud, 0) === 0 && auditionAt(aud, 1000) === 0.5 && auditionAt(aud, 5000) === 1 && auditionAt(null, 10) === 0, "auditionAt: the playhead from the sample's own rate");
 }
 
-/* P10: the keyboard's white keys, pitched by PTCH on the sample machines only (manual: 3 steps a semitone in the first octave) */
+/* P10: the keyboard's white keys as pitches from the track's sound (what a pitch is on the machine is the core's: mdDeskTest testKeyMapping) */
 {
-	const v = (m, k, o, p) => { const r = keyPlan(m, k, o, p); return r && r.v; };
-	check(v("ROM-01", "A", 0, 64) === 64 && v("ROM-01", "S", 0, 64) === 70 && v("ROM-01", "K", 0, 64) === 100 && v("ROM-01", "A", -1, 64) === 28,
-		"keyPlan: C D, the C an octave up and down are PTCH 64 70 100 28 (3 steps a semitone)");
-	check(v("RAM-P2", "G", 0, 70) === 91, "keyPlan: key C is the sound as tuned (PTCH 70), G is 7 semitones (21 steps) above it");
-	check(v("ROM-12", "A", 2, 64) === 127 && v("ROM-12", "A", -2, 64) === 0, "keyPlan: two octaves are the ends of PTCH");
-	check(v("ROM-12", "L", 1, 64) === 127 && v("ROM-12", "A", -2, 10) === 0, "keyPlan: beyond the scale, the ends");
-	check(semisPtch(ptchSemis(110)) === 110 && semisPtch(ptchSemis(15)) === 15, "ptchSemis and semisPtch invert each other in the second octave");
-	check(keyPlan("TRX-BD", "D", 0, 64).kind === "trig" && keyPlan("MID-01", "A", 0, 64).kind === "trig" && keyPlan("CTR-AL", "A", 0, 0).kind === "trig",
-		"keyPlan: synthesis, MIDI and control machines are played at their own pitch");
-	check(keyPlan("GND-EMPTY", "A", 0, 0).kind === "none" && keyPlan("RAM-R1", "A", 0, 0).kind === "none" && keyPlan("ROM-01", "W", 0, 64) === null,
-		"keyPlan: GND-EMPTY and the recorders are left alone; W is not a key of the keyboard");
+	check(keyPitch("A", 0) === 0 && keyPitch("S", 0) === 2 && keyPitch("G", 0) === 7 && keyPitch("K", 0) === 12 && keyPitch("L", 0) === 14,
+		"keyPitch: A S G K L are C D G C D, 0 2 7 12 14 semitones");
+	check(keyPitch("A", -1) === -12 && keyPitch("A", 2) === 24 && keyPitch("L", -2) === -10, "keyPitch: the octave is 12 semitones");
+	check(keyPitch("W", 0) === null, "keyPitch: W is not a key of the keyboard");
 	check(KEYS_VEL === 100 && keyVel(100, -1) === 80 && keyVel(100, 1) === 127 && keyVel(20, -1) === 20 && keyVel(127, 1) === 127,
 		"keyVel: C / V step the velocity 20 40 60 80 100 127 from 100, held at the ends");
 	check(keyVel(90, 1) === 100 && keyVel(90, -1) === 80, "keyVel: a velocity between steps goes to the next step");

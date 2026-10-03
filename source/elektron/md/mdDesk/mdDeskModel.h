@@ -21,6 +21,17 @@ namespace mdDesk
 	// The table's group column: the kit library and the pattern chooser (mdDeskLibrary.h).
 	constexpr int g_library = 1;
 
+	// Control All (manual p.37, DESIGN-edit-flow.md): what a "tweak" command means beyond its change (the
+	// whole working kit). On the emulated machine it is the firmware's own gesture: FUNCTION held, the DATA
+	// ENTRY knob turned. The page (0 synthesis, 1 effects, 2 routing) is made the machine's knob page first.
+	struct TweakIntent
+	{
+		int page = 0;
+		uint8_t knob = 0;
+		int d = 0;
+		std::optional<uint8_t> track;	// the gesture's track, the preferred lead
+	};
+
 	// The Machinedrum model for deskCore (P6): the documents, the pure edits, the page's messages
 	// for them, and the command table. No machine: that is the adapter (MdAdapter).
 	struct MdModel
@@ -34,6 +45,8 @@ namespace mdDesk
 		using Context = EditContext;
 		using EditResult = mdDesk::EditResult;
 		using Table = CommandTable;
+		// The command's intent review() hands to submit() (deskCore::IntentOf): Control All, or nothing.
+		using Intent = std::optional<TweakIntent>;
 
 		static Ref refOf(const Document& _d) { return mdDesk::refOf(_d); }
 		static std::optional<Document> get(const Documents& _docs, const Ref& _ref) { return _docs.get(_ref); }
@@ -51,6 +64,9 @@ namespace mdDesk
 		// What the clipboard holds, for the page's Paste (machine.clipboard).
 		static std::optional<elektronData::json::Value> clipboardDocument(const Clipboard& _clip);
 		// What the editor does not do yet on any engine: nothing for the Machinedrum.
+		// The page protocol's version (data-contract.md 2, machine.contract): bumped when a member is renamed, removed
+		// or re-meant; adding one keeps it.
+		static constexpr int contractVersion = 2;
 		static const std::vector<deskCore::Unsupported>& unsupported() { static const std::vector<deskCore::Unsupported> none; return none; }
 		// The Machinedrum Editor's command vocabulary (every op the page may send).
 		static const Table& commands();

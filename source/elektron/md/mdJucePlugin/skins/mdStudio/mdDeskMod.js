@@ -3,7 +3,7 @@
    parameters, as the "md-desk/modulators" document (doc/modern-ux/data-contract.md). Every edit
    builds a new doc (mutate) and the page sends it whole ("modSet"); the desk runs it on the
    machine's own steps and sends CCs within the CC budget (mdDesk/mdDeskMod.h). The page's own
-   in-flight guard (mdDeskApp.js's modInFlight, the MM page's pattern) keeps an incoming "mod"
+   in-flight guard (mdDeskControl.js's modInFlight, the MM page's pattern) keeps an incoming "mod"
    message from overwriting an edit still on its way to the desk. Nothing here knows the DOM. */
 const Mods = {
 	doc: { schema: "md-desk/modulators", version: 1, sources: [], links: [] },

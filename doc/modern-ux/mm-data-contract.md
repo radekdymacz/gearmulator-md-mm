@@ -28,6 +28,8 @@ Rules, as for the MD:
 - `"schema"` is `mm-desk/pattern`, `mm-desk/kit`, `mm-desk/song`, `mm-desk/global` or `mm-desk/machine`.
 - **Version 2 (P6):** the pattern, kit, song and global documents carry what the firmware stores and the editor passes through untouched under one member, `firmware`: `firmware.format` and the undecoded bytes (version 1's `hidden` members). A second engine then inherits nothing of OS 1.32B's layout by accident. Readers take version 1 too (`format` and `hidden` at the top level). The machine document stays version 1.
 - Readers ignore members they do not know; adding an optional member keeps the version; renaming or re-meaning one makes it the next.
+- The machine document's `contract` (2) is the page protocol's version (`MmModel::contractVersion`, written into the schema as a `const` by `mmDeskTest --write-schema`); it follows the rule above.
+- Commands (`$defs/command`) are closed: an undeclared argument is refused. What the plug-in writes (the documents, the machine document, the messages) is open for readers (`"additionalProperties": true` where the members are listed); the tests hold our own writer to what it declares by closing those again (`json::Schema::closedForWriter`), as data-contract.md 2 says.
 - `firmware.format.version` / `revision` are the firmware's own dump format bytes: pattern 6/1, kit 2/1, song 2/1, global 3/1.
 - The schema's `$defs/message` is every message the plug-in sends the page and `$defs/command` every command the page may send; `command` is generated from the command table (`mmDesk::commandTable`, `mmDeskTest --write-schema`), and the unit and firmware tests check every published message and every command they send against them.
 
@@ -137,6 +139,7 @@ The machine state the page shows, published by `mmDesk::Desk` whenever it change
 
 | Member | Meaning |
 |---|---|
+| `contract` | The page protocol's version (2; section 2) |
 | `engine` | `missing` (no ROM), `unsupported` (not OS 1.32B), `loading`, `booting` (the firmware's start-up screen), `ready` (the main screen came) |
 | `pattern.current`, `pattern.queued` | from the status replies; a LOAD PATTERN while playing is queued until the pattern end |
 | `kit.current`, `kit.working` | the kit slot, and `clean` / `edited`: the working kit in patch RAM against the stored slot |
@@ -144,6 +147,12 @@ The machine state the page shows, published by `mmDesk::Desk` whenever it change
 | `global` | the active global slot |
 | `mutes` | MM-P4: `synth` and `midi`, bit t = track t muted, from RAM (the MUTE window and CC 3; made on the machine's panel too); `null` where the engine cannot read them (HW MIDI) |
 | `poly` | MM-P4: POLY, the machine's audio mode (status 0x20); `null` until it answers |
+| `tempo` | BPM from RAM; `null` while it is not a tempo yet (boot) |
+
+`mutes`, `poly` and `tempo` are memory's, but a value the page set (`mute`, `muteMidi`, `poly`, `tempo`) is
+said from the moment the command is taken (so before its result) until memory shows it; memory that still
+disagrees after the engine's `settleMs` (1.5 s) wins, so a change on the machine's panel shows
+(DESIGN-UNIFY.md 4.4, `deskCore::FieldExpectation`). The page matches its echoes by command id, never by time.
 | `desk` | MM-P8: `chain` (the firmware's pattern chain from RAM: `active`, `next`, `patterns`; `null` where not readable, HW MIDI) and `bankGroup` (0 A-D, 1 E-H, -1 unknown) |
 | `recv` | the SYSEX RECV session: `state` (`idle`, `toMain`, `entering`, `parked`, `leaving`, `failed`; over HW MIDI `idle` or `waitingUser`), `waiting` (HW MIDI: messages that wait for the person to open SYSEX RECV, sent by `hwSend`), `sending` (dumps in flight), `received` / `errors` (the firmware's own counters) |
 | `loading` | `done` / `total` documents read (288) |
@@ -156,13 +165,57 @@ only here, never in the machine document), `lcd` (the firmware's 128 x 64 LCD as
 digits, row by row, MSB = left pixel, while the engine is not ready),
 `catalogue`, `learn` and `result` (`op`, `id`, `ok`, `errors`, `note`).
 
+Edit intents (DESIGN-UNIFY.md 4.1, `mmDesk/mmDeskEdit.cpp`): every edit the page makes, in small steps, applied by the
+core to its own documents (so a step the machine recorded meanwhile stays). Pattern edits name the pattern (`p`); the
+kit edits the kit that plays (`k`, its working kit); the song edits a song (`s`, any of the 24); the global edits the
+active global; the library's ops name their slots. A track `t` of a pattern edit is 0-11: the six synth tracks, then
+the six MIDI sequencer tracks. Values in firmware units.
+- Mix: `level`, `route` (`out`: AB 1, CD 2, EF 4), `input`, `param` (`page` 0-6 a synth track's, 7 a MIDI track's MIDI
+  page), `trigPos`, `legato`, `portamento`, `routing`, `midiTrack` (`ch`, `cc`).
+- Sequence: `step` (`v`: null, `{off:true}` or `{n, a, f, l, notrig?}`), `slide`, `swingStep`, `lock` (`v` null
+  clears), `clearLane`, `clearLocks`, `clearPattern`, `steps` (a range of tracks made exactly the rows given: the
+  generators), `rotate`, `doublePattern`, `length`, `speed`, `swing` (percent), `transpose`, `arp` (`field`, `v`, `i`
+  for a rhythm/offset step), `clearSteps`, `copySteps`, `pasteSteps` (the core's clipboard).
+- Sound and Perform (the kit that plays): `machine` (`model`: the SysEx 0x5B id; the SYN page starts at the machine's
+  defaults, without `keepFx` the other pages at their neutral values; a processing machine on a track that had none
+  listens, INP A+B on track 1, the neighbour elsewhere, with AMP DEC and REL at 127), `clearSound` (GND-SIN at its
+  start), `copySound` / `pasteSound` (the machine and its seven pages, the core's clipboard), `params` (`values`:
+  `[[t, page, i, v]...]`, MUTATE and a screen's handle), `assign` (`src` 0-5 and `row` 0-1 with `page`, `dest`, `add`
+  -64..63; `mirror`, `hpf`, `lpf`), `multiEnv` (`i`, `v`: every track's copy), `multiTrig` (`mode`, `splitKey`,
+  `splitTrack` 0-5, `timing`), `kitName` (the kit that plays, live).
+- The MULTI MAP (the active global): `multiMap` (`i`, `hi`, `pat` 255 CUR, `ofs` 255 ---, `len`, `trn` -64..63, `tim`),
+  `multiMapSplit` (`i`: the range splits at its middle key, the lower half a copy), `multiMapDelete` (`i`: the last
+  range then reaches the top key). The ranges past the last in use repeat its upper key.
+- Song (`s`): `rowSet` (`i`, `row`: a contract row), `rowInsert`, `rowDelete`, `rowMove` (`from`, `to`), `copyRow`,
+  `pasteRow`, as the Machinedrum's (`deskCore/deskEdits.h`): loop, jump and halt targets follow their rows, END stays
+  last, 200 rows; the bytes after END stay where they are.
+- The library (stored slots): `kitCopy`, `kitPaste`, `kitCopyTo` (`from`, `to`), `kitClear`, `kitRename` (a stored
+  kit; `kitName` renames the kit that plays), `patCopy`, `patPaste`, `patCopyTo`, `patClear`, as the Machinedrum's.
+  A copy of the kit that plays copies what it sounds like; a kit written into its slot is loaded too (LOAD KIT). A
+  cleared kit is six GND-SIN tracks at their start without a name; a cleared pattern has no notes, slides or locks
+  (length, speed, swing, arpeggiator, transposes and its kit link stay). The machine asks first (`clearSlot`;
+  `overwriteSlot` over a kit with a name, the kit that plays or a pattern with trigs); the page sends it again with
+  `force`.
+
+The schema's `$defs/command` says each one's arguments; `doc/modern-ux/intent-cases.json` is the executable spec of
+what they do. Every edit carries `g`: the edits of one gesture are one undo step. `set` (`kind`, `doc`: a whole
+document) is the intent of an import or a restore (the plug-in's own); the page sends none.
+
 Commands from the page: `ready`, `set` (`kind`, `doc`), `load` (`kind`, `slot`),
 `select` (`p`), `loadKit` / `saveKit` (`k`), `loadSong` / `saveSong` (`s`),
 `tempo` (`bpm`), `play`, `stop`, `mute` (`t`, `on`), `muteMidi` (`t`, `on`: the MUTE window),
 `poly` (`on`), `record` (`mode`: `off`, `grid`, `live`), `hwSend` (HW MIDI: the machine is on
 SYSEX RECV), `followHost`, `revealRomFolder`, `recheckFirmware`, and the `learn*` family. The
 schema's `$defs/command` is generated from the command tables (`mmDeskTest --write-schema`).
-`chain` (`patterns`) and `chainClear`: see Chaining below. Over HW MIDI `play` asks first (`transportIgnore`) while the active global's CONTROL IN TRANSPORT
+`chain` (`patterns`) and `chainClear`: see Chaining below.
+`noteOn` (`t` 0-5, `vel` 1-127, `pitch`) and `noteOff` (`t`, `pitch`; without it every note of the track):
+the page's keyboard (the home row, the piano roll's and the transpose keyboard's keys), the note intent
+both editors share (data-contract.md, the keyboard). The core sends synth track t's MIDI note 48 + pitch
+(C3 is pitch 0, -48 to 79) on the track's own channel (the active global's base + t, while t is below
+CHANNEL SPAN; else refused with the reason, as without a global). The note off goes where its note on
+went; a second `noteOn` of a sounding pitch ends it first; other pitches sound together (POLY). Notes
+change no document. The on-screen keyboard's MULTI TRIG / MULTI MAP keys and the joystick still go as
+the plug-in's `midi` messages. Over HW MIDI `play` asks first (`transportIgnore`) while the active global's CONTROL IN TRANSPORT
 is IGNORE; confirmed, it writes TRANSPORT ACCEPT (a global dump, so it waits for SYSEX RECV).
 
 ## 5. Hardware limits (`validate`)

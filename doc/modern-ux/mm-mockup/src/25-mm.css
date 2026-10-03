@@ -1,0 +1,264 @@
+/* P7: the workspace and setup keys: one minimum width each, so the rows look even (MIX was a sliver) */
+#tabs button{min-width:60px!important;justify-content:center;box-sizing:border-box}
+.setkeys button{min-width:46px!important;justify-content:center;box-sizing:border-box}
+/* The Song workspace edits any of the 24 songs (MM-P4, P8): the picker and LOAD SONG in the arrangement's header */
+.songpick{display:inline-flex;gap:6px;align-items:center;margin-left:auto}
+.songpick .kselbtn{height:24px;min-width:0;width:auto}
+.songpick #songload{height:24px;padding:0 9px;font-size:12px;white-space:nowrap}
+/* From the Machinedrum Editor (2026-10, MM-PORT-PLAN.md a-c, 75-comforts.js). Alt held: the keys it widens say so */
+body.althold .lcdsec button[data-sec=clear]{opacity:1;background:var(--ink);color:var(--lcd)}
+body.althold #clearLane{color:var(--led);box-shadow:inset 0 0 0 1px var(--led)}
+/* the lock budget on the lock lane's title line (as the LCD's meter: dark from 52, blinking at 62) */
+.lockbudget{font:12px var(--mono);color:var(--print2);white-space:nowrap;cursor:help}
+.lockbudget b{font-weight:500;color:var(--print)}
+.lockbudget.warn b,.lockbudget.full b{background:var(--ink);color:var(--lcd);padding:0 3px;border-radius:2px}
+.lockbudget.full b{animation:blink 1s steps(2) infinite}
+@media (prefers-reduced-motion:reduce){.lockbudget.full b{animation:none}}
+/* the tracks marked for a paste to many, the rail's M/S off key, a ramp while it is drawn */
+.th.marked{box-shadow:inset 0 0 0 2px var(--led)}
+.railhead .allon{width:auto;height:18px;padding:0 6px;margin-left:auto;font:600 9px var(--sans);letter-spacing:.08em}
+.railhead .allon:disabled{opacity:.35;cursor:default}
+.railhead .allon:disabled:hover{background:none;color:inherit}
+.lb.ramp i{opacity:.75}
+/* a control surface: nothing selects on a drag but the text fields (130-main.js refuses selectstart there too) */
+body{-webkit-user-select:none;user-select:none}
+input,textarea,select,[contenteditable]:not([contenteditable=false]),.selectable{-webkit-user-select:text;user-select:text}
+img,svg,canvas{-webkit-user-drag:none}
+/* the ? list of keys (56-keys.js), generated from the key map */
+.keyspop{position:absolute}
+.keyspop .note{font:12px var(--mono);color:var(--print2)}
+.keyspop .libx{margin-left:auto}
+.keysgrid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px 18px}
+.kgrp2{display:grid;gap:6px;align-content:start;min-width:0}
+.kgrp2 h3{margin:0;font:600 11px var(--sans);letter-spacing:.18em;text-transform:uppercase;color:var(--print);border-bottom:1px solid var(--rule);padding-bottom:4px}
+.krows{display:grid;gap:4px}
+.krow{display:grid;grid-template-columns:minmax(96px,auto) 1fr;gap:10px;align-items:baseline;font-size:13px}
+.krow kbd{justify-self:start;font:500 11px var(--mono);background:var(--key);color:var(--keytext);border-radius:3px;padding:2px 6px;box-shadow:inset 0 -2px 0 rgba(0,0,0,.35);white-space:nowrap}
+/* LEN ×2 (double the pattern) hugs LEN on LCD line 2, as narrow as its text, so SWG still fits */
+.l2[data-l2=dbl]{margin-left:-8px;gap:0;width:auto!important}
+/* ===== GEN and MUTATE (MM-PORT-PLAN.md d, 76-gen.js): the Machinedrum Editor's bars (its mdDesk.css), the
+   GEN bar under the piano roll in place of the old foot row (it holds the PAGE control and the step legend's ?
+   key), the MUTATE bar over the Sound pages. The roll gives the bar's extra height; the lock lane's top border
+   is the line the rail's LOCK PARAMETER block starts on. ===== */
+:root{--genband:58px}
+.genbar{display:flex;align-items:flex-end;gap:14px;min-width:0;height:var(--genband);box-sizing:border-box;margin:5px 0 0;padding:6px 10px 7px 12px;background:var(--plate3);border-radius:4px;position:relative;flex:none;white-space:nowrap}
+.genbar>.genband{flex:1 1 auto;align-self:stretch;height:auto;margin:0;padding:0;background:none;border-radius:0}
+.gdiv{align-self:stretch;width:1px;flex:none;background:var(--rule)}
+.genbar .pagectl{position:static!important;height:30px!important;background:none!important;padding:0!important;margin:0!important;flex:none}
+.genbar .pgkey{height:30px;padding:0 10px;font:600 11px var(--sans);letter-spacing:.12em;text-transform:uppercase}
+.genbar .ptog{margin-left:2px}
+.steplegend{position:relative;flex:none;height:30px;display:flex;align-items:center}
+.glegkey{width:22px;height:22px;padding:0;border-radius:50%;font:700 12px var(--sans);letter-spacing:0;display:grid;place-items:center}
+.glegpop.legend{display:none;position:absolute;right:-6px;bottom:calc(100% + 24px);z-index:30;flex-direction:column;align-items:stretch;gap:7px;margin:0;padding:10px 12px;background:var(--plate);border-radius:4px;box-shadow:0 6px 24px rgba(0,0,0,.45),inset 0 0 0 1px var(--rule);white-space:normal;width:300px;font:12px var(--sans);color:var(--print2)}
+.glegpop.legend>span{display:grid;grid-template-columns:16px 66px 1fr;gap:8px;align-items:start}
+.glegpop.legend b{font-weight:600;color:var(--print)}
+.glegpop.legend i.lg.none{background:none}
+.glegpop.legend small{font:11px var(--mono);color:var(--print3);padding-top:2px;border-top:1px solid var(--rule)}
+.steplegend:hover .glegpop,.glegkey:focus-visible+.glegpop{display:flex}
+.genband{display:flex;align-items:flex-end;gap:16px;min-width:0;height:var(--genband);box-sizing:border-box;margin:5px 0 0;padding:6px 10px 7px 12px;background:var(--plate3);border-radius:4px;white-space:nowrap;overflow:hidden;flex:none;font:12px var(--mono);color:var(--print2)}
+.gbt{display:grid;gap:4px;flex:none;align-self:center;min-width:92px}
+.gbt b{font:700 13px var(--sans);letter-spacing:.22em;text-transform:uppercase;color:var(--print)}
+.gbt span{font:12px var(--mono);color:var(--print2)}
+.gbt span.all{color:var(--led)}
+.gbg{display:grid;gap:4px;flex:none;min-width:0}
+.gbl{font:600 10px var(--sans);letter-spacing:.18em;text-transform:uppercase;color:var(--print2);display:flex;align-items:center;gap:7px;line-height:12px}
+.gbl::after{content:"";flex:1;min-width:12px;border-top:1px solid var(--rule)}
+.gbc{display:flex;align-items:center;gap:6px;height:30px}
+.gbc .seg{gap:12px;margin-right:4px}
+.gbc .seg button{height:30px;padding:0 2px;font:600 11px var(--sans);letter-spacing:.12em;text-transform:uppercase}
+.gv{display:inline-grid;grid-template-rows:auto auto;align-content:center;gap:1px;height:30px;box-sizing:border-box;min-width:54px;padding:0 8px;background:var(--lcd);color:var(--ink);border-radius:3px;box-shadow:inset 0 0 0 2px color-mix(in srgb,var(--ink) 18%,transparent);font:14px var(--pix);cursor:ns-resize;user-select:none;-webkit-user-select:none;touch-action:none;text-transform:uppercase;flex:none}
+.gv small{font:9px var(--pix);letter-spacing:.04em;opacity:.8;line-height:1}
+.gv b{font-weight:400;text-align:right;line-height:1}
+.gv:hover{box-shadow:inset 0 0 0 2px color-mix(in srgb,var(--ink) 40%,transparent)}
+.gv:focus-visible{outline:2px solid var(--led);outline-offset:1px}
+.gdice{width:30px;height:30px;padding:0;display:inline-grid;place-items:center;flex:none}
+.gdice svg{width:15px;height:15px;fill:currentColor}
+.genband .gsum{flex:1 1 auto;min-width:0;height:30px;line-height:30px;overflow:hidden;text-overflow:ellipsis;color:var(--print3)}
+.genband .gsum em{font-style:normal;color:var(--print2)}
+.gbc .gsum{height:auto;line-height:normal}
+.gkeys{display:flex;align-items:flex-end;gap:9px;flex:none;margin-left:auto}
+.kc{display:grid;justify-items:center;gap:4px;padding:0;background:none!important;box-shadow:none!important;color:var(--print2);min-width:30px}
+.kc small{font:600 9px var(--sans);letter-spacing:.1em;text-transform:uppercase;line-height:12px;color:var(--print2)}
+.kc kbd{width:30px;height:30px;box-sizing:border-box;display:grid;place-items:center;border-radius:3px;background:var(--key);color:var(--keytext);box-shadow:inset 0 -2px 0 rgba(0,0,0,.35);font:600 12px var(--sans);letter-spacing:0}
+.kc:hover kbd{background:var(--key2)}
+.kc:active kbd{box-shadow:none;transform:translateY(1px)}
+.kc:active{transform:none}
+.kc.cream kbd{background:var(--cream);color:var(--creamtext)}
+.kc.on kbd{box-shadow:inset 0 0 0 2px var(--led),inset 0 -2px 0 rgba(0,0,0,.35)}
+.kc small em{font-style:normal;letter-spacing:.04em;text-transform:none;color:var(--print3,var(--print2));opacity:.8;margin-left:3px}
+.kc.on small{color:var(--led)}
+.kc:disabled{cursor:default}
+.kc:disabled kbd,.kc:disabled small{opacity:.4}
+.kc:focus-visible{outline:none}
+.kc:focus-visible kbd{outline:2px solid var(--led);outline-offset:1px}
+.ghint{font:11px var(--mono);color:var(--print3)}
+.sndhead .mutband{flex:1 1 auto;margin:0}
+@media (max-width:1400px){.genband{gap:12px;padding-inline:10px}.genbar{gap:10px}.genbar>.genband{padding:0}.gbt{min-width:0}.gbc .seg{gap:9px}.gkeys{gap:7px}.ghint{display:none}.genbar .pgkey{padding:0 7px}}
+@media (max-width:1340px){.genband{gap:8px}.genbar{gap:8px}.gkeys{gap:5px}.gbc{gap:4px}.gbc .seg{gap:6px;margin-right:0}.gbc .seg button{letter-spacing:.06em}.gv{padding:0 6px;min-width:50px}.genbar .pgkey{padding:0 6px}.genbar .ptog{margin-left:0}}
+@media (max-width:1500px){.genband:has(.gwrite) .gsum{display:none}}
+.th .nm:has(.gtag){gap:4px}
+.th .nm .gtag{font:10px var(--pix);font-style:normal;color:var(--ink);background:var(--lcd);padding:0 3px;border-radius:2px;margin-left:auto;flex:none;align-self:center;white-space:nowrap}
+.ws-seq #main>.genbar{flex:none;margin-top:4px}
+.ws-seq #main>.lanewrap{border-top:2px solid var(--print);margin-top:5px}
+#seq canvas.roll[data-big]{height:clamp(160px,calc(100vh - 552px),620px)!important}
+.genbar .pagectl .pleds{align-self:center}
+.gnotes .gv b{min-width:3ch}
+#main>.mutband{margin:0 0 12px;flex:none}
+.ws-sound #main>.mutband .gbc .seg{gap:9px}
+/* the MM's bar holds NOTES too: under 1380 px the title loses its target (the rail shows the track) and the windows narrow */
+@media (max-width:1380px){.genbar .gbt span{display:none}.genbar .gbt{min-width:0}.genbar .gv{min-width:44px;padding:0 5px}.genbar .gbc .seg{gap:5px}.genbar .gbc .seg button{letter-spacing:.04em}.genbar .gbl{letter-spacing:.1em}}
+/* the rail's spec tags: the machine's name comes first, the tag takes what is left (gone under 1380 px) */
+.th .nm:has(.gtag) b{flex:none}
+.th .nm .gtag{flex:0 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis}
+@media (max-width:1380px){.th .nm .gtag{display:none}}
+/* ===== Sound by function (MM-PORT-PLAN e; 90-sound.js renderSound): the track's sound in small groups, the
+   Machinedrum Editor's section look (a title on a rule, the page's word at its right, no frame). The page is one
+   grid; each row of groups takes three of its lines (titles, screens, boxes) through subgrid, so a row's titles,
+   screens and boxes are level and every screen on the page is as tall (the screen lines share the free height,
+   up to --plotmax). Two groups without a screen share a column: the upper one's boxes at the screens' top, the
+   lower one's title at their foot; a lone one says what its knobs do there. A row without screens is two lines. */
+#main>.snd{flex:1 1 auto;min-height:0}
+.snd{--plotmax:230px;--sndgap:9px;display:grid;grid-template-columns:minmax(0,1fr);row-gap:6px;align-content:start;min-height:0;min-width:0}
+.sndhead{grid-row:1;display:flex;align-items:center;gap:16px;min-width:0;margin-bottom:4px}
+.sndhead>.machbtn{flex:none;width:auto!important;grid-template-columns:auto auto 10px!important;max-width:220px}
+.sndhead>.lcdchip{flex:none}
+.sndhead>.mutband{flex:1 1 auto;margin:0!important;min-width:0}
+.snddock{display:flex;flex-direction:column;gap:3px;flex:none}
+.snddock .ptog{height:17px;padding:0 8px;font-size:10px;letter-spacing:.1em;justify-content:flex-start;border:1px solid var(--rule);border-radius:2px}
+.sgrow{grid-column:1;display:grid;grid-template-rows:subgrid;column-gap:14px;min-width:0;min-height:0}
+.snd .sgcol{grid-row:1/-1;display:grid;grid-template-rows:subgrid;gap:normal;min-width:0;min-height:0}
+.sg{display:contents}
+.sg>*{grid-column:1;min-width:0}
+.sg>header{grid-row:1;border-top:2px solid var(--print);padding-top:6px;display:flex;justify-content:space-between;align-items:baseline;gap:8px;min-width:0}
+.sg h3{margin:0;font:600 12px var(--sans);letter-spacing:.18em;text-transform:uppercase;color:var(--print);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0;display:flex;align-items:center;gap:8px}
+.sg>header>span{font:11px var(--mono);color:var(--print3);white-space:nowrap;cursor:help;flex:none}
+.sg>.plot{grid-row:2;position:relative;min-height:0;border-radius:4px;overflow:hidden}
+.sg>.plot>canvas.ed{position:absolute;inset:0;width:100%;height:100%!important;min-height:0!important}
+.sg>:is(.ctl,.sgline,.lfobody,.sgabout){grid-row:3;align-self:start;min-width:0}
+.sgrow.flat .sg>:is(.ctl,.sgline,.lfobody,.sgabout){grid-row:2}
+.sgcol.stack>.sg:first-child>:not(header){grid-row:2;align-self:start}
+.sgcol.stack>.sg:last-child>header{grid-row:2;align-self:end}
+.sgnote{grid-row:2;margin:0;align-self:start;font:11px var(--mono);line-height:1.45;color:var(--print3);overflow:hidden;min-height:0}
+.sgabout{margin:0;font:12px var(--mono);line-height:1.5;color:var(--print3)}
+.sgabout .cream{margin-left:8px}
+.sg>.ctl{gap:4px}
+.snd .pc{padding:0 6px;height:28px}
+.snd .pc span{font-size:11px;letter-spacing:.04em}
+.snd .pc b{font-size:13px}
+.snd .mutg{all:unset;cursor:pointer;border-bottom:1px dashed currentColor;overflow:hidden;text-overflow:ellipsis}
+.snd .mutg[aria-pressed=true]{background:var(--lcd);color:var(--ink);padding:0 5px;border-radius:2px;border-bottom:0}
+.snd .lfohead{gap:8px;min-width:0}
+.snd .lfohandle{width:22px;height:22px;font-size:10px}
+.lfobody{display:grid;gap:5px}
+.lfobody .lforoute .kselbtn{height:24px;flex:1 1 0}
+.lfobody .lforoute .seg{flex:none;margin-left:6px;gap:7px}
+.lfobody .lforoute .seg button{font-size:10px;letter-spacing:.06em}
+.lfobody .shapes{flex-wrap:nowrap;gap:2px}
+.lfobody .shapes button{flex:1 1 0;padding:2px 0;display:grid;place-items:center;min-width:0}
+.lfobody .shapes svg{width:20px;height:15px}
+@media (max-width:1380px){.lfobody .lforoute .seg{gap:4px;margin-left:2px}.lfobody .lforoute .seg button{letter-spacing:0;gap:3px}.lfobody .lforoute .seg button::before{width:5px;height:5px}.snd .pc{padding:0 4px}.snd .pc span{font-size:10px;letter-spacing:.02em}.snd .pc b{font-size:12px}.sgrow{column-gap:11px}.snddock .ptog{padding:0 5px}}
+/* Song: the row's rarer settings behind MORE (as the Machinedrum Editor's) */
+.morebtn{margin-left:0}
+.morebtn small{font:12px var(--mono);letter-spacing:0;text-transform:none;color:var(--print3)}
+/* Song: one palette, two ways to play its pads (120-song.js renderSong, MM-P8, as the Machinedrum Editor's):
+   ARRANGE adds to the song, CHAIN numbers the machine's chain (the Plays line below the pads); the header
+   says what the machine plays */
+.card header.phead{align-items:center;gap:14px}
+.card header.phead .seg{gap:10px;color:inherit;font:inherit}
+.card header .playschip{margin-left:auto;font:12px var(--pix);color:var(--ink);min-width:0;overflow:hidden;text-overflow:ellipsis}
+.card header .playschip.chain{box-shadow:inset 0 0 0 2px var(--led)}
+.padd em{position:absolute;right:5px;bottom:4px;font:700 12px var(--pix);font-style:normal;color:var(--led)}
+.padd.in{box-shadow:inset 0 0 0 2px var(--led)}
+.songleft .pnote{margin:8px 0 0;font-size:12px;color:var(--print3)}
+.chainfoot{display:grid;gap:4px;margin-top:8px}
+.chainfoot .irow .note{padding-left:0;flex-basis:auto}
+.chainrow{display:flex;align-items:center;gap:6px;flex-wrap:wrap;min-height:26px}
+.chainrow .lcdchip{font:12px var(--pix);text-transform:uppercase}
+.chainrow .lcdchip.now{outline:2px solid var(--ink);outline-offset:-2px}
+.chainrow .lcdchip.nx{animation:blink .5s steps(2) infinite}
+.chainrow i{font-style:normal;color:var(--print2)}
+.chainacts{display:flex;gap:6px;align-items:center}
+.chainacts button{height:26px;padding:0 10px;font:600 11px var(--sans);letter-spacing:.12em;text-transform:uppercase}
+.chainacts button:disabled{opacity:.35;cursor:default}
+@media (prefers-reduced-motion:reduce){.chainrow .lcdchip.nx{animation:none}}
+
+/* ===== The Sequence dock: one layout for every tab (the lock lane's) =====
+   Geometry comes from the LOCKS layout only: the rail's LOCK PARAMETER block is always laid out (hidden in the
+   other tabs), the panel's keys cover its keys area, the body is the lane's box (flex basis 0, so its content
+   never sizes it). Switching tabs moves nothing outside the body. */
+#rail .railparams{position:relative}
+body.dockother #rail .railparams>:is(.lpspace,.pagetabs,.pkcol),body.dockother #rail #clearLane{visibility:hidden}
+.dockkeys{position:absolute;left:0;right:0;top:0;bottom:0;display:flex;flex-direction:column;justify-content:space-between;overflow:hidden}
+.dkg{display:grid;gap:2px;min-width:0}
+.dkl{height:11px;font:600 9px/11px var(--sans);letter-spacing:.14em;text-transform:uppercase;color:var(--print2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.dkrow{display:grid;grid-template-columns:repeat(var(--n),minmax(0,1fr));gap:3px}
+#rail .dkk{height:26px;width:auto;padding:0 1px;text-align:center;font:500 10.5px var(--mono);letter-spacing:0;white-space:nowrap;overflow:hidden;text-overflow:clip}
+#rail .dkrow.tight .dkk{font-size:10px}
+#rail .dkk:disabled{opacity:.35;cursor:default}
+.dkna{display:block;height:26px;font:11px/26px var(--mono);color:var(--print3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ws-seq .lanewrap>#lanescroll,.ws-seq .lanewrap>.dockbody{flex:1 1 0;min-height:140px}
+.ws-seq .lanewrap>.dockbody{height:auto;padding:0 0 0 53px;box-sizing:border-box;overflow:hidden;display:grid;grid-template-rows:34px minmax(0,1fr);row-gap:8px}
+.lanetop .dkread{flex:none}
+.lanetop .dkhelp{flex:1 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis}
+.dkvals{display:grid;grid-template-columns:repeat(8,minmax(0,1fr));gap:4px;height:34px;min-width:0}
+.dkvals .pc{min-width:0}
+.dkvals .pc span{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
+.dkvis{position:relative;min-height:0;display:flex;flex-direction:column;gap:4px}
+/* lane-style keys: the arp steps, the scale, the envelope */
+.dkvis .arptrack{flex:1 1 0;height:auto!important;min-height:0;padding:0;background:transparent;box-shadow:none;gap:3px;border-radius:0}
+.dkvis .arptrack .ac{position:relative;background:var(--key);border-radius:3px;box-shadow:inset 0 -2px 0 rgba(0,0,0,.35);overflow:hidden}
+.dkvis .arptrack .ac:hover{filter:brightness(1.15)}
+.dkvis .arptrack .ac.mute{background:color-mix(in srgb,var(--key) 55%,transparent)}
+.dkvis .arptrack .ac.na{background:repeating-linear-gradient(135deg,color-mix(in srgb,var(--key) 30%,transparent) 0 3px,transparent 3px 6px);box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--key) 40%,transparent)}
+.dkvis .arptrack .ac .z{border-top:1px solid color-mix(in srgb,var(--keytext) 45%,transparent)}
+.dkvis .arptrack .ac i{position:absolute;left:22%;right:22%;background:repeating-linear-gradient(to top,var(--led) 0 5px,transparent 5px 8px);filter:drop-shadow(0 0 3px color-mix(in srgb,var(--led) 70%,transparent))}
+.dkvis .arptrack .ac i.dn{background:repeating-linear-gradient(to bottom,var(--led) 0 5px,transparent 5px 8px)}
+.dkvis .arptrack .ac.mute i{background:transparent;filter:none;box-shadow:inset 0 0 0 1px var(--led)}
+.dkvis .arptrack .ac b{position:absolute;left:0;right:0;bottom:3px;text-align:center;font:8px var(--pix);color:var(--keytext);font-weight:400;white-space:nowrap;overflow:hidden}
+.dkvis .arptrack .ac b{top:3px;bottom:auto}
+.dkvis .arplenrow{padding:0;gap:3px;flex:none}
+.dkvis .arplenrow button{height:10px}
+.dkvals2 .dkcell{display:block}
+.dkscale{position:absolute;top:0;bottom:14px;left:-53px;width:50px;box-sizing:border-box;padding:0 6px 0 0;justify-items:end;text-align:right;display:grid;align-content:space-between;font:9px var(--pix);color:var(--print2);pointer-events:none}
+.dkscale b{font-weight:400;opacity:.75}
+/* TRIG SETUP and TRANSPOSE: an LCD plate (the Sound page's plots) filling the picture area */
+.dkvis canvas.dkplot{flex:1 1 0;height:auto;min-height:0;width:100%}
+
+/* ===== Perform v2: a short keyboard at the bottom; the joystick a big square in the middle, its rows beside it.
+   The controls row takes the height the keyboard leaves; the stick is sized from the page height. ===== */
+#main>.perf{flex:1 1 auto;min-height:0;grid-template-rows:minmax(0,1fr);grid-auto-rows:auto}
+.perf3{grid-template-columns:minmax(0,1fr) auto minmax(0,1fr)!important;min-height:0}
+.perf3>.card{min-height:0}
+.perf3 .menvcard{grid-template-rows:auto minmax(0,1fr) auto auto;align-content:stretch}
+.perf3 .menvcard canvas.ed{height:100%!important;min-height:96px}
+.perf3 .asgcard{--joy:clamp(200px,calc(100vh - 500px),440px);grid-template-rows:auto auto minmax(0,1fr)}
+.perf3 .asgcard .asgn{grid-template-columns:var(--joy) 270px;align-items:start}
+.perf3 .asgcard .asgn:not(:has(.joy)){grid-template-columns:calc(var(--joy) + 284px)}
+.perf3 .asgcard .joy{width:var(--joy)!important;height:var(--joy)!important}
+.joy small.jl{left:5px;top:50%;transform:translateY(-50%)}
+.joy small.jr{right:5px;top:50%;transform:translateY(-50%)}
+.joy small.ju{left:50%;top:4px;transform:translateX(-50%)}
+.joy small.jd{left:50%;bottom:4px;transform:translateX(-50%)}
+.joy .knobj{width:28px;height:28px;margin:-14px 0 0 -14px}
+.perf3 .joy small{font-size:11px}
+.perf3 .card header{flex-wrap:nowrap;white-space:nowrap;min-width:0}
+.perf3 .card header>span:not(.seg){min-width:0;overflow:hidden;text-overflow:ellipsis}
+.perf3 .mutes12 button{height:40px}
+.perf .kb{height:clamp(96px,20vh,190px)!important}
+.perf.map .kb{height:clamp(84px,14vh,150px)!important}
+/* Song, as the Machinedrum Editor's: the arrangement's 200 slots fill the page across and down (13 rows of 16
+   share the height); the left column (patterns, selected row) scrolls on its own. One column below 1100 px. */
+@media (min-width:1101px){
+#main>.songui.lay2{flex:1 1 auto;min-height:0;align-items:stretch}
+.songui.lay2>.songleft{min-height:0;overflow:auto;padding-right:6px}
+.songui.lay2>.card{min-height:0;grid-template-rows:auto auto minmax(0,1fr);padding:0 2px 2px 0}	/* room for the grid's bezel inside #main's clip */
+.songui.lay2 .slotgrid{min-height:0;grid-template-rows:repeat(13,minmax(22px,1fr));align-content:stretch}
+.songui.lay2 .slotgrid .scell{height:auto!important;min-height:0}
+}
+/* the arrangement's header stays one line, as the MD's: the legend shortens first */
+.songui.lay2>.card>header{flex-wrap:nowrap;min-width:0;align-items:center}
+.songui.lay2>.card>header>.note{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0;flex:1 1 auto}
+.songui.lay2>.card>header>.songpick{flex:none}
+
+/* A narrow window (1280): the top bar fits, so MKII is not cut off: tighter gaps and workspace keys */
+@media (max-width:1340px){header.top{column-gap:8px!important}header.top .left{gap:8px!important}header.top .tabs>button{min-width:0!important;padding-left:6px!important;padding-right:6px!important}}

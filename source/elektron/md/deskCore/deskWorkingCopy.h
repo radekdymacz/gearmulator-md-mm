@@ -1,6 +1,7 @@
 #pragma once
 
 #include "deskAdapter.h"
+#include "deskNotes.h"
 
 #include <cstdint>
 #include <optional>
@@ -15,7 +16,9 @@ namespace deskCore
 	//   - seed: the kit that plays starts as its slot's next dump (until memory shows it);
 	//   - region: a memory image not taken yet (it may predate the editor's own edits);
 	//   - expect: the live edits sent and not yet seen (deskCore::Expectation);
-	//   - image: the last image taken (the edited/clean judgement reads it).
+	//   - image: the last image taken (the edited/clean judgement reads it; masked: without held);
+	//   - held: kit values a held key changes for a moment (the keyboard's PTCH), a transient layer an
+	//     image is masked with before anything reads it (deskNotes.h). Another kit drops it.
 	// Status is the truth for which kit plays: an image of another kit waits and asks for status.
 	template<typename Kit>
 	struct WorkingCopy
@@ -24,10 +27,11 @@ namespace deskCore
 		std::optional<std::vector<uint8_t>> region;
 		Expectation<Kit> expect;
 		std::optional<Kit> image;
+		HeldOverrides held;
 	};
 
-	// Another kit plays (a switch, a reload): nothing of the old one holds; an image not taken yet
-	// may already be the new kit's.
+	// Another kit plays (a switch, a reload): nothing of the old one holds (nor a held key's value: the
+	// machine loaded the kit over it); an image not taken yet may already be the new kit's.
 	template<typename Kit>
 	WorkingCopy<Kit> switched(const WorkingCopy<Kit>& _w = {})
 	{

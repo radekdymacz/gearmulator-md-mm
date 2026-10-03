@@ -57,6 +57,16 @@ namespace elektronData
 		return r.position() == MmKit::g_rawSize ? std::optional<MmKit>(k) : std::nullopt;
 	}
 
+	MmKit mmKitAsLoaded(MmKit _kit)
+	{
+		if(_kit.name[0] != 0xff)
+			return _kit;
+		static constexpr char g_new[8] = {'N', 'E', 'W', ' ', 'K', 'I', 'T', 0};
+		for(size_t i = 0; i < sizeof(g_new); ++i)
+			_kit.name[i] = static_cast<uint8_t>(g_new[i]);
+		return _kit;
+	}
+
 	std::vector<uint8_t> mmKitRaw(const MmKit& _kit)
 	{
 		mmLayout::Writer w;

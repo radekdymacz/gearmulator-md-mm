@@ -12,6 +12,7 @@
 #include "elektronData/mmCommands.h"
 #include "elektronData/mmDump.h"
 #include "elektronData/mmJson.h"
+#include "elektronData/mmValidate.h"
 
 #include "elektronData/jsonSchema.h"
 
@@ -187,6 +188,9 @@ namespace
 		};
 		port.toPage = [&](const Value& _v) { page.push_back(_v); g_published.push_back(_v); };
 		port.device.nowMs = [&] { return now; };
+		auto noNotes = port;
+		std::vector<std::array<uint8_t, 3>> notes;
+		port.device.sendNote = [&](uint8_t _c, uint8_t _n, uint8_t _v) { notes.push_back({_c, _n, _v}); };
 		mmDesk::Desk d(port);
 		const auto run = [&](const double _ms)
 		{
@@ -266,6 +270,37 @@ namespace
 		for(const auto& v : page)
 			sawMachine |= v.find("type")->asString() == "machine";
 		check(sawMachine, "machine documents are published");
+
+		// The note intent (deskCore/deskNotes.h): a MIDI note on the track's own channel, 48 + pitch.
+		const auto error = [&]() -> std::string
+		{
+			const auto r = lastResult();
+			const auto* e = r.find("errors");
+			return e && e->isArray() && !e->asArray().empty() ? e->asArray()[0].asString() : "";
+		};
+		msg(R"({"op":"noteOn","id":20,"t":2,"vel":90,"pitch":7})");
+		check(lastResult().find("ok")->asBool() && notes.size() == 1 && notes[0] == std::array<uint8_t, 3>{2, 55, 90},
+			("noteOn: T3 on base + 2, MIDI note 48 + 7 " + error()).c_str());
+		msg(R"({"op":"noteOn","id":21,"t":2,"vel":80,"pitch":12})");
+		check(notes.size() == 2 && notes[1] == std::array<uint8_t, 3>{2, 60, 80}, "noteOn: a second pitch on the track sounds with the first (POLY)");
+		msg(R"({"op":"noteOn","id":22,"t":2,"vel":70,"pitch":7})");
+		check(notes.size() == 4 && notes[2] == std::array<uint8_t, 3>{2, 55, 0} && notes[3] == std::array<uint8_t, 3>{2, 55, 70},
+			"noteOn: the same pitch again ends its note first");
+		msg(R"({"op":"noteOff","id":23,"t":2,"pitch":12})");
+		check(lastResult().find("ok")->asBool() && notes.size() == 5 && notes[4] == std::array<uint8_t, 3>{2, 60, 0}, "noteOff: that pitch's note off");
+		msg(R"({"op":"noteOff","id":24,"t":2})");
+		check(notes.size() == 6 && notes[5] == std::array<uint8_t, 3>{2, 55, 0}, "noteOff without pitch: every note of the track");
+		msg(R"({"op":"noteOff","id":25,"t":2,"pitch":7})");
+		check(lastResult().find("ok")->asBool() && notes.size() == 6, "noteOff: nothing sounds, nothing sent");
+		msg(R"({"op":"noteOn","id":26,"t":2,"vel":70,"pitch":-49})");
+		check(!lastResult().find("ok")->asBool() && notes.size() == 6, "noteOn: a pitch out of range is refused by the table");
+		{
+			mmDesk::Desk none(noNotes);
+			none.onPageMessage(*ed::json::parse(R"({"op":"ready"})"));
+			none.setProbe(mmDesk::Desk::Probe::Running);
+			none.onPageMessage(*ed::json::parse(R"({"op":"noteOn","id":27,"t":0,"vel":100,"pitch":0})"));
+			check(!lastResult().find("ok")->asBool(), "noteOn: an engine without notes refuses");
+		}
 	}
 }
 
@@ -316,6 +351,69 @@ void playingFromSteps()
 	for(double e = 0; e < 300; e += 10) { now += 10; d.tick(); }
 	feed(3, 60);
 	check(!playing(), "the step stands still for three step times: stopped");
+}
+
+// Review finding 9: the adapter's small state values and their pure steps (mmDeskWatch.h).
+void watchSteps()
+{
+	std::printf("the adapter's state values (mmDeskWatch.h)\n");
+	// RECORD: read while recording, every _everyMs; once when it stops; the mode change is said once
+	auto r = mmDesk::watchRecord({}, 1, true, 0, 1000);
+	check(r.read && r.changed, "recording starts: read now, the mode changed");
+	r = mmDesk::watchRecord(r.next, 1, true, 500, 1000);
+	check(!r.read && !r.changed, "within the interval: no read");
+	r = mmDesk::watchRecord(r.next, 1, true, 1001, 1000);
+	check(r.read, "the interval passed: read again");
+	r = mmDesk::watchRecord(r.next, 0, true, 1100, 1000);
+	check(r.read && r.changed, "stopped recording: one last read");
+	r = mmDesk::watchRecord(r.next, 0, true, 5000, 1000);
+	check(!r.read && !r.changed, "off: no reads");
+	check(!mmDesk::watchRecord({}, 1, false, 0, 1000).read, "no current pattern: nothing to read");
+	// the transport message: at most every 25 ms, at once when the recording mode changed
+	auto due = mmDesk::telemetryDue({}, 0, false, false, 0, 25);
+	check(due && due->step == 0, "the first playhead goes out");
+	check(!mmDesk::telemetryDue(*due, 1, false, false, 10, 25), "a step within 25 ms waits");
+	check(mmDesk::telemetryDue(*due, 1, false, false, 30, 25).has_value(), "after 25 ms it goes");
+	check(mmDesk::telemetryDue(*due, 0, false, true, 1, 25).has_value(), "a recording mode change goes at once");
+	check(!mmDesk::telemetryDue(*due, 0, false, false, 100, 25), "nothing changed: nothing goes");
+	// the keyboard's notes: the note off goes where the note on went; a repeat ends the first
+	auto n = mmDesk::pressNote({}, 0, 7, 3, 55, 100);
+	check(n.sends.size() == 1 && n.sends[0].channel == 3 && n.sends[0].note == 55 && n.sends[0].velocity == 100, "note on");
+	n = mmDesk::pressNote(n.next, 0, 7, 4, 55, 90);
+	check(n.sends.size() == 2 && n.sends[0].channel == 3 && n.sends[0].velocity == 0 && n.sends[1].channel == 4, "the same pitch again ends the first");
+	n = mmDesk::pressNote(n.next, 0, 9, 4, 57, 90);
+	n = mmDesk::releaseNotes(n.next, deskCore::NoteOff{0, 7});
+	check(n.sends.size() == 1 && n.sends[0].channel == 4 && n.sends[0].note == 55 && n.next.size() == 1, "note off: that pitch, where it went");
+	n = mmDesk::releaseNotes(n.next, deskCore::NoteOff{0, std::nullopt});
+	check(n.sends.size() == 1 && n.next.empty(), "note off without pitch: every note of the track");
+	// playing from the step byte: two moves forward within three step times
+	mmDesk::Telemetry t;
+	t.valid = true;
+	t.tempo = 120 * 24;
+	t.step = 4;
+	auto w = mmDesk::watchStep({}, t, 0);
+	check(w.stepped && !w.playing, "a first step is not playing");
+	t.step = 5;
+	w = mmDesk::watchStep(w.next, t, 125);
+	check(!w.playing, "one move forward is not playing yet");
+	t.step = 6;
+	w = mmDesk::watchStep(w.next, t, 250);
+	check(w.playing, "two moves forward: playing");
+	w = mmDesk::watchStep(w.next, t, 700);
+	check(!w.playing && !w.stepped, "standing still for three step times: stopped");
+}
+
+// LOAD KIT of a never-written slot (name byte 0 is 0xff) plays it as NEW KIT (measured, mmDeskFirmwareTest p4).
+void kitAsLoaded()
+{
+	std::printf("a kit as LOAD KIT plays it\n");
+	ed::MmKit k;
+	k.name = {0xff, 0x00, 'L', 'T', 'I', ' ', 'S', 'I', 'X', '4', 0};
+	const auto l = ed::mmKitAsLoaded(k);
+	check(std::string(l.name.begin(), l.name.begin() + 7) == "NEW KIT" && l.name[7] == 0 && l.name[8] == 'X' && l.name[9] == '4',
+		"a slot marked unused loads as NEW KIT, the rest of its name bytes as stored");
+	k.name = {'B', 'A', 'S', 'S', 0};
+	check(ed::mmKitAsLoaded(k) == k, "a written kit loads as it is");
 }
 
 // P6: the Control workspace's LFOs run in the plug-in on the machine's steps (deskCore's ModEngine,
@@ -439,6 +537,29 @@ void asksAndErrors()
 		}
 		msg(R"({"op":"saveKit","k":4,"id":3})");
 		check(last("ask") && last("ask")->find("ask")->asString() == "overwriteSlot", "SAVE KIT over a slot that holds a kit asks first");
+		// The library's slot ops ask before they lose something (DESIGN-UNIFY.md phase 7, as the Machinedrum's), the
+		// page sends them again with force
+		const auto result = [&](const int _id) -> const Value*
+		{
+			for(auto it = page.rbegin(); it != page.rend(); ++it)
+				if(it->find("type")->asString() == "result" && it->find("id") && it->find("id")->asNumber() == _id)
+					return &*it;
+			return nullptr;
+		};
+		msg(R"({"op":"kitClear","k":4,"id":5,"g":50})");
+		check(last("ask") && last("ask")->find("ask")->asString() == "clearSlot" && last("ask")->find("command")->find("op")->asString() == "kitClear"
+			&& d.kit(4)->name == other.name, "kitClear asks first (clearSlot); nothing is cleared before the answer");
+		msg(R"({"op":"kitClear","k":4,"id":6,"g":50,"force":true})");
+		check(result(6) && result(6)->find("ok")->asBool() && d.kit(4)->name[0] == 0 && d.kit(4)->machines[3] == 1, "with force: K5 is six GND-SIN tracks, no name");
+		msg(R"({"op":"kitRename","k":4,"id":7,"g":51,"name":"solo"})");
+		check(result(7) && result(7)->find("ok")->asBool() && d.kit(4)->name[0] == 'S' && d.kit(4)->name[3] == 'O', "a stored kit renamed: no question");
+		msg(R"({"op":"kitCopyTo","from":4,"to":2,"id":8,"g":52})");
+		const auto* over = last("ask");
+		check(over && over->find("ask")->asString() == "overwriteSlot" && over->find("message")->asString().find("kit that plays") != std::string::npos,
+			"a kit copied over the kit that plays asks (it is loaded too)");
+		msg(R"({"op":"patClear","p":1,"id":9,"g":53})");
+		check(result(9) && result(9)->find("ok")->asBool() == false && last("ask")->find("command")->find("op")->asString() != "patClear",
+			"a pattern not read yet: refused, no question");
 		page.clear();
 		d.setProbe(mmDesk::Desk::Probe::Loading);
 		d.setProbe(mmDesk::Desk::Probe::Running);
@@ -664,7 +785,9 @@ void checkContract(const bool _write)
 	if(_write)
 	{
 		std::ofstream out(MMDESK_SCHEMA);
-		out << ed::json::write(contract::withAsks(contract::withDocKinds(contract::withGenerated(*root, generated), kinds), mmDesk::MmModel::asks()), 2) << "\n";
+		auto written = contract::withAsks(contract::withDocKinds(contract::withGenerated(*root, generated), kinds), mmDesk::MmModel::asks());
+		written = contract::withContractVersion(contract::withOpenDocuments(std::move(written)), mmDesk::MmModel::contractVersion);
+		out << ed::json::write(written, 2) << "\n";
 		std::ofstream cat(MMDESK_CATALOGUE);
 		cat << catalogue;
 		return;
@@ -677,6 +800,9 @@ void checkContract(const bool _write)
 	check(contract::sameCommands(*root, generated), "the schema's $defs/command is generated from the command tables (--write-schema)");
 	check(contract::sameLifecycle(*root), "the schema's lifecycle enum is the lifecycle rows (--write-schema)");
 	check(contract::sameAsks(*root, mmDesk::MmModel::asks()), "the schema's ask enum is the model's questions (--write-schema)");
+	check(contract::sameContractVersion(*root, mmDesk::MmModel::contractVersion), "the machine document's contract is the model's contractVersion (--write-schema)");
+	for(const auto& closed : contract::closedDocuments(*root))
+		check(false, ("what the plug-in writes is open for readers, " + closed + " is closed (--write-schema)").c_str());
 	for(const auto& gap : contract::docKindGaps(*root, kinds))
 		check(false, gap.c_str());
 	// The plug-in's host sends these; this test has no host.
@@ -698,6 +824,327 @@ void checkContract(const bool _write)
 	check(gaps.empty(), "every machine command of the table has its adapter function, and no other; every ask is a command");
 }
 
+// DESIGN-UNIFY.md 4.2: the edit intents as data (doc/modern-ux/intent-cases.json), shared with the page's view test
+// (mmViewTest.js). Each case's commands go through apply (mmDeskEdit.cpp) on the base documents, and the documents
+// after are compared whole with the base plus the case's "after" values; a refused case names a part of the error.
+namespace intentCases
+{
+	// _root's member at _path (object keys and array indices), made where it is missing; nullptr when the path crosses a value
+	Value* at(Value& _root, const Value& _path)
+	{
+		Value* v = &_root;
+		for(const auto& k : _path.asArray())
+		{
+			if(k.isString())
+			{
+				if(!v->isObject())
+					return nullptr;
+				auto* next = v->find(k.asString());
+				v = next ? next : &v->set(k.asString(), Value());
+			}
+			else
+			{
+				const auto i = static_cast<size_t>(k.asNumber());
+				if(!v->isArray() || i >= v->asArray().size())
+					return nullptr;
+				v = &v->asArray()[i];
+			}
+		}
+		return v;
+	}
+	// [kind, path, value] entries set on the documents by kind
+	bool patch(std::map<std::string, Value>& _docs, const Value& _entries)
+	{
+		for(const auto& e : _entries.asArray())
+		{
+			const auto& a = e.asArray();
+			auto* v = at(_docs[a[0].asString()], a[1]);
+			if(!v)
+				return false;
+			*v = a[2];
+		}
+		return true;
+	}
+	// the documents as the core holds them (and, back to JSON, in the contract's one form). A document's name in the
+	// cases is its kind ("pattern", "workingKit", "global", "song") or, for another slot of the library, any name
+	// ("kit5"); its schema says what it is.
+	std::optional<mmDesk::Documents> documents(const std::map<std::string, Value>& _json, std::vector<std::string>& _errors)
+	{
+		mmDesk::Documents d;
+		for(const auto& [name, doc] : _json)
+		{
+			const auto schema = doc.find("schema") ? doc.find("schema")->asString() : std::string();
+			if(name == "workingKit")
+			{
+				if(auto k = ed::mmKitFromJson(doc, _errors))
+					d.working = mmDesk::WorkingKit{*k};
+			}
+			else if(schema == "mm-desk/pattern")
+			{
+				if(auto p = ed::mmPatternFromJson(doc, _errors))
+				{
+					for(const auto& problem : ed::validate(*p))
+						_errors.push_back(name + ": " + problem);
+					d.patterns[p->position] = *p;
+				}
+			}
+			else if(schema == "mm-desk/kit")
+			{
+				if(auto k = ed::mmKitFromJson(doc, _errors))
+					d.kits[k->position] = *k;
+			}
+			else if(schema == "mm-desk/song")
+			{
+				if(auto x = ed::mmSongFromJson(doc, _errors))
+					d.songs[x->position] = *x;
+			}
+			else if(schema == "mm-desk/global")
+			{
+				if(auto g = ed::mmGlobalFromJson(doc, _errors))
+					d.globals[g->position] = *g;
+			}
+			else
+				_errors.push_back(name + ": no schema");
+		}
+		return _errors.empty() ? std::optional<mmDesk::Documents>(d) : std::nullopt;
+	}
+	std::map<std::string, std::string> written(const mmDesk::Documents& _d)
+	{
+		std::map<std::string, std::string> out;
+		for(const auto& [slot, p] : _d.patterns)
+			out["pattern " + std::to_string(slot)] = ed::json::write(ed::mmPatternToJson(p));
+		for(const auto& [slot, k] : _d.kits)
+			out["kit " + std::to_string(slot)] = ed::json::write(ed::mmKitToJson(k));
+		for(const auto& [slot, x] : _d.songs)
+			out["song " + std::to_string(slot)] = ed::json::write(ed::mmSongToJson(x));
+		for(const auto& [slot, g] : _d.globals)
+			out["global " + std::to_string(slot)] = ed::json::write(ed::mmGlobalToJson(g));
+		if(_d.working)
+			out["workingKit"] = ed::json::write(ed::mmKitToJson(_d.working->kit));
+		return out;
+	}
+	// the first place two JSON texts differ, for the failure line
+	std::string firstDiff(const std::string& _a, const std::string& _b)
+	{
+		size_t i = 0;
+		while(i < _a.size() && i < _b.size() && _a[i] == _b[i])
+			++i;
+		const auto from = i > 60 ? i - 60 : 0;
+		return "..." + _a.substr(from, 100) + "\n       expected ..." + _b.substr(from, 100);
+	}
+
+	void run()
+	{
+		std::puts("edit intents (doc/modern-ux/intent-cases.json)");
+		std::ifstream in(MMDESK_INTENT_CASES);
+		const auto file = ed::json::parse(std::string{std::istreambuf_iterator<char>(in), std::istreambuf_iterator<char>()});
+		check(file.has_value(), "the intent cases load");
+		if(!file)
+			return;
+		const auto& mm = *file->find("mm");
+		std::map<std::string, Value> base;
+		for(const auto& [kind, doc] : mm.find("docs")->asObject())
+			base[kind] = doc;
+		check(patch(base, *mm.find("given")), "the cases' given values are on the documents");
+		std::vector<std::string> errors;
+		const auto docs = documents(base, errors);
+		check(docs.has_value(), errors.empty() ? "the base documents read" : ("the base documents read: " + errors.front()).c_str());
+		if(!docs)
+			return;
+		mmDesk::EditContext context;
+		context.currentKit = static_cast<int>(mm.find("context")->find("kit")->asNumber());
+		context.currentGlobal = static_cast<int>(mm.find("context")->find("global")->asNumber());
+		size_t ran = 0;
+		for(const auto& c : mm.find("cases")->asArray())
+		{
+			const auto name = c.find("name")->asString();
+			std::vector<Value> commands;
+			if(const auto* one = c.find("command"))
+				commands.push_back(*one);
+			else
+				commands = c.find("commands")->asArray();
+			auto d = *docs;
+			mmDesk::Clipboard clip;
+			std::vector<std::string> refusedWith;
+			for(const auto& cmd : commands)
+			{
+				const auto r = mmDesk::apply(d, cmd, clip, context);
+				if(r.clipboard)
+					clip = *r.clipboard;
+				if(!r.errors.empty())
+				{
+					refusedWith = r.errors;
+					break;
+				}
+				for(const auto& ch : r.changes)
+					d.set(ch.after);
+			}
+			++ran;
+			if(const auto* want = c.find("refused"))
+			{
+				bool named = false;
+				for(const auto& e : refusedWith)
+					named = named || e.find(want->asString()) != std::string::npos;
+				check(named, ("refused: " + name + (refusedWith.empty() ? " (taken)" : " (" + refusedWith.front() + ")")).c_str());
+				continue;
+			}
+			if(!refusedWith.empty())
+			{
+				check(false, (name + ": refused, " + refusedWith.front()).c_str());
+				continue;
+			}
+			auto expectJson = base;
+			std::vector<std::string> e2;
+			const auto expected = patch(expectJson, *c.find("after")) ? documents(expectJson, e2) : std::nullopt;
+			if(!expected)
+			{
+				check(false, (name + ": its after values make no valid documents" + (e2.empty() ? "" : ": " + e2.front())).c_str());
+				continue;
+			}
+			const auto got = written(d), want = written(*expected);
+			std::string diff;
+			for(const auto& [kind, text] : want)
+				if(!got.count(kind) || got.at(kind) != text)
+					diff += "\n       " + kind + ": " + (got.count(kind) ? firstDiff(got.at(kind), text) : std::string("missing"));
+			check(diff.empty(), (name + diff).c_str());
+		}
+		check(ran >= 50, "every case ran");
+		// the edits the table declares are the ones apply has
+		for(const auto& gap : deskCore::contract::editGaps(mmDesk::commandTable(), mmDesk::editOps()))
+			check(false, gap.c_str());
+	}
+}
+
+// DESIGN-UNIFY.md 4.4: the mutes, the MIDI mutes, POLY and the tempo come from memory, but what the page set is
+// what the machine document says from the moment the command is taken (published before its result), until
+// memory shows it; memory that disagrees for longer than the profile's settleMs wins (a press on the panel).
+// The clock is the session's, a fake one here.
+void memoryFields()
+{
+	std::puts("mutes, POLY and tempo: expected until memory shows them");
+	double now = 0;
+	std::vector<Value> page;
+	mmDesk::Desk::Port port;
+	port.device.sendSysex = [](const Bytes&) {};
+	port.device.sendParam = [](uint8_t, uint8_t, uint8_t, uint8_t) {};
+	port.device.sendNrpn = [](uint8_t, uint8_t, uint8_t) {};
+	int muteWindows = 0;
+	port.device.pressKeys = [&](const std::vector<mmDesk::Key>& _keys) { muteWindows += !_keys.empty() && _keys[0] == mmDesk::Key::MuteWindow; return true; };
+	port.device.nowMs = [&] { return now; };
+	port.toPage = [&](const Value& _v) { page.push_back(_v); g_published.push_back(_v); };
+	const auto status = [](const uint8_t _p, const uint8_t _v) { return Bytes{0xf0, 0, 0x20, 0x3c, 3, 0, 0x72, _p, _v, 0xf7}; };
+	mmDesk::Desk d(port);
+	const auto msg = [&](const std::string& _json) { d.onPageMessage(*ed::json::parse(_json)); };
+	auto tel = screen(mmDesk::Screen::Main);
+	tel.mutes = 0;
+	tel.tempo = 120 * 24;
+	const auto run = [&](const double _ms)
+	{
+		for(double e = 0; e < _ms; e += 10)
+		{
+			now += 10;
+			d.onTelemetry(tel);
+			d.tick();
+		}
+	};
+	const auto machine = [&]() -> const Value*
+	{
+		for(auto it = page.rbegin(); it != page.rend(); ++it)
+			if(it->find("type")->asString() == "machine")
+				return it->find("doc");
+		return nullptr;
+	};
+	const auto synth = [&] { return static_cast<int>(machine()->find("mutes")->find("synth")->asNumber()); };
+	const auto midi = [&] { return static_cast<int>(machine()->find("mutes")->find("midi")->asNumber()); };
+	const auto poly = [&] { const auto* p = machine()->find("poly"); return p->isNull() ? -1 : p->asBool() ? 1 : 0; };
+	const auto tempo = [&] { return machine()->find("tempo")->asNumber(); };
+	// the machine document that came before the last result (the page has it when the result comes)
+	const auto beforeResult = [&]() -> const Value*
+	{
+		bool result = false;
+		for(auto it = page.rbegin(); it != page.rend(); ++it)
+		{
+			const auto type = it->find("type")->asString();
+			if(type == "result")
+				result = true;
+			else if(result && type == "machine")
+				return it->find("doc");
+		}
+		return nullptr;
+	};
+	msg(R"({"op":"ready"})");
+	d.setProbe(mmDesk::Desk::Probe::Running);
+	d.onTelemetry(tel);
+	d.onDeviceSysex(status(0x04, 1));
+	d.onDeviceSysex(status(0x02, 2));
+	d.onDeviceSysex(status(0x20, 0));
+	run(20);
+	check(synth() == 0 && midi() == 0 && poly() == 0 && tempo() == 120, "memory: no mutes, mono, 120 BPM");
+
+	// a mute: said at once, before the result; memory catches up and settles it
+	msg(R"({"op":"mute","id":1,"t":2,"on":true})");
+	const auto* before = beforeResult();
+	check(before && static_cast<int>(before->find("mutes")->find("synth")->asNumber()) == 4, "mute T3: the machine document says it before the result");
+	run(1000);
+	check(synth() == 4, "memory has not shown it yet (1 s): still expected");
+	tel.mutes = 4;
+	run(20);
+	check(synth() == 4, "memory shows it: settled");
+	tel.mutes = 0;
+	run(20);
+	check(synth() == 0, "settled, then a press on the panel unmutes T3: memory wins at once");
+
+	// memory never shows it: given up after settleMs on the session's clock
+	msg(R"({"op":"mute","id":2,"t":3,"on":true})");
+	run(1400);
+	check(synth() == 8, "mute T4, memory disagrees for 1.4 s: still expected");
+	run(200);
+	check(synth() == 0, "memory disagrees for longer than settleMs (1.5 s): memory wins");
+
+	// a MIDI track's mute (the MUTE window's keys)
+	msg(R"({"op":"muteMidi","id":3,"t":1,"on":true})");
+	check(midi() == 2, "mute M2: said at once");
+	tel.mutes = 2 << 6;
+	run(20);
+	tel.mutes = 0;
+	run(20);
+	check(midi() == 0, "settled by memory, then memory again");
+	// taken back before memory shows the first: the keys go again (each press toggles), so it ends unmuted
+	const auto windows = muteWindows;
+	msg(R"({"op":"muteMidi","id":30,"t":1,"on":true})");
+	msg(R"({"op":"muteMidi","id":31,"t":1,"on":false})");
+	check(muteWindows == windows + 2 && midi() == 0, "a MIDI mute taken back at once: the MUTE window's keys twice, unmuted");
+	msg(R"({"op":"muteMidi","id":32,"t":1,"on":false})");
+	check(muteWindows == windows + 2, "unmuting what is unmuted: no keys");
+	run(1600);
+
+	// POLY: SET STATUS, read back by the status reply
+	msg(R"({"op":"poly","id":4,"on":true})");
+	check(poly() == 1, "POLY on: said at once");
+	run(500);
+	check(poly() == 1, "no status reply yet: still expected");
+	d.onDeviceSysex(status(0x20, 1));
+	run(20);
+	d.onDeviceSysex(status(0x20, 0));
+	run(20);
+	check(poly() == 0, "settled by the status reply; then the machine's own change shows");
+	msg(R"({"op":"poly","id":5,"on":true})");
+	run(1600);
+	check(poly() == 0, "no status reply for longer than settleMs: memory wins");
+
+	// the tempo (BPM x 24 in memory)
+	msg(R"({"op":"tempo","id":6,"bpm":130})");
+	check(tempo() == 130, "tempo 130: said at once");
+	tel.tempo = 130 * 24;
+	run(20);
+	tel.tempo = 125 * 24;
+	run(20);
+	check(tempo() == 125, "settled; then the machine's own tempo");
+	msg(R"({"op":"tempo","id":7,"bpm":140})");
+	run(1600);
+	check(tempo() == 125, "memory disagrees for longer than settleMs: memory's tempo");
+}
+
 int main(const int _argc, char** _argv)
 {
 	if(_argc > 1 && std::string(_argv[1]) == "--write-schema")
@@ -709,9 +1156,13 @@ int main(const int _argc, char** _argv)
 	recvSession();
 	desk();
 	playingFromSteps();
+	watchSteps();
+	kitAsLoaded();
 	modulators();
 	asksAndErrors();
 	chains();
+	memoryFields();
+	intentCases::run();
 	checkContract(false);
 	std::printf("%s (%d failures)\n", g_failures ? "FAIL" : "PASS", g_failures);
 	return g_failures ? 1 : 0;

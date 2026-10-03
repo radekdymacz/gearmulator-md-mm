@@ -1,5 +1,6 @@
-/* MODAL BEGIN (P7): one modal system for every dialog of both editors, the same text in the MD mockup,
-   the MM mockup and the MD skin (checked by the sync scripts). The dialogs keep their own open and close
+"use strict";
+/* The modal layer (P7): one modal system for every dialog of both editors, one file for both editors and
+   both mockups (skins/shared/, its stylesheet deskModal.css). The dialogs keep their own open and close
    functions; this layer watches them (their hidden attribute) and gives every one the same behaviour:
    centred on the window over a dimmed backdrop, focus inside it (Tab goes round), Esc and a click
    outside by its kind, focus back where it was when it closes. Stacked: the newest is on top and only
@@ -7,7 +8,7 @@
      confirm  a question (the plug-in's asks, the first-run notice): Esc is its last key (Cancel, Close),
               a click outside does nothing, the first focus is its last key (never the destructive one)
      panel    a library, settings or list: Esc and a click outside close it (its own close function)
-     boot     the start-up card (BOOT block): nothing closes it but the machine becoming ready
+     boot     the start-up card (deskBoot.js): nothing closes it but the machine becoming ready
    A listbox (the dropdowns) is not a modal: it stays at its button. */
 const Modal = (() => {
 	const KINDS = { confirm: { outside: false, focusLast: true, esc: true }, panel: { outside: true, focusLast: false, esc: true },
@@ -62,7 +63,7 @@ const Modal = (() => {
 			if (!el.hidden) shown(el, kind, close);
 		}
 	}
-	/* first in line (this block loads before the dialogs' own handlers): Esc, Tab and the backdrop */
+	/* first in line (this file loads before the dialogs' own handlers): Esc, Tab and the backdrop */
 	document.addEventListener("keydown", e => {
 		const d = top(); if (!d) return;
 		if (e.key === "Escape") { e.preventDefault(); e.stopImmediatePropagation(); dismiss(d); return; }
@@ -107,4 +108,3 @@ const Modal = (() => {
 		.observe(document.body, { attributes: true, attributeFilter: ["title"], subtree: true });
 	return { open: () => stack.map(d => d.el.id), top: () => top()?.el.id || null };
 })();
-/* MODAL END */

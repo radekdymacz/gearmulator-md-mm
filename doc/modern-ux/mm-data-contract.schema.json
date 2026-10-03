@@ -581,7 +581,7 @@
           "type": "object",
           "description": "MULTI TRIG (MM-P4, panel): mode 0 ALL TRK, 1 SPLIT KEY, 2 SEQ START, 3 SEQ TRNSP; timing 0 DIRECT, 1/16 2/16 4/16 8/16 16/16 32/16; splitKey the first key of the upper zone; splitTrack the first upper track, 0-based.",
           "required": ["mode", "timing", "splitKey", "splitTrack"],
-          "additionalProperties": false,
+          "additionalProperties": true,
           "properties": {
             "mode": {
               "type": "integer",
@@ -829,7 +829,7 @@
           "type": "object",
           "description": "CONTROL IN (MM-P4, panel): tempoSync 0 INTERNAL, 1 EXT MIDI CLK; transport 0 IGNORE, 1 ACCEPT (MIDI Start/Stop).",
           "required": ["tempoSync", "transport"],
-          "additionalProperties": false,
+          "additionalProperties": true,
           "properties": {
             "tempoSync": {
               "$ref": "#/$defs/byte"
@@ -859,7 +859,7 @@
       "type": "object",
       "description": "P6: what the engine can do, as data (deskCore::Capabilities), with what the editor does not do yet on any engine (the model's unsupported list) merged in. A page enables a control when can[name] is true and shows reasons[name] otherwise; a name it does not know is not allowed.",
       "required": ["engine", "label", "about", "can", "reasons", "values"],
-      "additionalProperties": false,
+      "additionalProperties": true,
       "properties": {
         "engine": {
           "type": "string",
@@ -874,7 +874,7 @@
         "can": {
           "type": "object",
           "required": ["transport", "panelKeys", "recvSession", "lcd", "workingKitMemory", "telemetry", "midiMutes", "poly", "multiTrig", "multiMap", "portamento", "gridRecord", "chains"],
-          "additionalProperties": false,
+          "additionalProperties": true,
           "properties": {
             "transport": {
               "type": "boolean"
@@ -927,7 +927,7 @@
         "values": {
           "type": "object",
           "required": ["dumps"],
-          "additionalProperties": false,
+          "additionalProperties": true,
           "properties": {
             "dumps": {
               "enum": ["recv", "manual"]
@@ -942,7 +942,7 @@
       "items": {
         "type": "object",
         "required": ["id", "label", "available"],
-        "additionalProperties": false,
+        "additionalProperties": true,
         "properties": {
           "id": {
             "type": "string",
@@ -964,7 +964,7 @@
       "type": "object",
       "description": "P6: the core's undo history (a gesture is one step).",
       "required": ["undo", "redo", "undoCount", "redoCount"],
-      "additionalProperties": false,
+      "additionalProperties": true,
       "properties": {
         "undo": {
           "type": "boolean"
@@ -1070,7 +1070,7 @@
     },
     "machine": {
       "type": "object",
-      "required": ["schema", "version", "pattern", "kit", "song", "global", "tempo", "mutes", "poly", "desk", "recv", "loading", "roundTripMs", "lifecycle", "capabilities", "engines", "history", "input", "midi", "lifecycleText"],
+      "required": ["schema", "version", "pattern", "kit", "song", "global", "tempo", "mutes", "poly", "desk", "recv", "loading", "roundTripMs", "lifecycle", "capabilities", "engines", "history", "input", "midi", "lifecycleText", "contract"],
       "description": "Read-only machine state from the MM desk: current and queued pattern, kit and its working state, song, SYSEX RECV session, and the core's parts (P6: every member declared).",
       "properties": {
         "schema": {
@@ -1081,7 +1081,7 @@
         },
         "pattern": {
           "type": "object",
-          "additionalProperties": false,
+          "additionalProperties": true,
           "required": ["current", "queued"],
           "properties": {
             "current": {
@@ -1113,7 +1113,7 @@
         },
         "kit": {
           "type": "object",
-          "additionalProperties": false,
+          "additionalProperties": true,
           "required": ["current", "working"],
           "properties": {
             "current": {
@@ -1135,7 +1135,7 @@
         },
         "song": {
           "type": "object",
-          "additionalProperties": false,
+          "additionalProperties": true,
           "required": ["current", "songMode"],
           "properties": {
             "current": {
@@ -1164,7 +1164,7 @@
         },
         "global": {
           "type": "object",
-          "additionalProperties": false,
+          "additionalProperties": true,
           "required": ["current"],
           "properties": {
             "current": {
@@ -1196,7 +1196,7 @@
         },
         "mutes": {
           "type": "object",
-          "additionalProperties": false,
+          "additionalProperties": true,
           "required": ["synth", "midi"],
           "description": "MM-P4: the machine's own mutes from RAM (made on its panel too), bit t = track t; null where the engine cannot read them (HW MIDI).",
           "properties": {
@@ -1239,7 +1239,7 @@
         },
         "desk": {
           "type": "object",
-          "additionalProperties": false,
+          "additionalProperties": true,
           "required": ["chain", "bankGroup"],
           "description": "MM-P8: the machine's own sequencer state from RAM, as the Machinedrum's machine.desk.",
           "properties": {
@@ -1250,7 +1250,7 @@
                 },
                 {
                   "type": "object",
-                  "additionalProperties": false,
+                  "additionalProperties": true,
                   "description": "The firmware's pattern chain (BANK held + TRIG keys, manual 1-46; RAM 0x2bc2c4). One bank, each pattern once, loops. Played in pattern mode only: in song mode active can stay true while the song plays.",
                   "required": ["active", "next", "patterns"],
                   "properties": {
@@ -1288,7 +1288,7 @@
         },
         "recv": {
           "type": "object",
-          "additionalProperties": false,
+          "additionalProperties": true,
           "required": ["state", "waiting", "sending", "received", "errors"],
           "properties": {
             "state": {
@@ -1317,7 +1317,7 @@
         },
         "loading": {
           "type": "object",
-          "additionalProperties": false,
+          "additionalProperties": true,
           "required": ["done", "total"],
           "properties": {
             "done": {
@@ -1356,9 +1356,13 @@
         "lifecycleText": {
           "type": "string",
           "description": "What the lifecycle state means for the user, worded by the model."
+        },
+        "contract": {
+          "description": "The page protocol's version (the contract document's): bumped when a member is renamed, removed or re-meant; adding one keeps it. A page reads it first.",
+          "const": 2
         }
       },
-      "additionalProperties": false
+      "additionalProperties": true
     },
     "catalogue": {
       "type": "object",
@@ -1822,13 +1826,13 @@
               "const": "ask"
             },
             "ask": {
-              "enum": ["loadKit", "reloadKit", "overwriteSlot", "discardKit", "transportIgnore", "breakChain"]
+              "enum": ["loadKit", "reloadKit", "overwriteSlot", "clearSlot", "discardKit", "transportIgnore", "breakChain"]
             },
             "also": {
               "type": "array",
               "description": "Other questions this one answers too (force answers all of them).",
               "items": {
-                "enum": ["loadKit", "reloadKit", "overwriteSlot", "discardKit", "transportIgnore", "breakChain"]
+                "enum": ["loadKit", "reloadKit", "overwriteSlot", "clearSlot", "discardKit", "transportIgnore", "breakChain"]
               }
             },
             "message": {
@@ -2047,6 +2051,1902 @@
             },
             "doc": {
               "type": "object"
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "description": "core: a track's level (LEV)",
+          "required": ["op", "k", "t", "v"],
+          "properties": {
+            "op": {
+              "const": "level"
+            },
+            "id": {
+              "type": "integer"
+            },
+            "g": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "force": {
+              "type": ["boolean", "integer"]
+            },
+            "k": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 127
+            },
+            "t": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 5
+            },
+            "v": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 127
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "description": "core: a track's mix buses: AB 1, CD 2, EF 4",
+          "required": ["op", "k", "t", "out"],
+          "properties": {
+            "op": {
+              "const": "route"
+            },
+            "id": {
+              "type": "integer"
+            },
+            "g": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "force": {
+              "type": ["boolean", "integer"]
+            },
+            "k": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 127
+            },
+            "t": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 5
+            },
+            "out": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 7
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "description": "core: an FX machine's input: 0 NEIGHBOR, 1 INP A, 2 INP B, 3 INP A+B, 4-6 BUS AB CD EF",
+          "required": ["op", "k", "t", "v"],
+          "properties": {
+            "op": {
+              "const": "input"
+            },
+            "id": {
+              "type": "integer"
+            },
+            "g": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "force": {
+              "type": ["boolean", "integer"]
+            },
+            "k": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 127
+            },
+            "t": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 5
+            },
+            "v": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 6
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "description": "core: a kit value: a synth track's page 0-6 (SYN AMP FLT EFX LF1 LF2 LF3), a MIDI track's MIDI page (7)",
+          "required": ["op", "k", "t", "i", "v"],
+          "properties": {
+            "op": {
+              "const": "param"
+            },
+            "id": {
+              "type": "integer"
+            },
+            "g": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "force": {
+              "type": ["boolean", "integer"]
+            },
+            "k": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 127
+            },
+            "t": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 11
+            },
+            "page": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 7
+            },
+            "i": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 7
+            },
+            "v": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 127
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "description": "core: TRIG POS: the track that also plays this one's notes, null none",
+          "required": ["op", "k", "t", "v"],
+          "properties": {
+            "op": {
+              "const": "trigPos"
+            },
+            "id": {
+              "type": "integer"
+            },
+            "g": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "force": {
+              "type": ["boolean", "integer"]
+            },
+            "k": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 127
+            },
+            "t": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 5
+            },
+            "v": {
+              "oneOf": [
+                {
+                  "type": "null"
+                },
+                {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 5
+                }
+              ]
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "description": "core: LEGATO: whether that envelope fires again when notes overlap",
+          "required": ["op", "k", "t", "env", "on"],
+          "properties": {
+            "op": {
+              "const": "legato"
+            },
+            "id": {
+              "type": "integer"
+            },
+            "g": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "force": {
+              "type": ["boolean", "integer"]
+            },
+            "k": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 127
+            },
+            "t": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 5
+            },
+            "env": {
+              "type": "string",
+              "enum": ["amp", "filter", "lfo"]
+            },
+            "on": {
+              "type": ["boolean", "integer"]
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "description": "core: PORTAMENTO: ALWAYS or ONLY LEGATO",
+          "required": ["op", "k", "t", "v"],
+          "properties": {
+            "op": {
+              "const": "portamento"
+            },
+            "id": {
+              "type": "integer"
+            },
+            "g": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "force": {
+              "type": ["boolean", "integer"]
+            },
+            "k": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 127
+            },
+            "t": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 5
+            },
+            "v": {
+              "type": "string",
+              "enum": ["always", "legato"]
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "description": "core: the routing mode",
+          "required": ["op", "v"],
+          "properties": {
+            "op": {
+              "const": "routing"
+            },
+            "id": {
+              "type": "integer"
+            },
+            "g": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "force": {
+              "type": ["boolean", "integer"]
+            },
+            "v": {
+              "type": "string",
+              "enum": ["3xSTEREO+AB=MIX", "3xSTEREO", "6xMONO"]
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "description": "core: a MIDI sequencer track's channel and its CL1-4 CC numbers (four of 0-127, 128 = AFT)",
+          "required": ["op", "t"],
+          "properties": {
+            "op": {
+              "const": "midiTrack"
+            },
+            "id": {
+              "type": "integer"
+            },
+            "g": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "force": {
+              "type": ["boolean", "integer"]
+            },
+            "t": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 5
+            },
+            "ch": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 15
+            },
+            "cc": {
+              "type": "array"
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "description": "core: a step's value: null empty, {off:true} a NOTE OFF, {n:[note...], a, f, l, notrig?} a trig (n: its pitch, chord notes after the base; a f l: AMP FILTER LFO)",
+          "required": ["op", "p", "t", "s", "v"],
+          "properties": {
+            "op": {
+              "const": "step"
+            },
+            "id": {
+              "type": "integer"
+            },
+            "g": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "force": {
+              "type": ["boolean", "integer"]
+            },
+            "p": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 127
+            },
+            "t": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 11
+            },
+            "s": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 63
+            },
+            "v": {}
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "description": "core: a step on the slide track",
+          "required": ["op", "p", "t", "s", "on"],
+          "properties": {
+            "op": {
+              "const": "slide"
+            },
+            "id": {
+              "type": "integer"
+            },
+            "g": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "force": {
+              "type": ["boolean", "integer"]
+            },
+            "p": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 127
+            },
+            "t": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 11
+            },
+            "s": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 63
+            },
+            "on": {
+              "type": ["boolean", "integer"]
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "description": "core: a step on the swing track",
+          "required": ["op", "p", "t", "s", "on"],
+          "properties": {
+            "op": {
+              "const": "swingStep"
+            },
+            "id": {
+              "type": "integer"
+            },
+            "g": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "force": {
+              "type": ["boolean", "integer"]
+            },
+            "p": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 127
+            },
+            "t": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 11
+            },
+            "s": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 63
+            },
+            "on": {
+              "type": ["boolean", "integer"]
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "description": "core: a parameter lock (page as param's; MIDI tracks: 7); v null clears it. 62 locked parameters a pattern",
+          "required": ["op", "p", "t", "i", "s", "v"],
+          "properties": {
+            "op": {
+              "const": "lock"
+            },
+            "id": {
+              "type": "integer"
+            },
+            "g": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "force": {
+              "type": ["boolean", "integer"]
+            },
+            "p": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 127
+            },
+            "t": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 11
+            },
+            "page": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 7
+            },
+            "i": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 7
+            },
+            "s": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 63
+            },
+            "v": {
+              "oneOf": [
+                {
+                  "type": "null"
+                },
+                {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 127
+                }
+              ]
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "description": "core: every lock of one parameter of a track",
+          "required": ["op", "p", "t", "i"],
+          "properties": {
+            "op": {
+              "const": "clearLane"
+            },
+            "id": {
+              "type": "integer"
+            },
+            "g": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "force": {
+              "type": ["boolean", "integer"]
+            },
+            "p": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 127
+            },
+            "t": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 11
+            },
+            "page": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 7
+            },
+            "i": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 7
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "description": "core: every lock of a track (Alt + the lock lane's clear key)",
+          "required": ["op", "p", "t"],
+          "properties": {
+            "op": {
+              "const": "clearLocks"
+            },
+            "id": {
+              "type": "integer"
+            },
+            "g": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "force": {
+              "type": ["boolean", "integer"]
+            },
+            "p": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 127
+            },
+            "t": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 11
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "description": "core: every track's steps, slides and locks (Alt + CLR)",
+          "required": ["op", "p"],
+          "properties": {
+            "op": {
+              "const": "clearPattern"
+            },
+            "id": {
+              "type": "integer"
+            },
+            "g": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "force": {
+              "type": ["boolean", "integer"]
+            },
+            "p": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 127
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "description": "core: tracks' steps in [from, to) become exactly these (the generators, every-n fill): rows [{t, steps: [[s, v]...], slide?: [s...], locks?: [[page, i, s, v]...]}]; a step not listed is empty; slide and locks, when given, are the range's",
+          "required": ["op", "p", "from", "to", "rows"],
+          "properties": {
+            "op": {
+              "const": "steps"
+            },
+            "id": {
+              "type": "integer"
+            },
+            "g": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "force": {
+              "type": ["boolean", "integer"]
+            },
+            "p": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 127
+            },
+            "from": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 63
+            },
+            "to": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 64
+            },
+            "rows": {
+              "type": "array"
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "description": "core: a track's steps, slides and locks move by steps, wrapping at the length (swing stays: the groove)",
+          "required": ["op", "p", "t", "by"],
+          "properties": {
+            "op": {
+              "const": "rotate"
+            },
+            "id": {
+              "type": "integer"
+            },
+            "g": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "force": {
+              "type": ["boolean", "integer"]
+            },
+            "p": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 127
+            },
+            "t": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 11
+            },
+            "by": {
+              "type": "integer",
+              "minimum": -63,
+              "maximum": 63
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "description": "core: length x2, the new half a copy of every track's steps, slides, swing and locks",
+          "required": ["op", "p"],
+          "properties": {
+            "op": {
+              "const": "doublePattern"
+            },
+            "id": {
+              "type": "integer"
+            },
+            "g": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "force": {
+              "type": ["boolean", "integer"]
+            },
+            "p": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 127
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "description": "core",
+          "required": ["op", "p", "v"],
+          "properties": {
+            "op": {
+              "const": "length"
+            },
+            "id": {
+              "type": "integer"
+            },
+            "g": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "force": {
+              "type": ["boolean", "integer"]
+            },
+            "p": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 127
+            },
+            "v": {
+              "type": "integer",
+              "minimum": 2,
+              "maximum": 64
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "description": "core: the tempo multiplier",
+          "required": ["op", "p", "v"],
+          "properties": {
+            "op": {
+              "const": "speed"
+            },
+            "id": {
+              "type": "integer"
+            },
+            "g": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "force": {
+              "type": ["boolean", "integer"]
+            },
+            "p": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 127
+            },
+            "v": {
+              "type": "string",
+              "enum": ["1X", "2X", "3/4X", "3/2X"]
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "description": "core: percent",
+          "required": ["op", "p", "v"],
+          "properties": {
+            "op": {
+              "const": "swing"
+            },
+            "id": {
+              "type": "integer"
+            },
+            "g": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "force": {
+              "type": ["boolean", "integer"]
+            },
+            "p": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 127
+            },
+            "v": {
+              "type": "integer",
+              "minimum": 50,
+              "maximum": 80
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "description": "core: TRANSPOSE: the pattern's (no t: v) or a track's (v semitones, scale 0 --- 1 FIX 2 MAJ 3 MIN, key)",
+          "required": ["op", "p"],
+          "properties": {
+            "op": {
+              "const": "transpose"
+            },
+            "id": {
+              "type": "integer"
+            },
+            "g": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "force": {
+              "type": ["boolean", "integer"]
+            },
+            "p": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 127
+            },
+            "t": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 11
+            },
+            "v": {
+              "type": "integer",
+              "minimum": -64,
+              "maximum": 63
+            },
+            "scale": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 3
+            },
+            "key": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 11
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "description": "core: ARPEGGIATOR, a field in firmware units (step i: 64 + offset, 255 muted)",
+          "required": ["op", "p", "t", "field", "v"],
+          "properties": {
+            "op": {
+              "const": "arp"
+            },
+            "id": {
+              "type": "integer"
+            },
+            "g": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "force": {
+              "type": ["boolean", "integer"]
+            },
+            "p": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 127
+            },
+            "t": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 11
+            },
+            "field": {
+              "type": "string",
+              "enum": ["play", "ojmp", "mode", "range", "speed", "trigs", "length", "step"]
+            },
+            "v": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 255
+            },
+            "i": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 15
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "description": "core: a track's steps, slides and locks in [from, to)",
+          "required": ["op", "p", "t", "from", "to"],
+          "properties": {
+            "op": {
+              "const": "clearSteps"
+            },
+            "id": {
+              "type": "integer"
+            },
+            "g": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "force": {
+              "type": ["boolean", "integer"]
+            },
+            "p": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 127
+            },
+            "t": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 11
+            },
+            "from": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 63
+            },
+            "to": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 64
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "description": "core: a track page to the clipboard",
+          "required": ["op", "p", "t", "from", "to"],
+          "properties": {
+            "op": {
+              "const": "copySteps"
+            },
+            "id": {
+              "type": "integer"
+            },
+            "g": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "force": {
+              "type": ["boolean", "integer"]
+            },
+            "p": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 127
+            },
+            "t": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 11
+            },
+            "from": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 63
+            },
+            "to": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 64
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "description": "core: the clipboard's page from step from; [from, to) is cleared first (default: the page's own length)",
+          "required": ["op", "p", "t", "from"],
+          "properties": {
+            "op": {
+              "const": "pasteSteps"
+            },
+            "id": {
+              "type": "integer"
+            },
+            "g": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "force": {
+              "type": ["boolean", "integer"]
+            },
+            "p": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 127
+            },
+            "t": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 11
+            },
+            "from": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 63
+            },
+            "to": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 64
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "description": "core: a track's machine (model: its SysEx 0x5B id): its SYN page starts at the machine's defaults; without keepFx (default on) the other pages too",
+          "required": ["op", "k", "t", "model"],
+          "properties": {
+            "op": {
+              "const": "machine"
+            },
+            "id": {
+              "type": "integer"
+            },
+            "g": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "force": {
+              "type": ["boolean", "integer"]
+            },
+            "k": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 127
+            },
+            "t": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 5
+            },
+            "model": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 255
+            },
+            "keepFx": {
+              "type": ["boolean", "integer"]
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "description": "core: CLEAR MACHINE: GND-SIN, every page at its start",
+          "required": ["op", "k", "t"],
+          "properties": {
+            "op": {
+              "const": "clearSound"
+            },
+            "id": {
+              "type": "integer"
+            },
+            "g": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "force": {
+              "type": ["boolean", "integer"]
+            },
+            "k": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 127
+            },
+            "t": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 5
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "description": "core: a track's machine and its seven pages to the clipboard",
+          "required": ["op", "k", "t"],
+          "properties": {
+            "op": {
+              "const": "copySound"
+            },
+            "id": {
+              "type": "integer"
+            },
+            "g": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "force": {
+              "type": ["boolean", "integer"]
+            },
+            "k": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 127
+            },
+            "t": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 5
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "description": "core: the clipboard's machine and pages onto a track",
+          "required": ["op", "k", "t"],
+          "properties": {
+            "op": {
+              "const": "pasteSound"
+            },
+            "id": {
+              "type": "integer"
+            },
+            "g": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "force": {
+              "type": ["boolean", "integer"]
+            },
+            "k": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 127
+            },
+            "t": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 5
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "description": "core: many kit values at once (MUTATE, a screen's handle, Control All): values [[t 0-11, page, i 0-7, v 0-127]...], page as param's",
+          "required": ["op", "k", "values"],
+          "properties": {
+            "op": {
+              "const": "params"
+            },
+            "id": {
+              "type": "integer"
+            },
+            "g": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "force": {
+              "type": ["boolean", "integer"]
+            },
+            "k": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 127
+            },
+            "values": {
+              "type": "array"
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "description": "core: ASSIGN: a source's row (src 0 JOY R, 1 JOY L, 2 JOY U, 3 JOY D, 4 VEL, 5 KEY; row 0-1) gets page, dest, add; MIRROR, HPF, LPF",
+          "required": ["op", "k", "t"],
+          "properties": {
+            "op": {
+              "const": "assign"
+            },
+            "id": {
+              "type": "integer"
+            },
+            "g": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "force": {
+              "type": ["boolean", "integer"]
+            },
+            "k": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 127
+            },
+            "t": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 5
+            },
+            "src": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 5
+            },
+            "row": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 1
+            },
+            "page": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 8
+            },
+            "dest": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 7
+            },
+            "add": {
+              "type": "integer",
+              "minimum": -64,
+              "maximum": 63
+            },
+            "mirror": {
+              "type": ["boolean", "integer"]
+            },
+            "hpf": {
+              "type": ["boolean", "integer"]
+            },
+            "lpf": {
+              "type": ["boolean", "integer"]
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "description": "core: MULTI ENV: one value (ATK DEC SUS REL PORT ...) for every track",
+          "required": ["op", "k", "i", "v"],
+          "properties": {
+            "op": {
+              "const": "multiEnv"
+            },
+            "id": {
+              "type": "integer"
+            },
+            "g": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "force": {
+              "type": ["boolean", "integer"]
+            },
+            "k": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 127
+            },
+            "i": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 5
+            },
+            "v": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 127
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "description": "core: MULTI TRIG: mode (ALL TRK, SPLIT, SEQ STRT, SEQ TRNS), split key, split track, timing",
+          "required": ["op", "k"],
+          "properties": {
+            "op": {
+              "const": "multiTrig"
+            },
+            "id": {
+              "type": "integer"
+            },
+            "g": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "force": {
+              "type": ["boolean", "integer"]
+            },
+            "k": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 127
+            },
+            "mode": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 3
+            },
+            "splitKey": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 127
+            },
+            "splitTrack": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 5
+            },
+            "timing": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 6
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "description": "core: the kit that plays, renamed live (0x55): at most 11 characters",
+          "required": ["op", "k", "name"],
+          "properties": {
+            "op": {
+              "const": "kitName"
+            },
+            "id": {
+              "type": "integer"
+            },
+            "g": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "force": {
+              "type": ["boolean", "integer"]
+            },
+            "k": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 127
+            },
+            "name": {
+              "type": "string"
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "description": "core: a MULTI MAP range: upper key, pattern (255 CUR), offset (255 ---), length, transpose, timing (0 DIR, 1 2 4 8 16 32)",
+          "required": ["op", "i"],
+          "properties": {
+            "op": {
+              "const": "multiMap"
+            },
+            "id": {
+              "type": "integer"
+            },
+            "g": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "force": {
+              "type": ["boolean", "integer"]
+            },
+            "i": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 31
+            },
+            "hi": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 127
+            },
+            "pat": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 255
+            },
+            "ofs": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 255
+            },
+            "len": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 64
+            },
+            "trn": {
+              "type": "integer",
+              "minimum": -64,
+              "maximum": 63
+            },
+            "tim": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 6
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "description": "core: a MULTI MAP range splits at its middle key",
+          "required": ["op", "i"],
+          "properties": {
+            "op": {
+              "const": "multiMapSplit"
+            },
+            "id": {
+              "type": "integer"
+            },
+            "g": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "force": {
+              "type": ["boolean", "integer"]
+            },
+            "i": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 31
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "description": "core: a MULTI MAP range goes (the last then reaches the top key)",
+          "required": ["op", "i"],
+          "properties": {
+            "op": {
+              "const": "multiMapDelete"
+            },
+            "id": {
+              "type": "integer"
+            },
+            "g": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "force": {
+              "type": ["boolean", "integer"]
+            },
+            "i": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 31
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "description": "core: song rows (contract rows; i the row)",
+          "required": ["op", "s", "i", "row"],
+          "properties": {
+            "op": {
+              "const": "rowSet"
+            },
+            "id": {
+              "type": "integer"
+            },
+            "g": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "force": {
+              "type": ["boolean", "integer"]
+            },
+            "s": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 23
+            },
+            "i": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 199
+            },
+            "row": {
+              "type": "object"
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "description": "core",
+          "required": ["op", "s", "i"],
+          "properties": {
+            "op": {
+              "const": "rowInsert"
+            },
+            "id": {
+              "type": "integer"
+            },
+            "g": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "force": {
+              "type": ["boolean", "integer"]
+            },
+            "s": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 23
+            },
+            "i": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 199
+            },
+            "row": {
+              "type": "object"
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "description": "core",
+          "required": ["op", "s", "i"],
+          "properties": {
+            "op": {
+              "const": "rowDelete"
+            },
+            "id": {
+              "type": "integer"
+            },
+            "g": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "force": {
+              "type": ["boolean", "integer"]
+            },
+            "s": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 23
+            },
+            "i": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 199
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "description": "core",
+          "required": ["op", "s", "from", "to"],
+          "properties": {
+            "op": {
+              "const": "rowMove"
+            },
+            "id": {
+              "type": "integer"
+            },
+            "g": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "force": {
+              "type": ["boolean", "integer"]
+            },
+            "s": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 23
+            },
+            "from": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 199
+            },
+            "to": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 199
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "description": "core",
+          "required": ["op", "s", "i"],
+          "properties": {
+            "op": {
+              "const": "copyRow"
+            },
+            "id": {
+              "type": "integer"
+            },
+            "g": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "force": {
+              "type": ["boolean", "integer"]
+            },
+            "s": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 23
+            },
+            "i": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 199
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "description": "core",
+          "required": ["op", "s", "i"],
+          "properties": {
+            "op": {
+              "const": "pasteRow"
+            },
+            "id": {
+              "type": "integer"
+            },
+            "g": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "force": {
+              "type": ["boolean", "integer"]
+            },
+            "s": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 23
+            },
+            "i": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 199
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "description": "core: the pattern library",
+          "required": ["op", "p"],
+          "properties": {
+            "op": {
+              "const": "patCopy"
+            },
+            "id": {
+              "type": "integer"
+            },
+            "g": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "force": {
+              "type": ["boolean", "integer"]
+            },
+            "p": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 127
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "description": "core",
+          "required": ["op", "p"],
+          "properties": {
+            "op": {
+              "const": "patPaste"
+            },
+            "id": {
+              "type": "integer"
+            },
+            "g": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "force": {
+              "type": ["boolean", "integer"]
+            },
+            "p": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 127
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "description": "core: drag-copy",
+          "required": ["op", "from", "to"],
+          "properties": {
+            "op": {
+              "const": "patCopyTo"
+            },
+            "id": {
+              "type": "integer"
+            },
+            "g": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "force": {
+              "type": ["boolean", "integer"]
+            },
+            "from": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 127
+            },
+            "to": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 127
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "description": "core",
+          "required": ["op", "p"],
+          "properties": {
+            "op": {
+              "const": "patClear"
+            },
+            "id": {
+              "type": "integer"
+            },
+            "g": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "force": {
+              "type": ["boolean", "integer"]
+            },
+            "p": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 127
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "description": "core: the kit library",
+          "required": ["op", "k"],
+          "properties": {
+            "op": {
+              "const": "kitCopy"
+            },
+            "id": {
+              "type": "integer"
+            },
+            "g": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "force": {
+              "type": ["boolean", "integer"]
+            },
+            "k": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 127
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "description": "core",
+          "required": ["op", "k"],
+          "properties": {
+            "op": {
+              "const": "kitPaste"
+            },
+            "id": {
+              "type": "integer"
+            },
+            "g": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "force": {
+              "type": ["boolean", "integer"]
+            },
+            "k": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 127
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "description": "core",
+          "required": ["op", "from", "to"],
+          "properties": {
+            "op": {
+              "const": "kitCopyTo"
+            },
+            "id": {
+              "type": "integer"
+            },
+            "g": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "force": {
+              "type": ["boolean", "integer"]
+            },
+            "from": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 127
+            },
+            "to": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 127
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "description": "core",
+          "required": ["op", "k"],
+          "properties": {
+            "op": {
+              "const": "kitClear"
+            },
+            "id": {
+              "type": "integer"
+            },
+            "g": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "force": {
+              "type": ["boolean", "integer"]
+            },
+            "k": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 127
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "description": "core: a stored kit's name (kitName renames the kit that plays)",
+          "required": ["op", "k", "name"],
+          "properties": {
+            "op": {
+              "const": "kitRename"
+            },
+            "id": {
+              "type": "integer"
+            },
+            "g": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "force": {
+              "type": ["boolean", "integer"]
+            },
+            "k": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 127
+            },
+            "name": {
+              "type": "string"
             }
           },
           "additionalProperties": false
@@ -2496,6 +4396,73 @@
             },
             "force": {
               "type": ["boolean", "integer"]
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "description": "machine: the page's keyboard: synth track t's note on its own MIDI channel, pitch semitones from C3 (MIDI note 48)",
+          "required": ["op", "t", "vel", "pitch"],
+          "properties": {
+            "op": {
+              "const": "noteOn"
+            },
+            "id": {
+              "type": "integer"
+            },
+            "g": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "force": {
+              "type": ["boolean", "integer"]
+            },
+            "t": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 5
+            },
+            "vel": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 127
+            },
+            "pitch": {
+              "type": "integer",
+              "minimum": -48,
+              "maximum": 79
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "description": "machine: the key let go: track t's note of that pitch (none: all of them)",
+          "required": ["op", "t"],
+          "properties": {
+            "op": {
+              "const": "noteOff"
+            },
+            "id": {
+              "type": "integer"
+            },
+            "g": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "force": {
+              "type": ["boolean", "integer"]
+            },
+            "t": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 5
+            },
+            "pitch": {
+              "type": "integer",
+              "minimum": -48,
+              "maximum": 79
             }
           },
           "additionalProperties": false

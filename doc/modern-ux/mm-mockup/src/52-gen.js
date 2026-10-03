@@ -1,7 +1,7 @@
 /* ===== GEN and MUTATE, the Monomachine's own (MM-PORT-PLAN.md d) =====
    Pure: values in, values out, nothing of the page. The generators without a machine in them (euclid, random,
-   the seeds, genFit, genRunFor, mutPull, genNotes) are the Machinedrum Editor's GEN block, included just before
-   this file from skins/mdStudio/mdDeskGen.js (build.sh, sync-mmstudio-skin.py): one source. Here the roles of the
+   the seeds, genFit, genRunFor, mutPull, genNotes) are skins/shared/deskGen.js, both editors' one module,
+   included just before this file (build.sh, sync-mmstudio-skin.py). Here the roles of the
    Monomachine's machines and their defaults, a track's steps from a spec (the MM's steps carry their notes),
    and the mutation of a track's DATA pages. skins/mmStudio/mmGenTest.js checks them in node. */
 

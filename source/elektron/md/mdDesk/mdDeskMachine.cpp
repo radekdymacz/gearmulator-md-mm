@@ -1,6 +1,7 @@
 #include "mdDeskMachine.h"
 
 #include "mdDeskChain.h"
+#include "mdDeskKeys.h"
 #include "mdDeskLibrary.h"
 
 #include "deskCore/deskKinds.h"
@@ -71,6 +72,26 @@ namespace mdDesk
 			return v && ((v->isBool() && v->asBool()) || (v->isNumber() && v->asNumber() != 0));
 		}
 
+		// Control All: a "tweak" command's intent (MdModel::Intent), nothing for any other command.
+		MdModel::Intent tweakIntentOf(const Value& _command)
+		{
+			if(deskCore::opOf(_command) != "tweak")
+				return std::nullopt;
+			const auto* g = _command.find("group");
+			const std::string group = g && g->isString() ? g->asString() : "syn";
+			const auto t = intOf(_command, "t");
+			return TweakIntent{group == "fx" ? 1 : group == "rt" ? 2 : 0, static_cast<uint8_t>(intOf(_command, "knob").value_or(0)),
+				intOf(_command, "d").value_or(0), t && *t >= 0 && *t < 16 ? std::optional<uint8_t>(static_cast<uint8_t>(*t)) : std::nullopt};
+		}
+
+		// A kit value's place (the held layer's accessor, deskCore::HeldOverrides).
+		struct KitValue
+		{
+			template<typename Kit>
+			auto& operator()(Kit& _k, const uint8_t _t, const uint8_t _i) const { return _k.params[_t][_i]; }
+		};
+		constexpr KitValue kitValue{};
+
 		Outcome ok(std::string _note = {}) { return {{}, std::move(_note), {}}; }
 		Outcome refuse(std::string _error) { return {{std::move(_error)}, {}, {}}; }
 		// A question before something is lost; the core publishes it and the page's answer is the
@@ -129,37 +150,24 @@ namespace mdDesk
 	MdMachine::MdMachine(Profile _profile, Port _port)
 		: m_profile(std::move(_profile))
 		, m_port(std::move(_port))
-		, m_session([this](const Bytes& _b)
-		{
-			if(m_port.sendSysex)
-				m_port.sendSysex(_b);
-		})
+		, m_out(m_port.sendSysex)
+		, m_session([this](const Bytes& _b) { sendSysex(_b); })
 	{
-		// P9: while a sample goes out (SDS) nothing else may come between its packets; other SysEx waits.
-		m_rawSysex = m_port.sendSysex;
-		if(m_rawSysex)
-			m_port.sendSysex = [this](const Bytes& _b)
-			{
-				if(m_sds.active())
-					m_heldSysex.push_back(_b);
-				else
-					m_rawSysex(_b);
-			};
 		wireSession();
 		m_wire = deskCore::WireFacts(m_port.nowMs ? m_port.nowMs() : 0);
 	}
 
-	void MdMachine::sendRaw(const Bytes& _message) const
+	// P9: while a sample goes out (SDS) nothing else may come between its packets; other SysEx waits.
+	void MdMachine::sendSysex(const Bytes& _message)
 	{
-		if(m_rawSysex)
-			m_rawSysex(_message);
+		m_out.send(_message, m_sds.active());
 	}
 
 	// ---- P9: a sample to a ROM slot (SDS) ----
 
 	std::string MdMachine::sendSample(const uint8_t _slot, const ed::MdSampleUpload& _upload)
 	{
-		if(!m_rawSysex)
+		if(!m_out.open())
 			return "This engine cannot send SysEx to the machine.";
 		if(m_sds.active())
 			return "A sample is already on its way. Wait for it, or stop it.";
@@ -168,13 +176,13 @@ namespace mdDesk
 		auto dump = ed::mdSdsDump(_slot, _upload.samples, _upload.rate, _upload.name);
 		if(!dump)
 			return "The sample could not be made into SDS (ROM slot 1-48, 1 to 2 million samples).";
-		m_sds.start(_slot, std::move(*dump), now(), [this](const Bytes& _b) { sendRaw(_b); });
+		m_sds.start(_slot, std::move(*dump), now(), [this](const Bytes& _b) { m_out.sample(_b); });
 		return {};
 	}
 
 	void MdMachine::cancelSample()
 	{
-		m_sds.cancel([this](const Bytes& _b) { sendRaw(_b); });
+		m_sds.cancel([this](const Bytes& _b) { m_out.sample(_b); });
 		pumpSample(now());
 	}
 
@@ -189,13 +197,8 @@ namespace mdDesk
 	// The transfer's timeouts; once it is over, the SysEx held meanwhile goes out.
 	void MdMachine::pumpSample(const double _now)
 	{
-		m_sds.pump(_now, [this](const Bytes& _b) { sendRaw(_b); });
-		while(!m_sds.active() && !m_heldSysex.empty())
-		{
-			const auto b = std::move(m_heldSysex.front());
-			m_heldSysex.pop_front();
-			sendRaw(b);
-		}
+		m_sds.pump(_now, [this](const Bytes& _b) { m_out.sample(_b); });
+		m_out.release(m_sds.active());
 	}
 
 	void MdMachine::wireSession()
@@ -245,22 +248,18 @@ namespace mdDesk
 		m_pushes.clear();
 		m_working = deskCore::switched<ed::MdKit>();
 		m_keys = {};
-		m_chainQueued.reset();
+		m_chain.drop();
 		m_lastKit.reset();
 		m_lastPattern.reset();
 		m_audibleQueue.reset();
 		m_knobs.reset();
 		m_recLock.reset();
 		m_sequence.clear();
-		m_intent.reset();
 		m_tweak = {};
+		m_notes = {};
 		m_coalesced.clear();
 		m_telemetrySeen = false;
-		m_session = mdDataLink::Session([this](const Bytes& _b)
-		{
-			if(m_port.sendSysex)
-				m_port.sendSysex(_b);
-		});
+		m_session = mdDataLink::Session([this](const Bytes& _b) { sendSysex(_b); });
 		wireSession();
 		startedOver();
 	}
@@ -286,7 +285,7 @@ namespace mdDesk
 		// requests (measured on OS 1.63, P3), so its sample audio cannot be read.
 		c.set("sampleAudio", m_profile.memory, "A real Machinedrum does not send its samples: it ignores SDS dump requests "
 			"(measured on OS 1.63), so the editor cannot show their waveforms or play them.");
-		c.set("sampleLoad", static_cast<bool>(m_rawSysex), "This engine cannot send SysEx to the machine.");
+		c.set("sampleLoad", m_out.open(), "This engine cannot send SysEx to the machine.");
 		c.set("modulators", telemetry, "The app modulators move with the machine's playhead; this engine reports none.");
 		c.values.emplace_back("dumps", "direct");
 		return c;
@@ -296,9 +295,8 @@ namespace mdDesk
 	{
 		if(m_sds.active())
 			return true;
-		for(const auto& [ref, push] : m_pushes)
-			if(push.slot.busy())
-				return true;
+		if(m_pushes.anyBusy())
+			return true;
 		// Control All on its way (FUNCTION held: no dump may be asked for meanwhile), or its CCs.
 		if(m_tweak.active() || !m_coalesced.empty())
 			return true;
@@ -346,18 +344,10 @@ namespace mdDesk
 
 	// ---- core -> machine ----
 
-	Outcome MdMachine::review(const Value& _command, const std::vector<Change>& _changes, const Documents& _view)
+	MdMachine::Review MdMachine::review(const Value& _command, const std::vector<Change>& _changes, const Documents& _view)
 	{
-		// Control All: the intent the next submit() delivers (its change is the whole working kit).
-		m_intent.reset();
-		if(deskCore::opOf(_command) == "tweak")
-		{
-			const auto* g = _command.find("group");
-			const std::string group = g && g->isString() ? g->asString() : "syn";
-			const auto t = intOf(_command, "t");
-			m_intent = TweakIntent{group == "fx" ? 1 : group == "rt" ? 2 : 0, static_cast<uint8_t>(intOf(_command, "knob").value_or(0)),
-				intOf(_command, "d").value_or(0), t && *t >= 0 && *t < 16 ? std::optional<uint8_t>(static_cast<uint8_t>(*t)) : std::nullopt};
-		}
+		// Control All: the intent submit() delivers its change with (the change is the whole working kit).
+		const auto intent = tweakIntentOf(_command);
 		// While live recording the firmware writes the playing pattern itself; a dump from the
 		// editor would overwrite what it just recorded.
 		if(m_telemetry.recording)
@@ -397,7 +387,7 @@ namespace mdDesk
 			else if(library && ref.kind == DocKind::Pattern && anyTrig(std::get<ed::MdPattern>(c.before)))
 				add(ask("overwriteSlot", "Write over <b>" + ed::mdPatternName(ref.slot) + "</b>? Its notes and locks are replaced.", "Overwrite"));
 		}
-		return o;
+		return {o, intent};
 	}
 
 	Value MdMachine::kitDetails(const std::optional<uint8_t> _kit)
@@ -409,11 +399,7 @@ namespace mdDesk
 
 	deskCore::PushPolicy MdMachine::pushPolicy(const DocKind _kind) const
 	{
-		auto p = m_profile.push;
-		// Over a wire a dump takes its time on it: no faster than that.
-		if(m_profile.wire)
-			p.minIntervalMs = std::max(p.minIntervalMs, deskCore::DinPacer::wireMs(replyBytes(_kind)));
-		return p;
+		return deskCore::wirePolicy(m_profile.push, m_profile.wire, replyBytes(_kind));
 	}
 
 	// Paced (DESIGN-edit-flow.md): the dump goes now or waits its turn (latest wins); the read-back is
@@ -424,7 +410,7 @@ namespace mdDesk
 		auto problems = ref.kind == DocKind::Pattern ? ed::validate(std::get<ed::MdPattern>(_doc)) : ed::validate(std::get<ed::MdSong>(_doc));
 		if(!problems.empty())
 			return {problems, {}, {}};
-		if(m_pushes[ref].slot.want(_doc, now(), pushPolicy(ref.kind)))
+		if(m_pushes.want(ref, _doc, now(), pushPolicy(ref.kind)))
 			sendDump(_doc, _view);
 		return ok();
 	}
@@ -466,8 +452,8 @@ namespace mdDesk
 				if(m_port.sendKitParam)
 					m_port.sendKitParam(e.track, e.kind == LiveEdit::Kind::Level ? 24 : e.index, e.value);
 			}
-			else if(const auto sysex = liveEditSysex(e); !sysex.empty() && m_port.sendSysex)
-				m_port.sendSysex(sysex);
+			else if(const auto sysex = liveEditSysex(e); !sysex.empty() && canSendSysex())
+				sendSysex(sysex);
 		}
 		if(!m_profile.memory)
 			return;
@@ -476,7 +462,7 @@ namespace mdDesk
 		m_working.expect.sent(_stored, _working, now());
 	}
 
-	Outcome MdMachine::submit(const Change& _change, const Documents& _view)
+	Outcome MdMachine::submit(const Change& _change, const Intent& _intent, const Documents& _view)
 	{
 		const auto ref = _change.ref();
 		switch(ref.kind)
@@ -514,7 +500,7 @@ namespace mdDesk
 				return refuse("Only the kit that plays can be edited live" + (kit ? " (kit " + std::to_string(*kit + 1) + " plays)"
 					: std::string()));
 			const auto delivery = kitDelivery(before, after);
-			const auto intent = std::exchange(m_intent, std::nullopt);
+			const auto& intent = _intent;
 			// Control All (manual p.37): the machine's own FUNCTION + DATA ENTRY gesture moves every track;
 			// the edit is pending until memory shows it, like any live edit. No CCs.
 			const auto lead = intent ? tweakLead(before, intent->track) : std::nullopt;
@@ -544,8 +530,8 @@ namespace mdDesk
 					if(m_port.sendKitParam)
 						m_port.sendKitParam(e.track, e.kind == LiveEdit::Kind::Level ? 24 : e.index, e.value);
 				}
-				else if(const auto sysex = liveEditSysex(e); !sysex.empty() && m_port.sendSysex)
-					m_port.sendSysex(sysex);
+				else if(const auto sysex = liveEditSysex(e); !sysex.empty() && canSendSysex())
+					sendSysex(sysex);
 			}
 			std::string note;
 			for(const auto& n : delivery.notLive)
@@ -564,16 +550,16 @@ namespace mdDesk
 			const auto& after = std::get<ed::MdGlobal>(_change.after);
 			const auto delivery = globalDelivery(before, after);
 			for(const auto& e : delivery.edits)
-				if(const auto sysex = liveEditSysex(e); !sysex.empty() && m_port.sendSysex)
-					m_port.sendSysex(sysex);
+				if(const auto sysex = liveEditSysex(e); !sysex.empty() && canSendSysex())
+					sendSysex(sysex);
 			if(!delivery.notLive.empty())
 			{
 				// A global dump is stored at once but applied only when its slot is made active
 				// (P5, measured): 0x56 right after it. pushGlobal asks for the slot back.
 				if(auto problems = m_session.pushGlobal(after); !problems.empty())
 					return {problems, {}, {}};
-				if(m_port.sendSysex && (!m_session.state().globalSlot || *m_session.state().globalSlot == ref.slot))
-					m_port.sendSysex(ed::mdSetActiveGlobal(ref.slot));
+				if(canSendSysex() && (!m_session.state().globalSlot || *m_session.state().globalSlot == ref.slot))
+					sendSysex(ed::mdSetActiveGlobal(ref.slot));
 			}
 			else
 			{
@@ -599,7 +585,7 @@ namespace mdDesk
 		static const std::map<std::string, Handler> map{
 			{"load", &MdMachine::cmdLoad}, {"select", &MdMachine::cmdSelect}, {"saveKit", &MdMachine::cmdSaveKit},
 			{"reloadKit", &MdMachine::cmdReloadKit}, {"kitLoad", &MdMachine::cmdKitLoad}, {"kitSaveAs", &MdMachine::cmdKitSaveAs},
-			{"record", &MdMachine::cmdRecord}, {"recTrig", &MdMachine::cmdRecTrig}, {"keyNote", &MdMachine::cmdKeyNote}, {"chain", &MdMachine::cmdChain},
+			{"record", &MdMachine::cmdRecord}, {"recTrig", &MdMachine::cmdRecTrig}, {"noteOn", &MdMachine::cmdNoteOn}, {"noteOff", &MdMachine::cmdNoteOff}, {"chain", &MdMachine::cmdChain},
 			{"chainClear", &MdMachine::cmdChainClear}, {"globalSlot", &MdMachine::cmdGlobalSlot},
 			{"selectSong", &MdMachine::cmdSelectSong}, {"reloadSong", &MdMachine::cmdReloadSong},
 			{"sampleName", &MdMachine::cmdSampleName}, {"sampleCancel", &MdMachine::cmdSampleCancel}, {"play", &MdMachine::cmdPlay}, {"stop", &MdMachine::cmdStop},
@@ -733,7 +719,7 @@ namespace mdDesk
 	{
 		const auto slot = static_cast<uint8_t>(*intOf(_m, "p"));
 		// A pick ends a chain: one still waiting for its keys is not made.
-		m_chainQueued.reset();
+		m_chain.drop();
 		if(flagOf(_m, "now") && m_telemetry.playing)
 		{
 			// Switch now: STOP, LOAD PATTERN, PLAY, each step when the machine shows the one before.
@@ -776,6 +762,8 @@ namespace mdDesk
 		const auto kit = currentKit();
 		if(!kit)
 			return refuse("The current kit is not known yet");
+		// A held key's value must not be saved with the kit: the machine holds the document's again.
+		restore(m_working.held.releaseAll(), _view);
 		m_session.saveKit(*kit);
 		// The stored slot now holds the working kit (as the machine holds it).
 		if(const auto* w = heldKit(_view))
@@ -814,6 +802,7 @@ namespace mdDesk
 	Outcome MdMachine::cmdKitSaveAs(const Value& _m, const Documents& _view)
 	{
 		const auto slot = static_cast<uint8_t>(*intOf(_m, "k"));
+		restore(m_working.held.releaseAll(), _view);
 		m_session.saveKit(slot);
 		// The stored slot now holds the working kit.
 		if(const auto* w = heldKit(_view))
@@ -862,64 +851,99 @@ namespace mdDesk
 		return pressKey("trig" + std::to_string(t + 1)) ? ok() : refuse("TRIG keys need the local emulated machine");
 	}
 
-	// The page's keyboard (P10): a key plays track t as a MIDI note from the active global's MAP EDITOR
-	// (the manual's default map: C2 track 1 ... D4 track 16) on its base channel, so the firmware trigs it
-	// at the note's velocity. i, v: a kit value (the sample machines' PTCH, the page's semitone) sent as a
-	// live value just before the note and put back when the key is let go: the machine's momentary state,
-	// never an edit (no undo step, the kit document keeps its value). What it puts back is the value the
-	// key replaced, unless something else moved it meanwhile (then that).
-	Outcome MdMachine::cmdKeyNote(const Value& _m, const Documents& _view)
+	// The page's keyboard (P10), the note intent (deskCore/deskNotes.h, mdDeskKeys.h): noteOn plays track t
+	// as its MAP EDITOR note on the base channel (the manual's default map while no global is known), so
+	// the firmware trigs it at the velocity. On the sample machines (ROM, RAM-P) pitch is a PTCH the
+	// machine holds while the key is down: the working copy's held layer (m_working.held), never an edit
+	// (no undo step, no expectation; memory images are masked with it). Letting go puts back the
+	// document's value. Other machines play at their own pitch; GND-EMPTY and the recorders are refused.
+	// While live recording a key is the track's TRIG key (as recTrig): the firmware records a plain trig.
+	// One note sounds per track: a later key replaces it, and only its own noteOff lets it go.
+	Outcome MdMachine::cmdNoteOn(const Value& _m, const Documents& _view)
 	{
 		if(!m_port.sendNote)
 			return refuse("This engine cannot play notes");
-		const auto t = static_cast<size_t>(*intOf(_m, "t"));
-		const auto vel = static_cast<uint8_t>(*intOf(_m, "vel"));
-		const auto release = [&]
+		const auto on = deskCore::noteOnOf(_m);
+		const auto t = on.track;
+		const auto kit = currentKit();
+		const auto* document = kit ? _view.workingKitOf(*kit) : nullptr;
+		if(!document)
+			document = heldKit(_view);
+		const auto model = document ? document->models[t] : 0u;
+		const auto machine = ed::mdMachineName(model);
+		const auto kind = document ? keys::kindOf(model) : keys::Kind::Trig;
+		if(kind == keys::Kind::None)
+			return refuse(keys::notPlayed(machine));
+		if(m_telemetry.recording)
 		{
-			auto& h = m_heldKeys[t];
-			if(!h)
-				return;
-			m_port.sendNote(h->channel, h->note, 0);
-			if(h->value && m_port.sendKitParam)
-			{
-				const auto [index, before, sent] = *h->value;
-				const auto* k = heldKit(_view);
-				const auto now = k ? k->params[t][index] : sent;
-				m_port.sendKitParam(static_cast<uint8_t>(t), index, now != sent ? now : before);
-			}
-			h.reset();
-		};
-		release();
-		if(!vel)
-			return ok();
-		static constexpr std::array<uint8_t, 16> defaults{36, 38, 40, 41, 43, 45, 47, 48, 50, 52, 53, 55, 57, 59, 60, 62};
-		std::optional<uint8_t> note;
-		if(_view.global)
-		{
-			for(size_t n = 0; n < 128 && !note; ++n)
-				if(_view.global->keymap[n] == t)
-					note = static_cast<uint8_t>(n);
+			if(!pressKey("trig" + std::to_string(t + 1)))
+				return refuse("TRIG keys need the local emulated machine");
+			return ok("Recording: a key records a plain trig on the track, at the kit's pitch.");
 		}
-		else
-			note = defaults[t];
+		const auto note = keys::trackNote(_view.global ? &*_view.global : nullptr, t);
 		if(!note)
 			return refuse("Track " + std::to_string(t + 1) + " has no MIDI note in the MAP EDITOR (GLOBAL settings)");
+		releaseNote(t, _view);
 		const auto channel = static_cast<uint8_t>(_view.global ? _view.global->baseChannel & 0x0f : 0);
-		HeldKey h{channel, *note, std::nullopt};
-		const auto i = intOf(_m, "i"), v = intOf(_m, "v");
-		if(i && v && m_port.sendKitParam)
-			if(const auto* k = heldKit(_view))
+		if(kind == keys::Kind::Pitch && document)
+		{
+			const auto tuned = document->params[t][keys::g_ptchIndex];
+			const auto held = keys::heldPtch(tuned, on.pitch);
+			if(held != tuned)
 			{
-				const auto index = static_cast<uint8_t>(*i), before = k->params[t][index], sent = static_cast<uint8_t>(*v);
-				if(sent != before)
-				{
-					m_port.sendKitParam(static_cast<uint8_t>(t), index, sent);
-					h.value = std::array<uint8_t, 3>{index, before, sent};
-				}
+				sendHeld(t, keys::g_ptchIndex, held);
+				m_working.held.hold({t, keys::g_ptchIndex, held, tuned});
 			}
-		m_port.sendNote(channel, *note, vel);
-		m_heldKeys[t] = h;
+		}
+		m_port.sendNote(channel, *note, on.velocity);
+		m_notes[t] = SoundingNote{channel, *note, on.pitch};
+		return ok(kind == keys::Kind::Trig && document ? keys::ownPitch(machine) : std::string());
+	}
+
+	Outcome MdMachine::cmdNoteOff(const Value& _m, const Documents& _view)
+	{
+		const auto off = deskCore::noteOffOf(_m);
+		const auto& n = m_notes[off.track];
+		if(n && off.releases(n->pitch))
+			releaseNote(off.track, _view);
 		return ok();
+	}
+
+	void MdMachine::releaseNote(const uint8_t _t, const Documents& _view)
+	{
+		if(auto& n = m_notes[_t])
+		{
+			if(m_port.sendNote)
+				m_port.sendNote(n->channel, n->note, 0);
+			n.reset();
+		}
+		restore(m_working.held.release(_t), _view);
+	}
+
+	// What held keys put on the machine goes back to the document's values (an edit made meanwhile is
+	// in the document; host automation too), else to the values the keys replaced.
+	void MdMachine::restore(std::vector<deskCore::HeldOverride> _held, const Documents& _view)
+	{
+		const auto kit = currentKit();
+		const auto* document = kit ? _view.workingKitOf(*kit) : nullptr;
+		for(const auto& o : _held)
+			sendHeld(o.track, o.index, deskCore::HeldOverrides::restoreValue(o, document, kitValue));
+	}
+
+	void MdMachine::sendHeld(const uint8_t _t, const uint8_t _index, const uint8_t _value)
+	{
+		if(m_port.sendHeldParam)
+			m_port.sendHeldParam(_t, _index, _value);
+		else if(m_port.sendKitParam)
+			m_port.sendKitParam(_t, _index, _value);
+	}
+
+	ed::MdKit MdMachine::unheld(ed::MdKit _image, const Documents* _view) const
+	{
+		if(!m_working.held.any())
+			return _image;
+		const auto* document = _view ? _view->workingKitOf(_image.position) : nullptr;
+		return m_working.held.masked(std::move(_image), document, kitValue);
 	}
 
 	// Chaining as on the machine: hold BANK, press the TRIG keys (mdDeskChain.h). The chain is
@@ -929,20 +953,14 @@ namespace mdDesk
 	// and BANK GROUP is pressed from the group the machine is in after the run before.
 	Outcome MdMachine::cmdChain(const Value& _m, const Documents&)
 	{
-		std::vector<int> patterns;
-		if(const auto* list = _m.find("patterns"); list && list->isArray())
-			for(const auto& v : list->asArray())
-				patterns.push_back(v.isNumber() ? static_cast<int>(v.asNumber()) : -1);
+		auto patterns = deskCore::chainPatterns(_m);
 		auto errors = validateChain(patterns);
 		if(errors.empty() && !canChain())
 			errors.emplace_back(g_noChains);
 		if(!errors.empty())
 			return {errors, {}, {}};
-		if(keysOnTheirWay())
-		{
-			m_chainQueued = patterns;
+		if(!m_chain.offer(deskCore::ChainOf{patterns}, keysOnTheirWay()))
 			return ok("Chain next: the machine is still taking the keys before it");
-		}
 		return sendChain(patterns);
 	}
 
@@ -954,8 +972,8 @@ namespace mdDesk
 		// Whatever plays switches to the chain. A chain is pattern mode's: in SONG mode the firmware
 		// plays it but stays in SONG mode (measured), so the song would be back after CLEAR, which says
 		// the pattern plays on. Pattern mode first (SET STATUS, harmless when already there).
-		if(m_port.sendSysex)
-			m_port.sendSysex(ed::mdSetStatus(ed::MdStatus::SequencerMode, 0));
+		if(canSendSysex())
+			sendSysex(ed::mdSetStatus(ed::MdStatus::SequencerMode, 0));
 		bool pressed = true;
 		for(const auto& k : keys)
 			pressed = pressed && pressKey(k);
@@ -966,21 +984,25 @@ namespace mdDesk
 			: "Chained: PLAY starts at " + ed::mdPatternName(static_cast<uint8_t>(_patterns.front())) + ", then loops");
 	}
 
-	// The chain (or CLEAR, an empty list) the page asked for while keys were on their way.
+	bool MdMachine::clearChain()
+	{
+		const auto current = m_session.state().pattern;
+		if(!current)
+			return false;
+		m_session.selectPattern(*current);
+		return true;
+	}
+
+	// The chain (or CLEAR) the page asked for while keys were on their way.
 	void MdMachine::pumpChain()
 	{
-		if(!m_chainQueued || keysOnTheirWay())
+		const auto next = m_chain.takeWhen(!keysOnTheirWay());
+		if(!next)
 			return;
-		const auto patterns = std::move(*m_chainQueued);
-		m_chainQueued.reset();
-		if(patterns.empty())
-		{
-			if(const auto current = m_session.state().pattern)
-				m_session.selectPattern(*current);
-			return;
-		}
-		if(canChain())
-			(void)sendChain(patterns);
+		if(std::holds_alternative<deskCore::ChainClear>(*next))
+			(void)clearChain();
+		else if(canChain())
+			(void)sendChain(std::get<deskCore::ChainOf>(*next).patterns);
 	}
 
 	// CLEAR is LOAD PATTERN of the current pattern, which is what ends a chain on the machine. After
@@ -990,13 +1012,9 @@ namespace mdDesk
 		const auto current = m_session.state().pattern;
 		if(!current)
 			return refuse("The current pattern is not known yet");
-		if(keysOnTheirWay())
-		{
-			m_chainQueued = std::vector<int>{};
+		if(!m_chain.offer(deskCore::ChainClear{}, keysOnTheirWay()))
 			return ok("Chain cleared once the machine has taken the keys before it: " + ed::mdPatternName(*current) + " plays on");
-		}
-		m_chainQueued.reset();
-		m_session.selectPattern(*current);
+		(void)clearChain();
 		return ok("Chain cleared: " + ed::mdPatternName(*current) + " plays on");
 	}
 
@@ -1004,8 +1022,8 @@ namespace mdDesk
 	Outcome MdMachine::cmdGlobalSlot(const Value& _m, const Documents&)
 	{
 		const auto slot = static_cast<uint8_t>(*intOf(_m, "slot"));
-		if(m_port.sendSysex)
-			m_port.sendSysex(ed::mdSetActiveGlobal(slot));
+		if(canSendSysex())
+			sendSysex(ed::mdSetActiveGlobal(slot));
 		m_session.requestStatus();
 		load({DocKind::Global, slot}, true);
 		return ok("Global " + std::to_string(slot + 1) + " is active");
@@ -1048,8 +1066,8 @@ namespace mdDesk
 			: std::vector<uint8_t>{};
 		if(bytes.empty())
 			return refuse("A sample name is 1-4 letters (A-Z, 0-9, space, punctuation) for ROM slot 1-48");
-		if(m_port.sendSysex)
-			m_port.sendSysex(bytes);
+		if(canSendSysex())
+			sendSysex(bytes);
 		char label[8];
 		std::snprintf(label, sizeof(label), "ROM-%02d", slot + 1);
 		return ok(std::string("Sent the name to ") + label + ". The Machinedrum shows it in SAMPLE MGR; a real one cannot report "
@@ -1083,8 +1101,8 @@ namespace mdDesk
 			return ok();
 		if(auto problems = m_session.pushGlobal(*g); !problems.empty())
 			return {problems, {}, {}};
-		if(m_port.sendSysex)
-			m_port.sendSysex(ed::mdSetActiveGlobal(*slot));
+		if(canSendSysex())
+			sendSysex(ed::mdSetActiveGlobal(*slot));
 		return ok("The machine follows the host's tempo and transport (GLOBAL " + std::to_string(*slot + 1) + ": TEMPO IN external)");
 	}
 
@@ -1169,31 +1187,30 @@ namespace mdDesk
 
 	void MdMachine::pumpPushes(const double _now, const Documents& _view)
 	{
-		for(auto& [ref, push] : m_pushes)
+		const auto policyOf = [this](const DocRef& _ref) { return pushPolicy(_ref.kind); };
+		const auto timeoutOf = [this](const DocRef& _ref)
 		{
-			if(!push.slot.busy())
-				continue;
-			switch(push.slot.due(_now, pushPolicy(ref.kind)))
+			return g_pushTimeoutMs + (m_profile.wire ? 2.5 * deskCore::DinPacer::wireMs(replyBytes(_ref.kind)) : 0);
+		};
+		using K = Pushes::Effect::Kind;
+		for(const auto& e : m_pushes.pump(_now, policyOf, timeoutOf))
+		{
+			switch(e.kind)
 			{
-			case PushSlot<Document>::Due::Send:
-				sendDump(push.slot.takeNext(_now), _view);
+			case K::Send:
+				sendDump(*e.value, _view);
 				break;
-			case PushSlot<Document>::Due::ReadBack:
+			case K::AskBack:
 				// The gesture is quiet: one read-back confirms the last dump.
-				push.slot.askedBack(_now);
-				request(ref);
+				request(e.ref);
 				break;
-			case PushSlot<Document>::Due::Nothing:
+			case K::TimedOut:
+				fail(e.ref, std::string("Push failed: the machine did not read back ") + kindName(e.ref.kind)
+					+ " " + (e.ref.kind == DocKind::Pattern ? ed::mdPatternName(e.ref.slot) : std::to_string(e.ref.slot + 1))
+					+ ". Showing what it holds.");
+				load(e.ref, true);
 				break;
 			}
-			const double timeout = g_pushTimeoutMs + (m_profile.wire ? 2.5 * deskCore::DinPacer::wireMs(replyBytes(ref.kind)) : 0);
-			if(!push.slot.timedOut(_now, timeout))
-				continue;
-			push.slot.abandon();
-			fail(ref, std::string("Push failed: the machine did not read back ") + kindName(ref.kind)
-				+ " " + (ref.kind == DocKind::Pattern ? ed::mdPatternName(ref.slot) : std::to_string(ref.slot + 1))
-				+ ". Showing what it holds.");
-			load(ref, true);
 		}
 	}
 
@@ -1202,7 +1219,7 @@ namespace mdDesk
 	void MdMachine::onSysex(const Bytes& _message)
 	{
 		m_wire.heard(now());
-		if(m_sds.onReply(_message, now(), [this](const Bytes& _b) { sendRaw(_b); }))
+		if(m_sds.onReply(_message, now(), [this](const Bytes& _b) { m_out.sample(_b); }))
 		{
 			pumpSample(now());
 			return;
@@ -1220,13 +1237,13 @@ namespace mdDesk
 	{
 		const auto ref = refOf(_doc);
 		m_loads.arrived(ref);
-		const auto it = m_pushes.find(ref);
-		if(it == m_pushes.end())
+		auto* found = m_pushes.find(ref);
+		if(!found)
 		{
 			observe(_doc, Source::Dump);
 			return;
 		}
-		auto& push = it->second;
+		auto& push = *found;
 		const auto askedMs = push.slot.asked() ? push.slot.askedMs() : push.slot.sentMs();
 		switch(deskCore::readBack(push.slot, _doc))
 		{
@@ -1244,8 +1261,7 @@ namespace mdDesk
 
 	void MdMachine::onPattern(const ed::MdPattern& _p)
 	{
-		const auto it = m_pushes.find({DocKind::Pattern, _p.position});
-		const bool ownPush = it != m_pushes.end() && it->second.slot.busy();
+		const bool ownPush = m_pushes.busy({DocKind::Pattern, _p.position});
 		onDumpReadBack(_p);
 		// The current pattern names the kit the Sound and Mix workspaces edit. The read-back of the
 		// editor's own push re-reads it only when the pattern links another kit than the one that plays.
@@ -1283,10 +1299,10 @@ namespace mdDesk
 		observe(_g, Source::Dump);
 		setBaseChannel(_g);
 		// The read-back after a global edit: what the firmware stored, whatever it normalised.
-		if(const auto it = m_pushes.find(ref); it != m_pushes.end() && it->second.slot.busy())
+		if(auto* push = m_pushes.find(ref); push && push->slot.busy())
 		{
-			m_lastRoundTripMs = now() - it->second.slot.askedMs();
-			it->second.slot.abandon();
+			m_lastRoundTripMs = now() - push->slot.askedMs();
+			push->slot.abandon();
 			settle(_g, Source::Dump);
 		}
 	}
@@ -1341,6 +1357,10 @@ namespace mdDesk
 	{
 		const auto kit = currentKit();
 		if(!kit || _track > 15 || _index > 24)
+			return;
+		// The value a held key holds, reported back (the plug-in's parameter when the engine has no
+		// sendHeldParam): the machine's for a moment, not a change of the kit.
+		if(m_working.held.echo(_track, _index, _value))
 			return;
 		// Control All on the machine: FUNCTION + a knob steps every track, and the machine reports each step
 		// (its CCs through the plug-in's parameters). Folded in, the steps would replace the gesture's values
@@ -1412,6 +1432,8 @@ namespace mdDesk
 			image->version = stored->version;
 			image->revision = stored->revision;
 		}
+		// A held key's value is the machine's for a moment, not the kit's.
+		*image = unheld(std::move(*image), _view);
 		const auto* shown = _view && kit ? _view->workingKitOf(*kit) : nullptr;
 		const std::optional<int> current = kit ? std::optional<int>(*kit) : std::nullopt;
 		// Knob turns still on their way while recording keep the live edit pending over the image.
@@ -1420,10 +1442,10 @@ namespace mdDesk
 		auto r = deskCore::fromImage(std::move(m_working), *image, image->position, current, shown, now(), m_knobs.pending() || m_tweak.active(),
 			reflects);
 		m_working = std::move(r.next);
-		if(r.askStatus && now() - m_kitStatusAskedMs > 200 && m_port.sendSysex)
+		if(r.askStatus && now() - m_kitStatusAskedMs > 200 && canSendSysex())
 		{
 			m_kitStatusAskedMs = now();
-			m_port.sendSysex(ed::mdStatusRequest(ed::MdStatus::Kit));
+			sendSysex(ed::mdStatusRequest(ed::MdStatus::Kit));
 		}
 		if(r.take)
 		{
@@ -1505,10 +1527,10 @@ namespace mdDesk
 				load({DocKind::Pattern, *m_session.state().pattern}, true);
 		}
 		// The sequencer switched on its own (chain, panel, program change): ask.
-		if(e.patternChanged && m_wire.replied && m_session.state().pattern != _t.pattern && m_port.sendSysex)
+		if(e.patternChanged && m_wire.replied && m_session.state().pattern != _t.pattern && canSendSysex())
 		{
-			m_port.sendSysex(ed::mdStatusRequest(ed::MdStatus::Pattern));
-			m_port.sendSysex(ed::mdStatusRequest(ed::MdStatus::Kit));
+			sendSysex(ed::mdStatusRequest(ed::MdStatus::Pattern));
+			sendSysex(ed::mdStatusRequest(ed::MdStatus::Kit));
 		}
 		pumpSequence(now());
 		Value t = Value::object();
@@ -1541,8 +1563,8 @@ namespace mdDesk
 		switch(step->kind)
 		{
 		case KnobStep::Kind::SelectTrack:
-			if(m_port.sendSysex)
-				m_port.sendSysex(ed::mdSetStatus(ed::MdStatus::Track, step->track));
+			if(canSendSysex())
+				sendSysex(ed::mdSetStatus(ed::MdStatus::Track, step->track));
 			break;
 		case KnobStep::Kind::PageKey:
 			pressKey("page");
@@ -1589,8 +1611,8 @@ namespace mdDesk
 		if(_now - m_lastStatusMs >= statusEvery && !keysOnTheirWay())
 		{
 			m_lastStatusMs = _now;
-			if(m_wire.replied && m_audibleQueue && m_port.sendSysex)
-				m_port.sendSysex(ed::mdStatusRequest(ed::MdStatus::Pattern));
+			if(m_wire.replied && m_audibleQueue && canSendSysex())
+				sendSysex(ed::mdStatusRequest(ed::MdStatus::Pattern));
 			else
 				m_session.requestStatus();
 		}
@@ -1676,24 +1698,24 @@ namespace mdDesk
 				// may have changed it), make it one that leads, and wait for the machine's status to say so.
 				if(w.trackKnownMs < w.startMs)
 				{
-					if(_now - w.selectMs >= g_tweakSelectMs && m_port.sendSysex)
+					if(_now - w.selectMs >= g_tweakSelectMs && canSendSysex())
 					{
-						m_port.sendSysex(ed::mdStatusRequest(ed::MdStatus::Track));
+						sendSysex(ed::mdStatusRequest(ed::MdStatus::Track));
 						w.selectMs = _now;
 					}
 					return;
 				}
 				if(m_session.state().track != turn.lead)
 				{
-					if(_now - w.selectMs >= g_tweakSelectMs && m_port.sendSysex)
+					if(_now - w.selectMs >= g_tweakSelectMs && canSendSysex())
 					{
 						if(++w.selects > g_tweakMaxSelects)
 						{
 							giveUp();
 							return;
 						}
-						m_port.sendSysex(ed::mdSetStatus(ed::MdStatus::Track, turn.lead));
-						m_port.sendSysex(ed::mdStatusRequest(ed::MdStatus::Track));
+						sendSysex(ed::mdSetStatus(ed::MdStatus::Track, turn.lead));
+						sendSysex(ed::mdStatusRequest(ed::MdStatus::Track));
 						w.selectMs = _now;
 					}
 					return;
@@ -1754,6 +1776,7 @@ namespace mdDesk
 			memory = m_working.image;
 		if(!memory || memory->position != expect.to->position)
 			return;
+		memory = m_working.held.masked(std::move(*memory), &*expect.to, kitValue);
 		int sent = 0;
 		for(uint8_t i = 0; i < 24; ++i)
 		{

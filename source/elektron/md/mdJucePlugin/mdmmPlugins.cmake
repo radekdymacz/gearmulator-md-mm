@@ -44,20 +44,23 @@ list(APPEND SOURCES
 	skins/mdStudio/mdStudio.rml
 	skins/mdStudio/mdStudio.html
 	skins/mdStudio/mdDesk.css
-	skins/mdStudio/mdDeskApp.js
-	skins/mdStudio/mdDeskBridge.js
-	skins/mdStudio/mdDeskModal.js
-	skins/mdStudio/mdDeskBoot.js
-	skins/mdStudio/mdDeskSyx.js
+	skins/mdStudio/mdDeskApp.js skins/mdStudio/mdDeskSoundGroups.js skins/mdStudio/mdDeskTop.js skins/mdStudio/mdDeskSeq.js
+	skins/mdStudio/mdDeskSound.js skins/mdStudio/mdDeskEditors.js skins/mdStudio/mdDeskMix.js skins/mdStudio/mdDeskSampler.js
+	skins/mdStudio/mdDeskSong.js skins/mdStudio/mdDeskPicker.js skins/mdStudio/mdDeskControl.js skins/mdStudio/mdDeskGenUi.js
+	skins/mdStudio/mdDeskComforts.js skins/mdStudio/mdDeskRom.js skins/mdStudio/mdDeskGestures.js skins/mdStudio/mdDeskRender.js
+	skins/mdStudio/mdOverrides.css
 	skins/mdStudio/mdDeskModel.js
 	skins/mdStudio/mdDeskGen.js
 	skins/mdStudio/mdDeskMod.js
 	skins/mmStudio/mmStudio.rml
 	skins/mmStudio/mmStudio.html
 	skins/mmStudio/mmStudio.css
+	skins/mmStudio/mmOverrides.css
 	skins/mmStudio/mmMockup.js
 	skins/mmStudio/mmConvert.js
 	skins/mmStudio/mmAdapter.js
+	skins/mmStudio/mmView.js
+	skins/mmStudio/mmViewTest.js
 	skins/mmStudio/mmConvertTest.js
 	skins/mmStudio/mmKeysTest.js
 	skins/mmStudio/mmGenTest.js
@@ -71,7 +74,18 @@ list(APPEND SOURCES
 	skins/mdStudio/mdDeskLibrary.js
 	skins/mdStudio/mdDeskKeys.js
 	skins/mdStudio/mdDeskGlobal.js
-	skins/mdStudio/mdDeskAudio.js)
+	skins/mdStudio/mdDeskAudio.js
+	skins/shared/deskModal.js skins/shared/deskModal.css
+	skins/shared/deskCaps.js
+	skins/shared/deskBoot.js skins/shared/deskBoot.css
+	skins/shared/deskSyx.js skins/shared/deskSyx.css
+	skins/shared/deskAudio.js skins/shared/deskAudio.css skins/shared/deskAudioSelfTest.js
+	skins/shared/deskLcd.css skins/shared/deskFonts.css
+	skins/shared/deskBridge.js skins/shared/deskBridgeTest.js
+	skins/shared/deskDocs.js
+	skins/shared/deskOverlay.js skins/shared/deskOverlayTest.js
+	skins/shared/deskGen.js skins/shared/deskGenTest.js
+	skins/shared/deskKeys.js)
 
 # P6: the editors' diagnostics (the log of the web view, the window chrome and the session's
 # state, and the pages' self-tests: mdDeskSelfTest.js, mmSelfTest.js) observe the editors. Off by
@@ -88,24 +102,39 @@ if(gearmulator_MDMM_EDITFLOW_DRIVER)
 	list(APPEND SOURCES mdEditFlowDriver.cpp mdEditFlowDriver.h mdEditFlowCounters.h)
 endif()
 
-# The pages instead of the panel skins in the plug-ins' binary data.
+# The pages instead of the panel skins in the plug-ins' binary data. The stylesheets are the generated
+# ones only (mdDesk.css, mmStudio.css: the sync scripts concatenate the mockups', the shared ones and
+# mdOverrides.css / mmOverrides.css into them). The editor finds a page file by its name, so the shared
+# files (skins/shared/, named desk*) sit beside each page's own.
+# The Machinedrum page loads the shared scripts as files; the Monomachine page has them inside
+# mmMockup.js (sync-mmstudio-skin.py) but for the bridge.
+set(MD_SHARED_PAGE_FILES
+	"skins/shared/deskModal.js" "skins/shared/deskCaps.js" "skins/shared/deskBoot.js" "skins/shared/deskSyx.js" "skins/shared/deskBridge.js"
+	"skins/shared/deskDocs.js" "skins/shared/deskOverlay.js" "skins/shared/deskGen.js" "skins/shared/deskKeys.js"
+	"skins/shared/deskAudio.js")
 file(GLOB MD_SKIN_ASSETS CONFIGURE_DEPENDS
-	"skins/mdStudio/*.rml" "skins/mdStudio/*.html" "skins/mdStudio/*.css" "skins/mdStudio/*.js"
+	"skins/mdStudio/*.rml" "skins/mdStudio/*.html" "skins/mdStudio/mdDesk.css" "skins/mdStudio/*.js"
 	"skins/mdStudio/fonts/*.woff2" "skins/mdStudio/fonts/*.ttf")
+list(APPEND MD_SKIN_ASSETS ${MD_SHARED_PAGE_FILES})
 file(GLOB MM_SKIN_ASSETS CONFIGURE_DEPENDS
-	"skins/mmStudio/*.rml" "skins/mmStudio/*.html" "skins/mmStudio/*.css"
-	"skins/mmStudio/mmMockup.js" "skins/mmStudio/mmConvert.js" "skins/mmStudio/mmAdapter.js"
-	# shared with the Machinedrum Editor: the page bridge and the OFL fonts
-	"skins/mdStudio/mdDeskBridge.js" "skins/mdStudio/fonts/*.ttf")
+	"skins/mmStudio/*.rml" "skins/mmStudio/*.html" "skins/mmStudio/mmStudio.css"
+	"skins/mmStudio/mmMockup.js" "skins/mmStudio/mmConvert.js" "skins/mmStudio/mmAdapter.js" "skins/mmStudio/mmView.js"
+	# shared with the Machinedrum Editor: the page bridge, the document store and its overlays, the OFL fonts
+	"skins/shared/deskBridge.js" "skins/shared/deskDocs.js" "skins/shared/deskOverlay.js" "skins/mdStudio/fonts/*.ttf")
 # The tests are not the page, named one by one, not by a file-name pattern: the node tests never
 # ship, the self-tests only with the diagnostics. A test that was renamed or moved stops the
 # configure, so it cannot slip into the glob. The MM glob lists its page files already.
 set(MD_NODE_TESTS "skins/mdStudio/mdDeskModelTest.js" "skins/mdStudio/mdDeskGenTest.js" "skins/mdStudio/mdDeskKeysTest.js")
-set(MD_SELF_TESTS "skins/mdStudio/mdDeskSelfTest.js")
+# the AUDIO / MIDI panel's self-test (shared, diagnostics only) goes with the MD page's self-tests
+set(MD_SELF_TESTS "skins/mdStudio/mdDeskSelfTest.js" "skins/shared/deskAudioSelfTest.js")
 set(MM_SELF_TESTS "skins/mmStudio/mmSelfTest.js")
-# the MM glob names its page files, so its node tests (mmConvertTest.js, mmKeysTest.js, mmGenTest.js, mmSoundTest.js) never ship; checked to be there
-set(MM_NODE_TESTS "skins/mmStudio/mmConvertTest.js" "skins/mmStudio/mmKeysTest.js" "skins/mmStudio/mmGenTest.js" "skins/mmStudio/mmSoundTest.js")
-foreach(test ${MD_NODE_TESTS} ${MD_SELF_TESTS} ${MM_SELF_TESTS} ${MM_NODE_TESTS})
+# the MM glob names its page files, so its node tests (mmConvertTest.js, mmKeysTest.js, mmGenTest.js, mmSoundTest.js,
+# mmViewTest.js and its fixture) never ship; checked to be there
+set(MM_NODE_TESTS "skins/mmStudio/mmConvertTest.js" "skins/mmStudio/mmKeysTest.js" "skins/mmStudio/mmGenTest.js" "skins/mmStudio/mmSoundTest.js"
+	"skins/mmStudio/mmViewTest.js" "skins/mmStudio/mmViewFixture.json")
+# the shared page files' node tests (never in a glob, so never shipped); checked to be there
+set(SHARED_NODE_TESTS "skins/shared/deskGenTest.js" "skins/shared/deskOverlayTest.js" "skins/shared/deskBridgeTest.js")
+foreach(test ${MD_NODE_TESTS} ${MD_SELF_TESTS} ${MM_SELF_TESTS} ${MM_NODE_TESTS} ${SHARED_NODE_TESTS} ${MD_SHARED_PAGE_FILES})
 	if(NOT EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/${test}")
 		message(FATAL_ERROR "${test} is not there: update the editors' test lists in ${CMAKE_CURRENT_LIST_FILE}")
 	endif()
@@ -201,14 +230,34 @@ function(mdmm_plugin_targets)
 	set_tests_properties(mdWindowFitTest PROPERTIES LABELS "UnitTest")
 	set_property(TARGET mdWindowFitTest PROPERTY FOLDER "Elektron/test")
 
+	# The page bridge's transport (mdPageBridge.h, pure): long batches in pieces, the outbox split into calls.
+	add_executable(mdPageBridgeTest mdPageBridgeTest.cpp)
+	target_link_libraries(mdPageBridgeTest PRIVATE elektronJson)
+	target_include_directories(mdPageBridgeTest PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/..)
+	add_test(NAME mdPageBridgeTest COMMAND mdPageBridgeTest)
+	set_tests_properties(mdPageBridgeTest PROPERTIES LABELS "UnitTest")
+	set_property(TARGET mdPageBridgeTest PROPERTY FOLDER "Elektron/test")
+
 	# P6: the Machinedrum page's model (the pure view and the optimistic overlay), when node is here.
+
 	find_program(GEARMULATOR_NODE node)
 	if(GEARMULATOR_NODE)
 		add_test(NAME mdDeskModelPageTest COMMAND ${GEARMULATOR_NODE} ${CMAKE_CURRENT_SOURCE_DIR}/skins/mdStudio/mdDeskModelTest.js)
 		set_tests_properties(mdDeskModelPageTest PROPERTIES LABELS "UnitTest" TIMEOUT 60)
-		# the generators and the mutation (DESIGN-generators.md): pure, pinned
+		# the generators (DESIGN-generators.md): pure, pinned; the shared ones, then the MD's roles and mutation
+		add_test(NAME deskGenPageTest COMMAND ${GEARMULATOR_NODE} ${CMAKE_CURRENT_SOURCE_DIR}/skins/shared/deskGenTest.js)
+		set_tests_properties(deskGenPageTest PROPERTIES LABELS "UnitTest" TIMEOUT 60)
 		add_test(NAME mdDeskGenPageTest COMMAND ${GEARMULATOR_NODE} ${CMAKE_CURRENT_SOURCE_DIR}/skins/mdStudio/mdDeskGenTest.js)
 		set_tests_properties(mdDeskGenPageTest PROPERTIES LABELS "UnitTest" TIMEOUT 60)
+		# the shared document store and optimistic layers (DESIGN-UNIFY.md phase 0)
+		# the page bridge's transport (BridgeTransport in skins/shared/deskBridge.js): URLs and pieces
+		add_test(NAME deskBridgePageTest COMMAND ${GEARMULATOR_NODE} ${CMAKE_CURRENT_SOURCE_DIR}/skins/shared/deskBridgeTest.js)
+		set_tests_properties(deskBridgePageTest PROPERTIES LABELS "UnitTest" TIMEOUT 60)
+		add_test(NAME deskOverlayPageTest COMMAND ${GEARMULATOR_NODE} ${CMAKE_CURRENT_SOURCE_DIR}/skins/shared/deskOverlayTest.js)
+		set_tests_properties(deskOverlayPageTest PROPERTIES LABELS "UnitTest" TIMEOUT 60)
+		# the Monomachine page's documents and view (DESIGN-UNIFY.md phase 1): the derived view, echoes by command id
+		add_test(NAME mmViewPageTest COMMAND ${GEARMULATOR_NODE} ${CMAKE_CURRENT_SOURCE_DIR}/skins/mmStudio/mmViewTest.js)
+		set_tests_properties(mmViewPageTest PROPERTIES LABELS "UnitTest" TIMEOUT 60)
 	endif()
 
 	# P4: the editor's setup (MDSK chunk) round-trips with the plug-in state.

@@ -348,6 +348,11 @@ namespace
 		check(errors(R"({"schema":"x","v":1,"name":"Z99"})").size() == 1, "pattern");
 		check(!errors(R"({"schema":"x","v":1,"n":"no"})").empty(), "oneOf");
 		const auto e = errors(R"({"schema":"x","v":200})");
+		// Open for readers, closed for our writer (finding 15)
+		const auto open = j::parse(R"({"type":"object","properties":{"a":{"type":"integer"}},"additionalProperties":true})");
+		check(j::Schema(*open).validate(*j::parse(R"({"a":1,"newer":2})")).empty(), "an open object: a reader takes a member it does not know");
+		check(j::Schema(j::Schema::closedForWriter(*open)).validate(*j::parse(R"({"a":1,"newer":2})")).size() == 1,
+			"closedForWriter: our writer is held to what it declares");
 		check(!e.empty() && e[0].find("$.v") == 0, "errors carry the JSON path");
 	}
 

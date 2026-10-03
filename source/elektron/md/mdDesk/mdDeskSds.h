@@ -3,8 +3,10 @@
 #include "elektronData/mdSamples.h"
 
 #include <cstdint>
+#include <deque>
 #include <functional>
 #include <string>
+#include <utility>
 #include <vector>
 
 namespace mdDesk
@@ -67,5 +69,56 @@ namespace mdDesk
 		uint32_t m_packetRetries = 0;
 		bool m_held = false;			// WAIT
 		double m_sentMs = 0;
+	};
+	// P9: the one way SysEx leaves the adapter, in three lanes by priority. A sample transfer's own
+	// packets (sample) go straight out: nothing may come between them. Any other SysEx (send) goes at
+	// once while no sample is on its way, and is held otherwise; what was held goes out in order once
+	// the sample is over (release), before anything newer. Whether a sample is on its way is the
+	// caller's fact (SdsSender::active).
+	class SysexOut
+	{
+	public:
+		using Bytes = SdsSender::Bytes;
+		using Send = SdsSender::Send;
+
+		explicit SysexOut(Send _wire = {}) : m_wire(std::move(_wire)) {}
+
+		// The engine can send SysEx at all.
+		bool open() const { return static_cast<bool>(m_wire); }
+
+		// Any SysEx but the sample's.
+		void send(const Bytes& _message, const bool _sampleActive)
+		{
+			if(!m_wire)
+				return;
+			if(_sampleActive)
+				m_held.push_back(_message);
+			else
+				m_wire(_message);
+		}
+
+		// The sample transfer's own packets.
+		void sample(const Bytes& _message) const
+		{
+			if(m_wire)
+				m_wire(_message);
+		}
+
+		// The sample is over: what was held goes out, in order.
+		void release(const bool _sampleActive)
+		{
+			while(!_sampleActive && !m_held.empty())
+			{
+				const auto b = std::move(m_held.front());
+				m_held.pop_front();
+				m_wire(b);
+			}
+		}
+
+		size_t held() const { return m_held.size(); }
+
+	private:
+		Send m_wire;
+		std::deque<Bytes> m_held;
 	};
 }

@@ -133,14 +133,14 @@ if (/[?&]selftest=p4set/.test(location.search)) (async () => {
 	await sleep(500);
 	Mods.doc.sources = []; Mods.doc.links = [];
 	const id = Mods.add("lfo"); Mods.link(id, 2, 16); sendMods();
-	KNOB_CCS[0] = 40; saveKnobs();
+	setKnobCc(0, 40);
 	await sleep(800);
-	Bridge.log(`P4: setup set: ${Mods.doc.sources.length} app source, knob 1 CC ${KNOB_CCS[0]}`);
+	Bridge.log(`P4: setup set: ${Mods.doc.sources.length} app source, knob 1 CC ${knobCcs()[0]}`);
 })();
 if (/[?&]selftest=p4get/.test(location.search)) (async () => {
 	const sleep = ms => new Promise(r => setTimeout(r, ms));
 	await sleep(4000);
-	Bridge.log(`P4: page setup: ${Mods.doc.sources.length} app source(s) ${Mods.doc.sources.map(s => s.label + " -> " + Mods.linksOf(s.id).map(o => "T" + (o.l.track + 1) + " p" + o.l.param).join()).join("; ")}, knob CCs ${KNOB_CCS.join(" ")}`);
+	Bridge.log(`P4: page setup: ${Mods.doc.sources.length} app source(s) ${Mods.doc.sources.map(s => s.label + " -> " + Mods.linksOf(s.id).map(o => "T" + (o.l.track + 1) + " p" + o.l.param).join()).join("; ")}, knob CCs ${knobCcs().join(" ")}`);
 })();
 
 /* ?selftest=p4hw: the engine menu's HW MIDI in the plug-in (no Machinedrum is connected here): the label
@@ -160,7 +160,8 @@ if (/[?&]selftest=p4hw/.test(location.search)) (async () => {
 	cmd("select", { p: 3 }); await sleep(300);
 	sel.value = "emu"; sel.dispatchEvent(new Event("change", { bubbles: true }));
 	let t0 = performance.now(); while (!((machineState().capabilities || {}).engine === "emu" && runs() && V.loaded) && performance.now() - t0 < 15000) await sleep(100);
-	log(`EMU again: ${label()} after ${Math.round(performance.now() - t0)} ms, pattern ${patName(V.pat)}`);
+	await sleep(300);
+	log(`EMU again: ${label()} after ${Math.round(performance.now() - t0)} ms, pattern ${patName(V.pat)}, REC disabled ${$("#rec").disabled}`);
 	log("hw done");
 })();
 
@@ -177,8 +178,8 @@ async function p4Mix(log, sleep) {
 	const ds = strip().querySelector('.pc[data-n="DIST"]'), db = ds.getBoundingClientRect(), dist0 = V.tracks[6].rt.DIST;
 	const sent = [], send0 = Bridge.send; Bridge.send = (m, o) => { if (m.op === "param") sent.push(m.t + ":" + m.i + "=" + m.v); return send0(m, o); };
 	let seen = 0, lastX = null; const probe = e => { seen++; lastX = e.clientX; }; main.addEventListener("pointermove", probe);
-	pe(ds, "pointerdown", db.left + 10, db.top + 10); log(`  drag after pointerdown: ${drag ? "set, vert " + drag.vert + ", v " + drag.v : "none"}`); for (let i = 1; i <= 5; i++) { pe(ds, "pointermove", db.left + 10 + i * 4, db.top + 10); await sleep(30); }
-	const midD = ds.getBoundingClientRect().width, midV = V.tracks[6].rt.DIST; main.removeEventListener("pointermove", probe); log(`  moves seen ${seen}, last clientX ${lastX} (down at ${db.left + 10}, drag.x ${drag && drag.x}), drag ${drag ? "still set" : "gone"}, tweak ${!!tweak}, sent ${sent.join(" ")}`); Bridge.send = send0; pe(ds, "pointerup", db.left + 30, db.top + 10); await sleep(300);
+	pe(ds, "pointerdown", db.left + 10, db.top + 10); log(`  drag after pointerdown: ${Held.as("value") ? "set, vert " + Held.as("value").vert + ", v " + Held.as("value").v : "none"}`); for (let i = 1; i <= 5; i++) { pe(ds, "pointermove", db.left + 10 + i * 4, db.top + 10); await sleep(30); }
+	const midD = ds.getBoundingClientRect().width, midV = V.tracks[6].rt.DIST; main.removeEventListener("pointermove", probe); log(`  moves seen ${seen}, last clientX ${lastX} (down at ${db.left + 10}, drag.x ${Held.as("value")?.x}), drag ${Held.as("value") ? "still set" : "gone"}, tweak ${!!tweak}, sent ${sent.join(" ")}`); Bridge.send = send0; pe(ds, "pointerup", db.left + 30, db.top + 10); await sleep(300);
 	log(`DIST sideways drag: ${dist0} -> ${midV} while dragging, ${V.tracks[6].rt.DIST} after, box ${db.width}->${midD} px: ${V.tracks[6].rt.DIST !== dist0 && midD === db.width ? "ok" : "FAIL"}`);
 	cmd("param", { k: V.kit, t: 6, i: 16, v: dist0 }); cmd("param", { k: V.kit, t: 6, i: 17, v: vol0 }); await sleep(200);
 	log(`fit: page zoom ${Math.round(innerWidth / 1440 * 1000) / 1000 || 1}, page ${document.documentElement.scrollWidth} px wide in ${innerWidth} px, header right edge ${Math.round(document.querySelector(".rightgrp").getBoundingClientRect().right)} px`);
@@ -462,31 +463,8 @@ if (/[?&]selftest=1/.test(location.search)) (async () => {
 	log("selftest done; kit " + JSON.stringify(machineState().kit) + ", undo steps " + (machineState().history || {}).undoCount);
 })();
 
-/* The AUDIO / MIDI panel's own self-test: the same text as in the mockups' panel block
-   (doc/modern-ux/audio_panel_check.py checks it), here so a release page has none of it. */
-/* The panel's self-test (the editors' ?selftest=p6audio, or the mockup's console): open the panel, see
-   the level arrive, change the buffer size and the output device and back, and check after each change
-   that the machine keeps playing (its step moves). T gives log, play(on), step() and playing(). */
-async function audioSelfTest(T){const sleep=ms=>new Promise(r=>setTimeout(r,ms)),res=[];
- const until=async(f,ms=8000)=>{const t0=Date.now();while(Date.now()-t0<ms){const D=audioDoc();if(D&&f(D))return D;await sleep(100)}const D=audioDoc();throw new Error("timeout: output "+D?.output?.id+", buffer "+D?.bufferSize?.value+", running "+D?.running+(D?.error?", error "+D.error:""))};
- const moving=async()=>{const s0=T.step();for(let i=0;i<30;i++){await sleep(100);if(T.playing()&&T.step()!==s0)return true}return false};
- const check=async(name,fn)=>{try{const n=await fn();res.push(true);T.log("ok   "+name+(n?": "+n:""))}catch(e){res.push(false);T.log("FAIL "+name+": "+e.message)}};
- const D0=await until(D=>D.standalone,15000),out0=D0.output.id,buf0=D0.bufferSize.value,muted0=!!D0.input.muted;
- T.log("devices: "+D0.output.list.length+" outputs ("+out0+"), "+D0.input.list.length+" inputs, "+D0.sampleRate.value+" Hz, buffer "+buf0+", "+(D0.midiInputs||[]).length+" MIDI inputs, running "+D0.running);
- let levels=0;const lv=audioLevel;window.audioLevel=v=>{levels++;lv(v)};
- await check("panel opens",async()=>{openAudio();await sleep(700);if(!AP.open||$("#audiopop").hidden)throw new Error("not shown");const n=$("#audiopop").querySelectorAll("select,button").length;return n+" controls, "+levels+" level updates"});
- window.audioLevel=lv;
- T.play(true);await sleep(1500);
- await check("playing before the changes",async()=>{if(!(await moving()))throw new Error("the step does not move");return "step "+T.step()});
- const buf1=D0.bufferSize.list.find(b=>b!==buf0&&b>=128&&b<=1024)??D0.bufferSize.list.find(b=>b!==buf0);
- await check("buffer size "+buf0+" -> "+buf1,async()=>{if(buf1==null)throw new Error("one buffer size only");audioSend({set:"bufferSize",value:buf1});const D=await until(D=>D.bufferSize.value===buf1&&D.running);if(!(await moving()))throw new Error("audio stopped");return D.latencyMs+" ms, still playing"});
- await check("buffer size back to "+buf0,async()=>{audioSend({set:"bufferSize",value:buf0});await until(D=>D.bufferSize.value===buf0&&D.running);if(!(await moving()))throw new Error("audio stopped");return "still playing"});
- const out1=D0.output.list.find(o=>o!==out0);
- await check("output "+out0+" -> "+(out1??"-"),async()=>{if(!out1)return "one output device only, skipped";audioSend({set:"output",device:out1});await until(D=>D.output.id===out1&&D.running);if(!(await moving()))throw new Error("audio stopped");return "still playing"});
- await check("output back to "+out0,async()=>{if(!out1)return "skipped";audioSend({set:"output",device:out0});await until(D=>D.output.id===out0&&D.running);if(!(await moving()))throw new Error("audio stopped");return "still playing"});
- await check("input mute toggles and is kept",async()=>{audioSend({set:"mute",on:!muted0});await until(D=>!!D.input.muted===!muted0);audioSend({set:"mute",on:muted0});await until(D=>!!D.input.muted===muted0);return muted0?"muted again":"live again"});
- T.play(false);closeAudio();await sleep(300);
- T.log((res.every(Boolean)?"PASS ":"FAIL ")+res.filter(Boolean).length+"/"+res.length)}
+/* The AUDIO / MIDI panel's own self-test, audioSelfTest, is skins/shared/deskAudioSelfTest.js (loaded just
+   before this file, diagnostics builds only; the mockups load it too). */
 
 /* GEARMULATOR_MDSTUDIO_SELFTEST=p6audio: the panel's self-test once the engine is ready. */
 if (/[?&]selftest=p6audio/.test(location.search)) (async () => {
@@ -517,9 +495,9 @@ if (/[?&]selftest=p7tweak/.test(location.search)) (async () => {
 	/* the view's value g/name of every track, before and after; the gesture's delta is the dragged track's */
 	const verify = (name, before, g, n0, t0) => {
 		const after = snap(), d = after[t0][g][n0] - before[t0][g][n0];
-		const knob = g === "lfo" ? Enums().lfoParams[n0] - 16 : pages(before[t0].m)[TWEAK_PAGES[g]].indexOf(n0);
+		const knob = g === "lfo" ? Enums().lfoParams[n0] - 16 : pages(before[t0].m, Cat)[TWEAK_PAGES[g]].indexOf(n0);
 		const gg = g === "lfo" ? "rt" : g;
-		const want = tweakWrites({ tracks: before }, gg, knob, d, Enums());
+		const want = tweakWrites({ tracks: before }, gg, knob, d, Enums(), Cat);
 		const wrong = want.filter(([p, v]) => after[p[1]][p[2]][p[3]] !== v).map(([p, v]) => `T${p[1] + 1} ${p[3]} ${after[p[1]][p[2]][p[3]]}/${v}`);
 		check(name, d !== 0 && want.length > 1 && !wrong.length, `delta ${d}, ${want.length} values want it, wrong: ${wrong.join(" ") || "none"}`);
 	};

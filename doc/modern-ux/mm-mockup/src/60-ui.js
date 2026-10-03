@@ -11,8 +11,33 @@ function ask(html,btns,cls=""){const d=$("#dlg");d.innerHTML=`<div class="dlgbox
    EMU: the app drives that screen itself (the emulator can press the panel).
    HW: edits queue up until you open the screen and press Send. */
 let pstT;
-function structEdited(kind){if(!S.genOwn)genEnd();tx();if(HOST.edited){HOST.edited("struct",kind);return}if(S.engine==="emu"){S.patSent="recv";renderPst();clearTimeout(pstT);pstT=setTimeout(()=>{S.patSent="live";renderPst()},650)}else{S.pend++;S.patSent="pend";renderPst()}}
-function soundEdited(kind){if(!S.genOwn)genEnd();tx();if(HOST.edited){HOST.edited("sound",kind);return}setKitState("edited")}	/* a host's kit state is its machine's (MMView.setKitState) */
+/* The example engine's SYSEX RECV (the demo host calls it for a dump: a pattern, song or global edit): EMU takes
+   it on its RECV screen at once, HW waits until it is sent (SEND n). */
+function exampleDump(){if(S.engine==="emu"){S.patSent="recv";renderPst();clearTimeout(pstT);pstT=setTimeout(()=>{S.patSent="live";renderPst()},650)}else{S.pend++;S.patSent="pend";renderPst()}}
+/* An edit as the machine's intent (DESIGN-UNIFY.md 4.1): one vocabulary with the Machinedrum Editor, {op, args} in
+   the contract's units (knob and lock values and song rows in the page's: the host translates). The gesture has
+   changed the view's state already; the host sends the intent to its core, which applies it to the machine's own
+   documents, and shows its effect at once until the answer (the demo host, on its own: 54-demo.js). The undo step
+   is the gesture's (a commit ends it). */
+function edit(op,args){if(!S.genOwn)genEnd();tx();if(HOST.intent)HOST.intent(op,args)}
+/* a step of the view as the step intent's value: null, {off:true} or {n, a, f, l, notrig} */
+function stepVal(st){if(!st)return null;if(st.off)return{off:true};const v={a:st.a?1:0,f:st.f?1:0,l:st.l?1:0};if(st.n&&st.n.length)v.n=[...st.n];if(st.notrig)v.notrig=true;return v}
+const editStep=(t,s)=>edit("step",{t,s,v:stepVal(trk(t).steps[s])});
+/* a lane key ("FLT.1", "MID.0") as the lock intent's page and parameter */
+const pidArgs=pid=>{const[pg,i]=pid.split(".");return{page:pg==="MID"?7:PAGES.indexOf(pg),i:+i}};
+/* track t's steps in [a, b) as one row of the steps intent: its steps, slides and (locks) locks, page units */
+function rangeRow(t,a,b,locks){const tr=trk(t),steps=[],slide=[];for(let s=a;s<b;s++){const v=stepVal(tr.steps[s]);if(v)steps.push([s,v]);if(tr.slide.has(s))slide.push(s)}
+ const row={t,steps,slide};if(locks){row.locks=[];for(const[k,m] of S.locks){if(+k.split("|")[0]!==t)continue;const{page,i}=pidArgs(k.split("|")[1]);for(const[s,v] of m)if(s>=a&&s<b)row.locks.push([page,i,s,v])}}return row}
+/* the kit values of every synth track that moved since `before` ({t: pagesCopy(t)}) as param intents; false: none moved */
+function editParams(before){let n=0;for(const t of Object.keys(before).map(Number)){const v=trk(t).v;PAGES.forEach((pg,p)=>v[pg].forEach((x,i)=>{if(x!==before[t][pg][i]){edit("param",{t,page:p,i,v:x});n++}}))}return n>0}
+/* a gesture on track t's pages (a select, a cord, a curve): the values it moved, as param intents */
+function editTrack(t,f){const was={[t]:pagesCopy(t)};f();editParams(was)}
+/* MULTI ENV's values that moved since `before` as multiEnv intents (one value for every track) */
+function editMenv(before){["ATK","DEC","SUS","REL","PORT"].forEach((k,i)=>{if(S.menv[k]!==before[k])edit("multiEnv",{i,v:S.menv[k]})})}
+/* ASSIGN's tab names and the firmware's sources (MmConvert.TABS: JOY R/L 0, JOY U 2, JOY D 3, VEL 4, KEY 5) */
+const ASRC={"JOY RL":0,"JOY U":2,"JOY D":3,VEL:4,KEY:5};
+/* MULTI MAP: a range's value in the firmware's units (pat 255 CUR, ofs 255 ---, trn signed) */
+function mmapFw(n,v){return n==="pat"?(v<0?255:v):n==="ofs"?(v?v-1:255):n==="trn"?v-64:v}
 function renderPst(){if(HOST.renderPst)return HOST.renderPst();if(S.engine==="hw"&&S.pend)setPst("SEND "+S.pend,"Unsent pattern and song edits. Click to send them.",true);
  else if(S.patSent==="recv")setPst("RECV","The emulator is on SYSEX RECV and takes the dump.");else setPst("","")}
 /* the pattern field's SYSEX RECV state: its text, tooltip, and warn (a click opens the send dialog) */
@@ -29,7 +54,7 @@ function setKitState(st){S.kitState=st;const s=$("#save");if(!s)return;
  s.classList.toggle("dirty",st==="edited");s.classList.toggle("unknown",st==="unknown");
  s.lastElementChild.textContent=st==="edited"?"edited":st==="unknown"?"…":"saved";
  s.title=st==="edited"?"Kit edits are not saved on the machine. They are kept in the DAW project.":st==="unknown"?"Not yet known: still reading this kit from the machine.":"The kit matches its saved slot on the machine."}
-function saveKit(){if(HOST.kit)return HOST.kit("save",S.kit);S.kits[S.kit]={name:S.workName,empty:false,data:captureKit()};setKitState("clean");tx();toast("Saved "+kitName(S.kit)+" on the machine (SAVE KIT). The overwritten kit went to the UNDO KIT slot.")}
+function saveKit(){if(HOST.kit)return HOST.kit("save",S.kit);S.kits[S.kit]={name:S.workName,empty:false,data:captureKit()};setKitState("clean");demoRebase(true);tx();toast("Saved "+kitName(S.kit)+" on the machine (SAVE KIT). The overwritten kit went to the UNDO KIT slot.")}
 function goPattern(p,now){p=(p+128)%128;if(p===S.pat&&S.queued==null)return;const kitChange=S.patKit[p]!==S.kit,go=now?()=>switchNow(p):()=>queuePattern(p);
  /* a host's machine asks itself (its ask protocol); the mockup's example engine asks here */
  if(kitChange&&S.kitState==="edited"&&!HOST.selectPattern){ask(`<b>${patName(p)}</b> uses kit <b>${kitName(S.patKit[p])}</b>. Your edits to <b>${kitName(S.kit)}</b> are not saved. The Monomachine keeps them in its UNDO KIT slot, but only until the next unsaved switch.`,
@@ -38,7 +63,7 @@ function switchNow(p){if(HOST.selectPattern)return HOST.selectPattern(p,true);S.
 function queuePattern(p){if(HOST.selectPattern)return HOST.selectPattern(p,false);S.plays.chain=null;/* a pick ends a chain */if(S.playing){S.queued=p;renderTop();tx();return}applyPattern(p)}
 function applyPattern(p){const kc=S.patKit[p]!==S.kit;
  if(p!==S.pat){S.patData[S.pat]=capturePat();S.patInfo[S.pat]={has:curHas(),len:S.len};S.pat=p;applyPat(S.patData[p]||emptyPat(S.patInfo[p].len))}
- S.queued=null;if(kc){S.kit=S.patKit[p];applyKit(kitData(S.kit));S.workName=S.kits[S.kit].name;setKitState("clean");toast("Loaded "+kitName(S.kit)+" with "+patName(p)+".")}autoRange(S.sel);render();H.last=snap();
+ S.queued=null;if(kc){S.kit=S.patKit[p];applyKit(kitData(S.kit));S.workName=S.kits[S.kit].name;setKitState("clean");toast("Loaded "+kitName(S.kit)+" with "+patName(p)+".")}autoRange(S.sel);render();demoRebase(false);
  const pf=$(".lcdpanel .patf");if(pf){pf.classList.remove("flash");void pf.offsetWidth;pf.classList.add("flash");setTimeout(()=>pf.classList.remove("flash"),500)}const ls=document.querySelector("#libpop .ps.cur");if(ls){ls.classList.remove("flash");void ls.offsetWidth;ls.classList.add("flash")}drawLib()}
 
 /* ===== Top bar ===== */
@@ -48,7 +73,7 @@ function renderTop(){
  $("#platekey span").textContent=S.plate==="mk1"?"MKI":"MKII";
  const n=S.locks.size,m=$("#meter");$("#lockn").textContent=String(n).padStart(2,"0")+"/62";m.className="f meter"+(n>=62?" full":n>=52?" warn":"");
  $("#bpm").textContent=S.bpm.toFixed(1);$("#pat").textContent=patName(S.queued??S.pat);$("#pat").parentElement.classList.toggle("queued",S.queued!=null);
- $("#kitname").textContent=kitName(S.kit);const hc=HOST.history?HOST.history():{undo:H.undo.length,redo:H.redo.length};$("#undo").disabled=!hc.undo;$("#redo").disabled=!hc.redo;$("#undon").textContent=hc.undo||"";$("#redon").textContent=hc.redo||"";
+ $("#kitname").textContent=kitName(S.kit);const hc=HOST.history?HOST.history():{undo:0,redo:0};$("#undo").disabled=!hc.undo;$("#redo").disabled=!hc.redo;$("#undon").textContent=hc.undo||"";$("#redon").textContent=hc.redo||"";
  $("#play").setAttribute("aria-pressed",S.playing);$("#playico").textContent=S.playing?"■":"▶";$("#play").setAttribute("aria-label",S.playing?"Stop":"Play");$("#rec").setAttribute("aria-pressed",!!S.rec);$("#recled").classList.toggle("on",!!S.rec);
  renderPst();syncLockBudget()}
 /* line 2: fixed-width slots (as in the MD Editor v46), so values never push into COPY / CLR / PASTE */
@@ -83,8 +108,15 @@ function controlAll(t0,g,i,d){for(let t=0;t<6;t++){if(t===t0)continue;const tr=t
 function pagesCopy(t){const v=trk(t).v,o={};PAGES.forEach(pg=>o[pg]=[...v[pg]]);return o}
 function controlAllFrom(t0,before){PAGES.forEach(pg=>trk(t0).v[pg].forEach((x,i)=>{if(x!==before[pg][i])controlAll(t0,pg,i,x-before[pg][i])}))}
 function setV(el,v){const[o,n,m,t,g]=ref(el);v=clamp(Math.round(v),0,maxOf(m));if(o[n]===v)return;const d=v-o[n];o[n]=v;
- if(drag&&drag.all&&drag.el===el&&PAGES.includes(g))controlAll(t,g,+n,d);
- if(g==="cc")soundEdited("global");else if(PAGES.includes(g)||g==="MID"||g==="lev"||g==="menv"||g==="asg")soundEdited();else if(g==="src"||g==="link")ctlChanged();else if(g==="mmap")structEdited("global");else structEdited();
+ if(PAGES.includes(g)||g==="MID"){const all=drag&&drag.all&&drag.el===el&&PAGES.includes(g),before={};if(all)for(let k=0;k<6;k++)if(k!==t)before[k]=pagesCopy(k);
+  edit("param",{t,page:g==="MID"?7:PAGES.indexOf(g),i:+n,v});if(all){controlAll(t,g,+n,d);editParams(before)}}
+ else if(g==="lev")edit("level",{t,v});
+ else if(g==="arp")edit("arp",n==="SPD"?{t,field:"speed",v:clamp(v-1,0,127)}:n==="RNGE"?{t,field:"range",v:clamp(v-1,0,7)}:{t,field:"ojmp",v});
+ else if(g==="trn")edit("transpose",{t,v:v-64});else if(g==="ptrn")edit("transpose",{v:v-64});else if(g==="key")edit("transpose",{t,key:v});
+ else if(g==="cc")edit("midiTrack",{t:t-6,cc:[...trk(t).cc]});
+ else if(g==="menv")edit("multiEnv",{i:["ATK","DEC","SUS","REL","PORT"].indexOf(n),v});
+ else if(g==="asg")edit("assign",{t:asgT(),src:ASRC[S.asTab],row:+el.dataset.n,add:v-64});
+ else if(g==="src"||g==="link")ctlChanged();else if(g==="mmap")edit("multiMap",{i:+el.dataset.i,[n]:mmapFw(n,v)});
  if(g.startsWith("LF")&&(+el.dataset.n<2)){if(+el.dataset.n===0)o[1]=0;render();return}
  syncControls();redraw()}
 function pc(g,n,{t,label,cls="",extra=""}={}){if(n==null)return`<div class="pc empty" aria-hidden="true"></div>`;

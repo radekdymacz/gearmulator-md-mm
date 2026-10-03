@@ -1,6 +1,7 @@
 "use strict";
-/* Round trip check for mmConvert.js, the page <-> contract translation of the
-   Monomachine Editor:  toFirmware(toPage(doc), doc) == doc  for every document.
+/* Checks of mmConvert.js, the contract -> page translation of the Monomachine Editor (DESIGN-UNIFY.md 4.3): every
+   document reads into the page's units; what an intent carries back is exact (a knob's raw value inside its
+   enumeration band, a song row: rowToFw(rowToPage(row), row) == row) for every document.
      node mmConvertTest.js <json-dir>...
    The JSON comes from  mmDataCorpusTest --json <json-dir> <dumps>  (factory set
    and programmed read-backs). The mockup's tables are read from mmMockup.js next
@@ -18,8 +19,8 @@ const data = mock.slice(mock.indexOf("/* ---- 40-data.js ---- */"), mock.indexOf
 const inputs = mock.match(/const BUSES=.*INPUTS=\[[^\]]*\];/)[0];
 const ctx = vm.createContext({ console });
 vm.runInContext(data + "\n" + inputs + "\nfunction clamp(v,a=0,b=127){return Math.max(a,Math.min(b,v))}\n"
-	+ fs.readFileSync(path.join(here, "mmConvert.js"), "utf8") + "\nthis.C=MmConvert;", ctx);
-const C = ctx.C;
+	+ fs.readFileSync(path.join(here, "mmConvert.js"), "utf8") + "\nthis.C=MmConvert;this.PAGES=PAGES;", ctx);
+const C = ctx.C, PAGES = ctx.PAGES;
 const catalogue = JSON.parse(fs.readFileSync(path.join(here, "../../../../../../doc/modern-ux/mm-catalogue.json"), "utf8"));
 const catalogueOff = C.useCatalogue(catalogue);
 
@@ -53,48 +54,31 @@ const lenOf = p => patBySlot[p]?.length ?? 16;
 let fails = 0, n = 0;
 const check = (what, f, out, d) => { n++; const e = diff(out, d); if (e) { fails++; if (fails <= 20) console.log("FAIL", what, path.basename(f), e); } };
 
-for (const { d, f } of docs["mm-desk/kit"]) {
-	const page = C.kitToPage(d, global0);
-	check("kit", f, C.kitToFw(page, d, C.kitName(d)), d);
-}
-for (const { d, f } of docs["mm-desk/pattern"]) {
-	const k = kitBySlot[d.kit] ? C.kitToPage(kitBySlot[d.kit], global0) : null;
-	check("pattern", f, C.patternToFw(C.patternToPage(d, k), d, d.kit, k), d);
-}
-for (const { d, f } of docs["mm-desk/song"]) check("song", f, C.songToFw(C.songToPage(d, lenOf), d, lenOf), d);
-for (const { d, f } of docs["mm-desk/global"]) {
-	const midi = d.midiSeq.channels.map((c, t) => ({ ch: c + 1, cc: [...d.midiSeq.ccs[t]] }));
-	check("global", f, C.globalToFw(d, d.routingMode, midi, C.mapToPage(d)), d);
-}
+/* every document reads into the page's units */
+for (const { d, f } of docs["mm-desk/kit"]) { n++; try { const k = C.kitToPage(d, global0); if (k.tracks.length !== 6 || k.midi.length !== 6) throw new Error("tracks"); } catch (e) { fails++; console.log("FAIL kit to page", path.basename(f), e.message); } }
+for (const { d, f } of docs["mm-desk/pattern"]) { n++; try { const k = kitBySlot[d.kit] ? C.kitToPage(kitBySlot[d.kit], global0) : null; if (C.patternToPage(d, k).tr.length !== 12) throw new Error("tracks"); } catch (e) { fails++; console.log("FAIL pattern to page", path.basename(f), e.message); } }
+for (const { d, f } of docs["mm-desk/global"]) { n++; try { C.mapToPage(d); } catch (e) { fails++; console.log("FAIL global to page", path.basename(f), e.message); } }
+
+/* an intent's values back in the contract's units: a knob's raw value stays inside its enumeration band (an unchanged
+   index keeps it), for every value of every kit */
+for (const { d, f } of docs["mm-desk/kit"]) d.tracks.forEach((x, t) => {
+	const m = C.machineName(x.machine) ?? "GND-GND";
+	PAGES.forEach((pg, p) => x.pages[p].forEach((raw, i) => { n++; const back = C.valueToFw(m, pg, i, C.valueToPage(m, pg, i, raw), raw); if (back !== raw) { fails++; if (fails <= 20) console.log("FAIL value", path.basename(f), t, pg, i, raw, back); } }));
+});
+/* a song row: the page's row back to the song's is the row (rowSet, rowInsert), for every row of every song */
+for (const { d, f } of docs["mm-desk/song"]) d.rows.forEach((r, i) => check("song row " + i, f, C.rowToFw(C.rowToPage(r, i, lenOf), r, i, lenOf), r));
 
 /* edits land where they should */
 const edits = [];
-if (docs["mm-desk/pattern"].length) {
-	const d = docs["mm-desk/pattern"][0].d, p = C.patternToPage(d, null);
-	const free = [...Array(64).keys()].find(s => !p.tr[0].steps[s]);
-	p.tr[0].steps[free] = { n: [60], a: 0, f: 0, l: 0 };	// trigless, with a pitch
-	const q = C.patternToFw(p, d, d.kit, null);
-	edits.push(["trigless trig", q.tracks[0].trig.includes(free) && !q.tracks[0].amp.includes(free) && q.tracks[0].notes.some(([s, v]) => s === free && v === 60)]);
-	p.tr[0].steps[free] = { a: 1, f: 1, l: 1 };	// pitchless
-	const r = C.patternToFw(p, d, d.kit, null);
-	edits.push(["pitchless trig", r.tracks[0].trig.includes(free) && r.tracks[0].amp.includes(free) && !r.tracks[0].notes.some(([s]) => s === free)]);
-	p.tr[0].steps[free] = { n: [60, 64, 67], a: 1, f: 1, l: 1 };	// chord
-	const c = C.patternToFw(p, d, d.kit, null);
-	edits.push(["chord", c.tracks[0].chord.includes(free) && c.chordNotes.filter(([t, s]) => t === 0 && s === free).length === 2]);
-	p.swingAmt = 58; p.patTrn = 70;
-	const w = C.patternToFw(p, d, d.kit, null);
-	edits.push(["swing and transpose", w.swingAmount === 8 && w.patternTranspose === 6]);
-}
-if (docs["mm-desk/kit"].length) {
-	const d = docs["mm-desk/kit"][0].d, k = C.kitToPage(d, global0);
-	k.tracks[0].m = "SID-6581"; k.tracks[0].v.SYN[3] = 2;	// WAVE = PULS
-	k.tracks[0].v.LF1[3] = 4;	// SQR
-	k.tracks[1].assign.tabs["JOY U"][1].add = 10;
-	const o = C.kitToFw(k, d, "RENAMED");
-	edits.push(["machine and enums", o.tracks[0].machine === 3 && C.valueToPage("SID-6581", "SYN", 3, o.tracks[0].pages[0][3]) === 2
-		&& Math.floor(o.tracks[0].pages[4][3] * 11 / 128) === 4]);
-	edits.push(["assign amount", o.tracks[1].assign.add[5] === -54]);
-	edits.push(["name", o.name === "RENAMED" && !("nameBytes" in o)]);
+{
+	const base = C.rowToFw({ pat: 0, rep: 1 }, null, 0, lenOf);
+	const r = C.rowToFw({ pat: 9, rep: 3, trn: 70, ttr: [64, 66, 64, 64, 64, 64, 60, 64, 64, 64, 64, 64], ofs: 4, len: 8, bpm: 124, mutes: [1, 7] }, base, 2, lenOf);
+	edits.push(["a song row to the song's units", r.kind === "pattern" && r.pattern === 9 && r.repeats === 2 && r.transpose === 6 && r.trackTranspose[1] === 2 && r.midiTranspose[0] === -4
+		&& r.offset === 4 && r.length === 8 && r.tempo === 124 && r.mutes === 2 && r.midiMutes === 2]);
+	const h = C.rowToFw({ type: "halt", to: 0 }, null, 5, lenOf), l = C.rowToFw({ type: "loop", to: 1, count: Infinity }, null, 4, lenOf);
+	edits.push(["a HALT row's target is its place, a loop for ever repeats 0", h.pattern === 254 && h.target === 5 && l.pattern === 254 && l.target === 1 && l.repeats === 0]);
+	const w = C.rowToFw({ pat: 3, rep: 1 }, null, 0, q => q === 3 ? 48 : 16);
+	edits.push(["a whole pattern's row is as long as the pattern", w.length === 48 && C.rowToPage(w, 0, q => q === 3 ? 48 : 16).len === undefined]);
 }
 /* the Control workspace's app sources <-> md-desk/modulators (the plug-in runs them) */
 {
@@ -108,32 +92,15 @@ if (docs["mm-desk/kit"].length) {
 	const back = C.modToPage(m), again = C.modToFw(back);
 	edits.push(["modulators round trip", !diff(again, m) && back.links[0].pid === "AMP.6" && back.sources[0].SHAPE === 2]);
 }
-/* MM-P4: MULTI MAP, MULTI TRIG and PORTAMENTO, and a song row more with its residue after END kept inside */
+/* MM-P4: MULTI MAP and MULTI TRIG to the page */
 if (docs["mm-desk/global"].length) {
 	const d = docs["mm-desk/global"][0].d, rows = C.mapToPage(d);
-	rows[0] = { ...rows[0], pat: 2, ofs: 3, len: 8, trn: 61, tim: 3 };
-	const o = C.globalToFw(d, d.routingMode, d.midiSeq.channels.map((c, t) => ({ ch: c + 1, cc: d.midiSeq.ccs[t] })), rows);
-	edits.push(["multi map row", o.multiMap[1][0] === 2 && o.multiMap[2][0] === 2 && o.multiMap[3][0] === 8 && o.multiMap[4][0] === 253 && o.multiMap[5][0] === 3]);
-	const two = C.mapToPage(d).slice(0, 1).map(r => ({ ...r, hi: 60 })).concat([{ hi: 127, pat: -1, ofs: 0, len: 16, trn: 64, tim: 0 }]);
-	const o2 = C.globalToFw(d, d.routingMode, d.midiSeq.channels.map((c, t) => ({ ch: c + 1, cc: d.midiSeq.ccs[t] })), two);
-	edits.push(["multi map split: two ranges, the rest repeat the last upper key", C.mapToPage(o2).length === 2 && o2.multiMap[0][31] === 127]);
+	edits.push(["multi map: the ranges end where an upper key repeats", rows.length > 0 && rows.every((r, i) => !i || r.hi > rows[i - 1].hi)]);
 	const k = docs["mm-desk/kit"][0]?.d;
 	if (k) {
 		const p = C.kitToPage(k, d);
 		edits.push(["multi trig to the page (split track from 1)", p.multi && p.multi.splitTrack === k.multiTrig.splitTrack + 1 && p.multi.mode === k.multiTrig.mode]);
-		p.multi = { mode: 1, splitKey: 48, splitTrack: 3, timing: 6 };
-		p.tracks[2].port = 1;
-		const o3 = C.kitToFw(p, k, C.kitName(k));
-		edits.push(["multi trig and portamento", o3.multiTrig.mode === 1 && o3.multiTrig.splitTrack === 2 && o3.multiTrig.timing === 6 && !((o3.trackMasks.portamento >> 2) & 1)]);
 	}
-}
-if (docs["mm-desk/song"].length) {
-	const d = docs["mm-desk/song"].find(x => ((x.d.firmware || x.d.hidden || {}).rowsAfterEnd || []).length)?.d || docs["mm-desk/song"][0].d;
-	const rows = C.songToPage(d, lenOf);
-	rows.splice(0, 0, { pat: 3, rep: 2 });
-	const o = C.songToFw(rows, d, lenOf), fw = o.firmware || o.hidden;
-	const size = (200 - o.rows.length) * 24;
-	edits.push(["song row added, residue kept inside the region", o.rows.length === d.rows.length + 1 && (fw.rowsAfterEnd || []).every(([i, h]) => i * 2 + h.length <= size * 2)]);
 }
 /* the catalogue's counts are the ones mmConvert used before them (OS 1.32B), and the mockup's tables agree with it */
 edits.push(["catalogue: the mockup's tables agree" + (catalogueOff.length ? " (" + catalogueOff.join("; ") + ")" : ""), catalogueOff.length === 0]);

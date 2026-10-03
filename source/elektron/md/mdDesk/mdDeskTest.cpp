@@ -6,6 +6,7 @@
 
 #include "mdDesk.h"
 #include "mdDeskLibrary.h"
+#include "mdDeskKeys.h"
 #include "mdDeskMachine.h"
 
 #include "deskCore/deskContract.h"
@@ -1238,6 +1239,13 @@ namespace
 			&& !controlAllLeads(kit.models[0]) && !controlAllLeads(kit.models[1]) && !controlAllLeads(kit.models[2]) && controlAllLeads(kit.models[3]),
 			"Control All as the firmware: not CTR or MIDI, a RAM recorder not on synthesis; they cannot lead either");
 		{
+			const auto f = [&](const char* _m) { return ed::mdMachineFacts(modelOf(_m)); };
+			const auto rom = f("ROM-05"), rp = f("RAM-P2"), rr = f("RAM-R3"), ctr = f("CTR-EQ"), mid = f("MID-01"), pi = f("P-I-BD"), gnd = f("GND-EMPTY");
+			check(rom.sampler && rom.family == "ROM" && rp.sampler && !rp.recorder && rr.recorder && !rr.sampler && rr.audio && !ctr.audio && !mid.audio
+				&& pi.family == "P-I" && pi.audio && !pi.sampler && gnd.empty && !f("GND-SIN").empty && ed::mdMachineFacts(9999).family.empty(),
+				"a machine's facts, from its name in one place: sample players, recorders, no sound of their own (MID, CTR), the empty track");
+		}
+		{
 			Documents docs;
 			docs.working = WorkingKit{kit};
 			Clipboard clip;
@@ -2186,19 +2194,59 @@ namespace
 	// The executable spec (deskCore::contract): every published message against the contract and the
 	// contract's machine document against what was published; $defs/command generated from the
 	// tables (mdDeskTest --write-schema rewrites it); the adapter's functions against the table.
-	// P10, the page's keyboard: a key is the track's MAP EDITOR note on the base channel, a held PTCH is a live
-	// value sent before it and put back when the key is let go (not an edit: the kit document keeps its value).
-	void testKeyNote()
+	// The note intent's MD mapping (mdDeskKeys.h, moved from the page's keyPlan): PTCH semitones, the kinds.
+	void testKeyMapping()
 	{
-		std::vector<std::array<uint8_t, 3>> params, notes;
+		using namespace keys;
+		check(heldPtch(64, 0) == 64 && heldPtch(64, 2) == 70 && heldPtch(64, 12) == 100 && heldPtch(64, -12) == 28,
+			"keys: C D, the C an octave up and down are PTCH 64 70 100 28 (3 steps a semitone)");
+		check(heldPtch(70, 7) == 91, "keys: pitch 0 is the sound as tuned (PTCH 70), 7 semitones (21 steps) above it is 91");
+		check(heldPtch(64, 24) == 127 && heldPtch(64, -24) == 0, "keys: two octaves are the ends of PTCH");
+		check(heldPtch(64, 26) == 127 && heldPtch(10, -24) == 0, "keys: beyond the scale, the ends");
+		check(semisPtch(ptchSemis(110)) == 110 && semisPtch(ptchSemis(15)) == 15, "keys: ptchSemis and semisPtch invert each other in the second octave");
+		const auto kind = [](const char* _m) { return kindOf(*ed::mdMachineModel(_m)); };
+		check(kind("ROM-12") == Kind::Pitch && kind("RAM-P2") == Kind::Pitch, "keys: the sample machines are pitched");
+		check(kind("TRX-BD") == Kind::Trig && kind("MID-01") == Kind::Trig && kind("CTR-AL") == Kind::Trig,
+			"keys: synthesis, MIDI and control machines are played at their own pitch");
+		check(kind("GND-EMPTY") == Kind::None && kind("RAM-R1") == Kind::None, "keys: GND-EMPTY and the recorders are left alone");
+		ed::MdGlobal g;
+		g.keymap.fill(0x7f);
+		g.keymap[70] = 3;
+		g.keymap[72] = 3;
+		check(trackNote(nullptr, 4) == 43 && trackNote(&g, 3) == 70 && !trackNote(&g, 4), "keys: the MAP EDITOR's lowest note, the manual's map without a global");
+	}
+
+	// P10, the page's keyboard as the note intent (noteOn / noteOff, deskCore/deskNotes.h): a key is the
+	// track's MAP EDITOR note on the base channel; on ROM and RAM-P a held PTCH goes before it (sendHeldParam,
+	// not the plug-in's parameter) as the working copy's held layer: never an edit, masked out of memory
+	// images, and put back from the document when the key is let go.
+	void testNotes()
+	{
+		std::vector<std::array<uint8_t, 3>> params, heldParams, notes;
 		std::vector<Value> page;
 		double now = 0;
 		Desk::Port port;
 		std::vector<std::string> order;
 		port.device.sendSysex = [](const std::vector<uint8_t>&) {};
 		port.device.sendKitParam = [&](uint8_t _t, uint8_t _i, uint8_t _v) { params.push_back({_t, _i, _v}); order.push_back("cc"); };
+		port.device.sendHeldParam = [&](uint8_t _t, uint8_t _i, uint8_t _v) { heldParams.push_back({_t, _i, _v}); order.push_back("held"); };
 		port.toPage = [&](const Value& _m) { page.push_back(_m); g_published.push_back(_m); };
 		port.device.nowMs = [&] { return now; };
+		const auto lastResult = [&]() -> const Value*
+		{
+			for(auto it = page.rbegin(); it != page.rend(); ++it)
+				if(it->find("type") && it->find("type")->asString() == "result")
+					return &*it;
+			return nullptr;
+		};
+		const auto ok = [&] { const auto* r = lastResult(); return r && r->find("ok")->asBool(); };
+		const auto note = [&]() -> std::string { const auto* r = lastResult(); const auto* n = r ? r->find("note") : nullptr; return n && n->isString() ? n->asString() : ""; };
+		const auto error = [&]() -> std::string
+		{
+			const auto* r = lastResult();
+			const auto* e = r ? r->find("errors") : nullptr;
+			return e && e->isArray() && !e->asArray().empty() ? e->asArray()[0].asString() : "";
+		};
 		{
 			Desk none(port);
 			none.onPageMessage(cmd(R"({"op":"ready"})"));
@@ -2206,12 +2254,8 @@ namespace
 			tel.valid = true;
 			tel.bootAnimation = 0;
 			none.onTelemetry(tel);
-			none.onPageMessage(cmd(R"({"op":"keyNote","t":0,"vel":100,"id":1})"));
-			const Value* r = nullptr;
-			for(auto it = page.rbegin(); it != page.rend() && !r; ++it)
-				if(it->find("type") && it->find("type")->asString() == "result")
-					r = &*it;
-			check(r && !r->find("ok")->asBool(), "keyNote: an engine without notes refuses");
+			none.onPageMessage(cmd(R"({"op":"noteOn","t":0,"vel":100,"pitch":0,"id":1})"));
+			check(!ok(), "noteOn: an engine without notes refuses");
 		}
 		port.device.sendNote = [&](uint8_t _c, uint8_t _n, uint8_t _v) { notes.push_back({_c, _n, _v}); order.push_back("note"); };
 		Desk desk(port);
@@ -2219,14 +2263,20 @@ namespace
 		{
 			return std::vector<uint8_t>{0xf0, 0x00, 0x20, 0x3c, 0x02, 0x00, 0x72, static_cast<uint8_t>(_p), _v, 0xf7};
 		};
-		const auto ok = [&]
+		const auto region = [](const ed::MdKit& _k)
 		{
-			for(auto it = page.rbegin(); it != page.rend(); ++it)
-				if(it->find("type") && it->find("type")->asString() == "result")
-					return it->find("ok")->asBool();
-			return false;
+			auto image = ed::mdWorkingKitImage(_k);
+			std::vector<uint8_t> r{_k.position, 0};
+			r.insert(r.end(), image.begin(), image.end());
+			return r;
 		};
+		const auto working = [&]() { return desk.documents().working ? &desk.documents().working->kit : nullptr; };
 		auto kit = *ed::decodeMdKit(load("programmed_kit_0.syx"));
+		kit.models[4] = *ed::mdMachineModel("ROM-01");
+		kit.models[5] = *ed::mdMachineModel("TRX-BD");
+		kit.models[6] = *ed::mdMachineModel("GND-EMPTY");
+		kit.models[7] = *ed::mdMachineModel("RAM-R1");
+		kit.params[4][0] = 64;
 		desk.onPageMessage(cmd(R"({"op":"ready"})"));
 		desk.onDeviceSysex(status(ed::MdStatus::Kit, kit.position));
 		desk.onDeviceSysex(ed::encodeMdKit(kit));
@@ -2234,25 +2284,65 @@ namespace
 		tel.valid = true;
 		tel.bootAnimation = 0;
 		desk.onTelemetry(tel);
-		const auto before = kit.params[4][0];
-		const auto held = static_cast<uint8_t>(before == 70 ? 73 : 70);
-		desk.onPageMessage(cmd(R"({"op":"keyNote","t":4,"vel":100,"id":2})"));
-		check(ok() && notes.size() == 1 && notes[0] == std::array<uint8_t, 3>{0, 43, 100} && params.empty(),
-			"keyNote: track 5 is G2 (43, the manual's default map) on the base channel, no kit value");
-		desk.onPageMessage(cmd(R"({"op":"keyNote","t":4,"vel":0,"id":3})"));
-		check(ok() && notes.size() == 2 && notes[1] == std::array<uint8_t, 3>{0, 43, 0}, "keyNote: let go is the note off");
+		desk.onWorkingKitMemory(region(kit));
+		check(kitWorking(desk) == "clean", "notes: the kit that plays is its slot");
+
+		desk.onPageMessage(cmd(R"({"op":"noteOn","t":4,"vel":100,"pitch":0,"id":2})"));
+		check(ok() && notes.size() == 1 && notes[0] == std::array<uint8_t, 3>{0, 43, 100} && params.empty() && heldParams.empty(),
+			"noteOn: track 5 is G2 (43, the manual's default map) on the base channel; pitch 0 holds no kit value");
+		desk.onPageMessage(cmd(R"({"op":"noteOff","t":4,"pitch":0,"id":3})"));
+		check(ok() && notes.size() == 2 && notes[1] == std::array<uint8_t, 3>{0, 43, 0}, "noteOff: the note off");
+
+		desk.onPageMessage(cmd(R"({"op":"noteOn","t":5,"vel":90,"pitch":7,"id":4})"));
+		check(ok() && notes.back() == std::array<uint8_t, 3>{0, 45, 90} && heldParams.empty() && note() == "TRX-BD has no semitone scale for PTCH: the keys play it at its own pitch.",
+			"noteOn: a synthesis machine plays at its own pitch, and the result says so");
+		desk.onPageMessage(cmd(R"({"op":"noteOff","t":5,"id":5})"));
+		check(ok() && notes.back() == std::array<uint8_t, 3>{0, 45, 0}, "noteOff without pitch: the track's note");
+		const auto sent = notes.size();
+		desk.onPageMessage(cmd(R"({"op":"noteOn","t":6,"vel":90,"pitch":0,"id":6})"));
+		check(!ok() && error() == "GND-EMPTY is not played from the keyboard (it has no sound)." && notes.size() == sent, "noteOn: GND-EMPTY is refused");
+		desk.onPageMessage(cmd(R"({"op":"noteOn","t":7,"vel":90,"pitch":0,"id":7})"));
+		check(!ok() && error() == "RAM-R1 is not played from the keyboard (a recorder records on its trigs)." && notes.size() == sent, "noteOn: a recorder is refused");
+
+		// A pitched key: the held PTCH goes before the note, past the plug-in's parameter.
 		order.clear();
-		desk.onPageMessage(cmd("{\"op\":\"keyNote\",\"t\":4,\"vel\":127,\"i\":0,\"v\":" + std::to_string(held) + ",\"id\":4}"));
-		check(ok() && params.size() == 1 && params[0] == std::array<uint8_t, 3>{4, 0, held} && order == std::vector<std::string>{"cc", "note"},
-			"keyNote: the held PTCH goes before the note");
-		const auto* w = desk.documents().working ? &desk.documents().working->kit : nullptr;
-		check(w && w->params[4][0] == before, "keyNote: the kit document keeps its PTCH (not an edit)");
-		desk.onPageMessage(cmd(R"({"op":"undo","id":5})"));
-		desk.onPageMessage(cmd(R"({"op":"keyNote","t":4,"vel":0,"id":6})"));
-		check(ok() && params.size() == 2 && params[1] == std::array<uint8_t, 3>{4, 0, before} && notes.back()[2] == 0,
-			"keyNote: let go puts the PTCH back");
-		desk.onPageMessage(cmd(R"({"op":"keyNote","t":4,"vel":0,"id":7})"));
-		check(ok() && params.size() == 2, "keyNote: a second let go sends no value");
+		const auto held = keys::heldPtch(64, 7);
+		desk.onPageMessage(cmd(R"({"op":"noteOn","t":4,"vel":127,"pitch":7,"id":8})"));
+		check(ok() && heldParams.size() == 1 && heldParams[0] == std::array<uint8_t, 3>{4, 0, held} && params.empty()
+			&& order == std::vector<std::string>{"held", "note"} && note().empty(),
+			"noteOn: ROM-01's held PTCH (pitch 7 = 85) goes before the note, as sendHeldParam");
+		check(working() && working()->params[4][0] == 64, "noteOn: the kit document keeps its PTCH (not an edit)");
+		// Memory while the key is held shows the held PTCH: masked, it is no kit change.
+		auto during = kit;
+		during.params[4][0] = held;
+		desk.onWorkingKitMemory(region(during));
+		check(working() && working()->params[4][0] == 64 && kitWorking(desk) == "clean",
+			"held layer: a memory image taken while the key is held reports no kit edit");
+		desk.onHostKitParam(4, 0, held);
+		check(working()->params[4][0] == 64 && kitWorking(desk) == "clean", "held layer: the held value reported back is no change either");
+		desk.onPageMessage(cmd(R"({"op":"undo","id":9})"));
+		check(working()->params[4][0] == 64 && heldParams.size() == 1, "held layer: no undo step");
+		// A later key on the track replaces the first; only its own noteOff lets it go.
+		desk.onPageMessage(cmd(R"({"op":"noteOn","t":4,"vel":127,"pitch":12,"id":10})"));
+		check(ok() && heldParams.size() == 3 && heldParams[1] == std::array<uint8_t, 3>{4, 0, 64} && heldParams[2] == std::array<uint8_t, 3>{4, 0, 100}
+			&& notes[notes.size() - 2][2] == 0, "noteOn: a second key ends the first note, puts its PTCH back, holds its own");
+		desk.onPageMessage(cmd(R"({"op":"noteOff","t":4,"pitch":7,"id":11})"));
+		check(ok() && heldParams.size() == 3 && notes.back()[2] == 127, "noteOff: the first key let go while the second sounds: nothing");
+		// The person moves PTCH while the key is held: that edit is the document's, and the release restores it.
+		desk.onPageMessage(cmd("{\"op\":\"param\",\"k\":" + std::to_string(kit.position) + R"(,"t":4,"i":0,"v":50,"id":12})"));
+		check(working()->params[4][0] == 50 && !params.empty() && params.back() == std::array<uint8_t, 3>{4, 0, 50}, "an edit meanwhile is an edit");
+		desk.onPageMessage(cmd(R"({"op":"noteOff","t":4,"pitch":12,"id":13})"));
+		check(ok() && heldParams.size() == 4 && heldParams[3] == std::array<uint8_t, 3>{4, 0, 50} && notes.back() == std::array<uint8_t, 3>{0, 43, 0},
+			"noteOff: the release restores the document's value (the edit made meanwhile), not the one the key replaced");
+		desk.onPageMessage(cmd(R"({"op":"noteOff","t":4,"pitch":12,"id":14})"));
+		check(ok() && heldParams.size() == 4, "noteOff: a second let go sends nothing");
+		// SAVE KIT while a key holds PTCH: the machine gets the document's value back first.
+		desk.onPageMessage(cmd(R"({"op":"noteOn","t":4,"vel":100,"pitch":-12,"id":15})"));
+		check(heldParams.size() == 5 && heldParams[4][2] == keys::heldPtch(50, -12), "noteOn: pitched from the sound as it is now (PTCH 50)");
+		desk.onPageMessage(cmd(R"({"op":"saveKit","id":16})"));
+		check(heldParams.size() == 6 && heldParams[5] == std::array<uint8_t, 3>{4, 0, 50}, "saveKit: a held value is put back before the kit is saved");
+		desk.onPageMessage(cmd(R"({"op":"noteOff","t":4,"id":17})"));
+		check(ok() && heldParams.size() == 6 && notes.back()[2] == 0, "noteOff after saveKit: the note off, nothing held any more");
 	}
 
 	void checkContract(const bool _write)
@@ -2271,12 +2361,17 @@ namespace
 		if(_write)
 		{
 			std::ofstream out(MDDESK_SCHEMA);
-			out << ed::json::write(contract::withAsks(contract::withDocKinds(contract::withGenerated(*root, generated), kinds), mdDesk::MdModel::asks()), 2) << "\n";
+			auto written = contract::withAsks(contract::withDocKinds(contract::withGenerated(*root, generated), kinds), mdDesk::MdModel::asks());
+			written = contract::withContractVersion(contract::withOpenDocuments(std::move(written)), mdDesk::MdModel::contractVersion);
+			out << ed::json::write(written, 2) << "\n";
 			return;
 		}
 		check(contract::sameCommands(*root, generated), "the schema's $defs/command is generated from the command tables (--write-schema)");
 		check(contract::sameLifecycle(*root), "the schema's lifecycle enum is the lifecycle rows (--write-schema)");
 	check(contract::sameAsks(*root, mdDesk::MdModel::asks()), "the schema's ask enum is the model's questions (--write-schema)");
+	check(contract::sameContractVersion(*root, mdDesk::MdModel::contractVersion), "the machine document's contract is the model's contractVersion (--write-schema)");
+	for(const auto& closed : contract::closedDocuments(*root))
+		check(false, ("what the plug-in writes is open for readers, " + closed + " is closed (--write-schema)").c_str());
 	for(const auto& gap : contract::docKindGaps(*root, kinds))
 		check(false, gap.c_str());
 		// The plug-in's host sends these; this test has no host.
@@ -2311,8 +2406,8 @@ namespace
 
 		void hold(const Document& _doc) { observe(_doc, deskCore::Source::Dump); }
 
-		deskCore::Outcome review(const Value&, const std::vector<Change>&, const Documents&) override { return {}; }
-		deskCore::Outcome submit(const Change& _change, const Documents&) override
+		Review review(const Value&, const std::vector<Change>&, const Documents&) override { return {}; }
+		deskCore::Outcome submit(const Change& _change, const Intent&, const Documents&) override
 		{
 			submitted.push_back(_change);
 			settle(_change.after, deskCore::Source::Tracked);
@@ -2425,7 +2520,8 @@ int main(const int _argc, char** _argv)
 	testAuditionMixer();
 	testSampleWaveAndAudition();
 	testModulators();
-	testKeyNote();
+	testKeyMapping();
+	testNotes();
 	testFakeAdapter();
 	checkContract(false);
 	if(g_failures)

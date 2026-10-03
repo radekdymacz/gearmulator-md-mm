@@ -51,6 +51,10 @@ namespace mdDesk
 		// at 0. The firmware's MAP EDITOR turns a note into a track's trig (the page's keyboard). It goes
 		// after any kit value sent before it. Unset: this engine cannot play notes.
 		std::function<void(uint8_t _channel, uint8_t _note, uint8_t _velocity)> sendNote;
+		// A kit value the machine holds only while a key is down (the keyboard's PTCH, noteOn): to the
+		// machine as its CC on the base channel, never through the plug-in's parameter, so a DAW sees no
+		// move and records no automation. Unset: sendKitParam.
+		std::function<void(uint8_t _track, uint8_t _index, uint8_t _value)> sendHeldParam;
 		// A panel key press and release; false when not possible here. Keys: "play", "stop",
 		// "record", "recordPlay", "page", "trig1".."trig16". Unset: no panel.
 		std::function<bool(const std::string& _key)> pressKey;

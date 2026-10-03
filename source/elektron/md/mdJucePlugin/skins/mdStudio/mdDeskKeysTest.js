@@ -1,14 +1,15 @@
 "use strict";
-/* The page's key map (mdDeskKeys.js), checked: every Keys.bind entry of the page's scripts, as the page makes
+/* The page's key map (mdDeskKeys.js over the shared dispatcher, shared/deskKeys.js), checked: every Keys.bind entry of the page's scripts, as the page makes
    them (the scripts run here on a stand-in DOM that answers everything and does nothing), against the map's
    rules: plain keys play, a plain letter off the piano row acts on the selected track, Alt is all (two Alts
    are not: rotate and record), no ⇧ or ⌘ letter commands but the standard ⌘Z ⌘⇧Z ⌘Y ⌘C ⌘V; and no two
    dispatched entries share a key and modifiers unless both have a when() the test knows are exclusive.
      node mdDeskKeysTest.js */
 const fs = require("fs"), path = require("path");
-/* the page's scripts in load order (sync-mdstudio-skin.py SCRIPTS, less the self-tests) */
-const FILES = ["mdDeskModal.js", "mdDeskBoot.js", "mdDeskSyx.js", "mdDeskBridge.js", "mdDeskModel.js", "mdDeskGen.js", "mdDeskKeys.js", "mdDeskMod.js",
-	"mdDeskApp.js", "mdDeskLive.js", "mdDeskLibrary.js", "mdDeskGlobal.js", "mdDeskAudio.js"];
+/* the page's scripts in load order, as the page loads them (mdStudio.html, from sync-mdstudio-skin.py SCRIPTS), less
+   the self-tests; a shared one (desk*) is in skins/shared/ */
+const FILES = [...fs.readFileSync(path.join(__dirname, "mdStudio.html"), "utf8").matchAll(/<script src="([\w.]+)"><\/script>/g)].map(m => m[1])
+	.filter(f => !/SelfTest\.js$/.test(f)).map(f => f.startsWith("desk") ? "../shared/" + f : f);
 let failures = 0;
 const check = (ok, what) => { console.log((ok ? "  ok   " : "  FAIL ") + what); if (!ok) failures++; };
 

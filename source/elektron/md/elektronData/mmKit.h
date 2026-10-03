@@ -85,6 +85,10 @@ namespace elektronData
 	std::vector<uint8_t> encodeMmKit(const MmKit& _kit);
 	std::optional<MmKit> mmKitFromRaw(const std::vector<uint8_t>& _raw, uint8_t _position);
 	std::vector<uint8_t> mmKitRaw(const MmKit& _kit);
+	// What LOAD KIT makes of a stored kit (measured, OS 1.32B: mmDeskFirmwareTest p4, a never-written slot loaded): a
+	// slot marked unused (name byte 0 is 0xff) plays as "NEW KIT" (name bytes 0-7; the rest as stored); any other
+	// kit plays as it is stored.
+	MmKit mmKitAsLoaded(MmKit _kit);
 
 	std::vector<uint8_t> mmKitRequest(uint8_t _slot);
 

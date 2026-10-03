@@ -31,4 +31,18 @@ namespace elektronData
 	// "TRX", "EFM", "E12", "P-I", "GND", "INP", "MID", "CTR", "ROM", "RAM"; empty
 	// for an unknown model.
 	std::string mdMachineFamily(uint32_t _model);
+
+	// What the editors ask of a machine, derived from its name in one place (DESIGN-REVIEW-2026-10-02.md
+	// finding 16; the MD page's machineFacts in mdDeskModel.js is the same record): its family; whether it
+	// plays a sample slot (ROM-nn, RAM-Pn: PTCH is its pitch) or records one (RAM-Rn: its synthesis page is
+	// its recording setup); whether it makes sound of its own (not MID, not CTR); the empty track.
+	struct MdMachineFacts
+	{
+		std::string family;	// mdMachineFamily; empty for an unknown model
+		bool sampler = false;
+		bool recorder = false;
+		bool audio = true;
+		bool empty = false;
+	};
+	MdMachineFacts mdMachineFacts(uint32_t _model);
 }

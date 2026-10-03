@@ -177,7 +177,7 @@ mutate(spec, kit, cat) -> values: [[t, i, v]...]
 **Alt as the global "all" modifier** (matches Alt+CLEAR = whole pattern, Alt+trash = all locks, Alt-drag = Control All): Alt + a GEN change = all tracks; Alt-click on RANDOM = all tracks (Sound: the whole kit). Every key is in `Keys.bind`, so the ? overlay lists it; plain keys only fire outside fields.
 
 **The mnemonic key map (approved 2026-10-01, final).** Three rules, one modifier:
-1. *Plain keys play:* A S D F G H J K L the notes of the selected track, Z / X the octave −/+, C / V the velocity −/+ (20 40 60 80 100 127, from 100; a toast and the help say it; `keyNote` uses it), Space play / stop.
+1. *Plain keys play:* A S D F G H J K L the notes of the selected track, Z / X the octave −/+, C / V the velocity −/+ (20 40 60 80 100 127, from 100; a toast and the help say it; `noteOn` uses it), Space play / stop.
 2. *A plain letter off the piano row acts on the selected track:* R randomise (Sound: a fresh random sound, MUTATE; everywhere else its GEN variation), M mute / unmute it, T tap tempo; ↑ / ↓ select the previous / next track while no value has the keys (a focused value, tempo or bar keeps ↑ / ↓).
 3. *Alt is all:* Alt+R randomise every track (Sound: the whole kit), Alt+M mute all (none audible: unmute all), Alt+Delete clear the whole pattern, Alt-drag Control All, Alt-click the R cap. Two Alts are not "all", as on the machine: Alt+←/→ rotates the selected track (FUNCTION + arrows) and Alt+Space records (RECORD + PLAY: Alt + play). Alt chords are matched on `e.code` (macOS types another character with Alt).
 
