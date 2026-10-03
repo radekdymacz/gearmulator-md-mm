@@ -24,6 +24,7 @@
 #include <CoreFoundation/CoreFoundation.h>
 #endif
 #include <chrono>
+#include <cmath>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
@@ -165,6 +166,63 @@ int main(const int _argc, char** const _argv)
 		juce::MemoryBlock none;
 		ap.getStateInformation(none);
 		check(none.getSize() == 0, "no ROM and no project given: nothing to save");
+
+		// The DAW's automation parameters are saved and restored without a ROM too (the pluginTester's
+		// -automation-smoke in CI, which has no ROM): moved parameters make a project, a project given back
+		// restores them, an unmoved session hands the same bytes back, and a later move rewrites only them.
+		// Only in the plain run: moved parameters are edits the machine gets when its ROM arrives, and the
+		// install run checks that a first boot leaves the kit clean.
+		if(!install)
+		{
+			std::vector<juce::AudioProcessorParameter*> params;
+			for(auto* p : ap.getParameters())
+				if(p->isAutomatable() && p->getNumSteps() >= 3 && params.size() < 8)
+					params.push_back(p);
+			check(params.size() == 8, "the plug-in exposes automatable parameters");
+			const auto step = [](const juce::AudioProcessorParameter* _p, const int _n) { return static_cast<float>(_n) / static_cast<float>(_p->getNumSteps() - 1); };
+			std::vector<float> expected;
+			for(size_t i = 0; i < params.size(); ++i)
+			{
+				params[i]->setValue(step(params[i], static_cast<int>(i) + 1));
+				expected.push_back(params[i]->getValue());
+			}
+			juce::MemoryBlock project;
+			ap.getStateInformation(project);
+			check(project.getSize() > 0, "no ROM, moved parameters: the plug-in's own state is saved");
+			const auto restores = [&](const juce::MemoryBlock& _state, const std::vector<float>& _values)
+			{
+				for(auto* p : params)
+					p->setValue(0.0f);
+				ap.setStateInformation(_state.getData(), static_cast<int>(_state.getSize()));
+				for(size_t i = 0; i < params.size(); ++i)
+					if(std::abs(params[i]->getValue() - _values[i]) > 0.0001f)
+						return false;
+				return true;
+			};
+			check(restores(project, expected), "no ROM: the project restores the automation parameters");
+			{
+				juce::MemoryBlock again;
+				ap.getStateInformation(again);
+				check(again == project, "no ROM, nothing moved: the held project is handed back byte for byte");
+			}
+			params[0]->setValue(step(params[0], 2));
+			expected[0] = params[0]->getValue();
+			juce::MemoryBlock moved;
+			ap.getStateInformation(moved);
+			check(moved.getSize() == project.getSize() && moved != project, "no ROM, a parameter moved: the held project with its automation rewritten");
+			check(restores(moved, expected), "and that project restores the moved parameter");
+			// The editor's setup ("MDSK") lives without a machine too.
+			const std::string setupText = R"({"schema":"md-desk/setup","version":1,"knobCcs":[30,31,32,33,34,35,36,37]})";
+			processor->getDeskHost()->setSetup(setupText);
+			juce::MemoryBlock withSetup;
+			ap.getStateInformation(withSetup);
+			processor->getDeskHost()->setSetup({});
+			ap.setStateInformation(withSetup.getData(), static_cast<int>(withSetup.getSize()));
+			check(processor->getDeskHost()->setup() == setupText, "no ROM: the editor's setup is saved and restored with the held project");
+			ap.setStateInformation(moved.getData(), static_cast<int>(moved.getSize()));
+			check(processor->getDeskHost()->setup().empty(), "and a project without one starts from the default setup");
+		}
+
 		ap.setStateInformation(kept, sizeof(kept));
 		juce::MemoryBlock back;
 		ap.getStateInformation(back);

@@ -43,10 +43,15 @@ int main()
 	{
 		mdJucePlugin::AudioPluginAudioProcessor a(md::MachineModel::Machinedrum, isolated(), false);
 		juce::AudioProcessor& ja = a;
-		ja.getStateInformation(without);
 		a.getDeskHost()->setSetup(setup);
 		ja.getStateInformation(withSetup);
+		// Without a ROM an untouched instance saves nothing (mdDeskHost.h, DeskHost::holdState): the project
+		// without the setup is the one just saved, given back and saved again with the setup cleared.
+		ja.setStateInformation(withSetup.getData(), static_cast<int>(withSetup.getSize()));
+		a.getDeskHost()->setSetup({});
+		ja.getStateInformation(without);
 	}
+	check(!withSetup.isEmpty() && !without.isEmpty() && withSetup != without, "both projects are saved, one with the setup");
 	mdJucePlugin::AudioPluginAudioProcessor b(md::MachineModel::Machinedrum, isolated(), false);
 	juce::AudioProcessor& jb = b;
 	const auto g0 = b.getDeskHost()->setupVersion();

@@ -63,6 +63,10 @@ namespace mdJucePlugin
 		// overwrite the saved one (with an empty state and stale automation). While the stand-in runs the
 		// host keeps the project it was given, hands the same bytes back when the host asks to save, and
 		// gives it to the machine that replaces the stand-in (takeHeldState; the processor's hooks).
+		// Two parts of the project live without a machine: the DAW's automation parameters ("AUTO") and the
+		// editor's setup ("MDSK"). Holding a project restores both from it, and when either has moved since,
+		// the save is the held project with that chunk rewritten (the rest stays byte for byte). With no
+		// project held and something moved, heldState declines: the plug-in's own state carries them.
 		bool holdState(const void* _data, int _size);
 		bool heldState(juce::MemoryBlock& _out) const;
 		bool takeHeldState(std::vector<uint8_t>& _out);
@@ -71,11 +75,15 @@ namespace mdJucePlugin
 		uint32_t setupVersion() const { return m_setupVersion.load(std::memory_order_acquire); }
 
 	private:
+		std::vector<uint8_t> automationSnapshot() const;	// the controller's (Controller::createAutomationSnapshot)
+
 		AudioPluginAudioProcessor& m_processor;
 		mutable std::mutex m_setupMutex;
 		std::string m_setup;
 		mutable std::mutex m_heldMutex;
 		std::vector<uint8_t> m_held;
+		std::vector<uint8_t> m_heldAutomation;	// the automation snapshot as the held project left it
+		std::string m_heldSetup;	// the editor's setup as the held project left it
 		std::atomic<uint32_t> m_setupVersion{0};
 		std::unique_ptr<DeskSession> m_session;
 		std::shared_ptr<void> m_editFlowDriver;	// a test build's edit-flow driver (mdEditFlowDriver.h); gone before the session
