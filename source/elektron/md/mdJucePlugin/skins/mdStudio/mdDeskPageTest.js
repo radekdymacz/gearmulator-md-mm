@@ -45,7 +45,7 @@ const src = FILES.map(f => fs.readFileSync(path.join(__dirname, f), "utf8").repl
 const P = new Function("scope", "with (scope) {\n" + src + `
 ;let renders = 0;
 render = () => { renders++; }; syncControls = () => { }; renderTop = () => { }; renderSub = () => { }; redraw = () => { }; refreshAudible = () => { };
-return { S, Docs, Overlay, Held, PREP, scheduleRender, clickTrackKeys, muteSel, msSet, prepToggle, unmuteAll, Keys,
+return { S, Docs, Overlay, Held, PREP, scheduleRender, clickTrackKeys, userMute, soloWrites, muteSel, msSet, prepToggle, unmuteAll, Keys,
 	get V() { return V; }, setV(v) { V = v; }, view, get renders() { return renders; }, get pending() { return pendingRender; } }; }`)(scope);
 
 /* the machine document: its mutes (machine.desk.mutes) as the machine has them */
@@ -108,6 +108,32 @@ for (const kind of ["paint", "l2", "chop", "song", "lane", "value", "mutePaint"]
 }
 /* a gesture not holding the page (gv, bpm, wheel, rotate) ends without a render of its own */
 run(); { const before = P.renders; P.Held.begin("gv", {}); P.Held.end("gv"); run(); check(P.renders === before, "a gesture with nothing held renders nothing when it ends"); }
+
+/* ---- a solo leaves a RAM recorder alone: its mute is the sampler's capture and freeze ---- */
+{
+	const HEX62 = "0".repeat(62);
+	const tr = m => ({ machine: m, model: 0, level: 100, synth: Array(8).fill(0), effects: Array(8).fill(0), routing: Array(8).fill(0),
+		lfo: { track: 0, param: 0, shape1: 0, shape2: 0, update: 0 }, muteGroup: null, trigGroup: null });
+	P.Docs.kits[0] = { schema: "md-desk/kit", version: 2, slot: 0, name: "K", tracks: Array.from({ length: 16 }, (_, i) => tr(i === 9 ? "RAM-R1" : "GND-EMPTY")),
+		masterFx: { rhythmEcho: Array(8).fill(0), gateBox: Array(8).fill(0), eq: Array(8).fill(0), dynamix: Array(8).fill(0) },
+		firmware: { format: { version: 2, revision: 0 }, lfoState: Array(16).fill(HEX62) } };
+	P.Overlay.clear(); P.S.soloSet = new Set(); P.S.userMutes = new Set();
+	machineMutes([]);	/* the recorder plays: a capture records */
+	sent.length = 0; click("solo", 0);
+	check(!/[+-]10\b/.test(muteCmds()), "solo 1 does not mute the recording RAM recorder on track 10: " + muteCmds());
+	P.userMute(9, true);	/* the capture's end freezes it during the solo */
+	check(/\+10\b/.test(muteCmds()), "the capture's freeze during a solo goes to the machine at once");
+	machineMutes([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15]);	/* the machine now: every track but 1 muted */
+	sent.length = 0; click("solo", 0);
+	check(!/-10\b/.test(muteCmds()), "un-solo does not unfreeze the take on track 10: " + muteCmds());
+	check(P.soloWrites({ soloSet: new Set([0]), userMutes: new Set() }, Array(16).fill(false), new Set([9])).every(([i]) => i !== 9), "soloWrites leaves the kept tracks out");
+	delete P.Docs.kits[0];
+}
+
+/* ---- a reset (another engine, a restored project) starts the solos over ---- */
+P.S.soloSet = new Set([2]); P.S.userMutes = new Set([4]);
+bridgeListeners.forEach(f => { try { f({ type: "reset" }); } catch (_) { } });
+check(P.S.soloSet.size === 0 && P.S.userMutes.size === 0, "a reset clears the page's solos and its record of the user's mutes");
 
 console.log(failures ? `${failures} failure(s)` : "mdDeskPageTest: all passed");
 process.exit(failures ? 1 : 0);

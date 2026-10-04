@@ -261,9 +261,9 @@ document.addEventListener("change",e=>{const id=e.target.id,v=e.target.value,tr=
 document.addEventListener("keydown",e=>{if(!(S.learn&&S.learnT&&/^[1-8]$/.test(e.key))||e.metaKey||e.ctrlKey||e.altKey||e.target.closest?.("input,select,textarea"))return;e.preventDefault();e.stopImmediatePropagation();learnBind(+e.key)},true);
 function leaveLearn(){S.learn=false;document.body.classList.remove("learn");renderTop();if(HOST.learning)HOST.learning(false)}
 Keys.bind({keys:["Escape"],group:"Anywhere",does:"Close the dialog",when:()=>dialogOpen(),field:true,run:()=>{$("#dlg").hidden=true}});
-Keys.bind({keys:["Z"],mod:"cmd",group:"Anywhere",does:"Undo",run:()=>undo()});
-Keys.bind({keys:["Z"],mod:"cmd+shift",group:"Anywhere",does:"Redo",run:()=>redo()});
-Keys.bind({keys:["Y"],mod:"cmd",group:"Anywhere",does:"Redo",run:()=>redo()});
+Keys.bind({keys:["Z"],mod:"cmd",group:"Anywhere",does:"Undo",modal:"panel",run:()=>undo()});
+Keys.bind({keys:["Z"],mod:"cmd+shift",group:"Anywhere",does:"Redo",modal:"panel",run:()=>redo()});
+Keys.bind({keys:["Y"],mod:"cmd",group:"Anywhere",does:"Redo",modal:"panel",run:()=>redo()});
 Keys.bind({keys:["C"],mod:"cmd",group:"Anywhere",does:"Copy (Sequence: the page shown of the track; Sound: the machine; Perform: the assign; Song: the row)",run:()=>secAction("copy")});
 Keys.bind({keys:["V"],mod:"cmd",group:"Anywhere",does:"Paste (Sequence: into every track marked for paste too)",run:()=>secAction("paste")});
 Keys.bind({keys:["Escape"],group:"Anywhere",does:"Leave LEARN",mapping:true,when:()=>S.mapping&&S.learn,run:()=>leaveLearn()});
@@ -405,10 +405,12 @@ new MutationObserver(()=>{if(!naQueued){naQueued=true;queueMicrotask(()=>{naQueu
 DeskCaps.guard({attr:"na",events:["pointerdown","click","change","wheel","keydown","dragstart"],say:t=>toast(t)});
 function disable(cap,why){NA[cap]=why||"";markNa()}
 function setReading(kind,slots){READING[kind]=new Set(slots);markNa()}
-/* start with nothing: no example kit, pattern, song or mappings */
-function startEmpty(){applyKit({...clearedKit(),multi:S.multi});S.tracks.forEach(t=>t.name=machName(t.m));applyPat(emptyPat(16));S.song=[{type:"end"}];S.songSel=0;
+/* start with nothing: no example kit, pattern, song or mappings. machineOnly (an engine reset): only the machine's
+   state goes (kit, pattern, song, slots, transport); the Control workspace (CC sources, links, MIDI track targets)
+   is the page's and the plug-in's, and stays */
+function startEmpty(machineOnly){applyKit({...clearedKit(),multi:S.multi});S.tracks.forEach(t=>t.name=machName(t.m));applyPat(emptyPat(16));S.song=[{type:"end"}];S.songSel=0;
  S.kits=Array.from({length:128},()=>({name:"",empty:true,data:null}));S.patInfo=Array.from({length:128},()=>({has:false,len:16}));S.patKit=Array(128).fill(0);S.patData={};S.workName="";
- S.kit=0;S.pat=0;S.queued=null;S.playing=false;S.step=-1;S.ctl.links=[];S.ctl.sources=S.ctl.sources.filter(x=>x.kind==="cc")}
+ S.kit=0;S.pat=0;S.queued=null;S.playing=false;S.step=-1;if(machineOnly)return;S.ctl.links=[];S.ctl.sources=S.ctl.sources.filter(x=>x.kind==="cc")}
 function setPatternSlot(p,{data,kit,has,len}){S.patKit[p]=kit;S.patInfo[p]={has,len};if(p===S.pat)applyPat(data);else S.patData[p]=data}
 function setKitSlot(k,{name,empty,data}){S.kits[k]={name,empty,data}}
 /* ===== The machine's documents, shown (DESIGN-UNIFY.md 4.3-4.5, phase 1) =====
@@ -492,7 +494,9 @@ function setLcd(bits){const el=$("#bootscr");if(!el)return;clearTimeout(lcdFadeT
  if(!el.classList.contains("fw"))return;el.classList.add("fading");lcdFadeT=setTimeout(()=>el.classList.remove("on","fw","fading"),460)}
 const dialogOpen=()=>!$("#dlg").hidden;
 /* the firmware screen (an ask with class "first" and the firmware text) closes when the host has a firmware again */
-function closeFirmwareDialog(){const d=$("#dlg");if(!d.hidden&&d.querySelector(".dlgbox.first .lcdbig"))d.hidden=true}
+/* the firmware runs: the no-ROM screen goes, shown or still waiting behind another dialog (only it: the SYSEX RECV
+   steps share its look, so the dialog is named by its key, Dlg in deskModal.js) */
+function closeFirmwareDialog(){Dlg.drop("firstRun")}
 /* SysEx import and export: the host's file dialogs and document writes; the example shows a pretend file */
 Syx.host={choose:()=>{if(HOST.syxChoose)return HOST.syxChoose();Syx.preview({ok:true,file:"example.syx",model:"Monomachine",fullBackup:false,problemCount:0,problems:[],items:{kit:[{slot:0,name:"SUPERWAVES",overwrites:true}],pattern:[{slot:0,name:"A01",kit:0,overwrites:true}],song:[],global:[]}})},
  exportAll:()=>{if(HOST.syxExport)return HOST.syxExport();toast("In the plug-in: a save dialog, then every document as one .syx.")},

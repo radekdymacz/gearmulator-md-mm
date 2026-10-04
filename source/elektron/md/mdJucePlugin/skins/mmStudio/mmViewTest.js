@@ -318,6 +318,17 @@ const result = (m, ok = true, errors = []) => ({ type: "result", id: m.id, op: m
 	check(steps(S) !== steps(fresh), "the fixture's pattern is on screen before the reset");
 	p.recv([{ type: "reset" }]);
 	check(steps(S) === steps(fresh) && kit(S) === kit(fresh) && S.workName === "", "after the reset (no machine yet: HW MIDI connecting) the old engine's pattern and kit are gone, as at the start");
+	/* the Control workspace is not the machine's: a CC link and a MIDI track's target survive the reset (a machine
+	   restart sends no mod message to bring them back) */
+	{
+		const c = loaded(), C = c.S();
+		C.ctl.sources.push({ id: "cc99", kind: "cc", cc: 99, label: "Knob 99", val: 64 }, { id: "L7", kind: "lfo", label: "LFO 7", val: 64, SHAPE: 0, RATE: "1/4", DEPTH: 50 });
+		C.ctl.links.push({ src: "cc99", t: 0, pid: "SYN.1", min: 10, max: 90, curve: "exp", inv: true }, { src: "L7", t: 6, pid: "MID.0", min: 0, max: 127, curve: "lin", inv: false });
+		const before = JSON.stringify({ s: C.ctl.sources, l: C.ctl.links });
+		c.recv([{ type: "reset" }]);
+		const after = c.S().ctl;
+		check(JSON.stringify({ s: after.sources, l: after.links }) === before, "a reset keeps the Control workspace: the CC link (min, max, curve) and the track 7 target are there");
+	}
 	/* a modSet on its way when the engine changes is never answered: the new engine's setup is taken */
 	const q = loaded(), Q = q.S();
 	const setup = { sources: [{ id: "L1", kind: "lfo", label: "LFO 1", SHAPE: 0, RATE: "1/4", DEPTH: 80 }], links: [] };

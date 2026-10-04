@@ -14,13 +14,13 @@ const document = { addEventListener: (type, f) => { if (type === "keydown") keyd
 const ctx = vm.createContext({ document, console });
 vm.runInContext(fs.readFileSync(path.join(__dirname, "deskKeys.js"), "utf8") + "\nthis.Keys = Keys;", ctx);
 /* the modal layer: a const in the page's global scope, as deskModal.js makes it */
-vm.runInContext("const Modal = { top: () => this.modalTop };", ctx);
+vm.runInContext("const Modal = { top: () => this.modalTop, kind: () => this.modalTop ? (this.modalTop === \"dlg\" || this.modalTop === \"bootcard\" ? \"other\" : \"panel\") : null };", ctx);
 const Keys = ctx.Keys, ran = [];
 const setTop = id => { ctx.modalTop = id; };
 Keys.bind({ keys: ["Space"], group: "Transport", does: "play", run: () => ran.push("play") });
 Keys.bind({ keys: ["Delete", "Backspace"], group: "Sequence", does: "clear", run: () => ran.push("clear") });
 Keys.bind({ keys: ["1"], group: "Workspaces", does: "seq", run: () => ran.push("ws1") });
-Keys.bind({ keys: ["Z"], mod: "cmd", group: "Anywhere", does: "undo", run: () => ran.push("undo") });
+Keys.bind({ keys: ["Z"], mod: "cmd", group: "Anywhere", does: "undo", modal: "panel", run: () => ran.push("undo") });
 Keys.bind({ keys: ["T"], group: "Transport", does: "tap", when: () => Keys.free(), run: () => ran.push("tap") });
 Keys.bind({ keys: ["?"], group: "Help", does: "keys", modal: "keyspop", run: () => ran.push("help") });
 /* a key pressed on a button inside the dialog */
@@ -40,7 +40,9 @@ for (const id of ["dlg", "globpop", "audiopop", "libpop", "machpop", "bootcard"]
 	const sp = press(" "), bs = press("Backspace"), d1 = press("1"), z = press("z", { metaKey: true }), t = press("T");
 	check(!sp.ran && !sp.prevented, `${id} open: Space is the dialog's (no play, not prevented: the focused button is pressed)`);
 	check(!bs.ran && !bs.prevented, `${id} open: Backspace clears no steps behind it`);
-	check(!d1.ran && !z.ran && !t.ran, `${id} open: the digits, ⌘Z and T do nothing behind it`);
+	check(!d1.ran && !t.ran, `${id} open: the digits and T do nothing behind it`);
+	const panel = id !== "dlg" && id !== "bootcard";
+	check(panel ? z.ran === "undo" : !z.ran, panel ? `${id} (a panel) open: ⌘Z still undoes (modal: "panel")` : `${id} open: ⌘Z does nothing behind a question or the start-up card`);
 	check(!Keys.free(), `${id} open: Keys.free() is false (the keyboard does not play)`);
 }
 setTop("keyspop");

@@ -309,10 +309,11 @@ const mutedSet = mutes => new Set(mutes.map((m, i) => m ? i : -1).filter(i => i 
 function soloTo(ui, mutes, next) { return { soloSet: next, userMutes: ui.soloSet.size ? ui.userMutes : mutedSet(mutes) }; }
 /* M on track i (on: muted): during a solo the user's new mutes (nothing goes to the machine), else null (the machine's mute) */
 function muteTo(ui, i, on) { if (!ui.soloSet.size) return null; const u = new Set(ui.userMutes); on ? u.add(i) : u.delete(i); return u; }
-/* the machine mutes to send so the machine plays what ui says: [[t, on]] for every track that differs */
-function soloWrites(ui, mutes) {
+/* the machine mutes to send so the machine plays what ui says: [[t, on]] for every track that differs. keep: the
+   tracks a solo leaves alone (a RAM recorder: its mute is its capture and freeze, not what is heard) */
+function soloWrites(ui, mutes, keep = new Set()) {
 	const any = ui.soloSet.size > 0;
-	return mutes.map((m, i) => [i, any ? !ui.soloSet.has(i) : ui.userMutes.has(i)]).filter(([i, want]) => !!mutes[i] !== want);
+	return mutes.map((m, i) => [i, any ? !ui.soloSet.has(i) : ui.userMutes.has(i)]).filter(([i, want]) => !keep.has(i) && !!mutes[i] !== want);
 }
 /* ---- optimistic edits (P6): Overlay, docOf and shows are skins/shared/deskOverlay.js (both editors) ---- */
 function view() { return Overlay.over(deriveView(Docs, S)); }

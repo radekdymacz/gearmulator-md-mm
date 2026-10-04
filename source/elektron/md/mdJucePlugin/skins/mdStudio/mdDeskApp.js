@@ -285,11 +285,13 @@ function setMute(i, on) { const w = [[["mutes", i], on]]; if (!S.soloSet.size) w
 /* Solo is the page's idea (mdDeskModel.js, soloTo / muteTo / soloWrites, as the MM page): it mutes every other
    track on the machine; the user's mutes are the machine's when the first solo begins, M edits only them
    during a solo, and the last solo let go gives them back to the machine. */
-function applySolo() { for (const [i, on] of soloWrites(S, V.mutes)) setMute(i, on); }
+function applySolo() { for (const [i, on] of soloWrites(S, V.mutes, soloKeep())) setMute(i, on); }
+/* the tracks a solo leaves alone: the RAM recorders (their mute is the sampler's capture and freeze) */
+function soloKeep() { return new Set(V.tracks.map((t, i) => machineFacts(t.m, Cat).recorder ? i : -1).filter(i => i >= 0)); }
 /* the solo set becomes next (a new Set: solo is UI state the view reads, never mutated in place) */
 function setSolo(next) { Object.assign(S, soloTo(S, V.mutes, next)); V = view(); applySolo(); }
 /* M: track i muted or not, as the user means it (during a solo only the page's record; muteSet, mdDeskLive.js, is the gestures') */
-function userMute(i, on) { const u = muteTo(S, i, on); if (u) { S.userMutes = u; V = view(); } else setMute(i, on); }
+function userMute(i, on) { const u = muteTo(S, i, on); if (!u) { setMute(i, on); return; } S.userMutes = u; V = view(); if (soloKeep().has(i)) setMute(i, on); }
 function select(i) { S.sel = i; if (!params(i).includes(S.lane)) S.lane = params(i).includes("FLTF") ? "FLTF" : params(i)[0] || "FLTF"; render(); }
 function refreshAudible() {
 	$$(".th").forEach(h => { const i = +h.dataset.sel; h.classList.toggle("off", !audible(i)); h.querySelector(".m").setAttribute("aria-pressed", V.tracks[i].mute); h.querySelector(".s").setAttribute("aria-pressed", V.tracks[i].solo); });

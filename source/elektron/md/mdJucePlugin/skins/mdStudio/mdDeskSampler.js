@@ -353,8 +353,8 @@ function clickSamplerSteps(e) {
 }
 function clickSlots(e) {
 	const sk = e.target.closest(".slotk"); if (sk) { S.smpSlot = sk.dataset.slot; render(); return true; }
-	const sm = e.target.closest("[data-slotmode]"); if (sm) { const n = +S.smpSlot.slice(3), r = recTrack(n); if (r >= 0) { setMute(r, sm.dataset.slotmode === "frozen"); delete S.capture[n]; render(); } return true; }
-	const cap = e.target.closest("[data-capture]"); if (cap) { const n = +cap.dataset.capture, r = recTrack(n); if (!V.playing) { toast("Press PLAY first. The capture starts at the next loop."); return true; } if (r < 0) return true; S.capture[n] = "armed"; setMute(r, true); toast("RAM " + n + ": records the next whole loop, then freezes."); render(); return true; }
+	const sm = e.target.closest("[data-slotmode]"); if (sm) { const n = +S.smpSlot.slice(3), r = recTrack(n); if (r >= 0) { userMute(r, sm.dataset.slotmode === "frozen"); delete S.capture[n]; render(); } return true; }
+	const cap = e.target.closest("[data-capture]"); if (cap) { const n = +cap.dataset.capture, r = recTrack(n); if (!V.playing) { toast("Press PLAY first. The capture starts at the next loop."); return true; } if (r < 0) return true; S.capture[n] = "armed"; userMute(r, true); toast("RAM " + n + ": records the next whole loop, then freezes."); render(); return true; }
 	const ct = e.target.closest("[data-choptrk]"); if (ct) { S.chopTrack = +ct.dataset.choptrk; render(); return true; }
 	const sl = e.target.closest("[data-smpload]"); if (sl) { if (!sl.disabled) cmd("chooseSample", { slot: +sl.dataset.smpload - 1 }); return true; }
 	if (e.target.closest("[data-smpstop]")) { cmd("sampleCancel", {}); return true; }

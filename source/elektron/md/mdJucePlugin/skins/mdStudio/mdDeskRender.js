@@ -150,9 +150,9 @@ document.addEventListener("click", e => { for (const f of CLICKS) if (f(e)) retu
 /* The editor's keys (mdDeskKeys.js: dispatched from this map, and listed by ?). */
 const dlgOpen = () => !$("#dlg").hidden && $("#dlg").dataset.first !== "1";
 Keys.bind({ keys: ["Escape"], group: "Anywhere", does: "Close the dialog", when: dlgOpen, field: true, run: () => { $("#dlg").hidden = true; $("#dlg").dataset.first = ""; } });
-Keys.bind({ keys: ["Z"], mod: "cmd", group: "Anywhere", does: "Undo", run: () => cmd("undo") });
-Keys.bind({ keys: ["Z"], mod: "cmd+shift", group: "Anywhere", does: "Redo", run: () => cmd("redo") });
-Keys.bind({ keys: ["Y"], mod: "cmd", group: "Anywhere", does: "Redo", run: () => cmd("redo") });
+Keys.bind({ keys: ["Z"], mod: "cmd", group: "Anywhere", does: "Undo", modal: "panel", run: () => cmd("undo") });
+Keys.bind({ keys: ["Z"], mod: "cmd+shift", group: "Anywhere", does: "Redo", modal: "panel", run: () => cmd("redo") });
+Keys.bind({ keys: ["Y"], mod: "cmd", group: "Anywhere", does: "Redo", modal: "panel", run: () => cmd("redo") });
 Keys.bind({ keys: ["C"], mod: "cmd", group: "Anywhere", does: "Copy (track page, sound, song row)", run: () => secAction("copy") });
 Keys.bind({ keys: ["V"], mod: "cmd", group: "Anywhere", does: "Paste", run: () => secAction("paste") });
 Keys.bind({ keys: ["Escape"], group: "Anywhere", does: "Leave LEARN", mapping: true, when: () => S.mapping && S.ctl.learn, run: () => toggleLearn() });

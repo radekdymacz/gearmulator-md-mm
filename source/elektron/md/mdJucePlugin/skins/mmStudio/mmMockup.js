@@ -540,7 +540,8 @@ const Keys = (() => {
 	const norm = e => e.key === " " ? "Space" : e.key.length === 1 ? e.key.toUpperCase() : e.key;
 	/* {keys: ["Z"], mod: "cmd"|"alt"|"shift"|"cmd+shift"|"", group, does (text, or () => text when it shows state), when?: () => bool,
 	   run?: e => void, field?: true, hidden?: true (dispatched, but another entry describes it in the ? overlay),
-	   modal?: "keyspop" (it also runs while that dialog is the top one; every other entry is off while one is open),
+	   modal?: "keyspop" (it also runs while that dialog is the top one; every other entry is off while one is open)
+	     or "panel" (it also runs over any panel: the library, GLOBAL, AUDIO / MIDI; never over a question),
 	   code?: "KeyR" (matched on the physical key, e.code: with Alt or Cmd held macOS types another character)} */
 	function bind(entry) { list.push(Object.assign({ mod: "", when: null, field: false }, entry)); }
 	function modOf(e) { return [e.metaKey || e.ctrlKey ? "cmd" : "", e.altKey ? "alt" : "", e.shiftKey ? "shift" : ""].filter(Boolean).join("+"); }
@@ -550,12 +551,14 @@ const Keys = (() => {
 	   button, Backspace and the digits are its field's. Only an entry naming that dialog (modal) runs.
 	   free(): no dialog open and no text field focused, the rule of the keys that play and act on tracks. */
 	const modalTop = () => typeof Modal !== "undefined" && Modal.top ? Modal.top() : null;
+	const modalKind = () => typeof Modal !== "undefined" && Modal.kind ? Modal.kind() : null;
+	const passes = (b, top) => b.modal === top || (b.modal === "panel" && modalKind() === "panel");
 	const free = () => !modalTop() && !document.activeElement?.closest?.("input,select,textarea,[contenteditable]");
 	document.addEventListener("keydown", e => {
 		const inField = e.target.closest?.("input,select,textarea,[role=slider]"), k = norm(e), m = modOf(e), top = modalTop();
 		for (const b of list) {
 			if (!b.run || !(b.code ? e.code === b.code : b.keys.includes(k))) continue;
-			if (top && b.modal !== top) continue;
+			if (top && !passes(b, top)) continue;
 			const want = b.mod || "", ok = want === m || (want === "" && m === "shift" && k.length === 1 && !/[A-Z]/.test(k));
 			if (!ok || (inField && !b.field) || (b.when && !b.when())) continue;
 			e.preventDefault(); b.run(e); return;
@@ -744,7 +747,7 @@ const Modal = (() => {
 	/* a title set later (a state's new words) moves to the tip too */
 	new MutationObserver(ms => { for (const m of ms) { const el = m.target; if (el.title && el.closest?.(".lcdpanel")) { el.dataset.tip = el.title; el.removeAttribute("title"); } } })
 		.observe(document.body, { attributes: true, attributeFilter: ["title"], subtree: true });
-	return { open: () => stack.map(d => d.el.id), top: () => top()?.el.id || null };
+	return { open: () => stack.map(d => d.el.id), top: () => top()?.el.id || null, kind: () => top()?.kind || null };
 })();
 /* The question dialog (#dlg) of both editors is one at a time, and what wants it next waits its turn: nothing
    replaces what it shows. A page shows a question as an item {draw, notice?, cancel?, key?}: draw() writes the
@@ -752,10 +755,12 @@ const Modal = (() => {
    goes before every other item, and one that shows when it comes waits behind it and is drawn again after; a
    notice is always answered: closed in any other way than its own keys, cancel() answers it (its last key).
    key: an item already showing or waiting with the same key is not added again. The dialog closes by its
-   hidden attribute, whoever sets it; then the next item is drawn. */
+   hidden attribute, whoever sets it; then the next item is drawn. drop(key) withdraws an item that is no longer
+   wanted (the no-ROM screen once a firmware runs), shown or waiting. A notice drawn over a dialog in place takes
+   no click for a moment (GUARD_MS): a click meant for the old dialog's key must not answer the plug-in. */
 const Dlg = (() => {
-	const waiting = [];
-	let now = null, el = null;
+	const waiting = [], GUARD_MS = 300;
+	let now = null, el = null, guardUntil = 0;
 	const dlg = () => document.querySelector("#dlg");
 	/* the item shown is gone (the dialog was closed): a notice not answered by its keys is answered now */
 	function gone() { const was = now; now = null; if (was && was.notice && was.cancel && !was.done) { was.cancel(); was.done = true; } }
@@ -775,12 +780,24 @@ const Dlg = (() => {
 		const open = !!el && !el.hidden;
 		if (item.key && ((open && now && now.key === item.key) || waiting.some(w => w.key === item.key))) return;
 		if (!open) { draw(item); return; }
-		if (item.notice && !(now && now.notice)) { if (now) waiting.unshift(now); now = null; draw(item); return; }
+		if (item.notice && !(now && now.notice)) { if (now) waiting.unshift(now); now = null; guardUntil = Date.now() + GUARD_MS; draw(item); return; }
 		/* notices in their order, before every other item */
 		const at = item.notice ? waiting.findIndex(w => !w.notice) : -1;
 		at < 0 ? waiting.push(item) : waiting.splice(at, 0, item);
 	}
-	return { show, closed, waiting: () => waiting.length, get now() { return now; } };
+	/* withdraw every item with that key: a waiting one leaves the queue, a shown one closes; true when there was one */
+	function drop(key) {
+		let any = false;
+		for (let i = waiting.length - 1; i >= 0; i--) if (waiting[i].key === key) { waiting.splice(i, 1); any = true; }
+		if (now && now.key === key && el && !el.hidden) { el.hidden = true; any = true; }
+		return any;
+	}
+	/* first in line (capture): a press or a click on the dialog just replaced in place is not for its new keys */
+	for (const ev of ["pointerdown", "mousedown", "click"]) document.addEventListener(ev, e => {
+		if (Date.now() >= guardUntil || !el || !el.contains?.(e.target)) return;
+		e.preventDefault(); e.stopImmediatePropagation();
+	}, true);
+	return { show, closed, drop, waiting: () => waiting.length, get now() { return now; } };
 })();
 
 /* ---- shared/deskCaps.js ---- */
@@ -3228,9 +3245,9 @@ document.addEventListener("change",e=>{const id=e.target.id,v=e.target.value,tr=
 document.addEventListener("keydown",e=>{if(!(S.learn&&S.learnT&&/^[1-8]$/.test(e.key))||e.metaKey||e.ctrlKey||e.altKey||e.target.closest?.("input,select,textarea"))return;e.preventDefault();e.stopImmediatePropagation();learnBind(+e.key)},true);
 function leaveLearn(){S.learn=false;document.body.classList.remove("learn");renderTop();if(HOST.learning)HOST.learning(false)}
 Keys.bind({keys:["Escape"],group:"Anywhere",does:"Close the dialog",when:()=>dialogOpen(),field:true,run:()=>{$("#dlg").hidden=true}});
-Keys.bind({keys:["Z"],mod:"cmd",group:"Anywhere",does:"Undo",run:()=>undo()});
-Keys.bind({keys:["Z"],mod:"cmd+shift",group:"Anywhere",does:"Redo",run:()=>redo()});
-Keys.bind({keys:["Y"],mod:"cmd",group:"Anywhere",does:"Redo",run:()=>redo()});
+Keys.bind({keys:["Z"],mod:"cmd",group:"Anywhere",does:"Undo",modal:"panel",run:()=>undo()});
+Keys.bind({keys:["Z"],mod:"cmd+shift",group:"Anywhere",does:"Redo",modal:"panel",run:()=>redo()});
+Keys.bind({keys:["Y"],mod:"cmd",group:"Anywhere",does:"Redo",modal:"panel",run:()=>redo()});
 Keys.bind({keys:["C"],mod:"cmd",group:"Anywhere",does:"Copy (Sequence: the page shown of the track; Sound: the machine; Perform: the assign; Song: the row)",run:()=>secAction("copy")});
 Keys.bind({keys:["V"],mod:"cmd",group:"Anywhere",does:"Paste (Sequence: into every track marked for paste too)",run:()=>secAction("paste")});
 Keys.bind({keys:["Escape"],group:"Anywhere",does:"Leave LEARN",mapping:true,when:()=>S.mapping&&S.learn,run:()=>leaveLearn()});
@@ -3372,10 +3389,12 @@ new MutationObserver(()=>{if(!naQueued){naQueued=true;queueMicrotask(()=>{naQueu
 DeskCaps.guard({attr:"na",events:["pointerdown","click","change","wheel","keydown","dragstart"],say:t=>toast(t)});
 function disable(cap,why){NA[cap]=why||"";markNa()}
 function setReading(kind,slots){READING[kind]=new Set(slots);markNa()}
-/* start with nothing: no example kit, pattern, song or mappings */
-function startEmpty(){applyKit({...clearedKit(),multi:S.multi});S.tracks.forEach(t=>t.name=machName(t.m));applyPat(emptyPat(16));S.song=[{type:"end"}];S.songSel=0;
+/* start with nothing: no example kit, pattern, song or mappings. machineOnly (an engine reset): only the machine's
+   state goes (kit, pattern, song, slots, transport); the Control workspace (CC sources, links, MIDI track targets)
+   is the page's and the plug-in's, and stays */
+function startEmpty(machineOnly){applyKit({...clearedKit(),multi:S.multi});S.tracks.forEach(t=>t.name=machName(t.m));applyPat(emptyPat(16));S.song=[{type:"end"}];S.songSel=0;
  S.kits=Array.from({length:128},()=>({name:"",empty:true,data:null}));S.patInfo=Array.from({length:128},()=>({has:false,len:16}));S.patKit=Array(128).fill(0);S.patData={};S.workName="";
- S.kit=0;S.pat=0;S.queued=null;S.playing=false;S.step=-1;S.ctl.links=[];S.ctl.sources=S.ctl.sources.filter(x=>x.kind==="cc")}
+ S.kit=0;S.pat=0;S.queued=null;S.playing=false;S.step=-1;if(machineOnly)return;S.ctl.links=[];S.ctl.sources=S.ctl.sources.filter(x=>x.kind==="cc")}
 function setPatternSlot(p,{data,kit,has,len}){S.patKit[p]=kit;S.patInfo[p]={has,len};if(p===S.pat)applyPat(data);else S.patData[p]=data}
 function setKitSlot(k,{name,empty,data}){S.kits[k]={name,empty,data}}
 /* ===== The machine's documents, shown (DESIGN-UNIFY.md 4.3-4.5, phase 1) =====
@@ -3459,7 +3478,9 @@ function setLcd(bits){const el=$("#bootscr");if(!el)return;clearTimeout(lcdFadeT
  if(!el.classList.contains("fw"))return;el.classList.add("fading");lcdFadeT=setTimeout(()=>el.classList.remove("on","fw","fading"),460)}
 const dialogOpen=()=>!$("#dlg").hidden;
 /* the firmware screen (an ask with class "first" and the firmware text) closes when the host has a firmware again */
-function closeFirmwareDialog(){const d=$("#dlg");if(!d.hidden&&d.querySelector(".dlgbox.first .lcdbig"))d.hidden=true}
+/* the firmware runs: the no-ROM screen goes, shown or still waiting behind another dialog (only it: the SYSEX RECV
+   steps share its look, so the dialog is named by its key, Dlg in deskModal.js) */
+function closeFirmwareDialog(){Dlg.drop("firstRun")}
 /* SysEx import and export: the host's file dialogs and document writes; the example shows a pretend file */
 Syx.host={choose:()=>{if(HOST.syxChoose)return HOST.syxChoose();Syx.preview({ok:true,file:"example.syx",model:"Monomachine",fullBackup:false,problemCount:0,problems:[],items:{kit:[{slot:0,name:"SUPERWAVES",overwrites:true}],pattern:[{slot:0,name:"A01",kit:0,overwrites:true}],song:[],global:[]}})},
  exportAll:()=>{if(HOST.syxExport)return HOST.syxExport();toast("In the plug-in: a save dialog, then every document as one .syx.")},

@@ -178,8 +178,9 @@
 		lcdBits = null;
 		/* a modSet on its way to the old engine is never answered (as the MD page) */
 		modInFlight = 0;
-		/* the old engine's pattern, kit and song leave the screen (as at the start): the new engine's come as documents */
-		if (window.MMView) { V().setInput(false); V().startEmpty(); V().show(null, true); if (!V().busy()) V().render(); }
+		/* the old engine's pattern, kit and song leave the screen: the new engine's come as documents. The Control
+		   workspace stays (no mod message follows a machine restart): only the machine's state goes */
+		if (window.MMView) { V().setInput(false); V().startEmpty(true); V().show(null, true); if (!V().busy()) V().render(); }
 		markReading();
 		showEngine();
 	}

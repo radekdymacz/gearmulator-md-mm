@@ -42,7 +42,8 @@ function renderTop() {
 	Boot.update({ state: bootState, machine: "Machinedrum" });
 	/* HW MIDI with no machine answering: a card over the dimmed workspace says what to do (deskBoot.js) */
 	Boot.midi({ state: { hwConnecting: "connecting", hwLost: "lost" }[V.lifecycle] || null, machine: "Machinedrum", text: V.lifecycleText });
-	if ($("#dlg").dataset.first === "1") { $("#dlg").hidden = true; $("#dlg").dataset.first = ""; }
+	/* the start-up card is the no-ROM screen: the old one goes, shown or still waiting behind another dialog (Dlg, deskModal.js) */
+	Dlg.drop("first:1"); if ($("#dlg").hidden) $("#dlg").dataset.first = "";
 }
 
 /* The engine label in the LCD shows the engine's real state (mockup v48), from the device:
@@ -187,8 +188,8 @@ function onTelemetry(m) {
 	   wrap, then it is muted again, which keeps the take (Freeze). The mutes are the machine's. */
 	if (prev >= 0 && S.step >= 0 && S.step < prev) for (const n in S.capture) {
 		const r = recTrack(+n);
-		if (S.capture[n] === "armed") { S.capture[n] = "rec"; if (r >= 0) setMute(r, false); }
-		else { delete S.capture[n]; if (r >= 0) setMute(r, true); toast("RAM " + n + " captured and frozen."); if (S.ws === "sampler") render(); }
+		if (S.capture[n] === "armed") { S.capture[n] = "rec"; if (r >= 0) userMute(r, false); }
+		else { delete S.capture[n]; if (r >= 0) userMute(r, true); toast("RAM " + n + " captured and frozen."); if (S.ws === "sampler") render(); }
 	}
 	const pp = Math.floor(Math.max(0, S.step) / 16);
 	if (S.ws === "mix" && S.step >= 0) V.tracks.forEach((t, i) => { if (t.trigs[S.step] && audible(i)) { const l = document.querySelector(`.act[data-act="${i}"]`); if (l) { l.classList.add("on"); setTimeout(() => l.classList.remove("on"), 90); } } });

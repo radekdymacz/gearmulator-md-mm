@@ -6,7 +6,8 @@ const Keys = (() => {
 	const norm = e => e.key === " " ? "Space" : e.key.length === 1 ? e.key.toUpperCase() : e.key;
 	/* {keys: ["Z"], mod: "cmd"|"alt"|"shift"|"cmd+shift"|"", group, does (text, or () => text when it shows state), when?: () => bool,
 	   run?: e => void, field?: true, hidden?: true (dispatched, but another entry describes it in the ? overlay),
-	   modal?: "keyspop" (it also runs while that dialog is the top one; every other entry is off while one is open),
+	   modal?: "keyspop" (it also runs while that dialog is the top one; every other entry is off while one is open)
+	     or "panel" (it also runs over any panel: the library, GLOBAL, AUDIO / MIDI; never over a question),
 	   code?: "KeyR" (matched on the physical key, e.code: with Alt or Cmd held macOS types another character)} */
 	function bind(entry) { list.push(Object.assign({ mod: "", when: null, field: false }, entry)); }
 	function modOf(e) { return [e.metaKey || e.ctrlKey ? "cmd" : "", e.altKey ? "alt" : "", e.shiftKey ? "shift" : ""].filter(Boolean).join("+"); }
@@ -16,12 +17,14 @@ const Keys = (() => {
 	   button, Backspace and the digits are its field's. Only an entry naming that dialog (modal) runs.
 	   free(): no dialog open and no text field focused, the rule of the keys that play and act on tracks. */
 	const modalTop = () => typeof Modal !== "undefined" && Modal.top ? Modal.top() : null;
+	const modalKind = () => typeof Modal !== "undefined" && Modal.kind ? Modal.kind() : null;
+	const passes = (b, top) => b.modal === top || (b.modal === "panel" && modalKind() === "panel");
 	const free = () => !modalTop() && !document.activeElement?.closest?.("input,select,textarea,[contenteditable]");
 	document.addEventListener("keydown", e => {
 		const inField = e.target.closest?.("input,select,textarea,[role=slider]"), k = norm(e), m = modOf(e), top = modalTop();
 		for (const b of list) {
 			if (!b.run || !(b.code ? e.code === b.code : b.keys.includes(k))) continue;
-			if (top && b.modal !== top) continue;
+			if (top && !passes(b, top)) continue;
 			const want = b.mod || "", ok = want === m || (want === "" && m === "shift" && k.length === 1 && !/[A-Z]/.test(k));
 			if (!ok || (inField && !b.field) || (b.when && !b.when())) continue;
 			e.preventDefault(); b.run(e); return;

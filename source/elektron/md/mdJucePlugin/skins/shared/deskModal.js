@@ -106,7 +106,7 @@ const Modal = (() => {
 	/* a title set later (a state's new words) moves to the tip too */
 	new MutationObserver(ms => { for (const m of ms) { const el = m.target; if (el.title && el.closest?.(".lcdpanel")) { el.dataset.tip = el.title; el.removeAttribute("title"); } } })
 		.observe(document.body, { attributes: true, attributeFilter: ["title"], subtree: true });
-	return { open: () => stack.map(d => d.el.id), top: () => top()?.el.id || null };
+	return { open: () => stack.map(d => d.el.id), top: () => top()?.el.id || null, kind: () => top()?.kind || null };
 })();
 /* The question dialog (#dlg) of both editors is one at a time, and what wants it next waits its turn: nothing
    replaces what it shows. A page shows a question as an item {draw, notice?, cancel?, key?}: draw() writes the
@@ -114,10 +114,12 @@ const Modal = (() => {
    goes before every other item, and one that shows when it comes waits behind it and is drawn again after; a
    notice is always answered: closed in any other way than its own keys, cancel() answers it (its last key).
    key: an item already showing or waiting with the same key is not added again. The dialog closes by its
-   hidden attribute, whoever sets it; then the next item is drawn. */
+   hidden attribute, whoever sets it; then the next item is drawn. drop(key) withdraws an item that is no longer
+   wanted (the no-ROM screen once a firmware runs), shown or waiting. A notice drawn over a dialog in place takes
+   no click for a moment (GUARD_MS): a click meant for the old dialog's key must not answer the plug-in. */
 const Dlg = (() => {
-	const waiting = [];
-	let now = null, el = null;
+	const waiting = [], GUARD_MS = 300;
+	let now = null, el = null, guardUntil = 0;
 	const dlg = () => document.querySelector("#dlg");
 	/* the item shown is gone (the dialog was closed): a notice not answered by its keys is answered now */
 	function gone() { const was = now; now = null; if (was && was.notice && was.cancel && !was.done) { was.cancel(); was.done = true; } }
@@ -137,10 +139,22 @@ const Dlg = (() => {
 		const open = !!el && !el.hidden;
 		if (item.key && ((open && now && now.key === item.key) || waiting.some(w => w.key === item.key))) return;
 		if (!open) { draw(item); return; }
-		if (item.notice && !(now && now.notice)) { if (now) waiting.unshift(now); now = null; draw(item); return; }
+		if (item.notice && !(now && now.notice)) { if (now) waiting.unshift(now); now = null; guardUntil = Date.now() + GUARD_MS; draw(item); return; }
 		/* notices in their order, before every other item */
 		const at = item.notice ? waiting.findIndex(w => !w.notice) : -1;
 		at < 0 ? waiting.push(item) : waiting.splice(at, 0, item);
 	}
-	return { show, closed, waiting: () => waiting.length, get now() { return now; } };
+	/* withdraw every item with that key: a waiting one leaves the queue, a shown one closes; true when there was one */
+	function drop(key) {
+		let any = false;
+		for (let i = waiting.length - 1; i >= 0; i--) if (waiting[i].key === key) { waiting.splice(i, 1); any = true; }
+		if (now && now.key === key && el && !el.hidden) { el.hidden = true; any = true; }
+		return any;
+	}
+	/* first in line (capture): a press or a click on the dialog just replaced in place is not for its new keys */
+	for (const ev of ["pointerdown", "mousedown", "click"]) document.addEventListener(ev, e => {
+		if (Date.now() >= guardUntil || !el || !el.contains?.(e.target)) return;
+		e.preventDefault(); e.stopImmediatePropagation();
+	}, true);
+	return { show, closed, drop, waiting: () => waiting.length, get now() { return now; } };
 })();

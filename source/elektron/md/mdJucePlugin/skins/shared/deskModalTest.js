@@ -11,12 +11,15 @@ const check = (ok, what) => { console.log((ok ? "  ok   " : "  FAIL ") + what); 
 
 const stub = () => new Proxy(function () { }, { get: (t, k) => k === "style" || k === "classList" || k === "dataset" ? stub() : k === "hidden" ? true : stub(), apply: () => stub(), set: () => true });
 const dlg = { hidden: true, shows: "", querySelector: () => null, querySelectorAll: () => [], classList: { add() { }, remove() { } }, style: { setProperty() { } },
-	hasAttribute: () => true, setAttribute() { }, contains: () => false, id: "dlg" };
+	hasAttribute: () => true, setAttribute() { }, contains: t => t === dlgButton, id: "dlg" };
+const dlgButton = {};
 const observers = [];
 class MutationObserver { constructor(f) { this.f = f; } observe(el) { observers.push({ el, f: this.f }); } }
-const document = { addEventListener() { }, createElement: () => stub(), body: { appendChild() { } }, readyState: "complete", documentElement: { classList: { toggle() { } } },
+const capture = {};
+const document = { addEventListener: (type, f, cap) => { if (cap) (capture[type] = capture[type] || []).push(f); }, createElement: () => stub(), body: { appendChild() { } }, readyState: "complete", documentElement: { classList: { toggle() { } } },
 	querySelector: s => s === "#dlg" ? dlg : null, activeElement: null };
-const ctx = vm.createContext({ document, MutationObserver, console, setTimeout: () => 0, clearTimeout() { }, innerWidth: 1440, window: {} });
+let clock = 1000;
+const ctx = vm.createContext({ document, MutationObserver, console, Date: { now: () => clock }, setTimeout: () => 0, clearTimeout() { }, innerWidth: 1440, window: {} });
 vm.runInContext(fs.readFileSync(path.join(__dirname, "deskModal.js"), "utf8") + "\nthis.Dlg = Dlg;", ctx);
 const Dlg = ctx.Dlg;
 /* the dialog closed by whoever (a key's click, Esc, the page): the hidden attribute, then its observers */
@@ -70,6 +73,36 @@ close();
 const n4 = notice("notice C", 1); Dlg.show(n4); n4.answer(0);
 dlg.hidden = true; Dlg.show(ask("follow-up")); observers.forEach(o => o.f([]));
 check(dlg.shows === "follow-up" && !dlg.hidden && answers.filter(a => a.startsWith("notice C")).length === 1, "a question asked as the dialog closes shows at once; the notice is answered once");
+
+/* ---- drop: an item no longer wanted is withdrawn, waiting or shown (the no-ROM screen once a firmware runs) ---- */
+while (Dlg.waiting()) close();
+close();
+const n5 = notice("notice D", 1);
+Dlg.show(n5); Dlg.show(ask("no ROM", { key: "firstRun" }));
+check(Dlg.waiting() === 1, "the no-ROM screen waits behind a notice");
+check(Dlg.drop("firstRun") && Dlg.waiting() === 0 && dlg.shows === "notice D", "drop withdraws it from the queue; the notice stays");
+n5.answer(0); close();
+check(dlg.hidden && dlg.shows === "notice D", "after the notice nothing comes: the no-ROM screen never appears");
+Dlg.show(ask("no ROM", { key: "firstRun" }));
+check(!dlg.hidden && dlg.shows === "no ROM", "shown again");
+Dlg.drop("firstRun"); observers.forEach(o => o.f([]));
+check(dlg.hidden, "drop closes it when it shows");
+Dlg.show(ask("SYSEX RECV", { key: "recv" }));
+check(!Dlg.drop("firstRun") && !dlg.hidden && dlg.shows === "SYSEX RECV", "drop of the no-ROM screen leaves the SYSEX RECV steps alone (they share its look)");
+close();
+
+/* ---- a notice drawn over a dialog in place takes no click for a moment ---- */
+const clickOn = () => { let stopped = false; const e = { target: dlgButton, preventDefault() { }, stopImmediatePropagation() { stopped = true; } }; (capture.click || []).forEach(f => { if (!stopped) f(e); }); return stopped; };
+Dlg.show(ask("load K05?"));
+clock += 1000;
+check(!clickOn(), "a click on a question's key goes through");
+const n6 = notice("notice E", 1); Dlg.show(n6);
+check(dlg.shows === "notice E" && clickOn(), "the notice just drawn over it in place: the click meant for the old key is eaten");
+clock += 299; check(clickOn(), "still within 300 ms: eaten");
+clock += 2; check(!clickOn(), "after 300 ms the notice's keys take clicks");
+n6.answer(0); close();
+while (Dlg.waiting()) close();
+close();
 
 console.log(failures ? `${failures} failure(s)` : "deskModalTest: all passed");
 process.exit(failures ? 1 : 0);
