@@ -819,7 +819,9 @@ const DeskCaps = (() => {
      Boot.midi({state, machine, text})   HW MIDI with no machine answering: state "connecting" | "lost" | null. Not
                                          modal: a card over the dimmed workspace (body.deskmidi) says what is wrong and
                                          what to do, with AUDIO / MIDI… (openAudio, deskAudio.js) and Use the emulator
-                                         (the engine menu's "emu" entry, as if chosen there); the header stays live
+                                         (the engine menu's "emu" entry, as if chosen there); the header stays live.
+                                         AUDIO / MIDI… shows exactly when the engine menu offers its AUDIO entry (not in
+                                         a DAW); a page that changes that entry calls Boot.midiRefresh()
      Boot.host = {chooseRom(), revealRom(), recheck(), removeRom(info), say(text)}   the app's host calls
    A file dragged onto the page is not opened by the web view (that would replace the page): the card says to click
    the button instead. */
@@ -939,8 +941,10 @@ const Boot = (() => {
  <p class="bmhint" id="bmhint"></p>
  <div class="bmkeys"><button type="button" class="cream" data-bootmidi="audio">AUDIO / MIDI…</button><button type="button" data-bootmidi="emu">Use the emulator</button></div>`;
 	document.body.appendChild(wait);
-	const emuOption = () => { const o = document.querySelector('#engsel option[value="emu"]'); return o && !o.disabled ? o : null; };
+	const menuOption = v => { const o = document.querySelector(`#engsel option[value="${v}"]`); return o && !o.disabled && !o.hidden ? o : null; };
+	let midiLast = null;
 	function midi(o) {
+		midiLast = o;
 		const st = o && (o.state === "connecting" || o.state === "lost") ? o.state : null;
 		document.body.classList.toggle("deskmidi", !!st);
 		wait.hidden = !st;
@@ -950,21 +954,21 @@ const Boot = (() => {
 		wait.querySelector("#bmt").textContent = st === "lost" ? `No ${m} answers on MIDI` : `Connecting to the ${m}…`;
 		wait.querySelector("#bmtext").textContent = o.text || (st === "lost" ? `The ${m} has not answered on the MIDI in and out.` : `Waiting for the ${m} to answer on the MIDI in and out.`);
 		wait.querySelector("#bmhint").textContent = st === "lost"
-			? `Check both MIDI cables and the ${m}'s MIDI channel, and choose its ports in AUDIO / MIDI (in a DAW: route the track's MIDI to and from it). Editing waits until it answers.`
+			? `Choose its MIDI in and out in AUDIO / MIDI (in a DAW: route the track's MIDI to and from it). Editing waits until it answers.`
 			: `Editing starts when it answers. Not connected yet? Choose its MIDI in and out in AUDIO / MIDI (in a DAW: route the track's MIDI to and from it).`;
-		wait.querySelector('[data-bootmidi="audio"]').hidden = typeof openAudio !== "function";
-		wait.querySelector('[data-bootmidi="emu"]').hidden = !emuOption();
+		wait.querySelector('[data-bootmidi="audio"]').hidden = typeof openAudio !== "function" || !menuOption("audio");
+		wait.querySelector('[data-bootmidi="emu"]').hidden = !menuOption("emu");
 	}
 	wait.addEventListener("click", e => {
 		const k = e.target.closest("[data-bootmidi]"); if (!k) return;
 		e.stopPropagation();
-		if (k.dataset.bootmidi === "audio" && typeof openAudio === "function") openAudio();
+		if (k.dataset.bootmidi === "audio" && typeof openAudio === "function" && menuOption("audio")) openAudio();
 		else if (k.dataset.bootmidi === "emu") {
-			const sel = document.getElementById("engsel"); if (!sel || !emuOption()) return;
+			const sel = document.getElementById("engsel"); if (!sel || !menuOption("emu")) return;
 			sel.value = "emu"; sel.dispatchEvent(new Event("change", { bubbles: true }));
 		}
 	});
-	return { update, lcd, rom, showInstalled, midi, host: null, state: () => shown };
+	return { update, lcd, rom, showInstalled, midi, midiRefresh: () => midi(midiLast), host: null, state: () => shown };
 })();
 
 /* ---- shared/deskSyx.js ---- */
@@ -3385,7 +3389,7 @@ function setEngines(list,current){const sel=$("#engsel");if(!sel)return;const ow
  for(const e of list){let o=sel.querySelector(`option[value="${e.id}"]`);if(!o){o=document.createElement("option");o.value=e.id}sel.insertBefore(o,first);o.textContent=e.label;o.disabled=!e.available;o.title=e.available?"":e.reason||""}
  if(current){sel.value=current;S.engine=current}}
 /* the AUDIO / MIDI entry of the engine menu: only where the host has the devices (a standalone) */
-function setAudioEntry(on){const o=document.querySelector('#engsel option[value="audio"]');if(o)o.hidden=o.disabled=!on}
+function setAudioEntry(on){const o=document.querySelector('#engsel option[value="audio"]');if(o)o.hidden=o.disabled=!on;Boot.midiRefresh()}
 /* the app sources and their links as the host's engine took them (ctlSetup() shape); the knob rows and their links stay */
 function setCtlSetup({sources,links}){const cc=S.ctl.sources.filter(x=>x.kind==="cc"),ccIds=new Set(cc.map(x=>x.id)),old=S.ctl.sources;
  S.ctl.sources=[...cc,...sources.map(x=>({...x,val:old.find(o=>o.id===x.id)?.val??64}))];

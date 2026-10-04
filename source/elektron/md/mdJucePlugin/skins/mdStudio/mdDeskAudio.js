@@ -12,6 +12,7 @@ function audioMeter(on) { Bridge.send({ op: "audioMeter", on: !!on }); }
 function showAudioEntry() {
 	const o = document.querySelector('#engsel option[value="audio"]');
 	if (o) o.hidden = o.disabled = !(audioDocument && audioDocument.standalone);
+	Boot.midiRefresh();	/* the HW MIDI card's AUDIO / MIDI key follows this entry */
 }
 Bridge.onMessage(m => {
 	if (m.type === "audio") { audioDocument = m.doc; showAudioEntry(); if (AP.open) drawAudio(); }
