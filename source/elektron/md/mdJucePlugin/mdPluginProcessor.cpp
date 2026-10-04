@@ -1,5 +1,6 @@
 #include "mdPluginProcessor.h"
 #include "juceUiLib/messageBox.h"
+#include "juceUiLib/messageRoute.h"
 #include "mdDeskHost.h"
 
 #include "mdController.h"
@@ -786,8 +787,11 @@ namespace mdJucePlugin
 		updateHostDisplay(juce::AudioProcessorListener::ChangeDetails()
 			.withNonParameterStateChanged(true));
 		if(getActiveEditor())
+		{
+			const genericUI::messageRoute::OwnerScope owner(static_cast<const void*>(this));	// this instance's window shows it
 			genericUI::MessageBox::showOk(genericUI::MessageBox::Icon::Warning,	// the page shows it (messageRoute.h)
 				std::string(productName(m_model)) + " state restore", _error);
+		}
 	}
 
 	void AudioPluginAudioProcessor::recordStandaloneStartupDiagnostics()

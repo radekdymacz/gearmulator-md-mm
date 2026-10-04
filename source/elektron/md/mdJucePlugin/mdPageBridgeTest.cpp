@@ -1,9 +1,13 @@
 // The page bridge's transport on the plug-in's side (mdPageBridge.h, review finding 13): the page's long batches
-// joined from their pieces, and the outbox split into gm.recv calls at message boundaries. Pure.
+// joined from their pieces, and the outbox split into numbered gm.recv calls at message boundaries. Pure. Also
+// the route of the plug-in's notices to the page (juceUiLib/messageRoute.h): one sink per open window.
 #include "mdPageBridge.h"
+
+#include "juceUiLib/messageRoute.h"
 
 #include <cstdio>
 #include <string>
+#include <vector>
 
 namespace
 {
@@ -51,23 +55,80 @@ int main()
 			m.set("note", std::string(100, 'a'));
 			outbox.push_back(m);
 		}
-		const auto all = bridge::recvScripts(outbox);
-		check(all.size() == 1 && all[0] == "javascript:window.gm&&gm.recv(" + json::write(json::Value(json::Value::Array(outbox.begin(), outbox.end()))) + ")",
-			"an outbox that fits: one call, the same text as before");
-		const auto split = bridge::recvScripts(outbox, 300);
+		const auto all = bridge::recvScripts(outbox, 1);
+		check(all.size() == 1 && all[0] == "javascript:window.gm&&gm.recv(" + json::write(json::Value(json::Value::Array(outbox.begin(), outbox.end()))) + ",1)",
+			"an outbox that fits: one call, the messages as json::write of the array, then the batch number");
+		const auto split = bridge::recvScripts(outbox, 7, 300);
 		bool order = split.size() == 3;
 		std::string rejoined;
-		for(const auto& s : split)
+		for(size_t i = 0; i < split.size(); ++i)
 		{
+			const auto& s = split[i];
 			const auto open = std::string("javascript:window.gm&&gm.recv([");
-			order = order && s.rfind(open, 0) == 0 && s.size() <= open.size() + 300 + 2;
-			rejoined += (rejoined.empty() ? "" : ",") + s.substr(open.size(), s.size() - open.size() - 2);
+			const auto close = "]," + std::to_string(7 + i) + ")";
+			order = order && s.rfind(open, 0) == 0 && s.size() >= close.size() && s.compare(s.size() - close.size(), close.size(), close) == 0
+				&& s.size() <= open.size() + 300 + close.size();
+			rejoined += (rejoined.empty() ? "" : ",") + s.substr(open.size(), s.size() - open.size() - close.size());
 		}
 		check(order && "[" + rejoined + "]" == json::write(json::Value(json::Value::Array(outbox.begin(), outbox.end()))),
-			"a long outbox: calls of at most the limit, in order, every message once");
-		const auto big = bridge::recvScripts(outbox, 10);
-		check(big.size() == 5, "a message longer than the limit goes alone");
-		check(bridge::recvScripts({}).empty(), "nothing to send: no call");
+			"a long outbox: calls of at most the limit, in order, numbered on from the first, every message once");
+		const auto big = bridge::recvScripts(outbox, 1, 10);
+		check(big.size() == 5 && big[4].size() > 3 && big[4].compare(big[4].size() - 3, 3, ",5)") == 0, "a message longer than the limit goes alone, with its own number");
+		// what the host does: the next flush goes on from the last number, so a batch the view replays (JUCE 7's
+		// reloadLastURL) carries a number the page has had
+		uint64_t next = 1;
+		const auto first = bridge::recvScripts(outbox, next);
+		next += first.size();
+		const auto second = bridge::recvScripts(outbox, next, 300);
+		check(next == 2 && second.size() == 3 && second[0].find("],2)") != std::string::npos && second[2].find("],4)") != std::string::npos,
+			"successive flushes: the numbers go on, never repeat");
+		check(bridge::recvScripts({}, 1).empty(), "nothing to send: no call (and no number used)");
+	}
+	// notices: each window its own instance's; closing one never takes another's (release review 2026-10-04, S4)
+	{
+		namespace route = genericUI::messageRoute;
+		int ownerA = 0, ownerB = 0;
+		const void* a = &ownerA;
+		const void* b = &ownerB;
+		std::vector<std::string> toA, toB;
+		const auto notice = [](const std::string& _t) { return route::Notice{_t, "", {"OK"}, {}}; };
+		const auto from = [&](const void* _owner, const std::string& _t)
+		{
+			const route::OwnerScope scope(_owner);
+			return route::offer(notice(_t));
+		};
+		check(!route::offer(notice("off")), "the route off: the native box shows");
+		route::enable();
+		check(from(a, "a1"), "no window open: the notice waits");
+		auto winA = route::attach(a, [&](route::Notice _n) { toA.push_back(_n.title); });
+		check(toA.size() == 1 && toA[0] == "a1", "A's window opens: A's waiting notice goes to it");
+		auto winB = route::attach(b, [&](route::Notice _n) { toB.push_back(_n.title); });
+		check(from(a, "a2") && from(b, "b1") && toA.back() == "a2" && toB.size() == 1 && toB[0] == "b1",
+			"two windows: each instance's notices go to its own window");
+		check(route::offer(notice("anon")) && toB.back() == "anon", "a notice of nobody's goes to the newest window");
+		winA.reset();
+		check(from(b, "b2") && toB.back() == "b2", "closing A's window leaves B's sink in place");
+		check(from(a, "a3") && toA.back() == "a2" && toB.back() == "b2", "A's notice while its window is closed waits (not B's)");
+		auto winA2 = route::attach(a, [&](route::Notice _n) { toA.push_back(_n.title); });
+		check(toA.back() == "a3", "A's window opens again: the notice that waited reaches it");
+		winA2.reset();
+		winB.reset();
+		route::forget(a);
+		size_t taken = 0;
+		while(taken < route::g_maxWaiting + 4 && from(b, "w"))
+			++taken;
+		check(taken == route::g_maxWaiting, "past the waiting limit the native box shows (never dropped silently)");
+		route::forget(b);
+		check(from(b, "after forget"), "an instance gone: its waiting notices go, the room is free again");
+		route::forget(b);
+		{
+			route::Attachment moved = route::attach(a, [&](route::Notice _n) { toA.push_back(_n.title); });
+			route::Attachment other = std::move(moved);
+			check(!moved.attached() && other.attached() && from(a, "moved") && toA.back() == "moved", "a moved attachment keeps the sink");
+		}
+		const auto before = toA.size();
+		check(from(a, "gone") && toA.size() == before, "the attachment destroyed: its sink is gone");
+		route::forget(a);
 	}
 	if(g_failures)
 	{

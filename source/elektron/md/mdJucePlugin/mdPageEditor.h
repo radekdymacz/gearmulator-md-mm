@@ -4,6 +4,7 @@
 #include "jucePluginEditorLib/pluginEditor.h"
 
 #include "elektronData/json.h"
+#include "juceUiLib/messageRoute.h"
 
 #include "juce_gui_basics/juce_gui_basics.h"
 
@@ -57,5 +58,6 @@ namespace mdJucePlugin
 		int m_noticeId = 0;
 		std::shared_ptr<int> m_alive = std::make_shared<int>(0);	// callbacks that outlive the window check it
 		std::map<int, std::function<void(int)>> m_notices;	// the plug-in's questions the page has not answered yet
+		genericUI::messageRoute::Attachment m_noticeRoute;	// this window's sink for its instance's notices (messageRoute.h)
 	};
 }

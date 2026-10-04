@@ -37,7 +37,7 @@ namespace mdJucePlugin
 	PageEditor::~PageEditor()
 	{
 		stopTimer();
-		genericUI::messageRoute::setSink({});
+		m_noticeRoute.reset();	// this window's sink only; another instance's open window keeps its own
 		m_diagnostics.reset();
 		if(m_session)
 		{
@@ -66,8 +66,10 @@ namespace mdJucePlugin
 			m_session->setLog([this](const std::string& _l) { if(m_page) m_page->log(juce::String(_l)); });
 		if(m_session)
 			m_session->attach([this](const json::Value& _m) { m_page->send(_m); });
-		// The plug-in's questions and warnings are the page's modals, not native alerts (messageRoute.h).
-		genericUI::messageRoute::setSink([this, alive = std::weak_ptr<int>(m_alive)](genericUI::messageRoute::Notice _n)
+		// The plug-in's questions and warnings are the page's modals, not native alerts (messageRoute.h). This window
+		// takes its own instance's (and nobody's while it is the newest window).
+		m_noticeRoute = genericUI::messageRoute::attach(static_cast<const void*>(&processor),
+			[this, alive = std::weak_ptr<int>(m_alive)](genericUI::messageRoute::Notice _n)
 		{
 			juce::MessageManager::callAsync([this, alive, n = std::move(_n)]() mutable
 			{

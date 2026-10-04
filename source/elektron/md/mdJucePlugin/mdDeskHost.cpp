@@ -33,6 +33,7 @@ namespace mdJucePlugin
 
 	DeskHost::~DeskHost()
 	{
+		genericUI::messageRoute::forget(static_cast<const void*>(&m_processor));	// its notices that wait for a window
 		m_editFlowDriver.reset();
 	}
 
