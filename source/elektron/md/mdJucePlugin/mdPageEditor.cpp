@@ -52,6 +52,8 @@ namespace mdJucePlugin
 	{
 		jucePluginEditorLib::Editor::create();
 		auto& processor = dynamic_cast<AudioPluginAudioProcessor&>(getProcessor());
+		m_noticeOwner = static_cast<const void*>(&processor);
+		const genericUI::messageRoute::OwnerScope owner(m_noticeOwner);
 		m_session = processor.getDeskHost()->session();
 		m_page = std::make_unique<WebPageHost>(m_session ? m_session->pageSpec() : WebPageHost::Spec{},
 			[this](const std::string& _name)
@@ -68,13 +70,21 @@ namespace mdJucePlugin
 			m_session->attach([this](const json::Value& _m) { m_page->send(_m); });
 		// The plug-in's questions and warnings are the page's modals, not native alerts (messageRoute.h). This window
 		// takes its own instance's (and nobody's while it is the newest window).
-		m_noticeRoute = genericUI::messageRoute::attach(static_cast<const void*>(&processor),
-			[this, alive = std::weak_ptr<int>(m_alive)](genericUI::messageRoute::Notice _n)
+		m_noticeRoute = genericUI::messageRoute::attach(m_noticeOwner,
+			[this, alive = std::weak_ptr<int>(m_alive), noticeOwner = m_noticeOwner](genericUI::messageRoute::Notice _n)
 		{
-			juce::MessageManager::callAsync([this, alive, n = std::move(_n)]() mutable
+			juce::MessageManager::callAsync([this, alive, noticeOwner, n = std::move(_n)]() mutable
 			{
 				if(alive.expired() || !m_page)
+				{
+					// The window closed before it could show it: back to the route (buttons and answer kept), for
+					// this instance's next window. When too many wait, the native box shows the text.
+					const genericUI::messageRoute::OwnerScope owner(noticeOwner);
+					const auto title = n.title, text = n.text;
+					if(!genericUI::messageRoute::offer(std::move(n)))
+						genericUI::MessageBox::showOk(genericUI::MessageBox::Icon::Warning, title, text);
 					return;
+				}
 				const int id = ++m_noticeId;
 				json::Value m = json::Value::object();
 				m.set("type", "notice");
@@ -102,6 +112,7 @@ namespace mdJucePlugin
 
 	void PageEditor::onPageMessage(const json::Value& _message)
 	{
+		const genericUI::messageRoute::OwnerScope owner(m_noticeOwner);
 		// deskHost's table says who acts (its actor column): the window for its menu and the AUDIO /
 		// MIDI panel, the session for the rest.
 		if(const auto* row = deskHost::commands().find(deskCore::opOf(_message)); row && row->handler.actor == deskHost::Actor::Window)
@@ -157,6 +168,7 @@ namespace mdJucePlugin
 		m_chooser->launchAsync(juce::FileBrowserComponent::openMode | juce::FileBrowserComponent::canSelectFiles,
 			[this](const juce::FileChooser& _c)
 			{
+				const genericUI::messageRoute::OwnerScope owner(m_noticeOwner);
 				const auto f = _c.getResult();
 				if(f.existsAsFile())
 					m_session->installRom(f);
@@ -173,6 +185,7 @@ namespace mdJucePlugin
 		m_chooser->launchAsync(juce::FileBrowserComponent::openMode | juce::FileBrowserComponent::canSelectFiles,
 			[this, _slot](const juce::FileChooser& _c)
 			{
+				const genericUI::messageRoute::OwnerScope owner(m_noticeOwner);
 				const auto f = _c.getResult();
 				if(f.existsAsFile() && m_session)
 					m_session->loadSampleFile(_slot, f);
@@ -188,6 +201,7 @@ namespace mdJucePlugin
 			: juce::FileBrowserComponent::openMode | juce::FileBrowserComponent::canSelectFiles;
 		m_chooser->launchAsync(flags, [this, _save](const juce::FileChooser& _c)
 		{
+			const genericUI::messageRoute::OwnerScope owner(m_noticeOwner);
 			const auto f = _c.getResult();
 			if(f == juce::File() || !m_session)
 				return;
@@ -200,6 +214,7 @@ namespace mdJucePlugin
 
 	bool PageEditor::openAudioMidiSettings()
 	{
+		const genericUI::messageRoute::OwnerScope owner(m_noticeOwner);
 		if(!m_audio || !m_audio->standalone() || !m_page || !m_page->pageReady())
 			return false;
 		json::Value m = json::Value::object();
@@ -212,6 +227,7 @@ namespace mdJucePlugin
 
 	void PageEditor::timerCallback()
 	{
+		const genericUI::messageRoute::OwnerScope owner(m_noticeOwner);
 		layout();
 		if(m_audio)
 			m_audio->tick();

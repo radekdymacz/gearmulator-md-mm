@@ -59,5 +59,9 @@ namespace mdJucePlugin
 		std::shared_ptr<int> m_alive = std::make_shared<int>(0);	// callbacks that outlive the window check it
 		std::map<int, std::function<void(int)>> m_notices;	// the plug-in's questions the page has not answered yet
 		genericUI::messageRoute::Attachment m_noticeRoute;	// this window's sink for its instance's notices (messageRoute.h)
+		// This window's instance as the notice route knows it (the AudioPluginAudioProcessor's address, the same
+		// pointer the processor's own OwnerScope uses). Every entry point here runs in an OwnerScope of it, so a
+		// notice it raises goes to this window, not the newest one.
+		const void* m_noticeOwner = nullptr;
 	};
 }
