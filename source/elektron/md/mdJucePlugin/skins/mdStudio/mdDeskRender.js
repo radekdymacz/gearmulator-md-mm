@@ -24,6 +24,9 @@ function menuOpen() { return !$("#machpop")?.hidden || !$("#kpop")?.hidden; }
    once it ends (pendingRender) */
 const HOLDS = new Set(["value", "editor", "lane", "l2", "chop", "song", "paint", "mutePaint"]);
 function interacting() { const h = Held.now; return !!(h && HOLDS.has(h.kind)) || menuOpen(); }
+/* the one flush: a render held while a gesture ran is made when it ends, whichever gesture it was (a timer, so
+   the gesture's own end handler draws its row first; still held by a menu, it waits for the menu's close) */
+Held.onEnd(() => { if (pendingRender) scheduleRender(); });
 function scheduleRender() {
 	if (renderRaf) return;
 	/* A timer, not an animation frame: documents must land while the window is covered. */

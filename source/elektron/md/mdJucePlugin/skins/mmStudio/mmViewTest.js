@@ -311,6 +311,29 @@ const result = (m, ok = true, errors = []) => ({ type: "result", id: m.id, op: m
 	p.recv(fixture.docs);
 	check(S.swingAmt === fixture.golden.swingAmt, "the documents again: the view is theirs");
 }
+/* ---- a reset leaves nothing of the old engine on screen, and no modSet waiting (release review 2026-10-04, code-js S5) ---- */
+{
+	const fresh = page().S(), p = loaded(), S = p.S();
+	const steps = s => JSON.stringify(plain(s.tracks.map(t => t.steps))), kit = s => s.tracks.map(t => t.m).join();
+	check(steps(S) !== steps(fresh), "the fixture's pattern is on screen before the reset");
+	p.recv([{ type: "reset" }]);
+	check(steps(S) === steps(fresh) && kit(S) === kit(fresh) && S.workName === "", "after the reset (no machine yet: HW MIDI connecting) the old engine's pattern and kit are gone, as at the start");
+	/* a modSet on its way when the engine changes is never answered: the new engine's setup is taken */
+	const q = loaded(), Q = q.S();
+	const setup = { sources: [{ id: "L1", kind: "lfo", label: "LFO 1", SHAPE: 0, RATE: "1/4", DEPTH: 80 }], links: [] };
+	q.host.modulators(setup); q.run();
+	check(q.sent.some(m => m.op === "modSet"), "a modSet is on its way");
+	q.recv([{ type: "reset" }]);
+	const theirs = { schema: "mm-desk/modulators", version: 1, sources: [{ id: "R9", label: "RND 9", kind: "random", shape: 0, rate: "1", depth: 100, smooth: 40 }], links: [] };
+	q.recv([{ type: "mod", doc: theirs, values: [64], ccPerSecond: 0 }]);
+	check(q.win.MMView.ctlSetup().sources.some(x => x.id === "R9"), "after the reset the plug-in's setup is taken (the old modSet no longer holds it off)");
+	/* the same when the machine goes from not ready to ready */
+	const r = loaded();
+	r.host.modulators(setup); r.run();
+	r.recv([{ type: "machine", doc: machine({ input: false }) }, { type: "machine", doc: machine({ input: true }) }]);
+	r.recv([{ type: "mod", doc: theirs, values: [64], ccPerSecond: 0 }]);
+	check(r.win.MMView.ctlSetup().sources.some(x => x.id === "R9"), "not ready -> ready: the plug-in's setup is taken");
+}
 
 /* ---- the intent cases: the page's optimistic writes are the core's edit (DESIGN-UNIFY.md 4.2) ---- */
 {

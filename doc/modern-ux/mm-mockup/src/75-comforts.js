@@ -100,7 +100,8 @@ function liveRecord(){if(HOST.record)return HOST.record(true);S.rec=!S.rec;if(S.
 const KEYS_WHITE="ASDFGHJKL",KEYS_SEMIS=[0,2,4,5,7,9,11,12,14],KEYS_OCT=[-3,3],KEYS_VELS=[20,40,60,80,100,127],KEYS_BASE=48;
 const KB={oct:0,vel:100,held:new Map(),told:new Set()};
 function keyVel(v,d){const up=KEYS_VELS.find(x=>x>v),down=[...KEYS_VELS].reverse().find(x=>x<v);return d>0?up??KEYS_VELS[KEYS_VELS.length-1]:down??KEYS_VELS[0]}
-function kbOn(){return!dialogOpen()&&!LIB.open&&!AP.open&&$("#machpop").hidden&&$("#keyspop").hidden&&!document.activeElement?.closest?.("input,select,textarea,[contenteditable]")}
+/* the keys that play and act on tracks: no dialog or panel open, no text field focused (the one rule of both editors, deskKeys.js) */
+function kbOn(){return Keys.free()}
 function kbTell(k,t){if(KB.told.has(k))return;KB.told.add(k);toast(t)}
 function homeDown(e){if(e.repeat||KB.held.has(e.code))return;const t=S.sel,k=KEYS_WHITE.indexOf(e.code.replace(/^Key/,""));if(k<0)return;
  if(isMidiT(t)){kbTell("midi","The keys play the synth tracks: a MIDI track's notes go to the MIDI OUT only.");return}

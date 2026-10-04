@@ -132,7 +132,7 @@ main.addEventListener("pointermove", e => {
 	if (Held.as("lane")) { laneAt(e); return; }
 	const c = e.target.closest("canvas.ed"); if (c && ED[c.dataset.ed]) c.style.cursor = nearest(c, e) ? "grab" : "default";
 });
-function endDrag() { if (Held.end("editor")) redraw(); const drag = Held.end("value"); if (drag) drag.el.classList.remove("act"); endLaneDraw(); Gesture.end(); if (pendingRender) scheduleRender(); }
+function endDrag() { if (Held.end("editor")) redraw(); const drag = Held.end("value"); if (drag) drag.el.classList.remove("act"); endLaneDraw(); Gesture.end(); }
 /* P7: a gesture ends wherever the button comes up (a pointerup outside #main left the drag on: every later
    mouse move edited the value, and the page waited for the gesture to end before showing the machine again).
    A move with no button down ends it too, and so does leaving the window. */

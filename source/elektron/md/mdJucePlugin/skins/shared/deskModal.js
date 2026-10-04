@@ -108,3 +108,39 @@ const Modal = (() => {
 		.observe(document.body, { attributes: true, attributeFilter: ["title"], subtree: true });
 	return { open: () => stack.map(d => d.el.id), top: () => top()?.el.id || null };
 })();
+/* The question dialog (#dlg) of both editors is one at a time, and what wants it next waits its turn: nothing
+   replaces what it shows. A page shows a question as an item {draw, notice?, cancel?, key?}: draw() writes the
+   dialog and unhides it; a notice (a question the plug-in waits on: its callback runs only when it is answered)
+   goes before every other item, and one that shows when it comes waits behind it and is drawn again after; a
+   notice is always answered: closed in any other way than its own keys, cancel() answers it (its last key).
+   key: an item already showing or waiting with the same key is not added again. The dialog closes by its
+   hidden attribute, whoever sets it; then the next item is drawn. */
+const Dlg = (() => {
+	const waiting = [];
+	let now = null, el = null;
+	const dlg = () => document.querySelector("#dlg");
+	/* the item shown is gone (the dialog was closed): a notice not answered by its keys is answered now */
+	function gone() { const was = now; now = null; if (was && was.notice && was.cancel && !was.done) { was.cancel(); was.done = true; } }
+	function draw(item) { if (now && el && el.hidden) gone(); now = item; item.draw(); }
+	function closed() {
+		if (!el || !el.hidden) return;
+		gone();
+		if (!now && waiting.length && el.hidden) draw(waiting.shift());
+	}
+	function watch() {
+		const d = dlg(); if (!d || d === el) return;
+		el = d;
+		if (typeof MutationObserver !== "undefined") new MutationObserver(closed).observe(el, { attributes: true, attributeFilter: ["hidden"] });
+	}
+	function show(item) {
+		watch();
+		const open = !!el && !el.hidden;
+		if (item.key && ((open && now && now.key === item.key) || waiting.some(w => w.key === item.key))) return;
+		if (!open) { draw(item); return; }
+		if (item.notice && !(now && now.notice)) { if (now) waiting.unshift(now); now = null; draw(item); return; }
+		/* notices in their order, before every other item */
+		const at = item.notice ? waiting.findIndex(w => !w.notice) : -1;
+		at < 0 ? waiting.push(item) : waiting.splice(at, 0, item);
+	}
+	return { show, closed, waiting: () => waiting.length, get now() { return now; } };
+})();

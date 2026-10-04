@@ -69,14 +69,17 @@ const Gesture = (() => {
    "rotate" the rotate presses while Alt is down (their undo step g). interacting() (mdDeskRender.js) reads it. */
 const Held = (() => {
 	let now = null;
+	const enders = [];
 	return {
 		get now() { return now; },
 		begin(kind, v = {}) { now = Object.assign({ kind }, v); return now; },
 		as(kind) { return now && now.kind === kind ? now : null; },
 		/* the held value of that kind with these fields replaced (a new value), or null when another is held */
 		with(kind, v) { if (!now || now.kind !== kind) return null; now = Object.assign({}, now, v); return now; },
-		/* ends a gesture of that kind; returns its last value, or null */
-		end(kind) { if (!now || now.kind !== kind) return null; const was = now; now = null; return was; }
+		/* ends a gesture of that kind; returns its last value, or null. What waited for it (a render held while it
+		   ran, mdDeskRender.js) hears of it after its own end handler (onEnd). */
+		end(kind) { if (!now || now.kind !== kind) return null; const was = now; now = null; for (const f of enders) f(was); return was; },
+		onEnd(f) { enders.push(f); }
 	};
 })();
 /* Features that last over several edits (a GEN run, a MUTATE trial) hear of every edit sent, and end
@@ -225,7 +228,9 @@ function onAsk(m) {
 	const alts = (m.alternatives || []).map(a => [a.label, "cream", () => { (a.first || []).forEach(send); again(); }]);
 	ask(m.message || "Go on?", [...alts, [m.confirm || "Go on", "danger", again], ["Cancel", "", () => { }]]);
 }
-function ask(html, btns) { const d = $("#dlg"); d.innerHTML = `<div class="dlgbox" role="alertdialog" aria-modal="true"><p>${html}</p><div class="btnrow">${btns.map(([t, c], i) => `<button class="${c}" data-dlg="${i}">${t}</button>`).join("")}</div></div>`; d.hidden = false; d._btns = btns; d.querySelector(".btnrow button:last-child")?.focus(); }
+/* the question dialog: queued, never replacing what it shows (Dlg, skins/shared/deskModal.js); item: {notice, cancel, key} */
+function ask(html, btns, item = {}) { Dlg.show(Object.assign(item, { draw: () => drawAsk(html, btns) })); }
+function drawAsk(html, btns) { const d = $("#dlg"); d.dataset.first = ""; d.innerHTML = `<div class="dlgbox" role="alertdialog" aria-modal="true"><p>${html}</p><div class="btnrow">${btns.map(([t, c], i) => `<button class="${c}" data-dlg="${i}">${t}</button>`).join("")}</div></div>`; d.hidden = false; d._btns = btns; d.querySelector(".btnrow button:last-child")?.focus(); }
 
 /* Value access for every control: data-g group, data-n name, data-t track, data-f master fx */
 function ref(el) {
@@ -275,13 +280,16 @@ function secAction(kind) {
 }
 
 /* ===== The track keys (rail and Mix): mute, solo, select ===== */
-function setMute(i, on) { cmd("mute", { t: i, on }, undefined, [[["tracks", i, "mute"], on]]); }
-/* Solo is the page's idea: it mutes every other track on the machine, and un-solo restores the
-   mutes the user had set (S.userMutes). */
-function applySolo() {
-	const any = S.soloSet.size > 0;
-	V.tracks.forEach((t, i) => { const want = any ? !S.soloSet.has(i) : S.userMutes.has(i); if (t.mute !== want) setMute(i, want); });
-}
+/* the machine's mute of track i (shown at once: the machine's mutes, and the track's while no solo holds) */
+function setMute(i, on) { const w = [[["mutes", i], on]]; if (!S.soloSet.size) w.push([["tracks", i, "mute"], on]); cmd("mute", { t: i, on }, undefined, w); }
+/* Solo is the page's idea (mdDeskModel.js, soloTo / muteTo / soloWrites, as the MM page): it mutes every other
+   track on the machine; the user's mutes are the machine's when the first solo begins, M edits only them
+   during a solo, and the last solo let go gives them back to the machine. */
+function applySolo() { for (const [i, on] of soloWrites(S, V.mutes)) setMute(i, on); }
+/* the solo set becomes next (a new Set: solo is UI state the view reads, never mutated in place) */
+function setSolo(next) { Object.assign(S, soloTo(S, V.mutes, next)); V = view(); applySolo(); }
+/* M: track i muted or not, as the user means it (during a solo only the page's record; muteSet, mdDeskLive.js, is the gestures') */
+function userMute(i, on) { const u = muteTo(S, i, on); if (u) { S.userMutes = u; V = view(); } else setMute(i, on); }
 function select(i) { S.sel = i; if (!params(i).includes(S.lane)) S.lane = params(i).includes("FLTF") ? "FLTF" : params(i)[0] || "FLTF"; render(); }
 function refreshAudible() {
 	$$(".th").forEach(h => { const i = +h.dataset.sel; h.classList.toggle("off", !audible(i)); h.querySelector(".m").setAttribute("aria-pressed", V.tracks[i].mute); h.querySelector(".s").setAttribute("aria-pressed", V.tracks[i].solo); });
@@ -294,8 +302,8 @@ function clickTrackKeys(e) {
 	const mu = e.target.closest("[data-mute]"), so = e.target.closest("[data-solo]");
 	if (!mu && !so) return false;
 	const i = +(mu || so).dataset[mu ? "mute" : "solo"], t = V.tracks[i];
-	if (mu) { t.mute ? S.userMutes.delete(i) : S.userMutes.add(i); setMute(i, !t.mute); }
-	else { const next = new Set(S.soloSet); next.has(i) ? next.delete(i) : next.add(i); S.soloSet = next; V = view(); applySolo(); }	/* solo is UI state the view reads, replaced per gesture, never mutated in place */
+	if (mu) userMute(i, !t.mute);
+	else { const next = new Set(S.soloSet); next.has(i) ? next.delete(i) : next.add(i); setSolo(next); }
 	refreshAudible(); return true;
 }
 function clickSelect(e) {

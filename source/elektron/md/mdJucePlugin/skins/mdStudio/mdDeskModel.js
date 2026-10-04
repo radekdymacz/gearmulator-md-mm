@@ -243,7 +243,9 @@ function deriveView(docs, ui) {
 		songReload: !!(M.song && M.song.reloadNeeded), len: 16, length: 16, mult: "1X", swing: 50, accAmt: 0, accAll: false, slideAll: false };
 	for (const k in docs.kits) v.kitNames[k] = kitNameText(docs.kits[k].name);
 	if (K) v.kitNames[kit] = kitNameText(K.name);
-	const mutes = new Set(desk.mutes || []);
+	const mutes = new Set(desk.mutes || []), soloing = !!(ui.soloSet && ui.soloSet.size);
+	/* the machine's own mutes (16 booleans); a track's mute is the user's (below, soloMutes) */
+	v.mutes = Array.from({ length: 16 }, (_, i) => mutes.has(i));
 	if (P) {
 		v.len = P.totalLength;
 		v.length = P.length;
@@ -259,7 +261,7 @@ function deriveView(docs, ui) {
 		const m = kt ? kt.machine || "GND-EMPTY" : "GND-EMPTY";
 		const a = slots(m, cat);
 		const t = { name: nameOf(m, cat), m, model: kt ? kt.model : 0, fam: famOf(m, cat), syn: {}, fx: {}, rt: {}, level: kt ? kt.level : 0,
-			mute: mutes.has(i), solo: ui.soloSet ? ui.soloSet.has(i) : false, out: G ? (G.routing[i] === "MAIN" ? "MAIN" : G.routing[i]) : "MAIN",
+			mute: soloing ? !!(ui.userMutes && ui.userMutes.has(i)) : mutes.has(i), solo: soloing && ui.soloSet.has(i), out: G ? (G.routing[i] === "MAIN" ? "MAIN" : G.routing[i]) : "MAIN",
 			trigs: Array(64).fill(false), acc: new Set(), slide: new Set(), muteGroup: kt ? kt.muteGroup : null, trigGroup: kt ? kt.trigGroup : null };
 		if (kt) {
 			a.forEach((n, j) => {
@@ -296,6 +298,21 @@ function deriveView(docs, ui) {
 	v.song = song ? song.rows.map((r, i) => rowFromContract(r, i, p => lengthIn(docs, p))) : [{ type: "end" }];
 	v.songName = song ? song.name : "";
 	return v;
+}
+/* ---- mutes and solos (as the MM page): a track's mute is the user's. While no track is soloed the machine's
+   mutes are the user's (the view's track.mute is the machine's). A solo is the page's: it drives the machine's
+   mutes (every other track muted); the user's mutes are taken from the machine when the first solo begins, M
+   then edits only them (the M key shows them), and the last solo let go gives them back to the machine. Pure:
+   ui is {soloSet, userMutes}, mutes the machine's 16 booleans (view.mutes). ---- */
+const mutedSet = mutes => new Set(mutes.map((m, i) => m ? i : -1).filter(i => i >= 0));
+/* the solo set becomes next: the UI's new {soloSet, userMutes} */
+function soloTo(ui, mutes, next) { return { soloSet: next, userMutes: ui.soloSet.size ? ui.userMutes : mutedSet(mutes) }; }
+/* M on track i (on: muted): during a solo the user's new mutes (nothing goes to the machine), else null (the machine's mute) */
+function muteTo(ui, i, on) { if (!ui.soloSet.size) return null; const u = new Set(ui.userMutes); on ? u.add(i) : u.delete(i); return u; }
+/* the machine mutes to send so the machine plays what ui says: [[t, on]] for every track that differs */
+function soloWrites(ui, mutes) {
+	const any = ui.soloSet.size > 0;
+	return mutes.map((m, i) => [i, any ? !ui.soloSet.has(i) : ui.userMutes.has(i)]).filter(([i, want]) => !!mutes[i] !== want);
 }
 /* ---- optimistic edits (P6): Overlay, docOf and shows are skins/shared/deskOverlay.js (both editors) ---- */
 function view() { return Overlay.over(deriveView(Docs, S)); }

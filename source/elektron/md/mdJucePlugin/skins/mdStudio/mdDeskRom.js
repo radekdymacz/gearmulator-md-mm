@@ -7,9 +7,11 @@
 /* The firmware screen. Opened by itself while no MD OS 1.63 runs (it cannot be closed then), or
    from LOAD ROM in the engine menu (then it has a Close key while the firmware runs). */
 function firstRun(manual) {
-	const d = $("#dlg"), mode = manual && V.lifecycle !== "missing" ? "manual" : "1";
-	if (d.dataset.first === mode && !d.hidden) return;
-	const m = machineState().desk || {};
+	const mode = manual && V.lifecycle !== "missing" ? "manual" : "1";
+	Dlg.show({ key: "first:" + mode, draw: () => drawFirstRun(mode) });
+}
+function drawFirstRun(mode) {
+	const d = $("#dlg"), m = machineState().desk || {};
 	d.innerHTML = `<div class="dlgbox first" role="dialog" aria-modal="true" aria-label="Firmware needed">
  <div class="lcdbig">MACHINEDRUM FIRMWARE NEEDED</div>
  <p>Machinedrum Editor runs the real Machinedrum operating system. Elektron's firmware cannot be shipped with the app, so you add the one from your own machine.</p>
@@ -31,19 +33,15 @@ function askRemoveRom(m) {
 	ask(`Remove <b>${escH(m.os)}</b> from the ROM folder? The machine stops and the editor asks for a firmware again. Your project stays.`,
 		[["Remove", "danger", () => cmd("removeRom")], ["Cancel", "", () => {}]]);
 }
-/* what the plug-in has to say to the user (a question, a warning): its modal, never a native alert. One at a
-   time: a notice waits while another dialog is open. */
-const noticeQueue = [];
+/* what the plug-in has to say to the user (a question, a warning): its modal, never a native alert. The plug-in
+   waits for the answer, so a notice goes before the page's own questions, is never replaced by one, and is
+   always answered: closed any other way, by its last key (Dlg, skins/shared/deskModal.js). */
 function showNotice(m) {
-	noticeQueue.push(m);
-	pumpNotices();
-}
-function pumpNotices() {
-	if (!noticeQueue.length) return;
-	if (!$("#dlg").hidden) { setTimeout(pumpNotices, 400); return; }
-	const m = noticeQueue.shift(), names = m.buttons && m.buttons.length ? m.buttons : ["OK"];
+	const names = m.buttons && m.buttons.length ? m.buttons : ["OK"], item = { notice: true };
+	const answer = i => { if (item.done) return; item.done = true; cmd("noticeAnswer", { id: m.id, button: i }); };
+	item.cancel = () => answer(names.length - 1);
 	ask(`<b>${escH(m.title)}</b><br>${escH(m.text).replace(/\n/g, "<br>")}`,
-		names.map((t, i) => [escH(t), i === 0 && names.length > 1 ? "cream" : "", () => { cmd("noticeAnswer", { id: m.id, button: i }); setTimeout(pumpNotices, 0); }]));
+		names.map((t, i) => [escH(t), i === 0 && names.length > 1 ? "cream" : "", () => answer(i)]), item);
 }
 Bridge.onMessage(m => { if (m.type === "romInfo") showRomInfo(m); else if (m.type === "notice") showNotice(m); });
 

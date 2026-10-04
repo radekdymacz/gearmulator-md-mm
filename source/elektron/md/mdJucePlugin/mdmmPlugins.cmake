@@ -70,12 +70,13 @@ list(APPEND SOURCES
 	skins/mdStudio/mdDeskModelTest.js
 	skins/mdStudio/mdDeskGenTest.js
 	skins/mdStudio/mdDeskKeysTest.js
+	skins/mdStudio/mdDeskPageTest.js
 	skins/mdStudio/mdDeskLive.js
 	skins/mdStudio/mdDeskLibrary.js
 	skins/mdStudio/mdDeskKeys.js
 	skins/mdStudio/mdDeskGlobal.js
 	skins/mdStudio/mdDeskAudio.js
-	skins/shared/deskModal.js skins/shared/deskModal.css
+	skins/shared/deskModal.js skins/shared/deskModal.css skins/shared/deskModalTest.js
 	skins/shared/deskCaps.js
 	skins/shared/deskBoot.js skins/shared/deskBoot.css
 	skins/shared/deskSyx.js skins/shared/deskSyx.css
@@ -85,7 +86,7 @@ list(APPEND SOURCES
 	skins/shared/deskDocs.js
 	skins/shared/deskOverlay.js skins/shared/deskOverlayTest.js
 	skins/shared/deskGen.js skins/shared/deskGenTest.js
-	skins/shared/deskKeys.js
+	skins/shared/deskKeys.js skins/shared/deskKeysTest.js
 	skins/shared/deskTogglePaint.js skins/shared/deskTogglePaintTest.js)
 
 # P6: the editors' diagnostics (the log of the web view, the window chrome and the session's
@@ -125,7 +126,7 @@ file(GLOB MM_SKIN_ASSETS CONFIGURE_DEPENDS
 # The tests are not the page, named one by one, not by a file-name pattern: the node tests never
 # ship, the self-tests only with the diagnostics. A test that was renamed or moved stops the
 # configure, so it cannot slip into the glob. The MM glob lists its page files already.
-set(MD_NODE_TESTS "skins/mdStudio/mdDeskModelTest.js" "skins/mdStudio/mdDeskGenTest.js" "skins/mdStudio/mdDeskKeysTest.js")
+set(MD_NODE_TESTS "skins/mdStudio/mdDeskModelTest.js" "skins/mdStudio/mdDeskGenTest.js" "skins/mdStudio/mdDeskKeysTest.js" "skins/mdStudio/mdDeskPageTest.js")
 # the AUDIO / MIDI panel's self-test (shared, diagnostics only) goes with the MD page's self-tests
 set(MD_SELF_TESTS "skins/mdStudio/mdDeskSelfTest.js" "skins/shared/deskAudioSelfTest.js")
 set(MM_SELF_TESTS "skins/mmStudio/mmSelfTest.js")
@@ -135,7 +136,7 @@ set(MM_NODE_TESTS "skins/mmStudio/mmConvertTest.js" "skins/mmStudio/mmKeysTest.j
 	"skins/mmStudio/mmViewTest.js" "skins/mmStudio/mmViewFixture.json")
 # the shared page files' node tests (never in a glob, so never shipped); checked to be there
 set(SHARED_NODE_TESTS "skins/shared/deskGenTest.js" "skins/shared/deskOverlayTest.js" "skins/shared/deskBridgeTest.js"
-	"skins/shared/deskTogglePaintTest.js")
+	"skins/shared/deskTogglePaintTest.js" "skins/shared/deskKeysTest.js" "skins/shared/deskModalTest.js")
 foreach(test ${MD_NODE_TESTS} ${MD_SELF_TESTS} ${MM_SELF_TESTS} ${MM_NODE_TESTS} ${SHARED_NODE_TESTS} ${MD_SHARED_PAGE_FILES})
 	if(NOT EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/${test}")
 		message(FATAL_ERROR "${test} is not there: update the editors' test lists in ${CMAKE_CURRENT_LIST_FILE}")
@@ -260,6 +261,15 @@ function(mdmm_plugin_targets)
 		# the drag across the M and S keys (both editors): which keys a drag changes
 		add_test(NAME deskTogglePaintPageTest COMMAND ${GEARMULATOR_NODE} ${CMAKE_CURRENT_SOURCE_DIR}/skins/shared/deskTogglePaintTest.js)
 		set_tests_properties(deskTogglePaintPageTest PROPERTIES LABELS "UnitTest" TIMEOUT 60)
+		# the keys' one gating rule (both editors): no page shortcut behind an open dialog or panel
+		add_test(NAME deskKeysPageTest COMMAND ${GEARMULATOR_NODE} ${CMAKE_CURRENT_SOURCE_DIR}/skins/shared/deskKeysTest.js)
+		set_tests_properties(deskKeysPageTest PROPERTIES LABELS "UnitTest" TIMEOUT 60)
+		# the question dialog's queue (both editors): nothing replaces it, a plug-in notice is always answered
+		add_test(NAME deskModalPageTest COMMAND ${GEARMULATOR_NODE} ${CMAKE_CURRENT_SOURCE_DIR}/skins/shared/deskModalTest.js)
+		set_tests_properties(deskModalPageTest PROPERTIES LABELS "UnitTest" TIMEOUT 60)
+		# the MD page's wiring on its own scripts: solo and the machine's mutes, renders held by a gesture, prepared mutes
+		add_test(NAME mdDeskPageTest COMMAND ${GEARMULATOR_NODE} ${CMAKE_CURRENT_SOURCE_DIR}/skins/mdStudio/mdDeskPageTest.js)
+		set_tests_properties(mdDeskPageTest PROPERTIES LABELS "UnitTest" TIMEOUT 60)
 		# the Monomachine page's documents and view (DESIGN-UNIFY.md phase 1): the derived view, echoes by command id
 		add_test(NAME mmViewPageTest COMMAND ${GEARMULATOR_NODE} ${CMAKE_CURRENT_SOURCE_DIR}/skins/mmStudio/mmViewTest.js)
 		set_tests_properties(mmViewPageTest PROPERTIES LABELS "UnitTest" TIMEOUT 60)

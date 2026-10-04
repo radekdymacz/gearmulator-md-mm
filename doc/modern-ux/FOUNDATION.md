@@ -19,7 +19,7 @@ Dependency runs downward only (the session includes the view only through the da
 - `deskWireTest` and `deskWirePortTest` check the encoders, pacing and the wire ports (`mdDeskWirePort`/`mmDeskWirePort` INTERFACE targets). `mdSessionFirmwareTest` validates the plug-in's own messages (learn, audio) against the schema.
 - `deskCoreTest` (a toy model, the working-copy policy, asks) and `mdDeskTest`/`mmDeskTest` run with a fake device; `mdDeskTest` also runs the desk over a fake `MdAdapter` (`FakeMdAdapter`): the adapter interfaces carry no protocol getters, so a fake implements only protocol-free methods. `deskWireTest` checks the encoders and pacing.
 - `*DeskFirmwareTest` runs on the real firmware.
-- `mdDeskModelTest.js` runs the MD page model in node; `mmConvertTest.js` the MM conversions against `doc/modern-ux/mm-catalogue.json`.
+- `mdDeskModelTest.js` runs the MD page model in node, `mdDeskPageTest.js` the page's wiring (solo and the machine's mutes, renders held by a gesture) on its own scripts; `mmConvertTest.js` the MM conversions against `doc/modern-ux/mm-catalogue.json`.
 - `doc/modern-ux/page_contract_check.py` (run by both sync scripts) checks that every op a page sends is a `$defs/command` variant with declared arguments, and that the pages' capability tables match the schema's names.
 - The contract is open for readers and closed for commands (data-contract.md 2): what the plug-in writes says `"additionalProperties": true`, and every test that validates what our writer published uses `json::Schema::closedForWriter` (the schema with those closed again). `--write-schema` keeps the documents open and writes the machine document's `contract` from `Model::contractVersion` (the tests fail on a closed document object or another version). The MD schema file is kept in Python's `json.dumps(indent=2)` layout (re-dump it after `--write-schema`); the MM schema in the writer's own.
 - `mdPageBridgeTest` (C++) and `deskBridgeTest.js` (node) check the bridge's transport: pieces, joins, the outbox split, the batch numbers (a replayed batch is dropped); `mdPageBridgeTest` also checks the notice route (one sink a window).
@@ -131,6 +131,8 @@ Every dialog uses the one modal layer, `skins/shared/deskModal.js` and `deskModa
 1. Give the dialog an element with `hidden`, plus its own open and close functions, as the libraries have.
 2. Add one row to `DIALOGS` in `deskModal.js`: `[selector, kind, closeFunctionName]`. The kind is `confirm` (Esc answers its last key, a click outside keeps it) or `panel` (Esc and a click outside close it through its close function). Both editors and both mockups load the file, so there is nothing to copy.
 3. The layer centres the dialog over the backdrop, moves the focus in and returns it, and stacks dialogs. Do not position the dialog yourself.
+4. While any dialog or panel is open, no page shortcut runs (`Keys`, `deskKeys.js`): the keys are the dialog's. A key the dialog needs from the map names it (`modal: "keyspop"`, the ? that closes the list of keys). `Keys.free()` (no dialog, no text field) is the one rule of the keys that play and act on tracks (`kbOn` on both pages).
+5. The question dialog (`#dlg`) shows one item at a time through `Dlg.show({draw, notice, cancel, key})`: nothing replaces what it shows, the next waits. A plug-in notice goes first (what it covered comes back after it) and is always answered: closed any other way, `cancel` answers it with its last key. `deskModalTest.js`.
 
 ## The shared page files
 
@@ -138,11 +140,11 @@ What both editors use is one file in `source/elektron/md/mdJucePlugin/skins/shar
 
 | File | What it does |
 |---|---|
-| `deskModal.js`, `deskModal.css` | The modal layer, plus the LCD's tips under the display. |
+| `deskModal.js`, `deskModal.css` | The modal layer, the question dialog's queue (`Dlg`; `deskModalTest.js`), plus the LCD's tips under the display. |
 | `deskBoot.js`, `deskBoot.css` | The start-up and first-run card. The app sets `Boot.host`, and its lifecycle calls `Boot.update`. HW MIDI with no machine answering (`hwConnecting`, `hwLost`) is `Boot.midi`: not modal, a card over the dimmed workspace with AUDIO / MIDI… and Use the emulator. |
 | `deskSyx.js`, `deskSyx.css` | The SysEx import panel. The app sets `Syx.host`, and the library headers call `Syx.keys()`. |
 | `deskAudio.js`, `deskAudio.css`, `deskAudioSelfTest.js` | The audio and MIDI panel and its self-test (diagnostics builds only in the MD page). Each page's host for it stays its own (`mdDeskAudio.js`, the MM mockup's `127-audio.js`). |
-| `deskKeys.js` | The key map's dispatcher (`Keys`); each page's map is its own (`mdDeskKeys.js`, the MM mockup's `56-keys.js`). |
+| `deskKeys.js` | The key map's dispatcher (`Keys`) and its one gating rule (no shortcut behind an open dialog or panel; `Keys.free()`; `deskKeysTest.js`); each page's map is its own (`mdDeskKeys.js`, the MM mockup's `56-keys.js`). |
 | `deskGen.js` | The generators without a machine in them (pure; `deskGenTest.js`). The MD's roles and mutation are `mdDeskGen.js`, the MM's `52-gen.js`. |
 | `deskTogglePaint.js` | A drag across the M or S keys (`TogglePaint`): the pressed key toggles and its new state is the paint, every key of its group crossed becomes that once, and the points between two pointer events so a fast drag skips none. Pure; `deskTogglePaintTest.js`. Each page wires it to its pointer and its mutes (`mdDeskLive.js`, the MM mockup's `130-main.js`). |
 | `deskDocs.js` | The page's documents: `storeDoc` over a kinds list (`DOC_KINDS`, `docStore`). |

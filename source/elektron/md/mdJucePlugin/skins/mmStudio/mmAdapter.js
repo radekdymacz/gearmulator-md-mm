@@ -148,6 +148,8 @@
 		/* whether the machine takes input (as the MD page gates: machine.input, not a lifecycle
 		   guess) -- playing is telemetry's only, never the machine document's (P6) */
 		V().setInput(!!d.input);
+		/* not ready -> ready: a fresh mod message follows, an earlier modSet's id is moot (as the MD page) */
+		if (d.input && !prev?.input) modInFlight = 0;
 		host.renderPst();
 		V().setEngines(d.engines || [], d.capabilities?.engine);
 		markCapabilities(d.capabilities);
@@ -174,7 +176,10 @@
 		last.record = null;
 		last.ready = false;
 		lcdBits = null;
-		if (window.MMView) { V().setInput(false); V().show(null, true); }
+		/* a modSet on its way to the old engine is never answered (as the MD page) */
+		modInFlight = 0;
+		/* the old engine's pattern, kit and song leave the screen (as at the start): the new engine's come as documents */
+		if (window.MMView) { V().setInput(false); V().startEmpty(); V().show(null, true); if (!V().busy()) V().render(); }
 		markReading();
 		showEngine();
 	}
@@ -349,16 +354,16 @@
 		V().ask(`Remove <b>${esc(m.os)}</b> from the ROM folder? The machine stops and the editor asks for a firmware again. Your project stays.`,
 			[["Remove", "danger", () => send({ op: "removeRom" }, { onResult: r => { if (!r.ok) V().toast(r.errors[0]); } })], ["Cancel", "", () => {}]]);
 	}
-	/* what the plug-in has to say to the user (a question, a warning): its modal, never a native alert; one at a time */
-	const notices = [];
-	function onNotice(m) { notices.push(m); pumpNotices(); }
-	function pumpNotices() {
-		if (!notices.length) return;
-		if (V().dlgOpen()) { setTimeout(pumpNotices, 400); return; }
-		const m = notices.shift(), names = m.buttons && m.buttons.length ? m.buttons : ["OK"];
+	/* what the plug-in has to say to the user (a question, a warning): its modal, never a native alert. The plug-in
+	   waits for the answer, so a notice goes before the page's own questions, is never replaced by one, and is
+	   always answered: closed any other way, by its last key (Dlg, skins/shared/deskModal.js; as the MD page) */
+	function onNotice(m) {
+		const names = m.buttons && m.buttons.length ? m.buttons : ["OK"], item = { notice: true };
+		const answer = i => { if (item.done) return; item.done = true; send({ op: "noticeAnswer", id: m.id, button: i }); };
+		item.cancel = () => answer(names.length - 1);
 		const esc = t => String(t).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
 		V().ask(`<b>${esc(m.title)}</b><br>${esc(m.text).replace(/\n/g, "<br>")}`,
-			names.map((t, i) => [esc(t), i === 0 && names.length > 1 ? "cream" : "", () => { send({ op: "noticeAnswer", id: m.id, button: i }); setTimeout(pumpNotices, 0); }]));
+			names.map((t, i) => [esc(t), i === 0 && names.length > 1 ? "cream" : "", () => answer(i)]), "", item);
 	}
 	function onError(m) { log("error: " + m.message); V().toast(m.message); }
 	const noteOf = r => { if (r.ok && r.note) V().toast(r.note); };
@@ -510,7 +515,7 @@
  <p>Monomachine Editor runs the real Monomachine operating system. Elektron's firmware cannot ship with the plug-in, so you add the one from your own machine.</p>
  <ol class="recvsteps"><li>Dump the <b>OS 1.32B</b> flash image from your Monomachine (<span class="mono">.bin</span>).</li><li>Choose it here: the editor checks it and copies it into its ROM folder.</li><li>The machine starts with it at once. It stays on this computer only.</li></ol>`,
 				[["Choose ROM file…", "cream", () => send({ op: "chooseRom" })], ["Show ROM folder", "", () => send({ op: "revealRomFolder" })],
-					["Check again", "", () => send({ op: "recheckFirmware" }, { onResult: r => { V().toast(r.ok ? r.note : r.errors[0]); if (!r.ok) { noRomShown = false; showEngine(); } } })], ["Close", "", () => {}]], "first");
+					["Check again", "", () => send({ op: "recheckFirmware" }, { onResult: r => { V().toast(r.ok ? r.note : r.errors[0]); if (!r.ok) { noRomShown = false; showEngine(); } } })], ["Close", "", () => {}]], "first", { key: "firstRun" });
 		},
 		/* while the firmware starts, the LCD shows the machine's own screen (the lcd messages), not
 		   the mockup's example boot screen */

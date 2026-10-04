@@ -2657,20 +2657,29 @@ const Keys = (() => {
 	const norm = e => e.key === " " ? "Space" : e.key.length === 1 ? e.key.toUpperCase() : e.key;
 	/* {keys: ["Z"], mod: "cmd"|"alt"|"shift"|"cmd+shift"|"", group, does (text, or () => text when it shows state), when?: () => bool,
 	   run?: e => void, field?: true, hidden?: true (dispatched, but another entry describes it in the ? overlay),
+	   modal?: "keyspop" (it also runs while that dialog is the top one; every other entry is off while one is open),
 	   code?: "KeyR" (matched on the physical key, e.code: with Alt or Cmd held macOS types another character)} */
 	function bind(entry) { list.push(Object.assign({ mod: "", when: null, field: false }, entry)); }
 	function modOf(e) { return [e.metaKey || e.ctrlKey ? "cmd" : "", e.altKey ? "alt" : "", e.shiftKey ? "shift" : ""].filter(Boolean).join("+"); }
+	/* The one gating rule of both editors: while a dialog or a panel is open (the modal layer, deskModal.js:
+	   GLOBAL, AUDIO / MIDI, the library, the machine picker, the list of keys, a question, the start-up card)
+	   the page's shortcuts are off and the keys are the dialog's own: Space and Enter press its focused
+	   button, Backspace and the digits are its field's. Only an entry naming that dialog (modal) runs.
+	   free(): no dialog open and no text field focused, the rule of the keys that play and act on tracks. */
+	const modalTop = () => typeof Modal !== "undefined" && Modal.top ? Modal.top() : null;
+	const free = () => !modalTop() && !document.activeElement?.closest?.("input,select,textarea,[contenteditable]");
 	document.addEventListener("keydown", e => {
-		const inField = e.target.closest?.("input,select,textarea,[role=slider]"), k = norm(e), m = modOf(e);
+		const inField = e.target.closest?.("input,select,textarea,[role=slider]"), k = norm(e), m = modOf(e), top = modalTop();
 		for (const b of list) {
 			if (!b.run || !(b.code ? e.code === b.code : b.keys.includes(k))) continue;
+			if (top && b.modal !== top) continue;
 			const want = b.mod || "", ok = want === m || (want === "" && m === "shift" && k.length === 1 && !/[A-Z]/.test(k));
 			if (!ok || (inField && !b.field) || (b.when && !b.when())) continue;
 			e.preventDefault(); b.run(e); return;
 		}
 	});
 	const label = b => [...(b.mod ? b.mod.split("+").map(x => ({ cmd: "⌘", alt: "⌥", shift: "⇧" }[x])) : []), b.keys.map(k => ({ Space: "Space", ArrowLeft: "←", ArrowRight: "→", ArrowUp: "↑", ArrowDown: "↓", Escape: "Esc", Delete: "Delete", Backspace: "⌫", Enter: "Enter" }[k] || k)).join(" / ")].join("");
-	return { bind, list: () => list.slice(), label };
+	return { bind, list: () => list.slice(), label, free };
 })();
 "use strict";
 /* A drag across toggle keys (the M and S keys), one module for both editors (skins/shared/): pure, values in,
@@ -2735,7 +2744,7 @@ function drawKeys(){const pop=$("#keyspop");if(!pop)return;const groups=[];
  pop.hidden=false;const r=$(".lcdpanel").getBoundingClientRect(),top=Math.max(16,r.bottom+8);
  pop.style.top=(top+scrollY)+"px";pop.style.maxHeight=Math.max(240,innerHeight-top-12)+"px";pop.style.left=Math.max(16,(document.documentElement.clientWidth-pop.offsetWidth)/2+scrollX)+"px"}
 function toggleKeys(on){const pop=$("#keyspop");if(!pop)return;if(on??pop.hidden)drawKeys();else pop.hidden=true}
-Keys.bind({keys:["?"],group:"Help",does:"This list of keys",run:()=>toggleKeys()});
+Keys.bind({keys:["?"],group:"Help",does:"This list of keys",modal:"keyspop",run:()=>toggleKeys()});
 Keys.bind({keys:["Escape"],group:"Help",does:"Close the list of keys",when:()=>!$("#keyspop").hidden,run:()=>toggleKeys(false)});
 document.addEventListener("click",e=>{const pop=$("#keyspop");if(!pop||pop.hidden)return;if(e.target.closest("[data-keysx]")||!pop.contains(e.target))pop.hidden=true},true);
 "use strict";
@@ -2847,6 +2856,42 @@ const Modal = (() => {
 	new MutationObserver(ms => { for (const m of ms) { const el = m.target; if (el.title && el.closest?.(".lcdpanel")) { el.dataset.tip = el.title; el.removeAttribute("title"); } } })
 		.observe(document.body, { attributes: true, attributeFilter: ["title"], subtree: true });
 	return { open: () => stack.map(d => d.el.id), top: () => top()?.el.id || null };
+})();
+/* The question dialog (#dlg) of both editors is one at a time, and what wants it next waits its turn: nothing
+   replaces what it shows. A page shows a question as an item {draw, notice?, cancel?, key?}: draw() writes the
+   dialog and unhides it; a notice (a question the plug-in waits on: its callback runs only when it is answered)
+   goes before every other item, and one that shows when it comes waits behind it and is drawn again after; a
+   notice is always answered: closed in any other way than its own keys, cancel() answers it (its last key).
+   key: an item already showing or waiting with the same key is not added again. The dialog closes by its
+   hidden attribute, whoever sets it; then the next item is drawn. */
+const Dlg = (() => {
+	const waiting = [];
+	let now = null, el = null;
+	const dlg = () => document.querySelector("#dlg");
+	/* the item shown is gone (the dialog was closed): a notice not answered by its keys is answered now */
+	function gone() { const was = now; now = null; if (was && was.notice && was.cancel && !was.done) { was.cancel(); was.done = true; } }
+	function draw(item) { if (now && el && el.hidden) gone(); now = item; item.draw(); }
+	function closed() {
+		if (!el || !el.hidden) return;
+		gone();
+		if (!now && waiting.length && el.hidden) draw(waiting.shift());
+	}
+	function watch() {
+		const d = dlg(); if (!d || d === el) return;
+		el = d;
+		if (typeof MutationObserver !== "undefined") new MutationObserver(closed).observe(el, { attributes: true, attributeFilter: ["hidden"] });
+	}
+	function show(item) {
+		watch();
+		const open = !!el && !el.hidden;
+		if (item.key && ((open && now && now.key === item.key) || waiting.some(w => w.key === item.key))) return;
+		if (!open) { draw(item); return; }
+		if (item.notice && !(now && now.notice)) { if (now) waiting.unshift(now); now = null; draw(item); return; }
+		/* notices in their order, before every other item */
+		const at = item.notice ? waiting.findIndex(w => !w.notice) : -1;
+		at < 0 ? waiting.push(item) : waiting.splice(at, 0, item);
+	}
+	return { show, closed, waiting: () => waiting.length, get now() { return now; } };
 })();
 "use strict";
 /* What the engine cannot do, both editors (skins/shared/; DESIGN-REVIEW-2026-10-02 finding 16). One routine marks
@@ -3154,7 +3199,9 @@ const Syx = (() => {
 /* ===== Feedback: toast, TX lamp, dialogs ===== */
 let toastT;function toast(m){const e=$("#toast");e.textContent=m;e.classList.add("on");clearTimeout(toastT);toastT=setTimeout(()=>e.classList.remove("on"),3000)}
 let txT;function tx(){const l=$("#txled");if(!l)return;l.classList.add("on");clearTimeout(txT);txT=setTimeout(()=>l.classList.remove("on"),70)}
-function ask(html,btns,cls=""){const d=$("#dlg");d.innerHTML=`<div class="dlgbox ${cls}" role="alertdialog" aria-modal="true">${/^<(p|div|ol|ul|h[1-6]|section|form)[\s>]/i.test(html)?html:`<p>${html}</p>`}<div class="btnrow">${btns.map(([t,c],i)=>`<button class="${c}" data-dlg="${i}">${t}</button>`).join("")}</div></div>`;d.hidden=false;d._btns=btns;d.querySelector(".btnrow button:last-child")?.focus()}
+/* the question dialog: queued, never replacing what it shows (Dlg, skins/shared/deskModal.js); item: {notice, cancel, key} */
+function ask(html,btns,cls="",item={}){Dlg.show(Object.assign(item,{draw:()=>drawAsk(html,btns,cls)}))}
+function drawAsk(html,btns,cls){const d=$("#dlg");d.innerHTML=`<div class="dlgbox ${cls}" role="alertdialog" aria-modal="true">${/^<(p|div|ol|ul|h[1-6]|section|form)[\s>]/i.test(html)?html:`<p>${html}</p>`}<div class="btnrow">${btns.map(([t,c],i)=>`<button class="${c}" data-dlg="${i}">${t}</button>`).join("")}</div></div>`;d.hidden=false;d._btns=btns;d.querySelector(".btnrow button:last-child")?.focus()}
 
 /* ===== Honest machine state =====
    Sound edits go out as CCs at once (Appendix B) but stay unsaved in the kit.
@@ -3203,7 +3250,7 @@ function setPst(text,tip,warn,read){const p=$("#pst"),f=$("#syncf");if(!p||!f)re
 /* HW MIDI: what waits for the machine's SYSEX RECV (a host counts its own: waiting(), sendNow()) */
 function sendDialog(){const n=HOST.waiting?HOST.waiting():S.pend;ask(`<div class="lcdbig recv">SYSEX RECV · WAITING…</div><p>The Monomachine only accepts a dump on its SysEx receive screen. <b>${n}</b> message${n===1?"":"s"} to send.</p>
  <ol class="recvsteps"><li>On the Monomachine press <b>FUNCTION + KIT/SONG</b> (GLOBAL), then <b>FILE › SYSEX RECV</b>.</li><li>Set <b>MODE ORIG</b> and press <b>YES</b>. The screen shows <b>WAITING…</b></li><li>Press <b>Send now</b> here. When the pattern field is empty again, press <b>EXIT</b> on the machine.</li></ol>`,
- [["Send now","cream",()=>{if(HOST.sendNow)return HOST.sendNow();S.pend=0;S.patSent="live";renderPst();tx();toast("Sent. The pattern and song slots now match the editor. Press EXIT on the Monomachine.")}],["Later","",()=>{}]],"first")}
+ [["Send now","cream",()=>{if(HOST.sendNow)return HOST.sendNow();S.pend=0;S.patSent="live";renderPst();tx();toast("Sent. The pattern and song slots now match the editor. Press EXIT on the Monomachine.")}],["Later","",()=>{}]],"first",{key:"recv"})}
 /* st: "clean" | "edited" | "unknown" (the machine hasn't said yet -- never shown as "saved") */
 function setKitState(st){S.kitState=st;const s=$("#save");if(!s)return;
  s.classList.toggle("dirty",st==="edited");s.classList.toggle("unknown",st==="unknown");
@@ -3633,7 +3680,8 @@ function liveRecord(){if(HOST.record)return HOST.record(true);S.rec=!S.rec;if(S.
 const KEYS_WHITE="ASDFGHJKL",KEYS_SEMIS=[0,2,4,5,7,9,11,12,14],KEYS_OCT=[-3,3],KEYS_VELS=[20,40,60,80,100,127],KEYS_BASE=48;
 const KB={oct:0,vel:100,held:new Map(),told:new Set()};
 function keyVel(v,d){const up=KEYS_VELS.find(x=>x>v),down=[...KEYS_VELS].reverse().find(x=>x<v);return d>0?up??KEYS_VELS[KEYS_VELS.length-1]:down??KEYS_VELS[0]}
-function kbOn(){return!dialogOpen()&&!LIB.open&&!AP.open&&$("#machpop").hidden&&$("#keyspop").hidden&&!document.activeElement?.closest?.("input,select,textarea,[contenteditable]")}
+/* the keys that play and act on tracks: no dialog or panel open, no text field focused (the one rule of both editors, deskKeys.js) */
+function kbOn(){return Keys.free()}
 function kbTell(k,t){if(KB.told.has(k))return;KB.told.add(k);toast(t)}
 function homeDown(e){if(e.repeat||KB.held.has(e.code))return;const t=S.sel,k=KEYS_WHITE.indexOf(e.code.replace(/^Key/,""));if(k<0)return;
  if(isMidiT(t)){kbTell("midi","The keys play the synth tracks: a MIDI track's notes go to the MIDI OUT only.");return}
@@ -5029,7 +5077,7 @@ function firstRun(){if(HOST.firstRun)return HOST.firstRun();ask(`<div class="lcd
  <p>Monomachine Editor runs the real Monomachine operating system. Elektron's firmware cannot ship with the app, so you add the one from your own machine.</p>
  <ol class="recvsteps"><li>Dump the <b>OS 1.32B</b> flash image from your Monomachine (8 MiB, <span class="mono">.bin</span>).</li><li>Choose it here. The editor checks its size and fingerprint.</li><li>It stays on this computer only.</li></ol>
  <label class="drop" id="drop" tabindex="0"><input type="file" id="romfile" accept=".bin" hidden><span id="droptxt">Click to choose the .bin</span></label>
- <p class="hint">SFX-6, SFX-60 MKI and MKII use the same OS. The MKII adds the user waveforms and the DigiPRO draw machines.</p>`,[["Close preview","cream",()=>{}]],"first")}
+ <p class="hint">SFX-6, SFX-60 MKI and MKII use the same OS. The MKII adds the user waveforms and the DigiPRO draw machines.</p>`,[["Close preview","cream",()=>{}]],"first",{key:"firstRun"})}
 function checkRom(f){const t=$("#droptxt");if(!f)return;const ok=f.size===8388608;t.textContent=ok?`✓ ${f.name}: 8 MiB. In the real app: check the OS 1.32B fingerprint, then start.`:`✗ ${f.name}: ${(f.size/1048576).toFixed(2)} MiB. The OS 1.32B image is exactly 8 MiB.`;$("#drop").classList.toggle("ok",ok);$("#drop").classList.toggle("bad",!ok)}
 
 /* ===== LCD line 2 ===== */

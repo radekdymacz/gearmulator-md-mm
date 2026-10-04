@@ -2,7 +2,9 @@
 /* ===== Feedback: toast, TX lamp, dialogs ===== */
 let toastT;function toast(m){const e=$("#toast");e.textContent=m;e.classList.add("on");clearTimeout(toastT);toastT=setTimeout(()=>e.classList.remove("on"),3000)}
 let txT;function tx(){const l=$("#txled");if(!l)return;l.classList.add("on");clearTimeout(txT);txT=setTimeout(()=>l.classList.remove("on"),70)}
-function ask(html,btns,cls=""){const d=$("#dlg");d.innerHTML=`<div class="dlgbox ${cls}" role="alertdialog" aria-modal="true">${/^<(p|div|ol|ul|h[1-6]|section|form)[\s>]/i.test(html)?html:`<p>${html}</p>`}<div class="btnrow">${btns.map(([t,c],i)=>`<button class="${c}" data-dlg="${i}">${t}</button>`).join("")}</div></div>`;d.hidden=false;d._btns=btns;d.querySelector(".btnrow button:last-child")?.focus()}
+/* the question dialog: queued, never replacing what it shows (Dlg, skins/shared/deskModal.js); item: {notice, cancel, key} */
+function ask(html,btns,cls="",item={}){Dlg.show(Object.assign(item,{draw:()=>drawAsk(html,btns,cls)}))}
+function drawAsk(html,btns,cls){const d=$("#dlg");d.innerHTML=`<div class="dlgbox ${cls}" role="alertdialog" aria-modal="true">${/^<(p|div|ol|ul|h[1-6]|section|form)[\s>]/i.test(html)?html:`<p>${html}</p>`}<div class="btnrow">${btns.map(([t,c],i)=>`<button class="${c}" data-dlg="${i}">${t}</button>`).join("")}</div></div>`;d.hidden=false;d._btns=btns;d.querySelector(".btnrow button:last-child")?.focus()}
 
 /* ===== Honest machine state =====
    Sound edits go out as CCs at once (Appendix B) but stay unsaved in the kit.
@@ -51,7 +53,7 @@ function setPst(text,tip,warn,read){const p=$("#pst"),f=$("#syncf");if(!p||!f)re
 /* HW MIDI: what waits for the machine's SYSEX RECV (a host counts its own: waiting(), sendNow()) */
 function sendDialog(){const n=HOST.waiting?HOST.waiting():S.pend;ask(`<div class="lcdbig recv">SYSEX RECV · WAITING…</div><p>The Monomachine only accepts a dump on its SysEx receive screen. <b>${n}</b> message${n===1?"":"s"} to send.</p>
  <ol class="recvsteps"><li>On the Monomachine press <b>FUNCTION + KIT/SONG</b> (GLOBAL), then <b>FILE › SYSEX RECV</b>.</li><li>Set <b>MODE ORIG</b> and press <b>YES</b>. The screen shows <b>WAITING…</b></li><li>Press <b>Send now</b> here. When the pattern field is empty again, press <b>EXIT</b> on the machine.</li></ol>`,
- [["Send now","cream",()=>{if(HOST.sendNow)return HOST.sendNow();S.pend=0;S.patSent="live";renderPst();tx();toast("Sent. The pattern and song slots now match the editor. Press EXIT on the Monomachine.")}],["Later","",()=>{}]],"first")}
+ [["Send now","cream",()=>{if(HOST.sendNow)return HOST.sendNow();S.pend=0;S.patSent="live";renderPst();tx();toast("Sent. The pattern and song slots now match the editor. Press EXIT on the Monomachine.")}],["Later","",()=>{}]],"first",{key:"recv"})}
 /* st: "clean" | "edited" | "unknown" (the machine hasn't said yet -- never shown as "saved") */
 function setKitState(st){S.kitState=st;const s=$("#save");if(!s)return;
  s.classList.toggle("dirty",st==="edited");s.classList.toggle("unknown",st==="unknown");

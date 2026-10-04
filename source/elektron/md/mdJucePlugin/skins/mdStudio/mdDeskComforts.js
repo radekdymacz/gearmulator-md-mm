@@ -115,13 +115,13 @@ function pasteToMany(from) {
 function unmuteAll() {
 	if (!V.tracks.some(t => t.mute || t.solo)) { toast("No track is muted or soloed."); return; }
 	S.soloSet = new Set(); S.userMutes = new Set(); V = view();
-	V.tracks.forEach((t, i) => { if (t.mute) setMute(i, false); });
+	applySolo();
 	refreshAudible();
 }
 document.addEventListener("click", e => { if (e.target.closest("#allon")) unmuteAll(); });
 const seqKeys = () => S.ws === "seq" && dlgClosed() && $("#keyspop").hidden;
 Keys.bind({ keys: ["ArrowLeft", "ArrowRight"], mod: "alt", group: "Selected track", does: "Sequence: rotate the selected track one step earlier / later: trigs, accents and locks, wrapping at the length. Presses while ⌥ is down are one undo step. The one Alt that is not \"all\": FUNCTION + arrows on the machine", when: seqKeys, run: e => rotateTrack(e.key === "ArrowRight" ? 1 : -1) });
-Keys.bind({ keys: ["0"], group: "All", does: "Unmute and unsolo every track", run: () => unmuteAll() });
+Keys.bind({ keys: ["0"], group: "All", does: "Unmute and unsolo every track", when: () => kbOn(), run: () => unmuteAll() });
 Keys.bind({ keys: ["Escape"], group: "Sequence", does: "Unmark the tracks marked for paste", when: () => seqKeys() && S.multi.size > 0 && !genRunOn(), run: () => { S.multi = new Set(); renderRail(); renderLane(); } });
 Keys.bind({ keys: ["step"], mod: "cmd", group: "Sequence", does: "Click: every 2nd step from there to the end on (from a trig: off), one undo step" });
 Keys.bind({ keys: ["step"], mod: "cmd+shift", group: "Sequence", does: "Click: every 4th step from there to the end" });

@@ -2,7 +2,8 @@
 /* P4 live controls on the machine (mockup v52-v54): mutes on the track keys, the pattern chain and the
    firmware's own LCD while it boots. Loaded after the app's files (mdDeskApp.js lists them); uses their state (S), their
    render functions and its commands (cmd, setMute). What the page shows is the machine's:
-   - mutes: machine.desk.mutes, read from RAM (mutesSource "memory"), whoever set them;
+   - mutes: machine.desk.mutes, read from RAM (mutesSource "memory"), whoever set them; during a solo the M
+     keys show the user's mutes, which the end of the solo gives back to the machine (mdDeskModel.js, soloTo);
    - chain: machine.desk.chain, read from the firmware's own chain (active, patterns, next), shown and
      made in the Song page (mdDeskSong.js renderSong);
    - LCD: "lcd" messages with the 128 x 64 display while the engine says BOOTING OS. */
@@ -15,7 +16,7 @@
    track keys on screen LCD line 2 says what changed. */
 const PREP = new Map();
 function showPrep() { $$(".ms.m[data-mute]").forEach(b => { const i = +b.dataset.mute, p = PREP.get(i); b.classList.toggle("prep", p != null); if (p != null) b.dataset.prep = p ? "X" : "+"; else delete b.dataset.prep; }); }
-function muteSet(i, on) { on ? S.userMutes.add(i) : S.userMutes.delete(i); setMute(i, on); }
+function muteSet(i, on) { userMute(i, on); }
 function lcdSay(ch) {
 	if (S.ws === "seq" || S.ws === "sound" || S.ws === "mix") return;
 	const on = ch.filter(([, m]) => m).map(([i]) => i + 1), off = ch.filter(([, m]) => !m).map(([i]) => i + 1);
@@ -33,6 +34,8 @@ function applyPrep() {
 function prepToggle(i) { if (!V.tracks[i]) return; if (PREP.has(i)) PREP.delete(i); else PREP.set(i, !V.tracks[i].mute); showPrep(); }
 document.addEventListener("click", e => { const b = e.target.closest(".ms.m[data-mute]"); if (!b || !e.shiftKey) return; e.stopImmediatePropagation(); e.preventDefault(); prepToggle(+b.dataset.mute); }, true);
 document.addEventListener("keyup", e => { if (e.key === "Shift") applyPrep(); });
+/* leaving the window drops them (as the MM page): Shift let go elsewhere never reaches the page */
+addEventListener("blur", () => { if (!PREP.size) return; PREP.clear(); showPrep(); });
 Keys.bind({ keys: ["M key"], mod: "shift", group: "Anywhere", does: "Click: prepare that track's mute (+ / X); applied when ⇧ is let go" });
 Keys.bind({ keys: ["drag a value"], mod: "alt", group: "All", does: "Control All: move that knob on every track (FUNCTION + knob on the machine)" });
 /* M: the selected track; Alt+M: every track, one toggle (matched on e.code: with Alt macOS types µ) */
@@ -69,7 +72,7 @@ function msKeyAt(el) {
 const msOn = k => k.group === "mute" ? !!V.tracks[k.i].mute : S.soloSet.has(k.i);
 function msSet(k, on) {
 	if (k.group === "mute") muteSet(k.i, on);
-	else { const next = new Set(S.soloSet); on ? next.add(k.i) : next.delete(k.i); S.soloSet = next; V = view(); applySolo(); }
+	else { const next = new Set(S.soloSet); on ? next.add(k.i) : next.delete(k.i); setSolo(next); }
 	refreshAudible();
 }
 let msClickEaten = false;
@@ -97,7 +100,7 @@ document.addEventListener("pointermove", e => {
 		Held.with("mutePaint", { at });
 	}
 });
-function endMutePaint() { if (!Held.end("mutePaint")) return; setTimeout(() => { msClickEaten = false; }, 0); if (pendingRender) scheduleRender(); }
+function endMutePaint() { if (!Held.end("mutePaint")) return; setTimeout(() => { msClickEaten = false; }, 0); }
 document.addEventListener("pointerup", endMutePaint); document.addEventListener("pointercancel", endMutePaint);
 window.addEventListener("blur", endMutePaint);
 addEventListener("click", e => { if (!msClickEaten) return; msClickEaten = false; e.stopImmediatePropagation(); e.preventDefault(); }, true);
@@ -124,7 +127,7 @@ Bridge.onMessage(m => {
 
 /* ===== Tap tempo (manual p.36): T taps, the average of the last taps sets the tempo (0x61). ===== */
 const TAP = [];
-Keys.bind({ keys: ["T"], group: "Transport", does: "Tap tempo (the average of the last taps)", run: () => {
+Keys.bind({ keys: ["T"], group: "Transport", does: "Tap tempo (the average of the last taps)", when: () => kbOn(), run: () => {
 	const now = performance.now(); if (TAP.length && now - TAP[TAP.length - 1] > 2000) TAP.length = 0;
 	TAP.push(now); if (TAP.length > 5) TAP.shift();
 	if (TAP.length >= 2) { const bpm = clamp(Math.round(60000 / ((TAP[TAP.length - 1] - TAP[0]) / (TAP.length - 1)) * 10) / 10, 30, 300); cmd("tempo", { bpm }, "tempo", [[["bpm"], bpm]]); renderTop(); toast("Tap tempo: " + bpm.toFixed(1) + " BPM"); }
@@ -235,7 +238,9 @@ Bridge.onMessage(m => {
    own pitch", recording) is said once. Key repeat is ignored; a key let go ends its own note (the core
    keeps one note per track: a later key replaces it). */
 const KB = { oct: 0, vel: KEYS_VEL, held: new Map(), told: new Set() };
-function kbOn() { return dlgClosed() && !LIB.open && !(typeof GP !== "undefined" && GP.open) && !document.activeElement?.closest?.("input,select,textarea,[contenteditable]"); }
+/* the keys that play and act on tracks: no dialog or panel open (GLOBAL, AUDIO / MIDI, the library, the picker, the
+   keys list, a question), no text field focused: the one rule of both editors (deskKeys.js) */
+function kbOn() { return Keys.free(); }
 function kbTell(key, text) { if (KB.told.has(key)) return; KB.told.add(key); toast(text); }
 function kbSaid(r) { const say = r.ok ? r.note : (r.errors || [])[0]; if (say) kbTell(say, say); }
 function kbDown(e) {
