@@ -4,7 +4,9 @@
 #include "deskLifecycle.h"
 #include "deskPush.h"
 
+#include <algorithm>
 #include <cstdint>
+#include <map>
 #include <optional>
 #include <set>
 #include <string>
@@ -68,16 +70,49 @@ namespace deskCore
 			m_events.push_back(Ev::reset());
 		}
 		bool known(const Ref& _ref) const { return m_known.count(_ref) != 0; }
-		// The read of _ref was given up (LoadQueue's Step::gaveUp). True the first time since it was
-		// last known: report it then, not on every round after.
-		bool gaveUpReading(const Ref& _ref) { return !known(_ref) && m_unread.insert(_ref).second; }
+		// The read of _ref was given up (LoadQueue's Step::gaveUp): it is unread until it arrives
+		// (an Unread: how often, when, and whether the person was told). A document that arrived since is
+		// not unread.
+		void gaveUpReading(const Ref& _ref, const double _nowMs)
+		{
+			if(known(_ref))
+				return;
+			auto& u = m_unread[_ref];
+			++u.giveUps;
+			u.atMs = _nowMs;
+		}
+		// True once per unread document: the first time it is worth telling (the caller decides when: the
+		// document is the one that plays). A document given up in the background and wanted later is told then.
+		bool tellUnread(const Ref& _ref)
+		{
+			const auto it = m_unread.find(_ref);
+			if(it == m_unread.end() || it->second.told)
+				return false;
+			it->second.told = true;
+			return true;
+		}
 		bool unread(const Ref& _ref) const { return m_unread.count(_ref) != 0; }
+		// An unread document may be asked for again on its own (at a status reply) once its backoff is over:
+		// 5 s after the first give-up, doubling, at most a minute. A machine that answers status but never
+		// answers this request costs one round a minute, not a round every few seconds (panel keys wait for loads).
+		bool mayAskAgain(const Ref& _ref, const double _nowMs) const
+		{
+			const auto it = m_unread.find(_ref);
+			return it != m_unread.end() && _nowMs - it->second.atMs >= reaskMs(it->second.giveUps);
+		}
+		static double reaskMs(const int _giveUps) { return std::min(60000.0, 5000.0 * static_cast<double>(1 << std::clamp(_giveUps - 1, 0, 4))); }
 		bool knowsAnything() const { return !m_known.empty(); }
 
 	private:
 		std::vector<Ev> m_events;
 		std::set<Ref> m_known;
-		std::set<Ref> m_unread;
+		struct Unread
+		{
+			int giveUps = 0;
+			double atMs = 0;
+			bool told = false;
+		};
+		std::map<Ref, Unread> m_unread;
 	};
 
 	// A machine at the end of a cable (HW MIDI): its lifecycle is its replies (P6, shared).

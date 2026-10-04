@@ -19,8 +19,10 @@ namespace mmDesk
 	// after an idle time. A screen that never comes is retried after a pause, maxFailures
 	// times; then (or once the oldest dump waited maxWaitMs, telemetry or not) the session
 	// gives up what it holds and says whose it was (Out::gaveUp), so the caller can fail
-	// those pushes and the panel is left alone. Pure: feed it the time and the screen word,
-	// it returns the keys to press and the dumps to send.
+	// those pushes and the panel is left alone. Its times are the machine's: they move only
+	// while the emulator runs (Telemetry::blocks moves), so a host that stops processing
+	// (a DAW at rest) fails nothing that would go out on resume. Pure: feed it the time and
+	// the telemetry, it returns the keys to press and the dumps to send.
 	class RecvSession
 	{
 	public:
@@ -39,6 +41,7 @@ namespace mmDesk
 		{
 			std::vector<uint8_t> bytes;
 			uint32_t tag = 0;
+			double queuedMs = -1;	// machine time it was first seen in the queue (-1: not yet)
 		};
 
 		struct Out
@@ -52,9 +55,9 @@ namespace mmDesk
 		static std::vector<Key> enterMacro();
 		static std::vector<Key> exitKeys();
 
-		void want(std::vector<uint8_t> _dump, const uint32_t _tag = 0) { m_queue.push_back({std::move(_dump), _tag}); }
+		void want(std::vector<uint8_t> _dump, const uint32_t _tag = 0) { m_queue.push_back({std::move(_dump), _tag, -1}); }
 		// Keeps the session parked a while longer (an edit is coming).
-		void touch(const double _now) { m_lastActivity = _now; }
+		void touch() { m_lastActivity = m_clock; }
 		Out tick(double _now, const Telemetry& _t);
 
 		State state() const { return m_state; }
@@ -78,7 +81,9 @@ namespace mmDesk
 		double m_lastActivity = 0;
 		int m_attempts = 0;
 		int m_failures = 0;			// failed tries since the screen last came
-		double m_waitingSince = -1;	// the queue has not been empty since then (-1: it is empty)
+		double m_clock = 0;			// machine time: moves with the caller's clock only while the emulator runs
+		double m_lastNowMs = -1;
+		uint64_t m_lastBlocks = 0;
 		double m_keysDone = 0;	// the keys pressed last are through by then
 	};
 }

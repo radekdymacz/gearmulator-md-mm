@@ -43,14 +43,16 @@ namespace mmDesk
 
 	// A read with no reply after every resend and round (a slow wire, a cable pulled): the queue gave
 	// it up. It counts as done but failed in the machine document's loading (so the progress ends); a
-	// document the machine plays now is reported once, and the next status asks for it again
+	// document the machine plays now is reported once (one given up in the background is reported when
+	// it plays and is given up again), and a status reply asks for it again once its backoff is over
 	// (onStatus). Another one stays unknown until it is wanted again.
 	void MmMachine::gaveUpLoad(const Ref& _r)
 	{
-		if(!gaveUpReading(_r) || !current(_r))
+		gaveUpReading(_r, now());
+		if(!current(_r) || !tellUnread(_r))
 			return;
 		fail(_r, std::string("The machine did not answer the request for ") + kindName(_r.kind) + " " + std::to_string(_r.slot + 1)
-			+ ": its edits wait until it is read. The editor asks again.");
+			+ ": it cannot be edited until it is read. The editor asks again.");
 	}
 
 	bool MmMachine::current(const Ref& _r) const
@@ -178,7 +180,7 @@ namespace mmDesk
 				if(!known({Kind::Pattern, _value}))
 					request({Kind::Pattern, _value}, true);
 			}
-			else if(unread({Kind::Pattern, _value}) && !m_loads.contains({Kind::Pattern, _value}))
+			else if(mayAskAgain({Kind::Pattern, _value}, now()) && !m_loads.contains({Kind::Pattern, _value}))
 				request({Kind::Pattern, _value}, true);	// its read was given up (no reply): ask again
 			if(m_queuedPattern == _value)
 				m_queuedPattern = -1;
@@ -190,7 +192,7 @@ namespace mmDesk
 				m_curKit = _value;
 				kitSwitched(from, _value);
 			}
-			else if(unread({Kind::Kit, _value}) && !m_loads.contains({Kind::Kit, _value}))
+			else if(mayAskAgain({Kind::Kit, _value}, now()) && !m_loads.contains({Kind::Kit, _value}))
 				request({Kind::Kit, _value}, true);	// its read was given up (no reply): ask again
 			break;
 		case ed::MmStatus::Song:

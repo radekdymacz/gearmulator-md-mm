@@ -200,6 +200,7 @@ namespace mdJucePlugin
 		mmDesk::Telemetry t;
 		if(!m_telemetry)
 			return t;
+		t.blocks = m_telemetry->blocks.load(std::memory_order_acquire);
 		t.step = m_telemetry->step.load(std::memory_order_relaxed);
 		const int running = m_telemetry->running.load(std::memory_order_relaxed);
 		t.valid = t.step >= 0 && running >= 0;

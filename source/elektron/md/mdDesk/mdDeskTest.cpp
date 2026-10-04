@@ -822,8 +822,18 @@ namespace
 		check(errors() == 1 && asked > 1 && asked <= 6 && waited < 20000,
 			"A2: a pattern request with no reply is resent a bounded number of times, then reported");
 		check(!patternShown(pattern.position), "A2: the pattern is still unknown");
+		bool says = false;
+		for(const auto& v : page)
+			says = says || (v.find("type")->asString() == "error" && v.find("message")->asString().find("cannot be edited until it is read") != std::string::npos);
+		check(says, "A2: the error says it cannot be edited until it is read");
+		// A machine that answers status but never this request: asked again with a growing backoff, not a
+		// round every few seconds (panel and tweak keys wait while a load is in flight).
+		const int before = asked;
+		run(120000);
+		check(asked > before && asked - before <= 30, "A2: asked again at status replies, with a backoff (at most one round a minute in the end)");
+		check(errors() == 1, "A2: still reported once");
 		answer = true;
-		run(10000);
+		run(70000);
 		check(patternShown(pattern.position), "A2: the next status asks again; once the machine answers it is read");
 		check(errors() == 1, "A2: reported once, not every round");
 	}

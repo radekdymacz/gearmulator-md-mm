@@ -52,6 +52,7 @@ namespace mmDesk
 	struct Telemetry
 	{
 		bool valid = false;
+		uint64_t blocks = 0;		// audio blocks the emulator has run (it stands still while this does not move); 0 = unknown
 		int step = -1;
 		bool running = false;
 		Screen screen = Screen::Unknown;

@@ -76,7 +76,7 @@ namespace mmDesk
 	Outcome MmMachine::submit(const Change& _change, const Intent&, const Documents&)
 	{
 		const auto ref = _change.ref();
-		m_recv.touch(now());
+		m_recv.touch();
 		switch(ref.kind)
 		{
 		case Kind::Pattern:

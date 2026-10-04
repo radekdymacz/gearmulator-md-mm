@@ -46,33 +46,40 @@ namespace mmDesk
 		m_queue.clear();
 		m_failures = 0;
 		m_attempts = 0;
-		m_waitingSince = -1;
 		// Stop driving the panel; after the pause, a new dump starts afresh.
 		if(m_state != State::Parked && m_state != State::Leaving)
 			go(State::Failed, _now);
 	}
 
-	RecvSession::Out RecvSession::tick(const double _now, const Telemetry& _t)
+	RecvSession::Out RecvSession::tick(const double _nowMs, const Telemetry& _t)
 	{
 		Out out;
-		if(m_queue.empty())
-			m_waitingSince = -1;
-		else if(m_waitingSince < 0)
-			m_waitingSince = _now;
-		else if(_now - m_waitingSince > maxWaitMs)
-			giveUp(out, _now);
+		// The machine's time: it stands still while the emulator does (its block count does not move).
+		const bool runs = _t.blocks == 0 || _t.blocks != m_lastBlocks;
+		if(runs && m_lastNowMs >= 0 && _nowMs > m_lastNowMs)
+			m_clock += _nowMs - m_lastNowMs;
+		m_lastNowMs = _nowMs;
+		m_lastBlocks = _t.blocks;
+		if(!runs)
+			return out;
+		const double now = m_clock;
+		for(auto& s : m_queue)
+			if(s.queuedMs < 0)
+				s.queuedMs = now;
+		if(!m_queue.empty() && now - m_queue.front().queuedMs > maxWaitMs)
+			giveUp(out, now);
 		if(!_t.valid)
 			return out;
 		const bool onRecv = onSysexRecv(_t);
-		const bool keysDone = _now >= m_keysDone;
+		const bool keysDone = now >= m_keysDone;
 		const bool onMain = _t.screen == Screen::Main;
 		switch(m_state)
 		{
 		case State::Failed:
-			if(_now - m_since < 5000)
+			if(now - m_since < 5000)
 				break;
 			m_attempts = 0;
-			go(State::Idle, _now);
+			go(State::Idle, now);
 			[[fallthrough]];
 		case State::Idle:
 			if(m_queue.empty())
@@ -80,19 +87,19 @@ namespace mmDesk
 			if(onRecv)
 			{
 				m_failures = 0;
-				go(State::Parked, _now);
-				m_lastActivity = _now;
+				go(State::Parked, now);
+				m_lastActivity = now;
 				break;
 			}
 			if(onMain)
 			{
 				out.keys = enterMacro();
-				go(State::Entering, _now);
+				go(State::Entering, now);
 			}
 			else
 			{
 				out.keys = exitKeys();
-				go(State::ToMain, _now);
+				go(State::ToMain, now);
 			}
 			break;
 		case State::ToMain:
@@ -101,16 +108,16 @@ namespace mmDesk
 			if(onMain)
 			{
 				out.keys = enterMacro();
-				go(State::Entering, _now);
+				go(State::Entering, now);
 			}
-			else if(_now - m_since > timeoutMs)
+			else if(now - m_since > timeoutMs)
 			{
 				if(++m_attempts > 2)
-					failed(out, _now);
+					failed(out, now);
 				else
 				{
 					out.keys = exitKeys();
-					go(State::ToMain, _now);
+					go(State::ToMain, now);
 				}
 			}
 			break;
@@ -121,17 +128,17 @@ namespace mmDesk
 			{
 				m_attempts = 0;
 				m_failures = 0;
-				m_lastActivity = _now;
-				go(State::Parked, _now);
+				m_lastActivity = now;
+				go(State::Parked, now);
 			}
-			else if(_now - m_since > timeoutMs)
+			else if(now - m_since > timeoutMs)
 			{
 				if(++m_attempts > 2)
-					failed(out, _now);
+					failed(out, now);
 				else
 				{
 					out.keys = exitKeys();
-					go(State::ToMain, _now);
+					go(State::ToMain, now);
 				}
 			}
 			break;
@@ -139,29 +146,29 @@ namespace mmDesk
 			if(!onRecv)
 			{
 				// Someone left the screen (the panel): enter again when needed.
-				go(State::Idle, _now);
+				go(State::Idle, now);
 				break;
 			}
 			while(!m_queue.empty())
 			{
 				out.sends.push_back(std::move(m_queue.front()));
 				m_queue.pop_front();
-				m_lastActivity = _now;
+				m_lastActivity = now;
 			}
-			if(_now - m_lastActivity > idleMs)
+			if(now - m_lastActivity > idleMs)
 			{
 				out.keys = exitKeys();
-				go(State::Leaving, _now);
+				go(State::Leaving, now);
 			}
 			break;
 		case State::Leaving:
-			if(keysDone && (onMain || _now - m_since > timeoutMs))
-				go(State::Idle, _now);
+			if(keysDone && (onMain || now - m_since > timeoutMs))
+				go(State::Idle, now);
 			break;
 		}
 		// Each key is held 10 ms and released for 10 ms (the edge's timing), plus a margin.
 		if(!out.keys.empty())
-			m_keysDone = _now + 20.0 * static_cast<double>(out.keys.size() + 1) + 60;
+			m_keysDone = now + 20.0 * static_cast<double>(out.keys.size() + 1) + 60;
 		return out;
 	}
 }

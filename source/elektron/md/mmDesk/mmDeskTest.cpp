@@ -110,6 +110,45 @@ namespace
 			for(t = 0; t < 120000 && gaveUp.empty(); t += 100)
 				gaveUp = v.tick(t, invalid).gaveUp;
 			check(gaveUp == std::vector<uint32_t>({21}) && t <= v.maxWaitMs + 200, "no valid telemetry: given up after maxWaitMs");
+
+			// The give-up clocks are the machine's: an emulator that stands still (a DAW that stopped
+			// processing) fails nothing; once it runs again they go on.
+			mmDesk::RecvSession f;
+			f.want({0xf0, 6, 0xf7}, 31);
+			auto frozen = screen(mmDesk::Screen::Main);
+			frozen.blocks = 7;
+			size_t frozenKeys = 0;
+			gaveUp.clear();
+			frozenKeys += f.tick(0, frozen).keys.size();	// it runs: the macro goes
+			frozen.blocks = 8;
+			frozenKeys += f.tick(100, frozen).keys.size();
+			for(t = 200; t < 600000 && gaveUp.empty(); t += 100)
+			{
+				out = f.tick(t, frozen);
+				gaveUp = out.gaveUp;
+				frozenKeys += out.keys.size();
+			}
+			check(gaveUp.empty() && f.queued() == 1 && frozenKeys == mmDesk::RecvSession::enterMacro().size(),
+				"the emulator stands still for ten minutes: nothing is given up, no more keys");
+			double resumed = t;
+			for(; t < resumed + 120000 && gaveUp.empty(); t += 100)
+			{
+				++frozen.blocks;
+				gaveUp = f.tick(t, frozen).gaveUp;
+			}
+			check(gaveUp == std::vector<uint32_t>({31}) && t - resumed < 40000, "running again: given up on the machine's time");
+
+			// maxWaitMs is the oldest dump's age: a newer one does not restart it.
+			mmDesk::RecvSession o;
+			o.want({0xf0, 7, 0xf7}, 41);
+			gaveUp.clear();
+			for(t = 0; t < 120000 && gaveUp.empty(); t += 100)
+			{
+				if(t == 30000)
+					o.want({0xf0, 8, 0xf7}, 42);
+				gaveUp = o.tick(t, invalid).gaveUp;
+			}
+			check(gaveUp == std::vector<uint32_t>({41, 42}) && t <= o.maxWaitMs + 200, "the oldest dump's age: given up at maxWaitMs, the newer one with it");
 		}
 	}
 
@@ -758,10 +797,79 @@ void stuckDelivery()
 		const auto* l = m ? m->find("loading") : nullptr;
 		check(l && l->find("failed") && l->find("failed")->asNumber() >= 1 && l->find("done")->asNumber() >= l->find("failed")->asNumber(),
 			"loading counts it as failed and done, so the progress can end");
+		check(errors("pattern 2: it cannot be edited until it is read") == 1, "the error says the pattern cannot be edited until it is read");
+		const int before = asked;
+		run(120000);
+		check(asked > before && asked - before <= 50, "asked again at status replies, with a backoff (at most one round a minute in the end)");
 		answer = true;
-		run(20000);
+		run(70000);
 		check(d.pattern(1).has_value(), "the next status asks again; once the machine answers it is read");
 		check(errors("did not answer the request for pattern 2") == 1, "reported once, not every round");
+	}
+	page.clear();
+	wire.clear();
+	{
+		// A slot given up in the background (no error then) is reported when the machine plays it and its read
+		// is given up again.
+		FakeMachine m;
+		m.pattern = 1;
+		m.kit = 2;
+		for(uint8_t s = 0; s < 128; ++s)
+		{
+			if(s != 5)
+				m.slots[{0x67, s}] = ed::encodeMmPattern(emptyPattern(s));
+			ed::MmKit k;
+			k.position = s;
+			k.machines.fill(1);
+			k.trigPos.fill(0xff);
+			m.slots[{0x52, s}] = ed::encodeMmKit(k);
+		}
+		for(uint8_t s = 0; s < 24; ++s)
+		{
+			ed::MmSong so;
+			so.position = s;
+			so.rows[0].bytes[0] = 0xff;
+			so.rows[0].bytes[ed::mmSongRow::g_tempo] = so.rows[0].bytes[ed::mmSongRow::g_tempo + 1] = 0xff;
+			m.slots[{0x69, s}] = ed::encodeMmSong(so);
+		}
+		for(uint8_t s = 0; s < 8; ++s)
+		{
+			ed::MmGlobal g;
+			g.position = s;
+			m.slots[{0x50, s}] = ed::encodeMmGlobal(g);
+		}
+		auto fake = port;
+		fake.device.sendSysex = [&](const Bytes& _b) { m.take(_b); };
+		mmDesk::Desk d(fake);
+		const auto msg = [&](const std::string& _json) { d.onPageMessage(*ed::json::parse(_json)); };
+		msg(R"({"op":"ready"})");
+		d.setProbe(mmDesk::Desk::Probe::Running);
+		const auto run = [&](const double _ms)
+		{
+			for(double t = 0; t < _ms; t += 100)
+			{
+				now += 100;
+				d.onTelemetry(screen(mmDesk::Screen::Main));
+				d.tick();
+				auto replies = std::move(m.replies);
+				m.replies.clear();
+				for(const auto& r : replies)
+					d.onDeviceSysex(r);
+			}
+		};
+		const auto failed = [&]
+		{
+			const auto* doc = lastMachine();
+			const auto* l = doc ? doc->find("loading") : nullptr;
+			const auto* f = l ? l->find("failed") : nullptr;
+			return f ? static_cast<int>(f->asNumber()) : 0;
+		};
+		for(double t = 0; t < 300000 && failed() == 0; t += 1000)
+			run(1000);
+		check(failed() == 1 && errors("pattern 6") == 0, "a slot given up in the background: counted as failed, no error");
+		m.pattern = 5;
+		run(20000);
+		check(errors("did not answer the request for pattern 6") == 1, "once it plays and its read is given up again: reported");
 	}
 	page.clear();
 	wire.clear();

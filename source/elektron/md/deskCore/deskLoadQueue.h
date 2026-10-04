@@ -62,12 +62,14 @@ namespace deskCore
 				|| std::any_of(m_queue.begin(), m_queue.end(), [&](const Entry& _e) { return _e.ref == _ref; });
 		}
 
-		// A document arrived: the request for it is answered.
+		// A document arrived: the request for it is answered (a late reply to one waiting out its
+		// backoff too: it is not asked for again).
 		void arrived(const Ref& _ref)
 		{
 			if(m_loading == _ref)
 				m_loading.reset();
-			m_rounds.erase(_ref);
+			if(m_rounds.erase(_ref))
+				m_queue.erase(std::remove_if(m_queue.begin(), m_queue.end(), [&](const Entry& _e) { return _e.ref == _ref; }), m_queue.end());
 		}
 
 		// The request to send now, if any: the one in flight again after _timeoutMs without

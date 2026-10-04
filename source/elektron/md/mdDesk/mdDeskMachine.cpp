@@ -1189,15 +1189,17 @@ namespace mdDesk
 	}
 
 	// A read with no reply after every resend and round (a slow wire, a cable pulled): the queue gave
-	// it up. A document the machine plays now is reported once; the next status reply asks for it
-	// again (onSysex). Another one stays unknown until it is wanted again.
+	// it up. A document the machine plays now is reported once (one given up in the background is
+	// reported when it plays and is given up again); a status reply asks for it again once its backoff
+	// is over (onSysex). Another one stays unknown until it is wanted again.
 	void MdMachine::gaveUpLoad(const DocRef& _ref)
 	{
-		if(!gaveUpReading(_ref) || !current(_ref))
+		gaveUpReading(_ref, now());
+		if(!current(_ref) || !tellUnread(_ref))
 			return;
 		fail(_ref, std::string("The machine did not answer the request for ") + kindName(_ref.kind) + " "
 			+ (_ref.kind == DocKind::Pattern ? ed::mdPatternName(_ref.slot) : std::to_string(_ref.slot + 1))
-			+ ": its edits wait until it is read. The editor asks again.");
+			+ ": it cannot be edited until it is read. The editor asks again.");
 	}
 
 	bool MdMachine::current(const DocRef& _ref) const
@@ -1264,7 +1266,7 @@ namespace mdDesk
 			const auto& st = m_session.state();
 			for(const auto& ref : {st.pattern ? std::optional<DocRef>(DocRef{DocKind::Pattern, *st.pattern}) : std::nullopt,
 					st.kit ? std::optional<DocRef>(DocRef{DocKind::Kit, *st.kit}) : std::nullopt})
-				if(ref && unread(*ref) && !m_loads.contains(*ref))
+				if(ref && mayAskAgain(*ref, now()) && !m_loads.contains(*ref))
 					load(*ref, true);
 		}
 		// Control All: the machine said which track is selected (the one its gesture leads from).

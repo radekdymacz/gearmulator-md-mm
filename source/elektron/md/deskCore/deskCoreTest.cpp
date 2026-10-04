@@ -202,6 +202,20 @@ namespace
 		check(s.send && s.send->slot == 1, "then it is asked again");
 		r.arrived({0, 1});
 		check(r.idle(), "an answer ends it");
+
+		// A late reply while the request waits out its backoff: it is not asked for again.
+		LoadQueue<R> l;
+		l.want({0, 4}, false);
+		l.next(0, 800, true, p);
+		l.next(800, 800, true, p);
+		l.next(1600, 800, true, p);
+		check(l.pending() == 1 && !l.loading(), "out of resends: waiting out its backoff");
+		l.arrived({0, 4});
+		check(l.idle(), "a late reply during the backoff: nothing left to ask");
+		bool asked = false;
+		for(double u = 1600; u < 20000; u += 10)
+			asked = asked || l.next(u, 800, true, p).send.has_value();
+		check(!asked, "and it is not asked for again");
 	}
 
 	void lifecycle()
