@@ -2015,7 +2015,8 @@ body.dockother #rail .railparams>:is(.lpspace,.pagetabs,.pkcol),body.dockother #
 
 /* ===== Perform v2: a short keyboard at the bottom; the joystick a big square in the middle, its rows beside it.
    The controls row takes the height the keyboard leaves; the stick is sized from the page height. ===== */
-#main>.perf{flex:1 1 auto;min-height:0;grid-template-rows:minmax(0,1fr);grid-auto-rows:auto}
+/* The top row never shrinks below its cards (envelope, assign, mutes): in a short window the page scrolls (#main) instead of the cards printing over each other. */
+#main>.perf{flex:1 1 auto;min-height:min-content;grid-template-rows:minmax(300px,1fr);grid-auto-rows:auto}
 .perf3{grid-template-columns:minmax(0,1fr) auto minmax(0,1fr)!important;min-height:0}
 .perf3>.card{min-height:0}
 .perf3 .menvcard{grid-template-rows:auto minmax(0,1fr) auto auto;align-content:stretch}
