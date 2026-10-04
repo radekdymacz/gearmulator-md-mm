@@ -3,6 +3,7 @@
 #include "elektronData/json.h"
 
 #include <cstddef>
+#include <cstdint>
 #include <cstdlib>
 #include <map>
 #include <optional>
@@ -17,8 +18,11 @@ namespace mdJucePlugin::pageBridge
 	//   page -> plug-in: a navigation to gmbridge://c/<escaped JSON batch>, or a batch too long for one URL in
 	//     pieces, gmbridge://p/<seq>/<i>/<n>/<escaped piece> (cut between escapes, so they are joined before they
 	//     are decoded); gmbridge://log/<escaped text> is a line for the log.
-	//   plug-in -> page: javascript:window.gm&&gm.recv([...]); an outbox longer than g_maxRecvBytes goes as several
-	//     calls, split at message boundaries (one message longer than that goes alone), in order.
+	//   plug-in -> page: javascript:window.gm&&gm.recv([...],<seq>); an outbox longer than g_maxRecvBytes goes as
+	//     several calls, split at message boundaries (one message longer than that goes alone), in order. Each call
+	//     has the next batch number: JUCE 7 keeps the last URL it went to, javascript: ones too, and goes to it again
+	//     when the view is shown again (reloadLastURL), so the page drops a batch whose number it has already had
+	//     (release review 2026-10-04, S5).
 	constexpr const char* g_command = "gmbridge://c/";
 	constexpr const char* g_piece = "gmbridge://p/";
 	constexpr const char* g_log = "gmbridge://log/";
@@ -83,8 +87,10 @@ namespace mdJucePlugin::pageBridge
 		std::map<long, Batch> m_batches;
 	};
 
-	// The outbox as the scripts that hand it to the page, in order.
-	inline std::vector<std::string> recvScripts(const std::vector<elektronData::json::Value>& _outbox, const size_t _maxBytes = g_maxRecvBytes)
+	// The outbox as the scripts that hand it to the page, in order, numbered from _firstSeq (one number a script;
+	// the caller's next batch is _firstSeq + the number of scripts).
+	inline std::vector<std::string> recvScripts(const std::vector<elektronData::json::Value>& _outbox, const uint64_t _firstSeq,
+		const size_t _maxBytes = g_maxRecvBytes)
 	{
 		std::vector<std::string> scripts;
 		std::string batch;
@@ -92,7 +98,7 @@ namespace mdJucePlugin::pageBridge
 		{
 			if(batch.empty())
 				return;
-			scripts.push_back("javascript:window.gm&&gm.recv([" + batch + "])");
+			scripts.push_back("javascript:window.gm&&gm.recv([" + batch + "]," + std::to_string(_firstSeq + scripts.size()) + ")");
 			batch.clear();
 		};
 		for(const auto& m : _outbox)

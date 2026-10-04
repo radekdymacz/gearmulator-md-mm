@@ -232,8 +232,9 @@ namespace mdJucePlugin
 	{
 		if(!m_pageReady || m_outbox.empty())
 			return;
-		const auto scripts = pageBridge::recvScripts(m_outbox);
+		const auto scripts = pageBridge::recvScripts(m_outbox, m_recvSeq);
 		m_outbox.clear();
+		m_recvSeq += scripts.size();
 		for(const auto& s : scripts)
 			m_web->goToURL(juce::String::fromUTF8(s.c_str(), static_cast<int>(s.size())));
 	}

@@ -5,8 +5,10 @@
      JUCE 7's: page -> C++ as the navigation of a throw-away iframe to gmbridge://c/<json> (JUCE 7 has no
      native-function bridge; an iframe navigation never cancels another one), a batch too long for one URL
      in pieces (gmbridge://p/<seq>/<i>/<n>/<piece>, joined by mdPageBridge.h); C++ -> page as
-     gm.recv([...messages]) through evaluateJavaScript (the plug-in splits a long outbox into several calls at
-     message boundaries). Off the plug-in (a dev host, the node tests) window.gmDev takes the batch. JUCE 8's
+     gm.recv([...messages], seq) through a javascript: URL (the plug-in splits a long outbox into several calls at
+     message boundaries, each with the next batch number). JUCE 7 goes to its last URL again when the view is
+     shown again, so the newest batch can come twice: a numbered batch not newer than the last one is dropped
+     (release review 2026-10-04, S5). A call without a number (a dev host, the tests) is always taken. Off the plug-in (a dev host, the node tests) window.gmDev takes the batch. JUCE 8's
      native bridge replaces this part only.
    - Bridge: the API the pages use (send with keyed merging and results, log, onMessage, gesture ids, ready).
      Batches use a 16 ms timer, not requestAnimationFrame: WebKit stops animation frames while the plug-in
@@ -59,8 +61,21 @@ const BridgeTransport = (() => {
 			if (native) navigate("gmbridge://log/" + encodeURIComponent(String(text)));
 			else console.log("[desk]", text);
 		},
-		/* what the plug-in says: gm.recv([...]) */
-		onReceive(fn) { window.gm = { recv: fn }; },
+		/* what the plug-in says: gm.recv([...], seq); a batch already had (seq not above the last) is dropped */
+		onReceive(fn) {
+			let lastSeq = 0;
+			const gm = {
+				dropped: 0,	/* batches dropped as already had (for the tests and a look in the inspector) */
+				recv(messages, seq) {
+					if (typeof seq === "number") {
+						if (seq <= lastSeq) { gm.dropped++; return; }
+						lastSeq = seq;
+					}
+					fn(messages);
+				}
+			};
+			window.gm = gm;
+		},
 		urls, pieces
 	};
 })();

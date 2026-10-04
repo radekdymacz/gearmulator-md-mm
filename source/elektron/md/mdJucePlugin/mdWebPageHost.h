@@ -6,6 +6,7 @@
 
 #include "juce_gui_basics/juce_gui_basics.h"
 
+#include <cstdint>
 #include <functional>
 #include <memory>
 #include <string>
@@ -18,7 +19,7 @@ namespace mdJucePlugin
 
 	// A web page in the plug-in (P6: one host for both editors): bundling (stylesheets, scripts
 	// and fonts inlined into one file, which WKWebView may read), the bridge (page -> C++ as
-	// gmbridge:// navigations, C++ -> page as gm.recv([...])), the outbox (messages wait until
+	// gmbridge:// navigations, C++ -> page as numbered gm.recv([...], seq) calls), the outbox (messages wait until
 	// the page said ready, then go out in batches), a temp file per instance, and the zoom that
 	// fits the page's design width into the window. It knows nothing about documents. How a message travels
 	// is mdPageBridge.h (the transport, pure).
@@ -56,6 +57,7 @@ namespace mdJucePlugin
 		std::unique_ptr<PageWebView> m_web;
 		std::unique_ptr<pageBridge::Pieces> m_pieces;	// the page's long batches, joined (mdPageBridge.h)
 		std::vector<Value> m_outbox;
+		uint64_t m_recvSeq = 1;	// the next gm.recv batch's number (the page drops one it has had, mdPageBridge.h)
 		juce::File m_file;
 		juce::String m_selfTest;
 		bool m_pageReady = false;

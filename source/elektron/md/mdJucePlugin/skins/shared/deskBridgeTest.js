@@ -44,6 +44,21 @@ const check = (ok, what) => { console.log((ok ? "  ok   " : "  FAIL ") + what); 
 	win.gm.recv([{ type: "result", id, ok: true }, { type: "machine", doc: {} }]);
 	check(result && result.ok && seen.join() === "result,machine", "what the plug-in says reaches the result handler and every handler, in order");
 }
+/* ---- numbered batches: one the page has had is dropped (JUCE 7 replays its last javascript: URL) ---- */
+{
+	const seen = [];
+	Bridge.onMessage(m => { if (m.type === "notice") seen.push(m.id); });
+	win.gm.recv([{ type: "notice", id: 1 }], 1);
+	win.gm.recv([{ type: "notice", id: 2 }], 2);
+	win.gm.recv([{ type: "notice", id: 2 }], 2);
+	check(seen.join() === "1,2" && win.gm.dropped === 1, "a replayed batch (the same number again) is dropped");
+	win.gm.recv([{ type: "notice", id: 1 }], 1);
+	check(seen.join() === "1,2" && win.gm.dropped === 2, "an older batch is dropped");
+	win.gm.recv([{ type: "notice", id: 3 }], 3);
+	win.gm.recv([{ type: "notice", id: 4 }]);
+	win.gm.recv([{ type: "notice", id: 4 }]);
+	check(seen.join() === "1,2,3,4,4", "the next number is taken; a call without a number (a dev host) always is");
+}
 
 if (failures) { console.error("deskBridgeTest: " + failures + " failure(s)"); process.exit(1); }
 console.log("deskBridgeTest: PASS");
