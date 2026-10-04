@@ -139,7 +139,7 @@ What both editors use is one file in `source/elektron/md/mdJucePlugin/skins/shar
 | File | What it does |
 |---|---|
 | `deskModal.js`, `deskModal.css` | The modal layer, plus the LCD's tips under the display. |
-| `deskBoot.js`, `deskBoot.css` | The start-up and first-run card. The app sets `Boot.host`, and its lifecycle calls `Boot.update`. |
+| `deskBoot.js`, `deskBoot.css` | The start-up and first-run card. The app sets `Boot.host`, and its lifecycle calls `Boot.update`. HW MIDI with no machine answering (`hwConnecting`, `hwLost`) is `Boot.midi`: not modal, a card over the dimmed workspace with AUDIO / MIDI… and Use the emulator. |
 | `deskSyx.js`, `deskSyx.css` | The SysEx import panel. The app sets `Syx.host`, and the library headers call `Syx.keys()`. |
 | `deskAudio.js`, `deskAudio.css`, `deskAudioSelfTest.js` | The audio and MIDI panel and its self-test (diagnostics builds only in the MD page). Each page's host for it stays its own (`mdDeskAudio.js`, the MM mockup's `127-audio.js`). |
 | `deskKeys.js` | The key map's dispatcher (`Keys`); each page's map is its own (`mdDeskKeys.js`, the MM mockup's `56-keys.js`). |

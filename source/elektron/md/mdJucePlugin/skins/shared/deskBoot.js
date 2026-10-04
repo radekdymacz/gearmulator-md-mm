@@ -10,6 +10,10 @@
      Boot.rom({ok, text})                the host's verdict on a chosen file
      Boot.showInstalled({machine, os, name, size, inFolder})   the same card while a firmware runs (LOAD ROM):
                                          the current image, a button to choose another, Remove, Show the ROM folder, Close
+     Boot.midi({state, machine, text})   HW MIDI with no machine answering: state "connecting" | "lost" | null. Not
+                                         modal: a card over the dimmed workspace (body.deskmidi) says what is wrong and
+                                         what to do, with AUDIO / MIDI… (openAudio, deskAudio.js) and Use the emulator
+                                         (the engine menu's "emu" entry, as if chosen there); the header stays live
      Boot.host = {chooseRom(), revealRom(), recheck(), removeRom(info), say(text)}   the app's host calls
    A file dragged onto the page is not opened by the web view (that would replace the page): the card says to click
    the button instead. */
@@ -120,5 +124,39 @@ const Boot = (() => {
 		const text = f && /\.syx$/i.test(f.name || "") ? "Use Import SysEx… in the menu to open a .syx." : open ? "Click here to choose the ROM." : "Use LOAD ROM in the engine menu to choose a ROM.";
 		if (!open) { if (Boot.host && Boot.host.say) Boot.host.say(text); } else rom({ ok: false, text });
 	}, true);
-	return { update, lcd, rom, showInstalled, host: null, state: () => shown };
+	/* HW MIDI with no machine answering (yet): not the start-up card (the header, its engine menu and AUDIO / MIDI stay
+	   live) but a card over the dimmed workspace that says what is wrong and what to do */
+	const wait = document.createElement("div");
+	wait.id = "bootmidi"; wait.className = "bootmidi"; wait.hidden = true; wait.setAttribute("role", "status");
+	wait.innerHTML = `<div class="bmhead"><i class="bmled" aria-hidden="true"></i><h2 id="bmt"></h2></div>
+ <p class="bmtext" id="bmtext"></p>
+ <p class="bmhint" id="bmhint"></p>
+ <div class="bmkeys"><button type="button" class="cream" data-bootmidi="audio">AUDIO / MIDI…</button><button type="button" data-bootmidi="emu">Use the emulator</button></div>`;
+	document.body.appendChild(wait);
+	const emuOption = () => { const o = document.querySelector('#engsel option[value="emu"]'); return o && !o.disabled ? o : null; };
+	function midi(o) {
+		const st = o && (o.state === "connecting" || o.state === "lost") ? o.state : null;
+		document.body.classList.toggle("deskmidi", !!st);
+		wait.hidden = !st;
+		if (!st) return;
+		const m = o.machine || machine;
+		wait.classList.toggle("lost", st === "lost");
+		wait.querySelector("#bmt").textContent = st === "lost" ? `No ${m} answers on MIDI` : `Connecting to the ${m}…`;
+		wait.querySelector("#bmtext").textContent = o.text || (st === "lost" ? `The ${m} has not answered on the MIDI in and out.` : `Waiting for the ${m} to answer on the MIDI in and out.`);
+		wait.querySelector("#bmhint").textContent = st === "lost"
+			? `Check both MIDI cables and the ${m}'s MIDI channel, and choose its ports in AUDIO / MIDI (in a DAW: route the track's MIDI to and from it). Editing waits until it answers.`
+			: `Editing starts when it answers. Not connected yet? Choose its MIDI in and out in AUDIO / MIDI (in a DAW: route the track's MIDI to and from it).`;
+		wait.querySelector('[data-bootmidi="audio"]').hidden = typeof openAudio !== "function";
+		wait.querySelector('[data-bootmidi="emu"]').hidden = !emuOption();
+	}
+	wait.addEventListener("click", e => {
+		const k = e.target.closest("[data-bootmidi]"); if (!k) return;
+		e.stopPropagation();
+		if (k.dataset.bootmidi === "audio" && typeof openAudio === "function") openAudio();
+		else if (k.dataset.bootmidi === "emu") {
+			const sel = document.getElementById("engsel"); if (!sel || !emuOption()) return;
+			sel.value = "emu"; sel.dispatchEvent(new Event("change", { bubbles: true }));
+		}
+	});
+	return { update, lcd, rom, showInstalled, midi, host: null, state: () => shown };
 })();

@@ -318,6 +318,9 @@ function setEng(st){S.eng=st;const[txt,led]=ENG[st],b=document.querySelector(".l
  refreshEngGate();
  /* P7: the start-up card over the whole window until the machine takes input; NO ROM and ROM ERROR are its first-run states */
  Boot.update({state:{norom:"missing",unsupported:"unsupported",loading:"loading",boot:"booting"}[st]||"ready",machine:"Monomachine"});
+ /* HW MIDI with no machine answering: a card over the dimmed workspace says what to do (deskBoot.js) */
+ Boot.midi({state:{hwwait:"connecting",hwnone:"lost"}[st]||null,machine:"Monomachine",text:ENG[st][2]});
+ const kn=$("#kitname"),sv=$("#save");if(kn)kn.textContent=st==="hwwait"?"—":kitName(S.kit);if(sv)sv.style.visibility=st==="hwwait"?"hidden":"";
  bootScreen(st==="boot");
  b.title=ENG[st][2]||(engReady()?"Engine: running. Click to switch emulator or hardware, or load another ROM.":"Engine: "+txt.toLowerCase()+". Editing starts when it is ready.")}
 /* while BOOTING OS the LCD shows a firmware-style start-up screen (the text is the editor's, not a copy of the ROM's) */

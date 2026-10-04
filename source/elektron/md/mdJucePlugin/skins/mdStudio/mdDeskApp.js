@@ -102,7 +102,7 @@ const DELETE = Overlay.DELETE;
 function onResult(r) {
 	/* its optimistic edits leave the overlay; a refused one is shown as the documents have it */
 	if (Overlay.answered(r.id) && !r.ok) scheduleRender();
-	if (!r.ok && r.errors && r.errors.length) { toast(r.errors[0]); showLastError(r.errors); }
+	if (!r.ok && r.errors && r.errors.length) showLastError(r.errors);	/* once: the error line, not a toast too */
 	else if (r.note) toast(r.note);
 }
 /* The kit parameter index 0-23. With the group (syn, fx, rt) it is looked up in that page only: some
@@ -138,7 +138,14 @@ function audible(t) { const any = V.tracks.some(x => x.solo); return any ? V.tra
 function clamp(v, a = 0, b = 127) { return Math.max(a, Math.min(b, v)); }
 const $ = q => document.querySelector(q), $$ = q => [...document.querySelectorAll(q)];
 let toastT; function toast(m) { const e = $("#toast"); e.textContent = m; e.classList.add("on"); clearTimeout(toastT); toastT = setTimeout(() => e.classList.remove("on"), 2800); }
-function showLastError(errors) { const e = $("#errline"); if (!e) return; e.textContent = errors.join(" · "); e.hidden = false; clearTimeout(e._t); e._t = setTimeout(() => { e.hidden = true; }, 6000); }
+/* the error line under the header (over the page, never in its flow): 6 s, or until its × is clicked */
+function showLastError(errors) {
+	const e = $("#errline"); if (!e) return;
+	const hide = () => { clearTimeout(e._t); e.hidden = true; };
+	e.innerHTML = `<span></span><button class="errx" type="button" aria-label="Dismiss" title="Dismiss">×</button>`;
+	e.firstChild.textContent = errors.join(" · "); e.lastChild.onclick = ev => { ev.stopPropagation(); hide(); };
+	e.hidden = false; clearTimeout(e._t); e._t = setTimeout(hide, 6000);
+}
 const kitName = k => "K" + String(k + 1).padStart(2, "0") + " " + (V.kitNames[k] || "KIT " + String(k + 1).padStart(2, "0"));
 /* TX LED: lit while the desk has an edit on the wire (machine.desk.tx), and briefly for every command. */
 let txT; function tx() { const l = $("#txled"); if (!l) return; l.classList.add("on"); clearTimeout(txT); txT = setTimeout(syncTx, 90); }

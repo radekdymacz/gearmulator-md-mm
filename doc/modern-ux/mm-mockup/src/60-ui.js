@@ -42,7 +42,10 @@ function renderPst(){if(HOST.renderPst)return HOST.renderPst();if(S.engine==="hw
  else if(S.patSent==="recv")setPst("RECV","The emulator is on SYSEX RECV and takes the dump.");else setPst("","")}
 /* the pattern field's SYSEX RECV state: its text, tooltip, and warn (a click opens the send dialog) */
 /* P7: the sync slot on LCD line 2: SYNC when nothing is on its way, else the host's word (RECV n, SEND n) */
-function setPst(text,tip,warn,read){const p=$("#pst"),f=$("#syncf");if(!p||!f)return;p.textContent=text||"Sync";f.classList.toggle("warn",!!warn);f.title=tip||"In step with the machine";
+function setPst(text,tip,warn,read){const p=$("#pst"),f=$("#syncf");if(!p||!f)return;p.textContent=text||"Sync";
+ /* warn (SEND n, edits waiting for the machine): a lit LCD key with a red LED, not the plain SYNC word; said once as it starts */
+ if(warn&&!f.classList.contains("warn"))toast("Edits wait to be sent to the Monomachine: click "+(text||"SEND")+" on the LCD for how.");
+ f.classList.toggle("warn",!!warn);f.title=tip||"In step with the machine";
  /* read: the background read's fraction (a thin bar under the word), or nothing */
  f.classList.toggle("read",read!=null);f.style.setProperty("--rf",read??0)}
 /* HW MIDI: what waits for the machine's SYSEX RECV (a host counts its own: waiting(), sendNow()) */
@@ -73,7 +76,7 @@ function renderTop(){
  $("#platekey span").textContent=S.plate==="mk1"?"MKI":"MKII";
  const n=S.locks.size,m=$("#meter");$("#lockn").textContent=String(n).padStart(2,"0")+"/62";m.className="f meter"+(n>=62?" full":n>=52?" warn":"");
  $("#bpm").textContent=S.bpm.toFixed(1);$("#pat").textContent=patName(S.queued??S.pat);$("#pat").parentElement.classList.toggle("queued",S.queued!=null);
- $("#kitname").textContent=kitName(S.kit);const hc=HOST.history?HOST.history():{undo:0,redo:0};$("#undo").disabled=!hc.undo;$("#redo").disabled=!hc.redo;$("#undon").textContent=hc.undo||"";$("#redon").textContent=hc.redo||"";
+ $("#kitname").textContent=S.eng==="hwwait"?"—":kitName(S.kit);const hc=HOST.history?HOST.history():{undo:0,redo:0};$("#undo").disabled=!hc.undo;$("#redo").disabled=!hc.redo;$("#undon").textContent=hc.undo||"";$("#redon").textContent=hc.redo||"";
  $("#play").setAttribute("aria-pressed",S.playing);$("#playico").textContent=S.playing?"■":"▶";$("#play").setAttribute("aria-label",S.playing?"Stop":"Play");$("#rec").setAttribute("aria-pressed",!!S.rec);$("#recled").classList.toggle("on",!!S.rec);
  renderPst();syncLockBudget()}
 /* line 2: fixed-width slots (as in the MD Editor v46), so values never push into COPY / CLR / PASTE */

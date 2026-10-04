@@ -17,8 +17,10 @@ function renderTop() {
 	$("#pat").parentElement.classList.toggle("queued", V.queued != null);
 	if (lastQueued != null && V.queued == null && V.pat === lastQueued) { const pf = $(".patf"); if (pf) { pf.classList.remove("flash"); void pf.offsetWidth; pf.classList.add("flash"); } }
 	lastQueued = V.queued;
-	$("#kitname").textContent = kitName(V.kit);
+	/* no kit document yet (HW MIDI not answering, or the first read): no placeholder name and no saved/edited chip */
+	$("#kitname").textContent = V.loaded ? kitName(V.kit) : "—";
 	setKitState(V.kitState);
+	const sv = $("#save"); if (sv) sv.style.visibility = V.loaded ? "" : "hidden";
 	$("#undo").disabled = !V.canUndo; $("#redo").disabled = !V.canRedo; syncUndoCounts();
 	/* One key: PLAY while stopped, STOP while playing (the icon follows the machine). */
 	$("#play").setAttribute("aria-pressed", V.playing); $("#playico").textContent = V.playing ? "■" : "▶"; $("#play").setAttribute("aria-label", V.playing ? "Stop" : "Play");
@@ -30,13 +32,16 @@ function renderTop() {
 	const st = $("#status");
 	if (st) {
 		/* P7: while the machine starts, the start-up card says so (Boot); after it, the first read */
-		const msg = V.input && !V.loaded ? "Reading the current pattern and kit from the machine…" : "";
+		const hw = V.lifecycle === "hwConnecting" || V.lifecycle === "hwLost";	/* Boot.midi's card says it then */
+		const msg = V.input && !V.loaded && !hw ? "Reading the current pattern and kit from the machine…" : "";
 		st.textContent = msg; st.hidden = !msg;
 	}
 	/* the start-up card over the whole window until the machine takes input; NO ROM and ROM ERROR are its
 	   first-run states (an engine over MIDI has no start-up of its own) */
 	const bootState = { missing: "missing", unsupported: "unsupported", loading: "loading", booting: "booting", animating: "booting" }[V.lifecycle] || "ready";
 	Boot.update({ state: bootState, machine: "Machinedrum" });
+	/* HW MIDI with no machine answering: a card over the dimmed workspace says what to do (deskBoot.js) */
+	Boot.midi({ state: { hwConnecting: "connecting", hwLost: "lost" }[V.lifecycle] || null, machine: "Machinedrum", text: V.lifecycleText });
 	if ($("#dlg").dataset.first === "1") { $("#dlg").hidden = true; $("#dlg").dataset.first = ""; }
 }
 

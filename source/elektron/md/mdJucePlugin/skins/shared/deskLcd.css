@@ -23,8 +23,12 @@
 /* the LCD's own tips: under the display, never over it (see Tips in deskModal.js) */
 .lcdtip{position:fixed;z-index:130;max-width:360px;padding:6px 9px;border-radius:4px;background:var(--plate);color:var(--body);border:1px solid var(--print2);font:500 12px/1.35 var(--sans);box-shadow:0 8px 20px rgba(0,0,0,.3);pointer-events:none}
 .lcdtip[hidden]{display:none}
-.syncf.warn{cursor:pointer}
-.syncf.warn b{animation:blink 1s steps(2) infinite}
+/* warn: edits wait for the person (the MM's SEND n on HW MIDI): a lit key in the slot, the LCD's ink with a blinking
+   red LED, so it never reads as the plain SYNC word */
+.syncf.warn{cursor:pointer;background:var(--ink);color:var(--lcd);border-radius:2px;box-shadow:inset 0 0 0 1px var(--ink)}
+.lcdpanel .syncf.warn .led{background:var(--rec)!important;box-shadow:0 0 4px var(--rec)!important;opacity:1!important;animation:blink 1s steps(2) infinite}
+.syncf.warn:hover{background:color-mix(in srgb,var(--ink) 85%,var(--lcd))}
+@media (prefers-reduced-motion:reduce){.lcdpanel .syncf.warn .led{animation:none}}
 /* the background read of the library (READ n/m): a thin bar along the slot's foot */
 .syncf.read{background:linear-gradient(color-mix(in srgb,var(--ink) 70%,transparent),color-mix(in srgb,var(--ink) 70%,transparent)) no-repeat left bottom/calc(var(--rf,0) * 100%) 2px}
 /* the MKII print sits centred under the display's bezel */

@@ -1167,10 +1167,14 @@ html,body{min-width:1280px}
 .gmk small{font:10px var(--mono);color:var(--keydim)}
 .gmk .stepper{display:flex;gap:2px}
 .gmk.none{opacity:.55}
-.grout{display:grid;grid-template-columns:repeat(16,minmax(0,1fr));gap:3px}
-.grout button{height:34px;padding:0;display:grid;align-content:center;font:500 10px var(--mono);letter-spacing:0}
-.grout button b{font:600 11px var(--mono)}
+/* the 16 track outputs as two rows of 8 (the map editor's grid beside it): MAIN dim, a direct output A-F lit */
+.grout{display:grid;grid-template-columns:repeat(8,minmax(0,1fr));gap:4px}
+.grout button{height:40px;min-width:0;padding:0 2px;display:grid;align-content:center;gap:1px;font:500 10px var(--mono);letter-spacing:0;overflow:hidden;white-space:nowrap;text-overflow:clip}
+.grout button small{font:10px var(--mono);color:var(--keydim)}
+.grout button b{font:600 11px var(--mono);overflow:hidden;text-overflow:clip}
+.grout button:not(.on) b{color:var(--keydim)}
 .grout button.on{background:var(--cream);color:var(--creamtext)}
+.grout button.on small{color:inherit;opacity:.7}
 .ginputs{display:grid;grid-template-columns:auto repeat(5,minmax(0,1fr));gap:3px 8px;font:12px var(--mono);align-items:center}
 .ginputs span{color:var(--print2);font:600 10px var(--sans);letter-spacing:.12em;text-transform:uppercase}
 .gnv{font:600 9px var(--sans);letter-spacing:.1em;text-transform:uppercase;color:var(--print3);border:1px solid var(--rule);border-radius:2px;padding:0 4px;margin-left:6px}
@@ -2117,6 +2121,7 @@ function setEng(st){S.eng=st;const [txt,led]=ENG[st],b=document.querySelector(".
  const ready=st==="ready"||st==="hwready";document.querySelector(".lcdpanel").classList.toggle("engwait",!ready);
  /* P7: the start-up card over the whole window until the machine takes input; NO ROM is its first-run state */
  Boot.update({state:{norom:"missing",loading:"loading",boot:"booting"}[st]||"ready",machine:"Machinedrum"});
+ Boot.midi({state:{hwwait:"connecting",hwnone:"lost"}[st]||null,machine:"Machinedrum"});
  ["rec","play"].forEach(id=>{const k=document.getElementById(id);if(k)k.disabled=!ready});
  b.title=ready?"Engine: running. Click to switch emulator or hardware, or load another ROM.":"Engine: "+txt.toLowerCase()+". Editing starts when it is ready."}
 /* SysEx in the example: a pretend file with a few kits and patterns */

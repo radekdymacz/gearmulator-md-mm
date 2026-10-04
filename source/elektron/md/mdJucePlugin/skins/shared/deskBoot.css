@@ -31,4 +31,19 @@
 .bootcur .bootfile{font:500 12px var(--mono);min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--print)}
 .bootcur i{font-style:normal;flex:none}
 
-@media (prefers-reduced-motion:reduce){.bootcard{transition:none}.bootcard.ind .bootbar i{animation:none}}
+/* HW MIDI with no machine answering (Boot.midi): the workspace dims and takes no gesture; a card over it says why and
+   what to do. The header (engine menu, AUDIO / MIDI) stays live. */
+body.deskmidi #main,body.deskmidi #rail{opacity:.3;pointer-events:none;transition:opacity .3s}
+.bootmidi{position:fixed;left:50%;top:56%;transform:translate(-50%,-50%);z-index:15;width:min(520px,calc(100vw - 48px));box-sizing:border-box;display:grid;gap:10px;padding:18px 20px;background:var(--plate);border:2px solid var(--print);border-radius:8px;box-shadow:0 24px 60px rgba(0,0,0,.45);color:var(--body)}
+.bootmidi[hidden]{display:none}
+.bmhead{display:flex;align-items:center;gap:10px}
+.bmled{flex:none;width:8px;height:8px;border-radius:50%;background:var(--led);animation:bmblink 1s steps(2) infinite}
+.bootmidi.lost .bmled{background:var(--rec);animation:none}
+@keyframes bmblink{50%{opacity:.15}}
+.bootmidi h2{margin:0;font:600 18px var(--sans);letter-spacing:.14em;text-transform:uppercase;color:var(--print)}
+.bmtext{margin:0;font:500 15px/1.4 var(--sans);color:var(--print)}
+.bmhint{margin:0;font:500 13px/1.4 var(--sans);color:var(--print2)}
+.bmkeys{display:flex;gap:8px;margin-top:4px}
+.bmkeys button{height:30px;padding:0 14px;font:600 12px var(--sans);letter-spacing:.1em;text-transform:uppercase}
+.bmkeys button[hidden]{display:none}
+@media (prefers-reduced-motion:reduce){.bootcard{transition:none}.bootcard.ind .bootbar i{animation:none}.bmled{animation:none}body.deskmidi #main,body.deskmidi #rail{transition:none}}

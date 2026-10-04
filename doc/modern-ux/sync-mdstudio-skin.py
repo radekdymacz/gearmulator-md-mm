@@ -62,8 +62,12 @@ for pattern in MOCK_ONLY:
     assert not re.search(pattern, m), 'mockup: a mockup-only element came back (%s): drop it in the mockup' % pattern
 BODY = '  <div class="body" id="body">'
 assert m.count(BODY) == 1, 'mockup: no #body, or more than one'
-m = m.replace(BODY, '  <p class="statusline" id="status" role="status" hidden></p>\n'
-              '  <p class="errline" id="errline" role="alert" hidden></p>\n' + BODY)
+# The status and error lines hang from the header's foot (mdOverrides.css): over the page, never in its flow,
+# so a refused edit does not move the grid under the pointer.
+HEAD_END = '  </header>'
+assert m.count(HEAD_END) == 1, 'mockup: no </header> of the top bar, or more than one'
+m = m.replace(HEAD_END, '    <p class="statusline" id="status" role="status" hidden></p>\n'
+              '    <p class="errline" id="errline" role="alert" hidden></p>\n' + HEAD_END)
 # Controls the machine cannot do yet: (mockup text, skin text). Each must match.
 HONEST = [
     # P4: HW MIDI is real (the plug-in's MIDI in/out); nothing to disable here now.

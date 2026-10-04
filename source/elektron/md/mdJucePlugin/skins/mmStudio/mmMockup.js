@@ -816,6 +816,10 @@ const DeskCaps = (() => {
      Boot.rom({ok, text})                the host's verdict on a chosen file
      Boot.showInstalled({machine, os, name, size, inFolder})   the same card while a firmware runs (LOAD ROM):
                                          the current image, a button to choose another, Remove, Show the ROM folder, Close
+     Boot.midi({state, machine, text})   HW MIDI with no machine answering: state "connecting" | "lost" | null. Not
+                                         modal: a card over the dimmed workspace (body.deskmidi) says what is wrong and
+                                         what to do, with AUDIO / MIDI… (openAudio, deskAudio.js) and Use the emulator
+                                         (the engine menu's "emu" entry, as if chosen there); the header stays live
      Boot.host = {chooseRom(), revealRom(), recheck(), removeRom(info), say(text)}   the app's host calls
    A file dragged onto the page is not opened by the web view (that would replace the page): the card says to click
    the button instead. */
@@ -926,7 +930,41 @@ const Boot = (() => {
 		const text = f && /\.syx$/i.test(f.name || "") ? "Use Import SysEx… in the menu to open a .syx." : open ? "Click here to choose the ROM." : "Use LOAD ROM in the engine menu to choose a ROM.";
 		if (!open) { if (Boot.host && Boot.host.say) Boot.host.say(text); } else rom({ ok: false, text });
 	}, true);
-	return { update, lcd, rom, showInstalled, host: null, state: () => shown };
+	/* HW MIDI with no machine answering (yet): not the start-up card (the header, its engine menu and AUDIO / MIDI stay
+	   live) but a card over the dimmed workspace that says what is wrong and what to do */
+	const wait = document.createElement("div");
+	wait.id = "bootmidi"; wait.className = "bootmidi"; wait.hidden = true; wait.setAttribute("role", "status");
+	wait.innerHTML = `<div class="bmhead"><i class="bmled" aria-hidden="true"></i><h2 id="bmt"></h2></div>
+ <p class="bmtext" id="bmtext"></p>
+ <p class="bmhint" id="bmhint"></p>
+ <div class="bmkeys"><button type="button" class="cream" data-bootmidi="audio">AUDIO / MIDI…</button><button type="button" data-bootmidi="emu">Use the emulator</button></div>`;
+	document.body.appendChild(wait);
+	const emuOption = () => { const o = document.querySelector('#engsel option[value="emu"]'); return o && !o.disabled ? o : null; };
+	function midi(o) {
+		const st = o && (o.state === "connecting" || o.state === "lost") ? o.state : null;
+		document.body.classList.toggle("deskmidi", !!st);
+		wait.hidden = !st;
+		if (!st) return;
+		const m = o.machine || machine;
+		wait.classList.toggle("lost", st === "lost");
+		wait.querySelector("#bmt").textContent = st === "lost" ? `No ${m} answers on MIDI` : `Connecting to the ${m}…`;
+		wait.querySelector("#bmtext").textContent = o.text || (st === "lost" ? `The ${m} has not answered on the MIDI in and out.` : `Waiting for the ${m} to answer on the MIDI in and out.`);
+		wait.querySelector("#bmhint").textContent = st === "lost"
+			? `Check both MIDI cables and the ${m}'s MIDI channel, and choose its ports in AUDIO / MIDI (in a DAW: route the track's MIDI to and from it). Editing waits until it answers.`
+			: `Editing starts when it answers. Not connected yet? Choose its MIDI in and out in AUDIO / MIDI (in a DAW: route the track's MIDI to and from it).`;
+		wait.querySelector('[data-bootmidi="audio"]').hidden = typeof openAudio !== "function";
+		wait.querySelector('[data-bootmidi="emu"]').hidden = !emuOption();
+	}
+	wait.addEventListener("click", e => {
+		const k = e.target.closest("[data-bootmidi]"); if (!k) return;
+		e.stopPropagation();
+		if (k.dataset.bootmidi === "audio" && typeof openAudio === "function") openAudio();
+		else if (k.dataset.bootmidi === "emu") {
+			const sel = document.getElementById("engsel"); if (!sel || !emuOption()) return;
+			sel.value = "emu"; sel.dispatchEvent(new Event("change", { bubbles: true }));
+		}
+	});
+	return { update, lcd, rom, showInstalled, midi, host: null, state: () => shown };
 })();
 
 /* ---- shared/deskSyx.js ---- */
@@ -1049,7 +1087,10 @@ function renderPst(){if(HOST.renderPst)return HOST.renderPst();if(S.engine==="hw
  else if(S.patSent==="recv")setPst("RECV","The emulator is on SYSEX RECV and takes the dump.");else setPst("","")}
 /* the pattern field's SYSEX RECV state: its text, tooltip, and warn (a click opens the send dialog) */
 /* P7: the sync slot on LCD line 2: SYNC when nothing is on its way, else the host's word (RECV n, SEND n) */
-function setPst(text,tip,warn,read){const p=$("#pst"),f=$("#syncf");if(!p||!f)return;p.textContent=text||"Sync";f.classList.toggle("warn",!!warn);f.title=tip||"In step with the machine";
+function setPst(text,tip,warn,read){const p=$("#pst"),f=$("#syncf");if(!p||!f)return;p.textContent=text||"Sync";
+ /* warn (SEND n, edits waiting for the machine): a lit LCD key with a red LED, not the plain SYNC word; said once as it starts */
+ if(warn&&!f.classList.contains("warn"))toast("Edits wait to be sent to the Monomachine: click "+(text||"SEND")+" on the LCD for how.");
+ f.classList.toggle("warn",!!warn);f.title=tip||"In step with the machine";
  /* read: the background read's fraction (a thin bar under the word), or nothing */
  f.classList.toggle("read",read!=null);f.style.setProperty("--rf",read??0)}
 /* HW MIDI: what waits for the machine's SYSEX RECV (a host counts its own: waiting(), sendNow()) */
@@ -1080,7 +1121,7 @@ function renderTop(){
  $("#platekey span").textContent=S.plate==="mk1"?"MKI":"MKII";
  const n=S.locks.size,m=$("#meter");$("#lockn").textContent=String(n).padStart(2,"0")+"/62";m.className="f meter"+(n>=62?" full":n>=52?" warn":"");
  $("#bpm").textContent=S.bpm.toFixed(1);$("#pat").textContent=patName(S.queued??S.pat);$("#pat").parentElement.classList.toggle("queued",S.queued!=null);
- $("#kitname").textContent=kitName(S.kit);const hc=HOST.history?HOST.history():{undo:0,redo:0};$("#undo").disabled=!hc.undo;$("#redo").disabled=!hc.redo;$("#undon").textContent=hc.undo||"";$("#redon").textContent=hc.redo||"";
+ $("#kitname").textContent=S.eng==="hwwait"?"—":kitName(S.kit);const hc=HOST.history?HOST.history():{undo:0,redo:0};$("#undo").disabled=!hc.undo;$("#redo").disabled=!hc.redo;$("#undon").textContent=hc.undo||"";$("#redon").textContent=hc.redo||"";
  $("#play").setAttribute("aria-pressed",S.playing);$("#playico").textContent=S.playing?"■":"▶";$("#play").setAttribute("aria-label",S.playing?"Stop":"Play");$("#rec").setAttribute("aria-pressed",!!S.rec);$("#recled").classList.toggle("on",!!S.rec);
  renderPst();syncLockBudget()}
 /* line 2: fixed-width slots (as in the MD Editor v46), so values never push into COPY / CLR / PASTE */
@@ -3192,6 +3233,9 @@ function setEng(st){S.eng=st;const[txt,led]=ENG[st],b=document.querySelector(".l
  refreshEngGate();
  /* P7: the start-up card over the whole window until the machine takes input; NO ROM and ROM ERROR are its first-run states */
  Boot.update({state:{norom:"missing",unsupported:"unsupported",loading:"loading",boot:"booting"}[st]||"ready",machine:"Monomachine"});
+ /* HW MIDI with no machine answering: a card over the dimmed workspace says what to do (deskBoot.js) */
+ Boot.midi({state:{hwwait:"connecting",hwnone:"lost"}[st]||null,machine:"Monomachine",text:ENG[st][2]});
+ const kn=$("#kitname"),sv=$("#save");if(kn)kn.textContent=st==="hwwait"?"—":kitName(S.kit);if(sv)sv.style.visibility=st==="hwwait"?"hidden":"";
  bootScreen(st==="boot");
  b.title=ENG[st][2]||(engReady()?"Engine: running. Click to switch emulator or hardware, or load another ROM.":"Engine: "+txt.toLowerCase()+". Editing starts when it is ready.")}
 /* while BOOTING OS the LCD shows a firmware-style start-up screen (the text is the editor's, not a copy of the ROM's) */
