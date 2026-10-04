@@ -13,10 +13,9 @@ code { font: 12px Menlo, monospace; }
 installer. If you are reading this, you already got past that step. If the app
 itself is blocked the first time you open it:</p>
 <ol>
-<li>In Finder, <b>right-click</b> (or Control-click) <b>{{APP_NAME}}</b> in
-Applications and choose <b>Open</b>, then <b>Open</b> again; or</li>
 <li>open <b>System Settings &rsaquo; Privacy &amp; Security</b>, scroll down and click
-<b>Open Anyway</b> next to the message about {{APP_NAME}}; or</li>
+<b>Open Anyway</b> next to the message about {{APP_NAME}} (on macOS 15 and later
+right-click &rsaquo; Open no longer gets past this); or</li>
 <li>in Terminal:<br>
 <code>xattr -dr com.apple.quarantine "/Applications/{{APP_NAME}}.app"</code><br>
 (installed for you only: <code>"$HOME/Applications/{{APP_NAME}}.app"</code>)</li>

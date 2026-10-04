@@ -81,7 +81,7 @@
         <p class="small">The installer puts the app in Applications and the VST3 and AU plug-ins in <code>/Library/Audio/Plug-Ins</code>. No administrator password? Choose <b>Install for me only</b>: then they go to <code>~/Applications</code> and <code>~/Library/Audio/Plug-Ins</code> in your home folder.</p>
         <div class="notes">
           <details open><summary>1 · Install</summary><ol>
-            <li>Right-click the <code>.pkg</code> and choose <b>Open</b> (it is not notarised by Apple). If macOS still refuses: System Settings → Privacy &amp; Security → <b>Open Anyway</b>.</li>
+            <li>Double-click the <code>.pkg</code>. It is not notarised by Apple, so macOS 15 and later blocks it. Open <b>System Settings → Privacy &amp; Security</b>, scroll down to the message about the installer, click <b>Open Anyway</b> and confirm with your password or Touch ID. (Right-click → Open no longer works for installers.)</li>
             <li>At <b>Destination Select</b> (or <b>Change Install Location…</b>) pick <b>Install for all users</b> (needs an administrator) or <b>Install for me only</b> (works on a standard or managed account).</li>
             <li>Rescan plug-ins in your DAW.</li>
           </ol></details>

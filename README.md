@@ -2,14 +2,17 @@
 
 This fork adds two screen-native editors on top of joelanders' Machinedrum and Monomachine
 emulation: the whole machine on one page (step grid, parameter-lock lanes, kit and pattern library,
-chains, mutes, app LFOs, and a beta HW MIDI mode for a real machine). They run the real firmware,
+chains, mutes, a sampler view, and a beta HW MIDI mode for a real machine). They run the real firmware,
 as a standalone app, VST3 and AU on macOS.
 
 - **Site, screenshots, download:** https://mdmm.nativekloud.com
 - **Releases:** https://github.com/radekdymacz/gearmulator-md-mm/releases
-  (latest: [0.2.1 notes](doc/release/v0.2.1.md); [0.2.0](doc/release/v0.2.0.md); first: [0.1.0 alpha](doc/release/v0.1.0-alpha.md))
-- **Bring your own ROM.** No firmware is included; drag your machine's image onto the
-  editor's window (or copy it to `~/Documents/Gearmulator Preview/Machinedrum/roms/` or `.../Monomachine/roms/`).
+  (latest: [0.3.0 notes](doc/release/v0.3.0.md); [0.2.1](doc/release/v0.2.1.md); [0.2.0](doc/release/v0.2.0.md); first: [0.1.0 alpha](doc/release/v0.1.0-alpha.md))
+- **Bring your own ROM.** No firmware is included; choose your machine's image with the editor's
+  file chooser (or copy it to `~/Documents/Gearmulator Preview/Machinedrum/roms/` or `.../Monomachine/roms/`).
+- **Installing on macOS.** The installers are not signed or notarised yet. On macOS 15 and later,
+  double-click the `.pkg`, then open System Settings › Privacy & Security, scroll to the message
+  about the installer and click **Open Anyway** (right-click › Open no longer works for installers).
 - **Bugs and questions about the editors:** [this fork's issues](https://github.com/radekdymacz/gearmulator-md-mm/issues),
   not upstream.
 - **Credits:** the MD/MM emulation is by [joelanders](https://github.com/joelanders/gearmulator-md-mm);
@@ -32,7 +35,7 @@ There is a Discord channel [here](https://discord.gg/BnkTKpmp8) at #gearmulator-
 **Do NOT discuss firmware or ROMs in Discord.**
 **DO NOT ask us for the .bin files / firmware! They're under Elektron's copyright. This emulator is for people who own the original hardware.**
 
-[Downloads](https://github.com/joelanders/gearmulator-md-mm/releases) ·
+[Downloads](https://github.com/radekdymacz/gearmulator-md-mm/releases) ·
 [Report a bug](https://github.com/joelanders/gearmulator-md-mm/issues)
 
 Link to a short demo on Youtube:
