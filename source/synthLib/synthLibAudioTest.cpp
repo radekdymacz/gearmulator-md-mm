@@ -1,6 +1,7 @@
 #include "device.h"
 #include "plugin.h"
 #include "syntheticAudioTestDevice.h"
+#include "baseLib/finite.h"
 
 #include <algorithm>
 #include <array>
@@ -219,8 +220,8 @@ namespace
 					{
 						for(size_t sample = 0; sample < blockSize; ++sample)
 						{
-							const auto value = storage.output[channel][sample];
-							require(std::isfinite(value),
+							const auto& value = storage.output[channel][sample];
+							require(baseLib::isFinite(value),
 								"resampler produced a non-finite sample");
 							audible[channel] = audible[channel]
 								|| std::abs(value) > 0.0001f;

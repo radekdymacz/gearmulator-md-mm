@@ -4,6 +4,7 @@
 #include "mdLib/mdtypes.h"
 
 #include "synthLib/plugin.h"
+#include "baseLib/finite.h"
 
 #include <algorithm>
 #include <array>
@@ -173,7 +174,7 @@ namespace
 		for(const auto& channel : _audio)
 		{
 			if(!std::all_of(channel.begin(), channel.end(),
-				[](const float sample) { return std::isfinite(sample); }))
+				[](const float& sample) { return baseLib::isFinite(sample); }))
 				return false;
 			double energy = 0, maximum = 0;
 			size_t begin = 0;
@@ -343,7 +344,7 @@ namespace
 		for(const auto& channel : silentPlayback)
 			for(size_t i = 0; i < channel.size(); ++i)
 			{
-				if(!std::isfinite(channel[i]))
+				if(!baseLib::isFinite(channel[i]))
 					return fail("silent RAM playback produced a non-finite sample");
 				if(i >= 4096)
 					silentRamPeak = std::max(silentRamPeak, std::abs(channel[i]));
@@ -748,9 +749,9 @@ static int runFirmwareTest(const char* const firmwarePath)
 
 	float peak = 0.0f;
 	for(const auto& channel : rendered)
-		for(const auto sample : channel)
+		for(const auto& sample : channel)
 		{
-			if(!std::isfinite(sample))
+			if(!baseLib::isFinite(sample))
 				return fail("factory ROM machine produced a non-finite sample");
 			peak = std::max(peak, std::abs(sample));
 		}

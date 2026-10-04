@@ -7,6 +7,7 @@
 #include "jucePluginLib/processor.h"
 #include "jucePluginLib/tools.h"
 #include "baseLib/filesystem.h"
+#include "baseLib/finite.h"
 #include "synthLib/device.h"
 #include "synthLib/plugin.h"
 #include "synthLib/syntheticAudioTestDevice.h"
@@ -373,7 +374,7 @@ namespace
 		player.setProcessor(&processor);
 		player.audioDeviceIOCallbackWithContext(inputs, 2, outputs, 2, samples, {});
 		require(std::all_of(output.begin(), output.end(),
-			[](const float value) { return std::isfinite(value); }),
+			[](const float& value) { return baseLib::isFinite(value); }),
 			"sparse input/output callback produced invalid audio");
 		player.setProcessor(nullptr);
 		player.audioDeviceStopped();
@@ -392,7 +393,7 @@ namespace
 		player.audioDeviceIOCallbackWithContext(changedInputs, 1,
 			changedOutputs, 2, 512, {});
 		require(std::all_of(bluetoothLeft.begin(), bluetoothLeft.end(),
-			[](const float value) { return std::isfinite(value); }),
+			[](const float& value) { return baseLib::isFinite(value); }),
 			"device-change callback produced invalid audio");
 
 		// A disappearing device may deliver no backing output array while its

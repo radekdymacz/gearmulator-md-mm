@@ -256,6 +256,12 @@ if(BUILD_TESTING)
 	target_compile_definitions(mdAudioIoLayoutTest PRIVATE
 		JUCE_GLOBAL_MODULE_SETTINGS_INCLUDED=1
 		JUCE_STANDALONE_PLUGIN_AUTO_OPEN_AUDIO_INPUT=0)
+	# The NaN/Inf checks must hold in -Ofast (/fp:fast) builds.
+	if(MSVC)
+		target_compile_options(mdAudioIoLayoutTest PRIVATE /fp:precise)
+	else()
+		target_compile_options(mdAudioIoLayoutTest PRIVATE -fno-fast-math)
+	endif()
 	set_property(TARGET mdAudioIoLayoutTest PROPERTY FOLDER "Elektron/test")
 	add_test(NAME mdAudioIoLayoutTest COMMAND mdAudioIoLayoutTest)
 	set_tests_properties(mdAudioIoLayoutTest PROPERTIES LABELS "UnitTest;AudioIo")

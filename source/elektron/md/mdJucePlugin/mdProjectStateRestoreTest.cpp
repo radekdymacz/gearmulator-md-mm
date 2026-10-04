@@ -8,6 +8,7 @@
 #include "mdLib/mdtypes.h"
 
 #include "baseLib/binarystream.h"
+#include "baseLib/finite.h"
 #include "juce_audio_utils/juce_audio_utils.h"
 #include "synthLib/romLoader.h"
 
@@ -362,7 +363,7 @@ namespace
 		for(uint32_t block = 0; block < 32; ++block)
 			player.audioDeviceIOCallbackWithContext(inputs, 2, outputs, 2, 128, {});
 		require(std::all_of(output.begin(), output.end(),
-			[](const float value) { return std::isfinite(value); }),
+			[](const float& value) { return baseLib::isFinite(value); }),
 			"standalone-order sparse callback produced invalid audio");
 
 		player.audioDeviceStopped();
@@ -375,7 +376,7 @@ namespace
 		player.audioDeviceIOCallbackWithContext(bluetoothInputs, 1,
 			bluetoothOutputs, 2, 512, {});
 		require(std::all_of(bluetoothOutput.begin(), bluetoothOutput.end(),
-			[](const float value) { return std::isfinite(value); }),
+			[](const float& value) { return baseLib::isFinite(value); }),
 			"standalone-order device-change callback produced invalid audio");
 		player.setProcessor(nullptr);
 		player.audioDeviceStopped();

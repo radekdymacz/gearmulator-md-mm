@@ -2,6 +2,7 @@
 #include "sdsTestData.h"
 #include "sdsFaultWire.h"
 #include "sysexReadinessTrace.h"
+#include "baseLib/finite.h"
 
 #include <algorithm>
 #include <array>
@@ -152,9 +153,9 @@ namespace
 		double best = 0, peak = 0;
 		for(const auto& channel : audio)
 		{
-			for(auto sample : channel)
+			for(const auto& sample : channel)
 			{
-				if(!std::isfinite(sample)) return false;
+				if(!baseLib::isFinite(sample)) return false;
 				peak = std::max(peak, std::abs(double(sample)));
 			}
 			constexpr size_t window = 1024;

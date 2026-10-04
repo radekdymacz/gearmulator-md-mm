@@ -11,6 +11,7 @@ set(SOURCES
 	endian.h
 	event.cpp event.h
 	filesystem.cpp filesystem.h
+	finite.h
 	hybridcontainer.h
 	logging.cpp logging.h
 	md5.cpp md5.h
@@ -36,4 +37,11 @@ if(BUILD_TESTING)
 	add_test(NAME baseLibBinaryStreamTest COMMAND baseLibBinaryStreamTest)
 	set_tests_properties(baseLibBinaryStreamTest PROPERTIES LABELS "UnitTest")
 	set_property(TARGET baseLibBinaryStreamTest PROPERTY FOLDER "Tests")
+
+	# Deliberately keeps the global float flags (-Ofast in release): the helper must catch NaN/inf under them.
+	add_executable(baseLibFiniteTest finiteTest.cpp)
+	target_link_libraries(baseLibFiniteTest PRIVATE baseLib)
+	add_test(NAME baseLibFiniteTest COMMAND baseLibFiniteTest)
+	set_tests_properties(baseLibFiniteTest PROPERTIES LABELS "UnitTest")
+	set_property(TARGET baseLibFiniteTest PROPERTY FOLDER "Tests")
 endif()

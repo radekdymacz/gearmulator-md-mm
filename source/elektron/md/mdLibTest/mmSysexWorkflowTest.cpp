@@ -1,6 +1,7 @@
 #include "sysexContentOracle.h"
 #include "sysexPanelDriver.h"
 #include "digiproAudioOracle.h"
+#include "baseLib/finite.h"
 
 #include <array>
 #include <chrono>
@@ -163,7 +164,7 @@ namespace
 		}
 		else hardware.processAudio(output, 16384, 0);
 		for(const auto& channel : channels)
-			for(auto sample : channel) require(std::isfinite(sample), "non-finite audio");
+			for(const auto& sample : channel) require(baseLib::isFinite(sample), "non-finite audio");
 		if(const auto* prefix = std::getenv("MM_AUDIO_DIAGNOSTIC"))
 		{
 			std::ofstream out(std::string(prefix) + "-" + std::to_string(select) + ".f32", std::ios::binary);

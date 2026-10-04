@@ -3,6 +3,7 @@
 #include "mdLib/mdtypes.h"
 
 #include "baseLib/filesystem.h"
+#include "baseLib/finite.h"
 #include "synthLib/plugin.h"
 
 #include <algorithm>
@@ -141,7 +142,7 @@ namespace
 					plugin.getMidiOut(midiOut);
 					for(const auto& channel : output)
 						for(size_t sample = 0; sample < block; ++sample)
-							require(std::isfinite(channel[sample]),
+							require(baseLib::isFinite(channel[sample]),
 								"firmware/resampler produced a non-finite sample");
 					inputCursor += block;
 					remaining -= block;

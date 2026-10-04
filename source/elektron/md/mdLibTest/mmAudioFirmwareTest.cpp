@@ -1,6 +1,7 @@
 #include "mdLib/mdhardware.h"
 #include "mdLib/mdromloader.h"
 #include "baseLib/filesystem.h"
+#include "baseLib/finite.h"
 
 #include <algorithm>
 #include <array>
@@ -62,9 +63,9 @@ namespace
 		{
 			hardware.processAudio(outputs, 256, 0);
 			for(size_t channel = 0; channel < samples.size(); ++channel)
-				for(const auto sample : samples[channel])
+				for(const auto& sample : samples[channel])
 				{
-					require(std::isfinite(sample), "non-finite MM audio");
+					require(baseLib::isFinite(sample), "non-finite MM audio");
 					sum += double(sample) * sample;
 					energy[channel].add(sample, block >= blocks / 2);
 					if(reportIdle)
@@ -119,8 +120,8 @@ namespace
 		const auto frequency = 440.0 * std::exp2((double(note) - 69.0) / 12.0);
 		const auto difference = 2.0 - 2.0 * std::cos(6.283185307179586 * frequency / md::g_samplerate);
 		const auto expected = difference * difference;
-		require(std::isfinite(rms) && rms > 1e-5, "GND SIN produced silence/non-finite audio");
-		require(std::isfinite(roughness) && roughness > expected * 0.25
+		require(baseLib::isFinite(rms) && rms > 1e-5, "GND SIN produced silence/non-finite audio");
+		require(baseLib::isFinite(roughness) && roughness > expected * 0.25
 			&& roughness < expected * 4, "GND SIN waveform failed smoothness/pitch-scale check");
 	}
 
@@ -213,7 +214,7 @@ namespace
 					input[c][i]=static_cast<float>(.05*std::sin(omega*(at+i)));
 				hardware.processAudio(ins,outs,256,0);
 				for(unsigned i=0;i<256;++i) if(at+i>=discard) {
-					const auto sample=output[0][i]; require(std::isfinite(sample), "non-finite input output");
+					const auto& sample=output[0][i]; require(baseLib::isFinite(sample), "non-finite input output");
 					power+=sample*sample; sine+=sample*std::sin(omega*(at+i)); cosine+=sample*std::cos(omega*(at+i));
 				}
 			}

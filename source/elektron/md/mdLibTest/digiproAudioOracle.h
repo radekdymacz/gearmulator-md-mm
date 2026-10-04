@@ -1,5 +1,7 @@
 #pragma once
 
+#include "baseLib/finite.h"
+
 #include <algorithm>
 #include <cmath>
 #include <cstdint>
@@ -28,7 +30,7 @@ namespace md::test
 		const auto reference = digiProCycle(wave);
 		constexpr size_t window = 4096, start = 4096;
 		if(reference.empty() || audio.size() < start + window
-			|| !std::all_of(audio.begin(), audio.end(), [](float a) { return std::isfinite(a); })) return -1;
+			|| !std::all_of(audio.begin(), audio.end(), [](const float& a) { return baseLib::isFinite(a); })) return -1;
 		const auto points = reference.size();
 		const double frequency = 440.0 * std::pow(2.0, (48.0 - 69.0) / 12.0);
 		double best = -1;

@@ -216,6 +216,12 @@ endif()
 
 add_executable(mdAudioFirmwareTest mdAudioFirmwareTest.cpp)
 target_link_libraries(mdAudioFirmwareTest PRIVATE mdLib)
+# The NaN/Inf checks must hold in -Ofast (/fp:fast) builds.
+if(MSVC)
+	target_compile_options(mdAudioFirmwareTest PRIVATE /fp:precise)
+else()
+	target_compile_options(mdAudioFirmwareTest PRIVATE -fno-fast-math)
+endif()
 
 add_test(NAME mdAudioFirmwareTest COMMAND mdAudioFirmwareTest)
 set_tests_properties(mdAudioFirmwareTest PROPERTIES

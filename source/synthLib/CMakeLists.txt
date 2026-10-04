@@ -94,6 +94,12 @@ if(BUILD_TESTING)
 
 	add_executable(synthLibAudioTest synthLibAudioTest.cpp)
 	target_link_libraries(synthLibAudioTest PRIVATE synthLib)
+	# The NaN/Inf checks must hold in -Ofast (/fp:fast) builds.
+	if(MSVC)
+		target_compile_options(synthLibAudioTest PRIVATE /fp:precise)
+	else()
+		target_compile_options(synthLibAudioTest PRIVATE -fno-fast-math)
+	endif()
 	add_test(NAME synthLibAudioTest COMMAND synthLibAudioTest)
 	set_tests_properties(synthLibAudioTest PROPERTIES LABELS "UnitTest;AudioIo")
 	set_property(TARGET synthLibAudioTest PROPERTY FOLDER "Gearmulator/test")
