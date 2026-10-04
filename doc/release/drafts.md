@@ -1,3 +1,5 @@
+> **Superseded:** this is the v0.1.0-alpha draft. Some claims (app LFOs) no longer hold. See v0.3.0.md.
+
 # v0.1.0-alpha: drafts for Radek to send
 
 Nothing here has been sent. Edit freely.
