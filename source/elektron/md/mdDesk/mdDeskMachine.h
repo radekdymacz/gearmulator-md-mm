@@ -184,6 +184,8 @@ namespace mdDesk
 		const elektronData::MdKit* heldKit(const Documents& _view) const;
 		void setBaseChannel(const elektronData::MdGlobal& _g);
 		void pumpLoads(double _now);
+		void gaveUpLoad(const DocRef& _ref);
+		bool current(const DocRef& _ref) const;
 		void pumpPushes(double _now, const Documents& _view);
 		void pumpTweak(double _now);
 		void checkTweak(double _now);

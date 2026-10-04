@@ -1181,8 +1181,38 @@ namespace mdDesk
 		// Loads wait while an edit is on the wire (they would delay its read-back) and around
 		// panel key presses.
 		const bool mayStart = !busy() && !keysOnTheirWay();
-		if(const auto next = m_loads.next(_now, timeout, mayStart, g_loadPolicy))
-			request(*next);
+		const auto step = m_loads.next(_now, timeout, mayStart, g_loadPolicy);
+		if(step.gaveUp)
+			gaveUpLoad(*step.gaveUp);
+		if(step.send)
+			request(*step.send);
+	}
+
+	// A read with no reply after every resend and round (a slow wire, a cable pulled): the queue gave
+	// it up. A document the machine plays now is reported once; the next status reply asks for it
+	// again (onSysex). Another one stays unknown until it is wanted again.
+	void MdMachine::gaveUpLoad(const DocRef& _ref)
+	{
+		if(!gaveUpReading(_ref) || !current(_ref))
+			return;
+		fail(_ref, std::string("The machine did not answer the request for ") + kindName(_ref.kind) + " "
+			+ (_ref.kind == DocKind::Pattern ? ed::mdPatternName(_ref.slot) : std::to_string(_ref.slot + 1))
+			+ ": its edits wait until it is read. The editor asks again.");
+	}
+
+	bool MdMachine::current(const DocRef& _ref) const
+	{
+		const auto& st = m_session.state();
+		const auto is = [&](const auto& _slot) { return _slot && static_cast<int>(*_slot) == static_cast<int>(_ref.slot); };
+		switch(_ref.kind)
+		{
+		case DocKind::Pattern: return is(st.pattern);
+		case DocKind::Kit: return is(st.kit);
+		case DocKind::Song: return is(st.song);
+		case DocKind::Global: return is(st.globalSlot);
+		case DocKind::WorkingKit: return false;
+		}
+		return false;
 	}
 
 	void MdMachine::pumpPushes(const double _now, const Documents& _view)
@@ -1228,6 +1258,15 @@ namespace mdDesk
 		if(status && (m_profile.wire || m_probe == Probe::Running))
 			m_wire.statusReply(now());
 		m_session.onSysex(_message);
+		// The machine answers: a current document whose read was given up (no reply) is asked for again.
+		if(status && (status->param == ed::MdStatus::Pattern || status->param == ed::MdStatus::Kit))
+		{
+			const auto& st = m_session.state();
+			for(const auto& ref : {st.pattern ? std::optional<DocRef>(DocRef{DocKind::Pattern, *st.pattern}) : std::nullopt,
+					st.kit ? std::optional<DocRef>(DocRef{DocKind::Kit, *st.kit}) : std::nullopt})
+				if(ref && unread(*ref) && !m_loads.contains(*ref))
+					load(*ref, true);
+		}
 		// Control All: the machine said which track is selected (the one its gesture leads from).
 		if(status && status->param == ed::MdStatus::Track)
 			m_tweak.trackKnownMs = now();

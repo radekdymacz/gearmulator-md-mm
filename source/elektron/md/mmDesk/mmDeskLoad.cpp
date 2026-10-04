@@ -31,12 +31,40 @@ namespace mmDesk
 	{
 		const auto& inFlight = m_loads.loading();
 		const double timeout = g_loadTimeoutMs + (m_profile.wire && inFlight ? 1.5 * deskCore::DinPacer::wireMs(replyBytes(inFlight->kind)) : 0);
-		const auto next = m_loads.next(_now, timeout, true, g_loadPolicy);
-		if(!next)
+		const auto step = m_loads.next(_now, timeout, true, g_loadPolicy);
+		if(step.gaveUp)
+			gaveUpLoad(*step.gaveUp);
+		if(!step.send)
 			return;
-		const auto& r = *next;
+		const auto& r = *step.send;
 		m_port.sendSysex(r.kind == Kind::Pattern ? ed::mmPatternRequest(r.slot) : r.kind == Kind::Kit ? ed::mmKitRequest(r.slot)
 			: r.kind == Kind::Song ? ed::mmSongRequest(r.slot) : ed::mmGlobalRequest(r.slot));
+	}
+
+	// A read with no reply after every resend and round (a slow wire, a cable pulled): the queue gave
+	// it up. It counts as done but failed in the machine document's loading (so the progress ends); a
+	// document the machine plays now is reported once, and the next status asks for it again
+	// (onStatus). Another one stays unknown until it is wanted again.
+	void MmMachine::gaveUpLoad(const Ref& _r)
+	{
+		if(!gaveUpReading(_r) || !current(_r))
+			return;
+		fail(_r, std::string("The machine did not answer the request for ") + kindName(_r.kind) + " " + std::to_string(_r.slot + 1)
+			+ ": its edits wait until it is read. The editor asks again.");
+	}
+
+	bool MmMachine::current(const Ref& _r) const
+	{
+		const auto is = [&](const int _cur) { return _cur >= 0 && deskCore::slotIn<MmModel>(_r.kind, _cur) == _r.slot; };
+		switch(_r.kind)
+		{
+		case Kind::Pattern: return is(m_curPattern);
+		case Kind::Kit: return is(m_curKit);
+		case Kind::Song: return is(m_curSong);
+		case Kind::Global: return is(m_curGlobal);
+		case Kind::WorkingKit: return false;
+		}
+		return false;
 	}
 
 	// ---- device -> machine ----
@@ -150,6 +178,8 @@ namespace mmDesk
 				if(!known({Kind::Pattern, _value}))
 					request({Kind::Pattern, _value}, true);
 			}
+			else if(unread({Kind::Pattern, _value}) && !m_loads.contains({Kind::Pattern, _value}))
+				request({Kind::Pattern, _value}, true);	// its read was given up (no reply): ask again
 			if(m_queuedPattern == _value)
 				m_queuedPattern = -1;
 			break;
@@ -160,6 +190,8 @@ namespace mmDesk
 				m_curKit = _value;
 				kitSwitched(from, _value);
 			}
+			else if(unread({Kind::Kit, _value}) && !m_loads.contains({Kind::Kit, _value}))
+				request({Kind::Kit, _value}, true);	// its read was given up (no reply): ask again
 			break;
 		case ed::MmStatus::Song:
 			if(m_curSong != _value)

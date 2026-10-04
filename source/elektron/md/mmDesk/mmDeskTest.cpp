@@ -77,6 +77,40 @@ namespace
 			r.tick(t, screen(mmDesk::Screen::Main));
 		check(r.state() == mmDesk::RecvSession::State::Failed, "a screen that never comes fails after three tries");
 		check(mmDesk::RecvSession::enterMacro().size() == 29, "the macro is 29 keys (GLOBAL counts as one)");
+
+		// Release review A1: a screen that never comes is given up (the tags say whose dumps they were) and the
+		// panel is left alone; so is a dump that waits while telemetry is never valid.
+		{
+			mmDesk::RecvSession g;
+			g.want({0xf0, 3, 0xf7}, 11);
+			g.want({0xf0, 4, 0xf7}, 12);
+			std::vector<uint32_t> gaveUp;
+			double t = 0;
+			int failures = 0;
+			auto was = g.state();
+			for(; t < 120000 && gaveUp.empty(); t += 100)
+			{
+				out = g.tick(t, screen(mmDesk::Screen::Main));
+				gaveUp = out.gaveUp;
+				failures += g.state() == mmDesk::RecvSession::State::Failed && was != mmDesk::RecvSession::State::Failed;
+				was = g.state();
+			}
+			check(gaveUp == std::vector<uint32_t>({11, 12}), "a screen that never comes: the queue is given up, with its tags");
+			check(failures == 2 && t < 40000, "after two failed tries (bounded)");
+			check(g.queued() == 0, "nothing waits any more");
+			size_t keys = 0;
+			for(; t < 200000; t += 100)
+				keys += g.tick(t, screen(mmDesk::Screen::Main)).keys.size();
+			check(keys == 0 && g.state() == mmDesk::RecvSession::State::Idle, "then the panel is left alone");
+
+			mmDesk::RecvSession v;
+			v.want({0xf0, 5, 0xf7}, 21);
+			mmDesk::Telemetry invalid;
+			gaveUp.clear();
+			for(t = 0; t < 120000 && gaveUp.empty(); t += 100)
+				gaveUp = v.tick(t, invalid).gaveUp;
+			check(gaveUp == std::vector<uint32_t>({21}) && t <= v.maxWaitMs + 200, "no valid telemetry: given up after maxWaitMs");
+		}
 	}
 
 	// A tiny scripted machine: keeps dumps per slot (only on SYSEX RECV), answers requests and status.
@@ -604,6 +638,163 @@ void asksAndErrors()
 			d.tick();
 		}
 		check(last("error") != nullptr, "a push the machine never reads back is reported");
+	}
+}
+
+// Release review A1, A2, A3: a SYSEX RECV screen that never comes fails the push and leaves the panel alone; a
+// load with no reply is retried, then reported, and asked again at the next status; over HW MIDI a kit dump
+// replaced while it waits keeps one LOAD KIT.
+void stuckDelivery()
+{
+	std::puts("a SYSEX RECV that never comes, loads with no reply, one LOAD KIT (A1, A2, A3)");
+	double now = 0;
+	std::vector<Value> page;
+	std::vector<Bytes> wire;
+	size_t keys = 0;
+	mmDesk::Desk::Port port;
+	port.device.sendSysex = [&](const Bytes& _b) { wire.push_back(_b); };
+	port.device.sendParam = [](uint8_t, uint8_t, uint8_t, uint8_t) {};
+	port.device.sendNrpn = [](uint8_t, uint8_t, uint8_t) {};
+	port.device.pressKeys = [&](const std::vector<mmDesk::Key>& _k) { keys += _k.size(); return true; };	// the screen never changes
+	port.device.nowMs = [&] { return now; };
+	port.toPage = [&](const Value& _v) { page.push_back(_v); g_published.push_back(_v); };
+	const auto status = [](const uint8_t _p, const uint8_t _v) { return Bytes{0xf0, 0, 0x20, 0x3c, 3, 0, 0x72, _p, _v, 0xf7}; };
+	const auto errors = [&](const std::string& _part)
+	{
+		size_t n = 0;
+		for(const auto& v : page)
+			n += v.find("type")->asString() == "error" && v.find("message")->asString().find(_part) != std::string::npos;
+		return n;
+	};
+	const auto pending = [&](const char* _kind, const int _slot)
+	{
+		for(auto it = page.rbegin(); it != page.rend(); ++it)
+			if(it->find("type")->asString() == "doc" && it->find("kind")->asString() == _kind && it->find("slot")->asNumber() == _slot)
+				return it->find("pending")->asBool();
+		return false;
+	};
+	const auto lastMachine = [&]() -> const Value*
+	{
+		for(auto it = page.rbegin(); it != page.rend(); ++it)
+			if(it->find("type")->asString() == "machine")
+				return it->find("doc");
+		return nullptr;
+	};
+	const auto requested = [](const Bytes& _m, const uint8_t _cmd, const uint8_t _slot) { return _m.size() > 7 && _m[6] == _cmd && _m[7] == _slot; };
+	{
+		// A1: the emulator's panel never reaches SYSEX RECV.
+		mmDesk::Desk d(port);
+		const auto msg = [&](const std::string& _json) { d.onPageMessage(*ed::json::parse(_json)); };
+		msg(R"({"op":"ready"})");
+		d.setProbe(mmDesk::Desk::Probe::Running);
+		d.onTelemetry(screen(mmDesk::Screen::Main));
+		d.onDeviceSysex(status(0x04, 1));
+		d.onDeviceSysex(status(0x02, 2));
+		d.onDeviceSysex(ed::encodeMmPattern(emptyPattern(1)));
+		const auto run = [&](const double _ms)
+		{
+			for(double t = 0; t < _ms; t += 100)
+			{
+				now += 100;
+				d.onTelemetry(screen(mmDesk::Screen::Main));
+				d.tick();
+			}
+		};
+		auto p = emptyPattern(1);
+		p.amp[0] = 1;
+		msg(R"({"op":"set","id":4,"kind":"pattern","doc":)" + ed::json::write(ed::mmPatternToJson(p)) + "}");
+		run(1000);
+		check(keys > 0 && pending("pattern", 1), "the push waits for SYSEX RECV; the panel is driven there");
+		const auto wireBefore = wire.size();
+		run(60000);
+		check(errors("SYSEX RECV") == 1, "a SYSEX RECV that never comes fails the push, with the reason");
+		check(!pending("pattern", 1), "the edit is no longer pending");
+		bool reread = false;
+		for(size_t i = wireBefore; i < wire.size(); ++i)
+			reread = reread || requested(wire[i], 0x68, 1);
+		check(reread, "the pattern is read again");
+		const auto keysThen = keys;
+		run(30000);
+		check(keys == keysThen, "the panel is left alone (no more EXIT and macro)");
+		check(d.recvState() == "idle" || d.recvState() == "failed", "the session does not hold the panel (PLAY, STOP, RECORD, chains)");
+		check(d.pattern(1).has_value(), "the pattern keeps what the machine holds");
+	}
+	page.clear();
+	wire.clear();
+	{
+		// A2: the current pattern's request is never answered, then the machine answers again.
+		mmDesk::Desk d(port);
+		const auto msg = [&](const std::string& _json) { d.onPageMessage(*ed::json::parse(_json)); };
+		msg(R"({"op":"ready"})");
+		d.setProbe(mmDesk::Desk::Probe::Running);
+		bool answer = false;
+		size_t seen = 0;
+		int asked = 0;
+		const auto run = [&](const double _ms)
+		{
+			for(double t = 0; t < _ms; t += 100)
+			{
+				now += 100;
+				d.onTelemetry(screen(mmDesk::Screen::Main));
+				d.onDeviceSysex(status(0x04, 1));
+				d.onDeviceSysex(status(0x02, 2));
+				d.tick();
+				for(; seen < wire.size(); ++seen)
+				{
+					if(!requested(wire[seen], 0x68, 1))
+						continue;
+					++asked;
+					if(answer)
+						d.onDeviceSysex(ed::encodeMmPattern(emptyPattern(1)));
+				}
+			}
+		};
+		double waited = 0;
+		for(; waited < 60000 && !errors("did not answer the request for pattern 2"); waited += 100)
+			run(100);
+		check(asked > 1 && asked <= 9 && waited < 15000, "a request with no reply is resent a bounded number of times");
+		check(errors("did not answer the request for pattern 2") == 1, "then the current pattern is reported");
+		const auto* m = lastMachine();
+		const auto* l = m ? m->find("loading") : nullptr;
+		check(l && l->find("failed") && l->find("failed")->asNumber() >= 1 && l->find("done")->asNumber() >= l->find("failed")->asNumber(),
+			"loading counts it as failed and done, so the progress can end");
+		answer = true;
+		run(20000);
+		check(d.pattern(1).has_value(), "the next status asks again; once the machine answers it is read");
+		check(errors("did not answer the request for pattern 2") == 1, "reported once, not every round");
+	}
+	page.clear();
+	wire.clear();
+	{
+		// A3: over HW MIDI a kit dump waiting for SYSEX RECV is replaced in place; its LOAD KIT is not repeated.
+		mmDesk::Desk d(port, mmDesk::wireProfile());
+		const auto msg = [&](const std::string& _json) { d.onPageMessage(*ed::json::parse(_json)); };
+		msg(R"({"op":"ready"})");
+		d.onDeviceSysex(status(0x04, 1));
+		d.onDeviceSysex(status(0x02, 2));
+		ed::MmKit k;
+		k.position = 2;
+		k.machines.fill(1);
+		k.trigPos.fill(0xff);
+		d.onDeviceSysex(ed::encodeMmKit(k));
+		for(int i = 0; i < 5; ++i)
+		{
+			now += 100;
+			d.onDeviceSysex(status(0x04, 1));
+			d.tick();
+		}
+		for(uint8_t v = 0; v < 4; ++v)
+		{
+			auto e = k;
+			e.trigPos[0] = v;	// no live path: a dump to the slot, then LOAD KIT
+			msg(R"({"op":"set","id":)" + std::to_string(10 + v) + R"(,"kind":"workingKit","doc":)" + ed::json::write(ed::mmKitToJson(e)) + "}");
+			now += 100;
+			d.onDeviceSysex(status(0x04, 1));
+			d.tick();
+		}
+		const auto* m = lastMachine();
+		const auto* recv = m ? m->find("recv") : nullptr;
+		check(recv && recv->find("waiting")->asNumber() == 2, "four edits with no live path wait as one kit dump and one LOAD KIT (SEND 2)");
 	}
 }
 
@@ -1160,6 +1351,7 @@ int main(const int _argc, char** _argv)
 	kitAsLoaded();
 	modulators();
 	asksAndErrors();
+	stuckDelivery();
 	chains();
 	memoryFields();
 	intentCases::run();

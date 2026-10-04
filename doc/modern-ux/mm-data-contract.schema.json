@@ -1319,12 +1319,17 @@
           "type": "object",
           "additionalProperties": true,
           "required": ["done", "total"],
+          "description": "Background reading of the machine's slots: done counts the slots read plus those whose read was given up after its retries (failed), so done reaches total.",
           "properties": {
             "done": {
               "type": "integer",
               "minimum": 0
             },
             "total": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "failed": {
               "type": "integer",
               "minimum": 0
             }

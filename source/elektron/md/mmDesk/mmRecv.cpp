@@ -32,9 +32,35 @@ namespace mmDesk
 		return "?";
 	}
 
+	void RecvSession::failed(Out& _out, const double _now)
+	{
+		go(State::Failed, _now);
+		if(++m_failures >= maxFailures)
+			giveUp(_out, _now);
+	}
+
+	void RecvSession::giveUp(Out& _out, const double _now)
+	{
+		for(const auto& s : m_queue)
+			_out.gaveUp.push_back(s.tag);
+		m_queue.clear();
+		m_failures = 0;
+		m_attempts = 0;
+		m_waitingSince = -1;
+		// Stop driving the panel; after the pause, a new dump starts afresh.
+		if(m_state != State::Parked && m_state != State::Leaving)
+			go(State::Failed, _now);
+	}
+
 	RecvSession::Out RecvSession::tick(const double _now, const Telemetry& _t)
 	{
 		Out out;
+		if(m_queue.empty())
+			m_waitingSince = -1;
+		else if(m_waitingSince < 0)
+			m_waitingSince = _now;
+		else if(_now - m_waitingSince > maxWaitMs)
+			giveUp(out, _now);
 		if(!_t.valid)
 			return out;
 		const bool onRecv = onSysexRecv(_t);
@@ -53,6 +79,7 @@ namespace mmDesk
 				break;
 			if(onRecv)
 			{
+				m_failures = 0;
 				go(State::Parked, _now);
 				m_lastActivity = _now;
 				break;
@@ -79,7 +106,7 @@ namespace mmDesk
 			else if(_now - m_since > timeoutMs)
 			{
 				if(++m_attempts > 2)
-					go(State::Failed, _now);
+					failed(out, _now);
 				else
 				{
 					out.keys = exitKeys();
@@ -93,13 +120,14 @@ namespace mmDesk
 			if(onRecv)
 			{
 				m_attempts = 0;
+				m_failures = 0;
 				m_lastActivity = _now;
 				go(State::Parked, _now);
 			}
 			else if(_now - m_since > timeoutMs)
 			{
 				if(++m_attempts > 2)
-					go(State::Failed, _now);
+					failed(out, _now);
 				else
 				{
 					out.keys = exitKeys();

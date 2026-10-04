@@ -31,12 +31,15 @@ namespace deskCore
 		}
 
 		size_t knownCount() const { return m_known.size(); }
+		// Documents whose read was given up (no reply) and that have not arrived since.
+		size_t unreadCount() const { return m_unread.size(); }
 
 	protected:
 		// The machine holds _doc.
 		void observe(const Doc& _doc, const Source _source)
 		{
 			m_known.insert(Model::refOf(_doc));
+			m_unread.erase(Model::refOf(_doc));
 			m_events.push_back(Ev::observed(_doc, _source));
 		}
 		// Nothing is known about _ref any more (it is read again).
@@ -50,6 +53,7 @@ namespace deskCore
 		{
 			const auto ref = Model::refOf(_doc);
 			m_known.insert(ref);
+			m_unread.erase(ref);
 			m_events.push_back(Ev::settledWith(_doc, _source, ref));
 		}
 		// A submitted change did not reach the machine.
@@ -60,14 +64,20 @@ namespace deskCore
 		void startedOver()
 		{
 			m_known.clear();
+			m_unread.clear();
 			m_events.push_back(Ev::reset());
 		}
 		bool known(const Ref& _ref) const { return m_known.count(_ref) != 0; }
+		// The read of _ref was given up (LoadQueue's Step::gaveUp). True the first time since it was
+		// last known: report it then, not on every round after.
+		bool gaveUpReading(const Ref& _ref) { return !known(_ref) && m_unread.insert(_ref).second; }
+		bool unread(const Ref& _ref) const { return m_unread.count(_ref) != 0; }
 		bool knowsAnything() const { return !m_known.empty(); }
 
 	private:
 		std::vector<Ev> m_events;
 		std::set<Ref> m_known;
+		std::set<Ref> m_unread;
 	};
 
 	// A machine at the end of a cable (HW MIDI): its lifecycle is its replies (P6, shared).

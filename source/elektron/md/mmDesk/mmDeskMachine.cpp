@@ -253,8 +253,12 @@ namespace mmDesk
 		r.set("received", static_cast<unsigned long>(m_tel.recvCount));
 		r.set("errors", static_cast<unsigned long>(m_tel.recvErrors));
 		d.set("recv", std::move(r));
+		// done: the slots read, plus those whose read was given up (failed), so the progress ends; the working
+		// kit is no slot.
 		Value l = Value::object();
-		l.set("done", static_cast<unsigned long>(knownCount()));
+		const size_t read = knownCount() - (known({Kind::WorkingKit, 0}) ? 1 : 0);
+		l.set("done", static_cast<unsigned long>(read + unreadCount()));
+		l.set("failed", static_cast<unsigned long>(unreadCount()));
 		int total = 0;
 		for(const auto& k : MmModel::kinds())
 			if(k.loadable)

@@ -195,10 +195,22 @@ namespace mmDesk
 
 	void MmMachine::loadKitAfter(const Ref& _ref, const bool _sent)
 	{
-		if(_sent)
-			afterDumps(ed::mmLoadKit(_ref.slot));
-		else
+		if(!_sent)
+		{
 			m_loadAfter.insert(_ref);
+			return;
+		}
+		auto load = ed::mmLoadKit(_ref.slot);
+		if(manualDumps())
+		{
+			// HW MIDI: a newer dump took the place of the one still waiting for SYSEX RECV, whose LOAD KIT waits
+			// after it already: one is enough (a drag would queue one per value).
+			const auto dump = std::find_if(m_manual.begin(), m_manual.end(), [&](const Waiting& _w) { return _w.ref && *_w.ref == _ref; });
+			if(dump != m_manual.end()
+				&& std::any_of(dump + 1, m_manual.end(), [&](const Waiting& _w) { return !_w.ref && _w.bytes == load; }))
+				return;
+		}
+		afterDumps(std::move(load));
 	}
 
 	void MmMachine::sendDump(const Ref& _ref, Bytes _dump)
@@ -300,6 +312,29 @@ namespace mmDesk
 			// On the wire now; its read-back waits for the gesture's quiet (pumpPushes).
 			if(auto* push = m_pushes.find(ref); push && push->parked)
 				push->parked = false;
+		}
+		// The machine never showed SYSEX RECV: the session dropped what it held. Those pushes fail (the
+		// page shows the error, the edit is no longer pending) and the document is read again.
+		std::set<Ref> failedRefs;
+		for(const auto tag : out.gaveUp)
+		{
+			const auto tagged = m_recvRefs.find(tag);
+			if(tagged == m_recvRefs.end())
+				continue;
+			failedRefs.insert(tagged->second);
+			m_recvRefs.erase(tagged);
+		}
+		for(const auto& ref : failedRefs)
+		{
+			if(auto* push = m_pushes.find(ref))
+			{
+				push->parked = false;
+				push->slot.abandon();
+			}
+			m_loadAfter.erase(ref);
+			fail(ref, std::string("The Monomachine did not open GLOBAL > SYSEX RECV, so the ") + kindName(ref.kind)
+				+ " edit was not sent. Showing what it holds.");
+			request(ref, true);
 		}
 	}
 }

@@ -122,6 +122,8 @@ namespace mmDesk
 		void onStatus(uint8_t _param, uint8_t _value);
 		void kitSwitched(int _from, int _to);
 		void pumpLoads(double _now);
+		void gaveUpLoad(const Ref& _r);
+		bool current(const Ref& _r) const;
 		void pumpRecv(double _now);
 		void pumpSequence(double _now);
 		// RECORD: the current pattern read back while the machine records (true: the mode changed).

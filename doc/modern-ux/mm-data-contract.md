@@ -155,7 +155,7 @@ disagrees after the engine's `settleMs` (1.5 s) wins, so a change on the machine
 (DESIGN-UNIFY.md 4.4, `deskCore::FieldExpectation`). The page matches its echoes by command id, never by time.
 | `desk` | MM-P8: `chain` (the firmware's pattern chain from RAM: `active`, `next`, `patterns`; `null` where not readable, HW MIDI) and `bankGroup` (0 A-D, 1 E-H, -1 unknown) |
 | `recv` | the SYSEX RECV session: `state` (`idle`, `toMain`, `entering`, `parked`, `leaving`, `failed`; over HW MIDI `idle` or `waitingUser`), `waiting` (HW MIDI: messages that wait for the person to open SYSEX RECV, sent by `hwSend`), `sending` (dumps in flight), `received` / `errors` (the firmware's own counters) |
-| `loading` | `done` / `total` documents read (288) |
+| `loading` | `done` / `total` documents read (288); `done` includes `failed`, the slots whose read was given up after its retries (no reply) |
 | `roundTripMs`, `error` | the last dump's send-to-read-back time; the last problem, if any |
 
 Other messages to the page: `doc` (`kind`, `slot`, `pending` = sent but not yet

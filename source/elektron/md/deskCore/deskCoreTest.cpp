@@ -131,24 +131,77 @@ namespace
 		std::puts("load queue");
 		using R = Ref<int>;
 		LoadQueue<R> q;
-		const LoadQueue<R>::Policy p{30, 1};
+		LoadQueue<R>::Policy p{30, 1};
+		p.rounds = 0;
 		q.want({0, 1}, false);
 		q.want({0, 2}, false);
 		q.want({0, 2}, true);
 		check(q.pending() == 2, "two queued, no duplicates");
 		auto n = q.next(0, 800, true, p);
-		check(n && n->slot == 2, "urgent first");
-		check(!q.next(10, 800, true, p), "one in flight");
+		check(n.send && n.send->slot == 2, "urgent first");
+		check(!q.next(10, 800, true, p).send, "one in flight");
 		n = q.next(900, 800, true, p);
-		check(n && n->slot == 2, "resent after the timeout");
+		check(n.send && n.send->slot == 2, "resent after the timeout");
 		n = q.next(1800, 800, true, p);
-		check(n && n->slot == 1, "given up after one retry; the next goes out");
+		check(n.gaveUp && n.gaveUp->slot == 2, "given up after one retry (no rounds), and said so");
+		check(n.send && n.send->slot == 1, "the next goes out");
 		q.arrived({0, 1});
 		check(q.idle(), "answered: idle");
 		q.want({0, 3}, false);
-		check(!q.next(1810, 800, true, p), "the gap between requests");
-		check(!q.next(1900, 800, false, p), "held while busy");
-		check(q.next(1900, 800, true, p).has_value(), "then it goes");
+		check(!q.next(1810, 800, true, p).send, "the gap between requests");
+		check(!q.next(1900, 800, false, p).send, "held while busy");
+		check(q.next(1900, 800, true, p).send.has_value(), "then it goes");
+	}
+
+	// A2: a request without a reply goes back into the queue with a backoff, a bounded number of
+	// times, and is then given up (said once), so a slow wire or a pulled cable is not silent.
+	void loadQueueRounds()
+	{
+		std::puts("load queue: rounds and give up");
+		using R = Ref<int>;
+		LoadQueue<R> q;
+		LoadQueue<R>::Policy p{30, 1};
+		p.rounds = 2;
+		p.backoffMs = 2000;
+		q.want({0, 7}, true);
+		double t = 0;
+		int sends = 0;
+		std::optional<R> gaveUp;
+		double gaveUpAt = -1;
+		for(; t < 60000 && !gaveUp; t += 10)
+		{
+			const auto s = q.next(t, 800, true, p);
+			sends += s.send.has_value();
+			if(s.gaveUp)
+			{
+				gaveUp = s.gaveUp;
+				gaveUpAt = t;
+			}
+		}
+		check(gaveUp && gaveUp->slot == 7, "a request with no reply is given up in the end");
+		check(sends == 6, "two sends a round, three rounds (the first and two more)");
+		check(gaveUpAt > 2 * 2000 && gaveUpAt < 20000, "each round waits out the backoff; bounded");
+		check(q.idle(), "given up: nothing left in the queue");
+		bool again = false;
+		for(double u = t; u < t + 60000; u += 10)
+			again = again || q.next(u, 800, true, p).gaveUp.has_value();
+		check(!again, "given up once");
+
+		// The backoff does not hold the others back, and an answer during it resets the rounds.
+		LoadQueue<R> r;
+		r.want({0, 1}, false);
+		r.want({0, 2}, false);
+		auto s = r.next(0, 800, true, p);
+		check(s.send && s.send->slot == 1, "first");
+		r.next(800, 800, true, p);
+		s = r.next(1600, 800, true, p);
+		check(s.send && s.send->slot == 2 && !s.gaveUp, "out of resends: it waits its backoff, the next goes now");
+		r.arrived({0, 2});
+		check(!r.next(1700, 800, true, p).send, "slot 1 waits out its backoff");
+		s = r.next(3700, 800, true, p);
+		check(s.send && s.send->slot == 1, "then it is asked again");
+		r.arrived({0, 1});
+		check(r.idle(), "an answer ends it");
 	}
 
 	void lifecycle()
@@ -524,6 +577,7 @@ int main()
 		check(fellToZero && !mods.step(sink, 0, ModLimits{}, 1, true, t + 100), "the CC readout falls to zero after the last modulator, then stops");
 	}
 	loadQueue();
+	loadQueueRounds();
 	mailboxes();
 	lifecycle();
 	sequence();

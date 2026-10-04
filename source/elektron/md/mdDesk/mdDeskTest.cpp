@@ -757,6 +757,77 @@ namespace
 	}
 
 	// The Desk against a scripted device: the page's view of one edit.
+	// Release review A2: a load with no reply is resent a bounded number of times, then reported (once) for
+	// the pattern that plays, and asked for again at the next status; once the machine answers it is read.
+	void testLoadGivenUp()
+	{
+		std::vector<std::vector<uint8_t>> wire;
+		std::vector<Value> page;
+		double now = 0;
+		Desk::Port port;
+		port.device.sendSysex = [&](const std::vector<uint8_t>& _b) { wire.push_back(_b); };
+		port.toPage = [&](const Value& _m) { page.push_back(_m); g_published.push_back(_m); };
+		port.device.nowMs = [&] { return now; };
+		Desk desk(port);
+		desk.onTelemetry(Telemetry{});
+		const auto status = [](const ed::MdStatus _p, const uint8_t _v)
+		{
+			return std::vector<uint8_t>{0xf0, 0x00, 0x20, 0x3c, 0x02, 0x00, 0x72, static_cast<uint8_t>(_p), _v, 0xf7};
+		};
+		const auto errors = [&]
+		{
+			size_t n = 0;
+			for(const auto& v : page)
+				n += v.find("type")->asString() == "error" && v.find("message")->asString().find("did not answer the request for pattern") != std::string::npos;
+			return n;
+		};
+		const auto patternShown = [&](const int _slot)
+		{
+			for(const auto& v : page)
+				if(v.find("type")->asString() == "doc" && v.find("kind")->asString() == "pattern" && v.find("slot")->asNumber() == _slot)
+					return true;
+			return false;
+		};
+		auto pattern = *ed::decodeMdPattern(load("programmed_pattern_1.syx"));
+		auto kit = *ed::decodeMdKit(load("programmed_kit_0.syx"));
+		pattern.kit = kit.position;
+		desk.onPageMessage(cmd(R"({"op":"ready"})"));
+		bool answer = false;
+		size_t seen = 0;
+		int asked = 0;
+		const auto run = [&](const double _ms)
+		{
+			for(double t = 0; t < _ms; t += 100)
+			{
+				now += 100;
+				desk.onDeviceSysex(status(ed::MdStatus::Pattern, pattern.position));
+				desk.onDeviceSysex(status(ed::MdStatus::Kit, kit.position));
+				desk.tick();
+				for(; seen < wire.size(); ++seen)
+				{
+					const auto& m = wire[seen];
+					if(m.size() > 7 && m[6] == 0x53 && m[7] == kit.position)
+						desk.onDeviceSysex(ed::encodeMdKit(kit));
+					if(m.size() <= 7 || m[6] != 0x68 || m[7] != pattern.position)
+						continue;
+					++asked;
+					if(answer)
+						desk.onDeviceSysex(ed::encodeMdPattern(pattern));
+				}
+			}
+		};
+		double waited = 0;
+		for(; waited < 60000 && !errors(); waited += 100)
+			run(100);
+		check(errors() == 1 && asked > 1 && asked <= 6 && waited < 20000,
+			"A2: a pattern request with no reply is resent a bounded number of times, then reported");
+		check(!patternShown(pattern.position), "A2: the pattern is still unknown");
+		answer = true;
+		run(10000);
+		check(patternShown(pattern.position), "A2: the next status asks again; once the machine answers it is read");
+		check(errors() == 1, "A2: reported once, not every round");
+	}
+
 	void testDesk()
 	{
 		std::vector<std::vector<uint8_t>> wire;
@@ -2502,6 +2573,7 @@ int main(const int _argc, char** _argv)
 	testStepsAndParamsDesk();
 	testPushSlot();
 	testDesk();
+	testLoadGivenUp();
 	testLive();
 	testSetup();
 	testLockStep();
