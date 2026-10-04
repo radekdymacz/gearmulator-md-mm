@@ -235,6 +235,12 @@ body.dockother #rail .railparams>:is(.lpspace,.pagetabs,.pkcol),body.dockother #
 .perf3 .asgcard .asgn{grid-template-columns:var(--joy) 270px;align-items:start}
 .perf3 .asgcard .asgn:not(:has(.joy)){grid-template-columns:calc(var(--joy) + 284px)}
 .perf3 .asgcard .joy{width:var(--joy)!important;height:var(--joy)!important}
+/* Multi map: the map table and the keyboard below keep their height, so the stick gets what is left of the window
+   (about 100vh minus the page's other rows) and never more than its card's row. */
+.perf.map .asgcard{--joy:clamp(96px,calc(100vh - 725px),440px)}
+/* Too short for any stick above the map table (the card's row is under 170 px): the stick steps aside; the assign
+   rows stay, and the table and keyboard are never covered. */
+@media (max-height:759px){.perf.map .asgcard .joy{display:none}.perf.map .asgcard .asgn{grid-template-columns:minmax(0,1fr)}}
 .joy small.jl{left:5px;top:50%;transform:translateY(-50%)}
 .joy small.jr{right:5px;top:50%;transform:translateY(-50%)}
 .joy small.ju{left:50%;top:4px;transform:translateX(-50%)}

@@ -226,6 +226,16 @@ window.MMDiagnostics = {};
 			await w; }
 			V().goWs("seq");
 		});
+		await check("MULTI MAP: the stick and the map table never overlap", async () => {
+			V().goWs("perform"); await sleep(300);
+			$('[data-pmode="map"]').click(); await sleep(400);
+			try {
+				const joy = $("#joy")?.getBoundingClientRect(), tbl = $("table.mmap")?.getBoundingClientRect(), card = $(".asgcard")?.getBoundingClientRect();
+				if (!tbl || tbl.height < 40) throw new Error("the map table is not shown");
+				if (joy && joy.width > 0 && (joy.bottom > tbl.top + 1 || joy.right > card.right + 1)) throw new Error(`the stick (${Math.round(joy.width)} px, bottom ${Math.round(joy.bottom)}) covers the map table (top ${Math.round(tbl.top)}) at ${innerWidth} x ${innerHeight}`);
+				return `stick ${joy ? Math.round(joy.width) + " px" : "hidden"}, table top ${Math.round(tbl.top)}`;
+			} finally { $('[data-pmode="normal"]').click(); V().goWs("seq"); }
+		});
 		await check("GRID RECORDING on and off (the RECORD key)", async () => {
 			{ const w = waitFor(m => m.type === "telemetry" && m.record === "grid", 6000);
 			$("#rec").click();

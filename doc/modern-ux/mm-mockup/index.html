@@ -2024,6 +2024,12 @@ body.dockother #rail .railparams>:is(.lpspace,.pagetabs,.pkcol),body.dockother #
 .perf3 .asgcard .asgn{grid-template-columns:var(--joy) 270px;align-items:start}
 .perf3 .asgcard .asgn:not(:has(.joy)){grid-template-columns:calc(var(--joy) + 284px)}
 .perf3 .asgcard .joy{width:var(--joy)!important;height:var(--joy)!important}
+/* Multi map: the map table and the keyboard below keep their height, so the stick gets what is left of the window
+   (about 100vh minus the page's other rows) and never more than its card's row. */
+.perf.map .asgcard{--joy:clamp(96px,calc(100vh - 725px),440px)}
+/* Too short for any stick above the map table (the card's row is under 170 px): the stick steps aside; the assign
+   rows stay, and the table and keyboard are never covered. */
+@media (max-height:759px){.perf.map .asgcard .joy{display:none}.perf.map .asgcard .asgn{grid-template-columns:minmax(0,1fr)}}
 .joy small.jl{left:5px;top:50%;transform:translateY(-50%)}
 .joy small.jr{right:5px;top:50%;transform:translateY(-50%)}
 .joy small.ju{left:50%;top:4px;transform:translateX(-50%)}
@@ -2137,7 +2143,7 @@ const MACH={
  "DPRO-DDRW":{id:32,p:["WAV1","MIX","WAV2","TIME","BR1","WID","BR2","TUNE"],mk2:true,about:"Two of the 64 waveforms (factory or user) blended. MKII only."},
  "DPRO-DENS":{id:33,p:["PCH2","PCH3","PCH4","WAVE","","CHRL","CHRW","TUNE"],mk2:true,about:"Chords from one of the 64 waveforms. MKII only."},
  "FX-THRU":{id:12,p:["","","","","","","","INP"],fx:1,about:"Passes its input through the track effects. Needs one trig to open."},
- "FX-REVERB":{id:13,p:["DEC","DAMP","GATE","MIX","HP","LP","","INP"],fx:1,about:"The Machinedrum's gated reverb. GATE 127 turns the gate off."},
+ "FX-REVERB":{id:13,p:["DEC","DAMP","GATE","MIX","HP","LP","","INP"],fx:1,about:"A gated reverb. GATE 127 turns the gate off."},
  "FX-CHORUS":{id:15,p:["DEL","DEP","SPD","MIX","FB","WID","LP","INP"],fx:1,about:"2 × 3 tap stereo chorus."},
  "FX-DYNAMIX":{id:16,p:["ATK","REL","THRS","MIX","RAT","GAIN","RMS","INP"],fx:1,about:"Compressor. RAT 127 = limiter."},
  "FX-RINGMOD":{id:17,p:["WAVE","EXT","","MIX","","","","INP"],fx:1,about:"Ring-modulates the input with a sine-to-triangle carrier."},
@@ -4851,7 +4857,7 @@ function drawAudio(){const pop=$("#audiopop");if(!pop)return;if(!AP.open){pop.hi
    <div class="grow2 amtop"><span class="ilab">Inputs</span><span class="amins" title="${AMTIP.midiIn}">${(D.midiInputs||[]).map(m=>`<button class="amled" data-am="midiIn" data-id="${amEsc(m.id)}" aria-pressed="${!!m.on}"><i class="led${m.on?" on":""}"></i>${amEsc(m.name)}</button>`).join("")||`<span class="note">No MIDI inputs.</span>`}</span></div>
    <div class="grow2"><span class="ilab">Output</span>${sel("midiOut",D.midiOutput?.id||"",D.midiOutput?.list||[],AMTIP.midiOut,"NONE")}${D.bluetooth?`<button class="amkey" data-am="bt" title="${AMTIP.bt}">BLUETOOTH MIDI…</button>`:""}</div></section>
  </div>
- <div class="libfoot"><span>, or the engine menu opens it · Esc closes · a change applies at once and is kept</span><span class="fw">${amEsc(D.output?.id||"no output")}</span></div>`;
+ <div class="libfoot"><span>Also in the engine menu · Esc closes · a change applies at once and is kept</span><span class="fw">${amEsc(D.output?.id||"no output")}</span></div>`;
  if(typeof enhanceSelects==="function")enhanceSelects(pop);pop.hidden=false;placeAudio()}
 function placeAudio(){const pop=$("#audiopop"),r=$(".lcdpanel").getBoundingClientRect(),top=Math.max(16,r.bottom+8);pop.style.top=(top+scrollY)+"px";pop.style.maxHeight=Math.max(240,innerHeight-top-12)+"px";pop.style.left=Math.max(16,(document.documentElement.clientWidth-pop.offsetWidth)/2+scrollX)+"px"}
 function openAudio(){if(typeof closeGlobal==="function"&&typeof GP!=="undefined"&&GP.open)closeGlobal();if(typeof closeLib==="function")closeLib(false);AP.open=true;audioMeter(true);drawAudio()}
@@ -5200,7 +5206,7 @@ Keys.bind({keys:["CLR"],mod:"alt",group:"All",does:"Click: clear the whole patte
 Keys.bind({keys:["ArrowLeft","ArrowRight"],group:"Song",does:"Previous / next row",when:()=>S.ws==="song",run:e=>{S.songSel=clamp(S.songSel+(e.key==="ArrowRight"?1:-1),0,S.song.length-1);render()}});
 Keys.bind({keys:["ArrowUp","ArrowDown"],group:"Values",does:"A focused value, tempo or bar: one step (⇧: ×10, tempo: fine)"});
 Keys.bind({keys:["ArrowLeft","ArrowRight"],group:"Values",does:"A focused value: one step"});
-Keys.bind({keys:["drag a value"],mod:"alt",group:"All",does:"Control All: move that value on every synth track (FUNCTION + knob on the Machinedrum)"});
+Keys.bind({keys:["drag a value"],mod:"alt",group:"All",does:"Control All: move that value on every synth track (an editor feature; the Monomachine has no such key)"});
 Keys.bind({keys:["M key"],mod:"shift",group:"Anywhere",does:"Click: prepare that track's mute (+ / X); applied when ⇧ is let go"});
 Keys.bind({keys:["drag M / S keys"],group:"Anywhere",does:"Mute (solo) or unmute every track the drag crosses, as the first key became"});
 Keys.bind({keys:["roll"],mod:"shift",group:"Sequence",does:"Click: a chord note on the step"});

@@ -30,7 +30,7 @@ const MACH={
  "DPRO-DDRW":{id:32,p:["WAV1","MIX","WAV2","TIME","BR1","WID","BR2","TUNE"],mk2:true,about:"Two of the 64 waveforms (factory or user) blended. MKII only."},
  "DPRO-DENS":{id:33,p:["PCH2","PCH3","PCH4","WAVE","","CHRL","CHRW","TUNE"],mk2:true,about:"Chords from one of the 64 waveforms. MKII only."},
  "FX-THRU":{id:12,p:["","","","","","","","INP"],fx:1,about:"Passes its input through the track effects. Needs one trig to open."},
- "FX-REVERB":{id:13,p:["DEC","DAMP","GATE","MIX","HP","LP","","INP"],fx:1,about:"The Machinedrum's gated reverb. GATE 127 turns the gate off."},
+ "FX-REVERB":{id:13,p:["DEC","DAMP","GATE","MIX","HP","LP","","INP"],fx:1,about:"A gated reverb. GATE 127 turns the gate off."},
  "FX-CHORUS":{id:15,p:["DEL","DEP","SPD","MIX","FB","WID","LP","INP"],fx:1,about:"2 × 3 tap stereo chorus."},
  "FX-DYNAMIX":{id:16,p:["ATK","REL","THRS","MIX","RAT","GAIN","RMS","INP"],fx:1,about:"Compressor. RAT 127 = limiter."},
  "FX-RINGMOD":{id:17,p:["WAVE","EXT","","MIX","","","","INP"],fx:1,about:"Ring-modulates the input with a sine-to-triangle carrier."},

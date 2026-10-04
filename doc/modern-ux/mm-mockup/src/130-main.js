@@ -279,7 +279,7 @@ Keys.bind({keys:["CLR"],mod:"alt",group:"All",does:"Click: clear the whole patte
 Keys.bind({keys:["ArrowLeft","ArrowRight"],group:"Song",does:"Previous / next row",when:()=>S.ws==="song",run:e=>{S.songSel=clamp(S.songSel+(e.key==="ArrowRight"?1:-1),0,S.song.length-1);render()}});
 Keys.bind({keys:["ArrowUp","ArrowDown"],group:"Values",does:"A focused value, tempo or bar: one step (⇧: ×10, tempo: fine)"});
 Keys.bind({keys:["ArrowLeft","ArrowRight"],group:"Values",does:"A focused value: one step"});
-Keys.bind({keys:["drag a value"],mod:"alt",group:"All",does:"Control All: move that value on every synth track (FUNCTION + knob on the Machinedrum)"});
+Keys.bind({keys:["drag a value"],mod:"alt",group:"All",does:"Control All: move that value on every synth track (an editor feature; the Monomachine has no such key)"});
 Keys.bind({keys:["M key"],mod:"shift",group:"Anywhere",does:"Click: prepare that track's mute (+ / X); applied when ⇧ is let go"});
 Keys.bind({keys:["drag M / S keys"],group:"Anywhere",does:"Mute (solo) or unmute every track the drag crosses, as the first key became"});
 Keys.bind({keys:["roll"],mod:"shift",group:"Sequence",does:"Click: a chord note on the step"});
