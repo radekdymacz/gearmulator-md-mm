@@ -264,8 +264,11 @@ namespace elektronData
 						m_errors.push_back(path(_key) + ": a run must be [index, \"hex\"]");
 						return;
 					}
-					const auto at = static_cast<size_t>(r.asArray()[0].asNumber());
-					if(at + b.size() > _bytes.size())
+					// an integer inside the region: a negative or huge index must not wrap past the size check
+					size_t at = 0;
+					if(!toInteger(r.asArray()[0], path(_key), at, 0, static_cast<double>(_bytes.size())))
+						return;
+					if(b.size() > _bytes.size() - at)
 					{
 						m_errors.push_back(path(_key) + ": a run ends past the region");
 						return;

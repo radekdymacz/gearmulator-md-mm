@@ -1,9 +1,12 @@
 #include "json.h"
 
 #include <cassert>
+#include <clocale>
 #include <cmath>
+#include <cstdint>
 #include <cstdio>
 #include <cstdlib>
+#include <cstring>
 
 namespace elektronData::json
 {
@@ -58,11 +61,86 @@ namespace elektronData::json
 
 	namespace
 	{
+		// Finite by the bits, not by std::isfinite: release builds use -Ofast, whose finite-math assumption folds
+		// std::isfinite to true. The library is also built without fast math (CMakeLists.txt); this holds either way.
+		bool isFinite(const double _n)
+		{
+			uint64_t bits;
+			std::memcpy(&bits, &_n, sizeof(bits));
+			constexpr uint64_t exponent = 0x7ff0000000000000ull;
+			return (bits & exponent) != exponent;
+		}
+
+		// The length of the UTF-8 sequence at _s[_i], or 0 when it is not a valid one (overlong, a surrogate, past
+		// U+10FFFF, or cut short).
+		size_t utf8Length(const std::string& _s, const size_t _i)
+		{
+			const auto at = [&](const size_t _k) { return static_cast<unsigned char>(_s[_k]); };
+			const auto c = at(_i);
+			size_t n;
+			uint32_t code;
+			if(c >= 0xc2 && c <= 0xdf)
+			{
+				n = 2;
+				code = c & 0x1fu;
+			}
+			else if(c >= 0xe0 && c <= 0xef)
+			{
+				n = 3;
+				code = c & 0x0fu;
+			}
+			else if(c >= 0xf0 && c <= 0xf4)
+			{
+				n = 4;
+				code = c & 0x07u;
+			}
+			else
+				return 0;
+			if(_i + n > _s.size())
+				return 0;
+			for(size_t k = 1; k < n; ++k)
+			{
+				if((at(_i + k) & 0xc0) != 0x80)
+					return 0;
+				code = (code << 6) | (at(_i + k) & 0x3fu);
+			}
+			if((n == 3 && code < 0x800) || (n == 4 && (code < 0x10000 || code > 0x10ffff)) || (code >= 0xd800 && code <= 0xdfff))
+				return 0;
+			return n;
+		}
+
+		void appendUtf8(std::string& _out, const uint32_t _code)
+		{
+			if(_code < 0x80)
+				_out += static_cast<char>(_code);
+			else if(_code < 0x800)
+			{
+				_out += static_cast<char>(0xc0 | (_code >> 6));
+				_out += static_cast<char>(0x80 | (_code & 0x3f));
+			}
+			else if(_code < 0x10000)
+			{
+				_out += static_cast<char>(0xe0 | (_code >> 12));
+				_out += static_cast<char>(0x80 | ((_code >> 6) & 0x3f));
+				_out += static_cast<char>(0x80 | (_code & 0x3f));
+			}
+			else
+			{
+				_out += static_cast<char>(0xf0 | (_code >> 18));
+				_out += static_cast<char>(0x80 | ((_code >> 12) & 0x3f));
+				_out += static_cast<char>(0x80 | ((_code >> 6) & 0x3f));
+				_out += static_cast<char>(0x80 | (_code & 0x3f));
+			}
+		}
+
+		// Strings are UTF-8: a valid multi-byte sequence is written as it is. A byte that is not part of one (text
+		// that is not UTF-8) is escaped as U+00XX (its Latin-1 reading), so the output is always valid JSON.
 		void writeString(std::string& _out, const std::string& _s)
 		{
 			_out += '"';
-			for(const auto c : _s)
+			for(size_t i = 0; i < _s.size(); ++i)
 			{
+				const char c = _s[i];
 				const auto u = static_cast<unsigned char>(c);
 				switch(c)
 				{
@@ -72,6 +150,15 @@ namespace elektronData::json
 				case '\r': _out += "\\r"; break;
 				case '\t': _out += "\\t"; break;
 				default:
+					if(u >= 0x80)
+					{
+						if(const auto n = utf8Length(_s, i))
+						{
+							_out.append(_s, i, n);
+							i += n - 1;
+							break;
+						}
+					}
 					if(u < 0x20 || u >= 0x7f)
 					{
 						char esc[8];
@@ -85,14 +172,34 @@ namespace elektronData::json
 			_out += '"';
 		}
 
+		// Locale-independent: the C library formats with the current LC_NUMERIC decimal point (a comma under
+		// pl_PL, for example). Whatever it wrote between the digits is put back as '.'. A non-finite value has no
+		// JSON form and is written as null.
 		void writeNumber(std::string& _out, const double _n)
 		{
-			char text[32];
+			if(!isFinite(_n))
+			{
+				_out += "null";
+				return;
+			}
+			char text[48];
 			if(std::floor(_n) == _n && std::fabs(_n) < 9.0e15)
 				std::snprintf(text, sizeof(text), "%.0f", _n);
 			else
 				std::snprintf(text, sizeof(text), "%.17g", _n);
-			_out += text;
+			bool point = false;
+			for(const char* p = text; *p; ++p)
+			{
+				const char c = *p;
+				if((c >= '0' && c <= '9') || c == '-' || c == '+' || c == 'e' || c == 'E')
+				{
+					_out += c;
+					continue;
+				}
+				if(!point)
+					_out += '.';
+				point = true;
+			}
 		}
 
 		void newline(std::string& _out, const int _indent, const int _depth)
@@ -231,15 +338,80 @@ namespace elektronData::json
 				return number();
 			}
 
+			bool digits()
+			{
+				const auto from = m_pos;
+				while(m_pos < m_text.size() && m_text[m_pos] >= '0' && m_text[m_pos] <= '9')
+					++m_pos;
+				return m_pos > from;
+			}
+
+			// The JSON number grammar, then strtod on the token with '.' replaced by the current locale's decimal
+			// point, so the result does not depend on LC_NUMERIC. strtod alone would also take what JSON does not
+			// (nan, inf, hex, a leading + or .).
 			std::optional<Value> number()
 			{
-				const char* begin = m_text.c_str() + m_pos;
-				char* end = nullptr;
-				const double n = std::strtod(begin, &end);
-				if(end == begin || !std::isfinite(n))
+				const auto start = m_pos;
+				if(m_pos < m_text.size() && m_text[m_pos] == '-')
+					++m_pos;
+				if(m_pos < m_text.size() && m_text[m_pos] == '0')
+					++m_pos;
+				else if(!digits())
 					return fail("bad number");
-				m_pos += static_cast<size_t>(end - begin);
+				if(m_pos < m_text.size() && m_text[m_pos] == '.')
+				{
+					++m_pos;
+					if(!digits())
+						return fail("bad number");
+				}
+				if(m_pos < m_text.size() && (m_text[m_pos] == 'e' || m_text[m_pos] == 'E'))
+				{
+					++m_pos;
+					if(m_pos < m_text.size() && (m_text[m_pos] == '+' || m_text[m_pos] == '-'))
+						++m_pos;
+					if(!digits())
+						return fail("bad number");
+				}
+				std::string token;
+				const char* point = std::localeconv()->decimal_point;
+				for(size_t i = start; i < m_pos; ++i)
+				{
+					if(m_text[i] == '.' && point && *point)
+						token += point;
+					else
+						token += m_text[i];
+				}
+				char* end = nullptr;
+				const double n = std::strtod(token.c_str(), &end);
+				if(end != token.c_str() + token.size() || !isFinite(n))
+				{
+					m_pos = start;
+					return fail("bad number");
+				}
 				return Value(n);
+			}
+
+			// Four hex digits of a u-escape at m_pos.
+			std::optional<uint32_t> hex4()
+			{
+				if(m_pos + 4 > m_text.size())
+					return {};
+				uint32_t code = 0;
+				for(size_t k = 0; k < 4; ++k)
+				{
+					const char h = m_text[m_pos + k];
+					code <<= 4;
+					if(h >= '0' && h <= '9')
+						code |= static_cast<uint32_t>(h - '0');
+					else if(h >= 'a' && h <= 'f')
+						code |= static_cast<uint32_t>(h - 'a' + 10);
+					else if(h >= 'A' && h <= 'F')
+						code |= static_cast<uint32_t>(h - 'A' + 10);
+					else
+						return {};
+				}
+				m_pos += 4;
+				return code;
 			}
 
 			std::optional<std::string> string()
@@ -273,17 +445,35 @@ namespace elektronData::json
 					case 't': s += '\t'; break;
 					case 'u':
 					{
-						if(m_pos + 4 > m_text.size())
-							return {};
-						const auto code = std::strtoul(m_text.substr(m_pos, 4).c_str(), nullptr, 16);
-						m_pos += 4;
-						// The contract only needs Latin-1; wider code points are refused.
-						if(code > 0xff)
+						// A code point as UTF-8; above U+FFFF as a surrogate pair. A lone surrogate is refused.
+						auto code = hex4();
+						if(!code)
 						{
-							fail("unsupported \\u escape");
+							fail("bad \\u escape");
 							return {};
 						}
-						s += static_cast<char>(code);
+						if(*code >= 0xdc00 && *code <= 0xdfff)
+						{
+							fail("lone low surrogate in \\u escape");
+							return {};
+						}
+						if(*code >= 0xd800 && *code <= 0xdbff)
+						{
+							if(m_pos + 2 > m_text.size() || m_text[m_pos] != '\\' || m_text[m_pos + 1] != 'u')
+							{
+								fail("lone high surrogate in \\u escape");
+								return {};
+							}
+							m_pos += 2;
+							const auto low = hex4();
+							if(!low || *low < 0xdc00 || *low > 0xdfff)
+							{
+								fail("bad surrogate pair in \\u escape");
+								return {};
+							}
+							*code = 0x10000 + ((*code - 0xd800) << 10) + (*low - 0xdc00);
+						}
+						appendUtf8(s, *code);
 						break;
 					}
 					default:

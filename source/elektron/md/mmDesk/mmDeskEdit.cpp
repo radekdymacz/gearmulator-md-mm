@@ -183,7 +183,7 @@ namespace mmDesk
 				return;
 			const auto& lp = params[_row];
 			_p.lockMasks[lp.track][lp.page] &= static_cast<uint8_t>(~(1u << lp.param));
-			const size_t count = _p.lockRowCount;
+			const size_t count = std::min<size_t>(_p.lockRowCount, MmPattern::g_lockRows);
 			for(size_t r = _row; r + 1 < count; ++r)
 				_p.lockRows[r] = _p.lockRows[r + 1];
 			if(count)
@@ -198,7 +198,14 @@ namespace mmDesk
 			if(_p.lockRowCount >= MmPattern::g_lockRows)
 				return -1;
 			_p.lockMasks[_lp.track][_lp.page] |= static_cast<uint8_t>(1u << _lp.param);
-			const auto r = static_cast<size_t>(ed::mmLockRow(_p, _lp));
+			const auto made = ed::mmLockRow(_p, _lp);
+			if(made < 0)
+			{
+				// the masks hold more parameters than the pool has rows (a corrupt dump): no row for this one
+				_p.lockMasks[_lp.track][_lp.page] &= static_cast<uint8_t>(~(1u << _lp.param));
+				return -1;
+			}
+			const auto r = static_cast<size_t>(made);
 			for(size_t i = _p.lockRowCount; i > r; --i)
 				_p.lockRows[i] = _p.lockRows[i - 1];
 			_p.lockRows[r].fill(MmPattern::g_noLock);
@@ -661,7 +668,8 @@ namespace mmDesk
 				moveEntries(chordPool(_p));
 			}
 			for(const auto& lp : trackLocks(_p, tr))
-				deskCore::rotateRow(_p.lockRows[static_cast<size_t>(ed::mmLockRow(_p, lp))], by, len);
+				if(const auto row = ed::mmLockRow(_p, lp); row >= 0)
+					deskCore::rotateRow(_p.lockRows[static_cast<size_t>(row)], by, len);
 			_in.note = "Rotated " + trackName(t) + (by > 0 ? " later" : " earlier");
 			return _p;
 		}
@@ -680,7 +688,7 @@ namespace mmDesk
 					bits = deskCore::doubledBits(bits, len);
 			for(auto& row : _p.notes)
 				deskCore::doubleRow(row, len, MmPattern::g_noNote);
-			for(size_t r = 0; r < _p.lockRowCount; ++r)
+			for(size_t r = 0; r < _p.lockRowCount && r < MmPattern::g_lockRows; ++r)
 				deskCore::doubleRow(_p.lockRows[r], len, MmPattern::g_noLock);
 			// the note pools: the new half's entries are copies of the first half's (a chord note belongs to a chord step)
 			const auto copyEntries = [&](auto _pool, const auto _attached, const char* _what)
@@ -848,7 +856,10 @@ namespace mmDesk
 					c.slide |= ed::mmStepBit(rel);
 				for(const auto& lp : trackLocks(_p, tr))
 				{
-					const auto v = _p.lockRows[static_cast<size_t>(ed::mmLockRow(_p, lp))][static_cast<size_t>(s)];
+					const auto row = ed::mmLockRow(_p, lp);
+					if(row < 0)
+						continue;
+					const auto v = _p.lockRows[static_cast<size_t>(row)][static_cast<size_t>(s)];
 					if(v != MmPattern::g_noLock)
 						c.locks[{lp.page, lp.param}][rel] = v;
 				}

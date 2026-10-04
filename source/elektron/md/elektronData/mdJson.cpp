@@ -555,8 +555,12 @@ namespace elektronData
 		if(const auto* hidden = in.get("lockPoolHidden", false))
 		{
 			std::vector<uint8_t> bytes;
+			const auto expected = hiddenLockBytes(p).size();
 			for(const auto& pair : hidden->isArray() ? hidden->asArray() : Value::Array{})
 			{
+				// more than the layout holds cannot match: stop before a hostile list allocates gigabytes
+				if(bytes.size() > expected)
+					break;
 				size_t n = 0;
 				uint8_t b = 0;
 				if(!pair.isArray() || pair.asArray().size() != 2
@@ -567,7 +571,7 @@ namespace elektronData
 			}
 			// Only meaningful for the lock layout it was taken from: after an edit
 			// that adds or removes a locked parameter the residue is dropped.
-			if(bytes.size() == hiddenLockBytes(p).size())
+			if(bytes.size() == expected)
 			{
 				size_t i = 0;
 				forEachHiddenLockByte(p, [&](const size_t _r, const size_t _s) { p.lockRows[_r][_s] = bytes[i++]; });

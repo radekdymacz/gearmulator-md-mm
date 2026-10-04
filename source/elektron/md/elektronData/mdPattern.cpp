@@ -256,7 +256,11 @@ namespace elektronData
 	{
 		if(_track >= MdPattern::g_tracks || _param >= 32 || !((_p.lockMasks[_track] >> _param) & 1))
 			return {};
-		return rowsBefore(_p, _track, _param);
+		// a dump with more than 64 mask bits set (corrupt or hostile) has rows past the pool: they do not exist
+		const auto row = rowsBefore(_p, _track, _param);
+		if(row >= MdPattern::g_lockRows)
+			return {};
+		return row;
 	}
 
 	std::optional<uint8_t> lockValue(const MdPattern& _p, const size_t _track, const size_t _param,

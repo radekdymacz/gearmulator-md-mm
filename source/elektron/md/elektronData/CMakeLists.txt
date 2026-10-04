@@ -49,6 +49,17 @@ target_include_directories(elektronData PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/..)
 target_compile_features(elektronData PUBLIC cxx_std_17)
 set_property(TARGET elektronData PROPERTY FOLDER "Elektron")
 
+# Release builds use -Ofast (/fp:fast), whose finite-math assumption turns isfinite and isnan into constants: the
+# JSON layer would then accept and write inf/nan, and the sample import would pass NaN samples. Neither library is
+# on the emulator's hot path, so both keep IEEE semantics.
+foreach(target elektronJson elektronData)
+	if(MSVC)
+		target_compile_options(${target} PRIVATE /fp:precise)
+	else()
+		target_compile_options(${target} PRIVATE -fno-fast-math)
+	endif()
+endforeach()
+
 if(BUILD_TESTING)
 	add_executable(elektronDataTest elektronDataTest.cpp)
 	target_link_libraries(elektronDataTest PRIVATE elektronData)

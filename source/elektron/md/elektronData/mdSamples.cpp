@@ -451,11 +451,12 @@ namespace elektronData
 					float f;
 					const auto u = static_cast<uint32_t>(v);
 					std::memcpy(&f, &u, 4);
-					return std::isfinite(f) ? f : 0.0f;
+					// finite by the exponent bits: -Ofast folds std::isfinite to true
+					return (u & 0x7f800000u) != 0x7f800000u ? f : 0.0f;
 				}
 				double d;
 				std::memcpy(&d, &v, 8);
-				return std::isfinite(d) ? static_cast<float>(d) : 0.0f;
+				return (v & 0x7ff0000000000000ull) != 0x7ff0000000000000ull ? static_cast<float>(d) : 0.0f;
 			}
 			if(_bits == 8 && _unsigned8)
 				return (static_cast<int>(v) - 128) / 128.0f;

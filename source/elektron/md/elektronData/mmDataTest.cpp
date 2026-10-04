@@ -175,6 +175,39 @@ namespace
 		check(gBack && *gBack == g, "global -> JSON -> global");
 	}
 
+	// Release review 2026-10-04 S1 and S9: hidden runs and lock rows stay inside their buffers.
+	void bounds()
+	{
+		std::puts("bounds");
+		ed::MmSong s;
+		s.rows[0].bytes[0] = ed::MmSong::g_end;
+		const auto doc = ed::mmSongToJson(s);
+		std::vector<std::string> errors;
+		check(ed::mmSongFromJson(doc, errors).has_value(), "a song document reads");
+		const auto withRuns = [&](const char* _runs)
+		{
+			auto d = doc;
+			d.find("firmware")->put("rowsAfterEnd", *ed::json::parse(_runs));	// v2: the hidden fields sit in "firmware"
+			errors.clear();
+			return ed::mmSongFromJson(d, errors);
+		};
+		check(!withRuns("[[-8,\"0000000000000000\"]]") && hasError(errors, "rowsAfterEnd"), "a negative run index is refused");
+		check(!withRuns("[[1e300,\"00\"]]") && hasError(errors, "rowsAfterEnd"), "a huge run index is refused");
+		check(!withRuns("[[0.5,\"00\"]]") && hasError(errors, "rowsAfterEnd"), "a fractional run index is refused");
+		const auto tail = (ed::MmSong::g_rows - 1) * 24;
+		check(!withRuns(("[[" + std::to_string(tail - 1) + ",\"0000\"]]").c_str()) && hasError(errors, "past the region"),
+			"a run that ends past the region is refused");
+		const auto last = withRuns(("[[" + std::to_string(tail - 1) + ",\"05\"]]").c_str());
+		check(last && last->rows[ed::MmSong::g_rows - 1].bytes[23] == 5, "a run that ends at the region's end is written");
+
+		auto p = emptyPattern();
+		for(auto& t : p.lockMasks)
+			t.fill(0xff);
+		p.lockRowCount = 62;
+		check(ed::mmLockRow(p, {0, 7, 5}) == 61, "the 62nd locked parameter has the last row");
+		check(ed::mmLockRow(p, {0, 7, 6}) == -1 && ed::mmLockRow(p, {5, 7, 7}) == -1, "parameters past row 61 have no row");
+	}
+
 	void machines()
 	{
 		std::puts("machines and commands");
@@ -192,6 +225,7 @@ int main()
 	wire();
 	entries();
 	json();
+	bounds();
 	machines();
 	std::printf("%s (%d failures)\n", g_failures ? "FAIL" : "PASS", g_failures);
 	return g_failures ? 1 : 0;

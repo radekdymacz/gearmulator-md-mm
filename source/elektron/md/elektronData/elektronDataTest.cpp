@@ -14,8 +14,10 @@
 #include "mdValidate.h"
 #include "sysex7bit.h"
 
+#include <clocale>
 #include <cstdio>
 #include <cstdlib>
+#include <cstring>
 #include <fstream>
 #include <iterator>
 
@@ -326,6 +328,118 @@ namespace
 		check(!elektronData::json::parse("[1,]") && !elektronData::json::parse("{\"a\":1} x"), "JSON errors");
 	}
 
+	double fromBits(const uint64_t _bits)
+	{
+		double d;
+		std::memcpy(&d, &_bits, sizeof(d));
+		return d;
+	}
+
+	// Release review 2026-10-04 S2: inf and nan have no JSON form. Release builds use -Ofast, which once folded
+	// the isfinite checks away; this test runs in that build too.
+	void testJsonNonFinite()
+	{
+		namespace j = elektronData::json;
+		for(const char* text : {"1e400", "-1e400", "[1e999]", "nan", "NaN", "-inf", "inf", "Infinity", "{\"level\":NaN}"})
+			check(!j::parse(text), "a non-finite number is refused");
+		const double inf = fromBits(0x7ff0000000000000ull), nan = fromBits(0x7ff8000000000000ull);
+		check(j::write(j::Value(inf)) == "null" && j::write(j::Value(-inf)) == "null" && j::write(j::Value(nan)) == "null",
+			"inf and nan are written as null");
+		auto a = j::Value::array();
+		a.push(j::Value(1.0));
+		a.push(j::Value(nan));
+		check(j::parse(j::write(a)).has_value(), "a batch holding nan still parses after writing");
+		// The JSON number grammar, which strtod alone does not keep.
+		for(const char* text : {"+1", ".5", "1.", "01", "0x10", "-", "1e", "1e+"})
+			check(!j::parse(text), "a number JSON does not allow is refused");
+		for(const char* text : {"0", "-0", "1.5e3", "1E-2", "-0.25", "1e-400"})
+			check(j::parse(text).has_value(), "a JSON number parses");
+	}
+
+	// Release review 2026-10-04 S3: numbers do not depend on LC_NUMERIC.
+	void testJsonLocale()
+	{
+		namespace j = elektronData::json;
+		const char* commaLocale = nullptr;
+		for(const char* name : {"pl_PL.UTF-8", "pl_PL.utf8", "de_DE.UTF-8", "de_DE.utf8", "fr_FR.UTF-8", "Polish_Poland.1250", "German_Germany.1252", "de_DE"})
+		{
+			if(std::setlocale(LC_NUMERIC, name) && std::string(std::localeconv()->decimal_point) == ",")
+			{
+				commaLocale = name;
+				break;
+			}
+		}
+		if(!commaLocale)
+		{
+			std::setlocale(LC_NUMERIC, "C");
+			std::printf("testJsonLocale: no comma-decimal locale on this host, skipped\n");
+			return;
+		}
+		const auto v = j::parse("{\"tempo\":120.5,\"rate\":-0.25,\"e\":1.5e3}");
+		check(v && v->find("tempo")->asNumber() == 120.5 && v->find("rate")->asNumber() == -0.25 && v->find("e")->asNumber() == 1500.0,
+			"fractional numbers parse under a comma-decimal locale");
+		check(v && j::write(*v) == "{\"tempo\":120.5,\"rate\":-0.25,\"e\":1500}", "and are written with a point");
+		check(j::write(j::Value(0.1)) == "0.10000000000000001" && j::parse(j::write(j::Value(0.1)))->asNumber() == 0.1,
+			"a full-precision double round-trips under the locale");
+		std::setlocale(LC_NUMERIC, "C");
+	}
+
+	// Release review 2026-10-04 S10: strings are UTF-8 both ways.
+	void testJsonUtf8()
+	{
+		namespace j = elektronData::json;
+		const std::string name = "Rados\xc5\x82" "aw / zestaw-\xc5\x82\xc3\xb3" "d\xc5\xba.syx \xe2\x82\xac \xf0\x9f\x8e\xb9";
+		const auto text = j::write(j::Value(name));
+		check(text == "\"" + name + "\"", "UTF-8 is written as it is, not byte-escaped");
+		const auto back = j::parse(text);
+		check(back && back->asString() == name, "and reads back unchanged");
+		const auto esc = j::parse("\"\\u0141\\u00f3d\\u017a \\u20ac \\ud83c\\udfb9\"");
+		check(esc && esc->asString() == "\xc5\x81\xc3\xb3" "d\xc5\xba \xe2\x82\xac \xf0\x9f\x8e\xb9", "u-escapes decode to UTF-8, surrogate pairs included");
+		check(!j::parse("\"\\ud83c\"") && !j::parse("\"\\udfb9\"") && !j::parse("\"\\ud83cx\"") && !j::parse("\"\\ud83c\\u0041\""),
+			"a lone or broken surrogate is refused");
+		check(!j::parse("\"a\\u00zzb\"") && !j::parse("\"a\\u00\""), "a bad or short u-escape is refused");
+		const auto latin = j::write(j::Value(std::string("caf\xe9")));
+		check(latin == "\"caf\\u00e9\"" && j::parse(latin).has_value(), "a byte that is not UTF-8 is escaped, so the output stays valid JSON");
+		check(j::write(j::Value(std::string("\x01\x7f"))) == "\"\\u0001\\u007f\"", "control bytes stay escaped");
+	}
+
+	// Release review 2026-10-04 S9: a dump with more than 64 lock mask bits set has no rows past the pool.
+	void testLockRowBound()
+	{
+		elektronData::MdPattern p;
+		p.lockMasks.fill(0xffffffffu);
+		check(elektronData::lockRowIndex(p, 1, 31) == size_t{63}, "the 64th locked parameter has the last row");
+		check(!elektronData::lockRowIndex(p, 2, 0) && !elektronData::lockRowIndex(p, 15, 31), "parameters past row 63 have no row");
+		check(!elektronData::lockValue(p, 15, 31, 0), "no lock value is read past the pool");
+		check(!elektronData::withLock(p, 15, 31, 0, 1), "no lock is written past the pool");
+		check(elektronData::withoutLockRow(p, 15, 31) == p && elektronData::withoutLock(p, 15, 31, 0) == p,
+			"removing a row past the pool changes nothing");
+	}
+
+	// Release review 2026-10-04 S12: a hostile hidden lock pool cannot make the parser allocate without bound.
+	void testHiddenLockPoolBound()
+	{
+		namespace j = elektronData::json;
+		elektronData::MdPattern p;
+		p = *elektronData::withLock(p, 0, 1, 2, 3);
+		p.lockRows[63][0] = 0x11;
+		auto doc = elektronData::patternToJson(p);
+		std::vector<std::string> errors;
+		check(elektronData::patternFromJson(doc, errors) == std::optional<elektronData::MdPattern>(p), "hidden lock bytes round-trip");
+		auto hostile = j::Value::array();
+		for(int i = 0; i < 200000; ++i)		// 800 MB if every pair were expanded
+		{
+			auto pair = j::Value::array();
+			pair.push(j::Value(4096));
+			pair.push(j::Value(0));
+			hostile.push(std::move(pair));
+		}
+		doc.find("firmware")->put("lockPoolHidden", std::move(hostile));
+		errors.clear();
+		const auto back = elektronData::patternFromJson(doc, errors);
+		check(back.has_value() && back->lockRows[63][0] == 0, "an oversized hidden pool is dropped, not expanded");
+	}
+
 	// Optional: byte-exact round trip of dumps captured from firmware.
 
 	// The schema validator refuses what the contract refuses (the executable spec, P6).
@@ -382,6 +496,11 @@ int main(const int _argc, char** _argv)
 	testGlobal();
 	testPatternContract();
 	testJson();
+	testJsonNonFinite();
+	testJsonLocale();
+	testJsonUtf8();
+	testLockRowBound();
+	testHiddenLockPoolBound();
 	testSchema();
 	testCapturedDumps(_argc, _argv);
 	std::printf("elektronDataTest: %s\n", g_failures ? "FAIL" : "PASS");

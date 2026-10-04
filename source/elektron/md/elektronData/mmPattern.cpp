@@ -118,7 +118,8 @@ namespace elektronData
 	int mmLockRow(const MmPattern& _pattern, const MmLockParam& _param)
 	{
 		const auto params = mmLockParams(_pattern);
-		for(size_t r = 0; r < params.size(); ++r)
+		// a row past the 62 of the pool (a dump with too many mask bits set) does not exist
+		for(size_t r = 0; r < params.size() && r < MmPattern::g_lockRows; ++r)
 			if(params[r] == _param)
 				return static_cast<int>(r);
 		return -1;
