@@ -53,19 +53,38 @@ const Journey = (() => {
 		/* a press and drag: from the element's point through each [dx, dy] offset (or element), released at the last */
 		async drag(q, path, m = {}, o = {}) {
 			const e = el(q), a = pointIn(e, o.fx, o.fy), down = document.elementFromPoint(a.x, a.y);
-			pe("pointerdown", down, a.x, a.y, m, 1); me("mousedown", down, a.x, a.y, m, 1);
+			/* pointer capture as the browser keeps it: the element the page captured gets the moves and the release,
+			   even when a redraw replaced the element pressed (a synthetic pointer has no real capture) */
+			let captured = null; const cap0 = Element.prototype.setPointerCapture;
+			Element.prototype.setPointerCapture = function () { captured = this; };
 			let at = a;
-			for (const p of path) {
-				at = Array.isArray(p) ? { x: a.x + p[0], y: a.y + p[1] } : pointIn(el(p));
-				const over = document.elementFromPoint(at.x, at.y) || document.body;
-				/* a captured pointer's moves go to the pressed element; the page listens on the document too */
-				pe("pointermove", o.captured === false ? over : down, at.x, at.y, m, 1); me("mousemove", over, at.x, at.y, m, 1);
-				await sleep(o.stepMs ?? 30);
-			}
-			const up = o.captured === false ? (document.elementFromPoint(at.x, at.y) || document.body) : down;
-			pe("pointerup", up, at.x, at.y, m, 0); me("mouseup", up, at.x, at.y, m, 0);
+			const target = () => o.captured === false ? (document.elementFromPoint(at.x, at.y) || document.body)
+				: captured && captured.isConnected ? captured : down.isConnected ? down : document.body;
+			try {
+				pe("pointerdown", down, a.x, a.y, m, 1); me("mousedown", down, a.x, a.y, m, 1);
+				for (const p of path) {
+					at = Array.isArray(p) ? { x: a.x + p[0], y: a.y + p[1] } : pointIn(el(p));
+					const over = document.elementFromPoint(at.x, at.y) || document.body;
+					pe("pointermove", target(), at.x, at.y, m, 1); me("mousemove", over, at.x, at.y, m, 1);
+					await sleep(o.stepMs ?? 30);
+				}
+				const up = target();
+				pe("pointerup", up, at.x, at.y, m, 0); me("mouseup", up, at.x, at.y, m, 0);
+			} finally { Element.prototype.setPointerCapture = cap0; }
 			if (o.click !== false) me("click", document.elementFromPoint(at.x, at.y) || document.body, at.x, at.y, m, 0);
 			await sleep(o.settle ?? 150);
+		},
+		/* an HTML drag and drop (draggable=true): dragstart on the source, dragover and drop on the target, dragend,
+		   with one DataTransfer as the browser hands it */
+		async dragDrop(from, to) {
+			const a = el(from), b = el(to), pa = pointIn(a), pb = pointIn(b);
+			let dt = null; try { dt = new DataTransfer(); } catch (_) { const d = {}; dt = { effectAllowed: "all", dropEffect: "none", setData: (k, v) => { d[k] = v; }, getData: k => d[k] ?? "", types: [], files: [] }; }
+			const de = (type, target, p) => { const e = new DragEvent(type, { bubbles: true, cancelable: true, composed: true, clientX: p.x, clientY: p.y, dataTransfer: dt });
+				if (!e.dataTransfer) Object.defineProperty(e, "dataTransfer", { value: dt }); return target.dispatchEvent(e); };
+			const src = document.elementFromPoint(pa.x, pa.y), dst = document.elementFromPoint(pb.x, pb.y);
+			de("dragstart", src, pa); await sleep(30);
+			de("dragenter", dst, pb); de("dragover", dst, pb); await sleep(30);
+			de("drop", dst, pb); de("dragend", src, pb); await sleep(150);
 		},
 		/* scroll wheel notches over the element (up: positive n) */
 		wheel(q, n, m = {}) {
