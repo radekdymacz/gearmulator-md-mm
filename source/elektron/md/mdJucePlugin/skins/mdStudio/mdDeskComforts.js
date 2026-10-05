@@ -23,7 +23,9 @@ function altLabels() {
 	if (cl) { const t = S.alt ? `Clear every lock of track ${S.sel + 1}` : `Clear ${S.lane} locks. Alt: every lock of track ${S.sel + 1}`; cl.title = t; cl.setAttribute("aria-label", t); }
 }
 S.alt = false;
-function showAlt(on) { if (S.alt === on) return; S.alt = on; document.body.classList.toggle("althold", on); altLabels(); if (S.ws === "seq") genDraw(); if (S.ws === "sound") renderMutStrip(); }
+/* Alt seen up (any key or pointer event without it) also ends a rotate run: its keyup may never reach the page
+   (the Monomachine Editor's fix, MM-PORT-PLAN.md 2026-10-05) */
+function showAlt(on) { if (S.alt === on) return; S.alt = on; if (!on) Held.end("rotate"); document.body.classList.toggle("althold", on); altLabels(); if (S.ws === "seq") genDraw(); if (S.ws === "sound") renderMutStrip(); }
 addEventListener("keydown", e => showAlt(e.altKey), true);
 addEventListener("keyup", e => showAlt(e.altKey), true);
 addEventListener("blur", () => showAlt(false));

@@ -304,11 +304,11 @@ sampler). MIDI mapping is hidden by design on both; "undo says what it undoes" i
 - **Fixed on the way (2):** a rotate run (Alt + arrows) held the commit until a keyup of Alt itself; when that keyup
   never reached the page, every later edit joined the rotate's undo step. `showAlt(false)` (any key or pointer event
   without Alt) now ends the run too (`75-comforts.js`). The journeys found it: their Alt chords send no Alt keyup, so
-  every edit after `mm-seq-rotate` was one undo step. The MD's rotate run (`Held` "rotate", ended on Alt's keyup) has
-  the same shape; its journeys pass, left as it is (open question 4).
+  every edit after `mm-seq-rotate` was one undo step. The MD's rotate run (`Held` "rotate", ended on Alt's keyup) had
+  the same shape: fixed the same way after the owner's decision (below).
 - No core (C++) change: both features are page functions over the existing intents (`steps`, `noteOn`).
 
-### Open questions for the owner
+### Open questions for the owner (answered: see "The owner's decisions" below)
 
 1. **Tap tempo key.** T plays F♯ on the MM, so tap tempo moved to **B** there; the MD keeps T and accepts B as well.
    Alternatives: B only on both (drop T on the MD), or a black-key row that skips T (not chromatic).
@@ -318,3 +318,13 @@ sampler). MIDI mapping is hidden by design on both; "undo says what it undoes" i
    takes whole steps (all chord notes). Say if a paint should replace other pitches, or an erase take one row only.
 4. **The MD's rotate run** ends only on Alt's keyup or a window blur, as the MM's did. Give it the MM's fix
    (`showAlt(false)` ends it)?
+
+### The owner's decisions (2026-10-05, after the merge of 3c8143c0d)
+
+1. **Tap tempo stays as built:** B on both editors, T also on the Machinedrum Editor.
+2. **The MD gets the rotate fix:** `showAlt(false)` (any key or pointer event without Alt) ends the rotate run there too
+   (`mdDeskComforts.js`, `Held.end("rotate")`). Checks: `mdDeskPageTest` (a run lasts while Alt is down and ends at the
+   first event without it) and the journey `md-seq-rotate-undo` (Alt+→, Shift, Alt+→: one Cmd+Z undoes only the second
+   rotate, the next the first).
+3. **Roll paint and erase stay as built** (paint skips steps with notes and NOTE OFFs, erase takes whole steps).
+4. **The live-recording lock marker on the MM is skipped for now:** it needs a firmware probe first.

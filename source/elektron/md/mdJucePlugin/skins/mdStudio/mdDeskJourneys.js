@@ -233,6 +233,22 @@ const MdJourneys = (() => {
 			{ say: "press Alt+←: back", act: u => u.key("ArrowLeft", { alt: true }), machine: c => ok(same(trigsOf(c.t), c.t0), "pattern " + trigsOf(c.t).join(",")) }
 		]
 	};
+	/* a rotate run ends when the page sees Alt up in any event, not only in Alt's own keyup (which may never come:
+	   these synthetic chords send none, as a window switch can lose it); the next rotate is then its own undo step */
+	const rotateUndo = {
+		name: "md-seq-rotate-undo",
+		steps: [
+			go("seq"),
+			{ say: "pick a track with trigs that a rotate changes", act: (u, c) => { const L = Math.min(V.length, V.len), r = t => sorted(trigsOf(t).map(s => s >= L ? s : (s + 1) % L));
+				c.t = soundTracks().find(t => trigsOf(t).length && !same(r(t), trigsOf(t)) && !same(sorted(r(t).map(s => s >= L ? s : (s + 1) % L)), r(t))); if (c.t == null) throw new Error("no track a rotate changes");
+				c.t0 = trigsOf(c.t); c.t1 = r(c.t); u.click(rail(c.t)); }, screen: c => ok(S.sel === c.t, "selected " + S.sel) },
+			{ say: "press Alt+→: one step later", act: u => { document.activeElement?.blur?.(); u.key("ArrowRight", { alt: true }); }, machine: c => ok(same(trigsOf(c.t), c.t1), "pattern " + trigsOf(c.t).join(",")) },
+			{ say: "press Shift (Alt is up now), then Alt+→ again: another rotate", act: async u => { u.key("Shift"); await sleep(300); u.key("ArrowRight", { alt: true }); }, machine: c => ok(!same(trigsOf(c.t), c.t1), "pattern " + trigsOf(c.t).join(",")) },
+			{ say: "Cmd+Z: only the second rotate is undone", act: u => u.key("z", { cmd: true }), machine: c => ok(same(trigsOf(c.t), c.t1), "pattern " + trigsOf(c.t).join(",") + ", want " + c.t1.join(",")) },
+			{ say: "Cmd+Z: and then the first", act: u => u.key("z", { cmd: true }), machine: c => ok(same(trigsOf(c.t), c.t0), "pattern " + trigsOf(c.t).join(",") + ", want " + c.t0.join(",")) }
+		],
+		async tidy(u, c) { for (let i = 0; i < 4 && c.t0 && !same(trigsOf(c.t), c.t0); i++) { u.key("z", { cmd: true }); await until(() => same(trigsOf(c.t), c.t0), 3000); } }
+	};
 	const trackKeys = {
 		name: "md-keys-track-select",
 		steps: [
@@ -711,7 +727,7 @@ const MdJourneys = (() => {
 
 
 	const all = [bootCard, firstBeat, spaceTransport, tempoDrag, tapTempo, tapTempoB, patStep, queuePattern, plate, wsKeys, helpKeys, undoRedo,
-		paintUndo, accentSlide, lockLane, pagesJ, copyPaste, clearPatternJ, fillEveryJ, rotateJ, trackKeys, muteKeys, liveRec,
+		paintUndo, accentSlide, lockLane, pagesJ, copyPaste, clearPatternJ, fillEveryJ, rotateJ, rotateUndo, trackKeys, muteKeys, liveRec,
 		genJourney("md-gen-mutate-undo", false), genJourney("md-gen-defaults-mutate-undo", true), genKeys,
 		shapeSound, arrows, machinePick, soundCopy, editorDrag, controlAll,
 		mixSolo, shiftMutes, allOff, fader, outKey, masterFx,

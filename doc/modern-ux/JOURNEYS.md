@@ -7,7 +7,7 @@ check, User journeys. The journeys are `skins/mdStudio/mdDeskJourneys.js` and `s
 (names `md-…`, `mm-…`); a subset runs with `scripts/mdmm-journeys.sh md journey-seq-*`.
 
 Last run: 2026-10-05, diagnostics build of `feat/mm-port` (Release, arm64), MD OS 1.63, MM OS 1.32B: Machinedrum
-63/63 pass (the window on screen, so the sampler's canvas journeys ran too), Monomachine 71/71 pass (with the rotate
+64/64 pass (the window on screen, so the sampler's canvas journeys ran too), Monomachine 71/71 pass (with the rotate
 fix, MM-PORT-PLAN.md 2026-10-05; the run before it: 70/71, `mm-seq-roll-paint` found the rotate run holding the
 commit). Earlier, on `test/user-journeys`: Machinedrum 60 of 62 (2 skipped, window covered), Monomachine 69/69.
 
@@ -18,9 +18,9 @@ no journey yet); **not testable** (why). "—": the editor has no such feature.
 
 | | Machinedrum | Monomachine | Both |
 |---|---|---|---|
-| Features in the inventory (one row a feature; "—" rows not counted) | 81 | 85 | 166 |
-| Covered by a journey | 70 | 75 | 145 |
-| of which PASS | 70 | 75 | 145 |
+| Features in the inventory (one row a feature; "—" rows not counted) | 82 | 86 | 168 |
+| Covered by a journey | 71 | 76 | 147 |
+| of which PASS | 71 | 76 | 147 |
 | of which FAIL (product bug) | 0 | 0 | 0 |
 | of which SKIP here (window covered) | 0 | 0 | 0 |
 | Not covered yet (reachable through the page) | 0 | 0 | 0 |
@@ -82,6 +82,7 @@ no journey yet); **not testable** (why). "—": the editor has no such feature.
 | Clear the whole pattern (Alt+Delete), undo | md-seq-clear-pattern-undo PASS | mm-seq-clear-pattern-undo PASS |
 | Every-N fill (Cmd-click) | md-seq-fill-every PASS | mm-seq-fill-every PASS |
 | Rotate (Alt+← →) | md-seq-rotate PASS | mm-seq-rotate PASS |
+| A rotate run ends when Alt is seen up in any event: the next rotate is its own undo step (2026-10-05) | md-seq-rotate-undo PASS | mm-seq-roll-paint PASS (after mm-seq-rotate, its paint and erase are their own undo steps) |
 | Paste to many marked tracks (Shift-click headers) | md-seq-paste-many PASS | mm-seq-paste-many PASS |
 | Live recording (REC / Alt+Space) | md-seq-live-record PASS | mm-seq-live-record PASS |
 | GRID RECORDING (MM RECORD stopped) | — | mm-seq-grid-record PASS (bug 4, fixed; see note 2) |

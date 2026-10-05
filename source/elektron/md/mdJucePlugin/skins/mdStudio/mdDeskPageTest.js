@@ -109,6 +109,16 @@ for (const kind of ["paint", "l2", "chop", "song", "lane", "value", "mutePaint"]
 /* a gesture not holding the page (gv, bpm, wheel, rotate) ends without a render of its own */
 run(); { const before = P.renders; P.Held.begin("gv", {}); P.Held.end("gv"); run(); check(P.renders === before, "a gesture with nothing held renders nothing when it ends"); }
 
+/* ---- a rotate run (Alt + arrows, one undo step) ends when an event shows Alt up, not only on Alt's own keyup ---- */
+{
+	fire("window", "keydown", { altKey: true, key: "ArrowRight" });
+	P.Held.begin("rotate", { g: 99 });
+	fire("window", "keyup", { altKey: true, key: "ArrowRight" });
+	const kept = !!P.Held.as("rotate");
+	fire("document", "pointermove", { altKey: false });
+	check(kept && !P.Held.as("rotate"), "a rotate run lasts while Alt is down and ends at the first event without Alt");
+}
+
 /* ---- a solo leaves a RAM recorder alone: its mute is the sampler's capture and freeze ---- */
 {
 	const HEX62 = "0".repeat(62);
