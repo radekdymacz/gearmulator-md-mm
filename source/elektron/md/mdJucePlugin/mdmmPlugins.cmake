@@ -66,7 +66,10 @@ list(APPEND SOURCES
 	skins/mmStudio/mmGenTest.js
 	skins/mmStudio/mmSoundTest.js
 	skins/mmStudio/mmSelfTest.js
+	skins/mmStudio/mmJourneys.js
 	skins/mdStudio/mdDeskSelfTest.js
+	skins/mdStudio/mdDeskJourneys.js
+	skins/shared/deskJourney.js
 	skins/mdStudio/mdDeskModelTest.js
 	skins/mdStudio/mdDeskGenTest.js
 	skins/mdStudio/mdDeskKeysTest.js
@@ -127,9 +130,11 @@ file(GLOB MM_SKIN_ASSETS CONFIGURE_DEPENDS
 # ship, the self-tests only with the diagnostics. A test that was renamed or moved stops the
 # configure, so it cannot slip into the glob. The MM glob lists its page files already.
 set(MD_NODE_TESTS "skins/mdStudio/mdDeskModelTest.js" "skins/mdStudio/mdDeskGenTest.js" "skins/mdStudio/mdDeskKeysTest.js" "skins/mdStudio/mdDeskPageTest.js")
-# the AUDIO / MIDI panel's self-test (shared, diagnostics only) goes with the MD page's self-tests
-set(MD_SELF_TESTS "skins/mdStudio/mdDeskSelfTest.js" "skins/shared/deskAudioSelfTest.js")
-set(MM_SELF_TESTS "skins/mmStudio/mmSelfTest.js")
+# the AUDIO / MIDI panel's self-test (shared, diagnostics only) goes with the MD page's self-tests, and so do the
+# user journeys (the shared runner deskJourney.js and each page's journeys)
+set(MD_SELF_TESTS "skins/mdStudio/mdDeskSelfTest.js" "skins/shared/deskAudioSelfTest.js"
+	"skins/mdStudio/mdDeskJourneys.js" "skins/shared/deskJourney.js")
+set(MM_SELF_TESTS "skins/mmStudio/mmSelfTest.js" "skins/mmStudio/mmJourneys.js" "skins/shared/deskJourney.js")
 # the MM glob names its page files, so its node tests (mmConvertTest.js, mmKeysTest.js, mmGenTest.js, mmSoundTest.js,
 # mmViewTest.js and its fixture) never ship; checked to be there
 set(MM_NODE_TESTS "skins/mmStudio/mmConvertTest.js" "skins/mmStudio/mmKeysTest.js" "skins/mmStudio/mmGenTest.js" "skins/mmStudio/mmSoundTest.js"

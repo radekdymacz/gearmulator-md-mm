@@ -199,7 +199,7 @@ namespace mdJucePlugin
 
 		static PageSpec page()
 		{
-			return {"mmStudio.html", "gearmulator-mmStudio.log", "GEARMULATOR_MMSTUDIO_SELFTEST", {"1", "mmcpu", "p4", "p6", "p7"}, 1440};
+			return {"mmStudio.html", "gearmulator-mmStudio.log", "GEARMULATOR_MMSTUDIO_SELFTEST", {"1", "mmcpu", "p4", "p6", "p7", "journey"}, 1440};
 		}
 
 		// A synth track's DATA page values and level: the parameters that have a plug-in parameter.

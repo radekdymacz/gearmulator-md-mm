@@ -78,7 +78,8 @@ for a, b in HONEST:
 # The page's modules, in load order (a module that does not exist yet is skipped).
 # mdDeskSelfTest.js last: the self-tests, in the plug-in only with the diagnostics (an empty script otherwise).
 # desk*.js are the files both editors share (skins/shared/, the editor finds a page file by its name);
-# deskAudioSelfTest.js goes with the self-tests (diagnostics builds only).
+# deskAudioSelfTest.js goes with the self-tests (diagnostics builds only), and so do the user journeys:
+# deskJourney.js (the runner, shared) and mdDeskJourneys.js (doc/modern-ux/FOUNDATION.md, Build and check).
 # APP is the page's own app, one file a concern (mdDeskApp.js says what each holds), in load order: each only
 # defines at load, and mdDeskRender.js (last) renders the page and says it is ready.
 APP = ['mdDeskApp.js', 'mdDeskSoundGroups.js', 'mdDeskTop.js', 'mdDeskSeq.js', 'mdDeskSound.js', 'mdDeskEditors.js', 'mdDeskMix.js',
@@ -86,7 +87,7 @@ APP = ['mdDeskApp.js', 'mdDeskSoundGroups.js', 'mdDeskTop.js', 'mdDeskSeq.js', '
        'mdDeskGestures.js', 'mdDeskRender.js']
 SCRIPTS = ['deskModal.js', 'deskCaps.js', 'deskBoot.js', 'deskSyx.js', 'deskBridge.js', 'deskDocs.js', 'deskOverlay.js', 'mdDeskModel.js', 'deskGen.js', 'mdDeskGen.js',
            'deskKeys.js', 'mdDeskKeys.js', 'mdDeskMod.js', 'deskTogglePaint.js'] + APP + ['mdDeskLive.js', 'mdDeskLibrary.js', 'mdDeskGlobal.js', 'deskAudio.js', 'mdDeskAudio.js',
-           'deskAudioSelfTest.js', 'mdDeskSelfTest.js']
+           'deskAudioSelfTest.js', 'mdDeskSelfTest.js', 'deskJourney.js', 'mdDeskJourneys.js']
 for f in APP:
     assert os.path.exists(SK + f), 'APP lists %s, which is not in skins/mdStudio/' % f
 # every page script in the skin is loaded (a new file not in SCRIPTS would never run), the node tests apart
