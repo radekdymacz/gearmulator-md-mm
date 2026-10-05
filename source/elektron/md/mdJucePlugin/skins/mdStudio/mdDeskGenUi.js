@@ -12,25 +12,31 @@
    the workspace edits: a new GEN variation of the selected track (Sequence, and every workspace but Sound), a fresh
    mutation of the selected track from the trial's base (Sound); Alt+R or Alt-click on the R key: every track (the
    whole kit). ===== */
-S.gen = { specs: null, last: [], run: null };
+S.gen = { specs: null, last: [], m: [], edited: [], run: null };
 S.mut = { amount: 20, seed: genSeed(), scope: new Set(["syn"]), trial: null, note: "" };
 const GEN_TRACKS = Array.from({ length: 16 }, (_, t) => t);
 /* Every track's spec, from its machine's role the first time (render, or a GEN change before one) and on
-   Defaults (fill): the one place the specs are made; reading them never writes. */
+   Defaults (fill): the one place the specs are made; reading them never writes. A spec the person never changed
+   follows its track's machine (as the MM page, 76-gen.js genSpecs): the first render comes before the kit, when
+   every track is still GND-EMPTY (Keep), and a machine picked later gets its own default. */
+const genCurrent = (g, t, i) => g.m[i] === t.m || !!g.edited[i];
 function genEnsure(fill) {
-	if (S.gen.specs && !fill) return;
-	const len = V.len || 64;
-	S.gen = Object.assign({}, S.gen, { specs: V.tracks.map(t => genDefault(t.m, len)), last: V.tracks.map(() => ({})) });
+	const len = V.len || 64, g = S.gen;
+	if (!g.specs || fill) { S.gen = Object.assign({}, g, { specs: V.tracks.map(t => genDefault(t.m, len)), last: V.tracks.map(() => ({})), m: V.tracks.map(t => t.m), edited: [] }); return; }
+	if (V.tracks.every((t, i) => genCurrent(g, t, i))) return;
+	S.gen = Object.assign({}, g, { specs: V.tracks.map((t, i) => genCurrent(g, t, i) ? g.specs[i] : genDefault(t.m, len)),
+		last: V.tracks.map((t, i) => genCurrent(g, t, i) ? g.last[i] : {}), m: V.tracks.map((t, i) => g.edited[i] ? g.m[i] : t.m) });
 }
 /* every track's spec as it applies to the pattern now: fitted on read (STEPS never longer than the pattern, also
    when it got shorter; the stored spec keeps its own) */
 function genSpecs() {
 	const len = V.len || 64;
-	return (S.gen.specs || V.tracks.map(t => genDefault(t.m, len))).map(sp => genFit(sp, len));
+	const g = S.gen;
+	return V.tracks.map((t, i) => genFit(g.specs && genCurrent(g, t, i) ? g.specs[i] : genDefault(t.m, len), len));
 }
 function genSpec(t = S.sel) { return genSpecs()[t]; }
 /* track t's spec replaced by sp (the specs' new value) */
-function setGenSpec(t, sp) { genEnsure(); S.gen = Object.assign({}, S.gen, { specs: S.gen.specs.map((x, i) => i === t ? sp : x) }); }
+function setGenSpec(t, sp) { genEnsure(); S.gen = Object.assign({}, S.gen, { specs: S.gen.specs.map((x, i) => i === t ? sp : x), edited: V.tracks.map((_, i) => i === t || !!S.gen.edited[i]) }); }
 /* the range a generator writes: the steps shown (one page, or all), Alt: the whole pattern */
 function genRange(all) { const [a, b] = vis(); return all ? [0, V.len] : [a, Math.min(b, V.len)]; }
 /* A run (the GEN bar) or a trial (the MUTATE bar) lives in one context: the workspace, the selected track and

@@ -45,7 +45,7 @@ const src = FILES.map(f => fs.readFileSync(path.join(__dirname, f), "utf8").repl
 const P = new Function("scope", "with (scope) {\n" + src + `
 ;let renders = 0;
 render = () => { renders++; }; syncControls = () => { }; renderTop = () => { }; renderSub = () => { }; redraw = () => { }; refreshAudible = () => { };
-return { S, Docs, Overlay, Held, PREP, scheduleRender, clickTrackKeys, userMute, soloWrites, muteSel, msSet, prepToggle, unmuteAll, Keys,
+return { S, Docs, Overlay, Held, PREP, scheduleRender, genEnsure, genSpec, setGenSpec, clickTrackKeys, userMute, soloWrites, muteSel, msSet, prepToggle, unmuteAll, Keys,
 	get V() { return V; }, setV(v) { V = v; }, view, get renders() { return renders; }, get pending() { return pendingRender; } }; }`)(scope);
 
 /* the machine document: its mutes (machine.desk.mutes) as the machine has them */
@@ -128,6 +128,31 @@ run(); { const before = P.renders; P.Held.begin("gv", {}); P.Held.end("gv"); run
 	check(!/-10\b/.test(muteCmds()), "un-solo does not unfreeze the take on track 10: " + muteCmds());
 	check(P.soloWrites({ soloSet: new Set([0]), userMutes: new Set() }, Array(16).fill(false), new Set([9])).every(([i]) => i !== 9), "soloWrites leaves the kept tracks out");
 	delete P.Docs.kits[0];
+}
+
+/* ---- GEN: the specs made before the kit came (every track GND-EMPTY: Keep) follow the machines once they come;
+   a spec the person changed stays ---- */
+{
+	const HEX62 = "0".repeat(62);
+	const tr = m => ({ machine: m, model: 0, level: 100, synth: Array(8).fill(0), effects: Array(8).fill(0), routing: Array(8).fill(0),
+		lfo: { track: 0, param: 0, shape1: 0, shape2: 0, update: 0 }, muteGroup: null, trigGroup: null });
+	const kit = ms => ({ schema: "md-desk/kit", version: 2, slot: 0, name: "K", tracks: Array.from({ length: 16 }, (_, i) => tr(ms[i] || "GND-EMPTY")),
+		masterFx: { rhythmEcho: Array(8).fill(0), gateBox: Array(8).fill(0), eq: Array(8).fill(0), dynamix: Array(8).fill(0) },
+		firmware: { format: { version: 2, revision: 0 }, lfoState: Array(16).fill(HEX62) } });
+	P.S.gen = { specs: null, last: [], m: [], edited: [], run: null };
+	P.setV(P.view()); P.genEnsure();
+	check(P.genSpec(0).kind === "keep", "before the kit, track 1's spec is Keep (GND-EMPTY)");
+	P.Docs.kits[0] = kit(["TRX-BD", "TRX-SD"]); P.setV(P.view());
+	check(P.V.tracks[0].m === "TRX-BD", "the kit came: track 1 is " + P.V.tracks[0].m);
+	check(P.genSpec(0).kind === "euclid", "reading the specs already follows the machine: " + P.genSpec(0).kind);
+	P.genEnsure();
+	check(P.genSpec(0).kind === "euclid" && P.genSpec(0).k === 4 && P.genSpec(1).kind === "euclid" && P.genSpec(1).k === 2, "the render's genEnsure makes the kick's and the snare's defaults: " + JSON.stringify([P.genSpec(0), P.genSpec(1)]));
+	P.setGenSpec(1, { kind: "keep" });
+	P.Docs.kits[0] = kit(["TRX-BD", "EFM-SD"]); P.setV(P.view()); P.genEnsure();
+	check(P.genSpec(1).kind === "keep", "a spec the person set stays when the machine changes");
+	P.Docs.kits[0] = kit(["TRX-CH", "EFM-SD"]); P.setV(P.view()); P.genEnsure();
+	check(P.genSpec(0).kind === "euclid" && P.genSpec(0).k === 8, "an untouched spec follows a new machine (a hat): " + JSON.stringify(P.genSpec(0)));
+	delete P.Docs.kits[0]; P.setV(P.view());
 }
 
 /* ---- a reset (another engine, a restored project) starts the solos over ---- */

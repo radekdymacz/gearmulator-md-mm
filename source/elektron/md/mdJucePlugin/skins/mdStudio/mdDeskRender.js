@@ -86,7 +86,20 @@ function logFirstRender() {
 	const r = document.querySelector(".app").getBoundingClientRect();
 	Bridge.log(`first render: ${S.ws}, ${document.querySelectorAll("#main *").length} elements in #main, page ${Math.round(r.width)} x ${Math.round(r.height)}, window ${innerWidth} x ${innerHeight}, ${Math.round(performance.now())} ms`);
 }
+/* The focused value keeps the focus across a render (its element is a new one then): its keys stay its own (↑ ↓ step
+   it, the key map's promise), also when the machine's read-back of the step it just sent redraws the workspace. */
+const FOCUS_KEYS = ["g", "n", "t", "f", "src", "li", "gv"];
+function focusedValue() {
+	const el = document.activeElement, d = el && el.dataset;
+	if (!d || (d.g == null && d.gv == null) || !$("#main")?.contains(el)) return null;
+	return FOCUS_KEYS.filter(k => d[k] != null).map(k => `[data-${k}="${d[k]}"]`).join("");
+}
 function render() {
+	const focused = focusedValue();
+	renderPage();
+	if (focused && document.activeElement !== document.querySelector("#main " + focused)) document.querySelector("#main " + focused)?.focus({ preventScroll: true });
+}
+function renderPage() {
 	endStaleRuns(); closePicker(); closeK(); const sl = $("#seqscroll")?.scrollLeft || 0; renderTop();
 	const full = S.ws === "mix" || S.ws === "song" || S.ws === "control"; $("#body").classList.toggle("full", full); $("#rail").hidden = full;
 	if (!Base) { $("#main").innerHTML = ""; renderSub(); return; }	/* no document yet */
