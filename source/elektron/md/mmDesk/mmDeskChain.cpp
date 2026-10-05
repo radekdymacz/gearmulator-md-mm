@@ -12,6 +12,8 @@ namespace mmDesk
 	{
 		if(_patterns.empty() || !m_port.pressBankTrigs || m_tel.bankGroup < 0)
 			return false;
+		if(m_recv.taking())	// a key pressed while the machine takes a dump is lost (pressKeys)
+			return false;
 		const int bank = _patterns.front() >> 4;
 		// BANK GROUP first when the patterns are in the other half (A-D / E-H share the BANK keys)
 		if((bank >= 4 ? 1 : 0) != m_tel.bankGroup && !pressKeys({Key::BankGroup}))

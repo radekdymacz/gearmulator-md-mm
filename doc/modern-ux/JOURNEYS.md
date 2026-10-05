@@ -8,8 +8,7 @@ check, User journeys. The journeys are `skins/mdStudio/mdDeskJourneys.js` and `s
 
 Last run: 2026-10-05, diagnostics build of `test/user-journeys` (Release, arm64), MD OS 1.63, MM OS 1.32B.
 Machinedrum 60 journeys of 62 ran and pass, 2 skipped (the editor window was covered by another app, so the page
-drew no canvases). Monomachine, three full runs with bug 3 fixed: 69/69, 68/69, 68/69; the one failure each time is
-mm-seq-grid-record (bug 4).
+drew no canvases). Monomachine, three full runs with bugs 3 and 4 fixed: 69/69 each time.
 
 Status: **PASS**; **FAIL** with the bug (below); **SKIP** (needs the window on screen); **not covered** (reachable,
 no journey yet); **not testable** (why). "—": the editor has no such feature.
@@ -20,8 +19,8 @@ no journey yet); **not testable** (why). "—": the editor has no such feature.
 |---|---|---|---|
 | Features in the inventory (one row a feature; "—" rows not counted) | 81 | 84 | 165 |
 | Covered by a journey | 70 | 74 | 144 |
-| of which PASS | 68 | 73 | 141 |
-| of which FAIL (product bug) | 0 | 1 | 1 |
+| of which PASS | 68 | 74 | 142 |
+| of which FAIL (product bug) | 0 | 0 | 0 |
 | of which SKIP here (window covered) | 2 | 0 | 2 |
 | Not covered yet (reachable through the page) | 0 | 0 | 0 |
 | Not testable through the page (file chooser, hardware, DAW, hidden by design) | 11 | 10 | 21 |
@@ -83,7 +82,7 @@ no journey yet); **not testable** (why). "—": the editor has no such feature.
 | Rotate (Alt+← →) | md-seq-rotate PASS | mm-seq-rotate PASS |
 | Paste to many marked tracks (Shift-click headers) | md-seq-paste-many PASS | mm-seq-paste-many PASS |
 | Live recording (REC / Alt+Space) | md-seq-live-record PASS | mm-seq-live-record PASS |
-| GRID RECORDING (MM RECORD stopped) | — | mm-seq-grid-record **FAIL** in 2 of 3 full runs (bug 4); PASS alone |
+| GRID RECORDING (MM RECORD stopped) | — | mm-seq-grid-record PASS (bug 4, fixed; see note 2) |
 | LEN on LCD line 2 | — | mm-seq-len PASS |
 | Arpeggiator dock | — | mm-seq-arp PASS |
 | Clickable transpose keyboard | — | mm-seq-transpose-keyboard PASS |
@@ -164,7 +163,7 @@ no journey yet); **not testable** (why). "—": the editor has no such feature.
 | GLOBAL: a setting read back (TEMPO OUT) | md-global-tempo-out PASS | — (MM globals: the Perform and Mix journeys) |
 | GLOBAL › ROUTING fits its dialog, a route read back | md-global-routing PASS | — |
 
-## Bugs the journeys found (1, 2 and 3 fixed on this branch)
+## Bugs the journeys found (all four fixed on this branch)
 
 1. **Machinedrum: GEN offers Keep for every track until Defaults is pressed** (md-gen-mutate-undo). The GEN specs
    are made once, at the first render (`genEnsure`, mdDeskGenUi.js), which happens before the kit document is in,
@@ -187,14 +186,17 @@ no journey yet); **not testable** (why). "—": the editor has no such feature.
    `JOURNEY mm-sound-value-keys 3/4 FAIL focus a filter value and press ↑ three times: machine: kit 7, want 9 (from 6); selected 5; focus BODY`
    Fixed: `render` (mm-mockup/src/130-main.js) gives the focus back to the same value after the page is drawn
    again, as the Machinedrum's mdDeskRender.js does.
-4. **Monomachine: RECORD is answered ok but does nothing while the panel is parked on SYSEX RECV** (mm-seq-grid-record,
-   not fixed). Right after edits and undos the machine sits on GLOBAL › FILE › SYSEX RECV for the pending dumps
-   (recv "parked"). `MmMachine::pressKeys` (mmDesk/mmDeskCommands.cpp:107) refuses keys while RECV is entering,
-   going to main or leaving, but not while it is parked, so the RECORD key is pressed on the SYSEX RECV screen, the
-   command answers ok and the page says "GRID RECORDING on the machine", and the machine stays at record off. When
-   the state is entering or leaving instead the user gets "The panel is busy (SYSEX RECV); try again." (note 2).
-   Seen in 2 of 3 full Monomachine runs, never alone. Log:
+4. **Monomachine: a panel key pressed while the machine takes a dump on SYSEX RECV was lost** (mm-seq-grid-record).
+   After edits and undos the desk parks the machine on GLOBAL › FILE › SYSEX RECV and sends the dumps. Measured
+   (`mmDeskFirmwareTest <MM ROM> parked`): a key the machine gets while it is still taking a dump (about 40 ms for a
+   pattern) is lost; once the dump is taken, RECORD, PLAY, STOP, the MUTE window and BANK GROUP all work on SYSEX
+   RECV. The desk pressed RECORD in that window, answered ok, and the machine stayed at record off. Log:
    `JOURNEY mm-seq-grid-record FAIL step 1 "click RECORD (stopped): GRID RECORDING": machine: record off (seen off); results record:true ; recv parked -> idle; page: toast "GRID RECORDING on the machine: its TRIG keys write steps; the editor reads them back."`
+   Fixed: `RecvSession::taking()` (mmDesk/mmRecv.h) says a dump sent is not taken yet (the machine's RECV count, messages
+   and errors, has not caught up); `MmMachine::pressKeys` (mmDeskCommands.cpp) and `pressBankTrigs` (mmDeskChain.cpp)
+   refuse then with "The panel is busy (SYSEX RECV); try again." (as while RECV enters or leaves), and
+   `MmMachine::pumpRecv` (mmDeskDelivery.cpp) holds the next dump while the person's keys are on their way. mmDeskTest
+   checks both (RECV session: a dump being taken; the desk against the scripted machine).
 
 ## Notes
 

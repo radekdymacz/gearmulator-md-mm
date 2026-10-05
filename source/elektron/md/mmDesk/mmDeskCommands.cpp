@@ -109,6 +109,10 @@ namespace mmDesk
 		const auto s = m_recv.state();
 		if(s == RecvSession::State::Entering || s == RecvSession::State::ToMain || s == RecvSession::State::Leaving)
 			return false;
+		// Parked on SYSEX RECV the keys work, but not while the machine is still taking a dump: a key pressed then is
+		// lost (RECORD, PLAY, STOP, the MUTE window, BANK GROUP; measured: mmDeskFirmwareTest parked). Busy, as above.
+		if(m_recv.taking())
+			return false;
 		if(!m_port.pressKeys || !m_port.pressKeys(_keys))
 			return false;
 		size_t states = 0;

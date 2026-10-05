@@ -297,6 +297,10 @@ namespace mmDesk
 	{
 		if(m_profile.wire)
 			return;
+		// Parked, with the person's keys still on their way (pressKeys): the next dump waits, since a key the machine
+		// gets while it takes a dump is lost (mmDeskFirmwareTest parked).
+		if(m_recv.parked() && now() < m_keysUntilMs)
+			return;
 		auto out = m_recv.tick(_now, m_tel);
 		if(!out.keys.empty() && m_port.pressKeys)
 			m_port.pressKeys(out.keys);

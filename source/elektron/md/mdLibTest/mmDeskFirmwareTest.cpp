@@ -19,6 +19,8 @@
 #include "mdLib/mdautomation.h"
 #include "mdLib/mmtelemetry.h"
 
+#include <functional>
+
 #include "mmDesk/mmDesk.h"
 #include "mmDesk/mmDeskWirePort.h"
 #include "mmDesk/mmRecv.h"
@@ -1541,6 +1543,98 @@ namespace
 	// keyboard, GRID RECORDING from its TRIG keys); the page then edits other steps as intents (step, lock). The core
 	// applies them to its own pattern, which holds the recorded step (read back while the machine records), so the
 	// pattern it pushes keeps it. Before the intents the page sent its whole copy of the pattern, which did not.
+	// Bug 4 (the user journeys, 2026-10-05): the panel keys while the desk is parked on SYSEX RECV. The keys go to the
+	// panel directly here (as the RECV session's own do), so the desk's rule does not decide what is seen.
+	// Measured: a key pressed while the machine is still taking the dump is lost; once the dump is taken (the RECV
+	// count moved) RECORD, PLAY, STOP, the MUTE window and BANK GROUP all work on SYSEX RECV. Then the desk: RECORD
+	// while the dump is on its way is refused as busy (it was answered ok and lost), and taken once the dump is in.
+	void parkedKeys(const Bytes& _rom)
+	{
+		std::puts("parked");
+		Rig r(_rom);
+		r.msg(R"({"op":"ready"})");
+		r.desk->setProbe(mmDesk::Desk::Probe::Running);
+		r.run(600);
+		while(r.desk->loaded() < 288)
+			r.run(100);
+		int flip = 0;
+		uint32_t count0 = 0;
+		// An edit of the current pattern (one SLIDE step): its dump parks the machine on SYSEX RECV.
+		const auto park = [&]
+		{
+			const auto cur = static_cast<uint8_t>(lastMachine(r).find("pattern")->find("current")->asNumber());
+			auto p = *r.desk->pattern(cur);
+			p.slide[0] ^= ed::mmStepBit(static_cast<size_t>(1 + (flip++ & 7)));
+			count0 = r.tel.recvCount.load();
+			r.msg(R"({"op":"set","kind":"pattern","doc":)" + ed::json::write(ed::mmPatternToJson(p)) + "}");
+			for(int i = 0; i < 300 && !r.desk->recvParked(); ++i)
+				r.run(10);
+			return r.desk->recvParked();
+		};
+		const auto taken = [&]
+		{
+			const auto t0 = r.ms();
+			for(int i = 0; i < 300 && r.tel.recvCount.load() == count0; ++i)
+				r.run(10);
+			return r.ms() - t0;
+		};
+		const auto onRecv = [&] { return r.tel.recvActive.load() == 1 && md::MmTelemetry::screenOf(r.tel.screen.load()) == elektronData::MmScreen::GlobalEdit; };
+		const auto leave = [&] { r.run(4000); };	// the session leaves (idle)
+
+		// a key while the dump is still being taken
+		check(park(), "parked on SYSEX RECV");
+		r.userKeys({mmDesk::Key::Record});
+		const double tookMs = taken();
+		r.run(800);
+		std::printf("  RECORD pressed while the dump is taken (%.0f ms more): recording %d (on SYSEX RECV: %s)\n", tookMs, r.tel.recording.load(), onRecv() ? "yes" : "no");
+		check(r.tel.recording.load() == 0, "a key pressed while the machine takes a dump is lost");
+		leave();
+
+		// keys once the dump is taken
+		const auto afterTaken = [&](const char* _what, const std::vector<mmDesk::Key>& _keys, const std::function<int()>& _read, const int _want)
+		{
+			check(park(), std::string("parked on SYSEX RECV before ") + _what);
+			taken();
+			r.run(300);
+			const int before = _read();
+			r.userKeys(_keys);
+			r.run(800);
+			const int after = _read();
+			std::printf("  dump taken, %s: %d -> %d (on SYSEX RECV: %s)\n", _what, before, after, onRecv() ? "yes" : "no");
+			check(after == _want, std::string(_what) + " works on SYSEX RECV once the dump is taken");
+			leave();
+		};
+		afterTaken("RECORD", {mmDesk::Key::Record}, [&] { return r.tel.recording.load(); }, 1);
+		afterTaken("RECORD again (off)", {mmDesk::Key::Record}, [&] { return r.tel.recording.load(); }, 0);
+		afterTaken("PLAY (the step moves)", {mmDesk::Key::Play}, [&] { return r.tel.step.load() > 0 ? 1 : 0; }, 1);
+		afterTaken("STOP", {mmDesk::Key::Stop}, [&] { const int s = r.tel.step.load(); r.run(300); return r.tel.step.load() != s ? 1 : 0; }, 0);
+		const int bg = r.tel.bankGroup.load();
+		afterTaken("BANK GROUP", {mmDesk::Key::BankGroup}, [&] { return r.tel.bankGroup.load(); }, bg ^ 1);
+		afterTaken("BANK GROUP back", {mmDesk::Key::BankGroup}, [&] { return r.tel.bankGroup.load(); }, bg);
+		afterTaken("MUTE window + TRIG 9 + EXIT", {mmDesk::Key::MuteWindow, mmDesk::Key::Trig9, mmDesk::Key::Exit}, [&] { return (r.tel.mutes.load() >> 6) & 1; }, 1);
+		afterTaken("MUTE window + TRIG 9 + EXIT (back)", {mmDesk::Key::MuteWindow, mmDesk::Key::Trig9, mmDesk::Key::Exit}, [&] { return (r.tel.mutes.load() >> 6) & 1; }, 0);
+
+		// the desk: RECORD while the dump is on its way, then once it is taken
+		check(park(), "parked again");
+		r.run(10);	// the session sends the dump on its next step; the machine takes it over about 40 ms
+		check(r.tel.recvCount.load() == count0, "the dump not taken yet");
+		r.msg(R"({"op":"record","mode":"grid"})");
+		const auto first = r.lastResult();
+		std::printf("  RECORD while the dump is taken: %s\n", ed::json::write(first).c_str());
+		check(!first.find("ok")->asBool() && first.find("errors")->asArray()[0].asString() == "The panel is busy (SYSEX RECV); try again.",
+			"the desk refuses it as busy (it was answered ok and lost)");
+		taken();
+		r.run(300);
+		r.msg(R"({"op":"record","mode":"grid"})");
+		const auto again = r.lastResult();
+		r.run(800);
+		std::printf("  RECORD once the dump is taken: %s, recording %d, recv %s\n", ed::json::write(again).c_str(), r.tel.recording.load(), r.desk->recvState().c_str());
+		check(again.find("ok")->asBool() && r.tel.recording.load() == 1, "once the dump is taken RECORD is taken: GRID RECORDING");
+		r.msg(R"({"op":"record","mode":"off"})");
+		r.run(800);
+		check(r.tel.recording.load() == 0, "GRID RECORDING off");
+	}
+
 	void recording(const Bytes& _rom)
 	{
 		std::puts("recording");
@@ -1705,6 +1799,8 @@ int main(const int _argc, char** _argv)
 			chains(rom);
 		if(only.empty() || only == "record")
 			recording(rom);
+		if(only.empty() || only == "parked")
+			parkedKeys(rom);
 		check(g_contract.loaded() && g_contract.bad() == 0, g_contract.summary());
 		std::printf("%s (%d failures)\n", g_failures ? "FAIL" : "PASS", g_failures);
 		return g_failures ? 1 : 0;

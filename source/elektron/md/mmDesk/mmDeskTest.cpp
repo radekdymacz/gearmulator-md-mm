@@ -48,6 +48,28 @@ namespace
 		return t;
 	}
 
+	void recvTaking()
+	{
+		std::puts("RECV session: a dump being taken");
+		mmDesk::RecvSession r;
+		r.want({0xf0, 1, 0xf7});
+		auto t = screen(mmDesk::Screen::GlobalEdit);
+		t.recvCount = 7;
+		r.tick(0, t);
+		check(r.parked() && !r.taking(), "parked, nothing sent yet: not taking");
+		auto out = r.tick(10, t);
+		check(out.sends.size() == 1 && r.taking(), "the dump sent, the RECV count not moved: taking (a key now is lost)");
+		t.recvErrors = 1;
+		r.tick(20, t);
+		check(!r.taking(), "a message counted (an error counts too): taken");
+		r.want({0xf0, 2, 0xf7});
+		r.tick(30, t);
+		check(r.taking(), "another dump sent: taking again");
+		t.recvCount = 8;
+		r.tick(40, t);
+		check(!r.taking() && r.parked(), "taken: keys work on SYSEX RECV, still parked");
+	}
+
 	void recvSession()
 	{
 		std::puts("RECV session");
@@ -159,8 +181,12 @@ namespace
 		mmDesk::Screen screenWord = mmDesk::Screen::Main;
 		int keysPressed = 0;
 		uint8_t pattern = 3, kit = 5;
+		uint32_t recvTaken = 0;	// dumps taken on SYSEX RECV (the RECV count, RAM 0x26a3c4)
+		bool slow = false;		// dumps stay on their way (inFlight) until taken by hand
+		int recording = -1;		// the recording mode the telemetry says (-1 unknown)
 		std::vector<Bytes> replies;
 		std::vector<Bytes> ignored;
+		std::vector<Bytes> inFlight;
 
 		std::map<int, int> seen;
 		void take(const Bytes& _m)
@@ -171,8 +197,16 @@ namespace
 			const auto cmd = _m[6];
 			if(cmd == 0x67 || cmd == 0x52 || cmd == 0x69 || cmd == 0x50)
 			{
+				if(screenWord == mmDesk::Screen::GlobalEdit && slow)
+				{
+					inFlight.push_back(_m);
+					return;
+				}
 				if(screenWord == mmDesk::Screen::GlobalEdit)
+				{
 					slots[{cmd, _m[9]}] = _m;
+					++recvTaken;
+				}
 				else
 					ignored.push_back(_m);
 				return;
@@ -271,6 +305,8 @@ namespace
 			{
 				now += 10;
 				mmDesk::Telemetry tel = screen(m.screenWord);
+				tel.recvCount = m.recvTaken;
+				tel.recording = m.recording;
 				d.onTelemetry(tel);
 				d.tick();
 				auto replies = std::move(m.replies);
@@ -312,6 +348,31 @@ namespace
 		check(d.lastRoundTripMs() > 0, "read back and confirmed");
 		run(3500);
 		check(m.screenWord == mmDesk::Screen::Main && !d.recvParked(), "left SYSEX RECV when idle");
+
+		// Bug 4 (the user journeys): a panel key pressed while the machine is still taking a dump on SYSEX RECV is lost
+		// (mmDeskFirmwareTest parked). RECORD then is refused as busy (it was answered ok), and taken once the dump is in.
+		{
+			m.slow = true;
+			m.recording = 0;
+			p.notes[0][0] = 62;
+			msg(R"({"op":"set","id":8,"kind":"pattern","doc":)" + ed::json::write(ed::mmPatternToJson(p)) + "}");
+			for(int i = 0; i < 100 && m.inFlight.empty(); ++i)
+				run(10);
+			check(d.recvParked() && !m.inFlight.empty(), "parked, the dump on its way");
+			const int keys0 = m.keysPressed;
+			msg(R"({"op":"record","mode":"grid"})");
+			const auto r1 = lastResult();
+			check(!r1.find("ok")->asBool() && r1.find("errors")->asArray()[0].asString() == "The panel is busy (SYSEX RECV); try again."
+				&& m.keysPressed == keys0, "RECORD while the dump is taken: refused as busy, no key pressed");
+			m.slow = false;
+			for(auto& b : std::exchange(m.inFlight, {}))
+				m.take(b);
+			run(20);
+			msg(R"({"op":"record","mode":"grid"})");
+			check(lastResult().find("ok")->asBool() && m.keysPressed == keys0 + 1 && d.recvParked(), "taken: RECORD is pressed on SYSEX RECV");
+			m.recording = -1;
+			run(3500);
+		}
 
 		// Invalid: 63 locked parameters.
 		auto badDoc = ed::mmPatternToJson(p);
@@ -1453,6 +1514,7 @@ int main(const int _argc, char** _argv)
 		return 0;
 	}
 	recvSession();
+	recvTaking();
 	desk();
 	playingFromSteps();
 	watchSteps();

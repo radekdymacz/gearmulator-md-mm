@@ -64,6 +64,9 @@ namespace mmDesk
 		const char* stateName() const;
 		size_t queued() const { return m_queue.size(); }
 		bool parked() const { return m_state == State::Parked; }
+		// Parked and a dump sent is not taken yet (the machine's RECV count, messages and errors, has not caught up):
+		// a panel key pressed now is lost (measured, mmDeskFirmwareTest parked); once taken, keys work on SYSEX RECV.
+		bool taking() const { return parked() && m_taken - m_recvBase < m_sentParked; }
 
 		double idleMs = 3000;		// parked and quiet this long -> leave
 		double timeoutMs = 3000;	// a screen that does not come -> retry
@@ -72,6 +75,7 @@ namespace mmDesk
 
 	private:
 		void go(State _s, double _now) { m_state = _s; m_since = _now; }
+		void park(double _now, const Telemetry& _t);
 		void failed(Out& _out, double _now);
 		void giveUp(Out& _out, double _now);
 
@@ -85,5 +89,8 @@ namespace mmDesk
 		double m_lastNowMs = -1;
 		uint64_t m_lastBlocks = 0;
 		double m_keysDone = 0;	// the keys pressed last are through by then
+		uint32_t m_recvBase = 0;	// the machine's RECV count (messages and errors) when the session parked
+		uint32_t m_taken = 0;		// that count now
+		uint32_t m_sentParked = 0;	// dumps sent since the session parked
 	};
 }
