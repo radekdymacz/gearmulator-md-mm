@@ -8,7 +8,8 @@
 S.alt=false;
 function altLabels(){const c=$('[data-sec="clear"]');if(c){c.textContent=S.alt?"All":"Clr";c.title=S.alt?`Clear the whole pattern ${patName(S.pat)}: every track's notes, slides and locks (one undo step)`:"Clear (Delete). Alt: the whole pattern"}
  const cl=$("#clearLane");if(cl){const t=S.alt?`Clear every lock of ${tLabel(S.sel)}`:`Clear ${pidLabel(S.sel,S.lane)} locks. Alt: every lock of ${tLabel(S.sel)}`;cl.title=t;cl.setAttribute("aria-label",t)}}
-function showAlt(on){if(S.alt===on)return;S.alt=on;document.body.classList.toggle("althold",on);altLabels();if(S.gen&&S.ws==="seq")genDraw();if(S.gen&&S.ws==="sound")renderMutStrip()}
+/* Alt seen up (any key or pointer event without it) also ends a rotate run: its keyup may never reach the page */
+function showAlt(on){if(S.alt===on)return;S.alt=on;if(!on)rotHold=false;document.body.classList.toggle("althold",on);altLabels();if(S.gen&&S.ws==="seq")genDraw();if(S.gen&&S.ws==="sound")renderMutStrip()}
 addEventListener("keydown",e=>showAlt(e.altKey),true);addEventListener("keyup",e=>showAlt(e.altKey),true);addEventListener("blur",()=>showAlt(false));
 document.addEventListener("pointermove",e=>showAlt(e.altKey),{passive:true,capture:true});
 function clearPattern(){[...S.tracks,...S.midi].forEach(tr=>{tr.steps=tr.steps.map(()=>null);tr.slide=new Set()});S.locks.clear();edit("clearPattern",{});render();toast(`Cleared ${patName(S.pat)}: every track's notes, slides and locks.`)}
@@ -88,36 +89,40 @@ document.addEventListener("click",e=>{if(e.target.closest("#allon"))unmuteAll()}
 /* ---- tap tempo (manual p.36's TAP): the average of the last taps; live recording: RECORD + PLAY ---- */
 const TAP=[];
 function tapTempo(){const now=performance.now();if(TAP.length&&now-TAP[TAP.length-1]>2000)TAP.length=0;TAP.push(now);if(TAP.length>5)TAP.shift();
- if(TAP.length<2){toast("Tap tempo: keep tapping T");return}S.bpm=clamp(Math.round(60000/((TAP[TAP.length-1]-TAP[0])/(TAP.length-1))*10)/10,30,300);if(HOST.tempo)HOST.tempo(S.bpm);renderTop();if(S.playing)restartClock();toast("Tap tempo: "+S.bpm.toFixed(1)+" BPM")}
+ if(TAP.length<2){toast("Tap tempo: keep tapping B");return}S.bpm=clamp(Math.round(60000/((TAP[TAP.length-1]-TAP[0])/(TAP.length-1))*10)/10,30,300);if(HOST.tempo)HOST.tempo(S.bpm);renderTop();if(S.playing)restartClock();toast("Tap tempo: "+S.bpm.toFixed(1)+" BPM")}
 function liveRecord(){if(HOST.record)return HOST.record(true);S.rec=!S.rec;if(S.rec&&!S.playing)togglePlay();renderTop();if(S.rec)toast("LIVE RECORDING: the notes you play are recorded.")}
 
-/* ---- the keyboard: the home row plays the selected synth track, from any workspace. A S D F G H J K L are white
-   keys C D E F G A B C D from C-3 (Z / X: the octave, −3 to +3), real MIDI notes on the track's own channel
+/* ---- the keyboard: two rows play the selected synth track chromatically, from any workspace, as a DAW's typing
+   keyboard: A S D F G H J K L are the white keys C D E F G A B C D from C-3, W E · T Y U · O P the black keys above
+   them (C♯ D♯ · F♯ G♯ A♯ · C♯ D♯; R and I sit where a piano has no black key) (Z / X: the octave, −3 to +3; B taps
+   the tempo, since T is F♯ here; MM-PORT-PLAN.md 2026-10-05), real MIDI notes on the track's own channel
    (GLOBAL › MIDI › CHANNELS: base + track), at KB.vel (C / V: 20 40 60 80 100 127; the machine hears it through
    ASSIGN › VEL). Each key is its own note on and off, so legato and the machine's note priority work as on a
    keyboard; while LIVE RECORDING the machine records them. MIDI tracks are not played (their notes go to the
    MIDI OUT only). Key repeat is ignored. ---- */
-const KEYS_WHITE="ASDFGHJKL",KEYS_SEMIS=[0,2,4,5,7,9,11,12,14],KEYS_OCT=[-3,3],KEYS_VELS=[20,40,60,80,100,127],KEYS_BASE=48;
+/* a key (its letter) to semitones above the A key's note */
+const KEYS_PIANO={A:0,W:1,S:2,E:3,D:4,F:5,T:6,G:7,Y:8,H:9,U:10,J:11,K:12,O:13,L:14,P:15},KEYS_WHITE="ASDFGHJKL",KEYS_BLACK="WETYUOP",KEYS_OCT=[-3,3],KEYS_VELS=[20,40,60,80,100,127],KEYS_BASE=48;
 const KB={oct:0,vel:100,held:new Map(),told:new Set()};
 function keyVel(v,d){const up=KEYS_VELS.find(x=>x>v),down=[...KEYS_VELS].reverse().find(x=>x<v);return d>0?up??KEYS_VELS[KEYS_VELS.length-1]:down??KEYS_VELS[0]}
 /* the keys that play and act on tracks: no dialog or panel open, no text field focused (the one rule of both editors, deskKeys.js) */
 function kbOn(){return Keys.free()}
 function kbTell(k,t){if(KB.told.has(k))return;KB.told.add(k);toast(t)}
-function homeDown(e){if(e.repeat||KB.held.has(e.code))return;const t=S.sel,k=KEYS_WHITE.indexOf(e.code.replace(/^Key/,""));if(k<0)return;
+function homeDown(e){if(e.repeat||KB.held.has(e.code))return;const t=S.sel,k=KEYS_PIANO[e.code.replace(/^Key/,"")];if(k==null)return;
  if(isMidiT(t)){kbTell("midi","The keys play the synth tracks: a MIDI track's notes go to the MIDI OUT only.");return}
- const n=clamp(KEYS_BASE+12*KB.oct+KEYS_SEMIS[k]);KB.held.set(e.code,{t,n});keyNote(t,n,KB.vel)}
+ const n=clamp(KEYS_BASE+12*KB.oct+k);KB.held.set(e.code,{t,n});keyNote(t,n,KB.vel)}
 function homeUp(code){const h=KB.held.get(code);if(!h)return;KB.held.delete(code);keyNote(h.t,h.n,0)}
 /* a host plays the machine (the note intent: pitch in semitones from KEYS_BASE, C3); the example only shows the track's lamp */
 function keyNote(t,n,vel){if(HOST.noteOn){const p=n-KEYS_BASE;return vel?HOST.noteOn(t,p,vel):HOST.noteOff(t,p)}if(vel){flashTracks([t]);kbTell("eg","Example: in the plug-in the keys play the machine.")}}
 function kbVel(d){KB.vel=keyVel(KB.vel,d);toast(`Keyboard velocity ${KB.vel}`)}
 function kbOct(d){KB.oct=clamp(KB.oct+d,KEYS_OCT[0],KEYS_OCT[1]);toast(`Keyboard octave ${KB.oct>0?"+":""}${KB.oct}: A plays ${noteName(KEYS_BASE+12*KB.oct)}`)}
 document.addEventListener("keyup",e=>homeUp(e.code));addEventListener("blur",()=>[...KB.held.keys()].forEach(homeUp));
-Keys.bind({keys:[...KEYS_WHITE],group:"Playing",hidden:true,field:true,when:kbOn,run:homeDown,does:""});
+Keys.bind({keys:[...KEYS_WHITE,...KEYS_BLACK],group:"Playing",hidden:true,field:true,when:kbOn,run:homeDown,does:""});
 Keys.bind({keys:["Z"],group:"Playing",hidden:true,field:true,when:kbOn,run:()=>kbOct(-1),does:""});
 Keys.bind({keys:["X"],group:"Playing",hidden:true,field:true,when:kbOn,run:()=>kbOct(1),does:""});
 Keys.bind({keys:["C"],group:"Playing",hidden:true,field:true,when:kbOn,run:()=>kbVel(-1),does:""});
 Keys.bind({keys:["V"],group:"Playing",hidden:true,field:true,when:kbOn,run:()=>kbVel(1),does:""});
 Keys.bind({keys:["A S D F G H J K L"],group:"Playing",does:"Play the selected synth track: white keys C D E F G A B C D, real notes on its MIDI channel, from any workspace. While live recording the machine records them"});
+Keys.bind({keys:["W E T Y U O P"],group:"Playing",does:"The black keys above them: C♯ D♯ F♯ G♯ A♯ C♯ D♯, so the two rows play every semitone"});
 Keys.bind({keys:["Z","X"],group:"Playing",does:()=>`Octave down / up, −3 to +3 (now ${KB.oct>0?"+":""}${KB.oct}: A is ${noteName(KEYS_BASE+12*KB.oct)})`});
 Keys.bind({keys:["C","V"],group:"Playing",does:()=>`Velocity down / up: 20 40 60 80 100 127 (now ${KB.vel})`});
 
@@ -126,7 +131,7 @@ Keys.bind({keys:["M"],code:"KeyM",group:"Selected track",does:"Mute or unmute th
 Keys.bind({keys:["M"],code:"KeyM",mod:"alt",group:"All",does:"Mute every track; when none is audible, unmute every track",when:kbOn,run:()=>muteAllToggle()});
 Keys.bind({keys:["ArrowUp","ArrowDown"],group:"Selected track",does:"Select the previous / next track of the side shown (a focused value keeps ↑ / ↓ for itself)",
  when:()=>kbOn()&&$("#kpop").hidden&&S.ws!=="song",run:e=>{const sd=side(),i=sd.indexOf(S.sel);select(sd[((i<0?0:i)+(e.key==="ArrowDown"?1:5))%6])}});
-Keys.bind({keys:["T"],group:"Transport",does:"Tap tempo (the average of the last taps)",when:kbOn,run:()=>tapTempo()});
+Keys.bind({keys:["B"],group:"Transport",does:"Tap tempo (the average of the last taps; T plays F♯ here)",when:kbOn,run:()=>tapTempo()});
 Keys.bind({keys:["ArrowLeft","ArrowRight"],mod:"alt",group:"Selected track",does:"Sequence: rotate the selected track one step earlier / later: notes, slides and locks, wrapping at the length. Presses while ⌥ is down are one undo step. The one Alt that is not \"all\": FUNCTION + arrows on the machine",when:seqKeys,run:e=>rotateTrack(e.key==="ArrowRight"?1:-1)});
 Keys.bind({keys:["0"],group:"All",does:"Unmute and unsolo every track",when:kbOn,run:()=>unmuteAll()});
 Keys.bind({keys:["Escape"],group:"Sequence",does:"Unmark the tracks marked for paste",when:()=>seqKeys()&&S.marks.size>0,run:()=>{S.marks.clear();renderRail()}});

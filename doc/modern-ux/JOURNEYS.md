@@ -6,9 +6,10 @@ cover it and their last result. How to run them and how to add one: [FOUNDATION.
 check, User journeys. The journeys are `skins/mdStudio/mdDeskJourneys.js` and `skins/mmStudio/mmJourneys.js`
 (names `md-…`, `mm-…`); a subset runs with `scripts/mdmm-journeys.sh md journey-seq-*`.
 
-Last run: 2026-10-05, diagnostics build of `test/user-journeys` (Release, arm64), MD OS 1.63, MM OS 1.32B.
-Machinedrum 60 journeys of 62 ran and pass, 2 skipped (the editor window was covered by another app, so the page
-drew no canvases). Monomachine, three full runs with bugs 3 and 4 fixed: 69/69 each time.
+Last run: 2026-10-05, diagnostics build of `feat/mm-port` (Release, arm64), MD OS 1.63, MM OS 1.32B: Machinedrum
+63/63 pass (the window on screen, so the sampler's canvas journeys ran too), Monomachine 71/71 pass (with the rotate
+fix, MM-PORT-PLAN.md 2026-10-05; the run before it: 70/71, `mm-seq-roll-paint` found the rotate run holding the
+commit). Earlier, on `test/user-journeys`: Machinedrum 60 of 62 (2 skipped, window covered), Monomachine 69/69.
 
 Status: **PASS**; **FAIL** with the bug (below); **SKIP** (needs the window on screen); **not covered** (reachable,
 no journey yet); **not testable** (why). "—": the editor has no such feature.
@@ -17,11 +18,11 @@ no journey yet); **not testable** (why). "—": the editor has no such feature.
 
 | | Machinedrum | Monomachine | Both |
 |---|---|---|---|
-| Features in the inventory (one row a feature; "—" rows not counted) | 81 | 84 | 165 |
-| Covered by a journey | 70 | 74 | 144 |
-| of which PASS | 68 | 74 | 142 |
+| Features in the inventory (one row a feature; "—" rows not counted) | 81 | 85 | 166 |
+| Covered by a journey | 70 | 75 | 145 |
+| of which PASS | 70 | 75 | 145 |
 | of which FAIL (product bug) | 0 | 0 | 0 |
-| of which SKIP here (window covered) | 2 | 0 | 2 |
+| of which SKIP here (window covered) | 0 | 0 | 0 |
 | Not covered yet (reachable through the page) | 0 | 0 | 0 |
 | Not testable through the page (file chooser, hardware, DAW, hidden by design) | 11 | 10 | 21 |
 
@@ -45,7 +46,7 @@ no journey yet); **not testable** (why). "—": the editor has no such feature.
 | PLAY / STOP key, POSITION | md-seq-first-beat PASS | mm-seq-first-beat PASS |
 | Space plays and stops | md-keys-space-play PASS | mm-keys-space-play PASS (see note 2) |
 | Tempo: drag the BPM | md-top-tempo-drag PASS | mm-top-tempo-drag PASS |
-| Tap tempo (T) | md-keys-tap-tempo PASS | mm-keys-tap-tempo PASS |
+| Tap tempo (MD: T or B; MM: B, since T is a black key there, 2026-10-05) | md-keys-tap-tempo PASS, md-keys-tap-tempo-b PASS | mm-keys-tap-tempo PASS (B) |
 | Pattern ‹ › on the LCD | md-top-pattern-next PASS | mm-top-pattern-next PASS |
 | A pattern picked while playing is queued, starts at the end | md-seq-queue-while-playing PASS | mm-seq-queue-while-playing PASS |
 | Plate MK1 / MK2 | md-top-plate PASS | mm-top-plate PASS |
@@ -60,6 +61,7 @@ no journey yet); **not testable** (why). "—": the editor has no such feature.
 | Errors show once under the header, close with × | not testable: no refusal the page can cause on purpose | same |
 | Notices per window with two windows open | not testable: one window per standalone | same |
 | QWERTY keyboard plays the selected track | md-keys-play-notes PASS (the core takes the note) | mm-keys-play-notes PASS |
+| Black keys W E T Y U O P: the two rows play every semitone (2026-10-05) | — (white keys only) | mm-keys-black-keys PASS (the pitches sent: C♯ F♯ D♯, then A S still C D) |
 | Track select ↑ / ↓ | md-keys-track-select PASS | mm-keys-track-select PASS |
 | M mutes the selected track, Alt+M every track, 0 unmutes all | md-keys-mute PASS | mm-keys-mute PASS |
 | Window fits the screen, remembers its size; top bar fits 1280 px | not testable: the window size is the host's | same |
@@ -71,7 +73,7 @@ no journey yet); **not testable** (why). "—": the editor has no such feature.
 | Feature | Machinedrum | Monomachine |
 |---|---|---|
 | Trigs / notes by click (MM: piano roll) | md-seq-first-beat PASS | mm-seq-first-beat PASS |
-| Drag-paint steps, one undo step (MM: SLIDE lane) | md-seq-paint-undo PASS | mm-seq-slide-paint PASS |
+| Drag-paint steps, one undo step (MM: SLIDE lane; the roll: a new note dragged sideways paints, Alt-drag erases, 2026-10-05) | md-seq-paint-undo PASS | mm-seq-slide-paint PASS, mm-seq-roll-paint PASS (paint, erase, each one undo step) |
 | Accent (Shift-click), slide (Alt-click) | md-seq-accent-slide PASS | — (MM: SLIDE lane, above) |
 | Lock lane: pick a parameter, draw locks, clear | md-seq-lock-lane PASS | mm-seq-lock-lane PASS |
 | Lock lane ramp (Shift-drag), erase (Alt-drag), wheel on a step | md-seq-lock-ramp-erase-wheel PASS | mm-seq-lock-ramp-erase-wheel PASS |
@@ -138,9 +140,9 @@ no journey yet); **not testable** (why). "—": the editor has no such feature.
 
 | Feature | Machinedrum | Monomachine |
 |---|---|---|
-| Sample slots: browser of waveform tiles | md-sampler-slots SKIP (window covered: canvases not drawn) | — |
+| Sample slots: browser of waveform tiles | md-sampler-slots PASS | — |
 | Set up sampling (recorder, player), one undo step | md-sampler-setup-undo PASS | — |
-| Audition a sample | md-sampler-audition SKIP (window covered) | — |
+| Audition a sample | md-sampler-audition PASS | — |
 | Load a WAV / AIFF and audition it before keeping it | not testable: native file chooser | — |
 | RAM view steps; freeze / live | md-sampler-ram-view PASS | — |
 | POLY | — | mm-perform-poly PASS |
@@ -209,3 +211,6 @@ no journey yet); **not testable** (why). "—": the editor has no such feature.
    skipped there; tap tempo checks the BPM against the taps' real spacing.
 4. Pointer capture: a drag's moves and release go to the element the page captured (as the browser does), so a redraw
    during the drag (the lock lane's ramp) does not lose it.
+5. A journey's Alt chord (`u.key(k, {alt: true})`) sends no keyup of Alt itself. The Monomachine page now ends a
+   rotate run on any event without Alt as well (MM-PORT-PLAN.md 2026-10-05), so the journeys after `mm-seq-rotate` keep
+   their own undo steps.

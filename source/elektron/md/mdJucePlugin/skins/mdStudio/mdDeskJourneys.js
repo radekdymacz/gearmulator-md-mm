@@ -93,14 +93,16 @@ const MdJourneys = (() => {
 			{ say: "drag it back down as far", act: u => u.drag("#bpm", [[0, 6], [0, 12], [0, 18], [0, 24]]), screen: c => ok(parseFloat($1("#bpm").textContent) === c.b0, "LCD " + $1("#bpm").textContent), machine: c => ok(Docs.global.tempo === c.b0, "tempo " + Docs.global.tempo) }
 		]
 	};
-	const tapTempo = {
-		name: "md-keys-tap-tempo",
+	/* T taps; so does B, the Monomachine Editor's tap key (T is a black key there) */
+	const tapWith = (name, key) => ({
+		name,
 		steps: [
-			{ say: "tap T five times, about 0.5 s apart", act: async (u, c) => { c.b0 = Docs.global.tempo; document.activeElement?.blur?.(); const at = []; for (let i = 0; i < 5; i++) { at.push(performance.now()); u.key("t"); await sleep(500); } c.want = Math.round(60000 / ((at[4] - at[0]) / 4) * 10) / 10; c.note = `taps ${Math.round((at[4] - at[0]) / 4)} ms apart: ${c.want} BPM`; },
+			{ say: `tap ${key.toUpperCase()} five times, about 0.5 s apart`, act: async (u, c) => { c.b0 = Docs.global.tempo; document.activeElement?.blur?.(); const at = []; for (let i = 0; i < 5; i++) { at.push(performance.now()); u.key(key); await sleep(500); } c.want = Math.round(60000 / ((at[4] - at[0]) / 4) * 10) / 10; c.note = `taps ${Math.round((at[4] - at[0]) / 4)} ms apart: ${c.want} BPM`; },
 				screen: c => ok(Math.abs(V.bpm - c.want) <= 1.5 && Math.abs(parseFloat($1("#bpm").textContent) - V.bpm) < 0.06, "BPM " + V.bpm + ", want " + c.want), machine: c => ok(Math.abs(Docs.global.tempo - c.want) <= 1.5, "tempo " + Docs.global.tempo + ", want " + c.want) }
 		],
 		async tidy(u, c) { if (c.b0 != null) cmd("tempo", { bpm: c.b0 }); await sleep(500); }
-	};
+	});
+	const tapTempo = tapWith("md-keys-tap-tempo", "t"), tapTempoB = tapWith("md-keys-tap-tempo-b", "b");
 	const patStep = {
 		name: "md-top-pattern-next",
 		steps: [
@@ -708,7 +710,7 @@ const MdJourneys = (() => {
 	};
 
 
-	const all = [bootCard, firstBeat, spaceTransport, tempoDrag, tapTempo, patStep, queuePattern, plate, wsKeys, helpKeys, undoRedo,
+	const all = [bootCard, firstBeat, spaceTransport, tempoDrag, tapTempo, tapTempoB, patStep, queuePattern, plate, wsKeys, helpKeys, undoRedo,
 		paintUndo, accentSlide, lockLane, pagesJ, copyPaste, clearPatternJ, fillEveryJ, rotateJ, trackKeys, muteKeys, liveRec,
 		genJourney("md-gen-mutate-undo", false), genJourney("md-gen-defaults-mutate-undo", true), genKeys,
 		shapeSound, arrows, machinePick, soundCopy, editorDrag, controlAll,

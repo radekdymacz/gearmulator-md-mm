@@ -27,7 +27,7 @@ const scope = new Proxy({}, {
 	set: (t, k, v) => { t[k] = v; return true; } });
 const src = FILES.map(f => fs.readFileSync(path.join(__dirname, f), "utf8").replace(/^"use strict";/, ""))
 	.join("\n;\n");
-const Keys = new Function("scope", "with (scope) {\n" + src + "\n;return Keys; }")(scope);
+const { Keys, piano } = new Function("scope", "with (scope) {\n" + src + "\n;return { Keys, piano: KEYS_PIANO }; }")(scope);
 const list = Keys.list(), does = b => { try { return typeof b.does === "function" ? String(b.does()) : String(b.does); } catch (_) { return ""; } };
 check(list.length > 40, `the scripts ran to their ends: ${list.length} entries`);
 
@@ -55,18 +55,27 @@ check(!clash.length, "no two dispatched entries share a key and modifiers" + (cl
 const has = (m, id) => run.some(b => (b.mod || "") === m && ids(b).includes(id));
 /* R / Alt+R: randomise the selected track / every track (GEN, on Sound MUTATE; MM-PORT-PLAN.md d) */
 const WANT = [["", "KeyR", "randomise the selected track"], ["alt", "KeyR", "randomise every track"], ["", "KeyA", "a note"], ["", "KeyL", "a note"], ["", "KeyZ", "octave down"], ["", "KeyX", "octave up"], ["", "KeyC", "velocity down"], ["", "KeyV", "velocity up"],
-	["", "Space", "play / stop"], ["alt", "Space", "record + play"], ["", "KeyM", "mute the selected track"], ["", "KeyT", "tap tempo"],
+	["", "Space", "play / stop"], ["alt", "Space", "record + play"], ["", "KeyM", "mute the selected track"], ["", "KeyB", "tap tempo"], ["", "KeyW", "a black key (C♯)"], ["", "KeyT", "a black key (F♯)"], ["", "KeyP", "a black key (D♯)"],
 	["", "ArrowUp", "previous track"], ["", "ArrowDown", "next track"], ["alt", "KeyM", "mute / unmute all"], ["alt", "Delete", "clear the pattern"],
 	["alt", "ArrowLeft", "rotate"], ["alt", "ArrowRight", "rotate"], ["", "Digit0", "unmute / unsolo all"], ["cmd", "KeyZ", "undo"], ["cmd", "KeyC", "copy"], ["cmd", "KeyV", "paste"],
 	["", "?", "the list of keys"]];
 const missing = WANT.filter(([m, id]) => !has(m, id));
 check(!missing.length, "the approved keys are bound" + (missing.length ? ": missing " + missing.map(([m, id, w]) => `${m}+${id} (${w})`).join(", ") : ""));
-const GONE = [["", "KeyW", "Walk"], ["cmd", "KeyR", "⌘R"], ["shift", "KeyR", "⇧R"], ["shift", "KeyD", "⇧D"], ["shift", "KeyF", "⇧F"], ["shift", "KeyG", "⇧G"], ["shift", "KeyL", "⇧L"],
+const GONE = [["cmd", "KeyR", "⌘R"], ["shift", "KeyR", "⇧R"], ["shift", "KeyD", "⇧D"], ["shift", "KeyF", "⇧F"], ["shift", "KeyG", "⇧G"], ["shift", "KeyL", "⇧L"],
 	["shift", "ArrowLeft", "⇧← rotate"], ["shift", "Space", "⇧Space"]];
 const still = GONE.filter(([m, id]) => has(m, id));
 /* R randomises: on Sound MUTATE, elsewhere GEN; Alt+R every track (matched on the physical key, e.code) */
 const rKeys = run.filter(b => b.code === "KeyR");
 check(rKeys.length === 2 && rKeys.every(b => /randomise/i.test(does(b))) && rKeys.some(b => b.mod === "alt" && /every/i.test(does(b))), "R and Alt+R randomise (GEN, on Sound MUTATE), on the physical key");
+/* W is a black key now (C♯), not Walk; T is F♯, so tap tempo is B (MM-PORT-PLAN.md 2026-10-05) */
+const walk = run.filter(b => ids(b).includes("KeyW") && /walk/i.test(does(b))), tTap = run.filter(b => ids(b).includes("KeyT") && /tap/i.test(does(b)));
+check(!walk.length && !tTap.length, "W is not Walk and T does not tap (both play notes)" + (walk.length || tTap.length ? ": " + [...walk, ...tTap].map(name).join(", ") : ""));
+/* the two rows play every semitone: A..P are 0..15 above the A key's note, the white keys C major's steps */
+const PIANO = "A W S E D F T G Y H U J K O L P".split(" ");
+check(piano && PIANO.every((k, i) => piano[k] === i) && Object.keys(piano).length === 16, "the piano keys play semitones 0-15 in the DAW layout: " + JSON.stringify(piano));
+check(["A", "S", "D", "F", "G", "H", "J", "K", "L"].map(k => piano[k]).join(" ") === "0 2 4 5 7 9 11 12 14", "the home row stays the white keys C D E F G A B C D");
+const playing = run.filter(b => b.run && b.group === "Playing" && b.hidden).flatMap(ids);
+check(PIANO.every(k => playing.includes("Key" + k)), "every piano key is dispatched to the keyboard: " + PIANO.filter(k => !playing.includes("Key" + k)).join(" "));
 check(!still.length, "the removed keys are gone" + (still.length ? ": " + still.map(x => x[2]).join(", ") : ""));
 /* the MM's old map: R was RECORD and L was LEARN; the home row's L is a note now and recording is Alt+Space */
 const oldR = run.filter(b => ids(b).includes("KeyR") && /record/i.test(does(b))), oldL = run.filter(b => ids(b).includes("KeyL") && /learn/i.test(does(b)));

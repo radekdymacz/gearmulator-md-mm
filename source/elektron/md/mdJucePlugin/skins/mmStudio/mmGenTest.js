@@ -21,7 +21,7 @@ check(!/MACH|\bS\.|\$\(|document|DPRO|SWAVE|-BD|GND-/.test(genBlock.replace(/^\/
 
 const ctx = vm.createContext({ console });
 vm.runInContext(data.replace(/^"use strict";/m, "") + "\n" + genBlock + "\n" + mmGen
-	+ "\nthis.T = { MACH, FIXED, EN, BBOX, genU, generate, genFit, genScale, genNotes, GEN_SCALES, mutPull, mmGenRole, mmGenDefault, mmGenRoot, mmNoteSpec, mmGenSteps, mmLastNotes, mmMutate, MM_DRUMS, MM_SCALES, mmNotesTag };", ctx);
+	+ "\nthis.T = { MACH, FIXED, EN, BBOX, genU, generate, genFit, genScale, genNotes, GEN_SCALES, mutPull, mmGenRole, mmGenDefault, mmGenRoot, mmNoteSpec, mmGenSteps, mmLastNotes, mmMutate, MM_DRUMS, MM_SCALES, mmNotesTag, mmPaint };", ctx);
 const T = ctx.T;
 
 /* ---- genScale and genNotes ---- */
@@ -120,6 +120,15 @@ check(synOnly.every(([, pg]) => pg === "SYN") && same(synOnly, m40.filter(([, pg
 check(same(T.mmMutate(M({ tracks: [2] }), kitBase, info), m40.filter(([t]) => t === 2)), "and another track in scope changes nothing for this one");
 check(T.mmMutate(M({ pages: ["LFO"] }), kitBase, info).every(([, pg]) => /^LF[123]$/.test(pg)), "LFO is the three LFO pages");
 check(T.mutPull(64, 0, 0.9) === 64 && T.mutPull(64, 100, 0.5) === 64 && T.mutPull(0, 100, 0.999, 4) === 4 && T.mutPull(100, 50, 0, 127) === 50, "mutPull: the Machinedrum's pull toward u × max");
+
+/* ---- the roll's paint (mmPaint): what a drag across steps makes them ---- */
+{
+	const N = n => ({ n: [n], a: 1, f: 1, l: 1 }), steps = [N(50), null, { off: 1 }, null, { n: [40, 43], a: 0, f: 1, l: 0 }, null];
+	check(same(T.mmPaint(steps, 0, 5, "paint", 48), [[1, N(48)], [3, N(48)], [5, N(48)]]), "paint: a note on every empty step, a NOTE OFF and a step with notes stay");
+	check(same(T.mmPaint(steps, 5, 0, "paint", 48), T.mmPaint(steps, 0, 5, "paint", 48)), "paint: either direction, the same steps");
+	check(same(T.mmPaint(steps, 0, 5, "erase"), [[0, null], [4, null]]), "erase: every step with a trig empties, a chord too; a NOTE OFF stays");
+	check(same(T.mmPaint(steps, 2, 2, "paint", 48), []) && same(T.mmPaint([N(1)], 0, 0, "paint", 48), []), "nothing to change: no changes");
+}
 
 console.log("mmGenTest: " + (failures ? "FAIL" : "PASS") + " (" + failures + " failures)");
 process.exit(failures ? 1 : 0);

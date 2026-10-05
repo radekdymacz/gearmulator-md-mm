@@ -53,7 +53,7 @@ check(!clash.length, "no two dispatched entries share a key and modifiers" + (cl
 /* ---- the approved map is there (RULE 1-3) ---- */
 const has = (m, id) => run.some(b => (b.mod || "") === m && ids(b).includes(id));
 const WANT = [["", "KeyA", "a note"], ["", "KeyL", "a note"], ["", "KeyZ", "octave down"], ["", "KeyX", "octave up"], ["", "KeyC", "velocity down"], ["", "KeyV", "velocity up"],
-	["", "Space", "play / stop"], ["alt", "Space", "record + play"], ["", "KeyR", "randomise the selected track"], ["", "KeyM", "mute the selected track"], ["", "KeyT", "tap tempo"],
+	["", "Space", "play / stop"], ["alt", "Space", "record + play"], ["", "KeyR", "randomise the selected track"], ["", "KeyM", "mute the selected track"], ["", "KeyT", "tap tempo"], ["", "KeyB", "tap tempo (B, the Monomachine Editor's tap key)"],
 	["", "ArrowUp", "previous track"], ["", "ArrowDown", "next track"], ["alt", "KeyR", "randomise all"], ["alt", "KeyM", "mute / unmute all"], ["alt", "Delete", "clear the pattern"],
 	["alt", "ArrowLeft", "rotate"], ["alt", "ArrowRight", "rotate"], ["cmd", "KeyZ", "undo"], ["cmd", "KeyC", "copy"], ["cmd", "KeyV", "paste"]];
 const missing = WANT.filter(([m, id]) => !has(m, id));

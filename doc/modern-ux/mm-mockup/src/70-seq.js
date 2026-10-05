@@ -164,12 +164,12 @@ function rollDown(c,e){const t=+c.dataset.t;if(t!==S.sel){select(t);return}
  {const G=laneGeom(c);if(e.button===0&&onKeys(c,G,e)){const n=rollRow(c,G,e);if(n==null)return;if(isMidiT(t)){kbTell("midi","The keys play the synth tracks: a MIDI track's notes go to the MIDI OUT only.");return}rollDrag={mode:"key",t,c};rollKey(t,n);drawEd(c);return}}
  const h=laneHit(c,e);if(!h)return;const tr=trk(t);
  if(e.metaKey||e.ctrlKey){fillEvery(t,h.cell,e.shiftKey?4:2,h.n);return}
- if(h.k>=0&&e.altKey){const st=tr.steps[h.s];if(h.k>0||(st.n&&st.n.length>1))st.n.splice(h.k,1);else{tr.steps[h.s]=null;clearStepLocks(t,h.s)}editStep(t,h.s);rerenderSeq();return}
+ if(h.k>=0&&e.altKey){const st=tr.steps[h.s];if(h.k>0||(st.n&&st.n.length>1))st.n.splice(h.k,1);else{tr.steps[h.s]=null;clearStepLocks(t,h.s)}rollDrag={mode:"erase",s:h.s,c,last:h.s,touched:new Set([h.s])};redraw();return}
  if(h.k<0&&e.altKey){const st=tr.steps[h.cell];if(!st||st.off){tr.steps[h.cell]=st?.off?null:{off:1};editStep(t,h.cell);rerenderSeq()}return}
  if(h.k>=0&&h.edge){rollDrag={mode:"len",s:h.s,c,touched:new Set()};return}
  if(h.k>=0){rollDrag={mode:"pitch",s:h.s,k:h.k,c};return}
  const st=tr.steps[h.cell];
- if(!st||st.off){tr.steps[h.cell]=note(h.n);rollDrag={mode:"pitch",s:h.cell,k:0,c,moved:true}}
+ if(!st||st.off){tr.steps[h.cell]=note(h.n);rollDrag={mode:"pitch",s:h.cell,k:0,c,moved:true,paint:true}}
  else if(e.shiftKey){if(!st.n)st.n=[h.n];else if(!st.n.includes(h.n))st.n.push(h.n);rollDrag={mode:"pitch",s:h.cell,k:st.n.length-1,c,moved:true}}
  else{if(!st.n)st.n=[h.n];else st.n[0]=h.n;rollDrag={mode:"pitch",s:h.cell,k:0,c,moved:true}}
  redraw()}
@@ -177,14 +177,29 @@ function rollMove(c,e){const t=+c.dataset.t;if(!rollDrag){if(t!==S.sel){c.style.
   if((S.rollHov?.n??null)!==n||S.rollHov?.t!==t){S.rollHov=n==null?null:{t,n};drawEd(c)}
   if(key){c.style.cursor=n==null?"default":"pointer";return}const h=laneHit(c,e);c.style.cursor=h?.edge?"ew-resize":h?.k>=0?"ns-resize":"crosshair";return}
  if(rollDrag.mode==="key"){const d=rollDrag,n=rollRow(d.c,laneGeom(d.c),e);if(n!==d.n){if(d.n!=null)keyNote(d.t,d.n,0);rollKey(d.t,n);S.rollHov=n==null?null:{t:d.t,n};drawEd(d.c)}return}
- c=rollDrag.c;const r=c.getBoundingClientRect(),G=laneGeom(c),tr=trk(S.sel),st=tr.steps[rollDrag.s];if(!st)return;
+ c=rollDrag.c;if(rollPaintMove(c,e))return;const r=c.getBoundingClientRect(),G=laneGeom(c),tr=trk(S.sel),st=tr.steps[rollDrag.s];if(!st)return;
  if(rollDrag.mode==="pitch"){const n=clamp(G.lo+G.rows-1-Math.floor((e.clientY-r.top-G.top)/G.rh),0,127);if(st.n&&st.n[rollDrag.k]!==n){st.n[rollDrag.k]=n;rollDrag.moved=true;redraw()}}
  else{const x=e.clientX-r.left;let e2=rollDrag.s+1;for(const k of G.vs){if(k<=rollDrag.s)continue;const q=G.col[k];if(q&&x>(q.x0+q.x1)/2)e2=k+1}if(x>G.lastX)e2=G.b;e2=clamp(e2,rollDrag.s+1,S.len);if(e2===rollDrag.e)return;rollDrag.e=e2;rollDrag.moved=true;
   if(isMidiT(S.sel))setLock(S.sel,"MID.0",rollDrag.s,clamp((e2-rollDrag.s)*8,1,126));
   else{for(let k=rollDrag.s+1;k<S.len;k++){if(tr.steps[k]&&!tr.steps[k].off)break;if(tr.steps[k]?.off){tr.steps[k]=null;rollDrag.touched.add(k)}}if(e2<S.len&&!tr.steps[e2]){tr.steps[e2]={off:1};rollDrag.touched.add(e2)}}
   redraw()}}
+/* Paint (the Machinedrum Editor's drag across steps, MM-PORT-PLAN.md 2026-10-05): a new note dragged sideways out of its
+   column paints a note at its pitch on every empty step the pointer crosses; Alt-press on a note deletes it, and the
+   drag goes on erasing every step it crosses (its notes, slide and locks). The steps: mmPaint (52-gen.js). Nothing
+   is sent before the release (an intent shows the view again, which would draw the roll anew under the pointer):
+   then one steps intent (editSpan), one undo step. The columns between two moves count too. */
+function rollPaintMove(c,e){const d=rollDrag;if(d.mode==="pitch"&&!d.paint)return false;if(d.mode!=="pitch"&&d.mode!=="paint"&&d.mode!=="erase")return false;
+ const s=laneHit(c,e)?.cell;if(s==null||s===d.last||s>=S.len)return d.mode!=="pitch";
+ const t=S.sel,tr=trk(t);if(d.mode==="pitch"){const st=tr.steps[d.s];if(!st?.n)return false;Object.assign(d,{mode:"paint",n:st.n[0],last:d.s,touched:new Set([d.s])})}
+ for(const[k,x] of mmPaint(tr.steps,d.last,s,d.mode,d.n)){tr.steps[k]=x;if(!x){tr.slide.delete(k);clearStepLocks(t,k)}d.touched.add(k)}
+ d.last=s;redraw();return true}
+/* the steps a drag changed, as one steps intent over their span (one per step would not do: each intent shows the
+   view again from the documents and its own writes, so the later steps' changes were gone before they were sent) */
+function editSpan(t,touched){const ss=[...touched];if(!ss.length)return;const a=Math.min(...ss),b=Math.max(...ss)+1;edit("steps",{from:a,to:b,rows:[rangeRow(t,a,b)]})}
 /* the drag's edit, when it ends: the dragged step's notes, or its length (a MIDI track's LEN lock; a synth track's
-   NOTE OFFs, each step it moved) */
-function rollUp(){const d=rollDrag;rollDrag=null;if(d?.mode==="key"){if(d.n!=null)keyNote(d.t,d.n,0);drawEd(d.c);return}if(!d?.moved)return;const t=S.sel;
- if(d.mode!=="len")editStep(t,d.s);else if(isMidiT(t)){const v=S.locks.get(lkKey(t,"MID.0"))?.get(d.s);if(v!=null)edit("lock",{t,page:7,i:0,s:d.s,v})}else[...d.touched].sort((a,b)=>a-b).forEach(s=>editStep(t,s));
+   NOTE OFFs, each step it moved), or the steps a paint or an erase touched */
+function rollUp(){const d=rollDrag;rollDrag=null;if(d?.mode==="key"){if(d.n!=null)keyNote(d.t,d.n,0);drawEd(d.c);return}const t=S.sel;
+ if(d?.mode==="paint"||d?.mode==="erase"){editSpan(t,d.touched);const n=d.touched.size;if(n>1)toast(`${d.mode==="paint"?"Painted":"Erased"} ${n} steps of ${tLabel(t)}${d.mode==="paint"?" with "+noteName(d.n):""} (one undo step).`);renderTop();rerenderSeq();return}
+ if(!d?.moved)return;
+ if(d.mode!=="len")editStep(t,d.s);else if(isMidiT(t)){const v=S.locks.get(lkKey(t,"MID.0"))?.get(d.s);if(v!=null)edit("lock",{t,page:7,i:0,s:d.s,v})}else editSpan(t,d.touched);
  rerenderSeq()}

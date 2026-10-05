@@ -112,7 +112,7 @@ table per machine, data only, checked by a node test that every SYN parameter of
 
 ## Proposals for the owner
 
-1. **Black keys on the MM: yes, later, on W E — T Y U — O P.** The MM is melodic and the home row's white keys
+1. **Black keys on the MM: yes, later, on W E — T Y U — O P.** (Decided 2026-10-01, built 2026-10-05: see the gap analysis below.) The MM is melodic and the home row's white keys
    cannot play a chromatic line; the black keys above A S D F G H J K L are the standard DAW layout. Cost: T is
    tap tempo (it would move, e.g. to Alt+T, which breaks "Alt is all", or to a key off the piano rows like `B`),
    and the keys test's rule "a plain letter off the piano row acts on the selected track" would name the upper
@@ -231,3 +231,90 @@ table per machine, data only, checked by a node test that every SYN parameter of
   chain with its own keys), `machine.desk`, `capabilities.chains` (false over HW MIDI: no message reaches
   the keys), the Song palette's ARRANGE | CHAIN with the Plays line, BACK, CLEAR and the header chip.
   Tests: `mmDeskTest` (pattern chaining), `mmDeskFirmwareTest chain`.
+
+## Gap analysis and port: 2026-10-05 (branch `feat/mm-port`)
+
+The owner's port list (2026-10-01): the QWERTY keyboard (chromatic, with black keys, on the MM), GEN and MUTATE, Alt as
+the global "all", the small comforts (rotate, fill, double, lock counter, ramp), Sound by function with aligned rows,
+placement-aware pop-ups, no drag text selection, Song and chain (after checking the MM's song mode); not the
+sampler, not MIDI mapping. Compared: the MD page (`skins/mdStudio/*.js`, its `Keys.bind` map, its workspaces) against
+the MM mockup (`mm-mockup/src/*`), and the two journey sets (`mdDeskJourneys.js`, `mmJourneys.js`): the MD journeys
+with no MM name are `seq-paint-undo`, `seq-accent-slide`, `global-tempo-out`, `global-routing`, `mix-master-fx`,
+`mix-out-route`, `mix-fader-undo`, `mix-mute-solo`, `lib-load-save-dialog`, `dialog-esc-space-cancel`,
+`song-arrange-rows` and the four sampler ones; all but the first are covered on the MM under another name
+(`mm-mix-routing`, `mm-mix-level-mute`, `mm-mix-solo`, `mm-lib-kit-load`, `mm-lib-kit-saveas`, `mm-dialog-*`,
+`mm-song-rows`) or do not fit (below).
+
+| Feature (MD) | MM | How on the MM / why not |
+|---|---|---|
+| Home row plays the selected track (A–L white keys, Z/X octave, C/V velocity) | already | phase 1 (`75-comforts.js`), real notes on the track's channel |
+| **Black keys W E · T Y U · O P** (owner: chromatic on the MM) | **missing → ported** | `KEYS_PIANO` in `75-comforts.js`: A W S E D F T G Y H U J K O L P = semitones 0–15 above the A key's C. R and I sit where a piano has no black key (R stays randomise) |
+| Tap tempo (T) | **moved → B** | T is F♯ now; tap tempo is **B** on the MM. The MD keeps T and also takes B (`mdDeskLive.js`), so B taps on both editors |
+| Space, Alt+Space (record), M / Alt+M, ↑ ↓, 0, ⌘Z ⌘⇧Z ⌘Y ⌘C ⌘V, ?, Delete / Alt+Delete, [ ], 1–5 | already | phase 1, the shared dispatcher (`shared/deskKeys.js`) |
+| GEN bar: MODE Euclid / Random / Keep, Write, R / Alt+R, Defaults ↺, summary with repeats, rail tags, a run = one undo step, the spec follows the track's machine | already | phase 2 (`76-gen.js`, `52-gen.js`, shared `deskGen.js`); the MM adds NOTES (scale-aware pitches) |
+| GEN euclid ACCENT | does not fit | the MM has no accent (a trig's envelope flags A F L instead) |
+| MUTATE bar: amount, scopes, group chips, R / Alt+R, a trial = one undo step | already | phase 2 / 3 |
+| Alt is all: Alt+CLR, Alt+lane clear, Alt-drag Control All, Alt-click the R key, Alt + a GEN value, labels while Alt is held | already | phase 1 / 2 |
+| Lock budget over the lane | already | 62 locks (pooled over 12 tracks) instead of 64 |
+| Rotate (Alt+← →), one undo step per Alt hold | already | phase 1 |
+| Every-N fill (⌘-click, ⌘⇧-click) | already | in the roll, at the clicked pitch |
+| Wheel on a step moves its lock | already | on the lock lane's step (the roll's wheel stays the pitch scroll, by design: proposal 3) |
+| Ramp (⇧-drag in the lock lane) | already | phase 1 |
+| LEN ×2 | already | LCD line 2 |
+| Paste to many (⇧-click headers, ⌘V), Esc unmarks | already | `S.marks` |
+| 0 and M/S OFF: unmute and unsolo all | already | MIDI tracks only where the engine mutes them |
+| **Drag across steps paints them, one undo step** (`md-seq-paint-undo`) | **missing → ported** | the roll has no on/off grid, so: a new note dragged **sideways** paints that note on every empty step crossed (up / down stays its pitch); **Alt-press on a note and drag** erases every step crossed. NOTE OFFs stay. `mmPaint` (pure, `52-gen.js`), `rollPaintMove` / `editSpan` (`70-seq.js`). The ENV / SLIDE / SWING rows already paint |
+| Accent (⇧-click), ACC on LCD line 2 | does not fit | no accent on the MM |
+| Slide (Alt-click a step) | already, MM form | the SLIDE row (click or drag) |
+| Drag across the M / S keys | already | 0.3.0 |
+| A focused value keeps ↑ ↓ across the read-back | already | bug 3 of the journeys (fixed 2026-10-05) |
+| Sound page by function: groups per machine, aligned rows, a screen per group | already | phase 3 (`85-sound-groups.js`, `90-sound.js`) |
+| Placement-aware pop-ups (`placeK`), menus hold renders | already | `60-ui.js`; the library and AUDIO / MIDI place themselves too |
+| No text selection on a drag | already | `25-mm.css`, `130-main.js` (`selectstart`) |
+| Kit click loads; unsaved question with "Save and load" | already | phase 4 |
+| Song: chain plays at once (ARRANGE / CHAIN palette, BACK, CLEAR), the row's More, drag pads and rows | already | phase 4 and MM-P8. The MM's song mode as phases 4 and MM-P8 found it (24 songs, LOAD SONG while stopped: the song picker's Load; pattern chaining as on the MD, manual 1-46, measured on the firmware): nothing left to port |
+| Header right-click: the editor's menu | already | `130-main.js` |
+| Knob locks while live recording: the step that gets the lock lit, "Locks track n step s" (`machine.desk.recLock`) | **missing, not ported** | needs core work first: the MM desk would have to read which step the firmware locks (an MM telemetry probe, as the MD's `knobPage` / encoder read) and a firmware check that a knob intent (CC / NRPN) is recorded as a lock during LIVE RECORDING. Not on the owner's list; open question 2 |
+| Master effects on Mix | does not fit | the MM's effects are track machines (FX-*) |
+| Sampler | does not fit | the MM has none (owner) |
+| MIDI mapping (Control, LEARN) | hidden by design | both editors (FOUNDATION.md) |
+| GLOBAL panel's journeys (`md-global-*`) | MM form | the MM's globals live on Perform, Mix › ROUTING and the GLOBAL panel; covered by those journeys |
+| Undo says what it undoes (DESIGN-generators.md §7.9) | not on the MD either | — |
+
+Counts: 33 rows. **Already on the MM: 23** (two in the MM's own form: the SLIDE row, the globals). **Missing: 4**:
+the black keys and the tap key that had to move with them (ported), the drag-paint of steps (ported), the
+live-recording lock marker (not ported: core work). **Does not fit: 4** (GEN accent, accent / ACC, master effects,
+sampler). MIDI mapping is hidden by design on both; "undo says what it undoes" is not on the MD either.
+
+### Built (2026-10-05)
+
+- **Black keys:** `KEYS_PIANO` (one table, key letter → semitones) replaces `KEYS_WHITE.indexOf` + `KEYS_SEMIS`;
+  W E T Y U O P bound as hidden Playing keys beside the white ones, a help row says them. Tap tempo is **B** on the
+  MM (help, toast); on the MD `T` and `B` both tap (one entry, `keys: ["T", "B"]`). `mmKeysTest`: B taps, W / T / P are
+  bound, W is not Walk and T does not tap, the table is 0–15 in the DAW layout, the home row C major's steps, every
+  piano key dispatched. `mdDeskKeysTest`: B is bound.
+- **Roll paint:** `mmPaint(steps, a, b, mode, n)` (pure, `mmGenTest`: paint fills only empty steps, either direction
+  the same, erase empties trigs and chords, keeps NOTE OFFs). The roll's drag: from a new note, a sideways move into
+  another column switches from pitch to paint; Alt-press on a note starts an erase. Nothing is sent during the drag;
+  at the release one `steps` intent over the span (`editSpan`), so one undo step.
+- **Fixed on the way:** a drag that changed several steps sent one `step` intent per step; each intent shows the view
+  again from the documents plus its own writes, so the later steps' changes were gone before they were sent. The
+  note-length drag on a synth track (its NOTE OFFs) had this latent bug; it now sends one `steps` intent too
+  (`editSpan`).
+- **Fixed on the way (2):** a rotate run (Alt + arrows) held the commit until a keyup of Alt itself; when that keyup
+  never reached the page, every later edit joined the rotate's undo step. `showAlt(false)` (any key or pointer event
+  without Alt) now ends the run too (`75-comforts.js`). The journeys found it: their Alt chords send no Alt keyup, so
+  every edit after `mm-seq-rotate` was one undo step. The MD's rotate run (`Held` "rotate", ended on Alt's keyup) has
+  the same shape; its journeys pass, left as it is (open question 4).
+- No core (C++) change: both features are page functions over the existing intents (`steps`, `noteOn`).
+
+### Open questions for the owner
+
+1. **Tap tempo key.** T plays F♯ on the MM, so tap tempo moved to **B** there; the MD keeps T and accepts B as well.
+   Alternatives: B only on both (drop T on the MD), or a black-key row that skips T (not chromatic).
+2. **Knob locks while live recording on the MM** (the MD's `recLock` marker): worth a firmware probe? It needs the
+   MM's RAM address of the step the firmware locks and a check that the plug-in's CC / NRPN knob moves are recorded.
+3. **Roll paint semantics:** a paint skips steps that hold notes and NOTE OFFs (as the every-N fill does); an erase
+   takes whole steps (all chord notes). Say if a paint should replace other pitches, or an erase take one row only.
+4. **The MD's rotate run** ends only on Alt's keyup or a window blur, as the MM's did. Give it the MM's fix
+   (`showAlt(false)` ends it)?

@@ -125,9 +125,10 @@ Bridge.onMessage(m => {
 /* ===== Fit: the page is laid out for 1440 px. A smaller plug-in window (GUI scale 75 % is 1080 px)
    zooms the whole page out natively (WKWebView pageZoom, mdStudioWebZoom.mm), so nothing is cut. ===== */
 
-/* ===== Tap tempo (manual p.36): T taps, the average of the last taps sets the tempo (0x61). ===== */
+/* ===== Tap tempo (manual p.36): T (or B, the Monomachine Editor's tap key, where T is a black key) taps, the
+   average of the last taps sets the tempo (0x61). ===== */
 const TAP = [];
-Keys.bind({ keys: ["T"], group: "Transport", does: "Tap tempo (the average of the last taps)", when: () => kbOn(), run: () => {
+Keys.bind({ keys: ["T", "B"], group: "Transport", does: "Tap tempo (the average of the last taps; B as in the Monomachine Editor)", when: () => kbOn(), run: () => {
 	const now = performance.now(); if (TAP.length && now - TAP[TAP.length - 1] > 2000) TAP.length = 0;
 	TAP.push(now); if (TAP.length > 5) TAP.shift();
 	if (TAP.length >= 2) { const bpm = clamp(Math.round(60000 / ((TAP[TAP.length - 1] - TAP[0]) / (TAP.length - 1)) * 10) / 10, 30, 300); cmd("tempo", { bpm }, "tempo", [[["bpm"], bpm]]); renderTop(); toast("Tap tempo: " + bpm.toFixed(1) + " BPM"); }

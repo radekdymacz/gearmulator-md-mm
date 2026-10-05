@@ -86,3 +86,10 @@ function mmMutate(spec,base,info){const out=[],protect=new Set(spec.protect||["V
   for(const[pg,i] of (spec.extra&&spec.extra[t])||[]){const vals=tr.v[pg],k=vals&&info(t,pg,i);if(!k||!k.name||protect.has(k.name)||MM_MUT_KEEP.has(k.name)||have.has(pg+":"+i))continue;
    have.add(pg+":"+i);out.push([t,pg,i,mutPull(vals[i],spec.amount,genU(spec.seed,t,MM_PG_INDEX[pg]*8+i),k.max)])}}
  return out}
+
+/* ---- the roll's paint (the Machinedrum Editor's drag across steps, MM-PORT-PLAN.md 2026-10-05): the steps a..b
+   (both in, either order) as a drag crossing them makes them: "paint" puts note n on every empty step (a NOTE OFF and
+   a step with notes stay), "erase" empties every step with a trig (a NOTE OFF stays). The changes only: [[s, step]];
+   null is an empty step. ---- */
+function mmPaint(steps,a,b,mode,n){const out=[];for(let s=Math.min(a,b);s<=Math.max(a,b);s++){const x=steps[s];
+ if(mode==="paint"){if(!x)out.push([s,{n:[n],a:1,f:1,l:1}])}else if(x&&!x.off)out.push([s,null])}return out}
