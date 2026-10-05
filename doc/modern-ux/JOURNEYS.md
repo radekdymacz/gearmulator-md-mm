@@ -8,8 +8,8 @@ check, User journeys. The journeys are `skins/mdStudio/mdDeskJourneys.js` and `s
 
 Last run: 2026-10-05, diagnostics build of `test/user-journeys` (Release, arm64), MD OS 1.63, MM OS 1.32B.
 Machinedrum 60 journeys of 62 ran and pass, 2 skipped (the editor window was covered by another app, so the page
-drew no canvases); Monomachine 67 of 69 pass, mm-sound-value-keys fails on bug 3, and mm-seq-grid-record failed in
-the full run (see note 4) and passes on its own.
+drew no canvases). Monomachine, three full runs with bug 3 fixed: 69/69, 68/69, 68/69; the one failure each time is
+mm-seq-grid-record (bug 4).
 
 Status: **PASS**; **FAIL** with the bug (below); **SKIP** (needs the window on screen); **not covered** (reachable,
 no journey yet); **not testable** (why). "—": the editor has no such feature.
@@ -83,7 +83,7 @@ no journey yet); **not testable** (why). "—": the editor has no such feature.
 | Rotate (Alt+← →) | md-seq-rotate PASS | mm-seq-rotate PASS |
 | Paste to many marked tracks (Shift-click headers) | md-seq-paste-many PASS | mm-seq-paste-many PASS |
 | Live recording (REC / Alt+Space) | md-seq-live-record PASS | mm-seq-live-record PASS |
-| GRID RECORDING (MM RECORD stopped) | — | mm-seq-grid-record PASS (see note 2) |
+| GRID RECORDING (MM RECORD stopped) | — | mm-seq-grid-record **FAIL** in 2 of 3 full runs (bug 4); PASS alone |
 | LEN on LCD line 2 | — | mm-seq-len PASS |
 | Arpeggiator dock | — | mm-seq-arp PASS |
 | Clickable transpose keyboard | — | mm-seq-transpose-keyboard PASS |
@@ -104,7 +104,7 @@ no journey yet); **not testable** (why). "—": the editor has no such feature.
 |---|---|---|
 | Sound page grouped by function | md-sound-shape-undo PASS | mm-sound-shape-undo PASS |
 | Drag a value, undo restores the kit | md-sound-shape-undo PASS | mm-sound-shape-undo PASS |
-| A focused value: ↑ ↓ step it | md-sound-value-keys PASS (bug 2, fixed) | mm-sound-value-keys **FAIL** (bug 3) |
+| A focused value: ↑ ↓ step it | md-sound-value-keys PASS (bug 2, fixed) | mm-sound-value-keys PASS (bug 3, fixed) |
 | Machine picker, undo | md-sound-machine-pick-undo PASS | mm-sound-machine-pick-undo PASS |
 | Copy / paste a sound | md-sound-copy-paste PASS | mm-sound-copy-paste PASS |
 | Screens (curve editors): drag a handle | md-sound-screen-drag PASS | mm-sound-screen-drag PASS |
@@ -164,7 +164,7 @@ no journey yet); **not testable** (why). "—": the editor has no such feature.
 | GLOBAL: a setting read back (TEMPO OUT) | md-global-tempo-out PASS | — (MM globals: the Perform and Mix journeys) |
 | GLOBAL › ROUTING fits its dialog, a route read back | md-global-routing PASS | — |
 
-## Bugs the journeys found (1 and 2 fixed on this branch)
+## Bugs the journeys found (1, 2 and 3 fixed on this branch)
 
 1. **Machinedrum: GEN offers Keep for every track until Defaults is pressed** (md-gen-mutate-undo). The GEN specs
    are made once, at the first render (`genEnsure`, mdDeskGenUi.js), which happens before the kit document is in,
@@ -183,8 +183,18 @@ no journey yet); **not testable** (why). "—": the editor has no such feature.
 
 3. **Monomachine: a focused Sound value loses the arrow keys after one step** (mm-sound-value-keys), the same as
    bug 2 was on the Machinedrum: ↑ on a focused value sends one step, the read-back redraws the workspace, the focus
-   falls to the page and the next ↑ selects another track. Not fixed (the journey is left failing). Log:
+   falls to the page and the next ↑ selects another track. Log:
    `JOURNEY mm-sound-value-keys 3/4 FAIL focus a filter value and press ↑ three times: machine: kit 7, want 9 (from 6); selected 5; focus BODY`
+   Fixed: `render` (mm-mockup/src/130-main.js) gives the focus back to the same value after the page is drawn
+   again, as the Machinedrum's mdDeskRender.js does.
+4. **Monomachine: RECORD is answered ok but does nothing while the panel is parked on SYSEX RECV** (mm-seq-grid-record,
+   not fixed). Right after edits and undos the machine sits on GLOBAL › FILE › SYSEX RECV for the pending dumps
+   (recv "parked"). `MmMachine::pressKeys` (mmDesk/mmDeskCommands.cpp:107) refuses keys while RECV is entering,
+   going to main or leaving, but not while it is parked, so the RECORD key is pressed on the SYSEX RECV screen, the
+   command answers ok and the page says "GRID RECORDING on the machine", and the machine stays at record off. When
+   the state is entering or leaving instead the user gets "The panel is busy (SYSEX RECV); try again." (note 2).
+   Seen in 2 of 3 full Monomachine runs, never alone. Log:
+   `JOURNEY mm-seq-grid-record FAIL step 1 "click RECORD (stopped): GRID RECORDING": machine: record off (seen off); results record:true ; recv parked -> idle; page: toast "GRID RECORDING on the machine: its TRIG keys write steps; the editor reads them back."`
 
 ## Notes
 
@@ -195,9 +205,5 @@ no journey yet); **not testable** (why). "—": the editor has no such feature.
    seen right after an edit or an undo.
 3. A hidden window (display asleep, covered) gets no animation frames and slow timers: the canvas journeys are
    skipped there; tap tempo checks the BPM against the taps' real spacing.
-4. mm-seq-grid-record failed in two of three full runs, each time right after mm-top-undo-redo: the record command was
-   answered ok ("GRID RECORDING on the machine…") but the machine's telemetry stayed at record off for 6 s. Run alone,
-   or with mm-top-undo-redo before it, it passes (4 of 4). Not reproduced, so not counted as a bug; the journey now
-   logs the results and the RECV state when it fails.
-5. Pointer capture: a drag's moves and release go to the element the page captured (as the browser does), so a redraw
+4. Pointer capture: a drag's moves and release go to the element the page captured (as the browser does), so a redraw
    during the drag (the lock lane's ramp) does not lose it.
