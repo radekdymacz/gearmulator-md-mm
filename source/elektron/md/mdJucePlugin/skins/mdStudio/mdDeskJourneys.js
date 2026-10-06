@@ -736,6 +736,84 @@ const MdJourneys = (() => {
 		globalJ, globalRouting, audioPanel, romCard, notePlay,
 		lockRamp, pasteMany, mutScope, songInspector, songDrag, ramView, panBox, hwNoMachine];
 
+	/* ---------- demos: journeys played for a camera (doc/modern-ux/DEMO-VIDEOS.md) ---------- */
+	/* Not in `all`: ?selftest=journey never runs them; ?selftest=demo-md-<name> does (Journey.demo), at a person's pace
+	   with the drawn pointer. Each step is still checked on the screen and on the machine, so a demo that stops
+	   working fails like a journey does. hold: how long the step is left to sound; caption: the video's line. */
+	const look = async (u, q, m, fx, fy) => { await u.glide(q, fx, fy); u.click(q, m, fx, fy); };
+	const trackCount = p => (Docs.patterns[p]?.tracks || []).filter(t => t.trigs.length).length;
+	const trigCount = p => (Docs.patterns[p]?.tracks || []).reduce((n, t) => n + t.trigs.length, 0);
+	/* the pattern that makes the fullest groove: the most tracks playing, then the most trigs */
+	const fullest = () => Object.keys(Docs.patterns).map(Number).filter(hasPat).sort((a, b) => trackCount(b) - trackCount(a) || trigCount(b) - trigCount(a))[0];
+	const busy = () => [...Array(16).keys()].filter(t => trigsOf(t).length && soundTracks().includes(t));
+	const strip = (i, k) => `.strip[data-sel="${i}"] .ms.${k}`;
+	/* demo-md-groove (about 28 s): opens on the fullest pattern already playing, GEN rolls a hi-hat, a drag mutes three
+	   tracks and back, a solo, an Alt-drag filter sweep of the whole kit (undone), and the groove plays on under the
+	   end card. Captions: about six words a line, two lines at most (the video script renders them). */
+	const groove = {
+		name: "demo-md-groove",
+		card: "Machinedrum Editor|Free · pay what you want|mdmm.nativekloud.com",
+		/* before the camera: the fullest pattern and its kit, playing */
+		setup: [
+			{ say: "the Sequence workspace", act: async u => { u.click(tab("seq")); }, screen: () => onTab("seq") },
+			{ say: "click the pattern on the LCD: the chooser opens", act: async u => { u.click("#pat"); },
+				screen: () => ok(!$1("#libpop").hidden && $all("#libpop .ps").length === 128, "chooser closed"), machine: () => ok(Object.keys(Docs.patterns).length === 128, Object.keys(Docs.patterns).length + " patterns read"), within: 8000 },
+			{ say: "click the fullest pattern: it and its kit load", act: async (u, c) => {
+				c.p = fullest(); if (c.p == null) throw new Error("no pattern with trigs on this machine");
+				u.click(psq(c.p)); await confirmIfAsked(u); c.note = `pattern ${patName(c.p)}: ${trackCount(c.p)} tracks, ${trigCount(c.p)} trigs`;
+			}, machine: c => ok(currentPatternSlot() === c.p && idle(), "machine pattern " + currentPatternSlot()), within: 6000 },
+			{ say: "press Escape: the chooser closes", act: async u => { u.key("Escape"); }, screen: () => ok($1("#libpop").hidden, "still open") },
+			{ say: "press PLAY", act: async u => { tele.steps = []; u.click("#play"); }, screen: () => ok(V.playing, "not playing"), machine: () => ok(tele.last?.playing && new Set(tele.steps).size >= 2, "telemetry " + tele.steps.join(",")), within: 6000 }
+		],
+		steps: [
+			{ say: "the groove plays", caption: "Your Machinedrum, on screen.", act: async u => { await u.glide("#seq .st[data-t=\"0\"][data-s=\"8\"]", 0.5, 0.5, 700); },
+				machine: () => ok(tele.last?.playing, "not playing"), hold: 1700 },
+			{ say: "pick a hi-hat (or snare) track on the rail", caption: "Roll a fresh hi-hat groove", act: async (u, c) => {
+				const role = t => genRole(V.tracks[t].m), b = busy();
+				c.t = b.find(t => role(t) === "hat") ?? b.find(t => role(t) === "snare") ?? b.find(t => role(t) !== "kick") ?? soundTrack();
+				await look(u, rail(c.t)); c.p0 = trigsOf(c.t);
+			}, screen: c => ok(S.sel === c.t && !!$1("#genband [data-rand]"), "selected " + S.sel), hold: 300 },
+			{ say: "click GEN's Random key until the rhythm changes", act: async (u, c) => { await u.glide("#genband [data-rand]"); for (let i = 0; i < 5; i++) { u.click("#genband [data-rand]"); if (await until(() => !same(trigsOf(c.t), c.p0) && idle(), 2500)) break; } },
+				screen: c => ok(gridShows(c.t), "grid differs"), machine: c => ok(!same(trigsOf(c.t), c.p0), "unchanged"), hold: 1500 },
+			{ say: "roll it once more", act: async (u, c) => { c.p1 = trigsOf(c.t); for (let i = 0; i < 5; i++) { u.click("#genband [data-rand]"); if (await until(() => !same(trigsOf(c.t), c.p1) && idle(), 2500)) break; } },
+				machine: c => ok(!same(trigsOf(c.t), c.p1), "unchanged"), hold: 1500 },
+			{ say: "click the Mix tab", caption: "Mute tracks with one drag", act: async u => { await look(u, tab("mix")); }, screen: () => onTab("mix"), hold: 300 },
+			{ say: "drag across three tracks' M keys: they mute", act: async (u, c) => {
+				const keep = soloKeep(), b = busy().filter(t => genRole(V.tracks[t].m) !== "kick" && t !== c.t && !keep.has(t) && !mutes().includes(t));
+				c.run = b.slice(0, 3); if (!c.run.length) throw new Error("no tracks to mute");
+				await u.glide(strip(c.run[0], "m"));
+				await u.drag(strip(c.run[0], "m"), c.run.slice(1).map(i => strip(i, "m")), {}, { captured: false, stepMs: 260 });
+			}, machine: c => ok(c.run.every(i => mutes().includes(i)), "machine mutes " + mutes()), screen: c => ok(c.run.every(i => pressed(strip(i, "m"))), "M keys not lit"), hold: 1400 },
+			{ say: "drag back across them: they play again", act: async (u, c) => {
+				const back = c.run.slice().reverse();
+				await u.glide(strip(back[0], "m"));
+				await u.drag(strip(back[0], "m"), back.slice(1).map(i => strip(i, "m")), {}, { captured: false, stepMs: 260 });
+			}, machine: c => ok(c.run.every(i => !mutes().includes(i)), "machine mutes " + mutes()), hold: 600 },
+			{ say: "click S on the rolled track: solo", caption: "Solo in one click", act: async (u, c) => { await look(u, strip(c.t, "s")); },
+				machine: c => ok(!mutes().includes(c.t) && mutes().length >= 2, "machine mutes " + mutes()), hold: 1400 },
+			{ say: "click S again: everything plays", act: async (u, c) => { await look(u, strip(c.t, "s")); },
+				machine: c => ok(!c.run.some(i => mutes().includes(i)) && !mutes().includes(c.t), "machine mutes " + mutes()), within: 8000, hold: 500 },
+			{ say: "click the Sound tab", caption: "Sweep the whole kit at once", act: async u => { await look(u, tab("sound")); }, screen: () => onTab("sound"), hold: 300 },
+			{ say: "Alt-drag the filter's FLTF up, hold, and back: the whole kit sweeps (one undo step)", act: async (u, c) => {
+				const q = '#main .pc[data-g="fx"][data-n="FLTF"]'; if (!$1(q)) throw new Error("no FLTF value");
+				c.k0 = allKitVals(); c.v0 = getV($1(q)); c.moved = 0;
+				const up = Math.min(100, 120 - c.v0), path = [];
+				for (let k = 1; k <= 14; k++) path.push([Math.round(up * k / 14), 0]);
+				for (let k = 0; k < 8; k++) path.push([up, 0]);
+				for (let k = 13; k >= 0; k--) path.push([Math.round(up * k / 14), 0]);
+				/* how many tracks the sweep moved at its widest, read from the machine's documents while it runs */
+				const watch = setInterval(() => { c.moved = Math.max(c.moved, allKitVals().filter((v, t) => !same(v, c.k0[t])).length); }, 50);
+				await u.glide(q);
+				try { await u.drag(q, path, { alt: true }, { stepMs: 100 }); } finally { clearInterval(watch); }
+			}, machine: c => ok(c.moved >= 2, `the sweep moved ${c.moved} tracks`), within: 8000, hold: 200 },
+			{ say: "press Cmd+Z: the kit is as it was", act: async (u, c) => { document.activeElement?.blur?.(); if (!same(allKitVals(), c.k0)) u.key("z", { cmd: true }); }, machine: c => ok(same(allKitVals(), c.k0), "not all back"), within: 10000, hold: 300 },
+			/* the end card goes over this (the video script): the groove plays on and fades out */
+			{ say: "the groove plays on", act: async u => { await u.glide("#seq, #main", 0.5, 0.35, 600); }, machine: () => ok(tele.last?.playing, "stopped"), hold: 3800 }
+		],
+		async tidy(u) { if (V.playing) u.click("#play"); if (S.soloSet.size) setSolo(new Set()); }
+	};
+	const demos = [groove];
+
 	/* ---------- the page's neutral state between journeys ---------- */
 	async function between(u) {
 		for (let i = 0; i < 3 && dlgShown(); i++) { u.key("Escape"); await sleep(200); }
@@ -758,5 +836,6 @@ const MdJourneys = (() => {
 	const context = () => [...[["toast", $1("#toast")], ["error", $1("#errline")]].filter(([, e]) => e && !e.hidden && e.textContent.trim()).map(([k, e]) => `${k} "${e.textContent.trim().slice(0, 160)}"`),
 		...results.filter(r => r.ok === false).slice(-3).map(r => `refused ${r.op}: ${(r.errors || []).join("; ")}`)].join(", ");
 	if (/[?&]selftest=journey/.test(location.search)) setTimeout(() => Journey.run(all, { log: t => Bridge.log(t), ready, between, context }), 0);
-	return { all };
+	if (/[?&]selftest=demo/.test(location.search)) setTimeout(() => Journey.demo(demos, { log: t => Bridge.log(t), ready, between, context }), 0);
+	return { all, demos };
 })();
