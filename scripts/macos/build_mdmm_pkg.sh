@@ -19,9 +19,13 @@
 # "Install for me only" (no administrator needed, e.g. on a managed Mac) in
 # ~/Applications, ~/Library/Audio/Plug-Ins/VST3 and
 # ~/Library/Audio/Plug-Ins/Components. The payload paths are relative, so the
-# domain the person picks decides the root. The packages are unsigned: there is no
-# Apple Developer ID yet. Firmware is never packaged; the script refuses to
-# build if a firmware-like file is found in any bundle.
+# domain the person picks decides the root. Firmware is never packaged; the
+# script refuses to build if a firmware-like file is found in any bundle.
+#
+# Signing (doc/release/SIGNING.md): the bundles are packaged as they are, so
+# sign them first with sign_mdmm.sh. MDMM_INSTALLER_IDENTITY (a "Developer ID
+# Installer: ..." identity, optional MDMM_SIGN_KEYCHAIN) signs the product
+# archive; without it the packages are unsigned and say so in the log.
 
 set -euo pipefail
 
@@ -31,6 +35,14 @@ bundle_dir="$(cd "${1:?usage: build_mdmm_pkg.sh BUNDLE_DIR OUTPUT_DIR [VERSION]}
 output_dir_input="${2:?usage: build_mdmm_pkg.sh BUNDLE_DIR OUTPUT_DIR [VERSION]}"
 version="${3:-0.3.0}"
 resources_src="${script_dir}/pkg-resources"
+installer_identity="${MDMM_INSTALLER_IDENTITY:-}"
+sign_args=()
+if [[ -n "${installer_identity}" ]]; then
+  sign_args=(--sign "${installer_identity}" --timestamp)
+  if [[ -n "${MDMM_SIGN_KEYCHAIN:-}" ]]; then
+    sign_args+=(--keychain "${MDMM_SIGN_KEYCHAIN}")
+  fi
+fi
 
 if [[ ! "${version}" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
   echo "VERSION must be MAJOR.MINOR.PATCH, got: ${version}" >&2
@@ -142,7 +154,7 @@ for row in "${machines[@]}"; do
 
   # Component 1: the standalone app, renamed to the product name. Only the
   # folder name changes; the executable and Info.plist stay as built, so the
-  # ad-hoc signature stays valid.
+  # signature (and a stapled ticket) stays valid.
   stage_bundle "${app}" "${machine_dir}/root-app" "Applications" "${app_name}.app"
   write_component_plist "${machine_dir}/app.plist" "Applications/${app_name}.app"
   pkgbuild --root "${machine_dir}/root-app" \
@@ -224,7 +236,18 @@ XML
   productbuild --distribution "${machine_dir}/distribution.xml" \
     --resources "${resources}" \
     --package-path "${components}" \
+    ${sign_args[@]+"${sign_args[@]}"} \
     "${output_dir}/${pkg_name}"
+  if [[ -n "${installer_identity}" ]]; then
+    signature="$(pkgutil --check-signature "${output_dir}/${pkg_name}")"
+    echo "${signature}"
+    if [[ "${signature}" != *"Developer ID Installer:"* ]]; then
+      echo "Package is not signed with a Developer ID Installer certificate" >&2
+      exit 7
+    fi
+  else
+    echo "note: ${pkg_name} is UNSIGNED (no MDMM_INSTALLER_IDENTITY)"
+  fi
 
   # Self-check: the product holds exactly the three payloads, at the right
   # paths, with no firmware.

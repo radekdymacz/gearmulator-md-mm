@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  Hardened-runtime entitlements for the standalone apps (Machinedrum Editor.app,
+  Monomachine Editor.app). See doc/release/SIGNING.md.
+
+  allow-jit: the DSP56300 recompiler (asmjit 1.10 JitRuntime) maps its code
+  buffers with MAP_JIT and toggles pthread_jit_write_protect_np on arm64. Under
+  the hardened runtime MAP_JIT needs this entitlement and nothing else: asmjit
+  never makes plain memory executable with mprotect and never dual-maps while
+  MAP_JIT is available, so allow-unsigned-executable-memory and
+  disable-executable-page-protection are not wanted.
+
+  audio-input: the apps take audio input (NSMicrophoneUsageDescription). Under
+  the hardened runtime audio input is silently denied without it.
+
+  The VST3 and AU bundles are signed without entitlements: a loaded plug-in
+  runs with its host's entitlements, never its own.
+-->
+<plist version="1.0">
+<dict>
+	<key>com.apple.security.cs.allow-jit</key>
+	<true/>
+	<key>com.apple.security.device.audio-input</key>
+	<true/>
+</dict>
+</plist>
