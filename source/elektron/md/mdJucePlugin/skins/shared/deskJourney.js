@@ -17,7 +17,7 @@
    Demos (doc/modern-ux/DEMO-VIDEOS.md) are journeys too, played for a camera: ?selftest=demo-<names> (demo-md-*) runs
    them through Journey.demo at a person's pace, with a drawn pointer that glides to each control and rings on a click,
    and a key cap for each key. A step may also have caption (a line for the video, logged with its time) and hold (ms
-   to wait after the step passed, so the machine is heard). A demo may have setup (steps played before the camera
+   to wait after the step passed, so the machine is heard). A step may have section (its part of the song, for the video's timeline). A demo may have setup (steps played before the camera
    starts, so the video opens on the machine already playing) and card ("name|line|url", the video's end card). The video script (scripts/mdmm-demo-video.sh) starts
    recording on "DEMO READY" and cuts the video by the log's "DEMO <name> START" and "DEMO <name> at <ms> …" lines. */
 const Journey = (() => {
@@ -108,6 +108,8 @@ const Journey = (() => {
 		el, sleep, until,
 		/* demos: the drawn pointer glides to the element's point first (nothing is pressed); nothing otherwise */
 		async glide(q, fx, fy, ms) { if (!Pointer.on) return; const { x, y } = pointIn(el(q), fx, fy); await Pointer.glide(x, y, ms); },
+		/* demos: a key cap shown without a key sent (a held modifier); nothing otherwise */
+		cap(label) { Pointer.key(label); },
 		/* a mouse click at the element's centre (or at fx, fy of its box): down, up, click, as the browser sends them */
 		click(q, m = {}, fx, fy) {
 			const e = el(q), { x, y } = pointIn(e, fx, fy), t = document.elementFromPoint(x, y);
@@ -206,7 +208,7 @@ const Journey = (() => {
 		if (missing) { log(`JOURNEY ${j.name} SKIP ${missing}`); return "skip"; }
 		for (let i = 0; i < n && !reason; i++) {
 			const st = j.steps[i], t0 = performance.now(), head = `JOURNEY ${j.name} ${i + 1}/${n}`;
-			if (film) log(`DEMO ${j.name} at ${Math.round(t0 - film.t0)} step ${i + 1}/${n}${st.caption ? " caption " + st.caption : ""}`);
+			if (film) log(`DEMO ${j.name} at ${Math.round(t0 - film.t0)} step ${i + 1}/${n}${st.section ? " section " + st.section : ""}${st.caption ? " caption " + st.caption : ""}`);
 			try { if (st.act) await st.act(u, c); }
 			catch (e) { reason = `step ${i + 1} "${st.say}": could not do it: ${e.message}`; log(`${head} FAIL ${st.say}: could not do it: ${e.message}${context ? " (page: " + context() + ")" : ""}`); break; }
 			let scr = true, mac = true;
@@ -269,7 +271,8 @@ const Journey = (() => {
 			const j = list[i];
 			if (!(i === 0 ? ready0 : await setup(i))) { log(`JOURNEY ${j.name} FAIL its setup failed`); continue; }
 			const t0 = performance.now();
-			log(`DEMO ${j.name} START`);
+			/* START with the page clock (ms), so the page's own timed lines (a demo's bar lines) can be placed on the video */
+			log(`DEMO ${j.name} START clock ${Math.round(t0)}`);
 			/* the end card's text, for the video script: name|line|url */
 			if (j.card) log(`DEMO ${j.name} card ${j.card}`);
 			if (await runOne(j, log, page.context, { t0 }, scratch[i])) passed++;

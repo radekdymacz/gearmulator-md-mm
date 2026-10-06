@@ -8,7 +8,9 @@
 # The run folder's captions.txt is the copy: written from the demo's own step captions and end card on the first
 # render, then kept, so it can be edited and rendered again. A captions file given replaces it; "none" burns in none.
 # Its lines: "start|end|text" (seconds from the start of the video; about six words a line, two lines at most, "\n"
-# breaks a line) and "card|seconds|name|line|url" (the end card); # starts a comment.
+# breaks a line) and "card|seconds|name|line[|url]" (the end card; the URL is off until launch: add it as a fifth
+# field); # starts a comment. timeline.json (written on each render) places the take for other tools (the reels):
+# each bar line, pattern change and step of the demo on the video's and the raw take's clock.
 # Output: temp/videos/<demo>-<date>/ (MDMM_DEMO_OUT for another folder): raw.mov (the recording), page.log,
 # timeline.txt, captions.txt, <demo>-16x9.mp4, -9x16.mp4, -1x1.mp4, stills/*.png and check.txt (loudness, peak,
 # silence). Exits non-zero when the demo or a check fails.
@@ -51,7 +53,7 @@ import re, sys
 log, name, lead, dur = sys.argv[1], sys.argv[2], float(sys.argv[3]), float(sys.argv[4])
 caps, card, CARD = [], None, 3.5
 for line in open(log, encoding="utf-8", errors="replace"):
-	m = re.search(r"DEMO %s at (\d+) step \S+ caption (.*)$" % re.escape(name), line)
+	m = re.search(r"DEMO %s at (\d+) step \S+(?: section \S+)? caption (.*)$" % re.escape(name), line)
 	if m: caps.append((int(m.group(1)) / 1000 + lead, m.group(2).strip()))
 	m = re.search(r"DEMO %s card (.*)$" % re.escape(name), line)
 	if m: card = m.group(1).strip()
@@ -63,10 +65,43 @@ for i, (t, text) in enumerate(caps):
 	end = min(caps[i + 1][0] - 0.15 if i + 1 < len(caps) else stop, stop)
 	if end > t + 0.4: print("%.2f|%.2f|%s" % (t, end, text))
 if card:
-	print("# the end card over the last seconds: card|seconds|name|line|url")
+	print("# the end card over the last seconds: card|seconds|name|line, optionally |url (off until launch, e.g. |mdmm.nativekloud.com)")
 	print("card|%.1f|%s" % (CARD, card))
 EOF
 	fi
+	python3 - "$DIR" "$NAME" "$OFFSET" "$LEAD" "$DURATION" <<'EOF' || die "no timeline"
+import json, re, sys
+d, name, offset, lead, dur = sys.argv[1], sys.argv[2], float(sys.argv[3]), float(sys.argv[4]), float(sys.argv[5])
+log = open(d + "/page.log", encoding="utf-8", errors="replace").read().splitlines()
+start = None
+for l in log:
+	m = re.search(r"DEMO %s START clock (\d+)" % re.escape(name), l)
+	if m: start = int(m.group(1))
+vt = lambda ms: round(ms / 1000 + lead, 3)	# ms after START to the video's time
+bars, pats, steps = [], [], []
+for l in log:
+	m = re.search(r"DEMO BAR (\d+) clock (\d+)", l)
+	if m and start is not None: bars.append({"bar": int(m.group(1)), "t": vt(int(m.group(2)) - start)})
+	m = re.search(r"DEMO PATTERN (\S+) clock (\d+)", l)
+	if m and start is not None: pats.append({"pattern": m.group(1), "t": vt(int(m.group(2)) - start)})
+	m = re.search(r"DEMO %s at (\d+) step (\d+)/\d+(?: section (\S+))?(?: caption (.*))?$" % re.escape(name), l)
+	if m: steps.append({"t": vt(int(m.group(1))), "step": int(m.group(2)), "section": m.group(3), "caption": m.group(4)})
+	m = re.search(r"JOURNEY %s (\d+)/\d+ ok (.*?) \(\d+ ms\)(?: · (.*))?$" % re.escape(name), l)
+	if m:
+		for st in steps:
+			if st["step"] == int(m.group(1)): st["say"] = m.group(2); st["note"] = m.group(3)
+bars = [b for b in bars if -1 <= b["t"] <= dur + 1]
+sections = []
+for st in steps:
+	if st["section"] and (not sections or sections[-1]["section"] != st["section"]): sections.append({"section": st["section"], "t": st["t"]})
+# the first bar that can sound: bar 2 when the demo starts from an empty pattern (bar 1 is PLAY on nothing)
+first = next((b["t"] for b in bars if b["bar"] == 2), 0.0)
+json.dump({"demo": name, "video": {"duration": dur, "lead": lead}, "raw": {"file": "raw.mov", "offset": offset, "note": "raw time = video time + offset"},
+	"tempo": None, "bars": bars, "patterns": pats, "sections": sections, "steps": steps, "firstBar": first},
+	open(d + "/timeline.json", "w"), indent=1, ensure_ascii=False)
+EOF
+	# the silence the demo means: before its first bar (the machine is not playing yet)
+	QUIET=$(python3 -c "import json; print(json.load(open('$DIR/timeline.json'))['firstBar'])")
 	grep -v '^[[:space:]]*#' "$DIR/captions.txt" | grep -v '^card|' | grep '|' > "$DIR/captions/lines.txt"
 	CARDLINE=$(grep '^card|' "$DIR/captions.txt" | tail -1)
 	CARDSEC=0; CSTART=$DURATION
@@ -79,13 +114,13 @@ EOF
 	# loudness, measured on the cut (loudnorm's first pass), then applied (second pass, linear) under a limiter: the
 	# sound fades in at once and out under the end card
 	MEAS=$(ffmpeg -hide_banner -nostats -ss "$OFFSET" -t "$DURATION" -i "$DIR/raw.mov" -vn \
-		-af "loudnorm=I=-14:TP=-1.5:LRA=11:print_format=json" -f null - 2>&1 | python3 -c '
+		-af "loudnorm=I=-14:TP=-2:LRA=11:print_format=json" -f null - 2>&1 | python3 -c '
 import json, sys
 t = sys.stdin.read(); j = json.loads(t[t.rindex("{"):t.rindex("}") + 1])
 print("measured_I=%s:measured_TP=%s:measured_LRA=%s:measured_thresh=%s:offset=%s" % (j["input_i"], j["input_tp"], j["input_lra"], j["input_thresh"], j["target_offset"]))') \
 		|| die "no sound to measure in the recording"
 	AOUT=$(python3 -c "print(max(0, $DURATION - max(2.5, $CARDSEC * 0.8)))"); AOUTD=$(python3 -c "print($DURATION - $AOUT)")
-	AF="loudnorm=I=-14:TP=-1.5:LRA=11:$MEAS:linear=true,aresample=48000,alimiter=limit=0.79:level=false:attack=1:release=40,afade=t=in:d=0.05,afade=t=out:st=$AOUT:d=$AOUTD"
+	AF="loudnorm=I=-14:TP=-2:LRA=11:$MEAS:linear=true,aresample=48000,alimiter=limit=0.708:level=false:attack=1:release=40,afade=t=in:d=0.05,afade=t=out:st=$AOUT:d=$AOUTD"
 
 	# one picture chain per format: a blurred, darkened fill behind the window, the captions, the end card
 	for fmt in 16x9 9x16 1x1; do
@@ -128,14 +163,14 @@ print("measured_I=%s:measured_TP=%s:measured_LRA=%s:measured_thresh=%s:offset=%s
 		done
 		echo "   $OUT"
 	done
-	check "$DIR/$NAME-16x9.mp4" > "$DIR/check.txt"
+	check "$DIR/$NAME-16x9.mp4" "$QUIET" > "$DIR/check.txt"
 	cat "$DIR/check.txt"
 	grep -q "^RESULT ok" "$DIR/check.txt"
 }
 
 # ---------- the listen check: loudness, peak, silence ----------
-check() {	# $1 a rendered video
-	ffmpeg -hide_banner -nostats -i "$1" -vn -af "ebur128=peak=true,silencedetect=n=-50dB:d=1.0" -f null - 2>&1 | python3 -c '
+check() {	# $1 a rendered video, $2 seconds of silence meant at the start (before the demo's first bar)
+	ffmpeg -hide_banner -nostats -i "$1" -vn -af "ebur128=peak=true,silencedetect=n=-50dB:d=1.0" -f null - 2>&1 | QUIET=${2:-0} python3 -c '
 import re, sys
 t = sys.stdin.read()
 summary = t[t.rfind("Summary:"):]
@@ -152,12 +187,15 @@ sil = list(zip(starts, ends))
 lead = sum(e - s for s, e in sil if s <= 0.05)
 tail = sum(e - s for s, e in sil if s > 0.05 and e >= dur - 0.05)
 mid = [(s, e) for s, e in sil if s > 0.05 and e < dur - 0.05]
-print("loudness %.1f LUFS (target -14), true peak %.1f dBFS, silence: %.1f s at the start, %.1f s at the end, %d stretches over 1 s between%s"
+print("loudness %.1f LUFS (target -14), true peak %.1f dBFS, silence: %.1f s at the start, %.1f s at the end, %d stretches over 1 s between (2.5 s at most)%s"
 	% (I, peak, lead, tail, len(mid), "".join(" (%.1f-%.1f s)" % m for m in mid)))
 bad = []
 if I < -20 or I > -12: bad.append("loudness off target")
 if peak > -0.5: bad.append("clipping")
-if lead > 0.5 or tail > 1.5 or mid: bad.append("silence")
+# a STOP in the song (a chain loaded while stopped) is a short silence: up to 2.5 s; the start may be quiet until
+# the first bar
+import os
+if lead > float(os.environ.get("QUIET", "0")) + 0.5 or tail > 1.5 or any(e - s > 2.5 for s, e in mid): bad.append("silence")
 print("RESULT " + ("ok" if not bad else "bad: " + ", ".join(bad)))'
 }
 
@@ -218,6 +256,10 @@ setval "$C" skinDisplayName "$SKIN"; setval "$C" skinFile "$SKIN.rml"
 setval "$C" windowWidth "$WW"; setval "$C" windowHeight "$WH"
 if [ -f "$SETTINGS" ]; then setval "$SETTINGS" windowX 24; setval "$SETTINGS" windowY 40; fi
 
+# the display awake for the whole run: a sleeping display has no window to record and draws no canvases (caffeinate:
+# -u wakes it, -d keeps it on until this script ends; a locked screen still needs Radek)
+caffeinate -u -t 2 >/dev/null 2>&1 &
+caffeinate -d -w $$ >/dev/null 2>&1 &
 mkdir -p "$LOGDIR"; touch "$TMP/start"
 env "$VAR=$DEMO" "$EXE" >"$TMP/app.out" 2>&1 &
 PID=$!

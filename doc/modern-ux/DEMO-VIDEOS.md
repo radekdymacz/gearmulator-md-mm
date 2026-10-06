@@ -15,6 +15,7 @@ Output, under `temp/videos/<demo>-<date>/` (gitignored; `MDMM_DEMO_OUT` for else
 |---|---|
 | `raw.mov` | the recording: the editor's window content (1440x810 points at 2x, 60 fps max) and the app's sound only |
 | `page.log`, `timeline.txt` | the page's log (each demo step's time and caption) and the cut taken from it |
+| `timeline.json` | the take for other tools (the reels): each bar line, pattern change, section and step on the video's clock, and the raw take's offset (raw time = video time + offset) |
 | `captions.txt` | the copy: captions and end card, editable (below) |
 | `<demo>-16x9.mp4`, `-9x16.mp4`, `-1x1.mp4` | 1920x1080, 1080x1920, 1080x1080; H.264 + AAC, -14 LUFS, true peak under -1 dBFS |
 | `stills/` | a frame of each render: the hook (0.8 s), the middle, the end card |
@@ -44,7 +45,7 @@ Output, under `temp/videos/<demo>-<date>/` (gitignored; `MDMM_DEMO_OUT` for else
    has no `drawtext`, so `mdmm-recorder caption` and `mdmm-recorder card` draw the text as PNGs (the site's look:
    black, white, lime `#c8ff00`, sharp edges, the system sans since Inter is not installed).
 5. **The check** (`check.txt`): integrated loudness near -14 LUFS, no true peak above -0.5 dBFS, no silence over a
-   second anywhere. The script exits non-zero when the demo or the check fails.
+   second, but before the demo's first bar (a song from an empty pattern starts quiet) and a STOP of at most 2.5 s. The script exits non-zero when the demo or the check fails.
 
 ## Changing the copy
 
@@ -53,11 +54,12 @@ Output, under `temp/videos/<demo>-<date>/` (gitignored; `MDMM_DEMO_OUT` for else
 ```
 0.00|2.39|Your Machinedrum, on screen.
 2.54|7.36|Roll a fresh hi-hat groove
-card|3.5|Machinedrum Editor|Free · pay what you want|mdmm.nativekloud.com
+card|3.5|Machinedrum Editor|Free · pay what you want
 ```
 
 `start|end|text` in seconds from the start of the video; about six words a line, two lines at most (`\n` breaks a
-line, a longer line is split in two). `card|seconds|name|line|url` is the end card over the last seconds. Edit it,
+line, a longer line is split in two). `card|seconds|name|line` is the end card over the last seconds; a fifth field
+adds the URL (off until launch: `|mdmm.nativekloud.com`). Edit it,
 then `scripts/mdmm-demo-video.sh render <run folder>`; no app, no re-recording. A captions file given as the last
 argument replaces it; `none` burns in no captions.
 
@@ -91,5 +93,6 @@ then needs the same `Journey.demo(demos, …)` call), add a value to `demos` nam
   says so. No Accessibility or Automation permission is needed (the window is sized through the editor's config and
   fronted by process id).
 - **ffmpeg** with libx264 (`brew install ffmpeg`) and python3.
+- The display must be awake (the script wakes it and keeps it on with `caffeinate`; a locked screen needs Radek).
 - The window must be on screen while the demo plays (a covered page draws no canvases); do not use the Mac meanwhile.
   macOS shows its screen-recording indicator in the menu bar while the recorder runs.

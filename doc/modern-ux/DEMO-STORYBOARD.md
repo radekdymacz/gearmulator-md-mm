@@ -14,7 +14,7 @@ Sources: the page code (`skins/mdStudio/*.js`, the key map), [JOURNEYS.md](JOURN
 |---|---|---|
 | Top bar | PLAY / STOP, POSITION | show (bar 1, bar 72) |
 | | Live recording: REC or Alt+Space, notes from the QWERTY keys | show (bars 7-8) |
-| | Tap tempo T / B | flash (bar 12): taps on the beat, so the tempo stays 120 |
+| | Tap tempo T / B | flash (bar 13): four taps 500 ms apart; the take measured 119.1 BPM |
 | | Tempo drag on the LCD | skip: the song keeps one tempo |
 | | Pattern ‹ ›; a pattern picked while playing is queued | show (bar 24: A to B) |
 | | LCD values LEN, SPD, SWG, ACC | flash (bar 12: SWG 50 to 58 %). Verify that SWG drags |
@@ -63,10 +63,13 @@ Sources: the page code (`skins/mdStudio/*.js`, the key map), [JOURNEYS.md](JOURN
 
 ## 2. The song: 72 bars at 120 BPM (2.0 s a bar, 2:24)
 
-One take, 16-step patterns (one bar), kit with tracks 1-5 = kick, snare, clap, hat, open hat; 6-12 percussion and
-cymbals; 13 and 14 become the RAM recorder and player. Each action lands on the "1" of its bar; the demo waits for
-the machine's step 15 and acts about 100 ms before the bar line (as `demo-md-full` already does). Bar n starts at
-2(n−1) s.
+Implemented as `demo-md-full` (mdDeskJourneys.js). One take, 16-step patterns (one bar): two empty slots side by
+side (A, B) on the kit of the machine's fullest pattern (here K01 TRX UW: 1 kick, 2 snare, 3-5 toms, 6 clap, 7 rim,
+8 cowbell, 9 closed hat, 10 open hat, 11-12 cymbals); the demo finds the tracks by machine. 13 and 14 become the RAM
+recorder and player. A bar clock counts the machine's steps (telemetry); each action starts in time to land on the
+"1" of its bar. When the work before it overruns, the action waits for the next bar line, never lands mid-bar, and
+every later bar moves by the same amount, so the bar numbers below are nominal. The take logs each real bar line
+and pattern change; the run folder's `timeline.json` has them. Bar n starts at about 2(n−1) s.
 
 | Bars | Section | Music | Page | Action | Caption |
 |---|---|---|---|---|---|
@@ -93,14 +96,15 @@ the machine's step 15 and acts about 100 ms before the bar line (as `demo-md-ful
 | 42-44 | | full groove + chops | Sequence | none: the grid plays | |
 | 45-48 | | snare and chops alone | Mix | drag across S keys of snare and player on 45; un-solo on 47 (mutes kept) | Solo with a drag. |
 | 49-52 | | variation B | Sequence | GEN R on the open hat (49), rotate on 51 | |
-| 53-56 | outro | A, B, A, B | Song | Chain: pads A, B (plays at once from the next bar); Arrange row flash | Chain patterns. The track moves on. |
+| 52-56 | outro | stop, then A, B, A, B | Song | Arrange flash, Chain; STOP on the bar line; load the chain (pads A, B: one bank); PLAY starts it at A; the demo checks the machine plays A, B, A, B | Load a chain and start it. |
 | 57-69 | | strip back | Sequence | M on a track every 4 bars: perc (57), chops (61), hats (65), kick last (69) | |
-| 70-72 | | snare and clap, then silence | Sequence | M/S off flash on 71, STOP on the "1" of 72; end card over 70-72 | |
+| 70-72 | | everything back, then silence | Sequence | ⇧-click the muted tracks, let ⇧ go on the bar line (M/S off would unmute the frozen recorder and record again); STOP on a bar line; end card over the last 3.5 s (name and line; the URL is off until launch) | |
 
-Before recording, two things need a fix or a check:
+Found while building it:
 
-- **Chain.** In the last `demo-md-full` run the chain pads did not start a chain (`chain.active` stayed false
-  after both pads). Find out why before bar 53 depends on it.
+- **Chain.** A chain is one bank's: pads from two banks start the draft over, so the chain never formed. A and B
+  are adjacent slots of one bank.
+- **Copy a pattern slot.** ⌥-click in the pattern chooser switched the pattern; the arrows select without switching.
 - **Reverse on slice 1.** ⌥-click on a chop whose slice starts at 0 does nothing (END cannot go below 0). The song
   reverses moved slices only. The editor could say why, or reverse within the slice.
 
