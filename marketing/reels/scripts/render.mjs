@@ -12,11 +12,12 @@ import {basename, dirname, join, resolve} from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {bundle} from '@remotion/bundler';
 import {renderMedia, selectComposition} from '@remotion/renderer';
+import {resolveBars} from './bars.mjs';
 import {FOOTAGE_DIR, validateSpec} from './validate.mjs';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const LUFS = -14;
-const TP_TARGET = -1.5; // aim under the -1 dBTP ceiling: AAC encoding adds a little
+const TP_TARGET = -2.0; // aim under the -1 dBTP ceiling: AAC encoding adds a little
 const TP_CEILING = -1.0;
 
 const args = process.argv.slice(2);
@@ -28,13 +29,15 @@ if (!specPath) {
 const fmtArg = args.includes('--formats') ? args[args.indexOf('--formats') + 1] : '9x16,1x1,16x9';
 const formats = fmtArg.split(',');
 
-const spec = JSON.parse(readFileSync(resolve(specPath), 'utf8'));
-const {errors, warnings} = validateSpec(spec);
+const authored = JSON.parse(readFileSync(resolve(specPath), 'utf8'));
+const {errors, warnings} = validateSpec(authored);
 for (const w of warnings) console.log(`warn: ${w}`);
 if (errors.length) {
 	for (const m of errors) console.error(`error: ${m}`);
 	process.exit(1);
 }
+// inBar / audioInBar → footage seconds, from the recorder's timeline.json
+const spec = resolveBars(FOOTAGE_DIR, authored);
 
 const outDir = join(ROOT, 'out', spec.id);
 mkdirSync(join(outDir, 'stills'), {recursive: true});
@@ -71,6 +74,13 @@ const normalise = (src, dst) => {
 	const filter = `${base}:measured_I=${m.input_i}:measured_TP=${m.input_tp}:measured_LRA=${m.input_lra}:measured_thresh=${m.input_thresh}:offset=${m.target_offset}:linear=true,aresample=48000`;
 	const p2 = ff(['-y', '-i', src, '-c:v', 'copy', '-af', filter, '-c:a', 'aac', '-b:a', '256k', '-ar', '48000', '-movflags', '+faststart', dst]);
 	if (p2.status !== 0) throw new Error(`loudnorm failed: ${p2.stderr.slice(-800)}`);
+};
+
+const limit = (src, dst, gainDb) => {
+	const ceiling = 10 ** ((TP_TARGET - 0.5) / 20);
+	const filter = `volume=${gainDb.toFixed(2)}dB,alimiter=limit=${ceiling.toFixed(4)}:attack=1:release=60:level=false,aresample=48000`;
+	const r = ff(['-y', '-i', src, '-c:v', 'copy', '-af', filter, '-c:a', 'aac', '-b:a', '256k', '-ar', '48000', '-movflags', '+faststart', dst]);
+	if (r.status !== 0) throw new Error(`limiter failed: ${r.stderr.slice(-800)}`);
 };
 
 const fps = spec.fps;
@@ -117,8 +127,16 @@ for (const format of formats) {
 	});
 	process.stdout.write('\n');
 	normalise(raw, out);
+	let {I, TP} = measure(out);
+	// loudnorm stays linear only while the peaks allow it; a quiet break before a
+	// loud drop can leave it short. Then: gain plus a brick-wall limiter, nudged twice.
+	let gain = LUFS - measure(raw).I;
+	for (let pass = 0; pass < 3 && Math.abs(I - LUFS) > 0.3; pass++) {
+		limit(raw, out, gain);
+		({I, TP} = measure(out));
+		gain += LUFS - I;
+	}
 	rmSync(raw);
-	const {I, TP} = measure(out);
 	const ok = Math.abs(I - LUFS) <= 0.5 && TP <= TP_CEILING;
 	failed ||= !ok;
 	report.push(`${basename(out)}: ${I} LUFS, true peak ${TP} dBTP — ${ok ? 'ok' : 'OUT OF SPEC'}`);

@@ -46,7 +46,7 @@ export const LAYOUT: Record<FormatId, Layout> = {
 		camera: [0, 280, 1080, 1120],
 		hook: [60, 250, 870, 280],
 		subs: [60, 1330, 870, 170],
-		hookOnScrim: false,
+		hookOnScrim: true,
 		hookSize: 80,
 		subSize: 68,
 		endScale: 1,

@@ -22,6 +22,8 @@ under the file name the spec expects. Never commit video, ROMs or .syx files.*
 
 ---
 
+> **Delivered 2026-10-06:** the full-song take `demo-md-full-20261006` (feat/demo-recorder, 74 bars with a bar→time timeline) covers FR-01, FR-02 and most of FR-05; it feeds `md-beat-from-scratch`, `md-gen-roll`, `md-sampler-glitch`, `md-mute-drop` and `md-chain-outro`. Link it as `marketing/footage/demo-md-full-20261006.mov` + `.timeline.json`. Still open: FR-03, FR-04/04b, FR-05 (Alt-R all tracks), FR-06, FR-07 (eight tracks), FR-08, FR-09.
+
 ## FR-01 · A beat from scratch → `md-beat-from-scratch` (Radek's #1)
 
 File: `fr-01-md-beat-from-scratch.mov` · length ≈ 35 s · MD, Sequence workspace, MKI plate

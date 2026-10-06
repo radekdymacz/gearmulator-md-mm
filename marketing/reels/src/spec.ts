@@ -29,7 +29,10 @@ export type Shot = {
 	id: string;
 	/** where the shot starts in the footage: a beat index on the music grid ... */
 	inBeat?: number;
-	/** ... or plain seconds (for footage before the music starts) */
+	/** ... or a bar of the recorder's timeline.json (1-based, fractions allowed;
+	 *  resolved to inSeconds by scripts/bars.mjs before rendering) ... */
+	inBar?: number;
+	/** ... or plain seconds of the footage (for footage before the music starts) */
 	inSeconds?: number;
 	/** shot length in beats (cuts land on the beat) */
 	beats: number;
@@ -44,6 +47,9 @@ export type EndCard = {
 	beats: number;
 	/** where the end card's audio comes from (a beat index); omit for silence */
 	audioInBeat?: number;
+	/** or a bar of the recorder's timeline (resolved to audioInSeconds) */
+	audioInBar?: number;
+	audioInSeconds?: number;
 	title: string;
 	line: string;
 	/** optional and off by default (Radek, 2026-10-06: no website link in the reels yet).
@@ -66,6 +72,11 @@ export type ReelSpec = {
 		uiScale: number;
 		/** UI size in points (the recorded window) */
 		ui: [w: number, h: number];
+		/** the recorder's timeline.json in marketing/footage/ (bars on the video clock
+		 *  plus raw.offset); lets shots use inBar */
+		timeline?: string;
+		/** seconds added to every bar time (audio latency of the capture) */
+		syncOffset?: number;
 	};
 	music: {bpm: number; downbeat: number};
 	hook: {text: string; seconds: number};
@@ -124,7 +135,8 @@ export const timeline = (spec: ReelSpec): Timeline => {
 	beatsSoFar += spec.endCard.beats;
 	const endFrames = toFrame(beatsSoFar * b) - endFrom;
 	const audioStart =
-		spec.endCard.audioInBeat === undefined ? null : spec.music.downbeat + spec.endCard.audioInBeat * b;
+		spec.endCard.audioInSeconds ??
+		(spec.endCard.audioInBeat === undefined ? null : spec.music.downbeat + spec.endCard.audioInBeat * b);
 	return {shots, endCard: {from: endFrom, frames: endFrames, audioStart}, totalFrames: endFrom + endFrames};
 };
 

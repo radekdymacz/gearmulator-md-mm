@@ -1,0 +1,74 @@
+{
+  "schema": "mdmm.reel/1",
+  "id": "md-mute-drop",
+  "title": "Mute break, then the drop",
+  "status": "draft",
+  "machine": "md",
+  "fps": 30,
+  "footage": {
+    "file": "demo-md-full-20261006.mov",
+    "uiScale": 2,
+    "ui": [1440, 810],
+    "timeline": "demo-md-full-20261006.timeline.json",
+    "syncOffset": 0.025
+  },
+  "music": { "bpm": 119.1, "downbeat": 0 },
+  "hook": { "text": "Breakdown and drop. *By hand.*", "seconds": 2 },
+  "brief": {
+    "idea": "From the full-song take: one drag across tracks 1-5's M keys (bar 29, Mix), the Alt-drag sweep of the whole kit (bars 41-42), Shift-held M keys armed on the Sequence rail and the drop on bar 46. Every shot starts a beat after the bar line (x.25) so the drag and the drop land inside the shots; the phase is the same all the way, so the groove never skips. Framing keeps every muted track in view (strips 1-8 on Mix, the whole 16-track rail on Sequence).",
+    "footageRequest": "FR-07 is still open for the eight-track version (md-mute-8)",
+    "use": "paid-ok"
+  },
+  "shots": [
+    {
+      "id": "drag-out",
+      "inBar": 28.25,
+      "beats": 8,
+      "camera": [
+        { "at": 0, "region": [0, 0, 1440, 810], "byFormat": { "9x16": [0, 110, 900, 440] } },
+        { "at": 1.8, "region": [0, 110, 860, 484], "byFormat": { "9x16": [0, 130, 720, 400] } }
+      ],
+      "spotlight": [15, 462, 705, 30],
+      "spotlightAt": 2.2,
+      "subtitles": [{ "at": 2.2, "until": 3.9, "text": "One drag. *Five tracks out.*" }]
+    },
+    {
+      "id": "sweep",
+      "inBar": 41.25,
+      "beats": 8,
+      "camera": [
+        { "at": 0, "region": [0, 110, 960, 540], "byFormat": { "9x16": [0, 120, 800, 520] } },
+        { "at": 3.9, "region": [0, 250, 900, 506], "byFormat": { "9x16": [0, 300, 800, 380] } }
+      ],
+      "subtitles": [
+        { "at": 0.1, "until": 1.9, "text": "Alt-drag: the *whole kit*" },
+        { "at": 2.0, "until": 3.9, "text": "sweeps up together." }
+      ]
+    },
+    {
+      "id": "arm-drop",
+      "inBar": 44.25,
+      "beats": 12,
+      "camera": [
+        { "at": 0, "region": [0, 110, 960, 540], "byFormat": { "9x16": [0, 120, 640, 400] } },
+        { "at": 3.3, "region": [0, 110, 960, 540], "byFormat": { "9x16": [0, 120, 640, 400] } },
+        { "at": 4.2, "region": [0, 0, 1440, 810], "byFormat": { "9x16": [0, 100, 900, 520] } }
+      ],
+      "spotlight": [10, 140, 180, 360],
+      "spotlightAt": 0.8,
+      "subtitles": [
+        { "at": 0.6, "until": 3.4, "text": "Hold Shift. *Arm* the drop." },
+        { "at": 3.6, "until": 5.9, "text": "Let go on *the one.*" }
+      ]
+    }
+  ],
+  "endCard": {
+    "beats": 6,
+    "audioInBar": 47.25,
+    "title": "Machinedrum Editor",
+    "line": "Free · pay what you want",
+    "small": "macOS · VST3, AU and app · bring your own ROM"
+  },
+  "audio": { "fadeOutSeconds": 0.8 },
+  "post": { "link": "https://mdmm.nativekloud.com/?utm_source=tiktok&utm_medium=social&utm_campaign=launch&utm_content=md-mute-drop" }
+}

@@ -22,6 +22,7 @@ ffmpeg on the PATH. Rendering never posts or uploads anything.
 ## Writing a spec
 
 - `footage`: file in `marketing/footage/`, UI size in points (1440 x 810) and the pixel scale (2).
+- `footage.timeline` + `inBar` (preferred): point at the demo recorder's `timeline.json` (symlinked next to the footage) and start shots at measured bars (`inBar`, fractions allowed; `endCard.audioInBar`). `scripts/bars.mjs` turns them into footage seconds before rendering, so cuts follow the real song even where the tempo drifts or the transport stopped. `footage.syncOffset` adds the capture's audio latency (0.025 s for the 2026-10-06 takes).
 - `music`: BPM and the footage time of the first downbeat
   (`node scripts/onsets.mjs ../footage/<file> --from <s> --bpm <n>` prints onsets).
 - `shots`: each starts at a beat (`inBeat`) or a time (`inSeconds`, for footage before the

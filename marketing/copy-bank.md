@@ -56,6 +56,15 @@ Rotate: no two consecutive posts on one platform share a hook.*
 30. Paint a bassline. One drag.
 31. Monomachine, on QWERTY.
 
+**Mute break → drop** (`md-mute-drop`)
+34. Breakdown and drop. *By hand.*
+35. One drag. Five tracks out.
+36. Hold Shift. Let go on the one.
+
+**Chain outro** (`md-chain-outro`)
+37. Chain it. *Strip it back.*
+38. A, then B. Then strip it back.
+
 **Real hardware** (`md-hw-midi`, only after FR-09 is filmed working)
 32. Same editor. Real Machinedrum.
 33. Edit the box on your desk.

@@ -26,12 +26,12 @@ reels a week, one long YouTube video every two weeks, one community post a week.
 | Day | Reel (spec) | Hook | Where | Extra | Link |
 |---|---|---|---|---|---|
 | L | md-one-screen ✅ rendered | Whole Machinedrum. One screen. | IG, TT, YS, Feed | Launch posts: Elektronauts (Machinedrum section), r/Elektron, Gearspace (Electronic Music Instruments), GitHub release notes link the site; YT walkthrough goes live | `utm_campaign=launch`, forums → `/get/` |
-| L+1 | md-beat-from-scratch | Empty pattern. Watch it fill. | IG, TT, YS | Reply to launch-thread questions (comment bank) | launch |
-| L+2 | md-sampler-glitch | Sample it. Then break it. | IG, TT, YS | — | launch |
+| L+1 | md-beat-from-scratch ✅ rendered | Empty pattern. Watch it fill. | IG, TT, YS | Reply to launch-thread questions (comment bank) | launch |
+| L+2 | md-sampler-glitch ✅ rendered | Sample it. Then break it. | IG, TT, YS | — | launch |
 | L+3 | md-sysex-import | Old .syx backups? Drop them in. | IG, TT, YS, Feed | — | launch |
-| L+4 | md-gen-roll | One click. New beat. | IG, TT, YS | r/drummachines show-and-tell (text + 1:1 video) | launch |
+| L+4 | md-gen-roll ✅ rendered | One click. New beat. | IG, TT, YS | r/drummachines show-and-tell (text + 1:1 video) | launch |
 | L+5 | mm-piano-roll | A piano roll. For the Monomachine. | IG, TT, YS | Elektronauts Monomachine section post | launch |
-| L+6 | md-mute-8 | Eight tracks. One drag. | IG, TT, YS | Week-1 readout (views, bio clicks, `/get/` visits by utm_content) in this file | launch |
+| L+6 | md-mute-drop ✅ rendered | Breakdown and drop. By hand. | IG, TT, YS | Week-1 readout (views, bio clicks, `/get/` visits by utm_content) in this file | launch |
 
 ## Weeks 2–5 (evergreen)
 
@@ -49,7 +49,7 @@ Switch the bio links to `utm_campaign=evergreen` on L+7.
 | L+21 | mm-piano-roll (B hook) | Paint a bassline. One drag. | IG, TT, YS | — |
 | L+22 | md-sysex-import-ae, Monomachine follow-up (organic only) | Their Monomachine backup, too. | YS, IG | Same credit rules; needs FR-04b |
 | L+24 | md-sampler-glitch (B hook) | Your Machinedrum ate its own groove. | TT, YS | — |
-| L+26 | md-mute-8 (B hook) | Breakdown in one gesture. | IG, TT | — |
+| L+26 | md-chain-outro ✅ rendered | Chain it. Strip it back. | IG, TT | — |
 | L+28 | Readout + next month's plan | — | — | Which hooks earned profile clicks; retire the weakest two |
 | L+29 | YouTube long: "MD + MM Editor: what's new" (next release) | — | YT | Only if a release shipped |
 | L+31 | Best performer, re-cut 1:1 | — | Feed | — |

@@ -1,0 +1,79 @@
+{
+  "schema": "mdmm.reel/1",
+  "id": "md-chain-outro",
+  "title": "Chain, strip back, stop",
+  "status": "draft",
+  "machine": "md",
+  "fps": 30,
+  "footage": {
+    "file": "demo-md-full-20261006.mov",
+    "uiScale": 2,
+    "ui": [1440, 810],
+    "timeline": "demo-md-full-20261006.timeline.json",
+    "syncOffset": 0.025
+  },
+  "music": { "bpm": 119.1, "downbeat": 0 },
+  "hook": { "text": "Chain it. *Strip it back.*", "seconds": 2 },
+  "brief": {
+    "idea": "The song's outro (bars 59-72 of the full-song take): a chain of A and B playing from the Song page, then tracks muted a bar at a time on the Sequence rail, Shift-click to bring everything back for the last two bars, STOP on the bar line as the cut to the end card.",
+    "use": "paid-ok"
+  },
+  "shots": [
+    {
+      "id": "chain-a",
+      "inBar": 59,
+      "beats": 4,
+      "camera": [
+        { "at": 0, "region": [0, 0, 1440, 810], "byFormat": { "9x16": [0, 100, 900, 600] } },
+        { "at": 1.6, "region": [0, 100, 860, 484], "byFormat": { "9x16": [0, 110, 640, 520] } }
+      ]
+    },
+    {
+      "id": "chain-b",
+      "inBar": 60,
+      "beats": 4,
+      "camera": [{ "at": 0, "region": [0, 100, 860, 484], "byFormat": { "9x16": [0, 110, 640, 520] } }],
+      "subtitles": [{ "at": 0.1, "until": 1.9, "text": "A, then B. *On loop.*" }]
+    },
+    {
+      "id": "strip-1",
+      "inBar": 62,
+      "beats": 4,
+      "camera": [{ "at": 0, "region": [0, 110, 960, 540], "byFormat": { "9x16": [0, 120, 640, 400] } }],
+      "subtitles": [{ "at": 0.1, "until": 1.9, "text": "Mute one track a bar." }]
+    },
+    {
+      "id": "strip-2",
+      "inBar": 65,
+      "beats": 4,
+      "camera": [{ "at": 0, "region": [0, 110, 960, 540], "byFormat": { "9x16": [0, 120, 640, 400] } }],
+      "subtitles": [{ "at": 0.1, "until": 1.9, "text": "Strip it *back.*" }]
+    },
+    {
+      "id": "strip-3",
+      "inBar": 68,
+      "beats": 4,
+      "camera": [{ "at": 0, "region": [0, 110, 960, 540], "byFormat": { "9x16": [0, 120, 640, 400] } }],
+      "subtitles": [{ "at": 0.1, "until": 1.9, "text": "Down to the *bones.*" }]
+    },
+    {
+      "id": "all-back",
+      "inBar": 70,
+      "beats": 8,
+      "camera": [
+        { "at": 0, "region": [0, 110, 960, 540], "byFormat": { "9x16": [0, 120, 640, 400] } },
+        { "at": 1.6, "region": [0, 0, 1440, 810], "byFormat": { "9x16": [0, 100, 900, 520] } }
+      ],
+      "subtitles": [{ "at": 0.1, "until": 2.4, "text": "Then *everything* back." }]
+    }
+  ],
+  "endCard": {
+    "beats": 6,
+    "audioInBar": 72,
+    "title": "Machinedrum Editor",
+    "line": "Free · pay what you want",
+    "small": "macOS · VST3, AU and app · bring your own ROM"
+  },
+  "audio": { "fadeOutSeconds": 0.8 },
+  "post": { "link": "https://mdmm.nativekloud.com/?utm_source=instagram&utm_medium=social&utm_campaign=evergreen&utm_content=md-chain-outro" }
+}

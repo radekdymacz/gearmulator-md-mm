@@ -31,9 +31,11 @@ export const validateSpec = (spec, {requireFootage = true} = {}) => {
 	if (firstShot && firstShot.beats * b < spec.hook.seconds) e('the first shot must last at least as long as the hook');
 
 	let prevOut = null;
+	let prevOutBar = null;
+	const zoom16 = [];
 	for (const s of spec.shots) {
 		if (!s.camera?.length) e(`shot ${s.id}: no camera keys`);
-		if (s.inBeat === undefined && s.inSeconds === undefined) e(`shot ${s.id}: needs inBeat or inSeconds`);
+		if (s.inBeat === undefined && s.inSeconds === undefined && s.inBar === undefined) e(`shot ${s.id}: needs inBeat, inBar or inSeconds`);
 		const len = s.beats * b;
 		for (const sub of s.subtitles ?? []) {
 			const n = words(sub.text).length;
@@ -44,8 +46,14 @@ export const validateSpec = (spec, {requireFootage = true} = {}) => {
 		// the groove stays in time across a cut when the source jumps by whole bars
 		if (prevOut !== null && s.inBeat !== undefined && (((s.inBeat - prevOut) % 4) + 4) % 4 !== 0)
 			w(`shot ${s.id}: source jumps ${s.inBeat - prevOut} beats (not whole bars); the groove will skip at the cut`);
+		if (prevOutBar !== null && s.inBar !== undefined && Math.abs(((s.inBar - prevOutBar) % 1 + 1) % 1) > 1e-6 && Math.abs(((s.inBar - prevOutBar) % 1 + 1) % 1 - 1) > 1e-6)
+			w(`shot ${s.id}: source jumps ${(s.inBar - prevOutBar).toFixed(2)} bars (not whole bars); the groove will skip at the cut`);
 		prevOut = s.inBeat !== undefined ? s.inBeat + s.beats : null;
+		prevOutBar = s.inBar !== undefined ? s.inBar + s.beats / 4 : null;
+		zoom16.push(Math.min(...s.camera.map((k) => (k.byFormat?.["16x9"] ?? k.region)[2])));
 	}
+	if (zoom16.length > 1 && zoom16.filter((wd) => wd >= spec.footage.ui[0] * 0.9).length > zoom16.length / 2)
+		w("16:9 barely zooms: most shots frame 90 % or more of the UI width (give the 16:9 regions a 16:9 crop)");
 	const ec = spec.endCard;
 	if (prevOut !== null && ec.audioInBeat !== undefined && (((ec.audioInBeat - prevOut) % 4) + 4) % 4 !== 0)
 		w(`end card audio jumps ${ec.audioInBeat - prevOut} beats (not whole bars)`);
