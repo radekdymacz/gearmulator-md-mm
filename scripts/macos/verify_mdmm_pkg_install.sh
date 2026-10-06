@@ -15,9 +15,13 @@
 #
 # auval loads the AU in this process. Set GEARMULATOR_DATA_ROOT to an empty
 # folder to run it without touching your own Gearmulator settings (CI does).
+#
+# MDMM_EXPECT_SIGNED=1 also requires Developer ID signatures with the hardened
+# runtime on all three bundles and Gatekeeper (spctl) acceptance of the app.
 
 set -euo pipefail
 
+expect_signed="${MDMM_EXPECT_SIGNED:-0}"
 machines=("$@")
 if [[ ${#machines[@]} -eq 0 ]]; then
   machines=(md mm)
@@ -76,6 +80,20 @@ for machine in "${machines[@]}"; do
         echo "ok  ${bundle} ($(lipo -archs "${executable}"))"
       else
         fail "signature does not verify: ${bundle}"
+        continue
+      fi
+      if [[ "${expect_signed}" == "1" ]]; then
+        details="$(codesign -dvvv "${bundle}" 2>&1)"
+        [[ "${details}" == *"Authority=Developer ID Application:"* ]] \
+          || fail "not Developer ID signed: ${bundle}"
+        grep -Eq 'flags=0x[0-9a-f]+\([^)]*runtime' <<< "${details}" || fail "no hardened runtime: ${bundle}"
+        if [[ "${bundle}" == *.app ]]; then
+          if spctl --assess --type execute -vv "${bundle}"; then
+            echo "ok  Gatekeeper accepts ${bundle}"
+          else
+            fail "spctl rejects ${bundle}"
+          fi
+        fi
       fi
     done
   done
