@@ -49,8 +49,9 @@ export const validateSpec = (spec, {requireFootage = true} = {}) => {
 	const ec = spec.endCard;
 	if (prevOut !== null && ec.audioInBeat !== undefined && (((ec.audioInBeat - prevOut) % 4) + 4) % 4 !== 0)
 		w(`end card audio jumps ${ec.audioInBeat - prevOut} beats (not whole bars)`);
-	if (!/^[a-z0-9.-]+\.[a-z]+$/.test(ec.url)) e(`end card url "${ec.url}" should be a bare domain (no https://, no UTM: the card is read, not clicked)`);
-	if (ec.beats * b < 2.5) w('end card under 2.5 s: too short to read the URL');
+	// endCard.url is optional and off by default (no website link in the reels yet)
+	if (ec.url !== undefined && !/^[a-z0-9.-]+\.[a-z]+$/.test(ec.url)) e(`end card url "${ec.url}" should be a bare domain (no https://, no UTM: the card is read, not clicked)`);
+	if (ec.beats * b < 2.5) w('end card under 2.5 s: too short to read');
 	if (spec.post?.link && !/utm_source=.+&utm_medium=.+&utm_campaign=.+&utm_content=.+/.test(spec.post.link))
 		e('post.link must carry utm_source, utm_medium, utm_campaign and utm_content (marketing/UTM.md)');
 	const banned = /\b(official|endorsed|approved by elektron|by elektron)\b/i;

@@ -46,7 +46,9 @@ export type EndCard = {
 	audioInBeat?: number;
 	title: string;
 	line: string;
-	url: string;
+	/** optional and off by default (Radek, 2026-10-06: no website link in the reels yet).
+	 *  When set: a bare domain (no https, no UTM); the card is read, not clicked. */
+	url?: string;
 	/** small honest print under the URL */
 	small?: string;
 };

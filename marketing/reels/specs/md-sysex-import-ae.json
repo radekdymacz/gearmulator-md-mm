@@ -56,7 +56,6 @@
     "audioInBeat": 16,
     "title": "Machinedrum Editor",
     "line": "Free · pay what you want",
-    "url": "mdmm.nativekloud.com",
     "small": "SysEx: Autechre's public 2008 tour backup (autechre.ws). Not affiliated."
   },
   "audio": { "fadeOutSeconds": 0.8 },

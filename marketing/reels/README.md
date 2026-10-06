@@ -31,7 +31,7 @@ ffmpeg on the PATH. Rendering never posts or uploads anything.
   tighter, taller region. `spotlight` dims everything but one region.
 - `subtitles`: per shot, ≤ 6 words a line, `*word*` takes the accent colour.
 - `hook`: ≤ 7 words, on screen for the first 2 s over the first shot.
-- `endCard`: title, "Free · pay what you want", the bare URL, a small honest line;
+- `endCard`: title, "Free · pay what you want", a small honest line, and an optional `url` (off by default: no website link in the reels yet; when on, a bare domain);
   `audioInBeat` picks the bar of groove under it (faded out).
 - `brief.use`: `paid-ok` or `organic-only`. `status`: idea → needs-footage → draft → approved → posted.
 

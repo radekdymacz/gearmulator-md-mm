@@ -77,4 +77,4 @@ Flat, sharp-edged (radius 0 on brand surfaces, small radius only on hardware key
 
 **Fonts.** Inter (the site's `--font-sans`) for everything big; JetBrains Mono for the eyebrow and small print (the site uses the system mono, which cannot be bundled). Both are SIL Open Font License 1.1, bundled from npm (`@fontsource/inter`, `@fontsource/jetbrains-mono`), so rendering never fetches a font and redistribution is allowed. The editor's own LCD pixel font stays inside the footage.
 
-**End card:** "Machinedrum Editor" (or "Monomachine Editor"), "Free · pay what you want", `mdmm.nativekloud.com` large on the accent plate, "macOS · VST3, AU and app · bring your own ROM" small.
+**End card:** "Machinedrum Editor" (or "Monomachine Editor"), "Free · pay what you want", "macOS · VST3, AU and app · bring your own ROM" small. **No website URL in reels for now** (Radek, 2026-10-06): `endCard.url` is optional and off; when it is switched on it shows `mdmm.nativekloud.com` large on the accent plate.

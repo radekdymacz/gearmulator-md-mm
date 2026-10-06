@@ -365,6 +365,7 @@ const EndCardView: React.FC<{spec: ReelSpec; format: FormatId; layout: Layout}> 
 					<span style={{width: 18 * sc, height: 18 * sc, borderRadius: '50%', background: C.led}} />
 					{e.line}
 				</div>
+				{e.url ? (
 				<div
 					style={{
 						marginTop: 70 * sc,
@@ -380,6 +381,7 @@ const EndCardView: React.FC<{spec: ReelSpec; format: FormatId; layout: Layout}> 
 				>
 					{e.url}
 				</div>
+				) : null}
 				{e.small ? (
 					<div
 						style={{
