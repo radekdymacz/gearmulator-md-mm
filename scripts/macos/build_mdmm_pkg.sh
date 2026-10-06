@@ -55,16 +55,32 @@ work_dir="$(mktemp -d "${TMPDIR:-/tmp}/mdmm-pkg.XXXXXX")"
 trap 'rm -rf -- "${work_dir}"' EXIT
 
 # One row per machine: bundle stem | app name in /Applications | id suffix |
-# data folder | machine name | package file name
+# data folder | machine name | package file name | the bundles' identifier
+#
+# The package identifiers (com.nativekloud.mdmm.<md|mm>[.app|.vst3|.au]) name
+# the Installer receipts. They have been the same since 0.1.0 and stay so: a
+# new package upgrades the receipts of an earlier one in place. They are not
+# the bundles' identifiers (SIGNING.md, "Identifiers").
 machines=(
-  "Gearmulator MD|Machinedrum Editor|md|Machinedrum|Machinedrum|Machinedrum-Editor-macOS.pkg"
-  "Gearmulator MM|Monomachine Editor|mm|Monomachine|Monomachine|Monomachine-Editor-macOS.pkg"
+  "Gearmulator MD|Machinedrum Editor|md|Machinedrum|Machinedrum|Machinedrum-Editor-macOS.pkg|com.nativekloud.machinedrum-editor"
+  "Gearmulator MM|Monomachine Editor|mm|Monomachine|Monomachine|Monomachine-Editor-macOS.pkg|com.nativekloud.monomachine-editor"
 )
 
 require_bundle() {
   if [[ ! -d "$1" ]]; then
     echo "Missing bundle: $1" >&2
     exit 3
+  fi
+}
+
+# Every bundle must carry the editor's own identifier, never upstream
+# Gearmulator's local.gearmulator.preview.* one.
+require_bundle_id() {
+  local bundle="$1" expected="$2" actual
+  actual="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "${bundle}/Contents/Info.plist")"
+  if [[ "${actual}" != "${expected}" ]]; then
+    echo "Wrong bundle identifier on ${bundle}: ${actual} (expected ${expected})" >&2
+    exit 8
   fi
 }
 
@@ -136,13 +152,14 @@ package_info="${work_dir}/PackageInfo.template"
 echo '<pkg-info overwrite-permissions="false" relocatable="false"/>' > "${package_info}"
 
 for row in "${machines[@]}"; do
-  IFS='|' read -r stem app_name id_suffix data_folder machine pkg_name <<< "${row}"
+  IFS='|' read -r stem app_name id_suffix data_folder machine pkg_name bundle_id <<< "${row}"
   identifier="com.nativekloud.mdmm.${id_suffix}"
   app="${bundle_dir}/${stem}.app"
   vst3="${bundle_dir}/${stem}.vst3"
   au="${bundle_dir}/${stem}.component"
   for bundle in "${app}" "${vst3}" "${au}"; do
     require_bundle "${bundle}"
+    require_bundle_id "${bundle}" "${bundle_id}"
     refuse_firmware "${bundle}"
   done
 

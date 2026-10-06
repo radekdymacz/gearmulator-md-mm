@@ -575,6 +575,8 @@ namespace pluginLib
 
 	std::string Processor::getConfigFile(const bool _useFxFolder) const
 	{
+		if(!_useFxFolder && !getProperties().configFileName.empty())
+			return getConfigFolder() + getProperties().configFileName;
 		return getConfigFolder(_useFxFolder) + getProductName(_useFxFolder) + ".xml";
 	}
 

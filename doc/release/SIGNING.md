@@ -159,6 +159,68 @@ Dry run without a certificate: `MDMM_SIGN_HARDENED=1 sign_mdmm.sh BUNDLES`
 signs ad-hoc with the hardened runtime and the real entitlements. Then
 `MDMM_EXPECT_SIGNED=0 verify_mdmm_signed.sh OUT` runs the structural checks.
 
+## Identifiers
+
+A Developer ID signature makes the bundle identifier sticky: macOS ties the
+app's permissions (the microphone, TCC) and LaunchServices ties "the app with
+this id" to it. Up to 0.3.0 the editors used upstream Gearmulator's
+`local.gearmulator.preview.GearmulatorMD` / `…MM`, the same as an old upstream
+build (`Gearmulator MD.app` 2.2.9), and LaunchServices opened whichever it
+found. Since the first signed release they have their own:
+
+| Bundles (app, VST3, AU alike) | Up to 0.3.0 | Now |
+|---|---|---|
+| Machinedrum Editor, `Gearmulator MD.*` | `local.gearmulator.preview.GearmulatorMD` | `com.nativekloud.machinedrum-editor` |
+| Monomachine Editor, `Gearmulator MM.*` | `local.gearmulator.preview.GearmulatorMM` | `com.nativekloud.monomachine-editor` |
+
+JUCE gives every format of a target the same identifier, so there is no
+`.vst3`/`.component` suffix. They are set in
+`source/elektron/md/mdJucePlugin/mdmmPlugins.cmake`
+(`GEARMULATOR_PLUGIN_BUNDLE_ID_<target>`, read by `source/juce.cmake`); every
+other synth keeps upstream's. `sign_mdmm.sh` refuses to sign, and
+`build_mdmm_pkg.sh` to package, a bundle with any other identifier;
+`verify_mdmm_signed.sh` and `verify_mdmm_pkg_install.sh` check it.
+
+What does **not** change, so DAW projects and saved state still load:
+
+- the plug-in names hosts show (`Gearmulator MD`, `Gearmulator MM`; AU
+  `Gearmulator Preview: Gearmulator MD`) and the bundle file names;
+- the VST3 class IDs, which JUCE derives from the manufacturer code `GmPv` and
+  the plug-in code `Tmdr` / `Tmno`, never from the bundle identifier
+  (`ABCDEF019182FAEB476D5076546D6472` is the MD processor);
+- the AU type, subtype and manufacturer (`aumu Tmdr GmPv`, `aumu Tmno GmPv`);
+- the plug-in state format, and the data folder
+  `~/Documents/Gearmulator Preview/<Machinedrum|Monomachine>/` with its
+  `roms/`.
+
+**Settings.** The editors no longer share their settings files with an upstream
+build of the same machine (upstream reset the skin to its panel, and could not
+load ours):
+
+| | Up to 0.3.0 (upstream's name) | Now |
+|---|---|---|
+| Editor config | `…/<Machine>/config/Gearmulator MD.xml` | `…/<Machine>/config/Machinedrum Editor.xml` |
+| App settings (audio device, last state) | `~/Library/Application Support/Gearmulator MD.settings` | `~/Library/Application Support/Machinedrum Editor.settings` |
+
+(MM alike.) On the first start without its own file the editor copies the old
+one (`mdSettingsMigration.h`): a copy, never a move, through a temporary file;
+skipped once its own file exists; the old file is left for upstream. If the
+copied file was last written by upstream (skin `mdDefault`), the editor opens
+its own page anyway and writes it back (`keepEditorPage`). ROMs, the patch
+manager and MIDI learn presets stay in the shared data folder.
+
+**Upgrading from 0.1.0 – 0.3.0.** The package identifiers
+(`com.nativekloud.mdmm.md.app` / `.vst3` / `.au`, `…mm…`) are unchanged since
+0.1.0, so a new package upgrades the old receipts in place; the bundles land at
+the same paths (`BundleIsRelocatable=false`, `BundleHasStrictIdentifier=false`,
+so Installer overwrites the bundle there even though its identifier changed).
+macOS asks again for microphone access the first time the new app uses an
+input (the old grant belonged to the ad-hoc signed app). Saved window state
+under the old identifier is simply left behind. Not yet tried on a Mac with
+0.3.0 installed: install the new package over it, then check
+`pkgutil --pkg-info com.nativekloud.mdmm.md.app` shows the new version and
+`verify_mdmm_pkg_install.sh` passes.
+
 ## Hardened runtime and the JIT
 
 The DSP56300 emulator recompiles DSP code with asmjit 1.10 (`JitRuntime`).

@@ -102,12 +102,28 @@ sign_nested() {
   done <<< "${sorted}"
 }
 
+# The editors' own bundle identifiers (SIGNING.md, "Identifiers"). A Developer ID
+# signature makes the identifier sticky (macOS ties the app's permissions, such as
+# the microphone, to it), so a bundle still carrying upstream Gearmulator's
+# local.gearmulator.preview.* identifier is refused before it is signed.
+expected_bundle_id() {
+  case "$1" in
+    "Gearmulator MD") echo "com.nativekloud.machinedrum-editor" ;;
+    "Gearmulator MM") echo "com.nativekloud.monomachine-editor" ;;
+  esac
+}
+
 signed_any=0
 for stem in "Gearmulator MD" "Gearmulator MM"; do
   for ext in app vst3 component; do
     bundle="${bundle_dir}/${stem}.${ext}"
     if [[ ! -d "${bundle}" ]]; then
       echo "Missing bundle: ${bundle}" >&2
+      exit 3
+    fi
+    bundle_id="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "${bundle}/Contents/Info.plist")"
+    if [[ "${bundle_id}" != "$(expected_bundle_id "${stem}")" ]]; then
+      echo "Wrong bundle identifier on ${bundle}: ${bundle_id} (expected $(expected_bundle_id "${stem}"))" >&2
       exit 3
     fi
     echo "Signing ${bundle} (identity ${identity}, hardened ${hardened})"
@@ -120,6 +136,10 @@ for stem in "Gearmulator MD" "Gearmulator MM"; do
     codesign --verify --strict --deep "${bundle}"
 
     details="$(codesign -dvvv "${bundle}" 2>&1)"
+    if ! grep -qx "Identifier=${bundle_id}" <<< "${details}"; then
+      echo "Signature identifier is not ${bundle_id} on ${bundle}" >&2
+      exit 4
+    fi
     if [[ "${hardened}" == "1" ]] && ! grep -Eq 'flags=0x[0-9a-f]+\([^)]*runtime' <<< "${details}"; then
       echo "Hardened runtime flag missing on ${bundle}" >&2
       exit 4

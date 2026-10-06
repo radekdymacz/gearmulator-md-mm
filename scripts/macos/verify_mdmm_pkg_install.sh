@@ -35,11 +35,11 @@ fail() {
 
 for machine in "${machines[@]}"; do
   case "${machine}" in
-    md) stem="Gearmulator MD"; app="Machinedrum Editor"; subtype="Tmdr" ;;
-    mm) stem="Gearmulator MM"; app="Monomachine Editor"; subtype="Tmno" ;;
+    md) stem="Gearmulator MD"; app="Machinedrum Editor"; subtype="Tmdr"; bundle_id="com.nativekloud.machinedrum-editor" ;;
+    mm) stem="Gearmulator MM"; app="Monomachine Editor"; subtype="Tmno"; bundle_id="com.nativekloud.monomachine-editor" ;;
     *) echo "unknown machine: ${machine} (use md or mm)" >&2; exit 2 ;;
   esac
-  id="com.nativekloud.mdmm.${machine}"
+  id="com.nativekloud.mdmm.${machine}"	# the receipts' (package) identifier, not the bundles'
   echo "== ${app}"
 
   # The domain it is installed in: the root of Applications and Library.
@@ -76,6 +76,8 @@ for machine in "${machines[@]}"; do
         fail "missing ${executable}"
         continue
       fi
+      actual_id="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "${bundle}/Contents/Info.plist" 2>/dev/null || true)"
+      [[ "${actual_id}" == "${bundle_id}" ]] || fail "bundle identifier ${actual_id:-missing} is not ${bundle_id}: ${bundle}"
       if codesign --verify --deep --strict "${bundle}" 2>/dev/null; then
         echo "ok  ${bundle} ($(lipo -archs "${executable}"))"
       else

@@ -45,7 +45,10 @@ ok() {
 # One signed bundle: valid signature, and with EXPECT_SIGNED the Developer ID
 # authority, hardened runtime, timestamp, a stapled ticket and (apps) allow-jit.
 check_bundle() {
-  local bundle="$1" kind="$2" details entitlements
+  local bundle="$1" kind="$2" details entitlements actual_id
+  actual_id="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "${bundle}/Contents/Info.plist" 2>/dev/null || true)"
+  [[ "${actual_id}" == "${bundle_id}" ]] \
+    || fail "bundle identifier ${actual_id:-missing} is not ${bundle_id}: ${bundle}"
   if ! codesign --verify --strict --deep "${bundle}" 2>/dev/null; then
     fail "signature does not verify: ${bundle}"
     return
@@ -67,9 +70,11 @@ check_bundle() {
   ok "Developer ID, hardened, notarized: ${bundle##*/}"
 }
 
-for row in "Machinedrum-Editor-macOS|Machinedrum Editor|Gearmulator MD|md" \
-           "Monomachine-Editor-macOS|Monomachine Editor|Gearmulator MM|mm"; do
-  IFS='|' read -r base app_name stem id_suffix <<< "${row}"
+# The bundles' own identifiers (SIGNING.md, "Identifiers"), never upstream
+# Gearmulator's local.gearmulator.preview.*.
+for row in "Machinedrum-Editor-macOS|Machinedrum Editor|Gearmulator MD|md|com.nativekloud.machinedrum-editor" \
+           "Monomachine-Editor-macOS|Monomachine Editor|Gearmulator MM|mm|com.nativekloud.monomachine-editor"; do
+  IFS='|' read -r base app_name stem id_suffix bundle_id <<< "${row}"
   pkg="${artifact_dir}/${base}.pkg"
   dmg="${artifact_dir}/${base}.dmg"
   echo "== ${app_name}"

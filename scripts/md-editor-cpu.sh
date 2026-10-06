@@ -7,8 +7,8 @@
 #   scripts/md-editor-cpu.sh [path to "Gearmulator MD.app"]
 set -e
 APP=${1:-"$(cd "$(dirname "$0")/.." && pwd)/bin/plugins/Release/Standalone/Gearmulator MD.app"}
-C="$HOME/Documents/Gearmulator Preview/Machinedrum/config/Gearmulator MD.xml"
-SETTINGS="$HOME/Library/Application Support/Gearmulator MD.settings"
+C="$HOME/Documents/Gearmulator Preview/Machinedrum/config/Machinedrum Editor.xml"
+SETTINGS="$HOME/Library/Application Support/Machinedrum Editor.settings"
 LOG="$HOME/Library/Caches/Gearmulator MD/gearmulator-mdStudio.log"
 TMP=$(mktemp -d)
 cp -p "$C" "$TMP/config.xml"; cp -p "$SETTINGS" "$TMP/settings" 2>/dev/null || true
@@ -36,7 +36,7 @@ for phase in stopped playing-seq playing-mix; do
 	a1=$(secs $PID); w1=$(secs $web); g1=$(secs "${gpu:-0}"); t1=$(date +%s)
 	report "$phase" "$(echo "($a1-$a0)*100/($t1-$t0)" | bc -l)" "$(echo "(${w1:-0}-${w0:-0})*100/($t1-$t0)" | bc -l)" "$(echo "(${g1:-0}-${g0:-0})*100/($t1-$t0)" | bc -l)"
 done
-osascript -e 'tell application id "local.gearmulator.preview.GearmulatorMD" to quit' >/dev/null 2>&1 || true
+osascript -e 'tell application id "com.nativekloud.machinedrum-editor" to quit' >/dev/null 2>&1 || true
 sleep 3; kill $PID 2>/dev/null || true
 sysctl -n hw.model machdep.cpu.brand_string | tr '\n' ' '; echo "($(sysctl -n hw.ncpu) cores)"
 grep -E " audio: | window: " "$LOG" | tail -2 || true
