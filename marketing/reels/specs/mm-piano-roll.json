@@ -1,0 +1,57 @@
+{
+  "schema": "mdmm.reel/1",
+  "id": "mm-piano-roll",
+  "title": "Monomachine: paint a bassline in the piano roll",
+  "status": "needs-footage",
+  "machine": "mm",
+  "fps": 30,
+  "footage": { "file": "fr-08-mm-piano-roll.mov", "uiScale": 2, "ui": [1440, 810] },
+  "music": { "bpm": 120, "downbeat": 0 },
+  "hook": { "text": "A piano roll. *For the Monomachine.*", "seconds": 2 },
+  "brief": {
+    "idea": "The Monomachine has no piano roll; the editor gives it one. Paint a bassline by dragging across steps, add a slide, play the black keys on the QWERTY keyboard (W E T Y U), then Perform's joystick for a sweep. Ends on the Monomachine end card.",
+    "footageRequest": "FR-08",
+    "use": "paid-ok",
+    "openQuestions": ["Camera regions are placeholders: set them from FR-08 stills (the MM Sequence page differs from the MD's)."]
+  },
+  "shots": [
+    {
+      "id": "empty-roll",
+      "inBeat": 0,
+      "beats": 4,
+      "camera": [{ "at": 0, "region": [0, 0, 1440, 810] }, { "at": 1.8, "region": [0, 110, 1440, 460], "byFormat": { "9x16": [0, 110, 720, 520] } }],
+      "subtitles": [{ "at": 1.0, "until": 2.0, "text": "Drag to paint." }]
+    },
+    {
+      "id": "paint",
+      "inBeat": 4,
+      "beats": 8,
+      "camera": [{ "at": 0, "region": [0, 110, 1440, 460], "byFormat": { "9x16": [0, 110, 720, 520] } }, { "at": 3.5, "region": [200, 110, 1240, 460], "byFormat": { "9x16": [400, 110, 720, 520] } }],
+      "subtitles": [{ "at": 0.1, "until": 1.9, "text": "One drag. *One phrase.*" }, { "at": 2.1, "until": 3.9, "text": "Alt-drag *erases.*" }]
+    },
+    {
+      "id": "keys",
+      "inBeat": 12,
+      "beats": 4,
+      "camera": [{ "at": 0, "region": [0, 0, 1440, 810] }],
+      "subtitles": [{ "at": 0.1, "until": 1.9, "text": "Play it on *QWERTY.*" }]
+    },
+    {
+      "id": "perform",
+      "inBeat": 16,
+      "beats": 8,
+      "camera": [{ "at": 0, "region": [0, 0, 1440, 810] }, { "at": 2.0, "region": [700, 200, 740, 560] }],
+      "subtitles": [{ "at": 0.1, "until": 2.4, "text": "Then *perform* it." }]
+    }
+  ],
+  "endCard": {
+    "beats": 6,
+    "audioInBeat": 16,
+    "title": "Monomachine Editor",
+    "line": "Free · pay what you want",
+    "url": "mdmm.nativekloud.com",
+    "small": "macOS · VST3, AU and app · bring your own ROM"
+  },
+  "audio": { "fadeOutSeconds": 0.8 },
+  "post": { "link": "https://mdmm.nativekloud.com/?utm_source=instagram&utm_medium=social&utm_campaign=launch&utm_content=mm-piano-roll" }
+}

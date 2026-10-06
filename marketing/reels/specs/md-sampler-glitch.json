@@ -1,0 +1,82 @@
+{
+  "schema": "mdmm.reel/1",
+  "id": "md-sampler-glitch",
+  "title": "Sampler glitch",
+  "status": "needs-footage",
+  "machine": "md",
+  "fps": 30,
+  "footage": { "file": "fr-02-md-sampler-glitch.mov", "uiScale": 2, "ui": [1440, 810] },
+  "music": { "bpm": 120, "downbeat": 0 },
+  "hook": { "text": "Sample it. *Then break it.*", "seconds": 2 },
+  "brief": {
+    "idea": "Radek's #2. The Sampler workspace: 'Set up sampling' (recorder, then player), capture a loop from the running pattern, see it land as a waveform tile, then glitch it per step (retrigger, start/slice, pitch and filter locks). Shows the sampler is real, not a menu.",
+    "footageRequest": "FR-02",
+    "use": "paid-ok",
+    "openQuestions": [
+      "Camera regions below are placeholders (the Sampler page layout was not in the first recording): set them from the FR-02 stills.",
+      "Set music.downbeat with scripts/onsets.mjs; inBeat values from page.log."
+    ]
+  },
+  "shots": [
+    {
+      "id": "setup-card",
+      "inBeat": 0,
+      "beats": 4,
+      "camera": [
+        { "at": 0, "region": [0, 0, 1440, 810] },
+        { "at": 1.8, "region": [420, 200, 600, 420] }
+      ],
+      "subtitles": [{ "at": 1.0, "until": 2.0, "text": "Recorder, then player." }]
+    },
+    {
+      "id": "capture",
+      "inBeat": 8,
+      "beats": 4,
+      "camera": [{ "at": 0, "region": [0, 110, 1440, 400], "byFormat": { "9x16": [0, 110, 640, 420] } }],
+      "subtitles": [{ "at": 0.1, "until": 1.9, "text": "Capture the *groove.*" }]
+    },
+    {
+      "id": "tiles",
+      "inBeat": 12,
+      "beats": 4,
+      "camera": [{ "at": 0, "region": [0, 110, 1440, 400], "byFormat": { "9x16": [0, 110, 640, 420] } }],
+      "subtitles": [{ "at": 0.1, "until": 1.9, "text": "Real waveforms. *Every slot.*" }]
+    },
+    {
+      "id": "retrigger",
+      "inBeat": 16,
+      "beats": 4,
+      "camera": [{ "at": 0, "region": [200, 570, 1240, 230], "byFormat": { "9x16": [200, 540, 720, 260] } }],
+      "subtitles": [{ "at": 0.1, "until": 1.9, "text": "Retrigger. *Per step.*" }]
+    },
+    {
+      "id": "pitch-locks",
+      "inBeat": 20,
+      "beats": 4,
+      "camera": [{ "at": 0, "region": [200, 570, 1240, 230], "byFormat": { "9x16": [200, 540, 720, 260] } }],
+      "subtitles": [{ "at": 0.1, "until": 1.9, "text": "Pitch it. *Lock it.*" }]
+    },
+    {
+      "id": "result",
+      "inBeat": 24,
+      "beats": 6,
+      "camera": [
+        { "at": 0, "region": [0, 110, 1440, 400], "byFormat": { "9x16": [0, 120, 620, 390] } },
+        { "at": 2.8, "region": [0, 0, 1440, 810] }
+      ],
+      "subtitles": [{ "at": 0.2, "until": 2.8, "text": "Your Machinedrum, *glitched.*" }]
+    }
+  ],
+  "endCard": {
+    "beats": 6,
+    "audioInBeat": 30,
+    "title": "Machinedrum Editor",
+    "line": "Free · pay what you want",
+    "url": "mdmm.nativekloud.com",
+    "small": "macOS · VST3, AU and app · bring your own ROM"
+  },
+  "audio": { "fadeOutSeconds": 0.8 },
+  "post": {
+    "link": "https://mdmm.nativekloud.com/?utm_source=instagram&utm_medium=social&utm_campaign=launch&utm_content=md-sampler-glitch"
+  }
+}

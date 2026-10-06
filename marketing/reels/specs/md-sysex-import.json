@@ -1,0 +1,68 @@
+{
+  "schema": "mdmm.reel/1",
+  "id": "md-sysex-import",
+  "title": "SysEx import (neutral kit)",
+  "status": "needs-footage",
+  "machine": "md",
+  "fps": 30,
+  "footage": { "file": "fr-03-md-sysex-import.mov", "uiScale": 2, "ui": [1440, 810] },
+  "music": { "bpm": 120, "downbeat": 0 },
+  "hook": { "text": "Old .syx backups? *Drop them in.*", "seconds": 2 },
+  "brief": {
+    "idea": "Radek's #3, the paid/ad cut. Drop a .syx on the window (or Import SysEx... in the kit library): the preview panel lists what the file holds and what it overwrites, import is one undo step, then pick a pattern and play. Uses a neutral file we own (exported from our own demo project), never a third party's.",
+    "footageRequest": "FR-03",
+    "use": "paid-ok",
+    "openQuestions": [
+      "Which .syx: export our own demo kits/patterns with Export SysEx... into a file named e.g. mdmm-demo-kits.syx, then re-import it into a fresh project. No third-party content in this cut.",
+      "Set music.downbeat (scripts/onsets.mjs) and inBeat/inSeconds from page.log. The import itself happens before PLAY, so its shots use inSeconds."
+    ]
+  },
+  "shots": [
+    {
+      "id": "drop",
+      "inSeconds": 2,
+      "beats": 4,
+      "camera": [
+        { "at": 0, "region": [0, 0, 1440, 810] },
+        { "at": 1.8, "region": [360, 120, 720, 560] }
+      ],
+      "subtitles": [{ "at": 1.0, "until": 2.0, "text": "Drop the .syx." }]
+    },
+    {
+      "id": "preview",
+      "inSeconds": 5,
+      "beats": 4,
+      "camera": [{ "at": 0, "region": [360, 120, 720, 560] }],
+      "subtitles": [{ "at": 0.1, "until": 1.9, "text": "See what it *overwrites.*" }]
+    },
+    {
+      "id": "imported",
+      "inSeconds": 9,
+      "beats": 4,
+      "camera": [{ "at": 0, "region": [0, 110, 1440, 600], "byFormat": { "9x16": [0, 110, 720, 600] } }],
+      "subtitles": [{ "at": 0.1, "until": 1.9, "text": "Kits and patterns. *One undo.*" }]
+    },
+    {
+      "id": "play",
+      "inBeat": 0,
+      "beats": 12,
+      "camera": [
+        { "at": 0, "region": [0, 0, 1440, 810] },
+        { "at": 3.5, "region": [0, 110, 1440, 400], "byFormat": { "9x16": [0, 120, 620, 390] } }
+      ],
+      "subtitles": [{ "at": 0.2, "until": 3.6, "text": "Press play. *It's back.*" }]
+    }
+  ],
+  "endCard": {
+    "beats": 6,
+    "audioInBeat": 12,
+    "title": "Machinedrum Editor",
+    "line": "Free · pay what you want",
+    "url": "mdmm.nativekloud.com",
+    "small": "macOS · VST3, AU and app · bring your own ROM"
+  },
+  "audio": { "fadeOutSeconds": 0.8 },
+  "post": {
+    "link": "https://mdmm.nativekloud.com/?utm_source=instagram&utm_medium=social&utm_campaign=launch&utm_content=md-sysex-import"
+  }
+}

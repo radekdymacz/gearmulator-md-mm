@@ -1,0 +1,64 @@
+{
+  "schema": "mdmm.reel/1",
+  "id": "md-gen-roll",
+  "title": "Roll a new beat in one click (GEN)",
+  "status": "needs-footage",
+  "machine": "md",
+  "fps": 30,
+  "footage": { "file": "fr-05-md-gen-roll.mov", "uiScale": 2, "ui": [1440, 810] },
+  "music": { "bpm": 120, "downbeat": 0 },
+  "hook": { "text": "One click. *New beat.*", "seconds": 2 },
+  "brief": {
+    "idea": "Alt-click GEN's R: every track rolls at once, four times in a row, each roll one bar, each a different groove; then Cmd+Z back to the one you liked. The undo is the punchline.",
+    "footageRequest": "FR-05",
+    "use": "paid-ok",
+    "openQuestions": ["Set music.downbeat and inBeat values from the FR-05 recording (one roll per 2 bars assumed)."]
+  },
+  "shots": [
+    {
+      "id": "roll-1",
+      "inBeat": 0,
+      "beats": 4,
+      "camera": [{ "at": 0, "region": [0, 0, 1440, 810] }, { "at": 1.8, "region": [0, 110, 1440, 460], "byFormat": { "9x16": [600, 250, 820, 420] } }],
+      "subtitles": [{ "at": 1.0, "until": 2.0, "text": "Roll." }]
+    },
+    {
+      "id": "roll-2",
+      "inBeat": 8,
+      "beats": 4,
+      "camera": [{ "at": 0, "region": [0, 110, 1440, 460], "byFormat": { "9x16": [600, 250, 820, 420] } }],
+      "subtitles": [{ "at": 0.1, "until": 1.9, "text": "Roll *again.*" }]
+    },
+    {
+      "id": "roll-3",
+      "inBeat": 16,
+      "beats": 4,
+      "camera": [{ "at": 0, "region": [0, 110, 1440, 460], "byFormat": { "9x16": [600, 250, 820, 420] } }],
+      "subtitles": [{ "at": 0.1, "until": 1.9, "text": "Every track. *One click.*" }]
+    },
+    {
+      "id": "roll-4",
+      "inBeat": 24,
+      "beats": 4,
+      "camera": [{ "at": 0, "region": [0, 110, 1440, 460], "byFormat": { "9x16": [600, 250, 820, 420] } }],
+      "subtitles": [{ "at": 0.1, "until": 1.9, "text": "And *again.*" }]
+    },
+    {
+      "id": "undo",
+      "inBeat": 32,
+      "beats": 8,
+      "camera": [{ "at": 0, "region": [1080, 10, 360, 90], "byFormat": { "9x16": [1080, 10, 360, 160] } }, { "at": 1.5, "region": [0, 110, 1440, 460], "byFormat": { "9x16": [0, 120, 620, 390] } }],
+      "subtitles": [{ "at": 0.1, "until": 1.6, "text": "Liked the second? *⌘Z.*" }, { "at": 1.9, "until": 3.9, "text": "Back. Every step *undoes.*" }]
+    }
+  ],
+  "endCard": {
+    "beats": 6,
+    "audioInBeat": 36,
+    "title": "Machinedrum Editor",
+    "line": "Free · pay what you want",
+    "url": "mdmm.nativekloud.com",
+    "small": "macOS · VST3, AU and app · bring your own ROM"
+  },
+  "audio": { "fadeOutSeconds": 0.8 },
+  "post": { "link": "https://mdmm.nativekloud.com/?utm_source=tiktok&utm_medium=social&utm_campaign=launch&utm_content=md-gen-roll" }
+}

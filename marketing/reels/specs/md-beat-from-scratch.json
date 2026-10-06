@@ -1,0 +1,82 @@
+{
+  "schema": "mdmm.reel/1",
+  "id": "md-beat-from-scratch",
+  "title": "A beat from scratch",
+  "status": "needs-footage",
+  "machine": "md",
+  "fps": 30,
+  "footage": { "file": "fr-01-md-beat-from-scratch.mov", "uiScale": 2, "ui": [1440, 810] },
+  "music": { "bpm": 120, "downbeat": 0 },
+  "hook": { "text": "Empty pattern. *Watch it fill.*", "seconds": 2 },
+  "brief": {
+    "idea": "Radek's #1. An empty pattern turns into a full groove in about 12 seconds of fast cuts; the sound builds as each track goes in. Every cut is one bar, so the loop never skips.",
+    "footageRequest": "FR-01",
+    "use": "paid-ok",
+    "openQuestions": [
+      "Set music.downbeat after recording: node scripts/onsets.mjs ../footage/fr-01-md-beat-from-scratch.mov --bpm 120",
+      "Set every inBeat from the recording's page.log (which bar each track went in); the values below assume one track per 2 bars from bar 1."
+    ]
+  },
+  "shots": [
+    {
+      "id": "empty-kick",
+      "inBeat": 0,
+      "beats": 4,
+      "camera": [
+        { "at": 0, "region": [0, 0, 1440, 810] },
+        { "at": 1.8, "region": [0, 120, 1440, 60], "byFormat": { "9x16": [0, 120, 620, 120] } }
+      ],
+      "subtitles": [{ "at": 1.0, "until": 2.0, "text": "Kick." }]
+    },
+    {
+      "id": "snare",
+      "inBeat": 8,
+      "beats": 4,
+      "camera": [{ "at": 0, "region": [0, 120, 1440, 90], "byFormat": { "9x16": [0, 120, 620, 160] } }],
+      "subtitles": [{ "at": 0.1, "until": 1.9, "text": "*Snare.*" }]
+    },
+    {
+      "id": "hats-gen",
+      "inBeat": 16,
+      "beats": 4,
+      "camera": [{ "at": 0, "region": [0, 300, 1440, 280], "byFormat": { "9x16": [740, 250, 700, 330] } }],
+      "subtitles": [{ "at": 0.1, "until": 1.9, "text": "Hats: one *GEN* roll." }]
+    },
+    {
+      "id": "perc",
+      "inBeat": 24,
+      "beats": 4,
+      "camera": [{ "at": 0, "region": [0, 120, 1440, 380], "byFormat": { "9x16": [0, 120, 620, 390] } }],
+      "subtitles": [{ "at": 0.1, "until": 1.9, "text": "Claps. Toms. *Accents.*" }]
+    },
+    {
+      "id": "locks",
+      "inBeat": 32,
+      "beats": 4,
+      "camera": [{ "at": 0, "region": [200, 570, 1240, 230], "byFormat": { "9x16": [200, 560, 720, 250] } }],
+      "subtitles": [{ "at": 0.1, "until": 1.9, "text": "Draw the filter *locks.*" }]
+    },
+    {
+      "id": "full",
+      "inBeat": 40,
+      "beats": 4,
+      "camera": [
+        { "at": 0, "region": [0, 110, 1440, 400], "byFormat": { "9x16": [0, 120, 620, 390] } },
+        { "at": 2.0, "region": [0, 0, 1440, 810] }
+      ],
+      "subtitles": [{ "at": 0.2, "until": 1.9, "text": "Twelve seconds. *Done.*" }]
+    }
+  ],
+  "endCard": {
+    "beats": 6,
+    "audioInBeat": 40,
+    "title": "Machinedrum Editor",
+    "line": "Free · pay what you want",
+    "url": "mdmm.nativekloud.com",
+    "small": "macOS · VST3, AU and app · bring your own ROM"
+  },
+  "audio": { "fadeOutSeconds": 0.8 },
+  "post": {
+    "link": "https://mdmm.nativekloud.com/?utm_source=instagram&utm_medium=social&utm_campaign=launch&utm_content=md-beat-from-scratch"
+  }
+}

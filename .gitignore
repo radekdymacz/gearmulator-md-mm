@@ -23,3 +23,10 @@ claude*.bat
 # Local tool output (wrangler/miniflare cache holds the caller's IP location)
 site/node_modules/
 site/.wrangler/
+
+# marketing reels: footage, renders and node_modules stay local (never commit video or ROMs)
+marketing/footage/
+marketing/reels/out/
+marketing/reels/node_modules/
+marketing/**/*.syx
+.remotion/

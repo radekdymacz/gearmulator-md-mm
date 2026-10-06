@@ -1,0 +1,82 @@
+{
+  "schema": "mdmm.reel/1",
+  "id": "md-one-screen",
+  "title": "Whole Machinedrum on one screen",
+  "status": "draft",
+  "machine": "md",
+  "fps": 30,
+  "footage": {
+    "file": "demo-md-groove-20261006.mov",
+    "uiScale": 2,
+    "ui": [1440, 810]
+  },
+  "music": { "bpm": 92, "downbeat": 9.56 },
+  "hook": { "text": "Whole Machinedrum. *One screen.*", "seconds": 2 },
+  "shots": [
+    {
+      "id": "grid",
+      "inBeat": 0,
+      "beats": 4,
+      "camera": [
+        { "at": 0, "region": [0, 0, 1440, 810] },
+        { "at": 1.7, "region": [0, 0, 1440, 810] },
+        { "at": 2.6, "region": [0, 110, 1440, 400], "byFormat": { "9x16": [0, 120, 600, 390] } }
+      ],
+      "subtitles": [{ "at": 2.0, "until": 2.6, "text": "All 16 tracks. Playing." }]
+    },
+    {
+      "id": "gen",
+      "inBeat": 4,
+      "beats": 6,
+      "camera": [
+        { "at": 0, "region": [0, 300, 1440, 280], "byFormat": { "9x16": [740, 250, 700, 330] } },
+        { "at": 3.9, "region": [120, 310, 1320, 260], "byFormat": { "9x16": [600, 260, 680, 320] } }
+      ],
+      "subtitles": [
+        { "at": 0.1, "until": 2.5, "text": "*GEN* rolls a new hi-hat" },
+        { "at": 2.6, "until": 3.9, "text": "Not feeling it? *Roll again.*" }
+      ]
+    },
+    {
+      "id": "mute-drag",
+      "inBeat": 14,
+      "beats": 7,
+      "camera": [
+        { "at": 0, "region": [0, 115, 1440, 410], "byFormat": { "9x16": [0, 120, 560, 420] } },
+        { "at": 4.5, "region": [0, 125, 1380, 390], "byFormat": { "9x16": [20, 140, 520, 390] } }
+      ],
+      "spotlight": [20, 462, 1400, 30],
+      "spotlightAt": 0.25,
+      "subtitles": [
+        { "at": 0.3, "until": 2.6, "text": "Mute three tracks. *One drag.*" },
+        { "at": 3.0, "until": 4.5, "text": "Drag back. *All in.*" }
+      ]
+    },
+    {
+      "id": "alt-drag",
+      "inBeat": 29,
+      "beats": 6,
+      "camera": [
+        { "at": 0, "region": [200, 400, 1230, 200], "byFormat": { "9x16": [340, 320, 640, 300] } },
+        { "at": 3.9, "region": [360, 405, 980, 190], "byFormat": { "9x16": [380, 340, 580, 270] } }
+      ],
+      "subtitles": [
+        { "at": 0.2, "until": 2.6, "text": "*Alt*-drag: the whole kit sweeps" },
+        { "at": 2.8, "until": 3.9, "text": "One undo step." }
+      ]
+    }
+  ],
+  "endCard": {
+    "beats": 6,
+    "audioInBeat": 7,
+    "title": "Machinedrum Editor",
+    "line": "Free · pay what you want",
+    "url": "mdmm.nativekloud.com",
+    "small": "macOS · VST3, AU and app · bring your own ROM"
+  },
+  "audio": { "fadeOutSeconds": 0.8 },
+  "post": {
+    "link": "https://mdmm.nativekloud.com/?utm_source=instagram&utm_medium=social&utm_campaign=launch&utm_content=md-one-screen",
+    "notes": "Per-platform links: marketing/UTM.md. Caption: copy-bank.md, 'One screen'."
+  }
+}
