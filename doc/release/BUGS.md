@@ -55,7 +55,8 @@ where it came from, the setup, what happens, what should happen, status.*
 - **What happens (expected):** JUCE 7's default Windows web view is the old Internet Explorer control, not WebView2. The editor pages use modern JavaScript, so the page most likely does not load.
 - **Should:** use WebView2 (the WebView2 SDK in the Windows build), then check the page bridge (iframe navigations and `javascript:` URLs) on a real Windows machine.
 - **Confirmed 2026-10-07:** a Discord beta tester on Windows 11 (Monomachine Editor) sees Internet Explorer's dialog "Error in the script on this page … Syntax error" for the page in `AppData/Local/Temp/gearmulator-mmStudio-….html`, then a black window.
-- **Status:** open, WebView2 fix in progress. The 0.3.1 Windows zip is marked "not tested".
+- **Fix (branch `feat/windows-webview2`):** the editors drive WebView2 themselves (static loader, no extra DLL), the bridge goes over postMessage and ExecuteScript, no IE fallback (a missing runtime shows a message with Microsoft's download link). CI start test on Windows: both standalones and both VST3s open the page and round-trip with the plug-in.
+- **Status:** fixed for 0.3.2; not yet tried in a real Windows DAW.
 
 ## B-001 · Plug-in window too big in Ableton Live
 
