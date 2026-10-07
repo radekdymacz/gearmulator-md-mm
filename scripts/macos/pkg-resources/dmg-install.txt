@@ -39,4 +39,4 @@ Copyright (C) The Usual Suspects (Gearmulator), joelanders (Machinedrum and
 Monomachine emulation), and NativeKloud Consulting Radoslaw Dymacz (editors).
 
 Site: https://mdmm.dev
-Bugs: https://github.com/radekdymacz/gearmulator-md-mm/issues
+Bugs: https://mdmm.dev/contact/
