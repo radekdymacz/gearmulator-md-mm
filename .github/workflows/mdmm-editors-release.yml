@@ -25,7 +25,7 @@ jobs:
 
   build-macos:
     name: macOS universal bundles for the installers
-    runs-on: macos-14
+    runs-on: macos-15
     timeout-minutes: 120
 
     steps:
@@ -72,7 +72,7 @@ jobs:
   macos-installers:
     name: macOS installer packages and disk images
     needs: build-macos
-    runs-on: macos-14
+    runs-on: macos-15
     timeout-minutes: 120
     permissions:
       contents: write

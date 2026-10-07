@@ -25,7 +25,7 @@ where it came from, the setup, what happens, what should happen, status.*
 - **From:** the same tester asked how to loop only 16 steps, 2026-10-07; Radek expected LEN to be draggable.
 - **What happens:** on the Sequence LCD, LEN steps 16 / 32 / 48 / 64 on click (⌥-click steps the length inside it, the mouse wheel works), but a drag does nothing, and the click behaviour is easy to miss.
 - **Should:** LEN (and the other LCD values that step on click) also follow a vertical drag, like the other values in the editor; the tooltip says so.
-- **Status:** open.
+- **Status:** fixed for 0.3.2 (LEN, SPD and SONG follow a vertical drag).
 
 ## B-005 · High CPU in Ableton Live
 
