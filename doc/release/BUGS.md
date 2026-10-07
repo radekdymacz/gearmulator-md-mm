@@ -11,7 +11,7 @@ where it came from, the setup, what happens, what should happen, status.*
 - **Should:** a clearly visible play head on both plates, on every supported macOS.
 - **Cause:** the play head (`#phcol`) was drawn only with `color-mix()`: its tint and edge, and on the MK1 plate all of it, so the macOS 12 WebKit dropped it (B-001). On MK2 it was faint even on a current WebKit (a 1 px edge at 45 %, screen-blended).
 - **Fix (branch `fix/plugin-window-fit`):** `deskCompat.js` gives an older WebKit the same colours (B-001); the play head has a solid 2 px LED-coloured edge and a stronger tint on both plates (MD), and a 2 px ink edge on the Monomachine Editor's roll. Checked on MK1 and MK2, with and without the rewrite (`?compat=force`).
-- **Status:** fixed on the branch, not yet released.
+- **Status:** fixed for 0.3.2.
 
 ## B-007 · "Settings" in the right-click menu does not open
 
@@ -42,7 +42,7 @@ where it came from, the setup, what happens, what should happen, status.*
 - **Should:** the page keeps sensible proportions at every window size; faders have a maximum height.
 - **Cause:** the page laid itself out in whatever height the window had: the MD faders grew with it up to 320 px, and below the master effects (MD) or between the strips and the routing (MM) an empty band was left (Radek's Live window showed it too, about 80 pt).
 - **Fix (branch `fix/plugin-window-fit`):** a window larger than the design (1440 x 924) both ways zooms the page up by its smaller side, so the page keeps the design's proportions (`mdPageZoom.h`); the MD faders stop at 240 px and the master effects' screens take the height that is left, so the page ends at the window's bottom; the MM routing follows right under the strips. Checked in a browser harness from 864 x 554 to 3440 x 1440 and at portrait sizes, every workspace of both editors.
-- **Status:** fixed on the branch, not yet released.
+- **Status:** fixed for 0.3.2.
 
 ## B-003 · First start: the ROM loads twice
 
@@ -79,4 +79,4 @@ where it came from, the setup, what happens, what should happen, status.*
   - The page always fits its window: narrower than 1440 or shorter than 720 CSS px zooms it out, larger both ways zooms it up (`mdPageZoom.h`); where the web view has no `pageZoom` (macOS 10.15 and older) the page's CSS zoom does the same.
   - The page's own zoom: **Page Zoom** in the editor's menu (right-click on the page's header, the standalone's Editor menu) with Zoom In / Zoom Out / Actual Size and 50-200 % steps, and ⌘− / ⌘+ / ⌘0 on the page (`deskZoom.js`, the `pageZoom` command), remembered in the editor's config.
 - **Minimum macOS:** 12 (Monterey), any Safari 15 or later. macOS 11 with Safari 15 should work the same (not tested); macOS 10.15 and older lack flex `gap` and `inset` (Safari 14.1) unless Safari was updated, and are not supported. The build's deployment target (10.13) is not a claim.
-- **Status:** fixed on the branch, not yet released. To confirm with the tester: Safari's version (Safari > About Safari).
+- **Status:** fixed for 0.3.2. To confirm with the tester: Safari's version (Safari > About Safari).
