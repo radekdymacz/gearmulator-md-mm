@@ -47,6 +47,20 @@ Output, under `temp/videos/<demo>-<date>/` (gitignored; `MDMM_DEMO_OUT` for else
 5. **The check** (`check.txt`): integrated loudness near -14 LUFS, no true peak above -0.5 dBFS, no silence over a
    second, but before the demo's first bar (a song from an empty pattern starts quiet) and a STOP of at most 2.5 s. The script exits non-zero when the demo or the check fails.
 
+## Rules for a take
+
+- **Dry run first:** `MDMM_DEMO_DRY=1 scripts/mdmm-demo-video.sh md <demo>` plays and records the demo and runs the
+  level check only (no videos). `scripts/mdmm-demo-video.sh levels <run folder>` checks a take again.
+- **The level check** (`levels`, in `check.txt` too) fails a take with a bar more than 4.5 dB above the two bars before
+  it and the two after it, or a level climbing three bars in a row (at least 1.5 dB a bar, 5 dB in all): the signs of a
+  feedback loop. A drop or a break moves one side only and passes.
+- **The sampler:** Set up sampling puts the recorder's track at VOL 0 while it samples the main mix (it would record
+  itself otherwise: a feedback loop). Never retrig or Control-All the recorder; chops come after the capture froze.
+- **Moves:** small and deliberate, one at a time, within musical ranges, each held a bar or more; the echo's feedback
+  moderate and set back. A sweep is a section's point, not a side effect.
+- **ScreenCaptureKit** sometimes ends a recording by itself ("Unknown stream error"); the recorder then exits 4, the
+  run is not used, and the script plays it again (`MDMM_DEMO_TRIES`, 3).
+
 ## Changing the copy
 
 `captions.txt` in the run folder is written from the demo's own captions on the first render and kept after that:

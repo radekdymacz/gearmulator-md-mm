@@ -5,6 +5,8 @@
 # with ffmpeg: loudness normalised to -14 LUFS, captions burned in, an end card over the last seconds.
 #   scripts/mdmm-demo-video.sh md <demo> [captions]           demo: demo-md-groove or groove
 #   scripts/mdmm-demo-video.sh render <run folder> [captions]   renders a recorded run again from its raw.mov (no app)
+#   scripts/mdmm-demo-video.sh levels <run folder>              the level check alone (a bar jumping or climbing)
+#   MDMM_DEMO_DRY=1 scripts/mdmm-demo-video.sh md <demo>         a dry run: the take and its level check, no videos
 # The run folder's captions.txt is the copy: written from the demo's own step captions and end card on the first
 # render, then kept, so it can be edited and rendered again. A captions file given replaces it; "none" burns in none.
 # Its lines: "start|end|text" (seconds from the start of the video; about six words a line, two lines at most, "\n"
@@ -34,6 +36,42 @@ TIMEOUT=${MDMM_DEMO_TIMEOUT:-300}
 now() { python3 -c 'import time; print("%.3f" % time.time())'; }
 die() { echo "FAIL $*" >&2; exit 1; }
 for t in ffmpeg ffprobe python3; do command -v $t >/dev/null 2>&1 || die "$t is missing (ffmpeg: brew install ffmpeg)"; done
+
+# ---------- timeline.json: the take's bars, patterns, sections and steps on the video's and the raw take's clock ----------
+timeline() {	# $1 run folder, $2 demo, $3 offset, $4 lead, $5 duration
+	DIR=$1; NAME=$2; OFFSET=$3; LEAD=$4; DURATION=$5
+	python3 - "$DIR" "$NAME" "$OFFSET" "$LEAD" "$DURATION" <<'EOF' || die "no timeline"
+import json, re, sys
+d, name, offset, lead, dur = sys.argv[1], sys.argv[2], float(sys.argv[3]), float(sys.argv[4]), float(sys.argv[5])
+log = open(d + "/page.log", encoding="utf-8", errors="replace").read().splitlines()
+start = None
+for l in log:
+	m = re.search(r"DEMO %s START clock (\d+)" % re.escape(name), l)
+	if m: start = int(m.group(1))
+vt = lambda ms: round(ms / 1000 + lead, 3)	# ms after START to the video's time
+bars, pats, steps = [], [], []
+for l in log:
+	m = re.search(r"DEMO BAR (\d+) clock (\d+)", l)
+	if m and start is not None: bars.append({"bar": int(m.group(1)), "t": vt(int(m.group(2)) - start)})
+	m = re.search(r"DEMO PATTERN (\S+) clock (\d+)", l)
+	if m and start is not None: pats.append({"pattern": m.group(1), "t": vt(int(m.group(2)) - start)})
+	m = re.search(r"DEMO %s at (\d+) step (\d+)/\d+(?: section (\S+))?(?: caption (.*))?$" % re.escape(name), l)
+	if m: steps.append({"t": vt(int(m.group(1))), "step": int(m.group(2)), "section": m.group(3), "caption": m.group(4)})
+	m = re.search(r"JOURNEY %s (\d+)/\d+ ok (.*?) \(\d+ ms\)(?: · (.*))?$" % re.escape(name), l)
+	if m:
+		for st in steps:
+			if st["step"] == int(m.group(1)): st["say"] = m.group(2); st["note"] = m.group(3)
+bars = [b for b in bars if -1 <= b["t"] <= dur + 1]
+sections = []
+for st in steps:
+	if st["section"] and (not sections or sections[-1]["section"] != st["section"]): sections.append({"section": st["section"], "t": st["t"]})
+# the first bar that can sound: bar 2 when the demo starts from an empty pattern (bar 1 is PLAY on nothing)
+first = next((b["t"] for b in bars if b["bar"] == 2), 0.0)
+json.dump({"demo": name, "video": {"duration": dur, "lead": lead}, "raw": {"file": "raw.mov", "offset": offset, "note": "raw time = video time + offset"},
+	"tempo": None, "bars": bars, "patterns": pats, "sections": sections, "steps": steps, "firstBar": first},
+	open(d + "/timeline.json", "w"), indent=1, ensure_ascii=False)
+EOF
+}
 
 # ---------- render: the run folder's raw.mov, page.log and captions.txt to the three videos ----------
 render() {	# $1 run folder, $2 captions file (optional; "none": none)
@@ -78,37 +116,7 @@ if card:
 	print("card|%.1f|%s" % (CARD, card))
 EOF
 	fi
-	python3 - "$DIR" "$NAME" "$OFFSET" "$LEAD" "$DURATION" <<'EOF' || die "no timeline"
-import json, re, sys
-d, name, offset, lead, dur = sys.argv[1], sys.argv[2], float(sys.argv[3]), float(sys.argv[4]), float(sys.argv[5])
-log = open(d + "/page.log", encoding="utf-8", errors="replace").read().splitlines()
-start = None
-for l in log:
-	m = re.search(r"DEMO %s START clock (\d+)" % re.escape(name), l)
-	if m: start = int(m.group(1))
-vt = lambda ms: round(ms / 1000 + lead, 3)	# ms after START to the video's time
-bars, pats, steps = [], [], []
-for l in log:
-	m = re.search(r"DEMO BAR (\d+) clock (\d+)", l)
-	if m and start is not None: bars.append({"bar": int(m.group(1)), "t": vt(int(m.group(2)) - start)})
-	m = re.search(r"DEMO PATTERN (\S+) clock (\d+)", l)
-	if m and start is not None: pats.append({"pattern": m.group(1), "t": vt(int(m.group(2)) - start)})
-	m = re.search(r"DEMO %s at (\d+) step (\d+)/\d+(?: section (\S+))?(?: caption (.*))?$" % re.escape(name), l)
-	if m: steps.append({"t": vt(int(m.group(1))), "step": int(m.group(2)), "section": m.group(3), "caption": m.group(4)})
-	m = re.search(r"JOURNEY %s (\d+)/\d+ ok (.*?) \(\d+ ms\)(?: · (.*))?$" % re.escape(name), l)
-	if m:
-		for st in steps:
-			if st["step"] == int(m.group(1)): st["say"] = m.group(2); st["note"] = m.group(3)
-bars = [b for b in bars if -1 <= b["t"] <= dur + 1]
-sections = []
-for st in steps:
-	if st["section"] and (not sections or sections[-1]["section"] != st["section"]): sections.append({"section": st["section"], "t": st["t"]})
-# the first bar that can sound: bar 2 when the demo starts from an empty pattern (bar 1 is PLAY on nothing)
-first = next((b["t"] for b in bars if b["bar"] == 2), 0.0)
-json.dump({"demo": name, "video": {"duration": dur, "lead": lead}, "raw": {"file": "raw.mov", "offset": offset, "note": "raw time = video time + offset"},
-	"tempo": None, "bars": bars, "patterns": pats, "sections": sections, "steps": steps, "firstBar": first},
-	open(d + "/timeline.json", "w"), indent=1, ensure_ascii=False)
-EOF
+	timeline "$DIR" "$NAME" "$OFFSET" "$LEAD" "$DURATION"
 	# the silence the demo means: before its first bar (the machine is not playing yet)
 	QUIET=$(python3 -c "import json; print(json.load(open('$DIR/timeline.json'))['firstBar'])")
 	grep -v '^[[:space:]]*#' "$DIR/captions.txt" | grep -v '^card|' | grep '|' > "$DIR/captions/lines.txt"
@@ -172,9 +180,45 @@ print("measured_I=%s:measured_TP=%s:measured_LRA=%s:measured_thresh=%s:offset=%s
 		done
 		echo "   $OUT"
 	done
-	check "$DIR/$NAME-16x9.mp4" "$QUIET" > "$DIR/check.txt"
+	{ check "$DIR/$NAME-16x9.mp4" "$QUIET"; levels "$DIR"; } > "$DIR/check.txt"
 	cat "$DIR/check.txt"
-	grep -q "^RESULT ok" "$DIR/check.txt"
+	! grep -q "^RESULT bad\|^LEVELS bad" "$DIR/check.txt"
+}
+
+# ---------- the level check: no bar jumps out of its neighbours, no climb bar over bar ----------
+# A feedback loop (a recorder in the mix it samples, an echo at full feedback) shows as a bar several dB above the
+# bars around it, or as a level that climbs bar over bar. A drop on the bar is neither: the level after it stays.
+levels() {	# $1 run folder (raw.mov, timeline.json)
+	python3 - "$1" <<'EOF'
+import json, subprocess, sys
+import numpy as np
+d = sys.argv[1]
+t = json.load(open(d + "/timeline.json"))
+off = t["raw"]["offset"]
+raw = subprocess.run(["ffmpeg", "-v", "error", "-i", d + "/raw.mov", "-f", "f32le", "-ac", "1", "-ar", "48000", "-"], capture_output=True).stdout
+x = np.frombuffer(raw, dtype=np.float32); sr = 48000
+bars = [b for b in t["bars"] if b["t"] >= 0]
+lv = []
+for a, b in zip(bars, bars[1:]):
+	seg = x[int((a["t"] + off) * sr): int((b["t"] + off) * sr)]
+	if len(seg) > sr // 4 and np.abs(seg).max() > 1e-4:
+		lv.append((a["bar"], 10 * np.log10((seg.astype(np.float64) ** 2).mean() + 1e-12)))
+if not lv:
+	print("levels: no bar lines in the log (a demo without the bar clock)"); print("LEVELS ok (not checked)"); sys.exit(0)
+bad = []
+# a bar above the two bars before it and the two after it (a change of the arrangement, a drop or a break, moves
+# one side only)
+for i, (bar, v) in enumerate(lv):
+	left, right = [w for _, w in lv[max(0, i - 2):i]], [w for _, w in lv[i + 1:i + 3]]
+	if left and right and v > np.mean(left) + 4.5 and v > np.mean(right) + 4.5:
+		bad.append("bar %d jumps %.1f dB above the bars around it" % (bar, v - max(np.mean(left), np.mean(right))))
+for i in range(3, len(lv)):
+	steps = [lv[k][1] - lv[k - 1][1] for k in range(i - 2, i + 1)]
+	if all(st >= 1.5 for st in steps) and sum(steps) >= 5:
+		bad.append("bars %d-%d climb %.1f dB" % (lv[i - 3][0], lv[i][0], sum(steps)))
+print("levels: %d bars, %.1f to %.1f dB RMS%s" % (len(lv), min(v for _, v in lv), max(v for _, v in lv), "".join("; " + b for b in bad)))
+print("LEVELS " + ("ok" if not bad else "bad: " + "; ".join(bad)))
+EOF
 }
 
 # ---------- the listen check: loudness, peak, silence ----------
@@ -212,6 +256,10 @@ if lead > float(os.environ.get("QUIET", "0")) + 0.5 or tail > 1.5 or any(e - s >
 print("RESULT " + ("ok" if not bad else "bad: " + ", ".join(bad)))' "$1"
 }
 
+if [ "${1:-}" = levels ]; then
+	[ -n "${2:-}" ] || die "usage: $0 levels <run folder>"
+	levels "$2" | tee "$2/levels.txt"; ! grep -q "^LEVELS bad" "$2/levels.txt"; exit $?
+fi
 if [ "${1:-}" = render ]; then
 	[ -n "${2:-}" ] || die "usage: $0 render <run folder> [captions]"
 	render "$2" "${3:-}"; exit $?
@@ -219,6 +267,18 @@ fi
 
 
 # ---------- record: the app, the demo, the recorder ----------
+# ScreenCaptureKit sometimes ends a recording by itself ("Unknown stream error", seen after 13 to 78 s): the take is
+# then not used, and the whole run is played again, up to MDMM_DEMO_TRIES times (3); config and settings are
+# restored between tries as after any run.
+if [ "${MDMM_DEMO_TRY:-}" = "" ]; then
+	n=1
+	while :; do
+		MDMM_DEMO_TRY=$n "$0" "$@"; rc=$?
+		[ $rc = 75 ] && [ $n -lt "${MDMM_DEMO_TRIES:-3}" ] || exit $rc
+		echo "== the recording ended early: try $((n + 1))"
+		n=$((n + 1)); sleep 3
+	done
+fi
 WHICH=${1:-}; DEMO=${2:-}; CAPS=${3:-}
 case "$WHICH" in md) M=MD; MACHINE=Machinedrum; SKIN=mdStudio; VAR=GEARMULATOR_MDSTUDIO_SELFTEST ;;
 	mm) M=MM; MACHINE=Monomachine; SKIN=mmStudio; VAR=GEARMULATOR_MMSTUDIO_SELFTEST ;;
@@ -303,7 +363,7 @@ while :; do
 	run)
 		[ -n "$TSTART" ] || { grep -q "DEMO $DEMO START" "$LOG" && TSTART=$(now); }
 		if grep -q "DEMOS DONE" "$LOG"; then sleep "$TAIL"; break; fi
-		if ! kill -0 "$RPID" 2>/dev/null; then wait "$RPID"; RPID=""; cat "$OUT/recorder.log"; echo "FAIL the recorder stopped before the demo ended"; STATUS=1; break; fi ;;
+		if ! kill -0 "$RPID" 2>/dev/null; then wait "$RPID"; RPID=""; cat "$OUT/recorder.log"; echo "FAIL the recorder stopped before the demo ended"; STATUS=75; break; fi ;;
 	esac
 done
 # the recorder finishes its file on SIGINT; given 15 s, then it is killed (the file is then incomplete)
@@ -317,6 +377,7 @@ fi
 restore; trap - INT TERM
 [ -n "$LOG" ] || die "no page log"
 grep -E "JOURNEY $DEMO [^ ]+ (PASS|FAIL)|DEMO $DEMO (START|END)|DEMOS DONE" "$OUT/page.log" | sed 's/^[^JD]*\(JOURNEY\|DEMO\)/\1/'
+[ $STATUS = 75 ] && exit 75
 [ $STATUS = 0 ] || exit 1
 grep -q "JOURNEY $DEMO PASS" "$OUT/page.log" || { echo "FAIL the demo failed: the steps are in $OUT/page.log"; grep "JOURNEY $DEMO .* FAIL" "$OUT/page.log" | head -3; exit 1; }
 [ -n "$TREC" ] && [ -n "$TSTART" ] || die "no recording start or demo start seen"
@@ -330,4 +391,10 @@ lead = min(lead, tstart - trec)
 print("DEMO=%s\nOFFSET=%.3f\nDURATION=%.3f\nLEAD=%.3f" % (demo, offset, end / 1000 + lead + tail, lead))
 EOF
 cat "$OUT/timeline.txt" | tr '\n' ' '; echo
+# a dry run (MDMM_DEMO_DRY=1): the take and its level check only, no videos
+if [ "${MDMM_DEMO_DRY:-0}" = 1 ]; then
+	( . "$OUT/timeline.txt"; timeline "$OUT" "$DEMO" "$OFFSET" "$LEAD" "$DURATION" )
+	levels "$OUT" | tee "$OUT/levels.txt"
+	! grep -q "^LEVELS bad" "$OUT/levels.txt"; exit $?
+fi
 render "$OUT" "$CAPS"
