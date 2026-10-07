@@ -15,6 +15,7 @@ on:
       - "release/md-mm-*"
       - "release/0.*"
       - "feat/linux-*"
+      - "ci/*-ui-smoke"
     paths:
       - ".github/workflows/mdmm-editors-linux.yml"
       - "scripts/linux/**"
