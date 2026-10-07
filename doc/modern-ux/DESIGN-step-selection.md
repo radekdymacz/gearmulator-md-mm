@@ -74,7 +74,7 @@ without a trig does nothing on the machine and would spend the 64-lock budget). 
 before; on a track with another machine they are that machine's parameter at the same index.
 
 Where a paste stops (one rule for paste, duplicate and drop): at the **pattern's length** (steps past it do not play;
-`pasteSteps` before cut at the visible steps) and at track 16. What is left out is said in the result's note ("2
+until now `pasteSteps` stopped only at the visible steps) and at track 16. What is left out is said in the result's note ("2
 step(s) past the pattern's length (12) left out"). A paste that starts past the length is refused. Locks that need a
 new row when all 64 are used are skipped and counted, as before.
 
