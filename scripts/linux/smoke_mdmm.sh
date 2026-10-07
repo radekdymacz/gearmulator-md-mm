@@ -78,10 +78,16 @@ run() {
 	local pid=$!
 	local found=0 alive=1 waited=0
 	: > "${out}/${name}-ui.txt"
+	local crashes_before
+	crashes_before="$(sudo dmesg 2>/dev/null | grep -c -E 'segfault|trap' || true)"
 	while (( waited < timeout_seconds )); do
 		sleep 3
 		waited=$((waited + 3))
 		if ! kill -0 "${pid}" 2>/dev/null; then alive=0; break; fi
+		# Read the page only once it runs (the plug-in deleted an answer file it read): a reader walking WebKit's
+		# tree while the page loads is not what this tests.
+		tail -n "+$((events_before + 1))" "${out}/temp-events.txt" \
+			| grep -q -E '^DELETE gearmulator-.*\.recv-[0-9]+\.js$' || continue
 		timeout 20 python3 "${script_dir}/ui_texts.py" > "${out}/${name}-ui.txt" 2>"${out}/${name}-ui-errors.txt" || true
 		# Case-blind: the card shows the text in capitals (CSS), and that is what the accessibility tree says.
 		if grep -q -i -F "${wanted}" "${out}/${name}-ui.txt"; then found=1; break; fi
@@ -95,6 +101,14 @@ run() {
 	written="$(grep -c -E '^(CREATE|MOVED_TO) gearmulator-.*\.recv-[0-9]+\.js$' "${out}/${name}-temp-events.txt" || true)"
 	read_back="$(grep -c -E '^DELETE gearmulator-.*\.recv-[0-9]+\.js$' "${out}/${name}-temp-events.txt" || true)"
 
+	local crashes
+	crashes="$(sudo dmesg 2>/dev/null | grep -E 'segfault|trap' | tail -n "+$((crashes_before + 1))" || true)"
+	if [[ -n "${crashes}" ]]; then
+		echo "-- crashed during this run (kernel log):"
+		echo "${crashes}"
+		echo "${crashes}" > "${out}/${name}-crashes.txt"
+		record "${label}" "crashes (kernel log)" "$(echo "${crashes}" | grep -o -E '[A-Za-z]+\[[0-9]+\]: segfault' | head -n 3 | tr '\n' ' ')"
+	fi
 	if (( ! alive )); then
 		local code=0
 		wait "${pid}" 2>/dev/null || code=$?

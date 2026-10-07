@@ -69,7 +69,11 @@ def children(bus, name, path, seen, out):
 		return
 	budget -= 1
 	seen.add((name, path))
-	out.extend(texts(bus, name, path, {ACCESSIBLE, TEXT}))
+	try:
+		interfaces = set(call(bus, name, path, ACCESSIBLE, "GetInterfaces", None, "(as)").unpack()[0])
+	except GLib.Error:
+		interfaces = {ACCESSIBLE}
+	out.extend(texts(bus, name, path, interfaces | {ACCESSIBLE}))
 	try:
 		kids = call(bus, name, path, ACCESSIBLE, "GetChildren", None, "(a(so))").unpack()[0]
 	except GLib.Error:
