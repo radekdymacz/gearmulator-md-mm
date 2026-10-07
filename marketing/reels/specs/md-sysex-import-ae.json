@@ -61,7 +61,7 @@
   },
   "audio": { "fadeOutSeconds": 0.8 },
   "post": {
-    "link": "https://mdmm.nativekloud.com/guide/?utm_source=youtube&utm_medium=social&utm_campaign=evergreen&utm_content=md-sysex-import-ae",
-    "caption": "Loading Autechre's public Machinedrum backup from their 2008 Quaristice tour (free on their store: https://autechre.ws) into the Machinedrum Editor: Import SysEx, check what it overwrites, import as one undo step, play. Their files, credited; we are not affiliated with Autechre, Warp or Elektron. Editor: free, pay what you want, macOS, bring your own ROM. mdmm.nativekloud.com"
+    "link": "https://mdmm.dev/guide/?utm_source=youtube&utm_medium=social&utm_campaign=evergreen&utm_content=md-sysex-import-ae",
+    "caption": "Loading Autechre's public Machinedrum backup from their 2008 Quaristice tour (free on their store: https://autechre.ws) into the Machinedrum Editor: Import SysEx, check what it overwrites, import as one undo step, play. Their files, credited; we are not affiliated with Autechre, Warp or Elektron. Editor: free, pay what you want, macOS, bring your own ROM. mdmm.dev"
   }
 }

@@ -32,5 +32,5 @@ Please do not ask anyone, in any channel, for firmware files.
 Removing it: delete the three items from where you dropped them. Your
 firmware and settings in Documents are not touched.
 
-Site: https://mdmm.nativekloud.com
+Site: https://mdmm.dev
 Bugs: https://github.com/radekdymacz/gearmulator-md-mm/issues

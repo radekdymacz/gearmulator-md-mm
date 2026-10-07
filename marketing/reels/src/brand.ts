@@ -1,5 +1,5 @@
 // Colours from site/public/design/tokens.css + site/public/assets/site.css
-// (mdmm.nativekloud.com). The reels use the site's dark "hardware" surfaces and
+// (mdmm.dev). The reels use the site's dark "hardware" surfaces and
 // the dark-theme accent, which reads on near-black. Change the site first, then here.
 import type {FormatId} from './spec';
 

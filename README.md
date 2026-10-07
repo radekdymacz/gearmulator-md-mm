@@ -5,10 +5,10 @@ emulation: the whole machine on one page (step grid, parameter-lock lanes, kit a
 chains, mutes, a sampler view, and a beta HW MIDI mode for a real machine). They run the real firmware,
 as a standalone app, VST3 and AU on macOS.
 
-- **Site, screenshots, download:** https://mdmm.nativekloud.com
+- **Site, screenshots, download:** https://mdmm.dev
 - **Releases:** https://github.com/radekdymacz/gearmulator-md-mm/releases
   (latest: [0.3.0 notes](doc/release/v0.3.0.md); [0.2.1](doc/release/v0.2.1.md); [0.2.0](doc/release/v0.2.0.md); first: [0.1.0 alpha](doc/release/v0.1.0-alpha.md))
-- **User guide** (install, ROM, DAW use, workspaces, every keyboard shortcut): https://mdmm.nativekloud.com/guide/
+- **User guide** (install, ROM, DAW use, workspaces, every keyboard shortcut): https://mdmm.dev/guide/
 - **Bring your own ROM.** No firmware is included. With no ROM the editor shows a start-up card:
   choose your machine's image with its file chooser (drag and drop is not supported) and the editor
   copies it into its ROM folder. You can also copy it to `~/Documents/Gearmulator Preview/Machinedrum/roms/`
@@ -22,7 +22,7 @@ as a standalone app, VST3 and AU on macOS.
   and `.../Components`, or the `~/Applications` and `~/Library/Audio/Plug-Ins` equivalents. Firmware and
   settings are not touched. If a DAW will not load the AU, run
   `xattr -dr com.apple.quarantine "<path to the .component>"` and rescan.
-- **Bugs and questions about the editors:** use the [contact page](https://mdmm.nativekloud.com/contact/),
+- **Bugs and questions about the editors:** use the [contact page](https://mdmm.dev/contact/),
   not upstream. Issues are disabled on this fork.
 - **Credits:** the MD/MM emulation is by [joelanders](https://github.com/joelanders/gearmulator-md-mm);
   Gearmulator, the DSP56300 and 68k emulation are by The Usual Suspects and the
@@ -45,7 +45,7 @@ There is a Discord channel [here](https://discord.gg/BnkTKpmp8) at #gearmulator-
 **DO NOT ask us for the .bin files / firmware! They're under Elektron's copyright. This emulator is for people who own the original hardware.**
 
 [Downloads](https://github.com/radekdymacz/gearmulator-md-mm/releases) ·
-[Report a bug](https://mdmm.nativekloud.com/contact/)
+[Report a bug](https://mdmm.dev/contact/)
 
 Link to a short demo on Youtube:
 

@@ -73,7 +73,7 @@ card|3.5|Machinedrum Editor|Free · pay what you want|Coming soon
 
 `start|end|text` in seconds from the start of the video; about six words a line, two lines at most (`\n` breaks a
 line, a longer line is split in two). `card|seconds|name|line` is the end card over the last seconds; a fifth field
-is the big lime line under them: "Coming soon" until launch, then the URL (`|mdmm.nativekloud.com`). Edit it,
+is the big lime line under them: "Coming soon" until launch, then the URL (`|mdmm.dev`). Edit it,
 then `scripts/mdmm-demo-video.sh render <run folder>`; no app, no re-recording. A captions file given as the last
 argument replaces it; `none` burns in no captions.
 
@@ -83,7 +83,7 @@ In the page's journeys file (`skins/mdStudio/mdDeskJourneys.js`; the Monomachine
 then needs the same `Journey.demo(demos, …)` call), add a value to `demos` named `demo-md-<what>`:
 
 ```js
-{ name: "demo-md-<what>", card: "Machinedrum Editor|Free · pay what you want|mdmm.nativekloud.com",
+{ name: "demo-md-<what>", card: "Machinedrum Editor|Free · pay what you want|mdmm.dev",
   setup: [ /* steps before the camera: get the machine playing */ ],
   steps: [{ say, caption, act: async (u, c) => { await look(u, "#play"); }, screen, machine, hold: 1500 }, …],
   tidy }

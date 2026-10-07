@@ -20,7 +20,7 @@ message 2). Post only after the release is published and the site's download but
 > haven't tried it on real hardware yet, so if you have an MD or MM on a MIDI interface I'd love to
 > hear how it goes.
 >
-> Download and screenshots: https://mdmm.nativekloud.com
+> Download and screenshots: https://mdmm.dev
 > Release notes and source (GPL-3): https://github.com/radekdymacz/gearmulator-md-mm/releases
 >
 > Bring your own ROM: nothing is bundled. Please don't ask for or share firmware here.
@@ -46,7 +46,7 @@ Channel: a GitHub issue or discussion on joelanders/gearmulator-md-mm, or a Disc
 > your branch; the editor code sits beside it, in its own `mdStudio` / `mmStudio` skins and an `mdDesk` library.
 >
 > I'm about to publish a 0.1.0 alpha for macOS (standalone, VST3, AU). The site is
-> https://mdmm.nativekloud.com. It's GPL-3 with full source and bring-your-own-ROM, the same as
+> https://mdmm.dev. It's GPL-3 with full source and bring-your-own-ROM, the same as
 > yours. There's an optional pay-what-you-want link that helps fund the work. Your name and The
 > Usual Suspects are in the credits on the site, in the README, in the installer and in the
 > release notes. The README says clearly that it's an unofficial fork and that support questions
@@ -68,5 +68,5 @@ Channel: a GitHub issue or discussion on joelanders/gearmulator-md-mm, or a Disc
 ## Before sending
 
 - Publish the release first (see the note on "latest" in the release hand-off), then check that
-  both download buttons on https://mdmm.nativekloud.com work.
+  both download buttons on https://mdmm.dev work.
 - The upstream README says not to discuss firmware or ROMs in Discord. Both drafts keep to that.

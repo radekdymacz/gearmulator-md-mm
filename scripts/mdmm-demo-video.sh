@@ -112,7 +112,7 @@ for i, (t, text) in enumerate(caps):
 	end = min(caps[i + 1][0] - 0.15 if i + 1 < len(caps) else stop, stop)
 	if end > t + 0.4: print("%.2f|%.2f|%s" % (t, end, text))
 if card:
-	print("# the end card over the last seconds: card|seconds|name|line, optionally |url (off until launch, e.g. |mdmm.nativekloud.com)")
+	print("# the end card over the last seconds: card|seconds|name|line, optionally |url (off until launch, e.g. |mdmm.dev)")
 	print("card|%.1f|%s" % (CARD, card))
 EOF
 	fi

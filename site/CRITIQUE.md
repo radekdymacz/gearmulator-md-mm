@@ -1,4 +1,4 @@
-# Design critique: mdmm.nativekloud.com, first version (2026-09-28)
+# Design critique: mdmm.dev, first version (2026-09-28)
 
 Reviewed: `c066afb5` (landing page + 3-step download flow), at 375, 1280 and 1920 px, light and dark.
 Screenshots of that version: `site/review/before/`. Framework: first impression, hierarchy, consistency,

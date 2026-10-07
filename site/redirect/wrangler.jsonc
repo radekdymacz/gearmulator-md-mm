@@ -1,0 +1,16 @@
+{
+  // Sends the site's old and alternative addresses to https://mdmm.dev (same path, 301).
+  // The site itself stays an assets-only Worker (../wrangler.jsonc).
+  //   cd site/redirect && CLOUDFLARE_ACCOUNT_ID=331224f43e4f448483cad2f1185ea965 npx wrangler deploy
+  "$schema": "https://unpkg.com/wrangler/config-schema.json",
+  "name": "mdmm-redirect",
+  "main": "index.js",
+  "compatibility_date": "2026-09-01",
+  "account_id": "331224f43e4f448483cad2f1185ea965",
+  "routes": [
+    { "pattern": "mdmm.nativekloud.com", "custom_domain": true },
+    { "pattern": "www.mdmm.dev", "custom_domain": true }
+  ],
+  "workers_dev": false,
+  "preview_urls": false
+}

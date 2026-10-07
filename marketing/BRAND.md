@@ -1,7 +1,7 @@
 # Machinedrum Editor + Monomachine Editor — brand
 
 *Read this before writing a hook, a caption, a reel spec or any copy that names
-the product. The landing page (`site/public/index.html`, mdmm.nativekloud.com)
+the product. The landing page (`site/public/index.html`, mdmm.dev)
 is the source of truth for claims; this file never claims more than the site does.*
 
 ## Names
@@ -11,7 +11,7 @@ is the source of truth for claims; this file never claims more than the site doe
 | The pair, a heading, the site | **MD + MM Editor** |
 | One editor | **Machinedrum Editor**, **Monomachine Editor** (capitals, no "the" in titles) |
 | The hardware | Elektron Machinedrum, Elektron Monomachine — "Elektron" once per post, then Machinedrum / MD |
-| URL on screen | `mdmm.nativekloud.com` (bare, no https, no UTM: it is read, not clicked) |
+| URL on screen | `mdmm.dev` (bare, no https, no UTM: it is read, not clicked) |
 | URL in a caption or bio | the UTM link from `UTM.md` |
 
 Never "Gearmulator MD" in marketing (that is the plug-in's file name in a DAW,
@@ -77,4 +77,4 @@ Flat, sharp-edged (radius 0 on brand surfaces, small radius only on hardware key
 
 **Fonts.** Inter (the site's `--font-sans`) for everything big; JetBrains Mono for the eyebrow and small print (the site uses the system mono, which cannot be bundled). Both are SIL Open Font License 1.1, bundled from npm (`@fontsource/inter`, `@fontsource/jetbrains-mono`), so rendering never fetches a font and redistribution is allowed. The editor's own LCD pixel font stays inside the footage.
 
-**End card:** "Machinedrum Editor" (or "Monomachine Editor"), "Free · pay what you want", "macOS · VST3, AU and app · bring your own ROM" small. **No website URL in reels for now** (Radek, 2026-10-06): `endCard.url` is optional and off; until launch the accent plate carries `endCard.status` ("Coming soon", Radek 2026-10-07). At launch: set `url` to `mdmm.nativekloud.com` and drop `status`.
+**End card:** "Machinedrum Editor" (or "Monomachine Editor"), "Free · pay what you want", "macOS · VST3, AU and app · bring your own ROM" small. **No website URL in reels for now** (Radek, 2026-10-06): `endCard.url` is optional and off; until launch the accent plate carries `endCard.status` ("Coming soon", Radek 2026-10-07). At launch: set `url` to `mdmm.dev` and drop `status`.

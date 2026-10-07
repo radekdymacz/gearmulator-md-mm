@@ -7,7 +7,7 @@ fields. Keep them lowercase, hyphenated, and from the lists below; a new
 value is added here first.
 
 ```
-https://mdmm.nativekloud.com/<path>?utm_source=<source>&utm_medium=<medium>&utm_campaign=<campaign>&utm_content=<content>
+https://mdmm.dev/<path>?utm_source=<source>&utm_medium=<medium>&utm_campaign=<campaign>&utm_content=<content>
 ```
 
 | Tag | Meaning | Values |
@@ -25,12 +25,12 @@ Paths: `/` for reels and bios, `/get/` only where the post is explicitly "downlo
 
 | Placement | Link |
 |---|---|
-| Instagram bio | `https://mdmm.nativekloud.com/?utm_source=instagram&utm_medium=social&utm_campaign=launch&utm_content=bio` |
-| TikTok bio | `https://mdmm.nativekloud.com/?utm_source=tiktok&utm_medium=social&utm_campaign=launch&utm_content=bio` |
-| YouTube channel link | `https://mdmm.nativekloud.com/?utm_source=youtube&utm_medium=video&utm_campaign=launch&utm_content=channel` |
-| Reel (pattern) | `https://mdmm.nativekloud.com/?utm_source=<platform>&utm_medium=social&utm_campaign=<launch|evergreen>&utm_content=<reel-id>` |
-| YouTube description | `https://mdmm.nativekloud.com/?utm_source=youtube&utm_medium=video&utm_campaign=<campaign>&utm_content=<video-id>` |
-| Forum launch thread | `https://mdmm.nativekloud.com/get/?utm_source=<forum>&utm_medium=forum&utm_campaign=launch&utm_content=thread` |
+| Instagram bio | `https://mdmm.dev/?utm_source=instagram&utm_medium=social&utm_campaign=launch&utm_content=bio` |
+| TikTok bio | `https://mdmm.dev/?utm_source=tiktok&utm_medium=social&utm_campaign=launch&utm_content=bio` |
+| YouTube channel link | `https://mdmm.dev/?utm_source=youtube&utm_medium=video&utm_campaign=launch&utm_content=channel` |
+| Reel (pattern) | `https://mdmm.dev/?utm_source=<platform>&utm_medium=social&utm_campaign=<launch|evergreen>&utm_content=<reel-id>` |
+| YouTube description | `https://mdmm.dev/?utm_source=youtube&utm_medium=video&utm_campaign=<campaign>&utm_content=<video-id>` |
+| Forum launch thread | `https://mdmm.dev/get/?utm_source=<forum>&utm_medium=forum&utm_campaign=launch&utm_content=thread` |
 
 Rules: Instagram and TikTok captions are not clickable; the caption says "link in
 bio" and the bio link changes with the campaign (launch → evergreen in week 2).

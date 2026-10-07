@@ -79,7 +79,7 @@
   },
   "audio": { "fadeOutSeconds": 0.8 },
   "post": {
-    "link": "https://mdmm.nativekloud.com/?utm_source=instagram&utm_medium=social&utm_campaign=launch&utm_content=md-one-screen",
+    "link": "https://mdmm.dev/?utm_source=instagram&utm_medium=social&utm_campaign=launch&utm_content=md-one-screen",
     "notes": "Per-platform links: marketing/UTM.md. Caption: copy-bank.md, 'One screen'."
   }
 }
