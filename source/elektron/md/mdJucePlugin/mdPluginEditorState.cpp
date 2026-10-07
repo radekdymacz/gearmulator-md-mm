@@ -9,6 +9,7 @@
 #include "mdProductSkins.h"
 
 #include "juce_events/juce_events.h"
+#include "jucePluginEditorLib/editorTraits.h"
 #include "jucePluginEditorLib/rendererPreferenceKeys.h"
 #include "juceRmlUi/rmlMenu.h"
 
@@ -131,5 +132,24 @@ namespace mdJucePlugin
 						editor->chooseUserSysexFile();
 				});
 			});
+	}
+
+	// The editors are web pages: upstream's RmlUi settings page has nothing to show over them. What the
+	// page has is its AUDIO / MIDI panel, which is the standalone's; in a plug-in the host owns audio and
+	// MIDI, and the other settings (window scale, RAM recording, diagnostics) are entries of this menu.
+	void PluginEditorState::addSettingsEntry(juceRmlUi::Menu& _menu)
+	{
+		if(!juce::JUCEApplicationBase::isStandaloneApp())
+			return;
+		_menu.addSeparator();
+		_menu.addEntry("Audio/MIDI Settings...", [this]
+		{
+			// After the menu has closed, as the menu bar's entry does.
+			juce::MessageManager::callAsync([this]
+			{
+				if(auto* editor = dynamic_cast<jucePluginEditorLib::AudioMidiSettingsEditor*>(getEditor()))
+					editor->openAudioMidiSettings();
+			});
+		});
 	}
 }

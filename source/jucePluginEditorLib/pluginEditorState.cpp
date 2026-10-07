@@ -437,9 +437,16 @@ void PluginEditorState::fillMenu(juceRmlUi::Menu& _menu)
 		}
 	}
 
-	menu.addSeparator();
+	addSettingsEntry(menu);
 
-	menu.addEntry("Settings...", [this]
+	_menu = std::move(menu);
+}
+
+void PluginEditorState::addSettingsEntry(juceRmlUi::Menu& _menu)
+{
+	_menu.addSeparator();
+
+	_menu.addEntry("Settings...", [this]
 	{
 		juce::MessageManager::callAsync([this]
 		{
@@ -447,8 +454,6 @@ void PluginEditorState::fillMenu(juceRmlUi::Menu& _menu)
 				editor->showSettings(true);
 		});
 	});
-
-	_menu = std::move(menu);
 }
 
 Skin PluginEditorState::readSkinFromConfig() const
