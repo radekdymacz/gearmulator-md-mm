@@ -4,6 +4,21 @@
 repository; the site sends reports to the contact address. Newest first. Each entry:
 where it came from, the setup, what happens, what should happen, status.*
 
+## B-008 · The play head is invisible on the MK1 (white) skin
+
+- **From:** Discord tester (versonegro), macOS 12, 2026-10-07, with a screen recording.
+- **What happens:** on the Sequence page the moving play head does not show with the MK1 (white) plate; with the MK2 (black) plate it shows, but faintly.
+- **Likely cause:** the play-head colour uses CSS the macOS 12 WebKit drops (`color-mix`, see B-001).
+- **Should:** a clearly visible play head on both plates, on every supported macOS.
+- **Status:** open, with the old-WebKit fix.
+
+## B-007 · "Settings" in the right-click menu does not open
+
+- **From:** the same tester, macOS 12, 2026-10-07.
+- **What happens:** right-click on the editor opens the editor menu (inherited from Gearmulator); choosing its Settings entry does nothing.
+- **Should:** every entry in that menu works in the web-page editors, or is removed; Settings opens the editor's own settings (or the menu offers only what applies).
+- **Status:** open.
+
 ## B-006 · LEN (loop length) cannot be dragged
 
 - **From:** the same tester asked how to loop only 16 steps, 2026-10-07; Radek expected LEN to be draggable.
