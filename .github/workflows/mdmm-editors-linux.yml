@@ -92,7 +92,7 @@ jobs:
           done
           tmp="$(mktemp -d)"
           tar -C "${tmp}" -xzf artifacts/linux-mdmm/Machinedrum-Editor-Linux-x64-not-tested.tar.gz
-          app="${tmp}/Machinedrum-Editor-Linux-x64/Standalone/Gearmulator MD"
+          app="${tmp}/Machinedrum-Editor-Linux-x64/Standalone/Machinedrum Editor"
           # The run path that finds the shims, and no hard dependency on WebKit or GTK.
           readelf -d "${app}" | grep -E 'RUNPATH|RPATH' | grep -F '$ORIGIN'
           if readelf -d "${app}" | grep NEEDED | grep -E 'webkit|gtk'; then

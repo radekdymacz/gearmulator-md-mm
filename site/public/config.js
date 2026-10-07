@@ -5,7 +5,7 @@
  */
 window.MDMM_CONFIG = {
   // Bumped by the release process. Shown on the page as-is; the page makes no API calls.
-  version: "0.3.1",
+  version: "0.3.2",
 
   // Contact address. The pages carry it statically (entity-encoded mailto); keep this in sync.
   contact: { email: "radekdymacz@gmail.com" },

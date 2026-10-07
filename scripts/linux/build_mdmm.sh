@@ -18,6 +18,8 @@ output_dir="$(realpath -m "${3:-${source_dir}/artifacts/linux-mdmm}")"
 config=Release
 parallel="${MDMM_LINUX_PARALLEL:-$(nproc)}"
 skip_tests="${MDMM_LINUX_SKIP_TESTS:-0}"
+# shellcheck source=../mdmm-product.env
+source "${source_dir}/scripts/mdmm-product.env"
 diagnostics="${MDMM_LINUX_DIAGNOSTICS:-0}"
 products="${build_dir}/products"
 # JUCE loads each VST3 to write its moduleinfo.json: keep what that load writes out of the real home.
@@ -89,9 +91,9 @@ stage="$(mktemp -d)"
 trap 'rm -rf "${stage}"' EXIT
 for machine in md mm; do
 	if [[ "${machine}" == md ]]; then
-		product="Gearmulator MD"; editor="Machinedrum Editor"; asset="Machinedrum-Editor"
+		product="${MDMM_PRODUCT_NAME_MD}"; editor="Machinedrum Editor"; asset="Machinedrum-Editor"
 	else
-		product="Gearmulator MM"; editor="Monomachine Editor"; asset="Monomachine-Editor"
+		product="${MDMM_PRODUCT_NAME_MM}"; editor="Monomachine Editor"; asset="Monomachine-Editor"
 	fi
 	standalone="${products}/${config}/Standalone/${product}"
 	vst3="${products}/${config}/VST3/${product}.vst3"

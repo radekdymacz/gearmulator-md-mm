@@ -25,7 +25,7 @@ for tarball in "${archives}"/*-Linux-x64-not-tested.tar.gz; do
 	name="$(basename "${tarball}" .tar.gz)"
 	work="$(mktemp -d)"
 	tar -C "${work}" -xzf "${tarball}"
-	app="$(find "${work}" -path '*/Standalone/*' -type f -name 'Gearmulator *' ! -name '*.so' -print -quit)"
+	app="$(find "${work}" -path '*/Standalone/*' -type f -name '* Editor' ! -name '*.so' -print -quit)"
 	echo "== ${name}: ${app}"
 	home="${work}/home"
 	mkdir -p "${home}"

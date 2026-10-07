@@ -7,7 +7,7 @@
 
 # The Machinedrum and Monomachine Editors have their own release version, apart from
 # Gearmulator's (the bundles, the AU version, the installers and the site use it).
-set(MDMM_EDITOR_VERSION 0.3.1)
+set(MDMM_EDITOR_VERSION 0.3.2)
 string(REPLACE "." ";" _mdmmVersionParts "${MDMM_EDITOR_VERSION}")
 list(GET _mdmmVersionParts 0 _mdmmVersionMajor)
 list(GET _mdmmVersionParts 1 _mdmmVersionMinor)

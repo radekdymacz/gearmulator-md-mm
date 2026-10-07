@@ -9,6 +9,7 @@ set -euo pipefail
 
 script_dir="$(cd "$(dirname "$0")" && pwd)"
 source_dir="$(cd "${script_dir}/../.." && pwd)"
+source "${source_dir}/scripts/mdmm-product.env"
 zip_in="$(realpath "$1")"
 mkdir -p "$2"
 out="$(realpath "$2")"
@@ -20,9 +21,9 @@ unzip -q "${zip_in}" -d "${work}/all"
 
 for machine in md mm; do
 	if [[ "${machine}" == md ]]; then
-		product="Gearmulator MD"; editor="Machinedrum Editor"; asset="Machinedrum-Editor"
+		product="${MDMM_PRODUCT_NAME_MD}"; editor="Machinedrum Editor"; asset="Machinedrum-Editor"
 	else
-		product="Gearmulator MM"; editor="Monomachine Editor"; asset="Monomachine-Editor"
+		product="${MDMM_PRODUCT_NAME_MM}"; editor="Monomachine Editor"; asset="Monomachine-Editor"
 	fi
 	for need in "${work}/all/${product}.exe" "${work}/all/${product}.vst3" "${work}/all/LICENSE.md"; do
 		if [[ ! -e "${need}" ]]; then

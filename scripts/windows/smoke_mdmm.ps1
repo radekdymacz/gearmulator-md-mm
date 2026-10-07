@@ -63,10 +63,14 @@ function Get-WebViewProcesses() {
     return @(Get-CimInstance Win32_Process -Filter "Name = 'msedgewebview2.exe'" -ErrorAction SilentlyContinue)
 }
 
+$productNames = @{}
+foreach ($line in Get-Content -LiteralPath (Join-Path $PSScriptRoot '..\mdmm-product.env')) {
+    if ($line -match '^(MDMM_[A-Z_]+)="(.*)"$') { $productNames[$Matches[1]] = $Matches[2] }
+}
 $profileFolder = Join-Path $env:LOCALAPPDATA 'Gearmulator\EditorWebView2'
 $runs = New-Object System.Collections.Generic.List[object]
-foreach ($machine in @(@{ Product = 'Gearmulator MD'; Machine = 'Machinedrum'; Name = 'md' },
-                       @{ Product = 'Gearmulator MM'; Machine = 'Monomachine'; Name = 'mm' })) {
+foreach ($machine in @(@{ Product = $productNames['MDMM_PRODUCT_NAME_MD']; Machine = 'Machinedrum'; Name = 'md' },
+                       @{ Product = $productNames['MDMM_PRODUCT_NAME_MM']; Machine = 'Monomachine'; Name = 'mm' })) {
     $exe = Get-ChildItem -LiteralPath $PackageDir -Recurse -File -Filter "$($machine.Product).exe" | Select-Object -First 1
     if (-not $exe) { throw "Not in the package: $($machine.Product).exe" }
     $runs.Add(@{ Label = "$($machine.Product) standalone"; File = $exe.FullName; Arguments = @(); Machine = $machine.Machine;
