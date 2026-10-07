@@ -24,7 +24,16 @@ export const validateSpec = (spec, {requireFootage = true} = {}) => {
 	const b = 60 / spec.music.bpm;
 	const beats = spec.shots.reduce((n, s) => n + s.beats, 0) + spec.endCard.beats;
 	const seconds = beats * b;
-	if (seconds < 15 || seconds > 20) w(`length ${seconds.toFixed(1)} s (aim for 15–20 s)`);
+	// pacing (Radek, 2026-10-07): about 30 s, 3-5 shots, each about 8 s except the hook shot;
+	// actions land and then play; subtitles long enough to read twice; slow camera moves
+	if (seconds < 25 || seconds > 35) w(`length ${seconds.toFixed(1)} s (aim for about 30 s)`);
+	if (spec.shots.length < 3 || spec.shots.length > 5) w(`${spec.shots.length} shots (aim for 3-5)`);
+	spec.shots.forEach((s, i) => {
+		if (i > 0 && s.beats * b < 6.4) w(`shot ${s.id}: ${(s.beats * b).toFixed(1)} s; shots after the hook should run about 8 s`);
+		const at = s.camera.map((k) => k.at).sort((x, y) => x - y);
+		for (let j = 1; j < at.length; j++)
+			if (at[j] - at[j - 1] < 1.5) w(`shot ${s.id}: camera move ending at ${at[j]} s is faster than 1.5 s (ease over a bar)`);
+	});
 	if (spec.hook.seconds > 2.05) e(`hook is ${spec.hook.seconds} s; the hook must land within 2 s`);
 	if (words(spec.hook.text).length > 7) e(`hook "${spec.hook.text}" is over 7 words`);
 	const firstShot = spec.shots[0];
@@ -41,7 +50,7 @@ export const validateSpec = (spec, {requireFootage = true} = {}) => {
 			const n = words(sub.text).length;
 			if (n > 6) e(`shot ${s.id}: subtitle "${sub.text}" has ${n} words (max 6)`);
 			if (sub.until > len + 0.01) e(`shot ${s.id}: subtitle "${sub.text}" ends after the shot (${sub.until} > ${len.toFixed(2)})`);
-			if (sub.until - sub.at < 0.6) w(`shot ${s.id}: subtitle "${sub.text}" is on screen under 0.6 s`);
+			if (sub.until - sub.at < 2.4) w(`shot ${s.id}: subtitle "${sub.text}" is on screen under 2.4 s (read it twice)`);
 		}
 		// the groove stays in time across a cut when the source jumps by whole bars
 		if (prevOut !== null && s.inBeat !== undefined && (((s.inBeat - prevOut) % 4) + 4) % 4 !== 0)
@@ -59,6 +68,9 @@ export const validateSpec = (spec, {requireFootage = true} = {}) => {
 		w(`end card audio jumps ${ec.audioInBeat - prevOut} beats (not whole bars)`);
 	// endCard.url is optional and off by default (no website link in the reels yet)
 	if (ec.url !== undefined && !/^[a-z0-9.-]+\.[a-z]+$/.test(ec.url)) e(`end card url "${ec.url}" should be a bare domain (no https://, no UTM: the card is read, not clicked)`);
+	// endCard.status ("Coming soon") fills the URL plate until launch; url replaces it then
+	if (ec.url !== undefined && ec.status !== undefined) w('endCard has both url and status: the url is shown (drop status at launch)');
+	if (ec.status !== undefined && words(ec.status).length > 3) e(`endCard.status "${ec.status}" is over 3 words (it sits on the URL plate)`);
 	if (ec.beats * b < 2.5) w('end card under 2.5 s: too short to read');
 	if (spec.post?.link && !/utm_source=.+&utm_medium=.+&utm_campaign=.+&utm_content=.+/.test(spec.post.link))
 		e('post.link must carry utm_source, utm_medium, utm_campaign and utm_content (marketing/UTM.md)');

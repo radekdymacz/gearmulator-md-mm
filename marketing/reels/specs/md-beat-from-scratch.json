@@ -15,77 +15,60 @@
   "music": { "bpm": 120, "downbeat": 0 },
   "hook": { "text": "Empty pattern. *Watch it fill.*", "seconds": 2 },
   "brief": {
-    "idea": "Radek's #1, cut from the full-song take (demo-md-full, bars 2-14): GEN writes kick, snare and hats, then hand edits, a keyboard fill and a lock ramp. One bar per idea; every cut is on a bar line, so the groove builds without a skip.",
+    "idea": "Radek's #1, from the full-song take (bars 2-14.75, continuous): GEN writes kick, snare and hats; hand edits and a keyboard fill; a lock ramp, rotate and swing, then the groove plays. Three long shots at real speed, every action followed by a bar or two of playing.",
     "footageRequest": "FR-01 (covered by demo-md-full)",
     "use": "paid-ok"
   },
   "shots": [
     {
-      "id": "kick",
+      "id": "gen-writes",
       "inBar": 2,
-      "beats": 4,
+      "beats": 12,
       "camera": [
-        { "at": 0, "region": [0, 0, 1440, 810], "byFormat": { "9x16": [0, 110, 760, 420] } },
-        { "at": 1.6, "region": [0, 110, 800, 450], "byFormat": { "9x16": [0, 120, 600, 300] } }
-      ]
-    },
-    {
-      "id": "snare",
-      "inBar": 3,
-      "beats": 4,
-      "camera": [{ "at": 0, "region": [0, 110, 800, 450], "byFormat": { "9x16": [0, 120, 600, 300] } }],
-      "subtitles": [{ "at": 0.1, "until": 1.9, "text": "*GEN* writes kick and snare." }]
-    },
-    {
-      "id": "hats",
-      "inBar": 4,
-      "beats": 8,
-      "camera": [
-        { "at": 0, "region": [460, 140, 980, 551], "byFormat": { "9x16": [740, 280, 700, 320] } },
-        { "at": 3.9, "region": [500, 160, 900, 506], "byFormat": { "9x16": [760, 300, 660, 300] } }
+        { "at": 0, "region": [0, 110, 960, 540], "byFormat": { "9x16": [0, 120, 640, 400] } },
+        { "at": 2.2, "region": [0, 110, 960, 540], "byFormat": { "9x16": [0, 120, 640, 400] } },
+        { "at": 4.4, "region": [460, 140, 980, 551], "byFormat": { "9x16": [760, 140, 680, 420] } }
       ],
-      "subtitles": [
-        { "at": 0.1, "until": 1.9, "text": "Roll the *hats.*" },
-        { "at": 2.0, "until": 3.9, "text": "Again, till it *grooves.*" }
-      ]
+      "subtitles": [{ "at": 2.2, "until": 5.8, "text": "*GEN* writes kick, snare, hats." }]
     },
     {
       "id": "by-hand",
-      "inBar": 6,
-      "beats": 4,
-      "camera": [{ "at": 0, "region": [0, 110, 960, 540], "byFormat": { "9x16": [0, 120, 640, 400] } }],
-      "subtitles": [{ "at": 0.1, "until": 1.9, "text": "Then play it *by hand.*" }]
-    },
-    {
-      "id": "fill",
-      "inBar": 8,
-      "beats": 4,
-      "camera": [{ "at": 0, "region": [240, 110, 960, 540], "byFormat": { "9x16": [0, 280, 640, 300] } }],
-      "subtitles": [{ "at": 0.1, "until": 1.9, "text": "A fill from the *keyboard.*" }]
-    },
-    {
-      "id": "locks",
-      "inBar": 11,
-      "beats": 4,
-      "camera": [{ "at": 0, "region": [200, 400, 1000, 563], "byFormat": { "9x16": [200, 560, 700, 240] } }],
-      "subtitles": [{ "at": 0.1, "until": 1.9, "text": "Lock a value *per step.*" }]
-    },
-    {
-      "id": "full",
-      "inBar": 13,
-      "beats": 4,
+      "inBar": 5,
+      "beats": 16,
       "camera": [
         { "at": 0, "region": [0, 110, 960, 540], "byFormat": { "9x16": [0, 120, 640, 400] } },
-        { "at": 1.4, "region": [0, 0, 1440, 810], "byFormat": { "9x16": [0, 100, 900, 520] } }
+        { "at": 3.8, "region": [0, 110, 960, 540], "byFormat": { "9x16": [0, 120, 640, 400] } },
+        { "at": 6.0, "region": [240, 250, 1000, 563], "byFormat": { "9x16": [0, 300, 640, 360] } }
       ],
-      "subtitles": [{ "at": 0.2, "until": 1.9, "text": "From nothing. *25 seconds.*" }]
+      "subtitles": [
+        { "at": 0.3, "until": 3.7, "text": "Then play it *by hand.*" },
+        { "at": 4.5, "until": 7.9, "text": "A fill from the *keyboard.*" }
+      ]
+    },
+    {
+      "id": "locks-and-groove",
+      "inBar": 9,
+      "beats": 23,
+      "camera": [
+        { "at": 0, "region": [200, 400, 1000, 563], "byFormat": { "9x16": [220, 560, 520, 240] } },
+        { "at": 4.0, "region": [200, 400, 1000, 563], "byFormat": { "9x16": [220, 560, 520, 240] } },
+        { "at": 6.2, "region": [0, 110, 960, 540], "byFormat": { "9x16": [0, 120, 640, 400] } },
+        { "at": 8.6, "region": [0, 110, 960, 540], "byFormat": { "9x16": [0, 120, 640, 400] } },
+        { "at": 11.0, "region": [0, 60, 1240, 698], "byFormat": { "9x16": [0, 120, 760, 450] } }
+      ],
+      "subtitles": [
+        { "at": 0.4, "until": 3.8, "text": "Lock a value *per step.*" },
+        { "at": 4.6, "until": 7.8, "text": "Rotate the hats. Add swing." },
+        { "at": 8.4, "until": 11.4, "text": "From nothing. *25 seconds.*" }
+      ]
     }
   ],
   "endCard": {
     "beats": 6,
-    "audioInBar": 14,
+    "audioInBar": 14.75,
     "title": "Machinedrum Editor",
     "line": "Free · pay what you want",
+    "status": "Coming soon",
     "small": "macOS · VST3, AU and app · bring your own ROM"
   },
   "audio": { "fadeOutSeconds": 0.8 },

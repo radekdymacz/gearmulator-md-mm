@@ -1,7 +1,7 @@
 {
   "schema": "mdmm.reel/1",
   "id": "md-gen-roll",
-  "title": "Roll a new rhythm in one click (GEN)",
+  "title": "Roll a new rhythm in one click (GEN and MUTATE)",
   "status": "draft",
   "machine": "md",
   "fps": 30,
@@ -15,63 +15,60 @@
   "music": { "bpm": 120, "downbeat": 0 },
   "hook": { "text": "One click. *A new rhythm.*", "seconds": 2 },
   "brief": {
-    "idea": "GEN close-up from the full-song take: kick, snare and hats rolled in bars 2-5, then the open hat rolled and rotated mid-song (bars 52-54). The R key and the grid in one frame.",
+    "idea": "Rolling, not programming, from the full-song take: GEN writes kick, snare and hats (bars 1.85-6.85), MUTATE rolls a whole sound and Cmd+Z takes it back (Sound page, bars 17.85-21.85), GEN rolls the open hat mid-song (bars 52.85-55.85). Every shot starts .85 into a bar so the page changes stay out of frame and the groove keeps its phase.",
     "footageRequest": "FR-05 (covered by demo-md-full; an all-tracks Alt-R roll is still FR-05)",
     "use": "paid-ok"
   },
   "shots": [
     {
-      "id": "kick-snare",
-      "inBar": 2,
-      "beats": 4,
+      "id": "gen",
+      "inBar": 1.85,
+      "beats": 20,
       "camera": [
-        { "at": 0, "region": [0, 0, 1440, 810], "byFormat": { "9x16": [400, 110, 1040, 460] } },
-        { "at": 1.6, "region": [480, 120, 960, 540], "byFormat": { "9x16": [740, 120, 700, 460] } }
+        { "at": 0, "region": [460, 140, 980, 551], "byFormat": { "9x16": [760, 120, 680, 440] } },
+        { "at": 6.0, "region": [460, 140, 980, 551], "byFormat": { "9x16": [760, 120, 680, 440] } },
+        { "at": 8.5, "region": [0, 110, 960, 540], "byFormat": { "9x16": [0, 120, 640, 400] } }
+      ],
+      "subtitles": [
+        { "at": 2.2, "until": 5.4, "text": "Kick, snare: *GEN* writes them." },
+        { "at": 6.2, "until": 9.6, "text": "Hats: roll, again, *keep.*" }
       ]
     },
     {
-      "id": "hats-1",
-      "inBar": 3,
-      "beats": 4,
-      "camera": [{ "at": 0, "region": [460, 140, 980, 551], "byFormat": { "9x16": [740, 280, 700, 320] } }],
-      "subtitles": [{ "at": 0.1, "until": 1.9, "text": "Hats: Euclid, *rolled.*" }]
-    },
-    {
-      "id": "hats-2",
-      "inBar": 4,
-      "beats": 4,
-      "camera": [{ "at": 0, "region": [500, 160, 900, 506], "byFormat": { "9x16": [760, 300, 660, 300] } }],
-      "subtitles": [{ "at": 0.1, "until": 1.9, "text": "*R* again: another groove." }]
-    },
-    {
-      "id": "hats-3",
-      "inBar": 5,
-      "beats": 4,
-      "camera": [{ "at": 0, "region": [0, 110, 960, 540], "byFormat": { "9x16": [0, 120, 640, 400] } }],
-      "subtitles": [{ "at": 0.1, "until": 1.9, "text": "Keep the one you like." }]
+      "id": "mutate",
+      "inBar": 17.85,
+      "beats": 16,
+      "camera": [
+        { "at": 0, "region": [480, 100, 960, 540], "byFormat": { "9x16": [700, 100, 740, 480] } },
+        { "at": 5.0, "region": [480, 100, 960, 540], "byFormat": { "9x16": [700, 100, 740, 480] } },
+        { "at": 7.5, "region": [300, 100, 1140, 641], "byFormat": { "9x16": [560, 100, 880, 520] } }
+      ],
+      "subtitles": [
+        { "at": 0.6, "until": 3.9, "text": "*MUTATE* rolls a whole sound." },
+        { "at": 4.4, "until": 7.8, "text": "Not it? ⌘Z. Roll again." }
+      ]
     },
     {
       "id": "open-hat",
-      "inBar": 52,
+      "inBar": 52.85,
       "beats": 12,
       "camera": [
-        { "at": 0, "region": [0, 0, 1440, 810], "byFormat": { "9x16": [400, 110, 1040, 460] } },
-        { "at": 1.2, "region": [460, 140, 980, 551], "byFormat": { "9x16": [740, 280, 700, 320] } },
-        { "at": 4.4, "region": [460, 140, 980, 551], "byFormat": { "9x16": [740, 280, 700, 320] } },
-        { "at": 5.6, "region": [0, 110, 960, 540], "byFormat": { "9x16": [0, 120, 640, 400] } }
+        { "at": 0, "region": [460, 140, 980, 551], "byFormat": { "9x16": [760, 120, 680, 440] } },
+        { "at": 2.6, "region": [460, 140, 980, 551], "byFormat": { "9x16": [760, 120, 680, 440] } },
+        { "at": 4.6, "region": [0, 110, 960, 540], "byFormat": { "9x16": [0, 120, 640, 400] } }
       ],
       "subtitles": [
-        { "at": 0.2, "until": 2.4, "text": "Mid-song, still playing." },
-        { "at": 2.6, "until": 4.4, "text": "Roll the *open hat.*" },
-        { "at": 4.6, "until": 5.9, "text": "Every roll *undoes.*" }
+        { "at": 0.3, "until": 3.0, "text": "Mid-song: roll the *open hat.*" },
+        { "at": 3.3, "until": 5.9, "text": "Every roll *undoes.*" }
       ]
     }
   ],
   "endCard": {
     "beats": 6,
-    "audioInBar": 55,
+    "audioInBar": 55.85,
     "title": "Machinedrum Editor",
     "line": "Free · pay what you want",
+    "status": "Coming soon",
     "small": "macOS · VST3, AU and app · bring your own ROM"
   },
   "audio": { "fadeOutSeconds": 0.8 },

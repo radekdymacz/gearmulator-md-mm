@@ -55,6 +55,9 @@ export type EndCard = {
 	/** optional and off by default (Radek, 2026-10-06: no website link in the reels yet).
 	 *  When set: a bare domain (no https, no UTM); the card is read, not clicked. */
 	url?: string;
+	/** shown on the URL plate while there is no url, e.g. "Coming soon" (Radek, 2026-10-07).
+	 *  At launch: set url and drop status; url wins when both are set. */
+	status?: string;
 	/** small honest print under the URL */
 	small?: string;
 };

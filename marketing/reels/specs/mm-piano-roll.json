@@ -49,6 +49,7 @@
     "audioInBeat": 16,
     "title": "Monomachine Editor",
     "line": "Free · pay what you want",
+    "status": "Coming soon",
     "small": "macOS · VST3, AU and app · bring your own ROM"
   },
   "audio": { "fadeOutSeconds": 0.8 },
