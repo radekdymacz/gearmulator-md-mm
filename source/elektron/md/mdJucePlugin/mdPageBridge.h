@@ -23,10 +23,37 @@ namespace mdJucePlugin::pageBridge
 	//     has the next batch number: JUCE 7 keeps the last URL it went to, javascript: ones too, and goes to it again
 	//     when the view is shown again (reloadLastURL), so the page drops a batch whose number it has already had
 	//     (release review 2026-10-04, S5).
+	//
+	//   Linux (doc/release/LINUX.md): webkit2gtk's web process crashes (2.50, a null read) when a javascript: URL is
+	//   loaded while the page's bridge iframes navigate, so there plug-in -> page goes as files instead: each call's
+	//   script (the same gm.recv([...],<seq>) without "javascript:") is written beside the page file as
+	//   <page file>.recv-<seq>.js (recvFileName), and the page, loaded with ?recv=file, loads them in order with
+	//   <script> tags, polling for the next one. It says how far it got with gmbridge://a/<seq> (now and then; the
+	//   plug-in then deletes those files), and gmbridge://a/0 when it starts (a page that started again reads from 1).
 	constexpr const char* g_command = "gmbridge://c/";
 	constexpr const char* g_piece = "gmbridge://p/";
 	constexpr const char* g_log = "gmbridge://log/";
+	constexpr const char* g_ack = "gmbridge://a/";
+	constexpr const char* g_javascriptUrl = "javascript:";
+	constexpr const char* g_fileRecvQuery = "recv";	// ?recv=file
 	constexpr size_t g_maxRecvBytes = 1 << 20;
+
+	// The file the page loads for batch _seq (beside the page file, named after it).
+	inline std::string recvFileName(const std::string& _pageFileName, const uint64_t _seq)
+	{
+		return _pageFileName + ".recv-" + std::to_string(_seq) + ".js";
+	}
+
+	// gmbridge://a/<seq>: the last batch the page has read, or nothing when _url is not one.
+	inline std::optional<uint64_t> ackOf(const std::string& _url)
+	{
+		if(_url.rfind(g_ack, 0) != 0)
+			return std::nullopt;
+		const auto text = _url.substr(std::char_traits<char>::length(g_ack));
+		if(text.empty() || text.find_first_not_of("0123456789") != std::string::npos || text.size() > 19)
+			return std::nullopt;
+		return std::stoull(text);
+	}
 
 	inline bool startsWith(const std::string& _s, const char* _prefix)
 	{
@@ -89,8 +116,9 @@ namespace mdJucePlugin::pageBridge
 
 	// The outbox as the scripts that hand it to the page, in order, numbered from _firstSeq (one number a script;
 	// the caller's next batch is _firstSeq + the number of scripts).
+	// _prefix: "javascript:" for URLs, "" for the Linux script files.
 	inline std::vector<std::string> recvScripts(const std::vector<elektronData::json::Value>& _outbox, const uint64_t _firstSeq,
-		const size_t _maxBytes = g_maxRecvBytes)
+		const size_t _maxBytes = g_maxRecvBytes, const std::string& _prefix = g_javascriptUrl)
 	{
 		std::vector<std::string> scripts;
 		std::string batch;
@@ -98,7 +126,7 @@ namespace mdJucePlugin::pageBridge
 		{
 			if(batch.empty())
 				return;
-			scripts.push_back("javascript:window.gm&&gm.recv([" + batch + "]," + std::to_string(_firstSeq + scripts.size()) + ")");
+			scripts.push_back(_prefix + "window.gm&&gm.recv([" + batch + "]," + std::to_string(_firstSeq + scripts.size()) + ")");
 			batch.clear();
 		};
 		for(const auto& m : _outbox)

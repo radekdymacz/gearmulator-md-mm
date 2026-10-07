@@ -16,6 +16,12 @@
    Nothing here knows about patterns or kits; that is each page's model. */
 const BridgeTransport = (() => {
 	const native = location.protocol === "file:" && !/[?&]dev=1/.test(location.search);
+	/* Linux (?recv=file, mdPageBridge.h): the plug-in writes each gm.recv call as <this page's file>.recv-<seq>.js
+	   beside the page instead of a javascript: URL (webkit2gtk's web process crashes on those next to the bridge
+	   iframes). The page loads them in order, polling for the next one, and says how far it got
+	   (gmbridge://a/<seq>; a/0 when it starts) so the plug-in deletes what was read. */
+	const fileRecv = native && /[?&]recv=file(&|$)/.test(location.search);
+	const POLL_MS = 8, ACK_MS = 250;
 	/* The longest URL one navigation carries (encoded); a longer batch goes in pieces this long. Far above what
 	   a gesture sends (a whole kit document is about 20 KB encoded), so today's batches go as one. */
 	const MAX_URL = 256 * 1024;
@@ -42,6 +48,32 @@ const BridgeTransport = (() => {
 			i = end;
 		}
 		return out;
+	}
+	/* The file the plug-in writes for batch seq, relative to the page (pure, for the node test). */
+	function recvFile(pagePath, seq) {
+		return pagePath.split("/").pop() + ".recv-" + seq + ".js";
+	}
+	/* Linux: load batch 1, 2, ... as scripts (each runs gm.recv); a missing one is asked for again shortly. */
+	function pollFiles() {
+		let next = 1, tries = 0, ackTimer = 0;
+		const ack = () => {
+			ackTimer = 0;
+			navigate("gmbridge://a/" + (next - 1));
+		};
+		const load = () => {
+			const s = document.createElement("script");
+			s.src = recvFile(location.pathname, next) + "?t=" + (++tries);
+			s.onload = () => {
+				s.remove();
+				++next;
+				if (!ackTimer) ackTimer = setTimeout(ack, ACK_MS);
+				load();
+			};
+			s.onerror = () => { s.remove(); setTimeout(load, POLL_MS); };
+			(document.head || document.documentElement).appendChild(s);
+		};
+		navigate("gmbridge://a/0");
+		load();
 	}
 	/* The URLs one batch travels as (the native transport's; pure, for the node test). */
 	function urls(batch, max = MAX_URL) {
@@ -75,8 +107,9 @@ const BridgeTransport = (() => {
 				}
 			};
 			window.gm = gm;
+			if (fileRecv) pollFiles();
 		},
-		urls, pieces
+		urls, pieces, recvFile
 	};
 })();
 
