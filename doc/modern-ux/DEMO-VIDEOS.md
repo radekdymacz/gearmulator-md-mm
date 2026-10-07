@@ -54,12 +54,12 @@ Output, under `temp/videos/<demo>-<date>/` (gitignored; `MDMM_DEMO_OUT` for else
 ```
 0.00|2.39|Your Machinedrum, on screen.
 2.54|7.36|Roll a fresh hi-hat groove
-card|3.5|Machinedrum Editor|Free · pay what you want
+card|3.5|Machinedrum Editor|Free · pay what you want|Coming soon
 ```
 
 `start|end|text` in seconds from the start of the video; about six words a line, two lines at most (`\n` breaks a
 line, a longer line is split in two). `card|seconds|name|line` is the end card over the last seconds; a fifth field
-adds the URL (off until launch: `|mdmm.nativekloud.com`). Edit it,
+is the big lime line under them: "Coming soon" until launch, then the URL (`|mdmm.nativekloud.com`). Edit it,
 then `scripts/mdmm-demo-video.sh render <run folder>`; no app, no re-recording. A captions file given as the last
 argument replaces it; `none` burns in no captions.
 

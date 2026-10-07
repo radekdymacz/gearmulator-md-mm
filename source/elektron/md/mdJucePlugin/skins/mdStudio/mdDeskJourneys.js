@@ -752,7 +752,7 @@ const MdJourneys = (() => {
 	   end card. Captions: about six words a line, two lines at most (the video script renders them). */
 	const groove = {
 		name: "demo-md-groove",
-		card: "Machinedrum Editor|Free · pay what you want",
+		card: "Machinedrum Editor|Free · pay what you want|Coming soon",
 		/* before the camera: the fullest pattern and its kit, playing */
 		setup: [
 			{ say: "the Sequence workspace", act: async u => { u.click(tab("seq")); }, screen: () => onTab("seq") },
@@ -851,7 +851,7 @@ const MdJourneys = (() => {
 	const pickEmpty = () => { const k = Docs.patterns[fullest()]?.kit; const pairs = [...Array(127).keys()].filter(p => (p & 15) < 15 && Docs.patterns[p] && Docs.patterns[p + 1] && !hasPat(p) && !hasPat(p + 1)); return pairs.find(p => Docs.patterns[p].kit === k) ?? pairs[0] ?? null; };
 	const full = {
 		name: "demo-md-full",
-		card: "Machinedrum Editor|Free · pay what you want",
+		card: "Machinedrum Editor|Free · pay what you want|Coming soon",
 		setup: [
 			{ say: "the Sequence workspace", act: async u => { u.click(tab("seq")); }, screen: () => onTab("seq") },
 			{ say: "open the pattern chooser", act: async u => { u.click("#pat"); }, machine: () => ok(Object.keys(Docs.patterns).length === 128, "patterns read " + Object.keys(Docs.patterns).length), within: 8000 },
