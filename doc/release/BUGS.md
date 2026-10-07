@@ -17,7 +17,7 @@ where it came from, the setup, what happens, what should happen, status.*
 - **From:** the same tester, macOS 12, 2026-10-07.
 - **What happens:** right-click on the editor opens the editor menu (inherited from Gearmulator); choosing its Settings entry does nothing.
 - **Should:** every entry in that menu works in the web-page editors, or is removed; Settings opens the editor's own settings (or the menu offers only what applies).
-- **Status:** fixed on `fix/editor-menu` (not released). Cause: "Settings..." opened upstream's RmlUi settings page, which the web page hides. The menu now has GUI Scale, RAM recording (MD), Performance diagnostics and, in the standalone only, "Audio/MIDI Settings..." (the page's own panel); in a plug-in the host owns audio and MIDI, so there is no Settings entry.
+- **Status:** fixed for 0.3.2. Cause: "Settings..." opened upstream's RmlUi settings page, which the web page hides. The menu now has GUI Scale, RAM recording (MD), Performance diagnostics and, in the standalone only, "Audio/MIDI Settings..." (the page's own panel); in a plug-in the host owns audio and MIDI, so there is no Settings entry.
 
 ## B-006 · LEN (loop length) cannot be dragged
 
