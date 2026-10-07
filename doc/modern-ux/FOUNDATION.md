@@ -222,7 +222,7 @@ Every push to `main`, `release/md-mm-*`, `release/0.*` (and `ci/*-ui-smoke`) tha
 | Runners | windows-2022 | macos-14, macos-15 (the universal package) | Ubuntu 22.04 and 24.04, runtime packages only, Xvfb |
 | Still running after the page loaded | yes | yes | yes |
 | Web engine process | `msedgewebview2.exe` with the editors' profile (WebView2, not IE) | `com.apple.WebKit.WebContent` | `WebKitWebProcess` (the shims found a webkit2gtk) |
-| Page -> plug-in -> page | the page shows "<machine> firmware needed", read through UI Automation | the same text, read through the Accessibility API (`scripts/macos/ui_probe.swift`) | the same text, read through AT-SPI (`scripts/linux/ui_texts.py`); also the bridge's answer files written and deleted after the page read them (inotify) |
+| Page -> plug-in -> page | the page shows "<machine> firmware needed", read through UI Automation | the same text, read through the Accessibility API (`scripts/macos/ui_probe.swift`) | the same text, read through AT-SPI (`scripts/linux/ui_texts.py`); also the bridge's answer files written and deleted after the page read them (inotify); the tree is read only once the bridge runs, and a segfault in the kernel log is reported per run |
 | Plug-in formats | standalone, VST3 | standalone, VST3, AU (`auval -v`, installed on the runner only) | standalone, VST3 |
 | Artifact | `windows-mdmm-smoke` | `macos-mdmm-smoke-<os>` | `linux-mdmm-smoke-<os>` |
 
