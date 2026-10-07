@@ -91,14 +91,21 @@ def main():
 				"GetConnectionUnixProcessID", GLib.Variant("(s)", (name,)), "(u)").unpack()[0]
 		except GLib.Error:
 			pid = "?"
+		try:
+			with open(f"/proc/{pid}/comm") as f:
+				program = f.read().strip()
+		except (OSError, TypeError):
+			program = "?"
 		found = []
 		objects(bus, name, "/", found)
-		print(f"[connection] {name} pid={pid} objects={len(found)}")
+		print(f"[connection] {name} pid={pid} {program} objects={len(found)}: "
+			+ " ".join(path for path, _ in found[:6]))
+		# WebKit makes the page's objects when a reader asks for them: walk down from every object with children.
 		lines = []
-		for path, interfaces in found:
-			lines.extend(texts(bus, name, path, interfaces))
-		if not any(ACCESSIBLE in interfaces for _, interfaces in found):
-			children(bus, name, "/org/a11y/atspi/accessible/root", set(), lines)
+		seen = set()
+		roots = [path for path, interfaces in found if ACCESSIBLE in interfaces] or ["/org/a11y/atspi/accessible/root"]
+		for path in roots:
+			children(bus, name, path, seen, lines)
 		for line in lines:
 			print(line.replace("\n", " "))
 	return 0
