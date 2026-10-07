@@ -1,0 +1,87 @@
+name: MD/MM Editors Windows x64
+
+# This fork's Windows check (doc/release/WINDOWS.md, doc/modern-ux/UPSTREAM.md: a workflow of ours). Builds the
+# package with upstream's elektron-windows.yml as it is (standalones, VST3s, unit tests, the VST3 load test), then
+# starts each packaged standalone on a clean Windows runner (the WebView2 runtime is part of Windows there, as on
+# a user's Windows 10 or 11) and checks that the page runs in WebView2 and the bridge goes both ways
+# (scripts/windows/smoke_mdmm.ps1), keeping a screenshot.
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+      - "release/md-mm-*"
+      - "feat/windows-*"
+    paths:
+      - ".github/workflows/mdmm-editors-windows.yml"
+      - ".github/workflows/elektron-windows.yml"
+      - "scripts/windows/**"
+      - ".gitmodules"
+      - "CMakeLists.txt"
+      - "base.cmake"
+      - "source/CMakeLists.txt"
+      - "source/*.cmake"
+      - "source/JUCE"
+      - "source/elektron/**"
+      - "source/baseLib/**"
+      - "source/synthLib/**"
+      - "source/jucePluginEditorLib/**"
+      - "source/jucePluginLib/**"
+      - "source/juceUiLib/**"
+      - "source/juceRmlUi/**"
+      - "source/juceRmlPlugin/**"
+      - "source/dsp56300"
+      - "source/mc68k"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: mdmm-editors-windows-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    uses: ./.github/workflows/elektron-windows.yml
+
+  smoke:
+    name: Start the packaged standalones (WebView2)
+    needs: build
+    runs-on: windows-2022
+    timeout-minutes: 20
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          sparse-checkout: scripts/windows
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: Gearmulator-Elektron-Windows-x64-${{ github.sha }}
+          path: ${{ runner.temp }}\windows-mdmm
+
+      - name: Unpack the package
+        shell: pwsh
+        run: |
+          $zip = Get-ChildItem -LiteralPath "${{ runner.temp }}\windows-mdmm" -Filter 'Gearmulator-Elektron-Windows-x64.zip'
+          Expand-Archive -LiteralPath $zip.FullName -DestinationPath "${{ runner.temp }}\package"
+          Get-ChildItem -LiteralPath "${{ runner.temp }}\package" -Recurse | Select-Object FullName, Length | Format-Table -AutoSize
+          # No WebView2Loader.dll beside anything: the loader is linked statically (mdmmWindowsWebView.cmake).
+          if (Get-ChildItem -LiteralPath "${{ runner.temp }}\package" -Recurse -Filter 'WebView2Loader.dll') {
+            throw 'WebView2Loader.dll in the package: the loader should be static'
+          }
+          $runtime = Get-ItemProperty 'HKLM:\SOFTWARE\WOW6432Node\Microsoft\EdgeUpdate\Clients\{F3017226-FE2A-4295-8BDF-00C3A9A7E4C5}' -ErrorAction SilentlyContinue
+          Write-Host "WebView2 runtime: $(if ($runtime) { $runtime.pv } else { 'not in the registry' })"
+
+      - name: Start each standalone, check the page and the bridge, take a screenshot
+        shell: pwsh
+        run: ./scripts/windows/smoke_mdmm.ps1 -PackageDir "${{ runner.temp }}\package" -OutputDir "${{ runner.temp }}\smoke"
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: windows-mdmm-smoke
+          path: ${{ runner.temp }}\smoke
+          if-no-files-found: warn
+          retention-days: 14
