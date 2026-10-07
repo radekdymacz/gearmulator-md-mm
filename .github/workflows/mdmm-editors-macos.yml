@@ -1,0 +1,120 @@
+name: MD/MM Editors macOS start test
+
+# This fork's macOS start test (doc/modern-ux/FOUNDATION.md, "CI start tests"; doc/modern-ux/UPSTREAM.md: a
+# workflow of ours, upstream's elektron-macos.yml stays as it is and keeps its package on its runner). Builds the
+# fixture-free universal package with the same script and settings as elektron-macos.yml and
+# mdmm-editors-release.yml, then on a clean runner with a logged-in desktop starts each standalone and each VST3
+# (in scripts/vst3EditorHost) with no ROM, reads "<machine> firmware needed" from the page through the
+# Accessibility API, runs auval on each AU and keeps a screenshot of each window (scripts/macos/smoke_mdmm.sh).
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+      - "release/md-mm-*"
+      - "release/0.*"
+      - "ci/*-ui-smoke"
+    tags:
+      - "mdmm-v*"
+    paths:
+      - ".github/workflows/mdmm-editors-macos.yml"
+      - "scripts/macos/**"
+      - "scripts/vst3EditorHost/**"
+      - "scripts/mdmm-product.env"
+      - ".gitmodules"
+      - "CMakeLists.txt"
+      - "base.cmake"
+      - "source/CMakeLists.txt"
+      - "source/*.cmake"
+      - "source/JUCE"
+      - "source/elektron/**"
+      - "source/baseLib/**"
+      - "source/synthLib/**"
+      - "source/jucePluginEditorLib/**"
+      - "source/jucePluginLib/**"
+      - "source/juceUiLib/**"
+      - "source/juceRmlUi/**"
+      - "source/juceRmlPlugin/**"
+      - "source/dsp56300"
+      - "source/mc68k"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: mdmm-editors-macos-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: macOS universal package (fixture-free)
+    runs-on: macos-14
+    timeout-minutes: 120
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          submodules: recursive
+
+      - name: Build, test and package MD/MM
+        env:
+          GEARMULATOR_REQUIRE_FIRMWARE_TESTS: "0"
+          GEARMULATOR_MDMM_MACOS_ARCHITECTURES: "arm64;x86_64"
+          GEARMULATOR_MDMM_APPLE_PGO_MODE: "none"
+        run: >-
+          ./scripts/macos/build_mdmm.sh
+          "${{ github.workspace }}"
+          "${{ runner.temp }}/gearmulator-elektron-build"
+          "${{ github.workspace }}/artifacts/macos-mdmm"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: macos-mdmm-start-test-package
+          path: artifacts/macos-mdmm/Gearmulator-Elektron-macOS-*.zip
+          if-no-files-found: error
+          retention-days: 3
+
+  smoke:
+    name: Start the standalones, VST3s and AUs (${{ matrix.os }})
+    needs: build
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-14, macos-15]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 25
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: false
+
+      - name: Build the minimal VST3 host (scripts/vst3EditorHost)
+        run: ./scripts/macos/build_vst3_host.sh "${RUNNER_TEMP}/vst3host" >> "${GITHUB_ENV}"
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: macos-mdmm-start-test-package
+          path: ${{ runner.temp }}/macos-mdmm
+
+      - name: Unpack the package
+        run: |
+          set -euo pipefail
+          zip="$(find "${RUNNER_TEMP}/macos-mdmm" -name 'Gearmulator-Elektron-macOS-*.zip' | head -n 1)"
+          ditto -x -k "${zip}" "${RUNNER_TEMP}/package"
+          dir="$(find "${RUNNER_TEMP}/package" -mindepth 1 -maxdepth 1 -type d | head -n 1)"
+          ls -la "${dir}"
+          echo "PACKAGE_DIR=${dir}" >> "${GITHUB_ENV}"
+
+      - name: Start each standalone and VST3, check the page and the bridge, run auval, take screenshots
+        run: ./scripts/macos/smoke_mdmm.sh "${PACKAGE_DIR}" "${RUNNER_TEMP}/smoke" "${VST3_HOST}"
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: macos-mdmm-smoke-${{ matrix.os }}
+          path: ${{ runner.temp }}/smoke
+          if-no-files-found: warn
+          retention-days: 14

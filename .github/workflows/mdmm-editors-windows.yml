@@ -14,10 +14,14 @@ on:
       - "release/md-mm-*"
       - "release/0.*"
       - "feat/windows-*"
+      - "ci/*-ui-smoke"
+    tags:
+      - "mdmm-v*"
     paths:
       - ".github/workflows/mdmm-editors-windows.yml"
       - ".github/workflows/elektron-windows.yml"
       - "scripts/windows/**"
+      - "scripts/vst3EditorHost/**"
       - ".gitmodules"
       - "CMakeLists.txt"
       - "base.cmake"
@@ -55,11 +59,11 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Build the minimal VST3 host (scripts/windows/vst3EditorHost)
+      - name: Build the minimal VST3 host (scripts/vst3EditorHost)
         shell: pwsh
         run: |
           git submodule update --init --depth 1 source/JUCE
-          cmake -S scripts/windows/vst3EditorHost -B "${{ runner.temp }}\vst3host" -G "Visual Studio 17 2022" -A x64
+          cmake -S scripts/vst3EditorHost -B "${{ runner.temp }}\vst3host" -G "Visual Studio 17 2022" -A x64
           cmake --build "${{ runner.temp }}\vst3host" --config Release --parallel 4 -- /verbosity:minimal
           $exe = Get-ChildItem -LiteralPath "${{ runner.temp }}\vst3host" -Recurse -File -Filter 'mdmmVst3EditorHost.exe' | Select-Object -First 1
           "VST3_HOST=$($exe.FullName)" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8

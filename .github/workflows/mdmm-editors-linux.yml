@@ -2,8 +2,10 @@ name: MD/MM Editors Linux x64
 
 # This fork's Linux build (doc/release/LINUX.md, doc/modern-ux/UPSTREAM.md: a workflow of ours). Builds
 # the standalones and VST3s with the web view on, runs the unit tests, packages one .tar.gz per machine
-# (scripts/linux/build_mdmm.sh), then starts each packaged standalone on a virtual X11 display on the
-# oldest and the newest supported Ubuntu with only runtime packages, and keeps a screenshot. On an
+# (scripts/linux/build_mdmm.sh), then starts each packaged standalone and VST3 (in scripts/vst3EditorHost) on a
+# virtual X11 display on the oldest and the newest supported Ubuntu with only runtime packages, checks the page
+# and the bridge, and keeps screenshots (scripts/linux/smoke_mdmm.sh; doc/modern-ux/FOUNDATION.md, "CI start
+# tests"). On an
 # mdmm-v* tag, mdmm-editors-release.yml calls it and attaches the archives to the draft release.
 
 on:
@@ -15,9 +17,11 @@ on:
       - "release/md-mm-*"
       - "release/0.*"
       - "feat/linux-*"
+      - "ci/*-ui-smoke"
     paths:
       - ".github/workflows/mdmm-editors-linux.yml"
       - "scripts/linux/**"
+      - "scripts/vst3EditorHost/**"
       - ".gitmodules"
       - "CMakeLists.txt"
       - "base.cmake"
@@ -110,8 +114,27 @@ jobs:
           if-no-files-found: error
           retention-days: 14
 
+      # The start test's minimal VST3 host (scripts/vst3EditorHost), built here where the headers are; libstdc++
+      # and libgcc linked statically, as the editors, so it runs with runtime packages only.
+      - name: Build the minimal VST3 host
+        run: |
+          set -euo pipefail
+          cmake -S scripts/vst3EditorHost -B "${RUNNER_TEMP}/vst3host" -G Ninja -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_EXE_LINKER_FLAGS="-static-libstdc++ -static-libgcc"
+          cmake --build "${RUNNER_TEMP}/vst3host" --parallel 4
+          mkdir -p artifacts/linux-vst3host
+          find "${RUNNER_TEMP}/vst3host" -type f -name mdmmVst3EditorHost -perm -u+x -exec cp {} artifacts/linux-vst3host/ \;
+          test -x artifacts/linux-vst3host/mdmmVst3EditorHost
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: linux-mdmm-vst3host
+          path: artifacts/linux-vst3host/mdmmVst3EditorHost
+          if-no-files-found: error
+          retention-days: 3
+
   smoke:
-    name: Start the packaged standalones (${{ matrix.os }}, runtime packages only)
+    name: Start the packaged standalones and VST3s (${{ matrix.os }}, runtime packages only)
     needs: build
     strategy:
       fail-fast: false
@@ -127,11 +150,12 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          sparse-checkout: scripts/linux
+          sparse-checkout: scripts
 
       - name: Install runtime packages
         run: >-
           sudo apt-get update && sudo apt-get install -y --no-install-recommends xvfb x11-utils imagemagick
+          inotify-tools dbus dbus-x11 at-spi2-core python3-gi gir1.2-atspi-2.0 libglib2.0-bin
           ${{ matrix.packages }} libx11-6 libxext6 libxcursor1 libxinerama1 libxrandr2 libxrender1
           libxcomposite1 libfreetype6 libfontconfig1 &&
           dpkg -l | grep -i -E 'webkit2gtk|libgtk-3-0'
@@ -141,8 +165,16 @@ jobs:
           name: linux-mdmm
           path: ${{ runner.temp }}/linux-mdmm
 
-      - name: Start each standalone and take a screenshot
-        run: ./scripts/linux/smoke_mdmm.sh "${{ runner.temp }}/linux-mdmm" "${{ runner.temp }}/smoke"
+      - uses: actions/download-artifact@v4
+        with:
+          name: linux-mdmm-vst3host
+          path: ${{ runner.temp }}/vst3host
+
+      - name: Start each standalone and VST3, check the page and the bridge, take screenshots
+        run: |
+          chmod +x "${{ runner.temp }}/vst3host/mdmmVst3EditorHost"
+          ./scripts/linux/smoke_mdmm.sh "${{ runner.temp }}/linux-mdmm" "${{ runner.temp }}/smoke" \
+            "${{ runner.temp }}/vst3host/mdmmVst3EditorHost"
 
       - uses: actions/upload-artifact@v4
         if: always()
