@@ -458,6 +458,19 @@ function(mdmm_plugin_targets)
 	add_test(NAME mdSessionFirmwareTest COMMAND mdSessionFirmwareTest)
 	set_tests_properties(mdSessionFirmwareTest PROPERTIES LABELS "Integration;FirmwareTest" SKIP_RETURN_CODE 77 TIMEOUT 300)
 
+	# B-003: the first start without the UW factory cache shows one start-up, not two, and keeps the cache.
+	# In ctest; it skips (77) without GEARMULATOR_MD_FIRMWARE_BIN in the environment.
+	add_executable(mdFirstStartFirmwareTest mdFirstStartFirmwareTest.cpp)
+	target_link_libraries(mdFirstStartFirmwareTest PRIVATE
+		mdJucePlugin jucePluginEditorLib mdLib juce_plugin_modules
+		juce::juce_opengl)
+	target_include_directories(mdFirstStartFirmwareTest PRIVATE
+		${CMAKE_CURRENT_SOURCE_DIR}/../../..)
+	target_compile_definitions(mdFirstStartFirmwareTest PRIVATE JUCE_GLOBAL_MODULE_SETTINGS_INCLUDED=1)
+	set_property(TARGET mdFirstStartFirmwareTest PROPERTY FOLDER "Elektron/test")
+	add_test(NAME mdFirstStartFirmwareTest COMMAND mdFirstStartFirmwareTest)
+	set_tests_properties(mdFirstStartFirmwareTest PROPERTIES LABELS "Integration;FirmwareTest" SKIP_RETURN_CODE 77 TIMEOUT 900)
+
 	# A machine without its ROM is not an error: the session says "missing", the page's card takes the ROM,
 	# and the machine starts in place. The plain runs need no ROM; "install" needs the user's own (skips, 77, without).
 	add_executable(mdSessionNoRomTest mdSessionNoRomTest.cpp)

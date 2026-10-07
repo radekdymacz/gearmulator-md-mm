@@ -243,6 +243,9 @@ namespace mdJucePlugin
 		{
 			m_engine = m_record->make(*this);
 			m_desk = std::make_unique<DeskT>(m_engine->adapter(m_record->profile), port());
+			// What the machine does now, before the page's first document: a machine still being prepared is
+			// "loading" from the start, never addressed as a running one (B-003).
+			m_desk->setProbe(m_engine->probe());
 			m_choices = choices();
 			m_desk->setEngines(m_choices);
 			restoreSetup();
@@ -489,14 +492,16 @@ namespace mdJucePlugin
 	};
 
 	// The machine's own screen while it starts, as the page's LCD (both models): every g_lcdMs, only
-	// when it changed, through the desk (so it goes out in order with the rest).
+	// when it changed, through the desk (so it goes out in order with the rest). Not while the machine is
+	// prepared (lifecycle "loading": a restored project or the first start's flash formatting): that run is
+	// replaced by the one that follows, and its screen would be a start-up animation before the real one.
 	class LcdFeed
 	{
 	public:
 		template<typename DeskT, typename Read>
 		void step(DeskT& _desk, const uint64_t _tick, const Read& _read)
 		{
-			if(_desk.isInputReady())
+			if(_desk.isInputReady() || _desk.lifecycle() == deskCore::Lifecycle::Loading)
 			{
 				m_last.clear();
 				return;

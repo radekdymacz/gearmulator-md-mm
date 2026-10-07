@@ -322,6 +322,11 @@ namespace mdJucePlugin
 				return P::Unsupported;
 			if(device->isProjectStateRestorePending())
 				return P::Loading;
+			// No UW factory cache yet (the first start in this data folder): the firmware formats its sample
+			// flash and the processor starts it again (serviceFactoryInitialization). That first run prepares
+			// the machine; the start the page shows, with its animation, is the one after it (B-003).
+			if(hw.isFactoryFlashInitializationExpected())
+				return P::Loading;
 			if(!hw.isFirmwareMidiReady())
 				return P::Booting;
 			return P::Running;
