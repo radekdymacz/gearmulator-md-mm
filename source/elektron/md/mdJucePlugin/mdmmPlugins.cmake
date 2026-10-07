@@ -172,6 +172,22 @@ function(mdmm_plugin_targets)
 	endforeach()
 
 	if(APPLE)
+		# The standalone apps' Record menu (mdRecordMenu.h): its sources and ScreenCaptureKit go
+		# into the _Standalone targets alone, so the VST3 and AU neither build nor link them.
+		# ScreenCaptureKit is weak (macOS 12.3+; the deployment target is 10.13): the menu says
+		# what it needs on an older Mac.
+		set_source_files_properties(mdScreenRecorder.mm PROPERTIES COMPILE_OPTIONS "-fobjc-arc")
+		foreach(app_target mdJucePlugin_Standalone mmJucePlugin_Standalone)
+			if(NOT TARGET ${app_target})
+				continue()
+			endif()
+			target_sources(${app_target} PRIVATE
+				${CMAKE_CURRENT_SOURCE_DIR}/mdRecordMenu.cpp ${CMAKE_CURRENT_SOURCE_DIR}/mdRecordMenu.h
+				${CMAKE_CURRENT_SOURCE_DIR}/mdScreenRecorder.mm ${CMAKE_CURRENT_SOURCE_DIR}/mdScreenRecorder.h)
+			target_link_libraries(${app_target} PRIVATE
+				"-weak_framework ScreenCaptureKit" "-framework AVFoundation" "-framework CoreMedia")
+		endforeach()
+
 		foreach(plugin_target
 			mdJucePlugin_VST3 mmJucePlugin_VST3
 			mdJucePlugin_AU mmJucePlugin_AU

@@ -17,7 +17,9 @@
 // compile one file of the plug-in's shared code with
 //     #include "jucePluginEditorLib/standaloneApp.h"
 //     JUCE_CREATE_APPLICATION_DEFINE(jucePluginEditorLib::StandaloneApp)
-// or with a class derived from StandaloneApp that gives the window its title (getWindowTitle).
+// or with a class derived from StandaloneApp that gives the window its title (getWindowTitle)
+// and, through windowOpened / windowClosing, menus of its own after "Editor" and "Audio"
+// (StandaloneWindow::addMenu).
 
 #include "editorPopupMenu.h"
 #include "editorTraits.h"
@@ -31,11 +33,22 @@
 #include <juce_audio_plugin_client/detail/juce_PluginUtilities.h>
 #include <juce_audio_plugin_client/Standalone/juce_StandaloneFilterWindow.h>
 
+#include <functional>
+#include <vector>
+
 namespace jucePluginEditorLib
 {
 	class StandaloneWindow : public juce::StandaloneFilterWindow, juce::MenuBarModel
 	{
 	public:
+		// A menu of the application's own, after "Editor" and "Audio": its name and a function
+		// that builds it each time it opens.
+		struct Menu
+		{
+			juce::String name;
+			std::function<juce::PopupMenu()> build;
+		};
+
 		StandaloneWindow(const juce::String& _appName, juce::PropertySet* _settings)
 			: juce::StandaloneFilterWindow(_appName,
 				juce::LookAndFeel::getDefaultLookAndFeel().findColour(juce::ResizableWindow::backgroundColourId),
@@ -69,10 +82,33 @@ namespace jucePluginEditorLib
 			hideJuceOptionsButton();
 		}
 
-		juce::StringArray getMenuBarNames() override { return {"Editor", "Audio"}; }
+		void addMenu(Menu _menu)
+		{
+			m_menus.push_back(std::move(_menu));
+			menuItemsChanged();
+		}
+
+		// The menus' items or their states changed: build them again (the macOS menu bar keeps
+		// its items' key equivalents and enabled states from the last build).
+		void refreshMenus() { menuItemsChanged(); }
+
+		juce::StringArray getMenuBarNames() override
+		{
+			juce::StringArray names{"Editor", "Audio"};
+			for(const auto& m : m_menus)
+				names.add(m.name);
+			return names;
+		}
 
 		juce::PopupMenu getMenuForIndex(const int _index, const juce::String&) override
 		{
+			if(_index >= 2)
+			{
+				const auto i = static_cast<size_t>(_index - 2);
+				if(i >= m_menus.size() || !m_menus[i].build)
+					return {};
+				return m_menus[i].build();
+			}
 			if(_index == 0)
 			{
 				if(auto* p = dynamic_cast<Processor*>(getAudioProcessor()))
@@ -91,6 +127,8 @@ namespace jucePluginEditorLib
 		void menuItemSelected(int, int) override {}
 
 	private:
+		std::vector<Menu> m_menus;
+
 		void showAudioMidiSettings()
 		{
 			if(auto* p = dynamic_cast<Processor*>(getAudioProcessor()))
@@ -164,13 +202,20 @@ namespace jucePluginEditorLib
 					m_window->setName(title);
 			}
 			m_window->setVisible(true);
+			windowOpened(*m_window);
 		}
 
 		// The window's title; empty: the application name.
 		virtual juce::String getWindowTitle(juce::AudioProcessor&) const { return {}; }
 
+		// The window is up (the place to add menus of the application's own), and it is about to go.
+		virtual void windowOpened(StandaloneWindow&) {}
+		virtual void windowClosing(StandaloneWindow&) {}
+
 		void shutdown() override
 		{
+			if(m_window)
+				windowClosing(*m_window);
 			m_window = nullptr;
 			m_appProperties.saveIfNeeded();
 		}
