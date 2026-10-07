@@ -1,0 +1,55 @@
+#!/bin/sh
+# preinstall of one component of the {{APP_NAME}} package (build_mdmm_pkg.sh fills in the {{...}} values).
+#
+# Up to 0.3.1 the plug-ins were called {{OLD_NAME}}.vst3 / .component. Installer never removes a file a new
+# package no longer has, so without this a DAW would list the editor twice (same plug-in codes, two
+# bundles). Before {{NEW_PATH}} is installed this removes {{OLD_PATH}}, in the domain being installed into
+# and in the installing person's home folder (an earlier "for me only" install), but only when it is ours:
+# it carries the editor's bundle identifier ({{BUNDLE_ID}}), or our package's receipt ({{RECEIPT_ID}})
+# lists it (0.3.0 and earlier had upstream Gearmulator's identifier, which an upstream build shares: those
+# are never touched without our receipt). An app at the same path built before the rename (its executable
+# is not "{{APP_NAME}}") is replaced the same way, so no stale executable stays inside it.
+#
+# $2 is the install location: "/" for all users, the home folder for "Install for me only".
+
+old_path="{{OLD_PATH}}"
+new_path="{{NEW_PATH}}"
+bundle_id="{{BUNDLE_ID}}"
+receipt_id="{{RECEIPT_ID}}"
+executable="{{APP_NAME}}"
+
+is_ours() {
+  bundle="$1" volume="$2"
+  id="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "${bundle}/Contents/Info.plist" 2>/dev/null)"
+  [ "${id}" = "${bundle_id}" ] && return 0
+  /usr/sbin/pkgutil --volume "${volume}" --files "${receipt_id}" 2>/dev/null | /usr/bin/grep -qxF "${old_path}"
+}
+
+stale() {
+  bundle="$1"
+  [ "${old_path}" != "${new_path}" ] && return 0
+  # Same path: only a bundle built before the rename.
+  current="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleExecutable' "${bundle}/Contents/Info.plist" 2>/dev/null)"
+  [ -n "${current}" ] && [ "${current}" != "${executable}" ]
+}
+
+roots="${2:-/}"
+case "${HOME:-}" in
+  ""|/var/root|/) ;;
+  *) roots="${roots}
+${HOME}" ;;
+esac
+
+echo "${roots}" | while IFS= read -r root; do
+  [ -n "${root}" ] || continue
+  root="${root%/}"
+  bundle="${root}/${old_path}"
+  [ -d "${bundle}" ] || continue
+  if is_ours "${bundle}" "${root:-/}" && stale "${bundle}"; then
+    echo "Removing the old ${bundle}"
+    /bin/rm -rf -- "${bundle}"
+  else
+    echo "Leaving ${bundle} alone: not the editor's, or already current"
+  fi
+done
+exit 0

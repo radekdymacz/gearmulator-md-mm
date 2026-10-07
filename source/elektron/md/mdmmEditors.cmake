@@ -38,15 +38,36 @@ target_sources(mdLib PRIVATE
 target_link_libraries(mdLib PUBLIC elektronData mdAutomation)
 
 # The JUCE web view (the editor pages are web pages): on where JUCE's backend ships with the OS
-# (WKWebView on macOS, Edge/IE on Windows). Linux would also need webkit2gtk and NEEDS_WEB_BROWSER.
-# juce.cmake compiles JUCE_WEB_BROWSER=0 into juce_plugin_modules; this switches it.
+# (WKWebView on macOS, WebView2 on Windows: mdmmWindowsWebView.cmake), and on Linux when webkit2gtk-4.0's headers are there
+# (doc/release/LINUX.md). juce.cmake compiles JUCE_WEB_BROWSER=0 into juce_plugin_modules; this switches it.
 if(APPLE OR WIN32)
 	set(_mdmmWebBrowserDefault ON)
+elseif(CMAKE_SYSTEM_NAME STREQUAL "Linux")
+	find_package(PkgConfig QUIET)
+	if(PKG_CONFIG_FOUND)
+		# Headers only (the libraries are opened at run time): 4.0's or 4.1's, the same C API.
+		pkg_check_modules(MDMM_LINUX_WEBKIT QUIET webkit2gtk-4.0 gtk+-x11-3.0)
+		if(NOT MDMM_LINUX_WEBKIT_FOUND)
+			pkg_check_modules(MDMM_LINUX_WEBKIT QUIET webkit2gtk-4.1 gtk+-x11-3.0)
+		endif()
+	endif()
+	if(MDMM_LINUX_WEBKIT_FOUND)
+		set(_mdmmWebBrowserDefault ON)
+	else()
+		set(_mdmmWebBrowserDefault OFF)
+	endif()
 else()
 	set(_mdmmWebBrowserDefault OFF)
 endif()
 option(${CMAKE_PROJECT_NAME}_JUCE_WEB_BROWSER "Compile JUCE WebBrowserComponent into plugins" ${_mdmmWebBrowserDefault})
 unset(_mdmmWebBrowserDefault)
+if(TARGET juce_plugin_modules AND ${CMAKE_PROJECT_NAME}_JUCE_WEB_BROWSER AND CMAKE_SYSTEM_NAME STREQUAL "Linux")
+	include(mdJucePlugin/mdmmLinuxWebView.cmake)
+endif()
+# Windows: WebView2 driven by the editors themselves (doc/release/WINDOWS.md); JUCE's own backend stays off.
+if(TARGET juce_plugin_modules AND ${CMAKE_PROJECT_NAME}_JUCE_WEB_BROWSER AND WIN32)
+	include(mdJucePlugin/mdmmWindowsWebView.cmake)
+endif()
 if(TARGET juce_plugin_modules)
 	if(${CMAKE_PROJECT_NAME}_JUCE_WEB_BROWSER)
 		set(_mdmmWebBrowser 1)

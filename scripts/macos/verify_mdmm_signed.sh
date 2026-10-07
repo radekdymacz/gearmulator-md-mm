@@ -16,6 +16,9 @@
 
 set -euo pipefail
 
+# shellcheck source=../mdmm-product.env
+. "$(cd "$(dirname "$0")" && pwd)/../mdmm-product.env"
+
 artifact_dir="$(cd "${1:?usage: verify_mdmm_signed.sh ARTIFACT_DIR}" && pwd)"
 expect_signed="${MDMM_EXPECT_SIGNED:-1}"
 if [[ "${expect_signed}" != "0" && "${expect_signed}" != "1" ]]; then
@@ -72,9 +75,11 @@ check_bundle() {
 
 # The bundles' own identifiers (SIGNING.md, "Identifiers"), never upstream
 # Gearmulator's local.gearmulator.preview.*.
-for row in "Machinedrum-Editor-macOS|Machinedrum Editor|Gearmulator MD|md|com.nativekloud.machinedrum-editor" \
-           "Monomachine-Editor-macOS|Monomachine Editor|Gearmulator MM|mm|com.nativekloud.monomachine-editor"; do
-  IFS='|' read -r base app_name stem id_suffix bundle_id <<< "${row}"
+# The bundles carry the product names (scripts/mdmm-product.env); the file names
+# are the ones the website links to.
+for row in "Machinedrum-Editor-macOS|${MDMM_PRODUCT_NAME_MD}|md|com.nativekloud.machinedrum-editor" \
+           "Monomachine-Editor-macOS|${MDMM_PRODUCT_NAME_MM}|mm|com.nativekloud.monomachine-editor"; do
+  IFS='|' read -r base app_name id_suffix bundle_id <<< "${row}"
   pkg="${artifact_dir}/${base}.pkg"
   dmg="${artifact_dir}/${base}.dmg"
   echo "== ${app_name}"
@@ -95,8 +100,8 @@ for row in "Machinedrum-Editor-macOS|Machinedrum Editor|Gearmulator MD|md|com.na
     expanded="${work_dir}/${id_suffix}-pkg"
     pkgutil --expand-full "${pkg}" "${expanded}"
     check_bundle "${expanded}/${id_suffix}-app.pkg/Payload/Applications/${app_name}.app" app
-    check_bundle "${expanded}/${id_suffix}-vst3.pkg/Payload/Library/Audio/Plug-Ins/VST3/${stem}.vst3" plugin
-    check_bundle "${expanded}/${id_suffix}-au.pkg/Payload/Library/Audio/Plug-Ins/Components/${stem}.component" plugin
+    check_bundle "${expanded}/${id_suffix}-vst3.pkg/Payload/Library/Audio/Plug-Ins/VST3/${app_name}.vst3" plugin
+    check_bundle "${expanded}/${id_suffix}-au.pkg/Payload/Library/Audio/Plug-Ins/Components/${app_name}.component" plugin
   fi
 
   # The disk image.
@@ -119,11 +124,13 @@ for row in "Machinedrum-Editor-macOS|Machinedrum Editor|Gearmulator MD|md|com.na
   mkdir -p "${mount_point}"
   hdiutil attach -quiet -readonly -nobrowse -noautoopen -mountpoint "${mount_point}" "${dmg}"
   [[ -f "${mount_point}/Install.txt" ]] || fail "Install.txt missing from ${dmg}"
+  grep -q "GNU GENERAL PUBLIC LICENSE" "${mount_point}/LICENSE.txt" 2>/dev/null \
+    || fail "LICENSE.txt (GPL) missing from ${dmg}"
   [[ "$(readlink "${mount_point}/Applications")" == "/Applications" ]] \
     || fail "Applications link missing from ${dmg}"
   check_bundle "${mount_point}/${app_name}.app" app
-  check_bundle "${mount_point}/${stem}.vst3" plugin
-  check_bundle "${mount_point}/${stem}.component" plugin
+  check_bundle "${mount_point}/${app_name}.vst3" plugin
+  check_bundle "${mount_point}/${app_name}.component" plugin
   hdiutil detach -quiet "${mount_point}"
   mount_point=""
 done

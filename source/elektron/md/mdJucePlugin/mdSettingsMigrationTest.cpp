@@ -9,6 +9,10 @@
 namespace
 {
 	int g_failures = 0;
+	juce::Array<juce::File> partialsIn(const juce::File& _folder)
+	{
+		return _folder.findChildFiles(juce::File::findFiles, false, "*.migrating*");
+	}
 	void check(const bool _ok, const std::string& _what)
 	{
 		std::printf("  %s %s\n", _ok ? "ok  " : "FAIL", _what.c_str());
@@ -54,7 +58,7 @@ int main()
 	check(copySettingsOnce(legacy, own) == SettingsCopy::Copied, "Copied");
 	check(own.loadFileAsString() == upstreamWritten, "the copy is byte for byte the legacy file");
 	check(legacy.loadFileAsString() == upstreamWritten, "the legacy file is untouched");
-	check(!own.getSiblingFile(own.getFileName() + ".migrating").exists(), "no partial file left");
+	check(partialsIn(config).isEmpty(), "no partial file left");
 
 	std::printf("already migrated\n");
 	check(own.replaceWithText("editor's own"), "the editor writes its file");
@@ -67,9 +71,29 @@ int main()
 	own.deleteFile();
 	const auto partial = own.getSiblingFile(own.getFileName() + ".migrating");
 	check(partial.replaceWithText("half"), "a stale partial file");
-	check(copySettingsOnce(legacy, own) == SettingsCopy::Copied, "Copied over the stale partial");
+	check(copySettingsOnce(legacy, own) == SettingsCopy::Copied, "Copied next to the stale partial");
 	check(own.loadFileAsString() == "upstream wrote again", "the finished copy is the legacy file");
-	check(!partial.exists(), "the partial is gone");
+	check(partial.loadFileAsString() == "half", "the stale partial is not shared with this start (names are unique)");
+	check(partialsIn(config).size() == 1, "this start left no partial of its own");
+	partial.deleteFile();
+
+	std::printf("the copy cannot be made\n");
+	own.deleteFile();
+	const auto locked = dir.getChildFile("locked");
+	locked.createDirectory();
+	check(locked.setReadOnly(true, false), "a read-only folder");
+	const auto lockedOwn = locked.getChildFile("Machinedrum Editor.xml");
+	check(copySettingsOnce(legacy, lockedOwn) == SettingsCopy::Failed, "Failed");
+	check(!lockedOwn.exists(), "no file is made");
+	check(partialsIn(locked).isEmpty(), "no partial file left");
+	locked.setReadOnly(false, false);
+
+	std::printf("another process made the file first\n");
+	// its file is there by the time this start checks again: Copied would be wrong, and it must not be replaced
+	check(own.replaceWithText("the other process"), "the other process's file");
+	check(copySettingsOnce(legacy, own) == SettingsCopy::AlreadyMigrated, "AlreadyMigrated");
+	check(own.loadFileAsString() == "the other process", "its file is kept");
+	own.deleteFile();
 
 	std::printf("a config folder that does not exist yet\n");
 	const auto fresh = dir.getChildFile("fresh").getChildFile("config");

@@ -11,10 +11,10 @@
 #   Machinedrum-Editor-macOS.dmg
 #   Monomachine-Editor-macOS.dmg
 #
-# Each image holds the app (renamed to the product name, as in the package),
-# the VST3 and the AU, three Finder links to drop them on (/Applications,
+# Each image holds the app, the VST3 and the AU (named for the product,
+# scripts/mdmm-product.env), three Finder links to drop them on (/Applications,
 # /Library/Audio/Plug-Ins/VST3, /Library/Audio/Plug-Ins/Components) and
-# Install.txt. Plain hdiutil, no third-party tools, no Finder scripting (it
+# Install.txt and LICENSE.txt (the GPL). Plain hdiutil, no third-party tools, no Finder scripting (it
 # needs a logged-in GUI session, which CI runners do not reliably have).
 #
 # MDMM_DMG_SIGN_IDENTITY (a "Developer ID Application: ..." identity, optional
@@ -24,12 +24,16 @@
 set -euo pipefail
 
 script_dir="$(cd "$(dirname "$0")" && pwd)"
+# shellcheck source=../mdmm-product.env
+. "${script_dir}/../mdmm-product.env"
 bundle_dir="$(cd "${1:?usage: build_mdmm_dmg.sh BUNDLE_DIR OUTPUT_DIR [VERSION]}" && pwd)"
 output_dir_input="${2:?usage: build_mdmm_dmg.sh BUNDLE_DIR OUTPUT_DIR [VERSION]}"
-version="${3:-0.3.1}"
+version="${3:-0.3.2}"
 identity="${MDMM_DMG_SIGN_IDENTITY:-}"
 keychain="${MDMM_SIGN_KEYCHAIN:-}"
 install_template="${script_dir}/pkg-resources/dmg-install.txt"
+license_preamble="${script_dir}/pkg-resources/license-preamble.txt"
+license_md="${script_dir}/../../LICENSE.md"
 
 if [[ ! "${version}" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
   echo "VERSION must be MAJOR.MINOR.PATCH, got: ${version}" >&2
@@ -47,10 +51,11 @@ cleanup() {
 }
 trap cleanup EXIT
 
-# bundle stem | app name | machine | data folder | image file name
+# product name (the bundles' name) | the name up to 0.3.1 | machine | data folder |
+# image file name (the site links to it)
 machines=(
-  "Gearmulator MD|Machinedrum Editor|Machinedrum|Machinedrum|Machinedrum-Editor-macOS.dmg"
-  "Gearmulator MM|Monomachine Editor|Monomachine|Monomachine|Monomachine-Editor-macOS.dmg"
+  "${MDMM_PRODUCT_NAME_MD}|${MDMM_LEGACY_NAME_MD}|Machinedrum|Machinedrum|Machinedrum-Editor-macOS.dmg"
+  "${MDMM_PRODUCT_NAME_MM}|${MDMM_LEGACY_NAME_MM}|Monomachine|Monomachine|Monomachine-Editor-macOS.dmg"
 )
 
 refuse_firmware() {
@@ -67,33 +72,35 @@ link_vst3="VST3 Plug-Ins"
 link_au="Audio Unit Plug-Ins"
 
 for row in "${machines[@]}"; do
-  IFS='|' read -r stem app_name machine data_folder dmg_name <<< "${row}"
-  staging="${work_dir}/${stem}"
+  IFS='|' read -r app_name old_name machine data_folder dmg_name <<< "${row}"
+  staging="${work_dir}/${app_name}"
   mkdir -p "${staging}"
   for ext in app vst3 component; do
-    if [[ ! -d "${bundle_dir}/${stem}.${ext}" ]]; then
-      echo "Missing bundle: ${bundle_dir}/${stem}.${ext}" >&2
+    if [[ ! -d "${bundle_dir}/${app_name}.${ext}" ]]; then
+      echo "Missing bundle: ${bundle_dir}/${app_name}.${ext}" >&2
       exit 3
     fi
-    refuse_firmware "${bundle_dir}/${stem}.${ext}"
+    refuse_firmware "${bundle_dir}/${app_name}.${ext}"
   done
 
-  /usr/bin/ditto --noextattr --noqtn "${bundle_dir}/${stem}.app" "${staging}/${app_name}.app"
-  /usr/bin/ditto --noextattr --noqtn "${bundle_dir}/${stem}.vst3" "${staging}/${stem}.vst3"
-  /usr/bin/ditto --noextattr --noqtn "${bundle_dir}/${stem}.component" "${staging}/${stem}.component"
+  /usr/bin/ditto --noextattr --noqtn "${bundle_dir}/${app_name}.app" "${staging}/${app_name}.app"
+  /usr/bin/ditto --noextattr --noqtn "${bundle_dir}/${app_name}.vst3" "${staging}/${app_name}.vst3"
+  /usr/bin/ditto --noextattr --noqtn "${bundle_dir}/${app_name}.component" "${staging}/${app_name}.component"
   ln -s /Applications "${staging}/${link_apps}"
   ln -s /Library/Audio/Plug-Ins/VST3 "${staging}/${link_vst3}"
   ln -s /Library/Audio/Plug-Ins/Components "${staging}/${link_au}"
   sed -e "s|{{MACHINE}}|${machine}|g" \
       -e "s|{{APP_NAME}}|${app_name}|g" \
       -e "s|{{DATA_FOLDER}}|${data_folder}|g" \
-      -e "s|{{STEM}}|${stem}|g" \
+      -e "s|{{OLD_NAME}}|${old_name}|g" \
       -e "s|{{VERSION}}|${version}|g" \
       -e "s|{{LINK_APPS}}|${link_apps}|g" \
       -e "s|{{LINK_VST3}}|${link_vst3}|g" \
       -e "s|{{LINK_AU}}|${link_au}|g" \
       "${install_template}" > "${staging}/Install.txt"
-  for bundle in "${staging}/${app_name}.app" "${staging}/${stem}.vst3" "${staging}/${stem}.component"; do
+  # GPL-3: the licence travels with the binaries, preamble first, as in the package
+  { cat "${license_preamble}"; echo; cat "${license_md}"; } > "${staging}/LICENSE.txt"
+  for bundle in "${staging}/${app_name}.app" "${staging}/${app_name}.vst3" "${staging}/${app_name}.component"; do
     codesign --verify --strict --deep "${bundle}"
   done
 
@@ -112,12 +119,12 @@ for row in "${machines[@]}"; do
   fi
 
   # Self-check: mount read-only and look at what a person will see.
-  mount_point="${work_dir}/mount-${stem// /-}"
+  mount_point="${work_dir}/mount-${app_name// /-}"
   mkdir -p "${mount_point}"
   hdiutil attach -quiet -readonly -nobrowse -noautoopen -mountpoint "${mount_point}" "${dmg}"
-  for expected in "${app_name}.app/Contents/MacOS/${stem}" \
-      "${stem}.vst3/Contents/MacOS/${stem}" \
-      "${stem}.component/Contents/MacOS/${stem}" "Install.txt"; do
+  for expected in "${app_name}.app/Contents/MacOS/${app_name}" \
+      "${app_name}.vst3/Contents/MacOS/${app_name}" \
+      "${app_name}.component/Contents/MacOS/${app_name}" "Install.txt" "LICENSE.txt"; do
     if [[ ! -f "${mount_point}/${expected}" ]]; then
       echo "Disk image self-check failed, missing: ${expected}" >&2
       exit 6
@@ -130,8 +137,8 @@ for row in "${machines[@]}"; do
       exit 6
     fi
   done
-  for bundle in "${mount_point}/${app_name}.app" "${mount_point}/${stem}.vst3" \
-      "${mount_point}/${stem}.component"; do
+  for bundle in "${mount_point}/${app_name}.app" "${mount_point}/${app_name}.vst3" \
+      "${mount_point}/${app_name}.component"; do
     codesign --verify --strict --deep "${bundle}"
   done
   refuse_firmware "${mount_point}"

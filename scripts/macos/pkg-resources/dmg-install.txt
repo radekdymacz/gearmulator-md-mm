@@ -4,8 +4,8 @@
 Drag each item onto the folder next to it:
 
   {{APP_NAME}}.app        ->  {{LINK_APPS}}
-  {{STEM}}.vst3      ->  {{LINK_VST3}}
-  {{STEM}}.component ->  {{LINK_AU}}
+  {{APP_NAME}}.vst3       ->  {{LINK_VST3}}
+  {{APP_NAME}}.component  ->  {{LINK_AU}}
 
 Take only what you use: the app on its own needs no plug-ins, and a DAW
 needs only the VST3 or the Audio Unit. Finder asks for an administrator
@@ -17,6 +17,11 @@ own Library instead (Finder > Go > Go to Folder):
 
 Then restart your DAW or ask it to rescan plug-ins. Keep one copy of each
 plug-in, not one in /Library and another in ~/Library, or the DAW lists two.
+
+Upgrading from 0.3.1 or earlier: the plug-ins were called {{OLD_NAME}}.vst3
+and {{OLD_NAME}}.component then. Delete those from the plug-in folders, or
+the DAW lists the editor twice. Projects that used them open with
+{{APP_NAME}}: the plug-in is the same one under its new name.
 
 Prefer an installer? Machinedrum-Editor-macOS.pkg / Monomachine-Editor-macOS.pkg
 from the same release page puts all three in place for you.
@@ -32,5 +37,11 @@ Please do not ask anyone, in any channel, for firmware files.
 Removing it: delete the three items from where you dropped them. Your
 firmware and settings in Documents are not touched.
 
+Licence: free software under the GNU GPL version 3; the text is in LICENSE.txt
+on this disk image.
+Source code: https://github.com/radekdymacz/gearmulator-md-mm
+Copyright (C) The Usual Suspects (Gearmulator), joelanders (Machinedrum and
+Monomachine emulation), and NativeKloud Consulting Radoslaw Dymacz (editors).
+
 Site: https://mdmm.dev
-Bugs: https://github.com/radekdymacz/gearmulator-md-mm/issues
+Bugs: https://mdmm.dev/contact/

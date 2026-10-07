@@ -7,18 +7,19 @@ as a standalone app, VST3 and AU on macOS.
 
 - **Site, screenshots, download:** https://mdmm.dev
 - **Releases:** https://github.com/radekdymacz/gearmulator-md-mm/releases
-  (latest: [0.3.0 notes](doc/release/v0.3.0.md); [0.2.1](doc/release/v0.2.1.md); [0.2.0](doc/release/v0.2.0.md); first: [0.1.0 alpha](doc/release/v0.1.0-alpha.md))
+  (latest: [0.3.1 notes](doc/release/v0.3.1.md); [0.3.0](doc/release/v0.3.0.md); [0.2.1](doc/release/v0.2.1.md); [0.2.0](doc/release/v0.2.0.md); first: [0.1.0 alpha](doc/release/v0.1.0-alpha.md))
 - **User guide** (install, ROM, DAW use, workspaces, every keyboard shortcut): https://mdmm.dev/guide/
 - **Bring your own ROM.** No firmware is included. With no ROM the editor shows a start-up card:
   choose your machine's image with its file chooser (drag and drop is not supported) and the editor
   copies it into its ROM folder. You can also copy it to `~/Documents/Gearmulator Preview/Machinedrum/roms/`
   or `.../Monomachine/roms/` yourself.
-- **Installing on macOS.** The installers are not signed or notarised yet. On macOS 15 and later,
+- **Installing on macOS.** Needs macOS 12 or later (Intel and Apple silicon). The installers are not signed or notarised yet. On macOS 15 and later,
   double-click the `.pkg`, then open System Settings › Privacy & Security, scroll to the message
   about the installer and click **Open Anyway** (right-click › Open no longer works for installers).
 - **Uninstalling.** Delete the three bundles of each editor: the app in `/Applications`
   (`Machinedrum Editor.app`, `Monomachine Editor.app`), the VST3 and the AU
-  (`Gearmulator MD.vst3`/`.component`, `Gearmulator MM.vst3`/`.component`) in `/Library/Audio/Plug-Ins/VST3`
+  (`Machinedrum Editor.vst3`/`.component`, `Monomachine Editor.vst3`/`.component`;
+  `Gearmulator MD`/`MM` up to 0.3.1) in `/Library/Audio/Plug-Ins/VST3`
   and `.../Components`, or the `~/Applications` and `~/Library/Audio/Plug-Ins` equivalents. Firmware and
   settings are not touched. If a DAW will not load the AU, run
   `xattr -dr com.apple.quarantine "<path to the .component>"` and rescan.

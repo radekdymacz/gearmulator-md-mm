@@ -3,6 +3,8 @@
 set -euo pipefail
 
 script_dir="$(cd "$(dirname "$0")" && pwd)"
+# shellcheck source=../mdmm-product.env
+. "${script_dir}/../mdmm-product.env"
 source_dir="$(cd "${1:-${script_dir}/../..}" && pwd)"
 build_dir_input="${2:-${source_dir}/build/macos-mdmm-universal}"
 output_dir_input="${3:-${source_dir}/artifacts/macos-mdmm-universal}"
@@ -113,12 +115,14 @@ source_tuple_before="$(python3 "${script_dir}/write_mdmm_receipt.py" \
   --allow-untracked-root "${output_dir}/.gearmulator-mdmm-release-root")"
 
 artifact_root="${build_dir}/products/Release"
-md_app="${artifact_root}/Standalone/Gearmulator MD.app"
-mm_app="${artifact_root}/Standalone/Gearmulator MM.app"
-md_vst3="${artifact_root}/VST3/Gearmulator MD.vst3"
-mm_vst3="${artifact_root}/VST3/Gearmulator MM.vst3"
-md_au="${artifact_root}/AU/Gearmulator MD.component"
-mm_au="${artifact_root}/AU/Gearmulator MM.component"
+md_name="${MDMM_PRODUCT_NAME_MD}"
+mm_name="${MDMM_PRODUCT_NAME_MM}"
+md_app="${artifact_root}/Standalone/${md_name}.app"
+mm_app="${artifact_root}/Standalone/${mm_name}.app"
+md_vst3="${artifact_root}/VST3/${md_name}.vst3"
+mm_vst3="${artifact_root}/VST3/${mm_name}.vst3"
+md_au="${artifact_root}/AU/${md_name}.component"
+mm_au="${artifact_root}/AU/${mm_name}.component"
 build_runtime_home="${build_dir}/build-runtime-home"
 build_runtime_data="${build_runtime_home}/Documents"
 core_capacity_check="${build_dir}/mdmm-core-capacity.json"
@@ -407,16 +411,25 @@ fi
 
 package_dir="${output_dir}/${package_name}"
 mkdir -p "${package_dir}"
-/usr/bin/ditto "${md_app}" "${package_dir}/Gearmulator MD.app"
-/usr/bin/ditto "${mm_app}" "${package_dir}/Gearmulator MM.app"
-/usr/bin/ditto "${md_vst3}" "${package_dir}/Gearmulator MD.vst3"
-/usr/bin/ditto "${mm_vst3}" "${package_dir}/Gearmulator MM.vst3"
-/usr/bin/ditto "${md_au}" "${package_dir}/Gearmulator MD.component"
-/usr/bin/ditto "${mm_au}" "${package_dir}/Gearmulator MM.component"
+/usr/bin/ditto "${md_app}" "${package_dir}/${md_name}.app"
+/usr/bin/ditto "${mm_app}" "${package_dir}/${mm_name}.app"
+/usr/bin/ditto "${md_vst3}" "${package_dir}/${md_name}.vst3"
+/usr/bin/ditto "${mm_vst3}" "${package_dir}/${mm_name}.vst3"
+/usr/bin/ditto "${md_au}" "${package_dir}/${md_name}.component"
+/usr/bin/ditto "${mm_au}" "${package_dir}/${mm_name}.component"
 /usr/bin/ditto "${source_dir}/LICENSE.md" "${package_dir}/LICENSE.md"
-/usr/bin/ditto "${script_dir}/macsetup_Gearmulator-Elektron.command" \
+# The setup command and the notes, with the product names filled in.
+render_product_names() {
+  sed -e "s|{{PRODUCT_NAME_MD}}|${MDMM_PRODUCT_NAME_MD}|g" \
+      -e "s|{{PRODUCT_NAME_MM}}|${MDMM_PRODUCT_NAME_MM}|g" \
+      -e "s|{{LEGACY_NAME_MD}}|${MDMM_LEGACY_NAME_MD}|g" \
+      -e "s|{{LEGACY_NAME_MM}}|${MDMM_LEGACY_NAME_MM}|g" \
+      "$1" > "$2"
+}
+render_product_names "${script_dir}/macsetup_Gearmulator-Elektron.command" \
   "${package_dir}/macsetup_Gearmulator-Elektron.command"
-/usr/bin/ditto "${script_dir}/INSTALL-macOS.txt" \
+chmod 755 "${package_dir}/macsetup_Gearmulator-Elektron.command"
+render_product_names "${script_dir}/INSTALL-macOS.txt" \
   "${package_dir}/INSTALL-macOS.txt"
 
 archive="${output_dir}/${package_name}.zip"
@@ -447,12 +460,12 @@ python3 "${script_dir}/write_mdmm_receipt.py" \
   ${core_capacity_receipt_args[@]+"${core_capacity_receipt_args[@]}"} \
   --output "${receipt}" \
   --archive "${archive}" \
-  --artifact "${package_dir}/Gearmulator MD.app" \
-  --artifact "${package_dir}/Gearmulator MM.app" \
-  --artifact "${package_dir}/Gearmulator MD.vst3" \
-  --artifact "${package_dir}/Gearmulator MM.vst3" \
-  --artifact "${package_dir}/Gearmulator MD.component" \
-  --artifact "${package_dir}/Gearmulator MM.component" \
+  --artifact "${package_dir}/${md_name}.app" \
+  --artifact "${package_dir}/${mm_name}.app" \
+  --artifact "${package_dir}/${md_name}.vst3" \
+  --artifact "${package_dir}/${mm_name}.vst3" \
+  --artifact "${package_dir}/${md_name}.component" \
+  --artifact "${package_dir}/${mm_name}.component" \
   --package-file "${package_dir}/macsetup_Gearmulator-Elektron.command" \
   --package-file "${package_dir}/INSTALL-macOS.txt"
 

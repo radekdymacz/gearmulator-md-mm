@@ -35,6 +35,9 @@ const check = (ok, what) => { console.log((ok ? "  ok   " : "  FAIL ") + what); 
 	const a = BridgeTransport.urls(batch, 64), b = BridgeTransport.urls(batch, 64);
 	check(a[0].split("/")[3] !== b[0].split("/")[3], "each long batch has its own sequence number");
 }
+/* ---- Linux: the plug-in's batches as script files beside the page (mdPageBridge.h recvFileName) ---- */
+check(BridgeTransport.recvFile("/tmp/gearmulator-mdStudio-1a2b.html", 12) === "gearmulator-mdStudio-1a2b.html.recv-12.js",
+	"a batch's file: the page file's name, .recv-<seq>.js, relative to the page");
 /* ---- Bridge over the transport (a dev host: window.gmDev) ---- */
 {
 	let result = null, seen = [];
@@ -58,6 +61,21 @@ const check = (ok, what) => { console.log((ok ? "  ok   " : "  FAIL ") + what); 
 	win.gm.recv([{ type: "notice", id: 4 }]);
 	win.gm.recv([{ type: "notice", id: 4 }]);
 	check(seen.join() === "1,2,3,4,4", "the next number is taken; a call without a number (a dev host) always is");
+}
+/* ---- Windows: the page in WebView2 posts the same gmbridge:// texts, in order, and makes no iframes ---- */
+{
+	const posted = [];
+	const w = { chrome: { webview: { postMessage: t => posted.push(t) } }, addEventListener() {} };
+	const doc = { createElement() { throw new Error("no iframe on WebView2"); } };
+	const c = vm.createContext({ console, location: { protocol: "file:", search: "" }, setTimeout, clearTimeout, window: w, document: doc });
+	vm.runInContext(fs.readFileSync(path.join(__dirname, "deskBridge.js"), "utf8") + "\nthis.T = { BridgeTransport, Bridge };", c);
+	const T = c.T.BridgeTransport;
+	T.post([{ op: "a" }]);
+	T.log("hello");
+	T.post([{ op: "b" }]);
+	check(posted.length === 3 && posted[0] === "gmbridge://c/" + encodeURIComponent(JSON.stringify([{ op: "a" }]))
+		&& posted[1] === "gmbridge://log/hello" && posted[2].endsWith(encodeURIComponent(JSON.stringify([{ op: "b" }]))),
+		"WebView2: each message is one postMessage of its gmbridge:// text, in order");
 }
 
 if (failures) { console.error("deskBridgeTest: " + failures + " failure(s)"); process.exit(1); }

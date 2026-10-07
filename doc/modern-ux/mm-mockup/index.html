@@ -1600,10 +1600,11 @@ body.engwait #main,body.engwait #rail{pointer-events:none;opacity:.6;transition:
 .ws-seq .lb:not(.none)::before{content:""!important;display:block!important;position:absolute;left:30%;right:30%;top:2px;height:3px;border-radius:1px;z-index:2;background:var(--led)}
 .ws-seq .lb.k-part::before,.ws-seq .lb.k-trigless::before{background:var(--ledg)}
 /* Soft gliding playhead (as the MD Editor, v45): one ink-tinted column over the roll, the
-   ENV/SLIDE/SWING rows and the lock lane, instead of per-cell boxes in the Sequence */
+   ENV/SLIDE/SWING rows and the lock lane, instead of per-cell boxes in the Sequence. B-008: a 2 px edge, so it reads at a
+   glance (and, through deskCompat.js, on an older WebKit too) */
 #phcol{position:fixed;left:0;top:0;pointer-events:none;z-index:3;opacity:0;border-radius:5px;will-change:transform;
- background:linear-gradient(to bottom,color-mix(in srgb,var(--ink) 15%,transparent),color-mix(in srgb,var(--ink) 8%,transparent));
- box-shadow:0 0 0 1px color-mix(in srgb,var(--ink) 55%,transparent),0 0 12px color-mix(in srgb,var(--ink) 25%,transparent);mix-blend-mode:multiply}
+ background:linear-gradient(to bottom,color-mix(in srgb,var(--ink) 20%,transparent),color-mix(in srgb,var(--ink) 11%,transparent));
+ box-shadow:0 0 0 2px color-mix(in srgb,var(--ink) 75%,transparent),0 0 12px color-mix(in srgb,var(--ink) 30%,transparent);mix-blend-mode:multiply}
 .ws-seq #seq .tc.ph{box-shadow:none!important;outline:none!important}
 /* ===== P7 LAYOUT: the page fills the window and scales with it (as the MD Editor) =====
    Fixed bars and fluid rows. Sequence: the piano roll takes what the lock lane leaves, the lane keeps
@@ -1625,8 +1626,10 @@ body{box-sizing:border-box;overflow:hidden}
 .ws-seq .lanewrap{padding-top:8px!important}
 .ws-seq .lanetop{border-top:0!important;padding-top:0!important}
 /* Mix: the faders and the routing diagram share the height */
-/* the routing graph is as tall as its width needs (no letterbox); the strips' faders take the rest of the page */
-#main>.routewrap{flex:1 1 auto;min-height:0;grid-template-rows:minmax(0,1fr) auto auto auto;align-content:start}
+/* the routing graph is as tall as its width needs (no letterbox); the strips' faders take the rest of the page, up to a
+   fader's length (470 px strips, B-004), and the routing follows right under them: a window taller than that has its
+   room under the page, not as a gap between the strips and the routing */
+#main>.routewrap{flex:1 1 auto;min-height:0;grid-template-rows:minmax(0,470px) auto auto auto;align-content:start}
 #main>.routewrap>.strips6{min-height:0;max-height:470px}
 svg.route{width:100%;height:auto;aspect-ratio:1200/146;min-height:0}
 /* Shift + M prepares a mute, as the MD Editor (P7): "+" unmute, "X" mute, blinking until Shift comes up */

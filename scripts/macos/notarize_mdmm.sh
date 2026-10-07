@@ -18,6 +18,8 @@
 
 set -euo pipefail
 
+# shellcheck source=../mdmm-product.env
+. "$(cd "$(dirname "$0")" && pwd)/../mdmm-product.env"
 key_path="${MDMM_NOTARY_KEY_PATH:?MDMM_NOTARY_KEY_PATH is required}"
 key_id="${MDMM_NOTARY_KEY_ID:?MDMM_NOTARY_KEY_ID is required}"
 issuer_id="${MDMM_NOTARY_ISSUER_ID:?MDMM_NOTARY_ISSUER_ID is required}"
@@ -63,18 +65,18 @@ staple() {
 if [[ "${1:-}" == "--bundles" ]]; then
   bundle_dir="$(cd "${2:?usage: notarize_mdmm.sh --bundles BUNDLE_DIR}" && pwd)"
   bundles=()
-  for stem in "Gearmulator MD" "Gearmulator MM"; do
+  for stem in "${MDMM_PRODUCT_NAME_MD}" "${MDMM_PRODUCT_NAME_MM}"; do
     for ext in app vst3 component; do
       bundles+=("${bundle_dir}/${stem}.${ext}")
     done
   done
   work_dir="$(mktemp -d "${TMPDIR:-/tmp}/mdmm-notarize.XXXXXX")"
   trap 'rm -rf -- "${work_dir}"' EXIT
-  mkdir -p "${work_dir}/Gearmulator MD MM"
+  mkdir -p "${work_dir}/MD MM Editors"
   for bundle in "${bundles[@]}"; do
-    /usr/bin/ditto "${bundle}" "${work_dir}/Gearmulator MD MM/$(basename "${bundle}")"
+    /usr/bin/ditto "${bundle}" "${work_dir}/MD MM Editors/$(basename "${bundle}")"
   done
-  /usr/bin/ditto -c -k --sequesterRsrc --keepParent "${work_dir}/Gearmulator MD MM" \
+  /usr/bin/ditto -c -k --sequesterRsrc --keepParent "${work_dir}/MD MM Editors" \
     "${work_dir}/mdmm-bundles.zip"
   submit "${work_dir}/mdmm-bundles.zip"
   for bundle in "${bundles[@]}"; do

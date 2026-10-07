@@ -5,8 +5,9 @@
 #   sign_mdmm.sh BUNDLE_DIR
 #
 # BUNDLE_DIR holds the bundles as build_mdmm.sh stages them:
-#   Gearmulator MD.app  Gearmulator MD.vst3  Gearmulator MD.component
-#   Gearmulator MM.app  Gearmulator MM.vst3  Gearmulator MM.component
+#   Machinedrum Editor.app  Machinedrum Editor.vst3  Machinedrum Editor.component
+#   Monomachine Editor.app  Monomachine Editor.vst3  Monomachine Editor.component
+# (the names come from scripts/mdmm-product.env)
 #
 # Environment:
 #   MDMM_SIGN_IDENTITY  "Developer ID Application: ..." (name or SHA-1), or "-"
@@ -28,6 +29,8 @@
 set -euo pipefail
 
 script_dir="$(cd "$(dirname "$0")" && pwd)"
+# shellcheck source=../mdmm-product.env
+. "${script_dir}/../mdmm-product.env"
 bundle_dir="$(cd "${1:?usage: sign_mdmm.sh BUNDLE_DIR}" && pwd)"
 identity="${MDMM_SIGN_IDENTITY:--}"
 keychain="${MDMM_SIGN_KEYCHAIN:-}"
@@ -108,13 +111,13 @@ sign_nested() {
 # local.gearmulator.preview.* identifier is refused before it is signed.
 expected_bundle_id() {
   case "$1" in
-    "Gearmulator MD") echo "com.nativekloud.machinedrum-editor" ;;
-    "Gearmulator MM") echo "com.nativekloud.monomachine-editor" ;;
+    "${MDMM_PRODUCT_NAME_MD}") echo "com.nativekloud.machinedrum-editor" ;;
+    "${MDMM_PRODUCT_NAME_MM}") echo "com.nativekloud.monomachine-editor" ;;
   esac
 }
 
 signed_any=0
-for stem in "Gearmulator MD" "Gearmulator MM"; do
+for stem in "${MDMM_PRODUCT_NAME_MD}" "${MDMM_PRODUCT_NAME_MM}"; do
   for ext in app vst3 component; do
     bundle="${bundle_dir}/${stem}.${ext}"
     if [[ ! -d "${bundle}" ]]; then

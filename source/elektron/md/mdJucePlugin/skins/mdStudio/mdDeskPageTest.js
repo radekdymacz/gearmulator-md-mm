@@ -45,7 +45,7 @@ const src = FILES.map(f => fs.readFileSync(path.join(__dirname, f), "utf8").repl
 const P = new Function("scope", "with (scope) {\n" + src + `
 ;let renders = 0;
 render = () => { renders++; }; syncControls = () => { }; renderTop = () => { }; renderSub = () => { }; redraw = () => { }; refreshAudible = () => { };
-return { S, Docs, Overlay, Held, PREP, scheduleRender, genEnsure, genSpec, setGenSpec, clickTrackKeys, userMute, soloWrites, muteSel, msSet, prepToggle, unmuteAll, Keys,
+return { S, Docs, Overlay, Held, PREP, scheduleRender, clickSteps, secAction, selCut, selDuplicate, clearSel, setSel, endSelect, interacting, genEnsure, genSpec, setGenSpec, clickTrackKeys, userMute, soloWrites, muteSel, msSet, prepToggle, unmuteAll, Keys,
 	get V() { return V; }, setV(v) { V = v; }, view, get renders() { return renders; }, get pending() { return pendingRender; } }; }`)(scope);
 
 /* the machine document: its mutes (machine.desk.mutes) as the machine has them */
@@ -163,6 +163,104 @@ run(); { const before = P.renders; P.Held.begin("gv", {}); P.Held.end("gv"); run
 	P.Docs.kits[0] = kit(["TRX-CH", "EFM-SD"]); P.setV(P.view()); P.genEnsure();
 	check(P.genSpec(0).kind === "euclid" && P.genSpec(0).k === 8, "an untouched spec follows a new machine (a hat): " + JSON.stringify(P.genSpec(0)));
 	delete P.Docs.kits[0]; P.setV(P.view());
+}
+
+/* ---- a selection of steps (DESIGN-step-selection.md): ⌥-click, ⌥-drag, ⌘C ⌘V ⌘X ⌘D Delete, the dropped copy; the
+   step clicks that were there before are as they were ---- */
+{
+	const HEX62 = "0".repeat(62);
+	const tr = m => ({ machine: m, model: 0, level: 100, synth: Array(8).fill(0), effects: Array(8).fill(0), routing: Array(8).fill(0),
+		lfo: { track: 0, param: 0, shape1: 0, shape2: 0, update: 0 }, muteGroup: null, trigGroup: null });
+	P.Docs.kits[3] = { schema: "md-desk/kit", version: 2, slot: 3, name: "K", tracks: Array.from({ length: 16 }, () => tr("GND-EMPTY")),
+		masterFx: { rhythmEcho: Array(8).fill(0), gateBox: Array(8).fill(0), eq: Array(8).fill(0), dynamix: Array(8).fill(0) },
+		firmware: { format: { version: 2, revision: 0 }, lfoState: Array(16).fill(HEX62) } };
+	P.Docs.patterns[5] = { schema: "md-desk/pattern", version: 2, slot: 5, kit: 3, length: 16, totalLength: 16, tempoMultiplier: "1X", swingAmount: 0, accentAmount: 0,
+		accent: { editAll: 0, steps: [] }, slide: { editAll: 0, steps: [] }, swing: { editAll: 0, steps: [] },
+		tracks: Array.from({ length: 16 }, (_, i) => ({ trigs: i === 0 ? [0, 1, 4] : i === 1 ? [1] : [], accent: [], slide: [], swing: [] })),
+		locks: [{ track: 0, param: 0, steps: [[1, 99]] }], firmware: { format: { version: 2, revision: 0 }, lockedRowsField: 0 } };
+	const machine = clip => Object.assign({}, P.Docs.machine || {}, { pattern: { current: 5 }, kit: { current: 3 }, desk: {},
+		clipboard: Object.assign({ steps: false, sound: false, songRow: false, kit: null, pattern: null, stepsSize: null }, clip) });
+	P.Docs.machine = machine({}); P.Overlay.clear(); P.S.multi = new Set(); P.S.sel = 0; P.S.ws = "seq"; P.setV(P.view());
+	check(P.V.loaded && P.V.tracks[0].trigs[1], "a loaded pattern: track 1 has a trig on step 2");
+	const stepEv = (t, s, mods = {}) => Object.assign({ detail: 1, target: { closest: q => q === "#seq .st" ? { dataset: { t: String(t), s: String(s) } } : null } }, mods);
+	const last = () => sent[sent.length - 1] || {};
+	const args = m => { const { op, g, ...rest } = m; return op + " " + JSON.stringify(rest); };
+
+	/* ⌥-click a step: the pointer's gesture selects it (no other cell crossed); its click sends nothing */
+	sent.length = 0;
+	P.Held.begin("select", { from: { t: 0, s: 1 }, at: { t: 0, s: 1 }, ruler: false, extend: false, drop: false, moved: false });
+	check(P.interacting(), "the select gesture holds the page's renders while it runs");
+	P.endSelect(); P.clickSteps(stepEv(0, 1, { altKey: true }));
+	check(JSON.stringify(P.S.stepSel) === '{"t":0,"n":1,"from":1,"to":2}' && !sent.some(m => m.op === "slide" || m.op === "trig"), "⌥-click selects the one step and sends no edit: " + JSON.stringify(P.S.stepSel));
+	P.clickSteps(stepEv(1, 1, { altKey: true, detail: 0 }));
+	check(P.S.stepSel.t === 1 && P.S.stepSel.from === 1, "⌥ and the keyboard's click on a step select it too");
+	/* the main case: one step copied, another step picked, pasted there */
+	P.setSel({ t: 0, n: 1, from: 1, to: 2 }); sent.length = 0;
+	P.secAction("copy");
+	check(args(last()) === 'copySteps {"p":5,"t":0,"n":1,"from":1,"to":2}', "⌘C copies the selected step: " + args(last()));
+	P.Docs.machine = machine({ steps: true, stepsSize: { tracks: 1, length: 1 } }); P.setV(P.view());
+	P.setSel({ t: 0, n: 1, from: 8, to: 9 }); sent.length = 0;
+	P.secAction("paste");
+	check(args(last()) === 'pasteSteps {"p":5,"t":0,"from":8}', "⌘V pastes at the selected step: " + args(last()));
+	check(P.V.tracks[0].trigs[8] && [...P.V.locks.values()].some(m => m.get(8) === 99), "the paste shows at once: the trig and its lock on step 9");
+	/* a block: ⌥-drag from track 1 step 1 to track 2 step 4 */
+	P.Held.begin("select", { from: { t: 0, s: 0 }, at: { t: 1, s: 3 }, ruler: false, extend: false, drop: false, moved: true });
+	P.endSelect();
+	check(JSON.stringify(P.S.stepSel) === '{"t":0,"n":2,"from":0,"to":4}', "⌥-drag selects steps × tracks: " + JSON.stringify(P.S.stepSel));
+	sent.length = 0; P.secAction("copy");
+	check(args(last()) === 'copySteps {"p":5,"t":0,"n":2,"from":0,"to":4}', "⌘C copies the block: " + args(last()));
+	sent.length = 0; P.selCut();
+	check(sent.map(m => m.op).join() === "copySteps,clearSteps" && sent[0].g && sent[0].g === sent[1].g, "⌘X: a copy and a clear under one gesture (one undo step)");
+	check(!P.V.tracks[0].trigs[0] && !P.V.tracks[1].trigs[1], "the cut shows at once");
+	P.Overlay.clear(); P.setV(P.view());
+	sent.length = 0; P.selDuplicate();
+	check(args(last()) === 'copyStepsTo {"p":5,"t":0,"n":2,"from":0,"to":4,"at":4,"dt":0}' && P.S.stepSel.from === 4 && P.S.stepSel.to === 8,
+		"⌘D duplicates the block right after itself and selects the copy: " + args(last()));
+	sent.length = 0; P.secAction("clear");
+	check(args(last()) === 'clearSteps {"p":5,"t":0,"n":2,"from":4,"to":8}', "Delete clears the selected block: " + args(last()));
+	/* ⌥-drag of the selection: a copy where it lets go */
+	P.Overlay.clear(); P.setSel({ t: 0, n: 2, from: 0, to: 4 }); P.setV(P.view()); sent.length = 0;
+	P.Held.begin("select", { from: { t: 0, s: 1 }, at: { t: 2, s: 6 }, ruler: false, extend: false, drop: true, moved: true });
+	P.endSelect();
+	check(args(last()) === 'copyStepsTo {"p":5,"t":0,"n":2,"from":0,"to":4,"at":5,"dt":2}' && P.S.stepSel.t === 2 && P.S.stepSel.from === 5,
+		"⌥-dragging the selection drops a copy where it lets go: " + args(last()));
+	/* the ruler: ⇧-click extends */
+	P.setSel({ t: 0, n: 1, from: 2, to: 3 });
+	P.Held.begin("select", { from: { t: 0, s: 9 }, at: { t: 0, s: 9 }, ruler: true, extend: true, drop: false, moved: false }); P.endSelect();
+	check(JSON.stringify(P.S.stepSel) === '{"t":0,"n":1,"from":2,"to":10}', "⇧-click in the ruler extends the selection: " + JSON.stringify(P.S.stepSel));
+	/* Esc clears it; without one, ⌘C is the page of the selected track as before */
+	P.clearSel(); sent.length = 0; P.secAction("copy");
+	check(!P.S.stepSel && args(last()) === 'copySteps {"p":5,"t":0,"from":0,"to":16}', "no selection: ⌘C copies the track's page as before: " + args(last()));
+	/* the step clicks that were there: ⇧-click accent, ⌥⇧-click slide, ⌘-click fill */
+	P.Overlay.clear(); P.setV(P.view()); sent.length = 0;
+	P.clickSteps(stepEv(0, 4, { shiftKey: true }));
+	check(last().op === "accent" && last().s === 4, "⇧-click on a trig is still an accent");
+	P.clickSteps(stepEv(0, 4, { shiftKey: true, altKey: true }));
+	check(last().op === "slide" && last().s === 4, "⌥⇧-click on a trig is the slide");
+	P.clickSteps(stepEv(2, 0, { metaKey: true }));
+	check(last().op === "steps", "⌘-click is still the fill");
+	P.clearSel();
+	/* B-006: LEN, SPD and SONG on LCD line 2 follow a vertical drag (12 px a step, from where the press found them,
+	   no wrap), ⌥ at the press drags the inner length; one gesture; the drag's click does not step them again */
+	P.Overlay.clear(); P.setV(P.view()); sent.length = 0;
+	const l2 = k => ({ button: 0, clientY: 300, altKey: false, preventDefault() { }, target: { closest: q => q === ".l2.ed" ? { dataset: { l2: k } } : null } });
+	fire("document", "pointerdown", l2("len"));
+	fire("document", "pointermove", { buttons: 1, pointerType: "mouse", clientY: 300 - 25 });
+	fire("document", "pointerup", {});
+	const total = sent.filter(m => m.op === "totalLength");
+	check(total.length === 1 && total[0].v === 48 && total[0].g, "dragging LEN up 25 px steps the total length twice, 16 to 48, in one gesture: " + JSON.stringify(total));
+	sent.length = 0;
+	fire("document", "pointerdown", Object.assign(l2("len"), { altKey: true }));
+	fire("document", "pointermove", { buttons: 1, pointerType: "mouse", clientY: 300 + 40 });
+	fire("document", "pointerup", {});
+	check(sent.some(m => m.op === "length" && m.v === 13) && !sent.some(m => m.op === "totalLength"), "⌥-drag on LEN moves the inner length (16 down 3 to 13): " + JSON.stringify(sent.map(m => [m.op, m.v])));
+	sent.length = 0;
+	fire("document", "pointerdown", l2("song"));
+	fire("document", "pointermove", { buttons: 1, pointerType: "mouse", clientY: 300 - 1000 });
+	fire("document", "pointermove", { buttons: 1, pointerType: "mouse", clientY: 300 - 1012 });
+	fire("document", "pointerup", {});
+	check(sent.filter(m => m.op === "selectSong").map(m => m.s).join() === "31", "dragging SONG far up stops at song 32 (no wrap), sent once: " + JSON.stringify(sent.map(m => [m.op, m.s])));
+	delete P.Docs.patterns[5]; delete P.Docs.kits[3]; P.Overlay.clear(); P.setV(P.view());
 }
 
 /* ---- a reset (another engine, a restored project) starts the solos over ---- */

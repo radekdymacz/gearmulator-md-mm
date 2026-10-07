@@ -106,13 +106,41 @@ function rampSend() {
 	renderTop();
 }
 
-/* ===== LCD line 2: SWG and ACC dragged up or down (a click without a move steps them) ===== */
-document.addEventListener("pointerdown", e => { const el = e.target.closest(".l2.ed"); if (!el) return; const k = el.dataset.l2; if (k === "swing" || k === "accAmt") { Held.begin("l2", { k, y: e.clientY, v: V[k], moved: false }); Gesture.begin(); grabPointer(el, e); e.preventDefault(); } });
+/* ===== LCD line 2: its values dragged up or down (B-006). SWG and ACC move by their unit (a click without a move
+   steps them); LEN, SPD and SONG step through their values, one every 12 px, from where the press found them and
+   without wrapping (⌥ held at the press: LEN's inner length, as ⌥-click). A click without a move is still the click's
+   step (mdDeskTop.js), a drag's own click is not. One drag, one undo step. ===== */
+const L2_DRAG = { len: 12, mult: 12, song: 12 };
+document.addEventListener("pointerdown", e => {
+	const el = e.target.closest(".l2.ed"); if (!el || e.button !== 0) return; const k = el.dataset.l2;
+	if (k === "swing" || k === "accAmt") Held.begin("l2", { k, y: e.clientY, v: V[k], moved: false });
+	else if (L2_DRAG[k]) Held.begin("l2", { k, y: e.clientY, v: k === "len" ? (e.altKey ? V.length : V.len) : k === "mult" ? V.mult : V.songSlot, alt: e.altKey, moved: false, stepped: true });
+	else return;
+	Gesture.begin(); grabPointer(el, e); e.preventDefault();
+});
+/* a stepped value n steps from where the drag began, clamped to its range */
+function l2dragTo(l, n) {
+	if (l.k === "len" && l.alt) { const v = clamp(l.v + n, 1, V.len); if (v !== V.length) cmd("length", { p: V.pat, v }, "l2length", [[["length"], v]]); return; }
+	if (l.k === "len") { const o = [16, 32, 48, 64], v = o[clamp(o.indexOf(l.v) + n, 0, 3)]; if (v !== V.len) cmd("totalLength", { p: V.pat, v }, "l2total", [[["len"], v]]); return; }
+	if (l.k === "mult") { const o = Enums().tempoMultipliers; if (!o.length) return; const v = o[clamp(o.indexOf(l.v) + n, 0, o.length - 1)]; if (v !== V.mult) cmd("speed", { p: V.pat, v }, "l2mult", [[["mult"], v]]); return; }
+	if (l.k === "song") { const s = clamp(l.v + n, 0, 31); if (s !== l.at) { Held.with("l2", { at: s }); cmd("selectSong", { s }); } }
+}
 document.addEventListener("pointermove", e => {
-	let l = Held.as("l2"); if (!l) return; if (e.buttons === 0 && e.pointerType === "mouse") { Held.end("l2"); Gesture.end(); return; } const d = Math.round((l.y - e.clientY) / (l.k === "swing" ? 3 : 6)); if (d) l = Held.with("l2", { moved: true });
+	let l = Held.as("l2"); if (!l) return; if (e.buttons === 0 && e.pointerType === "mouse") { Held.end("l2"); Gesture.end(); return; }
+	if (l.stepped) {
+		const n = Math.trunc((l.y - e.clientY) / L2_DRAG[l.k]); if (!n && !l.moved) return;
+		l = Held.with("l2", { moved: true }); const before = [V.len, V.length, V.mult]; l2dragTo(l, n);
+		if (before.join() !== [V.len, V.length, V.mult].join()) renderSub();
+		return;
+	}
+	const d = Math.round((l.y - e.clientY) / (l.k === "swing" ? 3 : 6)); if (d) l = Held.with("l2", { moved: true });
 	const before = V[l.k]; l2set(l.k, l.v + d); if (V[l.k] !== before) renderSub();
 });
-document.addEventListener("pointerup", e => { const k = Held.end("l2"); if (!k) return; Gesture.end(); if (!k.moved) l2step(k.k, 1); });
+document.addEventListener("pointerup", e => {
+	const k = Held.end("l2"); if (!k) return; Gesture.end();
+	if (k.stepped) { if (k.moved) { const eat = c => { c.stopPropagation(); c.preventDefault(); }; addEventListener("click", eat, { capture: true, once: true }); setTimeout(() => removeEventListener("click", eat, true), 0); render(); } return; }
+	if (!k.moved) l2step(k.k, 1);
+});
 
 /* ===== Input: a value box or fader ("value"), a curve editor's dot ("editor"), the lock lane ("lane") ===== */
 const main = $("#main");
@@ -161,6 +189,7 @@ function paintStep(el) {
 main.addEventListener("pointerdown", e => {
 	const st = e.target.closest("#seq .st"); if (!st || e.button !== 0 || e.shiftKey || e.altKey || e.metaKey || e.ctrlKey || V.rec) return;
 	if (!V.loaded) { toast("The pattern is not loaded yet."); return; }
+	clearSel();	/* a plain press on a step paints, and ends the selection (DESIGN-step-selection.md §3) */
 	const i = +st.dataset.t, s = +st.dataset.s;
 	Held.begin("paint", { on: !V.tracks[i].trigs[s], done: new Set(), first: i });
 	Gesture.begin(); grabPointer(main, e); e.preventDefault();
@@ -178,6 +207,57 @@ function endPaint() {
 }
 document.addEventListener("pointerup", endPaint); document.addEventListener("pointercancel", endPaint);
 window.addEventListener("blur", endPaint);
+
+/* ===== Steps: a selection (DESIGN-step-selection.md, mdDeskSelect.js). ⌥-press a step, or press a number of the step
+   ruler: the release decides. No other cell crossed: that one step (a ⇧-press in the ruler extends the selection to
+   it); cells crossed: the block between the press and the release, steps × tracks. An ⌥-press inside a selection of
+   more than one step that moves drops a copy of it where it lets go ("drop": its target shown dashed). One slot kind,
+   "select" {from: {t, s}, at: {t, s}, ruler, extend, drop, moved}. A press in the workspace outside the grid ends the
+   selection. ===== */
+function selCell(e, d) {
+	const el = document.elementFromPoint(e.clientX, e.clientY);
+	const st = el?.closest("#seq .st"); if (st) return { t: +st.dataset.t, s: +st.dataset.s };
+	const r = el?.closest("#seq .rul[data-s]"); return r ? { t: d.at.t, s: +r.dataset.s } : null;
+}
+/* where a dragged selection lands: moved by the drag, within the tracks and the steps shown */
+function selDropAt(d) {
+	const x = S.stepSel, t = clamp(x.t + d.at.t - d.from.t, 0, 16 - x.n), from = clamp(x.from + d.at.s - d.from.s, 0, V.len - 1);
+	return { t, n: x.n, from, to: Math.min(from + x.to - x.from, V.len) };
+}
+main.addEventListener("pointerdown", e => {
+	if (e.button !== 0 || V.rec || S.ws !== "seq") return;
+	const st = e.target.closest("#seq .st"), ru = e.target.closest("#seq .rul[data-s]");
+	if (!st && !ru) { if (!e.target.closest("#seq")) clearSel(); return; }
+	if (st && !(e.altKey && !e.shiftKey && !e.metaKey && !e.ctrlKey)) return;
+	if (ru && (e.altKey || e.metaKey || e.ctrlKey)) return;
+	if (!V.loaded) { toast("The pattern is not loaded yet."); return; }
+	const at = st ? { t: +st.dataset.t, s: +st.dataset.s } : { t: S.stepSel && e.shiftKey ? S.stepSel.t : S.sel, s: +ru.dataset.s };
+	const x = S.stepSel, drop = !!st && !!x && inSel(at.t, at.s) && (x.n > 1 || x.to - x.from > 1);
+	Held.begin("select", { from: at, at, ruler: !!ru, extend: !!ru && e.shiftKey && !!x, drop, moved: false });
+	e.preventDefault();
+}, true);
+document.addEventListener("pointermove", e => {
+	const d = Held.as("select"); if (!d) return;
+	if (e.buttons === 0 && e.pointerType === "mouse") { endSelect(); return; }
+	const c = selCell(e, d); if (!c || (c.t === d.at.t && c.s === d.at.s)) return;
+	const n = Held.with("select", { at: c, moved: true });
+	if (n.drop) syncSel(selDropAt(n)); else { S.stepSel = selBetween(n.from, n.at); syncSel(); }
+});
+function endSelect() {
+	const d = Held.end("select"); if (!d) return;
+	if (d.moved) {	/* the drag's own click (it follows the release at once, if at all) is not a click on what it lands on */
+		const eat = e => { e.stopPropagation(); e.preventDefault(); };
+		addEventListener("click", eat, { capture: true, once: true }); setTimeout(() => removeEventListener("click", eat, true), 0);
+	}
+	if (d.drop && d.moved) { const g = selDropAt(d); syncSel(); selCopyTo(g.t, g.from); return; }
+	const x = S.stepSel;
+	const sel = d.extend && !d.moved ? { t: x.t, n: x.n, from: Math.min(x.from, d.at.s), to: Math.max(x.to, d.at.s + 1) } : selBetween(d.from, d.at);
+	setSel(sel);
+	if (sel.t !== S.sel && sel.n === 1) select(sel.t);
+	toast(`Selected ${selSay(sel)} · ⌘C copy · ⌘X cut · ⌘V paste here · ⌘D duplicate · Delete · Esc`);
+}
+document.addEventListener("pointerup", endSelect); document.addEventListener("pointercancel", endSelect);
+window.addEventListener("blur", () => { if (Held.as("select")) endSelect(); });
 
 /* ===== BPM: drag up or down, arrows -> global tempo (0x61) ===== */
 (() => {

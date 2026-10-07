@@ -7,6 +7,7 @@ on:
     branches:
       - main
       - "release/md-mm-*"
+      - "release/0.*"
     paths:
       - ".github/workflows/elektron-macos.yml"
       - ".gitmodules"

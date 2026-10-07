@@ -137,7 +137,6 @@ macro(createJucePlugin targetName productName isSynth plugin4CC binaryDataProjec
 		COMPANY_NAME "Gearmulator Preview"                 # Specify the name of the plugin's author
 		COMPANY_WEBSITE "https://dsp56300.wordpress.com"
 		IS_SYNTH ${isSynth}                               # Is this a synth or an effect?
-		${GEARMULATOR_PLUGIN_EXTRA_ARGS_${targetName}}   # Optional per-target juce_add_plugin arguments (e.g. ICON_BIG, ICON_SMALL)
 		NEEDS_MIDI_INPUT TRUE                             # Does the plugin need midi input?
 		NEEDS_MIDI_OUTPUT TRUE                            # Does the plugin need midi output?
 		IS_MIDI_EFFECT FALSE                              # Is this plugin a MIDI effect?
@@ -155,6 +154,7 @@ macro(createJucePlugin targetName productName isSynth plugin4CC binaryDataProjec
 		                                                  # and completely fails on Linux if we change the suffix to .vst3, so we skip that completely for now
 		BUNDLE_ID "${pluginBundleId}"
 		LV2URI "http://theusualsuspects.lv2/${productNameIdentifier}"
+		${GEARMULATOR_PLUGIN_EXTRA_ARGS_${targetName}}   # Optional per-target arguments, last so they win (doc/modern-ux/UPSTREAM.md)
 	)
 
 	# JUCE otherwise puts the internal SharedCode archive beside the final plug-in

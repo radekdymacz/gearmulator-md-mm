@@ -57,12 +57,19 @@ namespace jucePluginEditorLib
 		bool isFitting() const { return m_fitting; }
 
 		// The standalone's window no larger than its screen's visible area (menu bar and Dock
-		// excluded), and inside it.
+		// excluded), and inside it. A plug-in's editor (a free one) no larger than its screen either
+		// (fitPluginSize): the host places the window, the editor picks a size that fits.
 		void fitToScreen(juce::Component& _window, const PluginEditorState& _state,
 			const juce::ComponentBoundsConstrainer& _constrainer, const bool _embedded)
 		{
-			if(!juce::JUCEApplicationBase::isStandaloneApp() || _embedded)
+			if(_embedded)
 				return;
+			if(!juce::JUCEApplicationBase::isStandaloneApp())
+			{
+				m_plugin = {&_window, &_state, &_constrainer, 0};
+				fitPlugin();
+				return;
+			}
 			auto* top = _window.getTopLevelComponent();
 			if(!top || top == &_window || !top->isOnDesktop())
 				return;
@@ -97,6 +104,60 @@ namespace jucePluginEditorLib
 		}
 
 	private:
+		// The host shows the editor some time after it was made (an AU's view is put in its window when the
+		// host gets to it): until the editor is on a screen, it looks again a few times a second, for a while.
+		struct Retry final : juce::Timer
+		{
+			std::function<void()> tick;
+			void timerCallback() override { tick(); }
+		};
+
+		void fitPlugin()
+		{
+			auto* window = m_plugin.window;
+			if(!window || !freeSize(*m_plugin.state))
+				return;
+			if(!window->isShowing() || !window->getPeer())
+			{
+				if(++m_plugin.tries > 50)
+				{
+					m_retry.stopTimer();
+					return;
+				}
+				m_retry.tick = [this] { fitPlugin(); };
+				if(!m_retry.isTimerRunning())
+					m_retry.startTimer(200);
+				return;
+			}
+			m_retry.stopTimer();
+			const auto bounds = window->getScreenBounds();
+			const auto* display = juce::Desktop::getInstance().getDisplays().getDisplayForRect(bounds);
+			if(!display)
+				return;
+			const auto u = display->userArea;
+			const windowFit::Rect content{bounds.getX(), bounds.getY(), bounds.getWidth(), bounds.getHeight()};
+			const auto r = windowFit::fitPluginSize(content, {u.getX(), u.getY(), u.getWidth(), u.getHeight()},
+				m_plugin.constrainer->getMinimumWidth(), m_plugin.constrainer->getMinimumHeight(), false);
+			if(r.w == content.w && r.h == content.h)
+				return;
+			LOG("Plug-in editor " << content.w << "x" << content.h << " fitted to its screen (" << u.getWidth() << "x" << u.getHeight()
+				<< " visible): " << r.w << "x" << r.h);
+			// Not the user's size: a larger screen may have room for it again.
+			m_fitting = true;
+			window->setSize(r.w, r.h);
+			m_fitting = false;
+		}
+
+		struct Plugin
+		{
+			juce::Component* window = nullptr;
+			const PluginEditorState* state = nullptr;
+			const juce::ComponentBoundsConstrainer* constrainer = nullptr;
+			int tries = 0;
+		};
+
 		bool m_fitting = false;
+		Plugin m_plugin;
+		Retry m_retry;
 	};
 }

@@ -2,6 +2,8 @@
 #include "midiTypes.h"
 #include "plugin.h"
 
+#include "baseLib/finite.h"
+
 #include <algorithm>
 #include <cmath>
 
@@ -21,14 +23,14 @@ namespace synthLib
 		}
 		if(!_sampleCount) return;
 		const double rate = m_plugin.getHostSamplerate();
-		if(!std::isfinite(rate) || rate <= 0) return;
-		if(std::isfinite(_bpm) && _bpm > 0 && _bpm <= rate * 60 / ClockTicksPerQuarter)
+		if(!baseLib::isFinite(rate) || rate <= 0) return;
+		if(baseLib::isFinite(_bpm) && _bpm > 0 && _bpm <= rate * 60 / ClockTicksPerQuarter)
 			m_lastBpm = _bpm;
 		if(m_lastBpm <= 0) return;
 
 		const auto quartersPerSample = m_lastBpm / (60.0 * rate);
 		const auto samplesPerClock = rate * 60.0 / (m_lastBpm * ClockTicksPerQuarter);
-		const bool positionKnown = _ppqKnown && std::isfinite(_ppqPos) && std::abs(_ppqPos) < 1e12;
+		const bool positionKnown = _ppqKnown && baseLib::isFinite(_ppqPos) && std::abs(_ppqPos) < 1e12;
 		const auto ppq = positionKnown ? _ppqPos : (m_isPlaying ? m_expectedPpq : 0.0);
 		// Allow at most two samples of host rounding. Even within this tolerance
 		// the pulse offsets use current PPQ; the tolerance only avoids false

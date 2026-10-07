@@ -75,6 +75,9 @@ namespace jucePluginEditorLib
 		void loadDefaultSkin();
 
 		virtual void initContextMenu(juceRmlUi::Menu& _menu) {}
+		// The menu's last entry: upstream's RmlUi settings page. An editor that has none of its own
+		// (this fork's web page editors) replaces it with what it has, or with nothing.
+		virtual void addSettingsEntry(juceRmlUi::Menu& _menu);
 
 		void setPerInstanceConfig(const std::vector<uint8_t>& _data);
 		void getPerInstanceConfig(std::vector<uint8_t>& _data);

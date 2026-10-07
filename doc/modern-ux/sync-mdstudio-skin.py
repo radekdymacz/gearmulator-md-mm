@@ -83,9 +83,9 @@ for a, b in HONEST:
 # APP is the page's own app, one file a concern (mdDeskApp.js says what each holds), in load order: each only
 # defines at load, and mdDeskRender.js (last) renders the page and says it is ready.
 APP = ['mdDeskApp.js', 'mdDeskSoundGroups.js', 'mdDeskTop.js', 'mdDeskSeq.js', 'mdDeskSound.js', 'mdDeskEditors.js', 'mdDeskMix.js',
-       'mdDeskSampler.js', 'mdDeskSong.js', 'mdDeskPicker.js', 'mdDeskControl.js', 'mdDeskGenUi.js', 'mdDeskComforts.js', 'mdDeskRom.js',
+       'mdDeskSampler.js', 'mdDeskSong.js', 'mdDeskPicker.js', 'mdDeskControl.js', 'mdDeskGenUi.js', 'mdDeskComforts.js', 'mdDeskSelect.js', 'mdDeskRom.js',
        'mdDeskGestures.js', 'mdDeskRender.js']
-SCRIPTS = ['deskModal.js', 'deskCaps.js', 'deskBoot.js', 'deskSyx.js', 'deskBridge.js', 'deskDocs.js', 'deskOverlay.js', 'mdDeskModel.js', 'deskGen.js', 'mdDeskGen.js',
+SCRIPTS = ['deskModal.js', 'deskCaps.js', 'deskBoot.js', 'deskSyx.js', 'deskBridge.js', 'deskZoom.js', 'deskDocs.js', 'deskOverlay.js', 'mdDeskModel.js', 'deskGen.js', 'mdDeskGen.js',
            'deskKeys.js', 'mdDeskKeys.js', 'mdDeskMod.js', 'deskTogglePaint.js'] + APP + ['mdDeskLive.js', 'mdDeskLibrary.js', 'mdDeskGlobal.js', 'deskAudio.js', 'mdDeskAudio.js',
            'deskAudioSelfTest.js', 'mdDeskSelfTest.js', 'deskJourney.js', 'mdDeskJourneys.js']
 for f in APP:
@@ -111,6 +111,8 @@ page = '''<!doctype html>
      edit them by hand. The editor inlines the stylesheet, scripts and any
      bundled fonts before loading (WKWebView reads only this file). -->
 <link rel="stylesheet" href="mdDesk.css">
+<!-- first, before the page draws: the stylesheet without what an older WebKit lacks (macOS 12) -->
+<script src="deskCompat.js"></script>
 </head>
 <body>
 %s

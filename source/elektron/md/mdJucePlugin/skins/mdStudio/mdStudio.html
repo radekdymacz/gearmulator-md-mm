@@ -9,6 +9,8 @@
      edit them by hand. The editor inlines the stylesheet, scripts and any
      bundled fonts before loading (WKWebView reads only this file). -->
 <link rel="stylesheet" href="mdDesk.css">
+<!-- first, before the page draws: the stylesheet without what an older WebKit lacks (macOS 12) -->
+<script src="deskCompat.js"></script>
 </head>
 <body>
 <div class="app">
@@ -73,6 +75,7 @@
 <script src="deskBoot.js"></script>
 <script src="deskSyx.js"></script>
 <script src="deskBridge.js"></script>
+<script src="deskZoom.js"></script>
 <script src="deskDocs.js"></script>
 <script src="deskOverlay.js"></script>
 <script src="mdDeskModel.js"></script>
@@ -95,6 +98,7 @@
 <script src="mdDeskControl.js"></script>
 <script src="mdDeskGenUi.js"></script>
 <script src="mdDeskComforts.js"></script>
+<script src="mdDeskSelect.js"></script>
 <script src="mdDeskRom.js"></script>
 <script src="mdDeskGestures.js"></script>
 <script src="mdDeskRender.js"></script>

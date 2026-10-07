@@ -2,6 +2,7 @@
 
 #include "mdEditor.h"
 #include "mdEditorPages.h"
+#include "mdPageEditor.h"
 #include "mdPluginProcessor.h"
 #include "mdProductSkinPolicy.h"
 #include "mdStandaloneRendererPolicy.h"
@@ -9,6 +10,7 @@
 #include "mdProductSkins.h"
 
 #include "juce_events/juce_events.h"
+#include "jucePluginEditorLib/editorTraits.h"
 #include "jucePluginEditorLib/rendererPreferenceKeys.h"
 #include "juceRmlUi/rmlMenu.h"
 
@@ -105,6 +107,10 @@ namespace mdJucePlugin
 		diagnostics.addEntry(processor.performanceDiagnosticsStatus(), false, false, {});
 		_menu.addSubMenu("Performance diagnostics", std::move(diagnostics));
 
+		// B-001: the editor page's zoom (mdPageEditor.h; a hook, doc/modern-ux/UPSTREAM.md)
+		if(auto* page = dynamic_cast<PageEditor*>(getEditor()))
+			page->fillZoomMenu(_menu);
+
 		auto* const editor = dynamic_cast<Editor*>(getEditor());
 		if(!editor)
 			return;
@@ -131,5 +137,24 @@ namespace mdJucePlugin
 						editor->chooseUserSysexFile();
 				});
 			});
+	}
+
+	// The editors are web pages: upstream's RmlUi settings page has nothing to show over them. What the
+	// page has is its AUDIO / MIDI panel, which is the standalone's; in a plug-in the host owns audio and
+	// MIDI, and the other settings (window scale, RAM recording, diagnostics) are entries of this menu.
+	void PluginEditorState::addSettingsEntry(juceRmlUi::Menu& _menu)
+	{
+		if(!juce::JUCEApplicationBase::isStandaloneApp())
+			return;
+		_menu.addSeparator();
+		_menu.addEntry("Audio/MIDI Settings...", [this]
+		{
+			// After the menu has closed, as the menu bar's entry does.
+			juce::MessageManager::callAsync([this]
+			{
+				if(auto* editor = dynamic_cast<jucePluginEditorLib::AudioMidiSettingsEditor*>(getEditor()))
+					editor->openAudioMidiSettings();
+			});
+		});
 	}
 }

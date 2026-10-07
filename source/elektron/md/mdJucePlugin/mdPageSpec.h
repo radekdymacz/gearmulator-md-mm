@@ -15,6 +15,8 @@ namespace mdJucePlugin
 		std::string log;					// the diagnostics log in the temp folder, e.g. "gearmulator-mdStudio.log"
 		std::string selfTestVariable;		// GEARMULATOR_MDSTUDIO_SELFTEST
 		std::vector<std::string> selfTests;	// the values (prefixes) that make the page test itself
-		int designWidth = 1440;				// below it the page is zoomed out as a whole
+		int designWidth = 1440;				// the page's design size: the window zooms it to fit (mdPageZoom.h)
+		int designHeight = 924;
+		int minHeight = 720;				// below it the page is zoomed out as a whole
 	};
 }

@@ -47,7 +47,7 @@
   <div class="wrap">
     <span class="eyebrow">User guide</span>
     <h1>User guide</h1>
-    <p>Everything a first-time user needs for the Machinedrum Editor and the Monomachine Editor, version 0.3.1. Tested on macOS (Intel and Apple silicon builds). A Windows x64 build is available but not tested. Linux is coming.</p>
+    <p>Everything a first-time user needs for the Machinedrum Editor and the Monomachine Editor, version 0.3.2. Tested on macOS (Intel and Apple silicon builds, macOS 12 or later). A Windows x64 build is available but not tested. Linux is coming.</p>
     <ul class="toc">
       <li><a href="#start">Getting started</a></li>
       <li><a href="#rom">Add your ROM</a></li>
@@ -86,10 +86,10 @@
     <p>Over HW MIDI, some controls are disabled because the machine has no MIDI message for them. The editor says why. Use the standalone app for HW MIDI. In most DAWs the plug-in has no MIDI output to the machine, so HW MIDI is disabled there.</p>
 
     <h2 id="daw">In a DAW</h2>
-    <p>After the installer, rescan plug-ins in your DAW. The plug-ins are called <b>Gearmulator MD</b> and <b>Gearmulator MM</b>, as VST3 and AU instruments. They follow the DAW's tempo and transport. The plug-in window shows the same editor, and the same start-up card if the ROM is missing.</p>
+    <p>After the installer, rescan plug-ins in your DAW. The plug-ins are called <b>Machinedrum Editor</b> and <b>Monomachine Editor</b> (by Future Native Audio), as VST3 and AU instruments. Up to 0.3.1 they were called Gearmulator MD and Gearmulator MM: the installer removes those, and projects saved with them open with the new names. They follow the DAW's tempo and transport. The plug-in window shows the same editor, and the same start-up card if the ROM is missing.</p>
     <p>If a DAW will not load the AU, macOS may have quarantined it. In Terminal run:</p>
-    <p><code>xattr -dr com.apple.quarantine "/Library/Audio/Plug-Ins/Components/Gearmulator MD.component"</code></p>
-    <p>Use <code>Gearmulator MM.component</code> for the Monomachine, and <code>~/Library/Audio/Plug-Ins/Components</code> if you installed for yourself only. Then rescan plug-ins.</p>
+    <p><code>xattr -dr com.apple.quarantine "/Library/Audio/Plug-Ins/Components/Machinedrum Editor.component"</code></p>
+    <p>Use <code>Monomachine Editor.component</code> for the Monomachine, and <code>~/Library/Audio/Plug-Ins/Components</code> if you installed for yourself only. Then rescan plug-ins.</p>
 
     <h2 id="workspaces">Workspaces</h2>
     <p>Each editor has five workspaces. Switch with the tabs, or with the keys <kbd>1</kbd> to <kbd>5</kbd>.</p>
@@ -126,7 +126,7 @@
     </ul>
 
     <h2 id="keys">Keyboard shortcuts</h2>
-    <p>Press <kbd>?</kbd> in an editor for its own list, which is built from the same key map. <kbd>⌘</kbd> is Command, <kbd>⌥</kbd> is Option, <kbd>⇧</kbd> is Shift. A plain letter acts on the selected track. <kbd>⌥</kbd> means all tracks. <b>MD</b> means the Machinedrum Editor only, <b>MM</b> the Monomachine Editor only.</p>
+    <p>Press <kbd>?</kbd> in an editor for its own list, which is built from the same key map. <kbd>⌘</kbd> is Command, <kbd>⌥</kbd> is Option, <kbd>⇧</kbd> is Shift. On Windows, <kbd>⌘</kbd> is Ctrl and <kbd>⌥</kbd> is Alt. A plain letter acts on the selected track. <kbd>⌥</kbd> means all tracks. <b>MD</b> means the Machinedrum Editor only, <b>MM</b> the Monomachine Editor only.</p>
 
     <h3>Playing</h3>
     <div class="tablewrap"><table><tbody>
@@ -163,10 +163,26 @@
     <div class="tablewrap"><table><tbody>
       <tr><th scope="row"><kbd>1</kbd> to <kbd>5</kbd></th><td>Switch workspace, in the order of the tables above.</td></tr>
       <tr><th scope="row"><kbd>[</kbd> <kbd>]</kbd></th><td>Previous or next page of 16 steps (MD: also on Sampler).</td></tr>
-      <tr><th scope="row"><kbd>Delete</kbd> or <kbd>Backspace</kbd></th><td>Sequence: clear the selected steps (MM: the page shown of the selected track). Song: delete the row.</td></tr>
-      <tr><th scope="row"><kbd>Esc</kbd></th><td>Sequence: unmark the tracks marked for paste.</td></tr>
+      <tr><th scope="row"><kbd>Delete</kbd> or <kbd>Backspace</kbd></th><td>Sequence: clear the selected steps (MD: without a selection, and MM: the page shown of the selected track). Song: delete the row.</td></tr>
+      <tr><th scope="row"><kbd>Esc</kbd></th><td>Sequence: clear the step selection, or unmark the tracks marked for paste.</td></tr>
       <tr><th scope="row"><kbd>←</kbd> <kbd>→</kbd></th><td>Song: previous or next row.</td></tr>
     </tbody></table></div>
+
+    <h3 id="select-steps">Selecting steps (MD)</h3>
+    <p>Select one step or a block of steps across tracks, then copy, cut, paste or duplicate it. The selection is outlined and stays when you change pattern, so it is also where a paste goes. Each operation is one undo step.</p>
+    <div class="tablewrap"><table><tbody>
+      <tr><th scope="row"><kbd>⌥</kbd> click a step</th><td>Select that step.</td></tr>
+      <tr><th scope="row"><kbd>⌥</kbd> drag across steps</th><td>Select a block: the steps and tracks between the press and the release.</td></tr>
+      <tr><th scope="row">Click or drag the step numbers</th><td>Select steps of the selected track. Drag down over the grid to take more tracks. <kbd>⇧</kbd> click a number to extend the selection.</td></tr>
+      <tr><th scope="row"><kbd>⌘</kbd> <kbd>C</kbd></th><td>Copy the selected steps: trigs, accents, slides, swings and the locks of steps with a trig.</td></tr>
+      <tr><th scope="row"><kbd>⌘</kbd> <kbd>X</kbd></th><td>Cut: copy, then clear them.</td></tr>
+      <tr><th scope="row"><kbd>⌘</kbd> <kbd>V</kbd></th><td>Paste with the copied block's first step on the selected step, on that track and the ones under it, in this pattern or another. A paste stops at the pattern's length and at track 16.</td></tr>
+      <tr><th scope="row"><kbd>⌘</kbd> <kbd>D</kbd></th><td>Duplicate the selection right after itself. The copy becomes the selection, so press again for another. The clipboard is not touched.</td></tr>
+      <tr><th scope="row"><kbd>⌥</kbd> drag the selection</th><td>Drop a copy of it where you let go.</td></tr>
+      <tr><th scope="row"><kbd>Delete</kbd></th><td>Clear the selected steps.</td></tr>
+      <tr><th scope="row"><kbd>Esc</kbd></th><td>Clear the selection. A plain click on a step, or a click elsewhere in the workspace, also ends it.</td></tr>
+    </tbody></table></div>
+    <p>To copy one step to another: <kbd>⌥</kbd> click it, <kbd>⌘</kbd> <kbd>C</kbd>, <kbd>⌥</kbd> click the step it goes to, <kbd>⌘</kbd> <kbd>V</kbd>.</p>
 
     <h3>Values</h3>
     <div class="tablewrap"><table><tbody>
@@ -177,7 +193,7 @@
     <div class="tablewrap"><table><tbody>
       <tr><th scope="row"><kbd>⌘</kbd> <kbd>Z</kbd></th><td>Undo.</td></tr>
       <tr><th scope="row"><kbd>⌘</kbd> <kbd>⇧</kbd> <kbd>Z</kbd> or <kbd>⌘</kbd> <kbd>Y</kbd></th><td>Redo.</td></tr>
-      <tr><th scope="row"><kbd>⌘</kbd> <kbd>C</kbd> and <kbd>⌘</kbd> <kbd>V</kbd></th><td>Copy and paste: a track page, a sound, a song row. On the Monomachine, also a Perform assign.</td></tr>
+      <tr><th scope="row"><kbd>⌘</kbd> <kbd>C</kbd> and <kbd>⌘</kbd> <kbd>V</kbd></th><td>Copy and paste: the selected steps (MD) or a track page, a sound, a song row. On the Monomachine, also a Perform assign.</td></tr>
       <tr><th scope="row"><kbd>,</kbd></th><td>AUDIO / MIDI settings.</td></tr>
       <tr><th scope="row"><kbd>?</kbd></th><td>The editor's own list of keys. <kbd>?</kbd> or <kbd>Esc</kbd> closes it.</td></tr>
       <tr><th scope="row"><kbd>Esc</kbd></th><td>Close the open dialog or panel.</td></tr>
@@ -198,7 +214,8 @@
     <h3>Mouse with a key held</h3>
     <div class="tablewrap"><table><tbody>
       <tr><th scope="row"><kbd>⇧</kbd> click a step</th><td>MD: accent. MM: a chord note on the step.</td></tr>
-      <tr><th scope="row"><kbd>⌥</kbd> click a step</th><td>MD: slide. MM: delete a note, or a NOTE OFF on an empty step.</td></tr>
+      <tr><th scope="row"><kbd>⌥</kbd> click a step</th><td>MD: select it (see <a href="#select-steps">Selecting steps</a>). MM: delete a note, or a NOTE OFF on an empty step.</td></tr>
+      <tr><th scope="row"><kbd>⌥</kbd> <kbd>⇧</kbd> click a step</th><td>MD: slide.</td></tr>
       <tr><th scope="row"><kbd>⌘</kbd> click a step</th><td>MD: every second step from there to the end on (off, from a trig). With <kbd>⇧</kbd>, every fourth step. One undo step. MM: the same in the piano roll.</td></tr>
       <tr><th scope="row">Drag in the MM piano roll</th><td>Press an empty cell and drag to paint that note across the empty steps. <kbd>⌥</kbd> drag erases. One drag is one undo step.</td></tr>
       <tr><th scope="row"><kbd>⇧</kbd> drag a lock lane</th><td>A straight ramp from the press to the release.</td></tr>
@@ -215,8 +232,8 @@
     <p>Delete the three bundles of each editor. Your ROM and your settings are not touched.</p>
     <div class="tablewrap"><table><tbody>
       <tr><th scope="row">App</th><td><code>Machinedrum Editor.app</code> and <code>Monomachine Editor.app</code> in <code>/Applications</code> (or <code>~/Applications</code>)</td></tr>
-      <tr><th scope="row">VST3</th><td><code>Gearmulator MD.vst3</code> and <code>Gearmulator MM.vst3</code> in <code>/Library/Audio/Plug-Ins/VST3</code> (or <code>~/Library/Audio/Plug-Ins/VST3</code>)</td></tr>
-      <tr><th scope="row">AU</th><td><code>Gearmulator MD.component</code> and <code>Gearmulator MM.component</code> in <code>/Library/Audio/Plug-Ins/Components</code> (or <code>~/Library/Audio/Plug-Ins/Components</code>)</td></tr>
+      <tr><th scope="row">VST3</th><td><code>Machinedrum Editor.vst3</code> and <code>Monomachine Editor.vst3</code> in <code>/Library/Audio/Plug-Ins/VST3</code> (or <code>~/Library/Audio/Plug-Ins/VST3</code>)</td></tr>
+      <tr><th scope="row">AU</th><td><code>Machinedrum Editor.component</code> and <code>Monomachine Editor.component</code> in <code>/Library/Audio/Plug-Ins/Components</code> (or <code>~/Library/Audio/Plug-Ins/Components</code>)</td></tr>
     </tbody></table></div>
     <p class="small">Questions or bugs: <a href="/contact/">contact</a>. Release notes: <a href="https://github.com/radekdymacz/gearmulator-md-mm/blob/main/doc/release/v0.3.0.md">0.3.0</a>, <a href="https://github.com/radekdymacz/gearmulator-md-mm/blob/main/doc/release/v0.3.1.md">0.3.1</a>.</p>
   </div>

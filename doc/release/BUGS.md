@@ -8,23 +8,24 @@ where it came from, the setup, what happens, what should happen, status.*
 
 - **From:** Discord tester (versonegro), macOS 12, 2026-10-07, with a screen recording.
 - **What happens:** on the Sequence page the moving play head does not show with the MK1 (white) plate; with the MK2 (black) plate it shows, but faintly.
-- **Likely cause:** the play-head colour uses CSS the macOS 12 WebKit drops (`color-mix`, see B-001).
 - **Should:** a clearly visible play head on both plates, on every supported macOS.
-- **Status:** open, with the old-WebKit fix.
+- **Cause:** the play head (`#phcol`) was drawn only with `color-mix()`: its tint and edge, and on the MK1 plate all of it, so the macOS 12 WebKit dropped it (B-001). On MK2 it was faint even on a current WebKit (a 1 px edge at 45 %, screen-blended).
+- **Fix (branch `fix/plugin-window-fit`):** `deskCompat.js` gives an older WebKit the same colours (B-001); the play head has a solid 2 px LED-coloured edge and a stronger tint on both plates (MD), and a 2 px ink edge on the Monomachine Editor's roll. Checked on MK1 and MK2, with and without the rewrite (`?compat=force`).
+- **Status:** fixed for 0.3.2.
 
 ## B-007 · "Settings" in the right-click menu does not open
 
 - **From:** the same tester, macOS 12, 2026-10-07.
 - **What happens:** right-click on the editor opens the editor menu (inherited from Gearmulator); choosing its Settings entry does nothing.
 - **Should:** every entry in that menu works in the web-page editors, or is removed; Settings opens the editor's own settings (or the menu offers only what applies).
-- **Status:** open.
+- **Status:** fixed for 0.3.2. Cause: "Settings..." opened upstream's RmlUi settings page, which the web page hides. The menu now has GUI Scale, RAM recording (MD), Performance diagnostics and, in the standalone only, "Audio/MIDI Settings..." (the page's own panel); in a plug-in the host owns audio and MIDI, so there is no Settings entry.
 
 ## B-006 · LEN (loop length) cannot be dragged
 
 - **From:** the same tester asked how to loop only 16 steps, 2026-10-07; Radek expected LEN to be draggable.
 - **What happens:** on the Sequence LCD, LEN steps 16 / 32 / 48 / 64 on click (⌥-click steps the length inside it, the mouse wheel works), but a drag does nothing, and the click behaviour is easy to miss.
 - **Should:** LEN (and the other LCD values that step on click) also follow a vertical drag, like the other values in the editor; the tooltip says so.
-- **Status:** open.
+- **Status:** fixed for 0.3.2 (LEN, SPD and SONG follow a vertical drag).
 
 ## B-005 · High CPU in Ableton Live
 
@@ -39,14 +40,18 @@ where it came from, the setup, what happens, what should happen, status.*
 - **From:** the same Discord screenshot as B-001, 2026-10-07.
 - **What happens:** on the MIX workspace the volume faders stretch very tall and the strips look oversized.
 - **Should:** the page keeps sensible proportions at every window size; faders have a maximum height.
-- **Status:** open, part of the window-size review.
+- **Cause:** the page laid itself out in whatever height the window had: the MD faders grew with it up to 320 px, and below the master effects (MD) or between the strips and the routing (MM) an empty band was left (Radek's Live window showed it too, about 80 pt).
+- **Fix (branch `fix/plugin-window-fit`):** a window larger than the design (1440 x 924) both ways zooms the page up by its smaller side, so the page keeps the design's proportions (`mdPageZoom.h`); the MD faders stop at 240 px and the master effects' screens take the height that is left, so the page ends at the window's bottom; the MM routing follows right under the strips. Checked in a browser harness from 864 x 554 to 3440 x 1440 and at portrait sizes, every workspace of both editors.
+- **Status:** fixed for 0.3.2.
 
 ## B-003 · First start: the ROM loads twice
 
 - **From:** Radek, 2026-10-07, 0.3.1 installed for the user, first start of the app.
 - **What happens:** the start-up animation and the ROM loading run twice.
 - **Should:** one load, one animation.
-- **Status:** open.
+- **Cause:** not the settings migration. A Machinedrum that starts without its UW factory cache (`<data folder>/nvram/md-uw-1.63-factory-v2.cache`) and without a project that carries the sample flash first formats its sample flash, as the real machine does on its first start, and the processor then starts it again (`serviceFactoryInitialization`). The page showed that first run as a normal start, with its LCD, so the user saw two start-ups. The cache that should make this happen once per computer was never kept: the editor's status requests (the Song status is not on the read-only list) reached the machine while it formatted, which counts as outside use and disqualifies the capture. Reproduced with 0.3.1 and an empty data folder: one start-up animation, `[MD] factory flash preparation complete; rebooted in process`, a second animation, no cache; Radek's own data folder has never had one, so every start without a saved project did this (a new plug-in instance in a DAW, an app with no saved state). His own first-start log was overwritten by a later start; his migrated settings, started again with 0.3.1 in an empty data folder, restore with one start-up.
+- **Fix:** the machine that formats its flash is "loading" for the page (the start-up card says Preparing…, without its LCD) and the editor does not talk to it, so the cache is kept; the start-up animation shown is the one after it. The next start has no preparation at all. Test: `mdFirstStartFirmwareTest` (needs the ROM).
+- **Status:** fixed for 0.3.2.
 
 ## B-002 · The Windows editor window is empty (confirmed)
 
@@ -68,4 +73,12 @@ where it came from, the setup, what happens, what should happen, status.*
 - **More evidence (second screenshot, same tester):** the header LCD has no inner borders, the transport buttons are not boxed, and SETUP (UNDO/REDO/MKI) is cut off; on Radek's newer macOS all of it renders correctly.
 - **Likely cause:** macOS 12's system WebKit (Safari 15 engine) does not support some CSS the page uses (e.g. container-query units, color-mix), so those rules are dropped. Fix: fallbacks for the oldest supported WebKit, and an honest minimum macOS version.
 - **Update 2026-10-07:** the tester says the cut-off window was their own setting (the editor size is in the right-click menu). The missing LCD borders are still real (old WebKit, see above).
-- **Status:** window size: not a bug (discoverability: add ⌘− / ⌘+ zoom). Old-WebKit rendering: open, being fixed.
+- **Cause, rendering:** the editor's web view is the system WebKit, the one the installed Safari brought; macOS 12 with Safari 15 is WebKit 15. Both stylesheets use `color-mix()` (WebKit 16.2) about 70 times (no container queries, no `@layer`, no nesting): WebKit 15 drops each declaration that has one, and the LCD's rule variable (`--lrule`, a mix) makes every LCD divider invalid; that is the second screenshot. `:focus-visible` (WebKit 15.4) drops whole rules that list it (hover states), and `structuredClone` (15.4) is missing for the Monomachine page. The play head (B-008) is the same cause.
+- **Cause, size:** the window size was the tester's GUI Scale, but nothing kept it on the screen: a plug-in's editor opened at whatever size was set or last used (the standalone's included), larger than a 1440 x 900 screen, its right part, SETUP and resize corner off the screen; and the page had no zoom of its own.
+- **Fix (branch `fix/plugin-window-fit`):**
+  - `skins/shared/deskCompat.js`, first in both pages' `<head>`: where the engine lacks `color-mix()` or `:focus-visible` it rewrites the stylesheets before the first paint (each mix as the same `rgba()`, through channel variables beside each colour variable, so themes and plates still apply; `:focus-visible` as `:focus`), and adds `structuredClone`. A current engine keeps the stylesheets as written. Forced on (`?compat=force`) in Chrome it draws the MD page pixel for pixel like the original. `deskCompatTest.js` checks every mix in both stylesheets is rewritten. Left alone (an older WebKit skips them, nothing breaks): four `:has()` rules (WebKit 15.4) and `subgrid` (16) in alignment details, `scrollbar-gutter`, `overscroll-behavior`, `accent-color`.
+  - A plug-in's editor is never larger than its screen (less 64 pt for the host's bars): `windowFit::fitPluginSize`, applied once the host shows the window, not stored as the user's size.
+  - The page always fits its window: narrower than 1440 or shorter than 720 CSS px zooms it out, larger both ways zooms it up (`mdPageZoom.h`); where the web view has no `pageZoom` (macOS 10.15 and older) the page's CSS zoom does the same.
+  - The page's own zoom: **Page Zoom** in the editor's menu (right-click on the page's header, the standalone's Editor menu) with Zoom In / Zoom Out / Actual Size and 50-200 % steps, and ⌘− / ⌘+ / ⌘0 on the page (`deskZoom.js`, the `pageZoom` command), remembered in the editor's config.
+- **Minimum macOS:** 12 (Monterey), any Safari 15 or later. macOS 11 with Safari 15 should work the same (not tested); macOS 10.15 and older lack flex `gap` and `inset` (Safari 14.1) unless Safari was updated, and are not supported. The build's deployment target (10.13) is not a claim.
+- **Status:** fixed for 0.3.2. To confirm with the tester: Safari's version (Safari > About Safari).

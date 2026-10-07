@@ -24,9 +24,10 @@
 # up first and restored byte for byte afterwards, pass or fail, as the journeys do. The ROMs are the ones in the ROM
 # folders; none is copied.
 # Needs: Screen Recording allowed for the app that runs this script (System Settings > Privacy & Security > Screen &
-# System Audio Recording), ffmpeg (brew install ffmpeg), python3, the Xcode toolchain for the recorder.
+# System Audio Recording), ffmpeg (brew install ffmpeg), python3 with numpy (pip3 install numpy), the Xcode toolchain for the recorder.
 set -u
 ROOT=$(cd "$(dirname "$0")/.." && pwd)
+. "$ROOT/scripts/mdmm-product.env"	# the product names: the apps, their executables and caches
 APPS=${MDMM_APP_DIR:-"$ROOT/bin/plugins/Release/Standalone"}
 SIZE=${MDMM_DEMO_SIZE:-1440x810}
 FPS=${MDMM_DEMO_FPS:-60}
@@ -118,7 +119,7 @@ EOF
 	fi
 	timeline "$DIR" "$NAME" "$OFFSET" "$LEAD" "$DURATION"
 	# the silence the demo means: before its first bar (the machine is not playing yet)
-	QUIET=$(python3 -c "import json; print(json.load(open('$DIR/timeline.json'))['firstBar'])")
+	QUIET=$(python3 -c "import json, sys; print(json.load(open(sys.argv[1] + '/timeline.json'))['firstBar'])" "$DIR")
 	grep -v '^[[:space:]]*#' "$DIR/captions.txt" | grep -v '^card|' | grep '|' > "$DIR/captions/lines.txt"
 	CARDLINE=$(grep '^card|' "$DIR/captions.txt" | tail -1)
 	CARDSEC=0; CSTART=$DURATION
@@ -152,24 +153,24 @@ print("measured_I=%s:measured_TP=%s:measured_LRA=%s:measured_thresh=%s:offset=%s
 			9x16) W=1080; H=1920; FG="scale=1080:-2:flags=lanczos"; FY="560"
 				CAPARGS="--width 840 --size 60"; CX="60+(840-w)/2"; CY="1210"; SAFE="60,250,840,1250" ;;
 		esac
-		INPUTS=""; CHAIN=""; i=0; last="v0"
+		INPUTS=(); CHAIN=""; i=0; last="v0"
 		while IFS='|' read -r s e text; do
 			[ -n "$text" ] || continue
 			i=$((i + 1))
 			# shellcheck disable=SC2086
 			"$REC" caption --text "$text" --out "$DIR/captions/$fmt-$i.png" $CAPARGS || die "caption $i"
-			INPUTS="$INPUTS -loop 1 -framerate $FPS -t $DURATION -i $DIR/captions/$fmt-$i.png"
+			INPUTS+=(-loop 1 -framerate "$FPS" -t "$DURATION" -i "$DIR/captions/$fmt-$i.png")
 			CHAIN="$CHAIN;[$last][$i:v]overlay=x=$CX:y=$CY:enable='between(t,$s,$e)'[c$i]"; last="c$i"
 		done < "$DIR/captions/lines.txt"
 		if [ -n "$CARDLINE" ]; then
 			"$REC" card --out "$DIR/captions/$fmt-card.png" --width $W --height $H --safe "$SAFE" --title "$CTITLE" --line "$CLINE" --url "$CURL" || die "end card"
-			i=$((i + 1)); INPUTS="$INPUTS -loop 1 -framerate $FPS -t $DURATION -i $DIR/captions/$fmt-card.png"
+			i=$((i + 1)); INPUTS+=(-loop 1 -framerate "$FPS" -t "$DURATION" -i "$DIR/captions/$fmt-card.png")
 			CHAIN="$CHAIN;[$i:v]format=rgba,fade=t=in:st=$CSTART:d=0.45:alpha=1[card];[$last][card]overlay=0:0:enable='gte(t,$CSTART)'[cc]"; last="cc"
 		fi
 		VF="[0:v]fps=$FPS,split[a][b];[a]scale=$W:$H:force_original_aspect_ratio=increase,crop=$W:$H,gblur=sigma=40,eq=brightness=-0.22:saturation=0.8[bg];[b]$FG[fg];[bg][fg]overlay=x=(W-w)/2:y=$FY,setsar=1[v0]$CHAIN"
 		OUT="$DIR/$NAME-$fmt.mp4"
 		# shellcheck disable=SC2086
-		ffmpeg -hide_banner -loglevel error -y -ss "$OFFSET" -t "$DURATION" -i "$DIR/raw.mov" $INPUTS \
+		ffmpeg -hide_banner -loglevel error -y -ss "$OFFSET" -t "$DURATION" -i "$DIR/raw.mov" "${INPUTS[@]}" \
 			-filter_complex "$VF" -map "[$last]" -map 0:a -af "$AF" \
 			-c:v libx264 -preset slow -crf 18 -pix_fmt yuv420p -profile:v high -r "$FPS" \
 			-c:a aac -b:a 256k -ar 48000 -movflags +faststart -t "$DURATION" "$OUT" || die "ffmpeg $fmt"
@@ -278,26 +279,26 @@ if [ "${MDMM_DEMO_TRY:-}" = "" ]; then
 		echo "== the recording ended early: try $((n + 1))"
 		n=$((n + 1))
 		# the last try's app quits first (a new one started while it still runs ends at once)
-		for i in $(seq 1 30); do pgrep -f "Gearmulator M[DM].app/Contents/MacOS" >/dev/null 2>&1 || break; sleep 1; done
+		for i in $(seq 1 30); do pgrep -f "($MDMM_PRODUCT_NAME_MD|$MDMM_PRODUCT_NAME_MM).app/Contents/MacOS" >/dev/null 2>&1 || break; sleep 1; done
 		sleep 3
 	done
 fi
 WHICH=${1:-}; DEMO=${2:-}; CAPS=${3:-}
-case "$WHICH" in md) M=MD; MACHINE=Machinedrum; SKIN=mdStudio; VAR=GEARMULATOR_MDSTUDIO_SELFTEST ;;
-	mm) M=MM; MACHINE=Monomachine; SKIN=mmStudio; VAR=GEARMULATOR_MMSTUDIO_SELFTEST ;;
+case "$WHICH" in md) M=MD; MACHINE=Machinedrum; SKIN=mdStudio; VAR=GEARMULATOR_MDSTUDIO_SELFTEST; NAME=$MDMM_PRODUCT_NAME_MD ;;
+	mm) M=MM; MACHINE=Monomachine; SKIN=mmStudio; VAR=GEARMULATOR_MMSTUDIO_SELFTEST; NAME=$MDMM_PRODUCT_NAME_MM ;;
 	*) echo "usage: $0 md|mm <demo> [captions] | $0 render <run folder> [captions]" >&2; exit 2 ;; esac
 [ -n "$DEMO" ] || die "name a demo (demo-$WHICH-<name>)"
 case "$DEMO" in demo-*) ;; *) DEMO="demo-$WHICH-$DEMO" ;; esac
 case "$SIZE" in *x*) WW=${SIZE%x*}; WH=${SIZE#*x} ;; *) die "MDMM_DEMO_SIZE is WxH" ;; esac
-APP="$APPS/Gearmulator $M.app"
-EXE="$APP/Contents/MacOS/Gearmulator $M"
+APP="$APPS/$NAME.app"
+EXE="$APP/Contents/MacOS/$NAME"
 DATA="$HOME/Documents/Gearmulator Preview/$MACHINE"
-C="$DATA/config/Gearmulator $M.xml"
-SETTINGS="$HOME/Library/Application Support/Gearmulator $M.settings"
-LOGDIR="$HOME/Library/Caches/Gearmulator $M"
+C="$DATA/config/$MACHINE Editor.xml"	# the editor's own files since 0.3.1 (mdSettingsMigration.h), not the product name
+SETTINGS="$HOME/Library/Application Support/$MACHINE Editor.settings"
+LOGDIR="$HOME/Library/Caches/$NAME"	# JUCE's temp folder: ~/Library/Caches/<executable>
 [ -x "$EXE" ] || die "no diagnostics build at $APP (configure with -Dgearmulator_MDMM_DIAGNOSTICS=ON, build the $(echo $M | tr A-Z a-z)JucePlugin_Standalone target)"
 ls "$DATA/roms/"* >/dev/null 2>&1 || die "no $MACHINE ROM in $DATA/roms (it stays there; nothing copies it)"
-pgrep -f "Gearmulator $M.app/Contents/MacOS" >/dev/null 2>&1 && die "a Gearmulator $M app is running: quit it first (the demo uses the same settings)"
+pgrep -f "$NAME.app/Contents/MacOS" >/dev/null 2>&1 && die "a $NAME app is running: quit it first (the demo uses the same settings)"
 REC=$("$ROOT/tools/mdmm-recorder/build.sh") || die "the recorder did not build"
 OUT=${MDMM_DEMO_OUT:-"$ROOT/temp/videos"}/$DEMO-$(date +%Y%m%d-%H%M%S)
 mkdir -p "$OUT"

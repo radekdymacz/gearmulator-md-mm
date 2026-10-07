@@ -13,6 +13,11 @@
 #include <memory>
 #include <string>
 
+namespace juceRmlUi
+{
+	class Menu;
+}
+
 namespace mdJucePlugin
 {
 	class AudioMidiLink;
@@ -42,7 +47,14 @@ namespace mdJucePlugin
 		// itself out in any window size (P7, FreeSizeEditor): the window resizes freely.
 		bool openAudioMidiSettings() override;
 
+		// B-001: the page's zoom in the editor's menu (the page's right-click menu, the standalone's menu bar):
+		// smaller, larger, 100 % and the steps. Cmd - / Cmd + / Cmd 0 on the page do the same (pageZoom).
+		void fillZoomMenu(juceRmlUi::Menu& _menu);
+
 	private:
+		// The page's zoom one step smaller (-1), larger (1) or back to 100 % (0), or _zoom itself (step 2),
+		// remembered in the editor's config for every window (mdPageZoom.h).
+		void setZoom(int _step, double _zoom = 1.0);
 		void timerCallback() override;
 		void onPageMessage(const elektronData::json::Value& _message);
 		void chooseRom();

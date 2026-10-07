@@ -132,6 +132,8 @@ files, so merge it first.
   options (pkg or dmg).
 - `doc/release/v<next>.md`: no "Unsigned and not notarised" bullet (as in
   v0.3.0.md lines 97–98); mention the disk images.
+  Links in release notes are absolute (the file becomes the GitHub release page body, where
+  relative links break): `https://github.com/radekdymacz/gearmulator-md-mm/blob/main/doc/release/vX.Y.Z.md`.
 - `scripts/macos/macsetup_Gearmulator-Elektron.command` (zip only): becomes
   unnecessary for signed bundles. Keep it or retire it with the zip.
 
@@ -183,8 +185,6 @@ other synth keeps upstream's. `sign_mdmm.sh` refuses to sign, and
 
 What does **not** change, so DAW projects and saved state still load:
 
-- the plug-in names hosts show (`Gearmulator MD`, `Gearmulator MM`; AU
-  `Gearmulator Preview: Gearmulator MD`) and the bundle file names;
 - the VST3 class IDs, which JUCE derives from the manufacturer code `GmPv` and
   the plug-in code `Tmdr` / `Tmno`, never from the bundle identifier
   (`ABCDEF019182FAEB476D5076546D6472` is the MD processor);
@@ -220,6 +220,36 @@ under the old identifier is simply left behind. Not yet tried on a Mac with
 0.3.0 installed: install the new package over it, then check
 `pkgutil --pkg-info com.nativekloud.mdmm.md.app` shows the new version and
 `verify_mdmm_pkg_install.sh` passes.
+
+## Names
+
+After 0.3.1 every bundle, executable and plug-in carries the product name, set
+once in `scripts/mdmm-product.env` (read by `mdmmPlugins.cmake` and sourced by
+every script here):
+
+| | Up to 0.3.1 | Now |
+|---|---|---|
+| App | `Machinedrum Editor.app` (renamed by the installer), executable `Gearmulator MD`, `CFBundleName` `Gearmulator MD` | `Machinedrum Editor.app`, executable and `CFBundleName` `Machinedrum Editor` |
+| VST3 | `Gearmulator MD.vst3`, vendor `Gearmulator Preview` | `Machinedrum Editor.vst3`, vendor `Future Native Audio` |
+| AU | `Gearmulator MD.component`, `Gearmulator Preview: Gearmulator MD` | `Machinedrum Editor.component`, `Future Native Audio: Machinedrum Editor` |
+| Windows | `Gearmulator MD.exe`, `Gearmulator MD.vst3` | `Machinedrum Editor.exe`, `Machinedrum Editor.vst3` |
+
+(MM alike.) The plug-in codes above do not change, so a project saved with
+`Gearmulator MD` opens with `Machinedrum Editor`. The data folder keeps its
+`Gearmulator Preview` parent (`g_dataFolderVendor` in `mdPluginProcessor.cpp`),
+and the settings files keep their names (`mdSettingsMigration.h`), whatever the
+product is called. The LV2 URI is pinned to the old one in `mdmmPlugins.cmake`.
+
+**Upgrading from 0.3.1 or earlier.** Installer never removes a file the new
+package does not have, so each component's `preinstall`
+(`pkg-resources/remove-old-bundles`) removes `Gearmulator MD.vst3` /
+`.component` (and an app built before the rename at `Machinedrum
+Editor.app`) before the new one lands, in the domain being installed into and
+in the installing person's home folder. Only ours: the bundle must carry the
+editor's identifier, or our receipt (`com.nativekloud.mdmm.md.vst3` …) must
+list the path. An upstream Gearmulator build of the same name is left alone.
+`verify_mdmm_pkg_install.sh` fails if one of ours is still there. The disk
+images cannot do this; their `Install.txt` says to delete the old bundles.
 
 ## Hardened runtime and the JIT
 

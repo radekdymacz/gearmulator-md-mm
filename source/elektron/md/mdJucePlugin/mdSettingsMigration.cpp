@@ -1,9 +1,24 @@
 #include "mdSettingsMigration.h"
 
+#if JUCE_WINDOWS
+#	include <process.h>
+#else
+#	include <unistd.h>
+#endif
+
 namespace mdJucePlugin
 {
 	namespace
 	{
+		int processId()
+		{
+#if JUCE_WINDOWS
+			return _getpid();
+#else
+			return static_cast<int>(::getpid());
+#endif
+		}
+
 		bool isMonomachine(const md::MachineModel _model)
 		{
 			return _model == md::MachineModel::Monomachine;
@@ -40,12 +55,27 @@ namespace mdJucePlugin
 		if(!_own.getParentDirectory().createDirectory())
 			return SettingsCopy::Failed;
 
-		const auto partial = _own.getSiblingFile(_own.getFileName() + ".migrating");
+		// a name of this start's own (pid + random): two editors starting at once never share a partial file
+		const auto partial = _own.getSiblingFile(_own.getFileName() + ".migrating-" +
+			juce::String(processId()) + "-" +
+			juce::String::toHexString(juce::Random::getSystemRandom().nextInt64()));
 		partial.deleteFile();
-		if(!_legacy.copyFileTo(partial) || !partial.moveFileTo(_own))
+		if(!_legacy.copyFileTo(partial))
 		{
 			partial.deleteFile();
-			return SettingsCopy::Failed;
+			return _own.exists() ? SettingsCopy::AlreadyMigrated : SettingsCopy::Failed;
+		}
+		// moveFileTo replaces an existing target: look once more, so a file another process made meanwhile stays
+		if(_own.exists())
+		{
+			partial.deleteFile();
+			return SettingsCopy::AlreadyMigrated;
+		}
+		if(!partial.moveFileTo(_own))
+		{
+			partial.deleteFile();
+			// the other process may have won the race: its file is the migration
+			return _own.exists() ? SettingsCopy::AlreadyMigrated : SettingsCopy::Failed;
 		}
 		return SettingsCopy::Copied;
 	}

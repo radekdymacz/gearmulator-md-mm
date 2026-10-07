@@ -126,6 +126,13 @@ namespace mdDesk
 	{
 		Value c = Value::object();
 		c.set("steps", _clip.steps.has_value());
+		Value size = Value::object();
+		if(_clip.steps)
+		{
+			size.set("tracks", static_cast<int>(_clip.steps->rows.size()));
+			size.set("length", static_cast<int>(_clip.steps->length));
+		}
+		c.set("stepsSize", _clip.steps ? size : Value());
 		c.set("sound", _clip.sound.has_value());
 		c.set("songRow", _clip.songRow.has_value());
 		c.set("kit", _clip.kit ? Value(static_cast<int>(_clip.kit->position)) : Value());
@@ -218,6 +225,7 @@ namespace mdDesk
 		const Arg k = slot("k", DocKind::Kit);
 		const Arg s = slot("s", DocKind::Song);
 		const Arg t{"t", ArgType::Integer, 0, 15};
+		const Arg rows{"n", ArgType::Integer, 1, 16, true};	// a block's tracks from t (a selection, steps x tracks)
 		const Arg step{"s", ArgType::Integer, 0, 63};
 		const Arg i24{"i", ArgType::Integer, 0, 23};
 		const Arg v127{"v", ArgType::Integer, 0, 127};
@@ -248,9 +256,15 @@ namespace mdDesk
 			{"swing", Owner::Core, Gate::Input, P, {p, {"v", ArgType::Integer, 50, 80}}, "percent"},
 			{"accentAmount", Owner::Core, Gate::Input, P, {p, {"v", ArgType::Integer, 0, 15}}, ""},
 			{"patternKit", Owner::Core, Gate::Input, P, {p, slot("v", DocKind::Kit)}, ""},
-			{"clearSteps", Owner::Core, Gate::Input, P, {p, t, {"from", ArgType::Integer, 0, 63}, {"to", ArgType::Integer, 1, 64}}, ""},
-			{"copySteps", Owner::Core, Gate::Input, P, {p, t, {"from", ArgType::Integer, 0, 63}, {"to", ArgType::Integer, 1, 64}}, ""},
-			{"pasteSteps", Owner::Core, Gate::Input, P, {p, t, {"from", ArgType::Integer, 0, 63}}, ""},
+			{"clearSteps", Owner::Core, Gate::Input, P, {p, t, rows, {"from", ArgType::Integer, 0, 63}, {"to", ArgType::Integer, 1, 64}},
+				"the steps [from, to) of tracks t to t + n - 1 (n 1 without it): trigs, marks and locks"},
+			{"copySteps", Owner::Core, Gate::Input, P, {p, t, rows, {"from", ArgType::Integer, 0, 63}, {"to", ArgType::Integer, 1, 64}},
+				"a block of steps (tracks t to t + n - 1, steps [from, to)) into the clipboard: trigs, accents, slides, swings, locks"},
+			{"pasteSteps", Owner::Core, Gate::Input, P, {p, t, {"from", ArgType::Integer, 0, 63}},
+				"the clipboard's block with its first step at from on track t; it stops at the pattern's length and track 16"},
+			{"copyStepsTo", Owner::Core, Gate::Input, P, {p, t, rows, {"from", ArgType::Integer, 0, 63}, {"to", ArgType::Integer, 1, 64},
+				{"at", ArgType::Integer, 0, 63}, {"dt", ArgType::Integer, 0, 15, true}},
+				"a block of steps copied within the pattern to step at of track dt (its own track without dt), the clipboard untouched: duplicate, Alt-drag"},
 			{"patCopy", Owner::Core, Gate::Input, P, {p}, "the pattern chooser", CoreOp::Edit, g_library},
 			{"patPaste", Owner::Core, Gate::Input, P, {p}, "", CoreOp::Edit, g_library},
 			{"patCopyTo", Owner::Core, Gate::Input, P, {slot("from", DocKind::Pattern), slot("to", DocKind::Pattern)}, "drag-copy", CoreOp::Edit, g_library},
