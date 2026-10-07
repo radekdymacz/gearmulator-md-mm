@@ -2,7 +2,7 @@
 /* The page's key map (mdDeskKeys.js over the shared dispatcher, shared/deskKeys.js), checked: every Keys.bind entry of the page's scripts, as the page makes
    them (the scripts run here on a stand-in DOM that answers everything and does nothing), against the map's
    rules: plain keys play, a plain letter off the piano row acts on the selected track, Alt is all (two Alts
-   are not: rotate and record), no ⇧ or ⌘ letter commands but the standard ⌘Z ⌘⇧Z ⌘Y ⌘C ⌘V; and no two
+   are not: rotate and record), no ⇧ or ⌘ letter commands but the standard ⌘Z ⌘⇧Z ⌘Y ⌘C ⌘V ⌘X and ⌘D (duplicate); and no two
    dispatched entries share a key and modifiers unless both have a when() the test knows are exclusive.
      node mdDeskKeysTest.js */
 const fs = require("fs"), path = require("path");
@@ -38,9 +38,9 @@ const mods = b => (b.mod || "") === "" && !b.code && b.keys.some(k => k.length =
 const run = list.filter(b => b.run), name = b => `${Keys.label(b)} (${b.group})`;
 
 /* ---- rule: no ⇧ chords, ⌘ only for the standard edit keys ---- */
-const STD_CMD = new Set(["cmd KeyZ", "cmd+shift KeyZ", "cmd KeyY", "cmd KeyC", "cmd KeyV"]);
+const STD_CMD = new Set(["cmd KeyZ", "cmd+shift KeyZ", "cmd KeyY", "cmd KeyC", "cmd KeyV", "cmd KeyX", "cmd KeyD"]);
 const badMod = run.filter(b => ids(b).some(id => { const m = b.mod || ""; return m.includes("shift") && !STD_CMD.has(m + " " + id) || m.includes("cmd") && !STD_CMD.has(m + " " + id); }));
-check(!badMod.length, "no ⇧ or ⌘ commands but ⌘Z ⌘⇧Z ⌘Y ⌘C ⌘V" + (badMod.length ? ": " + badMod.map(name).join(", ") : ""));
+check(!badMod.length, "no ⇧ or ⌘ commands but ⌘Z ⌘⇧Z ⌘Y ⌘C ⌘V ⌘X ⌘D" + (badMod.length ? ": " + badMod.map(name).join(", ") : ""));
 
 /* ---- rule: no two dispatched entries on one key and modifiers, unless both are conditional and known exclusive ---- */
 /* Escape: each closes what is open (the help, a dialog, LEARN, the paste marks, GLOBAL), one at a time */
@@ -55,7 +55,7 @@ const has = (m, id) => run.some(b => (b.mod || "") === m && ids(b).includes(id))
 const WANT = [["", "KeyA", "a note"], ["", "KeyL", "a note"], ["", "KeyZ", "octave down"], ["", "KeyX", "octave up"], ["", "KeyC", "velocity down"], ["", "KeyV", "velocity up"],
 	["", "Space", "play / stop"], ["alt", "Space", "record + play"], ["", "KeyR", "randomise the selected track"], ["", "KeyM", "mute the selected track"], ["", "KeyT", "tap tempo"], ["", "KeyB", "tap tempo (B, the Monomachine Editor's tap key)"],
 	["", "ArrowUp", "previous track"], ["", "ArrowDown", "next track"], ["alt", "KeyR", "randomise all"], ["alt", "KeyM", "mute / unmute all"], ["alt", "Delete", "clear the pattern"],
-	["alt", "ArrowLeft", "rotate"], ["alt", "ArrowRight", "rotate"], ["cmd", "KeyZ", "undo"], ["cmd", "KeyC", "copy"], ["cmd", "KeyV", "paste"]];
+	["alt", "ArrowLeft", "rotate"], ["alt", "ArrowRight", "rotate"], ["cmd", "KeyZ", "undo"], ["cmd", "KeyC", "copy"], ["cmd", "KeyV", "paste"], ["cmd", "KeyX", "cut the selected steps"], ["cmd", "KeyD", "duplicate the selected steps"]];
 const missing = WANT.filter(([m, id]) => !has(m, id));
 check(!missing.length, "the approved keys are bound" + (missing.length ? ": missing " + missing.map(([m, id, w]) => `${m}+${id} (${w})`).join(", ") : ""));
 const GONE = [["", "KeyW", "Walk"], ["cmd", "KeyR", "⌘R"], ["shift", "KeyR", "⇧R"], ["shift", "KeyD", "⇧D"], ["shift", "KeyF", "⇧F"], ["shift", "KeyG", "⇧G"], ["shift", "KeyL", "⇧L"],

@@ -82,16 +82,24 @@ namespace mdDesk
 	// What copy puts aside for paste. Values only; nothing refers back.
 	struct Clipboard
 	{
+		// A block of steps: `length` steps of one or more neighbouring tracks (a selection, steps x tracks;
+		// a track page is a block of one row). Step bits and lock steps are relative to the block's first step.
 		struct Steps
 		{
-			size_t length = 0;
-			uint64_t trigs = 0, accent = 0, slide = 0;
-			std::map<uint8_t, std::map<uint8_t, uint8_t>> locks;	// param -> step -> value
-
-			bool operator==(const Steps& _o) const
+			struct Row
 			{
-				return length == _o.length && trigs == _o.trigs && accent == _o.accent && slide == _o.slide && locks == _o.locks;
-			}
+				uint64_t trigs = 0, accent = 0, slide = 0, swing = 0;
+				std::map<uint8_t, std::map<uint8_t, uint8_t>> locks;	// param -> step -> value
+
+				bool operator==(const Row& _o) const
+				{
+					return trigs == _o.trigs && accent == _o.accent && slide == _o.slide && swing == _o.swing && locks == _o.locks;
+				}
+			};
+			size_t length = 0;
+			std::vector<Row> rows;	// the block's tracks, top to bottom
+
+			bool operator==(const Steps& _o) const { return length == _o.length && rows == _o.rows; }
 		};
 		struct Sound
 		{

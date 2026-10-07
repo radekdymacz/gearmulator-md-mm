@@ -210,13 +210,15 @@ namespace
 		r = run(docs, cmd(R"({"op":"pasteSteps","p":1,"t":5,"from":0})"), clip);
 		check(r.errors.empty() && r.changes.size() == 1, "paste into another pattern");
 		bool same = true;
-		for(size_t s = 0; s < 16; ++s)
+		for(size_t s = 0; s < docs.patterns[1].length; ++s)	// a paste stops at the pattern's length
 		{
 			same &= ed::hasTrig(src, 0, s) == ed::hasTrig(pat(r), 5, s);
-			for(size_t param = 0; param < 24; ++param)
+			for(size_t param = 0; ed::hasTrig(src, 0, s) && param < 24; ++param)
 				same &= ed::lockValue(src, 0, param, s) == ed::lockValue(pat(r), 5, param, s);
 		}
-		check(same, "pasted trigs and locks match the copied page");
+		for(size_t s = docs.patterns[1].length; s < 16; ++s)
+			same &= ed::hasTrig(pat(r), 5, s) == ed::hasTrig(docs.patterns[1], 5, s);
+		check(same, "pasted trigs and locks match the copied page, up to the pattern's length");
 
 		// Pasting into the full pool skips the locks that need new rows.
 		r = run(docs, cmd(R"({"op":"copySteps","p":0,"t":0,"from":0,"to":16})"), clip);
@@ -250,6 +252,103 @@ namespace
 		Clipboard none;
 		r = run(docs, cmd(R"({"op":"pasteSteps","p":1,"t":0,"from":0})"), none);
 		check(!r.errors.empty(), "paste without a copy is refused");
+	}
+
+	// A selection (DESIGN-step-selection.md): a block of steps x tracks copied, cut, pasted at another place,
+	// pattern or track, and duplicated in place; the marks and locks go with it; it stops at the length and track 16.
+	void testStepBlocks()
+	{
+		auto docs = fixtureDocs();
+		const auto& src = docs.patterns[0];
+		const auto sameStep = [](const ed::MdPattern& _a, size_t _ta, size_t _sa, const ed::MdPattern& _b, size_t _tb, size_t _sb)
+		{
+			const bool on = ed::hasTrig(_a, _ta, _sa);
+			bool same = on == ed::hasTrig(_b, _tb, _sb);
+			for(size_t param = 0; on && param < 24; ++param)	// a lock without a trig does nothing and is not pasted
+				same &= ed::lockValue(_a, _ta, param, _sa) == ed::lockValue(_b, _tb, param, _sb);
+			return same;
+		};
+		// a block of three tracks of A01 with locks
+		size_t lt = 0;
+		while(lt < 13 && src.lockMasks[lt] == 0) ++lt;
+		Clipboard clip;
+		auto r = run(docs, cmd(R"({"op":"copySteps","p":0,"t":)" + std::to_string(lt) + R"(,"n":3,"from":2,"to":6})"), clip);
+		check(r.errors.empty() && r.changes.empty() && clip.steps && clip.steps->rows.size() == 3 && clip.steps->length == 4,
+			"copySteps with n: a block of 3 tracks x 4 steps in the clipboard, nothing changed");
+		const auto size = MdModel::clipboardDocument(clip);
+		check(size && size->find("stepsSize") && size->find("stepsSize")->find("tracks")->asNumber() == 3
+			&& size->find("stepsSize")->find("length")->asNumber() == 4, "the clipboard document says the block's size");
+
+		// pasted into another pattern, on other tracks, at another step: one change, the block lands there
+		r = run(docs, cmd(R"({"op":"pasteSteps","p":1,"t":5,"from":8})"), clip);
+		bool same = r.errors.empty() && r.changes.size() == 1;
+		for(size_t row = 0; same && row < 3; ++row)
+			for(size_t s = 0; s < 4; ++s)
+				same &= sameStep(src, lt + row, 2 + s, pat(r), 5 + row, 8 + s);
+		check(same, "pasteSteps puts the block's trigs and locks on tracks 6-8 from step 9 of another pattern");
+		bool around = true;
+		for(size_t s : {size_t(7), size_t(12)})
+			around &= ed::hasTrig(pat(r), 5, s) == ed::hasTrig(docs.patterns[1], 5, s);
+		around &= pat(r).trigs[4] == docs.patterns[1].trigs[4] && pat(r).trigs[8] == docs.patterns[1].trigs[8];
+		check(around, "the steps and tracks around the pasted block stay");
+
+		// at track 15 only two of the three rows fit
+		r = run(docs, cmd(R"({"op":"pasteSteps","p":1,"t":14,"from":0})"), clip);
+		check(r.errors.empty() && r.note.find("1 track(s) below track 16 left out") != std::string::npos
+			&& sameStep(src, lt + 1, 2, pat(r), 15, 0), "a block pasted at track 15 stops at track 16 and says so: " + r.note);
+
+		// the pattern's length: what reaches past it is left out; a paste that starts past it is refused
+		auto shorter = docs;
+		shorter.patterns[1].length = 10;
+		r = run(shorter, cmd(R"({"op":"pasteSteps","p":1,"t":0,"from":8})"), clip);
+		bool kept = r.errors.empty();
+		for(size_t s = 10; kept && s < 12; ++s)
+			kept &= ed::hasTrig(pat(r), 0, s) == ed::hasTrig(shorter.patterns[1], 0, s);
+		check(kept && sameStep(src, lt, 3, pat(r), 0, 9) && r.note.find("2 step(s) past the pattern's length (10) left out") != std::string::npos,
+			"a paste stops at the pattern's length and says so: " + r.note);
+		r = run(shorter, cmd(R"({"op":"pasteSteps","p":1,"t":0,"from":11})"), clip);
+		check(!r.errors.empty() && r.changes.empty(), "a paste that starts past the pattern's length is refused");
+
+		// duplicate: the block copied right after itself, the clipboard untouched
+		Clipboard empty;
+		r = run(docs, cmd(R"({"op":"copyStepsTo","p":0,"t":)" + std::to_string(lt) + R"(,"n":2,"from":0,"to":4,"at":4})"), empty);
+		same = r.errors.empty() && r.changes.size() == 1 && !empty.steps;
+		for(size_t row = 0; same && row < 2; ++row)
+			for(size_t s = 0; s < 4; ++s)
+				same &= ed::hasTrig(pat(r), lt + row, 4 + s) == ed::hasTrig(src, lt + row, s);
+		check(same && ed::validate(pat(r)).empty(), "copyStepsTo at = to duplicates the block to its right; the clipboard stays empty");
+		// to another track (the Alt-drag of a selection); overlapping its source is fine (the block is read first)
+		r = run(docs, cmd(R"({"op":"copyStepsTo","p":1,"t":0,"n":2,"from":0,"to":8,"at":2,"dt":1})"), empty);
+		same = r.errors.empty();
+		for(size_t row = 0; same && row < 2; ++row)
+			for(size_t s = 0; s < 8; ++s)
+				same &= ed::hasTrig(pat(r), 1 + row, 2 + s) == ed::hasTrig(docs.patterns[1], row, s);
+		check(same, "copyStepsTo with dt copies the block down a track and two steps on, over its own source");
+
+		// cut is a copy and a clear: the clear takes every track of the block, and nothing else
+		r = run(docs, cmd(R"({"op":"clearSteps","p":0,"t":)" + std::to_string(lt) + R"(,"n":2,"from":0,"to":8})"), clip);
+		bool cleared = r.errors.empty();
+		for(size_t row = 0; cleared && row < 2; ++row)
+			for(size_t s = 0; s < 8; ++s)
+				cleared &= !ed::hasTrig(pat(r), lt + row, s) && !ed::lockValue(pat(r), lt + row, 0, s);
+		check(cleared && pat(r).trigs[lt + 2] == src.trigs[lt + 2] && ed::validate(pat(r)).empty(), "clearSteps with n clears the block's tracks only");
+		check(!run(docs, cmd(R"({"op":"clearSteps","p":0,"t":15,"n":2,"from":0,"to":4})"), clip).errors.empty(), "a block below track 16 is refused");
+
+		// accents, slides and swings go with the steps (per-track marks: EDIT ALL off)
+		auto marks = docs;
+		auto& m = marks.patterns[1];
+		m.accentEditAll = m.slideEditAll = m.swingEditAll = 0;
+		m = ed::withTrig(m, 0, 1, true);
+		m = ed::withTrig(m, 0, 2, true);
+		m.trackAccent[0] = uint64_t{1} << 1;
+		m.trackSlide[0] = uint64_t{1} << 2;
+		m.trackSwing[0] = uint64_t{1} << 1 | uint64_t{1} << 2;
+		Clipboard mc;
+		run(marks, cmd(R"({"op":"copySteps","p":1,"t":0,"from":0,"to":4})"), mc);
+		r = run(marks, cmd(R"({"op":"pasteSteps","p":1,"t":3,"from":4})"), mc);
+		const auto at4 = [](const uint64_t _bits) { return (_bits >> 4) & 0xf; };
+		check(r.errors.empty() && at4(pat(r).trackAccent[3]) == 0b0010 && at4(pat(r).trackSlide[3]) == 0b0100
+			&& at4(pat(r).trackSwing[3]) == 0b0110, "accents, slides and swings are pasted with their steps");
 	}
 
 	void testKitEditsAndDelivery()
@@ -2576,6 +2675,7 @@ int main(const int _argc, char** _argv)
 	testTrigsAndLocks();
 	testPatternSettingsAndValidation();
 	testCopyPaste();
+	testStepBlocks();
 	testKitEditsAndDelivery();
 	testSongEdits();
 	testGlobal();

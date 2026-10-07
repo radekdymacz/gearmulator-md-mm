@@ -48,7 +48,7 @@ list(APPEND SOURCES
 	skins/mdStudio/mdDeskApp.js skins/mdStudio/mdDeskSoundGroups.js skins/mdStudio/mdDeskTop.js skins/mdStudio/mdDeskSeq.js
 	skins/mdStudio/mdDeskSound.js skins/mdStudio/mdDeskEditors.js skins/mdStudio/mdDeskMix.js skins/mdStudio/mdDeskSampler.js
 	skins/mdStudio/mdDeskSong.js skins/mdStudio/mdDeskPicker.js skins/mdStudio/mdDeskControl.js skins/mdStudio/mdDeskGenUi.js
-	skins/mdStudio/mdDeskComforts.js skins/mdStudio/mdDeskRom.js skins/mdStudio/mdDeskGestures.js skins/mdStudio/mdDeskRender.js
+	skins/mdStudio/mdDeskComforts.js skins/mdStudio/mdDeskSelect.js skins/mdStudio/mdDeskRom.js skins/mdStudio/mdDeskGestures.js skins/mdStudio/mdDeskRender.js
 	skins/mdStudio/mdOverrides.css
 	skins/mdStudio/mdDeskModel.js
 	skins/mdStudio/mdDeskGen.js

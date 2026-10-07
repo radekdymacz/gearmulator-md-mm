@@ -9,7 +9,7 @@
    The map's rules: plain keys play (the home row, Z / X octave, C / V velocity, Space); a plain letter off the
    piano row acts on the selected track (R, M, T; ↑ / ↓ pick it); Alt means all (Alt+R, Alt+M, Alt+Delete,
    Alt-drag, Alt-click). Two Alts are not "all", as on the machine: Alt+←/→ rotate (FUNCTION + arrows) and
-   Alt+Space record (Alt + play). No ⇧ or ⌘ letter commands but the standard ⌘Z ⌘⇧Z ⌘Y ⌘C ⌘V. */
+   Alt+Space record (Alt + play). No ⇧ or ⌘ letter commands but the standard ⌘Z ⌘⇧Z ⌘Y ⌘C ⌘V ⌘X, and ⌘D (duplicate the selected steps). */
 const KEY_GROUPS = ["Playing", "Selected track", "All", "Transport", "Workspaces", "Sequence", "Song", "Values", "Anywhere", "Kit library, pattern chooser", "Help"];
 function drawKeys() {
 	const pop = $("#keyspop"); if (!pop) return;

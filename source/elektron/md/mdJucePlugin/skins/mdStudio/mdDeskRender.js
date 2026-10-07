@@ -22,7 +22,7 @@ const beyondStatus = v => { const o = { ...v }; for (const k of STATUS) delete o
 function menuOpen() { return !$("#machpop")?.hidden || !$("#kpop")?.hidden; }
 /* a gesture that holds the page (a drag, a paint, a dragged pad): documents re-derive the view, the page renders
    once it ends (pendingRender) */
-const HOLDS = new Set(["value", "editor", "lane", "l2", "chop", "song", "paint", "mutePaint"]);
+const HOLDS = new Set(["value", "editor", "lane", "l2", "chop", "song", "paint", "mutePaint", "select"]);
 function interacting() { const h = Held.now; return !!(h && HOLDS.has(h.kind)) || menuOpen(); }
 /* the one flush: a render held while a gesture ran is made when it ends, whichever gesture it was (a timer, so
    the gesture's own end handler draws its row first; still held by a menu, it waits for the menu's close) */
@@ -166,8 +166,8 @@ Keys.bind({ keys: ["Escape"], group: "Anywhere", does: "Close the dialog", when:
 Keys.bind({ keys: ["Z"], mod: "cmd", group: "Anywhere", does: "Undo", modal: "panel", run: () => cmd("undo") });
 Keys.bind({ keys: ["Z"], mod: "cmd+shift", group: "Anywhere", does: "Redo", modal: "panel", run: () => cmd("redo") });
 Keys.bind({ keys: ["Y"], mod: "cmd", group: "Anywhere", does: "Redo", modal: "panel", run: () => cmd("redo") });
-Keys.bind({ keys: ["C"], mod: "cmd", group: "Anywhere", does: "Copy (track page, sound, song row)", run: () => secAction("copy") });
-Keys.bind({ keys: ["V"], mod: "cmd", group: "Anywhere", does: "Paste", run: () => secAction("paste") });
+Keys.bind({ keys: ["C"], mod: "cmd", group: "Anywhere", does: "Copy (Sequence: the selected steps, or the track page shown; Sound: the sound; Song: the row)", run: () => secAction("copy") });
+Keys.bind({ keys: ["V"], mod: "cmd", group: "Anywhere", does: "Paste (Sequence: at the selected step, the block from its first step and track)", run: () => secAction("paste") });
 Keys.bind({ keys: ["Escape"], group: "Anywhere", does: "Leave LEARN", mapping: true, when: () => S.mapping && S.ctl.learn, run: () => toggleLearn() });
 Keys.bind({ keys: ["Space"], group: "Transport", does: "Play / stop", run: () => cmd(V.playing ? "stop" : "play") });
 Keys.bind({ keys: ["Space"], code: "Space", mod: "alt", group: "Transport", does: "Live recording (RECORD + PLAY): Alt + play, the other Alt that is not \"all\"", run: () => cmd("record") });
@@ -178,7 +178,7 @@ Keys.bind({ keys: ["Delete", "Backspace"], mod: "alt", group: "All", does: "Sequ
 Keys.bind({ keys: ["CLR"], mod: "alt", group: "All", does: "Click: clear the whole pattern, every track's trigs and locks (one undo step)" });
 Keys.bind({ keys: ["ArrowLeft", "ArrowRight"], group: "Song", does: "Previous / next row", when: () => S.ws === "song", run: e => { S.songSel = Math.max(0, Math.min(V.song.length - 1, S.songSel + (e.key === "ArrowRight" ? 1 : -1))); render(); } });
 Keys.bind({ keys: ["step"], mod: "shift", group: "Sequence", does: "Click: accent" });
-Keys.bind({ keys: ["step"], mod: "alt", group: "Sequence", does: "Click: slide" });
+Keys.bind({ keys: ["step"], mod: "alt+shift", group: "Sequence", does: "Click: slide" });
 Keys.bind({ keys: ["lock lane"], mod: "alt", group: "Sequence", does: "Drag: erase locks" });
 Keys.bind({ keys: ["lock lane clear"], mod: "alt", group: "Sequence", does: "Click: clear every lock of the track (all its parameters)" });
 Keys.bind({ keys: ["ArrowUp", "ArrowDown"], group: "Values", does: "A focused value, tempo or bar: one step (⇧: fine or ×10)" });

@@ -161,6 +161,7 @@ function paintStep(el) {
 main.addEventListener("pointerdown", e => {
 	const st = e.target.closest("#seq .st"); if (!st || e.button !== 0 || e.shiftKey || e.altKey || e.metaKey || e.ctrlKey || V.rec) return;
 	if (!V.loaded) { toast("The pattern is not loaded yet."); return; }
+	clearSel();	/* a plain press on a step paints, and ends the selection (DESIGN-step-selection.md §3) */
 	const i = +st.dataset.t, s = +st.dataset.s;
 	Held.begin("paint", { on: !V.tracks[i].trigs[s], done: new Set(), first: i });
 	Gesture.begin(); grabPointer(main, e); e.preventDefault();
@@ -178,6 +179,57 @@ function endPaint() {
 }
 document.addEventListener("pointerup", endPaint); document.addEventListener("pointercancel", endPaint);
 window.addEventListener("blur", endPaint);
+
+/* ===== Steps: a selection (DESIGN-step-selection.md, mdDeskSelect.js). ⌥-press a step, or press a number of the step
+   ruler: the release decides. No other cell crossed: that one step (a ⇧-press in the ruler extends the selection to
+   it); cells crossed: the block between the press and the release, steps × tracks. An ⌥-press inside a selection of
+   more than one step that moves drops a copy of it where it lets go ("drop": its target shown dashed). One slot kind,
+   "select" {from: {t, s}, at: {t, s}, ruler, extend, drop, moved}. A press in the workspace outside the grid ends the
+   selection. ===== */
+function selCell(e, d) {
+	const el = document.elementFromPoint(e.clientX, e.clientY);
+	const st = el?.closest("#seq .st"); if (st) return { t: +st.dataset.t, s: +st.dataset.s };
+	const r = el?.closest("#seq .rul[data-s]"); return r ? { t: d.at.t, s: +r.dataset.s } : null;
+}
+/* where a dragged selection lands: moved by the drag, within the tracks and the steps shown */
+function selDropAt(d) {
+	const x = S.stepSel, t = clamp(x.t + d.at.t - d.from.t, 0, 16 - x.n), from = clamp(x.from + d.at.s - d.from.s, 0, V.len - 1);
+	return { t, n: x.n, from, to: Math.min(from + x.to - x.from, V.len) };
+}
+main.addEventListener("pointerdown", e => {
+	if (e.button !== 0 || V.rec || S.ws !== "seq") return;
+	const st = e.target.closest("#seq .st"), ru = e.target.closest("#seq .rul[data-s]");
+	if (!st && !ru) { if (!e.target.closest("#seq")) clearSel(); return; }
+	if (st && !(e.altKey && !e.shiftKey && !e.metaKey && !e.ctrlKey)) return;
+	if (ru && (e.altKey || e.metaKey || e.ctrlKey)) return;
+	if (!V.loaded) { toast("The pattern is not loaded yet."); return; }
+	const at = st ? { t: +st.dataset.t, s: +st.dataset.s } : { t: S.stepSel && e.shiftKey ? S.stepSel.t : S.sel, s: +ru.dataset.s };
+	const x = S.stepSel, drop = !!st && !!x && inSel(at.t, at.s) && (x.n > 1 || x.to - x.from > 1);
+	Held.begin("select", { from: at, at, ruler: !!ru, extend: !!ru && e.shiftKey && !!x, drop, moved: false });
+	e.preventDefault();
+}, true);
+document.addEventListener("pointermove", e => {
+	const d = Held.as("select"); if (!d) return;
+	if (e.buttons === 0 && e.pointerType === "mouse") { endSelect(); return; }
+	const c = selCell(e, d); if (!c || (c.t === d.at.t && c.s === d.at.s)) return;
+	const n = Held.with("select", { at: c, moved: true });
+	if (n.drop) syncSel(selDropAt(n)); else { S.stepSel = selBetween(n.from, n.at); syncSel(); }
+});
+function endSelect() {
+	const d = Held.end("select"); if (!d) return;
+	if (d.moved) {	/* the drag's own click (it follows the release at once, if at all) is not a click on what it lands on */
+		const eat = e => { e.stopPropagation(); e.preventDefault(); };
+		addEventListener("click", eat, { capture: true, once: true }); setTimeout(() => removeEventListener("click", eat, true), 0);
+	}
+	if (d.drop && d.moved) { const g = selDropAt(d); syncSel(); selCopyTo(g.t, g.from); return; }
+	const x = S.stepSel;
+	const sel = d.extend && !d.moved ? { t: x.t, n: x.n, from: Math.min(x.from, d.at.s), to: Math.max(x.to, d.at.s + 1) } : selBetween(d.from, d.at);
+	setSel(sel);
+	if (sel.t !== S.sel && sel.n === 1) select(sel.t);
+	toast(`Selected ${selSay(sel)} · ⌘C copy · ⌘X cut · ⌘V paste here · ⌘D duplicate · Delete · Esc`);
+}
+document.addEventListener("pointerup", endSelect); document.addEventListener("pointercancel", endSelect);
+window.addEventListener("blur", () => { if (Held.as("select")) endSelect(); });
 
 /* ===== BPM: drag up or down, arrows -> global tempo (0x61) ===== */
 (() => {
