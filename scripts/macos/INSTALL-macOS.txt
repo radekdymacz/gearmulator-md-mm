@@ -29,9 +29,10 @@ command only clears extended attributes from the Gearmulator MD/MM bundles in
 the extracted folder; it does not copy or delete plug-ins.
 
 Firmware is not included. If no supported firmware image is found, the
-application or plug-in displays the required ROM folder. Click OK to open it,
-copy a firmware image that you are entitled to use into that folder, then
-restart the application or reload the plug-in.
+application or plug-in shows a start-up card asking for it. Click the card and
+choose a firmware image that you are entitled to use in the file chooser; the
+editor checks it and copies it into its ROM folder. You can also copy the image
+into that folder yourself and click Check again.
 
 Do NOT discuss firmware or ROMs in Discord.
 Do not request or share files or download links, or ask for help obtaining

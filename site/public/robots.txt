@@ -1,2 +1,4 @@
 User-agent: *
 Allow: /
+
+Sitemap: https://mdmm.nativekloud.com/sitemap.xml

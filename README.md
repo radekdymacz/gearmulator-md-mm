@@ -8,13 +8,22 @@ as a standalone app, VST3 and AU on macOS.
 - **Site, screenshots, download:** https://mdmm.nativekloud.com
 - **Releases:** https://github.com/radekdymacz/gearmulator-md-mm/releases
   (latest: [0.3.0 notes](doc/release/v0.3.0.md); [0.2.1](doc/release/v0.2.1.md); [0.2.0](doc/release/v0.2.0.md); first: [0.1.0 alpha](doc/release/v0.1.0-alpha.md))
-- **Bring your own ROM.** No firmware is included; choose your machine's image with the editor's
-  file chooser (or copy it to `~/Documents/Gearmulator Preview/Machinedrum/roms/` or `.../Monomachine/roms/`).
+- **User guide** (install, ROM, DAW use, workspaces, every keyboard shortcut): https://mdmm.nativekloud.com/guide/
+- **Bring your own ROM.** No firmware is included. With no ROM the editor shows a start-up card:
+  choose your machine's image with its file chooser (drag and drop is not supported) and the editor
+  copies it into its ROM folder. You can also copy it to `~/Documents/Gearmulator Preview/Machinedrum/roms/`
+  or `.../Monomachine/roms/` yourself.
 - **Installing on macOS.** The installers are not signed or notarised yet. On macOS 15 and later,
   double-click the `.pkg`, then open System Settings › Privacy & Security, scroll to the message
   about the installer and click **Open Anyway** (right-click › Open no longer works for installers).
-- **Bugs and questions about the editors:** [this fork's issues](https://github.com/radekdymacz/gearmulator-md-mm/issues),
-  not upstream.
+- **Uninstalling.** Delete the three bundles of each editor: the app in `/Applications`
+  (`Machinedrum Editor.app`, `Monomachine Editor.app`), the VST3 and the AU
+  (`Gearmulator MD.vst3`/`.component`, `Gearmulator MM.vst3`/`.component`) in `/Library/Audio/Plug-Ins/VST3`
+  and `.../Components`, or the `~/Applications` and `~/Library/Audio/Plug-Ins` equivalents. Firmware and
+  settings are not touched. If a DAW will not load the AU, run
+  `xattr -dr com.apple.quarantine "<path to the .component>"` and rescan.
+- **Bugs and questions about the editors:** use the [contact page](https://mdmm.nativekloud.com/contact/),
+  not upstream. Issues are disabled on this fork.
 - **Credits:** the MD/MM emulation is by [joelanders](https://github.com/joelanders/gearmulator-md-mm);
   Gearmulator, the DSP56300 and 68k emulation are by The Usual Suspects and the
   [Gearmulator](https://github.com/dsp56300/gearmulator) contributors.
@@ -36,7 +45,7 @@ There is a Discord channel [here](https://discord.gg/BnkTKpmp8) at #gearmulator-
 **DO NOT ask us for the .bin files / firmware! They're under Elektron's copyright. This emulator is for people who own the original hardware.**
 
 [Downloads](https://github.com/radekdymacz/gearmulator-md-mm/releases) ·
-[Report a bug](https://github.com/joelanders/gearmulator-md-mm/issues)
+[Report a bug](https://mdmm.nativekloud.com/contact/)
 
 Link to a short demo on Youtube:
 
