@@ -142,7 +142,7 @@ no journey yet); **not testable** (why). "—": the editor has no such feature.
 | Feature | Machinedrum | Monomachine |
 |---|---|---|
 | Sample slots: browser of waveform tiles | md-sampler-slots PASS | — |
-| Set up sampling (recorder, player), one undo step | md-sampler-setup-undo PASS | — |
+| Set up sampling (recorder, player), one undo step; the recorder samples the main mix at VOL 0 (out of the mix), an input gives VOL back | md-sampler-setup-undo PASS | — |
 | Audition a sample | md-sampler-audition PASS | — |
 | Load a WAV / AIFF and audition it before keeping it | not testable: native file chooser | — |
 | RAM view steps; freeze / live | md-sampler-ram-view PASS | — |

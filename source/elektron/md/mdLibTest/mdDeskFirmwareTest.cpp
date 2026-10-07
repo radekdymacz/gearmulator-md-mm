@@ -83,6 +83,20 @@ namespace
 			// encoders), the base channel as the adapter gives it.
 			port.device.sendKitParam = [this](const uint8_t _t, const uint8_t _i, const uint8_t _v)
 			{
+				// As the plug-in's parameter (pluginLike): a value it already holds changes nothing and sends nothing.
+				if(pluginLike)
+				{
+					auto& last = m_paramHeld[_t * 25 + _i];
+					if(last == _v)
+						return;
+					last = _v;
+				}
+				if(const auto cc = deskWire::md::kitParam(m_channel, _t, _i, _v))
+					m_out.push_back(*cc);
+			};
+			// The engine's direct CC, past the plug-in's parameter (mdSessionMd.cpp): always sent.
+			port.device.sendHeldParam = [this](const uint8_t _t, const uint8_t _i, const uint8_t _v)
+			{
 				if(const auto cc = deskWire::md::kitParam(m_channel, _t, _i, _v))
 					m_out.push_back(*cc);
 			};
@@ -243,6 +257,23 @@ namespace
 
 	private:
 		uint8_t m_channel = 0;	// the machine's base channel (the adapter's fact)
+	public:
+		// the plug-in's delivery (keepedits): sendKitParam drops a value equal to the last one, and what is queued goes
+		// to the machine in one go (one audio block)
+		bool pluginLike = false;
+		// The plug-in's parameters hold the kit as it was loaded; what the machine changes by itself (a Control All
+		// gesture on its panel, a machine change's initial values) they do not learn.
+		void seedPluginParams(const ed::MdKit& _kit)
+		{
+			for(size_t t = 0; t < 16; ++t)
+			{
+				for(size_t i = 0; i < 24; ++i)
+					m_paramHeld[t * 25 + i] = _kit.params[t][i];
+				m_paramHeld[t * 25 + 24] = _kit.levels[t];
+			}
+		}
+	private:
+		std::array<int, 16 * 25> m_paramHeld = [] { std::array<int, 16 * 25> a{}; a.fill(-1); return a; }();
 		size_t m_patternDumps = 0;
 
 		void flushOut()
@@ -268,7 +299,16 @@ namespace
 
 		void stepOnce()
 		{
-			if(!m_out.empty())
+			// pluginLike: what is queued goes in one go, as the plug-in hands the machine a block's MIDI events
+			if(pluginLike && !m_out.empty())
+			{
+				while(!m_out.empty())
+				{
+					m_machine.send(m_out.front());
+					m_out.pop_front();
+				}
+			}
+			else if(!m_out.empty())
 			{
 				const auto b = m_out.front();
 				m_out.pop_front();
@@ -2169,6 +2209,203 @@ namespace
 			+ std::to_string(int(slotDoc("ram", 0).find("length")->asNumber())) + " samples)");
 	}
 
+	// An unsaved kit edit of the kit that plays survives a trig elsewhere (a pattern dump over the current pattern
+	// makes OS 1.63 load the kit it links from its slot; MdMachine::restoreWorkingKit sends the edits again): a
+	// synthesis value as well as a routing one, stopped and playing, as the demo videos found.
+	void keepEdits(Rig& _rig)
+	{
+		auto& desk = _rig.desk();
+		const auto kit = std::to_string(*desk.linkState().kit);
+		const auto pattern = std::to_string(*desk.linkState().pattern);
+		const auto working = [&] { return desk.documents().working->kit; };
+		const auto settle = [&] { _rig.runUntil([&] { return !desk.isBusy() && !_rig.pageTx(); }, 3000); _rig.run(1500); };
+		int step = 7;
+		for(const bool playing : {false, true})
+		{
+			if(playing)
+			{
+				_rig.page(R"({"op":"play"})");
+				_rig.run(1000);
+			}
+			for(const int i : {1, 16})
+			{
+				std::printf("== KEEP EDITS: T1 param %d, %s\n", i, playing ? "playing" : "stopped");
+				// as the page's drag sends it: a run of values in one gesture (g), the last one kept
+				const auto v0 = working().params[0][i];
+				const auto v = (v0 + 37) & 0x7f;
+				const auto g = std::to_string(800 + step);
+				for(const int d : {10, 20, 30})
+				{
+					_rig.page("{\"op\":\"param\",\"k\":" + kit + ",\"t\":0,\"i\":" + std::to_string(i) + ",\"v\":" + std::to_string((v0 + d) & 0x7f) + ",\"g\":" + g + "}");
+					_rig.run(60);
+				}
+				_rig.page("{\"op\":\"param\",\"k\":" + kit + ",\"t\":0,\"i\":" + std::to_string(i) + ",\"v\":" + std::to_string(v) + ",\"g\":" + g + "}");
+				settle();
+				check(working().params[0][i] == v, "the edit is in the working kit (" + std::to_string(working().params[0][i]) + ", want " + std::to_string(v) + ")");
+				_rig.page("{\"op\":\"trig\",\"p\":" + pattern + ",\"t\":3,\"s\":" + std::to_string(step) + ",\"on\":true}");
+				settle();
+				_rig.page("{\"op\":\"trig\",\"p\":" + pattern + ",\"t\":3,\"s\":" + std::to_string(step) + ",\"on\":false}");
+				settle();
+				_rig.run(2000);
+				check(working().params[0][i] == v, "after a trig elsewhere the edit is still in the working kit (" + std::to_string(working().params[0][i]) + ", want " + std::to_string(v) + ")");
+				++step;
+			}
+		}
+		_rig.page(R"({"op":"stop"})");
+		_rig.run(500);
+	}
+
+	// The working kit as the machine holds it (its memory, the test's own oracle).
+	std::optional<ed::MdKit> workingFromMemory(Rig& _rig)
+	{
+		Bytes region(ed::g_mdWorkingKitRegionSize);
+		for(size_t i = 0; i < region.size(); ++i)
+			region[i] = _rig.machine().read8(ed::g_mdWorkingKitRegionAddress + static_cast<uint32_t>(i));
+		return ed::mdWorkingKitFromMemory(region);
+	}
+
+	// Undo of a Control All gesture (Alt-drag) reaches the machine: its memory is the kit before the gesture.
+	void undoControlAll(Rig& _rig)
+	{
+		std::puts("== KEEP EDITS: undo of a Control All gesture");
+		auto& desk = _rig.desk();
+		const auto kit = std::to_string(*desk.linkState().kit);
+		const auto settle = [&] { _rig.runUntil([&] { return !desk.isBusy() && !_rig.pageTx(); }, 4000); _rig.run(1500); };
+		// a kick on track 1, played by its note: its level heard before, swept and after the undo
+		_rig.page("{\"op\":\"machine\",\"k\":" + kit + ",\"t\":0,\"model\":" + std::to_string(*ed::mdMachineModel("TRX-BD")) + ",\"keepFx\":true}");
+		settle();
+		_rig.page(R"({"op":"mute","t":0,"on":false})");
+		_rig.run(200);
+		auto& m = _rig.machine();
+		const auto heard = [&]
+		{
+			const auto from = m.left().size();
+			_rig.page(R"({"op":"noteOn","t":0,"vel":127,"pitch":0})");
+			_rig.run(300);
+			double sum = 0;
+			size_t n = 0;
+			for(size_t i = from; i < m.left().size(); ++i, ++n)
+				sum += m.left()[i] * m.left()[i] + m.right()[i] * m.right()[i];
+			_rig.page(R"({"op":"noteOff","t":0,"pitch":0})");
+			_rig.run(500);
+			return 10 * std::log10(sum / std::max<size_t>(1, 2 * n) + 1e-12);
+		};
+		const auto before = workingFromMemory(_rig);
+		require(before.has_value(), "the working kit in memory");
+		_rig.seedPluginParams(*before);
+		const auto dbBefore = heard();
+		// the effects page, knob 4 (FLTF), +20 three times in one gesture, from track 1
+		for(int k = 0; k < 3; ++k)
+		{
+			_rig.page("{\"op\":\"tweak\",\"k\":" + kit + ",\"group\":\"fx\",\"knob\":4,\"d\":20,\"t\":0,\"g\":990}");
+			_rig.run(120);
+		}
+		settle();
+		const auto swept = workingFromMemory(_rig);
+		int moved = 0;
+		for(size_t t = 0; t < 16; ++t)
+			moved += swept->params[t][12] != before->params[t][12];
+		check(moved >= 2, "Control All moved FLTF on " + std::to_string(moved) + " tracks in the machine");
+		const auto dbSwept = heard();
+		_rig.page(R"({"op":"undo"})");
+		settle();
+		_rig.run(1500);
+		const auto dbBack = heard();
+		std::printf("  track 1's kick: %.1f dB before, %.1f dB swept, %.1f dB after the undo\n", dbBefore, dbSwept, dbBack);
+		check(dbSwept < dbBefore - 3, "the sweep is heard");
+		check(std::abs(dbBack - dbBefore) < 1.5, "after the undo the kick sounds as before (heard, not only read back)");
+		const auto back = workingFromMemory(_rig);
+		std::string differs;
+		for(size_t t = 0; t < 16; ++t)
+			if(back->params[t][12] != before->params[t][12])
+				differs += " T" + std::to_string(t + 1) + "=" + std::to_string(back->params[t][12]) + "(was " + std::to_string(before->params[t][12]) + ")";
+		check(differs.empty(), "after undo the machine's FLTF is back on every track" + (differs.empty() ? std::string() : ":" + differs));
+		check(desk.documents().working->kit.params == back->params, "the page's working kit is the machine's after the undo");
+	}
+
+	// A value moved straight after a machine change reaches the machine and stays (seen in the demo videos: a
+	// GND-SIN's PTCH and an E12-SD's RTRG read back 0).
+	void valueAfterMachine(Rig& _rig)
+	{
+		auto& desk = _rig.desk();
+		const auto kit = std::to_string(*desk.linkState().kit);
+		const auto pattern = std::to_string(*desk.linkState().pattern);
+		const auto settle = [&] { _rig.runUntil([&] { return !desk.isBusy() && !_rig.pageTx(); }, 4000); _rig.run(1500); };
+		struct Case { uint8_t t; const char* model; uint8_t i; uint8_t v; int gapMs; };
+		const Case cases[] = {{11, "GND-SIN", 0, 28, 0}, {14, "E12-SD", 5, 40, 0}, {10, "GND-SIN", 1, 90, 120}, {13, "E12-SD", 6, 24, 400}};
+		for(const auto& c : cases)
+		{
+			std::printf("== KEEP EDITS: T%d %s, then param %d = %d after %d ms (the old machine had it)\n", c.t + 1, c.model, c.i, c.v, c.gapMs);
+			// the old machine holds the value first, through the parameter: the parameter then holds it too, and the
+			// new machine starts from its own initial value
+			_rig.page("{\"op\":\"param\",\"k\":" + kit + ",\"t\":" + std::to_string(c.t) + ",\"i\":" + std::to_string(c.i) + ",\"v\":" + std::to_string(c.v) + "}");
+			settle();
+			_rig.page("{\"op\":\"machine\",\"k\":" + kit + ",\"t\":" + std::to_string(c.t) + ",\"model\":" + std::to_string(*ed::mdMachineModel(c.model)) + ",\"keepFx\":true}");
+			_rig.run(c.gapMs);
+			_rig.page("{\"op\":\"param\",\"k\":" + kit + ",\"t\":" + std::to_string(c.t) + ",\"i\":" + std::to_string(c.i) + ",\"v\":" + std::to_string(c.v) + "}");
+			settle();
+			_rig.page("{\"op\":\"trig\",\"p\":" + pattern + ",\"t\":3,\"s\":9,\"on\":true}");
+			settle();
+			_rig.page("{\"op\":\"trig\",\"p\":" + pattern + ",\"t\":3,\"s\":9,\"on\":false}");
+			settle();
+			const auto mem = workingFromMemory(_rig);
+			const auto w = desk.documents().working->kit;
+			check(mem && ed::mdMachineName(mem->models[c.t]) == c.model && mem->params[c.t][c.i] == c.v,
+				std::string("the machine plays ") + c.model + " with the value (memory: " + (mem ? ed::mdMachineName(mem->models[c.t]) + " " + std::to_string(mem->params[c.t][c.i]) : std::string("none")) + ")");
+			check(w.params[c.t][c.i] == c.v, "the page shows it (" + std::to_string(w.params[c.t][c.i]) + ")");
+		}
+	}
+
+	// A RAM recorder sampling the main mix is itself in the main mix: what it records comes out of its track and goes
+	// back into what it records (the demo videos heard it ring). Its track's VOL at 0 takes it out of the mix; its
+	// recording goes on (Set up sampling does this, mdDeskSampler.js).
+	void recorderInTheMix(Rig& _rig)
+	{
+		std::puts("== RECORDER: RAM-R1 sampling the main mix, its own track in the mix");
+		auto& desk = _rig.desk();
+		auto& m = _rig.machine();
+		const auto kit = std::to_string(*desk.linkState().kit);
+		const auto pattern = std::to_string(*desk.linkState().pattern);
+		const auto settle = [&] { _rig.runUntil([&] { return !desk.isBusy() && !_rig.pageTx(); }, 4000); _rig.run(500); };
+		const auto param = [&](int _t, int _i, int _v) { _rig.page("{\"op\":\"param\",\"k\":" + kit + ",\"t\":" + std::to_string(_t) + ",\"i\":" + std::to_string(_i) + ",\"v\":" + std::to_string(_v) + "}"); settle(); };
+		_rig.page("{\"op\":\"machine\",\"k\":" + kit + ",\"t\":0,\"model\":" + std::to_string(*ed::mdMachineModel("TRX-BD")) + ",\"keepFx\":true}");
+		settle();
+		_rig.page("{\"op\":\"machine\",\"k\":" + kit + ",\"t\":12,\"model\":" + std::to_string(*ed::mdMachineModel("RAM-R1")) + ",\"keepFx\":true}");
+		settle();
+		param(0, 17, 110);
+		// the recorder: the machine's mix as it is (MLEV 64), no input, one bar, full rate, its track at VOL 127
+		param(12, 0, 64); param(12, 1, 64); param(12, 2, 0); param(12, 6, 64); param(12, 7, 127); param(12, 17, 127);
+		for(const int st : {0, 4, 8, 12})
+			_rig.page("{\"op\":\"trig\",\"p\":" + pattern + ",\"t\":0,\"s\":" + std::to_string(st) + ",\"on\":true}");
+		_rig.page("{\"op\":\"trig\",\"p\":" + pattern + ",\"t\":12,\"s\":0,\"on\":true}");
+		settle();
+		_rig.page(R"({"op":"mute","t":12,"on":false})");
+		_rig.page(R"({"op":"play"})");
+		_rig.run(2500);
+		const auto level = [&](const double _ms)
+		{
+			const auto from = m.left().size();
+			_rig.run(_ms);
+			double sum = 0;
+			size_t n = 0;
+			for(size_t i = from; i < m.left().size(); ++i, ++n)
+				sum += m.left()[i] * m.left()[i] + m.right()[i] * m.right()[i];
+			return 10 * std::log10(sum / std::max<size_t>(1, 2 * n) + 1e-12);
+		};
+		const auto loud = level(4000);
+		param(12, 17, 0);
+		_rig.run(2000);
+		const auto silent = level(4000);
+		_rig.page(R"({"op":"mute","t":12,"on":true})");
+		_rig.run(2000);
+		const auto muted = level(4000);
+		std::printf("  the main mix: recorder at VOL 127 %.1f dB, at VOL 0 %.1f dB, muted %.1f dB\n", loud, silent, muted);
+		check(loud > muted + 1.0, "the recorder at VOL 127 is in the main mix (louder than muted)");
+		check(std::abs(silent - muted) < 0.5, "the recorder at VOL 0 is out of the main mix (as muted)");
+		_rig.page(R"({"op":"stop"})");
+		_rig.run(300);
+	}
+
 	// The SAMPLER card's "Set up sampling" (mdDeskSampler.js, [data-setupgo]): two machine ops in one gesture put
 	// RAM-R1 and RAM-P1 on two tracks that played ROM machines, a trig on the recorder; then the chop grid's
 	// trigs + STRT locks on the player. A pattern dump over the current pattern makes OS 1.63 load the kit it
@@ -2333,7 +2570,7 @@ int main(const int _argc, char** _argv)
 	std::setvbuf(stdout, nullptr, _IOLBF, 0);
 	if(_argc < 2)
 	{
-		std::puts("usage: mdDeskFirmwareTest <MD-1.63-ROM> [probe|hw|p4|tweak|sampler|samples|gen|hostclock|playload|syximport]");
+		std::puts("usage: mdDeskFirmwareTest <MD-1.63-ROM> [probe|hw|p4|tweak|sampler|keepedits|recordermix|samples|gen|hostclock|playload|syximport]");
 		return 77;
 	}
 	try
@@ -2388,6 +2625,29 @@ int main(const int _argc, char** _argv)
 			samplerSetup(rig);
 			check(g_contract.loaded() && g_contract.bad() == 0, g_contract.summary());
 			std::printf("mdDeskFirmwareTest sampler: %s (%d failure(s))\n", g_failures ? "FAIL" : "PASS", g_failures);
+			return g_failures ? 1 : 0;
+		}
+		if(mode == "recordermix")
+		{
+			Rig rig(rom, _argv[1]);
+			rig.page(R"({"op":"ready"})");
+			rig.runUntil([&] { return rig.desk().isReady() && rig.desk().linkState().kit && rig.desk().linkState().pattern && rig.desk().documents().working; }, 8000);
+			recorderInTheMix(rig);
+			check(g_contract.loaded() && g_contract.bad() == 0, g_contract.summary());
+			std::printf("mdDeskFirmwareTest recordermix: %s (%d failure(s))\n", g_failures ? "FAIL" : "PASS", g_failures);
+			return g_failures ? 1 : 0;
+		}
+		if(mode == "keepedits")
+		{
+			Rig rig(rom, _argv[1]);
+			rig.page(R"({"op":"ready"})");
+			rig.runUntil([&] { return rig.desk().isReady() && rig.desk().linkState().kit && rig.desk().linkState().pattern && rig.desk().documents().working; }, 8000);
+			rig.pluginLike = true;
+			keepEdits(rig);
+			undoControlAll(rig);
+			valueAfterMachine(rig);
+			check(g_contract.loaded() && g_contract.bad() == 0, g_contract.summary());
+			std::printf("mdDeskFirmwareTest keepedits: %s (%d failure(s))\n", g_failures ? "FAIL" : "PASS", g_failures);
 			return g_failures ? 1 : 0;
 		}
 		if(mode == "gen")
