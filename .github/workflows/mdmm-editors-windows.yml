@@ -46,15 +46,22 @@ jobs:
     uses: ./.github/workflows/elektron-windows.yml
 
   smoke:
-    name: Start the packaged standalones (WebView2)
+    name: Start the packaged standalones and VST3s (WebView2)
     needs: build
     runs-on: windows-2022
-    timeout-minutes: 20
+    timeout-minutes: 40
 
     steps:
       - uses: actions/checkout@v4
-        with:
-          sparse-checkout: scripts/windows
+
+      - name: Build the minimal VST3 host (scripts/windows/vst3EditorHost)
+        shell: pwsh
+        run: |
+          git submodule update --init --depth 1 source/JUCE
+          cmake -S scripts/windows/vst3EditorHost -B "${{ runner.temp }}\vst3host" -G "Visual Studio 17 2022" -A x64
+          cmake --build "${{ runner.temp }}\vst3host" --config Release --parallel 4 -- /verbosity:minimal
+          $exe = Get-ChildItem -LiteralPath "${{ runner.temp }}\vst3host" -Recurse -File -Filter 'mdmmVst3EditorHost.exe' | Select-Object -First 1
+          "VST3_HOST=$($exe.FullName)" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
 
       - uses: actions/download-artifact@v4
         with:
@@ -76,7 +83,7 @@ jobs:
 
       - name: Start each standalone, check the page and the bridge, take a screenshot
         shell: pwsh
-        run: ./scripts/windows/smoke_mdmm.ps1 -PackageDir "${{ runner.temp }}\package" -OutputDir "${{ runner.temp }}\smoke"
+        run: ./scripts/windows/smoke_mdmm.ps1 -PackageDir "${{ runner.temp }}\package" -OutputDir "${{ runner.temp }}\smoke" -Vst3Host "$env:VST3_HOST"
 
       - uses: actions/upload-artifact@v4
         if: always()

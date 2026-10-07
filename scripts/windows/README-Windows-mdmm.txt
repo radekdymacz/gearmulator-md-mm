@@ -2,9 +2,10 @@
 =================================================================
 
 NOT TESTED: this build comes from CI. It compiles and passes the unit
-tests and a VST3 load test, but no person has used it on Windows yet, and
-the editor window (a web page) has not been seen on Windows. Reports are
-welcome: https://github.com/radekdymacz/gearmulator-md-mm/issues
+tests, a VST3 load test and a start test (the standalone and the VST3
+open their editor window on a clean Windows machine and show the "firmware
+needed" card), but no person has used it in a DAW on Windows yet. Reports
+are welcome: https://github.com/radekdymacz/gearmulator-md-mm/issues
 
 What is in here
 ---------------

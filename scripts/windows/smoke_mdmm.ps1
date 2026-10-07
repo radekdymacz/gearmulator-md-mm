@@ -1,4 +1,5 @@
-# Starts each standalone of the Windows package (elektron-windows.yml's Gearmulator-Elektron-Windows-x64.zip,
+# Starts each standalone of the Windows package, and each VST3 in a minimal host (vst3EditorHost/, when -Vst3Host
+# is given), (elektron-windows.yml's Gearmulator-Elektron-Windows-x64.zip,
 # unpacked) with no ROM and checks what can be checked without a person (doc/release/WINDOWS.md):
 #   - the app is still running after a while;
 #   - its page runs in WebView2 (msedgewebview2.exe processes with the editors' profile folder), not in the
@@ -8,11 +9,12 @@
 #     text is read through UI Automation (the page's accessibility tree), so the shipped build needs no log;
 #   - a screenshot of the screen (an artifact, to look at).
 #
-#   scripts/windows/smoke_mdmm.ps1 -PackageDir <unpacked zip> -OutputDir <dir>
+#   scripts/windows/smoke_mdmm.ps1 -PackageDir <unpacked zip> -OutputDir <dir> [-Vst3Host <mdmmVst3EditorHost.exe>]
 [CmdletBinding()]
 param(
     [Parameter(Mandatory = $true)] [string] $PackageDir,
     [Parameter(Mandatory = $true)] [string] $OutputDir,
+    [string] $Vst3Host = '',
     [int] $TimeoutSeconds = 90
 )
 
@@ -62,17 +64,31 @@ function Get-WebViewProcesses() {
 }
 
 $profileFolder = Join-Path $env:LOCALAPPDATA 'Gearmulator\EditorWebView2'
-$apps = @(
-    @{ Exe = 'Gearmulator MD.exe'; Machine = 'Machinedrum'; Name = 'md' },
-    @{ Exe = 'Gearmulator MM.exe'; Machine = 'Monomachine'; Name = 'mm' }
-)
+$runs = New-Object System.Collections.Generic.List[object]
+foreach ($machine in @(@{ Product = 'Gearmulator MD'; Machine = 'Machinedrum'; Name = 'md' },
+                       @{ Product = 'Gearmulator MM'; Machine = 'Monomachine'; Name = 'mm' })) {
+    $exe = Get-ChildItem -LiteralPath $PackageDir -Recurse -File -Filter "$($machine.Product).exe" | Select-Object -First 1
+    if (-not $exe) { throw "Not in the package: $($machine.Product).exe" }
+    $runs.Add(@{ Label = "$($machine.Product) standalone"; File = $exe.FullName; Arguments = @(); Machine = $machine.Machine;
+        Name = "$($machine.Name)-standalone" })
+    if ($Vst3Host) {
+        $bundle = Get-ChildItem -LiteralPath $PackageDir -Recurse -Directory -Filter "$($machine.Product).vst3" | Select-Object -First 1
+        if (-not $bundle) { throw "Not in the package: $($machine.Product).vst3" }
+        $runs.Add(@{ Label = "$($machine.Product) VST3 in mdmmVst3EditorHost"; File = $Vst3Host;
+            Arguments = @("`"$($bundle.FullName)`"", "$($TimeoutSeconds + 30)"); Machine = $machine.Machine;
+            Name = "$($machine.Name)-vst3" })
+    }
+}
+
 $status = 0
-foreach ($app in $apps) {
-    $exe = Get-ChildItem -LiteralPath $PackageDir -Recurse -File -Filter $app.Exe | Select-Object -First 1
-    if (-not $exe) { throw "Not in the package: $($app.Exe)" }
-    Write-Host "== $($app.Exe): $($exe.FullName)"
-    $process = Start-Process -FilePath $exe.FullName -WorkingDirectory $exe.DirectoryName -PassThru
-    $wanted = "$($app.Machine) firmware needed"
+foreach ($run in $runs) {
+    Write-Host "== $($run.Label): $($run.File) $($run.Arguments -join ' ')"
+    $start = @{ FilePath = $run.File; WorkingDirectory = (Split-Path -Parent $run.File); PassThru = $true
+        RedirectStandardOutput = (Join-Path $OutputDir "$($run.Name)-stdout.txt")
+        RedirectStandardError = (Join-Path $OutputDir "$($run.Name)-stderr.txt") }
+    if ($run.Arguments.Count -gt 0) { $start.ArgumentList = $run.Arguments }
+    $process = Start-Process @start
+    $wanted = "$($run.Machine) firmware needed"
     $found = $false
     $names = @()
     $deadline = (Get-Date).AddSeconds($TimeoutSeconds)
@@ -83,29 +99,30 @@ foreach ($app in $apps) {
         if ($names | Where-Object { $_ -like "*$wanted*" }) { $found = $true; break }
     }
     Start-Sleep -Seconds 2
-    Save-Screenshot (Join-Path $OutputDir "$($app.Name).png")
-    $names | Set-Content -LiteralPath (Join-Path $OutputDir "$($app.Name)-ui.txt") -Encoding UTF8
+    Save-Screenshot (Join-Path $OutputDir "$($run.Name).png")
+    $names | Set-Content -LiteralPath (Join-Path $OutputDir "$($run.Name)-ui.txt") -Encoding UTF8
     $webviews = Get-WebViewProcesses
     $webviews | ForEach-Object { "$($_.ProcessId) $($_.ParentProcessId) $($_.CommandLine)" } |
-        Set-Content -LiteralPath (Join-Path $OutputDir "$($app.Name)-webview-processes.txt") -Encoding UTF8
+        Set-Content -LiteralPath (Join-Path $OutputDir "$($run.Name)-webview-processes.txt") -Encoding UTF8
     $ours = @($webviews | Where-Object { $_.CommandLine -and $_.CommandLine -like '*Gearmulator\EditorWebView2*' })
 
     if ($process.HasExited) {
-        Write-Host "::error::$($app.Exe) exited (code $($process.ExitCode))"
+        Write-Host "::error::$($run.Label) exited (code $($process.ExitCode))"
+        Get-Content -LiteralPath (Join-Path $OutputDir "$($run.Name)-stderr.txt") -ErrorAction SilentlyContinue
         $status = 1
         continue
     }
-    Write-Host "$($app.Exe): running"
+    Write-Host "$($run.Label): running"
     if ($ours.Count -gt 0) {
-        Write-Host "$($app.Exe): WebView2 is running with the editors' profile ($($ours.Count) msedgewebview2.exe processes)"
+        Write-Host "$($run.Label): WebView2 is running with the editors' profile ($($ours.Count) msedgewebview2.exe processes)"
     } else {
-        Write-Host "::error::$($app.Exe): no msedgewebview2.exe with the profile $profileFolder"
+        Write-Host "::error::$($run.Label): no msedgewebview2.exe with the profile $profileFolder"
         $status = 1
     }
     if ($found) {
-        Write-Host "$($app.Exe): the page shows '$wanted' (page -> plug-in -> page)"
+        Write-Host "$($run.Label): the page shows '$wanted' (page -> plug-in -> page)"
     } else {
-        Write-Host "::error::$($app.Exe): the page never showed '$wanted' within $TimeoutSeconds s"
+        Write-Host "::error::$($run.Label): the page never showed '$wanted' within $TimeoutSeconds s"
         Write-Host "-- names in the UI Automation tree (first 80)"
         $names | Select-Object -First 80 | ForEach-Object { Write-Host "   $_" }
         $status = 1
