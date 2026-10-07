@@ -21,7 +21,7 @@ namespace mdJucePlugin
 			const auto* p = dynamic_cast<const AudioPluginAudioProcessor*>(&_processor);
 			if(!p)
 				return {};
-			return p->getModel() == md::MachineModel::Monomachine ? "Monomachine Editor" : "Machinedrum Editor";
+			return p->getModel() == md::MachineModel::Monomachine ? MDMM_PRODUCT_NAME_MM : MDMM_PRODUCT_NAME_MD;
 		}
 
 	private:
