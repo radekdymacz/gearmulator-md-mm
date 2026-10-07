@@ -268,15 +268,18 @@ fi
 
 # ---------- record: the app, the demo, the recorder ----------
 # ScreenCaptureKit sometimes ends a recording by itself ("Unknown stream error", seen after 13 to 78 s): the take is
-# then not used, and the whole run is played again, up to MDMM_DEMO_TRIES times (3); config and settings are
+# then not used, and the whole run is played again, up to MDMM_DEMO_TRIES times (4); config and settings are
 # restored between tries as after any run.
 if [ "${MDMM_DEMO_TRY:-}" = "" ]; then
 	n=1
 	while :; do
 		MDMM_DEMO_TRY=$n "$0" "$@"; rc=$?
-		[ $rc = 75 ] && [ $n -lt "${MDMM_DEMO_TRIES:-3}" ] || exit $rc
+		[ $rc = 75 ] && [ $n -lt "${MDMM_DEMO_TRIES:-4}" ] || exit $rc
 		echo "== the recording ended early: try $((n + 1))"
-		n=$((n + 1)); sleep 3
+		n=$((n + 1))
+		# the last try's app quits first (a new one started while it still runs ends at once)
+		for i in $(seq 1 30); do pgrep -f "Gearmulator M[DM].app/Contents/MacOS" >/dev/null 2>&1 || break; sleep 1; done
+		sleep 3
 	done
 fi
 WHICH=${1:-}; DEMO=${2:-}; CAPS=${3:-}

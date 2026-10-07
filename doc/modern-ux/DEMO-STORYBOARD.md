@@ -181,3 +181,22 @@ What the editor and the firmware really give, checked before relying on it:
 Reels from this take, 30 s each, in priority order: Resample (26-34), Sweep and drop (37-41), Retrig roll (12-13 with
 5-6), Lock anything (9-11), Euclid from nothing (0-4); then LFO (14-15), Mutate and undo (16-18), mute drop (25 +
 45-48), chain and strip (53-72).
+
+## Next (queued, not done)
+
+- **Chop retrig:** lower the chop row's Shift-click retrig (RTRG 20 / RTIM 10 today) to a short roll (2-6 repeats) with RTIM on the
+  grid at 120 BPM (1/16 or 1/32), on a few chosen steps only (bar-end fills); the same for the Alt-drag retrig section. The RTIM
+  mapping is not known yet: `mdDeskFirmwareTest retrigmap` (WIP) heard no retrigs from kit values or locks in the test rig; an
+  in-app probe (RAM-P chop soloed, RTRG/RTIM locks bar by bar, take in temp/probe) was recorded but not analysed.
+- **Snare:** GEN Euclid 2/16 rotated 4 (steps 5 and 13, the backbeat) shown as the GEN move, then a ghost note by hand; check
+  the Tight Sequencer snare against the same rule.
+- **A producer-grade beat:** kick with syncopation (1, 7/8, 11, a pickup), snare on 5 and 13 with a ghost, hats with accent
+  movement and an open hat on the off-beats, a percussion layer, a bass (GND sine) locked to the kick, swing 54-58 %. Write the
+  16-step grid per track here first; prototype it in a dry run and analyse onsets and balance before recording.
+- **FX throws on top:** delay throws (snare/rim at phrase ends), 2-3 reverb throws per song (a REV send lock on one hit into
+  the next bar, moderate decay; caption one "Reverb throw"), distortion moves (DIST in Mix or SRR/DIST on snare or bass for a
+  bar, then back); one at a time at phrase boundaries, tails and levels checked.
+- **Chain proof:** make the chained patterns audibly different (E02 is a copy of E01 today), prove on the machine (read-back
+  of the current pattern after each change, onsets of pattern-specific hits by audio) and check that the UI highlights the
+  playing pattern; a bug if not (cause, fix, test).
+- **Re-record** demo-md-full and the Tight Sequencer song (demo-md-techniques) with all of the above; three formats, the checks.
