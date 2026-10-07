@@ -26,7 +26,7 @@ set -euo pipefail
 script_dir="$(cd "$(dirname "$0")" && pwd)"
 bundle_dir="$(cd "${1:?usage: build_mdmm_dmg.sh BUNDLE_DIR OUTPUT_DIR [VERSION]}" && pwd)"
 output_dir_input="${2:?usage: build_mdmm_dmg.sh BUNDLE_DIR OUTPUT_DIR [VERSION]}"
-version="${3:-0.3.0}"
+version="${3:-0.3.1}"
 identity="${MDMM_DMG_SIGN_IDENTITY:-}"
 keychain="${MDMM_SIGN_KEYCHAIN:-}"
 install_template="${script_dir}/pkg-resources/dmg-install.txt"
