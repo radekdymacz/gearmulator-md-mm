@@ -13,11 +13,27 @@ window.MDMM_CONFIG = {
   source: "https://github.com/radekdymacz/gearmulator-md-mm",
   releasesPage: "https://github.com/radekdymacz/gearmulator-md-mm/releases",
 
-  // One installer per machine (app + VST3 + AU). GitHub's stable "latest release" redirect:
-  // the release build must publish exactly these asset names.
+  // Downloads per operating system, then per machine. GitHub's stable "latest release" redirect:
+  // the release build must publish exactly these asset names. The download page picks the
+  // visitor's system (or ?os=mac|win|linux) and offers the others. An OS without URLs shows
+  // its note and the releases page.
   downloads: {
-    md: { name: "Machinedrum Editor", url: "https://github.com/radekdymacz/gearmulator-md-mm/releases/latest/download/Machinedrum-Editor-macOS.pkg" },
-    mm: { name: "Monomachine Editor", url: "https://github.com/radekdymacz/gearmulator-md-mm/releases/latest/download/Monomachine-Editor-macOS.pkg" }
+    mac: {
+      label: "macOS",
+      line: "macOS · the app, VST3 and AU in one installer",
+      md: { name: "Machinedrum Editor", url: "https://github.com/radekdymacz/gearmulator-md-mm/releases/latest/download/Machinedrum-Editor-macOS.pkg" },
+      mm: { name: "Monomachine Editor", url: "https://github.com/radekdymacz/gearmulator-md-mm/releases/latest/download/Monomachine-Editor-macOS.pkg" }
+    },
+    win: {
+      label: "Windows",
+      line: "Windows x64 · not tested yet · both editors, app and VST3, in one zip",
+      md: { name: "Machinedrum Editor", url: "https://github.com/radekdymacz/gearmulator-md-mm/releases/latest/download/MD-MM-Editors-Windows-x64-not-tested.zip" },
+      mm: { name: "Monomachine Editor", url: "https://github.com/radekdymacz/gearmulator-md-mm/releases/latest/download/MD-MM-Editors-Windows-x64-not-tested.zip" }
+    },
+    linux: {
+      label: "Linux",
+      line: "Linux · coming soon · watch the releases page"
+    }
   },
 
   // Pay what you want, through Lemon Squeezy (merchant of record) as a plain link-out.

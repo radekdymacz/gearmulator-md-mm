@@ -16,12 +16,43 @@
   }
   if (step !== "2") return;
 
-  var D = (C.downloads || {})[ed] || {};
+  /* The operating system: ?os= first, then the browser's own report, then macOS. */
+  var OS = C.downloads || {};
+  var detect = function () {
+    var p = ((navigator.userAgentData && navigator.userAgentData.platform) || navigator.platform || "") + " " + navigator.userAgent;
+    if (/android|iphone|ipad/i.test(p)) return "mac";
+    if (/win/i.test(p)) return "win";
+    if (/linux|x11|cros/i.test(p)) return "linux";
+    return "mac";
+  };
+  var os = OS[q.get("os")] ? q.get("os") : detect();
+  if (!OS[os]) os = "mac";
   var rel = ready(C.releasesPage) ? C.releasesPage : "https://github.com/radekdymacz/gearmulator-md-mm/releases";
-  var fileUrl = ready(D.url) ? D.url : rel;
-  var name = D.name || (ed === "mm" ? "Monomachine Editor" : "Machinedrum Editor");
+  var fileUrl = rel;
+  var name = ed === "mm" ? "Monomachine Editor" : "Machinedrum Editor";
   document.querySelector("[data-name]").textContent = name;
   document.title = "Download " + name + " — MD + MM Editor";
+
+  function useOs(o) {
+    os = o;
+    var D = (OS[os] || {})[ed] || {};
+    fileUrl = ready(D.url) ? D.url : rel;
+    document.querySelectorAll("[data-download]").forEach(function (el) { if (el.tagName === "A") el.href = fileUrl; });
+    document.querySelectorAll("[data-os-line]").forEach(function (el) { el.textContent = OS[os].line || OS[os].label; });
+    document.querySelectorAll("[data-os]").forEach(function (el) { el.hidden = el.dataset.os !== os; });
+    document.querySelectorAll("#os button").forEach(function (b) { b.setAttribute("aria-pressed", String(b.value === os)); });
+    var u = new URL(location.href);
+    u.searchParams.set("os", os);
+    history.replaceState(null, "", u.toString());
+  }
+  var osBox = document.getElementById("os");
+  Object.keys(OS).forEach(function (k) {
+    var b = document.createElement("button");
+    b.type = "button"; b.value = k; b.textContent = OS[k].label || k;
+    b.addEventListener("click", function () { useOs(k); });
+    osBox.appendChild(b);
+  });
+  useOs(os);
 
   var pay = C.payments || {};
   var ls = (pay.lemonsqueezy || {}).checkoutUrl;
@@ -98,6 +129,7 @@
   btn.addEventListener("click", function () {
     var u = new URL(ls);
     u.searchParams.set("checkout[custom][editor]", ed);
+    u.searchParams.set("checkout[custom][os]", os);
     var a = amount();
     if (a > 0) u.searchParams.set("checkout[custom][suggested]", String(a));
     window.open(u.toString(), "_blank", "noopener");

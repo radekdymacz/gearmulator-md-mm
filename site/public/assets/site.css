@@ -317,3 +317,7 @@ legend { padding: 0; margin-bottom: 12px; color: var(--muted); }
 .guide .ws th { width: 30%; white-space: nowrap; font-weight: var(--font-weight-strong); }
 kbd { font: 500 .86em var(--font-mono); background: var(--panel-hover); border: 1px solid var(--ghost-border); border-bottom-width: 2px; padding: 1px 6px; color: var(--fg); white-space: nowrap; display: inline-block; margin: 1px 0; }
 @media (max-width: 560px) { .guide th { width: 40%; } .guide .ws th { width: 36%; } .guide th, .guide td { padding: 8px 10px; } }
+
+/* Download page: the operating system switch */
+.osrow { display: flex; align-items: center; gap: 10px; margin: 6px 0 18px; }
+.osrow .seg button { padding: 7px 12px; }

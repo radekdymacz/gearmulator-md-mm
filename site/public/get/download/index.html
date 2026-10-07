@@ -49,7 +49,8 @@
     <div class="dlgrid">
       <div>
         <h1 data-name>Download</h1>
-        <p class="small"><span data-version></span> · macOS · the app, VST3 and AU in one installer</p>
+        <p class="small"><span data-version></span> · <span data-os-line>macOS · the app, VST3 and AU in one installer</span></p>
+        <div class="osrow"><span class="small">Your system</span><div class="seg" id="os" role="group" aria-label="Operating system"></div></div>
         <div class="support" id="support" hidden>
           <span class="eyebrow">Pay what you want</span>
           <h2>Name your price. €0 is fine.</h2>
@@ -79,6 +80,7 @@
       </div>
       <div>
         <p class="started" id="started" hidden>Your download has started. <span id="nudge" hidden>If the editor earns a place in your setup, you can <a href="#support" id="nudgelink">name your price</a> any time.</span></p>
+        <div data-os="mac">
         <p class="small">The installer puts the app in Applications and the VST3 and AU plug-ins in <code>/Library/Audio/Plug-Ins</code>. No administrator password? Choose <b>Install for me only</b>: then they go to <code>~/Applications</code> and <code>~/Library/Audio/Plug-Ins</code> in your home folder.</p>
         <div class="notes">
           <details open><summary>1 · Install</summary><ol>
@@ -93,7 +95,26 @@
             <li>Details and keys: <a href="/guide/">the user guide</a>.</li>
           </ol></details>
         </div>
-        <p class="small"><b>Windows x64 (not tested):</b> <a href="https://github.com/radekdymacz/gearmulator-md-mm/releases/latest/download/MD-MM-Editors-Windows-x64-not-tested.zip">both editors, app and VST3, as a zip</a>. No person has tried it on Windows yet; please <a href="/contact/">tell us</a> how it goes.</p>
+        </div>
+        <div data-os="win" hidden>
+        <p class="small"><b>Not tested yet.</b> The Windows build passes the automatic tests, but no person has tried it. Please <a href="/contact/">tell us</a> how it goes.</p>
+        <div class="notes">
+          <details open><summary>1 · Install</summary><ol>
+            <li>Unzip the file. It holds both editors: <code>Gearmulator MD.exe</code> and <code>Gearmulator MM.exe</code> (the apps), and <code>Gearmulator MD.vst3</code> and <code>Gearmulator MM.vst3</code> (the plug-ins).</li>
+            <li>Run the app from the unzipped folder. If Windows SmartScreen warns you, choose <b>More info → Run anyway</b> (the build is not signed).</li>
+            <li>For your DAW, copy the <code>.vst3</code> folders to <code>C:\Program Files\Common Files\VST3</code> and rescan plug-ins.</li>
+            <li>Needs Windows 10 or 11 with the Microsoft Edge WebView2 Runtime (current Windows has it).</li>
+          </ol></details>
+          <details open><summary>2 · Add your ROM</summary><ol>
+            <li>Use your own firmware image: <b>Machinedrum OS 1.63</b> or <b>Monomachine OS 1.32B</b>, 8 MiB. It is not included.</li>
+            <li>Open the editor, click <b>Choose your ROM</b> on the start-up card and pick the <code>.bin</code> (or a <code>.zip</code> with it).</li>
+            <li>Details and keys: <a href="/guide/">the user guide</a>.</li>
+          </ol></details>
+        </div>
+        </div>
+        <div data-os="linux" hidden>
+        <p class="small"><b>Linux is coming soon.</b> The download button opens the releases page; a Linux build will appear there. Until then, the editors run on macOS and (not tested) Windows.</p>
+        </div>
         <p class="small"><a href="/get/">Other machine</a> · <a href="https://github.com/radekdymacz/gearmulator-md-mm/releases">All releases and source</a> · <a href="/contact/">Report a bug</a></p>
       </div>
     </div>
