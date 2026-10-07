@@ -101,10 +101,10 @@
         <p class="small"><b>Not tested yet.</b> The Windows build passes the automatic tests, but no person has tried it. Please <a href="/contact/">tell us</a> how it goes.</p>
         <div class="notes">
           <details open><summary>1 · Install</summary><ol>
-            <li>Unzip the file. It holds both editors: <code>Machinedrum Editor.exe</code> and <code>Monomachine Editor.exe</code> (the apps), and <code>Machinedrum Editor.vst3</code> and <code>Monomachine Editor.vst3</code> (the plug-ins).</li>
+            <li>Unzip the file. It holds the app (<code>Machinedrum Editor.exe</code> or <code>Monomachine Editor.exe</code>), the plug-in (the <code>.vst3</code> folder) and a README.</li>
             <li>Run the app from the unzipped folder. If Windows SmartScreen warns you, choose <b>More info → Run anyway</b> (the build is not signed).</li>
             <li>For your DAW, copy the <code>.vst3</code> folders to <code>C:\Program Files\Common Files\VST3</code> and rescan plug-ins.</li>
-            <li>Needs Windows 10 or 11 with the Microsoft Edge WebView2 Runtime (current Windows has it).</li>
+            <li>Needs Windows 10 or 11 with the Microsoft Edge WebView2 Runtime (current Windows has it; if it is missing, the editor window says so and links to Microsoft's download).</li>
           </ol></details>
           <details open><summary>2 · Add your ROM</summary><ol>
             <li>Use your own firmware image: <b>Machinedrum OS 1.63</b> or <b>Monomachine OS 1.32B</b>, 8 MiB. It is not included.</li>
@@ -114,7 +114,18 @@
         </div>
         </div>
         <div data-os="linux" hidden>
-        <p class="small"><b>Linux is coming soon.</b> The download button opens the releases page; a Linux build will appear there. Until then, the editors run on macOS and (not tested) Windows.</p>
+        <p class="small"><b>Not tested yet.</b> The Linux build (x86_64) passes the automatic tests and starts on Ubuntu 22.04 and 24.04, but no person has tried it on a Linux desktop or in a DAW. Please <a href="/contact/">tell us</a> how it goes.</p>
+        <div class="notes">
+          <details open><summary>1 · Install</summary><ol>
+            <li>Unpack the <code>.tar.gz</code>. Run the app in <code>Standalone/</code> from where it is; keep the two <code>.so</code> files beside it.</li>
+            <li>For your DAW, copy the whole <code>.vst3</code> folder from <code>VST3/</code> into <code>~/.vst3/</code> and rescan plug-ins.</li>
+            <li>The editor window needs WebKitGTK: on Ubuntu or Debian <code>sudo apt install libwebkit2gtk-4.1-0</code>, on Fedora <code>sudo dnf install webkit2gtk4.1</code>, on Arch <code>sudo pacman -S webkit2gtk-4.1</code>. Needs glibc 2.35 or newer (Ubuntu 22.04, Debian 12 or later). The README in the archive lists every package.</li>
+          </ol></details>
+          <details open><summary>2 · Add your ROM</summary><ol>
+            <li>Use your own firmware image: <b>Machinedrum OS 1.63</b> or <b>Monomachine OS 1.32B</b>, 8 MiB. It is not included.</li>
+            <li>Open the editor and click the large area on the start-up card to choose the file. Details and keys: <a href="/guide/">the user guide</a>.</li>
+          </ol></details>
+        </div>
         </div>
         <p class="small"><a href="/get/">Other machine</a> · <a href="https://github.com/radekdymacz/gearmulator-md-mm/releases">All releases and source</a> · <a href="/contact/">Report a bug</a></p>
       </div>

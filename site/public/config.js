@@ -26,13 +26,15 @@ window.MDMM_CONFIG = {
     },
     win: {
       label: "Windows",
-      line: "Windows x64 · not tested yet · both editors, app and VST3, in one zip",
-      md: { name: "Machinedrum Editor", url: "https://github.com/radekdymacz/gearmulator-md-mm/releases/latest/download/MD-MM-Editors-Windows-x64-not-tested.zip" },
-      mm: { name: "Monomachine Editor", url: "https://github.com/radekdymacz/gearmulator-md-mm/releases/latest/download/MD-MM-Editors-Windows-x64-not-tested.zip" }
+      line: "Windows x64 · not tested yet · the app and VST3 in one zip",
+      md: { name: "Machinedrum Editor", url: "https://github.com/radekdymacz/gearmulator-md-mm/releases/latest/download/Machinedrum-Editor-Windows-x64-not-tested.zip" },
+      mm: { name: "Monomachine Editor", url: "https://github.com/radekdymacz/gearmulator-md-mm/releases/latest/download/Monomachine-Editor-Windows-x64-not-tested.zip" }
     },
     linux: {
       label: "Linux",
-      line: "Linux · coming soon · watch the releases page"
+      line: "Linux x64 · not tested yet · the app and VST3 · needs WebKitGTK",
+      md: { name: "Machinedrum Editor", url: "https://github.com/radekdymacz/gearmulator-md-mm/releases/latest/download/Machinedrum-Editor-Linux-x64-not-tested.tar.gz" },
+      mm: { name: "Monomachine Editor", url: "https://github.com/radekdymacz/gearmulator-md-mm/releases/latest/download/Monomachine-Editor-Linux-x64-not-tested.tar.gz" }
     }
   },
 
