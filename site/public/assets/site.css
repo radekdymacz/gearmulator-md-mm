@@ -321,3 +321,7 @@ kbd { font: 500 .86em var(--font-mono); background: var(--panel-hover); border: 
 /* Download page: the operating system switch */
 .osrow { display: flex; align-items: center; gap: 10px; margin: 6px 0 18px; }
 .osrow .seg button { padding: 7px 12px; }
+
+/* The footer sits at the bottom of the window on short pages (the download steps). */
+body { min-height: 100vh; min-height: 100dvh; display: flex; flex-direction: column; }
+body > main { flex: 1 0 auto; }
