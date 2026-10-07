@@ -14,6 +14,16 @@ param(
 )
 
 $ErrorActionPreference = 'Stop'
+
+# The product names (scripts/mdmm-product.env, the one place they are set): the
+# VST3 bundles and the standalone programs carry them.
+$productNames = @{}
+foreach ($line in Get-Content -LiteralPath (Join-Path $PSScriptRoot '..\mdmm-product.env')) {
+    if ($line -match '^(MDMM_[A-Z_]+)="(.*)"$') { $productNames[$Matches[1]] = $Matches[2] }
+}
+$mdName = $productNames['MDMM_PRODUCT_NAME_MD']
+$mmName = $productNames['MDMM_PRODUCT_NAME_MM']
+if (-not $mdName -or -not $mmName) { throw 'scripts/mdmm-product.env names no MD/MM product.' }
 Set-StrictMode -Version Latest
 
 function Invoke-Native {
@@ -93,8 +103,8 @@ $pgoRuntimeDirectory = Find-PgoRuntimeDirectory
 Get-ChildItem -LiteralPath $vst3Root -Recurse -File -Filter '*.pgc' `
     -ErrorAction SilentlyContinue | Remove-Item -Force
 $training = @(
-    @{ Name = 'MD'; Plugin = Join-Path $vst3Root 'Gearmulator MD.vst3'; Firmware = $MdFirmware },
-    @{ Name = 'MM'; Plugin = Join-Path $vst3Root 'Gearmulator MM.vst3'; Firmware = $MmFirmware }
+    @{ Name = 'MD'; Plugin = Join-Path $vst3Root "$mdName.vst3"; Firmware = $MdFirmware },
+    @{ Name = 'MM'; Plugin = Join-Path $vst3Root "$mmName.vst3"; Firmware = $MmFirmware }
 )
 
 try {

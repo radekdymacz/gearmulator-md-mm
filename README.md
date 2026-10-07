@@ -18,7 +18,8 @@ as a standalone app, VST3 and AU on macOS.
   about the installer and click **Open Anyway** (right-click › Open no longer works for installers).
 - **Uninstalling.** Delete the three bundles of each editor: the app in `/Applications`
   (`Machinedrum Editor.app`, `Monomachine Editor.app`), the VST3 and the AU
-  (`Gearmulator MD.vst3`/`.component`, `Gearmulator MM.vst3`/`.component`) in `/Library/Audio/Plug-Ins/VST3`
+  (`Machinedrum Editor.vst3`/`.component`, `Monomachine Editor.vst3`/`.component`;
+  `Gearmulator MD`/`MM` up to 0.3.1) in `/Library/Audio/Plug-Ins/VST3`
   and `.../Components`, or the `~/Applications` and `~/Library/Audio/Plug-Ins` equivalents. Firmware and
   settings are not touched. If a DAW will not load the AU, run
   `xattr -dr com.apple.quarantine "<path to the .component>"` and rescan.

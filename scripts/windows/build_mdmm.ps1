@@ -19,6 +19,16 @@ param(
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
 
+# The product names (scripts/mdmm-product.env, the one place they are set): the
+# VST3 bundles and the standalone programs carry them.
+$productNames = @{}
+foreach ($line in Get-Content -LiteralPath (Join-Path $PSScriptRoot '..\mdmm-product.env')) {
+    if ($line -match '^(MDMM_[A-Z_]+)="(.*)"$') { $productNames[$Matches[1]] = $Matches[2] }
+}
+$mdName = $productNames['MDMM_PRODUCT_NAME_MD']
+$mmName = $productNames['MDMM_PRODUCT_NAME_MM']
+if (-not $mdName -or -not $mmName) { throw 'scripts/mdmm-product.env names no MD/MM product.' }
+
 function Invoke-Native {
     param(
         [Parameter(Mandatory = $true)] [string] $FilePath,
@@ -184,10 +194,10 @@ if (@($configuredPgo).Count -ne 1 -or $configuredPgo.Matches[0].Groups[1].Value 
 }
 
 $productRoot = Join-Path $SourceDir "bin\plugins\$Configuration"
-$mdVst3 = Get-Item -LiteralPath (Join-Path $productRoot 'VST3\Gearmulator MD.vst3')
-$mmVst3 = Get-Item -LiteralPath (Join-Path $productRoot 'VST3\Gearmulator MM.vst3')
-$mdStandalone = Get-Item -LiteralPath (Join-Path $productRoot 'Standalone\Gearmulator MD.exe')
-$mmStandalone = Get-Item -LiteralPath (Join-Path $productRoot 'Standalone\Gearmulator MM.exe')
+$mdVst3 = Get-Item -LiteralPath (Join-Path $productRoot "VST3\$mdName.vst3")
+$mmVst3 = Get-Item -LiteralPath (Join-Path $productRoot "VST3\$mmName.vst3")
+$mdStandalone = Get-Item -LiteralPath (Join-Path $productRoot "Standalone\$mdName.exe")
+$mmStandalone = Get-Item -LiteralPath (Join-Path $productRoot "Standalone\$mmName.exe")
 $pluginTester = Find-ExactlyOne -Kind 'VST3 host' -Candidates @(
     Get-ChildItem -LiteralPath $BuildDir -Recurse -File -Filter 'pluginTester.exe')
 

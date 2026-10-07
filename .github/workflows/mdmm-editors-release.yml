@@ -138,7 +138,7 @@ jobs:
           mkdir -p "${bundles}"
           zip="$(find "${RUNNER_TEMP}/mdmm-zip" -name 'Gearmulator-Elektron-macOS-*.zip' -print -quit)"
           /usr/bin/ditto -x -k "${zip}" "${bundles}"
-          package_dir="$(dirname "$(find "${bundles}" -maxdepth 2 -name 'Gearmulator MD.app' -print -quit)")"
+          package_dir="$(dirname "$(find "${bundles}" -maxdepth 2 -name 'macsetup_Gearmulator-Elektron.command' -print -quit)")"
           {
             echo "MDMM_VERSION=${version}"
             echo "MDMM_BUNDLES=${package_dir}"

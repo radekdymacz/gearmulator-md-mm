@@ -69,8 +69,12 @@ namespace
 
 	const char* productName(const md::MachineModel _model)
 	{
-		return _model == md::MachineModel::Monomachine ? "Gearmulator MM" : "Gearmulator MD";
+		return _model == md::MachineModel::Monomachine ? MDMM_PRODUCT_NAME_MM : MDMM_PRODUCT_NAME_MD;	// scripts/mdmm-product.env
 	}
+
+	// The data folder's parent, ~/Documents/Gearmulator Preview: upstream's vendor name, kept when the editors
+	// took their own (Future Native Audio, scripts/mdmm-product.env), so the ROMs and settings stay where they are.
+	constexpr auto g_dataFolderVendor = "Gearmulator Preview";
 
 	const char* dataFolderName(const md::MachineModel _model)
 	{
@@ -100,7 +104,7 @@ namespace
 	{
 		const auto compiled = pluginLib::initProcessorProperties();
 		return {
-			productName(_model), compiled.vendor, compiled.isSynth,
+			productName(_model), g_dataFolderVendor, compiled.isSynth,
 			compiled.wantsMidiInput, compiled.producesMidiOut, compiled.isMidiEffect,
 			_model == md::MachineModel::Monomachine ? "Tmno" : "Tmdr",
 			compiled.lv2Uri, compiled.binaryData, dataFolderName(_model),
@@ -114,9 +118,8 @@ namespace
 	{
 		if(!_ephemeral)
 		{
-			const auto vendor = pluginLib::initProcessorProperties().vendor;
 			const juce::File configFolder(juce::String::fromUTF8(
-				(pluginLib::Tools::getPublicDataFolder(vendor, dataFolderName(_model)) + "config/").c_str()));
+				(pluginLib::Tools::getPublicDataFolder(g_dataFolderVendor, dataFolderName(_model)) + "config/").c_str()));
 			const auto result = mdJucePlugin::copySettingsOnce(
 				configFolder.getChildFile(mdJucePlugin::legacyConfigFileName(_model)),
 				configFolder.getChildFile(mdJucePlugin::editorConfigFileName(_model)));
@@ -235,7 +238,7 @@ namespace mdJucePlugin
 		_result.clear();
 		if(m_model != md::MachineModel::Monomachine)
 		{
-			_result = "Storage images are only supported by Gearmulator MM";
+			_result = juce::String("Storage images are only supported by ") + MDMM_PRODUCT_NAME_MM;
 			return false;
 		}
 

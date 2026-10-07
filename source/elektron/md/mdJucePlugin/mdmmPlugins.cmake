@@ -163,18 +163,53 @@ if(gearmulator_MDMM_DIAGNOSTICS)
 	list(APPEND MM_SKIN_ASSETS ${MM_SELF_TESTS})
 endif()
 
-# App icons (doc/modern-ux/icons, built with build-icons.sh), through juce.cmake's per-target arguments.
-set(GEARMULATOR_PLUGIN_EXTRA_ARGS_mdJucePlugin
-	ICON_BIG "${CMAKE_CURRENT_SOURCE_DIR}/icons/md-1024.png" ICON_SMALL "${CMAKE_CURRENT_SOURCE_DIR}/icons/md-32.png")
-set(GEARMULATOR_PLUGIN_EXTRA_ARGS_mmJucePlugin
-	ICON_BIG "${CMAKE_CURRENT_SOURCE_DIR}/icons/mm-1024.png" ICON_SMALL "${CMAKE_CURRENT_SOURCE_DIR}/icons/mm-32.png")
+# The product names, the vendor and the old (0.3.1) names: scripts/mdmm-product.env, the one place they are set
+# (the packaging scripts source the same file). MDMM_PRODUCT_NAME_MD / _MM name the bundles, the executables and
+# the plug-in a DAW lists (upstream's createJucePlugin takes them in this folder's CMakeLists.txt).
+set(_mdmmProductEnv "${CMAKE_CURRENT_LIST_DIR}/../../../../scripts/mdmm-product.env")
+set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS "${_mdmmProductEnv}")
+file(STRINGS "${_mdmmProductEnv}" _mdmmProductLines REGEX "^MDMM_[A-Z_]+=\".*\"$")
+foreach(_mdmmLine ${_mdmmProductLines})
+	string(REGEX MATCH "^(MDMM_[A-Z_]+)=\"(.*)\"$" _mdmmMatch "${_mdmmLine}")
+	set(${CMAKE_MATCH_1} "${CMAKE_MATCH_2}")
+endforeach()
+foreach(_mdmmKey MDMM_PRODUCT_NAME_MD MDMM_PRODUCT_NAME_MM MDMM_VENDOR MDMM_WEBSITE MDMM_LEGACY_NAME_MD MDMM_LEGACY_NAME_MM)
+	if(NOT ${_mdmmKey})
+		message(FATAL_ERROR "${_mdmmKey} missing from ${_mdmmProductEnv}")
+	endif()
+endforeach()
+unset(_mdmmProductEnv)
+unset(_mdmmProductLines)
+unset(_mdmmLine)
+unset(_mdmmMatch)
+unset(_mdmmKey)
+
+# Per-target juce_add_plugin arguments (juce.cmake passes them last, so they win over upstream's):
+# - the app icons (doc/modern-ux/icons, built with build-icons.sh);
+# - the maker a DAW shows (AU "Future Native Audio: Machinedrum Editor", the VST3 vendor, the Windows file details)
+#   instead of upstream's "Gearmulator Preview". The data folder keeps that name (mdPluginProcessor.cpp,
+#   g_dataFolderVendor), and the VST3 class IDs and AU codes come from GmPv + Tmdr/Tmno, not from names;
+# - the microphone prompt's text;
+# - the LV2 URI as it was with the old product name (it would otherwise follow the name).
+foreach(_mdmmTarget md mm)
+	string(TOUPPER "${_mdmmTarget}" _mdmmUpper)
+	set(GEARMULATOR_PLUGIN_EXTRA_ARGS_${_mdmmTarget}JucePlugin
+		ICON_BIG "${CMAKE_CURRENT_SOURCE_DIR}/icons/${_mdmmTarget}-1024.png"
+		ICON_SMALL "${CMAKE_CURRENT_SOURCE_DIR}/icons/${_mdmmTarget}-32.png"
+		COMPANY_NAME "${MDMM_VENDOR}"
+		COMPANY_WEBSITE "${MDMM_WEBSITE}"
+		COMPANY_COPYRIGHT "Copyright (C) The Usual Suspects (Gearmulator), joelanders and NativeKloud Consulting Radoslaw Dymacz. GNU GPL v3."
+		MICROPHONE_PERMISSION_TEXT "${MDMM_PRODUCT_NAME_${_mdmmUpper}} uses audio input to process external instruments."
+		LV2URI "http://theusualsuspects.lv2/Gearmulator${_mdmmUpper}")
+endforeach()
+unset(_mdmmTarget)
+unset(_mdmmUpper)
 
 # The editors' own bundle identifiers (doc/release/SIGNING.md, "Identifiers"), on the app, the VST3 and the AU
 # alike (JUCE gives every format of a target the same one). Upstream's local.gearmulator.preview.GearmulatorMD/MM
 # belong to upstream's builds: with the same identifier LaunchServices opened whichever it found, and a signed
-# app's identifier is what its permissions (microphone) are tied to. Only the bundles' identity changes: the
-# plug-in names, the VST3 class IDs and the AU type/subtype/manufacturer come from the product name and the
-# four-character codes, not from this.
+# app's identifier is what its permissions (microphone) are tied to. The VST3 class IDs and the AU
+# type/subtype/manufacturer come from the four-character codes, not from this or from the names.
 set(GEARMULATOR_PLUGIN_BUNDLE_ID_mdJucePlugin "com.nativekloud.machinedrum-editor")
 set(GEARMULATOR_PLUGIN_BUNDLE_ID_mmJucePlugin "com.nativekloud.monomachine-editor")
 
@@ -184,6 +219,9 @@ function(mdmm_plugin_targets)
 		target_compile_definitions(${plugin_target} PUBLIC
 			# jucePluginEditorLib/standaloneApp.h: native title bar and menu bar (P4).
 			JUCE_USE_CUSTOM_PLUGIN_STANDALONE_APP=1
+			# The names the code shows (mdPluginProcessor.cpp, mdStandaloneApp.cpp): scripts/mdmm-product.env.
+			"MDMM_PRODUCT_NAME_MD=\"${MDMM_PRODUCT_NAME_MD}\""
+			"MDMM_PRODUCT_NAME_MM=\"${MDMM_PRODUCT_NAME_MM}\""
 			MDMM_DIAGNOSTICS=$<BOOL:${gearmulator_MDMM_DIAGNOSTICS}>
 			MDMM_EDITFLOW_DRIVER=$<BOOL:${gearmulator_MDMM_EDITFLOW_DRIVER}>)
 	endforeach()

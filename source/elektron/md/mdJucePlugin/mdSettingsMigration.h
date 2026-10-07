@@ -10,6 +10,8 @@ namespace mdJucePlugin
 	// 0.3.0 they used upstream Gearmulator's names, so an upstream build of the same machine read and rewrote
 	// them (its panel skin over the editor page, ours over its panel). The data folder stays shared: the ROMs,
 	// the patch manager and the MIDI learn presets are the machine's, whichever build plays it.
+	// These are file names on disk, not the product names (scripts/mdmm-product.env): they stay as they are
+	// when the product is renamed, so a user's settings are never left behind.
 
 	// The editor's config file in <data folder>/config/, and the one it used up to 0.3.0 (upstream's).
 	const char* editorConfigFileName(md::MachineModel _model);		// "Machinedrum Editor.xml"

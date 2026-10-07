@@ -2,6 +2,9 @@
 
 set -euo pipefail
 
+# shellcheck source=../mdmm-product.env
+. "$(cd "$(dirname "$0")" && pwd)/../mdmm-product.env"
+
 archive="${1:?usage: verify_mdmm_package.sh ARCHIVE PLUGIN_TESTER [MD_FIRMWARE_BIN MM_FIRMWARE_BIN]}"
 plugin_tester="${2:?usage: verify_mdmm_package.sh ARCHIVE PLUGIN_TESTER [MD_FIRMWARE_BIN MM_FIRMWARE_BIN]}"
 md_firmware_bin="${3:-}"
@@ -121,12 +124,12 @@ if [[ ! -f "${install_guide}" ]]; then
 fi
 
 bundles=(
-  "${package_dir}/Gearmulator MD.app"
-  "${package_dir}/Gearmulator MM.app"
-  "${package_dir}/Gearmulator MD.vst3"
-  "${package_dir}/Gearmulator MM.vst3"
-  "${package_dir}/Gearmulator MD.component"
-  "${package_dir}/Gearmulator MM.component"
+  "${package_dir}/${MDMM_PRODUCT_NAME_MD}.app"
+  "${package_dir}/${MDMM_PRODUCT_NAME_MM}.app"
+  "${package_dir}/${MDMM_PRODUCT_NAME_MD}.vst3"
+  "${package_dir}/${MDMM_PRODUCT_NAME_MM}.vst3"
+  "${package_dir}/${MDMM_PRODUCT_NAME_MD}.component"
+  "${package_dir}/${MDMM_PRODUCT_NAME_MM}.component"
 )
 for bundle in "${bundles[@]}"; do
   if [[ ! -d "${bundle}" ]]; then
@@ -168,24 +171,24 @@ for bundle in "${bundles[@]}"; do
   /usr/bin/codesign --verify --deep --strict "${bundle}"
 done
 /usr/bin/plutil -lint \
-  "${package_dir}/Gearmulator MD.component/Contents/Info.plist" \
-  "${package_dir}/Gearmulator MM.component/Contents/Info.plist"
+  "${package_dir}/${MDMM_PRODUCT_NAME_MD}.component/Contents/Info.plist" \
+  "${package_dir}/${MDMM_PRODUCT_NAME_MM}.component/Contents/Info.plist"
 
 md_smoke_home="${verification_root}/smoke-home-md"
 mm_smoke_home="${verification_root}/smoke-home-mm"
 if [[ -n "${md_firmware_bin}" ]]; then
   run_packaged_firmware_smoke "MD" "Machinedrum" "${md_firmware_bin}" \
-    "${md_firmware_bin_sha256}" "${package_dir}/Gearmulator MD.vst3" "${md_smoke_home}"
+    "${md_firmware_bin_sha256}" "${package_dir}/${MDMM_PRODUCT_NAME_MD}.vst3" "${md_smoke_home}"
   run_packaged_firmware_smoke "MM" "Monomachine" "${mm_firmware_bin}" \
-    "${mm_firmware_bin_sha256}" "${package_dir}/Gearmulator MM.vst3" "${mm_smoke_home}"
+    "${mm_firmware_bin_sha256}" "${package_dir}/${MDMM_PRODUCT_NAME_MM}.vst3" "${mm_smoke_home}"
 else
   mkdir -p "${md_smoke_home}/Documents" "${mm_smoke_home}/Documents"
   HOME="${md_smoke_home}" GEARMULATOR_DATA_ROOT="${md_smoke_home}/Documents" \
     "${plugin_tester}" -verify-audio-buses -blocks 16 \
-    -plugin "${package_dir}/Gearmulator MD.vst3"
+    -plugin "${package_dir}/${MDMM_PRODUCT_NAME_MD}.vst3"
   HOME="${mm_smoke_home}" GEARMULATOR_DATA_ROOT="${mm_smoke_home}/Documents" \
     "${plugin_tester}" -verify-audio-buses -blocks 16 \
-    -plugin "${package_dir}/Gearmulator MM.vst3"
+    -plugin "${package_dir}/${MDMM_PRODUCT_NAME_MM}.vst3"
 fi
 
 echo "Verified extracted MD/MM package: ${archive}"

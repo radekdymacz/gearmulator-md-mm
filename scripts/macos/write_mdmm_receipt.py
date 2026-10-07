@@ -558,10 +558,11 @@ def validate_core_capacity_check(
     qualified_hashes = check.get("plugin_module_sha256")
     if not isinstance(qualified_hashes, dict):
         raise RuntimeError("core-capacity check has no plug-in module hashes")
+    # The two packaged VST3 modules, whatever the product names (scripts/mdmm-product.env).
     expected_hashes = {
-        name: artifact_hashes[name]
-        for name in ("Gearmulator MD.vst3", "Gearmulator MM.vst3")
-        if name in artifact_hashes
+        name: digest
+        for name, digest in artifact_hashes.items()
+        if name.endswith(".vst3")
     }
     if qualified_hashes != expected_hashes:
         raise RuntimeError(

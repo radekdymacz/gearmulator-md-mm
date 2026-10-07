@@ -27,6 +27,7 @@
 # System Audio Recording), ffmpeg (brew install ffmpeg), python3, the Xcode toolchain for the recorder.
 set -u
 ROOT=$(cd "$(dirname "$0")/.." && pwd)
+. "$ROOT/scripts/mdmm-product.env"	# the product names: the apps, their executables and caches
 APPS=${MDMM_APP_DIR:-"$ROOT/bin/plugins/Release/Standalone"}
 SIZE=${MDMM_DEMO_SIZE:-1440x810}
 FPS=${MDMM_DEMO_FPS:-60}
@@ -278,26 +279,26 @@ if [ "${MDMM_DEMO_TRY:-}" = "" ]; then
 		echo "== the recording ended early: try $((n + 1))"
 		n=$((n + 1))
 		# the last try's app quits first (a new one started while it still runs ends at once)
-		for i in $(seq 1 30); do pgrep -f "Gearmulator M[DM].app/Contents/MacOS" >/dev/null 2>&1 || break; sleep 1; done
+		for i in $(seq 1 30); do pgrep -f "($MDMM_PRODUCT_NAME_MD|$MDMM_PRODUCT_NAME_MM).app/Contents/MacOS" >/dev/null 2>&1 || break; sleep 1; done
 		sleep 3
 	done
 fi
 WHICH=${1:-}; DEMO=${2:-}; CAPS=${3:-}
-case "$WHICH" in md) M=MD; MACHINE=Machinedrum; SKIN=mdStudio; VAR=GEARMULATOR_MDSTUDIO_SELFTEST ;;
-	mm) M=MM; MACHINE=Monomachine; SKIN=mmStudio; VAR=GEARMULATOR_MMSTUDIO_SELFTEST ;;
+case "$WHICH" in md) M=MD; MACHINE=Machinedrum; SKIN=mdStudio; VAR=GEARMULATOR_MDSTUDIO_SELFTEST; NAME=$MDMM_PRODUCT_NAME_MD ;;
+	mm) M=MM; MACHINE=Monomachine; SKIN=mmStudio; VAR=GEARMULATOR_MMSTUDIO_SELFTEST; NAME=$MDMM_PRODUCT_NAME_MM ;;
 	*) echo "usage: $0 md|mm <demo> [captions] | $0 render <run folder> [captions]" >&2; exit 2 ;; esac
 [ -n "$DEMO" ] || die "name a demo (demo-$WHICH-<name>)"
 case "$DEMO" in demo-*) ;; *) DEMO="demo-$WHICH-$DEMO" ;; esac
 case "$SIZE" in *x*) WW=${SIZE%x*}; WH=${SIZE#*x} ;; *) die "MDMM_DEMO_SIZE is WxH" ;; esac
-APP="$APPS/Gearmulator $M.app"
-EXE="$APP/Contents/MacOS/Gearmulator $M"
+APP="$APPS/$NAME.app"
+EXE="$APP/Contents/MacOS/$NAME"
 DATA="$HOME/Documents/Gearmulator Preview/$MACHINE"
-C="$DATA/config/Gearmulator $M.xml"
-SETTINGS="$HOME/Library/Application Support/Gearmulator $M.settings"
-LOGDIR="$HOME/Library/Caches/Gearmulator $M"
+C="$DATA/config/$MACHINE Editor.xml"	# the editor's own files since 0.3.1 (mdSettingsMigration.h), not the product name
+SETTINGS="$HOME/Library/Application Support/$MACHINE Editor.settings"
+LOGDIR="$HOME/Library/Caches/$NAME"	# JUCE's temp folder: ~/Library/Caches/<executable>
 [ -x "$EXE" ] || die "no diagnostics build at $APP (configure with -Dgearmulator_MDMM_DIAGNOSTICS=ON, build the $(echo $M | tr A-Z a-z)JucePlugin_Standalone target)"
 ls "$DATA/roms/"* >/dev/null 2>&1 || die "no $MACHINE ROM in $DATA/roms (it stays there; nothing copies it)"
-pgrep -f "Gearmulator $M.app/Contents/MacOS" >/dev/null 2>&1 && die "a Gearmulator $M app is running: quit it first (the demo uses the same settings)"
+pgrep -f "$NAME.app/Contents/MacOS" >/dev/null 2>&1 && die "a $NAME app is running: quit it first (the demo uses the same settings)"
 REC=$("$ROOT/tools/mdmm-recorder/build.sh") || die "the recorder did not build"
 OUT=${MDMM_DEMO_OUT:-"$ROOT/temp/videos"}/$DEMO-$(date +%Y%m%d-%H%M%S)
 mkdir -p "$OUT"

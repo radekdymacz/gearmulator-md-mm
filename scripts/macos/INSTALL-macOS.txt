@@ -1,5 +1,5 @@
-Gearmulator MD/MM for macOS
-===========================
+{{PRODUCT_NAME_MD}} and {{PRODUCT_NAME_MM}} for macOS
+================================================
 
 This alpha is ad-hoc signed and is not notarized by Apple. macOS may quarantine
 the applications, VST3 plug-ins, and Audio Units when you download them.
@@ -25,8 +25,10 @@ Installation
 6. Restart your DAW or ask it to rescan plug-ins.
 
 Run the setup command again whenever you install an updated download. The
-command only clears extended attributes from the Gearmulator MD/MM bundles in
-the extracted folder; it does not copy or delete plug-ins.
+command only clears extended attributes from the {{PRODUCT_NAME_MD}} and
+{{PRODUCT_NAME_MM}} bundles in the extracted folder; it does not copy or delete
+plug-ins. Up to 0.3.1 the bundles were called {{LEGACY_NAME_MD}} and
+{{LEGACY_NAME_MM}}: delete those copies, or a DAW lists the editor twice.
 
 Firmware is not included. If no supported firmware image is found, the
 application or plug-in shows a start-up card asking for it. Click the card and

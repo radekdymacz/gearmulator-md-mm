@@ -14,8 +14,9 @@ is the source of truth for claims; this file never claims more than the site doe
 | URL on screen | `mdmm.dev` (bare, no https, no UTM: it is read, not clicked) |
 | URL in a caption or bio | the UTM link from `UTM.md` |
 
-Never "Gearmulator MD" in marketing (that is the plug-in's file name in a DAW,
-fine in the user guide), never "MDMM" as a product name, never "official".
+Never "Gearmulator MD" or "Gearmulator MM" (the plug-ins' names up to 0.3.1; since then
+the bundles and the plug-in a DAW lists are "Machinedrum Editor" / "Monomachine Editor",
+set in `scripts/mdmm-product.env`), never "MDMM" as a product name, never "official".
 
 ## Voice
 

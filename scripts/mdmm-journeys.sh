@@ -5,7 +5,7 @@
 # non-zero on any FAIL, a timeout or a missing build or ROM.
 #   scripts/mdmm-journeys.sh [md|mm|both] [selector]      selector: journey (all, the default), journey-seq-*,
 #                                                          journey-md-lib-*,mm-mix-* (comma-separated, * any)
-# Environment: MDMM_APP_DIR the folder holding "Gearmulator MD.app" and "Gearmulator MM.app" (default: this tree's
+# Environment: MDMM_APP_DIR the folder holding "Machinedrum Editor.app" and "Monomachine Editor.app" (default: this tree's
 # bin/plugins/Release/Standalone, where a diagnostics build puts them), MDMM_JOURNEY_TIMEOUT seconds per editor
 # (default 900), MDMM_JOURNEY_VERBOSE=1 prints every step line too, MDMM_JOURNEY_FRONT=0 does not bring the app to
 # the front (a covered window draws no canvases and slows its timers, so some journeys fail there).
@@ -13,6 +13,7 @@
 # copied anywhere. The editor's config file and standalone settings (they hold the machine's memory, which the
 # journeys write to) are backed up first and restored byte for byte afterwards, pass or fail.
 set -u
+. "$(cd "$(dirname "$0")" && pwd)/mdmm-product.env"	# the product names: the apps, their executables and caches
 ROOT=$(cd "$(dirname "$0")/.." && pwd)
 WHICH=${1:-both}
 SEL=${2:-journey}
@@ -24,18 +25,18 @@ case "$WHICH" in md|mm|both) ;; *) echo "usage: $0 [md|mm|both] [journey|journey
 STATUS=0
 run_one() {	# $1: MD or MM
 	M=$1
-	if [ "$M" = MD ]; then MACHINE=Machinedrum SKIN=mdStudio VAR=GEARMULATOR_MDSTUDIO_SELFTEST BUNDLE=com.nativekloud.machinedrum-editor; else MACHINE=Monomachine SKIN=mmStudio VAR=GEARMULATOR_MMSTUDIO_SELFTEST BUNDLE=com.nativekloud.monomachine-editor; fi
-	APP="$APPS/Gearmulator $M.app"
-	EXE="$APP/Contents/MacOS/Gearmulator $M"
+	if [ "$M" = MD ]; then MACHINE=Machinedrum SKIN=mdStudio VAR=GEARMULATOR_MDSTUDIO_SELFTEST BUNDLE=com.nativekloud.machinedrum-editor NAME=$MDMM_PRODUCT_NAME_MD; else MACHINE=Monomachine SKIN=mmStudio VAR=GEARMULATOR_MMSTUDIO_SELFTEST BUNDLE=com.nativekloud.monomachine-editor NAME=$MDMM_PRODUCT_NAME_MM; fi
+	APP="$APPS/$NAME.app"
+	EXE="$APP/Contents/MacOS/$NAME"
 	DATA="$HOME/Documents/Gearmulator Preview/$MACHINE"
 	C="$DATA/config/$MACHINE Editor.xml"
 	SETTINGS="$HOME/Library/Application Support/$MACHINE Editor.settings"
-	LOGDIR="$HOME/Library/Caches/Gearmulator $M"
-	echo "== $MACHINE Editor: $SEL"
+	LOGDIR="$HOME/Library/Caches/$NAME"	# JUCE's temp folder: ~/Library/Caches/<executable>
+	echo "== $NAME: $SEL"
 	if [ ! -x "$EXE" ]; then echo "FAIL no diagnostics build at $APP (configure with -Dgearmulator_MDMM_DIAGNOSTICS=ON, build the $(echo $M | tr A-Z a-z)JucePlugin_Standalone target)"; STATUS=1; return; fi
 	if ! ls "$DATA/roms/"* >/dev/null 2>&1; then echo "FAIL no $MACHINE ROM in $DATA/roms (it stays there; the journeys never copy it)"; STATUS=1; return; fi
-	if pgrep -f "Gearmulator $M.app/Contents/MacOS" >/dev/null 2>&1 || pgrep -fx ".*/(Machinedrum|Monomachine) Editor.app/.*" >/dev/null 2>&1; then
-		echo "FAIL a Gearmulator $M app is running: quit it first (the journeys use the same settings)"; STATUS=1; return
+	if pgrep -f "$NAME.app/Contents/MacOS" >/dev/null 2>&1 || pgrep -f "Gearmulator $M.app/Contents/MacOS" >/dev/null 2>&1; then
+		echo "FAIL a $NAME app is running: quit it first (the journeys use the same settings)"; STATUS=1; return
 	fi
 	TMP=$(mktemp -d)
 	[ -f "$C" ] && cp -p "$C" "$TMP/config.xml"

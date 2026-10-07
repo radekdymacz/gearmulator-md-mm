@@ -24,7 +24,7 @@ namespace mdJucePlugin
 
 		juce::String editorName(const juce::AudioProcessor& _processor)
 		{
-			return isMonomachine(_processor) ? "Monomachine Editor" : "Machinedrum Editor";
+			return isMonomachine(_processor) ? MDMM_PRODUCT_NAME_MM : MDMM_PRODUCT_NAME_MD;
 		}
 	}
 

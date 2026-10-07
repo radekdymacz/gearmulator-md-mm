@@ -6,12 +6,14 @@
 # content and GPU processes that draw the page, at each phase's start and end.
 # The user's MM config file and standalone settings are backed up and restored byte for byte.
 # The MM OS 1.32B ROM must be in the plug-in's ROM folder.
-#   scripts/mm-editor-cpu.sh [path to "Gearmulator MM.app"]
+#   scripts/mm-editor-cpu.sh [path to "Monomachine Editor.app"] (the names: scripts/mdmm-product.env)
 set -e
-APP=${1:-"$(cd "$(dirname "$0")/.." && pwd)/bin/plugins/Release/Standalone/Gearmulator MM.app"}
+. "$(cd "$(dirname "$0")" && pwd)/mdmm-product.env"
+NAME=$MDMM_PRODUCT_NAME_MM
+APP=${1:-"$(cd "$(dirname "$0")/.." && pwd)/bin/plugins/Release/Standalone/$NAME.app"}
 C="$HOME/Documents/Gearmulator Preview/Monomachine/config/Monomachine Editor.xml"
 SETTINGS="$HOME/Library/Application Support/Monomachine Editor.settings"
-LOG="$HOME/Library/Caches/Gearmulator MM/gearmulator-mmStudio.log"
+LOG="$HOME/Library/Caches/$NAME/gearmulator-mmStudio.log"
 TMP=$(mktemp -d)
 cp -p "$C" "$TMP/config.xml"; cp -p "$SETTINGS" "$TMP/settings" 2>/dev/null || true
 restore() { cp -p "$TMP/config.xml" "$C"; if [ -f "$TMP/settings" ]; then cp -p "$TMP/settings" "$SETTINGS"; else rm -f "$SETTINGS"; fi; }
@@ -20,7 +22,7 @@ trap restore EXIT
 sed -e 's/"skinDisplayName" val="[^"]*"/"skinDisplayName" val="mmStudio"/' -e 's/"skinFile" val="[^"]*"/"skinFile" val="mmStudio.rml"/' "$TMP/config.xml" > "$C"
 rm -f "$LOG"
 before=$(pgrep -f 'com.apple.WebKit.(WebContent|GPU)' | sort)
-GEARMULATOR_MMSTUDIO_SELFTEST=mmcpu "$APP/Contents/MacOS/Gearmulator MM" >/dev/null 2>&1 &
+GEARMULATOR_MMSTUDIO_SELFTEST=mmcpu "$APP/Contents/MacOS/$NAME" >/dev/null 2>&1 &
 PID=$!
 secs() { ps -o time= -p "$1" 2>/dev/null | awk -F: '{ if (NF==3) print $1*3600+$2*60+$3; else print $1*60+$2 }'; }
 # The page's WebKit processes (content and GPU) that started with the app.
