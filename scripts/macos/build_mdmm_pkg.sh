@@ -259,7 +259,7 @@ for row in "${machines[@]}"; do
   <domains enable_anywhere="false" enable_currentUserHome="true" enable_localSystem="true"/>
   <volume-check>
     <allowed-os-versions>
-      <os-version min="10.13"/>
+      <os-version min="12.0"/>
     </allowed-os-versions>
   </volume-check>
   <choices-outline>

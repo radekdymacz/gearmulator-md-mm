@@ -1,6 +1,7 @@
 {{PRODUCT_NAME_MD}} and {{PRODUCT_NAME_MM}} for macOS
 ================================================
 
+Needs macOS 12 or later (Intel and Apple silicon).
 This alpha is ad-hoc signed and is not notarized by Apple. macOS may quarantine
 the applications, VST3 plug-ins, and Audio Units when you download them.
 
