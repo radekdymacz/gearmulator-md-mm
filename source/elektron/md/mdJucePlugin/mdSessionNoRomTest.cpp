@@ -32,6 +32,15 @@
 #include <thread>
 #include <vector>
 
+#if !JUCE_MAC
+namespace juce::detail
+{
+	// JUCE's own step of the message loop (juce_Messaging_linux.cpp, _windows.cpp); runDispatchLoopUntil
+	// needs JUCE_MODAL_LOOPS_PERMITTED, which the plug-ins do not set.
+	bool dispatchNextMessageOnSystemQueue(bool _returnIfNoPendingMessages);
+}
+#endif
+
 namespace
 {
 	using Value = elektronData::json::Value;
@@ -53,7 +62,9 @@ namespace
 #if JUCE_MAC
 			CFRunLoopRunInMode(kCFRunLoopDefaultMode, 0.008, false);
 #else
-			std::this_thread::sleep_for(std::chrono::milliseconds(8));
+			// The session's timers and callAsync run on the message thread: dispatch them, or nothing moves.
+			if(!juce::detail::dispatchNextMessageOnSystemQueue(true))
+				std::this_thread::sleep_for(std::chrono::milliseconds(1));
 #endif
 		}
 	}

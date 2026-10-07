@@ -1,0 +1,152 @@
+name: MD/MM Editors Linux x64
+
+# This fork's Linux build (doc/release/LINUX.md, doc/modern-ux/UPSTREAM.md: a workflow of ours). Builds
+# the standalones and VST3s with the web view on, runs the unit tests, packages one .tar.gz per machine
+# (scripts/linux/build_mdmm.sh), then starts each packaged standalone on a virtual X11 display on the
+# oldest and the newest supported Ubuntu with only runtime packages, and keeps a screenshot. On an
+# mdmm-v* tag, mdmm-editors-release.yml calls it and attaches the archives to the draft release.
+
+on:
+  workflow_call:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+      - "release/md-mm-*"
+      - "feat/linux-*"
+    paths:
+      - ".github/workflows/mdmm-editors-linux.yml"
+      - "scripts/linux/**"
+      - ".gitmodules"
+      - "CMakeLists.txt"
+      - "base.cmake"
+      - "source/CMakeLists.txt"
+      - "source/*.cmake"
+      - "source/JUCE"
+      - "source/elektron/**"
+      - "source/baseLib/**"
+      - "source/synthLib/**"
+      - "source/jucePluginEditorLib/**"
+      - "source/jucePluginLib/**"
+      - "source/juceUiLib/**"
+      - "source/juceRmlUi/**"
+      - "source/juceRmlPlugin/**"
+      - "source/dsp56300"
+      - "source/mc68k"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: mdmm-editors-linux-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: Linux x64 VST3 and Standalone
+    runs-on: ubuntu-22.04
+    timeout-minutes: 150
+    env:
+      SCCACHE_GHA_ENABLED: "true"
+      SCCACHE_GHA_VERSION: "mdmm-v1-linux-x64-gcc-2204-webview"
+      CMAKE_C_COMPILER_LAUNCHER: sccache
+      CMAKE_CXX_COMPILER_LAUNCHER: sccache
+      CC: gcc-13
+      CXX: g++-13
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          submodules: recursive
+
+      # GCC 13 (as on the 24.04 jobs, mdmm-core.yml): GCC 11, 22.04's own, rejects some of the editors' C++17.
+      # Building on 22.04 keeps the glibc floor at 2.35; libstdc++ and libgcc are linked statically.
+      - name: Install build dependencies
+        run: >-
+          sudo add-apt-repository -y ppa:ubuntu-toolchain-r/test &&
+          sudo apt-get update && sudo apt-get install -y g++-13 gcc-13 ninja-build pkg-config xvfb
+          libasound2-dev libgl1-mesa-dev libx11-dev libxcomposite-dev libxcursor-dev libxext-dev
+          libxinerama-dev libxrandr-dev libxrender-dev libfreetype6-dev libfontconfig1-dev
+          libwebkit2gtk-4.0-dev libgtk-3-dev
+
+      - name: Configure compiler cache
+        uses: mozilla-actions/sccache-action@v0.0.11
+        with:
+          version: v0.16.0
+
+      - name: Build, test and package MD/MM
+        run: >-
+          xvfb-run -a ./scripts/linux/build_mdmm.sh
+          "${{ github.workspace }}"
+          "${{ runner.temp }}/gearmulator-elektron-build"
+          "${{ github.workspace }}/artifacts/linux-mdmm"
+
+      - name: Check the packages
+        run: |
+          set -euo pipefail
+          for t in artifacts/linux-mdmm/*.tar.gz; do
+            echo "== ${t}"
+            tar -tzvf "${t}"
+          done
+          tmp="$(mktemp -d)"
+          tar -C "${tmp}" -xzf artifacts/linux-mdmm/Machinedrum-Editor-Linux-x64-not-tested.tar.gz
+          app="${tmp}/Machinedrum-Editor-Linux-x64/Standalone/Gearmulator MD"
+          # The run path that finds the shims, and no hard dependency on WebKit or GTK.
+          readelf -d "${app}" | grep -E 'RUNPATH|RPATH' | grep -F '$ORIGIN'
+          if readelf -d "${app}" | grep NEEDED | grep -E 'webkit|gtk'; then
+            echo "The standalone must not link WebKit or GTK" >&2
+            exit 1
+          fi
+          readelf -d "${tmp}/Machinedrum-Editor-Linux-x64/Standalone/libgtk-3.so" | grep NEEDED | grep -F libgtk-3.so.0
+          echo "Highest glibc symbol version used:"
+          objdump -T "${app}" | grep -o 'GLIBC_[0-9.]*' | sort -uV | tail -n 1
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: linux-mdmm
+          path: artifacts/linux-mdmm/*.tar.gz
+          if-no-files-found: error
+          retention-days: 14
+
+  smoke:
+    name: Start the packaged standalones (${{ matrix.os }}, runtime packages only)
+    needs: build
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-22.04
+            packages: libwebkit2gtk-4.0-37 libgtk-3-0 libasound2 libgl1
+          - os: ubuntu-24.04
+            packages: libwebkit2gtk-4.1-0 libgtk-3-0t64 libasound2t64 libgl1
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          sparse-checkout: scripts/linux
+
+      - name: Install runtime packages
+        run: >-
+          sudo apt-get update && sudo apt-get install -y --no-install-recommends xvfb x11-utils imagemagick
+          ${{ matrix.packages }} libx11-6 libxext6 libxcursor1 libxinerama1 libxrandr2 libxrender1
+          libxcomposite1 libfreetype6 libfontconfig1 &&
+          dpkg -l | grep -i -E 'webkit2gtk|libgtk-3-0'
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: linux-mdmm
+          path: ${{ runner.temp }}/linux-mdmm
+
+      - name: Start each standalone and take a screenshot
+        run: ./scripts/linux/smoke_mdmm.sh "${{ runner.temp }}/linux-mdmm" "${{ runner.temp }}/smoke"
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: linux-mdmm-smoke-${{ matrix.os }}
+          path: ${{ runner.temp }}/smoke
+          if-no-files-found: warn
+          retention-days: 14
