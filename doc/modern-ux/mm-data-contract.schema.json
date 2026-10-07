@@ -4796,6 +4796,32 @@
         },
         {
           "type": "object",
+          "description": "host: the page's zoom one step smaller (-1), larger (1) or back to 100 % (0); the window remembers it",
+          "required": ["op", "step"],
+          "properties": {
+            "op": {
+              "const": "pageZoom"
+            },
+            "id": {
+              "type": "integer"
+            },
+            "g": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "force": {
+              "type": ["boolean", "integer"]
+            },
+            "step": {
+              "type": "integer",
+              "minimum": -1,
+              "maximum": 1
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
           "description": "host: MIDI learn a track's parameter (learn.doc.limits: which)",
           "required": ["op", "t"],
           "properties": {

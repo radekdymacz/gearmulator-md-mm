@@ -5,6 +5,7 @@
 #include "mdPluginProcessor.h"
 #include "mdDeskHost.h"
 #include "mdWebPageHost.h"
+#include "mdPageZoom.h"
 
 #if MDMM_DIAGNOSTICS
 #include "mdDiagnostics.h"
@@ -23,11 +24,15 @@ namespace mdJucePlugin
 #include "jucePluginEditorLib/editorPopupMenu.h"
 #include "jucePluginEditorLib/pluginEditorState.h"
 #include "juceRmlUi/juceRmlComponent.h"
+#include "juceRmlUi/rmlMenu.h"
 #include "juceUiLib/messageRoute.h"
 
 namespace mdJucePlugin
 {
 	namespace json = elektronData::json;
+
+	// The user's page zoom in the editor's config (mdPageZoom.h): one value for every window of this editor.
+	constexpr const char* g_zoomKey = "pageZoom";
 
 	PageEditor::PageEditor(jucePluginEditorLib::Processor& _processor, const jucePluginEditorLib::Skin& _skin)
 		: jucePluginEditorLib::Editor(_processor, _skin)
@@ -63,6 +68,7 @@ namespace mdJucePlugin
 				return data ? std::string(data, size) : std::string();
 			},
 			[this](const json::Value& _m) { onPageMessage(_m); });
+		m_page->setUserZoom(getProcessor().getConfig().getDoubleValue(g_zoomKey, 1.0));
 		m_audio = std::make_unique<AudioMidiLink>(getProcessor(), [this](json::Value _m) { m_page->send(std::move(_m)); });
 		if(m_session)
 			m_session->setLog([this](const std::string& _l) { if(m_page) m_page->log(juce::String(_l)); });
@@ -147,6 +153,11 @@ namespace mdJucePlugin
 				chooseSyx(row->handler.action == deskHost::Action::SyxExport);
 				m_page->send(deskCore::resultMessage(_message, {}, {}));
 			}
+			else if(row->handler.action == deskHost::Action::PageZoom)
+			{
+				setZoom(static_cast<int>(_message.find("step")->asNumber()));
+				m_page->send(deskCore::resultMessage(_message, {}, {}));
+			}
 			else if(row->handler.action == deskHost::Action::Menu)
 			{
 				// The editor's menu (skins, scale, settings) where the page was right-clicked.
@@ -159,6 +170,47 @@ namespace mdJucePlugin
 		}
 		if(m_session)
 			m_session->onPageMessage(_message);
+	}
+
+	void PageEditor::setZoom(const int _step, const double _zoom)
+	{
+		if(!m_page)
+			return;
+		const double z = pageZoom::clampUser(_step == 2 ? _zoom : pageZoom::step(m_page->userZoom(), _step));
+		m_page->setUserZoom(z);
+		auto& config = getProcessor().getConfig();
+		config.setValue(g_zoomKey, z);
+		config.saveIfNeeded();
+		layout();
+	}
+
+	void PageEditor::fillZoomMenu(juceRmlUi::Menu& _menu)
+	{
+		if(!m_page)
+			return;
+		const double now = m_page->userZoom();
+#if JUCE_MAC
+		const std::string key = "Cmd";
+#else
+		const std::string key = "Ctrl";
+#endif
+		// The actions run after the menu closed; the window may have closed by then.
+		const auto act = [this, alive = std::weak_ptr<int>(m_alive)](const int _step, const double _zoom)
+		{
+			return [this, alive, _step, _zoom]
+			{
+				if(!alive.expired())
+					setZoom(_step, _zoom);
+			};
+		};
+		juceRmlUi::Menu zoom;
+		zoom.addEntry("Zoom In (" + key + " +)", now < pageZoom::g_steps.back() - 0.001, false, act(1, 0));
+		zoom.addEntry("Zoom Out (" + key + " -)", now > pageZoom::g_steps.front() + 0.001, false, act(-1, 0));
+		zoom.addEntry("Actual Size (" + key + " 0)", act(0, 0));
+		zoom.addSeparator();
+		for(const double s : pageZoom::g_steps)
+			zoom.addEntry(std::to_string(static_cast<int>(s * 100 + 0.5)) + " %", std::abs(s - now) < 0.001, act(2, s));
+		_menu.addSubMenu("Page Zoom (" + std::to_string(static_cast<int>(now * 100 + 0.5)) + " %)", std::move(zoom));
 	}
 
 	void PageEditor::chooseRom()

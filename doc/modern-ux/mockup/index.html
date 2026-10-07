@@ -1011,10 +1011,12 @@ html,body{min-width:1280px}
 /* v45: soft gliding playhead instead of white boxes */
 #seq{position:relative}
 .st.ph{box-shadow:none!important;outline:none!important}
+/* B-008: clearly visible on both plates: a solid LED-coloured edge and a tinted column (the faint screen-blended
+   version disappeared on the white plate, and entirely on an older WebKit) */
 #phcol{position:absolute;left:0;top:0;pointer-events:none;z-index:2;opacity:0;border-radius:5px;
- background:linear-gradient(to bottom,color-mix(in srgb,var(--led) 16%,transparent),color-mix(in srgb,var(--led) 7%,transparent));
- box-shadow:0 0 0 1px color-mix(in srgb,var(--led) 45%,transparent),0 0 14px color-mix(in srgb,var(--led) 22%,transparent);mix-blend-mode:screen;will-change:transform}
-:root[data-plate="mk1"] #phcol{mix-blend-mode:normal;background:color-mix(in srgb,var(--led) 20%,transparent);box-shadow:0 0 0 1px color-mix(in srgb,var(--led) 70%,transparent),0 0 12px color-mix(in srgb,var(--led) 30%,transparent)}
+ background:linear-gradient(to bottom,color-mix(in srgb,var(--led) 30%,transparent),color-mix(in srgb,var(--led) 18%,transparent));
+ box-shadow:0 0 0 2px var(--led),0 0 16px color-mix(in srgb,var(--led) 40%,transparent);will-change:transform}
+:root[data-plate="mk1"] #phcol{background:color-mix(in srgb,var(--led) 26%,transparent);box-shadow:0 0 0 2px var(--led),0 0 12px color-mix(in srgb,var(--led) 45%,transparent)}
 /* v46: LCD fields have fixed widths, so values never resize the LCD */
 .lcdpanel b,.lcd2{font-variant-numeric:tabular-nums}
 #bpm,#pos,#lockn{display:inline-block;width:5.2ch;min-width:0!important;text-align:left}
@@ -1222,8 +1224,12 @@ body{box-sizing:border-box;overflow:hidden}
 .soundgrid>.lfocard{grid-template-rows:auto minmax(0,1fr)!important}
 .soundgrid .lfoin{min-height:0;align-items:stretch}
 .soundgrid .lfoin canvas.ed{height:100%!important;min-height:150px}
-/* Mix: the faders take the height the page has left */
-.fader{height:clamp(132px,calc(100vh - 770px),320px)!important}
+/* Mix: the faders take the height the page has left, up to a fader's length (B-004: a taller one looked oversized);
+   the master effects' screens take the rest, so the page ends at the window's bottom at every height */
+.fader{height:clamp(132px,calc(100vh - 690px),240px)!important}
+#main>.fx4{flex:1 1 auto;min-height:0;align-items:stretch}
+.fx4>.card{min-height:0;grid-template-rows:auto minmax(96px,1fr) auto;align-content:stretch}
+.fx4>.card>canvas.ed.sm{height:100%!important;min-height:96px}
 </style>
 <link rel="stylesheet" href="../../../source/elektron/md/mdJucePlugin/skins/shared/deskLcd.css">
 <link rel="stylesheet" href="../../../source/elektron/md/mdJucePlugin/skins/shared/deskModal.css">

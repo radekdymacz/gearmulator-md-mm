@@ -8,9 +8,10 @@ where it came from, the setup, what happens, what should happen, status.*
 
 - **From:** Discord tester (versonegro), macOS 12, 2026-10-07, with a screen recording.
 - **What happens:** on the Sequence page the moving play head does not show with the MK1 (white) plate; with the MK2 (black) plate it shows, but faintly.
-- **Likely cause:** the play-head colour uses CSS the macOS 12 WebKit drops (`color-mix`, see B-001).
 - **Should:** a clearly visible play head on both plates, on every supported macOS.
-- **Status:** open, with the old-WebKit fix.
+- **Cause:** the play head (`#phcol`) was drawn only with `color-mix()`: its tint and edge, and on the MK1 plate all of it, so the macOS 12 WebKit dropped it (B-001). On MK2 it was faint even on a current WebKit (a 1 px edge at 45 %, screen-blended).
+- **Fix (branch `fix/plugin-window-fit`):** `deskCompat.js` gives an older WebKit the same colours (B-001); the play head has a solid 2 px LED-coloured edge and a stronger tint on both plates (MD), and a 2 px ink edge on the Monomachine Editor's roll. Checked on MK1 and MK2, with and without the rewrite (`?compat=force`).
+- **Status:** fixed on the branch, not yet released.
 
 ## B-007 · "Settings" in the right-click menu does not open
 
@@ -39,7 +40,9 @@ where it came from, the setup, what happens, what should happen, status.*
 - **From:** the same Discord screenshot as B-001, 2026-10-07.
 - **What happens:** on the MIX workspace the volume faders stretch very tall and the strips look oversized.
 - **Should:** the page keeps sensible proportions at every window size; faders have a maximum height.
-- **Status:** open, part of the window-size review.
+- **Cause:** the page laid itself out in whatever height the window had: the MD faders grew with it up to 320 px, and below the master effects (MD) or between the strips and the routing (MM) an empty band was left (Radek's Live window showed it too, about 80 pt).
+- **Fix (branch `fix/plugin-window-fit`):** a window larger than the design (1440 x 924) both ways zooms the page up by its smaller side, so the page keeps the design's proportions (`mdPageZoom.h`); the MD faders stop at 240 px and the master effects' screens take the height that is left, so the page ends at the window's bottom; the MM routing follows right under the strips. Checked in a browser harness from 864 x 554 to 3440 x 1440 and at portrait sizes, every workspace of both editors.
+- **Status:** fixed on the branch, not yet released.
 
 ## B-003 · First start: the ROM loads twice
 
@@ -68,4 +71,12 @@ where it came from, the setup, what happens, what should happen, status.*
 - **More evidence (second screenshot, same tester):** the header LCD has no inner borders, the transport buttons are not boxed, and SETUP (UNDO/REDO/MKI) is cut off; on Radek's newer macOS all of it renders correctly.
 - **Likely cause:** macOS 12's system WebKit (Safari 15 engine) does not support some CSS the page uses (e.g. container-query units, color-mix), so those rules are dropped. Fix: fallbacks for the oldest supported WebKit, and an honest minimum macOS version.
 - **Update 2026-10-07:** the tester says the cut-off window was their own setting (the editor size is in the right-click menu). The missing LCD borders are still real (old WebKit, see above).
-- **Status:** window size: not a bug (discoverability: add ⌘− / ⌘+ zoom). Old-WebKit rendering: open, being fixed.
+- **Cause, rendering:** the editor's web view is the system WebKit, the one the installed Safari brought; macOS 12 with Safari 15 is WebKit 15. Both stylesheets use `color-mix()` (WebKit 16.2) about 70 times (no container queries, no `@layer`, no nesting): WebKit 15 drops each declaration that has one, and the LCD's rule variable (`--lrule`, a mix) makes every LCD divider invalid; that is the second screenshot. `:focus-visible` (WebKit 15.4) drops whole rules that list it (hover states), and `structuredClone` (15.4) is missing for the Monomachine page. The play head (B-008) is the same cause.
+- **Cause, size:** the window size was the tester's GUI Scale, but nothing kept it on the screen: a plug-in's editor opened at whatever size was set or last used (the standalone's included), larger than a 1440 x 900 screen, its right part, SETUP and resize corner off the screen; and the page had no zoom of its own.
+- **Fix (branch `fix/plugin-window-fit`):**
+  - `skins/shared/deskCompat.js`, first in both pages' `<head>`: where the engine lacks `color-mix()` or `:focus-visible` it rewrites the stylesheets before the first paint (each mix as the same `rgba()`, through channel variables beside each colour variable, so themes and plates still apply; `:focus-visible` as `:focus`), and adds `structuredClone`. A current engine keeps the stylesheets as written. Forced on (`?compat=force`) in Chrome it draws the MD page pixel for pixel like the original. `deskCompatTest.js` checks every mix in both stylesheets is rewritten. Left alone (an older WebKit skips them, nothing breaks): four `:has()` rules (WebKit 15.4) and `subgrid` (16) in alignment details, `scrollbar-gutter`, `overscroll-behavior`, `accent-color`.
+  - A plug-in's editor is never larger than its screen (less 64 pt for the host's bars): `windowFit::fitPluginSize`, applied once the host shows the window, not stored as the user's size.
+  - The page always fits its window: narrower than 1440 or shorter than 720 CSS px zooms it out, larger both ways zooms it up (`mdPageZoom.h`); where the web view has no `pageZoom` (macOS 10.15 and older) the page's CSS zoom does the same.
+  - The page's own zoom: **Page Zoom** in the editor's menu (right-click on the page's header, the standalone's Editor menu) with Zoom In / Zoom Out / Actual Size and 50-200 % steps, and ⌘− / ⌘+ / ⌘0 on the page (`deskZoom.js`, the `pageZoom` command), remembered in the editor's config.
+- **Minimum macOS:** 12 (Monterey), any Safari 15 or later. macOS 11 with Safari 15 should work the same (not tested); macOS 10.15 and older lack flex `gap` and `inset` (Safari 14.1) unless Safari was updated, and are not supported. The build's deployment target (10.13) is not a claim.
+- **Status:** fixed on the branch, not yet released. To confirm with the tester: Safari's version (Safari > About Safari).

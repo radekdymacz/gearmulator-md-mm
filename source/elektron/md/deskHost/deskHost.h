@@ -43,7 +43,8 @@ namespace deskHost
 		RomInfo,			// the installed firmware: name, OS, size, where (answered with a romInfo message)
 		RemoveRom,			// delete the firmware from the editor's ROM folder (the page asked the user first)
 		NoticeAnswer,		// the button the user pressed on a notice (a message the plug-in has for the user)
-		ChooseSample		// P9: the native file chooser for a sample (WAV, AIFF) for a UW ROM slot
+		ChooseSample,		// P9: the native file chooser for a sample (WAV, AIFF) for a UW ROM slot
+		PageZoom			// B-001: the page's zoom one step smaller, larger or back to 100 % (Cmd - / Cmd + / Cmd 0)
 	};
 
 	// Who acts on a row: the session (it outlives the window) or the window (the menu and the

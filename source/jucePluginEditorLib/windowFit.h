@@ -47,5 +47,20 @@ namespace jucePluginEditorLib
 			r.y = std::max(top, std::min(r.y, bottom - r.h));
 			return r;
 		}
+
+		// A plug-in's editor (B-001): the host places its window and draws its own bars around it (a title bar,
+		// Live's device bar: g_hostBars tall, a guess that holds for the hosts we know), so the editor only
+		// chooses its size: no larger than the visible area less those bars, never smaller than _min. A window
+		// the size of the design (1440 x 924) on a 1440 x 900 screen otherwise hangs off the screen, its
+		// right and bottom parts and its resize corner out of reach. The position is the content's own.
+		inline constexpr int g_hostBars = 64;
+
+		inline Rect fitPluginSize(const Rect& _content, const Rect& _visible, const int _minW, const int _minH, const bool _keepAspect)
+		{
+			auto r = fit(_content, {g_hostBars, 0, 0, 0}, _visible, _minW, _minH, _keepAspect);
+			r.x = _content.x;
+			r.y = _content.y;
+			return r;
+		}
 	}
 }

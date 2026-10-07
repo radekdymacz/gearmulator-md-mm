@@ -32,7 +32,7 @@ list(APPEND SOURCES
 	mdStandaloneApp.cpp
 	mdDeskSession.cpp mdDeskSession.h
 	mdMidiLearnCommands.cpp mdMidiLearnCommands.h
-	mdPageEditor.cpp mdPageEditor.h
+	mdPageEditor.cpp mdPageEditor.h mdPageZoom.h
 	mdRomInstall.cpp mdRomInstall.h
 	mdSettingsMigration.cpp mdSettingsMigration.h
 	mdSessionMd.cpp mdSessionMm.cpp mdSessions.h
@@ -91,7 +91,9 @@ list(APPEND SOURCES
 	skins/shared/deskOverlay.js skins/shared/deskOverlayTest.js
 	skins/shared/deskGen.js skins/shared/deskGenTest.js
 	skins/shared/deskKeys.js skins/shared/deskKeysTest.js
-	skins/shared/deskTogglePaint.js skins/shared/deskTogglePaintTest.js)
+	skins/shared/deskTogglePaint.js skins/shared/deskTogglePaintTest.js
+	skins/shared/deskCompat.js skins/shared/deskCompatTest.js
+	skins/shared/deskZoom.js)
 
 # P6: the editors' diagnostics (the log of the web view, the window chrome and the session's
 # state, and the pages' self-tests: mdDeskSelfTest.js, mmSelfTest.js) observe the editors. Off by
@@ -117,7 +119,7 @@ endif()
 set(MD_SHARED_PAGE_FILES
 	"skins/shared/deskModal.js" "skins/shared/deskCaps.js" "skins/shared/deskBoot.js" "skins/shared/deskSyx.js" "skins/shared/deskBridge.js"
 	"skins/shared/deskDocs.js" "skins/shared/deskOverlay.js" "skins/shared/deskGen.js" "skins/shared/deskKeys.js" "skins/shared/deskTogglePaint.js"
-	"skins/shared/deskAudio.js")
+	"skins/shared/deskAudio.js" "skins/shared/deskCompat.js" "skins/shared/deskZoom.js")
 file(GLOB MD_SKIN_ASSETS CONFIGURE_DEPENDS
 	"skins/mdStudio/*.rml" "skins/mdStudio/*.html" "skins/mdStudio/mdDesk.css" "skins/mdStudio/*.js"
 	"skins/mdStudio/fonts/*.woff2" "skins/mdStudio/fonts/*.ttf")
@@ -126,7 +128,9 @@ file(GLOB MM_SKIN_ASSETS CONFIGURE_DEPENDS
 	"skins/mmStudio/*.rml" "skins/mmStudio/*.html" "skins/mmStudio/mmStudio.css"
 	"skins/mmStudio/mmMockup.js" "skins/mmStudio/mmConvert.js" "skins/mmStudio/mmAdapter.js" "skins/mmStudio/mmView.js"
 	# shared with the Machinedrum Editor: the page bridge, the document store and its overlays, the OFL fonts
-	"skins/shared/deskBridge.js" "skins/shared/deskDocs.js" "skins/shared/deskOverlay.js" "skins/mdStudio/fonts/*.ttf")
+	"skins/shared/deskBridge.js" "skins/shared/deskDocs.js" "skins/shared/deskOverlay.js" "skins/mdStudio/fonts/*.ttf"
+	# the older-WebKit rewrite (B-001), first in the page's <head>; the page's zoom keys
+	"skins/shared/deskCompat.js" "skins/shared/deskZoom.js")
 # The tests are not the page, named one by one, not by a file-name pattern: the node tests never
 # ship, the self-tests only with the diagnostics. A test that was renamed or moved stops the
 # configure, so it cannot slip into the glob. The MM glob lists its page files already.
@@ -142,7 +146,7 @@ set(MM_NODE_TESTS "skins/mmStudio/mmConvertTest.js" "skins/mmStudio/mmKeysTest.j
 	"skins/mmStudio/mmViewTest.js" "skins/mmStudio/mmViewFixture.json")
 # the shared page files' node tests (never in a glob, so never shipped); checked to be there
 set(SHARED_NODE_TESTS "skins/shared/deskGenTest.js" "skins/shared/deskOverlayTest.js" "skins/shared/deskBridgeTest.js"
-	"skins/shared/deskTogglePaintTest.js" "skins/shared/deskKeysTest.js" "skins/shared/deskModalTest.js")
+	"skins/shared/deskTogglePaintTest.js" "skins/shared/deskKeysTest.js" "skins/shared/deskModalTest.js" "skins/shared/deskCompatTest.js")
 foreach(test ${MD_NODE_TESTS} ${MD_SELF_TESTS} ${MM_SELF_TESTS} ${MM_NODE_TESTS} ${SHARED_NODE_TESTS} ${MD_SHARED_PAGE_FILES})
 	if(NOT EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/${test}")
 		message(FATAL_ERROR "${test} is not there: update the editors' test lists in ${CMAKE_CURRENT_LIST_FILE}")
@@ -291,6 +295,9 @@ function(mdmm_plugin_targets)
 		# the question dialog's queue (both editors): nothing replaces it, a plug-in notice is always answered
 		add_test(NAME deskModalPageTest COMMAND ${GEARMULATOR_NODE} ${CMAKE_CURRENT_SOURCE_DIR}/skins/shared/deskModalTest.js)
 		set_tests_properties(deskModalPageTest PROPERTIES LABELS "UnitTest" TIMEOUT 60)
+		# the pages on an older WebKit (B-001, macOS 12): the stylesheets without color-mix() and :focus-visible
+		add_test(NAME deskCompatPageTest COMMAND ${GEARMULATOR_NODE} ${CMAKE_CURRENT_SOURCE_DIR}/skins/shared/deskCompatTest.js)
+		set_tests_properties(deskCompatPageTest PROPERTIES LABELS "UnitTest" TIMEOUT 60)
 		# the MD page's wiring on its own scripts: solo and the machine's mutes, renders held by a gesture, prepared mutes
 		add_test(NAME mdDeskPageTest COMMAND ${GEARMULATOR_NODE} ${CMAKE_CURRENT_SOURCE_DIR}/skins/mdStudio/mdDeskPageTest.js)
 		set_tests_properties(mdDeskPageTest PROPERTIES LABELS "UnitTest" TIMEOUT 60)

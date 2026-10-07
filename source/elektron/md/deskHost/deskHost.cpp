@@ -79,6 +79,8 @@ namespace deskHost
 			row("syxExport", {}, "every document the editor holds, as one .syx: the window's native save dialog", Action::SyxExport, Actor::Window),
 			row("midi", {bytes}, "a channel message from the page: [status 0x80-0xef, data, data]", Action::Midi),
 			row("openMenu", {}, "the editor's menu", Action::Menu, Actor::Window),
+			row("pageZoom", {{"step", ArgType::Integer, -1, 1}},
+				"the page's zoom one step smaller (-1), larger (1) or back to 100 % (0); the window remembers it", Action::PageZoom, Actor::Window),
 			row("learnStart", {t, pg, i}, "MIDI learn a track's parameter (learn.doc.limits: which)", Action::LearnStart),
 			row("learnAdd", {{"cc", ArgType::Integer, 0, 127}, t, pg, i, {"ch", ArgType::Integer, 0, 15, true}},
 				"a CC mapping without learning, on channel ch (none: all channels)", Action::LearnAdd),

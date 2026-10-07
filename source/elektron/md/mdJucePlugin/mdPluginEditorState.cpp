@@ -2,6 +2,7 @@
 
 #include "mdEditor.h"
 #include "mdEditorPages.h"
+#include "mdPageEditor.h"
 #include "mdPluginProcessor.h"
 #include "mdProductSkinPolicy.h"
 #include "mdStandaloneRendererPolicy.h"
@@ -104,6 +105,10 @@ namespace mdJucePlugin
 		diagnostics.addSeparator();
 		diagnostics.addEntry(processor.performanceDiagnosticsStatus(), false, false, {});
 		_menu.addSubMenu("Performance diagnostics", std::move(diagnostics));
+
+		// B-001: the editor page's zoom (mdPageEditor.h; a hook, doc/modern-ux/UPSTREAM.md)
+		if(auto* page = dynamic_cast<PageEditor*>(getEditor()))
+			page->fillZoomMenu(_menu);
 
 		auto* const editor = dynamic_cast<Editor*>(getEditor());
 		if(!editor)

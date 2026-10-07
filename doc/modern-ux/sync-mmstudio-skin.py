@@ -68,7 +68,7 @@ m = open(SRC + body_file).read()
 # mmSelfTest.js before the mockup: the self-tests, in the plug-in only with the diagnostics (an empty
 # script otherwise); it sets window.MMDiagnostics, where the mockup puts what only tests may touch.
 # deskJourney.js and mmJourneys.js last: the user journeys, diagnostics builds only too (FOUNDATION.md, Build and check).
-SCRIPTS = ['deskBridge.js', 'deskDocs.js', 'deskOverlay.js', 'mmAdapter.js', 'mmSelfTest.js', 'mmMockup.js', 'mmConvert.js', 'mmView.js',
+SCRIPTS = ['deskBridge.js', 'deskZoom.js', 'deskDocs.js', 'deskOverlay.js', 'mmAdapter.js', 'mmSelfTest.js', 'mmMockup.js', 'mmConvert.js', 'mmView.js',
            'deskJourney.js', 'mmJourneys.js']
 page = '''<!doctype html>
 <html lang="en">
@@ -80,6 +80,8 @@ page = '''<!doctype html>
      mmMockup.js are copied by doc/modern-ux/sync-mmstudio-skin.py; do not edit
      them by hand. The editor inlines stylesheet, scripts and fonts. -->
 <link rel="stylesheet" href="mmStudio.css">
+<!-- first, before the page draws: the stylesheet without what an older WebKit lacks (macOS 12) -->
+<script src="deskCompat.js"></script>
 </head>
 <body>
 %s
