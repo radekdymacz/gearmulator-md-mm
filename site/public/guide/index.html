@@ -85,10 +85,10 @@
     <p>Over HW MIDI, some controls are disabled because the machine has no MIDI message for them. The editor says why. Use the standalone app for HW MIDI: in a DAW it is off, because the plug-in has no MIDI output to the machine.</p>
 
     <h2 id="daw">In a DAW</h2>
-    <p>After the installer, rescan plug-ins in your DAW. The plug-ins are called <b>Gearmulator MD</b> and <b>Gearmulator MM</b>, as VST3 and AU instruments. They follow the DAW's tempo and transport. The plug-in window shows the same editor, and the same start-up card if the ROM is missing.</p>
+    <p>After the installer, rescan plug-ins in your DAW. The plug-ins are called <b>Machinedrum Editor</b> and <b>Monomachine Editor</b> (by NativeKloud), as VST3 and AU instruments. Up to 0.3.1 they were called Gearmulator MD and Gearmulator MM: the installer removes those, and projects saved with them open with the new names. They follow the DAW's tempo and transport. The plug-in window shows the same editor, and the same start-up card if the ROM is missing.</p>
     <p>If a DAW will not load the AU, macOS may have quarantined it. In Terminal run:</p>
-    <p><code>xattr -dr com.apple.quarantine "/Library/Audio/Plug-Ins/Components/Gearmulator MD.component"</code></p>
-    <p>Use <code>Gearmulator MM.component</code> for the Monomachine, and <code>~/Library/Audio/Plug-Ins/Components</code> if you installed for yourself only. Then rescan plug-ins.</p>
+    <p><code>xattr -dr com.apple.quarantine "/Library/Audio/Plug-Ins/Components/Machinedrum Editor.component"</code></p>
+    <p>Use <code>Monomachine Editor.component</code> for the Monomachine, and <code>~/Library/Audio/Plug-Ins/Components</code> if you installed for yourself only. Then rescan plug-ins.</p>
 
     <h2 id="workspaces">Workspaces</h2>
     <p>Each editor has five workspaces. Switch with the tabs, or with the keys <kbd>1</kbd> to <kbd>5</kbd>.</p>
@@ -199,8 +199,8 @@
     <p>Delete the three bundles of each editor. Your ROM and your settings are not touched.</p>
     <div class="tablewrap"><table><tbody>
       <tr><th scope="row">App</th><td><code>Machinedrum Editor.app</code> and <code>Monomachine Editor.app</code> in <code>/Applications</code> (or <code>~/Applications</code>)</td></tr>
-      <tr><th scope="row">VST3</th><td><code>Gearmulator MD.vst3</code> and <code>Gearmulator MM.vst3</code> in <code>/Library/Audio/Plug-Ins/VST3</code> (or <code>~/Library/Audio/Plug-Ins/VST3</code>)</td></tr>
-      <tr><th scope="row">AU</th><td><code>Gearmulator MD.component</code> and <code>Gearmulator MM.component</code> in <code>/Library/Audio/Plug-Ins/Components</code> (or <code>~/Library/Audio/Plug-Ins/Components</code>)</td></tr>
+      <tr><th scope="row">VST3</th><td><code>Machinedrum Editor.vst3</code> and <code>Monomachine Editor.vst3</code> in <code>/Library/Audio/Plug-Ins/VST3</code> (or <code>~/Library/Audio/Plug-Ins/VST3</code>)</td></tr>
+      <tr><th scope="row">AU</th><td><code>Machinedrum Editor.component</code> and <code>Monomachine Editor.component</code> in <code>/Library/Audio/Plug-Ins/Components</code> (or <code>~/Library/Audio/Plug-Ins/Components</code>)</td></tr>
     </tbody></table></div>
     <p class="small">Questions or bugs: <a href="/contact/">contact</a>. Release notes: <a href="https://github.com/radekdymacz/gearmulator-md-mm/blob/main/doc/release/v0.3.0.md">0.3.0</a>.</p>
   </div>

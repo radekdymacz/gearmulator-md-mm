@@ -23,7 +23,7 @@ Output, under `temp/videos/<demo>-<date>/` (gitignored; `MDMM_DEMO_OUT` for else
 
 ## How it works
 
-1. **The app.** The script starts the diagnostics standalone (`bin/plugins/Release/Standalone/Gearmulator MD.app`, or
+1. **The app.** The script starts the diagnostics standalone (`bin/plugins/Release/Standalone/Machinedrum Editor.app`, or
    `MDMM_APP_DIR`) from its path with `GEARMULATOR_MDSTUDIO_SELFTEST=demo-md-<name>`. Everything after that goes by
    its process id, never by the bundle id: an older download of the app has the same id, and a lookup by id would
    launch that one (it rewrites the editor's config for its own skins). Before the start the editor's config and the
