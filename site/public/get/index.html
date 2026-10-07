@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Choose — MD + MM Editor</title>
-<meta name="description" content="Choose the Machinedrum Editor or the Monomachine Editor.">
+<meta name="description" content="Choose the Machinedrum Editor or the Monomachine Editor. For macOS (Intel and Apple silicon); a Windows build is there too, not tested.">
 <meta name="color-scheme" content="light">
 <meta name="theme-color" content="#fbfbf7">
 <link rel="canonical" href="https://mdmm.dev/get/">
@@ -14,19 +14,19 @@
 <meta property="og:type" content="website">
 <meta property="og:site_name" content="MD + MM Editor">
 <meta property="og:title" content="MD + MM Editor — free editors for Machinedrum and Monomachine">
-<meta property="og:description" content="Free desktop editors for the Elektron Machinedrum and Monomachine. The real firmware, emulated, or your own machine over MIDI. VST3, AU and app for macOS.">
+<meta property="og:description" content="Free desktop editors for the Elektron Machinedrum and Monomachine. The real firmware, emulated, or your own machine over MIDI. VST3, AU and app for macOS (Intel and Apple silicon). Windows build, not tested.">
 <meta property="og:url" content="https://mdmm.dev/get/">
 <meta property="og:image" content="https://mdmm.dev/og.png">
 <meta property="og:image:width" content="1200">
 <meta property="og:image:height" content="630">
-<meta property="og:image:alt" content="Editor screenshot: the Machinedrum Editor's step grid with a drawn lock lane.">
+<meta property="og:image:alt" content="Free editors for Machinedrum and Monomachine, beside a screenshot of the Machinedrum Editor's step grid and GEN bar.">
 <meta name="twitter:card" content="summary_large_image">
 <meta name="twitter:title" content="MD + MM Editor — free editors for Machinedrum and Monomachine">
-<meta name="twitter:description" content="Free desktop editors for the Elektron Machinedrum and Monomachine. VST3, AU and app for macOS.">
+<meta name="twitter:description" content="Free desktop editors for the Elektron Machinedrum and Monomachine. VST3, AU and app for macOS (Intel and Apple silicon). Windows build, not tested.">
 <meta name="twitter:image" content="https://mdmm.dev/og.png">
 <link rel="stylesheet" href="/design/tokens.css">
-<link rel="stylesheet" href="/assets/site.css?v=20261007">
-<script src="/assets/theme.js"></script>
+<link rel="stylesheet" href="/assets/site.css?v=20261008">
+<script src="/assets/theme.js?v=20261008"></script>
 </head>
 <body data-step="1">
 <a class="skip" href="#main">Skip to content</a>
@@ -35,7 +35,7 @@
     <a class="brand" href="/" aria-label="MD + MM Editor, home"><i class="dot" aria-hidden="true"></i><b>MD + MM Editor</b></a>
     <nav class="nav" aria-label="Main">
       <a class="opt" href="/#features">Features</a>
-      <a class="opt" href="/guide/">Guide</a>
+      <a class="keep" href="/guide/">Guide</a>
       <a class="opt" href="/#faq">FAQ</a>
       <button class="themebtn" type="button" data-theme-toggle aria-label="Switch to dark theme"><svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="6.5" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M8 1.5a6.5 6.5 0 0 1 0 13z" fill="currentColor"/></svg></button>
       <a class="btn btn-primary btn-sm" href="/get/">Download free</a>
@@ -51,8 +51,8 @@
       <fieldset>
         <legend class="sr">Choose the editor</legend>
         <div class="choices two">
-          <label class="choice"><input type="radio" name="ed" value="md" checked><span class="card"><img src="/icons/md-icon.svg" alt="" width="36" height="36"><span><b>Machinedrum Editor</b><small>MKI, MKII and UW · needs OS 1.63</small></span></span></label>
-          <label class="choice"><input type="radio" name="ed" value="mm"><span class="card"><img src="/icons/mm-icon.svg" alt="" width="36" height="36"><span><b>Monomachine Editor</b><small>SFX-6 and SFX-60 · needs OS 1.32B</small></span></span></label>
+          <label class="choice"><input type="radio" name="ed" value="md" checked><span class="card"><img src="/icons/md-icon.svg" alt="" width="36" height="36"><span><b>Machinedrum Editor</b><small>Needs the Machinedrum OS 1.63 image</small></span></span></label>
+          <label class="choice"><input type="radio" name="ed" value="mm"><span class="card"><img src="/icons/mm-icon.svg" alt="" width="36" height="36"><span><b>Monomachine Editor</b><small>Needs the Monomachine OS 1.32B image</small></span></span></label>
         </div>
       </fieldset>
       <div class="osrow"><span class="small">Your system</span><div class="seg" id="os" role="group" aria-label="Operating system"></div></div>
@@ -74,7 +74,7 @@
 </footer>
 
 <script src="/config.js"></script>
-<script src="/assets/main.js" defer></script>
-<script src="/assets/get.js?v=20261007" defer></script>
+<script src="/assets/main.js?v=20261008" defer></script>
+<script src="/assets/get.js?v=20261008" defer></script>
 </body>
 </html>

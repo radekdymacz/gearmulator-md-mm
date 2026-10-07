@@ -20,9 +20,9 @@ window.MDMM_CONFIG = {
   downloads: {
     mac: {
       label: "macOS",
-      line: "macOS · the app, VST3 and AU in one installer",
-      md: { name: "Machinedrum Editor", url: "https://github.com/radekdymacz/gearmulator-md-mm/releases/latest/download/Machinedrum-Editor-macOS.pkg" },
-      mm: { name: "Monomachine Editor", url: "https://github.com/radekdymacz/gearmulator-md-mm/releases/latest/download/Monomachine-Editor-macOS.pkg" }
+      line: "macOS (Intel and Apple silicon) · the app, VST3 and AU in one installer",
+      md: { name: "Machinedrum Editor", url: "https://github.com/radekdymacz/gearmulator-md-mm/releases/latest/download/Machinedrum-Editor-macOS.pkg", dmg: "https://github.com/radekdymacz/gearmulator-md-mm/releases/latest/download/Machinedrum-Editor-macOS.dmg" },
+      mm: { name: "Monomachine Editor", url: "https://github.com/radekdymacz/gearmulator-md-mm/releases/latest/download/Monomachine-Editor-macOS.pkg", dmg: "https://github.com/radekdymacz/gearmulator-md-mm/releases/latest/download/Monomachine-Editor-macOS.dmg" }
     },
     win: {
       label: "Windows",
@@ -40,7 +40,9 @@ window.MDMM_CONFIG = {
   // No Lemon Squeezy script is loaded. provider: "auto" (Lemon Squeezy when checkoutUrl is set,
   // otherwise download only) | "lemonsqueezy" | "none".
   payments: {
-    provider: "auto",
+    // "none" while the Lemon Squeezy store is not approved: the download page shows a plain Download button.
+    // Switch back to "auto" once the store is live (the checkoutUrl below is kept for that).
+    provider: "none",
     lemonsqueezy: {
       // The product's share link (Products > the product > Share), e.g.
       // https://YOURSTORE.lemonsqueezy.com/buy/xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx

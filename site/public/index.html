@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>MD + MM Editor — free editors for Machinedrum and Monomachine</title>
-<meta name="description" content="Free desktop editors for the Elektron Machinedrum and Monomachine: VST3, AU and app for macOS. They run the real firmware in an emulator, or drive your own machine over MIDI. Bring your own ROM.">
+<meta name="description" content="Free desktop editors for the Elektron Machinedrum and Monomachine: VST3, AU and app for macOS, plus a Windows build (not tested). They run the real firmware in an emulator, or drive your own machine over MIDI. Bring your own ROM.">
 <meta name="color-scheme" content="light">
 <meta name="theme-color" content="#fbfbf7">
 <link rel="canonical" href="https://mdmm.dev/">
@@ -14,20 +14,20 @@
 <meta property="og:type" content="website">
 <meta property="og:site_name" content="MD + MM Editor">
 <meta property="og:title" content="MD + MM Editor — free editors for Machinedrum and Monomachine">
-<meta property="og:description" content="Free desktop editors for the Elektron Machinedrum and Monomachine. The real firmware, emulated, or your own machine over MIDI. VST3, AU and app for macOS.">
+<meta property="og:description" content="Free desktop editors for the Elektron Machinedrum and Monomachine. The real firmware, emulated, or your own machine over MIDI. VST3, AU and app for macOS (Intel and Apple silicon). Windows build, not tested.">
 <meta property="og:url" content="https://mdmm.dev/">
 <meta property="og:image" content="https://mdmm.dev/og.png">
 <meta property="og:image:width" content="1200">
 <meta property="og:image:height" content="630">
-<meta property="og:image:alt" content="Editor screenshot: the Machinedrum Editor's step grid with a drawn lock lane.">
+<meta property="og:image:alt" content="Free editors for Machinedrum and Monomachine, beside a screenshot of the Machinedrum Editor's step grid and GEN bar.">
 <meta name="twitter:card" content="summary_large_image">
 <meta name="twitter:title" content="MD + MM Editor — free editors for Machinedrum and Monomachine">
-<meta name="twitter:description" content="Free desktop editors for the Elektron Machinedrum and Monomachine. VST3, AU and app for macOS.">
+<meta name="twitter:description" content="Free desktop editors for the Elektron Machinedrum and Monomachine. VST3, AU and app for macOS (Intel and Apple silicon). Windows build, not tested.">
 <meta name="twitter:image" content="https://mdmm.dev/og.png">
 <link rel="preload" as="image" type="image/avif" imagesrcset="/shots/md-seq-mk1-1440.avif 1440w, /shots/md-seq-mk1-2880.avif 2880w" imagesizes="(max-width: 1280px) 100vw, 1216px">
 <link rel="stylesheet" href="/design/tokens.css">
-<link rel="stylesheet" href="/assets/site.css?v=20261007">
-<script src="/assets/theme.js"></script>
+<link rel="stylesheet" href="/assets/site.css?v=20261008">
+<script src="/assets/theme.js?v=20261008"></script>
 </head>
 <body>
 <a class="skip" href="#main">Skip to content</a>
@@ -36,7 +36,7 @@
     <a class="brand" href="/" aria-label="MD + MM Editor, home"><i class="dot" aria-hidden="true"></i><b>MD + MM Editor</b></a>
     <nav class="nav" aria-label="Main">
       <a class="opt" href="/#features">Features</a>
-      <a class="opt" href="/guide/">Guide</a>
+      <a class="keep" href="/guide/">Guide</a>
       <a class="opt" href="/#faq">FAQ</a>
       <button class="themebtn" type="button" data-theme-toggle aria-label="Switch to dark theme"><svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="6.5" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M8 1.5a6.5 6.5 0 0 1 0 13z" fill="currentColor"/></svg></button>
       <a class="btn btn-primary btn-sm" href="/get/">Download free</a>
@@ -83,6 +83,7 @@
   <div class="wrap">
     <div class="sec-head"><span class="eyebrow">Features</span><h2>Everything on the screen, nothing hidden in menus.</h2></div>
     <ul class="feats"><li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="square" aria-hidden="true"><rect x="6" y="6" width="12" height="12"/><path d="M9 3v3M12 3v3M15 3v3M9 18v3M12 18v3M15 18v3M3 9h3M3 12h3M3 15h3M18 9h3M18 12h3M18 15h3"/></svg><div><h3>The real firmware</h3><p>The machine's own OS runs in the emulator.</p></div></li><li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="square" aria-hidden="true"><rect x="3" y="4" width="18" height="14"/><path d="M3 8h18M9 8v10M8 21h8"/></svg><div><h3>One screen per job</h3><p>Five workspaces per editor, every value in view.</p></div></li><li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="square" aria-hidden="true"><path d="M3 5h4v4H3zM10 5h4v4h-4zM17 5h4v4h-4zM3 12h4v4H3zM17 12h4v4h-4z"/><path d="M10 20l3-3 3 2 5-5"/></svg><div><h3>Step grid, drawn locks</h3><p>Draw parameter locks under the steps.</p></div></li><li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="square" aria-hidden="true"><path d="M4 7l8-4 8 4-8 4z"/><path d="M4 12l8 4 8-4M4 17l8 4 8-4"/></svg><div><h3>Kit and pattern library</h3><p>Copy, paste, rename. Everything undoes.</p></div></li><li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="square" aria-hidden="true"><rect x="3" y="4" width="18" height="16"/><path d="M8 4v16M13 4v16M18 4v16"/><path d="M6 4v9M11 4v9M16 4v9" stroke-width="3"/></svg><div><h3>Piano roll for the MM</h3><p>Notes, slides and live recording.</p></div></li><li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="square" aria-hidden="true"><circle cx="12" cy="12" r="7"/><path d="M12 12l4-4M4 20l2-2M20 20l-2-2"/></svg><div><h3>Mix and routing</h3><p>Channel strips and the machine's own routing.</p></div></li></ul>
+    <p class="small more">Also: a rhythm generator (<kbd>R</kbd>, <kbd>⌥</kbd> <kbd>R</kbd>) and Sound MUTATE, Import and Export SysEx in the libraries, drag a kit slot onto another to copy it, Set up sampling, and transpose on the Monomachine Perform page.</p>
     <p class="beta"><span class="tag">Beta</span>Hardware MIDI: edit your own machine over MIDI. Not yet tested on a real one.</p>
   </div>
 </section>
@@ -101,14 +102,14 @@
       <details><summary>Do I need a ROM?</summary><div><p>Yes, your own: Machinedrum OS 1.63 or Monomachine OS 1.32B, a full 8 MiB image. No firmware is included and we can't supply it.</p></div></details>
       <details><summary>How do I add the ROM?</summary><div><p>Open the editor. The start-up card asks for your firmware: click it, choose the <code>.bin</code> (or a <code>.zip</code> with it) in the file chooser, and the editor checks it and copies it into its ROM folder. Drag and drop is not supported. Steps, keys and DAW use are in the <a href="/guide/">user guide</a>.</p></div></details>
       <details><summary>Does it work with my real machine?</summary><div><p>In beta. HW MIDI drives a real Machinedrum or Monomachine over MIDI, but so far it has only been tested against the emulator.</p></div></details>
-      <details><summary>Is it really free?</summary><div><p>Yes, free software under the GPL-3. At download you can name your price; €0 is fine.</p></div></details>
+      <details><summary>Is it really free?</summary><div><p>Yes, free software under the GPL-3. Pay what you want is coming; until then the download is simply free.</p></div></details>
       <details><summary>How do I uninstall it?</summary><div><p>Delete the bundles the installer put in place. For the Machinedrum Editor: <code>Machinedrum Editor.app</code> in <code>/Applications</code>, <code>Gearmulator MD.vst3</code> in <code>/Library/Audio/Plug-Ins/VST3</code> and <code>Gearmulator MD.component</code> in <code>/Library/Audio/Plug-Ins/Components</code>. For the Monomachine Editor: the same with <code>Monomachine Editor.app</code>, <code>Gearmulator MM.vst3</code> and <code>Gearmulator MM.component</code>. If you installed for yourself only, look in <code>~/Applications</code> and <code>~/Library/Audio/Plug-Ins</code>. Your ROM and settings stay where they are.</p></div></details>
       <details><summary>My DAW will not load the AU</summary><div><p>macOS may have quarantined the unsigned component. In Terminal run <code>xattr -dr com.apple.quarantine "/Library/Audio/Plug-Ins/Components/Gearmulator MD.component"</code> (use <code>Gearmulator MM.component</code> for the Monomachine, and <code>~/Library/Audio/Plug-Ins/Components</code> if you installed for yourself only), then rescan plug-ins in your DAW.</p></div></details>
       <details><summary>Known limits</summary><div><ul>
-        <li>Tested on macOS, Apple silicon (M4 Pro). A Windows x64 build (app and VST3) is <a href="https://github.com/radekdymacz/gearmulator-md-mm/releases/latest/download/MD-MM-Editors-Windows-x64-not-tested.zip">available</a> but not tested yet. Linux is coming.</li>
+        <li>Tested on macOS, Apple silicon (M4 Pro). The macOS builds run on Intel and Apple silicon (macOS 10.13 or later). A Windows x64 build (app and VST3) is <a href="https://github.com/radekdymacz/gearmulator-md-mm/releases/latest/download/MD-MM-Editors-Windows-x64-not-tested.zip">available</a> but not tested yet. Linux is coming.</li>
         <li>Not notarised by Apple. On macOS 15 and later the first install is blocked: open System Settings › Privacy &amp; Security, scroll to the message about the installer and choose Open Anyway (then confirm). Right-click → Open no longer works for installers.</li>
         <li>About half a CPU core per instance.</li>
-        <li>Over MIDI: no sample transfers; live recording and chains need the emulator.</li>
+        <li>Over MIDI you can send a WAV or AIFF to a slot (when the port can send SysEx), but samples cannot be read back: no waveforms, no audition. Live recording and chains need the emulator.</li>
         <li>Alpha software: keep backups.</li>
       </ul></div></details>
     </div>
@@ -118,8 +119,8 @@
 <section class="cta">
   <div class="wrap">
     <span class="eyebrow">Download</span>
-    <h2>Free. Name your price if you like.</h2>
-    <p>One installer per machine: the app, VST3 and AU.</p>
+    <h2>Free. Pay what you want is coming.</h2>
+    <p>One installer per machine on macOS: the app, VST3 and AU. A Windows build too, not tested.</p>
     <div class="btns"><a class="btn btn-primary" href="/get/">Download free</a></div>
   </div>
 </section>
@@ -136,6 +137,6 @@
 </footer>
 
 <script src="/config.js"></script>
-<script src="/assets/main.js" defer></script>
+<script src="/assets/main.js?v=20261008" defer></script>
 </body>
 </html>
