@@ -20,7 +20,8 @@ namespace mdJucePlugin
 
 	// A web page in the plug-in (P6: one host for both editors): bundling (stylesheets, scripts
 	// and fonts inlined into one file, which WKWebView may read), the bridge (page -> C++ as
-	// gmbridge:// navigations, C++ -> page as numbered gm.recv([...], seq) calls; on Linux as script files), the outbox (messages wait until
+	// gmbridge:// navigations, C++ -> page as numbered gm.recv([...], seq) calls; on Linux as script files; on Windows WebView2's
+	// postMessage and ExecuteScript instead), the outbox (messages wait until
 	// the page said ready, then go out in batches), a temp file per instance, and the zoom that
 	// fits the page's design width into the window. It knows nothing about documents. How a message travels
 	// is mdPageBridge.h (the transport, pure).
@@ -66,6 +67,8 @@ namespace mdJucePlugin
 		bool m_pageReady = false;
 		// Linux: plug-in -> page as script files beside the page file (mdPageBridge.h), not javascript: URLs.
 		const bool m_fileRecv;
+		// Windows (WebView2, mdWebView2Page.h): plug-in -> page as executed scripts, not javascript: URLs.
+		const bool m_scriptRecv;
 		std::map<uint64_t, juce::File> m_recvFiles;	// written and not yet read by the page, by batch number
 		mutable juce::File m_logFile;	// created on the first line
 	};

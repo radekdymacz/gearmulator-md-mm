@@ -1,0 +1,383 @@
+// The editor page's web view on Windows: WebView2 without JUCE's backend (mdWebView2Page.h). Windows only
+// (mdmmWindowsWebView.cmake adds this file and the WebView2 SDK).
+
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
+#include <windows.h>
+#include <objbase.h>
+#include <wrl.h>
+
+#include "WebView2.h"
+
+#include "mdWebView2Page.h"
+
+#include <cmath>
+#include <deque>
+
+#ifndef MDMM_DIAGNOSTICS
+#define MDMM_DIAGNOSTICS 0
+#endif
+
+namespace mdJucePlugin
+{
+	using Microsoft::WRL::Callback;
+	using Microsoft::WRL::ComPtr;
+
+	namespace
+	{
+		juce::String takeString(LPWSTR _s)
+		{
+			if(_s == nullptr)
+				return {};
+			juce::String result(_s);
+			CoTaskMemFree(_s);
+			return result;
+		}
+
+		juce::String hresultText(const HRESULT _hr)
+		{
+			return "0x" + juce::String::toHexString(static_cast<int>(_hr)).paddedLeft('0', 8);
+		}
+	}
+
+	struct WebView2Page::Impl final : private juce::ComponentMovementWatcher
+	{
+		Impl(WebView2Page& _owner, juce::File _userDataFolder, Callbacks _callbacks)
+			: juce::ComponentMovementWatcher(&_owner)
+			, owner(_owner), callbacks(std::move(_callbacks))
+			, scaleNotifier(&_owner, [this](float) { updateBounds(); })
+		{
+			// WebView2 runs on a single-threaded COM apartment: the message thread's. A host has one already;
+			// the standalone app may not.
+			const auto co = CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
+			comInitialised = co == S_OK || co == S_FALSE;
+			userDataFolder = std::move(_userDataFolder);
+		}
+
+		// After the owner holds this Impl: the loader may call back before it returns.
+		void start()
+		{
+			userDataFolder.createDirectory();
+			const auto folder = userDataFolder.getFullPathName();
+			juce::Component::SafePointer<WebView2Page> safe(&owner);
+			const auto hr = CreateCoreWebView2EnvironmentWithOptions(nullptr, folder.toWideCharPointer(), nullptr,
+				Callback<ICoreWebView2CreateCoreWebView2EnvironmentCompletedHandler>(
+					[safe](const HRESULT _result, ICoreWebView2Environment* _env) -> HRESULT
+					{
+						if(safe == nullptr)
+							return S_OK;
+						auto& self = *safe->m_impl;
+						if(FAILED(_result) || _env == nullptr)
+						{
+							self.fail("the WebView2 environment was not created (" + hresultText(_result) + ")");
+							return S_OK;
+						}
+						self.environment = _env;
+						self.event("WebView2 environment ready");
+						self.createController();
+						return S_OK;
+					}).Get());
+			if(FAILED(hr))
+				fail("no WebView2 runtime (" + hresultText(hr) + ")");
+		}
+
+		~Impl() override
+		{
+			if(controller)
+				controller->Close();
+			controller = nullptr;
+			webView = nullptr;
+			environment = nullptr;
+			if(comInitialised)
+				CoUninitialize();
+		}
+
+		void event(const juce::String& _line) const
+		{
+			if(callbacks.onEvent)
+				callbacks.onEvent(_line);
+		}
+
+		void fail(const juce::String& _why)
+		{
+			failed = true;
+			juce::Logger::writeToLog("Gearmulator editor page: " + _why);
+			event(_why);
+			owner.repaint();
+		}
+
+		HWND parentWindow() const
+		{
+			auto* peer = owner.getPeer();
+			return peer != nullptr ? static_cast<HWND>(peer->getNativeHandle()) : nullptr;
+		}
+
+		// The controller is a child window of the component's peer; it is made once there are both.
+		void createController()
+		{
+			if(environment == nullptr || controller != nullptr || creating)
+				return;
+			const auto parent = parentWindow();
+			if(parent == nullptr)
+				return;
+			creating = true;
+			juce::Component::SafePointer<WebView2Page> safe(&owner);
+			const auto hr = environment->CreateCoreWebView2Controller(parent,
+				Callback<ICoreWebView2CreateCoreWebView2ControllerCompletedHandler>(
+					[safe](const HRESULT _result, ICoreWebView2Controller* _controller) -> HRESULT
+					{
+						if(safe == nullptr)
+						{
+							if(_controller != nullptr)
+								_controller->Close();
+							return S_OK;
+						}
+						auto& self = *safe->m_impl;
+						self.creating = false;
+						if(FAILED(_result) || _controller == nullptr)
+						{
+							self.fail("the WebView2 controller was not created (" + hresultText(_result) + ")");
+							return S_OK;
+						}
+						self.controller = _controller;
+						self.controller->get_CoreWebView2(&self.webView);
+						if(self.webView == nullptr)
+						{
+							self.fail("the WebView2 controller has no web view");
+							return S_OK;
+						}
+						self.ready();
+						return S_OK;
+					}).Get());
+			if(FAILED(hr))
+			{
+				creating = false;
+				fail("CreateCoreWebView2Controller failed (" + hresultText(hr) + ")");
+			}
+		}
+
+		void ready()
+		{
+			ComPtr<ICoreWebView2Settings> settings;
+			if(SUCCEEDED(webView->get_Settings(&settings)) && settings)
+			{
+				settings->put_IsStatusBarEnabled(FALSE);
+				settings->put_IsZoomControlEnabled(FALSE);	// the plug-in sets the zoom (the page's design width)
+				settings->put_AreDevToolsEnabled(MDMM_DIAGNOSTICS ? TRUE : FALSE);
+				ComPtr<ICoreWebView2Settings3> settings3;
+				// F5, Ctrl+R, Ctrl+P, Ctrl+F...: the browser's, not the editor's (a reload would restart the page)
+				if(SUCCEEDED(settings.As(&settings3)) && settings3)
+					settings3->put_AreBrowserAcceleratorKeysEnabled(FALSE);
+			}
+
+			webView->add_NavigationStarting(Callback<ICoreWebView2NavigationStartingEventHandler>(
+				[this](ICoreWebView2*, ICoreWebView2NavigationStartingEventArgs* _args) -> HRESULT
+				{
+					LPWSTR uri = nullptr;
+					_args->get_Uri(&uri);
+					const auto url = takeString(uri);
+					if(callbacks.onNavigation && !callbacks.onNavigation(url))
+						_args->put_Cancel(TRUE);
+					return S_OK;
+				}).Get(), &navigationStartingToken);
+
+			webView->add_NavigationCompleted(Callback<ICoreWebView2NavigationCompletedEventHandler>(
+				[this](ICoreWebView2* _sender, ICoreWebView2NavigationCompletedEventArgs* _args) -> HRESULT
+				{
+					LPWSTR uri = nullptr;
+					_sender->get_Source(&uri);
+					const auto url = takeString(uri);
+					BOOL ok = FALSE;
+					_args->get_IsSuccess(&ok);
+					if(ok)
+					{
+						event("finished loading " + url.substring(0, 60));
+					}
+					else
+					{
+						COREWEBVIEW2_WEB_ERROR_STATUS status = COREWEBVIEW2_WEB_ERROR_STATUS_UNKNOWN;
+						_args->get_WebErrorStatus(&status);
+						// a cancelled navigation (a dropped file, the bridge) is not an error
+						if(status != COREWEBVIEW2_WEB_ERROR_STATUS_OPERATION_CANCELED)
+						{
+							juce::Logger::writeToLog("Gearmulator editor page: load error " + juce::String(static_cast<int>(status)));
+							event("load error " + juce::String(static_cast<int>(status)) + " " + url.substring(0, 60));
+						}
+					}
+					return S_OK;
+				}).Get(), &navigationCompletedToken);
+
+			webView->add_WebMessageReceived(Callback<ICoreWebView2WebMessageReceivedEventHandler>(
+				[this](ICoreWebView2*, ICoreWebView2WebMessageReceivedEventArgs* _args) -> HRESULT
+				{
+					LPWSTR text = nullptr;
+					if(FAILED(_args->TryGetWebMessageAsString(&text)) || text == nullptr)
+						return S_OK;
+					const auto message = takeString(text);
+					if(callbacks.onMessage)
+						callbacks.onMessage(message.toStdString());
+					return S_OK;
+				}).Get(), &webMessageToken);
+
+			// No new windows: a link that asks for one opens nothing (as on macOS).
+			webView->add_NewWindowRequested(Callback<ICoreWebView2NewWindowRequestedEventHandler>(
+				[this](ICoreWebView2*, ICoreWebView2NewWindowRequestedEventArgs* _args) -> HRESULT
+				{
+					LPWSTR uri = nullptr;
+					_args->get_Uri(&uri);
+					event("new window not opened: " + takeString(uri).substring(0, 60));
+					_args->put_Handled(TRUE);
+					return S_OK;
+				}).Get(), &newWindowToken);
+
+			webView->add_ProcessFailed(Callback<ICoreWebView2ProcessFailedEventHandler>(
+				[this](ICoreWebView2*, ICoreWebView2ProcessFailedEventArgs* _args) -> HRESULT
+				{
+					COREWEBVIEW2_PROCESS_FAILED_KIND kind = COREWEBVIEW2_PROCESS_FAILED_KIND_UNKNOWN_PROCESS_EXITED;
+					_args->get_ProcessFailedKind(&kind);
+					juce::Logger::writeToLog("Gearmulator editor page: WebView2 process failed, kind " + juce::String(static_cast<int>(kind)));
+					event("WebView2 process failed, kind " + juce::String(static_cast<int>(kind)));
+					return S_OK;
+				}).Get(), &processFailedToken);
+
+			applyZoom();
+			updateBounds();
+			updateVisibility();
+			event("WebView2 ready");
+			if(url.isNotEmpty())
+				webView->Navigate(url.toWideCharPointer());
+			for(const auto& s : scripts)
+				run(s);
+			scripts.clear();
+		}
+
+		void goToURL(const juce::String& _url)
+		{
+			url = _url;
+			if(webView)
+				webView->Navigate(url.toWideCharPointer());
+		}
+
+		void executeScript(const juce::String& _script)
+		{
+			if(!webView)
+			{
+				scripts.push_back(_script);
+				return;
+			}
+			run(_script);
+		}
+
+		void run(const juce::String& _script) const
+		{
+			webView->ExecuteScript(_script.toWideCharPointer(), Callback<ICoreWebView2ExecuteScriptCompletedHandler>(
+				[](HRESULT, LPCWSTR) -> HRESULT { return S_OK; }).Get());
+		}
+
+		void setZoom(const double _zoom)
+		{
+			if(std::abs(zoom - _zoom) < 0.001)
+				return;
+			zoom = _zoom;
+			applyZoom();
+		}
+
+		void applyZoom() const
+		{
+			if(controller)
+				controller->put_ZoomFactor(zoom);
+		}
+
+		// The controller's bounds are in the parent window's client pixels.
+		void updateBounds() const
+		{
+			if(!controller)
+				return;
+			auto* peer = owner.getPeer();
+			if(peer == nullptr)
+				return;
+			const auto area = (peer->getAreaCoveredBy(owner).toDouble() * peer->getPlatformScaleFactor()).toNearestInt();
+			controller->put_Bounds(RECT{area.getX(), area.getY(), area.getRight(), area.getBottom()});
+		}
+
+		void updateVisibility() const
+		{
+			if(controller)
+				controller->put_IsVisible(owner.isShowing() ? TRUE : FALSE);
+		}
+
+		// ComponentMovementWatcher
+		void componentMovedOrResized(bool, bool) override { updateBounds(); }
+		void componentVisibilityChanged() override { updateVisibility(); }
+		void componentPeerChanged() override
+		{
+			if(controller)
+			{
+				if(const auto parent = parentWindow())
+					controller->put_ParentWindow(parent);
+			}
+			else
+			{
+				createController();
+			}
+			updateBounds();
+			updateVisibility();
+		}
+
+		WebView2Page& owner;
+		Callbacks callbacks;
+		juce::NativeScaleFactorNotifier scaleNotifier;
+		ComPtr<ICoreWebView2Environment> environment;
+		ComPtr<ICoreWebView2Controller> controller;
+		ComPtr<ICoreWebView2> webView;
+		EventRegistrationToken navigationStartingToken{}, navigationCompletedToken{}, webMessageToken{}, newWindowToken{},
+			processFailedToken{};
+		juce::File userDataFolder;
+		juce::String url;
+		std::deque<juce::String> scripts;	// asked for before the web view was there
+		double zoom = 1.0;
+		bool creating = false;
+		bool failed = false;
+		bool comInitialised = false;
+	};
+
+	WebView2Page::WebView2Page(juce::File _userDataFolder, Callbacks _callbacks)
+	{
+		setOpaque(true);
+		m_impl = std::make_unique<Impl>(*this, std::move(_userDataFolder), std::move(_callbacks));
+		m_impl->start();
+	}
+
+	WebView2Page::~WebView2Page()
+	{
+		m_impl.reset();
+	}
+
+	void WebView2Page::goToURL(const juce::String& _url) { m_impl->goToURL(_url); }
+	void WebView2Page::executeScript(const juce::String& _script) { m_impl->executeScript(_script); }
+	void WebView2Page::setZoom(const double _zoom) { m_impl->setZoom(_zoom); }
+
+	void WebView2Page::paint(juce::Graphics& _g)
+	{
+		_g.fillAll(juce::Colour(0xff15171a));
+		if(!m_impl || !m_impl->failed)
+			return;
+		_g.setColour(juce::Colours::white);
+		_g.setFont(16.0f);
+		_g.drawFittedText("The editor needs the Microsoft Edge WebView2 Runtime, which comes with Windows 10 and 11.\n"
+			"Install it from https://go.microsoft.com/fwlink/p/?LinkId=2124703 and open the editor again.",
+			getLocalBounds().reduced(24), juce::Justification::centred, 4);
+	}
+
+	void WebView2Page::resized() { if(m_impl) m_impl->updateBounds(); }
+	void WebView2Page::visibilityChanged() { if(m_impl) m_impl->updateVisibility(); }
+	void WebView2Page::parentHierarchyChanged()
+	{
+		if(!m_impl)
+			return;
+		m_impl->createController();
+		m_impl->updateBounds();
+		m_impl->updateVisibility();
+	}
+}

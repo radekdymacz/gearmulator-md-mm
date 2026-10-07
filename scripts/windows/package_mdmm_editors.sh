@@ -1,6 +1,7 @@
 #!/bin/bash
 # Splits elektron-windows.yml's package (Gearmulator-Elektron-Windows-x64.zip: both standalones, both VST3
-# bundles, LICENSE.md) into one zip per machine for the release (mdmm-editors-release.yml), each with a README.
+# bundles, LICENSE.md) into one zip per machine for the release (mdmm-editors-release.yml), each with a README and
+# the WebView2 loader's licence.
 # Runs on Linux (unzip, zip).
 #
 #   scripts/windows/package_mdmm_editors.sh <Gearmulator-Elektron-Windows-x64.zip> <output dir>
@@ -32,6 +33,8 @@ for machine in md mm; do
 	dir="${work}/${asset}-Windows-x64"
 	mkdir -p "${dir}"
 	cp -R "${work}/all/${product}.exe" "${work}/all/${product}.vst3" "${work}/all/LICENSE.md" "${dir}/"
+	# The WebView2 loader is linked into both binaries (mdmmWindowsWebView.cmake); its licence asks for the notice.
+	sed 's/$/\r/' "${script_dir}/WebView2-LICENSE.txt" > "${dir}/WebView2-LICENSE.txt"
 	sed -e "s/@EDITOR@/${editor}/g" -e "s/@PRODUCT@/${product}/g" -e "s/@VERSION@/${version}/g" \
 		"${script_dir}/README-Windows-mdmm.txt" | sed 's/$/\r/' > "${dir}/README.txt"
 	zip_out="${out}/${asset}-Windows-x64-not-tested.zip"

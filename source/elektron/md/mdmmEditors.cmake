@@ -38,7 +38,7 @@ target_sources(mdLib PRIVATE
 target_link_libraries(mdLib PUBLIC elektronData mdAutomation)
 
 # The JUCE web view (the editor pages are web pages): on where JUCE's backend ships with the OS
-# (WKWebView on macOS, Edge/IE on Windows), and on Linux when webkit2gtk-4.0's headers are there
+# (WKWebView on macOS, WebView2 on Windows: mdmmWindowsWebView.cmake), and on Linux when webkit2gtk-4.0's headers are there
 # (doc/release/LINUX.md). juce.cmake compiles JUCE_WEB_BROWSER=0 into juce_plugin_modules; this switches it.
 if(APPLE OR WIN32)
 	set(_mdmmWebBrowserDefault ON)
@@ -63,6 +63,10 @@ option(${CMAKE_PROJECT_NAME}_JUCE_WEB_BROWSER "Compile JUCE WebBrowserComponent 
 unset(_mdmmWebBrowserDefault)
 if(TARGET juce_plugin_modules AND ${CMAKE_PROJECT_NAME}_JUCE_WEB_BROWSER AND CMAKE_SYSTEM_NAME STREQUAL "Linux")
 	include(mdJucePlugin/mdmmLinuxWebView.cmake)
+endif()
+# Windows: WebView2 driven by the editors themselves (doc/release/WINDOWS.md); JUCE's own backend stays off.
+if(TARGET juce_plugin_modules AND ${CMAKE_PROJECT_NAME}_JUCE_WEB_BROWSER AND WIN32)
+	include(mdJucePlugin/mdmmWindowsWebView.cmake)
 endif()
 if(TARGET juce_plugin_modules)
 	if(${CMAKE_PROJECT_NAME}_JUCE_WEB_BROWSER)

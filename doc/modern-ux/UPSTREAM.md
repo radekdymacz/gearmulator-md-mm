@@ -45,7 +45,7 @@ the processor's setup chunk and session into `mdJucePlugin/mdDeskHost.*`; the sk
 tests into `mdLibTest/mdmmTests.cmake` and `mdJucePlugin/mdmmPlugins.cmake` (same targets, labels
 and output folders); the tag-time installers into `.github/workflows/mdmm-editors-release.yml`
 (his `elektron-prerelease.yml` and `elektron-macos.yml` are his again; a tag also runs his, which
-builds without uploading); it calls his `elektron-windows.yml` as is, and our `mdmm-editors-linux.yml`, for the not-tested
+builds without uploading); it calls his `elektron-windows.yml` as is (so does our `mdmm-editors-windows.yml`, which then starts the package, [doc/release/WINDOWS.md](../release/WINDOWS.md)), and our `mdmm-editors-linux.yml`, for the not-tested
 Windows and Linux archives, [doc/release/LINUX.md](../release/LINUX.md)).
 
 Upstream files that stay in the tree but not in our product: the panel skins

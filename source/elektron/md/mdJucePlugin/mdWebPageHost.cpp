@@ -3,6 +3,10 @@
 
 #include "juce_gui_extra/juce_gui_extra.h"
 
+#if JUCE_WINDOWS && MDMM_WEBVIEW2
+#include "mdWebView2Page.h"
+#endif
+
 #include <cstring>
 #include <limits>
 
@@ -12,6 +16,15 @@ namespace mdJucePlugin
 
 #if JUCE_MAC
 	bool setWebPageZoom(juce::Component& _web, double _zoom);	// mdStudioWebZoom.mm
+#elif JUCE_WINDOWS && MDMM_WEBVIEW2
+	inline bool setWebPageZoom(juce::Component& _web, const double _zoom)
+	{
+		auto* web = dynamic_cast<WebView2Page*>(&_web);
+		if(web == nullptr)
+			return false;
+		web->setZoom(_zoom);
+		return true;
+	}
 #else
 	inline bool setWebPageZoom(juce::Component&, double) { return false; }
 #endif
@@ -38,7 +51,48 @@ namespace mdJucePlugin
 		}
 	}
 
-#if JUCE_WEB_BROWSER
+#if JUCE_WINDOWS && MDMM_WEBVIEW2
+	// Windows: WebView2 driven directly (mdWebView2Page.h). Page -> C++ as postMessage texts (the same
+	// gmbridge://... strings, deskBridge.js), C++ -> page as executed scripts. A top-level navigation to a
+	// gmbridge:// URL still reaches the bridge, and a file dragged onto the page is not opened.
+	class PageWebView final : public WebView2Page
+	{
+	public:
+		PageWebView(std::function<void(const std::string&)> _onBridge, std::function<void(const juce::String&)> _onLoadEvent,
+			std::function<bool(const juce::String&)> _onFileUrl)
+			: WebView2Page(dataFolder(), callbacks(std::move(_onBridge), std::move(_onLoadEvent), std::move(_onFileUrl)))
+		{
+		}
+
+	private:
+		// Per user and writable: %LOCALAPPDATA%\Gearmulator\EditorWebView2 (a VST3 host may run from a read-only folder).
+		static juce::File dataFolder()
+		{
+			return juce::File::getSpecialLocation(juce::File::windowsLocalAppData).getChildFile("Gearmulator").getChildFile("EditorWebView2");
+		}
+
+		static Callbacks callbacks(std::function<void(const std::string&)> _onBridge, std::function<void(const juce::String&)> _onLoadEvent,
+			std::function<bool(const juce::String&)> _onFileUrl)
+		{
+			Callbacks c;
+			c.onMessage = _onBridge;
+			c.onEvent = _onLoadEvent;
+			c.onNavigation = [_onBridge, _onLoadEvent, _onFileUrl](const juce::String& _url)
+			{
+				if(_onFileUrl && _onFileUrl(_url))
+					return false;
+				if(_url.startsWith("gmbridge://"))
+				{
+					_onBridge(_url.toStdString());
+					return false;
+				}
+				_onLoadEvent("about to load " + _url.substring(0, 60));
+				return true;
+			};
+			return c;
+		}
+	};
+#elif JUCE_WEB_BROWSER
 	// JUCE 7.0.10 has no native-function bridge (that is JUCE 8). Page -> C++ goes through
 	// navigations to gmbridge://..., cancelled here; the page makes them in throw-away iframes so
 	// one never cancels another. C++ -> page uses javascript: URLs (WKWebView evaluateJavaScript); on Linux script
@@ -106,6 +160,11 @@ namespace mdJucePlugin
 		, m_fileRecv(true)	// webkit2gtk: javascript: URLs crash its web process next to the bridge iframes
 #else
 		, m_fileRecv(false)
+#endif
+#if JUCE_WINDOWS && MDMM_WEBVIEW2
+		, m_scriptRecv(true)	// WebView2: ExecuteScript (mdWebView2Page.h)
+#else
+		, m_scriptRecv(false)
 #endif
 	{
 		m_web = std::make_unique<PageWebView>([this](const std::string& _url) { onBridge(_url); },
@@ -250,12 +309,19 @@ namespace mdJucePlugin
 			return;
 		const auto firstSeq = m_recvSeq;
 		const auto scripts = pageBridge::recvScripts(m_outbox, firstSeq, pageBridge::g_maxRecvBytes,
-			m_fileRecv ? std::string() : std::string(pageBridge::g_javascriptUrl));
+			m_fileRecv || m_scriptRecv ? std::string() : std::string(pageBridge::g_javascriptUrl));
 		m_outbox.clear();
 		m_recvSeq += scripts.size();
 		for(size_t i = 0; i < scripts.size(); ++i)
 		{
 			const auto& s = scripts[i];
+#if JUCE_WINDOWS && MDMM_WEBVIEW2
+			if(m_scriptRecv)
+			{
+				m_web->executeScript(juce::String::fromUTF8(s.c_str(), static_cast<int>(s.size())));
+				continue;
+			}
+#endif
 			if(!m_fileRecv)
 			{
 				m_web->goToURL(juce::String::fromUTF8(s.c_str(), static_cast<int>(s.size())));

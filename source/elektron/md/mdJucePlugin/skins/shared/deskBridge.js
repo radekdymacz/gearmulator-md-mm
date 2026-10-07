@@ -1,8 +1,8 @@
 "use strict";
 /* The page bridge, both editors (skins/shared/): the page's only door to the plug-in.
    Two parts:
-   - BridgeTransport: how a message travels, and nothing else (DESIGN-REVIEW-2026-10-02 finding 13). Today
-     JUCE 7's: page -> C++ as the navigation of a throw-away iframe to gmbridge://c/<json> (JUCE 7 has no
+   - BridgeTransport: how a message travels, and nothing else (DESIGN-REVIEW-2026-10-02 finding 13). On Windows
+     WebView2's postMessage (below); otherwise JUCE 7's: page -> C++ as the navigation of a throw-away iframe to gmbridge://c/<json> (JUCE 7 has no
      native-function bridge; an iframe navigation never cancels another one), a batch too long for one URL
      in pieces (gmbridge://p/<seq>/<i>/<n>/<piece>, joined by mdPageBridge.h); C++ -> page as
      gm.recv([...messages], seq) through a javascript: URL (the plug-in splits a long outbox into several calls at
@@ -27,7 +27,13 @@ const BridgeTransport = (() => {
 	const MAX_URL = 256 * 1024;
 	let nextSeq = 1;
 
+	/* Windows (WebView2, mdWebView2Page.h): the same gmbridge:// texts go through window.chrome.webview.postMessage
+	   (in order, nothing cancelled; WebView2 does not report iframe navigations), and the plug-in runs the
+	   gm.recv([...], seq) scripts itself (ExecuteScript). */
+	const webview2 = native && typeof window !== "undefined" && !!(window.chrome && window.chrome.webview && window.chrome.webview.postMessage);
+
 	function navigate(url) {
+		if (webview2) { window.chrome.webview.postMessage(url); return; }
 		const f = document.createElement("iframe");
 		f.style.display = "none";
 		f.src = url;

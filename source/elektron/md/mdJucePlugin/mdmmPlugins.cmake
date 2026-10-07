@@ -40,6 +40,8 @@ list(APPEND SOURCES
 	mdWebPageHost.cpp mdWebPageHost.h
 	mmStudioLink.cpp mmStudioLink.h
 	$<$<PLATFORM_ID:Darwin>:mdStudioWebZoom.mm>
+	$<$<PLATFORM_ID:Windows>:mdWebView2Page.cpp>
+	mdWebView2Page.h
 	mdAudioMidiLink.cpp mdAudioMidiLink.h
 
 	skins/mdStudio/mdStudio.rml
@@ -251,6 +253,13 @@ function(mdmm_plugin_targets)
 				)
 				unset(_mdmmInstallDir)
 			endif()
+		endforeach()
+	endif()
+
+	# Windows (mdmmWindowsWebView.cmake): the WebView2 SDK's headers and static loader.
+	if(TARGET mdmmWebView2)
+		foreach(plugin_target mdJucePlugin mmJucePlugin)
+			target_link_libraries(${plugin_target} PRIVATE mdmmWebView2)
 		endforeach()
 	endif()
 
