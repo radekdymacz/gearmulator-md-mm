@@ -83,6 +83,20 @@ namespace
 			// encoders), the base channel as the adapter gives it.
 			port.device.sendKitParam = [this](const uint8_t _t, const uint8_t _i, const uint8_t _v)
 			{
+				// As the plug-in's parameter (pluginLike): a value it already holds changes nothing and sends nothing.
+				if(pluginLike)
+				{
+					auto& last = m_paramHeld[_t * 25 + _i];
+					if(last == _v)
+						return;
+					last = _v;
+				}
+				if(const auto cc = deskWire::md::kitParam(m_channel, _t, _i, _v))
+					m_out.push_back(*cc);
+			};
+			// The engine's direct CC, past the plug-in's parameter (mdSessionMd.cpp): always sent.
+			port.device.sendHeldParam = [this](const uint8_t _t, const uint8_t _i, const uint8_t _v)
+			{
 				if(const auto cc = deskWire::md::kitParam(m_channel, _t, _i, _v))
 					m_out.push_back(*cc);
 			};
@@ -243,6 +257,11 @@ namespace
 
 	private:
 		uint8_t m_channel = 0;	// the machine's base channel (the adapter's fact)
+	public:
+		// sendKitParam as the plug-in's parameters deliver it (keepedits): a value equal to the last one is dropped
+		bool pluginLike = false;
+	private:
+		std::array<int, 16 * 25> m_paramHeld = [] { std::array<int, 16 * 25> a{}; a.fill(-1); return a; }();
 		size_t m_patternDumps = 0;
 
 		void flushOut()
@@ -2169,6 +2188,52 @@ namespace
 			+ std::to_string(int(slotDoc("ram", 0).find("length")->asNumber())) + " samples)");
 	}
 
+	// An unsaved kit edit of the kit that plays survives a trig elsewhere (a pattern dump over the current pattern
+	// makes OS 1.63 load the kit it links from its slot; MdMachine::restoreWorkingKit sends the edits again): a
+	// synthesis value as well as a routing one, stopped and playing, as the demo videos found.
+	void keepEdits(Rig& _rig)
+	{
+		auto& desk = _rig.desk();
+		const auto kit = std::to_string(*desk.linkState().kit);
+		const auto pattern = std::to_string(*desk.linkState().pattern);
+		const auto working = [&] { return desk.documents().working->kit; };
+		const auto settle = [&] { _rig.runUntil([&] { return !desk.isBusy() && !_rig.pageTx(); }, 3000); _rig.run(1500); };
+		int step = 7;
+		for(const bool playing : {false, true})
+		{
+			if(playing)
+			{
+				_rig.page(R"({"op":"play"})");
+				_rig.run(1000);
+			}
+			for(const int i : {1, 16})
+			{
+				std::printf("== KEEP EDITS: T1 param %d, %s\n", i, playing ? "playing" : "stopped");
+				// as the page's drag sends it: a run of values in one gesture (g), the last one kept
+				const auto v0 = working().params[0][i];
+				const auto v = (v0 + 37) & 0x7f;
+				const auto g = std::to_string(800 + step);
+				for(const int d : {10, 20, 30})
+				{
+					_rig.page("{\"op\":\"param\",\"k\":" + kit + ",\"t\":0,\"i\":" + std::to_string(i) + ",\"v\":" + std::to_string((v0 + d) & 0x7f) + ",\"g\":" + g + "}");
+					_rig.run(60);
+				}
+				_rig.page("{\"op\":\"param\",\"k\":" + kit + ",\"t\":0,\"i\":" + std::to_string(i) + ",\"v\":" + std::to_string(v) + ",\"g\":" + g + "}");
+				settle();
+				check(working().params[0][i] == v, "the edit is in the working kit (" + std::to_string(working().params[0][i]) + ", want " + std::to_string(v) + ")");
+				_rig.page("{\"op\":\"trig\",\"p\":" + pattern + ",\"t\":3,\"s\":" + std::to_string(step) + ",\"on\":true}");
+				settle();
+				_rig.page("{\"op\":\"trig\",\"p\":" + pattern + ",\"t\":3,\"s\":" + std::to_string(step) + ",\"on\":false}");
+				settle();
+				_rig.run(2000);
+				check(working().params[0][i] == v, "after a trig elsewhere the edit is still in the working kit (" + std::to_string(working().params[0][i]) + ", want " + std::to_string(v) + ")");
+				++step;
+			}
+		}
+		_rig.page(R"({"op":"stop"})");
+		_rig.run(500);
+	}
+
 	// The SAMPLER card's "Set up sampling" (mdDeskSampler.js, [data-setupgo]): two machine ops in one gesture put
 	// RAM-R1 and RAM-P1 on two tracks that played ROM machines, a trig on the recorder; then the chop grid's
 	// trigs + STRT locks on the player. A pattern dump over the current pattern makes OS 1.63 load the kit it
@@ -2333,7 +2398,7 @@ int main(const int _argc, char** _argv)
 	std::setvbuf(stdout, nullptr, _IOLBF, 0);
 	if(_argc < 2)
 	{
-		std::puts("usage: mdDeskFirmwareTest <MD-1.63-ROM> [probe|hw|p4|tweak|sampler|samples|gen|hostclock|playload|syximport]");
+		std::puts("usage: mdDeskFirmwareTest <MD-1.63-ROM> [probe|hw|p4|tweak|sampler|keepedits|samples|gen|hostclock|playload|syximport]");
 		return 77;
 	}
 	try
@@ -2388,6 +2453,17 @@ int main(const int _argc, char** _argv)
 			samplerSetup(rig);
 			check(g_contract.loaded() && g_contract.bad() == 0, g_contract.summary());
 			std::printf("mdDeskFirmwareTest sampler: %s (%d failure(s))\n", g_failures ? "FAIL" : "PASS", g_failures);
+			return g_failures ? 1 : 0;
+		}
+		if(mode == "keepedits")
+		{
+			Rig rig(rom, _argv[1]);
+			rig.page(R"({"op":"ready"})");
+			rig.runUntil([&] { return rig.desk().isReady() && rig.desk().linkState().kit && rig.desk().linkState().pattern && rig.desk().documents().working; }, 8000);
+			rig.pluginLike = true;
+			keepEdits(rig);
+			check(g_contract.loaded() && g_contract.bad() == 0, g_contract.summary());
+			std::printf("mdDeskFirmwareTest keepedits: %s (%d failure(s))\n", g_failures ? "FAIL" : "PASS", g_failures);
 			return g_failures ? 1 : 0;
 		}
 		if(mode == "gen")

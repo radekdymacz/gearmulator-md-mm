@@ -443,14 +443,18 @@ namespace mdDesk
 		const auto delivery = kitDelivery(_stored, _working);
 		if(delivery.edits.empty())
 			return;
+		// The values go to the machine as its CCs, after the dump. Not through the plug-in's parameter: it already
+		// holds each of them (the edit set it), so setting it again changes nothing and sends nothing, and the
+		// machine kept the slot's value (the demo videos heard it: a kick's DEC edit undone by a trig elsewhere).
+		const auto& resend = m_port.sendHeldParam ? m_port.sendHeldParam : m_port.sendKitParam;
 		for(const auto& e : delivery.edits)
 		{
 			if(e.kind == LiveEdit::Kind::Param || e.kind == LiveEdit::Kind::Level)
 			{
 				if(e.kind == LiveEdit::Kind::Param)
 					m_coalesced.erase({e.track, e.index});
-				if(m_port.sendKitParam)
-					m_port.sendKitParam(e.track, e.kind == LiveEdit::Kind::Level ? 24 : e.index, e.value);
+				if(resend)
+					resend(e.track, e.kind == LiveEdit::Kind::Level ? 24 : e.index, e.value);
 			}
 			else if(const auto sysex = liveEditSysex(e); !sysex.empty() && canSendSysex())
 				sendSysex(sysex);
