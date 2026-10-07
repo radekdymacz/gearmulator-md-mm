@@ -83,6 +83,16 @@ int main()
 		check(next == 2 && second.size() == 3 && second[0].find("],2)") != std::string::npos && second[2].find("],4)") != std::string::npos,
 			"successive flushes: the numbers go on, never repeat");
 		check(bridge::recvScripts({}, 1).empty(), "nothing to send: no call (and no number used)");
+		// Linux: the same calls as script files beside the page, and the page's progress
+		const auto files = bridge::recvScripts(outbox, 3, bridge::g_maxRecvBytes, "");
+		check(files.size() == 1 && files[0] == "window.gm&&gm.recv(" + json::write(json::Value(json::Value::Array(outbox.begin(), outbox.end()))) + ",3)",
+			"a script file holds the same call, without javascript:");
+		check(bridge::recvFileName("gearmulator-mdStudio-1a2b.html", 12) == "gearmulator-mdStudio-1a2b.html.recv-12.js",
+			"a batch's file is named after the page file and the batch number");
+		check(bridge::ackOf("gmbridge://a/17") == std::optional<uint64_t>(17) && bridge::ackOf("gmbridge://a/0") == std::optional<uint64_t>(0),
+			"the page's progress: the last batch it read");
+		check(!bridge::ackOf("gmbridge://a/") && !bridge::ackOf("gmbridge://a/1x") && !bridge::ackOf("gmbridge://c/1")
+			&& !bridge::ackOf("gmbridge://a/99999999999999999999"), "anything else is not a progress report");
 	}
 	// notices: each window its own instance's; closing one never takes another's (release review 2026-10-04, S4)
 	{

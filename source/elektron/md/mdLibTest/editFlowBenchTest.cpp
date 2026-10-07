@@ -114,7 +114,7 @@ namespace
 		countOut(_b);
 		synthLib::SMidiEvent e(synthLib::MidiEventSource::Host);
 		if(_b[0] == 0xf0)
-			e.sysex = _b;
+			e.sysex.assign(_b.begin(), _b.end());
 		else
 		{
 			e.a = _b[0];

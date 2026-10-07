@@ -35,6 +35,9 @@ const check = (ok, what) => { console.log((ok ? "  ok   " : "  FAIL ") + what); 
 	const a = BridgeTransport.urls(batch, 64), b = BridgeTransport.urls(batch, 64);
 	check(a[0].split("/")[3] !== b[0].split("/")[3], "each long batch has its own sequence number");
 }
+/* ---- Linux: the plug-in's batches as script files beside the page (mdPageBridge.h recvFileName) ---- */
+check(BridgeTransport.recvFile("/tmp/gearmulator-mdStudio-1a2b.html", 12) === "gearmulator-mdStudio-1a2b.html.recv-12.js",
+	"a batch's file: the page file's name, .recv-<seq>.js, relative to the page");
 /* ---- Bridge over the transport (a dev host: window.gmDev) ---- */
 {
 	let result = null, seen = [];

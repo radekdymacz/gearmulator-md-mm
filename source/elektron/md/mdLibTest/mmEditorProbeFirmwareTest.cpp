@@ -650,7 +650,7 @@ namespace
 		for(const auto& d : sent)
 		{
 			synthLib::SMidiEvent e(synthLib::MidiEventSource::Host);
-			e.sysex = d;
+			e.sysex.assign(d.begin(), d.end());
 			m->hardware().sendMidi(e);
 		}
 		m->run(400);

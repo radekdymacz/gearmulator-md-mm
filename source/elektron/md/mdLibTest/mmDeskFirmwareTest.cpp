@@ -273,7 +273,7 @@ namespace
 					synthLib::SMidiEvent e(synthLib::MidiEventSource::Host);
 					const auto& b = out.front();
 					if(b[0] == 0xf0)
-						e.sysex = b;
+						e.sysex.assign(b.begin(), b.end());
 					else
 					{
 						e.a = b[0];

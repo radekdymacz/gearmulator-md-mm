@@ -4,6 +4,7 @@
 #include "juce_gui_extra/juce_gui_extra.h"
 
 #include <cstring>
+#include <limits>
 
 namespace mdJucePlugin
 {
@@ -40,7 +41,8 @@ namespace mdJucePlugin
 #if JUCE_WEB_BROWSER
 	// JUCE 7.0.10 has no native-function bridge (that is JUCE 8). Page -> C++ goes through
 	// navigations to gmbridge://..., cancelled here; the page makes them in throw-away iframes so
-	// one never cancels another. C++ -> page uses javascript: URLs (WKWebView evaluateJavaScript).
+	// one never cancels another. C++ -> page uses javascript: URLs (WKWebView evaluateJavaScript); on Linux script
+	// files (mdPageBridge.h).
 	class PageWebView final : public juce::WebBrowserComponent
 	{
 	public:
@@ -100,6 +102,11 @@ namespace mdJucePlugin
 		std::function<void(const Value&)> _onMessage)
 		: m_spec(std::move(_spec)), m_resource(std::move(_resource)), m_onMessage(std::move(_onMessage))
 		, m_pieces(std::make_unique<pageBridge::Pieces>())
+#if JUCE_LINUX || JUCE_BSD
+		, m_fileRecv(true)	// webkit2gtk: javascript: URLs crash its web process next to the bridge iframes
+#else
+		, m_fileRecv(false)
+#endif
 	{
 		m_web = std::make_unique<PageWebView>([this](const std::string& _url) { onBridge(_url); },
 			[this](const juce::String& _e) { log("web view: " + _e); },
@@ -120,7 +127,9 @@ namespace mdJucePlugin
 	WebPageHost::~WebPageHost()
 	{
 		m_web.reset();
-		// This instance's page file (P6: one per instance, so two open editors never share one).
+		// This instance's page file (P6: one per instance, so two open editors never share one), and the
+		// batches the page has not read.
+		deleteRecvFiles(std::numeric_limits<uint64_t>::max());
 		if(m_file != juce::File())
 			m_file.deleteFile();
 		// And its log, unless a self-test ran: its runner reads the log after the app has gone.
@@ -188,7 +197,9 @@ namespace mdJucePlugin
 			if(kind.isNotEmpty() && kind.startsWith(juce::String(t)))
 				m_selfTest = kind;
 #endif
-		const auto url = m_selfTest.isNotEmpty() ? juce::URL(m_file).withParameter("selftest", m_selfTest) : juce::URL(m_file);
+		auto url = m_selfTest.isNotEmpty() ? juce::URL(m_file).withParameter("selftest", m_selfTest) : juce::URL(m_file);
+		if(m_fileRecv)
+			url = url.withParameter(pageBridge::g_fileRecvQuery, "file");
 		m_web->goToURL(url.toString(true));
 		log("page loading, selftest=" + juce::String(m_selfTest.isNotEmpty() ? 1 : 0) + ", "
 			+ juce::String(m_file.getSize()) + " bytes");
@@ -200,6 +211,11 @@ namespace mdJucePlugin
 		if(bridge::startsWith(_url, bridge::g_log))
 		{
 			log("page: " + juce::URL::removeEscapeChars(juce::String(_url.substr(std::strlen(bridge::g_log)))));
+			return;
+		}
+		if(const auto seq = bridge::ackOf(_url))
+		{
+			onAck(*seq);
 			return;
 		}
 		std::string escaped;
@@ -232,11 +248,51 @@ namespace mdJucePlugin
 	{
 		if(!m_pageReady || m_outbox.empty())
 			return;
-		const auto scripts = pageBridge::recvScripts(m_outbox, m_recvSeq);
+		const auto firstSeq = m_recvSeq;
+		const auto scripts = pageBridge::recvScripts(m_outbox, firstSeq, pageBridge::g_maxRecvBytes,
+			m_fileRecv ? std::string() : std::string(pageBridge::g_javascriptUrl));
 		m_outbox.clear();
 		m_recvSeq += scripts.size();
-		for(const auto& s : scripts)
-			m_web->goToURL(juce::String::fromUTF8(s.c_str(), static_cast<int>(s.size())));
+		for(size_t i = 0; i < scripts.size(); ++i)
+		{
+			const auto& s = scripts[i];
+			if(!m_fileRecv)
+			{
+				m_web->goToURL(juce::String::fromUTF8(s.c_str(), static_cast<int>(s.size())));
+				continue;
+			}
+			// Written whole and then renamed (replaceWithText), so the page never reads half a batch.
+			const auto seq = firstSeq + i;
+			auto file = m_file.getSiblingFile(pageBridge::recvFileName(m_file.getFileName().toStdString(), seq));
+			if(!file.replaceWithData(s.data(), s.size()))
+				log("could not write " + file.getFileName());
+			m_recvFiles[seq] = std::move(file);
+		}
+	}
+
+	// The page has read every batch up to _seq; 0: it has (re)started and reads from the first batch.
+	void WebPageHost::onAck(const uint64_t _seq)
+	{
+		if(_seq != 0)
+		{
+			deleteRecvFiles(_seq);
+			return;
+		}
+		if(m_recvSeq == 1)
+			return;
+		// A page that loaded again: what it has not read is for the old one; number from 1 for this one.
+		log("page started again: batches numbered from 1");
+		deleteRecvFiles(std::numeric_limits<uint64_t>::max());
+		m_recvSeq = 1;
+	}
+
+	void WebPageHost::deleteRecvFiles(const uint64_t _upTo)
+	{
+		while(!m_recvFiles.empty() && m_recvFiles.begin()->first <= _upTo)
+		{
+			m_recvFiles.begin()->second.deleteFile();
+			m_recvFiles.erase(m_recvFiles.begin());
+		}
 	}
 
 	void WebPageHost::layout(const juce::Rectangle<int>& _bounds)

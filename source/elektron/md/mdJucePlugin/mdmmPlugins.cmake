@@ -216,6 +216,25 @@ function(mdmm_plugin_targets)
 		endforeach()
 	endif()
 
+	# Linux (mdmmLinuxWebView.cmake): the webkit2gtk and GTK shims beside the standalone and the VST3 module,
+	# found through $ORIGIN (dlopen searches the run path of the object that calls it).
+	if(TARGET mdmmLinuxWebkitShim)
+		foreach(plugin_target mdJucePlugin_VST3 mmJucePlugin_VST3 mdJucePlugin_Standalone mmJucePlugin_Standalone)
+			if(NOT TARGET ${plugin_target})
+				continue()
+			endif()
+			set_property(TARGET ${plugin_target} PROPERTY BUILD_RPATH "\$ORIGIN")
+			add_dependencies(${plugin_target} mdmmLinuxWebkitShim mdmmLinuxGtkShim)
+			add_custom_command(TARGET ${plugin_target} POST_BUILD
+				COMMAND ${CMAKE_COMMAND} -E copy_if_different
+					"$<TARGET_FILE:mdmmLinuxWebkitShim>" "$<TARGET_FILE:mdmmLinuxGtkShim>"
+					"$<TARGET_FILE_DIR:${plugin_target}>"
+				COMMENT "Web view shims beside ${plugin_target}"
+				VERBATIM
+			)
+		endforeach()
+	endif()
+
 	if(NOT BUILD_TESTING)
 		return()
 	endif()
@@ -237,7 +256,7 @@ function(mdmm_plugin_targets)
 	add_executable(mdRomInstallTest mdRomInstallTest.cpp mdRomInstall.cpp)
 	target_include_directories(mdRomInstallTest PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/..)
 	target_link_libraries(mdRomInstallTest PRIVATE juce::juce_core)
-	target_compile_definitions(mdRomInstallTest PRIVATE JUCE_GLOBAL_MODULE_SETTINGS_INCLUDED=1 JUCE_STANDALONE_APPLICATION=1)
+	target_compile_definitions(mdRomInstallTest PRIVATE JUCE_GLOBAL_MODULE_SETTINGS_INCLUDED=1 JUCE_STANDALONE_APPLICATION=1 JUCE_USE_CURL=0)
 	add_test(NAME mdRomInstallTest COMMAND mdRomInstallTest)
 	set_tests_properties(mdRomInstallTest PROPERTIES LABELS "UnitTest")
 	set_property(TARGET mdRomInstallTest PROPERTY FOLDER "Elektron/test")
@@ -246,7 +265,7 @@ function(mdmm_plugin_targets)
 	add_executable(mdSettingsMigrationTest mdSettingsMigrationTest.cpp mdSettingsMigration.cpp)
 	target_include_directories(mdSettingsMigrationTest PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/..)
 	target_link_libraries(mdSettingsMigrationTest PRIVATE juce::juce_core)
-	target_compile_definitions(mdSettingsMigrationTest PRIVATE JUCE_GLOBAL_MODULE_SETTINGS_INCLUDED=1 JUCE_STANDALONE_APPLICATION=1)
+	target_compile_definitions(mdSettingsMigrationTest PRIVATE JUCE_GLOBAL_MODULE_SETTINGS_INCLUDED=1 JUCE_STANDALONE_APPLICATION=1 JUCE_USE_CURL=0)
 	add_test(NAME mdSettingsMigrationTest COMMAND mdSettingsMigrationTest)
 	set_tests_properties(mdSettingsMigrationTest PROPERTIES LABELS "UnitTest")
 	set_property(TARGET mdSettingsMigrationTest PROPERTY FOLDER "Elektron/test")
@@ -322,12 +341,15 @@ function(mdmm_plugin_targets)
 
 	# DESIGN-edit-flow.md: a built VST3 bundle in a real host, real-time audio blocks, the bundle's
 	# edit-flow driver playing the page (manual: needs the ROM and gearmulator_MDMM_EDITFLOW_DRIVER).
-	juce_add_console_app(mdVst3EditFlowHost PRODUCT_NAME "mdVst3EditFlowHost")
-	target_sources(mdVst3EditFlowHost PRIVATE mdVst3EditFlowHost.cpp)
-	target_link_libraries(mdVst3EditFlowHost PRIVATE juce::juce_audio_processors juce::juce_events)
-	target_compile_definitions(mdVst3EditFlowHost PRIVATE JUCE_GLOBAL_MODULE_SETTINGS_INCLUDED=1 JUCE_PLUGINHOST_VST3=1
-		JUCE_USE_CURL=0 JUCE_WEB_BROWSER=0 JUCE_STANDALONE_APPLICATION=1)
-	set_property(TARGET mdVst3EditFlowHost PROPERTY FOLDER "Elektron/test")
+	# macOS only: it finds the bundle and the ROM the Mac way (CoreFoundation).
+	if(APPLE)
+		juce_add_console_app(mdVst3EditFlowHost PRODUCT_NAME "mdVst3EditFlowHost")
+		target_sources(mdVst3EditFlowHost PRIVATE mdVst3EditFlowHost.cpp)
+		target_link_libraries(mdVst3EditFlowHost PRIVATE juce::juce_audio_processors juce::juce_events)
+		target_compile_definitions(mdVst3EditFlowHost PRIVATE JUCE_GLOBAL_MODULE_SETTINGS_INCLUDED=1 JUCE_PLUGINHOST_VST3=1
+			JUCE_USE_CURL=0 JUCE_WEB_BROWSER=0 JUCE_STANDALONE_APPLICATION=1)
+		set_property(TARGET mdVst3EditFlowHost PROPERTY FOLDER "Elektron/test")
+	endif()
 
 	# P5: the app modulators in the processor, no editor (manual: needs the ROM).
 	add_executable(mdSessionFirmwareTest mdSessionFirmwareTest.cpp)
