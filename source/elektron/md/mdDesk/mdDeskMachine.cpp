@@ -443,18 +443,14 @@ namespace mdDesk
 		const auto delivery = kitDelivery(_stored, _working);
 		if(delivery.edits.empty())
 			return;
-		// The values go to the machine as its CCs, after the dump. Not through the plug-in's parameter: it already
-		// holds each of them (the edit set it), so setting it again changes nothing and sends nothing, and the
-		// machine kept the slot's value (the demo videos heard it: a kick's DEC edit undone by a trig elsewhere).
-		const auto& resend = m_port.sendHeldParam ? m_port.sendHeldParam : m_port.sendKitParam;
+		// The values go again after the dump (sendLive: the plug-in's parameters already hold them).
 		for(const auto& e : delivery.edits)
 		{
 			if(e.kind == LiveEdit::Kind::Param || e.kind == LiveEdit::Kind::Level)
 			{
 				if(e.kind == LiveEdit::Kind::Param)
 					m_coalesced.erase({e.track, e.index});
-				if(resend)
-					resend(e.track, e.kind == LiveEdit::Kind::Level ? 24 : e.index, e.value);
+				sendLive(e.track, e.kind == LiveEdit::Kind::Level ? 24 : e.index, e.value);
 			}
 			else if(const auto sysex = liveEditSysex(e); !sysex.empty() && canSendSysex())
 				sendSysex(sysex);
@@ -531,8 +527,7 @@ namespace mdDesk
 					// A plain edit goes at once; a coalesced value for it would come later and undo it.
 					if(e.kind == LiveEdit::Kind::Param)
 						m_coalesced.erase({e.track, e.index});
-					if(m_port.sendKitParam)
-						m_port.sendKitParam(e.track, e.kind == LiveEdit::Kind::Level ? 24 : e.index, e.value);
+					sendLive(e.track, e.kind == LiveEdit::Kind::Level ? 24 : e.index, e.value);
 				}
 				else if(const auto sysex = liveEditSysex(e); !sysex.empty() && canSendSysex())
 					sendSysex(sysex);
@@ -932,6 +927,21 @@ namespace mdDesk
 		const auto* document = kit ? _view.workingKitOf(*kit) : nullptr;
 		for(const auto& o : _held)
 			sendHeld(o.track, o.index, deskCore::HeldOverrides::restoreValue(o, document, kitValue));
+	}
+
+	// A kit value of the kit that plays, to the machine. Through the plug-in's parameter (a DAW sees the move and can
+	// record it), and as the machine's CC past it: the parameter holds the kit as it was loaded or last set from
+	// here, not what the machine changed by itself (a Control All gesture on its panel, the initial values of a new
+	// machine, a kit the machine loaded from its slot), and a parameter set to the value it holds sends nothing. So
+	// the undo of a Control All, a value set right after a machine change, and the unsaved edits sent again after
+	// a dump were lost on the machine (heard, mdDeskFirmwareTest keepedits). Unset sendHeldParam: the parameter
+	// alone (the wire engines send their CCs as such).
+	void MdMachine::sendLive(const uint8_t _t, const uint8_t _index, const uint8_t _value)
+	{
+		if(m_port.sendKitParam)
+			m_port.sendKitParam(_t, _index, _value);
+		if(m_port.sendHeldParam)
+			m_port.sendHeldParam(_t, _index, _value);
 	}
 
 	void MdMachine::sendHeld(const uint8_t _t, const uint8_t _index, const uint8_t _value)
