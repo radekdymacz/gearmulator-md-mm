@@ -15,7 +15,6 @@
 namespace mdJucePlugin
 {
 	namespace json = elektronData::json;
-
 #if JUCE_MAC
 #if JUCE_MAC
 	int setWebPageZoom(juce::Component& _web, double _zoom);	// mdStudioWebZoom.mm: 1 done, 0 not yet, -1 no pageZoom
