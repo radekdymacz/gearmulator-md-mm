@@ -43,7 +43,10 @@ namespace mdJucePlugin
 		void load();
 		void send(Value _message) { m_outbox.push_back(std::move(_message)); }
 		void flush();
+		// The web view over _bounds, the page zoomed to fit its design size times the user's zoom (mdPageZoom.h).
 		void layout(const juce::Rectangle<int>& _bounds);
+		void setUserZoom(double _zoom);
+		double userZoom() const { return m_userZoom; }
 		bool pageReady() const { return m_pageReady; }
 		const juce::String& selfTest() const { return m_selfTest; }
 		// A line of this instance's log (diagnostics builds only: a release build writes no file).
@@ -70,6 +73,8 @@ namespace mdJucePlugin
 		// Windows (WebView2, mdWebView2Page.h): plug-in -> page as executed scripts, not javascript: URLs.
 		const bool m_scriptRecv;
 		std::map<uint64_t, juce::File> m_recvFiles;	// written and not yet read by the page, by batch number
+		double m_userZoom = 1.0;	// the user's page zoom (the editor's menu, Cmd - / Cmd + / Cmd 0)
+		double m_cssZoom = 1.0;		// the CSS zoom sent, where the web view has no native page zoom
 		mutable juce::File m_logFile;	// created on the first line
 	};
 }

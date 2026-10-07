@@ -1,5 +1,6 @@
 #include "mdWebPageHost.h"
 #include "mdPageBridge.h"
+#include "mdPageZoom.h"
 
 #include "juce_gui_extra/juce_gui_extra.h"
 
@@ -7,6 +8,7 @@
 #include "mdWebView2Page.h"
 #endif
 
+#include <cmath>
 #include <cstring>
 #include <limits>
 
@@ -15,18 +17,20 @@ namespace mdJucePlugin
 	namespace json = elektronData::json;
 
 #if JUCE_MAC
-	bool setWebPageZoom(juce::Component& _web, double _zoom);	// mdStudioWebZoom.mm
+#if JUCE_MAC
+	int setWebPageZoom(juce::Component& _web, double _zoom);	// mdStudioWebZoom.mm: 1 done, 0 not yet, -1 no pageZoom
 #elif JUCE_WINDOWS && MDMM_WEBVIEW2
-	inline bool setWebPageZoom(juce::Component& _web, const double _zoom)
+	// 1 done, -1 not a WebView2 page (the CSS zoom then)
+	inline int setWebPageZoom(juce::Component& _web, const double _zoom)
 	{
 		auto* web = dynamic_cast<WebView2Page*>(&_web);
 		if(web == nullptr)
-			return false;
+			return -1;
 		web->setZoom(_zoom);
-		return true;
+		return 1;
 	}
 #else
-	inline bool setWebPageZoom(juce::Component&, double) { return false; }
+	inline int setWebPageZoom(juce::Component&, double) { return -1; }
 #endif
 
 	namespace
@@ -365,7 +369,23 @@ namespace mdJucePlugin
 	{
 		if(m_web->getBounds() != _bounds)
 			m_web->setBounds(_bounds);
-		if(_bounds.getWidth() > 0)
-			setWebPageZoom(*m_web, std::min(1.0, _bounds.getWidth() / static_cast<double>(m_spec.designWidth)));
+		if(_bounds.getWidth() <= 0)
+			return;
+		const double zoom = pageZoom::effective(_bounds.getWidth(), _bounds.getHeight(), m_userZoom,
+			{m_spec.designWidth, m_spec.designHeight, m_spec.minHeight});
+		if(setWebPageZoom(*m_web, zoom) >= 0)
+			return;
+		// No native page zoom (macOS 10.15 and older, the other platforms' web views): the page's own CSS zoom,
+		// which lays it out the same way. Sent when it changes and again when the page (re)loads.
+		if(!m_pageReady || std::abs(zoom - m_cssZoom) < 0.001)
+			return;
+		m_cssZoom = zoom;
+		m_web->goToURL("javascript:document.documentElement.style.zoom='" + juce::String(zoom, 4) + "';void 0");
+	}
+
+	void WebPageHost::setUserZoom(const double _zoom)
+	{
+		m_userZoom = pageZoom::clampUser(_zoom);
+		log("page zoom " + juce::String(m_userZoom, 2));
 	}
 }
