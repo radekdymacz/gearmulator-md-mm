@@ -108,6 +108,11 @@ if(gearmulator_MDMM_EDITFLOW_DRIVER)
 	list(APPEND SOURCES mdEditFlowDriver.cpp mdEditFlowDriver.h mdEditFlowCounters.h)
 endif()
 
+# Developer convenience (macOS): after each build, copy the editors' VST3 and AU bundles to the user's
+# plug-in folders and the standalone apps to ~/Applications. OFF by default: it overwrites whatever
+# release is installed there. Never on in CI or for release packages.
+option(MDMM_INSTALL_DEV_PLUGINS "Copy the built editors to ~/Library/Audio/Plug-Ins and ~/Applications after each build (macOS, developers only)" OFF)
+
 # The pages instead of the panel skins in the plug-ins' binary data. The stylesheets are the generated
 # ones only (mdDesk.css, mmStudio.css: the sync scripts concatenate the mockups', the shared ones and
 # mdOverrides.css / mmOverrides.css into them). The editor finds a page file by its name, so the shared
@@ -229,6 +234,23 @@ function(mdmm_plugin_targets)
 				COMMENT "Ad-hoc signing the editor's ${plugin_target} bundle"
 				VERBATIM
 			)
+			if(MDMM_INSTALL_DEV_PLUGINS)
+				if(plugin_target MATCHES "_VST3$")
+					set(_mdmmInstallDir "$ENV{HOME}/Library/Audio/Plug-Ins/VST3")
+				elseif(plugin_target MATCHES "_AU$")
+					set(_mdmmInstallDir "$ENV{HOME}/Library/Audio/Plug-Ins/Components")
+				else()
+					set(_mdmmInstallDir "$ENV{HOME}/Applications")
+				endif()
+				add_custom_command(TARGET ${plugin_target} POST_BUILD
+					COMMAND ${CMAKE_COMMAND} -E make_directory "${_mdmmInstallDir}"
+					COMMAND /bin/sh -c "rm -rf \"$1/$(basename \"$2\")\" && cp -R \"$2\" \"$1/\"" sh
+						"${_mdmmInstallDir}" "$<TARGET_BUNDLE_DIR:${plugin_target}>"
+					COMMENT "Installing ${plugin_target} to ${_mdmmInstallDir} (MDMM_INSTALL_DEV_PLUGINS)"
+					VERBATIM
+				)
+				unset(_mdmmInstallDir)
+			endif()
 		endforeach()
 	endif()
 

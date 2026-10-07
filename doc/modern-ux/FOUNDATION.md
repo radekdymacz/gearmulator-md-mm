@@ -188,7 +188,7 @@ The editors ship without MIDI mapping (MIDI Learn and the CONTROL workspace) unt
 
 Code of ours goes in files of ours; upstream's files carry hooks only ([UPSTREAM.md](UPSTREAM.md), checked by `scripts/mdmm-upstream-footprint.sh`).
 
-Configure a test build with `-DBUILD_TESTING=ON -Dgearmulator_MDMM_DIAGNOSTICS=ON`; diagnostics (the log, the self-tests) are off by default for every generator. Then:
+Configure a test build with `-DBUILD_TESTING=ON -Dgearmulator_MDMM_DIAGNOSTICS=ON`; diagnostics (the log, the self-tests) are off by default for every generator. Add `-DMDMM_INSTALL_DEV_PLUGINS=ON` (macOS, default OFF) to copy the built VST3 and AU of both editors to `~/Library/Audio/Plug-Ins/{VST3,Components}` and the standalone apps to `~/Applications` after each build; it overwrites the installed release, so never use it in CI or for a release build. Then:
 - `ctest -E "Plugin|_AU|VST|FirmwareTest"` runs the unit tests.
 - `mdDeskFirmwareTest <MD ROM> [hw|p4|playload]` and `mmDeskFirmwareTest <MM ROM>` run the firmware smoke tests, including the contract check; `GEARMULATOR_MD_FIRMWARE_BIN=<MD ROM> ctest -R mdSessionFirmwareTest` runs the session without an editor.
 - `GEARMULATOR_MDSTUDIO_SELFTEST=1|p4|p4hw|p5|p6audio|p7|journey…` and `GEARMULATOR_MMSTUDIO_SELFTEST=1|mmcpu|p4|p6audio|p7|journey…` run the in-plugin self-tests on the standalone apps (MM `p4`: the MM-P4 features ported in P8).
