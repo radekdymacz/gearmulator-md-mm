@@ -129,3 +129,55 @@ dock; the clickable transpose keyboard on the bar lines; Perform (POLY, MULTI TR
 its assign rows, PORTAMENTO); Mix channel strips (LEVEL, PAN, DIST, DSND) with mute and solo drags and the MIDI track
 mutes; the Song page's picker and Load; a chain into the outro. No sampler. HW MIDI and SYSEX RECV stay out of it,
 for the same reasons as on the Machinedrum.
+
+## 5. Second song: "Tight Sequencer" (Machinedrum techniques)
+
+From the technique research (2026-10-07: Elektronauts threads, the Know How quick start, reviews, Sean Booth calling the
+MD his "tightest sequencer"). Broken IDM electro at 120 BPM: a tuned kick, ricochet hats, metal percussion, a sine bass,
+wet echo, the beat resampled and re-cut. Implemented as `demo-md-techniques`; same bar clock and rules as
+`demo-md-full` (actions on bar lines; a late one waits for the next bar line, later bars move with it; `timeline.json`
+has the real bars). Kit: the machine's fullest pattern's kit (K01 TRX UW: 1 kick, 2 snare, 6 clap, 7 rim, 8 cowbell, 9
+closed hat, 10 open hat, 11-12 cymbals, 13-16 ROM); tracks found by machine.
+
+What the editor and the firmware really give, checked before relying on it:
+
+- **Retrig** is a parameter of the E12, ROM and RAM-P machines only (TRX-SD has none). The roll is an E12-SD put on
+  track 15 with the machine picker, RTRG and RTIM set in its Sound page's Retrig group, played on the last beat.
+- **Bass**: GND-SIN on track 12 (a cymbal) with the picker, tuned and given a long decay on its Sound page.
+- **LFO**: the Sound page's LFO section on the rim: target (track and parameter selects), shape keys, SPD, DEPTH.
+- **Control All**: Alt-drag, never a CTR-AL track (a kit holding CTR-AL cannot be edited yet).
+- **Machine changes** are kit edits too; they survive pattern edits (probed).
+- **Unsaved kit values** were lost on the machine at the next pattern edit until `b0fa65625` (found by these demos,
+  `mdDeskFirmwareTest keepedits`).
+- **Sampler**: the RAM-P machine keeps the values of the machine it replaces (PTCH, DEC, STRT…); the demo sets the
+  player's PTCH 64, HOLD and DEC 127. Chops are heard by soloing the player first (the demo-md-sampler lesson).
+
+| Bars | Section | You hear | Technique | Page + action | Caption |
+|---|---|---|---|---|---|
+| 0 | count-in | silence | kit as the start | Sequence: an empty pattern on the kit | Start from an empty pattern. |
+| 1-2 | intro | kick, then a late snare | GEN Euclid, rotate | GEN Defaults on the kick; the snare's GEN, ⌥→ | Euclid kick, rotated snare. |
+| 3-4 | intro | a sine bass on the 1, ricochet hats | machine choice, GEN Random | picker: GND-SIN on 12, PTCH and DEC; hats GEN Random, R | Pick the machine for the job. |
+| 5-6 | build | rim and cowbell by hand, an accent, a slide | accent, slide | clicks; ⇧-click accent; ⌥-click slide | Accent and slide by hand. |
+| 7-8 | build | a tom fill played live | live recording | ⌥Space; A S D F; ⌥Space | Record the fill live. |
+| 9-10 | build | the hat's decay opens up | parameter locks | LOCK lane DEC on the hat, ⇧-drag ramp | Lock decay to every step. |
+| 11 | build | hats shift, swing leans in | rotate, swing | ⌥→ ×2; SWG 50 → 58 | Rotate. Add swing. |
+| 12-13 | build | a buzzing roll on the last beat | retrig | picker: E12-SD on 15; RTRG, RTIM; a trig on step 13 | Retrig makes the roll. |
+| 14-15 | build | the rim's decay wobbles | LFO | LFO target T7 DEC, shape ramp, SPD, DEPTH | An LFO moves the decay. |
+| 16-18 | build | the cowbell changes colour, back, again | MUTATE, undo | MUTATE R; ⌘Z on 17; R on 18 | Mutate it. Undo it. |
+| 19-21 | dub | clap panned, one snare throw into the echo | sends, master echo | Mix: PAN; DEL up on 20, echo FB; DEL down on 21 | One hit into the echo. |
+| 22-24 | variation | B queued | pattern copy, queue | chooser: copy A to B; › on 24 | Copy it. Queue the next pattern. |
+| 25 | break | the beat drops dead | mute drag | Mix: one drag over M 1-5 | One drag drops the beat. |
+| 26-30 | break | the full groove sampled first, then the break | resample | Sampler: Set up sampling, Main mix, LEN 1 bar, player PTCH 64 HOLD/DEC 127; Capture | Sample your own beat. |
+| 31-34 | chops | the chops alone, re-cut | slicing, reverse, retrig | solo the player; chop row: trigs, slices, ⌥ reverse, ⇧ retrig | Chop it. Reverse. Retrig. |
+| 35-36 | chops | ROM slots | ROM tiles | waveform tiles | 48 ROM sounds, one click. |
+| 37-40 | riser | the whole kit filters up | Control All | ⌥-drag FLTF; ⇧-arm M 1-5 and un-solo | Sweep the whole kit. |
+| 41 | drop | everything back on the bar | ⇧-armed mutes | ⇧ up on the bar line; ⌘Z the sweep | Release on the bar. |
+| 42-48 | drop | full groove with the chops and the roll | solo drag | Mix: S snare + player on 45, off on 47 | Solo with a drag. |
+| 49-52 | variation | the open hat rolled again | GEN, rotate | GEN R; ⌥→ | Roll it again. |
+| 53-56 | outro | A, B, A, B | chain | Song: Chain; STOP on the bar line; pads A, B; PLAY | Chain the patterns. |
+| 57-69 | outro | strip back | mutes | M every 2 bars: perc, chops, hats, kick | Strip it back. |
+| 70-72 | outro | everything back, then stop | ⇧-armed return | ⇧-click, ⇧ up on the bar line; STOP; end card | End on the bar. |
+
+Reels from this take, 30 s each, in priority order: Resample (26-34), Sweep and drop (37-41), Retrig roll (12-13 with
+5-6), Lock anything (9-11), Euclid from nothing (0-4); then LFO (14-15), Mutate and undo (16-18), mute drop (25 +
+45-48), chain and strip (53-72).

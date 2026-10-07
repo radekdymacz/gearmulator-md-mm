@@ -41,6 +41,15 @@ render() {	# $1 run folder, $2 captions file (optional; "none": none)
 	[ -f "$DIR/raw.mov" ] && [ -f "$DIR/page.log" ] && [ -f "$DIR/timeline.txt" ] || die "$DIR has no raw.mov, page.log and timeline.txt"
 	REC=$("$ROOT/tools/mdmm-recorder/build.sh") || die "the recorder did not build"
 	. "$DIR/timeline.txt"	# DEMO OFFSET DURATION LEAD
+	# the take must hold the whole cut, picture and sound (a recording that ended early is not rendered)
+	python3 - "$DIR/raw.mov" "$OFFSET" "$DURATION" <<'EOF' || die "raw.mov is shorter than the cut"
+import subprocess, sys
+f, off, dur = sys.argv[1], float(sys.argv[2]), float(sys.argv[3])
+r = subprocess.run(["ffprobe", "-v", "error", "-show_entries", "stream=codec_type,duration", "-of", "csv=p=0", f], capture_output=True, text=True).stdout.split()
+d = {k: float(v) for k, v in (x.split(",") for x in r if "," in x)}
+short = [k for k in ("video", "audio") if d.get(k, 0) < off + dur - 0.3]
+if short: print("raw.mov: %s ends at %s s, the cut needs %.1f s" % (" and ".join(short), {k: d.get(k) for k in short}, off + dur)); sys.exit(1)
+EOF
 	NAME=$DEMO
 	mkdir -p "$DIR/stills" "$DIR/captions"
 	rm -f "$DIR"/captions/*.png "$DIR"/stills/*.png
@@ -111,7 +120,7 @@ EOF
 		CSTART=$(python3 -c "print(max(0, $DURATION - $CARDSEC))")
 	fi
 
-	# loudness, measured on the cut (loudnorm's first pass), then applied (second pass, linear) under a limiter: the
+	# loudness, measured on the cut (loudnorm's first pass), then applied (second pass, linear) under a limiter (at 4x the rate, -4 dBFS: AAC adds up to 3 dB of true peak on dense retrigs): the
 	# sound fades in at once and out under the end card
 	MEAS=$(ffmpeg -hide_banner -nostats -ss "$OFFSET" -t "$DURATION" -i "$DIR/raw.mov" -vn \
 		-af "loudnorm=I=-14:TP=-2:LRA=11:print_format=json" -f null - 2>&1 | python3 -c '
@@ -120,7 +129,7 @@ t = sys.stdin.read(); j = json.loads(t[t.rindex("{"):t.rindex("}") + 1])
 print("measured_I=%s:measured_TP=%s:measured_LRA=%s:measured_thresh=%s:offset=%s" % (j["input_i"], j["input_tp"], j["input_lra"], j["input_thresh"], j["target_offset"]))') \
 		|| die "no sound to measure in the recording"
 	AOUT=$(python3 -c "print(max(0, $DURATION - max(2.5, $CARDSEC * 0.8)))"); AOUTD=$(python3 -c "print($DURATION - $AOUT)")
-	AF="loudnorm=I=-14:TP=-2:LRA=11:$MEAS:linear=true,aresample=48000,alimiter=limit=0.708:level=false:attack=1:release=40,afade=t=in:d=0.05,afade=t=out:st=$AOUT:d=$AOUTD"
+	AF="loudnorm=I=-14:TP=-2:LRA=11:$MEAS:linear=true,aresample=192000,alimiter=limit=0.63:level=false:attack=1:release=40,aresample=48000,afade=t=in:d=0.05,afade=t=out:st=$AOUT:d=$AOUTD"
 
 	# one picture chain per format: a blurred, darkened fill behind the window, the captions, the end card
 	for fmt in 16x9 9x16 1x1; do
@@ -155,7 +164,7 @@ print("measured_I=%s:measured_TP=%s:measured_LRA=%s:measured_thresh=%s:offset=%s
 		ffmpeg -hide_banner -loglevel error -y -ss "$OFFSET" -t "$DURATION" -i "$DIR/raw.mov" $INPUTS \
 			-filter_complex "$VF" -map "[$last]" -map 0:a -af "$AF" \
 			-c:v libx264 -preset slow -crf 18 -pix_fmt yuv420p -profile:v high -r "$FPS" \
-			-c:a aac -b:a 192k -ar 48000 -movflags +faststart -t "$DURATION" "$OUT" || die "ffmpeg $fmt"
+			-c:a aac -b:a 256k -ar 48000 -movflags +faststart -t "$DURATION" "$OUT" || die "ffmpeg $fmt"
 		# stills: the hook, the middle, the end card
 		for p in 0.8 50% end; do
 			case $p in end) at=$(python3 -c "print($DURATION - 0.5)") ;; *%) at=$(python3 -c "print($DURATION * ${p%\%} / 100)") ;; *) at=$p ;; esac
@@ -179,6 +188,9 @@ pk = re.search(r"Peak:\s+(-?[\d.]+) dBFS", summary)
 peak = float(pk.group(1)) if pk else -99
 d = re.search(r"Duration: (\d+):(\d+):([\d.]+)", t)
 dur = 60 * int(d.group(2)) + float(d.group(3))
+# the sound must last as long as the picture
+import subprocess
+ad = float(subprocess.run(["ffprobe", "-v", "error", "-select_streams", "a:0", "-show_entries", "stream=duration", "-of", "csv=p=0", sys.argv[1]], capture_output=True, text=True).stdout.strip() or 0)
 starts = [float(x) for x in re.findall(r"silence_start: (-?[\d.]+)", t)]
 ends = [float(x) for x in re.findall(r"silence_end: ([\d.]+)", t)] + [dur]
 sil = list(zip(starts, ends))
@@ -191,12 +203,13 @@ print("loudness %.1f LUFS (target -14), true peak %.1f dBFS, silence: %.1f s at 
 	% (I, peak, lead, tail, len(mid), "".join(" (%.1f-%.1f s)" % m for m in mid)))
 bad = []
 if I < -20 or I > -12: bad.append("loudness off target")
+if ad < dur - 0.5: bad.append("the sound ends at %.1f s of %.1f s" % (ad, dur))
 if peak > -0.5: bad.append("clipping")
 # a STOP in the song (a chain loaded while stopped) is a short silence: up to 2.5 s; the start may be quiet until
 # the first bar
 import os
 if lead > float(os.environ.get("QUIET", "0")) + 0.5 or tail > 1.5 or any(e - s > 2.5 for s, e in mid): bad.append("silence")
-print("RESULT " + ("ok" if not bad else "bad: " + ", ".join(bad)))'
+print("RESULT " + ("ok" if not bad else "bad: " + ", ".join(bad)))' "$1"
 }
 
 if [ "${1:-}" = render ]; then
@@ -289,7 +302,8 @@ while :; do
 		elif grep -q "DEMO $DEMO START" "$LOG"; then echo "FAIL the recorder was not ready before the demo started (raise the page's preroll)"; STATUS=1; break; fi ;;
 	run)
 		[ -n "$TSTART" ] || { grep -q "DEMO $DEMO START" "$LOG" && TSTART=$(now); }
-		if grep -q "DEMOS DONE" "$LOG"; then sleep "$TAIL"; break; fi ;;
+		if grep -q "DEMOS DONE" "$LOG"; then sleep "$TAIL"; break; fi
+		if ! kill -0 "$RPID" 2>/dev/null; then wait "$RPID"; RPID=""; cat "$OUT/recorder.log"; echo "FAIL the recorder stopped before the demo ended"; STATUS=1; break; fi ;;
 	esac
 done
 # the recorder finishes its file on SIGINT; given 15 s, then it is killed (the file is then incomplete)

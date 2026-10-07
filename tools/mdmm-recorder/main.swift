@@ -271,6 +271,9 @@ final class Recorder: NSObject, SCStreamDelegate, SCRecordingOutputDelegate, @un
 	}
 
 	func recordingOutputDidFinishRecording(_ recordingOutput: SCRecordingOutput) {
+		// ScreenCaptureKit can end a recording by itself (seen once after 13 s, no error given): a file that ended
+		// before anyone asked is not the take, exit 4
+		if !stopping { say("the recording ended by itself before a stop was asked: \(options["out"] ?? "") is short"); exit(4) }
 		say("finished: \(options["out"] ?? "")")
 		exit(started ? 0 : 1)
 	}
