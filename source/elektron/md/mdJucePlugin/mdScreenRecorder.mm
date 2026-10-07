@@ -17,9 +17,15 @@
 
 #include <unistd.h>
 
+#include <AvailabilityMacros.h>
+
 #if !__has_feature(objc_arc)
 #error "mdScreenRecorder.mm is built with -fobjc-arc"
 #endif
+
+// SCRecordingOutput is in the macOS 15 SDK (Xcode 16). A build with an older SDK (CI on Xcode 15.4) gets the
+// stand-in at the end of the file: the Record menu says recording is not available in this build.
+#if __MAC_OS_X_VERSION_MAX_ALLOWED >= 150000
 
 namespace
 {
@@ -439,3 +445,34 @@ namespace mdJucePlugin
 			[[NSRunLoop mainRunLoop] runMode:NSDefaultRunLoopMode beforeDate:[NSDate dateWithTimeIntervalSinceNow:0.05]];
 	}
 }
+
+#else	// built with an SDK older than macOS 15: no recording
+
+namespace mdJucePlugin
+{
+	struct ScreenRecorder::Impl
+	{
+	};
+
+	juce::String ScreenRecorder::unavailableReason() { return "Recording is not in this build (it needs macOS 15 or later and a build made with Xcode 16)."; }
+	bool ScreenRecorder::screenRecordingAllowed() { return false; }
+	void ScreenRecorder::askForScreenRecording() {}
+	void ScreenRecorder::openScreenRecordingSettings() {}
+	ScreenRecorder::ScreenRecorder() : m_impl(std::make_unique<Impl>()) {}
+	ScreenRecorder::~ScreenRecorder() = default;
+	ScreenRecorder::State ScreenRecorder::state() const { return State::Idle; }
+
+	void ScreenRecorder::start(juce::TopLevelWindow&, const juce::File&,
+		std::function<void(const Started&)> _onStarted, std::function<void(const Ended&)>)
+	{
+		Started s;
+		s.problem = unavailableReason();
+		if(_onStarted)
+			_onStarted(s);
+	}
+
+	void ScreenRecorder::stop() {}
+	void ScreenRecorder::stopAndWait(double) {}
+}
+
+#endif
