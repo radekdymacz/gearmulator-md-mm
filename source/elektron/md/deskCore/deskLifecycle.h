@@ -12,7 +12,7 @@ namespace deskCore
 	{
 		Missing,		// no ROM (NO ROM, the first-run screen)
 		Unsupported,	// another firmware than the one the editor knows (ROM ERROR)
-		Loading,		// the device is prepared or restored (LOADING ROM)
+		Loading,		// the device is prepared or restored (LOADING ROM), or formats its sample flash on the first start
 		Booting,		// the firmware starts: MIDI is not taken yet, or no status reply yet
 		Animating,		// it answers MIDI, but its start-up animation still ignores panel keys
 		Ready,			// takes input

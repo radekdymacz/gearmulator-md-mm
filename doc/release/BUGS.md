@@ -16,7 +16,9 @@ where it came from, the setup, what happens, what should happen, status.*
 - **From:** Radek, 2026-10-07, 0.3.1 installed for the user, first start of the app.
 - **What happens:** the start-up animation and the ROM loading run twice.
 - **Should:** one load, one animation.
-- **Status:** open.
+- **Cause:** not the settings migration. A Machinedrum that starts without its UW factory cache (`<data folder>/nvram/md-uw-1.63-factory-v2.cache`) and without a project that carries the sample flash first formats its sample flash, as the real machine does on its first start, and the processor then starts it again (`serviceFactoryInitialization`). The page showed that first run as a normal start, with its LCD, so the user saw two start-ups. The cache that should make this happen once per computer was never kept: the editor's status requests (the Song status is not on the read-only list) reached the machine while it formatted, which counts as outside use and disqualifies the capture. Reproduced with 0.3.1 and an empty data folder: one start-up animation, `[MD] factory flash preparation complete; rebooted in process`, a second animation, no cache; Radek's own data folder has never had one, so every start without a saved project did this (a new plug-in instance in a DAW, an app with no saved state). His own first-start log was overwritten by a later start; his migrated settings, started again with 0.3.1 in an empty data folder, restore with one start-up.
+- **Fix:** the machine that formats its flash is "loading" for the page (the start-up card says Preparing…, without its LCD) and the editor does not talk to it, so the cache is kept; the start-up animation shown is the one after it. The next start has no preparation at all. Test: `mdFirstStartFirmwareTest` (needs the ROM).
+- **Status:** fixed on `fix/first-start-double-load`, not yet released.
 
 ## B-002 · The Windows editor window is probably empty
 
