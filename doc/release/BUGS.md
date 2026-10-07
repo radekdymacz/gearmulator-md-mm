@@ -4,6 +4,13 @@
 repository; the site sends reports to the contact address. Newest first. Each entry:
 where it came from, the setup, what happens, what should happen, status.*
 
+## B-006 · LEN (loop length) cannot be dragged
+
+- **From:** the same tester asked how to loop only 16 steps, 2026-10-07; Radek expected LEN to be draggable.
+- **What happens:** on the Sequence LCD, LEN steps 16 / 32 / 48 / 64 on click (⌥-click steps the length inside it, the mouse wheel works), but a drag does nothing, and the click behaviour is easy to miss.
+- **Should:** LEN (and the other LCD values that step on click) also follow a vertical drag, like the other values in the editor; the tooltip says so.
+- **Status:** open.
+
 ## B-005 · High CPU in Ableton Live
 
 - **From:** Discord beta tester (versonegro), 2026-10-07: Live's CPU meter at 66 % with the Machinedrum Editor, macOS 12, Apple M1.
@@ -44,4 +51,5 @@ where it came from, the setup, what happens, what should happen, status.*
 - **To check:** how the window size and the web view's zoom follow the host's scale (Retina and non-Retina, WKWebView on macOS 12); `mdStudioWebZoom.mm`, `mdWindowFitTest`; the Monomachine Editor; Logic, Bitwig and Reaper.
 - **More evidence (second screenshot, same tester):** the header LCD has no inner borders, the transport buttons are not boxed, and SETUP (UNDO/REDO/MKI) is cut off; on Radek's newer macOS all of it renders correctly.
 - **Likely cause:** macOS 12's system WebKit (Safari 15 engine) does not support some CSS the page uses (e.g. container-query units, color-mix), so those rules are dropped. Fix: fallbacks for the oldest supported WebKit, and an honest minimum macOS version.
-- **Status:** open. Radek could not reproduce it on his Mac; being fixed and reviewed at many window sizes.
+- **Update 2026-10-07:** the tester says the cut-off window was their own setting (the editor size is in the right-click menu). The missing LCD borders are still real (old WebKit, see above).
+- **Status:** window size: not a bug (discoverability: add ⌘− / ⌘+ zoom). Old-WebKit rendering: open, being fixed.
