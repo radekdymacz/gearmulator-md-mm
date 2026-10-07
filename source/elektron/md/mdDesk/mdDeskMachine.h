@@ -197,6 +197,7 @@ namespace mdDesk
 		deskCore::PushPolicy pushPolicy(DocKind _kind) const;
 		void sendDump(const Document& _doc, const Documents& _view);
 		void restoreWorkingKit(const elektronData::MdKit& _stored, const elektronData::MdKit& _working);
+		void sendLive(uint8_t _t, uint8_t _index, uint8_t _value);
 		void pumpRecording(double _now, const Documents& _view);
 		void pumpSequence(double _now);
 		void runSequence(std::vector<deskCore::SeqStep<Act>> _steps);

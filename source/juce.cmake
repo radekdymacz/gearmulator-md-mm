@@ -124,6 +124,12 @@ endmacro()
 
 macro(createJucePlugin targetName productName isSynth plugin4CC binaryDataProject synthLibProject)
 	string(REPLACE " " "" productNameIdentifier "${productName}")
+	# A product can own its bundle identifier (GEARMULATOR_PLUGIN_BUNDLE_ID_<target>); the others keep upstream's.
+	if(DEFINED GEARMULATOR_PLUGIN_BUNDLE_ID_${targetName})
+		set(pluginBundleId "${GEARMULATOR_PLUGIN_BUNDLE_ID_${targetName}}")
+	else()
+		set(pluginBundleId "local.gearmulator.preview.${productNameIdentifier}")
+	endif()
 	juce_add_plugin(${targetName}
 		# VERSION ...                                     # Set this if the plugin version is different to the project version
 		# ICON_BIG ...                                    # ICON_* arguments specify a path to an image file to use as an icon for the Standalone
@@ -147,7 +153,7 @@ macro(createJucePlugin targetName productName isSynth plugin4CC binaryDataProjec
 		PRODUCT_NAME ${productName}                       # The name of the final executable, which can differ from the target name
 		VST3_AUTO_MANIFEST TRUE                           # While generating a moduleinfo.json is nice, Juce does not properly package using cpack on Win/Linux
 		                                                  # and completely fails on Linux if we change the suffix to .vst3, so we skip that completely for now
-		BUNDLE_ID "local.gearmulator.preview.${productNameIdentifier}"
+		BUNDLE_ID "${pluginBundleId}"
 		LV2URI "http://theusualsuspects.lv2/${productNameIdentifier}"
 	)
 

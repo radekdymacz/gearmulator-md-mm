@@ -7,7 +7,7 @@
 
 # The Machinedrum and Monomachine Editors have their own release version, apart from
 # Gearmulator's (the bundles, the AU version, the installers and the site use it).
-set(MDMM_EDITOR_VERSION 0.3.0)
+set(MDMM_EDITOR_VERSION 0.3.1)
 string(REPLACE "." ";" _mdmmVersionParts "${MDMM_EDITOR_VERSION}")
 list(GET _mdmmVersionParts 0 _mdmmVersionMajor)
 list(GET _mdmmVersionParts 1 _mdmmVersionMinor)
@@ -34,6 +34,7 @@ list(APPEND SOURCES
 	mdMidiLearnCommands.cpp mdMidiLearnCommands.h
 	mdPageEditor.cpp mdPageEditor.h
 	mdRomInstall.cpp mdRomInstall.h
+	mdSettingsMigration.cpp mdSettingsMigration.h
 	mdSessionMd.cpp mdSessionMm.cpp mdSessions.h
 	mdStudioLink.cpp mdStudioLink.h
 	mdWebPageHost.cpp mdWebPageHost.h
@@ -161,6 +162,15 @@ set(GEARMULATOR_PLUGIN_EXTRA_ARGS_mdJucePlugin
 set(GEARMULATOR_PLUGIN_EXTRA_ARGS_mmJucePlugin
 	ICON_BIG "${CMAKE_CURRENT_SOURCE_DIR}/icons/mm-1024.png" ICON_SMALL "${CMAKE_CURRENT_SOURCE_DIR}/icons/mm-32.png")
 
+# The editors' own bundle identifiers (doc/release/SIGNING.md, "Identifiers"), on the app, the VST3 and the AU
+# alike (JUCE gives every format of a target the same one). Upstream's local.gearmulator.preview.GearmulatorMD/MM
+# belong to upstream's builds: with the same identifier LaunchServices opened whichever it found, and a signed
+# app's identifier is what its permissions (microphone) are tied to. Only the bundles' identity changes: the
+# plug-in names, the VST3 class IDs and the AU type/subtype/manufacturer come from the product name and the
+# four-character codes, not from this.
+set(GEARMULATOR_PLUGIN_BUNDLE_ID_mdJucePlugin "com.nativekloud.machinedrum-editor")
+set(GEARMULATOR_PLUGIN_BUNDLE_ID_mmJucePlugin "com.nativekloud.monomachine-editor")
+
 function(mdmm_plugin_targets)
 	foreach(plugin_target mdJucePlugin mmJucePlugin)
 		target_link_libraries(${plugin_target} PRIVATE elektronData mdDataLink mdDesk mmDesk deskHost deskWire)
@@ -247,6 +257,15 @@ function(mdmm_plugin_targets)
 	add_test(NAME mdRomInstallTest COMMAND mdRomInstallTest)
 	set_tests_properties(mdRomInstallTest PROPERTIES LABELS "UnitTest")
 	set_property(TARGET mdRomInstallTest PROPERTY FOLDER "Elektron/test")
+
+	# The editors' own settings files: the one-time copy from upstream's names (mdSettingsMigration.h).
+	add_executable(mdSettingsMigrationTest mdSettingsMigrationTest.cpp mdSettingsMigration.cpp)
+	target_include_directories(mdSettingsMigrationTest PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/..)
+	target_link_libraries(mdSettingsMigrationTest PRIVATE juce::juce_core)
+	target_compile_definitions(mdSettingsMigrationTest PRIVATE JUCE_GLOBAL_MODULE_SETTINGS_INCLUDED=1 JUCE_STANDALONE_APPLICATION=1)
+	add_test(NAME mdSettingsMigrationTest COMMAND mdSettingsMigrationTest)
+	set_tests_properties(mdSettingsMigrationTest PROPERTIES LABELS "UnitTest")
+	set_property(TARGET mdSettingsMigrationTest PROPERTY FOLDER "Elektron/test")
 
 	add_executable(mdWindowFitTest mdWindowFitTest.cpp)
 	target_include_directories(mdWindowFitTest PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/../../..)

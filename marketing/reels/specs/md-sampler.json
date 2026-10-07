@@ -1,0 +1,60 @@
+{
+  "schema": "mdmm.reel/1",
+  "id": "md-sampler",
+  "title": "Sample into your Machinedrum",
+  "status": "needs-footage",
+  "machine": "md",
+  "fps": 30,
+  "footage": { "file": "fr-06-md-sampler.mov", "uiScale": 2, "ui": [1440, 810] },
+  "music": { "bpm": 120, "downbeat": 0 },
+  "hook": { "text": "Any WAV. *Into your Machinedrum.*", "seconds": 2 },
+  "brief": {
+    "idea": "The calm sibling of the glitch reel: load a WAV/AIFF into a sample slot, audition it before keeping it, see the waveform tile, put it on a track and hear it in the groove. No sysex dump dance, no sample-transfer tool.",
+    "footageRequest": "FR-06",
+    "use": "paid-ok",
+    "openQuestions": [
+      "Honesty: this is the emulator. Over HW MIDI there are no sample transfers (site FAQ); captions must not suggest the WAV reaches a real machine.",
+      "Use a sample we own or a CC0 one; note its source in the FR-06 run folder. Camera regions are placeholders until FR-06 stills exist."
+    ]
+  },
+  "shots": [
+    {
+      "id": "slots",
+      "inSeconds": 2,
+      "beats": 4,
+      "camera": [{ "at": 0, "region": [0, 0, 1440, 810] }, { "at": 1.8, "region": [0, 110, 1440, 420], "byFormat": { "9x16": [0, 110, 640, 420] } }],
+      "subtitles": [{ "at": 1.0, "until": 2.0, "text": "Pick a slot." }]
+    },
+    {
+      "id": "load",
+      "inSeconds": 5,
+      "beats": 4,
+      "camera": [{ "at": 0, "region": [300, 120, 840, 560] }],
+      "subtitles": [{ "at": 0.1, "until": 1.9, "text": "Load a WAV. *Audition it.*" }]
+    },
+    {
+      "id": "tile",
+      "inSeconds": 9,
+      "beats": 4,
+      "camera": [{ "at": 0, "region": [0, 110, 1440, 420], "byFormat": { "9x16": [0, 110, 640, 420] } }],
+      "subtitles": [{ "at": 0.1, "until": 1.9, "text": "Keep it. *Real waveform.*" }]
+    },
+    {
+      "id": "groove",
+      "inBeat": 0,
+      "beats": 12,
+      "camera": [{ "at": 0, "region": [0, 0, 1440, 810] }, { "at": 3.0, "region": [0, 110, 1440, 400], "byFormat": { "9x16": [0, 120, 620, 390] } }],
+      "subtitles": [{ "at": 0.2, "until": 2.8, "text": "On a track. *In the groove.*" }]
+    }
+  ],
+  "endCard": {
+    "beats": 6,
+    "audioInBeat": 12,
+    "title": "Machinedrum Editor",
+    "line": "Free · pay what you want",
+    "status": "Coming soon",
+    "small": "macOS · VST3, AU and app · bring your own ROM"
+  },
+  "audio": { "fadeOutSeconds": 0.8 },
+  "post": { "link": "https://mdmm.dev/?utm_source=instagram&utm_medium=social&utm_campaign=evergreen&utm_content=md-sampler" }
+}

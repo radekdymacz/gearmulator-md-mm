@@ -9,8 +9,8 @@
 #   scripts/mm-editor-cpu.sh [path to "Gearmulator MM.app"]
 set -e
 APP=${1:-"$(cd "$(dirname "$0")/.." && pwd)/bin/plugins/Release/Standalone/Gearmulator MM.app"}
-C="$HOME/Documents/Gearmulator Preview/Monomachine/config/Gearmulator MM.xml"
-SETTINGS="$HOME/Library/Application Support/Gearmulator MM.settings"
+C="$HOME/Documents/Gearmulator Preview/Monomachine/config/Monomachine Editor.xml"
+SETTINGS="$HOME/Library/Application Support/Monomachine Editor.settings"
 LOG="$HOME/Library/Caches/Gearmulator MM/gearmulator-mmStudio.log"
 TMP=$(mktemp -d)
 cp -p "$C" "$TMP/config.xml"; cp -p "$SETTINGS" "$TMP/settings" 2>/dev/null || true
@@ -39,7 +39,7 @@ for phase in stopped playing-seq playing-mix; do
 	a1=$(secs $PID); w1=$(secs $web); g1=$(secs "${gpu:-0}"); t1=$(date +%s)
 	report "$phase" "$(echo "($a1-$a0)*100/($t1-$t0)" | bc -l)" "$(echo "(${w1:-0}-${w0:-0})*100/($t1-$t0)" | bc -l)" "$(echo "(${g1:-0}-${g0:-0})*100/($t1-$t0)" | bc -l)"
 done
-osascript -e 'tell application id "local.gearmulator.preview.GearmulatorMM" to quit' >/dev/null 2>&1 || true
+osascript -e 'tell application id "com.nativekloud.monomachine-editor" to quit' >/dev/null 2>&1 || true
 sleep 3; kill $PID 2>/dev/null || true
 sysctl -n hw.model machdep.cpu.brand_string | tr '\n' ' '; echo "($(sysctl -n hw.ncpu) cores)"
 grep -E " audio: " "$LOG" | tail -1 || true

@@ -19,9 +19,13 @@
 # "Install for me only" (no administrator needed, e.g. on a managed Mac) in
 # ~/Applications, ~/Library/Audio/Plug-Ins/VST3 and
 # ~/Library/Audio/Plug-Ins/Components. The payload paths are relative, so the
-# domain the person picks decides the root. The packages are unsigned: there is no
-# Apple Developer ID yet. Firmware is never packaged; the script refuses to
-# build if a firmware-like file is found in any bundle.
+# domain the person picks decides the root. Firmware is never packaged; the
+# script refuses to build if a firmware-like file is found in any bundle.
+#
+# Signing (doc/release/SIGNING.md): the bundles are packaged as they are, so
+# sign them first with sign_mdmm.sh. MDMM_INSTALLER_IDENTITY (a "Developer ID
+# Installer: ..." identity, optional MDMM_SIGN_KEYCHAIN) signs the product
+# archive; without it the packages are unsigned and say so in the log.
 
 set -euo pipefail
 
@@ -29,8 +33,16 @@ script_dir="$(cd "$(dirname "$0")" && pwd)"
 source_dir="$(cd "${script_dir}/../.." && pwd)"
 bundle_dir="$(cd "${1:?usage: build_mdmm_pkg.sh BUNDLE_DIR OUTPUT_DIR [VERSION]}" && pwd)"
 output_dir_input="${2:?usage: build_mdmm_pkg.sh BUNDLE_DIR OUTPUT_DIR [VERSION]}"
-version="${3:-0.3.0}"
+version="${3:-0.3.1}"
 resources_src="${script_dir}/pkg-resources"
+installer_identity="${MDMM_INSTALLER_IDENTITY:-}"
+sign_args=()
+if [[ -n "${installer_identity}" ]]; then
+  sign_args=(--sign "${installer_identity}" --timestamp)
+  if [[ -n "${MDMM_SIGN_KEYCHAIN:-}" ]]; then
+    sign_args+=(--keychain "${MDMM_SIGN_KEYCHAIN}")
+  fi
+fi
 
 if [[ ! "${version}" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
   echo "VERSION must be MAJOR.MINOR.PATCH, got: ${version}" >&2
@@ -43,16 +55,32 @@ work_dir="$(mktemp -d "${TMPDIR:-/tmp}/mdmm-pkg.XXXXXX")"
 trap 'rm -rf -- "${work_dir}"' EXIT
 
 # One row per machine: bundle stem | app name in /Applications | id suffix |
-# data folder | machine name | package file name
+# data folder | machine name | package file name | the bundles' identifier
+#
+# The package identifiers (com.nativekloud.mdmm.<md|mm>[.app|.vst3|.au]) name
+# the Installer receipts. They have been the same since 0.1.0 and stay so: a
+# new package upgrades the receipts of an earlier one in place. They are not
+# the bundles' identifiers (SIGNING.md, "Identifiers").
 machines=(
-  "Gearmulator MD|Machinedrum Editor|md|Machinedrum|Machinedrum|Machinedrum-Editor-macOS.pkg"
-  "Gearmulator MM|Monomachine Editor|mm|Monomachine|Monomachine|Monomachine-Editor-macOS.pkg"
+  "Gearmulator MD|Machinedrum Editor|md|Machinedrum|Machinedrum|Machinedrum-Editor-macOS.pkg|com.nativekloud.machinedrum-editor"
+  "Gearmulator MM|Monomachine Editor|mm|Monomachine|Monomachine|Monomachine-Editor-macOS.pkg|com.nativekloud.monomachine-editor"
 )
 
 require_bundle() {
   if [[ ! -d "$1" ]]; then
     echo "Missing bundle: $1" >&2
     exit 3
+  fi
+}
+
+# Every bundle must carry the editor's own identifier, never upstream
+# Gearmulator's local.gearmulator.preview.* one.
+require_bundle_id() {
+  local bundle="$1" expected="$2" actual
+  actual="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "${bundle}/Contents/Info.plist")"
+  if [[ "${actual}" != "${expected}" ]]; then
+    echo "Wrong bundle identifier on ${bundle}: ${actual} (expected ${expected})" >&2
+    exit 8
   fi
 }
 
@@ -124,13 +152,14 @@ package_info="${work_dir}/PackageInfo.template"
 echo '<pkg-info overwrite-permissions="false" relocatable="false"/>' > "${package_info}"
 
 for row in "${machines[@]}"; do
-  IFS='|' read -r stem app_name id_suffix data_folder machine pkg_name <<< "${row}"
+  IFS='|' read -r stem app_name id_suffix data_folder machine pkg_name bundle_id <<< "${row}"
   identifier="com.nativekloud.mdmm.${id_suffix}"
   app="${bundle_dir}/${stem}.app"
   vst3="${bundle_dir}/${stem}.vst3"
   au="${bundle_dir}/${stem}.component"
   for bundle in "${app}" "${vst3}" "${au}"; do
     require_bundle "${bundle}"
+    require_bundle_id "${bundle}" "${bundle_id}"
     refuse_firmware "${bundle}"
   done
 
@@ -142,7 +171,7 @@ for row in "${machines[@]}"; do
 
   # Component 1: the standalone app, renamed to the product name. Only the
   # folder name changes; the executable and Info.plist stay as built, so the
-  # ad-hoc signature stays valid.
+  # signature (and a stapled ticket) stays valid.
   stage_bundle "${app}" "${machine_dir}/root-app" "Applications" "${app_name}.app"
   write_component_plist "${machine_dir}/app.plist" "Applications/${app_name}.app"
   pkgbuild --root "${machine_dir}/root-app" \
@@ -224,7 +253,18 @@ XML
   productbuild --distribution "${machine_dir}/distribution.xml" \
     --resources "${resources}" \
     --package-path "${components}" \
+    ${sign_args[@]+"${sign_args[@]}"} \
     "${output_dir}/${pkg_name}"
+  if [[ -n "${installer_identity}" ]]; then
+    signature="$(pkgutil --check-signature "${output_dir}/${pkg_name}")"
+    echo "${signature}"
+    if [[ "${signature}" != *"Developer ID Installer:"* ]]; then
+      echo "Package is not signed with a Developer ID Installer certificate" >&2
+      exit 7
+    fi
+  else
+    echo "note: ${pkg_name} is UNSIGNED (no MDMM_INSTALLER_IDENTITY)"
+  fi
 
   # Self-check: the product holds exactly the three payloads, at the right
   # paths, with no firmware.

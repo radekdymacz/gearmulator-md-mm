@@ -2411,19 +2411,21 @@ namespace
 		check(ok() && heldParams.size() == 3 && notes.back()[2] == 127, "noteOff: the first key let go while the second sounds: nothing");
 		// The person moves PTCH while the key is held: that edit is the document's, and the release restores it.
 		desk.onPageMessage(cmd("{\"op\":\"param\",\"k\":" + std::to_string(kit.position) + R"(,"t":4,"i":0,"v":50,"id":12})"));
-		check(working()->params[4][0] == 50 && !params.empty() && params.back() == std::array<uint8_t, 3>{4, 0, 50}, "an edit meanwhile is an edit");
+		// a live edit goes through the parameter and as the machine's CC past it (MdMachine::sendLive)
+		check(working()->params[4][0] == 50 && !params.empty() && params.back() == std::array<uint8_t, 3>{4, 0, 50}
+			&& heldParams.size() == 4 && heldParams[3] == std::array<uint8_t, 3>{4, 0, 50}, "an edit meanwhile is an edit");
 		desk.onPageMessage(cmd(R"({"op":"noteOff","t":4,"pitch":12,"id":13})"));
-		check(ok() && heldParams.size() == 4 && heldParams[3] == std::array<uint8_t, 3>{4, 0, 50} && notes.back() == std::array<uint8_t, 3>{0, 43, 0},
+		check(ok() && heldParams.size() == 5 && heldParams[4] == std::array<uint8_t, 3>{4, 0, 50} && notes.back() == std::array<uint8_t, 3>{0, 43, 0},
 			"noteOff: the release restores the document's value (the edit made meanwhile), not the one the key replaced");
 		desk.onPageMessage(cmd(R"({"op":"noteOff","t":4,"pitch":12,"id":14})"));
-		check(ok() && heldParams.size() == 4, "noteOff: a second let go sends nothing");
+		check(ok() && heldParams.size() == 5, "noteOff: a second let go sends nothing");
 		// SAVE KIT while a key holds PTCH: the machine gets the document's value back first.
 		desk.onPageMessage(cmd(R"({"op":"noteOn","t":4,"vel":100,"pitch":-12,"id":15})"));
-		check(heldParams.size() == 5 && heldParams[4][2] == keys::heldPtch(50, -12), "noteOn: pitched from the sound as it is now (PTCH 50)");
+		check(heldParams.size() == 6 && heldParams[5][2] == keys::heldPtch(50, -12), "noteOn: pitched from the sound as it is now (PTCH 50)");
 		desk.onPageMessage(cmd(R"({"op":"saveKit","id":16})"));
-		check(heldParams.size() == 6 && heldParams[5] == std::array<uint8_t, 3>{4, 0, 50}, "saveKit: a held value is put back before the kit is saved");
+		check(heldParams.size() == 7 && heldParams[6] == std::array<uint8_t, 3>{4, 0, 50}, "saveKit: a held value is put back before the kit is saved");
 		desk.onPageMessage(cmd(R"({"op":"noteOff","t":4,"id":17})"));
-		check(ok() && heldParams.size() == 6 && notes.back()[2] == 0, "noteOff after saveKit: the note off, nothing held any more");
+		check(ok() && heldParams.size() == 7 && notes.back()[2] == 0, "noteOff after saveKit: the note off, nothing held any more");
 	}
 
 	void checkContract(const bool _write)

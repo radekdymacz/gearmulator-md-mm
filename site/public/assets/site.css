@@ -1,4 +1,4 @@
-/* mdmm.nativekloud.com — built only from the vendored tokens (/design/tokens.css).
+/* mdmm.dev — built only from the vendored tokens (/design/tokens.css).
    DOMAINS.md rule 10: this file overrides exactly four tokens, in both themes:
    --accent, --accent-ink, --on-accent, --glow (hue: Elektron-ish orange, from the MD LCD). The site never uses --glow:
    the design is flat on purpose (no glows, no blur). Light is always the default; dark
@@ -300,3 +300,28 @@ legend { padding: 0; margin-bottom: 12px; color: var(--muted); }
 .legalpage .wrap > * { max-width: 760px; }
 .legalpage h2 { font-size: 20px; margin: 28px 0 8px; }
 .foot .legal a { margin: 0; }
+
+/* user guide */
+.guide .wrap > * { max-width: 860px; }
+.guide h2 { font-size: 26px; margin: 40px 0 10px; scroll-margin-top: 16px; }
+.guide h3 { margin: 26px 0 8px; font-size: 18px; }
+.guide ol, .guide ul { padding-left: 22px; margin: 0 0 1em; }
+.guide li { margin: 6px 0; }
+.guide .toc { list-style: none; padding: 0; display: flex; flex-wrap: wrap; gap: 6px 18px; margin: 0 0 8px; }
+.guide .toc li { margin: 0; }
+.guide .tablewrap { overflow-x: auto; margin: 0 0 1.4em; border: 1px solid var(--line); background: var(--panel); }
+.guide table { width: 100%; border-collapse: collapse; font-size: 15.5px; }
+.guide th, .guide td { text-align: left; vertical-align: top; padding: 9px 12px; border-top: 1px solid var(--line); }
+.guide tr:first-child > * { border-top: 0; }
+.guide th { width: 34%; font-weight: var(--font-weight-body); color: var(--fg); }
+.guide .ws th { width: 30%; white-space: nowrap; font-weight: var(--font-weight-strong); }
+kbd { font: 500 .86em var(--font-mono); background: var(--panel-hover); border: 1px solid var(--ghost-border); border-bottom-width: 2px; padding: 1px 6px; color: var(--fg); white-space: nowrap; display: inline-block; margin: 1px 0; }
+@media (max-width: 560px) { .guide th { width: 40%; } .guide .ws th { width: 36%; } .guide th, .guide td { padding: 8px 10px; } }
+
+/* Download page: the operating system switch */
+.osrow { display: flex; align-items: center; gap: 10px; margin: 6px 0 18px; }
+.osrow .seg button { padding: 7px 12px; }
+
+/* The footer sits at the bottom of the window on short pages (the download steps). */
+body { min-height: 100vh; min-height: 100dvh; display: flex; flex-direction: column; }
+body > main { flex: 1 0 auto; }

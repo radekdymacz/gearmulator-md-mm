@@ -43,7 +43,7 @@ Key fact: the v0.2.0 draft is stale. Tags mdmm-v0.2.0 and mdmm-v0.2.1 exist and 
 - NEEDS-RADEK: README and the site's "Free"/"name your price" text are consistent. Lemon Squeezy is not yet configured, so no payment link exists.
 
 ## 6. site/
-- PASS: mdmm.nativekloud.com, /get/, /privacy/, /terms/, /refunds/ and /contact/ all return 200. The download URL redirects and returns 200, serving the alpha .pkg files.
+- PASS: mdmm.dev, /get/, /privacy/, /terms/, /refunds/ and /contact/ all return 200. The download URL redirects and returns 200, serving the alpha .pkg files.
 - FAIL: the deployed config.js says version "0.1.0-alpha" while the repo says 0.2.0. Redeploy is needed after the release (Radek's step).
 - FAIL: download links serve the 0.1.0-alpha .pkg because 0.2.x are still drafts. Publishing the release (a draft publish) flips "latest". The 0.2.0 draft should be deleted so it is never published.
 - FAIL: feature claim on MIDI learn (see 4).

@@ -6,6 +6,7 @@
 #include "jucePluginEditorLib/standaloneApp.h"
 
 #include "mdPluginProcessor.h"
+#include "mdSettingsMigration.h"
 
 #if JUCE_MAC
 #include "mdRecordMenu.h"
@@ -31,6 +32,10 @@ namespace mdJucePlugin
 	class StandaloneApp : public jucePluginEditorLib::StandaloneApp
 	{
 	public:
+		StandaloneApp() : jucePluginEditorLib::StandaloneApp(ownSettingsName())
+		{
+		}
+
 		juce::String getWindowTitle(juce::AudioProcessor& _processor) const override
 		{
 			if(!dynamic_cast<const AudioPluginAudioProcessor*>(&_processor))
@@ -56,10 +61,22 @@ namespace mdJucePlugin
 				m_record->close();
 			m_record.reset();
 		}
+#endif
 
 	private:
+#if JUCE_MAC
 		std::unique_ptr<RecordMenu> m_record;
 #endif
+		// The app's own settings file, not upstream's "Gearmulator MD.settings" (mdSettingsMigration.h), copied
+		// from that one the first time. Before the base class is made: it opens the file.
+		static juce::String ownSettingsName()
+		{
+			const auto model = AudioPluginAudioProcessor::getCompiledProductModel();
+			const juce::String own(editorStandaloneSettingsName(model));
+			copySettingsOnce(settingsOptions(legacyStandaloneSettingsName(model)).getDefaultFile(),
+				settingsOptions(own).getDefaultFile());
+			return own;
+		}
 	};
 }
 

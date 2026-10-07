@@ -173,10 +173,21 @@ namespace jucePluginEditorLib
 	class StandaloneApp : public juce::JUCEApplication
 	{
 	public:
-		StandaloneApp()
+		StandaloneApp() : StandaloneApp(juce::String(juce::CharPointer_UTF8(JucePlugin_Name)))
+		{
+		}
+
+		// _settingsName: the settings file's name (<name>.settings), by default the plug-in's name as JUCE's
+		// own standalone uses it. A product that must not share it with another build passes its own.
+		explicit StandaloneApp(const juce::String& _settingsName)
+		{
+			m_appProperties.setStorageParameters(settingsOptions(_settingsName));
+		}
+
+		static juce::PropertiesFile::Options settingsOptions(const juce::String& _settingsName)
 		{
 			juce::PropertiesFile::Options options;
-			options.applicationName = m_appName;
+			options.applicationName = _settingsName;
 			options.filenameSuffix = ".settings";
 			options.osxLibrarySubFolder = "Application Support";
 #if JUCE_LINUX || JUCE_BSD
@@ -184,7 +195,7 @@ namespace jucePluginEditorLib
 #else
 			options.folderName = "";
 #endif
-			m_appProperties.setStorageParameters(options);
+			return options;
 		}
 
 		const juce::String getApplicationName() override { return m_appName; }
