@@ -2356,6 +2356,56 @@ namespace
 		}
 	}
 
+	// A RAM recorder sampling the main mix is itself in the main mix: what it records comes out of its track and goes
+	// back into what it records (the demo videos heard it ring). Its track's VOL at 0 takes it out of the mix; its
+	// recording goes on (Set up sampling does this, mdDeskSampler.js).
+	void recorderInTheMix(Rig& _rig)
+	{
+		std::puts("== RECORDER: RAM-R1 sampling the main mix, its own track in the mix");
+		auto& desk = _rig.desk();
+		auto& m = _rig.machine();
+		const auto kit = std::to_string(*desk.linkState().kit);
+		const auto pattern = std::to_string(*desk.linkState().pattern);
+		const auto settle = [&] { _rig.runUntil([&] { return !desk.isBusy() && !_rig.pageTx(); }, 4000); _rig.run(500); };
+		const auto param = [&](int _t, int _i, int _v) { _rig.page("{\"op\":\"param\",\"k\":" + kit + ",\"t\":" + std::to_string(_t) + ",\"i\":" + std::to_string(_i) + ",\"v\":" + std::to_string(_v) + "}"); settle(); };
+		_rig.page("{\"op\":\"machine\",\"k\":" + kit + ",\"t\":0,\"model\":" + std::to_string(*ed::mdMachineModel("TRX-BD")) + ",\"keepFx\":true}");
+		settle();
+		_rig.page("{\"op\":\"machine\",\"k\":" + kit + ",\"t\":12,\"model\":" + std::to_string(*ed::mdMachineModel("RAM-R1")) + ",\"keepFx\":true}");
+		settle();
+		param(0, 17, 110);
+		// the recorder: the machine's mix as it is (MLEV 64), no input, one bar, full rate, its track at VOL 127
+		param(12, 0, 64); param(12, 1, 64); param(12, 2, 0); param(12, 6, 64); param(12, 7, 127); param(12, 17, 127);
+		for(const int st : {0, 4, 8, 12})
+			_rig.page("{\"op\":\"trig\",\"p\":" + pattern + ",\"t\":0,\"s\":" + std::to_string(st) + ",\"on\":true}");
+		_rig.page("{\"op\":\"trig\",\"p\":" + pattern + ",\"t\":12,\"s\":0,\"on\":true}");
+		settle();
+		_rig.page(R"({"op":"mute","t":12,"on":false})");
+		_rig.page(R"({"op":"play"})");
+		_rig.run(2500);
+		const auto level = [&](const double _ms)
+		{
+			const auto from = m.left().size();
+			_rig.run(_ms);
+			double sum = 0;
+			size_t n = 0;
+			for(size_t i = from; i < m.left().size(); ++i, ++n)
+				sum += m.left()[i] * m.left()[i] + m.right()[i] * m.right()[i];
+			return 10 * std::log10(sum / std::max<size_t>(1, 2 * n) + 1e-12);
+		};
+		const auto loud = level(4000);
+		param(12, 17, 0);
+		_rig.run(2000);
+		const auto silent = level(4000);
+		_rig.page(R"({"op":"mute","t":12,"on":true})");
+		_rig.run(2000);
+		const auto muted = level(4000);
+		std::printf("  the main mix: recorder at VOL 127 %.1f dB, at VOL 0 %.1f dB, muted %.1f dB\n", loud, silent, muted);
+		check(loud > muted + 1.0, "the recorder at VOL 127 is in the main mix (louder than muted)");
+		check(std::abs(silent - muted) < 0.5, "the recorder at VOL 0 is out of the main mix (as muted)");
+		_rig.page(R"({"op":"stop"})");
+		_rig.run(300);
+	}
+
 	// The SAMPLER card's "Set up sampling" (mdDeskSampler.js, [data-setupgo]): two machine ops in one gesture put
 	// RAM-R1 and RAM-P1 on two tracks that played ROM machines, a trig on the recorder; then the chop grid's
 	// trigs + STRT locks on the player. A pattern dump over the current pattern makes OS 1.63 load the kit it
@@ -2520,7 +2570,7 @@ int main(const int _argc, char** _argv)
 	std::setvbuf(stdout, nullptr, _IOLBF, 0);
 	if(_argc < 2)
 	{
-		std::puts("usage: mdDeskFirmwareTest <MD-1.63-ROM> [probe|hw|p4|tweak|sampler|keepedits|samples|gen|hostclock|playload|syximport]");
+		std::puts("usage: mdDeskFirmwareTest <MD-1.63-ROM> [probe|hw|p4|tweak|sampler|keepedits|recordermix|samples|gen|hostclock|playload|syximport]");
 		return 77;
 	}
 	try
@@ -2575,6 +2625,16 @@ int main(const int _argc, char** _argv)
 			samplerSetup(rig);
 			check(g_contract.loaded() && g_contract.bad() == 0, g_contract.summary());
 			std::printf("mdDeskFirmwareTest sampler: %s (%d failure(s))\n", g_failures ? "FAIL" : "PASS", g_failures);
+			return g_failures ? 1 : 0;
+		}
+		if(mode == "recordermix")
+		{
+			Rig rig(rom, _argv[1]);
+			rig.page(R"({"op":"ready"})");
+			rig.runUntil([&] { return rig.desk().isReady() && rig.desk().linkState().kit && rig.desk().linkState().pattern && rig.desk().documents().working; }, 8000);
+			recorderInTheMix(rig);
+			check(g_contract.loaded() && g_contract.bad() == 0, g_contract.summary());
+			std::printf("mdDeskFirmwareTest recordermix: %s (%d failure(s))\n", g_failures ? "FAIL" : "PASS", g_failures);
 			return g_failures ? 1 : 0;
 		}
 		if(mode == "keepedits")

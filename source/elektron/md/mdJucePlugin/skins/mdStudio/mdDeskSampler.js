@@ -208,6 +208,7 @@ function setupCard(n) {
    ${side("p", "Player", pt, P.m, "RAM-P" + n, playTrig, `<span class="sphint">plays what RAM ${n} holds</span>`, `Track ${pt + 1}'s machine (${P.m}) becomes RAM-P${n}: it plays what RAM ${n} holds on its trigs.`)}
   </div>
   <div class="spgo"><button class="cream" data-setupgo="${n}">Set up sampling</button><span class="note" title="Both tracks' machines are replaced${S.keepFx ? " (effects and routing kept)" : ""}${once ? `; track ${rt + 1}'s trigs are cleared` : "; no trig is cleared"}. Undo takes it all back.">One undo step · ${fx}${once ? `track ${rt + 1}'s trigs cleared` : "no trig cleared"}</span></div>
+  <p class="note spmix" title="${OUT_OF_MIX}">The recorder samples the main mix with its track's VOL at 0, so it never records itself.</p>
 </section>`;
 }
 /* The recorder's source, from its levels: MLEV/MBAL = the machine's own mix, ILEV/IBAL = inputs A/B. */
@@ -215,6 +216,18 @@ function setupCard(n) {
    -64..+63 (stored 0..127, 64 = centre). */
 const SOURCES = [["main", "Main mix", { MLEV: 64, MBAL: 64, ILEV: 0, IBAL: 64 }], ["a", "Input A", { MLEV: 0, MBAL: 64, ILEV: 64, IBAL: 0 }],
 	["b", "Input B", { MLEV: 0, MBAL: 64, ILEV: 64, IBAL: 127 }], ["ab", "A + B", { MLEV: 0, MBAL: 64, ILEV: 64, IBAL: 64 }]];
+/* A recorder that samples the machine's own mix (MLEV above 0) is itself in that mix: what it records comes out of its
+   track and goes back into what it records, a feedback loop (heard: mdDeskFirmwareTest recordermix, +8 dB). Its track's
+   VOL at 0 takes it out of the main mix and its recording goes on; an input source gives its VOL back. recVol keeps
+   the VOL it had, per track. */
+const recVol = {};
+const samplesMix = t => (V.tracks[t].syn.MLEV ?? 0) > 0;
+function recorderOutOfMix(t, mix) {
+	const vol = V.tracks[t].rt.VOL;
+	if (mix && vol !== 0) { recVol[t] = vol; sendParam(t, "rt", "VOL", 0); }
+	else if (!mix && vol === 0 && recVol[t] != null) { sendParam(t, "rt", "VOL", recVol[t]); delete recVol[t]; }
+}
+const OUT_OF_MIX = "VOL 0: the recorder is out of the main mix while it samples it, or its own sound would go back into what it records. An input as the source gives VOL back.";
 function sourceOf(t) { const y = V.tracks[t].syn; const hit = SOURCES.find(([, , v]) => Object.keys(v).every(k => y[k] === v[k])); return hit ? hit[0] : "custom"; }
 function sourceSeg(t) { const cur = sourceOf(t); return `<span class="seg srcseg">${SOURCES.map(([id, label]) => `<button data-recsrc="${id}" data-t="${t}" aria-pressed="${cur === id}">${label}</button>`).join("")}</span>${cur === "custom" ? `<span class="note">custom levels</span>` : ""}`; }
 /* RAM-R LEN and RATE in the manual's units (A-15). LEN: "each parameter value is ¼ of step", 127 records
@@ -281,7 +294,7 @@ function renderSampler() {
      <div class="r" id="recon" data-r="${r}" style="grid-template-columns:${smpCols()}">${smpLab(r, "Record on", "rec")}${steps().map(s => `<button class="${stepCls(r, s)}" data-rc="${s}" aria-pressed="${V.tracks[r].trigs[s]}" aria-label="Record on step ${s + 1}"></button>`).join("")}</div>
      ${p != null ? `<div class="r" id="chop" data-p="${p}" style="grid-template-columns:${smpCols()}">${smpLab(p, "Chop")}${steps().map(s => `<button class="${stepCls(p, s)}" data-cp="${s}" aria-pressed="${V.tracks[p].trigs[s]}" aria-label="Chop step ${s + 1}">${chopInner(p, s)}</button>`).join("")}</div>` : `<div class="r" style="grid-template-columns:var(--srlab) minmax(0,1fr)"><span class="srlab"><b>Chop</b></span><div class="edblank">No track plays RAM-P${n}. Put RAM-P${n} on a track in Sound.</div></div>`}</div>
     <div class="seqfoot"><span></span><div class="legend"><span><i class="lg on"></i>Trig: click</span>${p != null ? `<span>Chop slice: drag up / down</span><span>Reverse: alt-click</span><span>Retrig: shift-click</span>` : ""}<span><i class="lg on lk"></i>Has locks</span></div>${pageCtl()}</div></section>
-   <div class="smp2"><section class="card"><header><h3>Source</h3><span>recorder · track ${r + 1}</span></header><div class="irow">${sourceSeg(r)}</div><div class="ctl four">${RAMR.map(k => pc("syn", k, { t: r, unit: k === "LEN" ? "len" : k === "RATE" ? "rate" : "" })).join("")}</div></section>
+   <div class="smp2"><section class="card"><header><h3>Source</h3><span>recorder · track ${r + 1}</span></header><div class="irow">${sourceSeg(r)}</div>${samplesMix(r) ? `<p class="note recmix" title="${OUT_OF_MIX}">${V.tracks[r].rt.VOL === 0 ? "VOL 0: out of the main mix while it samples it" : "Samples the main mix and is in it: its own sound goes back into the recording. Main mix sets its VOL to 0."}</p>` : ""}<div class="ctl four">${RAMR.map(k => pc("syn", k, { t: r, unit: k === "LEN" ? "len" : k === "RATE" ? "rate" : "" })).join("")}</div></section>
     ${p != null ? `<section class="card"><header><h3>Playback</h3><span>player · track ${p + 1}</span></header><div class="irow"><span class="ilab">Take</span><span class="note pbtake">${take ? (take.empty ? "empty: nothing recorded yet" : smpInfo(take)) : smpWhy(at) || "not read"} · ${pTrigs} trig${pTrigs === 1 ? "" : "s"}</span></div><div class="ctl four">${SMPL.map(k => pc("syn", k, { t: p })).join("")}</div></section>` : ""}</div>`;
 		}
 	}
@@ -332,15 +345,18 @@ function clickSamplerSteps(e) {
 		const n = sgo.dataset.setupgo, [r, p] = setupTracks(), noTrig = !V.tracks[r].trigs.slice(0, V.len).some(Boolean);
 		Gesture.begin();	/* one undo step */
 		setMachine("RAM-R" + n, r); setMachine("RAM-P" + n, p);
+		/* the main mix as the source, the recorder out of it (recorderOutOfMix) */
+		Object.entries(SOURCES[0][2]).forEach(([k, v]) => sendParam(r, "syn", k, v));
+		if (V.tracks[r].rt.VOL !== 0) { recVol[r] = V.tracks[r].rt.VOL; sendParam(r, "rt", "VOL", 0); }
 		if (!noTrig && S.smpOnce) cmd("clearSteps", { p: V.pat, t: r, from: 0, to: V.len }, undefined, V.tracks[r].trigs.map((on, s) => on && [["tracks", r, "trigs", s], false]).filter(Boolean));
 		if (noTrig || S.smpOnce) cmd("trig", { p: V.pat, t: r, s: 0, on: true }, undefined, [[["tracks", r, "trigs", 0], true]]);
 		Gesture.end();
-		toast(`Sampling ready: track ${r + 1} records (RAM-R${n}), track ${p + 1} plays (RAM-P${n}). Undo takes it back.`); render(); return true;
+		toast(`Sampling ready: track ${r + 1} records the main mix (RAM-R${n}, its VOL at 0 so it does not record itself), track ${p + 1} plays (RAM-P${n}). Undo takes it back.`); render(); return true;
 	}
 	const son = e.target.closest("[data-smponce]"); if (son) { S.smpOnce = son.dataset.smponce === "1"; render(); return true; }
 	const rs = e.target.closest("[data-recsrc]"); if (rs) {
 		const t = +rs.dataset.t, src = SOURCES.find(([id]) => id === rs.dataset.recsrc);
-		if (src) { Object.entries(src[2]).forEach(([n, v]) => sendParam(t, "syn", n, v)); render(); }
+		if (src) { Gesture.begin(); Object.entries(src[2]).forEach(([n, v]) => sendParam(t, "syn", n, v)); recorderOutOfMix(t, src[2].MLEV > 0); Gesture.end(); render(); }
 		return true;
 	}
 	const rn = e.target.closest("[data-rename]"); if (rn) {

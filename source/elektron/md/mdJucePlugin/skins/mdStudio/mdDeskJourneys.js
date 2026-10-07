@@ -478,9 +478,14 @@ const MdJourneys = (() => {
 		steps: [
 			go("sampler"),
 			{ say: "click an unused RAM slot", act: (u, c) => { c.n = [1, 2, 3, 4].find(k => !V.tracks.some(t => t.m === "RAM-R" + k || t.m === "RAM-P" + k)); if (!c.n) throw new Error("every RAM slot is used"); u.click(`.slotk[data-slot="RAM${c.n}"]`); }, screen: () => ok(!!$1("[data-setupgo]"), "no Set up sampling") },
-			{ say: "click Set up sampling: a recorder and a player", act: (u, c) => { [c.r, c.p] = setupTracks(); c.m0 = [kit().tracks[c.r].machine, kit().tracks[c.p].machine]; u.click("[data-setupgo]"); },
-				machine: c => ok(kit().tracks[c.r].machine === "RAM-R" + c.n && kit().tracks[c.p].machine === "RAM-P" + c.n, `tracks ${kit().tracks[c.r].machine} ${kit().tracks[c.p].machine}`), within: 8000 },
-			{ ...undoKey, say: "press Cmd+Z: one step back", machine: c => ok(same([kit().tracks[c.r].machine, kit().tracks[c.p].machine], c.m0), `tracks ${kit().tracks[c.r].machine} ${kit().tracks[c.p].machine}`), within: 8000 }
+			{ say: "click Set up sampling: a recorder of the main mix, out of it (VOL 0), and a player", act: (u, c) => { [c.r, c.p] = setupTracks(); c.m0 = [kit().tracks[c.r].machine, kit().tracks[c.p].machine]; c.vol0 = kitVals(c.r)[pidx(c.r, "VOL", "rt")]; u.click("[data-setupgo]"); },
+				machine: c => ok(kit().tracks[c.r].machine === "RAM-R" + c.n && kit().tracks[c.p].machine === "RAM-P" + c.n && kitVals(c.r)[pidx(c.r, "MLEV", "syn")] === 64 && kitVals(c.r)[pidx(c.r, "VOL", "rt")] === 0,
+					`tracks ${kit().tracks[c.r].machine} ${kit().tracks[c.p].machine}, recorder MLEV ${kitVals(c.r)[pidx(c.r, "MLEV", "syn")]} VOL ${kitVals(c.r)[pidx(c.r, "VOL", "rt")]}`),
+				screen: () => ok(/VOL 0/.test($1(".recmix")?.textContent || ""), "no VOL 0 note on the Source card"), within: 8000 },
+			{ say: "click Input A: the recorder's VOL comes back", act: u => u.click('[data-recsrc="a"]'), machine: c => ok(kitVals(c.r)[pidx(c.r, "VOL", "rt")] === c.vol0 && kitVals(c.r)[pidx(c.r, "MLEV", "syn")] === 0, "VOL " + kitVals(c.r)[pidx(c.r, "VOL", "rt")]), within: 8000 },
+			{ say: "click Main mix: VOL 0 again", act: u => u.click('[data-recsrc="main"]'), machine: c => ok(kitVals(c.r)[pidx(c.r, "VOL", "rt")] === 0, "VOL " + kitVals(c.r)[pidx(c.r, "VOL", "rt")]), within: 8000 },
+			{ ...undoKey, say: "press Cmd+Z three times: as before the set-up", act: async u => { for (let k = 0; k < 3; k++) { u.key("z", { cmd: true }); await sleep(900); } },
+				machine: c => ok(same([kit().tracks[c.r].machine, kit().tracks[c.p].machine], c.m0) && kitVals(c.r)[pidx(c.r, "VOL", "rt")] === c.vol0, `tracks ${kit().tracks[c.r].machine} ${kit().tracks[c.p].machine}, VOL ${kitVals(c.r)[pidx(c.r, "VOL", "rt")]}`), within: 10000 }
 		]
 	};
 	const audition = {
