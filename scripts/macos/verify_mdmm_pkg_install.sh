@@ -10,8 +10,9 @@
 # With no arguments it checks both. It needs no sudo. For each machine it finds
 # where it is installed (/ for all users, the home folder for you only; both at
 # once is reported, since a DAW then lists two), and checks the Installer
-# receipts, that the three bundles are there with valid signatures, and that
-# the installed Audio Unit passes auval.
+# receipts, that the three bundles are there with valid signatures, that no
+# bundle under the old (0.3.1) names is left beside them, and that the
+# installed Audio Unit passes auval under the product name.
 #
 # auval loads the AU in this process. Set GEARMULATOR_DATA_ROOT to an empty
 # folder to run it without touching your own Gearmulator settings (CI does).
@@ -21,6 +22,8 @@
 
 set -euo pipefail
 
+# shellcheck source=../mdmm-product.env
+. "$(cd "$(dirname "$0")" && pwd)/../mdmm-product.env"
 expect_signed="${MDMM_EXPECT_SIGNED:-0}"
 machines=("$@")
 if [[ ${#machines[@]} -eq 0 ]]; then
@@ -35,8 +38,8 @@ fail() {
 
 for machine in "${machines[@]}"; do
   case "${machine}" in
-    md) stem="Gearmulator MD"; app="Machinedrum Editor"; subtype="Tmdr"; bundle_id="com.nativekloud.machinedrum-editor" ;;
-    mm) stem="Gearmulator MM"; app="Monomachine Editor"; subtype="Tmno"; bundle_id="com.nativekloud.monomachine-editor" ;;
+    md) app="${MDMM_PRODUCT_NAME_MD}"; legacy="${MDMM_LEGACY_NAME_MD}"; subtype="Tmdr"; bundle_id="com.nativekloud.machinedrum-editor" ;;
+    mm) app="${MDMM_PRODUCT_NAME_MM}"; legacy="${MDMM_LEGACY_NAME_MM}"; subtype="Tmno"; bundle_id="com.nativekloud.monomachine-editor" ;;
     *) echo "unknown machine: ${machine} (use md or mm)" >&2; exit 2 ;;
   esac
   id="com.nativekloud.mdmm.${machine}"	# the receipts' (package) identifier, not the bundles'
@@ -44,8 +47,8 @@ for machine in "${machines[@]}"; do
 
   # The domain it is installed in: the root of Applications and Library.
   roots=()
-  [[ -e "/Applications/${app}.app" || -e "/Library/Audio/Plug-Ins/VST3/${stem}.vst3" || -e "/Library/Audio/Plug-Ins/Components/${stem}.component" ]] && roots+=("")
-  [[ -e "${HOME}/Applications/${app}.app" || -e "${HOME}/Library/Audio/Plug-Ins/VST3/${stem}.vst3" || -e "${HOME}/Library/Audio/Plug-Ins/Components/${stem}.component" ]] && roots+=("${HOME}")
+  [[ -e "/Applications/${app}.app" || -e "/Library/Audio/Plug-Ins/VST3/${app}.vst3" || -e "/Library/Audio/Plug-Ins/Components/${app}.component" ]] && roots+=("")
+  [[ -e "${HOME}/Applications/${app}.app" || -e "${HOME}/Library/Audio/Plug-Ins/VST3/${app}.vst3" || -e "${HOME}/Library/Audio/Plug-Ins/Components/${app}.component" ]] && roots+=("${HOME}")
   if [[ ${#roots[@]} -eq 0 ]]; then
     fail "${app} is installed neither for all users nor for you only"
     continue
@@ -67,11 +70,23 @@ for machine in "${machines[@]}"; do
       fi
     done
 
+    # The installer removes the bundles it put in place under the old names.
+    for old in \
+        "${root}/Library/Audio/Plug-Ins/VST3/${legacy}.vst3" \
+        "${root}/Library/Audio/Plug-Ins/Components/${legacy}.component"; do
+      old_id="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "${old}/Contents/Info.plist" 2>/dev/null || true)"
+      if [[ "${old_id}" == "${bundle_id}" ]]; then
+        fail "the old ${old} is still installed beside ${app}: the DAW lists it twice"
+      elif [[ -e "${old}" ]]; then
+        echo "note: ${old} is there, not ours (${old_id:-no identifier}); left alone"
+      fi
+    done
+
     for bundle in \
         "${root}/Applications/${app}.app" \
-        "${root}/Library/Audio/Plug-Ins/VST3/${stem}.vst3" \
-        "${root}/Library/Audio/Plug-Ins/Components/${stem}.component"; do
-      executable="${bundle}/Contents/MacOS/${stem}"
+        "${root}/Library/Audio/Plug-Ins/VST3/${app}.vst3" \
+        "${root}/Library/Audio/Plug-Ins/Components/${app}.component"; do
+      executable="${bundle}/Contents/MacOS/${app}"
       if [[ ! -x "${executable}" ]]; then
         fail "missing ${executable}"
         continue
@@ -104,6 +119,10 @@ for machine in "${machines[@]}"; do
   if auval -v aumu "${subtype}" GmPv >"${auval_log}" 2>&1 \
       && grep -q "AU VALIDATION SUCCEEDED" "${auval_log}"; then
     echo "ok  auval aumu ${subtype} GmPv: AU VALIDATION SUCCEEDED"
+    grep -qF "AudioUnit Name: ${app}" "${auval_log}" \
+      || fail "auval aumu ${subtype} GmPv: the AU is not named ${app} ($(grep -m1 'AudioUnit Name:' "${auval_log}" || true))"
+    grep -qF "Manufacturer String: ${MDMM_VENDOR}" "${auval_log}" \
+      || fail "auval aumu ${subtype} GmPv: the maker is not ${MDMM_VENDOR} ($(grep -m1 'Manufacturer String:' "${auval_log}" || true))"
   else
     tail -40 "${auval_log}" >&2
     fail "auval aumu ${subtype} GmPv did not succeed (log: ${auval_log})"

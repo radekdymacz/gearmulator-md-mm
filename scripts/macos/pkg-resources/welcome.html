@@ -13,9 +13,12 @@ in an emulator. It installs three things, and you can leave any of them out unde
 <b>Customize</b>:</p>
 <ul>
 <li><b>{{APP_NAME}}.app</b> into <code>Applications</code></li>
-<li><b>{{STEM}}.vst3</b> into <code>Library/Audio/Plug-Ins/VST3</code></li>
-<li><b>{{STEM}}.component</b> (Audio Unit) into <code>Library/Audio/Plug-Ins/Components</code></li>
+<li><b>{{APP_NAME}}.vst3</b> into <code>Library/Audio/Plug-Ins/VST3</code></li>
+<li><b>{{APP_NAME}}.component</b> (Audio Unit) into <code>Library/Audio/Plug-Ins/Components</code></li>
 </ul>
+<p>Upgrading from 0.3.1 or earlier? The plug-ins were called <b>{{OLD_NAME}}</b> then. The
+installer removes the old ones it put in place, and DAW projects that used them open with
+{{APP_NAME}}: the plug-in is the same one under its new name.</p>
 
 <h2>For all users, or for you only</h2>
 <p>At <b>Destination Select</b> (or <b>Change Install Location…</b>) you choose:</p>

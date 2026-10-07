@@ -421,8 +421,8 @@ class ReceiptPathSafetyTest(unittest.TestCase):
             "workload": receipt.CORE_CAPACITY_WORKLOAD,
             "firmware_sha256": receipt.FIRMWARE_SHA256,
             "plugin_module_sha256": {
-                "Gearmulator MD.vst3": "a" * 64,
-                "Gearmulator MM.vst3": "b" * 64,
+                "Machinedrum Editor.vst3": "a" * 64,
+                "Monomachine Editor.vst3": "b" * 64,
             },
             "models": {
                 model: {
@@ -436,8 +436,8 @@ class ReceiptPathSafetyTest(unittest.TestCase):
 
     def artifact_hashes(self) -> dict[str, str]:
         return {
-            "Gearmulator MD.vst3": "a" * 64,
-            "Gearmulator MM.vst3": "b" * 64,
+            "Machinedrum Editor.vst3": "a" * 64,
+            "Monomachine Editor.vst3": "b" * 64,
         }
 
     def test_core_check_is_bound_to_native_slice_and_packaged_plugins(self) -> None:
