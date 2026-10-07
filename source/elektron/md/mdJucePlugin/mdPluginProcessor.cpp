@@ -73,7 +73,7 @@ namespace
 	}
 
 	// The data folder's parent, ~/Documents/Gearmulator Preview: upstream's vendor name, kept when the editors
-	// took their own (NativeKloud, scripts/mdmm-product.env), so the ROMs and settings stay where they are.
+	// took their own (Future Native Audio, scripts/mdmm-product.env), so the ROMs and settings stay where they are.
 	constexpr auto g_dataFolderVendor = "Gearmulator Preview";
 
 	const char* dataFolderName(const md::MachineModel _model)

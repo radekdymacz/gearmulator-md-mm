@@ -228,8 +228,8 @@ every script here):
 | | Up to 0.3.1 | Now |
 |---|---|---|
 | App | `Machinedrum Editor.app` (renamed by the installer), executable `Gearmulator MD`, `CFBundleName` `Gearmulator MD` | `Machinedrum Editor.app`, executable and `CFBundleName` `Machinedrum Editor` |
-| VST3 | `Gearmulator MD.vst3`, vendor `Gearmulator Preview` | `Machinedrum Editor.vst3`, vendor `NativeKloud` |
-| AU | `Gearmulator MD.component`, `Gearmulator Preview: Gearmulator MD` | `Machinedrum Editor.component`, `NativeKloud: Machinedrum Editor` |
+| VST3 | `Gearmulator MD.vst3`, vendor `Gearmulator Preview` | `Machinedrum Editor.vst3`, vendor `Future Native Audio` |
+| AU | `Gearmulator MD.component`, `Gearmulator Preview: Gearmulator MD` | `Machinedrum Editor.component`, `Future Native Audio: Machinedrum Editor` |
 | Windows | `Gearmulator MD.exe`, `Gearmulator MD.vst3` | `Machinedrum Editor.exe`, `Machinedrum Editor.vst3` |
 
 (MM alike.) The plug-in codes above do not change, so a project saved with

@@ -179,7 +179,7 @@ unset(_mdmmKey)
 
 # Per-target juce_add_plugin arguments (juce.cmake passes them last, so they win over upstream's):
 # - the app icons (doc/modern-ux/icons, built with build-icons.sh);
-# - the maker a DAW shows (AU "NativeKloud: Machinedrum Editor", the VST3 vendor, the Windows file details)
+# - the maker a DAW shows (AU "Future Native Audio: Machinedrum Editor", the VST3 vendor, the Windows file details)
 #   instead of upstream's "Gearmulator Preview". The data folder keeps that name (mdPluginProcessor.cpp,
 #   g_dataFolderVendor), and the VST3 class IDs and AU codes come from GmPv + Tmdr/Tmno, not from names;
 # - the microphone prompt's text;
@@ -191,7 +191,7 @@ foreach(_mdmmTarget md mm)
 		ICON_SMALL "${CMAKE_CURRENT_SOURCE_DIR}/icons/${_mdmmTarget}-32.png"
 		COMPANY_NAME "${MDMM_VENDOR}"
 		COMPANY_WEBSITE "${MDMM_WEBSITE}"
-		COMPANY_COPYRIGHT "Copyright (C) The Usual Suspects (Gearmulator), joelanders and ${MDMM_VENDOR}. GNU GPL v3."
+		COMPANY_COPYRIGHT "Copyright (C) The Usual Suspects (Gearmulator), joelanders and NativeKloud Consulting Radoslaw Dymacz. GNU GPL v3."
 		MICROPHONE_PERMISSION_TEXT "${MDMM_PRODUCT_NAME_${_mdmmUpper}} uses audio input to process external instruments."
 		LV2URI "http://theusualsuspects.lv2/Gearmulator${_mdmmUpper}")
 endforeach()
