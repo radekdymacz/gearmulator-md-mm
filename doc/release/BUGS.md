@@ -4,6 +4,14 @@
 repository; the site sends reports to the contact address. Newest first. Each entry:
 where it came from, the setup, what happens, what should happen, status.*
 
+## B-009 · WebKit crashed once on Ubuntu 24.04 (Linux VST3)
+
+- **From:** the Linux CI start test, 2026-10-08.
+- **What happened:** in one run, WebKitWebProcess (libwebkit2gtk-4.1 2.52.6) segfaulted when the Machinedrum VST3 opened in the test host. Not seen on Ubuntu 22.04; the next runs were clean.
+- **Maybe:** caused by the test reading the accessibility tree while the page was still loading (now it waits for the bridge), or an intermittent WebKit crash that users could also hit.
+- **Watch:** every start-test run now reports kernel-log segfaults in its summary.
+- **Status:** watching.
+
 ## B-008 · The play head is invisible on the MK1 (white) skin
 
 - **From:** Discord tester (versonegro), macOS 12, 2026-10-07, with a screen recording.
