@@ -9,14 +9,8 @@
   var ed = q.get("ed") === "mm" ? "mm" : "md";
   var ready = function (u) { return typeof u === "string" && /^https:\/\//.test(u) && u.indexOf("REPLACE_ME") < 0; };
 
-  if (step === "1") {
-    var r = document.querySelector("input[name=ed][value=" + ed + "]");
-    if (r && q.get("ed")) r.checked = true;
-    return;
-  }
-  if (step !== "2") return;
-
-  /* The operating system: ?os= first, then the browser's own report, then macOS. */
+  /* The operating system: ?os= first, then the browser's own report, then macOS. Both steps
+     show it as a switch; step 1 passes it on to step 2 in the form (?os=). */
   var OS = C.downloads || {};
   var detect = function () {
     var p = ((navigator.userAgentData && navigator.userAgentData.platform) || navigator.platform || "") + " " + navigator.userAgent;
@@ -27,31 +21,45 @@
   };
   var os = OS[q.get("os")] ? q.get("os") : detect();
   if (!OS[os]) os = "mac";
+  var onOs = function () {};
+  function useOs(o) {
+    os = o;
+    document.querySelectorAll("[data-os-line]").forEach(function (el) { el.textContent = OS[os].line || OS[os].label; });
+    document.querySelectorAll("[data-os]").forEach(function (el) { el.hidden = el.dataset.os !== os; });
+    document.querySelectorAll("#os button").forEach(function (b) { b.setAttribute("aria-pressed", String(b.value === os)); });
+    document.querySelectorAll("input[name=os]").forEach(function (i) { i.value = os; });
+    var u = new URL(location.href);
+    u.searchParams.set("os", os);
+    history.replaceState(null, "", u.toString());
+    onOs();
+  }
+  var osBox = document.getElementById("os");
+  if (osBox) Object.keys(OS).forEach(function (k) {
+    var b = document.createElement("button");
+    b.type = "button"; b.value = k; b.textContent = OS[k].label || k;
+    b.addEventListener("click", function () { useOs(k); });
+    osBox.appendChild(b);
+  });
+
+  if (step === "1") {
+    var r = document.querySelector("input[name=ed][value=" + ed + "]");
+    if (r && q.get("ed")) r.checked = true;
+    useOs(os);
+    return;
+  }
+  if (step !== "2") return;
+
   var rel = ready(C.releasesPage) ? C.releasesPage : "https://github.com/radekdymacz/gearmulator-md-mm/releases";
   var fileUrl = rel;
   var name = ed === "mm" ? "Monomachine Editor" : "Machinedrum Editor";
   document.querySelector("[data-name]").textContent = name;
   document.title = "Download " + name + " — MD + MM Editor";
 
-  function useOs(o) {
-    os = o;
+  onOs = function () {
     var D = (OS[os] || {})[ed] || {};
     fileUrl = ready(D.url) ? D.url : rel;
     document.querySelectorAll("[data-download]").forEach(function (el) { if (el.tagName === "A") el.href = fileUrl; });
-    document.querySelectorAll("[data-os-line]").forEach(function (el) { el.textContent = OS[os].line || OS[os].label; });
-    document.querySelectorAll("[data-os]").forEach(function (el) { el.hidden = el.dataset.os !== os; });
-    document.querySelectorAll("#os button").forEach(function (b) { b.setAttribute("aria-pressed", String(b.value === os)); });
-    var u = new URL(location.href);
-    u.searchParams.set("os", os);
-    history.replaceState(null, "", u.toString());
-  }
-  var osBox = document.getElementById("os");
-  Object.keys(OS).forEach(function (k) {
-    var b = document.createElement("button");
-    b.type = "button"; b.value = k; b.textContent = OS[k].label || k;
-    b.addEventListener("click", function () { useOs(k); });
-    osBox.appendChild(b);
-  });
+  };
   useOs(os);
 
   var pay = C.payments || {};

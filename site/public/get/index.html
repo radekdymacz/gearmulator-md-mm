@@ -25,7 +25,7 @@
 <meta name="twitter:description" content="Free desktop editors for the Elektron Machinedrum and Monomachine. VST3, AU and app for macOS.">
 <meta name="twitter:image" content="https://mdmm.dev/og.png">
 <link rel="stylesheet" href="/design/tokens.css">
-<link rel="stylesheet" href="/assets/site.css">
+<link rel="stylesheet" href="/assets/site.css?v=20261007">
 <script src="/assets/theme.js"></script>
 </head>
 <body data-step="1">
@@ -55,7 +55,9 @@
           <label class="choice"><input type="radio" name="ed" value="mm"><span class="card"><img src="/icons/mm-icon.svg" alt="" width="36" height="36"><span><b>Monomachine Editor</b><small>SFX-6 and SFX-60 · needs OS 1.32B</small></span></span></label>
         </div>
       </fieldset>
-      <p class="small">macOS: one installer with the app, VST3 and AU (Apple silicon tested). Windows x64: app and VST3, not tested yet. Linux: coming soon. You pick your system on the next page. Bring your own ROM.</p>
+      <div class="osrow"><span class="small">Your system</span><div class="seg" id="os" role="group" aria-label="Operating system"></div></div>
+      <input type="hidden" name="os" value="mac">
+      <p class="small"><span data-os-line>macOS · the app, VST3 and AU in one installer</span>. Bring your own ROM.</p>
       <div class="btns"><button class="btn btn-key" type="submit">Continue</button></div>
     </form>
   </div>
@@ -73,6 +75,6 @@
 
 <script src="/config.js"></script>
 <script src="/assets/main.js" defer></script>
-<script src="/assets/get.js" defer></script>
+<script src="/assets/get.js?v=20261007" defer></script>
 </body>
 </html>
