@@ -118,6 +118,10 @@ if [[ ! -x "${setup_command}" ]]; then
   echo "Setup command is missing or is not executable: ${setup_command}" >&2
   exit 3
 fi
+if ! grep -q "GNU GENERAL PUBLIC LICENSE" "${package_dir}/LICENSE.md" 2>/dev/null; then
+  echo "LICENSE.md (GPL) is missing from the extracted package: ${package_dir}" >&2
+  exit 3
+fi
 if [[ ! -f "${install_guide}" ]]; then
   echo "Installation guide is missing: ${install_guide}" >&2
   exit 3

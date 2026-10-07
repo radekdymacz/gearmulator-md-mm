@@ -14,7 +14,7 @@
 # Each image holds the app, the VST3 and the AU (named for the product,
 # scripts/mdmm-product.env), three Finder links to drop them on (/Applications,
 # /Library/Audio/Plug-Ins/VST3, /Library/Audio/Plug-Ins/Components) and
-# Install.txt. Plain hdiutil, no third-party tools, no Finder scripting (it
+# Install.txt and LICENSE.txt (the GPL). Plain hdiutil, no third-party tools, no Finder scripting (it
 # needs a logged-in GUI session, which CI runners do not reliably have).
 #
 # MDMM_DMG_SIGN_IDENTITY (a "Developer ID Application: ..." identity, optional
@@ -32,6 +32,8 @@ version="${3:-0.3.2}"
 identity="${MDMM_DMG_SIGN_IDENTITY:-}"
 keychain="${MDMM_SIGN_KEYCHAIN:-}"
 install_template="${script_dir}/pkg-resources/dmg-install.txt"
+license_preamble="${script_dir}/pkg-resources/license-preamble.txt"
+license_md="${script_dir}/../../LICENSE.md"
 
 if [[ ! "${version}" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
   echo "VERSION must be MAJOR.MINOR.PATCH, got: ${version}" >&2
@@ -96,6 +98,8 @@ for row in "${machines[@]}"; do
       -e "s|{{LINK_VST3}}|${link_vst3}|g" \
       -e "s|{{LINK_AU}}|${link_au}|g" \
       "${install_template}" > "${staging}/Install.txt"
+  # GPL-3: the licence travels with the binaries, preamble first, as in the package
+  { cat "${license_preamble}"; echo; cat "${license_md}"; } > "${staging}/LICENSE.txt"
   for bundle in "${staging}/${app_name}.app" "${staging}/${app_name}.vst3" "${staging}/${app_name}.component"; do
     codesign --verify --strict --deep "${bundle}"
   done
@@ -120,7 +124,7 @@ for row in "${machines[@]}"; do
   hdiutil attach -quiet -readonly -nobrowse -noautoopen -mountpoint "${mount_point}" "${dmg}"
   for expected in "${app_name}.app/Contents/MacOS/${app_name}" \
       "${app_name}.vst3/Contents/MacOS/${app_name}" \
-      "${app_name}.component/Contents/MacOS/${app_name}" "Install.txt"; do
+      "${app_name}.component/Contents/MacOS/${app_name}" "Install.txt" "LICENSE.txt"; do
     if [[ ! -f "${mount_point}/${expected}" ]]; then
       echo "Disk image self-check failed, missing: ${expected}" >&2
       exit 6

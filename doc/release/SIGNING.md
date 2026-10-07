@@ -132,6 +132,8 @@ files, so merge it first.
   options (pkg or dmg).
 - `doc/release/v<next>.md`: no "Unsigned and not notarised" bullet (as in
   v0.3.0.md lines 97–98); mention the disk images.
+  Links in release notes are absolute (the file becomes the GitHub release page body, where
+  relative links break): `https://github.com/radekdymacz/gearmulator-md-mm/blob/main/doc/release/vX.Y.Z.md`.
 - `scripts/macos/macsetup_Gearmulator-Elektron.command` (zip only): becomes
   unnecessary for signed bundles. Keep it or retire it with the zip.
 

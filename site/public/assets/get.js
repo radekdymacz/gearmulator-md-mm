@@ -19,7 +19,7 @@
     if (/linux|x11|cros/i.test(p)) return "linux";
     return "mac";
   };
-  var os = OS[q.get("os")] ? q.get("os") : detect();
+  var os = Object.prototype.hasOwnProperty.call(OS, q.get("os")) ? q.get("os") : detect();
   if (!OS[os]) os = "mac";
   var onOs = function () {};
   function useOs(o) {
@@ -55,12 +55,16 @@
   document.querySelector("[data-name]").textContent = name;
   document.title = "Download " + name + " — MD + MM Editor";
 
+  var hasFile = false, payUi = false; /* hasFile: the chosen OS has a download; payUi: the pay block is set up */
   onOs = function () {
     var D = (OS[os] || {})[ed] || {};
+    hasFile = ready(D.url);
     fileUrl = ready(D.url) ? D.url : rel;
     document.querySelectorAll("[data-download]").forEach(function (el) { if (el.tagName === "A") el.href = fileUrl; });
     var dmg = document.querySelector("[data-dmg-link]");
     if (dmg) { dmg.href = ready(D.dmg) ? D.dmg : rel; dmg.parentNode.hidden = !ready(D.dmg); }
+    /* no download for this OS (Linux): offer no payment either, only the releases link */
+    if (payUi) { support.hidden = !hasFile; plain.hidden = hasFile; }
   };
   useOs(os);
 
@@ -83,7 +87,7 @@
   }
   function download() {
     started.hidden = false;
-    nudge.hidden = !(provider && !thanks);
+    nudge.hidden = !(provider && !thanks && hasFile);
     mark(3);
     location.href = fileUrl; /* a file download: this page stays */
   }
@@ -101,8 +105,9 @@
   if (!provider) { mark(3); return; } /* no payment configured: download only */
 
   /* pay what you want */
-  plain.hidden = true;
-  support.hidden = false;
+  payUi = true;
+  plain.hidden = hasFile;
+  support.hidden = !hasFile;
   var sym = pay.symbol || "€", cur = pay.currency || "EUR";
   document.getElementById("cur").textContent = cur;
   var box = document.getElementById("amounts");
