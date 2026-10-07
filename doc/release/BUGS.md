@@ -4,6 +4,14 @@
 repository; the site sends reports to the contact address. Newest first. Each entry:
 where it came from, the setup, what happens, what should happen, status.*
 
+## B-005 · High CPU in Ableton Live
+
+- **From:** Discord beta tester (versonegro), 2026-10-07: Live's CPU meter at 66 % with the Machinedrum Editor, macOS 12, Apple M1.
+- **What happens:** the plug-in uses a large share of the CPU.
+- **To check:** how much is the emulation (DSP56300 JIT + 68k) and how much the editor page (web view redraws, the rate of plug-in → page updates, animations); CPU with the editor window open vs closed, playing vs stopped; M1 vs newer chips; Live's buffer size.
+- **Should:** as low as the emulation allows; the page costs little, and nothing when its window is closed.
+- **Status:** open.
+
 ## B-004 · MIX faders look far too big at some window sizes
 
 - **From:** the same Discord screenshot as B-001, 2026-10-07.
@@ -29,8 +37,8 @@ where it came from, the setup, what happens, what should happen, status.*
 ## B-001 · Plug-in window too big in Ableton Live
 
 - **From:** Discord beta tester (versonegro), 2026-10-07.
-- **Setup:** Ableton Live, macOS 12, Apple M1, Live's zoom at 66 %. Machinedrum Editor plug-in, MIX workspace.
+- **Setup:** Ableton Live, macOS 12, Apple M1 (the "66 %" in the report was Live's CPU meter, see B-005, not a zoom). Machinedrum Editor plug-in, MIX workspace.
 - **What happens:** the page is drawn larger than the plug-in window. The right part (track 13 onwards, the header's right side) and the bottom are cut off. The page cannot be zoomed out, so the settings cannot be reached.
 - **Should:** the page fits the plug-in window at any host zoom, the window can be resized, and the user can zoom the page (a control and ⌘− / ⌘+).
-- **To check:** how the window size and the web view's zoom follow the host's scale (Live's zoom, Retina and non-Retina, WKWebView on macOS 12); `mdStudioWebZoom.mm`, `mdWindowFitTest`; the Monomachine Editor; Logic, Bitwig and Reaper.
+- **To check:** how the window size and the web view's zoom follow the host's scale (Retina and non-Retina, WKWebView on macOS 12); `mdStudioWebZoom.mm`, `mdWindowFitTest`; the Monomachine Editor; Logic, Bitwig and Reaper.
 - **Status:** open. Radek could not reproduce it in Live with 0.3.1; being fixed and reviewed at many window sizes.
