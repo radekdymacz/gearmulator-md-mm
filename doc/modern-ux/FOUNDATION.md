@@ -212,6 +212,24 @@ A journey is what a person does with an editor, as data: a named list of steps, 
 - Add one: append a value to the page's `all` list: `{name: "md-<area>-<what>", steps: [{say, act: async (u, c) => …, screen: c => …, machine: c => …, within}], tidy}`. `u` is the hands (`click`, `drag`, `key`, `wheel`, `type`, `pick` for a key-style dropdown), `c` the journey's scratch value; a check returns `Journey.ok(pass, what was seen)`, and both checks must hold within `within` ms (6 s). Act only through the page's controls, never a bridge command; read the machine through the documents (`Docs`, `machineState()`; MM: `MMPage.inspect()`). A question the plug-in asks is answered through its dialog. `tidy` puts back what the steps changed, pass or fail. A new journeys file goes into `MD_SELF_TESTS`/`MM_SELF_TESTS` (mdmmPlugins.cmake) and the sync scripts' SCRIPTS.
 - Demos: journeys played for a camera (`demo-md-*`, not in `all`), recorded and rendered as product videos by `scripts/mdmm-demo-video.sh`: [DEMO-VIDEOS.md](DEMO-VIDEOS.md).
 
+### CI start tests
+
+Every push to `main`, `release/md-mm-*`, `release/0.*` (and `ci/*-ui-smoke`) that touches the editors, and every `mdmm-v*` tag, proves on GitHub Actions that the editors start and show their page on all three systems. Each test takes the package its workflow just built, starts each standalone and each VST3 (in `scripts/vst3EditorHost`, a minimal JUCE host that opens the editor and feeds silent blocks) with no ROM and a scratch data root, and fails the job when a check fails. ROMs are never in CI.
+
+| | Windows | macOS | Linux |
+|---|---|---|---|
+| Workflow, script | `mdmm-editors-windows.yml`, `scripts/windows/smoke_mdmm.ps1` | `mdmm-editors-macos.yml`, `scripts/macos/smoke_mdmm.sh` | `mdmm-editors-linux.yml`, `scripts/linux/smoke_mdmm.sh` |
+| Runners | windows-2022 | macos-14, macos-15 (the universal package) | Ubuntu 22.04 and 24.04, runtime packages only, Xvfb |
+| Still running after the page loaded | yes | yes | yes |
+| Web engine process | `msedgewebview2.exe` with the editors' profile (WebView2, not IE) | `com.apple.WebKit.WebContent` | `WebKitWebProcess` (the shims found a webkit2gtk) |
+| Page -> plug-in -> page | the page shows "<machine> firmware needed", read through UI Automation | the same text, read through the Accessibility API (`scripts/macos/ui_probe.swift`) | the same text, read through AT-SPI (`scripts/linux/ui_texts.py`); also the bridge's answer files written and deleted after the page read them (inotify) |
+| Plug-in formats | standalone, VST3 | standalone, VST3, AU (`auval -v`, installed on the runner only) | standalone, VST3 |
+| Artifact | `windows-mdmm-smoke` | `macos-mdmm-smoke-<os>` | `linux-mdmm-smoke-<os>` |
+
+Each artifact holds `md-standalone.png`, `md-vst3.png`, `mm-standalone.png`, `mm-vst3.png` (macOS: the window; Windows and Linux: the screen), the text each run read from the page (`*-ui.txt`), the apps' output, and `summary.md` (macOS and Linux also put it in the job summary; macOS adds `md-auval.txt`, `mm-auval.txt`).
+
+Not proven: a machine running on a ROM (the firmware, the panel, sound), audio and MIDI devices, a real DAW, a signed and notarized build (CI's bundles are ad-hoc signed), Gatekeeper on a downloaded app, High-DPI and multi-monitor, Windows on ARM, Wayland.
+
 ## HW MIDI without the panel (P8, from MM-P4)
 
 Where the editor cannot press the machine's keys (`Profile.panel` false), a dump reaches the Monomachine only if the person has opened GLOBAL › FILE › SYSEX RECV. The adapter keeps such dumps (and the LOAD KIT that follows a kit dump) in order and publishes `machine.recv.waiting`; the page shows **SEND n** and a dialog with the steps, and its **Send now** is the `hwSend` command. What the machine has no MIDI message for (the MIDI track mutes, RECORD) is a capability that is false, with the reason; never a branch on the engine.

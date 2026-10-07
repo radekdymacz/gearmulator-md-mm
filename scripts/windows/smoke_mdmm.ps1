@@ -1,13 +1,13 @@
 # Starts each standalone of the Windows package, and each VST3 in a minimal host (scripts/vst3EditorHost, when -Vst3Host
 # is given), (elektron-windows.yml's Gearmulator-Elektron-Windows-x64.zip,
-# unpacked) with no ROM and checks what can be checked without a person (doc/release/WINDOWS.md):
+# unpacked) with no ROM and a scratch data root (GEARMULATOR_DATA_ROOT), and checks what can be checked without a person (doc/release/WINDOWS.md):
 #   - the app is still running after a while;
 #   - its page runs in WebView2 (msedgewebview2.exe processes with the editors' profile folder), not in the
 #     Internet Explorer control;
 #   - the bridge went both ways: the page said "ready" (page -> plug-in, postMessage), the plug-in answered with
 #     the machine's state, and the page shows "<machine> firmware needed" (plug-in -> page, ExecuteScript). The
 #     text is read through UI Automation (the page's accessibility tree), so the shipped build needs no log;
-#   - a screenshot of the screen (an artifact, to look at).
+#   - a screenshot of the screen (md-standalone.png, md-vst3.png, ...; an artifact, to look at) and summary.md.
 #
 #   scripts/windows/smoke_mdmm.ps1 -PackageDir <unpacked zip> -OutputDir <dir> [-Vst3Host <mdmmVst3EditorHost.exe>]
 [CmdletBinding()]
@@ -25,6 +25,10 @@ Add-Type -AssemblyName UIAutomationClient, UIAutomationTypes, System.Windows.For
 
 New-Item -ItemType Directory -Path $OutputDir -Force | Out-Null
 $OutputDir = (Resolve-Path -LiteralPath $OutputDir).Path
+# A scratch data root (ROM and settings folders), as on macOS and Linux: nothing of the run stays.
+$dataRoot = Join-Path ([System.IO.Path]::GetTempPath()) ("mdmm-smoke-" + [guid]::NewGuid().ToString('N'))
+New-Item -ItemType Directory -Path $dataRoot -Force | Out-Null
+$env:GEARMULATOR_DATA_ROOT = $dataRoot + '\'
 
 function Save-Screenshot([string] $Path) {
     $bounds = [System.Windows.Forms.SystemInformation]::VirtualScreen
@@ -85,6 +89,8 @@ foreach ($machine in @(@{ Product = $productNames['MDMM_PRODUCT_NAME_MD']; Machi
 }
 
 $status = 0
+$summary = New-Object System.Collections.Generic.List[string]
+function Add-Row([string] $What, [string] $Check, [string] $Result) { $summary.Add("| $What | $Check | $Result |") }
 foreach ($run in $runs) {
     Write-Host "== $($run.Label): $($run.File) $($run.Arguments -join ' ')"
     $start = @{ FilePath = $run.File; WorkingDirectory = (Split-Path -Parent $run.File); PassThru = $true
@@ -112,21 +118,27 @@ foreach ($run in $runs) {
 
     if ($process.HasExited) {
         Write-Host "::error::$($run.Label) exited (code $($process.ExitCode))"
+        Add-Row $run.Label 'running' "no: exited ($($process.ExitCode))"
         Get-Content -LiteralPath (Join-Path $OutputDir "$($run.Name)-stderr.txt") -ErrorAction SilentlyContinue
         $status = 1
         continue
     }
     Write-Host "$($run.Label): running"
+    Add-Row $run.Label 'running' 'yes'
     if ($ours.Count -gt 0) {
         Write-Host "$($run.Label): WebView2 is running with the editors' profile ($($ours.Count) msedgewebview2.exe processes)"
+        Add-Row $run.Label 'WebView2 page process' "yes ($($ours.Count))"
     } else {
         Write-Host "::error::$($run.Label): no msedgewebview2.exe with the profile $profileFolder"
+        Add-Row $run.Label 'WebView2 page process' 'no'
         $status = 1
     }
     if ($found) {
         Write-Host "$($run.Label): the page shows '$wanted' (page -> plug-in -> page)"
+        Add-Row $run.Label "page shows `"$wanted`"" 'yes'
     } else {
         Write-Host "::error::$($run.Label): the page never showed '$wanted' within $TimeoutSeconds s"
+        Add-Row $run.Label "page shows `"$wanted`"" 'no'
         Write-Host "-- names in the UI Automation tree (first 80)"
         $names | Select-Object -First 80 | ForEach-Object { Write-Host "   $_" }
         $status = 1
@@ -143,4 +155,10 @@ foreach ($run in $runs) {
 }
 Get-ChildItem -LiteralPath $env:TEMP -Filter 'gearmulator-*' -ErrorAction SilentlyContinue |
     ForEach-Object { Write-Host "temp: $($_.Name) $($_.Length) bytes" }
+$os = (Get-CimInstance Win32_OperatingSystem).Caption
+$table = @("### Windows start test ($os)", '', '| What | Check | Result |', '|---|---|---|') + $summary
+$table | Set-Content -LiteralPath (Join-Path $OutputDir 'summary.md') -Encoding UTF8
+$table | ForEach-Object { Write-Host $_ }
+if ($env:GITHUB_STEP_SUMMARY) { $table | Add-Content -LiteralPath $env:GITHUB_STEP_SUMMARY -Encoding UTF8 }
+Remove-Item -LiteralPath $dataRoot -Recurse -Force -ErrorAction SilentlyContinue
 exit $status

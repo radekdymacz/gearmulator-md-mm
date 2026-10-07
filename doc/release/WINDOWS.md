@@ -32,9 +32,9 @@ macOS and Linux keep their transports (javascript: URLs, script files).
 
 ## The start test (CI)
 
-`mdmm-editors-windows.yml` runs on pushes to `main`, `release/md-mm-*` and `feat/windows-*`. After the package is
+`mdmm-editors-windows.yml` runs on pushes to `main`, `release/md-mm-*`, `release/0.*` and `feat/windows-*`, and on `mdmm-v*` tags. After the package is
 built, `scripts/windows/smoke_mdmm.ps1` on a clean `windows-2022` runner, with no ROM, starts each standalone and
-each VST3 (in `scripts/windows/vst3EditorHost`, a minimal JUCE host that opens the editor and feeds silent blocks)
+each VST3 (in `scripts/vst3EditorHost`, a minimal JUCE host that opens the editor and feeds silent blocks)
 and checks:
 
 - the process is still running;
@@ -42,7 +42,8 @@ and checks:
 - the page shows "<machine> firmware needed", read through UI Automation: the page said `ready` (page -> plug-in),
   the plug-in answered with the machine's state (plug-in -> page);
 
-and keeps a screenshot and the UI Automation names as the `windows-mdmm-smoke` artifact.
+and keeps a screenshot and the UI Automation names as the `windows-mdmm-smoke` artifact. The three systems' start
+tests side by side: [FOUNDATION.md](../modern-ux/FOUNDATION.md), "CI start tests".
 
 Not covered: a real DAW (Live, Reaper, Cubase, Bitwig, FL Studio), High-DPI monitors and moving a window between
 monitors of different scale, typing into the page inside a DAW (the host's own shortcuts), a machine without the

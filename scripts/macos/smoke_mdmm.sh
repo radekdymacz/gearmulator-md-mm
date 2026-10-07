@@ -66,7 +66,8 @@ run() {
 		waited=$((waited + 3))
 		if ! kill -0 "${pid}" 2>/dev/null; then alive=0; break; fi
 		"${probe}" texts "${pid}" > "${out}/${name}-ui.txt" 2>/dev/null || true
-		if grep -q -F "${wanted}" "${out}/${name}-ui.txt"; then found=1; break; fi
+		# Case-blind: the card shows the text in capitals (CSS), and that is what the accessibility tree says.
+		if grep -q -i -F "${wanted}" "${out}/${name}-ui.txt"; then found=1; break; fi
 	done
 	sleep 2
 	kill -0 "${pid}" 2>/dev/null || alive=0

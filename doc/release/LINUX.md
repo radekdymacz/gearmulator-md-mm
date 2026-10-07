@@ -45,9 +45,11 @@ The editor is a web page in JUCE 7's `WebBrowserComponent`. On Linux JUCE runs w
 
 `mdmm-editors-linux.yml` builds on Ubuntu 22.04 (glibc 2.35), runs the unit tests
 (`ctest -E "Plugin|_AU|VST|FirmwareTest|synthLibMidiClockTimingTest"`), packages, and starts each packaged
-standalone under Xvfb on Ubuntu 22.04 and 24.04 with runtime packages only: the app keeps running, JUCE's GTK
-child and WebKit's `WebKitWebProcess` start, and a screenshot is kept as an artifact. Not checked: the VST3 in
-a Linux DAW, audio and MIDI devices, a ROM, Wayland, any distribution but Ubuntu.
+standalone and VST3 (in `scripts/vst3EditorHost`) under Xvfb on Ubuntu 22.04 and 24.04 with runtime packages only
+(`scripts/linux/smoke_mdmm.sh`): the app keeps running, WebKit's `WebKitWebProcess` starts, the bridge goes both
+ways and the page shows "<machine> firmware needed" (read through AT-SPI), and screenshots are kept as an
+artifact. The three systems' start tests side by side: [FOUNDATION.md](../modern-ux/FOUNDATION.md), "CI start
+tests". Not checked: the VST3 in a Linux DAW, audio and MIDI devices, a ROM, Wayland, any distribution but Ubuntu.
 
 On Linux `synthLib::SysexBuffer` is a `std::pmr::vector` (macOS 10.13 builds have no `<memory_resource>`, so
 there it is a plain `std::vector`): a few of upstream's firmware test programs assign one to the other and do not

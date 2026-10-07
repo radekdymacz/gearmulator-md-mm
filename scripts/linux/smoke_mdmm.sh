@@ -83,7 +83,8 @@ run() {
 		waited=$((waited + 3))
 		if ! kill -0 "${pid}" 2>/dev/null; then alive=0; break; fi
 		timeout 20 python3 "${script_dir}/ui_texts.py" > "${out}/${name}-ui.txt" 2>"${out}/${name}-ui-errors.txt" || true
-		if grep -q -F "${wanted}" "${out}/${name}-ui.txt"; then found=1; break; fi
+		# Case-blind: the card shows the text in capitals (CSS), and that is what the accessibility tree says.
+		if grep -q -i -F "${wanted}" "${out}/${name}-ui.txt"; then found=1; break; fi
 	done
 	sleep 3
 	kill -0 "${pid}" 2>/dev/null || alive=0
