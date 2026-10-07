@@ -13,6 +13,7 @@ on:
     branches:
       - main
       - "release/md-mm-*"
+      - "release/0.*"
       - "feat/linux-*"
     paths:
       - ".github/workflows/mdmm-editors-linux.yml"

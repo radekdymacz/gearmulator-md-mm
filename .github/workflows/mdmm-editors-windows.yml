@@ -12,6 +12,7 @@ on:
     branches:
       - main
       - "release/md-mm-*"
+      - "release/0.*"
       - "feat/windows-*"
     paths:
       - ".github/workflows/mdmm-editors-windows.yml"
