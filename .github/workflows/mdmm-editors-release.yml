@@ -3,7 +3,9 @@ name: MD/MM Editors release installers
 # This fork's own release job (doc/modern-ux/UPSTREAM.md): upstream's elektron-prerelease.yml and
 # elektron-macos.yml stay as they are. On an mdmm-v* tag this builds the fixture-free universal
 # bundles itself (the same script and settings as elektron-macos.yml), packages the two installers
-# and attaches them to the release.
+# and attaches them to the release. It also builds Windows (upstream's elektron-windows.yml, called
+# as is) and Linux (mdmm-editors-linux.yml), and attaches one "not-tested" archive per machine and
+# platform to the same release while it is a draft (doc/release/LINUX.md).
 
 on:
   push:
@@ -14,6 +16,13 @@ permissions:
   contents: read
 
 jobs:
+  # Unsigned, untested by a person: attached as *-not-tested archives, to a draft only (the last job).
+  build-windows:
+    uses: ./.github/workflows/elektron-windows.yml
+
+  build-linux:
+    uses: ./.github/workflows/mdmm-editors-linux.yml
+
   build-macos:
     name: macOS universal bundles for the installers
     runs-on: macos-14
@@ -324,4 +333,93 @@ jobs:
               --draft ${channel_args[@]+"${channel_args[@]}"} --verify-tag \
               --title "${title}" \
               "${notes_args[@]}"
+          fi
+
+  # Windows and Linux: one archive per machine, "not-tested" in the name, never signed. They go only
+  # to the draft the macOS job made or found (so this runs after it, and only one job creates the
+  # release): an existing asset is kept, and a published release is left alone with a warning (the
+  # archives stay in the run's artifacts; Radek attaches them by hand if he wants them there). The
+  # body gets the "not tested" line once. The macOS names stay as they are (the website links to them).
+  other-platforms:
+    name: Windows and Linux archives (not tested) on the draft release
+    needs: [macos-installers, build-windows, build-linux]
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      TAG: ${{ github.ref_name }}
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+          submodules: false
+
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: Gearmulator-Elektron-Windows-x64-*
+          path: ${{ runner.temp }}/windows
+          merge-multiple: true
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: linux-mdmm
+          path: ${{ runner.temp }}/assets
+
+      - name: One Windows zip per machine
+        run: |
+          set -euo pipefail
+          zip="$(find "${RUNNER_TEMP}/windows" -name 'Gearmulator-Elektron-Windows-x64.zip' -print -quit)"
+          ./scripts/windows/package_mdmm_editors.sh "${zip}" "${RUNNER_TEMP}/assets"
+          ls -l "${RUNNER_TEMP}/assets"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: mdmm-windows-linux-not-tested
+          path: ${{ runner.temp }}/assets/*-not-tested.*
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Attach to the draft release
+        run: |
+          set -euo pipefail
+          assets=("${RUNNER_TEMP}/assets/Machinedrum-Editor-Windows-x64-not-tested.zip" \
+                  "${RUNNER_TEMP}/assets/Monomachine-Editor-Windows-x64-not-tested.zip" \
+                  "${RUNNER_TEMP}/assets/Machinedrum-Editor-Linux-x64-not-tested.tar.gz" \
+                  "${RUNNER_TEMP}/assets/Monomachine-Editor-Linux-x64-not-tested.tar.gz")
+          for asset in "${assets[@]}"; do
+            if [[ ! -f "${asset}" ]]; then
+              echo "::error::Missing ${asset}"
+              exit 1
+            fi
+          done
+          release_id="$(gh api --paginate "repos/${GITHUB_REPOSITORY}/releases?per_page=100" \
+            --jq ".[] | select(.tag_name == \"${TAG}\") | .id" | head -n 1)"
+          if [[ -z "${release_id}" ]]; then
+            echo "::error::No release for ${TAG}: the macOS job makes the draft first."
+            exit 1
+          fi
+          if [[ "$(gh api "repos/${GITHUB_REPOSITORY}/releases/${release_id}" --jq '.draft')" != "true" ]]; then
+            echo "::warning title=Published release left alone::${TAG} is published; the unsigned, not-tested Windows and Linux archives go to drafts only. They are in this run's artifacts."
+            exit 0
+          fi
+          existing="$(gh api "repos/${GITHUB_REPOSITORY}/releases/${release_id}" --jq '.assets[].name')"
+          for asset in "${assets[@]}"; do
+            name="$(basename "${asset}")"
+            if printf '%s\n' "${existing}" | grep -qxF "${name}"; then
+              echo "Keeping the existing ${name} on release ${release_id} (${TAG})"
+            else
+              gh api --method POST -H "Content-Type: application/octet-stream" \
+                "https://uploads.github.com/repos/${GITHUB_REPOSITORY}/releases/${release_id}/assets?name=${name}" \
+                --input "${asset}" --jq '.name'
+            fi
+          done
+          line="**Windows and Linux: not tested.** The \`*-Windows-x64-not-tested.zip\` and \`*-Linux-x64-not-tested.tar.gz\` archives are built and unit-tested by CI only; nobody has used them yet. Each has a README (install paths, required packages). Bring your own ROM."
+          body="$(gh api "repos/${GITHUB_REPOSITORY}/releases/${release_id}" --jq '.body // ""')"
+          if ! printf '%s' "${body}" | grep -qF "Windows and Linux: not tested"; then
+            printf '%s\n\n%s\n' "${body}" "${line}" > "${RUNNER_TEMP}/body.md"
+            gh api --method PATCH "repos/${GITHUB_REPOSITORY}/releases/${release_id}" \
+              -F body=@"${RUNNER_TEMP}/body.md" --jq '.name'
           fi
