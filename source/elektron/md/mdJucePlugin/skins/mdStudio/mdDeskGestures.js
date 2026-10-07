@@ -106,13 +106,41 @@ function rampSend() {
 	renderTop();
 }
 
-/* ===== LCD line 2: SWG and ACC dragged up or down (a click without a move steps them) ===== */
-document.addEventListener("pointerdown", e => { const el = e.target.closest(".l2.ed"); if (!el) return; const k = el.dataset.l2; if (k === "swing" || k === "accAmt") { Held.begin("l2", { k, y: e.clientY, v: V[k], moved: false }); Gesture.begin(); grabPointer(el, e); e.preventDefault(); } });
+/* ===== LCD line 2: its values dragged up or down (B-006). SWG and ACC move by their unit (a click without a move
+   steps them); LEN, SPD and SONG step through their values, one every 12 px, from where the press found them and
+   without wrapping (⌥ held at the press: LEN's inner length, as ⌥-click). A click without a move is still the click's
+   step (mdDeskTop.js), a drag's own click is not. One drag, one undo step. ===== */
+const L2_DRAG = { len: 12, mult: 12, song: 12 };
+document.addEventListener("pointerdown", e => {
+	const el = e.target.closest(".l2.ed"); if (!el || e.button !== 0) return; const k = el.dataset.l2;
+	if (k === "swing" || k === "accAmt") Held.begin("l2", { k, y: e.clientY, v: V[k], moved: false });
+	else if (L2_DRAG[k]) Held.begin("l2", { k, y: e.clientY, v: k === "len" ? (e.altKey ? V.length : V.len) : k === "mult" ? V.mult : V.songSlot, alt: e.altKey, moved: false, stepped: true });
+	else return;
+	Gesture.begin(); grabPointer(el, e); e.preventDefault();
+});
+/* a stepped value n steps from where the drag began, clamped to its range */
+function l2dragTo(l, n) {
+	if (l.k === "len" && l.alt) { const v = clamp(l.v + n, 1, V.len); if (v !== V.length) cmd("length", { p: V.pat, v }, "l2length", [[["length"], v]]); return; }
+	if (l.k === "len") { const o = [16, 32, 48, 64], v = o[clamp(o.indexOf(l.v) + n, 0, 3)]; if (v !== V.len) cmd("totalLength", { p: V.pat, v }, "l2total", [[["len"], v]]); return; }
+	if (l.k === "mult") { const o = Enums().tempoMultipliers; if (!o.length) return; const v = o[clamp(o.indexOf(l.v) + n, 0, o.length - 1)]; if (v !== V.mult) cmd("speed", { p: V.pat, v }, "l2mult", [[["mult"], v]]); return; }
+	if (l.k === "song") { const s = clamp(l.v + n, 0, 31); if (s !== l.at) { Held.with("l2", { at: s }); cmd("selectSong", { s }); } }
+}
 document.addEventListener("pointermove", e => {
-	let l = Held.as("l2"); if (!l) return; if (e.buttons === 0 && e.pointerType === "mouse") { Held.end("l2"); Gesture.end(); return; } const d = Math.round((l.y - e.clientY) / (l.k === "swing" ? 3 : 6)); if (d) l = Held.with("l2", { moved: true });
+	let l = Held.as("l2"); if (!l) return; if (e.buttons === 0 && e.pointerType === "mouse") { Held.end("l2"); Gesture.end(); return; }
+	if (l.stepped) {
+		const n = Math.trunc((l.y - e.clientY) / L2_DRAG[l.k]); if (!n && !l.moved) return;
+		l = Held.with("l2", { moved: true }); const before = [V.len, V.length, V.mult]; l2dragTo(l, n);
+		if (before.join() !== [V.len, V.length, V.mult].join()) renderSub();
+		return;
+	}
+	const d = Math.round((l.y - e.clientY) / (l.k === "swing" ? 3 : 6)); if (d) l = Held.with("l2", { moved: true });
 	const before = V[l.k]; l2set(l.k, l.v + d); if (V[l.k] !== before) renderSub();
 });
-document.addEventListener("pointerup", e => { const k = Held.end("l2"); if (!k) return; Gesture.end(); if (!k.moved) l2step(k.k, 1); });
+document.addEventListener("pointerup", e => {
+	const k = Held.end("l2"); if (!k) return; Gesture.end();
+	if (k.stepped) { if (k.moved) { const eat = c => { c.stopPropagation(); c.preventDefault(); }; addEventListener("click", eat, { capture: true, once: true }); setTimeout(() => removeEventListener("click", eat, true), 0); render(); } return; }
+	if (!k.moved) l2step(k.k, 1);
+});
 
 /* ===== Input: a value box or fader ("value"), a curve editor's dot ("editor"), the lock lane ("lane") ===== */
 const main = $("#main");

@@ -239,7 +239,28 @@ run(); { const before = P.renders; P.Held.begin("gv", {}); P.Held.end("gv"); run
 	check(last().op === "slide" && last().s === 4, "⌥⇧-click on a trig is the slide");
 	P.clickSteps(stepEv(2, 0, { metaKey: true }));
 	check(last().op === "steps", "⌘-click is still the fill");
-	P.clearSel(); delete P.Docs.patterns[5]; delete P.Docs.kits[3]; P.Overlay.clear(); P.setV(P.view());
+	P.clearSel();
+	/* B-006: LEN, SPD and SONG on LCD line 2 follow a vertical drag (12 px a step, from where the press found them,
+	   no wrap), ⌥ at the press drags the inner length; one gesture; the drag's click does not step them again */
+	P.Overlay.clear(); P.setV(P.view()); sent.length = 0;
+	const l2 = k => ({ button: 0, clientY: 300, altKey: false, preventDefault() { }, target: { closest: q => q === ".l2.ed" ? { dataset: { l2: k } } : null } });
+	fire("document", "pointerdown", l2("len"));
+	fire("document", "pointermove", { buttons: 1, pointerType: "mouse", clientY: 300 - 25 });
+	fire("document", "pointerup", {});
+	const total = sent.filter(m => m.op === "totalLength");
+	check(total.length === 1 && total[0].v === 48 && total[0].g, "dragging LEN up 25 px steps the total length twice, 16 to 48, in one gesture: " + JSON.stringify(total));
+	sent.length = 0;
+	fire("document", "pointerdown", Object.assign(l2("len"), { altKey: true }));
+	fire("document", "pointermove", { buttons: 1, pointerType: "mouse", clientY: 300 + 40 });
+	fire("document", "pointerup", {});
+	check(sent.some(m => m.op === "length" && m.v === 13) && !sent.some(m => m.op === "totalLength"), "⌥-drag on LEN moves the inner length (16 down 3 to 13): " + JSON.stringify(sent.map(m => [m.op, m.v])));
+	sent.length = 0;
+	fire("document", "pointerdown", l2("song"));
+	fire("document", "pointermove", { buttons: 1, pointerType: "mouse", clientY: 300 - 1000 });
+	fire("document", "pointermove", { buttons: 1, pointerType: "mouse", clientY: 300 - 1012 });
+	fire("document", "pointerup", {});
+	check(sent.filter(m => m.op === "selectSong").map(m => m.s).join() === "31", "dragging SONG far up stops at song 32 (no wrap), sent once: " + JSON.stringify(sent.map(m => [m.op, m.s])));
+	delete P.Docs.patterns[5]; delete P.Docs.kits[3]; P.Overlay.clear(); P.setV(P.view());
 }
 
 /* ---- a reset (another engine, a restored project) starts the solos over ---- */
