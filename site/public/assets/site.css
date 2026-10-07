@@ -79,6 +79,7 @@ code { font-family: var(--font-mono); font-size: .86em; background: var(--panel-
 .nav a:not(.btn) { color: var(--hw-muted); text-decoration: none; font-size: 15px; }
 .nav a:not(.btn):hover { color: var(--hw-text); }
 @media (max-width: 760px) { .nav .opt { display: none; } }
+@media (max-width: 420px) { .nav a.keep { font-size: 14px; } .nav .btn-sm { padding-left: 10px; padding-right: 10px; } .top .brand b { font-size: 13px; white-space: nowrap; } .top .brand { flex: none; margin-right: 6px; } .nav { gap: 8px; } }
 .themebtn { background: var(--hw-key); border: 0; box-shadow: inset 0 -2px 0 rgba(0,0,0,.35); color: var(--hw-text); width: 36px; height: 36px; display: inline-grid; place-items: center; cursor: pointer; padding: 0; }
 .themebtn:hover { background: #3d3f3b; }
 .themebtn svg { width: 16px; height: 16px; }
@@ -325,3 +326,9 @@ kbd { font: 500 .86em var(--font-mono); background: var(--panel-hover); border: 
 /* The footer sits at the bottom of the window on short pages (the download steps). */
 body { min-height: 100vh; min-height: 100dvh; display: flex; flex-direction: column; }
 body > main { flex: 1 0 auto; }
+
+/* Download steps: the three labels fit on one line each at phone width. */
+.progress li { white-space: nowrap; text-align: center; }
+@media (max-width: 480px) { .progress li { padding: 9px 4px; font-size: 11px; letter-spacing: .04em; } }
+.dmgline { margin: 0 0 12px; }
+.more { max-width: 62ch; margin: 18px 0 0; }

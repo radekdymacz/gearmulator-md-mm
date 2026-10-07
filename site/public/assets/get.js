@@ -59,6 +59,8 @@
     var D = (OS[os] || {})[ed] || {};
     fileUrl = ready(D.url) ? D.url : rel;
     document.querySelectorAll("[data-download]").forEach(function (el) { if (el.tagName === "A") el.href = fileUrl; });
+    var dmg = document.querySelector("[data-dmg-link]");
+    if (dmg) { dmg.href = ready(D.dmg) ? D.dmg : rel; dmg.parentNode.hidden = !ready(D.dmg); }
   };
   useOs(os);
 
@@ -124,7 +126,7 @@
     var r = box.querySelector("input:checked");
     return r ? Number(r.value) : 0;
   };
-  var sync = function () { var a = amount(); btn.textContent = a > 0 ? "Pay " + sym + a + " and download" : "Continue to checkout"; };
+  var sync = function () { var a = amount(); btn.textContent = a > 0 ? "Continue to pay " + sym + a : "Continue to checkout"; };
   box.addEventListener("change", function () { custom.value = ""; sync(); });
   custom.addEventListener("input", function () {
     if (parseInt(custom.value, 10) > 0) box.querySelectorAll("input").forEach(function (i) { i.checked = false; });

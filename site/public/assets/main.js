@@ -16,7 +16,7 @@
   document.querySelectorAll("[data-theme-toggle]").forEach(function (b) {
     b.addEventListener("click", function () {
       var next = root.dataset.theme === "dark" ? "light" : "dark";
-      root.dataset.theme = next;
+      if (window.mdmmTheme) window.mdmmTheme(next); else root.dataset.theme = next;
       try { localStorage.setItem("mdmm.theme", next); } catch (e) {}
       label();
     });
