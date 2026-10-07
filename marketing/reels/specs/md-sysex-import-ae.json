@@ -1,0 +1,67 @@
+{
+  "schema": "mdmm.reel/1",
+  "id": "md-sysex-import-ae",
+  "title": "Loading Autechre's public 2008 Machinedrum backup (organic tutorial)",
+  "status": "needs-footage",
+  "machine": "md",
+  "fps": 30,
+  "footage": { "file": "fr-04-md-sysex-import-ae.mov", "uiScale": 2, "ui": [1440, 810] },
+  "music": { "bpm": 120, "downbeat": 0 },
+  "hook": { "text": "A public 2008 tour backup. *Loaded.*", "seconds": 2 },
+  "brief": {
+    "idea": "Organic, tutorial-style: loading Autechre's public Quaristice-tour SysEx (the Machinedrum backup of 1 March 2008, released free on their store in 2018) into the Machinedrum Editor and playing it. The Monomachine file follows as a second post. Credit on screen and in the caption, with a link to their store. Nothing may say or suggest that Autechre, Warp or Elektron endorse, use or know of the editors.",
+    "footageRequest": "FR-04",
+    "use": "organic-only",
+    "openQuestions": [
+      "Decided by Radek 2026-10-06: goes ahead with credit + store link; no contact with Warp. Organic posts only: never boosted, never in a paid ad, never on the landing page.",
+      "Tempo comes from their pattern (not 120): measure it, set music.bpm and downbeat with scripts/onsets.mjs.",
+      "The import shots use inSeconds (before PLAY).",
+      "Confirm the store URL to credit (autechre.ws is assumed; the 2018 release was a hidden link on their store) before any post."
+    ]
+  },
+  "shots": [
+    {
+      "id": "drop",
+      "inSeconds": 2,
+      "beats": 4,
+      "camera": [
+        { "at": 0, "region": [0, 0, 1440, 810] },
+        { "at": 1.8, "region": [360, 120, 720, 560] }
+      ],
+      "subtitles": [{ "at": 1.0, "until": 2.0, "text": "Import SysEx." }]
+    },
+    {
+      "id": "preview",
+      "inSeconds": 5,
+      "beats": 4,
+      "camera": [{ "at": 0, "region": [360, 120, 720, 560] }],
+      "subtitles": [{ "at": 0.1, "until": 1.9, "text": "Kits, patterns, songs: *listed.*" }]
+    },
+    {
+      "id": "play",
+      "inBeat": 0,
+      "beats": 16,
+      "camera": [
+        { "at": 0, "region": [0, 0, 1440, 810] },
+        { "at": 4.0, "region": [0, 110, 1440, 400], "byFormat": { "9x16": [0, 120, 620, 390] } }
+      ],
+      "subtitles": [
+        { "at": 0.2, "until": 2.8, "text": "Their tour kit, *playing.*" },
+        { "at": 3.2, "until": 5.8, "text": "Every value on screen." }
+      ]
+    }
+  ],
+  "endCard": {
+    "beats": 6,
+    "audioInBeat": 16,
+    "title": "Machinedrum Editor",
+    "line": "Free · pay what you want",
+    "status": "Coming soon",
+    "small": "SysEx: Autechre's public 2008 tour backup (autechre.ws). Not affiliated."
+  },
+  "audio": { "fadeOutSeconds": 0.8 },
+  "post": {
+    "link": "https://mdmm.nativekloud.com/guide/?utm_source=youtube&utm_medium=social&utm_campaign=evergreen&utm_content=md-sysex-import-ae",
+    "caption": "Loading Autechre's public Machinedrum backup from their 2008 Quaristice tour (free on their store: https://autechre.ws) into the Machinedrum Editor: Import SysEx, check what it overwrites, import as one undo step, play. Their files, credited; we are not affiliated with Autechre, Warp or Elektron. Editor: free, pay what you want, macOS, bring your own ROM. mdmm.nativekloud.com"
+  }
+}

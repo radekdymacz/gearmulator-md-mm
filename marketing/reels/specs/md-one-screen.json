@@ -1,0 +1,85 @@
+{
+  "schema": "mdmm.reel/1",
+  "id": "md-one-screen",
+  "title": "Whole Machinedrum on one screen",
+  "status": "draft",
+  "machine": "md",
+  "fps": 30,
+  "footage": {
+    "file": "demo-md-full-20261006.mov",
+    "uiScale": 2,
+    "ui": [1440, 810],
+    "timeline": "demo-md-full-20261006.timeline.json",
+    "syncOffset": 0.025
+  },
+  "music": { "bpm": 119.1, "downbeat": 0 },
+  "hook": { "text": "Whole Machinedrum. *One screen.*", "seconds": 2 },
+  "brief": {
+    "idea": "A tour of the workspaces from the full-song take, one long shot each: Sequence (bars 12.95-14.95), Sound with the machine picker (14.95-18.95), Mix and the pattern chooser (22.95-26.95), Sampler capture and chop (32.95-36.95). Every shot starts .95 into a bar, right after each page change, and the groove keeps its phase. Recut 2026-10-07 from the full take (was demo-md-groove).",
+    "use": "paid-ok"
+  },
+  "shots": [
+    {
+      "id": "sequence",
+      "inBar": 12.95,
+      "beats": 8,
+      "camera": [{ "at": 0, "region": [0, 110, 960, 540], "byFormat": { "9x16": [0, 120, 640, 400] } }],
+      "subtitles": [{ "at": 2.1, "until": 4.0, "text": "Every step in view." }]
+    },
+    {
+      "id": "sound",
+      "inBar": 14.95,
+      "beats": 16,
+      "camera": [
+        { "at": 0, "region": [200, 100, 960, 540], "byFormat": { "9x16": [0, 110, 760, 520] } },
+        { "at": 4.0, "region": [200, 100, 960, 540], "byFormat": { "9x16": [0, 110, 760, 520] } },
+        { "at": 6.2, "region": [300, 180, 880, 495], "byFormat": { "9x16": [330, 200, 780, 400] } }
+      ],
+      "subtitles": [
+        { "at": 0.4, "until": 3.8, "text": "Sound: grouped by what it does." },
+        { "at": 4.6, "until": 7.9, "text": "Pick a machine. *Hear it.*" }
+      ]
+    },
+    {
+      "id": "mix-chooser",
+      "inBar": 22.95,
+      "beats": 16,
+      "camera": [
+        { "at": 0, "region": [0, 100, 960, 540], "byFormat": { "9x16": [0, 120, 720, 520] } },
+        { "at": 3.6, "region": [0, 100, 960, 540], "byFormat": { "9x16": [0, 120, 720, 520] } },
+        { "at": 5.8, "region": [40, 110, 1100, 619], "byFormat": { "9x16": [40, 150, 760, 420] } }
+      ],
+      "subtitles": [
+        { "at": 0.4, "until": 3.8, "text": "Mix: pan, sends, *echo.*" },
+        { "at": 4.6, "until": 7.9, "text": "Copy the pattern. Queue the next." }
+      ]
+    },
+    {
+      "id": "sampler",
+      "inBar": 32.95,
+      "beats": 16,
+      "camera": [
+        { "at": 0, "region": [200, 110, 1000, 562], "byFormat": { "9x16": [200, 130, 760, 380] } },
+        { "at": 4.4, "region": [200, 110, 1000, 562], "byFormat": { "9x16": [200, 130, 760, 380] } },
+        { "at": 6.6, "region": [200, 300, 960, 540], "byFormat": { "9x16": [200, 440, 760, 260] } }
+      ],
+      "subtitles": [
+        { "at": 0.4, "until": 3.8, "text": "Sampler: capture the *groove.*" },
+        { "at": 4.6, "until": 7.9, "text": "Chop it. Same window." }
+      ]
+    }
+  ],
+  "endCard": {
+    "beats": 6,
+    "audioInBar": 36.95,
+    "title": "Machinedrum Editor",
+    "line": "Free · pay what you want",
+    "status": "Coming soon",
+    "small": "macOS · VST3, AU and app · bring your own ROM"
+  },
+  "audio": { "fadeOutSeconds": 0.8 },
+  "post": {
+    "link": "https://mdmm.nativekloud.com/?utm_source=instagram&utm_medium=social&utm_campaign=launch&utm_content=md-one-screen",
+    "notes": "Per-platform links: marketing/UTM.md. Caption: copy-bank.md, 'One screen'."
+  }
+}

@@ -1,0 +1,31 @@
+{
+  "name": "mdmm-reels",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Marketing reels for the Machinedrum Editor and Monomachine Editor. A reel is a JSON spec; one command renders 9:16, 1:1 and 16:9.",
+  "license": "UNLICENSED",
+  "type": "module",
+  "scripts": {
+    "studio": "remotion studio src/index.ts",
+    "typecheck": "tsc --noEmit",
+    "validate": "node scripts/validate.mjs",
+    "render": "node scripts/render.mjs"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {
+    "@fontsource/inter": "5.3.0",
+    "@fontsource/jetbrains-mono": "5.3.0",
+    "@remotion/bundler": "4.0.533",
+    "@remotion/cli": "4.0.533",
+    "@remotion/renderer": "4.0.533",
+    "react": "19.3.0",
+    "react-dom": "19.3.0",
+    "remotion": "4.0.533"
+  },
+  "devDependencies": {
+    "@types/react": "19.2.2",
+    "typescript": "7.0.2"
+  }
+}

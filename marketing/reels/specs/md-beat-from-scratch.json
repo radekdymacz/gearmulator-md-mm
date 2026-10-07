@@ -1,0 +1,79 @@
+{
+  "schema": "mdmm.reel/1",
+  "id": "md-beat-from-scratch",
+  "title": "A beat from scratch",
+  "status": "draft",
+  "machine": "md",
+  "fps": 30,
+  "footage": {
+    "file": "demo-md-full-20261006.mov",
+    "uiScale": 2,
+    "ui": [1440, 810],
+    "timeline": "demo-md-full-20261006.timeline.json",
+    "syncOffset": 0.025
+  },
+  "music": { "bpm": 120, "downbeat": 0 },
+  "hook": { "text": "Empty pattern. *Watch it fill.*", "seconds": 2 },
+  "brief": {
+    "idea": "Radek's #1, from the full-song take (bars 2-14.75, continuous): GEN writes kick, snare and hats; hand edits and a keyboard fill; a lock ramp, rotate and swing, then the groove plays. Three long shots at real speed, every action followed by a bar or two of playing.",
+    "footageRequest": "FR-01 (covered by demo-md-full)",
+    "use": "paid-ok"
+  },
+  "shots": [
+    {
+      "id": "gen-writes",
+      "inBar": 2,
+      "beats": 12,
+      "camera": [
+        { "at": 0, "region": [0, 110, 960, 540], "byFormat": { "9x16": [0, 120, 640, 400] } },
+        { "at": 2.2, "region": [0, 110, 960, 540], "byFormat": { "9x16": [0, 120, 640, 400] } },
+        { "at": 4.4, "region": [460, 140, 980, 551], "byFormat": { "9x16": [760, 140, 680, 420] } }
+      ],
+      "subtitles": [{ "at": 2.2, "until": 5.8, "text": "*GEN* writes kick, snare, hats." }]
+    },
+    {
+      "id": "by-hand",
+      "inBar": 5,
+      "beats": 16,
+      "camera": [
+        { "at": 0, "region": [0, 110, 960, 540], "byFormat": { "9x16": [0, 120, 640, 400] } },
+        { "at": 3.8, "region": [0, 110, 960, 540], "byFormat": { "9x16": [0, 120, 640, 400] } },
+        { "at": 6.0, "region": [240, 250, 1000, 563], "byFormat": { "9x16": [0, 300, 640, 360] } }
+      ],
+      "subtitles": [
+        { "at": 0.3, "until": 3.7, "text": "Then play it *by hand.*" },
+        { "at": 4.5, "until": 7.9, "text": "A fill from the *keyboard.*" }
+      ]
+    },
+    {
+      "id": "locks-and-groove",
+      "inBar": 9,
+      "beats": 23,
+      "camera": [
+        { "at": 0, "region": [200, 400, 1000, 563], "byFormat": { "9x16": [220, 560, 520, 240] } },
+        { "at": 4.0, "region": [200, 400, 1000, 563], "byFormat": { "9x16": [220, 560, 520, 240] } },
+        { "at": 6.2, "region": [0, 110, 960, 540], "byFormat": { "9x16": [0, 120, 640, 400] } },
+        { "at": 8.6, "region": [0, 110, 960, 540], "byFormat": { "9x16": [0, 120, 640, 400] } },
+        { "at": 11.0, "region": [0, 60, 1240, 698], "byFormat": { "9x16": [0, 120, 760, 450] } }
+      ],
+      "subtitles": [
+        { "at": 0.4, "until": 3.8, "text": "Lock a value *per step.*" },
+        { "at": 4.6, "until": 7.8, "text": "Rotate the hats. Add swing." },
+        { "at": 8.4, "until": 11.4, "text": "From nothing. *25 seconds.*" }
+      ]
+    }
+  ],
+  "endCard": {
+    "beats": 6,
+    "audioInBar": 14.75,
+    "title": "Machinedrum Editor",
+    "line": "Free · pay what you want",
+    "status": "Coming soon",
+    "small": "macOS · VST3, AU and app · bring your own ROM"
+  },
+  "audio": { "fadeOutSeconds": 0.8 },
+  "post": {
+    "link": "https://mdmm.nativekloud.com/?utm_source=instagram&utm_medium=social&utm_campaign=launch&utm_content=md-beat-from-scratch",
+    "notes": "PLAY at video 3.35 s, full groove at bar 13 (27.97 s): about 25 s from nothing."
+  }
+}

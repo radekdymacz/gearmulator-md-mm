@@ -1,0 +1,82 @@
+{
+  "schema": "mdmm.reel/1",
+  "id": "md-sampler-glitch",
+  "title": "Sampler glitch",
+  "status": "draft",
+  "machine": "md",
+  "fps": 30,
+  "footage": {
+    "file": "demo-md-full-20261006.mov",
+    "uiScale": 2,
+    "ui": [1440, 810],
+    "timeline": "demo-md-full-20261006.timeline.json",
+    "syncOffset": 0.025
+  },
+  "music": { "bpm": 119.1, "downbeat": 0 },
+  "hook": { "text": "Sample it. *Then break it.*", "seconds": 2 },
+  "brief": {
+    "idea": "Radek's #2 from the full-song take: Set up sampling (bars 30-32), capture one bar live and chop it (32-36), reverse, retrig and the slot tiles (37-41), then the chops in the drop and soloed (46-50).",
+    "footageRequest": "FR-02 (covered by demo-md-full)",
+    "use": "paid-ok"
+  },
+  "shots": [
+    {
+      "id": "setup",
+      "inBar": 30,
+      "beats": 8,
+      "camera": [{ "at": 0, "region": [330, 180, 960, 540], "byFormat": { "9x16": [340, 200, 760, 460] } }]
+    },
+    {
+      "id": "capture-chop",
+      "inBar": 32,
+      "beats": 16,
+      "camera": [
+        { "at": 0, "region": [200, 110, 1000, 562], "byFormat": { "9x16": [200, 130, 760, 380] } },
+        { "at": 4.4, "region": [200, 110, 1000, 562], "byFormat": { "9x16": [200, 130, 760, 380] } },
+        { "at": 6.6, "region": [200, 300, 960, 540], "byFormat": { "9x16": [200, 440, 760, 260] } }
+      ],
+      "subtitles": [
+        { "at": 0.8, "until": 4.2, "text": "Capture one bar. *Live.*" },
+        { "at": 4.6, "until": 7.8, "text": "Frozen. Now *chop it.*" }
+      ]
+    },
+    {
+      "id": "reverse-tiles",
+      "inBar": 37,
+      "beats": 16,
+      "camera": [
+        { "at": 0, "region": [330, 380, 760, 428], "byFormat": { "9x16": [320, 460, 640, 220] } },
+        { "at": 3.4, "region": [330, 380, 760, 428], "byFormat": { "9x16": [320, 460, 640, 220] } },
+        { "at": 5.4, "region": [0, 300, 760, 428], "byFormat": { "9x16": [0, 280, 700, 420] } }
+      ],
+      "subtitles": [
+        { "at": 0.4, "until": 3.8, "text": "Reverse two. *Retrig* one." },
+        { "at": 4.8, "until": 7.9, "text": "Every slot: a *real waveform.*" }
+      ]
+    },
+    {
+      "id": "drop-solo",
+      "inBar": 46,
+      "beats": 16,
+      "camera": [
+        { "at": 0, "region": [0, 110, 960, 540], "byFormat": { "9x16": [0, 120, 640, 400] } },
+        { "at": 4.4, "region": [0, 110, 960, 540], "byFormat": { "9x16": [0, 120, 640, 400] } },
+        { "at": 6.2, "region": [480, 100, 960, 540], "byFormat": { "9x16": [700, 120, 740, 420] } }
+      ],
+      "subtitles": [
+        { "at": 0.4, "until": 3.8, "text": "Chops in the *drop.*" },
+        { "at": 4.8, "until": 7.9, "text": "Solo them: just the *chops.*" }
+      ]
+    }
+  ],
+  "endCard": {
+    "beats": 6,
+    "audioInBar": 50,
+    "title": "Machinedrum Editor",
+    "line": "Free · pay what you want",
+    "status": "Coming soon",
+    "small": "macOS · VST3, AU and app · bring your own ROM"
+  },
+  "audio": { "fadeOutSeconds": 0.8 },
+  "post": { "link": "https://mdmm.nativekloud.com/?utm_source=instagram&utm_medium=social&utm_campaign=launch&utm_content=md-sampler-glitch" }
+}

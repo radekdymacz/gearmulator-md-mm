@@ -1,0 +1,87 @@
+{
+  "schema": "mdmm.reel/1",
+  "id": "md-mute-drop",
+  "title": "Mute break, then the drop",
+  "status": "draft",
+  "machine": "md",
+  "fps": 30,
+  "footage": {
+    "file": "demo-md-full-20261006.mov",
+    "uiScale": 2,
+    "ui": [1440, 810],
+    "timeline": "demo-md-full-20261006.timeline.json",
+    "syncOffset": 0.025
+  },
+  "music": { "bpm": 119.1, "downbeat": 0 },
+  "hook": { "text": "Breakdown and drop. *By hand.*", "seconds": 2 },
+  "brief": {
+    "idea": "From the full-song take: one drag across tracks 1-5's M keys on Mix (hook, bar 28.2), the Alt-drag sweep of the whole kit on Sound (41.2-44.95), Shift-held M keys on the Sequence rail and the drop on bar 46 (44.95-48.45), solo on Mix (48.45-52.2). Shots 2-4 are one continuous stretch, cut only at the page changes, so nothing starts on the wrong page. Framing keeps every muted track in view.",
+    "footageRequest": "FR-07 is still open for the eight-track version (md-mute-8)",
+    "use": "paid-ok"
+  },
+  "shots": [
+    {
+      "id": "drag-out",
+      "inBar": 28.2,
+      "beats": 8,
+      "camera": [{ "at": 0, "region": [0, 100, 860, 484], "byFormat": { "9x16": [0, 120, 720, 420] } }],
+      "spotlight": [15, 462, 705, 30],
+      "spotlightAt": 2.2,
+      "subtitles": [{ "at": 2.2, "until": 4.0, "text": "One drag. *Five tracks out.*" }]
+    },
+    {
+      "id": "sweep",
+      "inBar": 41.2,
+      "beats": 15,
+      "camera": [
+        { "at": 0, "region": [0, 110, 960, 540], "byFormat": { "9x16": [0, 110, 800, 520] } },
+        { "at": 3.0, "region": [0, 110, 960, 540], "byFormat": { "9x16": [0, 110, 800, 520] } },
+        { "at": 5.2, "region": [0, 250, 900, 506], "byFormat": { "9x16": [0, 300, 800, 380] } }
+      ],
+      "subtitles": [
+        { "at": 0.4, "until": 3.6, "text": "Alt-drag: the *whole kit*" },
+        { "at": 3.8, "until": 7.2, "text": "sweeps up together." }
+      ]
+    },
+    {
+      "id": "arm-drop",
+      "inBar": 44.95,
+      "beats": 14,
+      "camera": [
+        { "at": 0, "region": [0, 110, 960, 540], "byFormat": { "9x16": [0, 120, 640, 400] } },
+        { "at": 3.0, "region": [0, 110, 960, 540], "byFormat": { "9x16": [0, 120, 640, 400] } },
+        { "at": 5.2, "region": [0, 80, 1200, 675], "byFormat": { "9x16": [0, 120, 760, 450] } }
+      ],
+      "spotlight": [10, 140, 180, 360],
+      "spotlightAt": 0.2,
+      "subtitles": [
+        { "at": 0.2, "until": 2.1, "text": "Hold Shift. *Arm* the drop." },
+        { "at": 2.3, "until": 5.6, "text": "Let go on *the one.*" }
+      ]
+    },
+    {
+      "id": "solo",
+      "inBar": 48.45,
+      "beats": 15,
+      "camera": [
+        { "at": 0, "region": [0, 100, 960, 540], "byFormat": { "9x16": [0, 120, 720, 420] } },
+        { "at": 3.4, "region": [0, 100, 960, 540], "byFormat": { "9x16": [0, 120, 720, 420] } },
+        { "at": 5.6, "region": [480, 100, 960, 540], "byFormat": { "9x16": [720, 120, 720, 420] } }
+      ],
+      "subtitles": [
+        { "at": 0.4, "until": 3.6, "text": "Solo in *one click.*" },
+        { "at": 4.0, "until": 7.2, "text": "Snare and chops, *alone.*" }
+      ]
+    }
+  ],
+  "endCard": {
+    "beats": 6,
+    "audioInBar": 52.2,
+    "title": "Machinedrum Editor",
+    "line": "Free · pay what you want",
+    "status": "Coming soon",
+    "small": "macOS · VST3, AU and app · bring your own ROM"
+  },
+  "audio": { "fadeOutSeconds": 0.8 },
+  "post": { "link": "https://mdmm.nativekloud.com/?utm_source=tiktok&utm_medium=social&utm_campaign=launch&utm_content=md-mute-drop" }
+}
