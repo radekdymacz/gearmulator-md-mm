@@ -1,5 +1,7 @@
 #include "realtimeInstrumentation.h"
 
+#include "baseLib/finite.h"
+
 #include <chrono>
 #include <cmath>
 #include <cstdlib>
@@ -151,12 +153,12 @@ namespace synthLib
 			return;
 		m_owner = &_owner;
 		m_startNanoseconds = nowNanoseconds();
-		if(std::isfinite(_sampleRate) && _sampleRate > 0.0)
+		if(baseLib::isFinite(_sampleRate) && _sampleRate > 0.0)
 			m_budgetNanoseconds = static_cast<uint64_t>(std::llround(
 				static_cast<double>(_frames) * 1'000'000'000.0 / _sampleRate));
 		m_bypassed = _bypassed;
 		m_frames = static_cast<uint32_t>(_frames);
-		m_sampleRate = std::isfinite(_sampleRate) && _sampleRate > 0.0 ? _sampleRate : 0;
+		m_sampleRate = baseLib::isFinite(_sampleRate) && _sampleRate > 0.0 ? _sampleRate : 0;
 		g_callbackContext = {};
 		g_callbackContext.owner = &_owner;
 	}
