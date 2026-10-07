@@ -1,0 +1,36 @@
+{{APP_NAME}} {{VERSION}}
+====================================
+
+Drag each item onto the folder next to it:
+
+  {{APP_NAME}}.app        ->  {{LINK_APPS}}
+  {{STEM}}.vst3      ->  {{LINK_VST3}}
+  {{STEM}}.component ->  {{LINK_AU}}
+
+Take only what you use: the app on its own needs no plug-ins, and a DAW
+needs only the VST3 or the Audio Unit. Finder asks for an administrator
+password for the two plug-in folders. Without one, put the plug-ins in your
+own Library instead (Finder > Go > Go to Folder):
+
+  ~/Library/Audio/Plug-Ins/VST3
+  ~/Library/Audio/Plug-Ins/Components
+
+Then restart your DAW or ask it to rescan plug-ins. Keep one copy of each
+plug-in, not one in /Library and another in ~/Library, or the DAW lists two.
+
+Prefer an installer? Machinedrum-Editor-macOS.pkg / Monomachine-Editor-macOS.pkg
+from the same release page puts all three in place for you.
+
+Firmware is not included. On first start the app or plug-in shows the folder
+for it:
+
+  ~/Documents/Gearmulator Preview/{{DATA_FOLDER}}/roms/
+
+Copy a {{MACHINE}} firmware image you are entitled to use there, then restart.
+Please do not ask anyone, in any channel, for firmware files.
+
+Removing it: delete the three items from where you dropped them. Your
+firmware and settings in Documents are not touched.
+
+Site: https://mdmm.nativekloud.com
+Bugs: https://github.com/radekdymacz/gearmulator-md-mm/issues

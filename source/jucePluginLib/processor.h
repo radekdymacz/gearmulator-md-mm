@@ -70,6 +70,9 @@ namespace pluginLib
 			// JUCE flattens disabled buses out of the processBlock buffer.
 			const std::vector<size_t> logicalInputBusOffsets{};
 			const std::vector<size_t> logicalOutputBusOffsets{};
+			// Optional name of the config file in the config folder (empty: "<product name>.xml"), for a
+			// product that must not share its settings with another build of the same data folder.
+			const std::string configFileName{};
 		};
 
 		Processor(const BusesProperties& _busesProperties, Properties _properties);

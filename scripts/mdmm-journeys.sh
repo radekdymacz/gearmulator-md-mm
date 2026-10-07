@@ -24,12 +24,12 @@ case "$WHICH" in md|mm|both) ;; *) echo "usage: $0 [md|mm|both] [journey|journey
 STATUS=0
 run_one() {	# $1: MD or MM
 	M=$1
-	if [ "$M" = MD ]; then MACHINE=Machinedrum SKIN=mdStudio VAR=GEARMULATOR_MDSTUDIO_SELFTEST; else MACHINE=Monomachine SKIN=mmStudio VAR=GEARMULATOR_MMSTUDIO_SELFTEST; fi
+	if [ "$M" = MD ]; then MACHINE=Machinedrum SKIN=mdStudio VAR=GEARMULATOR_MDSTUDIO_SELFTEST BUNDLE=com.nativekloud.machinedrum-editor; else MACHINE=Monomachine SKIN=mmStudio VAR=GEARMULATOR_MMSTUDIO_SELFTEST BUNDLE=com.nativekloud.monomachine-editor; fi
 	APP="$APPS/Gearmulator $M.app"
 	EXE="$APP/Contents/MacOS/Gearmulator $M"
 	DATA="$HOME/Documents/Gearmulator Preview/$MACHINE"
-	C="$DATA/config/Gearmulator $M.xml"
-	SETTINGS="$HOME/Library/Application Support/Gearmulator $M.settings"
+	C="$DATA/config/$MACHINE Editor.xml"
+	SETTINGS="$HOME/Library/Application Support/$MACHINE Editor.settings"
 	LOGDIR="$HOME/Library/Caches/Gearmulator $M"
 	echo "== $MACHINE Editor: $SEL"
 	if [ ! -x "$EXE" ]; then echo "FAIL no diagnostics build at $APP (configure with -Dgearmulator_MDMM_DIAGNOSTICS=ON, build the $(echo $M | tr A-Z a-z)JucePlugin_Standalone target)"; STATUS=1; return; fi
@@ -57,7 +57,7 @@ run_one() {	# $1: MD or MM
 	# visible (WebKit pauses a covered page's frames): the app is brought to the front once it is up. Do not type
 	# into it while it runs. MDMM_JOURNEY_FRONT=0 leaves it where it opens.
 	if [ "${MDMM_JOURNEY_FRONT:-1}" = 1 ]; then
-		( sleep 4; osascript -e "tell application id \"local.gearmulator.preview.Gearmulator$M\" to activate" >/dev/null 2>&1 ) &
+		( sleep 4; osascript -e "tell application id \"$BUNDLE\" to activate" >/dev/null 2>&1 ) &
 	fi
 	# the page's log is a new gearmulator-<skin>-<random>.log in the app's caches folder
 	LOG=""; t=0; DONE=""
@@ -67,7 +67,7 @@ run_one() {	# $1: MD or MM
 		if [ -n "$LOG" ] && grep -q "JOURNEYS DONE" "$LOG" 2>/dev/null; then DONE=1; break; fi
 		if ! kill -0 $PID 2>/dev/null; then break; fi
 	done
-	osascript -e "tell application id \"local.gearmulator.preview.Gearmulator$M\" to quit" >/dev/null 2>&1 || true
+	osascript -e "tell application id \"$BUNDLE\" to quit" >/dev/null 2>&1 || true
 	for i in 1 2 3 4 5; do kill -0 $PID 2>/dev/null || break; sleep 1; done
 	kill $PID 2>/dev/null; sleep 1; kill -9 $PID 2>/dev/null
 	wait $PID 2>/dev/null

@@ -5,11 +5,13 @@
 
 #include "mdController.h"
 #include "mdPluginEditorState.h"
+#include "mdSettingsMigration.h"
 #include "mdStorageImage.h"
 
 // ReSharper disable once CppUnusedIncludeDirective
 #include "BinaryData.h"
 #include "jucePluginLib/processorPropertiesInit.h"
+#include "jucePluginLib/tools.h"
 
 #include "mdLib/mddevice.h"
 #include "mdLib/mdromloader.h"
@@ -102,8 +104,26 @@ namespace
 			compiled.wantsMidiInput, compiled.producesMidiOut, compiled.isMidiEffect,
 			_model == md::MachineModel::Monomachine ? "Tmno" : "Tmdr",
 			compiled.lv2Uri, compiled.binaryData, dataFolderName(_model),
-			{0}, {0, 2, 4}
+			{0}, {0, 2, 4}, mdJucePlugin::editorConfigFileName(_model)
 		};
+	}
+
+	// The config options, after the one-time copy of the settings the editor kept in upstream's config file
+	// up to 0.3.0 into its own (mdSettingsMigration.h). Before the processor is made: it reads the file.
+	juce::PropertiesFile::Options prepareConfig(const md::MachineModel _model, const bool _ephemeral)
+	{
+		if(!_ephemeral)
+		{
+			const auto vendor = pluginLib::initProcessorProperties().vendor;
+			const juce::File configFolder(juce::String::fromUTF8(
+				(pluginLib::Tools::getPublicDataFolder(vendor, dataFolderName(_model)) + "config/").c_str()));
+			const auto result = mdJucePlugin::copySettingsOnce(
+				configFolder.getChildFile(mdJucePlugin::legacyConfigFileName(_model)),
+				configFolder.getChildFile(mdJucePlugin::editorConfigFileName(_model)));
+			if(result == mdJucePlugin::SettingsCopy::Failed)
+				DBG("could not copy the editor's settings from " << mdJucePlugin::legacyConfigFileName(_model));
+		}
+		return getOptions(_model, _ephemeral);
 	}
 
 }
@@ -387,7 +407,7 @@ namespace mdJucePlugin
 		const bool _ephemeralConfig,
 		std::optional<std::string> _deviceHomePath) :
 		Processor(createBusesProperties(),
-			getOptions(_model, _ephemeralConfig), makeProcessorProperties(_model),
+			prepareConfig(_model, _ephemeralConfig), makeProcessorProperties(_model),
 			_allowMcpServer, _ephemeralConfig
 				? jucePluginEditorLib::Processor::ConfigMode::Ephemeral
 				: jucePluginEditorLib::Processor::ConfigMode::Persistent)
