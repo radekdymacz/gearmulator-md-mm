@@ -1691,3 +1691,9 @@ img,svg,canvas{-webkit-user-drag:none}
 .railhead .allon:disabled{opacity:.35;cursor:default}
 .railhead .allon:disabled:hover{background:none;color:inherit}
 .lb.ramp i{opacity:.75}
+/* A selection of steps (DESIGN-step-selection.md, mdDeskSelect.js): an outline on its steps and their numbers; the
+   target of a dragged copy dashed */
+#seq .st.selx{outline:2px solid var(--cream);outline-offset:-2px}
+#seq .st.selghost{outline:2px dashed var(--cream);outline-offset:-2px}
+#seq .rul.selx{color:var(--print);box-shadow:inset 0 -2px 0 var(--cream)}
+#seq .rul[data-s]{cursor:pointer}

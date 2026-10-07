@@ -18,6 +18,7 @@
      mdDeskControl.js     Control: MIDI learn and the app modulators (hidden until enabled)
      mdDeskGenUi.js       the GEN and MUTATE bars over mdDeskGen.js
      mdDeskComforts.js    Alt, rotate, every-N fill, double, paste to many, unmute all
+     mdDeskSelect.js      a selection of steps: copy, cut, paste, duplicate, clear, a dropped copy
      mdDeskRom.js         firmware, notices, the dialog, the start-up card's and SysEx import's hosts
      mdDeskGestures.js    the pointer handlers; each owns its kind of the gesture slot
      mdDeskRender.js      documents in, render, the click router, the editor's keys; the first render
@@ -271,8 +272,12 @@ function syncControls() {
 }
 /* ===== Copy / clear / paste (the hardware's COPY CLEAR PASTE, per workspace; clipboard in the plug-in) ===== */
 function secAction(kind) {
-	if (S.ws === "seq") { const [a, b] = vis(); const range = { p: V.pat, t: S.sel, from: a, to: Math.min(b, V.len) };
-		if (kind === "copy") cmd("copySteps", range); else if (kind === "clear") cmd("clearSteps", range); else if (S.multi.size) pasteToMany(a); else cmd("pasteSteps", { p: V.pat, t: S.sel, from: a }); return; }
+	if (S.ws === "seq") {
+		/* a selection of steps (mdDeskSelect.js) is what copy and clear take, and where paste puts the clipboard */
+		if (S.stepSel && (kind !== "paste" || !S.multi.size) && (kind === "copy" ? selCopy() : kind === "clear" ? selClear() : selPaste())) return;
+		const [a, b] = vis(); const range = { p: V.pat, t: S.sel, from: a, to: Math.min(b, V.len) };
+		if (kind === "copy") { S.clipBlock = blockOf({ t: S.sel, n: 1, from: a, to: range.to }); cmd("copySteps", range); }
+		else if (kind === "clear") cmd("clearSteps", range); else if (S.multi.size) pasteToMany(S.stepSel ? S.stepSel.from : a); else cmd("pasteSteps", { p: V.pat, t: S.sel, from: a }); return; }
 	if (S.ws === "sound") { const a = { k: V.kit, t: S.sel }; cmd(kind === "copy" ? "copySound" : kind === "clear" ? "clearSound" : "pasteSound", a); return; }
 	if (S.ws === "song") { const i = S.songSel;
 		if (kind === "copy") songCmd("copyRow", { i }); else if (kind === "clear") songAction("del"); else { const at = V.song[i]?.type === "end" ? i : i + 1; songCmd("pasteRow", { i: at }); S.songSel = at; } return; }

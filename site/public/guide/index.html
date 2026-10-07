@@ -126,7 +126,7 @@
     </ul>
 
     <h2 id="keys">Keyboard shortcuts</h2>
-    <p>Press <kbd>?</kbd> in an editor for its own list, which is built from the same key map. <kbd>⌘</kbd> is Command, <kbd>⌥</kbd> is Option, <kbd>⇧</kbd> is Shift. A plain letter acts on the selected track. <kbd>⌥</kbd> means all tracks. <b>MD</b> means the Machinedrum Editor only, <b>MM</b> the Monomachine Editor only.</p>
+    <p>Press <kbd>?</kbd> in an editor for its own list, which is built from the same key map. <kbd>⌘</kbd> is Command, <kbd>⌥</kbd> is Option, <kbd>⇧</kbd> is Shift. On Windows, <kbd>⌘</kbd> is Ctrl and <kbd>⌥</kbd> is Alt. A plain letter acts on the selected track. <kbd>⌥</kbd> means all tracks. <b>MD</b> means the Machinedrum Editor only, <b>MM</b> the Monomachine Editor only.</p>
 
     <h3>Playing</h3>
     <div class="tablewrap"><table><tbody>
@@ -163,10 +163,26 @@
     <div class="tablewrap"><table><tbody>
       <tr><th scope="row"><kbd>1</kbd> to <kbd>5</kbd></th><td>Switch workspace, in the order of the tables above.</td></tr>
       <tr><th scope="row"><kbd>[</kbd> <kbd>]</kbd></th><td>Previous or next page of 16 steps (MD: also on Sampler).</td></tr>
-      <tr><th scope="row"><kbd>Delete</kbd> or <kbd>Backspace</kbd></th><td>Sequence: clear the selected steps (MM: the page shown of the selected track). Song: delete the row.</td></tr>
-      <tr><th scope="row"><kbd>Esc</kbd></th><td>Sequence: unmark the tracks marked for paste.</td></tr>
+      <tr><th scope="row"><kbd>Delete</kbd> or <kbd>Backspace</kbd></th><td>Sequence: clear the selected steps (MD: without a selection, and MM: the page shown of the selected track). Song: delete the row.</td></tr>
+      <tr><th scope="row"><kbd>Esc</kbd></th><td>Sequence: clear the step selection, or unmark the tracks marked for paste.</td></tr>
       <tr><th scope="row"><kbd>←</kbd> <kbd>→</kbd></th><td>Song: previous or next row.</td></tr>
     </tbody></table></div>
+
+    <h3 id="select-steps">Selecting steps (MD)</h3>
+    <p>Select one step or a block of steps across tracks, then copy, cut, paste or duplicate it. The selection is outlined and stays when you change pattern, so it is also where a paste goes. Each operation is one undo step.</p>
+    <div class="tablewrap"><table><tbody>
+      <tr><th scope="row"><kbd>⌥</kbd> click a step</th><td>Select that step.</td></tr>
+      <tr><th scope="row"><kbd>⌥</kbd> drag across steps</th><td>Select a block: the steps and tracks between the press and the release.</td></tr>
+      <tr><th scope="row">Click or drag the step numbers</th><td>Select steps of the selected track. Drag down over the grid to take more tracks. <kbd>⇧</kbd> click a number to extend the selection.</td></tr>
+      <tr><th scope="row"><kbd>⌘</kbd> <kbd>C</kbd></th><td>Copy the selected steps: trigs, accents, slides, swings and the locks of steps with a trig.</td></tr>
+      <tr><th scope="row"><kbd>⌘</kbd> <kbd>X</kbd></th><td>Cut: copy, then clear them.</td></tr>
+      <tr><th scope="row"><kbd>⌘</kbd> <kbd>V</kbd></th><td>Paste with the copied block's first step on the selected step, on that track and the ones under it, in this pattern or another. A paste stops at the pattern's length and at track 16.</td></tr>
+      <tr><th scope="row"><kbd>⌘</kbd> <kbd>D</kbd></th><td>Duplicate the selection right after itself. The copy becomes the selection, so press again for another. The clipboard is not touched.</td></tr>
+      <tr><th scope="row"><kbd>⌥</kbd> drag the selection</th><td>Drop a copy of it where you let go.</td></tr>
+      <tr><th scope="row"><kbd>Delete</kbd></th><td>Clear the selected steps.</td></tr>
+      <tr><th scope="row"><kbd>Esc</kbd></th><td>Clear the selection. A plain click on a step, or a click elsewhere in the workspace, also ends it.</td></tr>
+    </tbody></table></div>
+    <p>To copy one step to another: <kbd>⌥</kbd> click it, <kbd>⌘</kbd> <kbd>C</kbd>, <kbd>⌥</kbd> click the step it goes to, <kbd>⌘</kbd> <kbd>V</kbd>.</p>
 
     <h3>Values</h3>
     <div class="tablewrap"><table><tbody>
@@ -177,7 +193,7 @@
     <div class="tablewrap"><table><tbody>
       <tr><th scope="row"><kbd>⌘</kbd> <kbd>Z</kbd></th><td>Undo.</td></tr>
       <tr><th scope="row"><kbd>⌘</kbd> <kbd>⇧</kbd> <kbd>Z</kbd> or <kbd>⌘</kbd> <kbd>Y</kbd></th><td>Redo.</td></tr>
-      <tr><th scope="row"><kbd>⌘</kbd> <kbd>C</kbd> and <kbd>⌘</kbd> <kbd>V</kbd></th><td>Copy and paste: a track page, a sound, a song row. On the Monomachine, also a Perform assign.</td></tr>
+      <tr><th scope="row"><kbd>⌘</kbd> <kbd>C</kbd> and <kbd>⌘</kbd> <kbd>V</kbd></th><td>Copy and paste: the selected steps (MD) or a track page, a sound, a song row. On the Monomachine, also a Perform assign.</td></tr>
       <tr><th scope="row"><kbd>,</kbd></th><td>AUDIO / MIDI settings.</td></tr>
       <tr><th scope="row"><kbd>?</kbd></th><td>The editor's own list of keys. <kbd>?</kbd> or <kbd>Esc</kbd> closes it.</td></tr>
       <tr><th scope="row"><kbd>Esc</kbd></th><td>Close the open dialog or panel.</td></tr>
@@ -198,7 +214,8 @@
     <h3>Mouse with a key held</h3>
     <div class="tablewrap"><table><tbody>
       <tr><th scope="row"><kbd>⇧</kbd> click a step</th><td>MD: accent. MM: a chord note on the step.</td></tr>
-      <tr><th scope="row"><kbd>⌥</kbd> click a step</th><td>MD: slide. MM: delete a note, or a NOTE OFF on an empty step.</td></tr>
+      <tr><th scope="row"><kbd>⌥</kbd> click a step</th><td>MD: select it (see <a href="#select-steps">Selecting steps</a>). MM: delete a note, or a NOTE OFF on an empty step.</td></tr>
+      <tr><th scope="row"><kbd>⌥</kbd> <kbd>⇧</kbd> click a step</th><td>MD: slide.</td></tr>
       <tr><th scope="row"><kbd>⌘</kbd> click a step</th><td>MD: every second step from there to the end on (off, from a trig). With <kbd>⇧</kbd>, every fourth step. One undo step. MM: the same in the piano roll.</td></tr>
       <tr><th scope="row">Drag in the MM piano roll</th><td>Press an empty cell and drag to paint that note across the empty steps. <kbd>⌥</kbd> drag erases. One drag is one undo step.</td></tr>
       <tr><th scope="row"><kbd>⇧</kbd> drag a lock lane</th><td>A straight ramp from the press to the release.</td></tr>

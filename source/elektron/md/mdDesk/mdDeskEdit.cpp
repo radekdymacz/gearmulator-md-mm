@@ -100,6 +100,7 @@ namespace mdDesk
 		};
 		constexpr Mark g_accent{"accent", &ed::MdPattern::accentEditAll, &ed::MdPattern::accentPattern, &ed::MdPattern::trackAccent};
 		constexpr Mark g_slide{"slide", &ed::MdPattern::slideEditAll, &ed::MdPattern::slidePattern, &ed::MdPattern::trackSlide};
+		constexpr Mark g_swing{"swing", &ed::MdPattern::swingEditAll, &ed::MdPattern::swingPattern, &ed::MdPattern::trackSwing};
 
 		uint64_t& bitsOf(ed::MdPattern& _p, const Mark& _m, const size_t _track)
 		{
@@ -562,25 +563,137 @@ namespace mdDesk
 			return _p;
 		}
 
-		// A track's step range [from, to) within the visible steps, and its "track n, steps a-b".
+		// A block of steps [from, to) on tracks [track, track + rows) within the visible steps (a selection, steps x
+		// tracks; one row without "n"), and its "track n, steps a-b".
 		struct StepRange
 		{
-			size_t track, from, to;
+			size_t track, rows, from, to;
 			std::string where;
 		};
+
+		std::string tracksName(const size_t _t, const size_t _rows)
+		{
+			return _rows == 1 ? trackName(_t) : "tracks " + std::to_string(_t + 1) + "-" + std::to_string(_t + _rows);
+		}
 
 		std::optional<StepRange> stepRange(const ed::MdPattern& _p, const In& _in)
 		{
 			const auto t = size_t(*_in.a.integer("t"));
+			const auto n = _in.a.value("n") ? _in.a.within("n", 1, int(ed::MdPattern::g_tracks - t)) : std::optional<int>(1);
 			const auto from = _in.a.within("from", 0, visibleOf(_p) - 1), to = _in.a.within("to", 1, visibleOf(_p));
-			if(!from || !to)
+			if(!from || !to || !n)
 				return {};
 			if(*to <= *from)
 			{
 				_in.errors.push_back("Empty step range");
 				return {};
 			}
-			return StepRange{t, size_t(*from), size_t(*to), trackName(t) + ", steps " + std::to_string(*from + 1) + "-" + std::to_string(*to)};
+			return StepRange{t, size_t(*n), size_t(*from), size_t(*to),
+				tracksName(t, size_t(*n)) + ", steps " + std::to_string(*from + 1) + "-" + std::to_string(*to)};
+		}
+
+		// The block's steps as values: trigs, accents, slides, swings and every lock, per track.
+		Clipboard::Steps takeSteps(const ed::MdPattern& _p, const StepRange& _r)
+		{
+			Clipboard::Steps c;
+			c.length = _r.to - _r.from;
+			for(auto t = _r.track; t < _r.track + _r.rows; ++t)
+			{
+				Clipboard::Steps::Row row;
+				for(auto s = _r.from; s < _r.to; ++s)
+				{
+					const auto bit = uint64_t{1} << (s - _r.from);
+					if(ed::hasTrig(_p, t, s))
+						row.trigs |= bit;
+					if(markOn(_p, g_accent, t, s))
+						row.accent |= bit;
+					if(markOn(_p, g_slide, t, s))
+						row.slide |= bit;
+					if(markOn(_p, g_swing, t, s))
+						row.swing |= bit;
+					for(uint8_t param = 0; param < ed::MdKit::g_paramsPerTrack; ++param)
+						if(const auto v = ed::lockValue(_p, t, param, s))
+							row.locks[param][uint8_t(s - _r.from)] = *v;
+				}
+				c.rows.push_back(std::move(row));
+			}
+			return c;
+		}
+
+		// What a block put down at a step and a track: where it landed, and what did not fit.
+		struct Put
+		{
+			size_t rows = 0, steps = 0, cutSteps = 0, cutRows = 0, skippedLocks = 0;
+		};
+
+		// Puts a block down with its first step at _at on track _track: each of its rows replaces what the steps
+		// under it held. It stops at the pattern's length and at track 16; locks that need a new row while all 64
+		// are in use are skipped (counted).
+		ed::MdPattern putSteps(ed::MdPattern _p, const Clipboard::Steps& _c, const size_t _track, const size_t _at, Put& _put)
+		{
+			const auto end = std::min<size_t>(_at + _c.length, _p.length);
+			_put.steps = end > _at ? end - _at : 0;
+			_put.cutSteps = _c.length - _put.steps;
+			_put.rows = std::min(_c.rows.size(), ed::MdPattern::g_tracks - std::min(_track, ed::MdPattern::g_tracks));
+			_put.cutRows = _c.rows.size() - _put.rows;
+			for(size_t r = 0; r < _put.rows; ++r)
+			{
+				const auto t = _track + r;
+				const auto& row = _c.rows[r];
+				for(auto s = _at; s < end; ++s)
+					_p = clearStep(_p, t, s);
+				for(auto s = _at; s < end; ++s)
+				{
+					const auto bit = uint64_t{1} << (s - _at);
+					if(!(row.trigs & bit))
+						continue;
+					_p = ed::withTrig(_p, t, s, true);
+					for(const auto& [mark, bits] : {std::pair{&g_accent, row.accent}, std::pair{&g_slide, row.slide}, std::pair{&g_swing, row.swing}})
+						if(bits & bit && !markOn(_p, *mark, t, s))
+							toggleBit(bitsOf(_p, *mark, t), s);
+				}
+				for(const auto& [param, steps] : row.locks)
+				{
+					for(const auto& [rel, v] : steps)
+					{
+						const auto s = _at + rel;
+						if(s >= end || !ed::hasTrig(_p, t, s))
+							continue;
+						if(const auto locked = ed::withLock(_p, t, param, s, v))
+							_p = *locked;
+						else
+							++_put.skippedLocks;
+					}
+				}
+			}
+			return _p;
+		}
+
+		// "Pasted into ..." and what did not fit, for the result's note.
+		std::string putNote(const std::string& _verb, const Put& _put, const size_t _track, const size_t _at, const ed::MdPattern& _p)
+		{
+			auto note = _verb + " " + tracksName(_track, _put.rows) + ", steps " + std::to_string(_at + 1) + "-" + std::to_string(_at + _put.steps);
+			if(_put.cutSteps)
+				note += ". " + std::to_string(_put.cutSteps) + " step(s) past the pattern's length (" + std::to_string(_p.length) + ") left out";
+			if(_put.cutRows)
+				note += ". " + std::to_string(_put.cutRows) + " track(s) below track 16 left out";
+			if(_put.skippedLocks)
+				note += ". " + std::to_string(_put.skippedLocks) + " lock(s) skipped: all 64 locked parameters are in use";
+			return note;
+		}
+
+		// The first step a block is put down at: within the pattern's length.
+		std::optional<size_t> putAt(const ed::MdPattern& _p, const In& _in, const char* _key)
+		{
+			const auto at = _in.a.within(_key, 0, visibleOf(_p) - 1);
+			if(!at)
+				return {};
+			if(size_t(*at) >= _p.length)
+			{
+				_in.errors.push_back("Step " + std::to_string(*at + 1) + " is past the pattern's length (" + std::to_string(_p.length) + ")");
+				return {};
+			}
+			return size_t(*at);
 		}
 
 		std::optional<ed::MdPattern> clearSteps(ed::MdPattern _p, const In& _in)
@@ -588,8 +701,9 @@ namespace mdDesk
 			const auto r = stepRange(_p, _in);
 			if(!r)
 				return {};
-			for(auto s = r->from; s < r->to; ++s)
-				_p = clearStep(_p, r->track, s);
+			for(auto t = r->track; t < r->track + r->rows; ++t)
+				for(auto s = r->from; s < r->to; ++s)
+					_p = clearStep(_p, t, s);
 			_in.note = "Cleared " + r->where;
 			return _p;
 		}
@@ -599,22 +713,7 @@ namespace mdDesk
 			const auto r = stepRange(_p, _in);
 			if(!r)
 				return {};
-			Clipboard::Steps c;
-			c.length = r->to - r->from;
-			for(auto s = r->from; s < r->to; ++s)
-			{
-				const auto bit = uint64_t{1} << (s - r->from);
-				if(ed::hasTrig(_p, r->track, s))
-					c.trigs |= bit;
-				if(accentOn(_p, r->track, s))
-					c.accent |= bit;
-				if(slideOn(_p, r->track, s))
-					c.slide |= bit;
-				for(uint8_t param = 0; param < ed::MdKit::g_paramsPerTrack; ++param)
-					if(const auto v = ed::lockValue(_p, r->track, param, s))
-						c.locks[param][uint8_t(s - r->from)] = *v;
-			}
-			_in.clip.steps = std::move(c);
+			_in.clip.steps = takeSteps(_p, *r);
 			_in.note = "Copied " + r->where;
 			return _p;
 		}
@@ -622,46 +721,33 @@ namespace mdDesk
 		std::optional<ed::MdPattern> pasteSteps(ed::MdPattern _p, const In& _in)
 		{
 			const auto t = size_t(*_in.a.integer("t"));
-			const auto from = _in.a.within("from", 0, visibleOf(_p) - 1);
+			const auto from = putAt(_p, _in, "from");
 			if(!from)
 				return {};
 			if(!_in.clip.steps)
 			{
-				_in.errors.push_back("Copy a track page first");
+				_in.errors.push_back("Copy some steps first");
 				return {};
 			}
-			const auto& c = *_in.clip.steps;
-			const auto start = size_t(*from);
-			const auto end = std::min<size_t>(start + c.length, size_t(visibleOf(_p)));
-			for(auto s = start; s < end; ++s)
-				_p = clearStep(_p, t, s);
-			size_t skipped = 0;
-			for(auto s = start; s < end; ++s)
-			{
-				const auto bit = uint64_t{1} << (s - start);
-				if(!(c.trigs & bit))
-					continue;
-				_p = ed::withTrig(_p, t, s, true);
-				for(const auto& [mark, bits] : {std::pair{&g_accent, c.accent}, std::pair{&g_slide, c.slide}})
-					if(bits & bit && !markOn(_p, *mark, t, s))
-						toggleBit(bitsOf(_p, *mark, t), s);
-			}
-			for(const auto& [param, steps] : c.locks)
-			{
-				for(const auto& [rel, v] : steps)
-				{
-					const auto s = start + rel;
-					if(s >= end)
-						continue;
-					if(const auto locked = ed::withLock(_p, t, param, s, v))
-						_p = *locked;
-					else
-						++skipped;
-				}
-			}
-			_in.note = "Pasted into " + trackName(t);
-			if(skipped)
-				_in.note += ". " + std::to_string(skipped) + " lock(s) skipped: all 64 locked parameters are in use";
+			Put put;
+			_p = putSteps(std::move(_p), *_in.clip.steps, t, *from, put);
+			_in.note = putNote("Pasted into", put, t, *from, _p);
+			return _p;
+		}
+
+		// A block of this pattern copied to another place in it (step "at", track "dt"; its own track without
+		// it), the clipboard untouched: duplicate (at = to) and the Alt-drag of a selection.
+		std::optional<ed::MdPattern> copyStepsTo(ed::MdPattern _p, const In& _in)
+		{
+			const auto r = stepRange(_p, _in);
+			const auto at = putAt(_p, _in, "at");
+			const auto dt = _in.a.value("dt") ? _in.a.integer("dt") : std::optional<int>(r ? int(r->track) : 0);
+			if(!r || !at || !dt)
+				return {};
+			const auto block = takeSteps(_p, *r);
+			Put put;
+			_p = putSteps(std::move(_p), block, size_t(*dt), *at, put);
+			_in.note = putNote("Copied " + r->where + " to", put, size_t(*dt), *at, _p);
 			return _p;
 		}
 
@@ -671,7 +757,7 @@ namespace mdDesk
 				{"trig", trig}, {"accent", accent}, {"slide", slide}, {"lock", lock}, {"clearLane", clearLane},
 				{"length", length}, {"totalLength", totalLength}, {"speed", speed}, {"swing", swing},
 				{"accentAmount", accentAmount}, {"patternKit", patternKit}, {"clearSteps", clearSteps},
-				{"clearLocks", clearLocks}, {"clearPattern", clearPattern}, {"steps", steps}, {"rotate", rotate}, {"doublePattern", doublePattern}, {"copySteps", copySteps}, {"pasteSteps", pasteSteps}};
+				{"clearLocks", clearLocks}, {"clearPattern", clearPattern}, {"steps", steps}, {"rotate", rotate}, {"doublePattern", doublePattern}, {"copySteps", copySteps}, {"pasteSteps", pasteSteps}, {"copyStepsTo", copyStepsTo}};
 			return edits;
 		}
 
