@@ -119,6 +119,8 @@ for row in "Machinedrum-Editor-macOS|Machinedrum Editor|Gearmulator MD|md|com.na
   mkdir -p "${mount_point}"
   hdiutil attach -quiet -readonly -nobrowse -noautoopen -mountpoint "${mount_point}" "${dmg}"
   [[ -f "${mount_point}/Install.txt" ]] || fail "Install.txt missing from ${dmg}"
+  grep -q "GNU GENERAL PUBLIC LICENSE" "${mount_point}/LICENSE.txt" 2>/dev/null \
+    || fail "LICENSE.txt (GPL) missing from ${dmg}"
   [[ "$(readlink "${mount_point}/Applications")" == "/Applications" ]] \
     || fail "Applications link missing from ${dmg}"
   check_bundle "${mount_point}/${app_name}.app" app

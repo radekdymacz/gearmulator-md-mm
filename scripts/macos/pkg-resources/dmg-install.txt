@@ -32,5 +32,11 @@ Please do not ask anyone, in any channel, for firmware files.
 Removing it: delete the three items from where you dropped them. Your
 firmware and settings in Documents are not touched.
 
+Licence: free software under the GNU GPL version 3; the text is in LICENSE.txt
+on this disk image.
+Source code: https://github.com/radekdymacz/gearmulator-md-mm
+Copyright (C) The Usual Suspects (Gearmulator), joelanders (Machinedrum and
+Monomachine emulation), and NativeKloud Consulting Radoslaw Dymacz (editors).
+
 Site: https://mdmm.dev
 Bugs: https://github.com/radekdymacz/gearmulator-md-mm/issues
