@@ -65,8 +65,9 @@ namespace mdJucePlugin
 		// since the last call; lock-free, MD OS 1.63 only.
 		bool readWorkingKit(Bytes& _region);
 		// P9: the UW sample bank (md::DeskDevice::readSampleBank) when the device published a new one since
-		// the last call. Asking is what makes the device read its samples.
-		bool readSampleBank(std::shared_ptr<const elektronData::MdSampleBank>& _bank);
+		// the last call (_again: also when it did not, if there is one). Asking is what makes the device read its
+		// samples.
+		bool readSampleBank(std::shared_ptr<const elektronData::MdSampleBank>& _bank, bool _again = false);
 		// P9: a slot heard once on the plug-in's output (md::DeskDevice::audition); 0 without a device.
 		uint64_t audition(const elektronData::AuditionClip& _clip);
 		elektronData::AuditionStatus auditionStatus() const;

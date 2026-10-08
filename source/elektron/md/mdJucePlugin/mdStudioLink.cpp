@@ -254,7 +254,7 @@ namespace mdJucePlugin
 		return true;
 	}
 
-	bool StudioLink::readSampleBank(std::shared_ptr<const elektronData::MdSampleBank>& _bank)
+	bool StudioLink::readSampleBank(std::shared_ptr<const elektronData::MdSampleBank>& _bank, const bool _again)
 	{
 		uint32_t sequence = 0;
 		const void* source = nullptr;
@@ -266,7 +266,7 @@ namespace mdJucePlugin
 			source = device;
 			return device->readSampleBank(sequence);
 		});
-		if(!bank || (sequence == m_sampleSequence && source == m_sampleSource))
+		if(!bank || (!_again && sequence == m_sampleSequence && source == m_sampleSource))
 			return false;
 		m_sampleSequence = sequence;
 		m_sampleSource = source;

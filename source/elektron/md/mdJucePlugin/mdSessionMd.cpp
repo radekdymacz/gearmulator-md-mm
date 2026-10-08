@@ -85,7 +85,8 @@ namespace mdJucePlugin
 			if(m_link.readWorkingKit(region))
 				_desk.onWorkingKitMemory(region);
 			std::shared_ptr<const elektronData::MdSampleBank> bank;
-			if(_desk.pageSeen() && due(_tick, g_samplesMs) && m_link.readSampleBank(bank))
+			// A desk without a bank (none yet, or a reset forgot it) gets the device's current one again (B-012).
+			if(_desk.pageSeen() && due(_tick, g_samplesMs) && m_link.readSampleBank(bank, !_desk.hasSamples()))
 				_desk.onSampleBank(*bank);
 			m_link.drainParameterChanges([&_desk](const uint8_t _t, const uint8_t _i, const uint8_t _v)
 			{

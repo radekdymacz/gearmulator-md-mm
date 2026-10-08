@@ -136,6 +136,12 @@ namespace mdDesk
 		}
 	}
 
+	// The page dropped the samples with every other document; they are the machine's, read again.
+	void Desk::onStartOver()
+	{
+		m_samples.reset();
+	}
+
 	void Desk::onSampleBank(const elektronData::MdSampleBank& _bank)
 	{
 		if(m_samples && *m_samples == _bank)

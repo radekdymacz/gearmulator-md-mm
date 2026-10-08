@@ -2,7 +2,9 @@
 // its sample flash and the processor starts it again (serviceFactoryInitialization). The page sees that as
 // one preparation (lifecycle "loading", no LCD) and one start ("booting", "animating", "ready", the machine's
 // LCD on the start-up card): one start-up animation, not two. The editor leaves the preparing machine alone,
-// so its factory cache is kept and the next start has no preparation at all. Needs the MD OS 1.63 ROM:
+// so its factory cache is kept and the next start has no preparation at all. B-012: the page ends that first
+// start holding what a normal start gives it (the samples, the global, the kits and patterns it reads), as the
+// next start does. Needs the MD OS 1.63 ROM:
 //   GEARMULATOR_MD_FIRMWARE_BIN=<ROM> mdFirstStartFirmwareTest
 // Exits 77 without it. The config is isolated (EphemeralConfig), the device home an empty temp folder.
 
@@ -24,6 +26,7 @@
 #include <chrono>
 #include <cstdio>
 #include <cstdlib>
+#include <set>
 #include <string>
 #include <thread>
 #include <vector>
@@ -67,7 +70,19 @@ namespace
 		int lcd = 0;							// LCD frames published
 		int lcdWhileLoading = 0;				// ... while the lifecycle was "loading"
 		int machines = 0;						// the emulated machines that ran (a reboot makes another)
+		int resets = 0;							// "reset": the page dropped every document
+		std::set<std::string> held;				// what the page holds at the end: "samples", "doc:<kind>"
+		int romSamples = 0;						// ROM slots in the samples document the page holds
+		int romFilled = 0;						// ... that hold a sample
 		bool ready = false;
+
+		std::string heldText() const
+		{
+			std::string s;
+			for(const auto& h : held)
+				s += (s.empty() ? "" : ", ") + h;
+			return s;
+		}
 
 		std::string sequence() const
 		{
@@ -85,8 +100,9 @@ namespace
 		}
 	};
 
-	// One start: a processor on the device home, the page attached, until the machine has taken input for 10 s (at most
-	// 420 s: a loaded computer runs the emulator slower than real time).
+	// One start: a processor on the device home, the page attached, until the machine has taken input for 10 s and the
+	// page holds the samples (or 90 s passed without them; at most 420 s in all: a loaded computer runs the emulator
+	// slower than real time).
 	Start start(const juce::File& _home)
 	{
 		mdJucePlugin::AudioPluginAudioProcessor::EphemeralConfig config;
@@ -122,6 +138,29 @@ namespace
 					++s.lcd;
 					s.lcdWhileLoading += lifecycle == "loading";
 				}
+				if(type == "reset")
+				{
+					++s.resets;
+					s.held.clear();
+					s.romSamples = 0;
+					s.romFilled = 0;
+				}
+				if(type == "samples")
+				{
+					s.held.insert("samples");
+					const auto* doc = _m.find("doc");
+					const auto* rom = doc ? doc->find("rom") : nullptr;
+					s.romSamples = rom && rom->isArray() ? static_cast<int>(rom->asArray().size()) : 0;
+					s.romFilled = 0;
+					if(s.romSamples)
+						for(const auto& slot : rom->asArray())
+						{
+							const auto* empty = slot.find("empty");
+							s.romFilled += empty && empty->isBool() && !empty->asBool();
+						}
+				}
+				if(type == "doc")
+					s.held.insert("doc:" + str(_m, "kind"));
 				if(type != "machine")
 					return;
 				const auto* doc = _m.find("doc");
@@ -158,7 +197,8 @@ namespace
 			}
 			if(readySince == std::chrono::steady_clock::time_point::max())
 				readySince = std::chrono::steady_clock::now();
-			if(std::chrono::steady_clock::now() - readySince > std::chrono::seconds(10))	// and stays so: no start-up after it
+			const auto since = std::chrono::steady_clock::now() - readySince;
+			if(since > std::chrono::seconds(10) && (s.held.count("samples") || since > std::chrono::seconds(90)))	// and stays so: no start-up after it
 			{
 				s.ready = true;
 				break;
@@ -168,8 +208,9 @@ namespace
 		audio.join();
 		ap.releaseResources();
 		processor.reset();
-		std::printf("  lifecycle: %s; %d LCD frames (%d while loading); %d machine(s); %.0f s\n", s.sequence().c_str(), s.lcd,
-			s.lcdWhileLoading, s.machines, std::chrono::duration<double>(std::chrono::steady_clock::now() - began).count());
+		std::printf("  lifecycle: %s; %d LCD frames (%d while loading); %d machine(s); %d reset(s); %.0f s\n", s.sequence().c_str(), s.lcd,
+			s.lcdWhileLoading, s.machines, s.resets, std::chrono::duration<double>(std::chrono::steady_clock::now() - began).count());
+		std::printf("  the page holds: %s; %d ROM sample slot(s), %d filled\n", s.heldText().c_str(), s.romSamples, s.romFilled);
 		return s;
 	}
 }
@@ -201,6 +242,7 @@ int main()
 	check(first.lcdWhileLoading == 0, "no LCD from the machine that is being prepared");
 	check(first.lcd > 0, "the start-up card shows the LCD of the start that stays");
 	check(cache.existsAsFile(), "the factory cache is kept (the editor did not disturb the preparation)");
+	check(first.held.count("samples") && first.romSamples == 48, "the page holds the samples document, 48 ROM slots (B-012)");
 
 	std::puts("next start (the cache is there):");
 	const auto next = start(home);
@@ -208,6 +250,9 @@ int main()
 	check(next.machines == 1, "no second start");
 	check(next.count("loading") == 0, "no preparation");
 	check(next.count("booting") == 1 && next.count("animating") == 1, "one start with one animation");
+	check(next.held.count("samples") && next.romSamples == 48, "the page holds the samples document, 48 ROM slots");
+	check(first.held == next.held && first.romFilled == next.romFilled,
+		"the first start's page holds what the next start's does: " + first.heldText());
 
 	home.deleteRecursively();
 	std::printf("mdFirstStartFirmwareTest: %s\n", g_failures == 0 ? "PASS" : "FAIL");
