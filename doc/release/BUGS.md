@@ -4,6 +4,14 @@
 repository; the site sends reports to the contact address. Newest first. Each entry:
 where it came from, the setup, what happens, what should happen, status.*
 
+## B-022 · Doesn't work on Windows 10 with WebView2 installed
+
+- **From:** several Discord users, 2026-10-08 (details still missing: editor version, what they see).
+- **What happens:** the Windows editors "don't work" on Windows 10 although the WebView2 runtime is installed.
+- **Not the cause:** the C runtime (the build links it statically).
+- **To check:** the version used (0.3.2 still had the old IE engine; WebView2 came in 0.3.3); the WebView2 runtime version on those machines vs what our SDK (1.0.3856.49) needs — any newer ICoreWebView2_N interface we query may be missing on an old runtime; file:// loading of the page from %TEMP%; the user-data folder in %LOCALAPPDATA%\Gearmulator; the emulator itself (CPU features); the plug-in in a DAW vs the standalone. Add a startup log the user can send, and a message on screen that says what failed.
+- **Status:** open, waiting for details.
+
 ## B-021 · Monomachine: PLAY refused as "panel busy" after edits, a pattern edit not read back while playing
 
 - **From:** the 0.3.4 journeys (`mm-seq-first-beat`, both hosts), 2026-10-08, after B-014's stream was merged. Not in 0.3.3.
