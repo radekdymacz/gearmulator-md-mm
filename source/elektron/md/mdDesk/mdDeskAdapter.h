@@ -31,8 +31,12 @@ namespace mdDesk
 		bool memory = true;			// the device publishes the working kit and the LCD
 		bool panel = true;			// the editor can press the machine's keys (live record, chains, TRIG keys)
 		// Whole-document pushes (DESIGN-edit-flow.md): at most one dump per document per interval, one
-		// read-back at quiet. Over a wire the interval is at least the dump's time on it.
-		deskCore::PushPolicy push{200, 150};
+		// read-back at quiet. Over a wire the interval is at least the dump's time on it. The read-back
+		// waits for 750 ms without edits (B-010): it is a whole dump the firmware sends, and while it
+		// builds one the sequencer stands for several ms, so a run of clicks gets one, at its end.
+		// The emulator takes a pattern dump in about 45 ms (md::Hardware's SysEx ingress), inside
+		// the interval.
+		deskCore::PushPolicy push{200, 750};
 	};
 
 	const Profile& emulatorProfile();	// "emu"

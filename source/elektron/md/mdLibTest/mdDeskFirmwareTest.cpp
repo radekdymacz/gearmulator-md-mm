@@ -36,6 +36,8 @@
 #include "mdLib/mdsequencerstate.h"
 
 #include <algorithm>
+#include <chrono>
+#include <cmath>
 #include <cstdlib>
 #include <deque>
 #include <fstream>
@@ -272,7 +274,31 @@ namespace
 				m_paramHeld[t * 25 + 24] = _kit.levels[t];
 			}
 		}
+		// What the desk sent the machine (B-010: the traffic of an edit), bytes and messages.
+		size_t bytesToMachine = 0;
+		size_t messagesToMachine = 0;
+		size_t patternRequests = 0;
+		std::map<int, size_t> messageKinds;	// SysEx: the command byte; else the status nibble
+		std::map<int, uint64_t> ingestFrames;	// the longest a message of that kind took into the firmware
+		// The desk's messages go to the device and the rig goes on at once, as in the plug-in (the
+		// desk keeps ticking while a dump is on its way in).
+		bool postOnly = false;
 	private:
+		void toMachine(const Bytes& _b)
+		{
+			bytesToMachine += _b.size();
+			++messagesToMachine;
+			patternRequests += _b.size() > 6 && _b[0] == 0xf0 && _b[6] == 0x68;
+			const int kind = _b.size() > 6 && _b[0] == 0xf0 ? _b[6] : (_b.empty() ? 0 : (_b[0] & 0xf0));
+			++messageKinds[kind];
+			if(postOnly)
+			{
+				m_machine.post(_b);
+				return;
+			}
+			const auto frames = m_machine.send(_b);
+			ingestFrames[kind] = std::max(ingestFrames[kind], frames);
+		}
 		std::array<int, 16 * 25> m_paramHeld = [] { std::array<int, 16 * 25> a{}; a.fill(-1); return a; }();
 		size_t m_patternDumps = 0;
 
@@ -282,7 +308,7 @@ namespace
 			{
 				const auto b = m_out.front();
 				m_out.pop_front();
-				m_machine.send(b);
+				toMachine(b);
 			}
 			deliverIn();
 		}
@@ -304,7 +330,7 @@ namespace
 			{
 				while(!m_out.empty())
 				{
-					m_machine.send(m_out.front());
+					toMachine(m_out.front());
 					m_out.pop_front();
 				}
 			}
@@ -312,7 +338,7 @@ namespace
 			{
 				const auto b = m_out.front();
 				m_out.pop_front();
-				m_machine.send(b);
+				toMachine(b);
 			}
 			else if(!m_keys.empty())
 			{
@@ -2565,6 +2591,230 @@ namespace
 			"double: the firmware holds 32 steps, the second half a copy (trigs and locks)");
 	}
 
+	// B-010: the sequencer's timing while the page edits parameter locks. The pattern plays at 120 BPM
+	// with TEMPO OUT on; the machine's MIDI clock (24 a beat, 20.83 ms apart) and its play head (a step
+	// every 125 ms) are timed per audio block (64 frames, 1.45 ms) in phases: idle, a lock-lane drag
+	// (a lock on the next step every 16 ms, as the page's bridge batches a drag per frame), clicks (one
+	// lock every 250 ms, each its own gesture) and the wheel (one step's lock every 30 ms). Prints the
+	// traffic to the machine, the jitter and the emulator's CPU time a block per phase (the first,
+	// "load", is the page's first read of the library). _strict: fail when an edit phase has a clock tick
+	// more than 3 ms off for any reason but a read-back (one a gesture), or its steps drift further
+	// than idle's. PLOCK_INGRESS / PLOCK_TRANSMIT set md::Hardware's MIDI rates (0: unpaced, as before
+	// B-010); PLOCK_PROBE=1 also times single dumps and read-backs at several rates.
+	struct Jitter
+	{
+		double meanMs = 0, sdMs = 0, maxDevMs = 0;
+		size_t n = 0;
+		size_t off3 = 0;	// intervals more than 3 ms off
+	};
+	Jitter jitterOf(const std::vector<uint64_t>& _frames, const double _expectMs)
+	{
+		Jitter j;
+		if(_frames.size() < 3)
+			return j;
+		std::vector<double> d;
+		for(size_t i = 1; i < _frames.size(); ++i)
+			d.push_back(double(_frames[i] - _frames[i - 1]) * 1000.0 / g_rate);
+		double sum = 0;
+		for(const auto x : d)
+			sum += x;
+		j.n = d.size();
+		j.meanMs = sum / double(d.size());
+		double var = 0;
+		for(const auto x : d)
+		{
+			var += (x - j.meanMs) * (x - j.meanMs);
+			j.maxDevMs = std::max(j.maxDevMs, std::abs(x - _expectMs));
+			j.off3 += std::abs(x - _expectMs) > 3.0;
+		}
+		j.sdMs = std::sqrt(var / double(d.size()));
+		return j;
+	}
+
+	void plockTiming(Rig& _rig, const bool _strict)
+	{
+		// PLOCK_INGRESS=<bytes/s>: the firmware's SysEx ingress rate for the run (0: unpaced, as before B-010).
+		const char* rateEnv = std::getenv("PLOCK_INGRESS");
+		const uint32_t ingressRate = rateEnv ? static_cast<uint32_t>(std::atoi(rateEnv)) : md::Hardware::g_defaultSysexIngressBytesPerSecond;
+		_rig.machine().hardware().setSysexIngressRate(ingressRate);
+		const char* txEnv = std::getenv("PLOCK_TRANSMIT");
+		const uint32_t transmitRate = txEnv ? static_cast<uint32_t>(std::atoi(txEnv)) : md::Hardware::g_defaultMidiTransmitBytesPerSecond;
+		_rig.machine().hardware().setMidiTransmitRate(transmitRate);
+		std::printf("== B-010: sequencer timing while locks are edited (120 BPM, TEMPO OUT; SysEx in %u B/s, MIDI out %u B/s)\n", ingressRate, transmitRate);
+		auto& desk = _rig.desk();
+		auto& m = _rig.machine();
+		const auto p = *desk.linkState().pattern;
+		const auto ps = std::to_string(p);
+		const auto settle = [&] { _rig.runUntil([&] { return !desk.isBusy() && !_rig.pageTx(); }, 5000); };
+		// Track 1 has a trig on every step (a lock needs one), the tempo is 120 and TEMPO OUT is on.
+		_rig.page("{\"op\":\"steps\",\"p\":" + ps + ",\"from\":0,\"to\":16,\"g\":600,\"rows\":[{\"t\":0,\"on\":[0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15]}]}");
+		settle();
+		_rig.page(R"({"op":"tempo","bpm":120})");
+		_rig.page(R"({"op":"globalSet","field":"tempoOut","on":true})");
+		settle();
+		_rig.run(300);
+		std::vector<uint64_t> clocks, steps;
+		m.onMidi = [&](const synthLib::SMidiEvent& _e) { if(_e.a == 0xf8) clocks.push_back(m.now()); };
+		int lastStep = -1;
+		auto prevBlock = m.onBlock;
+		m.onBlock = [&]
+		{
+			const int s = m.playhead();
+			if(s != lastStep)
+			{
+				lastStep = s;
+				steps.push_back(m.now());
+			}
+		};
+		_rig.page(R"({"op":"play"})");
+		_rig.runUntil([&] { return _rig.pageTelemetry().playing; }, 2000);
+		_rig.run(500);
+
+		int gesture = 610;
+		Jitter idleClock, idleSteps;
+		bool first = true;
+		const auto phase = [&](const char* _name, const double _ms, const double _everyMs, const std::function<void(int)>& _edit)
+		{
+			clocks.clear();
+			steps.clear();
+			const auto b0 = _rig.bytesToMachine, m0 = _rig.messagesToMachine, d0 = _rig.patternDumps(), r0 = _rig.patternRequests;
+			const auto start = m.now();
+			const auto kinds0 = _rig.messageKinds;
+			m.resetAudioTime();
+			const int docs0 = _rig.pageDocCount("pattern");
+			double deskUs = 0;
+			int n = 0;
+			while(double(m.now() - start) * 1000.0 / g_rate < _ms)
+			{
+				const double t = double(m.now() - start) * 1000.0 / g_rate;
+				if(_edit && t >= n * _everyMs)
+				{
+					const auto w0 = std::chrono::steady_clock::now();
+					_edit(n++);
+					deskUs += std::chrono::duration<double, std::micro>(std::chrono::steady_clock::now() - w0).count();
+				}
+				_rig.run(1);
+			}
+			if(_edit)
+			{
+				// the gesture ends: what the desk still sends after it (the last value, the read-back)
+				settle();
+			}
+			const double secs = double(m.now() - start) / g_rate;
+			const auto c = jitterOf(clocks, 1000.0 / 48.0);
+			const auto st = jitterOf(steps, 125.0);
+			std::printf("  %-6s %5.1f s  edits %4d  to machine: %6zu bytes (%5.0f B/s, DIN carries 3125), %4zu msgs, %3zu pattern dumps, %3zu pattern requests\n",
+				_name, secs, n, _rig.bytesToMachine - b0, double(_rig.bytesToMachine - b0) / secs, _rig.messagesToMachine - m0,
+				_rig.patternDumps() - d0, _rig.patternRequests - r0);
+			std::printf("         clock: %zu ticks, mean %.2f ms (20.83), sd %.2f ms, worst %.2f ms off, %zu > 3 ms off   steps: %zu, mean %.1f ms (125), sd %.2f ms, worst %.2f ms off\n",
+				c.n, c.meanMs, c.sdMs, c.maxDevMs, c.off3, st.n, st.meanMs, st.sdMs, st.maxDevMs);
+			if(n)
+				std::printf("         page: %d pattern documents published; the desk took %.0f us an edit (its thread, not audio)\n",
+					_rig.pageDocCount("pattern") - docs0, deskUs / n);
+			std::printf("         audio thread: %.1f us a block of %.0f us (mean), worst %.0f us\n", m.audioUs / double(std::max<uint64_t>(1, m.audioBlocks)),
+				g_block * 1e6 / g_rate, m.audioMaxUs);
+			std::printf("         messages by kind:");
+			for(const auto& [k, v] : _rig.messageKinds)
+			{
+				const auto it = kinds0.find(k);
+				const auto d = v - (it == kinds0.end() ? 0 : it->second);
+				if(d)
+					std::printf(" %02x:%zu (ingest %.1f ms)", k, d, double(_rig.ingestFrames[k]) * 1000.0 / g_rate);
+			}
+			std::puts("");
+			if(first)
+			{
+				idleClock = c;
+				idleSteps = st;
+				first = false;
+			}
+			else if(_strict)
+			{
+				// A read-back is a whole dump the firmware builds; that may make one tick late (two intervals off; B-010: about
+				// 7 ms at most, once a gesture). Pushes cost none.
+				const auto readBacks = _rig.patternRequests - r0;
+				check(c.off3 <= 2 * readBacks && st.maxDevMs <= idleSteps.maxDevMs + 1.5 + (readBacks ? 8.0 : 0.0),
+					std::string(_name) + ": the sequencer keeps time while locks are edited");
+			}
+		};
+		const auto lock = [&](const int _s, const int _v, const int _g)
+		{
+			_rig.page("{\"op\":\"lock\",\"p\":" + ps + ",\"t\":0,\"i\":1,\"s\":" + std::to_string(_s) + ",\"v\":" + std::to_string(_v) + ",\"g\":" + std::to_string(_g) + "}");
+		};
+		// The page's first load reads the machine's library (patterns, kits, songs) while it plays; time
+		// that apart, then wait until the reads are done, so idle is idle.
+		phase("load", 6000, 0, {});
+		_rig.postOnly = true;
+		for(int quiet = 0, i = 0; quiet < 4 && i < 240; ++i)
+		{
+			const auto before = _rig.messagesToMachine - _rig.messageKinds[0x70];
+			_rig.run(500);
+			quiet = _rig.messagesToMachine - _rig.messageKinds[0x70] == before ? quiet + 1 : 0;
+		}
+		first = true;
+		phase("idle", 6000, 0, {});
+		if(std::getenv("PLOCK_PROBE"))
+		{
+			// What in a push costs the time: the dump's bytes all at once, the same bytes at DIN speed, a
+			// dump of another pattern, a read-back.
+			auto pat = desk.documents().patterns.at(p);
+			const auto dump = ed::encodeMdPattern(pat);
+			auto other = pat;
+			other.position = static_cast<uint8_t>((p + 9) % 128);
+			const auto otherDump = ed::encodeMdPattern(other);
+			const auto raw = [&](const char* _name, const std::function<void()>& _what)
+			{
+				clocks.clear();
+				_rig.run(1000);
+				const auto c0 = jitterOf(clocks, 1000.0 / 48.0);
+				clocks.clear();
+				for(int i = 0; i < 5; ++i)
+				{
+					_what();
+					_rig.run(800);
+				}
+				const auto c = jitterOf(clocks, 1000.0 / 48.0);
+				std::printf("  probe %-28s clock worst %.2f ms off (sd %.2f); before it worst %.2f ms\n", _name, c.maxDevMs, c.sdMs, c0.maxDevMs);
+			};
+			m.hardware().setSysexIngressRate(0);
+			raw("active pattern, whole", [&] { m.send(dump); });
+			raw("other pattern, whole", [&] { m.send(otherDump); });
+			for(const uint32_t rate : {31250u, 62500u, 125000u, 250000u})
+			{
+				char name[64];
+				std::snprintf(name, sizeof(name), "active, paced %u B/s", rate);
+				m.hardware().setSysexIngressRate(rate);
+				raw(name, [&] { m.send(dump); });
+			}
+			m.hardware().setSysexIngressRate(ingressRate);
+			m.hardware().setMidiTransmitRate(0);
+			raw("pattern request (read-back)", [&] { (void)m.request(ed::mdPatternRequest(p), ed::g_mdPatternDump); });
+			for(const uint32_t rate : {31250u, 62500u, 125000u, 250000u})
+			{
+				char name[64];
+				std::snprintf(name, sizeof(name), "read-back, sent at %u B/s", rate);
+				m.hardware().setMidiTransmitRate(rate);
+				uint64_t frames = 0;
+				bool ok = true;
+				raw(name, [&] { ok = ok && !m.request(ed::mdPatternRequest(p), ed::g_mdPatternDump, &frames).empty(); });
+				std::printf("        (the reply %s, %.0f ms)\n", ok ? "came" : "DID NOT COME", double(frames) * 1000.0 / g_rate);
+			}
+			m.hardware().setMidiTransmitRate(transmitRate);
+			raw("kit request", [&] { (void)m.request(ed::mdKitRequest(0), ed::g_mdKitDump); });
+		}
+		const int dragG = ++gesture;
+		phase("drag", 6000, 16, [&](const int _n) { lock(_n % 16, (_n * 7) % 128, dragG); });
+		phase("click", 6000, 250, [&](const int _n) { lock((_n * 5) % 16, (_n * 13) % 128, ++gesture); });
+		const int wheelG = ++gesture;
+		phase("wheel", 6000, 30, [&](const int _n) { lock(4, 40 + (_n % 40), wheelG); });
+		phase("after", 4000, 0, {});
+		_rig.postOnly = false;
+		m.onMidi = {};
+		m.onBlock = prevBlock;
+		_rig.page(R"({"op":"stop"})");
+		_rig.run(300);
+	}
+
 int main(const int _argc, char** _argv)
 {
 	std::setvbuf(stdout, nullptr, _IOLBF, 0);
@@ -2668,6 +2918,17 @@ int main(const int _argc, char** _argv)
 			samples(rig);
 			check(g_contract.loaded() && g_contract.bad() == 0, g_contract.summary());
 			std::printf("mdDeskFirmwareTest samples: %s (%d failure(s))\n", g_failures ? "FAIL" : "PASS", g_failures);
+			return g_failures ? 1 : 0;
+		}
+		if(mode == "plocktiming" || mode == "plocktiming-strict")
+		{
+			Rig rig(rom, _argv[1]);
+			rig.page(R"({"op":"ready"})");
+			rig.runUntil([&] { return rig.desk().isReady() && rig.desk().linkState().kit && rig.desk().linkState().pattern && rig.desk().documents().working
+				&& rig.desk().documents().patterns.count(*rig.desk().linkState().pattern); }, 8000);
+			plockTiming(rig, mode == "plocktiming-strict");
+			check(g_contract.loaded() && g_contract.bad() == 0, g_contract.summary());
+			std::printf("mdDeskFirmwareTest %s: %s (%d failure(s))\n", mode.c_str(), g_failures ? "FAIL" : "PASS", g_failures);
 			return g_failures ? 1 : 0;
 		}
 		if(mode == "hostclock")

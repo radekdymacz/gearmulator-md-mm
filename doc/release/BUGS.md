@@ -16,9 +16,11 @@ where it came from, the setup, what happens, what should happen, status.*
 
 - **From:** Discord tester (versonegro), 2026-10-07, macOS 12, Apple M1.
 - **What happens:** while setting parameter locks on the Sequence page, playback lags a little, like swing. When editing stops, timing goes back to normal. Upstream Gearmulator on the same Mac does not lag when editing locks.
-- **Likely:** the editor's traffic to the emulated machine during lock edits (lock writes, pattern pushes, read-backs over SysEx) keeps the emulated CPU busy, or work on the audio thread per edit, so the sequencer's clock slips.
+- **Also:** reproduced by the owner on an M4 Pro, current macOS, so not the tester's CPU.
 - **Should:** editing never changes the timing of playback.
-- **Status:** open, being investigated.
+- **Cause (measured, `mdDeskFirmwareTest <MD ROM> plocktiming`):** a lock edit is a whole pattern dump (5.4 KB; the MD has no SysEx for one lock). The desk already sends at most 5 a second (about 27 KB/s, 9 times what a MIDI cable carries), but the emulated MIDI UART took each dump's bytes all at once, and the firmware's receive interrupt then ran back to back for all of them: about 17 ms in which the sequencer did not run. On a real MD the bytes arrive one every 0.32 ms and nothing stalls. The same on the way out: the UART sent a read-back dump (the editor asks for one after a gesture) at once, and the transmit interrupt stalled the sequencer about 15 ms. At 120 BPM the MIDI clock was up to 17 ms off and the steps up to 19 ms; idle is under 1 ms. Upstream does not lag because its UI never sends dumps.
+- **Fix (branch `fix/plock-timing`):** `md::Hardware` paces the Elektron SysEx going into the firmware (125 KB/s: a pattern in 43 ms; MIDI realtime bytes still go in between) and the MIDI UART's sending (125 KB/s; a pattern read-back in about 60 ms); the desk asks for the read-back only after 750 ms without edits, so a run of clicks gets one. Measured, 120 BPM: the clock 0.94 ms off at worst while drawing, clicking or wheeling locks (was 16.9 ms), the same as idle, except the one tick at a gesture's read-back (up to 3.8-6.7 ms: the firmware's own time to build a dump). The page's first read of the library: 8.2 ms worst (was 19.4 ms). `GEARMULATOR_MDMM_MIDI_PACING=0` turns the pacing off to compare.
+- **Status:** fixed for 0.3.2, not yet checked by the tester.
 
 ## B-009 · WebKit crashed once on Ubuntu 24.04 (Linux VST3)
 
