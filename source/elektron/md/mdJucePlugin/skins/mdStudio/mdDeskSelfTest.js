@@ -212,6 +212,49 @@ if (/[?&]selftest=p4cpu/.test(location.search)) (async () => {
 	log("cpu done");
 })();
 
+/* ?selftest=p4locks (scripts/mdmm-page-load.sh, B-014): what lock editing costs as the pattern fills with locks.
+   Tracks 1-4 get a trig on every step; the pattern plays; then rounds of: 8 s playing, 8.5 s drawing 256 new
+   locks (30 a second, one gesture a round; a new step / parameter / track each, up to 64 locked parameters). Each
+   phase's start and end is logged ("P4: cpu <phase> start/end", with the locks the page shows) so the script
+   reads the processes' CPU time per phase. */
+if (/[?&]selftest=p4locks/.test(location.search)) (async () => {
+	const sleep = ms => new Promise(r => setTimeout(r, ms));
+	const log = t => Bridge.log("P4: " + t);
+	const rounds = Number((location.search.match(/[?&]selftest=p4locks(\d+)/) || [])[1] || 4);
+	while (!(runs() && V.loaded)) await sleep(200);
+	await sleep(8000);	/* the background loads settle */
+	S.ws = "seq"; render();
+	const all = [...Array(16).keys()];
+	for (let t = 0; t < 4; ++t) { cmd("steps", { p: V.pat, from: 0, to: 16, rows: [{ t, on: all }] }); await sleep(2500); }
+	if (!V.playing) $("#play").click();
+	await sleep(2000);
+	const lockCount = () => { let n = 0; for (const steps of V.locks.values()) n += steps.size; return n; };
+	const phase = async (name, ms, during) => {
+		log(`cpu ${name} start locks ${lockCount()} rows ${V.locks.size}`);
+		const end = performance.now() + ms;
+		if (during) await during(end); else await sleep(ms);
+		log(`cpu ${name} end locks ${lockCount()} rows ${V.locks.size}`);
+	};
+	let k = 0;
+	for (let r = 1; r <= rounds; ++r) {
+		await phase(`play${r}`, 8000);
+		const g = Bridge.gesture();
+		await phase(`draw${r}`, 8533, async end => {
+			for (let n = 0; n < 256 && performance.now() < end; ++n, ++k) {
+				const t = Math.floor(k / 256) % 4, s = k % 16, i = Math.floor(k / 16) % 16;
+				const names = slots(V.tracks[t].m, Cat);
+				const name = names[i];
+				if (name) setLock(t, name, s, (k * 37) % 128, true, g);
+				await sleep(1000 / 30);
+			}
+			while (performance.now() < end) await sleep(50);
+		});
+	}
+	await phase(`play${rounds + 1}`, 8000);
+	if (V.playing) $("#play").click();
+	log("cpu done");
+})();
+
 /* ?selftest=p5: P5 checks in the plug-in: PLAY right after ready (timed), GLOBAL, the ? list. */
 if (/[?&]selftest=p5(&|$)/.test(location.search)) (async () => {
 	const sleep = ms => new Promise(r => setTimeout(r, ms));
