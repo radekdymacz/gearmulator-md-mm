@@ -123,7 +123,8 @@ Pre-releases (`mdmm-v*-*`) and drafts never reach `latest.json`.
 | `updateLastCheck` | int (Unix seconds) | 0 | When the last check started (success or not). |
 
 A check is due when `updateCheck` is on and `now >= last + 86400`, or `last` is more than a day in the future (a clock
-that went back). Windows ask the shared checker every minute while open; "Check for Updates Now" ignores the day (not the
+that went back). Windows ask the shared checker every minute while open, the first time 20 s after the page is ready
+(nothing competes with the window's start-up; the background thread is made at the first check); "Check for Updates Now" ignores the day (not the
 setting's wording: it is a direct ask). Nothing is sent but a plain `GET /latest.json` (no query, no cookies).
 
 ### 3.4 Files

@@ -112,6 +112,7 @@ namespace mdJucePlugin::updates
 		void startDownload();
 		void onDownloaded(Ready _ready, Staged _staged, std::string _error);
 		void setPhase(Phase _p);
+		juce::ThreadPool& pool();
 		void changed();
 
 		std::shared_ptr<std::atomic<bool>> m_cancel = std::make_shared<std::atomic<bool>>(false);	// the job in flight stops

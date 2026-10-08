@@ -293,13 +293,16 @@ namespace mdJucePlugin
 		if(m_page->pageReady())
 		{
 			const auto now = juce::Time::currentTimeMillis();
-			if(now >= m_nextUpdatePoll)
+			if(m_nextUpdatePoll == 0)
 			{
-				const bool first = m_nextUpdatePoll == 0;
+				// the first check waits until the window has settled (nothing competes with its start-up)
+				m_nextUpdatePoll = now + 20 * 1000;
+				showUpdateBanner();	// a window opened while an update was already known
+			}
+			else if(now >= m_nextUpdatePoll)
+			{
 				m_nextUpdatePoll = now + 60 * 1000;
 				m_updater->poll(getProcessor().getConfig());
-				if(first)
-					showUpdateBanner();	// a window opened while an update was already known
 			}
 		}
 		m_page->flush();

@@ -164,17 +164,24 @@ namespace mdJucePlugin::updates
 #endif
 	}
 
-	Updater::Updater() : m_pool(std::make_unique<juce::ThreadPool>(1))
-	{
-	}
+	Updater::Updater() = default;
 
 	Updater::~Updater()
 	{
 		// a job in flight sees cancel within 100 ms (runCurl kills curl); its results are dropped (m_alive)
 		m_alive.reset();
 		*m_cancel = true;
-		m_pool->removeAllJobs(true, 10000);
+		if(m_pool)
+			m_pool->removeAllJobs(true, 10000);
 		m_pool.reset();
+	}
+
+	juce::ThreadPool& Updater::pool()
+	{
+		// made at the first check, not with the window: opening an editor starts no thread of ours
+		if(!m_pool)
+			m_pool = std::make_unique<juce::ThreadPool>(1);
+		return *m_pool;
 	}
 
 	mu::Version Updater::currentVersion()
@@ -270,7 +277,7 @@ namespace mdJucePlugin::updates
 		m_userAsked = _userAsked;
 		setPhase(Phase::Checking);
 		*m_cancel = false;
-		m_pool->addJob([cancel = m_cancel, alive = std::weak_ptr<int>(m_alive), this]
+		pool().addJob([cancel = m_cancel, alive = std::weak_ptr<int>(m_alive), this]
 		{
 			const juce::TemporaryFile temp(".json");
 			auto error = runCurl(mu::g_manifestUrl, temp.getFile(), mu::g_maxManifestBytes, g_manifestSeconds, *cancel, {});
@@ -325,7 +332,7 @@ namespace mdJucePlugin::updates
 		m_percent = 0;
 		setPhase(Phase::Downloading);
 		*m_cancel = false;
-		m_pool->addJob([cancel = m_cancel, alive = std::weak_ptr<int>(m_alive), this, asset = *asset, version = m_manifest->version]
+		pool().addJob([cancel = m_cancel, alive = std::weak_ptr<int>(m_alive), this, asset = *asset, version = m_manifest->version]
 		{
 			const auto post = [alive, this](Ready _ready, Staged _staged, std::string _error)
 			{
