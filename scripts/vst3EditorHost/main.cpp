@@ -22,8 +22,27 @@ void hostBecomeBackgroundApp();			// hostMac.mm
 void hostSendWindowBack(void* _nsView);
 #endif
 
+#if JUCE_LINUX || JUCE_BSD
+#include <dlfcn.h>
+#endif
+
 namespace
 {
+#if JUCE_LINUX || JUCE_BSD
+	// Xlib before 1.8 (Ubuntu 22.04 ships 1.7.5) is thread-safe only when XInitThreads is the process's first Xlib
+	// call; 1.8 makes it on its own. JUCE makes it when the host opens its first window, but the plug-in's own copy
+	// of JUCE opens its display connection while it loads, before that: the editor's threads then lost the reply
+	// sequence ("_XReply: Assertion `!xcb_xlib_threads_sequence_lost' failed", the start test's VST3 abort on 22.04).
+	// So the host makes the call before main. libX11 is loaded as JUCE loads it (dlopen, no link-time dependency).
+	const bool g_xlibThreads = []
+	{
+		if(auto* x11 = dlopen("libX11.so.6", RTLD_LAZY | RTLD_GLOBAL))
+			if(auto* initThreads = reinterpret_cast<int (*)()>(dlsym(x11, "XInitThreads")))
+				return initThreads() != 0;
+		return false;
+	}();
+#endif
+
 	constexpr double g_sampleRate = 48000.0;
 	constexpr int g_blockSize = 480;	// 10 ms
 

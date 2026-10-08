@@ -1,84 +1,202 @@
 name: MD/MM Editors Windows x64
 
-# This fork's Windows check (doc/release/WINDOWS.md, doc/modern-ux/UPSTREAM.md: a workflow of ours). Builds the
-# package with upstream's elektron-windows.yml as it is (standalones, VST3s, unit tests, the VST3 load test), then
-# starts each packaged standalone on a clean Windows runner (the WebView2 runtime is part of Windows there, as on
-# a user's Windows 10 or 11) and checks that the page runs in WebView2 and the bridge goes both ways
-# (scripts/windows/smoke_mdmm.ps1), keeping a screenshot, and runs pluginval (strictness 5, no ROM) on each VST3.
-# On an mdmm-v* tag, mdmm-editors-release.yml calls this workflow, and the release archives go to the draft
-# release only when all of it, start tests and pluginval, has passed.
+# This fork's Windows build and start test (doc/release/WINDOWS.md, doc/modern-ux/UPSTREAM.md: a workflow of ours;
+# upstream's elektron-windows.yml stays as it is and is no longer called). Called by mdmm-editors.yml on every push
+# (and by mdmm-editors-release.yml when no tested build of the tag's commit exists).
+#
+#   build     the package, once: upstream's scripts/windows/build_mdmm.ps1 as elektron-windows.yml runs it (Release,
+#             /GL and /LTCG, Ninja Multi-Config, sccache), products only: the two standalones, the two VST3s and
+#             pluginTester, which then loads each VST3 (audio buses, automation smoke) before the zip is made. Its
+#             zip (artifact windows-mdmm) is what the start test below and the release archives use.
+#   tests     the unit and plug-in tests of the same sources (the ctest list of build_mdmm.ps1 -WithTests), in
+#             parallel with the build. Compiled without whole-program optimisation (_CL_=/GL-, its own sccache
+#             namespace): with /GL each test program's link re-generated all the code (/LTCG) and the job took 43
+#             minutes; the shipped files are the build job's and are tested by pluginTester, the start test and
+#             pluginval below.
+#   vst3host  the start test's minimal VST3 host (scripts/vst3EditorHost).
+#   smoke     on a clean windows-2022 (the WebView2 runtime is part of Windows there, as on a user's Windows 10 or
+#             11): starts each packaged standalone and VST3, checks that the page runs in WebView2 and the bridge
+#             goes both ways (scripts/windows/smoke_mdmm.ps1), keeps a screenshot, then pluginval (strictness 5,
+#             no ROM) on each VST3.
 
 on:
   workflow_call:
   workflow_dispatch:
-  push:
-    branches:
-      - main
-      - "release/md-mm-*"
-      - "release/0.*"
-      - "feat/windows-*"
-      - "ci/*-ui-smoke"
-    paths:
-      - ".github/workflows/mdmm-editors-windows.yml"
-      - ".github/workflows/elektron-windows.yml"
-      - "scripts/windows/**"
-      - "scripts/ci/**"
-      - "scripts/pluginval.env"
-      - "scripts/vst3EditorHost/**"
-      - ".gitmodules"
-      - "CMakeLists.txt"
-      - "base.cmake"
-      - "source/CMakeLists.txt"
-      - "source/*.cmake"
-      - "source/JUCE"
-      - "source/elektron/**"
-      - "source/baseLib/**"
-      - "source/synthLib/**"
-      - "source/jucePluginEditorLib/**"
-      - "source/jucePluginLib/**"
-      - "source/juceUiLib/**"
-      - "source/juceRmlUi/**"
-      - "source/juceRmlPlugin/**"
-      - "source/dsp56300"
-      - "source/mc68k"
 
 permissions:
   contents: read
 
-concurrency:
-  group: mdmm-editors-windows-${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
-
 jobs:
   build:
-    uses: ./.github/workflows/elektron-windows.yml
-
-  smoke:
-    name: Start the packaged standalones and VST3s (WebView2)
-    needs: build
+    name: Windows x64 package (LTCG, sccache)
     runs-on: windows-2022
-    timeout-minutes: 40
+    timeout-minutes: 120
+    env:
+      SCCACHE_GHA_ENABLED: "true"
+      SCCACHE_GHA_VERSION: "mdmm-v1-windows-x64-msvc"
+      SCCACHE_IDLE_TIMEOUT: "0"
 
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          submodules: recursive
 
-      - name: Build the minimal VST3 host (scripts/vst3EditorHost)
+      - name: Configure MSVC environment
+        uses: ilammy/msvc-dev-cmd@v1
+        with:
+          arch: x64
+
+      - name: Configure compiler cache
+        uses: mozilla-actions/sccache-action@v0.0.11
+        with:
+          version: v0.16.0
+
+      - name: Build, check and package the standalones and VST3s
+        shell: pwsh
+        run: >-
+          ./scripts/windows/build_mdmm.ps1
+          -SourceDir "${{ github.workspace }}"
+          -BuildDir "${{ runner.temp }}\gearmulator-elektron-build"
+          -OutputDir "${{ github.workspace }}\artifacts\windows-mdmm"
+          -Configuration Release
+          -Parallel 4
+          -Generator "Ninja Multi-Config"
+          -CompilerLauncher sccache
+
+      - name: Compiler cache statistics
+        if: always()
+        shell: pwsh
+        run: |
+          & "$env:SCCACHE_PATH" --show-stats
+          "### sccache (Windows package)" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
+          '```' | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
+          & "$env:SCCACHE_PATH" --show-stats | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
+          '```' | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
+
+      - name: Upload the package and receipt
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-mdmm
+          path: artifacts/windows-mdmm/*
+          if-no-files-found: error
+          retention-days: 14
+
+  tests:
+    name: Windows x64 unit and plug-in tests
+    runs-on: windows-2022
+    timeout-minutes: 120
+    env:
+      SCCACHE_GHA_ENABLED: "true"
+      # Objects made with /GL- are not the build job's: a namespace of their own.
+      SCCACHE_GHA_VERSION: "mdmm-v1-windows-x64-msvc-nogl"
+      SCCACHE_IDLE_TIMEOUT: "0"
+      # cl.exe appends _CL_ to every command line: /GL- after base.cmake's /GL. LINK then has no code to generate.
+      _CL_: /GL-
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          submodules: recursive
+
+      - name: Configure MSVC environment
+        uses: ilammy/msvc-dev-cmd@v1
+        with:
+          arch: x64
+
+      - name: Configure compiler cache
+        uses: mozilla-actions/sccache-action@v0.0.11
+        with:
+          version: v0.16.0
+
+      - name: Build the tests
+        shell: pwsh
+        run: >-
+          ./scripts/windows/build_mdmm.ps1
+          -SourceDir "${{ github.workspace }}"
+          -BuildDir "${{ runner.temp }}\gearmulator-elektron-build"
+          -OutputDir "${{ runner.temp }}\windows-mdmm-tests"
+          -Configuration Release
+          -Parallel 4
+          -Generator "Ninja Multi-Config"
+          -CompilerLauncher sccache
+          -WithTests
+          -BuildOnly
+
+      - name: Run the tests
+        shell: pwsh
+        run: >-
+          ./scripts/windows/build_mdmm.ps1
+          -SourceDir "${{ github.workspace }}"
+          -BuildDir "${{ runner.temp }}\gearmulator-elektron-build"
+          -OutputDir "${{ runner.temp }}\windows-mdmm-tests"
+          -Configuration Release
+          -Parallel 4
+          -WithTests
+          -TestOnly
+
+      - name: Compiler cache statistics
+        if: always()
+        shell: pwsh
+        run: |
+          & "$env:SCCACHE_PATH" --show-stats
+          "### sccache (Windows tests, /GL-)" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
+          '```' | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
+          & "$env:SCCACHE_PATH" --show-stats | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
+          '```' | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
+
+  vst3host:
+    name: Minimal VST3 host (scripts/vst3EditorHost)
+    runs-on: windows-2022
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Build the host
         shell: pwsh
         run: |
           git submodule update --init --depth 1 source/JUCE
           cmake -S scripts/vst3EditorHost -B "${{ runner.temp }}\vst3host" -G "Visual Studio 17 2022" -A x64
           cmake --build "${{ runner.temp }}\vst3host" --config Release --parallel 4 -- /verbosity:minimal
           $exe = Get-ChildItem -LiteralPath "${{ runner.temp }}\vst3host" -Recurse -File -Filter 'mdmmVst3EditorHost.exe' | Select-Object -First 1
-          "VST3_HOST=$($exe.FullName)" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+          New-Item -ItemType Directory -Path "${{ runner.temp }}\out" -Force | Out-Null
+          Copy-Item -LiteralPath $exe.FullName -Destination "${{ runner.temp }}\out\mdmmVst3EditorHost.exe"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: windows-vst3host
+          path: ${{ runner.temp }}\out\mdmmVst3EditorHost.exe
+          if-no-files-found: error
+          retention-days: 14
+
+  smoke:
+    name: Start the packaged standalones and VST3s (WebView2)
+    needs: [build, vst3host]
+    runs-on: windows-2022
+    timeout-minutes: 40
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
 
       - uses: actions/download-artifact@v4
         with:
-          name: Gearmulator-Elektron-Windows-x64-${{ github.sha }}
+          name: windows-vst3host
+          path: ${{ runner.temp }}\vst3host
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: windows-mdmm
           path: ${{ runner.temp }}\windows-mdmm
 
       - name: Unpack the package
         shell: pwsh
         run: |
+          "VST3_HOST=${{ runner.temp }}\vst3host\mdmmVst3EditorHost.exe" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
           $zip = Get-ChildItem -LiteralPath "${{ runner.temp }}\windows-mdmm" -Filter 'Gearmulator-Elektron-Windows-x64.zip'
           Expand-Archive -LiteralPath $zip.FullName -DestinationPath "${{ runner.temp }}\package"
           Get-ChildItem -LiteralPath "${{ runner.temp }}\package" -Recurse | Select-Object FullName, Length | Format-Table -AutoSize

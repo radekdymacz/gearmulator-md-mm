@@ -157,22 +157,33 @@ run() {
 			eval "$(xdotool getwindowgeometry --shell "${w}" 2>/dev/null | grep -E '^(WIDTH|HEIGHT|X|Y)=')"
 			if (( WIDTH * HEIGHT > best )); then best=$((WIDTH * HEIGHT)); win="${w}"; fi
 		done
-		local seen="no window of the app found"
+		local seen="no window of the app found" missing=() attempt=0
 		if [[ -n "${win}" ]]; then
 			eval "$(xdotool getwindowgeometry --shell "${win}" | grep -E '^(WIDTH|HEIGHT|X|Y)=')"
-			xdotool windowraise "${win}" windowfocus --sync "${win}" 2>/dev/null || true
-			xdotool mousemove --sync $((X + 15)) $((Y + HEIGHT - 10)) click 1
-			sleep 1
-			xdotool key --delay 400 ctrl+c ctrl+v ctrl+x ctrl+z ctrl+d shift+slash
-			sleep 1
-			seen="$(timeout 20 python3 "${script_dir}/ui_texts.py" 2>/dev/null | grep -o -E 'Keys seen:.*' | head -n 1)"
+			# Up to three tries: with no window manager the keyboard focus reaches the page's web view (a GtkPlug
+			# in WebKit's own process, XEmbed) only after the click's focus request went round the embedder; on
+			# 22.04 the first keys sometimes left before it had (the probe then said "none"; twice on 2026-10-08).
+			# The probe keeps every key it saw, so a later try completes the list; never more than three.
+			while (( attempt < 3 )); do
+				attempt=$((attempt + 1))
+				xdotool windowraise "${win}" windowfocus --sync "${win}" 2>/dev/null || true
+				xdotool mousemove --sync $((X + 15)) $((Y + HEIGHT - 10)) click 1
+				sleep $((attempt + 1))
+				xdotool key --delay 400 ctrl+c ctrl+v ctrl+x ctrl+z ctrl+d shift+slash
+				sleep 1
+				seen="$(timeout 20 python3 "${script_dir}/ui_texts.py" 2>/dev/null | grep -o -E 'Keys seen:.*' | head -n 1)"
+				missing=()
+				for k in "${keys_wanted[@]}"; do [[ "${seen}" == *" ${k}"* ]] || missing+=("${k}"); done
+				(( ${#missing[@]} == 0 )) && break
+				echo "${label}: try ${attempt}: ${seen:-no key probe text}"
+			done
+		else
+			missing=("${keys_wanted[@]}")
 		fi
 		echo "${seen}" > "${out}/${name}-keys.txt"
-		local missing=()
-		for k in "${keys_wanted[@]}"; do [[ "${seen}" == *" ${k}"* ]] || missing+=("${k}"); done
 		if (( ${#missing[@]} == 0 )); then
-			echo "${label}: real keys reach the page: ${seen}"
-			record "${label}" "real keys reach the page (${keys_wanted[*]})" "yes"
+			echo "${label}: real keys reach the page: ${seen} (try ${attempt})"
+			record "${label}" "real keys reach the page (${keys_wanted[*]})" "yes$( (( attempt > 1 )) && echo " (try ${attempt})")"
 		else
 			fail "${label}: real keys did not reach the page: ${missing[*]} missing (${seen})"
 			record "${label}" "real keys reach the page (${keys_wanted[*]})" "no: ${missing[*]} missing"

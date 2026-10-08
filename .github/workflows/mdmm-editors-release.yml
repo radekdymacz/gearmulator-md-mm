@@ -1,11 +1,13 @@
 name: MD/MM Editors release installers
 
 # This fork's own release job (doc/modern-ux/UPSTREAM.md): upstream's elektron-prerelease.yml and
-# elektron-macos.yml stay as they are. On an mdmm-v* tag this builds the fixture-free universal
-# bundles itself (the same script and settings as elektron-macos.yml), packages the two installers
-# and attaches them to the release. It also builds Windows (upstream's elektron-windows.yml, called
-# as is) and Linux (mdmm-editors-linux.yml), and attaches one "not-tested" archive per machine and
-# platform to the same release while it is a draft (doc/release/LINUX.md).
+# elektron-macos.yml stay as they are. On an mdmm-v* tag this takes the packages that mdmm-editors.yml built and
+# tested for the tag's commit (the push of that commit ran it: the fixture-free universal macOS bundles, the
+# Windows zip, the Linux archives, with their start tests and pluginval), so nothing is built twice: `locate` finds
+# that run (waiting for it while it runs), and only when there is none (the commit's push did not touch the editors,
+# its artifacts expired after 14 days, or it failed) `build` calls mdmm-editors.yml here. It then packages the two
+# macOS installers and attaches them to the release, and one "not-tested" archive per machine and platform for
+# Windows and Linux to the same release while it is a draft (doc/release/LINUX.md).
 #
 # The in-app updates' ed25519 signatures are not made here: publishing the release runs
 # mdmm-site-release.yml, which signs the assets as published (a hand-uploaded asset wins over this job's,
@@ -15,9 +17,9 @@ name: MD/MM Editors release installers
 #   - macOS: macos-tests installs the two signed .pkg that macos-installers made, starts the installed standalones
 #     and VST3s (no ROM), runs auval and pluginval strictness 5 on the installed VST3 and AU, and checks the .dmg
 #     hold the very same bundles; only then macos-publish attaches the four files.
-#   - Windows and Linux: the called workflows run their start tests and pluginval on the packages they build;
-#     package-other packages the per-machine archives and checks they hold the tested files byte for byte;
-#     other-platforms attaches them after macos-publish.
+#   - Windows and Linux: mdmm-editors.yml ran its start tests and pluginval on the packages it built (a run is used
+#     only when it succeeded as a whole); package-other packages the per-machine archives and checks they hold the
+#     tested files byte for byte; other-platforms attaches them after macos-publish.
 # A manual run (workflow_dispatch) with dry_run (the default) does all of it except the upload: use it to try this
 # file on a branch. Dispatching on a tag with dry_run off does the real thing again.
 
@@ -36,49 +38,55 @@ permissions:
   contents: read
 
 jobs:
-  # Unsigned, untested by a person: attached as *-not-tested archives, to a draft only (the last job). This is
-  # our own Windows workflow: it calls upstream's elektron-windows.yml, then starts each packaged standalone and
-  # VST3 and runs pluginval; this job, and so the attaching one, fails if any of it fails.
-  build-windows:
-    uses: ./.github/workflows/mdmm-editors-windows.yml
-
-  build-linux:
-    uses: ./.github/workflows/mdmm-editors-linux.yml
-
-  build-macos:
-    name: macOS universal bundles for the installers
-    runs-on: macos-15
-    timeout-minutes: 120
-
+  # The run of mdmm-editors.yml that built and tested this commit: the newest successful one whose packages have not
+  # expired. One still running is waited for. None: `build` below makes one in this run.
+  locate:
+    name: Find the tested build of this commit
+    runs-on: ubuntu-latest
+    timeout-minutes: 150
+    permissions:
+      contents: read
+      actions: read
+    outputs:
+      run_id: ${{ steps.find.outputs.run_id }}
     steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-          submodules: recursive
-
-      - name: Build, test, sign, and package MD/MM
+      - id: find
         env:
-          # Hosted runners have no secure firmware-fixture channel. Local
-          # release verification defaults to requiring both validated images.
-          GEARMULATOR_REQUIRE_FIRMWARE_TESTS: "0"
-          GEARMULATOR_MDMM_MACOS_ARCHITECTURES: "arm64;x86_64"
-          GEARMULATOR_MDMM_APPLE_PGO_MODE: "none"
-        run: >-
-          ./scripts/macos/build_mdmm.sh
-          "${{ github.workspace }}"
-          "${{ runner.temp }}/gearmulator-elektron-build"
-          "${{ github.workspace }}/artifacts/macos-mdmm"
+          GH_TOKEN: ${{ github.token }}
+          SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          wanted="macos-mdmm-universal macos-vst3host windows-mdmm linux-mdmm"
+          deadline=$(( $(date +%s) + 140 * 60 ))
+          while :; do
+            runs="$(gh api "repos/${GITHUB_REPOSITORY}/actions/workflows/mdmm-editors.yml/runs?head_sha=${SHA}&per_page=50" \
+              --jq '.workflow_runs | sort_by(.created_at) | reverse | .[] | "\(.id) \(.status) \(.conclusion) \(.event) \(.html_url)"')"
+            echo "${runs:-no run of mdmm-editors.yml for ${SHA}}"
+            found=""
+            while read -r id status conclusion _event url; do
+              [[ -n "${id}" && "${status}" == completed && "${conclusion}" == success ]] || continue
+              have="$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${id}/artifacts?per_page=100" \
+                --jq '.artifacts[] | select(.expired == false) | .name')"
+              ok=1
+              for name in ${wanted}; do grep -qxF "${name}" <<< "${have}" || ok=0; done
+              if (( ok )); then found="${id}"; echo "Using the packages of ${url}"; break; fi
+              echo "${url}: its packages expired"
+            done <<< "${runs}"
+            if [[ -n "${found}" ]]; then break; fi
+            if grep -qE '^[0-9]+ (queued|in_progress|waiting|requested|pending) ' <<< "${runs}" && (( $(date +%s) < deadline )); then
+              echo "A run of this commit is still going: waiting"
+              sleep 60
+              continue
+            fi
+            echo "::notice title=Building here::No successful mdmm-editors.yml run with packages for ${SHA}: this run builds and tests them"
+            break
+          done
+          echo "run_id=${found}" >> "${GITHUB_OUTPUT}"
 
-      # Release artifacts preferably come from a local run with both pinned
-      # firmware images; the installers job below uploads installers only
-      # where the release has none.
-      - name: Upload universal bundles for installer packaging
-        uses: actions/upload-artifact@v4
-        with:
-          name: macos-mdmm-universal
-          path: artifacts/macos-mdmm/Gearmulator-Elektron-macOS-*.zip
-          if-no-files-found: error
-          retention-days: 7
+  build:
+    needs: locate
+    if: needs.locate.outputs.run_id == ''
+    uses: ./.github/workflows/mdmm-editors.yml
 
   # The website links to releases/latest/download/<name>, so these file names
   # are fixed: Machinedrum-Editor-macOS.pkg, Monomachine-Editor-macOS.pkg, and
@@ -93,11 +101,13 @@ jobs:
   # UNSIGNED and refuses to touch a published release. A partial set fails.
   macos-installers:
     name: macOS installer packages and disk images
-    needs: build-macos
+    needs: [locate, build]
+    if: ${{ !cancelled() && needs.locate.result == 'success' && (needs.build.result == 'success' || needs.build.result == 'skipped') }}
     runs-on: macos-15
     timeout-minutes: 120
     permissions:
       contents: read
+      actions: read
     outputs:
       signed: ${{ steps.mode.outputs.signed }}
     env:
@@ -152,6 +162,8 @@ jobs:
         with:
           name: macos-mdmm-universal
           path: ${{ runner.temp }}/mdmm-zip
+          run-id: ${{ needs.locate.outputs.run_id || github.run_id }}
+          github-token: ${{ github.token }}
 
       - name: Unpack the universal bundles
         run: |
@@ -294,7 +306,11 @@ jobs:
   # the release is built on and the oldest hosted one.
   macos-tests:
     name: Test the installed packages (${{ matrix.os }})
-    needs: macos-installers
+    needs: [locate, macos-installers]
+    if: ${{ !cancelled() && needs.macos-installers.result == 'success' }}
+    permissions:
+      contents: read
+      actions: read
     strategy:
       fail-fast: false
       matrix:
@@ -307,6 +323,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
+          fetch-depth: 1
           submodules: false
 
       - uses: actions/download-artifact@v4
@@ -315,8 +332,17 @@ jobs:
           path: ${{ runner.temp }}/installers
           merge-multiple: true
 
-      - name: Build the minimal VST3 host (scripts/vst3EditorHost)
-        run: ./scripts/macos/build_vst3_host.sh "${RUNNER_TEMP}/vst3host" >> "${GITHUB_ENV}"
+      - uses: actions/download-artifact@v4
+        with:
+          name: macos-vst3host
+          path: ${{ runner.temp }}/vst3host
+          run-id: ${{ needs.locate.outputs.run_id || github.run_id }}
+          github-token: ${{ github.token }}
+
+      - name: The minimal VST3 host (scripts/vst3EditorHost, built beside the package)
+        run: |
+          ditto -x -k "${RUNNER_TEMP}/vst3host/mdmmVst3EditorHost-macOS.zip" "${RUNNER_TEMP}/vst3host"
+          echo "VST3_HOST=${RUNNER_TEMP}/vst3host/mdmmVst3EditorHost.app/Contents/MacOS/mdmmVst3EditorHost" >> "${GITHUB_ENV}"
 
       - name: Install both packages, check the installation
         run: |
@@ -389,7 +415,7 @@ jobs:
   macos-publish:
     name: Attach the macOS installers to the draft release
     needs: [macos-installers, macos-tests]
-    if: ${{ !inputs.dry_run && startsWith(github.ref, 'refs/tags/mdmm-v') }}
+    if: ${{ !cancelled() && needs.macos-installers.result == 'success' && needs.macos-tests.result == 'success' && !inputs.dry_run && startsWith(github.ref, 'refs/tags/mdmm-v') }}
     runs-on: ubuntu-latest
     timeout-minutes: 30
     permissions:
@@ -501,13 +527,17 @@ jobs:
   # release): an existing asset is kept, and a published release is left alone with a warning (the
   # archives stay in the run's artifacts; Radek attaches them by hand if he wants them there). The
   # body gets the "not tested" line once. The macOS names stay as they are (the website links to them).
-  # Packages the per-machine archives and proves they hold the files the called workflows tested: the Windows zips
-  # are cut from the zip mdmm-editors-windows.yml tested, the Linux tarballs are the ones mdmm-editors-linux.yml tested.
+  # Packages the per-machine archives and proves they hold the files that were tested: the Windows zips are cut
+  # from the zip mdmm-editors-windows.yml tested, the Linux tarballs are the ones mdmm-editors-linux.yml tested.
   package-other:
     name: Windows and Linux archives (packaged)
-    needs: [build-windows, build-linux]
+    needs: [locate, build]
+    if: ${{ !cancelled() && needs.locate.result == 'success' && (needs.build.result == 'success' || needs.build.result == 'skipped') }}
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    permissions:
+      contents: read
+      actions: read
 
     steps:
       - uses: actions/checkout@v4
@@ -517,14 +547,17 @@ jobs:
 
       - uses: actions/download-artifact@v4
         with:
-          pattern: Gearmulator-Elektron-Windows-x64-*
+          name: windows-mdmm
           path: ${{ runner.temp }}/windows
-          merge-multiple: true
+          run-id: ${{ needs.locate.outputs.run_id || github.run_id }}
+          github-token: ${{ github.token }}
 
       - uses: actions/download-artifact@v4
         with:
           name: linux-mdmm
           path: ${{ runner.temp }}/assets
+          run-id: ${{ needs.locate.outputs.run_id || github.run_id }}
+          github-token: ${{ github.token }}
 
       - name: One Windows zip per machine
         run: |
@@ -554,7 +587,7 @@ jobs:
   other-platforms:
     name: Windows and Linux archives (not tested by a person) on the draft release
     needs: [macos-publish, package-other]
-    if: ${{ !inputs.dry_run && startsWith(github.ref, 'refs/tags/mdmm-v') }}
+    if: ${{ !cancelled() && needs.macos-publish.result == 'success' && needs.package-other.result == 'success' && !inputs.dry_run && startsWith(github.ref, 'refs/tags/mdmm-v') }}
     runs-on: ubuntu-latest
     timeout-minutes: 30
     permissions:

@@ -1,59 +1,46 @@
-name: MD/MM Editors macOS start test
+name: MD/MM Editors macOS
 
-# This fork's macOS start test (doc/modern-ux/FOUNDATION.md, "CI start tests"; doc/modern-ux/UPSTREAM.md: a
-# workflow of ours, upstream's elektron-macos.yml stays as it is and keeps its package on its runner). Builds the
-# fixture-free universal package with the same script and settings as elektron-macos.yml and
-# mdmm-editors-release.yml, then on a clean runner with a logged-in desktop starts each standalone and each VST3
-# (in scripts/vst3EditorHost) with no ROM, reads "<machine> firmware needed" from the page through the
-# Accessibility API, runs auval on each AU and keeps a screenshot of each window (scripts/macos/smoke_mdmm.sh), then
-# runs pluginval (strictness 5, no ROM) on each VST3 and each AU of the same package. The release job
-# (mdmm-editors-release.yml) runs the same checks on the installed release packages and gates the upload on them,
-# so this workflow no longer runs on mdmm-v* tags.
+# This fork's macOS build and start test (doc/modern-ux/FOUNDATION.md, "Build and check" and "CI start tests";
+# doc/modern-ux/UPSTREAM.md: a workflow of ours, upstream's elektron-macos.yml stays as it is). Called by
+# mdmm-editors.yml on every push (and by mdmm-editors-release.yml when no tested build of the tag's commit exists).
+#
+#   build     the fixture-free universal package, once: upstream's scripts/macos/build_mdmm.sh with the release
+#             settings (ThinLTO, arm64 + x86_64, unit and plug-in tests, package check), on Ninja with ccache. Its
+#             zip (artifact macos-mdmm-universal) is what the start test below and the release installers use.
+#   vst3host  the start test's minimal VST3 host (scripts/vst3EditorHost), beside the build.
+#   smoke     on a clean macos-14 and macos-15: starts each standalone and each VST3 (in the host) of that zip with
+#             no ROM, reads "<machine> firmware needed" from the page through the Accessibility API, presses real
+#             keys, runs auval on each AU, keeps screenshots (scripts/macos/smoke_mdmm.sh), then pluginval
+#             (strictness 5, no ROM) on each VST3 and AU.
 
 on:
+  workflow_call:
   workflow_dispatch:
-  push:
-    branches:
-      - main
-      - "release/md-mm-*"
-      - "release/0.*"
-      - "ci/*-ui-smoke"
-    paths:
-      - ".github/workflows/mdmm-editors-macos.yml"
-      - "scripts/ci/**"
-      - "scripts/pluginval.env"
-      - "scripts/macos/**"
-      - "scripts/vst3EditorHost/**"
-      - "scripts/mdmm-product.env"
-      - ".gitmodules"
-      - "CMakeLists.txt"
-      - "base.cmake"
-      - "source/CMakeLists.txt"
-      - "source/*.cmake"
-      - "source/JUCE"
-      - "source/elektron/**"
-      - "source/baseLib/**"
-      - "source/synthLib/**"
-      - "source/jucePluginEditorLib/**"
-      - "source/jucePluginLib/**"
-      - "source/juceUiLib/**"
-      - "source/juceRmlUi/**"
-      - "source/juceRmlPlugin/**"
-      - "source/dsp56300"
-      - "source/mc68k"
 
 permissions:
   contents: read
 
-concurrency:
-  group: mdmm-editors-macos-${{ github.ref }}
-  cancel-in-progress: true
-
 jobs:
   build:
-    name: macOS universal package (fixture-free)
-    runs-on: macos-14
+    name: macOS universal package (fixture-free, ccache)
+    # The release installers have always been built on macos-15 (Xcode 16): the one build per push is the one the
+    # release packages, so it is built there.
+    runs-on: macos-15
     timeout-minutes: 120
+    env:
+      # Paths below the checkout are hashed relative to it.
+      CCACHE_BASEDIR: ${{ github.workspace }}
+      # The compiler's own version, not the /usr/bin shim's mtime: a runner image with another Xcode misses.
+      CCACHE_COMPILERCHECK: "%compiler% -v"
+      CCACHE_SLOPPINESS: "include_file_mtime,include_file_ctime,time_macros,pch_defines"
+      CCACHE_MAXSIZE: 3G
+      CCACHE_COMPRESS: "true"
+      # build_mdmm.sh passes no generator: a new build tree takes these from the environment (cmake(1)).
+      CMAKE_GENERATOR: Ninja
+      CMAKE_C_COMPILER_LAUNCHER: ccache
+      CMAKE_CXX_COMPILER_LAUNCHER: ccache
+      CMAKE_OBJC_COMPILER_LAUNCHER: ccache
+      CMAKE_OBJCXX_COMPILER_LAUNCHER: ccache
 
     steps:
       - uses: actions/checkout@v4
@@ -61,27 +48,100 @@ jobs:
           fetch-depth: 0
           submodules: recursive
 
+      - name: Install ccache and Ninja
+        env:
+          HOMEBREW_NO_AUTO_UPDATE: "1"
+          HOMEBREW_NO_INSTALL_CLEANUP: "1"
+        run: |
+          brew install ccache ninja
+          ccache --version | head -n 1; ninja --version
+          echo "CCACHE_DIR=${RUNNER_TEMP}/ccache" >> "${GITHUB_ENV}"
+
+      # One cache per branch and toolchain; a new branch starts from main's (the default branch: its caches are
+      # readable from every branch). Saved after every run, pass or fail, under a new key.
+      - name: Restore the compiler cache
+        uses: actions/cache/restore@v4
+        with:
+          path: ${{ runner.temp }}/ccache
+          key: ccache-v1-macos15-universal-${{ github.ref_name }}-${{ github.run_id }}
+          restore-keys: |
+            ccache-v1-macos15-universal-${{ github.ref_name }}-
+            ccache-v1-macos15-universal-main-
+
+      - name: Test macOS release tooling
+        env:
+          PYTHONDONTWRITEBYTECODE: "1"
+        run: |
+          /bin/bash -n scripts/macos/build_mdmm.sh scripts/macos/verify_mdmm_package.sh
+          python3 scripts/macos/test_write_mdmm_receipt.py
+          python3 scripts/macos/test_check_mdmm_core_capacity.py
+
       - name: Build, test and package MD/MM
         env:
           GEARMULATOR_REQUIRE_FIRMWARE_TESTS: "0"
           GEARMULATOR_MDMM_MACOS_ARCHITECTURES: "arm64;x86_64"
           GEARMULATOR_MDMM_APPLE_PGO_MODE: "none"
-        run: >-
-          ./scripts/macos/build_mdmm.sh
-          "${{ github.workspace }}"
-          "${{ runner.temp }}/gearmulator-elektron-build"
-          "${{ github.workspace }}/artifacts/macos-mdmm"
+        run: |
+          ccache --zero-stats > /dev/null
+          ./scripts/macos/build_mdmm.sh \
+            "${{ github.workspace }}" \
+            "${{ runner.temp }}/gearmulator-elektron-build" \
+            "${{ github.workspace }}/artifacts/macos-mdmm"
+
+      - name: Compiler cache statistics
+        if: always()
+        run: |
+          ccache --show-stats --verbose | tee "${RUNNER_TEMP}/ccache-stats.txt"
+          {
+            echo "### ccache (macOS universal)"
+            echo '```'
+            ccache --show-stats
+            echo '```'
+          } >> "${GITHUB_STEP_SUMMARY}"
+
+      - name: Save the compiler cache
+        if: always()
+        uses: actions/cache/save@v4
+        with:
+          path: ${{ runner.temp }}/ccache
+          key: ccache-v1-macos15-universal-${{ github.ref_name }}-${{ github.run_id }}
 
       - uses: actions/upload-artifact@v4
         with:
-          name: macos-mdmm-start-test-package
+          name: macos-mdmm-universal
           path: artifacts/macos-mdmm/Gearmulator-Elektron-macOS-*.zip
           if-no-files-found: error
-          retention-days: 3
+          retention-days: 14
+
+  vst3host:
+    name: Minimal VST3 host (scripts/vst3EditorHost)
+    runs-on: macos-14
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+          submodules: false
+
+      - name: Build the host
+        run: |
+          set -euo pipefail
+          git submodule update --init --depth 1 source/JUCE
+          host="$(./scripts/macos/build_vst3_host.sh "${RUNNER_TEMP}/vst3host" | sed -n 's/^VST3_HOST=//p')"
+          app="${host%/Contents/MacOS/*}"
+          mkdir -p "${RUNNER_TEMP}/out"
+          ditto -c -k --keepParent "${app}" "${RUNNER_TEMP}/out/mdmmVst3EditorHost-macOS.zip"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: macos-vst3host
+          path: ${{ runner.temp }}/out/mdmmVst3EditorHost-macOS.zip
+          if-no-files-found: error
+          retention-days: 14
 
   smoke:
     name: Start the standalones, VST3s and AUs (${{ matrix.os }})
-    needs: build
+    needs: [build, vst3host]
     strategy:
       fail-fast: false
       matrix:
@@ -92,19 +152,24 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
+          fetch-depth: 1
           submodules: false
-
-      - name: Build the minimal VST3 host (scripts/vst3EditorHost)
-        run: ./scripts/macos/build_vst3_host.sh "${RUNNER_TEMP}/vst3host" >> "${GITHUB_ENV}"
 
       - uses: actions/download-artifact@v4
         with:
-          name: macos-mdmm-start-test-package
+          name: macos-vst3host
+          path: ${{ runner.temp }}/vst3host
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: macos-mdmm-universal
           path: ${{ runner.temp }}/macos-mdmm
 
-      - name: Unpack the package
+      - name: Unpack the package and the host
         run: |
           set -euo pipefail
+          ditto -x -k "${RUNNER_TEMP}/vst3host/mdmmVst3EditorHost-macOS.zip" "${RUNNER_TEMP}/vst3host"
+          echo "VST3_HOST=${RUNNER_TEMP}/vst3host/mdmmVst3EditorHost.app/Contents/MacOS/mdmmVst3EditorHost" >> "${GITHUB_ENV}"
           zip="$(find "${RUNNER_TEMP}/macos-mdmm" -name 'Gearmulator-Elektron-macOS-*.zip' | head -n 1)"
           ditto -x -k "${zip}" "${RUNNER_TEMP}/package"
           dir="$(find "${RUNNER_TEMP}/package" -mindepth 1 -maxdepth 1 -type d | head -n 1)"
