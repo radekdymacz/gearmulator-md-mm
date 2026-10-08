@@ -3068,6 +3068,14 @@ namespace
 			std::printf("  %-12s %4d | %4zu %5zu %6.0f | %5.1f %5.1f | %5.0f | %5.1f\n", _name, n, dumps, count(0xb0), double(_rig.bytesToMachine - b0) / secs,
 				double(h2) / secs, double(h4) / secs, hotMs, worst4);
 			// a sample's SDS runs as long as its handshake takes (by design, the machine paces it): not budgeted
+			if(std::getenv("ACTIONS_KINDS"))
+			{
+				std::printf("     kinds:");
+				for(const auto& [kk, vv] : _rig.messageKinds)
+					if(const auto d = vv - (kinds0.count(kk) ? kinds0.at(kk) : 0))
+						std::printf(" %02x:%zu", kk, d);
+				std::puts("");
+			}
 			if(budget >= 0 && _edit && std::string(_name) != "sampleLoad")
 				check(hotMs <= budget, std::string(_name) + ": hot time within the budget (" + std::to_string(int(hotMs)) + " ms/s, budget " + std::to_string(int(budget)) + ")");
 		};

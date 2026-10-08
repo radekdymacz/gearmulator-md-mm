@@ -636,17 +636,14 @@ namespace mdDesk
 				if(canSendSysex() && (!m_session.state().globalSlot || *m_session.state().globalSlot == ref.slot))
 					sendSysex(ed::mdSetActiveGlobal(ref.slot));
 			}
-			else
-			{
-				// Live edits only: the firmware takes MIDI in order, so the slot asked for now
-				// shows them.
-				m_session.requestGlobal(ref.slot);
-			}
-			// The global's read-back is asked for with it (pushGlobal, requestGlobal): not paced.
+			// A dump's read-back is asked for with it (pushGlobal). Live edits only (the tempo, routing): read back once
+			// the gesture is quiet (pumpPushes), as a pattern's: B-014, a tempo drag asked for the global at every value,
+			// and those requests held its tempo values in the stream (one a 100 ms, the newest wins).
 			auto& push = m_pushes[ref];
 			push.slot.abandon();
 			push.slot.want(_change.after, now(), pushPolicy(ref.kind));
-			push.slot.askedBack(now());
+			if(!delivery.notLive.empty())
+				push.slot.askedBack(now());
 			return ok();
 		}
 		}
