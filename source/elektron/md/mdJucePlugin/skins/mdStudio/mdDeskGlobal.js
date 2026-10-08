@@ -75,4 +75,4 @@ function globSend(f, v) {
 	else cmd("globalSet", { field: f, v });
 }
 Bridge.onMessage(m => { if (GP.open && (m.type === "doc" && m.kind === "global" || m.type === "result" && !m.ok)) setTimeout(drawGlobal, 20); });
-Keys.bind({ keys: ["Escape"], group: "Anywhere", does: "Close the GLOBAL settings", when: () => GP.open, run: () => closeGlobal() });
+Keys.bind({ id: "close-global", scope: "any", keys: ["Escape"], group: "Anywhere", does: "Close the GLOBAL settings", when: () => GP.open, run: () => closeGlobal() });

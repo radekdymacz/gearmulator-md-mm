@@ -94,7 +94,7 @@ list(APPEND SOURCES
 	skins/shared/deskDocs.js
 	skins/shared/deskOverlay.js skins/shared/deskOverlayTest.js
 	skins/shared/deskGen.js skins/shared/deskGenTest.js
-	skins/shared/deskKeys.js skins/shared/deskKeysTest.js
+	skins/shared/deskKeys.js skins/shared/deskKeysTest.js skins/shared/deskKeymapTest.js
 	skins/shared/deskTogglePaint.js skins/shared/deskTogglePaintTest.js
 	skins/shared/deskCompat.js skins/shared/deskCompatTest.js
 	skins/shared/deskZoom.js)
@@ -155,7 +155,8 @@ set(MM_NODE_TESTS "skins/mmStudio/mmConvertTest.js" "skins/mmStudio/mmKeysTest.j
 	"skins/mmStudio/mmViewTest.js" "skins/mmStudio/mmViewFixture.json")
 # the shared page files' node tests (never in a glob, so never shipped); checked to be there
 set(SHARED_NODE_TESTS "skins/shared/deskGenTest.js" "skins/shared/deskOverlayTest.js" "skins/shared/deskBridgeTest.js"
-	"skins/shared/deskTogglePaintTest.js" "skins/shared/deskKeysTest.js" "skins/shared/deskModalTest.js" "skins/shared/deskCompatTest.js")
+	"skins/shared/deskTogglePaintTest.js" "skins/shared/deskKeysTest.js" "skins/shared/deskModalTest.js" "skins/shared/deskCompatTest.js"
+	"skins/shared/deskKeymapTest.js")
 foreach(test ${MD_NODE_TESTS} ${MD_SELF_TESTS} ${MM_SELF_TESTS} ${MM_NODE_TESTS} ${SHARED_NODE_TESTS} ${MD_SHARED_PAGE_FILES})
 	if(NOT EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/${test}")
 		message(FATAL_ERROR "${test} is not there: update the editors' test lists in ${CMAKE_CURRENT_LIST_FILE}")
@@ -402,6 +403,9 @@ function(mdmm_plugin_targets)
 		# the keys' one gating rule (both editors): no page shortcut behind an open dialog or panel
 		add_test(NAME deskKeysPageTest COMMAND ${GEARMULATOR_NODE} ${CMAKE_CURRENT_SOURCE_DIR}/skins/shared/deskKeysTest.js)
 		set_tests_properties(deskKeysPageTest PROPERTIES LABELS "UnitTest" TIMEOUT 60)
+		# both editors' key maps as data (DESIGN-keymap.md K0): ids, the MD / MM parity, doc/modern-ux/keymap.json and the guide's tables
+		add_test(NAME deskKeymapPageTest COMMAND ${GEARMULATOR_NODE} ${CMAKE_CURRENT_SOURCE_DIR}/skins/shared/deskKeymapTest.js)
+		set_tests_properties(deskKeymapPageTest PROPERTIES LABELS "UnitTest" TIMEOUT 60)
 		# the question dialog's queue (both editors): nothing replaces it, a plug-in notice is always answered
 		add_test(NAME deskModalPageTest COMMAND ${GEARMULATOR_NODE} ${CMAKE_CURRENT_SOURCE_DIR}/skins/shared/deskModalTest.js)
 		set_tests_properties(deskModalPageTest PROPERTIES LABELS "UnitTest" TIMEOUT 60)

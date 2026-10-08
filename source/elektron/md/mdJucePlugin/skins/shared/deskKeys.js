@@ -4,7 +4,10 @@
 const Keys = (() => {
 	const list = [];
 	const norm = e => e.key === " " ? "Space" : e.key.length === 1 ? e.key.toUpperCase() : e.key;
-	/* {keys: ["Z"], mod: "cmd"|"alt"|"shift"|"cmd+shift"|"", group, does (text, or () => text when it shows state), when?: () => bool,
+	/* {id: "undo" (stable and unique in a page's map: the guide, the parity test of both editors and a later rebinding
+	   name an entry by it), scope: "any" or the workspaces it acts in ("seq sampler"; "library": the kit library and
+	   the pattern chooser; "control"), area?: "Steps" (a pointer gesture: where on the page; keys then name what is
+	   pressed, ["step"]), keys: ["Z"], mod: "cmd"|"alt"|"shift"|"cmd+shift"|"", group, does (text, or () => text when it shows state), when?: () => bool,
 	   run?: e => void, field?: true, hidden?: true (dispatched, but another entry describes it in the ? overlay),
 	   modal?: "keyspop" (it also runs while that dialog is the top one; every other entry is off while one is open)
 	     or "panel" (it also runs over any panel: the library, GLOBAL, AUDIO / MIDI; never over a question),
@@ -31,5 +34,6 @@ const Keys = (() => {
 		}
 	});
 	const label = b => [...(b.mod ? b.mod.split("+").map(x => ({ cmd: "⌘", alt: "⌥", shift: "⇧" }[x])) : []), b.keys.map(k => ({ Space: "Space", ArrowLeft: "←", ArrowRight: "→", ArrowUp: "↑", ArrowDown: "↓", Escape: "Esc", Delete: "Delete", Backspace: "⌫", Enter: "Enter" }[k] || k)).join(" / ")].join("");
-	return { bind, list: () => list.slice(), label, free };
+	const byId = id => list.find(b => b.id === id) || null;
+	return { bind, list: () => list.slice(), byId, label, free };
 })();

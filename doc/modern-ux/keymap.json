@@ -1,0 +1,1835 @@
+{
+	"about": "Both editors' key maps (scripts/keymap-export.js; doc/modern-ux/DESIGN-keymap.md). Generated: do not edit.",
+	"md": [
+		{
+			"id": "keys-help",
+			"scope": "any",
+			"keys": [
+				"?"
+			],
+			"mod": "",
+			"group": "Help",
+			"does": "This list of keys",
+			"modal": "keyspop",
+			"dispatched": true
+		},
+		{
+			"id": "keys-help-close",
+			"scope": "any",
+			"keys": [
+				"Escape"
+			],
+			"mod": "",
+			"group": "Help",
+			"does": "Close the list of keys",
+			"dispatched": true
+		},
+		{
+			"id": "step-paint",
+			"scope": "seq",
+			"keys": [
+				"step"
+			],
+			"mod": "",
+			"group": "Sequence",
+			"does": "Click: trig on / off. Drag: every step crossed becomes what the first became (one undo step)",
+			"area": "Steps"
+		},
+		{
+			"id": "lane-draw",
+			"scope": "seq",
+			"keys": [
+				"lock lane"
+			],
+			"mod": "",
+			"group": "Sequence",
+			"does": "Drag over the bars: lock the lane's parameter on each step with a trig",
+			"area": "Lock lane"
+		},
+		{
+			"id": "page-key",
+			"scope": "seq sampler",
+			"keys": [
+				"Page key"
+			],
+			"mod": "shift",
+			"group": "Sequence",
+			"does": "Click: the previous page (a plain click: the next)",
+			"area": "Steps"
+		},
+		{
+			"id": "value-drag",
+			"scope": "sound mix sampler control",
+			"keys": [
+				"value"
+			],
+			"mod": "",
+			"group": "Values",
+			"does": "Drag up / down or sideways: change it, a value a pixel",
+			"area": "Values"
+		},
+		{
+			"id": "value-fine",
+			"scope": "sound mix sampler control",
+			"keys": [
+				"value"
+			],
+			"mod": "shift",
+			"group": "Values",
+			"does": "Drag: fine, a quarter as fast",
+			"area": "Values"
+		},
+		{
+			"id": "value-wheel",
+			"scope": "sound mix sampler control",
+			"keys": [
+				"wheel on a value"
+			],
+			"mod": "",
+			"group": "Values",
+			"does": "One step a notch (⇧: 10)",
+			"area": "Values"
+		},
+		{
+			"id": "value-reset",
+			"scope": "sound mix sampler control",
+			"keys": [
+				"double-click a value"
+			],
+			"mod": "",
+			"group": "Values",
+			"does": "Back to its default (64; VOL 100)",
+			"area": "Values"
+		},
+		{
+			"id": "tempo-drag",
+			"scope": "any",
+			"keys": [
+				"tempo"
+			],
+			"mod": "",
+			"group": "Transport",
+			"does": "Drag up or down: the tempo, half a BPM a pixel (⇧: a tenth)",
+			"area": "Top bar"
+		},
+		{
+			"id": "lcd-value",
+			"scope": "any",
+			"keys": [
+				"LCD value"
+			],
+			"mod": "",
+			"group": "Anywhere",
+			"does": "Click: its next value; ⇧-click the previous one. LEN, SPD, SONG: drag up or down to step through them",
+			"area": "LCD"
+		},
+		{
+			"id": "lcd-len-inner",
+			"scope": "any",
+			"keys": [
+				"LEN"
+			],
+			"mod": "alt",
+			"group": "Anywhere",
+			"does": "Click or drag: the pattern's inner length instead of its total",
+			"area": "LCD"
+		},
+		{
+			"id": "header-menu",
+			"scope": "any",
+			"keys": [
+				"right-click the header"
+			],
+			"mod": "",
+			"group": "Anywhere",
+			"does": "The editor's menu: skins, page zoom, updates, settings",
+			"area": "Top bar"
+		},
+		{
+			"id": "gen-value",
+			"scope": "seq",
+			"keys": [
+				"GEN value"
+			],
+			"mod": "",
+			"group": "Sequence",
+			"does": "Click: +1; ⇧-click: −1; drag up or down, or the wheel (⇧: 10)",
+			"area": "GEN bar"
+		},
+		{
+			"id": "rkey",
+			"scope": "any",
+			"keys": [
+				"R key"
+			],
+			"mod": "",
+			"group": "Selected track",
+			"does": "Click: randomise the selected track, as R",
+			"area": "GEN bar"
+		},
+		{
+			"id": "ms-click",
+			"scope": "any",
+			"keys": [
+				"M / S key"
+			],
+			"mod": "",
+			"group": "Selected track",
+			"does": "Click: mute / solo that track",
+			"area": "Tracks"
+		},
+		{
+			"id": "song-steppers",
+			"scope": "song",
+			"keys": [
+				"row value − / +"
+			],
+			"mod": "shift",
+			"group": "Song",
+			"does": "Click: ten at a time",
+			"area": "Song"
+		},
+		{
+			"id": "song-drag",
+			"scope": "song",
+			"keys": [
+				"drag a pattern pad or a row"
+			],
+			"mod": "",
+			"group": "Song",
+			"does": "Onto the arrangement: a new row there, or the row moved",
+			"area": "Song"
+		},
+		{
+			"id": "chop-start",
+			"scope": "sampler",
+			"keys": [
+				"drag a chop step"
+			],
+			"mod": "",
+			"group": "Sampler",
+			"does": "Up or down: where its slice starts",
+			"area": "Sampler"
+		},
+		{
+			"id": "chop-reverse",
+			"scope": "sampler",
+			"keys": [
+				"chop step"
+			],
+			"mod": "alt",
+			"group": "Sampler",
+			"does": "Click: play its slice backwards",
+			"area": "Sampler"
+		},
+		{
+			"id": "chop-retrig",
+			"scope": "sampler",
+			"keys": [
+				"chop step"
+			],
+			"mod": "shift",
+			"group": "Sampler",
+			"does": "Click: a retrig on it",
+			"area": "Sampler"
+		},
+		{
+			"id": "lib-slot-click",
+			"scope": "library",
+			"keys": [
+				"kit slot"
+			],
+			"mod": "",
+			"group": "Kit library, pattern chooser",
+			"does": "Click: load it (⌥-click: only select it). Double-click: rename",
+			"area": "Library"
+		},
+		{
+			"id": "lib-pattern-now",
+			"scope": "library",
+			"keys": [
+				"pattern slot"
+			],
+			"mod": "shift",
+			"group": "Kit library, pattern chooser",
+			"does": "Click: go there at once, not at the end of the pattern",
+			"area": "Library"
+		},
+		{
+			"id": "lib-slot-drag",
+			"scope": "library",
+			"keys": [
+				"drag a slot onto another"
+			],
+			"mod": "",
+			"group": "Kit library, pattern chooser",
+			"does": "Copy it there",
+			"area": "Library"
+		},
+		{
+			"id": "randomise-track",
+			"scope": "any",
+			"keys": [
+				"R"
+			],
+			"mod": "",
+			"group": "Selected track",
+			"does": "Randomise the selected track: on Sound a fresh random sound (MUTATE, from the sound before the trial); everywhere else a new GEN variation, a new seed or random hits and rotation",
+			"code": "KeyR",
+			"dispatched": true
+		},
+		{
+			"id": "randomise-all",
+			"scope": "any",
+			"keys": [
+				"R"
+			],
+			"mod": "alt",
+			"group": "All",
+			"does": "Randomise every track: on Sound the whole kit, everywhere else every track's GEN spec over the whole pattern",
+			"code": "KeyR",
+			"dispatched": true
+		},
+		{
+			"id": "gen-value-all",
+			"scope": "seq",
+			"keys": [
+				"GEN value"
+			],
+			"mod": "alt",
+			"group": "All",
+			"does": "Change a GEN value: every track's spec, the whole pattern (one pattern change, one undo step per run)",
+			"area": "GEN bar"
+		},
+		{
+			"id": "rkey-all",
+			"scope": "any",
+			"keys": [
+				"R key"
+			],
+			"mod": "alt",
+			"group": "All",
+			"does": "Click: randomise every track (Sound: the whole kit; MIDI and CTR tracks are left alone, VOL is kept)",
+			"area": "GEN bar"
+		},
+		{
+			"id": "rotate",
+			"scope": "seq",
+			"keys": [
+				"ArrowLeft",
+				"ArrowRight"
+			],
+			"mod": "alt",
+			"group": "Selected track",
+			"does": "Sequence: rotate the selected track one step earlier / later: trigs, accents and locks, wrapping at the length. Presses while ⌥ is down are one undo step. The one Alt that is not \"all\": FUNCTION + arrows on the machine",
+			"dispatched": true
+		},
+		{
+			"id": "unmute-all",
+			"scope": "any",
+			"keys": [
+				"0"
+			],
+			"mod": "",
+			"group": "All",
+			"does": "Unmute and unsolo every track",
+			"dispatched": true
+		},
+		{
+			"id": "unmark-paste",
+			"scope": "seq",
+			"keys": [
+				"Escape"
+			],
+			"mod": "",
+			"group": "Sequence",
+			"does": "Unmark the tracks marked for paste",
+			"dispatched": true
+		},
+		{
+			"id": "step-fill-2",
+			"scope": "seq",
+			"keys": [
+				"step"
+			],
+			"mod": "cmd",
+			"group": "Sequence",
+			"does": "Click: every 2nd step from there to the end on (from a trig: off), one undo step",
+			"area": "Steps"
+		},
+		{
+			"id": "step-fill-4",
+			"scope": "seq",
+			"keys": [
+				"step"
+			],
+			"mod": "cmd+shift",
+			"group": "Sequence",
+			"does": "Click: every 4th step from there to the end",
+			"area": "Steps"
+		},
+		{
+			"id": "step-wheel-lock",
+			"scope": "seq",
+			"keys": [
+				"wheel on a step"
+			],
+			"mod": "",
+			"group": "Sequence",
+			"does": "Move its lock in the lane's parameter, 4 a notch (⇧: 1)",
+			"area": "Steps"
+		},
+		{
+			"id": "lane-ramp",
+			"scope": "seq",
+			"keys": [
+				"lock lane"
+			],
+			"mod": "shift",
+			"group": "Sequence",
+			"does": "Drag: a ramp, a straight line from the press to the release (one undo step)",
+			"area": "Lock lane"
+		},
+		{
+			"id": "track-mark-paste",
+			"scope": "seq",
+			"keys": [
+				"track header"
+			],
+			"mod": "shift",
+			"group": "Sequence",
+			"does": "Click: mark the track for paste; ⌘V then pastes into every marked track (one undo step)",
+			"area": "Tracks"
+		},
+		{
+			"id": "cut",
+			"scope": "seq",
+			"keys": [
+				"X"
+			],
+			"mod": "cmd",
+			"group": "Sequence",
+			"does": "Cut the selected steps (copy, then clear; one undo step)",
+			"dispatched": true
+		},
+		{
+			"id": "duplicate",
+			"scope": "seq",
+			"keys": [
+				"D"
+			],
+			"mod": "cmd",
+			"group": "Sequence",
+			"does": "Duplicate the selected steps right after themselves (the clipboard stays); again: once more",
+			"dispatched": true
+		},
+		{
+			"id": "deselect",
+			"scope": "seq",
+			"keys": [
+				"Escape"
+			],
+			"mod": "",
+			"group": "Sequence",
+			"does": "Clear the step selection",
+			"dispatched": true
+		},
+		{
+			"id": "step-select",
+			"scope": "seq",
+			"keys": [
+				"step"
+			],
+			"mod": "alt",
+			"group": "Sequence",
+			"does": "Click: select the step (⌘V pastes there). Drag: select steps × tracks. Drag the selection: a copy where you let go",
+			"area": "Steps"
+		},
+		{
+			"id": "ruler-select",
+			"scope": "seq",
+			"keys": [
+				"step ruler"
+			],
+			"mod": "",
+			"group": "Sequence",
+			"does": "Click or drag: select steps of the selected track (down over the grid: more tracks); ⇧-click extends",
+			"area": "Steps"
+		},
+		{
+			"id": "close-dialog",
+			"scope": "any",
+			"keys": [
+				"Escape"
+			],
+			"mod": "",
+			"group": "Anywhere",
+			"does": "Close the dialog",
+			"field": true,
+			"dispatched": true
+		},
+		{
+			"id": "undo",
+			"scope": "any",
+			"keys": [
+				"Z"
+			],
+			"mod": "cmd",
+			"group": "Anywhere",
+			"does": "Undo",
+			"modal": "panel",
+			"dispatched": true
+		},
+		{
+			"id": "redo",
+			"scope": "any",
+			"keys": [
+				"Z"
+			],
+			"mod": "cmd+shift",
+			"group": "Anywhere",
+			"does": "Redo",
+			"modal": "panel",
+			"dispatched": true
+		},
+		{
+			"id": "redo-y",
+			"scope": "any",
+			"keys": [
+				"Y"
+			],
+			"mod": "cmd",
+			"group": "Anywhere",
+			"does": "Redo",
+			"modal": "panel",
+			"dispatched": true
+		},
+		{
+			"id": "copy",
+			"scope": "any",
+			"keys": [
+				"C"
+			],
+			"mod": "cmd",
+			"group": "Anywhere",
+			"does": "Copy (Sequence: the selected steps, or the track page shown; Sound: the sound; Song: the row)",
+			"dispatched": true
+		},
+		{
+			"id": "paste",
+			"scope": "any",
+			"keys": [
+				"V"
+			],
+			"mod": "cmd",
+			"group": "Anywhere",
+			"does": "Paste (Sequence: at the selected step, the block from its first step and track)",
+			"dispatched": true
+		},
+		{
+			"id": "leave-learn",
+			"scope": "control",
+			"keys": [
+				"Escape"
+			],
+			"mod": "",
+			"group": "Anywhere",
+			"does": "Leave LEARN",
+			"mapping": true,
+			"dispatched": true
+		},
+		{
+			"id": "play-stop",
+			"scope": "any",
+			"keys": [
+				"Space"
+			],
+			"mod": "",
+			"group": "Transport",
+			"does": "Play / stop",
+			"dispatched": true
+		},
+		{
+			"id": "record",
+			"scope": "any",
+			"keys": [
+				"Space"
+			],
+			"mod": "alt",
+			"group": "Transport",
+			"does": "Live recording (RECORD + PLAY): Alt + play, the other Alt that is not \"all\"",
+			"code": "Space",
+			"dispatched": true
+		},
+		{
+			"id": "workspace-1",
+			"scope": "any",
+			"keys": [
+				"1"
+			],
+			"mod": "",
+			"group": "Workspaces",
+			"does": "Sequence",
+			"dispatched": true
+		},
+		{
+			"id": "workspace-2",
+			"scope": "any",
+			"keys": [
+				"2"
+			],
+			"mod": "",
+			"group": "Workspaces",
+			"does": "Sound",
+			"dispatched": true
+		},
+		{
+			"id": "workspace-3",
+			"scope": "any",
+			"keys": [
+				"3"
+			],
+			"mod": "",
+			"group": "Workspaces",
+			"does": "Mix",
+			"dispatched": true
+		},
+		{
+			"id": "workspace-4",
+			"scope": "any",
+			"keys": [
+				"4"
+			],
+			"mod": "",
+			"group": "Workspaces",
+			"does": "Sampler",
+			"dispatched": true
+		},
+		{
+			"id": "workspace-5",
+			"scope": "any",
+			"keys": [
+				"5"
+			],
+			"mod": "",
+			"group": "Workspaces",
+			"does": "Song",
+			"dispatched": true
+		},
+		{
+			"id": "workspace-6",
+			"scope": "any",
+			"keys": [
+				"6"
+			],
+			"mod": "",
+			"group": "Workspaces",
+			"does": "Control",
+			"mapping": true,
+			"dispatched": true
+		},
+		{
+			"id": "page-prev-next",
+			"scope": "seq sampler",
+			"keys": [
+				"[",
+				"]"
+			],
+			"mod": "",
+			"group": "Sequence",
+			"does": "Previous / next page",
+			"dispatched": true
+		},
+		{
+			"id": "delete",
+			"scope": "seq song",
+			"keys": [
+				"Delete",
+				"Backspace"
+			],
+			"mod": "",
+			"group": "Sequence",
+			"does": "Clear the selected steps (Song: delete the row)",
+			"dispatched": true
+		},
+		{
+			"id": "clear-pattern",
+			"scope": "seq",
+			"keys": [
+				"Delete",
+				"Backspace"
+			],
+			"mod": "alt",
+			"group": "All",
+			"does": "Sequence: clear the whole pattern: every track's trigs and locks",
+			"dispatched": true
+		},
+		{
+			"id": "clr-key-all",
+			"scope": "any",
+			"keys": [
+				"CLR"
+			],
+			"mod": "alt",
+			"group": "All",
+			"does": "Click: clear the whole pattern, every track's trigs and locks (one undo step)",
+			"area": "Top bar"
+		},
+		{
+			"id": "song-row",
+			"scope": "song",
+			"keys": [
+				"ArrowLeft",
+				"ArrowRight"
+			],
+			"mod": "",
+			"group": "Song",
+			"does": "Previous / next row",
+			"dispatched": true
+		},
+		{
+			"id": "step-accent",
+			"scope": "seq",
+			"keys": [
+				"step"
+			],
+			"mod": "shift",
+			"group": "Sequence",
+			"does": "Click: accent",
+			"area": "Steps"
+		},
+		{
+			"id": "step-slide",
+			"scope": "seq",
+			"keys": [
+				"step"
+			],
+			"mod": "alt+shift",
+			"group": "Sequence",
+			"does": "Click: slide",
+			"area": "Steps"
+		},
+		{
+			"id": "lane-erase",
+			"scope": "seq",
+			"keys": [
+				"lock lane"
+			],
+			"mod": "alt",
+			"group": "Sequence",
+			"does": "Drag: erase locks",
+			"area": "Lock lane"
+		},
+		{
+			"id": "lane-clear-all",
+			"scope": "seq",
+			"keys": [
+				"lock lane clear"
+			],
+			"mod": "alt",
+			"group": "Sequence",
+			"does": "Click: clear every lock of the track (all its parameters)",
+			"area": "Lock lane"
+		},
+		{
+			"id": "value-up-down",
+			"scope": "any",
+			"keys": [
+				"ArrowUp",
+				"ArrowDown"
+			],
+			"mod": "",
+			"group": "Values",
+			"does": "A focused value, tempo or bar: one step (⇧: fine or ×10)"
+		},
+		{
+			"id": "value-left-right",
+			"scope": "any",
+			"keys": [
+				"ArrowLeft",
+				"ArrowRight"
+			],
+			"mod": "",
+			"group": "Values",
+			"does": "A focused value: one step"
+		},
+		{
+			"id": "mkey-prepare",
+			"scope": "any",
+			"keys": [
+				"M key"
+			],
+			"mod": "shift",
+			"group": "Anywhere",
+			"does": "Click: prepare that track's mute (+ / X); applied when ⇧ is let go",
+			"area": "Tracks"
+		},
+		{
+			"id": "control-all",
+			"scope": "sound mix",
+			"keys": [
+				"drag a value"
+			],
+			"mod": "alt",
+			"group": "All",
+			"does": "Control All: move that knob on every track (FUNCTION + knob on the machine)",
+			"area": "Values"
+		},
+		{
+			"id": "mute-track",
+			"scope": "any",
+			"keys": [
+				"M"
+			],
+			"mod": "",
+			"group": "Selected track",
+			"does": "Mute or unmute the selected track",
+			"code": "KeyM",
+			"dispatched": true
+		},
+		{
+			"id": "mute-all",
+			"scope": "any",
+			"keys": [
+				"M"
+			],
+			"mod": "alt",
+			"group": "All",
+			"does": "Mute every track; when none is audible, unmute every track",
+			"code": "KeyM",
+			"dispatched": true
+		},
+		{
+			"id": "track-prev-next",
+			"scope": "any",
+			"keys": [
+				"ArrowUp",
+				"ArrowDown"
+			],
+			"mod": "",
+			"group": "Selected track",
+			"does": "Select the previous / next track (a focused value keeps ↑ / ↓ for itself)",
+			"dispatched": true
+		},
+		{
+			"id": "ms-paint",
+			"scope": "any",
+			"keys": [
+				"drag M / S keys"
+			],
+			"mod": "",
+			"group": "Anywhere",
+			"does": "Mute (solo) or unmute every track the drag crosses, as the first key became",
+			"area": "Tracks"
+		},
+		{
+			"id": "tap-tempo",
+			"scope": "any",
+			"keys": [
+				"T",
+				"B"
+			],
+			"mod": "",
+			"group": "Transport",
+			"does": "Tap tempo (the average of the last taps; B as in the Monomachine Editor)",
+			"dispatched": true
+		},
+		{
+			"id": "piano-run",
+			"scope": "any",
+			"keys": [
+				"A",
+				"S",
+				"D",
+				"F",
+				"G",
+				"H",
+				"J",
+				"K",
+				"L"
+			],
+			"mod": "",
+			"group": "Playing",
+			"does": "",
+			"hidden": true,
+			"field": true,
+			"dispatched": true
+		},
+		{
+			"id": "octave-down",
+			"scope": "any",
+			"keys": [
+				"Z"
+			],
+			"mod": "",
+			"group": "Playing",
+			"does": "",
+			"hidden": true,
+			"field": true,
+			"dispatched": true
+		},
+		{
+			"id": "octave-up",
+			"scope": "any",
+			"keys": [
+				"X"
+			],
+			"mod": "",
+			"group": "Playing",
+			"does": "",
+			"hidden": true,
+			"field": true,
+			"dispatched": true
+		},
+		{
+			"id": "velocity-down",
+			"scope": "any",
+			"keys": [
+				"C"
+			],
+			"mod": "",
+			"group": "Playing",
+			"does": "",
+			"hidden": true,
+			"field": true,
+			"dispatched": true
+		},
+		{
+			"id": "velocity-up",
+			"scope": "any",
+			"keys": [
+				"V"
+			],
+			"mod": "",
+			"group": "Playing",
+			"does": "",
+			"hidden": true,
+			"field": true,
+			"dispatched": true
+		},
+		{
+			"id": "piano-white",
+			"scope": "any",
+			"keys": [
+				"A S D F G H J K L"
+			],
+			"mod": "",
+			"group": "Playing",
+			"does": "Play the selected track: white keys C D E F G A B C D, from any workspace. ROM and RAM-P machines are pitched (PTCH, 3 steps a semitone; given back when the key is let go), others play at their own pitch. While recording: records the trig"
+		},
+		{
+			"id": "octave",
+			"scope": "any",
+			"keys": [
+				"Z",
+				"X"
+			],
+			"mod": "",
+			"group": "Playing",
+			"does": "Octave down / up, −2 to +2"
+		},
+		{
+			"id": "velocity",
+			"scope": "any",
+			"keys": [
+				"C",
+				"V"
+			],
+			"mod": "",
+			"group": "Playing",
+			"does": "Velocity down / up: 20 40 60 80 100 127"
+		},
+		{
+			"id": "lib-open",
+			"scope": "library",
+			"keys": [
+				"Enter / Space on KIT or the pattern"
+			],
+			"mod": "",
+			"group": "Kit library, pattern chooser",
+			"does": "Open the kit library / pattern chooser"
+		},
+		{
+			"id": "lib-move",
+			"scope": "library",
+			"keys": [
+				"Arrows"
+			],
+			"mod": "",
+			"group": "Kit library, pattern chooser",
+			"does": "Move (kits: without loading)"
+		},
+		{
+			"id": "lib-load",
+			"scope": "library",
+			"keys": [
+				"Enter"
+			],
+			"mod": "",
+			"group": "Kit library, pattern chooser",
+			"does": "Kits: load (a click loads too). Patterns: queue"
+		},
+		{
+			"id": "lib-bank",
+			"scope": "library",
+			"keys": [
+				"A–H"
+			],
+			"mod": "",
+			"group": "Kit library, pattern chooser",
+			"does": "Patterns: jump to a bank"
+		},
+		{
+			"id": "lib-rename",
+			"scope": "library",
+			"keys": [
+				"F2"
+			],
+			"mod": "",
+			"group": "Kit library, pattern chooser",
+			"does": "Kits: rename (or double-click)"
+		},
+		{
+			"id": "lib-clear",
+			"scope": "library",
+			"keys": [
+				"Delete"
+			],
+			"mod": "",
+			"group": "Kit library, pattern chooser",
+			"does": "Clear the slot"
+		},
+		{
+			"id": "lib-copy-paste",
+			"scope": "library",
+			"keys": [
+				"C / V"
+			],
+			"mod": "cmd",
+			"group": "Kit library, pattern chooser",
+			"does": "Copy / paste the slot"
+		},
+		{
+			"id": "lib-undo",
+			"scope": "library",
+			"keys": [
+				"Z"
+			],
+			"mod": "cmd",
+			"group": "Kit library, pattern chooser",
+			"does": "Undo a paste, clear or rename"
+		},
+		{
+			"id": "lib-close",
+			"scope": "library",
+			"keys": [
+				"Escape"
+			],
+			"mod": "",
+			"group": "Kit library, pattern chooser",
+			"does": "Close"
+		},
+		{
+			"id": "close-global",
+			"scope": "any",
+			"keys": [
+				"Escape"
+			],
+			"mod": "",
+			"group": "Anywhere",
+			"does": "Close the GLOBAL settings",
+			"dispatched": true
+		},
+		{
+			"id": "audio-settings",
+			"scope": "any",
+			"keys": [
+				","
+			],
+			"mod": "",
+			"group": "Anywhere",
+			"does": "AUDIO / MIDI settings (also in the engine menu)"
+		}
+	],
+	"mm": [
+		{
+			"id": "keys-help",
+			"scope": "any",
+			"keys": [
+				"?"
+			],
+			"mod": "",
+			"group": "Help",
+			"does": "This list of keys",
+			"modal": "keyspop",
+			"dispatched": true
+		},
+		{
+			"id": "keys-help-close",
+			"scope": "any",
+			"keys": [
+				"Escape"
+			],
+			"mod": "",
+			"group": "Help",
+			"does": "Close the list of keys",
+			"dispatched": true
+		},
+		{
+			"id": "piano-run",
+			"scope": "any",
+			"keys": [
+				"A",
+				"S",
+				"D",
+				"F",
+				"G",
+				"H",
+				"J",
+				"K",
+				"L",
+				"W",
+				"E",
+				"T",
+				"Y",
+				"U",
+				"O",
+				"P"
+			],
+			"mod": "",
+			"group": "Playing",
+			"does": "",
+			"hidden": true,
+			"field": true,
+			"dispatched": true
+		},
+		{
+			"id": "octave-down",
+			"scope": "any",
+			"keys": [
+				"Z"
+			],
+			"mod": "",
+			"group": "Playing",
+			"does": "",
+			"hidden": true,
+			"field": true,
+			"dispatched": true
+		},
+		{
+			"id": "octave-up",
+			"scope": "any",
+			"keys": [
+				"X"
+			],
+			"mod": "",
+			"group": "Playing",
+			"does": "",
+			"hidden": true,
+			"field": true,
+			"dispatched": true
+		},
+		{
+			"id": "velocity-down",
+			"scope": "any",
+			"keys": [
+				"C"
+			],
+			"mod": "",
+			"group": "Playing",
+			"does": "",
+			"hidden": true,
+			"field": true,
+			"dispatched": true
+		},
+		{
+			"id": "velocity-up",
+			"scope": "any",
+			"keys": [
+				"V"
+			],
+			"mod": "",
+			"group": "Playing",
+			"does": "",
+			"hidden": true,
+			"field": true,
+			"dispatched": true
+		},
+		{
+			"id": "piano-white",
+			"scope": "any",
+			"keys": [
+				"A S D F G H J K L"
+			],
+			"mod": "",
+			"group": "Playing",
+			"does": "Play the selected synth track: white keys C D E F G A B C D, real notes on its MIDI channel, from any workspace. While live recording the machine records them"
+		},
+		{
+			"id": "piano-black",
+			"scope": "any",
+			"keys": [
+				"W E T Y U O P"
+			],
+			"mod": "",
+			"group": "Playing",
+			"does": "The black keys above them: C♯ D♯ F♯ G♯ A♯ C♯ D♯, so the two rows play every semitone"
+		},
+		{
+			"id": "octave",
+			"scope": "any",
+			"keys": [
+				"Z",
+				"X"
+			],
+			"mod": "",
+			"group": "Playing",
+			"does": "Octave down / up, −3 to +3"
+		},
+		{
+			"id": "velocity",
+			"scope": "any",
+			"keys": [
+				"C",
+				"V"
+			],
+			"mod": "",
+			"group": "Playing",
+			"does": "Velocity down / up: 20 40 60 80 100 127"
+		},
+		{
+			"id": "mute-track",
+			"scope": "any",
+			"keys": [
+				"M"
+			],
+			"mod": "",
+			"group": "Selected track",
+			"does": "Mute or unmute the selected track",
+			"code": "KeyM",
+			"dispatched": true
+		},
+		{
+			"id": "mute-all",
+			"scope": "any",
+			"keys": [
+				"M"
+			],
+			"mod": "alt",
+			"group": "All",
+			"does": "Mute every track; when none is audible, unmute every track",
+			"code": "KeyM",
+			"dispatched": true
+		},
+		{
+			"id": "track-prev-next",
+			"scope": "any",
+			"keys": [
+				"ArrowUp",
+				"ArrowDown"
+			],
+			"mod": "",
+			"group": "Selected track",
+			"does": "Select the previous / next track of the side shown (a focused value keeps ↑ / ↓ for itself)",
+			"dispatched": true
+		},
+		{
+			"id": "tap-tempo",
+			"scope": "any",
+			"keys": [
+				"B"
+			],
+			"mod": "",
+			"group": "Transport",
+			"does": "Tap tempo (the average of the last taps; T plays F♯ here)",
+			"dispatched": true
+		},
+		{
+			"id": "rotate",
+			"scope": "seq",
+			"keys": [
+				"ArrowLeft",
+				"ArrowRight"
+			],
+			"mod": "alt",
+			"group": "Selected track",
+			"does": "Sequence: rotate the selected track one step earlier / later: notes, slides and locks, wrapping at the length. Presses while ⌥ is down are one undo step. The one Alt that is not \"all\": FUNCTION + arrows on the machine",
+			"dispatched": true
+		},
+		{
+			"id": "unmute-all",
+			"scope": "any",
+			"keys": [
+				"0"
+			],
+			"mod": "",
+			"group": "All",
+			"does": "Unmute and unsolo every track",
+			"dispatched": true
+		},
+		{
+			"id": "unmark-paste",
+			"scope": "seq",
+			"keys": [
+				"Escape"
+			],
+			"mod": "",
+			"group": "Sequence",
+			"does": "Unmark the tracks marked for paste",
+			"dispatched": true
+		},
+		{
+			"id": "roll-fill-2",
+			"scope": "seq",
+			"keys": [
+				"roll"
+			],
+			"mod": "cmd",
+			"group": "Sequence",
+			"does": "Click: every 2nd step from there to the end gets a note at that pitch (from a note: off), one undo step",
+			"area": "Roll"
+		},
+		{
+			"id": "roll-fill-4",
+			"scope": "seq",
+			"keys": [
+				"roll"
+			],
+			"mod": "cmd+shift",
+			"group": "Sequence",
+			"does": "Click: every 4th step from there to the end",
+			"area": "Roll"
+		},
+		{
+			"id": "lockstep-wheel",
+			"scope": "seq",
+			"keys": [
+				"wheel on a lock step"
+			],
+			"mod": "",
+			"group": "Sequence",
+			"does": "Move its lock in the lane's parameter, 4 a notch (⇧: 1)",
+			"area": "Lock lane"
+		},
+		{
+			"id": "lane-ramp",
+			"scope": "seq",
+			"keys": [
+				"lock lane"
+			],
+			"mod": "shift",
+			"group": "Sequence",
+			"does": "Drag: a ramp, a straight line from the press to the release (one undo step)",
+			"area": "Lock lane"
+		},
+		{
+			"id": "track-mark-paste",
+			"scope": "seq",
+			"keys": [
+				"track header"
+			],
+			"mod": "shift",
+			"group": "Sequence",
+			"does": "Click: mark the track for paste; ⌘V then pastes into every marked track (one undo step)",
+			"area": "Tracks"
+		},
+		{
+			"id": "randomise-track",
+			"scope": "any",
+			"keys": [
+				"R"
+			],
+			"mod": "",
+			"group": "Selected track",
+			"does": "Randomise the selected track: on Sound a fresh random sound (MUTATE, from the sound before the trial); everywhere else a new GEN variation: a new seed, or random hits and rotation",
+			"code": "KeyR",
+			"dispatched": true
+		},
+		{
+			"id": "randomise-all",
+			"scope": "any",
+			"keys": [
+				"R"
+			],
+			"mod": "alt",
+			"group": "All",
+			"does": "Randomise every track: on Sound every synth track's sound, everywhere else every GEN spec of the side shown over the whole pattern",
+			"code": "KeyR",
+			"dispatched": true
+		},
+		{
+			"id": "gen-value-all",
+			"scope": "seq",
+			"keys": [
+				"GEN value"
+			],
+			"mod": "alt",
+			"group": "All",
+			"does": "Change a GEN value: every track of the side shown, the whole pattern (one undo step per run)",
+			"area": "GEN bar"
+		},
+		{
+			"id": "rkey-all",
+			"scope": "any",
+			"keys": [
+				"R key"
+			],
+			"mod": "alt",
+			"group": "All",
+			"does": "Click: randomise every track (Sound: every synth track; VOL and TUNE stay)",
+			"area": "GEN bar"
+		},
+		{
+			"id": "lib-open",
+			"scope": "library",
+			"keys": [
+				"Enter / Space on KIT or the pattern"
+			],
+			"mod": "",
+			"group": "Kit library, pattern chooser",
+			"does": "Open the kit library / pattern chooser"
+		},
+		{
+			"id": "lib-move",
+			"scope": "library",
+			"keys": [
+				"Arrows"
+			],
+			"mod": "",
+			"group": "Kit library, pattern chooser",
+			"does": "Move (kits: without loading)"
+		},
+		{
+			"id": "lib-load",
+			"scope": "library",
+			"keys": [
+				"Enter"
+			],
+			"mod": "",
+			"group": "Kit library, pattern chooser",
+			"does": "Kits: load (a click loads too; Alt+click only selects). Patterns: queue (⇧-click or Now: at once)"
+		},
+		{
+			"id": "lib-bank",
+			"scope": "library",
+			"keys": [
+				"A–H"
+			],
+			"mod": "",
+			"group": "Kit library, pattern chooser",
+			"does": "Patterns: jump to a bank"
+		},
+		{
+			"id": "lib-rename",
+			"scope": "library",
+			"keys": [
+				"F2"
+			],
+			"mod": "",
+			"group": "Kit library, pattern chooser",
+			"does": "Kits: rename (or double-click)"
+		},
+		{
+			"id": "lib-clear",
+			"scope": "library",
+			"keys": [
+				"Delete"
+			],
+			"mod": "",
+			"group": "Kit library, pattern chooser",
+			"does": "Clear the slot"
+		},
+		{
+			"id": "lib-copy-paste",
+			"scope": "library",
+			"keys": [
+				"C / V"
+			],
+			"mod": "cmd",
+			"group": "Kit library, pattern chooser",
+			"does": "Copy / paste the slot"
+		},
+		{
+			"id": "lib-undo",
+			"scope": "library",
+			"keys": [
+				"Z"
+			],
+			"mod": "cmd",
+			"group": "Kit library, pattern chooser",
+			"does": "Undo a paste, clear or rename"
+		},
+		{
+			"id": "lib-close",
+			"scope": "library",
+			"keys": [
+				"Escape"
+			],
+			"mod": "",
+			"group": "Kit library, pattern chooser",
+			"does": "Close"
+		},
+		{
+			"id": "close-dialog",
+			"scope": "any",
+			"keys": [
+				"Escape"
+			],
+			"mod": "",
+			"group": "Anywhere",
+			"does": "Close the dialog",
+			"field": true,
+			"dispatched": true
+		},
+		{
+			"id": "undo",
+			"scope": "any",
+			"keys": [
+				"Z"
+			],
+			"mod": "cmd",
+			"group": "Anywhere",
+			"does": "Undo",
+			"modal": "panel",
+			"dispatched": true
+		},
+		{
+			"id": "redo",
+			"scope": "any",
+			"keys": [
+				"Z"
+			],
+			"mod": "cmd+shift",
+			"group": "Anywhere",
+			"does": "Redo",
+			"modal": "panel",
+			"dispatched": true
+		},
+		{
+			"id": "redo-y",
+			"scope": "any",
+			"keys": [
+				"Y"
+			],
+			"mod": "cmd",
+			"group": "Anywhere",
+			"does": "Redo",
+			"modal": "panel",
+			"dispatched": true
+		},
+		{
+			"id": "copy",
+			"scope": "any",
+			"keys": [
+				"C"
+			],
+			"mod": "cmd",
+			"group": "Anywhere",
+			"does": "Copy (Sequence: the page shown of the track; Sound: the machine; Perform: the assign; Song: the row)",
+			"dispatched": true
+		},
+		{
+			"id": "paste",
+			"scope": "any",
+			"keys": [
+				"V"
+			],
+			"mod": "cmd",
+			"group": "Anywhere",
+			"does": "Paste (Sequence: into every track marked for paste too)",
+			"dispatched": true
+		},
+		{
+			"id": "leave-learn",
+			"scope": "control",
+			"keys": [
+				"Escape"
+			],
+			"mod": "",
+			"group": "Anywhere",
+			"does": "Leave LEARN",
+			"mapping": true,
+			"dispatched": true
+		},
+		{
+			"id": "learn-knob",
+			"scope": "control",
+			"keys": [
+				"1 – 8"
+			],
+			"mod": "",
+			"group": "Anywhere",
+			"does": "LEARN: the controller knob for the value clicked",
+			"mapping": true
+		},
+		{
+			"id": "audio-settings",
+			"scope": "any",
+			"keys": [
+				","
+			],
+			"mod": "",
+			"group": "Anywhere",
+			"does": "AUDIO / MIDI settings (also in the engine menu)"
+		},
+		{
+			"id": "play-stop",
+			"scope": "any",
+			"keys": [
+				"Space"
+			],
+			"mod": "",
+			"group": "Transport",
+			"does": "Play / stop",
+			"dispatched": true
+		},
+		{
+			"id": "record",
+			"scope": "any",
+			"keys": [
+				"Space"
+			],
+			"mod": "alt",
+			"group": "Transport",
+			"does": "Live recording (RECORD + PLAY): Alt + play, the other Alt that is not \"all\". Again: recording off",
+			"code": "Space",
+			"dispatched": true
+		},
+		{
+			"id": "workspace-1",
+			"scope": "any",
+			"keys": [
+				"1"
+			],
+			"mod": "",
+			"group": "Workspaces",
+			"does": "Sequence",
+			"dispatched": true
+		},
+		{
+			"id": "workspace-2",
+			"scope": "any",
+			"keys": [
+				"2"
+			],
+			"mod": "",
+			"group": "Workspaces",
+			"does": "Sound",
+			"dispatched": true
+		},
+		{
+			"id": "workspace-3",
+			"scope": "any",
+			"keys": [
+				"3"
+			],
+			"mod": "",
+			"group": "Workspaces",
+			"does": "Mix",
+			"dispatched": true
+		},
+		{
+			"id": "workspace-4",
+			"scope": "any",
+			"keys": [
+				"4"
+			],
+			"mod": "",
+			"group": "Workspaces",
+			"does": "Perform",
+			"dispatched": true
+		},
+		{
+			"id": "workspace-5",
+			"scope": "any",
+			"keys": [
+				"5"
+			],
+			"mod": "",
+			"group": "Workspaces",
+			"does": "Song",
+			"dispatched": true
+		},
+		{
+			"id": "workspace-6",
+			"scope": "any",
+			"keys": [
+				"6"
+			],
+			"mod": "",
+			"group": "Workspaces",
+			"does": "Control",
+			"mapping": true,
+			"dispatched": true
+		},
+		{
+			"id": "page-prev-next",
+			"scope": "seq",
+			"keys": [
+				"[",
+				"]"
+			],
+			"mod": "",
+			"group": "Sequence",
+			"does": "Previous / next page",
+			"dispatched": true
+		},
+		{
+			"id": "delete",
+			"scope": "seq song",
+			"keys": [
+				"Delete",
+				"Backspace"
+			],
+			"mod": "",
+			"group": "Sequence",
+			"does": "Clear the page shown of the selected track (Song: delete the row)",
+			"dispatched": true
+		},
+		{
+			"id": "clear-pattern",
+			"scope": "seq",
+			"keys": [
+				"Delete",
+				"Backspace"
+			],
+			"mod": "alt",
+			"group": "All",
+			"does": "Sequence: clear the whole pattern: every track's notes, slides and locks (one undo step)",
+			"dispatched": true
+		},
+		{
+			"id": "clr-key-all",
+			"scope": "any",
+			"keys": [
+				"CLR"
+			],
+			"mod": "alt",
+			"group": "All",
+			"does": "Click: clear the whole pattern, every track's notes, slides and locks (one undo step)",
+			"area": "Top bar"
+		},
+		{
+			"id": "song-row",
+			"scope": "song",
+			"keys": [
+				"ArrowLeft",
+				"ArrowRight"
+			],
+			"mod": "",
+			"group": "Song",
+			"does": "Previous / next row",
+			"dispatched": true
+		},
+		{
+			"id": "value-up-down",
+			"scope": "any",
+			"keys": [
+				"ArrowUp",
+				"ArrowDown"
+			],
+			"mod": "",
+			"group": "Values",
+			"does": "A focused value, tempo or bar: one step (⇧: ×10, tempo: fine)"
+		},
+		{
+			"id": "value-left-right",
+			"scope": "any",
+			"keys": [
+				"ArrowLeft",
+				"ArrowRight"
+			],
+			"mod": "",
+			"group": "Values",
+			"does": "A focused value: one step"
+		},
+		{
+			"id": "control-all",
+			"scope": "sound mix",
+			"keys": [
+				"drag a value"
+			],
+			"mod": "alt",
+			"group": "All",
+			"does": "Control All: move that value on every synth track (an editor feature; the Monomachine has no such key)",
+			"area": "Values"
+		},
+		{
+			"id": "mkey-prepare",
+			"scope": "any",
+			"keys": [
+				"M key"
+			],
+			"mod": "shift",
+			"group": "Anywhere",
+			"does": "Click: prepare that track's mute (+ / X); applied when ⇧ is let go",
+			"area": "Tracks"
+		},
+		{
+			"id": "ms-paint",
+			"scope": "any",
+			"keys": [
+				"drag M / S keys"
+			],
+			"mod": "",
+			"group": "Anywhere",
+			"does": "Mute (solo) or unmute every track the drag crosses, as the first key became",
+			"area": "Tracks"
+		},
+		{
+			"id": "roll-chord",
+			"scope": "seq",
+			"keys": [
+				"roll"
+			],
+			"mod": "shift",
+			"group": "Sequence",
+			"does": "Click: a chord note on the step",
+			"area": "Roll"
+		},
+		{
+			"id": "roll-paint",
+			"scope": "seq",
+			"keys": [
+				"roll"
+			],
+			"mod": "",
+			"group": "Sequence",
+			"does": "Click an empty step: a note there; drag it up or down for its pitch, sideways to paint that note on every empty step crossed (one undo step)",
+			"area": "Roll"
+		},
+		{
+			"id": "roll-erase",
+			"scope": "seq",
+			"keys": [
+				"roll"
+			],
+			"mod": "alt",
+			"group": "Sequence",
+			"does": "Click: delete a note (drag on: every step crossed loses its notes, one undo step), or a NOTE OFF on an empty step",
+			"area": "Roll"
+		},
+		{
+			"id": "lane-erase",
+			"scope": "seq",
+			"keys": [
+				"lock lane"
+			],
+			"mod": "alt",
+			"group": "Sequence",
+			"does": "Drag: erase locks",
+			"area": "Lock lane"
+		},
+		{
+			"id": "lane-clear-all",
+			"scope": "seq",
+			"keys": [
+				"lock lane clear"
+			],
+			"mod": "alt",
+			"group": "Sequence",
+			"does": "Click: clear every lock of the track (all its parameters)",
+			"area": "Lock lane"
+		}
+	]
+}

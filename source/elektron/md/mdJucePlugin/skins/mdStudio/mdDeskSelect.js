@@ -114,8 +114,8 @@ function selClear() {
 }
 function refreshAfter(x) { for (let t = x.t; t < x.t + x.n; t++) refreshRow(t); syncSel(); renderTop(); renderLane(); }
 
-Keys.bind({ keys: ["X"], mod: "cmd", group: "Sequence", does: "Cut the selected steps (copy, then clear; one undo step)", when: () => seqKeys() && !!S.stepSel, run: () => selCut() });
-Keys.bind({ keys: ["D"], mod: "cmd", group: "Sequence", does: "Duplicate the selected steps right after themselves (the clipboard stays); again: once more", when: () => seqKeys() && !!S.stepSel, run: () => selDuplicate() });
-Keys.bind({ keys: ["Escape"], group: "Sequence", does: "Clear the step selection", when: () => seqKeys() && !!S.stepSel && !S.multi.size && !genRunOn(), run: () => clearSel() });
-Keys.bind({ keys: ["step"], mod: "alt", group: "Sequence", does: "Click: select the step (⌘V pastes there). Drag: select steps × tracks. Drag the selection: a copy where you let go" });
-Keys.bind({ keys: ["step ruler"], group: "Sequence", does: "Click or drag: select steps of the selected track (down over the grid: more tracks); ⇧-click extends" });
+Keys.bind({ id: "cut", scope: "seq", keys: ["X"], mod: "cmd", group: "Sequence", does: "Cut the selected steps (copy, then clear; one undo step)", when: () => seqKeys() && !!S.stepSel, run: () => selCut() });
+Keys.bind({ id: "duplicate", scope: "seq", keys: ["D"], mod: "cmd", group: "Sequence", does: "Duplicate the selected steps right after themselves (the clipboard stays); again: once more", when: () => seqKeys() && !!S.stepSel, run: () => selDuplicate() });
+Keys.bind({ id: "deselect", scope: "seq", keys: ["Escape"], group: "Sequence", does: "Clear the step selection", when: () => seqKeys() && !!S.stepSel && !S.multi.size && !genRunOn(), run: () => clearSel() });
+Keys.bind({ id: "step-select", scope: "seq", area: "Steps", keys: ["step"], mod: "alt", group: "Sequence", does: "Click: select the step (⌘V pastes there). Drag: select steps × tracks. Drag the selection: a copy where you let go" });
+Keys.bind({ id: "ruler-select", scope: "seq", area: "Steps", keys: ["step ruler"], group: "Sequence", does: "Click or drag: select steps of the selected track (down over the grid: more tracks); ⇧-click extends" });

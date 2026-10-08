@@ -122,12 +122,12 @@ function unmuteAll() {
 }
 document.addEventListener("click", e => { if (e.target.closest("#allon")) unmuteAll(); });
 const seqKeys = () => S.ws === "seq" && dlgClosed() && $("#keyspop").hidden;
-Keys.bind({ keys: ["ArrowLeft", "ArrowRight"], mod: "alt", group: "Selected track", does: "Sequence: rotate the selected track one step earlier / later: trigs, accents and locks, wrapping at the length. Presses while ⌥ is down are one undo step. The one Alt that is not \"all\": FUNCTION + arrows on the machine", when: seqKeys, run: e => rotateTrack(e.key === "ArrowRight" ? 1 : -1) });
-Keys.bind({ keys: ["0"], group: "All", does: "Unmute and unsolo every track", when: () => kbOn(), run: () => unmuteAll() });
-Keys.bind({ keys: ["Escape"], group: "Sequence", does: "Unmark the tracks marked for paste", when: () => seqKeys() && S.multi.size > 0 && !genRunOn(), run: () => { S.multi = new Set(); renderRail(); renderLane(); } });
-Keys.bind({ keys: ["step"], mod: "cmd", group: "Sequence", does: "Click: every 2nd step from there to the end on (from a trig: off), one undo step" });
-Keys.bind({ keys: ["step"], mod: "cmd+shift", group: "Sequence", does: "Click: every 4th step from there to the end" });
-Keys.bind({ keys: ["wheel on a step"], group: "Sequence", does: "Move its lock in the lane's parameter, 4 a notch (⇧: 1)" });
-Keys.bind({ keys: ["lock lane"], mod: "shift", group: "Sequence", does: "Drag: a ramp, a straight line from the press to the release (one undo step)" });
-Keys.bind({ keys: ["track header"], mod: "shift", group: "Sequence", does: "Click: mark the track for paste; ⌘V then pastes into every marked track (one undo step)" });
+Keys.bind({ id: "rotate", scope: "seq", keys: ["ArrowLeft", "ArrowRight"], mod: "alt", group: "Selected track", does: "Sequence: rotate the selected track one step earlier / later: trigs, accents and locks, wrapping at the length. Presses while ⌥ is down are one undo step. The one Alt that is not \"all\": FUNCTION + arrows on the machine", when: seqKeys, run: e => rotateTrack(e.key === "ArrowRight" ? 1 : -1) });
+Keys.bind({ id: "unmute-all", scope: "any", keys: ["0"], group: "All", does: "Unmute and unsolo every track", when: () => kbOn(), run: () => unmuteAll() });
+Keys.bind({ id: "unmark-paste", scope: "seq", keys: ["Escape"], group: "Sequence", does: "Unmark the tracks marked for paste", when: () => seqKeys() && S.multi.size > 0 && !genRunOn(), run: () => { S.multi = new Set(); renderRail(); renderLane(); } });
+Keys.bind({ id: "step-fill-2", scope: "seq", area: "Steps", keys: ["step"], mod: "cmd", group: "Sequence", does: "Click: every 2nd step from there to the end on (from a trig: off), one undo step" });
+Keys.bind({ id: "step-fill-4", scope: "seq", area: "Steps", keys: ["step"], mod: "cmd+shift", group: "Sequence", does: "Click: every 4th step from there to the end" });
+Keys.bind({ id: "step-wheel-lock", scope: "seq", area: "Steps", keys: ["wheel on a step"], group: "Sequence", does: "Move its lock in the lane's parameter, 4 a notch (⇧: 1)" });
+Keys.bind({ id: "lane-ramp", scope: "seq", area: "Lock lane", keys: ["lock lane"], mod: "shift", group: "Sequence", does: "Drag: a ramp, a straight line from the press to the release (one undo step)" });
+Keys.bind({ id: "track-mark-paste", scope: "seq", area: "Tracks", keys: ["track header"], mod: "shift", group: "Sequence", does: "Click: mark the track for paste; ⌘V then pastes into every marked track (one undo step)" });
 

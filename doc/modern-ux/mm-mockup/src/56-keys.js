@@ -18,6 +18,6 @@ function drawKeys(){const pop=$("#keyspop");if(!pop)return;const groups=[];
  pop.hidden=false;const r=$(".lcdpanel").getBoundingClientRect(),top=Math.max(16,r.bottom+8);
  pop.style.top=(top+scrollY)+"px";pop.style.maxHeight=Math.max(240,innerHeight-top-12)+"px";pop.style.left=Math.max(16,(document.documentElement.clientWidth-pop.offsetWidth)/2+scrollX)+"px"}
 function toggleKeys(on){const pop=$("#keyspop");if(!pop)return;if(on??pop.hidden)drawKeys();else pop.hidden=true}
-Keys.bind({keys:["?"],group:"Help",does:"This list of keys",modal:"keyspop",run:()=>toggleKeys()});
-Keys.bind({keys:["Escape"],group:"Help",does:"Close the list of keys",when:()=>!$("#keyspop").hidden,run:()=>toggleKeys(false)});
+Keys.bind({id:"keys-help",scope:"any",keys:["?"],group:"Help",does:"This list of keys",modal:"keyspop",run:()=>toggleKeys()});
+Keys.bind({id:"keys-help-close",scope:"any",keys:["Escape"],group:"Help",does:"Close the list of keys",when:()=>!$("#keyspop").hidden,run:()=>toggleKeys(false)});
 document.addEventListener("click",e=>{const pop=$("#keyspop");if(!pop||pop.hidden)return;if(e.target.closest("[data-keysx]")||!pop.contains(e.target))pop.hidden=true},true);

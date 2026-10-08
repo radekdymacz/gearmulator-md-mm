@@ -116,27 +116,27 @@ function keyNote(t,n,vel){if(HOST.noteOn){const p=n-KEYS_BASE;return vel?HOST.no
 function kbVel(d){KB.vel=keyVel(KB.vel,d);toast(`Keyboard velocity ${KB.vel}`)}
 function kbOct(d){KB.oct=clamp(KB.oct+d,KEYS_OCT[0],KEYS_OCT[1]);toast(`Keyboard octave ${KB.oct>0?"+":""}${KB.oct}: A plays ${noteName(KEYS_BASE+12*KB.oct)}`)}
 document.addEventListener("keyup",e=>homeUp(e.code));addEventListener("blur",()=>[...KB.held.keys()].forEach(homeUp));
-Keys.bind({keys:[...KEYS_WHITE,...KEYS_BLACK],group:"Playing",hidden:true,field:true,when:kbOn,run:homeDown,does:""});
-Keys.bind({keys:["Z"],group:"Playing",hidden:true,field:true,when:kbOn,run:()=>kbOct(-1),does:""});
-Keys.bind({keys:["X"],group:"Playing",hidden:true,field:true,when:kbOn,run:()=>kbOct(1),does:""});
-Keys.bind({keys:["C"],group:"Playing",hidden:true,field:true,when:kbOn,run:()=>kbVel(-1),does:""});
-Keys.bind({keys:["V"],group:"Playing",hidden:true,field:true,when:kbOn,run:()=>kbVel(1),does:""});
-Keys.bind({keys:["A S D F G H J K L"],group:"Playing",does:"Play the selected synth track: white keys C D E F G A B C D, real notes on its MIDI channel, from any workspace. While live recording the machine records them"});
-Keys.bind({keys:["W E T Y U O P"],group:"Playing",does:"The black keys above them: C♯ D♯ F♯ G♯ A♯ C♯ D♯, so the two rows play every semitone"});
-Keys.bind({keys:["Z","X"],group:"Playing",does:()=>`Octave down / up, −3 to +3 (now ${KB.oct>0?"+":""}${KB.oct}: A is ${noteName(KEYS_BASE+12*KB.oct)})`});
-Keys.bind({keys:["C","V"],group:"Playing",does:()=>`Velocity down / up: 20 40 60 80 100 127 (now ${KB.vel})`});
+Keys.bind({id:"piano-run",scope:"any",keys:[...KEYS_WHITE,...KEYS_BLACK],group:"Playing",hidden:true,field:true,when:kbOn,run:homeDown,does:""});
+Keys.bind({id:"octave-down",scope:"any",keys:["Z"],group:"Playing",hidden:true,field:true,when:kbOn,run:()=>kbOct(-1),does:""});
+Keys.bind({id:"octave-up",scope:"any",keys:["X"],group:"Playing",hidden:true,field:true,when:kbOn,run:()=>kbOct(1),does:""});
+Keys.bind({id:"velocity-down",scope:"any",keys:["C"],group:"Playing",hidden:true,field:true,when:kbOn,run:()=>kbVel(-1),does:""});
+Keys.bind({id:"velocity-up",scope:"any",keys:["V"],group:"Playing",hidden:true,field:true,when:kbOn,run:()=>kbVel(1),does:""});
+Keys.bind({id:"piano-white",scope:"any",keys:["A S D F G H J K L"],group:"Playing",does:"Play the selected synth track: white keys C D E F G A B C D, real notes on its MIDI channel, from any workspace. While live recording the machine records them"});
+Keys.bind({id:"piano-black",scope:"any",keys:["W E T Y U O P"],group:"Playing",does:"The black keys above them: C♯ D♯ F♯ G♯ A♯ C♯ D♯, so the two rows play every semitone"});
+Keys.bind({id:"octave",scope:"any",keys:["Z","X"],group:"Playing",does:()=>`Octave down / up, −3 to +3 (now ${KB.oct>0?"+":""}${KB.oct}: A is ${noteName(KEYS_BASE+12*KB.oct)})`});
+Keys.bind({id:"velocity",scope:"any",keys:["C","V"],group:"Playing",does:()=>`Velocity down / up: 20 40 60 80 100 127 (now ${KB.vel})`});
 
 /* ---- the selected track's keys, the all keys, the step gestures ---- */
-Keys.bind({keys:["M"],code:"KeyM",group:"Selected track",does:"Mute or unmute the selected track",when:kbOn,run:()=>muteSel()});
-Keys.bind({keys:["M"],code:"KeyM",mod:"alt",group:"All",does:"Mute every track; when none is audible, unmute every track",when:kbOn,run:()=>muteAllToggle()});
-Keys.bind({keys:["ArrowUp","ArrowDown"],group:"Selected track",does:"Select the previous / next track of the side shown (a focused value keeps ↑ / ↓ for itself)",
+Keys.bind({id:"mute-track",scope:"any",keys:["M"],code:"KeyM",group:"Selected track",does:"Mute or unmute the selected track",when:kbOn,run:()=>muteSel()});
+Keys.bind({id:"mute-all",scope:"any",keys:["M"],code:"KeyM",mod:"alt",group:"All",does:"Mute every track; when none is audible, unmute every track",when:kbOn,run:()=>muteAllToggle()});
+Keys.bind({id:"track-prev-next",scope:"any",keys:["ArrowUp","ArrowDown"],group:"Selected track",does:"Select the previous / next track of the side shown (a focused value keeps ↑ / ↓ for itself)",
  when:()=>kbOn()&&$("#kpop").hidden&&S.ws!=="song",run:e=>{const sd=side(),i=sd.indexOf(S.sel);select(sd[((i<0?0:i)+(e.key==="ArrowDown"?1:5))%6])}});
-Keys.bind({keys:["B"],group:"Transport",does:"Tap tempo (the average of the last taps; T plays F♯ here)",when:kbOn,run:()=>tapTempo()});
-Keys.bind({keys:["ArrowLeft","ArrowRight"],mod:"alt",group:"Selected track",does:"Sequence: rotate the selected track one step earlier / later: notes, slides and locks, wrapping at the length. Presses while ⌥ is down are one undo step. The one Alt that is not \"all\": FUNCTION + arrows on the machine",when:seqKeys,run:e=>rotateTrack(e.key==="ArrowRight"?1:-1)});
-Keys.bind({keys:["0"],group:"All",does:"Unmute and unsolo every track",when:kbOn,run:()=>unmuteAll()});
-Keys.bind({keys:["Escape"],group:"Sequence",does:"Unmark the tracks marked for paste",when:()=>seqKeys()&&S.marks.size>0,run:()=>{S.marks.clear();renderRail()}});
-Keys.bind({keys:["roll"],mod:"cmd",group:"Sequence",does:"Click: every 2nd step from there to the end gets a note at that pitch (from a note: off), one undo step"});
-Keys.bind({keys:["roll"],mod:"cmd+shift",group:"Sequence",does:"Click: every 4th step from there to the end"});
-Keys.bind({keys:["wheel on a lock step"],group:"Sequence",does:"Move its lock in the lane's parameter, 4 a notch (⇧: 1)"});
-Keys.bind({keys:["lock lane"],mod:"shift",group:"Sequence",does:"Drag: a ramp, a straight line from the press to the release (one undo step)"});
-Keys.bind({keys:["track header"],mod:"shift",group:"Sequence",does:"Click: mark the track for paste; ⌘V then pastes into every marked track (one undo step)"});
+Keys.bind({id:"tap-tempo",scope:"any",keys:["B"],group:"Transport",does:"Tap tempo (the average of the last taps; T plays F♯ here)",when:kbOn,run:()=>tapTempo()});
+Keys.bind({id:"rotate",scope:"seq",keys:["ArrowLeft","ArrowRight"],mod:"alt",group:"Selected track",does:"Sequence: rotate the selected track one step earlier / later: notes, slides and locks, wrapping at the length. Presses while ⌥ is down are one undo step. The one Alt that is not \"all\": FUNCTION + arrows on the machine",when:seqKeys,run:e=>rotateTrack(e.key==="ArrowRight"?1:-1)});
+Keys.bind({id:"unmute-all",scope:"any",keys:["0"],group:"All",does:"Unmute and unsolo every track",when:kbOn,run:()=>unmuteAll()});
+Keys.bind({id:"unmark-paste",scope:"seq",keys:["Escape"],group:"Sequence",does:"Unmark the tracks marked for paste",when:()=>seqKeys()&&S.marks.size>0,run:()=>{S.marks.clear();renderRail()}});
+Keys.bind({id:"roll-fill-2",scope:"seq",area:"Roll",keys:["roll"],mod:"cmd",group:"Sequence",does:"Click: every 2nd step from there to the end gets a note at that pitch (from a note: off), one undo step"});
+Keys.bind({id:"roll-fill-4",scope:"seq",area:"Roll",keys:["roll"],mod:"cmd+shift",group:"Sequence",does:"Click: every 4th step from there to the end"});
+Keys.bind({id:"lockstep-wheel",scope:"seq",area:"Lock lane",keys:["wheel on a lock step"],group:"Sequence",does:"Move its lock in the lane's parameter, 4 a notch (⇧: 1)"});
+Keys.bind({id:"lane-ramp",scope:"seq",area:"Lock lane",keys:["lock lane"],mod:"shift",group:"Sequence",does:"Drag: a ramp, a straight line from the press to the release (one undo step)"});
+Keys.bind({id:"track-mark-paste",scope:"seq",area:"Tracks",keys:["track header"],mod:"shift",group:"Sequence",does:"Click: mark the track for paste; ⌘V then pastes into every marked track (one undo step)"});
