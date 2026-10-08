@@ -134,7 +134,7 @@ run() {
 	if (( found )) && [[ "${name}" == *-standalone ]]; then
 		"${probe}" chrome "${pid}" > "${out}/${name}-chrome.txt" 2>&1 || true
 		local appmenu
-		appmenu="$(grep '^menu ' "${out}/${name}-chrome.txt" | grep -m1 -F 'Quit' || true)"
+		appmenu="$(grep '^menu ' "${out}/${name}-chrome.txt" | grep -v '^menu Apple:' | grep -m1 -F 'Quit' || true)"
 		if grep -q -F 'button full screen: enabled' "${out}/${name}-chrome.txt" && grep -q -F 'Audio/MIDI Settings...' <<< "${appmenu}" \
 			&& ! grep -q -E '(: | \| )Settings\.\.\.( \||$)' <<< "${appmenu}"; then
 			echo "${label}: full screen button enabled; ${appmenu}"
