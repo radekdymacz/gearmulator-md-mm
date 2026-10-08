@@ -50,8 +50,9 @@ Keys.bind({ id: "mute-track", scope: "any", keys: ["M"], code: "KeyM", group: "S
 Keys.bind({ id: "mute-all", scope: "any", keys: ["M"], code: "KeyM", mod: "alt", group: "All", does: "Mute every track; when none is audible, unmute every track", when: () => kbOn(), run: () => muteAllToggle() });
 /* ↑ / ↓: the previous / next track, while no value has the keys (a focused value, tempo or bar keeps them:
    the dispatcher leaves [role=slider] alone, a bar's value stops them itself) */
-Keys.bind({ id: "track-prev-next", scope: "any", keys: ["ArrowUp", "ArrowDown"], group: "Selected track", does: "Select the previous / next track (a focused value keeps ↑ / ↓ for itself)",
-	when: () => kbOn() && $("#kpop").hidden && $("#keyspop").hidden, run: e => select((S.sel + (e.key === "ArrowDown" ? 1 : 15)) % 16) });
+Keys.bind({ id: "track-prev-next", scope: "any", keys: ["ArrowUp", "ArrowDown"], group: "Selected track", does: "Select the previous / next track (a focused value keeps ↑ / ↓ for itself). Sequence with selected steps: move the selection a track",
+	when: () => kbOn() && $("#kpop").hidden && $("#keyspop").hidden,
+	run: e => { if (selKeys()) { selMove(e.key === "ArrowDown" ? 1 : -1, 0); return; } select((S.sel + (e.key === "ArrowDown" ? 1 : 15)) % 16); } });
 const refreshAudible0 = refreshAudible; refreshAudible = function () { refreshAudible0(); showPrep(); };
 const renderP0 = render; render = function () { renderP0(); showPrep(); markRecLock(); };
 

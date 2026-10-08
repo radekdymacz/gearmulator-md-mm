@@ -2,6 +2,13 @@
 
 - 2026-10-07. Built on branch `feat/step-selection` for the Machinedrum Editor's Sequence page. The Monomachine Editor is
   not built: §7 says what it needs.
+- **Amended 2026-10-08 by [DESIGN-keymap.md](DESIGN-keymap.md) (owner decision D1, slices K2 + K3):** the selection
+  modifier is ⌘ (Ctrl on Windows and Linux), not ⌥: ⌘-click a step, ⌘-drag a block, ⌘⇧-click extends, ⌘-drag the
+  selection drops a copy; ⌥ alone on a step does nothing (a hint says where select went). The fill (every 2nd / 4th)
+  moved from ⌘-click to the new step menu (right-click a step), which also has trig, accent, slide, copy, cut, paste
+  here, duplicate and clear for the step or the selection; right-click on a step is no longer the editor's menu (that
+  stays on the header). Delete clears only selected steps (D3). ⌘A, ← / → (move), ⇧← / ⇧→ (extend), ↑ / ↓ and Enter
+  (trigs) act on the selection. Where this page says ⌥ for selecting, read ⌘.
 - The ask (a customer, through the owner): "select steps by dragging, then copy and paste them, not only a whole track
   page". The owner added: duplicate is a first-class operation (⌘D), and an Alt-drag of a selection should drop a copy
   where it is let go if it fits the gesture map; pick the easiest modifier ("cmd or shift"). The tester added: the main

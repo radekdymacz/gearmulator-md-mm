@@ -206,36 +206,64 @@ const MdJourneys = (() => {
 			{ say: "pick another track and press Cmd+V", act: async (u, c) => { u.click(rail(c.b)); await sleep(200); document.activeElement?.blur?.(); u.key("v", { cmd: true }); }, screen: c => ok(gridShows(c.b) && same(lit(c.b).filter(inLen), c.ta.filter(inLen)), "grid " + lit(c.b).join(",")),
 				/* a paste stops at the pattern's length (DESIGN-step-selection.md §4): the steps past it keep what they had */
 				machine: c => ok(same(trigsOf(c.b).filter(inLen), c.ta.filter(inLen)) && same(trigsOf(c.b).filter(s => !inLen(s)), c.tb.filter(s => !inLen(s))), "pattern " + trigsOf(c.b).join(",")) },
-			{ say: "press Delete: the track's steps are cleared", act: u => u.key("Delete"), screen: c => ok(!lit(c.b).length, "lit " + lit(c.b).join(",")), machine: c => ok(!trigsOf(c.b).length, "pattern " + trigsOf(c.b).join(",")) },
+			/* D3 (DESIGN-keymap.md): Delete takes only selected steps; the LCD's Clr clears the page shown */
+			{ say: "press Delete with no step selected: nothing is cleared", act: (u, c) => { if (S.stepSel) clearSel(); c.lb = lit(c.b); document.activeElement?.blur?.(); u.key("Delete"); },
+				screen: c => ok(same(lit(c.b), c.lb), "lit " + lit(c.b).join(",")), machine: c => ok(same(trigsOf(c.b).filter(inLen), c.ta.filter(inLen)), "pattern " + trigsOf(c.b).join(",")) },
+			{ say: "click Clr on the LCD: the track's steps are cleared", act: u => u.click('[data-sec="clear"]'), screen: c => ok(!lit(c.b).length, "lit " + lit(c.b).join(",")), machine: c => ok(!trigsOf(c.b).length, "pattern " + trigsOf(c.b).join(",")) },
 			{ say: "Cmd+Z twice: the track is as before", act: async u => { u.key("z", { cmd: true }); await sleep(800); u.key("z", { cmd: true }); }, machine: c => ok(same(trigsOf(c.b), c.tb), "pattern " + trigsOf(c.b).join(",")), within: 8000 }
 		]
 	};
-	/* DESIGN-step-selection.md: one step copied to another step of its track, then a block duplicated */
+	/* DESIGN-step-selection.md, on ⌘ since K2 (DESIGN-keymap.md): one step copied to another step of its track (the LCD's
+	   PASTE acting on the selection), then a block duplicated and cleared with the LCD's CLR */
 	const selectCopyPaste = {
 		name: "md-seq-select-copy-paste",
 		steps: [
 			go("seq"), sel(() => soundTracks().find(t => t < 15 && trigsOf(t).some(s => s < Math.min(V.length, V.len))) ?? soundTrack()),
-			{ say: "alt-click a step with a trig: it is selected", act: (u, c) => {
+			{ say: "Cmd-click a step with a trig: it is selected", act: (u, c) => {
 				c.L = Math.min(V.length, V.len); if (c.L < 8) throw new Error("the pattern is shorter than 8 steps");
 				c.t0 = trigsOf(c.t); c.t1 = trigsOf(c.t + 1); c.u0 = V.undoCount;
 				c.s = c.t0.find(s => s < c.L) ?? 0; c.d = [...Array(c.L).keys()].find(s => !c.t0.includes(s) && Math.abs(s - c.s) > 1 && (s < 4 || s >= 8));
 				if (c.d == null) throw new Error("no free step to paste to");
-				u.click(cell(c.t, c.s), { alt: true });
+				u.click(cell(c.t, c.s), { cmd: true });
 			}, screen: c => ok($1(cell(c.t, c.s)).classList.contains("selx") && $all("#seq .st.selx").length === 1, $all("#seq .st.selx").length + " selected"),
-				machine: c => ok(c.t0.includes(c.s) === trigsOf(c.t).includes(c.s) && !trigsOf(c.t).some(s => !c.t0.includes(s)), "an alt-click changed the pattern: " + trigsOf(c.t).join(",")) },
+				machine: c => ok(c.t0.includes(c.s) === trigsOf(c.t).includes(c.s) && !trigsOf(c.t).some(s => !c.t0.includes(s)), "a Cmd-click changed the pattern: " + trigsOf(c.t).join(",")) },
 			{ say: "press Cmd+C", act: u => { document.activeElement?.blur?.(); u.key("c", { cmd: true }); }, machine: () => ok(V.clipboard.stepsSize?.length === 1 && V.clipboard.stepsSize?.tracks === 1, "clipboard " + JSON.stringify(V.clipboard.stepsSize)) },
-			{ say: "alt-click an empty step of the same track", act: (u, c) => u.click(cell(c.t, c.d), { alt: true }), screen: c => ok($1(cell(c.t, c.d)).classList.contains("selx") && !$1(cell(c.t, c.s)).classList.contains("selx"), "not selected") },
-			{ say: "press Cmd+V: the trig lands there", act: u => u.key("v", { cmd: true }), screen: c => ok(pressed(cell(c.t, c.d)), "not lit"), machine: c => ok(trigsOf(c.t).includes(c.d), "pattern " + trigsOf(c.t).join(",")) },
-			{ say: "alt-drag from step 1 of the track to step 4 of the next: a block", act: async (u, c) => { c.b0 = [c.t, c.t + 1].map(t => trigsOf(t).filter(s => s < 4)); await u.drag(cell(c.t, 0), [cell(c.t, 2), cell(c.t + 1, 3)], { alt: true }); },
+			{ say: "Cmd-click an empty step of the same track", act: (u, c) => u.click(cell(c.t, c.d), { cmd: true }), screen: c => ok($1(cell(c.t, c.d)).classList.contains("selx") && !$1(cell(c.t, c.s)).classList.contains("selx") && $1('[data-sec="paste"]').classList.contains("onsel"), "not selected, or PASTE not marked for it") },
+			{ say: "click PASTE on the LCD: the trig lands on the selected step", act: u => u.click('[data-sec="paste"]'), screen: c => ok(pressed(cell(c.t, c.d)), "not lit"), machine: c => ok(trigsOf(c.t).includes(c.d), "pattern " + trigsOf(c.t).join(",")) },
+			{ say: "Cmd-drag from step 1 of the track to step 4 of the next: a block", act: async (u, c) => { c.b0 = [c.t, c.t + 1].map(t => trigsOf(t).filter(s => s < 4)); await u.drag(cell(c.t, 0), [cell(c.t, 2), cell(c.t + 1, 3)], { cmd: true }); },
 				screen: () => ok($all("#seq .st.selx").length === 8 && S.stepSel?.n === 2 && S.stepSel?.to - S.stepSel?.from === 4, $all("#seq .st.selx").length + " selected, " + JSON.stringify(S.stepSel)) },
-			{ say: "press Cmd+D: the block again on steps 5-8", act: u => u.key("d", { cmd: true }),
+			{ say: "press Cmd+D: the block again on steps 5-8", act: u => { document.activeElement?.blur?.(); u.key("d", { cmd: true }); },
 				machine: c => ok([c.t, c.t + 1].every((t, k) => same(trigsOf(t).filter(s => s >= 4 && s < 8).map(s => s - 4), c.b0[k])), "steps 5-8 " + [c.t, c.t + 1].map(t => trigsOf(t).filter(s => s >= 4 && s < 8).join(",")).join(" / ")),
 				screen: () => ok(S.stepSel?.from === 4 && $all("#seq .st.selx").length === 8, "selection " + JSON.stringify(S.stepSel)) },
+			{ say: "click CLR on the LCD: the selected block (steps 5-8 of both tracks) is cleared, nothing else", act: (u, c) => { c.out = [c.t, c.t + 1].map(t => trigsOf(t).filter(s => s < 4 || s >= 8)); u.click('[data-sec="clear"]'); },
+				machine: c => ok([c.t, c.t + 1].every((t, k) => !trigsOf(t).some(s => s >= 4 && s < 8) && same(trigsOf(t).filter(s => s < 4 || s >= 8), c.out[k])), "pattern " + [c.t, c.t + 1].map(t => trigsOf(t).join(",")).join(" / ")) },
 			{ say: "press Esc: no selection", act: u => u.key("Escape"), screen: () => ok(!S.stepSel && !$all("#seq .st.selx").length, "still selected") },
-			{ say: "Cmd+Z twice (paste, duplicate): both tracks as before", act: async u => { u.key("z", { cmd: true }); await sleep(800); u.key("z", { cmd: true }); },
+			{ say: "Cmd+Z three times (paste, duplicate, clear): both tracks as before", act: async u => { for (let i = 0; i < 3; i++) { u.key("z", { cmd: true }); await sleep(800); } },
 				machine: c => ok(same(trigsOf(c.t), c.t0) && same(trigsOf(c.t + 1), c.t1) && V.undoCount === c.u0, `pattern ${trigsOf(c.t).join(",")} / ${trigsOf(c.t + 1).join(",")}, undo steps ${c.u0} -> ${V.undoCount}`), within: 8000 }
 		],
 		async tidy() { if (S.stepSel) clearSel(); }
+	};
+	/* K3 (DESIGN-keymap.md): the step menu: an accent, a copy and a paste with the pointer only */
+	const stepMenuJ = {
+		name: "md-seq-step-menu",
+		steps: [
+			go("seq"), sel(() => soundTracks().find(t => trigsOf(t).some(s => s < Math.min(V.length, V.len))) ?? soundTrack()),
+			{ say: "right-click a step with a trig: its menu", act: (u, c) => {
+				c.L = Math.min(V.length, V.len); c.t0 = trigsOf(c.t); c.a0 = flagsOf(c.t, "accent"); c.u0 = V.undoCount;
+				c.s = c.t0.find(s => s < c.L && !c.a0.includes(s)); c.d = [...Array(c.L).keys()].find(s => !c.t0.includes(s) && Math.abs(s - c.s) > 1);
+				if (c.s == null || c.d == null) throw new Error("no unaccented trig, or no free step");
+				if (S.stepSel) clearSel(); u.rightClick(cell(c.t, c.s));
+			}, screen: c => ok(!$1("#deskmenu").hidden && $1('#deskmenu [data-mid="step-fill-2"]') && $1(cell(c.t, c.s)).classList.contains("selx"), "no step menu") },
+			{ say: "choose Accent", act: u => u.click('#deskmenu [data-mid="step-accent"]'), screen: c => ok($1("#deskmenu").hidden && $1(cell(c.t, c.s)).classList.contains("acc"), "no accent shown"),
+				machine: c => ok(flagsOf(c.t, "accent").includes(c.s) || (V.accAll && (pat().accent?.steps || []).includes(c.s)), "accent " + flagsOf(c.t, "accent").join(",")) },
+			{ say: "right-click it again and choose Copy", act: async u => { u.rightClick(cell(S.stepSel.t, S.stepSel.from)); await sleep(150); u.click('#deskmenu [data-mid="copy"]'); },
+				machine: () => ok(V.clipboard.stepsSize?.length === 1, "clipboard " + JSON.stringify(V.clipboard.stepsSize)) },
+			{ say: "right-click an empty step and choose Paste here", act: async (u, c) => { u.rightClick(cell(c.t, c.d)); await sleep(150); u.click('#deskmenu [data-mid="paste"]'); },
+				screen: c => ok(pressed(cell(c.t, c.d)), "not lit"), machine: c => ok(trigsOf(c.t).includes(c.d), "pattern " + trigsOf(c.t).join(",")) },
+			{ say: "press Escape: no selection; Cmd+Z twice: the track as before", act: async u => { u.key("Escape"); await sleep(150); u.key("z", { cmd: true }); await sleep(800); u.key("z", { cmd: true }); },
+				machine: c => ok(same(trigsOf(c.t), c.t0) && same(flagsOf(c.t, "accent"), c.a0) && V.undoCount === c.u0, `pattern ${trigsOf(c.t).join(",")}, undo steps ${c.u0} -> ${V.undoCount}`), within: 8000 }
+		],
+		async tidy() { if (!$1("#deskmenu")?.hidden) closeDeskMenu(); if (S.stepSel) clearSel(); }
 	};
 	const clearPatternJ = {
 		name: "md-seq-clear-pattern-undo",
@@ -249,10 +277,11 @@ const MdJourneys = (() => {
 		name: "md-seq-fill-every",
 		steps: [
 			go("seq"), sel(() => soundTrack()),
-			{ say: "Cmd-click an empty step: every 2nd step from there comes on", act: (u, c) => { c.t0 = trigsOf(c.t); c.s = [...Array(V.len).keys()].find(s => s >= V.len - 8 && !c.t0.includes(s)) ?? V.len - 8; u.click(cell(c.t, c.s), { cmd: true }); },
+			{ say: "right-click an empty step, choose Fill every 2nd from here: every 2nd step from there comes on", act: async (u, c) => { c.t0 = trigsOf(c.t); c.s = [...Array(V.len).keys()].find(s => s >= V.len - 8 && !c.t0.includes(s)) ?? V.len - 8; if (S.stepSel) clearSel(); u.rightClick(cell(c.t, c.s)); await sleep(150); u.click('#deskmenu [data-mid="step-fill-2"]'); },
 				machine: c => { const want = []; for (let s = c.s; s < V.len; s += 2) want.push(s); return ok(want.every(s => trigsOf(c.t).includes(s)), "pattern " + trigsOf(c.t).join(",")); }, screen: c => ok(pressed(cell(c.t, c.s)) && pressed(cell(c.t, c.s + 2)), "not lit") },
 			{ ...undoKey, machine: c => ok(same(trigsOf(c.t), c.t0), "pattern " + trigsOf(c.t).join(",")) }
-		]
+		],
+		async tidy() { if (S.stepSel) clearSel(); }
 	};
 	const rotateJ = {
 		name: "md-seq-rotate",
@@ -762,7 +791,7 @@ const MdJourneys = (() => {
 
 
 	const all = [bootCard, firstBeat, spaceTransport, tempoDrag, tapTempo, tapTempoB, patStep, queuePattern, plate, wsKeys, helpKeys, undoRedo,
-		paintUndo, accentSlide, lockLane, pagesJ, copyPaste, selectCopyPaste, clearPatternJ, fillEveryJ, rotateJ, rotateUndo, trackKeys, muteKeys, liveRec,
+		paintUndo, accentSlide, lockLane, pagesJ, copyPaste, selectCopyPaste, stepMenuJ, clearPatternJ, fillEveryJ, rotateJ, rotateUndo, trackKeys, muteKeys, liveRec,
 		genJourney("md-gen-mutate-undo", false), genJourney("md-gen-defaults-mutate-undo", true), genKeys,
 		shapeSound, arrows, machinePick, soundCopy, editorDrag, controlAll,
 		mixSolo, shiftMutes, allOff, fader, outKey, masterFx,
@@ -916,7 +945,7 @@ const MdJourneys = (() => {
 			{ section: "build", say: "bar 6: rim clicks by hand, the open hat every 4th, an accent and a slide", caption: "Then play it by hand.", act: async (u, c) => {
 				await atBar(6, 900);
 				for (const s of [3, 11, 14]) { await u.glide(cell(c.T.rim, s), 0.5, 0.5, 220); u.click(cell(c.T.rim, s)); await sleep(60); }
-				await u.glide(cell(c.T.open, 2)); u.click(cell(c.T.open, 2), { cmd: true, shift: true }); u.cap("⌘⇧ every 4th"); await sleep(400);
+				await u.glide(cell(c.T.open, 2)); u.rightClick(cell(c.T.open, 2)); u.cap("right-click: the step menu"); await sleep(500); await u.glide('#deskmenu [data-mid="step-fill-4"]'); u.click('#deskmenu [data-mid="step-fill-4"]'); u.cap("Fill every 4th"); clearSel(); await sleep(400);
 				await u.glide(cell(c.T.snare, trigsOf(c.T.snare)[0] ?? 4)); u.click(cell(c.T.snare, trigsOf(c.T.snare)[0] ?? 4), { shift: true }); u.cap("⇧ accent"); await sleep(400);
 				await u.glide(cell(c.T.rim, 14)); u.click(cell(c.T.rim, 14), { alt: true, shift: true }); u.cap("⌥⇧ slide");
 			}, machine: c => ok([3, 11, 14].every(s => trigsOf(c.T.rim).includes(s)) && [2, 6, 10, 14].every(s => trigsOf(c.T.open).includes(s)), `rim ${trigsOf(c.T.rim)} open ${trigsOf(c.T.open)}`), within: 6000 },

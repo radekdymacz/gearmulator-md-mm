@@ -84,7 +84,7 @@ list(APPEND SOURCES
 	skins/mdStudio/mdDeskKeys.js
 	skins/mdStudio/mdDeskGlobal.js
 	skins/mdStudio/mdDeskAudio.js
-	skins/shared/deskModal.js skins/shared/deskModal.css skins/shared/deskModalTest.js
+	skins/shared/deskModal.js skins/shared/deskModal.css skins/shared/deskModalTest.js skins/shared/deskMenu.js
 	skins/shared/deskCaps.js
 	skins/shared/deskBoot.js skins/shared/deskBoot.css
 	skins/shared/deskSyx.js skins/shared/deskSyx.css
@@ -126,7 +126,7 @@ option(MDMM_INSTALL_DEV_PLUGINS "Copy the built editors to ~/Library/Audio/Plug-
 # The Machinedrum page loads the shared scripts as files; the Monomachine page has them inside
 # mmMockup.js (sync-mmstudio-skin.py) but for the bridge.
 set(MD_SHARED_PAGE_FILES
-	"skins/shared/deskModal.js" "skins/shared/deskCaps.js" "skins/shared/deskBoot.js" "skins/shared/deskSyx.js" "skins/shared/deskBridge.js"
+	"skins/shared/deskModal.js" "skins/shared/deskMenu.js" "skins/shared/deskCaps.js" "skins/shared/deskBoot.js" "skins/shared/deskSyx.js" "skins/shared/deskBridge.js"
 	"skins/shared/deskDocs.js" "skins/shared/deskOverlay.js" "skins/shared/deskGen.js" "skins/shared/deskKeys.js" "skins/shared/deskTogglePaint.js"
 	"skins/shared/deskAudio.js" "skins/shared/deskCompat.js" "skins/shared/deskZoom.js")
 file(GLOB MD_SKIN_ASSETS CONFIGURE_DEPENDS

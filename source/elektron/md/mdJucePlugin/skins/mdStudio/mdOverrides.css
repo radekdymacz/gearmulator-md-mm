@@ -323,3 +323,6 @@ img,svg,canvas{-webkit-user-drag:none}
 #seq .st.selghost{outline:2px dashed var(--cream);outline-offset:-2px}
 #seq .rul.selx{color:var(--print);box-shadow:inset 0 -2px 0 var(--cream)}
 #seq .rul[data-s]{cursor:pointer}
+/* K2 (DESIGN-keymap.md): the LCD's COPY CLR PASTE while they act on the selected steps: underlined, as the
+   selection is outlined (mdDeskComforts.js secLabels) */
+.lcdsec button.onsel{opacity:1;text-decoration:underline;text-underline-offset:2px}

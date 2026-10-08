@@ -22,6 +22,7 @@ function renderTop() {
 	setKitState(V.kitState);
 	const sv = $("#save"); if (sv) sv.style.visibility = V.loaded ? "" : "hidden";
 	$("#undo").disabled = !V.canUndo; $("#redo").disabled = !V.canRedo; syncUndoCounts();
+	secLabels();	/* COPY CLR PASTE: the selected steps, or the workspace's own (mdDeskComforts.js) */
 	/* One key: PLAY while stopped, STOP while playing (the icon follows the machine). */
 	$("#play").setAttribute("aria-pressed", V.playing); $("#playico").textContent = V.playing ? "■" : "▶"; $("#play").setAttribute("aria-label", V.playing ? "Stop" : "Play");
 	$("#rec").setAttribute("aria-pressed", !!V.rec); $("#recled").classList.toggle("on", !!V.rec);

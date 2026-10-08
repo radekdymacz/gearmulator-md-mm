@@ -347,28 +347,6 @@
 			"dispatched": true
 		},
 		{
-			"id": "step-fill-2",
-			"scope": "seq",
-			"keys": [
-				"step"
-			],
-			"mod": "cmd",
-			"group": "Sequence",
-			"does": "Click: every 2nd step from there to the end on (from a trig: off), one undo step",
-			"area": "Steps"
-		},
-		{
-			"id": "step-fill-4",
-			"scope": "seq",
-			"keys": [
-				"step"
-			],
-			"mod": "cmd+shift",
-			"group": "Sequence",
-			"does": "Click: every 4th step from there to the end",
-			"area": "Steps"
-		},
-		{
 			"id": "step-wheel-lock",
 			"scope": "seq",
 			"keys": [
@@ -424,6 +402,52 @@
 			"dispatched": true
 		},
 		{
+			"id": "select-all",
+			"scope": "seq",
+			"keys": [
+				"A"
+			],
+			"mod": "cmd",
+			"group": "Sequence",
+			"does": "Select every step of every track up to the length (then ⌘C copies the pattern as a block)",
+			"dispatched": true
+		},
+		{
+			"id": "sel-move",
+			"scope": "seq",
+			"keys": [
+				"ArrowLeft",
+				"ArrowRight"
+			],
+			"mod": "",
+			"group": "Sequence",
+			"does": "Move the selection a step earlier / later (one step selected: a cursor)",
+			"dispatched": true
+		},
+		{
+			"id": "sel-extend",
+			"scope": "seq",
+			"keys": [
+				"ArrowLeft",
+				"ArrowRight"
+			],
+			"mod": "shift",
+			"group": "Sequence",
+			"does": "Extend the selection a step earlier / later",
+			"dispatched": true
+		},
+		{
+			"id": "sel-trigs",
+			"scope": "seq",
+			"keys": [
+				"Enter"
+			],
+			"mod": "",
+			"group": "Sequence",
+			"does": "The selected steps' trigs on, or off when each has one (one undo step)",
+			"dispatched": true
+		},
+		{
 			"id": "deselect",
 			"scope": "seq",
 			"keys": [
@@ -440,9 +464,20 @@
 			"keys": [
 				"step"
 			],
-			"mod": "alt",
+			"mod": "cmd",
 			"group": "Sequence",
 			"does": "Click: select the step (⌘V pastes there). Drag: select steps × tracks. Drag the selection: a copy where you let go",
+			"area": "Steps"
+		},
+		{
+			"id": "step-extend",
+			"scope": "seq",
+			"keys": [
+				"step"
+			],
+			"mod": "cmd+shift",
+			"group": "Sequence",
+			"does": "Click: extend the selection to the step",
 			"area": "Steps"
 		},
 		{
@@ -454,6 +489,17 @@
 			"mod": "",
 			"group": "Sequence",
 			"does": "Click or drag: select steps of the selected track (down over the grid: more tracks); ⇧-click extends",
+			"area": "Steps"
+		},
+		{
+			"id": "step-menu",
+			"scope": "seq",
+			"keys": [
+				"right-click a step"
+			],
+			"mod": "",
+			"group": "Sequence",
+			"does": "The step menu: trig, accent, slide, copy, cut, paste here, duplicate, clear, fill every 2nd / 4th from it; on a selected step for the whole selection (Ctrl-click on a Mac; the Menu key on a focused step)",
 			"area": "Steps"
 		},
 		{
@@ -649,7 +695,7 @@
 			],
 			"mod": "",
 			"group": "Sequence",
-			"does": "Clear the selected steps (Song: delete the row)",
+			"does": "Clear the selected steps; with none selected nothing (Clr clears the page shown, ⌥Delete the pattern). Song: delete the row",
 			"dispatched": true
 		},
 		{
@@ -808,7 +854,7 @@
 			],
 			"mod": "",
 			"group": "Selected track",
-			"does": "Select the previous / next track (a focused value keeps ↑ / ↓ for itself)",
+			"does": "Select the previous / next track (a focused value keeps ↑ / ↓ for itself). Sequence with selected steps: move the selection a track",
 			"dispatched": true
 		},
 		{
