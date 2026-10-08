@@ -21,7 +21,8 @@ So the editors drive WebView2 themselves (`source/elektron/md/mdJucePlugin/mdWeb
 |---|---|
 | SDK | the `Microsoft.Web.WebView2` NuGet package, fetched at configure time and checked by SHA-256 (`mdmmWindowsWebView.cmake`); offline: `-DMDMM_WEBVIEW2_SDK_DIR=<unpacked package>` |
 | Loader | `WebView2LoaderStatic.lib`, linked into the binaries: nothing ships beside them |
-| Runtime | the Evergreen WebView2 Runtime, part of Windows 11 and an up-to-date Windows 10. Without it the window says what to install (no IE fallback) |
+| Runtime | the Evergreen WebView2 Runtime, part of Windows 11 and an up-to-date Windows 10; **86.0.616.0 or newer** (B-022: every interface used is in it but `ICoreWebView2Settings3`, 1.0.864, which is skipped when missing). Without one, or when the page does not start, the window says what failed and what to do (no IE fallback) |
+| Start-up log | `Documents\Gearmulator Preview\<machine>\logs\editor-mdStudio.log` / `editor-mmStudio.log`, every build (B-022): version, Windows, host, the runtime's version, each HRESULT, page loaded, bridge up, what failed. The editor's menu: Open Log Folder |
 | Profile | `%LOCALAPPDATA%\Gearmulator\EditorWebView2` (WebView2's default is beside the host's executable, often read-only) |
 | Page file | as on the other systems: the bundled page in `%TEMP%\gearmulator-<page>-<random>.html`, loaded as `file://` |
 | Page -> plug-in | `window.chrome.webview.postMessage` of the same `gmbridge://` texts (`deskBridge.js`), in order; a top-level `gmbridge://` navigation is still taken |

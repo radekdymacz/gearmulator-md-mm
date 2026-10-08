@@ -55,10 +55,32 @@ namespace mdJucePlugin
 			userDataFolder = std::move(_userDataFolder);
 		}
 
+		// B-022: GEARMULATOR_MDMM_WEBVIEW2_TEST=old acts as an old runtime would (no ICoreWebView2Settings3), =fail as a
+		// machine without one (the environment refused): the start tests check both ways (scripts/windows/smoke_mdmm.ps1).
+		static juce::String testMode() { return juce::SystemStats::getEnvironmentVariable("GEARMULATOR_MDMM_WEBVIEW2_TEST", {}); }
+
 		// After the owner holds this Impl: the loader may call back before it returns.
 		void start()
 		{
+			// B-022: which runtime this machine has, before anything else (a Windows 10 with an old or no runtime)
+			LPWSTR version = nullptr;
+			const auto vhr = GetAvailableCoreWebView2BrowserVersionString(nullptr, &version);
+			const auto runtime = takeString(version);
+			if(FAILED(vhr) || runtime.isEmpty())
+				event("WebView2 runtime: none found (" + hresultText(vhr) + ")");
+			else
+			{
+				int order = 0;
+				const auto older = SUCCEEDED(CompareBrowserVersions(runtime.toWideCharPointer(), juce::String(g_minimumRuntime).toWideCharPointer(), &order)) && order < 0;
+				event("WebView2 runtime " + runtime + " (the editors need " + g_minimumRuntime + " or newer" + (older ? ": this one is OLDER" : "") + ")");
+			}
+			if(testMode() == "fail")
+			{
+				fail("the WebView2 environment was not created (test: GEARMULATOR_MDMM_WEBVIEW2_TEST=fail)");
+				return;
+			}
 			userDataFolder.createDirectory();
+			event("WebView2 user data: " + userDataFolder.getFullPathName());
 			const auto folder = userDataFolder.getFullPathName();
 			juce::Component::SafePointer<WebView2Page> safe(&owner);
 			const auto hr = CreateCoreWebView2EnvironmentWithOptions(nullptr, folder.toWideCharPointer(), nullptr,
@@ -74,12 +96,16 @@ namespace mdJucePlugin
 							return S_OK;
 						}
 						self.environment = _env;
-						self.event("WebView2 environment ready");
+						LPWSTR used = nullptr;
+						_env->get_BrowserVersionString(&used);
+						self.event("WebView2 environment ready (" + hresultText(_result) + "), runtime " + takeString(used));
 						self.createController();
 						return S_OK;
 					}).Get());
 			if(FAILED(hr))
 				fail("no WebView2 runtime (" + hresultText(hr) + ")");
+			else
+				event("WebView2 environment asked for (" + hresultText(hr) + ")");
 		}
 
 		~Impl() override
@@ -104,6 +130,8 @@ namespace mdJucePlugin
 			failed = true;
 			juce::Logger::writeToLog("Gearmulator editor page: " + _why);
 			event(_why);
+			if(callbacks.onFailed)
+				callbacks.onFailed(_why);
 			owner.repaint();
 		}
 
@@ -140,6 +168,7 @@ namespace mdJucePlugin
 							self.fail("the WebView2 controller was not created (" + hresultText(_result) + ")");
 							return S_OK;
 						}
+						self.event("WebView2 controller ready (" + hresultText(_result) + ")");
 						self.controller = _controller;
 						self.controller->get_CoreWebView2(&self.webView);
 						if(self.webView == nullptr)
@@ -166,9 +195,13 @@ namespace mdJucePlugin
 				settings->put_IsZoomControlEnabled(FALSE);	// the plug-in sets the zoom (the page's design width)
 				settings->put_AreDevToolsEnabled(MDMM_DIAGNOSTICS ? TRUE : FALSE);
 				ComPtr<ICoreWebView2Settings3> settings3;
-				// F5, Ctrl+R, Ctrl+P, Ctrl+F...: the browser's, not the editor's (a reload would restart the page)
-				if(SUCCEEDED(settings.As(&settings3)) && settings3)
+				// F5, Ctrl+R, Ctrl+P, Ctrl+F...: the browser's, not the editor's (a reload would restart the page). B-022:
+				// a runtime older than 1.0.864 has no ICoreWebView2Settings3: the page works, those keys stay the browser's.
+				const auto qi = testMode() == "old" ? E_NOINTERFACE : settings.As(&settings3);
+				if(SUCCEEDED(qi) && settings3)
 					settings3->put_AreBrowserAcceleratorKeysEnabled(FALSE);
+				else
+					event("ICoreWebView2Settings3 not available (" + hresultText(qi) + "): an older runtime; the browser keys stay on");
 			}
 
 			webView->add_NavigationStarting(Callback<ICoreWebView2NavigationStartingEventHandler>(

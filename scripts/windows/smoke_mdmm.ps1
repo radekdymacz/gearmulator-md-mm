@@ -9,6 +9,11 @@
 #     text is read through UI Automation (the page's accessibility tree), so the shipped build needs no log;
 #   - real keys reach the page: the window in front, a real click on the page, then Ctrl+C Ctrl+V Ctrl+X Ctrl+Z Ctrl+D
 #     and ? as real key presses, and the page's key probe (GEARMULATOR_MDMM_KEYPROBE=1) lists them;
+#   - B-022: each run wrote its start-up log (<data root>\<machine>\logs\editor-*.log: the WebView2 runtime's version,
+#     the bridge up), copied to <name>-editor.log; the Machinedrum standalone runs three more times: as with an old
+#     runtime (GEARMULATOR_MDMM_WEBVIEW2_TEST=old: no ICoreWebView2Settings3, the page must still work), as on a machine
+#     without one (=fail) and with no page (GEARMULATOR_MDMM_PAGE_TEST=nostart): those two must say in the window
+#     that the editor page could not start (read through UI Automation);
 #   - a screenshot of the screen (md-standalone.png, md-vst3.png, ...; an artifact, to look at) and summary.md.
 #
 #   scripts/windows/smoke_mdmm.ps1 -PackageDir <unpacked zip> -OutputDir <dir> [-Vst3Host <mdmmVst3EditorHost.exe>]
@@ -140,6 +145,15 @@ foreach ($machine in @(@{ Product = $productNames['MDMM_PRODUCT_NAME_MD']; Machi
     }
 }
 
+# B-022: the fallback and failure paths, on the Machinedrum standalone (any build: the switches are read by the shipped one)
+$mdExe = $runs[0].File
+$runs.Add(@{ Label = 'MD standalone, old WebView2 runtime (test)'; File = $mdExe; Arguments = @(); Machine = 'Machinedrum'; Name = 'md-webview2-old'
+    Env = @{ GEARMULATOR_MDMM_WEBVIEW2_TEST = 'old' }; LogWants = 'ICoreWebView2Settings3 not available' })
+$runs.Add(@{ Label = 'MD standalone, no WebView2 runtime (test)'; File = $mdExe; Arguments = @(); Machine = 'Machinedrum'; Name = 'md-webview2-fail'
+    Env = @{ GEARMULATOR_MDMM_WEBVIEW2_TEST = 'fail' }; Failure = $true })
+$runs.Add(@{ Label = 'MD standalone, page that never starts (test)'; File = $mdExe; Arguments = @(); Machine = 'Machinedrum'; Name = 'md-page-nostart'
+    Env = @{ GEARMULATOR_MDMM_PAGE_TEST = 'nostart' }; Failure = $true })
+
 $status = 0
 $summary = New-Object System.Collections.Generic.List[string]
 function Add-Row([string] $What, [string] $Check, [string] $Result) { $summary.Add("| $What | $Check | $Result |") }
@@ -149,8 +163,13 @@ foreach ($run in $runs) {
         RedirectStandardOutput = (Join-Path $OutputDir "$($run.Name)-stdout.txt")
         RedirectStandardError = (Join-Path $OutputDir "$($run.Name)-stderr.txt") }
     if ($run.Arguments.Count -gt 0) { $start.ArgumentList = $run.Arguments }
+    $runEnv = if ($run.ContainsKey('Env')) { $run.Env } else { @{} }
+    foreach ($k in $runEnv.Keys) { Set-Item -Path "env:$k" -Value $runEnv[$k] }
+    Get-ChildItem -LiteralPath $dataRoot -Recurse -File -Filter 'editor-*.log' -ErrorAction SilentlyContinue | Remove-Item -Force -ErrorAction SilentlyContinue
     $process = Start-Process @start
-    $wanted = "$($run.Machine) firmware needed"
+    foreach ($k in $runEnv.Keys) { Remove-Item -Path "env:$k" -ErrorAction SilentlyContinue }
+    $failureRun = $run.ContainsKey('Failure') -and $run.Failure
+    $wanted = if ($failureRun) { 'The editor page could not start' } else { "$($run.Machine) firmware needed" }
     $found = $false
     $names = @()
     $deadline = (Get-Date).AddSeconds($TimeoutSeconds)
@@ -177,6 +196,44 @@ foreach ($run in $runs) {
     }
     Write-Host "$($run.Label): running"
     Add-Row $run.Label 'running' 'yes'
+    # B-022: the start-up log a user can send
+    $startupLog = Get-ChildItem -LiteralPath $dataRoot -Recurse -File -Filter 'editor-*.log' -ErrorAction SilentlyContinue |
+        Where-Object { $_.Name -notlike '*-previous.log' } | Select-Object -First 1
+    $logText = ''
+    if ($startupLog) {
+        Copy-Item -LiteralPath $startupLog.FullName -Destination (Join-Path $OutputDir "$($run.Name)-editor.log") -Force
+        $logText = Get-Content -LiteralPath $startupLog.FullName -Raw
+    }
+    $logWanted = @('WebView2 runtime')
+    if (-not $failureRun) { $logWanted += 'page up' }
+    if ($run.ContainsKey('LogWants')) { $logWanted += $run.LogWants }
+    if ($failureRun) { $logWanted += 'FAILED:' }
+    $logMissing = @($logWanted | Where-Object { -not $logText.Contains($_) })
+    if ($startupLog -and $logMissing.Count -eq 0) {
+        Write-Host "$($run.Label): start-up log $($startupLog.FullName)"
+        Add-Row $run.Label "start-up log ($($logWanted -join ', '))" 'yes'
+    } else {
+        Write-Host "::error::$($run.Label): start-up log missing or without: $($logMissing -join ', ') ($($startupLog))"
+        Add-Row $run.Label "start-up log ($($logWanted -join ', '))" "no: $($logMissing -join ', ')"
+        $status = 1
+    }
+    if ($failureRun) {
+        if ($found) {
+            Write-Host "$($run.Label): the window says '$wanted'"
+            Add-Row $run.Label "window says `"$wanted`"" 'yes'
+        } else {
+            Write-Host "::error::$($run.Label): the window never said '$wanted' within $TimeoutSeconds s"
+            Add-Row $run.Label "window says `"$wanted`"" 'no'
+            $names | Select-Object -First 80 | ForEach-Object { Write-Host "   $_" }
+            $status = 1
+        }
+        Stop-Process -Id $process.Id -Force -ErrorAction SilentlyContinue
+        Start-Sleep -Seconds 3
+        Get-WebViewProcesses | Where-Object { $_.CommandLine -like '*Gearmulator\EditorWebView2*' } |
+            ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }
+        Start-Sleep -Seconds 1
+        continue
+    }
     if ($ours.Count -gt 0) {
         Write-Host "$($run.Label): WebView2 is running with the editors' profile ($($ours.Count) msedgewebview2.exe processes)"
         Add-Row $run.Label 'WebView2 page process' "yes ($($ours.Count))"

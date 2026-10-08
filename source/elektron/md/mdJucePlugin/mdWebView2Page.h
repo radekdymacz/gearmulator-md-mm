@@ -27,7 +27,13 @@ namespace mdJucePlugin
 			std::function<void(const std::string&)> onMessage;		// a postMessage text from the page
 			std::function<bool(const juce::String&)> onNavigation;	// a top-level navigation: false cancels it
 			std::function<void(const juce::String&)> onEvent;		// a line for the log (loads, errors)
+			std::function<void(const juce::String&)> onFailed;		// B-022: the web view cannot start (why, in words)
 		};
+
+		// B-022: the oldest WebView2 Runtime the editors need (WebView2's first stable runtime): every interface they
+		// use but one is in it; ICoreWebView2Settings3 (the browser's own keys off: 1.0.864, Edge 91) is used when
+		// there. Logged with the runtime's version at each start; an older runtime is said in the window.
+		static constexpr const char* g_minimumRuntime = "86.0.616.0";
 
 		WebView2Page(juce::File _userDataFolder, Callbacks _callbacks);
 		~WebView2Page() override;
