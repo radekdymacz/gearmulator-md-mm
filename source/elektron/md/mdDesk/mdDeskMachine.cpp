@@ -147,8 +147,16 @@ namespace mdDesk
 		s.bytesPerSecond = deskCore::DinPacer::g_bytesPerSecond;
 		s.ingestBytesPerSecond = 125000;
 		s.settleMs = 250;
+		// values at cable speed too, 64 CCs at once (a track's sound), and a value SysEx (tempo...) 10 times a second
+		s.valueBytesPerSecond = deskCore::DinPacer::g_bytesPerSecond;
+		s.valueBurstBytes = 192;
+		s.latestIntervalMs = 100;
 		if(const char* rate = std::getenv("GEARMULATOR_MDMM_EDIT_RATE"); rate && *rate)
-			s.bytesPerSecond = std::max(0.0, std::atof(rate));
+		{
+			s.bytesPerSecond = s.valueBytesPerSecond = std::max(0.0, std::atof(rate));
+			if(s.bytesPerSecond <= 0)
+				s.latestIntervalMs = 0;
+		}
 		return s;
 	}
 
@@ -178,18 +186,29 @@ namespace mdDesk
 		, m_out(m_port.sendSysex, m_profile.stream)
 		, m_session([this](const Bytes& _b) { sendSysex(_b); })
 	{
-		// B-014: CCs and notes keep their order with the SysEx sent before them (a machine change, then its
-		// values): while SysEx waits its turn in the stream they wait behind it; otherwise they go at once.
-		const auto ordered = [this](auto& _send)
-		{
-			if(!_send)
-				return;
-			_send = [this, send = std::move(_send)](auto... _args) { m_out.after([send, _args...] { send(_args...); }, now()); };
-		};
-		ordered(m_port.sendKitParam);
-		ordered(m_port.sendHeldParam);
-		ordered(m_port.sendMute);
-		ordered(m_port.sendNote);
+		// B-014: CCs and notes go through the stream too. Kit values and mutes are values (the value budget, the
+		// newest value of a parameter wins, behind any SysEx before them: a machine change, then its values);
+		// notes and a key's held value have priority (they pass waiting values, never SysEx).
+		if(m_port.sendKitParam)
+			m_port.sendKitParam = [this, send = std::move(m_port.sendKitParam)](const uint8_t _t, const uint8_t _i, const uint8_t _v)
+			{
+				m_out.value(_t * 32 + _i, 3, [send, _t, _i, _v] { send(_t, _i, _v); }, now());
+			};
+		if(m_port.sendMute)
+			m_port.sendMute = [this, send = std::move(m_port.sendMute)](const uint8_t _t, const bool _on)
+			{
+				m_out.value(1000 + _t, 3, [send, _t, _on] { send(_t, _on); }, now());
+			};
+		if(m_port.sendHeldParam)
+			m_port.sendHeldParam = [this, send = std::move(m_port.sendHeldParam)](const uint8_t _t, const uint8_t _i, const uint8_t _v)
+			{
+				m_out.priority([send, _t, _i, _v] { send(_t, _i, _v); }, now());
+			};
+		if(m_port.sendNote)
+			m_port.sendNote = [this, send = std::move(m_port.sendNote)](const uint8_t _c, const uint8_t _n, const uint8_t _v)
+			{
+				m_out.priority([send, _c, _n, _v] { send(_c, _n, _v); }, now());
+			};
 		wireSession();
 		m_wire = deskCore::WireFacts(m_port.nowMs ? m_port.nowMs() : 0);
 	}
@@ -198,6 +217,18 @@ namespace mdDesk
 	void MdMachine::sendSysex(const Bytes& _message)
 	{
 		m_out.send(_message, m_sds.active(), now());
+	}
+
+	// B-014: a live edit's SysEx: one that sets a value goes in the stream's latest lane (the newest per value, at
+	// most 10 a second); a machine change is no value (its CCs follow it) and keeps its order.
+	void MdMachine::sendLiveSysex(const LiveEdit& _e, const Bytes& _message)
+	{
+		if(_e.kind == LiveEdit::Kind::Machine)
+		{
+			sendSysex(_message);
+			return;
+		}
+		m_out.sendLatest((static_cast<int>(_e.kind) << 16) | (_e.track << 8) | _e.index, _message, m_sds.active(), now());
 	}
 
 	// ---- P9: a sample to a ROM slot (SDS) ----
@@ -498,7 +529,7 @@ namespace mdDesk
 				sendLive(e.track, e.kind == LiveEdit::Kind::Level ? 24 : e.index, e.value);
 			}
 			else if(const auto sysex = liveEditSysex(e); !sysex.empty() && canSendSysex())
-				sendSysex(sysex);
+				sendLiveSysex(e, sysex);
 		}
 		if(!m_profile.memory)
 			return;
@@ -575,7 +606,7 @@ namespace mdDesk
 					sendLive(e.track, e.kind == LiveEdit::Kind::Level ? 24 : e.index, e.value);
 				}
 				else if(const auto sysex = liveEditSysex(e); !sysex.empty() && canSendSysex())
-					sendSysex(sysex);
+					sendLiveSysex(e, sysex);
 			}
 			std::string note;
 			for(const auto& n : delivery.notLive)
@@ -595,7 +626,7 @@ namespace mdDesk
 			const auto delivery = globalDelivery(before, after);
 			for(const auto& e : delivery.edits)
 				if(const auto sysex = liveEditSysex(e); !sysex.empty() && canSendSysex())
-					sendSysex(sysex);
+					sendLiveSysex(e, sysex);
 			if(!delivery.notLive.empty())
 			{
 				// A global dump is stored at once but applied only when its slot is made active

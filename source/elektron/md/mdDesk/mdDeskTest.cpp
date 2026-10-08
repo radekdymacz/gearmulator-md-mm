@@ -2737,6 +2737,39 @@ namespace
 		out.clear();
 		check(!out.sending(1e6) && out.waiting() == 0, "the machine started over: nothing waits");
 
+		// Values (CCs) share a budget at cable speed with a burst; the newest value of a parameter wins while it
+		// waits; notes pass waiting values; a value-setting SysEx goes at most every latestIntervalMs.
+		{
+			std::vector<std::string> sent;
+			StreamPolicy v = policy;
+			v.valueBytesPerSecond = 3125;
+			v.valueBurstBytes = 30;	// 10 CCs at once
+			v.latestIntervalMs = 100;
+			SysexOut s([&](const std::vector<uint8_t>& _b) { sent.push_back("sysex" + std::to_string(_b[6])); }, v);
+			for(int i = 0; i < 20; ++i)
+				s.value(i, 3, [&sent, i] { sent.push_back("cc" + std::to_string(i)); }, 0);
+			check(sent.size() == 10 && s.waiting() == 10, "a burst of 20 CCs: 10 go at once (the burst), 10 wait for the budget");
+			s.value(15, 3, [&sent] { sent.push_back("cc15new"); }, 0);
+			check(s.waiting() == 10, "a newer value of a waiting parameter replaces it");
+			s.priority([&sent] { sent.push_back("note"); }, 0);
+			check(sent.back() == "note", "a note passes the waiting values");
+			s.pump(3);
+			check(sent.size() == 11 + 3 && sent.back() == "cc12", "the budget refills at cable speed (about one CC a ms)");
+			s.pump(100);
+			check(s.waiting() == 0 && std::find(sent.begin(), sent.end(), "cc15new") != sent.end()
+				&& std::find(sent.begin(), sent.end(), "cc15") == sent.end(), "then the rest, the newest value of each");
+			sent.clear();
+			const std::vector<uint8_t> tempo1{0xf0, 0x00, 0x20, 0x3c, 0x02, 0x00, 0x61, 0x01, 0x10, 0xf7};
+			auto tempo2 = tempo1;
+			tempo2[8] = 0x20;
+			s.sendLatest(7, tempo1, false, 200);
+			s.sendLatest(7, tempo2, false, 220);
+			s.sendLatest(7, tempo1, false, 240);
+			check(sent.size() == 1 && s.waiting() == 1, "a value SysEx goes at once, then the newest waits for the interval");
+			s.pump(300);
+			check(sent.size() == 2, "and goes 100 ms after the one before");
+		}
+
 		// No pacing (bytesPerSecond 0): at once, in order, as before.
 		std::vector<std::vector<uint8_t>> direct;
 		SysexOut at([&](const std::vector<uint8_t>& _b) { direct.push_back(_b); });

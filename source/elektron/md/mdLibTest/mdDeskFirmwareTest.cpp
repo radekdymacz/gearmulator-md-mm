@@ -2971,6 +2971,163 @@ namespace
 		_rig.run(300);
 	}
 
+namespace
+{
+	// B-014: what every kind of editing costs the audio thread. The pattern plays (120 BPM, a trig on every step
+	// of tracks 1-4); each phase repeats one user action at the rate a person does it (the page's own commands),
+	// then waits until the desk is idle, as the plug-in runs it (pluginLike: a block's MIDI at once, postOnly).
+	// Per action: what went to the machine (dumps, CCs, bytes), the 128/256-frame host buffers a second whose
+	// work is over 50 / 100 M instructions (idle: about 27 / 55), the time a second the blocks run hot (a 5-block
+	// mean over 1.3x idle), the worst 256-frame buffer. ACTIONS=a,b,... runs some; ACTIONS_BUDGET=<hot ms/s> fails
+	// any action over it (scripts/mdmm-rt-check.sh). GEARMULATOR_MDMM_EDIT_RATE=0 compares without the stream.
+	void actionLoad(Rig& _rig)
+	{
+		auto& desk = _rig.desk();
+		auto& m = _rig.machine();
+		const auto p = *desk.linkState().pattern;
+		const auto ps = std::to_string(p);
+		const auto k = std::to_string(*desk.linkState().kit);
+		const auto settle = [&] { _rig.runUntil([&] { return !desk.isBusy() && !_rig.pageTx(); }, 8000); };
+		for(int t = 0; t < 4; ++t)
+		{
+			_rig.page("{\"op\":\"steps\",\"p\":" + ps + ",\"from\":0,\"to\":16,\"g\":" + std::to_string(500 + t) + ",\"rows\":[{\"t\":" + std::to_string(t) + ",\"on\":[0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15]}]}");
+			settle();
+		}
+		_rig.page(R"({"op":"tempo","bpm":120})");
+		settle();
+		_rig.page(R"({"op":"play"})");
+		_rig.runUntil([&] { return _rig.pageTelemetry().playing; }, 2000);
+		_rig.run(500);
+		_rig.pluginLike = true;
+		_rig.postOnly = true;
+		// idle is idle: the page's library reads are over (no request but status polls for 2 s)
+		for(int quiet = 0, i = 0; quiet < 4 && i < 240; ++i)
+		{
+			const auto before = _rig.messagesToMachine - _rig.messageKinds[0x70];
+			_rig.run(500);
+			quiet = _rig.messagesToMachine - _rig.messageKinds[0x70] == before ? quiet + 1 : 0;
+		}
+		const char* only = std::getenv("ACTIONS");
+		const double budget = std::getenv("ACTIONS_BUDGET") ? std::atof(std::getenv("ACTIONS_BUDGET")) : -1;
+		uint32_t rng = 12345;
+		const auto rnd = [&](const int _n) { rng = rng * 1664525u + 1013904223u; return static_cast<int>((rng >> 8) % static_cast<uint32_t>(_n)); };
+		int gesture = 3000;
+		double idleMean = 0;
+		std::printf("== B-014 actions (stream %s): action | edits | dumps CCs bytes/s | heavy 128 / 256 a second | hot ms/s | worst 256 (M instr)\n",
+			mdDesk::emulatorProfile().stream.bytesPerSecond > 0 ? "on" : "off");
+		const auto action = [&](const char* _name, const double _ms, const double _everyMs, const std::function<void(int)>& _edit)
+		{
+			if(only && std::string(_name) != "idle" && ("," + std::string(only) + ",").find("," + std::string(_name) + ",") == std::string::npos)
+				return;
+			const auto b0 = _rig.bytesToMachine;
+			const auto kinds0 = _rig.messageKinds;
+			m.resetAudioTime();
+			const auto start = m.now();
+			int n = 0;
+			while(double(m.now() - start) * 1000.0 / g_rate < _ms)
+			{
+				const double t = double(m.now() - start) * 1000.0 / g_rate;
+				if(_edit && t >= n * _everyMs)
+					_edit(n++);
+				_rig.run(1);
+			}
+			if(_edit)
+				settle();
+			_rig.run(200);
+			const double secs = double(m.now() - start) / g_rate;
+			const auto& v = m.blockMInstr;
+			double mean = 0;
+			for(const auto x : v)
+				mean += x;
+			mean /= double(std::max<size_t>(1, v.size()));
+			if(!_edit)
+				idleMean = mean;
+			const double base = idleMean > 0 ? idleMean : mean;
+			size_t h2 = 0, h4 = 0, hot = 0;
+			float worst4 = 0;
+			for(size_t i = 0; i + 2 <= v.size(); i += 2)
+				h2 += v[i] + v[i + 1] > 50;
+			for(size_t i = 0; i + 4 <= v.size(); i += 4)
+			{
+				const float w = v[i] + v[i + 1] + v[i + 2] + v[i + 3];
+				h4 += w > 100;
+				worst4 = std::max(worst4, w);
+			}
+			for(size_t i = 0; i + 5 <= v.size(); ++i)
+				hot += (v[i] + v[i + 1] + v[i + 2] + v[i + 3] + v[i + 4]) / 5 > 1.3 * base;
+			const auto count = [&](const int _kind)
+			{
+				const auto a = _rig.messageKinds.count(_kind) ? _rig.messageKinds.at(_kind) : 0;
+				const auto b = kinds0.count(_kind) ? kinds0.at(_kind) : 0;
+				return a - b;
+			};
+			size_t dumps = 0;
+			for(const int d : {0x67, 0x52, 0x69, 0x50})
+				dumps += count(d);
+			const double hotMs = double(hot) * g_block * 1000.0 / g_rate / secs;
+			std::printf("  %-12s %4d | %4zu %5zu %6.0f | %5.1f %5.1f | %5.0f | %5.1f\n", _name, n, dumps, count(0xb0), double(_rig.bytesToMachine - b0) / secs,
+				double(h2) / secs, double(h4) / secs, hotMs, worst4);
+			if(budget >= 0 && _edit)
+				check(hotMs <= budget, std::string(_name) + ": hot time within the budget (" + std::to_string(int(hotMs)) + " ms/s, budget " + std::to_string(int(budget)) + ")");
+		};
+		const auto steps16 = [&](const int _t, const int _from, const int _to, const int _g)
+		{
+			std::string on;
+			for(int st = _from; st < _to; ++st)
+				if(rnd(3) == 0)
+					on += (on.empty() ? "" : ",") + std::to_string(st);
+			return "{\"t\":" + std::to_string(_t) + ",\"on\":[" + on + "]}";
+			(void)_g;
+		};
+		const auto params = [&](const int _tracks, const int _g)
+		{
+			std::string vals;
+			for(int t = 0; t < _tracks; ++t)
+				for(int i = 0; i < 24; ++i)
+				{
+					if(i == 23 || (i >= 8 && i < 16 && rnd(2)))
+						continue;	// not every knob of the scope moves
+					vals += std::string(vals.empty() ? "" : ",") + "[" + std::to_string(t) + "," + std::to_string(i) + "," + std::to_string(rnd(128)) + "]";
+				}
+			return "{\"op\":\"params\",\"k\":" + k + ",\"values\":[" + vals + "],\"g\":" + std::to_string(_g) + "}";
+		};
+		const int models[] = {int(*ed::mdMachineModel("TRX-BD")), int(*ed::mdMachineModel("EFM-SD")), int(*ed::mdMachineModel("GND-SIN")), int(*ed::mdMachineModel("TRX-SD"))};
+
+		action("idle", 6000, 0, {});
+		{ const int g = ++gesture; action("lockDrag", 6000, 16, [&](const int _n) { _rig.page("{\"op\":\"lock\",\"p\":" + ps + ",\"t\":0,\"i\":1,\"s\":" + std::to_string(_n % 16) + ",\"v\":" + std::to_string((_n * 7) % 128) + ",\"g\":" + std::to_string(g) + "}"); }); }
+		action("lockClicks", 6000, 250, [&](const int _n) { _rig.page("{\"op\":\"lock\",\"p\":" + ps + ",\"t\":1,\"i\":2,\"s\":" + std::to_string(_n % 16) + ",\"v\":" + std::to_string((_n * 13) % 128) + ",\"g\":" + std::to_string(++gesture) + "}"); });
+		action("genR", 6000, 400, [&](const int _n) { _rig.page("{\"op\":\"steps\",\"p\":" + ps + ",\"from\":0,\"to\":16,\"g\":" + std::to_string(++gesture) + ",\"rows\":[" + steps16(4 + _n % 4, 0, 16, 0) + "]}"); });
+		action("genAllR", 6000, 800, [&](const int) { std::string rows; for(int t = 0; t < 16; ++t) rows += (t ? "," : "") + steps16(t, 0, 16, 0); _rig.page("{\"op\":\"steps\",\"p\":" + ps + ",\"from\":0,\"to\":16,\"g\":" + std::to_string(++gesture) + ",\"rows\":[" + rows + "]}"); });
+		{ const int g = ++gesture; action("genDrag", 6000, 33, [&](const int _n) { _rig.page("{\"op\":\"steps\",\"p\":" + ps + ",\"from\":0,\"to\":16,\"g\":" + std::to_string(g) + ",\"rows\":[" + steps16(5, 0, 16, _n) + "]}"); }); }
+		{ const int g = ++gesture; action("mutR", 6000, 400, [&](const int) { _rig.page(params(1, g)); }); }
+		{ const int g = ++gesture; action("mutAllR", 6000, 800, [&](const int) { _rig.page(params(16, g)); }); }
+		{ const int g = ++gesture; action("paramDrag", 6000, 16, [&](const int _n) { _rig.page("{\"op\":\"param\",\"k\":" + k + ",\"t\":2,\"i\":3,\"v\":" + std::to_string(_n % 128) + ",\"g\":" + std::to_string(g) + "}"); }); }
+		{ const int g = ++gesture; action("levelDrag", 6000, 16, [&](const int _n) { _rig.page("{\"op\":\"level\",\"k\":" + k + ",\"t\":3,\"v\":" + std::to_string(_n % 128) + ",\"g\":" + std::to_string(g) + "}"); }); }
+		action("machine", 6000, 500, [&](const int _n) { _rig.page("{\"op\":\"machine\",\"k\":" + k + ",\"t\":6,\"model\":" + std::to_string(models[_n % 4]) + ",\"keepFx\":true,\"g\":" + std::to_string(++gesture) + "}"); });
+		{ const int g = ++gesture; action("controlAll", 6000, 33, [&](const int _n) { _rig.page("{\"op\":\"tweak\",\"k\":" + k + ",\"group\":\"fx\",\"knob\":4,\"d\":" + std::to_string(_n % 2 ? 3 : -3) + ",\"t\":0,\"g\":" + std::to_string(g) + "}"); }); }
+		action("muteBurst", 6000, 30, [&](const int _n) { _rig.page("{\"op\":\"mute\",\"t\":" + std::to_string(_n % 16) + ",\"on\":" + ((_n / 16) % 2 ? "false" : "true") + "}"); });
+		action("copyPaste", 6000, 500, [&](const int _n) { _rig.page("{\"op\":\"copySteps\",\"p\":" + ps + ",\"t\":" + std::to_string(_n % 4) + ",\"from\":0,\"to\":16}"); _rig.page("{\"op\":\"pasteSteps\",\"p\":" + ps + ",\"t\":" + std::to_string(4 + _n % 8) + ",\"from\":0,\"g\":" + std::to_string(++gesture) + "}"); });
+		action("clearUndo", 6000, 700, [&](const int _n) { if(_n % 2 == 0) _rig.pageConfirmed("{\"op\":\"clearPattern\",\"p\":" + ps + ",\"g\":" + std::to_string(++gesture) + "}"); else _rig.page(R"({"op":"undo"})"); });
+		{ const int g = ++gesture; action("lengthDrag", 6000, 50, [&](const int _n) { _rig.page("{\"op\":\"totalLength\",\"p\":" + ps + ",\"v\":" + std::to_string(16 + (_n % 48)) + ",\"g\":" + std::to_string(g) + "}"); }); }
+		action("lengthBack", 2000, 0, {});
+		_rig.page("{\"op\":\"totalLength\",\"p\":" + ps + ",\"v\":16}");
+		settle();
+		{ const int g = ++gesture; action("tempoDrag", 6000, 33, [&](const int _n) { _rig.page("{\"op\":\"tempo\",\"bpm\":" + std::to_string(100 + _n % 60) + ",\"g\":" + std::to_string(g) + "}"); }); }
+		_rig.page(R"({"op":"tempo","bpm":120})");
+		action("keyboard", 6000, 125, [&](const int _n) { if(_n % 2 == 0) _rig.page("{\"op\":\"noteOn\",\"t\":" + std::to_string(_n % 4) + ",\"vel\":100,\"pitch\":0}"); else _rig.page("{\"op\":\"noteOff\",\"t\":" + std::to_string((_n - 1) % 4) + ",\"pitch\":0}"); });
+		action("undoRedo", 6000, 500, [&](const int _n) { _rig.page(_n % 2 ? R"({"op":"redo"})" : R"({"op":"undo"})"); });
+		action("select", 8000, 1000, [&](const int _n) { _rig.pageConfirmed("{\"op\":\"select\",\"p\":" + std::to_string(_n % 2 ? p : (p + 1) % 128) + ",\"now\":true}"); });
+		_rig.pageConfirmed("{\"op\":\"select\",\"p\":" + ps + ",\"now\":true}");
+		settle();
+		action("kitLoad", 8000, 1000, [&](const int _n) { _rig.pageConfirmed("{\"op\":\"kitLoad\",\"k\":" + std::to_string(_n % 2 ? *desk.linkState().kit : (*desk.linkState().kit + 1) % 64) + ",\"force\":true}"); });
+		action("after", 4000, 0, {});
+		_rig.pluginLike = false;
+		_rig.postOnly = false;
+		_rig.page(R"({"op":"stop"})");
+		_rig.run(300);
+	}
+}
+
 int main(const int _argc, char** _argv)
 {
 #ifdef __APPLE__
@@ -3078,6 +3235,17 @@ int main(const int _argc, char** _argv)
 			samples(rig);
 			check(g_contract.loaded() && g_contract.bad() == 0, g_contract.summary());
 			std::printf("mdDeskFirmwareTest samples: %s (%d failure(s))\n", g_failures ? "FAIL" : "PASS", g_failures);
+			return g_failures ? 1 : 0;
+		}
+		if(mode == "actions")
+		{
+			Rig rig(rom, _argv[1]);
+			rig.page(R"({"op":"ready"})");
+			rig.runUntil([&] { return rig.desk().isReady() && rig.desk().linkState().kit && rig.desk().linkState().pattern && rig.desk().documents().working; }, 8000);
+			rig.runUntil([&] { return !rig.desk().isBusy(); }, 20000);
+			rig.run(6000);	// the page's first library read
+			actionLoad(rig);
+			std::printf("mdDeskFirmwareTest actions: %s (%d failure(s))\n", g_failures ? "FAIL" : "PASS", g_failures);
 			return g_failures ? 1 : 0;
 		}
 		if(mode == "plocktiming" || mode == "plocktiming-strict")
