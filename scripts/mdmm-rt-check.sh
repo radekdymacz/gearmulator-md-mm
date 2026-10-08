@@ -1,45 +1,59 @@
 #!/bin/sh
-# B-014: the audio thread's cost per block while the editor edits parameter locks, measured headless
-# with the firmware (no window, no audio device, no sound). Runs mdDeskFirmwareTest plocktiming (the
-# emulator, the desk and the page's edits as the plug-in runs them, one audio block of 64 frames at a
-# time on this thread) and prints, per phase (idle, drag, click, click1s, wheel, after, fill/play
-# rounds), the retired instructions per block and per host buffer of 128 and 256 frames (independent
-# of what else the computer runs), the CPU time, and how many host buffers a second go over a work
-# level. Compare runs: GEARMULATOR_MDMM_MIDI_PACING has no effect here; use the PLOCK_* variables.
-#
-#   scripts/mdmm-rt-check.sh <MD ROM> [build dir (temp/mac_perf)] [VAR=value ...]
-#     PLOCK_INGRESS=<B/s>   SysEx into the firmware (0: at once, as 0.3.2; default 125000, as 0.3.3)
-#     PLOCK_TRANSMIT=<B/s>  the firmware's MIDI out (0: at once; default 125000)
-#     PLOCK_LONG=<rounds>   rounds of 96 new locks, each followed by 4 s of playing
-#     PLOCK_PHASES=a,b      only these phases; PLOCK_CLICK_MS=<ms> between the click1s clicks (1000)
-#
-# The ROM is only read. Output and per-block traces go to a temporary folder (printed at the end).
-set -e
-ROM=${1:?usage: mdmm-rt-check.sh <MD ROM> [build dir] [VAR=value ...]}
-shift
+# B-014: the audio thread's work while the editors edit, measured headless with the firmware (no window, no audio
+# device, no sound), as a pass/fail check. The emulator, the desk and the page's commands run as the plug-in runs
+# them, one audio block at a time on this thread; the cost is counted in retired instructions, so what else the
+# computer runs does not change it.
+#   scripts/mdmm-rt-check.sh [--md <MD ROM>] [--mm <MM ROM>] [--build <dir>] [--budget <hot ms/s>] [--plock] [VAR=value ...]
+#     --md / --mm   the ROMs (default: the plug-ins' ROM folders); only read
+#     --budget      fail any user action whose blocks run hot (a 5-block mean over 1.3x idle) longer than this
+#                   many ms a second (default 100; the stream keeps every action under about 75)
+#     --plock       also mdDeskFirmwareTest plocktiming-strict (B-010's sequencer timing, B-014's per-block tables)
+#     VAR=value     passed on: GEARMULATOR_MDMM_EDIT_RATE=0 measures without the stream (0.3.3), ACTIONS=a,b
+#                   only some actions, PLOCK_* for plocktiming (mdDeskFirmwareTest.cpp)
+# Per action (mdDeskFirmwareTest / mmDeskFirmwareTest actions): what went to the machine, the 128- and 256-frame host
+# buffers a second whose work is over 50 / 100 M instructions (idle: about 27 / 55), the hot time a second and the
+# worst 256-frame buffer. Output and traces go to a temporary folder (printed at the end).
+set -u
 ROOT=$(cd "$(dirname "$0")/.." && pwd)
+MD=$(ls "$HOME/Documents/Gearmulator Preview/Machinedrum/roms/"* 2>/dev/null | head -1)
+MM=$(ls "$HOME/Documents/Gearmulator Preview/Monomachine/roms/"* 2>/dev/null | head -1)
 BUILD=$ROOT/temp/mac_perf
-if [ -n "$1" ] && [ -d "$1" ]; then BUILD=$1; shift; fi
-BIN=$(find "$BUILD" -name mdDeskFirmwareTest -type f -perm +111 | head -1)
-[ -x "$BIN" ] || { echo "no mdDeskFirmwareTest in $BUILD (cmake --build $BUILD --target mdDeskFirmwareTest)"; exit 1; }
+BUDGET=100
+PLOCK=0
+while [ $# -gt 0 ]; do
+	case "$1" in
+		--md) MD=$2; shift 2 ;;
+		--mm) MM=$2; shift 2 ;;
+		--build) BUILD=$2; shift 2 ;;
+		--budget) BUDGET=$2; shift 2 ;;
+		--plock) PLOCK=1; shift ;;
+		*) break ;;
+	esac
+done
+find_bin() { find "$BUILD" -name "$1" -type f -perm +111 | head -1; }
+MDBIN=$(find_bin mdDeskFirmwareTest)
+MMBIN=$(find_bin mmDeskFirmwareTest)
 OUT=$(mktemp -d)
-mkdir -p "$OUT/trace" "$OUT/data"
-env GEARMULATOR_DATA_ROOT="$OUT/data" PLOCK_TRACE="$OUT/trace" "$@" "$BIN" "$ROM" plocktiming > "$OUT/run.txt" 2>&1 || true
-grep -E "^== |^  [a-z]+ |Minstr/|cpu  us|idle-skipped|to the page|locks the" "$OUT/run.txt" | cut -c1-200
-python3 - "$OUT/trace" <<'EOF'
-import csv, os, sys
-d = sys.argv[1]
-print('host buffers a second over a work level (Minstr): 128 frames > 45 / 50 / 55, 256 frames > 90 / 100 / 105')
-for f in sorted(os.listdir(d), key=lambda n: os.path.getmtime(os.path.join(d, n))):
-    v = [float(r['minstr']) for r in csv.DictReader(open(os.path.join(d, f)))]
-    if not v:
-        continue
-    secs = len(v) * 64 / 44100
-    w2 = [v[i] + v[i + 1] for i in range(0, len(v) - 1, 2)]
-    w4 = [sum(v[i:i + 4]) for i in range(0, len(v) - 3, 4)]
-    a = ' '.join('%5.1f' % (sum(x > t for x in w2) / secs) for t in (45, 50, 55))
-    b = ' '.join('%5.1f' % (sum(x > t for x in w4) / secs) for t in (90, 100, 105))
-    print('  %-8s %s | %s' % (f[:-4], a, b))
-EOF
+mkdir -p "$OUT/data"
+STATUS=0
+if [ -n "$MD" ] && [ -x "$MDBIN" ]; then
+	env GEARMULATOR_DATA_ROOT="$OUT/data" ACTIONS_BUDGET="$BUDGET" "$@" "$MDBIN" "$MD" actions > "$OUT/md-actions.txt" 2>&1 || STATUS=1
+	grep -E "^== B-014|^  [a-zA-Z]+ +[0-9]+ \||FAIL|actions:" "$OUT/md-actions.txt"
+	if [ "$PLOCK" = 1 ]; then
+		mkdir -p "$OUT/trace"
+		env GEARMULATOR_DATA_ROOT="$OUT/data" PLOCK_TRACE="$OUT/trace" "$@" "$MDBIN" "$MD" plocktiming-strict > "$OUT/md-plock.txt" 2>&1 || STATUS=1
+		grep -E "^== |^  [a-z0-9]+ |clock:|Minstr/|FAIL|plocktiming" "$OUT/md-plock.txt" | cut -c1-200
+	fi
+else
+	echo "MD: no ROM or no mdDeskFirmwareTest in $BUILD (cmake --build $BUILD --target mdDeskFirmwareTest)"; STATUS=1
+fi
+if [ -n "$MM" ] && [ -x "$MMBIN" ]; then
+	env GEARMULATOR_DATA_ROOT="$OUT/data" ACTIONS_BUDGET="$BUDGET" "$@" "$MMBIN" "$MM" actions > "$OUT/mm-actions.txt" 2>&1 || STATUS=1
+	grep -E "^== B-014|^  [a-zA-Z]+ +[0-9]+ \||FAIL|^PASS" "$OUT/mm-actions.txt"
+else
+	echo "MM: no ROM or no mmDeskFirmwareTest in $BUILD (cmake --build $BUILD --target mmDeskFirmwareTest)"; STATUS=1
+fi
 sysctl -n machdep.cpu.brand_string
 echo "output: $OUT"
+[ "$STATUS" = 0 ] && echo "rt-check: PASS (budget $BUDGET ms/s)" || echo "rt-check: FAIL"
+exit $STATUS

@@ -3067,7 +3067,8 @@ namespace
 			const double hotMs = double(hot) * g_block * 1000.0 / g_rate / secs;
 			std::printf("  %-12s %4d | %4zu %5zu %6.0f | %5.1f %5.1f | %5.0f | %5.1f\n", _name, n, dumps, count(0xb0), double(_rig.bytesToMachine - b0) / secs,
 				double(h2) / secs, double(h4) / secs, hotMs, worst4);
-			if(budget >= 0 && _edit)
+			// a sample's SDS runs as long as its handshake takes (by design, the machine paces it): not budgeted
+			if(budget >= 0 && _edit && std::string(_name) != "sampleLoad")
 				check(hotMs <= budget, std::string(_name) + ": hot time within the budget (" + std::to_string(int(hotMs)) + " ms/s, budget " + std::to_string(int(budget)) + ")");
 		};
 		const auto steps16 = [&](const int _t, const int _from, const int _to, const int _g)
@@ -3120,6 +3121,18 @@ namespace
 		_rig.pageConfirmed("{\"op\":\"select\",\"p\":" + ps + ",\"now\":true}");
 		settle();
 		action("kitLoad", 8000, 1000, [&](const int _n) { _rig.pageConfirmed("{\"op\":\"kitLoad\",\"k\":" + std::to_string(_n % 2 ? *desk.linkState().kit : (*desk.linkState().kit + 1) % 64) + ",\"force\":true}"); });
+		action("sampleLoad", 12000, 100000, [&](const int)
+		{
+			// a 1 s sample into ROM slot 48 (SDS, paced by the machine's handshake)
+			ed::AudioClip c;
+			c.rate = 44100;
+			c.channels.assign(1, std::vector<float>(44100));
+			for(size_t i = 0; i < c.channels[0].size(); ++i)
+				c.channels[0][i] = float(0.5 * std::sin(double(i) * 0.05));
+			const auto err = desk.loadSample(47, "B014 Tone.wav", ed::encodeWav16(c));
+			if(!err.empty())
+				std::printf("  sampleLoad: %s\n", err.c_str());
+		});
 		action("after", 4000, 0, {});
 		_rig.pluginLike = false;
 		_rig.postOnly = false;
