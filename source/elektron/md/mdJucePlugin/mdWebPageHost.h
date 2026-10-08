@@ -75,6 +75,7 @@ namespace mdJucePlugin
 		std::map<uint64_t, juce::File> m_recvFiles;	// written and not yet read by the page, by batch number
 		double m_userZoom = 1.0;	// the user's page zoom (the editor's menu, Cmd - / Cmd + / Cmd 0)
 		double m_cssZoom = 1.0;		// the CSS zoom sent, where the web view has no native page zoom
+		bool m_keptDrawn = false;	// a background run (mdBackgroundRun.h): the page draws while covered
 		mutable juce::File m_logFile;	// created on the first line
 	};
 }

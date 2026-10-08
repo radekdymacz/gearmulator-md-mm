@@ -40,6 +40,7 @@ list(APPEND SOURCES
 	mdWebPageHost.cpp mdWebPageHost.h
 	mmStudioLink.cpp mmStudioLink.h
 	$<$<PLATFORM_ID:Darwin>:mdStudioWebZoom.mm>
+	$<$<PLATFORM_ID:Darwin>:mdBackgroundRun.mm> mdBackgroundRun.h
 	$<$<PLATFORM_ID:Windows>:mdWebView2Page.cpp>
 	mdWebView2Page.h
 	mdAudioMidiLink.cpp mdAudioMidiLink.h
