@@ -1176,6 +1176,11 @@ namespace
 		check(!ed::mdWorkingKitFromMemory(std::vector<uint8_t>(10, 0)), "a short region is refused");
 
 		// P6: the desk outlives the machine: a reboot (a restored project) starts over.
+		ed::MdSampleBank bank;
+		for(uint8_t s = 0; s < 48; ++s) { ed::MdSampleSlot x; x.slot = s; bank.rom.push_back(x); }
+		for(uint8_t s = 0; s < 4; ++s) { ed::MdSampleSlot x; x.ram = true; x.slot = s; bank.ram.push_back(x); }
+		desk.onSampleBank(bank);
+		check(desk.hasSamples(), "the samples are held");
 		desk.setProbe(Desk::Probe::Loading);
 		check(!desk.isInputReady(), "restoring: no input");
 		page.clear();
@@ -1184,6 +1189,14 @@ namespace
 		for(const auto& m : page)
 			reset |= m.find("type")->asString() == "reset";
 		check(reset && desk.documents().kits.empty() && !desk.documents().working && !desk.coreState().history().canUndo(), "a reboot: the page starts over, nothing old is kept");
+		// B-012: the page dropped the samples with the rest; the same bank after the reboot reaches it again.
+		check(!desk.hasSamples(), "a reboot forgets the samples");
+		page.clear();
+		desk.onSampleBank(bank);
+		size_t samples = 0;
+		for(const auto& m : page)
+			samples += m.find("type")->asString() == "samples";
+		check(samples == 1 && desk.hasSamples(), "the same bank after a reboot is published again");
 	}
 
 	// Knob moves while live recording become panel steps: select, page, turn.

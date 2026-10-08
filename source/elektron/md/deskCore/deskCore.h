@@ -575,7 +575,12 @@ namespace deskCore
 					kept.push_back(std::move(m));
 			m_out = std::move(kept);
 			forgetAll();
+			if(m_onStartOver)
+				m_onStartOver();
 		}
+		// What the model holds beside the core's documents (and the page drops on a reset too) is forgotten
+		// here, so it reaches the page again (mdDesk: the samples).
+		void setOnStartOver(std::function<void()> _onStartOver) { m_onStartOver = std::move(_onStartOver); }
 
 		// The engine map's entries, for the page's engine menu (machine.engines).
 		void setEngines(std::vector<EngineChoice> _engines) { m_engines = std::move(_engines); }
@@ -692,5 +697,6 @@ namespace deskCore
 		bool m_pageSeen = false;
 		std::vector<EngineChoice> m_engines;
 		std::vector<Value> m_out;		// messages waiting for the flush, in order
+		std::function<void()> m_onStartOver;
 	};
 }

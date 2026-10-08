@@ -34,6 +34,7 @@ namespace deskCore
 			, m_ready(std::move(_ready))
 			, m_core(std::move(_toPage))
 		{
+			m_core.setOnStartOver([this] { onStartOver(); });
 			setEngine(std::move(_adapter));
 		}
 		virtual ~Desk() = default;
@@ -138,6 +139,9 @@ namespace deskCore
 		virtual void onSetup(const Value& _message) { m_core.result(_message, {"no setup here"}, {}); }
 		// The page (re)attached: after the core's own publishing, what the model adds.
 		virtual void onReadyExtra() {}
+		// The machine started over (a reset: the page drops every document): what the model holds beside the
+		// core's documents is not known any more either.
+		virtual void onStartOver() {}
 		void publish(const Value& _message) { m_core.publish(_message); }
 		void result(const Value& _message, const std::vector<std::string>& _errors, const std::string& _note)
 		{

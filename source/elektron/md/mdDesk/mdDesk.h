@@ -66,8 +66,12 @@ namespace mdDesk
 		void onWorkingKitMemory(const Bytes& _region);
 		void setProbe(Probe _probe);
 		// P9, UW samples. The bank read from the emulated machine's memory (md::DeskDevice): published to
-		// the page as {"type":"samples","doc"} (md-desk/samples) when it changed and after every ready.
+		// the page as {"type":"samples","doc"} (md-desk/samples) when it changed and after every ready. A reset
+		// (the machine started over: the page drops every document) forgets it: the next bank is published,
+		// also when it is the same (B-012).
 		void onSampleBank(const elektronData::MdSampleBank& _bank);
+		// Whether the desk holds a bank: without one, the engine hands it the device's current bank again.
+		bool hasSamples() const { return m_samples.has_value(); }
 		// The page's ops on them (Owner::Setup rows, the desk's own): sampleWave {bank, slot, bins} answers
 		// {"type":"sampleWave"} (the slot at up to bins min, max pairs, 16-bit: the overview's 128 are for the
 		// list); audition {bank, slot} plays the slot once on the plug-in's own output through the adapter
@@ -98,6 +102,7 @@ namespace mdDesk
 		void setModulators(const Value& _message);
 		void setKnobs(const Value& _message);
 		void onReadyExtra() override;
+		void onStartOver() override;
 		void publishSetup();
 		void publishModulators();
 		void saveSetup() const;

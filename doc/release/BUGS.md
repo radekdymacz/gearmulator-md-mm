@@ -9,7 +9,9 @@ where it came from, the setup, what happens, what should happen, status.*
 - **From:** journeys in the minimal VST3 host, 2026-10-08.
 - **What happens:** `mm-seq-first-beat` fails 5 of 5 in the VST3: the clicks reach the machine (trigs 0, 1, 16, 32, 48), but the piano roll shows only the first cell. The standalone passes.
 - **Maybe:** the plug-in follows the host's clock and the test host gives no play position; to be checked in a real DAW.
-- **Status:** open.
+- **Cause:** not the host. The VST3 starts from a factory machine (no saved state), the standalone from the person's saved one, so the pattern differs. On the factory pattern 1 of track 1 has notes on steps 1, 17, 33 and 49 only; the first click puts a note on step 2, and on a synth track a note's bar runs on to the next step that holds anything (step 17). The next clicks (steps 5, 9, 13, the same pitch) land on that bar, and a click on a bar takes the note (a pitch drag), so nothing is added: what the editor is meant to do, and what a person would see too. The clock is not involved: with the journey fixed, PLAY and STOP pass in the VST3. Turning the host following off (`followHost`) did not change the failure.
+- **Fix (branch `fix/first-start-sampler`):** the journey picks cells that no bar of the clicked pitch covers and clicks them right to left, so a new note's bar never reaches the next cell. The test host needs no play position.
+- **Status:** fixed (journey only), 2026-10-08.
 
 ## B-012 · First start on a new install: the Sampler has no samples
 
@@ -17,7 +19,9 @@ where it came from, the setup, what happens, what should happen, status.*
 - **What happens:** on the very first start (the Machinedrum prepares its factory flash, about 17 s, then restarts in process), the samples document is never published, so the Sampler workspace stays empty. After a restart of the editor (the factory cache now exists) it works.
 - **Where:** the sample scan after the in-process restart, `md::DeskDevice::scanSamples` (`mdLib/mddeskdevice.cpp`); related to the B-003 change in 0.3.2.
 - **Should:** the Sampler fills on the first start too.
-- **Status:** open, being fixed for 0.3.3.
+- **Cause:** not the scan. The page asks for the samples as soon as it is up, so the device reads them already from the machine that prepares its flash, and the desk publishes that bank. When the machine started again (in process), the desk sent the page a reset (the machine started over: the page drops every document) and read the kits, patterns, global and song again; the samples are not the core's documents, so the desk kept its bank, and the bank the new machine read was the same (the factory samples), so `mdDesk::Desk::onSampleBank` saw no change and published nothing. The page held no samples until the editor restarted. Any reset with an unchanged bank did the same.
+- **Fix (branch `fix/first-start-sampler`):** a reset makes the desk forget what it holds beside the core's documents (`deskCore::Desk::onStartOver`; the Machinedrum desk: the samples), and a desk without a bank gets the device's current one again (`StudioLink::readSampleBank(_, again)`), so the page gets the samples after every reset. MM has nothing of the kind (its page's documents are all the core's). Tests: `mdFirstStartFirmwareTest` (the page ends the first start holding what the next start's page holds, the samples with 48 ROM slots among them), `mdDeskTest` (a reboot forgets the samples; the same bank is published again); journeys `md-sampler-*` pass in the VST3 host on a fresh data root.
+- **Status:** fixed for 0.3.3.
 
 ## B-011 · A Monomachine DigiPRO voice goes silent at some MIDI input speeds
 
