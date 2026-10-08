@@ -120,6 +120,18 @@ const Journey = (() => {
 			pe("pointerdown", t, x, y, m, 1); me("mousedown", t, x, y, m, 1);
 			pe("pointerup", t, x, y, m, 0); me("mouseup", t, x, y, m, 0); me("click", t, x, y, m, 0);
 		},
+		/* a right-click at the element's centre: the second button down and up, then the contextmenu event the browser
+		   sends (a step's menu, DESIGN-keymap.md K3) */
+		rightClick(q, m = {}, fx, fy) {
+			const e = el(q), { x, y } = pointIn(e, fx, fy), t = document.elementFromPoint(x, y);
+			Pointer.ring(x, y);
+			const o = (type, buttons) => Object.assign({ bubbles: true, cancelable: true, composed: true, button: 2, buttons, clientX: x, clientY: y, view: window }, mods(m));
+			t.dispatchEvent(new PointerEvent("pointerdown", Object.assign(o("pointerdown", 2), { pointerId: 1, pointerType: "mouse", isPrimary: true })));
+			t.dispatchEvent(new MouseEvent("mousedown", o("mousedown", 2)));
+			t.dispatchEvent(new MouseEvent("contextmenu", o("contextmenu", 2)));
+			t.dispatchEvent(new PointerEvent("pointerup", Object.assign(o("pointerup", 0), { pointerId: 1, pointerType: "mouse", isPrimary: true })));
+			t.dispatchEvent(new MouseEvent("mouseup", o("mouseup", 0)));
+		},
 		dblclick(q, m = {}) { u.click(q, m); const e = el(q), { x, y } = pointIn(e); me("dblclick", document.elementFromPoint(x, y), x, y, m, 0, 2); },
 		/* a press and drag: from the element's point through each [dx, dy] offset (or element), released at the last */
 		async drag(q, path, m = {}, o = {}) {

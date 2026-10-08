@@ -36,8 +36,8 @@ document.addEventListener("click", e => { const b = e.target.closest(".ms.m[data
 document.addEventListener("keyup", e => { if (e.key === "Shift") applyPrep(); });
 /* leaving the window drops them (as the MM page): Shift let go elsewhere never reaches the page */
 addEventListener("blur", () => { if (!PREP.size) return; PREP.clear(); showPrep(); });
-Keys.bind({ keys: ["M key"], mod: "shift", group: "Anywhere", does: "Click: prepare that track's mute (+ / X); applied when ⇧ is let go" });
-Keys.bind({ keys: ["drag a value"], mod: "alt", group: "All", does: "Control All: move that knob on every track (FUNCTION + knob on the machine)" });
+Keys.bind({ id: "mkey-prepare", scope: "any", area: "Tracks", keys: ["M key"], mod: "shift", group: "Anywhere", does: "Click: prepare that track's mute (+ / X); applied when ⇧ is let go" });
+Keys.bind({ id: "control-all", scope: "sound mix", area: "Values", keys: ["drag a value"], mod: "alt", group: "All", does: "Control All: move that knob on every track (FUNCTION + knob on the machine)" });
 /* M: the selected track; Alt+M: every track, one toggle (matched on e.code: with Alt macOS types µ) */
 function muteSel() { const t = S.sel; if (!V.tracks[t]) return; const on = !V.tracks[t].mute; muteSet(t, on); refreshAudible(); lcdSay([[t, on]]); }
 function muteAllToggle() {
@@ -46,12 +46,13 @@ function muteAllToggle() {
 	refreshAudible(); if (ch.length) lcdSay(ch);
 	toast(on ? "Every track muted (Alt+M again: unmute all)" : "Every track unmuted");
 }
-Keys.bind({ keys: ["M"], code: "KeyM", group: "Selected track", does: "Mute or unmute the selected track", when: () => kbOn(), run: () => muteSel() });
-Keys.bind({ keys: ["M"], code: "KeyM", mod: "alt", group: "All", does: "Mute every track; when none is audible, unmute every track", when: () => kbOn(), run: () => muteAllToggle() });
+Keys.bind({ id: "mute-track", short: "Mute", scope: "any", keys: ["M"], code: "KeyM", group: "Selected track", does: "Mute or unmute the selected track", when: () => kbOn(), run: () => muteSel() });
+Keys.bind({ id: "mute-all", short: "Mute all", scope: "any", keys: ["M"], code: "KeyM", mod: "alt", group: "All", does: "Mute every track; when none is audible, unmute every track", when: () => kbOn(), run: () => muteAllToggle() });
 /* ↑ / ↓: the previous / next track, while no value has the keys (a focused value, tempo or bar keeps them:
    the dispatcher leaves [role=slider] alone, a bar's value stops them itself) */
-Keys.bind({ keys: ["ArrowUp", "ArrowDown"], group: "Selected track", does: "Select the previous / next track (a focused value keeps ↑ / ↓ for itself)",
-	when: () => kbOn() && $("#kpop").hidden && $("#keyspop").hidden, run: e => select((S.sel + (e.key === "ArrowDown" ? 1 : 15)) % 16) });
+Keys.bind({ id: "track-prev-next", short: "Track − / Track +", scope: "any", keys: ["ArrowUp", "ArrowDown"], group: "Selected track", does: "Select the previous / next track (a focused value keeps ↑ / ↓ for itself). Sequence with selected steps: move the selection a track",
+	when: () => kbOn() && $("#kpop").hidden && $("#keyspop").hidden,
+	run: e => { if (selKeys()) { selMove(e.key === "ArrowDown" ? 1 : -1, 0); return; } select((S.sel + (e.key === "ArrowDown" ? 1 : 15)) % 16); } });
 const refreshAudible0 = refreshAudible; refreshAudible = function () { refreshAudible0(); showPrep(); };
 const renderP0 = render; render = function () { renderP0(); showPrep(); markRecLock(); };
 
@@ -104,7 +105,7 @@ function endMutePaint() { if (!Held.end("mutePaint")) return; setTimeout(() => {
 document.addEventListener("pointerup", endMutePaint); document.addEventListener("pointercancel", endMutePaint);
 window.addEventListener("blur", endMutePaint);
 addEventListener("click", e => { if (!msClickEaten) return; msClickEaten = false; e.stopImmediatePropagation(); e.preventDefault(); }, true);
-Keys.bind({ keys: ["drag M / S keys"], group: "Anywhere", does: "Mute (solo) or unmute every track the drag crosses, as the first key became" });
+Keys.bind({ id: "ms-paint", scope: "any", area: "Tracks", keys: ["drag M / S keys"], group: "Anywhere", does: "Mute (solo) or unmute every track the drag crosses, as the first key became" });
 
 /* ===== Knob locks while live recording (P4): the firmware locks the track's next trig whose step has
    not started when the turn lands; the desk says which (machine.desk.recLock), the cell shows it until
@@ -128,7 +129,7 @@ Bridge.onMessage(m => {
 /* ===== Tap tempo (manual p.36): T (or B, the Monomachine Editor's tap key, where T is a black key) taps, the
    average of the last taps sets the tempo (0x61). ===== */
 const TAP = [];
-Keys.bind({ keys: ["T", "B"], group: "Transport", does: "Tap tempo (the average of the last taps; B as in the Monomachine Editor)", when: () => kbOn(), run: () => {
+Keys.bind({ id: "tap-tempo", short: "Tap / Tap", scope: "any", keys: ["T", "B"], group: "Transport", does: "Tap tempo (the average of the last taps; B as in the Monomachine Editor)", when: () => kbOn(), run: () => {
 	const now = performance.now(); if (TAP.length && now - TAP[TAP.length - 1] > 2000) TAP.length = 0;
 	TAP.push(now); if (TAP.length > 5) TAP.shift();
 	if (TAP.length >= 2) { const bpm = clamp(Math.round(60000 / ((TAP[TAP.length - 1] - TAP[0]) / (TAP.length - 1)) * 10) / 10, 30, 300); cmd("tempo", { bpm }, "tempo", [[["bpm"], bpm]]); renderTop(); toast("Tap tempo: " + bpm.toFixed(1) + " BPM"); }
@@ -260,11 +261,11 @@ function kbVel(d) { KB.vel = keyVel(KB.vel, d); toast(`Keyboard velocity ${KB.ve
 function kbOct(d) { KB.oct = clamp(KB.oct + d, KEYS_OCT[0], KEYS_OCT[1]); toast(`Keyboard octave ${KB.oct > 0 ? "+" : ""}${KB.oct}`); }
 document.addEventListener("keyup", e => kbUp(e.code));
 addEventListener("blur", () => [...KB.held.keys()].forEach(kbUp));
-Keys.bind({ keys: [...KEYS_WHITE], group: "Playing", hidden: true, field: true, when: kbOn, run: kbDown, does: "" });
-Keys.bind({ keys: ["Z"], group: "Playing", hidden: true, field: true, when: kbOn, run: () => kbOct(-1), does: "" });
-Keys.bind({ keys: ["X"], group: "Playing", hidden: true, field: true, when: kbOn, run: () => kbOct(1), does: "" });
-Keys.bind({ keys: ["C"], group: "Playing", hidden: true, field: true, when: kbOn, run: () => kbVel(-1), does: "" });
-Keys.bind({ keys: ["V"], group: "Playing", hidden: true, field: true, when: kbOn, run: () => kbVel(1), does: "" });
-Keys.bind({ keys: ["A S D F G H J K L"], group: "Playing", does: "Play the selected track: white keys C D E F G A B C D, from any workspace. ROM and RAM-P machines are pitched (PTCH, 3 steps a semitone; given back when the key is let go), others play at their own pitch. While recording: records the trig" });
-Keys.bind({ keys: ["Z", "X"], group: "Playing", does: () => `Octave down / up, −2 to +2 (now ${KB.oct > 0 ? "+" : ""}${KB.oct})` });
-Keys.bind({ keys: ["C", "V"], group: "Playing", does: () => `Velocity down / up: 20 40 60 80 100 127 (now ${KB.vel})` });
+Keys.bind({ id: "piano-run", scope: "any", keys: [...KEYS_WHITE], group: "Playing", hidden: true, field: true, when: kbOn, run: kbDown, does: "" });
+Keys.bind({ id: "octave-down", scope: "any", keys: ["Z"], group: "Playing", hidden: true, field: true, when: kbOn, run: () => kbOct(-1), does: "" });
+Keys.bind({ id: "octave-up", scope: "any", keys: ["X"], group: "Playing", hidden: true, field: true, when: kbOn, run: () => kbOct(1), does: "" });
+Keys.bind({ id: "velocity-down", scope: "any", keys: ["C"], group: "Playing", hidden: true, field: true, when: kbOn, run: () => kbVel(-1), does: "" });
+Keys.bind({ id: "velocity-up", scope: "any", keys: ["V"], group: "Playing", hidden: true, field: true, when: kbOn, run: () => kbVel(1), does: "" });
+Keys.bind({ id: "piano-white", short: "Play", scope: "any", notes: "C D E F G A B C D", keys: ["A S D F G H J K L"], group: "Playing", does: "Play the selected track: white keys C D E F G A B C D, from any workspace. ROM and RAM-P machines are pitched (PTCH, 3 steps a semitone; given back when the key is let go), others play at their own pitch. While recording: records the trig" });
+Keys.bind({ id: "octave", short: "Oct − / Oct +", scope: "any", keys: ["Z", "X"], group: "Playing", does: () => `Octave down / up, −2 to +2 (now ${KB.oct > 0 ? "+" : ""}${KB.oct})` });
+Keys.bind({ id: "velocity", short: "Vel − / Vel +", scope: "any", keys: ["C", "V"], group: "Playing", does: () => `Velocity down / up: 20 40 60 80 100 127 (now ${KB.vel})` });

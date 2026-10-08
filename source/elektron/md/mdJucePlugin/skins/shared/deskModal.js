@@ -9,13 +9,14 @@
               a click outside does nothing, the first focus is its last key (never the destructive one)
      panel    a library, settings or list: Esc and a click outside close it (its own close function)
      boot     the start-up card (deskBoot.js): nothing closes it but the machine becoming ready
+     menu     a context menu (deskMenu.js, K3): at the pointer, nothing dimmed, Esc and a click outside close it
    A listbox (the dropdowns) is not a modal: it stays at its button. */
 const Modal = (() => {
 	const KINDS = { confirm: { outside: false, focusLast: true, esc: true }, panel: { outside: true, focusLast: false, esc: true },
-		boot: { outside: false, focusLast: false, esc: false } };
+		boot: { outside: false, focusLast: false, esc: false }, menu: { outside: true, focusLast: false, esc: true } };
 	const DIALOGS = [["#dlg", "confirm", null], ["#libpop", "panel", "closeLib"], ["#globpop", "panel", "closeGlobal"],
 		["#keyspop", "panel", "toggleKeys"], ["#audiopop", "panel", "closeAudio"], ["#machpop", "panel", "closePicker"], ["#bootcard", "boot", null],
-		["#syxpop", "panel", null]];
+		["#syxpop", "panel", null], ["#deskmenu", "menu", "closeDeskMenu"]];
 	const stack = [];	// {el, kind, close, back}
 	const FOCUSABLE = 'button:not([disabled]),[href],input:not([disabled]),select:not([disabled]),textarea,[tabindex]:not([tabindex="-1"])';
 	let bg = null;
@@ -26,6 +27,7 @@ const Modal = (() => {
 	function layer() {
 		if (!bg) { bg = document.createElement("div"); bg.id = "modalbg"; bg.className = "modalbg"; bg.hidden = true; document.body.appendChild(bg); }
 		bg.hidden = !stack.length;
+		bg.classList.toggle("clear", stack.length > 0 && stack[stack.length - 1].kind === "menu");	/* a menu dims nothing */
 		stack.forEach((d, i) => { d.el.classList.add("modal"); d.el.style.setProperty("--mz", 60 + i * 2); });
 		if (stack.length) bg.style.setProperty("--mz", 59 + (stack.length - 1) * 2);
 		document.documentElement.classList.toggle("modalopen", stack.length > 0);
@@ -67,8 +69,10 @@ const Modal = (() => {
 	document.addEventListener("keydown", e => {
 		const d = top(); if (!d) return;
 		if (e.key === "Escape") { e.preventDefault(); e.stopImmediatePropagation(); dismiss(d); return; }
-		/* keys meant for the page behind (its shortcuts) do not reach it; the menu bar's own shortcuts are the system's */
-		if (e.key !== "Tab") { if (!box(d).contains(e.target) && !e.target.closest?.("#kpop") && !e.metaKey) { e.preventDefault(); e.stopImmediatePropagation(); } return; }
+		/* keys meant for the page behind (its shortcuts) do not reach it; ⌘ (Ctrl off a Mac: deskKeys.js Modifiers) passes,
+		   for the menu bar's own shortcuts and the map's modal: "panel" entries (⌘Z over a panel) */
+		const cmd = typeof Modifiers !== "undefined" ? Modifiers.cmd(e) : e.metaKey;
+		if (e.key !== "Tab") { if (!box(d).contains(e.target) && !e.target.closest?.("#kpop") && !cmd) { e.preventDefault(); e.stopImmediatePropagation(); } return; }
 		const k = keys(d); if (!k.length) { e.preventDefault(); return; }
 		const i = k.indexOf(document.activeElement), n = e.shiftKey ? (i <= 0 ? k.length - 1 : i - 1) : (i < 0 || i === k.length - 1 ? 0 : i + 1);
 		e.preventDefault(); k[n].focus();

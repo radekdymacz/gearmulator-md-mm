@@ -38,13 +38,15 @@ const mods = b => (b.mod || "") === "" && !b.code && b.keys.some(k => k.length =
 const run = list.filter(b => b.run), name = b => `${Keys.label(b)} (${b.group})`;
 
 /* ---- rule: no ⇧ chords, ⌘ only for the standard edit keys ---- */
-const STD_CMD = new Set(["cmd KeyZ", "cmd+shift KeyZ", "cmd KeyY", "cmd KeyC", "cmd KeyV", "cmd KeyX", "cmd KeyD"]);
+/* and the selection's own (K2, DESIGN-keymap.md §3.2): ⌘A selects every step, ⇧← ⇧→ extend it */
+const STD_CMD = new Set(["cmd KeyZ", "cmd+shift KeyZ", "cmd KeyY", "cmd KeyC", "cmd KeyV", "cmd KeyX", "cmd KeyD", "cmd KeyA", "shift ArrowLeft", "shift ArrowRight"]);
 const badMod = run.filter(b => ids(b).some(id => { const m = b.mod || ""; return m.includes("shift") && !STD_CMD.has(m + " " + id) || m.includes("cmd") && !STD_CMD.has(m + " " + id); }));
-check(!badMod.length, "no ⇧ or ⌘ commands but ⌘Z ⌘⇧Z ⌘Y ⌘C ⌘V ⌘X ⌘D" + (badMod.length ? ": " + badMod.map(name).join(", ") : ""));
+check(!badMod.length, "no ⇧ or ⌘ commands but ⌘Z ⌘⇧Z ⌘Y ⌘C ⌘V ⌘X ⌘D ⌘A and ⇧← ⇧→ (the selection)" + (badMod.length ? ": " + badMod.map(name).join(", ") : ""));
 
 /* ---- rule: no two dispatched entries on one key and modifiers, unless both are conditional and known exclusive ---- */
 /* Escape: each closes what is open (the help, a dialog, LEARN, the paste marks, GLOBAL), one at a time */
-const EXCLUSIVE = new Set([" Escape"]);
+/* ← →: Song's rows, or the step selection on Sequence (each when() names its workspace) */
+const EXCLUSIVE = new Set([" Escape", " ArrowLeft", " ArrowRight"]);
 const by = new Map();
 for (const b of run) for (const id of ids(b)) for (const m of mods(b)) { const k = m + " " + id; by.set(k, [...(by.get(k) || []), b]); }
 const clash = [...by].filter(([k, bs]) => bs.length > 1 && (bs.some(b => !b.when) || !EXCLUSIVE.has(k)));
@@ -55,11 +57,18 @@ const has = (m, id) => run.some(b => (b.mod || "") === m && ids(b).includes(id))
 const WANT = [["", "KeyA", "a note"], ["", "KeyL", "a note"], ["", "KeyZ", "octave down"], ["", "KeyX", "octave up"], ["", "KeyC", "velocity down"], ["", "KeyV", "velocity up"],
 	["", "Space", "play / stop"], ["alt", "Space", "record + play"], ["", "KeyR", "randomise the selected track"], ["", "KeyM", "mute the selected track"], ["", "KeyT", "tap tempo"], ["", "KeyB", "tap tempo (B, the Monomachine Editor's tap key)"],
 	["", "ArrowUp", "previous track"], ["", "ArrowDown", "next track"], ["alt", "KeyR", "randomise all"], ["alt", "KeyM", "mute / unmute all"], ["alt", "Delete", "clear the pattern"],
-	["alt", "ArrowLeft", "rotate"], ["alt", "ArrowRight", "rotate"], ["cmd", "KeyZ", "undo"], ["cmd", "KeyC", "copy"], ["cmd", "KeyV", "paste"], ["cmd", "KeyX", "cut the selected steps"], ["cmd", "KeyD", "duplicate the selected steps"]];
+	["alt", "ArrowLeft", "rotate"], ["alt", "ArrowRight", "rotate"], ["cmd", "KeyZ", "undo"], ["cmd", "KeyC", "copy"], ["cmd", "KeyV", "paste"], ["cmd", "KeyX", "cut the selected steps"], ["cmd", "KeyD", "duplicate the selected steps"],
+	["cmd", "KeyA", "select every step"], ["", "Enter", "the selected steps' trigs"], ["shift", "ArrowRight", "extend the selection"]];
 const missing = WANT.filter(([m, id]) => !has(m, id));
 check(!missing.length, "the approved keys are bound" + (missing.length ? ": missing " + missing.map(([m, id, w]) => `${m}+${id} (${w})`).join(", ") : ""));
+/* K2 (DESIGN-keymap.md): ⇧← ⇧→ are the selection's, never rotate again (rotate is ⌥← ⌥→); steps select on ⌘, ⌥ selects nothing */
+const byIdOf = id => list.find(b => b.id === id);
+check(run.filter(b => b.mod === "shift" && ids(b).includes("ArrowLeft")).every(b => b.id === "sel-extend"), "⇧← is the selection's extend, not rotate");
+check(byIdOf("step-select")?.mod === "cmd" && byIdOf("step-extend")?.mod === "cmd+shift" && !list.some(b => b.area === "Steps" && b.mod === "alt"),
+	"a step is selected with ⌘ (⌘⇧ extends); no ⌥ gesture on a step");
+check(!list.some(b => b.area === "Steps" && /fill/i.test(does(b)) && b.mod), "the fill is no ⌘-click any more (the step menu has it)");
 const GONE = [["", "KeyW", "Walk"], ["cmd", "KeyR", "⌘R"], ["shift", "KeyR", "⇧R"], ["shift", "KeyD", "⇧D"], ["shift", "KeyF", "⇧F"], ["shift", "KeyG", "⇧G"], ["shift", "KeyL", "⇧L"],
-	["shift", "ArrowLeft", "⇧← rotate"], ["shift", "Space", "⇧Space"]];
+	["shift", "Space", "⇧Space"]];
 const still = GONE.filter(([m, id]) => has(m, id));
 check(!still.length, "the removed keys are gone" + (still.length ? ": " + still.map(x => x[2]).join(", ") : ""));
 /* the old mute row (Alt+1..8 / Alt+Q..I) had its own listener: its code list must not come back */

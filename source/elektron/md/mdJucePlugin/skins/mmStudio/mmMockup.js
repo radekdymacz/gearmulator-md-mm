@@ -540,18 +540,85 @@ if(window.MMHost){const miss=MM_SEAM.host.filter(k=>!(k in window.MMHost));if(mi
 
 /* ---- shared/deskKeys.js ---- */
 "use strict";
+/* The platform's modifiers (K1, doc/modern-ux/DESIGN-keymap.md P4), the one place both editors read them: ⌘ is the
+   command key on macOS (metaKey) and Ctrl elsewhere (ctrlKey). On a Mac, Ctrl is not ⌘ (Ctrl-click is the
+   system's right-click), and off a Mac the Windows key is not Ctrl: of(e) names them "ctrl" / "meta", which no
+   entry wants. say(text) puts a text the page shows into the platform's words (⌘C stays ⌘C on a Mac, is Ctrl+C
+   elsewhere; ⌥ is Alt, ⇧ Shift); off a Mac the page's titles and texts are put so as they are drawn (localise).
+   setPlatform(mac) is for the tests. */
+const Modifiers = (() => {
+	let mac = typeof navigator !== "undefined" && /Mac|iPhone|iPad|iPod/.test(navigator.platform || navigator.userAgent || "");
+	const cmd = e => !!(mac ? e.metaKey : e.ctrlKey);
+	const of = e => [cmd(e) ? "cmd" : "", e.altKey ? "alt" : "", e.shiftKey ? "shift" : "",
+		mac && e.ctrlKey ? "ctrl" : "", !mac && e.metaKey ? "meta" : ""].filter(Boolean).join("+");
+	const NAME = { "⌘": "Ctrl", "⌥": "Alt", "⇧": "Shift" };
+	/* off a Mac: each run of symbols becomes its names joined with +, and a + before the key it holds ("⌘⇧Z" ->
+	   "Ctrl+Shift+Z", "⌘-click" -> "Ctrl-click", "(⇧: 1)" -> "(Shift: 1)"); "Cmd" and "Option" as words too */
+	const say = text => mac || text == null ? text : String(text)
+		.replace(/[⌘⌥⇧]+/g, (m, at, s) => [...m].map(c => NAME[c]).join("+") + (/^[^\s\-:;,.)/]/.test(s.slice(at + m.length)) ? "+" : ""))
+		.replace(/\bCmd\b/g, "Ctrl").replace(/\bOption\b/g, "Alt");
+	const odd = t => !!t && /[⌘⌥⇧]|\bCmd\b|\bOption\b/.test(t);
+	const ATTRS = ["title", "aria-label", "data-tip"];
+	function localiseNode(n) {
+		if (mac || !n) return;
+		if (n.nodeType === 3) { if (odd(n.nodeValue)) n.nodeValue = say(n.nodeValue); return; }
+		if (n.nodeType !== 1) return;
+		for (const el of [n, ...n.querySelectorAll("[title],[aria-label],[data-tip]")]) for (const a of ATTRS) { const v = el.getAttribute(a); if (odd(v)) el.setAttribute(a, say(v)); }
+		if (!odd(n.textContent)) return;
+		const it = document.createNodeIterator(n, 4); for (let t = it.nextNode(); t; t = it.nextNode()) if (odd(t.nodeValue)) t.nodeValue = say(t.nodeValue);
+	}
+	/* off a Mac, whatever the page draws or retitles is said with Ctrl / Alt / Shift */
+	function localise() {
+		if (mac || typeof MutationObserver === "undefined" || !document.body) return;
+		localiseNode(document.body);
+		new MutationObserver(ms => {
+			for (const m of ms) {
+				if (m.type !== "attributes") { m.addedNodes.forEach(localiseNode); continue; }
+				const v = m.target.getAttribute(m.attributeName); if (odd(v)) m.target.setAttribute(m.attributeName, say(v));
+			}
+		}).observe(document.body, { subtree: true, childList: true, attributes: true, attributeFilter: ATTRS });
+	}
+	if (typeof document !== "undefined" && document.addEventListener) { if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", localise); else localise(); }
+
+	/* FN (K4, DESIGN-keymap.md P5): the machine's FUNCTION key on the screen, for a mouse or a touch screen, for a
+	   host or a desktop that takes Alt (Windows' menu bar, Linux's Alt-drag): while it is on, every pointer and key
+	   event the page sees says ⌥ (altKey), so every ⌥ gesture and key has a route without a held key. "once": the next
+	   click, drag or key gets it, then it goes off; "latch" (a double-click on its key) until it is clicked again or
+	   Esc. Events on the FN key itself are left as they are. fn(state) sets it; onFn(f) hears every change. */
+	let fn = "off";
+	const fnHear = [];
+	const setFn = s => { if (s === fn) return; fn = s; fnHear.forEach(f => f(fn)); };
+	const onFnKey = e => !!e.target?.closest?.("[data-fnkey]");
+	const MODKEYS = new Set(["Alt", "Shift", "Meta", "Control", "CapsLock", "Fn", "AltGraph"]);
+	let spend = 0;
+	/* "once" is spent after the action it was for: a click, the end of a drag, a key (a timer: after the page's own handlers) */
+	const spendSoon = () => { if (fn !== "once" || spend) return; spend = setTimeout(() => { spend = 0; if (fn === "once") setFn("off"); }, 0); };
+	if (typeof addEventListener === "function") {
+		for (const type of ["pointerdown", "pointermove", "pointerup", "mousedown", "mousemove", "mouseup", "click", "dblclick", "contextmenu", "wheel", "keydown", "keyup"]) addEventListener(type, e => {
+			if (fn === "off" || onFnKey(e)) return;
+			if (type === "keydown" && e.key === "Escape") { setFn("off"); e.preventDefault(); e.stopImmediatePropagation(); return; }
+			if (!e.altKey) Object.defineProperty(e, "altKey", { value: true, configurable: true });
+			if (type === "click" || type === "pointerup" || (type === "keydown" && !MODKEYS.has(e.key))) spendSoon();
+		}, true);
+	}
+	return { get mac() { return mac; }, setPlatform(m) { mac = !!m; }, cmd, of, say,
+		get fn() { return fn; }, setFn, onFn: f => { fnHear.push(f); } };
+})();
 /* The key map's dispatcher (P5), one file for both editors and the MM mockup (skins/shared/): every shortcut
    is a Keys.bind entry; the pages' own maps are mdDeskKeys.js and the MM mockup's 56-keys.js. */
 const Keys = (() => {
 	const list = [];
 	const norm = e => e.key === " " ? "Space" : e.key.length === 1 ? e.key.toUpperCase() : e.key;
-	/* {keys: ["Z"], mod: "cmd"|"alt"|"shift"|"cmd+shift"|"", group, does (text, or () => text when it shows state), when?: () => bool,
+	/* {id: "undo" (stable and unique in a page's map: the guide, the parity test of both editors and a later rebinding
+	   name an entry by it), scope: "any" or the workspaces it acts in ("seq sampler"; "library": the kit library and
+	   the pattern chooser; "control"), area?: "Steps" (a pointer gesture: where on the page; keys then name what is
+	   pressed, ["step"]), keys: ["Z"], mod: "cmd"|"alt"|"shift"|"cmd+shift"|"", group, does (text, or () => text when it shows state), when?: () => bool,
 	   run?: e => void, field?: true, hidden?: true (dispatched, but another entry describes it in the ? overlay),
 	   modal?: "keyspop" (it also runs while that dialog is the top one; every other entry is off while one is open)
 	     or "panel" (it also runs over any panel: the library, GLOBAL, AUDIO / MIDI; never over a question),
 	   code?: "KeyR" (matched on the physical key, e.code: with Alt or Cmd held macOS types another character)} */
 	function bind(entry) { list.push(Object.assign({ mod: "", when: null, field: false }, entry)); }
-	function modOf(e) { return [e.metaKey || e.ctrlKey ? "cmd" : "", e.altKey ? "alt" : "", e.shiftKey ? "shift" : ""].filter(Boolean).join("+"); }
+	const modOf = e => Modifiers.of(e);
 	/* The one gating rule of both editors: while a dialog or a panel is open (the modal layer, deskModal.js:
 	   GLOBAL, AUDIO / MIDI, the library, the machine picker, the list of keys, a question, the start-up card)
 	   the page's shortcuts are off and the keys are the dialog's own: Space and Enter press its focused
@@ -583,21 +650,22 @@ const Keys = (() => {
 	}
 	let lastDown = null;	/* {k, at} of the last ⌘ keydown: an edit command right after it is the same press */
 	document.addEventListener("keydown", e => {
-		if (e.metaKey || e.ctrlKey) lastDown = { k: norm(e), at: Date.now() };
+		if (Modifiers.cmd(e)) lastDown = { k: norm(e), at: Date.now() };
 		dispatch(e, e.target.closest?.("input,select,textarea,[role=slider]"));
 	});
-	/* ⌘C, ⌘X and ⌘V may never come as keys. On macOS the web view the plug-in sits in (JUCE's WebBrowserComponent,
-	   juce_WebBrowserComponent_mac.mm, WebViewKeyEquivalentResponder) turns them into the edit commands copy:,
-	   cut: and paste: before WebKit sees a key, in the standalone and in every DAW alike, and the page gets the
-	   document's copy, cut and paste events instead of a keydown; a host's Edit menu does the same. So such an event
-	   is that key press: dispatched as ⌘C / ⌘X / ⌘V, unless a text field has the focus (its own copy and paste) or
-	   the keydown of the same press came first (a browser, WebView2: then that was the dispatch). */
+	/* ⌘C, ⌘X and ⌘V may never come as keys (B-015). On macOS the web view the plug-in sits in (JUCE's
+	   WebBrowserComponent, juce_WebBrowserComponent_mac.mm, WebViewKeyEquivalentResponder) turns them into the edit
+	   commands copy:, cut: and paste: before WebKit sees a key, in the standalone and in every DAW alike, and the page
+	   gets the document's copy, cut and paste events instead of a keydown; a host's Edit menu does the same. So such an
+	   event is that key press: dispatched as ⌘C / ⌘X / ⌘V (the platform's ⌘: Ctrl off a Mac), so it runs the map's
+	   entries copy, cut and paste, unless a text field has the focus (its own copy and paste) or the keydown of the
+	   same press came first (a browser, WebView2: then that was the dispatch). */
 	const EDITS = { copy: "c", cut: "x", paste: "v" };
 	for (const type of Object.keys(EDITS)) document.addEventListener(type, e => {
 		const key = EDITS[type], a = document.activeElement;
 		if (a?.closest?.("input,select,textarea,[contenteditable]")) return;
 		if (lastDown && lastDown.k === key.toUpperCase() && Date.now() - lastDown.at < 500) return;
-		const k = { key, code: "Key" + key.toUpperCase(), metaKey: true, ctrlKey: false, altKey: false, shiftKey: false, target: a || document.body,
+		const k = { key, code: "Key" + key.toUpperCase(), metaKey: Modifiers.mac, ctrlKey: !Modifiers.mac, altKey: false, shiftKey: false, target: a || document.body,
 			preventDefault: () => e.preventDefault() };
 		note(k); dispatch(k, a?.closest?.("[role=slider]"));
 	});
@@ -621,8 +689,18 @@ const Keys = (() => {
 		if (p.textContent !== text) p.textContent = text;
 	}
 	if (probing) setInterval(probe, 500);
-	const label = b => [...(b.mod ? b.mod.split("+").map(x => ({ cmd: "⌘", alt: "⌥", shift: "⇧" }[x])) : []), b.keys.map(k => ({ Space: "Space", ArrowLeft: "←", ArrowRight: "→", ArrowUp: "↑", ArrowDown: "↓", Escape: "Esc", Delete: "Delete", Backspace: "⌫", Enter: "Enter" }[k] || k)).join(" / ")].join("");
-	return { bind, list: () => list.slice(), label, free, seen: () => seen.slice() };
+	/* an entry's keys as the platform writes them: ⌘⇧Z on a Mac, Ctrl+Shift+Z elsewhere; a pointer gesture's
+	   modifiers before what is pressed (⇧ step, Shift + step) */
+	const KEYNAME = { Space: "Space", ArrowLeft: "←", ArrowRight: "→", ArrowUp: "↑", ArrowDown: "↓", Escape: "Esc", Delete: "Delete", Backspace: "⌫", Enter: "Enter" };
+	const modsLabel = mod => !mod ? "" : Modifiers.mac ? mod.split("+").map(x => ({ cmd: "⌘", alt: "⌥", shift: "⇧" }[x])).join("")
+		: mod.split("+").map(x => ({ cmd: "Ctrl", alt: "Alt", shift: "Shift" }[x])).join("+");
+	const label = b => {
+		const m = modsLabel(b.mod), k = b.keys.map(x => KEYNAME[x] || x).join(" / ");
+		if (!m) return k;
+		return b.area ? m + (Modifiers.mac ? " " : " + ") + k : m + (Modifiers.mac ? "" : "+") + k;
+	};
+	const byId = id => list.find(b => b.id === id) || null;
+	return { bind, list: () => list.slice(), byId, label, modsLabel, free, seen: () => seen.slice() };
 })();
 
 /* ---- shared/deskTogglePaint.js ---- */
@@ -691,8 +769,8 @@ function drawKeys(){const pop=$("#keyspop");if(!pop)return;const groups=[];
  pop.hidden=false;const r=$(".lcdpanel").getBoundingClientRect(),top=Math.max(16,r.bottom+8);
  pop.style.top=(top+scrollY)+"px";pop.style.maxHeight=Math.max(240,innerHeight-top-12)+"px";pop.style.left=Math.max(16,(document.documentElement.clientWidth-pop.offsetWidth)/2+scrollX)+"px"}
 function toggleKeys(on){const pop=$("#keyspop");if(!pop)return;if(on??pop.hidden)drawKeys();else pop.hidden=true}
-Keys.bind({keys:["?"],group:"Help",does:"This list of keys",modal:"keyspop",run:()=>toggleKeys()});
-Keys.bind({keys:["Escape"],group:"Help",does:"Close the list of keys",when:()=>!$("#keyspop").hidden,run:()=>toggleKeys(false)});
+Keys.bind({id:"keys-help",scope:"any",keys:["?"],group:"Help",does:"This list of keys",modal:"keyspop",run:()=>toggleKeys()});
+Keys.bind({id:"keys-help-close",scope:"any",keys:["Escape"],group:"Help",does:"Close the list of keys",when:()=>!$("#keyspop").hidden,run:()=>toggleKeys(false)});
 document.addEventListener("click",e=>{const pop=$("#keyspop");if(!pop||pop.hidden)return;if(e.target.closest("[data-keysx]")||!pop.contains(e.target))pop.hidden=true},true);
 
 /* ---- shared/deskModal.js ---- */
@@ -707,13 +785,14 @@ document.addEventListener("click",e=>{const pop=$("#keyspop");if(!pop||pop.hidde
               a click outside does nothing, the first focus is its last key (never the destructive one)
      panel    a library, settings or list: Esc and a click outside close it (its own close function)
      boot     the start-up card (deskBoot.js): nothing closes it but the machine becoming ready
+     menu     a context menu (deskMenu.js, K3): at the pointer, nothing dimmed, Esc and a click outside close it
    A listbox (the dropdowns) is not a modal: it stays at its button. */
 const Modal = (() => {
 	const KINDS = { confirm: { outside: false, focusLast: true, esc: true }, panel: { outside: true, focusLast: false, esc: true },
-		boot: { outside: false, focusLast: false, esc: false } };
+		boot: { outside: false, focusLast: false, esc: false }, menu: { outside: true, focusLast: false, esc: true } };
 	const DIALOGS = [["#dlg", "confirm", null], ["#libpop", "panel", "closeLib"], ["#globpop", "panel", "closeGlobal"],
 		["#keyspop", "panel", "toggleKeys"], ["#audiopop", "panel", "closeAudio"], ["#machpop", "panel", "closePicker"], ["#bootcard", "boot", null],
-		["#syxpop", "panel", null]];
+		["#syxpop", "panel", null], ["#deskmenu", "menu", "closeDeskMenu"]];
 	const stack = [];	// {el, kind, close, back}
 	const FOCUSABLE = 'button:not([disabled]),[href],input:not([disabled]),select:not([disabled]),textarea,[tabindex]:not([tabindex="-1"])';
 	let bg = null;
@@ -724,6 +803,7 @@ const Modal = (() => {
 	function layer() {
 		if (!bg) { bg = document.createElement("div"); bg.id = "modalbg"; bg.className = "modalbg"; bg.hidden = true; document.body.appendChild(bg); }
 		bg.hidden = !stack.length;
+		bg.classList.toggle("clear", stack.length > 0 && stack[stack.length - 1].kind === "menu");	/* a menu dims nothing */
 		stack.forEach((d, i) => { d.el.classList.add("modal"); d.el.style.setProperty("--mz", 60 + i * 2); });
 		if (stack.length) bg.style.setProperty("--mz", 59 + (stack.length - 1) * 2);
 		document.documentElement.classList.toggle("modalopen", stack.length > 0);
@@ -765,8 +845,10 @@ const Modal = (() => {
 	document.addEventListener("keydown", e => {
 		const d = top(); if (!d) return;
 		if (e.key === "Escape") { e.preventDefault(); e.stopImmediatePropagation(); dismiss(d); return; }
-		/* keys meant for the page behind (its shortcuts) do not reach it; the menu bar's own shortcuts are the system's */
-		if (e.key !== "Tab") { if (!box(d).contains(e.target) && !e.target.closest?.("#kpop") && !e.metaKey) { e.preventDefault(); e.stopImmediatePropagation(); } return; }
+		/* keys meant for the page behind (its shortcuts) do not reach it; ⌘ (Ctrl off a Mac: deskKeys.js Modifiers) passes,
+		   for the menu bar's own shortcuts and the map's modal: "panel" entries (⌘Z over a panel) */
+		const cmd = typeof Modifiers !== "undefined" ? Modifiers.cmd(e) : e.metaKey;
+		if (e.key !== "Tab") { if (!box(d).contains(e.target) && !e.target.closest?.("#kpop") && !cmd) { e.preventDefault(); e.stopImmediatePropagation(); } return; }
 		const k = keys(d); if (!k.length) { e.preventDefault(); return; }
 		const i = k.indexOf(document.activeElement), n = e.shiftKey ? (i <= 0 ? k.length - 1 : i - 1) : (i < 0 || i === k.length - 1 ? 0 : i + 1);
 		e.preventDefault(); k[n].focus();
@@ -1715,30 +1797,30 @@ function keyNote(t,n,vel){if(HOST.noteOn){const p=n-KEYS_BASE;return vel?HOST.no
 function kbVel(d){KB.vel=keyVel(KB.vel,d);toast(`Keyboard velocity ${KB.vel}`)}
 function kbOct(d){KB.oct=clamp(KB.oct+d,KEYS_OCT[0],KEYS_OCT[1]);toast(`Keyboard octave ${KB.oct>0?"+":""}${KB.oct}: A plays ${noteName(KEYS_BASE+12*KB.oct)}`)}
 document.addEventListener("keyup",e=>homeUp(e.code));addEventListener("blur",()=>[...KB.held.keys()].forEach(homeUp));
-Keys.bind({keys:[...KEYS_WHITE,...KEYS_BLACK],group:"Playing",hidden:true,field:true,when:kbOn,run:homeDown,does:""});
-Keys.bind({keys:["Z"],group:"Playing",hidden:true,field:true,when:kbOn,run:()=>kbOct(-1),does:""});
-Keys.bind({keys:["X"],group:"Playing",hidden:true,field:true,when:kbOn,run:()=>kbOct(1),does:""});
-Keys.bind({keys:["C"],group:"Playing",hidden:true,field:true,when:kbOn,run:()=>kbVel(-1),does:""});
-Keys.bind({keys:["V"],group:"Playing",hidden:true,field:true,when:kbOn,run:()=>kbVel(1),does:""});
-Keys.bind({keys:["A S D F G H J K L"],group:"Playing",does:"Play the selected synth track: white keys C D E F G A B C D, real notes on its MIDI channel, from any workspace. While live recording the machine records them"});
-Keys.bind({keys:["W E T Y U O P"],group:"Playing",does:"The black keys above them: C♯ D♯ F♯ G♯ A♯ C♯ D♯, so the two rows play every semitone"});
-Keys.bind({keys:["Z","X"],group:"Playing",does:()=>`Octave down / up, −3 to +3 (now ${KB.oct>0?"+":""}${KB.oct}: A is ${noteName(KEYS_BASE+12*KB.oct)})`});
-Keys.bind({keys:["C","V"],group:"Playing",does:()=>`Velocity down / up: 20 40 60 80 100 127 (now ${KB.vel})`});
+Keys.bind({id:"piano-run",scope:"any",keys:[...KEYS_WHITE,...KEYS_BLACK],group:"Playing",hidden:true,field:true,when:kbOn,run:homeDown,does:""});
+Keys.bind({id:"octave-down",scope:"any",keys:["Z"],group:"Playing",hidden:true,field:true,when:kbOn,run:()=>kbOct(-1),does:""});
+Keys.bind({id:"octave-up",scope:"any",keys:["X"],group:"Playing",hidden:true,field:true,when:kbOn,run:()=>kbOct(1),does:""});
+Keys.bind({id:"velocity-down",scope:"any",keys:["C"],group:"Playing",hidden:true,field:true,when:kbOn,run:()=>kbVel(-1),does:""});
+Keys.bind({id:"velocity-up",scope:"any",keys:["V"],group:"Playing",hidden:true,field:true,when:kbOn,run:()=>kbVel(1),does:""});
+Keys.bind({id:"piano-white",scope:"any",notes:"C D E F G A B C D",keys:["A S D F G H J K L"],group:"Playing",does:"Play the selected synth track: white keys C D E F G A B C D, real notes on its MIDI channel, from any workspace. While live recording the machine records them"});
+Keys.bind({id:"piano-black",scope:"any",notes:"C♯ D♯ F♯ G♯ A♯ C♯ D♯",keys:["W E T Y U O P"],group:"Playing",does:"The black keys above them: C♯ D♯ F♯ G♯ A♯ C♯ D♯, so the two rows play every semitone"});
+Keys.bind({id:"octave",scope:"any",keys:["Z","X"],group:"Playing",does:()=>`Octave down / up, −3 to +3 (now ${KB.oct>0?"+":""}${KB.oct}: A is ${noteName(KEYS_BASE+12*KB.oct)})`});
+Keys.bind({id:"velocity",scope:"any",keys:["C","V"],group:"Playing",does:()=>`Velocity down / up: 20 40 60 80 100 127 (now ${KB.vel})`});
 
 /* ---- the selected track's keys, the all keys, the step gestures ---- */
-Keys.bind({keys:["M"],code:"KeyM",group:"Selected track",does:"Mute or unmute the selected track",when:kbOn,run:()=>muteSel()});
-Keys.bind({keys:["M"],code:"KeyM",mod:"alt",group:"All",does:"Mute every track; when none is audible, unmute every track",when:kbOn,run:()=>muteAllToggle()});
-Keys.bind({keys:["ArrowUp","ArrowDown"],group:"Selected track",does:"Select the previous / next track of the side shown (a focused value keeps ↑ / ↓ for itself)",
+Keys.bind({id:"mute-track",scope:"any",keys:["M"],code:"KeyM",group:"Selected track",does:"Mute or unmute the selected track",when:kbOn,run:()=>muteSel()});
+Keys.bind({id:"mute-all",scope:"any",keys:["M"],code:"KeyM",mod:"alt",group:"All",does:"Mute every track; when none is audible, unmute every track",when:kbOn,run:()=>muteAllToggle()});
+Keys.bind({id:"track-prev-next",scope:"any",keys:["ArrowUp","ArrowDown"],group:"Selected track",does:"Select the previous / next track of the side shown (a focused value keeps ↑ / ↓ for itself)",
  when:()=>kbOn()&&$("#kpop").hidden&&S.ws!=="song",run:e=>{const sd=side(),i=sd.indexOf(S.sel);select(sd[((i<0?0:i)+(e.key==="ArrowDown"?1:5))%6])}});
-Keys.bind({keys:["B"],group:"Transport",does:"Tap tempo (the average of the last taps; T plays F♯ here)",when:kbOn,run:()=>tapTempo()});
-Keys.bind({keys:["ArrowLeft","ArrowRight"],mod:"alt",group:"Selected track",does:"Sequence: rotate the selected track one step earlier / later: notes, slides and locks, wrapping at the length. Presses while ⌥ is down are one undo step. The one Alt that is not \"all\": FUNCTION + arrows on the machine",when:seqKeys,run:e=>rotateTrack(e.key==="ArrowRight"?1:-1)});
-Keys.bind({keys:["0"],group:"All",does:"Unmute and unsolo every track",when:kbOn,run:()=>unmuteAll()});
-Keys.bind({keys:["Escape"],group:"Sequence",does:"Unmark the tracks marked for paste",when:()=>seqKeys()&&S.marks.size>0,run:()=>{S.marks.clear();renderRail()}});
-Keys.bind({keys:["roll"],mod:"cmd",group:"Sequence",does:"Click: every 2nd step from there to the end gets a note at that pitch (from a note: off), one undo step"});
-Keys.bind({keys:["roll"],mod:"cmd+shift",group:"Sequence",does:"Click: every 4th step from there to the end"});
-Keys.bind({keys:["wheel on a lock step"],group:"Sequence",does:"Move its lock in the lane's parameter, 4 a notch (⇧: 1)"});
-Keys.bind({keys:["lock lane"],mod:"shift",group:"Sequence",does:"Drag: a ramp, a straight line from the press to the release (one undo step)"});
-Keys.bind({keys:["track header"],mod:"shift",group:"Sequence",does:"Click: mark the track for paste; ⌘V then pastes into every marked track (one undo step)"});
+Keys.bind({id:"tap-tempo",scope:"any",keys:["B"],group:"Transport",does:"Tap tempo (the average of the last taps; T plays F♯ here)",when:kbOn,run:()=>tapTempo()});
+Keys.bind({id:"rotate",scope:"seq",keys:["ArrowLeft","ArrowRight"],mod:"alt",group:"Selected track",does:"Sequence: rotate the selected track one step earlier / later: notes, slides and locks, wrapping at the length. Presses while ⌥ is down are one undo step. The one Alt that is not \"all\": FUNCTION + arrows on the machine",when:seqKeys,run:e=>rotateTrack(e.key==="ArrowRight"?1:-1)});
+Keys.bind({id:"unmute-all",scope:"any",keys:["0"],group:"All",does:"Unmute and unsolo every track",when:kbOn,run:()=>unmuteAll()});
+Keys.bind({id:"unmark-paste",scope:"seq",keys:["Escape"],group:"Sequence",does:"Unmark the tracks marked for paste",when:()=>seqKeys()&&S.marks.size>0,run:()=>{S.marks.clear();renderRail()}});
+Keys.bind({id:"roll-fill-2",scope:"seq",area:"Roll",keys:["roll"],mod:"cmd",group:"Sequence",does:"Click: every 2nd step from there to the end gets a note at that pitch (from a note: off), one undo step"});
+Keys.bind({id:"roll-fill-4",scope:"seq",area:"Roll",keys:["roll"],mod:"cmd+shift",group:"Sequence",does:"Click: every 4th step from there to the end"});
+Keys.bind({id:"lockstep-wheel",scope:"seq",area:"Lock lane",keys:["wheel on a lock step"],group:"Sequence",does:"Move its lock in the lane's parameter, 4 a notch (⇧: 1)"});
+Keys.bind({id:"lane-ramp",scope:"seq",area:"Lock lane",keys:["lock lane"],mod:"shift",group:"Sequence",does:"Drag: a ramp, a straight line from the press to the release (one undo step)"});
+Keys.bind({id:"track-mark-paste",scope:"seq",area:"Tracks",keys:["track header"],mod:"shift",group:"Sequence",does:"Click: mark the track for paste; ⌘V then pastes into every marked track (one undo step)"});
 
 /* ---- 76-gen.js ---- */
 
@@ -1928,12 +2010,12 @@ document.addEventListener("pointerup",()=>{if(!gvDrag)return;const k=gvDrag.k;gv
 document.addEventListener("wheel",e=>{const v=e.target.closest?.(".gv[data-gv]");if(!v)return;e.preventDefault();genVal(v.dataset.gv,((e.deltaY||e.deltaX)<0?1:-1)*(e.shiftKey?10:1))},{passive:false});
 document.addEventListener("keydown",e=>{const v=e.target.closest?.(".gv[data-gv]");if(!v)return;const d={ArrowUp:1,ArrowRight:1,ArrowDown:-1,ArrowLeft:-1}[e.key];if(d==null)return;
  e.preventDefault();e.stopPropagation();const k=v.dataset.gv;genVal(k,d*(e.shiftKey?10:1));document.querySelector(`.gv[data-gv="${k}"]`)?.focus()},true);
-Keys.bind({keys:["R"],code:"KeyR",group:"Selected track",when:kbOn,run:()=>randomise(false),
+Keys.bind({id:"randomise-track",scope:"any",keys:["R"],code:"KeyR",group:"Selected track",when:kbOn,run:()=>randomise(false),
  does:"Randomise the selected track: on Sound a fresh random sound (MUTATE, from the sound before the trial); everywhere else a new GEN variation: a new seed, or random hits and rotation"});
-Keys.bind({keys:["R"],code:"KeyR",mod:"alt",group:"All",when:kbOn,run:()=>randomise(true),
+Keys.bind({id:"randomise-all",scope:"any",keys:["R"],code:"KeyR",mod:"alt",group:"All",when:kbOn,run:()=>randomise(true),
  does:"Randomise every track: on Sound every synth track's sound, everywhere else every GEN spec of the side shown over the whole pattern"});
-Keys.bind({keys:["GEN value"],mod:"alt",group:"All",does:"Change a GEN value: every track of the side shown, the whole pattern (one undo step per run)"});
-Keys.bind({keys:["R key"],mod:"alt",group:"All",does:"Click: randomise every track (Sound: every synth track; VOL and TUNE stay)"});
+Keys.bind({id:"gen-value-all",scope:"seq",area:"GEN bar",keys:["GEN value"],mod:"alt",group:"All",does:"Change a GEN value: every track of the side shown, the whole pattern (one undo step per run)"});
+Keys.bind({id:"rkey-all",scope:"any",area:"GEN bar",keys:["R key"],mod:"alt",group:"All",does:"Click: randomise every track (Sound: every synth track; VOL and TUNE stay)"});
 
 /* ---- 80-notes.js ---- */
 
@@ -2948,7 +3030,7 @@ document.addEventListener("dragend",()=>{if(!LIB.drag&&!$$("#libpop .dragging").
 [["Enter / Space on KIT or the pattern","","Open the kit library / pattern chooser"],["Arrows","","Move (kits: without loading)"],["Enter","","Kits: load (a click loads too; Alt+click only selects). Patterns: queue (⇧-click or Now: at once)"],
  ["A–H","","Patterns: jump to a bank"],["F2","","Kits: rename (or double-click)"],["Delete","","Clear the slot"],
  ["C / V","cmd","Copy / paste the slot"],["Z","cmd","Undo a paste, clear or rename"],["Escape","","Close"]]
- .forEach(([k,m,d])=>Keys.bind({keys:[k],mod:m,group:"Kit library, pattern chooser",does:d}));
+ .forEach(([k,m,d],i)=>Keys.bind({id:["lib-open","lib-move","lib-load","lib-bank","lib-rename","lib-clear","lib-copy-paste","lib-undo","lib-close"][i],scope:"library",keys:[k],mod:m,group:"Kit library, pattern chooser",does:d}));
 document.addEventListener("keydown",e=>{
  if(!LIB.open){if((e.key==="Enter"||e.key===" ")&&(e.target.id==="kitf"||e.target.id==="pat")){e.preventDefault();e.stopImmediatePropagation();openLib(e.target.id==="kitf"?"kit":"pat")}return}
  if(!$("#dlg").hidden)return;
@@ -3350,33 +3432,33 @@ document.addEventListener("change",e=>{const id=e.target.id,v=e.target.value,tr=
    knobs, not workspaces). ===== */
 document.addEventListener("keydown",e=>{if(!(S.learn&&S.learnT&&/^[1-8]$/.test(e.key))||e.metaKey||e.ctrlKey||e.altKey||e.target.closest?.("input,select,textarea"))return;e.preventDefault();e.stopImmediatePropagation();learnBind(+e.key)},true);
 function leaveLearn(){S.learn=false;document.body.classList.remove("learn");renderTop();if(HOST.learning)HOST.learning(false)}
-Keys.bind({keys:["Escape"],group:"Anywhere",does:"Close the dialog",when:()=>dialogOpen(),field:true,run:()=>{$("#dlg").hidden=true}});
-Keys.bind({keys:["Z"],mod:"cmd",group:"Anywhere",does:"Undo",modal:"panel",run:()=>undo()});
-Keys.bind({keys:["Z"],mod:"cmd+shift",group:"Anywhere",does:"Redo",modal:"panel",run:()=>redo()});
-Keys.bind({keys:["Y"],mod:"cmd",group:"Anywhere",does:"Redo",modal:"panel",run:()=>redo()});
-Keys.bind({keys:["C"],mod:"cmd",group:"Anywhere",does:"Copy (Sequence: the page shown of the track; Sound: the machine; Perform: the assign; Song: the row)",run:()=>secAction("copy")});
-Keys.bind({keys:["V"],mod:"cmd",group:"Anywhere",does:"Paste (Sequence: into every track marked for paste too)",run:()=>secAction("paste")});
-Keys.bind({keys:["Escape"],group:"Anywhere",does:"Leave LEARN",mapping:true,when:()=>S.mapping&&S.learn,run:()=>leaveLearn()});
-Keys.bind({keys:["1 – 8"],group:"Anywhere",does:"LEARN: the controller knob for the value clicked",mapping:true});
-Keys.bind({keys:[","],group:"Anywhere",does:"AUDIO / MIDI settings (also in the engine menu)"});
-Keys.bind({keys:["Space"],group:"Transport",does:"Play / stop",run:()=>togglePlay()});
-Keys.bind({keys:["Space"],code:"Space",mod:"alt",group:"Transport",does:"Live recording (RECORD + PLAY): Alt + play, the other Alt that is not \"all\". Again: recording off",run:()=>liveRecord()});
-["seq","sound","mix","perform","song","control"].forEach((ws,i)=>Keys.bind({keys:[String(i+1)],group:"Workspaces",does:["Sequence","Sound","Mix","Perform","Song","Control"][i],mapping:ws==="control",when:ws==="control"?()=>S.mapping:null,run:()=>goWs(ws)}));
-Keys.bind({keys:["[","]"],group:"Sequence",does:"Previous / next page",when:()=>S.ws==="seq"&&pages16()>1,run:e=>{const n=pages16();S.viewAll=false;S.page=(S.page+(e.key==="]"?1:-1)+n)%n;render()}});
-Keys.bind({keys:["Delete","Backspace"],group:"Sequence",does:"Clear the page shown of the selected track (Song: delete the row)",when:()=>S.ws==="song"||S.ws==="seq",run:()=>S.ws==="song"?songAction("del"):secAction("clear")});
-Keys.bind({keys:["Delete","Backspace"],mod:"alt",group:"All",does:"Sequence: clear the whole pattern: every track's notes, slides and locks (one undo step)",when:()=>S.ws==="seq",run:()=>clearPattern()});
-Keys.bind({keys:["CLR"],mod:"alt",group:"All",does:"Click: clear the whole pattern, every track's notes, slides and locks (one undo step)"});
-Keys.bind({keys:["ArrowLeft","ArrowRight"],group:"Song",does:"Previous / next row",when:()=>S.ws==="song",run:e=>{S.songSel=clamp(S.songSel+(e.key==="ArrowRight"?1:-1),0,S.song.length-1);render()}});
-Keys.bind({keys:["ArrowUp","ArrowDown"],group:"Values",does:"A focused value, tempo or bar: one step (⇧: ×10, tempo: fine)"});
-Keys.bind({keys:["ArrowLeft","ArrowRight"],group:"Values",does:"A focused value: one step"});
-Keys.bind({keys:["drag a value"],mod:"alt",group:"All",does:"Control All: move that value on every synth track (an editor feature; the Monomachine has no such key)"});
-Keys.bind({keys:["M key"],mod:"shift",group:"Anywhere",does:"Click: prepare that track's mute (+ / X); applied when ⇧ is let go"});
-Keys.bind({keys:["drag M / S keys"],group:"Anywhere",does:"Mute (solo) or unmute every track the drag crosses, as the first key became"});
-Keys.bind({keys:["roll"],mod:"shift",group:"Sequence",does:"Click: a chord note on the step"});
-Keys.bind({keys:["roll"],group:"Sequence",does:"Click an empty step: a note there; drag it up or down for its pitch, sideways to paint that note on every empty step crossed (one undo step)"});
-Keys.bind({keys:["roll"],mod:"alt",group:"Sequence",does:"Click: delete a note (drag on: every step crossed loses its notes, one undo step), or a NOTE OFF on an empty step"});
-Keys.bind({keys:["lock lane"],mod:"alt",group:"Sequence",does:"Drag: erase locks"});
-Keys.bind({keys:["lock lane clear"],mod:"alt",group:"Sequence",does:"Click: clear every lock of the track (all its parameters)"});
+Keys.bind({id:"close-dialog",scope:"any",keys:["Escape"],group:"Anywhere",does:"Close the dialog",when:()=>dialogOpen(),field:true,run:()=>{$("#dlg").hidden=true}});
+Keys.bind({id:"undo",scope:"any",keys:["Z"],mod:"cmd",group:"Anywhere",does:"Undo",modal:"panel",run:()=>undo()});
+Keys.bind({id:"redo",scope:"any",keys:["Z"],mod:"cmd+shift",group:"Anywhere",does:"Redo",modal:"panel",run:()=>redo()});
+Keys.bind({id:"redo-y",scope:"any",keys:["Y"],mod:"cmd",group:"Anywhere",does:"Redo",modal:"panel",run:()=>redo()});
+Keys.bind({id:"copy",scope:"any",keys:["C"],mod:"cmd",group:"Anywhere",does:"Copy (Sequence: the page shown of the track; Sound: the machine; Perform: the assign; Song: the row)",run:()=>secAction("copy")});
+Keys.bind({id:"paste",scope:"any",keys:["V"],mod:"cmd",group:"Anywhere",does:"Paste (Sequence: into every track marked for paste too)",run:()=>secAction("paste")});
+Keys.bind({id:"leave-learn",scope:"control",keys:["Escape"],group:"Anywhere",does:"Leave LEARN",mapping:true,when:()=>S.mapping&&S.learn,run:()=>leaveLearn()});
+Keys.bind({id:"learn-knob",scope:"control",keys:["1 – 8"],group:"Anywhere",does:"LEARN: the controller knob for the value clicked",mapping:true});
+Keys.bind({id:"audio-settings",scope:"any",keys:[","],group:"Anywhere",does:"AUDIO / MIDI settings (also in the engine menu)"});
+Keys.bind({id:"play-stop",scope:"any",keys:["Space"],group:"Transport",does:"Play / stop",run:()=>togglePlay()});
+Keys.bind({id:"record",scope:"any",keys:["Space"],code:"Space",mod:"alt",group:"Transport",does:"Live recording (RECORD + PLAY): Alt + play, the other Alt that is not \"all\". Again: recording off",run:()=>liveRecord()});
+["seq","sound","mix","perform","song","control"].forEach((ws,i)=>Keys.bind({id:"workspace-"+(i+1),scope:"any",keys:[String(i+1)],group:"Workspaces",does:["Sequence","Sound","Mix","Perform","Song","Control"][i],mapping:ws==="control",when:ws==="control"?()=>S.mapping:null,run:()=>goWs(ws)}));
+Keys.bind({id:"page-prev-next",scope:"seq",keys:["[","]"],group:"Sequence",does:"Previous / next page",when:()=>S.ws==="seq"&&pages16()>1,run:e=>{const n=pages16();S.viewAll=false;S.page=(S.page+(e.key==="]"?1:-1)+n)%n;render()}});
+Keys.bind({id:"delete",scope:"seq song",keys:["Delete","Backspace"],group:"Sequence",does:"Clear the page shown of the selected track (Song: delete the row)",when:()=>S.ws==="song"||S.ws==="seq",run:()=>S.ws==="song"?songAction("del"):secAction("clear")});
+Keys.bind({id:"clear-pattern",scope:"seq",keys:["Delete","Backspace"],mod:"alt",group:"All",does:"Sequence: clear the whole pattern: every track's notes, slides and locks (one undo step)",when:()=>S.ws==="seq",run:()=>clearPattern()});
+Keys.bind({id:"clr-key-all",scope:"any",area:"Top bar",keys:["CLR"],mod:"alt",group:"All",does:"Click: clear the whole pattern, every track's notes, slides and locks (one undo step)"});
+Keys.bind({id:"song-row",scope:"song",keys:["ArrowLeft","ArrowRight"],group:"Song",does:"Previous / next row",when:()=>S.ws==="song",run:e=>{S.songSel=clamp(S.songSel+(e.key==="ArrowRight"?1:-1),0,S.song.length-1);render()}});
+Keys.bind({id:"value-up-down",scope:"any",keys:["ArrowUp","ArrowDown"],group:"Values",does:"A focused value, tempo or bar: one step (⇧: ×10, tempo: fine)"});
+Keys.bind({id:"value-left-right",scope:"any",keys:["ArrowLeft","ArrowRight"],group:"Values",does:"A focused value: one step"});
+Keys.bind({id:"control-all",scope:"sound mix",area:"Values",keys:["drag a value"],mod:"alt",group:"All",does:"Control All: move that value on every synth track (an editor feature; the Monomachine has no such key)"});
+Keys.bind({id:"mkey-prepare",scope:"any",area:"Tracks",keys:["M key"],mod:"shift",group:"Anywhere",does:"Click: prepare that track's mute (+ / X); applied when ⇧ is let go"});
+Keys.bind({id:"ms-paint",scope:"any",area:"Tracks",keys:["drag M / S keys"],group:"Anywhere",does:"Mute (solo) or unmute every track the drag crosses, as the first key became"});
+Keys.bind({id:"roll-chord",scope:"seq",area:"Roll",keys:["roll"],mod:"shift",group:"Sequence",does:"Click: a chord note on the step"});
+Keys.bind({id:"roll-paint",scope:"seq",area:"Roll",keys:["roll"],group:"Sequence",does:"Click an empty step: a note there; drag it up or down for its pitch, sideways to paint that note on every empty step crossed (one undo step)"});
+Keys.bind({id:"roll-erase",scope:"seq",area:"Roll",keys:["roll"],mod:"alt",group:"Sequence",does:"Click: delete a note (drag on: every step crossed loses its notes, one undo step), or a NOTE OFF on an empty step"});
+Keys.bind({id:"lane-erase",scope:"seq",area:"Lock lane",keys:["lock lane"],mod:"alt",group:"Sequence",does:"Drag: erase locks"});
+Keys.bind({id:"lane-clear-all",scope:"seq",area:"Lock lane",keys:["lock lane clear"],mod:"alt",group:"Sequence",does:"Click: clear every lock of the track (all its parameters)"});
 
 /* a control surface: nothing selects on a drag but the text fields (the stylesheet has user-select none on the body,
    text on the fields); selectstart is refused outside them too (WebKit, the plug-in's engine) */

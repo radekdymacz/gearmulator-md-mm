@@ -45,7 +45,7 @@ const src = FILES.map(f => fs.readFileSync(path.join(__dirname, f), "utf8").repl
 const P = new Function("scope", "with (scope) {\n" + src + `
 ;let renders = 0;
 render = () => { renders++; }; syncControls = () => { }; renderTop = () => { }; renderSub = () => { }; redraw = () => { }; refreshAudible = () => { };
-return { S, Docs, Overlay, Held, PREP, scheduleRender, clickSteps, secAction, selCut, selDuplicate, clearSel, setSel, endSelect, interacting, genEnsure, genSpec, setGenSpec, clickTrackKeys, userMute, soloWrites, muteSel, msSet, prepToggle, unmuteAll, Keys,
+return { S, Docs, Overlay, Held, PREP, scheduleRender, clickSteps, secAction, selStart, stepMenu, stepMenuItems, Modifiers, selCut, selDuplicate, clearSel, setSel, endSelect, interacting, genEnsure, genSpec, setGenSpec, clickTrackKeys, userMute, soloWrites, muteSel, msSet, prepToggle, unmuteAll, Keys,
 	get V() { return V; }, setV(v) { V = v; }, view, get renders() { return renders; }, get pending() { return pendingRender; } }; }`)(scope);
 
 /* the machine document: its mutes (machine.desk.mutes) as the machine has them */
@@ -186,14 +186,39 @@ run(); { const before = P.renders; P.Held.begin("gv", {}); P.Held.end("gv"); run
 	const last = () => sent[sent.length - 1] || {};
 	const args = m => { const { op, g, ...rest } = m; return op + " " + JSON.stringify(rest); };
 
-	/* ⌥-click a step: the pointer's gesture selects it (no other cell crossed); its click sends nothing */
+	/* K2 (DESIGN-keymap.md): which presses start the select gesture: ⌘ on a step (metaKey on a Mac, Ctrl elsewhere),
+	   ⌘⇧ extends, the ruler plain or ⇧; never ⌥, never a Mac's Ctrl (its right-click) */
+	const ev = (m = {}) => Object.assign({ metaKey: false, ctrlKey: false, altKey: false, shiftKey: false }, m);
+	P.Modifiers.setPlatform(true);
+	P.clearSel();
+	check(!!P.selStart(ev({ metaKey: true }), { t: 0, s: 1 }, false), "Mac: ⌘-press on a step starts a selection");
+	check(!P.selStart(ev({ ctrlKey: true }), { t: 0, s: 1 }, false), "Mac: Ctrl-press on a step does not select (it is the right-click)");
+	check(!P.selStart(ev({ altKey: true }), { t: 0, s: 1 }, false), "⌥-press on a step selects nothing now");
+	check(!P.selStart(ev(), { t: 0, s: 1 }, false), "a plain press on a step is the paint's, not a selection");
+	check(!!P.selStart(ev(), { s: 3 }, true) && !P.selStart(ev({ metaKey: true }), { s: 3 }, true), "the ruler: a plain press selects, ⌘ does not");
+	P.Modifiers.setPlatform(false);
+	check(!!P.selStart(ev({ ctrlKey: true }), { t: 0, s: 1 }, false) && !P.selStart(ev({ metaKey: true }), { t: 0, s: 1 }, false), "Windows / Linux: Ctrl-press selects, the Windows key does not");
+	P.Modifiers.setPlatform(true);
+	P.setSel({ t: 0, n: 1, from: 2, to: 3 });
+	const ext = P.selStart(ev({ metaKey: true, shiftKey: true }), { t: 2, s: 6 }, false);
+	check(ext && ext.extend && !ext.drop, "⌘⇧-press with a selection extends it");
+	P.Held.begin("select", ext); P.endSelect();
+	check(JSON.stringify(P.S.stepSel) === '{"t":0,"n":3,"from":2,"to":7}', "⌘⇧-click extends the selection to the step, tracks and steps: " + JSON.stringify(P.S.stepSel));
+	P.setSel({ t: 0, n: 2, from: 0, to: 4 });
+	check(P.selStart(ev({ metaKey: true }), { t: 1, s: 2 }, false).drop, "⌘-press inside a selection of more than one step is a drop");
+	P.clearSel();
+	/* ⌘-click a step: the pointer's gesture selects it (no other cell crossed); its click sends nothing */
 	sent.length = 0;
 	P.Held.begin("select", { from: { t: 0, s: 1 }, at: { t: 0, s: 1 }, ruler: false, extend: false, drop: false, moved: false });
 	check(P.interacting(), "the select gesture holds the page's renders while it runs");
-	P.endSelect(); P.clickSteps(stepEv(0, 1, { altKey: true }));
-	check(JSON.stringify(P.S.stepSel) === '{"t":0,"n":1,"from":1,"to":2}' && !sent.some(m => m.op === "slide" || m.op === "trig"), "⌥-click selects the one step and sends no edit: " + JSON.stringify(P.S.stepSel));
-	P.clickSteps(stepEv(1, 1, { altKey: true, detail: 0 }));
-	check(P.S.stepSel.t === 1 && P.S.stepSel.from === 1, "⌥ and the keyboard's click on a step select it too");
+	P.endSelect(); P.clickSteps(stepEv(0, 1, { metaKey: true }));
+	check(JSON.stringify(P.S.stepSel) === '{"t":0,"n":1,"from":1,"to":2}' && !sent.some(m => m.op === "slide" || m.op === "trig" || m.op === "steps"), "⌘-click selects the one step and sends no edit (no fill): " + JSON.stringify(P.S.stepSel));
+	P.clickSteps(stepEv(1, 1, { metaKey: true, detail: 0 }));
+	check(P.S.stepSel.t === 1 && P.S.stepSel.from === 1, "⌘ and the keyboard's click on a step select it too");
+	sent.length = 0; P.clickSteps(stepEv(2, 0, { ctrlKey: true }));
+	check(!sent.length && P.S.stepSel.t === 1, "Mac: a Ctrl-click on a step neither fills nor selects (the step menu opens on its contextmenu)");
+	sent.length = 0; P.clickSteps(stepEv(2, 0, { altKey: true }));
+	check(!sent.length && P.S.stepSel.t === 1, "⌥-click on a step: no edit, no selection (a hint says select is ⌘-click)");
 	/* the main case: one step copied, another step picked, pasted there */
 	P.setSel({ t: 0, n: 1, from: 1, to: 2 }); sent.length = 0;
 	P.secAction("copy");
@@ -237,9 +262,49 @@ run(); { const before = P.renders; P.Held.begin("gv", {}); P.Held.end("gv"); run
 	check(last().op === "accent" && last().s === 4, "⇧-click on a trig is still an accent");
 	P.clickSteps(stepEv(0, 4, { shiftKey: true, altKey: true }));
 	check(last().op === "slide" && last().s === 4, "⌥⇧-click on a trig is the slide");
-	P.clickSteps(stepEv(2, 0, { metaKey: true }));
-	check(last().op === "steps", "⌘-click is still the fill");
+	sent.length = 0; P.clickSteps(stepEv(2, 0, { metaKey: true }));
+	check(!sent.length, "⌘-click is no fill any more (the step menu has it)");
 	P.clearSel();
+	/* K2 keys: Delete with nothing selected does nothing (D3); ⌘A; ← → move, ⇧→ extends; Enter: the trigs */
+	const key = (id, e = {}) => P.Keys.byId(id).run(Object.assign({ key: "", code: "" }, e));
+	P.Overlay.clear(); P.setV(P.view()); P.clearSel(); sent.length = 0;
+	key("delete");
+	check(!sent.length, "Delete with no selection sends nothing (the page shown is Clr's)");
+	sent.length = 0; P.secAction("clear");
+	check(args(last()) === 'clearSteps {"p":5,"t":0,"from":0,"to":16}', "Clr (the LCD's) with no selection still clears the page shown: " + args(last()));
+	P.Overlay.clear(); P.setV(P.view());
+	key("select-all");
+	check(JSON.stringify(P.S.stepSel) === '{"t":0,"n":16,"from":0,"to":16}', "⌘A selects every step of every track: " + JSON.stringify(P.S.stepSel));
+	P.setSel({ t: 0, n: 1, from: 4, to: 5 });
+	key("sel-move", { key: "ArrowRight" });
+	check(P.S.stepSel.from === 5 && P.S.stepSel.to === 6, "→ moves the selection a step");
+	key("sel-extend", { key: "ArrowRight" });
+	check(P.S.stepSel.from === 5 && P.S.stepSel.to === 7, "⇧→ extends it a step");
+	sent.length = 0; key("sel-trigs");
+	check(last().op === "steps" && JSON.stringify(last().rows) === '[{"t":0,"on":[5,6]}]' && P.V.tracks[0].trigs[5] && P.V.tracks[0].trigs[6], "Enter: the selected steps' trigs on, at once: " + args(last()));
+	/* the LCD's COPY CLR PASTE act on the selection (secAction); Delete too, with one */
+	P.setSel({ t: 0, n: 1, from: 0, to: 2 }); sent.length = 0; key("delete");
+	check(args(last()) === 'clearSteps {"p":5,"t":0,"n":1,"from":0,"to":2}', "Delete with a selection clears it: " + args(last()));
+	/* K3: the step menu: each item sends what its key sends */
+	P.Overlay.clear(); P.setV(P.view()); P.clearSel();
+	P.stepMenu(0, 4, 100, 100);
+	check(JSON.stringify(P.S.stepSel) === '{"t":0,"n":1,"from":4,"to":5}', "right-click a step outside the selection: that step is selected first");
+	const items = P.stepMenuItems(0, 4).filter(i => i !== "-"), item = id => items.find(i => i.id === id);
+	check(["sel-trigs", "step-accent", "step-slide", "copy", "cut", "paste", "duplicate", "delete", "step-fill-2", "step-fill-4"].every(id => item(id)), "the menu has trig, accent, slide, copy, cut, paste, duplicate, clear, fill 2nd / 4th: " + items.map(i => i.id).join(" "));
+	check(item("copy").key === "⌘C" && item("step-accent").key === "⇧-click" && item("delete").key === "Delete / ⌫", "each item shows its key: " + items.map(i => i.key).join(" | "));
+	const via = f => { sent.length = 0; f(); return sent.map(args).join(" | "); };
+	check(via(() => item("copy").run()) === via(() => P.secAction("copy")), "Copy in the menu sends what ⌘C sends: " + via(() => item("copy").run()));
+	P.Overlay.clear(); P.setV(P.view());
+	const accMenu = via(() => item("step-accent").run());
+	check(/^accent \{"p":5,"t":0,"s":4,"on":true\}$/.test(accMenu), "Accent in the menu: the step's accent on: " + accMenu);
+	P.Overlay.clear(); P.setV(P.view());
+	check(via(() => item("step-fill-2").run()).startsWith("steps "), "Fill every 2nd in the menu: one steps edit");
+	P.Overlay.clear(); P.setV(P.view()); P.setSel({ t: 0, n: 1, from: 4, to: 5 });
+	check(via(() => item("delete").run()) === 'clearSteps {"p":5,"t":0,"n":1,"from":4,"to":5}', "Clear in the menu clears the selection");
+	P.Overlay.clear(); P.setV(P.view());
+	P.setSel({ t: 0, n: 2, from: 0, to: 2 }); P.stepMenu(1, 1, 0, 0);
+	check(JSON.stringify(P.S.stepSel) === '{"t":0,"n":2,"from":0,"to":2}', "right-click inside the selection keeps it (the menu acts on all of it)");
+	P.clearSel(); P.Overlay.clear(); P.setV(P.view());
 	/* B-006: LEN, SPD and SONG on LCD line 2 follow a vertical drag (12 px a step, from where the press found them,
 	   no wrap), ⌥ at the press drags the inner length; one gesture; the drag's click does not step them again */
 	P.Overlay.clear(); P.setV(P.view()); sent.length = 0;
@@ -260,6 +325,44 @@ run(); { const before = P.renders; P.Held.begin("gv", {}); P.Held.end("gv"); run
 	fire("document", "pointermove", { buttons: 1, pointerType: "mouse", clientY: 300 - 1012 });
 	fire("document", "pointerup", {});
 	check(sent.filter(m => m.op === "selectSong").map(m => m.s).join() === "31", "dragging SONG far up stops at song 32 (no wrap), sent once: " + JSON.stringify(sent.map(m => [m.op, m.s])));
+	/* K4 (DESIGN-keymap.md): FN, the on-screen FUNCTION: the next click, drag or key gets ⌥; a latch keeps it; Esc drops it */
+	{
+		const keyEv = (key, code) => ({ key, code, altKey: false, metaKey: false, ctrlKey: false, shiftKey: false, repeat: false, target: { closest: () => null }, preventDefault() { }, stopImmediatePropagation() { } });
+		const press = e => { fire("window", "keydown", e); fire("document", "keydown", e); };
+		const ptrEv = () => ({ altKey: false, target: { closest: () => null }, preventDefault() { }, stopPropagation() { }, stopImmediatePropagation() { } });
+		const ran = [], all = P.Keys.byId("randomise-all"), one = P.Keys.byId("randomise-track"), runs = [all.run, one.run];
+		all.run = () => ran.push("all"); one.run = () => ran.push("track");
+		P.S.ws = "seq"; P.Overlay.clear(); P.setV(P.view()); run();
+		press(keyEv("r", "KeyR"));
+		check(ran.join() === "track", "without FN, R randomises the selected track");
+		ran.length = 0; P.Modifiers.setFn("once"); press(keyEv("r", "KeyR"));
+		check(ran.join() === "all", "FN then R randomises every track (⌥R)");
+		run();
+		check(P.Modifiers.fn === "off", "FN once is spent by the key");
+		ran.length = 0; press(keyEv("r", "KeyR"));
+		check(ran.join() === "track", "after it, R is the selected track's again");
+		all.run = runs[0]; one.run = runs[1];
+		sent.length = 0; P.Modifiers.setFn("once"); press(keyEv("Delete", "Delete")); run();
+		check(sent.some(m => m.op === "clearPattern"), "FN then Delete clears the whole pattern (⌥Delete): " + sent.map(m => m.op).join());
+		P.Overlay.clear(); P.setV(P.view());
+		/* a drag: the press, the moves and the release all say ⌥ (Control All reads the press: mdDeskLive.js) */
+		P.Modifiers.setFn("once");
+		const down = ptrEv(), move = ptrEv(), up = ptrEv();
+		fire("window", "pointerdown", down); fire("window", "pointermove", move); fire("window", "pointerup", up);
+		check(down.altKey && move.altKey && up.altKey, "FN: the drag's press, moves and release say ⌥");
+		run();
+		check(P.Modifiers.fn === "off", "FN once is spent at the drag's end");
+		P.Modifiers.setFn("latch");
+		const c1 = ptrEv(); fire("window", "click", c1); run();
+		const c2 = ptrEv(); fire("window", "click", c2); run();
+		check(c1.altKey && c2.altKey && P.Modifiers.fn === "latch", "FN latched: every click says ⌥ until it is let go");
+		const fk = Object.assign(ptrEv(), { target: { closest: q => q === "[data-fnkey]" ? {} : null } }); fire("window", "click", fk);
+		check(!fk.altKey, "a click on the FN key itself is not given ⌥");
+		const esc = keyEv("Escape", "Escape"); fire("window", "keydown", esc);
+		check(P.Modifiers.fn === "off", "Esc drops FN");
+		const c3 = ptrEv(); fire("window", "click", c3);
+		check(!c3.altKey, "FN off: a click is a click");
+	}
 	delete P.Docs.patterns[5]; delete P.Docs.kits[3]; P.Overlay.clear(); P.setV(P.view());
 }
 

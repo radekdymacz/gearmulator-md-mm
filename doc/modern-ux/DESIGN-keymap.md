@@ -1,7 +1,13 @@
 # Design: one keyboard and mouse map for both editors
 
-- 2026-10-08. Design only; nothing is built. Hammock style: the inventory (what is), principles (candidates,
-  critique, a pick), the map (before → after), rebinding, the owner's decisions, slices.
+- 2026-10-08. Hammock style: the inventory (what is), principles (candidates, critique, a pick), the map (before →
+  after), rebinding, the owner's decisions, slices.
+- **Decided 2026-10-08 (the owner):** D1 option 2 (⌘ / Ctrl selects, ⌘⇧ extends, the fill moves to the step menu; a
+  beta tester asked for ⌘-click = copy / paste selection), D2-D8 the recommendations.
+- **Built (branch `feat/keymap`, Machinedrum Editor):** K0 (ids, scopes, areas; `keymap.json`, the guide's tables
+  generated, the parity test), K1 (`Modifiers`), K2 + K3 (selection on ⌘, the step menu, D3), K4 (FN), and **K-view**
+  (added by the owner: ? is a drawn keyboard from the map, §6 below). Open: K5 (waits for the real-key work on
+  `feat/select-shift`), K6, K7 (MM, with the same `deskKeyView.js` and `deskMenu.js`), K8, and D7's moves.
 - The ask (the owner): "let's rethink and do proper keyboard mapping" instead of patching shortcuts one at a time.
   What led to it: step selection shipped on ⌥-click / ⌥-drag and slide moved to ⌥⇧-click
   ([DESIGN-step-selection.md](DESIGN-step-selection.md)), but ⌥ means "all" everywhere else; ⇧-click is accent;
@@ -309,6 +315,7 @@ later if asked. A rebindable map also makes the guide, the ? screenshots and sup
 | **K6 piano** | `e.code` dispatch for the piano block (both); MD black keys on pitched machines; tap on B (D6) | keys tests on QWERTY / AZERTY / QWERTZ stand-ins (`code` vs `key`); journey `md-keys-black-key` (PTCH moves a semitone) |
 | **K7 MM port (one pass)** | with MM's selection core (DESIGN-step-selection.md §7): ⌘ selection on the roll, fill to the roll's menu, ⌘X ⌘D ⌘A, Delete (D3), step menu items (Note off, Trigless, chord), FN, `e.code`; remove dead `clickStep`; D7 moves | `mmKeysTest.js` rules as MD's; parity test green; `mmViewTest` for the new ops; journeys `mm-seq-select-copy-paste`, `mm-seq-step-menu` |
 | **K8 words** | ? list groups per P1-P4, guide tables generated (K0), release notes "What you relearn" (§3.5), tooltips | guide check (K0) |
+| **K-view** (owner, 2026-10-08) | ? opens a drawn keyboard (`shared/deskKeyView.js`): physical layout, macOS or Windows / Linux legends, each key's meaning on the page shown (or all) per layer (⇧, ⌥ / FN, ⌘; held or clicked), piano keys with notes, the mouse's tricks by area, tips, the old list, search; all from the K0 data (`short`, `notes`, `tip` entries); small windows and an older WebKit | `deskKeyViewTest.js` (every dispatched key drawn in its layer, legends, filter, search, piano); journey `md-keys-help` |
 
 Order: K0, K1 (no visible change), then K2 + K3 together (the fill needs its new home before ⌘ is taken), K5, K6,
 K4, K7, K8. K5's real-key test should run first if the ⌘C / ⌘V investigation needs it.
