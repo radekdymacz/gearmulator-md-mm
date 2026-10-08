@@ -13,13 +13,13 @@ function stepCls(i, s) {
 	const t = V.tracks[i], c = ["st"]; if (s % 4 === 0) c.push("q"); if (s % 16 === 0 && s !== vis()[0]) c.push("gap"); if (s >= V.length) c.push("past");
 	if (t.trigs[s]) { c.push("on"); if (t.acc.has(s)) c.push("acc"); if (t.slide.has(s)) c.push("sl"); if (stepLocked(i, s)) c.push("lk"); }
 	if (inSel(i, s)) c.push("selx");
-	if (V.playing && s === S.step) c.push("ph"); return c.join(" ");
+	return c.join(" ");	/* the play position is the soft playhead (#phcol), not a class on the cells (B-014) */
 }
 /* The PAGE control sits on the right, above the grid, on the ruler row. */
 /* the step gestures, behind a small ? key at the right of the bar under the grid (a click: the list of keys) */
 function stepLegend() {
 	const row = (cls, what, how) => `<span>${cls != null ? `<i class="lg on ${cls}"></i>` : `<i class="lg none"></i>`}<b>${what}</b>${how}</span>`;
-	return `<span class="steplegend"><button class="glegkey" id="steplegend" aria-label="Step gestures" aria-describedby="steplegpop">?</button><span class="legend glegpop" id="steplegpop" role="tooltip">${row("", "Trig", "click")}${row("acc", "Accent", "shift-click" + (V.accAll ? " (all)" : ""))}${row("sl", "Slide", "alt-shift-click" + (V.slideAll ? " (all)" : ""))}${row("lk", "Has locks", "a lock on the step")}${row(null, "Fill", "⌘-click: every 2nd step from there to the end comes on (from a trig: off); ⌘⇧-click: every 4th")}${row(null, "Select", "alt-click a step, alt-drag steps, or drag in the step numbers; then ⌘C ⌘X ⌘V ⌘D, Delete, Esc. Alt-drag the selection: a copy")}<small>? the list of keys</small></span></span>`;
+	return `<span class="steplegend"><button class="glegkey" id="steplegend" aria-label="Step gestures" aria-describedby="steplegpop">?</button><span class="legend glegpop" id="steplegpop" role="tooltip">${row("", "Trig", "click")}${row("acc", "Accent", "shift-click" + (V.accAll ? " (all)" : ""))}${row("sl", "Slide", "alt-shift-click" + (V.slideAll ? " (all)" : ""))}${row("lk", "Has locks", "a lock on the step")}${row(null, "Select", "⌘-click a step, ⌘-drag steps, or drag in the step numbers; ⌘⇧-click extends; then ⌘C ⌘X ⌘V ⌘D, Delete, Esc. ⌘-drag the selection: a copy")}${row(null, "Menu", "right-click a step: trig, accent, slide, copy, paste, duplicate, clear, fill every 2nd / 4th")}<small>? the keyboard and every gesture</small></span></span>`;
 }
 function pageCtl() { return `<span class="pagectl seqpage"><button class="pgkey" id="pgkey" ${pages16() < 2 ? "disabled" : ""} title="Next page. Shift-click = previous. Keys [ and ].">Page</button><span class="pleds" aria-hidden="true">${[0, 1, 2, 3].map(k => `<span class="pl ${k < pages16() ? "" : "na"} ${!S.viewAll && k === S.page ? "cur" : ""}" data-plp="${k}"><i class="led"></i></span>`).join("")}</span><button class="ptog ${S.viewAll ? "on" : ""}" id="pgall" aria-pressed="${S.viewAll}" title="Show all steps"><i class="led"></i>All</button><button class="ptog ${S.follow ? "on" : ""}" id="pgfollow" aria-pressed="${S.follow}" title="Page follows the play position"><i class="led"></i>Fol</button></span>`; }
 function renderSeq() {
@@ -64,11 +64,17 @@ function clickSteps(e) {
 	if (!V.loaded) { toast("The pattern is not loaded yet."); return true; }
 	/* Live recording: a click plays the track like its TRIG key; the machine records it. */
 	if (V.rec) { cmd("recTrig", { t: i }); if (i !== S.sel) select(i); return true; }
-	if (e.metaKey || e.ctrlKey) { fillEvery(i, s, e.shiftKey ? 4 : 2); return true; }
+	/* a Mac's Ctrl-click is the system's right-click: the step menu (mdDeskSelect.js), not a click */
+	if (e.ctrlKey && Modifiers.mac) return true;
+	/* ⌘-click selects the step, ⌘⇧ extends the selection (K2): the pointer's select gesture did it; the keyboard's click here */
+	if (Modifiers.cmd(e)) {
+		if (e.detail === 0 && !e.altKey) setSel(e.shiftKey && S.stepSel ? selExtend(S.stepSel, { t: i, s }) : { t: i, n: 1, from: s, to: s + 1 });
+		return true;
+	}
 	/* a plain mouse click was the paint gesture's (pointerdown); the keyboard's click toggles here */
 	if (!e.shiftKey && !e.altKey && e.detail > 0) return true;
-	/* ⌥-click selects the step (DESIGN-step-selection.md): the pointer's select gesture did it; the keyboard's click here */
-	if (e.altKey && !e.shiftKey) { if (e.detail === 0) setSel({ t: i, n: 1, from: s, to: s + 1 }); return true; }
+	/* ⌥ alone on a step was select until 0.3.3; ⌥ is FUNCTION (every track) now: say where select went */
+	if (e.altKey && !e.shiftKey) { toast(Modifiers.say("Select is ⌘-click now (⌘-drag a block); ⌥ means every track. Right-click a step for its menu.")); return true; }
 	if (e.altKey && t.trigs[s]) cmd("slide", { p: V.pat, t: i, s }, undefined, [[["tracks", i, "slide", s], !t.slide.has(s)]]);
 	else if (e.shiftKey && t.trigs[s]) cmd("accent", { p: V.pat, t: i, s }, undefined, [[["tracks", i, "acc", s], !t.acc.has(s)]]);
 	else {

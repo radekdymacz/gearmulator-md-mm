@@ -58,10 +58,7 @@ namespace jucePluginEditorLib
 			hideJuceOptionsButton();
 			detachFeedbackBanner();
 #if JUCE_MAC
-			juce::PopupMenu appleExtras;
-			appleExtras.addItem("Settings...", [this] { showEditorSettings(); });
-			appleExtras.addItem("Audio/MIDI Settings...", [this] { showAudioMidiSettings(); });
-			juce::MenuBarModel::setMacMainMenu(this, &appleExtras);
+			setAppleMenu();
 #else
 			setMenuBar(this);
 #endif
@@ -80,6 +77,23 @@ namespace jucePluginEditorLib
 		{
 			juce::StandaloneFilterWindow::resized();
 			hideJuceOptionsButton();
+		}
+
+		// An "About <name>" entry: the application menu's first on macOS, a Help menu elsewhere.
+		void setAbout(const juce::String& _name, std::function<void()> _show)
+		{
+			m_aboutName = _name;
+			m_showAbout = std::move(_show);
+#if JUCE_MAC
+			setAppleMenu();
+#else
+			addMenu({"Help", [this]
+			{
+				juce::PopupMenu m;
+				m.addItem("About " + m_aboutName + "...", [this] { if(m_showAbout) m_showAbout(); });
+				return m;
+			}});
+#endif
 		}
 
 		void addMenu(Menu _menu)
@@ -128,6 +142,23 @@ namespace jucePluginEditorLib
 
 	private:
 		std::vector<Menu> m_menus;
+		juce::String m_aboutName;
+		std::function<void()> m_showAbout;
+
+#if JUCE_MAC
+		void setAppleMenu()
+		{
+			juce::PopupMenu appleExtras;
+			if(m_showAbout)
+			{
+				appleExtras.addItem("About " + m_aboutName, [this] { if(m_showAbout) m_showAbout(); });
+				appleExtras.addSeparator();
+			}
+			appleExtras.addItem("Settings...", [this] { showEditorSettings(); });
+			appleExtras.addItem("Audio/MIDI Settings...", [this] { showAudioMidiSettings(); });
+			juce::MenuBarModel::setMacMainMenu(this, &appleExtras);
+		}
+#endif
 
 		void showAudioMidiSettings()
 		{

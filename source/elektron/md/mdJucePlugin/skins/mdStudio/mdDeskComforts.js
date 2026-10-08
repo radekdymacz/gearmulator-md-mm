@@ -18,20 +18,42 @@ function clearTrackLocks(t) {
 }
 function altLabels() {
 	const c = $('[data-sec="clear"]');
-	if (c) { c.textContent = S.alt ? "All" : "Clr"; c.title = S.alt ? `Clear the whole pattern ${patName(V.pat)}: every track's trigs and locks (one undo step)` : "Clear (Delete). Alt: the whole pattern"; }
+	if (c) { c.textContent = S.alt ? "All" : "Clr"; if (S.alt) c.title = `Clear the whole pattern ${patName(V.pat)}: every track's trigs and locks (one undo step)`; }
+	secLabels();
 	const cl = $("#clearLane");
 	if (cl) { const t = S.alt ? `Clear every lock of track ${S.sel + 1}` : `Clear ${S.lane} locks. Alt: every lock of track ${S.sel + 1}`; cl.title = t; cl.setAttribute("aria-label", t); }
+}
+/* the LCD's COPY CLR PASTE say what they act on, and are marked while it is the selected steps (K2: Sequence with a
+   selection; secAction, mdDeskApp.js, takes the selection then) */
+function secLabels() {
+	const sel = S.ws === "seq" && !!S.stepSel, say = sel ? selSay(S.stepSel) : "";
+	const cp = $('[data-sec="copy"]'), pa = $('[data-sec="paste"]'), c = $('[data-sec="clear"]');
+	for (const b of [cp, pa, c]) if (b) b.classList.toggle("onsel", sel && !(b === c && S.alt));
+	if (cp) cp.title = sel ? `Copy the selected steps, ${say} (⌘C)` : "Copy (⌘C): Sequence, the selected track's page shown; Sound, the sound; Song, the row";
+	if (pa) pa.title = sel ? `Paste at the selected step, ${say} (⌘V)` : "Paste (⌘V)";
+	if (c && !S.alt) c.title = sel ? `Clear the selected steps, ${say} (Delete). ⌥: the whole pattern` : "Clear: Sequence, the selected track's page shown (⌥: the whole pattern); Sound, the sound; Song, the row";
 }
 S.alt = false;
 /* Alt seen up (any key or pointer event without it) also ends a rotate run: its keyup may never reach the page
    (the Monomachine Editor's fix, MM-PORT-PLAN.md 2026-10-05) */
 function showAlt(on) { if (S.alt === on) return; S.alt = on; if (!on) Held.end("rotate"); document.body.classList.toggle("althold", on); altLabels(); if (S.ws === "seq") genDraw(); if (S.ws === "sound") renderMutStrip(); }
+/* ===== FN (K4, DESIGN-keymap.md): the top bar's FN key, the machine's FUNCTION for a mouse or a touch screen: a click
+   gives the next click, drag or key ⌥ (every track), a double-click keeps it on until a click or Esc (Modifiers,
+   shared/deskKeys.js, puts ⌥ on the events); the keys that ⌥ changes say so while it is on ===== */
+document.addEventListener("click", e => { if (e.target.closest("#fnkey")) Modifiers.setFn(Modifiers.fn === "off" ? "once" : "off"); });
+document.addEventListener("dblclick", e => { if (e.target.closest("#fnkey")) Modifiers.setFn("latch"); });
+Modifiers.onFn(s => {
+	const k = $("#fnkey");
+	if (k) { k.setAttribute("aria-pressed", String(s !== "off")); k.classList.toggle("on", s !== "off"); k.classList.toggle("latch", s === "latch"); k.querySelector(".led")?.classList.toggle("on", s !== "off"); }
+	showAlt(s !== "off");
+});
+Keys.bind({ id: "fn-key", scope: "any", area: "Top bar", keys: ["FN key"], group: "All", does: "Click: the next click, drag or key gets ⌥, every track (FN then R randomises all, FN then drag a value is Control All, FN then Delete clears the pattern). Double-click: stays on until clicked again. Esc: off" });
 addEventListener("keydown", e => showAlt(e.altKey), true);
 addEventListener("keyup", e => showAlt(e.altKey), true);
 addEventListener("blur", () => showAlt(false));
 document.addEventListener("pointermove", e => showAlt(e.altKey), { passive: true, capture: true });
 /* ===== Small comforts (DESIGN-generators.md §7), each one undo step, each a plain edit the machine takes on any
-   engine: the lock budget in the lane's header, rotate a track (Alt + arrows), the every-N fill (⌘-click), the
+   engine: the lock budget in the lane's header, rotate a track (Alt + arrows), the every-N fill (the step menu), the
    wheel on a step moves its lock, a ramp in the lock lane (Shift-drag), double the pattern (LEN ×2), paste to many
    tracks (Shift-click the headers, ⌘V), unmute and unsolo all (0). The step arithmetic is mdDeskGen.js's. ===== */
 S.multi = new Set();
@@ -72,7 +94,7 @@ function rotateTrack(by) {
 	refreshRow(t); renderLane();
 }
 
-/* ---- every-N fill: ⌘-click a step, every 2nd step from there to the end (⌘⇧: every 4th) comes on; from a step
+/* ---- every-N fill: Fill every 2nd / 4th in the step menu (mdDeskSelect.js; ⌘-click until K2), every 2nd (4th) step from there to the end comes on; from a step
    with a trig they go off (the first step decides, as the paint does). One steps edit. */
 function fillEvery(t, s, n) {
 	if (!seqReady()) return;
@@ -122,12 +144,10 @@ function unmuteAll() {
 }
 document.addEventListener("click", e => { if (e.target.closest("#allon")) unmuteAll(); });
 const seqKeys = () => S.ws === "seq" && dlgClosed() && $("#keyspop").hidden;
-Keys.bind({ keys: ["ArrowLeft", "ArrowRight"], mod: "alt", group: "Selected track", does: "Sequence: rotate the selected track one step earlier / later: trigs, accents and locks, wrapping at the length. Presses while ⌥ is down are one undo step. The one Alt that is not \"all\": FUNCTION + arrows on the machine", when: seqKeys, run: e => rotateTrack(e.key === "ArrowRight" ? 1 : -1) });
-Keys.bind({ keys: ["0"], group: "All", does: "Unmute and unsolo every track", when: () => kbOn(), run: () => unmuteAll() });
-Keys.bind({ keys: ["Escape"], group: "Sequence", does: "Unmark the tracks marked for paste", when: () => seqKeys() && S.multi.size > 0 && !genRunOn(), run: () => { S.multi = new Set(); renderRail(); renderLane(); } });
-Keys.bind({ keys: ["step"], mod: "cmd", group: "Sequence", does: "Click: every 2nd step from there to the end on (from a trig: off), one undo step" });
-Keys.bind({ keys: ["step"], mod: "cmd+shift", group: "Sequence", does: "Click: every 4th step from there to the end" });
-Keys.bind({ keys: ["wheel on a step"], group: "Sequence", does: "Move its lock in the lane's parameter, 4 a notch (⇧: 1)" });
-Keys.bind({ keys: ["lock lane"], mod: "shift", group: "Sequence", does: "Drag: a ramp, a straight line from the press to the release (one undo step)" });
-Keys.bind({ keys: ["track header"], mod: "shift", group: "Sequence", does: "Click: mark the track for paste; ⌘V then pastes into every marked track (one undo step)" });
+Keys.bind({ id: "rotate", short: "Rotate ← / Rotate →", scope: "seq", keys: ["ArrowLeft", "ArrowRight"], mod: "alt", group: "Selected track", does: "Sequence: rotate the selected track one step earlier / later: trigs, accents and locks, wrapping at the length. Presses while ⌥ is down are one undo step. The one Alt that is not \"all\": FUNCTION + arrows on the machine", when: seqKeys, run: e => rotateTrack(e.key === "ArrowRight" ? 1 : -1) });
+Keys.bind({ id: "unmute-all", short: "Unmute all", scope: "any", keys: ["0"], group: "All", does: "Unmute and unsolo every track", when: () => kbOn(), run: () => unmuteAll() });
+Keys.bind({ id: "unmark-paste", short: "Unmark", scope: "seq", keys: ["Escape"], group: "Sequence", does: "Unmark the tracks marked for paste", when: () => seqKeys() && S.multi.size > 0 && !genRunOn(), run: () => { S.multi = new Set(); renderRail(); renderLane(); } });
+Keys.bind({ id: "step-wheel-lock", scope: "seq", area: "Steps", keys: ["wheel on a step"], group: "Sequence", does: "Move its lock in the lane's parameter, 4 a notch (⇧: 1)" });
+Keys.bind({ id: "lane-ramp", scope: "seq", area: "Lock lane", keys: ["lock lane"], mod: "shift", group: "Sequence", does: "Drag: a ramp, a straight line from the press to the release (one undo step)" });
+Keys.bind({ id: "track-mark-paste", scope: "seq", area: "Tracks", keys: ["track header"], mod: "shift", group: "Sequence", does: "Click: mark the track for paste; ⌘V then pastes into every marked track (one undo step)" });
 

@@ -237,6 +237,8 @@ namespace mdDesk
 		// Every SysEx but a sample's goes here (m_out holds it while a sample is on its way).
 		void sendSysex(const Bytes& _message);
 		bool canSendSysex() const { return m_out.open(); }
+		double streamTimeoutMs() const;
+		void sendLiveSysex(const LiveEdit& _e, const Bytes& _message);
 		void pumpSample(double _now);
 		deskCore::Outcome cmdPlay(const Value&, const Documents&);
 		deskCore::Outcome cmdStop(const Value&, const Documents&);

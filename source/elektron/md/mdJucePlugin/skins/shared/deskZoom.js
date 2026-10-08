@@ -12,7 +12,9 @@
 		return null;
 	};
 	document.addEventListener("keydown", e => {
-		if (!(mac ? e.metaKey : e.ctrlKey) || e.altKey) return;
+		/* ⌘ as the key map reads it (deskKeys.js Modifiers; the MM page loads this file before its map) */
+		const cmd = typeof Modifiers !== "undefined" ? Modifiers.cmd(e) : (mac ? e.metaKey : e.ctrlKey);
+		if (!cmd || e.altKey) return;
 		const step = stepOf(e);
 		if (step === null) return;
 		e.preventDefault(); e.stopPropagation();

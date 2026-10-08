@@ -5,6 +5,7 @@
 
 #include "deskCore/deskCore.h"
 #include "deskCore/deskPush.h"
+#include "deskCore/deskStream.h"
 
 #include <cstdint>
 #include <functional>
@@ -30,6 +31,10 @@ namespace mmDesk
 		// DESIGN-UNIFY.md 4.4: how long a field the editor set (a mute, POLY, the tempo) is shown while
 		// memory still disagrees; then memory wins (deskCore::FieldExpectation).
 		double settleMs = 1500;
+		// B-014: the editor's values (CCs, NRPN), value SysEx (tempo) and dumps through one stream at MIDI cable
+		// speed while the machine plays (deskCore::Stream: a pattern every 1.7 s, the newest wins meanwhile), as
+		// fast as the machine reads while it stands. The SYSEX RECV session times the dumps themselves. Unset: at once.
+		deskCore::StreamPolicy stream;
 	};
 
 	const Profile& emulatorProfile();	// "emu"

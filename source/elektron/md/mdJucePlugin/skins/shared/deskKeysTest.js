@@ -14,10 +14,11 @@ const on = {};
 const document = { addEventListener: (type, f) => { on[type] = f; }, activeElement: null };
 const keydown = e => on.keydown(e);
 const ctx = vm.createContext({ document, console });
-vm.runInContext(fs.readFileSync(path.join(__dirname, "deskKeys.js"), "utf8") + "\nthis.Keys = Keys;", ctx);
+vm.runInContext(fs.readFileSync(path.join(__dirname, "deskKeys.js"), "utf8") + "\nthis.Keys = Keys; this.Modifiers = Modifiers;", ctx);
 /* the modal layer: a const in the page's global scope, as deskModal.js makes it */
 vm.runInContext("const Modal = { top: () => this.modalTop, kind: () => this.modalTop ? (this.modalTop === \"dlg\" || this.modalTop === \"bootcard\" ? \"other\" : \"panel\") : null };", ctx);
-const Keys = ctx.Keys, ran = [];
+const Keys = ctx.Keys, Modifiers = ctx.Modifiers, ran = [];
+Modifiers.setPlatform(true);	/* a Mac first: ⌘ is metaKey */
 const setTop = id => { ctx.modalTop = id; };
 Keys.bind({ keys: ["Space"], group: "Transport", does: "play", run: () => ran.push("play") });
 Keys.bind({ keys: ["Delete", "Backspace"], group: "Sequence", does: "clear", run: () => ran.push("clear") });
@@ -58,11 +59,31 @@ check(!Keys.free(), "a text field focused: Keys.free() is false");
 document.activeElement = null;
 check(Keys.free(), "nothing open, no field: Keys.free() is true");
 
-/* ⌘C / ⌘X / ⌘V as edit commands (macOS: JUCE's web view turns the keys into copy:, cut:, paste:, so the page gets the
-   document's copy, cut and paste events and no keydown) are those keys */
-Keys.bind({ keys: ["C"], mod: "cmd", group: "Anywhere", does: "copy", run: () => ran.push("copy") });
-Keys.bind({ keys: ["X"], mod: "cmd", group: "Anywhere", does: "cut", run: () => ran.push("cut") });
-Keys.bind({ keys: ["V"], mod: "cmd", group: "Anywhere", does: "paste", run: () => ran.push("paste") });
+/* ---- K1 (DESIGN-keymap.md P4): ⌘ is metaKey on a Mac and Ctrl elsewhere; a Mac's Ctrl and the Windows key are neither ---- */
+Keys.bind({ id: "t-octave", scope: "any", keys: ["Z"], group: "Playing", does: "octave", run: () => ran.push("octave") });
+Keys.bind({ id: "t-redo", scope: "any", keys: ["Z"], mod: "cmd+shift", group: "Anywhere", does: "redo", run: () => ran.push("redo") });
+Modifiers.setPlatform(true);
+check(press("z", { metaKey: true }).ran === "undo", "Mac: ⌘Z undoes");
+check(press("z", { ctrlKey: true }).ran === "", "Mac: Ctrl+Z is not ⌘Z, and plays no octave either (Ctrl is not a plain key)");
+check(Modifiers.cmd({ ctrlKey: true }) === false && Modifiers.cmd({ metaKey: true }) === true, "Mac: Modifiers.cmd reads metaKey only");
+check(Keys.label(Keys.byId("t-octave")) === "Z" && Keys.label({ keys: ["Z"], mod: "cmd+shift" }) === "⌘⇧Z" && Keys.label({ keys: ["step"], mod: "alt+shift", area: "Steps" }) === "⌥⇧ step",
+	"Mac labels: ⌘⇧Z, ⌥⇧ step: " + Keys.label({ keys: ["Z"], mod: "cmd+shift" }));
+check(Modifiers.say("⌘C copy · ⌥-drag") === "⌘C copy · ⌥-drag", "Mac: the page's words keep their symbols");
+Modifiers.setPlatform(false);
+check(press("z", { ctrlKey: true }).ran === "undo", "Windows / Linux: Ctrl+Z undoes");
+check(press("z", { metaKey: true }).ran === "", "Windows / Linux: the Windows key + Z is not Ctrl+Z");
+check(press("z", { ctrlKey: true, shiftKey: true }).ran === "redo", "Windows / Linux: Ctrl+Shift+Z redoes");
+check(Keys.label({ keys: ["Z"], mod: "cmd+shift" }) === "Ctrl+Shift+Z" && Keys.label({ keys: ["step"], mod: "cmd", area: "Steps" }) === "Ctrl + step",
+	"Windows labels: Ctrl+Shift+Z, Ctrl + step: " + Keys.label({ keys: ["Z"], mod: "cmd+shift" }));
+const said = Modifiers.say("Select: ⌘-click a step, ⌘⇧-click extends; then ⌘C ⌘V. Wheel: 4 a notch (⇧: 1). Undo (Cmd+Z), ⌥R all, Option-drag");
+check(said === "Select: Ctrl-click a step, Ctrl+Shift-click extends; then Ctrl+C Ctrl+V. Wheel: 4 a notch (Shift: 1). Undo (Ctrl+Z), Alt+R all, Alt-drag", "Windows: the page's words say Ctrl, Alt, Shift: " + said);
+Modifiers.setPlatform(true);
+
+/* ⌘C / ⌘X / ⌘V as edit commands (B-015; macOS: JUCE's web view turns the keys into copy:, cut:, paste:, so the page
+   gets the document's copy, cut and paste events and no keydown) are those keys: the map's entries copy, cut, paste */
+Keys.bind({ id: "copy", scope: "any", keys: ["C"], mod: "cmd", group: "Anywhere", does: "copy", run: () => ran.push("copy") });
+Keys.bind({ id: "cut", scope: "any", keys: ["X"], mod: "cmd", group: "Anywhere", does: "cut", run: () => ran.push("cut") });
+Keys.bind({ id: "paste", scope: "any", keys: ["V"], mod: "cmd", group: "Anywhere", does: "paste", run: () => ran.push("paste") });
 function edit(type) {
 	let prevented = false;
 	ran.length = 0; on[type]({ type, preventDefault: () => { prevented = true; } });
@@ -73,7 +94,7 @@ const CtxDate = vm.runInContext("Date", ctx), realNow = CtxDate.now;
 CtxDate.now = () => realNow() + 10000;	/* long after the ⌘Z keydowns above */
 for (const t of ["copy", "cut", "paste"]) {
 	const r = edit(t);
-	check(r.ran === t && r.prevented, `a ${t} event with no keydown before it runs the ⌘${{ copy: "C", cut: "X", paste: "V" }[t]} entry and takes it`);
+	check(r.ran === t && r.prevented, `a ${t} event with no keydown before it runs the ⌘${{ copy: "C", cut: "X", paste: "V" }[t]} entry (id ${t}) and takes it`);
 }
 check(Keys.seen().slice(-3).join(" ") === "cmd+C cmd+X cmd+V", "the key probe notes them as cmd+C cmd+X cmd+V: " + Keys.seen().slice(-3).join(" "));
 document.activeElement = { closest: q => (q.includes("input") ? {} : null) };
@@ -88,6 +109,13 @@ check(edit("copy").ran === "copy", "a later copy event is a press of its own aga
 setTop("dlg");
 check(!edit("paste").ran, "a question open: a paste event pastes nothing behind it");
 setTop(null);
+/* off a Mac the edit command is Ctrl's (K1): it still runs the map's entry */
+Modifiers.setPlatform(false);
+CtxDate.now = () => realNow() + 30000;
+check(edit("paste").ran === "paste", "Windows / Linux: a paste event runs the paste entry (Ctrl+V)");
+press("c", { ctrlKey: true });
+check(!edit("copy").ran, "Windows / Linux: a copy event right after the Ctrl+C keydown is not a second one");
+Modifiers.setPlatform(true);
 CtxDate.now = realNow;
 
 console.log(failures ? `${failures} failure(s)` : "deskKeysTest: all passed");

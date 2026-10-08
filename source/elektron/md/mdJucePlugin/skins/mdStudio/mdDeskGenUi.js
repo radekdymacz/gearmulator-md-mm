@@ -244,7 +244,7 @@ document.addEventListener("click", e => {
 		if (a === "fill") genDefaults();
 		return;
 	}
-	const rk = e.target.closest("[data-rand]"); if (rk && !rk.disabled) { randomise(e.altKey || e.metaKey || e.ctrlKey); return; }
+	const rk = e.target.closest("[data-rand]"); if (rk && !rk.disabled) { randomise(e.altKey); return; }	/* ⌥ (or FN) is every track; ⌘ is not (P3) */
 	const k = e.target.closest("[data-genkind]"); if (k) { genKind(k.dataset.genkind); return; }
 	const md = e.target.closest("[data-genmode]"); if (md) { genMode(md.dataset.genmode); return; }
 	const v = e.target.closest(".gv[data-gv]"); if (v && !v.dataset.dragged) { genVal(v.dataset.gv, e.shiftKey ? -1 : 1); return; }
@@ -260,7 +260,7 @@ document.addEventListener("keydown", e => {
 const dlgClosed = () => $("#dlg").hidden;
 const genRunOn = () => S.ws === "seq" && !!S.gen.run && S.gen.run.applied > 0 && S.gen.run.key === genKey();
 const mutRunOn = () => S.ws === "sound" && !!S.mut.trial && S.mut.trial.applied > 0 && S.mut.trial.key === mutKey();
-Keys.bind({ keys: ["R"], code: "KeyR", when: () => dlgClosed() && !LIB.open, group: "Selected track", does: "Randomise the selected track: on Sound a fresh random sound (MUTATE, from the sound before the trial); everywhere else a new GEN variation, a new seed or random hits and rotation", run: () => randomise(false) });
-Keys.bind({ keys: ["R"], code: "KeyR", mod: "alt", when: () => dlgClosed() && !LIB.open, group: "All", does: "Randomise every track: on Sound the whole kit, everywhere else every track's GEN spec over the whole pattern", run: () => randomise(true) });
-Keys.bind({ keys: ["GEN value"], mod: "alt", group: "All", does: "Change a GEN value: every track's spec, the whole pattern (one pattern change, one undo step per run)" });
-Keys.bind({ keys: ["R key"], mod: "alt", group: "All", does: "Click: randomise every track (Sound: the whole kit; MIDI and CTR tracks are left alone, VOL is kept)" });
+Keys.bind({ id: "randomise-track", short: "Randomise", scope: "any", keys: ["R"], code: "KeyR", when: () => dlgClosed() && !LIB.open, group: "Selected track", does: "Randomise the selected track: on Sound a fresh random sound (MUTATE, from the sound before the trial); everywhere else a new GEN variation, a new seed or random hits and rotation", run: () => randomise(false) });
+Keys.bind({ id: "randomise-all", short: "Randomise all", scope: "any", keys: ["R"], code: "KeyR", mod: "alt", when: () => dlgClosed() && !LIB.open, group: "All", does: "Randomise every track: on Sound the whole kit, everywhere else every track's GEN spec over the whole pattern", run: () => randomise(true) });
+Keys.bind({ id: "gen-value-all", scope: "seq", area: "GEN bar", keys: ["GEN value"], mod: "alt", group: "All", does: "Change a GEN value: every track's spec, the whole pattern (one pattern change, one undo step per run)" });
+Keys.bind({ id: "rkey-all", scope: "any", area: "GEN bar", keys: ["R key"], mod: "alt", group: "All", does: "Click: randomise every track (Sound: the whole kit; MIDI and CTR tracks are left alone, VOL is kept)" });

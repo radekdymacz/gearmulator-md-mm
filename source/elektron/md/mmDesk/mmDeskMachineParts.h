@@ -36,6 +36,9 @@ namespace mmDesk::parts
 	constexpr const char* g_noChains = "A chain is made with the Monomachine's keys (hold BANK, press the TRIG keys; manual 1-46), and over"
 		" MIDI no message reaches them: Appendix C has no SysEx for chaining or for the keys. Chain on the machine's panel.";
 	constexpr const char* g_panelBusy = "The panel is busy (SYSEX RECV); try again.";
+	// 0.3.4: PLAY / STOP while the panel takes an edit wait for it (pumpTransport), this long at most
+	constexpr const char* g_transportWaits = "The machine is taking an edit (SYSEX RECV): it follows in a moment.";
+	constexpr double g_transportWaitMs = 10000;
 
 	// The dump a request brings back, for timeouts at DIN speed (the kind's record).
 	inline size_t replyBytes(const Kind _k)

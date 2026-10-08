@@ -800,7 +800,6 @@ namespace
 		check(dumps == 1 && undoCount() == undo0 + 1, "steps through the desk: 16 rows are one pattern dump and one undo step");
 		const auto sent = *ed::decodeMdPattern(wire.at(0));
 		check(ed::hasTrig(sent, 15, 11) && ed::hasTrig(sent, 0, 0), "the dump carries every row");
-
 		params.clear();
 		wire.clear();
 		const int undo1 = undoCount();
@@ -991,29 +990,46 @@ namespace
 		check(desk.isBusy(), "TX: busy while the read-back is due");
 
 		check(wire.size() == 1, "the dump alone: no read-back while the gesture may go on (DESIGN-edit-flow.md)");
-		// A second edit within 200 ms waits its turn (latest wins); one read-back once the gesture is quiet.
+		// B-014: the next dump waits for the first one's time on the stream (a MIDI cable, 3125 B/s: about
+		// 1.7 s), latest wins meanwhile; one read-back once the gesture is quiet and the last dump applied.
+		const auto& stream = emulatorProfile().stream;
+		const double gap = stream.wireMs(wire[0].size());
+		check(gap > 1000 && gap < 2000, "a pattern dump has its MIDI cable time on the stream (" + std::to_string(gap) + " ms)");
+		// (the status polls go on meanwhile: only pattern dumps and requests count here)
+		const auto patternTraffic = [&]
+		{
+			std::vector<std::vector<uint8_t>> v;
+			for(const auto& m : wire)
+				if(m.size() > 6 && (m[6] == ed::g_mdPatternDump || m[6] == 0x68))
+					v.push_back(m);
+			return v;
+		};
 		wire.clear();
 		desk.onPageMessage(cmd(R"({"op":"trig","p":1,"t":0,"s":2,"id":3,"g":5})"));
-		check(wire.empty(), "no second dump within 200 ms of the first");
-		now = 200;
+		check(patternTraffic().empty(), "no second dump while the first is on the stream");
+		now = 100 + gap - 20;
 		desk.tick();
-		check(wire.empty(), "still waiting its turn at 100 ms");
-		now = 300;
+		check(patternTraffic().empty(), "still waiting its turn just before the first dump's time is over");
+		now = 100 + gap + 10;
 		desk.tick();
-		check(wire.size() == 1 && ed::mdDumpCommand(wire[0]) == ed::g_mdPatternDump
-			&& ed::hasTrig(*ed::decodeMdPattern(wire[0]), 0, 2) != ed::hasTrig(pattern, 0, 2), "the waiting edit goes out 200 ms after the first");
-		const auto second = wire[0];
-		now = 840;
+		auto t = patternTraffic();
+		check(t.size() == 1 && ed::mdDumpCommand(t[0]) == ed::g_mdPatternDump
+			&& ed::hasTrig(*ed::decodeMdPattern(t[0]), 0, 2) != ed::hasTrig(pattern, 0, 2), "the waiting edit goes out once the first dump's time is over");
+		const auto second = t.empty() ? std::vector<uint8_t>{} : t[0];
+		const double secondAt = now;
+		now = secondAt + 20;
 		desk.tick();
-		check(wire.size() == 1, "no read-back before 750 ms of quiet (B-010: a read-back costs the sequencer time)");
-		now = 850;
+		check(patternTraffic().size() == 1, "no read-back while the machine applies the dump (B-014: never over a dump)");
+		now = secondAt + stream.ingestMs(second.size()) + stream.settleMs + 10;
 		desk.tick();
-		check(wire.size() == 2 && wire[1].size() > 6 && wire[1][6] == 0x68, "one read-back request once the gesture is quiet");
-		now = 898;
+		t = patternTraffic();
+		check(t.size() == 2 && t[1][6] == 0x68, "one read-back request once the gesture is quiet and the dump applied");
+		const double askedAt = secondAt + 20;
+		now += 48;
 		desk.onDeviceSysex(ed::encodeMdPattern(sent));
 		check(desk.isBusy(), "the older value does not confirm");
 		desk.onDeviceSysex(second);
-		check(desk.lastRoundTripMs() == 48, "round trip measured from the read-back request");
+		check(std::abs(desk.lastRoundTripMs() - (now - askedAt)) < 0.5, "round trip measured from asking for the read-back");
 		desk.tick();
 		check(!desk.isBusy(), "idle after the read-back of the last dump");
 
@@ -1063,11 +1079,9 @@ namespace
 		page.clear();
 		wire.clear();
 		desk.onPageMessage(cmd(R"({"op":"trig","p":1,"t":3,"s":3,"id":10})"));
-		now += 750;
-		desk.tick();
+		for(int i = 0; i < 100; ++i) { now += 10; desk.tick(); }
 		check(lastOf("error") == nullptr, "the read-back is asked for at quiet");
-		now += 2100;
-		desk.tick();
+		for(int i = 0; i < 1000; ++i) { now += 10; desk.tick(); }
 		check(lastOf("error") != nullptr, "a push without a read-back is reported");
 	}
 
@@ -1397,10 +1411,11 @@ namespace
 				+ std::to_string(n % 16) + ",\"v\":" + std::to_string(n) + ",\"g\":9}"));
 		}
 		count();
-		check(dumps >= 9 && dumps <= 11 && requests == 0, "a 2 s draw: at most 5 dumps a second (" + std::to_string(dumps) + "), no read-back mid-gesture");
-		for(int i = 0; i < 100; ++i) { now += 8; desk.tick(); }
+		// B-014: a dump at most every 1.7 s (the stream at MIDI cable speed), latest wins
+		check(dumps == 2 && requests == 0, "a 2 s draw: two dumps (the first at once, the next after the first one's cable time) (" + std::to_string(dumps) + "), no read-back mid-gesture");
+		for(int i = 0; i < 300; ++i) { now += 8; desk.tick(); }
 		count();
-		check(dumps <= 12 && requests == 1, "then exactly one read-back (" + std::to_string(requests) + ")");
+		check(dumps == 3 && requests == 1, "then the last value and exactly one read-back (" + std::to_string(dumps) + " dumps, " + std::to_string(requests) + " read-backs)");
 		check(desk.coreState().history().size() == 1, "one undo step");
 		const auto* st = desk.coreState().state({DocKind::Pattern, pattern.position});
 		check(st && st->pending && std::holds_alternative<ed::MdPattern>(*st->pending) && ed::usedLockRows(std::get<ed::MdPattern>(*st->pending)) > 0, "the page shows the last value, pending");
@@ -2680,6 +2695,137 @@ namespace
 	}
 }
 
+namespace
+{
+	// B-014: the editor's one stream to the machine (SysexOut + StreamPolicy).
+	void testSysexStream()
+	{
+		std::vector<std::vector<uint8_t>> wire;
+		StreamPolicy policy;
+		policy.bytesPerSecond = 3125;
+		policy.ingestBytesPerSecond = 125000;
+		policy.settleMs = 250;
+		SysexOut out([&](const std::vector<uint8_t>& _b) { wire.push_back(_b); }, policy);
+		const auto dump = [](const uint8_t _slot, const uint8_t _fill)
+		{
+			std::vector<uint8_t> m(5410, _fill);
+			m[0] = 0xf0; m[1] = 0x00; m[2] = 0x20; m[3] = 0x3c; m[4] = 0x02; m[5] = 0x00; m[6] = 0x67; m[9] = _slot; m.back() = 0xf7;
+			return m;
+		};
+		const std::vector<uint8_t> request{0xf0, 0x00, 0x20, 0x3c, 0x02, 0x00, 0x68, 0x01, 0xf7};
+
+		out.send(dump(1, 1), false, 0);
+		check(wire.size() == 1 && out.sending(0), "a dump on a free stream goes at once, and the stream is sending");
+		out.send(request, false, 10);
+		check(wire.size() == 1 && out.waiting() == 1, "a request waits while the machine applies the dump (never over it)");
+		out.pump(43 + 250 + 1);
+		check(wire.size() == 2 && wire[1] == request, "the request goes once the dump is read and applied");
+		out.send(dump(1, 2), false, 400);
+		out.send(dump(1, 3), false, 500);
+		out.send(dump(2, 4), false, 600);
+		check(wire.size() == 2 && out.waiting() == 2 && out.coalesced() == 1, "dumps wait for the cable time; a newer dump of the same pattern replaces the waiting one");
+		bool after = false;
+		out.after([&] { after = true; }, 600);
+		check(!after, "work queued after a waiting dump waits with it");
+		out.pump(1731);
+		check(wire.size() == 2, "the next dump waits for the first one's 1.73 s");
+		out.pump(1732);
+		check(wire.size() == 3 && wire[2][10] == 3 && !after, "then the newest value of pattern 1 goes (latest wins)");
+		out.pump(1732 + 1731 + 1);
+		check(wire.size() == 4 && wire[3][9] == 2 && after, "then pattern 2's dump, then the work after it (in that order)");
+		check(out.delayMs(3500) > 0 && out.delayMs(1e6) == 0, "a message sent while a dump is applied waits; later none waits");
+		out.clear();
+		check(!out.sending(1e6) && out.waiting() == 0, "the machine started over: nothing waits");
+
+		// Values (CCs) share a budget at cable speed with a burst; the newest value of a parameter wins while it
+		// waits; notes pass waiting values; a value-setting SysEx goes at most every latestIntervalMs.
+		{
+			std::vector<std::string> sent;
+			StreamPolicy v = policy;
+			v.valueBytesPerSecond = 3125;
+			v.valueBurstBytes = 30;	// 10 CCs at once
+			v.latestIntervalMs = 100;
+			SysexOut s([&](const std::vector<uint8_t>& _b) { sent.push_back("sysex" + std::to_string(_b[6])); }, v);
+			for(int i = 0; i < 20; ++i)
+				s.value(i, 3, [&sent, i] { sent.push_back("cc" + std::to_string(i)); }, 0);
+			check(sent.size() == 10 && s.waiting() == 10, "a burst of 20 CCs: 10 go at once (the burst), 10 wait for the budget");
+			s.value(15, 3, [&sent] { sent.push_back("cc15new"); }, 0);
+			check(s.waiting() == 10, "a newer value of a waiting parameter replaces it");
+			s.priority([&sent] { sent.push_back("note"); }, 0);
+			check(sent.back() == "note", "a note passes the waiting values");
+			s.pump(3);
+			check(sent.size() == 11 + 3 && sent.back() == "cc12", "the budget refills at cable speed (about one CC a ms)");
+			s.pump(100);
+			check(s.waiting() == 0 && std::find(sent.begin(), sent.end(), "cc15new") != sent.end()
+				&& std::find(sent.begin(), sent.end(), "cc15") == sent.end(), "then the rest, the newest value of each");
+			sent.clear();
+			const std::vector<uint8_t> tempo1{0xf0, 0x00, 0x20, 0x3c, 0x02, 0x00, 0x61, 0x01, 0x10, 0xf7};
+			auto tempo2 = tempo1;
+			tempo2[8] = 0x20;
+			s.sendLatest(7, tempo1, false, 200);
+			s.sendLatest(7, tempo2, false, 220);
+			s.sendLatest(7, tempo1, false, 240);
+			check(sent.size() == 1 && s.waiting() == 1, "a value SysEx goes at once, then the newest waits for the interval");
+			s.pump(300);
+			check(sent.size() == 2, "and goes 100 ms after the one before");
+		}
+
+		// 0.3.4: the cable's pace only while the machine plays. Stopped: dumps as fast as the machine reads them
+		// (a pattern in 43 ms), still nothing over a dump it applies and the newest dump of a document wins;
+		// values and value SysEx at once. Play starting mid-transfer slows the rest; play stopping speeds it up.
+		{
+			std::vector<std::vector<uint8_t>> sent;
+			StreamPolicy v = policy;
+			v.valueBytesPerSecond = 3125;
+			v.valueBurstBytes = 30;
+			v.latestIntervalMs = 100;
+			SysexOut s([&](const std::vector<uint8_t>& _b) { sent.push_back(_b); }, v);
+			check(s.playing() && s.policy().bytesPerSecond == 3125, "a new stream starts at the cable's pace (the safe one)");
+			s.setPlaying(false, 0);
+			check(!s.playing() && s.policy().bytesPerSecond == 125000 && s.policy().settleMs == 250, "stopped: the machine's read speed, the same settle");
+			int values = 0;
+			for(int i = 0; i < 40; ++i)
+				s.value(i, 3, [&values] { ++values; }, 0);
+			s.sendLatest(7, request, false, 0);
+			s.sendLatest(7, request, false, 0);
+			check(values == 40 && sent.size() == 2 && s.waiting() == 0, "stopped: values and value SysEx go at once (no budget, no interval)");
+			sent.clear();
+			for(uint8_t p = 0; p < 4; ++p)
+				s.send(dump(p, 1), false, 0);
+			s.send(dump(3, 9), false, 0);
+			check(sent.size() == 1 && s.waiting() == 3 && s.coalesced() == 1, "stopped: one dump at a time, the newest of a waiting document wins");
+			s.send(request, false, 1);
+			s.pump(43);
+			check(sent.size() == 1, "stopped: the next dump waits until the machine has read the one before");
+			s.pump(44.3);
+			check(sent.size() == 2, "stopped: then it goes, back to back (43 ms a pattern, not the cable's 1.73 s)");
+			// play starts while dumps wait: the rest goes at cable speed, each after the one before is applied
+			s.setPlaying(true, 50);
+			check(s.policy().bytesPerSecond == 3125 && s.policy().settleBetweenDumps && sent.size() == 2, "play starts: the cable's pace");
+			s.pump(337);
+			check(sent.size() == 2, "playing: the next dump waits until the one before is read and applied");
+			s.pump(338.6);
+			check(sent.size() == 3 && sent[2][9] == 2, "then it goes");
+			s.pump(1338.6);
+			check(sent.size() == 3, "playing: the dump after it waits for the cable's 1.73 s");
+			s.setPlaying(false, 1400);
+			check(sent.size() == 4 && sent[3][9] == 3 && sent[3][10] == 9, "play stops: the queue speeds up at once (the newest dump of pattern 4)");
+			s.pump(1400 + 43.3 + 249);
+			check(sent.size() == 4, "the request still waits for the read and the settle after the last dump");
+			s.pump(1e6);
+			check(sent.size() == 5 && sent[4] == request && !s.sending(1e6), "then it goes");
+		}
+
+		// No pacing (bytesPerSecond 0): at once, in order, as before.
+		std::vector<std::vector<uint8_t>> direct;
+		SysexOut at([&](const std::vector<uint8_t>& _b) { direct.push_back(_b); });
+		at.send(dump(1, 1), false, 0);
+		at.send(dump(1, 2), false, 0);
+		at.send(request, false, 0);
+		check(direct.size() == 3, "without a stream policy everything goes at once");
+	}
+}
+
 int main(const int _argc, char** _argv)
 {
 	if(_argc > 1 && std::string(_argv[1]) == "--write-schema")
@@ -2712,6 +2858,7 @@ int main(const int _argc, char** _argv)
 	testKnobRecorder();
 	testDeskRecording();
 	testPacedLockDraw();
+	testSysexStream();
 	testControlAll();
 	testSampleName();
 	testSampleFiles();

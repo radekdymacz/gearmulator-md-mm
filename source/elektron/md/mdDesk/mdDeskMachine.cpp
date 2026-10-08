@@ -11,6 +11,9 @@
 #include "elektronData/mdJson.h"
 #include "elektronData/mdMachines.h"
 #include "elektronData/mdValidate.h"
+
+#include <algorithm>
+#include <cstdlib>
 #include "elektronData/mdWorkingKit.h"
 
 #include <cassert>
@@ -132,10 +135,40 @@ namespace mdDesk
 
 	}
 
+	// B-014: the editor sends to the emulated machine no faster than a MIDI cable would (3125 B/s: a pattern
+	// dump in 1.73 s, so a lock drag pushes at most one dump every 1.73 s instead of five a second), and asks
+	// nothing while the firmware applies a dump (its read is paced at 125 KB/s by md::Hardware, B-010; 250 ms
+	// to apply it). Each dump keeps the emulated 68k busy, which costs the audio thread about 1.5 times its
+	// idle work for 50-70 ms: on a slower Mac five of them a second made late audio buffers.
+	// GEARMULATOR_MDMM_EDIT_RATE=<bytes a second> raises the rate (0: no pacing, as 0.3.3).
+	StreamPolicy emulatorStream()
+	{
+		StreamPolicy s;
+		s.bytesPerSecond = deskCore::DinPacer::g_bytesPerSecond;
+		s.ingestBytesPerSecond = 125000;
+		s.settleMs = 250;
+		// values at cable speed too, 64 CCs at once (a track's sound), and a value SysEx (tempo...) 10 times a second
+		s.valueBytesPerSecond = deskCore::DinPacer::g_bytesPerSecond;
+		s.valueBurstBytes = 192;
+		s.latestIntervalMs = 100;
+		if(const char* rate = std::getenv("GEARMULATOR_MDMM_EDIT_RATE"); rate && *rate)
+		{
+			s.bytesPerSecond = s.valueBytesPerSecond = std::max(0.0, std::atof(rate));
+			if(s.bytesPerSecond <= 0)
+				s.latestIntervalMs = 0;
+		}
+		return s;
+	}
+
 	const Profile& emulatorProfile()
 	{
-		static const Profile p{"emu", "EMU OS 1.63", "Engine: the real Machinedrum OS 1.63 runs inside the app. Choose HW MIDI to "
-			"edit a real Machinedrum instead.", false, false, true, true};
+		static const Profile p = []
+		{
+			Profile e{"emu", "EMU OS 1.63", "Engine: the real Machinedrum OS 1.63 runs inside the app. Choose HW MIDI to "
+				"edit a real Machinedrum instead.", false, false, true, true};
+			e.stream = emulatorStream();
+			return e;
+		}();
 		return p;
 	}
 
@@ -150,9 +183,32 @@ namespace mdDesk
 	MdMachine::MdMachine(Profile _profile, Port _port)
 		: m_profile(std::move(_profile))
 		, m_port(std::move(_port))
-		, m_out(m_port.sendSysex)
+		, m_out(m_port.sendSysex, m_profile.stream)
 		, m_session([this](const Bytes& _b) { sendSysex(_b); })
 	{
+		// B-014: CCs and notes go through the stream too. Kit values and mutes are values (the value budget, the
+		// newest value of a parameter wins, behind any SysEx before them: a machine change, then its values);
+		// notes and a key's held value have priority (they pass waiting values, never SysEx).
+		if(m_port.sendKitParam)
+			m_port.sendKitParam = [this, send = std::move(m_port.sendKitParam)](const uint8_t _t, const uint8_t _i, const uint8_t _v)
+			{
+				m_out.value(_t * 32 + _i, 3, [send, _t, _i, _v] { send(_t, _i, _v); }, now());
+			};
+		if(m_port.sendMute)
+			m_port.sendMute = [this, send = std::move(m_port.sendMute)](const uint8_t _t, const bool _on)
+			{
+				m_out.value(1000 + _t, 3, [send, _t, _on] { send(_t, _on); }, now());
+			};
+		if(m_port.sendHeldParam)
+			m_port.sendHeldParam = [this, send = std::move(m_port.sendHeldParam)](const uint8_t _t, const uint8_t _i, const uint8_t _v)
+			{
+				m_out.priority([send, _t, _i, _v] { send(_t, _i, _v); }, now());
+			};
+		if(m_port.sendNote)
+			m_port.sendNote = [this, send = std::move(m_port.sendNote)](const uint8_t _c, const uint8_t _n, const uint8_t _v)
+			{
+				m_out.priority([send, _c, _n, _v] { send(_c, _n, _v); }, now());
+			};
 		wireSession();
 		m_wire = deskCore::WireFacts(m_port.nowMs ? m_port.nowMs() : 0);
 	}
@@ -160,7 +216,19 @@ namespace mdDesk
 	// P9: while a sample goes out (SDS) nothing else may come between its packets; other SysEx waits.
 	void MdMachine::sendSysex(const Bytes& _message)
 	{
-		m_out.send(_message, m_sds.active());
+		m_out.send(_message, m_sds.active(), now());
+	}
+
+	// B-014: a live edit's SysEx: one that sets a value goes in the stream's latest lane (the newest per value, at
+	// most 10 a second); a machine change is no value (its CCs follow it) and keeps its order.
+	void MdMachine::sendLiveSysex(const LiveEdit& _e, const Bytes& _message)
+	{
+		if(_e.kind == LiveEdit::Kind::Machine)
+		{
+			sendSysex(_message);
+			return;
+		}
+		m_out.sendLatest((static_cast<int>(_e.kind) << 16) | (_e.track << 8) | _e.index, _message, m_sds.active(), now());
 	}
 
 	// ---- P9: a sample to a ROM slot (SDS) ----
@@ -198,7 +266,7 @@ namespace mdDesk
 	void MdMachine::pumpSample(const double _now)
 	{
 		m_sds.pump(_now, [this](const Bytes& _b) { m_out.sample(_b); });
-		m_out.release(m_sds.active());
+		m_out.release(m_sds.active(), _now);
 	}
 
 	void MdMachine::wireSession()
@@ -246,6 +314,7 @@ namespace mdDesk
 		m_loads = {};
 		m_backgroundQueued = false;
 		m_pushes.clear();
+		m_out.clear();
 		m_working = deskCore::switched<ed::MdKit>();
 		m_keys = {};
 		m_chain.drop();
@@ -296,6 +365,9 @@ namespace mdDesk
 		if(m_sds.active())
 			return true;
 		if(m_pushes.anyBusy())
+			return true;
+		// B-014: SysEx waiting its turn in the stream, or a dump the machine still reads or applies (the TX LED)
+		if(m_out.sending(now()))
 			return true;
 		// Control All on its way (FUNCTION held: no dump may be asked for meanwhile), or its CCs.
 		if(m_tweak.active() || !m_coalesced.empty())
@@ -399,7 +471,10 @@ namespace mdDesk
 
 	deskCore::PushPolicy MdMachine::pushPolicy(const DocKind _kind) const
 	{
-		return deskCore::wirePolicy(m_profile.push, m_profile.wire, replyBytes(_kind));
+		auto policy = deskCore::wirePolicy(m_profile.push, m_profile.wire, replyBytes(_kind));
+		// B-014: no faster than the stream carries the dump (latest wins meanwhile)
+		policy.minIntervalMs = std::max(policy.minIntervalMs, m_out.policy().wireMs(replyBytes(_kind)));
+		return policy;
 	}
 
 	// Paced (DESIGN-edit-flow.md): the dump goes now or waits its turn (latest wins); the read-back is
@@ -432,8 +507,9 @@ namespace mdDesk
 		const auto* held = stored != _view.kits.end() ? heldKit(_view) : nullptr;
 		const auto working = held ? std::optional<ed::MdKit>(*held) : std::nullopt;
 		m_session.pushPattern(pattern, false);
+		// after the dump (it may wait its turn in the stream, B-014)
 		if(working)
-			restoreWorkingKit(stored->second, *working);
+			m_out.after([this, storedKit = stored->second, w = *working] { restoreWorkingKit(storedKit, w); }, now());
 	}
 
 	// The machine just loaded the kit that plays from its slot (_stored): what it held before (_working)
@@ -453,7 +529,7 @@ namespace mdDesk
 				sendLive(e.track, e.kind == LiveEdit::Kind::Level ? 24 : e.index, e.value);
 			}
 			else if(const auto sysex = liveEditSysex(e); !sysex.empty() && canSendSysex())
-				sendSysex(sysex);
+				sendLiveSysex(e, sysex);
 		}
 		if(!m_profile.memory)
 			return;
@@ -530,7 +606,7 @@ namespace mdDesk
 					sendLive(e.track, e.kind == LiveEdit::Kind::Level ? 24 : e.index, e.value);
 				}
 				else if(const auto sysex = liveEditSysex(e); !sysex.empty() && canSendSysex())
-					sendSysex(sysex);
+					sendLiveSysex(e, sysex);
 			}
 			std::string note;
 			for(const auto& n : delivery.notLive)
@@ -550,7 +626,7 @@ namespace mdDesk
 			const auto delivery = globalDelivery(before, after);
 			for(const auto& e : delivery.edits)
 				if(const auto sysex = liveEditSysex(e); !sysex.empty() && canSendSysex())
-					sendSysex(sysex);
+					sendLiveSysex(e, sysex);
 			if(!delivery.notLive.empty())
 			{
 				// A global dump is stored at once but applied only when its slot is made active
@@ -560,17 +636,14 @@ namespace mdDesk
 				if(canSendSysex() && (!m_session.state().globalSlot || *m_session.state().globalSlot == ref.slot))
 					sendSysex(ed::mdSetActiveGlobal(ref.slot));
 			}
-			else
-			{
-				// Live edits only: the firmware takes MIDI in order, so the slot asked for now
-				// shows them.
-				m_session.requestGlobal(ref.slot);
-			}
-			// The global's read-back is asked for with it (pushGlobal, requestGlobal): not paced.
+			// A dump's read-back is asked for with it (pushGlobal). Live edits only (the tempo, routing): read back once
+			// the gesture is quiet (pumpPushes), as a pattern's: B-014, a tempo drag asked for the global at every value,
+			// and those requests held its tempo values in the stream (one a 100 ms, the newest wins).
 			auto& push = m_pushes[ref];
 			push.slot.abandon();
 			push.slot.want(_change.after, now(), pushPolicy(ref.kind));
-			push.slot.askedBack(now());
+			if(!delivery.notLive.empty())
+				push.slot.askedBack(now());
 			return ok();
 		}
 		}
@@ -1191,7 +1264,8 @@ namespace mdDesk
 	void MdMachine::pumpLoads(const double _now)
 	{
 		const auto& inFlight = m_loads.loading();
-		const double timeout = g_loadTimeoutMs + (m_profile.wire && inFlight ? deskCore::DinPacer::wireMs(replyBytes(inFlight->kind)) * 1.5 : 0);
+		const double timeout = g_loadTimeoutMs + (m_profile.wire && inFlight ? deskCore::DinPacer::wireMs(replyBytes(inFlight->kind)) * 1.5 : 0)
+			+ streamTimeoutMs();
 		// Loads wait while an edit is on the wire (they would delay its read-back) and around
 		// panel key presses.
 		const bool mayStart = !busy() && !keysOnTheirWay();
@@ -1236,10 +1310,13 @@ namespace mdDesk
 		const auto policyOf = [this](const DocRef& _ref) { return pushPolicy(_ref.kind); };
 		const auto timeoutOf = [this](const DocRef& _ref)
 		{
-			return g_pushTimeoutMs + (m_profile.wire ? 2.5 * deskCore::DinPacer::wireMs(replyBytes(_ref.kind)) : 0);
+			return g_pushTimeoutMs + (m_profile.wire ? 2.5 * deskCore::DinPacer::wireMs(replyBytes(_ref.kind)) : 0)
+				+ 1.5 * m_out.policy().wireMs(replyBytes(_ref.kind)) + streamTimeoutMs();
 		};
 		using K = Pushes::Effect::Kind;
-		for(const auto& e : m_pushes.pump(_now, policyOf, timeoutOf))
+		if(m_out.sending(_now))
+			m_pushes.restartAsked(_now);
+		for(const auto& e : m_pushes.pump(_now, policyOf, timeoutOf, deskCore::g_maxReadBacks))
 		{
 			switch(e.kind)
 			{
@@ -1650,8 +1727,18 @@ namespace mdDesk
 		}
 	}
 
+	// B-014: what a request may wait in the stream on top of its reply (a dump before it being applied).
+	double MdMachine::streamTimeoutMs() const
+	{
+		const auto& st = m_out.policy();
+		return st.bytesPerSecond > 0 ? st.ingestMs(ed::MdPattern::g_extendedDumpSize) + st.settleMs : 0.0;
+	}
+
 	void MdMachine::tick(const double _now, const Documents& _view)
 	{
+		// 0.3.4: cable speed only while the sequencer plays (a machine without telemetry counts as playing)
+		m_out.setPlaying(!m_telemetry.valid || m_telemetry.playing, _now);
+		m_out.pump(_now);
 		// A sample on its way owns the wire: no status polls or loads meanwhile (their replies would come
 		// late and their timeouts would run out).
 		pumpSample(_now);

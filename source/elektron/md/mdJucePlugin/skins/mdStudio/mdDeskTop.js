@@ -22,6 +22,7 @@ function renderTop() {
 	setKitState(V.kitState);
 	const sv = $("#save"); if (sv) sv.style.visibility = V.loaded ? "" : "hidden";
 	$("#undo").disabled = !V.canUndo; $("#redo").disabled = !V.canRedo; syncUndoCounts();
+	secLabels();	/* COPY CLR PASTE: the selected steps, or the workspace's own (mdDeskComforts.js) */
 	/* One key: PLAY while stopped, STOP while playing (the icon follows the machine). */
 	$("#play").setAttribute("aria-pressed", V.playing); $("#playico").textContent = V.playing ? "■" : "▶"; $("#play").setAttribute("aria-label", V.playing ? "Stop" : "Play");
 	$("#rec").setAttribute("aria-pressed", !!V.rec); $("#recled").classList.toggle("on", !!V.rec);
@@ -196,8 +197,10 @@ function onTelemetry(m) {
 	$$(".pl").forEach(b => b.classList.toggle("play", +b.dataset.plp === pp && V.playing));
 	if (S.follow && (S.ws === "seq" || S.ws === "sampler") && !S.viewAll && pp !== S.page && !Held.as("lane") && V.playing) { S.page = pp; render(); }
 	$("#tempoled").classList.toggle("on", V.playing && S.step % 4 === 0); setPos(); queueMicrotask(movePH); $("#playled")?.classList.toggle("on", V.playing && S.step % 4 === 0);
-	$$(`.st[data-s="${prev}"],.lb[data-s="${prev}"],[data-cp="${prev}"],[data-rc="${prev}"]`).forEach(c => c.classList.remove("ph"));
-	if (V.playing) $$(`.st[data-s="${S.step}"],.lb[data-s="${S.step}"],[data-cp="${S.step}"],[data-rc="${S.step}"]`).forEach(c => c.classList.add("ph"));
+	/* B-014: the step cells are not marked (.st.ph draws nothing since the soft playhead, #phcol): marking a column of
+	   16 cells every step made WebKit repaint them, with their glows, about half a core of its GPU process */
+	$$(`.lb[data-s="${prev}"],[data-cp="${prev}"],[data-rc="${prev}"]`).forEach(c => c.classList.remove("ph"));
+	if (V.playing) $$(`.lb[data-s="${S.step}"],[data-cp="${S.step}"],[data-rc="${S.step}"]`).forEach(c => c.classList.add("ph"));
 }
 
 /* Soft playhead (mockup v45): one glowing column over the grid that glides from step to step.

@@ -185,9 +185,9 @@ document.addEventListener("pointerup",()=>{if(!gvDrag)return;const k=gvDrag.k;gv
 document.addEventListener("wheel",e=>{const v=e.target.closest?.(".gv[data-gv]");if(!v)return;e.preventDefault();genVal(v.dataset.gv,((e.deltaY||e.deltaX)<0?1:-1)*(e.shiftKey?10:1))},{passive:false});
 document.addEventListener("keydown",e=>{const v=e.target.closest?.(".gv[data-gv]");if(!v)return;const d={ArrowUp:1,ArrowRight:1,ArrowDown:-1,ArrowLeft:-1}[e.key];if(d==null)return;
  e.preventDefault();e.stopPropagation();const k=v.dataset.gv;genVal(k,d*(e.shiftKey?10:1));document.querySelector(`.gv[data-gv="${k}"]`)?.focus()},true);
-Keys.bind({keys:["R"],code:"KeyR",group:"Selected track",when:kbOn,run:()=>randomise(false),
+Keys.bind({id:"randomise-track",scope:"any",keys:["R"],code:"KeyR",group:"Selected track",when:kbOn,run:()=>randomise(false),
  does:"Randomise the selected track: on Sound a fresh random sound (MUTATE, from the sound before the trial); everywhere else a new GEN variation: a new seed, or random hits and rotation"});
-Keys.bind({keys:["R"],code:"KeyR",mod:"alt",group:"All",when:kbOn,run:()=>randomise(true),
+Keys.bind({id:"randomise-all",scope:"any",keys:["R"],code:"KeyR",mod:"alt",group:"All",when:kbOn,run:()=>randomise(true),
  does:"Randomise every track: on Sound every synth track's sound, everywhere else every GEN spec of the side shown over the whole pattern"});
-Keys.bind({keys:["GEN value"],mod:"alt",group:"All",does:"Change a GEN value: every track of the side shown, the whole pattern (one undo step per run)"});
-Keys.bind({keys:["R key"],mod:"alt",group:"All",does:"Click: randomise every track (Sound: every synth track; VOL and TUNE stay)"});
+Keys.bind({id:"gen-value-all",scope:"seq",area:"GEN bar",keys:["GEN value"],mod:"alt",group:"All",does:"Change a GEN value: every track of the side shown, the whole pattern (one undo step per run)"});
+Keys.bind({id:"rkey-all",scope:"any",area:"GEN bar",keys:["R key"],mod:"alt",group:"All",does:"Click: randomise every track (Sound: every synth track; VOL and TUNE stay)"});

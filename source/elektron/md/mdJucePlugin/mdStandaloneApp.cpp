@@ -8,6 +8,7 @@
 #endif
 #include "jucePluginEditorLib/standaloneApp.h"
 
+#include "mdAbout.h"
 #include "mdPluginProcessor.h"
 #include "mdSettingsMigration.h"
 #include "mdUpdater.h"
@@ -58,20 +59,32 @@ namespace mdJucePlugin
 			m_updater->launchPendingSwap(false);
 		}
 
-#if JUCE_MAC
 		void windowOpened(jucePluginEditorLib::StandaloneWindow& _window) override
 		{
+			auto* p = _window.getAudioProcessor();
+			// 0.3.4: About <product> (mdAbout.h): the app menu on macOS, Help elsewhere
+			if(p)
+			{
+				const bool mm = isMonomachine(*p);
+				_window.setAbout(editorName(*p), [mm]
+				{
+					juce::AlertWindow::showMessageBoxAsync(juce::MessageBoxIconType::NoIcon,
+						juce::String::fromUTF8(about::title(mm).c_str()), juce::String::fromUTF8(about::text().c_str()));
+				});
+			}
+#if JUCE_MAC
 			// the journeys on a person's Mac: out of their way (mdBackgroundRun.h)
 			backgroundRun::sendWindowBack(_window);
-			auto* p = _window.getAudioProcessor();
 			if(!p)
 				return;
 			// the notices' owner is the processor as PageEditor names it (mdPageEditor.cpp)
 			const void* owner = dynamic_cast<const AudioPluginAudioProcessor*>(p);
 			m_record = std::make_unique<RecordMenu>(_window, editorName(*p), isMonomachine(*p) ? "Monomachine" : "Machinedrum", owner);
 			_window.addMenu({"Record", [this] { return m_record ? m_record->menu() : juce::PopupMenu(); }});
+#endif
 		}
 
+#if JUCE_MAC
 		void windowClosing(jucePluginEditorLib::StandaloneWindow&) override
 		{
 			if(m_record)

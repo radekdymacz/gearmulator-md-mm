@@ -1,5 +1,7 @@
 #pragma once
 
+#include <limits>
+
 #include "deskPacer.h"
 
 #include <algorithm>
@@ -145,6 +147,10 @@ namespace deskCore
 		double m_askedMs = 0;
 		bool m_asked = false;
 	};
+	// 0.3.4: how many read-backs the desks ask for at once (one answered, one on its way): a .syx import's
+	// hundreds of documents are confirmed one after the other instead of timing out together.
+	constexpr size_t g_maxReadBacks = 2;
+
 	// Every document's PushSlot, and the one pump around them (shared by the adapters). A push is parked
 	// while the dump it sent is queued on the machine's side and not on the wire yet (the MM's SYSEX RECV):
 	// a newer value waits for it (PushPolicy::Mode::Held), and the pump leaves it alone until it is
@@ -182,12 +188,18 @@ namespace deskCore
 			return p.slot.want(_value, _nowMs, _policy);
 		}
 
-		// _policyOf(ref) -> PushPolicy, _timeoutOf(ref) -> ms the read-back may take.
+		// _policyOf(ref) -> PushPolicy, _timeoutOf(ref) -> ms the read-back may take. _maxAsked: at most this many
+		// read-backs asked and not yet answered (0.3.4: a whole import's read-backs at once queue up in the firmware,
+		// which answers one dump at a time, and time out; the others wait their turn, their clocks not running).
 		template<typename PolicyOf, typename TimeoutOf>
-		std::vector<Effect> pump(const double _nowMs, const PolicyOf& _policyOf, const TimeoutOf& _timeoutOf)
+		std::vector<Effect> pump(const double _nowMs, const PolicyOf& _policyOf, const TimeoutOf& _timeoutOf,
+			const size_t _maxAsked = std::numeric_limits<size_t>::max())
 		{
 			using Due = typename PushSlot<T>::Due;
 			std::vector<Effect> effects;
+			size_t asked = 0;
+			for(const auto& [ref, push] : m_pushes)
+				asked += push.slot.busy() && push.slot.asked();
 			for(auto& [ref, push] : m_pushes)
 			{
 				if(!push.slot.busy() || push.parked)
@@ -198,6 +210,9 @@ namespace deskCore
 					effects.push_back({Effect::Kind::Send, ref, push.slot.takeNext(_nowMs)});
 					continue;	// just sent: nothing asked back yet, so nothing timed out
 				case Due::ReadBack:
+					if(asked >= _maxAsked)
+						continue;
+					++asked;
 					push.slot.askedBack(_nowMs);
 					effects.push_back({Effect::Kind::AskBack, ref, std::nullopt});
 					break;
@@ -236,6 +251,14 @@ namespace deskCore
 			return false;
 		}
 		void clear() { m_pushes.clear(); }
+		// The read-backs asked for wait in the editor's stream behind what it still sends (B-014: a whole import's
+		// dumps): their time starts once the stream is quiet, so a long queue does not time them out.
+		void restartAsked(const double _nowMs)
+		{
+			for(auto& [ref, push] : m_pushes)
+				if(push.slot.asked())
+					push.slot.askedBack(_nowMs);
+		}
 
 		auto begin() const { return m_pushes.begin(); }
 		auto end() const { return m_pushes.end(); }

@@ -212,6 +212,88 @@ if (/[?&]selftest=p4cpu/.test(location.search)) (async () => {
 	log("cpu done");
 })();
 
+/* ?selftest=p4locks (scripts/mdmm-page-load.sh, B-014): what lock editing costs as the pattern fills with locks.
+   Tracks 1-4 get a trig on every step; the pattern plays; then rounds of: 8 s playing, 8.5 s drawing 256 new
+   locks (30 a second, one gesture a round; a new step / parameter / track each, up to 64 locked parameters). Each
+   phase's start and end is logged ("P4: cpu <phase> start/end", with the locks the page shows) so the script
+   reads the processes' CPU time per phase. */
+if (/[?&]selftest=p4locks/.test(location.search)) (async () => {
+	const sleep = ms => new Promise(r => setTimeout(r, ms));
+	const log = t => Bridge.log("P4: " + t);
+	const rounds = Number((location.search.match(/[?&]selftest=p4locks(\d+)/) || [])[1] || 4);
+	while (!(runs() && V.loaded)) await sleep(200);
+	await sleep(8000);	/* the background loads settle */
+	S.ws = "seq"; render();
+	const all = [...Array(16).keys()];
+	for (let t = 0; t < 4; ++t) { cmd("steps", { p: V.pat, from: 0, to: 16, rows: [{ t, on: all }] }); await sleep(2500); }
+	if (!V.playing) $("#play").click();
+	await sleep(2000);
+	const lockCount = () => { let n = 0; for (const steps of V.locks.values()) n += steps.size; return n; };
+	/* what the page does meanwhile: its DOM changes and its running animations (the GPU process draws what changes) */
+	let mutations = 0;
+	new MutationObserver(l => { mutations += l.length; }).observe(document.body, { subtree: true, childList: true, attributes: true, characterData: true });
+	const anims = () => { const n = {}; for (const a of document.getAnimations()) { const k = a.animationName || a.transitionProperty || "other"; n[k] = (n[k] || 0) + 1; } return JSON.stringify(n); };
+	const phase = async (name, ms, during) => {
+		const m0 = mutations;
+		log(`cpu ${name} start locks ${lockCount()} rows ${V.locks.size} animations ${anims()}`);
+		const end = performance.now() + ms;
+		if (during) await during(end); else await sleep(ms);
+		log(`cpu ${name} end locks ${lockCount()} rows ${V.locks.size} mutations/s ${Math.round((mutations - m0) * 1000 / ms)} animations ${anims()}`);
+	};
+	if (V.playing) $("#play").click();
+	await sleep(1500);
+	await phase("stopped", 8000);
+	if (!V.playing) $("#play").click();
+	await sleep(1500);
+	/* ?selftest=p4locksN-probe: what in the page costs while it plays, by switching parts off with a style for a phase */
+	if (/[?&]selftest=p4locks\d*-probe/.test(location.search)) {
+		const probe = async (name, css) => { const st = document.createElement("style"); st.textContent = css; document.head.appendChild(st); await sleep(500); await phase(name, 8000); st.remove(); };
+		log("animated: " + document.getAnimations().map(a => { const e = a.effect && a.effect.target; return (a.animationName || a.transitionProperty) + "@" + (e ? e.tagName + "#" + e.id + "." + [...e.classList].join(".") + " in " + (e.parentElement ? e.parentElement.id + "." + [...e.parentElement.classList].join(".") : "") : "?"); }).join(", "));
+		await phase("pBase", 8000);
+		await probe("pNoGlow", "*{box-shadow:none!important;filter:none!important}");
+		/* drawing locks, with parts switched off */
+		let pk = 9000;
+		const draw = async (name, css, held) => {
+			const st = document.createElement("style"); st.textContent = css; document.head.appendChild(st);
+			const g = Bridge.gesture();
+			if (held) Held.begin("lane");
+			await phase(name, 6000, async end => {
+				for (let n = 0; performance.now() < end; ++n, ++pk) {
+					const t = Math.floor(pk / 16) % 4, s = pk % 16, names = slots(V.tracks[t].m, Cat);
+					if (names[3]) setLock(t, names[3], s, (pk * 37) % 128, true, g);
+					await sleep(1000 / 30);
+				}
+				if (held) Held.end("lane");
+			});
+			st.remove();
+		};
+		await draw("dFree", "", false);
+		await draw("dHeld", "", true);
+		await draw("dHeldNoGlow", "*{box-shadow:none!important;filter:none!important}", true);
+	}
+	let k = 0;
+	for (let r = 1; r <= rounds; ++r) {
+		await phase(`play${r}`, 8000);
+		const g = Bridge.gesture();
+		/* as the lock lane's drag: the gesture holds the page's full renders until it ends (Held "lane") */
+		Held.begin("lane");
+		await phase(`draw${r}`, 8533, async end => {
+			for (let n = 0; n < 256 && performance.now() < end; ++n, ++k) {
+				const t = Math.floor(k / 256) % 4, s = k % 16, i = Math.floor(k / 16) % 16;
+				const names = slots(V.tracks[t].m, Cat);
+				const name = names[i];
+				if (name) setLock(t, name, s, (k * 37) % 128, true, g);
+				await sleep(1000 / 30);
+			}
+			Held.end("lane");
+			while (performance.now() < end) await sleep(50);
+		});
+	}
+	await phase(`play${rounds + 1}`, 8000);
+	if (V.playing) $("#play").click();
+	log("cpu done");
+})();
+
 /* ?selftest=p5: P5 checks in the plug-in: PLAY right after ready (timed), GLOBAL, the ? list. */
 if (/[?&]selftest=p5(&|$)/.test(location.search)) (async () => {
 	const sleep = ms => new Promise(r => setTimeout(r, ms));

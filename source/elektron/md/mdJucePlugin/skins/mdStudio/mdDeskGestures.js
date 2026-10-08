@@ -208,11 +208,12 @@ function endPaint() {
 document.addEventListener("pointerup", endPaint); document.addEventListener("pointercancel", endPaint);
 window.addEventListener("blur", endPaint);
 
-/* ===== Steps: a selection (DESIGN-step-selection.md, mdDeskSelect.js). ⌥-press a step, or press a number of the step
-   ruler: the release decides. No other cell crossed: that one step (a ⇧-press in the ruler extends the selection to
-   it); cells crossed: the block between the press and the release, steps × tracks. An ⌥-press inside a selection of
-   more than one step that moves drops a copy of it where it lets go ("drop": its target shown dashed). One slot kind,
-   "select" {from: {t, s}, at: {t, s}, ruler, extend, drop, moved}. A press in the workspace outside the grid ends the
+/* ===== Steps: a selection (DESIGN-step-selection.md, mdDeskSelect.js; on ⌘ since K2, DESIGN-keymap.md). ⌘-press a
+   step (Ctrl off a Mac), or press a number of the step ruler: the release decides (selStart says which presses are
+   one). No other cell crossed: that one step (⌘⇧ on a step, ⇧ in the ruler, extends the selection to it); cells
+   crossed: the block between the press and the release, steps × tracks. A ⌘-press inside a selection of more than one
+   step that moves drops a copy of it where it lets go ("drop": its target shown dashed). One slot kind, "select"
+   {from: {t, s}, at: {t, s}, ruler, extend, drop, moved}. A press in the workspace outside the grid ends the
    selection. ===== */
 function selCell(e, d) {
 	const el = document.elementFromPoint(e.clientX, e.clientY);
@@ -228,12 +229,10 @@ main.addEventListener("pointerdown", e => {
 	if (e.button !== 0 || V.rec || S.ws !== "seq") return;
 	const st = e.target.closest("#seq .st"), ru = e.target.closest("#seq .rul[data-s]");
 	if (!st && !ru) { if (!e.target.closest("#seq")) clearSel(); return; }
-	if (st && !(e.altKey && !e.shiftKey && !e.metaKey && !e.ctrlKey)) return;
-	if (ru && (e.altKey || e.metaKey || e.ctrlKey)) return;
+	const d = selStart(e, st ? { t: +st.dataset.t, s: +st.dataset.s } : { s: +ru.dataset.s }, !st);
+	if (!d) return;
 	if (!V.loaded) { toast("The pattern is not loaded yet."); return; }
-	const at = st ? { t: +st.dataset.t, s: +st.dataset.s } : { t: S.stepSel && e.shiftKey ? S.stepSel.t : S.sel, s: +ru.dataset.s };
-	const x = S.stepSel, drop = !!st && !!x && inSel(at.t, at.s) && (x.n > 1 || x.to - x.from > 1);
-	Held.begin("select", { from: at, at, ruler: !!ru, extend: !!ru && e.shiftKey && !!x, drop, moved: false });
+	Held.begin("select", d);
 	e.preventDefault();
 }, true);
 document.addEventListener("pointermove", e => {
@@ -251,10 +250,10 @@ function endSelect() {
 	}
 	if (d.drop && d.moved) { const g = selDropAt(d); syncSel(); selCopyTo(g.t, g.from); return; }
 	const x = S.stepSel;
-	const sel = d.extend && !d.moved ? { t: x.t, n: x.n, from: Math.min(x.from, d.at.s), to: Math.max(x.to, d.at.s + 1) } : selBetween(d.from, d.at);
+	const sel = d.extend && !d.moved && x ? selExtend(x, d.at) : selBetween(d.from, d.at);
 	setSel(sel);
 	if (sel.t !== S.sel && sel.n === 1) select(sel.t);
-	toast(`Selected ${selSay(sel)} · ⌘C copy · ⌘X cut · ⌘V paste here · ⌘D duplicate · Delete · Esc (or Copy, Clr, Paste above)`);
+	toast(`Selected ${selSay(sel)} · ⌘C copy · ⌘X cut · ⌘V paste here · ⌘D duplicate · Delete (or Copy, Clr, Paste above) · right-click: more`);
 }
 document.addEventListener("pointerup", endSelect); document.addEventListener("pointercancel", endSelect);
 window.addEventListener("blur", () => { if (Held.as("select")) endSelect(); });

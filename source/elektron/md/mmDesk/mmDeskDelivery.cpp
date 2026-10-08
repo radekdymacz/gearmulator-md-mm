@@ -166,7 +166,10 @@ namespace mmDesk
 
 	deskCore::PushPolicy MmMachine::pushPolicy(const Kind _kind) const
 	{
-		return deskCore::wirePolicy(m_profile.push, m_profile.wire, replyBytes(_kind));
+		auto policy = deskCore::wirePolicy(m_profile.push, m_profile.wire, replyBytes(_kind));
+		// B-014: no faster than the stream carries the dump (a MIDI cable's pace while playing; the newest value waits meanwhile)
+		policy.minIntervalMs = std::max(policy.minIntervalMs, m_stream.policy().wireMs(replyBytes(_kind)));
+		return policy;
 	}
 
 	// Paced (DESIGN-edit-flow.md): the dump goes now or waits its turn (latest wins); the read-back is
@@ -234,7 +237,9 @@ namespace mmDesk
 		const double timeout = m_profile.wire ? g_wireReadBackTimeoutMs : g_readBackTimeoutMs;
 		const auto timeoutOf = [timeout](const Ref&) { return timeout; };
 		using K = Pushes::Effect::Kind;
-		for(auto& e : m_pushes.pump(_now, policyOf, timeoutOf))
+		if(m_stream.sending(_now))
+			m_pushes.restartAsked(_now);
+		for(auto& e : m_pushes.pump(_now, policyOf, timeoutOf, deskCore::g_maxReadBacks))
 		{
 			switch(e.kind)
 			{
@@ -301,6 +306,10 @@ namespace mmDesk
 		// gets while it takes a dump is lost (mmDeskFirmwareTest parked).
 		if(m_recv.parked() && now() < m_keysUntilMs)
 			return;
+		// 0.3.4: a dump the session sent may still wait in the stream (cable speed while playing): the session stays
+		// on SYSEX RECV until the stream is quiet, or the machine would leave it before the dump arrives
+		if(m_recv.parked() && m_stream.sending(_now))
+			m_recv.touch();
 		auto out = m_recv.tick(_now, m_tel);
 		if(!out.keys.empty() && m_port.pressKeys)
 			m_port.pressKeys(out.keys);

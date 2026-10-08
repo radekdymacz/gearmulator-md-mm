@@ -104,6 +104,20 @@ namespace mmDesk
 			" so it waits for SYSEX RECV (SEND in the pattern field).", "Set TRANSPORT to ACCEPT");
 	}
 
+	// PLAY or STOP that waited for the panel: pressed once it is free, given up after g_transportWaitMs.
+	void MmMachine::pumpTransport(const double _now)
+	{
+		if(!m_pendingTransport)
+			return;
+		if(_now - m_pendingTransportMs > g_transportWaitMs)
+		{
+			m_pendingTransport.reset();
+			return;
+		}
+		if(pressKeys({*m_pendingTransport}))
+			m_pendingTransport.reset();
+	}
+
 	bool MmMachine::pressKeys(const std::vector<Key>& _keys)
 	{
 		const auto s = m_recv.state();
@@ -261,7 +275,7 @@ namespace mmDesk
 	Outcome MmMachine::cmdTempo(const Value& _m, const Documents&)
 	{
 		const auto bpm = _m.find("bpm")->asNumber();
-		m_port.sendSysex(ed::mmSetTempo(bpm));
+		m_stream.sendLatest(0x7e000000, ed::mmSetTempo(bpm), false, clock());
 		m_expectTempo = deskCore::FieldExpectation<int>::sent(static_cast<int>(std::lround(bpm * 24.0)), clock());
 		return ok();
 	}
@@ -287,7 +301,13 @@ namespace mmDesk
 			m_reactivateGlobal = false;
 		}
 		if(!pressKeys({Key::Play}))
-			return refuse(g_panelBusy);
+		{
+			// 0.3.4: the panel is busy taking an edit (SYSEX RECV): PLAY goes once it is free
+			m_pendingTransport = Key::Play;
+			m_pendingTransportMs = now();
+			return ok(g_transportWaits);
+		}
+		m_pendingTransport.reset();
 		// P7: a machine that follows the host's clock (in a DAW) plays with the host's transport
 		const bool follows = g && g->tempoSync == 1;
 		return ok(follows ? "The machine follows the host: it plays when the host's transport runs." : "");
@@ -295,7 +315,15 @@ namespace mmDesk
 
 	Outcome MmMachine::cmdStop(const Value&, const Documents&)
 	{
-		return pressKeys({Key::Stop}) ? ok() : refuse(g_panelBusy);
+		if(pressKeys({Key::Stop}))
+		{
+			m_pendingTransport.reset();
+			return ok();
+		}
+		// 0.3.4: the panel is busy taking an edit (SYSEX RECV): STOP goes once it is free
+		m_pendingTransport = Key::Stop;
+		m_pendingTransportMs = now();
+		return ok(g_transportWaits);
 	}
 
 	// P7, in a DAW: the machine follows the host's MIDI clock and Start/Stop (MmModel::hostFollowing). The

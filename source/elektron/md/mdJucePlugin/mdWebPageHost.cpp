@@ -18,6 +18,10 @@
 #include <cstring>
 #include <limits>
 
+#ifndef MDMM_EDITOR_VERSION
+#define MDMM_EDITOR_VERSION "0.0.0"
+#endif
+
 namespace mdJucePlugin
 {
 	namespace json = elektronData::json;
@@ -268,6 +272,8 @@ namespace mdJucePlugin
 		auto url = m_selfTest.isNotEmpty() ? juce::URL(m_file).withParameter("selftest", m_selfTest) : juce::URL(m_file);
 		if(m_fileRecv)
 			url = url.withParameter(pageBridge::g_fileRecvQuery, "file");
+		// 0.3.4: the page shows which version it is (skins/shared/deskAbout.js)
+		url = url.withParameter("version", MDMM_EDITOR_VERSION);
 		// The start tests' key probe (skins/shared/deskKeys.js): the page shows which keys reached it, for the
 		// accessibility API to read. Any build, so the shipped one is what the start tests press keys into.
 		if(juce::SystemStats::getEnvironmentVariable("GEARMULATOR_MDMM_KEYPROBE", {}) == "1")

@@ -125,6 +125,7 @@ namespace mmDesk
 		void gaveUpLoad(const Ref& _r);
 		bool current(const Ref& _r) const;
 		void pumpRecv(double _now);
+		void pumpTransport(double _now);
 		void pumpSequence(double _now);
 		// RECORD: the current pattern read back while the machine records (true: the mode changed).
 		bool readWhileRecording(double _now);
@@ -173,6 +174,7 @@ namespace mmDesk
 
 		const Profile m_profile;
 		Port m_port;
+		deskCore::Stream m_stream;		// B-014: the one way to the machine (after m_port: it holds its SysEx)
 		RecvSession m_recv;
 		deskCore::WorkingCopy<elektronData::MmKit> m_working;	// where the kit that plays comes from
 		uint32_t m_nextRecvTag = 1;
@@ -214,6 +216,10 @@ namespace mmDesk
 		// MM-P8: the chain (or CLEAR) the page asked for while keys were on their way, sent after them
 		deskCore::Latest<deskCore::ChainRequest> m_chain;
 		double m_keysUntilMs = -1e9;	// the desk's last panel keys are through by then
+		// 0.3.4: PLAY or STOP asked while the panel was busy (a dump on its way to SYSEX RECV, which the stream paces
+		// at cable speed while playing): pressed once it is free (pumpTransport), the newest wins, given up after a while
+		std::optional<Key> m_pendingTransport;
+		double m_pendingTransportMs = 0;
 		// The keyboard's sounding notes (pressNote / releaseNotes)
 		SoundingNotes m_notes;
 	};
