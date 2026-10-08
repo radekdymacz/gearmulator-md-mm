@@ -3,26 +3,26 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Privacy — MD + MM Editor</title>
-<meta name="description" content="How the MD + MM Editor site handles data.">
+<title>MD + MM Editor 0.3.2 release notes</title>
+<meta name="description" content="Fixes and polish on top of 0.3.1: the Windows editor now opens, a new name, step selection on the Machinedrum, and rendering fixes for older Macs.">
 <meta name="color-scheme" content="light">
 <meta name="theme-color" content="#fbfbf7">
-<link rel="canonical" href="https://mdmm.dev/privacy/">
+<link rel="canonical" href="https://mdmm.dev/releases/0.3.2/">
 <link rel="icon" href="/favicon.svg" type="image/svg+xml">
 <link rel="icon" href="/favicon-32.png" sizes="32x32" type="image/png">
 <link rel="apple-touch-icon" href="/apple-touch-icon.png">
 <meta property="og:type" content="website">
 <meta property="og:site_name" content="MD + MM Editor">
-<meta property="og:title" content="MD + MM Editor — free editors for Machinedrum and Monomachine">
-<meta property="og:description" content="Free desktop editors for the Elektron Machinedrum and Monomachine. The real firmware, emulated, or your own machine over MIDI. VST3, AU and app for macOS (Intel and Apple silicon). Windows build, not tested.">
-<meta property="og:url" content="https://mdmm.dev/privacy/">
+<meta property="og:title" content="MD + MM Editor 0.3.2 release notes">
+<meta property="og:description" content="Fixes and polish on top of 0.3.1: the Windows editor now opens, a new name, step selection on the Machinedrum, and rendering fixes for older Macs.">
+<meta property="og:url" content="https://mdmm.dev/releases/0.3.2/">
 <meta property="og:image" content="https://mdmm.dev/og.png">
 <meta property="og:image:width" content="1200">
 <meta property="og:image:height" content="630">
 <meta property="og:image:alt" content="Free editors for Machinedrum and Monomachine, beside a screenshot of the Machinedrum Editor's step grid and GEN bar.">
 <meta name="twitter:card" content="summary_large_image">
-<meta name="twitter:title" content="MD + MM Editor — free editors for Machinedrum and Monomachine">
-<meta name="twitter:description" content="Free desktop editors for the Elektron Machinedrum and Monomachine. VST3, AU and app for macOS (Intel and Apple silicon). Windows build, not tested.">
+<meta name="twitter:title" content="MD + MM Editor 0.3.2 release notes">
+<meta name="twitter:description" content="Fixes and polish on top of 0.3.1: the Windows editor now opens, a new name, step selection on the Machinedrum, and rendering fixes for older Macs.">
 <meta name="twitter:image" content="https://mdmm.dev/og.png">
 <link rel="stylesheet" href="/design/tokens.css">
 <link rel="stylesheet" href="/assets/site.css?v=20261010">
@@ -44,24 +44,69 @@
   </div>
 </header>
 
-<main id="main" class="checkout legalpage">
+<main id="main" class="checkout legalpage guide">
   <div class="wrap">
-    <span class="eyebrow">Privacy</span>
-    <h1>Privacy</h1>
-    <p>This site sets no cookies, runs no tracking or analytics, and loads no third-party scripts. There are no accounts.</p>
-    <h2>This browser</h2>
-    <p>If you switch to the dark theme, your browser keeps that choice under the name <code>mdmm.theme</code> in its local storage. It stays on your device and is never sent to us.</p>
-    <h2>Hosting</h2>
-    <p>The site is hosted on Cloudflare, which keeps standard server logs (such as IP address and request time) to run and protect the service.</p>
-    <h2>Downloads</h2>
-    <p>The installers are hosted on GitHub, as GitHub Releases. When you download one, GitHub sees your IP address and the request, as described in <a href="https://docs.github.com/en/site-policy/privacy-policies/github-general-privacy-statement">GitHub's privacy statement</a>. We do not receive that information. The same applies if you open the source repository or the releases page.</p>
-    <h2>Update check in the editors</h2>
-    <p>At most once a day the editors fetch <code>https://mdmm.dev/latest.json</code> to see whether a newer version exists — a plain request with no cookies, query or identifiers, which you can turn off in the editor's menu (Updates › Check Daily) — and an update you choose to install comes from GitHub, as above.</p>
-    <h2>Purchases</h2>
-    <p>If you choose to pay, the purchase is processed by Lemon Squeezy, the merchant of record, under its own <a href="https://www.lemonsqueezy.com/privacy">privacy policy</a>. Pay opens Lemon Squeezy checkout and sends it three custom fields: the editor you chose, your operating system and the amount you suggested. We receive the order details Lemon Squeezy shares with sellers.</p>
-    <h2>Your rights</h2>
-    <p>To ask about, correct or delete your data, write to the contact address below.</p>
-    <p class="small">Seller: NativeKloud Consulting Radosław Dymacz, ul. Dynamiczna 19, 95-070 Rąbień, Poland · NIP PL8321771188<br>Contact: <a href="&#109;&#97;&#105;&#108;&#116;&#111;&#58;&#114;&#97;&#100;&#101;&#107;&#100;&#121;&#109;&#97;&#99;&#122;&#64;&#103;&#109;&#97;&#105;&#108;&#46;&#99;&#111;&#109;">&#114;&#97;&#100;&#101;&#107;&#100;&#121;&#109;&#97;&#99;&#122;&#64;&#103;&#109;&#97;&#105;&#108;&#46;&#99;&#111;&#109;</a><br>Last updated 8 October 2026.</p>
+    <span class="eyebrow">Release notes</span>
+    <h1>Machinedrum Editor + Monomachine Editor 0.3.2</h1>
+<p><small>Released 2026-10-07</small></p>
+<p>Fixes and polish on top of <a href="/releases/0.3.1/">0.3.1</a>: the Windows editor now opens, a new name, step selection on the Machinedrum, and rendering fixes for older Macs.</p>
+<p>Screenshots, features and FAQ: <b><a href="https://mdmm.dev">https://mdmm.dev</a></b> User guide: <b><a href="https://mdmm.dev/guide/">https://mdmm.dev/guide/</a></b></p>
+<h2>What's new</h2>
+<h3>Names</h3>
+<ul>
+<li>The editors are now <b>Machinedrum Editor</b> and <b>Monomachine Editor</b>, by <b>Future Native Audio</b>, in your DAW's plug-in list, in Finder and in the window titles.
+</li>
+<li>The installers remove the old Gearmulator MD and Gearmulator MM bundles they put in place, so a DAW does not list the editor twice. Your ROMs, settings and old DAW projects are untouched: projects still load.
+</li>
+</ul>
+<h3>Windows and Linux</h3>
+<ul>
+<li>The Windows editor now works (WebView2): the window is no longer empty. Windows is still not tested in a real DAW.
+</li>
+<li>A Linux x64 build is available (not tested).
+</li>
+</ul>
+<h3>Machinedrum</h3>
+<ul>
+<li>Select steps with Option-click, Option-drag or the ruler, then copy, cut, paste, duplicate and delete them (Cmd-C, Cmd-X, Cmd-V, Cmd-D, Delete). Slide moved to Option-Shift-click.
+</li>
+<li>The LCD's values follow a drag.
+</li>
+<li>The first start loads the ROM once, not twice.
+</li>
+</ul>
+<h3>Window and display</h3>
+<ul>
+<li>Page Zoom in the right-click menu, and Cmd -, Cmd +, Cmd 0. The page always fits its window, and the plug-in window fits the screen (no more oversized window in Ableton Live).
+</li>
+<li>The MIX faders keep a sensible size at every window size.
+</li>
+<li>Older macOS (12 and later): the rendering fixes for the older Safari, and a visible play head on the white skin.
+</li>
+<li>The right-click menu no longer has a dead Settings entry. The standalone app has "Audio/MIDI Settings...".
+</li>
+</ul>
+<h3>Standalone</h3>
+<ul>
+<li>A Record menu writes the window and its sound to an .mp4 (macOS 15 and later).
+</li>
+</ul>
+<h3>Requirements</h3>
+<ul>
+<li>macOS 12 or later (Intel and Apple silicon). The installer now checks this.
+</li>
+<li>CPU use is unchanged: about half a core per instance.
+</li>
+</ul>
+<h2>Known limits</h2>
+<ul>
+<li>Not notarised by Apple: on macOS 15 and later use Open Anyway in System Settings &gt; Privacy &amp; Security.
+</li>
+<li>High CPU in some hosts is not fixed yet.
+</li>
+</ul>
+<p>Report a problem: <b><a href="https://mdmm.dev/contact/">https://mdmm.dev/contact/</a></b></p>
+    <p><a href="/releases/">All release notes</a> · <a href="/get/">Download</a></p>
   </div>
 </main>
 

@@ -1,0 +1,254 @@
+<!doctype html>
+<html lang="en" data-theme="light">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>MD + MM Editor 0.2.0 release notes</title>
+<meta name="description" content="The second release of the screen-native editors for the Elektron Machinedrum and Monomachine, running each machine&#x27;s real firmware.">
+<meta name="color-scheme" content="light">
+<meta name="theme-color" content="#fbfbf7">
+<link rel="canonical" href="https://mdmm.dev/releases/0.2.0/">
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<link rel="icon" href="/favicon-32.png" sizes="32x32" type="image/png">
+<link rel="apple-touch-icon" href="/apple-touch-icon.png">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="MD + MM Editor">
+<meta property="og:title" content="MD + MM Editor 0.2.0 release notes">
+<meta property="og:description" content="The second release of the screen-native editors for the Elektron Machinedrum and Monomachine, running each machine&#x27;s real firmware.">
+<meta property="og:url" content="https://mdmm.dev/releases/0.2.0/">
+<meta property="og:image" content="https://mdmm.dev/og.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="og:image:alt" content="Free editors for Machinedrum and Monomachine, beside a screenshot of the Machinedrum Editor's step grid and GEN bar.">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="MD + MM Editor 0.2.0 release notes">
+<meta name="twitter:description" content="The second release of the screen-native editors for the Elektron Machinedrum and Monomachine, running each machine&#x27;s real firmware.">
+<meta name="twitter:image" content="https://mdmm.dev/og.png">
+<link rel="stylesheet" href="/design/tokens.css">
+<link rel="stylesheet" href="/assets/site.css?v=20261010">
+<script src="/assets/theme.js?v=20261008"></script>
+</head>
+<body>
+<a class="skip" href="#main">Skip to content</a>
+<header class="top">
+  <div class="wrap">
+    <a class="brand" href="/" aria-label="MD + MM Editor, home"><i class="dot" aria-hidden="true"></i><b>MD + MM Editor</b></a>
+    <nav class="nav" aria-label="Main">
+      <a class="opt" href="/#features">Features</a>
+      <a class="keep" href="/guide/">Guide</a>
+      <a class="opt" href="/#faq">FAQ</a>
+      <a class="disc" href="https://discord.gg/8xwXwBHbtn" aria-label="Discord community"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M2.5 3.5h11a1 1 0 0 1 1 1v6a1 1 0 0 1-1 1H7l-3 2.5V11.5H2.5a1 1 0 0 1-1-1v-6a1 1 0 0 1 1-1z" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/><circle cx="5.5" cy="7.5" r="1" fill="currentColor"/><circle cx="8" cy="7.5" r="1" fill="currentColor"/><circle cx="10.5" cy="7.5" r="1" fill="currentColor"/></svg><span>Discord</span></a>
+      <button class="themebtn" type="button" data-theme-toggle aria-label="Switch to dark theme"><svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="6.5" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M8 1.5a6.5 6.5 0 0 1 0 13z" fill="currentColor"/></svg></button>
+      <a class="btn btn-primary btn-sm" href="/get/">Download free</a>
+    </nav>
+  </div>
+</header>
+
+<main id="main" class="checkout legalpage guide">
+  <div class="wrap">
+    <span class="eyebrow">Release notes</span>
+    <h1>Machinedrum Editor + Monomachine Editor 0.2.0</h1>
+<p><small>Released 2026-09-29</small></p>
+<p>The second release of the screen-native editors for the Elektron Machinedrum and Monomachine, running each machine's real firmware. This one is about polish: a layout that scales, a calmer start, installing the ROM from the editor, SysEx backups, and plug-ins that follow the DAW. The Monomachine Editor now drives every machine feature it used to grey out, and both installers can <b>install for you only</b>, without an administrator password.</p>
+<p>Screenshots, features and FAQ: <b><a href="https://mdmm.dev">https://mdmm.dev</a></b> Pay what you want (optional, same download): <b><a href="https://mdmm.dev/get/">https://mdmm.dev/get/</a></b></p>
+<h2>What's new</h2>
+<h3>A layout that scales</h3>
+<ul>
+<li>The page uses the whole window. Rows are fluid, the lock lane never overflows, and the Sound and engine pages use the space they have.
+</li>
+<li><b>The window fits the screen</b>: it opens inside the visible area (above the Dock) and remembers its size. The editors resize freely.
+</li>
+<li>Workspace keys are bigger and even; the lane legend and paging sit in the same places in both apps. The Monomachine's Mix strips put each fader and its level in one column.
+</li>
+<li>One LCD for both apps, on a real pixel grid. Its sync slot shows SYNC, SEND, RECV, HOST, or the background read's progress ("170/288").
+</li>
+</ul>
+<h3>Editing</h3>
+<ul>
+<li><b>All steps are shown</b> by default. PAGE, the page LEDs and FOL still page if you prefer.
+</li>
+<li><b>Drag-paint</b>: drag across steps to paint trigs (Machinedrum) or SLIDE, SWING and envelope steps (Monomachine). One drag is one undo step.
+</li>
+<li><b>Shift-armed mutes</b>: hold Shift, pick the tracks to mute or unmute, release to send them all at once, on both machines.
+</li>
+<li><b>Monomachine LEN</b> can be changed again: a click steps 16, 32, 48, 64 and round, Shift-click steps back, and the scroll wheel steps by one.
+</li>
+<li><b>Fixed: a freshly loaded pattern was flagged "edited"</b> and asked to save on every load. A drag that outlived a redraw kept editing on plain mouse moves; gestures now always end.
+</li>
+</ul>
+<h3>Monomachine: the machine's own features</h3>
+<p>Everything the Monomachine Editor showed as "not yet" works now:</p>
+<ul>
+<li><b>MIDI track mutes and solos</b> (the machine's MUTE window). The rail, Mix and Perform also show the mutes you make on the machine's own panel.
+</li>
+<li><b>POLY</b>: the Perform keyboard's POLY key switches the machine's audio mode, and follows it.
+</li>
+<li><b>MULTI TRIG</b>: mode (ALL TRK, SPLIT KEY, SEQ START, SEQ TRNSP), the split key and track, and the timing (DIRECT to 32/16).
+</li>
+<li><b>MULTI MAP</b>: every range's pattern, offset, length, transpose and timing; split and delete ranges.
+</li>
+<li><b>PORTAMENTO</b> mode per track: ALWAYS or ONLY LEGATO.
+</li>
+<li><b>RECORD</b>: stopped, the record key is GRID RECORDING; playing, LIVE RECORDING (the notes you play are recorded). What the machine records shows in the editor while it records.
+</li>
+<li><b>Any of the 24 songs</b>: a song picker in the Song workspace, and <b>Load on the machine</b> (LOAD SONG).
+</li>
+<li><b>Undo</b> reaches library slot writes too (a kit or pattern copied, cleared or renamed).
+</li>
+<li>Some kit bytes the earlier versions had guessed are now read from the machine itself (the JOY mirror, key tracking HPF and LPF), and a changed global takes effect at once.
+</li>
+</ul>
+<h3>HW MIDI for the Monomachine</h3>
+<ul>
+<li>The Monomachine takes pattern, song, global and stored-kit dumps only on its <b>SYSEX RECV</b> screen, which the editor cannot open over MIDI. The edits wait, and the pattern field shows <b>SEND n</b>. Click it: the dialog says how to open GLOBAL › FILE › SYSEX RECV on the machine, and <b>Send now</b> sends them. Kit sounds (CCs) go out at once as before.
+</li>
+<li>PLAY and STOP are MIDI Start and Stop. A factory Monomachine ignores them (CONTROL IN TRANSPORT IGNORE); PLAY then offers to set TRANSPORT to ACCEPT in the active global.
+</li>
+<li>The MIDI track mutes and RECORD have no MIDI message on the machine, so over HW MIDI they are disabled, and say why.
+</li>
+</ul>
+<h3>Dialogs and start-up</h3>
+<ul>
+<li><b>Centred modals</b> with a backdrop, one system in both apps: questions start on Cancel and Esc answers Cancel; panels close on Esc or a click outside.
+</li>
+<li><b>The start-up screen shows the machine's real firmware LCD</b>, mirrored big, with a progress bar. It fades as soon as the machine takes input.
+</li>
+</ul>
+<h3>ROM install and hot reload</h3>
+<ul>
+<li>No ROM yet, or the wrong one? <b>Drag the firmware file onto the window, or click Choose ROM file…</b>. The editor checks it (8 MiB, the right machine and OS), copies it into the ROM folder without overwriting anything, and restarts the machine straight away. No restart of the app or plug-in needed. Nothing leaves your computer. A <code>.zip</code> holding the image works too.
+</li>
+</ul>
+<h3>SysEx import and export</h3>
+<ul>
+<li><b>Import SysEx…</b> (in both libraries), or drop a <code>.syx</code> on the window. A preview lists what the file holds, what it will overwrite, and what this OS cannot take. The kinds you choose go in as one undo step, with progress and Stop. Globals are off by default.
+</li>
+<li><b>Export SysEx…</b> writes everything the editor holds to one <code>.syx</code>: a full backup.
+</li>
+<li>Limits with backups made by older OS versions:
+<ul>
+<li>Machinedrum: globals from an older OS are converted by OS 1.63; kit names with bytes outside the name format read back with a different name.
+</li>
+<li>Monomachine: OS 1.32B ignores kit dumps from older OS versions (they are shorter), so the preview leaves them out. Patterns with a note but no trig do not validate and are left out.
+</li>
+</ul>
+</li>
+</ul>
+<h3>In your DAW</h3>
+<ul>
+<li><b>Both plug-ins follow the DAW's tempo and transport.</b> The LCD's sync slot shows HOST.
+</li>
+<li>In a DAW, HW MIDI is off (the plug-in has no MIDI output to the machine); use the standalone app for HW MIDI.
+</li>
+</ul>
+<h3>Under the hood</h3>
+<ul>
+<li>A simpler core shared by both editors: documents, undo and pending writes are owned by the plug-in, so they survive closing the window. A command that would lose two things now asks one question that names both.
+</li>
+</ul>
+<h2>Install (macOS)</h2>
+<div class="tablewrap"><table><thead><tr><th>File</th><th>Installs</th></tr></thead>
+<tbody>
+<tr><td><code>Machinedrum-Editor-macOS.pkg</code></td><td><code>Machinedrum Editor.app</code>, <code>Gearmulator MD.vst3</code>, <code>Gearmulator MD.component</code></td></tr>
+<tr><td><code>Monomachine-Editor-macOS.pkg</code></td><td><code>Monomachine Editor.app</code>, <code>Gearmulator MM.vst3</code>, <code>Gearmulator MM.component</code></td></tr>
+</tbody></table></div>
+<p>Where they go is your choice in the installer (<b>Destination Select</b>, or <b>Change Install Location…</b>):</p>
+<div class="tablewrap"><table><thead><tr><th>Choice</th><th>App</th><th>Plug-ins</th><th>Password</th></tr></thead>
+<tbody>
+<tr><td><b>Install for all users of this computer</b></td><td><code>/Applications</code></td><td><code>/Library/Audio/Plug-Ins/VST3</code>, <code>/Library/Audio/Plug-Ins/Components</code></td><td>an administrator's</td></tr>
+<tr><td><b>Install for me only</b></td><td><code>~/Applications</code></td><td><code>~/Library/Audio/Plug-Ins/VST3</code>, <code>~/Library/Audio/Plug-Ins/Components</code></td><td>none: works on a standard or managed account</td></tr>
+</tbody></table></div>
+<ol>
+<li>Download the package for your machine.
+</li>
+<li>The packages are <b>not signed yet</b> (there is no Apple Developer ID for the project), so macOS blocks them on a plain double-click. Open one in any of these ways:
+<ul>
+<li><b>Right-click</b> (or Control-click) the <code>.pkg</code> in Finder, choose <b>Open</b>, then <b>Open</b> again.
+</li>
+<li>Or double-click it, dismiss the warning, then go to <b>System Settings › Privacy &amp; Security</b>, scroll down and click <b>Open Anyway</b> next to the package's name.
+</li>
+<li>Or in Terminal: <code>xattr -d com.apple.quarantine ~/Downloads/Machinedrum-Editor-macOS.pkg</code>
+</li>
+</ul>
+</li>
+<li>Follow the installer. At <b>Destination Select</b> pick <b>Install for all users</b> (it asks for an administrator's password, because it writes to <code>/Applications</code> and <code>/Library</code>) or <b>Install for me only</b> (no password; your home folder). <b>Customize</b> lets you leave out the app, the VST3 or the AU.
+</li>
+<li>If the app is blocked the first time you open it, do the same: right-click it in Applications and choose <b>Open</b>, or use <b>Open Anyway</b>, or run:
+</li>
+</ol>
+<div class="tablewrap"><pre><code>   xattr -dr com.apple.quarantine "/Applications/Machinedrum Editor.app"
+   xattr -dr com.apple.quarantine "/Applications/Monomachine Editor.app"</code></pre></div>
+<p>(installed for you only: <code>"$HOME/Applications/Machinedrum Editor.app"</code> and so on)</p>
+<ol>
+<li>Rescan plug-ins in your DAW. The plug-ins are listed as <b>Gearmulator MD</b> and <b>Gearmulator MM</b> (instruments). Installing over 0.1.0 alpha in the same place replaces it. Keep one copy only: with one in <code>/Library/Audio/Plug-Ins</code> and another in <code>~/Library/Audio/Plug-Ins</code> (installed for you only, or an earlier build copied by hand) the DAW lists two, so delete the one you do not want.
+</li>
+</ol>
+<p>Terminal install, for scripts:</p>
+<div class="tablewrap"><pre><code># for all users
+sudo installer -pkg Machinedrum-Editor-macOS.pkg -target /
+sudo installer -pkg Monomachine-Editor-macOS.pkg -target /
+# for you only, no sudo
+installer -pkg Machinedrum-Editor-macOS.pkg -target CurrentUserHomeDirectory
+installer -pkg Monomachine-Editor-macOS.pkg -target CurrentUserHomeDirectory</code></pre></div>
+<p>To remove: delete the three bundles from where you installed them (the tables above). Your firmware and settings in <code>~/Documents</code> stay.</p>
+<h2>Bring your own ROM</h2>
+<p><b>No firmware is included, and none will be provided.</b> The Elektron firmware is Elektron's copyright; the editors are for people who own the machine.</p>
+<p>The easiest way: start the editor, then drag your machine's complete 8 MiB firmware image (<code>.bin</code>, or a <code>.zip</code> holding it) onto the window, or click <b>Choose ROM file…</b>. It is copied to:</p>
+<div class="tablewrap"><table><thead><tr><th>Machine</th><th>Folder</th></tr></thead>
+<tbody>
+<tr><td>Machinedrum</td><td><code>~/Documents/Gearmulator Preview/Machinedrum/roms/</code></td></tr>
+<tr><td>Monomachine</td><td><code>~/Documents/Gearmulator Preview/Monomachine/roms/</code></td></tr>
+</tbody></table></div>
+<p>You can also copy the file there yourself. Tested firmware: Machinedrum UW OS 1.63 and Monomachine SFX-60 OS 1.32B.</p>
+<p>Please do not ask for, share or link firmware files in the issues or on Discord.</p>
+<h2>Known limits</h2>
+<ul>
+<li><b>Unsigned.</b> There is no Apple Developer ID yet, so the packages and apps are not signed or notarized; use the Gatekeeper steps above (right-click › Open, Open Anyway, or <code>xattr</code>).
+</li>
+<li><b>HW MIDI is still beta and untested on real hardware.</b> It is verified against the emulator acting as the MIDI peer. Reports from real machines are very welcome.
+</li>
+<li><b>Standalone sync: Ableton Link is coming in v0.3.</b> Until then the standalone runs on its own clock; MIDI clock over the IAC bus works through the machines' own global sync settings, but it is not in the editor's UI yet.
+</li>
+<li>DAW sync was checked with the firmware test rig; please report anything odd in your DAW (tempo changes, loops, stop).
+</li>
+<li>Machinedrum: LOCAL CTRL and TRIG IN A/B are stored and shown, but their effect is not verified.
+</li>
+<li>Monomachine: STEP RECORDING (STOP + RECORD) is not on the page; the record key uses GRID and LIVE.
+</li>
+<li>Over HW MIDI some controls are disabled because the machine has no MIDI message for them (the editor says why): on the Monomachine the MIDI track mutes and RECORD. Over HW MIDI the Monomachine cannot report its mutes, playhead or tempo, and edits made on the machine before connecting are seen only after SAVE KIT.
+</li>
+<li>Names inside the apps still read "Gearmulator MD" / "Gearmulator MM", and the data folder is <code>~/Documents/Gearmulator Preview</code>.
+</li>
+<li>macOS only. Tested on macOS 27 on Apple silicon; the Intel slice is built and checked but not played on an Intel Mac.
+</li>
+</ul>
+<h2>Credits</h2>
+<ul>
+<li><b><a href="https://github.com/joelanders/gearmulator-md-mm" rel="noopener">joelanders</a></b>: the Machinedrum and Monomachine emulation this is built on, running the real firmware.
+</li>
+<li><b>The Usual Suspects</b> and the <a href="https://github.com/dsp56300/gearmulator" rel="noopener">Gearmulator</a> contributors: the emulation framework, the DSP56300 and 68k cores, and the plug-in infrastructure.
+</li>
+<li>The editors (the Machinedrum Editor and Monomachine Editor pages, HW MIDI mode, installers): Radek Dymacz, NativeKloud.
+</li>
+</ul>
+<h2>Licence and trademarks</h2>
+<p>GPL-3.0, like upstream Gearmulator. The full source for this release is at <a href="https://github.com/radekdymacz/gearmulator-md-mm" rel="noopener">radekdymacz/gearmulator-md-mm</a> under the <code>mdmm-v0.2.0</code> tag; the licence text is in <a href="https://github.com/radekdymacz/gearmulator-md-mm/blob/mdmm-v0.2.0/LICENSE.md" rel="noopener">LICENSE.md</a>.</p>
+<p>Machinedrum, Monomachine and Elektron are trademarks of Elektron Music Machines MAV AB. This project is not affiliated with, endorsed by, or supported by Elektron, The Usual Suspects or joelanders. Please do not contact them for support: use <a href="https://mdmm.dev/contact/">the issues</a>.</p>
+    <p><a href="/releases/">All release notes</a> · <a href="/get/">Download</a></p>
+  </div>
+</main>
+
+<footer class="foot">
+  <div class="wrap grid">
+    <p><b>MD + MM Editor</b> <span data-version></span> · Machinedrum Editor and Monomachine Editor<br>A NativeKloud Consulting project — <a href="https://nativekloud.com">nativekloud.com</a></p>
+    <p><b>Free software</b> under the <a href="https://www.gnu.org/licenses/gpl-3.0.html">GPL-3</a>. <a href="https://github.com/radekdymacz/gearmulator-md-mm">Source</a> · <a href="https://github.com/radekdymacz/gearmulator-md-mm/releases">All releases</a></p>
+    <p><b>Credits.</b> Built on <a href="https://github.com/joelanders/gearmulator-md-mm">gearmulator-md-mm</a> by joelanders (the Machinedrum and Monomachine emulation) and <a href="https://github.com/dsp56300/gearmulator">Gearmulator</a> by The Usual Suspects (dsp56300). Thanks to Elektron for the instruments.</p>
+    <p class="legal"><a href="/guide/">Guide</a> · <a href="/releases/">Release notes</a> · <a href="/terms/">Terms</a> · <a href="/privacy/">Privacy</a> · <a href="/refunds/">Refunds</a> · <a href="/contact/">Contact</a> · <a href="https://discord.gg/8xwXwBHbtn">Discord</a> · <a href="&#109;&#97;&#105;&#108;&#116;&#111;&#58;&#114;&#97;&#100;&#101;&#107;&#100;&#121;&#109;&#97;&#99;&#122;&#64;&#103;&#109;&#97;&#105;&#108;&#46;&#99;&#111;&#109;">&#114;&#97;&#100;&#101;&#107;&#100;&#121;&#109;&#97;&#99;&#122;&#64;&#103;&#109;&#97;&#105;&#108;&#46;&#99;&#111;&#109;</a></p>
+    <p><b>Trademarks.</b> Elektron, Machinedrum and Monomachine are trademarks of Elektron Music Machines. This project is independent and not affiliated with or endorsed by Elektron, joelanders or The Usual Suspects. No firmware is included. No cookies, no analytics, no third-party scripts.</p>
+  </div>
+</footer>
+
+<script src="/config.js"></script>
+<script src="/assets/main.js?v=20261008" defer></script>
+</body>
+</html>
