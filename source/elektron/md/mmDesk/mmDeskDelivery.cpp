@@ -306,6 +306,10 @@ namespace mmDesk
 		// gets while it takes a dump is lost (mmDeskFirmwareTest parked).
 		if(m_recv.parked() && now() < m_keysUntilMs)
 			return;
+		// 0.3.4: a dump the session sent may still wait in the stream (cable speed while playing): the session stays
+		// on SYSEX RECV until the stream is quiet, or the machine would leave it before the dump arrives
+		if(m_recv.parked() && m_stream.sending(_now))
+			m_recv.touch();
 		auto out = m_recv.tick(_now, m_tel);
 		if(!out.keys.empty() && m_port.pressKeys)
 			m_port.pressKeys(out.keys);

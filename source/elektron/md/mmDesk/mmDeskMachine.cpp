@@ -200,6 +200,7 @@ namespace mmDesk
 			requestStatus();
 		}
 		pumpRecv(_now);
+		pumpTransport(_now);
 		pumpChain();
 		if(m_activateGlobal >= 0 && (m_profile.wire || m_recv.state() == RecvSession::State::Idle))
 		{

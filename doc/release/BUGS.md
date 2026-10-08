@@ -4,6 +4,14 @@
 repository; the site sends reports to the contact address. Newest first. Each entry:
 where it came from, the setup, what happens, what should happen, status.*
 
+## B-017 · Monomachine: PLAY refused as "panel busy" after edits, a pattern edit not read back while playing
+
+- **From:** the 0.3.4 journeys (`mm-seq-first-beat`, both hosts), 2026-10-08, after B-014's stream was merged. Not in 0.3.3.
+- **What happens:** after a few clicks on the piano roll, PLAY is refused ("The panel is busy (SYSEX RECV); try again") for many seconds; once playing, STOP is refused the same way and the page says "The machine did not read back the pattern that was sent".
+- **Cause:** the Monomachine takes a dump only on SYSEX RECV, and a panel key pressed while it is still taking one is lost, so the desk refuses keys until the dump it sent is taken. With B-014 the dump the SYSEX RECV session sends waits in the stream (at cable speed while playing), so "taking" lasted far longer; and the session left SYSEX RECV after its idle time counted from when it handed the dump to the stream, before the dump had arrived, so the machine never took it.
+- **Fix (release 0.3.4):** the session stays on SYSEX RECV while the stream still delivers (`pumpRecv`), and PLAY or STOP asked while the panel is busy are accepted and pressed once it is free (the newest wins, given up after 10 s; RECORD and the other keys are still refused as busy). Tests: `mmDeskTest` (PLAY then STOP while a dump is taken: STOP pressed once, after it), `mmDeskFirmwareTest` (the session leaves SYSEX RECV once the stream is quiet), the MM journeys (142 pass in both hosts).
+- **Status:** fixed for 0.3.4.
+
 ## B-016 · A big SysEx import ends with "Push failed" errors and old patterns on the page
 
 - **From:** the 0.3.4 import measurements (`mdDeskFirmwareTest <MD ROM> syximport`, a full backup imported as the session does it: four documents every 8 ms), 2026-10-08. Not reported by a user.

@@ -482,8 +482,11 @@ namespace
 		r.run(800);
 		check(r.desk->song(2) && r.desk->song(2)->rows[0].bytes[0] == 7, "a song dump through SYSEX RECV");
 
-		// Idle: back to the main screen, still playing.
+		// Idle: back to the main screen, still playing. 0.3.4: the idle time starts once the stream has delivered the
+		// dumps (cable speed while playing), so the session never leaves SYSEX RECV before a dump arrives.
 		r.run(2500);
+		for(int i = 0; i < 100 && md::MmTelemetry::screenOf(r.tel.screen.load()) != md::MmScreen::Main; ++i)
+			r.run(100);
 		check(md::MmTelemetry::screenOf(r.tel.screen.load()) == md::MmScreen::Main, "left SYSEX RECV after the idle time");
 		check(r.tel.running.load() == 1, "still playing after leaving");
 

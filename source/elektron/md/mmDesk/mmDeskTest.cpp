@@ -364,12 +364,19 @@ namespace
 			const auto r1 = lastResult();
 			check(!r1.find("ok")->asBool() && r1.find("errors")->asArray()[0].asString() == "The panel is busy (SYSEX RECV); try again."
 				&& m.keysPressed == keys0, "RECORD while the dump is taken: refused as busy, no key pressed");
+			// 0.3.4: PLAY then STOP now: accepted, they wait for the panel (the newest, STOP, goes once the dump is in)
+			msg(R"({"op":"play"})");
+			check(lastResult().find("ok")->asBool() && m.keysPressed == keys0, "PLAY while the dump is taken: accepted, waits (no key yet)");
+			msg(R"({"op":"stop"})");
+			check(lastResult().find("ok")->asBool() && m.keysPressed == keys0, "then STOP: accepted, waits in PLAY's place");
 			m.slow = false;
 			for(auto& b : std::exchange(m.inFlight, {}))
 				m.take(b);
 			run(20);
+			check(m.keysPressed == keys0 + 1, "taken: the waiting STOP is pressed, once (PLAY is not)");
+			run(200);
 			msg(R"({"op":"record","mode":"grid"})");
-			check(lastResult().find("ok")->asBool() && m.keysPressed == keys0 + 1 && d.recvParked(), "taken: RECORD is pressed on SYSEX RECV");
+			check(lastResult().find("ok")->asBool() && m.keysPressed == keys0 + 2 && d.recvParked(), "taken: RECORD is pressed on SYSEX RECV");
 			m.recording = -1;
 			run(3500);
 		}
