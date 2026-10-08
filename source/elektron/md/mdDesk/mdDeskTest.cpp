@@ -800,6 +800,9 @@ namespace
 		check(dumps == 1 && undoCount() == undo0 + 1, "steps through the desk: 16 rows are one pattern dump and one undo step");
 		const auto sent = *ed::decodeMdPattern(wire.at(0));
 		check(ed::hasTrig(sent, 15, 11) && ed::hasTrig(sent, 0, 0), "the dump carries every row");
+		// B-025: the dump reloads the kit that plays; what follows waits until the machine has applied it
+		now = 3000;
+		desk.tick();
 		params.clear();
 		wire.clear();
 		const int undo1 = undoCount();
@@ -2742,7 +2745,9 @@ namespace
 		out.pump(1732);
 		check(wire.size() == 3 && wire[2][10] == 3 && !after, "then the newest value of pattern 1 goes (latest wins)");
 		out.pump(1732 + 1731 + 1);
-		check(wire.size() == 4 && wire[3][9] == 2 && after, "then pattern 2's dump, then the work after it (in that order)");
+		check(wire.size() == 4 && wire[3][9] == 2 && !after, "then pattern 2's dump");
+		out.pump(1732 + 1731 + 1 + 43 + 250 + 1);
+		check(after, "then the work after it, once the machine has read and applied it (B-025: a kit reload)");
 		check(out.delayMs(3500) > 0 && out.delayMs(1e6) == 0, "a message sent while a dump is applied waits; later none waits");
 		out.clear();
 		check(!out.sending(1e6) && out.waiting() == 0, "the machine started over: nothing waits");

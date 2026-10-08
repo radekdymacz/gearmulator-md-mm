@@ -894,6 +894,21 @@ const MdJourneys = (() => {
 		],
 		async tidy(u, c) { if (c.m0) await undoUntil(u, () => same([kit().tracks[c.r].machine, kit().tracks[c.p].machine], c.m0) && same(trigsOf(c.r), c.t0), 4); }
 	};
+	/* B-025: chops right after Set up sampling, the machine stopped: each is a pattern dump over the current pattern,
+	   which reloads the kit from its slot; the unsaved RAM-R / RAM-P must come back after every one. */
+	const setupChop = {
+		name: "md-sampler-setup-chop",
+		steps: [
+			go("sampler"),
+			{ say: "set up sampling in an unused RAM slot", act: async (u, c) => { c.n = [1, 2, 3, 4].find(k => !V.tracks.some(t => t.m === "RAM-R" + k || t.m === "RAM-P" + k)); if (!c.n) throw new Error("every RAM slot is used"); u.click(`.slotk[data-slot="RAM${c.n}"]`); await sleep(300); [c.r, c.p] = setupTracks(); c.m0 = [kit().tracks[c.r].machine, kit().tracks[c.p].machine]; c.t0 = trigsOf(c.p); u.click("[data-setupgo]"); },
+				machine: c => ok(kit().tracks[c.r].machine === "RAM-R" + c.n && kit().tracks[c.p].machine === "RAM-P" + c.n, `tracks ${kit().tracks[c.r].machine} ${kit().tracks[c.p].machine}`), within: 8000 },
+			{ say: "click up to eight chop cells quickly", act: async (u, c) => { c.s = $all("#chop [data-cp]").map(e => +e.dataset.cp).filter(s => !trigsOf(c.p).includes(s)).slice(0, 8); c.done = []; for (const s of c.s) { const q = `#chop [data-cp="${s}"]`; await until(() => !!$1(q), 1000); if (!$1(q)) continue; u.click(q); c.done.push(s); await sleep(90); } },
+				machine: c => ok(c.done.length >= 2 && c.done.every(s => trigsOf(c.p).includes(s)), "clicked " + c.done + ", player trigs " + trigsOf(c.p)), within: 8000 },
+			{ say: "wait: the kit keeps RAM-R and RAM-P", act: () => sleep(4000),
+				machine: c => ok(kit().tracks[c.r].machine === "RAM-R" + c.n && kit().tracks[c.p].machine === "RAM-P" + c.n, `tracks ${kit().tracks[c.r].machine} ${kit().tracks[c.p].machine}`), within: 2000 }
+		],
+		async tidy(u, c) { if (c.m0) await undoUntil(u, () => same([kit().tracks[c.r].machine, kit().tracks[c.p].machine], c.m0) && same(trigsOf(c.p), c.t0), 8); }
+	};
 	const panBox = {
 		name: "md-mix-pan-undo",
 		steps: [
@@ -963,7 +978,7 @@ const MdJourneys = (() => {
 		songArrange, songChain, samplerSlots, samplerSetup, audition,
 		libDialog, kitCopy, kitRename, kitClear, patGo, patClear, dialogEsc,
 		globalJ, globalRouting, globalMapNote, audioPanel, romCard, notePlay,
-		lockRamp, pasteMany, mutScope, songInspector, songDrag, ramView, panBox, hwNoMachine, syxImportJ, shots];
+		lockRamp, pasteMany, mutScope, songInspector, songDrag, ramView, setupChop, panBox, hwNoMachine, syxImportJ, shots];
 
 	/* ---------- demos: journeys played for a camera (doc/modern-ux/DEMO-VIDEOS.md) ---------- */
 	/* Not in `all`: ?selftest=journey never runs them; ?selftest=demo-md-<name> does (Journey.demo), at a person's pace

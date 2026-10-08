@@ -333,6 +333,7 @@ namespace mdDesk
 		m_backgroundQueued = false;
 		m_pushes.clear();
 		m_out.clear();
+		m_reloadsPending = 0;
 		m_working = deskCore::switched<ed::MdKit>();
 		m_keys = {};
 		m_chain.drop();
@@ -525,9 +526,19 @@ namespace mdDesk
 		const auto* held = stored != _view.kits.end() ? heldKit(_view) : nullptr;
 		const auto working = held ? std::optional<ed::MdKit>(*held) : std::nullopt;
 		m_session.pushPattern(pattern, false);
-		// after the dump (it may wait its turn in the stream, B-014)
+		// after the dump (it may wait its turn in the stream, B-014), once the machine has read and applied it
+		// (B-025: the stream's after-work waits for that). Until then memory shows the kit before the reload or
+		// the stored slot, neither the working kit: no image is taken meanwhile.
 		if(working)
-			m_out.after([this, storedKit = stored->second, w = *working] { restoreWorkingKit(storedKit, w); }, now());
+		{
+			++m_reloadsPending;
+			m_reloadQueuedMs = now();
+			m_out.after([this, storedKit = stored->second, w = *working]
+			{
+				m_reloadsPending = std::max(0, m_reloadsPending - 1);
+				restoreWorkingKit(storedKit, w);
+			}, now());
+		}
 	}
 
 	// The machine just loaded the kit that plays from its slot (_stored): what it held before (_working)
@@ -1565,6 +1576,8 @@ namespace mdDesk
 	void MdMachine::takeWorkingKit(const Documents* _view)
 	{
 		if(!m_working.region || m_probe != Probe::Running || !m_profile.memory)
+			return;
+		if(reloadHolds())	// B-025: the region waits for the restore after the reload
 			return;
 		auto image = ed::mdWorkingKitFromMemory(*m_working.region);
 		if(!image)

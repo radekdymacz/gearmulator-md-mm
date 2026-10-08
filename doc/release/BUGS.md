@@ -4,6 +4,15 @@
 repository; the site sends reports to the contact address. Newest first. Each entry:
 where it came from, the setup, what happens, what should happen, status.*
 
+## B-025 · Chopping right after Set up sampling loses RAM-R / RAM-P (machine stopped)
+
+- **From:** the firmware tests (`mdDeskFirmwareTest <MD ROM> sampler`), 2026-10-08, while checking 0.3.5. Not reported by a user.
+- **What happens:** with the sequencer stopped, Set up sampling puts RAM-R1 / RAM-P1 on tracks 13 and 14 (unsaved); a few chops on the player (trigs and STRT locks) and the tracks are back to the stored kit's machines (ROM-14 on the factory kit), with every other unsaved kit edit; the page shows it and the machine holds it.
+- **Since:** 0.3.4 (bisected with the fast build: 0.3.3 good, first bad c4327dc9e, "the stream at cable speed only while the machine plays"). A 0.3.4 user is affected: the new journey `md-sampler-setup-chop` fails the same way in a build without the fix (standalone and VST3).
+- **Cause:** a dump over the current pattern makes OS 1.63 load the linked kit from its slot; the desk sends the working kit's edits again after it (the stream's after-work). That work ran as soon as the dump left, not once the machine had applied it: the edits' expectation was met at once by memory that still showed the kit before the reload, the reload then showed the stored slot, and the next chop took that as the kit to keep. At cable speed (0.3.3, and while playing) the dumps coalesce and the window was rarely hit; stopped, dumps go back to back.
+- **Fix (release 0.3.5):** the stream's after-work waits until the machine has read and applied what went before (`deskCore::Stream`, Lane::Then), and while such a reload is on its way no memory image of the kit is taken (`MdMachine::reloadHolds`): the restore then sets what memory must show. Tests: `mdDeskFirmwareTest sampler` (passes again), `mdDeskTest` (the stream's after-work), journey `md-sampler-setup-chop`.
+- **Status:** fixed for 0.3.5.
+
 ## B-024 · Tempo drag fails when starting from a saved project
 
 - **From:** the journeys (md-top-tempo-drag), 2026-10-08.

@@ -152,6 +152,7 @@ no journey yet); **not testable** (why). "—": the editor has no such feature.
 | Audition a sample | md-sampler-audition PASS | — |
 | Load a WAV / AIFF and audition it before keeping it | not testable: native file chooser | — |
 | RAM view steps; freeze / live | md-sampler-ram-view PASS | — |
+| Chops right after Set up sampling keep RAM-R / RAM-P (B-025) | md-sampler-setup-chop PASS | — |
 | POLY | — | mm-perform-poly PASS |
 | MULTI TRIG mode | — | mm-perform-multi-trig PASS |
 | MULTI MAP: split and delete a range | — | mm-perform-multi-map PASS |

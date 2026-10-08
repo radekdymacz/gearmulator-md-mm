@@ -260,6 +260,13 @@ namespace mdDesk
 
 		deskCore::WorkingCopy<elektronData::MdKit> m_working;	// where the kit that plays comes from
 		double m_kitStatusAskedMs = -1e9;
+		// B-025: dumps over the current pattern whose kit reload the working kit's edits must follow, and when the
+		// last one went into the stream. Meanwhile memory images of the kit are not taken (they show the kit before
+		// the reload, then the stored slot): the restore after the dump sets what memory must show.
+		int m_reloadsPending = 0;
+		double m_reloadQueuedMs = 0;
+		static constexpr double g_reloadHoldMs = 10000;	// a reload not restored by then holds nothing any more
+		bool reloadHolds() const { return m_reloadsPending > 0 && now() - m_reloadQueuedMs < g_reloadHoldMs; }
 
 		Probe m_probe = Probe::Running;
 		deskCore::WireFacts m_wire;
