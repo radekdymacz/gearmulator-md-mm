@@ -74,10 +74,19 @@ namespace mdJucePlugin::backgroundRun
 		auto* top = _c.getTopLevelComponent();
 		if(top == nullptr)
 			return;
-		const auto place = [](juce::Component& _top)
+		// 720 x 462 points, or GEARMULATOR_MDMM_BACKGROUND_SIZE=<w>x<h> (screenshots of the page at its own size: the
+		// window is still behind every other one and captured by its id, scripts/mdmm-shots.sh)
+		int w = 720, h = 462;
+		const auto size = juce::StringArray::fromTokens(juce::SystemStats::getEnvironmentVariable("GEARMULATOR_MDMM_BACKGROUND_SIZE", {}), "x", {});
+		if(size.size() == 2 && size[0].getIntValue() >= 320 && size[1].getIntValue() >= 240)
+		{
+			w = size[0].getIntValue();
+			h = size[1].getIntValue();
+		}
+		const auto place = [w, h](juce::Component& _top)
 		{
 			if(const auto* display = juce::Desktop::getInstance().getDisplays().getPrimaryDisplay())
-				_top.setBounds(display->userArea.getX(), display->userArea.getBottom() - 462, 720, 462);
+				_top.setBounds(display->userArea.getX(), display->userArea.getBottom() - h, w, h);
 		};
 		place(*top);
 		// after the launch (the run loop has finished it by then): a prohibited app's windows do not show. The

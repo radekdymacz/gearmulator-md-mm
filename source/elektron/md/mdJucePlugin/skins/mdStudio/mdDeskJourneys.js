@@ -818,6 +818,32 @@ const MdJourneys = (() => {
 	};
 
 
+	/* Screenshots of the key map's views (scripts/mdmm-shots.sh): each step sets a view up and logs "SHOT <name>", then
+	   holds while the script captures the window by its id. Only when asked by name (journey-md-shots): skipped in a
+	   run of every journey. */
+	const shot = name => { Bridge.log("SHOT " + name); };
+	const hold = 2500;
+	const kvChip = mod => `#keyspop .kv-chip[data-kvmod="${mod}"]`;
+	const shots = {
+		name: "md-shots", needs: () => /md-shots/.test(location.search) ? null : "screenshots only when asked by name",
+		steps: [
+			go("seq"), sel(() => soundTracks().find(t => t < 14 && trigsOf(t).length >= 3) ?? soundTrack()),
+			{ say: "Cmd-drag a block over three tracks: a selection", act: async (u, c) => { if (S.stepSel) clearSel(); await u.drag(cell(c.t, 4), [cell(c.t, 6), cell(c.t + 2, 11)], { cmd: true }); await sleep(400); shot("app-7-selection"); },
+				screen: () => ok(!!S.stepSel, "no selection"), hold },
+			{ say: "press ?: the keyboard view, R clicked", act: async u => { clearSel(); document.activeElement?.blur?.(); u.key("?", { shift: true }); await sleep(300); u.click('#keyspop .kv-cap[data-code="KeyR"]'); await sleep(300); shot("app-1-base"); },
+				screen: () => ok(!$1("#keyspop").hidden, "no view"), hold },
+			{ say: "the ⇧ layer, → clicked", act: async u => { u.click(kvChip("shift")); await sleep(200); u.click('#keyspop .kv-cap[data-code="ArrowRight"]'); await sleep(300); shot("app-2-shift"); }, hold },
+			{ say: "the ⌥ / FN layer, R clicked", act: async u => { u.click(kvChip("shift")); u.click(kvChip("alt")); await sleep(200); u.click('#keyspop .kv-cap[data-code="KeyR"]'); await sleep(300); shot("app-3-alt-fn"); }, hold },
+			{ say: "the ⌘ layer, A clicked", act: async u => { u.click(kvChip("alt")); u.click(kvChip("cmd")); await sleep(200); u.click('#keyspop .kv-cap[data-code="KeyA"]'); await sleep(300); shot("app-4-cmd"); }, hold },
+			{ say: "the mouse's tricks", act: async () => { const p = $1("#keyspop"), c = p.querySelector(".kv-cols"); p.scrollTop = c.offsetTop - 8; await sleep(300); shot("app-5-mouse-tricks"); }, hold },
+			{ say: "Esc, then right-click a step with a trig: its menu", act: async (u, c) => {
+				u.key("Escape"); await sleep(300);
+				const s = trigsOf(c.t).find(x => x < Math.min(V.length, V.len)) ?? 0; u.rightClick(cell(c.t, s)); await sleep(400); shot("app-6-stepmenu");
+			}, screen: () => ok(!$1("#deskmenu").hidden, "no menu"), hold },
+			{ say: "Esc: the menu closes", act: async u => { u.key("Escape"); await sleep(200); if (S.stepSel) clearSel(); shot("done"); } }
+		],
+		async tidy() { if (!$1("#deskmenu")?.hidden) closeDeskMenu(); if (!$1("#keyspop").hidden) toggleKeys(false); if (S.stepSel) clearSel(); }
+	};
 	const all = [bootCard, firstBeat, spaceTransport, tempoDrag, tapTempo, tapTempoB, patStep, queuePattern, plate, wsKeys, helpKeys, undoRedo,
 		paintUndo, accentSlide, lockLane, pagesJ, copyPaste, selectCopyPaste, stepMenuJ, clearPatternJ, fillEveryJ, rotateJ, rotateUndo, trackKeys, muteKeys, liveRec,
 		genJourney("md-gen-mutate-undo", false), genJourney("md-gen-defaults-mutate-undo", true), genKeys,
@@ -826,7 +852,7 @@ const MdJourneys = (() => {
 		songArrange, songChain, samplerSlots, samplerSetup, audition,
 		libDialog, kitCopy, kitRename, kitClear, patGo, patClear, dialogEsc,
 		globalJ, globalRouting, audioPanel, romCard, notePlay,
-		lockRamp, pasteMany, mutScope, songInspector, songDrag, ramView, panBox, hwNoMachine];
+		lockRamp, pasteMany, mutScope, songInspector, songDrag, ramView, panBox, hwNoMachine, shots];
 
 	/* ---------- demos: journeys played for a camera (doc/modern-ux/DEMO-VIDEOS.md) ---------- */
 	/* Not in `all`: ?selftest=journey never runs them; ?selftest=demo-md-<name> does (Journey.demo), at a person's pace
