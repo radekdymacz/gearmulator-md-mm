@@ -4,6 +4,21 @@
 repository; the site sends reports to the contact address. Newest first. Each entry:
 where it came from, the setup, what happens, what should happen, status.*
 
+## B-013 · Monomachine "first beat" journey fails in the VST3 (host path)
+
+- **From:** journeys in the minimal VST3 host, 2026-10-08.
+- **What happens:** `mm-seq-first-beat` fails 5 of 5 in the VST3: the clicks reach the machine (trigs 0, 1, 16, 32, 48), but the piano roll shows only the first cell. The standalone passes.
+- **Maybe:** the plug-in follows the host's clock and the test host gives no play position; to be checked in a real DAW.
+- **Status:** open.
+
+## B-012 · First start on a new install: the Sampler has no samples
+
+- **From:** journeys in the VST3 host on a fresh data folder, 2026-10-08 (`md-sampler-slots`, `md-sampler-audition`).
+- **What happens:** on the very first start (the Machinedrum prepares its factory flash, about 17 s, then restarts in process), the samples document is never published, so the Sampler workspace stays empty. After a restart of the editor (the factory cache now exists) it works.
+- **Where:** the sample scan after the in-process restart, `md::DeskDevice::scanSamples` (`mdLib/mddeskdevice.cpp`); related to the B-003 change in 0.3.2.
+- **Should:** the Sampler fills on the first start too.
+- **Status:** open, being fixed for 0.3.3.
+
 ## B-011 · A Monomachine DigiPRO voice goes silent at some MIDI input speeds
 
 - **From:** the B-010 work, 2026-10-08 (test `mmDigiproFirmwareTest`).
