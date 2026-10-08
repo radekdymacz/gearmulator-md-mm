@@ -5,8 +5,11 @@
 // only read, and its copy lives in that folder until the test ends.
 //   mdSessionNoRomTest <md|mm>            no ROM: the state the page sees
 //   mdSessionNoRomTest <md|mm> manage     the same, then LOAD ROM: romInfo, REPLACE with another copy, REMOVE (the
-//                                         machine stops, the folder is empty, the page is told "missing" again)
-//   mdSessionNoRomTest <md|mm> install    then the ROM (GEARMULATOR_MD_FIRMWARE_BIN / _MM_): exits 77 without it
+//                                         machine stops, the folder is empty, the page is told "missing" again), the
+//                                         ROM again (starts without a second preparation)
+//   mdSessionNoRomTest <md|mm> install    then the ROM (GEARMULATOR_MD_FIRMWARE_BIN / _MM_): exits 77 without it. A
+//                                         Machinedrum's first start in the empty folder is "loading" while it formats
+//                                         its sample flash (B-003), then starts once and keeps its factory cache
 #include "mdPluginProcessor.h"
 #include "mdDeskHost.h"
 #include "mdDeskSession.h"
@@ -85,6 +88,27 @@ namespace
 		return {};
 	}
 
+	// The machine documents' lifecycles in order, repeats collapsed ("missing > loading > booting > ready").
+	std::string lifecycleSequence(const std::vector<Value>& _published)
+	{
+		std::string seq, last;
+		for(const auto& m : _published)
+			if(str(m, "type") == "machine")
+				if(const auto* doc = m.find("doc"))
+					if(const auto l = str(*doc, "lifecycle"); !l.empty() && l != last)
+					{
+						seq += (seq.empty() ? "" : " > ") + l;
+						last = l;
+					}
+		return seq;
+	}
+
+	// The machine the page shows has started: past the preparation ("loading") and the stand-in ("missing").
+	bool started(const std::string& _lifecycle)
+	{
+		return _lifecycle == "booting" || _lifecycle == "animating" || _lifecycle == "ready";
+	}
+
 	// kit.working ("clean", "edited", "unknown") in the last machine document, empty if none came.
 	std::string kitWorkingOf(const std::vector<Value>& _published)
 	{
@@ -119,7 +143,8 @@ int main(const int _argc, char** const _argv)
 	}
 
 	// An empty data root: no ROM anywhere the processor looks. Set before anything reads it.
-	const auto root = juce::File::getSpecialLocation(juce::File::tempDirectory).getNonexistentChildFile(mm ? "mdNoRomMm" : "mdNoRomMd", "");
+	// One folder per run (ctest -j runs the plain, install and manage runs side by side; a shared name raced).
+	const auto root = juce::File::getSpecialLocation(juce::File::tempDirectory).getChildFile(juce::String(mm ? "mdNoRomMm-" : "mdNoRomMd-") + juce::Uuid().toDashedString());
 	root.createDirectory();
 	setenv("GEARMULATOR_DATA_ROOT", root.getFullPathName().toRawUTF8(), 1);
 
@@ -163,6 +188,17 @@ int main(const int _argc, char** const _argv)
 			return d && d->isValid() && d->getHardware().isFirmwareMidiReady();
 		});
 	};
+	// The running machine is the first start's preparation run (no factory cache in the data folder yet):
+	// the processor replaces it once its sample flash is formatted (B-003).
+	const auto preparing = [&]
+	{
+		return processor->getPlugin().withDeviceLocked([](synthLib::Device* _d)
+		{
+			auto* d = dynamic_cast<md::DeskDevice*>(_d);
+			return d && d->isValid() && d->getHardware().isFactoryFlashInitializationExpected();
+		});
+	};
+	const auto factoryCache = home.getChildFile("nvram/md-uw-1.63-factory-v2.cache");
 
 	// No ROM: the stand-in runs, and within a couple of seconds the page is told "missing".
 	for(int i = 0; i < 40 && lifecycleOf(published) != "missing"; ++i)
@@ -276,6 +312,25 @@ int main(const int _argc, char** const _argv)
 			}
 		});
 		check(!restoreFailed && restoreError.empty(), "no state restore failed after the install ('" + restoreError + "')");
+		// The first start in an empty data folder: a Machinedrum formats its sample flash and is started
+		// again (B-003). The page sees that run as "loading" ("Preparing the Machinedrum…"), then one start.
+		// The preparation ends: the machine moves on, and the factory cache is kept so the next start skips it.
+		{
+			const auto began = std::chrono::steady_clock::now();
+			for(int i = 0; i < 1200 && !started(lifecycleOf(published)); ++i)
+				pump(100);
+			const auto life = lifecycleOf(published);
+			const auto seq = lifecycleSequence(published);
+			std::printf("  lifecycle after the install: %s (%.1f s after the machine took MIDI)\n", seq.c_str(),
+				std::chrono::duration<double>(std::chrono::steady_clock::now() - began).count());
+			check(started(life), "the page's lifecycle moves on from the preparation ('" + life + "')");
+			check(!preparing(), "the machine that runs is the started one, not the one being prepared");
+			if(model == md::MachineModel::Machinedrum)
+			{
+				check(seq.find("loading") == seq.rfind("loading"), "one preparation, not two ('" + seq + "')");
+				check(factoryCache.existsAsFile(), "the factory cache is kept, so the next start has no preparation");
+			}
+		}
 		// Nothing was edited: after a first boot the playing kit matches its stored slot. Give the
 		// session time to read both (it asks the machine once it is up), then it must say "clean".
 		std::string working;
@@ -330,6 +385,7 @@ int main(const int _argc, char** const _argv)
 		for(int i = 0; i < 1500 && !running(); ++i)
 			pump(40);
 		check(!stand() && running(), "the machine runs on the replaced image");
+		check(!preparing(), "the same firmware under a new name reuses the factory cache (no second preparation)");
 		// REMOVE
 		published.clear();
 		session->onPageMessage(*elektronData::json::parse(R"({"op":"removeRom","id":22})"));
@@ -360,6 +416,19 @@ int main(const int _argc, char** const _argv)
 				refused = ok && ok->isBool() && !ok->asBool();
 			}
 		check(refused, "REMOVE with nothing installed is refused with a text");
+
+		// The ROM again from the start-up card after a REMOVE: the machine starts in place, without a
+		// preparation (the factory cache from the first start is still in the data folder), and the page
+		// leaves the card.
+		published.clear();
+		session->installRom(juce::File(rom));
+		for(int i = 0; i < 1500 && !running(); ++i)
+			pump(40);
+		check(!stand() && running(), "REMOVE, then the ROM again: the machine runs");
+		check(!preparing(), "and it is not prepared again");
+		for(int i = 0; i < 300 && !started(lifecycleOf(published)); ++i)
+			pump(100);
+		check(started(lifecycleOf(published)), "and the page leaves the start-up card ('" + lifecycleSequence(published) + "')");
 	}
 	else if(!install)
 	{
