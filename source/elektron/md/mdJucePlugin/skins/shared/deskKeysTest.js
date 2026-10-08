@@ -12,10 +12,11 @@ const check = (ok, what) => { console.log((ok ? "  ok   " : "  FAIL ") + what); 
 let keydown = null;
 const document = { addEventListener: (type, f) => { if (type === "keydown") keydown = f; }, activeElement: null };
 const ctx = vm.createContext({ document, console });
-vm.runInContext(fs.readFileSync(path.join(__dirname, "deskKeys.js"), "utf8") + "\nthis.Keys = Keys;", ctx);
+vm.runInContext(fs.readFileSync(path.join(__dirname, "deskKeys.js"), "utf8") + "\nthis.Keys = Keys; this.Modifiers = Modifiers;", ctx);
 /* the modal layer: a const in the page's global scope, as deskModal.js makes it */
 vm.runInContext("const Modal = { top: () => this.modalTop, kind: () => this.modalTop ? (this.modalTop === \"dlg\" || this.modalTop === \"bootcard\" ? \"other\" : \"panel\") : null };", ctx);
-const Keys = ctx.Keys, ran = [];
+const Keys = ctx.Keys, Modifiers = ctx.Modifiers, ran = [];
+Modifiers.setPlatform(true);	/* a Mac first: ⌘ is metaKey */
 const setTop = id => { ctx.modalTop = id; };
 Keys.bind({ keys: ["Space"], group: "Transport", does: "play", run: () => ran.push("play") });
 Keys.bind({ keys: ["Delete", "Backspace"], group: "Sequence", does: "clear", run: () => ran.push("clear") });
@@ -55,6 +56,26 @@ document.activeElement = { closest: () => ({}) };
 check(!Keys.free(), "a text field focused: Keys.free() is false");
 document.activeElement = null;
 check(Keys.free(), "nothing open, no field: Keys.free() is true");
+
+/* ---- K1 (DESIGN-keymap.md P4): ⌘ is metaKey on a Mac and Ctrl elsewhere; a Mac's Ctrl and the Windows key are neither ---- */
+Keys.bind({ id: "t-octave", scope: "any", keys: ["Z"], group: "Playing", does: "octave", run: () => ran.push("octave") });
+Keys.bind({ id: "t-redo", scope: "any", keys: ["Z"], mod: "cmd+shift", group: "Anywhere", does: "redo", run: () => ran.push("redo") });
+Modifiers.setPlatform(true);
+check(press("z", { metaKey: true }).ran === "undo", "Mac: ⌘Z undoes");
+check(press("z", { ctrlKey: true }).ran === "", "Mac: Ctrl+Z is not ⌘Z, and plays no octave either (Ctrl is not a plain key)");
+check(Modifiers.cmd({ ctrlKey: true }) === false && Modifiers.cmd({ metaKey: true }) === true, "Mac: Modifiers.cmd reads metaKey only");
+check(Keys.label(Keys.byId("t-octave")) === "Z" && Keys.label({ keys: ["Z"], mod: "cmd+shift" }) === "⌘⇧Z" && Keys.label({ keys: ["step"], mod: "alt+shift", area: "Steps" }) === "⌥⇧ step",
+	"Mac labels: ⌘⇧Z, ⌥⇧ step: " + Keys.label({ keys: ["Z"], mod: "cmd+shift" }));
+check(Modifiers.say("⌘C copy · ⌥-drag") === "⌘C copy · ⌥-drag", "Mac: the page's words keep their symbols");
+Modifiers.setPlatform(false);
+check(press("z", { ctrlKey: true }).ran === "undo", "Windows / Linux: Ctrl+Z undoes");
+check(press("z", { metaKey: true }).ran === "", "Windows / Linux: the Windows key + Z is not Ctrl+Z");
+check(press("z", { ctrlKey: true, shiftKey: true }).ran === "redo", "Windows / Linux: Ctrl+Shift+Z redoes");
+check(Keys.label({ keys: ["Z"], mod: "cmd+shift" }) === "Ctrl+Shift+Z" && Keys.label({ keys: ["step"], mod: "cmd", area: "Steps" }) === "Ctrl + step",
+	"Windows labels: Ctrl+Shift+Z, Ctrl + step: " + Keys.label({ keys: ["Z"], mod: "cmd+shift" }));
+const said = Modifiers.say("Select: ⌘-click a step, ⌘⇧-click extends; then ⌘C ⌘V. Wheel: 4 a notch (⇧: 1). Undo (Cmd+Z), ⌥R all, Option-drag");
+check(said === "Select: Ctrl-click a step, Ctrl+Shift-click extends; then Ctrl+C Ctrl+V. Wheel: 4 a notch (Shift: 1). Undo (Ctrl+Z), Alt+R all, Alt-drag", "Windows: the page's words say Ctrl, Alt, Shift: " + said);
+Modifiers.setPlatform(true);
 
 console.log(failures ? `${failures} failure(s)` : "deskKeysTest: all passed");
 process.exit(failures ? 1 : 0);

@@ -244,7 +244,7 @@ document.addEventListener("click", e => {
 		if (a === "fill") genDefaults();
 		return;
 	}
-	const rk = e.target.closest("[data-rand]"); if (rk && !rk.disabled) { randomise(e.altKey || e.metaKey || e.ctrlKey); return; }
+	const rk = e.target.closest("[data-rand]"); if (rk && !rk.disabled) { randomise(e.altKey); return; }	/* ⌥ (or FN) is every track; ⌘ is not (P3) */
 	const k = e.target.closest("[data-genkind]"); if (k) { genKind(k.dataset.genkind); return; }
 	const md = e.target.closest("[data-genmode]"); if (md) { genMode(md.dataset.genmode); return; }
 	const v = e.target.closest(".gv[data-gv]"); if (v && !v.dataset.dragged) { genVal(v.dataset.gv, e.shiftKey ? -1 : 1); return; }

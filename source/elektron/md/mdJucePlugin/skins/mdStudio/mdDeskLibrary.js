@@ -154,7 +154,7 @@ document.addEventListener("click", e => {
 	   kit is only selected (Reload, or Enter, reloads it); Alt+click selects without loading */
 	const ks = e.target.closest("[data-ks]"); if (ks) {
 		const k = +ks.dataset.ks; if (LIB.renaming != null) finishRename(true); LIB.sel = k; drawLib(true);
-		if (k !== V.kit && !e.altKey && !e.metaKey && !e.ctrlKey && e.detail < 2) kitLoad(k);
+		if (k !== V.kit && !e.altKey && !Modifiers.cmd(e) && !e.ctrlKey && e.detail < 2) kitLoad(k);
 		return;
 	}
 	const ps = e.target.closest("[data-ps]"); if (ps) { patGo(+ps.dataset.ps, e.shiftKey); return; }
@@ -182,7 +182,7 @@ document.addEventListener("keydown", e => {
 	if (!LIB.open) { if ((e.key === "Enter" || e.key === " ") && (e.target.id === "kitf" || e.target.id === "pat")) { e.preventDefault(); e.stopImmediatePropagation(); openLib(e.target.id === "kitf" ? "kit" : "pat"); } return; }
 	if (!$("#dlg").hidden) return;
 	if (e.target.id === "lsin") { if (e.key === "Enter" || e.key === "Escape") { e.preventDefault(); finishRename(e.key === "Enter"); } e.stopImmediatePropagation(); return; }
-	const mod = e.metaKey || e.ctrlKey, kit = LIB.open === "kit", n = kit ? 64 : 128, cols = kit ? 8 : 16, key = e.key; let h = true;
+	const mod = Modifiers.cmd(e), kit = LIB.open === "kit", n = kit ? 64 : 128, cols = kit ? 8 : 16, key = e.key; let h = true;
 	if (key === "Escape") closeLib(true);
 	else if (!mod && !e.altKey && /^Arrow/.test(key)) { LIB.sel = (LIB.sel + { ArrowLeft: -1, ArrowRight: 1, ArrowUp: -cols, ArrowDown: cols }[key] + n) % n; drawLib(true); }
 	else if (key === "Enter") { if (kit) kitLoad(LIB.sel); else patGo(LIB.sel, false); }

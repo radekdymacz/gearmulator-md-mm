@@ -67,8 +67,10 @@ const Modal = (() => {
 	document.addEventListener("keydown", e => {
 		const d = top(); if (!d) return;
 		if (e.key === "Escape") { e.preventDefault(); e.stopImmediatePropagation(); dismiss(d); return; }
-		/* keys meant for the page behind (its shortcuts) do not reach it; the menu bar's own shortcuts are the system's */
-		if (e.key !== "Tab") { if (!box(d).contains(e.target) && !e.target.closest?.("#kpop") && !e.metaKey) { e.preventDefault(); e.stopImmediatePropagation(); } return; }
+		/* keys meant for the page behind (its shortcuts) do not reach it; ⌘ (Ctrl off a Mac: deskKeys.js Modifiers) passes,
+		   for the menu bar's own shortcuts and the map's modal: "panel" entries (⌘Z over a panel) */
+		const cmd = typeof Modifiers !== "undefined" ? Modifiers.cmd(e) : e.metaKey;
+		if (e.key !== "Tab") { if (!box(d).contains(e.target) && !e.target.closest?.("#kpop") && !cmd) { e.preventDefault(); e.stopImmediatePropagation(); } return; }
 		const k = keys(d); if (!k.length) { e.preventDefault(); return; }
 		const i = k.indexOf(document.activeElement), n = e.shiftKey ? (i <= 0 ? k.length - 1 : i - 1) : (i < 0 || i === k.length - 1 ? 0 : i + 1);
 		e.preventDefault(); k[n].focus();
