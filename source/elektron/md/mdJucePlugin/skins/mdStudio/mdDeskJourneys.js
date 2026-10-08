@@ -16,6 +16,8 @@ const MdJourneys = (() => {
 	const kitVals = t => { const k = kit()?.tracks[t]; return k ? [...k.synth, ...k.effects, ...k.routing] : []; };
 	const allKitVals = () => [...Array(16).keys()].map(kitVals);
 	const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
+	/* what differs between two allKitVals(): "T<track> #<index> <was>-><now>" (the first few) */
+	const kitDiff = (a, b) => a.flatMap((v, t) => v.map((x, i) => x === b[t]?.[i] ? null : `T${t + 1} #${i} ${x}->${b[t]?.[i]}`).filter(Boolean)).slice(0, 8).join(", ");
 	const sorted = a => a.slice().sort((x, y) => x - y);
 	const idle = () => !desk().tx;
 	const dlgShown = () => !$1("#dlg").hidden && $1("#dlg").dataset.first !== "1";
@@ -494,9 +496,11 @@ const MdJourneys = (() => {
 		name: "md-sound-control-all",
 		steps: [
 			go("sound"), sel(() => soundTrack()),
-			{ say: "Alt-drag an effects value: every track's knob moves", act: async (u, c) => { c.k0 = allKitVals(); const el = $1('#main .pc[data-g="fx"]'), d = getV(el) > 64 ? -1 : 1; await u.drag(el, [[d * 4, 0], [d * 8, 0], [d * 16, 0], [d * 24, 0]], { alt: true }); },
+			/* B-023: a real press focuses the value (a synthetic one does not): it is focused here, so ⌘Z below is pressed
+			   with the value focused, as a person's is */
+			{ say: "Alt-drag an effects value: every track's knob moves", act: async (u, c) => { c.k0 = allKitVals(); const el = $1('#main .pc[data-g="fx"]'), d = getV(el) > 64 ? -1 : 1; el.focus(); await u.drag(el, [[d * 4, 0], [d * 8, 0], [d * 16, 0], [d * 24, 0]], { alt: true }); },
 				machine: c => { const moved = allKitVals().filter((v, t) => !same(v, c.k0[t])).length; return ok(moved >= 2, moved + " tracks moved"); }, within: 10000 },
-			{ ...undoKey, say: "press Cmd+Z: one step back for all", machine: c => ok(same(allKitVals(), c.k0), "not all back"), within: 10000 }
+			{ ...undoKey, say: "press Cmd+Z: one step back for all", machine: c => ok(same(allKitVals(), c.k0), "not all back: " + kitDiff(c.k0, allKitVals())), within: 10000 }
 		]
 	};
 	/* K4 (DESIGN-keymap.md): the FN key gives the next drag ⌥, without a held key (a mouse, a touch screen, Linux's Alt-drag) */
@@ -508,7 +512,7 @@ const MdJourneys = (() => {
 			{ say: "drag an effects value (no key held): every track's knob moves, and FN goes off", act: async (u, c) => { c.k0 = allKitVals(); const el = $1('#main .pc[data-g="fx"]'), d = getV(el) > 64 ? -1 : 1; await u.drag(el, [[d * 4, 0], [d * 8, 0], [d * 16, 0], [d * 24, 0]]); },
 				screen: () => ok(Modifiers.fn === "off" && $1("#fnkey").getAttribute("aria-pressed") === "false", "FN still " + Modifiers.fn),
 				machine: c => { const moved = allKitVals().filter((v, t) => !same(v, c.k0[t])).length; return ok(moved >= 2, moved + " tracks moved"); }, within: 10000 },
-			{ ...undoKey, say: "press Cmd+Z: one step back for all", machine: c => ok(same(allKitVals(), c.k0), "not all back"), within: 10000 },
+			{ ...undoKey, say: "press Cmd+Z: one step back for all", machine: c => ok(same(allKitVals(), c.k0), "not all back: " + kitDiff(c.k0, allKitVals())), within: 10000 },
 			{ say: "double-click FN, then press Escape: latched, then off", act: async u => { u.dblclick("#fnkey"); await sleep(100); if (Modifiers.fn !== "latch") throw new Error("not latched: " + Modifiers.fn); u.key("Escape"); },
 				screen: () => ok(Modifiers.fn === "off", "FN " + Modifiers.fn) }
 		],

@@ -14,7 +14,9 @@ where it came from, the setup, what happens, what should happen, status.*
 
 - **From:** the journeys (md-sound-control-all right after md-sound-value-keys), 2026-10-08, both hosts.
 - **What happens:** after an Alt-drag (Control All), ⌘Z does not bring every track back; it looks like separate edits get merged into one undo step.
-- **Status:** open (product bug, not the test).
+- **Cause:** not the undo grouping: the arrow keys are three steps and Control All one (traced in the core: each edit recorded with its gesture, the Alt-drag's merged into one step). ⌘Z never reached the plug-in. `md-sound-value-keys` leaves its value focused (a value is `role=slider`), and the key dispatcher (`deskKeys.js`) treated a focused slider like a text field: every shortcut without `field: true` was off, ⌘Z included. A person meets it too: a real click on a value focuses it (a synthetic one in the journeys does not, which is why the journey only failed after the arrow-key journey), so ⌘Z (and Space, ⌘C ⌘V, the digits) after dragging a value did nothing.
+- **Fix (branch `fix/0.3.5-bugs`):** a focused value keeps only the keys that move it (arrows, Page Up/Down, Home, End: its own handler's); every other key is the page's. A text field keeps every key as before. Both editors (shared `deskKeys.js`). Tests: `deskKeysTest.js` (⌘Z, Space, ⌘C with a value focused; ↑ stays the value's), `md-sound-control-all` focuses the value it drags as a real press does (fails without the fix); its failure line lists what did not come back.
+- **Status:** fixed for 0.3.5.
 
 ## B-022 · Doesn't work on Windows 10 with WebView2 installed
 

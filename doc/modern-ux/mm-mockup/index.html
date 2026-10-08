@@ -2838,10 +2838,19 @@ const Keys = (() => {
 		}
 		return false;
 	}
+	/* B-023: the field a key belongs to, or null: a text field keeps every key; a focused value (role=slider: a knob, a
+	   fader, the tempo; a click on one focuses it) only the keys that move it, which its own handler takes. Every other
+	   key is the page's: ⌘Z after a drag on a value (or after its arrow keys) undoes, Space plays, ⌘C copies. */
+	const SLIDER_KEYS = new Set(["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight", "PageUp", "PageDown", "Home", "End"]);
+	function fieldOf(el, e) {
+		const text = el?.closest?.("input,select,textarea"); if (text) return text;
+		const slider = el?.closest?.("[role=slider]");
+		return slider && SLIDER_KEYS.has(norm(e)) ? slider : null;
+	}
 	let lastDown = null;	/* {k, at} of the last ⌘ keydown: an edit command right after it is the same press */
 	document.addEventListener("keydown", e => {
 		if (Modifiers.cmd(e)) lastDown = { k: norm(e), at: Date.now() };
-		dispatch(e, e.target.closest?.("input,select,textarea,[role=slider]"));
+		dispatch(e, fieldOf(e.target, e));
 	});
 	/* ⌘C, ⌘X and ⌘V may never come as keys (B-015). On macOS the web view the plug-in sits in (JUCE's
 	   WebBrowserComponent, juce_WebBrowserComponent_mac.mm, WebViewKeyEquivalentResponder) turns them into the edit
@@ -2857,7 +2866,7 @@ const Keys = (() => {
 		if (lastDown && lastDown.k === key.toUpperCase() && Date.now() - lastDown.at < 500) return;
 		const k = { key, code: "Key" + key.toUpperCase(), metaKey: Modifiers.mac, ctrlKey: !Modifiers.mac, altKey: false, shiftKey: false, target: a || document.body,
 			preventDefault: () => e.preventDefault() };
-		note(k); dispatch(k, a?.closest?.("[role=slider]"));
+		note(k); dispatch(k, fieldOf(a, k));
 	});
 	/* The key probe (the start tests, scripts/macos|windows|linux/smoke_mdmm.*): with ?keyprobe=1 in the page's
 	   address (the plug-in adds it when GEARMULATOR_MDMM_KEYPROBE=1) a line at the bottom left says which keys reached
