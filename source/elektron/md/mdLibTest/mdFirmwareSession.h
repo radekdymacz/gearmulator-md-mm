@@ -10,6 +10,7 @@
 
 #include <algorithm>
 #include <array>
+#include <chrono>
 #include <ctime>
 #include <cstdio>
 #include <fstream>
@@ -18,6 +19,12 @@
 #include <stdexcept>
 #include <string>
 #include <vector>
+#ifdef __APPLE__
+#include <pthread/qos.h>
+// The thread's own retired instructions and CPU cycles (libsystem_kernel, macOS 10.13+): a cost that does
+// not depend on what else the computer runs (B-014).
+extern "C" int thread_selfcounts(int _type, void* _buf, size_t _bytes);
+#endif
 
 namespace mdFirmwareSession
 {
@@ -101,15 +108,33 @@ namespace mdFirmwareSession
 		// CPU time the emulator's audio blocks took (processAudio, what the plug-in's audio thread runs).
 		double audioUs = 0, audioMaxUs = 0;
 		uint64_t audioBlocks = 0;
-		void resetAudioTime() { audioUs = audioMaxUs = 0; audioBlocks = 0; }
+		// B-014: every block's thread CPU time and wall time (us), for percentiles and per host-buffer sums.
+		std::vector<float> blockCpuUs, blockWallUs, blockMInstr, blockMCycles;
+		void resetAudioTime() { audioUs = audioMaxUs = 0; audioBlocks = 0; blockCpuUs.clear(); blockWallUs.clear(); blockMInstr.clear(); blockMCycles.clear(); }
+		static void counts(uint64_t* _ic)
+		{
+#ifdef __APPLE__
+			if(thread_selfcounts(1, _ic, 2 * sizeof(uint64_t)) == 0)
+				return;
+#endif
+			_ic[0] = _ic[1] = 0;
+		}
 
 		void step()
 		{
 			// the thread's CPU time, not wall time: other work on the computer does not count
 			const auto cpuNs = [] { timespec t{}; clock_gettime(CLOCK_THREAD_CPUTIME_ID, &t); return double(t.tv_sec) * 1e9 + double(t.tv_nsec); };
 			const double t0 = cpuNs();
+			const auto w0 = std::chrono::steady_clock::now();
+			uint64_t c0[2], c1[2];
+			counts(c0);
 			m_hw.processAudio(m_outputs, g_block, 0);
+			counts(c1);
+			blockMInstr.push_back(static_cast<float>(double(c1[0] - c0[0]) / 1e6));
+			blockMCycles.push_back(static_cast<float>(double(c1[1] - c0[1]) / 1e6));
 			const double us = (cpuNs() - t0) / 1000.0;
+			blockWallUs.push_back(static_cast<float>(std::chrono::duration<double, std::micro>(std::chrono::steady_clock::now() - w0).count()));
+			blockCpuUs.push_back(static_cast<float>(us));
 			audioUs += us;
 			audioMaxUs = std::max(audioMaxUs, us);
 			++audioBlocks;

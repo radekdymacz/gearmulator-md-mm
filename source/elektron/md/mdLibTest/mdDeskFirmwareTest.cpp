@@ -427,8 +427,22 @@ namespace
 			m_desk->tick();
 		}
 
+	public:
+		// B-014: what the page is sent, as JSON text (bytes the bridge carries and the page parses)
+		size_t pageBytes = 0, pagePatternDocBytes = 0, pagePatternDocs = 0;
+	private:
 		void onPage(const Value& _m)
 		{
+			if(std::getenv("PLOCK_PAGEBYTES"))
+			{
+				const auto n = elektronData::json::write(_m).size();
+				pageBytes += n;
+				if(const auto* k = _m.find("kind"); k && k->isString() && k->asString() == "pattern")
+				{
+					pagePatternDocBytes += n;
+					++pagePatternDocs;
+				}
+			}
 			const auto* type = _m.find("type");
 			if(!type)
 				return;
@@ -2631,6 +2645,44 @@ namespace
 		return j;
 	}
 
+	// B-014: the audio thread's time per block, as percentiles of the 64-frame blocks and as sums over
+	// host buffers of 128 and 256 frames (44.1 kHz: 2.90 and 5.80 ms), with how many buffers went over
+	// half and over all of their budget.
+	void printBlockStats(const char* _what, const std::vector<float>& _us)
+	{
+		if(_us.empty())
+			return;
+		const auto pct = [](std::vector<float> _v, const double _p)
+		{
+			std::sort(_v.begin(), _v.end());
+			return _v[std::min(_v.size() - 1, static_cast<size_t>(_p * double(_v.size())))];
+		};
+		std::printf("         %s us/64: p50 %.0f p99 %.0f p99.9 %.0f max %.0f", _what, pct(_us, .5), pct(_us, .99), pct(_us, .999), pct(_us, 1.0));
+		for(const size_t k : {size_t(2), size_t(4)})
+		{
+			std::vector<float> w;
+			for(size_t i = 0; i + k <= _us.size(); i += k)
+			{
+				float sum = 0;
+				for(size_t j = 0; j < k; ++j)
+					sum += _us[i + j];
+				w.push_back(sum);
+			}
+			if(w.empty())
+				continue;
+			const double budget = double(k * g_block) * 1e6 / g_rate;
+			size_t half = 0, over = 0;
+			for(const auto x : w)
+			{
+				half += x > budget * .5;
+				over += x > budget;
+			}
+			std::printf(" | /%zu: p50 %.0f p99.9 %.0f max %.0f (%.0f%%) >50%%:%zu >100%%:%zu of %zu",
+				k * g_block, pct(w, .5), pct(w, .999), pct(w, 1.0), pct(w, 1.0) * 100.0 / budget, half, over, w.size());
+		}
+		std::puts("");
+	}
+
 	void plockTiming(Rig& _rig, const bool _strict)
 	{
 		// PLOCK_INGRESS=<bytes/s>: the firmware's SysEx ingress rate for the run (0: unpaced, as before B-010).
@@ -2675,6 +2727,10 @@ namespace
 		bool first = true;
 		const auto phase = [&](const char* _name, const double _ms, const double _everyMs, const std::function<void(int)>& _edit)
 		{
+			// PLOCK_PHASES=idle,click1s,...: run only these (load always runs)
+			if(const char* only = std::getenv("PLOCK_PHASES"); only && std::string(_name) != "load"
+				&& ("," + std::string(only) + ",").find("," + std::string(_name) + ",") == std::string::npos)
+				return;
 			clocks.clear();
 			steps.clear();
 			const auto b0 = _rig.bytesToMachine, m0 = _rig.messagesToMachine, d0 = _rig.patternDumps(), r0 = _rig.patternRequests;
@@ -2682,6 +2738,8 @@ namespace
 			const auto kinds0 = _rig.messageKinds;
 			m.resetAudioTime();
 			const int docs0 = _rig.pageDocCount("pattern");
+			const auto pb0 = _rig.pageBytes, ppb0 = _rig.pagePatternDocBytes, ppn0 = _rig.pagePatternDocs;
+			const auto idle0 = m.hardware().getTransportScorecard().idleSelfBranchInstructions;
 			double deskUs = 0;
 			int n = 0;
 			while(double(m.now() - start) * 1000.0 / g_rate < _ms)
@@ -2713,6 +2771,60 @@ namespace
 					_rig.pageDocCount("pattern") - docs0, deskUs / n);
 			std::printf("         audio thread: %.1f us a block of %.0f us (mean), worst %.0f us\n", m.audioUs / double(std::max<uint64_t>(1, m.audioBlocks)),
 				g_block * 1e6 / g_rate, m.audioMaxUs);
+			printBlockStats("cpu ", m.blockCpuUs);
+			if(std::getenv("PLOCK_PAGEBYTES"))
+				std::printf("         to the page: %.0f KB/s, pattern documents %zu of %.1f KB each\n", double(_rig.pageBytes - pb0) / 1024.0 / secs,
+					_rig.pagePatternDocs - ppn0, _rig.pagePatternDocs > ppn0 ? double(_rig.pagePatternDocBytes - ppb0) / 1024.0 / double(_rig.pagePatternDocs - ppn0) : 0.0);
+			if(const auto sc = m.hardware().getTransportScorecard(); sc.enabled)
+				std::printf("         68k idle-skipped: %.1f %% of its cycles\n",
+					double(sc.idleSelfBranchInstructions - idle0) * 2.0 * 100.0 / (secs * double(md::g_ucClockHz)));
+			printBlockStats("wall", m.blockWallUs);
+			if(const char* dir = std::getenv("PLOCK_TRACE"))
+			{
+				// one line a block: Minstr, Mcycles, cpu us (B-014: the shape of the cost around an edit)
+				std::ofstream f(std::string(dir) + "/" + _name + ".csv");
+				f << "block,minstr,mcycles,cpuus\n";
+				for(size_t i = 0; i < m.blockMInstr.size(); ++i)
+					f << i << ',' << m.blockMInstr[i] << ',' << m.blockMCycles[i] << ',' << m.blockCpuUs[i] << '\n';
+			}
+			{
+				// instructions and cycles (millions) a block: what the CPU time is when nothing else competes
+				auto mi = m.blockMInstr, mc = m.blockMCycles;
+				std::sort(mi.begin(), mi.end());
+				std::sort(mc.begin(), mc.end());
+				if(!mi.empty())
+				{
+					const auto at = [](const std::vector<float>& _v, const double _p) { return _v[std::min(_v.size() - 1, size_t(_p * double(_v.size())))]; };
+					double sumI = 0, sumC = 0;
+					for(const auto x : m.blockMInstr) sumI += x;
+					for(const auto x : m.blockMCycles) sumC += x;
+					// sums over 128 and 256 frames, for the worst host buffer
+					float w2 = 0, w4 = 0;
+					for(size_t i = 0; i + 4 <= m.blockMCycles.size(); i += 4)
+					{
+						w2 = std::max({w2, m.blockMCycles[i] + m.blockMCycles[i + 1], m.blockMCycles[i + 2] + m.blockMCycles[i + 3]});
+						w4 = std::max(w4, m.blockMCycles[i] + m.blockMCycles[i + 1] + m.blockMCycles[i + 2] + m.blockMCycles[i + 3]);
+					}
+					// instructions over host buffers of 128 and 256 frames: p50, p99, p99.9, max (independent of other load)
+					for(const size_t k : {size_t(2), size_t(4)})
+					{
+						std::vector<float> w;
+						for(size_t i = 0; i + k <= m.blockMInstr.size(); i += k)
+						{
+							float sum = 0;
+							for(size_t j = 0; j < k; ++j)
+								sum += m.blockMInstr[i + j];
+							w.push_back(sum);
+						}
+						std::sort(w.begin(), w.end());
+						if(!w.empty())
+							std::printf("         Minstr/%zu: p50 %.1f p99 %.1f p99.9 %.1f max %.1f\n", k * g_block, at(w, .5), at(w, .99), at(w, .999), at(w, 1.0));
+					}
+					std::printf("         Minstr/64: mean %.2f p50 %.2f p99 %.2f p99.9 %.2f max %.2f   Mcycles/64: mean %.2f p50 %.2f p99 %.2f p99.9 %.2f max %.2f | max /128 %.2f /256 %.2f\n",
+						sumI / double(mi.size()), at(mi, .5), at(mi, .99), at(mi, .999), at(mi, 1.0),
+						sumC / double(mc.size()), at(mc, .5), at(mc, .99), at(mc, .999), at(mc, 1.0), w2, w4);
+				}
+			}
 			std::printf("         messages by kind:");
 			for(const auto& [k, v] : _rig.messageKinds)
 			{
@@ -2805,9 +2917,52 @@ namespace
 		const int dragG = ++gesture;
 		phase("drag", 6000, 16, [&](const int _n) { lock(_n % 16, (_n * 7) % 128, dragG); });
 		phase("click", 6000, 250, [&](const int _n) { lock((_n * 5) % 16, (_n * 13) % 128, ++gesture); });
+		// B-014: one click a second, so each gets its own read-back (750 ms after it)
+		{
+			// PLOCK_CLICK_MS: the time between those clicks (1000)
+			const double every = std::getenv("PLOCK_CLICK_MS") ? std::atof(std::getenv("PLOCK_CLICK_MS")) : 1000.0;
+			phase("click1s", every * 8, every, [&](const int _n) { lock((_n * 3) % 16, (_n * 11) % 128, ++gesture); });
+		}
 		const int wheelG = ++gesture;
 		phase("wheel", 6000, 30, [&](const int _n) { lock(4, 40 + (_n % 40), wheelG); });
 		phase("after", 4000, 0, {});
+		if(std::getenv("PLOCK_LONG"))
+		{
+			// B-014 "more and more steps": rounds of 96 new locks (a fresh drag each, an edit every 50 ms), each
+			// followed by playing with no edits, to see whether a cost grows with the edits made or the locks the
+			// pattern holds, and whether it stays once editing stops. Tracks 1-4 get trigs on every step first.
+			for(int t = 1; t < 4; ++t)
+			{
+				_rig.page("{\"op\":\"steps\",\"p\":" + ps + ",\"from\":0,\"to\":16,\"g\":" + std::to_string(++gesture)
+					+ ",\"rows\":[{\"t\":" + std::to_string(t) + ",\"on\":[0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15]}]}");
+				settle();
+			}
+			const int rounds = std::max(1, std::atoi(std::getenv("PLOCK_LONG")));
+			int made = 0;
+			for(int r = 0; r < rounds; ++r)
+			{
+				const int g = ++gesture;
+				char name[32];
+				std::snprintf(name, sizeof(name), "fill%d", r + 1);
+				phase(name, 96 * 50, 50, [&](const int _n)
+				{
+					const int k = made + _n;	// a new (param, step) each edit: param 0..23 across steps 0..15, tracks 1-4
+					const int t = (k / 384) % 4, i = (k / 16) % 24, st = k % 16;
+					_rig.page("{\"op\":\"lock\",\"p\":" + ps + ",\"t\":" + std::to_string(t) + ",\"i\":" + std::to_string(i) + ",\"s\":" + std::to_string(st)
+						+ ",\"v\":" + std::to_string((k * 37) % 128) + ",\"g\":" + std::to_string(g) + "}");
+				});
+				made += 96;
+				std::snprintf(name, sizeof(name), "play%d", r + 1);
+				phase(name, 4000, 0, {});
+				const auto& pat = desk.documents().patterns.at(p);
+				int locks = 0;
+				for(int t = 0; t < 16; ++t)
+					for(int i = 0; i < 24; ++i)
+						for(int st = 0; st < 16; ++st)
+							locks += ed::lockValue(pat, t, i, st).has_value();
+				std::printf("         locks the desk's pattern holds: %d (edits made %d)\n", locks, made);
+			}
+		}
 		_rig.postOnly = false;
 		m.onMidi = {};
 		m.onBlock = prevBlock;
@@ -2817,6 +2972,10 @@ namespace
 
 int main(const int _argc, char** _argv)
 {
+#ifdef __APPLE__
+	// as an audio thread: on a performance core when one is free (B-014 timing runs)
+	pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
+#endif
 	std::setvbuf(stdout, nullptr, _IOLBF, 0);
 	if(_argc < 2)
 	{
