@@ -107,6 +107,9 @@ namespace md
 		// request's id. Needs the device lock; the audio thread takes no lock and allocates nothing for it.
 		uint64_t audition(const elektronData::AuditionClip& _clip) { return m_audition.play(_clip); }
 		elektronData::AuditionStatus auditionStatus() const { return m_audition.status(); }
+		// Every output block zeroed after the machine made it (a test run on a person's computer: the emulation and
+		// the host's audio run as ever, nothing is heard). Set before the device runs.
+		void setSilentOutput(const bool _silent) { m_silentOutput = _silent; }
 
 		// MM OS 1.32B state for the Monomachine Editor (md::MmTelemetry).
 		std::shared_ptr<const MmTelemetry> getMmTelemetry() const { return m_mmTelemetry; }
@@ -153,5 +156,6 @@ namespace md
 		std::array<uint32_t, 128> m_panelSequenceHolds{};
 		uint64_t m_panelSequenceAt = 0;
 		uint64_t m_frames = 0;
+		bool m_silentOutput = false;
 	};
 }

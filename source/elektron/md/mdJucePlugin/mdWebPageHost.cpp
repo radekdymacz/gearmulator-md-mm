@@ -7,6 +7,9 @@
 #if JUCE_WINDOWS && MDMM_WEBVIEW2
 #include "mdWebView2Page.h"
 #endif
+#if JUCE_MAC
+#include "mdBackgroundRun.h"
+#endif
 
 #include <cmath>
 #include <cstring>
@@ -370,6 +373,10 @@ namespace mdJucePlugin
 			m_web->setBounds(_bounds);
 		if(_bounds.getWidth() <= 0)
 			return;
+#if JUCE_MAC
+		if(!m_keptDrawn)
+			m_keptDrawn = backgroundRun::keepPageDrawn(*m_web);
+#endif
 		const double zoom = pageZoom::effective(_bounds.getWidth(), _bounds.getHeight(), m_userZoom,
 			{m_spec.designWidth, m_spec.designHeight, m_spec.minHeight});
 		if(setWebPageZoom(*m_web, zoom) >= 0)

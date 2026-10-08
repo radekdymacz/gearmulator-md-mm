@@ -28,6 +28,10 @@ namespace md
 		Device::processAudio(_inputs, _outputs, _samples);
 		// P9: the audition on the main output (Main A/B), from its rate to the machine's.
 		m_audition.mix(_outputs[0], _outputs[1], _samples, getSamplerate());
+		if(m_silentOutput)
+			for(auto* out : _outputs)
+				if(out)
+					std::fill_n(out, _samples, 0.0f);
 		publishSequencerTelemetry(_samples);
 		scanSamples();
 		m_frames += _samples;

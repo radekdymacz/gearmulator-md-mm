@@ -1,3 +1,6 @@
+#ifdef __APPLE__
+#include "mdBackgroundRun.h"	// first: the JUCE plug-in headers define Component as a macro
+#endif
 #include "mdPluginProcessor.h"
 #include "juceUiLib/messageBox.h"
 #include "juceUiLib/messageRoute.h"
@@ -885,6 +888,11 @@ namespace mdJucePlugin
 		if(!d->isValid())
 			return makeNoRomDevice();	// no ROM is the page's to ask for, not an alert (mdDeskHost.h, UPSTREAM.md)
 		d->setRamRecordingMode(getRamRecordingMode());
+#ifdef __APPLE__
+		// a background run of the journeys on a person's Mac (mdBackgroundRun.h): the standalone's audio runs as
+		// ever, timing and all, but nothing reaches their speakers
+		d->setSilentOutput(juce::JUCEApplicationBase::isStandaloneApp() && backgroundRun::requested());
+#endif
 		return d.release();
 	}
 

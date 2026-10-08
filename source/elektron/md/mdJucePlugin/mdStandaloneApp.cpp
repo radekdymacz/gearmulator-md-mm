@@ -3,6 +3,9 @@
 // the Record menu (mdRecordMenu.h), which only the _Standalone targets build and link: this
 // file's object is pulled into the app alone (nothing in a plug-in names juce_CreateApplication).
 #if JucePlugin_Build_Standalone && JUCE_USE_CUSTOM_PLUGIN_STANDALONE_APP
+#ifdef __APPLE__
+#include "mdBackgroundRun.h"	// first: the JUCE plug-in headers define Component as a macro
+#endif
 #include "jucePluginEditorLib/standaloneApp.h"
 
 #include "mdPluginProcessor.h"
@@ -34,6 +37,9 @@ namespace mdJucePlugin
 	public:
 		StandaloneApp() : jucePluginEditorLib::StandaloneApp(ownSettingsName())
 		{
+#ifdef __APPLE__
+			backgroundRun::enterBeforeLaunch();	// the journeys on a person's Mac (mdBackgroundRun.h)
+#endif
 		}
 
 		juce::String getWindowTitle(juce::AudioProcessor& _processor) const override
@@ -46,6 +52,8 @@ namespace mdJucePlugin
 #if JUCE_MAC
 		void windowOpened(jucePluginEditorLib::StandaloneWindow& _window) override
 		{
+			// the journeys on a person's Mac: out of their way (mdBackgroundRun.h)
+			backgroundRun::sendWindowBack(_window);
 			auto* p = _window.getAudioProcessor();
 			if(!p)
 				return;
