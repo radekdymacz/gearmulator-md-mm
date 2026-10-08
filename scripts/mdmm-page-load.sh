@@ -34,8 +34,9 @@ C="$DATA/config/Machinedrum Editor.xml"
 	"$C" > "$ROOTDIR/Gearmulator Preview/Machinedrum/config/Machinedrum Editor.xml"
 touch "$TMP/start"
 before=$(pgrep -f 'com.apple.WebKit.(WebContent|GPU)' | sort)
-SECS=$((60 + ROUNDS * 20))
-env GEARMULATOR_DATA_ROOT="$ROOTDIR" GEARMULATOR_MDMM_BACKGROUND=1 GEARMULATOR_MDSTUDIO_SELFTEST="p4locks$ROUNDS" \
+PROBE=0; [ -n "${MDMM_PAGE_PROBE:-}" ] && PROBE=60
+SECS=$((60 + ROUNDS * 20 + PROBE))
+env GEARMULATOR_DATA_ROOT="$ROOTDIR" GEARMULATOR_MDMM_BACKGROUND=1 GEARMULATOR_MDSTUDIO_SELFTEST="p4locks$ROUNDS${MDMM_PAGE_PROBE:+-probe}" \
 	"$HOST_BIN" "$PLUGIN" $((SECS + 60)) --background >"$TMP/host.out" 2>&1 &
 PID=$!
 trap 'kill $PID 2>/dev/null; rm -rf "$TMP"; exit 1' INT TERM
@@ -55,11 +56,11 @@ n=0
 while [ $n -lt $((SECS * 2)) ]; do
 	grep -q "P4: cpu done" "$LOG" 2>/dev/null && break
 	kill -0 $PID 2>/dev/null || break
-	for ph in $(grep -o "P4: cpu [a-z0-9]* start" "$LOG" | awk '{print $3}'); do
+	for ph in $(grep -o "P4: cpu [a-zA-Z0-9]* start" "$LOG" | awk '{print $3}'); do
 		[ -f "$TMP/ph.$ph" ] && continue
 		echo "$(secs $PID) $(secs ${web:-0}) $(secs ${gpu:-0}) $(date +%s)" > "$TMP/ph.$ph"
 	done
-	for ph in $(grep -o "P4: cpu [a-z0-9]* end" "$LOG" | awk '{print $3}'); do
+	for ph in $(grep -o "P4: cpu [a-zA-Z0-9]* end" "$LOG" | awk '{print $3}'); do
 		[ -f "$TMP/done.$ph" ] && continue
 		touch "$TMP/done.$ph"
 		set -- $(cat "$TMP/ph.$ph")
