@@ -4,6 +4,14 @@
 repository; the site sends reports to the contact address. Newest first. Each entry:
 where it came from, the setup, what happens, what should happen, status.*
 
+## B-010 · Timing lags ("swing") while editing parameter locks
+
+- **From:** Discord tester (versonegro), 2026-10-07, macOS 12, Apple M1.
+- **What happens:** while setting parameter locks on the Sequence page, playback lags a little, like swing. When editing stops, timing goes back to normal. Upstream Gearmulator on the same Mac does not lag when editing locks.
+- **Likely:** the editor's traffic to the emulated machine during lock edits (lock writes, pattern pushes, read-backs over SysEx) keeps the emulated CPU busy, or work on the audio thread per edit, so the sequencer's clock slips.
+- **Should:** editing never changes the timing of playback.
+- **Status:** open, being investigated.
+
 ## B-009 · WebKit crashed once on Ubuntu 24.04 (Linux VST3)
 
 - **From:** the Linux CI start test, 2026-10-08.
