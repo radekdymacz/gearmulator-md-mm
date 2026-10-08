@@ -33,7 +33,7 @@ where it came from, the setup, what happens, what should happen, status.*
 
 ## B-010 · Timing lags ("swing") while editing parameter locks
 
-- **From:** Discord tester (versonegro), 2026-10-07, macOS 12, Apple M1.
+- **From:** Discord tester A, 2026-10-07, macOS 12, Apple M1.
 - **What happens:** while setting parameter locks on the Sequence page, playback lags a little, like swing. When editing stops, timing goes back to normal. Upstream Gearmulator on the same Mac does not lag when editing locks.
 - **Also:** reproduced by the owner on an M4 Pro, current macOS, so not the tester's CPU.
 - **Should:** editing never changes the timing of playback.
@@ -51,7 +51,7 @@ where it came from, the setup, what happens, what should happen, status.*
 
 ## B-008 · The play head is invisible on the MK1 (white) skin
 
-- **From:** Discord tester (versonegro), macOS 12, 2026-10-07, with a screen recording.
+- **From:** Discord tester A, macOS 12, 2026-10-07, with a screen recording.
 - **What happens:** on the Sequence page the moving play head does not show with the MK1 (white) plate; with the MK2 (black) plate it shows, but faintly.
 - **Should:** a clearly visible play head on both plates, on every supported macOS.
 - **Cause:** the play head (`#phcol`) was drawn only with `color-mix()`: its tint and edge, and on the MK1 plate all of it, so the macOS 12 WebKit dropped it (B-001). On MK2 it was faint even on a current WebKit (a 1 px edge at 45 %, screen-blended).
@@ -74,7 +74,7 @@ where it came from, the setup, what happens, what should happen, status.*
 
 ## B-005 · High CPU in Ableton Live
 
-- **From:** Discord beta tester (versonegro), 2026-10-07: Live's CPU meter at 66 % with the Machinedrum Editor, macOS 12, Apple M1.
+- **From:** Discord beta tester A, 2026-10-07: Live's CPU meter at 66 % with the Machinedrum Editor, macOS 12, Apple M1.
 - **What happens:** the plug-in uses a large share of the CPU.
 - **To check:** how much is the emulation (DSP56300 JIT + 68k) and how much the editor page (web view redraws, the rate of plug-in → page updates, animations); CPU with the editor window open vs closed, playing vs stopped; M1 vs newer chips; Live's buffer size.
 - **Should:** as low as the emulation allows; the page costs little, and nothing when its window is closed.
@@ -111,7 +111,7 @@ where it came from, the setup, what happens, what should happen, status.*
 
 ## B-001 · Plug-in window too big in Ableton Live
 
-- **From:** Discord beta tester (versonegro), 2026-10-07.
+- **From:** Discord beta tester A, 2026-10-07.
 - **Setup:** Ableton Live, macOS 12, Apple M1 (the "66 %" in the report was Live's CPU meter, see B-005, not a zoom). Machinedrum Editor plug-in, MIX workspace.
 - **What happens:** the page is drawn larger than the plug-in window. The right part (track 13 onwards, the header's right side) and the bottom are cut off. The page cannot be zoomed out, so the settings cannot be reached.
 - **Should:** the page fits the plug-in window at any host zoom, the window can be resized, and the user can zoom the page (a control and ⌘− / ⌘+).
