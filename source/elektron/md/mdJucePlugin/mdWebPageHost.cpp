@@ -367,6 +367,13 @@ namespace mdJucePlugin
 		if(!m_pageReady)
 		{
 			m_pageReady = true;
+			if(m_failure)
+			{
+				// B-022: what said it failed was not the last word (a slow start): the page after all
+				note("the page started after all: the failure message goes");
+				m_failure.reset();
+				m_web->setVisible(true);
+			}
 			note("page up: the bridge works (" + juce::String(static_cast<int>(juce::Time::getMillisecondCounterHiRes() - m_loadMs)) + " ms after loading)");
 			focusPage(false);
 		}

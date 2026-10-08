@@ -165,6 +165,14 @@ namespace mdJucePlugin
 						self.creating = false;
 						if(FAILED(_result) || _controller == nullptr)
 						{
+							// B-022: E_ABORT when the parent window went while the controller was being made (the
+							// standalone makes its window again while it starts): made again in the new one, a few times
+							if(_result == E_ABORT && ++self.controllerRetries <= g_controllerRetries)
+							{
+								self.event("the WebView2 controller was not created (" + hresultText(_result) + ", its window was made again): trying again");
+								juce::Timer::callAfterDelay(100, [safe] { if(safe != nullptr) safe->m_impl->createController(); });
+								return S_OK;
+							}
 							self.fail("the WebView2 controller was not created (" + hresultText(_result) + ")");
 							return S_OK;
 						}
@@ -388,6 +396,8 @@ namespace mdJucePlugin
 		double zoom = 1.0;
 		bool creating = false;
 		bool focusWanted = false;
+		int controllerRetries = 0;
+		static constexpr int g_controllerRetries = 10;
 		bool failed = false;
 		bool comInitialised = false;
 	};
