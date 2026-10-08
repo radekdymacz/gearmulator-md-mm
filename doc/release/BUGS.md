@@ -4,6 +4,14 @@
 repository; the site sends reports to the contact address. Newest first. Each entry:
 where it came from, the setup, what happens, what should happen, status.*
 
+## B-011 · A Monomachine DigiPRO voice goes silent at some MIDI input speeds
+
+- **From:** the B-010 work, 2026-10-08 (test `mmDigiproFirmwareTest`).
+- **What happens:** with the emulated MIDI input paced at 3.1 or 62.5 KB/s, the sixth DigiPRO voice stays silent; at 31, 125 and 250 KB/s it plays. Timing-dependent, cause unknown.
+- **Now:** B-010's pacing uses 125 KB/s, which passes. Not seen by users.
+- **Should:** every pacing rate plays all voices; understand the cause (possibly the same DSP1→DSP2 timing as joelanders' PR #98, "dropped Monomachine notes on tracks 4-6").
+- **Status:** open.
+
 ## B-010 · Timing lags ("swing") while editing parameter locks
 
 - **From:** Discord tester (versonegro), 2026-10-07, macOS 12, Apple M1.
