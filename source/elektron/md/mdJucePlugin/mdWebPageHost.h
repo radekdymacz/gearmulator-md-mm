@@ -16,6 +16,7 @@
 namespace mdJucePlugin
 {
 	class PageWebView;
+	class KeyWindowWatch;
 	namespace pageBridge { class Pieces; }
 
 	// A web page in the plug-in (P6: one host for both editors): bundling (stylesheets, scripts
@@ -25,7 +26,7 @@ namespace mdJucePlugin
 	// the page said ready, then go out in batches), a temp file per instance, and the zoom that
 	// fits the page's design width into the window. It knows nothing about documents. How a message travels
 	// is mdPageBridge.h (the transport, pure).
-	class WebPageHost
+	class WebPageHost final : private juce::FocusChangeListener
 	{
 	public:
 		using Value = elektronData::json::Value;
@@ -33,7 +34,7 @@ namespace mdJucePlugin
 
 		WebPageHost(Spec _spec, std::function<std::string(const std::string&)> _resource,
 			std::function<void(const Value&)> _onMessage);
-		~WebPageHost();
+		~WebPageHost() override;
 
 		WebPageHost(const WebPageHost&) = delete;
 		WebPageHost& operator=(const WebPageHost&) = delete;
@@ -54,6 +55,9 @@ namespace mdJucePlugin
 
 	private:
 		void onBridge(const std::string& _url);
+		// B-018: the keyboard to the page: _always, or only when no other view of the window has it
+		void focusPage(bool _always);
+		void globalFocusChanged(juce::Component* _focused) override;
 		void onAck(uint64_t _seq);
 		void deleteRecvFiles(uint64_t _upTo);
 		std::string bundle() const;
@@ -62,6 +66,7 @@ namespace mdJucePlugin
 		std::function<std::string(const std::string&)> m_resource;
 		std::function<void(const Value&)> m_onMessage;
 		std::unique_ptr<PageWebView> m_web;
+		std::unique_ptr<KeyWindowWatch> m_keyWatch;	// B-018: the window became the key window (macOS, mdWebFocus.h)
 		std::unique_ptr<pageBridge::Pieces> m_pieces;	// the page's long batches, joined (mdPageBridge.h)
 		std::vector<Value> m_outbox;
 		uint64_t m_recvSeq = 1;	// the next gm.recv batch's number (the page drops one it has had, mdPageBridge.h)

@@ -245,6 +245,8 @@ namespace mdJucePlugin
 			updateBounds();
 			updateVisibility();
 			event("WebView2 ready");
+			if(focusWanted)
+				focus();
 			if(url.isNotEmpty())
 				webView->Navigate(url.toWideCharPointer());
 			for(const auto& s : scripts)
@@ -273,6 +275,20 @@ namespace mdJucePlugin
 		{
 			webView->ExecuteScript(_script.toWideCharPointer(), Callback<ICoreWebView2ExecuteScriptCompletedHandler>(
 				[](HRESULT, LPCWSTR) -> HRESULT { return S_OK; }).Get());
+		}
+
+		// B-018: the keyboard into the page (WebView2's own window), now or once the controller is there.
+		void focus()
+		{
+			if(!controller)
+			{
+				focusWanted = true;
+				return;
+			}
+			focusWanted = false;
+			const auto hr = controller->MoveFocus(COREWEBVIEW2_MOVE_FOCUS_REASON_PROGRAMMATIC);
+			if(FAILED(hr))
+				event("keyboard focus not moved into the page (" + hresultText(hr) + ")");
 		}
 
 		void setZoom(const double _zoom)
@@ -338,6 +354,7 @@ namespace mdJucePlugin
 		std::deque<juce::String> scripts;	// asked for before the web view was there
 		double zoom = 1.0;
 		bool creating = false;
+		bool focusWanted = false;
 		bool failed = false;
 		bool comInitialised = false;
 	};
@@ -371,6 +388,7 @@ namespace mdJucePlugin
 	}
 
 	void WebView2Page::resized() { if(m_impl) m_impl->updateBounds(); }
+	void WebView2Page::focusPage() { if(m_impl) m_impl->focus(); }
 	void WebView2Page::visibilityChanged() { if(m_impl) m_impl->updateVisibility(); }
 	void WebView2Page::parentHierarchyChanged()
 	{

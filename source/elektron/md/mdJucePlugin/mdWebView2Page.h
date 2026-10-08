@@ -34,6 +34,8 @@ namespace mdJucePlugin
 
 		void goToURL(const juce::String& _url);
 		void executeScript(const juce::String& _script);
+		// B-018: the keyboard into the page (WebView2's own window), now or once the web view is there.
+		void focusPage();
 		// The page's zoom (1: its CSS pixels are the component's pixels).
 		void setZoom(double _zoom);
 

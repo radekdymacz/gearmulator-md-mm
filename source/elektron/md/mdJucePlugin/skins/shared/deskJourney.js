@@ -195,13 +195,14 @@ const Journey = (() => {
 		/* keys as the operating system delivers them (spec: "focus cmd+c", tokens as mdOsKeys.h reads them): in the
 		   macOS plug-in real key events routed as AppKit routes them (the window's views and JUCE, the menu bar, the
 		   first responder), so a key the host side keeps from the page is kept here too; "focus" is what a click on the
-		   page does to the web view. Elsewhere (a browser, Windows) the page's own keys (u.key), "focus" nothing. */
+		   page does to the web view, "activate" what JUCE does when the window becomes the key window (B-018). Elsewhere (a
+		   browser, Windows) the page's own keys (u.key), "focus" and "activate" nothing. */
 		async osKey(spec) {
 			const toks = spec.split(/\s+/).filter(Boolean);
-			Pointer.key(toks.filter(t => t !== "focus").join(" "));
+			Pointer.key(toks.filter(t => t !== "focus" && t !== "activate").join(" "));
 			if (osKeys()) { Bridge.log("oskeys " + spec); await sleep(350); return; }
 			for (const t of toks) {
-				if (t === "focus") continue;
+				if (t === "focus" || t === "activate") continue;
 				const p = t.split("+"), k = p.pop(), m = Object.fromEntries(p.map(x => [x, true]));
 				u.key({ escape: "Escape", delete: "Delete", space: " ", return: "Enter", tab: "Tab" }[k] || k, m);
 			}

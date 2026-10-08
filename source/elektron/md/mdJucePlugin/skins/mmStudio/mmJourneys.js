@@ -118,7 +118,7 @@ const MmJourneys = (() => {
 	const helpKeys = {
 		name: "mm-keys-help",
 		steps: [
-			{ say: "press ?: the list of keys", act: u => { blur(); u.key("?", { shift: true }); }, screen: () => ok(!$1("#keyspop").hidden && $all("#keyspop .krow").length > 20, $all("#keyspop .krow").length + " keys") },
+			{ say: "press ?: the keyboard view and the list of keys", act: u => { blur(); u.key("?", { shift: true }); }, screen: () => ok(!$1("#keyspop").hidden && $all("#keyspop .keyrow").length > 20 && !!$1("#keyspop .kv-cap"), $all("#keyspop .keyrow").length + " keys") },
 			{ say: "press Escape: it closes", act: u => u.key("Escape"), screen: () => ok($1("#keyspop").hidden, "still open") }
 		]
 	};
@@ -720,6 +720,18 @@ const MmJourneys = (() => {
 			{ ...undoKey, act: u => { blur(); u.key("z", { cmd: true }); }, machine: c => ok(JSON.stringify(wk().tracks.map(t => t.multiEnv)) === c.e0, "multi env not back"), within: 15000 }
 		]
 	};
+	/* B-018: ? as the operating system delivers it, before any click in the window: the web view has the keyboard
+	   (when the page is up, and whenever the window becomes the key window JUCE takes it for its own view and the page's
+	   component hands it back), so the key reaches the page, opens the keyboard view and does not beep. "activate": what
+	   JUCE does then; no "focus": nothing clicks first. */
+	const osHelp = {
+		name: "mm-keys-os-help", needs: Journey.osKeyPath,
+		steps: [
+			{ say: "the window becomes the key window (JUCE takes the keyboard), then press ? on the keyboard, no click in the page: the keyboard view", act: async u => { blur(); await u.osKey("activate"); await sleep(300); await u.osKey("?"); },
+				screen: () => ok(!$1("#keyspop").hidden && !!$1("#keyspop .kv-cap"), "keys view " + ($1("#keyspop").hidden ? "hidden" : "without the drawn keyboard")) },
+			{ say: "press Escape on the keyboard: it closes", act: u => u.osKey("escape"), screen: () => ok($1("#keyspop").hidden, "still open") }
+		]
+	};
 	const songInspector = {
 		name: "mm-song-row-inspector",
 		steps: [
@@ -825,7 +837,7 @@ const MmJourneys = (() => {
 		poly, multiTrig, multiMap, kbPlay, songRows, songPicker, songChain, kitLoad, kitCopy, patGo, dialogEsc,
 		audioPanel, romCard, notePlay,
 		tapTempo, queue, dialogKeys, trackKeys, muteKeys, lockRamp, pages, copyPaste, clearAll, fill, rotate, pasteMany, liveRec, genKeys, mutScope,
-		valueKeys, soundCopy, screenDrag, dragM, midiMutes, joyAssign, menvPort, menvLayout, songInspector, songDrag, kitSaveAs, kitRename, kitClear, patClear, hwNoMachine,
+		valueKeys, soundCopy, screenDrag, dragM, midiMutes, joyAssign, menvPort, menvLayout, osHelp, songInspector, songDrag, kitSaveAs, kitRename, kitClear, patClear, hwNoMachine,
 		blackKeys, rollPaint];
 
 	async function between(u) {

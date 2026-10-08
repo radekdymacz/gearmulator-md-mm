@@ -34,6 +34,10 @@ img,svg,canvas{-webkit-user-drag:none}
 .krows{display:grid;gap:4px}
 .krow{display:grid;grid-template-columns:minmax(96px,auto) 1fr;gap:10px;align-items:baseline;font-size:13px}
 .krow kbd{justify-self:start;font:500 11px var(--mono);background:var(--key);color:var(--keytext);border-radius:3px;padding:2px 6px;box-shadow:inset 0 -2px 0 rgba(0,0,0,.35);white-space:nowrap}
+/* the keyboard view's list (shared/deskKeyView.js, B-018): its rows as the list's above */
+.keyrows{display:grid;gap:4px}
+.keyrow{display:grid;grid-template-columns:minmax(96px,auto) 1fr;gap:10px;align-items:baseline;font-size:13px}
+.keyrow kbd{justify-self:start;font:500 11px var(--mono);background:var(--key);color:var(--keytext);border-radius:3px;padding:2px 6px;box-shadow:inset 0 -2px 0 rgba(0,0,0,.35);white-space:nowrap}
 /* LEN ×2 (double the pattern) hugs LEN on LCD line 2, as narrow as its text, so SWG still fits */
 .l2[data-l2=dbl]{margin-left:-8px;gap:0;width:auto!important}
 /* ===== GEN and MUTATE (MM-PORT-PLAN.md d, 76-gen.js): the Machinedrum Editor's bars (its mdDesk.css), the

@@ -1,5 +1,6 @@
 #include "mdWebPageHost.h"
 #include "mdPageBridge.h"
+#include "mdWebFocus.h"
 #include "mdPageZoom.h"
 
 #include "juce_gui_extra/juce_gui_extra.h"
@@ -38,6 +39,15 @@ namespace mdJucePlugin
 	}
 #else
 	inline int setWebPageZoom(juce::Component&, double) { return -1; }
+#endif
+
+#if !JUCE_MAC
+	// B-018's macOS parts (mdStudioWebZoom.mm); WebView2 takes the keyboard through WebView2Page::focusPage.
+	int focusWebView(juce::Component&, bool) { return 0; }
+	struct KeyWindowWatch::Impl {};
+	KeyWindowWatch::KeyWindowWatch(std::function<void()>) {}
+	KeyWindowWatch::~KeyWindowWatch() = default;
+	void KeyWindowWatch::follow(juce::Component&) {}
 #endif
 
 	namespace
@@ -178,6 +188,12 @@ namespace mdJucePlugin
 		, m_scriptRecv(false)
 #endif
 	{
+		juce::Desktop::getInstance().addFocusChangeListener(this);
+		m_keyWatch = std::make_unique<KeyWindowWatch>([this]
+		{
+			if(m_pageReady)
+				focusPage(true);	// after JUCE took the keyboard for its own view (B-018)
+		});
 		m_web = std::make_unique<PageWebView>([this](const std::string& _url) { onBridge(_url); },
 			[this](const juce::String& _e) { log("web view: " + _e); },
 			[this](const juce::String& _url)
@@ -196,6 +212,8 @@ namespace mdJucePlugin
 
 	WebPageHost::~WebPageHost()
 	{
+		juce::Desktop::getInstance().removeFocusChangeListener(this);
+		m_keyWatch.reset();
 		m_web.reset();
 		// This instance's page file (P6: one per instance, so two open editors never share one), and the
 		// batches the page has not read.
@@ -324,10 +342,42 @@ namespace mdJucePlugin
 		{
 			m_pageReady = true;
 			log("page up");
+			focusPage(false);
 		}
 		for(const auto& message : batch->asArray())
 			m_onMessage(message);
 		flush();
+	}
+
+	// B-018: the page takes the keyboard when it is up, unless something else in the window has it (a host's own
+	// control): a key pressed before any click reaches the page instead of JUCE's view (macOS: the beep).
+	void WebPageHost::focusPage(const bool _always)
+	{
+#if JUCE_MAC
+		const auto r = focusWebView(*m_web, _always);
+		log(r > 0 ? "keyboard focus: the page" : r < 0 ? "keyboard focus: kept by another view of the window" : "keyboard focus: no window yet");
+#elif JUCE_WINDOWS && MDMM_WEBVIEW2
+		// WebView2's window is a child of the editor's: moved into it when the editor's window has the focus
+		auto* top = m_web->getTopLevelComponent();
+		if(!_always && !(top && top->getPeer() && top->getPeer()->isFocused()))
+			return;
+		if(auto* web = dynamic_cast<WebView2Page*>(m_web.get()))
+		{
+			web->focusPage();
+			log("keyboard focus: the page");
+		}
+#else
+		(void)_always;
+#endif
+	}
+
+	// B-018: JUCE gives the window's own view the keyboard whenever the window is activated (macOS: becomeKeyWindow;
+	// Windows: WM_SETFOCUS), and its focus to the window component or one around the page. Handed on to the page.
+	void WebPageHost::globalFocusChanged(juce::Component* _focused)
+	{
+		if(_focused == nullptr || !m_pageReady || (_focused != m_web.get() && !_focused->isParentOf(m_web.get())))
+			return;
+		focusPage(true);
 	}
 
 	void WebPageHost::flush()
@@ -397,6 +447,7 @@ namespace mdJucePlugin
 #if JUCE_MAC
 		if(!m_keptDrawn)
 			m_keptDrawn = backgroundRun::keepPageDrawn(*m_web);
+		m_keyWatch->follow(*m_web);	// B-018: the window it is in now
 #endif
 		const double zoom = pageZoom::effective(_bounds.getWidth(), _bounds.getHeight(), m_userZoom,
 			{m_spec.designWidth, m_spec.designHeight, m_spec.minHeight});

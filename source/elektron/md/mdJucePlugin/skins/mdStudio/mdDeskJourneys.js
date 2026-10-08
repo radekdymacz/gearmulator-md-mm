@@ -131,6 +131,17 @@ const MdJourneys = (() => {
 		name: "md-keys-workspaces",
 		steps: [["2", "sound"], ["3", "mix"], ["4", "sampler"], ["5", "song"], ["1", "seq"]].map(([k, ws]) => ({ say: `press ${k}`, act: u => { document.activeElement?.blur?.(); u.key(k); }, screen: () => ok(S.ws === ws && !!$1("#main").firstElementChild, "workspace " + S.ws) }))
 	};
+	/* B-018: ? as the operating system delivers it after the window became the key window (JUCE then takes the keyboard
+	   for its own view; the page's host hands it back), no click in the page first: the key reaches the page, no beep */
+	const osHelp = {
+		name: "md-keys-os-help", needs: Journey.osKeyPath,
+		steps: [
+			{ say: "the window becomes the key window, then press ? on the keyboard, no click in the page: the keyboard view",
+				act: async u => { document.activeElement?.blur?.(); await u.osKey("activate"); await u.sleep(300); await u.osKey("?"); },
+				screen: () => ok(!$1("#keyspop").hidden && !!$1("#keyspop .kv-cap"), "keys view " + ($1("#keyspop").hidden ? "hidden" : "empty")) },
+			{ say: "press Escape on the keyboard: it closes", act: u => u.osKey("escape"), screen: () => ok($1("#keyspop").hidden, "still open") }
+		]
+	};
 	const helpKeys = {
 		name: "md-keys-help",
 		steps: [
@@ -889,7 +900,7 @@ const MdJourneys = (() => {
 		],
 		async tidy() { if (!$1("#deskmenu")?.hidden) closeDeskMenu(); if (!$1("#keyspop").hidden) toggleKeys(false); if (S.stepSel) clearSel(); }
 	};
-	const all = [bootCard, firstBeat, spaceTransport, tempoDrag, tapTempo, tapTempoB, patStep, queuePattern, plate, wsKeys, helpKeys, undoRedo,
+	const all = [bootCard, firstBeat, spaceTransport, tempoDrag, tapTempo, tapTempoB, patStep, queuePattern, plate, wsKeys, helpKeys, osHelp, undoRedo,
 		paintUndo, accentSlide, lockLane, pagesJ, copyPaste, selectCopyPaste, stepMenuJ, osCopyPaste, buttonsCopyPaste, clearPatternJ, fillEveryJ, rotateJ, rotateUndo, trackKeys, muteKeys, liveRec,
 		genJourney("md-gen-mutate-undo", false), genJourney("md-gen-defaults-mutate-undo", true), genKeys,
 		shapeSound, arrows, machinePick, soundCopy, editorDrag, controlAll, fnControlAll,

@@ -52,7 +52,9 @@ where it came from, the setup, what happens, what should happen, status.*
 - **From:** Discord tester C, 2026-10-08, M1, latest macOS.
 - **What happens:** pressing ? (or ⇧/) gives the macOS "beep", as if no one took the key.
 - **To check:** whether the web view has keyboard focus before the first click, whether the MM page binds ? at all, and the standalone vs plug-in path (see B-015).
-- **Status:** open.
+- **Cause:** not the MM page (it binds ?), the window: whenever the standalone's window becomes the key window (at start, after switching back to it, or on the click that activates it), JUCE gives its own view the keyboard (`NSViewComponentPeer::becomeKeyWindow`: `makeFirstResponder:` on the peer's view). A key that view does not use goes up the responder chain to AppKit's beep, so keys pressed before a click inside the page never reached it (the Machinedrum Editor too). The journeys missed it: their window is never the key window.
+- **Fix (branch `fix/0.3.5-bugs`):** the page's host hands the keyboard to the web view when the page is up, after the window became the key window (`NSWindowDidBecomeKeyNotification`, `mdWebFocus.h`), and when JUCE's focus lands on the window around the page (a host making the plug-in's view first responder); never away from another control of the window (a host's). Windows: the same moments move the focus into WebView2 (`MoveFocus`). ? on the Monomachine Editor now opens the keyboard view both editors share (`deskKeyView.js`) instead of the plain list. Tests: `mm-keys-os-help` and `md-keys-os-help` (real `NSEvent`s: `activate` does what the window does when it becomes key, then ? with no click; fail without the fix, both hosts); `mdOsKeys` refuses to send a key whose first responder is not the page and logs it, so the failing test makes no sound; `mm-keys-help` checks the drawn keyboard.
+- **Status:** fixed for 0.3.5.
 
 ## B-017 · Monomachine Perform: dragging DEC resizes the window
 
