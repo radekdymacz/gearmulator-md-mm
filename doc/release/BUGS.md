@@ -8,7 +8,9 @@ where it came from, the setup, what happens, what should happen, status.*
 
 - **From:** the journeys (md-top-tempo-drag), 2026-10-08.
 - **What happens:** the tempo drag does nothing when the editor starts from a saved project at 105.8 BPM; from fresh settings it works. Maybe host clock sync in the saved settings blocks it.
-- **Status:** open.
+- **Cause:** not the product, and not the host clock (the saved global has tempo in INTERNAL; the drag reached the machine every time). The machine keeps the tempo in 1/24 BPM steps and the LCD shows it to one decimal. The journey compared the LCD's text with the tempo itself: from a saved project at 93.79 BPM (2251/24) the drag goes to 105.79, the LCD says 105.8, and 105.8 is not 105.79; a fresh 120.0 is on the 0.1 grid, so it passed. The same check was in `mm-top-tempo-drag`.
+- **Fix (branch `fix/0.3.5-bugs`):** both journeys compare the LCD with the tempo as the LCD rounds it (`lcdBpm`), and the drag back with a tolerance below one step; the failure line now says the tempo, where it started and the global's tempo in. Checked from a saved project at 93.79 in both hosts.
+- **Status:** fixed for 0.3.5 (journey only).
 
 ## B-023 · Undo after an Alt-drag doesn't restore every track
 

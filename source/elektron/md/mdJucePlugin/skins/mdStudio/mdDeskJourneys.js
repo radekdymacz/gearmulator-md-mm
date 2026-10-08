@@ -87,12 +87,18 @@ const MdJourneys = (() => {
 			{ say: "press Space again: it stops", act: u => u.key(" "), screen: () => ok(!V.playing, "playing"), machine: () => ok(tele.last && !tele.last.playing, "still playing") }
 		]
 	};
+	/* B-024: the machine keeps the tempo in 1/24 BPM steps (a saved project's 93.79 is 2251/24) and the LCD shows it to
+	   one decimal: the LCD is compared with the tempo as the LCD rounds it, never with the tempo itself (only a tempo on
+	   the 0.1 grid, a fresh 120.0, passed that) */
+	const lcdBpm = v => +(+v).toFixed(1);
 	const tempoDrag = {
 		name: "md-top-tempo-drag",
 		steps: [
 			{ say: "drag the BPM on the LCD up", act: async (u, c) => { c.b0 = Docs.global.tempo; await u.drag("#bpm", [[0, -6], [0, -12], [0, -18], [0, -24]]); c.note = `${c.b0} -> ${V.bpm}`; },
-				screen: c => ok(parseFloat($1("#bpm").textContent) === V.bpm && V.bpm > c.b0, "LCD " + $1("#bpm").textContent), machine: c => ok(Docs.global.tempo > c.b0 && Docs.global.tempo === V.bpm, "tempo " + Docs.global.tempo) },
-			{ say: "drag it back down as far", act: u => u.drag("#bpm", [[0, 6], [0, 12], [0, 18], [0, 24]]), screen: c => ok(parseFloat($1("#bpm").textContent) === c.b0, "LCD " + $1("#bpm").textContent), machine: c => ok(Docs.global.tempo === c.b0, "tempo " + Docs.global.tempo) }
+				screen: c => ok(parseFloat($1("#bpm").textContent) === lcdBpm(V.bpm) && V.bpm > c.b0, `LCD ${$1("#bpm").textContent} for ${V.bpm} (from ${c.b0}); tempo in ${Docs.global?.control?.tempoIn}`),
+				machine: c => ok(Docs.global.tempo > c.b0 && Docs.global.tempo === V.bpm, "tempo " + Docs.global.tempo) },
+			{ say: "drag it back down as far", act: u => u.drag("#bpm", [[0, 6], [0, 12], [0, 18], [0, 24]]), screen: c => ok(parseFloat($1("#bpm").textContent) === lcdBpm(c.b0), "LCD " + $1("#bpm").textContent),
+				machine: c => ok(Math.abs(Docs.global.tempo - c.b0) < 0.05, "tempo " + Docs.global.tempo) }
 		]
 	};
 	/* T taps; so does B, the Monomachine Editor's tap key (T is a black key there) */
