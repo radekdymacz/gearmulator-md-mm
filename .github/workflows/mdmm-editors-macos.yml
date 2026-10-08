@@ -5,7 +5,10 @@ name: MD/MM Editors macOS start test
 # fixture-free universal package with the same script and settings as elektron-macos.yml and
 # mdmm-editors-release.yml, then on a clean runner with a logged-in desktop starts each standalone and each VST3
 # (in scripts/vst3EditorHost) with no ROM, reads "<machine> firmware needed" from the page through the
-# Accessibility API, runs auval on each AU and keeps a screenshot of each window (scripts/macos/smoke_mdmm.sh).
+# Accessibility API, runs auval on each AU and keeps a screenshot of each window (scripts/macos/smoke_mdmm.sh), then
+# runs pluginval (strictness 5, no ROM) on each VST3 and each AU of the same package. The release job
+# (mdmm-editors-release.yml) runs the same checks on the installed release packages and gates the upload on them,
+# so this workflow no longer runs on mdmm-v* tags.
 
 on:
   workflow_dispatch:
@@ -15,10 +18,10 @@ on:
       - "release/md-mm-*"
       - "release/0.*"
       - "ci/*-ui-smoke"
-    tags:
-      - "mdmm-v*"
     paths:
       - ".github/workflows/mdmm-editors-macos.yml"
+      - "scripts/ci/**"
+      - "scripts/pluginval.env"
       - "scripts/macos/**"
       - "scripts/vst3EditorHost/**"
       - "scripts/mdmm-product.env"
@@ -110,6 +113,23 @@ jobs:
 
       - name: Start each standalone and VST3, check the page and the bridge, run auval, take screenshots
         run: ./scripts/macos/smoke_mdmm.sh "${PACKAGE_DIR}" "${RUNNER_TEMP}/smoke" "${VST3_HOST}"
+
+      # pluginval 1.0.4 (pinned, sha256-checked: scripts/pluginval.env), strictness 5, scratch data root, no ROM.
+      - name: pluginval on each VST3 and AU
+        if: always()
+        run: |
+          . scripts/mdmm-product.env
+          ./scripts/ci/mdmm_pluginval.sh --out "${RUNNER_TEMP}/pluginval" --label "macOS ${{ matrix.os }}" \
+            "${PACKAGE_DIR}/${MDMM_PRODUCT_NAME_MD}.vst3" "${PACKAGE_DIR}/${MDMM_PRODUCT_NAME_MM}.vst3" \
+            "${PACKAGE_DIR}/${MDMM_PRODUCT_NAME_MD}.component" "${PACKAGE_DIR}/${MDMM_PRODUCT_NAME_MM}.component"
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: macos-mdmm-pluginval-${{ matrix.os }}
+          path: ${{ runner.temp }}/pluginval
+          if-no-files-found: warn
+          retention-days: 14
 
       - uses: actions/upload-artifact@v4
         if: always()
