@@ -1953,6 +1953,16 @@ namespace
 		check(!run(R"({"op":"globalSet","field":"baseChannel","v":13})").errors.empty(), "base channel 13 (14-17) refused");
 		run(R"({"op":"globalSet","field":"keymap","note":40,"target":0})");
 		check(docs.global->keymap[40] == 0 && docs.global->keymap[36] == ed::MdGlobal::g_unmapped, "a track mapped to another key frees its old key");
+		// 0.3.5: the MAP EDITOR's whole range (patterns A01-H16, START, STOP), as the firmware takes it
+		run(R"({"op":"globalSet","field":"keymap","note":90,"target":47})");
+		run(R"({"op":"globalSet","field":"keymap","note":91,"target":145})");
+		check(docs.global->keymap[90] == 47 && docs.global->keymap[91] == ed::MdGlobal::g_keymapStop, "a note maps to B16 and to STOP");
+		check(!run(R"({"op":"globalSet","field":"keymap","note":92,"target":146})").errors.empty(), "a target past STOP is refused");
+		auto backup = *docs.global;
+		backup.keymap[93] = 200;	// a byte the firmware keeps as sent
+		std::vector<std::string> jsonErrors;
+		const auto back = ed::globalFromJson(ed::globalToJson(backup), jsonErrors);
+		check(ed::validate(backup).empty() && back && back->keymap[93] == 200 && jsonErrors.empty(), "a global holding any target byte is valid and reads back");
 		const auto j = ed::globalToJson(*docs.global);
 		check(j.find("control")->find("tempoIn")->asString() == "external" && !j.find("control")->find("ctrlIn")->asBool()
 			&& j.find("control")->find("programChangeChannel")->asNumber() == 8, "the contract's derived control view");

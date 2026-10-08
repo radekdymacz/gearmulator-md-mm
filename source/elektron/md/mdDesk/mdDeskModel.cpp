@@ -297,7 +297,7 @@ namespace mdDesk
 			{"tempo", Owner::Core, Gate::Input, G, {{"bpm", ArgType::Number, 30, 300}}, ""},
 			{"extended", Owner::Core, Gate::Input, G, {{"on", ArgType::Bool}}, "EXTENDED or CLASSIC"},
 			{"globalSet", Owner::Core, Gate::Input, G, {{"field", ArgType::Text, 0, 0, false, list(ed::g_mdGlobalFields)}, opt(on), any, {"note", ArgType::Integer, 0, 127, true},
-				{"target", ArgType::IntegerOrNull, 0, 31, true}}, "a GLOBAL setting by name"},
+				{"target", ArgType::IntegerOrNull, 0, ed::MdGlobal::g_keymapStop, true}}, "a GLOBAL setting by name"},
 			// ---- the machine ----
 			{"load", Owner::Machine, Gate::Midi, -1, {{"kind", ArgType::Text, 0, 0, false, deskCore::kindNames<MdModel>(true)}, {"slot", ArgType::Integer, 0, static_cast<double>(deskCore::maxLoadableSlots<MdModel>() - 1)}}, "read a document now"},
 			{"select", Owner::Machine, Gate::Input, -1, {p, {"now", ArgType::Bool, 0, 0, true}},

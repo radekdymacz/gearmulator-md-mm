@@ -744,6 +744,27 @@ const MdJourneys = (() => {
 			esc
 		]
 	};
+	/* 0.3.5: the MAP EDITOR's whole range (16-143 patterns A01-H16, 144 START, 145 STOP: measured on the firmware), the
+	   values a backup brings (B-019) shown and kept, not snapped back to 0-31. */
+	const kmSel = '.kselbtn[data-for="gmapsel"]';
+	const globalMapNote = {
+		name: "md-global-map-note",
+		steps: [
+			{ say: "open GLOBAL", act: u => u.pick("engsel", "global"), screen: () => ok(!!$1(kmSel), "no Map a note key"), machine: () => ok(!!Docs.global?.keymap, "no global") },
+			{ say: "click › beside Map a note", act: (u, c) => { c.n = GP.note + 1; c.v0 = Docs.global.keymap[c.n]; u.click('#globpop [data-ga="mapnote"][data-d="1"]'); }, screen: c => ok(GP.note === c.n && $1(kmSel)?.textContent === KTGT(c.v0), "note " + GP.note + ", " + $1(kmSel)?.textContent) },
+			{ say: "choose a pattern of bank C or later for it", act: async (u, c) => { c.p = [...Array(112).keys()].map(k => 143 - k).find(v => !Docs.global.keymap.includes(v)); await u.pick("gmapsel", String(c.p)); },
+				machine: c => ok(Docs.global.keymap[c.n] === c.p, "keymap " + Docs.global.keymap[c.n]), screen: c => ok($1(kmSel)?.textContent === KTGT(c.p) && c.p > 47, $1(kmSel)?.textContent), within: 6000 },
+			{ say: "choose STOP", act: async (u, c) => { c.stopAt = Docs.global.keymap.indexOf(145); await u.pick("gmapsel", "145"); },
+				machine: c => ok(Docs.global.keymap[c.n] === 145, "keymap " + Docs.global.keymap[c.n]), screen: c => ok($1(kmSel)?.textContent === "STOP" && $all("#globpop .note").some(n => n.textContent.includes("STOP")), $1(kmSel)?.textContent), within: 6000 }
+		],
+		async tidy(u, c) {
+			if ($1("#globpop").hidden) { await u.pick("engsel", "global"); await sleep(300); }
+			GP.note = c.n; drawGlobal(); await sleep(100);
+			if (c.n != null && Docs.global.keymap[c.n] !== c.v0) { await u.pick("gmapsel", c.v0 == null ? "" : String(c.v0)); await sleep(1500); }
+			if (c.stopAt >= 0 && Docs.global.keymap[c.stopAt] !== 145) { GP.note = c.stopAt; drawGlobal(); await sleep(100); await u.pick("gmapsel", "145"); await sleep(1500); }
+			GP.note = 64; u.key("Escape"); await sleep(200);
+		}
+	};
 	const audioPanel = {
 		name: "md-audio-panel",
 		steps: [
@@ -920,7 +941,7 @@ const MdJourneys = (() => {
 		mixSolo, shiftMutes, allOff, fader, outKey, masterFx,
 		songArrange, songChain, samplerSlots, samplerSetup, audition,
 		libDialog, kitCopy, kitRename, kitClear, patGo, patClear, dialogEsc,
-		globalJ, globalRouting, audioPanel, romCard, notePlay,
+		globalJ, globalRouting, globalMapNote, audioPanel, romCard, notePlay,
 		lockRamp, pasteMany, mutScope, songInspector, songDrag, ramView, panBox, hwNoMachine, syxImportJ, shots];
 
 	/* ---------- demos: journeys played for a camera (doc/modern-ux/DEMO-VIDEOS.md) ---------- */

@@ -725,11 +725,11 @@
               {
                 "type": "integer",
                 "minimum": 0,
-                "maximum": 31
+                "maximum": 254
               }
             ]
           },
-          "description": "MIDI note -> 0-15 track trig; 16-31 appear in the Elektron default map (notes 64-89), meaning not verified."
+          "description": "MIDI note -> the MAP EDITOR's target (measured on the firmware, mdDeskFirmwareTest keymap): 0-15 a track's trig, 16-143 a pattern (A01-H16), 144 START, 145 STOP; null is \"--\" (byte 255). The firmware keeps every other byte as sent (146-254: no effect measured)."
         },
         "settings": {
           "type": "object",
@@ -5057,7 +5057,7 @@
                 {
                   "type": "integer",
                   "minimum": 0,
-                  "maximum": 31
+                  "maximum": 145
                 }
               ]
             }

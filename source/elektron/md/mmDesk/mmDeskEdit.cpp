@@ -781,7 +781,7 @@ namespace mmDesk
 			if(f == "play") { if(!within(0, 4)) return {}; a.playOjmp[tr.t] = static_cast<uint8_t>((a.playOjmp[tr.t] & 0xf8) | u8); }
 			else if(f == "ojmp") { if(!within(0, 15)) return {}; a.playOjmp[tr.t] = static_cast<uint8_t>((a.playOjmp[tr.t] & 0x0f) | (u8 << 4)); }
 			else if(f == "mode") { if(!within(0, 3)) return {}; a.mode[tr.t] = u8; }
-			else if(f == "range") { if(!within(0, 7)) return {}; a.range[tr.t] = u8; }
+			else if(f == "range") { if(!within(0, 8)) return {}; a.range[tr.t] = u8; }
 			else if(f == "speed") { if(!within(0, 127)) return {}; a.speed[tr.t] = u8; }
 			else if(f == "length") { if(!within(1, 16)) return {}; a.length[tr.t] = u8; }
 			else if(f == "trigs")

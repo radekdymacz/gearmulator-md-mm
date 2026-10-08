@@ -1101,6 +1101,18 @@ namespace
 					std::printf("  [%s%d%s] %s\n", op == "gsnap" ? "G" : "S", s2, label.c_str(), diffText(last, now, 64).c_str());
 				last = now;
 			}
+			else if(op == "panel")
+			{
+				// panel <row hex> <mask hex> [hold]: a raw panel key press, for keys md::PanelControl has no name for
+				std::string r, k;
+				double hold = 30;
+				ls >> r >> k >> hold;
+				const auto row = static_cast<uint8_t>(std::stoul(r, nullptr, 16)), mask = static_cast<uint8_t>(std::stoul(k, nullptr, 16));
+				m->hardware().trySendPanelEvent(row, mask);
+				m->run(hold);
+				m->hardware().trySendPanelEvent(row, 0);
+				m->run(60);
+			}
 			else if(op == "save")
 			{
 				std::string f;

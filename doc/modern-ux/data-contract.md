@@ -154,7 +154,7 @@ and master effects belong to the linked kit's document. The mockup's single
 | `tracks[i].out` MAIN/A..F | `routing[i]` | A-F skip the master effects |
 | `S.bpm` | `tempo` | The global tempo. Song rows can override it |
 | `S.mode` | `extendedMode` | Also SET STATUS 0x20 |
-| — | `baseChannel`, `keymap`, `settings` | Kept untouched. `keymap` values 16-31 appear in the Elektron default map for notes 64-89 (the manual maps those notes to patterns). Not verified |
+| — | `baseChannel`, `keymap`, `settings` | Kept untouched. `keymap`: the MAP EDITOR's targets (below) |
 
 **GLOBAL settings (P5).** Measured on the firmware (`mdP4ProbeFirmwareTest globals`,
 `elektronData/mdGlobal.h` `mdGlobalBits`): a global dump is stored at once but
@@ -171,14 +171,14 @@ after every settings push to the active slot.
 | PRG CHANGE channel | `programChange` bits 2-6 | 0 = BASE (in on the 4 base channels), n = channel n |
 | Base channel | `baseChannel` 0-12 | CCs on channel 1 vs 3 |
 | MAP EDITOR TRIG | `trigMode` 0 GATE, 1 START, 2 QUE | GATE stops on note off |
-| Key map | `keymap` 0-15 track, 16-31 pattern | note 65 -> 17 selects A02 |
+| Key map (MAP EDITOR) | `keymap` 0-15 track, 16-143 pattern A01-H16, 144 START, 145 STOP, `null` = `--` (255); any other byte is kept as sent | `mdDeskFirmwareTest <ROM> keymap` (0.3.5): every byte stored as sent; 17 selects A02, 47 B16, 143 H16; 144 starts, 145 stops; 146-254 no effect. A 2008 backup maps notes to 16-47 |
 | LOCAL CTRL | `localControl` | stored; no effect seen in the emulator (not verified) |
 | TRIG IN A/B | `inputSettings` | shown only (needs pads on the inputs; not verified) |
 
 `md-desk/global` carries a derived, read-only `control` view of these; the page
 changes them with `{"op":"globalSet","field":...,"on"|"v"}` (fields tempoIn, ctrlIn,
 tempoOut, ctrlOut, programChangeIn, programChangeOut, programChangeChannel 0-16,
-baseChannel 0-12, trigMode 0-2, localControl, keymap {note, target 0-31 or null})
+baseChannel 0-12, trigMode 0-2, localControl, keymap {note, target 0-145 or null})
 and selects the active slot with `{"op":"globalSlot","slot"}`.
 
 ### 4.5 `md-desk/machine` (read-only, from `mdDataLink::Session`)
@@ -539,7 +539,7 @@ sample disabled on a RAM slot with that reason; `loadSample` refuses slots 48-51
 | pattern | `slot` 0-127. `totalLength` 16/32/48/64. `length` 1..`totalLength`. `tempoMultiplier` one of four. `kit` 0-63. `accentAmount` 0-127. `swingAmount` 0-9830 (80 %). `editAll` 0/1. Steps below 64 (32 for classic dumps). **At most 64 locked (track, param)**, param 0-23, values 0-127 |
 | kit | `slot` 0-63. `model` an OS 1.63 machine. Parameters, levels and master effects 0-127. LFO track 0-15, param 0-23, shapes 0-5, update 0-2. Groups 0-15 or `null`. Name 7-bit |
 | song | `slot` 0-31. 1-256 rows, the last one `end`, no other `end`. Pattern rows: pattern 0-127, repeats 0-63, 0 <= start < end <= 64, tempo 30-300 BPM or `null`. Loop: an earlier target, repeats 0-63. Jump: a later target |
-| global | `slot` 0-7. `routing` A-F/MAIN. `tempo` 30-300. `keymap` 0-31 or `null` |
+| global | `slot` 0-7. `routing` A-F/MAIN. `tempo` 30-300. `keymap` 0-254 or `null` |
 
 The firmware stores values beyond these limits without complaint. It does not
 play them meaningfully, so the UI must not send them.

@@ -42,7 +42,7 @@ namespace elektronData
 				const auto base = std::string(_name) + "[" + std::to_string(t) + "]";
 				_p.range(_a.playOjmp[t] & 7, 0, 4, base + ".play");
 				_p.range(_a.mode[t], 0, 3, base + ".mode");
-				_p.range(_a.range[t], 0, 7, base + ".range");
+				_p.range(_a.range[t], 0, 8, base + ".range");	// the RNGE knob stops at 8 (measured)
 				_p.range(_a.speed[t], 0, 127, base + ".speed");
 				if(_synth)
 					_p.range(_a.trigs[t], 0, 7, base + ".trigs");
@@ -107,14 +107,13 @@ namespace elektronData
 		// Trig kinds (MM-P2-RESULT §3): a step holds a trig (trig), fires envelopes
 		// (amp, filter, lfo) or both. Trigless = trig without envelopes; pitchless =
 		// trig without a note; an envelope-only step (TRIG SELECT) has no trig bit.
-		// Notes and chords need the trig; a lock needs a trig or an envelope trig.
+		// Chords need the trig; a lock needs a trig or an envelope trig. A note without the trig is kept (0.3.5): a
+		// machine's own backup holds them (31 patterns of a 2008 Monomachine backup) and OS 1.32B takes and keeps them.
 		for(size_t t = 0; t < MmPattern::g_tracks; ++t)
 		{
 			for(size_t s = 0; s < MmPattern::g_steps; ++s)
 			{
 				const bool trig = mmStepSet(_pat.pitch[t], s);
-				p.check(trig || _pat.notes[t][s] == MmPattern::g_noNote,
-					"tracks[" + std::to_string(t) + "] step " + std::to_string(s) + " has a note but no trig");
 				p.check(trig || !mmStepSet(_pat.chord[t], s),
 					"tracks[" + std::to_string(t) + "] step " + std::to_string(s) + " has chord notes but no trig");
 				p.check(mmStepSet(_pat.midiTrig[t], s) || !mmStepSet(_pat.midiNote[t], s),
@@ -199,7 +198,7 @@ namespace elektronData
 		p.range(_g.position, 0, 7, "slot");
 		for(const auto c : {_g.autoChannel, _g.baseChannel, _g.multiTrigChannel, _g.multiMapChannel})
 			p.check(c <= 15 || c == 0x7f, "a MIDI channel must be 0-15 (or off)");
-		p.range(_g.channelSpan, 1, 16, "channels.span");
+		p.range(_g.channelSpan, 0, 16, "channels.span");	// 0 in an OS 1.x backup, kept as is by OS 1.32B
 		p.range(_g.routingMode, 0, 2, "routingMode");
 		for(size_t t = 0; t < 6; ++t)
 			p.check(_g.midiSeqChannels[t] <= 15 || _g.midiSeqChannels[t] == 0x7f, "midiSeq.channels[" + std::to_string(t) + "]");

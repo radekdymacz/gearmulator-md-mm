@@ -3,8 +3,11 @@
    opened from the engine menu (GLOBAL…). glob() gives the view, globSend(field, value) changes one
    setting; both are the host's (example state in the mockup, the desk's documents in the plug-in). What was
    measured on the firmware is plain; what could not be is marked "not verified". */
-var GP={open:false};
+var GP={open:false,note:64};
 const NOTE=n=>["C","C#","D","D#","E","F","F#","G","G#","A","A#","B"][n%12]+(Math.floor(n/12)-1);
+/* The MAP EDITOR's targets (measured on the firmware, 0.3.5): 0-15 a track, 16-143 a pattern A01-H16, 144 START,
+   145 STOP. The machine keeps any other byte as sent (a backup can hold one); it is shown as its number. */
+const KTGT=v=>v==null?"--":v<16?"TRACK "+(v+1):v<144?"ABCDEFGH"[(v-16)>>4]+String((v-16)%16+1).padStart(2,"0"):v===144?"START":v===145?"STOP":"#"+v;
 const GTIP={
  base:"The first of four MIDI channels the machine listens and sends on (channel n to n+3)",
  tempoIn:"INTERNAL: its own BPM. EXTERNAL: follows MIDI clock (MIDI Start waits for the clock)",
@@ -14,12 +17,14 @@ const GTIP={
  trig:"How a note mapped to a pattern starts it. GATE: plays while the key is held. START: at once. QUE: at the end of the playing pattern",
  local:"OFF: the TRIG keys and the sequencer do not play the internal sounds. Stored in the global; its effect could not be verified in the emulator",
  map:"The note that plays each track. A key maps one function: choosing a used key frees it elsewhere",
+ mapNote:"A note mapped to a pattern (A01-H16, GROUP PAT A-H on the machine) or to START / STOP (GROUP CTRL). Pick the note, then what it plays",
  inputs:"The external inputs as trig pads. Shown as stored; they need pads on the inputs, so they are not verified here" };
 function drawGlobal(){const pop=$("#globpop");if(!GP.open){pop.hidden=true;return}const G=glob();if(!G){pop.innerHTML=`<div class="libhead"><span class="cap">Global</span><span class="note">Reading the global settings from the machine…</span><button class="libx" data-ga="close">Esc</button></div>`;pop.hidden=false;placeGlobal();return}
  const tog=(f,on,tip,a="ON",b="OFF")=>`<span class="seg" title="${tip}"><button data-ga="${f}" data-v="1" aria-pressed="${on}">${a}</button><button data-ga="${f}" data-v="0" aria-pressed="${!on}">${b}</button></span>`;
  const step=(f,label,tip)=>`<span class="stepper" title="${tip}"><button data-ga="${f}" data-d="-1" aria-label="Less">−</button><b class="mono">${label}</b><button data-ga="${f}" data-d="1" aria-label="More">+</button></span>`;
  const trackKey=t=>{const n=G.keymap.indexOf(t);return`<div class="gmk key${n<0?" none":""}" title="${GTIP.map}"><small>TRACK ${t+1}</small><span class="stepper"><button data-ga="map" data-t="${t}" data-d="-1" aria-label="Lower note">‹</button><b>${n<0?"--":NOTE(n)}</b><button data-ga="map" data-t="${t}" data-d="1" aria-label="Higher note">›</button></span></div>`};
- const pats=G.keymap.map((v,n)=>v!=null&&v>=16&&v<32?`${NOTE(n)}→P${v-15}`:null).filter(Boolean);
+ const pats=G.keymap.map((v,n)=>v!=null&&v>=16?`${NOTE(n)}→${KTGT(v)}`:null).filter(Boolean);
+ const cur=G.keymap[GP.note],tgts=[null,...Array.from({length:146},(_,v)=>v)];if(cur!=null&&!tgts.includes(cur))tgts.push(cur);
  const outs=["A","B","C","D","E","F","MAIN"];
  pop.innerHTML=`<div class="libhead"><span class="cap">Global</span><span class="lcdchip">GLOBAL ${G.slot+1}</span><span class="gslots" title="8 global setups; the lit one is active (SysEx 0x56)">${Array.from({length:8},(_,k)=>`<button data-ga="slot" data-v="${k}" aria-pressed="${k===G.slot}">${k+1}</button>`).join("")}</span><span class="note">FUNCTION + PATTERN/SONG on the machine. A change is stored and made active at once.</span><button class="libx" data-ga="close" title="Close (Esc)">Esc</button></div>
  <div class="globgrid">
@@ -38,12 +43,14 @@ function drawGlobal(){const pop=$("#globpop");if(!GP.open){pop.hidden=true;retur
    <div class="ginputs" title="${GTIP.inputs}"><span></span><span>Gate</span><span>Sens</span><span>Vmin</span><span>Vmax</span><span>Dest</span>
     ${["A","B"].map((x,i)=>`<span>${x}</span>`+[0,2,4,6,8].map(k=>`<b>${G.inputs[k+i]}</b>`).join("")).join("")}</div></section>
   <section class="card wide"><header><h3>Map editor</h3><span>MIDI notes → tracks and patterns</span></header>
-   <div class="grow2"><span class="ilab">Pattern trig</span><span class="seg" title="${GTIP.trig}">${["gate","start","que"].map((m,i)=>`<button data-ga="trig" data-v="${i}" aria-pressed="${G.trigMode===m}">${m.toUpperCase()}</button>`).join("")}</span><span class="note">${pats.length?pats.length+" notes play patterns: "+pats.slice(0,6).join(" ")+(pats.length>6?" …":""):"No notes play patterns."}</span></div>
+   <div class="grow2"><span class="ilab">Pattern trig</span><span class="seg" title="${GTIP.trig}">${["gate","start","que"].map((m,i)=>`<button data-ga="trig" data-v="${i}" aria-pressed="${G.trigMode===m}">${m.toUpperCase()}</button>`).join("")}</span><span class="note" title="${pats.join(" ")}">${pats.length?pats.length+" notes play patterns or the transport: "+pats.slice(0,6).join(" ")+(pats.length>6?" …":""):"No notes play patterns."}</span></div>
+   <div class="grow2" title="${GTIP.mapNote}"><span class="ilab">Map a note</span><span class="stepper"><button data-ga="mapnote" data-d="-1" aria-label="Lower note">‹</button><b class="mono">${NOTE(GP.note)}</b><button data-ga="mapnote" data-d="1" aria-label="Higher note">›</button></span><select id="gmapsel" data-gsel="map" aria-label="What ${NOTE(GP.note)} plays">${tgts.map(v=>`<option value="${v==null?"":v}"${v===cur?" selected":""}>${KTGT(v)}</option>`).join("")}</select></div>
    <div class="gmap">${Array.from({length:16},(_,t)=>trackKey(t)).join("")}</div></section>
   <section class="card"><header><h3>Routing</h3><span>track outputs · A–F skip the master effects</span></header>
    <div class="grout">${G.routing.map((o,t)=>`<button class="${o!=="MAIN"?"on":""}" data-ga="route" data-t="${t}" title="Track ${t+1}: ${o==="MAIN"?"main output, through the master effects":"output "+o+", skips the master effects"}. Click for the next output."><small>${t+1}</small><b>${o}</b></button>`).join("")}</div></section>
  </div>
  <div class="libfoot"><span>G or the engine menu opens it · Esc closes · every change is stored on the machine and made active</span><span class="fw" title="The machine keeps 8 global setups">GLOBAL ${G.slot+1} of 8</span></div>`;
+ if(typeof enhanceSelects==="function")enhanceSelects(pop);
  pop.hidden=false;placeGlobal()}
 function placeGlobal(){const pop=$("#globpop"),r=$(".lcdpanel").getBoundingClientRect(),top=Math.max(16,r.bottom+8);pop.style.top=(top+scrollY)+"px";pop.style.maxHeight=Math.max(240,innerHeight-top-12)+"px";pop.style.left=Math.max(16,(document.documentElement.clientWidth-pop.offsetWidth)/2+scrollX)+"px"}
 function openGlobal(){if(typeof closeLib==="function")closeLib(false);GP.open=true;drawGlobal()}
@@ -55,10 +62,12 @@ function globalClick(a){const G=glob();if(!G)return;const f=a.dataset.ga,v=a.dat
  if(f==="pcCh"){globSend("programChangeChannel",Math.max(0,Math.min(16,(G.pcChannel||0)+d)));return}
  if(f==="trig"){globSend("trigMode",v);return}
  if(f==="route"){const outs=["MAIN","A","B","C","D","E","F"],t=+a.dataset.t;globSend("route",{t,out:outs[(outs.indexOf(G.routing[t])+1)%outs.length]});return}
+ if(f==="mapnote"){GP.note=Math.max(0,Math.min(127,GP.note+d));drawGlobal();return}
  if(f==="map"){const t=+a.dataset.t;let n=G.keymap.indexOf(t);n=n<0?(d>0?0:127):n+d;n=Math.max(0,Math.min(127,n));globSend("keymap",{note:n,target:t});return}
  const map={pcIn:"programChangeIn",pcOut:"programChangeOut",local:"localControl",tempoIn:"tempoIn",ctrlIn:"ctrlIn",tempoOut:"tempoOut",ctrlOut:"ctrlOut"};
  if(map[f])globSend(map[f],v===1)}
 document.addEventListener("click",e=>{if(!GP.open)return;const pop=$("#globpop");if(pop.contains(e.target)){const a=e.target.closest("[data-ga]");if(a)globalClick(a);return}if(!e.target.closest?.("#dlg,.kpop,#kpop,.lcdeng"))closeGlobal()},true);
+document.addEventListener("change",e=>{const s=e.target.closest?.("#globpop [data-gsel=map]");if(s&&glob())globSend("keymap",{note:GP.note,target:s.value===""?null:+s.value})});
 addEventListener("resize",()=>{if(GP.open)placeGlobal()});
 
 /* The plug-in's side: the view from md-desk/global (its derived "control" view) and the desk's commands. */

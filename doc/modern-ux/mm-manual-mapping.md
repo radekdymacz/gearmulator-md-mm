@@ -223,7 +223,7 @@ Uncertain, to verify against the ROM or the hardware:
    - ASSIGN has 5 tabs: JOY RL (MIRR), JOY U, JOY D, VEL, KEY (HPF / LPF)
    - The mockup keeps enum indices; the editor converts firmware 0-127 as index = floor(v × n / 128).
 5. The SID page is WAVE in slot 4 after PW / PWAD / PWRS; the manual's SYNC / SFRQ text belongs to DPRO-WAVE slots 5-6.
-6. **Still unverified:** the arp SPD, RNGE and OJMP ranges; the LEN unit (1 step = 8 in the roll); PCH2-4 encoding (offset from 64; OFF and the just ratios are not modelled).
+6. **Measured (0.3.5, the knobs of FUNCTION + BANK A's arpeggiator window, `mmEditorProbeFirmwareTest lab`):** RNGE 0-8, MODE 0-3, PLAY 0-4, LEVEL (length) 1-16, SPD up to 95; OJMP's knob sets bits 3-6 of the play byte (0x78 at its end), so the contract's `flag` (bit 3) is OJMP's low bit and `ojmp` its upper three: kept as two members, not yet re-meant. **Still unverified:** the LEN unit (1 step = 8 in the roll); PCH2-4 encoding (offset from 64; OFF and the just ratios are not modelled).
 7. **Which commands the MM takes outside SYSEX RECV.** The emulator proves the gate for dumps. It is unknown whether SX 0x5B (assign machine), 0x5C (routing), 0x57 (load pattern) and 0x61 (tempo) are also gated. The mockup treats them as live, like CCs. This needs a probe in `mmSysexWorkflowTest`.
 8. **Kit dumps need two receive-mode passes** in `mmSysexWorkflowTest` (`expectedBoundaries` = 2 for 0x52). The reason is not known. The HW dialog assumes one pass.
 9. The MD's P1 findings may or may not hold on the MM:

@@ -125,8 +125,8 @@
         "range": {
           "type": "integer",
           "minimum": 0,
-          "maximum": 7,
-          "description": "octaves - 1"
+          "maximum": 8,
+          "description": "octaves - 1 (the RNGE knob's 0-8, measured on the firmware)"
         },
         "speed": {
           "$ref": "#/$defs/value",

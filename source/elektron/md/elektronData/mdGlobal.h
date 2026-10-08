@@ -27,6 +27,11 @@ namespace elektronData
 		static constexpr size_t g_slots = 8;
 		static constexpr uint8_t g_mainOutput = 6;
 		static constexpr uint8_t g_unmapped = 0xff;
+		// The MAP EDITOR's targets (keymap below): tracks, then the 128 patterns, then START and STOP.
+		static constexpr uint8_t g_keymapFirstPattern = 16;
+		static constexpr uint8_t g_keymapStart = 144;
+		static constexpr uint8_t g_keymapStop = 145;
+		static constexpr uint8_t g_maxKeymapTarget = 254;	// any byte but "--": the firmware keeps it as sent
 
 		uint8_t version = 6;
 		uint8_t revision = 1;
@@ -57,7 +62,9 @@ namespace elektronData
 	//    channels, out on the first), n = channel n (1-16).
 	//  - baseChannel: 0-12 = channels 1-4 .. 13-16 (verified with CCs on 1 and 3).
 	//  - trigMode (MAP EDITOR TRIG): 0 GATE (the pattern stops on note off, verified), 1 START, 2 QUE.
-	//  - keymap: 0-15 = a track, 16-31 = a pattern of the current bank (note 65 -> 17 selects A02).
+	//  - keymap (MAP EDITOR, mdDeskFirmwareTest keymap, 0.3.5): 0-15 = a track, 16-143 = a pattern (16 + slot: 17
+	//    selects A02, 47 B16, 143 H16; GROUP PAT A-H), 144 = START, 145 = STOP (GROUP CTRL), 255 = "--". The firmware
+	//    stores every byte as sent; 146-254 had no effect (a 2008 backup holds targets up to 47).
 	//  - localControl: stored; no effect on TRIG keys was seen in the emulator (not verified).
 	//  - inputSettings: TRIG IN A/B (GATE, SENS, VMIN, VMAX, DEST in the manual); not verified.
 	namespace mdGlobalBits

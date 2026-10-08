@@ -143,6 +143,17 @@ namespace
 		full.lockMasks[5][7] |= 0x80;
 		check(!ed::validate(full).empty(), "a 63rd locked parameter is refused");
 
+		// 0.3.5: what OS 1.32B takes from a 2008 backup: RNGE 8 (the knob's end), a note on a step without its trig
+		auto old = emptyPattern();
+		old.arp.range[3] = 8;
+		old.notes[1][4] = 60;
+		check(ed::validate(old).empty(), "arpeggiator range 8 and a note without its trig validate");
+		errors.clear();
+		const auto oldBack = ed::mmPatternFromJson(ed::mmPatternToJson(old), errors);
+		check(oldBack && *oldBack == old, "and go through JSON");
+		old.arp.range[3] = 9;
+		check(!ed::validate(old).empty(), "arpeggiator range 9 is refused");
+
 		ed::MmKit k;
 		for(auto& m : k.machines) m = 1;
 		k.trigPos.fill(ed::MmKit::g_noTrigPos);
@@ -173,6 +184,8 @@ namespace
 		errors.clear();
 		const auto gBack = ed::mmGlobalFromJson(ed::mmGlobalToJson(g), errors);
 		check(gBack && *gBack == g, "global -> JSON -> global");
+		g.channelSpan = 0;	// a 2008 backup's, kept by OS 1.32B
+		check(ed::validate(g).empty(), "CHANNEL SPAN 0 validates");
 	}
 
 	// Release review 2026-10-04 S1 and S9: hidden runs and lock rows stay inside their buffers.

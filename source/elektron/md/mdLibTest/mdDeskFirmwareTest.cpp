@@ -2194,6 +2194,99 @@ namespace
 		}
 	}
 
+	// 0.3.5 (B-019, the contract widened to what the firmware takes): the MAP EDITOR's targets. A global with one
+	// note mapped to each value goes in as a dump (made active with 0x56), is read back, and the note is played: what
+	// the firmware keeps and what the note does (a track trig, a pattern, the transport) say what each value means.
+	void keymapRange(const Bytes& _rom, const std::string& _romName)
+	{
+		std::puts("== the MAP EDITOR's targets");
+		Machine m(_rom, _romName);
+		auto g = ed::decodeMdGlobal(m.request(ed::mdGlobalRequest(0), ed::g_mdGlobalDump));
+		require(g.has_value(), "global 0 read");
+		const uint8_t note = 120, channel = g->baseChannel;
+		g->position = 0;
+		g->trigMode = 1;	// START: a mapped pattern starts at once
+		g->syncFlags = 0;	// tempo in internal, CTRL IN on
+		const auto pattern = [&] { const auto s = ed::parseMdStatusResponse(m.request(ed::mdStatusRequest(ed::MdStatus::Pattern), 0x72)); return s ? int(s->value) : -1; };
+		const auto moving = [&] { const int a = m.playhead(); bool moved = false; for(int i = 0; i < 10; ++i) { m.run(50); moved |= m.playhead() != a; } return moved; };
+		std::vector<int> values;
+		for(int v = 0; v < 255; ++v)
+			if(v % 16 == 0 || v % 16 == 15 || (v >= 140 && v < 168) || v > 250)
+				values.push_back(v);
+		int taken = 0, lastPattern = -1, firstCtrl = -1, lastMeaningful = -1;
+		for(const int v : values)
+		{
+			m.send({0xfc});
+			m.send(ed::mdLoadPattern(0));
+			m.run(300);
+			auto gv = *g;
+			gv.keymap[note] = uint8_t(v);
+			m.send(ed::encodeMdGlobal(gv));
+			m.send(ed::mdSetActiveGlobal(0));
+			m.run(300);
+			const auto back = ed::decodeMdGlobal(m.request(ed::mdGlobalRequest(0), ed::g_mdGlobalDump));
+			const int stored = back ? int(back->keymap[note]) : -1;
+			const int before = pattern();
+			m.send({uint8_t(0x90 | channel), note, 100});
+			m.run(150);
+			m.send({uint8_t(0x80 | channel), note, 0});
+			const bool plays = moving();
+			const int after = pattern();
+			// and while playing (the transport targets): does the note stop it?
+			bool stops = false;
+			if(v >= 144)
+			{
+				m.send({0xfa});
+				m.run(300);
+				m.send({uint8_t(0x90 | channel), note, 100});
+				m.run(150);
+				m.send({uint8_t(0x80 | channel), note, 0});
+				stops = !moving();
+			}
+			// stopped in the middle of the pattern (a CONTINUE would play on from there)
+			if(v >= 144 && v < 148)
+			{
+				m.send({0xfa});
+				m.run(700);
+				m.send({0xfc});
+				m.run(200);
+				const int at = m.playhead();
+				m.send({uint8_t(0x90 | channel), note, 100});
+				m.run(150);
+				m.send({uint8_t(0x80 | channel), note, 0});
+				const bool resumes = moving();
+				std::printf("  target %3d: stopped at step %d: %s\n", v, at, resumes ? "plays" : "stays stopped");
+				m.send({0xfc});
+			}
+			std::printf("  target %3d: stored %3d, stopped: pattern %d -> %d, %s%s\n", v, stored, before, after, plays ? "plays" : "stays stopped",
+				v >= 144 ? (stops ? "; playing: stops" : "; playing: plays on") : "");
+			taken += stored == v;
+			if(after != before && after >= 0)
+			{
+				lastPattern = v;
+				check(after == v - 16, "target " + std::to_string(v) + " selects pattern " + std::to_string(v - 16));
+			}
+			if(v == ed::MdGlobal::g_keymapStart)
+				check(plays && !stops, "target 144 is START");
+			if(v == ed::MdGlobal::g_keymapStop)
+				check(!plays && stops, "target 145 is STOP");
+			if(v < 16)
+				check(after == before && !plays, "target " + std::to_string(v) + " is a track: no pattern, no transport");
+			if(v >= 144 && (plays || stops))
+			{
+				if(firstCtrl < 0)
+					firstCtrl = v;
+				lastMeaningful = v;
+			}
+		}
+		m.send({0xfc});
+		std::printf("  stored as sent: %d of %zu; last target that selects a pattern %d, transport targets %d-%d\n",
+			taken, values.size(), lastPattern, firstCtrl, lastMeaningful);
+		check(taken == int(values.size()), "the firmware keeps every target byte as sent");
+		check(lastPattern == 143, "targets 16-143 are the patterns A01-H16");
+		check(firstCtrl == ed::MdGlobal::g_keymapStart && lastMeaningful == ed::MdGlobal::g_keymapStop, "the transport targets are 144-145");
+	}
+
 	void hostClock(const Bytes& _rom, const std::string& _romName)
 	{
 		std::puts("host clock");
@@ -3270,7 +3363,7 @@ int main(const int _argc, char** _argv)
 	std::setvbuf(stdout, nullptr, _IOLBF, 0);
 	if(_argc < 2)
 	{
-		std::puts("usage: mdDeskFirmwareTest <MD-1.63-ROM> [probe|hw|p4|tweak|sampler|keepedits|recordermix|samples|gen|hostclock|playload|syxexport|syximport]");
+		std::puts("usage: mdDeskFirmwareTest <MD-1.63-ROM> [probe|hw|p4|tweak|sampler|keepedits|recordermix|samples|gen|hostclock|playload|syxexport|syximport|keymap]");
 		return 77;
 	}
 	try
@@ -3396,6 +3489,12 @@ int main(const int _argc, char** _argv)
 			plockTiming(rig, mode == "plocktiming-strict");
 			check(g_contract.loaded() && g_contract.bad() == 0, g_contract.summary());
 			std::printf("mdDeskFirmwareTest %s: %s (%d failure(s))\n", mode.c_str(), g_failures ? "FAIL" : "PASS", g_failures);
+			return g_failures ? 1 : 0;
+		}
+		if(mode == "keymap")
+		{
+			keymapRange(rom, _argv[1]);
+			std::printf("mdDeskFirmwareTest keymap: %s (%d failure(s))\n", g_failures ? "FAIL" : "PASS", g_failures);
 			return g_failures ? 1 : 0;
 		}
 		if(mode == "hostclock")

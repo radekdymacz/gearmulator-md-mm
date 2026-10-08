@@ -92,6 +92,7 @@ no journey yet); **not testable** (why). "—": the editor has no such feature.
 | GRID RECORDING (MM RECORD stopped) | — | mm-seq-grid-record PASS (bug 4, fixed; see note 2) |
 | LEN on LCD line 2 | — | mm-seq-len PASS |
 | Arpeggiator dock | — | mm-seq-arp PASS |
+| Arpeggiator RNGE to the machine's end (9 OCT, range 8: 0.3.5), kept | — | mm-seq-arp-range |
 | Clickable transpose keyboard | — | mm-seq-transpose-keyboard PASS |
 | SYNTH / MIDI side switch | — | mm-sound-midi-side PASS (Sound) |
 
@@ -170,6 +171,7 @@ no journey yet); **not testable** (why). "—": the editor has no such feature.
 | Clear a pattern slot (with its question), undo | md-lib-pattern-clear-undo PASS | mm-lib-pattern-clear-undo PASS |
 | GLOBAL: a setting read back (TEMPO OUT) | md-global-tempo-out PASS | — (MM globals: the Perform and Mix journeys) |
 | GLOBAL › ROUTING fits its dialog, a route read back | md-global-routing PASS | — |
+| GLOBAL › Map a note: a note to a pattern of bank C-H and to STOP (the MAP EDITOR's 16-145, 0.3.5), read back | md-global-map-note | — |
 
 ## Bugs the journeys found (all four fixed on this branch)
 

@@ -46,7 +46,7 @@ Rules, as for the MD:
 | `pattern.swingAmount` | 0-30 | 50-80 % (`mmSwingPercent`) |
 | `pattern.multiplier` | named | `1X` `2X` `3/4X` `3/2X` |
 | `arp.speed` | 0-127 | ×(speed + 1); 5 = ×6 = one 16th |
-| `arp.range` | 0-7 | range + 1 octaves |
+| `arp.range` | 0-8 | range + 1 octaves (the RNGE knob stops at 0 and 8: measured, 0.3.5) |
 | `arp.steps[]` | 0x40 + offset, 255 muted | offset in semitones (the ±24 range is the mockup's; the firmware's is not measured) |
 | `kit.tracks[].assign.add` | signed | as is |
 | `song.rows[].repeats` | 0-63 | plays repeats + 1 times (the editor shows repeats + 1) |
@@ -222,7 +222,7 @@ is IGNORE; confirmed, it writes TRANSPORT ACCEPT (a global dump, so it waits for
 
 | Document | Limit |
 |---|---|
-| pattern | slot 0-127; length 2-64; multiplier 0-3; kit 0-127; swing 0-30; transposes -64..63; scale 0-3, key 0-11; arp play 0-4, mode 0-3, range 0-7, length 1-16, trigs 0-7; notes 0-127; **lock rows = locked parameters ≤ 62**, lock values 0-127; MIDI notes ≤ 400, chord notes ≤ 192, tracks 0-5 |
+| pattern | slot 0-127; length 2-64; multiplier 0-3; kit 0-127; swing 0-30; transposes -64..63; scale 0-3, key 0-11; arp play 0-4, mode 0-3, range 0-8, length 1-16, trigs 0-7; notes 0-127 (a note on a step without its trig is kept: OS 1.32B takes it, old backups hold it); **lock rows = locked parameters ≤ 62**, lock values 0-127; MIDI notes ≤ 400, chord notes ≤ 192, tracks 0-5 |
 | kit | slot 0-127; levels and page values 0-127; an OS 1.32 machine; input 0-6; trigPos a track or none; assign page/dest 0-127 |
 | song | slot 0-23; pattern 0-127, LOOP or END; pattern rows: repeats 0-63, 1 ≤ length ≤ 64, offset < length, tempo 30-300 or keep; loops: target < 200 |
 | global | slot 0-7; channels 0-15 or off; span 1-16; routing mode 0-2 |
