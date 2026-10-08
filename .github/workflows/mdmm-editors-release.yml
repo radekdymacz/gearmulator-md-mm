@@ -6,6 +6,11 @@ name: MD/MM Editors release installers
 # and attaches them to the release. It also builds Windows (upstream's elektron-windows.yml, called
 # as is) and Linux (mdmm-editors-linux.yml), and attaches one "not-tested" archive per machine and
 # platform to the same release while it is a draft (doc/release/LINUX.md).
+#
+# The in-app updates' ed25519 signatures are not made here: publishing the release runs
+# mdmm-site-release.yml, which signs the assets as published (a hand-uploaded asset wins over this job's,
+# so only the published bytes are worth signing) and writes them into mdmm.dev/latest.json
+# (doc/modern-ux/DESIGN-updates.md 2).
 
 on:
   push:

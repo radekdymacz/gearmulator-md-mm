@@ -42,6 +42,8 @@ namespace mdJucePlugin
 	PageEditor::~PageEditor()
 	{
 		stopTimer();
+		if(m_updateToken)
+			m_updater->unsubscribe(m_updateToken);
 		m_noticeRoute.reset();	// this window's sink only; another instance's open window keeps its own
 		m_diagnostics.reset();
 		if(m_session)
@@ -106,6 +108,8 @@ namespace mdJucePlugin
 				m_page->send(std::move(m));
 			});
 		});
+		// I-005: the update banner follows the process's one Updater (its first check once the page is ready, timerCallback).
+		m_updateToken = m_updater->subscribe([this] { showUpdateBanner(); });
 		getRmlComponent()->addAndMakeVisible(m_page->component());
 		layout();
 		m_page->load();
@@ -285,7 +289,90 @@ namespace mdJucePlugin
 			m_audio->tick();
 		if(m_diagnostics)
 			m_diagnostics->tick();
+		// I-005: ask the Updater every minute whether the daily check is due (it decides; DESIGN-updates.md 3.3)
+		if(m_page->pageReady())
+		{
+			const auto now = juce::Time::currentTimeMillis();
+			if(m_nextUpdatePoll == 0)
+			{
+				// the first check waits until the window has settled (nothing competes with its start-up)
+				m_nextUpdatePoll = now + 20 * 1000;
+				showUpdateBanner();	// a window opened while an update was already known
+			}
+			else if(now >= m_nextUpdatePoll)
+			{
+				m_nextUpdatePoll = now + 60 * 1000;
+				m_updater->poll(getProcessor().getConfig());
+			}
+		}
 		m_page->flush();
+	}
+
+	void PageEditor::showUpdateBanner()
+	{
+		if(!m_page)
+			return;
+		const auto banner = m_updater->banner();
+		std::string shown = banner.title + "\n" + banner.text;
+		for(const auto& button : banner.buttons)
+			shown += "\n" + button.first;
+		if(shown == m_bannerShown || (banner.title.empty() && m_bannerId == 0))
+			return;
+		m_bannerShown = shown;
+		if(m_bannerId)
+			m_notices.erase(m_bannerId);	// a newer banner replaces it on the page: its answer is no longer wanted
+		// A notice with "modal": false is the page's banner, not its dialog (FOUNDATION.md, the notice route); one
+		// with no title and no text takes the banner away.
+		const int id = ++m_noticeId;
+		json::Value m = json::Value::object();
+		m.set("type", "notice");
+		m.set("id", id);
+		m.set("title", banner.title);
+		m.set("text", banner.text);
+		auto buttons = json::Value::array();
+		std::vector<updates::Action> actions;
+		for(const auto& button : banner.buttons)
+		{
+			buttons.push(json::Value(button.first));
+			actions.push_back(button.second);
+		}
+		m.set("buttons", std::move(buttons));
+		m.set("modal", false);
+		m_bannerId = banner.title.empty() ? 0 : id;
+		if(m_bannerId)
+		{
+			m_notices[id] = [this, alive = std::weak_ptr<int>(m_alive), actions](const int _button)
+			{
+				if(alive.expired() || _button < 0 || static_cast<size_t>(_button) >= actions.size())
+					return;
+				m_bannerId = 0;		// the page closed it
+				m_bannerShown.clear();
+				m_updater->act(actions[static_cast<size_t>(_button)], getProcessor().getConfig());
+			};
+		}
+		m_page->send(std::move(m));
+	}
+
+	void PageEditor::fillUpdateMenu(juceRmlUi::Menu& _menu)
+	{
+		// The actions run after the menu closed; the window may have closed by then.
+		const auto alive = std::weak_ptr<int>(m_alive);
+		juceRmlUi::Menu menu;
+		menu.addEntry("Check for Updates Now", [this, alive]
+		{
+			if(!alive.expired())
+				m_updater->checkNow(getProcessor().getConfig());
+		});
+		menu.addEntry("Check Daily", updates::Updater::enabled(getProcessor().getConfig()), [this, alive]
+		{
+			if(alive.expired())
+				return;
+			auto& config = getProcessor().getConfig();
+			updates::Updater::setEnabled(config, !updates::Updater::enabled(config));
+		});
+		menu.addSeparator();
+		menu.addEntry("This version: " + mdmmUpdate::toString(updates::Updater::currentVersion()), false, false, {});
+		_menu.addSubMenu("Updates", std::move(menu));
 	}
 
 	void PageEditor::layout() const

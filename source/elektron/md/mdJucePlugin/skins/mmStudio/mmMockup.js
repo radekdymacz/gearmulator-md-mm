@@ -806,6 +806,35 @@ const Dlg = (() => {
 	}, true);
 	return { show, closed, drop, waiting: () => waiting.length, get now() { return now; } };
 })();
+/* The banner (I-005, doc/modern-ux/DESIGN-updates.md): a plug-in notice with "modal": false is not a question in
+   the dialog but a strip at the window's bottom right: no backdrop, no focus taken, the page plays on under it, and
+   Esc or a page key never reaches it. One at a time: a newer one replaces it (the plug-in has forgotten the older
+   one's answer). One with no title and no text takes it away. A key answers it once and closes it. */
+const Banner = (() => {
+	let el = null, answer = null;
+	function hide() { if (el) el.hidden = true; answer = null; }
+	function show(m, onAnswer) {
+		if (!m.title && !m.text) { hide(); return; }
+		if (!el) {
+			el = document.createElement("div"); el.className = "gmbanner"; el.setAttribute("role", "status"); el.setAttribute("aria-live", "polite");
+			document.body.appendChild(el);
+		}
+		answer = onAnswer;
+		const title = document.createElement("b"), text = document.createElement("p"), row = document.createElement("div");
+		title.textContent = m.title || ""; text.textContent = m.text || ""; row.className = "btnrow";
+		const names = m.buttons || [];
+		names.forEach((name, i) => {
+			const b = document.createElement("button"); b.type = "button"; b.textContent = name;
+			if (i === 0 && names.length > 1) b.className = "cream";
+			const mine = answer;
+			b.addEventListener("click", () => { if (answer !== mine) return; hide(); if (mine) mine(i); });
+			row.appendChild(b);
+		});
+		el.replaceChildren(title, text, row);
+		el.hidden = false;
+	}
+	return { show, hide, get shown() { return !!el && !el.hidden; } };
+})();
 
 /* ---- shared/deskCaps.js ---- */
 "use strict";
