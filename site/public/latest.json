@@ -1,0 +1,52 @@
+{
+  "schema": 1,
+  "version": "0.3.3",
+  "tag": "mdmm-v0.3.3",
+  "date": "2026-10-08",
+  "notes": "https://github.com/radekdymacz/gearmulator-md-mm/releases/tag/mdmm-v0.3.3",
+  "page": "https://mdmm.dev/get/",
+  "assets": {
+    "mac": {
+      "md": {
+        "name": "Machinedrum-Editor-macOS.pkg",
+        "url": "https://github.com/radekdymacz/gearmulator-md-mm/releases/download/mdmm-v0.3.3/Machinedrum-Editor-macOS.pkg",
+        "size": 40601465,
+        "sha256": "1389884f4210a59bddf701300eed2e31f8666395bffbff9f3f34387e52b2d652"
+      },
+      "mm": {
+        "name": "Monomachine-Editor-macOS.pkg",
+        "url": "https://github.com/radekdymacz/gearmulator-md-mm/releases/download/mdmm-v0.3.3/Monomachine-Editor-macOS.pkg",
+        "size": 40787858,
+        "sha256": "fa077bfc76e349d6ae4fe8f40fdc5c41e4f9f36ffb11b35a17643250739910a3"
+      }
+    },
+    "win": {
+      "md": {
+        "name": "Machinedrum-Editor-Windows-x64-not-tested.zip",
+        "url": "https://github.com/radekdymacz/gearmulator-md-mm/releases/download/mdmm-v0.3.3/Machinedrum-Editor-Windows-x64-not-tested.zip",
+        "size": 21324021,
+        "sha256": "0c80aa46612e8dc79d7fa0d09bfbfeb558b9e7e1e5b268a767d3a9eafd32a2be"
+      },
+      "mm": {
+        "name": "Monomachine-Editor-Windows-x64-not-tested.zip",
+        "url": "https://github.com/radekdymacz/gearmulator-md-mm/releases/download/mdmm-v0.3.3/Monomachine-Editor-Windows-x64-not-tested.zip",
+        "size": 21379283,
+        "sha256": "016b5cc702a4143239b8890b20820acc9a037ec86c57d1813ac85f8222722d5a"
+      }
+    },
+    "linux": {
+      "md": {
+        "name": "Machinedrum-Editor-Linux-x64-not-tested.tar.gz",
+        "url": "https://github.com/radekdymacz/gearmulator-md-mm/releases/download/mdmm-v0.3.3/Machinedrum-Editor-Linux-x64-not-tested.tar.gz",
+        "size": 23480252,
+        "sha256": "58c5a4524d72c12673347812cc5092463885a8727a5e1f2c56e78210b5c3f265"
+      },
+      "mm": {
+        "name": "Monomachine-Editor-Linux-x64-not-tested.tar.gz",
+        "url": "https://github.com/radekdymacz/gearmulator-md-mm/releases/download/mdmm-v0.3.3/Monomachine-Editor-Linux-x64-not-tested.tar.gz",
+        "size": 23544192,
+        "sha256": "aea735cdad7b33fda0976f12ccbc1ef518068816ffdc8e11e492109548c2385f"
+      }
+    }
+  }
+}
