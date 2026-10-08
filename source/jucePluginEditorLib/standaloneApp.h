@@ -54,6 +54,11 @@ namespace jucePluginEditorLib
 				juce::LookAndFeel::getDefaultLookAndFeel().findColour(juce::ResizableWindow::backgroundColourId),
 				_settings, false)
 		{
+			// B-016: JUCE's standalone window asks for minimise and close only; without the maximise button the
+			// window has no full-screen button on macOS (NSWindowCollectionBehaviorFullScreenPrimary needs both
+			// it and a resizable window) and no maximise box on Windows and Linux. Before the native title bar,
+			// which makes the window again with these flags.
+			setTitleBarButtonsRequired(juce::DocumentWindow::allButtons, false);
 			setUsingNativeTitleBar(true);
 			hideJuceOptionsButton();
 			detachFeedbackBanner();
@@ -154,11 +159,22 @@ namespace jucePluginEditorLib
 				appleExtras.addItem("About " + m_aboutName, [this] { if(m_showAbout) m_showAbout(); });
 				appleExtras.addSeparator();
 			}
-			appleExtras.addItem("Settings...", [this] { showEditorSettings(); });
+			// B-016: an editor with its own audio and MIDI panel (the web-page editors) hides upstream's settings
+			// page, so its "Settings..." would do nothing: it has Audio/MIDI Settings... only.
+			if(!hasOwnAudioMidiPanel())
+				appleExtras.addItem("Settings...", [this] { showEditorSettings(); });
 			appleExtras.addItem("Audio/MIDI Settings...", [this] { showAudioMidiSettings(); });
 			juce::MenuBarModel::setMacMainMenu(this, &appleExtras);
 		}
 #endif
+
+		bool hasOwnAudioMidiPanel() const
+		{
+			if(auto* p = dynamic_cast<Processor*>(getAudioProcessor()))
+				if(auto* state = p->getEditorState())
+					return dynamic_cast<AudioMidiSettingsEditor*>(state->getEditor()) != nullptr;
+			return false;
+		}
 
 		void showAudioMidiSettings()
 		{
@@ -185,6 +201,11 @@ namespace jucePluginEditorLib
 
 		void showEditorSettings()
 		{
+			if(hasOwnAudioMidiPanel())	// the menu was made before the editor: its own panel, never the hidden page
+			{
+				showAudioMidiSettings();
+				return;
+			}
 			if(auto* p = dynamic_cast<Processor*>(getAudioProcessor()))
 				if(auto* state = p->getEditorState())
 					if(auto* editor = state->getEditor())

@@ -5,6 +5,7 @@
 //   ui_probe trusted          exit 0 when this process may read other apps' UI (Accessibility permission)
 //   ui_probe texts <pid>      every title, value and description under the app's windows (the WKWebView page
 //                            included: WebKit serves its accessibility tree to the app), one per line
+//   ui_probe chrome <pid>     the window's title-bar buttons (full screen, zoom...) and the menu bar's items (B-016)
 //   ui_probe window <pid>     the id of the app's largest on-screen window (for screencapture -l), or nothing
 //   ui_probe keys <pid> <key>...  brings the app to the front, clicks the page's key probe, presses the keys
 //                            ("cmd+c", "shift+/") through the system's event stream, prints the probe's text
@@ -131,6 +132,34 @@ case "keys":
 	}
 	Thread.sleep(forTimeInterval: 0.5)
 	print(probeText())
+case "chrome":
+	// ui_probe chrome <pid>: the window's own buttons and the menu bar, as a person finds them (B-016): one line per
+	// title-bar button ("button full screen: enabled"), then "menu <menu>: <item> | <item> ...". Reads only.
+	guard args.count >= 3, let pid = pid_t(args[2]) else { exit(2) }
+	let app = AXUIElementCreateApplication(pid)
+	if let windows = attribute(app, kAXWindowsAttribute) as? [AXUIElement], let window = windows.first {
+		for (name, attr) in [("close", kAXCloseButtonAttribute), ("minimise", kAXMinimizeButtonAttribute),
+			("zoom", kAXZoomButtonAttribute), ("full screen", "AXFullScreenButton")] {
+			if let b = attribute(window, attr as String) {
+				let enabled = attribute(b as! AXUIElement, kAXEnabledAttribute) as? Bool ?? false
+				print("button \(name): \(enabled ? "enabled" : "disabled")")
+			} else {
+				print("button \(name): none")
+			}
+		}
+	}
+	if let bar = attribute(app, kAXMenuBarAttribute), let menus = attribute(bar as! AXUIElement, kAXChildrenAttribute) as? [AXUIElement] {
+		for menu in menus {
+			let title = attribute(menu, kAXTitleAttribute) as? String ?? "?"
+			var items: [String] = []
+			for list in attribute(menu, kAXChildrenAttribute) as? [AXUIElement] ?? [] {
+				for item in attribute(list, kAXChildrenAttribute) as? [AXUIElement] ?? [] {
+					if let t = attribute(item, kAXTitleAttribute) as? String, !t.isEmpty { items.append(t) }
+				}
+			}
+			print("menu \(title): \(items.joined(separator: " | "))")
+		}
+	}
 case "window":
 	guard args.count >= 3, let pid = Int(args[2]) else { exit(2) }
 	let info = CGWindowListCopyWindowInfo([.optionOnScreenOnly], kCGNullWindowID) as? [[String: Any]] ?? []

@@ -66,7 +66,10 @@ where it came from, the setup, what happens, what should happen, status.*
 - **From:** Discord tester C, 2026-10-08, Monomachine, M1, latest macOS (version not given).
 - **What happens:** the window cannot go full screen; "Settings" does nothing.
 - **To check:** the window's full-screen button / maximise in the standalone; Settings: B-007 fixed this in 0.3.2 (plug-ins have no Settings entry, the standalone's opens Audio/MIDI) — confirm the tester's version.
-- **Status:** open.
+- **Cause:** JUCE's standalone window asks for the minimise and close buttons only. Without the maximise button the window had no full-screen behaviour on macOS (`NSWindowCollectionBehaviorFullScreenPrimary` needs it and a resizable window), and no maximise box on Windows and Linux. Had it gone full screen, the screen fit (P7) would have pulled it back: the window was fitted to the visible area (menu bar and Dock left out) after every resize, and its full-screen size would have been remembered as the user's. Settings: B-007 fixed the editor's menu; the macOS app menu still had upstream's "Settings..." (it opens the RmlUi settings page the web page hides: nothing happened).
+- **Fix (branch `fix/0.3.5-bugs`):** the standalone's window asks for all three buttons (`standaloneApp.h`), so the green button goes full screen on macOS and Windows and Linux maximise; a window in full screen, maximised or minimised is neither fitted nor remembered (`EditorWindowFit::sizedBySystem`), and the page zooms to the window (`mdPageZoom.h`, from 0.3.2). The app menu shows "Settings..." only for an editor without its own audio and MIDI panel; the web-page editors have Audio/MIDI Settings... (the app menu and the Audio menu). Test: the macOS start test reads the window's title-bar buttons and the menus through the Accessibility API (`ui_probe chrome`): the full-screen button enabled, Audio/MIDI Settings... in the app menu, no "Settings...".
+- **Not verified here:** full screen by hand on a Mac with a person (this Mac's shell may not use the Accessibility API; CI's start test reads it), Windows maximise and Linux by hand.
+- **Status:** fixed for 0.3.5.
 
 ## B-015 · Cmd+C and Cmd+V do nothing (macOS: Ableton Live and the standalone)
 

@@ -129,6 +129,21 @@ run() {
 			record "${label}" "real keys reach the page (${keys_wanted[*]})" "no: ${missing[*]} missing"
 		fi
 	fi
+	# B-016: the standalone's window has the full-screen button (green), and its app menu no dead "Settings..." (the
+	# web-page editors hide upstream's settings page): Audio/MIDI Settings... only. Read after the keys (the app in front).
+	if (( found )) && [[ "${name}" == *-standalone ]]; then
+		"${probe}" chrome "${pid}" > "${out}/${name}-chrome.txt" 2>&1 || true
+		local appmenu
+		appmenu="$(grep '^menu ' "${out}/${name}-chrome.txt" | grep -m1 -F 'Quit' || true)"
+		if grep -q -F 'button full screen: enabled' "${out}/${name}-chrome.txt" && grep -q -F 'Audio/MIDI Settings...' <<< "${appmenu}" \
+			&& ! grep -q -E '(: | \| )Settings\.\.\.( \||$)' <<< "${appmenu}"; then
+			echo "${label}: full screen button enabled; ${appmenu}"
+			record "${label}" "full screen button, Audio/MIDI Settings... (no dead Settings...)" "yes"
+		else
+			fail "${label}: window or menus not as wanted ($(tr '\n' ' ' < "${out}/${name}-chrome.txt"))"
+			record "${label}" "full screen button, Audio/MIDI Settings... (no dead Settings...)" "no"
+		fi
+	fi
 	kill "${pid}" 2>/dev/null || true
 	sleep 2
 	kill -9 "${pid}" 2>/dev/null || true
