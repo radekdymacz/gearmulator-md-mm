@@ -11,6 +11,9 @@
 #include "elektronData/mdJson.h"
 #include "elektronData/mdMachines.h"
 #include "elektronData/mdValidate.h"
+
+#include <algorithm>
+#include <cstdlib>
 #include "elektronData/mdWorkingKit.h"
 
 #include <cassert>
@@ -132,10 +135,32 @@ namespace mdDesk
 
 	}
 
+	// B-014: the editor sends to the emulated machine no faster than a MIDI cable would (3125 B/s: a pattern
+	// dump in 1.73 s, so a lock drag pushes at most one dump every 1.73 s instead of five a second), and asks
+	// nothing while the firmware applies a dump (its read is paced at 125 KB/s by md::Hardware, B-010; 250 ms
+	// to apply it). Each dump keeps the emulated 68k busy, which costs the audio thread about 1.5 times its
+	// idle work for 50-70 ms: on a slower Mac five of them a second made late audio buffers.
+	// GEARMULATOR_MDMM_EDIT_RATE=<bytes a second> raises the rate (0: no pacing, as 0.3.3).
+	StreamPolicy emulatorStream()
+	{
+		StreamPolicy s;
+		s.bytesPerSecond = deskCore::DinPacer::g_bytesPerSecond;
+		s.ingestBytesPerSecond = 125000;
+		s.settleMs = 250;
+		if(const char* rate = std::getenv("GEARMULATOR_MDMM_EDIT_RATE"); rate && *rate)
+			s.bytesPerSecond = std::max(0.0, std::atof(rate));
+		return s;
+	}
+
 	const Profile& emulatorProfile()
 	{
-		static const Profile p{"emu", "EMU OS 1.63", "Engine: the real Machinedrum OS 1.63 runs inside the app. Choose HW MIDI to "
-			"edit a real Machinedrum instead.", false, false, true, true};
+		static const Profile p = []
+		{
+			Profile e{"emu", "EMU OS 1.63", "Engine: the real Machinedrum OS 1.63 runs inside the app. Choose HW MIDI to "
+				"edit a real Machinedrum instead.", false, false, true, true};
+			e.stream = emulatorStream();
+			return e;
+		}();
 		return p;
 	}
 
@@ -150,7 +175,7 @@ namespace mdDesk
 	MdMachine::MdMachine(Profile _profile, Port _port)
 		: m_profile(std::move(_profile))
 		, m_port(std::move(_port))
-		, m_out(m_port.sendSysex)
+		, m_out(m_port.sendSysex, m_profile.stream)
 		, m_session([this](const Bytes& _b) { sendSysex(_b); })
 	{
 		wireSession();
@@ -160,7 +185,7 @@ namespace mdDesk
 	// P9: while a sample goes out (SDS) nothing else may come between its packets; other SysEx waits.
 	void MdMachine::sendSysex(const Bytes& _message)
 	{
-		m_out.send(_message, m_sds.active());
+		m_out.send(_message, m_sds.active(), now());
 	}
 
 	// ---- P9: a sample to a ROM slot (SDS) ----
@@ -198,7 +223,7 @@ namespace mdDesk
 	void MdMachine::pumpSample(const double _now)
 	{
 		m_sds.pump(_now, [this](const Bytes& _b) { m_out.sample(_b); });
-		m_out.release(m_sds.active());
+		m_out.release(m_sds.active(), _now);
 	}
 
 	void MdMachine::wireSession()
@@ -246,6 +271,7 @@ namespace mdDesk
 		m_loads = {};
 		m_backgroundQueued = false;
 		m_pushes.clear();
+		m_out.clear();
 		m_working = deskCore::switched<ed::MdKit>();
 		m_keys = {};
 		m_chain.drop();
@@ -296,6 +322,9 @@ namespace mdDesk
 		if(m_sds.active())
 			return true;
 		if(m_pushes.anyBusy())
+			return true;
+		// B-014: SysEx waiting its turn in the stream, or a dump the machine still reads or applies (the TX LED)
+		if(m_out.sending(now()))
 			return true;
 		// Control All on its way (FUNCTION held: no dump may be asked for meanwhile), or its CCs.
 		if(m_tweak.active() || !m_coalesced.empty())
@@ -399,7 +428,10 @@ namespace mdDesk
 
 	deskCore::PushPolicy MdMachine::pushPolicy(const DocKind _kind) const
 	{
-		return deskCore::wirePolicy(m_profile.push, m_profile.wire, replyBytes(_kind));
+		auto policy = deskCore::wirePolicy(m_profile.push, m_profile.wire, replyBytes(_kind));
+		// B-014: no faster than the stream carries the dump (latest wins meanwhile)
+		policy.minIntervalMs = std::max(policy.minIntervalMs, m_out.policy().wireMs(replyBytes(_kind)));
+		return policy;
 	}
 
 	// Paced (DESIGN-edit-flow.md): the dump goes now or waits its turn (latest wins); the read-back is
@@ -432,8 +464,9 @@ namespace mdDesk
 		const auto* held = stored != _view.kits.end() ? heldKit(_view) : nullptr;
 		const auto working = held ? std::optional<ed::MdKit>(*held) : std::nullopt;
 		m_session.pushPattern(pattern, false);
+		// after the dump (it may wait its turn in the stream, B-014)
 		if(working)
-			restoreWorkingKit(stored->second, *working);
+			m_out.after([this, storedKit = stored->second, w = *working] { restoreWorkingKit(storedKit, w); }, now());
 	}
 
 	// The machine just loaded the kit that plays from its slot (_stored): what it held before (_working)
@@ -1191,7 +1224,8 @@ namespace mdDesk
 	void MdMachine::pumpLoads(const double _now)
 	{
 		const auto& inFlight = m_loads.loading();
-		const double timeout = g_loadTimeoutMs + (m_profile.wire && inFlight ? deskCore::DinPacer::wireMs(replyBytes(inFlight->kind)) * 1.5 : 0);
+		const double timeout = g_loadTimeoutMs + (m_profile.wire && inFlight ? deskCore::DinPacer::wireMs(replyBytes(inFlight->kind)) * 1.5 : 0)
+			+ streamTimeoutMs();
 		// Loads wait while an edit is on the wire (they would delay its read-back) and around
 		// panel key presses.
 		const bool mayStart = !busy() && !keysOnTheirWay();
@@ -1236,7 +1270,8 @@ namespace mdDesk
 		const auto policyOf = [this](const DocRef& _ref) { return pushPolicy(_ref.kind); };
 		const auto timeoutOf = [this](const DocRef& _ref)
 		{
-			return g_pushTimeoutMs + (m_profile.wire ? 2.5 * deskCore::DinPacer::wireMs(replyBytes(_ref.kind)) : 0);
+			return g_pushTimeoutMs + (m_profile.wire ? 2.5 * deskCore::DinPacer::wireMs(replyBytes(_ref.kind)) : 0)
+				+ 1.5 * m_out.policy().wireMs(replyBytes(_ref.kind)) + streamTimeoutMs();
 		};
 		using K = Pushes::Effect::Kind;
 		for(const auto& e : m_pushes.pump(_now, policyOf, timeoutOf))
@@ -1650,8 +1685,16 @@ namespace mdDesk
 		}
 	}
 
+	// B-014: what a request may wait in the stream on top of its reply (a dump before it being applied).
+	double MdMachine::streamTimeoutMs() const
+	{
+		const auto& st = m_out.policy();
+		return st.bytesPerSecond > 0 ? st.ingestMs(ed::MdPattern::g_extendedDumpSize) + st.settleMs : 0.0;
+	}
+
 	void MdMachine::tick(const double _now, const Documents& _view)
 	{
+		m_out.pump(_now);
 		// A sample on its way owns the wire: no status polls or loads meanwhile (their replies would come
 		// late and their timeouts would run out).
 		pumpSample(_now);

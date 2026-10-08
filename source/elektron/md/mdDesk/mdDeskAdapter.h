@@ -37,6 +37,8 @@ namespace mdDesk
 		// The emulator takes a pattern dump in about 45 ms (md::Hardware's SysEx ingress), inside
 		// the interval.
 		deskCore::PushPolicy push{200, 750};
+		// B-014: the editor's SysEx to the machine, as fast as a cable carries it (SysexOut). Unset: at once.
+		StreamPolicy stream;
 	};
 
 	const Profile& emulatorProfile();	// "emu"

@@ -8,10 +8,12 @@ where it came from, the setup, what happens, what should happen, status.*
 
 - **From:** Discord tester A, 2026-10-08, MacBook Pro M1, Ableton Live, 0.3.3.
 - **What happens:** glitches (drop-outs) all the time while playing the Machinedrum Editor plug-in live; a recording of the same performance (Live's File Recorder) is clean. Upstream Gearmulator's Machinedrum on the same Mac runs at 65-70 % CPU and never glitches.
-- **Likely:** processing time per audio block sometimes exceeds the buffer (spikes), from work our editor adds on or next to the audio thread; the rendered sound is right but arrives late at the device. Live records the late block, so the file is clean.
-- **Workaround to try:** a larger buffer in Live (512 or 1024 samples).
+- **Also:** only while editing parameter locks (playing alone is fine); started with 0.3.3 (0.3.2 was fine); worse the more steps are edited.
+- **Cause (measured, `mdDeskFirmwareTest <MD ROM> plocktiming`, retired instructions per block):** the whole emulation runs on the host's audio thread. A lock edit is a whole pattern dump (5.4 KB); while the firmware reads and applies one, the 68k is busy and its idle loop cannot be skipped, so the audio thread does about 1.5 times its idle work for 50-70 ms. The desk sent up to five dumps a second during a drag. 0.3.3's B-010 pacing (the dump read at 125 KB/s) made each push's busy time longer (46 -> 69 ms) and 25 % more work, so hot time went from about 230 to 345 ms a second and heavy host buffers came about four times as often: late buffers on a slower Mac. The emulator's cost does not grow with the number of locks; the page's per-edit pattern document does (2.2 -> 4.4 KB at 288 locks, about 55 a second while drawing).
+- **Fix (branch `perf/audio-spikes`):** one stream for everything the editor sends to the machine (`mdDesk::SysexOut` + `StreamPolicy`): dumps at most as fast as a MIDI cable carries them (3125 B/s: a pattern every 1.73 s, the newest value wins meanwhile; `GEARMULATOR_MDMM_EDIT_RATE` raises it), nothing asked while the firmware applies a dump (no read-back over a dump), the TX LED lit while anything waits. B-010's 125 KB/s read stays. Measured: dumps in a 6 s drag 31 -> 5, hot time 257 -> 45 ms a second, heavy 128-frame buffers 21.7 -> 3.7 a second, 256-frame 8.5 -> 1.5; `plocktiming-strict` passes. A lock change is heard at once for the first edit of a gesture, at most 1.8 s later during a drag.
+- **Workaround:** a larger buffer in Live (512 or 1024 samples).
 - **Should:** no drop-outs wherever upstream Gearmulator has none.
-- **Status:** open, being measured (worst-case block times, editor vs upstream).
+- **Status:** fixed on `perf/audio-spikes` for 0.3.4, not yet checked by the tester.
 
 ## B-013 · Monomachine "first beat" journey fails in the VST3 (host path)
 
