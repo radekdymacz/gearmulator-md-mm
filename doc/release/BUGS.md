@@ -4,6 +4,15 @@
 repository; the site sends reports to the contact address. Newest first. Each entry:
 where it came from, the setup, what happens, what should happen, status.*
 
+## B-014 · Audio glitches while playing in Ableton (M1)
+
+- **From:** Discord tester A, 2026-10-08, MacBook Pro M1, Ableton Live, 0.3.3.
+- **What happens:** glitches (drop-outs) all the time while playing the Machinedrum Editor plug-in live; a recording of the same performance (Live's File Recorder) is clean. Upstream Gearmulator's Machinedrum on the same Mac runs at 65-70 % CPU and never glitches.
+- **Likely:** processing time per audio block sometimes exceeds the buffer (spikes), from work our editor adds on or next to the audio thread; the rendered sound is right but arrives late at the device. Live records the late block, so the file is clean.
+- **Workaround to try:** a larger buffer in Live (512 or 1024 samples).
+- **Should:** no drop-outs wherever upstream Gearmulator has none.
+- **Status:** open, being measured (worst-case block times, editor vs upstream).
+
 ## B-013 · Monomachine "first beat" journey fails in the VST3 (host path)
 
 - **From:** journeys in the minimal VST3 host, 2026-10-08.
