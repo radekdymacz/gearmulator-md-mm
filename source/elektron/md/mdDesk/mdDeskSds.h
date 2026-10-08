@@ -125,7 +125,8 @@ namespace mdDesk
 			pump(_nowMs);
 		}
 
-		// _then runs once everything sent before it has gone (at once when nothing waits).
+		// _then runs once everything sent before it has gone (at once when nothing waits): it keeps its place after
+		// them on the way to the machine.
 		void after(std::function<void()> _then, const double _nowMs)
 		{
 			if(m_queue.empty() && m_held.empty())

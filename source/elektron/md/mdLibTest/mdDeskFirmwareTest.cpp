@@ -605,11 +605,12 @@ namespace
 		if(had)
 		{
 			_rig.page("{\"op\":\"trig\",\"p\":" + std::to_string(pattern) + ",\"t\":0,\"s\":5,\"on\":true}");
-			_rig.runUntil([&] { return !desk.isBusy(); }, 1000);
+			_rig.runUntil([&] { return !desk.isBusy(); }, 4000);
 		}
+		// (B-014: a dump waits for the one before it to have had its MIDI cable time, up to 1.73 s)
 		_rig.page("{\"op\":\"lock\",\"p\":" + std::to_string(pattern) + ",\"t\":0,\"i\":12,\"s\":5,\"v\":33}");
 		check(resultOk(_rig), "lock command accepted");
-		_rig.runUntil([&] { return !desk.isBusy(); }, 1000);
+		_rig.runUntil([&] { return !desk.isBusy(); }, 4000);
 		const auto locked = _rig.readPattern(pattern);
 		check(locked && ed::lockValue(*locked, 0, 12, 5) == uint8_t{33}, "the firmware holds the lock");
 

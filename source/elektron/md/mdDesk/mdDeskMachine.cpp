@@ -178,6 +178,18 @@ namespace mdDesk
 		, m_out(m_port.sendSysex, m_profile.stream)
 		, m_session([this](const Bytes& _b) { sendSysex(_b); })
 	{
+		// B-014: CCs and notes keep their order with the SysEx sent before them (a machine change, then its
+		// values): while SysEx waits its turn in the stream they wait behind it; otherwise they go at once.
+		const auto ordered = [this](auto& _send)
+		{
+			if(!_send)
+				return;
+			_send = [this, send = std::move(_send)](auto... _args) { m_out.after([send, _args...] { send(_args...); }, now()); };
+		};
+		ordered(m_port.sendKitParam);
+		ordered(m_port.sendHeldParam);
+		ordered(m_port.sendMute);
+		ordered(m_port.sendNote);
 		wireSession();
 		m_wire = deskCore::WireFacts(m_port.nowMs ? m_port.nowMs() : 0);
 	}
