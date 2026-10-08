@@ -261,7 +261,7 @@ namespace mmDesk
 	Outcome MmMachine::cmdTempo(const Value& _m, const Documents&)
 	{
 		const auto bpm = _m.find("bpm")->asNumber();
-		m_port.sendSysex(ed::mmSetTempo(bpm));
+		m_stream.sendLatest(0x7e000000, ed::mmSetTempo(bpm), false, clock());
 		m_expectTempo = deskCore::FieldExpectation<int>::sent(static_cast<int>(std::lround(bpm * 24.0)), clock());
 		return ok();
 	}

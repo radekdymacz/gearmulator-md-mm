@@ -36,6 +36,65 @@ Single messages at once vs paced (`PLOCK_PROBE=1`): a pattern dump in 17.4 ms of
 
 Borrowed from upstream Gearmulator (dsp56300/gearmulator, read, not merged): `synthLib::Plugin` no longer hands the device the raw pieces of a chunked SysEx besides the joined message (0f1aeed14), and only the Elektron SysEx the firmware acts on is paced, so a host's tuning dump or other foreign SysEx never holds up the notes behind it (the concern of 474c8e091, which drops such SysEx before the JE-8086's rate limiter). Upstream paces all MIDI input at 31.25 kbaud and thins dense CC streams (b5faead4c) and purges superseded queued SysEx (6360a2b41, 116ae3bad); here channel messages are not paced, so no CC backlog builds, and the desk's `PushSlot` already keeps one dump per document on its way (latest wins), so there is nothing to purge.
 
+**Audio-thread load (B-014, 2026-10-08).** The emulation runs on the host's audio thread, and a whole pattern dump keeps the emulated 68k busy while the firmware reads and applies it (no idle-loop skip): about 1.5 times the idle work for 50-70 ms a dump, about 2x for a read-back. Five dumps a second (the 200 ms push interval) were heard as drop-outs on an M1 in Live. Since then every SysEx the MD desk sends goes through one stream, `mdDesk::SysexOut` with the Profile's `StreamPolicy`: a bulk message (a dump, 256 bytes or more) waits for the one before it to have had its time at MIDI cable speed (3125 B/s: a pattern 1.73 s), a newer dump of the same document replaces one still waiting, and any message after a dump waits until the machine has read it (125 KB/s) and 250 ms more, so a read-back request never reaches a firmware still applying a dump; work that must follow a dump (the working kit's live edits after a pattern dump reloads it) is queued behind it (`after`). CCs and notes go at once when nothing waits, else behind the SysEx before them (a machine change, then its values); panel keys do not wait. The push interval follows the stream (`pushPolicy`: at least the dump's stream time); timeouts add the stream's delay. `desk.tx` (the TX LED) is lit while the stream sends. `GEARMULATOR_MDMM_EDIT_RATE=<bytes/s>` raises the rate (0: no stream, as 0.3.3). Measured with `scripts/mdmm-rt-check.sh` (retired instructions per 64-frame block, independent of other load), before -> after: dumps in a 6 s drag 31 -> 5, time the blocks run hot 257 -> 45 ms a second, 128-frame buffers over 50 M instructions 21.7 -> 3.7 a second, 256-frame over 100 M 8.5 -> 1.5; clicks 202 -> 39 ms a second; `plocktiming-strict` passes (worst clock tick 6.3-6.7 ms at a gesture's read-back, as before). The first edit of a gesture is heard at once; during a drag the machine follows at most 1.73 s behind. In the VST3 with its page (`scripts/mdmm-page-load.sh`: the diagnostics VST3 in `scripts/vst3EditorHost --background`, the page's self-test `p4locks` drawing 256 new locks a round at 30 a second; M4 Pro, % of one core, before -> after): the host process while drawing 78-91 -> 62-72 %, the page's WebKit content 55-61 -> 43-51 %, WebKit GPU 129-146 -> 105-125 %; neither grows with the locks the pattern holds (0 to 700 locks, 44 locked parameters). Playing without edits the GPU process alone takes about half a core (the page's drawing; B-005).
+
+**Every user action (B-014, 2026-10-08).** The one stream (`deskCore::Stream`, `deskCore/deskStream.h`; `mdDesk::SysexOut` is its name in the MD desk) carries everything both desks send to their machine, in lanes: SysEx (dumps no faster than a MIDI cable, 3125 B/s, the newest dump of a document replacing a waiting one, anything after a dump waiting until it is read and applied), latest (a value-setting SysEx: tempo, LFO, master effect, routing; at most every 100 ms per value, the newest wins), value (kit CCs, NRPN and mutes: a budget at cable speed with a burst of 64 CCs, the newest value of a parameter wins while it waits, never across SysEx), priority (notes and a key's held value: they pass waiting values, never SysEx) and after (work that must follow, the working kit's edits after a pattern dump). Panel keys and SDS sample packets keep their own pacing (the SYSEX RECV session, the SDS handshake). The MD's live global edits (tempo, routing) are read back once at quiet instead of at every value. `GEARMULATOR_MDMM_EDIT_RATE=<B/s>` raises the rate, `0` turns the stream off (0.3.3).
+
+Measured with `mdDeskFirmwareTest <MD ROM> actions` and `mmDeskFirmwareTest <MM ROM> actions`: each action repeated at a person's rate for 6-8 s while a 120 BPM pattern plays, the plug-in's delivery, retired instructions per 64-frame block. Heavy: a 128-frame buffer over 50 M or a 256-frame one over 100 M instructions (idle about 27 / 55). Hot: a 5-block mean over 1.3x idle. Before = 0.3.3 (`GEARMULATOR_MDMM_EDIT_RATE=0`, the global read back at every value), after = the stream. `scripts/mdmm-rt-check.sh` runs both machines against a hot-time budget (100 ms/s): before fails 6 MD actions, after passes every one.
+
+| MD action | dumps | CCs | bytes/s | heavy 128 /s | heavy 256 /s | hot ms/s | worst 256 (M) |
+|---|---|---|---|---|---|---|---|
+| idle | 0 → 0 | 0 → 0 | 61 → 61 | 0.0 → 0.0 | 0.0 → 0.0 | **4 → 7** | 84.6 → 81.7 |
+| lockDrag | 31 → 5 | 0 → 0 | 23985 → 3669 | 17.0 → 3.1 | 7.8 → 1.2 | **252 → 44** | 111.1 → 109.1 |
+| lockClicks | 24 → 5 | 0 → 0 | 19224 → 3176 | 14.5 → 2.7 | 7.7 → 1.2 | **205 → 41** | 111.6 → 110.1 |
+| genR | 15 → 5 | 0 → 0 | 12287 → 3183 | 8.7 → 3.0 | 3.9 → 1.2 | **137 → 44** | 108.9 → 108.4 |
+| genAllR | 8 → 5 | 0 → 0 | 6582 → 3187 | 17.8 → 4.6 | 9.0 → 2.8 | **106 → 61** | 113.2 → 110.0 |
+| genDrag | 31 → 5 | 0 → 0 | 23995 → 3176 | 18.6 → 2.2 | 8.6 → 1.0 | **256 → 45** | 108.5 → 108.5 |
+| mutR | 0 → 0 | 574 → 574 | 339 → 349 | 0.0 → 0.0 | 0.0 → 0.0 | **18 → 18** | 93.7 → 96.2 |
+| mutAllR | 0 → 0 | 4824 → 4824 | 2186 → 2177 | 1.0 → 0.1 | 0.3 → 0.0 | **30 → 39** | 100.1 → 98.6 |
+| paramDrag | 0 → 0 | 750 → 750 | 423 → 433 | 0.0 → 0.0 | 0.0 → 0.0 | **28 → 28** | 87.9 → 87.0 |
+| levelDrag | 0 → 0 | 750 → 750 | 433 → 423 | 0.0 → 0.0 | 0.0 → 0.0 | **32 → 30** | 92.1 → 89.8 |
+| machine | 0 → 0 | 104 → 96 | 134 → 131 | 0.0 → 0.0 | 0.0 → 0.0 | **5 → 12** | 90.8 → 93.5 |
+| controlAll | 0 → 0 | 0 → 0 | 116 → 116 | 0.0 → 0.0 | 0.0 → 0.0 | **11 → 11** | 88.9 → 87.5 |
+| muteBurst | 0 → 0 | 200 → 200 | 158 → 158 | 0.0 → 0.0 | 0.0 → 0.0 | **13 → 11** | 84.8 → 88.3 |
+| copyPaste | 8 → 4 | 966 → 995 | 7525 → 2449 | 6.6 → 1.8 | 3.2 → 0.8 | **83 → 35** | 112.7 → 108.9 |
+| clearUndo | 9 → 5 | 1053 → 1085 | 7680 → 2573 | 6.0 → 1.9 | 3.1 → 0.7 | **90 → 35** | 108.7 → 110.0 |
+| lengthDrag | 8 → 5 | 936 → 1085 | 6858 → 3788 | 15.0 → 3.6 | 8.1 → 1.6 | **105 → 61** | 113.0 → 110.0 |
+| tempoDrag | 0 → 0 | 0 → 0 | 619 → 155 | 0.6 → 0.6 | 0.0 → 0.3 | **71 → 12** | 92.8 → 106.7 |
+| keyboard | 0 → 0 | 0 → 0 | 97 → 87 | 0.0 → 0.0 | 0.0 → 0.0 | **4 → 4** | 81.5 → 86.7 |
+| undoRedo | 0 → 0 | 0 → 0 | 98 → 78 | 0.2 → 0.0 | 0.0 → 0.0 | **9 → 6** | 91.9 → 89.4 |
+| select | 0 → 0 | 0 → 0 | 105 → 105 | 4.3 → 4.5 | 1.6 → 1.8 | **61 → 55** | 110.2 → 110.2 |
+| kitLoad | 0 → 0 | 0 → 0 | 153 → 153 | 5.2 → 4.6 | 2.2 → 2.2 | **54 → 58** | 110.2 → 122.0 |
+| after | 0 → 0 | 0 → 0 | 60 → 60 | 0.0 → 0.0 | 0.0 → 0.0 | **6 → 1** | 84.4 → 80.1 |
+
+| MM action | dumps | CCs | bytes/s | heavy 128 /s | heavy 256 /s | hot ms/s | worst 256 (M) |
+|---|---|---|---|---|---|---|---|
+| idle | 0 → 0 | 0 → 0 | 54 → 54 | 0.0 → 0.0 | 0.0 → 0.0 | **0 → 0** | 84.4 → 84.2 |
+| lockDrag | 28 → 7 | 0 → 0 | 2084 → 562 | 3.8 → 0.9 | 1.0 → 0.3 | **79 → 34** | 104.6 → 102.1 |
+| genR | 14 → 15 | 0 → 0 | 1144 → 1220 | 5.4 → 5.5 | 2.0 → 1.7 | **77 → 72** | 107.4 → 107.1 |
+| genAllR | 8 → 8 | 0 → 0 | 682 → 682 | 3.1 → 3.0 | 1.3 → 1.2 | **54 → 51** | 106.6 → 105.1 |
+| pianoPaint | 28 → 7 | 0 → 0 | 2191 → 585 | 4.2 → 1.2 | 1.3 → 0.4 | **81 → 35** | 104.7 → 102.8 |
+| mutR | 0 → 0 | 462 → 462 | 208 → 208 | 0.0 → 0.0 | 0.0 → 0.0 | **8 → 19** | 98.0 → 98.5 |
+| mutAllR | 0 → 0 | 1523 → 1523 | 561 → 561 | 0.0 → 0.0 | 0.0 → 0.0 | **6 → 8** | 95.7 → 95.1 |
+| paramDrag | 0 → 0 | 375 → 375 | 179 → 179 | 0.0 → 0.0 | 0.0 → 0.0 | **18 → 16** | 94.4 → 94.1 |
+| levelDrag | 0 → 0 | 375 → 375 | 179 → 179 | 0.0 → 0.0 | 0.0 → 0.0 | **18 → 22** | 94.7 → 95.7 |
+| machine | 0 → 0 | 96 → 96 | 101 → 101 | 0.0 → 0.1 | 0.0 → 0.0 | **1 → 3** | 92.5 → 95.0 |
+| muteBurst | 0 → 0 | 200 → 200 | 121 → 121 | 0.0 → 0.0 | 0.0 → 0.0 | **0 → 0** | 88.3 → 89.8 |
+| copyPaste | 3 → 2 | 0 → 0 | 288 → 210 | 0.9 → 0.8 | 0.4 → 0.2 | **22 → 20** | 104.0 → 104.5 |
+| clearUndo | 4 → 4 | 0 → 0 | 491 → 491 | 2.8 → 2.6 | 1.0 → 1.1 | **48 → 46** | 105.4 → 104.4 |
+| lengthDrag | 0 → 0 | 0 → 0 | 714 → 220 | 1.8 → 0.9 | 0.7 → 0.1 | **62 → 24** | 101.9 → 103.8 |
+| transpose | 0 → 0 | 0 → 0 | 727 → 223 | 3.3 → 0.9 | 0.2 → 0.2 | **60 → 16** | 103.2 → 103.2 |
+| tempoDrag | 0 → 0 | 0 → 0 | 256 → 121 | 0.0 → 0.0 | 0.0 → 0.0 | **5 → 6** | 97.7 → 98.5 |
+| keyboard | 0 → 0 | 0 → 0 | 71 → 71 | 0.0 → 0.0 | 0.0 → 0.0 | **0 → 0** | 84.6 → 92.7 |
+| undoRedo | 0 → 0 | 0 → 0 | 350 → 325 | 3.2 → 2.3 | 1.0 → 0.7 | **48 → 50** | 104.2 → 103.8 |
+| select | 0 → 0 | 0 → 0 | 61 → 61 | 0.0 → 0.0 | 0.0 → 0.0 | **3 → 2** | 97.6 → 98.2 |
+| loadKit | 0 → 0 | 0 → 0 | 72 → 72 | 0.9 → 1.0 | 0.5 → 0.4 | **14 → 13** | 101.7 → 102.4 |
+| after | 0 → 0 | 0 → 0 | 54 → 54 | 0.0 → 0.0 | 0.0 → 0.0 | **0 → 0** | 86.8 → 85.3 |
+
+Not changed by the stream: pattern select and kit load (the machine sends the documents the desk reads: 55-60 ms/s hot), a sample load (SDS, paced by the machine's handshake: about 160 ms/s of mild extra work while it runs, no heavy buffers), MUTATE of the whole kit (a kit of CCs, spread over about 0.6 s; the firmware's cost is small). A SysEx import goes at cable speed too, each document's dump then its read-back.
+
+**The page (WebKit, B-014).** `scripts/mdmm-page-load.sh`: the diagnostics VST3 in `scripts/vst3EditorHost --background`, the page's self-test `p4locks`; `MDMM_PAGE_PROBE=1` switches parts of the styling off for a phase to attribute the cost. Playing with no edits, WebKit's GPU process took about half a core: the playhead marked a column of 16 step cells every step (`.st.ph`, which draws nothing since the soft playhead), and WebKit repainted the cells with their box-shadow glows. The cells are no longer marked: GPU 42-58 % -> 6-10 % of a core while playing, WebContent 6-13 % -> 6-8 %, stopped 1-4 %. A lock-lane drag (the page's full renders held, Held "lane") costs about 17-20 % WebContent and 20-25 % GPU. Edits not held by a gesture (a wheel run, a GEN or MUTATE value drag at 30 a second) still re-render the grid at every document: about 50 % WebContent and more than a core of GPU, almost all of it the step cells' box-shadows (every shadow off: 28 %). Next: hold the renders for those gestures as the lane does, or draw the cells' bevel and glow without box-shadow. The Monomachine page marks its step cells the same way (`.mst.ph`, visible there): not measured yet.
+
 **The proof in a real host** (`mdVst3EditFlowHost`, our target: the built VST3 bundle through JUCE's VST3 hosting, `processBlock` on a real-time time-constraint thread, 48 kHz; the page's messages replayed by the bundle's env-gated edit-flow driver `mdEditFlowDriver.cpp`, built only with `-Dgearmulator_MDMM_EDITFLOW_DRIVER=ON`; 4 s at 60 moves/s, two interleaved runs before/after, the same driver in both bundles; before = this worktree's base with the page's old 16-param tweak):
 
 | | MD 128 before → after | MD 512 before → after | MM 128 before → after | MM 512 before → after |

@@ -427,8 +427,22 @@ namespace
 			m_desk->tick();
 		}
 
+	public:
+		// B-014: what the page is sent, as JSON text (bytes the bridge carries and the page parses)
+		size_t pageBytes = 0, pagePatternDocBytes = 0, pagePatternDocs = 0;
+	private:
 		void onPage(const Value& _m)
 		{
+			if(std::getenv("PLOCK_PAGEBYTES"))
+			{
+				const auto n = elektronData::json::write(_m).size();
+				pageBytes += n;
+				if(const auto* k = _m.find("kind"); k && k->isString() && k->asString() == "pattern")
+				{
+					pagePatternDocBytes += n;
+					++pagePatternDocs;
+				}
+			}
 			const auto* type = _m.find("type");
 			if(!type)
 				return;
@@ -591,11 +605,12 @@ namespace
 		if(had)
 		{
 			_rig.page("{\"op\":\"trig\",\"p\":" + std::to_string(pattern) + ",\"t\":0,\"s\":5,\"on\":true}");
-			_rig.runUntil([&] { return !desk.isBusy(); }, 1000);
+			_rig.runUntil([&] { return !desk.isBusy(); }, 4000);
 		}
+		// (B-014: a dump waits for the one before it to have had its MIDI cable time, up to 1.73 s)
 		_rig.page("{\"op\":\"lock\",\"p\":" + std::to_string(pattern) + ",\"t\":0,\"i\":12,\"s\":5,\"v\":33}");
 		check(resultOk(_rig), "lock command accepted");
-		_rig.runUntil([&] { return !desk.isBusy(); }, 1000);
+		_rig.runUntil([&] { return !desk.isBusy(); }, 4000);
 		const auto locked = _rig.readPattern(pattern);
 		check(locked && ed::lockValue(*locked, 0, 12, 5) == uint8_t{33}, "the firmware holds the lock");
 
@@ -2631,6 +2646,44 @@ namespace
 		return j;
 	}
 
+	// B-014: the audio thread's time per block, as percentiles of the 64-frame blocks and as sums over
+	// host buffers of 128 and 256 frames (44.1 kHz: 2.90 and 5.80 ms), with how many buffers went over
+	// half and over all of their budget.
+	void printBlockStats(const char* _what, const std::vector<float>& _us)
+	{
+		if(_us.empty())
+			return;
+		const auto pct = [](std::vector<float> _v, const double _p)
+		{
+			std::sort(_v.begin(), _v.end());
+			return _v[std::min(_v.size() - 1, static_cast<size_t>(_p * double(_v.size())))];
+		};
+		std::printf("         %s us/64: p50 %.0f p99 %.0f p99.9 %.0f max %.0f", _what, pct(_us, .5), pct(_us, .99), pct(_us, .999), pct(_us, 1.0));
+		for(const size_t k : {size_t(2), size_t(4)})
+		{
+			std::vector<float> w;
+			for(size_t i = 0; i + k <= _us.size(); i += k)
+			{
+				float sum = 0;
+				for(size_t j = 0; j < k; ++j)
+					sum += _us[i + j];
+				w.push_back(sum);
+			}
+			if(w.empty())
+				continue;
+			const double budget = double(k * g_block) * 1e6 / g_rate;
+			size_t half = 0, over = 0;
+			for(const auto x : w)
+			{
+				half += x > budget * .5;
+				over += x > budget;
+			}
+			std::printf(" | /%zu: p50 %.0f p99.9 %.0f max %.0f (%.0f%%) >50%%:%zu >100%%:%zu of %zu",
+				k * g_block, pct(w, .5), pct(w, .999), pct(w, 1.0), pct(w, 1.0) * 100.0 / budget, half, over, w.size());
+		}
+		std::puts("");
+	}
+
 	void plockTiming(Rig& _rig, const bool _strict)
 	{
 		// PLOCK_INGRESS=<bytes/s>: the firmware's SysEx ingress rate for the run (0: unpaced, as before B-010).
@@ -2675,6 +2728,10 @@ namespace
 		bool first = true;
 		const auto phase = [&](const char* _name, const double _ms, const double _everyMs, const std::function<void(int)>& _edit)
 		{
+			// PLOCK_PHASES=idle,click1s,...: run only these (load always runs)
+			if(const char* only = std::getenv("PLOCK_PHASES"); only && std::string(_name) != "load"
+				&& ("," + std::string(only) + ",").find("," + std::string(_name) + ",") == std::string::npos)
+				return;
 			clocks.clear();
 			steps.clear();
 			const auto b0 = _rig.bytesToMachine, m0 = _rig.messagesToMachine, d0 = _rig.patternDumps(), r0 = _rig.patternRequests;
@@ -2682,6 +2739,8 @@ namespace
 			const auto kinds0 = _rig.messageKinds;
 			m.resetAudioTime();
 			const int docs0 = _rig.pageDocCount("pattern");
+			const auto pb0 = _rig.pageBytes, ppb0 = _rig.pagePatternDocBytes, ppn0 = _rig.pagePatternDocs;
+			const auto idle0 = m.hardware().getTransportScorecard().idleSelfBranchInstructions;
 			double deskUs = 0;
 			int n = 0;
 			while(double(m.now() - start) * 1000.0 / g_rate < _ms)
@@ -2713,6 +2772,60 @@ namespace
 					_rig.pageDocCount("pattern") - docs0, deskUs / n);
 			std::printf("         audio thread: %.1f us a block of %.0f us (mean), worst %.0f us\n", m.audioUs / double(std::max<uint64_t>(1, m.audioBlocks)),
 				g_block * 1e6 / g_rate, m.audioMaxUs);
+			printBlockStats("cpu ", m.blockCpuUs);
+			if(std::getenv("PLOCK_PAGEBYTES"))
+				std::printf("         to the page: %.0f KB/s, pattern documents %zu of %.1f KB each\n", double(_rig.pageBytes - pb0) / 1024.0 / secs,
+					_rig.pagePatternDocs - ppn0, _rig.pagePatternDocs > ppn0 ? double(_rig.pagePatternDocBytes - ppb0) / 1024.0 / double(_rig.pagePatternDocs - ppn0) : 0.0);
+			if(const auto sc = m.hardware().getTransportScorecard(); sc.enabled)
+				std::printf("         68k idle-skipped: %.1f %% of its cycles\n",
+					double(sc.idleSelfBranchInstructions - idle0) * 2.0 * 100.0 / (secs * double(md::g_ucClockHz)));
+			printBlockStats("wall", m.blockWallUs);
+			if(const char* dir = std::getenv("PLOCK_TRACE"))
+			{
+				// one line a block: Minstr, Mcycles, cpu us (B-014: the shape of the cost around an edit)
+				std::ofstream f(std::string(dir) + "/" + _name + ".csv");
+				f << "block,minstr,mcycles,cpuus\n";
+				for(size_t i = 0; i < m.blockMInstr.size(); ++i)
+					f << i << ',' << m.blockMInstr[i] << ',' << m.blockMCycles[i] << ',' << m.blockCpuUs[i] << '\n';
+			}
+			{
+				// instructions and cycles (millions) a block: what the CPU time is when nothing else competes
+				auto mi = m.blockMInstr, mc = m.blockMCycles;
+				std::sort(mi.begin(), mi.end());
+				std::sort(mc.begin(), mc.end());
+				if(!mi.empty())
+				{
+					const auto at = [](const std::vector<float>& _v, const double _p) { return _v[std::min(_v.size() - 1, size_t(_p * double(_v.size())))]; };
+					double sumI = 0, sumC = 0;
+					for(const auto x : m.blockMInstr) sumI += x;
+					for(const auto x : m.blockMCycles) sumC += x;
+					// sums over 128 and 256 frames, for the worst host buffer
+					float w2 = 0, w4 = 0;
+					for(size_t i = 0; i + 4 <= m.blockMCycles.size(); i += 4)
+					{
+						w2 = std::max({w2, m.blockMCycles[i] + m.blockMCycles[i + 1], m.blockMCycles[i + 2] + m.blockMCycles[i + 3]});
+						w4 = std::max(w4, m.blockMCycles[i] + m.blockMCycles[i + 1] + m.blockMCycles[i + 2] + m.blockMCycles[i + 3]);
+					}
+					// instructions over host buffers of 128 and 256 frames: p50, p99, p99.9, max (independent of other load)
+					for(const size_t k : {size_t(2), size_t(4)})
+					{
+						std::vector<float> w;
+						for(size_t i = 0; i + k <= m.blockMInstr.size(); i += k)
+						{
+							float sum = 0;
+							for(size_t j = 0; j < k; ++j)
+								sum += m.blockMInstr[i + j];
+							w.push_back(sum);
+						}
+						std::sort(w.begin(), w.end());
+						if(!w.empty())
+							std::printf("         Minstr/%zu: p50 %.1f p99 %.1f p99.9 %.1f max %.1f\n", k * g_block, at(w, .5), at(w, .99), at(w, .999), at(w, 1.0));
+					}
+					std::printf("         Minstr/64: mean %.2f p50 %.2f p99 %.2f p99.9 %.2f max %.2f   Mcycles/64: mean %.2f p50 %.2f p99 %.2f p99.9 %.2f max %.2f | max /128 %.2f /256 %.2f\n",
+						sumI / double(mi.size()), at(mi, .5), at(mi, .99), at(mi, .999), at(mi, 1.0),
+						sumC / double(mc.size()), at(mc, .5), at(mc, .99), at(mc, .999), at(mc, 1.0), w2, w4);
+				}
+			}
 			std::printf("         messages by kind:");
 			for(const auto& [k, v] : _rig.messageKinds)
 			{
@@ -2805,9 +2918,52 @@ namespace
 		const int dragG = ++gesture;
 		phase("drag", 6000, 16, [&](const int _n) { lock(_n % 16, (_n * 7) % 128, dragG); });
 		phase("click", 6000, 250, [&](const int _n) { lock((_n * 5) % 16, (_n * 13) % 128, ++gesture); });
+		// B-014: one click a second, so each gets its own read-back (750 ms after it)
+		{
+			// PLOCK_CLICK_MS: the time between those clicks (1000)
+			const double every = std::getenv("PLOCK_CLICK_MS") ? std::atof(std::getenv("PLOCK_CLICK_MS")) : 1000.0;
+			phase("click1s", every * 8, every, [&](const int _n) { lock((_n * 3) % 16, (_n * 11) % 128, ++gesture); });
+		}
 		const int wheelG = ++gesture;
 		phase("wheel", 6000, 30, [&](const int _n) { lock(4, 40 + (_n % 40), wheelG); });
 		phase("after", 4000, 0, {});
+		if(std::getenv("PLOCK_LONG"))
+		{
+			// B-014 "more and more steps": rounds of 96 new locks (a fresh drag each, an edit every 50 ms), each
+			// followed by playing with no edits, to see whether a cost grows with the edits made or the locks the
+			// pattern holds, and whether it stays once editing stops. Tracks 1-4 get trigs on every step first.
+			for(int t = 1; t < 4; ++t)
+			{
+				_rig.page("{\"op\":\"steps\",\"p\":" + ps + ",\"from\":0,\"to\":16,\"g\":" + std::to_string(++gesture)
+					+ ",\"rows\":[{\"t\":" + std::to_string(t) + ",\"on\":[0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15]}]}");
+				settle();
+			}
+			const int rounds = std::max(1, std::atoi(std::getenv("PLOCK_LONG")));
+			int made = 0;
+			for(int r = 0; r < rounds; ++r)
+			{
+				const int g = ++gesture;
+				char name[32];
+				std::snprintf(name, sizeof(name), "fill%d", r + 1);
+				phase(name, 96 * 50, 50, [&](const int _n)
+				{
+					const int k = made + _n;	// a new (param, step) each edit: param 0..23 across steps 0..15, tracks 1-4
+					const int t = (k / 384) % 4, i = (k / 16) % 24, st = k % 16;
+					_rig.page("{\"op\":\"lock\",\"p\":" + ps + ",\"t\":" + std::to_string(t) + ",\"i\":" + std::to_string(i) + ",\"s\":" + std::to_string(st)
+						+ ",\"v\":" + std::to_string((k * 37) % 128) + ",\"g\":" + std::to_string(g) + "}");
+				});
+				made += 96;
+				std::snprintf(name, sizeof(name), "play%d", r + 1);
+				phase(name, 4000, 0, {});
+				const auto& pat = desk.documents().patterns.at(p);
+				int locks = 0;
+				for(int t = 0; t < 16; ++t)
+					for(int i = 0; i < 24; ++i)
+						for(int st = 0; st < 16; ++st)
+							locks += ed::lockValue(pat, t, i, st).has_value();
+				std::printf("         locks the desk's pattern holds: %d (edits made %d)\n", locks, made);
+			}
+		}
 		_rig.postOnly = false;
 		m.onMidi = {};
 		m.onBlock = prevBlock;
@@ -2815,8 +2971,190 @@ namespace
 		_rig.run(300);
 	}
 
+namespace
+{
+	// B-014: what every kind of editing costs the audio thread. The pattern plays (120 BPM, a trig on every step
+	// of tracks 1-4); each phase repeats one user action at the rate a person does it (the page's own commands),
+	// then waits until the desk is idle, as the plug-in runs it (pluginLike: a block's MIDI at once, postOnly).
+	// Per action: what went to the machine (dumps, CCs, bytes), the 128/256-frame host buffers a second whose
+	// work is over 50 / 100 M instructions (idle: about 27 / 55), the time a second the blocks run hot (a 5-block
+	// mean over 1.3x idle), the worst 256-frame buffer. ACTIONS=a,b,... runs some; ACTIONS_BUDGET=<hot ms/s> fails
+	// any action over it (scripts/mdmm-rt-check.sh). GEARMULATOR_MDMM_EDIT_RATE=0 compares without the stream.
+	void actionLoad(Rig& _rig)
+	{
+		auto& desk = _rig.desk();
+		auto& m = _rig.machine();
+		const auto p = *desk.linkState().pattern;
+		const auto ps = std::to_string(p);
+		const auto k = std::to_string(*desk.linkState().kit);
+		const auto settle = [&] { _rig.runUntil([&] { return !desk.isBusy() && !_rig.pageTx(); }, 8000); };
+		for(int t = 0; t < 4; ++t)
+		{
+			_rig.page("{\"op\":\"steps\",\"p\":" + ps + ",\"from\":0,\"to\":16,\"g\":" + std::to_string(500 + t) + ",\"rows\":[{\"t\":" + std::to_string(t) + ",\"on\":[0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15]}]}");
+			settle();
+		}
+		_rig.page(R"({"op":"tempo","bpm":120})");
+		settle();
+		_rig.page(R"({"op":"play"})");
+		_rig.runUntil([&] { return _rig.pageTelemetry().playing; }, 2000);
+		_rig.run(500);
+		_rig.pluginLike = true;
+		_rig.postOnly = true;
+		// idle is idle: the page's library reads are over (no request but status polls for 2 s)
+		for(int quiet = 0, i = 0; quiet < 4 && i < 240; ++i)
+		{
+			const auto before = _rig.messagesToMachine - _rig.messageKinds[0x70];
+			_rig.run(500);
+			quiet = _rig.messagesToMachine - _rig.messageKinds[0x70] == before ? quiet + 1 : 0;
+		}
+		const char* only = std::getenv("ACTIONS");
+		const double budget = std::getenv("ACTIONS_BUDGET") ? std::atof(std::getenv("ACTIONS_BUDGET")) : -1;
+		uint32_t rng = 12345;
+		const auto rnd = [&](const int _n) { rng = rng * 1664525u + 1013904223u; return static_cast<int>((rng >> 8) % static_cast<uint32_t>(_n)); };
+		int gesture = 3000;
+		double idleMean = 0;
+		std::printf("== B-014 actions (stream %s): action | edits | dumps CCs bytes/s | heavy 128 / 256 a second | hot ms/s | worst 256 (M instr)\n",
+			mdDesk::emulatorProfile().stream.bytesPerSecond > 0 ? "on" : "off");
+		const auto action = [&](const char* _name, const double _ms, const double _everyMs, const std::function<void(int)>& _edit)
+		{
+			if(only && std::string(_name) != "idle" && ("," + std::string(only) + ",").find("," + std::string(_name) + ",") == std::string::npos)
+				return;
+			const auto b0 = _rig.bytesToMachine;
+			const auto kinds0 = _rig.messageKinds;
+			m.resetAudioTime();
+			const auto start = m.now();
+			int n = 0;
+			while(double(m.now() - start) * 1000.0 / g_rate < _ms)
+			{
+				const double t = double(m.now() - start) * 1000.0 / g_rate;
+				if(_edit && t >= n * _everyMs)
+					_edit(n++);
+				_rig.run(1);
+			}
+			if(_edit)
+				settle();
+			_rig.run(200);
+			const double secs = double(m.now() - start) / g_rate;
+			const auto& v = m.blockMInstr;
+			double mean = 0;
+			for(const auto x : v)
+				mean += x;
+			mean /= double(std::max<size_t>(1, v.size()));
+			if(!_edit)
+				idleMean = mean;
+			const double base = idleMean > 0 ? idleMean : mean;
+			size_t h2 = 0, h4 = 0, hot = 0;
+			float worst4 = 0;
+			for(size_t i = 0; i + 2 <= v.size(); i += 2)
+				h2 += v[i] + v[i + 1] > 50;
+			for(size_t i = 0; i + 4 <= v.size(); i += 4)
+			{
+				const float w = v[i] + v[i + 1] + v[i + 2] + v[i + 3];
+				h4 += w > 100;
+				worst4 = std::max(worst4, w);
+			}
+			for(size_t i = 0; i + 5 <= v.size(); ++i)
+				hot += (v[i] + v[i + 1] + v[i + 2] + v[i + 3] + v[i + 4]) / 5 > 1.3 * base;
+			const auto count = [&](const int _kind)
+			{
+				const auto a = _rig.messageKinds.count(_kind) ? _rig.messageKinds.at(_kind) : 0;
+				const auto b = kinds0.count(_kind) ? kinds0.at(_kind) : 0;
+				return a - b;
+			};
+			size_t dumps = 0;
+			for(const int d : {0x67, 0x52, 0x69, 0x50})
+				dumps += count(d);
+			const double hotMs = double(hot) * g_block * 1000.0 / g_rate / secs;
+			std::printf("  %-12s %4d | %4zu %5zu %6.0f | %5.1f %5.1f | %5.0f | %5.1f\n", _name, n, dumps, count(0xb0), double(_rig.bytesToMachine - b0) / secs,
+				double(h2) / secs, double(h4) / secs, hotMs, worst4);
+			// a sample's SDS runs as long as its handshake takes (by design, the machine paces it): not budgeted
+			if(std::getenv("ACTIONS_KINDS"))
+			{
+				std::printf("     kinds:");
+				for(const auto& [kk, vv] : _rig.messageKinds)
+					if(const auto d = vv - (kinds0.count(kk) ? kinds0.at(kk) : 0))
+						std::printf(" %02x:%zu", kk, d);
+				std::puts("");
+			}
+			if(budget >= 0 && _edit && std::string(_name) != "sampleLoad")
+				check(hotMs <= budget, std::string(_name) + ": hot time within the budget (" + std::to_string(int(hotMs)) + " ms/s, budget " + std::to_string(int(budget)) + ")");
+		};
+		const auto steps16 = [&](const int _t, const int _from, const int _to, const int _g)
+		{
+			std::string on;
+			for(int st = _from; st < _to; ++st)
+				if(rnd(3) == 0)
+					on += (on.empty() ? "" : ",") + std::to_string(st);
+			return "{\"t\":" + std::to_string(_t) + ",\"on\":[" + on + "]}";
+			(void)_g;
+		};
+		const auto params = [&](const int _tracks, const int _g)
+		{
+			std::string vals;
+			for(int t = 0; t < _tracks; ++t)
+				for(int i = 0; i < 24; ++i)
+				{
+					if(i == 23 || (i >= 8 && i < 16 && rnd(2)))
+						continue;	// not every knob of the scope moves
+					vals += std::string(vals.empty() ? "" : ",") + "[" + std::to_string(t) + "," + std::to_string(i) + "," + std::to_string(rnd(128)) + "]";
+				}
+			return "{\"op\":\"params\",\"k\":" + k + ",\"values\":[" + vals + "],\"g\":" + std::to_string(_g) + "}";
+		};
+		const int models[] = {int(*ed::mdMachineModel("TRX-BD")), int(*ed::mdMachineModel("EFM-SD")), int(*ed::mdMachineModel("GND-SIN")), int(*ed::mdMachineModel("TRX-SD"))};
+
+		action("idle", 6000, 0, {});
+		{ const int g = ++gesture; action("lockDrag", 6000, 16, [&](const int _n) { _rig.page("{\"op\":\"lock\",\"p\":" + ps + ",\"t\":0,\"i\":1,\"s\":" + std::to_string(_n % 16) + ",\"v\":" + std::to_string((_n * 7) % 128) + ",\"g\":" + std::to_string(g) + "}"); }); }
+		action("lockClicks", 6000, 250, [&](const int _n) { _rig.page("{\"op\":\"lock\",\"p\":" + ps + ",\"t\":1,\"i\":2,\"s\":" + std::to_string(_n % 16) + ",\"v\":" + std::to_string((_n * 13) % 128) + ",\"g\":" + std::to_string(++gesture) + "}"); });
+		action("genR", 6000, 400, [&](const int _n) { _rig.page("{\"op\":\"steps\",\"p\":" + ps + ",\"from\":0,\"to\":16,\"g\":" + std::to_string(++gesture) + ",\"rows\":[" + steps16(4 + _n % 4, 0, 16, 0) + "]}"); });
+		action("genAllR", 6000, 800, [&](const int) { std::string rows; for(int t = 0; t < 16; ++t) rows += (t ? "," : "") + steps16(t, 0, 16, 0); _rig.page("{\"op\":\"steps\",\"p\":" + ps + ",\"from\":0,\"to\":16,\"g\":" + std::to_string(++gesture) + ",\"rows\":[" + rows + "]}"); });
+		{ const int g = ++gesture; action("genDrag", 6000, 33, [&](const int _n) { _rig.page("{\"op\":\"steps\",\"p\":" + ps + ",\"from\":0,\"to\":16,\"g\":" + std::to_string(g) + ",\"rows\":[" + steps16(5, 0, 16, _n) + "]}"); }); }
+		{ const int g = ++gesture; action("mutR", 6000, 400, [&](const int) { _rig.page(params(1, g)); }); }
+		{ const int g = ++gesture; action("mutAllR", 6000, 800, [&](const int) { _rig.page(params(16, g)); }); }
+		{ const int g = ++gesture; action("paramDrag", 6000, 16, [&](const int _n) { _rig.page("{\"op\":\"param\",\"k\":" + k + ",\"t\":2,\"i\":3,\"v\":" + std::to_string(_n % 128) + ",\"g\":" + std::to_string(g) + "}"); }); }
+		{ const int g = ++gesture; action("levelDrag", 6000, 16, [&](const int _n) { _rig.page("{\"op\":\"level\",\"k\":" + k + ",\"t\":3,\"v\":" + std::to_string(_n % 128) + ",\"g\":" + std::to_string(g) + "}"); }); }
+		action("machine", 6000, 500, [&](const int _n) { _rig.page("{\"op\":\"machine\",\"k\":" + k + ",\"t\":6,\"model\":" + std::to_string(models[_n % 4]) + ",\"keepFx\":true,\"g\":" + std::to_string(++gesture) + "}"); });
+		{ const int g = ++gesture; action("controlAll", 6000, 33, [&](const int _n) { _rig.page("{\"op\":\"tweak\",\"k\":" + k + ",\"group\":\"fx\",\"knob\":4,\"d\":" + std::to_string(_n % 2 ? 3 : -3) + ",\"t\":0,\"g\":" + std::to_string(g) + "}"); }); }
+		action("muteBurst", 6000, 30, [&](const int _n) { _rig.page("{\"op\":\"mute\",\"t\":" + std::to_string(_n % 16) + ",\"on\":" + ((_n / 16) % 2 ? "false" : "true") + "}"); });
+		action("copyPaste", 6000, 500, [&](const int _n) { _rig.page("{\"op\":\"copySteps\",\"p\":" + ps + ",\"t\":" + std::to_string(_n % 4) + ",\"from\":0,\"to\":16}"); _rig.page("{\"op\":\"pasteSteps\",\"p\":" + ps + ",\"t\":" + std::to_string(4 + _n % 8) + ",\"from\":0,\"g\":" + std::to_string(++gesture) + "}"); });
+		action("clearUndo", 6000, 700, [&](const int _n) { if(_n % 2 == 0) _rig.pageConfirmed("{\"op\":\"clearPattern\",\"p\":" + ps + ",\"g\":" + std::to_string(++gesture) + "}"); else _rig.page(R"({"op":"undo"})"); });
+		{ const int g = ++gesture; action("lengthDrag", 6000, 50, [&](const int _n) { _rig.page("{\"op\":\"totalLength\",\"p\":" + ps + ",\"v\":" + std::to_string(16 + (_n % 48)) + ",\"g\":" + std::to_string(g) + "}"); }); }
+		action("lengthBack", 2000, 0, {});
+		_rig.page("{\"op\":\"totalLength\",\"p\":" + ps + ",\"v\":16}");
+		settle();
+		{ const int g = ++gesture; action("tempoDrag", 6000, 33, [&](const int _n) { _rig.page("{\"op\":\"tempo\",\"bpm\":" + std::to_string(100 + _n % 60) + ",\"g\":" + std::to_string(g) + "}"); }); }
+		_rig.page(R"({"op":"tempo","bpm":120})");
+		action("keyboard", 6000, 125, [&](const int _n) { if(_n % 2 == 0) _rig.page("{\"op\":\"noteOn\",\"t\":" + std::to_string(_n % 4) + ",\"vel\":100,\"pitch\":0}"); else _rig.page("{\"op\":\"noteOff\",\"t\":" + std::to_string((_n - 1) % 4) + ",\"pitch\":0}"); });
+		action("undoRedo", 6000, 500, [&](const int _n) { _rig.page(_n % 2 ? R"({"op":"redo"})" : R"({"op":"undo"})"); });
+		action("select", 8000, 1000, [&](const int _n) { _rig.pageConfirmed("{\"op\":\"select\",\"p\":" + std::to_string(_n % 2 ? p : (p + 1) % 128) + ",\"now\":true}"); });
+		_rig.pageConfirmed("{\"op\":\"select\",\"p\":" + ps + ",\"now\":true}");
+		settle();
+		action("kitLoad", 8000, 1000, [&](const int _n) { _rig.pageConfirmed("{\"op\":\"kitLoad\",\"k\":" + std::to_string(_n % 2 ? *desk.linkState().kit : (*desk.linkState().kit + 1) % 64) + ",\"force\":true}"); });
+		action("sampleLoad", 12000, 100000, [&](const int)
+		{
+			// a 1 s sample into ROM slot 48 (SDS, paced by the machine's handshake)
+			ed::AudioClip c;
+			c.rate = 44100;
+			c.channels.assign(1, std::vector<float>(44100));
+			for(size_t i = 0; i < c.channels[0].size(); ++i)
+				c.channels[0][i] = float(0.5 * std::sin(double(i) * 0.05));
+			const auto err = desk.loadSample(47, "B014 Tone.wav", ed::encodeWav16(c));
+			if(!err.empty())
+				std::printf("  sampleLoad: %s\n", err.c_str());
+		});
+		action("after", 4000, 0, {});
+		_rig.pluginLike = false;
+		_rig.postOnly = false;
+		_rig.page(R"({"op":"stop"})");
+		_rig.run(300);
+	}
+}
+
 int main(const int _argc, char** _argv)
 {
+#ifdef __APPLE__
+	// as an audio thread: on a performance core when one is free (B-014 timing runs)
+	pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
+#endif
 	std::setvbuf(stdout, nullptr, _IOLBF, 0);
 	if(_argc < 2)
 	{
@@ -2918,6 +3256,17 @@ int main(const int _argc, char** _argv)
 			samples(rig);
 			check(g_contract.loaded() && g_contract.bad() == 0, g_contract.summary());
 			std::printf("mdDeskFirmwareTest samples: %s (%d failure(s))\n", g_failures ? "FAIL" : "PASS", g_failures);
+			return g_failures ? 1 : 0;
+		}
+		if(mode == "actions")
+		{
+			Rig rig(rom, _argv[1]);
+			rig.page(R"({"op":"ready"})");
+			rig.runUntil([&] { return rig.desk().isReady() && rig.desk().linkState().kit && rig.desk().linkState().pattern && rig.desk().documents().working; }, 8000);
+			rig.runUntil([&] { return !rig.desk().isBusy(); }, 20000);
+			rig.run(6000);	// the page's first library read
+			actionLoad(rig);
+			std::printf("mdDeskFirmwareTest actions: %s (%d failure(s))\n", g_failures ? "FAIL" : "PASS", g_failures);
 			return g_failures ? 1 : 0;
 		}
 		if(mode == "plocktiming" || mode == "plocktiming-strict")

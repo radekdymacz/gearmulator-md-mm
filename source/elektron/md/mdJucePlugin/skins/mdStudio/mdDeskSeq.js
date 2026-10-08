@@ -13,7 +13,7 @@ function stepCls(i, s) {
 	const t = V.tracks[i], c = ["st"]; if (s % 4 === 0) c.push("q"); if (s % 16 === 0 && s !== vis()[0]) c.push("gap"); if (s >= V.length) c.push("past");
 	if (t.trigs[s]) { c.push("on"); if (t.acc.has(s)) c.push("acc"); if (t.slide.has(s)) c.push("sl"); if (stepLocked(i, s)) c.push("lk"); }
 	if (inSel(i, s)) c.push("selx");
-	if (V.playing && s === S.step) c.push("ph"); return c.join(" ");
+	return c.join(" ");	/* the play position is the soft playhead (#phcol), not a class on the cells (B-014) */
 }
 /* The PAGE control sits on the right, above the grid, on the ruler row. */
 /* the step gestures, behind a small ? key at the right of the bar under the grid (a click: the list of keys) */

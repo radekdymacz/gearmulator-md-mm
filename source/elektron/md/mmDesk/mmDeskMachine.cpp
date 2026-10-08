@@ -6,14 +6,32 @@
 
 #include "elektronData/mmCommands.h"
 
+#include <algorithm>
+#include <cstdlib>
+
 namespace mmDesk
 {
 	using namespace parts;
 
 	const Profile& emulatorProfile()
 	{
-		static const Profile p{"emu", "EMU OS 1.32B", "Engine: the real Monomachine OS 1.32B runs inside the app. Choose HW MIDI to "
-			"edit a real Monomachine instead.", false, true, true, true};
+		static const Profile p = []
+		{
+			Profile e{"emu", "EMU OS 1.32B", "Engine: the real Monomachine OS 1.32B runs inside the app. Choose HW MIDI to "
+				"edit a real Monomachine instead.", false, true, true, true};
+			// B-014, as the Machinedrum's: values and dumps at MIDI cable speed (GEARMULATOR_MDMM_EDIT_RATE raises it, 0: off)
+			double rate = deskCore::DinPacer::g_bytesPerSecond;
+			if(const char* r = std::getenv("GEARMULATOR_MDMM_EDIT_RATE"); r && *r)
+				rate = std::max(0.0, std::atof(r));
+			e.pushBytesPerSecond = rate;
+			e.stream.bytesPerSecond = rate;
+			e.stream.ingestBytesPerSecond = 125000;
+			e.stream.settleMs = 250;
+			e.stream.valueBytesPerSecond = rate;
+			e.stream.valueBurstBytes = 192;
+			e.stream.latestIntervalMs = rate > 0 ? 100 : 0;
+			return e;
+		}();
 		return p;
 	}
 
@@ -40,7 +58,27 @@ namespace mmDesk
 		: m_profile(std::move(_profile))
 		, m_port(std::move(_port))
 		, m_wire(m_port.nowMs ? m_port.nowMs() : 0)
+		, m_stream(m_port.sendSysex, m_profile.stream)
 	{
+		// B-014: everything to the machine through the one stream, in order: SysEx (a machine change, then its values),
+		// values on the budget (the newest of a parameter wins), notes first. Panel keys stay the RECV session's.
+		if(m_port.sendSysex)
+			m_port.sendSysex = [this](const Bytes& _b) { m_stream.send(_b, false, clock()); };
+		if(m_port.sendParam)
+			m_port.sendParam = [this, send = std::move(m_port.sendParam)](const uint8_t _t, const uint8_t _p, const uint8_t _i, const uint8_t _v)
+			{
+				m_stream.value((_t << 12) | (_p << 8) | _i, 3, [send, _t, _p, _i, _v] { send(_t, _p, _i, _v); }, clock());
+			};
+		if(m_port.sendNrpn)
+			m_port.sendNrpn = [this, send = std::move(m_port.sendNrpn)](const uint8_t _t, const uint8_t _p, const uint8_t _v)
+			{
+				m_stream.value(0x100000 | (_t << 8) | _p, 12, [send, _t, _p, _v] { send(_t, _p, _v); }, clock());
+			};
+		if(m_port.sendNote)
+			m_port.sendNote = [this, send = std::move(m_port.sendNote)](const uint8_t _c, const uint8_t _n, const uint8_t _v)
+			{
+				m_stream.priority([send, _c, _n, _v] { send(_c, _n, _v); }, clock());
+			};
 	}
 
 	// ---- facts ----
@@ -79,6 +117,7 @@ namespace mmDesk
 	{
 		m_working = {};
 		m_pushes.clear();
+		m_stream.clear();
 		m_loads = {};
 		m_backgroundQueued = false;
 		m_recv = {};
@@ -147,6 +186,7 @@ namespace mmDesk
 
 	void MmMachine::tick(const double _now, const Documents& _view)
 	{
+		m_stream.pump(_now);
 		pumpSequence(_now);
 		// The emulator takes requests once its start screen is gone; over HW MIDI the status polls
 		// are what finds the machine.

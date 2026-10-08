@@ -173,6 +173,7 @@ namespace mmDesk
 
 		const Profile m_profile;
 		Port m_port;
+		deskCore::Stream m_stream;		// B-014: the one way to the machine (after m_port: it holds its SysEx)
 		RecvSession m_recv;
 		deskCore::WorkingCopy<elektronData::MmKit> m_working;	// where the kit that plays comes from
 		uint32_t m_nextRecvTag = 1;
