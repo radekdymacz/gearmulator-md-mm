@@ -1,38 +1,49 @@
-#!/bin/sh
+#!/bin/bash
 # The editors' user journeys (doc/modern-ux/FOUNDATION.md, Build and check): runs the diagnostics build of the
 # Machinedrum Editor, the Monomachine Editor or both with GEARMULATOR_MDSTUDIO_SELFTEST / GEARMULATOR_MMSTUDIO_SELFTEST
 # set to the journeys asked for, waits for "JOURNEYS DONE" in the page's log, prints a line per journey and exits
 # non-zero on any FAIL, a timeout or a missing build or ROM.
-#   scripts/mdmm-journeys.sh [--host standalone|vst3|both] [--background] [md|mm|both] [selector]
+#   scripts/mdmm-journeys.sh [--host standalone|vst3|both] [--background] [--jobs N] [md|mm|both] [selector]
 #     selector: journey (all, the default), journey-seq-*, journey-md-lib-*,mm-mix-* (comma-separated, * any)
 #     --host: the standalone apps (the default), the VST3s in the minimal host scripts/vst3EditorHost, or both
+#     --jobs N: N editors at once, each playing every N-th of the chosen journeys (the selector's "@k/N" shard,
+#       skins/shared/deskJourney.js); one report at the end. Implies --background. About one core per editor.
 #     --background (macOS): the editor never takes the focus nor comes to the front: an accessory app, its window
 #       small (the page zoomed to half), in the bottom-left corner behind every other window, and the page drawn
 #       while covered, and the standalone's output silent while its audio still runs (GEARMULATOR_MDMM_BACKGROUND=1,
 #       mdBackgroundRun.h). The VST3 host always runs so, and plays to no device.
+# Isolation: every editor runs in a sandbox of its own and never reads or writes the person's files but the ones it
+# copies from: its own data root (GEARMULATOR_DATA_ROOT: the ROM linked, the person's config copied with the page
+# skin set) and its own home for everything macOS keeps under ~/Library (CFFIXED_USER_HOME, which NSHomeDirectory
+# and so JUCE follow; HOME does not move it): the standalone's settings (a copy of the person's, which hold the
+# machine's memory the journeys write to; MDMM_JOURNEY_SETTINGS=fresh starts without), the page's log, WebKit's data.
+# Nothing is backed up or restored because nothing of the person's is written: two runs at once, or a run beside the
+# person's own editor, cannot touch ~/Library/Application Support/<editor>.settings or
+# ~/Documents/Gearmulator Preview/*/config.
 # Environment: MDMM_APP_DIR the folder holding "Machinedrum Editor.app" and "Monomachine Editor.app" (default: this tree's
-# bin/plugins/Release/Standalone, where a diagnostics build puts them), MDMM_VST3_DIR the folder holding the .vst3
-# bundles (default bin/plugins/Release/VST3), MDMM_VST3_HOST the host's binary (default: built into temp/vst3EditorHost
-# by scripts/macos/build_vst3_host.sh when missing), MDMM_JOURNEY_TIMEOUT seconds per editor (default 900),
-# MDMM_JOURNEY_VERBOSE=1 prints every step line too, MDMM_JOURNEY_PERF=1 records the audio callbacks
-# (GEARMULATOR_RT_INSTRUMENTATION=1: overruns, slow callbacks) into performance-*.jsonl beside the page's log,
-# MDMM_VST3_STATE=standalone starts the VST3 from the standalone's saved state (the filterState of the settings it
-# starts from, read only) instead of none, MDMM_JOURNEY_FRONT=0 does not bring the standalone to the front
+# bin/plugins/Release/Standalone, where a diagnostics build puts them, scripts/mdmm-dev.sh), MDMM_VST3_DIR the folder
+# holding the .vst3 bundles (default bin/plugins/Release/VST3), MDMM_VST3_HOST the host's binary (default: built into
+# temp/vst3EditorHost by scripts/macos/build_vst3_host.sh when missing), MDMM_JOURNEY_TIMEOUT seconds per editor
+# (default 900), MDMM_JOURNEY_OUT the report folder (default temp/journeys/<date-time>: each editor's page log,
+# app output and the merged report.txt), MDMM_JOURNEY_VERBOSE=1 prints every step line too, MDMM_JOURNEY_PERF=1
+# records the audio callbacks (GEARMULATOR_RT_INSTRUMENTATION=1: overruns, slow callbacks) into performance-*.jsonl in
+# the report folder, MDMM_VST3_STATE=standalone starts the VST3 from the standalone's saved state (the filterState of
+# the person's settings, read only) instead of none, MDMM_JOURNEY_FRONT=0 does not bring the standalone to the front
 # without --background (a covered window then draws no canvases and slows its timers, so some journeys fail there).
 # The ROMs: GEARMULATOR_MD_FIRMWARE_BIN / GEARMULATOR_MM_FIRMWARE_BIN, else the one in the plug-ins' ROM folder
-# (~/Documents/Gearmulator Preview/<machine>/roms); never copied or written: each run has a scratch data root
-# (GEARMULATOR_DATA_ROOT) whose ROM folder links to it, and the editor's config there is a copy of the person's with
-# the page skin set. The standalone's settings (they hold the machine's memory, which the journeys write to) are
-# backed up first and restored byte for byte afterwards, pass or fail.
+# (~/Documents/Gearmulator Preview/<machine>/roms); never copied or written (a link in the sandbox's ROM folder).
 set -u
 . "$(cd "$(dirname "$0")" && pwd)/mdmm-product.env"	# the product names: the apps, their executables and caches
 ROOT=$(cd "$(dirname "$0")/.." && pwd)
 HOSTS=standalone
 BACKGROUND=0
+JOBS=1
 while [ $# -gt 0 ]; do
 	case "$1" in
 		--host) HOSTS=${2:-}; shift 2 ;;
 		--host=*) HOSTS=${1#--host=}; shift ;;
+		--jobs) JOBS=${2:-}; shift 2 ;;
+		--jobs=*) JOBS=${1#--jobs=}; shift ;;
 		--background) BACKGROUND=1; shift ;;
 		*) break ;;
 	esac
@@ -42,10 +53,17 @@ SEL=${2:-journey}
 APPS=${MDMM_APP_DIR:-"$ROOT/bin/plugins/Release/Standalone"}
 VST3S=${MDMM_VST3_DIR:-"$ROOT/bin/plugins/Release/VST3"}
 TIMEOUT=${MDMM_JOURNEY_TIMEOUT:-900}
+OUT=${MDMM_JOURNEY_OUT:-"$ROOT/temp/journeys/$(date +%Y%m%d-%H%M%S)"}
 case "$SEL" in journey*) ;; *) SEL="journey-$SEL" ;; esac
-USAGE="usage: $0 [--host standalone|vst3|both] [--background] [md|mm|both] [journey|journey-<names>]"
+USAGE="usage: $0 [--host standalone|vst3|both] [--background] [--jobs N] [md|mm|both] [journey|journey-<names>]"
 case "$WHICH" in md|mm|both) ;; *) echo "$USAGE" >&2; exit 2 ;; esac
 case "$HOSTS" in standalone|vst3|both) ;; *) echo "$USAGE" >&2; exit 2 ;; esac
+case "$JOBS" in ''|*[!0-9]*|0) echo "$USAGE" >&2; exit 2 ;; esac
+case "$SEL" in *@*) echo "the selector takes no @shard: --jobs makes the shards" >&2; exit 2 ;; esac
+# several editors at once can neither all be in front nor all play to the audio device
+[ "$JOBS" -gt 1 ] && BACKGROUND=1
+mkdir -p "$OUT"
+OUT=$(cd "$OUT" && pwd)
 
 HOST_BIN=""
 vst3_host() {	# the host's binary in HOST_BIN, built once when there is none
@@ -61,116 +79,169 @@ vst3_host() {	# the host's binary in HOST_BIN, built once when there is none
 	[ -x "$HOST_BIN" ]
 }
 
-STATUS=0
-run_one() {	# $1: MD or MM, $2: standalone or vst3
-	M=$1 HOST=$2
-	if [ "$M" = MD ]; then MACHINE=Machinedrum SKIN=mdStudio VAR=GEARMULATOR_MDSTUDIO_SELFTEST BUNDLE=com.nativekloud.machinedrum-editor NAME=$MDMM_PRODUCT_NAME_MD ROMVAR=${GEARMULATOR_MD_FIRMWARE_BIN:-}
-	else MACHINE=Monomachine SKIN=mmStudio VAR=GEARMULATOR_MMSTUDIO_SELFTEST BUNDLE=com.nativekloud.monomachine-editor NAME=$MDMM_PRODUCT_NAME_MM ROMVAR=${GEARMULATOR_MM_FIRMWARE_BIN:-}; fi
+# What one editor needs, checked before anything starts: prints the problem and returns 1.
+#   $1: MD or MM, $2: standalone or vst3
+machine_vars() {
+	if [ "$1" = MD ]; then MACHINE=Machinedrum SKIN=mdStudio VAR=GEARMULATOR_MDSTUDIO_SELFTEST NAME=$MDMM_PRODUCT_NAME_MD LEGACY="Gearmulator MD" ROMVAR=${GEARMULATOR_MD_FIRMWARE_BIN:-} ROMENV=GEARMULATOR_MD_FIRMWARE_BIN
+	else MACHINE=Monomachine SKIN=mmStudio VAR=GEARMULATOR_MMSTUDIO_SELFTEST NAME=$MDMM_PRODUCT_NAME_MM LEGACY="Gearmulator MM" ROMVAR=${GEARMULATOR_MM_FIRMWARE_BIN:-} ROMENV=GEARMULATOR_MM_FIRMWARE_BIN; fi
 	DATA="$HOME/Documents/Gearmulator Preview/$MACHINE"
-	C="$DATA/config/$MACHINE Editor.xml"
-	SETTINGS="$HOME/Library/Application Support/$MACHINE Editor.settings"
-	LOGDIR="$HOME/Library/Caches/$NAME"	# JUCE's temp folder: ~/Library/Caches/<executable>; in the host, the plug-in's binary
-	echo "== $NAME ($HOST): $SEL"
-	if [ "$HOST" = standalone ]; then
-		APP="$APPS/$NAME.app"
-		EXE="$APP/Contents/MacOS/$NAME"
-		if [ ! -x "$EXE" ]; then echo "FAIL no diagnostics build at $APP (configure with -Dgearmulator_MDMM_DIAGNOSTICS=ON, build the $(echo $M | tr A-Z a-z)JucePlugin_Standalone target)"; STATUS=1; return; fi
-		if pgrep -f "$NAME.app/Contents/MacOS" >/dev/null 2>&1 || pgrep -f "Gearmulator $M.app/Contents/MacOS" >/dev/null 2>&1; then
-			echo "FAIL a $NAME app is running: quit it first (the journeys use the same settings)"; STATUS=1; return
-		fi
-	else
-		PLUGIN="$VST3S/$NAME.vst3"
-		if [ ! -d "$PLUGIN" ]; then echo "FAIL no diagnostics build at $PLUGIN (configure with -Dgearmulator_MDMM_DIAGNOSTICS=ON, build the $(echo $M | tr A-Z a-z)JucePlugin_VST3 target)"; STATUS=1; return; fi
-		if ! vst3_host; then echo "FAIL the VST3 host did not build (temp/vst3EditorHost.log)"; STATUS=1; return; fi
-	fi
 	ROM=$ROMVAR
 	[ -n "$ROM" ] || ROM=$(ls "$DATA/roms/"* 2>/dev/null | head -1)
-	if [ -z "$ROM" ] || [ ! -f "$ROM" ]; then echo "FAIL no $MACHINE ROM (set $( [ "$M" = MD ] && echo GEARMULATOR_MD_FIRMWARE_BIN || echo GEARMULATOR_MM_FIRMWARE_BIN) or put it in $DATA/roms)"; STATUS=1; return; fi
+}
+check_one() {
+	machine_vars "$1"
+	if [ "$2" = standalone ]; then
+		if [ ! -x "$APPS/$NAME.app/Contents/MacOS/$NAME" ]; then echo "FAIL no diagnostics build at $APPS/$NAME.app (scripts/mdmm-dev.sh build, or configure with -Dgearmulator_MDMM_DIAGNOSTICS=ON and build the $(echo "$1" | tr A-Z a-z)JucePlugin_Standalone target)"; return 1; fi
+	else
+		if [ ! -d "$VST3S/$NAME.vst3" ]; then echo "FAIL no diagnostics build at $VST3S/$NAME.vst3 (scripts/mdmm-dev.sh build)"; return 1; fi
+		if ! vst3_host; then echo "FAIL the VST3 host did not build (temp/vst3EditorHost.log)"; return 1; fi
+	fi
+	if [ -z "$ROM" ] || [ ! -f "$ROM" ]; then echo "FAIL no $MACHINE ROM (set $ROMENV or put it in $DATA/roms)"; return 1; fi
+	return 0
+}
 
-	TMP=$(mktemp -d)
-	# the scratch data root: the ROM linked, the person's config copied with the page skin set
-	ROOTDIR="$TMP/data/"
-	mkdir -p "$ROOTDIR/Gearmulator Preview/$MACHINE/roms" "$ROOTDIR/Gearmulator Preview/$MACHINE/config"
-	ln -s "$ROM" "$ROOTDIR/Gearmulator Preview/$MACHINE/roms/$(basename "$ROM")"
+# One editor in its sandbox, in the background of this script: writes $UNIT/result (DONE, TIMEOUT or ENDED), the page's
+# lines into $UNIT/journeys.txt and keeps the page's log and the app's output in $UNIT.
+#   $1: MD or MM, $2: standalone or vst3, $3: the selector, $4: the unit's folder in the report
+run_unit() {
+	M=$1 HOST=$2 S=$3 UNIT=$4
+	machine_vars "$M"
+	mkdir -p "$UNIT"
+	BOX=$(mktemp -d "${TMPDIR:-/tmp}/mdmm-journey.XXXXXX")
+	trap 'kill $PID 2>/dev/null; sleep 1; kill -9 $PID 2>/dev/null; rm -rf "$BOX"; exit 1' INT TERM
+	DROOT="$BOX/data/"
+	SHOME="$BOX/home"
+	mkdir -p "$DROOT/Gearmulator Preview/$MACHINE/roms" "$DROOT/Gearmulator Preview/$MACHINE/config" "$SHOME/Library/Application Support" "$SHOME/Library/Caches"
+	ln -s "$ROM" "$DROOT/Gearmulator Preview/$MACHINE/roms/$(basename "$ROM")"
+	C="$DATA/config/$MACHINE Editor.xml"
 	if [ -f "$C" ]; then
 		sed -e "s/\"skinDisplayName\" val=\"[^\"]*\"/\"skinDisplayName\" val=\"$SKIN\"/" -e "s/\"skinFile\" val=\"[^\"]*\"/\"skinFile\" val=\"$SKIN.rml\"/" \
-			"$C" > "$ROOTDIR/Gearmulator Preview/$MACHINE/config/$MACHINE Editor.xml"
+			"$C" > "$DROOT/Gearmulator Preview/$MACHINE/config/$MACHINE Editor.xml"
 	fi
-	[ -f "$SETTINGS" ] && cp -p "$SETTINGS" "$TMP/settings"
-	restore() {
-		# the audio callbacks' record (MDMM_JOURNEY_PERF=1) goes beside the page's log
-		for f in "$ROOTDIR/Gearmulator Preview/$MACHINE/logs/"performance-*.jsonl; do
-			[ -f "$f" ] && cp "$f" "$LOGDIR/" && echo "   audio: $LOGDIR/$(basename "$f")"
-		done
-		if [ "$HOST" = standalone ]; then
-			if [ -f "$TMP/settings" ]; then cp -p "$TMP/settings" "$SETTINGS"; else rm -f "$SETTINGS"; fi
-		fi
-		rm -rf "$TMP"
-	}
-	trap 'kill $PID 2>/dev/null; restore; exit 1' INT TERM
-	mkdir -p "$LOGDIR"; touch "$TMP/start"
-	PID=""
+	# the person's settings (read only): the editor's own, else the ones it copies them from the first time
+	SAVED="$HOME/Library/Application Support/$MACHINE Editor.settings"
+	[ -f "$SAVED" ] || SAVED="$HOME/Library/Application Support/$LEGACY.settings"
+	if [ "$HOST" = standalone ] && [ "${MDMM_JOURNEY_SETTINGS:-copy}" = copy ] && [ -f "$SAVED" ]; then
+		cp "$SAVED" "$SHOME/Library/Application Support/$MACHINE Editor.settings"
+	fi
+	touch "$BOX/start"
 	PERF=""; [ "${MDMM_JOURNEY_PERF:-0}" = 1 ] && PERF="GEARMULATOR_RT_INSTRUMENTATION=1"
+	BG=""; [ "$BACKGROUND" = 1 ] && BG="GEARMULATOR_MDMM_BACKGROUND=1"
 	if [ "$HOST" = standalone ]; then
-		if [ "$BACKGROUND" = 1 ]; then
-			env $PERF GEARMULATOR_DATA_ROOT="$ROOTDIR" GEARMULATOR_MDMM_BACKGROUND=1 "$VAR=$SEL" "$EXE" >"$TMP/app.out" 2>&1 &
-			PID=$!
-		else
-			env $PERF GEARMULATOR_DATA_ROOT="$ROOTDIR" "$VAR=$SEL" "$EXE" >"$TMP/app.out" 2>&1 &
-			PID=$!
-			# The page draws its canvases on animation frames and runs its timers at full rate only while its window
-			# is visible (WebKit pauses a covered page's frames): the app is brought to the front once it is up. Do
-			# not type into it while it runs. MDMM_JOURNEY_FRONT=0 leaves it where it opens; --background instead
-			# keeps the page drawn behind other windows.
-			if [ "${MDMM_JOURNEY_FRONT:-1}" = 1 ]; then
-				( sleep 4; osascript -e "tell application id \"$BUNDLE\" to activate" >/dev/null 2>&1 ) &
-			fi
+		env $PERF $BG CFFIXED_USER_HOME="$SHOME" GEARMULATOR_DATA_ROOT="$DROOT" "$VAR=$S" "$APPS/$NAME.app/Contents/MacOS/$NAME" >"$UNIT/app.out" 2>&1 &
+		PID=$!
+		# Without --background the page draws its canvases on animation frames and runs its timers at full rate only
+		# while its window is visible (WebKit pauses a covered page's frames): this process (not any other copy of the
+		# app, the person's own included) is brought to the front once it is up. Do not type into it while it runs.
+		if [ "$BACKGROUND" = 0 ] && [ "${MDMM_JOURNEY_FRONT:-1}" = 1 ]; then
+			( sleep 4; osascript -e "tell application \"System Events\" to set frontmost of (first process whose unix id is $PID) to true" >/dev/null 2>&1 ) &
 		fi
 	else
 		STATE=""
-		# the settings the standalone would start from: its own, else the ones it copies them from the first time
-		SAVED="$SETTINGS"; [ -f "$SAVED" ] || SAVED="$HOME/Library/Application Support/Gearmulator $M.settings"
 		if [ "${MDMM_VST3_STATE:-}" = standalone ] && [ -f "$SAVED" ]; then
-			sed -n 's/.*<VALUE name="filterState" val="\([^"]*\)".*/\1/p' "$SAVED" > "$TMP/state.b64"
-			[ -s "$TMP/state.b64" ] && STATE="--state $TMP/state.b64"
+			sed -n 's/.*<VALUE name="filterState" val="\([^"]*\)".*/\1/p' "$SAVED" > "$BOX/state.b64"
+			[ -s "$BOX/state.b64" ] && STATE="--state $BOX/state.b64"
 		fi
-		env $PERF GEARMULATOR_DATA_ROOT="$ROOTDIR" GEARMULATOR_MDMM_BACKGROUND=1 "$VAR=$SEL" "$HOST_BIN" "$PLUGIN" $((TIMEOUT + 60)) --background $STATE >"$TMP/app.out" 2>&1 &
+		env $PERF CFFIXED_USER_HOME="$SHOME" GEARMULATOR_DATA_ROOT="$DROOT" GEARMULATOR_MDMM_BACKGROUND=1 "$VAR=$S" "$HOST_BIN" "$VST3S/$NAME.vst3" $((TIMEOUT + 60)) --background $STATE >"$UNIT/app.out" 2>&1 &
 		PID=$!
 	fi
-	# the page's log is a new gearmulator-<skin>-<random>.log in the app's caches folder
-	LOG=""; t=0; DONE=""
+	# the page's log: a new gearmulator-<skin>-<random>.log in JUCE's temp folder, ~/Library/Caches/<executable>, here
+	# the sandbox's (the plug-in's binary in the host)
+	LOG=""; t=0; RESULT=TIMEOUT
 	while [ $t -lt "$TIMEOUT" ]; do
 		sleep 2; t=$((t + 2))
-		if [ -z "$LOG" ]; then LOG=$(find "$LOGDIR" -name "gearmulator-$SKIN-*.log" -newer "$TMP/start" 2>/dev/null | head -1); fi
-		if [ -n "$LOG" ] && grep -q "JOURNEYS DONE" "$LOG" 2>/dev/null; then DONE=1; break; fi
-		if ! kill -0 $PID 2>/dev/null; then break; fi
+		[ -n "$LOG" ] || LOG=$(find "$SHOME/Library/Caches" -name "gearmulator-$SKIN-*.log" -newer "$BOX/start" 2>/dev/null | head -1)
+		if [ -n "$LOG" ] && grep -q "JOURNEYS DONE" "$LOG" 2>/dev/null; then RESULT=DONE; break; fi
+		if ! kill -0 $PID 2>/dev/null; then RESULT=ENDED; break; fi
 	done
-	ALIVE=0; kill -0 $PID 2>/dev/null && ALIVE=1
-	# the standalone is asked to quit (it saves its settings: restored below); the host has nothing to save
-	if [ "$HOST" = standalone ]; then
-		osascript -e "tell application id \"$BUNDLE\" to quit" >/dev/null 2>&1 || true
-		for i in 1 2 3 4 5; do kill -0 $PID 2>/dev/null || break; sleep 1; done
-	fi
-	kill $PID 2>/dev/null; sleep 1; kill -9 $PID 2>/dev/null
+	# nothing to save: the sandbox goes, so the editor is simply stopped
+	kill $PID 2>/dev/null
+	for i in 1 2 3 4 5; do kill -0 $PID 2>/dev/null || break; sleep 1; done
+	kill -9 $PID 2>/dev/null
 	wait $PID 2>/dev/null
+	[ -n "$LOG" ] || LOG=$(find "$SHOME/Library/Caches" -name "gearmulator-$SKIN-*.log" -newer "$BOX/start" 2>/dev/null | head -1)
 	if [ -n "$LOG" ]; then
-		if [ "${MDMM_JOURNEY_VERBOSE:-0}" = 1 ]; then grep -E "JOURNEY" "$LOG" | sed 's/^[^J]*JOURNEY/JOURNEY/'
-		else grep -E "JOURNEY [^ ]+ (PASS|FAIL|SKIP)|JOURNEYS (start|DONE)" "$LOG" | sed 's/^[^J]*JOURNEY/JOURNEY/'; fi
-		echo "   log: $LOG"
+		cp "$LOG" "$UNIT/page.log"
+		grep -E "JOURNEY" "$LOG" | sed 's/^[^J]*JOURNEY/JOURNEY/' > "$UNIT/journeys.txt"
 	fi
-	if [ -z "$DONE" ]; then
-		if [ "$ALIVE" = 1 ]; then echo "FAIL timeout after ${TIMEOUT} s"; else echo "FAIL the app ended before JOURNEYS DONE:"; tail -5 "$TMP/app.out"; fi
-		STATUS=1
-	else
-		grep -qE "JOURNEY [^ ]+ FAIL" "$LOG" && STATUS=1
-		grep -q "JOURNEYS DONE 0/0" "$LOG" && { echo "FAIL no journey matched $SEL"; STATUS=1; }
-	fi
-	restore; trap - INT TERM
-	return 0
+	# the audio callbacks' record (MDMM_JOURNEY_PERF=1)
+	for f in "$DROOT/Gearmulator Preview/$MACHINE/logs/"performance-*.jsonl; do
+		[ -f "$f" ] && cp "$f" "$UNIT/"
+	done
+	echo "$RESULT $t" > "$UNIT/result"
+	rm -rf "$BOX"
+	trap - INT TERM
 }
+
+# The units: each editor and host asked for, split into JOBS shards; at most JOBS run at once.
+UNITS=""
+STATUS=0
 for H in standalone vst3; do
 	[ "$HOSTS" = "$H" ] || [ "$HOSTS" = both ] || continue
-	[ "$WHICH" = md ] || [ "$WHICH" = both ] && run_one MD $H
-	[ "$WHICH" = mm ] || [ "$WHICH" = both ] && run_one MM $H
+	for M in MD MM; do
+		[ "$WHICH" = both ] || [ "$WHICH" = "$(echo $M | tr A-Z a-z)" ] || continue
+		if ! check_one "$M" "$H"; then STATUS=1; continue; fi
+		k=1
+		while [ $k -le "$JOBS" ]; do
+			UNITS="$UNITS $M:$H:$k"
+			k=$((k + 1))
+		done
+	done
 done
+[ -n "$UNITS" ] || exit 1
+
+echo "== journeys: $SEL, $(echo $UNITS | wc -w | tr -d ' ') editor run(s), $JOBS at once$( [ "$BACKGROUND" = 1 ] && echo ", in the background"); report: $OUT"
+START=$(date +%s)
+PIDS=""
+for u in $UNITS; do
+	M=${u%%:*}; rest=${u#*:}; H=${rest%%:*}; k=${rest#*:}
+	sel=$SEL; [ "$JOBS" -gt 1 ] && sel="$SEL@$k/$JOBS"
+	dir="$OUT/$(echo $M | tr A-Z a-z)-$H$( [ "$JOBS" -gt 1 ] && echo "-$k")"
+	# a free slot: wait on the PIDs started (never on a process name)
+	while [ "$(echo $PIDS | wc -w)" -ge "$JOBS" ]; do
+		sleep 2
+		alive=""
+		for p in $PIDS; do kill -0 "$p" 2>/dev/null && alive="$alive $p"; done
+		PIDS=$alive
+	done
+	run_unit "$M" "$H" "$sel" "$dir" &
+	PIDS="$PIDS $!"
+	echo "   started $dir ($sel)"
+	sleep 3	# the editors' starts staggered: the first seconds are the heaviest
+done
+for p in $PIDS; do wait "$p"; done
+
+# The merged report
+REPORT="$OUT/report.txt"
+: > "$REPORT"
+passed=0; failed=0; skipped=0
+for u in $UNITS; do
+	M=${u%%:*}; rest=${u#*:}; H=${rest%%:*}; k=${rest#*:}
+	dir="$OUT/$(echo $M | tr A-Z a-z)-$H$( [ "$JOBS" -gt 1 ] && echo "-$k")"
+	machine_vars "$M"
+	{
+		echo "== $NAME ($H)$( [ "$JOBS" -gt 1 ] && echo ", shard $k/$JOBS")"
+		if [ -f "$dir/journeys.txt" ]; then
+			if [ "${MDMM_JOURNEY_VERBOSE:-0}" = 1 ]; then cat "$dir/journeys.txt"
+			else grep -E "JOURNEY [^ ]+ (PASS|FAIL|SKIP)|JOURNEYS (start|DONE)" "$dir/journeys.txt"; fi
+			echo "   log: $dir/page.log"
+		fi
+		read -r result secs < "$dir/result" 2>/dev/null || result=ENDED
+		case "$result" in
+			DONE) grep -q "JOURNEYS DONE 0/0" "$dir/journeys.txt" && [ "$JOBS" -eq 1 ] && echo "FAIL no journey matched $SEL" ;;
+			TIMEOUT) echo "FAIL timeout after ${TIMEOUT} s" ;;
+			*) echo "FAIL the editor ended before JOURNEYS DONE:"; tail -5 "$dir/app.out" 2>/dev/null ;;
+		esac
+	} >> "$REPORT"
+	read -r result secs < "$dir/result" 2>/dev/null || result=ENDED
+	[ "$result" = DONE ] || STATUS=1
+	if [ -f "$dir/journeys.txt" ]; then
+		p=$(grep -cE "JOURNEY [^ ]+ PASS" "$dir/journeys.txt"); f=$(grep -cE "JOURNEY [^ ]+ FAIL" "$dir/journeys.txt"); s=$(grep -cE "JOURNEY [^ ]+ SKIP" "$dir/journeys.txt")
+		passed=$((passed + p)); failed=$((failed + f)); skipped=$((skipped + s))
+	fi
+done
+[ "$failed" -gt 0 ] && STATUS=1
+[ $((passed + failed + skipped)) -eq 0 ] && { echo "FAIL no journey matched $SEL" >> "$REPORT"; STATUS=1; }
+echo "JOURNEYS: $passed passed, $failed failed, $skipped skipped in $(( $(date +%s) - START )) s ($JOBS at once)" >> "$REPORT"
+cat "$REPORT"
 exit $STATUS

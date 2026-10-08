@@ -6,48 +6,16 @@ name: MD/MM Editors Linux x64
 # virtual X11 display on the oldest and the newest supported Ubuntu with only runtime packages, checks the page
 # and the bridge, and keeps screenshots (scripts/linux/smoke_mdmm.sh; doc/modern-ux/FOUNDATION.md, "CI start
 # tests"), then runs pluginval (strictness 5, no ROM, on the same virtual display) on the VST3 of each archive.
-# On an mdmm-v* tag, mdmm-editors-release.yml calls it and attaches the archives to the draft release only
-# when all of it, start tests and pluginval, has passed.
+# Called by mdmm-editors.yml on every push; on an mdmm-v* tag, mdmm-editors-release.yml attaches the archives of
+# the tag commit's tested run (or calls mdmm-editors.yml when there is none) to the draft release, only when all of
+# it, start tests and pluginval, has passed. Compiler cache: ccache, one archive per branch (actions/cache).
 
 on:
   workflow_call:
   workflow_dispatch:
-  push:
-    branches:
-      - main
-      - "release/md-mm-*"
-      - "release/0.*"
-      - "feat/linux-*"
-      - "ci/*-ui-smoke"
-    paths:
-      - ".github/workflows/mdmm-editors-linux.yml"
-      - "scripts/ci/**"
-      - "scripts/pluginval.env"
-      - "scripts/linux/**"
-      - "scripts/vst3EditorHost/**"
-      - ".gitmodules"
-      - "CMakeLists.txt"
-      - "base.cmake"
-      - "source/CMakeLists.txt"
-      - "source/*.cmake"
-      - "source/JUCE"
-      - "source/elektron/**"
-      - "source/baseLib/**"
-      - "source/synthLib/**"
-      - "source/jucePluginEditorLib/**"
-      - "source/jucePluginLib/**"
-      - "source/juceUiLib/**"
-      - "source/juceRmlUi/**"
-      - "source/juceRmlPlugin/**"
-      - "source/dsp56300"
-      - "source/mc68k"
 
 permissions:
   contents: read
-
-concurrency:
-  group: mdmm-editors-linux-${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
 
 jobs:
   build:
@@ -55,10 +23,13 @@ jobs:
     runs-on: ubuntu-22.04
     timeout-minutes: 150
     env:
-      SCCACHE_GHA_ENABLED: "true"
-      SCCACHE_GHA_VERSION: "mdmm-v1-linux-x64-gcc-2204-webview"
-      CMAKE_C_COMPILER_LAUNCHER: sccache
-      CMAKE_CXX_COMPILER_LAUNCHER: sccache
+      CCACHE_BASEDIR: ${{ github.workspace }}
+      CCACHE_COMPILERCHECK: "%compiler% -v"
+      CCACHE_SLOPPINESS: "include_file_mtime,include_file_ctime,time_macros,pch_defines"
+      CCACHE_MAXSIZE: 2G
+      CCACHE_COMPRESS: "true"
+      CMAKE_C_COMPILER_LAUNCHER: ccache
+      CMAKE_CXX_COMPILER_LAUNCHER: ccache
       CC: gcc-13
       CXX: g++-13
 
@@ -73,22 +44,57 @@ jobs:
       - name: Install build dependencies
         run: >-
           sudo add-apt-repository -y ppa:ubuntu-toolchain-r/test &&
-          sudo apt-get update && sudo apt-get install -y g++-13 gcc-13 ninja-build pkg-config xvfb
+          sudo apt-get update && sudo apt-get install -y g++-13 gcc-13 ninja-build ccache pkg-config xvfb
           libasound2-dev libgl1-mesa-dev libx11-dev libxcomposite-dev libxcursor-dev libxext-dev
           libxinerama-dev libxrandr-dev libxrender-dev libfreetype6-dev libfontconfig1-dev
           libwebkit2gtk-4.0-dev libgtk-3-dev
 
-      - name: Configure compiler cache
-        uses: mozilla-actions/sccache-action@v0.0.11
+      # ccache (one archive per branch and toolchain; a new branch starts from main's) instead of sccache's GitHub
+      # cache backend, which stores an entry per object and lost writes to the cache service's rate limit.
+      - name: Compiler cache folder
+        run: echo "CCACHE_DIR=${RUNNER_TEMP}/ccache" >> "${GITHUB_ENV}"
+
+      - name: Restore the compiler cache
+        uses: actions/cache/restore@v4
         with:
-          version: v0.16.0
+          path: ${{ runner.temp }}/ccache
+          key: ccache-v1-linux-x64-gcc13-2204-${{ github.ref_name }}-${{ github.run_id }}
+          restore-keys: |
+            ccache-v1-linux-x64-gcc13-2204-${{ github.ref_name }}-
+            ccache-v1-linux-x64-gcc13-2204-main-
 
       - name: Build, test and package MD/MM
-        run: >-
-          xvfb-run -a ./scripts/linux/build_mdmm.sh
-          "${{ github.workspace }}"
-          "${{ runner.temp }}/gearmulator-elektron-build"
-          "${{ github.workspace }}/artifacts/linux-mdmm"
+        run: |
+          ccache --zero-stats > /dev/null
+          xvfb-run -a ./scripts/linux/build_mdmm.sh \
+            "${{ github.workspace }}" \
+            "${{ runner.temp }}/gearmulator-elektron-build" \
+            "${{ github.workspace }}/artifacts/linux-mdmm"
+
+      # The start test's minimal VST3 host (scripts/vst3EditorHost), built here where the headers are; libstdc++
+      # and libgcc linked statically, as the editors, so it runs with runtime packages only.
+      - name: Build the minimal VST3 host
+        run: |
+          set -euo pipefail
+          cmake -S scripts/vst3EditorHost -B "${RUNNER_TEMP}/vst3host" -G Ninja -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_EXE_LINKER_FLAGS="-static-libstdc++ -static-libgcc"
+          cmake --build "${RUNNER_TEMP}/vst3host" --parallel 4
+          mkdir -p artifacts/linux-vst3host
+          find "${RUNNER_TEMP}/vst3host" -type f -name mdmmVst3EditorHost -perm -u+x -exec cp {} artifacts/linux-vst3host/ \;
+          test -x artifacts/linux-vst3host/mdmmVst3EditorHost
+
+      - name: Compiler cache statistics
+        if: always()
+        run: |
+          ccache --show-stats --verbose
+          { echo "### ccache (Linux x64)"; echo '```'; ccache --show-stats; echo '```'; } >> "${GITHUB_STEP_SUMMARY}"
+
+      - name: Save the compiler cache
+        if: always()
+        uses: actions/cache/save@v4
+        with:
+          path: ${{ runner.temp }}/ccache
+          key: ccache-v1-linux-x64-gcc13-2204-${{ github.ref_name }}-${{ github.run_id }}
 
       - name: Check the packages
         run: |
@@ -117,24 +123,12 @@ jobs:
           if-no-files-found: error
           retention-days: 14
 
-      # The start test's minimal VST3 host (scripts/vst3EditorHost), built here where the headers are; libstdc++
-      # and libgcc linked statically, as the editors, so it runs with runtime packages only.
-      - name: Build the minimal VST3 host
-        run: |
-          set -euo pipefail
-          cmake -S scripts/vst3EditorHost -B "${RUNNER_TEMP}/vst3host" -G Ninja -DCMAKE_BUILD_TYPE=Release \
-            -DCMAKE_EXE_LINKER_FLAGS="-static-libstdc++ -static-libgcc"
-          cmake --build "${RUNNER_TEMP}/vst3host" --parallel 4
-          mkdir -p artifacts/linux-vst3host
-          find "${RUNNER_TEMP}/vst3host" -type f -name mdmmVst3EditorHost -perm -u+x -exec cp {} artifacts/linux-vst3host/ \;
-          test -x artifacts/linux-vst3host/mdmmVst3EditorHost
-
       - uses: actions/upload-artifact@v4
         with:
           name: linux-mdmm-vst3host
           path: artifacts/linux-vst3host/mdmmVst3EditorHost
           if-no-files-found: error
-          retention-days: 3
+          retention-days: 14
 
   smoke:
     name: Start the packaged standalones and VST3s (${{ matrix.os }}, runtime packages only)

@@ -7,6 +7,11 @@ set -euo pipefail
 
 source_dir="$(cd "$(dirname "$0")/../.." && pwd)"
 build_dir="$1"
+# The selected Xcode's SDK (scripts/mdmm-dev.sh says why): CMake's own guess may be the Command Line Tools' one.
+if [[ -z "${SDKROOT:-}" ]]; then
+	SDKROOT="$(xcrun --sdk macosx --show-sdk-path)"
+	export SDKROOT
+fi
 {
 	if [[ ! -f "${source_dir}/source/JUCE/CMakeLists.txt" ]]; then
 		git -C "${source_dir}" submodule update --init --depth 1 source/JUCE

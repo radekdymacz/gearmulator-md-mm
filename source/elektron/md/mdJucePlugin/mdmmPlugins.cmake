@@ -24,6 +24,13 @@ unset(_mdmmVersionMajor)
 unset(_mdmmVersionMinor)
 unset(_mdmmVersionPatch)
 
+# The version as code: one generated file (mdmmVersion.h), rewritten only when the version changes, instead of a
+# definition on every file of both plug-ins (a bump rebuilt all of them, JUCE's modules included).
+configure_file(mdmmVersion.cpp.in ${CMAKE_CURRENT_BINARY_DIR}/mdmmVersion.cpp @ONLY)
+add_library(mdmmVersion STATIC ${CMAKE_CURRENT_BINARY_DIR}/mdmmVersion.cpp mdmmVersion.h)
+target_include_directories(mdmmVersion PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
+set_property(TARGET mdmmVersion PROPERTY FOLDER "Elektron")
+
 # The editor page is the only UI (P5): upstream's panel skins stay in the tree, not in the product.
 list(FILTER SOURCES EXCLUDE REGEX "^skins/(mdDefault|mmSfx60)/")
 list(APPEND SOURCES
@@ -228,9 +235,9 @@ function(mdmm_plugin_targets)
 		target_link_libraries(${plugin_target} PRIVATE elektronData mdDataLink mdDesk mmDesk deskHost deskWire)
 		# public: mdPageEditor.h includes mdUpdater.h, and the tests that build on the plug-in include both
 		target_link_libraries(${plugin_target} PUBLIC mdmmUpdate)
+		# the version (mdmmVersion.h): the update check, the page's ?version=, the About box
+		target_link_libraries(${plugin_target} PUBLIC mdmmVersion)
 		target_compile_definitions(${plugin_target} PUBLIC
-			# the in-app update check compares latest.json's version with this one (mdUpdater.cpp)
-			"MDMM_EDITOR_VERSION=\"${MDMM_EDITOR_VERSION}\""
 			# jucePluginEditorLib/standaloneApp.h: native title bar and menu bar (P4).
 			JUCE_USE_CUSTOM_PLUGIN_STANDALONE_APP=1
 			# The names the code shows (mdPluginProcessor.cpp, mdStandaloneApp.cpp): scripts/mdmm-product.env.
@@ -241,7 +248,52 @@ function(mdmm_plugin_targets)
 			"MDMM_WEBSITE=\"${MDMM_WEBSITE}\""
 			MDMM_DIAGNOSTICS=$<BOOL:${gearmulator_MDMM_DIAGNOSTICS}>
 			MDMM_EDITFLOW_DRIVER=$<BOOL:${gearmulator_MDMM_EDITFLOW_DRIVER}>)
+
+		# JUCE gives its version definitions (JucePlugin_Version, _VersionString, _VersionCode: the version a host
+		# is told), and upstream's juce.cmake its PluginVersionMajor/Minor/Patch, to every file of the shared code
+		# and of what links it, so a bump rebuilt both plug-ins whole, JUCE's modules included. They go to the files
+		# that use them instead: the format wrappers (VST3, AU, Standalone: the versions hosts read), the two of
+		# ours that name JucePlugin_VersionString (mdPluginProcessor.cpp, mdStandaloneApp.cpp through
+		# standaloneApp.h; mdRecordMenu.cpp is in the _Standalone target) and upstream's serverPlugin.cpp (the
+		# bridge's plug-in description, bridge/client/plugin.h). A file that names them without having them does
+		# not compile.
+		set(_mdmmJuceVersionDefinitions "")
+		set(_mdmmVersionDefinition "^(JucePlugin_Version(String|Code)?|PluginVersion(Major|Minor|Patch))=")
+		foreach(_mdmmProperty COMPILE_DEFINITIONS INTERFACE_COMPILE_DEFINITIONS)
+			get_target_property(_mdmmDefinitions ${plugin_target} ${_mdmmProperty})
+			if(NOT _mdmmDefinitions)
+				continue()
+			endif()
+			set(_mdmmVersionOnes ${_mdmmDefinitions})
+			list(FILTER _mdmmVersionOnes INCLUDE REGEX "${_mdmmVersionDefinition}")
+			list(APPEND _mdmmJuceVersionDefinitions ${_mdmmVersionOnes})
+			list(FILTER _mdmmDefinitions EXCLUDE REGEX "${_mdmmVersionDefinition}")
+			set_property(TARGET ${plugin_target} PROPERTY ${_mdmmProperty} ${_mdmmDefinitions})
+		endforeach()
+		list(REMOVE_DUPLICATES _mdmmJuceVersionDefinitions)
+		list(LENGTH _mdmmJuceVersionDefinitions _mdmmCount)
+		if(NOT _mdmmCount EQUAL 6)
+			message(FATAL_ERROR "${plugin_target}: expected six version definitions (JUCE's three, juce.cmake's three), found: ${_mdmmJuceVersionDefinitions}")
+		endif()
+		# JUCE's default ARA factory ID ends in the version (<bundle id>.arafactory.<version>) and is a definition on
+		# every file too; the editors are no ARA plug-ins (JucePlugin_Enable_ARA=0), so it keeps the bundle ID only.
+		get_target_property(_mdmmBundleId ${plugin_target} JUCE_BUNDLE_ID)
+		set_property(TARGET ${plugin_target} PROPERTY JUCE_ARA_FACTORY_ID "\"${_mdmmBundleId}.arafactory\"")
+		get_target_property(_mdmmWrappers ${plugin_target} JUCE_ACTIVE_PLUGIN_TARGETS)
+		foreach(_mdmmWrapper IN LISTS _mdmmWrappers)
+			target_compile_definitions(${_mdmmWrapper} PRIVATE ${_mdmmJuceVersionDefinitions})
+		endforeach()
 	endforeach()
+	# both plug-ins have the same version; their shared files are compiled once per plug-in with these
+	set_property(SOURCE mdPluginProcessor.cpp mdStandaloneApp.cpp serverPlugin.cpp
+		APPEND PROPERTY COMPILE_DEFINITIONS ${_mdmmJuceVersionDefinitions})
+	unset(_mdmmJuceVersionDefinitions)
+	unset(_mdmmDefinitions)
+	unset(_mdmmVersionOnes)
+	unset(_mdmmWrappers)
+	unset(_mdmmCount)
+	unset(_mdmmBundleId)
+	unset(_mdmmVersionDefinition)
 
 	if(APPLE)
 		# The standalone apps' Record menu (mdRecordMenu.h): its sources and ScreenCaptureKit go
@@ -388,7 +440,8 @@ function(mdmm_plugin_targets)
 
 	# 0.3.4: the editor menu's first line and the About box: the build's product names and version (mdAbout.h)
 	add_executable(mdAboutTest mdAboutTest.cpp mdAbout.h)
-	target_compile_definitions(mdAboutTest PRIVATE "MDMM_EDITOR_VERSION=\"${MDMM_EDITOR_VERSION}\""
+	target_link_libraries(mdAboutTest PRIVATE mdmmVersion)
+	target_compile_definitions(mdAboutTest PRIVATE
 		"MDMM_PRODUCT_NAME_MD=\"${MDMM_PRODUCT_NAME_MD}\"" "MDMM_PRODUCT_NAME_MM=\"${MDMM_PRODUCT_NAME_MM}\""
 		"MDMM_VENDOR=\"${MDMM_VENDOR}\"" "MDMM_WEBSITE=\"${MDMM_WEBSITE}\"")
 	add_test(NAME mdAboutTest COMMAND mdAboutTest)

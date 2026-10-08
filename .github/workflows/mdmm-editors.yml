@@ -1,0 +1,81 @@
+name: MD/MM Editors
+
+# The one build-and-test of a push (doc/modern-ux/FOUNDATION.md, "Build and check" and "CI start tests"): each
+# system is built once, with a compiler cache, and the start tests and pluginval run on exactly what was built:
+#   mdmm-editors-macos.yml    universal package (macos-15) -> start test + auval + pluginval on macos-14 and -15
+#   mdmm-editors-windows.yml  x64 package (LTCG) -> start test + pluginval; unit tests in parallel (no /GL)
+#   mdmm-editors-linux.yml    x64 archives (22.04, unit tests) -> start test + pluginval on 22.04 and 24.04
+# The packages stay as this run's artifacts (macos-mdmm-universal, windows-mdmm, linux-mdmm, 14 days). A tag's
+# release (mdmm-editors-release.yml) takes them from the successful run of the tag's commit instead of building
+# again, and calls this workflow only when there is none.
+#
+# Upstream's elektron-macos.yml and elektron-windows.yml still run on their own triggers (main, release/md-mm-*);
+# nothing of ours calls them (doc/modern-ux/UPSTREAM.md).
+
+on:
+  workflow_call:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+      - "release/md-mm-*"
+      - "release/0.*"
+      - "feat/windows-*"
+      - "feat/linux-*"
+      - "ci/**"
+    paths:
+      - ".github/workflows/mdmm-editors.yml"
+      - ".github/workflows/mdmm-editors-macos.yml"
+      - ".github/workflows/mdmm-editors-windows.yml"
+      - ".github/workflows/mdmm-editors-linux.yml"
+      - "scripts/ci/**"
+      - "scripts/pluginval.env"
+      - "scripts/macos/**"
+      - "scripts/windows/**"
+      - "scripts/linux/**"
+      - "scripts/vst3EditorHost/**"
+      - "scripts/mdmm-product.env"
+      - ".gitmodules"
+      - "CMakeLists.txt"
+      - "base.cmake"
+      - "xcodeversion.cmake"
+      - "source/CMakeLists.txt"
+      - "source/*.cmake"
+      - "source/JUCE"
+      - "source/3rdparty/**"
+      - "source/elektron/**"
+      - "source/baseLib/**"
+      - "source/bridge/**"
+      - "source/hardwareLib/**"
+      - "source/synthLib/**"
+      - "source/jucePluginData/**"
+      - "source/jucePluginEditorLib/**"
+      - "source/jucePluginLib/**"
+      - "source/juceUiLib/**"
+      - "source/juceRmlUi/**"
+      - "source/juceRmlPlugin/**"
+      - "source/libresample/**"
+      - "source/mcpServerLib/**"
+      - "source/networkLib/**"
+      - "source/pluginTester/**"
+      - "source/ptypes/**"
+      - "source/dsp56300"
+      - "source/mc68k"
+
+permissions:
+  contents: read
+
+# A newer push to the same branch cancels the older run; a dispatch or a call from the release never does.
+concurrency:
+  group: mdmm-editors-${{ github.ref }}-${{ github.event_name }}
+  cancel-in-progress: ${{ github.event_name == 'push' }}
+
+jobs:
+  macos:
+    uses: ./.github/workflows/mdmm-editors-macos.yml
+
+  windows:
+    uses: ./.github/workflows/mdmm-editors-windows.yml
+
+  linux:
+    uses: ./.github/workflows/mdmm-editors-linux.yml

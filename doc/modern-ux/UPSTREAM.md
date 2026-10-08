@@ -45,8 +45,14 @@ the processor's setup chunk and session into `mdJucePlugin/mdDeskHost.*`; the sk
 tests into `mdLibTest/mdmmTests.cmake` and `mdJucePlugin/mdmmPlugins.cmake` (same targets, labels
 and output folders); the tag-time installers into `.github/workflows/mdmm-editors-release.yml`
 (his `elektron-prerelease.yml` and `elektron-macos.yml` are his again; a tag also runs his, which
-builds without uploading); it calls his `elektron-windows.yml` as is (so does our `mdmm-editors-windows.yml`, which then starts the package, [doc/release/WINDOWS.md](../release/WINDOWS.md)), and our `mdmm-editors-linux.yml`, for the not-tested
-Windows and Linux archives, [doc/release/LINUX.md](../release/LINUX.md)).
+builds without uploading); the build and start test of every push into our `mdmm-editors.yml`, which calls
+`mdmm-editors-macos.yml`, `-windows.yml` and `-linux.yml`: they run his `scripts/macos/build_mdmm.sh` and
+`scripts/windows/build_mdmm.ps1` as they are (a compiler cache and Ninja come in through the environment, not
+through his files) and no longer call his `elektron-windows.yml`; the release takes their packages
+([doc/release/WINDOWS.md](../release/WINDOWS.md), [doc/release/LINUX.md](../release/LINUX.md)). His
+`elektron-macos.yml` and `elektron-windows.yml` are byte-identical to his again and still run on their own triggers
+(`main`, `release/md-mm-*`), each a second build on a push to our `main` that nothing waits for; turning them off for
+this fork is a repository setting (`gh workflow disable`), not an edit of his files.
 
 Upstream files that stay in the tree but not in our product: the panel skins
 `skins/mdDefault/*` and `skins/mmSfx60/*` (not in the sources or the binary data),

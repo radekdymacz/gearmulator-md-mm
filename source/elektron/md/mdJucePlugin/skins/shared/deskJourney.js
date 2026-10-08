@@ -13,7 +13,8 @@
    One runner (Journey.run) plays them in order, logs a line per step, then "JOURNEY <name> PASS|FAIL <reason>"
    and at the end "JOURNEYS DONE <passed>/<run>". The editors' pages pass their journeys and a ready test
    (mdDeskJourneys.js, mmJourneys.js). Chosen by ?selftest=journey (all) or journey-<names>: comma-separated,
-   * matches any run of characters (journey-seq-*, journey-md-seq-first-beat,md-mix-*).
+   * matches any run of characters (journey-seq-*, journey-md-seq-first-beat,md-mix-*); "@k/n" after either takes every
+   n-th of those, from the k-th (journey@2/4: scripts/mdmm-journeys.sh --jobs 4 gives each of its editors a share).
    Demos (doc/modern-ux/DEMO-VIDEOS.md) are journeys too, played for a camera: ?selftest=demo-<names> (demo-md-*) runs
    them through Journey.demo at a person's pace, with a drawn pointer that glides to each control and rings on a click,
    and a key cap for each key. A step may also have caption (a line for the video, logged with its time) and hold (ms
@@ -221,12 +222,17 @@ const Journey = (() => {
 	/* the journeys (what: "journey") or demos ("demo") this page was asked for: null when none */
 	function wanted(all, what = "journey") {
 		const m = location.search.match(new RegExp(`[?&]selftest=(${what}[^&]*)`)); if (!m) return null;
-		const kind = decodeURIComponent(m[1]);
-		if (kind === what) return all;
+		let kind = decodeURIComponent(m[1]);
+		/* "@k/n" at the end (scripts/mdmm-journeys.sh --jobs n runs n editors at once): every n-th of the chosen ones,
+		   from the k-th, so the n editors share them without a list of names */
+		const shard = kind.match(/@(\d+)\/(\d+)$/);
+		if (shard) kind = kind.slice(0, shard.index);
+		const take = list => shard ? list.filter((_, i) => i % +shard[2] === +shard[1] - 1) : list;
+		if (kind === what) return take(all);
 		const pats = kind.slice(what.length).replace(/^-/, "").split(",").filter(Boolean).map(p => new RegExp("^" + p.replace(/[.+?^${}()|[\]\\]/g, "\\$&").replace(/\*/g, ".*") + "$"));
 		/* a name matches whole, or without its "demo-" and its "md-"/"mm-" (demo-md-groove: md-groove, groove) */
 		const forms = n => { const bare = n.replace(new RegExp(`^${what}-`), ""); return [n, bare, bare.replace(/^(md|mm)-/, "")]; };
-		return all.filter(j => pats.some(r => forms(j.name).some(f => r.test(f))));
+		return take(all.filter(j => pats.some(r => forms(j.name).some(f => r.test(f)))));
 	}
 	/* film: {t0} when a demo is filmed (its steps' times are logged against t0) */
 	async function runOne(j, log, context, film, c0) {
