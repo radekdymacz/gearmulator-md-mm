@@ -7,6 +7,8 @@
 #   - the bridge went both ways: the page said "ready" (page -> plug-in), the plug-in answered with the machine's
 #     state (plug-in -> page), and the page shows "<machine> firmware needed". The text is read through the
 #     Accessibility API (ui_probe.swift), so the shipped build needs no log;
+#   - real keys reach the page: the app brought to the front, a real click on the page, then ⌘C ⌘V ⌘X ⌘Z ⌘D and ?
+#     pressed through the system's event stream, and the page's key probe (GEARMULATOR_MDMM_KEYPROBE=1) lists them;
 #   - auval validates each AU (installed into ~/Library/Audio/Plug-Ins/Components for the run, removed after);
 #   - a screenshot of each window (md-standalone.png, md-vst3.png, ...), kept as an artifact.
 # Needs the Accessibility permission for the shell (GitHub's macOS runners have it).
@@ -26,6 +28,10 @@ timeout_seconds="${MDMM_SMOKE_TIMEOUT:-90}"
 scratch="$(mktemp -d)"
 export GEARMULATOR_DATA_ROOT="${scratch}/data/"
 mkdir -p "${GEARMULATOR_DATA_ROOT}"
+# The page's key probe (skins/shared/deskKeys.js): the keys that reached it, as a text the Accessibility API reads.
+export GEARMULATOR_MDMM_KEYPROBE=1
+keys_pressed=(cmd+c cmd+v cmd+x cmd+z cmd+d shift+/)
+keys_wanted=(cmd+C cmd+V cmd+X cmd+Z cmd+D "shift+?")
 components="${HOME}/Library/Audio/Plug-Ins/Components"
 installed_components=()
 cleanup() {
@@ -107,6 +113,21 @@ run() {
 		echo "-- texts in the accessibility tree (first 80)"
 		head -n 80 "${out}/${name}-ui.txt" | sed 's/^/   /'
 		record "${label}" "page shows \"${wanted}\"" "no"
+	fi
+	# Real keys (0.3.3 lost ⌘C / ⌘V on macOS: JUCE's web view turned them into copy: / paste: commands the page never
+	# heard): the app in front, a real click on the page's key probe, then real key presses through the system's event
+	# stream; the probe says which keys reached the page (skins/shared/deskKeys.js).
+	if (( found )); then
+		"${probe}" keys "${pid}" "${keys_pressed[@]}" > "${out}/${name}-keys.txt" 2>&1 || true
+		local missing=()
+		for k in "${keys_wanted[@]}"; do grep -q -F -- " ${k}" "${out}/${name}-keys.txt" || missing+=("${k}"); done
+		if (( ${#missing[@]} == 0 )); then
+			echo "${label}: real keys reach the page: $(cat "${out}/${name}-keys.txt")"
+			record "${label}" "real keys reach the page (${keys_wanted[*]})" "yes"
+		else
+			fail "${label}: real keys did not reach the page: ${missing[*]} missing ($(tr '\n' ' ' < "${out}/${name}-keys.txt"))"
+			record "${label}" "real keys reach the page (${keys_wanted[*]})" "no: ${missing[*]} missing"
+		fi
 	fi
 	kill "${pid}" 2>/dev/null || true
 	sleep 2

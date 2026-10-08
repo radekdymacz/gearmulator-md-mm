@@ -332,3 +332,10 @@ body > main { flex: 1 0 auto; }
 @media (max-width: 480px) { .progress li { padding: 9px 4px; font-size: 11px; letter-spacing: .04em; } }
 .dmgline { margin: 0 0 12px; }
 .more { max-width: 62ch; margin: 18px 0 0; }
+
+/* Top menu: the Discord community link (text on wide screens, the icon alone on phones) */
+.nav a.disc { display: inline-flex; align-items: center; gap: 6px; }
+.nav a.disc svg { width: 16px; height: 16px; flex: none; }
+@media (max-width: 760px) { .nav a.disc span { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; } }
+@media (max-width: 420px) { .nav { gap: 6px; } .nav .btn-sm { font-size: 13px; padding-left: 8px; padding-right: 8px; } .nav .themebtn { width: 30px; height: 30px; } .top .brand b { font-size: 12px; } }
+@media (max-width: 360px) { .top .brand b { display: none; } }

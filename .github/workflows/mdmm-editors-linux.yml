@@ -157,7 +157,7 @@ jobs:
 
       - name: Install runtime packages
         run: >-
-          sudo apt-get update && sudo apt-get install -y --no-install-recommends xvfb x11-utils imagemagick
+          sudo apt-get update && sudo apt-get install -y --no-install-recommends xvfb x11-utils xdotool imagemagick
           inotify-tools dbus dbus-x11 at-spi2-core python3-gi gir1.2-atspi-2.0 libglib2.0-bin
           ${{ matrix.packages }} libx11-6 libxext6 libxcursor1 libxinerama1 libxrandr2 libxrender1
           libxcomposite1 libfreetype6 libfontconfig1 &&

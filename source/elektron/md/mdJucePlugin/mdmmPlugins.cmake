@@ -105,7 +105,7 @@ list(APPEND SOURCES
 # has none of it; a test or development build turns it on (-Dgearmulator_MDMM_DIAGNOSTICS=ON).
 option(gearmulator_MDMM_DIAGNOSTICS "The Machinedrum/Monomachine Editors' diagnostics log and self-tests" OFF)
 if(gearmulator_MDMM_DIAGNOSTICS)
-	list(APPEND SOURCES mdDiagnostics.cpp mdDiagnostics.h)
+	list(APPEND SOURCES mdDiagnostics.cpp mdDiagnostics.h $<$<PLATFORM_ID:Darwin>:mdOsKeys.mm> mdOsKeys.h)
 endif()
 # DESIGN-edit-flow.md: the edit-flow driver (mdEditFlowDriver.h) replays the page's messages into the
 # plug-in's session when GEARMULATOR_EDITFLOW_DRIVE is set, for mdVst3EditFlowHost. A test build only.

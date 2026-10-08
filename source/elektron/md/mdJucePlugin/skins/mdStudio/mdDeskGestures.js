@@ -253,7 +253,7 @@ function endSelect() {
 	const sel = d.extend && !d.moved && x ? selExtend(x, d.at) : selBetween(d.from, d.at);
 	setSel(sel);
 	if (sel.t !== S.sel && sel.n === 1) select(sel.t);
-	toast(`Selected ${selSay(sel)} · ⌘C copy · ⌘X cut · ⌘V paste here · ⌘D duplicate · Delete · right-click: more`);
+	toast(`Selected ${selSay(sel)} · ⌘C copy · ⌘X cut · ⌘V paste here · ⌘D duplicate · Delete (or Copy, Clr, Paste above) · right-click: more`);
 }
 document.addEventListener("pointerup", endSelect); document.addEventListener("pointercancel", endSelect);
 window.addEventListener("blur", () => { if (Held.as("select")) endSelect(); });

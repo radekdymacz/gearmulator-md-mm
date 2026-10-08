@@ -87,16 +87,67 @@ const Keys = (() => {
 	const modalKind = () => typeof Modal !== "undefined" && Modal.kind ? Modal.kind() : null;
 	const passes = (b, top) => b.modal === top || (b.modal === "panel" && modalKind() === "panel");
 	const free = () => !modalTop() && !document.activeElement?.closest?.("input,select,textarea,[contenteditable]");
-	document.addEventListener("keydown", e => {
-		const inField = e.target.closest?.("input,select,textarea,[role=slider]"), k = norm(e), m = modOf(e), top = modalTop();
+	/* The keys that reached the page, newest last ("cmd+C", "shift+?", "Space"): every keydown (noted first, before a
+	   dialog keeps it from the shortcuts) and every edit command taken as its key (below). The key probe's text. */
+	const seen = [];
+	function note(e) {
+		const k = norm(e), m = modOf(e); if (/^(Meta|Control|Alt|Shift|CapsLock)$/.test(k)) return;
+		seen.push((m ? m + "+" : "") + k); if (seen.length > 24) seen.shift(); probe();
+	}
+	if (typeof addEventListener === "function") addEventListener("keydown", note, true);
+	/* One key, from either way in (a keydown, or an edit command below); true when an entry ran. */
+	function dispatch(e, inField) {
+		const k = norm(e), m = modOf(e), top = modalTop();
 		for (const b of list) {
 			if (!b.run || !(b.code ? e.code === b.code : b.keys.includes(k))) continue;
 			if (top && !passes(b, top)) continue;
 			const want = b.mod || "", ok = want === m || (want === "" && m === "shift" && k.length === 1 && !/[A-Z]/.test(k));
 			if (!ok || (inField && !b.field) || (b.when && !b.when())) continue;
-			e.preventDefault(); b.run(e); return;
+			e.preventDefault(); b.run(e); return true;
 		}
+		return false;
+	}
+	let lastDown = null;	/* {k, at} of the last ⌘ keydown: an edit command right after it is the same press */
+	document.addEventListener("keydown", e => {
+		if (Modifiers.cmd(e)) lastDown = { k: norm(e), at: Date.now() };
+		dispatch(e, e.target.closest?.("input,select,textarea,[role=slider]"));
 	});
+	/* ⌘C, ⌘X and ⌘V may never come as keys (B-015). On macOS the web view the plug-in sits in (JUCE's
+	   WebBrowserComponent, juce_WebBrowserComponent_mac.mm, WebViewKeyEquivalentResponder) turns them into the edit
+	   commands copy:, cut: and paste: before WebKit sees a key, in the standalone and in every DAW alike, and the page
+	   gets the document's copy, cut and paste events instead of a keydown; a host's Edit menu does the same. So such an
+	   event is that key press: dispatched as ⌘C / ⌘X / ⌘V (the platform's ⌘: Ctrl off a Mac), so it runs the map's
+	   entries copy, cut and paste, unless a text field has the focus (its own copy and paste) or the keydown of the
+	   same press came first (a browser, WebView2: then that was the dispatch). */
+	const EDITS = { copy: "c", cut: "x", paste: "v" };
+	for (const type of Object.keys(EDITS)) document.addEventListener(type, e => {
+		const key = EDITS[type], a = document.activeElement;
+		if (a?.closest?.("input,select,textarea,[contenteditable]")) return;
+		if (lastDown && lastDown.k === key.toUpperCase() && Date.now() - lastDown.at < 500) return;
+		const k = { key, code: "Key" + key.toUpperCase(), metaKey: Modifiers.mac, ctrlKey: !Modifiers.mac, altKey: false, shiftKey: false, target: a || document.body,
+			preventDefault: () => e.preventDefault() };
+		note(k); dispatch(k, a?.closest?.("[role=slider]"));
+	});
+	/* The key probe (the start tests, scripts/macos|windows|linux/smoke_mdmm.*): with ?keyprobe=1 in the page's
+	   address (the plug-in adds it when GEARMULATOR_MDMM_KEYPROBE=1) a line at the bottom left says which keys reached
+	   the page, a text the operating system's accessibility API reads. Nothing is shown without it. While a dialog
+	   marked aria-modal is open (the start-up card is one) the line lives inside it: WebKit's accessibility tree leaves
+	   out everything outside an open modal dialog. */
+	const probing = typeof location !== "undefined" && /[?&]keyprobe=1\b/.test(location.search || "");
+	function probe() {
+		if (!probing || !document.body) return;
+		let p = document.getElementById("keyprobe");
+		if (!p) {
+			p = document.createElement("div"); p.id = "keyprobe"; p.setAttribute("role", "status");
+			p.style.cssText = "position:fixed;left:8px;bottom:8px;z-index:2147483647;padding:6px 10px;background:#000;color:#fff;font:12px monospace";
+		}
+		const modal = [...document.querySelectorAll('[aria-modal="true"]')].filter(d => !d.closest("[hidden]")).pop();
+		const home = modal || document.body;
+		if (p.parentNode !== home) home.appendChild(p);
+		const text = "Keys seen: " + (seen.length ? seen.join(" ") : "none");
+		if (p.textContent !== text) p.textContent = text;
+	}
+	if (probing) setInterval(probe, 500);
 	/* an entry's keys as the platform writes them: ⌘⇧Z on a Mac, Ctrl+Shift+Z elsewhere; a pointer gesture's
 	   modifiers before what is pressed (⇧ step, Shift + step) */
 	const KEYNAME = { Space: "Space", ArrowLeft: "←", ArrowRight: "→", ArrowUp: "↑", ArrowDown: "↓", Escape: "Esc", Delete: "Delete", Backspace: "⌫", Enter: "Enter" };
@@ -108,5 +159,5 @@ const Keys = (() => {
 		return b.area ? m + (Modifiers.mac ? " " : " + ") + k : m + (Modifiers.mac ? "" : "+") + k;
 	};
 	const byId = id => list.find(b => b.id === id) || null;
-	return { bind, list: () => list.slice(), byId, label, modsLabel, free };
+	return { bind, list: () => list.slice(), byId, label, modsLabel, free, seen: () => seen.slice() };
 })();

@@ -10,6 +10,9 @@
 #if JUCE_MAC
 #include "mdBackgroundRun.h"
 #endif
+#if JUCE_MAC && MDMM_DIAGNOSTICS
+#include "mdOsKeys.h"
+#endif
 
 #include <cmath>
 #include <cstring>
@@ -265,9 +268,13 @@ namespace mdJucePlugin
 		auto url = m_selfTest.isNotEmpty() ? juce::URL(m_file).withParameter("selftest", m_selfTest) : juce::URL(m_file);
 		if(m_fileRecv)
 			url = url.withParameter(pageBridge::g_fileRecvQuery, "file");
+		// The start tests' key probe (skins/shared/deskKeys.js): the page shows which keys reached it, for the
+		// accessibility API to read. Any build, so the shipped one is what the start tests press keys into.
+		if(juce::SystemStats::getEnvironmentVariable("GEARMULATOR_MDMM_KEYPROBE", {}) == "1")
+			url = url.withParameter("keyprobe", "1");
 		m_web->goToURL(url.toString(true));
-		log("page loading, selftest=" + juce::String(m_selfTest.isNotEmpty() ? 1 : 0) + ", "
-			+ juce::String(m_file.getSize()) + " bytes");
+		log("page loading, selftest=" + juce::String(m_selfTest.isNotEmpty() ? 1 : 0) + ", keyprobe="
+			+ juce::String(url.getParameterNames().contains("keyprobe") ? 1 : 0) + ", " + juce::String(m_file.getSize()) + " bytes");
 	}
 
 	void WebPageHost::onBridge(const std::string& _url)
@@ -275,7 +282,17 @@ namespace mdJucePlugin
 		namespace bridge = pageBridge;
 		if(bridge::startsWith(_url, bridge::g_log))
 		{
-			log("page: " + juce::URL::removeEscapeChars(juce::String(_url.substr(std::strlen(bridge::g_log)))));
+			const auto line = juce::URL::removeEscapeChars(juce::String(_url.substr(std::strlen(bridge::g_log))));
+			log("page: " + line);
+#if JUCE_MAC && MDMM_DIAGNOSTICS
+			// A journey's keys through the operating system's way in (mdOsKeys.h), after this navigation's callback.
+			if(line.startsWith("oskeys "))
+				juce::MessageManager::callAsync([this, alive = std::weak_ptr<int>(m_alive), spec = line.fromFirstOccurrenceOf(" ", false, false)]
+				{
+					if(!alive.expired())
+						osKeys::send(*m_web, spec, [this](const juce::String& _l) { log(_l); });
+				});
+#endif
 			return;
 		}
 		if(const auto seq = bridge::ackOf(_url))
