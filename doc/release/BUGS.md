@@ -4,6 +4,34 @@
 repository; the site sends reports to the contact address. Newest first. Each entry:
 where it came from, the setup, what happens, what should happen, status.*
 
+## B-019 · SysEx import says "wrong OS" for most of a backup
+
+- **From:** Discord tester D, 2026-10-08 (Machinedrum, probably a public backup from an older OS).
+- **What happens:** importing a SysEx file shows mostly errors saying the OS is wrong.
+- **To check:** which OS versions' kit/pattern/song dumps we accept (only 1.63?), whether older dumps can be converted or imported partly, and that the message says what the file is and what to do.
+- **Status:** open. Import has no firmware tests with third-party files yet.
+
+## B-018 · "?" just beeps on the Mac (Monomachine)
+
+- **From:** Discord tester C, 2026-10-08, M1, latest macOS.
+- **What happens:** pressing ? (or ⇧/) gives the macOS "beep", as if no one took the key.
+- **To check:** whether the web view has keyboard focus before the first click, whether the MM page binds ? at all, and the standalone vs plug-in path (see B-015).
+- **Status:** open.
+
+## B-017 · Monomachine Perform: dragging DEC resizes the window
+
+- **From:** Discord tester C, 2026-10-08.
+- **What happens:** in Perform mode, moving the envelope's DEC (and similar) on the left side makes the page grow downwards to fit the envelope, then it jumps back when the mouse is released.
+- **Should:** the layout stays put while dragging.
+- **Status:** open.
+
+## B-016 · Standalone can't go full screen; Settings does nothing (Monomachine)
+
+- **From:** Discord tester C, 2026-10-08, Monomachine, M1, latest macOS (version not given).
+- **What happens:** the window cannot go full screen; "Settings" does nothing.
+- **To check:** the window's full-screen button / maximise in the standalone; Settings: B-007 fixed this in 0.3.2 (plug-ins have no Settings entry, the standalone's opens Audio/MIDI) — confirm the tester's version.
+- **Status:** open.
+
 ## B-015 · Cmd+C and Cmd+V do nothing (macOS: Ableton Live and the standalone)
 
 - **From:** the owner, 0.3.3, Ableton Live on macOS (VST3 and AU), 2026-10-08.

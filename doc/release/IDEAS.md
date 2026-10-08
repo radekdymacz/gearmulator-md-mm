@@ -3,6 +3,12 @@
 *Feature ideas from beta testers and users (Discord, email). Not bugs: see
 [BUGS.md](BUGS.md). Newest first. Each entry: who and when, the idea, status.*
 
+## I-007 · Ableton-style editing on the Monomachine piano roll
+
+- **From:** Discord tester C, 2026-10-08.
+- **Idea:** B toggles draw mode on the piano roll (as in Ableton); box-select notes.
+- **Status:** new; fits the keyboard-map port to the Monomachine (K7).
+
 ## I-005 · Update from inside the app (after 0.3.2)
 
 - **From:** Radek, 2026-10-07.
