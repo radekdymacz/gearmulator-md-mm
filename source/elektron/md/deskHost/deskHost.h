@@ -37,7 +37,7 @@ namespace deskHost
 		AudioMeter,
 		ChooseRom,			// P7: the native file chooser for a firmware file (.bin, or a .zip with it)
 		ChooseSyx,			// P7: the native file chooser for a .syx to import (its preview follows)
-		SyxImport,			// P7: import the previewed .syx (the kinds chosen)
+		SyxImport,			// P7, B-019: send the previewed .syx to the machine as it is (the kinds and items chosen), read back, report
 		SyxCancel,
 		SyxExport,			// P7: the native save dialog, then every document the editor holds as one .syx
 		RomInfo,			// the installed firmware: name, OS, size, where (answered with a romInfo message)

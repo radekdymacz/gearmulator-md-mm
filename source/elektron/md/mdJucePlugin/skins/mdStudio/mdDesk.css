@@ -1426,6 +1426,12 @@ body.deskmidi #main,body.deskmidi #rail{opacity:.3;pointer-events:none;transitio
 .syxnames{display:flex;flex-wrap:wrap;gap:3px;padding:0 0 6px 24px}
 .syxname{font:10px var(--pix);text-transform:uppercase;padding:2px 5px;border-radius:2px;background:var(--lcd);color:var(--ink);opacity:.8}
 .syxname.over{opacity:1;box-shadow:inset 0 0 0 1px var(--led)}
+button.syxname{border:0;margin:0;cursor:pointer;line-height:inherit}
+.syxname.off{opacity:.3;text-decoration:line-through}
+.syxreport{display:grid;gap:4px}
+.syxreport[hidden]{display:none}
+.syxsum{margin:0;font:600 12px var(--sans);color:var(--print)}
+.syxreport .syxprob div{padding:1px 0}
 .syxwarn,.syxwhy{margin:0;font:500 12px var(--sans);color:var(--print2)}
 .syxprob{font:500 12px var(--mono);color:var(--print2)}
 .syxbar{position:relative;height:18px;border-radius:3px;background:var(--ledoff);overflow:hidden}

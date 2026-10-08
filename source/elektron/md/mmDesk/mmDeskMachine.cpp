@@ -174,6 +174,31 @@ namespace mmDesk
 		return m_working.expect.expecting(now());
 	}
 
+	// B-019: an imported file's message as it is. A dump goes as the editor's own do: on SYSEX RECV, which the
+	// adapter opens on the emulator and the person opens over HW MIDI (it waits for SEND meanwhile), in order after
+	// what waits there; anything else (a read-back's request) into the stream.
+	std::string MmMachine::sendAsIs(const Bytes& _message, const bool _dump)
+	{
+		if(!m_stream.open())
+			return "This engine cannot send SysEx to the machine.";
+		if(_dump)
+			afterDumps(_message);
+		else
+			m_port.sendSysex(_message);
+		return {};
+	}
+
+	MmMachine::AsIs MmMachine::asIs() const
+	{
+		AsIs a;
+		a.queued = m_stream.waiting() + m_recv.queued() + m_manual.size();
+		a.busy = a.queued > 0 || m_stream.sending(clock()) || m_recv.taking();
+		if(!m_manual.empty())
+			a.waitsFor = "The Monomachine takes dumps only on GLOBAL > FILE > SYSEX RECV: open it on the machine, then press SEND "
+				"in the editor.";
+		return a;
+	}
+
 	deskCore::KitState MmMachine::kitState(const Documents& _view) const
 	{
 		const auto stored = m_curKit >= 0 ? _view.kits.find(static_cast<uint8_t>(m_curKit)) : _view.kits.end();

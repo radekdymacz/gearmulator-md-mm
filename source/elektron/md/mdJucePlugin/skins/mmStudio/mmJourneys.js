@@ -790,13 +790,37 @@ const MmJourneys = (() => {
 		],
 		async tidy(u, c) { if (c.t0 && !same(trigsOf(c.t), c.t0)) await undoUntil(u, () => same(trigsOf(c.t), c.t0)); }
 	};
+	/* B-019: a .syx imported as from a cable (the dumps on SYSEX RECV). The file is the run's (GEARMULATOR_MDMM_SYX_FILE,
+	   diagnostics builds: the plug-in opens it where the chooser would be). Kits only; afterwards every kit the report
+	   does not list (taken as in the file) has the file's name on the machine. An import has no Undo: last. */
+	const syxKitIds = () => $all('#syxpop [data-syxitem^="kit:"]');
+	const syxImportJ = {
+		name: "mm-lib-syx-import",
+		needs: () => new URLSearchParams(location.search).get("syxfile") ? null : "no .syx for the run (GEARMULATOR_MDMM_SYX_FILE)",
+		steps: [
+			openKits2,
+			{ say: "click Import SysEx…: the file's preview", act: u => u.click('#libpop [data-syx="import"]'), screen: () => ok(!$1("#syxpop").hidden && syxKitIds().length > 0, "no preview with kits"), within: 8000 },
+			{ say: "leave Kits ticked only, click Import: sent on SYSEX RECV, read back, reported", act: (u, c) => {
+				for (const b of $all("#syxpop [data-syxkind]")) if (b.checked !== (b.dataset.syxkind === "kit")) u.click(b);
+				c.names = syxKitIds().map(b => [+b.dataset.syxitem.split(":")[1], b.textContent.replace(/^▶ /, "").trim()]);
+				u.click('#syxpop [data-syxgo="start"]');
+			}, screen: () => ok(/imported/.test($1("#syxpop .syxsum")?.textContent || ""), "progress: " + ($1("#syxpop .syxbar span")?.textContent || "")),
+			machine: c => {
+				const notTaken = new Set($all("#syxpop .syxreport .syxprob div").map(d => (/^kit (\d+)/.exec(d.textContent) || [])[1]).filter(Boolean).map(n => +n - 1));
+				const off = c.names.filter(([k, n]) => !notTaken.has(k) && n !== "(no name)" && (kitName(k) || "").trim() !== n);
+				return ok(!off.length, off.length + " kits not as in the file: " + off.slice(0, 4).map(([k, n]) => `K${k + 1} "${kitName(k)}" not "${n}"`).join(", "));
+			}, within: 240000 },
+			{ say: "click Done: the panel closes", act: u => u.click('#syxpop [data-syxgo="close"]'), screen: () => ok($1("#syxpop").hidden, "still open") },
+			{ say: "press Escape", act: u => u.key("Escape"), screen: () => ok($1("#libpop").hidden, "open") }
+		]
+	};
 	const all = [bootCard, firstBeat, spaceKey, tempoDrag, patNext, wsKeys, helpKeys, plate, undoRedo, gridRecord, slidePaint, lenKey, lockLane, arpDock, trnKeys,
 		genMut, shapeSound, machinePick, midiSide, controlAll, mixStrip, mixSolo, shiftMutes, routing, panTrim, msOff,
 		poly, multiTrig, multiMap, kbPlay, songRows, songPicker, songChain, kitLoad, kitCopy, patGo, dialogEsc,
 		audioPanel, romCard, notePlay,
 		tapTempo, queue, dialogKeys, trackKeys, muteKeys, lockRamp, pages, copyPaste, clearAll, fill, rotate, pasteMany, liveRec, genKeys, mutScope,
 		valueKeys, soundCopy, screenDrag, dragM, midiMutes, joyAssign, menvPort, songInspector, songDrag, kitSaveAs, kitRename, kitClear, patClear, hwNoMachine,
-		blackKeys, rollPaint];
+		blackKeys, rollPaint, syxImportJ];
 
 	async function between(u) {
 		for (let i = 0; i < 3 && dlgShown(); i++) { u.key("Escape"); await sleep(200); }

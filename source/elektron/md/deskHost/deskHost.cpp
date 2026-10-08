@@ -73,9 +73,11 @@ namespace deskHost
 				"choose a sample (WAV or AIFF) for UW ROM slot slot: the window's native file chooser; the plug-in reads the file, "
 				"converts it and sends it as SDS (sampleLoad messages follow); the file never passes through the page",
 				Action::ChooseSample, Actor::Window),
-			row("syxImport", {{"kinds", ArgType::Array}}, "import the previewed .syx: the kinds chosen (global, kit, pattern, song), as document writes, one undo step",
+			row("syxImport", {{"kinds", ArgType::Array}, {"skip", ArgType::Array, 0, 0, true}},
+				"import the previewed .syx: the kinds chosen (global, kit, pattern, song, other) but the items in skip (\"kind:slot\"), "
+				"sent to the machine as they are (the firmware decides what it takes), then read back and reported (syxProgress); no undo step",
 				Action::SyxImport),
-			row("syxCancel", {}, "stop an import between items", Action::SyxCancel),
+			row("syxCancel", {}, "stop an import: nothing more is sent, what went is read back and reported", Action::SyxCancel),
 			row("syxExport", {}, "every document the editor holds, as one .syx: the window's native save dialog", Action::SyxExport, Actor::Window),
 			row("midi", {bytes}, "a channel message from the page: [status 0x80-0xef, data, data]", Action::Midi),
 			row("openMenu", {}, "the editor's menu", Action::Menu, Actor::Window),

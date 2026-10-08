@@ -54,6 +54,8 @@ namespace mdDesk
 		deskCore::Lifecycle lifecycle() const override { return deskCore::lifecycleOf(facts()); }
 		Context context() const override { return {m_session.state().kit}; }
 		bool busy() const override;
+		std::string sendAsIs(const Bytes& _message, bool _dump) override;
+		AsIs asIs() const override;
 
 		// ---- MdAdapter: Machinedrum facts from the device ----
 		void setProbe(Probe _probe) override;

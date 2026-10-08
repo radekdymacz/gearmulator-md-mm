@@ -506,7 +506,7 @@ function closeFirmwareDialog(){Dlg.drop("firstRun")}
 /* SysEx import and export: the host's file dialogs and document writes; the example shows a pretend file */
 Syx.host={choose:()=>{if(HOST.syxChoose)return HOST.syxChoose();Syx.preview({ok:true,file:"example.syx",model:"Monomachine",fullBackup:false,problemCount:0,problems:[],items:{kit:[{slot:0,name:"SUPERWAVES",overwrites:true}],pattern:[{slot:0,name:"A01",kit:0,overwrites:true}],song:[],global:[]}})},
  exportAll:()=>{if(HOST.syxExport)return HOST.syxExport();toast("In the plug-in: a save dialog, then every document as one .syx.")},
- start:k=>{if(HOST.syxStart)return HOST.syxStart(k);Syx.progress({done:2,total:2,running:false,text:"Imported (example)."})},
+ start:(k,s)=>{if(HOST.syxStart)return HOST.syxStart(k,s);Syx.progress({phase:"done",done:2,total:2,running:false,text:"2 imported (example).",report:{taken:2,items:[]}})},
  stop:()=>{if(HOST.syxStop)return HOST.syxStop()}};
 /* the start-up card's keys: the host's native file chooser and ROM folder (the ROM stays on this computer); the
    example pretends an install */

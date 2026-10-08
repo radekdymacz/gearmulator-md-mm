@@ -250,6 +250,15 @@ namespace mdJucePlugin
 
 	void PageEditor::chooseSyx(const bool _save)
 	{
+#if MDMM_DIAGNOSTICS
+		// B-019's journeys: the file is the run's (GEARMULATOR_MDMM_SYX_FILE), no chooser in front of anything
+		if(const auto given = juce::File(juce::SystemStats::getEnvironmentVariable("GEARMULATOR_MDMM_SYX_FILE", {}));
+			!_save && given.existsAsFile() && m_session)
+		{
+			m_session->openSyx(given);
+			return;
+		}
+#endif
 		const auto dir = juce::File::getSpecialLocation(juce::File::userDocumentsDirectory);
 		m_chooser = std::make_unique<juce::FileChooser>(_save ? "Export SysEx" : "Import SysEx (.syx)",
 			_save ? dir.getChildFile(juce::String(getProcessor().getProperties().name) + " backup.syx") : dir, "*.syx");

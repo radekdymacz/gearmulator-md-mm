@@ -1680,7 +1680,7 @@
         },
         {
           "type": "object",
-          "description": "P7: a .syx file the user chose or dropped, parsed by the plug-in: what it holds and what it overwrites.",
+          "description": "P7, B-019: a .syx file the user chose or dropped, parsed by the plug-in: what it holds (per kind the items with their slot, name, format bytes, whether they overwrite data or play now) and what cannot be sent and why. It informs; the import sends the chosen messages to the machine as they are.",
           "required": ["type", "ok", "file", "text"],
           "properties": {
             "type": {
@@ -1704,23 +1704,17 @@
             "items": {
               "type": "object"
             },
-            "problems": {
+            "skipped": {
               "type": "array",
               "items": {
                 "type": "string"
               }
             },
-            "leftOut": {
-              "type": "array",
-              "items": {
-                "type": "string"
-              }
-            },
-            "leftOutCount": {
+            "skippedCount": {
               "type": "integer",
               "minimum": 0
             },
-            "problemCount": {
+            "messages": {
               "type": "integer",
               "minimum": 0
             }
@@ -1728,11 +1722,14 @@
         },
         {
           "type": "object",
-          "description": "P7: an import's progress (documents sent of the chosen ones).",
+          "description": "P7, B-019: an import's progress: before (the slots the editor has not read are read first), send (messages handed to the machine of the chosen ones), read (documents read back), done (with the report: per outcome a count, and a line for each item the machine did not take as in the file).",
           "required": ["type", "done", "total", "running", "text"],
           "properties": {
             "type": {
               "const": "syxProgress"
+            },
+            "phase": {
+              "enum": ["idle", "before", "send", "read", "done"]
             },
             "done": {
               "type": "integer",
@@ -1747,6 +1744,9 @@
             },
             "text": {
               "type": "string"
+            },
+            "report": {
+              "type": "object"
             }
           }
         },
@@ -4682,7 +4682,7 @@
         },
         {
           "type": "object",
-          "description": "host: import the previewed .syx: the kinds chosen (global, kit, pattern, song), as document writes, one undo step",
+          "description": "host: import the previewed .syx: the kinds chosen (global, kit, pattern, song, other) but the items in skip (\"kind:slot\"), sent to the machine as they are (the firmware decides what it takes), then read back and reported (syxProgress); no undo step",
           "required": ["op", "kinds"],
           "properties": {
             "op": {
@@ -4700,13 +4700,16 @@
             },
             "kinds": {
               "type": "array"
+            },
+            "skip": {
+              "type": "array"
             }
           },
           "additionalProperties": false
         },
         {
           "type": "object",
-          "description": "host: stop an import between items",
+          "description": "host: stop an import: nothing more is sent, what went is read back and reported",
           "required": ["op"],
           "properties": {
             "op": {
