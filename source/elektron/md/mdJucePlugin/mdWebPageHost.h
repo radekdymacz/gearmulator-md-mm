@@ -16,6 +16,7 @@
 namespace mdJucePlugin
 {
 	class PageWebView;
+	class KeyWindowWatch;
 	namespace pageBridge { class Pieces; }
 
 	// A web page in the plug-in (P6: one host for both editors): bundling (stylesheets, scripts
@@ -25,7 +26,7 @@ namespace mdJucePlugin
 	// the page said ready, then go out in batches), a temp file per instance, and the zoom that
 	// fits the page's design width into the window. It knows nothing about documents. How a message travels
 	// is mdPageBridge.h (the transport, pure).
-	class WebPageHost
+	class WebPageHost final : private juce::FocusChangeListener
 	{
 	public:
 		using Value = elektronData::json::Value;
@@ -33,7 +34,7 @@ namespace mdJucePlugin
 
 		WebPageHost(Spec _spec, std::function<std::string(const std::string&)> _resource,
 			std::function<void(const Value&)> _onMessage);
-		~WebPageHost();
+		~WebPageHost() override;
 
 		WebPageHost(const WebPageHost&) = delete;
 		WebPageHost& operator=(const WebPageHost&) = delete;
@@ -51,9 +52,22 @@ namespace mdJucePlugin
 		const juce::String& selfTest() const { return m_selfTest; }
 		// A line of this instance's log (diagnostics builds only: a release build writes no file).
 		void log(const juce::String& _line) const;
+		// B-022: the start-up log every build keeps (the editor's version, the system, the web engine and its
+		// version, loading, the bridge up, what failed), for a user to send: <data folder>/logs/editor-<page>.log, the
+		// start before beside it. Set before load().
+		void setStartupLog(const juce::File& _file);
+		const juce::File& startupLog() const { return m_startupLog; }
+		// A line for both logs.
+		void note(const juce::String& _line) const;
+		// The page has not said it is up in time: the window says what failed and what to do (the editor's timer).
+		void checkStarted();
 
 	private:
 		void onBridge(const std::string& _url);
+		void fail(const juce::String& _why);
+		// B-018: the keyboard to the page: _always, or only when no other view of the window has it
+		void focusPage(bool _always);
+		void globalFocusChanged(juce::Component* _focused) override;
 		void onAck(uint64_t _seq);
 		void deleteRecvFiles(uint64_t _upTo);
 		std::string bundle() const;
@@ -62,6 +76,7 @@ namespace mdJucePlugin
 		std::function<std::string(const std::string&)> m_resource;
 		std::function<void(const Value&)> m_onMessage;
 		std::unique_ptr<PageWebView> m_web;
+		std::unique_ptr<KeyWindowWatch> m_keyWatch;	// B-018: the window became the key window (macOS, mdWebFocus.h)
 		std::unique_ptr<pageBridge::Pieces> m_pieces;	// the page's long batches, joined (mdPageBridge.h)
 		std::vector<Value> m_outbox;
 		uint64_t m_recvSeq = 1;	// the next gm.recv batch's number (the page drops one it has had, mdPageBridge.h)
@@ -77,6 +92,11 @@ namespace mdJucePlugin
 		double m_cssZoom = 1.0;		// the CSS zoom sent, where the web view has no native page zoom
 		bool m_keptDrawn = false;	// a background run (mdBackgroundRun.h): the page draws while covered
 		mutable juce::File m_logFile;	// created on the first line
+		juce::File m_startupLog;	// B-022 (setStartupLog)
+		mutable std::vector<juce::String> m_early;	// lines noted before the start-up log was named
+		double m_loadMs = 0;		// when load() asked for the page
+		bool m_noStartTest = false;	// GEARMULATOR_MDMM_PAGE_TEST=nostart (load())
+		std::unique_ptr<juce::Component> m_failure;	// B-022: what the window shows when the page cannot start
 		std::shared_ptr<int> m_alive = std::make_shared<int>(0);	// what runs later asks whether this host is still there
 	};
 }

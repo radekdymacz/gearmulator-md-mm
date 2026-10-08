@@ -16,6 +16,8 @@ const MdJourneys = (() => {
 	const kitVals = t => { const k = kit()?.tracks[t]; return k ? [...k.synth, ...k.effects, ...k.routing] : []; };
 	const allKitVals = () => [...Array(16).keys()].map(kitVals);
 	const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
+	/* what differs between two allKitVals(): "T<track> #<index> <was>-><now>" (the first few) */
+	const kitDiff = (a, b) => a.flatMap((v, t) => v.map((x, i) => x === b[t]?.[i] ? null : `T${t + 1} #${i} ${x}->${b[t]?.[i]}`).filter(Boolean)).slice(0, 8).join(", ");
 	const sorted = a => a.slice().sort((x, y) => x - y);
 	const idle = () => !desk().tx;
 	const dlgShown = () => !$1("#dlg").hidden && $1("#dlg").dataset.first !== "1";
@@ -85,12 +87,18 @@ const MdJourneys = (() => {
 			{ say: "press Space again: it stops", act: u => u.key(" "), screen: () => ok(!V.playing, "playing"), machine: () => ok(tele.last && !tele.last.playing, "still playing") }
 		]
 	};
+	/* B-024: the machine keeps the tempo in 1/24 BPM steps (a saved project's 93.79 is 2251/24) and the LCD shows it to
+	   one decimal: the LCD is compared with the tempo as the LCD rounds it, never with the tempo itself (only a tempo on
+	   the 0.1 grid, a fresh 120.0, passed that) */
+	const lcdBpm = v => +(+v).toFixed(1);
 	const tempoDrag = {
 		name: "md-top-tempo-drag",
 		steps: [
 			{ say: "drag the BPM on the LCD up", act: async (u, c) => { c.b0 = Docs.global.tempo; await u.drag("#bpm", [[0, -6], [0, -12], [0, -18], [0, -24]]); c.note = `${c.b0} -> ${V.bpm}`; },
-				screen: c => ok(parseFloat($1("#bpm").textContent) === V.bpm && V.bpm > c.b0, "LCD " + $1("#bpm").textContent), machine: c => ok(Docs.global.tempo > c.b0 && Docs.global.tempo === V.bpm, "tempo " + Docs.global.tempo) },
-			{ say: "drag it back down as far", act: u => u.drag("#bpm", [[0, 6], [0, 12], [0, 18], [0, 24]]), screen: c => ok(parseFloat($1("#bpm").textContent) === c.b0, "LCD " + $1("#bpm").textContent), machine: c => ok(Docs.global.tempo === c.b0, "tempo " + Docs.global.tempo) }
+				screen: c => ok(parseFloat($1("#bpm").textContent) === lcdBpm(V.bpm) && V.bpm > c.b0, `LCD ${$1("#bpm").textContent} for ${V.bpm} (from ${c.b0}); tempo in ${Docs.global?.control?.tempoIn}`),
+				machine: c => ok(Docs.global.tempo > c.b0 && Docs.global.tempo === V.bpm, "tempo " + Docs.global.tempo) },
+			{ say: "drag it back down as far", act: u => u.drag("#bpm", [[0, 6], [0, 12], [0, 18], [0, 24]]), screen: c => ok(parseFloat($1("#bpm").textContent) === lcdBpm(c.b0), "LCD " + $1("#bpm").textContent),
+				machine: c => ok(Math.abs(Docs.global.tempo - c.b0) < 0.05, "tempo " + Docs.global.tempo) }
 		]
 	};
 	/* T taps; so does B, the Monomachine Editor's tap key (T is a black key there) */
@@ -130,6 +138,17 @@ const MdJourneys = (() => {
 	const wsKeys = {
 		name: "md-keys-workspaces",
 		steps: [["2", "sound"], ["3", "mix"], ["4", "sampler"], ["5", "song"], ["1", "seq"]].map(([k, ws]) => ({ say: `press ${k}`, act: u => { document.activeElement?.blur?.(); u.key(k); }, screen: () => ok(S.ws === ws && !!$1("#main").firstElementChild, "workspace " + S.ws) }))
+	};
+	/* B-018: ? as the operating system delivers it after the window became the key window (JUCE then takes the keyboard
+	   for its own view; the page's host hands it back), no click in the page first: the key reaches the page, no beep */
+	const osHelp = {
+		name: "md-keys-os-help", needs: Journey.osKeyPath,
+		steps: [
+			{ say: "the window becomes the key window, then press ? on the keyboard, no click in the page: the keyboard view",
+				act: async u => { document.activeElement?.blur?.(); await u.osKey("activate"); await u.sleep(300); await u.osKey("?"); },
+				screen: () => ok(!$1("#keyspop").hidden && !!$1("#keyspop .kv-cap"), "keys view " + ($1("#keyspop").hidden ? "hidden" : "empty")) },
+			{ say: "press Escape on the keyboard: it closes", act: u => u.osKey("escape"), screen: () => ok($1("#keyspop").hidden, "still open") }
+		]
 	};
 	const helpKeys = {
 		name: "md-keys-help",
@@ -483,9 +502,11 @@ const MdJourneys = (() => {
 		name: "md-sound-control-all",
 		steps: [
 			go("sound"), sel(() => soundTrack()),
-			{ say: "Alt-drag an effects value: every track's knob moves", act: async (u, c) => { c.k0 = allKitVals(); const el = $1('#main .pc[data-g="fx"]'), d = getV(el) > 64 ? -1 : 1; await u.drag(el, [[d * 4, 0], [d * 8, 0], [d * 16, 0], [d * 24, 0]], { alt: true }); },
+			/* B-023: a real press focuses the value (a synthetic one does not): it is focused here, so ⌘Z below is pressed
+			   with the value focused, as a person's is */
+			{ say: "Alt-drag an effects value: every track's knob moves", act: async (u, c) => { c.k0 = allKitVals(); const el = $1('#main .pc[data-g="fx"]'), d = getV(el) > 64 ? -1 : 1; el.focus(); await u.drag(el, [[d * 4, 0], [d * 8, 0], [d * 16, 0], [d * 24, 0]], { alt: true }); },
 				machine: c => { const moved = allKitVals().filter((v, t) => !same(v, c.k0[t])).length; return ok(moved >= 2, moved + " tracks moved"); }, within: 10000 },
-			{ ...undoKey, say: "press Cmd+Z: one step back for all", machine: c => ok(same(allKitVals(), c.k0), "not all back"), within: 10000 }
+			{ ...undoKey, say: "press Cmd+Z: one step back for all", machine: c => ok(same(allKitVals(), c.k0), "not all back: " + kitDiff(c.k0, allKitVals())), within: 10000 }
 		]
 	};
 	/* K4 (DESIGN-keymap.md): the FN key gives the next drag ⌥, without a held key (a mouse, a touch screen, Linux's Alt-drag) */
@@ -497,7 +518,7 @@ const MdJourneys = (() => {
 			{ say: "drag an effects value (no key held): every track's knob moves, and FN goes off", act: async (u, c) => { c.k0 = allKitVals(); const el = $1('#main .pc[data-g="fx"]'), d = getV(el) > 64 ? -1 : 1; await u.drag(el, [[d * 4, 0], [d * 8, 0], [d * 16, 0], [d * 24, 0]]); },
 				screen: () => ok(Modifiers.fn === "off" && $1("#fnkey").getAttribute("aria-pressed") === "false", "FN still " + Modifiers.fn),
 				machine: c => { const moved = allKitVals().filter((v, t) => !same(v, c.k0[t])).length; return ok(moved >= 2, moved + " tracks moved"); }, within: 10000 },
-			{ ...undoKey, say: "press Cmd+Z: one step back for all", machine: c => ok(same(allKitVals(), c.k0), "not all back"), within: 10000 },
+			{ ...undoKey, say: "press Cmd+Z: one step back for all", machine: c => ok(same(allKitVals(), c.k0), "not all back: " + kitDiff(c.k0, allKitVals())), within: 10000 },
 			{ say: "double-click FN, then press Escape: latched, then off", act: async u => { u.dblclick("#fnkey"); await sleep(100); if (Modifiers.fn !== "latch") throw new Error("not latched: " + Modifiers.fn); u.key("Escape"); },
 				screen: () => ok(Modifiers.fn === "off", "FN " + Modifiers.fn) }
 		],
@@ -934,7 +955,7 @@ const MdJourneys = (() => {
 			esc
 		]
 	};
-	const all = [bootCard, firstBeat, spaceTransport, tempoDrag, tapTempo, tapTempoB, patStep, queuePattern, plate, wsKeys, helpKeys, undoRedo,
+	const all = [bootCard, firstBeat, spaceTransport, tempoDrag, tapTempo, tapTempoB, patStep, queuePattern, plate, wsKeys, helpKeys, osHelp, undoRedo,
 		paintUndo, accentSlide, lockLane, pagesJ, copyPaste, selectCopyPaste, stepMenuJ, osCopyPaste, buttonsCopyPaste, clearPatternJ, fillEveryJ, rotateJ, rotateUndo, trackKeys, muteKeys, liveRec,
 		genJourney("md-gen-mutate-undo", false), genJourney("md-gen-defaults-mutate-undo", true), genKeys,
 		shapeSound, arrows, machinePick, soundCopy, editorDrag, controlAll, fnControlAll,

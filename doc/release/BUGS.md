@@ -8,13 +8,17 @@ where it came from, the setup, what happens, what should happen, status.*
 
 - **From:** the journeys (md-top-tempo-drag), 2026-10-08.
 - **What happens:** the tempo drag does nothing when the editor starts from a saved project at 105.8 BPM; from fresh settings it works. Maybe host clock sync in the saved settings blocks it.
-- **Status:** open.
+- **Cause:** not the product, and not the host clock (the saved global has tempo in INTERNAL; the drag reached the machine every time). The machine keeps the tempo in 1/24 BPM steps and the LCD shows it to one decimal. The journey compared the LCD's text with the tempo itself: from a saved project at 93.79 BPM (2251/24) the drag goes to 105.79, the LCD says 105.8, and 105.8 is not 105.79; a fresh 120.0 is on the 0.1 grid, so it passed. The same check was in `mm-top-tempo-drag`.
+- **Fix (branch `fix/0.3.5-bugs`):** both journeys compare the LCD with the tempo as the LCD rounds it (`lcdBpm`), and the drag back with a tolerance below one step; the failure line now says the tempo, where it started and the global's tempo in. Checked from a saved project at 93.79 in both hosts.
+- **Status:** fixed for 0.3.5 (journey only).
 
 ## B-023 · Undo after an Alt-drag doesn't restore every track
 
 - **From:** the journeys (md-sound-control-all right after md-sound-value-keys), 2026-10-08, both hosts.
 - **What happens:** after an Alt-drag (Control All), ⌘Z does not bring every track back; it looks like separate edits get merged into one undo step.
-- **Status:** open (product bug, not the test).
+- **Cause:** not the undo grouping: the arrow keys are three steps and Control All one (traced in the core: each edit recorded with its gesture, the Alt-drag's merged into one step). ⌘Z never reached the plug-in. `md-sound-value-keys` leaves its value focused (a value is `role=slider`), and the key dispatcher (`deskKeys.js`) treated a focused slider like a text field: every shortcut without `field: true` was off, ⌘Z included. A person meets it too: a real click on a value focuses it (a synthetic one in the journeys does not, which is why the journey only failed after the arrow-key journey), so ⌘Z (and Space, ⌘C ⌘V, the digits) after dragging a value did nothing.
+- **Fix (branch `fix/0.3.5-bugs`):** a focused value keeps only the keys that move it (arrows, Page Up/Down, Home, End: its own handler's); every other key is the page's. A text field keeps every key as before. Both editors (shared `deskKeys.js`). Tests: `deskKeysTest.js` (⌘Z, Space, ⌘C with a value focused; ↑ stays the value's), `md-sound-control-all` focuses the value it drags as a real press does (fails without the fix); its failure line lists what did not come back.
+- **Status:** fixed for 0.3.5.
 
 ## B-022 · Doesn't work on Windows 10 with WebView2 installed
 
@@ -22,7 +26,14 @@ where it came from, the setup, what happens, what should happen, status.*
 - **What happens:** the Windows editors "don't work" on Windows 10 although the WebView2 runtime is installed.
 - **Not the cause:** the C runtime (the build links it statically).
 - **To check:** the version used (0.3.2 still had the old IE engine; WebView2 came in 0.3.3); the WebView2 runtime version on those machines vs what our SDK (1.0.3856.49) needs — any newer ICoreWebView2_N interface we query may be missing on an old runtime; file:// loading of the page from %TEMP%; the user-data folder in %LOCALAPPDATA%\Gearmulator; the emulator itself (CPU features); the plug-in in a DAW vs the standalone. Add a startup log the user can send, and a message on screen that says what failed.
-- **Status:** open, waiting for details.
+- **Done for 0.3.5 (branch `fix/0.3.5-bugs`), so the next report says what failed:**
+  - **A start-up log every build writes**, for the user to send: `<data folder>\logs\editor-mdStudio.log` / `editor-mmStudio.log` (Windows: `Documents\Gearmulator Preview\<machine>\logs`; the start before kept as `editor-*-previous.log`): the editor's version, Windows version, standalone or the host's executable, the CPU, the WebView2 runtime found (`GetAvailableCoreWebView2BrowserVersionString`) against the oldest the editors need, the user-data folder, each HRESULT of the environment and the controller, the runtime the environment uses, `ICoreWebView2Settings3` missing (an older runtime), page loads and errors, the WebView2 process failing, and "page up" when the bridge answers. **Open Log Folder** in the editor's menu (right-click the header; the standalone's Editor menu).
+  - **The window says what failed** instead of staying blank: no runtime, the environment or controller refused, the page failing to load, or the page's script not answering within 30 s; with what to do (install or update the Evergreen WebView2 Runtime, a button to its download page; send the log, with its path and an Open the log folder button).
+  - **Older runtimes:** every WebView2 interface the editors use is in the first stable runtime (86.0.616) except `ICoreWebView2Settings3` (1.0.864, the browser's own keys off), which is asked for and skipped when missing: the page works, F5 and Ctrl+F stay the browser's. Minimum runtime: 86.0.616.0 (WINDOWS.md); an older one is marked in the log.
+  - **Tests:** the Windows start test checks every run's log (the runtime's version, page up) and runs the Machinedrum standalone three more times: as an old runtime (`GEARMULATOR_MDMM_WEBVIEW2_TEST=old`: no `ICoreWebView2Settings3`, the page must still work), as a machine without one (`=fail`) and with a page that never starts (`GEARMULATOR_MDMM_PAGE_TEST=nostart`): the window must say "The editor page could not start" (UI Automation). Checked on macOS by hand (`nostart`: the log and the message).
+  - **Found by the new log on CI's runner:** the standalone's first WebView2 controller is refused with `E_ABORT` (0x80004004): its parent window is made again while the standalone starts. It was retried only when the window changed again, so the page came up 25 to 35 s late on the runner; on a slower machine it may never have. A controller refused with `E_ABORT` is now made again at once in the new window (up to 10 times), and a failure message goes away if the page starts after all. A likely cause of the reports; to be confirmed by a tester's log.
+- **Not verified:** a real Windows 10 machine, a runtime actually older than the SDK's (CI's windows-2022 has a current one). The cause on the testers' machines is still unknown: their logs will say.
+- **Status:** diagnosable for 0.3.5; the cause waits for a tester's log.
 
 ## B-021 · Monomachine: PLAY refused as "panel busy" after edits, a pattern edit not read back while playing
 
@@ -54,21 +65,28 @@ where it came from, the setup, what happens, what should happen, status.*
 - **From:** Discord tester C, 2026-10-08, M1, latest macOS.
 - **What happens:** pressing ? (or ⇧/) gives the macOS "beep", as if no one took the key.
 - **To check:** whether the web view has keyboard focus before the first click, whether the MM page binds ? at all, and the standalone vs plug-in path (see B-015).
-- **Status:** open.
+- **Cause:** not the MM page (it binds ?), the window: whenever the standalone's window becomes the key window (at start, after switching back to it, or on the click that activates it), JUCE gives its own view the keyboard (`NSViewComponentPeer::becomeKeyWindow`: `makeFirstResponder:` on the peer's view). A key that view does not use goes up the responder chain to AppKit's beep, so keys pressed before a click inside the page never reached it (the Machinedrum Editor too). The journeys missed it: their window is never the key window.
+- **Fix (branch `fix/0.3.5-bugs`):** the page's host hands the keyboard to the web view when the page is up, after the window became the key window (`NSWindowDidBecomeKeyNotification`, `mdWebFocus.h`), and when JUCE's focus lands on the window around the page (a host making the plug-in's view first responder); never away from another control of the window (a host's). Windows: the same moments move the focus into WebView2 (`MoveFocus`). ? on the Monomachine Editor now opens the keyboard view both editors share (`deskKeyView.js`) instead of the plain list. Tests: `mm-keys-os-help` and `md-keys-os-help` (real `NSEvent`s: `activate` does what the window does when it becomes key, then ? with no click; fail without the fix, both hosts); `mdOsKeys` refuses to send a key whose first responder is not the page and logs it, so the failing test makes no sound; `mm-keys-help` checks the drawn keyboard.
+- **Status:** fixed for 0.3.5.
 
 ## B-017 · Monomachine Perform: dragging DEC resizes the window
 
 - **From:** Discord tester C, 2026-10-08.
 - **What happens:** in Perform mode, moving the envelope's DEC (and similar) on the left side makes the page grow downwards to fit the envelope, then it jumps back when the mouse is released.
 - **Should:** the layout stays put while dragging.
-- **Status:** open.
+- **Cause:** the envelope's screen was a canvas placed straight in the card's grid row with `height: 100%`. A canvas's drawing size (its width and height attributes, set on every redraw to the box times the display's scale) is its intrinsic size, which the row took into account: each redraw while dragging made the row, the card and the page a little taller; the render on release put a fresh canvas in, so the page jumped back.
+- **Fix (branch `fix/0.3.5-bugs`):** the canvas sits absolutely in a box of its own (`.menvplot`), which takes the row; the canvas no longer sizes anything (as the Sound page's plots already did). Test: `mm-perform-menv-layout` drags DEC on the value and the DEC dot on the screen and samples the card's, the page's and the screen's heights every 10 ms (grew before the fix, steady after; both hosts).
+- **Status:** fixed for 0.3.5.
 
 ## B-016 · Standalone can't go full screen; Settings does nothing (Monomachine)
 
 - **From:** Discord tester C, 2026-10-08, Monomachine, M1, latest macOS (version not given).
 - **What happens:** the window cannot go full screen; "Settings" does nothing.
 - **To check:** the window's full-screen button / maximise in the standalone; Settings: B-007 fixed this in 0.3.2 (plug-ins have no Settings entry, the standalone's opens Audio/MIDI) — confirm the tester's version.
-- **Status:** open.
+- **Cause:** JUCE's standalone window asks for the minimise and close buttons only. Without the maximise button the window had no full-screen behaviour on macOS (`NSWindowCollectionBehaviorFullScreenPrimary` needs it and a resizable window), and no maximise box on Windows and Linux. Had it gone full screen, the screen fit (P7) would have pulled it back: the window was fitted to the visible area (menu bar and Dock left out) after every resize, and its full-screen size would have been remembered as the user's. Settings: B-007 fixed the editor's menu; the macOS app menu still had upstream's "Settings..." (it opens the RmlUi settings page the web page hides: nothing happened).
+- **Fix (branch `fix/0.3.5-bugs`):** the standalone's window asks for all three buttons (`standaloneApp.h`), so the green button goes full screen on macOS and Windows and Linux maximise; a window in full screen, maximised or minimised is neither fitted nor remembered (`EditorWindowFit::sizedBySystem`), and the page zooms to the window (`mdPageZoom.h`, from 0.3.2). The app menu shows "Settings..." only for an editor without its own audio and MIDI panel; the web-page editors have Audio/MIDI Settings... (the app menu and the Audio menu). Test: the macOS start test reads the window's title-bar buttons and the menus through the Accessibility API (`ui_probe chrome`): the full-screen button enabled, Audio/MIDI Settings... in the app menu, no "Settings...".
+- **Not verified here:** full screen by hand on a Mac with a person (this Mac's shell may not use the Accessibility API; CI's start test reads it), Windows maximise and Linux by hand.
+- **Status:** fixed for 0.3.5.
 
 ## B-015 · Cmd+C and Cmd+V do nothing (macOS: Ableton Live and the standalone)
 

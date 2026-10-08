@@ -1,5 +1,6 @@
 #include "mdWebPageHost.h"
 #include "mdPageBridge.h"
+#include "mdWebFocus.h"
 #include "mdPageZoom.h"
 
 #include "juce_gui_extra/juce_gui_extra.h"
@@ -19,6 +20,7 @@
 #include <cmath>
 #include <cstring>
 #include <limits>
+#include <utility>
 
 namespace mdJucePlugin
 {
@@ -40,8 +42,22 @@ namespace mdJucePlugin
 	inline int setWebPageZoom(juce::Component&, double) { return -1; }
 #endif
 
+#if !JUCE_MAC
+	// B-018's macOS parts (mdStudioWebZoom.mm); WebView2 takes the keyboard through WebView2Page::focusPage.
+	int focusWebView(juce::Component&, bool) { return 0; }
+	struct KeyWindowWatch::Impl {};
+	KeyWindowWatch::KeyWindowWatch(std::function<void()>) {}
+	KeyWindowWatch::~KeyWindowWatch() = default;
+	void KeyWindowWatch::follow(juce::Component&) {}
+#endif
+
 	namespace
 	{
+		// B-022: a web view's event that means the page cannot start (WebView2Page's onFailed, a load error)
+		const juce::String g_failed = "FAILED: ";
+		// The page says it is up (its first message) within this, or the window says what failed
+		constexpr double g_pageUpTimeoutMs = 30000.0;
+
 		// Replaces every "<open>NAME<close>" with _make(NAME).
 		std::string replaceAll(const std::string& _text, const std::string& _open, const std::string& _close,
 			const std::function<std::string(const std::string&)>& _make)
@@ -88,6 +104,7 @@ namespace mdJucePlugin
 			Callbacks c;
 			c.onMessage = _onBridge;
 			c.onEvent = _onLoadEvent;
+			c.onFailed = [_onLoadEvent](const juce::String& _why) { _onLoadEvent(g_failed + _why); };
 			c.onNavigation = [_onBridge, _onLoadEvent, _onFileUrl](const juce::String& _url)
 			{
 				if(_onFileUrl && _onFileUrl(_url))
@@ -142,7 +159,7 @@ namespace mdJucePlugin
 		{
 			// What a user of any build needs to report a blank editor.
 			juce::Logger::writeToLog("Gearmulator editor page: load error " + _error);
-			m_onLoadEvent("load error " + _error);
+			m_onLoadEvent(g_failed + "the page did not load (" + _error + ")");
 			return false;
 		}
 
@@ -178,8 +195,23 @@ namespace mdJucePlugin
 		, m_scriptRecv(false)
 #endif
 	{
+		juce::Desktop::getInstance().addFocusChangeListener(this);
+		m_keyWatch = std::make_unique<KeyWindowWatch>([this]
+		{
+			if(m_pageReady)
+				focusPage(true);	// after JUCE took the keyboard for its own view (B-018)
+		});
 		m_web = std::make_unique<PageWebView>([this](const std::string& _url) { onBridge(_url); },
-			[this](const juce::String& _e) { log("web view: " + _e); },
+			[this, alive = std::weak_ptr<int>(m_alive)](const juce::String& _e)
+			{
+				note("web view: " + _e);
+				if(_e.startsWith(g_failed))	// later: the web view may say so while it is being made
+					juce::MessageManager::callAsync([this, alive, why = _e.substring(g_failed.length())]
+					{
+						if(!alive.expired())
+							fail(why);
+					});
+			},
 			[this](const juce::String& _url)
 			{
 				// A file the web view is asked to open (one dragged onto it) is not this page: cancelled quietly, the
@@ -196,6 +228,8 @@ namespace mdJucePlugin
 
 	WebPageHost::~WebPageHost()
 	{
+		juce::Desktop::getInstance().removeFocusChangeListener(this);
+		m_keyWatch.reset();
 		m_web.reset();
 		// This instance's page file (P6: one per instance, so two open editors never share one), and the
 		// batches the page has not read.
@@ -282,6 +316,16 @@ namespace mdJucePlugin
 		// accessibility API to read. Any build, so the shipped one is what the start tests press keys into.
 		if(juce::SystemStats::getEnvironmentVariable("GEARMULATOR_MDMM_KEYPROBE", {}) == "1")
 			url = url.withParameter("keyprobe", "1");
+		m_loadMs = juce::Time::getMillisecondCounterHiRes();
+		// B-022: GEARMULATOR_MDMM_PAGE_TEST=nostart loads no page, so the window's failure message shows (in 3 s): the
+		// start tests check it on every system, any build
+		m_noStartTest = juce::SystemStats::getEnvironmentVariable("GEARMULATOR_MDMM_PAGE_TEST", {}) == "nostart";
+		if(m_noStartTest)
+		{
+			note("page not loaded (test: GEARMULATOR_MDMM_PAGE_TEST=nostart)");
+			return;
+		}
+		note("page loading: " + m_file.getFullPathName() + " (" + juce::String(m_file.getSize()) + " bytes)");
 		m_web->goToURL(url.toString(true));
 		log("page loading, selftest=" + juce::String(m_selfTest.isNotEmpty() ? 1 : 0) + ", keyprobe="
 			+ juce::String(url.getParameterNames().contains("keyprobe") ? 1 : 0) + ", " + juce::String(m_file.getSize()) + " bytes");
@@ -329,11 +373,50 @@ namespace mdJucePlugin
 		if(!m_pageReady)
 		{
 			m_pageReady = true;
-			log("page up");
+			if(m_failure)
+			{
+				// B-022: what said it failed was not the last word (a slow start): the page after all
+				note("the page started after all: the failure message goes");
+				m_failure.reset();
+				m_web->setVisible(true);
+			}
+			note("page up: the bridge works (" + juce::String(static_cast<int>(juce::Time::getMillisecondCounterHiRes() - m_loadMs)) + " ms after loading)");
+			focusPage(false);
 		}
 		for(const auto& message : batch->asArray())
 			m_onMessage(message);
 		flush();
+	}
+
+	// B-018: the page takes the keyboard when it is up, unless something else in the window has it (a host's own
+	// control): a key pressed before any click reaches the page instead of JUCE's view (macOS: the beep).
+	void WebPageHost::focusPage(const bool _always)
+	{
+#if JUCE_MAC
+		const auto r = focusWebView(*m_web, _always);
+		log(r > 0 ? "keyboard focus: the page" : r < 0 ? "keyboard focus: kept by another view of the window" : "keyboard focus: no window yet");
+#elif JUCE_WINDOWS && MDMM_WEBVIEW2
+		// WebView2's window is a child of the editor's: moved into it when the editor's window has the focus
+		auto* top = m_web->getTopLevelComponent();
+		if(!_always && !(top && top->getPeer() && top->getPeer()->isFocused()))
+			return;
+		if(auto* web = dynamic_cast<WebView2Page*>(m_web.get()))
+		{
+			web->focusPage();
+			log("keyboard focus: the page");
+		}
+#else
+		(void)_always;
+#endif
+	}
+
+	// B-018: JUCE gives the window's own view the keyboard whenever the window is activated (macOS: becomeKeyWindow;
+	// Windows: WM_SETFOCUS), and its focus to the window component or one around the page. Handed on to the page.
+	void WebPageHost::globalFocusChanged(juce::Component* _focused)
+	{
+		if(_focused == nullptr || !m_pageReady || (_focused != m_web.get() && !_focused->isParentOf(m_web.get())))
+			return;
+		focusPage(true);
 	}
 
 	void WebPageHost::flush()
@@ -394,8 +477,127 @@ namespace mdJucePlugin
 		}
 	}
 
+	// ---- B-022: the start-up log and the window's word when the page cannot start ----
+
+	void WebPageHost::setStartupLog(const juce::File& _file)
+	{
+		m_startupLog = _file;
+		if(m_startupLog == juce::File() || !m_startupLog.getParentDirectory().createDirectory().wasOk())
+		{
+			m_startupLog = juce::File();
+			return;
+		}
+		// this window's start, the one before kept beside it (the last two starts are what a report needs)
+		const auto previous = m_startupLog.getSiblingFile(m_startupLog.getFileNameWithoutExtension() + "-previous.log");
+		if(m_startupLog.existsAsFile())
+			m_startupLog.moveFileTo(previous);
+		note(juce::String("Gearmulator ") + m_spec.page + " " + juce::String(mdmm::editorVersion()) + ", "
+			+ juce::SystemStats::getOperatingSystemName() + (juce::SystemStats::isOperatingSystem64Bit() ? " 64-bit" : "")
+			+ ", " + (juce::JUCEApplicationBase::isStandaloneApp() ? "standalone" : "plug-in in " + juce::File::getSpecialLocation(juce::File::hostApplicationPath).getFileName())
+			+ ", CPU " + juce::SystemStats::getCpuModel());
+		// what the web view said while it was being made, before this file was named
+		for(const auto& line : std::exchange(m_early, {}))
+			m_startupLog.appendText(line);
+	}
+
+	// A line every build keeps (the start-up log), and the diagnostics log's too.
+	void WebPageHost::note(const juce::String& _line) const
+	{
+		log(_line);
+		const auto line = juce::Time::getCurrentTime().toString(true, true, true, true) + " " + _line + "\n";
+		if(m_startupLog != juce::File())
+			m_startupLog.appendText(line);
+		else if(m_early.size() < 64)
+			m_early.push_back(line);
+	}
+
+	// The page did not say it is up in time: the window says so (from the editor's timer).
+	void WebPageHost::checkStarted()
+	{
+		const double timeout = m_noStartTest ? 3000.0 : g_pageUpTimeoutMs;
+		if(m_pageReady || m_failure || m_loadMs <= 0 || juce::Time::getMillisecondCounterHiRes() - m_loadMs < timeout)
+			return;
+		fail("the page did not start within " + juce::String(static_cast<int>(timeout / 1000)) + " s (it loaded, or is still loading, but its script never answered)");
+	}
+
+	namespace
+	{
+		// What the window shows instead of the page when it cannot start (B-022): what failed, what to do, the log.
+		class FailureView final : public juce::Component
+		{
+		public:
+			FailureView(const juce::String& _why, const juce::File& _log)
+			{
+				setOpaque(true);
+				juce::String text = "The editor page could not start.\n\n" + _why + "\n\n";
+#if JUCE_WINDOWS
+				text += "What to do: install or update the Microsoft Edge WebView2 Runtime (the Evergreen Runtime, version "
+					+ juce::String(g_minimumRuntimeText) + " or newer; Windows Update or the button below), then open the editor again.\n\n";
+#elif JUCE_LINUX || JUCE_BSD
+				text += "What to do: install webkit2gtk (libwebkit2gtk-4.1 or 4.0), then open the editor again.\n\n";
+#else
+				text += "What to do: open the editor again; if it stays like this, send the log.\n\n";
+#endif
+				text += "If it still does not work, please send the log: " + (_log != juce::File() ? _log.getFullPathName() : juce::String("(none could be written)"));
+				m_text.setText(text, juce::dontSendNotification);
+				m_text.setJustificationType(juce::Justification::topLeft);
+				m_text.setColour(juce::Label::textColourId, juce::Colours::white);
+				m_text.setFont(juce::Font(16.0f));
+				addAndMakeVisible(m_text);
+				m_open.setButtonText("Open the log folder");
+				m_open.onClick = [_log] { if(_log != juce::File()) _log.getParentDirectory().revealToUser(); };
+				addAndMakeVisible(m_open);
+#if JUCE_WINDOWS
+				m_get.setButtonText("Get the WebView2 Runtime");
+				m_get.onClick = [] { juce::URL("https://go.microsoft.com/fwlink/p/?LinkId=2124703").launchInDefaultBrowser(); };
+				addAndMakeVisible(m_get);
+#endif
+			}
+
+			void paint(juce::Graphics& _g) override { _g.fillAll(juce::Colour(0xff15171a)); }
+
+			void resized() override
+			{
+				auto r = getLocalBounds().reduced(32);
+				auto buttons = r.removeFromBottom(36);
+				m_open.setBounds(buttons.removeFromLeft(220));
+				buttons.removeFromLeft(12);
+				m_get.setBounds(buttons.removeFromLeft(240));
+				m_text.setBounds(r.removeFromTop(std::min(r.getHeight(), 320)));
+			}
+
+		private:
+			static constexpr const char* g_minimumRuntimeText =
+#if JUCE_WINDOWS && MDMM_WEBVIEW2
+				WebView2Page::g_minimumRuntime;
+#else
+				"86";
+#endif
+			juce::Label m_text;
+			juce::TextButton m_open, m_get;
+		};
+	}
+
+	void WebPageHost::fail(const juce::String& _why)
+	{
+		if(m_failure)
+			return;
+		note("FAILED: " + _why + " - the window says so; log: " + m_startupLog.getFullPathName());
+		m_failure = std::make_unique<FailureView>(_why, m_startupLog);
+		m_failure->setTitle("The editor page could not start");
+		m_failure->setDescription(_why);
+		if(auto* parent = m_web->getParentComponent())
+		{
+			parent->addAndMakeVisible(*m_failure);
+			m_failure->setBounds(m_web->getBounds());
+		}
+		m_web->setVisible(false);	// WebView2's own window would cover the message
+	}
+
 	void WebPageHost::layout(const juce::Rectangle<int>& _bounds)
 	{
+		if(m_failure)
+			m_failure->setBounds(_bounds);
 		if(m_web->getBounds() != _bounds)
 			m_web->setBounds(_bounds);
 		if(_bounds.getWidth() <= 0)
@@ -403,6 +605,7 @@ namespace mdJucePlugin
 #if JUCE_MAC
 		if(!m_keptDrawn)
 			m_keptDrawn = backgroundRun::keepPageDrawn(*m_web);
+		m_keyWatch->follow(*m_web);	// B-018: the window it is in now
 #endif
 		const double zoom = pageZoom::effective(_bounds.getWidth(), _bounds.getHeight(), m_userZoom,
 			{m_spec.designWidth, m_spec.designHeight, m_spec.minHeight});

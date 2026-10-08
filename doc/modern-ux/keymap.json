@@ -1252,7 +1252,8 @@
 			],
 			"mod": "",
 			"group": "Help",
-			"does": "This list of keys",
+			"does": "The keyboard view: what every key and gesture does (this)",
+			"short": "This view",
 			"modal": "keyspop",
 			"dispatched": true
 		},
@@ -1264,7 +1265,8 @@
 			],
 			"mod": "",
 			"group": "Help",
-			"does": "Close the list of keys",
+			"does": "Close the keyboard view",
+			"short": "Close",
 			"dispatched": true
 		},
 		{

@@ -71,6 +71,18 @@ namespace mdJucePlugin::osKeys
 		{
 			if(token.isEmpty())
 				continue;
+			if(token == "activate")
+			{
+				// What happens when the window becomes the key window: JUCE's peer grabs the focus, its view the first
+				// responder (NSViewComponentPeer::becomeKeyWindow), then AppKit posts NSWindowDidBecomeKeyNotification
+				// (B-018). Not the window's activation itself: the journeys' window stays in the background.
+				if(auto* peer = _web.getPeer())
+					peer->grabFocus();
+				[[NSNotificationCenter defaultCenter] postNotificationName:NSWindowDidBecomeKeyNotification object:window];
+				const id r = [window firstResponder];
+				_log(juce::String("oskeys activate: JUCE took the focus; first responder: ") + (r ? [NSStringFromClass([r class]) UTF8String] : "none"));
+				continue;
+			}
 			if(token == "focus")
 			{
 				const bool done = [window makeFirstResponder:web];
@@ -113,6 +125,16 @@ namespace mdJucePlugin::osKeys
 			}
 			else
 			{
+				// A plain key goes to the first responder; one that is not the page's web view (or inside it) does not
+				// use it and AppKit beeps (B-018): not sent, said in the log, so the journey fails without a sound.
+				const id r = [window firstResponder];
+				const bool page = r != nil && [r isKindOfClass:[NSView class]] && ((NSView*)r == (NSView*)web || [(NSView*)r isDescendantOf:web]);
+				if(!page)
+				{
+					_log("oskeys " + token + ": NOT sent, the first responder is not the page ("
+						+ juce::String(r ? [NSStringFromClass([r class]) UTF8String] : "none") + "): AppKit would beep");
+					continue;
+				}
 				[window sendEvent:down];
 			}
 			[window sendEvent:up];

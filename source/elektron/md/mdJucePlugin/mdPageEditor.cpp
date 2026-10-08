@@ -112,6 +112,9 @@ namespace mdJucePlugin
 		m_updateToken = m_updater->subscribe([this] { showUpdateBanner(); });
 		getRmlComponent()->addAndMakeVisible(m_page->component());
 		layout();
+		// B-022: the start-up log a user can send (the editor's menu: Open Log Folder)
+		m_page->setStartupLog(processor.performanceDiagnosticsFolder().getChildFile(
+			"editor-" + juce::File::createLegalFileName(juce::String(m_session ? m_session->pageSpec().page : "page")).upToLastOccurrenceOf(".", false, false) + ".log"));
 		m_page->load();
 #if MDMM_DIAGNOSTICS
 		if(m_session)
@@ -314,6 +317,7 @@ namespace mdJucePlugin
 				m_updater->poll(getProcessor().getConfig());
 			}
 		}
+		m_page->checkStarted();	// B-022
 		m_page->flush();
 	}
 

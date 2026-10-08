@@ -59,7 +59,7 @@ void EditorWindow::resized()
 	{
 		const auto percent = 100.f * scale / m_state.getRootScale();
 		m_config.setValue("scale", percent);
-		EditorWindowFit::persistSize(m_state, m_config, w, h);
+		EditorWindowFit::persistSize(*this, m_state, m_config, w, h);
 		m_config.saveIfNeeded();
 	}
 

@@ -77,6 +77,15 @@ namespace mdJucePlugin
 		auto* const page = dynamic_cast<PageEditor*>(getEditor());
 		if(page)
 			page->fillUpdateMenu(_menu);	// I-005 (doc/modern-ux/DESIGN-updates.md)
+		// B-022: the folder of the start-up log (and the performance captures), for a report
+		_menu.addEntry("Open Log Folder", [folder = processor.performanceDiagnosticsFolder()]
+		{
+			juce::MessageManager::callAsync([folder]	// after the menu closed
+			{
+				if(folder.createDirectory().wasOk())
+					folder.revealToUser();
+			});
+		});
 		_menu.addSeparator();
 		jucePluginEditorLib::PluginEditorState::initContextMenu(_menu);
 		if(processor.getModel() == md::MachineModel::Machinedrum)
