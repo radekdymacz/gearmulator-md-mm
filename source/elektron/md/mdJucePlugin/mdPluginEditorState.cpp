@@ -1,5 +1,7 @@
 #include "mdPluginEditorState.h"
 
+#include "mdAbout.h"
+
 #include "mdEditor.h"
 #include "mdEditorPages.h"
 #include "mdPageEditor.h"
@@ -69,8 +71,14 @@ namespace mdJucePlugin
 
 	void PluginEditorState::initContextMenu(juceRmlUi::Menu& _menu)
 	{
-		jucePluginEditorLib::PluginEditorState::initContextMenu(_menu);
 		auto& processor = static_cast<AudioPluginAudioProcessor&>(m_processor);
+		// 0.3.4: which editor and version first (disabled), the Updates under it (mdAbout.h)
+		_menu.addEntry(about::title(processor.getModel() == md::MachineModel::Monomachine), false, false, {});
+		auto* const page = dynamic_cast<PageEditor*>(getEditor());
+		if(page)
+			page->fillUpdateMenu(_menu);	// I-005 (doc/modern-ux/DESIGN-updates.md)
+		_menu.addSeparator();
+		jucePluginEditorLib::PluginEditorState::initContextMenu(_menu);
 		if(processor.getModel() == md::MachineModel::Machinedrum)
 		{
 			const bool available = processor.isRamRecordingModeAvailable();
@@ -108,11 +116,8 @@ namespace mdJucePlugin
 		_menu.addSubMenu("Performance diagnostics", std::move(diagnostics));
 
 		// B-001: the editor page's zoom (mdPageEditor.h; a hook, doc/modern-ux/UPSTREAM.md)
-		if(auto* page = dynamic_cast<PageEditor*>(getEditor()))
-		{
+		if(page)
 			page->fillZoomMenu(_menu);
-			page->fillUpdateMenu(_menu);	// I-005 (doc/modern-ux/DESIGN-updates.md)
-		}
 
 		auto* const editor = dynamic_cast<Editor*>(getEditor());
 		if(!editor)

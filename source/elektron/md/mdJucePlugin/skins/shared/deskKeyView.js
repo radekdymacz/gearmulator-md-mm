@@ -121,7 +121,9 @@ const KeyView = (() => {
 		const lay = m.layer.split("+").filter(Boolean);
 		const chip = (mod, text) => `<button type="button" class="kv-chip${lay.includes(mod) ? " on" : ""}" data-kvmod="${mod}" aria-pressed="${lay.includes(mod)}">${text}</button>`;
 		const rowsHtml = list => list.map(r => `<div class="kv-row"><kbd>${esc(r.label)}</kbd><span>${esc(r.does)}</span></div>`).join("");
-		const head = `<div class="libhead kv-head"><span class="cap">Keys</span><span class="note">${esc(o.note || "")}</span>`
+		/* the editor's version (deskAbout.js) after the title, when the plug-in told the page */
+		const ver = typeof About !== "undefined" && About.label ? `<span class="note kv-ver" title="This editor's version">${esc(About.label)}</span>` : "";
+		const head = `<div class="libhead kv-head"><span class="cap">Keys</span>${ver}<span class="note">${esc(o.note || "")}</span>`
 			+ `<input class="kv-search" type="search" placeholder="Search keys and gestures" value="${esc(m.query)}" aria-label="Search keys and gestures" data-kvsearch="1">`
 			+ `<span class="kv-scope"><button type="button" class="kv-chip${m.all ? "" : " on"}" data-kvall="0" aria-pressed="${!m.all}">${esc(o.pageName || "This page")}</button><button type="button" class="kv-chip${m.all ? " on" : ""}" data-kvall="1" aria-pressed="${m.all}">All</button></span>`
 			+ `<button class="libx" data-keysx="1">Esc</button></div>`;
