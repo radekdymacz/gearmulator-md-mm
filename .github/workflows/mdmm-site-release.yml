@@ -5,7 +5,8 @@ name: MD/MM site follows the release
 #  2. Writes site/public/latest.json (version, date, notes, per-OS per-machine URL, size, SHA-256) and signs
 #     each asset for the in-app updater when the MDMM_UPDATE_SIGNING_KEY secret is set (else: no "sig", the
 #     apps notify but never install).
-#  3. Sets the version in site/public/config.js.
+#  3. Sets the version in site/public/config.js, and renders the release-notes pages (site/public/releases/,
+#     sitemap) from doc/release/v*.md with scripts/release/make_release_pages.py.
 #  4. Commits both to main as github-actions[bot]. main has no protection today, so it pushes directly
 #     (a site-only commit; a GITHUB_TOKEN push starts no other workflow). If the push is refused (main moved
 #     twice, or protection is added later) it opens a pull request from site/release-<version> instead.
@@ -105,6 +106,7 @@ jobs:
           python3 scripts/release/make_latest_json.py --tag "${TAG}" --assets "${RUNNER_TEMP}/assets" \
             --out site/public/latest.json --date "${{ steps.release.outputs.date }}"
           python3 scripts/release/set_site_version.py "${{ steps.release.outputs.version }}" site/public/config.js
+          python3 scripts/release/make_release_pages.py --date "${{ steps.release.outputs.version }}=${{ steps.release.outputs.date }}"
           {
             echo "### Site for ${TAG}"
             echo '```json'
@@ -119,12 +121,12 @@ jobs:
           version="${{ steps.release.outputs.version }}"
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add site/public/latest.json site/public/config.js
+          git add site/public/latest.json site/public/config.js site/public/releases site/public/sitemap.xml
           if git diff --cached --quiet; then
             echo "The site already says ${version}: nothing to commit."
             exit 0
           fi
-          git commit -m "Site: ${version} (latest.json, config.js) from the published release ${TAG}"
+          git commit -m "Site: ${version} (latest.json, config.js, release notes) from the published release ${TAG}"
           for _ in 1 2; do
             if git push origin HEAD:main; then
               echo "Pushed to main."
@@ -157,27 +159,26 @@ jobs:
 
       - name: Announce on Discord
         # Only for the real publish event (not a manual re-run), and only when the webhook secret exists:
-        # #announcements on the mdmm.dev Discord server.
+        # #announcements on the mdmm.dev Discord server. Three lines, one link preview (the download link is in <>).
         if: steps.release.outputs.skip == 'false' && github.event_name == 'release'
         env:
           DISCORD_WEBHOOK: ${{ secrets.DISCORD_RELEASE_WEBHOOK }}
+          VERSION: ${{ steps.release.outputs.version }}
         run: |
           set -euo pipefail
           if [[ -z "${DISCORD_WEBHOOK}" ]]; then
             echo "::notice title=No Discord post::DISCORD_RELEASE_WEBHOOK is not set."
             exit 0
           fi
-          gh api "repos/${GITHUB_REPOSITORY}/releases/tags/${TAG}" > "${RUNNER_TEMP}/release.json"
-          python3 - "${RUNNER_TEMP}/release.json" > "${RUNNER_TEMP}/discord.json" <<'PY'
-          import json, re, sys
-          r = json.load(open(sys.argv[1]))
-          body = r.get("body") or ""
-          # the notes up to the first "## Testing" / "## Platforms" section, links unchanged, at most ~1500 characters
-          body = re.split(r"\n## (Testing|Platforms)", body)[0].strip()
-          if len(body) > 1500:
-              body = body[:1500].rsplit("\n", 1)[0] + "\n…"
-          text = f"**{r['name']}** is out: https://mdmm.dev/get/\n\n{body}\n\nFull notes: {r['html_url']}"
-          print(json.dumps({"content": text[:1990], "allowed_mentions": {"parse": []}}))
+          # the summary: the <!-- discord: ... --> line of the notes if present, else their first sentence (~140 characters)
+          summary="$(python3 scripts/release/make_release_pages.py --summary "${VERSION}")"
+          python3 - "${VERSION}" "${summary}" > "${RUNNER_TEMP}/discord.json" <<'PY'
+          import json, sys
+          version, summary = sys.argv[1], sys.argv[2]
+          text = (f"**Machinedrum Editor + Monomachine Editor {version} is out** \u2014 {summary}\n"
+                  f"What's new: https://mdmm.dev/releases/{version}/\n"
+                  f"Download: <https://mdmm.dev/get/>")
+          print(json.dumps({"content": text, "allowed_mentions": {"parse": []}}))
           PY
           curl -fsS -H "Content-Type: application/json" -d @"${RUNNER_TEMP}/discord.json" "${DISCORD_WEBHOOK}" > /dev/null
           echo "Posted ${TAG} to Discord."

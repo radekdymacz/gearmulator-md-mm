@@ -1,0 +1,188 @@
+<!doctype html>
+<html lang="en" data-theme="light">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>MD + MM Editor 0.3.0 release notes</title>
+<meta name="description" content="A feature release on top of 0.2.1: a sampler workspace, a Sound page grouped by function, a keyboard for both editors, channel strips on the Monomachine&#x27;s Mix, and a gentler first run when no ROM is installed yet.">
+<meta name="color-scheme" content="light">
+<meta name="theme-color" content="#fbfbf7">
+<link rel="canonical" href="https://mdmm.dev/releases/0.3.0/">
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<link rel="icon" href="/favicon-32.png" sizes="32x32" type="image/png">
+<link rel="apple-touch-icon" href="/apple-touch-icon.png">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="MD + MM Editor">
+<meta property="og:title" content="MD + MM Editor 0.3.0 release notes">
+<meta property="og:description" content="A feature release on top of 0.2.1: a sampler workspace, a Sound page grouped by function, a keyboard for both editors, channel strips on the Monomachine&#x27;s Mix, and a gentler first run when no ROM is installed yet.">
+<meta property="og:url" content="https://mdmm.dev/releases/0.3.0/">
+<meta property="og:image" content="https://mdmm.dev/og.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="og:image:alt" content="Free editors for Machinedrum and Monomachine, beside a screenshot of the Machinedrum Editor's step grid and GEN bar.">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="MD + MM Editor 0.3.0 release notes">
+<meta name="twitter:description" content="A feature release on top of 0.2.1: a sampler workspace, a Sound page grouped by function, a keyboard for both editors, channel strips on the Monomachine&#x27;s Mix, and a gentler first run when no ROM is installed yet.">
+<meta name="twitter:image" content="https://mdmm.dev/og.png">
+<link rel="stylesheet" href="/design/tokens.css">
+<link rel="stylesheet" href="/assets/site.css?v=20261010">
+<script src="/assets/theme.js?v=20261008"></script>
+</head>
+<body>
+<a class="skip" href="#main">Skip to content</a>
+<header class="top">
+  <div class="wrap">
+    <a class="brand" href="/" aria-label="MD + MM Editor, home"><i class="dot" aria-hidden="true"></i><b>MD + MM Editor</b></a>
+    <nav class="nav" aria-label="Main">
+      <a class="opt" href="/#features">Features</a>
+      <a class="keep" href="/guide/">Guide</a>
+      <a class="opt" href="/#faq">FAQ</a>
+      <a class="disc" href="https://discord.gg/8xwXwBHbtn" aria-label="Discord community"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M2.5 3.5h11a1 1 0 0 1 1 1v6a1 1 0 0 1-1 1H7l-3 2.5V11.5H2.5a1 1 0 0 1-1-1v-6a1 1 0 0 1 1-1z" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/><circle cx="5.5" cy="7.5" r="1" fill="currentColor"/><circle cx="8" cy="7.5" r="1" fill="currentColor"/><circle cx="10.5" cy="7.5" r="1" fill="currentColor"/></svg><span>Discord</span></a>
+      <button class="themebtn" type="button" data-theme-toggle aria-label="Switch to dark theme"><svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="6.5" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M8 1.5a6.5 6.5 0 0 1 0 13z" fill="currentColor"/></svg></button>
+      <a class="btn btn-primary btn-sm" href="/get/">Download free</a>
+    </nav>
+  </div>
+</header>
+
+<main id="main" class="checkout legalpage guide">
+  <div class="wrap">
+    <span class="eyebrow">Release notes</span>
+    <h1>Machinedrum Editor + Monomachine Editor 0.3.0</h1>
+<p><small>Released 2026-10-05</small></p>
+<p>A feature release on top of <a href="/releases/0.2.1/">0.2.1</a>: a sampler workspace, a Sound page grouped by function, a keyboard for both editors, channel strips on the Monomachine's Mix, and a gentler first run when no ROM is installed yet.</p>
+<p>Screenshots, features and FAQ: <b><a href="https://mdmm.dev">https://mdmm.dev</a></b> Pay what you want (optional, same download): <b><a href="https://mdmm.dev/get/">https://mdmm.dev/get/</a></b></p>
+<h2>What's new</h2>
+<h3>Sampler (Machinedrum)</h3>
+<ul>
+<li>Sample slots are a browser of waveform tiles, with real waveforms drawn.
+</li>
+<li>Load a WAV or AIFF file and audition it before you keep it.
+</li>
+<li>The sampler's RAM view shows steps like the Sequence page; length is set in steps and bars.
+</li>
+<li>Kit edits to the sampler survive a pattern dump from the machine.
+</li>
+<li>"Set up sampling" is one centred card: recorder, then player.
+</li>
+</ul>
+<h3>Sound page by function</h3>
+<ul>
+<li>Both editors group the Sound page by what the controls do: small groups per machine, aligned rows, one screen per group. Pop-ups open in view.
+</li>
+</ul>
+<h3>Keyboard and playing</h3>
+<ul>
+<li>Mnemonic keys for the pages and actions, plus a QWERTY keyboard for playing notes.
+</li>
+<li>Alt (Option) works the same on every page.
+</li>
+<li>Kits load as soon as you click them. Song chains start playing at once, and the Song page is simpler.
+</li>
+<li>Rhythm generators and sound mutation: roll a new pattern or vary a sound, then undo it.
+</li>
+<li>A clickable transpose keyboard, a compact routing graph, a larger joystick and a short keyboard on the Monomachine's Perform page.
+</li>
+<li>Drag across the M or S keys to mute or solo many tracks at once.
+</li>
+</ul>
+<h3>Monomachine</h3>
+<ul>
+<li><b>Mix:</b> channel strips with a PAN bar, small AMP VOL, DIST and DSND boxes, and one labelled LEVEL fader.
+</li>
+<li><b>Piano roll:</b> the keys and octave labels sit on the left, with one left edge for every row.
+</li>
+<li>Features of the Machinedrum Editor that the Monomachine was missing are now there too.
+</li>
+<li>The Sequence page's lock lane lines up with the LOCK PARAMETER keys, on both editors.
+</li>
+<li>The top bar fits a 1280 pixel wide window on both editors.
+</li>
+</ul>
+<h3>Starting without a ROM</h3>
+<ul>
+<li>A missing ROM is no longer an error: no pop-up alerts, just a start-up card asking for the ROM. You choose the file with the file chooser (drag and drop is not supported).
+</li>
+<li>A session opened without a ROM keeps your saved project, and in a DAW it restores the automation and the editor setup from the held project.
+</li>
+<li>LOAD ROM replaces or removes the firmware.
+</li>
+<li>Questions in the editors read as sentences, and the LCD tooltip never covers an open menu.
+</li>
+</ul>
+<h3>Changed</h3>
+<ul>
+<li>MIDI mapping (the Control workspace and the LEARN key) is hidden until the controller feature exists. Each editor has five workspaces. Alt-drag on all tracks (Control All) is unchanged.
+</li>
+</ul>
+<h2>Release review fixes</h2>
+<ul>
+<li><b>Monomachine edits no longer wait forever.</b> If the machine never opens GLOBAL &gt; SYSEX RECV, the edit fails with a message after about half a minute of machine time, and PLAY, STOP and RECORD work again. In a DAW with audio stopped, nothing fails until the emulator runs again.
+</li>
+<li><b>A pattern or kit that does not answer is asked for again.</b> Over HW MIDI, a lost reply no longer leaves the editor refusing every edit; you get one message, and the editor asks again when the machine answers. The Monomachine's loading progress always finishes.
+</li>
+<li><b>No more lost or repeated messages to the editor page:</b> odd numbers, a comma-decimal system language, Polish letters and emoji no longer break the page, and dialogs no longer show twice when the window is shown again.
+</li>
+<li><b>Each editor window gets its own notices</b>, also with two windows open.
+</li>
+<li><b>Solo keeps your mutes</b> on the Machinedrum: un-solo no longer unmutes tracks muted on the machine or in the project, and a sampler capture stays frozen.
+</li>
+<li><b>No shortcuts behind dialogs:</b> Space presses the dialog's button, and Delete or the number keys no longer act on the page behind it. Undo still works over the library and GLOBAL panels.
+</li>
+<li><b>Dialogs wait their turn</b>, so a question from the plug-in is never lost behind another one.
+</li>
+<li><b>HW MIDI says when no machine answers:</b> the editor dims and a card offers AUDIO / MIDI or the emulator. The Monomachine's unsent edits (SEND n) no longer look like SYNC.
+</li>
+<li><b>Errors show once</b>, under the header, without moving the page, and close with ×.
+</li>
+<li>GLOBAL › ROUTING fits its dialog; the Monomachine's Multi map is never covered by the joystick, and Perform scrolls in a short window; Monomachine texts no longer name the Machinedrum.
+</li>
+<li>Safer data handling: bad song or pattern data can no longer write outside its memory.
+</li>
+</ul>
+<h2>Found by the new user-journey tests</h2>
+<ul>
+<li><b>Machinedrum GEN</b> offers each track's own generator from the start; before, every track said Keep until you pressed Defaults.
+</li>
+<li><b>Arrow keys on a Sound value</b> keep stepping that value on both editors; before, the second ↑ selected another track.
+</li>
+<li><b>Monomachine RECORD right after an edit</b> now records. A key pressed while the machine was still taking a dump was lost; the editor now says the panel is busy for that moment.
+</li>
+<li><b>A drag over many steps</b> keeps every step on the Monomachine (it lost the later ones), and a rotate's undo step no longer swallows the edits after it, on both editors.
+</li>
+</ul>
+<h2>Also new on the Monomachine</h2>
+<ul>
+<li><b>Black keys:</b> W E T Y U O P play the semitones on the QWERTY keyboard. Tap tempo is <b>B</b> (on the Machinedrum, B and T both tap).
+</li>
+<li><b>Paint in the piano roll:</b> press an empty cell and drag to paint that note across the empty steps; Alt-drag erases. One drag is one undo step.
+</li>
+</ul>
+<h2>Known</h2>
+<ul>
+<li>Unsigned and not notarised: on macOS 15 and later, double-click the installer, then open System Settings &gt; Privacy &amp; Security, scroll down and click <b>Open Anyway</b>. Right-click &gt; Open no longer works for installers.
+</li>
+<li>macOS only for now, tested on Apple silicon.
+</li>
+<li>A kit that contains a CTR-AL machine cannot be edited in the Machinedrum Editor yet.
+</li>
+<li>Bring your own ROM. No firmware is included.
+</li>
+</ul>
+    <p><a href="/releases/">All release notes</a> · <a href="/get/">Download</a></p>
+  </div>
+</main>
+
+<footer class="foot">
+  <div class="wrap grid">
+    <p><b>MD + MM Editor</b> <span data-version></span> · Machinedrum Editor and Monomachine Editor<br>A NativeKloud Consulting project — <a href="https://nativekloud.com">nativekloud.com</a></p>
+    <p><b>Free software</b> under the <a href="https://www.gnu.org/licenses/gpl-3.0.html">GPL-3</a>. <a href="https://github.com/radekdymacz/gearmulator-md-mm">Source</a> · <a href="https://github.com/radekdymacz/gearmulator-md-mm/releases">All releases</a></p>
+    <p><b>Credits.</b> Built on <a href="https://github.com/joelanders/gearmulator-md-mm">gearmulator-md-mm</a> by joelanders (the Machinedrum and Monomachine emulation) and <a href="https://github.com/dsp56300/gearmulator">Gearmulator</a> by The Usual Suspects (dsp56300). Thanks to Elektron for the instruments.</p>
+    <p class="legal"><a href="/guide/">Guide</a> · <a href="/releases/">Release notes</a> · <a href="/terms/">Terms</a> · <a href="/privacy/">Privacy</a> · <a href="/refunds/">Refunds</a> · <a href="/contact/">Contact</a> · <a href="https://discord.gg/8xwXwBHbtn">Discord</a> · <a href="&#109;&#97;&#105;&#108;&#116;&#111;&#58;&#114;&#97;&#100;&#101;&#107;&#100;&#121;&#109;&#97;&#99;&#122;&#64;&#103;&#109;&#97;&#105;&#108;&#46;&#99;&#111;&#109;">&#114;&#97;&#100;&#101;&#107;&#100;&#121;&#109;&#97;&#99;&#122;&#64;&#103;&#109;&#97;&#105;&#108;&#46;&#99;&#111;&#109;</a></p>
+    <p><b>Trademarks.</b> Elektron, Machinedrum and Monomachine are trademarks of Elektron Music Machines. This project is independent and not affiliated with or endorsed by Elektron, joelanders or The Usual Suspects. No firmware is included. No cookies, no analytics, no third-party scripts.</p>
+  </div>
+</footer>
+
+<script src="/config.js"></script>
+<script src="/assets/main.js?v=20261008" defer></script>
+</body>
+</html>

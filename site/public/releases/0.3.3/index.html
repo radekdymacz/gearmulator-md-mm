@@ -3,26 +3,26 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Privacy — MD + MM Editor</title>
-<meta name="description" content="How the MD + MM Editor site handles data.">
+<title>MD + MM Editor 0.3.3 release notes</title>
+<meta name="description" content="A fix release on top of 0.3.2, with the first steps towards updating from inside the app.">
 <meta name="color-scheme" content="light">
 <meta name="theme-color" content="#fbfbf7">
-<link rel="canonical" href="https://mdmm.dev/privacy/">
+<link rel="canonical" href="https://mdmm.dev/releases/0.3.3/">
 <link rel="icon" href="/favicon.svg" type="image/svg+xml">
 <link rel="icon" href="/favicon-32.png" sizes="32x32" type="image/png">
 <link rel="apple-touch-icon" href="/apple-touch-icon.png">
 <meta property="og:type" content="website">
 <meta property="og:site_name" content="MD + MM Editor">
-<meta property="og:title" content="MD + MM Editor — free editors for Machinedrum and Monomachine">
-<meta property="og:description" content="Free desktop editors for the Elektron Machinedrum and Monomachine. The real firmware, emulated, or your own machine over MIDI. VST3, AU and app for macOS (Intel and Apple silicon). Windows build, not tested.">
-<meta property="og:url" content="https://mdmm.dev/privacy/">
+<meta property="og:title" content="MD + MM Editor 0.3.3 release notes">
+<meta property="og:description" content="A fix release on top of 0.3.2, with the first steps towards updating from inside the app.">
+<meta property="og:url" content="https://mdmm.dev/releases/0.3.3/">
 <meta property="og:image" content="https://mdmm.dev/og.png">
 <meta property="og:image:width" content="1200">
 <meta property="og:image:height" content="630">
 <meta property="og:image:alt" content="Free editors for Machinedrum and Monomachine, beside a screenshot of the Machinedrum Editor's step grid and GEN bar.">
 <meta name="twitter:card" content="summary_large_image">
-<meta name="twitter:title" content="MD + MM Editor — free editors for Machinedrum and Monomachine">
-<meta name="twitter:description" content="Free desktop editors for the Elektron Machinedrum and Monomachine. VST3, AU and app for macOS (Intel and Apple silicon). Windows build, not tested.">
+<meta name="twitter:title" content="MD + MM Editor 0.3.3 release notes">
+<meta name="twitter:description" content="A fix release on top of 0.3.2, with the first steps towards updating from inside the app.">
 <meta name="twitter:image" content="https://mdmm.dev/og.png">
 <link rel="stylesheet" href="/design/tokens.css">
 <link rel="stylesheet" href="/assets/site.css?v=20261010">
@@ -44,24 +44,40 @@
   </div>
 </header>
 
-<main id="main" class="checkout legalpage">
+<main id="main" class="checkout legalpage guide">
   <div class="wrap">
-    <span class="eyebrow">Privacy</span>
-    <h1>Privacy</h1>
-    <p>This site sets no cookies, runs no tracking or analytics, and loads no third-party scripts. There are no accounts.</p>
-    <h2>This browser</h2>
-    <p>If you switch to the dark theme, your browser keeps that choice under the name <code>mdmm.theme</code> in its local storage. It stays on your device and is never sent to us.</p>
-    <h2>Hosting</h2>
-    <p>The site is hosted on Cloudflare, which keeps standard server logs (such as IP address and request time) to run and protect the service.</p>
-    <h2>Downloads</h2>
-    <p>The installers are hosted on GitHub, as GitHub Releases. When you download one, GitHub sees your IP address and the request, as described in <a href="https://docs.github.com/en/site-policy/privacy-policies/github-general-privacy-statement">GitHub's privacy statement</a>. We do not receive that information. The same applies if you open the source repository or the releases page.</p>
-    <h2>Update check in the editors</h2>
-    <p>At most once a day the editors fetch <code>https://mdmm.dev/latest.json</code> to see whether a newer version exists — a plain request with no cookies, query or identifiers, which you can turn off in the editor's menu (Updates › Check Daily) — and an update you choose to install comes from GitHub, as above.</p>
-    <h2>Purchases</h2>
-    <p>If you choose to pay, the purchase is processed by Lemon Squeezy, the merchant of record, under its own <a href="https://www.lemonsqueezy.com/privacy">privacy policy</a>. Pay opens Lemon Squeezy checkout and sends it three custom fields: the editor you chose, your operating system and the amount you suggested. We receive the order details Lemon Squeezy shares with sellers.</p>
-    <h2>Your rights</h2>
-    <p>To ask about, correct or delete your data, write to the contact address below.</p>
-    <p class="small">Seller: NativeKloud Consulting Radosław Dymacz, ul. Dynamiczna 19, 95-070 Rąbień, Poland · NIP PL8321771188<br>Contact: <a href="&#109;&#97;&#105;&#108;&#116;&#111;&#58;&#114;&#97;&#100;&#101;&#107;&#100;&#121;&#109;&#97;&#99;&#122;&#64;&#103;&#109;&#97;&#105;&#108;&#46;&#99;&#111;&#109;">&#114;&#97;&#100;&#101;&#107;&#100;&#121;&#109;&#97;&#99;&#122;&#64;&#103;&#109;&#97;&#105;&#108;&#46;&#99;&#111;&#109;</a><br>Last updated 8 October 2026.</p>
+    <span class="eyebrow">Release notes</span>
+    <h1>Machinedrum Editor + Monomachine Editor 0.3.3</h1>
+<p><small>Released 2026-10-08</small></p>
+<p>A fix release on top of <a href="/releases/0.3.2/">0.3.2</a>, with the first steps towards updating from inside the app.</p>
+<p>Screenshots, features and FAQ: <b><a href="https://mdmm.dev">https://mdmm.dev</a></b> · User guide: <b><a href="https://mdmm.dev/guide/">https://mdmm.dev/guide/</a></b></p>
+<h2>Fixes</h2>
+<ul>
+<li><b>No more swing while editing parameter locks (Machinedrum).</b> Each lock edit sends the whole pattern to the machine; it used to arrive all at once and stall the machine's sequencer for up to 17 ms. It now goes in at a steady pace, and the editor checks the machine once after you stop editing. Timing while dragging a lock lane: worst error 16.9 ms before, under 4 ms now.
+</li>
+<li><b>The Sampler fills on the very first start</b> of a new install (it stayed empty until the editor was restarted).
+</li>
+<li>A SysEx message that a host delivers in pieces now reaches the machine once, not twice (from upstream Gearmulator).
+</li>
+</ul>
+<h2>New</h2>
+<ul>
+<li><b>Update check:</b> once a day the editor asks <a href="https://mdmm.dev/latest.json">https://mdmm.dev/latest.json</a> whether a newer version exists and shows a small notice; it starts showing notices once the update service is switched on, in a later release. Nothing else is sent; turn it off in the new <b>Updates</b> menu. Installing from inside the app also comes later.
+</li>
+</ul>
+<h2>Testing</h2>
+<ul>
+<li>Every release is now checked on the exact files we ship before they are published: the apps and plug-ins start and show their editor on macOS, Windows and Linux, Apple's AU validation, and pluginval (strictness 5) on every VST3 and AU.
+</li>
+</ul>
+<h2>Platforms</h2>
+<ul>
+<li>macOS 12 or later (Intel and Apple silicon), not signed by Apple yet: the first install needs <b>Open Anyway</b>.
+</li>
+<li>Windows x64 and Linux x64: not tested by a person yet. Feedback welcome: <a href="https://mdmm.dev/contact/">https://mdmm.dev/contact/</a>
+</li>
+</ul>
+    <p><a href="/releases/">All release notes</a> · <a href="/get/">Download</a></p>
   </div>
 </main>
 
