@@ -237,6 +237,51 @@ const MdJourneys = (() => {
 		],
 		async tidy() { if (S.stepSel) clearSel(); }
 	};
+	/* one step copied and pasted on its track, the two ways a person has: ⌘C / ⌘V as the operating system delivers them
+	   (u.osKey: on macOS JUCE's web view turns them into the copy: and paste: commands, never a keydown; 0.3.3 lost them
+	   there, in the standalone and in every DAW), and the top bar's Copy and Paste with the mouse (a host that keeps
+	   ⌘C and ⌘V for itself leaves those). Each ends with the pattern as it was (⌘Z through the same way in). */
+	const pickCopyStep = { say: "alt-click a step with a trig: it is selected", act: (u, c) => {
+		c.L = Math.min(V.length, V.len); c.t0 = trigsOf(c.t); c.u0 = V.undoCount;
+		c.s = c.t0.find(s => s < c.L) ?? 0; c.d = [...Array(c.L).keys()].find(s => !c.t0.includes(s) && Math.abs(s - c.s) > 1);
+		if (c.d == null) throw new Error("no free step to paste to");
+		u.click(cell(c.t, c.s), { alt: true });
+	}, screen: c => ok($1(cell(c.t, c.s)).classList.contains("selx") && $all("#seq .st.selx").length === 1, $all("#seq .st.selx").length + " selected") };
+	const pickPasteStep = { say: "alt-click an empty step of the same track", act: (u, c) => u.click(cell(c.t, c.d), { alt: true }),
+		screen: c => ok($1(cell(c.t, c.d)).classList.contains("selx") && !$1(cell(c.t, c.s)).classList.contains("selx"), "not selected") };
+	const copyTrack = () => soundTracks().find(t => trigsOf(t).some(s => s < Math.min(V.length, V.len))) ?? soundTrack();
+	const oneStepCopied = () => ok(V.clipboard.stepsSize?.length === 1 && V.clipboard.stepsSize?.tracks === 1, "clipboard " + JSON.stringify(V.clipboard.stepsSize));
+	const osCopyPaste = {
+		name: "md-seq-os-copy-paste", needs: Journey.osKeyPath,
+		steps: [
+			go("seq"), sel(copyTrack), pickCopyStep,
+			{ say: "press Cmd+C on the keyboard (the operating system's way in)", act: async u => { document.activeElement?.blur?.(); await u.osKey("focus cmd+c"); },
+				/* with the start tests' key probe on (GEARMULATOR_MDMM_KEYPROBE=1) its line says so too */
+				screen: () => ok(Keys.seen().includes("cmd+C") && (!$1("#keyprobe") || $1("#keyprobe").textContent.includes(" cmd+C")),
+					"keys that reached the page: " + Keys.seen().join(" ") + ($1("#keyprobe") ? "; probe: " + $1("#keyprobe").textContent : "")), machine: oneStepCopied },
+			pickPasteStep,
+			{ say: "press Cmd+V on the keyboard: the trig lands there", act: u => u.osKey("cmd+v"), screen: c => ok(pressed(cell(c.t, c.d)), "not lit"), machine: c => ok(trigsOf(c.t).includes(c.d), "pattern " + trigsOf(c.t).join(",")) },
+			{ say: "press Cmd+Z on the keyboard: the track as before", act: u => u.osKey("cmd+z"),
+				machine: c => ok(same(trigsOf(c.t), c.t0) && V.undoCount === c.u0, `pattern ${trigsOf(c.t).join(",")}, undo steps ${c.u0} -> ${V.undoCount}`), within: 8000 }
+		],
+		async tidy() { if (S.stepSel) clearSel(); }
+	};
+	const buttonsCopyPaste = {
+		name: "md-seq-copy-paste-buttons",
+		steps: [
+			go("seq"), sel(copyTrack), pickCopyStep,
+			{ say: "click Copy in the top bar: the selected step is copied", act: u => u.click('[data-sec="copy"]'), machine: oneStepCopied,
+				screen: c => ok($1(cell(c.t, c.s)).classList.contains("selx"), "the selection went") },
+			pickPasteStep,
+			{ say: "click Paste in the top bar: the trig lands at the selected step", act: u => u.click('[data-sec="paste"]'), screen: c => ok(pressed(cell(c.t, c.d)), "not lit"),
+				machine: c => ok(trigsOf(c.t).includes(c.d) && same(trigsOf(c.t).filter(s => s !== c.d), c.t0), "pattern " + trigsOf(c.t).join(",")) },
+			{ say: "click Clr in the top bar: the pasted step is cleared again, nothing else", act: u => u.click('[data-sec="clear"]'), screen: c => ok(!pressed(cell(c.t, c.d)), "still lit"),
+				machine: c => ok(same(trigsOf(c.t), c.t0), "pattern " + trigsOf(c.t).join(",")) },
+			{ say: "Cmd+Z twice (clear, paste): the track as before", act: async u => { u.key("z", { cmd: true }); await sleep(800); u.key("z", { cmd: true }); },
+				machine: c => ok(same(trigsOf(c.t), c.t0) && V.undoCount === c.u0, `pattern ${trigsOf(c.t).join(",")}, undo steps ${c.u0} -> ${V.undoCount}`), within: 8000 }
+		],
+		async tidy() { if (S.stepSel) clearSel(); }
+	};
 	const clearPatternJ = {
 		name: "md-seq-clear-pattern-undo",
 		steps: [
@@ -762,7 +807,7 @@ const MdJourneys = (() => {
 
 
 	const all = [bootCard, firstBeat, spaceTransport, tempoDrag, tapTempo, tapTempoB, patStep, queuePattern, plate, wsKeys, helpKeys, undoRedo,
-		paintUndo, accentSlide, lockLane, pagesJ, copyPaste, selectCopyPaste, clearPatternJ, fillEveryJ, rotateJ, rotateUndo, trackKeys, muteKeys, liveRec,
+		paintUndo, accentSlide, lockLane, pagesJ, copyPaste, selectCopyPaste, osCopyPaste, buttonsCopyPaste, clearPatternJ, fillEveryJ, rotateJ, rotateUndo, trackKeys, muteKeys, liveRec,
 		genJourney("md-gen-mutate-undo", false), genJourney("md-gen-defaults-mutate-undo", true), genKeys,
 		shapeSound, arrows, machinePick, soundCopy, editorDrag, controlAll,
 		mixSolo, shiftMutes, allOff, fader, outKey, masterFx,

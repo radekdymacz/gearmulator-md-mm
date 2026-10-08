@@ -99,6 +99,9 @@ const Journey = (() => {
 		if (!top || (top !== e && !e.contains(top))) throw new Error(`${describe(e)} is covered by ${describe(top)}`);
 		return { x, y };
 	}
+	/* the macOS plug-in: WKWebView over the page file (not a browser, not WebView2), with mdOsKeys.h behind the log */
+	const osKeys = () => typeof BridgeTransport !== "undefined" && BridgeTransport.up() && location.protocol === "file:"
+		&& !(window.chrome && window.chrome.webview) && /Mac/.test(navigator.platform);
 	const mods = (m = {}) => ({ shiftKey: !!m.shift, altKey: !!m.alt, metaKey: !!m.cmd, ctrlKey: !!m.ctrl });
 	const pe = (type, target, x, y, m, buttons) => target.dispatchEvent(new PointerEvent(type, Object.assign({ bubbles: true, cancelable: true, composed: true,
 		pointerId: 1, pointerType: "mouse", isPrimary: true, button: 0, buttons, clientX: x, clientY: y }, mods(m))));
@@ -175,6 +178,20 @@ const Journey = (() => {
 			if (go && button && key === "Enter") t.click();
 			t.dispatchEvent(new KeyboardEvent("keyup", o));
 			if (go && button && key === " ") t.click();
+		},
+		/* keys as the operating system delivers them (spec: "focus cmd+c", tokens as mdOsKeys.h reads them): in the
+		   macOS plug-in real key events routed as AppKit routes them (the window's views and JUCE, the menu bar, the
+		   first responder), so a key the host side keeps from the page is kept here too; "focus" is what a click on the
+		   page does to the web view. Elsewhere (a browser, Windows) the page's own keys (u.key), "focus" nothing. */
+		async osKey(spec) {
+			const toks = spec.split(/\s+/).filter(Boolean);
+			Pointer.key(toks.filter(t => t !== "focus").join(" "));
+			if (osKeys()) { Bridge.log("oskeys " + spec); await sleep(350); return; }
+			for (const t of toks) {
+				if (t === "focus") continue;
+				const p = t.split("+"), k = p.pop(), m = Object.fromEntries(p.map(x => [x, true]));
+				u.key({ escape: "Escape", delete: "Delete", space: " ", return: "Enter", tab: "Tab" }[k] || k, m);
+			}
 		},
 		/* a value typed into a field and committed (input events per character, then change) */
 		type(q, text) {
@@ -283,5 +300,7 @@ const Journey = (() => {
 	}
 	/* for needs: the page draws its canvases on animation frames, which WebKit runs only while the window is on screen */
 	const onScreen = () => document.visibilityState === "visible" ? null : "the editor window is not on screen (display asleep or covered): its canvases are not drawn";
-	return { run, demo, ok, sleep, until, u, onScreen };
+	/* for needs: real key events through the operating system (u.osKey) exist in the macOS plug-in only */
+	const osKeyPath = () => osKeys() ? null : "no way in for real key events here (the macOS plug-in has one, mdOsKeys.h)";
+	return { run, demo, ok, sleep, until, u, onScreen, osKeyPath };
 })();
