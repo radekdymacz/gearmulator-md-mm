@@ -589,7 +589,9 @@ const MmJourneys = (() => {
 		name: "mm-seq-live-record",
 		steps: [
 			go("seq"), sel(0),
-			{ say: "press Alt+Space: live recording, playing", act: async (u, c) => { c.n0 = trigsOf(0).length; c.p0 = pat0(); blur(); u.key(" ", { alt: true }, "Space"); await sleep(400); if (!S().playing) u.click("#play"); },
+			{ say: "press Alt+Space: live recording, playing (pressed again when the plug-in says the panel is busy: an earlier journey's dumps on their way, as mm-seq-grid-record)", act: async (u, c) => { c.n0 = trigsOf(0).length; c.p0 = pat0(); blur(); results.length = 0; u.key(" ", { alt: true }, "Space");
+				for (let i = 0; i < 5 && await until(() => results.some(r => r.op === "record" && r.ok === false), 1500); i++) { c.note = "the plug-in said the panel was busy (SYSEX RECV); pressed again"; results.length = 0; await sleep(1500); blur(); u.key(" ", { alt: true }, "Space"); }
+				await sleep(400); if (!S().playing) u.click("#play"); },
 				machine: () => ok(tele.last?.record === "live" && tele.last?.playing, `record ${tele.last?.record}, playing ${tele.last?.playing}`), within: 8000 },
 			{ say: "play A, S, D on the keyboard while it records: the machine records notes", act: async u => { for (const k of ["a", "s", "d"]) { u.key(k); await sleep(450); } },
 				machine: c => ok(pat0() !== c.p0, "pattern unchanged (" + c.n0 + " notes)"), within: 15000 },
