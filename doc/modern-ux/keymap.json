@@ -313,6 +313,17 @@
 			"area": "GEN bar"
 		},
 		{
+			"id": "fn-key",
+			"scope": "any",
+			"keys": [
+				"FN key"
+			],
+			"mod": "",
+			"group": "All",
+			"does": "Click: the next click, drag or key gets ⌥, every track (FN then R randomises all, FN then drag a value is Control All, FN then Delete clears the pattern). Double-click: stays on until clicked again. Esc: off",
+			"area": "Top bar"
+		},
+		{
 			"id": "rotate",
 			"scope": "seq",
 			"keys": [

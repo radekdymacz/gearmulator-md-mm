@@ -325,6 +325,44 @@ run(); { const before = P.renders; P.Held.begin("gv", {}); P.Held.end("gv"); run
 	fire("document", "pointermove", { buttons: 1, pointerType: "mouse", clientY: 300 - 1012 });
 	fire("document", "pointerup", {});
 	check(sent.filter(m => m.op === "selectSong").map(m => m.s).join() === "31", "dragging SONG far up stops at song 32 (no wrap), sent once: " + JSON.stringify(sent.map(m => [m.op, m.s])));
+	/* K4 (DESIGN-keymap.md): FN, the on-screen FUNCTION: the next click, drag or key gets ⌥; a latch keeps it; Esc drops it */
+	{
+		const keyEv = (key, code) => ({ key, code, altKey: false, metaKey: false, ctrlKey: false, shiftKey: false, repeat: false, target: { closest: () => null }, preventDefault() { }, stopImmediatePropagation() { } });
+		const press = e => { fire("window", "keydown", e); fire("document", "keydown", e); };
+		const ptrEv = () => ({ altKey: false, target: { closest: () => null }, preventDefault() { }, stopPropagation() { }, stopImmediatePropagation() { } });
+		const ran = [], all = P.Keys.byId("randomise-all"), one = P.Keys.byId("randomise-track"), runs = [all.run, one.run];
+		all.run = () => ran.push("all"); one.run = () => ran.push("track");
+		P.S.ws = "seq"; P.Overlay.clear(); P.setV(P.view()); run();
+		press(keyEv("r", "KeyR"));
+		check(ran.join() === "track", "without FN, R randomises the selected track");
+		ran.length = 0; P.Modifiers.setFn("once"); press(keyEv("r", "KeyR"));
+		check(ran.join() === "all", "FN then R randomises every track (⌥R)");
+		run();
+		check(P.Modifiers.fn === "off", "FN once is spent by the key");
+		ran.length = 0; press(keyEv("r", "KeyR"));
+		check(ran.join() === "track", "after it, R is the selected track's again");
+		all.run = runs[0]; one.run = runs[1];
+		sent.length = 0; P.Modifiers.setFn("once"); press(keyEv("Delete", "Delete")); run();
+		check(sent.some(m => m.op === "clearPattern"), "FN then Delete clears the whole pattern (⌥Delete): " + sent.map(m => m.op).join());
+		P.Overlay.clear(); P.setV(P.view());
+		/* a drag: the press, the moves and the release all say ⌥ (Control All reads the press: mdDeskLive.js) */
+		P.Modifiers.setFn("once");
+		const down = ptrEv(), move = ptrEv(), up = ptrEv();
+		fire("window", "pointerdown", down); fire("window", "pointermove", move); fire("window", "pointerup", up);
+		check(down.altKey && move.altKey && up.altKey, "FN: the drag's press, moves and release say ⌥");
+		run();
+		check(P.Modifiers.fn === "off", "FN once is spent at the drag's end");
+		P.Modifiers.setFn("latch");
+		const c1 = ptrEv(); fire("window", "click", c1); run();
+		const c2 = ptrEv(); fire("window", "click", c2); run();
+		check(c1.altKey && c2.altKey && P.Modifiers.fn === "latch", "FN latched: every click says ⌥ until it is let go");
+		const fk = Object.assign(ptrEv(), { target: { closest: q => q === "[data-fnkey]" ? {} : null } }); fire("window", "click", fk);
+		check(!fk.altKey, "a click on the FN key itself is not given ⌥");
+		const esc = keyEv("Escape", "Escape"); fire("window", "keydown", esc);
+		check(P.Modifiers.fn === "off", "Esc drops FN");
+		const c3 = ptrEv(); fire("window", "click", c3);
+		check(!c3.altKey, "FN off: a click is a click");
+	}
 	delete P.Docs.patterns[5]; delete P.Docs.kits[3]; P.Overlay.clear(); P.setV(P.view());
 }
 

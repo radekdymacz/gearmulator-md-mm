@@ -430,6 +430,21 @@ const MdJourneys = (() => {
 			{ ...undoKey, say: "press Cmd+Z: one step back for all", machine: c => ok(same(allKitVals(), c.k0), "not all back"), within: 10000 }
 		]
 	};
+	/* K4 (DESIGN-keymap.md): the FN key gives the next drag ⌥, without a held key (a mouse, a touch screen, Linux's Alt-drag) */
+	const fnControlAll = {
+		name: "md-fn-control-all",
+		steps: [
+			go("sound"), sel(() => soundTrack()),
+			{ say: "click FN: it is lit", act: u => u.click("#fnkey"), screen: () => ok(Modifiers.fn === "once" && $1("#fnkey").getAttribute("aria-pressed") === "true", "FN " + Modifiers.fn) },
+			{ say: "drag an effects value (no key held): every track's knob moves, and FN goes off", act: async (u, c) => { c.k0 = allKitVals(); const el = $1('#main .pc[data-g="fx"]'), d = getV(el) > 64 ? -1 : 1; await u.drag(el, [[d * 4, 0], [d * 8, 0], [d * 16, 0], [d * 24, 0]]); },
+				screen: () => ok(Modifiers.fn === "off" && $1("#fnkey").getAttribute("aria-pressed") === "false", "FN still " + Modifiers.fn),
+				machine: c => { const moved = allKitVals().filter((v, t) => !same(v, c.k0[t])).length; return ok(moved >= 2, moved + " tracks moved"); }, within: 10000 },
+			{ ...undoKey, say: "press Cmd+Z: one step back for all", machine: c => ok(same(allKitVals(), c.k0), "not all back"), within: 10000 },
+			{ say: "double-click FN, then press Escape: latched, then off", act: async u => { u.dblclick("#fnkey"); await sleep(100); if (Modifiers.fn !== "latch") throw new Error("not latched: " + Modifiers.fn); u.key("Escape"); },
+				screen: () => ok(Modifiers.fn === "off", "FN " + Modifiers.fn) }
+		],
+		async tidy() { Modifiers.setFn("off"); }
+	};
 
 	/* ---------- Mix ---------- */
 	const mixSolo = {
@@ -793,7 +808,7 @@ const MdJourneys = (() => {
 	const all = [bootCard, firstBeat, spaceTransport, tempoDrag, tapTempo, tapTempoB, patStep, queuePattern, plate, wsKeys, helpKeys, undoRedo,
 		paintUndo, accentSlide, lockLane, pagesJ, copyPaste, selectCopyPaste, stepMenuJ, clearPatternJ, fillEveryJ, rotateJ, rotateUndo, trackKeys, muteKeys, liveRec,
 		genJourney("md-gen-mutate-undo", false), genJourney("md-gen-defaults-mutate-undo", true), genKeys,
-		shapeSound, arrows, machinePick, soundCopy, editorDrag, controlAll,
+		shapeSound, arrows, machinePick, soundCopy, editorDrag, controlAll, fnControlAll,
 		mixSolo, shiftMutes, allOff, fader, outKey, masterFx,
 		songArrange, songChain, samplerSlots, samplerSetup, audition,
 		libDialog, kitCopy, kitRename, kitClear, patGo, patClear, dialogEsc,

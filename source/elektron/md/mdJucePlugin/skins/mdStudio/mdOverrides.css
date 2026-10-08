@@ -326,3 +326,5 @@ img,svg,canvas{-webkit-user-drag:none}
 /* K2 (DESIGN-keymap.md): the LCD's COPY CLR PASTE while they act on the selected steps: underlined, as the
    selection is outlined (mdDeskComforts.js secLabels) */
 .lcdsec button.onsel{opacity:1;text-decoration:underline;text-underline-offset:2px}
+/* K4: the FN key while it is on (once: lit; latched: outlined too) */
+.skey.fnkey.latch{outline:2px solid var(--cream);outline-offset:-3px}
