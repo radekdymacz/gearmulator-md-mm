@@ -166,7 +166,11 @@ namespace mmDesk
 
 	deskCore::PushPolicy MmMachine::pushPolicy(const Kind _kind) const
 	{
-		return deskCore::wirePolicy(m_profile.push, m_profile.wire, replyBytes(_kind));
+		auto policy = deskCore::wirePolicy(m_profile.push, m_profile.wire, replyBytes(_kind));
+		// B-014: no faster than a MIDI cable carries the dump (the newest value waits meanwhile)
+		if(m_profile.pushBytesPerSecond > 0)
+			policy.minIntervalMs = std::max(policy.minIntervalMs, double(replyBytes(_kind)) * 1000.0 / m_profile.pushBytesPerSecond);
+		return policy;
 	}
 
 	// Paced (DESIGN-edit-flow.md): the dump goes now or waits its turn (latest wins); the read-back is

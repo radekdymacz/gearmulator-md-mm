@@ -28,6 +28,7 @@ target_sources(deskCore PRIVATE
 	deskPush.h
 	deskRef.h
 	deskSequence.h
+	deskStream.h
 )
 
 target_link_libraries(deskCore PUBLIC elektronJson)
