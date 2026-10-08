@@ -256,20 +256,24 @@ const MdJourneys = (() => {
 	const stepMenuJ = {
 		name: "md-seq-step-menu",
 		steps: [
-			go("seq"), sel(() => soundTracks().find(t => trigsOf(t).some(s => s < Math.min(V.length, V.len))) ?? soundTrack()),
-			{ say: "right-click a step with a trig: its menu", act: (u, c) => {
+			go("seq"), sel(() => soundTrack()),
+			{ say: "click an empty step: a trig to work on", act: (u, c) => {
 				c.L = Math.min(V.length, V.len); c.t0 = trigsOf(c.t); c.a0 = flagsOf(c.t, "accent"); c.u0 = V.undoCount;
-				c.s = c.t0.find(s => s < c.L && !c.a0.includes(s)); c.d = [...Array(c.L).keys()].find(s => !c.t0.includes(s) && Math.abs(s - c.s) > 1);
-				if (c.s == null || c.d == null) throw new Error("no unaccented trig, or no free step");
-				if (S.stepSel) clearSel(); u.rightClick(cell(c.t, c.s));
-			}, screen: c => ok(!$1("#deskmenu").hidden && $1('#deskmenu [data-mid="step-fill-2"]') && $1(cell(c.t, c.s)).classList.contains("selx"), "no step menu") },
+				/* not accented as shown (with EDIT ALL on, the accents are the pattern's), and a free step two away to paste to */
+				const free = s => !c.t0.includes(s) && !V.tracks[c.t].acc.has(s);
+				c.s = [...Array(c.L).keys()].find(s => free(s)); c.d = [...Array(c.L).keys()].find(s => free(s) && Math.abs(s - c.s) > 1);
+				if (c.s == null || c.d == null) throw new Error("no two free steps");
+				if (S.stepSel) clearSel(); u.click(cell(c.t, c.s));
+			}, screen: c => ok(pressed(cell(c.t, c.s)), "not lit"), machine: c => ok(trigsOf(c.t).includes(c.s), "no trig") },
+			{ say: "right-click it: its menu", act: (u, c) => u.rightClick(cell(c.t, c.s)),
+				screen: c => ok(!$1("#deskmenu").hidden && $1('#deskmenu [data-mid="step-fill-2"]') && $1(cell(c.t, c.s)).classList.contains("selx"), "no step menu") },
 			{ say: "choose Accent", act: u => u.click('#deskmenu [data-mid="step-accent"]'), screen: c => ok($1("#deskmenu").hidden && $1(cell(c.t, c.s)).classList.contains("acc"), "no accent shown"),
 				machine: c => ok(flagsOf(c.t, "accent").includes(c.s) || (V.accAll && (pat().accent?.steps || []).includes(c.s)), "accent " + flagsOf(c.t, "accent").join(",")) },
 			{ say: "right-click it again and choose Copy", act: async u => { u.rightClick(cell(S.stepSel.t, S.stepSel.from)); await sleep(150); u.click('#deskmenu [data-mid="copy"]'); },
 				machine: () => ok(V.clipboard.stepsSize?.length === 1, "clipboard " + JSON.stringify(V.clipboard.stepsSize)) },
 			{ say: "right-click an empty step and choose Paste here", act: async (u, c) => { u.rightClick(cell(c.t, c.d)); await sleep(150); u.click('#deskmenu [data-mid="paste"]'); },
 				screen: c => ok(pressed(cell(c.t, c.d)), "not lit"), machine: c => ok(trigsOf(c.t).includes(c.d), "pattern " + trigsOf(c.t).join(",")) },
-			{ say: "press Escape: no selection; Cmd+Z twice: the track as before", act: async u => { u.key("Escape"); await sleep(150); u.key("z", { cmd: true }); await sleep(800); u.key("z", { cmd: true }); },
+			{ say: "press Escape: no selection; Cmd+Z three times (paste, accent, trig): the track as before", act: async u => { u.key("Escape"); await sleep(150); for (let i = 0; i < 3; i++) { u.key("z", { cmd: true }); await sleep(800); } },
 				machine: c => ok(same(trigsOf(c.t), c.t0) && same(flagsOf(c.t, "accent"), c.a0) && V.undoCount === c.u0, `pattern ${trigsOf(c.t).join(",")}, undo steps ${c.u0} -> ${V.undoCount}`), within: 8000 }
 		],
 		async tidy() { if (!$1("#deskmenu")?.hidden) closeDeskMenu(); if (S.stepSel) clearSel(); }
