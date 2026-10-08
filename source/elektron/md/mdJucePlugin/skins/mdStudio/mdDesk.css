@@ -1319,6 +1319,52 @@ body{box-sizing:border-box;overflow:hidden}
 .gmbanner[hidden]{display:none}
 .gmbanner b{font-size:15px}
 .gmbanner p{margin:0;font-size:13px;line-height:1.4}
+/* The keyboard view (K-view, deskKeyView.js), both editors: the ? panel. The keys are flex cells sized in key units,
+   so the board fits the panel at any width; a narrow window drops the words on the keys (a click on a key, or the
+   list under it, says them). Plain colours and rgba only (no colour mixes: an older WebKit lacks them, deskCompat.js); the page's
+   tokens (--plate --print --body --rule --key --keytext --cream --mono --sans). */
+.globpop.kview{width:min(1120px,calc(100vw - 24px))}
+.kv-head{flex-wrap:wrap;row-gap:6px}
+.kv-head .note{flex:1 1 180px;min-width:0}
+.kv-search{flex:0 1 220px;min-width:120px;height:24px;box-sizing:border-box;padding:0 8px;border:1px solid var(--rule);border-radius:3px;background:var(--plate);color:var(--body);font:400 12px var(--mono,monospace)}
+.kv-scope{display:flex;gap:4px}
+.kv-layers{display:flex;flex-wrap:wrap;align-items:center;gap:6px}
+.kv-lab{font:500 10px var(--mono,monospace);letter-spacing:.08em;text-transform:uppercase;opacity:.7}
+.kv-hint{font-size:12px;opacity:.7;margin-left:6px}
+.kv-chip{height:24px;padding:0 10px;border:1px solid var(--rule);border-radius:12px;background:transparent;color:var(--body);font:600 11px var(--sans,sans-serif);letter-spacing:.06em;cursor:pointer}
+.kv-chip.on{background:var(--print);color:var(--plate);border-color:var(--print)}
+.kv-board{display:grid;gap:4px;padding:8px;border-radius:8px;background:rgba(0,0,0,.18);user-select:none;-webkit-user-select:none}
+.kv-keys{display:flex;gap:4px;min-width:0}
+.kv-cap{position:relative;min-width:0;height:46px;box-sizing:border-box;display:flex;flex-direction:column;justify-content:space-between;padding:3px 4px;border-radius:4px;background:var(--key);color:var(--keytext);box-shadow:inset 0 -3px 0 rgba(0,0,0,.35);overflow:hidden;cursor:pointer;opacity:.55}
+.kv-cap b{font:500 10px/1 var(--mono,monospace);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;opacity:.8}
+.kv-cap .kv-act{font:600 10px/1.1 var(--sans,sans-serif);font-style:normal;letter-spacing:.02em;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;word-break:break-word}
+.kv-cap .kv-act small{font-size:9px;opacity:.7}
+.kv-cap.has{opacity:1}
+.kv-cap.has .kv-act{color:var(--cream)}
+.kv-cap.mod{opacity:1;border:0;font:inherit;text-align:left;background:rgba(0,0,0,.45)}
+.kv-cap.mod.on{background:var(--cream);color:var(--key)}
+.kv-cap.inert{opacity:.3;cursor:default}
+.kv-cap.sel{outline:2px solid var(--cream);outline-offset:-2px}
+.kv-cap.hit{outline:2px solid var(--cream);outline-offset:-2px;opacity:1}
+.kv-cap.piano.white{background:#ecebe5;color:#2f2c29;box-shadow:inset 0 -4px 0 rgba(0,0,0,.18);opacity:1}
+.kv-cap.piano.white .kv-act{color:#2f2c29}
+.kv-cap.piano.black{background:#101010;color:#ecebe5;opacity:1}
+.kv-cap .kv-note{position:absolute;right:4px;top:3px;font:600 11px/1 var(--mono,monospace);font-style:normal}
+.kv-stack{display:flex;flex-direction:column;gap:2px;min-width:0}
+.kv-cap.kv-half{height:22px;padding:2px 4px;flex-direction:row;align-items:center;gap:3px}
+.kv-cap.kv-half .kv-act{-webkit-line-clamp:1}
+.kv-detail{min-height:22px;font-size:13px}
+.kv-detail .kv-row{display:grid;grid-template-columns:minmax(80px,auto) 1fr;gap:10px;align-items:baseline}
+.kv-row kbd,.kv-detail kbd{justify-self:start;font:500 11px var(--mono,monospace);background:var(--key);color:var(--keytext);border-radius:3px;padding:2px 6px;white-space:nowrap}
+.kv-cols{display:grid;grid-template-columns:minmax(0,2fr) minmax(0,1fr);gap:10px}
+.kv-mouse h4{margin:8px 0 4px;font:600 11px var(--sans,sans-serif);letter-spacing:.1em;text-transform:uppercase;opacity:.75}
+.kv-mouse .kv-row{display:grid;grid-template-columns:minmax(110px,auto) 1fr;gap:10px;align-items:baseline;font-size:13px;margin:2px 0}
+.kv-tips ul{margin:4px 0 0;padding-left:18px;display:grid;gap:5px;font-size:13px;line-height:1.35}
+.kv-none{font-size:12px;opacity:.65}
+.kv-list>h3{margin:4px 0 6px}
+/* a smaller window: fewer words on the keys, the columns one under the other */
+@media (max-width:900px){.kv-cap{height:38px}.kv-cap .kv-act{-webkit-line-clamp:1;font-size:9px}.kv-cols{grid-template-columns:minmax(0,1fr)}.kv-hint{display:none}.globpop.kview .keysgrid{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media (max-width:640px){.kv-cap{height:30px;padding:2px}.kv-cap .kv-act{display:none}.kv-cap.has::after{content:"";position:absolute;left:50%;bottom:4px;width:5px;height:5px;margin-left:-2px;border-radius:50%;background:var(--cream)}.kv-keys,.kv-board{gap:2px}.kv-cap b{font-size:8px}.globpop.kview .keysgrid{grid-template-columns:minmax(0,1fr)}}
 /* The start-up and first-run card (P7, deskBoot.js) */
 .bootcard{position:fixed;inset:0;z-index:var(--mz,60);display:grid;place-items:center;padding:24px;background:transparent;transition:opacity .35s}
 .bootcard[hidden]{display:none}

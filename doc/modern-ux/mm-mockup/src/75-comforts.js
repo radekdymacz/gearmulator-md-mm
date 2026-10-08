@@ -121,8 +121,8 @@ Keys.bind({id:"octave-down",scope:"any",keys:["Z"],group:"Playing",hidden:true,f
 Keys.bind({id:"octave-up",scope:"any",keys:["X"],group:"Playing",hidden:true,field:true,when:kbOn,run:()=>kbOct(1),does:""});
 Keys.bind({id:"velocity-down",scope:"any",keys:["C"],group:"Playing",hidden:true,field:true,when:kbOn,run:()=>kbVel(-1),does:""});
 Keys.bind({id:"velocity-up",scope:"any",keys:["V"],group:"Playing",hidden:true,field:true,when:kbOn,run:()=>kbVel(1),does:""});
-Keys.bind({id:"piano-white",scope:"any",keys:["A S D F G H J K L"],group:"Playing",does:"Play the selected synth track: white keys C D E F G A B C D, real notes on its MIDI channel, from any workspace. While live recording the machine records them"});
-Keys.bind({id:"piano-black",scope:"any",keys:["W E T Y U O P"],group:"Playing",does:"The black keys above them: C♯ D♯ F♯ G♯ A♯ C♯ D♯, so the two rows play every semitone"});
+Keys.bind({id:"piano-white",scope:"any",notes:"C D E F G A B C D",keys:["A S D F G H J K L"],group:"Playing",does:"Play the selected synth track: white keys C D E F G A B C D, real notes on its MIDI channel, from any workspace. While live recording the machine records them"});
+Keys.bind({id:"piano-black",scope:"any",notes:"C♯ D♯ F♯ G♯ A♯ C♯ D♯",keys:["W E T Y U O P"],group:"Playing",does:"The black keys above them: C♯ D♯ F♯ G♯ A♯ C♯ D♯, so the two rows play every semitone"});
 Keys.bind({id:"octave",scope:"any",keys:["Z","X"],group:"Playing",does:()=>`Octave down / up, −3 to +3 (now ${KB.oct>0?"+":""}${KB.oct}: A is ${noteName(KEYS_BASE+12*KB.oct)})`});
 Keys.bind({id:"velocity",scope:"any",keys:["C","V"],group:"Playing",does:()=>`Velocity down / up: 20 40 60 80 100 127 (now ${KB.vel})`});
 

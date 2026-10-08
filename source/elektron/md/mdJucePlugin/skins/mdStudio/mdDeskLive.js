@@ -46,11 +46,11 @@ function muteAllToggle() {
 	refreshAudible(); if (ch.length) lcdSay(ch);
 	toast(on ? "Every track muted (Alt+M again: unmute all)" : "Every track unmuted");
 }
-Keys.bind({ id: "mute-track", scope: "any", keys: ["M"], code: "KeyM", group: "Selected track", does: "Mute or unmute the selected track", when: () => kbOn(), run: () => muteSel() });
-Keys.bind({ id: "mute-all", scope: "any", keys: ["M"], code: "KeyM", mod: "alt", group: "All", does: "Mute every track; when none is audible, unmute every track", when: () => kbOn(), run: () => muteAllToggle() });
+Keys.bind({ id: "mute-track", short: "Mute", scope: "any", keys: ["M"], code: "KeyM", group: "Selected track", does: "Mute or unmute the selected track", when: () => kbOn(), run: () => muteSel() });
+Keys.bind({ id: "mute-all", short: "Mute all", scope: "any", keys: ["M"], code: "KeyM", mod: "alt", group: "All", does: "Mute every track; when none is audible, unmute every track", when: () => kbOn(), run: () => muteAllToggle() });
 /* ↑ / ↓: the previous / next track, while no value has the keys (a focused value, tempo or bar keeps them:
    the dispatcher leaves [role=slider] alone, a bar's value stops them itself) */
-Keys.bind({ id: "track-prev-next", scope: "any", keys: ["ArrowUp", "ArrowDown"], group: "Selected track", does: "Select the previous / next track (a focused value keeps ↑ / ↓ for itself). Sequence with selected steps: move the selection a track",
+Keys.bind({ id: "track-prev-next", short: "Track − / Track +", scope: "any", keys: ["ArrowUp", "ArrowDown"], group: "Selected track", does: "Select the previous / next track (a focused value keeps ↑ / ↓ for itself). Sequence with selected steps: move the selection a track",
 	when: () => kbOn() && $("#kpop").hidden && $("#keyspop").hidden,
 	run: e => { if (selKeys()) { selMove(e.key === "ArrowDown" ? 1 : -1, 0); return; } select((S.sel + (e.key === "ArrowDown" ? 1 : 15)) % 16); } });
 const refreshAudible0 = refreshAudible; refreshAudible = function () { refreshAudible0(); showPrep(); };
@@ -129,7 +129,7 @@ Bridge.onMessage(m => {
 /* ===== Tap tempo (manual p.36): T (or B, the Monomachine Editor's tap key, where T is a black key) taps, the
    average of the last taps sets the tempo (0x61). ===== */
 const TAP = [];
-Keys.bind({ id: "tap-tempo", scope: "any", keys: ["T", "B"], group: "Transport", does: "Tap tempo (the average of the last taps; B as in the Monomachine Editor)", when: () => kbOn(), run: () => {
+Keys.bind({ id: "tap-tempo", short: "Tap / Tap", scope: "any", keys: ["T", "B"], group: "Transport", does: "Tap tempo (the average of the last taps; B as in the Monomachine Editor)", when: () => kbOn(), run: () => {
 	const now = performance.now(); if (TAP.length && now - TAP[TAP.length - 1] > 2000) TAP.length = 0;
 	TAP.push(now); if (TAP.length > 5) TAP.shift();
 	if (TAP.length >= 2) { const bpm = clamp(Math.round(60000 / ((TAP[TAP.length - 1] - TAP[0]) / (TAP.length - 1)) * 10) / 10, 30, 300); cmd("tempo", { bpm }, "tempo", [[["bpm"], bpm]]); renderTop(); toast("Tap tempo: " + bpm.toFixed(1) + " BPM"); }
@@ -266,6 +266,6 @@ Keys.bind({ id: "octave-down", scope: "any", keys: ["Z"], group: "Playing", hidd
 Keys.bind({ id: "octave-up", scope: "any", keys: ["X"], group: "Playing", hidden: true, field: true, when: kbOn, run: () => kbOct(1), does: "" });
 Keys.bind({ id: "velocity-down", scope: "any", keys: ["C"], group: "Playing", hidden: true, field: true, when: kbOn, run: () => kbVel(-1), does: "" });
 Keys.bind({ id: "velocity-up", scope: "any", keys: ["V"], group: "Playing", hidden: true, field: true, when: kbOn, run: () => kbVel(1), does: "" });
-Keys.bind({ id: "piano-white", scope: "any", keys: ["A S D F G H J K L"], group: "Playing", does: "Play the selected track: white keys C D E F G A B C D, from any workspace. ROM and RAM-P machines are pitched (PTCH, 3 steps a semitone; given back when the key is let go), others play at their own pitch. While recording: records the trig" });
-Keys.bind({ id: "octave", scope: "any", keys: ["Z", "X"], group: "Playing", does: () => `Octave down / up, −2 to +2 (now ${KB.oct > 0 ? "+" : ""}${KB.oct})` });
-Keys.bind({ id: "velocity", scope: "any", keys: ["C", "V"], group: "Playing", does: () => `Velocity down / up: 20 40 60 80 100 127 (now ${KB.vel})` });
+Keys.bind({ id: "piano-white", short: "Play", scope: "any", notes: "C D E F G A B C D", keys: ["A S D F G H J K L"], group: "Playing", does: "Play the selected track: white keys C D E F G A B C D, from any workspace. ROM and RAM-P machines are pitched (PTCH, 3 steps a semitone; given back when the key is let go), others play at their own pitch. While recording: records the trig" });
+Keys.bind({ id: "octave", short: "Oct − / Oct +", scope: "any", keys: ["Z", "X"], group: "Playing", does: () => `Octave down / up, −2 to +2 (now ${KB.oct > 0 ? "+" : ""}${KB.oct})` });
+Keys.bind({ id: "velocity", short: "Vel − / Vel +", scope: "any", keys: ["C", "V"], group: "Playing", does: () => `Velocity down / up: 20 40 60 80 100 127 (now ${KB.vel})` });

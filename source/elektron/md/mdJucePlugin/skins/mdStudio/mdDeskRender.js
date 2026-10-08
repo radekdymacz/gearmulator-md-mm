@@ -162,28 +162,28 @@ const CLICKS = [clickTrackKeys, clickSteps, clickSelect, clickSeg, clickLane, cl
 document.addEventListener("click", e => { for (const f of CLICKS) if (f(e)) return; });
 /* The editor's keys (mdDeskKeys.js: dispatched from this map, and listed by ?). */
 const dlgOpen = () => !$("#dlg").hidden && $("#dlg").dataset.first !== "1";
-Keys.bind({ id: "close-dialog", scope: "any", keys: ["Escape"], group: "Anywhere", does: "Close the dialog", when: dlgOpen, field: true, run: () => { $("#dlg").hidden = true; $("#dlg").dataset.first = ""; } });
-Keys.bind({ id: "undo", scope: "any", keys: ["Z"], mod: "cmd", group: "Anywhere", does: "Undo", modal: "panel", run: () => cmd("undo") });
-Keys.bind({ id: "redo", scope: "any", keys: ["Z"], mod: "cmd+shift", group: "Anywhere", does: "Redo", modal: "panel", run: () => cmd("redo") });
-Keys.bind({ id: "redo-y", scope: "any", keys: ["Y"], mod: "cmd", group: "Anywhere", does: "Redo", modal: "panel", run: () => cmd("redo") });
-Keys.bind({ id: "copy", scope: "any", keys: ["C"], mod: "cmd", group: "Anywhere", does: "Copy (Sequence: the selected steps, or the track page shown; Sound: the sound; Song: the row)", run: () => secAction("copy") });
-Keys.bind({ id: "paste", scope: "any", keys: ["V"], mod: "cmd", group: "Anywhere", does: "Paste (Sequence: at the selected step, the block from its first step and track)", run: () => secAction("paste") });
-Keys.bind({ id: "leave-learn", scope: "control", keys: ["Escape"], group: "Anywhere", does: "Leave LEARN", mapping: true, when: () => S.mapping && S.ctl.learn, run: () => toggleLearn() });
-Keys.bind({ id: "play-stop", scope: "any", keys: ["Space"], group: "Transport", does: "Play / stop", run: () => cmd(V.playing ? "stop" : "play") });
-Keys.bind({ id: "record", scope: "any", keys: ["Space"], code: "Space", mod: "alt", group: "Transport", does: "Live recording (RECORD + PLAY): Alt + play, the other Alt that is not \"all\"", run: () => cmd("record") });
+Keys.bind({ id: "close-dialog", short: "Close", scope: "any", keys: ["Escape"], group: "Anywhere", does: "Close the dialog", when: dlgOpen, field: true, run: () => { $("#dlg").hidden = true; $("#dlg").dataset.first = ""; } });
+Keys.bind({ id: "undo", short: "Undo", scope: "any", keys: ["Z"], mod: "cmd", group: "Anywhere", does: "Undo", modal: "panel", run: () => cmd("undo") });
+Keys.bind({ id: "redo", short: "Redo", scope: "any", keys: ["Z"], mod: "cmd+shift", group: "Anywhere", does: "Redo", modal: "panel", run: () => cmd("redo") });
+Keys.bind({ id: "redo-y", short: "Redo", scope: "any", keys: ["Y"], mod: "cmd", group: "Anywhere", does: "Redo", modal: "panel", run: () => cmd("redo") });
+Keys.bind({ id: "copy", short: "Copy", scope: "any", keys: ["C"], mod: "cmd", group: "Anywhere", does: "Copy (Sequence: the selected steps, or the track page shown; Sound: the sound; Song: the row)", run: () => secAction("copy") });
+Keys.bind({ id: "paste", short: "Paste", scope: "any", keys: ["V"], mod: "cmd", group: "Anywhere", does: "Paste (Sequence: at the selected step, the block from its first step and track)", run: () => secAction("paste") });
+Keys.bind({ id: "leave-learn", short: "Leave LEARN", scope: "control", keys: ["Escape"], group: "Anywhere", does: "Leave LEARN", mapping: true, when: () => S.mapping && S.ctl.learn, run: () => toggleLearn() });
+Keys.bind({ id: "play-stop", short: "Play / stop", scope: "any", keys: ["Space"], group: "Transport", does: "Play / stop", run: () => cmd(V.playing ? "stop" : "play") });
+Keys.bind({ id: "record", short: "Record", scope: "any", keys: ["Space"], code: "Space", mod: "alt", group: "Transport", does: "Live recording (RECORD + PLAY): Alt + play, the other Alt that is not \"all\"", run: () => cmd("record") });
 ["seq", "sound", "mix", "sampler", "song", "control"].forEach((ws, i) => Keys.bind({ id: "workspace-" + (i + 1), scope: "any", keys: [String(i + 1)], group: "Workspaces", does: ["Sequence", "Sound", "Mix", "Sampler", "Song", "Control"][i], mapping: ws === "control", when: ws === "control" ? () => S.mapping : null, run: () => { S.ws = ws; render(); } }));
-Keys.bind({ id: "page-prev-next", scope: "seq sampler", keys: ["[", "]"], group: "Sequence", does: "Previous / next page", when: () => (S.ws === "seq" || S.ws === "sampler") && pages16() > 1, run: e => { const n = pages16(); S.viewAll = false; S.page = (S.page + (e.key === "]" ? 1 : -1) + n) % n; render(); } });
-Keys.bind({ id: "delete", scope: "seq song", keys: ["Delete", "Backspace"], group: "Sequence", does: "Clear the selected steps; with none selected nothing (Clr clears the page shown, ⌥Delete the pattern). Song: delete the row", when: () => S.ws === "song" || S.ws === "seq",
+Keys.bind({ id: "page-prev-next", short: "Page − / Page +", scope: "seq sampler", keys: ["[", "]"], group: "Sequence", does: "Previous / next page", when: () => (S.ws === "seq" || S.ws === "sampler") && pages16() > 1, run: e => { const n = pages16(); S.viewAll = false; S.page = (S.page + (e.key === "]" ? 1 : -1) + n) % n; render(); } });
+Keys.bind({ id: "delete", short: "Clear selected / Clear selected", scope: "seq song", keys: ["Delete", "Backspace"], group: "Sequence", does: "Clear the selected steps; with none selected nothing (Clr clears the page shown, ⌥Delete the pattern). Song: delete the row", when: () => S.ws === "song" || S.ws === "seq",
 	run: () => S.ws === "song" ? songAction("del") : S.stepSel ? secAction("clear") : toast(Modifiers.say("Nothing selected: ⌘-click or ⌘-drag steps first. Clr clears the page shown, ⌥Delete the whole pattern.")) });
-Keys.bind({ id: "clear-pattern", scope: "seq", keys: ["Delete", "Backspace"], mod: "alt", group: "All", does: "Sequence: clear the whole pattern: every track's trigs and locks", when: () => S.ws === "seq", run: () => clearPattern() });
+Keys.bind({ id: "clear-pattern", short: "Clear pattern / Clear pattern", scope: "seq", keys: ["Delete", "Backspace"], mod: "alt", group: "All", does: "Sequence: clear the whole pattern: every track's trigs and locks", when: () => S.ws === "seq", run: () => clearPattern() });
 Keys.bind({ id: "clr-key-all", scope: "any", area: "Top bar", keys: ["CLR"], mod: "alt", group: "All", does: "Click: clear the whole pattern, every track's trigs and locks (one undo step)" });
-Keys.bind({ id: "song-row", scope: "song", keys: ["ArrowLeft", "ArrowRight"], group: "Song", does: "Previous / next row", when: () => S.ws === "song", run: e => { S.songSel = Math.max(0, Math.min(V.song.length - 1, S.songSel + (e.key === "ArrowRight" ? 1 : -1))); render(); } });
+Keys.bind({ id: "song-row", short: "Row − / Row +", scope: "song", keys: ["ArrowLeft", "ArrowRight"], group: "Song", does: "Previous / next row", when: () => S.ws === "song", run: e => { S.songSel = Math.max(0, Math.min(V.song.length - 1, S.songSel + (e.key === "ArrowRight" ? 1 : -1))); render(); } });
 Keys.bind({ id: "step-accent", scope: "seq", area: "Steps", keys: ["step"], mod: "shift", group: "Sequence", does: "Click: accent" });
 Keys.bind({ id: "step-slide", scope: "seq", area: "Steps", keys: ["step"], mod: "alt+shift", group: "Sequence", does: "Click: slide" });
 Keys.bind({ id: "lane-erase", scope: "seq", area: "Lock lane", keys: ["lock lane"], mod: "alt", group: "Sequence", does: "Drag: erase locks" });
 Keys.bind({ id: "lane-clear-all", scope: "seq", area: "Lock lane", keys: ["lock lane clear"], mod: "alt", group: "Sequence", does: "Click: clear every lock of the track (all its parameters)" });
-Keys.bind({ id: "value-up-down", scope: "any", keys: ["ArrowUp", "ArrowDown"], group: "Values", does: "A focused value, tempo or bar: one step (⇧: fine or ×10)" });
-Keys.bind({ id: "value-left-right", scope: "any", keys: ["ArrowLeft", "ArrowRight"], group: "Values", does: "A focused value: one step" });
+Keys.bind({ id: "value-up-down", short: "Value + / Value −", scope: "any", keys: ["ArrowUp", "ArrowDown"], group: "Values", does: "A focused value, tempo or bar: one step (⇧: fine or ×10)" });
+Keys.bind({ id: "value-left-right", short: "Value − / Value +", scope: "any", keys: ["ArrowLeft", "ArrowRight"], group: "Values", does: "A focused value: one step" });
 new ResizeObserver(() => redraw()).observe(document.body);
 render();
 Bridge.ready();

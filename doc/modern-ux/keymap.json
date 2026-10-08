@@ -9,7 +9,8 @@
 			],
 			"mod": "",
 			"group": "Help",
-			"does": "This list of keys",
+			"does": "The keyboard view: what every key and gesture does (this)",
+			"short": "This view",
 			"modal": "keyspop",
 			"dispatched": true
 		},
@@ -21,8 +22,105 @@
 			],
 			"mod": "",
 			"group": "Help",
-			"does": "Close the list of keys",
+			"does": "Close the keyboard view",
+			"short": "Close",
 			"dispatched": true
+		},
+		{
+			"id": "zoom-out",
+			"scope": "any",
+			"keys": [
+				"-"
+			],
+			"mod": "cmd",
+			"group": "Anywhere",
+			"does": "Page zoom: smaller (also in the editor's menu)",
+			"short": "Zoom −"
+		},
+		{
+			"id": "zoom-in",
+			"scope": "any",
+			"keys": [
+				"="
+			],
+			"mod": "cmd",
+			"group": "Anywhere",
+			"does": "Page zoom: larger (⌘+ too)",
+			"short": "Zoom +"
+		},
+		{
+			"id": "zoom-reset",
+			"scope": "any",
+			"keys": [
+				"0"
+			],
+			"mod": "cmd",
+			"group": "Anywhere",
+			"does": "Page zoom: back to 100 %",
+			"short": "Zoom 100 %"
+		},
+		{
+			"id": "tip-hold-alt",
+			"scope": "any",
+			"keys": [],
+			"mod": "",
+			"group": "Tips",
+			"does": "Hold ⌥ (or click FN in the top bar): the keys and buttons it changes say what they do then (Clr becomes All).",
+			"tip": true
+		},
+		{
+			"id": "tip-fn",
+			"scope": "any",
+			"keys": [],
+			"mod": "",
+			"group": "Tips",
+			"does": "No ⌥ to hand (a touch screen, a DAW or desktop that takes Alt)? Click FN: the next click, drag or key gets ⌥; double-click it to keep it on.",
+			"tip": true
+		},
+		{
+			"id": "tip-step-menu",
+			"scope": "any",
+			"keys": [],
+			"mod": "",
+			"group": "Tips",
+			"does": "Right-click a step: everything a step can do, with its key (Ctrl-click on a Mac).",
+			"tip": true
+		},
+		{
+			"id": "tip-select",
+			"scope": "any",
+			"keys": [],
+			"mod": "",
+			"group": "Tips",
+			"does": "⌘-click or ⌘-drag steps to select them; the LCD's Copy, Clr and Paste then act on the selection.",
+			"tip": true
+		},
+		{
+			"id": "tip-undo",
+			"scope": "any",
+			"keys": [],
+			"mod": "",
+			"group": "Tips",
+			"does": "A drag, a paint or a run of rotates is one undo step: ⌘Z takes it back whole.",
+			"tip": true
+		},
+		{
+			"id": "tip-play",
+			"scope": "any",
+			"keys": [],
+			"mod": "",
+			"group": "Tips",
+			"does": "A to L play the selected track from any workspace; Z / X move the octave, C / V the velocity.",
+			"tip": true
+		},
+		{
+			"id": "tip-reset",
+			"scope": "any",
+			"keys": [],
+			"mod": "",
+			"group": "Tips",
+			"does": "Double-click a value: back to its default. ⇧ while dragging: fine.",
+			"tip": true
 		},
 		{
 			"id": "step-paint",
@@ -276,6 +374,7 @@
 			"group": "Selected track",
 			"does": "Randomise the selected track: on Sound a fresh random sound (MUTATE, from the sound before the trial); everywhere else a new GEN variation, a new seed or random hits and rotation",
 			"code": "KeyR",
+			"short": "Randomise",
 			"dispatched": true
 		},
 		{
@@ -288,6 +387,7 @@
 			"group": "All",
 			"does": "Randomise every track: on Sound the whole kit, everywhere else every track's GEN spec over the whole pattern",
 			"code": "KeyR",
+			"short": "Randomise all",
 			"dispatched": true
 		},
 		{
@@ -333,6 +433,7 @@
 			"mod": "alt",
 			"group": "Selected track",
 			"does": "Sequence: rotate the selected track one step earlier / later: trigs, accents and locks, wrapping at the length. Presses while ⌥ is down are one undo step. The one Alt that is not \"all\": FUNCTION + arrows on the machine",
+			"short": "Rotate ← / Rotate →",
 			"dispatched": true
 		},
 		{
@@ -344,6 +445,7 @@
 			"mod": "",
 			"group": "All",
 			"does": "Unmute and unsolo every track",
+			"short": "Unmute all",
 			"dispatched": true
 		},
 		{
@@ -355,6 +457,7 @@
 			"mod": "",
 			"group": "Sequence",
 			"does": "Unmark the tracks marked for paste",
+			"short": "Unmark",
 			"dispatched": true
 		},
 		{
@@ -399,6 +502,7 @@
 			"mod": "cmd",
 			"group": "Sequence",
 			"does": "Cut the selected steps (copy, then clear; one undo step)",
+			"short": "Cut",
 			"dispatched": true
 		},
 		{
@@ -410,6 +514,7 @@
 			"mod": "cmd",
 			"group": "Sequence",
 			"does": "Duplicate the selected steps right after themselves (the clipboard stays); again: once more",
+			"short": "Duplicate",
 			"dispatched": true
 		},
 		{
@@ -421,6 +526,7 @@
 			"mod": "cmd",
 			"group": "Sequence",
 			"does": "Select every step of every track up to the length (then ⌘C copies the pattern as a block)",
+			"short": "Select all",
 			"dispatched": true
 		},
 		{
@@ -433,6 +539,7 @@
 			"mod": "",
 			"group": "Sequence",
 			"does": "Move the selection a step earlier / later (one step selected: a cursor)",
+			"short": "Sel ← / Sel →",
 			"dispatched": true
 		},
 		{
@@ -445,6 +552,7 @@
 			"mod": "shift",
 			"group": "Sequence",
 			"does": "Extend the selection a step earlier / later",
+			"short": "Grow ← / Grow →",
 			"dispatched": true
 		},
 		{
@@ -456,6 +564,7 @@
 			"mod": "",
 			"group": "Sequence",
 			"does": "The selected steps' trigs on, or off when each has one (one undo step)",
+			"short": "Trigs",
 			"dispatched": true
 		},
 		{
@@ -467,6 +576,7 @@
 			"mod": "",
 			"group": "Sequence",
 			"does": "Clear the step selection",
+			"short": "Deselect",
 			"dispatched": true
 		},
 		{
@@ -522,6 +632,7 @@
 			"mod": "",
 			"group": "Anywhere",
 			"does": "Close the dialog",
+			"short": "Close",
 			"field": true,
 			"dispatched": true
 		},
@@ -534,6 +645,7 @@
 			"mod": "cmd",
 			"group": "Anywhere",
 			"does": "Undo",
+			"short": "Undo",
 			"modal": "panel",
 			"dispatched": true
 		},
@@ -546,6 +658,7 @@
 			"mod": "cmd+shift",
 			"group": "Anywhere",
 			"does": "Redo",
+			"short": "Redo",
 			"modal": "panel",
 			"dispatched": true
 		},
@@ -558,6 +671,7 @@
 			"mod": "cmd",
 			"group": "Anywhere",
 			"does": "Redo",
+			"short": "Redo",
 			"modal": "panel",
 			"dispatched": true
 		},
@@ -570,6 +684,7 @@
 			"mod": "cmd",
 			"group": "Anywhere",
 			"does": "Copy (Sequence: the selected steps, or the track page shown; Sound: the sound; Song: the row)",
+			"short": "Copy",
 			"dispatched": true
 		},
 		{
@@ -581,6 +696,7 @@
 			"mod": "cmd",
 			"group": "Anywhere",
 			"does": "Paste (Sequence: at the selected step, the block from its first step and track)",
+			"short": "Paste",
 			"dispatched": true
 		},
 		{
@@ -592,6 +708,7 @@
 			"mod": "",
 			"group": "Anywhere",
 			"does": "Leave LEARN",
+			"short": "Leave LEARN",
 			"mapping": true,
 			"dispatched": true
 		},
@@ -604,6 +721,7 @@
 			"mod": "",
 			"group": "Transport",
 			"does": "Play / stop",
+			"short": "Play / stop",
 			"dispatched": true
 		},
 		{
@@ -616,6 +734,7 @@
 			"group": "Transport",
 			"does": "Live recording (RECORD + PLAY): Alt + play, the other Alt that is not \"all\"",
 			"code": "Space",
+			"short": "Record",
 			"dispatched": true
 		},
 		{
@@ -695,6 +814,7 @@
 			"mod": "",
 			"group": "Sequence",
 			"does": "Previous / next page",
+			"short": "Page − / Page +",
 			"dispatched": true
 		},
 		{
@@ -707,6 +827,7 @@
 			"mod": "",
 			"group": "Sequence",
 			"does": "Clear the selected steps; with none selected nothing (Clr clears the page shown, ⌥Delete the pattern). Song: delete the row",
+			"short": "Clear selected / Clear selected",
 			"dispatched": true
 		},
 		{
@@ -719,6 +840,7 @@
 			"mod": "alt",
 			"group": "All",
 			"does": "Sequence: clear the whole pattern: every track's trigs and locks",
+			"short": "Clear pattern / Clear pattern",
 			"dispatched": true
 		},
 		{
@@ -742,6 +864,7 @@
 			"mod": "",
 			"group": "Song",
 			"does": "Previous / next row",
+			"short": "Row − / Row +",
 			"dispatched": true
 		},
 		{
@@ -797,7 +920,8 @@
 			],
 			"mod": "",
 			"group": "Values",
-			"does": "A focused value, tempo or bar: one step (⇧: fine or ×10)"
+			"does": "A focused value, tempo or bar: one step (⇧: fine or ×10)",
+			"short": "Value + / Value −"
 		},
 		{
 			"id": "value-left-right",
@@ -808,7 +932,8 @@
 			],
 			"mod": "",
 			"group": "Values",
-			"does": "A focused value: one step"
+			"does": "A focused value: one step",
+			"short": "Value − / Value +"
 		},
 		{
 			"id": "mkey-prepare",
@@ -842,6 +967,7 @@
 			"group": "Selected track",
 			"does": "Mute or unmute the selected track",
 			"code": "KeyM",
+			"short": "Mute",
 			"dispatched": true
 		},
 		{
@@ -854,6 +980,7 @@
 			"group": "All",
 			"does": "Mute every track; when none is audible, unmute every track",
 			"code": "KeyM",
+			"short": "Mute all",
 			"dispatched": true
 		},
 		{
@@ -866,6 +993,7 @@
 			"mod": "",
 			"group": "Selected track",
 			"does": "Select the previous / next track (a focused value keeps ↑ / ↓ for itself). Sequence with selected steps: move the selection a track",
+			"short": "Track − / Track +",
 			"dispatched": true
 		},
 		{
@@ -889,6 +1017,7 @@
 			"mod": "",
 			"group": "Transport",
 			"does": "Tap tempo (the average of the last taps; B as in the Monomachine Editor)",
+			"short": "Tap / Tap",
 			"dispatched": true
 		},
 		{
@@ -972,7 +1101,9 @@
 			],
 			"mod": "",
 			"group": "Playing",
-			"does": "Play the selected track: white keys C D E F G A B C D, from any workspace. ROM and RAM-P machines are pitched (PTCH, 3 steps a semitone; given back when the key is let go), others play at their own pitch. While recording: records the trig"
+			"does": "Play the selected track: white keys C D E F G A B C D, from any workspace. ROM and RAM-P machines are pitched (PTCH, 3 steps a semitone; given back when the key is let go), others play at their own pitch. While recording: records the trig",
+			"short": "Play",
+			"notes": "C D E F G A B C D"
 		},
 		{
 			"id": "octave",
@@ -983,7 +1114,8 @@
 			],
 			"mod": "",
 			"group": "Playing",
-			"does": "Octave down / up, −2 to +2"
+			"does": "Octave down / up, −2 to +2",
+			"short": "Oct − / Oct +"
 		},
 		{
 			"id": "velocity",
@@ -994,7 +1126,8 @@
 			],
 			"mod": "",
 			"group": "Playing",
-			"does": "Velocity down / up: 20 40 60 80 100 127"
+			"does": "Velocity down / up: 20 40 60 80 100 127",
+			"short": "Vel − / Vel +"
 		},
 		{
 			"id": "lib-open",
@@ -1095,6 +1228,7 @@
 			"mod": "",
 			"group": "Anywhere",
 			"does": "Close the GLOBAL settings",
+			"short": "Close",
 			"dispatched": true
 		},
 		{
@@ -1105,7 +1239,8 @@
 			],
 			"mod": "",
 			"group": "Anywhere",
-			"does": "AUDIO / MIDI settings (also in the engine menu)"
+			"does": "AUDIO / MIDI settings (also in the engine menu)",
+			"short": "Audio / MIDI"
 		}
 	],
 	"mm": [
@@ -1220,7 +1355,8 @@
 			],
 			"mod": "",
 			"group": "Playing",
-			"does": "Play the selected synth track: white keys C D E F G A B C D, real notes on its MIDI channel, from any workspace. While live recording the machine records them"
+			"does": "Play the selected synth track: white keys C D E F G A B C D, real notes on its MIDI channel, from any workspace. While live recording the machine records them",
+			"notes": "C D E F G A B C D"
 		},
 		{
 			"id": "piano-black",
@@ -1230,7 +1366,8 @@
 			],
 			"mod": "",
 			"group": "Playing",
-			"does": "The black keys above them: C♯ D♯ F♯ G♯ A♯ C♯ D♯, so the two rows play every semitone"
+			"does": "The black keys above them: C♯ D♯ F♯ G♯ A♯ C♯ D♯, so the two rows play every semitone",
+			"notes": "C♯ D♯ F♯ G♯ A♯ C♯ D♯"
 		},
 		{
 			"id": "octave",

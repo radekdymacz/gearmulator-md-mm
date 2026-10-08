@@ -134,8 +134,17 @@ const MdJourneys = (() => {
 	const helpKeys = {
 		name: "md-keys-help",
 		steps: [
-			{ say: "press ?: the list of keys", act: u => { document.activeElement?.blur?.(); u.key("?", { shift: true }); }, screen: () => ok(!$1("#keyspop").hidden && $all("#keyspop .keyrow").length > 20 && $all("#keyspop h3").length >= 6, $all("#keyspop .keyrow").length + " keys") },
-			{ say: "press Escape: it closes", act: u => u.key("Escape"), screen: () => ok($1("#keyspop").hidden, "still open") }
+			/* K-view (DESIGN-keymap.md): ? is a drawn keyboard from the key map, with the mouse's tricks, tips and the list */
+			{ say: "press ? on Sequence: the keyboard view", act: u => { if (S.ws !== "seq") u.click(tab("seq")); document.activeElement?.blur?.(); u.key("?", { shift: true }); },
+				screen: () => ok(!$1("#keyspop").hidden && $all("#keyspop .kv-cap").length > 60 && $1('#keyspop .kv-cap[data-code="KeyR"]')?.dataset.ids === "randomise-track"
+					&& $1('#keyspop .kv-cap.piano.white[data-code="KeyA"] .kv-note')?.textContent === "C" && $all("#keyspop .kv-mouse .kv-row").length > 5 && $all("#keyspop .keyrow").length > 20,
+					`${$all("#keyspop .kv-cap").length} keys, R ${$1('#keyspop .kv-cap[data-code="KeyR"]')?.dataset.ids}, ${$all("#keyspop .keyrow").length} rows`) },
+			{ say: "click the ⌥ / FN layer: R randomises every track there", act: u => u.click('#keyspop .kv-chip[data-kvmod="alt"]'),
+				screen: () => ok($1('#keyspop .kv-cap[data-code="KeyR"]')?.dataset.ids === "randomise-all" && $1('#keyspop .kv-cap[data-code="AltLeft"]')?.classList.contains("on"), "R " + $1('#keyspop .kv-cap[data-code="KeyR"]')?.dataset.ids) },
+			{ say: "click R on the drawn keyboard: what it does, in words", act: u => u.click('#keyspop .kv-cap[data-code="KeyR"]'), screen: () => ok(/every track/i.test($1("#keyspop .kv-detail")?.textContent || ""), $1("#keyspop .kv-detail")?.textContent) },
+			{ say: "type \"undo\" in its search: ⌘Z is marked, the list keeps undo", act: u => { u.click('#keyspop .kv-chip[data-kvmod="cmd"]'); u.click('#keyspop .kv-chip[data-kvmod="alt"]'); u.type("#keyspop [data-kvsearch]", "undo"); },
+				screen: () => ok($1('#keyspop .kv-cap.hit[data-code="KeyZ"]') && $all("#keyspop .keyrow").length >= 1 && $all("#keyspop .keyrow").every(r => /undo/i.test(r.textContent + r.dataset.id)), $all("#keyspop .keyrow").length + " rows") },
+			{ say: "press Escape: it closes", act: u => { document.activeElement?.blur?.(); u.key("Escape"); }, screen: () => ok($1("#keyspop").hidden, "still open") }
 		]
 	};
 	const undoRedo = {

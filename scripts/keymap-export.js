@@ -48,7 +48,7 @@ const textOf = b => { let t; try { t = typeof b.does === "function" ? String(b.d
 function entries(Keys) {
 	return Keys.list().map(b => {
 		const o = { id: b.id, scope: b.scope, keys: b.keys.slice(), mod: b.mod || "", group: b.group, does: textOf(b) };
-		for (const k of ["area", "code", "short", "modal"]) if (b[k] != null) o[k] = b[k];
+		for (const k of ["area", "code", "short", "notes", "modal"]) if (b[k] != null) o[k] = b[k];
 		for (const k of ["hidden", "mapping", "field", "tip"]) if (b[k]) o[k] = true;
 		if (b.run) o.dispatched = true;
 		return o;

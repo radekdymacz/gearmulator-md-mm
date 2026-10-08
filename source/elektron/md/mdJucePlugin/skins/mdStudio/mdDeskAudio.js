@@ -19,6 +19,6 @@ Bridge.onMessage(m => {
 	else if (m.type === "audioLevel") audioLevel(m.in);
 	else if (m.type === "openAudio") openAudio();
 });
-Keys.bind({ id: "audio-settings", scope: "any", keys: [","], group: "Anywhere", does: "AUDIO / MIDI settings (also in the engine menu)" });
+Keys.bind({ id: "audio-settings", short: "Audio / MIDI", scope: "any", keys: [","], group: "Anywhere", does: "AUDIO / MIDI settings (also in the engine menu)" });
 showAudioEntry();
 Bridge.send({ op: "audio" });
