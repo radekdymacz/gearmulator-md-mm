@@ -59,7 +59,9 @@ where it came from, the setup, what happens, what should happen, status.*
 - **From:** Discord tester C, 2026-10-08.
 - **What happens:** in Perform mode, moving the envelope's DEC (and similar) on the left side makes the page grow downwards to fit the envelope, then it jumps back when the mouse is released.
 - **Should:** the layout stays put while dragging.
-- **Status:** open.
+- **Cause:** the envelope's screen was a canvas placed straight in the card's grid row with `height: 100%`. A canvas's drawing size (its width and height attributes, set on every redraw to the box times the display's scale) is its intrinsic size, which the row took into account: each redraw while dragging made the row, the card and the page a little taller; the render on release put a fresh canvas in, so the page jumped back.
+- **Fix (branch `fix/0.3.5-bugs`):** the canvas sits absolutely in a box of its own (`.menvplot`), which takes the row; the canvas no longer sizes anything (as the Sound page's plots already did). Test: `mm-perform-menv-layout` drags DEC on the value and the DEC dot on the screen and samples the card's, the page's and the screen's heights every 10 ms (grew before the fix, steady after; both hosts).
+- **Status:** fixed for 0.3.5.
 
 ## B-016 · Standalone can't go full screen; Settings does nothing (Monomachine)
 

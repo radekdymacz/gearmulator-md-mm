@@ -231,7 +231,11 @@ body.dockother #rail .railparams>:is(.lpspace,.pagetabs,.pkcol),body.dockother #
 .perf3{grid-template-columns:minmax(0,1fr) auto minmax(0,1fr)!important;min-height:0}
 .perf3>.card{min-height:0}
 .perf3 .menvcard{grid-template-rows:auto minmax(0,1fr) auto auto;align-content:stretch}
-.perf3 .menvcard canvas.ed{height:100%!important;min-height:96px}
+/* B-017: the envelope's screen fills its row from a box of its own, the canvas absolute inside it. A canvas in the row
+   itself sized the row from its drawing (its width and height attributes, set on every redraw), so dragging DEC grew
+   the card and the page a little with each redraw until the render on release put it back. */
+.perf3 .menvcard .menvplot{position:relative;min-height:96px;min-width:0}
+.perf3 .menvcard .menvplot>canvas.ed{position:absolute;inset:0;width:100%;height:100%!important;min-height:0!important}
 .perf3 .asgcard{--joy:clamp(200px,calc(100vh - 500px),440px);grid-template-rows:auto auto minmax(0,1fr)}
 .perf3 .asgcard .asgn{grid-template-columns:var(--joy) 270px;align-items:start}
 .perf3 .asgcard .asgn:not(:has(.joy)){grid-template-columns:calc(var(--joy) + 284px)}
