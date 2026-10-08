@@ -8,6 +8,8 @@
 #   - the bridge went both ways: the plug-in wrote its answers as script files beside the page file and deleted
 #     them, which it does only when the page says it read them (mdPageBridge.h; watched with inotify);
 #   - the page shows "<machine> firmware needed": read through AT-SPI (ui_texts.py), as a screen reader would;
+#   - real keys reach the page: a real click on the page, then Ctrl+C Ctrl+V Ctrl+X Ctrl+Z Ctrl+D and ? (xdotool,
+#     XTEST), and the page's key probe (GEARMULATOR_MDMM_KEYPROBE=1) lists them;
 #   - a screenshot of the display (md-standalone.png, md-vst3.png, ...), kept as an artifact.
 #
 #   scripts/linux/smoke_mdmm.sh <dir with the .tar.gz files> <output dir> [<mdmmVst3EditorHost binary>]
@@ -57,6 +59,9 @@ gdbus call --session --dest org.a11y.Bus --object-path /org/a11y/bus \
 status=0
 summary=()
 fail() { echo "::error::$1"; status=1; }
+# The page's key probe (skins/shared/deskKeys.js): the keys that reached it, as a text AT-SPI reads.
+export GEARMULATOR_MDMM_KEYPROBE=1
+keys_wanted=(cmd+C cmd+V cmd+X cmd+Z cmd+D "shift+?")
 record() { summary+=("| $1 | $2 | $3 |"); }
 
 # Every file written and deleted in the temp folders (JUCE's is /var/tmp, else /tmp): the bridge's script files
@@ -142,6 +147,36 @@ run() {
 		head -n 80 "${out}/${name}-ui.txt" | sed 's/^/   /'
 		head -n 20 "${out}/${name}-ui-errors.txt" | sed 's/^/   /'
 		record "${label}" "page shows \"${wanted}\"" "no"
+	fi
+	# Real input (0.3.3 lost Cmd+C / Cmd+V on macOS; this proves Ctrl+C and the rest reach the page here too): a real
+	# click (XTEST) at the page's key probe, the bottom-left corner of the window (skins/shared/deskKeys.js), then real
+	# key presses; the probe, read through AT-SPI, lists the keys that reached the page.
+	if (( found )); then
+		local win="" WIDTH=0 HEIGHT=0 X=0 Y=0 best=0
+		for w in $(xdotool search --onlyvisible --pid "${pid}" 2>/dev/null); do
+			eval "$(xdotool getwindowgeometry --shell "${w}" 2>/dev/null | grep -E '^(WIDTH|HEIGHT|X|Y)=')"
+			if (( WIDTH * HEIGHT > best )); then best=$((WIDTH * HEIGHT)); win="${w}"; fi
+		done
+		local seen="no window of the app found"
+		if [[ -n "${win}" ]]; then
+			eval "$(xdotool getwindowgeometry --shell "${win}" | grep -E '^(WIDTH|HEIGHT|X|Y)=')"
+			xdotool windowraise "${win}" windowfocus --sync "${win}" 2>/dev/null || true
+			xdotool mousemove --sync $((X + 15)) $((Y + HEIGHT - 10)) click 1
+			sleep 1
+			xdotool key --delay 400 ctrl+c ctrl+v ctrl+x ctrl+z ctrl+d shift+slash
+			sleep 1
+			seen="$(timeout 20 python3 "${script_dir}/ui_texts.py" 2>/dev/null | grep -o -E 'Keys seen:.*' | head -n 1)"
+		fi
+		echo "${seen}" > "${out}/${name}-keys.txt"
+		local missing=()
+		for k in "${keys_wanted[@]}"; do [[ "${seen}" == *" ${k}"* ]] || missing+=("${k}"); done
+		if (( ${#missing[@]} == 0 )); then
+			echo "${label}: real keys reach the page: ${seen}"
+			record "${label}" "real keys reach the page (${keys_wanted[*]})" "yes"
+		else
+			fail "${label}: real keys did not reach the page: ${missing[*]} missing (${seen})"
+			record "${label}" "real keys reach the page (${keys_wanted[*]})" "no: ${missing[*]} missing"
+		fi
 	fi
 	kill "${pid}" 2>/dev/null || true
 	sleep 2

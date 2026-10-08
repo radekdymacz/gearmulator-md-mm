@@ -4,6 +4,15 @@
 repository; the site sends reports to the contact address. Newest first. Each entry:
 where it came from, the setup, what happens, what should happen, status.*
 
+## B-014 · Cmd+C and Cmd+V do nothing (macOS: Ableton Live and the standalone)
+
+- **From:** the owner, 0.3.3, Ableton Live on macOS (VST3 and AU), 2026-10-08.
+- **What happens:** with steps selected, Cmd+C and Cmd+V do nothing. Cmd+Z, Cmd+D and the plain keys work.
+- **Cause:** not the host. JUCE's web view on macOS (`juce_WebBrowserComponent_mac.mm`, `WebViewKeyEquivalentResponder`) catches Cmd+X, Cmd+C, Cmd+V and Cmd+A in `performKeyEquivalent:` and sends the edit commands `cut:`, `copy:`, `paste:`, `selectAll:` to the first responder instead of letting WebKit see the key. WebKit runs them as editing commands, so the page gets the document's `copy` / `cut` / `paste` events and never a keydown; the page's key map listened to keydowns only. The same in the standalone, in the VST3 host and in every DAW: the window, JUCE's components and the menu bar take nothing (measured with real `NSEvent`s: "taken by a view's key equivalent", first responder `WebViewKeyEquivalentResponder_…`). Cmd+Z and Cmd+D pass JUCE's responder and reach the page as keys. The page's own tests sent DOM key events inside the page, which is why nothing caught it.
+- **Fix (branch `feat/select-shift`, its own commit):** the shared key dispatcher (`skins/shared/deskKeys.js`, both editors) takes a `copy`, `cut` or `paste` event outside a text field as Cmd+C, Cmd+X or Cmd+V (not twice when the keydown came first, as in a browser or WebView2). The mouse path was there already and is now tested: with steps selected, the top bar's Copy, Clr and Paste act on the selection. Tests: `deskKeysTest.js`; journeys `md-seq-os-copy-paste` (real key events through AppKit, `mdOsKeys.h`; fails without the fix in both hosts) and `md-seq-copy-paste-buttons`; the start tests of all three systems press real keys into the shipped standalones and VST3s and read the page's key probe (`GEARMULATOR_MDMM_KEYPROBE=1`).
+- **Not proven here:** Live itself (the journeys and the start tests run in the standalone and the minimal VST3 host); Windows and Linux (no machine here; their start tests check it on the runners).
+- **Status:** fixed on the branch, 2026-10-08.
+
 ## B-013 · Monomachine "first beat" journey fails in the VST3 (host path)
 
 - **From:** journeys in the minimal VST3 host, 2026-10-08.

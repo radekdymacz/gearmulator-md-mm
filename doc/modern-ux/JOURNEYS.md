@@ -79,6 +79,8 @@ no journey yet); **not testable** (why). "—": the editor has no such feature.
 | Lock lane ramp (Shift-drag), erase (Alt-drag), wheel on a step | md-seq-lock-ramp-erase-wheel PASS | mm-seq-lock-ramp-erase-wheel PASS |
 | Pages: ALL, PAGE, [ ] | md-seq-pages PASS | mm-seq-pages PASS |
 | Copy, paste, clear steps (Cmd+C, Cmd+V, Delete) | md-seq-copy-paste-clear PASS | mm-seq-copy-paste-clear PASS |
+| Cmd+C, Cmd+V, Cmd+Z as the operating system delivers them (real `NSEvent`s through AppKit's key path, `u.osKey`; B-014), standalone and VST3, 2026-10-08 | md-seq-os-copy-paste PASS (FAIL without the fix: no key reached the page) | not covered |
+| A selected step copied and pasted with the mouse (the top bar's Copy, Paste, Clr), 2026-10-08 | md-seq-copy-paste-buttons PASS | — (no step selection yet) |
 | Clear the whole pattern (Alt+Delete), undo | md-seq-clear-pattern-undo PASS | mm-seq-clear-pattern-undo PASS |
 | Every-N fill (Cmd-click) | md-seq-fill-every PASS | mm-seq-fill-every PASS |
 | Rotate (Alt+← →) | md-seq-rotate PASS | mm-seq-rotate PASS |

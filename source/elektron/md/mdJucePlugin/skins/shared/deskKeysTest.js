@@ -3,14 +3,16 @@
    while a dialog or a panel is open (the modal layer's top, deskModal.js) no page shortcut runs and the key is
    left to the dialog (not default-prevented: Space presses its focused button, Backspace edits its field);
    an entry naming that dialog (modal) still runs; Keys.free() is false while one is open or a field has the
-   focus. Run on a stand-in document and a stand-in modal layer.
+   focus. The document's copy, cut and paste events (how ⌘C, ⌘X and ⌘V arrive on macOS, B-014) are those keys,
+   outside a text field and not twice for one press. Run on a stand-in document and a stand-in modal layer.
      node deskKeysTest.js */
 const fs = require("fs"), path = require("path"), vm = require("vm");
 let failures = 0;
 const check = (ok, what) => { console.log((ok ? "  ok   " : "  FAIL ") + what); if (!ok) failures++; };
 
-let keydown = null;
-const document = { addEventListener: (type, f) => { if (type === "keydown") keydown = f; }, activeElement: null };
+const on = {};
+const document = { addEventListener: (type, f) => { on[type] = f; }, activeElement: null };
+const keydown = e => on.keydown(e);
 const ctx = vm.createContext({ document, console });
 vm.runInContext(fs.readFileSync(path.join(__dirname, "deskKeys.js"), "utf8") + "\nthis.Keys = Keys;", ctx);
 /* the modal layer: a const in the page's global scope, as deskModal.js makes it */
@@ -55,6 +57,38 @@ document.activeElement = { closest: () => ({}) };
 check(!Keys.free(), "a text field focused: Keys.free() is false");
 document.activeElement = null;
 check(Keys.free(), "nothing open, no field: Keys.free() is true");
+
+/* ⌘C / ⌘X / ⌘V as edit commands (macOS: JUCE's web view turns the keys into copy:, cut:, paste:, so the page gets the
+   document's copy, cut and paste events and no keydown) are those keys */
+Keys.bind({ keys: ["C"], mod: "cmd", group: "Anywhere", does: "copy", run: () => ran.push("copy") });
+Keys.bind({ keys: ["X"], mod: "cmd", group: "Anywhere", does: "cut", run: () => ran.push("cut") });
+Keys.bind({ keys: ["V"], mod: "cmd", group: "Anywhere", does: "paste", run: () => ran.push("paste") });
+function edit(type) {
+	let prevented = false;
+	ran.length = 0; on[type]({ type, preventDefault: () => { prevented = true; } });
+	return { ran: ran.join(","), prevented };
+}
+check(["copy", "cut", "paste"].every(t => typeof on[t] === "function"), "the dispatcher listens to the copy, cut and paste events");
+const CtxDate = vm.runInContext("Date", ctx), realNow = CtxDate.now;
+CtxDate.now = () => realNow() + 10000;	/* long after the ⌘Z keydowns above */
+for (const t of ["copy", "cut", "paste"]) {
+	const r = edit(t);
+	check(r.ran === t && r.prevented, `a ${t} event with no keydown before it runs the ⌘${{ copy: "C", cut: "X", paste: "V" }[t]} entry and takes it`);
+}
+check(Keys.seen().slice(-3).join(" ") === "cmd+C cmd+X cmd+V", "the key probe notes them as cmd+C cmd+X cmd+V: " + Keys.seen().slice(-3).join(" "));
+document.activeElement = { closest: q => (q.includes("input") ? {} : null) };
+const inField = edit("copy");
+check(!inField.ran && !inField.prevented, "a text field focused: the copy event is the field's own (not run, not prevented)");
+document.activeElement = null;
+press("c", { metaKey: true });
+const twice = edit("copy");
+check(!twice.ran, "a copy event right after the ⌘C keydown of the same press is not a second ⌘C");
+CtxDate.now = () => realNow() + 20000;
+check(edit("copy").ran === "copy", "a later copy event is a press of its own again");
+setTop("dlg");
+check(!edit("paste").ran, "a question open: a paste event pastes nothing behind it");
+setTop(null);
+CtxDate.now = realNow;
 
 console.log(failures ? `${failures} failure(s)` : "deskKeysTest: all passed");
 process.exit(failures ? 1 : 0);

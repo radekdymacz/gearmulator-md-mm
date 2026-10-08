@@ -7,6 +7,8 @@
 #   - the bridge went both ways: the page said "ready" (page -> plug-in, postMessage), the plug-in answered with
 #     the machine's state, and the page shows "<machine> firmware needed" (plug-in -> page, ExecuteScript). The
 #     text is read through UI Automation (the page's accessibility tree), so the shipped build needs no log;
+#   - real keys reach the page: the window in front, a real click on the page, then Ctrl+C Ctrl+V Ctrl+X Ctrl+Z Ctrl+D
+#     and ? as real key presses, and the page's key probe (GEARMULATOR_MDMM_KEYPROBE=1) lists them;
 #   - a screenshot of the screen (md-standalone.png, md-vst3.png, ...; an artifact, to look at) and summary.md.
 #
 #   scripts/windows/smoke_mdmm.ps1 -PackageDir <unpacked zip> -OutputDir <dir> [-Vst3Host <mdmmVst3EditorHost.exe>]
@@ -62,6 +64,56 @@ function Get-UiNames([int] $ProcessId) {
     }
     return $names
 }
+
+# Real input (0.3.3 lost Cmd+C / Cmd+V on macOS; this proves Ctrl+C and the rest reach the page here too): the window
+# in front, a real click on the page's key probe (skins/shared/deskKeys.js, GEARMULATOR_MDMM_KEYPROBE=1), then real key
+# presses (keybd_event: the system's input queue, so the host window, the WebView2 controller and its accelerator keys
+# take their turns). Returns the probe's text afterwards.
+Add-Type -TypeDefinition @'
+using System;
+using System.Runtime.InteropServices;
+public static class MdmmInput {
+    [DllImport("user32.dll")] public static extern bool SetForegroundWindow(IntPtr h);
+    [DllImport("user32.dll")] public static extern bool SetCursorPos(int x, int y);
+    [DllImport("user32.dll")] public static extern void mouse_event(uint f, uint dx, uint dy, uint d, UIntPtr e);
+    [DllImport("user32.dll")] public static extern void keybd_event(byte vk, byte scan, uint f, UIntPtr e);
+    public static void Click(int x, int y) { SetCursorPos(x, y); mouse_event(2, 0, 0, 0, UIntPtr.Zero); mouse_event(4, 0, 0, 0, UIntPtr.Zero); }
+    public static void Key(byte vk, bool down) { keybd_event(vk, 0, down ? 0u : 2u, UIntPtr.Zero); }
+}
+'@
+function Find-KeyProbe([int] $ProcessId) {
+    $A = [System.Windows.Automation.AutomationElement]
+    $condition = New-Object System.Windows.Automation.PropertyCondition($A::ProcessIdProperty, $ProcessId)
+    foreach ($window in $A::RootElement.FindAll([System.Windows.Automation.TreeScope]::Children, $condition)) {
+        foreach ($element in $window.FindAll([System.Windows.Automation.TreeScope]::Descendants, [System.Windows.Automation.Condition]::TrueCondition)) {
+            try { if ($element.Current.Name -like 'Keys seen:*') { return $element } } catch { }
+        }
+    }
+    return $null
+}
+function Send-RealKeys($Process) {
+    $probe = Find-KeyProbe -ProcessId $Process.Id
+    if (-not $probe) { return 'no key probe on the page' }
+    $Process.Refresh()
+    [MdmmInput]::SetForegroundWindow($Process.MainWindowHandle) | Out-Null
+    Start-Sleep -Milliseconds 500
+    $r = $probe.Current.BoundingRectangle
+    [MdmmInput]::Click([int]($r.X + $r.Width / 2), [int]($r.Y + $r.Height / 2))
+    Start-Sleep -Milliseconds 500
+    # Ctrl+C, Ctrl+V, Ctrl+X, Ctrl+Z, Ctrl+D, then Shift+/ (?)
+    foreach ($key in @(@(0x11, 0x43), @(0x11, 0x56), @(0x11, 0x58), @(0x11, 0x5A), @(0x11, 0x44), @(0x10, 0xBF))) {
+        [MdmmInput]::Key([byte]$key[0], $true); [MdmmInput]::Key([byte]$key[1], $true)
+        Start-Sleep -Milliseconds 50
+        [MdmmInput]::Key([byte]$key[1], $false); [MdmmInput]::Key([byte]$key[0], $false)
+        Start-Sleep -Milliseconds 400
+    }
+    Start-Sleep -Milliseconds 500
+    $probe = Find-KeyProbe -ProcessId $Process.Id
+    if ($probe) { return $probe.Current.Name }
+    return 'the key probe went'
+}
+$env:GEARMULATOR_MDMM_KEYPROBE = '1'
+$keysWanted = @('cmd+C', 'cmd+V', 'cmd+X', 'cmd+Z', 'cmd+D', 'shift+?')
 
 function Get-WebViewProcesses() {
     return @(Get-CimInstance Win32_Process -Filter "Name = 'msedgewebview2.exe'" -ErrorAction SilentlyContinue)
@@ -142,6 +194,20 @@ foreach ($run in $runs) {
         Write-Host "-- names in the UI Automation tree (first 80)"
         $names | Select-Object -First 80 | ForEach-Object { Write-Host "   $_" }
         $status = 1
+    }
+    if ($found) {
+        $seen = ''
+        try { $seen = Send-RealKeys -Process $process } catch { $seen = "input: $_" }
+        $seen | Set-Content -LiteralPath (Join-Path $OutputDir "$($run.Name)-keys.txt") -Encoding UTF8
+        $missing = @($keysWanted | Where-Object { -not $seen.Contains(" $_") })
+        if ($missing.Count -eq 0) {
+            Write-Host "$($run.Label): real keys reach the page: $seen"
+            Add-Row $run.Label "real keys reach the page ($($keysWanted -join ' '))" 'yes'
+        } else {
+            Write-Host "::error::$($run.Label): real keys did not reach the page: $($missing -join ' ') missing ($seen)"
+            Add-Row $run.Label "real keys reach the page ($($keysWanted -join ' '))" "no: $($missing -join ' ') missing"
+            $status = 1
+        }
     }
     if (-not (Test-Path -LiteralPath $profileFolder)) {
         Write-Host "::error::no WebView2 profile folder at $profileFolder"

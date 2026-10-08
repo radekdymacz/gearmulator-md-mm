@@ -77,5 +77,6 @@ namespace mdJucePlugin
 		double m_cssZoom = 1.0;		// the CSS zoom sent, where the web view has no native page zoom
 		bool m_keptDrawn = false;	// a background run (mdBackgroundRun.h): the page draws while covered
 		mutable juce::File m_logFile;	// created on the first line
+		std::shared_ptr<int> m_alive = std::make_shared<int>(0);	// what runs later asks whether this host is still there
 	};
 }

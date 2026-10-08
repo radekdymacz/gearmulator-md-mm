@@ -254,7 +254,7 @@ function endSelect() {
 	const sel = d.extend && !d.moved ? { t: x.t, n: x.n, from: Math.min(x.from, d.at.s), to: Math.max(x.to, d.at.s + 1) } : selBetween(d.from, d.at);
 	setSel(sel);
 	if (sel.t !== S.sel && sel.n === 1) select(sel.t);
-	toast(`Selected ${selSay(sel)} · ⌘C copy · ⌘X cut · ⌘V paste here · ⌘D duplicate · Delete · Esc`);
+	toast(`Selected ${selSay(sel)} · ⌘C copy · ⌘X cut · ⌘V paste here · ⌘D duplicate · Delete · Esc (or Copy, Clr, Paste above)`);
 }
 document.addEventListener("pointerup", endSelect); document.addEventListener("pointercancel", endSelect);
 window.addEventListener("blur", () => { if (Held.as("select")) endSelect(); });
