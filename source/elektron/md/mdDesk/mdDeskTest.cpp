@@ -1003,10 +1003,13 @@ namespace
 		check(wire.size() == 1 && ed::mdDumpCommand(wire[0]) == ed::g_mdPatternDump
 			&& ed::hasTrig(*ed::decodeMdPattern(wire[0]), 0, 2) != ed::hasTrig(pattern, 0, 2), "the waiting edit goes out 200 ms after the first");
 		const auto second = wire[0];
-		now = 310;
+		now = 840;
+		desk.tick();
+		check(wire.size() == 1, "no read-back before 750 ms of quiet (B-010: a read-back costs the sequencer time)");
+		now = 850;
 		desk.tick();
 		check(wire.size() == 2 && wire[1].size() > 6 && wire[1][6] == 0x68, "one read-back request once the gesture is quiet");
-		now = 358;
+		now = 898;
 		desk.onDeviceSysex(ed::encodeMdPattern(sent));
 		check(desk.isBusy(), "the older value does not confirm");
 		desk.onDeviceSysex(second);
@@ -1060,7 +1063,7 @@ namespace
 		page.clear();
 		wire.clear();
 		desk.onPageMessage(cmd(R"({"op":"trig","p":1,"t":3,"s":3,"id":10})"));
-		now += 200;
+		now += 750;
 		desk.tick();
 		check(lastOf("error") == nullptr, "the read-back is asked for at quiet");
 		now += 2100;
@@ -1382,7 +1385,7 @@ namespace
 		}
 		count();
 		check(dumps >= 9 && dumps <= 11 && requests == 0, "a 2 s draw: at most 5 dumps a second (" + std::to_string(dumps) + "), no read-back mid-gesture");
-		for(int i = 0; i < 40; ++i) { now += 8; desk.tick(); }
+		for(int i = 0; i < 100; ++i) { now += 8; desk.tick(); }
 		count();
 		check(dumps <= 12 && requests == 1, "then exactly one read-back (" + std::to_string(requests) + ")");
 		check(desk.coreState().history().size() == 1, "one undo step");

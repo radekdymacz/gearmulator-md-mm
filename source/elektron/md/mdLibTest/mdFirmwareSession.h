@@ -8,7 +8,9 @@
 #include "mdLib/mdpanelsequence.h"
 #include "mdLib/mdstate.h"
 
+#include <algorithm>
 #include <array>
+#include <ctime>
 #include <cstdio>
 #include <fstream>
 #include <functional>
@@ -96,9 +98,21 @@ namespace mdFirmwareSession
 		// Every other MIDI message the firmware sends (clock, start/stop, notes, CCs, PCs).
 		std::function<void(const synthLib::SMidiEvent&)> onMidi;
 
+		// CPU time the emulator's audio blocks took (processAudio, what the plug-in's audio thread runs).
+		double audioUs = 0, audioMaxUs = 0;
+		uint64_t audioBlocks = 0;
+		void resetAudioTime() { audioUs = audioMaxUs = 0; audioBlocks = 0; }
+
 		void step()
 		{
+			// the thread's CPU time, not wall time: other work on the computer does not count
+			const auto cpuNs = [] { timespec t{}; clock_gettime(CLOCK_THREAD_CPUTIME_ID, &t); return double(t.tv_sec) * 1e9 + double(t.tv_nsec); };
+			const double t0 = cpuNs();
 			m_hw.processAudio(m_outputs, g_block, 0);
+			const double us = (cpuNs() - t0) / 1000.0;
+			audioUs += us;
+			audioMaxUs = std::max(audioMaxUs, us);
+			++audioBlocks;
 			m_left.insert(m_left.end(), m_out[0].begin(), m_out[0].end());
 			m_right.insert(m_right.end(), m_out[1].begin(), m_out[1].end());
 			m_frames += g_block;
@@ -131,6 +145,21 @@ namespace mdFirmwareSession
 		{
 			while(m_frames < _frame)
 				step();
+		}
+
+		// Queue a message and return at once, as the plug-in hands the device its MIDI.
+		void post(const Bytes& _bytes)
+		{
+			synthLib::SMidiEvent e(synthLib::MidiEventSource::Host);
+			if(!_bytes.empty() && _bytes[0] == 0xf0)
+				e.sysex.assign(_bytes.begin(), _bytes.end());
+			else
+			{
+				e.a = _bytes.size() > 0 ? _bytes[0] : 0;
+				e.b = _bytes.size() > 1 ? _bytes[1] : 0;
+				e.c = _bytes.size() > 2 ? _bytes[2] : 0;
+			}
+			m_hw.sendMidi(e);
 		}
 
 		// Queue a message; returns the frames until the firmware UART consumed it.

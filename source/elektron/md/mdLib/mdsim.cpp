@@ -49,6 +49,7 @@ namespace md
 			u.txShiftBusy = false;
 			u.txShift = 0;
 			u.txCyclesRemaining = 0;
+			u.txBacklog.clear();
 			// u.txCallback is wiring, deliberately preserved across reset.
 		}
 	}
@@ -226,15 +227,23 @@ namespace md
 
 	uint8_t Sim::computeUartStatus(const unsigned _uart) const
 	{
-		// UM 12.4.1.3 Status Register. UART1 retains immediate legacy delivery.
+		// UM 12.4.1.3 Status Register. UART1 sends at once unless it is paced.
 		// Once UART2 uses its internal baud generator, TxRDY describes the holding
-		// register and TxEMP additionally requires an idle shift register.
+		// register and TxEMP additionally requires an idle shift register. UART1 does the same when
+		// paced (setMidiTransmitCharacterCycles, B-010).
 		uint8_t usr = 0;
 
 		if(_uart < g_uartCount)
 		{
 			const auto& uart = m_uart[_uart];
-			if(_uart != g_uartPanel || !panelTransmitTimingActive())
+			if(_uart == g_uartMidi && midiTransmitPaced())
+			{
+				if(!uart.txHoldingFull)
+					usr |= g_usrTxRdy;
+				if(!uart.txHoldingFull && !uart.txShiftBusy)
+					usr |= g_usrTxEmp;
+			}
+			else if(_uart != g_uartPanel || !panelTransmitTimingActive())
 				usr |= g_usrTxEmp | g_usrTxRdy;
 			else if(uart.txEnabled)
 			{
@@ -302,6 +311,26 @@ namespace md
 			return;
 		}
 
+		if(_uart == g_uartMidi && midiTransmitPaced())
+		{
+			// Paced MIDI: the byte waits its turn on the wire; TxRDY comes back when the holding
+			// register is free again. A write the firmware makes while it is full is kept, not lost.
+			if(u.txHoldingFull)
+			{
+				if(!u.txBacklog.push(_value))
+				{
+					flushMidiTransmitter();
+					if(u.txCallback)
+						u.txCallback(_value);
+				}
+				return;
+			}
+			u.txHolding = _value;
+			u.txHoldingFull = true;
+			startMidiShiftRegister();
+			return;
+		}
+
 		if(u.txCallback)
 			u.txCallback(_value);
 
@@ -336,6 +365,8 @@ namespace md
 				uart.modePointer = 0;
 				break;
 			case 3:
+				if(_uart == g_uartMidi)
+					flushMidiTransmitter();
 				uart.txEnabled = false;
 				uart.txHoldingFull = false;
 				uart.txShiftBusy = false;
@@ -354,6 +385,8 @@ namespace md
 					armTransmitReady(_uart);
 				break;
 			case 2:
+				if(_uart == g_uartMidi)
+					flushMidiTransmitter();
 				uart.txEnabled = false;
 				uart.txHoldingFull = false;
 				m_uartTxIrqArmed[_uart] = false;
@@ -406,6 +439,62 @@ namespace md
 		uart.txShiftBusy = true;
 		uart.txCyclesRemaining = panelCharacterCycles();
 		armTransmitReady(g_uartPanel);
+	}
+
+	void Sim::setMidiTransmitCharacterCycles(const uint32_t _cycles)
+	{
+		if(!_cycles)
+			flushMidiTransmitter();
+		m_midiTxCharacterCycles = _cycles;
+	}
+
+	void Sim::startMidiShiftRegister()
+	{
+		auto& uart = m_uart[g_uartMidi];
+		if(uart.txShiftBusy || !uart.txHoldingFull)
+			return;
+		uart.txShift = uart.txHolding;
+		uart.txShiftBusy = true;
+		uart.txCyclesRemaining = m_midiTxCharacterCycles;
+		// The byte leaves as it starts (its timestamp is the cycle it was written when the wire was
+		// free); the character time only holds the next one back.
+		if(uart.txCallback)
+			uart.txCallback(uart.txShift);
+		uint8_t next = 0;
+		uart.txHoldingFull = uart.txBacklog.pop(next);
+		uart.txHolding = next;
+		armTransmitReady(g_uartMidi);
+	}
+
+	void Sim::stepMidiTransmitter(uint32_t _cycles)
+	{
+		auto& uart = m_uart[g_uartMidi];
+		while(uart.txShiftBusy && _cycles >= uart.txCyclesRemaining)
+		{
+			_cycles -= uart.txCyclesRemaining;
+			uart.txCyclesRemaining = 0;
+			uart.txShiftBusy = false;
+			startMidiShiftRegister();
+			if(!uart.txShiftBusy)
+				armTransmitReady(g_uartMidi);
+		}
+		if(uart.txShiftBusy)
+			uart.txCyclesRemaining -= _cycles;
+	}
+
+	// Everything still on its way leaves at once (pacing switched off, the transmitter reset).
+	void Sim::flushMidiTransmitter()
+	{
+		auto& uart = m_uart[g_uartMidi];
+		const auto send = [&](const uint8_t _b) { if(uart.txCallback) uart.txCallback(_b); };
+		// the byte in the shift register has left already
+		if(uart.txHoldingFull)
+			send(uart.txHolding);
+		for(uint8_t b = 0; uart.txBacklog.pop(b);)
+			send(b);
+		uart.txShiftBusy = false;
+		uart.txHoldingFull = false;
+		uart.txCyclesRemaining = 0;
 	}
 
 	void Sim::stepPanelTransmitter(uint32_t _cycles)
@@ -523,12 +612,16 @@ namespace md
 		stepTimer(0, g_timer1Base, _cycles);
 		stepTimer(1, g_timer2Base, _cycles);
 		stepPanelTransmitter(_cycles);
+		if(midiTransmitPaced())
+			stepMidiTransmitter(_cycles);
 	}
 
 	uint32_t Sim::cyclesUntilNextUartTransmit() const
 	{
 		const auto& uart = m_uart[g_uartPanel];
-		return uart.txShiftBusy ? uart.txCyclesRemaining : g_noTimerInterruptDeadline;
+		const auto& midi = m_uart[g_uartMidi];
+		return std::min(uart.txShiftBusy ? uart.txCyclesRemaining : g_noTimerInterruptDeadline,
+			midi.txShiftBusy ? midi.txCyclesRemaining : g_noTimerInterruptDeadline);
 	}
 
 	uint32_t Sim::cyclesUntilNextTimerInterrupt() const

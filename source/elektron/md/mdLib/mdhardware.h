@@ -222,6 +222,22 @@ namespace md
 			registerExternalInteraction();
 			return m_realtimeMidiIn.tryPush(_bytes);
 		}
+		// B-010: the bytes of a SysEx message reach the firmware's MIDI UART no faster than this
+		// (0: all at once, as before). A real UART takes one byte at a time at the wire's speed; this
+		// emulated one takes a whole message at once, and the firmware's receive interrupt then runs
+		// back to back for all of it (a 5.4 KB pattern dump: about 17 ms in which the sequencer does
+		// not run, heard as swing while the editor pushes lock edits). Only Elektron SysEx is paced;
+		// channel messages and other SysEx go in at once. 125 KB/s: a pattern in 43 ms, no sequencer
+		// delay measured from 31 to 250 KB/s (mdDeskFirmwareTest plocktiming). At 3.1 and 62.5 KB/s the
+		// MM's sixth DigiPRO voice stays silent in mmDigiproFirmwareTest (timing-dependent, not
+		// understood; 31, 125 and 250 KB/s pass).
+		static constexpr uint32_t g_defaultSysexIngressBytesPerSecond = 125000;
+		void setSysexIngressRate(const uint32_t _bytesPerSecond) { m_sysexIngressCyclesPerByte = _bytesPerSecond ? g_ucClockHz / _bytesPerSecond : 0; }
+		// The same on the way out: the MIDI UART sends at most this many bytes a second (0: at once, as
+		// before). Its transmit interrupt otherwise runs back to back for a whole dump the firmware
+		// sends (a pattern read-back: about 17 ms the sequencer stands).
+		static constexpr uint32_t g_defaultMidiTransmitBytesPerSecond = 125000;
+		void setMidiTransmitRate(const uint32_t _bytesPerSecond) { m_uc.setMidiTransmitRate(_bytesPerSecond); }
 		void readMidiOut(std::vector<synthLib::SMidiEvent>& _midiOut)
 		{
 			m_uc.readMidiOut(_midiOut, m_midiOutputNativeOrigin.load(std::memory_order_relaxed));
@@ -251,7 +267,7 @@ namespace md
 		bool isMidiIngressIdle() const
 		{
 			return !m_midiSysexTransfer.ownsMidiWire()
-				&& m_midiInByteCursor == 0 && m_midiIn.empty()
+				&& m_midiInByteCursor == 0 && m_midiIn.empty() && m_midiClockBypass.empty()
 				&& m_realtimeMidiIn.size() == 0
 				&& m_uc.queuedMidiRxBytes() == 0;
 		}
@@ -400,6 +416,12 @@ namespace md
 		std::atomic<uint64_t> m_scheduledMidiOverflow{0};
 		dsp56k::RingBuffer<synthLib::SMidiEvent, 16384, true> m_midiIn;
 		size_t m_midiInByteCursor = 0;
+		// Paced SysEx ingress (setSysexIngressRate): the cycle the next byte may enter the UART.
+		uint64_t m_sysexIngressCyclesPerByte = g_ucClockHz / g_defaultSysexIngressBytesPerSecond;
+		uint64_t m_sysexIngressNextCycle = 0;
+		// MIDI realtime bytes (clock, start, stop...) that arrive while a paced SysEx is the only
+		// message on its way: they go in between its bytes, as on a wire.
+		FixedByteQueue<256> m_midiClockBypass;
 		RealtimeMidiByteQueue<64> m_realtimeMidiIn;
 
 		// Panel input events pending delivery to UART2 RX.

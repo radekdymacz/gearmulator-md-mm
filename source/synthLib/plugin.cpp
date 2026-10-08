@@ -399,6 +399,11 @@ namespace synthLib
 					m_pendingSysexInput.sysex.clear();
 				}
 			}
+
+			// The chunk is folded into m_pendingSysexInput (and the whole message pushed if this was its
+			// last piece); pushing the raw fragment too gave the device headless slices of the dump. A
+			// fragment with no start before it is dropped the same way. (Upstream 0f1aeed14.)
+			return;
 		}
 
 		m_midiIn.push_back(_ev);

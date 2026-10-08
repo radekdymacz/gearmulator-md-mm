@@ -127,6 +127,14 @@ namespace md
 
 		if(!m_rom.isValid())
 			return;
+		// B-010: the MIDI UART at a pace the firmware keeps time at. GEARMULATOR_MDMM_MIDI_PACING=0 turns
+		// it off (bytes in and out at once, as before) to compare; "in" or "out" keeps only that side.
+		const auto* const midiPacing = std::getenv("GEARMULATOR_MDMM_MIDI_PACING");
+		const std::string pacing = midiPacing ? midiPacing : "";
+		if(pacing == "0" || pacing == "out")
+			setSysexIngressRate(0);
+		if(pacing != "0" && pacing != "in")
+			m_uc.setMidiTransmitRate(g_defaultMidiTransmitBytesPerSecond);
 		m_uc.setMidiTransmitTap([this](const uint8_t _byte)
 		{
 			m_midiSysexTransfer.observeTransmitByte(_byte);
@@ -1029,7 +1037,7 @@ namespace md
 		// racing this observation is visible at the next instruction boundary.
 		if(!projectRestorePending && (m_midiSysexTransfer.ownsMidiWire()
 			|| m_midiInByteCursor != 0
-			|| !m_midiIn.empty()
+			|| !m_midiIn.empty() || !m_midiClockBypass.empty()
 			|| m_realtimeMidiIn.size() != 0))
 			pumpMidiIngress();
 
@@ -1365,12 +1373,17 @@ namespace md
 			// skip stays transparent.
 			const bool dspTxClear = !m_dspMixer.hdi08().hasTX()
 				&& !m_dspProducer.hdi08().hasTX();
+			// A paced SysEx between two of its bytes (B-010) waits for a cycle, not for the
+			// firmware: the idle loop may be skipped up to that cycle.
+			const bool sysexWaits = m_midiInByteCursor != 0 && m_sysexIngressCyclesPerByte
+				&& m_sysexIngressNextCycle > m_schedUcCyclesDone && m_midiClockBypass.empty()
+				&& !m_midiIn.empty() && !m_midiIn.front().sysex.empty();
 			if(((probeCount++ & 15u) == 0) && (isMonomachine() || dspTxClear)
 				&& m_schedUcCyclesDone < clampStop
 					&& !m_pendingFlashRestoreActive.load(std::memory_order_acquire)
 					&& !m_schedulerHostPumpDirty.load(std::memory_order_acquire)
 					&& !m_dspMixer.hasDeferredHostRx() && !m_dspProducer.hasDeferredHostRx()
-					&& !m_midiSysexTransfer.ownsMidiWire() && m_midiInByteCursor == 0)
+					&& !m_midiSysexTransfer.ownsMidiWire() && (m_midiInByteCursor == 0 || sysexWaits))
 				{
 					const double remaining = (subTarget
 						- static_cast<double>(m_schedUcCyclesDone) / ucPerFrame) * ucPerFrame;
@@ -1385,12 +1398,15 @@ namespace md
 								: static_cast<uint32_t>(std::min<uint64_t>(maxCycles,
 									deadline - m_schedUcCyclesDone));
 						}
+						if(sysexWaits)
+							maxCycles = static_cast<uint32_t>(std::min<uint64_t>(maxCycles,
+								m_sysexIngressNextCycle - m_schedUcCyclesDone));
 						const auto limit = m_uc.idleSelfBranchInstructions(maxCycles);
 						uint32_t instructions = 0;
 						// Keep external input polling at each omitted instruction
 						// boundary; a producer still wakes the ordinary path.
 						for(; instructions < limit; ++instructions)
-							if(m_panelIn.hasPending() || !m_midiIn.empty()
+							if(m_panelIn.hasPending() || (!m_midiIn.empty() && !sysexWaits) || !m_midiClockBypass.empty()
 								|| m_realtimeMidiIn.size() != 0
 								|| m_midiSysexTransfer.ownsMidiWire())
 								break;
@@ -1722,6 +1738,14 @@ namespace md
 						static_cast<uint32_t>(m_model), row, 0);
 				}
 			}
+			else if(event.sysex.empty() && event.a >= 0xf8 && m_midiInByteCursor != 0 && m_midiIn.size() == 1
+				&& !m_midiIn.front().sysex.empty())
+			{
+				// A realtime byte while a paced SysEx is the only message on its way: it goes in
+				// between the SysEx's bytes (nothing else waits, so the order of the rest holds).
+				if(!m_midiClockBypass.tryPush(event.a))
+					return;
+			}
 			else
 			{
 				// Both this producer and Device/control callers hold the owning
@@ -1779,14 +1803,29 @@ namespace md
 				: (type == synthLib::M_PROGRAMCHANGE || type == synthLib::M_AFTERTOUCH
 					|| event.a == synthLib::M_QUARTERFRAME || event.a == synthLib::M_SONGSELECT)
 					? 2u : type < 0xf0 ? 3u : 1u;
+			// Only the Elektron SysEx the firmware acts on is paced; anything else (SDS, a host's tuning
+			// dump) goes in at once as before, so it never holds up the messages behind it (the idea of
+			// upstream 474c8e091, which drops such SysEx before its rate limiter).
+			const bool paced = m_sysexIngressCyclesPerByte && event.sysex.size() > 4 && event.sysex[1] == 0x00
+				&& event.sysex[2] == 0x20 && event.sysex[3] == 0x3c;
 			while(m_midiInByteCursor < byteCount)
 			{
+				if(paced)
+				{
+					// at most a byte's time ahead (the cycle count can restart)
+					if(m_sysexIngressNextCycle > m_schedUcCyclesDone + m_sysexIngressCyclesPerByte)
+						m_sysexIngressNextCycle = m_schedUcCyclesDone;
+					if(m_schedUcCyclesDone < m_sysexIngressNextCycle)
+						return false;
+				}
 				const auto cursor = m_midiInByteCursor;
 				const uint8_t byte = !event.sysex.empty() ? event.sysex[cursor]
 					: cursor == 0 ? event.a : cursor == 1 ? event.b : event.c;
 				if(!m_uc.tryQueueMidiRx(byte))
 					return false;
 				++m_midiInByteCursor;
+				if(paced)
+					m_sysexIngressNextCycle = std::max(m_sysexIngressNextCycle, m_schedUcCyclesDone) + m_sysexIngressCyclesPerByte;
 			}
 			(void)m_midiIn.pop_front();
 			m_midiInByteCursor = 0;
@@ -1802,6 +1841,13 @@ namespace md
 			(void)pumpRealtime(true,
 				m_midiSysexTransfer.realtimeWriteBoundary());
 			return;
+		}
+
+		for(uint8_t clock = 0; m_midiClockBypass.tryPeek(clock);)
+		{
+			if(!m_uc.tryQueueMidiRx(clock))
+				return;
+			(void)m_midiClockBypass.tryPop(clock);
 		}
 
 		// Once a normal MIDI event has begun, finish it before switching back to the

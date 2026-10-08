@@ -103,6 +103,11 @@ namespace md
 			return m_sim.availableRxBytes(Sim::g_uartPanel);
 		}
 
+		// B-010: UART1 sends at most _bytesPerSecond (0: at once). Call from the CPU thread.
+		void setMidiTransmitRate(const uint32_t _bytesPerSecond)
+		{
+			m_sim.setMidiTransmitCharacterCycles(_bytesPerSecond ? static_cast<uint32_t>(g_ucClockHz / _bytesPerSecond) : 0);
+		}
 		// Present a MIDI byte to the firmware over UART1 RX. Call from the CPU thread.
 		bool tryQueueMidiRx(uint8_t _byte)
 		{

@@ -172,6 +172,10 @@ namespace md
 
 		// Register a sink for bytes the firmware transmits on this UART (UTB writes).
 		void setTransmitCallback(unsigned _uart, TransmitCallback _callback);
+		// B-010: UART1 (MIDI) sends a byte every _cycles (0: at once, the legacy delivery). The
+		// firmware's transmit interrupt then fires once a character, as on the real UART, instead of
+		// running back to back for a whole dump (a 5.4 KB pattern: about 17 ms the sequencer stands).
+		void setMidiTransmitCharacterCycles(uint32_t _cycles);
 
 		// tryQueueRx rejects the newest byte when full and records an overflow.
 		// queueRx is retained for compatibility; lossless callers must use tryQueueRx.
@@ -297,6 +301,8 @@ namespace md
 			bool txShiftBusy = false;
 			uint8_t txShift = 0;
 			uint32_t txCyclesRemaining = 0;
+			// MIDI pacing only: bytes written while the holding register was full (none are lost)
+			ByteQueue<256> txBacklog;
 		};
 
 		uint8_t computeParallelData() const;
@@ -310,6 +316,11 @@ namespace md
 		uint32_t panelCharacterCycles() const;
 		void    startPanelShiftRegister();
 		void    stepPanelTransmitter(uint32_t _cycles);
+		bool    midiTransmitPaced() const { return m_midiTxCharacterCycles != 0; }
+		void    startMidiShiftRegister();
+		void    stepMidiTransmitter(uint32_t _cycles);
+		void    flushMidiTransmitter();
+		uint32_t m_midiTxCharacterCycles = 0;
 		void    armTransmitReady(unsigned _uart);
 
 		// --- Timer internals ------------------------------------------------------
