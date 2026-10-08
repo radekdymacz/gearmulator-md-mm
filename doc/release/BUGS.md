@@ -4,6 +4,18 @@
 repository; the site sends reports to the contact address. Newest first. Each entry:
 where it came from, the setup, what happens, what should happen, status.*
 
+## B-024 · Tempo drag fails when starting from a saved project
+
+- **From:** the journeys (md-top-tempo-drag), 2026-10-08.
+- **What happens:** the tempo drag does nothing when the editor starts from a saved project at 105.8 BPM; from fresh settings it works. Maybe host clock sync in the saved settings blocks it.
+- **Status:** open.
+
+## B-023 · Undo after an Alt-drag doesn't restore every track
+
+- **From:** the journeys (md-sound-control-all right after md-sound-value-keys), 2026-10-08, both hosts.
+- **What happens:** after an Alt-drag (Control All), ⌘Z does not bring every track back; it looks like separate edits get merged into one undo step.
+- **Status:** open (product bug, not the test).
+
 ## B-022 · Doesn't work on Windows 10 with WebView2 installed
 
 - **From:** several Discord users, 2026-10-08 (details still missing: editor version, what they see).
