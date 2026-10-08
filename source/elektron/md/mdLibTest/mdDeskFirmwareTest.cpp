@@ -1810,31 +1810,102 @@ namespace
 		rig.page(R"({"op":"ready"})");
 		rig.runUntil([&] { return desk.isReady() && desk.documents().global && desk.documents().patterns.size() == 128 && desk.documents().kits.size() == 64 && desk.documents().songs.size() == 32; }, 60000);
 		const int active = desk.documents().global ? desk.documents().global->position : -1;
-		size_t sent = 0;
+		// As the session imports (mdSyxSession.h): every item a "set" with one gesture id, four per session step,
+		// nothing waited for; then until the desk is idle. 0.3.4: SYX_PLAYING=1 imports while the sequencer plays
+		// (the stream at MIDI cable speed); stopped, the stream goes as fast as the machine reads. The emulated
+		// time it takes is printed. SYX_KINDS=kit,pattern imports only those; SYX_SEQUENTIAL=1 one at a time, each
+		// until the desk is idle. Before 0.3.4 an import this fast ended with most read-backs timed out ("Push
+		// failed": the firmware answers one dump at a time, hundreds were asked at once) and the page showing old
+		// patterns, though the firmware held the new ones; the desks now ask at most deskCore::g_maxReadBacks.
+		std::vector<std::string> items;
+		const std::string kinds = std::getenv("SYX_KINDS") ? std::getenv("SYX_KINDS") : "global,kit,pattern,song";
 		const auto set = [&](const char* _kind, const ed::json::Value& _doc)
 		{
-			rig.page(std::string(R"({"op":"set","g":777,"kind":")") + _kind + R"(","doc":)" + ed::json::write(_doc) + "}");
-			++sent;
-			rig.runUntil([&] { return !desk.isBusy(); }, 5000);
+			if(kinds.find(_kind) == std::string::npos)
+				return;
+			items.push_back(std::string(R"({"op":"set","g":777,"kind":")") + _kind + R"(","doc":)" + ed::json::write(_doc) + "}");
 		};
 		for(const auto& [s, g] : f.md.globals)
 			if(s == active && g.version == 6 && g.revision == 1)	// the session leaves out an older OS's globals
 				set("global", ed::globalToJson(g));
-		std::printf("  before: pattern %d kit %d global %d\n", desk.linkState().pattern ? *desk.linkState().pattern : -1, desk.linkState().kit ? *desk.linkState().kit : -1, active);
 		for(const auto& [s, k] : f.md.kits) set("kit", ed::kitToJson(k));
-		std::printf("  after kits: pattern %d kit %d\n", desk.linkState().pattern ? *desk.linkState().pattern : -1, desk.linkState().kit ? *desk.linkState().kit : -1);
 		for(const auto& [s, p] : f.md.patterns) set("pattern", ed::patternToJson(p));
-		std::printf("  after patterns: pattern %d kit %d global %d\n", desk.linkState().pattern ? *desk.linkState().pattern : -1, desk.linkState().kit ? *desk.linkState().kit : -1, desk.documents().global ? desk.documents().global->position : -1);
 		for(const auto& [s, g] : f.md.songs) set("song", ed::songToJson(g));
+		const size_t sent = items.size();
+		const bool playing = std::getenv("SYX_PLAYING") && std::string(std::getenv("SYX_PLAYING")) == "1";
+		if(playing)
+		{
+			rig.page(R"({"op":"play","id":990})");
+			rig.runUntil([&] { return rig.pageTelemetry().playing; }, 2000);
+		}
+		const auto secs = [&] { return double(rig.machine().now()) / g_rate; };
+		const double t0 = secs();
+		// SYX_SEQUENTIAL=1: one at a time, each until the desk is idle (P7's first form of this test)
+		const bool sequential = std::getenv("SYX_SEQUENTIAL") && std::string(std::getenv("SYX_SEQUENTIAL")) == "1";
+		for(size_t i = 0; i < items.size(); ++i)
+		{
+			rig.page(items[i]);
+			if(sequential)
+				rig.runUntil([&] { return !desk.isBusy(); }, 10000);
+			else if(i % 4 == 3)
+				rig.run(8);
+		}
+		rig.runUntil([&] { return !desk.isBusy(); }, 900000);
+		const double t1 = secs();
+		std::printf("  sent to the machine:");
+		for(const auto& [k, v] : rig.messageKinds)
+			std::printf(" %02x:%zu", k, v);
+		std::printf("\n");
+		std::printf("  import %s: %zu documents (%zu kits, %zu patterns, %zu songs) in %.1f s (emulated time)\n", playing ? "while playing" : "stopped",
+			sent, f.md.kits.size(), f.md.patterns.size(), f.md.songs.size(), t1 - t0);
+		if(playing)
+		{
+			check(rig.pageTelemetry().playing, "the machine still plays after the import");
+			rig.page(R"({"op":"stop","id":991})");
+		}
 		rig.run(2000);
+		// The firmware itself, past the desk: each imported pattern asked for directly
+		if(kinds.find("pattern") != std::string::npos)
+		{
+			auto& m = rig.machine();
+			const auto prev = m.onSysex;
+			std::optional<ed::MdPattern> got;
+			uint8_t want = 0;
+			m.onSysex = [&](const Bytes& _b) { if(auto p = ed::decodeMdPattern(_b); p && p->position == want) got = p; if(prev) prev(_b); };
+			size_t fwSame = 0;
+			std::string fwOff;
+			for(const auto& [s, p] : f.md.patterns)
+			{
+				got.reset();
+				want = s;
+				m.send(ed::mdPatternRequest(s));
+				for(int i = 0; i < 250 && !got; ++i)
+					rig.run(20);
+				if(got && ed::encodeMdPattern(*got) == ed::encodeMdPattern(p))
+					++fwSame;
+				else
+					fwOff += " p" + std::to_string(s + 1) + (got ? "" : "(no reply)");
+			}
+			m.onSysex = prev;
+			std::printf("  the firmware itself: %zu of %zu patterns as in the file%s%s\n", fwSame, f.md.patterns.size(), fwOff.empty() ? "" : "; not:", fwOff.c_str());
+			check(fwSame == f.md.patterns.size(), "every imported pattern is in the firmware as in the file (asked directly)");
+		}
 		size_t same = 0, total = 0;
 		std::vector<std::string> off;
 		const auto& v = desk.documents();
+		std::string offSlots;
 		const auto cmp = [&](const char* _k, const int _s, const Bytes& _a, const std::optional<Bytes>& _b)
 		{
+			if(kinds.find(_k) == std::string::npos)
+				return;
 			++total;
-			if(_b && *_b == _a) ++same;
-			else if(off.size() < 8)
+			if(_b && *_b == _a)
+			{
+				++same;
+				return;
+			}
+			offSlots += " " + std::string(_k).substr(0, 1) + std::to_string(_s + 1);
+			if(off.size() < 8)
 			{
 				std::string d;
 				if(_b)
@@ -1850,6 +1921,7 @@ namespace
 			cmp("global", active, ed::encodeMdGlobal(f.md.globals.at(static_cast<uint8_t>(active))), v.global ? std::optional<Bytes>(ed::encodeMdGlobal(*v.global)) : std::nullopt);
 		std::printf("  %zu documents sent, %zu of %zu read back equal%s", sent, same, total, off.empty() ? "\n" : "; not equal:");
 		for(const auto& o : off) std::printf(" %s", o.c_str());
+		if(!offSlots.empty()) std::printf("\n  not equal:%s", offSlots.c_str());
 		if(!off.empty()) std::printf("\n");
 		// Measured on the AE backup (OS 1.2x era): its globals are format 5/1 (OS 1.63 stores 6/1, converting them),
 		// and two kit names hold bytes the contract's name does not carry; everything else is byte-exact.

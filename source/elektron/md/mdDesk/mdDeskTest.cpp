@@ -2770,6 +2770,52 @@ namespace
 			check(sent.size() == 2, "and goes 100 ms after the one before");
 		}
 
+		// 0.3.4: the cable's pace only while the machine plays. Stopped: dumps as fast as the machine reads them
+		// (a pattern in 43 ms), still nothing over a dump it applies and the newest dump of a document wins;
+		// values and value SysEx at once. Play starting mid-transfer slows the rest; play stopping speeds it up.
+		{
+			std::vector<std::vector<uint8_t>> sent;
+			StreamPolicy v = policy;
+			v.valueBytesPerSecond = 3125;
+			v.valueBurstBytes = 30;
+			v.latestIntervalMs = 100;
+			SysexOut s([&](const std::vector<uint8_t>& _b) { sent.push_back(_b); }, v);
+			check(s.playing() && s.policy().bytesPerSecond == 3125, "a new stream starts at the cable's pace (the safe one)");
+			s.setPlaying(false, 0);
+			check(!s.playing() && s.policy().bytesPerSecond == 125000 && s.policy().settleMs == 250, "stopped: the machine's read speed, the same settle");
+			int values = 0;
+			for(int i = 0; i < 40; ++i)
+				s.value(i, 3, [&values] { ++values; }, 0);
+			s.sendLatest(7, request, false, 0);
+			s.sendLatest(7, request, false, 0);
+			check(values == 40 && sent.size() == 2 && s.waiting() == 0, "stopped: values and value SysEx go at once (no budget, no interval)");
+			sent.clear();
+			for(uint8_t p = 0; p < 4; ++p)
+				s.send(dump(p, 1), false, 0);
+			s.send(dump(3, 9), false, 0);
+			check(sent.size() == 1 && s.waiting() == 3 && s.coalesced() == 1, "stopped: one dump at a time, the newest of a waiting document wins");
+			s.send(request, false, 1);
+			s.pump(43);
+			check(sent.size() == 1, "stopped: the next dump waits until the machine has read the one before");
+			s.pump(44.3);
+			check(sent.size() == 2, "stopped: then it goes, back to back (43 ms a pattern, not the cable's 1.73 s)");
+			// play starts while dumps wait: the rest goes at cable speed, each after the one before is applied
+			s.setPlaying(true, 50);
+			check(s.policy().bytesPerSecond == 3125 && s.policy().settleBetweenDumps && sent.size() == 2, "play starts: the cable's pace");
+			s.pump(337);
+			check(sent.size() == 2, "playing: the next dump waits until the one before is read and applied");
+			s.pump(338.6);
+			check(sent.size() == 3 && sent[2][9] == 2, "then it goes");
+			s.pump(1338.6);
+			check(sent.size() == 3, "playing: the dump after it waits for the cable's 1.73 s");
+			s.setPlaying(false, 1400);
+			check(sent.size() == 4 && sent[3][9] == 3 && sent[3][10] == 9, "play stops: the queue speeds up at once (the newest dump of pattern 4)");
+			s.pump(1400 + 43.3 + 249);
+			check(sent.size() == 4, "the request still waits for the read and the settle after the last dump");
+			s.pump(1e6);
+			check(sent.size() == 5 && sent[4] == request && !s.sending(1e6), "then it goes");
+		}
+
 		// No pacing (bytesPerSecond 0): at once, in order, as before.
 		std::vector<std::vector<uint8_t>> direct;
 		SysexOut at([&](const std::vector<uint8_t>& _b) { direct.push_back(_b); });

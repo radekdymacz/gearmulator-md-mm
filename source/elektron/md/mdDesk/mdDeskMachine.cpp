@@ -1314,7 +1314,9 @@ namespace mdDesk
 				+ 1.5 * m_out.policy().wireMs(replyBytes(_ref.kind)) + streamTimeoutMs();
 		};
 		using K = Pushes::Effect::Kind;
-		for(const auto& e : m_pushes.pump(_now, policyOf, timeoutOf))
+		if(m_out.sending(_now))
+			m_pushes.restartAsked(_now);
+		for(const auto& e : m_pushes.pump(_now, policyOf, timeoutOf, deskCore::g_maxReadBacks))
 		{
 			switch(e.kind)
 			{
@@ -1734,6 +1736,8 @@ namespace mdDesk
 
 	void MdMachine::tick(const double _now, const Documents& _view)
 	{
+		// 0.3.4: cable speed only while the sequencer plays (a machine without telemetry counts as playing)
+		m_out.setPlaying(!m_telemetry.valid || m_telemetry.playing, _now);
 		m_out.pump(_now);
 		// A sample on its way owns the wire: no status polls or loads meanwhile (their replies would come
 		// late and their timeouts would run out).

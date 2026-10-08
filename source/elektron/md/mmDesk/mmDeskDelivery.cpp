@@ -167,9 +167,8 @@ namespace mmDesk
 	deskCore::PushPolicy MmMachine::pushPolicy(const Kind _kind) const
 	{
 		auto policy = deskCore::wirePolicy(m_profile.push, m_profile.wire, replyBytes(_kind));
-		// B-014: no faster than a MIDI cable carries the dump (the newest value waits meanwhile)
-		if(m_profile.pushBytesPerSecond > 0)
-			policy.minIntervalMs = std::max(policy.minIntervalMs, double(replyBytes(_kind)) * 1000.0 / m_profile.pushBytesPerSecond);
+		// B-014: no faster than the stream carries the dump (a MIDI cable's pace while playing; the newest value waits meanwhile)
+		policy.minIntervalMs = std::max(policy.minIntervalMs, m_stream.policy().wireMs(replyBytes(_kind)));
 		return policy;
 	}
 
@@ -238,7 +237,9 @@ namespace mmDesk
 		const double timeout = m_profile.wire ? g_wireReadBackTimeoutMs : g_readBackTimeoutMs;
 		const auto timeoutOf = [timeout](const Ref&) { return timeout; };
 		using K = Pushes::Effect::Kind;
-		for(auto& e : m_pushes.pump(_now, policyOf, timeoutOf))
+		if(m_stream.sending(_now))
+			m_pushes.restartAsked(_now);
+		for(auto& e : m_pushes.pump(_now, policyOf, timeoutOf, deskCore::g_maxReadBacks))
 		{
 			switch(e.kind)
 			{

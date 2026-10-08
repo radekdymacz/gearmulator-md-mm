@@ -23,7 +23,6 @@ namespace mmDesk
 			double rate = deskCore::DinPacer::g_bytesPerSecond;
 			if(const char* r = std::getenv("GEARMULATOR_MDMM_EDIT_RATE"); r && *r)
 				rate = std::max(0.0, std::atof(r));
-			e.pushBytesPerSecond = rate;
 			e.stream.bytesPerSecond = rate;
 			e.stream.ingestBytesPerSecond = 125000;
 			e.stream.settleMs = 250;
@@ -186,6 +185,8 @@ namespace mmDesk
 
 	void MmMachine::tick(const double _now, const Documents& _view)
 	{
+		// 0.3.4: cable speed only while the sequencer plays
+		m_stream.setPlaying(m_playing, _now);
 		m_stream.pump(_now);
 		pumpSequence(_now);
 		// The emulator takes requests once its start screen is gone; over HW MIDI the status polls

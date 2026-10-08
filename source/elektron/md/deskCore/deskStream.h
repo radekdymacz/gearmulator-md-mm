@@ -27,8 +27,29 @@ namespace deskCore
 		double valueBytesPerSecond = 0;		// 0: values are not budgeted
 		double valueBurstBytes = 0;
 		double latestIntervalMs = 0;
+		// A dump after a dump waits for the settle too (true), or only until the machine has read the one before
+		// (false: dumps back to back at the machine's read speed, as md::Hardware feeds them; a request still waits
+		// for the settle after the last one).
+		bool settleBetweenDumps = true;
 
 		double wireMs(const size_t _bytes) const { return bytesPerSecond > 0 ? double(_bytes) * 1000.0 / bytesPerSecond : 0.0; }
+		// 0.3.4: the same stream while the machine's sequencer stands. No audio timing to protect, so no cable:
+		// dumps go back to back as fast as the machine reads them (as md::Hardware feeds them, 125 KB/s), still
+		// nothing else over a dump it applies (a request waits for the read and the settle), still the newest dump
+		// of a document wins while it waits; values unbudgeted, value SysEx at once. Measured (mdDeskFirmwareTest
+		// syximport, a full backup's 128 patterns while stopped): 13.7 s, every pattern in the firmware as in the
+		// file; with the settle between dumps too, 46.9 s and the same result.
+		StreamPolicy stopped() const
+		{
+			if(bytesPerSecond <= 0)
+				return *this;
+			StreamPolicy s = *this;
+			s.bytesPerSecond = ingestBytesPerSecond > 0 ? ingestBytesPerSecond : bytesPerSecond;
+			s.valueBytesPerSecond = 0;
+			s.latestIntervalMs = 0;
+			s.settleBetweenDumps = false;
+			return s;
+		}
 		double ingestMs(const size_t _bytes) const
 		{
 			const double rate = ingestBytesPerSecond > 0 ? ingestBytesPerSecond : bytesPerSecond;
@@ -48,21 +69,48 @@ namespace deskCore
 	//   priority notes and a key's held value: never wait for the value budget (they pass waiting values), but
 	//            keep their place after SysEx.
 	//   after    work that must follow what was sent before it (the working kit's edits after a pattern dump).
-	// Pure: the caller gives the time and whether a sample is active.
+	// Two paces (0.3.4): the policy given (a MIDI cable's) while the machine plays, StreamPolicy::stopped() while
+	// it stands (setPlaying). A transfer that is under way when play starts goes on at cable speed; when play
+	// stops, what waits goes at the fast pace. Starts in the playing pace (the safe one) until told.
+	// Pure: the caller gives the time, whether a sample is active and whether the machine plays.
 	class Stream
 	{
 	public:
 		using Bytes = std::vector<uint8_t>;
 		using Send = std::function<void(const Bytes&)>;
 
-		explicit Stream(Send _wire = {}, StreamPolicy _policy = {}) : m_wire(std::move(_wire)), m_policy(_policy)
+		explicit Stream(Send _wire = {}, StreamPolicy _policy = {})
+			: m_wire(std::move(_wire)), m_playingPolicy(_policy), m_stoppedPolicy(_policy.stopped()), m_policy(_policy)
 		{
 			m_tokens = m_policy.valueBurstBytes;
 		}
 
 		// The engine can send SysEx at all.
 		bool open() const { return static_cast<bool>(m_wire); }
+		// The pace in force now (the cable's while playing).
 		const StreamPolicy& policy() const { return m_policy; }
+		bool playing() const { return m_playing; }
+
+		// The machine's sequencer started or stopped: the pace changes from now on.
+		void setPlaying(const bool _playing, const double _nowMs)
+		{
+			if(_playing == m_playing)
+				return;
+			m_playing = _playing;
+			m_policy = _playing ? m_playingPolicy : m_stoppedPolicy;
+			if(_playing)
+			{
+				// values start with a full burst at cable speed
+				m_tokens = m_policy.valueBurstBytes;
+				m_tokensAtMs = _nowMs;
+			}
+			else if(m_bulkFreeAtMs > _nowMs && m_policy.bytesPerSecond > 0)
+			{
+				// the dump on the "wire" is already with the machine: its remaining cable time is not waited for
+				m_bulkFreeAtMs = std::min(m_bulkFreeAtMs, std::max(_nowMs, m_readAtMs));
+			}
+			pump(_nowMs);
+		}
 
 		// Any SysEx but the sample's.
 		void send(const Bytes& _message, const bool _sampleActive, const double _nowMs)
@@ -86,7 +134,7 @@ namespace deskCore
 		{
 			if(!m_wire)
 				return;
-			if(_sampleActive || m_policy.latestIntervalMs <= 0)
+			if(_sampleActive || m_playingPolicy.latestIntervalMs <= 0)
 			{
 				send(_message, _sampleActive, _nowMs);
 				return;
@@ -213,7 +261,7 @@ namespace deskCore
 		void clear()
 		{
 			m_queue.clear();
-			m_bulkFreeAtMs = m_settledAtMs = 0;
+			m_bulkFreeAtMs = m_settledAtMs = m_readAtMs = 0;
 			m_latestAtMs.clear();
 			m_tokens = m_policy.valueBurstBytes;
 		}
@@ -248,7 +296,11 @@ namespace deskCore
 			switch(_i.lane)
 			{
 			case Lane::Sysex:
-				return !paced() || (_nowMs >= m_settledAtMs && (!isBulk(_i.bytes) || _nowMs >= m_bulkFreeAtMs));
+				if(!paced())
+					return true;
+				if(!isBulk(_i.bytes))
+					return _nowMs >= m_settledAtMs;
+				return _nowMs >= m_bulkFreeAtMs && _nowMs >= (m_policy.settleBetweenDumps ? m_settledAtMs : m_readAtMs);
 			case Lane::Latest:
 			{
 				if(paced() && _nowMs < m_settledAtMs)
@@ -273,7 +325,8 @@ namespace deskCore
 				if(paced() && isBulk(_i.bytes))
 				{
 					m_bulkFreeAtMs = std::max(m_bulkFreeAtMs, _nowMs) + m_policy.wireMs(_i.bytes.size());
-					m_settledAtMs = _nowMs + m_policy.ingestMs(_i.bytes.size()) + m_policy.settleMs;
+					m_readAtMs = std::max(m_readAtMs, _nowMs) + m_policy.ingestMs(_i.bytes.size());
+					m_settledAtMs = m_readAtMs + m_policy.settleMs;
 				}
 				m_wire(_i.bytes);
 				break;
@@ -350,11 +403,15 @@ namespace deskCore
 		}
 
 		Send m_wire;
-		StreamPolicy m_policy;
+		StreamPolicy m_playingPolicy;
+		StreamPolicy m_stoppedPolicy;
+		StreamPolicy m_policy;		// the one in force
+		bool m_playing = true;
 		std::deque<Bytes> m_held;
 		std::deque<Item> m_queue;
 		double m_bulkFreeAtMs = 0;
 		double m_settledAtMs = 0;
+		double m_readAtMs = 0;
 		std::map<int, double> m_latestAtMs;
 		double m_tokens = 0;
 		double m_tokensAtMs = 0;
