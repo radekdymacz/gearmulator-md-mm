@@ -154,3 +154,30 @@ jobs:
           npx --yes wrangler@4 deploy
           curl -fsS https://mdmm.dev/latest.json | python3 -c 'import json,sys; d=json.load(sys.stdin); print("mdmm.dev/latest.json says", d["version"])' \
             || echo "::warning::mdmm.dev/latest.json is not readable yet (cache, or the deploy did not take)."
+
+      - name: Announce on Discord
+        # Only for the real publish event (not a manual re-run), and only when the webhook secret exists:
+        # #announcements on the mdmm.dev Discord server.
+        if: steps.release.outputs.skip == 'false' && github.event_name == 'release'
+        env:
+          DISCORD_WEBHOOK: ${{ secrets.DISCORD_RELEASE_WEBHOOK }}
+        run: |
+          set -euo pipefail
+          if [[ -z "${DISCORD_WEBHOOK}" ]]; then
+            echo "::notice title=No Discord post::DISCORD_RELEASE_WEBHOOK is not set."
+            exit 0
+          fi
+          gh api "repos/${GITHUB_REPOSITORY}/releases/tags/${TAG}" > "${RUNNER_TEMP}/release.json"
+          python3 - "${RUNNER_TEMP}/release.json" > "${RUNNER_TEMP}/discord.json" <<'PY'
+          import json, re, sys
+          r = json.load(open(sys.argv[1]))
+          body = r.get("body") or ""
+          # the notes up to the first "## Testing" / "## Platforms" section, links unchanged, at most ~1500 characters
+          body = re.split(r"\n## (Testing|Platforms)", body)[0].strip()
+          if len(body) > 1500:
+              body = body[:1500].rsplit("\n", 1)[0] + "\n…"
+          text = f"**{r['name']}** is out: https://mdmm.dev/get/\n\n{body}\n\nFull notes: {r['html_url']}"
+          print(json.dumps({"content": text[:1990], "allowed_mentions": {"parse": []}}))
+          PY
+          curl -fsS -H "Content-Type: application/json" -d @"${RUNNER_TEMP}/discord.json" "${DISCORD_WEBHOOK}" > /dev/null
+          echo "Posted ${TAG} to Discord."
