@@ -219,6 +219,24 @@ namespace mdDesk
 		m_out.send(_message, m_sds.active(), now());
 	}
 
+	// B-019: an imported file's message as it is, in the stream like the editor's own (a dump at the machine's read
+	// speed while it stands, at cable speed while it plays; a request after the dumps before it are applied).
+	std::string MdMachine::sendAsIs(const Bytes& _message, const bool)
+	{
+		if(!canSendSysex())
+			return "This engine cannot send SysEx to the machine.";
+		sendSysex(_message);
+		return {};
+	}
+
+	MdMachine::AsIs MdMachine::asIs() const
+	{
+		AsIs a;
+		a.queued = m_out.waiting() + m_out.held();
+		a.busy = m_out.sending(now()) || m_out.held() > 0;
+		return a;
+	}
+
 	// B-014: a live edit's SysEx: one that sets a value goes in the stream's latest lane (the newest per value, at
 	// most 10 a second); a machine change is no value (its CCs follow it) and keeps its order.
 	void MdMachine::sendLiveSysex(const LiveEdit& _e, const Bytes& _message)

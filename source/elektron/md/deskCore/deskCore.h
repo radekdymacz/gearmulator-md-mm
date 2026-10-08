@@ -302,6 +302,25 @@ namespace deskCore
 		virtual Context context() const = 0;
 		// Something is on the wire (the page's TX LED).
 		virtual bool busy() const = 0;
+
+		// B-019: a message of a file the person imports, to the machine as it is, after what was sent before it: the
+		// firmware decides what it takes (a MIDI cable into the machine). _dump: a user-data dump, which goes the
+		// adapter's way for dumps (the Monomachine's SYSEX RECV); anything else (a read-back's request) goes into
+		// the stream. No document is pushed or settled: what the machine holds is read back by the caller.
+		// "" = on its way; else why not.
+		virtual std::string sendAsIs(const Bytes& _message, const bool _dump)
+		{
+			(void)_message; (void)_dump;
+			return "This engine cannot send SysEx to the machine.";
+		}
+		// What the messages sent as they are wait for.
+		struct AsIs
+		{
+			size_t queued = 0;		// messages not on the wire yet (the stream's queue, SYSEX RECV's)
+			bool busy = false;		// something is still on its way, or the machine still reads or applies it
+			std::string waitsFor;	// the person must act first (HW MIDI: open SYSEX RECV, press SEND); "" = nothing
+		};
+		virtual AsIs asIs() const { return {}; }
 	};
 
 	// The engine-neutral core (P6): documents as observed + pending, pure edits (the

@@ -60,6 +60,8 @@ namespace mmDesk
 		deskCore::Lifecycle lifecycle() const override { return deskCore::lifecycleOf(facts()); }
 		Context context() const override { return {m_curKit, m_curGlobal}; }
 		bool busy() const override;
+		std::string sendAsIs(const Bytes& _message, bool _dump) override;
+		AsIs asIs() const override;
 
 		// ---- MmAdapter: Monomachine facts from the device ----
 		void setProbe(Probe _probe) override;

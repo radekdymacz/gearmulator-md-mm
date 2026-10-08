@@ -66,7 +66,7 @@ no journey yet); **not testable** (why). "—": the editor has no such feature.
 | M mutes the selected track, Alt+M every track, 0 unmutes all | md-keys-mute PASS | mm-keys-mute PASS |
 | Window fits the screen, remembers its size; top bar fits 1280 px | not testable: the window size is the host's | same |
 | MIDI mapping (Control workspace, LEARN) | skipped: hidden by design until the controller feature exists | same |
-| SysEx import / export | not testable: native file chooser | same |
+| SysEx import | md-lib-syx-import (with GEARMULATOR_MDMM_SYX_FILE: the file the native chooser would give; kits, as from a cable, read back) | mm-lib-syx-import (the same, on SYSEX RECV) |
 
 ## Sequence
 

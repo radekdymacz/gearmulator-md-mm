@@ -270,6 +270,12 @@ namespace mdJucePlugin
 				m_selfTest = kind;
 #endif
 		auto url = m_selfTest.isNotEmpty() ? juce::URL(m_file).withParameter("selftest", m_selfTest) : juce::URL(m_file);
+#if MDMM_DIAGNOSTICS
+		// B-019: a .syx for the import journeys (mdPageEditor's chooseSyx opens it without a chooser); the page only
+		// learns that there is one
+		if(juce::File(juce::SystemStats::getEnvironmentVariable("GEARMULATOR_MDMM_SYX_FILE", {})).existsAsFile())
+			url = url.withParameter("syxfile", "1");
+#endif
 		if(m_fileRecv)
 			url = url.withParameter(pageBridge::g_fileRecvQuery, "file");
 		// 0.3.4: the page shows which version it is (skins/shared/deskAbout.js)

@@ -2135,7 +2135,7 @@ function setEng(st){S.eng=st;const [txt,led]=ENG[st],b=document.querySelector(".
 /* SysEx in the example: a pretend file with a few kits and patterns */
 Syx.host={choose:()=>Syx.preview({ok:true,file:"example.syx",model:"Machinedrum",fullBackup:false,problemCount:0,problems:[],items:{kit:[{slot:0,name:"WAREHOUSE",overwrites:true},{slot:9,name:"",overwrites:false}],pattern:[{slot:0,name:"A01",kit:0,overwrites:true},{slot:1,name:"A02",kit:9,overwrites:false}],song:[],global:[{slot:0,name:"Global 1",overwrites:true}]}}),
  exportAll:()=>toast("In the plug-in: a save dialog, then every document as one .syx."),
- start:k=>{let d=0;const n=4;const t=setInterval(()=>{d++;Syx.progress({done:d,total:n,running:d<n,text:d<n?"":"Imported (example)."});if(d>=n)clearInterval(t)},300)},stop:()=>Syx.progress({done:0,total:0,running:false,text:"Import stopped."})};
+ start:(k,s)=>{let d=0;const n=4;const t=setInterval(()=>{d++;Syx.progress(d<n?{phase:"send",done:d,total:n,running:true,text:""}:{phase:"done",done:n,total:n,running:false,text:"3 imported, 1 ignored by the machine (example).",report:{taken:3,ignored:1,items:[{kind:"kit",slot:9,name:"",outcome:"ignored",text:"kit 10: the machine ignored this dump and kept what it held (format 3.1, 1233 bytes)"}]}});if(d>=n)clearInterval(t)},300)},stop:()=>Syx.progress({phase:"done",done:0,total:0,running:false,text:"Import stopped."})};
 /* the start-up card's keys in the example: a pretend install (the plug-in's host checks and copies the file) */
 Boot.host={chooseRom:()=>{Boot.rom({ok:true,text:"\u2713 Machinedrum OS 1.63 found (example)"});setTimeout(()=>startEngine("emu"),900)},
  revealRom:()=>toast("In the plug-in: the ROM folder opens in Finder."),recheck:()=>startEngine("emu")};

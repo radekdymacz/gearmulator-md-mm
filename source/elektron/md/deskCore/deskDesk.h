@@ -99,7 +99,12 @@ namespace deskCore
 		{
 			m_machine->onSysex(_message);
 			flush();
+			if(m_sysexTap)
+				m_sysexTap(_message);
 		}
+
+		// B-019: every SysEx the machine sends, after the adapter had it (a .syx import's read-back). Unset: none.
+		void setSysexTap(std::function<void(const Bytes&)> _tap) { m_sysexTap = std::move(_tap); }
 
 		void tick()
 		{
@@ -167,6 +172,7 @@ namespace deskCore
 
 		std::function<double()> m_nowMs;
 		std::function<void()> m_ready;
+		std::function<void(const Bytes&)> m_sysexTap;
 		Core<Model> m_core;
 		std::unique_ptr<Adapter> m_machine;
 	};

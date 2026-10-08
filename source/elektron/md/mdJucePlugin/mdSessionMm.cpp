@@ -142,42 +142,10 @@ namespace mdJucePlugin
 			o.globals = v.globals;
 			return o;
 		}
-		static elektronData::json::Value json(const elektronData::SyxKind _k, const Docs& _d, const uint8_t _s)
+		// The slots the machine is on (B-019: the preview marks the imported items that land in what plays).
+		static SyxPlaying playing(const mmDesk::Desk& _d)
 		{
-			namespace ed = elektronData;
-			switch(_k)
-			{
-			case ed::SyxKind::Pattern: return ed::mmPatternToJson(_d.patterns.at(_s));
-			case ed::SyxKind::Kit: return ed::mmKitToJson(_d.kits.at(_s));
-			case ed::SyxKind::Song: return ed::mmSongToJson(_d.songs.at(_s));
-			default: return ed::mmGlobalToJson(_d.globals.at(_s));
-			}
-		}
-		static bool importable(const elektronData::SyxItem&, const mmDesk::Desk&) { return true; }
-		// What OS 1.32B takes as it is: dumps of its own formats and sizes that validate (an older OS's kit
-		// dump is shorter; the firmware ignores it).
-		static std::string fits(const elektronData::SyxKind _k, const Docs& _d, const uint8_t _s)
-		{
-			namespace ed = elektronData;
-			const auto older = [](const int _v, const int _r, const int _wv, const int _wr)
-			{
-				return _v == _wv && _r == _wr ? std::string() : "format " + std::to_string(_v) + "/" + std::to_string(_r) + " (OS 1.32B stores " + std::to_string(_wv) + "/" + std::to_string(_wr) + ")";
-			};
-			switch(_k)
-			{
-			// patterns of format 5/1 (an older OS) are stored as they are (measured on the firmware): only validation
-			case ed::SyxKind::Pattern: { const auto& p = _d.patterns.at(_s); const auto v = ed::validate(p); return v.empty() ? std::string() : v.front(); }
-			case ed::SyxKind::Kit:
-			{
-				static const auto size = ed::encodeMmKit(ed::MmKit{}).size();
-				const auto& k = _d.kits.at(_s);
-				auto w = older(k.version, k.revision, 2, 1);
-				if(w.empty() && ed::encodeMmKit(k).size() != size) w = "an older OS's kit (" + std::to_string(ed::encodeMmKit(k).size()) + " bytes, OS 1.32B's are " + std::to_string(size) + ")";
-				return w;
-			}
-			case ed::SyxKind::Song: { const auto& g = _d.songs.at(_s); return older(g.version, g.revision, 2, 1); }
-			default: { const auto& g = _d.globals.at(_s); return older(g.version, g.revision, 3, 1); }
-			}
+			return {_d.currentPattern(), _d.currentKit(), _d.currentSong(), _d.currentGlobal()};
 		}
 	};
 

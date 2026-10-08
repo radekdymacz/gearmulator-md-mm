@@ -507,7 +507,7 @@
 		/* SysEx import and export (P7): the window's file dialogs; the plug-in parses and writes */
 		syxChoose() { send({ op: "chooseSyx" }); },
 		syxExport() { send({ op: "syxExport" }); },
-		syxStart(kinds) { send({ op: "syxImport", kinds }, { onResult: r => { if (!r.ok) V().toast(r.errors[0]); } }); },
+		syxStart(kinds, skip) { send({ op: "syxImport", kinds, skip: skip || [] }, { onResult: r => { if (!r.ok) V().toast(r.errors[0]); } }); },
 		syxStop() { send({ op: "syxCancel" }); },
 		revealRom() { send({ op: "revealRomFolder" }); },
 		recheck() { send({ op: "recheckFirmware" }, { onResult: r => V().toast(r.ok ? r.note : r.errors[0]) }); },

@@ -27,6 +27,8 @@
 
 #include "deskWire/mmWire.h"
 
+#include "../mdJucePlugin/mdSyxSession.h"	// the session's .syx import, header only (B-019)
+
 #include <cmath>
 #include <cstdlib>
 #include <deque>
@@ -755,63 +757,188 @@ namespace
 		}
 	}
 
-	// P7: a full backup .syx imported through the desk (one "set" per document, one gesture) and read back from
-	// the firmware. The user's own file, read in place (MM_SYX, default Radek's download); skipped without it.
-	void syxImport(const Bytes& _rom)
+	// The session's import traits for the rig (mdSessionMm.cpp's, without the plug-in).
+	struct MmSyxTraits
 	{
-		std::puts("syx import");
-		namespace ed = elektronData;
-		const char* path = std::getenv("MM_SYX");
-		const std::string file = path ? path : "/Users/radek/Downloads/AE_LIVE_ELEKTRONS_BACKUP_010308/mm010308.syx";
-		std::ifstream in(file, std::ios::binary);
-		if(!in) { std::printf("  skip: %s not found\n", file.c_str()); return; }
-		const Bytes bytes((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
-		const auto f = ed::parseSyx(bytes);
-		check(f.model == ed::SyxModel::Mm && f.problems.empty(), "the file is a Monomachine dump with no problems");
+		using Docs = ed::MmDocuments;
+		static constexpr ed::SyxModel model = ed::SyxModel::Mm;
+		static constexpr const char* name = "Monomachine";
+		static const Docs& docs(const ed::SyxFile& _f) { return _f.mm; }
+	};
+
+	ed::MmDocuments machineDocs(const mmDesk::Desk& _desk)
+	{
+		const auto& v = _desk.documents();
+		ed::MmDocuments o;
+		o.patterns = v.patterns;
+		o.kits = v.kits;
+		o.songs = v.songs;
+		o.globals = v.globals;
+		return o;
+	}
+
+	// P7: Export SysEx as the session does (writeSyx of every document the desk holds) from a fresh machine, to
+	// SYX_EXPORT_TO: a file of the owner's own, for syximport.
+	void syxExport(const Bytes& _rom)
+	{
+		std::puts("syx export");
+		const std::string to = std::getenv("SYX_EXPORT_TO") ? std::getenv("SYX_EXPORT_TO") : "mm-export.syx";
 		Rig r(_rom);
 		r.msg(R"({"op":"ready"})");
 		r.desk->setProbe(mmDesk::Desk::Probe::Running);
 		r.run(600);
-		while(r.desk->loaded() < 288) r.run(100);
-		r.run(1000);
-		size_t sent = 0;
-		int refused = 0;
-		const auto set = [&](const char* _kind, const ed::json::Value& _doc)
-		{
-			r.msg(std::string(R"({"op":"set","g":777,"kind":")") + _kind + R"(","doc":)" + ed::json::write(_doc) + "}"); ++sent;
-			const auto res = r.lastResult();
-			if(res.isObject() && !res.find("ok")->asBool() && refused++ < 3) std::printf("    %s refused: %s\n", _kind, ed::json::write(*res.find("errors")).c_str());
-			r.run(20);
-		};
-		// what OS 1.32B takes as it is (the session's SyxTraits::fits): its own formats and sizes, validating
-		const auto kitSize = ed::encodeMmKit(ed::MmKit{}).size();
-		std::map<uint8_t, ed::MmKit> kits; std::map<uint8_t, ed::MmPattern> pats; std::map<uint8_t, ed::MmSong> songs;
-		for(const auto& [s, k] : f.mm.kits) if(k.version == 2 && k.revision == 1 && ed::encodeMmKit(k).size() == kitSize) kits[s] = k;
-		for(const auto& [s, p] : f.mm.patterns) if(ed::validate(p).empty()) pats[s] = p;
-		for(const auto& [s, g] : f.mm.songs) if(g.version == 2 && g.revision == 1) songs[s] = g;
-		std::printf("  the firmware takes %zu kits, %zu patterns and %zu songs of the file as they are (the others are an older OS's)\n", kits.size(), pats.size(), songs.size());
-		for(const auto& [s, k] : kits) set("kit", ed::mmKitToJson(k));
-		for(const auto& [s, p] : pats) set("pattern", ed::mmPatternToJson(p));
-		for(const auto& [s, g] : songs) set("song", ed::mmSongToJson(g));
 		const auto t0 = r.ms();
-		const double limit = std::getenv("MM_SYX_MS") ? std::atof(std::getenv("MM_SYX_MS")) : 600000;
-		while(r.ms() - t0 < limit)
+		while(r.desk->loaded() < 288 && r.ms() - t0 < 60000) r.run(100);
+		const auto bytes = ed::writeSyx(machineDocs(*r.desk));
+		std::ofstream out(to, std::ios::binary);
+		out.write(reinterpret_cast<const char*>(bytes.data()), static_cast<std::streamsize>(bytes.size()));
+		check(out.good() && !bytes.empty(), "wrote " + std::to_string(bytes.size()) + " bytes to " + to);
+	}
+
+	// P7, B-019: a .syx imported as the session does (mdSyxSession.h): the file's messages to the firmware as they
+	// are (the dumps on SYSEX RECV, as the editor's own), then every document read back and compared. The user's own
+	// file, read in place (MM_SYX); skipped without it. SYX_KINDS=kit,pattern imports only those; SYX_HW=1 over the
+	// HW MIDI engine (the person opens SYSEX RECV and presses SEND: the rig does both). SYX_EXPECT=all: every
+	// document must be taken (as it is or in the machine's own form).
+	void syxImport(const Bytes& _rom)
+	{
+		std::puts("syx import (as is)");
+		const char* path = std::getenv("MM_SYX");
+		const std::string file = path ? path : "";
+		std::ifstream in(file, std::ios::binary);
+		if(file.empty() || !in) { std::printf("  skip: no file (MM_SYX)\n"); return; }
+		const Bytes bytes((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
+		const bool hw = std::getenv("SYX_HW") && std::string(std::getenv("SYX_HW")) == "1";
+		Rig r(_rom, hw);
+		r.msg(R"({"op":"ready"})");
+		if(!hw)
+			r.desk->setProbe(mmDesk::Desk::Probe::Running);
+		r.run(600);
+		const auto tLoad = r.ms();
+		while(r.desk->loaded() < 288 && r.ms() - tLoad < (hw ? 900000 : 60000)) r.run(100);
+		r.run(1000);
+		std::printf("  %zu documents loaded\n", r.desk->loaded());
+
+		mdJucePlugin::SyxJob<MmSyxTraits> job;
+		const auto preview = job.open(bytes, file, machineDocs(*r.desk), {r.desk->currentPattern(), r.desk->currentKit(), r.desk->currentSong(), r.desk->currentGlobal()});
+		g_contract(preview);
+		check(preview.find("ok")->asBool(), "the preview opens the file");
+		std::printf("  preview: %d messages, %d left out;", static_cast<int>(preview.find("messages")->asNumber()), static_cast<int>(preview.find("skippedCount")->asNumber()));
+		for(const auto& [k, list] : preview.find("items")->asObject())
 		{
-			r.run(500);
-			bool busy = false;
-			for(const auto& [s, k] : kits) { const auto d = r.desk->kit(s); if(!d || ed::encodeMmKit(*d) != ed::encodeMmKit(k)) { busy = true; break; } }
-			if(!busy) for(const auto& [s, p] : pats) { const auto d = r.desk->pattern(s); if(!d || ed::encodeMmPattern(*d) != ed::encodeMmPattern(p)) { busy = true; break; } }
-			if(!busy) break;
+			std::map<std::string, int> formats;
+			for(const auto& i : list.asArray())
+				++formats[i.find("format")->asString()];
+			std::printf(" %s %zu", k.c_str(), list.asArray().size());
+			for(const auto& [f, n] : formats)
+				std::printf(" [%s x%d]", f.c_str(), n);
 		}
+		std::printf("\n");
+		std::vector<std::string> kinds;
+		{
+			const std::string k = std::getenv("SYX_KINDS") ? std::getenv("SYX_KINDS") : "global,kit,pattern,song";
+			for(const char* kind : {"global", "kit", "pattern", "song", "other"})
+				if(k.find(kind) != std::string::npos)
+					kinds.emplace_back(kind);
+		}
+		r.desk->setSysexTap([&job](const Bytes& _m) { job.onMachineSysex(_m); });
+		const auto why = job.start(kinds, {}, machineDocs(*r.desk));
+		check(why.empty(), "the import starts" + (why.empty() ? std::string() : ": " + why));
+		using Phase = mdJucePlugin::SyxJob<MmSyxTraits>::Phase;
+		const auto t0 = r.ms();
+		double sendAt = -1, readAt = -1;
+		std::optional<Value> last;
+		bool hwSent = false;
+		while(job.running() && r.ms() - t0 < 3600000)
+		{
+			if(r.desk->isInputReady())
+				if(auto p = job.step(r.desk->machine(), r.ms(), hw))
+				{
+					g_contract(*p);
+					last = *p;
+					// HW MIDI: the person puts the machine on SYSEX RECV and presses SEND once the import waits for it
+					if(hw && !hwSent && !p->find("text")->asString().empty() && p->find("text")->asString().find("SYSEX RECV") != std::string::npos)
+					{
+						hwSent = true;
+						std::puts("  the person opens SYSEX RECV and presses SEND");
+						r.userKeys(mmDesk::RecvSession::enterMacro());
+						r.run(3000);
+						r.msg(R"({"op":"hwSend","id":881})");
+					}
+				}
+			if(sendAt < 0 && job.phase() == Phase::Sending)
+				sendAt = r.ms();
+			if(readAt < 0 && job.phase() == Phase::Reading)
+				readAt = r.ms();
+			r.run(10);
+		}
+		std::printf("  import: read before %.1f s, sent in %.1f s, read back in %.1f s (emulated time)\n", (sendAt - t0) / 1000,
+			(readAt - sendAt) / 1000, (r.ms() - readAt) / 1000);
+		check(last && last->find("phase")->asString() == "done", "the import ends with a report");
+		if(!last)
+			return;
+		std::printf("  report: %s\n", last->find("text")->asString().c_str());
+		int n = 0;
+		for(const auto& i : last->find("report")->find("items")->asArray())
+			if(n++ < 24)
+				std::printf("    %s\n", i.find("text")->asString().c_str());
+		std::map<std::string, int> outcomes;
+		std::map<std::string, std::map<std::string, int>> perKind;
+		for(const auto& [item, o] : job.outcomes())
+		{
+			++outcomes[ed::syxOutcomeName(o)];
+			++perKind[ed::syxKindName(item.kind)][ed::syxOutcomeName(o)];
+		}
+		for(const auto& [k, m] : perKind)
+		{
+			std::printf("  %s:", k.c_str());
+			for(const auto& [o, c] : m)
+				std::printf(" %s %d", o.c_str(), c);
+			std::printf("\n");
+		}
+		// SYX_DIFF=1: what differs between the file's document and the machine's, per JSON field (the first few)
+		if(std::getenv("SYX_DIFF"))
+		{
+			const auto f = ed::parseSyx(bytes);
+			int shown = 0;
+			for(const auto& [item, o] : job.outcomes())
+			{
+				if(o == ed::SyxOutcome::Taken || shown >= 6)
+					continue;
+				Value a, b;
+				if(item.kind == ed::SyxKind::Pattern && f.mm.patterns.count(item.slot) && r.desk->pattern(item.slot)) { a = ed::mmPatternToJson(f.mm.patterns.at(item.slot)); b = ed::mmPatternToJson(*r.desk->pattern(item.slot)); }
+				else if(item.kind == ed::SyxKind::Kit && f.mm.kits.count(item.slot) && r.desk->kit(item.slot)) { a = ed::mmKitToJson(f.mm.kits.at(item.slot)); b = ed::mmKitToJson(*r.desk->kit(item.slot)); }
+				else if(item.kind == ed::SyxKind::Global && f.mm.globals.count(item.slot) && machineDocs(*r.desk).globals.count(item.slot)) { a = ed::mmGlobalToJson(f.mm.globals.at(item.slot)); b = ed::mmGlobalToJson(machineDocs(*r.desk).globals.at(item.slot)); }
+				else continue;
+				++shown;
+				std::string d;
+				for(const auto& [key, v] : a.asObject())
+					if(const auto* w = b.find(key); !w || *w != v)
+						d += " " + key + (d.size() < 300 && v.isNumber() && w && w->isNumber() ? "=" + std::to_string(static_cast<int>(v.asNumber())) + "->" + std::to_string(static_cast<int>(w->asNumber())) : "");
+				std::printf("    diff %s %d (%s):%s\n", ed::syxKindName(item.kind), item.slot + 1, ed::syxOutcomeName(o), d.c_str());
+			}
+		}
+		check(outcomes["no reply"] == 0, "every document of the file is read back (" + std::to_string(outcomes["no reply"]) + " without a reply)");
+		check(outcomes["taken"] > 0, "documents are imported (" + std::to_string(outcomes["taken"]) + ")");
+		if(std::getenv("SYX_EXPECT") && std::string(std::getenv("SYX_EXPECT")) == "all")
+			check(outcomes["ignored"] == 0 && outcomes["differs"] == 0 && outcomes["unknown"] == 0, "the machine took every document of the file");
+		// the desk's documents are what the machine took
+		r.run(2000);
 		size_t same = 0, total = 0;
 		std::string off;
-		for(const auto& [s, k] : kits) { ++total; const auto d = r.desk->kit(s); if(d && ed::encodeMmKit(*d) == ed::encodeMmKit(k)) ++same; else if(off.size() < 80) { off += " kit " + std::to_string(s + 1);
-			if(d) { const auto a = ed::encodeMmKit(k), b = ed::encodeMmKit(*d); int n = 0; for(size_t i = 0; i < std::min(a.size(), b.size()) && n < 8; ++i) if(a[i] != b[i]) { char t[32]; std::snprintf(t, sizeof(t), " @%zu %02x->%02x", i, a[i], b[i]); off += t; ++n; } if(a.size() != b.size()) off += " size " + std::to_string(a.size()) + "/" + std::to_string(b.size()); } else off += " missing"; } }
-		for(const auto& [s, p] : pats) { ++total; const auto d = r.desk->pattern(s); if(d && ed::encodeMmPattern(*d) == ed::encodeMmPattern(p)) ++same; else if(off.size() < 80) off += " pattern " + std::to_string(s + 1); }
-		for(const auto& [s, g] : songs) { ++total; const auto d = r.desk->song(s); if(d && ed::encodeMmSong(*d) == ed::encodeMmSong(g)) ++same; else if(off.size() < 80) off += " song " + std::to_string(s + 1); }
-		std::printf("  %zu documents sent, %zu of %zu read back equal after %.0f s emulated%s%s\n", sent, same, total, (r.ms() - t0) / 1000, off.empty() ? "" : "; not equal:", off.c_str());
-		check(same == total, "the documents the firmware takes read back from it as in the file (" + std::to_string(same) + " of " + std::to_string(total) + ")");
-		check(r.desk->coreState().history().size() == 1, "the whole import is one undo step (" + std::to_string(r.desk->coreState().history().size()) + ")");
+		const auto f = ed::parseSyx(bytes);
+		for(const auto& [item, o] : job.outcomes())
+		{
+			if(o != ed::SyxOutcome::Taken)
+				continue;
+			++total;
+			if(ed::syxCanonical(machineDocs(*r.desk), item.kind, item.slot) == ed::syxCanonical(f.mm, item.kind, item.slot))
+				++same;
+			else if(off.size() < 80)
+				off += std::string(" ") + ed::syxKindName(item.kind) + std::to_string(item.slot + 1);
+		}
+		check(same == total, "the desk's documents are what the machine took (" + std::to_string(same) + " of " + std::to_string(total) + ")" + off);
+		check(r.desk->coreState().history().size() == 0, "an import is no undo step (the machine took a dump, nothing was edited)");
 	}
 
 	// Zero crossings per second / 2 over a window of the left channel.
@@ -1922,6 +2049,8 @@ int main(const int _argc, char** _argv)
 			trigKinds(rom);
 		if(only == "syximport")
 			syxImport(rom);
+		if(only == "syxexport")
+			syxExport(rom);
 		if(only.empty() || only == "hostclock")
 			hostClock(rom);
 		if(only.empty() || only == "patterns")
