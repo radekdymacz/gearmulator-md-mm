@@ -62,7 +62,9 @@ const Keys = (() => {
 	});
 	/* The key probe (the start tests, scripts/macos|windows|linux/smoke_mdmm.*): with ?keyprobe=1 in the page's
 	   address (the plug-in adds it when GEARMULATOR_MDMM_KEYPROBE=1) a line at the bottom left says which keys reached
-	   the page, a text the operating system's accessibility API reads. Nothing is shown without it. */
+	   the page, a text the operating system's accessibility API reads. Nothing is shown without it. While a dialog
+	   marked aria-modal is open (the start-up card is one) the line lives inside it: WebKit's accessibility tree leaves
+	   out everything outside an open modal dialog. */
 	const probing = typeof location !== "undefined" && /[?&]keyprobe=1\b/.test(location.search || "");
 	function probe() {
 		if (!probing || !document.body) return;
@@ -70,11 +72,14 @@ const Keys = (() => {
 		if (!p) {
 			p = document.createElement("div"); p.id = "keyprobe"; p.setAttribute("role", "status");
 			p.style.cssText = "position:fixed;left:8px;bottom:8px;z-index:2147483647;padding:6px 10px;background:#000;color:#fff;font:12px monospace";
-			document.body.appendChild(p);
 		}
-		p.textContent = "Keys seen: " + (seen.length ? seen.join(" ") : "none");
+		const modal = [...document.querySelectorAll('[aria-modal="true"]')].filter(d => !d.closest("[hidden]")).pop();
+		const home = modal || document.body;
+		if (p.parentNode !== home) home.appendChild(p);
+		const text = "Keys seen: " + (seen.length ? seen.join(" ") : "none");
+		if (p.textContent !== text) p.textContent = text;
 	}
-	if (probing) setTimeout(probe, 0);
+	if (probing) setInterval(probe, 500);
 	const label = b => [...(b.mod ? b.mod.split("+").map(x => ({ cmd: "⌘", alt: "⌥", shift: "⇧" }[x])) : []), b.keys.map(k => ({ Space: "Space", ArrowLeft: "←", ArrowRight: "→", ArrowUp: "↑", ArrowDown: "↓", Escape: "Esc", Delete: "Delete", Backspace: "⌫", Enter: "Enter" }[k] || k)).join(" / ")].join("");
 	return { bind, list: () => list.slice(), label, free, seen: () => seen.slice() };
 })();
