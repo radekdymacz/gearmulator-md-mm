@@ -339,3 +339,6 @@ body > main { flex: 1 0 auto; }
 @media (max-width: 760px) { .nav a.disc span { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; } }
 @media (max-width: 420px) { .nav { gap: 6px; } .nav .btn-sm { font-size: 13px; padding-left: 8px; padding-right: 8px; } .nav .themebtn { width: 30px; height: 30px; } .top .brand b { font-size: 12px; } }
 @media (max-width: 360px) { .top .brand b { display: none; } }
+/* The ghost button on the dark download band */
+.cta .btn-ghost { color: var(--hw-text); border-color: var(--hw-line); }
+.cta .btn-ghost:hover { background: var(--hw-key); color: #fff; }

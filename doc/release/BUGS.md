@@ -4,7 +4,7 @@
 repository; the site sends reports to the contact address. Newest first. Each entry:
 where it came from, the setup, what happens, what should happen, status.*
 
-## B-017 · Monomachine: PLAY refused as "panel busy" after edits, a pattern edit not read back while playing
+## B-021 · Monomachine: PLAY refused as "panel busy" after edits, a pattern edit not read back while playing
 
 - **From:** the 0.3.4 journeys (`mm-seq-first-beat`, both hosts), 2026-10-08, after B-014's stream was merged. Not in 0.3.3.
 - **What happens:** after a few clicks on the piano roll, PLAY is refused ("The panel is busy (SYSEX RECV); try again") for many seconds; once playing, STOP is refused the same way and the page says "The machine did not read back the pattern that was sent".
@@ -12,13 +12,41 @@ where it came from, the setup, what happens, what should happen, status.*
 - **Fix (release 0.3.4):** the session stays on SYSEX RECV while the stream still delivers (`pumpRecv`), and PLAY or STOP asked while the panel is busy are accepted and pressed once it is free (the newest wins, given up after 10 s; RECORD and the other keys are still refused as busy). Tests: `mmDeskTest` (PLAY then STOP while a dump is taken: STOP pressed once, after it), `mmDeskFirmwareTest` (the session leaves SYSEX RECV once the stream is quiet), the MM journeys (142 pass in both hosts).
 - **Status:** fixed for 0.3.4.
 
-## B-016 · A big SysEx import ends with "Push failed" errors and old patterns on the page
+## B-020 · A big SysEx import ends with "Push failed" errors and old patterns on the page
 
 - **From:** the 0.3.4 import measurements (`mdDeskFirmwareTest <MD ROM> syximport`, a full backup imported as the session does it: four documents every 8 ms), 2026-10-08. Not reported by a user.
 - **What happens:** after the import, about 130 "Push failed: the machine did not read back pattern …" errors, and the page shows the old content of about half the patterns. The same with 0.3.3's pacing (`GEARMULATOR_MDMM_EDIT_RATE=0`) and at any stream speed; importing one document at a time is fine.
 - **Cause:** not the firmware: asked directly afterwards, it holds every pattern as in the file. Each pattern's read-back is asked for 750 ms after its push, so an import asks for hundreds at once; the firmware answers one dump at a time, the answers come seconds late, the desk gives each up after its timeout and shows a late or stale answer.
 - **Fix (release 0.3.4):** the desks ask for at most two read-backs at a time (`deskCore::g_maxReadBacks`, `Pushes::pump`), and a read-back's clock starts once the editor's stream is quiet (`Pushes::restartAsked`). Measured: 224 of 224 documents read back equal, no errors, stopped and while playing; `syximport` checks the firmware directly too.
 - **Status:** fixed for 0.3.4.
+
+## B-019 · SysEx import says "wrong OS" for most of a backup
+
+- **From:** Discord tester D, 2026-10-08 (Machinedrum, probably a public backup from an older OS).
+- **What happens:** importing a SysEx file shows mostly errors saying the OS is wrong.
+- **To check:** which OS versions' kit/pattern/song dumps we accept (only 1.63?), whether older dumps can be converted or imported partly, and that the message says what the file is and what to do.
+- **Status:** open. Import has no firmware tests with third-party files yet.
+
+## B-018 · "?" just beeps on the Mac (Monomachine)
+
+- **From:** Discord tester C, 2026-10-08, M1, latest macOS.
+- **What happens:** pressing ? (or ⇧/) gives the macOS "beep", as if no one took the key.
+- **To check:** whether the web view has keyboard focus before the first click, whether the MM page binds ? at all, and the standalone vs plug-in path (see B-015).
+- **Status:** open.
+
+## B-017 · Monomachine Perform: dragging DEC resizes the window
+
+- **From:** Discord tester C, 2026-10-08.
+- **What happens:** in Perform mode, moving the envelope's DEC (and similar) on the left side makes the page grow downwards to fit the envelope, then it jumps back when the mouse is released.
+- **Should:** the layout stays put while dragging.
+- **Status:** open.
+
+## B-016 · Standalone can't go full screen; Settings does nothing (Monomachine)
+
+- **From:** Discord tester C, 2026-10-08, Monomachine, M1, latest macOS (version not given).
+- **What happens:** the window cannot go full screen; "Settings" does nothing.
+- **To check:** the window's full-screen button / maximise in the standalone; Settings: B-007 fixed this in 0.3.2 (plug-ins have no Settings entry, the standalone's opens Audio/MIDI) — confirm the tester's version.
+- **Status:** open.
 
 ## B-015 · Cmd+C and Cmd+V do nothing (macOS: Ableton Live and the standalone)
 
@@ -36,7 +64,7 @@ where it came from, the setup, what happens, what should happen, status.*
 - **Also:** only while editing parameter locks (playing alone is fine); started with 0.3.3 (0.3.2 was fine); worse the more steps are edited.
 - **Cause (measured, `mdDeskFirmwareTest <MD ROM> plocktiming`, retired instructions per block):** the whole emulation runs on the host's audio thread. A lock edit is a whole pattern dump (5.4 KB); while the firmware reads and applies one, the 68k is busy and its idle loop cannot be skipped, so the audio thread does about 1.5 times its idle work for 50-70 ms. The desk sent up to five dumps a second during a drag. 0.3.3's B-010 pacing (the dump read at 125 KB/s) made each push's busy time longer (46 -> 69 ms) and 25 % more work, so hot time went from about 230 to 345 ms a second and heavy host buffers came about four times as often: late buffers on a slower Mac. The emulator's cost does not grow with the number of locks; the page's per-edit pattern document does (2.2 -> 4.4 KB at 288 locks, about 55 a second while drawing).
 - **Fix (branch `perf/audio-spikes`, release 0.3.4):** one stream for everything both editors send to their machine (`deskCore::Stream`, `deskCore/deskStream.h`; `mdDesk::SysexOut` in the MD desk), for every user action on the Machinedrum and the Monomachine, in lanes: dumps no faster than a MIDI cable carries them (3125 B/s: a pattern every 1.73 s, the newest dump of a document replacing a waiting one), nothing sent while the firmware reads and applies a dump (125 KB/s and 250 ms: no read-back over a dump), value SysEx (tempo, LFO, master effects, routing) at most every 100 ms per value, kit CCs, NRPN and mutes on a cable-speed budget (the newest value wins), notes passing waiting values; the TX LED lit while anything waits. The MD's live global edits (tempo, routing) are read back once at quiet, not at every value. B-010's 125 KB/s read stays. `GEARMULATOR_MDMM_EDIT_RATE` raises the rate (0: off, as 0.3.3). Measured (`scripts/mdmm-rt-check.sh`, every user action on both machines against a hot-time budget; table in `doc/modern-ux/DESIGN-edit-flow.md`): dumps in a 6 s lock drag 31 -> 5, hot time 257 -> 45 ms a second, heavy 128-frame buffers 21.7 -> 3.7 a second, 256-frame 8.5 -> 1.5; a tempo drag 71 -> 12 ms a second; `plocktiming-strict` passes. A lock change is heard at once for the first edit of a gesture, at most 1.8 s later during a drag. The page: the MD's step cells are no longer marked at every step while playing (the play head repainted 16 cells with their glows each step), WebKit's GPU process about half a core -> 6-10 % while playing.
-- **Owner decision for 0.3.4:** the cable pace only while the machine's sequencer plays. Stopped there is no audio timing to protect, so the stream goes as fast as the machine reads: dumps back to back at 125 KB/s (as `md::Hardware` feeds them), a request still waiting for the read and the 250 ms settle after the last dump, the newest dump of a document still winning, values and value SysEx at once. Play starting mid-transfer slows the rest to cable speed; play stopping speeds the queue up. Measured with `mdDeskFirmwareTest <MD ROM> syximport` (a full backup imported as the session does it, emulated time): 128 patterns stopped 13.7 s (0.3.3's pacing with B-016's fix: 12.3 s), while playing 231 s (cable speed); with the settle between dumps too, 46.9 s. Every pattern is in the firmware as in the file in each case. Test: `mdDeskTest` (the mode switch).
+- **Owner decision for 0.3.4:** the cable pace only while the machine's sequencer plays. Stopped there is no audio timing to protect, so the stream goes as fast as the machine reads: dumps back to back at 125 KB/s (as `md::Hardware` feeds them), a request still waiting for the read and the 250 ms settle after the last dump, the newest dump of a document still winning, values and value SysEx at once. Play starting mid-transfer slows the rest to cable speed; play stopping speeds the queue up. Measured with `mdDeskFirmwareTest <MD ROM> syximport` (a full backup imported as the session does it, emulated time): 128 patterns stopped 13.7 s (0.3.3's pacing with B-020's fix: 12.3 s), while playing 231 s (cable speed); with the settle between dumps too, 46.9 s. Every pattern is in the firmware as in the file in each case. Test: `mdDeskTest` (the mode switch).
 - **Workaround (0.3.3):** a larger buffer in Live (512 or 1024 samples).
 - **Should:** no drop-outs wherever upstream Gearmulator has none.
 - **Status:** fixed for 0.3.4, not yet checked by the tester.
