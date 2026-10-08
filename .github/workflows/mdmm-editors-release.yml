@@ -323,7 +323,7 @@ jobs:
           mkdir -p "${RUNNER_TEMP}/empty-data"
           GEARMULATOR_DATA_ROOT="${RUNNER_TEMP}/empty-data" ./scripts/macos/verify_mdmm_pkg_install.sh
 
-      # smoke_mdmm.sh and the pluginval step take a folder of "<product>.app/.vst3/.component": the installed bundles.
+      # smoke_mdmm.sh takes a folder of "<product>.app/.vst3/.component": the installed bundles.
       - name: Gather the installed bundles
         run: |
           set -euo pipefail
@@ -362,8 +362,8 @@ jobs:
         run: |
           . scripts/mdmm-product.env
           ./scripts/ci/mdmm_pluginval.sh --out "${RUNNER_TEMP}/pluginval" --label "macOS ${{ matrix.os }}, installed release packages" \
-            "${INSTALLED_DIR}/${MDMM_PRODUCT_NAME_MD}.vst3" "${INSTALLED_DIR}/${MDMM_PRODUCT_NAME_MM}.vst3" \
-            "${INSTALLED_DIR}/${MDMM_PRODUCT_NAME_MD}.component" "${INSTALLED_DIR}/${MDMM_PRODUCT_NAME_MM}.component"
+            "/Library/Audio/Plug-Ins/VST3/${MDMM_PRODUCT_NAME_MD}.vst3" "/Library/Audio/Plug-Ins/VST3/${MDMM_PRODUCT_NAME_MM}.vst3" \
+            "/Library/Audio/Plug-Ins/Components/${MDMM_PRODUCT_NAME_MD}.component" "/Library/Audio/Plug-Ins/Components/${MDMM_PRODUCT_NAME_MM}.component"
 
       - uses: actions/upload-artifact@v4
         if: always()

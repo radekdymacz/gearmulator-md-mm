@@ -3,7 +3,7 @@
 # firmware present, at strictness 5 and 8 (and 10 with --strict). CI runs the same tool without a ROM
 # (scripts/ci/mdmm_pluginval.sh; the pinned release is in scripts/pluginval.env).
 #
-#   scripts/mdmm-pluginval.sh [--strict] [--gui] [--products <dir>] [--out <dir>] [--no-au] [md|mm|both]
+#   scripts/mdmm-pluginval.sh [--strict] [--gui] [--products <dir>] [--out <dir>] [--no-au] [--au-installed] [md|mm|both]
 #
 #   --strict     also run strictness 10 (long: fuzzing)
 #   --gui        let pluginval open the editor windows. By default --skip-gui-tests is passed, so no window
@@ -11,6 +11,9 @@
 #   --products   the folder holding VST3/ and AU/ of a build (default: $MDMM_PRODUCTS, then
 #                build/macos-mdmm-universal/products/Release, then build/macos-mdmm/products/Release)
 #   --out        where the logs go (default: build/pluginval-<date>)
+#   --au-installed  macOS finds an AU in its registry (installed components), not by path: the AU of the build is
+#                validated only if the installed one is byte-identical; with this flag the installed one is
+#                validated anyway (and said so). Nothing is ever installed by this script
 #
 # The ROM is copied (read-only source) into a scratch data root (GEARMULATOR_DATA_ROOT), from
 # GEARMULATOR_MD_FIRMWARE_BIN / GEARMULATOR_MM_FIRMWARE_BIN or ~/Documents/Gearmulator Preview/<machine>/roms; it is
@@ -24,7 +27,7 @@ here="$(cd "$(dirname "$0")" && pwd)"
 . "${here}/mdmm-product.env"
 root="$(cd "${here}/.." && pwd)"
 
-strict=0; gui=0; products="${MDMM_PRODUCTS:-}"; out=""; au=1; which="both"
+strict=0; gui=0; au_installed=0; products="${MDMM_PRODUCTS:-}"; out=""; au=1; which="both"
 while (( $# )); do
 	case "$1" in
 		--strict) strict=1; shift ;;
@@ -32,8 +35,9 @@ while (( $# )); do
 		--products) products="$2"; shift 2 ;;
 		--out) out="$2"; shift 2 ;;
 		--no-au) au=0; shift ;;
+		--au-installed) au_installed=1; shift ;;
 		md|mm|both) which="$1"; shift ;;
-		*) echo "usage: $0 [--strict] [--gui] [--products <dir>] [--out <dir>] [--no-au] [md|mm|both]" >&2; exit 2 ;;
+		*) echo "usage: $0 [--strict] [--gui] [--products <dir>] [--out <dir>] [--no-au] [--au-installed] [md|mm|both]" >&2; exit 2 ;;
 	esac
 done
 if [[ -z "${products}" ]]; then
@@ -94,7 +98,19 @@ add_machine() {	# <short> <Machine> <product> <firmware env var value>
 		echo "WARNING: no ${machine} firmware found: that machine is validated without a ROM"
 	fi
 	[[ -d "${products}/VST3/${product}.vst3" ]] && plugins+=("${products}/VST3/${product}.vst3") || echo "missing: ${product}.vst3"
-	(( au )) && [[ -d "${products}/AU/${product}.component" ]] && plugins+=("${products}/AU/${product}.component")
+	if (( au )) && [[ -d "${products}/AU/${product}.component" ]]; then
+		# macOS loads an AU from its registry, never from the path it is given, so pluginval would test whatever
+		# is installed under that name. Validate the AU only where that is this build (nothing is installed here).
+		installed="${HOME}/Library/Audio/Plug-Ins/Components/${product}.component"
+		if [[ -d "${installed}" ]] && diff -rq "${products}/AU/${product}.component" "${installed}" > /dev/null 2>&1; then
+			plugins+=("${products}/AU/${product}.component")
+		elif (( au_installed )) && [[ -d "${installed}" ]]; then
+			echo "NOTE: validating the INSTALLED ${product}.component (it differs from this build)"
+			plugins+=("${installed}")
+		else
+			echo "SKIP: ${product}.component: the installed AU is not this build (or none is installed); install this build to validate its AU, or pass --au-installed to validate the installed one"
+		fi
+	fi
 }
 [[ "${which}" != mm ]] && add_machine md Machinedrum "${MDMM_PRODUCT_NAME_MD}" "${GEARMULATOR_MD_FIRMWARE_BIN:-}"
 [[ "${which}" != md ]] && add_machine mm Monomachine "${MDMM_PRODUCT_NAME_MM}" "${GEARMULATOR_MM_FIRMWARE_BIN:-}"

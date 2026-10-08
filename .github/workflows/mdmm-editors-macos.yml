@@ -119,7 +119,7 @@ jobs:
         if: always()
         run: |
           . scripts/mdmm-product.env
-          ./scripts/ci/mdmm_pluginval.sh --out "${RUNNER_TEMP}/pluginval" --label "macOS ${{ matrix.os }}" \
+          ./scripts/ci/mdmm_pluginval.sh --install-au --out "${RUNNER_TEMP}/pluginval" --label "macOS ${{ matrix.os }}" \
             "${PACKAGE_DIR}/${MDMM_PRODUCT_NAME_MD}.vst3" "${PACKAGE_DIR}/${MDMM_PRODUCT_NAME_MM}.vst3" \
             "${PACKAGE_DIR}/${MDMM_PRODUCT_NAME_MD}.component" "${PACKAGE_DIR}/${MDMM_PRODUCT_NAME_MM}.component"
 

@@ -12,6 +12,9 @@
 #                           caller's own folders is touched; a given folder is NOT removed)
 #     --pluginval PATH      use this pluginval (default: the pinned release of scripts/pluginval.env is downloaded
 #                           to $MDMM_PLUGINVAL_CACHE or the temp folder and its sha256 verified)
+#     --install-au          macOS: an AU is loaded by the system from its registry, not from a path, so each .component
+#                           given is copied to ~/Library/Audio/Plug-Ins/Components for the run and removed after (a runner
+#                           only; never on a developer's Mac, and it refuses to replace a component that is there)
 #     --label TEXT          written into the summary (the system, the job)
 # Writes <out>/<plug-in>-s<level>.log per run and <out>/pluginval-summary.md (appended to $GITHUB_STEP_SUMMARY too).
 # Exit status: 0 if every run passed, 1 otherwise (also for a timeout or a crash).
@@ -21,7 +24,7 @@ here="$(cd "$(dirname "$0")" && pwd)"
 # shellcheck disable=SC1091
 . "${here}/../pluginval.env"
 
-out=""; levels="5"; timeout_ms=120000; max_seconds=1800; skip_gui=0; disabled=""; data_root=""; pv=""; label=""
+out=""; levels="5"; timeout_ms=120000; max_seconds=1800; skip_gui=0; disabled=""; data_root=""; pv=""; label=""; install_au=0
 plugins=()
 while (( $# )); do
 	case "$1" in
@@ -33,6 +36,7 @@ while (( $# )); do
 		--disabled-tests) disabled="$2"; shift 2 ;;
 		--data-root) data_root="$2"; shift 2 ;;
 		--pluginval) pv="$2"; shift 2 ;;
+		--install-au) install_au=1; shift ;;
 		--label) label="$2"; shift 2 ;;
 		-*) echo "unknown option: $1" >&2; exit 2 ;;
 		*) plugins+=("$1"); shift ;;
@@ -98,7 +102,30 @@ if [[ -z "${data_root}" ]]; then
 	data_root="${scratch}/data"
 	mkdir -p "${data_root}"
 fi
-trap '[[ -n "${scratch}" ]] && rm -rf "${scratch}"' EXIT
+installed_au=()
+cleanup() {
+	for c in ${installed_au[@]+"${installed_au[@]}"}; do rm -rf "${c}"; done
+	[[ -n "${scratch}" ]] && rm -rf "${scratch}"
+	return 0
+}
+trap cleanup EXIT
+if (( install_au )); then
+	components="${HOME}/Library/Audio/Plug-Ins/Components"
+	mkdir -p "${components}"
+	for i in "${!plugins[@]}"; do
+		[[ "${plugins[$i]}" == *.component && -d "${plugins[$i]}" ]] || continue
+		target="${components}/${plugins[$i]##*/}"
+		if [[ -e "${target}" ]]; then
+			echo "::error::${target} exists already; not replacing it"
+			exit 1
+		fi
+		ditto "${plugins[$i]}" "${target}"
+		installed_au+=("${target}")
+		plugins[i]="${target}"
+	done
+	killall -9 AudioComponentRegistrar 2>/dev/null || true
+	sleep 2
+fi
 GEARMULATOR_DATA_ROOT="$(native_path "${data_root}")/"
 export GEARMULATOR_DATA_ROOT
 echo "GEARMULATOR_DATA_ROOT=${GEARMULATOR_DATA_ROOT}"
