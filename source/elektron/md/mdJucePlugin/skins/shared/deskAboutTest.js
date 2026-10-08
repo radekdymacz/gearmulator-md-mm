@@ -35,7 +35,7 @@ check(none.version === "" && none.label === "", "no version in the page's addres
 
 /* the plug-in opens the page with the build's version; both pages load the file; the keyboard view shows it */
 const host = fs.readFileSync(path.join(HERE, "../../mdWebPageHost.cpp"), "utf8");
-check(/withParameter\("version",\s*MDMM_EDITOR_VERSION\)/.test(host), "mdWebPageHost.cpp opens the page with ?version=MDMM_EDITOR_VERSION");
+check(/withParameter\("version",\s*mdmm::editorVersion\(\)\)/.test(host), "mdWebPageHost.cpp opens the page with ?version=mdmm::editorVersion()");
 for (const page of ["../mdStudio/mdStudio.html", "../mmStudio/mmStudio.html"])
 	check(fs.readFileSync(path.join(HERE, page), "utf8").includes('<script src="deskAbout.js"></script>'), `${path.basename(page)} loads deskAbout.js`);
 check(/About\.label/.test(fs.readFileSync(path.join(HERE, "deskKeyView.js"), "utf8")), "the keyboard view's head shows About.label");

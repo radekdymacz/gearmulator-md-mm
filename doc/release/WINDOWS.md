@@ -1,9 +1,11 @@
 # Windows x64
 
-The editors' Windows build: upstream's `.github/workflows/elektron-windows.yml` (unchanged) builds and packages
-both machines' standalones and VST3s; `scripts/windows/package_mdmm_editors.sh` splits the package into one zip per
-machine for a release (`mdmm-editors-release.yml`); `.github/workflows/mdmm-editors-windows.yml` (ours) builds the
-same package and starts what is in it.
+The editors' Windows build: `.github/workflows/mdmm-editors-windows.yml` (ours, called by `mdmm-editors.yml` on every
+push) runs upstream's `scripts/windows/build_mdmm.ps1` (unchanged; upstream's `elektron-windows.yml` runs it the same
+way) to build and package both machines' standalones and VST3s once, with sccache, starts what is in the package and
+runs pluginval on it; the unit tests run beside it in a job of their own, compiled without `/GL` (their links took
+most of the old 43 minutes). `scripts/windows/package_mdmm_editors.sh` splits that tested package into one zip per
+machine for a release (`mdmm-editors-release.yml`).
 
 ## The web view: WebView2 (B-002)
 
@@ -32,7 +34,7 @@ macOS and Linux keep their transports (javascript: URLs, script files).
 
 ## The start test (CI)
 
-`mdmm-editors-windows.yml` runs on pushes to `main`, `release/md-mm-*`, `release/0.*` and `feat/windows-*`, and on `mdmm-v*` tags. After the package is
+`mdmm-editors-windows.yml` runs on pushes to `main`, `release/md-mm-*`, `release/0.*`, `feat/windows-*` and `ci/**` (through `mdmm-editors.yml`). After the package is
 built, `scripts/windows/smoke_mdmm.ps1` on a clean `windows-2022` runner, with no ROM, starts each standalone and
 each VST3 (in `scripts/vst3EditorHost`, a minimal JUCE host that opens the editor and feeds silent blocks)
 and checks:

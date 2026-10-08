@@ -1,6 +1,7 @@
 #include "mdUpdater.h"
 
 #include "mdPluginProcessor.h"
+#include "mdmmVersion.h"
 
 #include "juce_events/juce_events.h"
 
@@ -10,10 +11,6 @@
 #include <process.h>
 #else
 #include <unistd.h>
-#endif
-
-#ifndef MDMM_EDITOR_VERSION
-#define MDMM_EDITOR_VERSION "0.0.0"
 #endif
 
 namespace mdJucePlugin::updates
@@ -186,7 +183,7 @@ namespace mdJucePlugin::updates
 
 	mu::Version Updater::currentVersion()
 	{
-		return mu::parseVersion(MDMM_EDITOR_VERSION).value_or(mu::Version{});
+		return mu::parseVersion(mdmm::editorVersion()).value_or(mu::Version{});
 	}
 
 	mu::Os Updater::thisOs()

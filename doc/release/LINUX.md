@@ -5,7 +5,7 @@ Linux x64 to the draft release (`.github/workflows/mdmm-editors-release.yml`):
 
 | Asset | Built by |
 |---|---|
-| `Machinedrum-Editor-Windows-x64-not-tested.zip`, `Monomachine-Editor-Windows-x64-not-tested.zip` | upstream's `elektron-windows.yml` (called as is), split per machine by `scripts/windows/package_mdmm_editors.sh` |
+| `Machinedrum-Editor-Windows-x64-not-tested.zip`, `Monomachine-Editor-Windows-x64-not-tested.zip` | `.github/workflows/mdmm-editors-windows.yml` (upstream's `build_mdmm.ps1`, as is), split per machine by `scripts/windows/package_mdmm_editors.sh` |
 | `Machinedrum-Editor-Linux-x64-not-tested.tar.gz`, `Monomachine-Editor-Linux-x64-not-tested.tar.gz` | `.github/workflows/mdmm-editors-linux.yml` (`scripts/linux/build_mdmm.sh`) |
 
 They are unsigned and nobody has used them: they go to a draft only, never to a published release, and the

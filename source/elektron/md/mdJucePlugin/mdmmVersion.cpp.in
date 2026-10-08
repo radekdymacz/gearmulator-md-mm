@@ -1,0 +1,10 @@
+// Made by CMake from mdmmVersion.cpp.in (mdmmPlugins.cmake), rewritten only when the version changes.
+#include "mdmmVersion.h"
+
+namespace mdmm
+{
+	const char* editorVersion()
+	{
+		return "@MDMM_EDITOR_VERSION@";
+	}
+}
