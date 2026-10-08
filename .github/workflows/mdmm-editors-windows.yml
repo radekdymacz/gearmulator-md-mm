@@ -4,9 +4,12 @@ name: MD/MM Editors Windows x64
 # package with upstream's elektron-windows.yml as it is (standalones, VST3s, unit tests, the VST3 load test), then
 # starts each packaged standalone on a clean Windows runner (the WebView2 runtime is part of Windows there, as on
 # a user's Windows 10 or 11) and checks that the page runs in WebView2 and the bridge goes both ways
-# (scripts/windows/smoke_mdmm.ps1), keeping a screenshot.
+# (scripts/windows/smoke_mdmm.ps1), keeping a screenshot, and runs pluginval (strictness 5, no ROM) on each VST3.
+# On an mdmm-v* tag, mdmm-editors-release.yml calls this workflow, and the release archives go to the draft
+# release only when all of it, start tests and pluginval, has passed.
 
 on:
+  workflow_call:
   workflow_dispatch:
   push:
     branches:
@@ -15,12 +18,12 @@ on:
       - "release/0.*"
       - "feat/windows-*"
       - "ci/*-ui-smoke"
-    tags:
-      - "mdmm-v*"
     paths:
       - ".github/workflows/mdmm-editors-windows.yml"
       - ".github/workflows/elektron-windows.yml"
       - "scripts/windows/**"
+      - "scripts/ci/**"
+      - "scripts/pluginval.env"
       - "scripts/vst3EditorHost/**"
       - ".gitmodules"
       - "CMakeLists.txt"
@@ -43,7 +46,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: mdmm-editors-windows-${{ github.ref }}
+  group: mdmm-editors-windows-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
@@ -89,6 +92,25 @@ jobs:
       - name: Start each standalone, check the page and the bridge, take a screenshot
         shell: pwsh
         run: ./scripts/windows/smoke_mdmm.ps1 -PackageDir "${{ runner.temp }}\package" -OutputDir "${{ runner.temp }}\smoke" -Vst3Host "$env:VST3_HOST"
+
+      # pluginval 1.0.4 (pinned, sha256-checked: scripts/pluginval.env), strictness 5, scratch data root, no ROM.
+      - name: pluginval on each VST3
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+          . scripts/mdmm-product.env
+          pkg="$(cygpath -u "${{ runner.temp }}")/package"
+          ./scripts/ci/mdmm_pluginval.sh --out "$(cygpath -u "${{ runner.temp }}")/pluginval" --label "Windows x64" \
+            "${pkg}/${MDMM_PRODUCT_NAME_MD}.vst3" "${pkg}/${MDMM_PRODUCT_NAME_MM}.vst3"
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: windows-mdmm-pluginval
+          path: ${{ runner.temp }}\pluginval
+          if-no-files-found: warn
+          retention-days: 14
 
       - uses: actions/upload-artifact@v4
         if: always()

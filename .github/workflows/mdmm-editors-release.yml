@@ -11,19 +11,36 @@ name: MD/MM Editors release installers
 # mdmm-site-release.yml, which signs the assets as published (a hand-uploaded asset wins over this job's,
 # so only the published bytes are worth signing) and writes them into mdmm.dev/latest.json
 # (doc/modern-ux/DESIGN-updates.md 2).
+# Nothing reaches the release before the tests have passed on what is packaged (the owner's rule):
+#   - macOS: macos-tests installs the two signed .pkg that macos-installers made, starts the installed standalones
+#     and VST3s (no ROM), runs auval and pluginval strictness 5 on the installed VST3 and AU, and checks the .dmg
+#     hold the very same bundles; only then macos-publish attaches the four files.
+#   - Windows and Linux: the called workflows run their start tests and pluginval on the packages they build;
+#     package-other packages the per-machine archives and checks they hold the tested files byte for byte;
+#     other-platforms attaches them after macos-publish.
+# A manual run (workflow_dispatch) with dry_run (the default) does all of it except the upload: use it to try this
+# file on a branch. Dispatching on a tag with dry_run off does the real thing again.
 
 on:
   push:
     tags:
       - "mdmm-v*"
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: Build and test everything, attach nothing to any release
+        type: boolean
+        default: true
 
 permissions:
   contents: read
 
 jobs:
-  # Unsigned, untested by a person: attached as *-not-tested archives, to a draft only (the last job).
+  # Unsigned, untested by a person: attached as *-not-tested archives, to a draft only (the last job). This is
+  # our own Windows workflow: it calls upstream's elektron-windows.yml, then starts each packaged standalone and
+  # VST3 and runs pluginval; this job, and so the attaching one, fails if any of it fails.
   build-windows:
-    uses: ./.github/workflows/elektron-windows.yml
+    uses: ./.github/workflows/mdmm-editors-windows.yml
 
   build-linux:
     uses: ./.github/workflows/mdmm-editors-linux.yml
@@ -80,10 +97,12 @@ jobs:
     runs-on: macos-15
     timeout-minutes: 120
     permissions:
-      contents: write
+      contents: read
+    outputs:
+      signed: ${{ steps.mode.outputs.signed }}
     env:
-      GH_TOKEN: ${{ github.token }}
-      TAG: ${{ github.ref_name }}
+      # A branch (dry run) has no tag: a made-up one gives the installers a numeric version.
+      TAG: ${{ startsWith(github.ref, 'refs/tags/') && github.ref_name || 'mdmm-v0.0.0-dryrun' }}
 
     steps:
       - uses: actions/checkout@v4
@@ -270,6 +289,128 @@ jobs:
           if-no-files-found: error
           retention-days: 30
 
+  # The gate: the exact signed packages are installed, as a user does, and tested; the .dmg are checked to hold the
+  # same bundles. Needs no ROM: the machine does not run, the page says "firmware needed". Two runners: the one
+  # the release is built on and the oldest hosted one.
+  macos-tests:
+    name: Test the installed packages (${{ matrix.os }})
+    needs: macos-installers
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-14, macos-15]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 45
+    env:
+      MDMM_EXPECT_SIGNED: ${{ needs.macos-installers.outputs.signed == 'true' && '1' || '0' }}
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: false
+
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: macos-mdmm-installers*
+          path: ${{ runner.temp }}/installers
+          merge-multiple: true
+
+      - name: Build the minimal VST3 host (scripts/vst3EditorHost)
+        run: ./scripts/macos/build_vst3_host.sh "${RUNNER_TEMP}/vst3host" >> "${GITHUB_ENV}"
+
+      - name: Install both packages, check the installation
+        run: |
+          set -euo pipefail
+          ls -l "${RUNNER_TEMP}/installers"
+          sudo installer -pkg "${RUNNER_TEMP}/installers/Machinedrum-Editor-macOS.pkg" -target /
+          sudo installer -pkg "${RUNNER_TEMP}/installers/Monomachine-Editor-macOS.pkg" -target /
+          mkdir -p "${RUNNER_TEMP}/empty-data"
+          GEARMULATOR_DATA_ROOT="${RUNNER_TEMP}/empty-data" ./scripts/macos/verify_mdmm_pkg_install.sh
+
+      # smoke_mdmm.sh takes a folder of "<product>.app/.vst3/.component": the installed bundles.
+      - name: Gather the installed bundles
+        run: |
+          set -euo pipefail
+          . scripts/mdmm-product.env
+          installed="${RUNNER_TEMP}/installed"
+          mkdir -p "${installed}"
+          for product in "${MDMM_PRODUCT_NAME_MD}" "${MDMM_PRODUCT_NAME_MM}"; do
+            ditto "/Applications/${product}.app" "${installed}/${product}.app"
+            ditto "/Library/Audio/Plug-Ins/VST3/${product}.vst3" "${installed}/${product}.vst3"
+            ditto "/Library/Audio/Plug-Ins/Components/${product}.component" "${installed}/${product}.component"
+          done
+          echo "INSTALLED_DIR=${installed}" >> "${GITHUB_ENV}"
+
+      - name: The disk images hold the same bundles as the packages
+        run: |
+          set -euo pipefail
+          . scripts/mdmm-product.env
+          for product in "${MDMM_PRODUCT_NAME_MD}" "${MDMM_PRODUCT_NAME_MM}"; do
+            dmg="${RUNNER_TEMP}/installers/${product// /-}-macOS.dmg"
+            mount="${RUNNER_TEMP}/dmg-${product// /-}"
+            mkdir -p "${mount}"
+            hdiutil attach -nobrowse -readonly -mountpoint "${mount}" "${dmg}" > /dev/null
+            for part in app vst3 component; do
+              diff -r "${mount}/${product}.${part}" "${INSTALLED_DIR}/${product}.${part}"
+            done
+            hdiutil detach "${mount}" > /dev/null
+            echo "${dmg##*/}: the same bundles as the installed package"
+          done
+
+      - name: Start each installed standalone and VST3, check the page and the bridge, run auval
+        run: ./scripts/macos/smoke_mdmm.sh "${INSTALLED_DIR}" "${RUNNER_TEMP}/smoke" "${VST3_HOST}"
+
+      # pluginval 1.0.4 (pinned, sha256-checked: scripts/pluginval.env), strictness 5, scratch data root, no ROM.
+      - name: pluginval on each installed VST3 and AU
+        if: always()
+        run: |
+          . scripts/mdmm-product.env
+          ./scripts/ci/mdmm_pluginval.sh --out "${RUNNER_TEMP}/pluginval" --label "macOS ${{ matrix.os }}, installed release packages" \
+            "/Library/Audio/Plug-Ins/VST3/${MDMM_PRODUCT_NAME_MD}.vst3" "/Library/Audio/Plug-Ins/VST3/${MDMM_PRODUCT_NAME_MM}.vst3" \
+            "/Library/Audio/Plug-Ins/Components/${MDMM_PRODUCT_NAME_MD}.component" "/Library/Audio/Plug-Ins/Components/${MDMM_PRODUCT_NAME_MM}.component"
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: release-macos-pluginval-${{ matrix.os }}
+          path: ${{ runner.temp }}/pluginval
+          if-no-files-found: warn
+          retention-days: 30
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: release-macos-smoke-${{ matrix.os }}
+          path: ${{ runner.temp }}/smoke
+          if-no-files-found: warn
+          retention-days: 30
+
+  # Attaches the four macOS files to the draft. Runs only after macos-tests passed, never in a dry run.
+  macos-publish:
+    name: Attach the macOS installers to the draft release
+    needs: [macos-installers, macos-tests]
+    if: ${{ !inputs.dry_run && startsWith(github.ref, 'refs/tags/mdmm-v') }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      TAG: ${{ github.ref_name }}
+      MDMM_OUT: ${{ github.workspace }}/installers
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+          submodules: false
+
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: macos-mdmm-installers*
+          path: installers
+          merge-multiple: true
+
       # A release reviewed and uploaded by hand (from a local, firmware-tested
       # build) wins: an asset that is already there is never replaced. With no
       # release yet, a draft is created for Radek to publish. A draft release
@@ -279,7 +420,7 @@ jobs:
       # unsigned run only ever touches a draft, and titles it UNSIGNED.
       - name: Attach installers to the GitHub release
         env:
-          SIGNED: ${{ steps.mode.outputs.signed }}
+          SIGNED: ${{ needs.macos-installers.outputs.signed }}
         run: |
           set -euo pipefail
           notes="doc/release/v${TAG#mdmm-v}.md"
@@ -360,16 +501,13 @@ jobs:
   # release): an existing asset is kept, and a published release is left alone with a warning (the
   # archives stay in the run's artifacts; Radek attaches them by hand if he wants them there). The
   # body gets the "not tested" line once. The macOS names stay as they are (the website links to them).
-  other-platforms:
-    name: Windows and Linux archives (not tested) on the draft release
-    needs: [macos-installers, build-windows, build-linux]
+  # Packages the per-machine archives and proves they hold the files the called workflows tested: the Windows zips
+  # are cut from the zip mdmm-editors-windows.yml tested, the Linux tarballs are the ones mdmm-editors-linux.yml tested.
+  package-other:
+    name: Windows and Linux archives (packaged)
+    needs: [build-windows, build-linux]
     runs-on: ubuntu-latest
     timeout-minutes: 30
-    permissions:
-      contents: write
-    env:
-      GH_TOKEN: ${{ github.token }}
-      TAG: ${{ github.ref_name }}
 
     steps:
       - uses: actions/checkout@v4
@@ -394,6 +532,17 @@ jobs:
           zip="$(find "${RUNNER_TEMP}/windows" -name 'Gearmulator-Elektron-Windows-x64.zip' -print -quit)"
           ./scripts/windows/package_mdmm_editors.sh "${zip}" "${RUNNER_TEMP}/assets"
           ls -l "${RUNNER_TEMP}/assets"
+          # The archives hold the files that were tested.
+          . scripts/mdmm-product.env
+          mkdir -p "${RUNNER_TEMP}/cmp/all"
+          unzip -q "${zip}" -d "${RUNNER_TEMP}/cmp/all"
+          for entry in "Machinedrum-Editor|${MDMM_PRODUCT_NAME_MD}" "Monomachine-Editor|${MDMM_PRODUCT_NAME_MM}"; do
+            asset="${entry%%|*}"; product="${entry#*|}"
+            unzip -q "${RUNNER_TEMP}/assets/${asset}-Windows-x64-not-tested.zip" -d "${RUNNER_TEMP}/cmp/${asset}"
+            diff -r "${RUNNER_TEMP}/cmp/all/${product}.vst3" "${RUNNER_TEMP}/cmp/${asset}/${asset}-Windows-x64/${product}.vst3"
+            cmp "${RUNNER_TEMP}/cmp/all/${product}.exe" "${RUNNER_TEMP}/cmp/${asset}/${asset}-Windows-x64/${product}.exe"
+            echo "${asset}: the Windows zip holds the tested exe and vst3"
+          done
 
       - uses: actions/upload-artifact@v4
         with:
@@ -401,6 +550,24 @@ jobs:
           path: ${{ runner.temp }}/assets/*-not-tested.*
           if-no-files-found: error
           retention-days: 30
+
+  other-platforms:
+    name: Windows and Linux archives (not tested by a person) on the draft release
+    needs: [macos-publish, package-other]
+    if: ${{ !inputs.dry_run && startsWith(github.ref, 'refs/tags/mdmm-v') }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      TAG: ${{ github.ref_name }}
+
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: mdmm-windows-linux-not-tested
+          path: ${{ runner.temp }}/assets
 
       - name: Attach to the draft release
         run: |

@@ -5,8 +5,9 @@ name: MD/MM Editors Linux x64
 # (scripts/linux/build_mdmm.sh), then starts each packaged standalone and VST3 (in scripts/vst3EditorHost) on a
 # virtual X11 display on the oldest and the newest supported Ubuntu with only runtime packages, checks the page
 # and the bridge, and keeps screenshots (scripts/linux/smoke_mdmm.sh; doc/modern-ux/FOUNDATION.md, "CI start
-# tests"). On an
-# mdmm-v* tag, mdmm-editors-release.yml calls it and attaches the archives to the draft release.
+# tests"), then runs pluginval (strictness 5, no ROM, on the same virtual display) on the VST3 of each archive.
+# On an mdmm-v* tag, mdmm-editors-release.yml calls it and attaches the archives to the draft release only
+# when all of it, start tests and pluginval, has passed.
 
 on:
   workflow_call:
@@ -20,6 +21,8 @@ on:
       - "ci/*-ui-smoke"
     paths:
       - ".github/workflows/mdmm-editors-linux.yml"
+      - "scripts/ci/**"
+      - "scripts/pluginval.env"
       - "scripts/linux/**"
       - "scripts/vst3EditorHost/**"
       - ".gitmodules"
@@ -175,6 +178,27 @@ jobs:
           chmod +x "${{ runner.temp }}/vst3host/mdmmVst3EditorHost"
           ./scripts/linux/smoke_mdmm.sh "${{ runner.temp }}/linux-mdmm" "${{ runner.temp }}/smoke" \
             "${{ runner.temp }}/vst3host/mdmmVst3EditorHost"
+
+      # pluginval 1.0.4 (pinned, sha256-checked: scripts/pluginval.env), strictness 5, scratch data root, no ROM,
+      # on the archives the release attaches. The editor tests open the window on the virtual display.
+      - name: pluginval on each VST3
+        if: always()
+        run: |
+          set -euo pipefail
+          . scripts/mdmm-product.env
+          rm -rf "${RUNNER_TEMP}/pv-unpacked"; mkdir -p "${RUNNER_TEMP}/pv-unpacked"
+          for t in "${RUNNER_TEMP}"/linux-mdmm/*.tar.gz; do tar -C "${RUNNER_TEMP}/pv-unpacked" -xzf "${t}"; done
+          xvfb-run -a ./scripts/ci/mdmm_pluginval.sh --out "${RUNNER_TEMP}/pluginval" --label "Linux ${{ matrix.os }}" \
+            "${RUNNER_TEMP}/pv-unpacked/Machinedrum-Editor-Linux-x64/VST3/${MDMM_PRODUCT_NAME_MD}.vst3" \
+            "${RUNNER_TEMP}/pv-unpacked/Monomachine-Editor-Linux-x64/VST3/${MDMM_PRODUCT_NAME_MM}.vst3"
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: linux-mdmm-pluginval-${{ matrix.os }}
+          path: ${{ runner.temp }}/pluginval
+          if-no-files-found: warn
+          retention-days: 14
 
       - uses: actions/upload-artifact@v4
         if: always()
