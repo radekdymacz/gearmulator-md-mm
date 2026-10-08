@@ -50,7 +50,9 @@ const MmJourneys = (() => {
 		const row = Math.floor(G.rows / 2), n = G.lo + G.rows - 1 - row;
 		return { c, n, fx: (q.x0 + q.x1) / 2 / r.width, fy: (G.top + (row + 0.5) * G.rh) / r.height };
 	}
-	const freeSteps = (t, n, from = 0) => { const busy = trigsOf(t), out = []; for (let s = from; s < S().len && out.length < n; s++) if (!busy.includes(s) && !S().tracks[t].steps[s] && !out.some(x => Math.abs(x - s) < 2)) out.push(s); return out; };
+	/* the bar of note pitch on step s: the step before it that holds anything is a note whose first pitch it is */
+	const underBar = (t, s, pitch) => { const st = S().tracks[t].steps; for (let k = s - 1; k >= 0; k--) if (st[k]) return !st[k].off && st[k].n?.[0] === pitch; return false; };
+	const freeSteps = (t, n, from = 0, pitch = null) => { const busy = trigsOf(t), out = []; for (let s = from; s < S().len && out.length < n; s++) if (!busy.includes(s) && !S().tracks[t].steps[s] && (pitch == null || !underBar(t, s, pitch)) && !out.some(x => Math.abs(x - s) < 2)) out.push(s); return out; };
 
 	/* ---------- start-up ---------- */
 	const bootCard = {
@@ -71,9 +73,13 @@ const MmJourneys = (() => {
 			{ say: "click the Sequence tab", act: u => u.click(tab("seq")), screen: () => onTab("seq") === true ? ok(!!$1("#seq canvas.roll[data-big]"), "no piano roll") : onTab("seq"), machine: () => ok(!!patDoc(), "pattern not read") },
 			sel(0),
 			{ say: "click four empty cells of the piano roll", act: async (u, c) => {
-				c.steps = [0, 4, 8, 12].map(k => freeSteps(c.t, 1, k)[0]).filter(s => s != null);
+				/* A synth note's bar runs on to the next step that holds anything, and a click on a bar takes that note
+				   (B-013): the cells are ones no bar of the middle row's note covers, clicked right to left, so a new
+				   note's bar never reaches the next cell. */
+				c.n = rollCell(c.t, 0).n;
+				c.steps = [0, 4, 8, 12].map(k => freeSteps(c.t, 1, k, c.n)[0]).filter(s => s != null);
 				if (c.steps.length < 4) throw new Error("no four free steps");
-				for (const s of c.steps) { const p = rollCell(c.t, s); c.n = p.n; u.click(p.c, {}, p.fx, p.fy); await sleep(250); }
+				for (const s of [...c.steps].reverse()) { const p = rollCell(c.t, s); u.click(p.c, {}, p.fx, p.fy); await sleep(250); }
 				c.note = `track ${c.t + 1} steps ${c.steps.map(s => s + 1).join(" ")}, note ${c.n}`;
 			}, screen: c => ok(c.steps.every(s => S().tracks[c.t].steps[s]?.n?.includes(c.n)), "roll shows " + c.steps.map(s => JSON.stringify(S().tracks[c.t].steps[s]?.n || null)).join(",")),
 				machine: c => ok(c.steps.every(s => trigsOf(c.t).includes(s)), "pattern trigs " + trigsOf(c.t).join(",")), within: 15000 },
