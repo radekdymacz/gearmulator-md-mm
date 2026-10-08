@@ -1718,6 +1718,11 @@ svg.route{width:100%;height:auto;aspect-ratio:1200/146;min-height:0}
 @keyframes nudge{25%{transform:translateX(-5px)}75%{transform:translateX(5px)}}
 .dlgbox.nudge{animation:nudge .16s 2}
 @media (prefers-reduced-motion:reduce){.dlgbox.nudge{animation:none}}
+/* The banner (I-005, deskModal.js Banner): a non-modal notice at the bottom right, under any modal and its backdrop */
+.gmbanner{position:fixed;right:16px;bottom:calc(16px + env(safe-area-inset-bottom,0px));z-index:58;max-width:min(420px,calc(100vw - 32px));box-sizing:border-box;display:grid;gap:8px;padding:12px 14px;background:var(--plate);color:var(--body,var(--print));border:2px solid var(--print);border-radius:6px;box-shadow:0 12px 32px rgba(0,0,0,.35)}
+.gmbanner[hidden]{display:none}
+.gmbanner b{font-size:15px}
+.gmbanner p{margin:0;font-size:13px;line-height:1.4}
 /* The start-up and first-run card (P7, deskBoot.js) */
 .bootcard{position:fixed;inset:0;z-index:var(--mz,60);display:grid;place-items:center;padding:24px;background:transparent;transition:opacity .35s}
 .bootcard[hidden]{display:none}
@@ -2919,6 +2924,35 @@ const Dlg = (() => {
 		e.preventDefault(); e.stopImmediatePropagation();
 	}, true);
 	return { show, closed, drop, waiting: () => waiting.length, get now() { return now; } };
+})();
+/* The banner (I-005, doc/modern-ux/DESIGN-updates.md): a plug-in notice with "modal": false is not a question in
+   the dialog but a strip at the window's bottom right: no backdrop, no focus taken, the page plays on under it, and
+   Esc or a page key never reaches it. One at a time: a newer one replaces it (the plug-in has forgotten the older
+   one's answer). One with no title and no text takes it away. A key answers it once and closes it. */
+const Banner = (() => {
+	let el = null, answer = null;
+	function hide() { if (el) el.hidden = true; answer = null; }
+	function show(m, onAnswer) {
+		if (!m.title && !m.text) { hide(); return; }
+		if (!el) {
+			el = document.createElement("div"); el.className = "gmbanner"; el.setAttribute("role", "status"); el.setAttribute("aria-live", "polite");
+			document.body.appendChild(el);
+		}
+		answer = onAnswer;
+		const title = document.createElement("b"), text = document.createElement("p"), row = document.createElement("div");
+		title.textContent = m.title || ""; text.textContent = m.text || ""; row.className = "btnrow";
+		const names = m.buttons || [];
+		names.forEach((name, i) => {
+			const b = document.createElement("button"); b.type = "button"; b.textContent = name;
+			if (i === 0 && names.length > 1) b.className = "cream";
+			const mine = answer;
+			b.addEventListener("click", () => { if (answer !== mine) return; hide(); if (mine) mine(i); });
+			row.appendChild(b);
+		});
+		el.replaceChildren(title, text, row);
+		el.hidden = false;
+	}
+	return { show, hide, get shown() { return !!el && !el.hidden; } };
 })();
 "use strict";
 /* What the engine cannot do, both editors (skins/shared/; DESIGN-REVIEW-2026-10-02 finding 16). One routine marks

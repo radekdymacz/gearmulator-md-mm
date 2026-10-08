@@ -1303,6 +1303,11 @@ body{box-sizing:border-box;overflow:hidden}
 @keyframes nudge{25%{transform:translateX(-5px)}75%{transform:translateX(5px)}}
 .dlgbox.nudge{animation:nudge .16s 2}
 @media (prefers-reduced-motion:reduce){.dlgbox.nudge{animation:none}}
+/* The banner (I-005, deskModal.js Banner): a non-modal notice at the bottom right, under any modal and its backdrop */
+.gmbanner{position:fixed;right:16px;bottom:calc(16px + env(safe-area-inset-bottom,0px));z-index:58;max-width:min(420px,calc(100vw - 32px));box-sizing:border-box;display:grid;gap:8px;padding:12px 14px;background:var(--plate);color:var(--body,var(--print));border:2px solid var(--print);border-radius:6px;box-shadow:0 12px 32px rgba(0,0,0,.35)}
+.gmbanner[hidden]{display:none}
+.gmbanner b{font-size:15px}
+.gmbanner p{margin:0;font-size:13px;line-height:1.4}
 /* The start-up and first-run card (P7, deskBoot.js) */
 .bootcard{position:fixed;inset:0;z-index:var(--mz,60);display:grid;place-items:center;padding:24px;background:transparent;transition:opacity .35s}
 .bootcard[hidden]{display:none}

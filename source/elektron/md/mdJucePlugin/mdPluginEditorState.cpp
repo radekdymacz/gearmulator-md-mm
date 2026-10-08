@@ -109,7 +109,10 @@ namespace mdJucePlugin
 
 		// B-001: the editor page's zoom (mdPageEditor.h; a hook, doc/modern-ux/UPSTREAM.md)
 		if(auto* page = dynamic_cast<PageEditor*>(getEditor()))
+		{
 			page->fillZoomMenu(_menu);
+			page->fillUpdateMenu(_menu);	// I-005 (doc/modern-ux/DESIGN-updates.md)
+		}
 
 		auto* const editor = dynamic_cast<Editor*>(getEditor());
 		if(!editor)

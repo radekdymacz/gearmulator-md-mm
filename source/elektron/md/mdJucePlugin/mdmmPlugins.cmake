@@ -43,6 +43,7 @@ list(APPEND SOURCES
 	$<$<PLATFORM_ID:Windows>:mdWebView2Page.cpp>
 	mdWebView2Page.h
 	mdAudioMidiLink.cpp mdAudioMidiLink.h
+	mdUpdater.cpp mdUpdater.h
 
 	skins/mdStudio/mdStudio.rml
 	skins/mdStudio/mdStudio.html
@@ -220,7 +221,11 @@ set(GEARMULATOR_PLUGIN_BUNDLE_ID_mmJucePlugin "com.nativekloud.monomachine-edito
 function(mdmm_plugin_targets)
 	foreach(plugin_target mdJucePlugin mmJucePlugin)
 		target_link_libraries(${plugin_target} PRIVATE elektronData mdDataLink mdDesk mmDesk deskHost deskWire)
+		# public: mdPageEditor.h includes mdUpdater.h, and the tests that build on the plug-in include both
+		target_link_libraries(${plugin_target} PUBLIC mdmmUpdate)
 		target_compile_definitions(${plugin_target} PUBLIC
+			# the in-app update check compares latest.json's version with this one (mdUpdater.cpp)
+			"MDMM_EDITOR_VERSION=\"${MDMM_EDITOR_VERSION}\""
 			# jucePluginEditorLib/standaloneApp.h: native title bar and menu bar (P4).
 			JUCE_USE_CUSTOM_PLUGIN_STANDALONE_APP=1
 			# The names the code shows (mdPluginProcessor.cpp, mdStandaloneApp.cpp): scripts/mdmm-product.env.

@@ -104,5 +104,49 @@ n6.answer(0); close();
 while (Dlg.waiting()) close();
 close();
 
+/* The banner (Banner, I-005): a notice with "modal": false is a strip, not the dialog. Run on a small stand-in DOM
+   (elements with children, attributes and click listeners). */
+{
+	const made = [];
+	const element = tag => {
+		const e = { tag, hidden: false, children: [], attrs: {}, listeners: {}, className: "", textContent: "",
+			setAttribute(k, v) { this.attrs[k] = v; }, appendChild(c) { this.children.push(c); }, replaceChildren(...c) { this.children = c; },
+			addEventListener(t, f) { (this.listeners[t] = this.listeners[t] || []).push(f); }, click() { (this.listeners.click || []).forEach(f => f()); } };
+		made.push(e);
+		return e;
+	};
+	const body = element("body");
+	const doc = { addEventListener() { }, createElement: element, body, readyState: "complete", documentElement: { classList: { toggle() { } } },
+		querySelector: () => null, activeElement: null };
+	const bctx = vm.createContext({ document: doc, MutationObserver, console, Date: { now: () => 0 }, setTimeout: () => 0, clearTimeout() { }, innerWidth: 1440, window: {} });
+	vm.runInContext(fs.readFileSync(path.join(__dirname, "deskModal.js"), "utf8") + "\nthis.Banner = Banner; this.Dlg = Dlg;", bctx);
+	const Banner = bctx.Banner;
+	const strip = () => body.children.find(c => c.className === "gmbanner");
+	const keys = () => strip().children[2].children;
+	const got = [];
+	Banner.show({ title: "Update available: 0.3.3", text: "You have 0.3.2.", buttons: ["Update", "Later", "Don't check"] }, i => got.push("a" + i));
+	check(Banner.shown && strip() && strip().attrs.role === "status" && strip().children[0].textContent === "Update available: 0.3.3",
+		"banner: shown as a strip with its title (role status: it takes no focus)");
+	check(keys().length === 3 && keys()[0].className === "cream" && keys()[1].className === "", "banner: its keys, the first one the answer");
+	check(bctx.Dlg.waiting() === 0 && bctx.Dlg.now === null, "banner: the question dialog is untouched");
+	/* a newer banner replaces it: the old keys no longer answer */
+	const oldKeys = keys();
+	Banner.show({ title: "Downloading 0.3.3… 5 %", text: "", buttons: ["Cancel"] }, i => got.push("b" + i));
+	oldKeys[1].click();
+	check(got.length === 0 && Banner.shown && keys().length === 1, "banner: a newer one replaces it; the old keys answer nothing");
+	keys()[0].click();
+	check(got.join() === "b0" && !Banner.shown, "banner: a key answers once and closes it");
+	keys()[0].click();
+	check(got.join() === "b0", "banner: a second press answers nothing");
+	Banner.show({ title: "No update", text: "You have the latest version.", buttons: ["OK"] }, i => got.push("c" + i));
+	check(Banner.shown && body.children.filter(c => c.className === "gmbanner").length === 1, "banner: one strip, shown again");
+	Banner.show({ title: "", text: "", buttons: [] }, () => got.push("x"));
+	check(!Banner.shown && got.join() === "b0", "banner: no title and no text takes it away, unanswered");
+	const textOnly = made.filter(e => e.tag === "p").every(e => typeof e.textContent === "string");
+	Banner.show({ title: "<img src=x onerror=alert(1)>", text: "<b>x</b>", buttons: ["OK"] }, () => { });
+	check(textOnly && strip().children[0].textContent === "<img src=x onerror=alert(1)>" && strip().children[0].innerHTML === undefined,
+		"banner: the plug-in's words are text, never markup");
+}
+
 console.log(failures ? `${failures} failure(s)` : "deskModalTest: all passed");
 process.exit(failures ? 1 : 0);

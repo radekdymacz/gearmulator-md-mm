@@ -1,0 +1,156 @@
+name: MD/MM site follows the release
+
+# I-004 (doc/modern-ux/DESIGN-updates.md): when an mdmm-v* release is PUBLISHED, the site learns about it.
+#  1. Downloads the release's six fixed assets (the bytes users get, whoever uploaded them).
+#  2. Writes site/public/latest.json (version, date, notes, per-OS per-machine URL, size, SHA-256) and signs
+#     each asset for the in-app updater when the MDMM_UPDATE_SIGNING_KEY secret is set (else: no "sig", the
+#     apps notify but never install).
+#  3. Sets the version in site/public/config.js.
+#  4. Commits both to main as github-actions[bot]. main has no protection today, so it pushes directly
+#     (a site-only commit; a GITHUB_TOKEN push starts no other workflow). If the push is refused (main moved
+#     twice, or protection is added later) it opens a pull request from site/release-<version> instead.
+#  5. Deploys the site (assets-only Worker mdmm-site, site/wrangler.jsonc) with wrangler when both
+#     CLOUDFLARE_API_TOKEN and CLOUDFLARE_ACCOUNT_ID are set; without them it says so and stops there.
+# Pre-releases (mdmm-v0.4.0-rc1) and drafts never reach latest.json. Run it by hand (Actions > this workflow >
+# Run workflow, a tag) to backfill a release or to redo one after adding the secrets.
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "The published release's tag (mdmm-vMAJOR.MINOR.PATCH)"
+        required: true
+
+permissions:
+  contents: write
+  pull-requests: write
+
+concurrency:
+  group: mdmm-site-release
+  cancel-in-progress: false
+
+jobs:
+  site:
+    name: latest.json, config.js, deploy
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      GH_TOKEN: ${{ github.token }}
+      TAG: ${{ github.event.release.tag_name || inputs.tag }}
+
+    steps:
+      - name: Which release
+        id: release
+        run: |
+          set -euo pipefail
+          if [[ ! "${TAG}" =~ ^mdmm-v([0-9]+\.[0-9]+\.[0-9]+)$ ]]; then
+            echo "::notice title=Not a site release::${TAG} is not mdmm-vMAJOR.MINOR.PATCH (another product, or a pre-release): nothing to do."
+            echo "skip=true" >> "${GITHUB_OUTPUT}"
+            exit 0
+          fi
+          version="${BASH_REMATCH[1]}"
+          info="$(gh api "repos/${GITHUB_REPOSITORY}/releases/tags/${TAG}" --jq '[.draft, .prerelease, (.published_at // "")[0:10]] | @tsv' || true)"
+          if [[ -z "${info}" ]]; then
+            echo "::error title=No published release::${TAG} has no published release (drafts are not seen here)."
+            exit 1
+          fi
+          IFS=$'\t' read -r draft prerelease published <<< "${info}"
+          if [[ "${draft}" == "true" || "${prerelease}" == "true" ]]; then
+            echo "::notice title=Not a site release::${TAG} is a draft or a pre-release: the site keeps the last full release."
+            echo "skip=true" >> "${GITHUB_OUTPUT}"
+            exit 0
+          fi
+          {
+            echo "skip=false"
+            echo "version=${version}"
+            echo "date=${published:-$(date -u +%Y-%m-%d)}"
+          } >> "${GITHUB_OUTPUT}"
+
+      - uses: actions/checkout@v4
+        if: steps.release.outputs.skip == 'false'
+        with:
+          ref: main
+          fetch-depth: 0
+          submodules: false
+
+      - name: Download the release assets
+        if: steps.release.outputs.skip == 'false'
+        run: |
+          set -euo pipefail
+          mkdir -p "${RUNNER_TEMP}/assets"
+          for name in Machinedrum-Editor-macOS.pkg Monomachine-Editor-macOS.pkg \
+              Machinedrum-Editor-Windows-x64-not-tested.zip Monomachine-Editor-Windows-x64-not-tested.zip \
+              Machinedrum-Editor-Linux-x64-not-tested.tar.gz Monomachine-Editor-Linux-x64-not-tested.tar.gz; do
+            if ! gh release download "${TAG}" --repo "${GITHUB_REPOSITORY}" --pattern "${name}" --dir "${RUNNER_TEMP}/assets"; then
+              echo "::warning title=Asset missing::${name} is not on ${TAG}: latest.json leaves it out (the app offers the site for that system)."
+            fi
+          done
+          ls -l "${RUNNER_TEMP}/assets"
+
+      - name: Test the release scripts
+        if: steps.release.outputs.skip == 'false'
+        run: python3 scripts/release/test_release_scripts.py
+
+      - name: Write latest.json (signed when the key is set) and config.js
+        if: steps.release.outputs.skip == 'false'
+        env:
+          MDMM_UPDATE_SIGNING_KEY: ${{ secrets.MDMM_UPDATE_SIGNING_KEY }}
+        run: |
+          set -euo pipefail
+          if [[ -z "${MDMM_UPDATE_SIGNING_KEY}" ]]; then
+            echo "::warning title=Updates not signed::No MDMM_UPDATE_SIGNING_KEY secret: latest.json has no signatures, so the apps notify but do not install (doc/modern-ux/DESIGN-updates.md 3.2)."
+          fi
+          python3 scripts/release/make_latest_json.py --tag "${TAG}" --assets "${RUNNER_TEMP}/assets" \
+            --out site/public/latest.json --date "${{ steps.release.outputs.date }}"
+          python3 scripts/release/set_site_version.py "${{ steps.release.outputs.version }}" site/public/config.js
+          {
+            echo "### Site for ${TAG}"
+            echo '```json'
+            cat site/public/latest.json
+            echo '```'
+          } >> "${GITHUB_STEP_SUMMARY}"
+
+      - name: Commit to main (or open a pull request)
+        if: steps.release.outputs.skip == 'false'
+        run: |
+          set -euo pipefail
+          version="${{ steps.release.outputs.version }}"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add site/public/latest.json site/public/config.js
+          if git diff --cached --quiet; then
+            echo "The site already says ${version}: nothing to commit."
+            exit 0
+          fi
+          git commit -m "Site: ${version} (latest.json, config.js) from the published release ${TAG}"
+          for _ in 1 2; do
+            if git push origin HEAD:main; then
+              echo "Pushed to main."
+              exit 0
+            fi
+            git pull --rebase origin main || { git rebase --abort || true; break; }
+          done
+          branch="site/release-${version}"
+          git push --force origin "HEAD:refs/heads/${branch}"
+          gh pr create --repo "${GITHUB_REPOSITORY}" --base main --head "${branch}" \
+            --title "Site: ${version} (latest.json, config.js)" \
+            --body "The published release ${TAG}: latest.json and the version in config.js. Pushing to main was refused, so this is a pull request (mdmm-site-release.yml). The site was deployed from these files already if the Cloudflare secrets are set." \
+            || echo "::warning::A pull request for ${branch} exists already."
+
+      - name: Deploy the site
+        if: steps.release.outputs.skip == 'false'
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          set -euo pipefail
+          if [[ -z "${CLOUDFLARE_API_TOKEN}" || -z "${CLOUDFLARE_ACCOUNT_ID}" ]]; then
+            echo "::warning title=Site not deployed::CLOUDFLARE_API_TOKEN and CLOUDFLARE_ACCOUNT_ID are not both set: the files are committed, deploy by hand (cd site && npx wrangler deploy) or add the secrets (doc/modern-ux/DESIGN-updates.md) and run this workflow again."
+            exit 0
+          fi
+          cd site
+          npx --yes wrangler@4 deploy
+          curl -fsS https://mdmm.dev/latest.json | python3 -c 'import json,sys; d=json.load(sys.stdin); print("mdmm.dev/latest.json says", d["version"])' \
+            || echo "::warning::mdmm.dev/latest.json is not readable yet (cache, or the deploy did not take)."

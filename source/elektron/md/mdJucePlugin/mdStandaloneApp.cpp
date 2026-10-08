@@ -7,6 +7,7 @@
 
 #include "mdPluginProcessor.h"
 #include "mdSettingsMigration.h"
+#include "mdUpdater.h"
 
 #if JUCE_MAC
 #include "mdRecordMenu.h"
@@ -43,6 +44,14 @@ namespace mdJucePlugin
 			return editorName(_processor);
 		}
 
+		// I-005: an update staged for after exit (Windows, Linux) starts its helper as the app quits
+		// (doc/modern-ux/DESIGN-updates.md); "Restart now" has started it already.
+		void shutdown() override
+		{
+			jucePluginEditorLib::StandaloneApp::shutdown();
+			m_updater->launchPendingSwap(false);
+		}
+
 #if JUCE_MAC
 		void windowOpened(jucePluginEditorLib::StandaloneWindow& _window) override
 		{
@@ -67,6 +76,8 @@ namespace mdJucePlugin
 #if JUCE_MAC
 		std::unique_ptr<RecordMenu> m_record;
 #endif
+		// the process's Updater lives as long as the app, so a staged update outlives the window
+		juce::SharedResourcePointer<updates::Updater> m_updater;
 		// The app's own settings file, not upstream's "Gearmulator MD.settings" (mdSettingsMigration.h), copied
 		// from that one the first time. Before the base class is made: it opens the file.
 		static juce::String ownSettingsName()

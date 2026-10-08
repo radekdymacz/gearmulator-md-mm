@@ -359,6 +359,8 @@
 	   waits for the answer, so a notice goes before the page's own questions, is never replaced by one, and is
 	   always answered: closed any other way, by its last key (Dlg, skins/shared/deskModal.js; as the MD page) */
 	function onNotice(m) {
+		/* "modal": false (the update banner, DESIGN-updates.md): a strip, not the dialog; the page plays on under it */
+		if (m.modal === false) { Banner.show(m, i => send({ op: "noticeAnswer", id: m.id, button: i })); return; }
 		const names = m.buttons && m.buttons.length ? m.buttons : ["OK"], item = { notice: true };
 		const answer = i => { if (item.done) return; item.done = true; send({ op: "noticeAnswer", id: m.id, button: i }); };
 		item.cancel = () => answer(names.length - 1);

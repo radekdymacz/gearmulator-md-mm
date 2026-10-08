@@ -1671,6 +1671,10 @@
               "items": {
                 "type": "string"
               }
+            },
+            "modal": {
+              "type": "boolean",
+              "description": "false: a banner (no backdrop, the page usable under it; DESIGN-updates.md), not the dialog; absent: the dialog. A banner with no title and no text takes the banner away."
             }
           }
         },

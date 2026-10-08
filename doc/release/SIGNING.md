@@ -311,3 +311,49 @@ codesign -d --entitlements - "/Applications/<DAW>.app"
 Logic Pro and GarageBand may run AUs out of process (AUHostingService). Test
 the AU there before announcing support. If a host fails, the standalone app
 remains the fallback.
+
+## Update signatures and the site deploy (I-004, I-005)
+
+Independent of Apple's signing: the editors install an update only when its
+ed25519 signature checks out against the public key compiled into them
+(doc/modern-ux/DESIGN-updates.md). Publishing a release runs
+`.github/workflows/mdmm-site-release.yml`, which writes `site/public/latest.json`
+(signed), the version in `site/public/config.js`, commits both to main and
+deploys mdmm.dev. Each secret is optional: without it that step says so and is
+skipped.
+
+| GitHub secret | What | Without it |
+|---|---|---|
+| `MDMM_UPDATE_SIGNING_KEY` | the update key's private half, 64 hex characters | latest.json has no signatures: the apps say "Update available" and offer the download page, never install |
+| `CLOUDFLARE_API_TOKEN` | a Cloudflare API token that can deploy the `mdmm-site` Worker | the files are committed, the site is not deployed |
+| `CLOUDFLARE_ACCOUNT_ID` | `331224f43e4f448483cad2f1185ea965` | as above |
+
+### The update key (once)
+
+1. On your own computer: `python3 scripts/release/update_keygen.py`. It prints
+   both halves and writes nothing.
+2. Paste the public key into `source/elektron/md/mdmmUpdate/updateKey.h`
+   (`g_updatePublicKeyHex`), commit, release. Builds before that commit carry the
+   placeholder and never install updates themselves.
+3. Save the private key as the repository secret `MDMM_UPDATE_SIGNING_KEY`
+   (Settings > Secrets and variables > Actions > New repository secret), and in
+   your password manager. Nowhere else.
+
+The workflow refuses a key whose public half is not the one in `updateKey.h`.
+To sign by hand: `MDMM_UPDATE_SIGNING_KEY=... python3 scripts/release/sign_update.py --version 0.3.3 FILE...`.
+
+### The Cloudflare token (once)
+
+Cloudflare dashboard > My Profile > API Tokens > Create Token > Create Custom Token:
+
+- Permissions: **Account > Workers Scripts > Edit**. (If wrangler asks for more
+  when the custom domain route is first attached, add **Zone > Workers Routes >
+  Edit** on mdmm.dev; the route exists already, so a plain deploy needs only the
+  first.)
+- Account resources: Include > the NativeKloud account
+  (`331224f43e4f448483cad2f1185ea965`) only.
+- No client IP filtering (GitHub runners' addresses change); a TTL if you like.
+
+Save the token as `CLOUDFLARE_API_TOKEN` and the account ID as
+`CLOUDFLARE_ACCOUNT_ID` (repository secrets). Then, to backfill the current
+release: Actions > "MD/MM site follows the release" > Run workflow > the tag.

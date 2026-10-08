@@ -5,6 +5,7 @@
 
 #include "elektronData/json.h"
 #include "juceUiLib/messageRoute.h"
+#include "mdUpdater.h"
 
 #include "juce_gui_basics/juce_gui_basics.h"
 
@@ -50,6 +51,8 @@ namespace mdJucePlugin
 		// B-001: the page's zoom in the editor's menu (the page's right-click menu, the standalone's menu bar):
 		// smaller, larger, 100 % and the steps. Cmd - / Cmd + / Cmd 0 on the page do the same (pageZoom).
 		void fillZoomMenu(juceRmlUi::Menu& _menu);
+		// I-005: Updates (Check for Updates Now, Check Daily) in the same menus (DESIGN-updates.md).
+		void fillUpdateMenu(juceRmlUi::Menu& _menu);
 
 	private:
 		// The page's zoom one step smaller (-1), larger (1) or back to 100 % (0), or _zoom itself (step 2),
@@ -61,6 +64,8 @@ namespace mdJucePlugin
 		void chooseSyx(bool _save);
 		void chooseSample(uint8_t _slot);
 		void layout() const;
+		// The update banner (DESIGN-updates.md 4): the Updater's state as a non-modal notice, sent when it changes.
+		void showUpdateBanner();
 
 		DeskSession* m_session = nullptr;
 		std::unique_ptr<WebPageHost> m_page;
@@ -75,5 +80,10 @@ namespace mdJucePlugin
 		// pointer the processor's own OwnerScope uses). Every entry point here runs in an OwnerScope of it, so a
 		// notice it raises goes to this window, not the newest one.
 		const void* m_noticeOwner = nullptr;
+		juce::SharedResourcePointer<updates::Updater> m_updater;	// one a process, shared by every window
+		int m_updateToken = 0;
+		int m_bannerId = 0;				// the notice id of the banner shown, 0: none
+		std::string m_bannerShown;		// what it says (sent again only when that changes)
+		juce::int64 m_nextUpdatePoll = 0;
 	};
 }

@@ -28,6 +28,9 @@ as a standalone app, VST3 and AU on macOS.
 - **Credits:** the MD/MM emulation is by [joelanders](https://github.com/joelanders/gearmulator-md-mm);
   Gearmulator, the DSP56300 and 68k emulation are by The Usual Suspects and the
   [Gearmulator](https://github.com/dsp56300/gearmulator) contributors.
+- **Third-party code in the editors:** [Monocypher](https://monocypher.org) 4.0.2 (Loup Vaillant, Michael Savage,
+  Fabio Scotoni; BSD-2-Clause or CC0-1.0) verifies update signatures
+  ([source/elektron/md/mdmmUpdate/monocypher/](source/elektron/md/mdmmUpdate/monocypher/LICENCE.md)).
 - GPL-3.0 ([LICENSE.md](LICENSE.md)). Machinedrum, Monomachine and Elektron are trademarks of
   Elektron Music Machines MAV AB; this project is not affiliated with or endorsed by Elektron.
 

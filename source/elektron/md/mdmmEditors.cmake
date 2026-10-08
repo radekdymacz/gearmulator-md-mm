@@ -11,6 +11,7 @@ add_subdirectory(mdDataLink)
 add_subdirectory(mdDesk)
 add_subdirectory(mmDesk)
 add_subdirectory(deskWire)
+add_subdirectory(mdmmUpdate)	# the in-app updater's pure parts (doc/modern-ux/DESIGN-updates.md)
 
 # Pure CC parameter-change maps (P6): MD kit parameters and MM parameters/mute as MIDI CCs on a
 # base channel, and back. No device, no emulator, no JUCE: deskWire's wire engines and the
