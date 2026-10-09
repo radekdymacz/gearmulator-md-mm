@@ -955,16 +955,19 @@ namespace
 			const auto doc = lastMachine(r);
 			const auto* g = doc.find("global");
 			const auto* active = g ? g->find("current") : nullptr;
-			int base = -1;
+			int base = -1, span = 16;
 			if(active && active->isNumber() && gs.count(static_cast<uint8_t>(active->asNumber())))
+			{
 				base = gs.at(static_cast<uint8_t>(active->asNumber())).baseChannel;
+				span = gs.at(static_cast<uint8_t>(active->asNumber())).channelSpan;
+			}
 			r.msg(R"({"op":"mute","t":2,"on":true})");
 			const bool taken = r.lastResult().find("ok")->asBool();
 			r.run(600);
 			const bool landed = ((r.tel.mutes.load() >> 2) & 1) == 1;
-			std::printf("  after the import: base channel %d, mute %s, machine mutes %04x\n", base, taken ? "taken" : "refused", unsigned(r.tel.mutes.load()));
-			if(base > 15)
-				check(!taken && !landed, "base channel OFF: the page's mute is refused with the reason, not shown as taken");
+			std::printf("  after the import: base channel %d, span %d, mute %s, machine mutes %04x\n", base, span, taken ? "taken" : "refused", unsigned(r.tel.mutes.load()));
+			if(base > 15 || span <= 2)
+				check(!taken && r.tel.mutes.load() == 0, "no channel for T3 (base OFF or CHANNEL SPAN): the page's mute is refused with the reason, nothing muted");
 			else
 			{
 				check(taken && landed, "after the import a page mute lands in the machine's mute set");
