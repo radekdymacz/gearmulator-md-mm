@@ -31,6 +31,9 @@ namespace bridgeServer
 		m_midiOut.reserve(4096);
 
 		getDeviceState().state.reserve(8 * 1024 * 1024);
+
+		// Last: the receive thread may call any handler as soon as it runs
+		start();
 	}
 
 	ClientConnection::~ClientConnection()
@@ -94,6 +97,7 @@ namespace bridgeServer
 			{
 				LOGNET(networkLib::LogLevel::Error, "Calculated hash " << calculatedHash.toString() << " of ROM " << p.romName << " does not match sent hash " <<  p.romHash.toString() << ", transfer error");
 				close();
+				return;
 			}
 
 			LOGNET(networkLib::LogLevel::Info, "Adding ROM " << p.romName << " with hash " << p.romHash.toString() << " to pool");
@@ -113,7 +117,8 @@ namespace bridgeServer
 			return;
 		}
 
-		const auto numSamples = TcpConnection::handleAudio(const_cast<float* const*>(m_audioInputs.data()), _in);
+		const auto numSamples = TcpConnection::handleAudio(const_cast<float* const*>(m_audioInputs.data()),
+			static_cast<uint32_t>(m_audioInputs.size()), g_audioBufferSize, _in);
 
 		m_device->process(m_audioInputs, m_audioOutputs, numSamples, m_midiIn, m_midiOut);
 

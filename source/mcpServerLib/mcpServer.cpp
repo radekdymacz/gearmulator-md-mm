@@ -3,8 +3,13 @@
 #include "networkLib/exception.h"
 #include "networkLib/logging.h"
 
+#include <algorithm>
+#include <chrono>
+
 namespace mcpServer
 {
+	static constexpr auto g_sseKeepAliveInterval = std::chrono::seconds(15);
+
 	McpServer::McpServer(const int _port) : m_port(_port)
 	{
 	}
@@ -24,6 +29,11 @@ namespace mcpServer
 	{
 		if (m_httpServer)
 			return false;
+
+		{
+			std::lock_guard lock(m_sseMutex);
+			m_sseStop = false;
+		}
 
 		// Try the configured port, and if it fails, try subsequent ports
 		constexpr int maxPortAttempts = 100;
@@ -54,12 +64,14 @@ namespace mcpServer
 
 	void McpServer::stop()
 	{
+		// SSE handlers wait on m_sseWake, not on their sockets: wake them first, then the HTTP server's
+		// destructor interrupts the other client threads and joins them all. A stream is only ever closed by
+		// its own thread.
 		{
 			std::lock_guard lock(m_sseMutex);
-			for (auto* client : m_sseClients)
-				client->close();
-			m_sseClients.clear();
+			m_sseStop = true;
 		}
+		m_sseWake.notify_all();
 
 		m_httpServer.reset();
 		m_initialized = false;
@@ -72,13 +84,14 @@ namespace mcpServer
 
 	HttpResponse McpServer::handleRequest(const HttpRequest& _request, networkLib::Stream& _stream)
 	{
+		// No CORS headers: only local clients outside a browser are served (HttpServer refuses foreign
+		// Host and Origin values), and a browser page must not be able to read any response.
 		HttpResponse response;
-		response.setCorsHeaders();
 
-		// CORS preflight
+		// OPTIONS: an empty answer. A browser's preflight gets no Access-Control headers from it, so it stops there.
 		if (_request.isOptions())
 		{
-			LOGNET(networkLib::LogLevel::Debug, "CORS preflight for " << _request.path);
+			LOGNET(networkLib::LogLevel::Debug, "OPTIONS for " << _request.path);
 			response.statusCode = 204;
 			response.statusText = "No Content";
 			return response;
@@ -124,7 +137,6 @@ namespace mcpServer
 	HttpResponse McpServer::handleMcpPost(const HttpRequest& _request)
 	{
 		HttpResponse response;
-		response.setCorsHeaders();
 
 		auto rpcRequest = parseJsonRpcRequest(_request.body);
 		if (!rpcRequest)
@@ -174,7 +186,6 @@ namespace mcpServer
 		// Send SSE headers
 		HttpResponse headers;
 		headers.setSseHeaders();
-		headers.setCorsHeaders();
 		const auto headerStr = headers.serialize();
 		_stream.write(headerStr.data(), static_cast<uint32_t>(headerStr.size()));
 		_stream.flush();
@@ -185,12 +196,16 @@ namespace mcpServer
 
 		addSseClient(&_stream);
 
-		// Keep connection alive until closed
+		// Keep connection alive until closed or the server stops
 		try
 		{
 			while (_stream.isValid())
 			{
-				std::this_thread::sleep_for(std::chrono::seconds(15));
+				{
+					std::unique_lock lock(m_sseMutex);
+					if (m_sseWake.wait_for(lock, g_sseKeepAliveInterval, [this] { return m_sseStop; }))
+						break;
+				}
 				// Send keep-alive comment
 				const std::string keepAlive = ": keepalive\n\n";
 				_stream.write(keepAlive.data(), static_cast<uint32_t>(keepAlive.size()));
@@ -258,46 +273,55 @@ namespace mcpServer
 
 		LOGNET(networkLib::LogLevel::Info, "Tool call: " << toolName);
 
-		std::lock_guard lock(m_toolsMutex);
-
-		for (const auto& tool : m_tools)
+		// Copy the handler and run it unlocked. A tool can take seconds (send_note waits, the DOM tools wait for
+		// the message thread); holding m_toolsMutex meanwhile would hold up every other client's tools/list and
+		// tool calls behind it.
+		ToolHandler handler;
 		{
-			if (tool.name == toolName)
+			std::lock_guard lock(m_toolsMutex);
+			const auto it = std::find_if(m_tools.begin(), m_tools.end(), [&toolName](const ToolDef& _tool)
 			{
-				try
-				{
-					auto toolResult = tool.handler(arguments);
-					LOGNET(networkLib::LogLevel::Info, "Tool " << toolName << " completed successfully");
-
-					auto content = JsonValue::array();
-					auto textContent = JsonValue::object();
-					textContent.set("type", JsonValue::fromString("text"));
-					textContent.set("text", JsonValue::fromString(toolResult.toJsonString()));
-					content.append(textContent);
-
-					auto result = JsonValue::object();
-					result.set("content", content);
-					return JsonRpcResponse::success(_request.id, result);
-				}
-				catch (const std::exception& e)
-				{
-					LOGNET(networkLib::LogLevel::Error, "Tool " << toolName << " failed: " << e.what());
-					auto content = JsonValue::array();
-					auto textContent = JsonValue::object();
-					textContent.set("type", JsonValue::fromString("text"));
-					textContent.set("text", JsonValue::fromString(std::string("Error: ") + e.what()));
-					content.append(textContent);
-
-					auto result = JsonValue::object();
-					result.set("content", content);
-					result.set("isError", JsonValue::fromBool(true));
-					return JsonRpcResponse::success(_request.id, result);
-				}
-			}
+				return _tool.name == toolName;
+			});
+			if (it != m_tools.end())
+				handler = it->handler;
 		}
 
-		return JsonRpcResponse::error(_request.id, ErrorCode::InvalidParams,
-			"Unknown tool: " + toolName);
+		if (!handler)
+		{
+			return JsonRpcResponse::error(_request.id, ErrorCode::InvalidParams,
+				"Unknown tool: " + toolName);
+		}
+
+		try
+		{
+			auto toolResult = handler(arguments);
+			LOGNET(networkLib::LogLevel::Info, "Tool " << toolName << " completed successfully");
+
+			auto content = JsonValue::array();
+			auto textContent = JsonValue::object();
+			textContent.set("type", JsonValue::fromString("text"));
+			textContent.set("text", JsonValue::fromString(toolResult.toJsonString()));
+			content.append(textContent);
+
+			auto result = JsonValue::object();
+			result.set("content", content);
+			return JsonRpcResponse::success(_request.id, result);
+		}
+		catch (const std::exception& e)
+		{
+			LOGNET(networkLib::LogLevel::Error, "Tool " << toolName << " failed: " << e.what());
+			auto content = JsonValue::array();
+			auto textContent = JsonValue::object();
+			textContent.set("type", JsonValue::fromString("text"));
+			textContent.set("text", JsonValue::fromString(std::string("Error: ") + e.what()));
+			content.append(textContent);
+
+			auto result = JsonValue::object();
+			result.set("content", content);
+			result.set("isError", JsonValue::fromBool(true));
+			return JsonRpcResponse::success(_request.id, result);
+		}
 	}
 
 	JsonRpcResponse McpServer::handlePing(const JsonRpcRequest& _request)

@@ -40,7 +40,7 @@ list(APPEND SOURCES
 	mdBootDiagnostics.cpp mdBootDiagnostics.h
 	mdDeskSession.cpp mdDeskSession.h
 	mdMidiLearnCommands.cpp mdMidiLearnCommands.h
-	mdPageEditor.cpp mdPageEditor.h mdPageZoom.h mdEditorMenu.h
+	mdPageEditor.cpp mdPageEditor.h mdPageZoom.h mdEditorMenu.h mdNoticeBook.h
 	mdRomInstall.cpp mdRomInstall.h
 	mdSettingsMigration.cpp mdSettingsMigration.h
 	mdSessionMd.cpp mdSessionMm.cpp mdSessions.h
@@ -408,6 +408,31 @@ function(mdmm_plugin_targets)
 		target_compile_definitions(mdAudioIoLayoutTest PRIVATE JUCE_USE_CUSTOM_PLUGIN_STANDALONE_APP=1)
 	endif()
 
+	# The fork's hooks in upstream's Processor (jucePluginLib/processor.*, doc/modern-ux/UPSTREAM.md): the host latency
+	# after a resampler mode change, and no MIDI learn translator while MIDI mapping is off. No firmware.
+	add_executable(mdProcessorHooksTest mdProcessorHooksTest.cpp)
+	target_link_libraries(mdProcessorHooksTest PRIVATE
+		mdJucePlugin jucePluginEditorLib mdLib juce_plugin_modules juce::juce_opengl)
+	target_include_directories(mdProcessorHooksTest PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/../../..)
+	target_compile_definitions(mdProcessorHooksTest PRIVATE JUCE_GLOBAL_MODULE_SETTINGS_INCLUDED=1)
+	add_test(NAME mdProcessorHooksTest COMMAND mdProcessorHooksTest)
+	set_tests_properties(mdProcessorHooksTest PROPERTIES LABELS "UnitTest;AudioIo" TIMEOUT 120)
+	set_property(TARGET mdProcessorHooksTest PROPERTY FOLDER "Elektron/test")
+
+	# upstreamTests/mcpServerTest.cpp: the MCP server above the HTTP layer (stop() wakes an SSE client's wait, a slow
+	# tool does not hold up tools/list, send_note's duration is clamped). Its JSON values are juce::var, so it is built
+	# here, with juce_core; it needs no plug-in.
+	set(_mdmmMcp ${CMAKE_CURRENT_SOURCE_DIR}/../../../mcpServerLib)
+	add_executable(mcpServerTest ../upstreamTests/mcpServerTest.cpp ../upstreamTests/loopbackClient.h
+		${_mdmmMcp}/mcpServer.cpp ${_mdmmMcp}/mcpServer.h ${_mdmmMcp}/httpServer.cpp ${_mdmmMcp}/httpServer.h)
+	target_link_libraries(mcpServerTest PRIVATE networkLib juce::juce_core)
+	target_compile_definitions(mcpServerTest PRIVATE
+		JUCE_GLOBAL_MODULE_SETTINGS_INCLUDED=1 JUCE_STANDALONE_APPLICATION=1 JUCE_USE_CURL=0)
+	add_test(NAME mcpServerTest COMMAND mcpServerTest)
+	set_tests_properties(mcpServerTest PROPERTIES LABELS "UnitTest" TIMEOUT 120)
+	set_property(TARGET mcpServerTest PROPERTY FOLDER "Tests")
+	unset(_mdmmMcp)
+
 	add_executable(mdRomInstallTest mdRomInstallTest.cpp mdRomInstall.cpp)
 	target_include_directories(mdRomInstallTest PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/..)
 	target_link_libraries(mdRomInstallTest PRIVATE juce::juce_core)
@@ -431,7 +456,9 @@ function(mdmm_plugin_targets)
 	set_tests_properties(mdWindowFitTest PROPERTIES LABELS "UnitTest")
 	set_property(TARGET mdWindowFitTest PROPERTY FOLDER "Elektron/test")
 
-	# The page bridge's transport (mdPageBridge.h, pure): long batches in pieces, the outbox split into numbered calls; and the notice route (juceUiLib/messageRoute.h): a sink per window.
+	# The page bridge's transport (mdPageBridge.h, pure): long batches in pieces, the outbox split into numbered calls,
+	# Linux's files written in order (FileOutbox) and its reload after a drop; the notice route
+	# (juceUiLib/messageRoute.h): a sink per window; and a window's notices and their answers (mdNoticeBook.h).
 	add_executable(mdPageBridgeTest mdPageBridgeTest.cpp)
 	target_link_libraries(mdPageBridgeTest PRIVATE elektronJson)
 	target_include_directories(mdPageBridgeTest PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/.. ${CMAKE_CURRENT_SOURCE_DIR}/../../..)	# ../../..: juceUiLib/messageRoute.h

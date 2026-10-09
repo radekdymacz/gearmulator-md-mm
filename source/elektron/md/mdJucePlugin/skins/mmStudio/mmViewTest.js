@@ -16,7 +16,9 @@
    - the mutes, POLY and the tempo: the page's value until the command is answered (Overlay), then the machine
      document's (the core says the expected value until memory shows it, mmDeskTest); a later change on the
      machine's panel shows;
-   - no clock in the page: the adapter reads no time.
+   - no clock in the page: the adapter reads no time;
+   - the plug-in's notices (codex review 2026-10): a notice's key, the dialog's and the update banner's, answers that
+     notice by its number (noticeAnswer's notice), the request's own id apart; a refused answer is not shown.
      node mmViewTest.js */
 const fs = require("fs"), path = require("path");
 const SK = path.join(__dirname, ".."), R = path.join(__dirname, "../../../../../..");
@@ -53,7 +55,7 @@ function page() {
 	   plug-in, where start() waits for them): here it is held until they are */
 	const hold = "\n;const __start = window.MMHost.start; window.MMHost.start = () => { };\n";
 	const src = FILES.map(f => fs.readFileSync(f, "utf8").replace(/^"use strict";/, "") + (/mmAdapter/.test(f) ? hold : "")).join("\n;\n")
-		+ "\n;__start();\nreturn { S: () => S, Overlay, MmView, docStore, storeDoc, MM_SEAM, mockup: { mutApply, genLive, genEnd, setMachine, songAction, secAction } };";
+		+ "\n;__start();\nreturn { S: () => S, Overlay, MmView, docStore, storeDoc, MM_SEAM, Dlg, Banner, mockup: { mutApply, genLive, genEnd, setMachine, songAction, secAction } };";
 	const out = new Function("scope", "with (scope) {\n" + src + "\n}")(scope);
 	const run = () => { for (let n = 0; timers.length && n < 10000; n++) timers.shift()(); };
 	run();
@@ -413,6 +415,30 @@ const result = (m, ok = true, errors = []) => ({ type: "result", id: m.id, op: m
 	for (let s = 0; s < 32; s++) { V.setStep(s); V.setStep(s); p.run(); }
 	check(p.frames.n === 0, `32 steps playing: ${p.frames.n} canvas redraws (none: only the soft playhead moves)`);
 	V.setPlaying(false); p.run();
+}
+
+/* ---- the plug-in's notices over the real bridge (codex review 2026-10: Bridge.send's request id had replaced the
+   notice's number since 0.3.0, so no key reached the plug-in): the dialog's and the banner's answers name the notice ---- */
+{
+	const p = loaded(), items = [], banners = [], toasts = [];
+	p.Dlg.show = item => items.push(item);	/* the dialog's queue: the item the adapter asks (its cancel is its last key) */
+	p.Banner.show = (m, answer) => banners.push({ m, answer });
+	p.win.MMView.toast = t => toasts.push(t);
+	p.recv([{ type: "notice", id: 41, title: "Overwrite K05?", text: "", buttons: ["Overwrite", "Cancel"] }]);
+	check(items.length === 1 && items[0].notice, "a notice is a dialog item the plug-in waits on");
+	p.sent.length = 0;
+	items[0].cancel();
+	const a = p.sent.find(m => m.op === "noticeAnswer");
+	check(a && a.notice === 41 && a.button === 1 && typeof a.id === "number" && a.id !== 41,
+		"closed another way, the notice is answered by its last key: notice 41, the request's own id apart: " + JSON.stringify(a));
+	p.recv([{ type: "notice", id: 42, title: "Update available: 9.9.9", text: "", buttons: ["Update", "Later"], modal: false }]);
+	check(banners.length === 1 && banners[0].m.id === 42 && items.length === 1, "\"modal\": false is the banner, not the dialog");
+	p.sent.length = 0;
+	banners[0].answer(0);
+	const b = p.sent.find(m => m.op === "noticeAnswer");
+	check(b && b.notice === 42 && b.button === 0 && b.id !== 42, "Update on the banner answers notice 42: " + JSON.stringify(b));
+	p.recv([{ type: "result", op: "noticeAnswer", id: b.id, ok: false, errors: ["notice 42 is not waiting for an answer"], note: "" }]);
+	check(toasts.length === 0, "a refused answer shows nothing (the log only)");
 }
 
 console.log(failures ? `mmViewTest: ${failures} failure(s)` : "mmViewTest: PASS");

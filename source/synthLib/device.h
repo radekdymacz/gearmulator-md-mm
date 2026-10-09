@@ -44,6 +44,21 @@ namespace synthLib
 			virtual bool prepare() = 0;
 		};
 
+		// The save side of the same split: beginStateCapture runs under Plugin's process/device lock and only
+		// copies what the running machine can still change; encode runs after the lock is released.
+		class StateCapture
+		{
+		public:
+			StateCapture() = default;
+			StateCapture(const StateCapture&) = delete;
+			StateCapture& operator=(const StateCapture&) = delete;
+			virtual ~StateCapture() = default;
+
+			// Runs without Plugin's process/device lock, like StateTransaction::prepare: it must own (or share
+			// immutably) every input and must not access the live Device. Appends what getState would append.
+			virtual bool encode(std::vector<uint8_t>& _state) = 0;
+		};
+
 		Device(const DeviceCreateParams& _params);
 		Device(const Device&) = delete;
 		Device(Device&&) = delete;
@@ -95,6 +110,9 @@ namespace synthLib
 		virtual std::unique_ptr<StateTransaction> beginStateTransaction(
 			std::shared_ptr<const std::vector<uint8_t>>, StateType) { return {}; }
 		virtual bool finishStateTransaction(StateTransaction&) { return false; }
+		// Devices whose state is expensive to encode capture it here and encode it unlocked. Null (the default):
+		// Plugin calls getState under the lock, as before.
+		virtual std::unique_ptr<StateCapture> beginStateCapture(StateType) { return {}; }
 #endif
 
 		virtual uint32_t getChannelCountIn() = 0;

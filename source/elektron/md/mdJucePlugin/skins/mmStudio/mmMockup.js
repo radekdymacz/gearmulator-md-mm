@@ -1144,6 +1144,13 @@ const Banner = (() => {
 	}
 	return { show, hide, get shown() { return !!el && !el.hidden; } };
 })();
+/* The answer to a plug-in notice m (deskHost.cpp noticeAnswer), the dialog's and the banner's, both editors: the
+   button pressed, on the notice numbered m.id. That number goes as "notice", never as "id": "id" is the request's own,
+   which Bridge.send gives every request, so a notice number sent as "id" would be overwritten. The plug-in refuses an
+   answer to a notice that waits for none (answered already, replaced by a newer banner): nothing for the user to do,
+   so a page sends it with noticeRefused as its onResult (the log only). */
+const noticeAnswer = (m, button) => ({ op: "noticeAnswer", notice: m.id, button });
+const noticeRefused = r => { if (!r.ok) Bridge.log("noticeAnswer refused: " + (r.errors || []).join("; ")); };
 
 /* ---- shared/deskMenu.js ---- */
 "use strict";

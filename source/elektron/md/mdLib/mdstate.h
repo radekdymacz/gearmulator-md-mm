@@ -31,6 +31,9 @@ namespace md
 		bool containsFlash = false;
 	};
 
+	// The checksum of the state and the factory cache formats: CRC-32 (IEEE 802.3, as zlib's crc32).
+	uint32_t crc32(const uint8_t* _data, size_t _size);
+
 	// Append a self-describing patch-RAM image to _state. The synthLib plugin wrapper may
 	// already have placed its own two-byte envelope in the vector, so this function does
 	// not clear it.

@@ -10,6 +10,9 @@
 #   - the page shows "<machine> firmware needed": read through AT-SPI (ui_texts.py), as a screen reader would;
 #   - real keys reach the page: a real click on the page, then Ctrl+C Ctrl+V Ctrl+X Ctrl+Z Ctrl+D and ? (xdotool,
 #     XTEST), and the page's key probe (GEARMULATOR_MDMM_KEYPROBE=1) lists them;
+#   - the page's zoom: it starts at 125 % (the editor's config, seeded) and Ctrl+= makes it 150 %; webkit2gtk has no
+#     page zoom, so the plug-in sends it as a message (a batch file), and the web process must live through it (a
+#     javascript: URL for it crashed the web process next to the bridge's iframes until the codex review of 2026-10);
 #   - a screenshot of the display (md-standalone.png, md-vst3.png, ...), kept as an artifact.
 #
 #   scripts/linux/smoke_mdmm.sh <dir with the .tar.gz files> <output dir> [<mdmmVst3EditorHost binary>]
@@ -76,6 +79,10 @@ run() {
 	shift 4
 	local wanted="${machine} firmware needed"
 	echo "== ${label}: $*"
+	# the page's zoom at 125 % from the start (PageEditor's pageZoom, the editor's config in the data folder)
+	mkdir -p "${home}/data/Gearmulator Preview/${machine}/config"
+	printf '<?xml version="1.0" encoding="UTF-8"?>\n<PROPERTIES>\n  <VALUE name="pageZoom" val="1.25"/>\n</PROPERTIES>\n' \
+		> "${home}/data/Gearmulator Preview/${machine}/config/${product_name}.xml"
 	local events_before
 	events_before="$(wc -l < "${out}/temp-events.txt")"
 	HOME="${home}" XDG_CONFIG_HOME="${home}/.config" GEARMULATOR_DATA_ROOT="${home}/data/" \
@@ -188,6 +195,23 @@ run() {
 			fail "${label}: real keys did not reach the page: ${missing[*]} missing (${seen})"
 			record "${label}" "real keys reach the page (${keys_wanted[*]})" "no: ${missing[*]} missing"
 		fi
+		# The zoom (started at 125 %): Ctrl+= makes it 150 %, sent to the page as a message. The same web process must
+		# run afterwards, and the bridge still deliver (the page read and deleted a batch file after the key).
+		local web_before web_after read_before read_after
+		web_before="$(pgrep -f WebKitWebProcess | sort | tr '\n' ' ')"
+		read_before="$(grep -c -E '^DELETE gearmulator-.*\.recv-[0-9]+\.js$' "${out}/temp-events.txt" || true)"
+		xdotool key --delay 400 ctrl+equal
+		sleep 4
+		web_after="$(pgrep -f WebKitWebProcess | sort | tr '\n' ' ')"
+		read_after="$(grep -c -E '^DELETE gearmulator-.*\.recv-[0-9]+\.js$' "${out}/temp-events.txt" || true)"
+		import -display "${display}" -window root "${out}/${name}-zoom.png" 2>/dev/null || true
+		if kill -0 "${pid}" 2>/dev/null && [[ -n "${web_after}" && "${web_after}" == "${web_before}" ]] && (( read_after > read_before )); then
+			echo "${label}: zoom 125 % -> 150 %: the web process lives on (${web_after}), the bridge delivers"
+			record "${label}" "page zoom by message (Ctrl+=)" "yes"
+		else
+			fail "${label}: after Ctrl+= (page zoom) the web process changed or the bridge stopped (before: ${web_before:-none}, after: ${web_after:-none}; batches read ${read_before} -> ${read_after})"
+			record "${label}" "page zoom by message (Ctrl+=)" "no"
+		fi
 	fi
 	kill "${pid}" 2>/dev/null || true
 	sleep 2
@@ -212,6 +236,7 @@ for entry in "md|Machinedrum|${MDMM_PRODUCT_NAME_MD}|Machinedrum-Editor" \
 	tar -C "${work}" -xzf "${tarball}"
 	root="${work}/${asset}-Linux-x64"
 	mkdir -p "${work}/home-standalone" "${work}/home-vst3"
+	product_name="${product}"	# the editor's config file (run seeds its zoom)
 	run "${short}-standalone" "${product} standalone" "${machine}" "${work}/home-standalone" \
 		"${root}/Standalone/${product}"
 	if [[ -n "${vst3_host}" ]]; then

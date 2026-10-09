@@ -234,7 +234,9 @@ if life is None:
     problems.append('mmAdapter.js: no LIFE')
 else:
     problems += pc.check_lifecycle(pc.object_keys(life) or set(), schema, 'mmAdapter.js')
-problems += pc.check_message_types(pc.message_types_handled(adapter), schema, 'mmAdapter.js')
+# the shared page files the page loads beside the adapter handle some types themselves (deskZoom.js: zoom)
+beside = ''.join(open(SHARED + f).read() for f in SCRIPTS if f.startswith('desk') and f != 'deskJourney.js')
+problems += pc.check_message_types(pc.message_types_handled(adapter + beside), schema, 'mmAdapter.js and the shared page files')
 if problems:
     print('contract check: ' + '; '.join(problems))
     sys.exit(1)

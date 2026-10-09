@@ -8,7 +8,7 @@
 
 namespace networkLib
 {
-	TcpServer::TcpServer(OnConnectedFunc _onConnected, const int _tcpPort)
+	TcpServer::TcpServer(OnConnectedFunc _onConnected, const int _tcpPort, const BindScope _scope)
 		: TcpConnection(std::move(_onConnected))
 		, m_port(_tcpPort)
 		, m_listener(std::make_unique<ptypes::ipstmserver>())
@@ -24,7 +24,10 @@ namespace networkLib
 		// McpServer::start's port-retry loop) only have to handle std::exception.
 		try
 		{
-			m_listener->bindall(m_port);
+			if(_scope == BindScope::Loopback)
+				m_listener->bind(ptypes::ipaddress(127, 0, 0, 1), m_port);
+			else
+				m_listener->bindall(m_port);
 			// poll() with a 0 timeout triggers the lazy open()/bind() in
 			// ipsvbase. open() itself is protected, so this is the cheapest
 			// public call that forces the actual bind() to run now.
@@ -77,6 +80,14 @@ namespace networkLib
 			{
 				LOGNET(LogLevel::Warning, "Network Error: " << static_cast<const char*>(e->get_message()));
 				delete e;
+			}
+			catch (const std::exception& e)
+			{
+				// The connection handler ran out of memory or threads: drop this client and keep accepting. An
+				// exception that left this thread would end the whole process (the DAW). The handler may own the
+				// stream already, so it is never served again (one object leaks when its own allocation failed).
+				LOGNET(LogLevel::Error, "Failed to accept a client: " << e.what());
+				stream = new ptypes::ipstream();
 			}
 		}
 

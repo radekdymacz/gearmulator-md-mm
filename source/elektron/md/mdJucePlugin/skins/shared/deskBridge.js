@@ -135,10 +135,14 @@ const Bridge = (() => {
 	/* send(msg, {key, onResult, merge}): a message with the same key still waiting in
 	   this frame is replaced (a drag sends its latest value once per frame); the
 	   replacement keeps its id, so one result answers both. merge(waiting, msg)
-	   makes the replacement from both (a relative change sums its steps). */
+	   makes the replacement from both (a relative change sums its steps). msg.id is
+	   the request's, given here: a value of the caller's there is lost, so it is
+	   logged (a notice's number went that way until the codex review of 2026-10:
+	   it travels as noticeAnswer's "notice"). */
 	function send(msg, opt = {}) {
 		const i = opt.key ? queue.findIndex(q => q.key === opt.key) : -1;
 		if (i >= 0 && opt.merge) msg = opt.merge(queue[i].msg, msg);
+		if (i < 0 && msg.id != null) log("send " + msg.op + ": its own id " + msg.id + " is replaced by the request's");
 		msg.id = i >= 0 ? queue[i].msg.id : nextId++;
 		if (opt.onResult) pending.set(msg.id, { op: msg.op, onResult: opt.onResult });
 		if (i >= 0) { queue[i] = { key: opt.key, msg }; return msg.id; }

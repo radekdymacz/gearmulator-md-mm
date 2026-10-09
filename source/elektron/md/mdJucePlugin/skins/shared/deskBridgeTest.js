@@ -1,7 +1,10 @@
 "use strict";
 /* The page bridge's transport (BridgeTransport, deskBridge.js; DESIGN-REVIEW-2026-10-02 finding 13): a batch is one
    gmbridge://c/ URL while it fits, else pieces never cut inside an escape that join (in index order) to the one
-   encoded text; Bridge hands batches to the transport and what the plug-in says to its handlers.
+   encoded text; Bridge hands batches to the transport and what the plug-in says to its handlers. Over the real
+   bridge (codex review 2026-10): a notice's answer keeps the notice's number apart from the request's id (deskModal.js
+   noticeAnswer), the plug-in's zoom message zooms the page (deskZoom.js), and on Linux the page reads the plug-in's
+   batch files in order however long one takes to appear.
      node deskBridgeTest.js */
 const fs = require("fs"), path = require("path"), vm = require("vm");
 
@@ -76,6 +79,93 @@ check(BridgeTransport.recvFile("/tmp/gearmulator-mdStudio-1a2b.html", 12) === "g
 	check(posted.length === 3 && posted[0] === "gmbridge://c/" + encodeURIComponent(JSON.stringify([{ op: "a" }]))
 		&& posted[1] === "gmbridge://log/hello" && posted[2].endsWith(encodeURIComponent(JSON.stringify([{ op: "b" }]))),
 		"WebView2: each message is one postMessage of its gmbridge:// text, in order");
+}
+
+/* ---- the bridge on a stand-in page: deskBridge.js and the shared files given, a document that answers everything ---- */
+function standIn(files, extra = {}) {
+	const posted = [], logged = [];
+	const el = () => ({ style: {}, classList: { add() { }, remove() { }, toggle() { } }, setAttribute() { }, hasAttribute: () => true, appendChild() { },
+		replaceChildren() { }, addEventListener() { }, querySelector: () => null, querySelectorAll: () => [], remove() { } });
+	const document = Object.assign({ addEventListener() { }, createElement: el, body: el(), documentElement: el(), head: el(), readyState: "complete",
+		querySelector: () => null, activeElement: null }, extra.document || {});
+	const window = Object.assign({ gmDev: batch => posted.push(...JSON.parse(JSON.stringify(batch))), addEventListener() { } }, extra.window || {});
+	const c = vm.createContext(Object.assign({ console: { log: (...a) => logged.push(a.join(" ")), error: console.error }, location: { protocol: "http:", search: "" },
+		setTimeout, clearTimeout, window, document, navigator: { platform: "MacIntel" }, MutationObserver: class { observe() { } }, Date, innerWidth: 1440 }, extra.globals || {}));
+	vm.runInContext(files.map(f => fs.readFileSync(path.join(__dirname, f), "utf8")).join("\n;\n")
+		+ "\nthis.P = { Bridge, noticeAnswer: typeof noticeAnswer !== 'undefined' ? noticeAnswer : null, noticeRefused: typeof noticeRefused !== 'undefined' ? noticeRefused : null };", c);
+	c.gm = window.gm;	/* a browser's window is its global: the plug-in's scripts say gm */
+	return Object.assign(c.P, { posted, logged, window, document, ctx: c, recv: (m, seq) => window.gm.recv(m, seq) });
+}
+/* ---- a notice's answer: the notice's number as "notice", the request's own id apart (deskModal.js noticeAnswer) ---- */
+{
+	const p = standIn(["deskModal.js", "deskBridge.js"]);
+	p.Bridge.send({ op: "play" });	/* an earlier command: the bridge's numbers are on */
+	const notice = { type: "notice", id: 77, title: "Update available", text: "", buttons: ["Update", "Later"], modal: false };
+	const id = p.Bridge.send(p.noticeAnswer(notice, 1), { onResult: p.noticeRefused });
+	const a = p.posted[p.posted.length - 1];
+	check(a.op === "noticeAnswer" && a.notice === 77 && a.button === 1 && a.id === id && a.id !== 77 && Object.keys(a).sort().join() === "button,id,notice,op",
+		"noticeAnswer: the notice's number as notice, the request's own id as id, nothing else: " + JSON.stringify(a));
+	p.recv([{ type: "result", op: "noticeAnswer", id, ok: false, errors: ["notice 77 is not waiting for an answer"], note: "" }]);
+	check(p.logged.some(l => /noticeAnswer refused: notice 77 is not waiting/.test(l)), "a refused answer is logged (noticeRefused), nothing else");
+	const before = p.logged.length;
+	p.recv([{ type: "result", op: "noticeAnswer", id: p.Bridge.send(p.noticeAnswer({ id: 3 }, 0), { onResult: p.noticeRefused }), ok: true, errors: [], note: "" }]);
+	check(p.logged.length === before, "a taken answer logs nothing");
+	/* a caller's own id on a new message is replaced by the request's: said in the log */
+	const own = p.Bridge.send({ op: "noticeAnswer", id: 77, button: 0 });
+	check(p.posted[p.posted.length - 1].id === own && own !== 77 && p.logged.some(l => /send noticeAnswer: its own id 77 is replaced/.test(l)),
+		"a message with its own id: the bridge's id goes out, and the log says the caller's was lost");
+}
+/* ---- the plug-in's zoom (no native page zoom: Linux): the page zooms itself (deskZoom.js) ---- */
+{
+	const p = standIn(["deskBridge.js", "deskZoom.js"]);
+	p.recv([{ type: "zoom", zoom: 1.25 }], 1);
+	check(p.document.documentElement.style.zoom === "1.25", "gm.recv([{type: zoom, zoom: 1.25}], 1) sets the page's CSS zoom to 1.25: " + p.document.documentElement.style.zoom);
+	p.recv([{ type: "zoom", zoom: 0.8 }], 2);
+	check(p.document.documentElement.style.zoom === "0.8", "a new zoom replaces it");
+	p.recv([{ type: "zoom", zoom: "big" }, { type: "zoom", zoom: 0 }, { type: "zoom" }], 3);
+	check(p.document.documentElement.style.zoom === "0.8", "a zoom that is not a number above 0 is ignored");
+	/* the message is both editors' contract ($defs/message) */
+	const { execFileSync } = require("child_process");
+	const root = path.join(__dirname, "..", "..", "..", "..", "..", "..");
+	const onContract = (schema, m) => { try { execFileSync("python3", [path.join(root, "doc/modern-ux/page_contract_check.py"), path.join(root, "doc/modern-ux", schema), "message"], { input: JSON.stringify(m) }); return true; } catch (e) { return false; } };
+	check(["md-data-contract.schema.json", "mm-data-contract.schema.json"].every(f => onContract(f, { type: "zoom", zoom: 1.25 }) && !onContract(f, { type: "zoom" })),
+		"{type: zoom, zoom} is on both editors' contract (and zoom is required)");
+}
+/* ---- Linux (?recv=file): the page reads the plug-in's batch files in order, polling for the next however long it takes
+   (the plug-in writes them strictly in order: mdPageBridge.h FileOutbox), and says how far it got ---- */
+{
+	let now = 0; const timers = [];
+	const later = (f, ms) => { timers.push({ at: now + (ms || 0), f }); return timers.length; };
+	const advance = ms => { const end = now + ms; for (;;) { timers.sort((a, b) => a.at - b.at); const t = timers[0]; if (!t || t.at > end) break; timers.shift(); now = t.at; t.f(); } now = end; };
+	const dir = new Map(), acks = [], loads = [];
+	let ctx = null;
+	const document = {
+		documentElement: { style: {}, appendChild(el) { const m = /^gmbridge:\/\/a\/(\d+)$/.exec(el.src || ""); if (m) acks.push(+m[1]); } },
+		head: { appendChild(el) { later(() => { const name = el.src.split("?")[0]; loads.push(name); if (dir.has(name)) { vm.runInContext(dir.get(name), ctx); el.onload(); } else el.onerror(); }, 1); } },
+		createElement: tag => ({ tag, style: {}, remove() { } }), addEventListener() { }
+	};
+	const page = "gearmulator-mdStudio-1a2b.html";
+	const p = standIn(["deskBridge.js"], { document, window: { gmDev: undefined }, globals: { setTimeout: later, clearTimeout() { },
+		location: { protocol: "file:", search: "?recv=file&version=x", pathname: "/tmp/" + page } } });
+	ctx = p.ctx;
+	const got = [];
+	p.Bridge.onMessage(m => got.push(m.n));
+	check(acks[0] === 0, "the page says it started (a/0) before it reads anything");
+	/* the plug-in: one message a tick (30 Hz), a batch file each; batch 3's file appears only 1.5 s late (a full disk for a
+	   moment), and 4, 5, ... wait behind it, as FileOutbox writes them */
+	const waiting = [];
+	let seq = 1;
+	const write = n => dir.set(page + ".recv-" + n.seq + ".js", "window.gm&&gm.recv(" + JSON.stringify([{ type: "machine", n: n.n }]) + "," + n.seq + ")");
+	/* every tick the plug-in tries what waits again, also with nothing new (WebPageHost::flush) */
+	for (let tick = 1; tick <= 90; tick++) {
+		if (tick <= 30) waiting.push({ seq: seq++, n: tick });
+		while (waiting.length && !(waiting[0].seq === 3 && now < 1500)) write(waiting.shift());
+		advance(33);
+	}
+	advance(500);
+	check(got.length === 30 && got.every((n, i) => n === i + 1), "every message arrives once, in order, after a batch that came 1.5 s late: " + got.length);
+	check(loads.filter(l => l.endsWith(".recv-3.js")).length > 50 && !loads.some(l => /\.recv-0\.js$/.test(l)), "the page asked for batch 3 again and again (every 8 ms) until it was there");
+	check(acks[acks.length - 1] === 30 && acks.every((a, i) => i === 0 || a >= acks[i - 1]), "it says how far it got, never backwards, up to 30: " + acks.slice(-3).join(","));
 }
 
 if (failures) { console.error("deskBridgeTest: " + failures + " failure(s)"); process.exit(1); }

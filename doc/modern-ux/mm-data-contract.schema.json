@@ -1767,14 +1767,15 @@
         },
         {
           "type": "object",
-          "description": "Something the plug-in has for the user (a question or a warning), shown as the page's modal instead of a native alert; the button pressed goes back as noticeAnswer. The first button is the answer to a question, the last the safe one.",
+          "description": "Something the plug-in has for the user (a question or a warning), shown as the page's modal instead of a native alert; the button pressed goes back as noticeAnswer {notice: this id, button} (the request's own id is its result's). The first button is the answer to a question, the last the safe one.",
           "required": ["type", "id", "title", "text", "buttons"],
           "properties": {
             "type": {
               "const": "notice"
             },
             "id": {
-              "type": "integer"
+              "type": "integer",
+              "description": "the notice's number, from 1; a banner with no title and no text (it takes the banner away) has 0: it waits for no answer"
             },
             "title": {
               "type": "string"
@@ -1791,6 +1792,21 @@
             "modal": {
               "type": "boolean",
               "description": "false: a banner (no backdrop, the page usable under it; DESIGN-updates.md), not the dialog; absent: the dialog. A banner with no title and no text takes the banner away."
+            }
+          }
+        },
+        {
+          "type": "object",
+          "description": "Where the web view has no page zoom of its own (Linux's webkit2gtk): the page's CSS zoom, the zoom that fits the page's design size into the window times the user's zoom (mdPageZoom.h), sent when it changes and again when the page starts again; the page sets document.documentElement.style.zoom (skins/shared/deskZoom.js). Never sent where the web view zooms itself (macOS, WebView2).",
+          "required": ["type", "zoom"],
+          "properties": {
+            "type": {
+              "const": "zoom"
+            },
+            "zoom": {
+              "type": "number",
+              "minimum": 0,
+              "description": "greater than 0; 1: the page's own size"
             }
           }
         },
@@ -4769,16 +4785,14 @@
         },
         {
           "type": "object",
-          "description": "host: the button pressed on a notice message (the plug-in's own question or warning, shown by the page)",
-          "required": ["op", "id", "button"],
+          "description": "host: the button pressed on the notice numbered notice (a notice message's id: the plug-in's own question or warning, shown by the page); refused when that notice waits for no answer (answered already, or replaced) or has no such button",
+          "required": ["op", "notice", "button"],
           "properties": {
             "op": {
               "const": "noticeAnswer"
             },
             "id": {
-              "type": "integer",
-              "minimum": 0,
-              "maximum": 1000000000
+              "type": "integer"
             },
             "g": {
               "type": "integer",
@@ -4786,6 +4800,11 @@
             },
             "force": {
               "type": ["boolean", "integer"]
+            },
+            "notice": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 1000000000
             },
             "button": {
               "type": "integer",

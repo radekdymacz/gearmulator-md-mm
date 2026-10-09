@@ -27,13 +27,6 @@ namespace mcpServer
 			headers["Connection"] = "keep-alive";
 		}
 
-		void setCorsHeaders()
-		{
-			headers["Access-Control-Allow-Origin"] = "*";
-			headers["Access-Control-Allow-Methods"] = "GET, POST, OPTIONS";
-			headers["Access-Control-Allow-Headers"] = "Content-Type, Accept";
-		}
-
 		std::string serialize() const
 		{
 			std::ostringstream ss;

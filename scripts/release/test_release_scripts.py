@@ -9,6 +9,7 @@ import base64
 import hashlib
 import json
 import os
+import re
 import subprocess
 import sys
 import tempfile
@@ -110,8 +111,19 @@ with tempfile.TemporaryDirectory() as tmp:
     r = run([os.path.join(HERE, "set_site_version.py"), "0.3", cfg])
     check(r.returncode != 0, "config.js: a bad version is refused")
     site_cfg = os.path.join(HERE, "..", "..", "site", "public", "config.js")
-    import re
     check(len(re.findall(r'^\s*version:\s*"[0-9.]+",', open(site_cfg).read(), re.M)) == 1, "site/public/config.js has exactly one version line")
+
+# The README's "latest" link follows the version: the notes of the version the plug-ins carry (the first thing a
+# reader of the repository sees), and that file exists. Bump MDMM_EDITOR_VERSION and forget the README, and this fails.
+root = os.path.join(HERE, "..", "..")
+with open(os.path.join(root, "source", "elektron", "md", "mdJucePlugin", "mdmmPlugins.cmake")) as f:
+    found = re.search(r"^set\(MDMM_EDITOR_VERSION ([0-9.]+)\)\s*$", f.read(), re.M)
+check(found is not None, "mdmmPlugins.cmake has the MDMM_EDITOR_VERSION line")
+if found:
+    notes = "doc/release/v%s.md" % found.group(1)
+    check(os.path.isfile(os.path.join(root, notes)), "%s exists" % notes)
+    with open(os.path.join(root, "README.md")) as f:
+        check(("(%s)" % notes) in f.read(), "README.md links %s (the current version's notes)" % notes)
 
 print("test_release_scripts: %s" % ("all passed" if failures == 0 else "%d FAILED" % failures))
 sys.exit(1 if failures else 0)

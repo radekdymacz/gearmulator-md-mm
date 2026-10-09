@@ -7,6 +7,9 @@
      the user's mutes, which the end of the solo gives to the machine;
    - S4: a render held while a gesture ran is made when the gesture ends (paint, l2, chop, song alike);
    - S6: Shift-prepared mutes are dropped when the window loses the focus.
+   And, on the page with the real bridge (deskBridge.js) against a model of the plug-in's notice book (mdNoticeBook.h):
+   a notice's key answers that notice, never another, the update banner's too (codex review 2026-10: the bridge's
+   request id had replaced the notice's number since 0.3.0), and a refused answer is only logged.
      node mdDeskPageTest.js */
 const fs = require("fs"), path = require("path");
 const FILES = [...fs.readFileSync(path.join(__dirname, "mdStudio.html"), "utf8").matchAll(/<script src="([\w.]+)"><\/script>/g)].map(m => m[1])
@@ -371,6 +374,88 @@ check(P.Boot.audioWord({ plugin: true, seconds: 3, blocks: 0, realtime: null }) 
 	"not before 5 s, and not in the app");
 check(P.Boot.audioWord({ plugin: true, seconds: 9, blocks: 900, realtime: 0.6 }) === "The machine runs at 0.6× real time: try a larger buffer.", "slower than real time: says how slow");
 check(P.Boot.audioWord({ plugin: true, seconds: 9, blocks: 900, realtime: 1.0 }) === "", "in real time: nothing to say");
+
+/* ---- the plug-in's notices over the real bridge (codex review 2026-10): the page's own scripts, deskBridge.js included,
+   against a model of the plug-in's notice book (mdNoticeBook.h: a notice answers once, by its number, with one of its
+   buttons; anything else is refused and runs nothing) ---- */
+{
+	const files = [...fs.readFileSync(path.join(__dirname, "mdStudio.html"), "utf8").matchAll(/<script src="([\w.]+)"><\/script>/g)].map(m => m[1])
+		.filter(f => !/SelfTest\.js$|Journeys?\.js$|deskJourney\.js$/.test(f)).map(f => f.startsWith("desk") ? "../shared/" + f : f);
+	check(files.includes("../shared/deskBridge.js") && files.includes("../shared/deskModal.js"), "this page runs the real bridge and modal layer");
+	const native = (() => {
+		let last = 0; const waiting = new Map(), toPage = [], ran = [], answers = [];
+		return {
+			notice(title, buttons, modal) { const id = ++last; waiting.set(id, { buttons: Math.max(1, buttons.length), title }); toPage.push(Object.assign({ type: "notice", id, title, text: "", buttons }, modal === false ? { modal } : {})); return id; },
+			onPageMessage(m) {
+				if (m.op !== "noticeAnswer") { toPage.push({ type: "result", op: m.op, id: m.id, ok: true, errors: [] }); return; }
+				answers.push(m);
+				const w = waiting.get(m.notice), ok = !!w && m.button >= 0 && m.button < w.buttons;
+				if (ok) { waiting.delete(m.notice); ran.push(w.title + ":" + m.button); }
+				toPage.push({ type: "result", op: m.op, id: m.id, ok, errors: ok ? [] : ["notice " + m.notice + " is not waiting for an answer"] });
+			},
+			toPage, ran, answers, waiting
+		};
+	})();
+	const timers2 = [], logged = [];
+	const win = { addEventListener() { }, gmDev: batch => { for (const m of batch) native.onPageMessage(m); } };
+	const scope2 = new Proxy({ setTimeout: f => { timers2.push(f); return timers2.length; }, clearTimeout() { }, window: win, location: { protocol: "http:", search: "" },
+		document: orAny({ addEventListener() { }, activeElement: null, readyState: "complete" }), addEventListener() { },
+		console: { log: (...a) => logged.push(a.join(" ")), error() { }, warn() { } } }, {
+		has: () => true,
+		get: (t, k) => k === Symbol.unscopables ? undefined : k in t ? t[k] : k in real ? real[k] : any,
+		set: (t, k, v) => { t[k] = v; return true; } });
+	const src2 = files.map(f => fs.readFileSync(path.join(__dirname, f), "utf8").replace(/^"use strict";/, ""))
+		.join("\n;\n").replace(/^render\(\);\s*$/m, "").replace(/^Bridge\.ready\(\);\s*$/m, "");
+	const Q = new Function("scope", "with (scope) {\n" + src2 + `
+;const asked = [], errors = [];
+ask = (html, btns, item) => { asked.push({ html, btns, item }); };
+showLastError = e => { errors.push(e); }; toast = t => { errors.push(t); };
+render = () => { }; scheduleRender = () => { };
+const banners = []; Banner.show = (m, answer) => { banners.push({ m, answer }); };
+return { Bridge, cmd, asked, errors, banners }; }`)(scope2);
+	const deliver = () => { win.gm.recv(native.toPage.splice(0)); };
+	Q.cmd("romInfo"); deliver();	/* a command first: the bridge's request numbers are on */
+	const first = native.notice("Delete preset?", ["Yes", "No"]), second = native.notice("Overwrite?", ["Overwrite", "Cancel"]);
+	deliver();
+	Q.asked.find(a => /Delete preset/.test(a.html)).btns[0][2]();
+	deliver();
+	const a1 = native.answers[native.answers.length - 1];
+	check(a1 && a1.notice === first && typeof a1.id === "number" && a1.id !== a1.notice && native.ran.join() === "Delete preset?:0",
+		"Yes on notice " + first + ": the answer names notice " + first + " (its own request id " + (a1 && a1.id) + " apart), and that notice runs");
+	for (let i = 0; i < 40; i++) Q.cmd("romInfo");
+	deliver();
+	Q.asked.find(a => /Overwrite\?/.test(a.html)).item.cancel();	/* closed another way: its last key */
+	deliver();
+	check(native.ran.join() === "Delete preset?:0,Overwrite?:1" && native.answers[native.answers.length - 1].notice === second,
+		"40 commands later, the other notice closed by its last key: notice " + second + " takes it");
+	for (let i = 3; i <= 30; i++) native.notice("Q" + i, ["Yes", "No"]);
+	deliver();
+	Q.asked.find(a => /<b>Q7<\/b>/.test(a.html)).btns[0][2]();
+	deliver();
+	check(native.ran[native.ran.length - 1] === "Q7:0" && native.ran.length === 3 && native.waiting.size === 27, "a key on notice 7 among 28 waiting answers notice 7 only");
+	/* the update banner ("modal": false): its keys answer the banner's notice */
+	const banner = native.notice("Update available: 9.9.9", ["Update", "Later", "Don't check"], false);
+	deliver();
+	const b = Q.banners[Q.banners.length - 1];
+	check(b && b.m.id === banner, "the banner is the banner strip's (Banner.show), not the dialog");
+	b.answer(0);
+	deliver();
+	const ab = native.answers[native.answers.length - 1];
+	check(ab.notice === banner && ab.button === 0 && ab.id !== banner && native.ran[native.ran.length - 1] === "Update available: 9.9.9:0",
+		"Update on the banner reaches the banner's notice (its action runs in the plug-in)");
+	/* answered again (a second click, a replayed batch): refused by the plug-in, only logged on the page */
+	const shownBefore = Q.errors.length;
+	b.answer(0);
+	deliver();
+	check(native.ran.length === 4 && Q.errors.length === shownBefore && logged.some(l => /noticeAnswer refused: notice \d+ is not waiting/.test(l)),
+		"an answer the plug-in refuses runs nothing, shows nothing, and is logged");
+	/* what the page sends is the command the plug-in's table takes ($defs/command is generated from it, mdDeskTest) */
+	const { execFileSync } = require("child_process");
+	const root = path.join(__dirname, "..", "..", "..", "..", "..", "..");
+	const onContract = m => { try { execFileSync("python3", [path.join(root, "doc/modern-ux/page_contract_check.py"), path.join(root, "doc/modern-ux/md-data-contract.schema.json"), "command"], { input: JSON.stringify(m) }); return true; } catch (e) { return false; } };
+	check(onContract(a1) && onContract(ab) && !onContract({ op: "noticeAnswer", id: a1.notice, button: 0 }),
+		"the answers are the contract's noticeAnswer ({notice, button}); the old shape (the notice's number as id) is not");
+}
 
 console.log(failures ? `${failures} failure(s)` : "mdDeskPageTest: all passed");
 process.exit(failures ? 1 : 0);

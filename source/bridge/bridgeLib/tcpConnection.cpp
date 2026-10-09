@@ -4,15 +4,31 @@
 #include "networkLib/exception.h"
 #include "networkLib/logging.h"
 
+#include "ptypes/ptypes.h"
+
 #include "synthLib/midiTypes.h"
+
+#include <stdexcept>
+#include <string>
 
 namespace bridgeLib
 {
+	namespace
+	{
+		// Audio counts are peer data: a count the receiver has no room for is a protocol error, never a write
+		// past the end of a buffer.
+		void checkAudioCount(const uint32_t _count, const uint32_t _limit, const char* _what)
+		{
+			if(_count <= _limit)
+				return;
+			throw std::range_error(std::string("audio ") + _what + ' ' + std::to_string(_count) + " exceeds "
+				+ std::to_string(_limit));
+		}
+	}
+
 	TcpConnection::TcpConnection(std::unique_ptr<networkLib::TcpStream>&& _stream) : CommandReader(nullptr), m_stream(std::move(_stream))
 	{
 		m_audioTransferBuffer.reserve(16384);
-
-		start();
 	}
 
 	TcpConnection::~TcpConnection()
@@ -54,6 +70,24 @@ namespace bridgeLib
 			m_stream->close();
 			LOGNET(networkLib::LogLevel::Warning, "Network Exception, code " << e.type() << ": " << e.what());
 			handleException(e);
+		}
+		catch (const std::exception& e)
+		{
+			// A malformed command (a short payload, a count out of range, an oversized command) throws from
+			// the parser. It ends this connection the way a lost connection does instead of leaving the thread
+			// and terminating the whole process.
+			m_stream->close();
+			LOGNET(networkLib::LogLevel::Warning, "Protocol error, closing connection: " << e.what());
+			handleException(networkLib::NetException(networkLib::ConnectionLost, e.what()));
+		}
+		catch (ptypes::exception* e)
+		{
+			// ptypes throws pointers; TcpStream turns those of a read or write into NetException, this is any other
+			const std::string message = e ? static_cast<const char*>(e->get_message()) : "unknown";
+			delete e;
+			m_stream->close();
+			LOGNET(networkLib::LogLevel::Warning, "Network error, closing connection: " << message);
+			handleException(networkLib::NetException(networkLib::ConnectionLost, message));
 		}
 	}
 
@@ -129,14 +163,19 @@ namespace bridgeLib
 		send();
 	}
 
-	uint32_t TcpConnection::handleAudio(float* const* _output, baseLib::BinaryStream& _in)
+	uint32_t TcpConnection::handleAudio(float* const* _output, const uint32_t _maxChannels, const uint32_t _capacity,
+		baseLib::BinaryStream& _in)
 	{
 		const uint32_t numChannels = _in.read<uint8_t>();
 		const uint32_t numSamplesMax = _in.read<uint32_t>();
 
+		checkAudioCount(numChannels, _maxChannels, "channel count");
+		checkAudioCount(numSamplesMax, _capacity, "block size");
+
 		for(uint32_t i=0; i<numChannels; ++i)
 		{
 			const auto numSamples = _in.read<uint32_t>();
+			checkAudioCount(numSamples, numSamplesMax, "channel size");
 			if(numSamples)
 			{
 				assert(_output[i]);
@@ -151,9 +190,14 @@ namespace bridgeLib
 		const uint32_t numChannels = _in.read<uint8_t>();
 		const uint32_t numSamplesMax = _in.read<uint32_t>();
 
+		checkAudioCount(numChannels, static_cast<uint32_t>(std::tuple_size_v<synthLib::TAudioOutputs>),
+			"channel count");
+		checkAudioCount(numSamplesMax, AudioBuffers::BufferSize, "block size");
+
 		for(uint32_t i=0; i<numChannels; ++i)
 		{
 			const auto numSamples = _in.read<uint32_t>();
+			checkAudioCount(numSamples, numSamplesMax, "channel size");
 
 			if(numSamples)
 			{

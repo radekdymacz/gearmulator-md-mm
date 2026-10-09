@@ -68,10 +68,16 @@ namespace
 		// "ready": everything the session publishes once a page attaches, "learn" among it.
 		session->onPageMessage(parseJson(R"({"op":"ready"})"));
 
-		// MIDI mapping is a switch (deskHost::midiMappingEnabled): off, the learn document says so with no
-		// mappings, and a learn command is refused. On, this part of the test does not apply.
+		// MIDI mapping is a switch (deskHost::midiMappingEnabled): off, the plug-in has no MIDI learn translator
+		// (no learn code on the MIDI threads), the learn document says so with no mappings, and a learn command
+		// is refused. On, this part of the test does not apply.
 		if(!deskHost::midiMappingEnabled)
 		{
+			if(_processor.getMidiLearnTranslator())
+			{
+				std::puts("  FAIL: MIDI mapping off, but the plug-in made a MIDI learn translator");
+				return false;
+			}
 			bool told = false, refused = false;
 			for(const auto& m : published)
 				if(const auto* type = m.find("type"); type && type->isString() && type->asString() == "learn")
@@ -97,7 +103,7 @@ namespace
 				std::printf("  FAIL: MIDI mapping off: learn document says off %d, both learn commands refused %d\n", told, refused);
 				return false;
 			}
-			std::puts("  MIDI mapping off: the learn document says so, learn commands refused");
+			std::puts("  MIDI mapping off: no translator, the learn document says so, learn commands refused");
 		}
 
 		// AUDIO/MIDI is the editor window's, not the session's (mdPageEditor.h owns it); built the

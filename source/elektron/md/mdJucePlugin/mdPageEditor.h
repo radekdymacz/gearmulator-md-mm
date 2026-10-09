@@ -6,6 +6,7 @@
 #include "elektronData/json.h"
 #include "juceUiLib/messageRoute.h"
 #include "mdEditorMenu.h"
+#include "mdNoticeBook.h"
 #include "mdUpdater.h"
 
 #include "juce_gui_basics/juce_gui_basics.h"
@@ -79,9 +80,8 @@ namespace mdJucePlugin
 		std::unique_ptr<AudioMidiLink> m_audio;
 		std::unique_ptr<Diagnostics> m_diagnostics;
 		std::unique_ptr<juce::FileChooser> m_chooser;
-		int m_noticeId = 0;
 		std::shared_ptr<int> m_alive = std::make_shared<int>(0);	// callbacks that outlive the window check it
-		std::map<int, std::function<void(int)>> m_notices;	// the plug-in's questions the page has not answered yet
+		NoticeBook m_notices;	// the plug-in's questions and the banner the page has not answered yet (their numbers)
 		genericUI::messageRoute::Attachment m_noticeRoute;	// this window's sink for its instance's notices (messageRoute.h)
 		// This window's instance as the notice route knows it (the AudioPluginAudioProcessor's address, the same
 		// pointer the processor's own OwnerScope uses). Every entry point here runs in an OwnerScope of it, so a
@@ -89,7 +89,7 @@ namespace mdJucePlugin
 		const void* m_noticeOwner = nullptr;
 		juce::SharedResourcePointer<updates::Updater> m_updater;	// one a process, shared by every window
 		int m_updateToken = 0;
-		int m_bannerId = 0;				// the notice id of the banner shown, 0: none
+		int m_bannerId = 0;				// the notice number of the banner shown, 0: none
 		std::string m_bannerShown;		// what it says (sent again only when that changes)
 		juce::int64 m_nextUpdatePoll = 0;
 		int m_menuSerial = 0;							// the editor's menu last sent to the page (editorMenu's menu)

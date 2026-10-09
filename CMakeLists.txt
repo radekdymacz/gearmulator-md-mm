@@ -1,5 +1,6 @@
 cmake_minimum_required(VERSION 3.15)
 
+include(source/elektron/md/mdmmCMakeVersion.cmake)	# the fork: JUCE needs CMake 3.22 (doc/modern-ux/UPSTREAM.md)
 # build a fat binary that runs on both intel and the new Apple M1 chip
 if(APPLE)
 	include(xcodeversion.cmake)

@@ -35,12 +35,14 @@ function askRemoveRom(m) {
 }
 /* what the plug-in has to say to the user (a question, a warning): its modal, never a native alert. The plug-in
    waits for the answer, so a notice goes before the page's own questions, is never replaced by one, and is
-   always answered: closed any other way, by its last key (Dlg, skins/shared/deskModal.js). */
+   always answered: closed any other way, by its last key (Dlg, skins/shared/deskModal.js). The answer is
+   noticeAnswer (deskModal.js), not cmd: it is no edit, and a refusal is only logged. */
 function showNotice(m) {
+	const send = i => Bridge.send(noticeAnswer(m, i), { onResult: noticeRefused });
 	/* "modal": false (the update banner, DESIGN-updates.md): a strip, not the dialog; the page plays on under it */
-	if (m.modal === false) { Banner.show(m, i => cmd("noticeAnswer", { id: m.id, button: i })); return; }
+	if (m.modal === false) { Banner.show(m, send); return; }
 	const names = m.buttons && m.buttons.length ? m.buttons : ["OK"], item = { notice: true };
-	const answer = i => { if (item.done) return; item.done = true; cmd("noticeAnswer", { id: m.id, button: i }); };
+	const answer = i => { if (item.done) return; item.done = true; send(i); };
 	item.cancel = () => answer(names.length - 1);
 	ask(`<b>${escH(m.title)}</b><br>${escH(m.text).replace(/\n/g, "<br>")}`,
 		names.map((t, i) => [escH(t), i === 0 && names.length > 1 ? "cream" : "", () => answer(i)]), item);

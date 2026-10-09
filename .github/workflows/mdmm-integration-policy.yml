@@ -11,6 +11,8 @@ permissions:
 
 jobs:
   integration-policy:
+    # Joe Landers' gate for PRs into his release line; this fork merges into main (doc/modern-ux/UPSTREAM.md).
+    if: github.repository == 'joelanders/gearmulator-md-mm'
     name: Evaluate integration policy
     runs-on: ubuntu-latest
     timeout-minutes: 10

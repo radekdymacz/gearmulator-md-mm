@@ -234,39 +234,8 @@ namespace md
 
 	bool Device::getState(std::vector<uint8_t>& _state, synthLib::StateType _type)
 	{
-		if(isProjectStateRestorePending() && _type == m_requestedStateType
-			&& m_requestedState)
-		{
-			_state.insert(_state.end(), m_requestedState->begin(), m_requestedState->end());
-			return true;
-		}
-
-		auto* stateHardware = m_hardware.get();
-		if(m_deferredPreparedState && m_deferredPreparedState->m_hardware)
-			stateHardware = m_deferredPreparedState->m_hardware.get();
-		const auto patchRam = stateHardware->copyPatchRam();
-		if(m_model == MachineModel::Monomachine)
-			return encodeState(_state, patchRam, m_model, _type,
-				stateHardware->copyUserFlash());
-		std::vector<uint8_t> factoryBaseline;
-		// B-034: the ROM's and the baseline's fingerprints as md::Hardware keeps them (not two 8 MiB scans under the
-		// plug-in's lock, which the audio thread waits for)
-		FlashFingerprints known;
-		known.rom = stateHardware->firmwareFingerprint();
-		if(stateHardware->copyFactoryFlashBaseline(factoryBaseline, known.baseline))
-			return encodeStateWithFactoryBaseline(_state, patchRam,
-				stateHardware->copyFlashData(),
-				factoryBaseline, stateHardware->flashBaseline(), m_model, _type, &known);
-		FlashSectorOverlay pending;
-		if(stateHardware->copyPendingFlashOverlay(pending))
-			return encodeState(_state, patchRam, pending,
-				stateHardware->flashBaseline(), m_model, _type, &known.rom);
-		// If interaction happened before the first machine-local baseline was
-		// captured, preserve a complete flash image. An absolute sector set records
-		// ROM-equal deletions and lets the replacement boot coherently without waiting
-		// for another factory-initialization pass.
-		return encodeState(_state, patchRam, stateHardware->copyFlashData(),
-			stateHardware->flashBaseline(), stateHardware->flashBaseline(), m_model, _type);
+		auto capture = beginStateCapture(_type);
+		return capture && capture->encode(_state);
 	}
 
 	bool Device::setState(const std::vector<uint8_t>& _state, synthLib::StateType _type)
