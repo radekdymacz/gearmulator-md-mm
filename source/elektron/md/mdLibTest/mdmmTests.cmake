@@ -97,6 +97,15 @@ function(mdmm_add_lib_tests _dir)
 	set_tests_properties(deskWirePortTest PROPERTIES LABELS "UnitTest;Midi")
 	set_property(TARGET deskWirePortTest PROPERTY FOLDER "Elektron/test")
 
+	# A state save captured under the plug-in's lock and encoded after it (codex review 2026-10, item 3): the
+	# table-driven CRC-32, and the capture's bytes against the encoder's (the firmware part needs
+	# GEARMULATOR_MD_FIRMWARE_BIN / GEARMULATOR_MM_FIRMWARE_BIN and says SKIP without them).
+	add_executable(mdStateCaptureTest ${_dir}/mdStateCaptureTest.cpp)
+	target_link_libraries(mdStateCaptureTest PRIVATE mdLib)
+	add_test(NAME mdStateCaptureTest COMMAND mdStateCaptureTest)
+	set_tests_properties(mdStateCaptureTest PROPERTIES LABELS "UnitTest")
+	set_property(TARGET mdStateCaptureTest PROPERTY FOLDER "Elektron/test")
+
 	# .syx import and export (P7): synthetic dumps; no firmware.
 	add_executable(syxImportTest ${_dir}/syxImportTest.cpp)
 	target_link_libraries(syxImportTest PRIVATE elektronData)

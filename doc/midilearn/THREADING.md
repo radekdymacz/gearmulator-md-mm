@@ -33,7 +33,7 @@ refused and the pages hide the CONTROL workspace. Since the fix of 2026-10, the 
 all: `AudioPluginAudioProcessor::usesMidiLearn()` returns the switch, and `Processor::getController` creates the
 translator only when it is true. So no learn code runs on any thread, no default preset is loaded, and no `MDLN`
 chunk is written to or read from the project (an old project's chunk is skipped). Every user of
-`getMidiLearnTranslator()` already handles null. `mdAudioIoLayoutTest` (no firmware) and `mdSessionFirmwareTest`
+`getMidiLearnTranslator()` already handles null. `mdProcessorHooksTest` (no firmware) and `mdSessionFirmwareTest`
 assert that the translator follows the switch.
 
 The other synths keep the upstream behaviour (`usesMidiLearn()` defaults to true).
@@ -81,7 +81,7 @@ One owner per piece of state; the realtime threads read immutable values and pos
   there (a counting hook on the processor).
 - A ThreadSanitizer stress test: one thread calls `processMidiInput` in a loop with mapped and unmapped CCs while the
   main thread swaps presets and starts and cancels learning; no reports, no crash.
-- Extend the switch check in `mdSessionFirmwareTest` (and `mdAudioIoLayoutTest`) for the "on" position: a
+- Extend the switch check in `mdSessionFirmwareTest` (and `mdProcessorHooksTest`) for the "on" position: a
   translator exists and a learned CC moves the parameter.
 
 ### Turning MIDI mapping on again

@@ -42,14 +42,6 @@ namespace synthLib::test
 		float getInputPeak(const size_t _channel) const { return m_inputPeaks[_channel]; }
 		void invalidate() { m_valid = false; }
 		void queueMidiOutput(const SMidiEvent& _event) { m_pendingMidiOutput.push_back(_event); }
-		// Opt-in so the allocation probes keep a silent sendMidi; the capacity keeps recording
-		// itself from allocating while the plug-in processes.
-		void recordMidiInput(const size_t _capacity)
-		{
-			m_recordMidiInput = true;
-			m_receivedMidi.reserve(_capacity);
-		}
-		const std::vector<SMidiEvent>& getReceivedMidi() const { return m_receivedMidi; }
 
 	private:
 		void readMidiOut(std::vector<SMidiEvent>& _output) override
@@ -57,10 +49,8 @@ namespace synthLib::test
 			_output.insert(_output.end(), m_pendingMidiOutput.begin(), m_pendingMidiOutput.end());
 			m_pendingMidiOutput.clear();
 		}
-		bool sendMidi(const SMidiEvent& _event, std::vector<SMidiEvent>&) override
+		bool sendMidi(const SMidiEvent&, std::vector<SMidiEvent>&) override
 		{
-			if(m_recordMidiInput)
-				m_receivedMidi.push_back(_event);
 			return true;
 		}
 		void processAudio(const TAudioInputs& _inputs,
@@ -103,7 +93,5 @@ namespace synthLib::test
 		std::array<float, 4> m_inputPeaks{};
 		bool m_valid = true;
 		std::vector<SMidiEvent> m_pendingMidiOutput;
-		bool m_recordMidiInput = false;
-		std::vector<SMidiEvent> m_receivedMidi;
 	};
 }

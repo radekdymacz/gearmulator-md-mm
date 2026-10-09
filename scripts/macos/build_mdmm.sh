@@ -205,13 +205,16 @@ cmake --build "${build_dir}" --parallel 4 --target \
   mcpHttpGuardTest \
   mcpHttpServerTest \
   synthLibAudioTest \
+  synthLibMidiQueueTest \
   mdLibTest \
   mdStateTest \
+  mdStateCaptureTest \
   mdFlashTest \
   mdUwFirmwareTest \
   mdAudioQueueTest \
   mdAudioFirmwareTest \
   mdAudioIoLayoutTest \
+  mdProcessorHooksTest \
   mdProjectStateRestoreTest \
   mdAudioProbePlugin_VST3 \
   vst3ProgramChangeTest \
@@ -245,8 +248,10 @@ for test_name in \
   mcpHttpGuardTest \
   mcpHttpServerTest \
   synthLibAudioTest \
+  synthLibMidiQueueTest \
   mdLibTests \
   mdStateTest \
+  mdStateCaptureTest \
   mdFlashTest \
   mdStandaloneRendererPolicyTest \
   mdPanelRenderingTest \
@@ -254,6 +259,7 @@ for test_name in \
   mdFrontPanelPresentationTests \
   mdAudioQueueTest \
   mdAudioIoLayoutTest \
+  mdProcessorHooksTest \
   mdAudioProbePluginVST3IdentityTest \
   mdVst3ProgramChangeTest \
   mdVst3ProgramChangeOptOutTest \

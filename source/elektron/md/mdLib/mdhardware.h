@@ -35,38 +35,12 @@ namespace md
 	inline constexpr uint32_t g_hostAudioInputSafetyFrames = 64;
 
 	class Device;
+	class FactoryFlashBaseline;	// mdfactorybaseline.h, the fork's
 
 	struct FactoryFlashSnapshot
 	{
 		std::vector<uint8_t> cache;
 		std::vector<uint8_t> baseline;
-	};
-
-	// The initialized factory flash a Machinedrum state is stored relative to, with its FNV-1a 64 fingerprint.
-	// Built once and then kept: from the machine-local cache that is three 8 MiB scans and a CRC of every cached
-	// sector, which a state save used to repeat every time under the plug-in's lock. Immutable once built, so a
-	// state save shares it, and whoever asks first builds it (outside the plug-in's lock when a capture does).
-	class FactoryFlashBaseline
-	{
-	public:
-		// From the machine-local cache, decoded against the ROM on first use
-		FactoryFlashBaseline(std::vector<uint8_t> _cache, std::shared_ptr<const Rom> _rom);
-		// From an initialized image (a completed capture, or a cache already decoded), with its fingerprint if known
-		FactoryFlashBaseline(std::vector<uint8_t> _baseline, std::optional<uint64_t> _fingerprint);
-
-		FactoryFlashBaseline(const FactoryFlashBaseline&) = delete;
-		FactoryFlashBaseline& operator=(const FactoryFlashBaseline&) = delete;
-
-		// Any thread. False when the cache does not decode against its ROM.
-		bool get(std::shared_ptr<const std::vector<uint8_t>>& _baseline, uint64_t& _fingerprint);
-
-	private:
-		std::mutex m_mutex;
-		std::vector<uint8_t> m_cache;			// until decoded
-		std::shared_ptr<const Rom> m_rom;		// until decoded
-		std::shared_ptr<const std::vector<uint8_t>> m_baseline;
-		std::optional<uint64_t> m_fingerprint;
-		bool m_failed = false;
 	};
 
 	// md::Hardware models the Elektron ColdFire MCU and two DSP56303s. A single
@@ -182,8 +156,9 @@ namespace md
 		{
 			return m_pendingFlashRestoreActive.load(std::memory_order_acquire);
 		}
+		bool copyFactoryFlashBaseline(std::vector<uint8_t>& _baseline);
 		// The factory baseline once the factory flash is ready (null before), shared and built at most once per
-		// cache or capture (FactoryFlashBaseline). Call under the owning Plugin device lock.
+		// cache or capture (FactoryFlashBaseline). Call under the owning Plugin device lock. mdfactorybaseline.cpp.
 		std::shared_ptr<FactoryFlashBaseline> factoryFlashBaseline();
 		std::vector<uint8_t> copyFactoryFlashCache();
 		// Capture immutable source bytes while the machine is pinned. Cache encoding

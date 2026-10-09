@@ -154,12 +154,16 @@ jobs:
           baseLibBinaryStreamTest
           bridgeLibTest
           bridgeServerRomPoolTest
+          mcpHttpGuardTest
+          mcpHttpServerTest
           midiRoutingMatrixTest
           mdAutomationMidiTest
           synthLibAudioTest
+          synthLibMidiQueueTest
           mdAudioQueueTest
           mdAudioFirmwareTest
           mdStateTest
+          mdStateCaptureTest
           mdFlashTest
 
       - name: Run DSP accumulator regressions
@@ -178,8 +182,7 @@ jobs:
           mdAutomationRobustnessTest
           mdFrontPanelPresentationTest
           mdAudioIoLayoutTest
-          mcpHttpGuardTest
-          mcpHttpServerTest
+          mdProcessorHooksTest
 
       - name: Run headless gates
         env:
@@ -189,7 +192,7 @@ jobs:
           ctest --test-dir build-mdmm-core -C Release --output-on-failure
           --no-tests=error
           --tests-regex
-          '^(baseLibBinaryStreamTest|bridgeLibTest|bridgeServerRomPoolTest|midiRoutingMatrixTest|mdAutomationMidiTest|synthLibAudioTest|mdAudioQueueTest|mdAudioFirmwareTest|mdStateTest|mdFlashTest)$'
+          '^(baseLibBinaryStreamTest|bridgeLibTest|bridgeServerRomPoolTest|mcpHttpGuardTest|mcpHttpServerTest|midiRoutingMatrixTest|mdAutomationMidiTest|synthLibAudioTest|synthLibMidiQueueTest|mdAudioQueueTest|mdAudioFirmwareTest|mdStateTest|mdStateCaptureTest|mdFlashTest)$'
 
       - name: Build and run realtime instrumentation gate
         env:
@@ -209,7 +212,7 @@ jobs:
           ctest --test-dir build-mdmm-core -C Release --output-on-failure
           --no-tests=error
           --tests-regex
-          '^(midiOutputDispatcherTest|mdAutomationParameterTest|mdAutomationArchitectureTest|mdAudioIoLayoutTest|mdFrontPanelPresentationTests|mcpHttpGuardTest|mcpHttpServerTest)$'
+          '^(midiOutputDispatcherTest|mdAutomationParameterTest|mdAutomationArchitectureTest|mdAudioIoLayoutTest|mdProcessorHooksTest|mdFrontPanelPresentationTests)$'
 
       - name: Build and run Shift panel chording regression
         run: |

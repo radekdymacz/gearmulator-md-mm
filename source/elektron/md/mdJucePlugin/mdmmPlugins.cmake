@@ -408,6 +408,17 @@ function(mdmm_plugin_targets)
 		target_compile_definitions(mdAudioIoLayoutTest PRIVATE JUCE_USE_CUSTOM_PLUGIN_STANDALONE_APP=1)
 	endif()
 
+	# The fork's hooks in upstream's Processor (jucePluginLib/processor.*, doc/modern-ux/UPSTREAM.md): the host latency
+	# after a resampler mode change, and no MIDI learn translator while MIDI mapping is off. No firmware.
+	add_executable(mdProcessorHooksTest mdProcessorHooksTest.cpp)
+	target_link_libraries(mdProcessorHooksTest PRIVATE
+		mdJucePlugin jucePluginEditorLib mdLib juce_plugin_modules juce::juce_opengl)
+	target_include_directories(mdProcessorHooksTest PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/../../..)
+	target_compile_definitions(mdProcessorHooksTest PRIVATE JUCE_GLOBAL_MODULE_SETTINGS_INCLUDED=1)
+	add_test(NAME mdProcessorHooksTest COMMAND mdProcessorHooksTest)
+	set_tests_properties(mdProcessorHooksTest PROPERTIES LABELS "UnitTest;AudioIo" TIMEOUT 120)
+	set_property(TARGET mdProcessorHooksTest PROPERTY FOLDER "Elektron/test")
+
 	add_executable(mdRomInstallTest mdRomInstallTest.cpp mdRomInstall.cpp)
 	target_include_directories(mdRomInstallTest PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/..)
 	target_link_libraries(mdRomInstallTest PRIVATE juce::juce_core)

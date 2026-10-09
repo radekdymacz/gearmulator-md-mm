@@ -1,7 +1,5 @@
 #include "mdPluginProcessor.h"
 
-#include "deskHost/deskHost.h"
-
 #include "juce_audio_utils/juce_audio_utils.h"
 #include "juce_audio_plugin_client/Standalone/juce_StandaloneFilterWindow.h"
 #include "juce_events/juce_events.h"
@@ -214,10 +212,6 @@ namespace
 	{
 		mdJucePlugin::AudioPluginAudioProcessor processor(_model,
 			mdJucePlugin::AudioPluginAudioProcessor::EphemeralConfig{}, false);
-
-		// MIDI mapping off: incoming MIDI must not run through the (not thread-safe) learn translator at all
-		require((processor.getMidiLearnTranslator() != nullptr) == deskHost::midiMappingEnabled,
-			"the MIDI learn translator does not follow the MIDI mapping switch");
 
 		require(processor.getBusCount(true) == 1,
 			"expected one audio input bus");
@@ -433,67 +427,6 @@ namespace
 			"device replacement never notified the host of its new latency");
 		require(processor.getLatencySamples() != previousHostLatency,
 			"queued latency update did not publish the replacement latency");
-		processor.removeListener(&listener);
-	}
-
-	// Each resampler has its own group delay. A mode change (settings page, project restore) must publish the new
-	// latency to the host at once on the message thread, and through the async update from any other thread.
-	void verifyResamplerModeLatencyIsPublished()
-	{
-		constexpr std::array<synthLib::Resampler::Mode, 4> modes{
-			synthLib::Resampler::Mode::MameHq, synthLib::Resampler::Mode::Legacy,
-			synthLib::Resampler::Mode::MameLofi, synthLib::Resampler::Mode::Legacy};
-
-		SyntheticProcessor processor;
-		juce::AudioProcessor& audioProcessor = processor;
-		audioProcessor.prepareToPlay(48000.0, 256);
-		LatencyListener listener;
-		processor.addListener(&listener);
-
-		const auto expectedLatency = [&]
-		{
-			return static_cast<int>(std::max(processor.getPlugin().getLatencyMidiToOutput(),
-				processor.getPlugin().getLatencyInputToOutput()));
-		};
-
-		bool anyModeChangedLatency = false;
-		for(const auto mode : modes)
-		{
-			const auto before = processor.getLatencySamples();
-			const auto notificationsBefore = listener.latencyChanges.load();
-			processor.setResamplerMode(mode);
-			const auto expected = expectedLatency();
-			require(processor.getLatencySamples() == expected,
-				"resampler mode " + std::to_string(static_cast<int>(mode))
-				+ " left the host latency stale: reported " + std::to_string(processor.getLatencySamples())
-				+ ", plug-in latency " + std::to_string(expected));
-			if(expected == before)
-				continue;
-			anyModeChangedLatency = true;
-			require(listener.latencyChanges.load() > notificationsBefore,
-				"resampler mode latency change was not published to the host");
-		}
-		require(anyModeChangedLatency,
-			"no resampler mode changed the latency at 48 kHz; the test proves nothing");
-
-		// From a worker thread the host is told on the message thread, never synchronously
-		processor.setResamplerMode(synthLib::Resampler::Mode::Legacy);
-		const auto legacyLatency = processor.getLatencySamples();
-		const auto notificationsBefore = listener.latencyChanges.load();
-		std::thread worker([&]
-		{
-			processor.setResamplerMode(synthLib::Resampler::Mode::MameHq);
-		});
-		worker.join();
-		const auto expected = expectedLatency();
-		require(expected != legacyLatency, "MAME HQ and legacy resampling have the same latency");
-		require(listener.latencyChanges.load() == notificationsBefore
-			&& processor.getLatencySamples() == legacyLatency,
-			"resampler mode change on a worker thread notified the host synchronously");
-		processor.serviceAsyncForTest();
-		require(listener.latencyChanges.load() > notificationsBefore
-			&& processor.getLatencySamples() == expected,
-			"resampler mode change on a worker thread never published its latency");
 		processor.removeListener(&listener);
 	}
 
@@ -764,7 +697,6 @@ int main()
 		verifyLatencyTracksLayoutRateAndOfflineMode();
 		verifyInvalidDeviceRecoveryIsDeferred();
 		verifyReplacementLatencyNotificationIsAsync();
-		verifyResamplerModeLatencyIsPublished();
 		verifyIsolatedDataRoot();
 		std::cout << "mdAudioIoLayoutTest: PASS\n";
 		return 0;
