@@ -119,6 +119,19 @@ namespace mdJucePlugin
 			"editor-" + juce::File::createLegalFileName(juce::String(m_session ? m_session->pageSpec().page : "page")).upToLastOccurrenceOf(".", false, false) + ".log");
 		m_page->setStartupLog(startupLog);
 		m_page->setFallbackMenu([this] { openMenu(); });	// I-008: no page up, the native menu
+		// Linux: a page that started again has nothing (WebPageHost::onAck): the session's documents once more, as on
+		// its ready, and the update banner (the old one's answer is no longer wanted)
+		m_page->setOnRestart([this]
+		{
+			const genericUI::messageRoute::OwnerScope owner(m_noticeOwner);
+			if(m_bannerId)
+				m_notices.forget(m_bannerId);
+			m_bannerId = 0;
+			m_bannerShown.clear();
+			if(m_session)
+				m_session->republish();
+			showUpdateBanner();
+		});
 		// B-035: the processor's start-up lines (the host's audio calls, the machine's boot) go into the same log
 		processor.bootDiagnostics().setLog(startupLog);
 		m_page->load();

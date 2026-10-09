@@ -37,8 +37,12 @@ The editor is a web page in JUCE 7's `WebBrowserComponent`. On Linux JUCE runs w
   each `gm.recv([...], seq)` call as a script file beside the page file (`<page>.recv-<seq>.js`), the page (loaded
   with `?recv=file`) loads them in order with `<script>` tags, polling every 8 ms for the next one, and reports
   `gmbridge://a/<seq>` every 250 ms so the plug-in deletes what was read (`a/0` when it starts: a page that loaded
-  again reads from 1). The same probe in that mode (`file`) passed 5 of 5 runs of 300 round trips under the same
-  load. The page loads from a `file://` temp file as on macOS. The zoom that fits the design width is macOS-only
+  again reads from 1, and the plug-in sends it everything once more, as on its ready). The same probe in that mode
+  (`file`) passed 5 of 5 runs of 300 round trips under the same load. The plug-in writes the files strictly in order
+  (`FileOutbox` in `mdPageBridge.h`): one that cannot be written (a full disk for a moment) holds back the later ones
+  and is tried again on every tick; with 8 MiB waiting, or 2 s without a file written, they are dropped and the page
+  is loaded again once a file can be written. The start-up log says each of these in every build. The page loads
+  from a `file://` temp file as on macOS. The zoom that fits the design width is macOS-only
   (`mdStudioWebZoom.mm`), as on Windows.
 
 ## Checked by CI, and not

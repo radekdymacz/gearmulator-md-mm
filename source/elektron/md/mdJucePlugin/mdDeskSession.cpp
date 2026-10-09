@@ -83,6 +83,13 @@ namespace mdJucePlugin
 		m_toPage = nullptr;
 	}
 
+	void DeskSession::republish()
+	{
+		Value ready = Value::object();
+		ready.set("op", "ready");	// no id: nobody waits for its result
+		onPageMessage(ready);
+	}
+
 	void DeskSession::toPage(const Value& _message) const
 	{
 		if(m_toPage)

@@ -5,9 +5,12 @@
 #include <cstddef>
 #include <cstdint>
 #include <cstdlib>
+#include <deque>
+#include <functional>
 #include <map>
 #include <optional>
 #include <string>
+#include <utility>
 #include <vector>
 
 namespace mdJucePlugin::pageBridge
@@ -30,6 +33,8 @@ namespace mdJucePlugin::pageBridge
 	//   <page file>.recv-<seq>.js (recvFileName), and the page, loaded with ?recv=file, loads them in order with
 	//   <script> tags, polling for the next one. It says how far it got with gmbridge://a/<seq> (now and then; the
 	//   plug-in then deletes those files), and gmbridge://a/0 when it starts (a page that started again reads from 1).
+	//   The page waits for batch n before it reads n + 1, so the files are written strictly in order (FileOutbox): one
+	//   that could not be written holds back every later one until it is.
 	constexpr const char* g_command = "gmbridge://c/";
 	constexpr const char* g_piece = "gmbridge://p/";
 	constexpr const char* g_log = "gmbridge://log/";
@@ -112,6 +117,108 @@ namespace mdJucePlugin::pageBridge
 			std::map<size_t, std::string> pieces;
 		};
 		std::map<long, Batch> m_batches;
+	};
+
+	// Linux: the batches' script files written strictly in order (the page reads batch n + 1 only after batch n). A script
+	// that could not be written (a full disk for a moment) waits with every later one, and each pump tries again from the
+	// first; only a written one is the page's (the writer registers it, for deletion once the page has read it). A
+	// backlog past g_maxBacklogBytes, or one that has not moved for g_maxStallMs, is dropped: the page could never read
+	// past the gap, so it is loaded again once a file can be written (resync; it starts over with a/0 and says ready,
+	// and the session sends everything once more). Pure: the writer and the clock are the caller's.
+	class FileOutbox
+	{
+	public:
+		static constexpr size_t g_maxBacklogBytes = 8 << 20;
+		static constexpr double g_maxStallMs = 2000.0;
+
+		// _write(seq, script): true when the page can read the batch now (its file is there, whole)
+		using Write = std::function<bool(uint64_t, const std::string&)>;
+
+		// What a pump changed, for the log (a stall is said once, not on every try)
+		enum class Change
+		{
+			None,
+			Stalled,	// a write failed and nothing failed before: it waits (stalledAt) with what follows
+			Recovered,	// every waiting batch is written now
+			Dropped		// the backlog was too large or too old: dropped, resync() is set
+		};
+
+		explicit FileOutbox(Write _write) : m_write(std::move(_write)) {}
+
+		// _scripts numbered from _firstSeq (recvScripts), behind what waits. Nothing while a resync is due: the page
+		// that is loaded again gets everything anew.
+		void add(const uint64_t _firstSeq, std::vector<std::string> _scripts)
+		{
+			if(m_resync)
+				return;
+			for(size_t i = 0; i < _scripts.size(); ++i)
+			{
+				m_bytes += _scripts[i].size();
+				m_waiting.push_back({_firstSeq + i, std::move(_scripts[i])});
+			}
+		}
+
+		// Writes what waits, in order, until a write fails. _nowMs: the caller's clock (how long a stall lasts).
+		Change pump(const double _nowMs)
+		{
+			bool moved = false;
+			while(!m_waiting.empty())
+			{
+				const auto& next = m_waiting.front();
+				if(m_write(next.seq, next.script))
+				{
+					m_bytes -= next.script.size();
+					m_waiting.pop_front();
+					moved = true;
+					continue;
+				}
+				const bool first = !m_stalledSince;
+				if(first || moved)
+					m_stalledSince = _nowMs;	// a stall lasts from the last batch that went
+				if(m_bytes <= g_maxBacklogBytes && _nowMs - *m_stalledSince <= g_maxStallMs)
+					return first ? Change::Stalled : Change::None;
+				m_dropped = {m_waiting.size(), m_bytes};
+				m_waiting.clear();
+				m_bytes = 0;
+				m_stalledSince.reset();
+				m_resync = true;
+				return Change::Dropped;
+			}
+			if(!m_stalledSince)
+				return Change::None;
+			m_stalledSince.reset();
+			return Change::Recovered;
+		}
+
+		// The page started again (a/0): what waits was the old page's, the new one reads from batch 1.
+		void restart()
+		{
+			m_waiting.clear();
+			m_bytes = 0;
+			m_stalledSince.reset();
+			m_resync = false;
+		}
+
+		bool resync() const { return m_resync; }
+		size_t waiting() const { return m_waiting.size(); }
+		size_t bytes() const { return m_bytes; }
+		// The batch that could not be written, while one waits.
+		std::optional<uint64_t> stalledAt() const { return m_stalledSince && !m_waiting.empty() ? std::optional<uint64_t>(m_waiting.front().seq) : std::nullopt; }
+		// The last drop: how many batches and bytes went.
+		std::pair<size_t, size_t> dropped() const { return m_dropped; }
+
+	private:
+		struct Script
+		{
+			uint64_t seq;
+			std::string script;
+		};
+		Write m_write;
+		std::deque<Script> m_waiting;
+		size_t m_bytes = 0;
+		std::optional<double> m_stalledSince;
+		bool m_resync = false;
+		std::pair<size_t, size_t> m_dropped;
 	};
 
 	// The outbox as the scripts that hand it to the page, in order, numbered from _firstSeq (one number a script;

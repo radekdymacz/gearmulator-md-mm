@@ -195,6 +195,19 @@ namespace mdJucePlugin
 		, m_scriptRecv(false)
 #endif
 	{
+		if(m_fileRecv)
+		{
+			m_files = std::make_unique<pageBridge::FileOutbox>([this](const uint64_t _seq, const std::string& _script)
+			{
+				// Written whole and then renamed (replaceWithData), so the page never reads half a batch; the page's (to
+				// delete once read) only when it is there.
+				auto file = m_file.getSiblingFile(pageBridge::recvFileName(m_file.getFileName().toStdString(), _seq));
+				if(!file.replaceWithData(_script.data(), _script.size()))
+					return false;
+				m_recvFiles[_seq] = std::move(file);
+				return true;
+			});
+		}
 		juce::Desktop::getInstance().addFocusChangeListener(this);
 		m_keyWatch = std::make_unique<KeyWindowWatch>([this]
 		{
@@ -326,7 +339,8 @@ namespace mdJucePlugin
 			return;
 		}
 		note("page loading: " + m_file.getFullPathName() + " (" + juce::String(m_file.getSize()) + " bytes)");
-		m_web->goToURL(url.toString(true));
+		m_pageUrl = url.toString(true);
+		m_web->goToURL(m_pageUrl);
 		log("page loading, selftest=" + juce::String(m_selfTest.isNotEmpty() ? 1 : 0) + ", keyprobe="
 			+ juce::String(url.getParameterNames().contains("keyprobe") ? 1 : 0) + ", " + juce::String(m_file.getSize()) + " bytes");
 	}
@@ -421,16 +435,23 @@ namespace mdJucePlugin
 
 	void WebPageHost::flush()
 	{
-		if(!m_pageReady || m_outbox.empty())
+		if(!m_pageReady)
+			return;
+		// Linux: batches that could not be written wait and are tried again here, also when nothing new came
+		if(m_fileRecv)
+		{
+			flushFiles();
+			return;
+		}
+		if(m_outbox.empty())
 			return;
 		const auto firstSeq = m_recvSeq;
 		const auto scripts = pageBridge::recvScripts(m_outbox, firstSeq, pageBridge::g_maxRecvBytes,
-			m_fileRecv || m_scriptRecv ? std::string() : std::string(pageBridge::g_javascriptUrl));
+			m_scriptRecv ? std::string() : std::string(pageBridge::g_javascriptUrl));
 		m_outbox.clear();
 		m_recvSeq += scripts.size();
-		for(size_t i = 0; i < scripts.size(); ++i)
+		for(const auto& s : scripts)
 		{
-			const auto& s = scripts[i];
 #if JUCE_WINDOWS && MDMM_WEBVIEW2
 			if(m_scriptRecv)
 			{
@@ -438,17 +459,61 @@ namespace mdJucePlugin
 				continue;
 			}
 #endif
-			if(!m_fileRecv)
+			m_web->goToURL(juce::String::fromUTF8(s.c_str(), static_cast<int>(s.size())));
+		}
+	}
+
+	void WebPageHost::flushFiles()
+	{
+		namespace bridge = pageBridge;
+		const auto now = juce::Time::getMillisecondCounterHiRes();
+		if(m_files->resync())
+		{
+			// The page can never read past the batches that were dropped: nothing more goes to it. Once a file can be
+			// written again (its own page file, which the reload reads) it is loaded again; its a/0 ends this
+			// (onAck), and one that does not start in time is loaded again.
+			m_outbox.clear();
+			if(now < m_nextResyncTry)
+				return;
+			if(!m_file.replaceWithText(bundle()))
 			{
-				m_web->goToURL(juce::String::fromUTF8(s.c_str(), static_cast<int>(s.size())));
-				continue;
+				m_nextResyncTry = now + 1000.0;
+				return;
 			}
-			// Written whole and then renamed (replaceWithText), so the page never reads half a batch.
-			const auto seq = firstSeq + i;
-			auto file = m_file.getSiblingFile(pageBridge::recvFileName(m_file.getFileName().toStdString(), seq));
-			if(!file.replaceWithData(s.data(), s.size()))
-				log("could not write " + file.getFileName());
-			m_recvFiles[seq] = std::move(file);
+			note("page bridge: files can be written again; the page is loaded again to get what it missed");
+			m_nextResyncTry = now + g_pageUpTimeoutMs;
+			m_web->goToURL(m_pageUrl);
+			return;
+		}
+		if(!m_outbox.empty())
+		{
+			const auto firstSeq = m_recvSeq;
+			auto scripts = bridge::recvScripts(m_outbox, firstSeq, bridge::g_maxRecvBytes, std::string());
+			m_outbox.clear();
+			m_recvSeq += scripts.size();
+			m_files->add(firstSeq, std::move(scripts));
+		}
+		const auto stalled = m_files->stalledAt();
+		switch(m_files->pump(now))
+		{
+		case bridge::FileOutbox::Change::None:
+			break;
+		case bridge::FileOutbox::Change::Stalled:
+			note("page bridge: could not write " + juce::String(bridge::recvFileName(m_file.getFileName().toStdString(), m_files->stalledAt().value_or(0)))
+				+ " (" + m_file.getParentDirectory().getFullPathName() + "); it and the " + juce::String(static_cast<int>(m_files->waiting()) - 1)
+				+ " batches after it wait and are tried again");
+			break;
+		case bridge::FileOutbox::Change::Recovered:
+			note("page bridge: written again from batch " + juce::String(static_cast<juce::int64>(stalled.value_or(0))) + "; nothing waits");
+			break;
+		case bridge::FileOutbox::Change::Dropped:
+		{
+			const auto [batches, bytes] = m_files->dropped();
+			note("page bridge: " + juce::String(static_cast<juce::int64>(batches)) + " batches (" + juce::String(static_cast<juce::int64>(bytes))
+				+ " bytes) could not be written in time and were dropped; the page is loaded again once a file can be written");
+			m_nextResyncTry = 0;
+			break;
+		}
 		}
 	}
 
@@ -462,10 +527,16 @@ namespace mdJucePlugin
 		}
 		if(m_recvSeq == 1)
 			return;
-		// A page that loaded again: what it has not read is for the old one; number from 1 for this one.
-		log("page started again: batches numbered from 1");
+		// A page that loaded again: what it has not read, or not been written yet, is for the old one; number from 1
+		// for this one, which has nothing: everything once more (its ready may have come first, and what that sent
+		// went out under the old numbers).
+		note("page started again: batches numbered from 1, everything sent once more");
 		deleteRecvFiles(std::numeric_limits<uint64_t>::max());
 		m_recvSeq = 1;
+		if(m_files)
+			m_files->restart();
+		if(m_onRestart)
+			m_onRestart();
 	}
 
 	void WebPageHost::deleteRecvFiles(const uint64_t _upTo)

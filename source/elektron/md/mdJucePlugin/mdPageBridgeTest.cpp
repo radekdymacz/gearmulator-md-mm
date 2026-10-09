@@ -1,7 +1,7 @@
 // The page bridge's transport on the plug-in's side (mdPageBridge.h, review finding 13): the page's long batches
-// joined from their pieces, and the outbox split into numbered gm.recv calls at message boundaries. Pure. Also
-// the route of the plug-in's notices to the page (juceUiLib/messageRoute.h): one sink per open window; and a
-// window's notices and their answers (mdNoticeBook.h).
+// joined from their pieces, the outbox split into numbered gm.recv calls at message boundaries, and Linux's batch
+// files written strictly in order (FileOutbox). Pure. Also the route of the plug-in's notices to the page
+// (juceUiLib/messageRoute.h): one sink per open window; and a window's notices and their answers (mdNoticeBook.h).
 #include "mdNoticeBook.h"
 #include "mdPageBridge.h"
 
@@ -95,6 +95,69 @@ int main()
 			"the page's progress: the last batch it read");
 		check(!bridge::ackOf("gmbridge://a/") && !bridge::ackOf("gmbridge://a/1x") && !bridge::ackOf("gmbridge://c/1")
 			&& !bridge::ackOf("gmbridge://a/99999999999999999999"), "anything else is not a progress report");
+	}
+	// Linux's batch files (codex review 2026-10, item 5): a file that could not be written holds back every later one
+	// (the page reads in order) and is the page's only once written; a backlog too large or too old is dropped and the
+	// page is loaded again
+	{
+		using Outbox = bridge::FileOutbox;
+		std::vector<uint64_t> written;	// the files the page can read (the writer registers them), in write order
+		uint64_t failAt = 3;			// the write of this batch fails, 0: none
+		bool ownScripts = true;
+		Outbox files([&](const uint64_t _seq, const std::string& _script)
+		{
+			if(_seq == failAt)
+				return false;
+			ownScripts = ownScripts && _script == "s" + std::to_string(_seq);
+			written.push_back(_seq);
+			return true;
+		});
+		const auto scripts = [](const uint64_t _first, const size_t _n)
+		{
+			std::vector<std::string> out;
+			for(size_t i = 0; i < _n; ++i)
+				out.push_back("s" + std::to_string(_first + i));
+			return out;
+		};
+		const auto list = [&] { std::string t; for(const auto s : written) t += (t.empty() ? "" : ",") + std::to_string(s); return t; };
+		files.add(1, scripts(1, 2));
+		check(files.pump(0) == Outbox::Change::None && list() == "1,2" && files.waiting() == 0, "batches 1 and 2 written, in order");
+		files.add(3, scripts(3, 1));
+		check(files.pump(33) == Outbox::Change::Stalled && list() == "1,2" && files.waiting() == 1 && files.stalledAt() == std::optional<uint64_t>(3),
+			"batch 3 cannot be written: it waits, nothing registered for it, the stall said once");
+		files.add(4, scripts(4, 2));
+		check(files.pump(66) == Outbox::Change::None && list() == "1,2" && files.waiting() == 3,
+			"batches 4 and 5 wait behind 3 (the page reads in order): not written, not registered; said only once");
+		check(files.pump(99) == Outbox::Change::None && list() == "1,2", "a pump with nothing new tries batch 3 again");
+		failAt = 0;
+		check(files.pump(132) == Outbox::Change::Recovered && list() == "1,2,3,4,5" && files.waiting() == 0 && files.bytes() == 0 && !files.stalledAt(),
+			"writing works again: 3, 4 and 5 written in order, nothing waits");
+		files.add(6, scripts(6, 1));
+		check(files.pump(165) == Outbox::Change::None && list() == "1,2,3,4,5,6" && !files.resync(), "then on as before");
+		// a stall measured from the last batch that went: progress starts it again
+		failAt = 8;
+		files.add(7, scripts(7, 2));
+		check(files.pump(1000) == Outbox::Change::Stalled && list() == "1,2,3,4,5,6,7", "7 written, 8 waits");
+		check(files.pump(2900) == Outbox::Change::None && !files.resync(), "under 2 s of stall: still waiting");
+		check(files.pump(3001) == Outbox::Change::Dropped && files.resync() && files.waiting() == 0 && files.bytes() == 0
+			&& files.dropped() == std::make_pair(size_t(1), std::string("s8").size()), "over 2 s without a batch going: dropped, resync due");
+		files.add(9, scripts(9, 1));
+		failAt = 0;
+		check(files.pump(3100) == Outbox::Change::None && files.waiting() == 0 && list() == "1,2,3,4,5,6,7",
+			"while a resync is due nothing is queued or written (the page is loaded again and gets everything anew)");
+		files.restart();
+		files.add(1, scripts(1, 1));
+		check(!files.resync() && files.pump(3200) == Outbox::Change::None && written.back() == 1, "the page started again: from batch 1, written");
+		check(ownScripts, "the writer got each batch's own script");
+		// a backlog past 8 MiB while stalled is dropped at once
+		failAt = 2;
+		files.add(2, {std::string("s2")});
+		check(files.pump(4000) == Outbox::Change::Stalled, "a new stall");
+		files.add(3, {std::string(Outbox::g_maxBacklogBytes, 'x')});
+		check(files.pump(4001) == Outbox::Change::Dropped && files.resync() && files.waiting() == 0 && files.bytes() == 0,
+			"more than 8 MiB waiting: the queue is emptied and the resync flag set, without waiting 2 s");
+		files.restart();
+		check(!files.resync() && files.waiting() == 0, "restart clears the resync");
 	}
 	// a window's notices (codex review 2026-10, item 1): the page answers {"notice": n, "button": b}; an answer runs its
 	// notice's callback once, and only for a notice waiting with that button

@@ -17,7 +17,7 @@ namespace mdJucePlugin
 {
 	class PageWebView;
 	class KeyWindowWatch;
-	namespace pageBridge { class Pieces; }
+	namespace pageBridge { class Pieces; class FileOutbox; }
 
 	// A web page in the plug-in (P6: one host for both editors): bundling (stylesheets, scripts
 	// and fonts inlined into one file, which WKWebView may read), the bridge (page -> C++ as
@@ -64,6 +64,10 @@ namespace mdJucePlugin
 		void checkStarted();
 		// I-008: what a right-click on that message does (the editor's menu as a native menu: no page draws it).
 		void setFallbackMenu(std::function<void()> _open) { m_fallbackMenu = std::move(_open); }
+		// The page started again with batches already sent (Linux: it says a/0 when it starts, mdPageBridge.h): what it
+		// had is gone, so the owner sends everything once more (the page's ready may have come before this, and what
+		// it answered went out under the old page's numbers).
+		void setOnRestart(std::function<void()> _restarted) { m_onRestart = std::move(_restarted); }
 
 	private:
 		void onBridge(const std::string& _url);
@@ -73,6 +77,8 @@ namespace mdJucePlugin
 		void globalFocusChanged(juce::Component* _focused) override;
 		void onAck(uint64_t _seq);
 		void deleteRecvFiles(uint64_t _upTo);
+		// Linux: the outbox as script files beside the page, strictly in order (mdPageBridge.h FileOutbox).
+		void flushFiles();
 		std::string bundle() const;
 
 		const Spec m_spec;
@@ -91,6 +97,10 @@ namespace mdJucePlugin
 		// Windows (WebView2, mdWebView2Page.h): plug-in -> page as executed scripts, not javascript: URLs.
 		const bool m_scriptRecv;
 		std::map<uint64_t, juce::File> m_recvFiles;	// written and not yet read by the page, by batch number
+		std::unique_ptr<pageBridge::FileOutbox> m_files;	// Linux: the batches not written yet (a write failed), in order
+		juce::String m_pageUrl;		// what load() went to: a page that lost batches is loaded again (FileOutbox resync)
+		double m_nextResyncTry = 0;	// when to try that reload (again)
+		std::function<void()> m_onRestart;	// setOnRestart
 		double m_userZoom = 1.0;	// the user's page zoom (the editor's menu, Cmd - / Cmd + / Cmd 0)
 		double m_cssZoom = 1.0;		// the CSS zoom sent, where the web view has no native page zoom
 		bool m_keptDrawn = false;	// a background run (mdBackgroundRun.h): the page draws while covered
