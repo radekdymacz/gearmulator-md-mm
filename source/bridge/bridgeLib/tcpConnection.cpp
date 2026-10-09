@@ -4,6 +4,8 @@
 #include "networkLib/exception.h"
 #include "networkLib/logging.h"
 
+#include "ptypes/ptypes.h"
+
 #include "synthLib/midiTypes.h"
 
 #include <stdexcept>
@@ -76,6 +78,15 @@ namespace bridgeLib
 			m_stream->close();
 			LOGNET(networkLib::LogLevel::Warning, "Protocol error, closing connection: " << e.what());
 			handleException(networkLib::NetException(networkLib::ConnectionLost, e.what()));
+		}
+		catch (ptypes::exception* e)
+		{
+			// ptypes throws pointers; TcpStream turns those of a read or write into NetException, this is any other
+			const std::string message = e ? static_cast<const char*>(e->get_message()) : "unknown";
+			delete e;
+			m_stream->close();
+			LOGNET(networkLib::LogLevel::Warning, "Network error, closing connection: " << message);
+			handleException(networkLib::NetException(networkLib::ConnectionLost, message));
 		}
 	}
 

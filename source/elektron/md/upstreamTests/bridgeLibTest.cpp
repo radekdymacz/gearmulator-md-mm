@@ -402,6 +402,61 @@ namespace
 		server.reset();
 		connection.reset();
 	}
+
+	// networkLib's accept thread (the bridge server's and the MCP server's): a connection handler that throws (out of
+	// memory or threads) drops that client; the thread keeps accepting instead of ending the process.
+	void testAcceptThreadSurvivesAThrowingHandler()
+	{
+		std::mutex mutex;
+		std::condition_variable cv;
+		int calls = 0;
+
+		std::unique_ptr<networkLib::TcpServer> server;
+		int port = 0;
+		for(int p = 46400; p < 46500 && !server; ++p)
+		{
+			try
+			{
+				server = std::make_unique<networkLib::TcpServer>([&](std::unique_ptr<networkLib::TcpStream>)
+				{
+					{
+						std::lock_guard lock(mutex);
+						++calls;
+					}
+					cv.notify_all();
+					throw std::bad_alloc();
+				}, p, networkLib::BindScope::Loopback);
+				port = p;
+			}
+			catch(const std::exception&)
+			{
+			}
+		}
+		if(!server)
+		{
+			check(false, "accept: a free port for the server");
+			return;
+		}
+
+		const auto connectAndWait = [&](const int _calls)
+		{
+			ptypes::ipstream client(ptypes::ipaddress(127, 0, 0, 1), port);
+			try
+			{
+				client.open();
+			}
+			catch(ptypes::exception* e)
+			{
+				delete e;
+				return false;
+			}
+			std::unique_lock lock(mutex);
+			return cv.wait_for(lock, std::chrono::seconds(5), [&] { return calls >= _calls; });
+		};
+		check(connectAndWait(1), "accept: the first client reaches the handler, which throws");
+		check(connectAndWait(2), "accept: the accept thread lives on and serves the next client");
+		server.reset();
+	}
 }
 
 int main()
@@ -417,6 +472,7 @@ int main()
 	testClientAudio();
 	testEnums();
 	testMalformedCommandOverLoopback();
+	testAcceptThreadSurvivesAThrowingHandler();
 
 	if(g_failures)
 	{

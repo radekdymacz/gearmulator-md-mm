@@ -110,12 +110,12 @@ namespace mcpServer
 
 		_stream->setReadTimeout(m_idleReadTimeoutMs);
 
-		auto client = std::make_unique<Client>();
-		client->stream = std::move(_stream);
-
-		auto* c = client.get();
 		try
 		{
+			auto client = std::make_unique<Client>();
+			client->stream = std::move(_stream);
+			auto* c = client.get();
+			m_clients.reserve(m_clients.size() + 1);	// the push below cannot throw once the thread runs
 			c->thread = std::thread([this, c]()
 			{
 				handleClient(*c->stream);
@@ -126,15 +126,14 @@ namespace mcpServer
 				}
 				c->done = true;
 			});
+			m_clients.push_back(std::move(client));
 		}
-		catch (const std::system_error& e)
+		catch (const std::exception& e)
 		{
-			// Out of threads: drop this client, keep serving the others (an exception here would end the accept thread)
-			LOGNET(networkLib::LogLevel::Error, "Failed to start a client thread: " << e.what());
-			return;
+			// Out of threads or memory: drop this client (its stream closes with it) and keep serving the others. An
+			// exception that left here would end the accept thread, and with it the host.
+			LOGNET(networkLib::LogLevel::Error, "Failed to start a client: " << e.what());
 		}
-
-		m_clients.push_back(std::move(client));
 	}
 
 	void HttpServer::reapFinishedClients()

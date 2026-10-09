@@ -81,6 +81,14 @@ namespace networkLib
 				LOGNET(LogLevel::Warning, "Network Error: " << static_cast<const char*>(e->get_message()));
 				delete e;
 			}
+			catch (const std::exception& e)
+			{
+				// The connection handler ran out of memory or threads: drop this client and keep accepting. An
+				// exception that left this thread would end the whole process (the DAW). The handler may own the
+				// stream already, so it is never served again (one object leaks when its own allocation failed).
+				LOGNET(LogLevel::Error, "Failed to accept a client: " << e.what());
+				stream = new ptypes::ipstream();
+			}
 		}
 
 		LOGNET(LogLevel::Info, "TCP server shutdown");
