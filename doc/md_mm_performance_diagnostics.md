@@ -231,3 +231,67 @@ The session's architecture fields come from the editor, not from `synthLib` (the
 takes any list of name/value pairs): `mdProcessArchTest` covers the translated decision over
 injected macOS and Windows cases and the three fields, and `mdRosettaNoticeTest` the on-screen
 notice, its once-a-session rule and **Don't show again** kept in a real config file.
+
+## Gate tool: bit-exact audio and host cost (mdmmPerfGateTest)
+
+`mdmmPerfGateTest` (source/elektron/md/mdLibTest, built with `BUILD_TESTING=ON`, manual: it needs a ROM) is the
+check behind "both positions produce the same audio, bit for bit" above and behind the local release gate
+(doc/release/LOCAL-GATE.md). It boots MD OS 1.63 or MM OS 1.32B headless, sets up a scenario, renders a stopped
+phase (with a fixed burst of host notes in its first 1.5 s), presses PLAY and renders a playing phase, and prints
+hashes of everything the emulation produced next to its host cost per audio frame.
+
+```
+mdmmPerfGateTest <ROM> md|mm [seconds-per-phase=8] [--scenario <name>] [--outputs stereo|all]
+                 [--golden <goldens.json> [--record]]
+```
+
+**Scenarios.** Without `--scenario` the tool does what it always did (`md-busy` for md, `mm-a01` for mm), with
+the same hashes.
+
+| Scenario | What plays |
+|---|---|
+| `md-busy` | the MD's current pattern with every track on every other 16th |
+| `md-factory` | the pattern the MD boots with, untouched |
+| `md-song` | song mode (set by SysEx 0x10, then LOAD SONG): `md-busy`'s pattern twice, a sparser copy in the next slot with tracks 5-8 muted at 150 BPM, a loop to the start; rows of 16 steps |
+| `mm-a01` | the pattern the MM boots with (the factory A01) |
+| `mm-busy` | that pattern with a trig in ALL on every other 16th of the six synth tracks (sent on SYSEX RECV as the editor sends it, then LOAD PATTERN) |
+| `mm-song` | song mode (SysEx 0x6C and 0x10): `mm-busy`'s pattern twice, a sparser copy with tracks 1-3 muted, a loop to the start; rows of 16 steps |
+
+**Output.** One line per phase (`MD stopped:`, `MD playing:`, or `MM ...`) and a `combined` line, `key=value`
+fields in a fixed order; newer fields come after the older ones.
+
+- Per phase: `cpu_pct`, `instr_per_frame`, `cycles_per_frame`, `uc_cycles_per_frame`, `audio_hash` (left then
+  right samples), then `frames`, `nonsilent_frames`, `playhead_moves` (the sequencer's step, read once per
+  block; the run fails if it never moves while playing), `instr_median_per_frame`. With `--outputs all` also
+  `outputs_hash` and `out0_hash` to `out5_hash`: each of the six outputs, and the hash of the six.
+- `combined`: `audio_hash` (both phases chained), `ram_hash`, `sram_hash`, `loader_hash`, `patch_hash`,
+  `midi_out_hash` and `midi_out_events` (everything the machine sent, with its frame), then the PLAY press:
+  `press_frame` (counted from the start of the stopped phase), `press_frames` (PLAY held 40 ms, 40 ms after) and
+  `press_hash`; and `stream_frames` and `stream_hash`, every frame from the start of the stopped phase to the end
+  of the playing phase with no gap. With `--outputs all` also `stream_outputs_hash`.
+
+The phases cover the same frames as before the press was hashed, so `audio_hash`, the memory hashes and the MIDI
+hash of `md-busy` and `mm-a01` are the values the step 1 work was checked against.
+
+**Goldens.** `--golden <file>` compares the run with the file's entry for its key
+`<ROM fingerprint>/<scenario>/<stereo|all>/speedups-<on|off>/<seconds>s` and exits 1, with one
+`mdmmPerfGateTest golden: differs <field> golden=... run=...` line per difference, when any compared field
+differs or is missing on either side, or when the file has no entry for the key. The speed-ups position is the
+machine's own (`GEARMULATOR_MDMM_SPEEDUPS=0` gives `speedups-off`); both positions have their own entries, which
+hold the same hashes. The last line is `mdmmPerfGateTest golden: PASS (...)` or `... FAIL (...)`.
+`--golden <file> --record` writes or replaces that one entry and keeps the others. An entry's `compare` object holds
+every hash and count (`frames`, `nonsilent_frames`, `playhead_moves`, `midi_out_events`, `press_frame`,
+`press_frames`, `stream_frames`); its `info` object holds the recording run's instruction figures and guest cycles
+per frame, which a compare prints beside the run's (with the change in per cent) and never judges. The goldens
+contain nothing from the firmware.
+
+The committed goldens are `source/elektron/md/mdLibTest/goldens/mdmm-goldens.json`: every scenario, both
+`--outputs` modes, both speed-ups positions, 8 s per phase. Record them again only for a change that is meant to
+change what the emulation produces (a fix to the emulation, a new scenario or field), from the build that has that
+change, and say in the commit why the values changed. `GEARMULATOR_MDMM_MIDI_PACING` changes MIDI timing, and so
+the hashes; the tool says so when it is set.
+
+**Benches.** `mdCpuBenchTest` and `mmCpuBenchTest` (`<ROM> [instances] [seconds]`) measure the CPU per
+instance. A playing figure counts only if the machine played: each instance's playhead (MD) or step counter (MM),
+read every 50 ms, must move at least twice after PLAY, or the bench prints `FAIL instance n did not play` and
+exits 1.

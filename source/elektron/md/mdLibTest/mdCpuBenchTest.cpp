@@ -4,6 +4,8 @@
 // its current pattern (made busy: every track on 16ths), in 64-frame blocks at 44.1 kHz.
 // Reported per instance: thread CPU time per second of audio = the share of one core it
 // needs in real time. Instances run in parallel threads (a host with several instances).
+// A playing result counts only if the machine played: its playhead (RAM 0x261aa7) must
+// move while it renders the playing part, read every 50 ms; else the run exits 1.
 // Exits 77 without a ROM.
 
 #include "mdFirmwareSession.h"
@@ -38,7 +40,11 @@ namespace
 		return static_cast<double>(t.tv_sec) + static_cast<double>(t.tv_nsec) * 1e-9;
 	}
 
-	struct Result { double stopped = 0, playing = 0; bool plays = false; };
+	// A machine that plays moves its playhead many times a second (16ths at 120 BPM: 8): two
+	// moves are the least that is not a single jump.
+	constexpr int g_minPlayheadMoves = 2;
+
+	struct Result { double stopped = 0, playing = 0; int moves = 0; };
 
 	Result bench(const Bytes& _rom, const std::string& _name, const double _seconds, std::atomic<int>& _ready, const int _instances)
 	{
@@ -63,9 +69,17 @@ namespace
 		Result r;
 		r.stopped = run(_seconds / 3);
 		m.panel(md::PanelControl::Play);
-		const auto s0 = m.playhead();
-		r.playing = run(_seconds * 2 / 3);
-		r.plays = m.playhead() != s0 || true;
+		// Count the playhead's moves, so a result is known to be a playing machine.
+		int last = m.playhead();
+		const double c0 = threadCpuSeconds();
+		for(double t = 0; t < _seconds * 2 / 3; t += 0.05)
+		{
+			m.run(50.0);
+			const int step = m.playhead();
+			r.moves += step != last;
+			last = step;
+		}
+		r.playing = (threadCpuSeconds() - c0) / (_seconds * 2 / 3);
 		return r;
 	}
 }
@@ -97,5 +111,14 @@ int main(const int _argc, char** _argv)
 			results[static_cast<size_t>(i)].stopped * 100, results[static_cast<size_t>(i)].playing * 100);
 	std::printf("  whole process (every thread, e.g. DSP threads too): %.1f %% of one core per instance, averaged over stopped + playing\n",
 		proc / (seconds * n) * 100);
-	return 0;
+	int failures = 0;
+	for(int i = 0; i < n; ++i)
+	{
+		if(results[static_cast<size_t>(i)].moves >= g_minPlayheadMoves)
+			continue;
+		std::printf("  FAIL instance %d did not play: its playhead moved %d time(s) after PLAY\n", i + 1,
+			results[static_cast<size_t>(i)].moves);
+		++failures;
+	}
+	return failures ? 1 : 0;
 }

@@ -56,9 +56,23 @@ function(mdmm_add_lib_tests _dir)
 
 	# The gate of the emulation CPU plan (doc/modern-ux/RESEARCH-emulation-cpu.md, section 5): bit-exact audio and
 	# RAM hashes plus host instructions and cycles per frame, MD or MM, stopped and playing. Manual: needs a ROM.
-	add_executable(mdmmPerfGateTest ${_dir}/mdmmPerfGateTest.cpp ${_dir}/mdFirmwareSession.h)
-	target_link_libraries(mdmmPerfGateTest PRIVATE mdLib elektronData)
+	# The local release gate (doc/release/LOCAL-GATE.md) runs it against recorded goldens (--golden, goldens/).
+	add_executable(mdmmPerfGateTest ${_dir}/mdmmPerfGateTest.cpp ${_dir}/mdFirmwareSession.h ${_dir}/mmSysexRecv.h)
+	target_link_libraries(mdmmPerfGateTest PRIVATE mdLib mmDesk)
 	set_property(TARGET mdmmPerfGateTest PROPERTY FOLDER "Elektron/test")
+
+	# The local release gate's ROM check: each supported image boots and answers SysEx, a truncated and a garbage
+	# image are refused. Manual: needs a user-supplied ROM.
+	add_executable(mdmmRomLoadTest ${_dir}/mdmmRomLoadTest.cpp ${_dir}/mdFirmwareSession.h)
+	target_link_libraries(mdmmRomLoadTest PRIVATE mdLib elektronData)
+	set_property(TARGET mdmmRomLoadTest PROPERTY FOLDER "Elektron/test")
+
+	# The local release gate's SysEx round trip: a machine's full dump imported into a fresh one as the editors
+	# import a file, dumped again, byte for byte; real backups (fixtures, never in the repo) document by document.
+	# Manual: needs a user-supplied ROM.
+	add_executable(mdmmSysexRoundTripTest ${_dir}/mdmmSysexRoundTripTest.cpp ${_dir}/mdFirmwareSession.h ${_dir}/mmSysexRecv.h)
+	target_link_libraries(mdmmSysexRoundTripTest PRIVATE mdLib mmDesk)
+	set_property(TARGET mdmmSysexRoundTripTest PROPERTY FOLDER "Elektron/test")
 
 	# P4 Machinedrum Editor discovery probes (start-up animation, chaining,
 	# mutes, kit and pattern library). Manual: needs a user-supplied ROM.
