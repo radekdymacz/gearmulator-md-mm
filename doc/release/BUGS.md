@@ -4,6 +4,13 @@
 repository; the site sends reports to the contact address. Newest first. Each entry:
 where it came from, the setup, what happens, what should happen, status.*
 
+## B-027 · Monomachine: a machine change reverts when going back to Sequence
+
+- **From:** Discord tester, 2026-10-09, Monomachine Editor 0.3.4.
+- **What happens:** change a track's machine, go back to the Sequence page, and the track has the previous machine again.
+- **Likely:** a kit dump/read-back or the working kit re-sent after the change overwrites it (same family as B-025 on the MD); 0.3.4's stream or the SYSEX RECV session (B-021) involved.
+- **Status:** open, for 0.3.5.
+
 ## B-026 · Mutes don't work in 0.3.5 (release candidate)
 
 - **From:** Radek's manual test of the packaged 0.3.5, 2026-10-09.
