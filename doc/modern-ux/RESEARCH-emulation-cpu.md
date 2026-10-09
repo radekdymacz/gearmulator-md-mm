@@ -276,8 +276,8 @@ Do L1, L11, L2 (b first, then a), L5, and evaluate PR #20 (L13a). If PR #20 land
 
 | Gate | Pass condition |
 |---|---|
-| Audio FNV hash and RAM hash, MD and MM, stopped and playing | identical before and after each change |
-| `mdCpuBenchTest` / `mmCpuBenchTest`, plus host cycles per frame from `thread_selfcounts` | ≤ 0.88 (MD) and ≤ 0.87 (MM) of the same build's baseline |
+| `mdmmPerfGateTest` audio FNV hash and RAM hash, MD and MM, stopped and playing | identical before and after each change |
+| `mdCpuBenchTest` / `mmCpuBenchTest`, plus host cycles per frame from `thread_selfcounts` (`mdmmPerfGateTest`) | ≤ 0.88 (MD) and ≤ 0.87 (MM) of the same build's baseline |
 | Firmware tests | `idleSelfBranchTest`, `idleSchedulerFirmwareTest`, `transportScorecardFirmwareTest`, `mdAudioFirmwareTest`, `mdMidiTimingTest`, `mdHostRxTimingTest` green |
 | `scripts/mdmm-rt-check.sh --plock` | idle 128-frame buffers below today's ~27 M instructions; no action over budget |
 
