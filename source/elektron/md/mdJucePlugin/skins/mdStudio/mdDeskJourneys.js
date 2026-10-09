@@ -1038,6 +1038,22 @@ const MdJourneys = (() => {
 	/* the same, as screenshots for a design review (scripts/mdmm-shots.sh with MDMM_SHOTS_JOURNEY=md-shots-song) */
 	const shotsSong = { name: "md-shots-song", needs: () => /md-shots/.test(location.search) ? null : "screenshots only when asked by name",
 		steps: [...songPlayheadSteps(name => Bridge.log("SHOT " + name)).map(s => s.act && /SHOT|shot/.test(String(s.act)) ? Object.assign({}, s, { hold: 2500 }) : s), { say: "done", act: () => Bridge.log("SHOT done") }], tidy: songPlayheadTidy };
+	/* I-008: the editor's menu (shared/deskJourney.js editorMenuJourney: a submenu by the keyboard, a zoom step and
+	   Updates › Check Daily by the pointer, each read back from the plug-in) */
+	const editorMenuJ = Journey.editorMenuJourney("md-top-editor-menu", "Machinedrum Editor");
+	const menu = Journey.menu;
+	/* the same menu as screenshots for a design review (scripts/mdmm-shots.sh with MDMM_SHOTS_JOURNEY=md-shots-menu) */
+	const shotsMenu = {
+		name: "md-shots-menu", needs: () => /md-shots/.test(location.search) ? null : "screenshots only when asked by name",
+		steps: [
+			{ say: "the editor's menu", act: async u => { await menu.via(u); await sleep(300); shot("menu-1-open"); }, screen: () => menu.titled("Machinedrum Editor"), hold },
+			{ say: "its Zoom submenu", act: async u => { u.click(menu.id("zoom")); await sleep(300); shot("menu-2-zoom"); }, screen: () => ok(DeskMenu.depth() === 2, "no submenu"), hold },
+			{ say: "Zoom › Window Size", act: async u => { u.click(menu.id("window-size")); await sleep(300); shot("menu-3-window-size"); }, screen: () => ok(DeskMenu.depth() === 3, "no submenu"), hold },
+			{ say: "Developer", act: async u => { u.click(menu.id("developer")); await sleep(300); shot("menu-4-developer"); }, screen: () => ok(DeskMenu.depth() === 2, "no submenu"), hold },
+			{ say: "done", act: async () => { closeDeskMenu(); shot("done"); } }
+		],
+		async tidy() { if (menu.on()) closeDeskMenu(); }
+	};
 	const all = [bootCard, firstBeat, spaceTransport, tempoDrag, tapTempo, tapTempoB, patStep, queuePattern, plate, wsKeys, helpKeys, osHelp, undoRedo,
 		paintUndo, accentSlide, lockLane, pagesJ, copyPaste, selectCopyPaste, stepMenuJ, osCopyPaste, buttonsCopyPaste, clearPatternJ, fillEveryJ, rotateJ, rotateUndo, trackKeys, muteKeys, liveRec,
 		genJourney("md-gen-mutate-undo", false), genJourney("md-gen-defaults-mutate-undo", true), genKeys,
@@ -1046,7 +1062,7 @@ const MdJourneys = (() => {
 		songArrange, songChain, songPlayhead, samplerSlots, samplerSetup, audition,
 		libDialog, kitCopy, kitRename, kitClear, patGo, patClear, dialogEsc,
 		globalJ, globalRouting, globalMapNote, audioPanel, romCard, notePlay,
-		lockRamp, pasteMany, mutScope, songInspector, songDrag, ramView, setupChop, panBox, hwNoMachine, syxImportJ, syxImportMute, shots, shotsSong];
+		lockRamp, pasteMany, mutScope, songInspector, songDrag, ramView, setupChop, panBox, hwNoMachine, syxImportJ, syxImportMute, editorMenuJ, shots, shotsSong, shotsMenu];
 
 	/* ---------- demos: journeys played for a camera (doc/modern-ux/DEMO-VIDEOS.md) ---------- */
 	/* Not in `all`: ?selftest=journey never runs them; ?selftest=demo-md-<name> does (Journey.demo), at a person's pace

@@ -2,10 +2,13 @@
 
 #include "mdAudioMidiLink.h"
 #include "mdDeskSession.h"
+#include "mdPluginEditorState.h"
 #include "mdPluginProcessor.h"
 #include "mdDeskHost.h"
 #include "mdWebPageHost.h"
 #include "mdPageZoom.h"
+
+#include <cmath>
 
 #if MDMM_DIAGNOSTICS
 #include "mdDiagnostics.h"
@@ -116,6 +119,7 @@ namespace mdJucePlugin
 		const auto startupLog = processor.performanceDiagnosticsFolder().getChildFile(
 			"editor-" + juce::File::createLegalFileName(juce::String(m_session ? m_session->pageSpec().page : "page")).upToLastOccurrenceOf(".", false, false) + ".log");
 		m_page->setStartupLog(startupLog);
+		m_page->setFallbackMenu([this] { openMenu(); });	// I-008: no page up, the native menu
 		// B-035: the processor's start-up lines (the host's audio calls, the machine's boot) go into the same log
 		processor.bootDiagnostics().setLog(startupLog);
 		m_page->load();
@@ -170,9 +174,12 @@ namespace mdJucePlugin
 			}
 			else if(row->handler.action == deskHost::Action::Menu)
 			{
-				// The editor's menu (skins, scale, settings) where the page was right-clicked.
-				if(auto* state = getProcessor().getEditorState())
-					jucePluginEditorLib::createPopupMenu(*state).showMenuAsync(juce::PopupMenu::Options().withMousePosition());
+				openMenu();	// I-008: the page draws it where it was right-clicked
+			}
+			else if(row->handler.action == deskHost::Action::MenuPick)
+			{
+				m_page->send(deskCore::resultMessage(_message, {}, {}));
+				pickMenu(static_cast<int>(_message.find("menu")->asNumber()), static_cast<size_t>(_message.find("n")->asNumber()));
 			}
 			else if(!m_audio || !m_audio->handle(row->handler.action, _message))
 				m_page->send(deskCore::resultMessage(_message, {"The audio devices are the standalone app's."}, {}));
@@ -194,15 +201,14 @@ namespace mdJucePlugin
 		layout();
 	}
 
-	void PageEditor::fillZoomMenu(juceRmlUi::Menu& _menu)
+	editorMenu::Item PageEditor::zoomMenu(editorMenu::Item _windowSize)
 	{
-		if(!m_page)
-			return;
-		const double now = m_page->userZoom();
+		using namespace editorMenu;
+		const double now = m_page ? m_page->userZoom() : 1.0;
 #if JUCE_MAC
-		const std::string key = "Cmd";
+		const std::string cmd = "\xe2\x8c\x98";	// ⌘
 #else
-		const std::string key = "Ctrl";
+		const std::string cmd = "Ctrl ";
 #endif
 		// The actions run after the menu closed; the window may have closed by then.
 		const auto act = [this, alive = std::weak_ptr<int>(m_alive)](const int _step, const double _zoom)
@@ -213,14 +219,20 @@ namespace mdJucePlugin
 					setZoom(_step, _zoom);
 			};
 		};
-		juceRmlUi::Menu zoom;
-		zoom.addEntry("Zoom In (" + key + " +)", now < pageZoom::g_steps.back() - 0.001, false, act(1, 0));
-		zoom.addEntry("Zoom Out (" + key + " -)", now > pageZoom::g_steps.front() + 0.001, false, act(-1, 0));
-		zoom.addEntry("Actual Size (" + key + " 0)", act(0, 0));
-		zoom.addSeparator();
+		const auto percent = [](const double _z) { return std::to_string(static_cast<int>(_z * 100 + 0.5)); };
+		std::vector<Item> zoom;
+		zoom.push_back(action("zoom-in", "Zoom In", act(1, 0), cmd + "+", false, now < pageZoom::g_steps.back() - 0.001));
+		zoom.push_back(action("zoom-out", "Zoom Out", act(-1, 0), cmd + "\xe2\x88\x92", false, now > pageZoom::g_steps.front() + 0.001));
+		zoom.push_back(action("zoom-actual", "Actual Size", act(0, 0), cmd + "0"));
+		zoom.push_back(separator());
 		for(const double s : pageZoom::g_steps)
-			zoom.addEntry(std::to_string(static_cast<int>(s * 100 + 0.5)) + " %", std::abs(s - now) < 0.001, act(2, s));
-		_menu.addSubMenu("Page Zoom (" + std::to_string(static_cast<int>(now * 100 + 0.5)) + " %)", std::move(zoom));
+			zoom.push_back(action("zoom-" + percent(s), percent(s) + " %", act(2, s), {}, std::abs(s - now) < 0.001));
+		zoom.push_back(separator());
+		// The window's own size (the page fits itself into it): its own submenu, so the two zooms are not mixed up
+		zoom.push_back(std::move(_windowSize));
+		auto item = submenu("zoom", "Zoom", std::move(zoom));
+		item.key = percent(now) + " %";
+		return item;
 	}
 
 	void PageEditor::chooseRom()
@@ -369,26 +381,57 @@ namespace mdJucePlugin
 		m_page->send(std::move(m));
 	}
 
-	void PageEditor::fillUpdateMenu(juceRmlUi::Menu& _menu)
+	editorMenu::Item PageEditor::updateMenu()
 	{
+		using namespace editorMenu;
 		// The actions run after the menu closed; the window may have closed by then.
 		const auto alive = std::weak_ptr<int>(m_alive);
-		juceRmlUi::Menu menu;
-		menu.addEntry("Check for Updates Now", [this, alive]
+		std::vector<Item> items;
+		items.push_back(action("update-now", "Check for Updates Now", [this, alive]
 		{
 			if(!alive.expired())
 				m_updater->checkNow(getProcessor().getConfig());
-		});
-		menu.addEntry("Check Daily", updates::Updater::enabled(getProcessor().getConfig()), [this, alive]
+		}));
+		items.push_back(action("update-daily", "Check Daily", [this, alive]
 		{
 			if(alive.expired())
 				return;
 			auto& config = getProcessor().getConfig();
 			updates::Updater::setEnabled(config, !updates::Updater::enabled(config));
-		});
-		menu.addSeparator();
-		menu.addEntry("This version: " + mdmmUpdate::toString(updates::Updater::currentVersion()), false, false, {});
-		_menu.addSubMenu("Updates", std::move(menu));
+		}, {}, updates::Updater::enabled(getProcessor().getConfig())));
+		items.push_back(separator());
+		items.push_back(note("This version: " + mdmmUpdate::toString(updates::Updater::currentVersion())));
+		return submenu("updates", "Updates", std::move(items));
+	}
+
+	// I-008: the editor's menu drawn by the page (an editorMenu message, deskMenu.js); the page answers menuPick with
+	// the entry's number. No page up (it failed to start, no web view): the same menu as a native one.
+	void PageEditor::openMenu()
+	{
+		auto* state = dynamic_cast<PluginEditorState*>(getProcessor().getEditorState());
+		if(!state)
+			return;
+		if(!m_page || !m_page->pageReady() || m_page->failed())
+		{
+			jucePluginEditorLib::createPopupMenu(*state).showMenuAsync(juce::PopupMenu::Options().withMousePosition());
+			return;
+		}
+		auto m = editorMenu::toJson(state->menu(), m_menuActions);
+		m.set("type", "editorMenu");
+		m.set("menu", ++m_menuSerial);
+		m_page->send(std::move(m));
+		m_page->flush();
+	}
+
+	void PageEditor::pickMenu(const int _menu, const size_t _n)
+	{
+		if(_menu != m_menuSerial || _n >= m_menuActions.size())
+			return;	// an older menu's entry (a newer one was sent since): nothing
+		auto action = m_menuActions[_n];
+		m_menuActions.clear();	// one choice a menu
+		++m_menuSerial;
+		if(action)
+			action();
 	}
 
 	void PageEditor::layout() const

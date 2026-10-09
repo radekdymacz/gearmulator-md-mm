@@ -2367,6 +2367,75 @@
         },
         {
           "type": "object",
+          "description": "I-008: the editor's menu (the answer to openMenu), as data: the page draws it where it was asked for (skins/shared/deskMenu.js) and sends the chosen entry back as menuPick {menu, n}; the window runs it. The same tree is the menu bar's and, when no page is up, a native menu (mdEditorMenu.h).",
+          "required": [
+            "type",
+            "menu",
+            "title",
+            "items"
+          ],
+          "properties": {
+            "type": {
+              "const": "editorMenu"
+            },
+            "menu": {
+              "type": "integer",
+              "description": "this menu's number: a pick of an older menu does nothing"
+            },
+            "title": {
+              "type": "string",
+              "description": "the first line: which editor and its version (not an entry)"
+            },
+            "items": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "required": [
+                  "kind"
+                ],
+                "properties": {
+                  "kind": {
+                    "enum": [
+                      "action",
+                      "submenu",
+                      "separator",
+                      "heading",
+                      "note"
+                    ]
+                  },
+                  "id": {
+                    "type": "string",
+                    "description": "stable (zoom-in, open-log-folder): the page's journeys find an entry by it"
+                  },
+                  "label": {
+                    "type": "string"
+                  },
+                  "key": {
+                    "type": "string",
+                    "description": "the shortcut's words, shown at the right (a submenu: what it is set to)"
+                  },
+                  "enabled": {
+                    "type": "boolean"
+                  },
+                  "checked": {
+                    "type": "boolean"
+                  },
+                  "n": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "description": "an entry that can run: the number menuPick sends back"
+                  },
+                  "items": {
+                    "type": "array",
+                    "description": "a submenu's entries, of this same shape"
+                  }
+                }
+              }
+            }
+          }
+        },
+        {
+          "type": "object",
           "description": "Something the plug-in has for the user (a question or a warning), shown as the page's modal instead of a native alert; the button pressed goes back as noticeAnswer. The first button is the answer to a question, the last the safe one.",
           "required": [
             "type",
@@ -6361,7 +6430,7 @@
         },
         {
           "type": "object",
-          "description": "host: the editor's menu",
+          "description": "host: the editor's menu: the window answers with an editorMenu message (its entries as data), the page draws it (I-008)",
           "required": [
             "op"
           ],
@@ -6381,6 +6450,44 @@
                 "boolean",
                 "integer"
               ]
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "description": "host: the entry n the user chose in the editor's menu numbered menu (the editorMenu message): the window runs it",
+          "required": [
+            "op",
+            "menu",
+            "n"
+          ],
+          "properties": {
+            "op": {
+              "const": "menuPick"
+            },
+            "id": {
+              "type": "integer"
+            },
+            "g": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "force": {
+              "type": [
+                "boolean",
+                "integer"
+              ]
+            },
+            "menu": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 1000000000
+            },
+            "n": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 65535
             }
           },
           "additionalProperties": false

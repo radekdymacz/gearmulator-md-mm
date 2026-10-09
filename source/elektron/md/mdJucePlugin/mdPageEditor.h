@@ -5,6 +5,7 @@
 
 #include "elektronData/json.h"
 #include "juceUiLib/messageRoute.h"
+#include "mdEditorMenu.h"
 #include "mdUpdater.h"
 
 #include "juce_gui_basics/juce_gui_basics.h"
@@ -13,6 +14,7 @@
 #include <map>
 #include <memory>
 #include <string>
+#include <vector>
 
 namespace juceRmlUi
 {
@@ -48,16 +50,21 @@ namespace mdJucePlugin
 		// itself out in any window size (P7, FreeSizeEditor): the window resizes freely.
 		bool openAudioMidiSettings() override;
 
-		// B-001: the page's zoom in the editor's menu (the page's right-click menu, the standalone's menu bar):
-		// smaller, larger, 100 % and the steps. Cmd - / Cmd + / Cmd 0 on the page do the same (pageZoom).
-		void fillZoomMenu(juceRmlUi::Menu& _menu);
+		// B-001: the page's zoom in the editor's menu (mdEditorMenu.h, the page's right-click menu, the standalone's
+		// menu bar): smaller, larger, 100 % and the steps, then _windowSize (the window's size, upstream's GUI Scale).
+		// Cmd - / Cmd + / Cmd 0 on the page do the same (pageZoom).
+		editorMenu::Item zoomMenu(editorMenu::Item _windowSize);
 		// I-005: Updates (Check for Updates Now, Check Daily) in the same menus (DESIGN-updates.md).
-		void fillUpdateMenu(juceRmlUi::Menu& _menu);
+		editorMenu::Item updateMenu();
 
 	private:
 		// The page's zoom one step smaller (-1), larger (1) or back to 100 % (0), or _zoom itself (step 2),
 		// remembered in the editor's config for every window (mdPageZoom.h).
 		void setZoom(int _step, double _zoom = 1.0);
+		// I-008: the editor's menu: sent to the page to draw (editorMenu), or native when no page is up; then the
+		// entry the page chose (menuPick) of the menu numbered _menu.
+		void openMenu();
+		void pickMenu(int _menu, size_t _n);
 		void timerCallback() override;
 		void onPageMessage(const elektronData::json::Value& _message);
 		void chooseRom();
@@ -85,5 +92,7 @@ namespace mdJucePlugin
 		int m_bannerId = 0;				// the notice id of the banner shown, 0: none
 		std::string m_bannerShown;		// what it says (sent again only when that changes)
 		juce::int64 m_nextUpdatePoll = 0;
+		int m_menuSerial = 0;							// the editor's menu last sent to the page (editorMenu's menu)
+		std::vector<std::function<void()>> m_menuActions;	// its entries' actions, by their n
 	};
 }

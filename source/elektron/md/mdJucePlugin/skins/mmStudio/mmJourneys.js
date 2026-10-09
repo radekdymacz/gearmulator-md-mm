@@ -934,13 +934,15 @@ const MmJourneys = (() => {
 			{ say: "press Escape", act: u => u.key("Escape"), screen: () => ok($1("#libpop").hidden, "open") }
 		]
 	};
+	/* I-008: the editor's menu (shared/deskJourney.js editorMenuJourney), as the Machinedrum's */
+	const editorMenuJ = Journey.editorMenuJourney("mm-top-editor-menu", "Monomachine Editor");
 	const all = [bootCard, firstBeat, spaceKey, tempoDrag, patNext, wsKeys, helpKeys, plate, undoRedo, gridRecord, slidePaint, lenKey, lockLane, arpDock, arpRange, trnKeys,
 		genMut, shapeSound, machinePick, machineStays, songModeJ, songPlayhead, midiSide, controlAll, mixStrip, mixSolo, shiftMutes, routing, panTrim, msOff,
 		poly, multiTrig, multiMap, kbPlay, songRows, songPicker, songChain, kitLoad, kitCopy, patGo, dialogEsc,
 		audioPanel, romCard, notePlay,
 		tapTempo, queue, dialogKeys, trackKeys, muteKeys, lockRamp, pages, copyPaste, clearAll, fill, rotate, pasteMany, liveRec, genKeys, mutScope,
 		valueKeys, soundCopy, screenDrag, dragM, midiMutes, joyAssign, menvPort, menvLayout, osHelp, songInspector, songDrag, kitSaveAs, kitRename, kitClear, patClear, hwNoMachine,
-		blackKeys, rollPaint, syxImportJ];
+		blackKeys, rollPaint, syxImportJ, editorMenuJ];
 
 	async function between(u) {
 		for (let i = 0; i < 3 && dlgShown(); i++) { u.key("Escape"); await sleep(200); }

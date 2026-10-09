@@ -64,8 +64,9 @@ namespace jucePluginEditorLib
 		static std::string createSkinDisplayName(std::string _filename);
 
 		virtual void openMenu(const Rml::Event& _event);
-		// The menu openMenu shows, as data (a native menu bar or a menu outside RmlUi shows it too).
-		void fillMenu(juceRmlUi::Menu& _menu);
+		// The menu openMenu shows, as data (a native menu bar or a menu outside RmlUi shows it too). An editor may
+		// build its own (this fork's web page editors: mdPluginEditorState).
+		virtual void fillMenu(juceRmlUi::Menu& _menu);
 
 		baseLib::Event<int> evSetGuiScale;
 		baseLib::Event<juce::Component*> evSkinLoaded;

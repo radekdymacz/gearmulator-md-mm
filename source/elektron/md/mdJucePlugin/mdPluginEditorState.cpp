@@ -16,6 +16,8 @@
 #include "jucePluginEditorLib/rendererPreferenceKeys.h"
 #include "juceRmlUi/rmlMenu.h"
 
+#include <cmath>
+
 namespace mdJucePlugin
 {
 	PluginEditorState::PluginEditorState(AudioPluginAudioProcessor& _processor)
@@ -69,109 +71,168 @@ namespace mdJucePlugin
 		return createEditorPage(*this, m_processor, _skin);
 	}
 
-	void PluginEditorState::initContextMenu(juceRmlUi::Menu& _menu)
+	// I-008: the editor's menu, one tree for the page (which draws it), the menu bar and the native fallback.
+	editorMenu::Menu PluginEditorState::menu()
 	{
+		using namespace editorMenu;
 		auto& processor = static_cast<AudioPluginAudioProcessor&>(m_processor);
-		// 0.3.4: which editor and version first (disabled), the Updates under it (mdAbout.h)
-		_menu.addEntry(about::title(processor.getModel() == md::MachineModel::Monomachine), false, false, {});
+		Menu m;
+		m.title = about::title(processor.getModel() == md::MachineModel::Monomachine);	// 0.3.4: which editor, which version
+
+		// The two zooms: the page's own (Cmd - / Cmd + / Cmd 0, B-001) and, inside it, the window's size (upstream's GUI Scale)
 		auto* const page = dynamic_cast<PageEditor*>(getEditor());
 		if(page)
-			page->fillUpdateMenu(_menu);	// I-005 (doc/modern-ux/DESIGN-updates.md)
+			m.items.push_back(page->zoomMenu(windowSizeMenu()));
+		else
+			m.items.push_back(windowSizeMenu());
+		m.items.push_back(separator());
+
+		if(page)
+			m.items.push_back(page->updateMenu());	// I-005 (doc/modern-ux/DESIGN-updates.md)
 		// B-022: the folder of the start-up log (and the performance captures), for a report
-		_menu.addEntry("Open Log Folder", [folder = processor.performanceDiagnosticsFolder()]
+		m.items.push_back(action("open-log-folder", "Open Log Folder", [folder = processor.performanceDiagnosticsFolder()]
 		{
 			juce::MessageManager::callAsync([folder]	// after the menu closed
 			{
 				if(folder.createDirectory().wasOk())
 					folder.revealToUser();
 			});
-		});
-		_menu.addSeparator();
-		jucePluginEditorLib::PluginEditorState::initContextMenu(_menu);
+		}));
+		if(juce::JUCEApplicationBase::isStandaloneApp())
+		{
+			// B-007: the page's AUDIO / MIDI panel (in a plug-in the host owns audio and MIDI)
+			m.items.push_back(action("audio-midi", "Audio/MIDI Settings...", [this]
+			{
+				juce::MessageManager::callAsync([this]	// after the menu closed, as the menu bar's entry does
+				{
+					if(auto* editor = dynamic_cast<jucePluginEditorLib::AudioMidiSettingsEditor*>(getEditor()))
+						editor->openAudioMidiSettings();
+				});
+			}));
+		}
+		addSysexEntries(m.items);
+		m.items.push_back(separator());
+
+		// What a developer or a bug report asks for: the performance captures, the Machinedrum's RAM recording mode
+		std::vector<Item> developer;
+		developer.push_back(action("perf-capture", processor.performanceDiagnosticsActive()
+			? "Stop Performance Capture" : "Start Performance Capture", [this]
+			{
+				auto& p = static_cast<AudioPluginAudioProcessor&>(m_processor);
+				p.setPerformanceDiagnosticsEnabled(!p.performanceDiagnosticsActive());
+			}));
+		developer.push_back(note(processor.performanceDiagnosticsStatus()));
 		if(processor.getModel() == md::MachineModel::Machinedrum)
 		{
 			const bool available = processor.isRamRecordingModeAvailable();
 			const auto mode = processor.getRamRecordingMode();
-			juceRmlUi::Menu ramRecording;
-			ramRecording.addEntry("Complete tails (recommended)", available,
-				mode == md::RamRecordingMode::CompleteTail, [&processor]
+			developer.push_back(separator());
+			developer.push_back(heading("RAM recording"));
+			developer.push_back(action("ram-complete", "Complete tails (recommended)", [&processor]
 				{
 					processor.setRamRecordingMode(md::RamRecordingMode::CompleteTail);
-				});
-			ramRecording.addEntry("Original finalization", available,
-				mode == md::RamRecordingMode::Original, [&processor]
+				}, {}, mode == md::RamRecordingMode::CompleteTail, available));
+			developer.push_back(action("ram-original", "Original finalization", [&processor]
 				{
 					processor.setRamRecordingMode(md::RamRecordingMode::Original);
-				});
-			_menu.addSubMenu("RAM recording", std::move(ramRecording));
+				}, {}, mode == md::RamRecordingMode::Original, available));
 		}
-		juceRmlUi::Menu diagnostics;
-		diagnostics.addEntry(processor.performanceDiagnosticsActive()
-			? "Stop performance capture" : "Start performance capture", [this]
-			{
-				auto& processor = static_cast<AudioPluginAudioProcessor&>(m_processor);
-				processor.setPerformanceDiagnosticsEnabled(!processor.performanceDiagnosticsActive());
-			});
-		diagnostics.addEntry("Open logs folder", [folder = processor.performanceDiagnosticsFolder()]
-			{
-				// Open Finder/Explorer after the Rml menu has closed.
-				juce::MessageManager::callAsync([folder]
-					{
-						if(folder.createDirectory().wasOk()) folder.revealToUser();
-					});
-			});
-		diagnostics.addSeparator();
-		diagnostics.addEntry(processor.performanceDiagnosticsStatus(), false, false, {});
-		_menu.addSubMenu("Performance diagnostics", std::move(diagnostics));
+		m.items.push_back(submenu("developer", "Developer", std::move(developer)));
+		return m;
+	}
 
-		// B-001: the editor page's zoom (mdPageEditor.h; a hook, doc/modern-ux/UPSTREAM.md)
-		if(page)
-			page->fillZoomMenu(_menu);
+	// Upstream's GUI Scale: the window at a size of the page's design size (1440 x 924); the page fits itself into it.
+	editorMenu::Item PluginEditorState::windowSizeMenu()
+	{
+		using namespace editorMenu;
+		const auto now = m_processor.getConfig().getDoubleValue("scale", 100);
+		const double w = getWidth() * getRootScale(), h = getHeight() * getRootScale();
+		std::vector<Item> sizes;
+		for(const int percent : {50, 65, 75, 85, 100, 125, 150, 175, 200, 250, 300})
+		{
+			auto label = std::to_string(percent) + " %";
+			if(w > 0 && h > 0)
+				label += "  (" + std::to_string(static_cast<int>(w * percent / 100)) + " \xc3\x97 " + std::to_string(static_cast<int>(h * percent / 100)) + ")";
+			sizes.push_back(action("window-" + std::to_string(percent), label, [this, percent]
+			{
+				juce::MessageManager::callAsync([this, percent] { evSetGuiScale(percent); });	// after the menu closed
+			}, {}, std::abs(now - percent) < 0.5));
+		}
+		return submenu("window-size", "Window Size", std::move(sizes));
+	}
 
+	// The panel editor's SysEx transfer (upstream's skins; the editor page has its own import, deskSyx.js).
+	void PluginEditorState::addSysexEntries(std::vector<editorMenu::Item>& _items)
+	{
 		auto* const editor = dynamic_cast<Editor*>(getEditor());
 		if(!editor)
 			return;
-
 		const bool active = editor->isUserSysexTransferActive();
 		if(editor->canResumeUserSysexTransfer())
-			_menu.addEntry("Resume SysEx Transfer - machine is ready", true, false,
-				[editor] { editor->resumeUserSysexTransfer(); });
+			_items.push_back(editorMenu::action("sysex-resume", "Resume SysEx Transfer - machine is ready",
+				[editor] { editor->resumeUserSysexTransfer(); }));
 		const bool cancellable = editor->canCancelUserSysexTransfer();
-		_menu.addEntry(editor->getUserSysexMenuText(),
-			!active || cancellable, false, [this, editor, cancellable]
+		_items.push_back(editorMenu::action("sysex", editor->getUserSysexMenuText(), [editor, cancellable]
 			{
 				if(cancellable)
 				{
 					editor->cancelUserSysexTransfer();
 					return;
 				}
-				// Menu actions run before the Rml menu closes. Defer the native picker
-				// until that teardown has completed.
+				// Defer the native picker until the menu's teardown has completed.
 				const auto lifetime = editor->getLifetimeToken();
 				juce::MessageManager::callAsync([lifetime, editor]
 				{
 					if(!lifetime.expired())
 						editor->chooseUserSysexFile();
 				});
-			});
+			}, {}, false, !active || cancellable));
 	}
 
-	// The editors are web pages: upstream's RmlUi settings page has nothing to show over them. What the
-	// page has is its AUDIO / MIDI panel, which is the standalone's; in a plug-in the host owns audio and
-	// MIDI, and the other settings (window scale, RAM recording, diagnostics) are entries of this menu.
-	void PluginEditorState::addSettingsEntry(juceRmlUi::Menu& _menu)
+	// The same tree as an RmlUi menu: the menu bar and the native fallback show it (jucePluginEditorLib::toPopupMenu).
+	void PluginEditorState::fillMenu(juceRmlUi::Menu& _menu)
 	{
-		if(!juce::JUCEApplicationBase::isStandaloneApp())
-			return;
-		_menu.addSeparator();
-		_menu.addEntry("Audio/MIDI Settings...", [this]
+		const auto m = menu();
+		juceRmlUi::Menu out;
+		out.addEntry(m.title, false, false, {});
+		out.addSeparator();
+		toRml(m.items, out);
+		_menu = std::move(out);
+	}
+
+	void PluginEditorState::toRml(const std::vector<editorMenu::Item>& _items, juceRmlUi::Menu& _menu)
+	{
+		using Kind = editorMenu::Item::Kind;
+		for(const auto& i : _items)
 		{
-			// After the menu has closed, as the menu bar's entry does.
-			juce::MessageManager::callAsync([this]
+			const auto label = i.key.empty() ? i.label : i.label + "  (" + i.key + ")";
+			switch(i.kind)
 			{
-				if(auto* editor = dynamic_cast<jucePluginEditorLib::AudioMidiSettingsEditor*>(getEditor()))
-					editor->openAudioMidiSettings();
-			});
-		});
+			case Kind::Separator:
+				_menu.addSeparator();
+				break;
+			case Kind::Heading:
+			case Kind::Note:
+				_menu.addEntry(i.label, false, false, {});
+				break;
+			case Kind::Submenu:
+				{
+					juceRmlUi::Menu sub;
+					toRml(i.items, sub);
+					_menu.addSubMenu(label, std::move(sub));
+				}
+				break;
+			case Kind::Action:
+				_menu.addEntry(label, i.enabled && i.action != nullptr, i.checked, i.action);
+				break;
+			}
+		}
+	}
+
+	// The editors are web pages: upstream's RmlUi settings page has nothing to show over them. What the page has is
+	// its AUDIO / MIDI panel, the standalone's (menu(): Audio/MIDI Settings...); in a plug-in the host owns audio and
+	// MIDI. The other settings (zoom, window size, RAM recording, diagnostics) are entries of the menu.
+	void PluginEditorState::addSettingsEntry(juceRmlUi::Menu&)
+	{
 	}
 }

@@ -527,7 +527,7 @@ Boot.host={chooseRom:()=>{if(HOST.chooseRom)return HOST.chooseRom();Boot.rom({ok
  recheck:()=>{if(HOST.recheck)return HOST.recheck();startEngine("emu")},
  removeRom:i=>{if(HOST.removeRom)return HOST.removeRom(i)},say:t=>toast(t)};
 /* the editor's menu (a host's): right-click an empty part of the header */
-document.addEventListener("contextmenu",e=>{if(!HOST.menu||!e.target.closest(".top")||e.target.closest("button,[role=slider],[role=button],select,input,b,.lcdpanel"))return;e.preventDefault();HOST.menu()});
+document.addEventListener("contextmenu",e=>{if(!HOST.menu||!e.target.closest(".top")||e.target.closest("button,[role=slider],[role=button],select,input,b,.lcdpanel"))return;e.preventDefault();HOST.menu(e.clientX,e.clientY)});
 window.MMView={
  /* values */
  audible,soloed:()=>[...S.tracks,...S.midi].some(x=>x.solo),engReady,asgT,noteName,pname,machName,kitName,

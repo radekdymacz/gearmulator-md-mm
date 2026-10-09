@@ -526,7 +526,7 @@ namespace mdJucePlugin
 		class FailureView final : public juce::Component
 		{
 		public:
-			FailureView(const juce::String& _why, const juce::File& _log)
+			FailureView(const juce::String& _why, const juce::File& _log, std::function<void()> _menu) : m_menu(std::move(_menu))
 			{
 				setOpaque(true);
 				juce::String text = "The editor page could not start.\n\n" + _why + "\n\n";
@@ -543,6 +543,7 @@ namespace mdJucePlugin
 				m_text.setJustificationType(juce::Justification::topLeft);
 				m_text.setColour(juce::Label::textColourId, juce::Colours::white);
 				m_text.setFont(juce::Font(16.0f));
+				m_text.setInterceptsMouseClicks(false, false);	// a right-click on the text is the view's (the menu)
 				addAndMakeVisible(m_text);
 				m_open.setButtonText("Open the log folder");
 				m_open.onClick = [_log] { if(_log != juce::File()) _log.getParentDirectory().revealToUser(); };
@@ -555,6 +556,13 @@ namespace mdJucePlugin
 			}
 
 			void paint(juce::Graphics& _g) override { _g.fillAll(juce::Colour(0xff15171a)); }
+
+			// I-008: the editor's menu, native (the page that draws it is not up)
+			void mouseDown(const juce::MouseEvent& _e) override
+			{
+				if(_e.mods.isPopupMenu() && m_menu)
+					m_menu();
+			}
 
 			void resized() override
 			{
@@ -575,6 +583,7 @@ namespace mdJucePlugin
 #endif
 			juce::Label m_text;
 			juce::TextButton m_open, m_get;
+			std::function<void()> m_menu;
 		};
 	}
 
@@ -583,7 +592,7 @@ namespace mdJucePlugin
 		if(m_failure)
 			return;
 		note("FAILED: " + _why + " - the window says so; log: " + m_startupLog.getFullPathName());
-		m_failure = std::make_unique<FailureView>(_why, m_startupLog);
+		m_failure = std::make_unique<FailureView>(_why, m_startupLog, m_fallbackMenu);
 		m_failure->setTitle("The editor page could not start");
 		m_failure->setDescription(_why);
 		if(auto* parent = m_web->getParentComponent())
