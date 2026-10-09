@@ -1,0 +1,135 @@
+<!doctype html>
+<html lang="en" data-theme="light">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>MD + MM Editor 0.3.5 release notes</title>
+<meta name="description" content="A fix release on top of 0.3.4.">
+<meta name="color-scheme" content="light">
+<meta name="theme-color" content="#fbfbf7">
+<link rel="canonical" href="https://mdmm.dev/releases/0.3.5/">
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<link rel="icon" href="/favicon-32.png" sizes="32x32" type="image/png">
+<link rel="apple-touch-icon" href="/apple-touch-icon.png">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="MD + MM Editor">
+<meta property="og:title" content="MD + MM Editor 0.3.5 release notes">
+<meta property="og:description" content="A fix release on top of 0.3.4.">
+<meta property="og:url" content="https://mdmm.dev/releases/0.3.5/">
+<meta property="og:image" content="https://mdmm.dev/og.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="og:image:alt" content="Free editors for Machinedrum and Monomachine, beside a screenshot of the Machinedrum Editor's step grid and GEN bar.">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="MD + MM Editor 0.3.5 release notes">
+<meta name="twitter:description" content="A fix release on top of 0.3.4.">
+<meta name="twitter:image" content="https://mdmm.dev/og.png">
+<link rel="stylesheet" href="/design/tokens.css">
+<link rel="stylesheet" href="/assets/site.css?v=20261010">
+<script src="/assets/theme.js?v=20261008"></script>
+</head>
+<body>
+<a class="skip" href="#main">Skip to content</a>
+<header class="top">
+  <div class="wrap">
+    <a class="brand" href="/" aria-label="MD + MM Editor, home"><i class="dot" aria-hidden="true"></i><b>MD + MM Editor</b></a>
+    <nav class="nav" aria-label="Main">
+      <a class="opt" href="/#features">Features</a>
+      <a class="keep" href="/guide/">Guide</a>
+      <a class="opt" href="/#faq">FAQ</a>
+      <a class="disc" href="https://discord.gg/8xwXwBHbtn" aria-label="Discord community"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M2.5 3.5h11a1 1 0 0 1 1 1v6a1 1 0 0 1-1 1H7l-3 2.5V11.5H2.5a1 1 0 0 1-1-1v-6a1 1 0 0 1 1-1z" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/><circle cx="5.5" cy="7.5" r="1" fill="currentColor"/><circle cx="8" cy="7.5" r="1" fill="currentColor"/><circle cx="10.5" cy="7.5" r="1" fill="currentColor"/></svg><span>Discord</span></a>
+      <button class="themebtn" type="button" data-theme-toggle aria-label="Switch to dark theme"><svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="6.5" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M8 1.5a6.5 6.5 0 0 1 0 13z" fill="currentColor"/></svg></button>
+      <a class="btn btn-primary btn-sm" href="/get/">Download free</a>
+    </nav>
+  </div>
+</header>
+
+<main id="main" class="checkout legalpage guide">
+  <div class="wrap">
+    <span class="eyebrow">Release notes</span>
+    <h1>Machinedrum Editor + Monomachine Editor 0.3.5</h1>
+<p><small>Released 2026-10-09</small></p>
+<p>A fix release on top of <a href="/releases/0.3.4/">0.3.4</a>.</p>
+<p>Screenshots, features and FAQ: <b><a href="https://mdmm.dev">https://mdmm.dev</a></b> · User guide: <b><a href="https://mdmm.dev/guide/">https://mdmm.dev/guide/</a></b></p>
+<h2>SysEx import</h2>
+<ul>
+<li><b>The file goes to the machine as it is, and the machine decides.</b> The editor no longer guesses which OS a dump is from. Old backups, public ones among them, now import in full: kits, patterns, songs and globals from earlier OS versions that used to be refused as "wrong OS".
+</li>
+<li><b>The preview tells you what will happen</b>: what each item overwrites, what plays now, and that an import has no Undo (Export SysEx first). Untick a whole kind or click single items away.
+</li>
+<li><b>A report per item</b> once the machine has read everything back: taken, converted by the machine, ignored, or different from the file.
+</li>
+<li><b>A new import window</b> (both editors): one tab per kind (kits, patterns, songs, globals) with the machine's own slot grid, so you see which slots get overwritten and what plays now. Click a slot to leave it out (Shift-click for a range), or use All, Empty slots only and None. While it runs, each tab shows its own progress; the report marks every slot and can show the problems only.
+</li>
+<li><b>Globals are off unless you tick them</b>: they change the machine's MIDI channels and settings. An imported global for the slot the machine uses is made active at once, so the machine and the editor agree on the MIDI channel, and the report says what each global changed. If a global sets the MIDI base channel to OFF, the editor says so instead of showing mutes the machine never took; GLOBAL sets a channel again.
+</li>
+</ul>
+<h2>Fixes</h2>
+<ul>
+<li><b>Start-up diagnostics in the plug-in too</b> (both editors, B-035). While the machine starts, the start-up card says when the DAW is not running audio for the plug-in, or when the machine runs slower than real time; the start-up log (<b>Open Log Folder</b>) gets a line a second for the first 30 s, in the app and in a DAW.
+</li>
+<li><b>The Monomachine Editor's play head costs less</b> (B-036): it moves without repainting the step cells and the piano rolls at every step, and the editor asks the emulator less often while the machine starts, as the Machinedrum Editor does.
+</li>
+<li><b>TEMPO shows the DAW's tempo in a DAW</b> (both editors, B-030). The machine already followed the host's clock, but the LCD showed its own stored tempo. Now it shows the host's BPM (also while the DAW is stopped), marked DAW, and refuses edits: change the tempo in the DAW. The app is unchanged.
+</li>
+<li><b>No more glitch when you save a project or close the app</b> (Machinedrum Editor): saving no longer holds up the audio for 25 to 30 ms. The app now fades out before it closes, so closing while a pattern plays no longer clicks.
+</li>
+<li><b>Set up sampling no longer loses tracks 13 and 14</b> (Machinedrum Editor). In 0.3.4, chopping right after Set up sampling with the machine stopped put the tracks back to the kit's stored machines, together with every unsaved kit edit.
+</li>
+<li><b>The arpeggiator range goes up to 9 octaves</b> (Monomachine Editor), as on the machine, and shows the right number: it used to read one octave too many.
+</li>
+<li><b>Full screen and maximise work in the app</b>, and the app menu no longer has a Settings entry that did nothing.
+</li>
+<li><b>? works without clicking into the window first</b> (both editors); in the Monomachine Editor it now opens the keyboard view.
+</li>
+<li><b>Shortcuts work while a value is focused</b>, so ⌘Z (Ctrl+Z) undoes a Control All drag at once.
+</li>
+<li><b>Perform no longer jumps while you drag</b> the envelope (Monomachine Editor).
+</li>
+<li><b>A SysEx file chosen as the ROM</b> now says it is SysEx, not the ROM image, and where to import it.
+</li>
+<li><b>Windows: a faster, more reliable start.</b> The editors try WebView2 again when it fails to start, write a start-up log, and say on screen what went wrong. <b>Open Log Folder</b> in the right-click menu finds the log to send us.
+</li>
+</ul>
+<h2>New</h2>
+<ul>
+<li><b>The Song page shows what plays</b> (both editors). Its left column now goes from the top: <b>What plays</b> (a big PATTERN | SONG switch and one live line: PATTERN B07, SONG 01 · row 017 of 65 · B01, or CHAIN A03»A05), the song, the pattern palette, the selected row. While a song plays, the arrangement is framed as playing; in PATTERN mode it stays as it is, ready to edit, and the header says the song is not playing. The switch lights what the machine reports.
+</li>
+<li><b>A song playhead</b> (both editors): while the machine plays a song, the row it plays is marked in the arrangement, read from the machine itself, so it follows repeats, loops and jumps; the time bar above the grid fills up to it, and the LCD's pattern slot reads SONG 01 · 017.
+</li>
+<li><b>PAT / SONG on the LCD's second line</b>, on every page: click it to switch between pattern and song mode. The LCD keeps its size in both modes.
+</li>
+<li><b>Song edits just play</b> (both editors): no more "Reload song". An edit made while stopped is heard at the next PLAY; one made while the song plays, from the next start; one made in pattern mode, when you switch to SONG.
+</li>
+<li><b>GLOBAL key in the top bar</b> (Machinedrum Editor), where FN was: the machine's MIDI channel, sync, note map and routing. The AUDIO / MIDI panel points to it. FN is gone: ⌥, ⇧ and ⌘ remain, and the step menu keeps every ⌥ action.
+</li>
+<li><b>The editor menu in the editors' own style</b> (both editors): right-click anywhere the page has no menu of its own. <b>Zoom</b> (the page, and <b>Window Size</b> for the window itself), <b>Updates</b>, <b>Open Log Folder</b>, <b>Audio/MIDI Settings…</b> in the app, and a <b>Developer</b> submenu. It works with the keyboard and looks the same in every DAW.
+</li>
+<li><b>The GLOBAL panel's note map names every target</b> (Machinedrum Editor): tracks, patterns A01 to H16, START and STOP. <b>Map a note</b> sends any note to any pattern, START or STOP. Maps from older backups now show as they are instead of being cut short.
+</li>
+</ul>
+<h2>Platforms</h2>
+<ul>
+<li>macOS 12 or later (Intel and Apple silicon), not signed by Apple yet: the first install needs <b>Open Anyway</b>.
+</li>
+<li>Windows x64 and Linux x64: not tested by a person yet. Feedback welcome: <a href="https://mdmm.dev/contact/">https://mdmm.dev/contact/</a>
+</li>
+</ul>
+    <p><a href="/releases/">All release notes</a> · <a href="/get/">Download</a></p>
+  </div>
+</main>
+
+<footer class="foot">
+  <div class="wrap grid">
+    <p><b>MD + MM Editor</b> <span data-version></span> · Machinedrum Editor and Monomachine Editor<br>A NativeKloud Consulting project — <a href="https://nativekloud.com">nativekloud.com</a></p>
+    <p><b>Free software</b> under the <a href="https://www.gnu.org/licenses/gpl-3.0.html">GPL-3</a>. <a href="https://github.com/radekdymacz/gearmulator-md-mm">Source</a> · <a href="https://github.com/radekdymacz/gearmulator-md-mm/releases">All releases</a></p>
+    <p><b>Credits.</b> Built on <a href="https://github.com/joelanders/gearmulator-md-mm">gearmulator-md-mm</a> by joelanders (the Machinedrum and Monomachine emulation) and <a href="https://github.com/dsp56300/gearmulator">Gearmulator</a> by The Usual Suspects (dsp56300). Thanks to Elektron for the instruments.</p>
+    <p class="legal"><a href="/guide/">Guide</a> · <a href="/releases/">Release notes</a> · <a href="/terms/">Terms</a> · <a href="/privacy/">Privacy</a> · <a href="/refunds/">Refunds</a> · <a href="/contact/">Contact</a> · <a href="https://discord.gg/8xwXwBHbtn">Discord</a> · <a href="&#109;&#97;&#105;&#108;&#116;&#111;&#58;&#114;&#97;&#100;&#101;&#107;&#100;&#121;&#109;&#97;&#99;&#122;&#64;&#103;&#109;&#97;&#105;&#108;&#46;&#99;&#111;&#109;">&#114;&#97;&#100;&#101;&#107;&#100;&#121;&#109;&#97;&#99;&#122;&#64;&#103;&#109;&#97;&#105;&#108;&#46;&#99;&#111;&#109;</a></p>
+    <p><b>Trademarks.</b> Elektron, Machinedrum and Monomachine are trademarks of Elektron Music Machines. This project is independent and not affiliated with or endorsed by Elektron, joelanders or The Usual Suspects. No firmware is included. No cookies, no analytics, no third-party scripts.</p>
+  </div>
+</footer>
+
+<script src="/config.js"></script>
+<script src="/assets/main.js?v=20261008" defer></script>
+</body>
+</html>
