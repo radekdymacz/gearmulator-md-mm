@@ -4,6 +4,33 @@
 repository; the site sends reports to the contact address. Newest first. Each entry:
 where it came from, the setup, what happens, what should happen, status.*
 
+## B-042 · The Windows and Linux READMEs send reports to GitHub issues, which are off
+
+- **From:** this round-up, 2026-10-09 (a Linux tester's blank window, B-033, and the READMEs everyone on Windows and Linux gets).
+- **What happens:** `scripts/linux/README-Linux.txt` and `scripts/windows/README-Windows-mdmm.txt` say "Reports are welcome: https://github.com/radekdymacz/gearmulator-md-mm/issues". Issues are off on the repository (`has_issues: false`), so the link leads nowhere a tester can report. The release notes and the site say https://mdmm.dev/contact/ and the Discord.
+- **Should:** both READMEs point to mdmm.dev/contact and the Discord invite (and say what to send: the OS, the DAW, the version, the `editor-*.log` of Open Log Folder on Windows).
+- **Status:** open; two lines in two files. Not in `fix/codex-review-2026-10` (it still carries the old link).
+
+## B-041 · ROM card: a zip with Elektron's OS update said "The .zip holds no .bin file" (0.3.4)
+
+- **From:** Discord tester K, 2026-10-09, setting the editor up for the first time: "always when i upload the zip os file it says the .zip holds no .bin file". Tester C answered that the editor wants the binary, not the .syx; K then wrote that it was on their side and "figured it out".
+- **What happens:** the card refused the zip with a message that did not say what the file was. Most likely the zip held Elektron's OS update (.syx), which is not the ROM image.
+- **Fix (release 0.3.5, commit `64fcc66a4`):** a .syx, or a .zip with .syx files and no ROM, is named as SysEx ("This is a SysEx file, not the ROM image"), with where SysEx goes (Import SysEx after start-up); `mdRomInstallTest`. A zip with no .bin and no .syx still says "holds no .bin file".
+- **Status:** fixed for 0.3.5 (the tester solved it before the release; not rechecked with the card's new text).
+
+## B-040 · macOS 12: no installer, only loose AU, VST3 and app files (0.3.4)
+
+- **From:** Discord tester A, 2026-10-08, macOS 12, 0.3.4: "no installer on Mac for 0.3.4 MacOS 12; only individual files AU, vst3, Stand Alone" (with a screenshot of the Machinedrum Editor's files). Tester C (latest macOS) installed 0.3.4 with the .pkg from the big Download button and pointed out the small "dmg instead" link; tester H also took the .pkg.
+- **To check:** which button the tester used (the .dmg holds the loose files by design; the .pkg is the installer), what the download page offers on macOS 12 and Safari 15 (`site/public/get`), and whether the .pkg installs on macOS 12. If it was the .dmg, make the installer the clear choice (the dmg link smaller, or its page saying what it holds).
+- **Ask the tester:** the file name downloaded (.pkg or .dmg), the browser.
+- **Status:** open, probably the .dmg link; not reproduced.
+
+## B-039 · Machinedrum: changing a machine in the stock patterns does not work (message cut off)
+
+- **From:** Discord tester D, 2026-10-08, the Machinedrum Editor (version not given, before 0.3.4): D listed three things that "didn't seem to work": where to add a different firmware (I-014), the SysEx import (B-019), and "when i went to change one of the machines in the stock patterns." The last line ends there; no later message says what happened.
+- **To check:** the same family as B-027 (the Monomachine: a machine change reverts when going back to Sequence) and B-025 (a kit reload after a dump overwrote unsaved kit edits, since 0.3.4): the Machinedrum's machine change, then pattern select or a stream reload; 0.3.5's fixes may cover it. Needs the steps: which track, which machine, what the page and the machine did.
+- **Status:** open, waiting for the tester's facts (a reply is drafted).
+
 ## B-038 · Monomachine: a song's LOOP row goes back to row 1
 
 - **From:** found by the song playhead's firmware test, 2026-10-09 (0.3.5 work).
@@ -13,13 +40,13 @@ where it came from, the setup, what happens, what should happen, status.*
 
 ## B-037 · Windows: MIDI in/out don't work in the standalone
 
-- **From:** Discord tester D, 2026-10-09, Windows 10, i9, 32 GB, 0.3.4: "MIDI ins/outs don't work, or I didn't figure out how to make them work".
+- **From:** Discord tester A (a Windows 10 PC; A's other reports are from macOS 12), 2026-10-09, i9, 32 GB, version not stated (0.3.4 was current): "MIDI ins/outs don't work, or I didn't figure out how to make them work".
 - **To check:** whether the AUDIO / MIDI panel lists Windows MIDI devices (WinMM vs WinRT), enabling an input, the editor's own use of the port, a short how-to in the guide.
 - **Status:** open.
 
 ## B-036 · Windows: Monomachine standalone crackles and the page lags at 8 % CPU
 
-- **From:** Discord tester D, 2026-10-09, Windows 10, i9, 32 GB, 0.3.4. The Machinedrum standalone runs fine on the same machine.
+- **From:** Discord tester A (Windows 10 PC), 2026-10-09, i9, 32 GB, version not stated (0.3.4 was current). The Machinedrum standalone runs fine on the same machine.
 - **What happens:** heavy crackle and a slow page while Task Manager shows only 8 % CPU.
 - **To check:** low CPU with drop-outs points to waiting, not computing: audio device/buffer/sample rate (WASAPI shared, 44.1 vs 48 kHz resampling), the MM's stream or page repaint holding the plug-in lock, timer resolution; compare with the MD path.
 - **0.3.5: diagnostics + the Monomachine's paths made the Machinedrum's:** the probe every 96 ms instead of 32 (it takes the device lock the audio thread holds for a whole block); the boot screen read from the panel the device publishes, without the lock (`MmStudioLink::readLcd`); the play head as the Machinedrum's B-014: per step only the soft play head moves (geometry read once per layout, not per step), no step cell is marked, no canvas is redrawn (`mmViewTest`: 32 steps, 64 canvas redraws before, 0 after), and following the play head to another page rebuilds the sequencer only. The start-up log (B-035) says the audio rate and the machine's real-time ratio.
@@ -27,7 +54,7 @@ where it came from, the setup, what happens, what should happen, status.*
 
 ## B-035 · Windows 10: both VST3s freeze at the boot screen in Ableton
 
-- **From:** Discord tester D, 2026-10-09, Windows 10, i9, 32 GB, Ableton Live, 0.3.4.
+- **From:** Discord tester A (Windows 10 PC), 2026-10-09, i9, 32 GB, Ableton Live, version not stated (0.3.4 was current).
 - **What happens:** Ableton finds both VST3s; each freezes on the "loading OS" boot screen. The MD standalone works on the same machine.
 - **To check:** the firmware boot in a hosted plug-in on Windows (ROM path, data root, first-boot cache write, message-thread waits while the host holds its lock), WebView2 in Ableton's process; 0.3.5's start-up log (B-022) should show where it stops. Related: B-022, B-029.
 - **0.3.5: diagnostics + a word on the card:** the plug-in writes the start-up diagnostics too (they were the standalone's only): once a second for the first 30 s, in the editor's start-up log (Open Log Folder, `editor-*.log`): `boot t=12s rate=44100 block=256 blocks=0 (0/s) bypassed=0 nonRealtime=0 realtime=0.00x dspBooted=0/2 firmwareMidiReady=0 lifecycle=booting rom=<file> cycles=<n>` (the host's audio calls counted on the audio thread, bypassed ones apart: the `processBlockStarted` hook; the machine's own cycles for the real-time ratio; `mdBootDiagnostics.h`). The start-up card says so when a plug-in gets no audio block for 5 s ("The host is not running audio for this plug-in: check the audio engine/device is on and the track or plug-in is not deactivated.") or when the machine runs slower than real time ("the machine runs at 0.6× real time: try a larger buffer"), from the plug-in's `audioRun` message. Tests: `mdSessionNoRomTest` (the page is told the host's blocks; the log line; the rates), `mdDeskPageTest` (the card's words).
@@ -39,19 +66,21 @@ where it came from, the setup, what happens, what should happen, status.*
 - **What happens:** a short drop-out when the standalone closes, at every DAW save or autosave, and at Remove ROM; closing while a pattern plays also clicks.
 - **Cause:** `synthLib::Plugin::getState` holds the plug-in's lock, the one `processAudio` takes; inside it the Machinedrum's state (`md::Device::getState` -> `makeFlashOverlay`, `validFlashOverlay`) fingerprinted the 8 MiB ROM twice and the 8 MiB factory baseline once (FNV), besides 8 MiB copies: 26-30 ms with the audio thread blocked (2-3 buffers at 512). JUCE's standalone saves while the audio runs and then stops it at once.
 - **Fix (release 0.3.5):** the ROM's and the factory baseline's fingerprints are computed once (the ROM's at load, the baseline's when its capture completes or a cached one is first decoded), kept by `md::Hardware` and passed to the state encoder; the state bytes are the same (`mdStateTest`: same bytes, read back). Measured (`mdStateTest`, an 8 MiB synthetic ROM and baseline): the state encode under the lock 33.4 ms -> 7.9 ms. The standalone quits in order, for the close button and the system's quit alike: the output fades to silence over about 30 ms, the audio stops at about 60 ms, then the state is saved (with the gain it had), then the app quits (`jucePluginEditorLib/standaloneApp.h`, both editors).
-- **Not yet (0.3.6):** the remaining copy, sector compare and encode still run under the lock (moving them out, dirty-sector tracking).
-- **Status:** fixed for 0.3.5 (the rest for 0.3.6).
+- **Not yet in 0.3.5:** the remaining copy, sector compare and encode still ran under the lock.
+- **Fix (0.4.0, branch `fix/codex-review-2026-10`):** `43f1e40d0` (the state is captured under the lock and encoded after it: MD 0.13-0.24 ms under the lock, MM 0.04-0.45 ms; bytes identical to the old `getState`; `synthLibStateTransactionTest`, `mdStateTest`) and `dd267e0c8` (the factory cache decoded once, slicing-by-8 CRC-32: MD 48-59 ms -> about 1 ms under the lock, first save 37 ms, MM 21-25 ms -> 1.5 ms). Not merged.
+- **Status:** fixed for 0.3.5 (the rest on `fix/codex-review-2026-10`, for 0.4.0).
 
 ## B-033 · Linux: blank window, no editor page
 
-- **From:** Discord tester, 2026-10-08, Linux (distribution not given), 0.3.4.
+- **From:** Discord tester F, 2026-10-08, Linux (distribution not given), 0.3.4: "Linux version shows a blank screen", "0/10 so far", "All I got when I installed it on Linux was a blank screen no GUI just a blank template". Nobody has replied in the channel yet.
 - **What happens:** the editor window stays blank; nothing works.
-- **To check:** WebKitGTK version/packages on the tester's system, the start-up log, the file-based bridge (LINUX.md); CI's Ubuntu 22.04/24.04 start tests pass.
-- **Status:** open.
+- **To check:** WebKitGTK version/packages on the tester's system, the start-up log, the file-based bridge (LINUX.md); CI's Ubuntu 22.04/24.04 start tests pass. The Linux README says an empty (grey) window means WebKitGTK is missing (`libwebkit2gtk-4.0` or `-4.1`, `libgtk-3`); the tester has not said whether it is installed, or which distribution, desktop or X11/Wayland.
+- **May be fixed by (0.4.0, branch `fix/codex-review-2026-10`, unverified):** `ffa87311b` (the page's fit zoom on Linux went as a `javascript:` URL, which crashes webkit2gtk's web process next to the bridge iframes: any window not at the design size, e.g. a laptop screen below 1440 x 924, could blank the page) and `1b81fb867` (a failed batch-file write froze the page; it is now retried in order and logged). Not run on a real Linux desktop.
+- **Status:** open: the tester's distribution, WebKitGTK package and start-up log are missing; a reply is drafted.
 
 ## B-032 · Old AU plug-ins still show next to the new ones (macOS)
 
-- **From:** Discord tester, 2026-10-08, M1 Pro, Ableton Live: "Monomachine Editor appears twice: one runs the old emulator (AU), one the editor (VST3)"; same for the Machinedrum.
+- **From:** Discord tester C, 2026-10-08, M1 Pro, Ableton Live (latest public release): "Monomachine Editor appears twice: one runs the old emulator (AU), one the editor (VST3)"; same for the Machinedrum.
 - **To check:** whether these are our own 0.2.x/0.3.x AUs (old bundle id local.gearmulator.preview.*) that the 0.3.2 clean-up missed, or upstream Gearmulator's; tell users which to remove; extend the clean-up if they are ours.
 - **Status:** open.
 
@@ -71,19 +100,20 @@ where it came from, the setup, what happens, what should happen, status.*
 
 ## B-029 · Windows: closing and reopening the plug-in window leaves it blank
 
-- **From:** Discord tester, 2026-10-08, Windows 11, Ableton Live 12, Machinedrum VST3: the window opens fine the first time; after closing and reopening it, everything in it has gone and the plug-in has to be reloaded. Also: 65 % CPU at 44.1 kHz; audible glitches at 48 kHz and above (CPU research, see B-005).
+- **From:** Discord tester E, 2026-10-08, Windows 11, Ableton Live 12, Machinedrum VST3 (version not given; 0.3.3 was current): the window opens fine the first time; after closing and reopening it, everything in it has gone and the plug-in has to be reloaded. Also: 65 % CPU at 44.1 kHz with a 4096 buffer, "same" at 1024; audible glitches at 48 kHz and above (CPU research, see B-005). "Looks beautiful btw."
 - **To check:** WebView2 controller/environment teardown and re-creation when the editor is destroyed and created again (mdWebView2Page); the start-up log (0.3.5).
-- **Status:** open.
+- **Status:** open; no branch has a fix (not in `fix/codex-review-2026-10`). Ask the tester to retry with 0.3.5 and send `editor-*.log`.
 
 ## B-028 · Glitches while p-locking still there in 0.3.4 (one tester)
 
 - **From:** Discord tester A, 2026-10-08, M1, macOS 12, 0.3.4: "Glitch while P-locking still there, no improvement".
 - **To check:** this tester's Mac is already at 65-70 % CPU with upstream Gearmulator; the B-014 stream cut the extra work 5-7×, but the emulation's own load may leave no headroom on an M1; check the buffer size, whether the page graphics (still heavy for fast gestures) is the remaining cost, and measure with the rt-check on an M1-like budget.
-- **Status:** open (related: B-014, CPU research).
+- **Fix (0.4.0, merged in main as `cba2ace1f`, branch `perf/step1-quick-wins`):** the CPU research's step 1 (L1, L11, L2b, L5), bit-exact: host work per frame MD -15 % stopped / -16 % playing, MM -19 % / -21 %; the worst buffer during edits -17 to -25 % (MD) and -19 to -27 % (MM) on an M4 Pro, from the headless rigs and firmware tests. Not yet run in a DAW or heard by ear on an M1. `GEARMULATOR_MDMM_SPEEDUPS=0` / Developer > Speed-ups off turns it off to compare.
+- **Status:** open (related: B-014, CPU research); step 1 is in main for the next release, to be checked by tester A on an M1.
 
 ## B-027 · Monomachine: a machine change reverts when going back to Sequence
 
-- **From:** Discord tester, 2026-10-09, Monomachine Editor 0.3.4.
+- **From:** Discord tester G, 2026-10-09, Monomachine Editor 0.3.4: "whenever I change the machine and go back to the sequence page it reverts to the machine I was using previously". Tester A asked "Mac or PC?"; no answer yet, and neither the host nor app-or-plug-in is known.
 - **What happens:** change a track's machine, go back to the Sequence page, and the track has the previous machine again.
 - **Likely:** a kit dump/read-back or the working kit re-sent after the change overwrites it (same family as B-025 on the MD); 0.3.4's stream or the SYSEX RECV session (B-021) involved.
 - **0.3.5:** not reproduced: the new journey `mm-sound-machine-stays` (pick a machine on Sound, go to Sequence, wait, back to Sound; the machine read from the machine's memory) passes in the standalone and the VST3.
@@ -123,7 +153,7 @@ where it came from, the setup, what happens, what should happen, status.*
 
 ## B-022 · Doesn't work on Windows 10 with WebView2 installed
 
-- **From:** several Discord users, 2026-10-08 (details still missing: editor version, what they see).
+- **From:** several Discord users, 2026-10-08 (details still missing: editor version, what they see). Tester A: "No GUI on Win 10, WebView2 already installed" (0.3.4, a Windows 10 PC; also B-035 to B-037). Tester E (Windows 11): B-029.
 - **What happens:** the Windows editors "don't work" on Windows 10 although the WebView2 runtime is installed.
 - **Not the cause:** the C runtime (the build links it statically).
 - **To check:** the version used (0.3.2 still had the old IE engine; WebView2 came in 0.3.3); the WebView2 runtime version on those machines vs what our SDK (1.0.3856.49) needs — any newer ICoreWebView2_N interface we query may be missing on an old runtime; file:// loading of the page from %TEMP%; the user-data folder in %LOCALAPPDATA%\Gearmulator; the emulator itself (CPU features); the plug-in in a DAW vs the standalone. Add a startup log the user can send, and a message on screen that says what failed.
@@ -150,13 +180,15 @@ where it came from, the setup, what happens, what should happen, status.*
 - **What happens:** after the import, about 130 "Push failed: the machine did not read back pattern …" errors, and the page shows the old content of about half the patterns. The same with 0.3.3's pacing (`GEARMULATOR_MDMM_EDIT_RATE=0`) and at any stream speed; importing one document at a time is fine.
 - **Cause:** not the firmware: asked directly afterwards, it holds every pattern as in the file. Each pattern's read-back is asked for 750 ms after its push, so an import asks for hundreds at once; the firmware answers one dump at a time, the answers come seconds late, the desk gives each up after its timeout and shows a late or stale answer.
 - **Fix (release 0.3.4):** the desks ask for at most two read-backs at a time (`deskCore::g_maxReadBacks`, `Pushes::pump`), and a read-back's clock starts once the editor's stream is quiet (`Pushes::restartAsked`). Measured: 224 of 224 documents read back equal, no errors, stopped and while playing; `syximport` checks the firmware directly too.
-- **Status:** fixed for 0.3.4.
+- **Reported again after 0.3.4:** tester H, 2026-10-09 (0.3.4, macOS, M3 Pro), the Autechre backup: "it said also push failed. Some patterns and kit are actually working tho. Not all", and guessed "too much data for the slots available" (not the cause: B-019). The import path of 0.3.4 is replaced in 0.3.5 (B-019); with 0.3.5 the same files import 232 of 232 (MD) and 288 of 288 (MM) on the firmware. To confirm with the tester on 0.3.5, with the import report.
+- **Status:** fixed for 0.3.4 by the measurements; two testers still had import trouble on 0.3.4 (H here, A in B-031), rebuilt in 0.3.5 (B-019).
 
 ## B-019 · SysEx import says "wrong OS" for most of a backup
 
 - **From:** Discord tester D, 2026-10-08 (Machinedrum, probably a public backup from an older OS).
 - **What happens:** importing a SysEx file shows mostly errors saying the OS is wrong.
 - **To check:** which OS versions' kit/pattern/song dumps we accept (only 1.63?), whether older dumps can be converted or imported partly, and that the message says what the file is and what to do.
+- **More from tester D (2026-10-08, later):** it was D's own SysEx, not the Autechre backup: "it doesn't seem to be able to read the kits. patterns seem to be fine though". Fits the cause below (kit dumps left out when the model called them another OS's format). Not checked with D's file on 0.3.5; ask D to retry and send the import report (and the file, if kits are still missing).
 - **Cause:** the import re-encoded each document as a "set" and left out whatever the model's `SyxTraits::fits` called another OS's format. On the Autechre 2008 backups (Machinedrum and Monomachine) that refused the MD's 8 globals (format 5.1) and, on the Monomachine, all 128 kits (an encoded-size check that RLE makes wrong), 31 patterns and the 8 globals: 167 of 288 items "wrong OS". The firmware takes every one of them.
 - **Fix (branch `fix/sysex-import`, release 0.3.5, owner's direction):** the import is a MIDI cable: the file's messages go to the machine as they are, in file order, a couple at a time; the firmware decides; the editor then reads every document back and reports, per item, taken, converted, ignored, differs, changed, unknown or no reply. Left out up front, with the reason, is only what cannot be sent at all (another device's SysEx, broken framing, Elektron OS update packets). The preview informs (format, what it overwrites, what plays, no Undo); kinds and single items can be unticked. Measured on the firmware (`md/mmDeskFirmwareTest <ROM> syximport` with the Autechre backups): Machinedrum 232 of 232 items taken, Monomachine 288 of 288; the editors' own exports read back equal; over HW MIDI (`SYX_HW=1`, the Monomachine on SYSEX RECV and SEND) too. Tests: `syxImportTest`, `syxImportFileTest` (`MD_SYX`, `MM_SYX`), the `syximport`/`syxexport` firmware tests, the journeys `md-lib-syx-import`, `mm-lib-syx-import`. The data contract was widened to what the firmware accepts (the MD's global key map, the MM pattern arpeggiator length), so those files' values show and stay on the page.
 - **Status:** fixed for 0.3.5.
@@ -196,6 +228,7 @@ where it came from, the setup, what happens, what should happen, status.*
 - **Cause:** not the host. JUCE's web view on macOS (`juce_WebBrowserComponent_mac.mm`, `WebViewKeyEquivalentResponder`) catches Cmd+X, Cmd+C, Cmd+V and Cmd+A in `performKeyEquivalent:` and sends the edit commands `cut:`, `copy:`, `paste:`, `selectAll:` to the first responder instead of letting WebKit see the key. WebKit runs them as editing commands, so the page gets the document's `copy` / `cut` / `paste` events and never a keydown; the page's key map listened to keydowns only. The same in the standalone, in the VST3 host and in every DAW: the window, JUCE's components and the menu bar take nothing (measured with real `NSEvent`s: "taken by a view's key equivalent", first responder `WebViewKeyEquivalentResponder_…`). Cmd+Z and Cmd+D pass JUCE's responder and reach the page as keys. The page's own tests sent DOM key events inside the page, which is why nothing caught it.
 - **Fix (branch `feat/select-shift`, its own commit):** the shared key dispatcher (`skins/shared/deskKeys.js`, both editors) takes a `copy`, `cut` or `paste` event outside a text field as Cmd+C, Cmd+X or Cmd+V (not twice when the keydown came first, as in a browser or WebView2). The mouse path was there already and is now tested: with steps selected, the top bar's Copy, Clr and Paste act on the selection. Tests: `deskKeysTest.js`; journeys `md-seq-os-copy-paste` (real key events through AppKit, `mdOsKeys.h`; fails without the fix in both hosts) and `md-seq-copy-paste-buttons`; the start tests of all three systems press real keys into the shipped standalones and VST3s and read the page's key probe (`GEARMULATOR_MDMM_KEYPROBE=1`).
 - **Not proven here:** Live itself (the journeys and the start tests run in the standalone and the minimal VST3 host); Windows and Linux (no machine here; their start tests check it on the runners).
+- **Confirmed by a tester, 2026-10-08:** tester A, 0.3.4: "Copy/Paste individual steps are working now via right click menu (huge improvement here!!)". Cmd+C / Cmd+V in Live were not mentioned.
 - **Status:** fixed for 0.3.4; real-key tests green on macOS 14/15, Windows and Linux.
 
 ## B-014 · Audio glitches while playing in Ableton (M1)
@@ -208,7 +241,8 @@ where it came from, the setup, what happens, what should happen, status.*
 - **Owner decision for 0.3.4:** the cable pace only while the machine's sequencer plays. Stopped there is no audio timing to protect, so the stream goes as fast as the machine reads: dumps back to back at 125 KB/s (as `md::Hardware` feeds them), a request still waiting for the read and the 250 ms settle after the last dump, the newest dump of a document still winning, values and value SysEx at once. Play starting mid-transfer slows the rest to cable speed; play stopping speeds the queue up. Measured with `mdDeskFirmwareTest <MD ROM> syximport` (a full backup imported as the session does it, emulated time): 128 patterns stopped 13.7 s (0.3.3's pacing with B-020's fix: 12.3 s), while playing 231 s (cable speed); with the settle between dumps too, 46.9 s. Every pattern is in the firmware as in the file in each case. Test: `mdDeskTest` (the mode switch).
 - **Workaround (0.3.3):** a larger buffer in Live (512 or 1024 samples).
 - **Should:** no drop-outs wherever upstream Gearmulator has none.
-- **Status:** fixed for 0.3.4, not yet checked by the tester.
+- **Also reported for the Monomachine Editor:** tester C, 2026-10-08, M1 Pro, latest macOS (before 0.3.4): "painting in parameter locks causes audio glitches". 0.3.4's stream covers both editors; not rechecked by C.
+- **Status:** fixed for 0.3.4; tester A still hears glitches on 0.3.4 (B-028).
 
 ## B-013 · Monomachine "first beat" journey fails in the VST3 (host path)
 
@@ -284,7 +318,9 @@ where it came from, the setup, what happens, what should happen, status.*
 - **What happens:** the plug-in uses a large share of the CPU.
 - **To check:** how much is the emulation (DSP56300 JIT + 68k) and how much the editor page (web view redraws, the rate of plug-in → page updates, animations); CPU with the editor window open vs closed, playing vs stopped; M1 vs newer chips; Live's buffer size.
 - **Should:** as low as the emulation allows; the page costs little, and nothing when its window is closed.
-- **Status:** open.
+- **More reports, 2026-10-08 and 09:** tester E (Windows 11, Live 12): 65 % at 44.1 kHz, same at 4096 and 1024, glitches at 48 kHz and above (B-029). Tester I (macOS M1, 2026-10-09, before 0.3.5): "performance issues running both together standalone. Buffer at 1024 helps"; upstream's original (joelanders) "seems ok" on the same Mac. Tester A (2026-10-09): both editors in one Ableton project on a MacBook Pro M2 Pro 16 GB "working flawlessly" (version not stated). Tester A (Windows 10 PC): the Monomachine standalone crackles at 8 % CPU (B-036).
+- **Fix (0.4.0, merged in main as `cba2ace1f`, branch `perf/step1-quick-wins`):** step 1 of the CPU research (see B-028): host work per frame -15 to -21 %, CPU for one instance -16 to -19 % on an M4 Pro. Steps 2 (a DSP idle skip, moves the MD serial timing; Radek listens and signs off) and 3 (compiler profile) are not built.
+- **Status:** open; step 1 is in main for the next release.
 
 ## B-004 · MIX faders look far too big at some window sizes
 
