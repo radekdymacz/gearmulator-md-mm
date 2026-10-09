@@ -17,15 +17,18 @@ namespace md
 	// Built once and then kept: from the machine-local cache that is three 8 MiB scans and a CRC of every cached
 	// sector, which a state save used to repeat every time under the plug-in's lock. Immutable once built, so a
 	// state save shares it, and whoever asks first builds it (outside the plug-in's lock when a capture does).
-	// Memory: from the cache, the decoded image is kept, 8 MiB more per Machinedrum instance once a state was saved
-	// (the cache itself is freed once decoded).
+	// Memory: from the machine-local cache (the usual case) the decoded image is kept, 8 MiB more per Machinedrum
+	// instance once a state was saved (its copy of the 2 MiB cache is freed once decoded); from a completed capture
+	// (the first start, before there is a cache) it is md::Hardware's own image, shared, nothing more.
 	class FactoryFlashBaseline
 	{
 	public:
 		// From the machine-local cache, decoded against the ROM on first use
 		FactoryFlashBaseline(std::vector<uint8_t> _cache, std::shared_ptr<const Rom> _rom);
-		// From an initialized image (a completed capture, or a cache already decoded), with its fingerprint if known
+		// From an initialized image (a cache already decoded), with its fingerprint if known
 		FactoryFlashBaseline(std::vector<uint8_t> _baseline, std::optional<uint64_t> _fingerprint);
+		// From md::Hardware's completed capture, shared (it no longer changes), with its fingerprint if known
+		FactoryFlashBaseline(std::shared_ptr<const std::vector<uint8_t>> _baseline, std::optional<uint64_t> _fingerprint);
 
 		FactoryFlashBaseline(const FactoryFlashBaseline&) = delete;
 		FactoryFlashBaseline& operator=(const FactoryFlashBaseline&) = delete;

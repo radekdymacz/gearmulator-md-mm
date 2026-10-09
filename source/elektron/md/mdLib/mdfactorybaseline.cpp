@@ -16,8 +16,13 @@ namespace md
 
 	FactoryFlashBaseline::FactoryFlashBaseline(std::vector<uint8_t> _baseline,
 		const std::optional<uint64_t> _fingerprint)
-		: m_baseline(std::make_shared<const std::vector<uint8_t>>(std::move(_baseline)))
-		, m_fingerprint(_fingerprint)
+		: FactoryFlashBaseline(std::make_shared<const std::vector<uint8_t>>(std::move(_baseline)), _fingerprint)
+	{
+	}
+
+	FactoryFlashBaseline::FactoryFlashBaseline(std::shared_ptr<const std::vector<uint8_t>> _baseline,
+		const std::optional<uint64_t> _fingerprint)
+		: m_baseline(std::move(_baseline)), m_fingerprint(_fingerprint)
 	{
 	}
 
@@ -53,9 +58,9 @@ namespace md
 		// stay as they are until replaceFactoryFlashCache or exchangePersistentFlashState, which replace this too.
 		if(!m_factoryBaseline && !m_factoryFlashCache.empty())
 			m_factoryBaseline = std::make_shared<FactoryFlashBaseline>(m_factoryFlashCache, m_rom);
-		else if(!m_factoryBaseline && !m_factoryFlashBaseline.empty())
-			m_factoryBaseline = std::make_shared<FactoryFlashBaseline>(m_factoryFlashBaseline,
-				m_factoryBaselineFingerprint);
+		else if(!m_factoryBaseline && !m_factoryFlashBaseline->empty())
+			m_factoryBaseline = std::make_shared<FactoryFlashBaseline>(
+				std::shared_ptr<const std::vector<uint8_t>>(m_factoryFlashBaseline), m_factoryBaselineFingerprint);
 		return m_factoryBaseline;
 	}
 }

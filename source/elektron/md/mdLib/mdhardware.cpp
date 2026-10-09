@@ -130,8 +130,8 @@ namespace md
 		, m_factoryFlashPreparationReady(!_factoryFlashCache.empty()
 			|| !_initialFlash.empty())
 		, m_factoryFlashCache(_factoryFlashCache)
-		, m_factoryFlashBaseline(_model == MachineModel::Machinedrum
-			&& _factoryFlashCache.empty() ? g_romSize : 0)
+		, m_factoryFlashBaseline(std::make_shared<std::vector<uint8_t>>(_model == MachineModel::Machinedrum
+			&& _factoryFlashCache.empty() ? g_romSize : 0))
 		, m_pendingFlashImage(_pendingFlashOverlay.valid ? g_romSize : 0)
 		, m_pendingFlashOverlay(_pendingFlashOverlay)
 		, m_pendingPatchRam(_pendingFlashOverlay.valid
@@ -688,10 +688,10 @@ namespace md
 				return;
 			}
 
-			const auto remaining = m_factoryFlashBaseline.size()
+			const auto remaining = m_factoryFlashBaseline->size()
 				- m_factoryFlashCaptureOffset;
 			const auto count = std::min(sliceSize, remaining);
-			auto* const destination = m_factoryFlashBaseline.data()
+			auto* const destination = m_factoryFlashBaseline->data()
 				+ m_factoryFlashCaptureOffset;
 			if(!m_uc.copyFlashDataRangeRealtime(destination,
 				m_factoryFlashCaptureOffset, count))
@@ -705,7 +705,7 @@ namespace md
 				m_factoryFlashCaptureFingerprint *= 1099511628211ull;
 			}
 			m_factoryFlashCaptureOffset += count;
-			if(m_factoryFlashCaptureOffset != m_factoryFlashBaseline.size())
+			if(m_factoryFlashCaptureOffset != m_factoryFlashBaseline->size())
 				return;
 			m_factoryFlashCaptureComplete = true;
 			{
@@ -812,7 +812,7 @@ namespace md
 		std::lock_guard lock(m_factoryFlashMutex);
 		_snapshot.cache = m_factoryFlashCache;
 		if(_snapshot.cache.empty())
-			_snapshot.baseline = m_factoryFlashBaseline;
+			_snapshot.baseline = *m_factoryFlashBaseline;
 		return !_snapshot.cache.empty() || !_snapshot.baseline.empty();
 	}
 
@@ -834,7 +834,7 @@ namespace md
 		auto baseline = std::make_shared<FactoryFlashBaseline>(std::move(decoded), std::nullopt);
 		std::lock_guard lock(m_factoryFlashMutex);
 		m_factoryFlashCache = _cache;
-		m_factoryFlashBaseline.clear();
+		m_factoryFlashBaseline = std::make_shared<std::vector<uint8_t>>();	// a new one: a state save may share the old
 		m_factoryBaselineFingerprint.reset();
 		m_factoryBaseline = std::move(baseline);
 		m_factoryFlashReady.store(true, std::memory_order_release);
