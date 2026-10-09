@@ -308,6 +308,43 @@ namespace
 		baseLib::filesystem::remove(filename);
 	}
 
+	// The state CRC is table-driven: it must give exactly what the bitwise CRC-32 gave, or old states and caches
+	// stop loading. The standard check value, then random buffers of awkward lengths against the bitwise reference.
+	void testCrc32()
+	{
+		const std::string checkInput = "123456789";
+		check(md::crc32(reinterpret_cast<const uint8_t*>(checkInput.data()), checkInput.size()) == 0xcbf43926u,
+			"CRC-32 of \"123456789\" is 0xCBF43926");
+		check(md::crc32(nullptr, 0) == 0, "CRC-32 of nothing is 0");
+
+		uint32_t seed = 0x9e3779b9u;
+		bool same = true;
+		for(const size_t size : {size_t(1), size_t(3), size_t(7), size_t(64), size_t(4093),
+			size_t(md::g_uwFlashSectorSize), size_t(md::g_patchRamStateSize)})
+		{
+			std::vector<uint8_t> data(size);
+			for(auto& byte : data)
+			{
+				seed = seed * 1664525u + 1013904223u;
+				byte = static_cast<uint8_t>(seed >> 24);
+			}
+			same = same && md::crc32(data.data(), data.size()) == crc32(data.data(), data.size());
+		}
+		check(same, "table CRC-32 equals the bitwise CRC-32 on random buffers");
+
+		using clock = std::chrono::steady_clock;
+		const auto patchRam = makePatchRam();
+		const auto t0 = clock::now();
+		const auto bitwise = crc32(patchRam.data(), patchRam.size());
+		const auto t1 = clock::now();
+		const auto table = md::crc32(patchRam.data(), patchRam.size());
+		const auto t2 = clock::now();
+		std::printf("  CRC-32 of 1 MiB: bitwise %.2f ms, table %.2f ms\n",
+			std::chrono::duration<double, std::milli>(t1 - t0).count(),
+			std::chrono::duration<double, std::milli>(t2 - t1).count());
+		check(bitwise == table, "and on the patch RAM image");
+	}
+
 	// B-034: the state a save writes under the plug-in's lock (the audio thread waits for it). With the fingerprints
 	// md::Hardware holds, the ROM and the factory baseline are not scanned again; the bytes are the same.
 	void testKnownFingerprints()
@@ -352,6 +389,7 @@ namespace
 int main()
 {
 	std::puts("Machinedrum UW state and cache tests\n");
+	testCrc32();
 	testKnownFingerprints();
 	testSparseProjectState();
 	testMonomachineUserFlashState();

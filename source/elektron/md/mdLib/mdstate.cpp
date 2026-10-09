@@ -65,21 +65,46 @@ namespace md
 				| readU32(_src, _offset + 4);
 		}
 
-		uint32_t updateCrc32(uint32_t _crc, const uint8_t* const _data,
-			const size_t _size)
+		// CRC-32 (IEEE 802.3, reflected polynomial 0xedb88320) by table lookups, eight bytes per step (slicing by
+		// eight) instead of eight shift steps per byte: a state save checksums the patch RAM and every stored flash
+		// sector, the factory cache decode every cached sector, megabytes each time. Table 0 is the bitwise step
+		// applied to each byte value, table k advances it by k more zero bytes, so the result is the bitwise one.
+		using Crc32Tables = std::array<std::array<uint32_t, 256>, 8>;
+
+		constexpr Crc32Tables makeCrc32Tables()
 		{
-			for(size_t i = 0; i < _size; ++i)
+			Crc32Tables tables{};
+			for(uint32_t value = 0; value < 256; ++value)
 			{
-				_crc ^= _data[i];
+				auto crc = value;
 				for(uint32_t bit = 0; bit < 8; ++bit)
-					_crc = (_crc >> 1) ^ (0xedb88320u & (0u - (_crc & 1u)));
+					crc = (crc >> 1) ^ (0xedb88320u & (0u - (crc & 1u)));
+				tables[0][value] = crc;
 			}
-			return _crc;
+			for(size_t k = 1; k < tables.size(); ++k)
+				for(uint32_t value = 0; value < 256; ++value)
+					tables[k][value] = (tables[k - 1][value] >> 8) ^ tables[0][tables[k - 1][value] & 0xffu];
+			return tables;
 		}
 
-		uint32_t crc32(const uint8_t* const _data, const size_t _size)
+		constexpr Crc32Tables g_crc32Tables = makeCrc32Tables();
+
+		uint32_t updateCrc32(uint32_t _crc, const uint8_t* _data, size_t _size)
 		{
-			return ~updateCrc32(0xffffffffu, _data, _size);
+			const auto& t = g_crc32Tables;
+			for(; _size >= 8; _data += 8, _size -= 8)
+			{
+				// Bytes assembled explicitly: the same on any host byte order
+				const uint32_t lo = _crc ^ (static_cast<uint32_t>(_data[0]) | (static_cast<uint32_t>(_data[1]) << 8)
+					| (static_cast<uint32_t>(_data[2]) << 16) | (static_cast<uint32_t>(_data[3]) << 24));
+				const uint32_t hi = static_cast<uint32_t>(_data[4]) | (static_cast<uint32_t>(_data[5]) << 8)
+					| (static_cast<uint32_t>(_data[6]) << 16) | (static_cast<uint32_t>(_data[7]) << 24);
+				_crc = t[7][lo & 0xffu] ^ t[6][(lo >> 8) & 0xffu] ^ t[5][(lo >> 16) & 0xffu] ^ t[4][lo >> 24]
+					^ t[3][hi & 0xffu] ^ t[2][(hi >> 8) & 0xffu] ^ t[1][(hi >> 16) & 0xffu] ^ t[0][hi >> 24];
+			}
+			for(; _size; ++_data, --_size)
+				_crc = t[0][(_crc ^ *_data) & 0xffu] ^ (_crc >> 8);
+			return _crc;
 		}
 
 		uint32_t flashStateCrc(const std::vector<uint8_t>& _state,
@@ -271,6 +296,11 @@ namespace md
 			_overlay = std::move(overlay);
 			return true;
 		}
+	}
+
+	uint32_t crc32(const uint8_t* const _data, const size_t _size)
+	{
+		return ~updateCrc32(0xffffffffu, _data, _size);
 	}
 
 	bool encodeState(std::vector<uint8_t>& _state, const std::vector<uint8_t>& _patchRam,

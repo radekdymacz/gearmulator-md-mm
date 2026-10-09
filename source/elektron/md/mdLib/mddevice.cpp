@@ -248,15 +248,16 @@ namespace md
 		if(m_model == MachineModel::Monomachine)
 			return encodeState(_state, patchRam, m_model, _type,
 				stateHardware->copyUserFlash());
-		std::vector<uint8_t> factoryBaseline;
 		// B-034: the ROM's and the baseline's fingerprints as md::Hardware keeps them (not two 8 MiB scans under the
-		// plug-in's lock, which the audio thread waits for)
+		// plug-in's lock, which the audio thread waits for); the baseline itself is decoded once and shared
 		FlashFingerprints known;
 		known.rom = stateHardware->firmwareFingerprint();
-		if(stateHardware->copyFactoryFlashBaseline(factoryBaseline, known.baseline))
+		std::shared_ptr<const std::vector<uint8_t>> factoryBaseline;
+		if(const auto baseline = stateHardware->factoryFlashBaseline();
+			baseline && baseline->get(factoryBaseline, known.baseline))
 			return encodeStateWithFactoryBaseline(_state, patchRam,
 				stateHardware->copyFlashData(),
-				factoryBaseline, stateHardware->flashBaseline(), m_model, _type, &known);
+				*factoryBaseline, stateHardware->flashBaseline(), m_model, _type, &known);
 		FlashSectorOverlay pending;
 		if(stateHardware->copyPendingFlashOverlay(pending))
 			return encodeState(_state, patchRam, pending,
