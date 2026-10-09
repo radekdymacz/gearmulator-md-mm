@@ -1785,26 +1785,103 @@ body.deskmidi #main,body.deskmidi #rail{opacity:.3;pointer-events:none;transitio
 .bmkeys button{height:30px;padding:0 14px;font:600 12px var(--sans);letter-spacing:.1em;text-transform:uppercase}
 .bmkeys button[hidden]{display:none}
 @media (prefers-reduced-motion:reduce){.bootcard{transition:none}.bootcard.ind .bootbar i{animation:none}.bmled{animation:none}body.deskmidi #main,body.deskmidi #rail{transition:none}}
-/* The SysEx import panel (P7, deskSyx.js) */
-.syxpop{position:absolute;z-index:22;width:min(900px,calc(100vw - 32px));display:grid;gap:10px;align-content:start;padding:14px;background:var(--plate);border:2px solid var(--print);border-radius:6px;box-shadow:0 18px 40px rgba(0,0,0,.35)}
+/* The SysEx import panel (P7, deskSyx.js; 0.3.5): a tab per kind, the machine's slot grid, one footer.
+   Plain colours and no :has()/subgrid (an older WebKit, deskCompat.js) */
+.syxpop{position:absolute;z-index:22;width:min(1120px,calc(100vw - 48px));display:grid;gap:10px;align-content:start;padding:14px 16px;background:var(--plate);color:var(--body,var(--print));border:2px solid var(--print);border-radius:6px;box-shadow:0 18px 40px rgba(0,0,0,.35)}
 .syxpop[hidden]{display:none}
-.syxbody{display:grid;gap:6px;max-height:48vh;overflow:auto}
-.syxrow{display:flex;align-items:center;gap:10px;font:600 13px var(--sans);letter-spacing:.06em;text-transform:uppercase;color:var(--print)}
-.syxrow .syxn{font:500 12px var(--mono);letter-spacing:0;text-transform:none;color:var(--print2)}
-.syxnames{display:flex;flex-wrap:wrap;gap:3px;padding:0 0 6px 24px}
-.syxname{font:10px var(--pix);text-transform:uppercase;padding:2px 5px;border-radius:2px;background:var(--lcd);color:var(--ink);opacity:.8}
-.syxname.over{opacity:1;box-shadow:inset 0 0 0 1px var(--led)}
-button.syxname{border:0;margin:0;cursor:pointer;line-height:inherit}
-.syxname.off{opacity:.3;text-decoration:line-through}
-.syxreport{display:grid;gap:4px}
-.syxreport[hidden]{display:none}
-.syxsum{margin:0;font:600 12px var(--sans);color:var(--print)}
-.syxreport .syxprob div{padding:1px 0}
-.syxwarn,.syxwhy{margin:0;font:500 12px var(--sans);color:var(--print2)}
+.syxhead{flex-wrap:wrap;row-gap:6px}
+.syxhead .lcdchip{flex:none}
+.syxfile{flex:1 1 200px;min-width:0;font:500 12px/1.3 var(--mono);color:var(--print2);overflow-wrap:anywhere;word-break:break-all}
+.syxq{width:26px;padding:0!important;font:600 13px var(--sans)!important;letter-spacing:0!important}
+.syxhelp{margin:0;font:500 13px/1.4 var(--sans);color:var(--print2)}
+.syxwhy{margin:0;font:500 14px/1.4 var(--sans);color:var(--print)}
+/* the tabs: a kind each, its LED sends it or not */
+.syxtabs{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:6px}
+.syxtab{display:flex;align-items:stretch;min-width:0;border-radius:4px;background:var(--plate2);box-shadow:inset 0 0 0 1px var(--rule)}
+.syxtab.sel{background:var(--plate3);box-shadow:inset 0 0 0 2px var(--print)}
+.syxtab input{-webkit-appearance:none;appearance:none;flex:none;align-self:center;width:13px;height:13px;margin:0 0 0 12px;border-radius:50%;background:var(--ledoff);border:0;cursor:pointer}
+.syxtab input:checked{background:var(--led);box-shadow:0 0 6px 1px var(--led)}
+.syxtab input:disabled{cursor:default}
+.syxtab.bad input:checked{animation:none}
+.syxtabb{flex:1;min-width:0;display:grid;gap:2px;justify-items:start;text-align:left;padding:7px 12px 7px 10px;background:transparent!important;color:var(--print);box-shadow:none!important;transform:none!important;border-radius:4px}
+.syxtabb .t{display:flex;align-items:center;gap:8px;font:600 14px var(--sans);letter-spacing:.14em;text-transform:uppercase}
+.syxct{font:11px/1 var(--pix);letter-spacing:0;background:var(--lcd);color:var(--ink);padding:3px 6px 2px;border-radius:2px}
+.syxpl[hidden]{display:none}
+.syxpl{font:600 9px/1 var(--mono);letter-spacing:0;background:var(--cream,var(--lcd));color:var(--creamtext,var(--ink));padding:3px 4px;border-radius:2px}
+.syxtabb .s{max-width:100%;font:500 11px var(--mono);color:var(--print2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.syxtabb .s em,.syxtab.bad .s{font-style:normal;color:var(--rec)}
+/* the slots, as on the machine */
+.syxbody{min-height:336px;max-height:calc(100vh - 330px);overflow:auto;overscroll-behavior:contain}
+.syxpane[hidden]{display:none}
+.syxgrid{display:grid;gap:4px;align-items:stretch}
+.syxrl{align-self:center;font:600 12px var(--mono);color:var(--print2);text-align:center}
+.syxc{position:relative;height:38px;min-width:0;display:grid;align-content:center;gap:1px;padding:3px 6px;margin:0;text-align:left;border:0;border-radius:3px;background:var(--key);color:var(--keytext);box-shadow:inset 0 -2px 0 rgba(0,0,0,.35);font:500 11px var(--mono);letter-spacing:0;cursor:pointer}
+.syxc b{font:500 10px/1.1 var(--mono);color:var(--keydim);white-space:nowrap}
+.syxc span{font:500 11px/1.2 var(--mono);text-transform:uppercase;white-space:nowrap;overflow:hidden}
+.syxc.over::after{content:"";position:absolute;right:5px;top:5px;width:6px;height:6px;border-radius:50%;background:var(--led);box-shadow:0 0 4px var(--led)}
+.syxc.plays{background:var(--cream,var(--lcd));color:var(--creamtext,var(--ink))}
+.syxc.plays b{color:var(--creamtext,var(--ink))}
+.syxc.unread span{font-style:italic}
+.syxc.off{background:transparent;color:var(--print3);box-shadow:inset 0 0 0 1px var(--rule)}
+.syxc.off b{color:var(--print3)}
+.syxc.off span{text-decoration:line-through}
+.syxc.off::after{opacity:.35}
+.syxc:hover{filter:brightness(1.12)}
+.syxc.off:hover{background:var(--plate3);filter:none}
+.syxc.none{display:grid;align-content:center;background:transparent;box-shadow:none;border:1px dashed var(--rule);opacity:.45;cursor:default}
+.syxc.none b{color:var(--print3)}
+.syxgrid.g8 .syxc{height:44px}
+.kindoff .syxc:not(.none){opacity:.4;cursor:default;filter:none}
+.syx-running .syxc,.syx-report .syxc{cursor:default}
+.syx-running .syxc:hover,.syx-report .syxc:hover{filter:none}
+.syxo{position:absolute;right:4px;top:3px;font:600 11px/1 var(--mono);font-style:normal;color:var(--keydim)}
+.syxc.bad{box-shadow:inset 0 0 0 2px var(--rec)}
+.syxc.bad .syxo{color:var(--rec)}
+.syx-report .syxc.over::after{display:none}
+.syx-report .syxc:not(.none):not([data-syxout]){opacity:.3}
+.syxnote{margin:0 0 8px;font:500 13px/1.4 var(--sans);color:var(--print2)}
+.syxnote b{color:var(--print);font-weight:600}
+/* the legend and the quick choices under the grid */
+.syxtools{display:flex;align-items:center;justify-content:space-between;gap:6px 18px;flex-wrap:wrap;min-height:26px}
+.syxleg{display:flex;align-items:center;flex-wrap:wrap;gap:4px 6px;font:500 11px var(--mono);color:var(--print2)}
+.syxleg .lg{display:inline-grid;place-items:center;width:18px;height:14px;margin-left:8px;border-radius:2px;background:var(--key);color:var(--keytext);font:600 9px/1 var(--mono);font-style:normal;position:relative}
+.syxleg .lg:first-child{margin-left:0}
+.syxleg .lg.over::after{content:"";position:absolute;right:2px;top:2px;width:4px;height:4px;border-radius:50%;background:var(--led)}
+.syxleg .lg.plays{background:var(--cream,var(--lcd));color:var(--creamtext,var(--ink))}
+.syxleg .lg.off{background:transparent;box-shadow:inset 0 0 0 1px var(--rule)}
+.syxleg .lg.bad{box-shadow:inset 0 0 0 1.5px var(--rec);color:var(--rec)}
+.syxsel{display:flex;gap:4px}
+.syxsel button{height:24px;padding:0 10px;font:600 10px var(--sans);letter-spacing:.14em;text-transform:uppercase;white-space:nowrap}
+.syxfilt{display:inline-flex;align-items:center;gap:6px;font:600 11px var(--sans);letter-spacing:.12em;text-transform:uppercase;color:var(--print);cursor:pointer}
+/* the problems, as a list (the report) */
+.syxlist{display:grid;gap:3px}
+.syxli{display:grid;grid-template-columns:44px minmax(80px,140px) 110px minmax(0,1fr);gap:10px;align-items:baseline;padding:4px 8px;border-radius:3px;background:var(--plate2);font:500 12px var(--mono);color:var(--print2)}
+.syxli b{font-weight:600;color:var(--print)}
+.syxli .nm{text-transform:uppercase;white-space:nowrap;overflow:hidden}
+.syxli .tag{font:600 11px var(--sans);letter-spacing:.12em;text-transform:uppercase;color:var(--rec)}
+.syxli .why{font:500 12px/1.35 var(--sans)}
+/* the footer: one line, the keys */
+.syxfoot{display:flex;align-items:center;gap:16px;border-top:1px solid var(--rule);padding-top:10px;min-height:44px}
+.syxmsg{flex:1;min-width:0;display:grid;gap:6px}
+.syxwarn,.syxsum{margin:0;font:500 14px/1.35 var(--sans);color:var(--print2)}
+.syxwarn.hot{color:var(--print)}
+.syxsum{color:var(--print);font-weight:600}
+.syxfoot .btnrow{flex:none;flex-wrap:nowrap}
+.syxfoot button{height:32px;padding:0 18px;font:600 12px var(--sans);letter-spacing:.14em;text-transform:uppercase;white-space:nowrap}
+.syxfoot button.go{background:var(--cream,var(--lcd));color:var(--creamtext,var(--ink))}
+.syxfoot button.go.danger{background:var(--rec);color:#fff}
+.syxfoot button:disabled{opacity:.35;cursor:default}
 .syxprob{font:500 12px var(--mono);color:var(--print2)}
-.syxbar{position:relative;height:18px;border-radius:3px;background:var(--ledoff);overflow:hidden}
+.syxprob summary{cursor:pointer}
+/* importing: the phases, the bar */
+.syxsteps{display:flex;gap:6px 22px;flex-wrap:wrap}
+.syxstep{display:inline-flex;align-items:center;gap:7px;font:600 12px var(--sans);letter-spacing:.14em;text-transform:uppercase;color:var(--print3)}
+.syxstep.done,.syxstep.now{color:var(--print)}
+.syxstep.now .led{animation:blink 1s steps(2) infinite}
+@media (prefers-reduced-motion:reduce){.syxstep.now .led{animation:none}}
+.syxbar{position:relative;height:20px;border-radius:3px;background:var(--ledoff);overflow:hidden}
 .syxbar i{position:absolute;left:0;top:0;bottom:0;background:var(--led);width:0;transition:width .2s}
-.syxbar span{position:relative;display:block;text-align:center;font:600 11px/18px var(--sans);color:var(--body)}
+.syxbar span{position:relative;display:block;padding:0 8px;text-align:center;font:600 11px/20px var(--sans);letter-spacing:.06em;color:#fff;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .syxkeys{display:inline-flex;gap:6px;margin-left:auto}
 .syxkeys+.libx{margin-left:8px!important}
 /* The AUDIO / MIDI panel (P6, deskAudio.js), the plate's own keys, LEDs and dropdowns */
