@@ -32,6 +32,10 @@ function(mdmm_add_lib_tests _dir)
 	target_link_libraries(mdDeskFirmwareTest PRIVATE mdLib mdDesk deskWire)
 	target_compile_definitions(mdDeskFirmwareTest PRIVATE MDDESK_SCHEMA="${_dir}/../../../../doc/modern-ux/md-data-contract.schema.json")
 	set_property(TARGET mdDeskFirmwareTest PROPERTY FOLDER "Elektron/test")
+	# B-031: the user's own backup imported, then patterns picked while and after it runs. The backup from MD_SYX
+	# (never in the repo), the ROM from GEARMULATOR_MD_FIRMWARE_BIN; skipped without them (the local gate gives both).
+	add_test(NAME mdSyxPickFirmwareTest COMMAND mdDeskFirmwareTest --env syxpick)
+	set_tests_properties(mdSyxPickFirmwareTest PROPERTIES LABELS "Integration;FirmwareTest" SKIP_RETURN_CODE 77 TIMEOUT 1200)
 
 	# P3 Machinedrum Editor discovery probes (working kit in memory, live
 	# recording, sample names, SDS). Manual: needs a user-supplied ROM.
@@ -101,6 +105,9 @@ function(mdmm_add_lib_tests _dir)
 	# -DGEARMULATOR_MM_ROM=<OS 1.32B image> runs it in ctest; without it the test skips.
 	add_test(NAME mmDeskFirmwareTest COMMAND mmDeskFirmwareTest ${GEARMULATOR_MM_ROM})
 	set_tests_properties(mmDeskFirmwareTest PROPERTIES LABELS "Integration;FirmwareTest" SKIP_RETURN_CODE 77 TIMEOUT 400)
+	# B-031 on the Monomachine: the backup from MM_SYX, the ROM from GEARMULATOR_MM_FIRMWARE_BIN; skipped without them.
+	add_test(NAME mmSyxPickFirmwareTest COMMAND mmDeskFirmwareTest --env syxpick)
+	set_tests_properties(mmSyxPickFirmwareTest PROPERTIES LABELS "Integration;FirmwareTest" SKIP_RETURN_CODE 77 TIMEOUT 1200)
 
 	# Unit test: mdDesk::wirePort and mmDesk::wirePort send the right bytes (kit param, mute, NRPN,
 	# panel keys) on the base channel. No ROM, no emulator - links the two wirePort INTERFACE

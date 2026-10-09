@@ -61,8 +61,15 @@ namespace mmDesk
 	{
 		// B-014: everything to the machine through the one stream, in order: SysEx (a machine change, then its values),
 		// values on the budget (the newest of a parameter wins), notes first. Panel keys stay the RECV session's.
+		// B-031: a request already waiting is not queued twice (the status polls behind a long backlog).
 		if(m_port.sendSysex)
-			m_port.sendSysex = [this](const Bytes& _b) { m_stream.send(_b, false, clock()); };
+			m_port.sendSysex = [this](const Bytes& _b)
+			{
+				if(ed::mmIsRequest(_b))
+					m_stream.ask(_b, false, clock());
+				else
+					m_stream.send(_b, false, clock());
+			};
 		if(m_port.sendParam)
 			m_port.sendParam = [this, send = std::move(m_port.sendParam)](const uint8_t _t, const uint8_t _p, const uint8_t _i, const uint8_t _v)
 			{
