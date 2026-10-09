@@ -23,10 +23,12 @@ check(M.slotLabel("song", 4) === "S05" && M.slotLabel("global", 7) === "G8", "so
 	check(g.cols === 8 && g.rows.length === 8 && g.rows[1].label === "09", "MD kits: 8 x 8, rows 01, 09, ..");
 	check(g.rows[0].cells[2].item?.name === "N2" && g.rows[0].cells[3].item === null, "a slot not in the file is drawn empty");
 	const m = M.layout("Monomachine", "kit", items(128));
-	check(m.cols === 16 && m.rows.length === 8 && m.rows[7].cells[15].label === "K128", "MM kits: 8 x 16");
+	check(m.cols === 8 && m.rows.length === 16 && m.rows[15].cells[7].label === "K128" && m.rows[15].label === "121", "MM kits: 16 x 8 (whole names, the panel scrolls)");
 	const p = M.layout("Machinedrum", "pattern", items(128));
 	check(p.cols === 16 && p.rows.map(r => r.label).join("") === "ABCDEFGH", "patterns: banks A-H x 16, as the pattern palette");
-	check(M.layout("Machinedrum", "song", items(24)).rows.length === 4, "songs: 32 slots, 4 x 8, though the file has 24");
+	check(M.layout("Machinedrum", "song", items(24)).rows.length === 4, "MD songs: 32 slots, 4 x 8, though the file has 24");
+	const ms = M.layout("Monomachine", "song", items(24));
+	check(ms.rows.length === 3 && ms.rows.every(r => r.cells.every(c => c.item)), "MM songs: its 24, 3 x 8, no empty slot drawn");
 	const gl = M.layout("Machinedrum", "global", items(8));
 	check(gl.cols === 8 && gl.rows.length === 1, "globals: 1 x 8");
 	check(M.layout("Machinedrum", "kit", [{ slot: 70, name: "X" }]).rows.some(r => r.cells.some(c => c.item?.name === "X")), "a file with more slots than the machine has: more rows, nothing lost");
@@ -70,6 +72,14 @@ check(M.slotLabel("song", 4) === "S05" && M.slotLabel("global", 7) === "G8", "so
 	check(r.get("pattern:4").outcome === "taken" && r.get("other:0").outcome === "sent", "other messages: sent");
 	const stopped = M.outcomes(picked, { taken: 1, unsent: 1, items: [{ kind: "kit", slot: 1, outcome: "ignored", text: "" }] });
 	check(stopped.get("kit:0").outcome === "unclear", "stopped (the counts do not add up): not listed is not known, never claimed taken");
+}
+
+/* importing, per kind (syxProgress.kinds) */
+{
+	check(M.kindLine("send", { done: 12, total: 64 }, true).text === "sent 12 of 64" && M.kindLine("send", { done: 12, total: 64 }, true).pct === 19, "sending: done of total, its bar");
+	check(M.kindLine("read", { done: 64, total: 64 }, true).text === "✓ read back 64 of 64", "a kind read back whole: ticked");
+	check(M.kindLine("before", undefined, true).text === "waits", "a kind the phase does not reach yet waits");
+	check(M.kindLine("send", undefined, false).text === "not sent", "a kind not chosen: not sent");
 }
 
 console.log(failures ? `${failures} FAILED` : "all ok");

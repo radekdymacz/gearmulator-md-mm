@@ -1446,8 +1446,13 @@ body.deskmidi #main,body.deskmidi #rail{opacity:.3;pointer-events:none;transitio
 .syxpl{font:600 9px/1 var(--mono);letter-spacing:0;background:var(--cream,var(--lcd));color:var(--creamtext,var(--ink));padding:3px 4px;border-radius:2px}
 .syxtabb .s{max-width:100%;font:500 11px var(--mono);color:var(--print2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .syxtabb .s em,.syxtab.bad .s{font-style:normal;color:var(--rec)}
+/* importing: each kind's own bar under its line; the kind at work blinks its LED */
+.syxtb{display:block;justify-self:stretch;height:4px;margin-top:3px;border-radius:2px;background:var(--ledoff);overflow:hidden}
+.syxtb b{display:block;height:100%;width:0;background:var(--led);transition:width .2s}
+.syxtab.work input:checked{animation:blink 1s steps(2) infinite}
+@media (prefers-reduced-motion:reduce){.syxtab.work input:checked{animation:none}}
 /* the slots, as on the machine */
-.syxbody{min-height:336px;max-height:calc(100vh - 330px);overflow:auto;overscroll-behavior:contain}
+.syxbody{max-height:calc(100vh - 330px);overflow:auto;overscroll-behavior:contain}
 .syxpane[hidden]{display:none}
 .syxgrid{display:grid;gap:4px;align-items:stretch}
 .syxrl{align-self:center;font:600 12px var(--mono);color:var(--print2);text-align:center}

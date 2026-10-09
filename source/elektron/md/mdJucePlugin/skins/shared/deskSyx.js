@@ -29,19 +29,19 @@ const Syx = (() => {
 		if (k === "pattern") return "ABCDEFGH"[slot >> 4] + nn((slot & 15) + 1);
 		return ({ kit: "K", song: "S", global: "G", other: "#" })[k] + (k === "global" || k === "other" ? slot + 1 : nn(slot + 1));
 	}
-	/* the machine's slots of a kind: kits 64 (MD) or 128 (MM), patterns 128, songs 32, globals 8; more when a file holds
-	   more. Columns: patterns and 128 kits 16 (a bank a row, as the pattern palette); 64 kits, songs and globals 8 */
-	const columns = (n, k) => k === "pattern" || (k === "kit" && n > 64) ? 16 : 8;
+	/* the machine's slots of a kind: kits 64 (MD) or 128 (MM), patterns 128, songs 32 (MD) or 24 (MM, its manual 1-73),
+	   globals 8; more when a file holds more. Columns: patterns 16 (a bank a row, as the pattern palette); kits, songs and
+	   globals 8, so a kit's name is whole (the MM's 128 kits scroll) */
+	const columns = k => k === "pattern" ? 16 : 8;
 	function capacity(model, k, list) {
-		const top = list.reduce((a, i) => Math.max(a, i.slot + 1), 0);
-		const base = { kit: /mono/i.test(model || "") ? 128 : 64, pattern: 128, song: 32, global: 8 }[k] || 0;
-		const cols = columns(Math.max(base, top), k);
-		return Math.max(base, Math.ceil(top / cols) * cols);
+		const top = list.reduce((a, i) => Math.max(a, i.slot + 1), 0), mm = /mono/i.test(model || "");
+		const base = { kit: mm ? 128 : 64, pattern: 128, song: mm ? 24 : 32, global: 8 }[k] || 0;
+		return Math.max(base, Math.ceil(top / columns(k)) * columns(k));
 	}
 	/* rows of slots as on the machine: {cols, rows:[{label, cells:[{slot, label, item|null}]}]}; "other" has no slots */
 	function layout(model, k, list) {
 		if (k === "other") return { cols: 0, rows: [{ label: "", cells: list.map(i => ({ slot: i.slot, label: slotLabel(k, i.slot), item: i })) }] };
-		const n = capacity(model, k, list), by = new Map(list.map(i => [i.slot, i])), cols = columns(n, k), rows = [];
+		const n = capacity(model, k, list), by = new Map(list.map(i => [i.slot, i])), cols = columns(k), rows = [];
 		for (let r = 0; r * cols < n; r++) {
 			const cells = [];
 			for (let c = 0; c < cols; c++) { const slot = r * cols + c; cells.push({ slot, label: slotLabel(k, slot), item: by.get(slot) || null }); }
@@ -87,14 +87,22 @@ const Syx = (() => {
 		s.push("No undo: Export SysEx… first.");
 		return s.join(" ");
 	}
-	const model = { KINDS, OFF, slotLabel, capacity, layout, kindSums, toggleRange, outcomes, footLine, OUTCOME };
+	/* a kind's line while importing, from syxProgress.kinds[kind] {done, total} of the phase: its words and its bar (%) */
+	function kindLine(phase, kp, picked) {
+		if (!picked) return { text: "not sent", pct: 0 };
+		const verb = { before: "reading the slots", send: "sent", read: "read back" }[phase] || "";
+		if (!kp || !kp.total) return { text: "waits", pct: 0 };
+		const all = kp.done >= kp.total;
+		return { text: `${all ? "✓ " : ""}${verb} ${kp.done} of ${kp.total}`, pct: Math.round(kp.done / kp.total * 100) };
+	}
+	const model = { KINDS, OFF, slotLabel, capacity, layout, kindSums, toggleRange, outcomes, footLine, kindLine, OUTCOME };
 
 	/* ---- the panel ---- */
 	const pop = document.createElement("div");
 	pop.id = "syxpop"; pop.className = "syxpop libpop"; pop.hidden = true;
 	pop.setAttribute("role", "dialog"); pop.setAttribute("aria-label", "Import SysEx");
 	document.body.appendChild(pop);
-	let last = null, state = "idle", tab = null, anchor = null, problemsOnly = true, steps = [], rep = null, picks = [], res = new Map();
+	let last = null, state = "idle", tab = null, anchor = null, problemsOnly = true, steps = [], rep = null, picks = [], res = new Map(), follow = true;
 	let skip = new Set();
 	const on = {};	// kind -> ticked
 	const esc = s => String(s).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
@@ -134,6 +142,10 @@ const Syx = (() => {
 	}
 	function tabSub(k) {
 		const list = last.items[k];
+		if (state === "running") {
+			const m = lastProgress || {}, l = kindLine(m.phase, m.kinds?.[k], picks.some(p => p.kind === k));
+			return { text: l.text, bad: 0, pct: l.pct, work: m.kind === k };
+		}
 		if (state === "report") {
 			const mine = picks.filter(p => p.kind === k), bad = mine.filter(p => problem(res.get(key(k, p.slot))?.outcome)).length;
 			if (!mine.length) return { text: "not sent", bad: 0 };
@@ -149,7 +161,7 @@ const Syx = (() => {
 	function tabs() {
 		return `<div class="syxtabs" role="tablist">${kindsIn().map(([k, label]) => {
 			const s = tabSub(k), lock = state !== "preview";
-			return `<div class="syxtab${k === tab ? " sel" : ""}${s.bad ? " bad" : ""}" data-syxtabk="${k}"><input type="checkbox" data-syxkind="${k}" aria-label="Send ${label}"${on[k] ? " checked" : ""}${lock ? " disabled" : ""}><button type="button" class="syxtabb" role="tab" aria-selected="${k === tab}" data-syxtab="${k}"><span class="t">${label}<span class="syxct">${last.items[k].length}</span><span class="syxpl" title="plays now"${s.plays ? "" : " hidden"}>▶</span></span><span class="s">${s.html ? s.text : esc(s.text)}</span></button></div>`;
+			return `<div class="syxtab${k === tab ? " sel" : ""}${s.bad ? " bad" : ""}${s.work ? " work" : ""}" data-syxtabk="${k}"><input type="checkbox" data-syxkind="${k}" aria-label="Send ${label}"${on[k] ? " checked" : ""}${lock ? " disabled" : ""}><button type="button" class="syxtabb" role="tab" aria-selected="${k === tab}" data-syxtab="${k}"><span class="t">${label}<span class="syxct">${last.items[k].length}</span><span class="syxpl" title="plays now"${s.plays ? "" : " hidden"}>▶</span></span><span class="s">${s.html ? s.text : esc(s.text)}</span>${state === "running" && picks.some(p => p.kind === k) ? `<i class="syxtb"><b style="width:${s.pct || 0}%"></b></i>` : ""}</button></div>`;
 		}).join("")}</div>`;
 	}
 	function tools() {
@@ -207,6 +219,21 @@ const Syx = (() => {
 		const b = q(".syxbar");
 		b.querySelector("i").style.width = (m.total ? m.done / m.total * 100 : 0) + "%";
 		b.querySelector("span").textContent = m.text || (m.total ? `${m.done} of ${m.total}` : "");
+		// per kind (0.3.5: syxProgress.kinds and .kind): each tab's line and bar; the shown tab follows the kind at work
+		// until the person picks a tab
+		for (const [k] of kindsIn()) {
+			const s = tabSub(k), t = q(`[data-syxtabk="${k}"]`); if (!t) continue;
+			t.classList.toggle("work", !!s.work);
+			t.querySelector(".s").textContent = s.text;
+			const w = t.querySelector(".syxtb b"); if (w) w.style.width = (s.pct || 0) + "%";
+		}
+		if (follow && m.kind && m.kind !== tab && last.items[m.kind]?.length) show(m.kind);
+	}
+	function show(k) {
+		tab = k;
+		for (const t of pop.querySelectorAll("[data-syxtabk]")) t.classList.toggle("sel", t.dataset.syxtabk === k);
+		for (const p of pop.querySelectorAll("[data-syxpane]")) p.hidden = p.dataset.syxpane !== k;
+		for (const b of pop.querySelectorAll("[data-syxtab]")) b.setAttribute("aria-selected", b.dataset.syxtab === k);
 	}
 	function preview(m) {
 		last = m; state = m.ok ? "preview" : "error"; skip = new Set(); anchor = null; res = new Map(); rep = null; picks = []; steps = []; lastProgress = null;
@@ -229,7 +256,7 @@ const Syx = (() => {
 	}
 	pop.addEventListener("change", e => {
 		const k = e.target.dataset?.syxkind;
-		if (k && state === "preview") { on[k] = e.target.checked; tab = k; for (const t of pop.querySelectorAll("[data-syxtabk]")) t.classList.toggle("sel", t.dataset.syxtabk === k); for (const p of pop.querySelectorAll("[data-syxpane]")) p.hidden = p.dataset.syxpane !== k; for (const b of pop.querySelectorAll("[data-syxtab]")) b.setAttribute("aria-selected", b.dataset.syxtab === k); sums(); return; }
+		if (k && state === "preview") { on[k] = e.target.checked; show(k); sums(); return; }
 		if (e.target.dataset?.syxgo === "problems") { problemsOnly = e.target.checked; draw(); }
 	});
 	function select(how) {
@@ -249,7 +276,10 @@ const Syx = (() => {
 		if (sk && Syx.host) { if (sk.dataset.syx === "import") Syx.host.choose(); else Syx.host.exportAll(); return; }
 		if (!pop.contains(e.target)) return;
 		const t = e.target.closest("[data-syxtab]");
-		if (t) { tab = t.dataset.syxtab; if (state === "report" && problemsOnly) problemsOnly = false; draw(); return; }
+		if (t) {
+			if (state === "running") { follow = false; show(t.dataset.syxtab); return; }
+			tab = t.dataset.syxtab; if (state === "report" && problemsOnly) problemsOnly = false; draw(); return;
+		}
 		const it = e.target.closest("[data-syxitem]");
 		if (it && it.tagName === "BUTTON" && state === "preview") {
 			const [k, s] = it.dataset.syxitem.split(":"), slot = +s;
@@ -262,7 +292,7 @@ const Syx = (() => {
 		const g = e.target.closest("[data-syxgo]"); if (!g) return;
 		const a = g.dataset.syxgo;
 		if (a === "start" && Syx.host && state === "preview") {
-			picks = picked(); const kinds = chosen(), sk2 = [...skip];
+			follow = true; picks = picked(); const kinds = chosen(), sk2 = [...skip];
 			state = "running"; lastProgress = { phase: "send", done: 0, total: 0, running: true, text: "Starting" }; draw();
 			Syx.host.start(kinds, sk2);
 		}
