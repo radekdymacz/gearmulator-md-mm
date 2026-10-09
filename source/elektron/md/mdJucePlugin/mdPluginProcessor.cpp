@@ -912,8 +912,13 @@ namespace mdJucePlugin
 
 	void AudioPluginAudioProcessor::timerCallback()
 	{
-		if(++m_bootTicks % 4 == 1)
+		// B-035: a start-up line once a second by the clock, not every 4th tick: serviceFactoryInitialization sets this
+		// timer to 250 ms, 1 s or 2 s (the Machinedrum's lines came every 4 s in 0.3.5). A little early still counts.
+		if(const auto now = juce::Time::getMillisecondCounterHiRes(); now - m_lastBootRecordMs >= 900.0)
+		{
+			m_lastBootRecordMs = now;
 			recordBoot();
+		}
 		recordStandaloneStartupDiagnostics();
 		if(serviceProjectStateRestore())
 			return;

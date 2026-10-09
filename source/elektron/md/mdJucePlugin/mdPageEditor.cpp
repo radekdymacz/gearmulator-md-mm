@@ -74,7 +74,9 @@ namespace mdJucePlugin
 			},
 			[this](const json::Value& _m) { onPageMessage(_m); });
 		m_page->setUserZoom(getProcessor().getConfig().getDoubleValue(g_zoomKey, 1.0));
-		m_audio = std::make_unique<AudioMidiLink>(getProcessor(), [this](json::Value _m) { m_page->send(std::move(_m)); });
+		// B-036, B-037: the standalone's audio and MIDI devices, and a MIDI port that did not open, in the start-up log
+		m_audio = std::make_unique<AudioMidiLink>(getProcessor(), [this](json::Value _m) { m_page->send(std::move(_m)); },
+			[this](const std::string& _line) { if(m_page) m_page->note(juce::String(_line)); });
 		if(m_session)
 			m_session->setLog([this](const std::string& _l) { if(m_page) m_page->log(juce::String(_l)); });
 		if(m_session)
@@ -119,8 +121,9 @@ namespace mdJucePlugin
 			"editor-" + juce::File::createLegalFileName(juce::String(m_session ? m_session->pageSpec().page : "page")).upToLastOccurrenceOf(".", false, false) + ".log");
 		m_page->setStartupLog(startupLog);
 		m_page->setFallbackMenu([this] { openMenu(); });	// I-008: no page up, the native menu
-		// Linux: a page that started again has nothing (WebPageHost::onAck): the session's documents once more, as on
-		// its ready, and the update banner (the old one's answer is no longer wanted)
+		// A page that started again has nothing (Linux: WebPageHost::onAck; Windows, B-029: a new web view after its window
+		// was destroyed): the session's documents once more, as on its ready, and the update banner (the old one's answer is
+		// no longer wanted)
 		m_page->setOnRestart([this]
 		{
 			const genericUI::messageRoute::OwnerScope owner(m_noticeOwner);

@@ -237,6 +237,10 @@ namespace mdJucePlugin
 				log("a file was dragged onto the page: not opened (" + file.getFileName() + ")");
 				return true;
 			});
+#if JUCE_WINDOWS && MDMM_WEBVIEW2
+		// B-029: WebView2 made again in a new window (its window was destroyed) loads the page from its start
+		m_web->setOnReload([this] { pageLoadsAgain(); });
+#endif
 	}
 
 	WebPageHost::~WebPageHost()
@@ -535,6 +539,22 @@ namespace mdJucePlugin
 		m_recvSeq = 1;
 		if(m_files)
 			m_files->restart();
+		m_cssZoom = 1.0;
+		if(m_onRestart)
+			m_onRestart();
+	}
+
+	// B-029 (Windows, mdWebView2Page.h): the web view was made again in a new window, because the window it lived in was
+	// destroyed (a host closed the editor, the standalone made its window again), and loads the page from its start.
+	// Nothing goes to it until it speaks (it would be lost while it loads); then it gets everything, as a first page
+	// does: its ready, and the owner's restart (the session's documents, the update banner). The window says so if it
+	// does not start in time (checkStarted), as for the first page.
+	void WebPageHost::pageLoadsAgain()
+	{
+		note("the page loads again in a new web view (the window it was in was closed or made again)");
+		m_pageReady = false;
+		m_loadMs = juce::Time::getMillisecondCounterHiRes();
+		m_recvSeq = 1;
 		m_cssZoom = 1.0;
 		if(m_onRestart)
 			m_onRestart();

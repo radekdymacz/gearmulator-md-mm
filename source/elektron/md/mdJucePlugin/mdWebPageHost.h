@@ -64,9 +64,9 @@ namespace mdJucePlugin
 		void checkStarted();
 		// I-008: what a right-click on that message does (the editor's menu as a native menu: no page draws it).
 		void setFallbackMenu(std::function<void()> _open) { m_fallbackMenu = std::move(_open); }
-		// The page started again with batches already sent (Linux: it says a/0 when it starts, mdPageBridge.h): what it
-		// had is gone, so the owner sends everything once more (the page's ready may have come before this, and what
-		// it answered went out under the old page's numbers).
+		// The page started again with batches already sent (Linux: it says a/0 when it starts, mdPageBridge.h; Windows, B-029:
+		// WebView2 was made again in a new window and loads it again): what it had is gone, so the owner sends everything
+		// once more (the page's ready may have come before this, and what it answered went out under the old page's numbers).
 		void setOnRestart(std::function<void()> _restarted) { m_onRestart = std::move(_restarted); }
 
 	private:
@@ -76,6 +76,8 @@ namespace mdJucePlugin
 		void focusPage(bool _always);
 		void globalFocusChanged(juce::Component* _focused) override;
 		void onAck(uint64_t _seq);
+		// B-029 (Windows): a new web view loads the page from its start (its old window was destroyed)
+		void pageLoadsAgain();
 		void deleteRecvFiles(uint64_t _upTo);
 		// Linux: the outbox as script files beside the page, strictly in order (mdPageBridge.h FileOutbox).
 		void flushFiles();

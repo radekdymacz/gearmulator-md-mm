@@ -50,8 +50,8 @@ list(APPEND SOURCES
 	$<$<PLATFORM_ID:Darwin>:mdStudioWebZoom.mm> mdWebFocus.h
 	$<$<PLATFORM_ID:Darwin>:mdBackgroundRun.mm> mdBackgroundRun.h
 	$<$<PLATFORM_ID:Windows>:mdWebView2Page.cpp>
-	mdWebView2Page.h
-	mdAudioMidiLink.cpp mdAudioMidiLink.h
+	mdWebView2Page.h mdWebView2Window.h
+	mdAudioMidiLink.cpp mdAudioMidiLink.h mdMidiPortRefusal.h
 	mdUpdater.cpp mdUpdater.h
 
 	skins/mdStudio/mdStudio.rml
@@ -430,6 +430,14 @@ function(mdmm_plugin_targets)
 	add_test(NAME mdWindowFitTest COMMAND mdWindowFitTest)
 	set_tests_properties(mdWindowFitTest PROPERTIES LABELS "UnitTest")
 	set_property(TARGET mdWindowFitTest PROPERTY FOLDER "Elektron/test")
+
+	# The Windows editors' decisions as plain values, tested on every system: B-029 and B-022, what the WebView2
+	# controller does when the page's window changes (mdWebView2Window.h); B-037, what the AUDIO / MIDI panel says when a
+	# MIDI port did not open (mdMidiPortRefusal.h).
+	add_executable(mdWindowsPolicyTest mdWindowsPolicyTest.cpp mdWebView2Window.h mdMidiPortRefusal.h)
+	add_test(NAME mdWindowsPolicyTest COMMAND mdWindowsPolicyTest)
+	set_tests_properties(mdWindowsPolicyTest PROPERTIES LABELS "UnitTest")
+	set_property(TARGET mdWindowsPolicyTest PROPERTY FOLDER "Elektron/test")
 
 	# The page bridge's transport (mdPageBridge.h, pure): long batches in pieces, the outbox split into numbered calls, Linux's
 	# files written in order (FileOutbox); the notice route (juceUiLib/messageRoute.h): a sink per window; and a window's
