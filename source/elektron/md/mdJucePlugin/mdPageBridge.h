@@ -221,6 +221,19 @@ namespace mdJucePlugin::pageBridge
 		std::pair<size_t, size_t> m_dropped;
 	};
 
+	// Linux, after a drop (FileOutbox::resync): the page is loaded again only once none of the old page's batch files
+	// is left (_deleteOldBatches) and its own file could be written (_writePage). The page that starts reads batch 1 at
+	// once, before the plug-in has its a/0: an old file 1..k would pass for the new numbering's, and the page would
+	// then wait for k + 1 and skip the new 1..k. Pure: the steps are the caller's. True when it was loaded again.
+	inline bool reloadAfterDrop(const std::function<bool()>& _deleteOldBatches, const std::function<bool()>& _writePage,
+		const std::function<void()>& _reload)
+	{
+		if(!_deleteOldBatches() || !_writePage())
+			return false;
+		_reload();
+		return true;
+	}
+
 	// The outbox as the scripts that hand it to the page, in order, numbered from _firstSeq (one number a script;
 	// the caller's next batch is _firstSeq + the number of scripts).
 	// _prefix: "javascript:" for URLs, "" for the Linux script files.

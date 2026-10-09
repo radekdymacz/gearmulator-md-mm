@@ -76,7 +76,8 @@ namespace mdJucePlugin
 		void focusPage(bool _always);
 		void globalFocusChanged(juce::Component* _focused) override;
 		void onAck(uint64_t _seq);
-		void deleteRecvFiles(uint64_t _upTo);
+		// The batch files up to _upTo; true when none of them is left (one that cannot be deleted stays registered)
+		bool deleteRecvFiles(uint64_t _upTo);
 		// Linux: the outbox as script files beside the page, strictly in order (mdPageBridge.h FileOutbox).
 		void flushFiles();
 		std::string bundle() const;

@@ -475,14 +475,17 @@ namespace mdJucePlugin
 			m_outbox.clear();
 			if(now < m_nextResyncTry)
 				return;
-			if(!m_file.replaceWithText(bundle()))
+			const bool reloaded = bridge::reloadAfterDrop(
+				[this] { return deleteRecvFiles(std::numeric_limits<uint64_t>::max()); },
+				[this] { return m_file.replaceWithText(bundle()); },
+				[this] { m_web->goToURL(m_pageUrl); });
+			if(!reloaded)
 			{
 				m_nextResyncTry = now + 1000.0;
 				return;
 			}
 			note("page bridge: files can be written again; the page is loaded again to get what it missed");
 			m_nextResyncTry = now + g_pageUpTimeoutMs;
-			m_web->goToURL(m_pageUrl);
 			return;
 		}
 		if(!m_outbox.empty())
@@ -540,13 +543,21 @@ namespace mdJucePlugin
 			m_onRestart();
 	}
 
-	void WebPageHost::deleteRecvFiles(const uint64_t _upTo)
+	bool WebPageHost::deleteRecvFiles(const uint64_t _upTo)
 	{
-		while(!m_recvFiles.empty() && m_recvFiles.begin()->first <= _upTo)
+		bool allGone = true;
+		for(auto it = m_recvFiles.begin(); it != m_recvFiles.end() && it->first <= _upTo;)
 		{
-			m_recvFiles.begin()->second.deleteFile();
-			m_recvFiles.erase(m_recvFiles.begin());
+			// One that could not be deleted stays registered and is tried again next time
+			if(it->second.deleteFile())
+			{
+				it = m_recvFiles.erase(it);
+				continue;
+			}
+			allGone = false;
+			++it;
 		}
+		return allGone;
 	}
 
 	// ---- B-022: the start-up log and the window's word when the page cannot start ----

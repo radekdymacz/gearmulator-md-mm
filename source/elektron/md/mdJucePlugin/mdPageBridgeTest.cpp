@@ -8,6 +8,7 @@
 #include "juceUiLib/messageRoute.h"
 
 #include <cstdio>
+#include <map>
 #include <string>
 #include <vector>
 
@@ -158,6 +159,47 @@ int main()
 			"more than 8 MiB waiting: the queue is emptied and the resync flag set, without waiting 2 s");
 		files.restart();
 		check(!files.resync() && files.waiting() == 0, "restart clears the resync");
+	}
+	// after a drop the page is loaded again (codex review r2, S1), but only once every old batch file is gone and its
+	// page file is written: the new page reads batch 1 at once, before the plug-in renumbers on its a/0, and an old
+	// file 1 would pass for the new numbering's (the page would then skip the new 1..k)
+	{
+		std::map<uint64_t, std::string> disk{{1, "old 1"}, {2, "old 2"}};	// what the old page had not read
+		bool deleteFails = true;
+		bool pageWritable = true;
+		std::vector<std::string> steps;
+		std::string newPageRead = "nothing yet";
+		const auto deleteOld = [&]
+		{
+			steps.push_back("delete");
+			if(deleteFails)
+				return false;
+			disk.clear();
+			return true;
+		};
+		const auto writePage = [&]
+		{
+			steps.push_back("write");
+			return pageWritable;
+		};
+		const auto reload = [&]
+		{
+			steps.push_back("reload");
+			const auto first = disk.find(1);	// the new page's first look, before the plug-in has its a/0
+			newPageRead = first == disk.end() ? "" : first->second;
+		};
+		using Steps = std::vector<std::string>;
+		check(!bridge::reloadAfterDrop(deleteOld, writePage, reload) && steps == Steps{"delete"} && disk.size() == 2,
+			"resync: an old batch file that cannot be deleted holds the reload back (tried again later)");
+		deleteFails = false;
+		pageWritable = false;
+		steps.clear();
+		check(!bridge::reloadAfterDrop(deleteOld, writePage, reload) && steps == Steps{"delete", "write"},
+			"resync: a page file that cannot be written holds it back too");
+		pageWritable = true;
+		steps.clear();
+		check(bridge::reloadAfterDrop(deleteOld, writePage, reload) && steps == Steps{"delete", "write", "reload"}
+			&& newPageRead.empty(), "resync: then the page is loaded again and finds no old batch 1 to take for the new one");
 	}
 	// a window's notices (codex review 2026-10, item 1): the page answers {"notice": n, "button": b}; an answer runs its
 	// notice's callback once, and only for a notice waiting with that button
