@@ -37,17 +37,6 @@ S.alt = false;
 /* Alt seen up (any key or pointer event without it) also ends a rotate run: its keyup may never reach the page
    (the Monomachine Editor's fix, MM-PORT-PLAN.md 2026-10-05) */
 function showAlt(on) { if (S.alt === on) return; S.alt = on; if (!on) Held.end("rotate"); document.body.classList.toggle("althold", on); altLabels(); if (S.ws === "seq") genDraw(); if (S.ws === "sound") renderMutStrip(); }
-/* ===== FN (K4, DESIGN-keymap.md): the top bar's FN key, the machine's FUNCTION for a mouse or a touch screen: a click
-   gives the next click, drag or key ⌥ (every track), a double-click keeps it on until a click or Esc (Modifiers,
-   shared/deskKeys.js, puts ⌥ on the events); the keys that ⌥ changes say so while it is on ===== */
-document.addEventListener("click", e => { if (e.target.closest("#fnkey")) Modifiers.setFn(Modifiers.fn === "off" ? "once" : "off"); });
-document.addEventListener("dblclick", e => { if (e.target.closest("#fnkey")) Modifiers.setFn("latch"); });
-Modifiers.onFn(s => {
-	const k = $("#fnkey");
-	if (k) { k.setAttribute("aria-pressed", String(s !== "off")); k.classList.toggle("on", s !== "off"); k.classList.toggle("latch", s === "latch"); k.querySelector(".led")?.classList.toggle("on", s !== "off"); }
-	showAlt(s !== "off");
-});
-Keys.bind({ id: "fn-key", scope: "any", area: "Top bar", keys: ["FN key"], group: "All", does: "Click: the next click, drag or key gets ⌥, every track (FN then R randomises all, FN then drag a value is Control All, FN then Delete clears the pattern). Double-click: stays on until clicked again. Esc: off" });
 addEventListener("keydown", e => showAlt(e.altKey), true);
 addEventListener("keyup", e => showAlt(e.altKey), true);
 addEventListener("blur", () => showAlt(false));

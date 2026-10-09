@@ -195,13 +195,14 @@ const Journey = (() => {
 		/* keys as the operating system delivers them (spec: "focus cmd+c", tokens as mdOsKeys.h reads them): in the
 		   macOS plug-in real key events routed as AppKit routes them (the window's views and JUCE, the menu bar, the
 		   first responder), so a key the host side keeps from the page is kept here too; "focus" is what a click on the
-		   page does to the web view. Elsewhere (a browser, Windows) the page's own keys (u.key), "focus" nothing. */
+		   page does to the web view, "activate" what JUCE does when the window becomes the key window (B-018). Elsewhere (a
+		   browser, Windows) the page's own keys (u.key), "focus" and "activate" nothing. */
 		async osKey(spec) {
 			const toks = spec.split(/\s+/).filter(Boolean);
-			Pointer.key(toks.filter(t => t !== "focus").join(" "));
+			Pointer.key(toks.filter(t => t !== "focus" && t !== "activate").join(" "));
 			if (osKeys()) { Bridge.log("oskeys " + spec); await sleep(350); return; }
 			for (const t of toks) {
-				if (t === "focus") continue;
+				if (t === "focus" || t === "activate") continue;
 				const p = t.split("+"), k = p.pop(), m = Object.fromEntries(p.map(x => [x, true]));
 				u.key({ escape: "Escape", delete: "Delete", space: " ", return: "Enter", tab: "Tab" }[k] || k, m);
 			}
@@ -317,8 +318,62 @@ const Journey = (() => {
 		log(`DEMOS DONE ${passed}/${list.length}`);
 	}
 	/* for needs: the page draws its canvases on animation frames, which WebKit runs only while the window is on screen */
+	/* I-008: the editor's menu, both editors: drawn by the page from the plug-in's entries (editorMenu, deskMenu.js),
+	   opened by a right-click anywhere the page has no menu of its own (the header, the rail). menu.via(u, path) opens it afresh (the plug-in's entries as
+	   they are now) and clicks the entries of a path in turn. editorMenuJourney(name, product): a submenu by the
+	   keyboard, a zoom step and Updates › Check Daily by the pointer; each choice is the plug-in's to run (menuPick),
+	   its effect read back from the plug-in in the menu itself (the zoom it says, the tick it sends); Esc closes the
+	   submenu, then the menu. The tidy puts the zoom and Check Daily back through the same menu. */
+	const $q = q => document.querySelector(q);
+	const menu = {
+		at: ".top .brand .ed",
+		on: () => !!$q("#deskmenu") && !$q("#deskmenu").hidden,
+		id: id => `#deskmenu [data-mid="${id}"]`,
+		zoomSays: () => $q(menu.id("zoom"))?.querySelector("kbd")?.textContent || "",
+		dailyOn: () => $q(menu.id("update-daily"))?.getAttribute("aria-checked") === "true",
+		async via(hands, path = []) {
+			if (menu.on()) closeDeskMenu();
+			hands.rightClick(menu.at);
+			if (!await until(() => menu.on() && !!$q(menu.id("zoom")), 4000)) throw new Error("the editor's menu did not open");
+			for (const id of path) { await until(() => !!$q(menu.id(id)), 1000); hands.click(menu.id(id)); await sleep(120); }
+		},
+		titled: product => ok(menu.on() && new RegExp(product + " \\d").test($q("#deskmenu .mtitle")?.textContent || "") && !!$q(menu.id("developer")),
+			"no editor menu: " + ($q("#deskmenu .mtitle")?.textContent || "(none)"))
+	};
+	const editorMenuJourney = (name, product) => ({
+		name,
+		steps: [
+			{ say: "right-click the header's empty part: the editor's menu, its title the editor and version", act: hands => { if (menu.on()) closeDeskMenu(); hands.rightClick(menu.at); },
+				screen: () => menu.titled(product) },
+			{ say: "Esc, then right-click the track rail (outside the header, no menu of its own): the editor's menu there too",
+				act: async hands => { hands.key("Escape"); await until(() => !menu.on(), 1000); hands.rightClick("#rail", {}, 0.5, 0.97); },
+				screen: () => menu.titled(product) },
+			{ say: "focus Zoom, press →: its submenu, its first entry focused", act: (hands, c) => { c.z0 = menu.zoomSays(); $q(menu.id("zoom")).focus(); hands.key("ArrowRight"); },
+				screen: () => ok(DeskMenu.depth() === 2 && document.activeElement?.closest?.(".mpanel")?.dataset.lv === "1" && $q(menu.id("zoom")).getAttribute("aria-expanded") === "true",
+					"depth " + DeskMenu.depth()) },
+			{ say: "click a zoom step: the menu closes, the plug-in zooms the page", act: (hands, c) => { c.to = c.z0 === "110 %" ? "125" : "110"; hands.click(menu.id("zoom-" + c.to)); },
+				screen: () => ok(!menu.on(), "menu still open") },
+			{ say: "right-click again: Zoom says the new step", act: hands => menu.via(hands), screen: c => ok(menu.zoomSays() === c.to + " %", "Zoom says " + menu.zoomSays()) },
+			{ say: "click Updates, then Check Daily: the menu closes", act: async (hands, c) => {
+				hands.click(menu.id("updates")); await until(() => !!$q(menu.id("update-daily")), 1000); c.d0 = menu.dailyOn(); hands.click(menu.id("update-daily")); },
+				screen: () => ok(!menu.on(), "menu still open") },
+			{ say: "open Updates again: Check Daily's tick turned", act: hands => menu.via(hands, ["updates"]),
+				screen: c => ok(!!$q(menu.id("update-daily")) && menu.dailyOn() !== c.d0, "ticked " + menu.dailyOn()) },
+			{ say: "press Esc: the submenu closes, the menu stays", act: hands => hands.key("Escape"),
+				screen: () => ok(menu.on() && DeskMenu.depth() === 1, "depth " + DeskMenu.depth() + (menu.on() ? "" : ", menu closed")) },
+			{ say: "press Esc again: the menu closes", act: hands => hands.key("Escape"), screen: () => ok(!menu.on(), "menu still open") }
+		],
+		async tidy(hands, c) {
+			if (c.to && /^\d+ %$/.test(c.z0 || "")) await menu.via(hands).then(() => menu.zoomSays() !== c.z0 && menu.via(hands, ["zoom", "zoom-" + parseInt(c.z0, 10)])).catch(() => { });
+			if (c.d0 !== undefined) {
+				await menu.via(hands, ["updates"]).catch(() => { });
+				if (menu.dailyOn() !== c.d0) hands.click(menu.id("update-daily"));
+			}
+			if (menu.on()) closeDeskMenu();
+		}
+	});
 	const onScreen = () => document.visibilityState === "visible" ? null : "the editor window is not on screen (display asleep or covered): its canvases are not drawn";
 	/* for needs: real key events through the operating system (u.osKey) exist in the macOS plug-in only */
 	const osKeyPath = () => osKeys() ? null : "no way in for real key events here (the macOS plug-in has one, mdOsKeys.h)";
-	return { run, demo, ok, sleep, until, u, onScreen, osKeyPath };
+	return { run, demo, ok, sleep, until, u, onScreen, osKeyPath, menu, editorMenuJourney };
 })();

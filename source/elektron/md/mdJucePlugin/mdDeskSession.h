@@ -18,6 +18,7 @@
 #include "juce_events/juce_events.h"
 
 #include <algorithm>
+#include <cmath>
 #include <cstdint>
 #include <functional>
 #include <memory>
@@ -39,13 +40,39 @@ namespace mdJucePlugin
 	constexpr double g_lcdMs = 64;				// the machine's screen while it starts, about 15 Hz
 	constexpr double g_engineChoicesMs = 1000;	// whether the engines are available (a MIDI out appeared)
 	constexpr double g_followHostMs = 2000;		// in a DAW: the machine's global follows the host (followHost)
+	constexpr double g_hostTempoMs = 100;		// B-030: the host's tempo, published to the page when it changed
+
+	// B-030: the host's tempo for the page (a "host" message: {bpm, follows}), when the host reports one and it
+	// moved, or the page is new. Pure: the decision only (mdDeskSetupStateTest checks it).
+	struct HostTempo
+	{
+		double published = -1;	// the last bpm sent, -1 none (a new page)
+
+		// The message to send now, or nothing: _bpm 0 = no host reports a tempo.
+		std::optional<double> next(const double _bpm)
+		{
+			if(_bpm <= 0 || !(_bpm < 1000))
+				return std::nullopt;
+			const double rounded = std::round(_bpm * 100) / 100;
+			if(published >= 0 && std::abs(rounded - published) < 0.005)
+				return std::nullopt;
+			published = rounded;
+			return rounded;
+		}
+	};
+
+	bool followsHost(AudioPluginAudioProcessor& _processor);
+	double hostBpmOf(AudioPluginAudioProcessor& _processor);
+	// B-035: how the host runs the plug-in's audio, for the start-up card ({"type":"audioRun", ...}), once the
+	// processor has a second's sample; nothing before.
+	std::optional<elektronData::json::Value> audioRunOf(AudioPluginAudioProcessor& _processor);
+	constexpr double g_audioRunMs = 1000;
 
 	// P7: a model's SysEx import traits (mdSessionMd.cpp, mdSessionMm.cpp): the documents' type, the
 	// file's and the desk's documents, one document as the contract's JSON, and what may be imported.
 	template<typename DeskT> struct SyxTraits;
 
 	// P7: whether the machine follows the host's tempo and transport: in a DAW's plug-in only.
-	bool followsHost(AudioPluginAudioProcessor& _processor);
 
 	// Due on the session's first step, then once every _periodMs (_tick counts steps from 1).
 	constexpr bool due(const uint64_t _tick, const double _periodMs)
@@ -88,6 +115,8 @@ namespace mdJucePlugin
 		virtual void step() = 0;
 		// One line of state for the diagnostics log.
 		virtual std::string status() const = 0;
+		// B-035: the desk's lifecycle ("booting", "ready", ...), for the start-up log.
+		virtual std::string lifecycleName() const = 0;
 		// The page the editor window shows for this session (data: the file, its log, its self-tests).
 		virtual const PageSpec& pageSpec() const = 0;
 
@@ -246,6 +275,8 @@ namespace mdJucePlugin
 			// What the machine does now, before the page's first document: a machine still being prepared is
 			// "loading" from the start, never addressed as a running one (B-003).
 			m_desk->setProbe(m_engine->probe());
+			// B-019: a .syx import reads back what the machine took from the dumps it sends
+			m_desk->setSysexTap([this](const std::vector<uint8_t>& _m) { m_syx.onMachineSysex(_m); });
 			m_choices = choices();
 			m_desk->setEngines(m_choices);
 			restoreSetup();
@@ -279,7 +310,7 @@ namespace mdJucePlugin
 			case Action::RomInfo: romInfo(_message); break;
 			case Action::RemoveRom: removeRom(_message); break;
 			case Action::SyxImport: syxImport(_message); break;
-			case Action::SyxCancel: m_syx.cancel(); toPage(m_syx.progress("Import stopped.")); reply(_message, true, "Import stopped."); break;
+			case Action::SyxCancel: m_syx.cancel(); toPage(m_syx.progress()); reply(_message, true, "Import stopped."); break;
 			case Action::Midi: onMidi(_message); break;
 			case Action::LearnStart:
 			case Action::LearnAdd:
@@ -305,19 +336,39 @@ namespace mdJucePlugin
 			// P7: in a DAW the host's tempo and transport reach the machine as MIDI clock, Start and Stop
 			// (synthLib::MidiClock); the machine follows them only with its global set for it. The model
 			// says how (hostFollowing), the adapter sets it without an undo step; ready machines only.
-			// P7: a .syx import goes out a few documents a step, while the machine takes input
+			// P7, B-019: a .syx import goes to the machine as it is, a few messages at a time while the machine takes
+			// input, then each document is read back (mdSyxSession.h)
 			if(m_syx.running() && m_desk->lifecycle() == deskCore::Lifecycle::Ready)
 			{
-				for(const auto& c : m_syx.next(4))
-					m_desk->onPageMessage(c);
-				toPage(m_syx.progress(m_syx.running() ? "" : "Imported: the machine takes the documents in over the next moments (the sync slot shows them going out)."));
+				if(auto p = m_syx.step(m_desk->machine(), sessionNowMs(), m_record->profile.wire))
+					toPage(*p);
+				m_desk->flush();
 			}
-			if(m_followHost && m_desk->lifecycle() == deskCore::Lifecycle::Ready && due(t, g_followHostMs))
+			// B-030: at once when the machine becomes ready (not up to 2 s later), then on the cadence. A refusal is a
+			// result (op followHost) the page shows and logs.
+			const bool ready = m_desk->lifecycle() == deskCore::Lifecycle::Ready;
+			if(m_followHost && ready && (!m_followReady || due(t, g_followHostMs)))
 			{
 				Value m = Value::object();
 				m.set("op", "followHost");
 				m_desk->onPageMessage(m);
 			}
+			m_followReady = ready;
+			// B-035: while the machine starts (and for the first minute): the host's audio calls and the machine's
+			// speed, for the start-up card
+			if(m_desk->pageSeen() && due(t, g_audioRunMs) && (static_cast<double>(t) * g_stepMs < 60000 || !ready))
+				if(auto a = audioRunOf(processor()))
+					toPage(*a);
+			// B-030: the host's tempo (a DAW's playhead, also while it is stopped) for the LCD's TEMPO
+			if(m_desk->pageSeen() && due(t, g_hostTempoMs))
+				if(const auto bpm = m_hostTempo.next(hostBpmOf(processor())))
+				{
+					Value h = Value::object();
+					h.set("type", "host");
+					h.set("bpm", *bpm);
+					h.set("follows", m_followHost);
+					toPage(h);
+				}
 		}
 
 		std::string status() const override
@@ -325,6 +376,8 @@ namespace mdJucePlugin
 			return "desk: engine " + m_record->profile.id + " " + deskCore::lifecycleName(m_desk->lifecycle()) + " "
 				+ elektronData::json::write(m_desk->status());
 		}
+
+		std::string lifecycleName() const override { return deskCore::lifecycleName(m_desk->lifecycle()); }
 
 		const PageSpec& pageSpec() const override { return m_page; }
 
@@ -347,8 +400,8 @@ namespace mdJucePlugin
 			p.device.nowMs = [] { return sessionNowMs(); };
 			p.toPage = [this](const Value& _m) { toPage(_m); };
 			p.saveSetup = [this](const Value& _setup) { m_setup.save(_setup); };
-			// After the page's ready the plug-in publishes its own document too.
-			p.ready = [this] { m_learn.publish(); };
+			// After the page's ready the plug-in publishes its own document too, and the host's tempo again.
+			p.ready = [this] { m_learn.publish(); m_hostTempo = {}; };
 			return p;
 		}
 
@@ -437,18 +490,25 @@ namespace mdJucePlugin
 				return;
 			}
 			const auto* d = static_cast<const uint8_t*>(mb.getData());
-			toPage(m_syx.open(std::vector<uint8_t>(d, d + mb.getSize()), _file.getFileName().toStdString(), Syx::machine(*m_desk)));
+			toPage(m_syx.open(std::vector<uint8_t>(d, d + mb.getSize()), _file.getFileName().toStdString(), Syx::machine(*m_desk),
+				Syx::playing(*m_desk)));
 		}
 
 		void syxImport(const Value& _message)
 		{
-			std::vector<std::string> kinds;
-			if(const auto* k = _message.find("kinds"); k && k->isArray())
-				for(const auto& v : k->asArray())
-					if(v.isString())
-						kinds.push_back(v.asString());
-			// one gesture id for the whole import: one undo step
-			const auto why = m_syx.start(kinds, 0x40000000u + (++m_syxImports), [this](const elektronData::SyxItem& _i) { return Syx::importable(_i, *m_desk); });
+			const auto strings = [&_message](const char* _key)
+			{
+				std::vector<std::string> out;
+				if(const auto* k = _message.find(_key); k && k->isArray())
+					for(const auto& v : k->asArray())
+						if(v.isString())
+							out.push_back(v.asString());
+				return out;
+			};
+			const auto kinds = strings("kinds");
+			const auto skip = strings("skip");
+			// B-019: the file's messages as they are; no undo step (the machine decides, the editor reads back)
+			const auto why = m_syx.start(kinds, std::set<std::string>(skip.begin(), skip.end()), Syx::machine(*m_desk));
 			reply(_message, why.empty(), why);
 			toPage(m_syx.progress());
 		}
@@ -487,8 +547,9 @@ namespace mdJucePlugin
 		// A plug-in in a host (a DAW): not the standalone app, which has no host transport, and not a
 		// processor without a plug-in wrapper (the tests).
 		const bool m_followHost;
+		bool m_followReady = false;
+		HostTempo m_hostTempo;
 		SyxJob<SyxTraits<DeskT>> m_syx;
-		uint32_t m_syxImports = 0;
 	};
 
 	// The machine's own screen while it starts, as the page's LCD (both models): every g_lcdMs, only

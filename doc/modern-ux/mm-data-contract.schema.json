@@ -125,8 +125,8 @@
         "range": {
           "type": "integer",
           "minimum": 0,
-          "maximum": 7,
-          "description": "octaves - 1"
+          "maximum": 8,
+          "description": "octaves - 1 (the RNGE knob's 0-8, measured on the firmware)"
         },
         "speed": {
           "$ref": "#/$defs/value",
@@ -1159,6 +1159,10 @@
                   "type": "boolean"
                 }
               ]
+            },
+            "reloadNeeded": {
+              "type": "boolean",
+              "description": "0.3.5: the machine's song was edited and is not loaded again yet: the desk does it by itself once the machine is stopped in SONG mode (LOAD SONG)."
             }
           }
         },
@@ -1588,6 +1592,62 @@
                 }
               ],
               "description": "MM-P4: the recording mode (RAM): GRID RECORDING, LIVE RECORDING or off; null where the engine cannot read it."
+            },
+            "songRow": {
+              "type": ["integer", "null"],
+              "minimum": 0,
+              "maximum": 199,
+              "description": "0.3.5: the song row heard (RAM 0x2bdba1, md::MmTelemetry, as it was at PLAY and at the last wrap), null where the engine cannot read it. Meaningful while song.songMode is true and the machine plays."
+            }
+          }
+        },
+        {
+          "type": "object",
+          "description": "B-030: the host's tempo (a DAW's playhead, also while its transport is stopped), when it changed or the page is new. follows: the plug-in sets the machine to follow the host's clock (a DAW, not the standalone).",
+          "required": ["type", "bpm", "follows"],
+          "properties": {
+            "type": {
+              "const": "host"
+            },
+            "bpm": {
+              "type": "number",
+              "exclusiveMinimum": 0
+            },
+            "follows": {
+              "type": "boolean"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "description": "B-035: how the host runs the plug-in's audio, once a second while the machine starts and for the first minute: the host's audio calls (blocks, bypassed ones apart) and the machine's speed (realtime: machine seconds per wall second, null before the first block). The start-up card says when a plug-in gets no audio, or the machine is slower than real time.",
+          "required": ["type", "plugin", "seconds", "blocks", "bypassed", "blocksPerSecond", "realtime"],
+          "properties": {
+            "type": {
+              "const": "audioRun"
+            },
+            "plugin": {
+              "type": "boolean"
+            },
+            "seconds": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "blocks": {
+              "type": "number",
+              "minimum": 0
+            },
+            "bypassed": {
+              "type": "number",
+              "minimum": 0
+            },
+            "blocksPerSecond": {
+              "type": "number",
+              "minimum": 0
+            },
+            "realtime": {
+              "type": ["number", "null"],
+              "minimum": 0
             }
           }
         },
@@ -1651,6 +1711,62 @@
         },
         {
           "type": "object",
+          "description": "I-008: the editor's menu (the answer to openMenu), as data: the page draws it where it was asked for (skins/shared/deskMenu.js) and sends the chosen entry back as menuPick {menu, n}; the window runs it. The same tree is the menu bar's and, when no page is up, a native menu (mdEditorMenu.h).",
+          "required": ["type", "menu", "title", "items"],
+          "properties": {
+            "type": {
+              "const": "editorMenu"
+            },
+            "menu": {
+              "type": "integer",
+              "description": "this menu's number: a pick of an older menu does nothing"
+            },
+            "title": {
+              "type": "string",
+              "description": "the first line: which editor and its version (not an entry)"
+            },
+            "items": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "required": ["kind"],
+                "properties": {
+                  "kind": {
+                    "enum": ["action", "submenu", "separator", "heading", "note"]
+                  },
+                  "id": {
+                    "type": "string",
+                    "description": "stable (zoom-in, open-log-folder): the page's journeys find an entry by it"
+                  },
+                  "label": {
+                    "type": "string"
+                  },
+                  "key": {
+                    "type": "string",
+                    "description": "the shortcut's words, shown at the right (a submenu: what it is set to)"
+                  },
+                  "enabled": {
+                    "type": "boolean"
+                  },
+                  "checked": {
+                    "type": "boolean"
+                  },
+                  "n": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "description": "an entry that can run: the number menuPick sends back"
+                  },
+                  "items": {
+                    "type": "array",
+                    "description": "a submenu's entries, of this same shape"
+                  }
+                }
+              }
+            }
+          }
+        },
+        {
+          "type": "object",
           "description": "Something the plug-in has for the user (a question or a warning), shown as the page's modal instead of a native alert; the button pressed goes back as noticeAnswer. The first button is the answer to a question, the last the safe one.",
           "required": ["type", "id", "title", "text", "buttons"],
           "properties": {
@@ -1680,7 +1796,7 @@
         },
         {
           "type": "object",
-          "description": "P7: a .syx file the user chose or dropped, parsed by the plug-in: what it holds and what it overwrites.",
+          "description": "P7, B-019: a .syx file the user chose or dropped, parsed by the plug-in: what it holds (per kind the items with their slot, name, format bytes, whether they overwrite data or play now) and what cannot be sent and why. It informs; the import sends the chosen messages to the machine as they are.",
           "required": ["type", "ok", "file", "text"],
           "properties": {
             "type": {
@@ -1704,23 +1820,17 @@
             "items": {
               "type": "object"
             },
-            "problems": {
+            "skipped": {
               "type": "array",
               "items": {
                 "type": "string"
               }
             },
-            "leftOut": {
-              "type": "array",
-              "items": {
-                "type": "string"
-              }
-            },
-            "leftOutCount": {
+            "skippedCount": {
               "type": "integer",
               "minimum": 0
             },
-            "problemCount": {
+            "messages": {
               "type": "integer",
               "minimum": 0
             }
@@ -1728,11 +1838,14 @@
         },
         {
           "type": "object",
-          "description": "P7: an import's progress (documents sent of the chosen ones).",
+          "description": "P7, B-019: an import's progress: before (the slots the editor has not read are read first), send (messages handed to the machine of the chosen ones), read (documents read back), done (with the report: per outcome a count, and a line for each item the machine did not take as in the file).",
           "required": ["type", "done", "total", "running", "text"],
           "properties": {
             "type": {
               "const": "syxProgress"
+            },
+            "phase": {
+              "enum": ["idle", "before", "send", "read", "done"]
             },
             "done": {
               "type": "integer",
@@ -1747,6 +1860,31 @@
             },
             "text": {
               "type": "string"
+            },
+            "kind": {
+              "description": "0.3.5: while running, the kind of the item at work (the one the next message belongs to, or the one read now)",
+              "enum": ["kit", "pattern", "song", "global", "other"]
+            },
+            "kinds": {
+              "description": "0.3.5: while running, per kind of the import the phase's items done of its total (send: items whose every message went; before, read: items read)",
+              "type": "object",
+              "additionalProperties": {
+                "type": "object",
+                "required": ["done", "total"],
+                "properties": {
+                  "done": {
+                    "type": "integer",
+                    "minimum": 0
+                  },
+                  "total": {
+                    "type": "integer",
+                    "minimum": 0
+                  }
+                }
+              }
+            },
+            "report": {
+              "type": "object"
             }
           }
         },
@@ -4217,6 +4355,30 @@
         },
         {
           "type": "object",
+          "description": "machine: PATTERN or SONG mode (SET STATUS 0x10), read back from the machine's status",
+          "required": ["op", "song"],
+          "properties": {
+            "op": {
+              "const": "seqMode"
+            },
+            "id": {
+              "type": "integer"
+            },
+            "g": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "force": {
+              "type": ["boolean", "integer"]
+            },
+            "song": {
+              "type": ["boolean", "integer"]
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
           "description": "machine: a synth track's mute",
           "required": ["op", "t"],
           "properties": {
@@ -4682,7 +4844,7 @@
         },
         {
           "type": "object",
-          "description": "host: import the previewed .syx: the kinds chosen (global, kit, pattern, song), as document writes, one undo step",
+          "description": "host: import the previewed .syx: the kinds chosen (global, kit, pattern, song, other) but the items in skip (\"kind:slot\"), sent to the machine as they are (the firmware decides what it takes), then read back and reported (syxProgress); no undo step",
           "required": ["op", "kinds"],
           "properties": {
             "op": {
@@ -4700,13 +4862,16 @@
             },
             "kinds": {
               "type": "array"
+            },
+            "skip": {
+              "type": "array"
             }
           },
           "additionalProperties": false
         },
         {
           "type": "object",
-          "description": "host: stop an import between items",
+          "description": "host: stop an import: nothing more is sent, what went is read back and reported",
           "required": ["op"],
           "properties": {
             "op": {
@@ -4779,7 +4944,7 @@
         },
         {
           "type": "object",
-          "description": "host: the editor's menu",
+          "description": "host: the editor's menu: the window answers with an editorMenu message (its entries as data), the page draws it (I-008)",
           "required": ["op"],
           "properties": {
             "op": {
@@ -4794,6 +4959,37 @@
             },
             "force": {
               "type": ["boolean", "integer"]
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "description": "host: the entry n the user chose in the editor's menu numbered menu (the editorMenu message): the window runs it",
+          "required": ["op", "menu", "n"],
+          "properties": {
+            "op": {
+              "const": "menuPick"
+            },
+            "id": {
+              "type": "integer"
+            },
+            "g": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "force": {
+              "type": ["boolean", "integer"]
+            },
+            "menu": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 1000000000
+            },
+            "n": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 65535
             }
           },
           "additionalProperties": false

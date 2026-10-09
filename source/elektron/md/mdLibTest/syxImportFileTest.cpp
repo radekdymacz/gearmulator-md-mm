@@ -1,15 +1,23 @@
-// Local test (P7): parse two full factory backups, one Machinedrum and one Monomachine, check the
-// counts, zero problems, fullBackup, and that every message re-encodes to its own bytes. The files
-// are third-party data and live outside the repo: the test exits 77 (skip) when they are absent,
-// and prints only counts, slots and reasons, never contents.
+// Local test (P7, B-019): real .syx files of the person's own (backups, other people's dumps), parsed as the import
+// does. Prints what is in each file (message kinds, their format bytes and sizes, what the import would leave out
+// and why, what the editor's validation says about the documents) and checks that the editor reads every dump of
+// its model and re-encodes it to its own bytes. The files are third-party data and live outside the repo: their
+// paths come from the environment (MD_SYX, MM_SYX: one file each; SYX_FILES: more, separated by ':'), and the
+// test exits 77 (skip) when none is given. It prints counts, slots and reasons, never contents.
 //
-//   syxImportFileTest [<md.syx> <mm.syx>]
+//   MD_SYX=<md.syx> MM_SYX=<mm.syx> syxImportFileTest
 
 #include "elektronData/syxImport.h"
+#include "elektronData/mdValidate.h"
+#include "elektronData/mmValidate.h"
 
+#include <algorithm>
+#include <cstdint>
 #include <cstdio>
+#include <cstdlib>
 #include <fstream>
 #include <iterator>
+#include <map>
 #include <string>
 #include <vector>
 
@@ -18,9 +26,6 @@ namespace
 	namespace ed = elektronData;
 	using Bytes = std::vector<uint8_t>;
 	int g_failures = 0;
-
-	const char* const g_mdPath = "/Users/radek/Downloads/AE_LIVE_ELEKTRONS_BACKUP_010308/md010308.syx";
-	const char* const g_mmPath = "/Users/radek/Downloads/AE_LIVE_ELEKTRONS_BACKUP_010308/mm010308.syx";
 
 	void check(const bool _ok, const std::string& _what)
 	{
@@ -38,12 +43,6 @@ namespace
 		return true;
 	}
 
-	struct Expected
-	{
-		ed::SyxModel model;
-		size_t messages, globals, kits, patterns, songs;
-	};
-
 	// The first byte where two messages differ, or the shorter size.
 	size_t firstDifference(const Bytes& _a, const Bytes& _b)
 	{
@@ -53,30 +52,92 @@ namespace
 		return i;
 	}
 
-	void run(const std::string& _path, const Bytes& _bytes, const Expected& _expected)
+	template<typename Docs>
+	void validation(const Docs& _docs)
 	{
-		std::printf("%s\n", _path.c_str());
+		std::map<std::string, int> reasons;
+		const auto add = [&](const char* _kind, const std::vector<std::string>& _v)
+		{
+			if(!_v.empty())
+				++reasons[std::string(_kind) + ": " + _v.front()];
+		};
+		for(const auto& [s, d] : _docs.globals) add("global", ed::validate(d));
+		for(const auto& [s, d] : _docs.kits) add("kit", ed::validate(d));
+		for(const auto& [s, d] : _docs.patterns) add("pattern", ed::validate(d));
+		for(const auto& [s, d] : _docs.songs) add("song", ed::validate(d));
+		for(const auto& [r, n] : reasons)
+			std::printf("    the editor's validation: %d x %s\n", n, r.c_str());
+	}
+
+	void run(const std::string& _path, const Bytes& _bytes)
+	{
+		std::printf("%s (%zu bytes)\n", _path.c_str(), _bytes.size());
 		const auto file = ed::parseSyx(_bytes);
 		const auto s = ed::summarizeSyx(file);
-		std::printf("  model %s, %zu messages: %zu globals, %zu kits, %zu patterns, %zu songs, %zu problems\n",
+		std::printf("  model %s, %zu messages: %zu globals, %zu kits, %zu patterns, %zu songs%s, %zu problems\n",
 			ed::syxModelName(file.model), file.messages.size(), s.globals, s.kits, s.patterns, s.songs,
-			file.problems.size());
+			s.fullBackup ? " (a full backup)" : "", file.problems.size());
 
-		check(file.model == _expected.model, std::string("model ") + ed::syxModelName(_expected.model));
-		check(file.messages.size() == _expected.messages, std::to_string(_expected.messages) + " messages");
-		check(s.globals == _expected.globals && s.kits == _expected.kits && s.patterns == _expected.patterns
-			&& s.songs == _expected.songs, "counts per kind");
-		check(file.problems.empty(), "no problems");
+		// what is in it: per model, kind and format, the count and the sizes
+		struct Sizes { int n = 0; size_t min = SIZE_MAX, max = 0; };
+		std::map<std::string, Sizes> inventory;
+		for(const auto& r : file.messages)
+		{
+			char key[96];
+			std::snprintf(key, sizeof(key), "%s %s%s%s", ed::syxModelName(r.model), r.kind == ed::SyxKind::Other ? "command " : ed::syxKindName(r.kind),
+				r.kind == ed::SyxKind::Other ? (r.command >= 0 ? std::to_string(r.command).c_str() : "-") : " format ",
+				r.kind == ed::SyxKind::Other ? "" : (std::to_string(r.version) + "." + std::to_string(r.revision)).c_str());
+			auto& v = inventory[key];
+			++v.n;
+			v.min = std::min(v.min, r.size);
+			v.max = std::max(v.max, r.size);
+		}
+		for(const auto& [k, v] : inventory)
+			std::printf("    %-40s x%-4d %zu..%zu bytes\n", k.c_str(), v.n, v.min, v.max);
+		std::map<std::string, int> problems;
 		for(const auto& p : file.problems)
-			std::printf("    message %zu (%s %d): %s\n", p.index, ed::syxKindName(p.kind), p.slot,
-				ed::syxStatusName(p.status));
-		check(s.fullBackup, "full backup");
+			++problems[std::string(ed::syxKindName(p.kind)) + ": " + ed::syxStatusName(p.status)];
+		for(const auto& [p, n] : problems)
+			std::printf("    the editor's codec: %d x %s\n", n, p.c_str());
+		const auto docsModel = ed::documentsModel(file);
+		const auto model = docsModel != ed::SyxModel::Unknown ? docsModel : file.model;
+		std::map<std::string, int> unsendable;
+		size_t leftOut = 0;
+		for(const auto& r : file.messages)
+			if(const auto why = ed::syxUnsendable(r, _bytes, model); !why.empty())
+			{
+				++unsendable[why];
+				++leftOut;
+			}
+		for(const auto& [w, n] : unsendable)
+			std::printf("    left out by an import: %d x %s\n", n, w.c_str());
+		if(model == ed::SyxModel::Md)
+			validation(file.md);
+		else if(model == ed::SyxModel::Mm)
+			validation(file.mm);
 
-		size_t exact = 0;
+		if(docsModel == ed::SyxModel::Unknown)
+		{
+			// no user data (an OS update, another device's dumps): an import sends nothing of it
+			check(leftOut == file.messages.size(), "no user data in it: an import leaves every message out (" + std::to_string(leftOut) + " of "
+				+ std::to_string(file.messages.size()) + ")");
+			return;
+		}
+		size_t framed = 0, unreadable = 0;
+		for(const auto& r : file.messages)
+		{
+			framed += r.status == ed::SyxStatus::Truncated || r.status == ed::SyxStatus::BadData;
+			unreadable += r.model == model && r.kind != ed::SyxKind::Other && r.status != ed::SyxStatus::Ok && r.status != ed::SyxStatus::DuplicateSlot;
+		}
+		check(framed == 0, "no broken messages (" + std::to_string(framed) + ")");
+		check(unreadable == 0, "the editor's codec reads every dump of the file's model (" + std::to_string(unreadable) + " not)");
+
+		size_t exact = 0, dumps = 0;
 		for(const auto& r : file.messages)
 		{
 			if(r.status != ed::SyxStatus::Ok)
 				continue;
+			++dumps;
 			const Bytes in(_bytes.begin() + static_cast<std::ptrdiff_t>(r.offset),
 				_bytes.begin() + static_cast<std::ptrdiff_t>(r.offset + r.size));
 			const auto out = ed::syxMessage(file, {r.kind, static_cast<uint8_t>(r.slot)});
@@ -88,29 +149,51 @@ namespace
 			std::printf("    message %zu (%s %d) re-encodes differently: %zu bytes in, %zu out, first difference at %zu\n",
 				r.index, ed::syxKindName(r.kind), r.slot, in.size(), out.size(), firstDifference(in, out));
 		}
-		check(exact == file.messages.size(), std::to_string(exact) + "/" + std::to_string(file.messages.size())
-			+ " messages re-encode byte-exactly");
+		check(exact == dumps, std::to_string(exact) + "/" + std::to_string(dumps) + " dumps re-encode byte-exactly");
 
 		const auto written = ed::writeSyx(file);
-		check(ed::parseSyx(written).messages.size() == file.messages.size()
-			&& ed::writeSyx(ed::parseSyx(written)) == written, "export -> parse -> export is byte-exact");
+		check(ed::writeSyx(ed::parseSyx(written)) == written, "export -> parse -> export is byte-exact");
 	}
 }
 
-int main(const int _argc, const char* _argv[])
+int main()
 {
-	const std::string mdPath = _argc > 2 ? _argv[1] : g_mdPath;
-	const std::string mmPath = _argc > 2 ? _argv[2] : g_mmPath;
-
-	Bytes md, mm;
-	if(!load(mdPath, md) || !load(mmPath, mm))
+	std::vector<std::string> paths;
+	for(const char* var : {"MD_SYX", "MM_SYX"})
+		if(const char* p = std::getenv(var); p && *p)
+			paths.emplace_back(p);
+	if(const char* more = std::getenv("SYX_FILES"); more && *more)
 	{
-		std::printf("SKIP: the local backups are not there\n");
+		std::string list = more;
+		size_t from = 0;
+		while(from <= list.size())
+		{
+			const auto to = list.find(':', from);
+			const auto p = list.substr(from, to == std::string::npos ? std::string::npos : to - from);
+			if(!p.empty())
+				paths.push_back(p);
+			if(to == std::string::npos)
+				break;
+			from = to + 1;
+		}
+	}
+	size_t ran = 0;
+	for(const auto& p : paths)
+	{
+		Bytes bytes;
+		if(!load(p, bytes))
+		{
+			std::printf("%s: not found\n", p.c_str());
+			continue;
+		}
+		run(p, bytes);
+		++ran;
+	}
+	if(!ran)
+	{
+		std::printf("SKIP: no local .syx given (MD_SYX, MM_SYX, SYX_FILES)\n");
 		return 77;
 	}
-
-	run(mdPath, md, {ed::SyxModel::Md, 232, 8, 64, 128, 32});
-	run(mmPath, mm, {ed::SyxModel::Mm, 288, 8, 128, 128, 24});
 	std::printf("%s (%d failures)\n", g_failures ? "FAIL" : "PASS", g_failures);
 	return g_failures ? 1 : 0;
 }

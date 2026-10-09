@@ -70,14 +70,17 @@
 	/* the song the Song workspace edits (MM-P4): any of the 24; null = the machine's current one */
 	let songEdit = null;
 	const songSlot = () => songEdit ?? cur("song");
-	const view = () => { const v = MmView.derive(docs(), { songEdit }); return Overlay.over(Overlay.size() ? MmView.own(v) : v); };
+	/* B-030: the plug-in's "host" message (a DAW's tempo); the plug-in's, so it stays when the engine changes */
+	let hostTempo = null;
+	const view = () => { const v = MmView.derive(docs(), { songEdit, host: hostTempo }); return Overlay.over(Overlay.size() ? MmView.own(v) : v); };
 	/* the view shows the machine: the catalogue (MmConvert's enumerations), the current pattern and the kit that plays */
 	const ready = () => !!catalogue && !!(docs().patterns[cur("pattern")] && kitNow());
-	const last = { record: null, ready: false, readyLabel: "", caps: null, modSent: null, note: { g: 0, text: "" } };
+	const last = { record: null, ready: false, readyLabel: "", caps: null, modSent: null, note: { g: 0, text: "" }, songRow: -1, hostRefused: "" };
 	let gesture = Bridge.gesture();
 	let modInFlight = 0;	// the id of a modSet command not answered yet
 	let clip = null;	// the page's copy of what the core's clipboard holds (MmView.copied): a paste shows at once
 	let audioDocument = null, audioError = "";
+	let menuAt = { x: 24, y: 24 };	/* I-008: where the editor's menu was asked for (its editorMenu answer opens there) */
 	let lcdBits = null, lcdShown = null;	// the firmware's last LCD picture, and the one the view shows
 	let noRomShown = false;
 	let libDirty = false;	// a library slot changed: drawn when no gesture holds the page
@@ -458,6 +461,10 @@
 		chain(patterns) {
 			send({ op: "chain", patterns }, { onResult: r => { if (!r.ok) V().toast(r.errors[0] || "The machine did not take the chain."); } });
 		},
+		/* 0.3.5: the Song page's PATTERN | SONG switch; the view shows the status the machine reports (song.songMode) */
+		seqMode(song) {
+			send({ op: "seqMode", song }, { onResult: r => { if (!r.ok) V().toast(r.errors[0] || "The machine did not change its mode."); } });
+		},
 		chainClear() {
 			send({ op: "chainClear" }, { onResult: r => { if (!r.ok) V().toast(r.errors[0] || "The chain did not end."); } });
 		},
@@ -507,7 +514,7 @@
 		/* SysEx import and export (P7): the window's file dialogs; the plug-in parses and writes */
 		syxChoose() { send({ op: "chooseSyx" }); },
 		syxExport() { send({ op: "syxExport" }); },
-		syxStart(kinds) { send({ op: "syxImport", kinds }, { onResult: r => { if (!r.ok) V().toast(r.errors[0]); } }); },
+		syxStart(kinds, skip) { send({ op: "syxImport", kinds, skip: skip || [] }, { onResult: r => { if (!r.ok) V().toast(r.errors[0]); } }); },
 		syxStop() { send({ op: "syxCancel" }); },
 		revealRom() { send({ op: "revealRomFolder" }); },
 		recheck() { send({ op: "recheckFirmware" }, { onResult: r => V().toast(r.ok ? r.note : r.errors[0]) }); },
@@ -537,8 +544,9 @@
 			else if (globalNow()?.controlIn?.tempoSync === 1 && globalNow()?.controlIn?.transport === 1) V().setPst("Host", "Follows the host's tempo and transport (GLOBAL › CONTROL IN: EXT MIDI CLK, TRANSPORT ACCEPT).", false);
 			else V().setPst("", "", false);
 		},
-		/* the editor's menu (skins, GUI scale, settings) */
-		menu() { send({ op: "openMenu" }); },
+		/* the editor's menu (zoom, updates, the log folder, Developer) at the point x, y: the plug-in sends its entries
+		   (editorMenu), the page draws them (I-008, DeskMenu.showEditor in shared/deskMenu.js) */
+		menu(x, y) { if (x != null) menuAt = { x, y }; send({ op: "openMenu" }); },
 		/* the AUDIO / MIDI panel: the plug-in's devices (mdAudioMidiLink.cpp); in a plug-in the
 		   document says standalone false, and the engine menu has no entry for it. A change's error is
 		   only in its result: the panel shows the last one until the next change. */
@@ -590,7 +598,12 @@
 			if (V().playing()) V().setStep(m.step);
 			/* MM-P4: the machine's recording mode */
 			if (m.record !== undefined && m.record !== last.record) { last.record = m.record; V().setRecord(m.record || "off"); }
+			/* 0.3.5: the song row that plays (RAM): the Song page's playhead, without a render */
+			const row = m.songRow ?? -1;
+			if (row !== last.songRow) { last.songRow = row; V().setSongRow(row); }
 		}
+		else if (m.type === "host") { hostTempo = m; refresh(); }
+		else if (m.type === "audioRun") Boot.audio(m);
 		else if (m.type === "lcd") { lcdBits = Uint8Array.from(atob(m.bits || ""), c => c.charCodeAt(0)); showLcd(); }
 		else if (m.type === "mod") onMod(m);
 		else if (m.type === "catalogue") onCatalogue(m.doc);
@@ -603,10 +616,17 @@
 			else if (m.type === "romInstall") { V().bootRom(m); V().toast(m.text); }
 			else if (m.type === "romInfo") onRomInfo(m);
 			else if (m.type === "notice") onNotice(m);
+			else if (m.type === "editorMenu") DeskMenu.showEditor(m, menuAt.x, menuAt.y, c => send(c));
 			else if (m.type === "syxPreview") V().syxPreview(m);
 			else if (m.type === "syxProgress") V().syxProgress(m);
 			else if (m.type === "syxExport") V().toast(m.text);
 		else if (m.type === "error") onError(m);
+		else if (m.type === "result" && m.op === "followHost" && !m.ok) {
+			/* a refused followHost (B-030): logged, and said once per reason */
+			const t = (m.errors || []).join(" · ") || "refused";
+			log("followHost refused: " + t);
+			if (t !== last.hostRefused) { last.hostRefused = t; V().toast("The machine could not be set to follow the DAW's tempo: " + t); }
+		}
 		else if (m.type === "result" && !m.ok && m.errors?.length && m.op !== "set" && m.op !== "modSet") V().toast(m.errors[0]);
 	}
 })();

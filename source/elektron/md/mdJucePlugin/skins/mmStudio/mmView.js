@@ -87,6 +87,12 @@ const MmView = (() => {
 			v.songs = songsOf(docs, song, slotIn(m, "song"));
 		}
 		const global = glob != null ? docs.globals[glob] || null : null;
+		/* B-030: in a DAW whose clock the machine follows (its global: CONTROL IN TEMPO SYNC external, set by the
+		   plug-in), the tempo is the host's (ui.host, the plug-in's "host" message): TEMPO shows it, also while the
+		   host is stopped, and is not edited here */
+		const H = ui.host;
+		v.hostTempo = !!(H && H.follows && H.bpm > 0 && global && global.controlIn && global.controlIn.tempoSync === 1);
+		if (v.hostTempo) v.bpm = H.bpm;
 		const kd = kitDocOf(docs, kit), pd = pat != null ? docs.patterns[pat] || null : null;
 		/* the view shows the machine once the current pattern and the kit that plays are there */
 		v.ready = !!(kd && pd);

@@ -16,6 +16,9 @@
                                          (the engine menu's "emu" entry, as if chosen there); the header stays live.
                                          AUDIO / MIDI… shows exactly when the engine menu offers its AUDIO entry (not in
                                          a DAW); a page that changes that entry calls Boot.midiRefresh()
+     Boot.audio({plugin, seconds, blocks, realtime})   B-035: how the host runs the audio (the plug-in's "audioRun"
+                                         message): while the machine starts, the card says when a plug-in gets no
+                                         audio at all, or when the machine runs slower than real time
      Boot.host = {chooseRom(), revealRom(), recheck(), removeRom(info), say(text)}   the app's host calls
    A file dragged onto the page is not opened by the web view (that would replace the page): the card says to click
    the button instead. */
@@ -55,6 +58,22 @@ const Boot = (() => {
 		$b("bootbar").setAttribute("aria-valuenow", Math.round(f * 100));
 		raf = requestAnimationFrame(tick);
 	}
+	/* B-035: what the start-up card says about the audio, or "" (pure: the "audioRun" message) */
+	function audioWord(a) {
+		if (!a) return "";
+		if (a.plugin && !a.blocks && a.seconds >= 5) return "The host is not running audio for this plug-in: check the audio engine/device is on and the track or plug-in is not deactivated.";
+		if (a.realtime != null && a.realtime > 0 && a.realtime < 0.95) return `The machine runs at ${a.realtime.toFixed(1)}× real time: try a larger buffer.`;
+		return "";
+	}
+	let audioRun = null;
+	const BOOTLINE = "Keys work when the start-up animation ends.";
+	/* the line under the bar while the machine starts: the audio's word when there is one */
+	function bootLine() {
+		if (shown !== "booting" && shown !== "loading") return;
+		const w = audioWord(audioRun), el = $b("bootline");
+		el.textContent = w || BOOTLINE; el.classList.toggle("warn", !!w); el.hidden = false;
+	}
+	function audio(a) { audioRun = a; bootLine(); }
 	function romName(m) { return m === "Monomachine" ? "Monomachine SFX-60 OS 1.32B" : "Machinedrum OS 1.63"; }
 	const esc = t => String(t).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
 	const links = (m) => {	// which of the card's links show: the first-run ones, or the installed firmware's
@@ -94,8 +113,10 @@ const Boot = (() => {
 		card.classList.toggle("rom", rom);
 		card.classList.toggle("ind", st === "loading");
 		$b("boott").textContent = rom ? (st === "missing" ? `${machine} firmware needed` : `This is not the ${machine}'s firmware`) : st === "loading" ? `Preparing the ${machine}…` : `Starting the ${machine}…`;
-		$b("bootline").textContent = st === "unsupported" ? "The ROM in the ROM folder is another OS or a damaged dump." : rom ? "" : "Keys work when the start-up animation ends.";
+		$b("bootline").textContent = st === "unsupported" ? "The ROM in the ROM folder is another OS or a damaged dump." : rom ? "" : BOOTLINE;
+		$b("bootline").classList.remove("warn");
 		$b("bootline").hidden = st === "missing";
+		bootLine();
 		$b("bootrom").hidden = !rom;
 		if (rom) $b("bootzone").textContent = `Choose your ${romName(machine)} ROM (.bin or .zip, 8 MB)`;
 		card.hidden = false;
@@ -162,5 +183,5 @@ const Boot = (() => {
 			sel.value = "emu"; sel.dispatchEvent(new Event("change", { bubbles: true }));
 		}
 	});
-	return { update, lcd, rom, showInstalled, midi, midiRefresh: () => midi(midiLast), host: null, state: () => shown };
+	return { update, lcd, rom, showInstalled, midi, midiRefresh: () => midi(midiLast), audio, audioWord, host: null, state: () => shown };
 })();

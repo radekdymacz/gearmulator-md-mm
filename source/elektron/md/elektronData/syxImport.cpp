@@ -2,6 +2,8 @@
 
 #include "dumpIo.h"
 #include "mdCommands.h"
+#include "mdJson.h"
+#include "mmJson.h"
 #include "mmDump.h"
 #include "sysex7bit.h"
 
@@ -322,10 +324,18 @@ namespace elektronData
 			r.index = i;
 			r.offset = span.offset;
 			r.size = span.size;
-			if(m.size() > 6 && headerModel(m) != SyxModel::Unknown)
+			r.model = headerModel(m);
+			if(m.size() > 6 && r.model != SyxModel::Unknown)
+			{
 				r.kind = kindOf(m[6]);
+				r.command = m[6];
+			}
 			if(m.size() > 9 && r.kind != SyxKind::Other)
+			{
 				r.slot = m[9];
+				r.version = m[7];
+				r.revision = m[8];
+			}
 
 			r.status = span.complete ? readMessage(file, model, m, r.kind) : SyxStatus::Truncated;
 
@@ -551,6 +561,203 @@ namespace elektronData
 		}
 	}
 
+	// ---- as-is import (B-019)
+
+	std::string syxUnsendable(const SyxMessageReport& _message, const std::vector<uint8_t>& _file, const SyxModel _model)
+	{
+		const auto bytes = syxBytes(_file, _message);
+		if(_message.status == SyxStatus::Truncated || bytes.size() < 2 || bytes.back() != 0xf7)
+			return "broken: it has no end (no F7), the file is cut or damaged";
+		if(_message.model == SyxModel::Unknown)
+			return bytes.size() > 4 && bytes[1] == 0x00 && bytes[2] == 0x20 && bytes[3] == 0x3c
+				? "SysEx of another Elektron machine" : bytes.size() > 1 && bytes[1] == 0x7e
+				? "a universal SysEx message (a sample dump or a device inquiry), not data of this machine"
+				: "SysEx of another maker's device";
+		if(_message.model != _model)
+			return std::string("SysEx of the ") + syxModelName(_message.model) + ", not of the " + syxModelName(_model);
+		for(size_t i = 1; i + 1 < bytes.size(); ++i)
+			if(bytes[i] > 0x7f)
+				return "broken: a byte above 7F inside the message";
+		// Elektron's OS update files are 0x7E packets and a closing 0x7F (Elektron_SPS1-1UW_OS1.63.syx,
+		// Elektron_SFX6-60_OS1.32B.syx): firmware, not user data. Sent to a machine on its OS upgrade screen they
+		// rewrite its flash; the emulated machine runs the ROM it was given. The editor never sends them.
+		if(_message.command == g_syxOsPacket || _message.command == g_syxOsEnd)
+			return "part of an OS update (the machine's firmware), not user data: an import never sends it";
+		return {};
+	}
+
+	std::vector<uint8_t> syxBytes(const std::vector<uint8_t>& _file, const SyxMessageReport& _message)
+	{
+		const auto from = std::min(_message.offset, _file.size());
+		const auto to = std::min(_message.offset + _message.size, _file.size());
+		return {_file.begin() + static_cast<std::ptrdiff_t>(from), _file.begin() + static_cast<std::ptrdiff_t>(to)};
+	}
+
+	std::vector<uint8_t> syxRequest(const SyxModel _model, const SyxKind _kind, const uint8_t _slot)
+	{
+		if(_model == SyxModel::Md)
+		{
+			switch(_kind)
+			{
+			case SyxKind::Global: return mdGlobalRequest(_slot);
+			case SyxKind::Kit: return mdKitRequest(_slot);
+			case SyxKind::Pattern: return mdPatternRequest(_slot);
+			case SyxKind::Song: return mdSongRequest(_slot);
+			default: return {};
+			}
+		}
+		if(_model == SyxModel::Mm)
+		{
+			switch(_kind)
+			{
+			case SyxKind::Global: return mmGlobalRequest(_slot);
+			case SyxKind::Kit: return mmKitRequest(_slot);
+			case SyxKind::Pattern: return mmPatternRequest(_slot);
+			case SyxKind::Song: return mmSongRequest(_slot);
+			default: return {};
+			}
+		}
+		return {};
+	}
+
+	namespace
+	{
+		json::Value jsonOf(const MdGlobal& _d) { return globalToJson(_d); }
+		json::Value jsonOf(const MdKit& _d) { return kitToJson(_d); }
+		json::Value jsonOf(const MdPattern& _d) { return patternToJson(_d); }
+		json::Value jsonOf(const MdSong& _d) { return songToJson(_d); }
+		json::Value jsonOf(const MmGlobal& _d) { return mmGlobalToJson(_d); }
+		json::Value jsonOf(const MmKit& _d) { return mmKitToJson(_d); }
+		json::Value jsonOf(const MmPattern& _d) { return mmPatternToJson(_d); }
+		json::Value jsonOf(const MmSong& _d) { return mmSongToJson(_d); }
+
+		// What a person edits: the contract's document without its "firmware" group (the format bytes, residue
+		// past the counts, undecoded bytes, the LFO's running state), which a machine rewrites as it stores a dump.
+		template<typename T>
+		Bytes visible(const T& _doc)
+		{
+			auto v = jsonOf(_doc);
+			if(v.isObject())
+			{
+				auto& o = v.asObject();
+				o.erase(std::remove_if(o.begin(), o.end(), [](const json::Value::Member& _m) { return _m.first == "firmware"; }), o.end());
+			}
+			const auto s = json::write(v);
+			return {s.begin(), s.end()};
+		}
+
+		template<typename T, typename Decode>
+		std::optional<SyxCanonical> canonicalOf(const SyxKind _kind, const Bytes& _m, Decode _decode)
+		{
+			const auto doc = _decode(_m);
+			if(!doc)
+				return std::nullopt;
+			return SyxCanonical{_kind, _m[9], visible(*doc)};
+		}
+
+		template<typename Map>
+		Bytes canonicalIn(const Map& _map, const uint8_t _slot)
+		{
+			const auto it = _map.find(_slot);
+			return it == _map.end() ? Bytes{} : visible(it->second);
+		}
+	}
+
+	std::optional<SyxCanonical> syxCanonical(const SyxModel _model, const std::vector<uint8_t>& _message)
+	{
+		if(_message.size() < 15 || headerModel(_message) != _model)
+			return std::nullopt;
+		const auto kind = kindOf(_message[6]);
+		if(_model == SyxModel::Md)
+		{
+			switch(kind)
+			{
+			case SyxKind::Global: return canonicalOf<MdGlobal>(kind, _message, decodeMdGlobal);
+			case SyxKind::Kit: return canonicalOf<MdKit>(kind, _message, decodeMdKit);
+			case SyxKind::Pattern: return canonicalOf<MdPattern>(kind, _message, decodeMdPattern);
+			case SyxKind::Song: return canonicalOf<MdSong>(kind, _message, decodeMdSong);
+			default: return std::nullopt;
+			}
+		}
+		if(_model == SyxModel::Mm)
+		{
+			switch(kind)
+			{
+			case SyxKind::Global: return canonicalOf<MmGlobal>(kind, _message, decodeMmGlobal);
+			case SyxKind::Kit: return canonicalOf<MmKit>(kind, _message, decodeMmKit);
+			case SyxKind::Pattern: return canonicalOf<MmPattern>(kind, _message, decodeMmPattern);
+			case SyxKind::Song: return canonicalOf<MmSong>(kind, _message, decodeMmSong);
+			default: return std::nullopt;
+			}
+		}
+		return std::nullopt;
+	}
+
+	std::vector<uint8_t> syxCanonical(const MdDocuments& _docs, const SyxKind _kind, const uint8_t _slot)
+	{
+		switch(_kind)
+		{
+		case SyxKind::Global: return canonicalIn(_docs.globals, _slot);
+		case SyxKind::Kit: return canonicalIn(_docs.kits, _slot);
+		case SyxKind::Pattern: return canonicalIn(_docs.patterns, _slot);
+		case SyxKind::Song: return canonicalIn(_docs.songs, _slot);
+		default: return {};
+		}
+	}
+
+	std::vector<uint8_t> syxCanonical(const MmDocuments& _docs, const SyxKind _kind, const uint8_t _slot)
+	{
+		switch(_kind)
+		{
+		case SyxKind::Global: return canonicalIn(_docs.globals, _slot);
+		case SyxKind::Kit: return canonicalIn(_docs.kits, _slot);
+		case SyxKind::Pattern: return canonicalIn(_docs.patterns, _slot);
+		case SyxKind::Song: return canonicalIn(_docs.songs, _slot);
+		default: return {};
+		}
+	}
+
+	bool syxHoldsData(const MdDocuments& _docs, const SyxKind _kind, const uint8_t _slot)
+	{
+		return _kind == SyxKind::Global || overwrites(_docs, SyxItem{_kind, _slot});
+	}
+
+	bool syxHoldsData(const MmDocuments& _docs, const SyxKind _kind, const uint8_t _slot)
+	{
+		return _kind == SyxKind::Global || overwrites(_docs, SyxItem{_kind, _slot});
+	}
+
+	SyxOutcome syxOutcome(const std::vector<uint8_t>& _file, const std::optional<std::vector<uint8_t>>& _before,
+		const std::optional<std::vector<uint8_t>>& _after)
+	{
+		if(!_after)
+			return SyxOutcome::NoReply;
+		if(!_file.empty() && *_after == _file)
+			return SyxOutcome::Taken;
+		if(_before && !_before->empty())
+		{
+			if(*_after == *_before)
+				return SyxOutcome::Ignored;
+			return _file.empty() ? SyxOutcome::Changed : SyxOutcome::Converted;
+		}
+		return _file.empty() ? SyxOutcome::Unknown : SyxOutcome::Differs;
+	}
+
+	const char* syxOutcomeName(const SyxOutcome _outcome)
+	{
+		switch(_outcome)
+		{
+		case SyxOutcome::Taken: return "taken";
+		case SyxOutcome::Converted: return "converted";
+		case SyxOutcome::Ignored: return "ignored";
+		case SyxOutcome::Differs: return "differs";
+		case SyxOutcome::Changed: return "changed";
+		case SyxOutcome::Unknown: return "unknown";
+		case SyxOutcome::NoReply: return "no reply";
+		}
+		return "?";
+	}
+
 	std::vector<uint8_t> syxMessage(const SyxFile& _file, const SyxItem& _item)
 	{
 		const auto model = documentsModel(_file);
@@ -579,5 +786,55 @@ namespace elektronData
 			}
 		}
 		return {};
+	}
+
+	std::vector<std::string> syxGlobalChanges(const SyxModel _model, const std::optional<std::vector<uint8_t>>& _before,
+		const std::optional<std::vector<uint8_t>>& _after)
+	{
+		if(!_before || !_after || *_before == *_after)
+			return {};
+		const auto b = json::parse(std::string(_before->begin(), _before->end()));
+		const auto a = json::parse(std::string(_after->begin(), _after->end()));
+		if(!b || !a || !b->isObject() || !a->isObject())
+			return {};
+		std::vector<std::string> out;
+		// The MIDI base channel: where the editor's notes, mutes and sound values go.
+		const auto channels = [&](const json::Value& _g) -> std::string
+		{
+			const json::Value* v = nullptr;
+			if(_model == SyxModel::Md)
+				v = _g.find("baseChannel");
+			else if(const auto* c = _g.find("channels"))
+				v = c->find("base");
+			if(!v || !v->isNumber())
+				return {};
+			const int n = static_cast<int>(v->asNumber());
+			if(_model == SyxModel::Md)
+				return n <= 12 ? std::to_string(n + 1) + "-" + std::to_string(n + 4) : "OFF";
+			return n <= 15 ? std::to_string(n + 1) : "OFF";
+		};
+		const auto cb = channels(*b), ca = channels(*a);
+		if(cb != ca)
+			out.push_back("MIDI base channel " + cb + " -> " + ca);
+		for(const auto& [key, value] : a->asObject())
+		{
+			if(key == "slot" || key == "name" || key == "baseChannel" || key == "schema" || key == "version")
+				continue;
+			const auto* before = b->find(key);
+			if(before && *before == value)
+				continue;
+			if(key == "channels" && value.isObject() && before && before->isObject())
+			{
+				for(const auto& [k, v] : value.asObject())
+					if(k != "base" && !(before->find(k) && *before->find(k) == v))
+						out.push_back("channels." + k);
+				continue;
+			}
+			static const std::map<std::string, std::string> names{{"keymap", "the note map"}, {"control", "MIDI sync and program change"},
+				{"settings", "trig inputs and other settings"}, {"extendedMode", "EXTENDED mode"}, {"routing", "track outputs"}, {"tempo", "tempo"}};
+			const auto n = names.find(key);
+			out.push_back(n != names.end() ? n->second : key);
+		}
+		return out;
 	}
 }

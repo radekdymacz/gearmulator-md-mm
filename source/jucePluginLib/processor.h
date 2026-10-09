@@ -171,6 +171,8 @@ namespace pluginLib
 		const Properties& getProperties() const { return m_properties; }
 
 		virtual void processBpm(float _bpm) {}
+		// A hook: every audio callback the host makes, as it starts (audio thread; _bypassed: processBlockBypassed).
+		virtual void processBlockStarted(int /*_frames*/, bool /*_bypassed*/) {}
 
 		bool rebootDevice();
 

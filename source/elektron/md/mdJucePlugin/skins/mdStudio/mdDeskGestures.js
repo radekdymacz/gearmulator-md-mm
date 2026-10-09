@@ -261,8 +261,8 @@ window.addEventListener("blur", () => { if (Held.as("select")) endSelect(); });
 /* ===== BPM: drag up or down, arrows -> global tempo (0x61) ===== */
 (() => {
 	const b = $("#bpm");
-	const set = v => { const bpm = clamp(Math.round(v * 10) / 10, 30, 300); cmd("tempo", { bpm }, "tempo", [[["bpm"], bpm]]); renderTop(); };
-	b.addEventListener("pointerdown", e => { Held.begin("bpm", { y: e.clientY, v: V.bpm }); Gesture.begin(); grabPointer(b, e); });
+	const set = v => { if (hostTempoRefused()) return; const bpm = clamp(Math.round(v * 10) / 10, 30, 300); cmd("tempo", { bpm }, "tempo", [[["bpm"], bpm]]); renderTop(); };
+	b.addEventListener("pointerdown", e => { if (hostTempoRefused()) return; Held.begin("bpm", { y: e.clientY, v: V.bpm }); Gesture.begin(); grabPointer(b, e); });
 	b.addEventListener("pointermove", e => { const d = Held.as("bpm"); if (!d) return; if (e.buttons === 0 && e.pointerType === "mouse") { Held.end("bpm"); Gesture.end(); return; } const v = d.v + (d.y - e.clientY) * (e.shiftKey ? .1 : .5); if (Math.abs(v - V.bpm) >= .05) set(v); });
 	b.addEventListener("pointerup", () => { Held.end("bpm"); Gesture.end(); });
 	b.addEventListener("keydown", e => { const k = { ArrowUp: 1, ArrowDown: -1 }[e.key]; if (!k) return; e.preventDefault(); set(V.bpm + k * (e.shiftKey ? .1 : 1)); });

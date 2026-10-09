@@ -95,6 +95,16 @@ namespace md
 	//    once, so at most 16. SysEx LOAD PATTERN or a single TRIG clears "active".
 	//  - Mutes: main RAM 0x28b34a, 16 bits big-endian, bit 0 = track 1. CC 12-15 and the
 	//    panel's MUTE window write it.
+	// 0.3.5: the song row the sequencer plays (mdP4ProbeFirmwareTest songrow, mdDeskFirmwareTest songrow): main RAM
+	// 0x2b18f5, one byte, the row index 0-255 of the loaded song while it plays in SONG mode (a LOOP row is never
+	// "played": the byte goes from the row before it straight to the target). STOP leaves it (STOP twice: 0, the song
+	// starts again from its first row). Pattern mode leaves it as it was: read it with the sequencer mode and the
+	// transport.
+	struct SongPosition
+	{
+		static constexpr uint32_t g_rowAddress = 0x2b18f5;
+	};
+
 	struct ChainAndMutes
 	{
 		static constexpr uint32_t g_chainAddress = 0x1001f5c;

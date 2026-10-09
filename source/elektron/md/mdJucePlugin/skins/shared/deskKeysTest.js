@@ -118,5 +118,30 @@ check(!edit("copy").ran, "Windows / Linux: a copy event right after the Ctrl+C k
 Modifiers.setPlatform(true);
 CtxDate.now = realNow;
 
+/* B-023: a focused value (role=slider; a click or its arrow keys focus it) keeps only the keys that move it: ⌘Z, ⌘C
+   and Space are the page's (⌘Z after an Alt-drag on a value did nothing: the drag's undo step stayed), ↑ / ↓ are the
+   value's (no track change); a text field keeps every key */
+const slider = { closest: q => (q.includes("role=slider") ? slider : null) }, text = { closest: q => (q.includes("input") ? text : null) };
+const pressOn = (target, key, mods = {}) => {
+	let prevented = false;
+	const e = Object.assign({ key, code: key.length === 1 ? "Key" + key.toUpperCase() : key, metaKey: false, ctrlKey: false, altKey: false, shiftKey: false,
+		target, preventDefault: () => { prevented = true; } }, mods);
+	ran.length = 0; keydown(e);
+	return { ran: ran.join(","), prevented };
+};
+Keys.bind({ id: "t-track", scope: "any", keys: ["ArrowUp", "ArrowDown"], group: "Selected track", does: "track", run: () => ran.push("track") });
+CtxDate.now = () => realNow() + 40000;
+check(pressOn(slider, "z", { metaKey: true }).ran === "undo", "a value focused: ⌘Z undoes");
+check(pressOn(slider, " ").ran === "play", "a value focused: Space plays");
+check(pressOn(slider, "ArrowUp").ran === "", "a value focused: ↑ is the value's (no track change)");
+check(pressOn(slider, "PageDown").ran === "", "a value focused: Page Down is the value's");
+check(pressOn({ closest: () => null }, "ArrowUp").ran === "track", "nothing focused: ↑ picks the track");
+check(pressOn(text, "z", { metaKey: true }).ran === "" && pressOn(text, " ").ran === "", "a text field focused: ⌘Z and Space are the field's");
+document.activeElement = slider;
+CtxDate.now = () => realNow() + 50000;
+check(edit("copy").ran === "copy", "a value focused: a copy event (⌘C on macOS) runs the copy entry");
+document.activeElement = null;
+CtxDate.now = realNow;
+
 console.log(failures ? `${failures} failure(s)` : "deskKeysTest: all passed");
 process.exit(failures ? 1 : 0);

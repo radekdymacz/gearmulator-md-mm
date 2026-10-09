@@ -30,6 +30,8 @@
 
 #include "elektronData/mdSamples.h"
 
+#include "../mdJucePlugin/mdSyxSession.h"	// the session's .syx import, header only (B-019)
+
 #include "mdLib/mdautomation.h"
 #include "mdLib/mddeskdevice.h"
 #include "mdLib/mdfrontpanel.h"
@@ -45,6 +47,7 @@
 #include <functional>
 #include <map>
 #include <memory>
+#include <type_traits>
 
 using namespace mdFirmwareSession;
 namespace ed = elektronData;
@@ -225,6 +228,7 @@ namespace
 			int pattern = -1;
 			bool playing = false;
 			bool recording = false;
+			int songRow = -1;
 		};
 		PageTelemetry pageTelemetry() const
 		{
@@ -237,6 +241,7 @@ namespace
 			if(const auto* p = v.find("pattern")) t.pattern = static_cast<int>(p->asNumber());
 			if(const auto* p = v.find("playing")) t.playing = p->asBool();
 			if(const auto* p = v.find("recording")) t.recording = p->asBool();
+			if(const auto* p = v.find("songRow"); p && p->isNumber()) t.songRow = static_cast<int>(p->asNumber());
 			return t;
 		}
 
@@ -372,6 +377,7 @@ namespace
 			t.gridEdit = m_leds.gridEdit();
 			t.knobPage = m_machine.read8(md::SequencerState::g_knobPageAddress);
 			t.panelPending = static_cast<int>(m_keys.size());	// the rig's key queue, as md::Device reports its own
+			t.songRow = m_machine.read8(md::SongPosition::g_rowAddress);	// 0.3.5, as md::DeskDevice publishes it
 			// P4, as md::Device publishes them.
 			m_boot.update(m_machine.read8(md::BootAnimation::g_mainScreenAddress), now - m_bootAt);
 			m_bootAt = now;
@@ -1787,146 +1793,231 @@ namespace
 		m.send(ed::mdLoadPattern(0));
 		_rig.run(300);
 		m.onMidi = nullptr;
+		// 0.3.5: the Song page's PATTERN | SONG switch, as the firmware takes it
+		const auto mode = [&] { const auto s = ed::parseMdStatusResponse(m.request(ed::mdStatusRequest(ed::MdStatus::SequencerMode), 0x72)); return s ? int(s->value) : -1; };
+		_rig.page(R"({"op":"seqMode","song":true,"id":998})");
+		_rig.run(400);
+		const int song = mode();
+		_rig.page(R"({"op":"seqMode","song":false,"id":999})");
+		_rig.run(400);
+		const int pattern = mode();
+		std::printf("  sequencer mode: SONG -> %d, PATTERN -> %d; the machine document says %s\n", song, pattern,
+			_rig.machineDoc() && _rig.machineDoc()->find("songMode") ? (_rig.machineDoc()->find("songMode")->isBool() && _rig.machineDoc()->find("songMode")->asBool() ? "song" : "pattern") : "nothing");
+		check(song == 1 && pattern == 0, "seqMode: the machine goes to SONG mode and back to PATTERN mode");
+		check(_rig.machineDoc() && _rig.machineDoc()->find("songMode") && _rig.machineDoc()->find("songMode")->isBool() && !_rig.machineDoc()->find("songMode")->asBool(),
+			"and the machine document reads pattern mode back");
 	}
 
-	// P7: a full backup .syx imported through the desk (the session's SysEx import: one "set" per document,
-	// one gesture) and read back from the firmware equal. The file is the user's own, read in place and
-	// never copied (argument 3); skipped without it.
-	void syxImport(const Bytes& _rom, const std::string& _romName, const std::string& _file)
+	// The session's import traits for the rig (mdSessionMd.cpp's, without the plug-in).
+	struct MdSyxTraits
 	{
-		std::puts("syx import");
-		namespace ed = elektronData;
-		std::ifstream in(_file, std::ios::binary);
-		if(!in)
-		{
-			std::printf("  skip: %s not found\n", _file.c_str());
-			return;
-		}
-		const Bytes bytes((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
-		const auto f = ed::parseSyx(bytes);
-		check(f.model == ed::SyxModel::Md && f.problems.empty(), "the file is a Machinedrum dump with no problems");
+		using Docs = ed::MdDocuments;
+		static constexpr ed::SyxModel model = ed::SyxModel::Md;
+		static constexpr const char* name = "Machinedrum";
+		static const Docs& docs(const ed::SyxFile& _f) { return _f.md; }
+	};
+
+	ed::MdDocuments machineDocs(const mdDesk::Desk& _desk)
+	{
+		const auto& v = _desk.documents();
+		ed::MdDocuments o;
+		o.patterns = v.patterns;
+		o.kits = v.kits;
+		o.songs = v.songs;
+		if(v.global)
+			o.globals[v.global->position] = *v.global;
+		return o;
+	}
+
+	// P7: Export SysEx as the session does (writeSyx of every document the desk holds) from a fresh machine, to
+	// _to (SYX_EXPORT_TO): a file of the owner's own, for syximport.
+	void syxExport(const Bytes& _rom, const std::string& _romName, const std::string& _to)
+	{
+		std::puts("syx export");
 		Rig rig(_rom, _romName);
 		auto& desk = rig.desk();
 		rig.page(R"({"op":"ready"})");
 		rig.runUntil([&] { return desk.isReady() && desk.documents().global && desk.documents().patterns.size() == 128 && desk.documents().kits.size() == 64 && desk.documents().songs.size() == 32; }, 60000);
-		const int active = desk.documents().global ? desk.documents().global->position : -1;
-		// As the session imports (mdSyxSession.h): every item a "set" with one gesture id, four per session step,
-		// nothing waited for; then until the desk is idle. 0.3.4: SYX_PLAYING=1 imports while the sequencer plays
-		// (the stream at MIDI cable speed); stopped, the stream goes as fast as the machine reads. The emulated
-		// time it takes is printed. SYX_KINDS=kit,pattern imports only those; SYX_SEQUENTIAL=1 one at a time, each
-		// until the desk is idle. Before 0.3.4 an import this fast ended with most read-backs timed out ("Push
-		// failed": the firmware answers one dump at a time, hundreds were asked at once) and the page showing old
-		// patterns, though the firmware held the new ones; the desks now ask at most deskCore::g_maxReadBacks.
-		std::vector<std::string> items;
-		const std::string kinds = std::getenv("SYX_KINDS") ? std::getenv("SYX_KINDS") : "global,kit,pattern,song";
-		const auto set = [&](const char* _kind, const ed::json::Value& _doc)
+		auto docs = machineDocs(desk);
+		// B-026: SYX_BASE_CHANNEL=n (0-12, or 127 = OFF) writes the export's global with another MIDI base channel
+		if(const char* ch = std::getenv("SYX_BASE_CHANNEL"))
+			for(auto& [slot, g] : docs.globals)
+				g.baseChannel = static_cast<uint8_t>(std::atoi(ch));
+		const auto bytes = ed::writeSyx(docs);
+		std::ofstream out(_to, std::ios::binary);
+		out.write(reinterpret_cast<const char*>(bytes.data()), static_cast<std::streamsize>(bytes.size()));
+		check(out.good() && !bytes.empty(), "wrote " + std::to_string(bytes.size()) + " bytes to " + _to);
+	}
+
+	// P7, B-019: a .syx imported as the session does (mdSyxSession.h): the file's messages to the firmware as they
+	// are, through the desk's adapter (the stream), then every document read back and compared. The file is the
+	// user's own, read in place and never copied (MD_SYX or argument 3); skipped without it. SYX_KINDS=kit,pattern
+	// imports only those (default: every kind); SYX_PLAYING=1 imports while the sequencer plays (cable speed).
+	// SYX_EXPECT=all: every document must be taken as it is or in the machine's own form (nothing ignored, every
+	// read-back answered); else only the read-backs are checked and the outcomes are printed.
+	template<typename R>
+	void importWith(R& rig, const Bytes& bytes, const std::string& _file, const bool _hw)
+	{
+		auto& desk = rig.desk();
+		mdJucePlugin::SyxJob<MdSyxTraits> job;
+		const auto& st = desk.linkState();
+		const auto preview = job.open(bytes, _file, machineDocs(desk), {st.pattern ? *st.pattern : -1, st.kit ? *st.kit : -1, st.song ? *st.song : -1, st.globalSlot ? *st.globalSlot : -1});
+		check(preview.find("ok")->asBool(), "the preview opens the file");
+		std::printf("  preview: %d messages, %d left out;", static_cast<int>(preview.find("messages")->asNumber()), static_cast<int>(preview.find("skippedCount")->asNumber()));
+		for(const auto& [k, list] : preview.find("items")->asObject())
 		{
-			if(kinds.find(_kind) == std::string::npos)
-				return;
-			items.push_back(std::string(R"({"op":"set","g":777,"kind":")") + _kind + R"(","doc":)" + ed::json::write(_doc) + "}");
-		};
-		for(const auto& [s, g] : f.md.globals)
-			if(s == active && g.version == 6 && g.revision == 1)	// the session leaves out an older OS's globals
-				set("global", ed::globalToJson(g));
-		for(const auto& [s, k] : f.md.kits) set("kit", ed::kitToJson(k));
-		for(const auto& [s, p] : f.md.patterns) set("pattern", ed::patternToJson(p));
-		for(const auto& [s, g] : f.md.songs) set("song", ed::songToJson(g));
-		const size_t sent = items.size();
-		const bool playing = std::getenv("SYX_PLAYING") && std::string(std::getenv("SYX_PLAYING")) == "1";
-		if(playing)
-		{
-			rig.page(R"({"op":"play","id":990})");
-			rig.runUntil([&] { return rig.pageTelemetry().playing; }, 2000);
+			std::map<std::string, int> formats;
+			for(const auto& i : list.asArray())
+				++formats[i.find("format")->asString()];
+			std::printf(" %s %zu", k.c_str(), list.asArray().size());
+			for(const auto& [f, n] : formats)
+				std::printf(" [%s x%d]", f.c_str(), n);
 		}
-		const auto secs = [&] { return double(rig.machine().now()) / g_rate; };
-		const double t0 = secs();
-		// SYX_SEQUENTIAL=1: one at a time, each until the desk is idle (P7's first form of this test)
-		const bool sequential = std::getenv("SYX_SEQUENTIAL") && std::string(std::getenv("SYX_SEQUENTIAL")) == "1";
-		for(size_t i = 0; i < items.size(); ++i)
-		{
-			rig.page(items[i]);
-			if(sequential)
-				rig.runUntil([&] { return !desk.isBusy(); }, 10000);
-			else if(i % 4 == 3)
-				rig.run(8);
-		}
-		rig.runUntil([&] { return !desk.isBusy(); }, 900000);
-		const double t1 = secs();
-		std::printf("  sent to the machine:");
-		for(const auto& [k, v] : rig.messageKinds)
-			std::printf(" %02x:%zu", k, v);
 		std::printf("\n");
-		std::printf("  import %s: %zu documents (%zu kits, %zu patterns, %zu songs) in %.1f s (emulated time)\n", playing ? "while playing" : "stopped",
-			sent, f.md.kits.size(), f.md.patterns.size(), f.md.songs.size(), t1 - t0);
-		if(playing)
+		for(const auto& s : preview.find("skipped")->asArray())
+			std::printf("    left out: %s\n", s.asString().c_str());
+
+		std::vector<std::string> kinds;
 		{
-			check(rig.pageTelemetry().playing, "the machine still plays after the import");
-			rig.page(R"({"op":"stop","id":991})");
+			const std::string k = std::getenv("SYX_KINDS") ? std::getenv("SYX_KINDS") : "global,kit,pattern,song";
+			for(const char* kind : {"global", "kit", "pattern", "song", "other"})
+				if(k.find(kind) != std::string::npos)
+					kinds.emplace_back(kind);
 		}
-		rig.run(2000);
-		// The firmware itself, past the desk: each imported pattern asked for directly
-		if(kinds.find("pattern") != std::string::npos)
+		bool playing = false;
+		if constexpr(std::is_same_v<R, Rig>)
 		{
-			auto& m = rig.machine();
-			const auto prev = m.onSysex;
-			std::optional<ed::MdPattern> got;
-			uint8_t want = 0;
-			m.onSysex = [&](const Bytes& _b) { if(auto p = ed::decodeMdPattern(_b); p && p->position == want) got = p; if(prev) prev(_b); };
-			size_t fwSame = 0;
-			std::string fwOff;
-			for(const auto& [s, p] : f.md.patterns)
+			playing = std::getenv("SYX_PLAYING") && std::string(std::getenv("SYX_PLAYING")) == "1";
+			if(playing)
 			{
-				got.reset();
-				want = s;
-				m.send(ed::mdPatternRequest(s));
-				for(int i = 0; i < 250 && !got; ++i)
-					rig.run(20);
-				if(got && ed::encodeMdPattern(*got) == ed::encodeMdPattern(p))
-					++fwSame;
-				else
-					fwOff += " p" + std::to_string(s + 1) + (got ? "" : "(no reply)");
+				rig.page(R"({"op":"play","id":990})");
+				rig.runUntil([&] { return rig.pageTelemetry().playing; }, 2000);
 			}
-			m.onSysex = prev;
-			std::printf("  the firmware itself: %zu of %zu patterns as in the file%s%s\n", fwSame, f.md.patterns.size(), fwOff.empty() ? "" : "; not:", fwOff.c_str());
-			check(fwSame == f.md.patterns.size(), "every imported pattern is in the firmware as in the file (asked directly)");
 		}
+		desk.setSysexTap([&job](const Bytes& _m) { job.onMachineSysex(_m); });
+		const auto why = job.start(kinds, {}, machineDocs(desk));
+		check(why.empty(), "the import starts" + (why.empty() ? std::string() : ": " + why));
+		const auto secs = [&] { return double(rig.machine().now()) / g_rate; };
+		using Phase = mdJucePlugin::SyxJob<MdSyxTraits>::Phase;
+		const double t0 = secs();
+		double sendAt = -1, readAt = -1;
+		std::optional<Value> last;
+		// the session steps every few ms while the machine takes input
+		rig.runUntil([&]
+		{
+			if(desk.lifecycle() == deskCore::Lifecycle::Ready)
+				if(auto p = job.step(desk.machine(), ms(rig.machine().now()), _hw))
+				{
+					g_contract(*p);
+					last = *p;
+				}
+			if(sendAt < 0 && job.phase() == Phase::Sending)
+				sendAt = secs();
+			if(readAt < 0 && job.phase() == Phase::Reading)
+				readAt = secs();
+			rig.run(4);
+			return !job.running();
+		}, 3600000);
+		const double t1 = secs();
+		std::printf("  import %s: read before %.1f s, sent in %.1f s, read back in %.1f s (emulated time)\n", _hw ? "over HW MIDI" : playing ? "while playing" : "stopped",
+			sendAt - t0, readAt - sendAt, t1 - readAt);
+		if constexpr(std::is_same_v<R, Rig>)
+			if(playing)
+			{
+				check(rig.pageTelemetry().playing, "the machine still plays after the import");
+				rig.page(R"({"op":"stop","id":991})");
+			}
+		check(last && last->find("phase")->asString() == "done", "the import ends with a report");
+		if(!last)
+			return;
+		std::printf("  report: %s\n", last->find("text")->asString().c_str());
+		const auto& report = *last->find("report");
+		int n = 0;
+		for(const auto& i : report.find("items")->asArray())
+			if(n++ < 24)
+				std::printf("    %s\n", i.find("text")->asString().c_str());
+		std::map<std::string, int> outcomes;
+		for(const auto& [item, o] : job.outcomes())
+			++outcomes[ed::syxOutcomeName(o)];
+		check(outcomes["no reply"] == 0, "every document of the file is read back (" + std::to_string(outcomes["no reply"]) + " without a reply)");
+		check(outcomes["taken"] > 0, "documents are imported (" + std::to_string(outcomes["taken"]) + ")");
+		if(std::getenv("SYX_EXPECT") && std::string(std::getenv("SYX_EXPECT")) == "all")
+			check(outcomes["ignored"] == 0 && outcomes["differs"] == 0 && outcomes["unknown"] == 0, "the machine took every document of the file");
+		// The page sees what the machine holds: every imported pattern, kit and song is the desk's document now.
 		size_t same = 0, total = 0;
-		std::vector<std::string> off;
-		const auto& v = desk.documents();
-		std::string offSlots;
-		const auto cmp = [&](const char* _k, const int _s, const Bytes& _a, const std::optional<Bytes>& _b)
+		std::string off;
+		const auto file = ed::parseSyx(bytes);
+		for(const auto& [item, o] : job.outcomes())
 		{
-			if(kinds.find(_k) == std::string::npos)
-				return;
+			if(o != ed::SyxOutcome::Taken || item.kind == ed::SyxKind::Global)
+				continue;
 			++total;
-			if(_b && *_b == _a)
-			{
+			const auto view = ed::syxCanonical(machineDocs(desk), item.kind, item.slot);
+			const auto want = ed::syxCanonical(file.md, item.kind, item.slot);
+			if(view == want)
 				++same;
-				return;
-			}
-			offSlots += " " + std::string(_k).substr(0, 1) + std::to_string(_s + 1);
-			if(off.size() < 8)
+			else if(off.size() < 80)
+				off += std::string(" ") + ed::syxKindName(item.kind) + std::to_string(item.slot + 1);
+		}
+		check(same == total, "the desk's documents are what the machine took (" + std::to_string(same) + " of " + std::to_string(total) + ")" + off);
+		check(desk.coreState().history().size() == 0, "an import is no undo step (the machine took a dump, nothing was edited)");
+		// B-026: the editor still plays the machine after the import (mutes and kit values are CCs on the base channel)
+		if constexpr(std::is_same_v<R, Rig>)
+		{
+			rig.runUntil([&] { return !desk.isBusy(); }, 3000);
+			rig.run(1000);
+			const auto m0 = rig.telemetry().mutes;
+			const int base = desk.documents().global ? desk.documents().global->baseChannel : -1;
+			const bool off = base > 12;
+			rig.page(R"({"op":"mute","t":2,"on":true,"id":993})");
+			const bool taken = resultOk(rig);
+			const bool landed = rig.runUntil([&] { return rig.telemetry().mutes >= 0 && (rig.telemetry().mutes & 0x0004); }, 2000);
+			std::printf("  after the import: base channel %d, mute %s, machine mutes %04x (before %04x)\n", base, taken ? "taken" : "refused", rig.telemetry().mutes, m0);
+			const auto shown = [&] { const auto* l = rig.machineDoc() ? rig.machineDoc()->find("desk")->find("mutes") : nullptr; bool m = false; if(l) for(const auto& v : l->asArray()) m |= int(v.asNumber()) == 2; return m; };
+			if(off)
 			{
-				std::string d;
-				if(_b)
-					for(size_t i = 0, n = 0; i < std::min(_a.size(), _b->size()) && n < 6; ++i)
-						if(_a[i] != (*_b)[i]) { char t[40]; std::snprintf(t, sizeof(t), " @%zu %02x->%02x", i, _a[i], (*_b)[i]); d += t; ++n; }
-				off.push_back(std::string(_k) + " " + std::to_string(_s + 1) + (_b ? d : " missing") + (_b && _a.size() != _b->size() ? " (size " + std::to_string(_a.size()) + "/" + std::to_string(_b->size()) + ")" : ""));
+				check(!taken && !landed, "base channel OFF: the page's mute is refused with the reason, not shown as taken");
 			}
-		};
-		for(const auto& [s, k] : f.md.kits) { const auto it = v.kits.find(s); cmp("kit", s, ed::encodeMdKit(k), it == v.kits.end() ? std::nullopt : std::optional<Bytes>(ed::encodeMdKit(it->second))); }
-		for(const auto& [s, p] : f.md.patterns) { const auto it = v.patterns.find(s); cmp("pattern", s, ed::encodeMdPattern(p), it == v.patterns.end() ? std::nullopt : std::optional<Bytes>(ed::encodeMdPattern(it->second))); }
-		for(const auto& [s, g] : f.md.songs) { const auto it = v.songs.find(s); cmp("song", s, ed::encodeMdSong(g), it == v.songs.end() ? std::nullopt : std::optional<Bytes>(ed::encodeMdSong(it->second))); }
-		if(f.md.globals.count(static_cast<uint8_t>(active)) && f.md.globals.at(static_cast<uint8_t>(active)).version == 6)
-			cmp("global", active, ed::encodeMdGlobal(f.md.globals.at(static_cast<uint8_t>(active))), v.global ? std::optional<Bytes>(ed::encodeMdGlobal(*v.global)) : std::nullopt);
-		std::printf("  %zu documents sent, %zu of %zu read back equal%s", sent, same, total, off.empty() ? "\n" : "; not equal:");
-		for(const auto& o : off) std::printf(" %s", o.c_str());
-		if(!offSlots.empty()) std::printf("\n  not equal:%s", offSlots.c_str());
-		if(!off.empty()) std::printf("\n");
-		// Measured on the AE backup (OS 1.2x era): its globals are format 5/1 (OS 1.63 stores 6/1, converting them),
-		// and two kit names hold bytes the contract's name does not carry; everything else is byte-exact.
-		check(total > 0 && same * 100 >= total * 98, "the imported documents read back from the firmware as in the file (" + std::to_string(same) + " of " + std::to_string(total) + ")");
-		check(desk.coreState().history().size() == 1, "the whole import is one undo step (" + std::to_string(desk.coreState().history().size()) + ")");
+			else
+			{
+				check(taken && landed, "after the import a page mute lands in the machine's mute set (base channel " + std::to_string(base + 1) + ")");
+				rig.page(R"({"op":"play","id":995})");
+				rig.runUntil([&] { return rig.pageTelemetry().playing; }, 2000);
+				rig.run(1500);
+				check((rig.telemetry().mutes & 0x0004) && shown(), "and stays muted while the machine plays");
+				rig.page(R"({"op":"stop","id":996})");
+				rig.run(400);
+				rig.page(R"({"op":"mute","t":2,"on":false,"id":994})");
+				rig.runUntil([&] { return rig.telemetry().mutes >= 0 && !(rig.telemetry().mutes & 0x0004); }, 2000);
+			}
+		}
+	}
+
+	// SYX_HW=1: over the HW MIDI engine (the plug-in's wire at DIN speed both ways), as a real Machinedrum.
+	void syxImport(const Bytes& _rom, const std::string& _romName, const std::string& _file)
+	{
+		std::puts("syx import (as is)");
+		std::ifstream in(_file, std::ios::binary);
+		if(_file.empty() || !in)
+		{
+			std::printf("  skip: no file (MD_SYX)%s\n", _file.empty() ? "" : (": " + _file + " not found").c_str());
+			return;
+		}
+		const Bytes bytes((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
+		const auto loaded = [](const mdDesk::Desk& _d) { return _d.isReady() && _d.documents().global && _d.documents().patterns.size() == 128 && _d.documents().kits.size() == 64 && _d.documents().songs.size() == 32; };
+		if(std::getenv("SYX_HW") && std::string(std::getenv("SYX_HW")) == "1")
+		{
+			HwRig rig(_rom, _romName);
+			rig.page(R"({"op":"ready"})");
+			rig.runUntil([&] { return loaded(rig.desk()); }, 900000);
+			std::printf("  over HW MIDI: %zu patterns, %zu kits, %zu songs read before the import\n", rig.desk().documents().patterns.size(), rig.desk().documents().kits.size(), rig.desk().documents().songs.size());
+			importWith(rig, bytes, _file, true);
+			return;
+		}
+		Rig rig(_rom, _romName);
+		rig.page(R"({"op":"ready"})");
+		rig.runUntil([&] { return loaded(rig.desk()); }, 60000);
+		importWith(rig, bytes, _file, false);
 	}
 
 	// P7: in a DAW the plug-in sends the host's transport and tempo as MIDI Start, clock and Stop; the
@@ -2152,6 +2243,203 @@ namespace
 				check(same && settled, std::string("Mix then Sound: a short drag ends where the model does (") + dr.group + ")");
 			}
 		}
+	}
+
+	// 0.3.5 (B-019, the contract widened to what the firmware takes): the MAP EDITOR's targets. A global with one
+	// note mapped to each value goes in as a dump (made active with 0x56), is read back, and the note is played: what
+	// the firmware keeps and what the note does (a track trig, a pattern, the transport) say what each value means.
+	void keymapRange(const Bytes& _rom, const std::string& _romName)
+	{
+		std::puts("== the MAP EDITOR's targets");
+		Machine m(_rom, _romName);
+		auto g = ed::decodeMdGlobal(m.request(ed::mdGlobalRequest(0), ed::g_mdGlobalDump));
+		require(g.has_value(), "global 0 read");
+		const uint8_t note = 120, channel = g->baseChannel;
+		g->position = 0;
+		g->trigMode = 1;	// START: a mapped pattern starts at once
+		g->syncFlags = 0;	// tempo in internal, CTRL IN on
+		const auto pattern = [&] { const auto s = ed::parseMdStatusResponse(m.request(ed::mdStatusRequest(ed::MdStatus::Pattern), 0x72)); return s ? int(s->value) : -1; };
+		const auto moving = [&] { const int a = m.playhead(); bool moved = false; for(int i = 0; i < 10; ++i) { m.run(50); moved |= m.playhead() != a; } return moved; };
+		std::vector<int> values;
+		for(int v = 0; v < 255; ++v)
+			if(v % 16 == 0 || v % 16 == 15 || (v >= 140 && v < 168) || v > 250)
+				values.push_back(v);
+		int taken = 0, lastPattern = -1, firstCtrl = -1, lastMeaningful = -1;
+		for(const int v : values)
+		{
+			m.send({0xfc});
+			m.send(ed::mdLoadPattern(0));
+			m.run(300);
+			auto gv = *g;
+			gv.keymap[note] = uint8_t(v);
+			m.send(ed::encodeMdGlobal(gv));
+			m.send(ed::mdSetActiveGlobal(0));
+			m.run(300);
+			const auto back = ed::decodeMdGlobal(m.request(ed::mdGlobalRequest(0), ed::g_mdGlobalDump));
+			const int stored = back ? int(back->keymap[note]) : -1;
+			const int before = pattern();
+			m.send({uint8_t(0x90 | channel), note, 100});
+			m.run(150);
+			m.send({uint8_t(0x80 | channel), note, 0});
+			const bool plays = moving();
+			const int after = pattern();
+			// and while playing (the transport targets): does the note stop it?
+			bool stops = false;
+			if(v >= 144)
+			{
+				m.send({0xfa});
+				m.run(300);
+				m.send({uint8_t(0x90 | channel), note, 100});
+				m.run(150);
+				m.send({uint8_t(0x80 | channel), note, 0});
+				stops = !moving();
+			}
+			// stopped in the middle of the pattern (a CONTINUE would play on from there)
+			if(v >= 144 && v < 148)
+			{
+				m.send({0xfa});
+				m.run(700);
+				m.send({0xfc});
+				m.run(200);
+				const int at = m.playhead();
+				m.send({uint8_t(0x90 | channel), note, 100});
+				m.run(150);
+				m.send({uint8_t(0x80 | channel), note, 0});
+				const bool resumes = moving();
+				std::printf("  target %3d: stopped at step %d: %s\n", v, at, resumes ? "plays" : "stays stopped");
+				m.send({0xfc});
+			}
+			std::printf("  target %3d: stored %3d, stopped: pattern %d -> %d, %s%s\n", v, stored, before, after, plays ? "plays" : "stays stopped",
+				v >= 144 ? (stops ? "; playing: stops" : "; playing: plays on") : "");
+			taken += stored == v;
+			if(after != before && after >= 0)
+			{
+				lastPattern = v;
+				check(after == v - 16, "target " + std::to_string(v) + " selects pattern " + std::to_string(v - 16));
+			}
+			if(v == ed::MdGlobal::g_keymapStart)
+				check(plays && !stops, "target 144 is START");
+			if(v == ed::MdGlobal::g_keymapStop)
+				check(!plays && stops, "target 145 is STOP");
+			if(v < 16)
+				check(after == before && !plays, "target " + std::to_string(v) + " is a track: no pattern, no transport");
+			if(v >= 144 && (plays || stops))
+			{
+				if(firstCtrl < 0)
+					firstCtrl = v;
+				lastMeaningful = v;
+			}
+		}
+		m.send({0xfc});
+		std::printf("  stored as sent: %d of %zu; last target that selects a pattern %d, transport targets %d-%d\n",
+			taken, values.size(), lastPattern, firstCtrl, lastMeaningful);
+		check(taken == int(values.size()), "the firmware keeps every target byte as sent");
+		check(lastPattern == 143, "targets 16-143 are the patterns A01-H16");
+		check(firstCtrl == ed::MdGlobal::g_keymapStart && lastMeaningful == ed::MdGlobal::g_keymapStop, "the transport targets are 144-145");
+	}
+
+	// 0.3.5, the Song page's playhead: the song row the page is told (telemetry songRow, RAM 0x2b18f5) is the row the
+	// machine plays. A song A02, A03 x2, A04, LOOP to row 2 (forever), END, short patterns, SONG mode, PLAY: at
+	// the middle of each pattern pass the row's pattern is the pattern that plays, and the rows go 1 2 2 3, then
+	// round the loop 2 2 3 2 2 3 (one-based). The page marks a row only while the machine plays in SONG mode.
+	void songRow(const Bytes& _rom, const std::string& _romName)
+	{
+		std::puts("song row: the Song page's playhead");
+		Rig rig(_rom, _romName);
+		rig.page(R"({"op":"ready"})");
+		rig.runUntil([&] { return rig.desk().isInputReady() && rig.desk().linkState().pattern; }, 5000);
+		auto& m = rig.machine();
+		const auto base = rig.readPattern(0);
+		require(base.has_value(), "no pattern A01");
+		for(uint8_t s = 1; s < 4; ++s)
+		{
+			auto p = *base;
+			p.position = s;
+			p.length = 8;
+			p.trigs.fill(0);
+			p.lockMasks.fill(0);
+			p.trigs[s] = 0x11;
+			m.send(ed::encodeMdPattern(p));
+		}
+		ed::MdSong song;
+		song.position = 6;
+		const auto row = [](const uint8_t _pattern, const uint8_t _repeats, const uint8_t _target = 0)
+		{
+			ed::MdSongRow r;
+			r.pattern = _pattern;
+			r.repeats = _repeats;
+			r.target = _target;
+			r.end = 8;
+			return r;
+		};
+		song.rows = {row(1, 0), row(2, 1), row(3, 0), row(ed::MdSongRow::g_loopRow, 0, 1), row(ed::MdSongRow::g_endRow, 0)};
+		m.send(ed::encodeMdSong(song));
+		m.send(ed::mdLoadSong(6));
+		rig.run(300);
+		rig.page(R"({"op":"seqMode","song":true,"id":1})");
+		rig.runUntil([&] { const auto* d = rig.machineDoc() ? rig.machineDoc()->find("songMode") : nullptr; return d && d->isBool() && d->asBool(); }, 3000);
+		rig.page(R"({"op":"play","id":2})");
+		// the middle of each pass (step 3) and its last step (7): the RAM byte has queued the next row by then
+		// (two steps early), the page is still told the row heard
+		std::vector<int> rows, patterns, lateRows;
+		int lastStep = -1;
+		for(int i = 0; i < 4000 && rows.size() < 10; ++i)
+		{
+			rig.run(5);
+			const auto t = rig.pageTelemetry();
+			if(t.playing && t.step == 3 && lastStep != 3)
+			{
+				rows.push_back(t.songRow);
+				patterns.push_back(m.read8(0x28d205));
+			}
+			if(t.playing && t.step == 7 && lastStep != 7 && !rows.empty())
+				lateRows.push_back(t.songRow);
+			lastStep = t.step;
+		}
+		bool late = !lateRows.empty();
+		for(size_t k = 0; k < lateRows.size() && k < rows.size(); ++k)
+			late = late && lateRows[k] == rows[k];
+		check(late, "at the last step of each pass the page is still told that pass's row (the RAM byte runs two steps ahead)");
+		std::string seen;
+		bool match = rows.size() == 10;
+		for(size_t k = 0; k < rows.size(); ++k)
+		{
+			seen += " " + std::to_string(rows[k] + 1) + "(" + ed::mdPatternName(static_cast<uint8_t>(patterns[k])) + ")";
+			match = match && rows[k] >= 0 && rows[k] < 3 && song.rows[static_cast<size_t>(rows[k])].pattern == patterns[k];
+		}
+		std::printf("  rows (one-based) at each pass, with the pattern that plays:%s\n", seen.c_str());
+		check(match, "the row the page is told is the row whose pattern plays, at every pass");
+		check(rows == std::vector<int>{0, 1, 1, 2, 1, 1, 2, 1, 1, 2}, "the rows go 1 2 2 3, then round the loop (LOOP to row 2) 2 2 3 2 2 3 2");
+		rig.page(R"({"op":"stop","id":3})");
+		rig.run(600);
+		check(!rig.pageTelemetry().playing, "STOP: the page is told the machine stopped (no row is marked then)");
+		std::printf("  after STOP: songRow %d\n", rig.pageTelemetry().songRow);
+		// 0.3.5: an edit of the machine's song is heard without Reload song. Stopped in SONG mode: row 1 becomes A08;
+		// the desk loads the song again by itself (MdMachine::pumpSongReload), and PLAY plays A08 first.
+		rig.page(R"({"op":"stop","id":5})");	// STOP twice: the song from its first row
+		rig.run(300);
+		rig.page(R"({"op":"selectSong","s":6,"id":6})");
+		rig.runUntil([&] { return rig.desk().documents().songs.count(6) > 0; }, 4000);
+		const auto loads = rig.messageKinds[0x6c];
+		rig.page(R"({"op":"rowSet","s":6,"i":0,"row":{"kind":"pattern","pattern":7,"repeats":0,"start":0,"end":8,"tempo":null,"mutes":[]},"id":7})");
+		const bool needed = rig.runUntil([&] { return rig.desk().linkState().songReloadNeeded; }, 1500);
+		const bool reloaded = rig.runUntil([&] { return !rig.desk().linkState().songReloadNeeded; }, 4000);
+		check(needed && reloaded && rig.messageKinds[0x6c] > loads, "stopped in SONG mode: the edited song is loaded again by the desk (LOAD SONG), no Reload song");
+		rig.page(R"({"op":"play","id":8})");
+		int first = -1;
+		for(int i = 0; i < 1000 && first < 0; ++i)
+		{
+			rig.run(5);
+			const auto t = rig.pageTelemetry();
+			if(t.playing && t.step == 3)
+				first = m.read8(0x28d205);
+		}
+		std::printf("  after the edit, PLAY plays %s first\n", first >= 0 ? ed::mdPatternName(static_cast<uint8_t>(first)).c_str() : "nothing");
+		check(first == 7, "and PLAY plays the edited row (A08) without pressing Reload song");
+		rig.page(R"({"op":"stop","id":9})");
+		rig.run(600);
+		rig.page(R"({"op":"seqMode","song":false,"id":4})");
+		rig.run(400);
 	}
 
 	void hostClock(const Bytes& _rom, const std::string& _romName)
@@ -3230,7 +3518,7 @@ int main(const int _argc, char** _argv)
 	std::setvbuf(stdout, nullptr, _IOLBF, 0);
 	if(_argc < 2)
 	{
-		std::puts("usage: mdDeskFirmwareTest <MD-1.63-ROM> [probe|hw|p4|tweak|sampler|keepedits|recordermix|samples|gen|hostclock|playload|syximport]");
+		std::puts("usage: mdDeskFirmwareTest <MD-1.63-ROM> [probe|hw|p4|tweak|sampler|keepedits|recordermix|samples|gen|hostclock|songrow|playload|syxexport|syximport|keymap]");
 		return 77;
 	}
 	try
@@ -3260,9 +3548,15 @@ int main(const int _argc, char** _argv)
 			std::printf("mdDeskFirmwareTest p4: %s (%d failure(s))\n", g_failures ? "FAIL" : "PASS", g_failures);
 			return g_failures ? 1 : 0;
 		}
+		if(mode == "syxexport")
+		{
+			syxExport(rom, _argv[1], std::getenv("SYX_EXPORT_TO") ? std::getenv("SYX_EXPORT_TO") : "md-export.syx");
+			std::printf("mdDeskFirmwareTest syxexport: %s (%d failure(s))\n", g_failures ? "FAIL" : "PASS", g_failures);
+			return g_failures ? 1 : 0;
+		}
 		if(mode == "syximport")
 		{
-			syxImport(rom, _argv[1], _argc > 3 ? _argv[3] : "/Users/radek/Downloads/AE_LIVE_ELEKTRONS_BACKUP_010308/md010308.syx");
+			syxImport(rom, _argv[1], _argc > 3 ? _argv[3] : std::getenv("MD_SYX") ? std::getenv("MD_SYX") : "");
 			check(g_contract.loaded() && g_contract.bad() == 0, g_contract.summary());
 			std::printf("mdDeskFirmwareTest syximport: %s (%d failure(s))\n", g_failures ? "FAIL" : "PASS", g_failures);
 			return g_failures ? 1 : 0;
@@ -3350,6 +3644,19 @@ int main(const int _argc, char** _argv)
 			plockTiming(rig, mode == "plocktiming-strict");
 			check(g_contract.loaded() && g_contract.bad() == 0, g_contract.summary());
 			std::printf("mdDeskFirmwareTest %s: %s (%d failure(s))\n", mode.c_str(), g_failures ? "FAIL" : "PASS", g_failures);
+			return g_failures ? 1 : 0;
+		}
+		if(mode == "keymap")
+		{
+			keymapRange(rom, _argv[1]);
+			std::printf("mdDeskFirmwareTest keymap: %s (%d failure(s))\n", g_failures ? "FAIL" : "PASS", g_failures);
+			return g_failures ? 1 : 0;
+		}
+		if(mode == "songrow")
+		{
+			songRow(rom, _argv[1]);
+			check(g_contract.loaded() && g_contract.bad() == 0, g_contract.summary());
+			std::printf("mdDeskFirmwareTest songrow: %s (%d failure(s))\n", g_failures ? "FAIL" : "PASS", g_failures);
 			return g_failures ? 1 : 0;
 		}
 		if(mode == "hostclock")

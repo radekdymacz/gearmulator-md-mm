@@ -42,6 +42,10 @@ namespace md
 		// MM-P8: BANK GROUP (patch RAM): 0 A-D, 1 E-H. The BANK GROUP key toggles it; a SysEx LOAD
 		// PATTERN leaves it.
 		static constexpr uint32_t g_bankGroupAddress = 0x70000b;
+		// 0.3.5 (mmEditorProbeFirmwareTest songrow, mmDeskFirmwareTest songrow): the song row the sequencer plays,
+		// one byte, the row index 0-199 of the loaded song while it plays in SONG mode (a LOOP row is never
+		// "played"). Pattern mode leaves it as it was: read it with the sequencer mode.
+		static constexpr uint32_t g_songRowAddress = 0x2bdba1;
 		// Patch RAM: 0x700023 is the current kit number, 0x700028 the working kit
 		// (the kit dump's raw payload, 698 bytes, unsaved edits included).
 		static constexpr uint32_t g_workingKitAddress = 0x700023;
@@ -72,6 +76,7 @@ namespace md
 		std::atomic<int> mutes{-1};			// bit t: synth track t (0-5), MIDI track t - 6 (6-11); -1 = unknown
 		std::atomic<int> recording{-1};		// 0 off, 1 grid, 2 live; -1 = unknown
 		std::atomic<int> bankGroup{-1};		// 0 A-D, 1 E-H; -1 = unknown
+		std::atomic<int> songRow{-1};		// the song row that plays (SONG mode); -1 = unknown
 		std::atomic<int> chainActive{-1};	// 1 a chain plays (pattern mode), 0 none; -1 = unknown
 		std::atomic<int> chainNext{-1};
 		std::atomic<int> chainLength{0};
@@ -136,6 +141,7 @@ namespace md
 				if(_read8(g_midiMuteAddress + 4 * t)) m |= 1 << (t + 6);
 			}
 			mutes.store(m, std::memory_order_relaxed);
+			songRow.store(_read8(g_songRowAddress), std::memory_order_relaxed);
 			recording.store(_read8(g_liveRecordAddress) ? 2 : _read8(g_gridRecordAddress) ? 1 : 0, std::memory_order_relaxed);
 			{
 				const auto group = _read8(g_bankGroupAddress);
@@ -174,6 +180,7 @@ namespace md
 			mutes.store(-1, std::memory_order_relaxed);
 			recording.store(-1, std::memory_order_relaxed);
 			bankGroup.store(-1, std::memory_order_relaxed);
+			songRow.store(-1, std::memory_order_relaxed);
 			chainActive.store(-1, std::memory_order_relaxed);
 			chainNext.store(-1, std::memory_order_relaxed);
 			chainLength.store(0, std::memory_order_relaxed);

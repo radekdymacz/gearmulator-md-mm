@@ -88,7 +88,7 @@ document.addEventListener("click",e=>{if(e.target.closest("#allon"))unmuteAll()}
 
 /* ---- tap tempo (manual p.36's TAP): the average of the last taps; live recording: RECORD + PLAY ---- */
 const TAP=[];
-function tapTempo(){const now=performance.now();if(TAP.length&&now-TAP[TAP.length-1]>2000)TAP.length=0;TAP.push(now);if(TAP.length>5)TAP.shift();
+function tapTempo(){if(tempoLocked()){TAP.length=0;return}const now=performance.now();if(TAP.length&&now-TAP[TAP.length-1]>2000)TAP.length=0;TAP.push(now);if(TAP.length>5)TAP.shift();
  if(TAP.length<2){toast("Tap tempo: keep tapping B");return}S.bpm=clamp(Math.round(60000/((TAP[TAP.length-1]-TAP[0])/(TAP.length-1))*10)/10,30,300);if(HOST.tempo)HOST.tempo(S.bpm);renderTop();if(S.playing)restartClock();toast("Tap tempo: "+S.bpm.toFixed(1)+" BPM")}
 function liveRecord(){if(HOST.record)return HOST.record(true);S.rec=!S.rec;if(S.rec&&!S.playing)togglePlay();renderTop();if(S.rec)toast("LIVE RECORDING: the notes you play are recorded.")}
 

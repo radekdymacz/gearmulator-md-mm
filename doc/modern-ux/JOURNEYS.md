@@ -53,6 +53,7 @@ no journey yet); **not testable** (why). "—": the editor has no such feature.
 | Workspace keys 1-5 | md-keys-workspaces PASS | mm-keys-workspaces PASS |
 | ? keyboard view (K-view, 2026-10-08: the drawn keyboard, the ⌥ layer, a key's words, the search; MM: the list until K7) | md-keys-help PASS | mm-keys-help PASS |
 | Undo / Redo keys and Cmd+Z, Cmd+Shift+Z | md-top-undo-redo PASS | mm-top-undo-redo PASS |
+| The editor's menu in the page (I-008): right-click the header and the rail, submenu by keys, Zoom, Updates › Check Daily | md-top-editor-menu PASS | mm-top-editor-menu PASS |
 | Undo works over the library | md-lib-kit-copy-paste-undo PASS | mm-lib-kit-copy-paste-undo PASS |
 | Questions: start on Cancel, Esc answers Cancel | md-dialog-esc-space-cancel PASS | mm-dialog-esc-cancel PASS |
 | Space presses the dialog's focused button (0.3.0) | md-dialog-esc-space-cancel PASS | mm-dialog-keys-behind PASS |
@@ -66,7 +67,7 @@ no journey yet); **not testable** (why). "—": the editor has no such feature.
 | M mutes the selected track, Alt+M every track, 0 unmutes all | md-keys-mute PASS | mm-keys-mute PASS |
 | Window fits the screen, remembers its size; top bar fits 1280 px | not testable: the window size is the host's | same |
 | MIDI mapping (Control workspace, LEARN) | skipped: hidden by design until the controller feature exists | same |
-| SysEx import / export | not testable: native file chooser | same |
+| SysEx import | md-lib-syx-import (with GEARMULATOR_MDMM_SYX_FILE: the file the native chooser would give; kits, as from a cable, read back) | mm-lib-syx-import (the same, on SYSEX RECV) |
 
 ## Sequence
 
@@ -92,6 +93,7 @@ no journey yet); **not testable** (why). "—": the editor has no such feature.
 | GRID RECORDING (MM RECORD stopped) | — | mm-seq-grid-record PASS (bug 4, fixed; see note 2) |
 | LEN on LCD line 2 | — | mm-seq-len PASS |
 | Arpeggiator dock | — | mm-seq-arp PASS |
+| Arpeggiator RNGE to the machine's end (9 OCT, range 8: 0.3.5), kept | — | mm-seq-arp-range |
 | Clickable transpose keyboard | — | mm-seq-transpose-keyboard PASS |
 | SYNTH / MIDI side switch | — | mm-sound-midi-side PASS (Sound) |
 
@@ -115,7 +117,7 @@ no journey yet); **not testable** (why). "—": the editor has no such feature.
 | Copy / paste a sound | md-sound-copy-paste PASS | mm-sound-copy-paste PASS |
 | Screens (curve editors): drag a handle | md-sound-screen-drag PASS | mm-sound-screen-drag PASS |
 | Control All (Alt-drag), one undo step | md-sound-control-all PASS | mm-sound-control-all PASS |
-| The FN key (K4): FN, then a plain drag is Control All; latch, Esc | md-fn-control-all PASS | — (K7) |
+| The GLOBAL key in the top bar (where FN was until 0.3.5): opens the panel, lit, Esc closes | md-global-key | — (the Monomachine Editor has no GLOBAL panel) |
 
 ## Mix
 
@@ -151,6 +153,7 @@ no journey yet); **not testable** (why). "—": the editor has no such feature.
 | Audition a sample | md-sampler-audition PASS | — |
 | Load a WAV / AIFF and audition it before keeping it | not testable: native file chooser | — |
 | RAM view steps; freeze / live | md-sampler-ram-view PASS | — |
+| Chops right after Set up sampling keep RAM-R / RAM-P (B-025) | md-sampler-setup-chop PASS | — |
 | POLY | — | mm-perform-poly PASS |
 | MULTI TRIG mode | — | mm-perform-multi-trig PASS |
 | MULTI MAP: split and delete a range | — | mm-perform-multi-map PASS |
@@ -170,6 +173,9 @@ no journey yet); **not testable** (why). "—": the editor has no such feature.
 | Clear a pattern slot (with its question), undo | md-lib-pattern-clear-undo PASS | mm-lib-pattern-clear-undo PASS |
 | GLOBAL: a setting read back (TEMPO OUT) | md-global-tempo-out PASS | — (MM globals: the Perform and Mix journeys) |
 | GLOBAL › ROUTING fits its dialog, a route read back | md-global-routing PASS | — |
+| Song page: PATTERN | SONG switch, lit from the machine's status (0.3.5) | md-song-mode | mm-song-mode |
+| Song page: the song playhead (the row the machine plays, from RAM), What plays, PAT/SONG on the LCD (0.3.5) | md-song-playhead | mm-song-playhead |
+| GLOBAL › Map a note: a note to a pattern of bank C-H and to STOP (the MAP EDITOR's 16-145, 0.3.5), read back | md-global-map-note | — |
 
 ## Bugs the journeys found (all four fixed on this branch)
 

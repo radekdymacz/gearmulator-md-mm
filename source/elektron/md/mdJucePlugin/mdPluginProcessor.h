@@ -1,6 +1,7 @@
 #pragma once
 
 #include "jucePluginEditorLib/pluginProcessor.h"
+#include "mdBootDiagnostics.h"
 #include "mdLib/mdtypes.h"
 #include "synthLib/performanceReport.h"
 
@@ -55,6 +56,13 @@ namespace mdJucePlugin
 				m_ramRecordingMode.load(std::memory_order_relaxed));
 		}
 		bool isRamRecordingModeAvailable();
+		// B-030: the host's tempo as its playhead reports it (also while its transport is stopped), 0 when no
+		// host reports one (the standalone app). Any thread.
+		double getHostBpm() const { return m_hostBpm.load(std::memory_order_relaxed); }
+		void processBpm(float _bpm) override { m_hostBpm.store(_bpm, std::memory_order_relaxed); }
+		// B-035: the host's audio calls counted, the start-up log's lines and the rates (mdBootDiagnostics.h)
+		void processBlockStarted(int _frames, bool _bypassed) override;
+		BootDiagnostics& bootDiagnostics() { return m_boot; }
 		// The Machinedrum/Monomachine Editors' setup and session (mdDeskHost.h, doc/modern-ux/UPSTREAM.md).
 		class DeskHost* getDeskHost() const { return m_desk.get(); }
 
@@ -98,6 +106,12 @@ namespace mdJucePlugin
 		std::atomic<uint8_t> m_ramRecordingMode{
 			static_cast<uint8_t>(md::RamRecordingMode::Original)};
 		bool m_ramRecordingModeChunkSeen = false;
+		std::atomic<double> m_hostBpm{0.0};
+		BootDiagnostics m_boot;
+		void recordBoot();
+		int m_bootTicks = 0;
+		const double m_bootStartMs = juce::Time::getMillisecondCounterHiRes();
+		std::string m_bootRom;
 		std::unique_ptr<class DeskHost> m_desk;
 		JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(AudioPluginAudioProcessor)
 	};

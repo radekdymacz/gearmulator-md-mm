@@ -972,7 +972,7 @@ namespace elektronData
 			if(k.isNull())
 				g.keymap[n] = MdGlobal::g_unmapped;
 			else
-				keymap.toInteger(k, keymap.path(std::to_string(n)), g.keymap[n], 0, 31);
+				keymap.toInteger(k, keymap.path(std::to_string(n)), g.keymap[n], 0, 254);
 		}
 		const auto other = in.child("settings");
 		other.integer("unused", g.unused, 0, 127);

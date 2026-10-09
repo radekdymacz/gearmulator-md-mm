@@ -144,7 +144,7 @@ namespace mmDesk
 			{"load", &MmMachine::cmdLoad}, {"select", &MmMachine::cmdSelect}, {"loadKit", &MmMachine::cmdLoadKit},
 			{"saveKit", &MmMachine::cmdSaveKit}, {"loadSong", &MmMachine::cmdLoadSong}, {"saveSong", &MmMachine::cmdSaveSong},
 			{"tempo", &MmMachine::cmdTempo}, {"play", &MmMachine::cmdPlay}, {"stop", &MmMachine::cmdStop},
-			{"mute", &MmMachine::cmdMute}, {"followHost", &MmMachine::cmdFollowHost}, {"muteMidi", &MmMachine::cmdMuteMidi},
+			{"mute", &MmMachine::cmdMute}, {"seqMode", &MmMachine::cmdSeqMode}, {"followHost", &MmMachine::cmdFollowHost}, {"muteMidi", &MmMachine::cmdMuteMidi},
 			{"poly", &MmMachine::cmdPoly}, {"record", &MmMachine::cmdRecord}, {"hwSend", &MmMachine::cmdHwSend},
 			{"chain", &MmMachine::cmdChain}, {"chainClear", &MmMachine::cmdChainClear},
 			{"noteOn", &MmMachine::cmdNoteOn}, {"noteOff", &MmMachine::cmdNoteOff}};
@@ -255,6 +255,8 @@ namespace mmDesk
 		if(m_playing)
 			return refuse("The machine loads a song only while stopped.");
 		m_port.sendSysex(ed::mmLoadSong(static_cast<uint8_t>(s)));
+		if(s == m_curSong)
+			m_songReloadNeeded = false;
 		requestStatus();	// the current song is what the machine reports
 		m_lastStatusMs = now();
 		return ok();
@@ -344,9 +346,28 @@ namespace mmDesk
 		return ok("The machine follows the host's tempo and transport (GLOBAL " + std::to_string(ref.slot + 1) + ": MIDI SYNC CLOCK IN, TRANSPORT IN)");
 	}
 
-	Outcome MmMachine::cmdMute(const Value& _m, const Documents&)
+	// 0.3.5: the Song page's PATTERN | SONG switch: SET STATUS 0x10 (in the MM's Appendix C: over HW MIDI too), then
+	// the status asked for; the page shows the machine's answer
+	Outcome MmMachine::cmdSeqMode(const Value& _m, const Documents&)
+	{
+		const bool song = flag(_m, "song");
+		m_port.sendSysex(ed::mmSetStatus(ed::MmStatus::SongMode, song ? 1 : 0));
+		m_port.sendSysex(ed::mmStatusRequest(ed::MmStatus::SongMode));
+		return ok(song ? "SONG mode: the machine plays the song." : "PATTERN mode: the machine plays the pattern.");
+	}
+
+	Outcome MmMachine::cmdMute(const Value& _m, const Documents& _view)
 	{
 		const auto t = num(_m, "t");
+		// B-026: a mute is the track's CC on the machine's channels: none when the base channel is OFF, and then the
+		// page must not show a mute the machine never took
+		if(const auto* g = activeGlobal(_view, m_curGlobal); g && g->baseChannel > 15)
+			return refuse("The machine's MIDI base channel is OFF (GLOBAL " + std::to_string(g->position + 1)
+				+ "): it takes no mutes, notes or sound values over MIDI. GLOBAL › MIDI › CHANNELS on the machine.");
+		else if(g && (t >= g->channelSpan || g->baseChannel + t > 15))
+			// measured with a 2008 backup's global (CHANNEL SPAN 0): T3's mute CC muted T1
+			return refuse("T" + std::to_string(t + 1) + " has no MIDI channel of its own: CHANNEL SPAN is " + std::to_string(g->channelSpan)
+				+ " (GLOBAL › MIDI › CHANNELS), so the machine takes no mute for it over MIDI.");
 		const bool mute = flag(_m, "on");
 		m_port.sendParam(static_cast<uint8_t>(t), 8, 0, mute ? 1 : 0);
 		m_expectMute[static_cast<size_t>(t)] = deskCore::FieldExpectation<bool>::sent(mute, clock());

@@ -44,10 +44,21 @@ namespace jucePluginEditorLib
 			return true;
 		}
 
-		// A size the user gave the window (not one fitToScreen made).
-		static void persistSize(const PluginEditorState& _state, juce::PropertiesFile& _config, const int _width, const int _height)
+		// B-016: the window is in full screen (macOS: its own space; Windows: maximised, JUCE's isFullScreen) or
+		// minimised. The operating system sized it: it is not fitted to the visible area (that would take it
+		// out of full screen, or move a maximised window off its place) and not remembered as the user's size.
+		static bool sizedBySystem(const juce::Component& _window)
 		{
-			if(!freeSize(_state))
+			const auto* top = _window.getTopLevelComponent();
+			const auto* peer = top ? top->getPeer() : nullptr;
+			return peer && (peer->isFullScreen() || peer->isMinimised());
+		}
+
+		// A size the user gave the window (not one fitToScreen made, nor full screen).
+		static void persistSize(const juce::Component& _window, const PluginEditorState& _state, juce::PropertiesFile& _config,
+			const int _width, const int _height)
+		{
+			if(!freeSize(_state) || sizedBySystem(_window))
 				return;
 			_config.setValue("windowWidth", _width);
 			_config.setValue("windowHeight", _height);
@@ -71,7 +82,7 @@ namespace jucePluginEditorLib
 				return;
 			}
 			auto* top = _window.getTopLevelComponent();
-			if(!top || top == &_window || !top->isOnDesktop())
+			if(!top || top == &_window || !top->isOnDesktop() || sizedBySystem(_window))
 				return;
 			const auto bounds = top->getScreenBounds();
 			const auto* display = juce::Desktop::getInstance().getDisplays().getDisplayForRect(bounds);

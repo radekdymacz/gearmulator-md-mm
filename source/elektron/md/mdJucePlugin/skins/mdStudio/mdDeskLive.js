@@ -132,6 +132,7 @@ const TAP = [];
 Keys.bind({ id: "tap-tempo", short: "Tap / Tap", scope: "any", keys: ["T", "B"], group: "Transport", does: "Tap tempo (the average of the last taps; B as in the Monomachine Editor)", when: () => kbOn(), run: () => {
 	const now = performance.now(); if (TAP.length && now - TAP[TAP.length - 1] > 2000) TAP.length = 0;
 	TAP.push(now); if (TAP.length > 5) TAP.shift();
+	if (hostTempoRefused()) { TAP.length = 0; return; }
 	if (TAP.length >= 2) { const bpm = clamp(Math.round(60000 / ((TAP[TAP.length - 1] - TAP[0]) / (TAP.length - 1)) * 10) / 10, 30, 300); cmd("tempo", { bpm }, "tempo", [[["bpm"], bpm]]); renderTop(); toast("Tap tempo: " + bpm.toFixed(1) + " BPM"); }
 	else toast("Tap tempo: keep tapping T");
 } });
@@ -175,12 +176,16 @@ function tweakEditor(to, vals) {
 	return true;
 }
 
-/* ===== The editor's menu (skins, GUI scale, settings): right-click an empty part of the header
-   (P4; the standalone also has it in the native menu bar). ===== */
+/* ===== The editor's menu (zoom, updates, the log folder, Developer): right-click anywhere the page has no menu of
+   its own (DeskMenu.wantsEditor; P4; the standalone also has it in the native menu bar). I-008: the plug-in sends its entries (editorMenu), the
+   page draws them where it was right-clicked (DeskMenu.showEditor, shared/deskMenu.js). ===== */
+let editorMenuAt = { x: 24, y: 24 };
+function openEditorMenu(x, y) { editorMenuAt = { x, y }; Bridge.send({ op: "openMenu" }); }
 document.addEventListener("contextmenu", e => {
-	if (!e.target.closest(".top") || e.target.closest("button,[role=slider],[role=button],select,input,b,.lcdpanel")) return;
-	e.preventDefault(); Bridge.send({ op: "openMenu" });
+	if (!DeskMenu.wantsEditor(e)) return;
+	e.preventDefault(); openEditorMenu(e.clientX, e.clientY);
 });
+Bridge.onMessage(m => { if (m.type === "editorMenu") DeskMenu.showEditor(m, editorMenuAt.x, editorMenuAt.y, c => Bridge.send(c)); });
 
 /* The pattern chain (manual p.37) is made in the Song page's palette, CHAIN (mdDeskSong.js renderSong,
    chainFooter); what the machine plays (playsOf) shows in its header. A new chain or sequencer mode

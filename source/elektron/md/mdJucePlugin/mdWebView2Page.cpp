@@ -55,10 +55,32 @@ namespace mdJucePlugin
 			userDataFolder = std::move(_userDataFolder);
 		}
 
+		// B-022: GEARMULATOR_MDMM_WEBVIEW2_TEST=old acts as an old runtime would (no ICoreWebView2Settings3), =fail as a
+		// machine without one (the environment refused): the start tests check both ways (scripts/windows/smoke_mdmm.ps1).
+		static juce::String testMode() { return juce::SystemStats::getEnvironmentVariable("GEARMULATOR_MDMM_WEBVIEW2_TEST", {}); }
+
 		// After the owner holds this Impl: the loader may call back before it returns.
 		void start()
 		{
+			// B-022: which runtime this machine has, before anything else (a Windows 10 with an old or no runtime)
+			LPWSTR version = nullptr;
+			const auto vhr = GetAvailableCoreWebView2BrowserVersionString(nullptr, &version);
+			const auto runtime = takeString(version);
+			if(FAILED(vhr) || runtime.isEmpty())
+				event("WebView2 runtime: none found (" + hresultText(vhr) + ")");
+			else
+			{
+				int order = 0;
+				const auto older = SUCCEEDED(CompareBrowserVersions(runtime.toWideCharPointer(), juce::String(g_minimumRuntime).toWideCharPointer(), &order)) && order < 0;
+				event("WebView2 runtime " + runtime + " (the editors need " + g_minimumRuntime + " or newer" + (older ? ": this one is OLDER" : "") + ")");
+			}
+			if(testMode() == "fail")
+			{
+				fail("the WebView2 environment was not created (test: GEARMULATOR_MDMM_WEBVIEW2_TEST=fail)");
+				return;
+			}
 			userDataFolder.createDirectory();
+			event("WebView2 user data: " + userDataFolder.getFullPathName());
 			const auto folder = userDataFolder.getFullPathName();
 			juce::Component::SafePointer<WebView2Page> safe(&owner);
 			const auto hr = CreateCoreWebView2EnvironmentWithOptions(nullptr, folder.toWideCharPointer(), nullptr,
@@ -74,12 +96,16 @@ namespace mdJucePlugin
 							return S_OK;
 						}
 						self.environment = _env;
-						self.event("WebView2 environment ready");
+						LPWSTR used = nullptr;
+						_env->get_BrowserVersionString(&used);
+						self.event("WebView2 environment ready (" + hresultText(_result) + "), runtime " + takeString(used));
 						self.createController();
 						return S_OK;
 					}).Get());
 			if(FAILED(hr))
 				fail("no WebView2 runtime (" + hresultText(hr) + ")");
+			else
+				event("WebView2 environment asked for (" + hresultText(hr) + ")");
 		}
 
 		~Impl() override
@@ -104,6 +130,8 @@ namespace mdJucePlugin
 			failed = true;
 			juce::Logger::writeToLog("Gearmulator editor page: " + _why);
 			event(_why);
+			if(callbacks.onFailed)
+				callbacks.onFailed(_why);
 			owner.repaint();
 		}
 
@@ -137,9 +165,18 @@ namespace mdJucePlugin
 						self.creating = false;
 						if(FAILED(_result) || _controller == nullptr)
 						{
+							// B-022: E_ABORT when the parent window went while the controller was being made (the
+							// standalone makes its window again while it starts): made again in the new one, a few times
+							if(_result == E_ABORT && ++self.controllerRetries <= g_controllerRetries)
+							{
+								self.event("the WebView2 controller was not created (" + hresultText(_result) + ", its window was made again): trying again");
+								juce::Timer::callAfterDelay(100, [safe] { if(safe != nullptr) safe->m_impl->createController(); });
+								return S_OK;
+							}
 							self.fail("the WebView2 controller was not created (" + hresultText(_result) + ")");
 							return S_OK;
 						}
+						self.event("WebView2 controller ready (" + hresultText(_result) + ")");
 						self.controller = _controller;
 						self.controller->get_CoreWebView2(&self.webView);
 						if(self.webView == nullptr)
@@ -166,9 +203,13 @@ namespace mdJucePlugin
 				settings->put_IsZoomControlEnabled(FALSE);	// the plug-in sets the zoom (the page's design width)
 				settings->put_AreDevToolsEnabled(MDMM_DIAGNOSTICS ? TRUE : FALSE);
 				ComPtr<ICoreWebView2Settings3> settings3;
-				// F5, Ctrl+R, Ctrl+P, Ctrl+F...: the browser's, not the editor's (a reload would restart the page)
-				if(SUCCEEDED(settings.As(&settings3)) && settings3)
+				// F5, Ctrl+R, Ctrl+P, Ctrl+F...: the browser's, not the editor's (a reload would restart the page). B-022:
+				// a runtime older than 1.0.864 has no ICoreWebView2Settings3: the page works, those keys stay the browser's.
+				const auto qi = testMode() == "old" ? E_NOINTERFACE : settings.As(&settings3);
+				if(SUCCEEDED(qi) && settings3)
 					settings3->put_AreBrowserAcceleratorKeysEnabled(FALSE);
+				else
+					event("ICoreWebView2Settings3 not available (" + hresultText(qi) + "): an older runtime; the browser keys stay on");
 			}
 
 			webView->add_NavigationStarting(Callback<ICoreWebView2NavigationStartingEventHandler>(
@@ -245,6 +286,8 @@ namespace mdJucePlugin
 			updateBounds();
 			updateVisibility();
 			event("WebView2 ready");
+			if(focusWanted)
+				focus();
 			if(url.isNotEmpty())
 				webView->Navigate(url.toWideCharPointer());
 			for(const auto& s : scripts)
@@ -273,6 +316,20 @@ namespace mdJucePlugin
 		{
 			webView->ExecuteScript(_script.toWideCharPointer(), Callback<ICoreWebView2ExecuteScriptCompletedHandler>(
 				[](HRESULT, LPCWSTR) -> HRESULT { return S_OK; }).Get());
+		}
+
+		// B-018: the keyboard into the page (WebView2's own window), now or once the controller is there.
+		void focus()
+		{
+			if(!controller)
+			{
+				focusWanted = true;
+				return;
+			}
+			focusWanted = false;
+			const auto hr = controller->MoveFocus(COREWEBVIEW2_MOVE_FOCUS_REASON_PROGRAMMATIC);
+			if(FAILED(hr))
+				event("keyboard focus not moved into the page (" + hresultText(hr) + ")");
 		}
 
 		void setZoom(const double _zoom)
@@ -338,6 +395,9 @@ namespace mdJucePlugin
 		std::deque<juce::String> scripts;	// asked for before the web view was there
 		double zoom = 1.0;
 		bool creating = false;
+		bool focusWanted = false;
+		int controllerRetries = 0;
+		static constexpr int g_controllerRetries = 10;
 		bool failed = false;
 		bool comInitialised = false;
 	};
@@ -371,6 +431,7 @@ namespace mdJucePlugin
 	}
 
 	void WebView2Page::resized() { if(m_impl) m_impl->updateBounds(); }
+	void WebView2Page::focusPage() { if(m_impl) m_impl->focus(); }
 	void WebView2Page::visibilityChanged() { if(m_impl) m_impl->updateVisibility(); }
 	void WebView2Page::parentHierarchyChanged()
 	{

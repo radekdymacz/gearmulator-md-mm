@@ -677,6 +677,13 @@ namespace md
 			if(m_factoryFlashCaptureOffset != m_factoryFlashBaseline.size())
 				return;
 			m_factoryFlashCaptureComplete = true;
+			{
+				std::unique_lock fpLock(m_factoryFlashMutex, std::try_to_lock);
+				if(fpLock.owns_lock())
+					m_factoryBaselineFingerprint = m_factoryFlashCaptureFingerprint;	// B-034: the capture's own FNV
+				else
+					m_factoryBaselineFingerprint.reset();
+			}
 
 			if(m_pendingFlashOverlay.valid
 				&& m_pendingFlashOverlay.baselineFingerprint
@@ -754,6 +761,17 @@ namespace md
 		return decodeFactoryFlashCache(_baseline, snapshot.cache, m_rom.data());
 	}
 
+	bool Hardware::copyFactoryFlashBaseline(std::vector<uint8_t>& _baseline, uint64_t& _fingerprint)
+	{
+		if(!copyFactoryFlashBaseline(_baseline))
+			return false;
+		std::lock_guard lock(m_factoryFlashMutex);
+		if(!m_factoryBaselineFingerprint)
+			m_factoryBaselineFingerprint = fingerprintRom(_baseline);
+		_fingerprint = *m_factoryBaselineFingerprint;
+		return true;
+	}
+
 	std::vector<uint8_t> Hardware::copyFactoryFlashCache()
 	{
 		FactoryFlashSnapshot snapshot;
@@ -795,6 +813,7 @@ namespace md
 		std::lock_guard lock(m_factoryFlashMutex);
 		m_factoryFlashCache = _cache;
 		m_factoryFlashBaseline.clear();
+		m_factoryBaselineFingerprint.reset();
 		m_factoryFlashReady.store(true, std::memory_order_release);
 		return true;
 	}
@@ -818,6 +837,7 @@ namespace md
 			_other.m_factoryFlashCaptureOffset);
 		std::swap(m_factoryFlashCaptureFingerprint,
 			_other.m_factoryFlashCaptureFingerprint);
+		std::swap(m_factoryBaselineFingerprint, _other.m_factoryBaselineFingerprint);
 		std::swap(m_factoryFlashCaptureComplete,
 			_other.m_factoryFlashCaptureComplete);
 

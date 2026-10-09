@@ -61,6 +61,9 @@ Bridge.onMessage(m => {
 		break;
 	}
 	case "telemetry": onTelemetry(m); break;
+	case "host": Docs.host = m; scheduleRender(); break;
+	case "audioRun": Boot.audio(m); break;
+	case "result": if (m.op === "followHost" && !m.ok) hostRefused(m); break;
 	case "setup": { const before = knobCcs().join(); Docs.setup = m.doc; if (knobCcs().join() !== before && S.ws === "control") scheduleRender(); break; }
 	case "mod": {
 		/* a modSet is still on its way: keep the pending edit, only its values/CC rate are live */

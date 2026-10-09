@@ -34,6 +34,10 @@ img,svg,canvas{-webkit-user-drag:none}
 .krows{display:grid;gap:4px}
 .krow{display:grid;grid-template-columns:minmax(96px,auto) 1fr;gap:10px;align-items:baseline;font-size:13px}
 .krow kbd{justify-self:start;font:500 11px var(--mono);background:var(--key);color:var(--keytext);border-radius:3px;padding:2px 6px;box-shadow:inset 0 -2px 0 rgba(0,0,0,.35);white-space:nowrap}
+/* the keyboard view's list (shared/deskKeyView.js, B-018): its rows as the list's above */
+.keyrows{display:grid;gap:4px}
+.keyrow{display:grid;grid-template-columns:minmax(96px,auto) 1fr;gap:10px;align-items:baseline;font-size:13px}
+.keyrow kbd{justify-self:start;font:500 11px var(--mono);background:var(--key);color:var(--keytext);border-radius:3px;padding:2px 6px;box-shadow:inset 0 -2px 0 rgba(0,0,0,.35);white-space:nowrap}
 /* LEN ×2 (double the pattern) hugs LEN on LCD line 2, as narrow as its text, so SWG still fits */
 .l2[data-l2=dbl]{margin-left:-8px;gap:0;width:auto!important}
 /* ===== GEN and MUTATE (MM-PORT-PLAN.md d, 76-gen.js): the Machinedrum Editor's bars (its mdDesk.css), the
@@ -231,7 +235,11 @@ body.dockother #rail .railparams>:is(.lpspace,.pagetabs,.pkcol),body.dockother #
 .perf3{grid-template-columns:minmax(0,1fr) auto minmax(0,1fr)!important;min-height:0}
 .perf3>.card{min-height:0}
 .perf3 .menvcard{grid-template-rows:auto minmax(0,1fr) auto auto;align-content:stretch}
-.perf3 .menvcard canvas.ed{height:100%!important;min-height:96px}
+/* B-017: the envelope's screen fills its row from a box of its own, the canvas absolute inside it. A canvas in the row
+   itself sized the row from its drawing (its width and height attributes, set on every redraw), so dragging DEC grew
+   the card and the page a little with each redraw until the render on release put it back. */
+.perf3 .menvcard .menvplot{position:relative;min-height:96px;min-width:0}
+.perf3 .menvcard .menvplot>canvas.ed{position:absolute;inset:0;width:100%;height:100%!important;min-height:0!important}
 .perf3 .asgcard{--joy:clamp(200px,calc(100vh - 500px),440px);grid-template-rows:auto auto minmax(0,1fr)}
 .perf3 .asgcard .asgn{grid-template-columns:var(--joy) 270px;align-items:start}
 .perf3 .asgcard .asgn:not(:has(.joy)){grid-template-columns:calc(var(--joy) + 284px)}

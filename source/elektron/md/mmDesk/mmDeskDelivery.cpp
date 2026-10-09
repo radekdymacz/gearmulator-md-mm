@@ -84,7 +84,12 @@ namespace mmDesk
 			return ok();
 		case Kind::Song:
 			pushDump(ref, ed::encodeMmSong(std::get<ed::MmSong>(_change.after)));
-			return ok(static_cast<int>(ref.slot) == m_curSong ? "Heard after STOP and LOAD SONG." : "");
+			if(static_cast<int>(ref.slot) != m_curSong)
+				return ok();
+			// 0.3.5: the machine's song: loaded again by the desk once it is stopped in SONG mode (pumpSongReload)
+			m_songReloadNeeded = true;
+			m_songEditedMs = now();
+			return ok(m_playing && m_songMode == 1 ? "Heard from the next start." : "");
 		case Kind::Global:
 			pushDump(ref, ed::encodeMmGlobal(std::get<ed::MmGlobal>(_change.after)));
 			return ok();

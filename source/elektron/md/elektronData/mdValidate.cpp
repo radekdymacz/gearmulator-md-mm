@@ -214,7 +214,7 @@ namespace elektronData
 			p.range(at("routing", t), _g.routing[t], 0, MdGlobal::g_mainOutput);
 		for(size_t n = 0; n < _g.keymap.size(); ++n)
 			if(_g.keymap[n] != MdGlobal::g_unmapped)
-				p.range(at("keymap", n), _g.keymap[n], 0, 31);
+				p.range(at("keymap", n), _g.keymap[n], 0, MdGlobal::g_maxKeymapTarget);
 		p.range("tempo (BPM x 24)", _g.tempo, g_minTempo, g_maxTempo);
 		p.range("extendedMode", _g.extendedMode, 0, 1);
 		p.range("settings.programChange channel", _g.programChange >> 2, 0, 16);

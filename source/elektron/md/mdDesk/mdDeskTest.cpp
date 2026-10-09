@@ -800,6 +800,9 @@ namespace
 		check(dumps == 1 && undoCount() == undo0 + 1, "steps through the desk: 16 rows are one pattern dump and one undo step");
 		const auto sent = *ed::decodeMdPattern(wire.at(0));
 		check(ed::hasTrig(sent, 15, 11) && ed::hasTrig(sent, 0, 0), "the dump carries every row");
+		// B-025: the dump reloads the kit that plays; what follows waits until the machine has applied it
+		now = 3000;
+		desk.tick();
 		params.clear();
 		wire.clear();
 		const int undo1 = undoCount();
@@ -815,6 +818,16 @@ namespace
 		desk.onPageMessage(cmd(R"({"op":"undo","id":20})"));
 		check(params.size() == 1 && params[0] == std::array<uint8_t, 3>{2, 0, kit.params[2][0]} && desk.documents().working->kit.params[2] == kit.params[2],
 			"undo returns the trial to the base in one step");
+		// 0.3.5: the Song page's PATTERN | SONG switch: SET STATUS 0x10, then the status asked for (the page shows the answer)
+		now = 6000;
+		desk.tick();
+		wire.clear();
+		desk.onPageMessage(cmd(R"({"op":"seqMode","song":false,"id":30})"));
+		now = 9000;
+		desk.tick();
+		const auto has = [&](const std::vector<uint8_t>& _m) { return std::find(wire.begin(), wire.end(), _m) != wire.end(); };
+		check(has(ed::mdSetStatus(ed::MdStatus::SequencerMode, 0)) && has(ed::mdStatusRequest(ed::MdStatus::SequencerMode)),
+			"seqMode: SET STATUS sequencer mode, then the status asked for");
 	}
 
 	// DESIGN-edit-flow.md: paced, latest wins, one read-back at quiet.
@@ -1953,6 +1966,16 @@ namespace
 		check(!run(R"({"op":"globalSet","field":"baseChannel","v":13})").errors.empty(), "base channel 13 (14-17) refused");
 		run(R"({"op":"globalSet","field":"keymap","note":40,"target":0})");
 		check(docs.global->keymap[40] == 0 && docs.global->keymap[36] == ed::MdGlobal::g_unmapped, "a track mapped to another key frees its old key");
+		// 0.3.5: the MAP EDITOR's whole range (patterns A01-H16, START, STOP), as the firmware takes it
+		run(R"({"op":"globalSet","field":"keymap","note":90,"target":47})");
+		run(R"({"op":"globalSet","field":"keymap","note":91,"target":145})");
+		check(docs.global->keymap[90] == 47 && docs.global->keymap[91] == ed::MdGlobal::g_keymapStop, "a note maps to B16 and to STOP");
+		check(!run(R"({"op":"globalSet","field":"keymap","note":92,"target":146})").errors.empty(), "a target past STOP is refused");
+		auto backup = *docs.global;
+		backup.keymap[93] = 200;	// a byte the firmware keeps as sent
+		std::vector<std::string> jsonErrors;
+		const auto back = ed::globalFromJson(ed::globalToJson(backup), jsonErrors);
+		check(ed::validate(backup).empty() && back && back->keymap[93] == 200 && jsonErrors.empty(), "a global holding any target byte is valid and reads back");
 		const auto j = ed::globalToJson(*docs.global);
 		check(j.find("control")->find("tempoIn")->asString() == "external" && !j.find("control")->find("ctrlIn")->asBool()
 			&& j.find("control")->find("programChangeChannel")->asNumber() == 8, "the contract's derived control view");
@@ -2588,7 +2611,7 @@ namespace
 	for(const auto& gap : contract::docKindGaps(*root, kinds))
 		check(false, gap.c_str());
 		// The plug-in's host sends these; this test has no host.
-		const auto r = contract::checkMessages(*root, g_published, {"learn", "audio", "audioLevel", "openAudio", "romInstall", "romInfo", "notice", "syxPreview", "syxProgress", "syxExport"});
+		const auto r = contract::checkMessages(*root, g_published, {"learn", "audio", "audioLevel", "openAudio", "romInstall", "romInfo", "notice", "syxPreview", "syxProgress", "syxExport", "host", "audioRun", "editorMenu"});
 		for(const auto& p : r.off)
 			std::printf("    %s\n", p.c_str());
 		for(const auto& u : r.unseen)
@@ -2732,7 +2755,9 @@ namespace
 		out.pump(1732);
 		check(wire.size() == 3 && wire[2][10] == 3 && !after, "then the newest value of pattern 1 goes (latest wins)");
 		out.pump(1732 + 1731 + 1);
-		check(wire.size() == 4 && wire[3][9] == 2 && after, "then pattern 2's dump, then the work after it (in that order)");
+		check(wire.size() == 4 && wire[3][9] == 2 && !after, "then pattern 2's dump");
+		out.pump(1732 + 1731 + 1 + 43 + 250 + 1);
+		check(after, "then the work after it, once the machine has read and applied it (B-025: a kit reload)");
 		check(out.delayMs(3500) > 0 && out.delayMs(1e6) == 0, "a message sent while a dump is applied waits; later none waits");
 		out.clear();
 		check(!out.sending(1e6) && out.waiting() == 0, "the machine started over: nothing waits");

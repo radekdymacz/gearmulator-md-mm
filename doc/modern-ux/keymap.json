@@ -236,12 +236,12 @@
 			"id": "header-menu",
 			"scope": "any",
 			"keys": [
-				"right-click the header"
+				"right-click"
 			],
 			"mod": "",
 			"group": "Anywhere",
-			"does": "The editor's menu: skins, page zoom, updates, settings",
-			"area": "Top bar"
+			"does": "The editor's menu: zoom and window size, updates, the log folder, Developer",
+			"area": "Anywhere"
 		},
 		{
 			"id": "gen-value",
@@ -411,17 +411,6 @@
 			"group": "All",
 			"does": "Click: randomise every track (Sound: the whole kit; MIDI and CTR tracks are left alone, VOL is kept)",
 			"area": "GEN bar"
-		},
-		{
-			"id": "fn-key",
-			"scope": "any",
-			"keys": [
-				"FN key"
-			],
-			"mod": "",
-			"group": "All",
-			"does": "Click: the next click, drag or key gets ⌥, every track (FN then R randomises all, FN then drag a value is Control All, FN then Delete clears the pattern). Double-click: stays on until clicked again. Esc: off",
-			"area": "Top bar"
 		},
 		{
 			"id": "rotate",
@@ -1220,6 +1209,17 @@
 			"does": "Close"
 		},
 		{
+			"id": "global-key",
+			"scope": "any",
+			"keys": [
+				"GLOBAL key"
+			],
+			"mod": "",
+			"group": "Anywhere",
+			"does": "The machine's own settings, kept in its memory: MIDI channel, sync, the note map, routing (also the engine menu: GLOBAL…)",
+			"area": "Top bar"
+		},
+		{
 			"id": "close-global",
 			"scope": "any",
 			"keys": [
@@ -1252,7 +1252,8 @@
 			],
 			"mod": "",
 			"group": "Help",
-			"does": "This list of keys",
+			"does": "The keyboard view: what every key and gesture does (this)",
+			"short": "This view",
 			"modal": "keyspop",
 			"dispatched": true
 		},
@@ -1264,7 +1265,8 @@
 			],
 			"mod": "",
 			"group": "Help",
-			"does": "Close the list of keys",
+			"does": "Close the keyboard view",
+			"short": "Close",
 			"dispatched": true
 		},
 		{

@@ -53,6 +53,16 @@ int main()
 	r = mdJucePlugin::installRom(noBin, MachineModel::Machinedrum, roms);
 	check(!r.ok && has(r.text, "holds no .bin"), "a .zip without a .bin is refused", r.text);
 
+	// a SysEx file chosen where the ROM goes: said so, with where SysEx goes instead
+	juce::MemoryBlock sysex("\xF0\x00\x20\x3C\x02\x00\xF7", 7);
+	auto syx = dir.getChildFile("backup.syx");
+	syx.replaceWithData(sysex.getData(), sysex.getSize());
+	r = mdJucePlugin::installRom(syx, MachineModel::Machinedrum, roms);
+	check(!r.ok && has(r.text, "This is a SysEx file, not the ROM image"), "a .syx is refused as SysEx, not the ROM", r.text);
+	auto syxZip = zipWith(dir, "backup.zip", "backup/kits.syx", sysex);
+	r = mdJucePlugin::installRom(syxZip, MachineModel::Monomachine, roms);
+	check(!r.ok && has(r.text, "This is a SysEx file, not the ROM image"), "and so is a .zip holding .syx files and no ROM", r.text);
+
 	juce::MemoryBlock zeros(md::g_romSize, true);
 	auto unknown = zipWith(dir, "unknown.zip", "unknown.bin", zeros);
 	r = mdJucePlugin::installRom(unknown, MachineModel::Machinedrum, roms);

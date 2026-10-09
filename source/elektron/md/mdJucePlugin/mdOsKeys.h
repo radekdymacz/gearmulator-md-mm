@@ -12,7 +12,10 @@
 //
 // _spec: tokens separated by spaces, each "focus" or a key with modifiers: "cmd+c", "cmd+shift+z", "shift+/", "?",
 // "escape", "delete", "a". "focus" makes the web view the window's first responder, as a click on the page does
-// (AppKit ignores a synthesized click on a window that is not key, and the journeys' window never is).
+// (AppKit ignores a synthesized click on a window that is not key, and the journeys' window never is). "activate" is
+// what JUCE does when the window becomes the key window: its peer grabs the focus (its view the first responder; the
+// page's component then hands it on, B-018). A plain key whose first responder is not the page is not sent (AppKit
+// would beep): the log says so.
 
 #include "juce_gui_basics/juce_gui_basics.h"
 

@@ -7,7 +7,7 @@ where it came from, the setup, what happens, what should happen, status.*
 ## B-038 · Monomachine: a song's LOOP row goes back to row 1
 
 - **From:** found by the song playhead's firmware test, 2026-10-09 (0.3.5 work).
-- **What happens:** in a song written by the Monomachine Editor, a LOOP row goes back to row 1 instead of the row it names, and the row before the LOOP is skipped. The machine plays it so; the playhead shows it.
+- **What happens:** in a song written by the Monomachine Editor, a LOOP row goes back to row 1 instead of the row it names. The machine plays it so; the playhead shows it. (The "row before the LOOP is skipped" first noted here was the test's: it sampled only while RAM 0x26b46e, taken as "running", read 1, and that byte reads 0 during some passes; sampled on the step alone, every row plays.)
 - **To check:** where the MM song row stores the loop target (inferred in MM-P1, never probed); probe it on the firmware as the Machinedrum's was. Noted in mm-data-contract.md.
 - **Status:** open, for 0.3.6.
 
@@ -22,14 +22,25 @@ where it came from, the setup, what happens, what should happen, status.*
 - **From:** Discord tester D, 2026-10-09, Windows 10, i9, 32 GB, 0.3.4. The Machinedrum standalone runs fine on the same machine.
 - **What happens:** heavy crackle and a slow page while Task Manager shows only 8 % CPU.
 - **To check:** low CPU with drop-outs points to waiting, not computing: audio device/buffer/sample rate (WASAPI shared, 44.1 vs 48 kHz resampling), the MM's stream or page repaint holding the plug-in lock, timer resolution; compare with the MD path.
-- **Status:** open.
+- **0.3.5: diagnostics + the Monomachine's paths made the Machinedrum's:** the probe every 96 ms instead of 32 (it takes the device lock the audio thread holds for a whole block); the boot screen read from the panel the device publishes, without the lock (`MmStudioLink::readLcd`); the play head as the Machinedrum's B-014: per step only the soft play head moves (geometry read once per layout, not per step), no step cell is marked, no canvas is redrawn (`mmViewTest`: 32 steps, 64 canvas redraws before, 0 after), and following the play head to another page rebuilds the sequencer only. The start-up log (B-035) says the audio rate and the machine's real-time ratio.
+- **Status:** open: the tester's machine to confirm with 0.3.5.
 
 ## B-035 · Windows 10: both VST3s freeze at the boot screen in Ableton
 
 - **From:** Discord tester D, 2026-10-09, Windows 10, i9, 32 GB, Ableton Live, 0.3.4.
 - **What happens:** Ableton finds both VST3s; each freezes on the "loading OS" boot screen. The MD standalone works on the same machine.
 - **To check:** the firmware boot in a hosted plug-in on Windows (ROM path, data root, first-boot cache write, message-thread waits while the host holds its lock), WebView2 in Ableton's process; 0.3.5's start-up log (B-022) should show where it stops. Related: B-022, B-029.
-- **Status:** open.
+- **0.3.5: diagnostics + a word on the card:** the plug-in writes the start-up diagnostics too (they were the standalone's only): once a second for the first 30 s, in the editor's start-up log (Open Log Folder, `editor-*.log`): `boot t=12s rate=44100 block=256 blocks=0 (0/s) bypassed=0 nonRealtime=0 realtime=0.00x dspBooted=0/2 firmwareMidiReady=0 lifecycle=booting rom=<file> cycles=<n>` (the host's audio calls counted on the audio thread, bypassed ones apart: the `processBlockStarted` hook; the machine's own cycles for the real-time ratio; `mdBootDiagnostics.h`). The start-up card says so when a plug-in gets no audio block for 5 s ("The host is not running audio for this plug-in: check the audio engine/device is on and the track or plug-in is not deactivated.") or when the machine runs slower than real time ("the machine runs at 0.6× real time: try a larger buffer"), from the plug-in's `audioRun` message. Tests: `mdSessionNoRomTest` (the page is told the host's blocks; the log line; the rates), `mdDeskPageTest` (the card's words).
+- **Status:** open: the tester's log from 0.3.5 says where it stops.
+
+## B-034 · A glitch when the app closes and at every DAW state save (Machinedrum)
+
+- **From:** Radek, 2026-10-09; cause found by a read-only check and measured.
+- **What happens:** a short drop-out when the standalone closes, at every DAW save or autosave, and at Remove ROM; closing while a pattern plays also clicks.
+- **Cause:** `synthLib::Plugin::getState` holds the plug-in's lock, the one `processAudio` takes; inside it the Machinedrum's state (`md::Device::getState` -> `makeFlashOverlay`, `validFlashOverlay`) fingerprinted the 8 MiB ROM twice and the 8 MiB factory baseline once (FNV), besides 8 MiB copies: 26-30 ms with the audio thread blocked (2-3 buffers at 512). JUCE's standalone saves while the audio runs and then stops it at once.
+- **Fix (release 0.3.5):** the ROM's and the factory baseline's fingerprints are computed once (the ROM's at load, the baseline's when its capture completes or a cached one is first decoded), kept by `md::Hardware` and passed to the state encoder; the state bytes are the same (`mdStateTest`: same bytes, read back). Measured (`mdStateTest`, an 8 MiB synthetic ROM and baseline): the state encode under the lock 33.4 ms -> 7.9 ms. The standalone quits in order, for the close button and the system's quit alike: the output fades to silence over about 30 ms, the audio stops at about 60 ms, then the state is saved (with the gain it had), then the app quits (`jucePluginEditorLib/standaloneApp.h`, both editors).
+- **Not yet (0.3.6):** the remaining copy, sector compare and encode still run under the lock (moving them out, dirty-sector tracking).
+- **Status:** fixed for 0.3.5 (the rest for 0.3.6).
 
 ## B-033 · Linux: blank window, no editor page
 
@@ -48,12 +59,15 @@ where it came from, the setup, what happens, what should happen, status.*
 
 - **From:** Discord tester A, 2026-10-08, 0.3.4: after importing patterns by SysEx, patterns get stuck; the next pattern can't be selected.
 - **Likely:** 0.3.4's import read-back flood (B-020) leaving pushes pending; 0.3.5's new import should fix it — verify pattern select after an import.
-- **Status:** open, check in 0.3.5.
+- **0.3.5:** the journey `md-lib-syx-import-mute` selects the next pattern after an import (with its globals) stopped, then the previous one while playing: the machine takes both, in the standalone and the VST3, with an own export, its base channel changed, and the Autechre backup.
+- **Status:** not reproduced in 0.3.5; open until the tester confirms.
 
 ## B-030 · Tempo doesn't follow the DAW
 
 - **From:** Discord tester A, 2026-10-08: tempo stays on the machine's internal BPM although the plug-in is set to follow the host.
-- **Status:** open.
+- **Cause:** the machine did play at the host's tempo (the plug-in's `followHost` sets TEMPO IN external and the host's MIDI clock drives it), but the LCD's TEMPO showed the machine's stored global tempo (HOST, TEMPO 120.0 with Ableton at 72), and edits to it did nothing audible. The host's BPM never reached the page. `followHost` went out only on its 2 s cadence, and a refused one said nothing.
+- **Fix (0.3.5):** the plug-in publishes the host's tempo (its playhead, also while the host is stopped) to the page (`host` message: `bpm`, `follows`). When the machine follows the host, TEMPO shows the host's BPM, marked DAW; a drag, the arrows or tap tempo are refused with "The DAW sets the tempo. Change it there." The standalone is unchanged. `followHost` goes out as soon as the machine is ready, then on its cadence; a refused one is logged and shown. Checked by mdDeskModelTest and mmViewTest (the host's BPM shown, the lock), mdDeskPageTest (an edit refused, nothing sent) and mdSessionNoRomTest (a DAW stopped at 72 BPM: the page is told 72).
+- **Status:** fixed in 0.3.5, to be checked in a DAW by hand.
 
 ## B-029 · Windows: closing and reopening the plug-in window leaves it blank
 
@@ -72,25 +86,40 @@ where it came from, the setup, what happens, what should happen, status.*
 - **From:** Discord tester, 2026-10-09, Monomachine Editor 0.3.4.
 - **What happens:** change a track's machine, go back to the Sequence page, and the track has the previous machine again.
 - **Likely:** a kit dump/read-back or the working kit re-sent after the change overwrites it (same family as B-025 on the MD); 0.3.4's stream or the SYSEX RECV session (B-021) involved.
-- **Status:** open, for 0.3.5.
+- **0.3.5:** not reproduced: the new journey `mm-sound-machine-stays` (pick a machine on Sound, go to Sequence, wait, back to Sound; the machine read from the machine's memory) passes in the standalone and the VST3.
+- **Status:** open until the tester confirms with 0.3.5.
 
-## B-026 · Mutes don't work in 0.3.5 (release candidate)
+## B-026 · Mutes don't work after a SysEx import with its globals (0.3.5 candidate)
 
-- **From:** Radek's manual test of the packaged 0.3.5, 2026-10-09.
-- **What happens:** muting tracks does nothing (details being collected).
-- **Status:** open, blocks 0.3.5.
+- **From:** Radek's manual test of the packaged 0.3.5, 2026-10-09: after importing a backup with its globals, M on the track list lights, but the machine does not mute; on PLAY the mutes are gone.
+- **Cause:** a global dump is stored at once but applied only when its slot is made active (SysEx 0x56; P5, measured). The import sent the active global's dump and nothing else: the machine kept running on its old settings while every document, and so the editor, used the new ones. The editor then sent its mutes (CCs) on the new base channel where the machine was not listening (`mdDeskFirmwareTest syximport` with an export whose global has base channel 4-7: T3's mute landed on T15), and the page showed the mute until the machine's memory said otherwise. The Autechre 2008 backup's globals have the MIDI base channel OFF (127): the editor's mutes, notes and sound values cannot reach a machine set so at all. Not in 0.3.4: it left those globals out ("wrong OS", B-019).
+- **Fix (release 0.3.5):** an imported dump of the active global is made active right after it (0x56), as the editor's own GLOBAL edits are (both editors; the Monomachine once SYSEX RECV is left), so the machine, the documents and the editor agree on the channels; the editor sends on the active global's channels as read back. With the base channel OFF the editor refuses mutes and notes with the reason ("The machine's MIDI base channel is OFF … Set a base channel in GLOBAL"), so the page never shows a mute the machine did not take; the GLOBAL panel shows OFF and its +/− set 1-4. The import report says what each imported global changed ("Global 1 changed: MIDI base channel 1-4 -> OFF, tempo, the note map, …"); Globals stay unticked by default in the preview, now with "changes MIDI channels and machine settings". Tests: `md/mmDeskFirmwareTest syximport` mutes after the import and checks the machine's mute set while it plays (own export with base channel 4-7, with OFF, the AE backup); `syxexport` takes `SYX_BASE_CHANNEL` to make such files; journey `md-lib-syx-import-mute` (import with globals, M on the rail, PLAY: the machine's memory holds the mute; with OFF the M stays dark).
+- **Status:** fixed for 0.3.5.
+
+## B-025 · Chopping right after Set up sampling loses RAM-R / RAM-P (machine stopped)
+
+- **From:** the firmware tests (`mdDeskFirmwareTest <MD ROM> sampler`), 2026-10-08, while checking 0.3.5. Not reported by a user.
+- **What happens:** with the sequencer stopped, Set up sampling puts RAM-R1 / RAM-P1 on tracks 13 and 14 (unsaved); a few chops on the player (trigs and STRT locks) and the tracks are back to the stored kit's machines (ROM-14 on the factory kit), with every other unsaved kit edit; the page shows it and the machine holds it.
+- **Since:** 0.3.4 (bisected with the fast build: 0.3.3 good, first bad c4327dc9e, "the stream at cable speed only while the machine plays"). A 0.3.4 user is affected: the new journey `md-sampler-setup-chop` fails the same way in a build without the fix (standalone and VST3).
+- **Cause:** a dump over the current pattern makes OS 1.63 load the linked kit from its slot; the desk sends the working kit's edits again after it (the stream's after-work). That work ran as soon as the dump left, not once the machine had applied it: the edits' expectation was met at once by memory that still showed the kit before the reload, the reload then showed the stored slot, and the next chop took that as the kit to keep. At cable speed (0.3.3, and while playing) the dumps coalesce and the window was rarely hit; stopped, dumps go back to back.
+- **Fix (release 0.3.5):** the stream's after-work waits until the machine has read and applied what went before (`deskCore::Stream`, Lane::Then), and while such a reload is on its way no memory image of the kit is taken (`MdMachine::reloadHolds`): the restore then sets what memory must show. Tests: `mdDeskFirmwareTest sampler` (passes again), `mdDeskTest` (the stream's after-work), journey `md-sampler-setup-chop`.
+- **Status:** fixed for 0.3.5.
 
 ## B-024 · Tempo drag fails when starting from a saved project
 
 - **From:** the journeys (md-top-tempo-drag), 2026-10-08.
 - **What happens:** the tempo drag does nothing when the editor starts from a saved project at 105.8 BPM; from fresh settings it works. Maybe host clock sync in the saved settings blocks it.
-- **Status:** open.
+- **Cause:** not the product, and not the host clock (the saved global has tempo in INTERNAL; the drag reached the machine every time). The machine keeps the tempo in 1/24 BPM steps and the LCD shows it to one decimal. The journey compared the LCD's text with the tempo itself: from a saved project at 93.79 BPM (2251/24) the drag goes to 105.79, the LCD says 105.8, and 105.8 is not 105.79; a fresh 120.0 is on the 0.1 grid, so it passed. The same check was in `mm-top-tempo-drag`.
+- **Fix (branch `fix/0.3.5-bugs`):** both journeys compare the LCD with the tempo as the LCD rounds it (`lcdBpm`), and the drag back with a tolerance below one step; the failure line now says the tempo, where it started and the global's tempo in. Checked from a saved project at 93.79 in both hosts.
+- **Status:** fixed for 0.3.5 (journey only).
 
 ## B-023 · Undo after an Alt-drag doesn't restore every track
 
 - **From:** the journeys (md-sound-control-all right after md-sound-value-keys), 2026-10-08, both hosts.
 - **What happens:** after an Alt-drag (Control All), ⌘Z does not bring every track back; it looks like separate edits get merged into one undo step.
-- **Status:** open (product bug, not the test).
+- **Cause:** not the undo grouping: the arrow keys are three steps and Control All one (traced in the core: each edit recorded with its gesture, the Alt-drag's merged into one step). ⌘Z never reached the plug-in. `md-sound-value-keys` leaves its value focused (a value is `role=slider`), and the key dispatcher (`deskKeys.js`) treated a focused slider like a text field: every shortcut without `field: true` was off, ⌘Z included. A person meets it too: a real click on a value focuses it (a synthetic one in the journeys does not, which is why the journey only failed after the arrow-key journey), so ⌘Z (and Space, ⌘C ⌘V, the digits) after dragging a value did nothing.
+- **Fix (branch `fix/0.3.5-bugs`):** a focused value keeps only the keys that move it (arrows, Page Up/Down, Home, End: its own handler's); every other key is the page's. A text field keeps every key as before. Both editors (shared `deskKeys.js`). Tests: `deskKeysTest.js` (⌘Z, Space, ⌘C with a value focused; ↑ stays the value's), `md-sound-control-all` focuses the value it drags as a real press does (fails without the fix); its failure line lists what did not come back.
+- **Status:** fixed for 0.3.5.
 
 ## B-022 · Doesn't work on Windows 10 with WebView2 installed
 
@@ -98,7 +127,14 @@ where it came from, the setup, what happens, what should happen, status.*
 - **What happens:** the Windows editors "don't work" on Windows 10 although the WebView2 runtime is installed.
 - **Not the cause:** the C runtime (the build links it statically).
 - **To check:** the version used (0.3.2 still had the old IE engine; WebView2 came in 0.3.3); the WebView2 runtime version on those machines vs what our SDK (1.0.3856.49) needs — any newer ICoreWebView2_N interface we query may be missing on an old runtime; file:// loading of the page from %TEMP%; the user-data folder in %LOCALAPPDATA%\Gearmulator; the emulator itself (CPU features); the plug-in in a DAW vs the standalone. Add a startup log the user can send, and a message on screen that says what failed.
-- **Status:** open, waiting for details.
+- **Done for 0.3.5 (branch `fix/0.3.5-bugs`), so the next report says what failed:**
+  - **A start-up log every build writes**, for the user to send: `<data folder>\logs\editor-mdStudio.log` / `editor-mmStudio.log` (Windows: `Documents\Gearmulator Preview\<machine>\logs`; the start before kept as `editor-*-previous.log`): the editor's version, Windows version, standalone or the host's executable, the CPU, the WebView2 runtime found (`GetAvailableCoreWebView2BrowserVersionString`) against the oldest the editors need, the user-data folder, each HRESULT of the environment and the controller, the runtime the environment uses, `ICoreWebView2Settings3` missing (an older runtime), page loads and errors, the WebView2 process failing, and "page up" when the bridge answers. **Open Log Folder** in the editor's menu (right-click the header; the standalone's Editor menu).
+  - **The window says what failed** instead of staying blank: no runtime, the environment or controller refused, the page failing to load, or the page's script not answering within 30 s; with what to do (install or update the Evergreen WebView2 Runtime, a button to its download page; send the log, with its path and an Open the log folder button).
+  - **Older runtimes:** every WebView2 interface the editors use is in the first stable runtime (86.0.616) except `ICoreWebView2Settings3` (1.0.864, the browser's own keys off), which is asked for and skipped when missing: the page works, F5 and Ctrl+F stay the browser's. Minimum runtime: 86.0.616.0 (WINDOWS.md); an older one is marked in the log.
+  - **Tests:** the Windows start test checks every run's log (the runtime's version, page up) and runs the Machinedrum standalone three more times: as an old runtime (`GEARMULATOR_MDMM_WEBVIEW2_TEST=old`: no `ICoreWebView2Settings3`, the page must still work), as a machine without one (`=fail`) and with a page that never starts (`GEARMULATOR_MDMM_PAGE_TEST=nostart`): the window must say "The editor page could not start" (UI Automation). Checked on macOS by hand (`nostart`: the log and the message).
+  - **Found by the new log on CI's runner:** the standalone's first WebView2 controller is refused with `E_ABORT` (0x80004004): its parent window is made again while the standalone starts. It was retried only when the window changed again, so the page came up 25 to 35 s late on the runner; on a slower machine it may never have. A controller refused with `E_ABORT` is now made again at once in the new window (up to 10 times), and a failure message goes away if the page starts after all. A likely cause of the reports; to be confirmed by a tester's log.
+- **Not verified:** a real Windows 10 machine, a runtime actually older than the SDK's (CI's windows-2022 has a current one). The cause on the testers' machines is still unknown: their logs will say.
+- **Status:** diagnosable for 0.3.5; the cause waits for a tester's log.
 
 ## B-021 · Monomachine: PLAY refused as "panel busy" after edits, a pattern edit not read back while playing
 
@@ -121,28 +157,37 @@ where it came from, the setup, what happens, what should happen, status.*
 - **From:** Discord tester D, 2026-10-08 (Machinedrum, probably a public backup from an older OS).
 - **What happens:** importing a SysEx file shows mostly errors saying the OS is wrong.
 - **To check:** which OS versions' kit/pattern/song dumps we accept (only 1.63?), whether older dumps can be converted or imported partly, and that the message says what the file is and what to do.
-- **Status:** open. Import has no firmware tests with third-party files yet.
+- **Cause:** the import re-encoded each document as a "set" and left out whatever the model's `SyxTraits::fits` called another OS's format. On the Autechre 2008 backups (Machinedrum and Monomachine) that refused the MD's 8 globals (format 5.1) and, on the Monomachine, all 128 kits (an encoded-size check that RLE makes wrong), 31 patterns and the 8 globals: 167 of 288 items "wrong OS". The firmware takes every one of them.
+- **Fix (branch `fix/sysex-import`, release 0.3.5, owner's direction):** the import is a MIDI cable: the file's messages go to the machine as they are, in file order, a couple at a time; the firmware decides; the editor then reads every document back and reports, per item, taken, converted, ignored, differs, changed, unknown or no reply. Left out up front, with the reason, is only what cannot be sent at all (another device's SysEx, broken framing, Elektron OS update packets). The preview informs (format, what it overwrites, what plays, no Undo); kinds and single items can be unticked. Measured on the firmware (`md/mmDeskFirmwareTest <ROM> syximport` with the Autechre backups): Machinedrum 232 of 232 items taken, Monomachine 288 of 288; the editors' own exports read back equal; over HW MIDI (`SYX_HW=1`, the Monomachine on SYSEX RECV and SEND) too. Tests: `syxImportTest`, `syxImportFileTest` (`MD_SYX`, `MM_SYX`), the `syximport`/`syxexport` firmware tests, the journeys `md-lib-syx-import`, `mm-lib-syx-import`. The data contract was widened to what the firmware accepts (the MD's global key map, the MM pattern arpeggiator length), so those files' values show and stay on the page.
+- **Status:** fixed for 0.3.5.
 
 ## B-018 · "?" just beeps on the Mac (Monomachine)
 
 - **From:** Discord tester C, 2026-10-08, M1, latest macOS.
 - **What happens:** pressing ? (or ⇧/) gives the macOS "beep", as if no one took the key.
 - **To check:** whether the web view has keyboard focus before the first click, whether the MM page binds ? at all, and the standalone vs plug-in path (see B-015).
-- **Status:** open.
+- **Cause:** not the MM page (it binds ?), the window: whenever the standalone's window becomes the key window (at start, after switching back to it, or on the click that activates it), JUCE gives its own view the keyboard (`NSViewComponentPeer::becomeKeyWindow`: `makeFirstResponder:` on the peer's view). A key that view does not use goes up the responder chain to AppKit's beep, so keys pressed before a click inside the page never reached it (the Machinedrum Editor too). The journeys missed it: their window is never the key window.
+- **Fix (branch `fix/0.3.5-bugs`):** the page's host hands the keyboard to the web view when the page is up, after the window became the key window (`NSWindowDidBecomeKeyNotification`, `mdWebFocus.h`), and when JUCE's focus lands on the window around the page (a host making the plug-in's view first responder); never away from another control of the window (a host's). Windows: the same moments move the focus into WebView2 (`MoveFocus`). ? on the Monomachine Editor now opens the keyboard view both editors share (`deskKeyView.js`) instead of the plain list. Tests: `mm-keys-os-help` and `md-keys-os-help` (real `NSEvent`s: `activate` does what the window does when it becomes key, then ? with no click; fail without the fix, both hosts); `mdOsKeys` refuses to send a key whose first responder is not the page and logs it, so the failing test makes no sound; `mm-keys-help` checks the drawn keyboard.
+- **Status:** fixed for 0.3.5.
 
 ## B-017 · Monomachine Perform: dragging DEC resizes the window
 
 - **From:** Discord tester C, 2026-10-08.
 - **What happens:** in Perform mode, moving the envelope's DEC (and similar) on the left side makes the page grow downwards to fit the envelope, then it jumps back when the mouse is released.
 - **Should:** the layout stays put while dragging.
-- **Status:** open.
+- **Cause:** the envelope's screen was a canvas placed straight in the card's grid row with `height: 100%`. A canvas's drawing size (its width and height attributes, set on every redraw to the box times the display's scale) is its intrinsic size, which the row took into account: each redraw while dragging made the row, the card and the page a little taller; the render on release put a fresh canvas in, so the page jumped back.
+- **Fix (branch `fix/0.3.5-bugs`):** the canvas sits absolutely in a box of its own (`.menvplot`), which takes the row; the canvas no longer sizes anything (as the Sound page's plots already did). Test: `mm-perform-menv-layout` drags DEC on the value and the DEC dot on the screen and samples the card's, the page's and the screen's heights every 10 ms (grew before the fix, steady after; both hosts).
+- **Status:** fixed for 0.3.5.
 
 ## B-016 · Standalone can't go full screen; Settings does nothing (Monomachine)
 
 - **From:** Discord tester C, 2026-10-08, Monomachine, M1, latest macOS (version not given).
 - **What happens:** the window cannot go full screen; "Settings" does nothing.
 - **To check:** the window's full-screen button / maximise in the standalone; Settings: B-007 fixed this in 0.3.2 (plug-ins have no Settings entry, the standalone's opens Audio/MIDI) — confirm the tester's version.
-- **Status:** open.
+- **Cause:** JUCE's standalone window asks for the minimise and close buttons only. Without the maximise button the window had no full-screen behaviour on macOS (`NSWindowCollectionBehaviorFullScreenPrimary` needs it and a resizable window), and no maximise box on Windows and Linux. Had it gone full screen, the screen fit (P7) would have pulled it back: the window was fitted to the visible area (menu bar and Dock left out) after every resize, and its full-screen size would have been remembered as the user's. Settings: B-007 fixed the editor's menu; the macOS app menu still had upstream's "Settings..." (it opens the RmlUi settings page the web page hides: nothing happened).
+- **Fix (branch `fix/0.3.5-bugs`):** the standalone's window asks for all three buttons (`standaloneApp.h`), so the green button goes full screen on macOS and Windows and Linux maximise; a window in full screen, maximised or minimised is neither fitted nor remembered (`EditorWindowFit::sizedBySystem`), and the page zooms to the window (`mdPageZoom.h`, from 0.3.2). The app menu shows "Settings..." only for an editor without its own audio and MIDI panel; the web-page editors have Audio/MIDI Settings... (the app menu and the Audio menu). Test: the macOS start test reads the window's title-bar buttons and the menus through the Accessibility API (`ui_probe chrome`): the full-screen button enabled, Audio/MIDI Settings... in the app menu, no "Settings...".
+- **Not verified here:** full screen by hand on a Mac with a person (this Mac's shell may not use the Accessibility API; CI's start test reads it), Windows maximise and Linux by hand.
+- **Status:** fixed for 0.3.5.
 
 ## B-015 · Cmd+C and Cmd+V do nothing (macOS: Ableton Live and the standalone)
 

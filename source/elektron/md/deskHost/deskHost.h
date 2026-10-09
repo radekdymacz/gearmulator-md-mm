@@ -37,14 +37,15 @@ namespace deskHost
 		AudioMeter,
 		ChooseRom,			// P7: the native file chooser for a firmware file (.bin, or a .zip with it)
 		ChooseSyx,			// P7: the native file chooser for a .syx to import (its preview follows)
-		SyxImport,			// P7: import the previewed .syx (the kinds chosen)
+		SyxImport,			// P7, B-019: send the previewed .syx to the machine as it is (the kinds and items chosen), read back, report
 		SyxCancel,
 		SyxExport,			// P7: the native save dialog, then every document the editor holds as one .syx
 		RomInfo,			// the installed firmware: name, OS, size, where (answered with a romInfo message)
 		RemoveRom,			// delete the firmware from the editor's ROM folder (the page asked the user first)
 		NoticeAnswer,		// the button the user pressed on a notice (a message the plug-in has for the user)
 		ChooseSample,		// P9: the native file chooser for a sample (WAV, AIFF) for a UW ROM slot
-		PageZoom			// B-001: the page's zoom one step smaller, larger or back to 100 % (Cmd - / Cmd + / Cmd 0)
+		PageZoom,			// B-001: the page's zoom one step smaller, larger or back to 100 % (Cmd - / Cmd + / Cmd 0)
+		MenuPick			// I-008: the entry of the editor's menu the page chose (the menu the window sent as editorMenu)
 	};
 
 	// Who acts on a row: the session (it outlives the window) or the window (the menu and the

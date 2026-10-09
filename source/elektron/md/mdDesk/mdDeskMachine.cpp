@@ -219,6 +219,31 @@ namespace mdDesk
 		m_out.send(_message, m_sds.active(), now());
 	}
 
+	// B-019: an imported file's message as it is, in the stream like the editor's own (a dump at the machine's read
+	// speed while it stands, at cable speed while it plays; a request after the dumps before it are applied).
+	std::string MdMachine::sendAsIs(const Bytes& _message, const bool)
+	{
+		if(!canSendSysex())
+			return "This engine cannot send SysEx to the machine.";
+		sendSysex(_message);
+		// B-026: a global dump is stored at once but applied only when its slot is made active (P5, measured). An
+		// imported dump of the active global would leave the machine running on its old settings (MIDI base channel,
+		// sync, the map) while every document says the new ones, and the editor would send its mutes, notes and
+		// sound values where the machine does not listen. As the editor's own GLOBAL edits: 0x56 right after it.
+		if(ed::mdDumpCommand(_message) == ed::g_mdGlobalDump && _message.size() > 9 && m_session.state().globalSlot
+			&& *m_session.state().globalSlot == _message[9])
+			sendSysex(ed::mdSetActiveGlobal(_message[9]));
+		return {};
+	}
+
+	MdMachine::AsIs MdMachine::asIs() const
+	{
+		AsIs a;
+		a.queued = m_out.waiting() + m_out.held();
+		a.busy = m_out.sending(now()) || m_out.held() > 0;
+		return a;
+	}
+
 	// B-014: a live edit's SysEx: one that sets a value goes in the stream's latest lane (the newest per value, at
 	// most 10 a second); a machine change is no value (its CCs follow it) and keeps its order.
 	void MdMachine::sendLiveSysex(const LiveEdit& _e, const Bytes& _message)
@@ -315,6 +340,7 @@ namespace mdDesk
 		m_backgroundQueued = false;
 		m_pushes.clear();
 		m_out.clear();
+		m_reloadsPending = 0;
 		m_working = deskCore::switched<ed::MdKit>();
 		m_keys = {};
 		m_chain.drop();
@@ -507,9 +533,19 @@ namespace mdDesk
 		const auto* held = stored != _view.kits.end() ? heldKit(_view) : nullptr;
 		const auto working = held ? std::optional<ed::MdKit>(*held) : std::nullopt;
 		m_session.pushPattern(pattern, false);
-		// after the dump (it may wait its turn in the stream, B-014)
+		// after the dump (it may wait its turn in the stream, B-014), once the machine has read and applied it
+		// (B-025: the stream's after-work waits for that). Until then memory shows the kit before the reload or
+		// the stored slot, neither the working kit: no image is taken meanwhile.
 		if(working)
-			m_out.after([this, storedKit = stored->second, w = *working] { restoreWorkingKit(storedKit, w); }, now());
+		{
+			++m_reloadsPending;
+			m_reloadQueuedMs = now();
+			m_out.after([this, storedKit = stored->second, w = *working]
+			{
+				m_reloadsPending = std::max(0, m_reloadsPending - 1);
+				restoreWorkingKit(storedKit, w);
+			}, now());
+		}
 	}
 
 	// The machine just loaded the kit that plays from its slot (_stored): what it held before (_working)
@@ -661,7 +697,7 @@ namespace mdDesk
 			{"chainClear", &MdMachine::cmdChainClear}, {"globalSlot", &MdMachine::cmdGlobalSlot},
 			{"selectSong", &MdMachine::cmdSelectSong}, {"reloadSong", &MdMachine::cmdReloadSong},
 			{"sampleName", &MdMachine::cmdSampleName}, {"sampleCancel", &MdMachine::cmdSampleCancel}, {"play", &MdMachine::cmdPlay}, {"stop", &MdMachine::cmdStop},
-			{"mute", &MdMachine::cmdMute}, {"followHost", &MdMachine::cmdFollowHost}};
+			{"mute", &MdMachine::cmdMute}, {"followHost", &MdMachine::cmdFollowHost}, {"seqMode", &MdMachine::cmdSeqMode}};
 		return map;
 	}
 
@@ -952,6 +988,8 @@ namespace mdDesk
 				return refuse("TRIG keys need the local emulated machine");
 			return ok("Recording: a key records a plain trig on the track, at the kit's pitch.");
 		}
+		if(const auto why = channelsOff(_view); !why.empty())
+			return refuse(why);
 		const auto note = keys::trackNote(_view.global ? &*_view.global : nullptr, t);
 		if(!note)
 			return refuse("Track " + std::to_string(t + 1) + " has no MIDI note in the MAP EDITOR (GLOBAL settings)");
@@ -1193,14 +1231,38 @@ namespace mdDesk
 		return ok("The machine follows the host's tempo and transport (GLOBAL " + std::to_string(*slot + 1) + ": TEMPO IN external)");
 	}
 
-	Outcome MdMachine::cmdMute(const Value& _m, const Documents&)
+	// B-026: the machine's MIDI base channel is where the editor's mutes, notes and sound values go. With it OFF
+	// (an imported global: 127) the machine takes none of them: say so instead of showing a mute it never took.
+	std::string MdMachine::channelsOff(const Documents& _view) const
 	{
+		if(!_view.global || _view.global->baseChannel <= ed::mdGlobalBits::g_maxBaseChannel)
+			return {};
+		return "The machine's MIDI base channel is OFF (GLOBAL " + std::to_string(_view.global->position + 1)
+			+ "): it takes no mutes, notes or sound values over MIDI. Set a base channel in GLOBAL (G).";
+	}
+
+	Outcome MdMachine::cmdMute(const Value& _m, const Documents& _view)
+	{
+		if(const auto why = channelsOff(_view); !why.empty())
+			return refuse(why);
 		const auto t = static_cast<uint8_t>(*intOf(_m, "t"));
 		const bool on = flagOf(_m, "on");
 		m_mutes[t] = on;
 		if(m_port.sendMute)
 			m_port.sendMute(t, on);
 		return ok();
+	}
+
+	// 0.3.5: the Song page's PATTERN | SONG switch: SET STATUS sequencer mode (Appendix C, so over HW MIDI too), then the
+	// status asked for: the page shows what the machine reports, never what was asked
+	Outcome MdMachine::cmdSeqMode(const Value& _m, const Documents&)
+	{
+		if(!canSendSysex())
+			return refuse("This engine cannot send SysEx to the machine.");
+		const bool song = flagOf(_m, "song");
+		sendSysex(ed::mdSetStatus(ed::MdStatus::SequencerMode, song ? 1 : 0));
+		sendSysex(ed::mdStatusRequest(ed::MdStatus::SequencerMode));
+		return ok(song ? "SONG mode: the machine plays the song." : "PATTERN mode: the machine plays the pattern.");
 	}
 
 	// ---- sequences ----
@@ -1548,6 +1610,8 @@ namespace mdDesk
 	{
 		if(!m_working.region || m_probe != Probe::Running || !m_profile.memory)
 			return;
+		if(reloadHolds())	// B-025: the region waits for the restore after the reload
+			return;
 		auto image = ed::mdWorkingKitFromMemory(*m_working.region);
 		if(!image)
 		{
@@ -1611,7 +1675,7 @@ namespace mdDesk
 	void MdMachine::setBaseChannel(const ed::MdGlobal& _g)
 	{
 		if(m_port.baseChannel)
-			m_port.baseChannel(static_cast<uint8_t>(_g.baseChannel & 0x0f));
+			m_port.baseChannel(_g.baseChannel <= ed::mdGlobalBits::g_maxBaseChannel ? _g.baseChannel : uint8_t{0x7f});	// 0x7f: OFF
 	}
 
 	TelemetryEvents MdMachine::onTelemetry(const Telemetry& _t)
@@ -1628,6 +1692,7 @@ namespace mdDesk
 			m_session.noteChained();
 		}
 		m_telemetrySeen = true;
+		m_songRowHeard = m_songRow.update(_t.songRow, _t.step, _t.playing);
 		// The keys' fact: the device reports them pending, then none left.
 		m_keys.onPending(_t.panelPending);
 		if(!e.any)
@@ -1671,6 +1736,7 @@ namespace mdDesk
 		t.set("playing", _t.playing);
 		t.set("recording", _t.recording);
 		t.set("valid", _t.valid);
+		t.set("songRow", m_songRowHeard >= 0 ? Value(m_songRowHeard) : Value());
 		publishTelemetry(std::move(t));
 		return e;
 	}
@@ -1765,6 +1831,28 @@ namespace mdDesk
 		pumpTweak(_now);
 		pumpCoalesced(_now);
 		pumpPushes(_now, _view);
+		pumpSongReload(_now);
+	}
+
+	// 0.3.5: the firmware plays the song it loaded; a dump into the current song's slot is heard only after LOAD SONG,
+	// and it takes LOAD SONG only while stopped (P1). So once the edits have gone (nothing on the wire, the stream's
+	// latest dump read back) and the machine is stopped in SONG mode, the desk loads the song again by itself; a
+	// playing machine gets it at its next stop. Reload song stays as the fallback (the machine reported otherwise).
+	void MdMachine::pumpSongReload(const double _now)
+	{
+		const auto& st = m_session.state();
+		if(!st.songReloadNeeded || !st.song)
+		{
+			m_songEditedMs = -1;
+			return;
+		}
+		if(m_songEditedMs < 0)
+			m_songEditedMs = _now;
+		if(!m_telemetry.valid || m_telemetry.playing || st.songMode != true || _now - m_songEditedMs < g_songReloadQuietMs || busy()
+			|| keysOnTheirWay() || m_sequence.running() || !canSendSysex())
+			return;
+		m_session.loadSong(*st.song);
+		m_songEditedMs = -1;
 	}
 
 	std::optional<uint8_t> MdMachine::tweakLead(const ed::MdKit& _kit, const std::optional<uint8_t> _preferred)

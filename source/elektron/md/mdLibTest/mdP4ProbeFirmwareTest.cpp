@@ -13,10 +13,12 @@
 #include "elektronData/mdJson.h"
 #include "elektronData/mdKit.h"
 #include "elektronData/mdPattern.h"
+#include "elektronData/mdSong.h"
 #include "elektronData/mdWorkingKit.h"
 
 #include "mdLib/mdautomation.h"
 #include "mdLib/mdfrontpanel.h"
+#include "mdLib/mdsequencerstate.h"
 
 #include <algorithm>
 #include <functional>
@@ -762,6 +764,141 @@ namespace
 		return p;
 	}
 
+	// 0.3.5 song playhead: which RAM byte holds the song row the machine plays? A song A02, A03 x2, A04, LOOP to
+	// row 1 (infinite), END; sampled in the middle of every pattern pass (step 3 of 8), main RAM and the
+	// MC68331's internal SRAM. A candidate equals a * row + b at every sample.
+	void songRow(const Bytes& _rom)
+	{
+		std::puts("== probe: the song row the machine plays");
+		Machine m(_rom, g_romName);
+		const auto base = readPattern(m, 0);
+		require(base.has_value(), "no pattern A01");
+		for(uint8_t s = 1; s < 4; ++s)
+		{
+			auto p = shortPattern(*base, s, s);
+			p.length = 8;
+			m.send(ed::encodeMdPattern(p));
+		}
+		ed::MdSong song;
+		song.position = 5;
+		song.rows.clear();
+		const auto row = [](const uint8_t _pattern, const uint8_t _repeats, const uint8_t _target = 0)
+		{
+			ed::MdSongRow r;
+			r.pattern = _pattern;
+			r.repeats = _repeats;
+			r.target = _target;
+			r.end = 8;
+			return r;
+		};
+		song.rows = {row(1, 0), row(2, 1), row(3, 0), row(ed::MdSongRow::g_loopRow, 0, 1), row(ed::MdSongRow::g_endRow, 0)};
+		m.send(ed::encodeMdSong(song));
+		m.run(200);
+		m.send(ed::mdLoadSong(5));
+		m.run(200);
+		m.send(ed::mdSetStatus(ed::MdStatus::SequencerMode, 1));
+		m.run(200);
+		std::printf("  sequencer mode %d, song %d\n", status(m, ed::MdStatus::SequencerMode), status(m, ed::MdStatus::Song));
+		const auto snap = [&]
+		{
+			Bytes r;
+			r.reserve(0x100000 + 0x2000);
+			for(uint32_t a = 0x200000; a < 0x300000; ++a)
+				r.push_back(m.read8(a));
+			for(uint32_t a = 0x1000000; a < 0x1002000; ++a)
+				r.push_back(m.read8(a));
+			return r;
+		};
+		const auto addressOf = [](const size_t _i) { return _i < 0x100000 ? uint32_t(_i + 0x200000) : uint32_t(_i - 0x100000 + 0x1000000); };
+		const auto stoppedSnap = snap();
+		if(std::getenv("SONGROW_TRACE"))
+		{
+			// when does the row byte move, against the step and the pattern byte (from PLAY, 6 s)
+			std::printf("  stopped: row %d pattern %d\n", m.read8(md::SongPosition::g_rowAddress), m.read8(0x28d205));
+			press(m, md::PanelControl::Play);
+			int lr = -1, lp = -1, ls = -1;
+			for(double t = 0; t < 6000; t += 2)
+			{
+				m.run(2);
+				const int r = m.read8(md::SongPosition::g_rowAddress), pt = m.read8(0x28d205), st = m.playhead();
+				if(r != lr || pt != lp || (st == 0 && ls != 0))
+					std::printf("  %6.0f ms step %2d row %d pattern %d\n", t, st, r, pt);
+				lr = r; lp = pt; ls = st;
+			}
+			return;
+		}
+		press(m, md::PanelControl::Play);
+		std::vector<Bytes> snaps;
+		std::vector<int> rows, patterns;
+		int lastStep = m.playhead();
+		for(double t = 0; t < 20000 && snaps.size() < 14; t += 5)
+		{
+			m.run(5);
+			const int s = m.playhead();
+			if(s == 3 && lastStep != 3)
+			{
+				const int pat = m.read8(0x28d205);
+				patterns.push_back(pat);
+				rows.push_back(pat - 1);
+				snaps.push_back(snap());
+			}
+			lastStep = s;
+		}
+		printList("pattern at each pass (A02 A03 A03 A04 then A03 A03 A04 ...)", patterns);
+		for(const int a : {1, 2, 4, 10, 12})
+		{
+			std::printf("  value = %d * row + b:", a);
+			int n = 0;
+			for(size_t i = 0; i < snaps[0].size(); ++i)
+			{
+				const int b = int(snaps[0][i]) - a * rows[0];
+				bool all = true, moves = false;
+				for(size_t k = 0; k < snaps.size() && all; ++k)
+				{
+					all = ((int(snaps[k][i]) - a * rows[k] - b) & 0xff) == 0;
+					moves = moves || snaps[k][i] != snaps[0][i];
+				}
+				if(all && moves && n++ < 30)
+					std::printf(" %06x(b=%d,stopped %02x)", addressOf(i), b, stoppedSnap[i]);
+			}
+			std::printf(" (%d)\n", n);
+		}
+		// a counter of passes inside the row (A03 twice)
+		std::printf("  per-sample values of the 1x candidates:\n");
+		for(size_t i = 0; i < snaps[0].size(); ++i)
+		{
+			const int b = int(snaps[0][i]) - rows[0];
+			bool all = true, moves = false;
+			for(size_t k = 0; k < snaps.size() && all; ++k)
+			{
+				all = ((int(snaps[k][i]) - rows[k] - b) & 0xff) == 0;
+				moves = moves || snaps[k][i] != snaps[0][i];
+			}
+			if(!all || !moves)
+				continue;
+			std::printf("    %06x:", addressOf(i));
+			for(size_t k = 0; k < snaps.size(); ++k)
+				std::printf(" %02x", snaps[k][i]);
+			std::printf("  (+1 %02x, -1 %02x)\n", i + 1 < snaps[0].size() ? snaps.back()[i + 1] : 0, i ? snaps.back()[i - 1] : 0);
+		}
+		stopMachine(m);
+		std::printf("  stopped:");
+		const auto after = snap();
+		for(size_t i = 0; i < after.size(); ++i)
+		{
+			const int b = int(snaps[0][i]) - rows[0];
+			bool all = true, moves = false;
+			for(size_t k = 0; k < snaps.size() && all; ++k)
+			{
+				all = ((int(snaps[k][i]) - rows[k] - b) & 0xff) == 0;
+				moves = moves || snaps[k][i] != snaps[0][i];
+			}
+			if(all && moves)
+				std::printf(" %06x=%02x", addressOf(i), after[i]);
+		}
+		std::printf("\n");
+	}
+
 	void chain(const Bytes& _rom)
 	{
 		std::puts("== probe: pattern chaining (hold BANK, press TRIG keys)");
@@ -1451,6 +1588,8 @@ int main(const int _argc, char** _argv)
 		}
 		if(only == "chain5")
 			chainRegion(rom);
+		if(only == "songrow")
+			songRow(rom);
 		if(only == "remotekeys")
 			remoteKeys(rom);
 		if(only == "flaguse")

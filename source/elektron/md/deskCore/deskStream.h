@@ -68,7 +68,8 @@ namespace deskCore
 	//   value    a CC (a kit value, a mute): the value budget; the newest value of a key replaces a waiting one.
 	//   priority notes and a key's held value: never wait for the value budget (they pass waiting values), but
 	//            keep their place after SysEx.
-	//   after    work that must follow what was sent before it (the working kit's edits after a pattern dump).
+	//   after    work that must follow what was sent before it, once the machine has read and applied it (the working
+	//            kit's edits after a pattern dump that reloads the kit, B-025).
 	// Two paces (0.3.4): the policy given (a MIDI cable's) while the machine plays, StreamPolicy::stopped() while
 	// it stands (setPlaying). A transfer that is under way when play starts goes on at cable speed; when play
 	// stops, what waits goes at the fast pace. Starts in the playing pace (the safe one) until told.
@@ -311,8 +312,10 @@ namespace deskCore
 			case Lane::Value:
 				return m_policy.valueBytesPerSecond <= 0 || m_tokens >= double(_i.cost);
 			case Lane::Priority:
-			case Lane::Then:
 				return true;
+			case Lane::Then:
+				// B-025: after the machine has read and applied what went before (a pattern dump's kit reload)
+				return !paced() || _nowMs >= m_settledAtMs;
 			}
 			return true;
 		}

@@ -63,6 +63,7 @@ namespace mmDesk
 		int mutes = -1;				// bit t: synth track t, bit 6 + t: MIDI track t (RAM, MM-P4); -1 = unknown
 		int recording = -1;			// 0 off, 1 GRID RECORDING (RAM 0x26bbb3), 2 LIVE RECORDING (0x2bff01); -1 = unknown
 		int bankGroup = -1;			// MM-P8: BANK GROUP, 0 A-D, 1 E-H (RAM 0x70000b); -1 = unknown
+		int songRow = -1;			// 0.3.5: the song row that plays (RAM 0x2bdba1, SONG mode); -1 = unknown
 		bool chainKnown = false;	// MM-P8: the chain is readable (RAM 0x2bc2c4)
 		Chain chain;
 	};

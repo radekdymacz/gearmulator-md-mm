@@ -1720,15 +1720,23 @@ svg.route{width:100%;height:auto;aspect-ratio:1200/146;min-height:0}
 .dlgbox.nudge{animation:nudge .16s 2}
 @media (prefers-reduced-motion:reduce){.dlgbox.nudge{animation:none}}
 /* A context menu (K3, deskMenu.js): at the pointer, above the clear backdrop; each item with its key at the right.
-   Plain colours (no color-mix: an older WebKit, deskCompat.js) */
-.deskmenu{position:fixed;z-index:var(--mz,60);min-width:210px;max-width:calc(100vw - 8px);max-height:calc(100vh - 8px);overflow:auto;box-sizing:border-box;padding:4px;background:var(--plate,#e9e6df);color:var(--body,var(--print,#222));border:1.5px solid var(--print,#222);border-radius:6px;box-shadow:0 10px 28px rgba(0,0,0,.35);font:500 13px/1.2 var(--sans,system-ui,sans-serif)}
+   #deskmenu holds the panels (the menu, an open submenu beside it), each placed by the script. The page's tokens
+   (--plate --print --body --rule --mono --sans: light and dark, MK1 and MK2 alike); plain colours and rgba only (no
+   color-mix, no :has: an older WebKit, deskCompat.js) */
+.deskmenu{position:fixed;left:0;top:0;width:0;height:0;overflow:visible;z-index:var(--mz,60)}
 .deskmenu[hidden]{display:none}
+.deskmenu .mpanel{position:fixed;min-width:210px;max-width:calc(100vw - 8px);max-height:calc(100vh - 8px);overflow:auto;box-sizing:border-box;padding:4px;background:var(--plate,#e9e6df);color:var(--body,var(--print,#222));border:1.5px solid var(--print,#222);border-radius:6px;box-shadow:0 10px 28px rgba(0,0,0,.35);font:500 13px/1.2 var(--sans,system-ui,sans-serif);-webkit-user-select:none;user-select:none}
 .deskmenu .mtitle{padding:5px 10px 6px;font:500 10px/1.2 var(--mono,ui-monospace,monospace);letter-spacing:.06em;text-transform:uppercase;opacity:.7}
-.deskmenu hr{border:0;border-top:1px solid rgba(0,0,0,.18);margin:4px 6px}
-.deskmenu button{display:flex;width:100%;align-items:center;justify-content:space-between;gap:18px;padding:6px 10px;border:0;border-radius:4px;background:transparent;color:inherit;font:inherit;text-align:left;cursor:pointer}
-.deskmenu button:hover,.deskmenu button:focus{background:var(--print,#222);color:var(--plate,#fff);outline:none}
+.deskmenu .mhead{padding:7px 10px 3px;font:500 10px/1.2 var(--mono,ui-monospace,monospace);letter-spacing:.06em;text-transform:uppercase;opacity:.6}
+.deskmenu .mnote{padding:4px 10px 5px;font:400 11px/1.3 var(--mono,ui-monospace,monospace);opacity:.65;max-width:360px;white-space:normal}
+.deskmenu hr{border:0;border-top:1px solid var(--rule,rgba(0,0,0,.18));margin:4px 6px}
+.deskmenu button{display:flex;width:100%;height:auto;min-height:0;margin:0;align-items:center;gap:10px;padding:6px 10px;border:0;border-radius:4px;box-shadow:none;text-transform:none;letter-spacing:normal;background:transparent;color:inherit;font:inherit;text-align:left;cursor:pointer;white-space:nowrap}
+.deskmenu button>span{flex:1 1 auto}
+.deskmenu button:hover,.deskmenu button:focus,.deskmenu button[aria-expanded=true]{background:var(--print,#222);color:var(--plate,#fff);outline:none}
 .deskmenu button[disabled]{opacity:.4;cursor:default;background:transparent;color:inherit}
-.deskmenu kbd{font:400 11px/1 var(--mono,ui-monospace,monospace);opacity:.75;white-space:nowrap}
+.deskmenu .mck{flex:0 0 12px;margin-right:-2px;font-style:normal;text-align:center}
+.deskmenu .msub{flex:0 0 auto;font-style:normal;font-size:15px;line-height:13px;opacity:.8}
+.deskmenu kbd{margin-left:8px;font:400 11px/1 var(--mono,ui-monospace,monospace);opacity:.75;white-space:nowrap}
 /* The banner (I-005, deskModal.js Banner): a non-modal notice at the bottom right, under any modal and its backdrop */
 .gmbanner{position:fixed;right:16px;bottom:calc(16px + env(safe-area-inset-bottom,0px));z-index:58;max-width:min(420px,calc(100vw - 32px));box-sizing:border-box;display:grid;gap:8px;padding:12px 14px;background:var(--plate);color:var(--body,var(--print));border:2px solid var(--print);border-radius:6px;box-shadow:0 12px 32px rgba(0,0,0,.35)}
 .gmbanner[hidden]{display:none}
@@ -1750,6 +1758,8 @@ svg.route{width:100%;height:auto;aspect-ratio:1200/146;min-height:0}
 @keyframes bootind{0%{transform:translateX(-100%)}100%{transform:translateX(340%)}}
 .bootcard.rom .bootbar{display:none}
 .bootline{margin:0;font:500 13px var(--sans);color:var(--print2);max-width:48ch}
+/* B-035: the host runs no audio, or the machine is slower than real time */
+.bootline.warn{color:var(--print);font-weight:600}
 .bootrom{display:grid;gap:10px;justify-items:center;width:100%}
 .bootzone{all:unset;box-sizing:border-box;width:100%;display:grid;gap:6px;justify-items:center;padding:20px;border:2px solid var(--print);border-radius:8px;background:color-mix(in srgb,var(--print) 8%,var(--plate));box-shadow:0 3px 0 var(--print2);cursor:pointer;text-align:center}
 .bootzone:active{transform:translateY(2px);box-shadow:0 1px 0 var(--print2)}
@@ -1783,20 +1793,108 @@ body.deskmidi #main,body.deskmidi #rail{opacity:.3;pointer-events:none;transitio
 .bmkeys button{height:30px;padding:0 14px;font:600 12px var(--sans);letter-spacing:.1em;text-transform:uppercase}
 .bmkeys button[hidden]{display:none}
 @media (prefers-reduced-motion:reduce){.bootcard{transition:none}.bootcard.ind .bootbar i{animation:none}.bmled{animation:none}body.deskmidi #main,body.deskmidi #rail{transition:none}}
-/* The SysEx import panel (P7, deskSyx.js) */
-.syxpop{position:absolute;z-index:22;width:min(900px,calc(100vw - 32px));display:grid;gap:10px;align-content:start;padding:14px;background:var(--plate);border:2px solid var(--print);border-radius:6px;box-shadow:0 18px 40px rgba(0,0,0,.35)}
+/* The SysEx import panel (P7, deskSyx.js; 0.3.5): a tab per kind, the machine's slot grid, one footer.
+   Plain colours and no :has()/subgrid (an older WebKit, deskCompat.js) */
+.syxpop{position:absolute;z-index:22;width:min(1120px,calc(100vw - 48px));display:grid;gap:10px;align-content:start;padding:14px 16px;background:var(--plate);color:var(--body,var(--print));border:2px solid var(--print);border-radius:6px;box-shadow:0 18px 40px rgba(0,0,0,.35)}
 .syxpop[hidden]{display:none}
-.syxbody{display:grid;gap:6px;max-height:48vh;overflow:auto}
-.syxrow{display:flex;align-items:center;gap:10px;font:600 13px var(--sans);letter-spacing:.06em;text-transform:uppercase;color:var(--print)}
-.syxrow .syxn{font:500 12px var(--mono);letter-spacing:0;text-transform:none;color:var(--print2)}
-.syxnames{display:flex;flex-wrap:wrap;gap:3px;padding:0 0 6px 24px}
-.syxname{font:10px var(--pix);text-transform:uppercase;padding:2px 5px;border-radius:2px;background:var(--lcd);color:var(--ink);opacity:.8}
-.syxname.over{opacity:1;box-shadow:inset 0 0 0 1px var(--led)}
-.syxwarn,.syxwhy{margin:0;font:500 12px var(--sans);color:var(--print2)}
+.syxhead{flex-wrap:wrap;row-gap:6px}
+.syxhead .lcdchip{flex:none}
+.syxfile{flex:1 1 200px;min-width:0;font:500 12px/1.3 var(--mono);color:var(--print2);overflow-wrap:anywhere;word-break:break-all}
+.syxq{width:26px;padding:0!important;font:600 13px var(--sans)!important;letter-spacing:0!important}
+.syxhelp{margin:0;font:500 13px/1.4 var(--sans);color:var(--print2)}
+.syxwhy{margin:0;font:500 14px/1.4 var(--sans);color:var(--print)}
+/* the tabs: a kind each, its LED sends it or not */
+.syxtabs{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:6px}
+.syxtab{display:flex;align-items:stretch;min-width:0;border-radius:4px;background:var(--plate2);box-shadow:inset 0 0 0 1px var(--rule)}
+.syxtab.sel{background:var(--plate3);box-shadow:inset 0 0 0 2px var(--print)}
+.syxtab input{-webkit-appearance:none;appearance:none;flex:none;align-self:center;width:13px;height:13px;margin:0 0 0 12px;border-radius:50%;background:var(--ledoff);border:0;cursor:pointer}
+.syxtab input:checked{background:var(--led);box-shadow:0 0 6px 1px var(--led)}
+.syxtab input:disabled{cursor:default}
+.syxtab.bad input:checked{animation:none}
+.syxtabb{flex:1;min-width:0;display:grid;gap:2px;justify-items:start;text-align:left;padding:7px 12px 7px 10px;background:transparent!important;color:var(--print);box-shadow:none!important;transform:none!important;border-radius:4px}
+.syxtabb .t{display:flex;align-items:center;gap:8px;font:600 14px var(--sans);letter-spacing:.14em;text-transform:uppercase}
+.syxct{font:11px/1 var(--pix);letter-spacing:0;background:var(--lcd);color:var(--ink);padding:3px 6px 2px;border-radius:2px}
+.syxpl[hidden]{display:none}
+.syxpl{font:600 9px/1 var(--mono);letter-spacing:0;background:var(--cream,var(--lcd));color:var(--creamtext,var(--ink));padding:3px 4px;border-radius:2px}
+.syxtabb .s{max-width:100%;font:500 11px var(--mono);color:var(--print2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.syxtabb .s em,.syxtab.bad .s{font-style:normal;color:var(--rec)}
+/* importing: each kind's own bar under its line; the kind at work blinks its LED */
+.syxtb{display:block;justify-self:stretch;height:4px;margin-top:3px;border-radius:2px;background:var(--ledoff);overflow:hidden}
+.syxtb b{display:block;height:100%;width:0;background:var(--led);transition:width .2s}
+.syxtab.work input:checked{animation:blink 1s steps(2) infinite}
+@media (prefers-reduced-motion:reduce){.syxtab.work input:checked{animation:none}}
+/* the slots, as on the machine */
+.syxbody{max-height:calc(100vh - 330px);overflow:auto;overscroll-behavior:contain}
+.syxpane[hidden]{display:none}
+.syxgrid{display:grid;gap:4px;align-items:stretch}
+.syxrl{align-self:center;font:600 12px var(--mono);color:var(--print2);text-align:center}
+.syxc{position:relative;height:38px;min-width:0;display:grid;align-content:center;gap:1px;padding:3px 6px;margin:0;text-align:left;border:0;border-radius:3px;background:var(--key);color:var(--keytext);box-shadow:inset 0 -2px 0 rgba(0,0,0,.35);font:500 11px var(--mono);letter-spacing:0;cursor:pointer}
+.syxc b{font:500 10px/1.1 var(--mono);color:var(--keydim);white-space:nowrap}
+.syxc span{font:500 11px/1.2 var(--mono);text-transform:uppercase;white-space:nowrap;overflow:hidden}
+.syxc.over::after{content:"";position:absolute;right:5px;top:5px;width:6px;height:6px;border-radius:50%;background:var(--led);box-shadow:0 0 4px var(--led)}
+.syxc.plays{background:var(--cream,var(--lcd));color:var(--creamtext,var(--ink))}
+.syxc.plays b{color:var(--creamtext,var(--ink))}
+.syxc.unread span{font-style:italic}
+.syxc.off{background:transparent;color:var(--print3);box-shadow:inset 0 0 0 1px var(--rule)}
+.syxc.off b{color:var(--print3)}
+.syxc.off span{text-decoration:line-through}
+.syxc.off::after{opacity:.35}
+.syxc:hover{filter:brightness(1.12)}
+.syxc.off:hover{background:var(--plate3);filter:none}
+.syxc.none{display:grid;align-content:center;background:transparent;box-shadow:none;border:1px dashed var(--rule);opacity:.45;cursor:default}
+.syxc.none b{color:var(--print3)}
+.syxgrid.g8 .syxc{height:44px}
+.kindoff .syxc:not(.none){opacity:.4;cursor:default;filter:none}
+.syx-running .syxc,.syx-report .syxc{cursor:default}
+.syx-running .syxc:hover,.syx-report .syxc:hover{filter:none}
+.syxo{position:absolute;right:4px;top:3px;font:600 11px/1 var(--mono);font-style:normal;color:var(--keydim)}
+.syxc.bad{box-shadow:inset 0 0 0 2px var(--rec)}
+.syxc.bad .syxo{color:var(--rec)}
+.syx-report .syxc.over::after{display:none}
+.syx-report .syxc:not(.none):not([data-syxout]){opacity:.3}
+.syxnote{margin:0 0 8px;font:500 13px/1.4 var(--sans);color:var(--print2)}
+.syxnote b{color:var(--print);font-weight:600}
+/* the legend and the quick choices under the grid */
+.syxtools{display:flex;align-items:center;justify-content:space-between;gap:6px 18px;flex-wrap:wrap;min-height:26px}
+.syxleg{display:flex;align-items:center;flex-wrap:wrap;gap:4px 6px;font:500 11px var(--mono);color:var(--print2)}
+.syxleg .lg{display:inline-grid;place-items:center;width:18px;height:14px;margin-left:8px;border-radius:2px;background:var(--key);color:var(--keytext);font:600 9px/1 var(--mono);font-style:normal;position:relative}
+.syxleg .lg:first-child{margin-left:0}
+.syxleg .lg.over::after{content:"";position:absolute;right:2px;top:2px;width:4px;height:4px;border-radius:50%;background:var(--led)}
+.syxleg .lg.plays{background:var(--cream,var(--lcd));color:var(--creamtext,var(--ink))}
+.syxleg .lg.off{background:transparent;box-shadow:inset 0 0 0 1px var(--rule)}
+.syxleg .lg.bad{box-shadow:inset 0 0 0 1.5px var(--rec);color:var(--rec)}
+.syxsel{display:flex;gap:4px}
+.syxsel button{height:24px;padding:0 10px;font:600 10px var(--sans);letter-spacing:.14em;text-transform:uppercase;white-space:nowrap}
+.syxfilt{display:inline-flex;align-items:center;gap:6px;font:600 11px var(--sans);letter-spacing:.12em;text-transform:uppercase;color:var(--print);cursor:pointer}
+/* the problems, as a list (the report) */
+.syxlist{display:grid;gap:3px}
+.syxli{display:grid;grid-template-columns:44px minmax(80px,140px) 110px minmax(0,1fr);gap:10px;align-items:baseline;padding:4px 8px;border-radius:3px;background:var(--plate2);font:500 12px var(--mono);color:var(--print2)}
+.syxli b{font-weight:600;color:var(--print)}
+.syxli .nm{text-transform:uppercase;white-space:nowrap;overflow:hidden}
+.syxli .tag{font:600 11px var(--sans);letter-spacing:.12em;text-transform:uppercase;color:var(--rec)}
+.syxli .why{font:500 12px/1.35 var(--sans)}
+/* the footer: one line, the keys */
+.syxfoot{display:flex;align-items:center;gap:16px;border-top:1px solid var(--rule);padding-top:10px;min-height:44px}
+.syxmsg{flex:1;min-width:0;display:grid;gap:6px}
+.syxwarn,.syxsum{margin:0;font:500 14px/1.35 var(--sans);color:var(--print2)}
+.syxwarn.hot{color:var(--print)}
+.syxsum{color:var(--print);font-weight:600}
+.syxfoot .btnrow{flex:none;flex-wrap:nowrap}
+.syxfoot button{height:32px;padding:0 18px;font:600 12px var(--sans);letter-spacing:.14em;text-transform:uppercase;white-space:nowrap}
+.syxfoot button.go{background:var(--cream,var(--lcd));color:var(--creamtext,var(--ink))}
+.syxfoot button.go.danger{background:var(--rec);color:#fff}
+.syxfoot button:disabled{opacity:.35;cursor:default}
 .syxprob{font:500 12px var(--mono);color:var(--print2)}
-.syxbar{position:relative;height:18px;border-radius:3px;background:var(--ledoff);overflow:hidden}
+.syxprob summary{cursor:pointer}
+/* importing: the phases, the bar */
+.syxsteps{display:flex;gap:6px 22px;flex-wrap:wrap}
+.syxstep{display:inline-flex;align-items:center;gap:7px;font:600 12px var(--sans);letter-spacing:.14em;text-transform:uppercase;color:var(--print3)}
+.syxstep.done,.syxstep.now{color:var(--print)}
+.syxstep.now .led{animation:blink 1s steps(2) infinite}
+@media (prefers-reduced-motion:reduce){.syxstep.now .led{animation:none}}
+.syxbar{position:relative;height:20px;border-radius:3px;background:var(--ledoff);overflow:hidden}
 .syxbar i{position:absolute;left:0;top:0;bottom:0;background:var(--led);width:0;transition:width .2s}
-.syxbar span{position:relative;display:block;text-align:center;font:600 11px/18px var(--sans);color:var(--body)}
+.syxbar span{position:relative;display:block;padding:0 8px;text-align:center;font:600 11px/20px var(--sans);letter-spacing:.06em;color:#fff;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .syxkeys{display:inline-flex;gap:6px;margin-left:auto}
 .syxkeys+.libx{margin-left:8px!important}
 /* The AUDIO / MIDI panel (P6, deskAudio.js), the plate's own keys, LEDs and dropdowns */
@@ -1825,6 +1923,54 @@ body.deskmidi #main,body.deskmidi #rail{opacity:.3;pointer-events:none;transitio
 .amnote{font:500 11px var(--sans);color:var(--print2);padding-left:100px}
 .amerr{color:var(--led);font-weight:600}
 @media (max-width:900px){.amgrid{grid-template-columns:1fr}.amnote{padding-left:0}}
+/* 0.3.5: the line to the machine's own MIDI settings (GLOBAL, the Machinedrum Editor) */
+.amlink{background:none;border:0;padding:0;font:inherit;color:var(--print);text-decoration:underline;text-underline-offset:2px;cursor:pointer}
+/* The keyboard view (K-view, deskKeyView.js), both editors: the ? panel. The keys are flex cells sized in key units,
+   so the board fits the panel at any width; a narrow window drops the words on the keys (a click on a key, or the
+   list under it, says them). Plain colours and rgba only (no colour mixes: an older WebKit lacks them, deskCompat.js); the page's
+   tokens (--plate --print --body --rule --key --keytext --cream --mono --sans). */
+.globpop.kview{width:min(1120px,calc(100vw - 24px))}
+.kv-head{flex-wrap:wrap;row-gap:6px}
+.kv-head .note{flex:1 1 180px;min-width:0}
+.kv-search{flex:0 1 220px;min-width:120px;height:24px;box-sizing:border-box;padding:0 8px;border:1px solid var(--rule);border-radius:3px;background:var(--plate);color:var(--body);font:400 12px var(--mono,monospace)}
+.kv-scope{display:flex;gap:4px}
+.kv-layers{display:flex;flex-wrap:wrap;align-items:center;gap:6px}
+.kv-lab{font:500 10px var(--mono,monospace);letter-spacing:.08em;text-transform:uppercase;opacity:.7}
+.kv-hint{font-size:12px;opacity:.7;margin-left:6px}
+.kv-chip{height:24px;padding:0 10px;border:1px solid var(--rule);border-radius:12px;background:transparent;color:var(--body);font:600 11px var(--sans,sans-serif);letter-spacing:.06em;cursor:pointer}
+.kv-chip.on{background:var(--print);color:var(--plate);border-color:var(--print)}
+.kv-board{display:grid;gap:4px;padding:8px;border-radius:8px;background:rgba(0,0,0,.18);user-select:none;-webkit-user-select:none}
+.kv-keys{display:flex;gap:4px;min-width:0}
+.kv-cap{position:relative;min-width:0;height:46px;box-sizing:border-box;display:flex;flex-direction:column;justify-content:space-between;padding:3px 4px;border-radius:4px;background:var(--key);color:var(--keytext);box-shadow:inset 0 -3px 0 rgba(0,0,0,.35);overflow:hidden;cursor:pointer;opacity:.55}
+.kv-cap b{font:500 10px/1 var(--mono,monospace);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;opacity:.8}
+.kv-cap .kv-act{font:600 10px/1.1 var(--sans,sans-serif);font-style:normal;letter-spacing:.02em;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;word-break:break-word}
+.kv-cap .kv-act small{font-size:9px;opacity:.7}
+.kv-cap.has{opacity:1}
+.kv-cap.has .kv-act{color:var(--cream)}
+.kv-cap.mod{opacity:1;border:0;font:inherit;text-align:left;background:rgba(0,0,0,.45)}
+.kv-cap.mod.on{background:var(--cream);color:var(--key)}
+.kv-cap.inert{opacity:.3;cursor:default}
+.kv-cap.sel{outline:2px solid var(--cream);outline-offset:-2px}
+.kv-cap.hit{outline:2px solid var(--cream);outline-offset:-2px;opacity:1}
+.kv-cap.piano.white{background:#ecebe5;color:#2f2c29;box-shadow:inset 0 -4px 0 rgba(0,0,0,.18);opacity:1}
+.kv-cap.piano.white .kv-act{color:#2f2c29}
+.kv-cap.piano.black{background:#101010;color:#ecebe5;opacity:1}
+.kv-cap .kv-note{position:absolute;right:4px;top:3px;font:600 11px/1 var(--mono,monospace);font-style:normal}
+.kv-stack{display:flex;flex-direction:column;gap:2px;min-width:0}
+.kv-cap.kv-half{height:22px;padding:2px 4px;flex-direction:row;align-items:center;gap:3px}
+.kv-cap.kv-half .kv-act{-webkit-line-clamp:1}
+.kv-detail{min-height:22px;font-size:13px}
+.kv-detail .kv-row{display:grid;grid-template-columns:minmax(80px,auto) 1fr;gap:10px;align-items:baseline}
+.kv-row kbd,.kv-detail kbd{justify-self:start;font:500 11px var(--mono,monospace);background:var(--key);color:var(--keytext);border-radius:3px;padding:2px 6px;white-space:nowrap}
+.kv-cols{display:grid;grid-template-columns:minmax(0,2fr) minmax(0,1fr);gap:10px}
+.kv-mouse h4{margin:8px 0 4px;font:600 11px var(--sans,sans-serif);letter-spacing:.1em;text-transform:uppercase;opacity:.75}
+.kv-mouse .kv-row{display:grid;grid-template-columns:minmax(110px,auto) 1fr;gap:10px;align-items:baseline;font-size:13px;margin:2px 0}
+.kv-tips ul{margin:4px 0 0;padding-left:18px;display:grid;gap:5px;font-size:13px;line-height:1.35}
+.kv-none{font-size:12px;opacity:.65}
+.kv-list>h3{margin:4px 0 6px}
+/* a smaller window: fewer words on the keys, the columns one under the other */
+@media (max-width:900px){.kv-cap{height:38px}.kv-cap .kv-act{-webkit-line-clamp:1;font-size:9px}.kv-cols{grid-template-columns:minmax(0,1fr)}.kv-hint{display:none}.globpop.kview .keysgrid{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media (max-width:640px){.kv-cap{height:30px;padding:2px}.kv-cap .kv-act{display:none}.kv-cap.has::after{content:"";position:absolute;left:50%;bottom:4px;width:5px;height:5px;margin-left:-2px;border-radius:50%;background:var(--cream)}.kv-keys,.kv-board{gap:2px}.kv-cap b{font-size:8px}.globpop.kview .keysgrid{grid-template-columns:minmax(0,1fr)}}
 /* P7: the workspace and setup keys: one minimum width each, so the rows look even (MIX was a sliver) */
 #tabs button{min-width:60px!important;justify-content:center;box-sizing:border-box}
 .setkeys button{min-width:46px!important;justify-content:center;box-sizing:border-box}
@@ -1861,6 +2007,10 @@ img,svg,canvas{-webkit-user-drag:none}
 .krows{display:grid;gap:4px}
 .krow{display:grid;grid-template-columns:minmax(96px,auto) 1fr;gap:10px;align-items:baseline;font-size:13px}
 .krow kbd{justify-self:start;font:500 11px var(--mono);background:var(--key);color:var(--keytext);border-radius:3px;padding:2px 6px;box-shadow:inset 0 -2px 0 rgba(0,0,0,.35);white-space:nowrap}
+/* the keyboard view's list (shared/deskKeyView.js, B-018): its rows as the list's above */
+.keyrows{display:grid;gap:4px}
+.keyrow{display:grid;grid-template-columns:minmax(96px,auto) 1fr;gap:10px;align-items:baseline;font-size:13px}
+.keyrow kbd{justify-self:start;font:500 11px var(--mono);background:var(--key);color:var(--keytext);border-radius:3px;padding:2px 6px;box-shadow:inset 0 -2px 0 rgba(0,0,0,.35);white-space:nowrap}
 /* LEN ×2 (double the pattern) hugs LEN on LCD line 2, as narrow as its text, so SWG still fits */
 .l2[data-l2=dbl]{margin-left:-8px;gap:0;width:auto!important}
 /* ===== GEN and MUTATE (MM-PORT-PLAN.md d, 76-gen.js): the Machinedrum Editor's bars (its mdDesk.css), the
@@ -2058,7 +2208,11 @@ body.dockother #rail .railparams>:is(.lpspace,.pagetabs,.pkcol),body.dockother #
 .perf3{grid-template-columns:minmax(0,1fr) auto minmax(0,1fr)!important;min-height:0}
 .perf3>.card{min-height:0}
 .perf3 .menvcard{grid-template-rows:auto minmax(0,1fr) auto auto;align-content:stretch}
-.perf3 .menvcard canvas.ed{height:100%!important;min-height:96px}
+/* B-017: the envelope's screen fills its row from a box of its own, the canvas absolute inside it. A canvas in the row
+   itself sized the row from its drawing (its width and height attributes, set on every redraw), so dragging DEC grew
+   the card and the page a little with each redraw until the render on release put it back. */
+.perf3 .menvcard .menvplot{position:relative;min-height:96px;min-width:0}
+.perf3 .menvcard .menvplot>canvas.ed{position:absolute;inset:0;width:100%;height:100%!important;min-height:0!important}
 .perf3 .asgcard{--joy:clamp(200px,calc(100vh - 500px),440px);grid-template-rows:auto auto minmax(0,1fr)}
 .perf3 .asgcard .asgn{grid-template-columns:var(--joy) 270px;align-items:start}
 .perf3 .asgcard .asgn:not(:has(.joy)){grid-template-columns:calc(var(--joy) + 284px)}
@@ -2557,14 +2711,14 @@ function mmPaint(steps,a,b,mode,n){const out=[];for(let s=Math.min(a,b);s<=Math.
 const MM_SEAM={
  "host":[
   "ownsClock","engineLabels","notes","start","commit","intent","library","undo","redo","history","togglePlay",
-  "selectPattern","kit","tempo","mutes","keyMode","record","songSlot","chain","chainClear","loadSong","waiting",
+  "selectPattern","kit","tempo","mutes","keyMode","record","songSlot","chain","chainClear","seqMode","loadSong","waiting",
   "sendNow","playKey","keyUp","noteOn","noteOff","joy","learning","learnTarget","learnBind","modulators",
   "engine","chooseRom","removeRom","romManage","syxChoose","syxExport","syxStart","syxStop","revealRom",
   "recheck","firstRun","bootScreen","renderPst","menu","audioDoc","audioSend","audioMeter"],
  "view":[
   "audible","soloed","engReady","asgT","noteName","pname","machName","kitName","gated","busy","sel","mode",
   "playing","step","tempo","engineState","kitState","learnTarget","learning","ctlSetup","show","startEmpty",
-  "setPatternSlot","setKitSlot","setReading","setTempo","setInput","setPlaying","setStep","setEng","dlgOpen",
+  "setPatternSlot","setKitSlot","setReading","setTempo","setInput","setPlaying","setStep","setSongRow","setEng","dlgOpen",
   "setEngineLabel","setEngineTip","setEngines","setAudioEntry","clearLearnTarget","setMapping","setModulation",
   "setCtlSetup","disable","setRecord","setLcd","setKeyDown","setPst","closeFirmwareDialog","bootRom",
   "bootInstalled","syxPreview","syxProgress","render","renderTop","drawLib","toast","ask","redraw","movePH",
@@ -2657,8 +2811,8 @@ function demoRebase(step){if(window.MMDemoHost)window.MMDemoHost.rebase(step)}
                                       host's engine runs them ({sources, links}, ctlSetup()); it
                                       shows their moving values with MMView.setModulation
      notes                            the host's words for the Control sources ({ccSource, appSource})
-     engine(kind), firstRun(), bootScreen(on), renderPst(), engineLabels, menu()
-     syxChoose(), syxExport(), syxStart(kinds), syxStop()   SysEx import and export (P7): the host's file
+     engine(kind), firstRun(), bootScreen(on), renderPst(), engineLabels, menu(x, y) (the editor's menu at that point: the host draws it with DeskMenu, I-008)
+     syxChoose(), syxExport(), syxStart(kinds, skip), syxStop()   SysEx import and export (P7, B-019): the host's file
                                       dialogs; the preview and progress come back through MMView
      removeRom(info)   REMOVE in the LOAD ROM card
      romManage()   LOAD ROM in the engine menu (a host shows which firmware runs, REPLACE and REMOVE; none: the start-up card)
@@ -2716,29 +2870,7 @@ const Modifiers = (() => {
 	}
 	if (typeof document !== "undefined" && document.addEventListener) { if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", localise); else localise(); }
 
-	/* FN (K4, DESIGN-keymap.md P5): the machine's FUNCTION key on the screen, for a mouse or a touch screen, for a
-	   host or a desktop that takes Alt (Windows' menu bar, Linux's Alt-drag): while it is on, every pointer and key
-	   event the page sees says ⌥ (altKey), so every ⌥ gesture and key has a route without a held key. "once": the next
-	   click, drag or key gets it, then it goes off; "latch" (a double-click on its key) until it is clicked again or
-	   Esc. Events on the FN key itself are left as they are. fn(state) sets it; onFn(f) hears every change. */
-	let fn = "off";
-	const fnHear = [];
-	const setFn = s => { if (s === fn) return; fn = s; fnHear.forEach(f => f(fn)); };
-	const onFnKey = e => !!e.target?.closest?.("[data-fnkey]");
-	const MODKEYS = new Set(["Alt", "Shift", "Meta", "Control", "CapsLock", "Fn", "AltGraph"]);
-	let spend = 0;
-	/* "once" is spent after the action it was for: a click, the end of a drag, a key (a timer: after the page's own handlers) */
-	const spendSoon = () => { if (fn !== "once" || spend) return; spend = setTimeout(() => { spend = 0; if (fn === "once") setFn("off"); }, 0); };
-	if (typeof addEventListener === "function") {
-		for (const type of ["pointerdown", "pointermove", "pointerup", "mousedown", "mousemove", "mouseup", "click", "dblclick", "contextmenu", "wheel", "keydown", "keyup"]) addEventListener(type, e => {
-			if (fn === "off" || onFnKey(e)) return;
-			if (type === "keydown" && e.key === "Escape") { setFn("off"); e.preventDefault(); e.stopImmediatePropagation(); return; }
-			if (!e.altKey) Object.defineProperty(e, "altKey", { value: true, configurable: true });
-			if (type === "click" || type === "pointerup" || (type === "keydown" && !MODKEYS.has(e.key))) spendSoon();
-		}, true);
-	}
-	return { get mac() { return mac; }, setPlatform(m) { mac = !!m; }, cmd, of, say,
-		get fn() { return fn; }, setFn, onFn: f => { fnHear.push(f); } };
+	return { get mac() { return mac; }, setPlatform(m) { mac = !!m; }, cmd, of, say };
 })();
 /* The key map's dispatcher (P5), one file for both editors and the MM mockup (skins/shared/): every shortcut
    is a Keys.bind entry; the pages' own maps are mdDeskKeys.js and the MM mockup's 56-keys.js. */
@@ -2784,10 +2916,19 @@ const Keys = (() => {
 		}
 		return false;
 	}
+	/* B-023: the field a key belongs to, or null: a text field keeps every key; a focused value (role=slider: a knob, a
+	   fader, the tempo; a click on one focuses it) only the keys that move it, which its own handler takes. Every other
+	   key is the page's: ⌘Z after a drag on a value (or after its arrow keys) undoes, Space plays, ⌘C copies. */
+	const SLIDER_KEYS = new Set(["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight", "PageUp", "PageDown", "Home", "End"]);
+	function fieldOf(el, e) {
+		const text = el?.closest?.("input,select,textarea"); if (text) return text;
+		const slider = el?.closest?.("[role=slider]");
+		return slider && SLIDER_KEYS.has(norm(e)) ? slider : null;
+	}
 	let lastDown = null;	/* {k, at} of the last ⌘ keydown: an edit command right after it is the same press */
 	document.addEventListener("keydown", e => {
 		if (Modifiers.cmd(e)) lastDown = { k: norm(e), at: Date.now() };
-		dispatch(e, e.target.closest?.("input,select,textarea,[role=slider]"));
+		dispatch(e, fieldOf(e.target, e));
 	});
 	/* ⌘C, ⌘X and ⌘V may never come as keys (B-015). On macOS the web view the plug-in sits in (JUCE's
 	   WebBrowserComponent, juce_WebBrowserComponent_mac.mm, WebViewKeyEquivalentResponder) turns them into the edit
@@ -2803,7 +2944,7 @@ const Keys = (() => {
 		if (lastDown && lastDown.k === key.toUpperCase() && Date.now() - lastDown.at < 500) return;
 		const k = { key, code: "Key" + key.toUpperCase(), metaKey: Modifiers.mac, ctrlKey: !Modifiers.mac, altKey: false, shiftKey: false, target: a || document.body,
 			preventDefault: () => e.preventDefault() };
-		note(k); dispatch(k, a?.closest?.("[role=slider]"));
+		note(k); dispatch(k, fieldOf(a, k));
 	});
 	/* The key probe (the start tests, scripts/macos|windows|linux/smoke_mdmm.*): with ?keyprobe=1 in the page's
 	   address (the plug-in adds it when GEARMULATOR_MDMM_KEYPROBE=1) a line at the bottom left says which keys reached
@@ -2837,6 +2978,190 @@ const Keys = (() => {
 	};
 	const byId = id => list.find(b => b.id === id) || null;
 	return { bind, list: () => list.slice(), byId, label, modsLabel, free, seen: () => seen.slice() };
+})();
+"use strict";
+/* The keyboard view (K-view, doc/modern-ux/DESIGN-keymap.md), one for both editors: what ? opens. A drawn computer
+   keyboard (its physical layout, macOS or Windows / Linux legends: ⌘ / Ctrl, ⌥ / Alt) where each key shows what it
+   does on the page shown; holding or clicking a modifier (⇧, ⌥, ⌘, or FN for ⌥) shows that layer; the keys that play
+   are drawn as piano keys with their notes; under it the mouse's tricks per area (steps, lock lane, values,
+   library...), a few tips, and every entry of the map by group (the list ? showed before). Everything comes from the
+   page's key map (Keys.list(), K0), so it cannot go stale: a key the map binds is on a key here, a gesture it
+   describes is in the tricks. This page or every page; a search over all of it.
+   Pure parts (no DOM): layout(mac), capsOf(entry), model(entries, opts), html(model). mount(el, opts) draws into a
+   panel and wires it (its own clicks, the search, the real keyboard's modifiers while it is open). */
+const KeyView = (() => {
+	/* ---- the keyboard: rows of [code, legend, width in key units]; "" legend: the code's own ---- */
+	const F = Array.from({ length: 12 }, (_, i) => ["F" + (i + 1), "F" + (i + 1), 1]);
+	const L = s => [...s].map(c => ["Key" + c, c, 1]);
+	function layout(mac) {
+		const row0 = [["Escape", "esc", 1.5], ...F, ...(mac ? [] : [["Delete", "Del", 1]])];
+		const row1 = [["Backquote", "`", 1], ...[..."1234567890"].map(d => ["Digit" + d, d, 1]), ["Minus", "-", 1], ["Equal", "=", 1], ["Backspace", mac ? "delete" : "⌫ Backspace", 2]];
+		const row2 = [["Tab", "tab", 1.5], ...L("QWERTYUIOP"), ["BracketLeft", "[", 1], ["BracketRight", "]", 1], ["Backslash", "\\", 1.5]];
+		const row3 = [["CapsLock", "caps", 1.75], ...L("ASDFGHJKL"), ["Semicolon", ";", 1], ["Quote", "'", 1], ["Enter", mac ? "return" : "Enter", 2.25]];
+		const row4 = [["ShiftLeft", mac ? "⇧ shift" : "Shift", 2.25], ...L("ZXCVBNM"), ["Comma", ",", 1], ["Period", ".", 1], ["Slash", "/ ?", 1], ["ShiftRight", mac ? "⇧ shift" : "Shift", 2.75]];
+		const arrows = [["ArrowLeft", "←", 1], ["Arrows", "", 1], ["ArrowRight", "→", 1]];
+		const row5 = mac ? [["ControlLeft", "⌃ control", 1.25], ["AltLeft", "⌥ option", 1.25], ["MetaLeft", "⌘ command", 1.5], ["Space", "", 6], ["MetaRight", "⌘ command", 1.5], ["AltRight", "⌥ option", 1.25], ...arrows]
+			: [["ControlLeft", "Ctrl", 1.5], ["MetaLeft", "Win", 1.25], ["AltLeft", "Alt", 1.25], ["Space", "", 6], ["AltRight", "Alt", 1.25], ["ControlRight", "Ctrl", 1.5], ...arrows];
+		return [row0, row1, row2, row3, row4, row5];
+	}
+	/* the modifier a key is, on this platform (a Mac's Ctrl and the Windows key are none of the map's) */
+	const modOfCode = (code, mac) => /^Shift/.test(code) ? "shift" : /^Alt/.test(code) ? "alt" : (mac ? /^Meta/ : /^Control/).test(code) ? "cmd" : null;
+	/* ---- an entry's physical keys and the modifiers it wants: [{code, mod}] (none for a gesture or a description) ---- */
+	const NAMED = { Space: "Space", Escape: "Escape", Enter: "Enter", Delete: "Delete", Backspace: "Backspace", Tab: "Tab",
+		ArrowLeft: "ArrowLeft", ArrowRight: "ArrowRight", ArrowUp: "ArrowUp", ArrowDown: "ArrowDown",
+		",": "Comma", ".": "Period", "/": "Slash", "?": "Slash", "[": "BracketLeft", "]": "BracketRight", "-": "Minus", "=": "Equal", ";": "Semicolon", "'": "Quote", "`": "Backquote" };
+	function codeOf(k) {
+		if (/^[A-Z]$/.test(k)) return "Key" + k;
+		if (/^[0-9]$/.test(k)) return "Digit" + k;
+		if (/^F\d{1,2}$/.test(k)) return k;
+		return NAMED[k] || null;
+	}
+	const modSet = m => (m || "").split("+").filter(Boolean).sort().join("+");
+	function capsOf(b) {
+		if (b.area || b.tip) return [];
+		const mod = modSet(b.mod);
+		if (b.code) return [{ code: b.code, mod }];
+		const out = [];
+		for (const k of b.keys) {
+			/* "A S D F G H J K L": the keys a description names */
+			const parts = /^[A-Z0-9](?: [A-Z0-9])+$/.test(k) ? k.split(" ") : [k];
+			for (const p of parts) {
+				const code = codeOf(p); if (!code) continue;
+				/* a plain character typed with ⇧ (?) is on its key's ⇧ layer */
+				out.push({ code, mod: p === "?" ? modSet(mod ? mod + "+shift" : "shift") : mod, part: p });
+			}
+		}
+		return out;
+	}
+	const textOf = b => { try { return String(typeof b.does === "function" ? b.does() : b.does || ""); } catch (_) { return ""; } };
+	/* a key's words on its cap: the entry's short (one part per key when it names one for each: "Oct − / Oct +"), or
+	   the first words of what it does */
+	function shortOf(b, i) {
+		if (b.short) { const parts = b.short.split(" / "); return parts.length === b.keys.length || (parts.length > 1 && parts.length === capsOf(b).length) ? parts[Math.min(i, parts.length - 1)] : b.short; }
+		const t = textOf(b).replace(/^(Sequence|Song|Sound|Click|Drag): /, "").split(/[.:;(,]/)[0].trim();
+		return t.length > 22 ? t.slice(0, 20).trim() + "…" : t;
+	}
+	const inScope = (b, page, all) => all || !b.scope || b.scope === "any" || b.scope.split(" ").includes(page);
+	const matches = (b, q) => !q || (textOf(b) + " " + (b.short || "") + " " + b.keys.join(" ") + " " + (b.id || "") + " " + (b.area || "") + " " + (b.group || "")).toLowerCase().includes(q);
+
+	/* ---- the model: what is drawn, as data ----
+	   opts {mac, layer: "cmd+shift" (sorted mod names), page, all, query, label(b) (the key's words), mapping} */
+	function model(entries, opts) {
+		const mac = !!opts.mac, layer = modSet(opts.layer), q = (opts.query || "").trim().toLowerCase();
+		const usable = entries.filter(b => !(b.mapping && !opts.mapping));
+		const keyed = usable.filter(b => !b.area && !b.tip);
+		/* every keyboard entry by its key and layer */
+		const at = new Map();
+		for (const b of keyed) capsOf(b).forEach((c, i) => { const k = c.mod + " " + c.code; at.set(k, [...(at.get(k) || []), { b, i }]); });
+		/* the piano: a description naming the keys with their notes (notes: "C D E ..."), white or black */
+		const piano = new Map();
+		for (const b of keyed) if (b.notes) { const n = b.notes.split(" "); capsOf(b).forEach((c, i) => piano.set(c.code, { note: n[i] || "", black: /♯|#|♭/.test(n[i] || "") })); }
+		/* the entries on a key, the one its words show first: a key the map dispatches before a described one, then the
+		   page's own; a key with many meanings by what is open (Esc) shows its general one, scope any */
+		const run = b => !!(b.run || b.dispatched);
+		const pick = list => {
+			const ok = list.filter(({ b }) => inScope(b, opts.page, opts.all));
+			const shown = ok.filter(({ b }) => !b.hidden), l = (shown.length ? shown : ok).slice();
+			const many = l.length >= 3, rank = ({ b }) => (run(b) ? 0 : 2) + (many ? (b.scope === "any" ? 0 : 1) : (b.scope === opts.page ? 0 : 1));
+			return l.sort((x, y) => rank(x) - rank(y));
+		};
+		const rows = layout(mac).map(row => row.map(([code, legend, w]) => {
+			if (code === "Arrows") {
+				const half = c => { const e = pick(at.get(layer + " " + c) || []); return { code: c, legend: c === "ArrowUp" ? "↑" : "↓", entries: e.map(x => x.b.id), action: e[0] ? shortOf(e[0].b, e[0].i) : "", hit: !!q && e.some(x => matches(x.b, q)) }; };
+				return { code, w, stack: [half("ArrowUp"), half("ArrowDown")] };
+			}
+			const mod = modOfCode(code, mac);
+			if (mod) return { code, legend, w, mod, on: layer.split("+").includes(mod) };
+			const e = pick(at.get(layer + " " + code) || []), p = layer === "" ? piano.get(code) : null;
+			return { code, legend, w, entries: e.map(x => x.b.id), action: e[0] ? shortOf(e[0].b, e[0].i) : "", more: Math.max(0, e.length - 1),
+				piano: p ? (p.black ? "black" : "white") : null, note: p ? p.note : "", hit: !!q && e.some(x => matches(x.b, q)), inert: /^(Control|Meta)/.test(code) && !mod };
+		}));
+		const label = opts.label || (b => b.keys.join(" / "));
+		const pointer = usable.filter(b => b.area && inScope(b, opts.page, opts.all) && matches(b, q));
+		const areas = [...new Set(pointer.map(b => b.area))].map(area => ({ area, rows: pointer.filter(b => b.area === area).map(b => ({ id: b.id, label: label(b), does: textOf(b) })) }));
+		const tips = usable.filter(b => b.tip && inScope(b, opts.page, opts.all) && matches(b, q)).map(b => ({ id: b.id, does: textOf(b) }));
+		const listed = keyed.filter(b => !b.hidden && inScope(b, opts.page, opts.all) && matches(b, q));
+		const order = opts.groups || [], rank = g => { const i = order.indexOf(g); return i < 0 ? order.length : i; };
+		const groups = [...new Set(listed.map(b => b.group))].sort((a, b) => rank(a) - rank(b)).map(group => ({ group, rows: listed.filter(b => b.group === group).map(b => ({ id: b.id, label: label(b), does: textOf(b) })) }));
+		return { mac, layer, rows, areas, tips, groups, query: q, all: !!opts.all, page: opts.page };
+	}
+
+	/* ---- the drawing (a string; the page puts it into its panel) ---- */
+	const esc = s => String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+	function capHtml(c) {
+		if (c.stack) return `<span class="kv-stack" style="flex:${c.w} ${c.w} 0">${c.stack.map(h => `<span class="kv-cap kv-half${h.action ? " has" : ""}${h.hit ? " hit" : ""}" data-code="${h.code}" data-ids="${esc(h.entries.join(" "))}" title="${esc(h.action)}"><b>${h.legend}</b><i class="kv-act">${esc(h.action)}</i></span>`).join("")}</span>`;
+		const cls = ["kv-cap", c.mod ? "mod" : "", c.on ? "on" : "", c.action ? "has" : "", c.piano ? "piano " + c.piano : "", c.hit ? "hit" : "", c.inert ? "inert" : ""].filter(Boolean).join(" ");
+		const tag = c.mod ? "button" : "span";
+		return `<${tag} class="${cls}" style="flex:${c.w} ${c.w} 0" data-code="${c.code}"${c.mod ? ` data-kvmod="${c.mod}" type="button" aria-pressed="${!!c.on}"` : ""}${c.entries ? ` data-ids="${esc(c.entries.join(" "))}"` : ""}${c.action ? ` title="${esc(c.action)}"` : ""}>`
+			+ `<b>${esc(c.legend)}</b>${c.note ? `<em class="kv-note">${esc(c.note)}</em>` : ""}<i class="kv-act">${esc(c.action || "")}${c.more ? ` <small>+${c.more}</small>` : ""}</i></${tag}>`;
+	}
+	/* the head (the search, this page / all) and the body (the layers, the board, the tricks, the tips, the list): a
+	   search or a layer draws the body again only, so the search field keeps its focus and what is typed */
+	function parts(m, o = {}) {
+		const sym = m.mac ? { shift: "⇧", alt: "⌥", cmd: "⌘" } : { shift: "Shift", alt: "Alt", cmd: "Ctrl" };
+		const lay = m.layer.split("+").filter(Boolean);
+		const chip = (mod, text) => `<button type="button" class="kv-chip${lay.includes(mod) ? " on" : ""}" data-kvmod="${mod}" aria-pressed="${lay.includes(mod)}">${text}</button>`;
+		const rowsHtml = list => list.map(r => `<div class="kv-row"><kbd>${esc(r.label)}</kbd><span>${esc(r.does)}</span></div>`).join("");
+		/* the editor's version (deskAbout.js) after the title, when the plug-in told the page */
+		const ver = typeof About !== "undefined" && About.label ? `<span class="note kv-ver" title="This editor's version">${esc(About.label)}</span>` : "";
+		const head = `<div class="libhead kv-head"><span class="cap">Keys</span>${ver}<span class="note">${esc(o.note || "")}</span>`
+			+ `<input class="kv-search" type="search" placeholder="Search keys and gestures" value="${esc(m.query)}" aria-label="Search keys and gestures" data-kvsearch="1">`
+			+ `<span class="kv-scope"><button type="button" class="kv-chip${m.all ? "" : " on"}" data-kvall="0" aria-pressed="${!m.all}">${esc(o.pageName || "This page")}</button><button type="button" class="kv-chip${m.all ? " on" : ""}" data-kvall="1" aria-pressed="${m.all}">All</button></span>`
+			+ `<button class="libx" data-keysx="1">Esc</button></div>`;
+		const body = `<div class="kv-layers"><span class="kv-lab">Layer</span><button type="button" class="kv-chip${lay.length ? "" : " on"}" data-kvmod="" aria-pressed="${!lay.length}">Plain</button>${chip("shift", sym.shift)}${chip("alt", sym.alt + " / FN")}${chip("cmd", sym.cmd)}`
+			+ `<span class="kv-hint">Hold a key or click one to see its layer. Piano keys play the selected track.</span></div>`
+			+ `<div class="kv-board ${m.mac ? "kv-osmac" : "kv-ospc"}" role="img" aria-label="The keyboard: what each key does">${m.rows.map(r => `<div class="kv-keys">${r.map(capHtml).join("")}</div>`).join("")}</div>`
+			+ `<div class="kv-detail" aria-live="polite"></div>`
+			+ `<div class="kv-cols"><section class="card kv-mouse"><header><h3>Mouse tricks</h3></header>${m.areas.length ? m.areas.map(a => `<h4>${esc(a.area)}</h4>${rowsHtml(a.rows)}`).join("") : `<p class="kv-none">None here.</p>`}</section>`
+			+ `<section class="card kv-tips"><header><h3>Tips</h3></header>${m.tips.length ? `<ul>${m.tips.map(t => `<li>${esc(t.does)}</li>`).join("")}</ul>` : `<p class="kv-none">None here.</p>`}</section></div>`
+			+ `<section class="kv-list"><h3>Every key${m.all ? "" : " on this page"}</h3><div class="keysgrid">${m.groups.map(g => `<section class="card"><header><h3>${esc(g.group)}</h3></header><div class="keyrows">${g.rows.map(r => `<div class="keyrow" data-id="${esc(r.id)}"><kbd>${esc(r.label)}</kbd><span>${esc(r.does)}</span></div>`).join("")}</div></section>`).join("")}</div></section>`;
+		return { head, body };
+	}
+	function html(m, o = {}) { const p = parts(m, o); return p.head + `<div class="kv-body">${p.body}</div>`; }
+
+	/* ---- the panel: draws and wires it. opts {entries(), page(), pageName(), mapping(), mac(), fn() (FN on), groups, note()} ---- */
+	function mount(el, opts) {
+		const st = { clicked: "", held: new Set(), all: false, query: "" };
+		const layerNow = () => {
+			const s = new Set(st.clicked.split("+").filter(Boolean)); st.held.forEach(m => s.add(m));
+			if (opts.fn && opts.fn()) s.add("alt");
+			return [...s].join("+");
+		};
+		const label = b => Keys.label(b);
+		/* body: only the body again (a search, a layer), the head as it is */
+		function draw(bodyOnly) {
+			const m = model(opts.entries(), { mac: opts.mac(), layer: layerNow(), page: opts.page(), all: st.all, query: st.query, mapping: opts.mapping(), label, groups: opts.groups });
+			const p = parts(m, { note: opts.note ? opts.note() : "", pageName: opts.pageName() }), b = el.querySelector(".kv-body");
+			if (bodyOnly && b) b.innerHTML = p.body; else el.innerHTML = p.head + `<div class="kv-body">${p.body}</div>`;
+		}
+		/* a key's detail under the board: every entry on it, in words */
+		function detail(code) {
+			const d = el.querySelector(".kv-detail"), cap = el.querySelector(`[data-code="${code}"]`); if (!d) return;
+			const ids = (cap?.dataset.ids || "").split(" ").filter(Boolean), list = opts.entries();
+			d.innerHTML = ids.length ? ids.map(id => list.find(b => b.id === id)).filter(Boolean).map(b => `<div class="kv-row"><kbd>${esc(label(b))}</kbd><span>${esc(textOf(b))}</span></div>`).join("")
+				: `<span class="kv-none">${esc(cap ? (cap.querySelector("b")?.textContent || code) : code)}: nothing on this layer${st.all ? "" : " here"}.</span>`;
+			el.querySelectorAll(".kv-cap.sel").forEach(c => c.classList.remove("sel")); cap?.classList.add("sel");
+		}
+		el.addEventListener("click", e => {
+			const mod = e.target.closest("[data-kvmod]");
+			if (mod) { const m = mod.dataset.kvmod, s = new Set(st.clicked.split("+").filter(Boolean)); if (!m) s.clear(); else s.has(m) ? s.delete(m) : s.add(m); st.clicked = [...s].join("+"); draw(true); return; }
+			const all = e.target.closest("[data-kvall]"); if (all) { st.all = all.dataset.kvall === "1"; draw(); return; }
+			const cap = e.target.closest(".kv-cap[data-code]"); if (cap) detail(cap.dataset.code);
+		});
+		el.addEventListener("input", e => { if (e.target.matches("[data-kvsearch]")) { st.query = e.target.value; draw(true); } });
+		/* the real keyboard while the panel is open (before the modal layer keeps the keys from the page): a modifier
+		   shows its layer; any other key shows what it does */
+		const MODS = { Shift: "shift", Alt: "alt", Meta: opts.mac() ? "cmd" : null, Control: opts.mac() ? null : "cmd" };
+		for (const type of ["keydown", "keyup"]) addEventListener(type, e => {
+			if (el.hidden) return;
+			const m = MODS[e.key];
+			if (m) { const was = layerNow(); if (type === "keydown") st.held.add(m); else st.held.delete(m); if (layerNow() !== was) draw(true); return; }
+			if (type === "keydown" && !e.target.closest?.("[data-kvsearch]") && e.key !== "Escape" && e.key !== "?") detail(e.code);
+		}, true);
+		addEventListener("blur", () => { if (st.held.size) { st.held.clear(); if (!el.hidden) draw(); } });
+		return { draw, reset() { st.held.clear(); st.clicked = ""; st.query = ""; }, state: st };
+	}
+	return { layout, capsOf, model, html, mount, codeOf };
 })();
 "use strict";
 /* A drag across toggle keys (the M and S keys), one module for both editors (skins/shared/): pure, values in,
@@ -2887,23 +3212,27 @@ const TogglePaint = (() => {
    handled next to its own code and only described. The dispatcher (Keys) is skins/shared/deskKeys.js, both
    editors' one file, included just before this one (build.sh). */
 
-/* ===== The ? overlay =====
+/* ===== The ? keyboard view =====
    The map's rules, as the MD Editor's: plain keys play (the home row, Z / X octave, C / V velocity, Space); a plain
    letter off the piano row acts on the selected track (M, T; ↑ / ↓ pick it); Alt means all (Alt+M, Alt+Delete,
    Alt-drag, Alt-click). Two Alts are not "all", as on the machine: Alt+←/→ rotate (FUNCTION + arrows) and Alt+Space
    record (RECORD + PLAY). No ⇧ or ⌘ letter commands but the standard ⌘Z ⌘⇧Z ⌘Y ⌘C ⌘V. */
 const KEY_GROUPS=["Playing","Selected track","All","Transport","Workspaces","Sequence","Song","Values","Anywhere","Kit library, pattern chooser","Help"];
-function drawKeys(){const pop=$("#keyspop");if(!pop)return;const groups=[];
- for(const b of Keys.list()){if(b.hidden||(b.mapping&&!S.mapping))continue;let g=groups.find(x=>x.name===b.group);if(!g)groups.push(g={name:b.group,rows:[]});g.rows.push(b)}
- const at=g=>{const i=KEY_GROUPS.indexOf(g.name);return i<0?KEY_GROUPS.length:i};groups.sort((x,y)=>at(x)-at(y));
- pop.innerHTML=`<div class="libhead"><span class="cap">Keys</span><span class="note">Every shortcut of the editor, from its key map. ? or Esc closes.</span><button class="libx" data-keysx="1">Esc</button></div>
- <div class="keysgrid">${groups.map(g=>`<section class="kgrp2"><h3>${g.name}</h3><div class="krows">${g.rows.map(b=>`<div class="krow"><kbd>${Keys.label(b)}</kbd><span>${typeof b.does==="function"?b.does():b.does}</span></div>`).join("")}</div></section>`).join("")}</div>`;
- pop.hidden=false;const r=$(".lcdpanel").getBoundingClientRect(),top=Math.max(16,r.bottom+8);
+/* B-018: ? opens the keyboard view both editors share (skins/shared/deskKeyView.js, DESIGN-keymap.md K-view): a drawn
+   keyboard from this map with what each key does on the page shown (or every page), its layers, the mouse's tricks, the
+   tips, and every entry by group (the list ? showed before). */
+const WS_NAMES={seq:"Sequence",sound:"Sound",mix:"Mix",perform:"Perform",song:"Song",control:"Control"};
+let keyView=null;
+function drawKeys(){const pop=$("#keyspop");if(!pop)return;
+ if(!keyView)keyView=KeyView.mount(pop,{entries:()=>Keys.list(),page:()=>S.ws,pageName:()=>WS_NAMES[S.ws]||"This page",mapping:()=>S.mapping,
+  mac:()=>Modifiers.mac,groups:KEY_GROUPS,note:()=>Modifiers.say("? or Esc closes. Click a key for what it does.")});
+ pop.classList.add("kview");keyView.draw();pop.hidden=false;
+ const r=$(".lcdpanel").getBoundingClientRect(),top=Math.max(16,r.bottom+8);
  pop.style.top=(top+scrollY)+"px";pop.style.maxHeight=Math.max(240,innerHeight-top-12)+"px";pop.style.left=Math.max(16,(document.documentElement.clientWidth-pop.offsetWidth)/2+scrollX)+"px"}
-function toggleKeys(on){const pop=$("#keyspop");if(!pop)return;if(on??pop.hidden)drawKeys();else pop.hidden=true}
-Keys.bind({id:"keys-help",scope:"any",keys:["?"],group:"Help",does:"This list of keys",modal:"keyspop",run:()=>toggleKeys()});
-Keys.bind({id:"keys-help-close",scope:"any",keys:["Escape"],group:"Help",does:"Close the list of keys",when:()=>!$("#keyspop").hidden,run:()=>toggleKeys(false)});
-document.addEventListener("click",e=>{const pop=$("#keyspop");if(!pop||pop.hidden)return;if(e.target.closest("[data-keysx]")||!pop.contains(e.target))pop.hidden=true},true);
+function toggleKeys(on){const pop=$("#keyspop");if(!pop)return;if(on??pop.hidden)drawKeys();else{pop.hidden=true;keyView?.reset()}}
+Keys.bind({id:"keys-help",short:"This view",scope:"any",keys:["?"],group:"Help",does:"The keyboard view: what every key and gesture does (this)",modal:"keyspop",run:()=>toggleKeys()});
+Keys.bind({id:"keys-help-close",short:"Close",scope:"any",keys:["Escape"],group:"Help",does:"Close the keyboard view",when:()=>!$("#keyspop").hidden,run:()=>toggleKeys(false)});
+document.addEventListener("click",e=>{const pop=$("#keyspop");if(!pop||pop.hidden)return;if(e.target.closest("[data-keysx]")||!pop.contains(e.target)){pop.hidden=true;keyView?.reset()}},true);
 "use strict";
 /* The modal layer (P7): one modal system for every dialog of both editors, one file for both editors and
    both mockups (skins/shared/, its stylesheet deskModal.css). The dialogs keep their own open and close
@@ -3098,6 +3427,182 @@ const Banner = (() => {
 	return { show, hide, get shown() { return !!el && !el.hidden; } };
 })();
 "use strict";
+/* A context menu (K3, doc/modern-ux/DESIGN-keymap.md P5), one for both editors: a short list of actions at the
+   pointer, each with the key that does the same, so nothing is only behind a key (a host that eats ⌘C, a person
+   on a trackpad or a touch screen). It is a dialog of the modal layer (deskModal.js, kind "menu": no dimming, Esc
+   and a click outside close it; the page's keys are off while it is open). Items are data:
+     {id?, label, key? (the key's words, shown at the right), enabled? (default true), checked? (true / false: a tick
+      column), run: () => void}
+     {id?, label, key?, items: [...]}   a submenu, opened beside its entry
+     {heading: "words"}                 a section's name, not chosen
+     {note: "words"}                    a line of information (a version, a status), not chosen
+     "-"                                a separator
+   open(items, x, y, {title?}) shows it at the point: below and right of it where it fits, else above or left (kept
+   inside the window); a submenu opens right of its entry, or left where the right has no room. A chosen item closes
+   the menu, then runs. Arrow keys, Home and End move between the items, → or Enter opens a submenu, ← or Esc closes
+   it, Enter or Space chooses (the focused button's own key); the pointer focuses what it is over.
+   I-008: the editor's menu (zoom, updates, the log folder, the developer's entries) is the plug-in's, as data: the
+   page asks for it (openMenu), the window answers with an editorMenu message (mdEditorMenu.h), showEditor() draws
+   it here and sends the chosen entry's number back (menuPick). fromEditor() is the translation, pure. */
+const DeskMenu = (() => {
+	let el = null, levels = [], hoverT = 0;	// levels[i]: {panel, items, owner: the entry that opened it}
+	const esc = s => String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+	const M = 4;	// the margin kept to the window's edges
+	const clamp = (v, lo, hi) => Math.max(lo, Math.min(v, hi));
+	/* Where a panel w x h goes in a window vw x vh (pure): at a point {x, y} below and right of it where that fits,
+	   else above or left of it; beside an entry {left, right, top}, right of it where that fits, else left. */
+	function place(w, h, vw, vh, at) {
+		let left, top;
+		if (at.right != null) {
+			left = at.right - 2 + w + M <= vw ? at.right - 2 : at.left - w + 2;
+			top = at.top - 5;
+		} else {
+			left = at.x + w + M <= vw ? at.x : at.x - w;
+			top = at.y + h + M <= vh ? at.y : at.y - h;
+		}
+		return { left: Math.round(clamp(left, M, Math.max(M, vw - w - M))), top: Math.round(clamp(top, M, Math.max(M, vh - h - M))) };
+	}
+	/* The entry a key moves to among n entries from i (pure): -1 for a key that moves nothing. */
+	function step(n, i, key) {
+		if (!n) return -1;
+		const to = { ArrowDown: i + 1, ArrowUp: i < 0 ? n - 1 : i - 1, Home: 0, End: n - 1 }[key];
+		return to == null ? -1 : (to + n) % n;
+	}
+	const isEntry = it => it && it !== "-" && it.heading == null && it.note == null;
+	const can = it => isEntry(it) && it.enabled !== false && (it.items ? it.items.length > 0 : !!it.run);
+	function row(it, i, ticks) {
+		if (it === "-") return "<hr>";
+		if (it.heading != null) return `<div class="mhead" role="presentation">${esc(it.heading)}</div>`;
+		if (it.note != null) return `<div class="mnote" role="presentation">${esc(it.note)}</div>`;
+		const sub = !!it.items, role = typeof it.checked === "boolean" ? "menuitemcheckbox" : "menuitem";
+		return `<button type="button" role="${role}" data-mi="${i}"${it.id ? ` data-mid="${esc(it.id)}"` : ""}${can(it) ? "" : " disabled"}`
+			+ `${role === "menuitemcheckbox" ? ` aria-checked="${!!it.checked}"` : ""}${sub ? ' aria-haspopup="menu" aria-expanded="false"' : ""}>`
+			+ `${ticks ? `<i class="mck" aria-hidden="true">${it.checked ? "✓" : ""}</i>` : ""}<span>${esc(it.label)}</span>`
+			+ `${it.key ? `<kbd>${esc(it.key)}</kbd>` : ""}${sub ? '<i class="msub" aria-hidden="true">›</i>' : ""}</button>`;
+	}
+	const vw = () => document.documentElement.clientWidth || innerWidth, vh = () => document.documentElement.clientHeight || innerHeight;
+	function panel(list, level, at, title) {
+		const p = document.createElement("div");
+		p.className = "mpanel"; p.setAttribute("role", "menu"); p.dataset.lv = level;
+		const ticks = list.some(it => isEntry(it) && typeof it.checked === "boolean");
+		p.innerHTML = (title ? `<div class="mtitle">${esc(title)}</div>` : "") + list.map((it, i) => row(it, i, ticks)).join("");
+		p.style.left = "0px"; p.style.top = "0px"; p.style.visibility = "hidden";
+		el.appendChild(p);
+		const pos = place(p.offsetWidth, p.offsetHeight, vw(), vh(), at);
+		p.style.left = pos.left + "px"; p.style.top = pos.top + "px"; p.style.visibility = "";
+		return p;
+	}
+	const buttons = p => [...p.querySelectorAll("[data-mi]:not([disabled])")];
+	const focus = b => { if (b) b.focus({ preventScroll: true }); };
+	const levelOf = node => { const p = node && node.closest && node.closest(".mpanel"); return p ? +p.dataset.lv : -1; };
+	function closeFrom(level) {
+		while (levels.length > level) {
+			const l = levels.pop();
+			if (l.owner) l.owner.setAttribute("aria-expanded", "false");
+			l.panel.remove();
+		}
+	}
+	function openSub(level, b, focusFirst) {
+		const it = levels[level] && levels[level].items[+b.dataset.mi];
+		if (!it || !it.items || b.disabled) return;
+		if (levels[level + 1] && levels[level + 1].owner === b) { if (focusFirst) focus(buttons(levels[level + 1].panel)[0]); return; }
+		closeFrom(level + 1);
+		const r = b.getBoundingClientRect();
+		const p = panel(it.items, level + 1, { left: r.left, right: r.right, top: r.top });
+		levels.push({ panel: p, items: it.items, owner: b });
+		b.setAttribute("aria-expanded", "true");
+		if (focusFirst) focus(buttons(p)[0]);
+	}
+	function choose(b) {
+		const level = levelOf(b), it = levels[level] && levels[level].items[+b.dataset.mi];
+		if (!it || b.disabled) return;
+		if (it.items) { openSub(level, b, true); return; }
+		close();
+		if (it.run) it.run();
+	}
+	function ensure() {
+		if (el) return el;
+		el = document.createElement("div"); el.id = "deskmenu"; el.className = "deskmenu"; el.hidden = true;
+		document.body.appendChild(el);
+		el.addEventListener("click", e => { const b = e.target.closest("[data-mi]"); if (b) choose(b); });
+		/* the pointer focuses the entry it is over; over a submenu's entry for a moment, it opens; over another, a
+		   deeper submenu closes (as a native menu does) */
+		el.addEventListener("mouseover", e => {
+			const b = e.target.closest("[data-mi]"), level = levelOf(e.target);
+			if (level < 0) return;
+			clearTimeout(hoverT);
+			if (b && !b.disabled && document.activeElement !== b) focus(b);
+			hoverT = setTimeout(() => {
+				if (!levels[level]) return;
+				if (b && !b.disabled && levels[level].items[+b.dataset.mi]?.items) openSub(level, b, false);
+				else if (b || !levels[level + 1]) closeFrom(level + 1);
+			}, 160);
+		});
+		el.addEventListener("keydown", e => {
+			const level = levelOf(document.activeElement); if (level < 0 || !levels[level]) return;
+			const b = document.activeElement.closest("[data-mi]");
+			if (e.key === "ArrowRight" && b && levels[level].items[+b.dataset.mi]?.items) { e.preventDefault(); openSub(level, b, true); return; }
+			if (e.key === "ArrowLeft" && level > 0) { e.preventDefault(); const owner = levels[level].owner; closeFrom(level); focus(owner); return; }
+			const keys = buttons(levels[level].panel), to = step(keys.length, keys.indexOf(document.activeElement), e.key);
+			if (to < 0) return;
+			e.preventDefault(); focus(keys[to]);
+		});
+		/* Esc in a submenu closes that submenu only (the modal layer's Esc, which closes the whole menu, comes after) */
+		window.addEventListener("keydown", e => {
+			if (e.key !== "Escape" || !shown() || levels.length < 2) return;
+			e.preventDefault(); e.stopImmediatePropagation();
+			const owner = levels[levels.length - 1].owner; closeFrom(levels.length - 1); focus(owner);
+		}, true);
+		/* a right-click anywhere while it is open: no system menu over it */
+		document.addEventListener("contextmenu", e => { if (shown() && !el.contains(e.target)) { e.preventDefault(); close(); } }, true);
+		return el;
+	}
+	const shown = () => !!el && !el.hidden;
+	function open(list, x, y, opts = {}) {
+		ensure(); closeFrom(0); clearTimeout(hoverT);
+		el.hidden = false;
+		const p = panel(list, 0, { x, y }, opts.title);
+		levels.push({ panel: p, items: list, owner: null });
+		focus(buttons(p)[0]);
+	}
+	function close() { clearTimeout(hoverT); if (!el) return; closeFrom(0); el.hidden = true; }
+	/* I-008: the plug-in's editorMenu message as items (pure): each entry the window can run sends its number */
+	function fromEditor(list, pick) {
+		return (list || []).map(x => {
+			if (x.kind === "separator") return "-";
+			if (x.kind === "heading") return { heading: x.label || "" };
+			if (x.kind === "note") return { note: x.label || "" };
+			const it = { id: x.id, label: x.label || "", key: x.key || "" };
+			if (x.kind === "submenu") { it.items = fromEditor(x.items, pick); it.enabled = x.enabled !== false; return it; }
+			it.checked = !!x.checked;
+			it.enabled = x.enabled !== false && typeof x.n === "number";
+			if (it.enabled) it.run = () => pick(x.n);
+			return it;
+		});
+	}
+	/* I-008: whether a right-click (a contextmenu event) asks for the editor's menu: anywhere the page has no menu of
+	   its own (an earlier handler took the event: a step's menu), not in a text field (its own edit menu), not while a
+	   dialog or panel is open (its backdrop) and not over this menu. Each page's listener runs after its own menus'. */
+	function wantsEditor(e) {
+		if (e.defaultPrevented) return false;
+		const t = e.target && e.target.closest ? e.target : null;
+		if (t && t.closest("input,textarea,select,[contenteditable],[contenteditable=''],#deskmenu")) return false;
+		return !(typeof Modal !== "undefined" && Modal.top());
+	}
+	/* the editor's menu at the point, its choice sent with send({op: "menuPick", menu, n}) */
+	function showEditor(m, x, y, send) {
+		api.open(fromEditor(m.items, n => send({ op: "menuPick", menu: m.menu, n })), x, y, { title: m.title });
+	}
+	/* made at load, so the modal layer finds it when it starts watching its dialogs */
+	if (typeof document !== "undefined" && document.body) ensure();
+	const api = { open, close, showEditor, wantsEditor, fromEditor, place, step, get shown() { return shown(); }, items: () => (levels[0] ? levels[0].items.slice() : []),
+		depth: () => levels.length };
+	return api;
+})();
+/* the modal layer's close for it (deskModal.js DIALOGS: Esc, a click outside) */
+function closeDeskMenu() { DeskMenu.close(); }
+if (typeof module !== "undefined") module.exports = { DeskMenu };
+"use strict";
 /* What the engine cannot do, both editors (skins/shared/; DESIGN-REVIEW-2026-10-02 finding 16). One routine marks
    each capability's controls from the page's table ({capability: selector}: CAP_CONTROLS on the MD page, NA_SEL on
    the MM page) and the reasons the page has; one guard keeps a marked control from taking a gesture (a click says
@@ -3178,6 +3683,9 @@ const DeskCaps = (() => {
                                          (the engine menu's "emu" entry, as if chosen there); the header stays live.
                                          AUDIO / MIDI… shows exactly when the engine menu offers its AUDIO entry (not in
                                          a DAW); a page that changes that entry calls Boot.midiRefresh()
+     Boot.audio({plugin, seconds, blocks, realtime})   B-035: how the host runs the audio (the plug-in's "audioRun"
+                                         message): while the machine starts, the card says when a plug-in gets no
+                                         audio at all, or when the machine runs slower than real time
      Boot.host = {chooseRom(), revealRom(), recheck(), removeRom(info), say(text)}   the app's host calls
    A file dragged onto the page is not opened by the web view (that would replace the page): the card says to click
    the button instead. */
@@ -3217,6 +3725,22 @@ const Boot = (() => {
 		$b("bootbar").setAttribute("aria-valuenow", Math.round(f * 100));
 		raf = requestAnimationFrame(tick);
 	}
+	/* B-035: what the start-up card says about the audio, or "" (pure: the "audioRun" message) */
+	function audioWord(a) {
+		if (!a) return "";
+		if (a.plugin && !a.blocks && a.seconds >= 5) return "The host is not running audio for this plug-in: check the audio engine/device is on and the track or plug-in is not deactivated.";
+		if (a.realtime != null && a.realtime > 0 && a.realtime < 0.95) return `The machine runs at ${a.realtime.toFixed(1)}× real time: try a larger buffer.`;
+		return "";
+	}
+	let audioRun = null;
+	const BOOTLINE = "Keys work when the start-up animation ends.";
+	/* the line under the bar while the machine starts: the audio's word when there is one */
+	function bootLine() {
+		if (shown !== "booting" && shown !== "loading") return;
+		const w = audioWord(audioRun), el = $b("bootline");
+		el.textContent = w || BOOTLINE; el.classList.toggle("warn", !!w); el.hidden = false;
+	}
+	function audio(a) { audioRun = a; bootLine(); }
 	function romName(m) { return m === "Monomachine" ? "Monomachine SFX-60 OS 1.32B" : "Machinedrum OS 1.63"; }
 	const esc = t => String(t).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
 	const links = (m) => {	// which of the card's links show: the first-run ones, or the installed firmware's
@@ -3256,8 +3780,10 @@ const Boot = (() => {
 		card.classList.toggle("rom", rom);
 		card.classList.toggle("ind", st === "loading");
 		$b("boott").textContent = rom ? (st === "missing" ? `${machine} firmware needed` : `This is not the ${machine}'s firmware`) : st === "loading" ? `Preparing the ${machine}…` : `Starting the ${machine}…`;
-		$b("bootline").textContent = st === "unsupported" ? "The ROM in the ROM folder is another OS or a damaged dump." : rom ? "" : "Keys work when the start-up animation ends.";
+		$b("bootline").textContent = st === "unsupported" ? "The ROM in the ROM folder is another OS or a damaged dump." : rom ? "" : BOOTLINE;
+		$b("bootline").classList.remove("warn");
 		$b("bootline").hidden = st === "missing";
+		bootLine();
 		$b("bootrom").hidden = !rom;
 		if (rom) $b("bootzone").textContent = `Choose your ${romName(machine)} ROM (.bin or .zip, 8 MB)`;
 		card.hidden = false;
@@ -3324,79 +3850,313 @@ const Boot = (() => {
 			sel.value = "emu"; sel.dispatchEvent(new Event("change", { bubbles: true }));
 		}
 	});
-	return { update, lcd, rom, showInstalled, midi, midiRefresh: () => midi(midiLast), host: null, state: () => shown };
+	return { update, lcd, rom, showInstalled, midi, midiRefresh: () => midi(midiLast), audio, audioWord, host: null, state: () => shown };
 })();
 "use strict";
-/* SysEx import and export (P7), one file for both editors and both mockups (skins/shared/).
-   The host opens, parses and writes the files (the page never reads their bytes): a .syx chosen with
-   "Import SysEx…" comes back as a preview, here a panel of the modal layer with
-   what is in the file and what it overwrites; "Import" sends the chosen kinds as ordinary document writes
-   (one undo step), a few at a time, with progress and a Stop key.
+/* SysEx import and export (P7, B-019), one file for both editors and both mockups (skins/shared/).
+   The host opens, parses and writes the files (the page never reads their bytes). A .syx chosen with
+   "Import SysEx…" comes back as a preview, here a panel of the modal layer. The preview informs; it is no gate.
+   "Import" sends the chosen messages to the machine as they are, like a MIDI cable (the firmware decides what it
+   takes), then the host reads every document back and reports per item what the machine did. No Undo: Export
+   SysEx… first keeps a way back.
+   The panel (0.3.5): a tab per kind in the file (Kits, Patterns, Songs, Globals, Other), each with its LED (send this
+   kind or not) and its counts; the tab shows the kind as the machine's own slot grid (patterns A-H x 16, kits 4 or
+   8 x 16, songs 2 x 16, globals 1-8), a slot that holds data on the machine with a lit dot, the one that plays now
+   cream with ▶. A click on a slot leaves it out or takes it again, Shift-click a range. Three states, one footer:
+   preview (Cancel, Import n), importing (the phases and a bar; Stop, Hide), report (per slot what the machine did,
+   the problems as a list; Done only).
      Syx.keys()            the library's two keys (markup)
-     Syx.preview(m)        {type:"syxPreview", ok, text, file, model, fullBackup, items:{kind:[{slot,name,overwrites}]}, problems}
-     Syx.progress(m)       {type:"syxProgress", done, total, running, text}
+     Syx.preview(m)        {type:"syxPreview", ok, text, file, model, fullBackup, items:{kind:[{slot,name,kit?,overwrites,plays,format,readable}]},
+                            skipped, skippedCount, messages}
+     Syx.progress(m)       {type:"syxProgress", phase, done, total, running, text, report?:{taken, converted, ignored, differs,
+                            changed, unknown, "no reply", commands, unsent, items:[{kind, slot, name, outcome, text}]}}
      Syx.exported(m)       {type:"syxExport", ok, text}
-     Syx.host = {choose(), exportAll(), start(kinds), stop()}   the app's host calls */
+     Syx.host = {choose(), exportAll(), start(kinds, skip), stop()}   the app's host calls
+     Syx.model             the panel's pure part, as data (deskSyxTest.js) */
 const Syx = (() => {
-	const KINDS = [["kit", "Kits"], ["pattern", "Patterns"], ["song", "Songs"], ["global", "Globals"]];
+	/* ---- the pure part: the file's items in, what the panel shows out ---- */
+	const KINDS = [["kit", "Kits"], ["pattern", "Patterns"], ["song", "Songs"], ["global", "Globals"], ["other", "Other"]];
+	const OFF = { global: true, other: true };	// settings and commands: off unless ticked
+	const nn = n => String(n).padStart(2, "0");
+	const key = (k, slot) => k + ":" + slot;
+	function slotLabel(k, slot) {
+		if (k === "pattern") return "ABCDEFGH"[slot >> 4] + nn((slot & 15) + 1);
+		return ({ kit: "K", song: "S", global: "G", other: "#" })[k] + (k === "global" || k === "other" ? slot + 1 : nn(slot + 1));
+	}
+	/* the machine's slots of a kind: kits 64 (MD) or 128 (MM), patterns 128, songs 32 (MD) or 24 (MM, its manual 1-73),
+	   globals 8; more when a file holds more. Columns: patterns 16 (a bank a row, as the pattern palette); kits, songs and
+	   globals 8, so a kit's name is whole (the MM's 128 kits scroll) */
+	const columns = k => k === "pattern" ? 16 : 8;
+	function capacity(model, k, list) {
+		const top = list.reduce((a, i) => Math.max(a, i.slot + 1), 0), mm = /mono/i.test(model || "");
+		const base = { kit: mm ? 128 : 64, pattern: 128, song: mm ? 24 : 32, global: 8 }[k] || 0;
+		return Math.max(base, Math.ceil(top / columns(k)) * columns(k));
+	}
+	/* rows of slots as on the machine: {cols, rows:[{label, cells:[{slot, label, item|null}]}]}; "other" has no slots */
+	function layout(model, k, list) {
+		if (k === "other") return { cols: 0, rows: [{ label: "", cells: list.map(i => ({ slot: i.slot, label: slotLabel(k, i.slot), item: i })) }] };
+		const n = capacity(model, k, list), by = new Map(list.map(i => [i.slot, i])), cols = columns(k), rows = [];
+		for (let r = 0; r * cols < n; r++) {
+			const cells = [];
+			for (let c = 0; c < cols; c++) { const slot = r * cols + c; cells.push({ slot, label: slotLabel(k, slot), item: by.get(slot) || null }); }
+			rows.push({ label: k === "pattern" ? "ABCDEFGH"[r] || String(r + 1) : k === "global" ? "" : nn(r * cols + 1), cells });
+		}
+		return { cols, rows };
+	}
+	/* a kind's counts: in the file, chosen, overwriting, into empty slots, playing now, left out */
+	function kindSums(k, list, skip, on) {
+		const inn = on ? list.filter(i => !skip.has(key(k, i.slot))) : [];
+		return { total: list.length, n: inn.length, over: inn.filter(i => i.overwrites).length, fresh: inn.filter(i => !i.overwrites).length,
+			plays: inn.filter(i => i.plays).length, out: on ? list.length - inn.length : list.length };
+	}
+	/* Shift-click: every item of the kind between the anchor and the clicked slot (by slot) takes the clicked one's new state */
+	function toggleRange(k, list, skip, anchor, slot) {
+		const next = new Set(skip), out = !skip.has(key(k, slot));
+		const lo = Math.min(anchor ?? slot, slot), hi = Math.max(anchor ?? slot, slot);
+		for (const i of list) if (i.slot >= lo && i.slot <= hi) { if (out) next.add(key(k, i.slot)); else next.delete(key(k, i.slot)); }
+		return next;
+	}
+	/* per chosen item what the machine did: the report lists every item not taken as in the file; the rest were taken,
+	   unless the counts do not add up (stopped, or more problems than the report lists): then "unclear" */
+	function outcomes(picked, report) {
+		const out = new Map(), listed = new Map((report?.items || []).map(i => [key(i.kind, i.slot), i]));
+		const slots = picked.filter(p => p.kind !== "other");
+		const whole = (report?.taken || 0) + listed.size === slots.length;
+		for (const p of picked) {
+			const id = key(p.kind, p.slot), l = listed.get(id);
+			out.set(id, p.kind === "other" ? { outcome: "sent" } : l ? { outcome: l.outcome, text: l.text } : { outcome: whole ? "taken" : "unclear" });
+		}
+		return out;
+	}
+	const OUTCOME = { taken: ["taken", "✓"], converted: ["converted", "≈"], ignored: ["ignored", "✕"], differs: ["different", "≠"], changed: ["not comparable", "~"],
+		unknown: ["not comparable", "~"], "no reply": ["no answer", "?"], unclear: ["not known", "?"], sent: ["sent", "→"] };
+	const problem = o => o !== "taken" && o !== "sent";
+	/* the footer's one line before the import */
+	function footLine(t) {
+		if (!t.n) return "Nothing chosen.";
+		const s = [];
+		if (t.over) s.push(`${t.over} slot${t.over > 1 ? "s" : ""} on the machine overwritten${t.plays ? `, ${t.plays} playing now` : ""}.`);
+		else s.push(`${t.n} item${t.n > 1 ? "s" : ""}, into empty slots.`);
+		if (t.globals) s.push("Globals change MIDI channels.");
+		s.push("No undo: Export SysEx… first.");
+		return s.join(" ");
+	}
+	/* a kind's line while importing, from syxProgress.kinds[kind] {done, total} of the phase: its words and its bar (%) */
+	function kindLine(phase, kp, picked) {
+		if (!picked) return { text: "not sent", pct: 0 };
+		const verb = { before: "reading the slots", send: "sent", read: "read back" }[phase] || "";
+		if (!kp || !kp.total) return { text: "waits", pct: 0 };
+		const all = kp.done >= kp.total;
+		return { text: `${all ? "✓ " : ""}${verb} ${kp.done} of ${kp.total}`, pct: Math.round(kp.done / kp.total * 100) };
+	}
+	const model = { KINDS, OFF, slotLabel, capacity, layout, kindSums, toggleRange, outcomes, footLine, kindLine, OUTCOME };
+
+	/* ---- the panel ---- */
 	const pop = document.createElement("div");
 	pop.id = "syxpop"; pop.className = "syxpop libpop"; pop.hidden = true;
 	pop.setAttribute("role", "dialog"); pop.setAttribute("aria-label", "Import SysEx");
 	document.body.appendChild(pop);
-	let last = null, running = false;
+	let last = null, state = "idle", tab = null, anchor = null, problemsOnly = true, steps = [], rep = null, picks = [], res = new Map(), follow = true;
+	let skip = new Set();
+	const on = {};	// kind -> ticked
 	const esc = s => String(s).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
-	const chosen = () => [...pop.querySelectorAll("[data-syxkind]:checked")].map(b => b.dataset.syxkind);
+	const q = s => pop.querySelector(s);
+	const kindsIn = () => last ? KINDS.filter(([k]) => (last.items[k] || []).length) : [];
+	const chosen = () => kindsIn().map(([k]) => k).filter(k => on[k]);
+	const picked = () => chosen().flatMap(k => last.items[k].filter(i => !skip.has(key(k, i.slot))).map(i => Object.assign({ kind: k }, i)));
+	const totals = () => {
+		const s = kindsIn().map(([k]) => kindSums(k, last.items[k], skip, on[k]));
+		return { n: s.reduce((a, x) => a + x.n, 0), over: s.reduce((a, x) => a + x.over, 0), plays: s.reduce((a, x) => a + x.plays, 0), globals: !!on.global && kindSums("global", last.items.global || [], skip, true).n > 0 };
+	};
+	const HELP = "Everything goes into the same slots as in the file, as from a MIDI cable: the machine decides what it takes. Afterwards the editor reads every item back and says what happened. ▶ plays now: the machine takes the dump over it, and unsaved edits of the kit that plays may be lost. Globals (MIDI channels, sync, machine settings) and other messages are off unless you tick them; the active global becomes active at once. There is no Undo: Export SysEx… first keeps a way back.";
+
+	function tip(k, i, out) {
+		const t = [slotLabel(k, i.slot) + (i.name && i.name !== slotLabel(k, i.slot) ? " " + i.name : ""), i.kit != null ? "kit " + nn(i.kit + 1) : "", i.format ? "format " + i.format : "",
+			i.readable === false ? "the editor cannot read this dump (the machine may)" : "", i.plays ? "plays now" : "", i.overwrites ? "overwrites a slot that holds data" : "into an empty slot"];
+		if (state === "preview") t.push(!on[k] ? "tick " + KINDS.find(x => x[0] === k)[1] + " to send these" : out ? "left out: click to take it" : "click to leave it out, Shift-click a range");
+		const r = res.get(key(k, i.slot));
+		if (r) t.push(r.text || OUTCOME[r.outcome]?.[0] || r.outcome);
+		return t.filter(Boolean).join(" · ");
+	}
+	function cell(k, c) {
+		if (!c.item) return `<span class="syxc none"><b>${c.label}</b></span>`;
+		const i = c.item, id = key(k, i.slot), out = skip.has(id), r = res.get(id);
+		const second = k === "pattern" && (!i.name || i.name === c.label) ? (i.kit != null ? "K" + nn(i.kit + 1) : "") : i.name || "—";
+		const cls = ["syxc", i.overwrites ? "over" : "fresh", i.plays ? "plays" : "", out ? "off" : "", i.readable === false ? "unread" : "", r && problem(r.outcome) ? "bad" : ""].filter(Boolean).join(" ");
+		const mark = r ? `<i class="syxo">${OUTCOME[r.outcome]?.[1] || "?"}</i>` : "";
+		return `<button type="button" class="${cls}" data-syxitem="${esc(id)}" data-syxname="${esc(i.name || "")}"${r ? ` data-syxout="${esc(r.outcome)}"` : ""} title="${esc(tip(k, i, out))}"><b>${i.plays ? "▶ " : ""}${c.label}</b><span>${esc(second)}</span>${mark}</button>`;
+	}
+	function pane(k) {
+		const list = last.items[k], g = layout(last.model, k, list);
+		const style = g.cols ? `grid-template-columns:${k === "global" ? "" : "26px "}repeat(${g.cols},minmax(0,1fr))` : "grid-template-columns:repeat(auto-fill,minmax(110px,1fr))";
+		const body = g.rows.map(r => (g.cols && k !== "global" ? `<span class="syxrl">${r.label}</span>` : "") + r.cells.map(c => cell(k, c)).join("")).join("");
+		const note = k === "global" ? `<p class="syxnote"><b>Globals</b> hold the machine's MIDI channels, sync and settings: off unless you tick them, and the active one becomes active at once.</p>`
+			: k === "other" ? `<p class="syxnote">Messages that are no kit, pattern, song or global (commands, sounds): sent as they are when ticked.</p>` : "";
+		return `<div class="syxpane${on[k] ? "" : " kindoff"}" data-syxpane="${k}" role="tabpanel"${k === tab ? "" : " hidden"}>${note}<div class="syxgrid${k === "global" ? " g8" : ""}" style="${style}">${body}</div></div>`;
+	}
+	function tabSub(k) {
+		const list = last.items[k];
+		if (state === "running") {
+			const m = lastProgress || {}, l = kindLine(m.phase, m.kinds?.[k], picks.some(p => p.kind === k));
+			return { text: l.text, bad: 0, pct: l.pct, work: m.kind === k };
+		}
+		if (state === "report") {
+			const mine = picks.filter(p => p.kind === k), bad = mine.filter(p => problem(res.get(key(k, p.slot))?.outcome)).length;
+			if (!mine.length) return { text: "not sent", bad: 0 };
+			if (k === "other") return { text: `${mine.length} sent`, bad: 0 };
+			return { text: `${mine.length - bad} taken${bad ? ` · ${bad} problem${bad > 1 ? "s" : ""}` : ""}`, bad };
+		}
+		const s = kindSums(k, list, skip, on[k]);
+		if (!on[k]) return { text: k === "global" ? "off · MIDI settings" : "off", bad: 0 };
+		if (k === "other") return { text: `${s.n} to send${s.out ? ` · ${s.out} out` : ""}`, bad: 0 };
+		const t = [s.over ? `<em>${s.over} overwrite</em>` : "", s.fresh ? `${s.fresh} new` : "", s.out ? `${s.out} out` : "", !s.n ? "none chosen" : ""].filter(Boolean).join(" · ");
+		return { text: t, html: true, bad: 0, plays: s.plays };
+	}
+	function tabs() {
+		return `<div class="syxtabs" role="tablist">${kindsIn().map(([k, label]) => {
+			const s = tabSub(k), lock = state !== "preview";
+			return `<div class="syxtab${k === tab ? " sel" : ""}${s.bad ? " bad" : ""}${s.work ? " work" : ""}" data-syxtabk="${k}"><input type="checkbox" data-syxkind="${k}" aria-label="Send ${label}"${on[k] ? " checked" : ""}${lock ? " disabled" : ""}><button type="button" class="syxtabb" role="tab" aria-selected="${k === tab}" data-syxtab="${k}"><span class="t">${label}<span class="syxct">${last.items[k].length}</span><span class="syxpl" title="plays now"${s.plays ? "" : " hidden"}>▶</span></span><span class="s">${s.html ? s.text : esc(s.text)}</span>${state === "running" && picks.some(p => p.kind === k) ? `<i class="syxtb"><b style="width:${s.pct || 0}%"></b></i>` : ""}</button></div>`;
+		}).join("")}</div>`;
+	}
+	function tools() {
+		if (state === "report") {
+			const bad = [...res.values()].filter(r => problem(r.outcome)).length;
+			return `<div class="syxtools"><label class="syxfilt"><input type="checkbox" data-syxgo="problems"${problemsOnly && bad ? " checked" : ""}${bad ? "" : " disabled"}> Show problems only</label>
+				<span class="syxleg"><i class="lg">✓</i>taken as in the file <i class="lg bad">≈</i>converted <i class="lg bad">✕</i>ignored <i class="lg bad">≠</i>different</span></div>`;
+		}
+		return `<div class="syxtools"><span class="syxleg"><i class="lg over"></i>overwrites data <i class="lg"></i>empty slot <i class="lg plays">▶</i>plays now <i class="lg off"></i>left out</span>
+			<span class="syxsel">${state === "preview" ? `<button type="button" data-syxsel="all">All</button><button type="button" data-syxsel="fresh">Empty slots only</button><button type="button" data-syxsel="none">None</button>` : ""}</span></div>`;
+	}
+	function problems() {
+		const rows = picks.map(p => ({ p, r: res.get(key(p.kind, p.slot)) })).filter(x => x.r && problem(x.r.outcome));
+		if (!rows.length) return `<p class="syxnote">Every item as in the file.</p>`;
+		return `<div class="syxlist">${rows.map(({ p, r }) => `<div class="syxli" data-syxitem="${esc(key(p.kind, p.slot))}" data-syxout="${esc(r.outcome)}"><b>${slotLabel(p.kind, p.slot)}</b><span class="nm">${esc(p.name || "")}</span><span class="tag">${esc(OUTCOME[r.outcome]?.[0] || r.outcome)}</span><span class="why">${esc(r.text || "")}</span></div>`).join("")}</div>`;
+	}
+	function foot() {
+		if (state === "report") return `<div class="syxfoot"><div class="syxmsg"><p class="syxsum">${esc(rep.text || "")}</p></div><div class="btnrow"><button type="button" class="go" data-syxgo="close">Done</button></div></div>`;
+		if (state === "running") return `<div class="syxfoot"><div class="syxmsg"><div class="syxsteps"></div><div class="syxbar"><i></i><span></span></div></div><div class="btnrow"><button type="button" data-syxgo="close">Hide</button><button type="button" data-syxgo="stop">Stop</button></div></div>`;
+		const skipped = last.skippedCount ? `<details class="syxprob"><summary>${last.skippedCount} message${last.skippedCount > 1 ? "s" : ""} cannot be sent</summary>${(last.skipped || []).map(p => `<div>${esc(p)}</div>`).join("")}</details>` : "";
+		return `<div class="syxfoot"><div class="syxmsg"><p class="syxwarn"></p>${skipped}</div><div class="btnrow"><button type="button" data-syxgo="close">Cancel</button><button type="button" class="go" data-syxgo="start">Import</button></div></div>`;
+	}
+	function head() {
+		const what = last.ok ? `<span class="lcdchip">${esc(last.model || "")}${last.fullBackup ? " · full backup" : ""}</span>` : "";
+		return `<div class="libhead syxhead"><span class="cap">Import SysEx</span>${what}<span class="syxfile" title="${esc(last.file || "")}">${esc(last.file || "")}</span>${last.ok ? `<button type="button" class="libx syxq" data-syxgo="help" aria-expanded="false" title="How the import works">?</button>` : ""}<button type="button" class="libx" data-syxgo="close" title="Close (Esc)">Esc</button></div>
+			<p class="syxhelp" hidden>${esc(HELP)}</p>`;
+	}
+	function draw() {
+		if (!last) return;
+		for (const st of ["preview", "error", "running", "report"]) pop.classList.toggle("syx-" + st, st === state);
+		if (!last.ok) { pop.innerHTML = head() + `<p class="syxwhy">${esc(last.text)}</p><div class="syxfoot"><div class="syxmsg"></div><div class="btnrow"><button type="button" data-syxgo="close">Close</button></div></div>`; return; }
+		const list = state === "report" && problemsOnly && [...res.values()].some(r => problem(r.outcome));
+		pop.innerHTML = head() + tabs() + `<div class="syxbody">${list ? `<div class="syxpane">${problems()}</div>` : kindsIn().map(([k]) => pane(k)).join("")}</div>` + tools() + foot();
+		sums(); bar();
+	}
 	function sums() {
-		const k = chosen(), items = last?.items || {};
-		const n = k.reduce((a, x) => a + (items[x] || []).length, 0), over = k.reduce((a, x) => a + (items[x] || []).filter(i => i.overwrites).length, 0);
-		const go = pop.querySelector('[data-syxgo="start"]');
-		if (go) { go.textContent = n ? `Import ${n} item${n > 1 ? "s" : ""}` : "Nothing chosen"; go.disabled = !n || running; go.className = over ? "danger" : "cream"; }
-		const w = pop.querySelector(".syxwarn");
-		if (w) w.textContent = over ? `${over} slot${over > 1 ? "s" : ""} on the machine hold data and are overwritten, the pattern and kit that play too if they are among them. One Undo takes the whole import back.` : n ? "Only empty slots are written." : "";
+		if (state !== "preview") return;
+		const t = totals(), go = q('[data-syxgo="start"]'), w = q(".syxwarn");
+		if (go) { go.textContent = t.n ? `Import ${t.n}` : "Import"; go.disabled = !t.n; go.classList.toggle("danger", !!t.over); }
+		if (w) { w.textContent = footLine(t); w.classList.toggle("hot", !!t.over); }
+		for (const [k] of kindsIn()) {
+			const s = tabSub(k), el = q(`[data-syxtab="${k}"] .s`);
+			if (el) el.innerHTML = s.html ? s.text : esc(s.text);
+			const pl = q(`[data-syxtab="${k}"] .syxpl`); if (pl) pl.hidden = !s.plays;
+			q(`[data-syxpane="${k}"]`)?.classList.toggle("kindoff", !on[k]);
+		}
+	}
+	let lastProgress = null;
+	function bar() {
+		const m = lastProgress, box = q(".syxsteps");
+		if (state !== "running" || !box || !m) return;
+		const PH = [["before", "Read the slots"], ["send", "Send"], ["read", "Read back"]].filter(([p]) => p !== "before" || steps.includes("before"));
+		const at = PH.findIndex(([p]) => p === m.phase);
+		box.innerHTML = PH.map(([p, t], n) => `<span class="syxstep${n < at ? " done" : n === at ? " now" : ""}"><i class="led${n <= at ? " on" : ""}"></i>${t}</span>`).join("");
+		const b = q(".syxbar");
+		b.querySelector("i").style.width = (m.total ? m.done / m.total * 100 : 0) + "%";
+		b.querySelector("span").textContent = m.text || (m.total ? `${m.done} of ${m.total}` : "");
+		// per kind (0.3.5: syxProgress.kinds and .kind): each tab's line and bar; the shown tab follows the kind at work
+		// until the person picks a tab
+		for (const [k] of kindsIn()) {
+			const s = tabSub(k), t = q(`[data-syxtabk="${k}"]`); if (!t) continue;
+			t.classList.toggle("work", !!s.work);
+			t.querySelector(".s").textContent = s.text;
+			const w = t.querySelector(".syxtb b"); if (w) w.style.width = (s.pct || 0) + "%";
+		}
+		if (follow && m.kind && m.kind !== tab && last.items[m.kind]?.length) show(m.kind);
+	}
+	function show(k) {
+		tab = k;
+		for (const t of pop.querySelectorAll("[data-syxtabk]")) t.classList.toggle("sel", t.dataset.syxtabk === k);
+		for (const p of pop.querySelectorAll("[data-syxpane]")) p.hidden = p.dataset.syxpane !== k;
+		for (const b of pop.querySelectorAll("[data-syxtab]")) b.setAttribute("aria-selected", b.dataset.syxtab === k);
 	}
 	function preview(m) {
-		last = m; running = false;
-		if (!m.ok) { pop.innerHTML = `<div class="libhead"><span class="cap">Import SysEx</span><span class="note">${esc(m.file || "")}</span><button class="libx" data-syxgo="close">Esc</button></div><p class="syxwhy">${esc(m.text)}</p>`; pop.hidden = false; return; }
-		const rows = KINDS.map(([k, label]) => {
-			const list = m.items[k] || [];
-			if (!list.length) return "";
-			const over = list.filter(i => i.overwrites).length;
-			const names = list.slice(0, 64).map(i => `<span class="syxname ${i.overwrites ? "over" : ""}" title="${i.overwrites ? "overwrites a slot that holds data" : "an empty slot"}">${esc(k === "pattern" ? i.name + " · K" + String(i.kit + 1).padStart(2, "0") : (i.name || "(no name)"))}</span>`).join("") + (list.length > 64 ? `<span class="syxname">+${list.length - 64}</span>` : "");
-			return `<label class="syxrow"><input type="checkbox" data-syxkind="${k}" ${k === "global" ? "" : "checked"}><b>${label}</b><span class="syxn">${list.length}${over ? ` · ${over} overwrite` : ""}</span></label><div class="syxnames">${names}</div>`;
-		}).join("");
-		pop.innerHTML = `<div class="libhead"><span class="cap">Import SysEx</span><span class="lcdchip">${esc(m.model)}${m.fullBackup ? " · full backup" : ""}</span><span class="note">${esc(m.file)}. Into the same slots as in the file. Globals are settings (MIDI channels, sync): off unless you tick them.</span><button class="libx" data-syxgo="close">Esc</button></div>
- <div class="syxbody">${rows}</div>
- ${m.problemCount ? `<details class="syxprob"><summary>${m.problemCount} message${m.problemCount > 1 ? "s" : ""} could not be read</summary>${m.problems.map(p => `<div>${esc(p)}</div>`).join("")}</details>` : ""}
- ${m.leftOutCount ? `<details class="syxprob"><summary>${m.leftOutCount} document${m.leftOutCount > 1 ? "s" : ""} left out: this ${esc(m.model)}'s OS does not take them as they are</summary>${(m.leftOut || []).map(p => `<div>${esc(p)}</div>`).join("")}</details>` : ""}
- <p class="syxwarn"></p>
- <div class="syxbar" hidden><i></i><span></span></div>
- <div class="btnrow"><button class="cream" data-syxgo="start">Import</button><button data-syxgo="stop" hidden>Stop</button><button data-syxgo="close">Cancel</button></div>`;
-		pop.hidden = false; sums();
+		last = m; state = m.ok ? "preview" : "error"; skip = new Set(); anchor = null; res = new Map(); rep = null; picks = []; steps = []; lastProgress = null;
+		for (const [k] of KINDS) on[k] = !OFF[k];
+		tab = kindsIn()[0]?.[0] || null;
+		draw(); pop.hidden = false;
 	}
 	function progress(m) {
-		if (pop.hidden) return;
-		running = !!m.running;
-		const bar = pop.querySelector(".syxbar"); if (!bar) return;
-		bar.hidden = !m.total;
-		bar.querySelector("i").style.width = (m.total ? m.done / m.total * 100 : 0) + "%";
-		bar.querySelector("span").textContent = m.text || (m.total ? `${m.done} of ${m.total} sent` : "");
-		pop.querySelector('[data-syxgo="stop"]').hidden = !running;
-		pop.querySelector('[data-syxgo="close"]').textContent = running ? "Hide" : m.total && m.done >= m.total ? "Done" : "Cancel";
-		sums();
+		if (!last || !last.ok) return;
+		lastProgress = m;
+		if (m.phase && !steps.includes(m.phase)) steps.push(m.phase);
+		if (m.phase === "done") {
+			rep = { text: m.text, report: m.report };
+			res = outcomes(picks, m.report);
+			problemsOnly = [...res.values()].some(r => problem(r.outcome));
+			state = "report"; draw(); return;
+		}
+		if (m.running) { if (state !== "running") { state = "running"; draw(); } else bar(); return; }
+		if (state === "running") { state = "preview"; draw(); }	// the host refused or ended without a report
 	}
-	pop.addEventListener("change", e => { if (e.target.matches("[data-syxkind]")) sums(); });
+	pop.addEventListener("change", e => {
+		const k = e.target.dataset?.syxkind;
+		if (k && state === "preview") { on[k] = e.target.checked; show(k); sums(); return; }
+		if (e.target.dataset?.syxgo === "problems") { problemsOnly = e.target.checked; draw(); }
+	});
+	function select(how) {
+		const list = last.items[tab] || [];
+		for (const i of list) { const id = key(tab, i.slot); if (how === "all" || (how === "fresh" && !i.overwrites)) skip.delete(id); else skip.add(id); }
+		if (!on[tab] && how !== "none") { on[tab] = true; const b = q(`[data-syxkind="${tab}"]`); if (b) b.checked = true; }
+		redrawCells(tab); sums();
+	}
+	function redrawCells(k) {
+		for (const el of pop.querySelectorAll(`[data-syxpane="${k}"] [data-syxitem]`)) {
+			const slot = +el.dataset.syxitem.split(":")[1], i = last.items[k].find(x => x.slot === slot), out = skip.has(el.dataset.syxitem);
+			el.classList.toggle("off", out); el.title = tip(k, i, out);
+		}
+	}
 	document.addEventListener("click", e => {
-		const k = e.target.closest?.("[data-syx]");
-		if (k && Syx.host) { if (k.dataset.syx === "import") Syx.host.choose(); else Syx.host.exportAll(); return; }
-		const g = e.target.closest?.("[data-syxgo]"); if (!g || !pop.contains(g)) return;
+		const sk = e.target.closest?.("[data-syx]");
+		if (sk && Syx.host) { if (sk.dataset.syx === "import") Syx.host.choose(); else Syx.host.exportAll(); return; }
+		if (!pop.contains(e.target)) return;
+		const t = e.target.closest("[data-syxtab]");
+		if (t) {
+			if (state === "running") { follow = false; show(t.dataset.syxtab); return; }
+			tab = t.dataset.syxtab; if (state === "report" && problemsOnly) problemsOnly = false; draw(); return;
+		}
+		const it = e.target.closest("[data-syxitem]");
+		if (it && it.tagName === "BUTTON" && state === "preview") {
+			const [k, s] = it.dataset.syxitem.split(":"), slot = +s;
+			if (!on[k]) return;
+			skip = e.shiftKey && anchor != null ? toggleRange(k, last.items[k], skip, anchor, slot) : toggleRange(k, last.items[k], skip, slot, slot);
+			anchor = slot; redrawCells(k); sums(); return;
+		}
+		const sel = e.target.closest("[data-syxsel]");
+		if (sel && state === "preview") { select(sel.dataset.syxsel); return; }
+		const g = e.target.closest("[data-syxgo]"); if (!g) return;
 		const a = g.dataset.syxgo;
-		if (a === "start" && Syx.host) { running = true; Syx.host.start(chosen()); sums(); }
+		if (a === "start" && Syx.host && state === "preview") {
+			follow = true; picks = picked(); const kinds = chosen(), sk2 = [...skip];
+			state = "running"; lastProgress = { phase: "send", done: 0, total: 0, running: true, text: "Starting" }; draw();
+			Syx.host.start(kinds, sk2);
+		}
 		else if (a === "stop" && Syx.host) Syx.host.stop();
+		else if (a === "help") { const h = q(".syxhelp"); h.hidden = !h.hidden; g.setAttribute("aria-expanded", String(!h.hidden)); }
 		else if (a === "close") pop.hidden = true;
 	});
 	return {
-		keys: () => `<span class="syxkeys"><button class="amkey" data-syx="import" title="Open a .syx (a backup, or dumps from any source) and choose what to import.">Import SysEx…</button><button class="amkey" data-syx="export" title="Every pattern, kit, song and the global the editor holds, as one .syx">Export SysEx…</button></span>`,
-		preview, progress, exported: m => m, host: null
+		keys: () => `<span class="syxkeys"><button class="amkey" data-syx="import" title="Open a .syx (a backup, or dumps from any source) and choose what to send to the machine.">Import SysEx…</button><button class="amkey" data-syx="export" title="Every pattern, kit, song and the global the editor holds, as one .syx">Export SysEx…</button></span>`,
+		preview, progress, exported: m => m, host: null, model
 	};
 })();
 
@@ -3478,7 +4238,9 @@ function renderTop(){
  const lkk=$("#learnkey");if(lkk){lkk.setAttribute("aria-pressed",S.learn);lkk.classList.toggle("on",!!S.learn)}
  $("#platekey span").textContent=S.plate==="mk1"?"MKI":"MKII";
  const n=S.locks.size,m=$("#meter");$("#lockn").textContent=String(n).padStart(2,"0")+"/62";m.className="f meter"+(n>=62?" full":n>=52?" warn":"");
- $("#bpm").textContent=S.bpm.toFixed(1);$("#pat").textContent=patName(S.queued??S.pat);$("#pat").parentElement.classList.toggle("queued",S.queued!=null);
+ $("#bpm").textContent=S.bpm.toFixed(1);$("#pat").textContent=patName(S.queued??S.pat);$("#pat").parentElement.classList.toggle("queued",S.queued!=null);songLcd();
+ /* B-030: the host's tempo (in a DAW the machine follows): marked, and not edited here */
+ $("#bpm").parentElement.classList.toggle("hosttempo",!!S.hostTempo);$("#bpm").title=S.hostTempo?"The DAW's tempo: the machine follows the host. Change it in the DAW.":"Drag up or down";
  $("#kitname").textContent=S.eng==="hwwait"?"—":kitName(S.kit);const hc=HOST.history?HOST.history():{undo:0,redo:0};$("#undo").disabled=!hc.undo;$("#redo").disabled=!hc.redo;$("#undon").textContent=hc.undo||"";$("#redon").textContent=hc.redo||"";
  $("#play").setAttribute("aria-pressed",S.playing);$("#playico").textContent=S.playing?"■":"▶";$("#play").setAttribute("aria-label",S.playing?"Stop":"Play");$("#rec").setAttribute("aria-pressed",!!S.rec);$("#recled").classList.toggle("on",!!S.rec);
  renderPst();syncLockBudget()}
@@ -3491,13 +4253,17 @@ function renderSub(){const t=S.sel,tr=trk(t);let h="";
  else if(S.ws==="perform")h=L2("pmode","MODE",{normal:"AUTO",multi:"MULTI",map:"MAP",poly:"POLY"}[S.mode],"Keyboard mode: auto track, multi trig, multi map or poly. Click to step.",1,10)+L2("","",S.mode==="multi"?["ALL TRK","SPLIT","SEQ STRT","SEQ TRNS"][S.multi.mode]:"","",0,9)+L2("","CH",{normal:"09",multi:"07",map:"08",poly:"09"}[S.mode],"MIDI channel of this keyboard mode","",5);
  else if(S.ws==="control")h=L2("","IN","CH1","Controller input channel",0,6)+L2("","CC OUT","0/s","CCs sent to the machine per second",0,11,"ccrate")+L2("","MAX","300/s","The editor thins CC output above this rate",0,10);
  else h=L2("","SONG",String((S.songSlot??0)+1).padStart(2,"0"),"",0,7)+L2("","ROWS",S.song.length,"",0,7)+L2("","BARS",Math.round(songSteps()/16),"",0,7)+L2("","TIME",songTime(),"",0,8);
+ /* 0.3.5, every workspace: PATTERN or SONG mode, as the machine reports it; a click switches (the Song page's switch) */
+ h+=L2("seqmode","PLAY",S.plays.songMode?"SONG":"PAT","What the machine plays: PAT (the pattern and its chain) or SONG (the song). Click to switch; it shows what the machine reports.",1,9);
  $("#lcd2").innerHTML=h}
+/* B-030: an edit of the tempo while the DAW sets it is refused with a word (drag, arrows, tap) */
+function tempoLocked(){if(!S.hostTempo)return false;toast("The DAW sets the tempo. Change it there.");return true}
 
 /* ===== Controls: one key-style value control for everything ===== */
 function ref(el){const d=el.dataset,t=d.t!=null?+d.t:S.sel,tr=trk(t),g=d.g;
  if(PAGES.includes(g)||g==="MID")return[tr.v[g],+d.n,meta(t,g,+d.n),t,g];
  switch(g){case"lev":return[tr,"lev",{name:"LEV",max:127},t,g];case"menv":return[S.menv,d.n,{name:d.n,max:127},t,g];
-  case"arp":return[tr.arp,d.n,{name:d.n,...{SPD:{max:127},RNGE:{en:["1 OCT","2 OCT","3 OCT","4 OCT"]},OJMP:{max:15}}[d.n]},t,g];
+  case"arp":return[tr.arp,d.n,{name:d.n,...{SPD:{max:127},RNGE:{en:["—",...Array.from({length:9},(_,k)=>(k+1)+" OCT")]},OJMP:{max:15}}[d.n]},t,g];
   case"trn":return[tr.tr,"TRACK",{name:"TRACK",max:127,signed:1},t,g];case"ptrn":return[S,"patTrn",{name:"PAT",max:127,signed:1},t,g];
   case"key":return[tr.tr,"KEY",{name:"KEY",en:KEYS},t,g];
   case"asg":{const r=tr.assign.tabs[S.asTab][+d.n];return[r,"add",{name:"ADD",max:127,signed:1},t,g]}
@@ -3517,7 +4283,7 @@ function setV(el,v){const[o,n,m,t,g]=ref(el);v=clamp(Math.round(v),0,maxOf(m));i
  if(PAGES.includes(g)||g==="MID"){const all=drag&&drag.all&&drag.el===el&&PAGES.includes(g),before={};if(all)for(let k=0;k<6;k++)if(k!==t)before[k]=pagesCopy(k);
   edit("param",{t,page:g==="MID"?7:PAGES.indexOf(g),i:+n,v});if(all){controlAll(t,g,+n,d);editParams(before)}}
  else if(g==="lev")edit("level",{t,v});
- else if(g==="arp")edit("arp",n==="SPD"?{t,field:"speed",v:clamp(v-1,0,127)}:n==="RNGE"?{t,field:"range",v:clamp(v-1,0,7)}:{t,field:"ojmp",v});
+ else if(g==="arp")edit("arp",n==="SPD"?{t,field:"speed",v:clamp(v-1,0,127)}:n==="RNGE"?{t,field:"range",v:clamp(v-1,0,8)}:{t,field:"ojmp",v});
  else if(g==="trn")edit("transpose",{t,v:v-64});else if(g==="ptrn")edit("transpose",{v:v-64});else if(g==="key")edit("transpose",{t,key:v});
  else if(g==="cc")edit("midiTrack",{t:t-6,cc:[...trk(t).cc]});
  else if(g==="menv")edit("multiEnv",{i:["ATK","DEC","SUS","REL","PORT"].indexOf(n),v});
@@ -3673,7 +4439,7 @@ function baseHTML(v,mx){return`<div class="base" style="bottom:calc(6px + ${IN}*
 function renderLane(){const lane=$("#lane");if(!lane)return;const t=S.sel,tr=trk(t),pid=S.lane,[pg,i]=pid.split("."),m=meta(t,pg,+i),mx=maxOf(m),lm=S.locks.get(lkKey(t,pid)),base=getP(t,pid);
  const sc=$("#lanescale");if(sc)sc.textContent=m.en?`${m.en[0]}…${m.en[mx]}`:m.signed?"−64…+63":"0–127";
  lane.innerHTML=`<div class="lbscale"><b>${fmt(m,mx)}</b><span>${fmt(m,base)}<small>kit</small></span><b>${fmt(m,0)}</b></div>`+steps().map(s=>{const st=tr.steps[s],on=st&&!st.off,v=lm?.get(s);
-  return`<div class="lb ${on?"":"none"} ${on?"k-"+(isMidiT(t)?"full":stepKind(st)):""} ${gapC(s)} ${S.playing&&s===S.step?"ph":""}" data-s="${s}" title="${on?(v!=null?"Locked "+fmt(m,v):"Kit value "+fmt(m,base)):"No trig here: add one (a trigless trig with alt-click keeps the envelopes quiet)"}">${on?`${baseHTML(base,mx)}${m.signed?`<div class="mid"></div>`:""}${v!=null?barHTML(v):""}`:""}</div>`}).join("");
+  return`<div class="lb ${on?"":"none"} ${on?"k-"+(isMidiT(t)?"full":stepKind(st)):""} ${gapC(s)} " data-s="${s}" title="${on?(v!=null?"Locked "+fmt(m,v):"Kit value "+fmt(m,base)):"No trig here: add one (a trigless trig with alt-click keeps the envelopes quiet)"}">${on?`${baseHTML(base,mx)}${m.signed?`<div class="mid"></div>`:""}${v!=null?barHTML(v):""}`:""}</div>`}).join("");
  requestAnimationFrame(drawSlides)}
 function drawSlides(){const svg=$("#lanesvg"),lane=$("#lane");if(!svg||!lane)return;const t=S.sel,tr=trk(t),lm=S.locks.get(lkKey(t,S.lane));svg.innerHTML="";if(!lm)return;
  const[pg,i]=S.lane.split("."),mx=maxOf(meta(t,pg,+i)),box=lane.getBoundingClientRect(),ink=cssv("--ink");let d="";const locked=[...lm.keys()].sort((a,b)=>a-b);
@@ -3724,7 +4490,7 @@ ED.lane={draw(g,W,H,c){const G=laneGeom(c),t=G.t,tr=trk(t),ink=cssv("--ink");if(
    if(n===hov||n===held){g.save();g.globalAlpha=n===held?.85:.45;g.fillStyle=led;g.fillRect(0,y+.5,blk?BW:KW,G.rh-1);g.restore()}
    if(n%12===0||n===G.hi){g.fillStyle=ink;g.font="9px Silkscreen, monospace";g.textAlign="right";g.fillText(noteName(n),KW-3,y+G.rh/2+3.5);g.textAlign="left"}}}
   else{g.fillStyle=ink;g.font="8px Silkscreen, monospace";const ns=tr.steps.slice(0,S.len).flatMap(x=>x?.n||[]);if(ns.length){const mn=Math.min(...ns),mx=Math.max(...ns);g.fillText(mn===mx?noteName(mn).replace("-",""):noteName(mn).replace("-","")+"-"+noteName(mx).replace("-",""),G.lastX+4,11)}const st=rowStatus(t);if(st)g.fillText(st,G.lastX+4,H-5)}
-  G.vs.forEach(s=>{const x=G.col[s];if(!x)return;if(s%4===0){g.fillStyle=inkA(G.big?.1:.07);g.fillRect(x.x0,0,x.x1-x.x0,G.H)}if(S.playing&&s===S.step&&!G.big){g.fillStyle=inkA(.2);g.fillRect(x.x0,0,x.x1-x.x0,H)}});
+  G.vs.forEach(s=>{const x=G.col[s];if(!x)return;if(s%4===0){g.fillStyle=inkA(G.big?.1:.07);g.fillRect(x.x0,0,x.x1-x.x0,G.H)}});
   if(G.big&&S.ghost)side().forEach(o=>{if(o===t||(o<6&&(isFx(trk(o).m)||trk(o).m==="DPRO-BBOX")))return;noteSpans(o).forEach(sp=>{const r=spanX(G,sp);if(!r||sp.n[0]<G.lo||sp.n[0]>G.hi)return;g.fillStyle=inkA(.14);g.fillRect(r[0]+2,G.y(sp.n[0])+3,r[1]-r[0]-4,G.rh-6)})});
   /* the arpeggiator's output as ghost notes at their real pitch, under the trigs: lighter and thinner, never hit-tested. PLAY RND is not predictable: outlined, hatched */
   if(G.arp){const rnd=tr.arp.PLAY===4,gh=Math.max(3,Math.round(G.rh*.5));noteSpans(t).forEach(sp=>arpTicks(t,sp).forEach(q=>{if(q.n<G.lo||q.n>G.hi||q.x<G.a||q.x>=G.b)return;const s0=Math.floor(q.x),c1=G.col[s0];if(!c1)return;const cw=c1.x1-c1.x0,xx=c1.x0+(q.x-s0)*cw+1,ww=Math.max(2,q.w*cw-2),yy=G.y(q.n)+(G.rh-gh)/2;
@@ -3887,7 +4653,7 @@ document.addEventListener("click",e=>{if(e.target.closest("#allon"))unmuteAll()}
 
 /* ---- tap tempo (manual p.36's TAP): the average of the last taps; live recording: RECORD + PLAY ---- */
 const TAP=[];
-function tapTempo(){const now=performance.now();if(TAP.length&&now-TAP[TAP.length-1]>2000)TAP.length=0;TAP.push(now);if(TAP.length>5)TAP.shift();
+function tapTempo(){if(tempoLocked()){TAP.length=0;return}const now=performance.now();if(TAP.length&&now-TAP[TAP.length-1]>2000)TAP.length=0;TAP.push(now);if(TAP.length>5)TAP.shift();
  if(TAP.length<2){toast("Tap tempo: keep tapping B");return}S.bpm=clamp(Math.round(60000/((TAP[TAP.length-1]-TAP[0])/(TAP.length-1))*10)/10,30,300);if(HOST.tempo)HOST.tempo(S.bpm);renderTop();if(S.playing)restartClock();toast("Tap tempo: "+S.bpm.toFixed(1)+" BPM")}
 function liveRecord(){if(HOST.record)return HOST.record(true);S.rec=!S.rec;if(S.rec&&!S.playing)togglePlay();renderTop();if(S.rec)toast("LIVE RECORDING: the notes you play are recorded.")}
 
@@ -4149,7 +4915,7 @@ function noteSpans(t){const tr=trk(t),out=[],L=S.len;
 /* honest gate: the amp envelope may die before the gate ends (HOLD, then DEC). Estimate, in steps. */
 function ampSteps(t){if(isMidiT(t))return Infinity;const a=trk(t).v.AMP;if(a[2]>=127)return Infinity;return(a[0]+a[1]+a[2])/127*16}
 function arpSeq(tr,chord){const a=tr.arp;let c=[...chord];if(a.PLAY===1)c.sort((x,y)=>x-y);if(a.PLAY===2)c.sort((x,y)=>y-x);if(a.PLAY===3){c.sort((x,y)=>x-y);c=[...c,...c.slice(1,-1).reverse()]}
- let seq=[];for(let o=0;o<=a.RNGE;o++)seq=seq.concat(c.map(n=>n+12*o));if(a.PLAY===4){let h=7;seq=seq.map(()=>seq[(h=(h*31+11)%97)%seq.length])}return seq}
+ let seq=[];for(let o=0;o<Math.max(1,a.RNGE);o++)seq=seq.concat(c.map(n=>n+12*o));if(a.PLAY===4){let h=7;seq=seq.map(()=>seq[(h=(h*31+11)%97)%seq.length])}return seq}
 function arpTicks(t,span){const tr=trk(t),a=tr.arp;if(!a.MODE||!a.SPD)return[];if(a.MODE===2&&span.n.length<2)return[];const tl=a.SPD/6,seq=arpSeq(tr,span.n),out=[];
  for(let k=0;k*tl<span.e-span.s&&k<256;k++){const r=k%a.len;if(!a.rhy[r])continue;out.push({x:span.s+k*tl,w:tl,n:seq[k%seq.length]+a.ofs[r]})}return out}
 /* a lane-style key per arp step: the offset is a bipolar LED meter from the middle line (±24 = the half key) */
@@ -4719,7 +5485,7 @@ function renderPerform(){const pm=PMODES.find(p=>p[0]===S.mode),t=asgT(),tr=S.tr
  const joy=S.asTab.startsWith("JOY");
  $("#main").innerHTML=`<div class="perf ${S.mode==="map"?"map":""}">
   <div class="perf3">
-   <section class="card menvcard"><header><h3>Multi envelope</h3><span>both DATA PAGE keys · multi trig only</span></header><canvas class="ed" data-ed="menv" aria-label="Multi envelope. Drag the dots."></canvas>
+   <section class="card menvcard"><header><h3>Multi envelope</h3><span>both DATA PAGE keys · multi trig only</span></header><div class="menvplot"><canvas class="ed" data-ed="menv" aria-label="Multi envelope. Drag the dots."></canvas></div>
     <div class="ctl" style="grid-template-columns:repeat(5,minmax(0,1fr))">${["ATK","DEC","SUS","REL","PORT"].map(n=>pc("menv",n,{})).join("")}</div>
     <div class="hint">On top of every track's own envelope. For no effect: ATK 0, DEC, SUS and REL at 127.</div></section>
    <section class="card asgcard"><header><h3>Assign · T${t+1} ${shortM(tr.m)}</h3><span class="seg" data-set="astrk">${[0,1,2,3,4,5].map(k=>`<button data-v="${k}" aria-pressed="${k===t}">${k+1}</button>`).join("")}</span></header>
@@ -4878,17 +5644,49 @@ function chainSoon(){clearTimeout(S.chainTimer);
   else if((c&&c.active)||S.chainSent){clearChain();S.chainSent=false}},150)}
 function chainFooter(){const c=S.plays.chain,bn="ABCDEFGH"[S.bank],d=S.chainDraft;
  const known=!!c||!window.MMHost,active=!!(c&&c.active&&c.patterns.length),list=active?c.patterns:[],at=list.indexOf(S.pat),next=active?list[(at+1)%list.length]:null;
- const live=!canChain()?`<span class="note">${NA.chains}</span>`:!known?`<span class="note">The chain is not readable on this engine.</span>`
-  :S.plays.songMode?`<span class="note">Song mode: the machine plays song ${nn2(S.plays.song??0)}. A chain switches it to pattern mode.</span>`
-  :active?list.map(p=>`<span class="lcdchip${p===S.pat?" now":""}${S.playing&&p===next&&at>=0?" nx":""}">${patName(p)}</span>`).join("<i>»</i>")+"<i>↺</i>"
-  :`<span class="note">No chain. The machine plays ${patName(S.pat)} and stays on it.</span>`;
- return`<div class="chainfoot"><div class="irow"><span class="ilab">Plays</span><div class="chainrow">${live}</div></div>
+ /* what plays is the What plays card's (whatPlays); here: the pads' own state and the gestures */
+ const state=!canChain()?NA.chains:!known?"The chain is not readable on this engine.":S.plays.songMode&&active?"Song mode: the machine plays the song; PATTERN or a new chain switches it to pattern mode.":active?`The machine plays the chain${at>=0&&S.playing?`: now ${patName(S.pat)}, next ${patName(next)}`:""}.`:"";
+ return chainRows(d,bn,active,state)}
+/* the PATTERN | SONG switch, as the machine reports it (lit: S.plays.songMode); big in the What plays card */
+function seqModeKeys(){return`<span class="seg seqmode" title="PATTERN: the machine plays the pattern (and its chain). SONG: it plays the song. What is lit is what the machine reports">${[["pattern","PATTERN",false],["song","SONG",true]].map(([k,l,v])=>`<button data-seqmode="${k}" aria-pressed="${S.plays.songMode===v}"><span>${l}</span></button>`).join("")}</span>`}
+function chainRows(d,bn,active,state){
+ return`<div class="chainfoot">${state?`<div class="irow"><span class="ilab"></span><span class="note">${state}</span></div>`:""}
   <div class="irow"><span class="ilab"></span><span class="chainacts"><button data-chain="undo"${d.length?"":" disabled"} title="Takes the last pad out and chains the rest at once">Back</button><button class="danger" data-chain="clear"${active||d.length?"":" disabled"} title="BANK + the TRIG key of the pattern that plays: the machine's way to end a chain. The pads start over">Clear</button></span>
   <span class="note">${d.length===1?`One more pad and the machine plays the chain (BANK ${bn} held, the TRIG keys in order; ${S.playing?"from the pattern end":"PLAY starts at the first"}).`:"Each pad chains at once: the machine plays them in order and loops."} One bank, each pattern once. Picking a pattern ends the chain; editing its patterns does not.</span></div></div>`}
+function seqMode(song){if(HOST.seqMode)return HOST.seqMode(song);S.plays.songMode=song;render()}
+/* ===== Song playhead (0.3.5): the song row the machine plays (the host's telemetry songRow, RAM), shown without a
+   render: the arrangement cell, the time bar up to it, the What plays line and the LCD's pattern slot ===== */
+S.songRow=-1;let songRowShown=-2;
+const songRowNow=()=>S.plays.songMode&&S.playing&&S.songRow>=0?S.songRow:-1;
+const nn3=n=>String(n+1).padStart(3,"0");
+const songRows=()=>S.song.filter(r=>r.type!=="end").length;
+/* the What plays line: PATTERN B07 / SONG 01 · row 017 of 65 · B01 / CHAIN A03»A05 */
+function playsText(){const plays=playsOf();if(plays.kind!=="song")return plays.label;
+ const row=songRowNow(),r=row>=0?S.song[row]:null;
+ return`SONG ${nn2(S.plays.song??0)} · `+(row>=0?`row ${nn3(row)} of ${songRows()}${r&&!r.type?" · "+patName(r.pat):""}`:`${songRows()} rows · ${S.playing?"…":"stopped"}`)}
+/* the LCD's pattern slot reads SONG 01 · 017 in song mode */
+function songLcd(){const p=$("#pat"),f=p?.closest(".patf"),lab=f?.querySelector("small");if(!p)return;const song=!!S.plays.songMode,row=songRowNow();
+ if(lab)lab.textContent=song?"Song":"Pattern";if(song)p.textContent=nn2(S.plays.song??0)+(row>=0?"·"+nn3(row):"");f?.classList.toggle("songlcd",song)}
+/* the arrangement's header and frame: the mode and the transport apart (PLAYING only while the song really plays) */
+function arrState(){return S.plays.songMode?(S.playing?"Playing":"Song mode · stopped"):"Pattern mode · song not playing"}
+function markSongRow(force){const st=document.getElementById("arrstate");if(st&&st.textContent!==arrState())st.textContent=arrState();
+ document.querySelector(".songui")?.classList.toggle("songplaying",!!S.plays.songMode&&S.playing);
+ const row=songRowNow();if(row===songRowShown&&!force)return;songRowShown=row;songLcd();
+ const pl=document.getElementById("songPlays");if(pl)pl.textContent=playsText();if(S.ws!=="song")return;
+ $$(".scell.ph").forEach(c=>c.classList.remove("ph"));if(row>=0)document.querySelector(`.scell[data-i="${row}"]`)?.classList.add("ph");
+ $$(".durbar .db").forEach(d=>{const i=+d.dataset.i;d.classList.toggle("past",row>=0&&i<row);d.classList.toggle("now",i===row)})}
+/* (a) What plays: the PATTERN | SONG switch first, then one live line from the machine */
+function whatPlays(plays){const tip={chain:"The machine plays its own chain (live, one bank, loops). Clear it in CHAIN, or pick a pattern.",song:"SONG mode: the machine plays the stored song.",pattern:"PATTERN mode: the machine plays this pattern and stays on it."}[plays.kind];
+ return`<section class="card whatplays ${S.plays.songMode?"song":"pattern"}"><header><h3>What plays</h3></header>
+   <div class="modebig">${seqModeKeys()}</div>
+   <div class="chainrow playsline"><span class="lcdchip playschip ${plays.kind}" id="songPlays" title="${tip}">${playsText()}</span></div></section>`}
+/* (b) the song itself: the one to edit, and LOAD SONG */
+function songCard(){return`<section class="card songslot"><header><h3>Song</h3>${songPick()||`<span class="lcdchip">SONG ${nn2(S.songSlot??0)}</span>`}</header><div class="irow"><span class="note">${songRows()} rows · ${Math.round(songSteps()/16)} bars · ${songTime()}</span></div></section>`}
+document.addEventListener("click",e=>{const b=e.target.closest?.("[data-seqmode]");if(b)seqMode(b.dataset.seqmode==="song")});
 function chainPad(p){const n=S.chainDraft.indexOf(p),d=S.chainDraft;if(n>=0)d.splice(n,1);else if(d.length<16)d.push(p);render();chainSoon()}
 function chainAct(a){if(a==="undo"){S.chainDraft.pop();render();chainSoon();return}
  clearTimeout(S.chainTimer);S.chainDraft=[];render();if(S.plays.chain?.active||S.chainSent){clearChain();S.chainSent=false}}
-function renderSong(){const sel=S.song[S.songSel]||S.song[0],chain=S.songPick==="chain",plays=playsOf();
+function renderSong(){S.songSel=Math.max(0,Math.min(S.songSel,S.song.length-1));const sel=S.song[S.songSel]||S.song[0],chain=S.songPick==="chain",plays=playsOf();
  /* a chain is one bank's: another bank starts the draft over */
  S.chainDraft=S.chainDraft.filter(p=>p>>4===S.bank);
  const pad=p=>{const info=`${patName(p)}<small>${hasPat(p)?patLen(p):"empty"}</small>`;
@@ -4898,8 +5696,7 @@ function renderSong(){const sel=S.song[S.songSel]||S.song[0],chain=S.songPick===
  const palette=`<div class="banks">${[..."ABCDEFGH"].map((b,k)=>`<button class="bank ${k===S.bank?"on":""}" data-bank="${k}"><i class="led"></i>${b}</button>`).join("")}</div>
   <div class="pgridp">${Array.from({length:16},(_,k)=>pad(S.bank*16+k)).join("")}</div>
   ${chain?chainFooter():`<p class="note pnote">Click adds after row ${String(S.songSel+1).padStart(3,"0")} · drag onto the grid</p>`}`;
- const playsTip={chain:"The machine plays its own chain (live, one bank, loops). Clear it in CHAIN, or pick a pattern.",song:"The machine is in song mode: it plays the stored song.",pattern:"The machine is in pattern mode: it plays this pattern and stays on it."}[plays.kind];
- const head=`<header class="phead"><h3>Patterns</h3><span class="seg" data-set="songpick" title="ARRANGE: a click adds the pattern to the song. CHAIN: a click numbers it into the machine's chain.">${[["arrange","Arrange"],["chain","Chain"]].map(([v,t])=>`<button data-v="${v}" aria-pressed="${S.songPick===v}">${t}</button>`).join("")}</span><span class="lcdchip playschip ${plays.kind}" id="songPlays" title="${playsTip}">${plays.label}</span></header>`;
+ const head=`<header class="phead"><h3>Patterns</h3><span class="seg" data-set="songpick" title="ARRANGE: a click adds the pattern to the song. CHAIN: a click numbers it into the machine's chain.">${[["arrange","Arrange"],["chain","Chain"]].map(([v,t])=>`<button data-v="${v}" aria-pressed="${S.songPick===v}">${t}</button>`).join("")}</span></header>`;
  let insp="";
  if(!sel.type){const L=patLen(sel.pat),o=sel.ofs||0,ln=rowLen(sel),tt=sel.ttr||T64(),trn=(sel.trn??64)-64;
   insp=`<div class="irow"><span class="ilab">Row</span><span class="lcdchip">${String(S.songSel+1).padStart(3,"0")} · ${patName(sel.pat)}</span><span class="stepper"><button data-step="pat" data-d="-1" aria-label="Previous pattern">‹</button><button data-step="pat" data-d="1" aria-label="Next pattern">›</button></span></div>
@@ -4918,16 +5715,17 @@ function renderSong(){const sel=S.song[S.songSel]||S.song[0],chain=S.songPick===
    ${sel.type==="loop"?`<div class="irow"><span class="ilab">Times</span><span class="stepper"><button data-step="count" data-d="-1">−</button><b class="mono">${sel.count===Infinity?"∞":sel.count}</b><button data-step="count" data-d="1">+</button></span><button class="ptog ${sel.count===Infinity?"on":""}" data-inf="1"><i class="led"></i>Forever</button></div>`:""}
    <div class="irow"><span class="ilab"></span><span class="note">${sel.type==="loop"?"Loops nest. Loops also stretch a part past the 64-step pattern limit.":sel.type==="jump"?"Jumps the song pointer forward.":"Pauses until you pick a row to go on from."}</span></div>`;
  const lines=Math.ceil(200/16);
- $("#main").innerHTML=`<div class="songui lay2"><div class="songleft"><section class="card ${chain?"chainmode":""}">${head}${palette}</section>
+ $("#main").innerHTML=`<div class="songui lay2 ${S.plays.songMode?"songmode":"patmode"}${S.plays.songMode&&S.playing?" songplaying":""}"><div class="songleft">${whatPlays(plays)}${songCard()}<section class="card ${chain?"chainmode":""}">${head}${palette}</section>
    <section class="card"><header><h3>Selected row</h3><span class="rowacts"><button data-rowact="up" title="Move left">←</button><button data-rowact="down" title="Move right">→</button><button data-rowact="dup">Duplicate</button><button data-rowact="loop">Add loop</button><button data-rowact="del" class="danger">Delete</button></span></header><div class="insp">${insp}</div></section></div>
-  <section class="card"><header><h3>Arrangement</h3><span class="note" title="${S.song.length} of 200 rows · T track transpose · M mutes · B tempo · ~ part">${S.song.length} of 200 rows · T track transpose · M mutes · B tempo</span>${songPick()}</header>
-   <div class="durbar" title="Song shape by time (length × repeats)">${S.song.map((r,i)=>r.type?`<i class="db dbm"></i>`:`<i class="db ${i===S.songSel?"sel":""}" data-row="${i}" style="flex:${rowLen(r)*r.rep} 1 0"></i>`).join("")}</div>
+  <section class="card arrcard"><header><h3>Arrangement</h3><span class="arrstate" id="arrstate">${arrState()}</span><span class="note" title="${S.song.length} of 200 rows · T track transpose · M mutes · B tempo · ~ part">${S.song.length} of 200 rows · T track transpose · M mutes · B tempo</span></header>
+   <div class="durbar" title="Song shape by time (length × repeats); in SONG mode it fills up to the row that plays">${S.song.map((r,i)=>r.type?`<i class="db dbm" data-i="${i}"></i>`:`<i class="db ${i===S.songSel?"sel":""}" data-row="${i}" data-i="${i}" style="flex:${rowLen(r)*r.rep} 1 0"></i>`).join("")}</div>
    <div class="slotgrid" id="tl">${Array.from({length:lines},(_,line)=>`<span class="sglab">${String(line*16+1).padStart(3,"0")}</span>${Array.from({length:16},(_,c)=>{const i=line*16+c,r=S.song[i];if(i>=200)return`<span></span>`;
      if(!r)return`<div class="scell empty" data-i="${i}"></div>`;
      const cls=`scell ${i===S.songSel?"sel":""} ${r.type?"cmd "+r.type:""} ${!r.type&&loopOf(i)>=0?"inloop":""}`;
      const txt=r.type==="end"?"END":r.type==="loop"?`↺${String(r.to+1).padStart(3,"0")}`:r.type==="jump"?`→${String(r.to+1).padStart(3,"0")}`:r.type==="halt"?"HALT":patName(r.pat);
      const sub=r.type==="loop"?(r.count===Infinity?"∞":"×"+r.count):!r.type?`${r.rep>1?"×"+r.rep:""}${(r.trn??64)!==64?" "+((r.trn-64)>0?"+":"")+(r.trn-64):""}${hasTtr(r)?" T":""}${r.mutes?.length?" M":""}${r.bpm?" B":""}${r.ofs||r.len?"~":""}`:"";
-     return`<button class="${cls}" data-row="${i}" data-i="${i}" draggable="${r.type==="end"?"false":"true"}" title="Row ${String(i+1).padStart(3,"0")}${r.type?"":" · "+patName(r.pat)+" ×"+r.rep+" · "+rowLen(r)+" steps"}"><b>${txt}</b><small>${sub}</small></button>`}).join("")}`).join("")}</div></section></div>`}
+     return`<button class="${cls}" data-row="${i}" data-i="${i}" draggable="${r.type==="end"?"false":"true"}" title="Row ${String(i+1).padStart(3,"0")}${r.type?"":" · "+patName(r.pat)+" ×"+r.rep+" · "+rowLen(r)+" steps"}"><b>${txt}</b><small>${sub}</small></button>`}).join("")}`).join("")}</div></section></div>`;
+ markSongRow(true)}
 /* a row as the song's intent: rowSet of the selected row (the page's row; the host makes the song's) */
 function editRow(i=S.songSel){edit("rowSet",{i,row:S.song[i]})}
 /* the page's rows after a move or a removal: loop and jump targets follow their rows (map: old place -> new), a HALT
@@ -5192,7 +5990,7 @@ function drawAudio(){const pop=$("#audiopop");if(!pop)return;if(!AP.open){pop.hi
    <div class="grow2"><span class="ilab">Latency</span><b class="mono">${D.latencyMs?D.latencyMs+" ms":"--"}</b></div></section>
   <section class="card amwide"><header><h3>MIDI</h3><span>inputs, output, Bluetooth</span></header>
    <div class="grow2 amtop"><span class="ilab">Inputs</span><span class="amins" title="${AMTIP.midiIn}">${(D.midiInputs||[]).map(m=>`<button class="amled" data-am="midiIn" data-id="${amEsc(m.id)}" aria-pressed="${!!m.on}"><i class="led${m.on?" on":""}"></i>${amEsc(m.name)}</button>`).join("")||`<span class="note">No MIDI inputs.</span>`}</span></div>
-   <div class="grow2"><span class="ilab">Output</span>${sel("midiOut",D.midiOutput?.id||"",D.midiOutput?.list||[],AMTIP.midiOut,"NONE")}${D.bluetooth?`<button class="amkey" data-am="bt" title="${AMTIP.bt}">BLUETOOTH MIDI…</button>`:""}</div></section>
+   <div class="grow2"><span class="ilab">Output</span>${sel("midiOut",D.midiOutput?.id||"",D.midiOutput?.list||[],AMTIP.midiOut,"NONE")}${D.bluetooth?`<button class="amkey" data-am="bt" title="${AMTIP.bt}">BLUETOOTH MIDI…</button>`:""}</div>${typeof openGlobal==="function"?`<div class="grow2"><span class="ilab"></span><button class="amlink" data-am="global" title="GLOBAL: the machine's own settings, kept in its memory">The machine's MIDI channel and sync are in GLOBAL</button></div>`:""}</section>
  </div>
  <div class="libfoot"><span>Also in the engine menu · Esc closes · a change applies at once and is kept</span><span class="fw">${amEsc(D.output?.id||"no output")}</span></div>`;
  if(typeof enhanceSelects==="function")enhanceSelects(pop);pop.hidden=false;placeAudio()}
@@ -5202,6 +6000,7 @@ function closeAudio(){if(!AP.open)return;AP.open=false;audioMeter(false);drawAud
 function audioLevel(v){AP.level=v;const l=document.getElementById("amlevel");if(l)l.style.width=Math.round(Math.min(1,Math.sqrt(Math.max(0,v)))*100)+"%"}
 function audioClick(a){const f=a.dataset.am;
  if(f==="close"){closeAudio();return}
+ if(f==="global"){closeAudio();openGlobal();return}
  if(f==="test"){audioSend({do:"test"});return}
  if(f==="bt"){audioSend({do:"bluetooth"});return}
  if(f==="mute"){audioSend({set:"mute",on:a.dataset.v==="1"});return}
@@ -5312,6 +6111,7 @@ function l2step(k,d,fine){
   if(k==="ptrn"){S.patTrn=clamp(S.patTrn+d,0,127);edit("transpose",{v:S.patTrn-64})}
  if(k==="route"){S.routing=ROUTES[(ROUTES.indexOf(S.routing)+d+3)%3];edit("routing",{v:S.routing})}
  if(k==="side"){setSide(S.side==="midi"?"int":"midi");return}
+ if(k==="seqmode"){seqMode(!S.plays.songMode);return}
  if(k==="dbl"){if(!fine)doublePattern();return}
  if(k==="pmode"){const o=PMODES.map(p=>p[0]);S.mode=o[(o.indexOf(S.mode)+d+4)%4]}
  render()}
@@ -5320,7 +6120,7 @@ document.addEventListener("pointerdown",e=>{const el=e.target.closest(".l2.ed");
 document.addEventListener("pointermove",e=>{if(!l2drag)return;if(e.buttons===0&&e.pointerType==="mouse"){l2drag=null;return}const d=Math.round((l2drag.y-e.clientY)/4);if(d)l2drag.moved=true;if(l2drag.k==="swing")S.swingAmt=clamp(l2drag.v+d,50,80);else S.patTrn=clamp(l2drag.v+d,0,127);renderSub()});
 document.addEventListener("pointerup",()=>{if(!l2drag)return;const k=l2drag;l2drag=null;if(!k.moved)l2step(k.k,1);else{if(k.k==="swing")edit("swing",{v:S.swingAmt});else edit("transpose",{v:S.patTrn-64});render()}});
 document.addEventListener("click",e=>{const el=e.target.closest(".l2.ed");if(!el)return;const k=el.dataset.l2;if(k!=="swing"&&k!=="ptrn")l2step(k,e.shiftKey?-1:1)});
-document.addEventListener("wheel",e=>{const el=e.target.closest(".l2.ed");if(!el)return;e.preventDefault();l2step(el.dataset.l2,(e.deltaY||e.deltaX)<0?1:-1,true)},{passive:false});
+document.addEventListener("wheel",e=>{const el=e.target.closest(".l2.ed");if(!el)return;e.preventDefault();if(el.dataset.l2==="seqmode")return;l2step(el.dataset.l2,(e.deltaY||e.deltaX)<0?1:-1,true)},{passive:false});
 
 /* P7, as the MD Editor (v54): Shift + M prepares a mute ("+" unmute, "X" mute, blinking); the prepared
    mutes apply together when Shift comes up. Leaving the window drops them. */
@@ -5559,9 +6359,9 @@ document.addEventListener("selectstart",e=>{if(!textField(e.target))e.preventDef
 document.addEventListener("dragstart",e=>{if(e.target.closest?.("img,svg,canvas")&&!e.target.closest?.("[draggable=true]"))e.preventDefault()},true);
 
 /* BPM: drag or arrows */
-(()=>{const b=$("#bpm");let d=null;b.addEventListener("pointerdown",e=>{d={y:e.clientY,v:S.bpm};b.setPointerCapture(e.pointerId)});
+(()=>{const b=$("#bpm");let d=null;b.addEventListener("pointerdown",e=>{if(tempoLocked())return;d={y:e.clientY,v:S.bpm};b.setPointerCapture(e.pointerId)});
  b.addEventListener("pointermove",e=>{if(!d)return;if(e.buttons===0&&e.pointerType==="mouse"){d=null;return}S.bpm=clamp(Math.round((d.v+(d.y-e.clientY)*(e.shiftKey?.1:.5))*10)/10,30,300);if(HOST.tempo)HOST.tempo(S.bpm);renderTop();if(S.playing)restartClock()});
- b.addEventListener("pointerup",()=>d=null);b.addEventListener("keydown",e=>{const k={ArrowUp:1,ArrowDown:-1}[e.key];if(!k)return;e.preventDefault();S.bpm=clamp(S.bpm+k*(e.shiftKey?.1:1),30,300);if(HOST.tempo)HOST.tempo(S.bpm);renderTop();if(S.playing)restartClock()})})();
+ b.addEventListener("pointerup",()=>d=null);b.addEventListener("keydown",e=>{const k={ArrowUp:1,ArrowDown:-1}[e.key];if(!k)return;e.preventDefault();if(tempoLocked())return;S.bpm=clamp(S.bpm+k*(e.shiftKey?.1:1),30,300);if(HOST.tempo)HOST.tempo(S.bpm);renderTop();if(S.playing)restartClock()})})();
 
 
 /* ===== Engine status (from the MD Editor v48): the LCD says what the engine is doing; editing waits until it is ready ===== */
@@ -5601,26 +6401,37 @@ function startEngine(kind){engT.forEach(clearTimeout);engT=[];if(S.playing)toggl
 /* ===== Transport ===== */
 let clock=null;
 function tick(){const prev=S.step;S.step=(S.step+1)%S.len;ctlTick();if(S.step===0){const q=S.queued??chainWrap();if(q!=null){applyPattern(q);return}}stepShown(prev)}
-/* the playhead, POSITION, the page LEDs and the lamps at S.step (the step before it was prev) */
-function stepShown(prev){const pp=Math.floor(S.step/16);$$(".pl").forEach(b=>b.classList.toggle("play",+b.dataset.plp===pp&&S.playing));
- if(S.follow&&S.ws==="seq"&&!S.viewAll&&pp!==S.page&&!laneDraw&&!menuOpen()){S.page=pp;render()}
+/* the playhead, POSITION, the page LEDs and the lamps at S.step (the step before it was prev). B-036, as the Machinedrum
+   Editor's B-014: per step only the soft playhead moves (#phcol, from cached geometry) and POSITION, the page LEDs and
+   the tempo LED change; no step cell is marked (their glows repainted a column of cells every step), no canvas is
+   redrawn (they draw no playhead), and following the playhead to another page rebuilds the sequencer only */
+let stepPage=-1;
+function stepShown(prev){if(S.step===prev)return;const pp=Math.floor(S.step/16);
+ if(pp!==stepPage){stepPage=pp;$$(".pl").forEach(b=>b.classList.toggle("play",+b.dataset.plp===pp&&S.playing))}
+ if(S.follow&&S.ws==="seq"&&!S.viewAll&&pp!==S.page&&!laneDraw&&!menuOpen()){S.page=pp;followPage()}
  $("#tempoled").classList.toggle("on",S.step%4===0);setPos();queueMicrotask(movePH);
- $$(`.mst[data-s="${prev}"],.lb[data-s="${prev}"],.tc[data-s="${prev}"]`).forEach(c=>c.classList.remove("ph"));$$(`.mst[data-s="${S.step}"],.lb[data-s="${S.step}"],.tc[data-s="${S.step}"]`).forEach(c=>c.classList.add("ph"));
- if(S.ws==="seq")redraw();
  if(S.ws==="perform"){const act=[0,1,2,3,4,5].filter(i=>{const st=S.tracks[i].steps[S.step];return st&&!st.off&&st.a&&audible(i)&&(S.mode!=="poly"||i===asgT())});flashTracks(act)}}
+/* the playhead's page while following: the sequencer only (renderPage's work for it), not the whole page */
+function followPage(){const sl=$("#seqscroll")?.scrollLeft||0;renderSeq();const sc=$("#seqscroll");if(sc){sc.scrollLeft=sl;const l=$("#lanescroll");if(l)l.scrollLeft=sl}enhanceSelects($("#main"));movePH(false)}
 function stepMs(){const m={"1X":1,"2X":2,"3/4X":.75,"3/2X":1.5}[S.mult];return 60000/S.bpm/4/m}
 function restartClock(){if(HOST.ownsClock)return;clearInterval(clock);clock=setInterval(tick,stepMs())}
 /* Soft playhead (as the MD Editor, v45): one ink-tinted column over the roll, the ENV/SLIDE/SWING
    rows and the lock lane that glides from step to step. It jumps without animation on a wrap, a
    page flip or a scroll, and fades out on stop. It lives on <body> in viewport coordinates, so the
    roll's and the lane's scrollers both carry it (movePH(false) on scroll and resize). */
-let phX=null;
-function movePH(glide=true){let ph=document.getElementById("phcol");
- const seq=$("#seq"),sc=$("#seqscroll"),col=S.playing&&S.step>=0&&S.ws==="seq"&&seq&&sc?seq.querySelector(`.ruler .rul[data-s="${S.step}"]`):null;
- if(!col){if(ph)ph.style.opacity="0";phX=null;return}
+let phX=null,phGeo=null;
+/* the playhead's geometry, read once per layout (a render, a scroll, a resize: movePH(false)), not every step (B-036:
+   no forced layout read per step) */
+function phGeom(){const seq=$("#seq"),sc=$("#seqscroll");if(!seq||!sc)return null;if(phGeo&&phGeo.seq===seq)return phGeo;
+ const v=sc.getBoundingClientRect(),top=(seq.querySelector(".nlane.big")||seq).getBoundingClientRect().top,
+  lane=$("#lane"),bot=(lane&&lane.getClientRects().length?lane:$("#tlanes")||seq).getBoundingClientRect().bottom,cols={};
+ seq.querySelectorAll(".ruler .rul[data-s]").forEach(c=>{const r=c.getBoundingClientRect();cols[c.dataset.s]={left:r.left,right:r.right,width:r.width}});
+ return phGeo={seq,v,top,bot,cols}}
+function movePH(glide=true){let ph=document.getElementById("phcol");if(!glide){phGeo=null;stepPage=-1}
+ const g=S.playing&&S.step>=0&&S.ws==="seq"?phGeom():null,r=g?g.cols[S.step]:null;
+ if(!r){if(ph)ph.style.opacity="0";phX=null;return}
  if(!ph){ph=document.createElement("div");ph.id="phcol";ph.setAttribute("aria-hidden","true");document.body.appendChild(ph);phX=null}
- const r=col.getBoundingClientRect(),v=sc.getBoundingClientRect(),top=(seq.querySelector(".nlane.big")||col).getBoundingClientRect().top,
-  lane=$("#lane"),bot=(lane&&lane.getClientRects().length?lane:$("#tlanes")||seq).getBoundingClientRect().bottom;
+ const v=g.v,top=g.top,bot=g.bot;
  const jump=!glide||phX==null||r.left<phX;
  ph.style.transition=jump?"opacity .15s":`transform ${Math.round(Math.min(stepMs()*.85,140))}ms cubic-bezier(.2,.7,.3,1),opacity .15s`;
  ph.style.width=r.width+"px";ph.style.top=(top-3)+"px";ph.style.height=(bot-top+6)+"px";ph.style.transform=`translateX(${r.left}px)`;
@@ -5628,8 +6439,8 @@ function movePH(glide=true){let ph=document.getElementById("phcol");
 addEventListener("scroll",()=>{if(S.playing)movePH(false)},true);addEventListener("resize",()=>{if(S.playing)movePH(false)});
 function setPos(){$("#pos").textContent=S.playing&&S.step>=0?String(Math.floor(S.step/16)+1).padStart(2,"0")+"."+String(S.step%16+1).padStart(2,"0"):"--.--"}
 /* A host's transport (P6): the machine's step and whether it plays, shown. */
-function setStep(step){const prev=S.step;S.step=step;stepShown(prev)}
-function setPlaying(on){if(S.playing===on)return;S.playing=on;if(!on){$$(".pl").forEach(b=>b.classList.remove("play"));$("#tempoled").classList.remove("on");$$(".ph").forEach(c=>c.classList.remove("ph"));S.step=-1}setPos();renderTop();redraw();movePH(false)}
+function setStep(step){if(step===S.step)return;const prev=S.step;S.step=step;stepShown(prev)}
+function setPlaying(on){if(S.playing===on)return;S.playing=on;if(!on){$$(".pl").forEach(b=>b.classList.remove("play"));$("#tempoled").classList.remove("on");$$(".ph").forEach(c=>c.classList.remove("ph"));S.step=-1}setPos();renderTop();redraw();movePH(false);markSongRow()}
 function togglePlay(){if(HOST.togglePlay)return HOST.togglePlay();if(!S.playing&&S.eng&&!engReady())return;S.playing=!S.playing;clearInterval(clock);$$(".pl").forEach(b=>b.classList.remove("play"));$("#tempoled").classList.remove("on");$$(".ph").forEach(c=>c.classList.remove("ph"));if(S.playing){S.step=-1;tick();restartClock()}else S.queued=null;setPos();renderTop();redraw();movePH(false)}
 
 /* ===== Render ===== */
@@ -5712,7 +6523,7 @@ function show(v,all){
   for(const k of["len","mult","swingAmt","patTrn","locks"])if(put(S,k,v[k],was[k])){doc=true;seq=true}
   for(const k of["multi","menv","routing","plays"])if(put(S,k,v[k],was[k]))doc=true;
   if(put(S,"workName",v.workName,was.workName))top=true;
-  for(const k of["pat","kit","queued","bpm"])if(put(S,k,v[k],was[k]))top=true;
+  for(const k of["pat","kit","queued","bpm","hostTempo"])if(put(S,k,v[k],was[k]))top=true;
   if(v.kitState!==undefined&&v.kitState!==was.kitState){setKitState(v.kitState);top=true}
   if(v.patSlot&&!sameV(v.patSlot,was.patSlot)){S.patKit[v.patSlot.p]=v.patSlot.kit;S.patInfo[v.patSlot.p]={has:v.patSlot.has,len:v.patSlot.len}}
   if(put(S,"song",v.song,was.song)||v.song!==undefined&&v.songSlot!==was.songSlot){S.songSlot=v.songSlot;S.songSel=Math.min(S.songSel||0,S.song.length-1);doc=true}
@@ -5770,7 +6581,7 @@ function closeFirmwareDialog(){Dlg.drop("firstRun")}
 /* SysEx import and export: the host's file dialogs and document writes; the example shows a pretend file */
 Syx.host={choose:()=>{if(HOST.syxChoose)return HOST.syxChoose();Syx.preview({ok:true,file:"example.syx",model:"Monomachine",fullBackup:false,problemCount:0,problems:[],items:{kit:[{slot:0,name:"SUPERWAVES",overwrites:true}],pattern:[{slot:0,name:"A01",kit:0,overwrites:true}],song:[],global:[]}})},
  exportAll:()=>{if(HOST.syxExport)return HOST.syxExport();toast("In the plug-in: a save dialog, then every document as one .syx.")},
- start:k=>{if(HOST.syxStart)return HOST.syxStart(k);Syx.progress({done:2,total:2,running:false,text:"Imported (example)."})},
+ start:(k,s)=>{if(HOST.syxStart)return HOST.syxStart(k,s);Syx.progress({phase:"done",done:2,total:2,running:false,text:"2 imported (example).",report:{taken:2,items:[]}})},
  stop:()=>{if(HOST.syxStop)return HOST.syxStop()}};
 /* the start-up card's keys: the host's native file chooser and ROM folder (the ROM stays on this computer); the
    example pretends an install */
@@ -5778,8 +6589,8 @@ Boot.host={chooseRom:()=>{if(HOST.chooseRom)return HOST.chooseRom();Boot.rom({ok
  revealRom:()=>{if(HOST.revealRom)return HOST.revealRom();toast("In the plug-in: the ROM folder opens in Finder.")},
  recheck:()=>{if(HOST.recheck)return HOST.recheck();startEngine("emu")},
  removeRom:i=>{if(HOST.removeRom)return HOST.removeRom(i)},say:t=>toast(t)};
-/* the editor's menu (a host's): right-click an empty part of the header */
-document.addEventListener("contextmenu",e=>{if(!HOST.menu||!e.target.closest(".top")||e.target.closest("button,[role=slider],[role=button],select,input,b,.lcdpanel"))return;e.preventDefault();HOST.menu()});
+/* the editor's menu (a host's): right-click anywhere the page has no menu of its own (DeskMenu.wantsEditor, I-008) */
+document.addEventListener("contextmenu",e=>{if(!HOST.menu||!DeskMenu.wantsEditor(e))return;e.preventDefault();HOST.menu(e.clientX,e.clientY)});
 window.MMView={
  /* values */
  audible,soloed:()=>[...S.tracks,...S.midi].some(x=>x.solo),engReady,asgT,noteName,pname,machName,kitName,
@@ -5791,7 +6602,7 @@ window.MMView={
  /* the machine's documents: show(view) is the one writer of S's document members (DESIGN-UNIFY.md phase 1); the
     library's other slots keep their own cheap setters; setTempo is the BPM gesture's own write (the self-test's) */
  show,startEmpty,setPatternSlot,setKitSlot,setReading,setTempo:bpm=>{S.bpm=bpm},
- setInput,setPlaying,setStep,
+ setInput,setPlaying,setStep,setSongRow:r=>{S.songRow=r;markSongRow()},
  setEng,dlgOpen:()=>!$("#dlg").hidden,setEngineLabel,setEngineTip,setEngines,setAudioEntry,clearLearnTarget:()=>{S.learnT=null},setMapping,setModulation,setCtlSetup,disable,
  setRecord,
  setLcd,setKeyDown,setPst,closeFirmwareDialog,bootRom:r=>Boot.rom(r),bootInstalled:o=>Boot.showInstalled(o),syxPreview:m=>Syx.preview(m),syxProgress:m=>Syx.progress(m),
@@ -6540,6 +7351,12 @@ const MmView = (() => {
 			v.songs = songsOf(docs, song, slotIn(m, "song"));
 		}
 		const global = glob != null ? docs.globals[glob] || null : null;
+		/* B-030: in a DAW whose clock the machine follows (its global: CONTROL IN TEMPO SYNC external, set by the
+		   plug-in), the tempo is the host's (ui.host, the plug-in's "host" message): TEMPO shows it, also while the
+		   host is stopped, and is not edited here */
+		const H = ui.host;
+		v.hostTempo = !!(H && H.follows && H.bpm > 0 && global && global.controlIn && global.controlIn.tempoSync === 1);
+		if (v.hostTempo) v.bpm = H.bpm;
 		const kd = kitDocOf(docs, kit), pd = pat != null ? docs.patterns[pat] || null : null;
 		/* the view shows the machine once the current pattern and the kit that plays are there */
 		v.ready = !!(kd && pd);

@@ -1,6 +1,7 @@
 #pragma once
 
 #include "mmDeskAdapter.h"
+#include "deskCore/deskSongRow.h"
 #include "mmDeskModel.h"
 #include "mmRecv.h"
 #include "mmDeskWatch.h"
@@ -60,6 +61,8 @@ namespace mmDesk
 		deskCore::Lifecycle lifecycle() const override { return deskCore::lifecycleOf(facts()); }
 		Context context() const override { return {m_curKit, m_curGlobal}; }
 		bool busy() const override;
+		std::string sendAsIs(const Bytes& _message, bool _dump) override;
+		AsIs asIs() const override;
 
 		// ---- MmAdapter: Monomachine facts from the device ----
 		void setProbe(Probe _probe) override;
@@ -147,6 +150,7 @@ namespace mmDesk
 		deskCore::Outcome cmdPlay(const Value&, const Documents&);
 		deskCore::Outcome cmdStop(const Value&, const Documents&);
 		deskCore::Outcome cmdMute(const Value&, const Documents&);
+		deskCore::Outcome cmdSeqMode(const Value&, const Documents&);
 		deskCore::Outcome cmdFollowHost(const Value&, const Documents&);
 		deskCore::Outcome cmdMuteMidi(const Value&, const Documents&);
 		deskCore::Outcome cmdPoly(const Value&, const Documents&);
@@ -162,6 +166,11 @@ namespace mmDesk
 		// CLEAR: BANK + the TRIG key of the pattern that plays (false: the panel did not take them).
 		bool clearChain();
 		void pumpChain();
+		// 0.3.5: an edited current song is heard without LOAD SONG by hand (pumpSongReload)
+		void pumpSongReload(double _now);
+		bool m_songReloadNeeded = false;
+		double m_songEditedMs = -1;
+		static constexpr double g_songReloadQuietMs = 300;
 		// BANK (+ BANK GROUP from the half the machine is in) and the TRIG keys of _patterns (one bank).
 		bool pressBankTrigs(const std::vector<int>& _patterns);
 		// Panel keys the desk pressed are still on their way (their own hold times), or the panel is
@@ -194,6 +203,7 @@ namespace mmDesk
 		bool m_backgroundQueued = false;
 
 		Telemetry m_tel;
+		deskCore::SongRowHeard m_songRow;	// 0.3.5: the row heard (the RAM byte runs ahead of the pass)
 		// "playing" is the RAM flag or the step byte advancing (watchStep, onTelemetry)
 		bool m_playing = false;
 		StepWatch m_steps;

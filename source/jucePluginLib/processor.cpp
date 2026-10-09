@@ -780,6 +780,7 @@ namespace pluginLib
 	{
 	    juce::ScopedNoDenormals noDenormals;
 	    const int numSamples = buffer.getNumSamples();
+		processBlockStarted(numSamples, false);
 		synthLib::RealtimeInstrumentation::CallbackScope instrumentation(
 			getPlugin().getRealtimeInstrumentation(), static_cast<size_t>(numSamples),
 			getSampleRate());
@@ -944,6 +945,7 @@ namespace pluginLib
 
 	void Processor::processBlockBypassed(juce::AudioBuffer<float>& _buffer, juce::MidiBuffer& _midiMessages)
 	{
+		processBlockStarted(_buffer.getNumSamples(), true);
 		synthLib::RealtimeInstrumentation::CallbackScope instrumentation(
 			getPlugin().getRealtimeInstrumentation(),
 			static_cast<size_t>(_buffer.getNumSamples()), getSampleRate(), true);

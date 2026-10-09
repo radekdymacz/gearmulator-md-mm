@@ -52,7 +52,7 @@ Boot.host = { chooseRom: () => cmd("chooseRom"), revealRom: () => cmd("revealRom
 	removeRom: askRemoveRom, say: toast };
 Bridge.onMessage(m => { if (m.type === "romInstall") { Boot.rom(m); toast(m.text); } });
 /* SysEx import and export: the host's file dialogs and document writes (the page never reads the file) */
-Syx.host = { choose: () => cmd("chooseSyx"), exportAll: () => cmd("syxExport"), start: kinds => cmd("syxImport", { kinds }), stop: () => cmd("syxCancel") };
+Syx.host = { choose: () => cmd("chooseSyx"), exportAll: () => cmd("syxExport"), start: (kinds, skip) => cmd("syxImport", { kinds, skip: skip || [] }), stop: () => cmd("syxCancel") };
 Bridge.onMessage(m => {
 	if (m.type === "syxPreview") Syx.preview(m);
 	else if (m.type === "syxProgress") Syx.progress(m);

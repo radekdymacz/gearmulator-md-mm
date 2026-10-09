@@ -154,7 +154,7 @@ and master effects belong to the linked kit's document. The mockup's single
 | `tracks[i].out` MAIN/A..F | `routing[i]` | A-F skip the master effects |
 | `S.bpm` | `tempo` | The global tempo. Song rows can override it |
 | `S.mode` | `extendedMode` | Also SET STATUS 0x20 |
-| — | `baseChannel`, `keymap`, `settings` | Kept untouched. `keymap` values 16-31 appear in the Elektron default map for notes 64-89 (the manual maps those notes to patterns). Not verified |
+| — | `baseChannel`, `keymap`, `settings` | Kept untouched. `keymap`: the MAP EDITOR's targets (below) |
 
 **GLOBAL settings (P5).** Measured on the firmware (`mdP4ProbeFirmwareTest globals`,
 `elektronData/mdGlobal.h` `mdGlobalBits`): a global dump is stored at once but
@@ -171,14 +171,14 @@ after every settings push to the active slot.
 | PRG CHANGE channel | `programChange` bits 2-6 | 0 = BASE (in on the 4 base channels), n = channel n |
 | Base channel | `baseChannel` 0-12 | CCs on channel 1 vs 3 |
 | MAP EDITOR TRIG | `trigMode` 0 GATE, 1 START, 2 QUE | GATE stops on note off |
-| Key map | `keymap` 0-15 track, 16-31 pattern | note 65 -> 17 selects A02 |
+| Key map (MAP EDITOR) | `keymap` 0-15 track, 16-143 pattern A01-H16, 144 START, 145 STOP, `null` = `--` (255); any other byte is kept as sent | `mdDeskFirmwareTest <ROM> keymap` (0.3.5): every byte stored as sent; 17 selects A02, 47 B16, 143 H16; 144 starts, 145 stops; 146-254 no effect. A 2008 backup maps notes to 16-47 |
 | LOCAL CTRL | `localControl` | stored; no effect seen in the emulator (not verified) |
 | TRIG IN A/B | `inputSettings` | shown only (needs pads on the inputs; not verified) |
 
 `md-desk/global` carries a derived, read-only `control` view of these; the page
 changes them with `{"op":"globalSet","field":...,"on"|"v"}` (fields tempoIn, ctrlIn,
 tempoOut, ctrlOut, programChangeIn, programChangeOut, programChangeChannel 0-16,
-baseChannel 0-12, trigMode 0-2, localControl, keymap {note, target 0-31 or null})
+baseChannel 0-12, trigMode 0-2, localControl, keymap {note, target 0-145 or null})
 and selects the active slot with `{"op":"globalSlot","slot"}`.
 
 ### 4.5 `md-desk/machine` (read-only, from `mdDataLink::Session`)
@@ -190,7 +190,7 @@ and selects the active slot with `{"op":"globalSlot","slot"}`.
 | `pattern.queued` | Requested with `selectPattern` while playing. Becomes current at the end of the current pattern (P1-RESULT §4) |
 | `kit.current` | The current kit number |
 | `kit.working` | `clean`: the kit equals its stored slot. `edited`: **not saved on the machine**. `unknown`: nothing observed yet |
-| `song.current`, `song.reloadNeeded` | A song was written into the current song's slot. It is heard after STOP, LOAD SONG and PLAY |
+| `song.current`, `song.reloadNeeded` | A song was written into the current song's slot and is not loaded again yet. 0.3.5: the desk loads it again by itself (LOAD SONG of the current slot, `MdMachine::pumpSongReload`) once nothing is on the wire and the machine is stopped in SONG mode: an edit made while it plays is heard from the next start, one made in PATTERN mode when SONG mode is entered. Reload song only where the desk has no telemetry (HW MIDI) |
 | `songMode`, `extendedMode`, `globalSlot`, `track` | Status values. `null` until reported |
 | `patternKits` | `[pattern, kit]` links seen in pattern dumps. `Session::selectWouldDiscardKitEdits(p)` uses them |
 | `desk` | Added by `mdDesk::Desk` for the page: firmware state, TX, round trip, undo counts, the audible queue, mutes, and `kitSource` (below) |
@@ -277,6 +277,37 @@ it waits the host sends the firmware's own LCD, `{"type":"lcd","bits"}` (128 x 6
 one bit per pixel, row-major, 16 bytes a row, bit 7 = the left pixel, base64), which
 the page draws in its LCD with the plate's `--lcd` / `--ink`, then fades out. The
 host must call `onTelemetry` every tick, also without telemetry (`valid = false`).
+
+**Song playhead (0.3.5).** The telemetry message carries `songRow`: the song row the
+sequencer plays, 0-based, from main RAM 0x2b18f5 (`md::SongPosition`, one byte; found
+with `mdP4ProbeFirmwareTest songrow`: a song A02, A03 ×2, A04, LOOP to row 2, sampled in
+the middle of every pass; checked by `mdDeskFirmwareTest songrow`: the row's pattern is
+the pattern that plays at every pass, through repeats and round the loop). A LOOP or
+JUMP row is never the row: the byte goes straight to its target. The byte runs ahead:
+it moves to the next row about two steps before the pass ends (it queues it, as the
+pattern byte does; `SONGROW_TRACE=1 mdP4ProbeFirmwareTest <ROM> songrow`), so the desk
+publishes the row heard: the byte as it was at PLAY and at each wrap of the playhead
+(`deskCore::SongRowHeard`). It is the machine's
+only while `machine.songMode` is true and the machine plays: pattern mode and STOP
+leave it as it was (STOP twice sets it to 0), so the page marks a row only then. `null`
+where the engine cannot read it (HW MIDI). The page moves the mark without a render
+(the arrangement cell, the time bar, the What plays line, the LCD's pattern slot).
+
+**How the host runs the audio (B-035).** `{"type":"audioRun","plugin","seconds","blocks","bypassed","blocksPerSecond","realtime"}`
+once a second while the machine starts and for the first minute: the host's audio calls since the
+processor started (`blocks`; `bypassed` apart), their rate, and the machine's speed (`realtime`: machine
+seconds per wall second from its MCU cycles; `null` before the first block). The start-up card says when
+a plug-in got no block in 5 s, or when `realtime` is below 0.95. The same values go into the editor's
+start-up log once a second for the first 30 s (`mdBootDiagnostics.h`), in the app and in a DAW.
+
+**The host's tempo (B-030).** In a DAW the plug-in sends `{"type":"host","bpm","follows"}`:
+the host's tempo as its playhead reports it (also while the host's transport is stopped),
+when it changed (by 0.01 BPM) or a page is new; `follows` is true in a DAW (the plug-in
+sets the machine's global to follow the host's clock with `followHost`, at once when the
+machine becomes ready, then every 2 s; a refusal is a `result` with `op` `followHost`
+that the page logs and shows). While `follows` and the global's `control.tempoIn` is
+`external`, the page shows the host's BPM as TEMPO and refuses tempo edits. The
+standalone sends no `host` message.
 
 **Chaining and mutes (P4).** `machine.desk.chain` is the firmware's own pattern
 chain, read from the MC68331 internal SRAM (`md::ChainAndMutes`: 0x1001f5c active,
@@ -539,7 +570,7 @@ sample disabled on a RAM slot with that reason; `loadSample` refuses slots 48-51
 | pattern | `slot` 0-127. `totalLength` 16/32/48/64. `length` 1..`totalLength`. `tempoMultiplier` one of four. `kit` 0-63. `accentAmount` 0-127. `swingAmount` 0-9830 (80 %). `editAll` 0/1. Steps below 64 (32 for classic dumps). **At most 64 locked (track, param)**, param 0-23, values 0-127 |
 | kit | `slot` 0-63. `model` an OS 1.63 machine. Parameters, levels and master effects 0-127. LFO track 0-15, param 0-23, shapes 0-5, update 0-2. Groups 0-15 or `null`. Name 7-bit |
 | song | `slot` 0-31. 1-256 rows, the last one `end`, no other `end`. Pattern rows: pattern 0-127, repeats 0-63, 0 <= start < end <= 64, tempo 30-300 BPM or `null`. Loop: an earlier target, repeats 0-63. Jump: a later target |
-| global | `slot` 0-7. `routing` A-F/MAIN. `tempo` 30-300. `keymap` 0-31 or `null` |
+| global | `slot` 0-7. `routing` A-F/MAIN. `tempo` 30-300. `keymap` 0-254 or `null` |
 
 The firmware stores values beyond these limits without complaint. It does not
 play them meaningfully, so the UI must not send them.

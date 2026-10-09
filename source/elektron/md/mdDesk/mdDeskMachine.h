@@ -1,6 +1,7 @@
 #pragma once
 
 #include "mdDeskAdapter.h"
+#include "deskCore/deskSongRow.h"
 #include "mdDeskDelivery.h"
 #include "mdDeskModel.h"
 #include "mdDeskRecord.h"
@@ -54,6 +55,8 @@ namespace mdDesk
 		deskCore::Lifecycle lifecycle() const override { return deskCore::lifecycleOf(facts()); }
 		Context context() const override { return {m_session.state().kit}; }
 		bool busy() const override;
+		std::string sendAsIs(const Bytes& _message, bool _dump) override;
+		AsIs asIs() const override;
 
 		// ---- MdAdapter: Machinedrum facts from the device ----
 		void setProbe(Probe _probe) override;
@@ -168,6 +171,9 @@ namespace mdDesk
 		// CLEAR: LOAD PATTERN of the current pattern (false: it is not known).
 		bool clearChain();
 		void pumpChain();
+		// 0.3.5: an edited current song is heard without Reload song (pumpSongReload)
+		void pumpSongReload(double _now);
+		double m_songEditedMs = -1;
 		void load(const DocRef& _ref, bool _urgent);
 		void request(const DocRef& _ref);
 		std::optional<uint8_t> currentKit() const { return m_session.state().kit; }
@@ -183,6 +189,7 @@ namespace mdDesk
 		deskCore::KitState kitState(const Documents& _view) const;
 		const elektronData::MdKit* heldKit(const Documents& _view) const;
 		void setBaseChannel(const elektronData::MdGlobal& _g);
+		std::string channelsOff(const Documents& _view) const;
 		void pumpLoads(double _now);
 		void gaveUpLoad(const DocRef& _ref);
 		bool current(const DocRef& _ref) const;
@@ -243,6 +250,7 @@ namespace mdDesk
 		deskCore::Outcome cmdPlay(const Value&, const Documents&);
 		deskCore::Outcome cmdStop(const Value&, const Documents&);
 		deskCore::Outcome cmdMute(const Value&, const Documents&);
+		deskCore::Outcome cmdSeqMode(const Value&, const Documents&);
 		deskCore::Outcome cmdFollowHost(const Value&, const Documents&);
 
 		const Profile m_profile;
@@ -258,6 +266,14 @@ namespace mdDesk
 
 		deskCore::WorkingCopy<elektronData::MdKit> m_working;	// where the kit that plays comes from
 		double m_kitStatusAskedMs = -1e9;
+		// B-025: dumps over the current pattern whose kit reload the working kit's edits must follow, and when the
+		// last one went into the stream. Meanwhile memory images of the kit are not taken (they show the kit before
+		// the reload, then the stored slot): the restore after the dump sets what memory must show.
+		int m_reloadsPending = 0;
+		double m_reloadQueuedMs = 0;
+		static constexpr double g_reloadHoldMs = 10000;	// a reload not restored by then holds nothing any more
+		static constexpr double g_songReloadQuietMs = 300;	// a song edit, then this long before the song loads again
+		bool reloadHolds() const { return m_reloadsPending > 0 && now() - m_reloadQueuedMs < g_reloadHoldMs; }
 
 		Probe m_probe = Probe::Running;
 		deskCore::WireFacts m_wire;
@@ -272,6 +288,8 @@ namespace mdDesk
 		std::optional<uint8_t> m_lastKit;
 		std::optional<uint8_t> m_lastPattern;
 		Telemetry m_telemetry;
+		deskCore::SongRowHeard m_songRow;	// 0.3.5: the row heard (the RAM byte runs ahead by about two steps)
+		int m_songRowHeard = -1;
 		std::array<bool, 16> m_mutes{};
 		// The page's keyboard: per track, the note sounding (one at a time; a later key replaces it). The kit
 		// value a key holds is the working copy's held layer (m_working.held).

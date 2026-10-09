@@ -54,6 +54,11 @@ namespace jucePluginEditorLib
 				juce::LookAndFeel::getDefaultLookAndFeel().findColour(juce::ResizableWindow::backgroundColourId),
 				_settings, false)
 		{
+			// B-016: JUCE's standalone window asks for minimise and close only; without the maximise button the
+			// window has no full-screen button on macOS (NSWindowCollectionBehaviorFullScreenPrimary needs both
+			// it and a resizable window) and no maximise box on Windows and Linux. Before the native title bar,
+			// which makes the window again with these flags.
+			setTitleBarButtonsRequired(juce::DocumentWindow::allButtons, false);
 			setUsingNativeTitleBar(true);
 			hideJuceOptionsButton();
 			detachFeedbackBanner();
@@ -77,6 +82,37 @@ namespace jucePluginEditorLib
 		{
 			juce::StandaloneFilterWindow::resized();
 			hideJuceOptionsButton();
+		}
+
+		// B-034: one ordered way out, for the close button and the system's quit. JUCE's saves the state while the
+		// audio runs (the save holds the plug-in's lock, so the audio thread waits: a glitch) and then cuts the
+		// sound (a click while a pattern plays). Here the output fades to silence over about 30 ms, the audio
+		// stops at about 60 ms, then the state is saved with the gain it had, then the application quits.
+		void closeButtonPressed() override { quitOrdered(); }
+
+		void quitOrdered()
+		{
+			if(m_quitting)
+				return;
+			m_quitting = true;
+			auto* processor = dynamic_cast<Processor*>(getAudioProcessor());
+			const float gain = processor ? processor->getOutputGain() : 1.0f;
+			// the window lives until the application quits (the last step below)
+			constexpr int steps = 6;
+			for(int i = 1; i <= steps; ++i)
+				juce::Timer::callAfterDelay(5 * i, [processor, gain, i]
+				{
+					if(processor)
+						processor->setOutputGain(gain * static_cast<float>(steps - i) / static_cast<float>(steps));
+				});
+			juce::Timer::callAfterDelay(60, [this, processor, gain]
+			{
+				pluginHolder->stopPlaying();
+				if(processor)
+					processor->setOutputGain(gain);
+				pluginHolder->savePluginState();
+				juce::JUCEApplicationBase::quit();
+			});
 		}
 
 		// An "About <name>" entry: the application menu's first on macOS, a Help menu elsewhere.
@@ -144,6 +180,7 @@ namespace jucePluginEditorLib
 		std::vector<Menu> m_menus;
 		juce::String m_aboutName;
 		std::function<void()> m_showAbout;
+		bool m_quitting = false;
 
 #if JUCE_MAC
 		void setAppleMenu()
@@ -154,11 +191,22 @@ namespace jucePluginEditorLib
 				appleExtras.addItem("About " + m_aboutName, [this] { if(m_showAbout) m_showAbout(); });
 				appleExtras.addSeparator();
 			}
-			appleExtras.addItem("Settings...", [this] { showEditorSettings(); });
+			// B-016: an editor with its own audio and MIDI panel (the web-page editors) hides upstream's settings
+			// page, so its "Settings..." would do nothing: it has Audio/MIDI Settings... only.
+			if(!hasOwnAudioMidiPanel())
+				appleExtras.addItem("Settings...", [this] { showEditorSettings(); });
 			appleExtras.addItem("Audio/MIDI Settings...", [this] { showAudioMidiSettings(); });
 			juce::MenuBarModel::setMacMainMenu(this, &appleExtras);
 		}
 #endif
+
+		bool hasOwnAudioMidiPanel() const
+		{
+			if(auto* p = dynamic_cast<Processor*>(getAudioProcessor()))
+				if(auto* state = p->getEditorState())
+					return dynamic_cast<AudioMidiSettingsEditor*>(state->getEditor()) != nullptr;
+			return false;
+		}
 
 		void showAudioMidiSettings()
 		{
@@ -185,6 +233,11 @@ namespace jucePluginEditorLib
 
 		void showEditorSettings()
 		{
+			if(hasOwnAudioMidiPanel())	// the menu was made before the editor: its own panel, never the hidden page
+			{
+				showAudioMidiSettings();
+				return;
+			}
 			if(auto* p = dynamic_cast<Processor*>(getAudioProcessor()))
 				if(auto* state = p->getEditorState())
 					if(auto* editor = state->getEditor())
@@ -264,8 +317,6 @@ namespace jucePluginEditorLib
 
 		void systemRequestedQuit() override
 		{
-			if(m_window)
-				m_window->pluginHolder->savePluginState();
 			if(juce::ModalComponentManager::getInstance()->cancelAllModalComponents())
 			{
 				juce::Timer::callAfterDelay(100, []
@@ -274,6 +325,8 @@ namespace jucePluginEditorLib
 						app->systemRequestedQuit();
 				});
 			}
+			else if(m_window)
+				m_window->quitOrdered();	// B-034: fade, stop, save, quit (the close button's way)
 			else
 				quit();
 		}

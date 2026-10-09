@@ -33,7 +33,7 @@ function page() {
 	const any = new Proxy(function () { }, {
 		get: (t, k) => k === Symbol.toPrimitive ? () => 0 : k === Symbol.iterator ? function* () { } : k === "length" ? 0 : any,
 		apply: () => any, construct: () => any, has: () => false, set: () => true });
-	const timers = [], sent = [], win = {};
+	const timers = [], sent = [], win = {}, frames = { n: 0 };
 	const windowP = new Proxy(win, { get: (t, k) => k in t ? t[k] : /EventListener$/.test(String(k)) ? () => { } : undefined,
 		set: (t, k, v) => { t[k] = v; return true; }, has: (t, k) => k in t });
 	win.gmDev = batch => sent.push(...JSON.parse(JSON.stringify(batch)));
@@ -42,7 +42,9 @@ function page() {
 		console, encodeURIComponent, decodeURIComponent, Infinity, NaN, undefined, URLSearchParams, structuredClone,
 		atob: s => Buffer.from(s, "base64").toString("binary"), location: { hash: "", search: "", protocol: "http:" }, window: windowP,
 		setTimeout: f => { timers.push(f); return timers.length; }, clearTimeout: () => { }, setInterval: () => 0, clearInterval: () => { },
-		queueMicrotask: f => timers.push(f), performance: { now: () => 0 } };
+		queueMicrotask: f => timers.push(f), performance: { now: () => 0 },
+		/* the frames the page asks for (redraw: every canvas), counted; run at once */
+		requestAnimationFrame: f => { frames.n++; f(0); return 0; }, cancelAnimationFrame: () => { } };
 	const scope = new Proxy({}, {
 		has: () => true,
 		get: (t, k) => k === Symbol.unscopables ? undefined : k in t ? t[k] : k in real ? real[k] : any,
@@ -55,7 +57,7 @@ function page() {
 	const out = new Function("scope", "with (scope) {\n" + src + "\n}")(scope);
 	const run = () => { for (let n = 0; timers.length && n < 10000; n++) timers.shift()(); };
 	run();
-	return Object.assign(out, { win, sent, run, host: win.MMHost, recv: msgs => { win.gm.recv(msgs); run(); } });
+	return Object.assign(out, { win, sent, run, frames, host: win.MMHost, recv: msgs => { win.gm.recv(msgs); run(); } });
 }
 const plain = v => JSON.parse(JSON.stringify(v, (k, x) => x instanceof Set ? [...x].sort((a, b) => a - b) : x instanceof Map ? [...x] : x === Infinity ? "inf" : x));
 /* the page's document members, as the golden values hold them */
@@ -115,6 +117,18 @@ const result = (m, ok = true, errors = []) => ({ type: "result", id: m.id, op: m
 	check(!none.ready && none.tracks === undefined && none.pat === 0 && none.bpm === 121.5, "without the current pattern and kit: the machine's members only");
 	const edited = p.MmView.derive(docs, { songEdit: 1 });
 	check(edited.songSlot === 1 && edited.song === undefined && edited.songs.slot === 1 && edited.songs.current === 2, "the song the Song workspace edits (not read yet: none)");
+	/* B-030: in a DAW whose clock the machine follows (CONTROL IN TEMPO SYNC external), TEMPO is the host's */
+	const g = docs.globals[1];
+	if (g) {
+		const follow = Object.assign({}, docs, { globals: Object.assign({}, docs.globals, { 1: Object.assign({}, g, { controlIn: Object.assign({}, g.controlIn, { tempoSync: 1 }) }) }) });
+		const own = Object.assign({}, docs, { globals: Object.assign({}, docs.globals, { 1: Object.assign({}, g, { controlIn: Object.assign({}, g.controlIn, { tempoSync: 0 }) }) }) });
+		const host = { type: "host", bpm: 72, follows: true };
+		const daw = p.MmView.derive(follow, { host });
+		check(daw.bpm === 72 && daw.hostTempo === true, "the machine follows the DAW: TEMPO is the host's 72 (" + daw.bpm + "), marked");
+		check(p.MmView.derive(own, { host }).bpm === 121.5 && !p.MmView.derive(own, { host }).hostTempo, "TEMPO SYNC internal: the machine's own tempo");
+		check(p.MmView.derive(follow, { host: Object.assign({}, host, { follows: false }) }).bpm === 121.5, "a host that is not followed (the standalone): the machine's tempo");
+		check(p.MmView.derive(follow).bpm === 121.5, "no host message: the machine's tempo");
+	} else check(false, "the fixture has the active global 2");
 }
 
 /* ---- echoes by command id ---- */
@@ -387,6 +401,18 @@ const result = (m, ok = true, errors = []) => ({ type: "result", id: m.id, op: m
 	}
 	check(ran >= 75 && optimistic >= 70, `every intent case the view can show was checked (${ran}, ${optimistic} with writes)`);
 	check(p.MmView.derive(docsOf(base)).ready, "the derive of the cases' documents is the machine's view (ready)");
+}
+
+/* ---- B-036: the playhead's cost per step on the Sequence page (as the Machinedrum Editor's B-014): no canvas redrawn
+   per step, the same step twice is nothing ---- */
+{
+	const p = page(), S = p.S(), V = p.win.MMView;
+	S.ws = "seq";
+	V.setPlaying(true); p.run();
+	p.frames.n = 0;
+	for (let s = 0; s < 32; s++) { V.setStep(s); V.setStep(s); p.run(); }
+	check(p.frames.n === 0, `32 steps playing: ${p.frames.n} canvas redraws (none: only the soft playhead moves)`);
+	V.setPlaying(false); p.run();
 }
 
 console.log(failures ? `mmViewTest: ${failures} failure(s)` : "mmViewTest: PASS");

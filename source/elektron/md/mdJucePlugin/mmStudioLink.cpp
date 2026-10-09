@@ -196,6 +196,11 @@ namespace mdJucePlugin
 				auto* device = dynamic_cast<md::DeskDevice*>(_base);
 				return device ? device->getMmTelemetry() : nullptr;
 			});
+			m_panel = m_processor.getPlugin().withDeviceLocked([](synthLib::Device* _base) -> std::shared_ptr<md::FrontPanelPublisher>
+			{
+				auto* device = dynamic_cast<md::DeskDevice*>(_base);
+				return device ? device->getFrontPanelPublisher() : nullptr;
+			});
 		}
 		mmDesk::Telemetry t;
 		if(!m_telemetry)
@@ -213,6 +218,7 @@ namespace mdJucePlugin
 		t.mutes = m_telemetry->mutes.load(std::memory_order_relaxed);
 		t.recording = m_telemetry->recording.load(std::memory_order_relaxed);
 		t.bankGroup = m_telemetry->bankGroup.load(std::memory_order_relaxed);
+		t.songRow = m_telemetry->songRow.load(std::memory_order_relaxed);
 		t.chainKnown = m_telemetry->readChain(t.chain.active, t.chain.next, t.chain.patterns);
 		return t;
 	}
@@ -253,6 +259,17 @@ namespace mdJucePlugin
 
 	bool MmStudioLink::readLcd(std::vector<uint8_t>& _bits) const
 	{
+		// B-036: the panel the device publishes, without the plug-in's device lock (as the Machinedrum's, StudioLink)
+		if(m_panel)
+		{
+			const auto panel = m_panel->read();
+			_bits.assign(1024, 0);
+			for(uint32_t y = 0; y < 64; ++y)
+				for(uint32_t x = 0; x < 128; ++x)
+					if(panel.getLcdPixel(x, y))
+						_bits[y * 16 + x / 8] |= static_cast<uint8_t>(0x80 >> (x & 7));
+			return true;
+		}
 		return m_processor.getPlugin().withDeviceLocked([&](synthLib::Device* _base)
 		{
 			auto* device = dynamic_cast<md::DeskDevice*>(_base);

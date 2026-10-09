@@ -5,6 +5,7 @@
 #include <atomic>
 #include <memory>
 #include <mutex>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -152,6 +153,9 @@ namespace md
 			return m_pendingFlashRestoreActive.load(std::memory_order_acquire);
 		}
 		bool copyFactoryFlashBaseline(std::vector<uint8_t>& _baseline);
+		// B-034: the same, with the baseline's fingerprint (FNV-1a 64), computed once per baseline (when the capture
+		// completes, or the first time a cached baseline is decoded) instead of on every state save
+		bool copyFactoryFlashBaseline(std::vector<uint8_t>& _baseline, uint64_t& _fingerprint);
 		std::vector<uint8_t> copyFactoryFlashCache();
 		// Capture immutable source bytes while the machine is pinned. Cache encoding
 		// scans the complete flash image and belongs after the outer Device lock is
@@ -336,6 +340,7 @@ namespace md
 		std::atomic<bool> m_pendingFlashRestoreFailed{false};
 		size_t m_factoryFlashCaptureOffset = 0;
 		uint64_t m_factoryFlashCaptureFingerprint = 14695981039346656037ull;
+		std::optional<uint64_t> m_factoryBaselineFingerprint;	// B-034: of the baseline copyFactoryFlashBaseline gives
 		bool m_factoryFlashCaptureComplete = false;
 		size_t m_pendingFlashSectorIndex = 0;
 		FrontPanel m_frontPanel;	// writer-owned UART2 LCD/LED decoder

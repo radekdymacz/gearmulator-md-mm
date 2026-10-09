@@ -4,6 +4,12 @@
 
 namespace mdJucePlugin
 {
+	namespace
+	{
+		// a SysEx file chosen where the ROM goes (the start-up card, LOAD ROM)
+		constexpr const char* g_sysexNotRom = "This is a SysEx file, not the ROM image. Choose the ROM (.bin, 8 MB) here; import SysEx with Import SysEx\xE2\x80\xA6 after start-up.";
+	}
+
 	std::optional<std::vector<uint8_t>> readRomImage(const juce::File& _file, std::string& _why)
 	{
 		if(!_file.existsAsFile())
@@ -11,14 +17,21 @@ namespace mdJucePlugin
 			_why = "The file is not there any more.";
 			return std::nullopt;
 		}
+		if(_file.hasFileExtension("syx"))
+		{
+			_why = g_sysexNotRom;
+			return std::nullopt;
+		}
 		if(_file.hasFileExtension("zip"))
 		{
 			juce::ZipFile zip(_file);
 			const juce::ZipFile::ZipEntry* found = nullptr;
-			int bins = 0;
+			int bins = 0, syx = 0;
 			for(int i = 0; i < zip.getNumEntries(); ++i)
 			{
 				const auto* e = zip.getEntry(i);
+				if(e && e->filename.endsWithIgnoreCase(".syx") && !e->filename.contains("__MACOSX"))
+					++syx;
 				if(!e || !e->filename.endsWithIgnoreCase(".bin") || e->filename.contains("__MACOSX"))
 					continue;
 				++bins;
@@ -27,7 +40,7 @@ namespace mdJucePlugin
 			}
 			if(!found)
 			{
-				_why = bins ? "The .zip holds no 8 MiB .bin." : "The .zip holds no .bin file.";
+				_why = !bins && syx ? g_sysexNotRom : bins ? "The .zip holds no 8 MiB .bin." : "The .zip holds no .bin file.";
 				return std::nullopt;
 			}
 			std::unique_ptr<juce::InputStream> in(zip.createStreamForEntry(*found));

@@ -4,20 +4,24 @@
    handled next to its own code and only described. The dispatcher (Keys) is skins/shared/deskKeys.js, both
    editors' one file, included just before this one (build.sh). */
 
-/* ===== The ? overlay =====
+/* ===== The ? keyboard view =====
    The map's rules, as the MD Editor's: plain keys play (the home row, Z / X octave, C / V velocity, Space); a plain
    letter off the piano row acts on the selected track (M, T; ↑ / ↓ pick it); Alt means all (Alt+M, Alt+Delete,
    Alt-drag, Alt-click). Two Alts are not "all", as on the machine: Alt+←/→ rotate (FUNCTION + arrows) and Alt+Space
    record (RECORD + PLAY). No ⇧ or ⌘ letter commands but the standard ⌘Z ⌘⇧Z ⌘Y ⌘C ⌘V. */
 const KEY_GROUPS=["Playing","Selected track","All","Transport","Workspaces","Sequence","Song","Values","Anywhere","Kit library, pattern chooser","Help"];
-function drawKeys(){const pop=$("#keyspop");if(!pop)return;const groups=[];
- for(const b of Keys.list()){if(b.hidden||(b.mapping&&!S.mapping))continue;let g=groups.find(x=>x.name===b.group);if(!g)groups.push(g={name:b.group,rows:[]});g.rows.push(b)}
- const at=g=>{const i=KEY_GROUPS.indexOf(g.name);return i<0?KEY_GROUPS.length:i};groups.sort((x,y)=>at(x)-at(y));
- pop.innerHTML=`<div class="libhead"><span class="cap">Keys</span><span class="note">Every shortcut of the editor, from its key map. ? or Esc closes.</span><button class="libx" data-keysx="1">Esc</button></div>
- <div class="keysgrid">${groups.map(g=>`<section class="kgrp2"><h3>${g.name}</h3><div class="krows">${g.rows.map(b=>`<div class="krow"><kbd>${Keys.label(b)}</kbd><span>${typeof b.does==="function"?b.does():b.does}</span></div>`).join("")}</div></section>`).join("")}</div>`;
- pop.hidden=false;const r=$(".lcdpanel").getBoundingClientRect(),top=Math.max(16,r.bottom+8);
+/* B-018: ? opens the keyboard view both editors share (skins/shared/deskKeyView.js, DESIGN-keymap.md K-view): a drawn
+   keyboard from this map with what each key does on the page shown (or every page), its layers, the mouse's tricks, the
+   tips, and every entry by group (the list ? showed before). */
+const WS_NAMES={seq:"Sequence",sound:"Sound",mix:"Mix",perform:"Perform",song:"Song",control:"Control"};
+let keyView=null;
+function drawKeys(){const pop=$("#keyspop");if(!pop)return;
+ if(!keyView)keyView=KeyView.mount(pop,{entries:()=>Keys.list(),page:()=>S.ws,pageName:()=>WS_NAMES[S.ws]||"This page",mapping:()=>S.mapping,
+  mac:()=>Modifiers.mac,groups:KEY_GROUPS,note:()=>Modifiers.say("? or Esc closes. Click a key for what it does.")});
+ pop.classList.add("kview");keyView.draw();pop.hidden=false;
+ const r=$(".lcdpanel").getBoundingClientRect(),top=Math.max(16,r.bottom+8);
  pop.style.top=(top+scrollY)+"px";pop.style.maxHeight=Math.max(240,innerHeight-top-12)+"px";pop.style.left=Math.max(16,(document.documentElement.clientWidth-pop.offsetWidth)/2+scrollX)+"px"}
-function toggleKeys(on){const pop=$("#keyspop");if(!pop)return;if(on??pop.hidden)drawKeys();else pop.hidden=true}
-Keys.bind({id:"keys-help",scope:"any",keys:["?"],group:"Help",does:"This list of keys",modal:"keyspop",run:()=>toggleKeys()});
-Keys.bind({id:"keys-help-close",scope:"any",keys:["Escape"],group:"Help",does:"Close the list of keys",when:()=>!$("#keyspop").hidden,run:()=>toggleKeys(false)});
-document.addEventListener("click",e=>{const pop=$("#keyspop");if(!pop||pop.hidden)return;if(e.target.closest("[data-keysx]")||!pop.contains(e.target))pop.hidden=true},true);
+function toggleKeys(on){const pop=$("#keyspop");if(!pop)return;if(on??pop.hidden)drawKeys();else{pop.hidden=true;keyView?.reset()}}
+Keys.bind({id:"keys-help",short:"This view",scope:"any",keys:["?"],group:"Help",does:"The keyboard view: what every key and gesture does (this)",modal:"keyspop",run:()=>toggleKeys()});
+Keys.bind({id:"keys-help-close",short:"Close",scope:"any",keys:["Escape"],group:"Help",does:"Close the keyboard view",when:()=>!$("#keyspop").hidden,run:()=>toggleKeys(false)});
+document.addEventListener("click",e=>{const pop=$("#keyspop");if(!pop||pop.hidden)return;if(e.target.closest("[data-keysx]")||!pop.contains(e.target)){pop.hidden=true;keyView?.reset()}},true);

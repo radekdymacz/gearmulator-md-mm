@@ -74,6 +74,8 @@ namespace mdJucePlugin
 		std::vector<baseLib::EventListener<pluginLib::Parameter*>> m_paramListeners;
 		std::array<std::atomic<uint64_t>, 6> m_dirtyParams{};		// bit page*8+index; 56 level, 57 mute
 		std::shared_ptr<const md::MmTelemetry> m_telemetry;
+		// B-036: the front panel as the device publishes it (lock-free), for the LCD while the machine starts
+		std::shared_ptr<md::FrontPanelPublisher> m_panel;
 		double m_telemetryCheckedMs = -1e9;
 		uint32_t m_workingKitSequence = 0;
 		const void* m_workingKitSource = nullptr;

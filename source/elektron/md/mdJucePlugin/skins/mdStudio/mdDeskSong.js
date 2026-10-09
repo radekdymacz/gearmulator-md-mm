@@ -36,13 +36,24 @@ function chainFooter() {
 	const playing = V.pat, list = active ? c.patterns : [], at = list.indexOf(playing), next = active ? list[(at + 1) % list.length] : null;
 	/* what the engine can do (machine.capabilities.chains, with its reason) */
 	const can = canDo(V, "chains"), why = V.caps.reasons.chains || "";
-	const live = !can ? `<span class="note">${why}</span>` : !known ? `<span class="note">The chain is not readable on this firmware.</span>` : active ? list.map(p => `<span class="lcdchip${p === playing ? " now" : ""}${V.playing && p === next && at >= 0 ? " nx" : ""}">${patName(p)}</span>`).join("<i>»</i>") + "<i>↺</i>"
-		: `<span class="note">No chain. The machine plays ${patName(playing)} and stays on it.</span>`;
-	return `<div class="chainfoot"><div class="irow"><span class="ilab">Plays</span><div class="chainrow">${live}</div></div>
+	/* what plays is the What plays card's (whatPlays); here: the pads' own state and the gestures */
+	const state = !can ? why : !known ? "The chain is not readable on this firmware." : active ? `The machine plays the chain${at >= 0 && V.playing ? `: now ${patName(playing)}, next ${patName(next)}` : ""}.` : "";
+	return chainRows(d, bn, active, state);
+}
+/* the PATTERN | SONG switch, as the machine reports it (lit: machine.songMode); big in the What plays card */
+function seqModeKeys() {
+	const sm = V.songMode;
+	return `<span class="seg seqmode" title="PATTERN: the machine plays the pattern (and its chain). SONG: it plays the song. What is lit is what the machine reports">${[["pattern", "PATTERN", false], ["song", "SONG", true]].map(([k, l, v]) => `<button data-seqmode="${k}" aria-pressed="${sm === v}"><span>${l}</span></button>`).join("")}</span>`;
+}
+function chainRows(d, bn, active, state) {
+	return `<div class="chainfoot">${state ? `<div class="irow"><span class="ilab"></span><span class="note">${state}</span></div>` : ""}
   <div class="irow"><span class="ilab"></span><span class="chainacts"><button data-chain="undo"${d.length ? "" : " disabled"} title="Takes the last pad out and chains the rest at once">Back</button><button class="danger" data-chain="clear"${active || d.length ? "" : " disabled"} title="LOAD PATTERN of the current pattern: the machine's way to end a chain. The pads start over">Clear</button></span>
   <span class="note">${d.length === 1 ? `One more pad and the machine plays the chain (BANK ${bn} held, the TRIG keys in order; ${V.playing ? "from the pattern end" : "PLAY starts at the first"}).` : "Each pad chains at once: the machine plays them in order and loops."} One bank, each pattern once. Picking a pattern ends the chain; editing its patterns does not.</span></div></div>`;
 }
+document.addEventListener("click", e => { const b = e.target.closest?.("[data-seqmode]"); if (b) cmd("seqMode", { song: b.dataset.seqmode === "song" }); });
 function renderSong() {
+	/* another song (the song card, the LCD, the machine): the selection stays inside it */
+	S.songSel = Math.max(0, Math.min(S.songSel, V.song.length - 1));
 	const sel = V.song[S.songSel] || V.song[0], chain = S.songPick === "chain", plays = playsOf(Docs);
 	/* a chain is one bank's: another bank starts the draft over */
 	S.chainDraft = S.chainDraft.filter(p => p >> 4 === S.bank);
@@ -55,8 +66,7 @@ function renderSong() {
 	const palette = `<div class="banks">${[..."ABCDEFGH"].map((b, k) => `<button class="bank ${k === S.bank ? "on" : ""}" data-bank="${k}"><i class="led"></i>${b}</button>`).join("")}</div>
   <div class="pgridp">${Array.from({ length: 16 }, (_, k) => pad(S.bank * 16 + k)).join("")}</div>
   ${chain ? chainFooter() : `<p class="note pnote">Click adds after row ${String(S.songSel + 1).padStart(3, "0")} · drag onto the grid</p>`}`;
-	const playsTip = { chain: "The machine plays its own chain (live, one bank, loops). Clear it in CHAIN, or pick a pattern.", song: "The machine is in SONG mode: it plays the stored song (edits are heard after STOP + reload).", pattern: "The machine is in pattern mode: it plays this pattern and stays on it." }[plays.kind];
-	const head = `<header class="phead"><h3>Patterns</h3><span class="seg" data-set="songpick" title="ARRANGE: a click adds the pattern to the song. CHAIN: a click numbers it into the machine's chain.">${[["arrange", "Arrange"], ["chain", "Chain"]].map(([v, t]) => `<button data-v="${v}" aria-pressed="${S.songPick === v}">${t}</button>`).join("")}</span><span class="lcdchip playschip ${plays.kind}" id="songPlays" title="${playsTip}">${plays.label}</span></header>`;
+	const head = `<header class="phead"><h3>Patterns</h3><span class="seg" data-set="songpick" title="ARRANGE: a click adds the pattern to the song. CHAIN: a click numbers it into the machine's chain.">${[["arrange", "Arrange"], ["chain", "Chain"]].map(([v, t]) => `<button data-v="${v}" aria-pressed="${S.songPick === v}">${t}</button>`).join("")}</span></header>`;
 	let insp = "";
 	if (!sel.type) {
 		const L = patLen(sel.pat), o = sel.ofs || 0, ln = rowLen(sel);
@@ -77,10 +87,11 @@ function renderSong() {
    ${sel.type !== "halt" ? `<div class="irow"><span class="ilab">${sel.type === "loop" ? "Back to" : "Jump to"}</span><span class="stepper"><button data-step="to" data-d="-1">−</button><b class="mono">${String(sel.to + 1).padStart(3, "0")}</b><button data-step="to" data-d="1">+</button></span></div>` : ""}
    ${sel.type === "loop" ? `<div class="irow"><span class="ilab">Times</span><span class="stepper"><button data-step="count" data-d="-1">−</button><b class="mono">${sel.count === Infinity ? "∞" : sel.count}</b><button data-step="count" data-d="1">+</button></span><button class="ptog ${sel.count === Infinity ? "on" : ""}" data-inf="1"><i class="led"></i>Forever</button></div>` : ""}
    <div class="irow"><span class="ilab"></span><span class="note">${sel.type === "loop" ? "Loops can be nested. Forever loops are good live: pick the next row while it plays." : sel.type === "jump" ? "Jumps the song pointer to another row." : "Pauses playback until you pick a row to go on from."}</span></div>`;
-	$("#main").innerHTML = `<div class="songui lay2"><div class="songleft"><section class="card ${chain ? "chainmode" : ""}">${head}${palette}</section>
+	const mode = (V.songMode === true ? "songmode" : V.songMode === false ? "patmode" : "") + (V.songMode === true && V.playing ? " songplaying" : "");
+	$("#main").innerHTML = `<div class="songui lay2 ${mode}"><div class="songleft">${whatPlays(plays)}${songCard()}<section class="card ${chain ? "chainmode" : ""}">${head}${palette}</section>
    <section class="card"><header><h3>Selected row</h3><span class="rowacts"><button data-rowact="up" title="Move left">←</button><button data-rowact="down" title="Move right">→</button><button data-rowact="dup">Duplicate</button><button data-rowact="loop">Add loop</button><button data-rowact="del" class="danger">Delete</button></span></header><div class="insp">${insp}</div></section></div>
-  <section class="card"><header><h3>Arrangement</h3>${V.songReload ? `<span class="songwarn"><span class="lcdchip warnchip">Edits heard after STOP + reload</span><button class="cream" data-reloadsong="1">Reload song</button></span>` : ""}<span class="note">${V.song.length} of 256 rows · drag patterns onto the grid · drag cells to move · Delete removes</span></header>
-    <div class="durbar" title="Song shape by time (length × repeats)">${V.song.map((r, i) => r.type ? `<i class="db dbm"></i>` : `<i class="db ${i === S.songSel ? "sel" : ""}" data-row="${i}" style="flex:${rowLen(r) * r.rep} 1 0"></i>`).join("")}</div>
+  <section class="card arrcard"><header><h3>Arrangement</h3><span class="arrstate" id="arrstate">${arrState()}</span><span class="note">${V.song.length} of 256 rows · drag patterns onto the grid · drag cells to move · Delete removes</span></header>
+    <div class="durbar" title="Song shape by time (length × repeats); in SONG mode it fills up to the row that plays">${V.song.map((r, i) => r.type ? `<i class="db dbm" data-i="${i}"></i>` : `<i class="db ${i === S.songSel ? "sel" : ""}" data-row="${i}" data-i="${i}" style="flex:${rowLen(r) * r.rep} 1 0"></i>`).join("")}</div>
     <div class="slotgrid" id="tl">${Array.from({ length: 16 }, (_, line) => `<span class="sglab">${String(line * 16 + 1).padStart(3, "0")}</span>${Array.from({ length: 16 }, (_, c) => {
 		const i = line * 16 + c, r = V.song[i];
 		if (!r) return `<div class="scell empty" data-i="${i}"></div>`;
@@ -89,7 +100,28 @@ function renderSong() {
 		const sub = r.type === "loop" ? (r.count === Infinity ? "∞" : "×" + r.count) : !r.type ? `${r.rep > 1 ? "×" + r.rep : ""}${r.ofs || r.len ? "~" : ""}` : "";
 		return `<button class="${cls}" data-row="${i}" data-i="${i}" draggable="${r.type === "end" ? "false" : "true"}" title="Row ${String(i + 1).padStart(3, "0")}${r.type ? "" : " · " + patName(r.pat) + " ×" + r.rep + " · " + rowLen(r) + " steps"}"><b>${txt}</b><small>${sub}</small></button>`;
 	}).join("")}`).join("")}</div></section></div>`;
+	markSongRow(true);
 }
+/* (a) What plays: the PATTERN | SONG switch first, then one live line from the machine (playsText, mdDeskTop.js;
+   the song row is moved by markSongRow without a render) */
+function whatPlays(plays) {
+	const tip = { chain: "The machine plays its own chain (live, one bank, loops). Clear it in CHAIN, or pick a pattern.", song: "SONG mode: the machine plays the stored song (an edit made while it plays is heard from the next start).", pattern: "PATTERN mode: the machine plays this pattern and stays on it." }[plays.kind];
+	return `<section class="card whatplays ${V.songMode === true ? "song" : V.songMode === false ? "pattern" : ""}"><header><h3>What plays</h3></header>
+   <div class="modebig">${seqModeKeys()}</div>
+   <div class="chainrow playsline"><span class="lcdchip playschip ${plays.kind}" id="songPlays" title="${tip}">${playsText()}</span></div></section>`;
+}
+/* (b) the song itself: its slot (the machine loads it when stopped). 0.3.5: an edit of the machine's song is loaded
+   again by the desk (stopped in SONG mode, or at the next stop: MdMachine::pumpSongReload); Reload song only where
+   the desk cannot see the transport (no telemetry: HW MIDI) */
+function songCard() {
+	const n = String(V.songSlot + 1).padStart(2, "0"), manual = (machineState().desk || {}).telemetry === false;
+	const state = V.songReload && manual ? `<span class="songwarn"><span class="lcdchip warnchip">Edits heard after STOP + reload</span><button class="cream" data-reloadsong="1">Reload song</button></span>`
+		: `<span class="note">${V.songReload && V.songMode === true && V.playing ? "Edits heard from the next start · " : ""}${songRows()} rows · ${Math.round(songSteps() / 16)} bars · ${songTime()}</span>`;
+	return `<section class="card songslot"><header><h3>Song</h3><span class="stepper"><button data-songslot="-1" aria-label="Previous song" title="Previous song (the machine loads it when stopped)">‹</button><b class="lcdchip">SONG ${n}</b><button data-songslot="1" aria-label="Next song" title="Next song (the machine loads it when stopped)">›</button></span>
+   ${state}</header></section>`;
+}
+/* the arrangement's header and frame: the mode and the transport apart (PLAYING only while the song really plays) */
+function arrState() { return V.songMode === true ? (V.playing ? "Playing" : "Song mode · stopped") : V.songMode === false ? "Pattern mode · song not playing" : ""; }
 function songAction(a) {
 	const i = S.songSel, r = V.song[i];
 	if (a === "del") { if (r.type === "end") return; songCmd("rowDelete", { i }); S.songSel = Math.max(0, Math.min(i, V.song.length - 2)); }
@@ -121,6 +153,7 @@ function showTarget(t) {
 function clickSong(e) {
 	if (S.ws !== "song") return false;
 	const bk = e.target.closest("[data-bank]"); if (bk) { S.bank = +bk.dataset.bank; render(); return true; }
+	const ss = e.target.closest("[data-songslot]"); if (ss) { cmd("selectSong", { s: (V.songSlot + +ss.dataset.songslot + 32) % 32 }); return true; }
 	const cp = e.target.closest("[data-chainpad]"); if (cp) { if (cp.disabled) return true; const n = +cp.dataset.chainpad, i = S.chainDraft.indexOf(n); if (i >= 0) S.chainDraft.splice(i, 1); else if (S.chainDraft.length < 16) S.chainDraft.push(n); render(); chainSoon(); return true; }
 	const ca = e.target.closest("[data-chain]"); if (ca) {
 		if (ca.disabled) return true;

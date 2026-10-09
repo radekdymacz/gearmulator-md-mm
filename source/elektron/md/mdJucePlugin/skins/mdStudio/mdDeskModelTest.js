@@ -231,5 +231,20 @@ Overlay.clear();
 	check(keyVel(90, 1) === 100 && keyVel(90, -1) === 80, "keyVel: a velocity between steps goes to the next step");
 }
 
+/* B-030: in a DAW whose clock the machine follows, TEMPO is the host's (also while the host is stopped) and marked */
+{
+	const G = (tempoIn, tempo = 120) => ({ global: { extendedMode: true, tempo, routing: Array(16).fill("MAIN"), control: { tempoIn } } });
+	const withHost = (g, host) => Object.assign(docs(g), { host });
+	const daw = deriveView(withHost(G("external"), { type: "host", bpm: 72, follows: true }), S);
+	check(daw.bpm === 72 && daw.hostTempo === true, "the machine follows the DAW (TEMPO IN external): TEMPO is the host's 72, marked as the host's (" + daw.bpm + ")");
+	const own = deriveView(withHost(G("internal"), { type: "host", bpm: 72, follows: true }), S);
+	check(own.bpm === 120 && own.hostTempo === false, "TEMPO IN internal: the machine's own tempo, not locked");
+	const standalone = deriveView(withHost(G("external"), { type: "host", bpm: 72, follows: false }), S);
+	check(standalone.bpm === 120 && !standalone.hostTempo, "a host that is not followed (the standalone): the machine's tempo");
+	check(deriveView(docs(G("external")), S).bpm === 120 && !deriveView(docs(G("external")), S).hostTempo, "no host message: the machine's tempo");
+	check(deriveView(docs({ machine: Object.assign({}, docs().machine, { songMode: true }) }), S).songMode === true && deriveView(docs(), S).songMode !== true,
+		"songMode is the machine document's (the view re-renders on it)");
+}
+
 console.log("mdDeskModelTest: " + (failures ? "FAIL" : "PASS") + " (" + failures + " failures)");
 process.exit(failures ? 1 : 0);

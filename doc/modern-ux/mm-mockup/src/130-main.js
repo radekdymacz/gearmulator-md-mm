@@ -48,6 +48,7 @@ function l2step(k,d,fine){
   if(k==="ptrn"){S.patTrn=clamp(S.patTrn+d,0,127);edit("transpose",{v:S.patTrn-64})}
  if(k==="route"){S.routing=ROUTES[(ROUTES.indexOf(S.routing)+d+3)%3];edit("routing",{v:S.routing})}
  if(k==="side"){setSide(S.side==="midi"?"int":"midi");return}
+ if(k==="seqmode"){seqMode(!S.plays.songMode);return}
  if(k==="dbl"){if(!fine)doublePattern();return}
  if(k==="pmode"){const o=PMODES.map(p=>p[0]);S.mode=o[(o.indexOf(S.mode)+d+4)%4]}
  render()}
@@ -56,7 +57,7 @@ document.addEventListener("pointerdown",e=>{const el=e.target.closest(".l2.ed");
 document.addEventListener("pointermove",e=>{if(!l2drag)return;if(e.buttons===0&&e.pointerType==="mouse"){l2drag=null;return}const d=Math.round((l2drag.y-e.clientY)/4);if(d)l2drag.moved=true;if(l2drag.k==="swing")S.swingAmt=clamp(l2drag.v+d,50,80);else S.patTrn=clamp(l2drag.v+d,0,127);renderSub()});
 document.addEventListener("pointerup",()=>{if(!l2drag)return;const k=l2drag;l2drag=null;if(!k.moved)l2step(k.k,1);else{if(k.k==="swing")edit("swing",{v:S.swingAmt});else edit("transpose",{v:S.patTrn-64});render()}});
 document.addEventListener("click",e=>{const el=e.target.closest(".l2.ed");if(!el)return;const k=el.dataset.l2;if(k!=="swing"&&k!=="ptrn")l2step(k,e.shiftKey?-1:1)});
-document.addEventListener("wheel",e=>{const el=e.target.closest(".l2.ed");if(!el)return;e.preventDefault();l2step(el.dataset.l2,(e.deltaY||e.deltaX)<0?1:-1,true)},{passive:false});
+document.addEventListener("wheel",e=>{const el=e.target.closest(".l2.ed");if(!el)return;e.preventDefault();if(el.dataset.l2==="seqmode")return;l2step(el.dataset.l2,(e.deltaY||e.deltaX)<0?1:-1,true)},{passive:false});
 
 /* P7, as the MD Editor (v54): Shift + M prepares a mute ("+" unmute, "X" mute, blinking); the prepared
    mutes apply together when Shift comes up. Leaving the window drops them. */
@@ -295,9 +296,9 @@ document.addEventListener("selectstart",e=>{if(!textField(e.target))e.preventDef
 document.addEventListener("dragstart",e=>{if(e.target.closest?.("img,svg,canvas")&&!e.target.closest?.("[draggable=true]"))e.preventDefault()},true);
 
 /* BPM: drag or arrows */
-(()=>{const b=$("#bpm");let d=null;b.addEventListener("pointerdown",e=>{d={y:e.clientY,v:S.bpm};b.setPointerCapture(e.pointerId)});
+(()=>{const b=$("#bpm");let d=null;b.addEventListener("pointerdown",e=>{if(tempoLocked())return;d={y:e.clientY,v:S.bpm};b.setPointerCapture(e.pointerId)});
  b.addEventListener("pointermove",e=>{if(!d)return;if(e.buttons===0&&e.pointerType==="mouse"){d=null;return}S.bpm=clamp(Math.round((d.v+(d.y-e.clientY)*(e.shiftKey?.1:.5))*10)/10,30,300);if(HOST.tempo)HOST.tempo(S.bpm);renderTop();if(S.playing)restartClock()});
- b.addEventListener("pointerup",()=>d=null);b.addEventListener("keydown",e=>{const k={ArrowUp:1,ArrowDown:-1}[e.key];if(!k)return;e.preventDefault();S.bpm=clamp(S.bpm+k*(e.shiftKey?.1:1),30,300);if(HOST.tempo)HOST.tempo(S.bpm);renderTop();if(S.playing)restartClock()})})();
+ b.addEventListener("pointerup",()=>d=null);b.addEventListener("keydown",e=>{const k={ArrowUp:1,ArrowDown:-1}[e.key];if(!k)return;e.preventDefault();if(tempoLocked())return;S.bpm=clamp(S.bpm+k*(e.shiftKey?.1:1),30,300);if(HOST.tempo)HOST.tempo(S.bpm);renderTop();if(S.playing)restartClock()})})();
 
 
 /* ===== Engine status (from the MD Editor v48): the LCD says what the engine is doing; editing waits until it is ready ===== */
@@ -337,26 +338,37 @@ function startEngine(kind){engT.forEach(clearTimeout);engT=[];if(S.playing)toggl
 /* ===== Transport ===== */
 let clock=null;
 function tick(){const prev=S.step;S.step=(S.step+1)%S.len;ctlTick();if(S.step===0){const q=S.queued??chainWrap();if(q!=null){applyPattern(q);return}}stepShown(prev)}
-/* the playhead, POSITION, the page LEDs and the lamps at S.step (the step before it was prev) */
-function stepShown(prev){const pp=Math.floor(S.step/16);$$(".pl").forEach(b=>b.classList.toggle("play",+b.dataset.plp===pp&&S.playing));
- if(S.follow&&S.ws==="seq"&&!S.viewAll&&pp!==S.page&&!laneDraw&&!menuOpen()){S.page=pp;render()}
+/* the playhead, POSITION, the page LEDs and the lamps at S.step (the step before it was prev). B-036, as the Machinedrum
+   Editor's B-014: per step only the soft playhead moves (#phcol, from cached geometry) and POSITION, the page LEDs and
+   the tempo LED change; no step cell is marked (their glows repainted a column of cells every step), no canvas is
+   redrawn (they draw no playhead), and following the playhead to another page rebuilds the sequencer only */
+let stepPage=-1;
+function stepShown(prev){if(S.step===prev)return;const pp=Math.floor(S.step/16);
+ if(pp!==stepPage){stepPage=pp;$$(".pl").forEach(b=>b.classList.toggle("play",+b.dataset.plp===pp&&S.playing))}
+ if(S.follow&&S.ws==="seq"&&!S.viewAll&&pp!==S.page&&!laneDraw&&!menuOpen()){S.page=pp;followPage()}
  $("#tempoled").classList.toggle("on",S.step%4===0);setPos();queueMicrotask(movePH);
- $$(`.mst[data-s="${prev}"],.lb[data-s="${prev}"],.tc[data-s="${prev}"]`).forEach(c=>c.classList.remove("ph"));$$(`.mst[data-s="${S.step}"],.lb[data-s="${S.step}"],.tc[data-s="${S.step}"]`).forEach(c=>c.classList.add("ph"));
- if(S.ws==="seq")redraw();
  if(S.ws==="perform"){const act=[0,1,2,3,4,5].filter(i=>{const st=S.tracks[i].steps[S.step];return st&&!st.off&&st.a&&audible(i)&&(S.mode!=="poly"||i===asgT())});flashTracks(act)}}
+/* the playhead's page while following: the sequencer only (renderPage's work for it), not the whole page */
+function followPage(){const sl=$("#seqscroll")?.scrollLeft||0;renderSeq();const sc=$("#seqscroll");if(sc){sc.scrollLeft=sl;const l=$("#lanescroll");if(l)l.scrollLeft=sl}enhanceSelects($("#main"));movePH(false)}
 function stepMs(){const m={"1X":1,"2X":2,"3/4X":.75,"3/2X":1.5}[S.mult];return 60000/S.bpm/4/m}
 function restartClock(){if(HOST.ownsClock)return;clearInterval(clock);clock=setInterval(tick,stepMs())}
 /* Soft playhead (as the MD Editor, v45): one ink-tinted column over the roll, the ENV/SLIDE/SWING
    rows and the lock lane that glides from step to step. It jumps without animation on a wrap, a
    page flip or a scroll, and fades out on stop. It lives on <body> in viewport coordinates, so the
    roll's and the lane's scrollers both carry it (movePH(false) on scroll and resize). */
-let phX=null;
-function movePH(glide=true){let ph=document.getElementById("phcol");
- const seq=$("#seq"),sc=$("#seqscroll"),col=S.playing&&S.step>=0&&S.ws==="seq"&&seq&&sc?seq.querySelector(`.ruler .rul[data-s="${S.step}"]`):null;
- if(!col){if(ph)ph.style.opacity="0";phX=null;return}
+let phX=null,phGeo=null;
+/* the playhead's geometry, read once per layout (a render, a scroll, a resize: movePH(false)), not every step (B-036:
+   no forced layout read per step) */
+function phGeom(){const seq=$("#seq"),sc=$("#seqscroll");if(!seq||!sc)return null;if(phGeo&&phGeo.seq===seq)return phGeo;
+ const v=sc.getBoundingClientRect(),top=(seq.querySelector(".nlane.big")||seq).getBoundingClientRect().top,
+  lane=$("#lane"),bot=(lane&&lane.getClientRects().length?lane:$("#tlanes")||seq).getBoundingClientRect().bottom,cols={};
+ seq.querySelectorAll(".ruler .rul[data-s]").forEach(c=>{const r=c.getBoundingClientRect();cols[c.dataset.s]={left:r.left,right:r.right,width:r.width}});
+ return phGeo={seq,v,top,bot,cols}}
+function movePH(glide=true){let ph=document.getElementById("phcol");if(!glide){phGeo=null;stepPage=-1}
+ const g=S.playing&&S.step>=0&&S.ws==="seq"?phGeom():null,r=g?g.cols[S.step]:null;
+ if(!r){if(ph)ph.style.opacity="0";phX=null;return}
  if(!ph){ph=document.createElement("div");ph.id="phcol";ph.setAttribute("aria-hidden","true");document.body.appendChild(ph);phX=null}
- const r=col.getBoundingClientRect(),v=sc.getBoundingClientRect(),top=(seq.querySelector(".nlane.big")||col).getBoundingClientRect().top,
-  lane=$("#lane"),bot=(lane&&lane.getClientRects().length?lane:$("#tlanes")||seq).getBoundingClientRect().bottom;
+ const v=g.v,top=g.top,bot=g.bot;
  const jump=!glide||phX==null||r.left<phX;
  ph.style.transition=jump?"opacity .15s":`transform ${Math.round(Math.min(stepMs()*.85,140))}ms cubic-bezier(.2,.7,.3,1),opacity .15s`;
  ph.style.width=r.width+"px";ph.style.top=(top-3)+"px";ph.style.height=(bot-top+6)+"px";ph.style.transform=`translateX(${r.left}px)`;
@@ -364,8 +376,8 @@ function movePH(glide=true){let ph=document.getElementById("phcol");
 addEventListener("scroll",()=>{if(S.playing)movePH(false)},true);addEventListener("resize",()=>{if(S.playing)movePH(false)});
 function setPos(){$("#pos").textContent=S.playing&&S.step>=0?String(Math.floor(S.step/16)+1).padStart(2,"0")+"."+String(S.step%16+1).padStart(2,"0"):"--.--"}
 /* A host's transport (P6): the machine's step and whether it plays, shown. */
-function setStep(step){const prev=S.step;S.step=step;stepShown(prev)}
-function setPlaying(on){if(S.playing===on)return;S.playing=on;if(!on){$$(".pl").forEach(b=>b.classList.remove("play"));$("#tempoled").classList.remove("on");$$(".ph").forEach(c=>c.classList.remove("ph"));S.step=-1}setPos();renderTop();redraw();movePH(false)}
+function setStep(step){if(step===S.step)return;const prev=S.step;S.step=step;stepShown(prev)}
+function setPlaying(on){if(S.playing===on)return;S.playing=on;if(!on){$$(".pl").forEach(b=>b.classList.remove("play"));$("#tempoled").classList.remove("on");$$(".ph").forEach(c=>c.classList.remove("ph"));S.step=-1}setPos();renderTop();redraw();movePH(false);markSongRow()}
 function togglePlay(){if(HOST.togglePlay)return HOST.togglePlay();if(!S.playing&&S.eng&&!engReady())return;S.playing=!S.playing;clearInterval(clock);$$(".pl").forEach(b=>b.classList.remove("play"));$("#tempoled").classList.remove("on");$$(".ph").forEach(c=>c.classList.remove("ph"));if(S.playing){S.step=-1;tick();restartClock()}else S.queued=null;setPos();renderTop();redraw();movePH(false)}
 
 /* ===== Render ===== */
@@ -448,7 +460,7 @@ function show(v,all){
   for(const k of["len","mult","swingAmt","patTrn","locks"])if(put(S,k,v[k],was[k])){doc=true;seq=true}
   for(const k of["multi","menv","routing","plays"])if(put(S,k,v[k],was[k]))doc=true;
   if(put(S,"workName",v.workName,was.workName))top=true;
-  for(const k of["pat","kit","queued","bpm"])if(put(S,k,v[k],was[k]))top=true;
+  for(const k of["pat","kit","queued","bpm","hostTempo"])if(put(S,k,v[k],was[k]))top=true;
   if(v.kitState!==undefined&&v.kitState!==was.kitState){setKitState(v.kitState);top=true}
   if(v.patSlot&&!sameV(v.patSlot,was.patSlot)){S.patKit[v.patSlot.p]=v.patSlot.kit;S.patInfo[v.patSlot.p]={has:v.patSlot.has,len:v.patSlot.len}}
   if(put(S,"song",v.song,was.song)||v.song!==undefined&&v.songSlot!==was.songSlot){S.songSlot=v.songSlot;S.songSel=Math.min(S.songSel||0,S.song.length-1);doc=true}
@@ -506,7 +518,7 @@ function closeFirmwareDialog(){Dlg.drop("firstRun")}
 /* SysEx import and export: the host's file dialogs and document writes; the example shows a pretend file */
 Syx.host={choose:()=>{if(HOST.syxChoose)return HOST.syxChoose();Syx.preview({ok:true,file:"example.syx",model:"Monomachine",fullBackup:false,problemCount:0,problems:[],items:{kit:[{slot:0,name:"SUPERWAVES",overwrites:true}],pattern:[{slot:0,name:"A01",kit:0,overwrites:true}],song:[],global:[]}})},
  exportAll:()=>{if(HOST.syxExport)return HOST.syxExport();toast("In the plug-in: a save dialog, then every document as one .syx.")},
- start:k=>{if(HOST.syxStart)return HOST.syxStart(k);Syx.progress({done:2,total:2,running:false,text:"Imported (example)."})},
+ start:(k,s)=>{if(HOST.syxStart)return HOST.syxStart(k,s);Syx.progress({phase:"done",done:2,total:2,running:false,text:"2 imported (example).",report:{taken:2,items:[]}})},
  stop:()=>{if(HOST.syxStop)return HOST.syxStop()}};
 /* the start-up card's keys: the host's native file chooser and ROM folder (the ROM stays on this computer); the
    example pretends an install */
@@ -514,8 +526,8 @@ Boot.host={chooseRom:()=>{if(HOST.chooseRom)return HOST.chooseRom();Boot.rom({ok
  revealRom:()=>{if(HOST.revealRom)return HOST.revealRom();toast("In the plug-in: the ROM folder opens in Finder.")},
  recheck:()=>{if(HOST.recheck)return HOST.recheck();startEngine("emu")},
  removeRom:i=>{if(HOST.removeRom)return HOST.removeRom(i)},say:t=>toast(t)};
-/* the editor's menu (a host's): right-click an empty part of the header */
-document.addEventListener("contextmenu",e=>{if(!HOST.menu||!e.target.closest(".top")||e.target.closest("button,[role=slider],[role=button],select,input,b,.lcdpanel"))return;e.preventDefault();HOST.menu()});
+/* the editor's menu (a host's): right-click anywhere the page has no menu of its own (DeskMenu.wantsEditor, I-008) */
+document.addEventListener("contextmenu",e=>{if(!HOST.menu||!DeskMenu.wantsEditor(e))return;e.preventDefault();HOST.menu(e.clientX,e.clientY)});
 window.MMView={
  /* values */
  audible,soloed:()=>[...S.tracks,...S.midi].some(x=>x.solo),engReady,asgT,noteName,pname,machName,kitName,
@@ -527,7 +539,7 @@ window.MMView={
  /* the machine's documents: show(view) is the one writer of S's document members (DESIGN-UNIFY.md phase 1); the
     library's other slots keep their own cheap setters; setTempo is the BPM gesture's own write (the self-test's) */
  show,startEmpty,setPatternSlot,setKitSlot,setReading,setTempo:bpm=>{S.bpm=bpm},
- setInput,setPlaying,setStep,
+ setInput,setPlaying,setStep,setSongRow:r=>{S.songRow=r;markSongRow()},
  setEng,dlgOpen:()=>!$("#dlg").hidden,setEngineLabel,setEngineTip,setEngines,setAudioEntry,clearLearnTarget:()=>{S.learnT=null},setMapping,setModulation,setCtlSetup,disable,
  setRecord,
  setLcd,setKeyDown,setPst,closeFirmwareDialog,bootRom:r=>Boot.rom(r),bootInstalled:o=>Boot.showInstalled(o),syxPreview:m=>Syx.preview(m),syxProgress:m=>Syx.progress(m),

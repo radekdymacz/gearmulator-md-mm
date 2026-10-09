@@ -174,6 +174,36 @@ namespace mmDesk
 		return m_working.expect.expecting(now());
 	}
 
+	// B-019: an imported file's message as it is. A dump goes as the editor's own do: on SYSEX RECV, which the
+	// adapter opens on the emulator and the person opens over HW MIDI (it waits for SEND meanwhile), in order after
+	// what waits there; anything else (a read-back's request) into the stream.
+	std::string MmMachine::sendAsIs(const Bytes& _message, const bool _dump)
+	{
+		if(!m_stream.open())
+			return "This engine cannot send SysEx to the machine.";
+		if(_dump)
+			afterDumps(_message);
+		else
+			m_port.sendSysex(_message);
+		// B-026: a dump of the active global is stored, not applied, until its slot is made active (0x56): without it
+		// the machine keeps its old channels while every document says the new ones. As after the editor's own global
+		// writes, once SYSEX RECV is left.
+		if(_message.size() > 9 && _message[0] == 0xf0 && _message[6] == 0x50 && m_curGlobal >= 0 && _message[9] == m_curGlobal)
+			m_activateGlobal = m_curGlobal;
+		return {};
+	}
+
+	MmMachine::AsIs MmMachine::asIs() const
+	{
+		AsIs a;
+		a.queued = m_stream.waiting() + m_recv.queued() + m_manual.size();
+		a.busy = a.queued > 0 || m_stream.sending(clock()) || m_recv.taking();
+		if(!m_manual.empty())
+			a.waitsFor = "The Monomachine takes dumps only on GLOBAL > FILE > SYSEX RECV: open it on the machine, then press SEND "
+				"in the editor.";
+		return a;
+	}
+
 	deskCore::KitState MmMachine::kitState(const Documents& _view) const
 	{
 		const auto stored = m_curKit >= 0 ? _view.kits.find(static_cast<uint8_t>(m_curKit)) : _view.kits.end();
@@ -202,6 +232,7 @@ namespace mmDesk
 		pumpRecv(_now);
 		pumpTransport(_now);
 		pumpChain();
+		pumpSongReload(_now);
 		if(m_activateGlobal >= 0 && (m_profile.wire || m_recv.state() == RecvSession::State::Idle))
 		{
 			m_port.sendSysex(ed::mmSetActiveGlobal(static_cast<uint8_t>(m_activateGlobal)));
@@ -211,6 +242,22 @@ namespace mmDesk
 		applyWorkingKit(_now, _view);
 		pumpPushes(_now);
 		publishTransport(_now, readWhileRecording(_now));
+	}
+
+	// 0.3.5: the firmware plays the song it loaded; a dump into the current song's slot is heard after LOAD SONG,
+	// which it takes only while stopped. Once the dumps have landed (SYSEX RECV done, nothing pending) and the machine
+	// is stopped in SONG mode, the desk loads the song again by itself; a playing machine gets it at its next stop.
+	void MmMachine::pumpSongReload(const double _now)
+	{
+		if(!m_songReloadNeeded || m_curSong < 0)
+			return;
+		if(m_playing || m_songMode != 1 || _now - m_songEditedMs < g_songReloadQuietMs || busy() || !m_stream.open()
+			|| m_recv.state() != RecvSession::State::Idle || m_stream.waiting() > 0 || m_recv.queued() > 0)
+			return;
+		m_port.sendSysex(ed::mmLoadSong(static_cast<uint8_t>(m_curSong)));
+		m_songReloadNeeded = false;
+		requestStatus();
+		m_lastStatusMs = _now;
 	}
 
 	// The playhead, at most every g_telemetryMinMs, and the recording mode when it changes (the transport).
@@ -227,6 +274,8 @@ namespace mmDesk
 		t.set("step", m_tel.step);
 		t.set("playing", m_playing);
 		t.set("record", m_tel.recording < 0 || m_tel.recording > 2 ? Value() : Value(modes[m_tel.recording]));
+		const int row = m_songRow.update(m_tel.songRow, m_tel.step, m_playing);
+		t.set("songRow", row >= 0 ? Value(row) : Value());
 		publishTelemetry(std::move(t));
 	}
 
@@ -248,6 +297,7 @@ namespace mmDesk
 		Value s = Value::object();
 		s.set("current", m_curSong < 0 ? Value() : Value(m_curSong));
 		s.set("songMode", m_songMode < 0 ? Value() : Value(m_songMode == 1));
+		s.set("reloadNeeded", m_songReloadNeeded);
 		d.set("song", std::move(s));
 		Value g = Value::object();
 		g.set("current", m_curGlobal < 0 ? Value() : Value(m_curGlobal));

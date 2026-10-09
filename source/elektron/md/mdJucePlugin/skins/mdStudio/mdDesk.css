@@ -1215,6 +1215,8 @@ html,body{min-width:1280px}
 .amnote{font:500 11px var(--sans);color:var(--print2);padding-left:100px}
 .amerr{color:var(--led);font-weight:600}
 @media (max-width:900px){.amgrid{grid-template-columns:1fr}.amnote{padding-left:0}}
+/* 0.3.5: the line to the machine's own MIDI settings (GLOBAL, the Machinedrum Editor) */
+.amlink{background:none;border:0;padding:0;font:inherit;color:var(--print);text-decoration:underline;text-underline-offset:2px;cursor:pointer}
 /* ===== P7 LAYOUT: the page fills the window and scales with it =====
    One column of fixed bars (the header, the page's own bars) and fluid rows: the Sequence's 16 track
    rows share the height the lock lane leaves (the lane keeps at least the lock parameter list's height,
@@ -1305,15 +1307,23 @@ body{box-sizing:border-box;overflow:hidden}
 .dlgbox.nudge{animation:nudge .16s 2}
 @media (prefers-reduced-motion:reduce){.dlgbox.nudge{animation:none}}
 /* A context menu (K3, deskMenu.js): at the pointer, above the clear backdrop; each item with its key at the right.
-   Plain colours (no color-mix: an older WebKit, deskCompat.js) */
-.deskmenu{position:fixed;z-index:var(--mz,60);min-width:210px;max-width:calc(100vw - 8px);max-height:calc(100vh - 8px);overflow:auto;box-sizing:border-box;padding:4px;background:var(--plate,#e9e6df);color:var(--body,var(--print,#222));border:1.5px solid var(--print,#222);border-radius:6px;box-shadow:0 10px 28px rgba(0,0,0,.35);font:500 13px/1.2 var(--sans,system-ui,sans-serif)}
+   #deskmenu holds the panels (the menu, an open submenu beside it), each placed by the script. The page's tokens
+   (--plate --print --body --rule --mono --sans: light and dark, MK1 and MK2 alike); plain colours and rgba only (no
+   color-mix, no :has: an older WebKit, deskCompat.js) */
+.deskmenu{position:fixed;left:0;top:0;width:0;height:0;overflow:visible;z-index:var(--mz,60)}
 .deskmenu[hidden]{display:none}
+.deskmenu .mpanel{position:fixed;min-width:210px;max-width:calc(100vw - 8px);max-height:calc(100vh - 8px);overflow:auto;box-sizing:border-box;padding:4px;background:var(--plate,#e9e6df);color:var(--body,var(--print,#222));border:1.5px solid var(--print,#222);border-radius:6px;box-shadow:0 10px 28px rgba(0,0,0,.35);font:500 13px/1.2 var(--sans,system-ui,sans-serif);-webkit-user-select:none;user-select:none}
 .deskmenu .mtitle{padding:5px 10px 6px;font:500 10px/1.2 var(--mono,ui-monospace,monospace);letter-spacing:.06em;text-transform:uppercase;opacity:.7}
-.deskmenu hr{border:0;border-top:1px solid rgba(0,0,0,.18);margin:4px 6px}
-.deskmenu button{display:flex;width:100%;align-items:center;justify-content:space-between;gap:18px;padding:6px 10px;border:0;border-radius:4px;background:transparent;color:inherit;font:inherit;text-align:left;cursor:pointer}
-.deskmenu button:hover,.deskmenu button:focus{background:var(--print,#222);color:var(--plate,#fff);outline:none}
+.deskmenu .mhead{padding:7px 10px 3px;font:500 10px/1.2 var(--mono,ui-monospace,monospace);letter-spacing:.06em;text-transform:uppercase;opacity:.6}
+.deskmenu .mnote{padding:4px 10px 5px;font:400 11px/1.3 var(--mono,ui-monospace,monospace);opacity:.65;max-width:360px;white-space:normal}
+.deskmenu hr{border:0;border-top:1px solid var(--rule,rgba(0,0,0,.18));margin:4px 6px}
+.deskmenu button{display:flex;width:100%;height:auto;min-height:0;margin:0;align-items:center;gap:10px;padding:6px 10px;border:0;border-radius:4px;box-shadow:none;text-transform:none;letter-spacing:normal;background:transparent;color:inherit;font:inherit;text-align:left;cursor:pointer;white-space:nowrap}
+.deskmenu button>span{flex:1 1 auto}
+.deskmenu button:hover,.deskmenu button:focus,.deskmenu button[aria-expanded=true]{background:var(--print,#222);color:var(--plate,#fff);outline:none}
 .deskmenu button[disabled]{opacity:.4;cursor:default;background:transparent;color:inherit}
-.deskmenu kbd{font:400 11px/1 var(--mono,ui-monospace,monospace);opacity:.75;white-space:nowrap}
+.deskmenu .mck{flex:0 0 12px;margin-right:-2px;font-style:normal;text-align:center}
+.deskmenu .msub{flex:0 0 auto;font-style:normal;font-size:15px;line-height:13px;opacity:.8}
+.deskmenu kbd{margin-left:8px;font:400 11px/1 var(--mono,ui-monospace,monospace);opacity:.75;white-space:nowrap}
 /* The banner (I-005, deskModal.js Banner): a non-modal notice at the bottom right, under any modal and its backdrop */
 .gmbanner{position:fixed;right:16px;bottom:calc(16px + env(safe-area-inset-bottom,0px));z-index:58;max-width:min(420px,calc(100vw - 32px));box-sizing:border-box;display:grid;gap:8px;padding:12px 14px;background:var(--plate);color:var(--body,var(--print));border:2px solid var(--print);border-radius:6px;box-shadow:0 12px 32px rgba(0,0,0,.35)}
 .gmbanner[hidden]{display:none}
@@ -1381,6 +1391,8 @@ body{box-sizing:border-box;overflow:hidden}
 @keyframes bootind{0%{transform:translateX(-100%)}100%{transform:translateX(340%)}}
 .bootcard.rom .bootbar{display:none}
 .bootline{margin:0;font:500 13px var(--sans);color:var(--print2);max-width:48ch}
+/* B-035: the host runs no audio, or the machine is slower than real time */
+.bootline.warn{color:var(--print);font-weight:600}
 .bootrom{display:grid;gap:10px;justify-items:center;width:100%}
 .bootzone{all:unset;box-sizing:border-box;width:100%;display:grid;gap:6px;justify-items:center;padding:20px;border:2px solid var(--print);border-radius:8px;background:color-mix(in srgb,var(--print) 8%,var(--plate));box-shadow:0 3px 0 var(--print2);cursor:pointer;text-align:center}
 .bootzone:active{transform:translateY(2px);box-shadow:0 1px 0 var(--print2)}
@@ -1417,20 +1429,108 @@ body.deskmidi #main,body.deskmidi #rail{opacity:.3;pointer-events:none;transitio
 /* P7: the workspace and setup keys: one minimum width each, so the rows look even (MIX was a sliver) */
 #tabs button{min-width:60px!important;justify-content:center;box-sizing:border-box}
 .setkeys button{min-width:46px!important;justify-content:center;box-sizing:border-box}
-/* The SysEx import panel (P7, deskSyx.js) */
-.syxpop{position:absolute;z-index:22;width:min(900px,calc(100vw - 32px));display:grid;gap:10px;align-content:start;padding:14px;background:var(--plate);border:2px solid var(--print);border-radius:6px;box-shadow:0 18px 40px rgba(0,0,0,.35)}
+/* The SysEx import panel (P7, deskSyx.js; 0.3.5): a tab per kind, the machine's slot grid, one footer.
+   Plain colours and no :has()/subgrid (an older WebKit, deskCompat.js) */
+.syxpop{position:absolute;z-index:22;width:min(1120px,calc(100vw - 48px));display:grid;gap:10px;align-content:start;padding:14px 16px;background:var(--plate);color:var(--body,var(--print));border:2px solid var(--print);border-radius:6px;box-shadow:0 18px 40px rgba(0,0,0,.35)}
 .syxpop[hidden]{display:none}
-.syxbody{display:grid;gap:6px;max-height:48vh;overflow:auto}
-.syxrow{display:flex;align-items:center;gap:10px;font:600 13px var(--sans);letter-spacing:.06em;text-transform:uppercase;color:var(--print)}
-.syxrow .syxn{font:500 12px var(--mono);letter-spacing:0;text-transform:none;color:var(--print2)}
-.syxnames{display:flex;flex-wrap:wrap;gap:3px;padding:0 0 6px 24px}
-.syxname{font:10px var(--pix);text-transform:uppercase;padding:2px 5px;border-radius:2px;background:var(--lcd);color:var(--ink);opacity:.8}
-.syxname.over{opacity:1;box-shadow:inset 0 0 0 1px var(--led)}
-.syxwarn,.syxwhy{margin:0;font:500 12px var(--sans);color:var(--print2)}
+.syxhead{flex-wrap:wrap;row-gap:6px}
+.syxhead .lcdchip{flex:none}
+.syxfile{flex:1 1 200px;min-width:0;font:500 12px/1.3 var(--mono);color:var(--print2);overflow-wrap:anywhere;word-break:break-all}
+.syxq{width:26px;padding:0!important;font:600 13px var(--sans)!important;letter-spacing:0!important}
+.syxhelp{margin:0;font:500 13px/1.4 var(--sans);color:var(--print2)}
+.syxwhy{margin:0;font:500 14px/1.4 var(--sans);color:var(--print)}
+/* the tabs: a kind each, its LED sends it or not */
+.syxtabs{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:6px}
+.syxtab{display:flex;align-items:stretch;min-width:0;border-radius:4px;background:var(--plate2);box-shadow:inset 0 0 0 1px var(--rule)}
+.syxtab.sel{background:var(--plate3);box-shadow:inset 0 0 0 2px var(--print)}
+.syxtab input{-webkit-appearance:none;appearance:none;flex:none;align-self:center;width:13px;height:13px;margin:0 0 0 12px;border-radius:50%;background:var(--ledoff);border:0;cursor:pointer}
+.syxtab input:checked{background:var(--led);box-shadow:0 0 6px 1px var(--led)}
+.syxtab input:disabled{cursor:default}
+.syxtab.bad input:checked{animation:none}
+.syxtabb{flex:1;min-width:0;display:grid;gap:2px;justify-items:start;text-align:left;padding:7px 12px 7px 10px;background:transparent!important;color:var(--print);box-shadow:none!important;transform:none!important;border-radius:4px}
+.syxtabb .t{display:flex;align-items:center;gap:8px;font:600 14px var(--sans);letter-spacing:.14em;text-transform:uppercase}
+.syxct{font:11px/1 var(--pix);letter-spacing:0;background:var(--lcd);color:var(--ink);padding:3px 6px 2px;border-radius:2px}
+.syxpl[hidden]{display:none}
+.syxpl{font:600 9px/1 var(--mono);letter-spacing:0;background:var(--cream,var(--lcd));color:var(--creamtext,var(--ink));padding:3px 4px;border-radius:2px}
+.syxtabb .s{max-width:100%;font:500 11px var(--mono);color:var(--print2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.syxtabb .s em,.syxtab.bad .s{font-style:normal;color:var(--rec)}
+/* importing: each kind's own bar under its line; the kind at work blinks its LED */
+.syxtb{display:block;justify-self:stretch;height:4px;margin-top:3px;border-radius:2px;background:var(--ledoff);overflow:hidden}
+.syxtb b{display:block;height:100%;width:0;background:var(--led);transition:width .2s}
+.syxtab.work input:checked{animation:blink 1s steps(2) infinite}
+@media (prefers-reduced-motion:reduce){.syxtab.work input:checked{animation:none}}
+/* the slots, as on the machine */
+.syxbody{max-height:calc(100vh - 330px);overflow:auto;overscroll-behavior:contain}
+.syxpane[hidden]{display:none}
+.syxgrid{display:grid;gap:4px;align-items:stretch}
+.syxrl{align-self:center;font:600 12px var(--mono);color:var(--print2);text-align:center}
+.syxc{position:relative;height:38px;min-width:0;display:grid;align-content:center;gap:1px;padding:3px 6px;margin:0;text-align:left;border:0;border-radius:3px;background:var(--key);color:var(--keytext);box-shadow:inset 0 -2px 0 rgba(0,0,0,.35);font:500 11px var(--mono);letter-spacing:0;cursor:pointer}
+.syxc b{font:500 10px/1.1 var(--mono);color:var(--keydim);white-space:nowrap}
+.syxc span{font:500 11px/1.2 var(--mono);text-transform:uppercase;white-space:nowrap;overflow:hidden}
+.syxc.over::after{content:"";position:absolute;right:5px;top:5px;width:6px;height:6px;border-radius:50%;background:var(--led);box-shadow:0 0 4px var(--led)}
+.syxc.plays{background:var(--cream,var(--lcd));color:var(--creamtext,var(--ink))}
+.syxc.plays b{color:var(--creamtext,var(--ink))}
+.syxc.unread span{font-style:italic}
+.syxc.off{background:transparent;color:var(--print3);box-shadow:inset 0 0 0 1px var(--rule)}
+.syxc.off b{color:var(--print3)}
+.syxc.off span{text-decoration:line-through}
+.syxc.off::after{opacity:.35}
+.syxc:hover{filter:brightness(1.12)}
+.syxc.off:hover{background:var(--plate3);filter:none}
+.syxc.none{display:grid;align-content:center;background:transparent;box-shadow:none;border:1px dashed var(--rule);opacity:.45;cursor:default}
+.syxc.none b{color:var(--print3)}
+.syxgrid.g8 .syxc{height:44px}
+.kindoff .syxc:not(.none){opacity:.4;cursor:default;filter:none}
+.syx-running .syxc,.syx-report .syxc{cursor:default}
+.syx-running .syxc:hover,.syx-report .syxc:hover{filter:none}
+.syxo{position:absolute;right:4px;top:3px;font:600 11px/1 var(--mono);font-style:normal;color:var(--keydim)}
+.syxc.bad{box-shadow:inset 0 0 0 2px var(--rec)}
+.syxc.bad .syxo{color:var(--rec)}
+.syx-report .syxc.over::after{display:none}
+.syx-report .syxc:not(.none):not([data-syxout]){opacity:.3}
+.syxnote{margin:0 0 8px;font:500 13px/1.4 var(--sans);color:var(--print2)}
+.syxnote b{color:var(--print);font-weight:600}
+/* the legend and the quick choices under the grid */
+.syxtools{display:flex;align-items:center;justify-content:space-between;gap:6px 18px;flex-wrap:wrap;min-height:26px}
+.syxleg{display:flex;align-items:center;flex-wrap:wrap;gap:4px 6px;font:500 11px var(--mono);color:var(--print2)}
+.syxleg .lg{display:inline-grid;place-items:center;width:18px;height:14px;margin-left:8px;border-radius:2px;background:var(--key);color:var(--keytext);font:600 9px/1 var(--mono);font-style:normal;position:relative}
+.syxleg .lg:first-child{margin-left:0}
+.syxleg .lg.over::after{content:"";position:absolute;right:2px;top:2px;width:4px;height:4px;border-radius:50%;background:var(--led)}
+.syxleg .lg.plays{background:var(--cream,var(--lcd));color:var(--creamtext,var(--ink))}
+.syxleg .lg.off{background:transparent;box-shadow:inset 0 0 0 1px var(--rule)}
+.syxleg .lg.bad{box-shadow:inset 0 0 0 1.5px var(--rec);color:var(--rec)}
+.syxsel{display:flex;gap:4px}
+.syxsel button{height:24px;padding:0 10px;font:600 10px var(--sans);letter-spacing:.14em;text-transform:uppercase;white-space:nowrap}
+.syxfilt{display:inline-flex;align-items:center;gap:6px;font:600 11px var(--sans);letter-spacing:.12em;text-transform:uppercase;color:var(--print);cursor:pointer}
+/* the problems, as a list (the report) */
+.syxlist{display:grid;gap:3px}
+.syxli{display:grid;grid-template-columns:44px minmax(80px,140px) 110px minmax(0,1fr);gap:10px;align-items:baseline;padding:4px 8px;border-radius:3px;background:var(--plate2);font:500 12px var(--mono);color:var(--print2)}
+.syxli b{font-weight:600;color:var(--print)}
+.syxli .nm{text-transform:uppercase;white-space:nowrap;overflow:hidden}
+.syxli .tag{font:600 11px var(--sans);letter-spacing:.12em;text-transform:uppercase;color:var(--rec)}
+.syxli .why{font:500 12px/1.35 var(--sans)}
+/* the footer: one line, the keys */
+.syxfoot{display:flex;align-items:center;gap:16px;border-top:1px solid var(--rule);padding-top:10px;min-height:44px}
+.syxmsg{flex:1;min-width:0;display:grid;gap:6px}
+.syxwarn,.syxsum{margin:0;font:500 14px/1.35 var(--sans);color:var(--print2)}
+.syxwarn.hot{color:var(--print)}
+.syxsum{color:var(--print);font-weight:600}
+.syxfoot .btnrow{flex:none;flex-wrap:nowrap}
+.syxfoot button{height:32px;padding:0 18px;font:600 12px var(--sans);letter-spacing:.14em;text-transform:uppercase;white-space:nowrap}
+.syxfoot button.go{background:var(--cream,var(--lcd));color:var(--creamtext,var(--ink))}
+.syxfoot button.go.danger{background:var(--rec);color:#fff}
+.syxfoot button:disabled{opacity:.35;cursor:default}
 .syxprob{font:500 12px var(--mono);color:var(--print2)}
-.syxbar{position:relative;height:18px;border-radius:3px;background:var(--ledoff);overflow:hidden}
+.syxprob summary{cursor:pointer}
+/* importing: the phases, the bar */
+.syxsteps{display:flex;gap:6px 22px;flex-wrap:wrap}
+.syxstep{display:inline-flex;align-items:center;gap:7px;font:600 12px var(--sans);letter-spacing:.14em;text-transform:uppercase;color:var(--print3)}
+.syxstep.done,.syxstep.now{color:var(--print)}
+.syxstep.now .led{animation:blink 1s steps(2) infinite}
+@media (prefers-reduced-motion:reduce){.syxstep.now .led{animation:none}}
+.syxbar{position:relative;height:20px;border-radius:3px;background:var(--ledoff);overflow:hidden}
 .syxbar i{position:absolute;left:0;top:0;bottom:0;background:var(--led);width:0;transition:width .2s}
-.syxbar span{position:relative;display:block;text-align:center;font:600 11px/18px var(--sans);color:var(--body)}
+.syxbar span{position:relative;display:block;padding:0 8px;text-align:center;font:600 11px/20px var(--sans);letter-spacing:.06em;color:#fff;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .syxkeys{display:inline-flex;gap:6px;margin-left:auto}
 .syxkeys+.libx{margin-left:8px!important}
 
@@ -1762,5 +1862,38 @@ img,svg,canvas{-webkit-user-drag:none}
 /* K2 (DESIGN-keymap.md): the LCD's COPY CLR PASTE while they act on the selected steps: underlined, as the
    selection is outlined (mdDeskComforts.js secLabels) */
 .lcdsec button.onsel{opacity:1;text-decoration:underline;text-underline-offset:2px}
-/* K4: the FN key while it is on (once: lit; latched: outlined too) */
-.skey.fnkey.latch{outline:2px solid var(--cream);outline-offset:-3px}
+/* 0.3.5, the Song page's left column by hierarchy (mdDeskSong.js): (a) What plays: the PATTERN | SONG switch, big,
+   and one live line from the machine; (b) the song; (c) the palette; (d) the selected row. The mode is lit by what
+   the machine reports; the arrangement is framed in red while the song plays, and looks as ever otherwise */
+.whatplays .modebig .seg{display:grid;grid-template-columns:1fr 1fr;gap:6px;width:100%}
+.whatplays .modebig .seg button{justify-content:center;padding:10px 6px;font:600 14px var(--sans);letter-spacing:.14em;border-radius:4px;box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--print) 35%,transparent)}
+.whatplays .modebig .seg button::before{width:10px;height:10px}
+.whatplays .modebig .seg button[aria-pressed=true]{box-shadow:inset 0 0 0 2px var(--led),0 0 10px -2px var(--led)}
+.whatplays .playsline{display:flex;min-width:0}
+.whatplays .playsline .playschip{flex:1;min-width:0;margin:0;overflow:hidden;text-overflow:ellipsis;font:13px var(--pix);padding:7px 10px}
+.whatplays.song .playsline .playschip{box-shadow:inset 0 0 0 2px var(--led)}
+.songslot header{flex-wrap:wrap;align-items:center}
+.songslot .stepper .lcdchip{min-width:72px;text-align:center}
+.arrcard .arrstate{font:11px var(--pix);text-transform:uppercase;letter-spacing:.06em;display:inline-flex;align-items:center;gap:6px;white-space:nowrap}
+.arrcard .arrstate:empty{display:none}
+.songplaying .arrcard .arrstate::before{content:"";width:8px;height:8px;border-radius:50%;background:var(--led);box-shadow:0 0 6px 1px var(--led)}
+.songplaying .arrcard .arrstate{color:var(--print)}
+/* the red frame only while the song really plays; pattern mode looks as ever (songs are edited while patterns play) */
+.songplaying .arrcard .slotgrid{box-shadow:0 0 0 2px var(--led),0 0 14px -2px color-mix(in srgb,var(--led) 60%,transparent)}
+/* the song playhead: the row the machine plays (telemetry songRow), the soft playhead's language (#phcol) */
+.slotgrid .scell.ph{z-index:1;outline:2px solid var(--led);outline-offset:1px;box-shadow:0 0 0 4px color-mix(in srgb,var(--led) 35%,transparent),0 0 14px color-mix(in srgb,var(--led) 55%,transparent)}
+.slotgrid .scell.ph b{text-decoration:underline;text-underline-offset:2px}
+/* the time bar in SONG mode: the rows played up to the one that plays now lit in the LED's red (the playing colour),
+   the rest unlit */
+.songmode .durbar .db{background:color-mix(in srgb,var(--ink) 22%,transparent);opacity:1}
+.songmode .durbar .db.past,.songmode .durbar .db.now{background:var(--led)}
+.songmode .durbar .db.now{box-shadow:0 0 6px var(--led)}
+.songmode .durbar .db.sel:not(.past):not(.now){background:color-mix(in srgb,var(--ink) 45%,transparent)}
+/* the LCD's pattern slot reads SONG 01 · 017 in SONG mode: one width in both modes (the arrows keep their place,
+   unseen), so the LCD and line 2 never move when PLAY switches */
+.lcdpanel .patf #pat{width:6.4ch}
+.patf.songlcd .lcdbtn{visibility:hidden}
+.l2[data-l2="seqmode"] b{display:inline-block;width:4ch;text-align:left}
+/* B-030: TEMPO is the DAW's (the machine follows the host): marked, not editable here */
+.f.hosttempo #bpm{cursor:not-allowed}
+.f.hosttempo small::after{content:"DAW";margin-left:5px;padding:0 3px;border-radius:2px;background:var(--ink);color:var(--lcd);font:8px var(--pix);vertical-align:1px}

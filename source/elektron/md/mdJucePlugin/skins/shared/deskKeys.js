@@ -39,29 +39,7 @@ const Modifiers = (() => {
 	}
 	if (typeof document !== "undefined" && document.addEventListener) { if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", localise); else localise(); }
 
-	/* FN (K4, DESIGN-keymap.md P5): the machine's FUNCTION key on the screen, for a mouse or a touch screen, for a
-	   host or a desktop that takes Alt (Windows' menu bar, Linux's Alt-drag): while it is on, every pointer and key
-	   event the page sees says ⌥ (altKey), so every ⌥ gesture and key has a route without a held key. "once": the next
-	   click, drag or key gets it, then it goes off; "latch" (a double-click on its key) until it is clicked again or
-	   Esc. Events on the FN key itself are left as they are. fn(state) sets it; onFn(f) hears every change. */
-	let fn = "off";
-	const fnHear = [];
-	const setFn = s => { if (s === fn) return; fn = s; fnHear.forEach(f => f(fn)); };
-	const onFnKey = e => !!e.target?.closest?.("[data-fnkey]");
-	const MODKEYS = new Set(["Alt", "Shift", "Meta", "Control", "CapsLock", "Fn", "AltGraph"]);
-	let spend = 0;
-	/* "once" is spent after the action it was for: a click, the end of a drag, a key (a timer: after the page's own handlers) */
-	const spendSoon = () => { if (fn !== "once" || spend) return; spend = setTimeout(() => { spend = 0; if (fn === "once") setFn("off"); }, 0); };
-	if (typeof addEventListener === "function") {
-		for (const type of ["pointerdown", "pointermove", "pointerup", "mousedown", "mousemove", "mouseup", "click", "dblclick", "contextmenu", "wheel", "keydown", "keyup"]) addEventListener(type, e => {
-			if (fn === "off" || onFnKey(e)) return;
-			if (type === "keydown" && e.key === "Escape") { setFn("off"); e.preventDefault(); e.stopImmediatePropagation(); return; }
-			if (!e.altKey) Object.defineProperty(e, "altKey", { value: true, configurable: true });
-			if (type === "click" || type === "pointerup" || (type === "keydown" && !MODKEYS.has(e.key))) spendSoon();
-		}, true);
-	}
-	return { get mac() { return mac; }, setPlatform(m) { mac = !!m; }, cmd, of, say,
-		get fn() { return fn; }, setFn, onFn: f => { fnHear.push(f); } };
+	return { get mac() { return mac; }, setPlatform(m) { mac = !!m; }, cmd, of, say };
 })();
 /* The key map's dispatcher (P5), one file for both editors and the MM mockup (skins/shared/): every shortcut
    is a Keys.bind entry; the pages' own maps are mdDeskKeys.js and the MM mockup's 56-keys.js. */
@@ -107,10 +85,19 @@ const Keys = (() => {
 		}
 		return false;
 	}
+	/* B-023: the field a key belongs to, or null: a text field keeps every key; a focused value (role=slider: a knob, a
+	   fader, the tempo; a click on one focuses it) only the keys that move it, which its own handler takes. Every other
+	   key is the page's: ⌘Z after a drag on a value (or after its arrow keys) undoes, Space plays, ⌘C copies. */
+	const SLIDER_KEYS = new Set(["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight", "PageUp", "PageDown", "Home", "End"]);
+	function fieldOf(el, e) {
+		const text = el?.closest?.("input,select,textarea"); if (text) return text;
+		const slider = el?.closest?.("[role=slider]");
+		return slider && SLIDER_KEYS.has(norm(e)) ? slider : null;
+	}
 	let lastDown = null;	/* {k, at} of the last ⌘ keydown: an edit command right after it is the same press */
 	document.addEventListener("keydown", e => {
 		if (Modifiers.cmd(e)) lastDown = { k: norm(e), at: Date.now() };
-		dispatch(e, e.target.closest?.("input,select,textarea,[role=slider]"));
+		dispatch(e, fieldOf(e.target, e));
 	});
 	/* ⌘C, ⌘X and ⌘V may never come as keys (B-015). On macOS the web view the plug-in sits in (JUCE's
 	   WebBrowserComponent, juce_WebBrowserComponent_mac.mm, WebViewKeyEquivalentResponder) turns them into the edit
@@ -126,7 +113,7 @@ const Keys = (() => {
 		if (lastDown && lastDown.k === key.toUpperCase() && Date.now() - lastDown.at < 500) return;
 		const k = { key, code: "Key" + key.toUpperCase(), metaKey: Modifiers.mac, ctrlKey: !Modifiers.mac, altKey: false, shiftKey: false, target: a || document.body,
 			preventDefault: () => e.preventDefault() };
-		note(k); dispatch(k, a?.closest?.("[role=slider]"));
+		note(k); dispatch(k, fieldOf(a, k));
 	});
 	/* The key probe (the start tests, scripts/macos|windows|linux/smoke_mdmm.*): with ?keyprobe=1 in the page's
 	   address (the plug-in adds it when GEARMULATOR_MDMM_KEYPROBE=1) a line at the bottom left says which keys reached

@@ -43,7 +43,7 @@ function drawAudio(){const pop=$("#audiopop");if(!pop)return;if(!AP.open){pop.hi
    <div class="grow2"><span class="ilab">Latency</span><b class="mono">${D.latencyMs?D.latencyMs+" ms":"--"}</b></div></section>
   <section class="card amwide"><header><h3>MIDI</h3><span>inputs, output, Bluetooth</span></header>
    <div class="grow2 amtop"><span class="ilab">Inputs</span><span class="amins" title="${AMTIP.midiIn}">${(D.midiInputs||[]).map(m=>`<button class="amled" data-am="midiIn" data-id="${amEsc(m.id)}" aria-pressed="${!!m.on}"><i class="led${m.on?" on":""}"></i>${amEsc(m.name)}</button>`).join("")||`<span class="note">No MIDI inputs.</span>`}</span></div>
-   <div class="grow2"><span class="ilab">Output</span>${sel("midiOut",D.midiOutput?.id||"",D.midiOutput?.list||[],AMTIP.midiOut,"NONE")}${D.bluetooth?`<button class="amkey" data-am="bt" title="${AMTIP.bt}">BLUETOOTH MIDI…</button>`:""}</div></section>
+   <div class="grow2"><span class="ilab">Output</span>${sel("midiOut",D.midiOutput?.id||"",D.midiOutput?.list||[],AMTIP.midiOut,"NONE")}${D.bluetooth?`<button class="amkey" data-am="bt" title="${AMTIP.bt}">BLUETOOTH MIDI…</button>`:""}</div>${typeof openGlobal==="function"?`<div class="grow2"><span class="ilab"></span><button class="amlink" data-am="global" title="GLOBAL: the machine's own settings, kept in its memory">The machine's MIDI channel and sync are in GLOBAL</button></div>`:""}</section>
  </div>
  <div class="libfoot"><span>Also in the engine menu · Esc closes · a change applies at once and is kept</span><span class="fw">${amEsc(D.output?.id||"no output")}</span></div>`;
  if(typeof enhanceSelects==="function")enhanceSelects(pop);pop.hidden=false;placeAudio()}
@@ -53,6 +53,7 @@ function closeAudio(){if(!AP.open)return;AP.open=false;audioMeter(false);drawAud
 function audioLevel(v){AP.level=v;const l=document.getElementById("amlevel");if(l)l.style.width=Math.round(Math.min(1,Math.sqrt(Math.max(0,v)))*100)+"%"}
 function audioClick(a){const f=a.dataset.am;
  if(f==="close"){closeAudio();return}
+ if(f==="global"){closeAudio();openGlobal();return}
  if(f==="test"){audioSend({do:"test"});return}
  if(f==="bt"){audioSend({do:"bluetooth"});return}
  if(f==="mute"){audioSend({set:"mute",on:a.dataset.v==="1"});return}

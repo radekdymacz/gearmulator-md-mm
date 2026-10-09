@@ -45,7 +45,7 @@ const src = FILES.map(f => fs.readFileSync(path.join(__dirname, f), "utf8").repl
 const P = new Function("scope", "with (scope) {\n" + src + `
 ;let renders = 0;
 render = () => { renders++; }; syncControls = () => { }; renderTop = () => { }; renderSub = () => { }; redraw = () => { }; refreshAudible = () => { };
-return { S, Docs, Overlay, Held, PREP, scheduleRender, clickSteps, secAction, selStart, stepMenu, stepMenuItems, Modifiers, selCut, selDuplicate, clearSel, setSel, endSelect, interacting, genEnsure, genSpec, setGenSpec, clickTrackKeys, userMute, soloWrites, muteSel, msSet, prepToggle, unmuteAll, Keys,
+return { Boot, hostTempoRefused, l2step, playsText, songLcd, S, Docs, Overlay, Held, PREP, scheduleRender, clickSteps, secAction, selStart, stepMenu, stepMenuItems, Modifiers, selCut, selDuplicate, clearSel, setSel, endSelect, interacting, genEnsure, genSpec, setGenSpec, clickTrackKeys, userMute, soloWrites, muteSel, msSet, prepToggle, unmuteAll, Keys,
 	get V() { return V; }, setV(v) { V = v; }, view, get renders() { return renders; }, get pending() { return pendingRender; } }; }`)(scope);
 
 /* the machine document: its mutes (machine.desk.mutes) as the machine has them */
@@ -325,43 +325,19 @@ run(); { const before = P.renders; P.Held.begin("gv", {}); P.Held.end("gv"); run
 	fire("document", "pointermove", { buttons: 1, pointerType: "mouse", clientY: 300 - 1012 });
 	fire("document", "pointerup", {});
 	check(sent.filter(m => m.op === "selectSong").map(m => m.s).join() === "31", "dragging SONG far up stops at song 32 (no wrap), sent once: " + JSON.stringify(sent.map(m => [m.op, m.s])));
-	/* K4 (DESIGN-keymap.md): FN, the on-screen FUNCTION: the next click, drag or key gets ⌥; a latch keeps it; Esc drops it */
+	/* 0.3.5: the FN latch is gone (⌥, ⇧ and ⌘ are the modifiers); R and ⌥R still split track and all */
 	{
-		const keyEv = (key, code) => ({ key, code, altKey: false, metaKey: false, ctrlKey: false, shiftKey: false, repeat: false, target: { closest: () => null }, preventDefault() { }, stopImmediatePropagation() { } });
+		const keyEv = (key, code, altKey = false) => ({ key, code, altKey, metaKey: false, ctrlKey: false, shiftKey: false, repeat: false, target: { closest: () => null }, preventDefault() { }, stopPropagation() { }, stopImmediatePropagation() { } });
 		const press = e => { fire("window", "keydown", e); fire("document", "keydown", e); };
-		const ptrEv = () => ({ altKey: false, target: { closest: () => null }, preventDefault() { }, stopPropagation() { }, stopImmediatePropagation() { } });
 		const ran = [], all = P.Keys.byId("randomise-all"), one = P.Keys.byId("randomise-track"), runs = [all.run, one.run];
 		all.run = () => ran.push("all"); one.run = () => ran.push("track");
 		P.S.ws = "seq"; P.Overlay.clear(); P.setV(P.view()); run();
 		press(keyEv("r", "KeyR"));
-		check(ran.join() === "track", "without FN, R randomises the selected track");
-		ran.length = 0; P.Modifiers.setFn("once"); press(keyEv("r", "KeyR"));
-		check(ran.join() === "all", "FN then R randomises every track (⌥R)");
-		run();
-		check(P.Modifiers.fn === "off", "FN once is spent by the key");
-		ran.length = 0; press(keyEv("r", "KeyR"));
-		check(ran.join() === "track", "after it, R is the selected track's again");
+		check(ran.join() === "track", "R randomises the selected track");
+		ran.length = 0; press(keyEv("r", "KeyR", true));
+		check(ran.join() === "all", "⌥R randomises every track");
 		all.run = runs[0]; one.run = runs[1];
-		sent.length = 0; P.Modifiers.setFn("once"); press(keyEv("Delete", "Delete")); run();
-		check(sent.some(m => m.op === "clearPattern"), "FN then Delete clears the whole pattern (⌥Delete): " + sent.map(m => m.op).join());
-		P.Overlay.clear(); P.setV(P.view());
-		/* a drag: the press, the moves and the release all say ⌥ (Control All reads the press: mdDeskLive.js) */
-		P.Modifiers.setFn("once");
-		const down = ptrEv(), move = ptrEv(), up = ptrEv();
-		fire("window", "pointerdown", down); fire("window", "pointermove", move); fire("window", "pointerup", up);
-		check(down.altKey && move.altKey && up.altKey, "FN: the drag's press, moves and release say ⌥");
-		run();
-		check(P.Modifiers.fn === "off", "FN once is spent at the drag's end");
-		P.Modifiers.setFn("latch");
-		const c1 = ptrEv(); fire("window", "click", c1); run();
-		const c2 = ptrEv(); fire("window", "click", c2); run();
-		check(c1.altKey && c2.altKey && P.Modifiers.fn === "latch", "FN latched: every click says ⌥ until it is let go");
-		const fk = Object.assign(ptrEv(), { target: { closest: q => q === "[data-fnkey]" ? {} : null } }); fire("window", "click", fk);
-		check(!fk.altKey, "a click on the FN key itself is not given ⌥");
-		const esc = keyEv("Escape", "Escape"); fire("window", "keydown", esc);
-		check(P.Modifiers.fn === "off", "Esc drops FN");
-		const c3 = ptrEv(); fire("window", "click", c3);
-		check(!c3.altKey, "FN off: a click is a click");
+		check(P.Modifiers.fn === undefined && typeof P.Modifiers.setFn === "undefined", "no FN latch any more");
 	}
 	delete P.Docs.patterns[5]; delete P.Docs.kits[3]; P.Overlay.clear(); P.setV(P.view());
 }
@@ -370,6 +346,31 @@ run(); { const before = P.renders; P.Held.begin("gv", {}); P.Held.end("gv"); run
 P.S.soloSet = new Set([2]); P.S.userMutes = new Set([4]);
 bridgeListeners.forEach(f => { try { f({ type: "reset" }); } catch (_) { } });
 check(P.S.soloSet.size === 0 && P.S.userMutes.size === 0, "a reset clears the page's solos and its record of the user's mutes");
+
+/* ---- B-030: TEMPO while the DAW sets it: an edit is refused (drag, arrows and tap go through hostTempoRefused) ---- */
+P.setV(Object.assign({}, P.V, { hostTempo: true, bpm: 72 }));
+sent.length = 0;
+check(P.hostTempoRefused() === true && !sent.some(m => m.op === "tempo"), "the DAW's tempo: a tempo edit is refused, nothing is sent");
+P.setV(Object.assign({}, P.V, { hostTempo: false }));
+check(P.hostTempoRefused() === false, "the machine's own tempo: edits go through");
+/* ---- 0.3.5: LCD line 2's PLAY field switches the mode; the What plays line says the song row the machine plays ---- */
+P.setV(Object.assign({}, P.V, { songMode: false }));
+sent.length = 0; P.l2step("seqmode", 1);
+check(sent.some(m => m.op === "seqMode" && m.song === true), "PLAY PAT clicked: seqMode song (what is lit stays the machine's report)");
+P.Docs.machine = Object.assign({}, P.Docs.machine || {}, { songMode: true, song: { current: 0 }, desk: {} });
+P.Docs.telemetry = { type: "telemetry", step: 3, pattern: 17, playing: true, recording: false, valid: true, songRow: 1 };
+P.setV(Object.assign({}, P.V, { songMode: true, playing: true, songSlot: 0, song: [{ pat: 0, rep: 1 }, { pat: 17, rep: 2 }, { type: "end" }] }));
+check(P.playsText() === "SONG 01 · row 002 of 2 · B02", "the What plays line: " + P.playsText());
+P.Docs.telemetry = Object.assign({}, P.Docs.telemetry, { playing: false });
+P.setV(Object.assign({}, P.V, { playing: false }));
+check(P.playsText() === "SONG 01 · 2 rows · stopped", "stopped: no row is said (" + P.playsText() + ")");
+
+/* ---- B-035: the start-up card's word about the audio ---- */
+check(/not running audio/.test(P.Boot.audioWord({ plugin: true, seconds: 6, blocks: 0, realtime: null })), "a plug-in with no audio block after 5 s: the host is not running its audio");
+check(P.Boot.audioWord({ plugin: true, seconds: 3, blocks: 0, realtime: null }) === "" && P.Boot.audioWord({ plugin: false, seconds: 9, blocks: 0, realtime: null }) === "",
+	"not before 5 s, and not in the app");
+check(P.Boot.audioWord({ plugin: true, seconds: 9, blocks: 900, realtime: 0.6 }) === "The machine runs at 0.6× real time: try a larger buffer.", "slower than real time: says how slow");
+check(P.Boot.audioWord({ plugin: true, seconds: 9, blocks: 900, realtime: 1.0 }) === "", "in real time: nothing to say");
 
 console.log(failures ? `${failures} failure(s)` : "mdDeskPageTest: all passed");
 process.exit(failures ? 1 : 0);

@@ -326,5 +326,38 @@ img,svg,canvas{-webkit-user-drag:none}
 /* K2 (DESIGN-keymap.md): the LCD's COPY CLR PASTE while they act on the selected steps: underlined, as the
    selection is outlined (mdDeskComforts.js secLabels) */
 .lcdsec button.onsel{opacity:1;text-decoration:underline;text-underline-offset:2px}
-/* K4: the FN key while it is on (once: lit; latched: outlined too) */
-.skey.fnkey.latch{outline:2px solid var(--cream);outline-offset:-3px}
+/* 0.3.5, the Song page's left column by hierarchy (mdDeskSong.js): (a) What plays: the PATTERN | SONG switch, big,
+   and one live line from the machine; (b) the song; (c) the palette; (d) the selected row. The mode is lit by what
+   the machine reports; the arrangement is framed in red while the song plays, and looks as ever otherwise */
+.whatplays .modebig .seg{display:grid;grid-template-columns:1fr 1fr;gap:6px;width:100%}
+.whatplays .modebig .seg button{justify-content:center;padding:10px 6px;font:600 14px var(--sans);letter-spacing:.14em;border-radius:4px;box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--print) 35%,transparent)}
+.whatplays .modebig .seg button::before{width:10px;height:10px}
+.whatplays .modebig .seg button[aria-pressed=true]{box-shadow:inset 0 0 0 2px var(--led),0 0 10px -2px var(--led)}
+.whatplays .playsline{display:flex;min-width:0}
+.whatplays .playsline .playschip{flex:1;min-width:0;margin:0;overflow:hidden;text-overflow:ellipsis;font:13px var(--pix);padding:7px 10px}
+.whatplays.song .playsline .playschip{box-shadow:inset 0 0 0 2px var(--led)}
+.songslot header{flex-wrap:wrap;align-items:center}
+.songslot .stepper .lcdchip{min-width:72px;text-align:center}
+.arrcard .arrstate{font:11px var(--pix);text-transform:uppercase;letter-spacing:.06em;display:inline-flex;align-items:center;gap:6px;white-space:nowrap}
+.arrcard .arrstate:empty{display:none}
+.songplaying .arrcard .arrstate::before{content:"";width:8px;height:8px;border-radius:50%;background:var(--led);box-shadow:0 0 6px 1px var(--led)}
+.songplaying .arrcard .arrstate{color:var(--print)}
+/* the red frame only while the song really plays; pattern mode looks as ever (songs are edited while patterns play) */
+.songplaying .arrcard .slotgrid{box-shadow:0 0 0 2px var(--led),0 0 14px -2px color-mix(in srgb,var(--led) 60%,transparent)}
+/* the song playhead: the row the machine plays (telemetry songRow), the soft playhead's language (#phcol) */
+.slotgrid .scell.ph{z-index:1;outline:2px solid var(--led);outline-offset:1px;box-shadow:0 0 0 4px color-mix(in srgb,var(--led) 35%,transparent),0 0 14px color-mix(in srgb,var(--led) 55%,transparent)}
+.slotgrid .scell.ph b{text-decoration:underline;text-underline-offset:2px}
+/* the time bar in SONG mode: the rows played up to the one that plays now lit in the LED's red (the playing colour),
+   the rest unlit */
+.songmode .durbar .db{background:color-mix(in srgb,var(--ink) 22%,transparent);opacity:1}
+.songmode .durbar .db.past,.songmode .durbar .db.now{background:var(--led)}
+.songmode .durbar .db.now{box-shadow:0 0 6px var(--led)}
+.songmode .durbar .db.sel:not(.past):not(.now){background:color-mix(in srgb,var(--ink) 45%,transparent)}
+/* the LCD's pattern slot reads SONG 01 · 017 in SONG mode: one width in both modes (the arrows keep their place,
+   unseen), so the LCD and line 2 never move when PLAY switches */
+.lcdpanel .patf #pat{width:6.4ch}
+.patf.songlcd .lcdbtn{visibility:hidden}
+.l2[data-l2="seqmode"] b{display:inline-block;width:4ch;text-align:left}
+/* B-030: TEMPO is the DAW's (the machine follows the host): marked, not editable here */
+.f.hosttempo #bpm{cursor:not-allowed}
+.f.hosttempo small::after{content:"DAW";margin-left:5px;padding:0 3px;border-radius:2px;background:var(--ink);color:var(--lcd);font:8px var(--pix);vertical-align:1px}

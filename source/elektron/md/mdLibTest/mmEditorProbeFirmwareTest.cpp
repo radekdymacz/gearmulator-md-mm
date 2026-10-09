@@ -26,6 +26,7 @@
 #include "mdFirmwareSession.h"
 #include "sysexPanelDriver.h"
 
+#include "elektronData/mmCommands.h"
 #include "elektronData/mmGlobal.h"
 #include "elektronData/mmKit.h"
 #include "elektronData/mmMachines.h"
@@ -35,6 +36,7 @@
 #include "elektronData/sysex7bit.h"
 
 #include "mdLib/mdautomation.h"
+#include "mdLib/mmtelemetry.h"
 
 #include <algorithm>
 #include <cmath>
@@ -1101,6 +1103,18 @@ namespace
 					std::printf("  [%s%d%s] %s\n", op == "gsnap" ? "G" : "S", s2, label.c_str(), diffText(last, now, 64).c_str());
 				last = now;
 			}
+			else if(op == "panel")
+			{
+				// panel <row hex> <mask hex> [hold]: a raw panel key press, for keys md::PanelControl has no name for
+				std::string r, k;
+				double hold = 30;
+				ls >> r >> k >> hold;
+				const auto row = static_cast<uint8_t>(std::stoul(r, nullptr, 16)), mask = static_cast<uint8_t>(std::stoul(k, nullptr, 16));
+				m->hardware().trySendPanelEvent(row, mask);
+				m->run(hold);
+				m->hardware().trySendPanelEvent(row, 0);
+				m->run(60);
+			}
 			else if(op == "save")
 			{
 				std::string f;
@@ -1730,6 +1744,126 @@ namespace
 		std::printf("\n");
 	}
 
+	// 0.3.5 song playhead: which RAM byte holds the song row the machine plays? A song A02, A03 x2, A04, LOOP to
+	// row 1 (infinite), END in slot 6; sampled at step 3 of every pass (length 8). A candidate equals a * row + b.
+	void songRowMode(const Bytes& _rom)
+	{
+		std::puts("== MM song row probe");
+		auto m = boot(_rom);
+		auto base = *ed::decodeMmPattern(patternDump(*m, 0));
+		recvMacro(*m, 20, 20);	// dumps reach the MM only on SYSEX RECV
+		m->run(200);
+		for(uint8_t s = 1; s < 5; ++s)
+		{
+			auto p = base;
+			p.position = s;
+			p.length = 8;
+			m->send(ed::encodeMmPattern(p));
+			m->run(150);
+		}
+		ed::MmSong song;
+		song.position = 5;
+		const auto row = [&](const size_t _i, const uint8_t _pattern, const uint8_t _repeats, const uint8_t _target = 0)
+		{
+			auto& r = song.rows[_i].bytes;
+			r.fill(0);
+			r[ed::mmSongRow::g_pattern] = _pattern;
+			r[ed::mmSongRow::g_repeats] = _repeats;
+			r[ed::mmSongRow::g_target] = _target;
+			r[ed::mmSongRow::g_length] = 8;
+			r[ed::mmSongRow::g_tempo] = 0xff;
+			r[ed::mmSongRow::g_tempo + 1] = 0xff;
+		};
+		for(size_t i = 0; i < song.rows.size(); ++i)
+			row(i, ed::MmSong::g_end, 0);
+		song.name.fill(0);
+		row(0, 1, 0); row(1, 2, 1); row(2, 3, 0); row(3, 4, 0); row(4, ed::MmSong::g_loop, 0, 2);
+		m->send(ed::encodeMmSong(song));
+		m->run(300);
+		for(int i = 0; i < 8; ++i) key(*m, md::PanelControl::Exit, 20, 20);
+		m->run(200);
+		{
+			const auto back = ed::decodeMmSong(dump(*m, 0x69, 5));
+			std::printf("  song 6 read back: rows %d %d %d %d\n", back ? back->rows[0].bytes[0] : -1, back ? back->rows[1].bytes[0] : -1,
+				back ? back->rows[2].bytes[0] : -1, back ? back->rows[3].bytes[0] : -1);
+		}
+		m->send(ed::mmLoadSong(5));
+		m->run(300);
+		m->send(ed::mmSetStatus(ed::MmStatus::SongMode, 1));
+		m->run(300);
+		std::printf("  song mode %d, song %d\n", status(*m, 0x10), status(*m, 0x08));
+		const auto stopped = chainSnapshot(*m);
+		key(*m, md::PanelControl::Play, 60, 100);
+		for(int i = 0; i < 8; ++i)
+		{
+			m->run(150);
+			std::printf("  step %d running %d\n", m->read8(md::MmTelemetry::g_stepAddress), m->read8(md::MmTelemetry::g_runningAddress));
+		}
+		std::vector<Bytes> snaps;
+		std::vector<int> rows;
+		int last = m->read8(md::MmTelemetry::g_stepAddress);
+		for(double t = 0; t < 30000 && snaps.size() < 14; t += 5)
+		{
+			m->run(5);
+			const int s = m->read8(md::MmTelemetry::g_stepAddress);
+			if(s == 3 && last != 3)
+			{
+				snaps.push_back(chainSnapshot(*m));
+				const int pat = status(*m, 0x04);
+				rows.push_back(pat - 1);
+				std::printf(" %d", pat);
+			}
+			last = s;
+		}
+		std::printf("  <- pattern at each pass (1 2 2 3 2 2 3 ...)\n");
+		require(!snaps.empty(), "the song did not play");
+		for(const int a : {1, 2, 4, 24})
+		{
+			std::printf("  value = %d * row + b:", a);
+			int n = 0;
+			for(size_t i = 0; i < snaps[0].size(); ++i)
+			{
+				const int b = int(snaps[0][i]) - a * rows[0];
+				bool all = true, moves = false;
+				for(size_t k = 0; k < snaps.size() && all; ++k)
+				{
+					all = ((int(snaps[k][i]) - a * rows[k] - b) & 0xff) == 0;
+					moves = moves || snaps[k][i] != snaps[0][i];
+				}
+				if(all && moves && n++ < 30)
+					std::printf(" %06x(b=%d,stopped %02x)", addrOf(i), b, stopped[i]);
+			}
+			std::printf(" (%d)\n", n);
+		}
+		for(const uint32_t a : {0x26b93bu, 0x2bdba1u, 0x2bda2du, 0x716ae3u})
+		{
+			std::printf("    %06x:", a);
+			for(const auto& sn : snaps)
+			{
+				for(size_t i = 0; i < sn.size(); ++i)
+					if(addrOf(i) == a) { std::printf(" %02x", sn[i]); break; }
+			}
+			std::printf("\n");
+		}
+		tap(*m, md::PanelControl::Stop);
+		m->run(200);
+		const auto after = chainSnapshot(*m);
+		std::printf("  after STOP:");
+		for(size_t i = 0; i < after.size(); ++i)
+		{
+			const int b = int(snaps[0][i]) - rows[0];
+			bool all = true, moves = false;
+			for(size_t k = 0; k < snaps.size() && all; ++k)
+			{
+				all = ((int(snaps[k][i]) - rows[k] - b) & 0xff) == 0;
+				moves = moves || snaps[k][i] != snaps[0][i];
+			}
+			if(all && moves)
+				std::printf(" %06x=%02x", addrOf(i), after[i]);
+		}
+		std::printf("\n");
+	}
+
 	void chainMode(const Bytes& _rom, const std::string& _region)
 	{
 		std::puts("== MM chain probe");
@@ -2021,6 +2155,7 @@ int main(const int _argc, char** _argv)
 		else if(mode == "statebytes") stateBytesMode(rom);
 		else if(mode == "recvflag2") recvFlag2Mode(rom);
 		else if(mode == "chain") chainMode(rom, dir);
+		else if(mode == "songrow") songRowMode(rom);
 		else if(mode == "enums")
 		{
 			require(_argc >= 7, "enums <outdir> <machine> <page> <param>...");

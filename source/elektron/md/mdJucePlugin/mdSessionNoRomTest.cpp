@@ -156,6 +156,19 @@ int main(const int _argc, char** const _argv)
 	auto processor = std::make_unique<mdJucePlugin::AudioPluginAudioProcessor>(model, config, false);
 	juce::AudioProcessor& ap = *processor;
 	ap.prepareToPlay(44100.0, 128);
+	// B-030: a DAW whose transport is stopped at 72 BPM (its playhead reports the tempo then too)
+	struct StoppedHost : juce::AudioPlayHead
+	{
+		juce::Optional<PositionInfo> getPosition() const override
+		{
+			PositionInfo p;
+			p.setBpm(72.0);
+			p.setIsPlaying(false);
+			p.setPpqPosition(0.0);
+			return p;
+		}
+	} host;
+	ap.setPlayHead(&host);
 	std::atomic<bool> run{true};
 	std::thread audio([&]
 	{
@@ -205,6 +218,44 @@ int main(const int _argc, char** const _argv)
 		pump(100);
 	check(stand(), "no ROM: the processor runs the silent stand-in (no exception, so no alert)");
 	check(lifecycleOf(published) == "missing", "the page is told the ROM is missing (lifecycle '" + lifecycleOf(published) + "'), not left loading");
+	// B-030: the host's tempo reaches the page while the host is stopped (the LCD's TEMPO shows it)
+	{
+		double bpm = -1;
+		for(int i = 0; i < 20 && bpm < 0; ++i)
+		{
+			for(const auto& m : published)
+				if(str(m, "type") == "host")
+					if(const auto* b = m.find("bpm"); b && b->isNumber())
+						bpm = b->asNumber();
+			if(bpm < 0)
+				pump(100);
+		}
+		check(bpm == 72.0, "the host's tempo is published to the page while its transport is stopped (" + std::to_string(bpm) + ")");
+	}
+	// B-035: the host's audio calls reach the page (the start-up card) and the start-up log's line
+	{
+		double blocks = -1;
+		for(int i = 0; i < 30 && blocks <= 0; ++i)
+		{
+			for(const auto& m : published)
+				if(str(m, "type") == "audioRun")
+					if(const auto* b = m.find("blocks"); b && b->isNumber())
+						blocks = b->asNumber();
+			if(blocks <= 0)
+				pump(100);
+		}
+		check(blocks > 0, "the page is told the host runs the audio (audioRun, " + std::to_string(blocks) + " blocks)");
+		const auto& boot = processor->bootDiagnostics();
+		const auto line = mdJucePlugin::bootLine(boot.last(), boot.rate());
+		std::printf("  %s\n", line.c_str());
+		check(line.rfind("boot t=", 0) == 0 && line.find(" blocks=") != std::string::npos && line.find(" rom=none") != std::string::npos,
+			"the start-up log's line says the blocks and that there is no ROM");
+		mdJucePlugin::BootSample a, b;
+		a.wallMs = 1000; a.blocks = 10; a.cycles = 0;
+		b.wallMs = 2000; b.blocks = 182; b.cycles = md::g_ucClockHz / 2;
+		const auto r = mdJucePlugin::BootRate::between(a, b);
+		check(r.known && r.blocksPerSecond == 172 && r.realtime == 0.5, "a second's rates: 172 blocks, the machine at 0.5x real time");
+	}
 
 	// The project the app was opened with is kept while there is no ROM (saving must not overwrite it
 	// with the stand-in's empty state) and nothing is saved when there was none.
