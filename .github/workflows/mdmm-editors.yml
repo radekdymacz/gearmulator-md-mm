@@ -3,7 +3,7 @@ name: MD/MM Editors
 # The one build-and-test of a push (doc/modern-ux/FOUNDATION.md, "Build and check" and "CI start tests"): each
 # system is built once, with a compiler cache, and the start tests and pluginval run on exactly what was built:
 #   mdmm-editors-macos.yml    universal package (macos-15) -> start test + auval + pluginval on macos-14 and -15
-#   mdmm-editors-windows.yml  x64 package (LTCG) -> start test + pluginval; unit tests in parallel (no /GL)
+#   mdmm-editors-windows.yml  x64 package (LTCG only for a release) -> start test + pluginval; unit tests in parallel (no /GL)
 #   mdmm-editors-linux.yml    x64 archives (22.04, unit tests) -> start test + pluginval on 22.04 and 24.04
 # The packages stay as this run's artifacts (macos-mdmm-universal, windows-mdmm, linux-mdmm, 14 days). A tag's
 # release (mdmm-editors-release.yml) takes them from the successful run of the tag's commit instead of building
@@ -14,7 +14,17 @@ name: MD/MM Editors
 
 on:
   workflow_call:
+    inputs:
+      ltcg:
+        description: Windows with whole-program optimisation (/GL, /LTCG), for a release
+        type: boolean
+        default: false
   workflow_dispatch:
+    inputs:
+      ltcg:
+        description: Windows with whole-program optimisation (/GL, /LTCG)
+        type: boolean
+        default: false
   push:
     branches:
       - main
@@ -76,6 +86,8 @@ jobs:
 
   windows:
     uses: ./.github/workflows/mdmm-editors-windows.yml
+    with:
+      ltcg: ${{ inputs.ltcg || false }}
 
   linux:
     uses: ./.github/workflows/mdmm-editors-linux.yml

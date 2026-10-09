@@ -3,6 +3,22 @@
 *Feature ideas from beta testers and users (Discord, email). Not bugs: see
 [BUGS.md](BUGS.md). Newest first. Each entry: who and when, the idea, status.*
 
+## I-011 · A song library pop-up instead of stepping the SONG field
+
+- **From:** Radek, 2026-10-09: the LCD's SONG nn field steps through songs (click, drag, scroll). It should open a pop-up like the kit library instead: all songs with names, and load, copy, paste, clear and save from one place.
+- **Scope:** both editors (MD 32 songs, MM 24). Same layout and keys as the kit library.
+- **Status:** planned, after 0.3.5.
+
+## I-010 · Monomachine: note length like Ableton/Digitakt
+
+- **From:** Discord tester C, 2026-10-08: dropping notes in the MM piano roll, a note runs until the next one; wants explicit trig/note length (place 1/16, then 1/8 notes as in Ableton).
+- **Status:** new.
+
+## I-009 · Option to turn off the "kit has unsaved edits" warning on pattern change
+
+- **From:** Discord tester C, 2026-10-08 (mostly the Machinedrum, maybe the Monomachine too).
+- **Status:** new.
+
 ## I-008 · The editor menu in the editor's own style (next, after 0.3.4)
 
 - **From:** Radek, 2026-10-08.

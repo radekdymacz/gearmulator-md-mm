@@ -4,6 +4,33 @@
 repository; the site sends reports to the contact address. Newest first. Each entry:
 where it came from, the setup, what happens, what should happen, status.*
 
+## B-038 · Monomachine: a song's LOOP row goes back to row 1
+
+- **From:** found by the song playhead's firmware test, 2026-10-09 (0.3.5 work).
+- **What happens:** in a song written by the Monomachine Editor, a LOOP row goes back to row 1 instead of the row it names, and the row before the LOOP is skipped. The machine plays it so; the playhead shows it.
+- **To check:** where the MM song row stores the loop target (inferred in MM-P1, never probed); probe it on the firmware as the Machinedrum's was. Noted in mm-data-contract.md.
+- **Status:** open, for 0.3.6.
+
+## B-037 · Windows: MIDI in/out don't work in the standalone
+
+- **From:** Discord tester D, 2026-10-09, Windows 10, i9, 32 GB, 0.3.4: "MIDI ins/outs don't work, or I didn't figure out how to make them work".
+- **To check:** whether the AUDIO / MIDI panel lists Windows MIDI devices (WinMM vs WinRT), enabling an input, the editor's own use of the port, a short how-to in the guide.
+- **Status:** open.
+
+## B-036 · Windows: Monomachine standalone crackles and the page lags at 8 % CPU
+
+- **From:** Discord tester D, 2026-10-09, Windows 10, i9, 32 GB, 0.3.4. The Machinedrum standalone runs fine on the same machine.
+- **What happens:** heavy crackle and a slow page while Task Manager shows only 8 % CPU.
+- **To check:** low CPU with drop-outs points to waiting, not computing: audio device/buffer/sample rate (WASAPI shared, 44.1 vs 48 kHz resampling), the MM's stream or page repaint holding the plug-in lock, timer resolution; compare with the MD path.
+- **Status:** open.
+
+## B-035 · Windows 10: both VST3s freeze at the boot screen in Ableton
+
+- **From:** Discord tester D, 2026-10-09, Windows 10, i9, 32 GB, Ableton Live, 0.3.4.
+- **What happens:** Ableton finds both VST3s; each freezes on the "loading OS" boot screen. The MD standalone works on the same machine.
+- **To check:** the firmware boot in a hosted plug-in on Windows (ROM path, data root, first-boot cache write, message-thread waits while the host holds its lock), WebView2 in Ableton's process; 0.3.5's start-up log (B-022) should show where it stops. Related: B-022, B-029.
+- **Status:** open.
+
 ## B-034 · A glitch when the app closes and at every DAW state save (Machinedrum)
 
 - **From:** Radek, 2026-10-09; cause found by a read-only check and measured.
