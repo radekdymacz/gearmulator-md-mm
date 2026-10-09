@@ -1422,14 +1422,16 @@ namespace md
 							maxCycles = static_cast<uint32_t>(std::min<uint64_t>(maxCycles,
 								m_sysexIngressNextCycle - m_schedUcCyclesDone));
 						const auto limit = m_uc.idleSelfBranchInstructions(maxCycles);
-						uint32_t instructions = 0;
-						// Keep external input polling at each omitted instruction
-						// boundary; a producer still wakes the ordinary path.
-						for(; instructions < limit; ++instructions)
-							if(m_panelIn.hasPending() || (!m_midiIn.empty() && !sysexWaits) || !m_midiClockBypass.empty()
-								|| m_realtimeMidiIn.size() != 0
-								|| m_midiSysexTransfer.ownsMidiWire())
-								break;
+						// The external inputs are tested once for the whole batch, not at each
+						// omitted instruction: Plugin::process holds the device lock for the whole
+						// call and the panel and SysEx producers take the same lock, so none of
+						// them can change while this batch runs. A producer that arrives later
+						// wakes the ordinary path at the next probe. A future lock-free producer
+						// would wait at most one batch (about 110 microseconds of machine time).
+						const bool inputPending = m_panelIn.hasPending() || (!m_midiIn.empty() && !sysexWaits)
+							|| !m_midiClockBypass.empty() || m_realtimeMidiIn.size() != 0
+							|| m_midiSysexTransfer.ownsMidiWire();
+						const uint32_t instructions = inputPending ? 0 : limit;
 						if(instructions)
 						{
 							MD_TRANSPORT_RECORD(m_transportScorecard.idleSelfBranchInstructions
