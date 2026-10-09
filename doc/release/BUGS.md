@@ -4,6 +4,42 @@
 repository; the site sends reports to the contact address. Newest first. Each entry:
 where it came from, the setup, what happens, what should happen, status.*
 
+## B-033 · Linux: blank window, no editor page
+
+- **From:** Discord tester, 2026-10-08, Linux (distribution not given), 0.3.4.
+- **What happens:** the editor window stays blank; nothing works.
+- **To check:** WebKitGTK version/packages on the tester's system, the start-up log, the file-based bridge (LINUX.md); CI's Ubuntu 22.04/24.04 start tests pass.
+- **Status:** open.
+
+## B-032 · Old AU plug-ins still show next to the new ones (macOS)
+
+- **From:** Discord tester, 2026-10-08, M1 Pro, Ableton Live: "Monomachine Editor appears twice: one runs the old emulator (AU), one the editor (VST3)"; same for the Machinedrum.
+- **To check:** whether these are our own 0.2.x/0.3.x AUs (old bundle id local.gearmulator.preview.*) that the 0.3.2 clean-up missed, or upstream Gearmulator's; tell users which to remove; extend the clean-up if they are ours.
+- **Status:** open.
+
+## B-031 · After a SysEx import the pattern can't be changed (0.3.4)
+
+- **From:** Discord tester A, 2026-10-08, 0.3.4: after importing patterns by SysEx, patterns get stuck; the next pattern can't be selected.
+- **Likely:** 0.3.4's import read-back flood (B-020) leaving pushes pending; 0.3.5's new import should fix it — verify pattern select after an import.
+- **Status:** open, check in 0.3.5.
+
+## B-030 · Tempo doesn't follow the DAW
+
+- **From:** Discord tester A, 2026-10-08: tempo stays on the machine's internal BPM although the plug-in is set to follow the host.
+- **Status:** open.
+
+## B-029 · Windows: closing and reopening the plug-in window leaves it blank
+
+- **From:** Discord tester, 2026-10-08, Windows 11, Ableton Live 12, Machinedrum VST3: the window opens fine the first time; after closing and reopening it, everything in it has gone and the plug-in has to be reloaded. Also: 65 % CPU at 44.1 kHz; audible glitches at 48 kHz and above (CPU research, see B-005).
+- **To check:** WebView2 controller/environment teardown and re-creation when the editor is destroyed and created again (mdWebView2Page); the start-up log (0.3.5).
+- **Status:** open.
+
+## B-028 · Glitches while p-locking still there in 0.3.4 (one tester)
+
+- **From:** Discord tester A, 2026-10-08, M1, macOS 12, 0.3.4: "Glitch while P-locking still there, no improvement".
+- **To check:** this tester's Mac is already at 65-70 % CPU with upstream Gearmulator; the B-014 stream cut the extra work 5-7×, but the emulation's own load may leave no headroom on an M1; check the buffer size, whether the page graphics (still heavy for fast gestures) is the remaining cost, and measure with the rt-check on an M1-like budget.
+- **Status:** open (related: B-014, CPU research).
+
 ## B-027 · Monomachine: a machine change reverts when going back to Sequence
 
 - **From:** Discord tester, 2026-10-09, Monomachine Editor 0.3.4.

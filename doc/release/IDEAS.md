@@ -3,6 +3,16 @@
 *Feature ideas from beta testers and users (Discord, email). Not bugs: see
 [BUGS.md](BUGS.md). Newest first. Each entry: who and when, the idea, status.*
 
+## I-010 · Monomachine: note length like Ableton/Digitakt
+
+- **From:** Discord tester C, 2026-10-08: dropping notes in the MM piano roll, a note runs until the next one; wants explicit trig/note length (place 1/16, then 1/8 notes as in Ableton).
+- **Status:** new.
+
+## I-009 · Option to turn off the "kit has unsaved edits" warning on pattern change
+
+- **From:** Discord tester C, 2026-10-08 (mostly the Machinedrum, maybe the Monomachine too).
+- **Status:** new.
+
 ## I-008 · The editor menu in the editor's own style (next, after 0.3.4)
 
 - **From:** Radek, 2026-10-08.
