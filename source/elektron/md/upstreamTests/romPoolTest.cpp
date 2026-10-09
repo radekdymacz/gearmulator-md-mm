@@ -20,12 +20,14 @@
 #ifdef _WIN32
 #	include <direct.h>
 #else
+#	include <sys/stat.h>
 #	include <unistd.h>
 #endif
 
 namespace
 {
 	int g_failures = 0;
+	std::string g_lastWarning;	// the pool's last warning or error, as logged
 
 	void check(const bool _ok, const std::string& _what)
 	{
@@ -123,8 +125,10 @@ int main()
 	// Keep the output to the checks: only warnings and errors from the pool
 	networkLib::setLogFunc([](const networkLib::LogLevel _level, const char*, int, const std::string& _message)
 	{
-		if(_level >= networkLib::LogLevel::Warning)
-			std::cout << "     log: " << _message << '\n';
+		if(_level < networkLib::LogLevel::Warning)
+			return;
+		g_lastWarning = _message;
+		std::cout << "     log: " << _message << '\n';
 	});
 
 	const auto root = makeTempDir();
@@ -188,6 +192,51 @@ int main()
 		bridgeServer::RomPool reloaded(config);
 		check(reloaded.getRom(hash) == rom && reloaded.getRom(baseLib::MD5(largest)) == largest, "a new pool loads the cached ROMs from the folder");
 		check(reloaded.getRom(baseLib::MD5(oversized)).empty(), "and skips a file over g_maxRomSize");
+	}
+
+	// A valid ROM whose cache file cannot be written is kept in memory: the client is not asked for it again at every
+	// connection (codex review r2, S8). In a folder of its own: these leave files that are not named after their content.
+	{
+		const auto keepPath = root + "keep/";
+		std::vector<std::string> keepArgs = {"bridgeServerRomPoolTest", "-config", root + "none.cfg",
+			"-pluginsPath", pluginsPath, "-romsPath", keepPath};
+		std::vector<char*> keepArgv;
+		for(auto& arg : keepArgs)
+			keepArgv.push_back(arg.data());
+		bridgeServer::Config config(static_cast<int>(keepArgv.size()), keepArgv.data());
+		baseLib::filesystem::createDirectory(keepPath);
+		bridgeServer::RomPool pool(config);
+
+		// A file of that name is there already, and it is not this ROM: the exclusive write fails
+		const auto rom = makeRom(3000, 21);
+		const baseLib::MD5 hash(rom);
+		const auto planted = keepPath + hash.toString() + ".bin";
+		baseLib::filesystem::writeFile(planted, makeRom(100, 99));
+		pool.addRom("taken", rom);
+		check(pool.getRom(hash) == rom, "a ROM whose cache file name is taken is kept in memory and served");
+		std::vector<uint8_t> onDisk;
+		check(baseLib::filesystem::readFile(onDisk, planted) && onDisk == makeRom(100, 99), "and the file that was there is not replaced");
+
+		// The client's name reaches the log only as letters, digits and ._-, at most 48 of them
+		pool.addRom(std::string("evil\n\x1b[31m/..\0x", 15) + std::string(60, 'a'), {});
+		check(g_lastWarning.find("ROM evil???31m?..?x" + std::string(33, 'a') + "...:") != std::string::npos,
+			"a name with a line end, an escape, a separator or a NUL is logged sanitised and cut at 48 characters");
+
+#ifndef _WIN32
+		// The folder cannot be written (a full disk behaves the same: the write fails)
+		if(geteuid() != 0 && chmod(keepPath.c_str(), 0555) == 0)
+		{
+			const auto unwritable = makeRom(5000, 23);
+			pool.addRom("unwritable", unwritable);
+			check(pool.getRom(baseLib::MD5(unwritable)) == unwritable, "a ROM that cannot be written is kept in memory and served");
+			check(listNames(keepPath).size() == 1, "and nothing was written");
+			chmod(keepPath.c_str(), 0755);
+		}
+		else
+		{
+			std::cout << "     (root, or no chmod: the unwritable folder case is skipped)\n";
+		}
+#endif
 	}
 
 	removeDir(root);

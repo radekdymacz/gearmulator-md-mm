@@ -18,7 +18,7 @@ namespace bridgeServer
 
 	// The largest ROM the pool holds, on disk (findRoms) and from a client (addRom). A peer decides what it
 	// sends, so the pool needs a bound of its own.
-	static constexpr size_t g_maxRomSize = 16 * 1024 * 1024;
+	inline constexpr size_t g_maxRomSize = 16 * 1024 * 1024;
 
 	class RomPool
 	{
