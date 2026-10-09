@@ -206,8 +206,15 @@ int main()
 	{
 		mdJucePlugin::NoticeBook book;
 		std::vector<std::string> ran;
-		const int a = book.add(2, [&](const int _b) { ran.push_back("a" + std::to_string(_b)); });
-		const int b = book.add(0, [&](const int _b) { ran.push_back("b" + std::to_string(_b)); });
+		const auto keys = [](const size_t _count)
+		{
+			mdJucePlugin::NoticeShown shown{"title", "text", {}, true};
+			for(size_t i = 0; i < _count; ++i)
+				shown.buttons.push_back("key " + std::to_string(i));
+			return shown;
+		};
+		const int a = book.add(keys(2), [&](const int _b) { ran.push_back("a" + std::to_string(_b)); });
+		const int b = book.add(keys(0), [&](const int _b) { ran.push_back("b" + std::to_string(_b)); });
 		check(a == 1 && b == 2 && book.size() == 2, "notices are numbered from 1 in the order they come");
 		check(book.answer(99, 0) == "notice 99 is not waiting for an answer" && ran.empty(), "an unknown notice: refused, nothing runs");
 		check(book.answer(a, 2) == "notice 1 has no button 2" && book.answer(a, -1) == "notice 1 has no button -1" && ran.empty() && book.waiting(a),
@@ -217,18 +224,42 @@ int main()
 		check(book.answer(b, 0).empty() && ran.back() == "b0" && book.answer(b, 1) == "notice 2 is not waiting for an answer",
 			"a notice without buttons is the page's OK: button 0, once");
 		// the update banner: a newer one replaces it, the old one's answer is not wanted
-		int banner = book.add(3, [&](const int _b) { ran.push_back("old" + std::to_string(_b)); });
+		int banner = book.add(keys(3), [&](const int _b) { ran.push_back("old" + std::to_string(_b)); });
 		book.forget(banner);
-		banner = book.add(1, [&](const int _b) { ran.push_back("new" + std::to_string(_b)); });
+		banner = book.add(keys(1), [&](const int _b) { ran.push_back("new" + std::to_string(_b)); });
 		check(book.answer(banner - 1, 0) == "notice " + std::to_string(banner - 1) + " is not waiting for an answer" && ran.back() == "b0",
 			"a replaced banner is forgotten: its answer runs nothing");
 		check(book.answer(banner, 0).empty() && ran.back() == "new0", "the banner shown takes its answer");
 		// a callback may add the next notice (the banner's next state) while it runs
 		int next = 0;
-		const int c = book.add(1, [&](const int) { next = book.add(1, {}); });
+		const int c = book.add(keys(1), [&](const int) { next = book.add(keys(1), {}); });
 		check(book.answer(c, 0).empty() && next == c + 1 && book.waiting(next) && book.answer(next, 0).empty(),
 			"a callback that adds a notice: the new one waits; one without a callback takes its answer");
 		check(book.size() == 0, "nothing left waiting");
+	}
+	// a page that started again (Linux: WebPageHost's restart, codex review r2, S7) has lost the notices it showed: those
+	// still waiting are shown again as they were, by their numbers, so the answer still runs the callback; the banner
+	// is forgotten (a new one is made) and an answered question is not shown again
+	{
+		mdJucePlugin::NoticeBook book;
+		std::vector<std::string> ran;
+		const mdJucePlugin::NoticeShown first{"Save changes?", "The kit was changed.", {"Save", "Discard", "Cancel"}, true};
+		const mdJucePlugin::NoticeShown second{"No ROM", "Choose the firmware.", {}, true};
+		const mdJucePlugin::NoticeShown banner{"Update", "0.3.9 is out.", {"Update", "Later"}, false};
+		const int a = book.add(first, [&](const int _b) { ran.push_back("a" + std::to_string(_b)); });
+		const int b = book.add(second, [&](const int _b) { ran.push_back("b" + std::to_string(_b)); });
+		const int c = book.add(banner, [&](const int _b) { ran.push_back("banner" + std::to_string(_b)); });
+		const auto firstSent = json::write(mdJucePlugin::noticeMessage(a, first));
+		check(firstSent == R"({"type":"notice","id":1,"title":"Save changes?","text":"The kit was changed.","buttons":["Save","Discard","Cancel"]})"
+			&& json::write(mdJucePlugin::noticeMessage(c, banner)).find(R"("modal":false)") != std::string::npos,
+			"notice messages: a question as before, the banner with modal false");
+		check(book.answer(b, 0).empty() && ran == std::vector<std::string>{"b0"}, "restart: one question was answered before");
+		// the restart: the banner is forgotten, the rest is shown again
+		book.forget(c);
+		const auto again = book.waitingNotices();
+		check(again.size() == 1 && again[0].first == a && json::write(mdJucePlugin::noticeMessage(again[0].first, again[0].second)) == firstSent,
+			"restart: the question still waiting is shown again, the same message and number; the answered one and the banner are not");
+		check(book.answer(a, 2).empty() && ran.back() == "a2" && book.size() == 0, "restart: the new page's answer runs its callback");
 	}
 	// notices: each window its own instance's; closing one never takes another's (release review 2026-10-04, S4)
 	{

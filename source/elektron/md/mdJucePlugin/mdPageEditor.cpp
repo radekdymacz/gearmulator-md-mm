@@ -96,18 +96,10 @@ namespace mdJucePlugin
 						genericUI::MessageBox::showOk(genericUI::MessageBox::Icon::Warning, title, text);
 					return;
 				}
-				const int id = m_notices.add(n.buttons.size(), std::move(n.answered));
-				json::Value m = json::Value::object();
-				m.set("type", "notice");
-				m.set("id", id);
-				m.set("title", n.title);
-				m.set("text", n.text);
-				auto buttons = json::Value::array();
-				for(const auto& b : n.buttons)
-					buttons.push(json::Value(b));
-				m.set("buttons", std::move(buttons));
+				NoticeShown shown{n.title, n.text, n.buttons, true};
+				const int id = m_notices.add(shown, std::move(n.answered));
 				m_page->log("notice " + juce::String(id) + ": " + juce::String(n.title) + " - " + juce::String(n.text).substring(0, 200));
-				m_page->send(std::move(m));
+				m_page->send(noticeMessage(id, shown));
 			});
 		});
 		// I-005: the update banner follows the process's one Updater (its first check once the page is ready, timerCallback).
@@ -120,7 +112,8 @@ namespace mdJucePlugin
 		m_page->setStartupLog(startupLog);
 		m_page->setFallbackMenu([this] { openMenu(); });	// I-008: no page up, the native menu
 		// Linux: a page that started again has nothing (WebPageHost::onAck): the session's documents once more, as on
-		// its ready, and the update banner (the old one's answer is no longer wanted)
+		// its ready; the questions still waiting for an answer, by their numbers, so an answer still runs its callback
+		// (the user decides, as before); and the update banner (the old one's answer is no longer wanted)
 		m_page->setOnRestart([this]
 		{
 			const genericUI::messageRoute::OwnerScope owner(m_noticeOwner);
@@ -130,6 +123,8 @@ namespace mdJucePlugin
 			m_bannerShown.clear();
 			if(m_session)
 				m_session->republish();
+			for(const auto& [notice, shown] : m_notices.waitingNotices())
+				m_page->send(noticeMessage(notice, shown));
 			showUpdateBanner();
 		});
 		// B-035: the processor's start-up lines (the host's audio calls, the machine's boot) go into the same log
@@ -360,29 +355,23 @@ namespace mdJucePlugin
 			m_notices.forget(m_bannerId);	// a newer banner replaces it on the page: its answer is no longer wanted
 		// A notice with "modal": false is the page's banner, not its dialog (FOUNDATION.md, the notice route); one
 		// with no title and no text takes the banner away (number 0: it waits for no answer).
-		auto buttons = json::Value::array();
+		NoticeShown notice{banner.title, banner.text, {}, false};
 		std::vector<updates::Action> actions;
 		for(const auto& button : banner.buttons)
 		{
-			buttons.push(json::Value(button.first));
+			notice.buttons.push_back(button.first);
 			actions.push_back(button.second);
 		}
-		m_bannerId = banner.title.empty() ? 0 : m_notices.add(actions.size(), [this, alive = std::weak_ptr<int>(m_alive), actions](const int _button)
+		const auto answered = [this, alive = std::weak_ptr<int>(m_alive), actions](const int _button)
 		{
 			if(alive.expired() || _button < 0 || static_cast<size_t>(_button) >= actions.size())
 				return;
 			m_bannerId = 0;		// the page closed it
 			m_bannerShown.clear();
 			m_updater->act(actions[static_cast<size_t>(_button)], getProcessor().getConfig());
-		});
-		json::Value m = json::Value::object();
-		m.set("type", "notice");
-		m.set("id", m_bannerId);
-		m.set("title", banner.title);
-		m.set("text", banner.text);
-		m.set("buttons", std::move(buttons));
-		m.set("modal", false);
-		m_page->send(std::move(m));
+		};
+		m_bannerId = banner.title.empty() ? 0 : m_notices.add(notice, answered);
+		m_page->send(noticeMessage(m_bannerId, notice));
 	}
 
 	editorMenu::Item PageEditor::updateMenu()
