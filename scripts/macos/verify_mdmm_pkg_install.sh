@@ -38,8 +38,10 @@ fail() {
 
 for machine in "${machines[@]}"; do
   case "${machine}" in
-    md) app="${MDMM_PRODUCT_NAME_MD}"; legacy="${MDMM_LEGACY_NAME_MD}"; subtype="Tmdr"; bundle_id="com.nativekloud.machinedrum-editor" ;;
-    mm) app="${MDMM_PRODUCT_NAME_MM}"; legacy="${MDMM_LEGACY_NAME_MM}"; subtype="Tmno"; bundle_id="com.nativekloud.monomachine-editor" ;;
+    md) app="${MDMM_PRODUCT_NAME_MD}"; legacy="${MDMM_LEGACY_NAME_MD}"; subtype="Tmdr"
+        bundle_id="${MDMM_BUNDLE_ID_MD}"; legacy_id="${MDMM_LEGACY_BUNDLE_ID_MD}" ;;
+    mm) app="${MDMM_PRODUCT_NAME_MM}"; legacy="${MDMM_LEGACY_NAME_MM}"; subtype="Tmno"
+        bundle_id="${MDMM_BUNDLE_ID_MM}"; legacy_id="${MDMM_LEGACY_BUNDLE_ID_MM}" ;;
     *) echo "unknown machine: ${machine} (use md or mm)" >&2; exit 2 ;;
   esac
   id="com.nativekloud.mdmm.${machine}"	# the receipts' (package) identifier, not the bundles'
@@ -70,12 +72,15 @@ for machine in "${machines[@]}"; do
       fi
     done
 
-    # The installer removes the bundles it put in place under the old names.
+    # The installer removes the bundles under the old names (scripts/macos/pkg-resources/remove-old-bundles):
+    # a plug-in with either of our identifiers (the old one is upstream Gearmulator's, with the same plug-in
+    # codes), an app with the editor's own.
     for old in \
         "${root}/Library/Audio/Plug-Ins/VST3/${legacy}.vst3" \
-        "${root}/Library/Audio/Plug-Ins/Components/${legacy}.component"; do
+        "${root}/Library/Audio/Plug-Ins/Components/${legacy}.component" \
+        "${root}/Applications/${legacy}.app"; do
       old_id="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "${old}/Contents/Info.plist" 2>/dev/null || true)"
-      if [[ "${old_id}" == "${bundle_id}" ]]; then
+      if [[ "${old_id}" == "${bundle_id}" || ( "${old_id}" == "${legacy_id}" && "${old}" != *.app ) ]]; then
         fail "the old ${old} is still installed beside ${app}: the DAW lists it twice"
       elif [[ -e "${old}" ]]; then
         echo "note: ${old} is there, not ours (${old_id:-no identifier}); left alone"

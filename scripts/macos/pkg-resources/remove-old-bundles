@@ -1,55 +1,128 @@
 #!/bin/sh
-# preinstall of one component of the {{APP_NAME}} package (build_mdmm_pkg.sh fills in the {{...}} values).
+# preinstall of the {{KIND}} component of the {{APP_NAME}} package. scripts/macos/render_remove_old_bundles.sh fills in
+# the {{...}} values from scripts/mdmm-product.env; scripts/release/test_release_scripts.py runs the result in a
+# temporary folder.
 #
-# Up to 0.3.1 the plug-ins were called {{OLD_NAME}}.vst3 / .component. Installer never removes a file a new
-# package no longer has, so without this a DAW would list the editor twice (same plug-in codes, two
-# bundles). Before {{NEW_PATH}} is installed this removes {{OLD_PATH}}, in the domain being installed into
-# and in the installing person's home folder (an earlier "for me only" install), but only when it is ours:
-# it carries the editor's bundle identifier ({{BUNDLE_ID}}), or our package's receipt ({{RECEIPT_ID}})
-# lists it (0.3.0 and earlier had upstream Gearmulator's identifier, which an upstream build shares: those
-# are never touched without our receipt). An app at the same path built before the rename (its executable
-# is not "{{APP_NAME}}") is replaced the same way, so no stale executable stays inside it.
+# Up to 0.3.1 the plug-ins were called {{OLD_NAME}}.vst3 / .component (and a standalone app could carry that name
+# too). Installer never removes a file a new package no longer has, so without this a DAW lists the editor twice:
+# same plug-in codes, two bundles. Before {{NEW_PATH}} is installed this removes what is left under the old name,
+# {{OLD_PATH}}, and the bundle at {{NEW_PATH}} itself when the executable inside is not "{{APP_NAME}}" (built before
+# the rename: the old executable would otherwise stay inside the new bundle and break its signature).
 #
-# $2 is the install location: "/" for all users, the home folder for "Install for me only".
+# Where it looks, relative to each root: the install location ($2: "/" for all users, the home folder for
+# "Install for me only") and the home folders of the person installing: $HOME, the person at the console, and
+# $SUDO_USER / $USER. A root-run Installer has no home of its own, and the 0.3.0 and 0.3.1 zip and disk image told
+# people to copy the plug-ins into ~/Library/Audio/Plug-Ins by hand: those copies have no receipt. Other users'
+# home folders are never touched.
+#
+# What it removes, never anything else: a bundle at exactly that path (not a symbolic link) that is ours:
+#   - it carries the editor's bundle identifier (0.3.1 and later), or
+#   - it carries upstream Gearmulator's (0.3.0 and earlier), for the plug-ins only (old_id_counts below). They
+#     share our plug-in codes, so a DAW would clash between upstream's bundle and ours anyway; a standalone app
+#     of upstream's is somebody's own copy and stays, or
+#   - our package's receipt lists it.
+# It always exits 0: an old copy it cannot remove must not stop the install. What it did goes to the install log.
 
 old_path="{{OLD_PATH}}"
 new_path="{{NEW_PATH}}"
 bundle_id="{{BUNDLE_ID}}"
+old_bundle_id="{{OLD_BUNDLE_ID}}"
+old_id_counts="{{OLD_ID_COUNTS}}"
 receipt_id="{{RECEIPT_ID}}"
 executable="{{APP_NAME}}"
+plistbuddy="{{PLISTBUDDY}}"
+pkgutil="{{PKGUTIL}}"
+stat_tool="{{STAT}}"
+dscl_tool="{{DSCL}}"
 
+# Whatever went wrong while rendering, never delete anything but a bundle named like one.
+for path in "${old_path}" "${new_path}"; do
+  case "${path}" in
+    *.app | *.vst3 | *.component) ;;
+    *) echo "remove-old-bundles: not a bundle path: ${path}"; exit 0 ;;
+  esac
+done
+
+plist_value() {
+  "${plistbuddy}" -c "Print :$2" "$1/Contents/Info.plist" 2>/dev/null
+}
+
+# listed ROOT PATH: is PATH (relative, as the receipt lists it) in our package's receipt, on ROOT's volume?
+listed() {
+  "${pkgutil}" --files "${receipt_id}" 2>/dev/null | /usr/bin/grep -qxF "$2" && return 0
+  [ -n "$1" ] || return 1
+  "${pkgutil}" --volume "$1" --files "${receipt_id}" 2>/dev/null | /usr/bin/grep -qxF "$2"
+}
+
+# is_ours BUNDLE ROOT PATH ACCEPT-OLD-ID
 is_ours() {
-  bundle="$1" volume="$2"
-  id="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "${bundle}/Contents/Info.plist" 2>/dev/null)"
+  id="$(plist_value "$1" CFBundleIdentifier)"
   [ "${id}" = "${bundle_id}" ] && return 0
-  /usr/sbin/pkgutil --volume "${volume}" --files "${receipt_id}" 2>/dev/null | /usr/bin/grep -qxF "${old_path}"
+  [ "$4" = 1 ] && [ "${id}" = "${old_bundle_id}" ] && return 0
+  listed "$2" "$3"
 }
 
-stale() {
-  bundle="$1"
-  [ "${old_path}" != "${new_path}" ] && return 0
-  # Same path: only a bundle built before the rename.
-  current="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleExecutable' "${bundle}/Contents/Info.plist" 2>/dev/null)"
-  [ -n "${current}" ] && [ "${current}" != "${executable}" ]
-}
-
-roots="${2:-/}"
-case "${HOME:-}" in
-  ""|/var/root|/) ;;
-  *) roots="${roots}
-${HOME}" ;;
-esac
-
-echo "${roots}" | while IFS= read -r root; do
-  [ -n "${root}" ] || continue
-  root="${root%/}"
-  bundle="${root}/${old_path}"
-  [ -d "${bundle}" ] || continue
-  if is_ours "${bundle}" "${root:-/}" && stale "${bundle}"; then
+# consider ROOT PATH old|current
+consider() {
+  root="${1%/}" rel="$2" which="$3"
+  bundle="${root}/${rel}"
+  [ -e "${bundle}" ] || [ -L "${bundle}" ] || return 0
+  if [ -L "${bundle}" ] || [ ! -d "${bundle}" ]; then
+    echo "Leaving ${bundle} alone: not a plain bundle folder"
+    return 0
+  fi
+  if [ "${which}" = current ]; then
+    # Only a bundle built before the rename (its executable is not ours). The old identifier counts here for the
+    # app too: the name is ours, and 0.3.0 and earlier gave that app upstream's identifier.
+    found="$(plist_value "${bundle}" CFBundleExecutable)"
+    if [ -z "${found}" ] || [ "${found}" = "${executable}" ]; then
+      return 0
+    fi
+    accept_old=1
+  else
+    accept_old="${old_id_counts}"
+  fi
+  if is_ours "${bundle}" "${root}" "${rel}" "${accept_old}"; then
     echo "Removing the old ${bundle}"
     /bin/rm -rf -- "${bundle}"
   else
-    echo "Leaving ${bundle} alone: not the editor's, or already current"
+    echo "Leaving ${bundle} alone: not the editor's"
   fi
+}
+
+# The home folder of a user name (nothing when we do not know it).
+home_of() {
+  case "$1" in
+    "" | root | loginwindow | */* | _*) return 0 ;;
+  esac
+  "${dscl_tool}" . -read "/Users/$1" NFSHomeDirectory 2>/dev/null | /usr/bin/sed -n '1s/^NFSHomeDirectory: //p'
+}
+
+roots="${2:-/}"
+add_home() {
+  home="${1%/}"
+  case "${home}" in
+    "" | /var/root | /private/var/root) return 0 ;;
+  esac
+  [ -d "${home}" ] || return 0
+  case "
+${roots}
+" in
+    *"
+${home}
+"*) return 0 ;;
+  esac
+  roots="${roots}
+${home}"
+}
+add_home "${HOME:-}"
+add_home "$(home_of "$("${stat_tool}" -f%Su /dev/console 2>/dev/null)")"
+add_home "$(home_of "${SUDO_USER:-}")"
+add_home "$(home_of "${USER:-}")"
+
+echo "${roots}" | while IFS= read -r root; do
+  [ -n "${root}" ] || continue
+  [ "${old_path}" = "${new_path}" ] || consider "${root}" "${old_path}" old
+  consider "${root}" "${new_path}" current
 done
 exit 0

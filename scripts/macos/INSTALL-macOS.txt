@@ -28,8 +28,17 @@ Installation
 Run the setup command again whenever you install an updated download. The
 command only clears extended attributes from the {{PRODUCT_NAME_MD}} and
 {{PRODUCT_NAME_MM}} bundles in the extracted folder; it does not copy or delete
-plug-ins. Up to 0.3.1 the bundles were called {{LEGACY_NAME_MD}} and
-{{LEGACY_NAME_MM}}: delete those copies, or a DAW lists the editor twice.
+plug-ins.
+
+Upgrading from 0.3.1 or earlier: the bundles were called {{LEGACY_NAME_MD}} and
+{{LEGACY_NAME_MM}} then. Copying the new ones does not remove the old ones, and
+a DAW then lists the editor twice. Delete the old-named .vst3 and .component
+(and .app) from every place they are in:
+
+   /Library/Audio/Plug-Ins/VST3, /Library/Audio/Plug-Ins/Components, /Applications
+   ~/Library/Audio/Plug-Ins/VST3, ~/Library/Audio/Plug-Ins/Components, ~/Applications
+
+The installer packages (.pkg) delete these for you.
 
 Firmware is not included. If no supported firmware image is found, the
 application or plug-in shows a start-up card asking for it. Click the card and
