@@ -200,6 +200,10 @@ cmake --build "${build_dir}" --parallel 4 --target \
   pluginTester \
   latency_host \
   baseLibBinaryStreamTest \
+  bridgeLibTest \
+  bridgeServerRomPoolTest \
+  mcpHttpGuardTest \
+  mcpHttpServerTest \
   synthLibAudioTest \
   mdLibTest \
   mdStateTest \
@@ -236,6 +240,10 @@ fi
 
 for test_name in \
   baseLibBinaryStreamTest \
+  bridgeLibTest \
+  bridgeServerRomPoolTest \
+  mcpHttpGuardTest \
+  mcpHttpServerTest \
   synthLibAudioTest \
   mdLibTests \
   mdStateTest \

@@ -8,7 +8,7 @@
 
 namespace networkLib
 {
-	TcpServer::TcpServer(OnConnectedFunc _onConnected, const int _tcpPort)
+	TcpServer::TcpServer(OnConnectedFunc _onConnected, const int _tcpPort, const BindScope _scope)
 		: TcpConnection(std::move(_onConnected))
 		, m_port(_tcpPort)
 		, m_listener(std::make_unique<ptypes::ipstmserver>())
@@ -24,7 +24,10 @@ namespace networkLib
 		// McpServer::start's port-retry loop) only have to handle std::exception.
 		try
 		{
-			m_listener->bindall(m_port);
+			if(_scope == BindScope::Loopback)
+				m_listener->bind(ptypes::ipaddress(127, 0, 0, 1), m_port);
+			else
+				m_listener->bindall(m_port);
 			// poll() with a 0 timeout triggers the lazy open()/bind() in
 			// ipsvbase. open() itself is protected, so this is the cheapest
 			// public call that forces the actual bind() to run now.

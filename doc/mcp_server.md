@@ -40,7 +40,9 @@ The server starts immediately when enabled and stops when disabled. The setting 
 
 ### Connecting
 
-The server listens on **port 13710** by default. If multiple plugin instances are loaded, each one increments the port automatically (13710, 13711, 13712, ...).
+The server listens on **127.0.0.1, port 13710** by default: connect to `http://127.0.0.1:13710`. It is not reachable from other machines. If multiple plugin instances are loaded, each one increments the port automatically (13710, 13711, 13712, ...).
+
+Requests are refused with `403 Forbidden` unless the `Host` header is `127.0.0.1:<port>`, `localhost:<port>` or `[::1]:<port>` and an `Origin` header, if the client sends one, is that same server (`http://127.0.0.1:<port>`, for example). MCP clients and scripts send a matching `Host` on their own and no `Origin`; the check is there so that a web page in a browser cannot drive the server through a cross-site request or DNS rebinding. The server sends no CORS headers.
 
 #### Discovery File
 
@@ -198,7 +200,7 @@ Send a note on, wait for a duration, then send note off.
 | `note` | integer | yes | MIDI note number (0-127) |
 | `velocity` | integer | no | Note velocity (0-127, default: 100) |
 | `channel` | integer | no | MIDI channel (0-15, default: 0) |
-| `duration_ms` | integer | no | Note duration in milliseconds (default: 500) |
+| `duration_ms` | integer | no | Note duration in milliseconds (1-10000, default: 500) |
 | `source` | string | no | MIDI source: `"editor"` (default), `"host"`, or `"physical"` |
 
 > **Tip:** Use `"host"` or `"physical"` source when testing MIDI Learn, which only processes Host and Physical sources by default.
@@ -287,14 +289,6 @@ Get plugin information: name, vendor, 4CC identifier, MIDI capabilities, MCP ser
 No parameters required.
 
 Returns `name`, `vendor`, `plugin4CC`, `isSynth`, `wantsMidiInput`, `producesMidiOut`, `mcpPort`, `pid`. The `pid` (host process id) and `mcpPort` let a client confirm it is talking to a specific instance — useful when several instances run in parallel and share the discovery file.
-
-#### `exit`
-
-Cleanly terminate **this** plugin instance's host process. Only this process exits, so it is safe for tearing down one instance without affecting other instances running in parallel. The server first removes its own entry from the discovery file, then terminates the host process shortly after (so the response is delivered first).
-
-No parameters required.
-
-> **Warning:** this terminates the entire host process. That is exactly what you want for a dedicated test host (e.g. VSTHost), but in a full DAW it would close the DAW.
 
 ---
 
@@ -723,7 +717,7 @@ Rename the currently loaded preset for a part.
 │  └────────────────────────────────────────┘ │
 └─────────────────────────────────────────────┘
          │
-         │ TCP (port 13710+)
+         │ TCP 127.0.0.1 (port 13710+)
          │
 ┌────────┴────────┐
 │  MCP Client     │
@@ -744,3 +738,4 @@ Rename the currently loaded preset for a part.
 - Patch manager tools require the plugin editor window to be open (the patch manager is initialized with the editor).
 - The discovery file may contain stale entries if a plugin crashes without cleanup. Entries include the process ID (`pid`) so clients can verify liveness.
 - Maximum of 100 simultaneous plugin instances (ports 13710–13809).
+- Each instance serves at most 32 connections at a time and closes a connection that sends nothing for 60 seconds. A request line or header line may be up to 8 KiB, a request up to 64 headers and a body up to 4 MiB; a larger request closes the connection.

@@ -152,6 +152,8 @@ jobs:
         run: >-
           cmake --build build-mdmm-core --parallel 4 --target
           baseLibBinaryStreamTest
+          bridgeLibTest
+          bridgeServerRomPoolTest
           midiRoutingMatrixTest
           mdAutomationMidiTest
           synthLibAudioTest
@@ -176,6 +178,8 @@ jobs:
           mdAutomationRobustnessTest
           mdFrontPanelPresentationTest
           mdAudioIoLayoutTest
+          mcpHttpGuardTest
+          mcpHttpServerTest
 
       - name: Run headless gates
         env:
@@ -185,7 +189,7 @@ jobs:
           ctest --test-dir build-mdmm-core -C Release --output-on-failure
           --no-tests=error
           --tests-regex
-          '^(baseLibBinaryStreamTest|midiRoutingMatrixTest|mdAutomationMidiTest|synthLibAudioTest|mdAudioQueueTest|mdAudioFirmwareTest|mdStateTest|mdFlashTest)$'
+          '^(baseLibBinaryStreamTest|bridgeLibTest|bridgeServerRomPoolTest|midiRoutingMatrixTest|mdAutomationMidiTest|synthLibAudioTest|mdAudioQueueTest|mdAudioFirmwareTest|mdStateTest|mdFlashTest)$'
 
       - name: Build and run realtime instrumentation gate
         env:
@@ -205,7 +209,7 @@ jobs:
           ctest --test-dir build-mdmm-core -C Release --output-on-failure
           --no-tests=error
           --tests-regex
-          '^(midiOutputDispatcherTest|mdAutomationParameterTest|mdAutomationArchitectureTest|mdAudioIoLayoutTest|mdFrontPanelPresentationTests)$'
+          '^(midiOutputDispatcherTest|mdAutomationParameterTest|mdAutomationArchitectureTest|mdAudioIoLayoutTest|mdFrontPanelPresentationTests|mcpHttpGuardTest|mcpHttpServerTest)$'
 
       - name: Build and run Shift panel chording regression
         run: |

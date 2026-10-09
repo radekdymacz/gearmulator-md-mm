@@ -19,6 +19,7 @@
 #include <unistd.h>
 #endif
 
+#include <algorithm>
 #include <sstream>
 #include <thread>
 #include <chrono>
@@ -346,8 +347,9 @@ namespace mcpServer
 					? static_cast<uint8_t>(_params.get("velocity").getInt()) : static_cast<uint8_t>(100);
 				const uint8_t channel = _params.hasProperty("channel")
 					? static_cast<uint8_t>(_params.get("channel").getInt()) : static_cast<uint8_t>(0);
-				const int durationMs = _params.hasProperty("duration_ms")
-					? _params.get("duration_ms").getInt() : 500;
+				// The schema's range, enforced: the call holds its client thread (and a server shutdown) this long
+				const int durationMs = std::clamp(_params.hasProperty("duration_ms")
+					? _params.get("duration_ms").getInt() : 500, 1, 10000);
 				const auto source = parseMidiSource(_params);
 
 				// Note on
