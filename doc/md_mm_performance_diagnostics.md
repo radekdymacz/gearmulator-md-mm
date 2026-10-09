@@ -7,7 +7,7 @@ project restore. It is off by default and never uploads a report.
 ## Collect a report
 
 1. Right-click the instrument background in the Machinedrum Editor or the Monomachine Editor and open
-   **Performance diagnostics**. Knobs may have their own parameter menu.
+   **Developer** (the Performance diagnostics entries moved there in 0.3.5). Knobs may have their own parameter menu.
 2. Click **Start performance capture**. Reopen the submenu to check its status.
 3. Reproduce the crackling or slow playback using your normal host settings.
 4. Click **Stop performance capture**, then **Open logs folder**.
@@ -41,7 +41,7 @@ speed-ups replaced, and costs about what it did before step 1: a few per cent le
 that stays on is the `processUC` gating (part B of L5; it only skips work that cannot change anything, so
 it has no switch).
 
-- **Menu: Performance diagnostics > Speed-ups off (legacy emulation, slower).** Ticked is the old
+- **Menu: Developer > Speed-ups off (legacy emulation, slower).** Ticked is the old
   emulation. The choice applies at once, without restarting, and is kept in the plug-in's settings (key
   `legacyEmulation`) and across project loads.
 - **`GEARMULATOR_MDMM_SPEEDUPS=0`** starts every new session with the speed-ups off. Set it as an
