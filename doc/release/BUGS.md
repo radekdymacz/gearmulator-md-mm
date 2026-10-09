@@ -4,6 +4,18 @@
 repository; the site sends reports to the contact address. Newest first. Each entry:
 where it came from, the setup, what happens, what should happen, status.*
 
+## B-046 · Monomachine: picking H16 of the Autechre backup leaves the machine on kit 58, not its linked kit 74
+
+- **From:** found by the B-031 work, 2026-10-09.
+- **What happens:** with a real backup imported (the Autechre fixture), picking pattern H16 leaves the machine on kit 58 instead of kit 74, the kit the pattern links. The firmware decides this.
+- **Status:** open, not investigated.
+
+## B-045 · Machinedrum: a pattern pick during a SysEx import asks about unsaved kit edits that were never made
+
+- **From:** found by the B-031 work, 2026-10-09.
+- **What happens:** a pattern picked while a SysEx import runs asks "Your edits to K.. are not saved" although nothing was edited. A dump over the current pattern reloads the linked kit before that slot has been read back. Transient: gone once the import finishes.
+- **Status:** open.
+
 ## B-044 · Linux CI: synthLibMidiClockTimingTest is still left out
 
 - **From:** the codex review of 2026-10 (the Linux CI rewrite, its second review).
