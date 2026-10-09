@@ -4,6 +4,12 @@
 repository; the site sends reports to the contact address. Newest first. Each entry:
 where it came from, the setup, what happens, what should happen, status.*
 
+## B-026 · Mutes don't work in 0.3.5 (release candidate)
+
+- **From:** Radek's manual test of the packaged 0.3.5, 2026-10-09.
+- **What happens:** muting tracks does nothing (details being collected).
+- **Status:** open, blocks 0.3.5.
+
 ## B-024 · Tempo drag fails when starting from a saved project
 
 - **From:** the journeys (md-top-tempo-drag), 2026-10-08.
