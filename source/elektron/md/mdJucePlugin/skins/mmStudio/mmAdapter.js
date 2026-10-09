@@ -362,10 +362,12 @@
 	   waits for the answer, so a notice goes before the page's own questions, is never replaced by one, and is
 	   always answered: closed any other way, by its last key (Dlg, skins/shared/deskModal.js; as the MD page) */
 	function onNotice(m) {
+		/* the answer: noticeAnswer (skins/shared/deskModal.js, in mmMockup.js); a refusal is only logged */
+		const sendAnswer = i => send(noticeAnswer(m, i), { onResult: noticeRefused });
 		/* "modal": false (the update banner, DESIGN-updates.md): a strip, not the dialog; the page plays on under it */
-		if (m.modal === false) { Banner.show(m, i => send({ op: "noticeAnswer", id: m.id, button: i })); return; }
+		if (m.modal === false) { Banner.show(m, sendAnswer); return; }
 		const names = m.buttons && m.buttons.length ? m.buttons : ["OK"], item = { notice: true };
-		const answer = i => { if (item.done) return; item.done = true; send({ op: "noticeAnswer", id: m.id, button: i }); };
+		const answer = i => { if (item.done) return; item.done = true; sendAnswer(i); };
 		item.cancel = () => answer(names.length - 1);
 		const esc = t => String(t).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
 		V().ask(`<b>${esc(m.title)}</b><br>${esc(m.text).replace(/\n/g, "<br>")}`,
@@ -627,6 +629,7 @@
 			log("followHost refused: " + t);
 			if (t !== last.hostRefused) { last.hostRefused = t; V().toast("The machine could not be set to follow the DAW's tempo: " + t); }
 		}
-		else if (m.type === "result" && !m.ok && m.errors?.length && m.op !== "set" && m.op !== "modSet") V().toast(m.errors[0]);
+		/* a refused noticeAnswer is the log's only (noticeRefused): nothing for the user to do */
+		else if (m.type === "result" && !m.ok && m.errors?.length && m.op !== "set" && m.op !== "modSet" && m.op !== "noticeAnswer") V().toast(m.errors[0]);
 	}
 })();

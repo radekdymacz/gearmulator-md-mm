@@ -96,7 +96,7 @@ namespace mdJucePlugin
 						genericUI::MessageBox::showOk(genericUI::MessageBox::Icon::Warning, title, text);
 					return;
 				}
-				const int id = ++m_noticeId;
+				const int id = m_notices.add(n.buttons.size(), std::move(n.answered));
 				json::Value m = json::Value::object();
 				m.set("type", "notice");
 				m.set("id", id);
@@ -106,7 +106,6 @@ namespace mdJucePlugin
 				for(const auto& b : n.buttons)
 					buttons.push(json::Value(b));
 				m.set("buttons", std::move(buttons));
-				m_notices[id] = std::move(n.answered);
 				m_page->log("notice " + juce::String(id) + ": " + juce::String(n.title) + " - " + juce::String(n.text).substring(0, 200));
 				m_page->send(std::move(m));
 			});
@@ -146,16 +145,13 @@ namespace mdJucePlugin
 			}
 			else if(row->handler.action == deskHost::Action::NoticeAnswer)
 			{
-				const auto id = static_cast<int>(_message.find("id")->asNumber());
+				// "notice" names the notice; "id" is this request's (its result's)
+				const auto notice = static_cast<int>(_message.find("notice")->asNumber());
 				const auto button = static_cast<int>(_message.find("button")->asNumber());
-				if(const auto it = m_notices.find(id); it != m_notices.end())
-				{
-					auto answered = std::move(it->second);
-					m_notices.erase(it);
-					if(answered)
-						answered(button);
-				}
-				m_page->send(deskCore::resultMessage(_message, {}, {}));
+				const auto refused = m_notices.answer(notice, button);
+				if(!refused.empty())
+					m_page->log("noticeAnswer: " + juce::String(refused));
+				m_page->send(deskCore::resultMessage(_message, refused.empty() ? std::vector<std::string>{} : std::vector<std::string>{refused}, {}));
 			}
 			else if(row->handler.action == deskHost::Action::ChooseSample)
 			{
@@ -348,15 +344,9 @@ namespace mdJucePlugin
 			return;
 		m_bannerShown = shown;
 		if(m_bannerId)
-			m_notices.erase(m_bannerId);	// a newer banner replaces it on the page: its answer is no longer wanted
+			m_notices.forget(m_bannerId);	// a newer banner replaces it on the page: its answer is no longer wanted
 		// A notice with "modal": false is the page's banner, not its dialog (FOUNDATION.md, the notice route); one
-		// with no title and no text takes the banner away.
-		const int id = ++m_noticeId;
-		json::Value m = json::Value::object();
-		m.set("type", "notice");
-		m.set("id", id);
-		m.set("title", banner.title);
-		m.set("text", banner.text);
+		// with no title and no text takes the banner away (number 0: it waits for no answer).
 		auto buttons = json::Value::array();
 		std::vector<updates::Action> actions;
 		for(const auto& button : banner.buttons)
@@ -364,20 +354,21 @@ namespace mdJucePlugin
 			buttons.push(json::Value(button.first));
 			actions.push_back(button.second);
 		}
+		m_bannerId = banner.title.empty() ? 0 : m_notices.add(actions.size(), [this, alive = std::weak_ptr<int>(m_alive), actions](const int _button)
+		{
+			if(alive.expired() || _button < 0 || static_cast<size_t>(_button) >= actions.size())
+				return;
+			m_bannerId = 0;		// the page closed it
+			m_bannerShown.clear();
+			m_updater->act(actions[static_cast<size_t>(_button)], getProcessor().getConfig());
+		});
+		json::Value m = json::Value::object();
+		m.set("type", "notice");
+		m.set("id", m_bannerId);
+		m.set("title", banner.title);
+		m.set("text", banner.text);
 		m.set("buttons", std::move(buttons));
 		m.set("modal", false);
-		m_bannerId = banner.title.empty() ? 0 : id;
-		if(m_bannerId)
-		{
-			m_notices[id] = [this, alive = std::weak_ptr<int>(m_alive), actions](const int _button)
-			{
-				if(alive.expired() || _button < 0 || static_cast<size_t>(_button) >= actions.size())
-					return;
-				m_bannerId = 0;		// the page closed it
-				m_bannerShown.clear();
-				m_updater->act(actions[static_cast<size_t>(_button)], getProcessor().getConfig());
-			};
-		}
 		m_page->send(std::move(m));
 	}
 

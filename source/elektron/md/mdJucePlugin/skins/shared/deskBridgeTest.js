@@ -1,7 +1,9 @@
 "use strict";
 /* The page bridge's transport (BridgeTransport, deskBridge.js; DESIGN-REVIEW-2026-10-02 finding 13): a batch is one
    gmbridge://c/ URL while it fits, else pieces never cut inside an escape that join (in index order) to the one
-   encoded text; Bridge hands batches to the transport and what the plug-in says to its handlers.
+   encoded text; Bridge hands batches to the transport and what the plug-in says to its handlers. Over the real
+   bridge (codex review 2026-10): a notice's answer keeps the notice's number apart from the request's id (deskModal.js
+   noticeAnswer).
      node deskBridgeTest.js */
 const fs = require("fs"), path = require("path"), vm = require("vm");
 
@@ -76,6 +78,41 @@ check(BridgeTransport.recvFile("/tmp/gearmulator-mdStudio-1a2b.html", 12) === "g
 	check(posted.length === 3 && posted[0] === "gmbridge://c/" + encodeURIComponent(JSON.stringify([{ op: "a" }]))
 		&& posted[1] === "gmbridge://log/hello" && posted[2].endsWith(encodeURIComponent(JSON.stringify([{ op: "b" }]))),
 		"WebView2: each message is one postMessage of its gmbridge:// text, in order");
+}
+
+/* ---- the bridge on a stand-in page: deskBridge.js and the shared files given, a document that answers everything ---- */
+function standIn(files, extra = {}) {
+	const posted = [], logged = [];
+	const el = () => ({ style: {}, classList: { add() { }, remove() { }, toggle() { } }, setAttribute() { }, hasAttribute: () => true, appendChild() { },
+		replaceChildren() { }, addEventListener() { }, querySelector: () => null, querySelectorAll: () => [], remove() { } });
+	const document = Object.assign({ addEventListener() { }, createElement: el, body: el(), documentElement: el(), head: el(), readyState: "complete",
+		querySelector: () => null, activeElement: null }, extra.document || {});
+	const window = Object.assign({ gmDev: batch => posted.push(...JSON.parse(JSON.stringify(batch))), addEventListener() { } }, extra.window || {});
+	const c = vm.createContext(Object.assign({ console: { log: (...a) => logged.push(a.join(" ")), error: console.error }, location: { protocol: "http:", search: "" },
+		setTimeout, clearTimeout, window, document, navigator: { platform: "MacIntel" }, MutationObserver: class { observe() { } }, Date, innerWidth: 1440 }, extra.globals || {}));
+	vm.runInContext(files.map(f => fs.readFileSync(path.join(__dirname, f), "utf8")).join("\n;\n")
+		+ "\nthis.P = { Bridge, noticeAnswer: typeof noticeAnswer !== 'undefined' ? noticeAnswer : null, noticeRefused: typeof noticeRefused !== 'undefined' ? noticeRefused : null };", c);
+	c.gm = window.gm;	/* a browser's window is its global: the plug-in's scripts say gm */
+	return Object.assign(c.P, { posted, logged, window, document, ctx: c, recv: (m, seq) => window.gm.recv(m, seq) });
+}
+/* ---- a notice's answer: the notice's number as "notice", the request's own id apart (deskModal.js noticeAnswer) ---- */
+{
+	const p = standIn(["deskModal.js", "deskBridge.js"]);
+	p.Bridge.send({ op: "play" });	/* an earlier command: the bridge's numbers are on */
+	const notice = { type: "notice", id: 77, title: "Update available", text: "", buttons: ["Update", "Later"], modal: false };
+	const id = p.Bridge.send(p.noticeAnswer(notice, 1), { onResult: p.noticeRefused });
+	const a = p.posted[p.posted.length - 1];
+	check(a.op === "noticeAnswer" && a.notice === 77 && a.button === 1 && a.id === id && a.id !== 77 && Object.keys(a).sort().join() === "button,id,notice,op",
+		"noticeAnswer: the notice's number as notice, the request's own id as id, nothing else: " + JSON.stringify(a));
+	p.recv([{ type: "result", op: "noticeAnswer", id, ok: false, errors: ["notice 77 is not waiting for an answer"], note: "" }]);
+	check(p.logged.some(l => /noticeAnswer refused: notice 77 is not waiting/.test(l)), "a refused answer is logged (noticeRefused), nothing else");
+	const before = p.logged.length;
+	p.recv([{ type: "result", op: "noticeAnswer", id: p.Bridge.send(p.noticeAnswer({ id: 3 }, 0), { onResult: p.noticeRefused }), ok: true, errors: [], note: "" }]);
+	check(p.logged.length === before, "a taken answer logs nothing");
+	/* a caller's own id on a new message is replaced by the request's: said in the log */
+	const own = p.Bridge.send({ op: "noticeAnswer", id: 77, button: 0 });
+	check(p.posted[p.posted.length - 1].id === own && own !== 77 && p.logged.some(l => /send noticeAnswer: its own id 77 is replaced/.test(l)),
+		"a message with its own id: the bridge's id goes out, and the log says the caller's was lost");
 }
 
 if (failures) { console.error("deskBridgeTest: " + failures + " failure(s)"); process.exit(1); }

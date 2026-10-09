@@ -1,6 +1,8 @@
 // The page bridge's transport on the plug-in's side (mdPageBridge.h, review finding 13): the page's long batches
 // joined from their pieces, and the outbox split into numbered gm.recv calls at message boundaries. Pure. Also
-// the route of the plug-in's notices to the page (juceUiLib/messageRoute.h): one sink per open window.
+// the route of the plug-in's notices to the page (juceUiLib/messageRoute.h): one sink per open window; and a
+// window's notices and their answers (mdNoticeBook.h).
+#include "mdNoticeBook.h"
 #include "mdPageBridge.h"
 
 #include "juceUiLib/messageRoute.h"
@@ -93,6 +95,35 @@ int main()
 			"the page's progress: the last batch it read");
 		check(!bridge::ackOf("gmbridge://a/") && !bridge::ackOf("gmbridge://a/1x") && !bridge::ackOf("gmbridge://c/1")
 			&& !bridge::ackOf("gmbridge://a/99999999999999999999"), "anything else is not a progress report");
+	}
+	// a window's notices (codex review 2026-10, item 1): the page answers {"notice": n, "button": b}; an answer runs its
+	// notice's callback once, and only for a notice waiting with that button
+	{
+		mdJucePlugin::NoticeBook book;
+		std::vector<std::string> ran;
+		const int a = book.add(2, [&](const int _b) { ran.push_back("a" + std::to_string(_b)); });
+		const int b = book.add(0, [&](const int _b) { ran.push_back("b" + std::to_string(_b)); });
+		check(a == 1 && b == 2 && book.size() == 2, "notices are numbered from 1 in the order they come");
+		check(book.answer(99, 0) == "notice 99 is not waiting for an answer" && ran.empty(), "an unknown notice: refused, nothing runs");
+		check(book.answer(a, 2) == "notice 1 has no button 2" && book.answer(a, -1) == "notice 1 has no button -1" && ran.empty() && book.waiting(a),
+			"a button the notice does not have: refused, nothing runs, the notice still waits");
+		check(book.answer(a, 1).empty() && ran.size() == 1 && ran[0] == "a1" && !book.waiting(a), "its own button: the callback runs with it, once");
+		check(book.answer(a, 0) == "notice 1 is not waiting for an answer" && ran.size() == 1, "answered already: refused, nothing runs again");
+		check(book.answer(b, 0).empty() && ran.back() == "b0" && book.answer(b, 1) == "notice 2 is not waiting for an answer",
+			"a notice without buttons is the page's OK: button 0, once");
+		// the update banner: a newer one replaces it, the old one's answer is not wanted
+		int banner = book.add(3, [&](const int _b) { ran.push_back("old" + std::to_string(_b)); });
+		book.forget(banner);
+		banner = book.add(1, [&](const int _b) { ran.push_back("new" + std::to_string(_b)); });
+		check(book.answer(banner - 1, 0) == "notice " + std::to_string(banner - 1) + " is not waiting for an answer" && ran.back() == "b0",
+			"a replaced banner is forgotten: its answer runs nothing");
+		check(book.answer(banner, 0).empty() && ran.back() == "new0", "the banner shown takes its answer");
+		// a callback may add the next notice (the banner's next state) while it runs
+		int next = 0;
+		const int c = book.add(1, [&](const int) { next = book.add(1, {}); });
+		check(book.answer(c, 0).empty() && next == c + 1 && book.waiting(next) && book.answer(next, 0).empty(),
+			"a callback that adds a notice: the new one waits; one without a callback takes its answer");
+		check(book.size() == 0, "nothing left waiting");
 	}
 	// notices: each window its own instance's; closing one never takes another's (release review 2026-10-04, S4)
 	{
