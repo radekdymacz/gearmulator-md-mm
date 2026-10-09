@@ -5,7 +5,8 @@ name: MD/MM Editors Windows x64
 # (and by mdmm-editors-release.yml when no tested build of the tag's commit exists).
 #
 #   build     the package, once: upstream's scripts/windows/build_mdmm.ps1 as elektron-windows.yml runs it (Release,
-#             /GL and /LTCG, Ninja Multi-Config, sccache), products only: the two standalones, the two VST3s and
+#             /GL and /LTCG only when `ltcg` is set, i.e. for a tag's release; a push builds with _CL_=/GL-,
+#             Ninja Multi-Config, sccache), products only: the two standalones, the two VST3s and
 #             pluginTester, which then loads each VST3 (audio buses, automation smoke) before the zip is made. Its
 #             zip (artifact windows-mdmm) is what the start test below and the release archives use.
 #   tests     the unit and plug-in tests of the same sources (the ctest list of build_mdmm.ps1 -WithTests), in
@@ -21,20 +22,36 @@ name: MD/MM Editors Windows x64
 
 on:
   workflow_call:
+    inputs:
+      ltcg:
+        description: Whole-program optimisation (/GL, /LTCG) for the shipped files; the release asks for it
+        type: boolean
+        default: false
   workflow_dispatch:
+    inputs:
+      ltcg:
+        description: Whole-program optimisation (/GL, /LTCG) for the shipped files
+        type: boolean
+        default: false
 
 permissions:
   contents: read
 
 jobs:
   build:
-    name: Windows x64 package (LTCG, sccache)
+    name: Windows x64 package (${{ inputs.ltcg && 'LTCG' || 'no LTCG' }}, sccache)
     runs-on: windows-2022
     timeout-minutes: 120
     env:
       SCCACHE_GHA_ENABLED: "true"
-      SCCACHE_GHA_VERSION: "mdmm-v1-windows-x64-msvc"
+      # /GL objects (a tag's release) and plain ones (a push) are different objects: a namespace each. The tests
+      # job below compiles the same plain objects.
+      SCCACHE_GHA_VERSION: ${{ inputs.ltcg && 'mdmm-v1-windows-x64-msvc' || 'mdmm-v1-windows-x64-msvc-nogl' }}
       SCCACHE_IDLE_TIMEOUT: "0"
+      # cl.exe appends _CL_ to every command line: /GL- after base.cmake's /GL turns whole-program optimisation
+      # off, and LINK, given /LTCG but no /GL object, has no code to generate (the tests job below does the same).
+      # Only a release's build (inputs.ltcg) ships /GL + /LTCG files; a push's build skips that link.
+      _CL_: ${{ inputs.ltcg && ' ' || '/GL-' }}
 
     steps:
       - uses: actions/checkout@v4
@@ -73,6 +90,22 @@ jobs:
           '```' | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
           & "$env:SCCACHE_PATH" --show-stats | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
           '```' | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
+
+      # Which flavour the package is: a tag's release takes a build with this marker only.
+      - name: Mark the flavour
+        if: ${{ inputs.ltcg }}
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Path "${{ runner.temp }}\flavour" -Force | Out-Null
+          "ltcg=true" | Set-Content "${{ runner.temp }}\flavour\flavour.txt"
+
+      - name: Upload the flavour marker
+        if: ${{ inputs.ltcg }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-mdmm-ltcg
+          path: ${{ runner.temp }}\flavour\flavour.txt
+          retention-days: 14
 
       - name: Upload the package and receipt
         uses: actions/upload-artifact@v4
