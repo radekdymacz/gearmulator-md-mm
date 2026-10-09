@@ -419,6 +419,20 @@ function(mdmm_plugin_targets)
 	set_tests_properties(mdProcessorHooksTest PROPERTIES LABELS "UnitTest;AudioIo" TIMEOUT 120)
 	set_property(TARGET mdProcessorHooksTest PROPERTY FOLDER "Elektron/test")
 
+	# upstreamTests/mcpServerTest.cpp: the MCP server above the HTTP layer (stop() wakes an SSE client's wait, a slow
+	# tool does not hold up tools/list, send_note's duration is clamped). Its JSON values are juce::var, so it is built
+	# here, with juce_core; it needs no plug-in.
+	set(_mdmmMcp ${CMAKE_CURRENT_SOURCE_DIR}/../../../mcpServerLib)
+	add_executable(mcpServerTest ../upstreamTests/mcpServerTest.cpp ../upstreamTests/loopbackClient.h
+		${_mdmmMcp}/mcpServer.cpp ${_mdmmMcp}/mcpServer.h ${_mdmmMcp}/httpServer.cpp ${_mdmmMcp}/httpServer.h)
+	target_link_libraries(mcpServerTest PRIVATE networkLib juce::juce_core)
+	target_compile_definitions(mcpServerTest PRIVATE
+		JUCE_GLOBAL_MODULE_SETTINGS_INCLUDED=1 JUCE_STANDALONE_APPLICATION=1 JUCE_USE_CURL=0)
+	add_test(NAME mcpServerTest COMMAND mcpServerTest)
+	set_tests_properties(mcpServerTest PROPERTIES LABELS "UnitTest" TIMEOUT 120)
+	set_property(TARGET mcpServerTest PROPERTY FOLDER "Tests")
+	unset(_mdmmMcp)
+
 	add_executable(mdRomInstallTest mdRomInstallTest.cpp mdRomInstall.cpp)
 	target_include_directories(mdRomInstallTest PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/..)
 	target_link_libraries(mdRomInstallTest PRIVATE juce::juce_core)

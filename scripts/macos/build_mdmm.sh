@@ -204,6 +204,7 @@ cmake --build "${build_dir}" --parallel 4 --target \
   bridgeServerRomPoolTest \
   mcpHttpGuardTest \
   mcpHttpServerTest \
+  mcpServerTest \
   synthLibAudioTest \
   synthLibMidiQueueTest \
   mdLibTest \
@@ -247,6 +248,7 @@ for test_name in \
   bridgeServerRomPoolTest \
   mcpHttpGuardTest \
   mcpHttpServerTest \
+  mcpServerTest \
   synthLibAudioTest \
   synthLibMidiQueueTest \
   mdLibTests \

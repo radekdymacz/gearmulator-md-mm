@@ -4,8 +4,8 @@
 # when BUILD_TESTING is on; the ctest names are the ones the CI lists use.
 #
 # Upstream excludes networkLib, bridgeLib and mcpServerLib from the default build (EXCLUDE_FROM_ALL); a target here
-# that needs one of them builds it as a dependency, on every generator. The bridge server and the HTTP layer are
-# programs or need JUCE as libraries, so their tests compile the sources they test directly.
+# that needs one of them builds it as a dependency, on every generator. The bridge server is a program and
+# mcpServerLib links the plug-in libraries, so their tests compile the sources they test directly.
 
 set(_mdmmSource ${CMAKE_CURRENT_SOURCE_DIR}/../../..)	# source/
 
@@ -34,13 +34,16 @@ add_test(NAME mcpHttpGuardTest COMMAND mcpHttpGuardTest)
 set_tests_properties(mcpHttpGuardTest PROPERTIES LABELS "UnitTest")
 set_property(TARGET mcpHttpGuardTest PROPERTY FOLDER "Tests")
 
-add_executable(mcpHttpServerTest httpServerTest.cpp
+add_executable(mcpHttpServerTest httpServerTest.cpp loopbackClient.h
 	${_mdmmSource}/mcpServerLib/httpServer.cpp ${_mdmmSource}/mcpServerLib/httpServer.h)
 target_include_directories(mcpHttpServerTest PRIVATE ${_mdmmSource}/mcpServerLib)
 target_link_libraries(mcpHttpServerTest PRIVATE networkLib)
 add_test(NAME mcpHttpServerTest COMMAND mcpHttpServerTest)
 set_tests_properties(mcpHttpServerTest PROPERTIES LABELS "UnitTest" TIMEOUT 120)
 set_property(TARGET mcpHttpServerTest PROPERTY FOLDER "Tests")
+
+# mcpServerTest (mcpServerTest.cpp, the MCP server above the HTTP layer) needs juce_core and is declared with the
+# JUCE tests in mdJucePlugin/mdmmPlugins.cmake: JUCE marks its module sources header-only in that folder only.
 
 # synthLib::Plugin: a state save encodes after the process lock is released (Device::StateCapture), and a full MIDI
 # ring never replays a stale event

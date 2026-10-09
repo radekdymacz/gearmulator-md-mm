@@ -8,6 +8,7 @@
 #include "networkLib/tcpStream.h"
 
 #include <algorithm>
+#include <cctype>
 #include <limits>
 #include <sstream>
 #include <system_error>
@@ -47,8 +48,9 @@ namespace mcpServer
 		}
 	}
 
-	HttpServer::HttpServer(const int _port, RequestHandler _handler)
+	HttpServer::HttpServer(const int _port, RequestHandler _handler, const uint32_t _idleReadTimeoutMs)
 		: m_port(_port)
+		, m_idleReadTimeoutMs(_idleReadTimeoutMs)
 		, m_handler(std::move(_handler))
 	{
 		m_tcpServer = std::make_unique<networkLib::TcpServer>([this](std::unique_ptr<networkLib::TcpStream> _stream)
@@ -106,7 +108,7 @@ namespace mcpServer
 			return;
 		}
 
-		_stream->setReadTimeout(g_idleReadTimeoutMs);
+		_stream->setReadTimeout(m_idleReadTimeoutMs);
 
 		auto client = std::make_unique<Client>();
 		client->stream = std::move(_stream);
@@ -253,7 +255,10 @@ namespace mcpServer
 			const auto value = trimWhitespace(headerLine.substr(colonPos + 1));
 
 			// Lowercase key for case-insensitive lookup
-			std::transform(key.begin(), key.end(), key.begin(), ::tolower);
+			std::transform(key.begin(), key.end(), key.begin(), [](const unsigned char _c)
+			{
+				return static_cast<char>(std::tolower(_c));	// a char of 0x80 and up is negative: undefined for tolower
+			});
 			_request.headers[key] = value;
 		}
 

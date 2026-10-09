@@ -146,9 +146,9 @@ if (-not $TestOnly) {
     )
     if ($WithTests) {
         $targets += @('baseLibBinaryStreamTest', 'bridgeLibTest', 'bridgeServerRomPoolTest', 'mcpHttpGuardTest',
-            'mcpHttpServerTest', 'synthLibAudioTest', 'synthLibMidiQueueTest', 'mdLibTest', 'mdAudioQueueTest',
-            'mdAudioFirmwareTest', 'mdAudioIoLayoutTest', 'mdProcessorHooksTest', 'mdProjectStateRestoreTest',
-            'mdProgramChangeFirmwareTest',
+            'mcpHttpServerTest', 'mcpServerTest', 'synthLibAudioTest', 'synthLibMidiQueueTest', 'mdLibTest',
+            'mdAudioQueueTest', 'mdAudioFirmwareTest', 'mdAudioIoLayoutTest', 'mdProcessorHooksTest',
+            'mdProjectStateRestoreTest', 'mdProgramChangeFirmwareTest',
             'mdAudioProbePlugin_VST3', 'vst3ProgramChangeTest', 'mdProgramChangeProbe_VST3')
     }
     Invoke-Native -FilePath $cmake -Arguments (@(
@@ -179,7 +179,7 @@ if ($WithTests) {
         '--test-dir', $BuildDir,
         '-C', $Configuration,
         '--output-on-failure',
-        '--tests-regex', '^(baseLibBinaryStreamTest|bridgeLibTest|bridgeServerRomPoolTest|mcpHttpGuardTest|mcpHttpServerTest|synthLibAudioTest|synthLibMidiQueueTest|mdLibTests|mdAudioQueueTest|mdAudioFirmwareTest|mdAudioIoLayoutTest|mdProcessorHooksTest|mdProjectStateRestoreTest|mdProgramChangeFirmwareTest|mdAudioProbePluginVST3IdentityTest|mdVst3ProgramChange(Test|OptOutTest)|(md|mm)JucePlugin_VST3ProgramChangeTest)$'
+        '--tests-regex', '^(baseLibBinaryStreamTest|bridgeLibTest|bridgeServerRomPoolTest|mcpHttpGuardTest|mcpHttpServerTest|mcpServerTest|synthLibAudioTest|synthLibMidiQueueTest|mdLibTests|mdAudioQueueTest|mdAudioFirmwareTest|mdAudioIoLayoutTest|mdProcessorHooksTest|mdProjectStateRestoreTest|mdProgramChangeFirmwareTest|mdAudioProbePluginVST3IdentityTest|mdVst3ProgramChange(Test|OptOutTest)|(md|mm)JucePlugin_VST3ProgramChangeTest)$'
     )
     Invoke-Native -FilePath $ctest -Arguments @(
         '--test-dir', $BuildDir,

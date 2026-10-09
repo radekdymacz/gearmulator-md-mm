@@ -38,7 +38,8 @@ namespace mcpServer
 
 		using RequestHandler = std::function<HttpResponse(const HttpRequest&, networkLib::Stream&)>;
 
-		HttpServer(int _port, RequestHandler _handler);
+		// _idleReadTimeoutMs: g_idleReadTimeoutMs but in tests
+		HttpServer(int _port, RequestHandler _handler, uint32_t _idleReadTimeoutMs = g_idleReadTimeoutMs);
 		// Returns once every client thread has finished: blocked reads and writes are interrupted. A handler
 		// that waits for something else (an SSE stream) must be woken by its owner first.
 		~HttpServer();
@@ -64,6 +65,7 @@ namespace mcpServer
 		static bool sendResponse(const HttpResponse& _response, networkLib::Stream& _stream);
 
 		const int m_port;
+		const uint32_t m_idleReadTimeoutMs;
 		RequestHandler m_handler;
 		std::unique_ptr<networkLib::TcpServer> m_tcpServer;
 

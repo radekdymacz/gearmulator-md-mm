@@ -183,6 +183,7 @@ jobs:
           mdFrontPanelPresentationTest
           mdAudioIoLayoutTest
           mdProcessorHooksTest
+          mcpServerTest
 
       - name: Run headless gates
         env:
@@ -212,7 +213,7 @@ jobs:
           ctest --test-dir build-mdmm-core -C Release --output-on-failure
           --no-tests=error
           --tests-regex
-          '^(midiOutputDispatcherTest|mdAutomationParameterTest|mdAutomationArchitectureTest|mdAudioIoLayoutTest|mdProcessorHooksTest|mdFrontPanelPresentationTests)$'
+          '^(midiOutputDispatcherTest|mdAutomationParameterTest|mdAutomationArchitectureTest|mdAudioIoLayoutTest|mdProcessorHooksTest|mdFrontPanelPresentationTests|mcpServerTest)$'
 
       - name: Build and run Shift panel chording regression
         run: |

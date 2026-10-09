@@ -19,7 +19,6 @@
 #include <unistd.h>
 #endif
 
-#include <algorithm>
 #include <sstream>
 #include <thread>
 #include <chrono>
@@ -338,7 +337,8 @@ namespace mcpServer
 			tool.inputSchema.addIntProperty("note", "MIDI note number (0-127, e.g. 60=C4)", true, 0, 127);
 			tool.inputSchema.addIntProperty("velocity", "Note velocity (1-127)", false, 1, 127);
 			tool.inputSchema.addIntProperty("channel", "MIDI channel (0-15)", false, 0, 15);
-			tool.inputSchema.addIntProperty("duration_ms", "Note duration in milliseconds", false, 1, 10000);
+			tool.inputSchema.addIntProperty("duration_ms", "Note duration in milliseconds", false,
+				g_noteDurationMinMs, g_noteDurationMaxMs);
 			tool.inputSchema.addProperty("source", "string", "MIDI source: 'editor' (default), 'host', 'physical'", false);
 			tool.handler = [this](const JsonValue& _params) -> JsonValue
 			{
@@ -347,9 +347,7 @@ namespace mcpServer
 					? static_cast<uint8_t>(_params.get("velocity").getInt()) : static_cast<uint8_t>(100);
 				const uint8_t channel = _params.hasProperty("channel")
 					? static_cast<uint8_t>(_params.get("channel").getInt()) : static_cast<uint8_t>(0);
-				// The schema's range, enforced: the call holds its client thread (and a server shutdown) this long
-				const int durationMs = std::clamp(_params.hasProperty("duration_ms")
-					? _params.get("duration_ms").getInt() : 500, 1, 10000);
+				const int durationMs = noteDurationMs(_params);
 				const auto source = parseMidiSource(_params);
 
 				// Note on

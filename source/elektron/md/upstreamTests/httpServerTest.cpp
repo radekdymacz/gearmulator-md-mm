@@ -1,6 +1,8 @@
 // The MCP HTTP server (httpServer.cpp) over real sockets: it listens on loopback only, refuses requests a browser
 // page could make, bounds what a client may send or hold, and shuts down without waiting for its clients.
 
+#include "loopbackClient.h"
+
 #include "httpServer.h"
 
 #include "networkLib/logging.h"
@@ -38,9 +40,7 @@
 
 namespace
 {
-	using Clock = std::chrono::steady_clock;
-	using Milliseconds = std::chrono::milliseconds;
-	using ClientStream = std::unique_ptr<ptypes::ipstream>;
+	using namespace loopbackClient;
 
 	int g_failures = 0;
 	int g_nextPort = 47100;
@@ -52,40 +52,6 @@ namespace
 			++g_failures;
 	}
 
-	// Ends the test when a step does not finish in time, instead of hanging until ctest gives up
-	class Watchdog
-	{
-	public:
-		Watchdog(const Milliseconds _limit, std::string _what) : m_what(std::move(_what))
-		{
-			m_thread = std::thread([this, _limit]
-			{
-				std::unique_lock lock(m_mutex);
-				if(m_cv.wait_for(lock, _limit, [this] { return m_done; }))
-					return;
-				std::cout << "FAIL " << m_what << ": did not finish within " << _limit.count() << " ms" << std::endl;
-				std::_Exit(1);
-			});
-		}
-
-		~Watchdog()
-		{
-			{
-				std::lock_guard lock(m_mutex);
-				m_done = true;
-			}
-			m_cv.notify_all();
-			m_thread.join();
-		}
-
-	private:
-		std::string m_what;
-		std::mutex m_mutex;
-		std::condition_variable m_cv;
-		bool m_done = false;
-		std::thread m_thread;
-	};
-
 	struct Server
 	{
 		std::unique_ptr<mcpServer::HttpServer> http;
@@ -94,7 +60,7 @@ namespace
 	};
 
 	// A server on a free port whose handler answers every request with 200 and an empty JSON object
-	std::unique_ptr<Server> startServer()
+	std::unique_ptr<Server> startServer(const uint32_t _idleReadTimeoutMs = mcpServer::HttpServer::g_idleReadTimeoutMs)
 	{
 		auto server = std::make_unique<Server>();
 		auto* s = server.get();
@@ -102,13 +68,14 @@ namespace
 		{
 			try
 			{
-				server->http = std::make_unique<mcpServer::HttpServer>(g_nextPort, [s](const mcpServer::HttpRequest&, networkLib::Stream&)
+				const auto handler = [s](const mcpServer::HttpRequest&, networkLib::Stream&)
 				{
 					++s->handled;
 					mcpServer::HttpResponse response;
 					response.setJsonBody("{}");
 					return response;
-				});
+				};
+				server->http = std::make_unique<mcpServer::HttpServer>(g_nextPort, handler, _idleReadTimeoutMs);
 				server->port = g_nextPort;
 			}
 			catch(const std::exception&)
@@ -118,104 +85,10 @@ namespace
 		return server->http ? std::move(server) : nullptr;
 	}
 
-	ClientStream connect(const ptypes::ipaddress& _ip, const int _port)
-	{
-		auto stream = std::make_unique<ptypes::ipstream>(_ip, _port);
-		try
-		{
-			stream->open();
-			return stream;
-		}
-		catch(ptypes::exception* e)
-		{
-			delete e;
-			return nullptr;
-		}
-	}
-
-	ClientStream connectLoopback(const int _port)
-	{
-		return connect(ptypes::ipaddress(127, 0, 0, 1), _port);
-	}
-
-	bool send(ptypes::ipstream& _s, const std::string& _data)
-	{
-		try
-		{
-			_s.write(_data.data(), static_cast<int>(_data.size()));
-			_s.flush();
-			return true;
-		}
-		catch(ptypes::exception* e)
-		{
-			delete e;
-			return false;
-		}
-	}
-
 	std::string requestText(const int _port, const std::string& _extraHeaders = {}, const std::string& _host = {})
 	{
 		const auto host = _host.empty() ? "127.0.0.1:" + std::to_string(_port) : _host;
 		return "POST /mcp HTTP/1.1\r\nHost: " + host + "\r\n" + _extraHeaders + "Content-Length: 2\r\n\r\n{}";
-	}
-
-	// Collects what arrives until _done says the data is complete, the server closes the connection or the
-	// time is up. Returns true when the connection was closed by the server.
-	bool receive(ptypes::ipstream& _s, const Milliseconds _timeout, std::string& _data, const std::function<bool(const std::string&)>& _done)
-	{
-		const auto deadline = Clock::now() + _timeout;
-		try
-		{
-			while(!_done(_data))
-			{
-				// A timeout of 0 still polls once
-				const auto remaining = std::max<long long>(0, std::chrono::duration_cast<Milliseconds>(deadline - Clock::now()).count());
-				if(!_s.waitfor(static_cast<int>(remaining)))
-					return false;
-				if(_s.get_eof())
-					return true;
-				std::string chunk(static_cast<size_t>(_s.get_dataavail()), '\0');
-				_s.read(chunk.data(), static_cast<int>(chunk.size()));
-				_data += chunk;
-			}
-			return false;
-		}
-		catch(ptypes::exception* e)
-		{
-			// Reset by the server: closed as well
-			delete e;
-			return true;
-		}
-	}
-
-	bool waitClosed(ptypes::ipstream& _s, const Milliseconds _timeout)
-	{
-		std::string ignored;
-		return receive(_s, _timeout, ignored, [](const std::string&) { return false; });
-	}
-
-	// One complete response (headers and a Content-Length body), or "" when none arrives in time
-	std::string readResponse(ptypes::ipstream& _s, const Milliseconds _timeout)
-	{
-		std::string data;
-		const auto complete = [](const std::string& _d)
-		{
-			const auto headerEnd = _d.find("\r\n\r\n");
-			if(headerEnd == std::string::npos)
-				return false;
-			size_t length = 0;
-			const auto pos = _d.find("Content-Length: ");
-			if(pos != std::string::npos && pos < headerEnd)
-				length = std::strtoul(_d.c_str() + pos + 16, nullptr, 10);
-			return _d.size() >= headerEnd + 4 + length;
-		};
-		receive(_s, _timeout, data, complete);
-		return complete(data) ? data : std::string();
-	}
-
-	bool isStatus(const std::string& _response, const int _status)
-	{
-		return _response.rfind("HTTP/1.1 " + std::to_string(_status) + ' ', 0) == 0;
 	}
 
 	// Live threads of this process, -1 where this test cannot count them
@@ -526,6 +399,41 @@ namespace
 			check(isStatus(response, 200) && server->handled == 1, "input: the server still serves a well-formed request");
 		}
 	}
+
+	// A client that sends nothing for the idle read timeout is dropped (60 s in the plug-in, 300 ms here), and so is
+	// one that stops in the middle of a request; one that keeps talking is served
+	void testIdleTimeout()
+	{
+		constexpr uint32_t timeoutMs = 300;
+		auto server = startServer(timeoutMs);
+		if(!server)
+		{
+			check(false, "idle: a free port");
+			return;
+		}
+		const Watchdog watchdog(Milliseconds(15000), "idle read timeout");
+
+		auto silent = connectLoopback(server->port);
+		const auto start = Clock::now();
+		const bool closed = silent && waitClosed(*silent, Milliseconds(3000));
+		const auto elapsed = std::chrono::duration_cast<Milliseconds>(Clock::now() - start).count();
+		check(closed && elapsed >= timeoutMs / 2 && elapsed < 2000,
+			"idle: a client that sends nothing is dropped after the idle timeout (" + std::to_string(elapsed) + " ms)");
+
+		auto halfway = connectLoopback(server->port);
+		const bool sent = halfway && send(*halfway, "POST /mcp HTTP/1.1\r\nHost: 127.0.0.1:" + std::to_string(server->port) + "\r\n");
+		check(sent && waitClosed(*halfway, Milliseconds(3000)) && server->handled == 0,
+			"idle: a request that stops halfway is dropped too, the handler is not called");
+
+		auto talking = connectLoopback(server->port);
+		bool served = talking != nullptr;
+		for(int i = 0; i < 3 && served; ++i)
+		{
+			std::this_thread::sleep_for(Milliseconds(timeoutMs / 2));
+			served = send(*talking, requestText(server->port)) && isStatus(readResponse(*talking, Milliseconds(2000)), 200);
+		}
+		check(served && server->handled == 3, "idle: a client that keeps talking within the timeout is served");
+	}
 }
 
 int main(const int _argc, char* _argv[])
@@ -549,6 +457,7 @@ int main(const int _argc, char* _argv[])
 	run("shutdown", testShutdownWithIdleClient);
 	run("limit", testClientLimitAndReaping);
 	run("input", testOversizedInput);
+	run("idle", testIdleTimeout);
 
 	if(g_failures)
 	{

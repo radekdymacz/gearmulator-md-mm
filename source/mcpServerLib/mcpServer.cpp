@@ -88,10 +88,10 @@ namespace mcpServer
 		// Host and Origin values), and a browser page must not be able to read any response.
 		HttpResponse response;
 
-		// CORS preflight
+		// OPTIONS: an empty answer. A browser's preflight gets no Access-Control headers from it, so it stops there.
 		if (_request.isOptions())
 		{
-			LOGNET(networkLib::LogLevel::Debug, "CORS preflight for " << _request.path);
+			LOGNET(networkLib::LogLevel::Debug, "OPTIONS for " << _request.path);
 			response.statusCode = 204;
 			response.statusText = "No Content";
 			return response;

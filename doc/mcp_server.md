@@ -44,6 +44,12 @@ The server listens on **127.0.0.1, port 13710** by default: connect to `http://1
 
 Requests are refused with `403 Forbidden` unless the `Host` header is `127.0.0.1:<port>`, `localhost:<port>` or `[::1]:<port>` and an `Origin` header, if the client sends one, is that same server (`http://127.0.0.1:<port>`, for example). MCP clients and scripts send a matching `Host` on their own and no `Origin`; the check is there so that a web page in a browser cannot drive the server through a cross-site request or DNS rebinding. The server sends no CORS headers.
 
+#### Security: no authentication (an accepted risk)
+
+The server does not authenticate its clients. What limits who can reach it: it is **opt-in and off by default**, listens on **127.0.0.1 only**, and refuses requests whose `Host` or `Origin` is not this server (the check above). That stops other machines and web pages, but not programs on this computer: **any local process, under any user account, can connect to the port and call every tool**, including the ones that change or read the whole plug-in state (`set_state`, `set_plugin_state`, `get_state`, `get_plugin_state`), send MIDI and SysEx, and click or screenshot the editor. The discovery file (below) tells such a program which port to use.
+
+So turn the server on only while you use it, on a computer whose local programs and users you trust. This risk is accepted while the server is a developer option that is off by default. If it is ever on by default, the next step is a per-instance token: a random secret the server writes next to its port in the discovery file, readable by the user only (mode 0600; today the file gets the default mode, which other users can usually read), and requires on every request as `Authorization: Bearer <token>`. That changes what clients send, so existing scripts would need it too.
+
 #### Discovery File
 
 Active instances register themselves in a JSON file at:
