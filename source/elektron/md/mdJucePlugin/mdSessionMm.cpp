@@ -22,8 +22,9 @@ namespace mdJucePlugin
 	{
 		double nowMs() { return sessionNowMs(); }
 
-		// How often the emulator engine asks the device for the probe and the working kit.
-		constexpr double g_probeMs = 32;
+		// How often the emulator engine asks the device whether the firmware runs (B-036: as the Machinedrum's, the
+		// probe takes the plug-in's device lock, which the audio thread holds for a whole block) and for the working kit.
+		constexpr double g_probeMs = 96;
 		constexpr double g_memoryMs = 32;
 	}
 
