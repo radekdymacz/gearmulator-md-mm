@@ -242,14 +242,31 @@ product is called. The LV2 URI is pinned to the old one in `mdmmPlugins.cmake`.
 
 **Upgrading from 0.3.1 or earlier.** Installer never removes a file the new
 package does not have, so each component's `preinstall`
-(`pkg-resources/remove-old-bundles`) removes `Gearmulator MD.vst3` /
-`.component` (and an app built before the rename at `Machinedrum
-Editor.app`) before the new one lands, in the domain being installed into and
-in the installing person's home folder. Only ours: the bundle must carry the
-editor's identifier, or our receipt (`com.nativekloud.mdmm.md.vst3` …) must
-list the path. An upstream Gearmulator build of the same name is left alone.
+(`pkg-resources/remove-old-bundles`, rendered per machine and component by
+`render_remove_old_bundles.sh` from the names and identifiers in
+`mdmm-product.env`) removes what is left under the old name before the new
+bundle lands: `Gearmulator MD.vst3`, `Gearmulator MD.component` and a
+`Gearmulator MD.app` (and `MM`), plus an app at `Machinedrum Editor.app` built
+before the rename. It looks in the install location and in the home folder of
+the person installing (`$HOME`, the person at the console, `$SUDO_USER`: a
+root-run Installer has no home of its own, and the 0.3.0 and 0.3.1 zip and disk
+image told people to copy the plug-ins into `~/Library/Audio/Plug-Ins` by
+hand, so those copies have no receipt). Never another user's home folder.
+Only ours, by exact path (no symbolic link) and identifier: the bundle must
+carry the editor's (`com.nativekloud.machinedrum-editor`), or, for the VST3
+and the AU only, upstream Gearmulator's (`local.gearmulator.preview.GearmulatorMD`,
+0.3.0 and earlier: same plug-in codes, so a DAW would clash with it anyway),
+or our receipt (`com.nativekloud.mdmm.md.vst3` ...) must list the path. An
+old-named app with upstream's identifier is somebody's own copy and stays.
+`scripts/release/test_release_scripts.py` runs the rendered script against a
+temporary folder (names, identifiers, symbolic links, receipts, home folders).
 `verify_mdmm_pkg_install.sh` fails if one of ours is still there. The disk
-images cannot do this; their `Install.txt` says to delete the old bundles.
+images cannot do this; their `Install.txt` says which old bundles to delete,
+and where. Why it matters beyond a duplicate in the plug-in list: 0.1.0-alpha
+and 0.2.0 carried the upstream project's version, 2.2.9, and from 0.2.1 the
+editors' own (0.2.1, 0.3.x). macOS keeps one Audio Unit per type, subtype and
+manufacturer and is said to prefer the higher version (not verified here), so a
+left-over 2.2.9 AU may win over the new one.
 
 ## Hardened runtime and the JIT
 

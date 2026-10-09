@@ -24,10 +24,14 @@ right-click &rsaquo; Open no longer gets past this); or</li>
 <h2>In your DAW</h2>
 <p>The plug-ins show up as <b>{{APP_NAME}}</b> by Future Native Audio (VST3 and Audio Unit, instrument).
 Up to 0.3.1 they were called {{OLD_NAME}}; projects saved with those open with {{APP_NAME}}.
-Rescan plug-ins or restart the DAW after installing. Install either for all users
+The installer removes the old-named copies it finds. Rescan plug-ins or restart the DAW after
+installing. Install either for all users
 or for you only, not both: with a copy in <code>/Library/Audio/Plug-Ins</code> and
 another in <code>~/Library/Audio/Plug-Ins</code> the DAW lists two. Remove the one you
-do not want.</p>
+do not want. The VST3 and the Audio Unit are the same editor in two formats, and a DAW
+may list both: use one of them, and leave the other out under <b>Customize</b>.
+If the DAW still lists two, look for <code>{{OLD_NAME}}.vst3</code> and
+<code>{{OLD_NAME}}.component</code> in the same folders and delete them.</p>
 
 <h2>Where your files live</h2>
 <ul>
@@ -40,7 +44,8 @@ do not want.</p>
 <code>/Library/Audio/Plug-Ins/VST3/{{APP_NAME}}.vst3</code> and
 <code>/Library/Audio/Plug-Ins/Components/{{APP_NAME}}.component</code>; if you installed
 for you only, the same three in <code>~/Applications</code> and
-<code>~/Library/Audio/Plug-Ins</code>.
+<code>~/Library/Audio/Plug-Ins</code>. A copy from 0.3.1 or earlier is called
+{{OLD_NAME}}; delete that too.
 Your firmware and settings in Documents are not touched.</p>
 
 <h2>Help and source</h2>

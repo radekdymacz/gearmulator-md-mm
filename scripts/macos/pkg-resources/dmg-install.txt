@@ -1,6 +1,12 @@
 {{APP_NAME}} {{VERSION}}
 ====================================
 
+This disk image holds the files loose, to put in place by hand: there is no
+installer in it. The installer is {{MACHINE}}-Editor-macOS.pkg, a separate
+download on the same release page (https://mdmm.dev/get/). It puts all three in
+place for you and removes the old ones (see "Upgrading" below). Use this disk
+image only if you would rather place the files yourself.
+
 Drag each item onto the folder next to it:
 
   {{APP_NAME}}.app        ->  {{LINK_APPS}}
@@ -19,12 +25,19 @@ Then restart your DAW or ask it to rescan plug-ins. Keep one copy of each
 plug-in, not one in /Library and another in ~/Library, or the DAW lists two.
 
 Upgrading from 0.3.1 or earlier: the plug-ins were called {{OLD_NAME}}.vst3
-and {{OLD_NAME}}.component then. Delete those from the plug-in folders, or
-the DAW lists the editor twice. Projects that used them open with
-{{APP_NAME}}: the plug-in is the same one under its new name.
+and {{OLD_NAME}}.component then (and the app {{OLD_NAME}}.app, when it came from
+the zip). Dragging the new ones in does not remove the old ones, and a DAW then
+lists the editor twice. Delete the old ones from every place they are in, in
+Finder > Go > Go to Folder:
 
-Prefer an installer? Machinedrum-Editor-macOS.pkg / Monomachine-Editor-macOS.pkg
-from the same release page puts all three in place for you.
+  /Library/Audio/Plug-Ins/VST3/{{OLD_NAME}}.vst3
+  /Library/Audio/Plug-Ins/Components/{{OLD_NAME}}.component
+  /Applications/{{OLD_NAME}}.app
+
+and the same three under your own home folder (~/Library/Audio/Plug-Ins/VST3,
+~/Library/Audio/Plug-Ins/Components, ~/Applications). Projects that used them
+open with {{APP_NAME}}: the plug-in is the same one under its new name. The
+installer (.pkg) deletes these for you.
 
 Firmware is not included. On first start the app or plug-in shows the folder
 for it:
@@ -34,8 +47,9 @@ for it:
 Copy a {{MACHINE}} firmware image you are entitled to use there, then restart.
 Please do not ask anyone, in any channel, for firmware files.
 
-Removing it: delete the three items from where you dropped them. Your
-firmware and settings in Documents are not touched.
+Removing it: delete the three items from where you dropped them (and any
+{{OLD_NAME}} ones, see above). Your firmware and settings in Documents are not
+touched.
 
 Licence: free software under the GNU GPL version 3; the text is in LICENSE.txt
 on this disk image.
