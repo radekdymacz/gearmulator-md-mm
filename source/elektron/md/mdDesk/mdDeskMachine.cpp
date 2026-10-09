@@ -697,7 +697,7 @@ namespace mdDesk
 			{"chainClear", &MdMachine::cmdChainClear}, {"globalSlot", &MdMachine::cmdGlobalSlot},
 			{"selectSong", &MdMachine::cmdSelectSong}, {"reloadSong", &MdMachine::cmdReloadSong},
 			{"sampleName", &MdMachine::cmdSampleName}, {"sampleCancel", &MdMachine::cmdSampleCancel}, {"play", &MdMachine::cmdPlay}, {"stop", &MdMachine::cmdStop},
-			{"mute", &MdMachine::cmdMute}, {"followHost", &MdMachine::cmdFollowHost}};
+			{"mute", &MdMachine::cmdMute}, {"followHost", &MdMachine::cmdFollowHost}, {"seqMode", &MdMachine::cmdSeqMode}};
 		return map;
 	}
 
@@ -1251,6 +1251,18 @@ namespace mdDesk
 		if(m_port.sendMute)
 			m_port.sendMute(t, on);
 		return ok();
+	}
+
+	// 0.3.5: the Song page's PATTERN | SONG switch: SET STATUS sequencer mode (Appendix C, so over HW MIDI too), then the
+	// status asked for: the page shows what the machine reports, never what was asked
+	Outcome MdMachine::cmdSeqMode(const Value& _m, const Documents&)
+	{
+		if(!canSendSysex())
+			return refuse("This engine cannot send SysEx to the machine.");
+		const bool song = flagOf(_m, "song");
+		sendSysex(ed::mdSetStatus(ed::MdStatus::SequencerMode, song ? 1 : 0));
+		sendSysex(ed::mdStatusRequest(ed::MdStatus::SequencerMode));
+		return ok(song ? "SONG mode: the machine plays the song." : "PATTERN mode: the machine plays the pattern.");
 	}
 
 	// ---- sequences ----

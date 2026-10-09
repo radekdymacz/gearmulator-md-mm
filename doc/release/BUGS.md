@@ -4,6 +4,15 @@
 repository; the site sends reports to the contact address. Newest first. Each entry:
 where it came from, the setup, what happens, what should happen, status.*
 
+## B-034 · A glitch when the app closes and at every DAW state save (Machinedrum)
+
+- **From:** Radek, 2026-10-09; cause found by a read-only check and measured.
+- **What happens:** a short drop-out when the standalone closes, at every DAW save or autosave, and at Remove ROM; closing while a pattern plays also clicks.
+- **Cause:** `synthLib::Plugin::getState` holds the plug-in's lock, the one `processAudio` takes; inside it the Machinedrum's state (`md::Device::getState` -> `makeFlashOverlay`, `validFlashOverlay`) fingerprinted the 8 MiB ROM twice and the 8 MiB factory baseline once (FNV), besides 8 MiB copies: 26-30 ms with the audio thread blocked (2-3 buffers at 512). JUCE's standalone saves while the audio runs and then stops it at once.
+- **Fix (release 0.3.5):** the ROM's and the factory baseline's fingerprints are computed once (the ROM's at load, the baseline's when its capture completes or a cached one is first decoded), kept by `md::Hardware` and passed to the state encoder; the state bytes are the same (`mdStateTest`: same bytes, read back). Measured (`mdStateTest`, an 8 MiB synthetic ROM and baseline): the state encode under the lock 33.4 ms -> 7.9 ms. The standalone quits in order, for the close button and the system's quit alike: the output fades to silence over about 30 ms, the audio stops at about 60 ms, then the state is saved (with the gain it had), then the app quits (`jucePluginEditorLib/standaloneApp.h`, both editors).
+- **Not yet (0.3.6):** the remaining copy, sector compare and encode still run under the lock (moving them out, dirty-sector tracking).
+- **Status:** fixed for 0.3.5 (the rest for 0.3.6).
+
 ## B-033 · Linux: blank window, no editor page
 
 - **From:** Discord tester, 2026-10-08, Linux (distribution not given), 0.3.4.
@@ -21,7 +30,8 @@ where it came from, the setup, what happens, what should happen, status.*
 
 - **From:** Discord tester A, 2026-10-08, 0.3.4: after importing patterns by SysEx, patterns get stuck; the next pattern can't be selected.
 - **Likely:** 0.3.4's import read-back flood (B-020) leaving pushes pending; 0.3.5's new import should fix it — verify pattern select after an import.
-- **Status:** open, check in 0.3.5.
+- **0.3.5:** the journey `md-lib-syx-import-mute` selects the next pattern after an import (with its globals) stopped, then the previous one while playing: the machine takes both, in the standalone and the VST3, with an own export, its base channel changed, and the Autechre backup.
+- **Status:** not reproduced in 0.3.5; open until the tester confirms.
 
 ## B-030 · Tempo doesn't follow the DAW
 

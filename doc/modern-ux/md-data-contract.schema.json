@@ -5661,6 +5661,39 @@
         },
         {
           "type": "object",
+          "description": "machine: PATTERN or SONG mode (SET STATUS 0x10), read back from the machine's status",
+          "required": [
+            "op",
+            "song"
+          ],
+          "properties": {
+            "op": {
+              "const": "seqMode"
+            },
+            "id": {
+              "type": "integer"
+            },
+            "g": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "force": {
+              "type": [
+                "boolean",
+                "integer"
+              ]
+            },
+            "song": {
+              "type": [
+                "boolean",
+                "integer"
+              ]
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
           "description": "machine",
           "required": [
             "op",

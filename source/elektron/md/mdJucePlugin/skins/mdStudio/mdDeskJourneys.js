@@ -982,14 +982,32 @@ const MdJourneys = (() => {
 			{ say: "press PLAY: the mute holds", act: u => { tele.steps = []; u.click("#play"); },
 				machine: c => ok(new Set(tele.steps).size >= 4 && (c.off ? same(mutes(), c.m0) : mutes().includes(c.t) === c.want), `machine mutes ${mutes()}, steps ${tele.steps.length}`),
 				screen: c => ok(pressed(railM(c.t)) === (c.off ? c.m0.includes(c.t) : c.want), "M " + (pressed(railM(c.t)) ? "lit" : "not lit")), within: 8000 },
+			{ say: "press STOP", act: u => u.click("#play"), machine: () => ok(tele.last && !tele.last.playing, "still playing") },
+			/* B-031: after an import the pattern still changes, stopped and playing */
+			{ say: "click › next to the pattern: the machine selects it (stopped)", act: async (u, c) => { c.p0 = currentPatternSlot(); u.click("#patNext"); await confirmIfAsked(u); },
+				machine: c => ok(currentPatternSlot() === c.p0 + 1, "machine pattern " + currentPatternSlot()), within: 6000 },
+			{ say: "press PLAY, click ‹: the machine moves to it at the pattern's end (playing)", act: async u => { u.click("#play"); await sleep(500); u.click("#patPrev"); await confirmIfAsked(u); },
+				machine: c => ok(currentPatternSlot() === c.p0 && V.playing, "machine pattern " + currentPatternSlot() + (V.playing ? ", playing" : ", stopped")), within: 15000 },
 			{ say: "press STOP", act: u => u.click("#play"), machine: () => ok(tele.last && !tele.last.playing, "still playing") }
 		],
 		async tidy(u, c) { if (V.playing) u.click("#play"); await sleep(300); if (c.t != null && !c.off && mutes().includes(c.t) !== c.m0.includes(c.t)) u.click(railM(c.t)); await sleep(500); }
 	};
+	/* 0.3.5: the Song page's PATTERN | SONG switch: what is lit is the status the machine reports */
+	const songModeJ = {
+		name: "md-song-mode",
+		steps: [
+			go("song"),
+			{ say: "click SONG next to Plays: the machine reports song mode", act: (u, c) => { c.m0 = machineState().songMode === true; u.click('[data-seqmode="song"]'); },
+				machine: () => ok(machineState().songMode === true, "songMode " + machineState().songMode), screen: () => ok(pressed('[data-seqmode="song"]') && !pressed('[data-seqmode="pattern"]'), "SONG not lit"), within: 6000 },
+			{ say: "click PATTERN: the machine reports pattern mode", act: u => u.click('[data-seqmode="pattern"]'),
+				machine: () => ok(machineState().songMode === false, "songMode " + machineState().songMode), screen: () => ok(pressed('[data-seqmode="pattern"]') && !pressed('[data-seqmode="song"]'), "PATTERN not lit"), within: 6000 }
+		],
+		async tidy(u, c) { if (c.m0 && machineState().songMode !== true) { u.click('[data-seqmode="song"]'); await sleep(1500); } }
+	};
 	const all = [bootCard, firstBeat, spaceTransport, tempoDrag, tapTempo, tapTempoB, patStep, queuePattern, plate, wsKeys, helpKeys, osHelp, undoRedo,
 		paintUndo, accentSlide, lockLane, pagesJ, copyPaste, selectCopyPaste, stepMenuJ, osCopyPaste, buttonsCopyPaste, clearPatternJ, fillEveryJ, rotateJ, rotateUndo, trackKeys, muteKeys, liveRec,
 		genJourney("md-gen-mutate-undo", false), genJourney("md-gen-defaults-mutate-undo", true), genKeys,
-		shapeSound, arrows, machinePick, soundCopy, editorDrag, controlAll, globalKey,
+		shapeSound, arrows, machinePick, soundCopy, editorDrag, controlAll, globalKey, songModeJ,
 		mixSolo, shiftMutes, allOff, fader, outKey, masterFx,
 		songArrange, songChain, samplerSlots, samplerSetup, audition,
 		libDialog, kitCopy, kitRename, kitClear, patGo, patClear, dialogEsc,

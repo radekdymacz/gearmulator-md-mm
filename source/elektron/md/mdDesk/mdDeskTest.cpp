@@ -818,6 +818,16 @@ namespace
 		desk.onPageMessage(cmd(R"({"op":"undo","id":20})"));
 		check(params.size() == 1 && params[0] == std::array<uint8_t, 3>{2, 0, kit.params[2][0]} && desk.documents().working->kit.params[2] == kit.params[2],
 			"undo returns the trial to the base in one step");
+		// 0.3.5: the Song page's PATTERN | SONG switch: SET STATUS 0x10, then the status asked for (the page shows the answer)
+		now = 6000;
+		desk.tick();
+		wire.clear();
+		desk.onPageMessage(cmd(R"({"op":"seqMode","song":false,"id":30})"));
+		now = 9000;
+		desk.tick();
+		const auto has = [&](const std::vector<uint8_t>& _m) { return std::find(wire.begin(), wire.end(), _m) != wire.end(); };
+		check(has(ed::mdSetStatus(ed::MdStatus::SequencerMode, 0)) && has(ed::mdStatusRequest(ed::MdStatus::SequencerMode)),
+			"seqMode: SET STATUS sequencer mode, then the status asked for");
 	}
 
 	// DESIGN-edit-flow.md: paced, latest wins, one read-back at quiet.

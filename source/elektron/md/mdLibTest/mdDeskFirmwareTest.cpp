@@ -1790,6 +1790,19 @@ namespace
 		m.send(ed::mdLoadPattern(0));
 		_rig.run(300);
 		m.onMidi = nullptr;
+		// 0.3.5: the Song page's PATTERN | SONG switch, as the firmware takes it
+		const auto mode = [&] { const auto s = ed::parseMdStatusResponse(m.request(ed::mdStatusRequest(ed::MdStatus::SequencerMode), 0x72)); return s ? int(s->value) : -1; };
+		_rig.page(R"({"op":"seqMode","song":true,"id":998})");
+		_rig.run(400);
+		const int song = mode();
+		_rig.page(R"({"op":"seqMode","song":false,"id":999})");
+		_rig.run(400);
+		const int pattern = mode();
+		std::printf("  sequencer mode: SONG -> %d, PATTERN -> %d; the machine document says %s\n", song, pattern,
+			_rig.machineDoc() && _rig.machineDoc()->find("songMode") ? (_rig.machineDoc()->find("songMode")->isBool() && _rig.machineDoc()->find("songMode")->asBool() ? "song" : "pattern") : "nothing");
+		check(song == 1 && pattern == 0, "seqMode: the machine goes to SONG mode and back to PATTERN mode");
+		check(_rig.machineDoc() && _rig.machineDoc()->find("songMode") && _rig.machineDoc()->find("songMode")->isBool() && !_rig.machineDoc()->find("songMode")->asBool(),
+			"and the machine document reads pattern mode back");
 	}
 
 	// The session's import traits for the rig (mdSessionMd.cpp's, without the plug-in).

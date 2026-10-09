@@ -415,7 +415,7 @@ function mmPaint(steps,a,b,mode,n){const out=[];for(let s=Math.min(a,b);s<=Math.
 const MM_SEAM={
  "host":[
   "ownsClock","engineLabels","notes","start","commit","intent","library","undo","redo","history","togglePlay",
-  "selectPattern","kit","tempo","mutes","keyMode","record","songSlot","chain","chainClear","loadSong","waiting",
+  "selectPattern","kit","tempo","mutes","keyMode","record","songSlot","chain","chainClear","seqMode","loadSong","waiting",
   "sendNow","playKey","keyUp","noteOn","noteOff","joy","learning","learnTarget","learnBind","modulators",
   "engine","chooseRom","removeRom","romManage","syxChoose","syxExport","syxStart","syxStop","revealRom",
   "recheck","firstRun","bootScreen","renderPst","menu","audioDoc","audioSend","audioMeter"],
@@ -2987,12 +2987,18 @@ function chainSoon(){clearTimeout(S.chainTimer);
 function chainFooter(){const c=S.plays.chain,bn="ABCDEFGH"[S.bank],d=S.chainDraft;
  const known=!!c||!window.MMHost,active=!!(c&&c.active&&c.patterns.length),list=active?c.patterns:[],at=list.indexOf(S.pat),next=active?list[(at+1)%list.length]:null;
  const live=!canChain()?`<span class="note">${NA.chains}</span>`:!known?`<span class="note">The chain is not readable on this engine.</span>`
-  :S.plays.songMode?`<span class="note">Song mode: the machine plays song ${nn2(S.plays.song??0)}. A chain switches it to pattern mode.</span>`
+  :S.plays.songMode?`<span class="note">Song mode: the machine plays song ${nn2(S.plays.song??0)}. PATTERN or a chain switches it to pattern mode.</span>`
   :active?list.map(p=>`<span class="lcdchip${p===S.pat?" now":""}${S.playing&&p===next&&at>=0?" nx":""}">${patName(p)}</span>`).join("<i>»</i>")+"<i>↺</i>"
   :`<span class="note">No chain. The machine plays ${patName(S.pat)} and stays on it.</span>`;
- return`<div class="chainfoot"><div class="irow"><span class="ilab">Plays</span><div class="chainrow">${live}</div></div>
+ const mode=seqModeKeys();
+ return chainRows(mode,live,d,bn,active)}
+function seqModeKeys(){return`<span class="seg seqmode" title="PATTERN: the machine plays the pattern (and its chain). SONG: it plays the song. What is lit is what the machine reports">${[["pattern","PATTERN",false],["song","SONG",true]].map(([k,l,v])=>`<button data-seqmode="${k}" aria-pressed="${S.plays.songMode===v}">${l}</button>`).join("")}</span>`}
+function chainRows(mode,live,d,bn,active){
+ return`<div class="chainfoot"><div class="irow"><span class="ilab">Plays</span>${mode}<div class="chainrow">${live}</div></div>
   <div class="irow"><span class="ilab"></span><span class="chainacts"><button data-chain="undo"${d.length?"":" disabled"} title="Takes the last pad out and chains the rest at once">Back</button><button class="danger" data-chain="clear"${active||d.length?"":" disabled"} title="BANK + the TRIG key of the pattern that plays: the machine's way to end a chain. The pads start over">Clear</button></span>
   <span class="note">${d.length===1?`One more pad and the machine plays the chain (BANK ${bn} held, the TRIG keys in order; ${S.playing?"from the pattern end":"PLAY starts at the first"}).`:"Each pad chains at once: the machine plays them in order and loops."} One bank, each pattern once. Picking a pattern ends the chain; editing its patterns does not.</span></div></div>`}
+function seqMode(song){if(HOST.seqMode)return HOST.seqMode(song);S.plays.songMode=song;render()}
+document.addEventListener("click",e=>{const b=e.target.closest?.("[data-seqmode]");if(b)seqMode(b.dataset.seqmode==="song")});
 function chainPad(p){const n=S.chainDraft.indexOf(p),d=S.chainDraft;if(n>=0)d.splice(n,1);else if(d.length<16)d.push(p);render();chainSoon()}
 function chainAct(a){if(a==="undo"){S.chainDraft.pop();render();chainSoon();return}
  clearTimeout(S.chainTimer);S.chainDraft=[];render();if(S.plays.chain?.active||S.chainSent){clearChain();S.chainSent=false}}
@@ -3005,7 +3011,7 @@ function renderSong(){const sel=S.song[S.songSel]||S.song[0],chain=S.songPick===
   return`<button class="padd ${hasPat(p)?"has":""}${n>=0?" in":""}" data-chainpad="${p}" title="${patName(p)}${n>=0?": number "+(n+1)+" in the chain. Click takes it out, and the machine plays the rest.":". Click adds it: the machine plays the chain at once."}">${info}${n>=0?`<em>${n+1}</em>`:""}</button>`};
  const palette=`<div class="banks">${[..."ABCDEFGH"].map((b,k)=>`<button class="bank ${k===S.bank?"on":""}" data-bank="${k}"><i class="led"></i>${b}</button>`).join("")}</div>
   <div class="pgridp">${Array.from({length:16},(_,k)=>pad(S.bank*16+k)).join("")}</div>
-  ${chain?chainFooter():`<p class="note pnote">Click adds after row ${String(S.songSel+1).padStart(3,"0")} · drag onto the grid</p>`}`;
+  ${chain?chainFooter():`<div class="chainfoot"><div class="irow"><span class="ilab">Plays</span>${seqModeKeys()}<div class="chainrow"><span class="note">${S.plays.songMode?"Song mode: the machine plays the song.":"Pattern mode: the machine plays the pattern."}</span></div></div></div><p class="note pnote">Click adds after row ${String(S.songSel+1).padStart(3,"0")} · drag onto the grid</p>`}`;
  const playsTip={chain:"The machine plays its own chain (live, one bank, loops). Clear it in CHAIN, or pick a pattern.",song:"The machine is in song mode: it plays the stored song.",pattern:"The machine is in pattern mode: it plays this pattern and stays on it."}[plays.kind];
  const head=`<header class="phead"><h3>Patterns</h3><span class="seg" data-set="songpick" title="ARRANGE: a click adds the pattern to the song. CHAIN: a click numbers it into the machine's chain.">${[["arrange","Arrange"],["chain","Chain"]].map(([v,t])=>`<button data-v="${v}" aria-pressed="${S.songPick===v}">${t}</button>`).join("")}</span><span class="lcdchip playschip ${plays.kind}" id="songPlays" title="${playsTip}">${plays.label}</span></header>`;
  let insp="";

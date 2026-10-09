@@ -307,11 +307,52 @@ namespace
 			"atomic replacement publishes the complete new cache");
 		baseLib::filesystem::remove(filename);
 	}
+
+	// B-034: the state a save writes under the plug-in's lock (the audio thread waits for it). With the fingerprints
+	// md::Hardware holds, the ROM and the factory baseline are not scanned again; the bytes are the same.
+	void testKnownFingerprints()
+	{
+		const auto fnv = [](const std::vector<uint8_t>& _d) { uint64_t r = 14695981039346656037ull; for(const auto b : _d) { r ^= b; r *= 1099511628211ull; } return r; };
+		const auto patchRam = makePatchRam();
+		std::vector<uint8_t> rom(md::g_romSize, 0xff);
+		for(size_t i = 0; i < rom.size(); i += 4093)
+			rom[i] = static_cast<uint8_t>(i >> 8);
+		auto factory = rom;
+		for(size_t i = 0; i < factory.size(); i += 777)
+			factory[i] ^= 0x5a;
+		auto flash = factory;
+		flash[5 * md::g_uwFlashSectorSize + 3] ^= 0x11;
+		const md::FlashFingerprints known{fnv(rom), fnv(factory)};
+		using clock = std::chrono::steady_clock;
+		const auto time = [&](const md::FlashFingerprints* _k, std::vector<uint8_t>& _out)
+		{
+			double best = 1e9;
+			for(int i = 0; i < 5; ++i)
+			{
+				_out.clear();
+				const auto t0 = clock::now();
+				const bool ok = md::encodeStateWithFactoryBaseline(_out, patchRam, flash, factory, rom, md::MachineModel::Machinedrum,
+					synthLib::StateTypeGlobal, _k);
+				best = std::min(best, std::chrono::duration<double, std::milli>(clock::now() - t0).count());
+				if(!ok)
+					return -1.0;
+			}
+			return best;
+		};
+		std::vector<uint8_t> scanned, cached;
+		const auto before = time(nullptr, scanned);
+		const auto after = time(&known, cached);
+		std::printf("  B-034: UW state encode %.2f ms scanning the ROM and the baseline, %.2f ms with the stored fingerprints\n", before, after);
+		check(before >= 0 && after >= 0 && scanned == cached, "the stored fingerprints write the same state bytes");
+		md::DecodedState decoded;
+		check(md::decodeState(decoded, cached, rom, md::MachineModel::Machinedrum, synthLib::StateTypeGlobal), "and it reads back");
+	}
 }
 
 int main()
 {
 	std::puts("Machinedrum UW state and cache tests\n");
+	testKnownFingerprints();
 	testSparseProjectState();
 	testMonomachineUserFlashState();
 	testFactoryCache();

@@ -1147,6 +1147,15 @@ namespace
 		r.msg(R"({"op":"poly","on":false})");
 		r.run(1500);
 		check(lastMachine(r).find("poly")->isBool() && !lastMachine(r).find("poly")->asBool(), "POLY off again");
+		// 0.3.5: the Song page's PATTERN | SONG switch: SET STATUS 0x10, the status read back
+		const auto songMode = [&] { const auto d = lastMachine(r); const auto* s = d.find("song"); const auto* m = s ? s->find("songMode") : nullptr; return m && m->isBool() ? (m->asBool() ? 1 : 0) : -1; };
+		r.msg(R"({"op":"seqMode","song":true})");
+		r.run(1500);
+		const int inSong = songMode();
+		r.msg(R"({"op":"seqMode","song":false})");
+		r.run(1500);
+		std::printf("  sequencer mode: SONG -> %d, PATTERN -> %d\n", inSong, songMode());
+		check(inSong == 1 && songMode() == 0, "seqMode: SONG mode and back to PATTERN mode, read back by status");
 
 		// A pattern with MIDI track 1 notes every 4 steps (E01).
 		auto p = *r.desk->pattern(64);

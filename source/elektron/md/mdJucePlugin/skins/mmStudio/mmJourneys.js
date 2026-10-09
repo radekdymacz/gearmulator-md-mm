@@ -277,6 +277,18 @@ const MmJourneys = (() => {
 		],
 		async tidy(u, c) { if (c.k0 != null && kitT(0) !== c.k0) { blur(); u.key("z", { cmd: true }); await sleep(3000); } }
 	};
+	/* 0.3.5: the Song page's PATTERN | SONG switch: what is lit is the status the machine reports */
+	const songModeJ = {
+		name: "mm-song-mode",
+		steps: [
+			go("song"),
+			{ say: "click SONG next to Plays: the machine reports song mode", act: (u, c) => { c.m0 = machine().song?.songMode === true; u.click('[data-seqmode="song"]'); },
+				machine: () => ok(machine().song?.songMode === true, "songMode " + machine().song?.songMode), screen: () => ok(pressed('[data-seqmode="song"]') && !pressed('[data-seqmode="pattern"]'), "SONG not lit"), within: 8000 },
+			{ say: "click PATTERN: the machine reports pattern mode", act: u => u.click('[data-seqmode="pattern"]'),
+				machine: () => ok(machine().song?.songMode === false, "songMode " + machine().song?.songMode), screen: () => ok(pressed('[data-seqmode="pattern"]') && !pressed('[data-seqmode="song"]'), "PATTERN not lit"), within: 8000 }
+		],
+		async tidy(u, c) { if (c.m0 && machine().song?.songMode !== true) { u.click('[data-seqmode="song"]'); await sleep(2000); } }
+	};
 	const midiSide = {
 		name: "mm-sound-midi-side",
 		steps: [
@@ -891,7 +903,7 @@ const MmJourneys = (() => {
 		]
 	};
 	const all = [bootCard, firstBeat, spaceKey, tempoDrag, patNext, wsKeys, helpKeys, plate, undoRedo, gridRecord, slidePaint, lenKey, lockLane, arpDock, arpRange, trnKeys,
-		genMut, shapeSound, machinePick, machineStays, midiSide, controlAll, mixStrip, mixSolo, shiftMutes, routing, panTrim, msOff,
+		genMut, shapeSound, machinePick, machineStays, songModeJ, midiSide, controlAll, mixStrip, mixSolo, shiftMutes, routing, panTrim, msOff,
 		poly, multiTrig, multiMap, kbPlay, songRows, songPicker, songChain, kitLoad, kitCopy, patGo, dialogEsc,
 		audioPanel, romCard, notePlay,
 		tapTempo, queue, dialogKeys, trackKeys, muteKeys, lockRamp, pages, copyPaste, clearAll, fill, rotate, pasteMany, liveRec, genKeys, mutScope,

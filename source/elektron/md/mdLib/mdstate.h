@@ -58,16 +58,23 @@ namespace md
 	// Use this variant when a validated machine-local factory cache exists. It
 	// remains sparse even when the initialized bytes happen to equal the ROM;
 	// byte equality alone must not be mistaken for the no-cache fallback case.
+	// B-034: the ROM's and the baseline's FNV-1a 64 fingerprints when the caller holds them (md::Hardware computes
+	// them once); without, they are computed here (two 8 MiB scans). The state bytes are the same either way.
+	struct FlashFingerprints
+	{
+		uint64_t rom = 0;
+		uint64_t baseline = 0;
+	};
 	bool encodeStateWithFactoryBaseline(std::vector<uint8_t>& _state,
 		const std::vector<uint8_t>& _patchRam,
 		const std::vector<uint8_t>& _flashData,
 		const std::vector<uint8_t>& _factoryFlashBaseline,
 		const std::vector<uint8_t>& _romBaseline,
-		MachineModel _model, synthLib::StateType _type);
+		MachineModel _model, synthLib::StateType _type, const FlashFingerprints* _known = nullptr);
 	bool encodeState(std::vector<uint8_t>& _state, const std::vector<uint8_t>& _patchRam,
 		const FlashSectorOverlay& _flashOverlay,
 		const std::vector<uint8_t>& _romBaseline,
-		MachineModel _model, synthLib::StateType _type);
+		MachineModel _model, synthLib::StateType _type, const uint64_t* _knownRomFingerprint = nullptr);
 
 	// Validate and decode a device payload. No output is changed on failure.
 	bool decodeState(std::vector<uint8_t>& _patchRam, const std::vector<uint8_t>& _state,

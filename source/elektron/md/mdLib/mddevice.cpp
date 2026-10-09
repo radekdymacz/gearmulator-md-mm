@@ -248,14 +248,18 @@ namespace md
 			return encodeState(_state, patchRam, m_model, _type,
 				stateHardware->copyUserFlash());
 		std::vector<uint8_t> factoryBaseline;
-		if(stateHardware->copyFactoryFlashBaseline(factoryBaseline))
+		// B-034: the ROM's and the baseline's fingerprints as md::Hardware keeps them (not two 8 MiB scans under the
+		// plug-in's lock, which the audio thread waits for)
+		FlashFingerprints known;
+		known.rom = stateHardware->firmwareFingerprint();
+		if(stateHardware->copyFactoryFlashBaseline(factoryBaseline, known.baseline))
 			return encodeStateWithFactoryBaseline(_state, patchRam,
 				stateHardware->copyFlashData(),
-				factoryBaseline, stateHardware->flashBaseline(), m_model, _type);
+				factoryBaseline, stateHardware->flashBaseline(), m_model, _type, &known);
 		FlashSectorOverlay pending;
 		if(stateHardware->copyPendingFlashOverlay(pending))
 			return encodeState(_state, patchRam, pending,
-				stateHardware->flashBaseline(), m_model, _type);
+				stateHardware->flashBaseline(), m_model, _type, &known.rom);
 		// If interaction happened before the first machine-local baseline was
 		// captured, preserve a complete flash image. An absolute sector set records
 		// ROM-equal deletions and lets the replacement boot coherently without waiting

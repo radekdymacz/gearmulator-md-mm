@@ -38,10 +38,19 @@ function chainFooter() {
 	const can = canDo(V, "chains"), why = V.caps.reasons.chains || "";
 	const live = !can ? `<span class="note">${why}</span>` : !known ? `<span class="note">The chain is not readable on this firmware.</span>` : active ? list.map(p => `<span class="lcdchip${p === playing ? " now" : ""}${V.playing && p === next && at >= 0 ? " nx" : ""}">${patName(p)}</span>`).join("<i>»</i>") + "<i>↺</i>"
 		: `<span class="note">No chain. The machine plays ${patName(playing)} and stays on it.</span>`;
-	return `<div class="chainfoot"><div class="irow"><span class="ilab">Plays</span><div class="chainrow">${live}</div></div>
+	const sm = machineState().songMode, mode = seqModeKeys();
+	return chainRows(sm, mode, live, d, bn, active);
+}
+function seqModeKeys() {
+	const sm = machineState().songMode;
+	return `<span class="seg seqmode" title="PATTERN: the machine plays the pattern (and its chain). SONG: it plays the song. What is lit is what the machine reports">${[["pattern", "PATTERN", false], ["song", "SONG", true]].map(([k, l, v]) => `<button data-seqmode="${k}" aria-pressed="${sm === v}">${l}</button>`).join("")}</span>`;
+}
+function chainRows(sm, mode, live, d, bn, active) {
+	return `<div class="chainfoot"><div class="irow"><span class="ilab">Plays</span>${mode}<div class="chainrow">${sm === true ? `<span class="note">Song mode: the machine plays song ${String(songSlotOf(Docs) + 1).padStart(2, "0")}. PATTERN or a chain switches it to pattern mode.</span>` : live}</div></div>
   <div class="irow"><span class="ilab"></span><span class="chainacts"><button data-chain="undo"${d.length ? "" : " disabled"} title="Takes the last pad out and chains the rest at once">Back</button><button class="danger" data-chain="clear"${active || d.length ? "" : " disabled"} title="LOAD PATTERN of the current pattern: the machine's way to end a chain. The pads start over">Clear</button></span>
   <span class="note">${d.length === 1 ? `One more pad and the machine plays the chain (BANK ${bn} held, the TRIG keys in order; ${V.playing ? "from the pattern end" : "PLAY starts at the first"}).` : "Each pad chains at once: the machine plays them in order and loops."} One bank, each pattern once. Picking a pattern ends the chain; editing its patterns does not.</span></div></div>`;
 }
+document.addEventListener("click", e => { const b = e.target.closest?.("[data-seqmode]"); if (b) cmd("seqMode", { song: b.dataset.seqmode === "song" }); });
 function renderSong() {
 	const sel = V.song[S.songSel] || V.song[0], chain = S.songPick === "chain", plays = playsOf(Docs);
 	/* a chain is one bank's: another bank starts the draft over */
@@ -54,7 +63,7 @@ function renderSong() {
 	};
 	const palette = `<div class="banks">${[..."ABCDEFGH"].map((b, k) => `<button class="bank ${k === S.bank ? "on" : ""}" data-bank="${k}"><i class="led"></i>${b}</button>`).join("")}</div>
   <div class="pgridp">${Array.from({ length: 16 }, (_, k) => pad(S.bank * 16 + k)).join("")}</div>
-  ${chain ? chainFooter() : `<p class="note pnote">Click adds after row ${String(S.songSel + 1).padStart(3, "0")} · drag onto the grid</p>`}`;
+  ${chain ? chainFooter() : `<div class="chainfoot"><div class="irow"><span class="ilab">Plays</span>${seqModeKeys()}<div class="chainrow"><span class="note">${machineState().songMode === true ? "Song mode: the machine plays the song." : "Pattern mode: the machine plays the pattern."}</span></div></div></div><p class="note pnote">Click adds after row ${String(S.songSel + 1).padStart(3, "0")} · drag onto the grid</p>`}`;
 	const playsTip = { chain: "The machine plays its own chain (live, one bank, loops). Clear it in CHAIN, or pick a pattern.", song: "The machine is in SONG mode: it plays the stored song (edits are heard after STOP + reload).", pattern: "The machine is in pattern mode: it plays this pattern and stays on it." }[plays.kind];
 	const head = `<header class="phead"><h3>Patterns</h3><span class="seg" data-set="songpick" title="ARRANGE: a click adds the pattern to the song. CHAIN: a click numbers it into the machine's chain.">${[["arrange", "Arrange"], ["chain", "Chain"]].map(([v, t]) => `<button data-v="${v}" aria-pressed="${S.songPick === v}">${t}</button>`).join("")}</span><span class="lcdchip playschip ${plays.kind}" id="songPlays" title="${playsTip}">${plays.label}</span></header>`;
 	let insp = "";

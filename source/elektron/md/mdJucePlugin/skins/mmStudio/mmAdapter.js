@@ -458,6 +458,10 @@
 		chain(patterns) {
 			send({ op: "chain", patterns }, { onResult: r => { if (!r.ok) V().toast(r.errors[0] || "The machine did not take the chain."); } });
 		},
+		/* 0.3.5: the Song page's PATTERN | SONG switch; the view shows the status the machine reports (song.songMode) */
+		seqMode(song) {
+			send({ op: "seqMode", song }, { onResult: r => { if (!r.ok) V().toast(r.errors[0] || "The machine did not change its mode."); } });
+		},
 		chainClear() {
 			send({ op: "chainClear" }, { onResult: r => { if (!r.ok) V().toast(r.errors[0] || "The chain did not end."); } });
 		},

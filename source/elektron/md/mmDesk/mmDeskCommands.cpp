@@ -144,7 +144,7 @@ namespace mmDesk
 			{"load", &MmMachine::cmdLoad}, {"select", &MmMachine::cmdSelect}, {"loadKit", &MmMachine::cmdLoadKit},
 			{"saveKit", &MmMachine::cmdSaveKit}, {"loadSong", &MmMachine::cmdLoadSong}, {"saveSong", &MmMachine::cmdSaveSong},
 			{"tempo", &MmMachine::cmdTempo}, {"play", &MmMachine::cmdPlay}, {"stop", &MmMachine::cmdStop},
-			{"mute", &MmMachine::cmdMute}, {"followHost", &MmMachine::cmdFollowHost}, {"muteMidi", &MmMachine::cmdMuteMidi},
+			{"mute", &MmMachine::cmdMute}, {"seqMode", &MmMachine::cmdSeqMode}, {"followHost", &MmMachine::cmdFollowHost}, {"muteMidi", &MmMachine::cmdMuteMidi},
 			{"poly", &MmMachine::cmdPoly}, {"record", &MmMachine::cmdRecord}, {"hwSend", &MmMachine::cmdHwSend},
 			{"chain", &MmMachine::cmdChain}, {"chainClear", &MmMachine::cmdChainClear},
 			{"noteOn", &MmMachine::cmdNoteOn}, {"noteOff", &MmMachine::cmdNoteOff}};
@@ -342,6 +342,16 @@ namespace mmDesk
 			return ok();
 		pushDump(ref, ed::encodeMmGlobal(*g));
 		return ok("The machine follows the host's tempo and transport (GLOBAL " + std::to_string(ref.slot + 1) + ": MIDI SYNC CLOCK IN, TRANSPORT IN)");
+	}
+
+	// 0.3.5: the Song page's PATTERN | SONG switch: SET STATUS 0x10 (in the MM's Appendix C: over HW MIDI too), then
+	// the status asked for; the page shows the machine's answer
+	Outcome MmMachine::cmdSeqMode(const Value& _m, const Documents&)
+	{
+		const bool song = flag(_m, "song");
+		m_port.sendSysex(ed::mmSetStatus(ed::MmStatus::SongMode, song ? 1 : 0));
+		m_port.sendSysex(ed::mmStatusRequest(ed::MmStatus::SongMode));
+		return ok(song ? "SONG mode: the machine plays the song." : "PATTERN mode: the machine plays the pattern.");
 	}
 
 	Outcome MmMachine::cmdMute(const Value& _m, const Documents& _view)

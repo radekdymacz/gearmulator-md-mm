@@ -320,6 +320,7 @@ namespace mdDesk
 			{"sampleCancel", Owner::Machine, Gate::None, -1, {}, "stop the sample on its way to a ROM slot (SDS CANCEL); the file is chosen with chooseSample"},
 			{"play", Owner::Machine, Gate::Input, -1, {}, ""},
 			{"stop", Owner::Machine, Gate::Input, -1, {}, ""},
+			{"seqMode", Owner::Machine, Gate::Input, -1, {{"song", ArgType::Bool}}, "PATTERN or SONG mode (SET STATUS 0x10), read back from the machine's status"},
 			{"mute", Owner::Machine, Gate::Input, -1, {t, on}, ""},
 			{"followHost", Owner::Machine, Gate::Input, -1, {}, "in a DAW: the active GLOBAL follows the host's clock and transport"},
 			// ---- the editor's setup ----

@@ -187,15 +187,15 @@ namespace md
 			const std::vector<uint8_t>& _flashData,
 			const std::vector<uint8_t>& _baseline,
 			const std::vector<uint8_t>& _romBaseline,
-			const bool _includeUnchanged = false)
+			const bool _includeUnchanged = false, const FlashFingerprints* _known = nullptr)
 		{
 			if(_flashData.size() != g_romSize || _baseline.size() != g_romSize
 				|| _romBaseline.size() != g_romSize)
 				return false;
 
 			FlashSectorOverlay overlay;
-			overlay.romFingerprint = fingerprint(_romBaseline);
-			overlay.baselineFingerprint = fingerprint(_baseline);
+			overlay.romFingerprint = _known ? _known->rom : fingerprint(_romBaseline);
+			overlay.baselineFingerprint = _known ? _known->baseline : fingerprint(_baseline);
 			overlay.flashSize = static_cast<uint32_t>(_flashData.size());
 			for(size_t sector = 0; sector < _flashData.size() / g_uwFlashSectorSize;
 				++sector)
@@ -215,10 +215,10 @@ namespace md
 		}
 
 		bool validFlashOverlay(const FlashSectorOverlay& _overlay,
-			const std::vector<uint8_t>& _romBaseline)
+			const std::vector<uint8_t>& _romBaseline, const uint64_t* _knownRomFingerprint = nullptr)
 		{
 			if(!_overlay.valid || _romBaseline.size() != g_romSize
-				|| _overlay.romFingerprint != fingerprint(_romBaseline)
+				|| _overlay.romFingerprint != (_knownRomFingerprint ? *_knownRomFingerprint : fingerprint(_romBaseline))
 				|| _overlay.flashSize != g_romSize
 				|| _overlay.sectors.size() > g_romSize / g_uwFlashSectorSize
 				|| _overlay.data.size()
@@ -337,24 +337,24 @@ namespace md
 		const std::vector<uint8_t>& _flashData,
 		const std::vector<uint8_t>& _factoryFlashBaseline,
 		const std::vector<uint8_t>& _romBaseline,
-		const MachineModel _model, const synthLib::StateType _type)
+		const MachineModel _model, const synthLib::StateType _type, const FlashFingerprints* _known)
 	{
 		FlashSectorOverlay overlay;
 		if(!makeFlashOverlay(overlay, _flashData, _factoryFlashBaseline,
-			_romBaseline, false))
+			_romBaseline, false, _known))
 			return false;
-		return encodeState(_state, _patchRam, overlay, _romBaseline, _model, _type);
+		return encodeState(_state, _patchRam, overlay, _romBaseline, _model, _type, _known ? &_known->rom : nullptr);
 	}
 
 	bool encodeState(std::vector<uint8_t>& _state,
 		const std::vector<uint8_t>& _patchRam,
 		const FlashSectorOverlay& _flashOverlay,
 		const std::vector<uint8_t>& _romBaseline,
-		const MachineModel _model, const synthLib::StateType _type)
+		const MachineModel _model, const synthLib::StateType _type, const uint64_t* _knownRomFingerprint)
 	{
 		if(_model != MachineModel::Machinedrum
 			|| _patchRam.size() != g_patchRamStateSize || !validStateType(_type)
-			|| !validFlashOverlay(_flashOverlay, _romBaseline)
+			|| !validFlashOverlay(_flashOverlay, _romBaseline, _knownRomFingerprint)
 			|| _flashOverlay.sectors.size() > std::numeric_limits<uint16_t>::max())
 			return false;
 

@@ -387,6 +387,7 @@ namespace mmDesk
 			// ---- the editor's setup ----
 			{"modSet", Owner::Setup, Gate::None, -1, {{"doc", ArgType::Object}}, "the app modulators (mm-desk/modulators)"},
 			// ---- the machine ----
+			{"seqMode", Owner::Machine, Gate::Input, -1, {{"song", ArgType::Bool}}, "PATTERN or SONG mode (SET STATUS 0x10), read back from the machine's status"},
 			{"mute", Owner::Machine, Gate::Input, -1, {t6, {"on", ArgType::Bool, 0, 0, true}}, "a synth track's mute"},
 			// MM-P4
 			{"muteMidi", Owner::Machine, Gate::Input, -1, {t6, {"on", ArgType::Bool, 0, 0, true}},

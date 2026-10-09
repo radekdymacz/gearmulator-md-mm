@@ -149,6 +149,7 @@ namespace mmDesk
 		deskCore::Outcome cmdPlay(const Value&, const Documents&);
 		deskCore::Outcome cmdStop(const Value&, const Documents&);
 		deskCore::Outcome cmdMute(const Value&, const Documents&);
+		deskCore::Outcome cmdSeqMode(const Value&, const Documents&);
 		deskCore::Outcome cmdFollowHost(const Value&, const Documents&);
 		deskCore::Outcome cmdMuteMidi(const Value&, const Documents&);
 		deskCore::Outcome cmdPoly(const Value&, const Documents&);
