@@ -319,7 +319,7 @@ const Journey = (() => {
 	}
 	/* for needs: the page draws its canvases on animation frames, which WebKit runs only while the window is on screen */
 	/* I-008: the editor's menu, both editors: drawn by the page from the plug-in's entries (editorMenu, deskMenu.js),
-	   opened by a right-click on the header's empty part. menu.via(u, path) opens it afresh (the plug-in's entries as
+	   opened by a right-click anywhere the page has no menu of its own (the header, the rail). menu.via(u, path) opens it afresh (the plug-in's entries as
 	   they are now) and clicks the entries of a path in turn. editorMenuJourney(name, product): a submenu by the
 	   keyboard, a zoom step and Updates › Check Daily by the pointer; each choice is the plug-in's to run (menuPick),
 	   its effect read back from the plug-in in the menu itself (the zoom it says, the tick it sends); Esc closes the
@@ -344,6 +344,9 @@ const Journey = (() => {
 		name,
 		steps: [
 			{ say: "right-click the header's empty part: the editor's menu, its title the editor and version", act: hands => { if (menu.on()) closeDeskMenu(); hands.rightClick(menu.at); },
+				screen: () => menu.titled(product) },
+			{ say: "Esc, then right-click the track rail (outside the header, no menu of its own): the editor's menu there too",
+				act: async hands => { hands.key("Escape"); await until(() => !menu.on(), 1000); hands.rightClick("#rail", {}, 0.5, 0.97); },
 				screen: () => menu.titled(product) },
 			{ say: "focus Zoom, press →: its submenu, its first entry focused", act: (hands, c) => { c.z0 = menu.zoomSays(); $q(menu.id("zoom")).focus(); hands.key("ArrowRight"); },
 				screen: () => ok(DeskMenu.depth() === 2 && document.activeElement?.closest?.(".mpanel")?.dataset.lv === "1" && $q(menu.id("zoom")).getAttribute("aria-expanded") === "true",

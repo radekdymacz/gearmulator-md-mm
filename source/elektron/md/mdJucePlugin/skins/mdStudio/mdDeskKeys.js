@@ -61,7 +61,7 @@ Keys.bind({ id: "zoom-reset", short: "Zoom 100 %", scope: "any", keys: ["0"], mo
 	["tempo-drag", "any", "Top bar", ["tempo"], "", "Transport", "Drag up or down: the tempo, half a BPM a pixel (⇧: a tenth)"],
 	["lcd-value", "any", "LCD", ["LCD value"], "", "Anywhere", "Click: its next value; ⇧-click the previous one. LEN, SPD, SONG: drag up or down to step through them"],
 	["lcd-len-inner", "any", "LCD", ["LEN"], "alt", "Anywhere", "Click or drag: the pattern's inner length instead of its total"],
-	["header-menu", "any", "Top bar", ["right-click the header"], "", "Anywhere", "The editor's menu: zoom and window size, updates, the log folder, Developer"],
+	["header-menu", "any", "Anywhere", ["right-click"], "", "Anywhere", "The editor's menu: zoom and window size, updates, the log folder, Developer"],
 	/* the GEN bar (mdDeskGenUi.js) */
 	["gen-value", "seq", "GEN bar", ["GEN value"], "", "Sequence", "Click: +1; ⇧-click: −1; drag up or down, or the wheel (⇧: 10)"],
 	["rkey", "any", "GEN bar", ["R key"], "", "Selected track", "Click: randomise the selected track, as R"],

@@ -68,6 +68,18 @@ opened[0].list[2].run();
 check(picks.length === 1 && picks[0].op === "menuPick" && picks[0].menu === 7 && picks[0].n === 3, "a choice sends menuPick {menu, n}");
 DeskMenu.open = saved;
 
+/* which right-clicks ask for the editor's menu: anywhere the page has no menu of its own */
+const target = sel => ({ closest: q => (sel && q.split(",").some(x => x === sel) ? {} : null) });
+const ev = (sel, prevented = false) => ({ defaultPrevented: prevented, target: target(sel) });
+check(DeskMenu.wantsEditor(ev(null)), "a right-click on the page's background, a panel, the rail: the editor's menu");
+check(!DeskMenu.wantsEditor(ev(null, true)), "one an element's own menu took (a step): not");
+check(!DeskMenu.wantsEditor(ev("input")) && !DeskMenu.wantsEditor(ev("textarea")) && !DeskMenu.wantsEditor(ev("#deskmenu")), "a text field or the menu itself: not");
+global.Modal = { top: () => "libpop" };
+check(!DeskMenu.wantsEditor(ev(null)), "while a dialog or panel is open: not");
+delete global.Modal;
+check(/DeskMenu\.wantsEditor\(e\)/.test(read("../mdStudio/mdDeskLive.js"))
+	&& /DeskMenu\.wantsEditor\(e\)/.test(fs.readFileSync(path.join(HERE, "../../../../../../doc/modern-ux/mm-mockup/src/130-main.js"), "utf8")), "both pages ask it");
+
 /* the wiring: both pages ask for the menu and draw the answer; the MM page has the file; the window answers it */
 const R = path.join(HERE, "../../../../../..");
 const live = read("../mdStudio/mdDeskLive.js"), adapter = read("../mmStudio/mmAdapter.js");

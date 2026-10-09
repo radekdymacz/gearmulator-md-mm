@@ -152,13 +152,22 @@ const DeskMenu = (() => {
 			return it;
 		});
 	}
+	/* I-008: whether a right-click (a contextmenu event) asks for the editor's menu: anywhere the page has no menu of
+	   its own (an earlier handler took the event: a step's menu), not in a text field (its own edit menu), not while a
+	   dialog or panel is open (its backdrop) and not over this menu. Each page's listener runs after its own menus'. */
+	function wantsEditor(e) {
+		if (e.defaultPrevented) return false;
+		const t = e.target && e.target.closest ? e.target : null;
+		if (t && t.closest("input,textarea,select,[contenteditable],[contenteditable=''],#deskmenu")) return false;
+		return !(typeof Modal !== "undefined" && Modal.top());
+	}
 	/* the editor's menu at the point, its choice sent with send({op: "menuPick", menu, n}) */
 	function showEditor(m, x, y, send) {
 		api.open(fromEditor(m.items, n => send({ op: "menuPick", menu: m.menu, n })), x, y, { title: m.title });
 	}
 	/* made at load, so the modal layer finds it when it starts watching its dialogs */
 	if (typeof document !== "undefined" && document.body) ensure();
-	const api = { open, close, showEditor, fromEditor, place, step, get shown() { return shown(); }, items: () => (levels[0] ? levels[0].items.slice() : []),
+	const api = { open, close, showEditor, wantsEditor, fromEditor, place, step, get shown() { return shown(); }, items: () => (levels[0] ? levels[0].items.slice() : []),
 		depth: () => levels.length };
 	return api;
 })();

@@ -53,7 +53,7 @@ no journey yet); **not testable** (why). "—": the editor has no such feature.
 | Workspace keys 1-5 | md-keys-workspaces PASS | mm-keys-workspaces PASS |
 | ? keyboard view (K-view, 2026-10-08: the drawn keyboard, the ⌥ layer, a key's words, the search; MM: the list until K7) | md-keys-help PASS | mm-keys-help PASS |
 | Undo / Redo keys and Cmd+Z, Cmd+Shift+Z | md-top-undo-redo PASS | mm-top-undo-redo PASS |
-| The editor's menu in the page (I-008): submenu by keys, Zoom, Updates › Check Daily | md-top-editor-menu PASS | mm-top-editor-menu PASS |
+| The editor's menu in the page (I-008): right-click the header and the rail, submenu by keys, Zoom, Updates › Check Daily | md-top-editor-menu PASS | mm-top-editor-menu PASS |
 | Undo works over the library | md-lib-kit-copy-paste-undo PASS | mm-lib-kit-copy-paste-undo PASS |
 | Questions: start on Cancel, Esc answers Cancel | md-dialog-esc-space-cancel PASS | mm-dialog-esc-cancel PASS |
 | Space presses the dialog's focused button (0.3.0) | md-dialog-esc-space-cancel PASS | mm-dialog-keys-behind PASS |
