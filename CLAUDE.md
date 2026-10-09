@@ -2,6 +2,22 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## This fork: Machinedrum Editor + Monomachine Editor
+
+`origin` (radekdymacz/gearmulator-md-mm, default branch `main`) is a fork of joelanders' Machinedrum/Monomachine emulation (`upstream`), which is built on dsp56300/gearmulator (`gearmulator`). The product is two editors (standalone, VST3, AU on macOS; Windows and Linux builds exist, not tested) that run the user's own Elektron firmware behind one web page. ROMs are never committed. The "Upstream guide" below is upstream's, for the shared code.
+
+- **Read first:** doc/modern-ux/FOUNDATION.md (the layers; how to add an engine, document kind, command, workspace or dialog; "Build and check"), doc/modern-ux/DESIGN-P6-simple-core.md (why), doc/modern-ux/UPSTREAM.md (our code lives in our files, upstream's files get hooks only).
+- **Where:** source/elektron/md/: elektronData, deskCore, deskHost, deskWire, mdDesk, mmDesk, mdDataLink, mdmmUpdate, mdLib (the emulated machines), mdJucePlugin (plug-ins, bridge, skins/ page files), mdLibTest. Version: `MDMM_EDITOR_VERSION` in mdJucePlugin/mdmmPlugins.cmake; product names: scripts/mdmm-product.env.
+- **Build:** `scripts/mdmm-dev.sh configure|build [target...]|tests|stats` (tree temp/dev, ccache, diagnostics on). Release packages: scripts/macos/build_mdmm.sh, scripts/linux/build_mdmm.sh, scripts/windows/build_mdmm.ps1. CMake 3.22 or newer.
+- **Check:** `scripts/mdmm-dev.sh tests` (`ctest -E "Plugin|_AU|VST|FirmwareTest"`); firmware tests need your ROM (`GEARMULATOR_MD_FIRMWARE_BIN`, `GEARMULATOR_MM_FIRMWARE_BIN`); scripts/mdmm-journeys.sh, scripts/mdmm-pluginval.sh; before a merge or PR scripts/mdmm-upstream-footprint.sh; upstream sync scripts/mdmm-sync-upstream.sh (merge, never rebase).
+- **Floats:** Release builds are `-Ofast` (`/fp:fast`): `std::isfinite`/`std::isnan` can fold to constants. Use `baseLib::isFinite` and put code that must see NaN on `-fno-fast-math` (examples: source/elektron/md/elektronData/CMakeLists.txt).
+- **Emulation CPU:** the plan and findings are in doc/modern-ux/RESEARCH-emulation-cpu.md; the speed-ups have one tester switch (`GEARMULATOR_MDMM_SPEEDUPS=0`, or Developer > Speed-ups off): doc/md_mm_performance_diagnostics.md, "Switches for testers".
+- **Releases:** `release/0.x.y` branches are merged into `main`; the tag `mdmm-v0.x.y` runs .github/workflows/mdmm-editors-release.yml; notes in doc/release/vX.Y.Z.md; bugs and ideas in doc/release/BUGS.md and IDEAS.md (testers are never named).
+
+## Upstream guide (shared emulation, JUCE and CMake code)
+
+Everything from here to the Community section is upstream's: his Windows setup, his Jenkins and his remotes included.
+
 ## Project Overview
 
 Gearmulator is a low-level IC emulator that recreates classic virtual analog synthesizers (Access Virus, Waldorf microQ/XT, Clavia Nord Lead 2x, Roland JP-8000, Ensoniq VFX/TS-10) by emulating original DSP56300 and MC68K processors and running authentic firmware ROMs as audio plugins (FST, VST3, AU, CLAP, LV2).
@@ -67,7 +83,7 @@ Convenience scripts: `build_win64.bat`, `build_linux.sh`, `build_mac.sh`.
 
 - Do NOT include `Co-authored-by` trailers in commit messages
 - Do NOT commit without explicit user approval
-- Git remotes: `gearmulator` (public OSS), `private` (development), also `nas`, `codeberg`, `EvilDragon`
+- Remotes here: `origin` (radekdymacz), `upstream` (joelanders), `gearmulator` (dsp56300). The list that was here (`private`, `nas`, `codeberg`, `EvilDragon`) is the upstream author's.
 - DSP submodule (`source/dsp56300/`) is also owned by user — changes there are fine
 
 ## Key Build Files
