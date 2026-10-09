@@ -4,10 +4,13 @@
 #include "mdDeskSession.h"
 #include "mdPluginEditorState.h"
 #include "mdPluginProcessor.h"
+#include "mdProcessArch.h"
+#include "mdRosettaNotice.h"
 #include "mdDeskHost.h"
 #include "mdWebPageHost.h"
 #include "mdPageZoom.h"
 
+#include <atomic>
 #include <cmath>
 
 #if MDMM_DIAGNOSTICS
@@ -86,6 +89,8 @@ namespace mdJucePlugin
 		m_noticeRoute = genericUI::messageRoute::attach(m_noticeOwner,
 			[this, alive = std::weak_ptr<int>(m_alive), noticeOwner = m_noticeOwner](genericUI::messageRoute::Notice _n)
 		{
+			if(rosettaNotice::isUpstreamWarning(_n.title))
+				return;		// replaced by offerRosettaNotice's: once a session, and it can be put away
 			juce::MessageManager::callAsync([this, alive, noticeOwner, n = std::move(_n)]() mutable
 			{
 				if(alive.expired() || !m_page)
@@ -327,6 +332,11 @@ namespace mdJucePlugin
 		// I-005: ask the Updater every minute whether the daily check is due (it decides; DESIGN-updates.md 3.3)
 		if(m_page->pageReady())
 		{
+			if(!m_rosettaOffered)
+			{
+				m_rosettaOffered = true;
+				offerRosettaNotice();
+			}
 			const auto now = juce::Time::currentTimeMillis();
 			if(m_nextUpdatePoll == 0)
 			{
@@ -342,6 +352,18 @@ namespace mdJucePlugin
 		}
 		m_page->checkStarted();	// B-022
 		m_page->flush();
+	}
+
+	void PageEditor::offerRosettaNotice()
+	{
+		// One a process (a host with several instances shows it once), taken only when there is a notice to show.
+		static std::atomic<bool> offered{false};
+		auto notice = rosettaNotice::make(processArch::current(), processArch::thisOs(),
+			juce::JUCEApplicationBase::isStandaloneApp(), getProcessor().getConfig(), offered);
+		if(!notice)
+			return;
+		const genericUI::messageRoute::OwnerScope owner(m_noticeOwner);
+		genericUI::messageRoute::offer(std::move(*notice));	// the dialog goes before the page's own questions
 	}
 
 	void PageEditor::showUpdateBanner()

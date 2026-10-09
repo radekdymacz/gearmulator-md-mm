@@ -19,6 +19,7 @@
    - no clock in the page: the adapter reads no time;
    - the plug-in's notices (codex review 2026-10): a notice's key, the dialog's and the update banner's, answers that
      notice by its number (noticeAnswer's notice), the request's own id apart; a refused answer is not shown.
+     The Rosetta notice (mdRosettaNotice.h): "Don't show again" first, OK last; closed another way it answers OK.
      node mmViewTest.js */
 const fs = require("fs"), path = require("path");
 const SK = path.join(__dirname, ".."), R = path.join(__dirname, "../../../../../..");
@@ -439,6 +440,23 @@ const result = (m, ok = true, errors = []) => ({ type: "result", id: m.id, op: m
 	check(b && b.notice === 42 && b.button === 0 && b.id !== 42, "Update on the banner answers notice 42: " + JSON.stringify(b));
 	p.recv([{ type: "result", op: "noticeAnswer", id: b.id, ok: false, errors: ["notice 42 is not waiting for an answer"], note: "" }]);
 	check(toasts.length === 0, "a refused answer shows nothing (the log only)");
+	/* Rosetta (mdRosettaNotice.h): "Don't show again" first, OK last. Closed another way (Esc, a click outside) the page
+	   answers with the last key, OK, which keeps nothing; only its own key sends the first button, which the plug-in keeps */
+	const asked = [];
+	p.win.MMView.ask = (html, btns, cls, item) => asked.push({ html, btns, item });
+	const rosetta = { type: "notice", id: 43, title: "Running under Rosetta", text: "This is the Intel version of the editor running translated on an Apple silicon Mac. It uses about twice the CPU.", buttons: ["Don't show again", "OK"] };
+	p.recv([rosetta]);
+	check(asked.length === 1 && /uses about twice the CPU/.test(asked[0].html) && asked[0].item.notice && asked[0].btns.length === 2
+		&& asked[0].btns[0][0] === "Don't show again" && asked[0].btns[1][0] === "OK", "the Rosetta notice is a dialog the plug-in waits on: its text, Don't show again and OK");
+	p.sent.length = 0;
+	asked[0].item.cancel();
+	const closedRosetta = p.sent.find(m => m.op === "noticeAnswer");
+	check(closedRosetta && closedRosetta.notice === 43 && closedRosetta.button === 1, "closed another way: answered by OK, the last key (nothing is kept): " + JSON.stringify(closedRosetta));
+	p.recv([Object.assign({}, rosetta, { id: 44 })]);
+	p.sent.length = 0;
+	asked[1].btns[0][2]();
+	const neverRosetta = p.sent.find(m => m.op === "noticeAnswer");
+	check(neverRosetta && neverRosetta.notice === 44 && neverRosetta.button === 0, "Don't show again answers its own notice with button 0 (the plug-in keeps it): " + JSON.stringify(neverRosetta));
 }
 
 console.log(failures ? `mmViewTest: ${failures} failure(s)` : "mmViewTest: PASS");

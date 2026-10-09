@@ -81,8 +81,8 @@ are nanoseconds. Summary elapsed time and callback start time are relative to
 capture start; they use a monotonic clock.
 
 The session identifies the product, version/build revision, host/plugin format,
-OS, CPU model/vendor, logical CPU count, reported clock speed and process
-architecture. Callback records include actual block size and sample rate,
+OS, CPU model/vendor, logical CPU count, reported clock speed, and the process
+and machine architecture (whether the editor ran translated, see [The session record](#the-session-record)). Callback records include actual block size and sample rate,
 device sample rate, resampler mode, DSP clock percentage, active output layout,
 transport/bypass/offline state, and incoming MIDI event/byte counts. The action
 timeline records panel button states and encoder movements. No MIDI payload,
@@ -111,6 +111,7 @@ to count all callbacks. A trace is a selected sample, not an exhaustive profiler
 | Resampler time substantially exceeds device time | Compare resampler modes and host/device sample-rate combinations. |
 | Spikes coincide with `dualMachine` and substantial `deferredNanoseconds` | Investigate scheduling or moving restore preparation off the audio thread. |
 | Spikes coincide with live/deferred JIT counts | Investigate warmup/precompilation for that machine; confirm compilation cost with a profiler. |
+| `translated` is `true` | The editor ran as an Intel build on an Arm machine: expect about twice the CPU. Compare with a capture of the same project in a host opened as an Apple silicon app (Windows on Arm: there is no native build yet). |
 | Callback timing is comfortably within budget despite audible trouble | Investigate host/driver scheduling and other processing; the capture does not prove the entire audio system met its deadline. |
 
 Timings are **inclusive**: synth time includes its lock wait and resampler work;
@@ -126,6 +127,44 @@ adds some overhead, so compare captures with the same instrumentation settings.
 Reported CPU MHz is descriptive and does not track dynamic frequency or throttling.
 Timings measure elapsed wall time, which can include OS preemption and waits;
 device-dominated time alone does not prove continuous CPU execution in emulation.
+
+## The session record
+
+Every field is a string. The first line of a report looks like this (shortened):
+
+```json
+{"type":"session","schema":2,"duration_unit":"ns","product":"Machinedrum Editor","version":"0.4.0",
+ "host":"Ableton Live","format":"VST3","os":"macOS 15.1","cpu":"VirtualApple @ 2.50GHz",
+ "architecture":"x86","process_arch":"x86_64","machine_arch":"arm64","translated":"true", ...}
+```
+
+| Field | Meaning |
+| --- | --- |
+| `type`, `schema`, `duration_unit` | `session`, `2`, `ns` (all durations are nanoseconds). |
+| `product`, `version`, `revision` | The editor, its version, and the source revision it was built from (`-modified` when the tree had uncommitted changes). |
+| `started` | When the capture started (ISO 8601). |
+| `host`, `format` | The host application and the plug-in format (VST3, AU, Standalone). |
+| `os` | The operating system's name. |
+| `cpu`, `cpu_vendor`, `logical_cpus`, `cpu_mhz` | What the system reports. `cpu_mhz` is descriptive only. Under Rosetta, `cpu` reads `VirtualApple @ 2.50GHz`, whatever the real chip is. |
+| `architecture` | `arm` or `x86`: what the build was compiled for (the slice of a universal binary that the host loaded). |
+| `pointer_bits` | `64` or `32`. |
+| `process_arch` | The architecture of the running build: `arm64`, `x86_64`, `x86` (or `unknown`). |
+| `machine_arch` | The architecture of the hardware under it: macOS names Apple silicon (`arm64`) when the process is translated, and otherwise gives the build's own; Windows asks the system (`IsWow64Process2`). |
+| `translated` | `true` when an Intel build runs on an Arm machine: Rosetta 2 on an Apple silicon Mac (`sysctl.proc_translated` is 1; where that cannot be read, a `VirtualApple` CPU stands in), or the x64 emulation of Windows on Arm. Otherwise `false`. A 32-bit build on 64-bit Windows is not translated in this sense. |
+| `resampler_modes` | The key to the `resamplerMode` numbers in callback records. |
+| `notes` | A reminder of how to read the timings. |
+
+`translated` settles one common cause of a Mac using about twice the CPU of another: a
+DAW opened as an Intel app (**Get Info > Open using Rosetta**, or a DAW without an Apple
+silicon build) loads the editor's Intel code, and the whole emulator then runs translated.
+The same fields are in the first line of the start-up log (**Open Log Folder**,
+`editor-*.log`): `... CPU VirtualApple @ 2.50GHz, process x86_64 on arm64, translated`. A
+translated editor also says so on screen at start, once a session, with a **Don't show
+again** button (config key `rosettaNoticeDismissed`).
+
+A developer build (`gearmulator_MDMM_DIAGNOSTICS=ON`) can pretend, to see the notice and the
+fields on a Mac without Rosetta: start the host or the standalone with
+`GEARMULATOR_MDMM_FAKE_ROSETTA=1`. A release build ignores it.
 
 ## Panel and transport timeline
 
@@ -187,3 +226,8 @@ immediate return under contention, concurrent producers/draining, and off-thread
 label formatting. `synthLibAudioInstrumentationTest` runs the prepared-audio
 allocation regression with capture scopes, transport and delivery events enabled.
 These are included in the focused CI gate.
+
+The session's architecture fields come from the editor, not from `synthLib` (the report
+takes any list of name/value pairs): `mdProcessArchTest` covers the translated decision over
+injected macOS and Windows cases and the three fields, and `mdRosettaNoticeTest` the on-screen
+notice, its once-a-session rule and **Don't show again** kept in a real config file.

@@ -11,6 +11,15 @@ where it came from, the setup, what happens, what should happen, status.*
 - **To do:** take it out of the script's `exclude` pattern in a CI run; keep it in if it passes, put it back with the reason if it does not.
 - **Status:** open.
 
+## B-043 · M1 users see about twice the CPU of M2 users: most likely Rosetta
+
+- **From:** Discord testers I and A, 2026-10-09, both on M1 Macs: about twice the CPU of the same project on M2 Macs.
+- **What happens:** the likely cause is a DAW opened as an Intel app (Get Info > **Open using Rosetta**, or a DAW without an Apple silicon build). It loads the editor's Intel code and the whole emulator then runs translated. The performance report could not tell: its `architecture` field is what the build was compiled for, so an Intel build says `x86` on an M1 as well. On screen, the only word was upstream's own box (`<product> - Rosetta detected`, raised by the base editor's constructor each time a window opens, with no way to put it away); whether testers I and A saw it is not known.
+- **Should:** the editor says so at start, once, and the report says whether the run was translated, so a performance report settles it.
+- **Fix (0.4.0, branch `feat/rosetta-notice`):** the editor detects it (`mdProcessArch.h`: `sysctl.proc_translated` on macOS, `IsWow64Process2` on Windows, an x64 build on Windows on Arm) and records `process_arch`, `machine_arch` and `translated` in the performance report's session record and in the first line of the start-up log (`..., CPU VirtualApple @ 2.50GHz, process x86_64 on arm64, translated`). At start, once a session, a translated editor shows "Running under Rosetta" (Windows on Arm: "Running in emulation") with **Don't show again** (config key `rosettaNoticeDismissed`) and **OK**; it replaces upstream's box. Tests: `mdProcessArchTest`, `mdRosettaNoticeTest`, `mdDeskPageTest`, `mmViewTest`. Fields: `doc/md_mm_performance_diagnostics.md`, "The session record".
+- **To check:** ask testers I and A for a performance report: `translated` should read `true`. If it reads `false`, the cause is something else. Run the standalone with **Open using Rosetta** ticked (Get Info) and see the notice; untick it and see none.
+- **Status:** fixed for 0.4.0 (not merged); the cause stays unconfirmed until tester I or A sends a report.
+
 ## B-040 · macOS 12: "no installer", only loose AU, VST3 and app files (0.3.4)
 
 - **From:** Discord tester A, 2026-10-08, macOS 12, 0.3.4: "no installer on Mac for 0.3.4 MacOS 12; only individual files AU, vst3, Stand Alone" (with a screenshot of the Machinedrum Editor's files). Tester C (latest macOS) installed 0.3.4 with the .pkg from the big Download button and pointed out the small ".dmg instead" link; tester H also took the .pkg.
