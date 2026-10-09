@@ -926,6 +926,19 @@ const MmJourneys = (() => {
 	const syxKitIds = () => $all('#syxpop button[data-syxitem^="kit:"]');
 	/* the report: the slots of a kind the machine did not take as in the file (every reported item carries its outcome) */
 	const syxNotTaken = kind => new Set($all(`#syxpop [data-syxitem^="${kind}:"][data-syxout]`).filter(d => d.dataset.syxout !== "taken").map(d => +d.dataset.syxitem.split(":")[1]));
+	/* a .syx dropped on the window (FOUNDATION.md, "Files dropped on the window"): the run's file, dropped through the
+	   window's drop path from the native side on ("dropfiles <x> <y> syx" in the page's log, diagnostics builds; as
+	   md-drop-syx): its import window opens */
+	const dropSyxJ = {
+		name: "mm-drop-syx",
+		needs: () => new URLSearchParams(location.search).get("syxfile") ? null : "no .syx for the run (GEARMULATOR_MDMM_SYX_FILE)",
+		steps: [
+			{ say: "drop the run's .syx on the page: its import window opens with the file's preview", act: () => Bridge.log(`dropfiles ${Math.round(innerWidth / 2)} ${Math.round(innerHeight / 2)} syx`),
+				screen: () => ok(!$1("#syxpop").hidden && $all("#syxpop [data-syxkind]").length > 0, "no preview"), within: 8000 },
+			{ say: "click Cancel: it closes, nothing is sent", act: u => u.click('#syxpop .syxfoot [data-syxgo="close"]'), screen: () => ok($1("#syxpop").hidden, "still open") }
+		],
+		async tidy(u) { if (!$1("#syxpop").hidden) u.key("Escape"); }
+	};
 	const syxImportJ = {
 		name: "mm-lib-syx-import",
 		needs: () => new URLSearchParams(location.search).get("syxfile") ? null : "no .syx for the run (GEARMULATOR_MDMM_SYX_FILE)",
@@ -973,7 +986,7 @@ const MmJourneys = (() => {
 		audioPanel, romCard, notePlay,
 		tapTempo, queue, dialogKeys, trackKeys, muteKeys, lockRamp, pages, copyPaste, clearAll, fill, rotate, pasteMany, liveRec, genKeys, mutScope,
 		valueKeys, soundCopy, screenDrag, dragM, midiMutes, joyAssign, menvPort, menvLayout, osHelp, songInspector, songDrag, kitSaveAs, kitRename, kitClear, patClear, hwNoMachine,
-		blackKeys, rollPaint, syxImportJ, shotsImport, editorMenuJ];
+		blackKeys, rollPaint, syxImportJ, shotsImport, editorMenuJ, dropSyxJ];
 
 	async function between(u) {
 		for (let i = 0; i < 3 && dlgShown(); i++) { u.key("Escape"); await sleep(200); }

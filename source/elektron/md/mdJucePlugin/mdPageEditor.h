@@ -5,6 +5,7 @@
 
 #include "elektronData/json.h"
 #include "juceUiLib/messageRoute.h"
+#include "mdDroppedFiles.h"
 #include "mdEditorMenu.h"
 #include "mdNoticeBook.h"
 #include "mdUpdater.h"
@@ -71,6 +72,10 @@ namespace mdJucePlugin
 		void chooseRom();
 		void chooseSyx(bool _save);
 		void chooseSample(uint8_t _slot);
+		// Files dropped on the window (mdDroppedFiles.h): the page hears what they are and answers with dropRom, dropSyx or
+		// dropSample, which hand the file to the session as its chooser would. The reason when the file cannot be used.
+		void filesDropped(const std::vector<std::string>& _paths, double _x, double _y);
+		std::string useDrop(droppedFiles::Kind _kind, const elektronData::json::Value& _message);
 		void layout() const;
 		// The update banner (DESIGN-updates.md 4): the Updater's state as a non-modal notice, sent when it changes.
 		void showUpdateBanner();
@@ -83,6 +88,7 @@ namespace mdJucePlugin
 		std::unique_ptr<AudioMidiLink> m_audio;
 		std::unique_ptr<Diagnostics> m_diagnostics;
 		std::unique_ptr<juce::FileChooser> m_chooser;
+		droppedFiles::DropBook m_drops;	// the files of the last drop, until the page has used them
 		std::shared_ptr<int> m_alive = std::make_shared<int>(0);	// callbacks that outlive the window check it
 		NoticeBook m_notices;	// the plug-in's questions and the banner the page has not answered yet (their numbers)
 		genericUI::messageRoute::Attachment m_noticeRoute;	// this window's sink for its instance's notices (messageRoute.h)

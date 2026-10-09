@@ -1264,7 +1264,7 @@ void checkContract(const bool _write)
 	// The plug-in's host sends these; this test has no host.
 	const auto r = contract::checkMessages(*root, g_published, {"learn", "audio", "audioLevel", "openAudio",
 		"romInstall", "romInfo", "notice", "syxPreview", "syxProgress", "syxExport", "host", "audioRun", "editorMenu",
-		"zoom"});
+		"zoom", "drop", "dragFiles"});
 	for(const auto& p : r.off)
 		std::printf("    %s\n", p.c_str());
 	for(const auto& u : r.unseen)

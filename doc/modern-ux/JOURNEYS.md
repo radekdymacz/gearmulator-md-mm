@@ -68,6 +68,7 @@ no journey yet); **not testable** (why). "—": the editor has no such feature.
 | Window fits the screen, remembers its size; top bar fits 1280 px | not testable: the window size is the host's | same |
 | MIDI mapping (Control workspace, LEARN) | skipped: hidden by design until the controller feature exists | same |
 | SysEx import | md-lib-syx-import (with GEARMULATOR_MDMM_SYX_FILE: the file the native chooser would give; kits, as from a cable, read back) | mm-lib-syx-import (the same, on SYSEX RECV) |
+| A file dropped on the window (macOS, 2026-10-09): a .syx opens its import window | md-drop-syx (with GEARMULATOR_MDMM_SYX_FILE, dropped through the window's drop path; not run yet) | mm-drop-syx (the same; not run yet) |
 
 ## Sequence
 
@@ -152,6 +153,7 @@ no journey yet); **not testable** (why). "—": the editor has no such feature.
 | Sample slots: browser of waveform tiles | md-sampler-slots PASS | — |
 | Set up sampling (recorder, player), one undo step; the recorder samples the main mix at VOL 0 (out of the mix), an input gives VOL back | md-sampler-setup-undo PASS | — |
 | Audition a sample | md-sampler-audition PASS | — |
+| A sample dropped on the window into the selected ROM slot (macOS, 2026-10-09) | md-drop-sample (with GEARMULATOR_MDMM_WAV_FILE; not run yet) | — |
 | Load a WAV / AIFF and audition it before keeping it | not testable: native file chooser | — |
 | RAM view steps; freeze / live | md-sampler-ram-view PASS | — |
 | Chops right after Set up sampling keep RAM-R / RAM-P (B-025) | md-sampler-setup-chop PASS | — |

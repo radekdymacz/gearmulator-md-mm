@@ -538,7 +538,7 @@ are disabled with its reason and the desk refuses both rows with it. Measured on
 sent, and its audition is the sent samples resampled 32 -> 44.1 kHz to within 1e-4.
 
 **Loading a sample** (`chooseSample {slot}`, the window's row): the window's native chooser
-(WAV or AIFF; drag and drop is not offered, see P7), the session reads the file and hands its bytes
+(WAV or AIFF), or one dropped on the window (macOS: `dropSample {drop, n, slot}`, FOUNDATION.md "Files dropped on the window"); the session reads the file and hands its bytes
 to `mdDesk::Desk::loadSample`; nothing passes through the page. Pure steps (`elektronData`):
 `decodeAudioFile` (WAV PCM 8/16/24/32, float 32/64, extensible; AIFF / AIFC PCM, `sowt`, `fl32`),
 `prepareMdSample` (channels mixed to mono; above 44.1 kHz a short low-pass and linear interpolation

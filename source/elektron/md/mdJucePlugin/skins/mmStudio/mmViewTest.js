@@ -1,6 +1,6 @@
 "use strict";
 /* The Monomachine Editor page's documents and view (DESIGN-UNIFY.md phase 1), on the page as the plug-in loads it
-   (deskBridge.js, deskDocs.js, deskOverlay.js, mmAdapter.js, the generated mmMockup.js, mmConvert.js, mmView.js) on
+   (deskBridge.js, deskDocs.js, deskOverlay.js, deskDrop.js, mmAdapter.js, the generated mmMockup.js, mmConvert.js, mmView.js) on
    a stand-in DOM that answers everything and does nothing, with the plug-in's messages played in:
    - derive: the view of the fixture's documents (mmViewFixture.json) is what the adapter before phase 1 showed
      (golden values captured once from its applyPending), and the background read of other slots costs nothing;
@@ -20,6 +20,8 @@
    - the plug-in's notices (codex review 2026-10): a notice's key, the dialog's and the update banner's, answers that
      notice by its number (noticeAnswer's notice), the request's own id apart; a refused answer is not shown.
      The Rosetta notice (mdRosettaNotice.h): "Don't show again" first, OK last; closed another way it answers OK.
+   - files dropped on the window (shared/deskDrop.js through the adapter's Drop.host): a .syx opens its import window,
+     a ROM is asked about while the machine runs, samples are said to have no place on a Monomachine.
      node mmViewTest.js */
 const fs = require("fs"), path = require("path");
 const SK = path.join(__dirname, ".."), R = path.join(__dirname, "../../../../../..");
@@ -27,7 +29,7 @@ let failures = 0;
 const check = (ok, what) => { console.log((ok ? "  ok   " : "  FAIL ") + what); if (!ok) failures++; };
 const fixture = JSON.parse(fs.readFileSync(path.join(__dirname, "mmViewFixture.json"), "utf8"));
 const catalogue = JSON.parse(fs.readFileSync(path.join(R, "doc/modern-ux/mm-catalogue.json"), "utf8"));
-const FILES = ["shared/deskBridge.js", "shared/deskDocs.js", "shared/deskOverlay.js", "mmStudio/mmAdapter.js", "mmStudio/mmMockup.js",
+const FILES = ["shared/deskBridge.js", "shared/deskDocs.js", "shared/deskOverlay.js", "shared/deskDrop.js", "mmStudio/mmAdapter.js", "mmStudio/mmMockup.js",
 	"mmStudio/mmConvert.js", "mmStudio/mmView.js"].map(f => path.join(SK, f));
 
 /* ---- the page on a stand-in: every unknown name is "any" (callable, constructible, every property any); timers
@@ -457,6 +459,23 @@ const result = (m, ok = true, errors = []) => ({ type: "result", id: m.id, op: m
 	asked[1].btns[0][2]();
 	const neverRosetta = p.sent.find(m => m.op === "noticeAnswer");
 	check(neverRosetta && neverRosetta.notice === 44 && neverRosetta.button === 0, "Don't show again answers its own notice with button 0 (the plug-in keeps it): " + JSON.stringify(neverRosetta));
+}
+
+/* ---- files dropped on the window (shared/deskDrop.js, the adapter's Drop.host) ---- */
+{
+	const p = loaded(), asked = [], toasts = [];
+	p.win.MMView.toast = t => toasts.push(t);
+	p.win.MMView.ask = (html, btns) => asked.push({ html, btns });
+	p.recv([{ type: "drop", drop: 4, items: [{ n: 0, kind: "sample", name: "kick.wav" }, { n: 1, kind: "sysex", name: "kits.syx" }, { n: 2, kind: "unknown", name: "a.txt" }], x: 10, y: 20 }]);
+	const drops = p.sent.filter(m => /^drop/.test(m.op));
+	check(drops.length === 1 && drops[0].op === "dropSyx" && drops[0].drop === 4 && drops[0].n === 1, "a .syx among a sample and a text file: dropSyx {drop 4, n 1} only: " + JSON.stringify(drops));
+	check(toasts.length === 1 && /^The Monomachine has no samples\. Not a ROM .*: a\.txt\.$/.test(toasts[0]), "one toast: no samples on a Monomachine, the text file named: " + toasts.join(" | "));
+	p.sent.length = 0;
+	p.recv([{ type: "drop", drop: 5, items: [{ n: 0, kind: "rom", name: "mm.bin" }], x: 0, y: 0 }]);
+	check(!p.sent.some(m => m.op === "dropRom") && asked.length === 1 && /Install <b>mm\.bin<\/b> as the firmware\?/.test(asked[0].html), "a ROM while the machine runs: asked first");
+	asked[0].btns.find(b => b[0] === "Install")[2]();
+	p.run();
+	check(p.sent.some(m => m.op === "dropRom" && m.drop === 5 && m.n === 0), "Install: dropRom {drop 5, n 0}");
 }
 
 console.log(failures ? `mmViewTest: ${failures} failure(s)` : "mmViewTest: PASS");

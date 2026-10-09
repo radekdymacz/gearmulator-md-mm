@@ -53,6 +53,11 @@ Bridge.onMessage(m => { if (m.type === "romInfo") showRomInfo(m); else if (m.typ
 Boot.host = { chooseRom: () => cmd("chooseRom"), revealRom: () => cmd("revealRomFolder"), recheck: () => cmd("recheckFirmware"),
 	removeRom: askRemoveRom, say: toast };
 Bridge.onMessage(m => { if (m.type === "romInstall") { Boot.rom(m); toast(m.text); } });
+/* files dropped on the window (shared/deskDrop.js): the page's question and toast (called late: a test may replace
+   them), the start-up card asking for a firmware, and the Sampler for samples (mdDeskSampler.js) */
+Drop.host = { send: c => { const { op, ...args } = c; cmd(op, args); }, ask: (html, btns) => ask(html, btns), toast: t => toast(t),
+	romWanted: () => V.lifecycle === "missing" || V.lifecycle === "unsupported", samples: (drop, items, x, y) => dropSamples(drop, items, x, y),
+	hint: "Drop a ROM (.bin, .zip), a SysEx file (.syx), or samples (.wav, .aif) for the Sampler's ROM slots" };
 /* SysEx import and export: the host's file dialogs and document writes (the page never reads the file) */
 Syx.host = { choose: () => cmd("chooseSyx"), exportAll: () => cmd("syxExport"), start: (kinds, skip) => cmd("syxImport", { kinds, skip: skip || [] }), stop: () => cmd("syxCancel") };
 Bridge.onMessage(m => {
