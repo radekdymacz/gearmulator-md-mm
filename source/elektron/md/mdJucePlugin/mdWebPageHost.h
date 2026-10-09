@@ -68,6 +68,17 @@ namespace mdJucePlugin
 		// had is gone, so the owner sends everything once more (the page's ready may have come before this, and what
 		// it answered went out under the old page's numbers).
 		void setOnRestart(std::function<void()> _restarted) { m_onRestart = std::move(_restarted); }
+		// Files dragged onto the page: whether the owner takes them (their full paths), that they came over the page
+		// (true) or left it (false), and where they were dropped, in the page's CSS pixels. macOS only for now: there
+		// the web view hands the window the drags of files from outside the page (mdWebFileDrop.mm); WebView2 and
+		// webkit2gtk keep them (the page is not replaced: their navigation to the file is cancelled).
+		struct FileDrop
+		{
+			std::function<bool(const std::vector<std::string>&)> takes;
+			std::function<void(bool)> over;
+			std::function<void(const std::vector<std::string>&, double, double)> dropped;
+		};
+		void setFileDrop(FileDrop _drop);
 
 	private:
 		void onBridge(const std::string& _url);
@@ -101,8 +112,11 @@ namespace mdJucePlugin
 		juce::String m_pageUrl;		// what load() went to: a page that lost batches is loaded again (FileOutbox resync)
 		double m_nextResyncTry = 0;	// when to try that reload (again)
 		std::function<void()> m_onRestart;	// setOnRestart
+		FileDrop m_fileDrop;	// setFileDrop: the owner's, in the page's CSS pixels
 		double m_userZoom = 1.0;	// the user's page zoom (the editor's menu, Cmd - / Cmd + / Cmd 0)
 		double m_cssZoom = 1.0;		// the CSS zoom sent (a zoom message), where the web view has no native page zoom
+		double m_pageZoom = 1.0;	// the page's zoom now (native or CSS): a CSS pixel is this many of the view's
+		int m_fileDrops = 0;		// macOS: 1 once the web view hands file drags to the window (mdWebFileDrop.mm), -1 it cannot
 		bool m_keptDrawn = false;	// a background run (mdBackgroundRun.h): the page draws while covered
 		mutable juce::File m_logFile;	// created on the first line
 		juce::File m_startupLog;	// B-022 (setStartupLog)

@@ -119,6 +119,22 @@ namespace mdJucePlugin
 			"editor-" + juce::File::createLegalFileName(juce::String(m_session ? m_session->pageSpec().page : "page")).upToLastOccurrenceOf(".", false, false) + ".log");
 		m_page->setStartupLog(startupLog);
 		m_page->setFallbackMenu([this] { openMenu(); });	// I-008: no page up, the native menu
+		// Files dragged onto the window (macOS): taken when the page is up and one of them is a kind it knows; the page
+		// shows where they go while they are over it, and decides what each becomes once dropped
+		m_page->setFileDrop({[this](const std::vector<std::string>& _paths)
+			{
+				return m_page->pageReady() && !m_page->failed() && droppedFiles::accepts(_paths);
+			},
+			[this](const bool _over)
+			{
+				m_page->send(droppedFiles::dragMessage(_over));
+				m_page->flush();
+			},
+			[this](const std::vector<std::string>& _paths, const double _x, const double _y)
+			{
+				const genericUI::messageRoute::OwnerScope owner(m_noticeOwner);
+				filesDropped(_paths, _x, _y);
+			}});
 		// Linux: a page that started again has nothing (WebPageHost::onAck): the session's documents once more, as on
 		// its ready, and the update banner (the old one's answer is no longer wanted)
 		m_page->setOnRestart([this]
@@ -170,6 +186,14 @@ namespace mdJucePlugin
 			{
 				chooseSample(static_cast<uint8_t>(_message.find("slot")->asNumber()));
 				m_page->send(deskCore::resultMessage(_message, {}, {}));
+			}
+			else if(row->handler.action == deskHost::Action::DropRom || row->handler.action == deskHost::Action::DropSyx
+				|| row->handler.action == deskHost::Action::DropSample)
+			{
+				const auto kind = row->handler.action == deskHost::Action::DropRom ? droppedFiles::Kind::Rom
+					: row->handler.action == deskHost::Action::DropSyx ? droppedFiles::Kind::Sysex : droppedFiles::Kind::Sample;
+				const auto why = useDrop(kind, _message);
+				m_page->send(deskCore::resultMessage(_message, why.empty() ? std::vector<std::string>{} : std::vector<std::string>{why}, {}));
 			}
 			else if(row->handler.action == deskHost::Action::ChooseSyx || row->handler.action == deskHost::Action::SyxExport)
 			{
@@ -302,6 +326,44 @@ namespace mdJucePlugin
 			else if(f.existsAsFile())
 				m_session->openSyx(f);
 		});
+	}
+
+	// Files dropped on the window: kept here by their number (the page never sees a path), and the page told what each is
+	// and where they were dropped (its CSS pixels): it decides what each becomes (deskDrop.js).
+	void PageEditor::filesDropped(const std::vector<std::string>& _paths, const double _x, const double _y)
+	{
+		if(!m_page)
+			return;
+		const int drop = m_drops.add(_paths, juce::Time::getMillisecondCounterHiRes());
+		const auto items = droppedFiles::classify(_paths);
+		m_page->log("drop " + juce::String(drop) + ": " + juce::String(static_cast<int>(items.size())) + " files at " + juce::String(_x, 1) + ", " + juce::String(_y, 1));
+		m_page->send(droppedFiles::dropMessage(drop, items, _x, _y));
+		m_page->flush();
+	}
+
+	// The file the page chose of a drop, as its chooser would give it: a ROM to install, a .syx to preview, a sample for a
+	// UW ROM slot. Each file serves once, as the kind it was dropped as.
+	std::string PageEditor::useDrop(const droppedFiles::Kind _kind, const json::Value& _message)
+	{
+		const auto drop = static_cast<int>(_message.find("drop")->asNumber());
+		const auto n = static_cast<size_t>(_message.find("n")->asNumber());
+		const auto path = m_drops.take(drop, n, _kind, juce::Time::getMillisecondCounterHiRes());
+		if(!path)
+			return "The window no longer holds that file: drop it again.";
+		const juce::File file(juce::String::fromUTF8(path->c_str()));
+		if(!file.existsAsFile())
+			return file.getFileName().toStdString() + " is no longer there.";
+		if(!m_session)
+			return "The editor has no machine to give it to.";
+		m_page->log("drop " + juce::String(drop) + ": file " + juce::String(static_cast<int>(n)) + " (" + file.getFileName() + ") used as " + droppedFiles::kindName(_kind));
+		switch(_kind)
+		{
+		case droppedFiles::Kind::Rom:		m_session->installRom(file); break;
+		case droppedFiles::Kind::Sysex:		m_session->openSyx(file); break;
+		case droppedFiles::Kind::Sample:	m_session->loadSampleFile(static_cast<uint8_t>(_message.find("slot")->asNumber()), file); break;
+		case droppedFiles::Kind::Unknown:	break;
+		}
+		return {};
 	}
 
 	bool PageEditor::openAudioMidiSettings()

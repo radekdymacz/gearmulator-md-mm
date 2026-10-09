@@ -40,7 +40,7 @@ list(APPEND SOURCES
 	mdBootDiagnostics.cpp mdBootDiagnostics.h
 	mdDeskSession.cpp mdDeskSession.h
 	mdMidiLearnCommands.cpp mdMidiLearnCommands.h
-	mdPageEditor.cpp mdPageEditor.h mdPageZoom.h mdEditorMenu.h mdNoticeBook.h
+	mdPageEditor.cpp mdPageEditor.h mdPageZoom.h mdEditorMenu.h mdNoticeBook.h mdDroppedFiles.h
 	mdRomInstall.cpp mdRomInstall.h
 	mdSettingsMigration.cpp mdSettingsMigration.h
 	mdSessionMd.cpp mdSessionMm.cpp mdSessions.h
@@ -49,6 +49,7 @@ list(APPEND SOURCES
 	mmStudioLink.cpp mmStudioLink.h
 	$<$<PLATFORM_ID:Darwin>:mdStudioWebZoom.mm> mdWebFocus.h
 	$<$<PLATFORM_ID:Darwin>:mdBackgroundRun.mm> mdBackgroundRun.h
+	$<$<PLATFORM_ID:Darwin>:mdWebFileDrop.mm> mdWebFileDrop.h
 	$<$<PLATFORM_ID:Windows>:mdWebView2Page.cpp>
 	mdWebView2Page.h
 	mdAudioMidiLink.cpp mdAudioMidiLink.h
@@ -99,6 +100,7 @@ list(APPEND SOURCES
 	skins/shared/deskAudio.js skins/shared/deskAudio.css skins/shared/deskAudioSelfTest.js
 	skins/shared/deskLcd.css skins/shared/deskFonts.css
 	skins/shared/deskBridge.js skins/shared/deskBridgeTest.js
+	skins/shared/deskDrop.js skins/shared/deskDropTest.js
 	skins/shared/deskDocs.js
 	skins/shared/deskOverlay.js skins/shared/deskOverlayTest.js
 	skins/shared/deskGen.js skins/shared/deskGenTest.js
@@ -136,7 +138,7 @@ option(MDMM_INSTALL_DEV_PLUGINS "Copy the built editors to ~/Library/Audio/Plug-
 # mmMockup.js (sync-mmstudio-skin.py) but for the bridge.
 set(MD_SHARED_PAGE_FILES
 	"skins/shared/deskModal.js" "skins/shared/deskMenu.js" "skins/shared/deskCaps.js" "skins/shared/deskBoot.js" "skins/shared/deskSyx.js" "skins/shared/deskBridge.js"
-	"skins/shared/deskDocs.js" "skins/shared/deskOverlay.js" "skins/shared/deskGen.js" "skins/shared/deskKeys.js" "skins/shared/deskKeyView.js" "skins/shared/deskTogglePaint.js"
+	"skins/shared/deskDrop.js" "skins/shared/deskDocs.js" "skins/shared/deskOverlay.js" "skins/shared/deskGen.js" "skins/shared/deskKeys.js" "skins/shared/deskKeyView.js" "skins/shared/deskTogglePaint.js"
 	"skins/shared/deskAudio.js" "skins/shared/deskCompat.js" "skins/shared/deskZoom.js" "skins/shared/deskAbout.js")
 file(GLOB MD_SKIN_ASSETS CONFIGURE_DEPENDS
 	"skins/mdStudio/*.rml" "skins/mdStudio/*.html" "skins/mdStudio/mdDesk.css" "skins/mdStudio/*.js"
@@ -150,7 +152,9 @@ file(GLOB MM_SKIN_ASSETS CONFIGURE_DEPENDS
 	# the older-WebKit rewrite (B-001), first in the page's <head>; the page's zoom keys
 	"skins/shared/deskCompat.js" "skins/shared/deskZoom.js"
 	# the version the page shows (0.3.4)
-	"skins/shared/deskAbout.js")
+	"skins/shared/deskAbout.js"
+	# files dropped on the window (macOS): what the page does with them
+	"skins/shared/deskDrop.js")
 # The tests are not the page, named one by one, not by a file-name pattern: the node tests never
 # ship, the self-tests only with the diagnostics. A test that was renamed or moved stops the
 # configure, so it cannot slip into the glob. The MM glob lists its page files already.
@@ -167,7 +171,8 @@ set(MM_NODE_TESTS "skins/mmStudio/mmConvertTest.js" "skins/mmStudio/mmKeysTest.j
 # the shared page files' node tests (never in a glob, so never shipped); checked to be there
 set(SHARED_NODE_TESTS "skins/shared/deskGenTest.js" "skins/shared/deskOverlayTest.js" "skins/shared/deskBridgeTest.js"
 	"skins/shared/deskTogglePaintTest.js" "skins/shared/deskKeysTest.js" "skins/shared/deskModalTest.js" "skins/shared/deskMenuTest.js" "skins/shared/deskCompatTest.js"
-	"skins/shared/deskKeymapTest.js" "skins/shared/deskKeyViewTest.js" "skins/shared/deskAboutTest.js" "skins/shared/deskSyxTest.js")
+	"skins/shared/deskKeymapTest.js" "skins/shared/deskKeyViewTest.js" "skins/shared/deskAboutTest.js" "skins/shared/deskSyxTest.js"
+	"skins/shared/deskDropTest.js")
 foreach(test ${MD_NODE_TESTS} ${MD_SELF_TESTS} ${MM_SELF_TESTS} ${MM_NODE_TESTS} ${SHARED_NODE_TESTS} ${MD_SHARED_PAGE_FILES})
 	if(NOT EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/${test}")
 		message(FATAL_ERROR "${test} is not there: update the editors' test lists in ${CMAKE_CURRENT_LIST_FILE}")
@@ -449,6 +454,28 @@ function(mdmm_plugin_targets)
 	set_tests_properties(mdEditorMenuTest PROPERTIES LABELS "UnitTest")
 	set_property(TARGET mdEditorMenuTest PROPERTY FOLDER "Elektron/test")
 
+	# Files dropped on the window (mdDroppedFiles.h): what each is, the drop and drag messages and the drop commands against both
+	# contracts, the book of the last drop's files
+	add_executable(mdDroppedFilesTest mdDroppedFilesTest.cpp mdDroppedFiles.h)
+	target_link_libraries(mdDroppedFilesTest PRIVATE elektronJson)
+	target_include_directories(mdDroppedFilesTest PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/..)
+	target_compile_definitions(mdDroppedFilesTest PRIVATE
+		MDDESK_SCHEMA="${CMAKE_CURRENT_SOURCE_DIR}/../../../../doc/modern-ux/md-data-contract.schema.json"
+		MMDESK_SCHEMA="${CMAKE_CURRENT_SOURCE_DIR}/../../../../doc/modern-ux/mm-data-contract.schema.json")
+	add_test(NAME mdDroppedFilesTest COMMAND mdDroppedFilesTest)
+	set_tests_properties(mdDroppedFilesTest PROPERTIES LABELS "UnitTest")
+	set_property(TARGET mdDroppedFilesTest PROPERTY FOLDER "Elektron/test")
+
+	# Files dropped on the window, macOS (mdWebFileDrop.mm): the web view's dragging methods route a drag of files from
+	# outside the page to the window's view and every other drag to the web view's own (run on plain views, no window)
+	if(APPLE)
+		add_executable(mdWebFileDropTest mdWebFileDropTest.mm mdWebFileDrop.mm mdWebFileDrop.h)
+		target_link_libraries(mdWebFileDropTest PRIVATE "-framework AppKit")
+		add_test(NAME mdWebFileDropTest COMMAND mdWebFileDropTest)
+		set_tests_properties(mdWebFileDropTest PROPERTIES LABELS "UnitTest")
+		set_property(TARGET mdWebFileDropTest PROPERTY FOLDER "Elektron/test")
+	endif()
+
 	# 0.3.4: the editor menu's first line and the About box: the build's product names and version (mdAbout.h)
 	add_executable(mdAboutTest mdAboutTest.cpp mdAbout.h)
 	target_link_libraries(mdAboutTest PRIVATE mdmmVersion)
@@ -494,6 +521,9 @@ function(mdmm_plugin_targets)
 		# the SysEx import panel (both editors): the machine's slot grids, the counts, Shift-click ranges, the report per slot
 		add_test(NAME deskSyxPageTest COMMAND ${GEARMULATOR_NODE} ${CMAKE_CURRENT_SOURCE_DIR}/skins/shared/deskSyxTest.js)
 		set_tests_properties(deskSyxPageTest PROPERTIES LABELS "UnitTest" TIMEOUT 60)
+		# files dropped on the window (both editors): what each kind becomes, in order, the ROM's question, the notes, the frame
+		add_test(NAME deskDropPageTest COMMAND ${GEARMULATOR_NODE} ${CMAKE_CURRENT_SOURCE_DIR}/skins/shared/deskDropTest.js)
+		set_tests_properties(deskDropPageTest PROPERTIES LABELS "UnitTest" TIMEOUT 60)
 		# I-008: the menu drawn in the page (placement, keys, the editor menu's message and picks) and its wiring
 		add_test(NAME deskMenuPageTest COMMAND ${GEARMULATOR_NODE} ${CMAKE_CURRENT_SOURCE_DIR}/skins/shared/deskMenuTest.js)
 		set_tests_properties(deskMenuPageTest PROPERTIES LABELS "UnitTest" TIMEOUT 60)

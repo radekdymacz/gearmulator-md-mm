@@ -53,6 +53,8 @@ namespace deskHost
 		const Arg device{"device", ArgType::Text, 0, 0, true};
 		const Arg channel{"index", ArgType::Integer, 0, 255, true};	// an output channel of the device
 		const Arg value{"value", ArgType::Number, 0, 1e6, true};		// a sample rate or a buffer size
+		const Arg dropNumber{"drop", ArgType::Integer, 1, 1e9};	// a drop message's number
+		const Arg dropFile{"n", ArgType::Integer, 0, 65535};		// a file's number in that drop
 		const auto row = [](const char* _op, std::vector<Arg> _args, const char* _help, const Action _a, const Actor _who = Actor::Session)
 		{
 			return deskCore::Command<Handler>{_op, Owner::Host, Gate::None, -1, std::move(_args), _help, CoreOp::Edit, 0, {_a, _who}};
@@ -90,6 +92,21 @@ namespace deskHost
 				"the entry n the user chose in the editor's menu numbered menu (the editorMenu message): the window runs it", Action::MenuPick, Actor::Window),
 			row("pageZoom", {{"step", ArgType::Integer, -1, 1}},
 				"the page's zoom one step smaller (-1), larger (1) or back to 100 % (0); the window remembers it", Action::PageZoom, Actor::Window),
+			// Files dropped on the window (macOS; mdDroppedFiles.h): the window keeps them and sends the drop message; the page
+			// names a file by drop and n, never by a path. Each file serves once, as the kind it was dropped as, until the next
+			// drop or 10 minutes without use.
+			row("dropRom", {dropNumber, dropFile},
+				"install the ROM (.bin, or a .zip with it) numbered n in the drop message numbered drop: checked and copied like a chosen one, "
+				"then the machine starts again with it (romInstall follows); refused when the window no longer holds that file",
+				Action::DropRom, Actor::Window),
+			row("dropSyx", {dropNumber, dropFile},
+				"open the .syx numbered n in the drop message numbered drop: its import preview follows (syxPreview), as for Import SysEx "
+				"after its chooser; refused when the window no longer holds that file",
+				Action::DropSyx, Actor::Window),
+			row("dropSample", {dropNumber, dropFile, {"slot", ArgType::Integer, 0, 47}},
+				"load the sample (WAV or AIFF) numbered n in the drop message numbered drop into UW ROM slot slot, as a chosen one "
+				"(sampleLoad messages follow; one sample at a time); refused when the window no longer holds that file",
+				Action::DropSample, Actor::Window),
 			row("learnStart", {t, pg, i}, "MIDI learn a track's parameter (learn.doc.limits: which)", Action::LearnStart),
 			row("learnAdd", {{"cc", ArgType::Integer, 0, 127}, t, pg, i, {"ch", ArgType::Integer, 0, 15, true}},
 				"a CC mapping without learning, on channel ch (none: all channels)", Action::LearnAdd),

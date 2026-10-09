@@ -557,6 +557,12 @@
 		audioMeter(on) { send({ op: "audioMeter", on: !!on }); }
 	};
 
+	/* files dropped on the window (shared/deskDrop.js): the page's question and toast, the start-up card asking for a
+	   firmware; the Monomachine has no samples */
+	Drop.host = { send: c => send(c), ask: (html, btns) => V().ask(html, btns), toast: t => V().toast(t),
+		romWanted: () => machine?.lifecycle === "missing" || machine?.lifecycle === "unsupported",
+		samples: () => "The Monomachine has no samples.", hint: "Drop a ROM (.bin, .zip) or a SysEx file (.syx)" };
+
 	/* What the page holds, read-only, for whoever looks (a diagnostics build's self-tests register
 	   here; the page does not know them): copies of the documents, and a call once the machine is
 	   ready. */

@@ -2487,6 +2487,83 @@
         },
         {
           "type": "object",
+          "description": "Files dropped on the window (macOS for now; FOUNDATION.md, Files dropped on the window). The window keeps them and says what each is; the page decides what each becomes and answers with dropRom, dropSyx or dropSample, which name a file by this message's drop and the file's n, never by a path (each file serves once, as the kind it was dropped as, until the next drop or 10 minutes without use). x and y: where they were dropped, in the page's CSS pixels.",
+          "required": [
+            "type",
+            "drop",
+            "items",
+            "x",
+            "y"
+          ],
+          "additionalProperties": true,
+          "properties": {
+            "type": {
+              "const": "drop"
+            },
+            "drop": {
+              "type": "integer",
+              "minimum": 1,
+              "description": "this drop's number: the drop commands name it"
+            },
+            "items": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "required": [
+                  "n",
+                  "kind",
+                  "name"
+                ],
+                "additionalProperties": true,
+                "properties": {
+                  "n": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "description": "the file's number in the drop, from 0"
+                  },
+                  "kind": {
+                    "enum": [
+                      "rom",
+                      "sysex",
+                      "sample",
+                      "unknown"
+                    ],
+                    "description": "by the extension, in any case: rom .bin .zip, sysex .syx, sample .wav .wave .aif .aiff .aifc"
+                  },
+                  "name": {
+                    "type": "string",
+                    "description": "the file's name, never its folder"
+                  }
+                }
+              }
+            },
+            "x": {
+              "type": "number"
+            },
+            "y": {
+              "type": "number"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "description": "Files the window takes are dragged over it (active true), or have left it (false; a drop message ends it too): the page shows where a drop goes.",
+          "required": [
+            "type",
+            "active"
+          ],
+          "additionalProperties": true,
+          "properties": {
+            "type": {
+              "const": "dragFiles"
+            },
+            "active": {
+              "type": "boolean"
+            }
+          }
+        },
+        {
+          "type": "object",
           "description": "P7, B-019: a .syx file the user chose or dropped, parsed by the plug-in: what it holds (per kind the items with their slot, name, format bytes, whether they overwrite data or play now) and what cannot be sent and why. It informs; the import sends the chosen messages to the machine as they are.",
           "required": [
             "type",
@@ -6570,6 +6647,126 @@
               "type": "integer",
               "minimum": -1,
               "maximum": 1
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "description": "host: install the ROM (.bin, or a .zip with it) numbered n in the drop message numbered drop: checked and copied like a chosen one, then the machine starts again with it (romInstall follows); refused when the window no longer holds that file",
+          "required": [
+            "op",
+            "drop",
+            "n"
+          ],
+          "properties": {
+            "op": {
+              "const": "dropRom"
+            },
+            "id": {
+              "type": "integer"
+            },
+            "g": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "force": {
+              "type": [
+                "boolean",
+                "integer"
+              ]
+            },
+            "drop": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 1000000000
+            },
+            "n": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 65535
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "description": "host: open the .syx numbered n in the drop message numbered drop: its import preview follows (syxPreview), as for Import SysEx after its chooser; refused when the window no longer holds that file",
+          "required": [
+            "op",
+            "drop",
+            "n"
+          ],
+          "properties": {
+            "op": {
+              "const": "dropSyx"
+            },
+            "id": {
+              "type": "integer"
+            },
+            "g": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "force": {
+              "type": [
+                "boolean",
+                "integer"
+              ]
+            },
+            "drop": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 1000000000
+            },
+            "n": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 65535
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "description": "host: load the sample (WAV or AIFF) numbered n in the drop message numbered drop into UW ROM slot slot, as a chosen one (sampleLoad messages follow; one sample at a time); refused when the window no longer holds that file",
+          "required": [
+            "op",
+            "drop",
+            "n",
+            "slot"
+          ],
+          "properties": {
+            "op": {
+              "const": "dropSample"
+            },
+            "id": {
+              "type": "integer"
+            },
+            "g": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "force": {
+              "type": [
+                "boolean",
+                "integer"
+              ]
+            },
+            "drop": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 1000000000
+            },
+            "n": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 65535
+            },
+            "slot": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 47
             }
           },
           "additionalProperties": false
