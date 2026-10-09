@@ -4,7 +4,8 @@
 #
 #   scripts/local-gate/updater-manual.sh check        what can be tested now; no window. Reads https://mdmm.dev/latest.json
 #   scripts/local-gate/updater-manual.sh prepare      a scratch copy of this tree with an OLDER version number, its standalones built
-#   scripts/local-gate/updater-manual.sh run md|mm    that standalone, in a sandbox, in front; prints what to press
+#   scripts/local-gate/updater-manual.sh run md|mm    that standalone, in a sandbox, in front; prints what to press. The system
+#                                                     output is muted while it runs (the standalone opens an audio device)
 #
 # Why a scratch copy: the app asks only https://mdmm.dev/latest.json and downloads only from the repository's
 # GitHub releases (no setting, variable or test hook changes that; curl runs with -q, HTTPS only), and it offers an
@@ -22,7 +23,10 @@ here="$(cd "$(dirname "$0")" && pwd)"
 ROOT="$(cd "${here}/../.." && pwd)"
 # shellcheck source=../mdmm-product.env
 . "${ROOT}/scripts/mdmm-product.env"
-WORK="${ROOT}/temp/local-gate/updater"
+GATE_HOME="${ROOT}/temp/local-gate"
+# shellcheck source=silence.sh
+. "${here}/silence.sh"
+WORK="${GATE_HOME}/updater"
 COPY="${WORK}/src"
 TEST_VERSION="${UPDATER_TEST_VERSION:-0.3.0}"
 PREVIEW="${MDMM_GATE_PREVIEW:-${HOME}/Documents/Gearmulator Preview}"
@@ -91,6 +95,15 @@ run() {
 	rom="${GEARMULATOR_MD_FIRMWARE_BIN:-}"
 	[ "${machine}" = Monomachine ] && rom="${GEARMULATOR_MM_FIRMWARE_BIN:-}"
 	[ -n "${rom}" ] || rom="$(find "${PREVIEW}/${machine}/roms" -maxdepth 1 -type f 2> /dev/null | head -n 1)"
+	# The standalone opens the Mac's audio device: the system output is muted while it runs, and comes back when it ends
+	# (silence.sh; a muted output left behind by a killed run is restored by the next one).
+	trap 'output_restore' EXIT
+	trap 'exit 130' INT
+	trap 'exit 143' TERM
+	if ! output_mute "the updater test"; then
+		echo "!!! ${MUTE_NOTE}; not starting an editor with the output live (MDMM_GATE_ALLOW_UNMUTED=1 starts it anyway)" >&2
+		[ "${MDMM_GATE_ALLOW_UNMUTED:-0}" = 1 ] || return 1
+	fi
 	rm -rf "${sandbox}"
 	mkdir -p "${sandbox}/data/Gearmulator Preview/${machine}/roms" "${sandbox}/home/Library/Application Support" "${sandbox}/home/Library/Caches"
 	[ -f "${rom}" ] && ln -s "${rom}" "${sandbox}/data/Gearmulator Preview/${machine}/roms/$(basename "${rom}")"
@@ -105,6 +118,7 @@ run() {
    5. Also: Later hides the banner until tomorrow; Cancel during the download stops it; Don't check unticks Updates > Check Daily.
    6. Windows / Linux ("not tested" builds): the same on such a machine: Restart now replaces the app and starts it again.
    Quit the editor to end (Ctrl-C here also works). The sandbox is ${sandbox}.
+   The Mac's sound output is muted until then (it has no sound to test here); ${MUTE_NOTE:-the output was not muted}.
 EOF
 	env GEARMULATOR_DATA_ROOT="${sandbox}/data/" CFFIXED_USER_HOME="${sandbox}/home" "${app}/Contents/MacOS/${product}"
 }
@@ -113,5 +127,5 @@ case "${1:-}" in
 	check) check ;;
 	prepare) prepare ;;
 	run) shift; run "$@" ;;
-	*) sed -n '2,19p' "$0" | sed 's/^# \{0,1\}//' >&2; exit 2 ;;
+	*) awk 'NR > 1 && /^#/ { sub(/^# ?/, ""); print; next } NR > 1 { exit }' "$0" >&2; exit 2 ;;
 esac

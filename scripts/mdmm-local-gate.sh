@@ -5,12 +5,17 @@
 # repo's own scripts (mdmm-rt-check.sh, mdmm-pluginval.sh, mdmm-journeys.sh, mdmm-dev.sh, macos/check_mdmm_core_capacity.py)
 # and adds only the glue: sandboxes, a time limit per run, the summary.
 #
-#   scripts/mdmm-local-gate.sh [--quick] [--skip-plugin] [--skip-journeys] [--record-goldens] [--build <dir>] [--out <dir>]
+#   scripts/mdmm-local-gate.sh [--quick] [--skip-plugin] [--skip-soak] [--skip-journeys] [--record-goldens] [--build <dir>] [--out <dir>]
 #
 #   --quick            no plug-ins: configure with JUCE off and run what needs no window or bundle (stages 1 to 6a).
 #                      Not a release gate: the verdict says so
-#   --skip-plugin      build everything, but leave out the core-capacity run and stage 7 (the plug-in checks)
-#   --skip-journeys    leave out only the user journeys (they take a window and the Mac for 8 to 16 minutes)
+#   --skip-plugin      build everything, but leave out the core-capacity run, the soak and stage 7 (the plug-in checks)
+#   --skip-soak        leave out only the soak (ten minutes of busy play per machine, 6c: 21 minutes)
+#   --skip-journeys    leave out only the user journeys (8 to 16 minutes, in the background of the Mac)
+#
+# The Mac stays silent: no stage but 7d (the standalones of the journeys) opens an audio device, an audio guard fails any
+# other that does, and 7d runs with the standalone's output zeroed (--background) and the system output muted, restored
+# afterwards and on any exit (doc/release/LOCAL-GATE.md, Silence).
 #   --record-goldens   stage 5 records the goldens (mdmmPerfGateTest --record) instead of comparing; the new numbers
 #                      are then compared once more, and the summary says the goldens changed and need sign-off
 #   --build <dir>      the build tree (default temp/local-gate/build; --quick: temp/local-gate/build-quick)
@@ -20,7 +25,9 @@
 # <preview>/<machine>/roms), MDMM_GATE_PREVIEW (default ~/Documents/Gearmulator Preview), MDMM_GATE_MD_CACHE (the
 # Machinedrum factory cache), MDMM_GATE_MM_PATCH (the Monomachine factory patch RAM), MDMM_GATE_FIXTURES (the SysEx
 # fixtures, default <preview>/fixtures/sysex), MDMM_GATE_JOBS (build jobs), MDMM_GATE_GOLDEN_JOBS (golden runs at once), MDMM_GATE_JOURNEY_ARGS
-# (options for mdmm-journeys.sh, default --host both), MDMM_GATE_COMPONENTS_DIR (where the AU bundles are installed),
+# (options for mdmm-journeys.sh, default --host both --background), MDMM_GATE_COMPONENTS_DIR (where the AU bundles are installed),
+# MDMM_GATE_SOAK_SECONDS (6c, default 600), MDMM_GATE_SOAK_WARMUP (seconds not judged, default 30), MDMM_GATE_SOAK_LOCK_US
+# (a synth lock wait that fails it, default 1000), MDMM_GATE_ALLOW_UNMUTED=1 (run 7d although the output cannot be muted),
 # MDMM_GATE_SCENARIOS (extra golden scenarios, for --record-goldens). For working on the gate itself: MDMM_GATE_SKIP_BUILD=1
 # (use the build tree as it is), MDMM_GATE_ONLY="3 5" (only those stages) and MDMM_GATE_GOLDENS (another goldens file);
 # the summary calls such a run partial.
@@ -40,11 +47,12 @@ usage() {
 	exit "${1:-2}"
 }
 
-QUICK=0; SKIP_PLUGIN=0; SKIP_JOURNEYS=0; RECORD=0; BUILD=""; OUT=""
+QUICK=0; SKIP_PLUGIN=0; SKIP_SOAK=0; SKIP_JOURNEYS=0; RECORD=0; BUILD=""; OUT=""
 while [ $# -gt 0 ]; do
 	case "$1" in
 		--quick) QUICK=1; shift ;;
 		--skip-plugin) SKIP_PLUGIN=1; shift ;;
+		--skip-soak) SKIP_SOAK=1; shift ;;
 		--skip-journeys) SKIP_JOURNEYS=1; shift ;;
 		--record-goldens) RECORD=1; shift ;;
 		--build) [ $# -ge 2 ] || usage; BUILD="$2"; shift 2 ;;
@@ -81,7 +89,10 @@ FIXTURES="${MDMM_GATE_FIXTURES:-${PREVIEW}/fixtures/sysex}"
 GOLDENS="${MDMM_GATE_GOLDENS:-${ROOT}/source/elektron/md/mdLibTest/goldens/mdmm-goldens.json}"	# the override is for testing the gate
 GATE_MIN_SCENARIOS="md-busy md-factory md-song mm-a01 mm-busy mm-song"	# a goldens file must cover at least these
 JOBS="${MDMM_GATE_JOBS:-$(sysctl -n hw.ncpu 2>/dev/null || echo 4)}"
-JOURNEY_ARGS="${MDMM_GATE_JOURNEY_ARGS:---host both}"
+JOURNEY_ARGS="${MDMM_GATE_JOURNEY_ARGS:---host both --background}"	# --background: the standalone's output is zeroed (silence)
+SOAK_SECONDS="${MDMM_GATE_SOAK_SECONDS:-600}"
+SOAK_WARMUP="${MDMM_GATE_SOAK_WARMUP:-30}"
+SOAK_LOCK_US="${MDMM_GATE_SOAK_LOCK_US:-1000}"
 COMPONENTS="${MDMM_GATE_COMPONENTS_DIR:-${HOME}/Library/Audio/Plug-Ins/Components}"
 AU_SWAP_DIR="${GATE_HOME}/au-swap"
 ARCH="$(uname -m)"
@@ -96,7 +107,12 @@ TOLERATED_SKIPS=()
 # The tools stages 3 to 5 need. A target the tree does not define yet makes that stage PENDING, which is red.
 ROM_LOAD_TOOL="mdmmRomLoadTest"; SYSEX_TOOL="mdmmSysexRoundTripTest"; PERF_TOOL="mdmmPerfGateTest"
 
-PLUGINVAL_CMD="${MDMM_GATE_PLUGINVAL:-${here}/mdmm-pluginval.sh}"	# a seam for testing the gate itself
+# seams for testing the gate itself (stand-ins in a test, never set otherwise)
+PLUGINVAL_CMD="${MDMM_GATE_PLUGINVAL:-${here}/mdmm-pluginval.sh}"
+DEV_CMD="${MDMM_GATE_DEV:-${here}/mdmm-dev.sh}"
+JOURNEYS_CMD="${MDMM_GATE_JOURNEYS:-${here}/mdmm-journeys.sh}"
+
+output_restore_stale || true	# the output of a gate that was killed with it muted comes back before anything else
 
 info_set() { printf '%s=%s\n' "$1" "$2" >> "${OUT}/info.txt"; }
 cache_value() { sed -n "s/^$1=//p" "${BUILD}/CMakeCache.txt" 2> /dev/null | head -n 1; }
@@ -155,6 +171,7 @@ on_exit() {
 	trap - EXIT
 	kill_descendants $$
 	au_swap_out
+	output_restore
 	if [ "${FINISHED}" != 1 ]; then
 		info_set aborted 1
 		echo "!!! the gate stopped before its end (status ${status})" >&2
@@ -548,7 +565,10 @@ stage_rt() {
 
 stage_capacity() {
 	stage_begin "6b" "Core capacity of the built VST3"
-	local host receipt="${OUT}/mdmm-core-capacity.json" log="${LOG_DIR}/6b-core-capacity.log" status=0 answer
+	local host receipt="${OUT}/mdmm-core-capacity.json" log="${LOG_DIR}/6b-core-capacity.log" status=0 answer seed=()
+	# With no flash cache in its fresh data folder the Machinedrum does its first-start flash work while the notes play, and the
+	# capture is silent in about one run in three ("produced no finite audible output"): the cache is given, as a person has it.
+	[ -f "${MD_CACHE}" ] && seed=(--md-flash-cache "${MD_CACHE}")
 	have_roms both || { stage_end FAIL "" "${MISSING_WHAT}"; return; }
 	host="$(find_tool latency_host)"
 	[ -n "${host}" ] || { stage_end FAIL "" "latency_host is not built"; return; }
@@ -560,7 +580,7 @@ stage_capacity() {
 		--md-plugin "${PRODUCTS}/VST3/${MDMM_PRODUCT_NAME_MD}.vst3" --mm-plugin "${PRODUCTS}/VST3/${MDMM_PRODUCT_NAME_MM}.vst3" \
 		--md-firmware "${MD_ROM}" --mm-firmware "${MM_ROM}" --work-root "${OUT}/core-capacity" --output "${receipt}" \
 		--rate 48000 --block 128 --seconds 20 --warm-start-seconds 12 --capacity-repeats 3 --paced-repeats 3 \
-		--capacity-p50-limit 0.90 || status=$?
+		--capacity-p50-limit 0.90 ${seed[@]+"${seed[@]}"} || status=$?
 	if [ -f "${receipt}" ]; then
 		answer="$(gate_py capacity "${receipt}")"
 		if [ "${status}" = 0 ] && gate_py capacity "${receipt}" > /dev/null; then
@@ -572,6 +592,59 @@ stage_capacity() {
 		stage_end FAIL "" "no receipt (exit ${status}); $(last_line "${log}")"
 		show_tail "${log}" 10
 	fi
+}
+
+# =====================================================================================================================
+# 6c. soak: ten minutes of busy play per machine, the plug-in's own performance capture judged
+# =====================================================================================================================
+stage_soak() {
+	stage_begin "6c" "Soak, busy play with the performance capture"
+	local host model product machine note vst3 log jsonl answer status bad=0 numbers="" notes="" seconds="${SOAK_SECONDS}" min
+	have_roms both || { stage_end FAIL "" "${MISSING_WHAT}"; return; }
+	host="$(find_tool latency_host)"
+	[ -n "${host}" ] || { stage_end FAIL "" "latency_host is not built"; return; }
+	[ "${seconds}" -lt 20 ] && seconds=20		# latency_host takes 20 to 600 s; the capture itself ends at 10 minutes or 8 MiB
+	[ "${seconds}" -gt 600 ] && seconds=600
+	min=$((seconds * 80 / 100))
+	rm -rf "${OUT}/soak"; mkdir -p "${OUT}/soak"; : > "${OUT}/soak.tsv"
+	# latency_host (scripts/pluginTester/latency) loads the real VST3 and renders it in real time, 48 kHz in blocks of 128, with
+	# no audio device: the plug-in's processor starts the performance capture itself with GEARMULATOR_RT_INSTRUMENTATION=1
+	# (doc/md_mm_performance_diagnostics.md). The load is its busiest scenario, "chords": six voices every 251 ms (the
+	# Machinedrum's pads 1 to 6, the Monomachine's tracks 1 to 6) from second 10 on.
+	for model in md mm; do
+		if [ "${model}" = md ]; then product="${MDMM_PRODUCT_NAME_MD}"; machine=Machinedrum; note=36; else product="${MDMM_PRODUCT_NAME_MM}"; machine=Monomachine; note=60; fi
+		vst3="${PRODUCTS}/VST3/${product}.vst3"
+		sandbox_new "soak-${model}"
+		# the factory flash cache and the factory patch RAM, as a person's machine has them (without them the first start
+		# does its flash work in the first seconds, and a callback waits 36 ms for the synth lock)
+		mkdir -p "${SB_DATA}/Gearmulator Preview/${machine}/nvram"
+		if [ "${model}" = md ]; then
+			[ -f "${MD_CACHE}" ] && cp "${MD_CACHE}" "${SB_DATA}/Gearmulator Preview/${machine}/nvram/"
+		else
+			[ -f "${MM_PATCH}" ] && cp "${MM_PATCH}" "${SB_DATA}/Gearmulator Preview/${machine}/nvram/"
+		fi
+		log="${LOG_DIR}/6c-soak-${model}.log"
+		echo "    $(label "${model}"): ${seconds} s of play, started $(date +%H:%M:%S)"
+		run_box $((seconds + 300)) "${log}" GEARMULATOR_RT_INSTRUMENTATION=1 "${host}" "${vst3}" "${OUT}/soak/${model}" \
+			48000 128 "${seconds}" -1 fixed -1 paced "${note}" 127 chords messages -1
+		status=$?
+		jsonl="$(find "${SB_DATA}/Gearmulator Preview/${machine}/logs" -name 'performance-*.jsonl' 2> /dev/null | sort | tail -n 1)"
+		if [ "${status}" != 0 ] || [ -z "${jsonl}" ]; then
+			bad=1
+			numbers="${numbers:+${numbers}; }$(label "${model}") no capture"
+			notes="${notes:+${notes}; }$(label "${model}"): latency_host exit ${status}${jsonl:+, capture written}$( [ -z "${jsonl}" ] && echo ', no performance capture was written' )"
+			show_tail "${log}" 8
+			rm -f "${OUT}/soak/${model}.wav"
+			continue
+		fi
+		cp "${jsonl}" "${OUT}/soak/${model}.jsonl"
+		answer="$(gate_py soak "${OUT}/soak/${model}.jsonl" --machine "$(label "${model}")" --warmup "${SOAK_WARMUP}" --lock-us "${SOAK_LOCK_US}" \
+			--min-seconds "${min}" --tsv "${OUT}/soak.tsv" --blocks "${OUT}/soak/${model}.blocks.csv" --receipt "${OUT}/soak/${model}.json")" || bad=1
+		numbers="${numbers:+${numbers}; }$(printf '%s\n' "${answer}" | key numbers)"
+		notes="${notes:+${notes}; }$(printf '%s\n' "${answer}" | key notes)"
+		rm -f "${OUT}/soak/${model}.wav" "${OUT}/soak/${model}.blocks.csv"	# the audio is not kept: 170 MB each
+	done
+	if [ "${bad}" = 0 ]; then stage_end PASS "${numbers}" "${notes}"; else stage_end FAIL "${numbers}" "${notes}"; fi
 }
 
 # =====================================================================================================================
@@ -660,33 +733,59 @@ stage_pluginval() {
 stage_journeys() {
 	stage_begin "7d" "User journeys, both editors"
 	have_roms both || { stage_end FAIL "" "${MISSING_WHAT}"; return; }
-	local log="${LOG_DIR}/7d-journeys.log" build_log="${LOG_DIR}/7d-diagnostics-build.log" report status=0 answer
+	local log="${LOG_DIR}/7d-journeys.log" build_log="${LOG_DIR}/7d-diagnostics-build.log" report status=0 answer muted_note="" notes capture
 	# The journeys need the page's self-tests, which only a diagnostics build has (-Dgearmulator_MDMM_DIAGNOSTICS=ON):
 	# scripts/mdmm-dev.sh builds one in its own tree, its products kept out of the checkout's bin/.
 	gate_run --timeout 7200 --log "${build_log}" -- MDMM_DEV_BUILD="${DIAG_BUILD}" \
-		MDMM_DEV_ARGS="-DGEARMULATOR_JUCE_PRODUCTS_ROOT=${DIAG_BUILD}/products" "${here}/mdmm-dev.sh" build \
+		MDMM_DEV_ARGS="-DGEARMULATOR_JUCE_PRODUCTS_ROOT=${DIAG_BUILD}/products" "${DEV_CMD}" build \
 		|| { stage_end FAIL "" "the diagnostics build failed (${build_log})"; show_tail "${build_log}" 20; return; }
 	rm -rf "${OUT}/journeys"
-	# The sampler journeys draw canvases and skip unless their window is on screen and uncovered (a covered or
-	# sleeping display stops WebKit's frames). Without --background the runner brings each standalone to the front:
-	# do not type or cover it while it runs. Journeys that skip for that reason make this stage red.
+	# Silence: the standalones open the audio device (the VST3 host plays to none). --background zeroes the standalone's
+	# output after the machine made it, so nothing reaches any speaker or interface whatever the person's saved audio setup
+	# is (a copy of it is used), and no input is opened (JUCE's standalone does not open one by default and the saved
+	# setup has none). On top of that the system output is muted for the stage, and put back after it and on any exit.
+	if output_mute 7d; then
+		muted_note="${MUTE_NOTE}"
+	elif [ "${MDMM_GATE_ALLOW_UNMUTED:-0}" = 1 ]; then
+		muted_note="${MUTE_NOTE}; MDMM_GATE_ALLOW_UNMUTED=1: ran anyway, the --background output is zeroed"
+	else
+		stage_end FAIL "" "${MUTE_NOTE}; a stage that opens an audio device does not run with the output live (MDMM_GATE_ALLOW_UNMUTED=1 overrides it)"
+		return
+	fi
+	# The sampler journeys draw canvases and skip unless their window is drawing: --background keeps WebKit drawing while the
+	# window is covered (a sleeping display still stops it). Journeys that skip for that reason make this stage red.
+	# MDMM_JOURNEY_PERF=1 records the audio callbacks of each editor (the performance capture), judged below for the record.
 	# shellcheck disable=SC2086
 	gate_run --timeout 10800 --log "${log}" -- MDMM_APP_DIR="${DIAG_BUILD}/products/Release/Standalone" \
-		MDMM_VST3_DIR="${DIAG_BUILD}/products/Release/VST3" MDMM_JOURNEY_OUT="${OUT}/journeys" \
+		MDMM_VST3_DIR="${DIAG_BUILD}/products/Release/VST3" MDMM_JOURNEY_OUT="${OUT}/journeys" MDMM_JOURNEY_PERF=1 \
 		GEARMULATOR_MD_FIRMWARE_BIN="${MD_ROM}" GEARMULATOR_MM_FIRMWARE_BIN="${MM_ROM}" \
-		"${here}/mdmm-journeys.sh" ${JOURNEY_ARGS} both || status=$?
+		"${JOURNEYS_CMD}" ${JOURNEY_ARGS} both || status=$?
+	output_restore
 	report="${OUT}/journeys/report.txt"
 	if [ -f "${report}" ]; then
 		answer="$(gate_py journeys "${report}")"
+		notes="$(printf '%s\n' "${answer}" | key notes)"
+		capture="$(journeys_capture_note)"
 		if [ "${status}" = 0 ] && gate_py journeys "${report}" > /dev/null; then
-			stage_end PASS "$(printf '%s\n' "${answer}" | key numbers)" "$(printf '%s\n' "${answer}" | key notes)"
+			stage_end PASS "$(printf '%s\n' "${answer}" | key numbers)" "${notes}${muted_note:+${notes:+; }${muted_note}}${capture:+; ${capture}}"
 		else
-			stage_end FAIL "$(printf '%s\n' "${answer}" | key numbers)" "exit ${status}; $(printf '%s\n' "${answer}" | key notes); report ${report}"
+			stage_end FAIL "$(printf '%s\n' "${answer}" | key numbers)" "exit ${status}; ${notes}; report ${report}${muted_note:+; ${muted_note}}"
 		fi
 	else
-		stage_end FAIL "" "no report (exit ${status}); log ${log}"
+		stage_end FAIL "" "no report (exit ${status}); log ${log}${muted_note:+; ${muted_note}}"
 		show_tail "${log}" 12
 	fi
+}
+
+journeys_capture_note() {	# the audio thread while the page edited the machine: for the record, not judged
+	local file label brief=""
+	for file in "${OUT}"/journeys/*/performance-*.jsonl; do
+		[ -f "${file}" ] || continue
+		label="$(basename "$(dirname "${file}")")"
+		brief="${brief:+${brief}, }$(gate_py soak "${file}" --machine "${label}" --warmup 30 --info --brief | key numbers)"
+	done
+	[ -n "${brief}" ] && printf 'audio thread during the journeys (the first 10 minutes of each editor, not judged): %s' "${brief}"
+	return 0
 }
 
 # =====================================================================================================================
@@ -767,7 +866,7 @@ else
 		stage_end FAIL "" "not run: the build failed"
 	done
 fi
-PLUGIN_STAGES="6b:Core capacity of the built VST3|7a:VST3 start with firmware|7b:auval on the built AU|7c:pluginval on the built VST3 and AU|7d:User journeys, both editors"
+PLUGIN_STAGES="6b:Core capacity of the built VST3|6c:Soak, busy play with the performance capture|7a:VST3 start with firmware|7b:auval on the built AU|7c:pluginval on the built VST3 and AU|7d:User journeys, both editors"
 leave_out() {	# <reason> <FAIL|SKIP>: every stage of the plug-in group, not run
 	local pair
 	IFS='|'
@@ -779,6 +878,7 @@ leave_out() {	# <reason> <FAIL|SKIP>: every stage of the plug-in group, not run
 }
 if [ -n "${ONLY}" ]; then
 	wanted 6b && [ "${QUICK}" != 1 ] && stage_capacity
+	wanted 6c && [ "${QUICK}" != 1 ] && stage_soak
 	wanted 7a && [ "${QUICK}" != 1 ] && stage_vst3_start
 	wanted 7b && [ "${QUICK}" != 1 ] && stage_auval
 	wanted 7c && [ "${QUICK}" != 1 ] && stage_pluginval
@@ -792,6 +892,11 @@ elif [ "${BUILD_OK}" = 0 ]; then
 	leave_out "not run: the build failed" FAIL
 else
 	stage_capacity
+	if [ "${SKIP_SOAK}" = 1 ]; then
+		stage_skip "6c" "Soak, busy play with the performance capture" "--skip-soak"
+	else
+		stage_soak
+	fi
 	stage_vst3_start
 	stage_auval
 	stage_pluginval

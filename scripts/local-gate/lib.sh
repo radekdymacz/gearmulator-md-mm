@@ -1,9 +1,12 @@
 # shellcheck shell=bash
+# shellcheck source-path=SCRIPTDIR
 # Helpers of scripts/mdmm-local-gate.sh (doc/release/LOCAL-GATE.md): stage bookkeeping, sandboxes, logged runs.
 # Sourced, never run. bash 3.2 (macOS /bin/bash): no associative arrays, no mapfile, no wait -n.
 # The caller sets ROOT, OUT, GATE_DIR, MD_ROM and MM_ROM first.
 
 GATE_TOOLS="${GATE_DIR}/gate_tools.py"
+# shellcheck source=silence.sh
+. "${GATE_DIR}/silence.sh"
 
 gate_py() { python3 -B "${GATE_TOOLS}" "$@"; }
 
@@ -27,11 +30,38 @@ kill_descendants() {	# <pid>: its children, their children, ... (TERM; the runne
 # stages.tsv: id, name, result (PASS, FAIL, SKIP, PENDING), seconds, numbers, notes. One line each on stdout.
 STAGE_ID=""; STAGE_NAME=""; STAGE_START=0; STAGE_RESULT=""
 
+# The audio guard: below the gate, only the stages in DEVICE_STAGES may hold an audio stream (and those run silenced, see
+# silence.sh). Every other stage is watched by a poller of coreaudiod's assertions (pmset -g assertions names the process
+# an open stream was made for), and fails if a process it started holds one.
+DEVICE_STAGES=" 7d "
+GUARD_PID=""; GUARD_FILE=""; GUARD_OPENED=""
+
+guard_start() {
+	[ -z "${GUARD_PID}" ] || return 0
+	GUARD_FILE="${OUT}/logs/audio-guard-${STAGE_ID}.txt"
+	: > "${GUARD_FILE}"
+	python3 -B "${GATE_TOOLS}" audio-watch --root-pid $$ --interval 2 --out "${GUARD_FILE}" > /dev/null 2>&1 &
+	GUARD_PID=$!
+	disown "${GUARD_PID}" 2> /dev/null	# a bare `wait` of the gate must not wait for it
+}
+
+guard_stop() {	# GUARD_OPENED: what the stage held open, if anything (a global: no command substitution, it must stop the poller here)
+	GUARD_OPENED=""
+	[ -n "${GUARD_PID}" ] || return 0
+	kill -TERM "${GUARD_PID}" 2> /dev/null
+	local waited=0
+	while kill -0 "${GUARD_PID}" 2> /dev/null && [ "${waited}" -lt 50 ]; do sleep 0.1; waited=$((waited + 1)); done
+	GUARD_PID=""
+	if [ -s "${GUARD_FILE}" ]; then GUARD_OPENED="$(tr '\n' ';' < "${GUARD_FILE}" | sed 's/;$//')"; else rm -f "${GUARD_FILE}"; fi
+	return 0
+}
+
 scrub() { printf '%s' "$1" | tr '\t\n' '  '; }
 
 stage_begin() {	# <id> <name>
 	STAGE_ID="$1"; STAGE_NAME="$2"; STAGE_START=${SECONDS}
 	printf '[%s] %s\n' "$1" "$2"
+	[[ "${DEVICE_STAGES}" == *" $1 "* ]] || guard_start
 }
 
 busy_note() {	# something when the Mac is busy: the timing checks (and the firmware tests that time) fail from load alone
@@ -42,7 +72,14 @@ busy_note() {	# something when the Mac is busy: the timing checks (and the firmw
 }
 
 stage_end() {	# <PASS|FAIL|SKIP|PENDING|MANUAL> <numbers> [notes]
-	local result="$1" numbers="${2:-}" notes="${3:-}" took=$((SECONDS - STAGE_START)) busy
+	local result="$1" numbers="${2:-}" notes="${3:-}" took=$((SECONDS - STAGE_START)) busy opened
+	guard_stop
+	opened="${GUARD_OPENED}"
+	if [ -n "${opened}" ]; then
+		# a headless stage opened an audio device: it could have made a sound
+		result=FAIL
+		notes="${notes:+${notes}; }OPENED AN AUDIO DEVICE (${opened})"
+	fi
 	if [ "${result}" = FAIL ]; then
 		busy="$(busy_note)"
 		[ -n "${busy}" ] && notes="${notes:+${notes}; }${busy}"

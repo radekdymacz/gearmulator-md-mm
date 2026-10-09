@@ -164,6 +164,7 @@ def run_capture(
     block: int,
     seconds: int,
     warm_start_seconds: int,
+    md_flash_cache: Optional[pathlib.Path] = None,
 ) -> dict[str, object]:
     case = work_root / f"{model.lower()}-{mode}-{repetition}"
     data_root = case / "data"
@@ -173,6 +174,13 @@ def run_capture(
     home.mkdir(parents=True)
     shutil.copyfile(firmware, rom_dir / f"validated-{model.lower()}.bin")
     write_settings(data_root, model)
+    if md_flash_cache is not None and model == "MD":
+        # A fresh Machinedrum prepares its factory flash at its first start, which ends around second 16 of a real-time
+        # run: a capture whose notes play before that is silent, once in a few runs. With the cache a person's machine has,
+        # it starts at once. Optional (the release script does not pass it); the local gate does (doc/release/LOCAL-GATE.md).
+        nvram = data_root / "Gearmulator Preview" / PRODUCT_FOLDER[model] / "nvram"
+        nvram.mkdir(parents=True)
+        shutil.copyfile(md_flash_cache, nvram / "md-uw-1.63-factory-v2.cache")
 
     prefix = case / "capture"
     command = [
@@ -275,6 +283,11 @@ def parse_args(argv: Optional[list[str]] = None) -> argparse.Namespace:
     parser.add_argument("--capacity-repeats", type=int, default=3)
     parser.add_argument("--paced-repeats", type=int, default=3)
     parser.add_argument("--capacity-p50-limit", type=float, default=0.90)
+    parser.add_argument(
+        "--md-flash-cache",
+        type=pathlib.Path,
+        help="the Machinedrum's factory flash cache (nvram/md-uw-1.63-factory-v2.cache), copied into each MD case",
+    )
     return parser.parse_args(argv)
 
 
@@ -305,6 +318,7 @@ def main() -> None:
     for model in ("MD", "MM"):
         if sha256(firmware[model]) != FIRMWARE_SHA256[model]:
             raise RuntimeError(f"{model} firmware hash does not match the pinned release image")
+    md_flash_cache = args.md_flash_cache.resolve(strict=True) if args.md_flash_cache else None
     work_root = args.work_root.resolve()
     work_root.mkdir(parents=True, exist_ok=False)
     # Captures contain private firmware and rendered audio. The build wrapper
@@ -330,6 +344,7 @@ def main() -> None:
                 args.block,
                 args.seconds,
                 args.warm_start_seconds,
+                md_flash_cache,
             )
             for repetition in range(1, args.capacity_repeats + 1)
         ]
@@ -346,6 +361,7 @@ def main() -> None:
                 args.block,
                 args.seconds,
                 args.warm_start_seconds,
+                md_flash_cache,
             )
             for repetition in range(1, args.paced_repeats + 1)
         ]
