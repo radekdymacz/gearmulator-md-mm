@@ -207,10 +207,11 @@ namespace md
 		// Called after every ColdFire instruction, so the common case only counts: cycles
 		// that cannot reach the next event (a timer reference match or the end of a UART
 		// character) are deferred and applied in one step when that event falls due or when
-		// anything observes the stepped state (a register access, a deadline query). The
-		// deferred cycles never contain an event, so applying them at once leaves the same
-		// counters as applying them instruction by instruction, and every event still
-		// happens after the same instruction as before.
+		// anything observes the stepped state: a register access or an interrupt scan applies
+		// them; the deadline queries only count them, they apply nothing. The deferred cycles
+		// never contain an event, so applying them at once leaves the same counters as applying
+		// them instruction by instruction, and every event still happens after the same
+		// instruction as before.
 		void exec(const uint32_t _cycles)
 		{
 			if(_cycles < m_cyclesUntilEvent - m_deferredCycles)

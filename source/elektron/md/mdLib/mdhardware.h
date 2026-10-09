@@ -23,6 +23,7 @@
 #include "mdtransportdiagnostics.h"
 #include "mdtypes.h"
 
+#include "baseLib/compilerdefs.h"
 #include "synthLib/audioTypes.h"
 #include "synthLib/midiTypes.h"
 
@@ -385,7 +386,9 @@ namespace md
 		RealtimeHostAudioQueue m_schedHostAudio;
 		std::atomic<uint64_t> m_schedHostAudioOverflow{0};
 		bool     m_schedHostAudioActive = false;	// retain drained frames for a host callback
-		bool     m_schedBoundedJit = true;		// cycle-bounded DSP background slices
+		// Cycle-bounded DSP background slices and, on the Machinedrum, the one-entry catch-ups
+		// (schedCatchUpDsp, schedCatchUpDspToDsp). Off: the instruction-by-instruction loops.
+		bool     m_schedBoundedJit = true;
 		std::array<RealtimeHostAudioInputTimeline, 2> m_hostAudioInput;
 		std::array<int64_t, 2> m_hostAudioInputClockOrigin{};
 		std::array<uint64_t, 2> m_hostAudioInputNextRxIndex{};

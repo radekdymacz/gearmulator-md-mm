@@ -798,11 +798,9 @@ namespace md
 	uint16_t Microcontroller::readImm16(const uint32_t _addr)
 	{
 		// Instruction fetch: always from ROM/RAM, never a peripheral - do not log.
-		static constexpr uint32_t pageSize = g_immPageSize;
-		static constexpr uint32_t pageMask = g_immPageMask;
-		const uint32_t pageAddress = _addr & ~pageMask;
-		const uint32_t pageOffset = _addr & pageMask;
-		if(pageOffset + 1 < pageSize && pageAddress == m_immPageAddress)
+		const uint32_t pageAddress = _addr & ~g_immPageMask;
+		const uint32_t pageOffset = _addr & g_immPageMask;
+		if(pageOffset + 1 < g_immPageSize && pageAddress == m_immPageAddress)
 			return mc68k::memoryOps::readU16(m_immPageData, pageOffset);
 
 		const auto r = resolve(_addr);
@@ -810,9 +808,9 @@ namespace md
 
 		// All normal backing windows are page-aligned, but keep the cache
 		// conditional so an unusual future mapping retains the resolve() result.
-		if(pageOffset + 1 < pageSize && r.offset >= pageOffset
-			&& (r.offset & pageMask) == pageOffset
-			&& r.offset - pageOffset + pageSize <= r.size)
+		if(pageOffset + 1 < g_immPageSize && r.offset >= pageOffset
+			&& (r.offset & g_immPageMask) == pageOffset
+			&& r.offset - pageOffset + g_immPageSize <= r.size)
 		{
 			m_immPageAddress = pageAddress;
 			m_immPageData = r.data + r.offset - pageOffset;

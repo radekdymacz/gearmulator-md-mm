@@ -144,7 +144,9 @@ namespace md
 		, m_dspProducer(*this, m_uc.getHdi08Dsp2(), 1)	// DSP2, producer
 	{
 		// Ship the validated bounded dispatcher by default while retaining the
-		// established path as a field fallback and exact A/B control.
+		// established path as a field fallback and exact A/B control. The switch covers the
+		// background DSP slices and, on the Machinedrum, the DSP catch-ups (schedCatchUpDsp,
+		// schedCatchUpDspToDsp).
 		const auto* const boundedJit = std::getenv("GEARMULATOR_MDMM_BOUNDED_JIT");
 		m_schedBoundedJit = boundedJit == nullptr || std::strcmp(boundedJit, "0") != 0;
 
@@ -1130,6 +1132,8 @@ namespace md
 
 	void Hardware::pumpDsp2HostRequest()
 	{
+		// The early return below is this function's own contract. processUC tests the same
+		// condition before the call, so the settled path does not even enter the function.
 		// The settled path executes millions of ColdFire instructions between meaningful
 		// host-port edges. Keep that overwhelmingly common clean check read-only; reserve the
 		// cache-line-writing RMW for a producer/consumer/ICR wake. A wake racing the exchange
@@ -1436,13 +1440,12 @@ namespace md
 			if((probeCount++ & 15u) != 0)
 				continue;
 			// The Monomachine path skips its ColdFire idle loop (BRA.B -2) in
-			// chunks. The Machinedrum idles the same way, but its per-step host
-			// pump must not be skipped while a DSP holds an
-			// unpumped transmit word: delaying that word would delay the
-			// HREQ->IRQ4 edge the idle firmware may be waiting for. With both
-			// transmit registers empty the pump is a no-op (no UC reads happen
-			// mid-skip, so the latched queue state cannot be observed), and the
-			// skip stays transparent.
+			// chunks. The Machinedrum idles the same way, but only while neither
+			// DSP holds a word in its transmit register. The host pump itself runs
+			// only when it is dirty or a word is deferred (processUC tests both), and
+			// the skip condition below tests the same two, so an idle step has no pump
+			// work to lose; the transmit test is the older, stricter gate. Whether it
+			// can go is a separate lever that needs its own gate run.
 			const bool dspTxClear = !m_dspMixer.hdi08().hasTX()
 				&& !m_dspProducer.hdi08().hasTX();
 			// A paced SysEx between two of its bytes (B-010) waits for a cycle, not for the
