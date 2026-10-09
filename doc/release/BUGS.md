@@ -9,7 +9,8 @@ where it came from, the setup, what happens, what should happen, status.*
 - **From:** this round-up, 2026-10-09 (a Linux tester's blank window, B-033, and the READMEs everyone on Windows and Linux gets).
 - **What happens:** `scripts/linux/README-Linux.txt` and `scripts/windows/README-Windows-mdmm.txt` say "Reports are welcome: https://github.com/radekdymacz/gearmulator-md-mm/issues". Issues are off on the repository (`has_issues: false`), so the link leads nowhere a tester can report. The release notes and the site say https://mdmm.dev/contact/ and the Discord.
 - **Should:** both READMEs point to mdmm.dev/contact and the Discord invite (and say what to send: the OS, the DAW, the version, the `editor-*.log` of Open Log Folder on Windows).
-- **Status:** open; two lines in two files. Not in `fix/codex-review-2026-10` (it still carries the old link).
+- **Fix (0.4.0, branch `docs/discord-roundup-2026-10-09`):** both READMEs now say "Bugs: https://mdmm.dev/contact/" (as the macOS installer's readme does) and "Discord (#bugs): https://discord.gg/8xwXwBHbtn", what to include (editor and version, OS and desktop or Windows version, standalone or VST3 and DAW; on Windows the `editor-*.log`), and the no-firmware-requests line the macOS readme has. `fix/codex-review-2026-10` still carries the old link; merge this branch after it.
+- **Status:** fixed for 0.4.0 (not merged).
 
 ## B-041 · ROM card: a zip with Elektron's OS update said "The .zip holds no .bin file" (0.3.4)
 
