@@ -4,6 +4,13 @@
 repository; the site sends reports to the contact address. Newest first. Each entry:
 where it came from, the setup, what happens, what should happen, status.*
 
+## B-039 · Linux CI: synthLibMidiClockTimingTest is still left out
+
+- **From:** the codex review of 2026-10 (the Linux CI rewrite, its second review).
+- **What happens:** `scripts/linux/build_mdmm.sh` runs every unit test but `synthLibMidiClockTimingTest`, a known failure under `-Ofast` (`isfinite` folded away). `midiClock.cpp` and the test are built with `-fno-fast-math` since 2026-10-07 (51183a9fc), so it may pass on Linux now.
+- **To do:** take it out of the script's `exclude` pattern in a CI run; keep it in if it passes, put it back with the reason if it does not.
+- **Status:** open.
+
 ## B-038 · Monomachine: a song's LOOP row goes back to row 1
 
 - **From:** found by the song playhead's firmware test, 2026-10-09 (0.3.5 work).
