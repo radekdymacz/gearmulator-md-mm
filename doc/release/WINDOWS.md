@@ -68,8 +68,9 @@ WebView2 runtime, Windows on ARM.
   3 to 6 % in Task Manager.
 - **MIDI:** JUCE's WinMM backend (WinRT MIDI is off). A WinMM port belongs to one program at a time: a port a DAW or
   another editor has open cannot be opened by the standalone, and the AUDIO / MIDI panel says so since 0.4.0. No MIDI
-  input is on until it is switched on in the panel. The emulated machine's own MIDI out does not reach the panel's
-  output (no Device -> Host route; B-037, open).
+  input is on until it is switched on in the panel. Since 0.4.0 the machine's own MIDI out (notes, CCs, program
+  changes, clock and transport; never its SysEx) goes to the panel's output, and in a DAW to the plug-in's MIDI out
+  (B-037, `mdMachineMidiOut.h`).
 
 ## What a Windows tester sends
 

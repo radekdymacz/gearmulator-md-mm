@@ -5970,7 +5970,7 @@ const AMTIP={
  rate:"The device's sample rate. The machine's own rate is fixed; the plug-in resamples",
  buffer:"Smaller: less latency, more CPU. Larger: safer on a busy computer",
  midiIn:"MIDI inputs that play and control the machine",
- midiOut:"Where the machine's MIDI goes (clock, notes, SysEx)",
+ midiOut:"Where the machine's own MIDI goes: its notes, CCs, program changes, clock and transport (never its SysEx)",
  bt:"Pair a Bluetooth MIDI device (the system's dialog)" };
 const amEsc=t=>String(t??"").replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"})[c]);
 function drawAudio(){const pop=$("#audiopop");if(!pop)return;if(!AP.open){pop.hidden=true;return}const D=audioDoc();

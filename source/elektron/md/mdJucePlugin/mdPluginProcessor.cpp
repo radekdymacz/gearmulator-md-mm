@@ -10,6 +10,7 @@
 #include "mdRomInstall.h"
 
 #include "mdController.h"
+#include "mdMachineMidiOut.h"
 #include "mdPluginEditorState.h"
 #include "mdSettingsMigration.h"
 #include "mdStorageImage.h"
@@ -199,6 +200,7 @@ namespace mdJucePlugin
 
 	bool AudioPluginAudioProcessor::loadCustomData(const std::vector<uint8_t>& _sourceBuffer)
 	{
+		const machineMidiOut::RouteAfterLoad machineMidiRoute(getMidiRoutingMatrix());	// B-037: a state carries the whole matrix
 		const auto previous = getRamRecordingMode();
 		m_ramRecordingModeChunkSeen = false;
 		m_desk->beginProjectLoad();
@@ -448,6 +450,7 @@ namespace mdJucePlugin
 		}
 
 		getController();
+		machineMidiOut::route(getMidiRoutingMatrix());	// B-037: the machine's own MIDI out to the host (mdMachineMidiOut.h)
 		setRamRecordingMode(getRamRecordingMode());
 		const auto latencyBlocks = getConfig().getIntValue("latencyBlocks", static_cast<int>(getPlugin().getLatencyBlocks()));
 		Processor::setLatencyBlocks(latencyBlocks);
