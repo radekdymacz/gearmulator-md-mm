@@ -5,6 +5,7 @@
 
 #include <algorithm>
 #include <array>
+#include <chrono>
 #include <cmath>
 #include <cstdint>
 #include <cstdlib>
@@ -13,6 +14,7 @@
 #include <memory>
 #include <new>
 #include <stdexcept>
+#include <thread>
 
 #if defined(_MSC_VER)
 #include <malloc.h>
@@ -364,6 +366,64 @@ namespace
 			"core SysEx allocation-capable path was not explicitly accounted");
 	}
 
+	// A producer that finds the MIDI ring full waits for the process lock before it makes room.
+	// If the audio thread drains the ring meanwhile, the producer must not pop the now empty ring:
+	// that replays a stale event and loses the new one (a lost note-off is a stuck note).
+	void verifyMidiQueueOverflowRaceKeepsEveryEventOnce()
+	{
+		using namespace std::chrono_literals;
+		constexpr auto capacity = static_cast<uint32_t>(synthLib::Plugin::RealtimeMidiEventCapacity);
+		constexpr auto sentinel = capacity;
+
+		const auto indexedEvent = [](const uint32_t _index)
+		{
+			return synthLib::SMidiEvent(synthLib::MidiEventSource::Host, synthLib::M_CONTROLCHANGE,
+				static_cast<uint8_t>(_index & 0x7f), static_cast<uint8_t>((_index >> 7) & 0x7f), 0);
+		};
+		const auto indexOf = [](const synthLib::SMidiEvent& _event)
+		{
+			return static_cast<uint32_t>(_event.b) | (static_cast<uint32_t>(_event.c) << 7);
+		};
+
+		auto device = std::make_unique<SyntheticAudioDevice>(2, 6, 0);
+		device->recordMidiInput(capacity * 2);
+		synthLib::Plugin plugin(device.get(), [](synthLib::Device*) {});
+		plugin.setHostSamplerate(44100.0f, 44100.0f);
+		plugin.setBlockSize(64);
+		plugin.reserveMidiEventCapacity();
+		AudioStorage storage;
+
+		for(uint32_t i = 0; i < capacity; ++i)
+			plugin.addMidiEvent(indexedEvent(i));
+
+		std::thread producer;
+		plugin.withDeviceLocked([&](synthLib::Device*)
+		{
+			producer = std::thread([&] { plugin.addMidiEvent(indexedEvent(sentinel)); });
+			// Long enough for the producer to see the full ring and block on the process lock.
+			// Too short can only make the test pass falsely, never fail falsely.
+			std::this_thread::sleep_for(100ms);
+			plugin.process(storage.inputs, storage.outputs, 64, 0.0f, 0.0f, false);
+		});
+		producer.join();
+		for(size_t block = 0; block < 4; ++block)
+			plugin.process(storage.inputs, storage.outputs, 64, 0.0f, 0.0f, false);
+
+		const auto& received = device->getReceivedMidi();
+		if(received.size() != capacity + 1)
+			std::cerr << "MIDI overflow race: received " << received.size() << " events, expected "
+				<< capacity + 1 << '\n';
+		require(received.size() == capacity + 1,
+			"MIDI queue overflow race lost or duplicated an event");
+		for(uint32_t i = 0; i < received.size(); ++i)
+		{
+			if(indexOf(received[i]) == i)
+				continue;
+			std::cerr << "MIDI overflow race: event " << i << " carries index " << indexOf(received[i]) << '\n';
+			require(false, "MIDI queue overflow race reordered, replayed or dropped an event");
+		}
+	}
+
 	void verifyPreparedProcessingDoesNotAllocate()
 	{
 		constexpr std::array<synthLib::Resampler::Mode, 3> modes{
@@ -444,6 +504,7 @@ int main()
 		verifyMissingInputsCannotReadDiscardedOutputs();
 		verifyInvalidDeviceOnlyNotifiesDuringProcess();
 		verifyRealtimeSysexIsExplicitFallback();
+		verifyMidiQueueOverflowRaceKeepsEveryEventOnce();
 		verifyPreparedProcessingDoesNotAllocate();
 		std::cout << "synthLibAudioTest: PASS\n";
 		return 0;

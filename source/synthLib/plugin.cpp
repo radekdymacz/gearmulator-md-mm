@@ -41,7 +41,11 @@ namespace synthLib
 		if(m_midiInRingBuffer.full())
 		{
 			std::lock_guard l(m_lock);
-			processMidiInEvent(m_midiInRingBuffer.pop_front(), false);
+			// The audio thread may have drained the ring while we waited for m_lock. Popping an
+			// empty Lock=false ring hands out a stale slot and corrupts the counters, so check
+			// again: with both locks held nobody else pushes or pops.
+			if(m_midiInRingBuffer.full())
+				processMidiInEvent(m_midiInRingBuffer.pop_front(), false);
 		}
 		m_midiInRingBuffer.push_back(_ev);
 	}
