@@ -500,7 +500,10 @@ namespace pluginLib
 		if(!m_device)
 			return false;
 
-		return getPlugin().setPreferredDeviceSamplerate(_samplerate);
+		const auto result = getPlugin().setPreferredDeviceSamplerate(_samplerate);
+		// A new device rate changes the resampler's and the device's latency in host samples
+		requestLatencyUpdate();
+		return result;
 	}
 
 	float Processor::getPreferredDeviceSamplerate() const
@@ -530,6 +533,8 @@ namespace pluginLib
 	{
 		m_resamplerMode = _mode;
 		getPlugin().setResamplerMode(_mode);
+		// Each resampler has its own group delay; the host compensates only what it is told
+		requestLatencyUpdate();
 	}
 
 	std::optional<std::pair<const char*, uint32_t>> Processor::findResource(const BinaryDataRef& _binaryData,	const std::string& _filename)
