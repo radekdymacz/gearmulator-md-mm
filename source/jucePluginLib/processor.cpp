@@ -160,7 +160,7 @@ namespace pluginLib
 	        m_controller.reset(createController());
 			
 			// Initialize MIDI Learn translator with controller
-			if (m_controller && !m_midiLearnTranslator)
+			if (m_controller && !m_midiLearnTranslator && usesMidiLearn())
 			{
 				m_midiLearnTranslator = std::make_unique<MidiLearnTranslator>(*m_controller, m_controller->getParameterDescriptions().getControllerMap());
 				

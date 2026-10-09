@@ -201,7 +201,11 @@ namespace pluginLib
 		const synthLib::MidiRoutingMatrix& getMidiRoutingMatrix() const { return m_midiRoutingMatrix; }
 		synthLib::MidiRoutingMatrix& getMidiRoutingMatrix() { return m_midiRoutingMatrix; }
 
+		// Null when the plug-in runs without MIDI learn (usesMidiLearn) and before the controller exists.
 		MidiLearnTranslator* getMidiLearnTranslator() { return m_midiLearnTranslator.get(); }
+		// False: no MIDI learn translator is made, so incoming MIDI never runs through the learn code (which is not
+		// thread-safe) and no learn preset is loaded, applied or saved. Read once, when the controller is made.
+		virtual bool usesMidiLearn() const { return true; }
 
 		std::string getMidiLearnFolder() const;
 		void saveDefaultMidiLearnPreset();

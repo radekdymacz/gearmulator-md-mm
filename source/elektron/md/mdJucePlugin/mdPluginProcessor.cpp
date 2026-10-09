@@ -6,6 +6,7 @@
 #include "juceUiLib/messageRoute.h"
 #include "mdDeskHost.h"
 #include "mdDeskSession.h"
+#include "deskHost/deskHost.h"
 #include "mdRomInstall.h"
 
 #include "mdController.h"
@@ -1003,5 +1004,12 @@ namespace mdJucePlugin
 	pluginLib::Controller* AudioPluginAudioProcessor::createController()
 	{
 		return new mdJucePlugin::Controller(*this);
+	}
+
+	bool AudioPluginAudioProcessor::usesMidiLearn() const
+	{
+		// The translator reads and swaps its mappings on the audio, MIDI-input and message threads without
+		// synchronisation (doc/midilearn/THREADING.md); it is made only once that is redesigned and mapping is on.
+		return deskHost::midiMappingEnabled;
 	}
 }

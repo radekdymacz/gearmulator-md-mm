@@ -1,5 +1,7 @@
 #include "mdPluginProcessor.h"
 
+#include "deskHost/deskHost.h"
+
 #include "juce_audio_utils/juce_audio_utils.h"
 #include "juce_audio_plugin_client/Standalone/juce_StandaloneFilterWindow.h"
 #include "juce_events/juce_events.h"
@@ -212,6 +214,10 @@ namespace
 	{
 		mdJucePlugin::AudioPluginAudioProcessor processor(_model,
 			mdJucePlugin::AudioPluginAudioProcessor::EphemeralConfig{}, false);
+
+		// MIDI mapping off: incoming MIDI must not run through the (not thread-safe) learn translator at all
+		require((processor.getMidiLearnTranslator() != nullptr) == deskHost::midiMappingEnabled,
+			"the MIDI learn translator does not follow the MIDI mapping switch");
 
 		require(processor.getBusCount(true) == 1,
 			"expected one audio input bus");
