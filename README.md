@@ -3,11 +3,11 @@
 This fork adds two screen-native editors on top of joelanders' Machinedrum and Monomachine
 emulation: the whole machine on one page (step grid, parameter-lock lanes, kit and pattern library,
 chains, mutes, a sampler view, and a beta HW MIDI mode for a real machine). They run the real firmware,
-as a standalone app, VST3 and AU on macOS.
+as a standalone app, VST3 and AU on macOS (Windows x64 and Linux x64 builds exist, not tested).
 
 - **Site, screenshots, download:** https://mdmm.dev
 - **Releases:** https://github.com/radekdymacz/gearmulator-md-mm/releases
-  (latest: [0.3.1 notes](doc/release/v0.3.1.md); [0.3.0](doc/release/v0.3.0.md); [0.2.1](doc/release/v0.2.1.md); [0.2.0](doc/release/v0.2.0.md); first: [0.1.0 alpha](doc/release/v0.1.0-alpha.md))
+  (latest: [0.3.5 notes](doc/release/v0.3.5.md); all release notes are in [doc/release/](doc/release/))
 - **User guide** (install, ROM, DAW use, workspaces, every keyboard shortcut): https://mdmm.dev/guide/
 - **Bring your own ROM.** No firmware is included. With no ROM the editor shows a start-up card:
   choose your machine's image with its file chooser (drag and drop is not supported) and the editor
