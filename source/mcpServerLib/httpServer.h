@@ -34,7 +34,7 @@ namespace mcpServer
 		static constexpr size_t g_maxLineLength = 8 * 1024;			// request line and each header line
 		static constexpr size_t g_maxHeaderCount = 64;
 		static constexpr size_t g_maxBodySize = 4 * 1024 * 1024;
-		static constexpr uint32_t g_idleReadTimeoutMs = 60 * 1000;	// a client that sends nothing for this long is dropped
+		static constexpr uint32_t g_idleReadTimeoutMs = 60 * 1000;	// a client silent for this long is dropped
 
 		using RequestHandler = std::function<HttpResponse(const HttpRequest&, networkLib::Stream&)>;
 

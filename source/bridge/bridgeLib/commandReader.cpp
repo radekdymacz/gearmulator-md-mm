@@ -17,7 +17,8 @@ namespace bridgeLib
 		{
 			if(_size <= g_maxCommandSize)
 				return;
-			throw std::length_error("command size " + std::to_string(_size) + " exceeds the limit of " + std::to_string(g_maxCommandSize) + " bytes");
+			throw std::length_error("command size " + std::to_string(_size) + " exceeds the limit of "
+				+ std::to_string(g_maxCommandSize) + " bytes");
 		}
 	}
 

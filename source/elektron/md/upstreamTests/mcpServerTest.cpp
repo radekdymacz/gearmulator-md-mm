@@ -52,7 +52,8 @@ namespace
 		const bool sent = c && send(*c, "GET /sse HTTP/1.1\r\nHost: 127.0.0.1:" + std::to_string(port)
 			+ "\r\nAccept: text/event-stream\r\n\r\n");
 		if(sent)
-			receive(*c, Milliseconds(2000), events, [](const std::string& _d) { return _d.find("data: /message") != std::string::npos; });
+			receive(*c, Milliseconds(2000), events,
+				[](const std::string& _d) { return _d.find("data: /message") != std::string::npos; });
 		check(events.find("event: endpoint") != std::string::npos, "sse: the stream is open (its endpoint event came)");
 
 		// The handler now waits up to 15 s for its next keep-alive: stop() must wake it, not wait it out. 2 s, not
@@ -61,7 +62,8 @@ namespace
 		const auto start = Clock::now();
 		server.stop();
 		const auto elapsed = millisecondsSince(start);
-		check(elapsed < 2000, "sse: stop() returns within 2 s with an SSE client connected (" + std::to_string(elapsed) + " ms)");
+		check(elapsed < 2000, "sse: stop() returns within 2 s with an SSE client connected (" + std::to_string(elapsed)
+			+ " ms)");
 		check(c && waitClosed(*c, Milliseconds(2000)), "sse: and the client sees its stream end");
 	}
 
@@ -97,7 +99,8 @@ namespace
 		std::thread slowClient([&]
 		{
 			auto c = connectLoopback(port);
-			if(c && send(*c, postText(port, R"({"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"slow","arguments":{}}})")))
+			if(c && send(*c, postText(port,
+				R"({"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"slow","arguments":{}}})")))
 				slowResponse = readResponse(*c, Milliseconds(8000));
 		});
 		{

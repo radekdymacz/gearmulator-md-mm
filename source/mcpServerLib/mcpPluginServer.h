@@ -30,8 +30,8 @@ namespace mcpServer
 
 		McpServer& getServer() { return m_server; }
 
-		// send_note's duration_ms, its schema's range enforced (500 ms when absent): the call holds its client's thread,
-		// and a server shutdown, this long.
+		// send_note's duration_ms, its schema's range enforced (500 ms when absent): the call holds its client's
+		// thread, and a server shutdown, this long.
 		static constexpr int g_noteDurationMinMs = 1;
 		static constexpr int g_noteDurationMaxMs = 10000;
 		static int noteDurationMs(const JsonValue& _params)

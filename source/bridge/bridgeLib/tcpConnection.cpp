@@ -21,7 +21,8 @@ namespace bridgeLib
 		{
 			if(_count <= _limit)
 				return;
-			throw std::range_error(std::string("audio ") + _what + ' ' + std::to_string(_count) + " exceeds " + std::to_string(_limit));
+			throw std::range_error(std::string("audio ") + _what + ' ' + std::to_string(_count) + " exceeds "
+				+ std::to_string(_limit));
 		}
 	}
 
@@ -162,7 +163,8 @@ namespace bridgeLib
 		send();
 	}
 
-	uint32_t TcpConnection::handleAudio(float* const* _output, const uint32_t _maxChannels, const uint32_t _capacity, baseLib::BinaryStream& _in)
+	uint32_t TcpConnection::handleAudio(float* const* _output, const uint32_t _maxChannels, const uint32_t _capacity,
+		baseLib::BinaryStream& _in)
 	{
 		const uint32_t numChannels = _in.read<uint8_t>();
 		const uint32_t numSamplesMax = _in.read<uint32_t>();
@@ -188,7 +190,8 @@ namespace bridgeLib
 		const uint32_t numChannels = _in.read<uint8_t>();
 		const uint32_t numSamplesMax = _in.read<uint32_t>();
 
-		checkAudioCount(numChannels, static_cast<uint32_t>(std::tuple_size_v<synthLib::TAudioOutputs>), "channel count");
+		checkAudioCount(numChannels, static_cast<uint32_t>(std::tuple_size_v<synthLib::TAudioOutputs>),
+			"channel count");
 		checkAudioCount(numSamplesMax, AudioBuffers::BufferSize, "block size");
 
 		for(uint32_t i=0; i<numChannels; ++i)

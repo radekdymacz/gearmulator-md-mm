@@ -103,7 +103,8 @@ namespace mcpServer
 		if (m_clients.size() >= g_maxClients)
 		{
 			// Closing here is safe: no other thread has seen this stream
-			LOGNET(networkLib::LogLevel::Warning, "Refusing connection, " << m_clients.size() << " clients are connected already");
+			LOGNET(networkLib::LogLevel::Warning, "Refusing connection, " << m_clients.size()
+				<< " clients are connected already");
 			_stream->close();
 			return;
 		}
@@ -268,7 +269,8 @@ namespace mcpServer
 			size_t contentLength = 0;
 			if (!parseContentLength(contentLengthHeader->second, contentLength) || contentLength > g_maxBodySize)
 			{
-				LOGNET(networkLib::LogLevel::Warning, "Invalid or too large Content-Length '" << contentLengthHeader->second << "'");
+				LOGNET(networkLib::LogLevel::Warning, "Invalid or too large Content-Length '"
+					<< contentLengthHeader->second << "'");
 				return false;
 			}
 

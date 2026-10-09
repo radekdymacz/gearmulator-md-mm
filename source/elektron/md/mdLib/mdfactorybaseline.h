@@ -28,7 +28,8 @@ namespace md
 		// From an initialized image (a cache already decoded), with its fingerprint if known
 		FactoryFlashBaseline(std::vector<uint8_t> _baseline, std::optional<uint64_t> _fingerprint);
 		// From md::Hardware's completed capture, shared (it no longer changes), with its fingerprint if known
-		FactoryFlashBaseline(std::shared_ptr<const std::vector<uint8_t>> _baseline, std::optional<uint64_t> _fingerprint);
+		FactoryFlashBaseline(std::shared_ptr<const std::vector<uint8_t>> _baseline,
+			std::optional<uint64_t> _fingerprint);
 
 		FactoryFlashBaseline(const FactoryFlashBaseline&) = delete;
 		FactoryFlashBaseline& operator=(const FactoryFlashBaseline&) = delete;

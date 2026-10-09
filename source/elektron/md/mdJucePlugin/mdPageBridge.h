@@ -119,12 +119,12 @@ namespace mdJucePlugin::pageBridge
 		std::map<long, Batch> m_batches;
 	};
 
-	// Linux: the batches' script files written strictly in order (the page reads batch n + 1 only after batch n). A script
-	// that could not be written (a full disk for a moment) waits with every later one, and each pump tries again from the
-	// first; only a written one is the page's (the writer registers it, for deletion once the page has read it). A
-	// backlog past g_maxBacklogBytes, or one that has not moved for g_maxStallMs, is dropped: the page could never read
-	// past the gap, so it is loaded again once a file can be written (resync; it starts over with a/0 and says ready,
-	// and the session sends everything once more). Pure: the writer and the clock are the caller's.
+	// Linux: the batches' script files written strictly in order (the page reads batch n + 1 only after batch n). A
+	// script that could not be written (a full disk for a moment) waits with every later one, and each pump tries again
+	// from the first; only a written one is the page's (the writer registers it, for deletion once the page has read
+	// it). A backlog past g_maxBacklogBytes, or one that has not moved for g_maxStallMs, is dropped: the page could
+	// never read past the gap, so it is loaded again once a file can be written (resync; it starts over with a/0 and
+	// says ready, and the session sends everything once more). Pure: the writer and the clock are the caller's.
 	class FileOutbox
 	{
 	public:
@@ -203,7 +203,12 @@ namespace mdJucePlugin::pageBridge
 		size_t waiting() const { return m_waiting.size(); }
 		size_t bytes() const { return m_bytes; }
 		// The batch that could not be written, while one waits.
-		std::optional<uint64_t> stalledAt() const { return m_stalledSince && !m_waiting.empty() ? std::optional<uint64_t>(m_waiting.front().seq) : std::nullopt; }
+		std::optional<uint64_t> stalledAt() const
+		{
+			if(!m_stalledSince || m_waiting.empty())
+				return std::nullopt;
+			return m_waiting.front().seq;
+		}
 		// The last drop: how many batches and bytes went.
 		std::pair<size_t, size_t> dropped() const { return m_dropped; }
 

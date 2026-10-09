@@ -98,7 +98,8 @@ namespace mdJucePlugin
 		// Windows (WebView2, mdWebView2Page.h): plug-in -> page as executed scripts, not javascript: URLs.
 		const bool m_scriptRecv;
 		std::map<uint64_t, juce::File> m_recvFiles;	// written and not yet read by the page, by batch number
-		std::unique_ptr<pageBridge::FileOutbox> m_files;	// Linux: the batches not written yet (a write failed), in order
+		// Linux: the batches not written yet (a write failed), in order
+		std::unique_ptr<pageBridge::FileOutbox> m_files;
 		juce::String m_pageUrl;		// what load() went to: a page that lost batches is loaded again (FileOutbox resync)
 		double m_nextResyncTry = 0;	// when to try that reload (again)
 		std::function<void()> m_onRestart;	// setOnRestart

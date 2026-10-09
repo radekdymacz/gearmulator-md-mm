@@ -66,10 +66,11 @@ namespace deskHost
 			row("romInfo", {}, "which firmware is installed (answered with a romInfo message): the LOAD ROM dialog", Action::RomInfo),
 			row("removeRom", {}, "delete the firmware from the editor's ROM folder (never outside it); the machine stops and the start-up card asks for a ROM again",
 				Action::RemoveRom),
-			// "notice" names the notice (its message's id); the request's own "id" is the result's, as for every command
-			// (the page's bridge numbers every request, so a notice number sent as "id" never arrived)
+			// "notice" names the notice (its message's id); the request's own "id" is the result's, as for
+			// every command (the page's bridge numbers every request, so a notice number sent as "id" never arrived)
 			row("noticeAnswer", {{"notice", ArgType::Integer, 1, 1e9}, {"button", ArgType::Integer, 0, 8}},
-				"the button pressed on the notice numbered notice (a notice message's id: the plug-in's own question or warning, shown by the page); "
+				"the button pressed on the notice numbered notice (a notice message's id: the plug-in's own question "
+				"or warning, shown by the page); "
 				"refused when that notice waits for no answer (answered already, or replaced) or has no such button",
 				Action::NoticeAnswer, Actor::Window),
 			row("chooseSyx", {}, "choose a .syx to import: the window's native file chooser; a preview follows (syxPreview)", Action::ChooseSyx, Actor::Window),

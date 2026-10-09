@@ -67,7 +67,8 @@ namespace bridgeLib
 		void sendAudio(AudioBuffers& _buffers, uint32_t _numChannels, uint32_t _numSamplesPerChannel);
 		// The channel and sample counts come from the peer: both throw std::range_error for counts that do not fit
 		// the receiver (_maxChannels buffers of _capacity samples each), which ends the connection (threadFunc).
-		static uint32_t handleAudio(float* const* _output, uint32_t _maxChannels, uint32_t _capacity, baseLib::BinaryStream& _in);
+		static uint32_t handleAudio(float* const* _output, uint32_t _maxChannels, uint32_t _capacity,
+			baseLib::BinaryStream& _in);
 		void handleAudio(AudioBuffers& _buffers, baseLib::BinaryStream& _in);
 		virtual void handleAudio(baseLib::BinaryStream& _in);
 

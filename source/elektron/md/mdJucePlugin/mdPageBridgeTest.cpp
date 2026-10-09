@@ -120,42 +120,55 @@ int main()
 				out.push_back("s" + std::to_string(_first + i));
 			return out;
 		};
-		const auto list = [&] { std::string t; for(const auto s : written) t += (t.empty() ? "" : ",") + std::to_string(s); return t; };
+		const auto list = [&]
+		{
+			std::string t;
+			for(const auto s : written)
+				t += (t.empty() ? "" : ",") + std::to_string(s);
+			return t;
+		};
 		files.add(1, scripts(1, 2));
-		check(files.pump(0) == Outbox::Change::None && list() == "1,2" && files.waiting() == 0, "batches 1 and 2 written, in order");
+		check(files.pump(0) == Outbox::Change::None && list() == "1,2" && files.waiting() == 0,
+			"batches 1 and 2 written, in order");
 		files.add(3, scripts(3, 1));
-		check(files.pump(33) == Outbox::Change::Stalled && list() == "1,2" && files.waiting() == 1 && files.stalledAt() == std::optional<uint64_t>(3),
+		check(files.pump(33) == Outbox::Change::Stalled && list() == "1,2" && files.waiting() == 1
+			&& files.stalledAt() == std::optional<uint64_t>(3),
 			"batch 3 cannot be written: it waits, nothing registered for it, the stall said once");
 		files.add(4, scripts(4, 2));
 		check(files.pump(66) == Outbox::Change::None && list() == "1,2" && files.waiting() == 3,
 			"batches 4 and 5 wait behind 3 (the page reads in order): not written, not registered; said only once");
 		check(files.pump(99) == Outbox::Change::None && list() == "1,2", "a pump with nothing new tries batch 3 again");
 		failAt = 0;
-		check(files.pump(132) == Outbox::Change::Recovered && list() == "1,2,3,4,5" && files.waiting() == 0 && files.bytes() == 0 && !files.stalledAt(),
+		check(files.pump(132) == Outbox::Change::Recovered && list() == "1,2,3,4,5" && files.waiting() == 0
+			&& files.bytes() == 0 && !files.stalledAt(),
 			"writing works again: 3, 4 and 5 written in order, nothing waits");
 		files.add(6, scripts(6, 1));
-		check(files.pump(165) == Outbox::Change::None && list() == "1,2,3,4,5,6" && !files.resync(), "then on as before");
+		check(files.pump(165) == Outbox::Change::None && list() == "1,2,3,4,5,6" && !files.resync(),
+			"then on as before");
 		// a stall measured from the last batch that went: progress starts it again
 		failAt = 8;
 		files.add(7, scripts(7, 2));
 		check(files.pump(1000) == Outbox::Change::Stalled && list() == "1,2,3,4,5,6,7", "7 written, 8 waits");
 		check(files.pump(2900) == Outbox::Change::None && !files.resync(), "under 2 s of stall: still waiting");
-		check(files.pump(3001) == Outbox::Change::Dropped && files.resync() && files.waiting() == 0 && files.bytes() == 0
-			&& files.dropped() == std::make_pair(size_t(1), std::string("s8").size()), "over 2 s without a batch going: dropped, resync due");
+		check(files.pump(3001) == Outbox::Change::Dropped && files.resync() && files.waiting() == 0
+			&& files.bytes() == 0 && files.dropped() == std::make_pair(size_t(1), std::string("s8").size()),
+			"over 2 s without a batch going: dropped, resync due");
 		files.add(9, scripts(9, 1));
 		failAt = 0;
 		check(files.pump(3100) == Outbox::Change::None && files.waiting() == 0 && list() == "1,2,3,4,5,6,7",
 			"while a resync is due nothing is queued or written (the page is loaded again and gets everything anew)");
 		files.restart();
 		files.add(1, scripts(1, 1));
-		check(!files.resync() && files.pump(3200) == Outbox::Change::None && written.back() == 1, "the page started again: from batch 1, written");
+		check(!files.resync() && files.pump(3200) == Outbox::Change::None && written.back() == 1,
+			"the page started again: from batch 1, written");
 		check(ownScripts, "the writer got each batch's own script");
 		// a backlog past 8 MiB while stalled is dropped at once
 		failAt = 2;
 		files.add(2, {std::string("s2")});
 		check(files.pump(4000) == Outbox::Change::Stalled, "a new stall");
 		files.add(3, {std::string(Outbox::g_maxBacklogBytes, 'x')});
-		check(files.pump(4001) == Outbox::Change::Dropped && files.resync() && files.waiting() == 0 && files.bytes() == 0,
+		check(files.pump(4001) == Outbox::Change::Dropped && files.resync() && files.waiting() == 0
+			&& files.bytes() == 0,
 			"more than 8 MiB waiting: the queue is emptied and the resync flag set, without waiting 2 s");
 		files.restart();
 		check(!files.resync() && files.waiting() == 0, "restart clears the resync");
@@ -199,10 +212,11 @@ int main()
 		pageWritable = true;
 		steps.clear();
 		check(bridge::reloadAfterDrop(deleteOld, writePage, reload) && steps == Steps{"delete", "write", "reload"}
-			&& newPageRead.empty(), "resync: then the page is loaded again and finds no old batch 1 to take for the new one");
+			&& newPageRead.empty(),
+			"resync: then the page is loaded again and finds no old batch 1 to take for the new one");
 	}
-	// a window's notices (codex review 2026-10, item 1): the page answers {"notice": n, "button": b}; an answer runs its
-	// notice's callback once, and only for a notice waiting with that button
+	// a window's notices (codex review 2026-10, item 1): the page answers {"notice": n, "button": b}; an answer runs
+	// its notice's callback once, and only for a notice waiting with that button
 	{
 		mdJucePlugin::NoticeBook book;
 		std::vector<std::string> ran;
@@ -216,18 +230,24 @@ int main()
 		const int a = book.add(keys(2), [&](const int _b) { ran.push_back("a" + std::to_string(_b)); });
 		const int b = book.add(keys(0), [&](const int _b) { ran.push_back("b" + std::to_string(_b)); });
 		check(a == 1 && b == 2 && book.size() == 2, "notices are numbered from 1 in the order they come");
-		check(book.answer(99, 0) == "notice 99 is not waiting for an answer" && ran.empty(), "an unknown notice: refused, nothing runs");
-		check(book.answer(a, 2) == "notice 1 has no button 2" && book.answer(a, -1) == "notice 1 has no button -1" && ran.empty() && book.waiting(a),
+		check(book.answer(99, 0) == "notice 99 is not waiting for an answer" && ran.empty(),
+			"an unknown notice: refused, nothing runs");
+		check(book.answer(a, 2) == "notice 1 has no button 2" && book.answer(a, -1) == "notice 1 has no button -1"
+			&& ran.empty() && book.waiting(a),
 			"a button the notice does not have: refused, nothing runs, the notice still waits");
-		check(book.answer(a, 1).empty() && ran.size() == 1 && ran[0] == "a1" && !book.waiting(a), "its own button: the callback runs with it, once");
-		check(book.answer(a, 0) == "notice 1 is not waiting for an answer" && ran.size() == 1, "answered already: refused, nothing runs again");
-		check(book.answer(b, 0).empty() && ran.back() == "b0" && book.answer(b, 1) == "notice 2 is not waiting for an answer",
+		check(book.answer(a, 1).empty() && ran.size() == 1 && ran[0] == "a1" && !book.waiting(a),
+			"its own button: the callback runs with it, once");
+		check(book.answer(a, 0) == "notice 1 is not waiting for an answer" && ran.size() == 1,
+			"answered already: refused, nothing runs again");
+		check(book.answer(b, 0).empty() && ran.back() == "b0"
+			&& book.answer(b, 1) == "notice 2 is not waiting for an answer",
 			"a notice without buttons is the page's OK: button 0, once");
 		// the update banner: a newer one replaces it, the old one's answer is not wanted
 		int banner = book.add(keys(3), [&](const int _b) { ran.push_back("old" + std::to_string(_b)); });
 		book.forget(banner);
 		banner = book.add(keys(1), [&](const int _b) { ran.push_back("new" + std::to_string(_b)); });
-		check(book.answer(banner - 1, 0) == "notice " + std::to_string(banner - 1) + " is not waiting for an answer" && ran.back() == "b0",
+		check(book.answer(banner - 1, 0) == "notice " + std::to_string(banner - 1) + " is not waiting for an answer"
+			&& ran.back() == "b0",
 			"a replaced banner is forgotten: its answer runs nothing");
 		check(book.answer(banner, 0).empty() && ran.back() == "new0", "the banner shown takes its answer");
 		// a callback may add the next notice (the banner's next state) while it runs
@@ -237,29 +257,36 @@ int main()
 			"a callback that adds a notice: the new one waits; one without a callback takes its answer");
 		check(book.size() == 0, "nothing left waiting");
 	}
-	// a page that started again (Linux: WebPageHost's restart, codex review r2, S7) has lost the notices it showed: those
-	// still waiting are shown again as they were, by their numbers, so the answer still runs the callback; the banner
-	// is forgotten (a new one is made) and an answered question is not shown again
+	// a page that started again (Linux: WebPageHost's restart, codex review r2, S7) has lost the notices it showed:
+	// those still waiting are shown again as they were, by their numbers, so the answer still runs the callback; the
+	// banner is forgotten (a new one is made) and an answered question is not shown again
 	{
 		mdJucePlugin::NoticeBook book;
 		std::vector<std::string> ran;
-		const mdJucePlugin::NoticeShown first{"Save changes?", "The kit was changed.", {"Save", "Discard", "Cancel"}, true};
+		const mdJucePlugin::NoticeShown first{"Save changes?", "The kit was changed.", {"Save", "Discard", "Cancel"},
+			true};
 		const mdJucePlugin::NoticeShown second{"No ROM", "Choose the firmware.", {}, true};
 		const mdJucePlugin::NoticeShown banner{"Update", "0.3.9 is out.", {"Update", "Later"}, false};
 		const int a = book.add(first, [&](const int _b) { ran.push_back("a" + std::to_string(_b)); });
 		const int b = book.add(second, [&](const int _b) { ran.push_back("b" + std::to_string(_b)); });
 		const int c = book.add(banner, [&](const int _b) { ran.push_back("banner" + std::to_string(_b)); });
 		const auto firstSent = json::write(mdJucePlugin::noticeMessage(a, first));
-		check(firstSent == R"({"type":"notice","id":1,"title":"Save changes?","text":"The kit was changed.","buttons":["Save","Discard","Cancel"]})"
+		const std::string expectedFirst = R"({"type":"notice","id":1,"title":"Save changes?",)"
+			R"("text":"The kit was changed.","buttons":["Save","Discard","Cancel"]})";
+		check(firstSent == expectedFirst
 			&& json::write(mdJucePlugin::noticeMessage(c, banner)).find(R"("modal":false)") != std::string::npos,
 			"notice messages: a question as before, the banner with modal false");
-		check(book.answer(b, 0).empty() && ran == std::vector<std::string>{"b0"}, "restart: one question was answered before");
+		check(book.answer(b, 0).empty() && ran == std::vector<std::string>{"b0"},
+			"restart: one question was answered before");
 		// the restart: the banner is forgotten, the rest is shown again
 		book.forget(c);
 		const auto again = book.waitingNotices();
-		check(again.size() == 1 && again[0].first == a && json::write(mdJucePlugin::noticeMessage(again[0].first, again[0].second)) == firstSent,
-			"restart: the question still waiting is shown again, the same message and number; the answered one and the banner are not");
-		check(book.answer(a, 2).empty() && ran.back() == "a2" && book.size() == 0, "restart: the new page's answer runs its callback");
+		check(again.size() == 1 && again[0].first == a
+			&& json::write(mdJucePlugin::noticeMessage(again[0].first, again[0].second)) == firstSent,
+			"restart: the question still waiting is shown again, the same message and number; the answered one and the "
+			"banner are not");
+		check(book.answer(a, 2).empty() && ran.back() == "a2" && book.size() == 0,
+			"restart: the new page's answer runs its callback");
 	}
 	// notices: each window its own instance's; closing one never takes another's (release review 2026-10-04, S4)
 	{

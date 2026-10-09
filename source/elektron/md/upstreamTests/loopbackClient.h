@@ -97,7 +97,8 @@ namespace loopbackClient
 	// A POST to /mcp with a JSON body and this server's Host
 	inline std::string postText(const int _port, const std::string& _body)
 	{
-		return "POST /mcp HTTP/1.1\r\nHost: 127.0.0.1:" + std::to_string(_port) + "\r\nContent-Type: application/json\r\n"
+		return "POST /mcp HTTP/1.1\r\nHost: 127.0.0.1:" + std::to_string(_port)
+			+ "\r\nContent-Type: application/json\r\n"
 			"Content-Length: " + std::to_string(_body.size()) + "\r\n\r\n" + _body;
 	}
 

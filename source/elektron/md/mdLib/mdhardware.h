@@ -360,7 +360,8 @@ namespace md
 		std::atomic<bool> m_factoryFlashPreparationReady{false};
 		mutable std::mutex m_factoryFlashMutex;
 		std::vector<uint8_t> m_factoryFlashCache;
-		std::shared_ptr<std::vector<uint8_t>> m_factoryFlashBaseline;	// never null; immutable once its capture completes
+		// Never null; immutable once its capture completes, so a state save shares it (FactoryFlashBaseline)
+		std::shared_ptr<std::vector<uint8_t>> m_factoryFlashBaseline;
 		std::vector<uint8_t> m_pendingFlashImage;
 		FlashSectorOverlay m_pendingFlashOverlay;
 		std::vector<uint8_t> m_pendingPatchRam;

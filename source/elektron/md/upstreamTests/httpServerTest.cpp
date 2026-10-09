@@ -212,8 +212,10 @@ namespace
 		{
 			char name[INET_ADDRSTRLEN] = {};
 			::inet_ntop(AF_INET, &address, name, sizeof(name));
-			check(canBind(address, server->port), std::string("bind: the server does not hold ") + name + ':' + std::to_string(server->port));
-			check(!reaches(address, server->port, Milliseconds(1000)), std::string("bind: a client on ") + name + " does not reach it");
+			check(canBind(address, server->port), std::string("bind: the server does not hold ") + name + ':'
+				+ std::to_string(server->port));
+			check(!reaches(address, server->port, Milliseconds(1000)), std::string("bind: a client on ") + name
+				+ " does not reach it");
 		}
 #endif
 	}
@@ -230,19 +232,24 @@ namespace
 
 		{
 			auto c = connectLoopback(server->port);
-			const auto response = c && send(*c, requestText(server->port)) ? readResponse(*c, Milliseconds(2000)) : std::string();
+			const auto response = c && send(*c, requestText(server->port)) ? readResponse(*c, Milliseconds(2000))
+				: std::string();
 			check(isStatus(response, 200) && server->handled == 1, "guard: a loopback Host is served");
 		}
 		{
 			auto c = connectLoopback(server->port);
-			const auto response = c && send(*c, requestText(server->port, {}, "evil.example:" + std::to_string(server->port))) ? readResponse(*c, Milliseconds(2000)) : std::string();
-			check(isStatus(response, 403) && server->handled == 1, "guard: a foreign Host (DNS rebinding) gets 403, the handler is not called");
+			const auto response = c && send(*c, requestText(server->port, {}, "evil.example:"
+				+ std::to_string(server->port))) ? readResponse(*c, Milliseconds(2000)) : std::string();
+			check(isStatus(response, 403) && server->handled == 1,
+				"guard: a foreign Host (DNS rebinding) gets 403, the handler is not called");
 			check(c && waitClosed(*c, Milliseconds(2000)), "guard: and the connection is closed");
 		}
 		{
 			auto c = connectLoopback(server->port);
-			const auto response = c && send(*c, requestText(server->port, "Origin: http://evil.example\r\n")) ? readResponse(*c, Milliseconds(2000)) : std::string();
-			check(isStatus(response, 403) && server->handled == 1, "guard: a foreign Origin (cross-site request) gets 403, the handler is not called");
+			const auto response = c && send(*c, requestText(server->port, "Origin: http://evil.example\r\n"))
+				? readResponse(*c, Milliseconds(2000)) : std::string();
+			check(isStatus(response, 403) && server->handled == 1,
+				"guard: a foreign Origin (cross-site request) gets 403, the handler is not called");
 		}
 	}
 
@@ -257,14 +264,16 @@ namespace
 
 		// A keep-alive client that got its answer and now sends nothing: its server thread waits in read()
 		auto c = connectLoopback(server->port);
-		const auto response = c && send(*c, requestText(server->port)) ? readResponse(*c, Milliseconds(2000)) : std::string();
+		const auto response = c && send(*c, requestText(server->port)) ? readResponse(*c, Milliseconds(2000))
+			: std::string();
 		check(isStatus(response, 200), "shutdown: the idle client was served once");
 
 		const Watchdog watchdog(Milliseconds(5000), "shutdown with an idle keep-alive client");
 		const auto start = Clock::now();
 		server->http.reset();
 		const auto elapsed = std::chrono::duration_cast<Milliseconds>(Clock::now() - start).count();
-		check(elapsed < 2000, "shutdown: the server stops within 2 s with an idle client connected (" + std::to_string(elapsed) + " ms)");
+		check(elapsed < 2000, "shutdown: the server stops within 2 s with an idle client connected ("
+			+ std::to_string(elapsed) + " ms)");
 		check(c && waitClosed(*c, Milliseconds(2000)), "shutdown: and the client sees its connection closed");
 	}
 
@@ -288,7 +297,8 @@ namespace
 			if(auto c = connectLoopback(server->port))
 				clients.push_back(std::move(c));
 		}
-		check(clients.size() == mcpServer::HttpServer::g_maxClients + extra, "limit: every client connects at the TCP level");
+		check(clients.size() == mcpServer::HttpServer::g_maxClients + extra,
+			"limit: every client connects at the TCP level");
 
 		// Poll every client until the expected number is closed, then once more to see that no further one is
 		std::vector<bool> isClosed(clients.size(), false);
@@ -312,14 +322,16 @@ namespace
 		}
 		std::this_thread::sleep_for(Milliseconds(200));
 		pollClosed();
-		check(closed == extra, "limit: exactly the clients over g_maxClients are closed (" + std::to_string(closed) + ", expected " + std::to_string(extra) + ")");
+		check(closed == extra, "limit: exactly the clients over g_maxClients are closed (" + std::to_string(closed)
+			+ ", expected " + std::to_string(extra) + ")");
 
 		const auto threadsBusy = countThreads();
 		if(threadsBefore >= 0 && threadsBusy >= 0)
 		{
 			// One accept thread and a thread per served client
 			const auto added = threadsBusy - threadsBefore;
-			check(added <= static_cast<int>(mcpServer::HttpServer::g_maxClients) + 1, "limit: threads stay bounded (" + std::to_string(added) + " added)");
+			check(added <= static_cast<int>(mcpServer::HttpServer::g_maxClients) + 1, "limit: threads stay bounded ("
+				+ std::to_string(added) + " added)");
 		}
 		else
 		{
@@ -336,18 +348,21 @@ namespace
 			if(c && send(*c, requestText(server->port)) && isStatus(readResponse(*c, Milliseconds(2000)), 200))
 				++served;
 		}
-		check(served == 200, "reaping: 200 connect/request/close cycles are all served (" + std::to_string(served) + ")");
+		check(served == 200, "reaping: 200 connect/request/close cycles are all served (" + std::to_string(served)
+			+ ")");
 
 		std::this_thread::sleep_for(Milliseconds(200));
 		{
 			auto c = connectLoopback(server->port);
-			const auto response = c && send(*c, requestText(server->port)) ? readResponse(*c, Milliseconds(2000)) : std::string();
+			const auto response = c && send(*c, requestText(server->port)) ? readResponse(*c, Milliseconds(2000))
+				: std::string();
 			check(isStatus(response, 200), "reaping: a client after them is still served");
 		}
 
 		const auto threadsAfter = countThreads();
 		if(threadsBefore >= 0 && threadsAfter >= 0)
-			check(threadsAfter - threadsBefore <= 4, "reaping: the threads of finished clients are gone (" + std::to_string(threadsAfter - threadsBefore) + " left)");
+			check(threadsAfter - threadsBefore <= 4, "reaping: the threads of finished clients are gone ("
+				+ std::to_string(threadsAfter - threadsBefore) + " left)");
 	}
 
 	void testOversizedInput()
@@ -367,12 +382,14 @@ namespace
 			const std::string chunk(64 * 1024, 'a');
 			for(size_t sent = 0; !writeFailed && sent < 8 * 1024 * 1024; sent += chunk.size())
 				writeFailed = !send(*c, chunk);
-			check(c && (writeFailed || waitClosed(*c, Milliseconds(2000))), "input: a line of 8 MiB without a line end is dropped");
+			check(c && (writeFailed || waitClosed(*c, Milliseconds(2000))),
+				"input: a line of 8 MiB without a line end is dropped");
 		}
 		{
 			const auto start = Clock::now();
 			auto c = connectLoopback(server->port);
-			const bool sent = c && send(*c, "POST /mcp HTTP/1.1\r\nHost: 127.0.0.1:" + std::to_string(server->port) + "\r\nContent-Length: 2000000000\r\n\r\n");
+			const bool sent = c && send(*c, "POST /mcp HTTP/1.1\r\nHost: 127.0.0.1:" + std::to_string(server->port)
+				+ "\r\nContent-Length: 2000000000\r\n\r\n");
 			const bool closed = sent && waitClosed(*c, Milliseconds(1000));
 			const auto elapsed = std::chrono::duration_cast<Milliseconds>(Clock::now() - start).count();
 			check(closed, "input: Content-Length 2000000000 is refused at once (" + std::to_string(elapsed) + " ms)");
@@ -380,8 +397,10 @@ namespace
 		for(const char* value : {"abc", "-1", "12abc", "99999999999999999999999999"})
 		{
 			auto c = connectLoopback(server->port);
-			const bool sent = c && send(*c, "POST /mcp HTTP/1.1\r\nHost: 127.0.0.1:" + std::to_string(server->port) + "\r\nContent-Length: " + value + "\r\n\r\n{}");
-			check(sent && waitClosed(*c, Milliseconds(1000)), std::string("input: Content-Length '") + value + "' is refused");
+			const bool sent = c && send(*c, "POST /mcp HTTP/1.1\r\nHost: 127.0.0.1:" + std::to_string(server->port)
+				+ "\r\nContent-Length: " + value + "\r\n\r\n{}");
+			check(sent && waitClosed(*c, Milliseconds(1000)), std::string("input: Content-Length '") + value
+				+ "' is refused");
 		}
 		{
 			std::string headers;
@@ -395,8 +414,10 @@ namespace
 
 		{
 			auto c = connectLoopback(server->port);
-			const auto response = c && send(*c, requestText(server->port)) ? readResponse(*c, Milliseconds(2000)) : std::string();
-			check(isStatus(response, 200) && server->handled == 1, "input: the server still serves a well-formed request");
+			const auto response = c && send(*c, requestText(server->port)) ? readResponse(*c, Milliseconds(2000))
+				: std::string();
+			check(isStatus(response, 200) && server->handled == 1,
+				"input: the server still serves a well-formed request");
 		}
 	}
 
@@ -421,7 +442,8 @@ namespace
 			"idle: a client that sends nothing is dropped after the idle timeout (" + std::to_string(elapsed) + " ms)");
 
 		auto halfway = connectLoopback(server->port);
-		const bool sent = halfway && send(*halfway, "POST /mcp HTTP/1.1\r\nHost: 127.0.0.1:" + std::to_string(server->port) + "\r\n");
+		const bool sent = halfway && send(*halfway, "POST /mcp HTTP/1.1\r\nHost: 127.0.0.1:"
+			+ std::to_string(server->port) + "\r\n");
 		check(sent && waitClosed(*halfway, Milliseconds(3000)) && server->handled == 0,
 			"idle: a request that stops halfway is dropped too, the handler is not called");
 
@@ -430,7 +452,8 @@ namespace
 		for(int i = 0; i < 3 && served; ++i)
 		{
 			std::this_thread::sleep_for(Milliseconds(timeoutMs / 2));
-			served = send(*talking, requestText(server->port)) && isStatus(readResponse(*talking, Milliseconds(2000)), 200);
+			served = send(*talking, requestText(server->port))
+				&& isStatus(readResponse(*talking, Milliseconds(2000)), 200);
 		}
 		check(served && server->handled == 3, "idle: a client that keeps talking within the timeout is served");
 	}

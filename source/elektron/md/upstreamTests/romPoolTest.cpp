@@ -46,7 +46,8 @@ namespace
 		if(root.back() != '/' && root.back() != '\\')
 			root += '/';
 
-		std::mt19937_64 random(static_cast<uint64_t>(std::chrono::steady_clock::now().time_since_epoch().count()) ^ std::random_device()());
+		const auto now = static_cast<uint64_t>(std::chrono::steady_clock::now().time_since_epoch().count());
+		std::mt19937_64 random(now ^ std::random_device()());
 		for(int attempt = 0; attempt < 100; ++attempt)
 		{
 			const auto dir = root + "bridgeServerRomPoolTest-" + std::to_string(random());
@@ -159,7 +160,8 @@ int main()
 		const auto rom = makeRom(4096, 1);
 		const baseLib::MD5 hash(rom);
 		pool.addRom("../escaped", rom);
-		check(listNames(romsPath) == std::vector<std::string>{hash.toString() + ".bin"}, "a ROM is cached as <md5>.bin, whatever its name");
+		check(listNames(romsPath) == std::vector<std::string>{hash.toString() + ".bin"},
+			"a ROM is cached as <md5>.bin, whatever its name");
 		check(listNames(root) == rootEntries, "a name with \"..\" writes nothing outside the ROM folder");
 		check(pool.getRom(hash) == rom, "the pool serves the cached ROM");
 
@@ -168,7 +170,8 @@ int main()
 		pool.addRom("..", makeRom(1024, 9));
 		pool.addRom("a/../../b", makeRom(1500, 11));
 		pool.addRom("/absolute/path", makeRom(1600, 13));
-		check(onlyHashNamedFiles(romsPath, 5), "names with separators, \"..\" or a NUL: every cache file is named after its content");
+		check(onlyHashNamedFiles(romsPath, 5),
+			"names with separators, \"..\" or a NUL: every cache file is named after its content");
 		check(listNames(root) == rootEntries, "and nothing is written outside the ROM folder");
 
 		// The same ROM again: no second file, the first one stays
@@ -181,21 +184,24 @@ int main()
 
 		const auto oversized = makeRom(bridgeServer::g_maxRomSize + 1, 3);
 		pool.addRom("oversized", oversized);
-		check(onlyHashNamedFiles(romsPath, 5) && pool.getRom(baseLib::MD5(oversized)).empty(), "data over g_maxRomSize is not cached");
+		check(onlyHashNamedFiles(romsPath, 5) && pool.getRom(baseLib::MD5(oversized)).empty(),
+			"data over g_maxRomSize is not cached");
 
 		const auto largest = makeRom(bridgeServer::g_maxRomSize, 5);
 		pool.addRom("largest", largest);
-		check(onlyHashNamedFiles(romsPath, 6) && pool.getRom(baseLib::MD5(largest)) == largest, "data of exactly g_maxRomSize is cached");
+		check(onlyHashNamedFiles(romsPath, 6) && pool.getRom(baseLib::MD5(largest)) == largest,
+			"data of exactly g_maxRomSize is cached");
 
 		// findRoms shares the bound: a larger file in the folder is not loaded
 		baseLib::filesystem::writeFile(romsPath + "planted.bin", oversized);
 		bridgeServer::RomPool reloaded(config);
-		check(reloaded.getRom(hash) == rom && reloaded.getRom(baseLib::MD5(largest)) == largest, "a new pool loads the cached ROMs from the folder");
+		check(reloaded.getRom(hash) == rom && reloaded.getRom(baseLib::MD5(largest)) == largest,
+			"a new pool loads the cached ROMs from the folder");
 		check(reloaded.getRom(baseLib::MD5(oversized)).empty(), "and skips a file over g_maxRomSize");
 	}
 
 	// A valid ROM whose cache file cannot be written is kept in memory: the client is not asked for it again at every
-	// connection (codex review r2, S8). In a folder of its own: these leave files that are not named after their content.
+	// connection (codex review r2, S8). In a folder of its own: these leave a file not named after its content.
 	{
 		const auto keepPath = root + "keep/";
 		std::vector<std::string> keepArgs = {"bridgeServerRomPoolTest", "-config", root + "none.cfg",
@@ -215,7 +221,8 @@ int main()
 		pool.addRom("taken", rom);
 		check(pool.getRom(hash) == rom, "a ROM whose cache file name is taken is kept in memory and served");
 		std::vector<uint8_t> onDisk;
-		check(baseLib::filesystem::readFile(onDisk, planted) && onDisk == makeRom(100, 99), "and the file that was there is not replaced");
+		check(baseLib::filesystem::readFile(onDisk, planted) && onDisk == makeRom(100, 99),
+			"and the file that was there is not replaced");
 
 		// The client's name reaches the log only as letters, digits and ._-, at most 48 of them
 		pool.addRom(std::string("evil\n\x1b[31m/..\0x", 15) + std::string(60, 'a'), {});
@@ -228,7 +235,8 @@ int main()
 		{
 			const auto unwritable = makeRom(5000, 23);
 			pool.addRom("unwritable", unwritable);
-			check(pool.getRom(baseLib::MD5(unwritable)) == unwritable, "a ROM that cannot be written is kept in memory and served");
+			check(pool.getRom(baseLib::MD5(unwritable)) == unwritable,
+				"a ROM that cannot be written is kept in memory and served");
 			check(listNames(keepPath).size() == 1, "and nothing was written");
 			chmod(keepPath.c_str(), 0755);
 		}

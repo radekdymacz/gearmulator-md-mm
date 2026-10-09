@@ -70,7 +70,8 @@ namespace bridgeServer
 		const auto filename = getRootPath() + hash.toString() + ".bin";
 
 		if(!baseLib::filesystem::writeFileExclusive(filename, _data))
-			LOGNET(networkLib::LogLevel::Warning, "Could not write ROM cache file " << filename << ", ROM " << logName(_name)
+			LOGNET(networkLib::LogLevel::Warning, "Could not write ROM cache file " << filename << ", ROM "
+				<< logName(_name)
 				<< " is kept in memory only");
 
 		// Kept whatever the disk did (a full disk, or a file of that name that is not this ROM): the data is the ROM

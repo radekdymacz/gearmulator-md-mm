@@ -133,7 +133,8 @@ namespace
 	class LoopbackConnection final : public bridgeLib::TcpConnection
 	{
 	public:
-		explicit LoopbackConnection(std::unique_ptr<networkLib::TcpStream>&& _stream) : TcpConnection(std::move(_stream))
+		explicit LoopbackConnection(std::unique_ptr<networkLib::TcpStream>&& _stream)
+			: TcpConnection(std::move(_stream))
 		{
 			start();
 		}
@@ -165,7 +166,8 @@ namespace
 		bool m_exceptionSeen = false;
 	};
 
-	std::vector<uint8_t> commandBytes(const char (&_fourCC)[5], const uint32_t _size, const std::vector<uint8_t>& _payload = {})
+	std::vector<uint8_t> commandBytes(const char (&_fourCC)[5], const uint32_t _size,
+		const std::vector<uint8_t>& _payload = {})
 	{
 		std::vector<uint8_t> bytes(_fourCC, _fourCC + 4);
 		const auto* size = reinterpret_cast<const uint8_t*>(&_size);
@@ -180,21 +182,26 @@ namespace
 			ScriptedStream stream(commandBytes("MIDI", 0xffffffff, {1, 2, 3}));
 			CountingReader reader;
 			g_largestAllocation = 0;
-			check(throwsStdException([&] { reader.read(stream); }) && reader.commands == 0, "a command announcing 4 GiB is refused (stream)");
-			check(g_largestAllocation < 1024 * 1024, "without an allocation sized from it (largest: " + std::to_string(g_largestAllocation) + " bytes)");
+			check(throwsStdException([&] { reader.read(stream); }) && reader.commands == 0,
+				"a command announcing 4 GiB is refused (stream)");
+			check(g_largestAllocation < 1024 * 1024, "without an allocation sized from it (largest: "
+				+ std::to_string(g_largestAllocation) + " bytes)");
 		}
 		{
 			ScriptedStream stream(commandBytes("MIDI", bridgeLib::g_maxCommandSize + 1));
 			CountingReader reader;
-			check(throwsStdException([&] { reader.read(stream); }) && reader.commands == 0, "a command one byte over g_maxCommandSize is refused");
+			check(throwsStdException([&] { reader.read(stream); }) && reader.commands == 0,
+				"a command one byte over g_maxCommandSize is refused");
 		}
 		{
 			const auto bytes = commandBytes("MIDI", 0xffffffff, {1, 2, 3});
 			baseLib::BinaryStream in(bytes);
 			CountingReader reader;
 			g_largestAllocation = 0;
-			check(throwsStdException([&] { reader.read(in); }) && reader.commands == 0, "a command announcing 4 GiB is refused (BinaryStream)");
-			check(g_largestAllocation < 1024 * 1024, "without an allocation sized from it (largest: " + std::to_string(g_largestAllocation) + " bytes)");
+			check(throwsStdException([&] { reader.read(in); }) && reader.commands == 0,
+				"a command announcing 4 GiB is refused (BinaryStream)");
+			check(g_largestAllocation < 1024 * 1024, "without an allocation sized from it (largest: "
+				+ std::to_string(g_largestAllocation) + " bytes)");
 		}
 		{
 			ScriptedStream stream(commandBytes("ping", 4, {1, 2, 3, 4}));
@@ -205,7 +212,8 @@ namespace
 	}
 
 	// Writes an audio command payload: channel count, block size, then per channel a size and that many samples
-	baseLib::BinaryStream audioPayload(const uint32_t _numChannels, const uint32_t _numSamplesMax, const std::vector<uint32_t>& _channelSizes)
+	baseLib::BinaryStream audioPayload(const uint32_t _numChannels, const uint32_t _numSamplesMax,
+		const std::vector<uint32_t>& _channelSizes)
 	{
 		baseLib::BinaryStream s;
 		s.write(static_cast<uint8_t>(_numChannels));
@@ -250,17 +258,20 @@ namespace
 
 		{
 			auto in = audioPayload(3, 8, {8, 8, 8});
-			check(throwsStdException([&] { bridgeLib::TcpConnection::handleAudio(outputs, channels, capacity, in); }) && guardsIntact(),
+			check(throwsStdException([&] { bridgeLib::TcpConnection::handleAudio(outputs, channels, capacity, in); })
+				&& guardsIntact(),
 				"server: more channels than buffers is refused, nothing written");
 		}
 		{
 			auto in = audioPayload(1, capacity + guard / 2, {capacity + guard / 2});
-			check(throwsStdException([&] { bridgeLib::TcpConnection::handleAudio(outputs, channels, capacity, in); }) && guardsIntact(),
+			check(throwsStdException([&] { bridgeLib::TcpConnection::handleAudio(outputs, channels, capacity, in); })
+				&& guardsIntact(),
 				"server: a block larger than the buffers is refused, nothing written past them");
 		}
 		{
 			auto in = audioPayload(1, 8, {16});
-			check(throwsStdException([&] { bridgeLib::TcpConnection::handleAudio(outputs, channels, capacity, in); }) && guardsIntact(),
+			check(throwsStdException([&] { bridgeLib::TcpConnection::handleAudio(outputs, channels, capacity, in); })
+				&& guardsIntact(),
 				"server: a channel larger than its block is refused");
 		}
 		{
@@ -283,7 +294,8 @@ namespace
 		}
 		{
 			bridgeLib::AudioBuffers buffers;
-			auto in = audioPayload(1, bridgeLib::AudioBuffers::BufferSize + 1, {bridgeLib::AudioBuffers::BufferSize + 1});
+			constexpr uint32_t tooLarge = bridgeLib::AudioBuffers::BufferSize + 1;
+			auto in = audioPayload(1, tooLarge, {tooLarge});
 			check(throwsStdException([&] { connection.handleAudio(buffers, in); }) && buffers.getOutputSize() == 0,
 				"client: a block larger than the ring buffers is refused");
 		}
@@ -331,12 +343,14 @@ namespace
 			auto s = stream(synthLib::StateTypeCurrentProgram);
 			bridgeLib::DeviceState state;
 			state.read(s);
-			check(state.type == synthLib::StateTypeCurrentProgram && state.state.size() == 3, "a known state type is read");
+			check(state.type == synthLib::StateTypeCurrentProgram && state.state.size() == 3,
+				"a known state type is read");
 		}
 		{
 			auto s = stream(static_cast<uint32_t>(bridgeLib::ErrorCode::FailedToCreateDevice));
 			bridgeLib::Error error;
-			check(!throwsStdException([&] { error.read(s); }) && error.code == bridgeLib::ErrorCode::FailedToCreateDevice, "a known error code is read");
+			check(!throwsStdException([&] { error.read(s); })
+				&& error.code == bridgeLib::ErrorCode::FailedToCreateDevice, "a known error code is read");
 		}
 	}
 
@@ -396,7 +410,8 @@ namespace
 			c = connection.get();
 		}
 		check(c != nullptr, "loopback: the server accepted the connection");
-		check(c && c->waitForException(std::chrono::seconds(5)), "loopback: a malformed command ends its connection through handleException, the process lives on");
+		check(c && c->waitForException(std::chrono::seconds(5)),
+			"loopback: a malformed command ends its connection through handleException, the process lives on");
 
 		client.close();
 		server.reset();

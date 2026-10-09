@@ -159,7 +159,8 @@ namespace mdJucePlugin
 				const auto refused = m_notices.answer(notice, button);
 				if(!refused.empty())
 					m_page->log("noticeAnswer: " + juce::String(refused));
-				m_page->send(deskCore::resultMessage(_message, refused.empty() ? std::vector<std::string>{} : std::vector<std::string>{refused}, {}));
+				m_page->send(deskCore::resultMessage(_message, refused.empty() ? std::vector<std::string>{}
+					: std::vector<std::string>{refused}, {}));
 			}
 			else if(row->handler.action == deskHost::Action::ChooseSample)
 			{

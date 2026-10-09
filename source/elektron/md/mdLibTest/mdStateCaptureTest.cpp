@@ -183,7 +183,8 @@ namespace
 		check(complete.bytes == completeExpected, "capture: complete flash image without a factory baseline");
 		check(sameAsGetState(*firstRun, synthLib::StateTypeGlobal, completeExpected),
 			"capture: getState writes the same complete image");
-		std::printf("  state save, MD without a factory cache (complete image): under the lock %.2f ms, encode %.2f ms\n",
+		std::printf("  state save, MD without a factory cache (complete image): under the lock %.2f ms, "
+			"encode %.2f ms\n",
 			complete.lockedMs, complete.encodeMs);
 
 		// Restoring the sparse state without its factory baseline leaves it pending
@@ -210,7 +211,8 @@ namespace
 		check(mm->isValid(), "capture: the Monomachine boots");
 		std::vector<uint8_t> expected;
 		check(md::encodeState(expected, mm->getHardware().copyPatchRam(), md::MachineModel::Monomachine,
-			synthLib::StateTypeGlobal, mm->getHardware().copyUserFlash()), "capture: the Monomachine reference encodes");
+			synthLib::StateTypeGlobal, mm->getHardware().copyUserFlash()),
+			"capture: the Monomachine reference encodes");
 		const auto captured = captureState(*mm, synthLib::StateTypeGlobal);
 		check(captured.bytes == expected, "capture: Monomachine patch RAM and user flash, byte for byte");
 		check(sameAsGetState(*mm, synthLib::StateTypeGlobal, expected), "capture: getState writes the same");

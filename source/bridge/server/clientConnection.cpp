@@ -117,7 +117,8 @@ namespace bridgeServer
 			return;
 		}
 
-		const auto numSamples = TcpConnection::handleAudio(const_cast<float* const*>(m_audioInputs.data()), static_cast<uint32_t>(m_audioInputs.size()), g_audioBufferSize, _in);
+		const auto numSamples = TcpConnection::handleAudio(const_cast<float* const*>(m_audioInputs.data()),
+			static_cast<uint32_t>(m_audioInputs.size()), g_audioBufferSize, _in);
 
 		m_device->process(m_audioInputs, m_audioOutputs, numSamples, m_midiIn, m_midiOut);
 

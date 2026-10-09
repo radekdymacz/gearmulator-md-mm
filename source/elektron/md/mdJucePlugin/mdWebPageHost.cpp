@@ -199,8 +199,8 @@ namespace mdJucePlugin
 		{
 			m_files = std::make_unique<pageBridge::FileOutbox>([this](const uint64_t _seq, const std::string& _script)
 			{
-				// Written whole and then renamed (replaceWithData), so the page never reads half a batch; the page's (to
-				// delete once read) only when it is there.
+				// Written whole and then renamed (replaceWithData), so the page never reads half a batch; registered
+				// as the page's (to delete once read) only when it is there.
 				auto file = m_file.getSiblingFile(pageBridge::recvFileName(m_file.getFileName().toStdString(), _seq));
 				if(!file.replaceWithData(_script.data(), _script.size()))
 					return false;
@@ -502,18 +502,25 @@ namespace mdJucePlugin
 		case bridge::FileOutbox::Change::None:
 			break;
 		case bridge::FileOutbox::Change::Stalled:
-			note("page bridge: could not write " + juce::String(bridge::recvFileName(m_file.getFileName().toStdString(), m_files->stalledAt().value_or(0)))
-				+ " (" + m_file.getParentDirectory().getFullPathName() + "); it and the " + juce::String(static_cast<int>(m_files->waiting()) - 1)
+		{
+			const auto seq = m_files->stalledAt().value_or(0);
+			const auto file = bridge::recvFileName(m_file.getFileName().toStdString(), seq);
+			note("page bridge: could not write " + juce::String(file) + " ("
+				+ m_file.getParentDirectory().getFullPathName() + "); it and the "
+				+ juce::String(static_cast<int>(m_files->waiting()) - 1)
 				+ " batches after it wait and are tried again");
 			break;
+		}
 		case bridge::FileOutbox::Change::Recovered:
-			note("page bridge: written again from batch " + juce::String(static_cast<juce::int64>(stalled.value_or(0))) + "; nothing waits");
+			note("page bridge: written again from batch " + juce::String(static_cast<juce::int64>(stalled.value_or(0)))
+				+ "; nothing waits");
 			break;
 		case bridge::FileOutbox::Change::Dropped:
 		{
 			const auto [batches, bytes] = m_files->dropped();
-			note("page bridge: " + juce::String(static_cast<juce::int64>(batches)) + " batches (" + juce::String(static_cast<juce::int64>(bytes))
-				+ " bytes) could not be written in time and were dropped; the page is loaded again once a file can be written");
+			note("page bridge: " + juce::String(static_cast<juce::int64>(batches)) + " batches ("
+				+ juce::String(static_cast<juce::int64>(bytes)) + " bytes) could not be written in time and were "
+				"dropped; the page is loaded again once a file can be written");
 			m_nextResyncTry = 0;
 			break;
 		}

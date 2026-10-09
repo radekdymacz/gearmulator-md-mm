@@ -456,9 +456,9 @@ function(mdmm_plugin_targets)
 	set_tests_properties(mdWindowFitTest PROPERTIES LABELS "UnitTest")
 	set_property(TARGET mdWindowFitTest PROPERTY FOLDER "Elektron/test")
 
-	# The page bridge's transport (mdPageBridge.h, pure): long batches in pieces, the outbox split into numbered calls, Linux's
-	# files written in order (FileOutbox); the notice route (juceUiLib/messageRoute.h): a sink per window; and a window's
-	# notices and their answers (mdNoticeBook.h).
+	# The page bridge's transport (mdPageBridge.h, pure): long batches in pieces, the outbox split into numbered calls,
+	# Linux's files written in order (FileOutbox) and its reload after a drop; the notice route
+	# (juceUiLib/messageRoute.h): a sink per window; and a window's notices and their answers (mdNoticeBook.h).
 	add_executable(mdPageBridgeTest mdPageBridgeTest.cpp)
 	target_link_libraries(mdPageBridgeTest PRIVATE elektronJson)
 	target_include_directories(mdPageBridgeTest PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/.. ${CMAKE_CURRENT_SOURCE_DIR}/../../..)	# ../../..: juceUiLib/messageRoute.h

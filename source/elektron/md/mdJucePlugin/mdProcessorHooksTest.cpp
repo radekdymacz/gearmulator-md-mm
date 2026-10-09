@@ -34,7 +34,8 @@ namespace
 	public:
 		explicit SyntheticController(pluginLib::Processor& _processor) : Controller(_processor) {}
 
-		void sendParameterChange(const pluginLib::Parameter&, pluginLib::ParamValue, pluginLib::Parameter::Origin) override {}
+		void sendParameterChange(const pluginLib::Parameter&, pluginLib::ParamValue,
+			pluginLib::Parameter::Origin) override {}
 		bool parseSysexMessage(const pluginLib::SysEx&, synthLib::MidiEventSource) override { return false; }
 		void onStateLoaded() override {}
 	};

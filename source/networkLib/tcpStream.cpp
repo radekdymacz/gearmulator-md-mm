@@ -51,7 +51,8 @@ namespace networkLib
 			return false;
 #ifdef _WIN32
 		const DWORD timeout = _milliseconds;
-		return ::setsockopt(static_cast<SOCKET>(m_stream->get_handle()), SOL_SOCKET, SO_RCVTIMEO, reinterpret_cast<const char*>(&timeout), sizeof(timeout)) == 0;
+		return ::setsockopt(static_cast<SOCKET>(m_stream->get_handle()), SOL_SOCKET, SO_RCVTIMEO,
+			reinterpret_cast<const char*>(&timeout), sizeof(timeout)) == 0;
 #else
 		timeval timeout{};
 		timeout.tv_sec = static_cast<decltype(timeout.tv_sec)>(_milliseconds / 1000);
