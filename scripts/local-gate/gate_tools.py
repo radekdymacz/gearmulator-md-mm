@@ -5,9 +5,11 @@ Subcommands (every one that judges prints `numbers=...` and `notes=...` lines fo
 green, 1 for red):
 
   run            run a command with a time limit and a log file; its process group dies with it
+  audio-watch    note every process below a pid that holds an audio stream (macOS: coreaudiod's assertions)
   ctest-missing  ctest -N --show-only=json-v1 on stdin: registered tests whose program was not built
   junit          ctest's --output-junit file: executed, failed and skipped tests, by name
   goldens        the runs a goldens file asks for (scenario x outputs x speed-ups switch)
+  soak           a performance capture (schema 2 JSON Lines) judged against the block budget
   capacity       the core-capacity receipt of scripts/macos/check_mdmm_core_capacity.py
   journeys       the report of scripts/mdmm-journeys.sh
   pluginval      the pluginval-summary.md of scripts/ci/mdmm_pluginval.sh
@@ -89,6 +91,70 @@ def cmd_run(args: argparse.Namespace) -> int:
             return 124
         kill_group(signal.SIGTERM)  # anything the command left behind in its group
     return code if code >= 0 else 128 - code
+
+
+# ------------------------------------------------------------------------------------------------ audio-watch
+def process_tree(root: int) -> dict[int, str]:
+    """pid -> command name of root and everything below it."""
+    listing = subprocess.run(["ps", "-A", "-o", "pid=,ppid=,comm="], capture_output=True, text=True).stdout
+    children: dict[int, list[int]] = {}
+    names: dict[int, str] = {}
+    for line in listing.splitlines():
+        parts = line.split(None, 2)
+        if len(parts) == 3 and parts[0].isdigit() and parts[1].isdigit():
+            children.setdefault(int(parts[1]), []).append(int(parts[0]))
+            names[int(parts[0])] = os.path.basename(parts[2])
+    tree, queue = {}, [root]
+    while queue:
+        pid = queue.pop()
+        tree[pid] = names.get(pid, "?")
+        queue.extend(children.get(pid, []))
+    return tree
+
+
+def audio_streams() -> list[tuple[int, str]]:
+    """(pid, resources) of every process coreaudiod keeps awake for an open audio stream (pmset -g assertions)."""
+    out = subprocess.run(["pmset", "-g", "assertions"], capture_output=True, text=True).stdout
+    found, current = [], None
+    for line in out.splitlines():
+        if re.search(r"pid \d+\(coreaudiod\).*named: \"com\.apple\.audio\.", line):
+            current = None
+            continue
+        created = re.match(r"\s+Created for PID: (\d+)", line)
+        if created:
+            current = int(created.group(1))
+            continue
+        resources = re.match(r"\s+Resources: (audio-\S+)", line)
+        if resources and current is not None:
+            found.append((current, resources.group(1)))
+            current = None
+    return found
+
+
+def cmd_audio_watch(args: argparse.Namespace) -> int:
+    """Until terminated: every `interval` seconds, append one line per new (pid, stream) held below --root-pid."""
+    import time
+    seen: set[tuple[int, str]] = set()
+    stop = {"now": False}
+
+    def on_term(_signum: int, _frame: object) -> None:
+        stop["now"] = True
+
+    signal.signal(signal.SIGTERM, on_term)
+    signal.signal(signal.SIGINT, on_term)
+    while True:
+        tree = process_tree(args.root_pid)
+        for pid, resource in audio_streams():
+            if pid in tree and (pid, resource) not in seen:
+                seen.add((pid, resource))
+                with open(args.out, "a", encoding="utf-8") as out:
+                    out.write(f"{tree[pid]} (pid {pid}) holds {resource}\n")
+        if stop["now"]:
+            return 0
+        for _ in range(int(args.interval * 10)):
+            if stop["now"]:
+                break
+            time.sleep(0.1)
 
 
 # ---------------------------------------------------------------------------------------- ctest-missing
@@ -204,6 +270,131 @@ def cmd_goldens(args: argparse.Namespace) -> int:
     return 1 if missing else 0
 
 
+# ------------------------------------------------------------------------------------------------ soak
+BUCKETS = ("<25%", "25-50%", "50-75%", "75-100%", "100-150%", ">=150%")
+
+
+def load_bucket(ratio: float) -> int:
+    for index, edge in enumerate((0.25, 0.5, 0.75, 1.0, 1.5)):
+        if ratio < edge:
+            return index
+    return 5
+
+
+def read_capture(path: str) -> dict[str, object]:
+    """A performance capture (doc/md_mm_performance_diagnostics.md, schema 2): the last summary, the callback trace, the end."""
+    capture: dict[str, object] = {"summary": None, "callbacks": {}, "end": None, "session": None, "lines": 0}
+    callbacks: dict[int, dict] = capture["callbacks"]  # type: ignore[assignment]
+    with open(path, encoding="utf-8", errors="replace") as stream:
+        for line in stream:
+            try:
+                record = json.loads(line)
+            except ValueError:
+                continue  # the last line of a capture that was cut off
+            capture["lines"] = int(capture["lines"]) + 1  # type: ignore[call-overload]
+            kind = record.get("type")
+            if kind == "summary":
+                capture["summary"] = record
+            elif kind == "callback":
+                callbacks[int(record["index"])] = record
+            elif kind in ("end", "session"):
+                capture[kind] = record
+    return capture
+
+
+def cmd_soak(args: argparse.Namespace) -> int:
+    """Judge a capture against the block budget. Callbacks that start before --warmup seconds (the JIT compiling the
+    firmware's hot paths, a first start's flash work) are listed, not judged; every other callback must be inside its budget
+    (the two top buckets of the load histogram, minus the recorded warm-up ones) and wait for the synth lock less than --lock-us."""
+    try:
+        capture = read_capture(args.file)
+    except OSError as error:
+        emit(f"{args.machine}: no capture", str(error))
+        return 1
+    summary = capture["summary"]
+    if not summary:
+        emit(f"{args.machine}: no summary record in the capture", "the host did not run long enough or the capture never started")
+        return 1
+    histogram = list(summary["realtimeBudgetHistogram"])
+    count = int(summary["outerHostCallbackCount"])
+    elapsed = summary["elapsedNanoseconds"] / 1e9
+    dropped = int(summary["slowCallbacksDropped"])
+    callbacks = list(capture["callbacks"].values())  # type: ignore[union-attr]
+    over_total = histogram[4] + histogram[5]
+    warm_over = [cb for cb in callbacks if cb["startNanoseconds"] / 1e9 < args.warmup and cb["durationNanoseconds"] >= cb["budgetNanoseconds"]]
+    # The histogram is cumulative from the start. The callbacks over budget are all in the trace (every callback at 75 % of its
+    # budget or more is recorded) unless the trace dropped some: then the warm-up ones cannot be told apart, and all count.
+    judged_over = over_total if dropped else max(0, over_total - len(warm_over))
+    lock_ns = args.lock_us * 1000
+    waits = sorted((cb for cb in callbacks if cb["startNanoseconds"] / 1e9 >= args.warmup and cb["lockWaitNanoseconds"] > lock_ns),
+                   key=lambda cb: -cb["lockWaitNanoseconds"])
+    after = [cb["lockWaitNanoseconds"] for cb in callbacks if cb["startNanoseconds"] / 1e9 >= args.warmup]
+    max_wait_us = max(after) / 1000 if after else 0.0
+    end = capture["end"]
+    reason = end["reason"] if end else "no end record"
+    problems = []
+    if not end:
+        problems.append("the capture has no end record: the host died or was killed")
+    if int(summary["offlineCallbackCount"]):
+        problems.append(f"{summary['offlineCallbackCount']} callbacks were offline: the histogram does not count them")
+    if elapsed < args.min_seconds:
+        problems.append(f"only {elapsed:.0f} s were captured (at least {args.min_seconds:.0f} s wanted; the capture ends at 10 minutes or 8 MiB)")
+    if judged_over:
+        worst = max((cb for cb in callbacks if cb["startNanoseconds"] / 1e9 >= args.warmup), key=lambda cb: cb["durationNanoseconds"], default=None)
+        where = f"; worst at {worst['startNanoseconds'] / 1e9:.0f} s: {worst['durationNanoseconds'] / 1e6:.2f} ms of {worst['budgetNanoseconds'] / 1e6:.2f} ms" if worst else ""
+        problems.append(f"{judged_over} callbacks over their budget after the first {args.warmup:.0f} s{where}")
+    if waits:
+        top = waits[0]
+        problems.append(f"{len(waits)} callbacks waited more than {args.lock_us / 1000:.1f} ms for the synth lock after the first {args.warmup:.0f} s "
+                        f"(worst {top['lockWaitNanoseconds'] / 1e6:.2f} ms at {top['startNanoseconds'] / 1e9:.0f} s)")
+    if args.receipt:
+        try:
+            peak = float(json.loads(Path(args.receipt).read_text(encoding="utf-8")).get("audio_peak_before_quantization", 0.0))
+        except (OSError, ValueError) as error:
+            problems.append(f"the host's receipt is unreadable ({error})")
+        else:
+            if not peak > 1e-3:
+                problems.append(f"the machine made no sound (output peak {peak:.1e}): the soak played nothing")
+    result = "FAIL" if problems else "PASS"
+    if args.tsv:
+        with open(args.tsv, "a", encoding="utf-8") as out:
+            out.write("\t".join([args.machine, f"{elapsed:.0f}", str(count), ",".join(str(h) for h in histogram), str(over_total),
+                                  str(len(warm_over)), str(judged_over), f"{max_wait_us:.0f}", reason, result]) + "\n")
+    numbers = (f"{args.machine} {count} callbacks in {elapsed:.0f} s, load " + ", ".join(f"{name} {value}" for name, value in zip(BUCKETS, histogram)))
+    if args.brief:
+        numbers = f"{args.machine} {count} callbacks, {over_total} over budget ({judged_over} after the first {args.warmup:.0f} s)"
+    notes = list(problems)
+    if warm_over:
+        notes.append(f"{args.machine}: {len(warm_over)} callbacks over budget in the first {args.warmup:.0f} s (start-up JIT, listed not judged)")
+    if dropped:
+        notes.append(f"{args.machine}: the trace dropped {dropped} records, so warm-up callbacks could not be told apart")
+    if args.blocks:
+        notes.append(block_view(args))
+    notes.append(f"{args.machine}: capture ended '{reason}', longest lock wait after warm-up {max_wait_us / 1000:.2f} ms")
+    emit(numbers, "; ".join(note for note in notes if note))
+    return 0 if args.info or not problems else 1
+
+
+def block_view(args: argparse.Namespace) -> str:
+    """The host's own view of the same callbacks (latency_host's .blocks.csv), as a second opinion: not judged."""
+    import csv
+    renders, over = [], 0
+    try:
+        with open(args.blocks, newline="", encoding="utf-8") as stream:
+            for row in csv.DictReader(stream):
+                if int(row["sample"]) / args.rate >= args.warmup:
+                    value = float(row["render_ms"])
+                    renders.append(value)
+                    over += value > int(row["count"]) * 1000.0 / args.rate
+    except (OSError, KeyError, ValueError) as error:
+        return f"{args.machine}: host view unreadable ({error})"
+    if not renders:
+        return f"{args.machine}: host view empty"
+    renders.sort()
+    p50, p99 = renders[len(renders) // 2], renders[min(len(renders) - 1, int(len(renders) * 0.99))]
+    return f"{args.machine} host view after warm-up: render p50 {p50:.2f} ms, p99 {p99:.2f} ms, max {renders[-1]:.2f} ms, {over} blocks over their period"
+
+
 # ------------------------------------------------------------------------------------------------ capacity
 def cmd_capacity(args: argparse.Namespace) -> int:
     try:
@@ -297,6 +488,15 @@ def cell(text: str) -> str:
     return text.replace("|", "/").replace("\n", " ").strip() or "-"
 
 
+def audio_line(stages: list[list[str]]) -> str:
+    """What the run did to the Mac's sound: the guard's verdict and the stages that muted the output."""
+    opened = [row[0] for row in stages if "OPENED AN AUDIO DEVICE" in row[5]]
+    muted = [row[0] for row in stages if "output muted for stage" in row[5] or "output turned down" in row[5]]
+    guard = ("a stage opened an audio device: " + ", ".join(opened) + " (see the table)") if opened else \
+        "the guard saw no audio stream in any stage it watched (every stage but 7d)"
+    return guard + ("; output muted for stage " + ", ".join(muted) if muted else "; no stage needed the output muted")
+
+
 def cmd_summary(args: argparse.Namespace) -> int:
     out = Path(args.out)
     info = read_info(out / "info.txt")
@@ -339,6 +539,7 @@ def cmd_summary(args: argparse.Namespace) -> int:
         ("MM ROM", f"{info.get('mm_rom', 'none')} sha256 {info.get('mm_rom_sha256', '-')}"),
         ("Goldens", f"{info.get('goldens_file', '?')} sha256 {info.get('goldens_sha256', '-')}"
             f"{', MODIFIED against HEAD' if info.get('goldens_modified') == '1' else ''}"),
+        ("Audio", audio_line(stages)),
         ("Started", info.get("started", "?")),
         ("Total time", info.get("total", "?")),
         ("Run folder", str(out)),
@@ -356,6 +557,14 @@ def cmd_summary(args: argparse.Namespace) -> int:
                   "| Scenario | Outputs | Speed-ups | Seconds | Result | Detail |", "|---|---|---|---|---|---|"]
         for row in goldens:
             lines.append("| " + " | ".join(cell(field) for field in row) + " |")
+    soak_rows = read_rows(out / "soak.tsv", 10)
+    if soak_rows:
+        lines += ["", "## Soak: the audio thread's load over the capture (callbacks per share of their block budget)", "",
+                  "| Machine | Captured | Callbacks | " + " | ".join(BUCKETS) + " | Over budget after warm-up | Longest lock wait | Capture ended | Result |",
+                  "|---|---|---|" + "---|" * len(BUCKETS) + "---|---|---|---|"]
+        for machine, seconds, callbacks, histogram, _total, _warm, judged, wait_us, reason, result in soak_rows:
+            buckets = histogram.split(",") + [""] * len(BUCKETS)
+            lines.append(f"| {machine} | {seconds} s | {callbacks} | " + " | ".join(buckets[: len(BUCKETS)]) + f" | {judged} | {float(wait_us or 0) / 1000:.2f} ms | {reason} | **{result}** |")
     if cannot:
         lines += ["", "## Known cannot-run-here (named, not counted as skipped)", ""]
         lines += [f"- `{name}`: {reason}" for name, reason in cannot]
@@ -385,6 +594,12 @@ def main() -> int:
     run.add_argument("command", nargs=argparse.REMAINDER)
     run.set_defaults(func=cmd_run)
 
+    watch = sub.add_parser("audio-watch")
+    watch.add_argument("--root-pid", type=int, required=True)
+    watch.add_argument("--interval", type=float, default=2.0)
+    watch.add_argument("--out", required=True)
+    watch.set_defaults(func=cmd_audio_watch)
+
     missing = sub.add_parser("ctest-missing")
     missing.set_defaults(func=cmd_ctest_missing)
 
@@ -400,6 +615,20 @@ def main() -> int:
     goldens.add_argument("--extra", default="", help="more scenarios (record mode: new ones)")
     goldens.add_argument("--seconds", default="8")
     goldens.set_defaults(func=cmd_goldens)
+
+    soak = sub.add_parser("soak")
+    soak.add_argument("file")
+    soak.add_argument("--machine", default="?")
+    soak.add_argument("--warmup", type=float, default=30.0)
+    soak.add_argument("--lock-us", type=float, default=1000.0)
+    soak.add_argument("--min-seconds", type=float, default=0.0)
+    soak.add_argument("--tsv")
+    soak.add_argument("--blocks")
+    soak.add_argument("--rate", type=float, default=48000.0)
+    soak.add_argument("--info", action="store_true", help="report only: always exit 0")
+    soak.add_argument("--brief", action="store_true", help="numbers: the counts only")
+    soak.add_argument("--receipt", help="latency_host's .json: the machine must have made a sound")
+    soak.set_defaults(func=cmd_soak)
 
     for name, func in (("capacity", cmd_capacity), ("journeys", cmd_journeys), ("pluginval", cmd_pluginval)):
         judge = sub.add_parser(name)

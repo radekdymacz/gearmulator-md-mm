@@ -7,19 +7,20 @@ running. The gate does the rest. **It runs green before a release is tagged** ([
 on the shipped files ([FOUNDATION.md](../modern-ux/FOUNDATION.md), CI start tests).
 
 ```sh
-scripts/mdmm-local-gate.sh                       # the release gate: everything; plan on about two hours (timings below)
+scripts/mdmm-local-gate.sh                       # the release gate: everything; plan on about two and a half hours (timings below)
 scripts/mdmm-local-gate.sh --quick               # no plug-ins, no window: stages 1 to 6a, for working on the emulator
-scripts/mdmm-local-gate.sh --skip-journeys       # everything but the user journeys (no window, no 8 to 16 minutes)
-scripts/mdmm-local-gate.sh --skip-plugin         # build the plug-ins, but leave out the core-capacity run and stage 7
+scripts/mdmm-local-gate.sh --skip-soak           # everything but the soak (6c: 21 minutes of play)
+scripts/mdmm-local-gate.sh --skip-journeys       # everything but the user journeys (8 to 16 minutes)
+scripts/mdmm-local-gate.sh --skip-plugin         # build the plug-ins, but leave out 6b, 6c (the soak) and stage 7
 scripts/mdmm-local-gate.sh --record-goldens      # record the playing goldens instead of comparing (see Goldens)
 scripts/mdmm-local-gate.sh --build <dir> --out <dir>
 ```
 
-**Run it on a quiet Mac.** Three of its checks measure time (the idle-scheduler and MIDI timing tests, the real-time work in 6a, the core capacity in 6b) and the emulator needs most of a core each; with other builds, a DAW or other agents running they fail from load alone. The first line of the run says the load, and any failed stage is annotated "the Mac is busy" when the load was high (more than half the cores).
+**Run it on a quiet Mac.** Four of its checks measure time (the idle-scheduler and MIDI timing tests, the real-time work in 6a, the core capacity in 6b, the soak in 6c) and the emulator needs most of a core each; with other builds, a DAW or other agents running they fail from load alone. The first line of the run says the load, and any failed stage is annotated "the Mac is busy" when the load was high (more than half the cores).
 
 It prints one line per stage while it runs, ends with the table below, writes the same to `temp/local-gate/<date-time>/summary.md`
 (`temp/local-gate/latest` links to the newest run) and exits non-zero when red. Only a run **without** `--quick`,
-`--skip-plugin`, `--skip-journeys` and `MDMM_GATE_SKIP_BUILD` can clear a release; the verdict says `GREEN, PARTIAL` for the
+`--skip-plugin`, `--skip-soak`, `--skip-journeys` and `MDMM_GATE_SKIP_BUILD` can clear a release; the verdict says `GREEN, PARTIAL` for the
 others. The last thing a green run prints is the manual step it cannot do (Updater end to end, below).
 
 ## Timings
@@ -34,9 +35,10 @@ Measured on 2026-10-09 on a 12-core M4 Pro with other work running (load 25 to 2
 | 3, 4, 5, 5b | 1 to 2 min, 2 to 7 min, 5 min (24 runs, 4 at once), 1 to 2 min |
 | 6a rt-check | 11 min |
 | 6b core capacity | about 6 min |
+| 6c soak | 21 min (two machines, 10 minutes of play each) |
 | 7a, 7b | under a minute |
 | 7c pluginval | not measured here: the first run downloads pluginval |
-| 7d journeys | diagnostics build 6 min (first time), VST3 host build a few minutes (first time), then 8 to 16 min with the window in front |
+| 7d journeys | diagnostics build 6 min (first time), VST3 host build a few minutes (first time), then 8 to 16 min in the background |
 
 ## What it proves
 
@@ -51,11 +53,12 @@ Measured on 2026-10-09 on a 12-core M4 Pro with other work running (load 25 to 2
 | 5 Playing goldens | `mdmmPerfGateTest <ROM> <md or mm> 8 --scenario S --outputs <stereo or all> --golden <goldens>` for every scenario in the goldens file, both outputs modes, with the speed-ups at their default and with `GEARMULATOR_MDMM_SPEEDUPS=0`: the audio, the memory and the MIDI the machine sent must equal the recorded hashes | a hash differs, or the file has no entry for a run |
 | 5b CPU bench sanity | `mdCpuBenchTest <MD ROM> 1 6`, `mmCpuBenchTest <MM ROM> 1 6`: the machine plays (the play head moves) | either exits non-zero |
 | 6a Real-time work | `scripts/mdmm-rt-check.sh --plock`: the audio thread's work while the editor edits, in retired instructions (budget 100 ms hot a second per action), and B-010's sequencer timing | `rt-check: FAIL` |
-| 6b Core capacity | `scripts/macos/check_mdmm_core_capacity.py` with the release script's parameters, on the built VST3 in `latency_host`: three unpaced runs per machine must stay under 0.90 of the block budget at the median. The paced tail is reported, not judged | the microgate fails (needs the pinned release ROMs) |
+| 6b Core capacity | `scripts/macos/check_mdmm_core_capacity.py` with the release script's parameters, on the built VST3 in `latency_host`: three unpaced runs per machine must stay under 0.90 of the block budget at the median. The paced tail is reported, not judged. The Machinedrum's factory flash cache is given to it (`--md-flash-cache`, an option the gate added to the script): without one a fresh Machinedrum does its first-start flash work while the notes play and the capture is silent in about one run in three | the microgate fails (needs the pinned release ROMs) |
+| 6c Soak | for each machine, 10 minutes of busy play in the real VST3, at 48 kHz in blocks of 128, in real time, with no window and no audio device (`latency_host`, the host of 6b): its busiest scenario, `chords`, six voices every 251 ms (the Machinedrum's pads 1 to 6, the Monomachine's tracks 1 to 6) from second 10 on, in a sandbox that has the factory flash cache and patch RAM. `GEARMULATOR_RT_INSTRUMENTATION=1` makes the plug-in start its own performance capture ([md_mm_performance_diagnostics.md](../md_mm_performance_diagnostics.md)); the gate parses that JSON Lines file (schema 2) and prints the realtime load histogram of each machine in the summary | any callback after the first 30 s over its block budget (the `100-150%` and `>=150%` buckets, less the recorded start-up ones), any callback waiting more than 1 ms for the synth lock after the first 30 s, a capture of less than 8 minutes or with no end record, or a machine that made no sound |
 | 7a VST3 start with firmware | `pluginTester -verify-audio-buses -blocks 256` per machine with the ROM (the check of `verify_mdmm_package.sh`), and `-blocks 16 -verify-audio-buses -automation-smoke` without one (`build_mdmm.sh`) | a device-start error, a short run, a non-zero exit |
 | 7b auval | `auval -v` on each built AU, with no ROM, as `smoke_mdmm.sh` runs it in CI | `auval` fails |
 | 7c pluginval | `scripts/mdmm-pluginval.sh`: pluginval 1.0.4 (pinned, `scripts/pluginval.env`) at strictness 5 and 8 on the VST3 and the AU, with the firmware in its own scratch data root | a run fails, or the AU was not validated |
-| 7d User journeys | a diagnostics build in its own tree (`scripts/mdmm-dev.sh`, `temp/local-gate/build-diag`), then `scripts/mdmm-journeys.sh --host both both`: the page clicked as a person does, both editors, standalone and VST3, on the firmware | a journey fails, the editor ends early, or a journey is skipped because its window was not drawing |
+| 7d User journeys | a diagnostics build in its own tree (`scripts/mdmm-dev.sh`, `temp/local-gate/build-diag`), then `scripts/mdmm-journeys.sh --host both --background both`: the page clicked as a person does, both editors, standalone and VST3, on the firmware, silent (below); `MDMM_JOURNEY_PERF=1` records the audio thread during those edits and the summary quotes it, not judged | a journey fails, the editor ends early, or a journey is skipped because its window was not drawing |
 | M1 Updater end to end | **manual**, see below | never red; the summary lists it as open |
 
 What it does not prove: a signed and notarised build (CI's job, [SIGNING.md](SIGNING.md)), Gatekeeper on a downloaded
@@ -76,16 +79,50 @@ shipped files.
 |---|---|---|
 | Machinedrum ROM (OS 1.63) | first file in `~/Documents/Gearmulator Preview/Machinedrum/roms/` | `GEARMULATOR_MD_FIRMWARE_BIN` |
 | Monomachine ROM (OS 1.32B) | first file in `~/Documents/Gearmulator Preview/Monomachine/roms/` | `GEARMULATOR_MM_FIRMWARE_BIN` |
-| Machinedrum factory cache | `…/Machinedrum/nvram/md-uw-1.63-factory-v2.cache` | `MDMM_GATE_MD_CACHE` |
+| Machinedrum factory cache | `…/Machinedrum/nvram/md-uw-1.63-factory-v2.cache`: given to 6b and 6c (a machine that starts as a person's does) and to `mdSysexLifecycleTest` | `MDMM_GATE_MD_CACHE` |
 | Monomachine factory patch RAM | `…/Monomachine/nvram/mm-factory-live3-be.bin` (not on this Mac) | `MDMM_GATE_MM_PATCH` |
 | SysEx fixtures | `…/fixtures/sysex/**/*.syx`: `md*.syx` for the Machinedrum, `mm*.syx` for the Monomachine | `MDMM_GATE_FIXTURES` |
 | Goldens | `source/elektron/md/mdLibTest/goldens/mdmm-goldens.json` (in the repo) | — |
 
 `…` is `~/Documents/Gearmulator Preview` (`MDMM_GATE_PREVIEW`). The ROMs must be the pinned release images
 (`scripts/macos/check_mdmm_core_capacity.py` checks their SHA-256). Other settings: `MDMM_GATE_JOBS` (build jobs, default
-all cores), `MDMM_GATE_GOLDEN_JOBS` (golden runs at once, default 4), `MDMM_GATE_JOURNEY_ARGS` (default `--host both`;
-`--background --jobs 4` runs the journeys in about 6 minutes without taking the screen), `MDMM_GATE_SCENARIOS` (extra
-golden scenarios when recording), `MDMM_GATE_SKIP_BUILD=1` (use the tree as it is) `MDMM_GATE_ONLY="3 5"` (only those stages) and `MDMM_GATE_GOLDENS` (another goldens file) for working on the gate itself; such a run is `GREEN, PARTIAL` at best.
+all cores), `MDMM_GATE_GOLDEN_JOBS` (golden runs at once, default 4), `MDMM_GATE_JOURNEY_ARGS` (default
+`--host both --background`; add `--jobs 4` to run them in about 6 minutes), `MDMM_GATE_SOAK_SECONDS` (6c, default 600, the
+most the capture and the host allow), `MDMM_GATE_SOAK_WARMUP` (seconds at the start that are listed but not judged, default 30),
+`MDMM_GATE_SOAK_LOCK_US` (a synth lock wait that fails the soak, default 1000), `MDMM_GATE_ALLOW_UNMUTED=1` (run a stage
+that opens an audio device although the output could not be muted), `MDMM_GATE_SCENARIOS` (extra golden scenarios when
+recording). For working on the gate itself: `MDMM_GATE_SKIP_BUILD=1` (use the tree as it is), `MDMM_GATE_ONLY="3 5"` (only
+those stages) and `MDMM_GATE_GOLDENS` (another goldens file); such a run is `GREEN, PARTIAL` at best.
+
+## Silence
+
+The gate keeps your Mac quiet. Only a stage that opens a real audio device can make a sound, and only two things do:
+the standalones of the user journeys (7d) and the standalone of the manual updater step (M1). Everything else is
+headless, and the gate checks that instead of assuming it:
+
+- **No device at all, and a guard that fails a stage that opens one.** ctest (its audio tests use fake devices:
+  `FakeAudioIODevice`, the tests' own headless ones), the rt-check (`mdDeskFirmwareTest`, the emulator and no plug-in),
+  the goldens and the benches, `latency_host` (6b and 6c: it renders the VST3 itself), `pluginTester` (7a: a fake device),
+  `auval` and `pluginval` (they call the plug-in's `processBlock` themselves) and the VST3 host of the journeys (a thread that
+  feeds silent blocks) never open an audio stream. A poller watches every stage but 7d: macOS keeps a power assertion for
+  each open audio stream (`pmset -g assertions`, owner `coreaudiod`, "Created for PID"), and if a process the gate started holds
+  one, the stage is **FAIL** with "OPENED AN AUDIO DEVICE (process, pid, device)". `scripts/local-gate/selftest.sh` shows it
+  working (a silent file played by `afplay` trips it).
+- **7d: a quiet setup, then the output muted.** `--background` (the default here) runs each editor as an accessory app behind
+  every window, and its standalone zeroes its output after the machine made it (`md::DeskDevice::setSilentOutput`): the audio
+  device still runs, so the emulation keeps its timing, but nothing is sent to it, whichever output your saved audio setup names. The journeys use a copy of your settings; on this Mac they name no input device (`audioInputDeviceName` is empty, `shouldMuteInput` is 1)
+  and JUCE's standalone does not open one by default (`mdAudioIoLayoutTest` pins that). If your saved setup ever names an input, start the gate with
+  `MDMM_JOURNEY_SETTINGS=fresh` in the environment (no copy of your settings). The gate never opens a microphone or an input. A real "null" output device does not exist
+  in JUCE or macOS (no device means no callbacks, and the emulation is driven by them), so the zeroed output is the quiet choice.
+- **Muted as well, whatever the setup.** For 7d (and for `updater-manual.sh run`) `output muted true` is set with `osascript`, the
+  previous muted state and volume remembered in `temp/local-gate/audio-state.txt`, and put back after the stage, on Ctrl-C, on
+  `kill`, and on any failure (the same exit trap that restores the AU bundles). An output with no mute control (some interfaces,
+  HDMI) is turned down to 0 instead and the volume is restored. The log and the stage's notes say "output muted for stage 7d (was muted
+  false, volume 63)". If the gate was killed with `kill -9` and could not restore it, the next gate (or the next
+  `updater-manual.sh run`) restores the output first and says so; the file also holds the old values to put back by hand. If the output
+  cannot be muted, 7d does not run (`MDMM_GATE_ALLOW_UNMUTED=1` runs it anyway, still zeroed).
+- `scripts/local-gate/selftest.sh` tries the mute and restore (against a stand-in for `osascript`: your real volume is not touched),
+  the restore after a TERM, a stale state file, an output with no mute control and the guard; run it after changing the gate.
 
 ## What it touches
 
@@ -93,16 +130,18 @@ golden scenarios when recording), `MDMM_GATE_SKIP_BUILD=1` (use the tree as it i
 - **The build** runs JUCE's VST3 manifest step with a data root inside the build tree, as the release script does, with no ROM in it.
 - **auval needs the AU where macOS looks.** macOS finds an AU in its registry, never by path, and this Mac normally has the editors installed there. 7b therefore sets your installed `Machinedrum Editor.component` and `Monomachine Editor.component` aside in `temp/local-gate/au-swap/`, installs the built ones in `~/Library/Audio/Plug-Ins/Components/`, runs auval and pluginval, removes them and puts yours back (also on Ctrl-C, on a failure and on any exit; `MDMM_GATE_COMPONENTS_DIR` moves the folder, for testing). If the gate is killed with `kill -9` it cannot do that: the next run refuses to start 7b while `temp/local-gate/au-swap/` holds anything, and says so. Move the files in it back into `~/Library/Audio/Plug-Ins/Components/` by hand and run again.
 - **pluginval** is downloaded once (the pinned release, SHA-256 checked, `scripts/pluginval.env`) into the temporary folder; later runs reuse it. `scripts/mdmm-pluginval.sh` checksums your config and settings files before and after and restores them if anything touched them.
-- **The journeys** open the standalones, each in a sandbox of its own, and take the front: do not type or cover the window while it runs.
+- **The journeys** open the standalones, each in a sandbox of its own, in the background (small, behind your windows, no Dock icon, never in front) with the system output muted ([Silence](#silence)); they do not take the keyboard.
 
 ## Reading the summary
 
 ```
 # MD/MM local release gate: GREEN; manual steps still open: M1 Updater end to end
-- Commit …  - ROM sha256 …  - Build …
+- Commit …  - ROM sha256 …  - Build …  - Audio: the guard saw no audio stream …; output muted for stage 7d
 ROM fingerprints as the tests print them: …
 | Stage | Result | Time | Numbers | Failures and skips |
 ## Goldens compared          one row per run: scenario, outputs mode, speed-ups, seconds, result
+## Soak: the audio thread's load   per machine: the load histogram (callbacks per share of their block budget), the ones
+                                   over budget after the warm-up, the longest synth lock wait, how the capture ended
 ## Known cannot-run-here     tests the gate names and leaves out, with the reason
 ## Skipped stages            what a flag left out
 ## Manual steps
@@ -163,7 +202,16 @@ Named in the summary (`Known cannot-run-here`), not counted as skipped:
 | tests marked DISABLED in CMake | ctest does not run them; listed in the stage's notes |
 | the x86_64 slice, signing, notarisation, Gatekeeper | not part of a local build ([SIGNING.md](SIGNING.md)) |
 
-The journeys' sampler journeys draw canvases and **skip unless their window is on screen and uncovered** (WebKit draws no
-frames for a hidden page, and a sleeping display stops them). Without `--background` the runner brings each standalone to
-the front; keep the Mac awake and hands off for the 8 to 16 minutes. A journey skipped for that reason makes 7d red;
-others skipped for a missing capability are listed and tolerated.
+The journeys that check a canvas (the sampler ones) need their page drawing. `--background` keeps WebKit drawing while the window
+is covered, but a sleeping display still stops it: keep the Mac awake for the 8 to 16 minutes. A journey skipped for that reason
+makes 7d red; others skipped for a missing capability are listed and tolerated.
+
+**The soak (6c) does not run an edit stream.** The page's edits reach the machine through the editor's desk, which exists only with
+an editor and its web page; `latency_host` and `pluginTester` host the real plug-in headless, without one. `mdDeskFirmwareTest`
+and the rt-check (6a) do run the desk's edit actions, but on the emulator directly, with no plug-in processor, so there is no
+performance capture of them. What the soak adds to 6a is the plug-in's own capture over ten minutes of busy MIDI play; the cost of the
+edit actions is 6a's (retired instructions per block, 100 ms hot a second at most), and the audio thread during real page edits is the
+capture the journeys record (7d, quoted, not judged). The capture itself stops at 10 minutes or 8 MiB. On the Machinedrum the pad
+triggers are recorded as panel events (24,500 of them, 94 % of the file), so its capture reached 8 MiB after 524 of the 600 seconds
+(196,388 callbacks); the Monomachine's reached the 10 minutes (225,000). The stage asks for at least 80 % of the run (8 minutes)
+and names how each capture ended.
