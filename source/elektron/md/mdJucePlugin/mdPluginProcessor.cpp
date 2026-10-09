@@ -5,6 +5,8 @@
 #include "juceUiLib/messageBox.h"
 #include "juceUiLib/messageRoute.h"
 #include "mdDeskHost.h"
+#include "mdDeskSession.h"
+#include "mdRomInstall.h"
 
 #include "mdController.h"
 #include "mdPluginEditorState.h"
@@ -464,8 +466,7 @@ namespace mdJucePlugin
 			else
 				m_startupDiagnosticsEnabled = false;
 		}
-		if(m_model == md::MachineModel::Machinedrum || m_startupDiagnosticsEnabled)
-			startTimer(250);
+		startTimer(250);	// B-035: the start-up log's line every second, in the plug-in too (recordBoot)
 		m_desk = std::make_unique<DeskHost>(*this);
 		m_desk->startSession();
 		m_performanceReport = std::make_unique<synthLib::PerformanceReport>(
@@ -866,8 +867,49 @@ namespace mdJucePlugin
 		m_startupDiagnosticsFile.appendText(line);
 	}
 
+	void AudioPluginAudioProcessor::processBlockStarted(const int _frames, const bool _bypassed)
+	{
+		if(_bypassed)
+			m_boot.counters.onBypassed(_frames);
+		else
+			m_boot.counters.onBlock(_frames, isNonRealtime());
+	}
+
+	// B-035: once a second, what the host does with the audio and how far the machine got (mdBootDiagnostics.h)
+	void AudioPluginAudioProcessor::recordBoot()
+	{
+		BootSample s;
+		s.wallMs = juce::Time::getMillisecondCounterHiRes() - m_bootStartMs;
+		s.sampleRate = getSampleRate() > 0 ? getSampleRate() : getPlugin().getHostSamplerate();
+		s.blockSize = m_boot.counters.blockSize.load(std::memory_order_relaxed);
+		s.blocks = m_boot.counters.blocks.load(std::memory_order_relaxed);
+		s.bypassed = m_boot.counters.bypassed.load(std::memory_order_relaxed);
+		s.nonRealtime = m_boot.counters.nonRealtime.load(std::memory_order_relaxed);
+		getPlugin().withDeviceLocked([&](synthLib::Device* const _device)
+		{
+			auto* const device = dynamic_cast<md::Device*>(_device);
+			if(!device || !device->isValid())
+				return;
+			auto& hw = device->getHardware();
+			s.cycles = hw.hostCurrentCycle();
+			s.dspBooted = (hw.getDspMixer().booted() ? 1 : 0) + (hw.getDspProducer().booted() ? 1 : 0);
+			s.firmwareMidiReady = hw.isFirmwareMidiReady();
+		});
+		if(m_desk && m_desk->session())
+			s.lifecycle = m_desk->session()->lifecycleName();
+		if(m_bootRom.empty())
+		{
+			const auto roms = romsInFolder(m_model, juce::File(juce::String::fromUTF8(getPublicRomFolder().c_str())));
+			m_bootRom = roms.empty() ? std::string("none") : roms.front().getFileName().toStdString();
+		}
+		s.rom = m_bootRom;
+		m_boot.record(s);
+	}
+
 	void AudioPluginAudioProcessor::timerCallback()
 	{
+		if(++m_bootTicks % 4 == 1)
+			recordBoot();
 		recordStandaloneStartupDiagnostics();
 		if(serviceProjectStateRestore())
 			return;

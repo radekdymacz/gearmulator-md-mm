@@ -1229,6 +1229,9 @@ const DeskCaps = (() => {
                                          (the engine menu's "emu" entry, as if chosen there); the header stays live.
                                          AUDIO / MIDI… shows exactly when the engine menu offers its AUDIO entry (not in
                                          a DAW); a page that changes that entry calls Boot.midiRefresh()
+     Boot.audio({plugin, seconds, blocks, realtime})   B-035: how the host runs the audio (the plug-in's "audioRun"
+                                         message): while the machine starts, the card says when a plug-in gets no
+                                         audio at all, or when the machine runs slower than real time
      Boot.host = {chooseRom(), revealRom(), recheck(), removeRom(info), say(text)}   the app's host calls
    A file dragged onto the page is not opened by the web view (that would replace the page): the card says to click
    the button instead. */
@@ -1268,6 +1271,22 @@ const Boot = (() => {
 		$b("bootbar").setAttribute("aria-valuenow", Math.round(f * 100));
 		raf = requestAnimationFrame(tick);
 	}
+	/* B-035: what the start-up card says about the audio, or "" (pure: the "audioRun" message) */
+	function audioWord(a) {
+		if (!a) return "";
+		if (a.plugin && !a.blocks && a.seconds >= 5) return "The host is not running audio for this plug-in: check the audio engine/device is on and the track or plug-in is not deactivated.";
+		if (a.realtime != null && a.realtime > 0 && a.realtime < 0.95) return `The machine runs at ${a.realtime.toFixed(1)}× real time: try a larger buffer.`;
+		return "";
+	}
+	let audioRun = null;
+	const BOOTLINE = "Keys work when the start-up animation ends.";
+	/* the line under the bar while the machine starts: the audio's word when there is one */
+	function bootLine() {
+		if (shown !== "booting" && shown !== "loading") return;
+		const w = audioWord(audioRun), el = $b("bootline");
+		el.textContent = w || BOOTLINE; el.classList.toggle("warn", !!w); el.hidden = false;
+	}
+	function audio(a) { audioRun = a; bootLine(); }
 	function romName(m) { return m === "Monomachine" ? "Monomachine SFX-60 OS 1.32B" : "Machinedrum OS 1.63"; }
 	const esc = t => String(t).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
 	const links = (m) => {	// which of the card's links show: the first-run ones, or the installed firmware's
@@ -1307,8 +1326,10 @@ const Boot = (() => {
 		card.classList.toggle("rom", rom);
 		card.classList.toggle("ind", st === "loading");
 		$b("boott").textContent = rom ? (st === "missing" ? `${machine} firmware needed` : `This is not the ${machine}'s firmware`) : st === "loading" ? `Preparing the ${machine}…` : `Starting the ${machine}…`;
-		$b("bootline").textContent = st === "unsupported" ? "The ROM in the ROM folder is another OS or a damaged dump." : rom ? "" : "Keys work when the start-up animation ends.";
+		$b("bootline").textContent = st === "unsupported" ? "The ROM in the ROM folder is another OS or a damaged dump." : rom ? "" : BOOTLINE;
+		$b("bootline").classList.remove("warn");
 		$b("bootline").hidden = st === "missing";
+		bootLine();
 		$b("bootrom").hidden = !rom;
 		if (rom) $b("bootzone").textContent = `Choose your ${romName(machine)} ROM (.bin or .zip, 8 MB)`;
 		card.hidden = false;
@@ -1375,7 +1396,7 @@ const Boot = (() => {
 			sel.value = "emu"; sel.dispatchEvent(new Event("change", { bubbles: true }));
 		}
 	});
-	return { update, lcd, rom, showInstalled, midi, midiRefresh: () => midi(midiLast), host: null, state: () => shown };
+	return { update, lcd, rom, showInstalled, midi, midiRefresh: () => midi(midiLast), audio, audioWord, host: null, state: () => shown };
 })();
 
 /* ---- shared/deskSyx.js ---- */
@@ -1769,7 +1790,7 @@ function baseHTML(v,mx){return`<div class="base" style="bottom:calc(6px + ${IN}*
 function renderLane(){const lane=$("#lane");if(!lane)return;const t=S.sel,tr=trk(t),pid=S.lane,[pg,i]=pid.split("."),m=meta(t,pg,+i),mx=maxOf(m),lm=S.locks.get(lkKey(t,pid)),base=getP(t,pid);
  const sc=$("#lanescale");if(sc)sc.textContent=m.en?`${m.en[0]}…${m.en[mx]}`:m.signed?"−64…+63":"0–127";
  lane.innerHTML=`<div class="lbscale"><b>${fmt(m,mx)}</b><span>${fmt(m,base)}<small>kit</small></span><b>${fmt(m,0)}</b></div>`+steps().map(s=>{const st=tr.steps[s],on=st&&!st.off,v=lm?.get(s);
-  return`<div class="lb ${on?"":"none"} ${on?"k-"+(isMidiT(t)?"full":stepKind(st)):""} ${gapC(s)} ${S.playing&&s===S.step?"ph":""}" data-s="${s}" title="${on?(v!=null?"Locked "+fmt(m,v):"Kit value "+fmt(m,base)):"No trig here: add one (a trigless trig with alt-click keeps the envelopes quiet)"}">${on?`${baseHTML(base,mx)}${m.signed?`<div class="mid"></div>`:""}${v!=null?barHTML(v):""}`:""}</div>`}).join("");
+  return`<div class="lb ${on?"":"none"} ${on?"k-"+(isMidiT(t)?"full":stepKind(st)):""} ${gapC(s)} " data-s="${s}" title="${on?(v!=null?"Locked "+fmt(m,v):"Kit value "+fmt(m,base)):"No trig here: add one (a trigless trig with alt-click keeps the envelopes quiet)"}">${on?`${baseHTML(base,mx)}${m.signed?`<div class="mid"></div>`:""}${v!=null?barHTML(v):""}`:""}</div>`}).join("");
  requestAnimationFrame(drawSlides)}
 function drawSlides(){const svg=$("#lanesvg"),lane=$("#lane");if(!svg||!lane)return;const t=S.sel,tr=trk(t),lm=S.locks.get(lkKey(t,S.lane));svg.innerHTML="";if(!lm)return;
  const[pg,i]=S.lane.split("."),mx=maxOf(meta(t,pg,+i)),box=lane.getBoundingClientRect(),ink=cssv("--ink");let d="";const locked=[...lm.keys()].sort((a,b)=>a-b);
@@ -1820,7 +1841,7 @@ ED.lane={draw(g,W,H,c){const G=laneGeom(c),t=G.t,tr=trk(t),ink=cssv("--ink");if(
    if(n===hov||n===held){g.save();g.globalAlpha=n===held?.85:.45;g.fillStyle=led;g.fillRect(0,y+.5,blk?BW:KW,G.rh-1);g.restore()}
    if(n%12===0||n===G.hi){g.fillStyle=ink;g.font="9px Silkscreen, monospace";g.textAlign="right";g.fillText(noteName(n),KW-3,y+G.rh/2+3.5);g.textAlign="left"}}}
   else{g.fillStyle=ink;g.font="8px Silkscreen, monospace";const ns=tr.steps.slice(0,S.len).flatMap(x=>x?.n||[]);if(ns.length){const mn=Math.min(...ns),mx=Math.max(...ns);g.fillText(mn===mx?noteName(mn).replace("-",""):noteName(mn).replace("-","")+"-"+noteName(mx).replace("-",""),G.lastX+4,11)}const st=rowStatus(t);if(st)g.fillText(st,G.lastX+4,H-5)}
-  G.vs.forEach(s=>{const x=G.col[s];if(!x)return;if(s%4===0){g.fillStyle=inkA(G.big?.1:.07);g.fillRect(x.x0,0,x.x1-x.x0,G.H)}if(S.playing&&s===S.step&&!G.big){g.fillStyle=inkA(.2);g.fillRect(x.x0,0,x.x1-x.x0,H)}});
+  G.vs.forEach(s=>{const x=G.col[s];if(!x)return;if(s%4===0){g.fillStyle=inkA(G.big?.1:.07);g.fillRect(x.x0,0,x.x1-x.x0,G.H)}});
   if(G.big&&S.ghost)side().forEach(o=>{if(o===t||(o<6&&(isFx(trk(o).m)||trk(o).m==="DPRO-BBOX")))return;noteSpans(o).forEach(sp=>{const r=spanX(G,sp);if(!r||sp.n[0]<G.lo||sp.n[0]>G.hi)return;g.fillStyle=inkA(.14);g.fillRect(r[0]+2,G.y(sp.n[0])+3,r[1]-r[0]-4,G.rh-6)})});
   /* the arpeggiator's output as ghost notes at their real pitch, under the trigs: lighter and thinner, never hit-tested. PLAY RND is not predictable: outlined, hatched */
   if(G.arp){const rnd=tr.arp.PLAY===4,gh=Math.max(3,Math.round(G.rh*.5));noteSpans(t).forEach(sp=>arpTicks(t,sp).forEach(q=>{if(q.n<G.lo||q.n>G.hi||q.x<G.a||q.x>=G.b)return;const s0=Math.floor(q.x),c1=G.col[s0];if(!c1)return;const cw=c1.x1-c1.x0,xx=c1.x0+(q.x-s0)*cw+1,ww=Math.max(2,q.w*cw-2),yy=G.y(q.n)+(G.rh-gh)/2;
@@ -3755,26 +3776,37 @@ function startEngine(kind){engT.forEach(clearTimeout);engT=[];if(S.playing)toggl
 /* ===== Transport ===== */
 let clock=null;
 function tick(){const prev=S.step;S.step=(S.step+1)%S.len;ctlTick();if(S.step===0){const q=S.queued??chainWrap();if(q!=null){applyPattern(q);return}}stepShown(prev)}
-/* the playhead, POSITION, the page LEDs and the lamps at S.step (the step before it was prev) */
-function stepShown(prev){const pp=Math.floor(S.step/16);$$(".pl").forEach(b=>b.classList.toggle("play",+b.dataset.plp===pp&&S.playing));
- if(S.follow&&S.ws==="seq"&&!S.viewAll&&pp!==S.page&&!laneDraw&&!menuOpen()){S.page=pp;render()}
+/* the playhead, POSITION, the page LEDs and the lamps at S.step (the step before it was prev). B-036, as the Machinedrum
+   Editor's B-014: per step only the soft playhead moves (#phcol, from cached geometry) and POSITION, the page LEDs and
+   the tempo LED change; no step cell is marked (their glows repainted a column of cells every step), no canvas is
+   redrawn (they draw no playhead), and following the playhead to another page rebuilds the sequencer only */
+let stepPage=-1;
+function stepShown(prev){if(S.step===prev)return;const pp=Math.floor(S.step/16);
+ if(pp!==stepPage){stepPage=pp;$$(".pl").forEach(b=>b.classList.toggle("play",+b.dataset.plp===pp&&S.playing))}
+ if(S.follow&&S.ws==="seq"&&!S.viewAll&&pp!==S.page&&!laneDraw&&!menuOpen()){S.page=pp;followPage()}
  $("#tempoled").classList.toggle("on",S.step%4===0);setPos();queueMicrotask(movePH);
- $$(`.mst[data-s="${prev}"],.lb[data-s="${prev}"],.tc[data-s="${prev}"]`).forEach(c=>c.classList.remove("ph"));$$(`.mst[data-s="${S.step}"],.lb[data-s="${S.step}"],.tc[data-s="${S.step}"]`).forEach(c=>c.classList.add("ph"));
- if(S.ws==="seq")redraw();
  if(S.ws==="perform"){const act=[0,1,2,3,4,5].filter(i=>{const st=S.tracks[i].steps[S.step];return st&&!st.off&&st.a&&audible(i)&&(S.mode!=="poly"||i===asgT())});flashTracks(act)}}
+/* the playhead's page while following: the sequencer only (renderPage's work for it), not the whole page */
+function followPage(){const sl=$("#seqscroll")?.scrollLeft||0;renderSeq();const sc=$("#seqscroll");if(sc){sc.scrollLeft=sl;const l=$("#lanescroll");if(l)l.scrollLeft=sl}enhanceSelects($("#main"));movePH(false)}
 function stepMs(){const m={"1X":1,"2X":2,"3/4X":.75,"3/2X":1.5}[S.mult];return 60000/S.bpm/4/m}
 function restartClock(){if(HOST.ownsClock)return;clearInterval(clock);clock=setInterval(tick,stepMs())}
 /* Soft playhead (as the MD Editor, v45): one ink-tinted column over the roll, the ENV/SLIDE/SWING
    rows and the lock lane that glides from step to step. It jumps without animation on a wrap, a
    page flip or a scroll, and fades out on stop. It lives on <body> in viewport coordinates, so the
    roll's and the lane's scrollers both carry it (movePH(false) on scroll and resize). */
-let phX=null;
-function movePH(glide=true){let ph=document.getElementById("phcol");
- const seq=$("#seq"),sc=$("#seqscroll"),col=S.playing&&S.step>=0&&S.ws==="seq"&&seq&&sc?seq.querySelector(`.ruler .rul[data-s="${S.step}"]`):null;
- if(!col){if(ph)ph.style.opacity="0";phX=null;return}
+let phX=null,phGeo=null;
+/* the playhead's geometry, read once per layout (a render, a scroll, a resize: movePH(false)), not every step (B-036:
+   no forced layout read per step) */
+function phGeom(){const seq=$("#seq"),sc=$("#seqscroll");if(!seq||!sc)return null;if(phGeo&&phGeo.seq===seq)return phGeo;
+ const v=sc.getBoundingClientRect(),top=(seq.querySelector(".nlane.big")||seq).getBoundingClientRect().top,
+  lane=$("#lane"),bot=(lane&&lane.getClientRects().length?lane:$("#tlanes")||seq).getBoundingClientRect().bottom,cols={};
+ seq.querySelectorAll(".ruler .rul[data-s]").forEach(c=>{const r=c.getBoundingClientRect();cols[c.dataset.s]={left:r.left,right:r.right,width:r.width}});
+ return phGeo={seq,v,top,bot,cols}}
+function movePH(glide=true){let ph=document.getElementById("phcol");if(!glide){phGeo=null;stepPage=-1}
+ const g=S.playing&&S.step>=0&&S.ws==="seq"?phGeom():null,r=g?g.cols[S.step]:null;
+ if(!r){if(ph)ph.style.opacity="0";phX=null;return}
  if(!ph){ph=document.createElement("div");ph.id="phcol";ph.setAttribute("aria-hidden","true");document.body.appendChild(ph);phX=null}
- const r=col.getBoundingClientRect(),v=sc.getBoundingClientRect(),top=(seq.querySelector(".nlane.big")||col).getBoundingClientRect().top,
-  lane=$("#lane"),bot=(lane&&lane.getClientRects().length?lane:$("#tlanes")||seq).getBoundingClientRect().bottom;
+ const v=g.v,top=g.top,bot=g.bot;
  const jump=!glide||phX==null||r.left<phX;
  ph.style.transition=jump?"opacity .15s":`transform ${Math.round(Math.min(stepMs()*.85,140))}ms cubic-bezier(.2,.7,.3,1),opacity .15s`;
  ph.style.width=r.width+"px";ph.style.top=(top-3)+"px";ph.style.height=(bot-top+6)+"px";ph.style.transform=`translateX(${r.left}px)`;
@@ -3782,7 +3814,7 @@ function movePH(glide=true){let ph=document.getElementById("phcol");
 addEventListener("scroll",()=>{if(S.playing)movePH(false)},true);addEventListener("resize",()=>{if(S.playing)movePH(false)});
 function setPos(){$("#pos").textContent=S.playing&&S.step>=0?String(Math.floor(S.step/16)+1).padStart(2,"0")+"."+String(S.step%16+1).padStart(2,"0"):"--.--"}
 /* A host's transport (P6): the machine's step and whether it plays, shown. */
-function setStep(step){const prev=S.step;S.step=step;stepShown(prev)}
+function setStep(step){if(step===S.step)return;const prev=S.step;S.step=step;stepShown(prev)}
 function setPlaying(on){if(S.playing===on)return;S.playing=on;if(!on){$$(".pl").forEach(b=>b.classList.remove("play"));$("#tempoled").classList.remove("on");$$(".ph").forEach(c=>c.classList.remove("ph"));S.step=-1}setPos();renderTop();redraw();movePH(false);markSongRow()}
 function togglePlay(){if(HOST.togglePlay)return HOST.togglePlay();if(!S.playing&&S.eng&&!engReady())return;S.playing=!S.playing;clearInterval(clock);$$(".pl").forEach(b=>b.classList.remove("play"));$("#tempoled").classList.remove("on");$$(".ph").forEach(c=>c.classList.remove("ph"));if(S.playing){S.step=-1;tick();restartClock()}else S.queued=null;setPos();renderTop();redraw();movePH(false)}
 

@@ -2209,6 +2209,39 @@
         },
         {
           "type": "object",
+          "description": "B-035: how the host runs the plug-in's audio, once a second while the machine starts and for the first minute: the host's audio calls (blocks, bypassed ones apart) and the machine's speed (realtime: machine seconds per wall second, null before the first block). The start-up card says when a plug-in gets no audio, or the machine is slower than real time.",
+          "required": ["type", "plugin", "seconds", "blocks", "bypassed", "blocksPerSecond", "realtime"],
+          "properties": {
+            "type": {
+              "const": "audioRun"
+            },
+            "plugin": {
+              "type": "boolean"
+            },
+            "seconds": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "blocks": {
+              "type": "number",
+              "minimum": 0
+            },
+            "bypassed": {
+              "type": "number",
+              "minimum": 0
+            },
+            "blocksPerSecond": {
+              "type": "number",
+              "minimum": 0
+            },
+            "realtime": {
+              "type": ["number", "null"],
+              "minimum": 0
+            }
+          }
+        },
+        {
+          "type": "object",
           "required": [
             "type",
             "doc"

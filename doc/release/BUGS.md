@@ -22,14 +22,16 @@ where it came from, the setup, what happens, what should happen, status.*
 - **From:** Discord tester D, 2026-10-09, Windows 10, i9, 32 GB, 0.3.4. The Machinedrum standalone runs fine on the same machine.
 - **What happens:** heavy crackle and a slow page while Task Manager shows only 8 % CPU.
 - **To check:** low CPU with drop-outs points to waiting, not computing: audio device/buffer/sample rate (WASAPI shared, 44.1 vs 48 kHz resampling), the MM's stream or page repaint holding the plug-in lock, timer resolution; compare with the MD path.
-- **Status:** open.
+- **0.3.5: diagnostics + the Monomachine's paths made the Machinedrum's:** the probe every 96 ms instead of 32 (it takes the device lock the audio thread holds for a whole block); the boot screen read from the panel the device publishes, without the lock (`MmStudioLink::readLcd`); the play head as the Machinedrum's B-014: per step only the soft play head moves (geometry read once per layout, not per step), no step cell is marked, no canvas is redrawn (`mmViewTest`: 32 steps, 64 canvas redraws before, 0 after), and following the play head to another page rebuilds the sequencer only. The start-up log (B-035) says the audio rate and the machine's real-time ratio.
+- **Status:** open: the tester's machine to confirm with 0.3.5.
 
 ## B-035 · Windows 10: both VST3s freeze at the boot screen in Ableton
 
 - **From:** Discord tester D, 2026-10-09, Windows 10, i9, 32 GB, Ableton Live, 0.3.4.
 - **What happens:** Ableton finds both VST3s; each freezes on the "loading OS" boot screen. The MD standalone works on the same machine.
 - **To check:** the firmware boot in a hosted plug-in on Windows (ROM path, data root, first-boot cache write, message-thread waits while the host holds its lock), WebView2 in Ableton's process; 0.3.5's start-up log (B-022) should show where it stops. Related: B-022, B-029.
-- **Status:** open.
+- **0.3.5: diagnostics + a word on the card:** the plug-in writes the start-up diagnostics too (they were the standalone's only): once a second for the first 30 s, in the editor's start-up log (Open Log Folder, `editor-*.log`): `boot t=12s rate=44100 block=256 blocks=0 (0/s) bypassed=0 nonRealtime=0 realtime=0.00x dspBooted=0/2 firmwareMidiReady=0 lifecycle=booting rom=<file> cycles=<n>` (the host's audio calls counted on the audio thread, bypassed ones apart: the `processBlockStarted` hook; the machine's own cycles for the real-time ratio; `mdBootDiagnostics.h`). The start-up card says so when a plug-in gets no audio block for 5 s ("The host is not running audio for this plug-in: check the audio engine/device is on and the track or plug-in is not deactivated.") or when the machine runs slower than real time ("the machine runs at 0.6× real time: try a larger buffer"), from the plug-in's `audioRun` message. Tests: `mdSessionNoRomTest` (the page is told the host's blocks; the log line; the rates), `mdDeskPageTest` (the card's words).
+- **Status:** open: the tester's log from 0.3.5 says where it stops.
 
 ## B-034 · A glitch when the app closes and at every DAW state save (Machinedrum)
 

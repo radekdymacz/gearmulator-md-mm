@@ -45,7 +45,7 @@ const src = FILES.map(f => fs.readFileSync(path.join(__dirname, f), "utf8").repl
 const P = new Function("scope", "with (scope) {\n" + src + `
 ;let renders = 0;
 render = () => { renders++; }; syncControls = () => { }; renderTop = () => { }; renderSub = () => { }; redraw = () => { }; refreshAudible = () => { };
-return { hostTempoRefused, l2step, playsText, songLcd, S, Docs, Overlay, Held, PREP, scheduleRender, clickSteps, secAction, selStart, stepMenu, stepMenuItems, Modifiers, selCut, selDuplicate, clearSel, setSel, endSelect, interacting, genEnsure, genSpec, setGenSpec, clickTrackKeys, userMute, soloWrites, muteSel, msSet, prepToggle, unmuteAll, Keys,
+return { Boot, hostTempoRefused, l2step, playsText, songLcd, S, Docs, Overlay, Held, PREP, scheduleRender, clickSteps, secAction, selStart, stepMenu, stepMenuItems, Modifiers, selCut, selDuplicate, clearSel, setSel, endSelect, interacting, genEnsure, genSpec, setGenSpec, clickTrackKeys, userMute, soloWrites, muteSel, msSet, prepToggle, unmuteAll, Keys,
 	get V() { return V; }, setV(v) { V = v; }, view, get renders() { return renders; }, get pending() { return pendingRender; } }; }`)(scope);
 
 /* the machine document: its mutes (machine.desk.mutes) as the machine has them */
@@ -364,6 +364,13 @@ check(P.playsText() === "SONG 01 · row 002 of 2 · B02", "the What plays line: 
 P.Docs.telemetry = Object.assign({}, P.Docs.telemetry, { playing: false });
 P.setV(Object.assign({}, P.V, { playing: false }));
 check(P.playsText() === "SONG 01 · 2 rows · stopped", "stopped: no row is said (" + P.playsText() + ")");
+
+/* ---- B-035: the start-up card's word about the audio ---- */
+check(/not running audio/.test(P.Boot.audioWord({ plugin: true, seconds: 6, blocks: 0, realtime: null })), "a plug-in with no audio block after 5 s: the host is not running its audio");
+check(P.Boot.audioWord({ plugin: true, seconds: 3, blocks: 0, realtime: null }) === "" && P.Boot.audioWord({ plugin: false, seconds: 9, blocks: 0, realtime: null }) === "",
+	"not before 5 s, and not in the app");
+check(P.Boot.audioWord({ plugin: true, seconds: 9, blocks: 900, realtime: 0.6 }) === "The machine runs at 0.6× real time: try a larger buffer.", "slower than real time: says how slow");
+check(P.Boot.audioWord({ plugin: true, seconds: 9, blocks: 900, realtime: 1.0 }) === "", "in real time: nothing to say");
 
 console.log(failures ? `${failures} failure(s)` : "mdDeskPageTest: all passed");
 process.exit(failures ? 1 : 0);

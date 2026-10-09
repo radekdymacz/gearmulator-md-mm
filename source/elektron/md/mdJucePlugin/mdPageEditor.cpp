@@ -113,8 +113,11 @@ namespace mdJucePlugin
 		getRmlComponent()->addAndMakeVisible(m_page->component());
 		layout();
 		// B-022: the start-up log a user can send (the editor's menu: Open Log Folder)
-		m_page->setStartupLog(processor.performanceDiagnosticsFolder().getChildFile(
-			"editor-" + juce::File::createLegalFileName(juce::String(m_session ? m_session->pageSpec().page : "page")).upToLastOccurrenceOf(".", false, false) + ".log"));
+		const auto startupLog = processor.performanceDiagnosticsFolder().getChildFile(
+			"editor-" + juce::File::createLegalFileName(juce::String(m_session ? m_session->pageSpec().page : "page")).upToLastOccurrenceOf(".", false, false) + ".log");
+		m_page->setStartupLog(startupLog);
+		// B-035: the processor's start-up lines (the host's audio calls, the machine's boot) go into the same log
+		processor.bootDiagnostics().setLog(startupLog);
 		m_page->load();
 #if MDMM_DIAGNOSTICS
 		if(m_session)

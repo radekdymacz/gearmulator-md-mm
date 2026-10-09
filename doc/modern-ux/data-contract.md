@@ -293,6 +293,13 @@ leave it as it was (STOP twice sets it to 0), so the page marks a row only then.
 where the engine cannot read it (HW MIDI). The page moves the mark without a render
 (the arrangement cell, the time bar, the What plays line, the LCD's pattern slot).
 
+**How the host runs the audio (B-035).** `{"type":"audioRun","plugin","seconds","blocks","bypassed","blocksPerSecond","realtime"}`
+once a second while the machine starts and for the first minute: the host's audio calls since the
+processor started (`blocks`; `bypassed` apart), their rate, and the machine's speed (`realtime`: machine
+seconds per wall second from its MCU cycles; `null` before the first block). The start-up card says when
+a plug-in got no block in 5 s, or when `realtime` is below 0.95. The same values go into the editor's
+start-up log once a second for the first 30 s (`mdBootDiagnostics.h`), in the app and in a DAW.
+
 **The host's tempo (B-030).** In a DAW the plug-in sends `{"type":"host","bpm","follows"}`:
 the host's tempo as its playhead reports it (also while the host's transport is stopped),
 when it changed (by 0.01 BPM) or a page is new; `follows` is true in a DAW (the plug-in

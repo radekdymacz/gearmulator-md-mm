@@ -27,6 +27,23 @@ namespace mdJucePlugin
 		return _processor.getHostBpm();
 	}
 
+	std::optional<elektronData::json::Value> audioRunOf(AudioPluginAudioProcessor& _processor)
+	{
+		using Value = elektronData::json::Value;
+		const auto& b = _processor.bootDiagnostics();
+		if(!b.sampled())
+			return std::nullopt;
+		auto m = Value::object();
+		m.set("type", "audioRun");
+		m.set("plugin", !juce::JUCEApplicationBase::isStandaloneApp());
+		m.set("seconds", static_cast<int>(b.last().wallMs / 1000.0));
+		m.set("blocks", static_cast<double>(b.last().blocks));
+		m.set("bypassed", static_cast<double>(b.last().bypassed));
+		m.set("blocksPerSecond", b.rate().known ? b.rate().blocksPerSecond : 0.0);
+		m.set("realtime", b.rate().known && b.last().blocks > 0 ? Value(b.rate().realtime) : Value());
+		return m;
+	}
+
 	pluginLib::Processor& pluginProcessorOf(AudioPluginAudioProcessor& _processor)
 	{
 		return _processor;

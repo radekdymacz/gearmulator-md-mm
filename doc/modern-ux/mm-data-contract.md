@@ -163,7 +163,8 @@ read back, `working` = the current kit's working copy, `doc`), `telemetry` (`ste
 `playing`, at most every 25 ms, `record`: `off`, `grid`, `live` or `null`, and `songRow`: the song
 row the sequencer plays, 0-based, RAM 0x2bdba1, or `null` where the engine cannot read it; the
 transport is only here, never in the machine document), `host` (`bpm`, `follows`: in a DAW the host's
-tempo, also while it is stopped; see the Machinedrum's data-contract.md, B-030), `lcd` (the firmware's 128 x 64 LCD as 2048 hex
+tempo, also while it is stopped; see the Machinedrum's data-contract.md, B-030), `audioRun` (B-035: the host's
+audio calls and the machine's speed while it starts; see data-contract.md), `lcd` (the firmware's 128 x 64 LCD as 2048 hex
 digits, row by row, MSB = left pixel, while the engine is not ready),
 `catalogue`, `learn` and `result` (`op`, `id`, `ok`, `errors`, `note`).
 

@@ -338,26 +338,37 @@ function startEngine(kind){engT.forEach(clearTimeout);engT=[];if(S.playing)toggl
 /* ===== Transport ===== */
 let clock=null;
 function tick(){const prev=S.step;S.step=(S.step+1)%S.len;ctlTick();if(S.step===0){const q=S.queued??chainWrap();if(q!=null){applyPattern(q);return}}stepShown(prev)}
-/* the playhead, POSITION, the page LEDs and the lamps at S.step (the step before it was prev) */
-function stepShown(prev){const pp=Math.floor(S.step/16);$$(".pl").forEach(b=>b.classList.toggle("play",+b.dataset.plp===pp&&S.playing));
- if(S.follow&&S.ws==="seq"&&!S.viewAll&&pp!==S.page&&!laneDraw&&!menuOpen()){S.page=pp;render()}
+/* the playhead, POSITION, the page LEDs and the lamps at S.step (the step before it was prev). B-036, as the Machinedrum
+   Editor's B-014: per step only the soft playhead moves (#phcol, from cached geometry) and POSITION, the page LEDs and
+   the tempo LED change; no step cell is marked (their glows repainted a column of cells every step), no canvas is
+   redrawn (they draw no playhead), and following the playhead to another page rebuilds the sequencer only */
+let stepPage=-1;
+function stepShown(prev){if(S.step===prev)return;const pp=Math.floor(S.step/16);
+ if(pp!==stepPage){stepPage=pp;$$(".pl").forEach(b=>b.classList.toggle("play",+b.dataset.plp===pp&&S.playing))}
+ if(S.follow&&S.ws==="seq"&&!S.viewAll&&pp!==S.page&&!laneDraw&&!menuOpen()){S.page=pp;followPage()}
  $("#tempoled").classList.toggle("on",S.step%4===0);setPos();queueMicrotask(movePH);
- $$(`.mst[data-s="${prev}"],.lb[data-s="${prev}"],.tc[data-s="${prev}"]`).forEach(c=>c.classList.remove("ph"));$$(`.mst[data-s="${S.step}"],.lb[data-s="${S.step}"],.tc[data-s="${S.step}"]`).forEach(c=>c.classList.add("ph"));
- if(S.ws==="seq")redraw();
  if(S.ws==="perform"){const act=[0,1,2,3,4,5].filter(i=>{const st=S.tracks[i].steps[S.step];return st&&!st.off&&st.a&&audible(i)&&(S.mode!=="poly"||i===asgT())});flashTracks(act)}}
+/* the playhead's page while following: the sequencer only (renderPage's work for it), not the whole page */
+function followPage(){const sl=$("#seqscroll")?.scrollLeft||0;renderSeq();const sc=$("#seqscroll");if(sc){sc.scrollLeft=sl;const l=$("#lanescroll");if(l)l.scrollLeft=sl}enhanceSelects($("#main"));movePH(false)}
 function stepMs(){const m={"1X":1,"2X":2,"3/4X":.75,"3/2X":1.5}[S.mult];return 60000/S.bpm/4/m}
 function restartClock(){if(HOST.ownsClock)return;clearInterval(clock);clock=setInterval(tick,stepMs())}
 /* Soft playhead (as the MD Editor, v45): one ink-tinted column over the roll, the ENV/SLIDE/SWING
    rows and the lock lane that glides from step to step. It jumps without animation on a wrap, a
    page flip or a scroll, and fades out on stop. It lives on <body> in viewport coordinates, so the
    roll's and the lane's scrollers both carry it (movePH(false) on scroll and resize). */
-let phX=null;
-function movePH(glide=true){let ph=document.getElementById("phcol");
- const seq=$("#seq"),sc=$("#seqscroll"),col=S.playing&&S.step>=0&&S.ws==="seq"&&seq&&sc?seq.querySelector(`.ruler .rul[data-s="${S.step}"]`):null;
- if(!col){if(ph)ph.style.opacity="0";phX=null;return}
+let phX=null,phGeo=null;
+/* the playhead's geometry, read once per layout (a render, a scroll, a resize: movePH(false)), not every step (B-036:
+   no forced layout read per step) */
+function phGeom(){const seq=$("#seq"),sc=$("#seqscroll");if(!seq||!sc)return null;if(phGeo&&phGeo.seq===seq)return phGeo;
+ const v=sc.getBoundingClientRect(),top=(seq.querySelector(".nlane.big")||seq).getBoundingClientRect().top,
+  lane=$("#lane"),bot=(lane&&lane.getClientRects().length?lane:$("#tlanes")||seq).getBoundingClientRect().bottom,cols={};
+ seq.querySelectorAll(".ruler .rul[data-s]").forEach(c=>{const r=c.getBoundingClientRect();cols[c.dataset.s]={left:r.left,right:r.right,width:r.width}});
+ return phGeo={seq,v,top,bot,cols}}
+function movePH(glide=true){let ph=document.getElementById("phcol");if(!glide){phGeo=null;stepPage=-1}
+ const g=S.playing&&S.step>=0&&S.ws==="seq"?phGeom():null,r=g?g.cols[S.step]:null;
+ if(!r){if(ph)ph.style.opacity="0";phX=null;return}
  if(!ph){ph=document.createElement("div");ph.id="phcol";ph.setAttribute("aria-hidden","true");document.body.appendChild(ph);phX=null}
- const r=col.getBoundingClientRect(),v=sc.getBoundingClientRect(),top=(seq.querySelector(".nlane.big")||col).getBoundingClientRect().top,
-  lane=$("#lane"),bot=(lane&&lane.getClientRects().length?lane:$("#tlanes")||seq).getBoundingClientRect().bottom;
+ const v=g.v,top=g.top,bot=g.bot;
  const jump=!glide||phX==null||r.left<phX;
  ph.style.transition=jump?"opacity .15s":`transform ${Math.round(Math.min(stepMs()*.85,140))}ms cubic-bezier(.2,.7,.3,1),opacity .15s`;
  ph.style.width=r.width+"px";ph.style.top=(top-3)+"px";ph.style.height=(bot-top+6)+"px";ph.style.transform=`translateX(${r.left}px)`;
@@ -365,7 +376,7 @@ function movePH(glide=true){let ph=document.getElementById("phcol");
 addEventListener("scroll",()=>{if(S.playing)movePH(false)},true);addEventListener("resize",()=>{if(S.playing)movePH(false)});
 function setPos(){$("#pos").textContent=S.playing&&S.step>=0?String(Math.floor(S.step/16)+1).padStart(2,"0")+"."+String(S.step%16+1).padStart(2,"0"):"--.--"}
 /* A host's transport (P6): the machine's step and whether it plays, shown. */
-function setStep(step){const prev=S.step;S.step=step;stepShown(prev)}
+function setStep(step){if(step===S.step)return;const prev=S.step;S.step=step;stepShown(prev)}
 function setPlaying(on){if(S.playing===on)return;S.playing=on;if(!on){$$(".pl").forEach(b=>b.classList.remove("play"));$("#tempoled").classList.remove("on");$$(".ph").forEach(c=>c.classList.remove("ph"));S.step=-1}setPos();renderTop();redraw();movePH(false);markSongRow()}
 function togglePlay(){if(HOST.togglePlay)return HOST.togglePlay();if(!S.playing&&S.eng&&!engReady())return;S.playing=!S.playing;clearInterval(clock);$$(".pl").forEach(b=>b.classList.remove("play"));$("#tempoled").classList.remove("on");$$(".ph").forEach(c=>c.classList.remove("ph"));if(S.playing){S.step=-1;tick();restartClock()}else S.queued=null;setPos();renderTop();redraw();movePH(false)}
 

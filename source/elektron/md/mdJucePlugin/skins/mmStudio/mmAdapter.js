@@ -601,6 +601,7 @@
 			if (row !== last.songRow) { last.songRow = row; V().setSongRow(row); }
 		}
 		else if (m.type === "host") { hostTempo = m; refresh(); }
+		else if (m.type === "audioRun") Boot.audio(m);
 		else if (m.type === "lcd") { lcdBits = Uint8Array.from(atob(m.bits || ""), c => c.charCodeAt(0)); showLcd(); }
 		else if (m.type === "mod") onMod(m);
 		else if (m.type === "catalogue") onCatalogue(m.doc);

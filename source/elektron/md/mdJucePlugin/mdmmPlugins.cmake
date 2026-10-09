@@ -37,6 +37,7 @@ list(APPEND SOURCES
 	mdEditorPages.cpp mdEditorPages.h
 	mdDeskHost.cpp mdDeskHost.h
 	mdStandaloneApp.cpp
+	mdBootDiagnostics.cpp mdBootDiagnostics.h
 	mdDeskSession.cpp mdDeskSession.h
 	mdMidiLearnCommands.cpp mdMidiLearnCommands.h
 	mdPageEditor.cpp mdPageEditor.h mdPageZoom.h

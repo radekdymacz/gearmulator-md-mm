@@ -63,6 +63,10 @@ namespace mdJucePlugin
 
 	bool followsHost(AudioPluginAudioProcessor& _processor);
 	double hostBpmOf(AudioPluginAudioProcessor& _processor);
+	// B-035: how the host runs the plug-in's audio, for the start-up card ({"type":"audioRun", ...}), once the
+	// processor has a second's sample; nothing before.
+	std::optional<elektronData::json::Value> audioRunOf(AudioPluginAudioProcessor& _processor);
+	constexpr double g_audioRunMs = 1000;
 
 	// P7: a model's SysEx import traits (mdSessionMd.cpp, mdSessionMm.cpp): the documents' type, the
 	// file's and the desk's documents, one document as the contract's JSON, and what may be imported.
@@ -111,6 +115,8 @@ namespace mdJucePlugin
 		virtual void step() = 0;
 		// One line of state for the diagnostics log.
 		virtual std::string status() const = 0;
+		// B-035: the desk's lifecycle ("booting", "ready", ...), for the start-up log.
+		virtual std::string lifecycleName() const = 0;
 		// The page the editor window shows for this session (data: the file, its log, its self-tests).
 		virtual const PageSpec& pageSpec() const = 0;
 
@@ -348,6 +354,11 @@ namespace mdJucePlugin
 				m_desk->onPageMessage(m);
 			}
 			m_followReady = ready;
+			// B-035: while the machine starts (and for the first minute): the host's audio calls and the machine's
+			// speed, for the start-up card
+			if(m_desk->pageSeen() && due(t, g_audioRunMs) && (static_cast<double>(t) * g_stepMs < 60000 || !ready))
+				if(auto a = audioRunOf(processor()))
+					toPage(*a);
 			// B-030: the host's tempo (a DAW's playhead, also while it is stopped) for the LCD's TEMPO
 			if(m_desk->pageSeen() && due(t, g_hostTempoMs))
 				if(const auto bpm = m_hostTempo.next(hostBpmOf(processor())))
@@ -365,6 +376,8 @@ namespace mdJucePlugin
 			return "desk: engine " + m_record->profile.id + " " + deskCore::lifecycleName(m_desk->lifecycle()) + " "
 				+ elektronData::json::write(m_desk->status());
 		}
+
+		std::string lifecycleName() const override { return deskCore::lifecycleName(m_desk->lifecycle()); }
 
 		const PageSpec& pageSpec() const override { return m_page; }
 

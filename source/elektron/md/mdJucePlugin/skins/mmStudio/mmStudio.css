@@ -1750,6 +1750,8 @@ svg.route{width:100%;height:auto;aspect-ratio:1200/146;min-height:0}
 @keyframes bootind{0%{transform:translateX(-100%)}100%{transform:translateX(340%)}}
 .bootcard.rom .bootbar{display:none}
 .bootline{margin:0;font:500 13px var(--sans);color:var(--print2);max-width:48ch}
+/* B-035: the host runs no audio, or the machine is slower than real time */
+.bootline.warn{color:var(--print);font-weight:600}
 .bootrom{display:grid;gap:10px;justify-items:center;width:100%}
 .bootzone{all:unset;box-sizing:border-box;width:100%;display:grid;gap:6px;justify-items:center;padding:20px;border:2px solid var(--print);border-radius:8px;background:color-mix(in srgb,var(--print) 8%,var(--plate));box-shadow:0 3px 0 var(--print2);cursor:pointer;text-align:center}
 .bootzone:active{transform:translateY(2px);box-shadow:0 1px 0 var(--print2)}
