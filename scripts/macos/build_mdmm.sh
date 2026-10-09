@@ -210,12 +210,20 @@ cmake --build "${build_dir}" --parallel 4 --target \
   mdLibTest \
   mdStateTest \
   mdStateCaptureTest \
+  synthLibStateCaptureTest \
+  mdMemoryFastLaneTest \
   mdFlashTest \
   mdUwFirmwareTest \
   mdAudioQueueTest \
   mdAudioFirmwareTest \
   mdAudioIoLayoutTest \
   mdProcessorHooksTest \
+  mdWindowsPolicyTest \
+  mdMachineMidiOutTest \
+  mdProcessArchTest \
+  mdRosettaNoticeTest \
+  mdDroppedFilesTest \
+  mdWebFileDropTest \
   mdProjectStateRestoreTest \
   mdAudioProbePlugin_VST3 \
   vst3ProgramChangeTest \
@@ -242,6 +250,7 @@ if [[ "${require_firmware_tests}" == "1" ]]; then
     mdAutomationSoakTest
 fi
 
+# deskDropPageTest runs under node: CMake registers it only when node is on the PATH, and the loop fails without it.
 for test_name in \
   baseLibBinaryStreamTest \
   bridgeLibTest \
@@ -254,6 +263,8 @@ for test_name in \
   mdLibTests \
   mdStateTest \
   mdStateCaptureTest \
+  synthLibStateCaptureTest \
+  mdMemoryFastLaneTest \
   mdFlashTest \
   mdStandaloneRendererPolicyTest \
   mdPanelRenderingTest \
@@ -262,6 +273,13 @@ for test_name in \
   mdAudioQueueTest \
   mdAudioIoLayoutTest \
   mdProcessorHooksTest \
+  mdWindowsPolicyTest \
+  mdMachineMidiOutTest \
+  mdProcessArchTest \
+  mdRosettaNoticeTest \
+  mdDroppedFilesTest \
+  mdWebFileDropTest \
+  deskDropPageTest \
   mdAudioProbePluginVST3IdentityTest \
   mdVst3ProgramChangeTest \
   mdVst3ProgramChangeOptOutTest \
@@ -293,6 +311,11 @@ if [[ "${require_firmware_tests}" == "1" ]]; then
     GEARMULATOR_MM_FIRMWARE_BIN="${mm_firmware_bin}" \
     ctest --test-dir "${build_dir}" -C Release --output-on-failure \
       --no-tests=error --tests-regex '^mdProjectStateRestoreTest$'
+  HOME="${build_runtime_home}" GEARMULATOR_DATA_ROOT="${build_runtime_data}" \
+    GEARMULATOR_MD_FIRMWARE_BIN="${md_firmware_bin}" \
+    GEARMULATOR_MM_FIRMWARE_BIN="${mm_firmware_bin}" \
+    ctest --test-dir "${build_dir}" -C Release --output-on-failure \
+      --no-tests=error --tests-regex '^mdMachineMidiOutFirmwareTest_(md|mm)$'
   HOME="${build_runtime_home}" GEARMULATOR_DATA_ROOT="${build_runtime_data}" \
     MD_AUTOMATION_REQUIRE_FIRMWARE=1 \
     ctest --test-dir "${build_dir}" -C Release --output-on-failure \

@@ -160,10 +160,12 @@ jobs:
           mdAutomationMidiTest
           synthLibAudioTest
           synthLibMidiQueueTest
+          synthLibStateCaptureTest
           mdAudioQueueTest
           mdAudioFirmwareTest
           mdStateTest
           mdStateCaptureTest
+          mdMemoryFastLaneTest
           mdFlashTest
 
       - name: Run DSP accumulator regressions
@@ -184,6 +186,11 @@ jobs:
           mdAudioIoLayoutTest
           mdProcessorHooksTest
           mcpServerTest
+          mdWindowsPolicyTest
+          mdMachineMidiOutTest
+          mdProcessArchTest
+          mdRosettaNoticeTest
+          mdDroppedFilesTest
 
       - name: Run headless gates
         env:
@@ -193,7 +200,7 @@ jobs:
           ctest --test-dir build-mdmm-core -C Release --output-on-failure
           --no-tests=error
           --tests-regex
-          '^(baseLibBinaryStreamTest|bridgeLibTest|bridgeServerRomPoolTest|mcpHttpGuardTest|mcpHttpServerTest|midiRoutingMatrixTest|mdAutomationMidiTest|synthLibAudioTest|synthLibMidiQueueTest|mdAudioQueueTest|mdAudioFirmwareTest|mdStateTest|mdStateCaptureTest|mdFlashTest)$'
+          '^(baseLibBinaryStreamTest|bridgeLibTest|bridgeServerRomPoolTest|mcpHttpGuardTest|mcpHttpServerTest|midiRoutingMatrixTest|mdAutomationMidiTest|synthLibAudioTest|synthLibMidiQueueTest|synthLibStateCaptureTest|mdAudioQueueTest|mdAudioFirmwareTest|mdStateTest|mdStateCaptureTest|mdMemoryFastLaneTest|mdFlashTest)$'
 
       - name: Build and run realtime instrumentation gate
         env:
@@ -213,7 +220,7 @@ jobs:
           ctest --test-dir build-mdmm-core -C Release --output-on-failure
           --no-tests=error
           --tests-regex
-          '^(midiOutputDispatcherTest|mdAutomationParameterTest|mdAutomationArchitectureTest|mdAudioIoLayoutTest|mdProcessorHooksTest|mdFrontPanelPresentationTests|mcpServerTest)$'
+          '^(midiOutputDispatcherTest|mdAutomationParameterTest|mdAutomationArchitectureTest|mdAudioIoLayoutTest|mdProcessorHooksTest|mdFrontPanelPresentationTests|mcpServerTest|mdWindowsPolicyTest|mdMachineMidiOutTest|mdProcessArchTest|mdRosettaNoticeTest|mdDroppedFilesTest|deskDropPageTest)$'
 
       - name: Build and run Shift panel chording regression
         run: |
