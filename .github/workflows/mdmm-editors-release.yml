@@ -27,6 +27,16 @@ on:
   push:
     tags:
       - "mdmm-v*"
+  # A dry run of every push to a release branch whose mdmm-editors.yml run (all three systems) passed: the installers
+  # of that commit are made, installed and tested without being attached to anything. GitHub runs a workflow_run
+  # workflow from the default branch's copy of this file, with github.sha and github.ref of the default branch:
+  # the commit under test is workflow_run.head_sha (SHA / checkout `ref` below), and no job that publishes can
+  # run (they need a refs/tags/mdmm-v* ref and a push or dispatch event).
+  workflow_run:
+    workflows: ["MD/MM Editors"]
+    types: [completed]
+    branches:
+      - "release/**"
   workflow_dispatch:
     inputs:
       dry_run:
@@ -37,11 +47,18 @@ on:
 permissions:
   contents: read
 
+# One dry run per commit; a newer push to the branch does not cancel one that is already testing installers.
+concurrency:
+  group: mdmm-release-${{ github.event.workflow_run.head_sha || github.ref }}-${{ github.event_name }}
+  cancel-in-progress: false
+
 jobs:
   # The run of mdmm-editors.yml that built and tested this commit: the newest successful one whose packages have not
   # expired. One still running is waited for. None: `build` below makes one in this run.
   locate:
     name: Find the tested build of this commit
+    # From CI (workflow_run): only a successful push run.
+    if: ${{ github.event_name != 'workflow_run' || (github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'push') }}
     runs-on: ubuntu-latest
     timeout-minutes: 150
     permissions:
@@ -53,10 +70,13 @@ jobs:
       - id: find
         env:
           GH_TOKEN: ${{ github.token }}
-          SHA: ${{ github.sha }}
+          SHA: ${{ github.event.workflow_run.head_sha || github.sha }}
         run: |
           set -euo pipefail
           wanted="macos-mdmm-universal macos-vst3host windows-mdmm linux-mdmm"
+          # A tag's release ships the whole-program-optimised Windows files (a push's build is not): that
+          # flavour's marker artifact is required, else this run builds them (below).
+          if [[ "${GITHUB_REF}" == refs/tags/* ]]; then wanted="${wanted} windows-mdmm-ltcg"; fi
           deadline=$(( $(date +%s) + 140 * 60 ))
           while :; do
             runs="$(gh api "repos/${GITHUB_REPOSITORY}/actions/workflows/mdmm-editors.yml/runs?head_sha=${SHA}&per_page=50" \
@@ -87,6 +107,9 @@ jobs:
     needs: locate
     if: needs.locate.outputs.run_id == ''
     uses: ./.github/workflows/mdmm-editors.yml
+    with:
+      # A tag's release gets LTCG Windows files; a dry run on a branch tries the push flavour.
+      ltcg: ${{ startsWith(github.ref, 'refs/tags/') }}
 
   # The website links to releases/latest/download/<name>, so these file names
   # are fixed: Machinedrum-Editor-macOS.pkg, Monomachine-Editor-macOS.pkg, and
@@ -117,13 +140,14 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
+          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
           fetch-depth: 1
           submodules: false
 
       - name: Check packaging scripts
         run: |
           /bin/bash -n scripts/macos/build_mdmm_pkg.sh scripts/macos/build_mdmm_dmg.sh \
-            scripts/macos/sign_mdmm.sh scripts/macos/notarize_mdmm.sh \
+            scripts/macos/sign_mdmm.sh scripts/macos/notarize_mdmm.sh scripts/macos/package_mdmm_installers.sh \
             scripts/macos/verify_mdmm_signed.sh scripts/macos/verify_mdmm_pkg_install.sh
           plutil -lint scripts/macos/entitlements/mdmm-standalone.entitlements
 
@@ -165,21 +189,8 @@ jobs:
           run-id: ${{ needs.locate.outputs.run_id || github.run_id }}
           github-token: ${{ github.token }}
 
-      - name: Unpack the universal bundles
-        run: |
-          set -euo pipefail
-          # mdmm-v0.2.0 -> 0.2.0, mdmm-v0.1.0-alpha -> 0.1.0 (Installer versions are numeric).
-          version="$(printf '%s' "${TAG#mdmm-v}" | sed -E 's/^([0-9]+\.[0-9]+\.[0-9]+).*/\1/')"
-          bundles="${RUNNER_TEMP}/mdmm-bundles"
-          mkdir -p "${bundles}"
-          zip="$(find "${RUNNER_TEMP}/mdmm-zip" -name 'Gearmulator-Elektron-macOS-*.zip' -print -quit)"
-          /usr/bin/ditto -x -k "${zip}" "${bundles}"
-          package_dir="$(dirname "$(find "${bundles}" -maxdepth 2 -name 'macsetup_Gearmulator-Elektron.command' -print -quit)")"
-          {
-            echo "MDMM_VERSION=${version}"
-            echo "MDMM_BUNDLES=${package_dir}"
-            echo "MDMM_OUT=${RUNNER_TEMP}/mdmm-pkg"
-          } >> "${GITHUB_ENV}"
+      - name: Output folder
+        run: echo "MDMM_OUT=${RUNNER_TEMP}/mdmm-pkg" >> "${GITHUB_ENV}"
 
       - name: Import the Developer ID identities
         if: steps.mode.outputs.signed == 'true'
@@ -243,33 +254,17 @@ jobs:
             echo "MDMM_NOTARY_KEY_PATH=${key_dir}/AuthKey.p8"
           } >> "${GITHUB_ENV}"
 
-      # Without secrets MDMM_SIGN_IDENTITY is unset: the script re-signs ad-hoc
-      # without the hardened runtime, exactly what the build job produced.
-      - name: Sign the six bundles
-        run: ./scripts/macos/sign_mdmm.sh "${MDMM_BUNDLES}"
-
-      - name: Notarize and staple the bundles
-        if: steps.mode.outputs.signed == 'true'
+      # The same script every push runs (mdmm-editors-macos.yml, ad-hoc): sign the six bundles, notarize and staple
+      # them (signed mode), build the two packages and the two disk images, notarize and staple those. Without
+      # secrets MDMM_SIGN_IDENTITY is unset: the bundles are re-signed ad-hoc, exactly what the build job produced.
+      - name: Sign, notarize and package
         env:
-          MDMM_NOTARY_KEY_ID: ${{ secrets.MDMM_NOTARY_KEY_ID }}
-          MDMM_NOTARY_ISSUER_ID: ${{ secrets.MDMM_NOTARY_ISSUER_ID }}
-        run: ./scripts/macos/notarize_mdmm.sh --bundles "${MDMM_BUNDLES}"
-
-      - name: Build the two installer packages
-        run: ./scripts/macos/build_mdmm_pkg.sh "${MDMM_BUNDLES}" "${MDMM_OUT}" "${MDMM_VERSION}"
-
-      - name: Build the two disk images
-        run: ./scripts/macos/build_mdmm_dmg.sh "${MDMM_BUNDLES}" "${MDMM_OUT}" "${MDMM_VERSION}"
-
-      - name: Notarize and staple the packages and disk images
-        if: steps.mode.outputs.signed == 'true'
-        env:
+          MDMM_NOTARIZE: ${{ steps.mode.outputs.signed == 'true' && '1' || '0' }}
           MDMM_NOTARY_KEY_ID: ${{ secrets.MDMM_NOTARY_KEY_ID }}
           MDMM_NOTARY_ISSUER_ID: ${{ secrets.MDMM_NOTARY_ISSUER_ID }}
         run: |
-          ./scripts/macos/notarize_mdmm.sh \
-            "${MDMM_OUT}/Machinedrum-Editor-macOS.pkg" "${MDMM_OUT}/Monomachine-Editor-macOS.pkg" \
-            "${MDMM_OUT}/Machinedrum-Editor-macOS.dmg" "${MDMM_OUT}/Monomachine-Editor-macOS.dmg"
+          zip="$(find "${RUNNER_TEMP}/mdmm-zip" -name 'Gearmulator-Elektron-macOS-*.zip' -print -quit)"
+          ./scripts/macos/package_mdmm_installers.sh "${zip}" "${MDMM_OUT}" "${TAG}"
 
       - name: Verify signatures, notarization and Gatekeeper
         env:
@@ -323,6 +318,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
+          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
           fetch-depth: 1
           submodules: false
 
@@ -415,7 +411,7 @@ jobs:
   macos-publish:
     name: Attach the macOS installers to the draft release
     needs: [macos-installers, macos-tests]
-    if: ${{ !cancelled() && needs.macos-installers.result == 'success' && needs.macos-tests.result == 'success' && !inputs.dry_run && startsWith(github.ref, 'refs/tags/mdmm-v') }}
+    if: ${{ !cancelled() && needs.macos-installers.result == 'success' && needs.macos-tests.result == 'success' && github.event_name != 'workflow_run' && !inputs.dry_run && startsWith(github.ref, 'refs/tags/mdmm-v') }}
     runs-on: ubuntu-latest
     timeout-minutes: 30
     permissions:
@@ -428,6 +424,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
+          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
           fetch-depth: 1
           submodules: false
 
@@ -542,6 +539,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
+          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
           fetch-depth: 1
           submodules: false
 
@@ -587,7 +585,7 @@ jobs:
   other-platforms:
     name: Windows and Linux archives (not tested by a person) on the draft release
     needs: [macos-publish, package-other]
-    if: ${{ !cancelled() && needs.macos-publish.result == 'success' && needs.package-other.result == 'success' && !inputs.dry_run && startsWith(github.ref, 'refs/tags/mdmm-v') }}
+    if: ${{ !cancelled() && needs.macos-publish.result == 'success' && needs.package-other.result == 'success' && github.event_name != 'workflow_run' && !inputs.dry_run && startsWith(github.ref, 'refs/tags/mdmm-v') }}
     runs-on: ubuntu-latest
     timeout-minutes: 30
     permissions:

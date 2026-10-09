@@ -7,6 +7,7 @@ name: MD/MM Editors macOS
 #   build     the fixture-free universal package, once: upstream's scripts/macos/build_mdmm.sh with the release
 #             settings (ThinLTO, arm64 + x86_64, unit and plug-in tests, package check), on Ninja with ccache. Its
 #             zip (artifact macos-mdmm-universal) is what the start test below and the release installers use.
+#   installers unsigned .pkg + .dmg from that zip (the release's script): an artifact minutes after the build.
 #   vst3host  the start test's minimal VST3 host (scripts/vst3EditorHost), beside the build.
 #   smoke     on a clean macos-14 and macos-15: starts each standalone and each VST3 (in the host) of that zip with
 #             no ROM, reads "<machine> firmware needed" from the page through the Accessibility API, presses real
@@ -110,6 +111,46 @@ jobs:
         with:
           name: macos-mdmm-universal
           path: artifacts/macos-mdmm/Gearmulator-Elektron-macOS-*.zip
+          if-no-files-found: error
+          retention-days: 14
+
+  # The two installers and two disk images of this push, unsigned (ad-hoc), made by the script the release uses
+  # (scripts/macos/package_mdmm_installers.sh) from the zip above: downloadable as soon as this job ends, without
+  # waiting for the start tests or for Windows and Linux. Not a release: nothing here is notarized, and the
+  # release builds its own from the tested zip.
+  installers:
+    name: Unsigned installers (.pkg, .dmg) for testing
+    needs: build
+    runs-on: macos-15
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+          submodules: false
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: macos-mdmm-universal
+          path: ${{ runner.temp }}/macos-mdmm
+
+      - name: Package
+        run: |
+          set -euo pipefail
+          zip="$(find "${RUNNER_TEMP}/macos-mdmm" -name 'Gearmulator-Elektron-macOS-*.zip' -print -quit)"
+          ./scripts/macos/package_mdmm_installers.sh "${zip}" "${RUNNER_TEMP}/mdmm-pkg" "mdmm-v0.0.0-ci"
+
+      - name: Verify the signatures (ad-hoc)
+        env:
+          MDMM_EXPECT_SIGNED: "0"
+        run: ./scripts/macos/verify_mdmm_signed.sh "${RUNNER_TEMP}/mdmm-pkg"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: macos-mdmm-ci-installers-UNSIGNED
+          path: |
+            ${{ runner.temp }}/mdmm-pkg/*.pkg
+            ${{ runner.temp }}/mdmm-pkg/*.dmg
           if-no-files-found: error
           retention-days: 14
 
