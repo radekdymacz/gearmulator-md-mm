@@ -234,40 +234,66 @@ namespace md
 
 	bool Device::getState(std::vector<uint8_t>& _state, synthLib::StateType _type)
 	{
+		auto capture = beginStateCapture(_type);
+		return capture && capture->encode(_state);
+	}
+
+	std::unique_ptr<synthLib::Device::StateCapture> Device::beginStateCapture(const synthLib::StateType _type)
+	{
+		auto capture = std::unique_ptr<StateCaptureImpl>(new StateCaptureImpl(m_model, _type));
 		if(isProjectStateRestorePending() && _type == m_requestedStateType
 			&& m_requestedState)
 		{
-			_state.insert(_state.end(), m_requestedState->begin(), m_requestedState->end());
-			return true;
+			capture->m_requestedState = m_requestedState;
+			return capture;
 		}
 
 		auto* stateHardware = m_hardware.get();
 		if(m_deferredPreparedState && m_deferredPreparedState->m_hardware)
 			stateHardware = m_deferredPreparedState->m_hardware.get();
-		const auto patchRam = stateHardware->copyPatchRam();
+		capture->m_patchRam = stateHardware->copyPatchRam();
 		if(m_model == MachineModel::Monomachine)
-			return encodeState(_state, patchRam, m_model, _type,
-				stateHardware->copyUserFlash());
-		// B-034: the ROM's and the baseline's fingerprints as md::Hardware keeps them (not two 8 MiB scans under the
-		// plug-in's lock, which the audio thread waits for); the baseline itself is decoded once and shared
+		{
+			capture->m_userFlash = stateHardware->copyUserFlash();
+			return capture;
+		}
+		capture->m_rom = stateHardware->sharedRom();
+		capture->m_romFingerprint = stateHardware->firmwareFingerprint();
+		capture->m_factoryBaseline = stateHardware->factoryFlashBaseline();
+		const bool pending = stateHardware->copyPendingFlashOverlay(capture->m_pendingOverlay);
+		// A pending restore without a factory baseline saves its overlay alone; every other case saves the flash
+		if(capture->m_factoryBaseline || !pending)
+			capture->m_flash = stateHardware->copyFlashData();
+		return capture;
+	}
+
+	bool Device::StateCaptureImpl::encode(std::vector<uint8_t>& _state)
+	{
+		if(m_requestedState)
+		{
+			_state.insert(_state.end(), m_requestedState->begin(), m_requestedState->end());
+			return true;
+		}
+		if(m_model == MachineModel::Monomachine)
+			return encodeState(_state, m_patchRam, m_model, m_type, m_userFlash);
+
+		// B-034: the ROM's and the baseline's fingerprints as md::Hardware keeps them; the baseline is decoded
+		// once per cache, by the first save that needs it
 		FlashFingerprints known;
-		known.rom = stateHardware->firmwareFingerprint();
+		known.rom = m_romFingerprint;
 		std::shared_ptr<const std::vector<uint8_t>> factoryBaseline;
-		if(const auto baseline = stateHardware->factoryFlashBaseline();
-			baseline && baseline->get(factoryBaseline, known.baseline))
-			return encodeStateWithFactoryBaseline(_state, patchRam,
-				stateHardware->copyFlashData(),
-				*factoryBaseline, stateHardware->flashBaseline(), m_model, _type, &known);
-		FlashSectorOverlay pending;
-		if(stateHardware->copyPendingFlashOverlay(pending))
-			return encodeState(_state, patchRam, pending,
-				stateHardware->flashBaseline(), m_model, _type, &known.rom);
+		if(m_factoryBaseline && m_factoryBaseline->get(factoryBaseline, known.baseline))
+			return encodeStateWithFactoryBaseline(_state, m_patchRam, m_flash,
+				*factoryBaseline, m_rom->data(), m_model, m_type, &known);
+		if(m_pendingOverlay.valid)
+			return encodeState(_state, m_patchRam, m_pendingOverlay,
+				m_rom->data(), m_model, m_type, &known.rom);
 		// If interaction happened before the first machine-local baseline was
 		// captured, preserve a complete flash image. An absolute sector set records
 		// ROM-equal deletions and lets the replacement boot coherently without waiting
 		// for another factory-initialization pass.
-		return encodeState(_state, patchRam, stateHardware->copyFlashData(),
-			stateHardware->flashBaseline(), stateHardware->flashBaseline(), m_model, _type);
+		return encodeState(_state, m_patchRam, m_flash,
+			m_rom->data(), m_rom->data(), m_model, m_type);
 	}
 
 	bool Device::setState(const std::vector<uint8_t>& _state, synthLib::StateType _type)

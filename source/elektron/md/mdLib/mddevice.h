@@ -88,7 +88,12 @@ namespace md
 
 		float getSamplerate() const override;
 		bool isValid() const override;
+		// The same bytes as a capture encoded at once (beginStateCapture)
 		bool getState(std::vector<uint8_t>& _state, synthLib::StateType _type) override;
+		// Copies the patch RAM and the flash (MD) or user flash (MM), shares the ROM, the factory baseline and a
+		// requested state; the encode (CRCs, the sector compare, the first decode of the factory cache) runs
+		// after synthLib::Plugin releases its lock.
+		std::unique_ptr<synthLib::Device::StateCapture> beginStateCapture(synthLib::StateType _type) override;
 		bool setState(const std::vector<uint8_t>& _state, synthLib::StateType _type) override;
 		bool supportsStateTransactions() const override { return true; }
 		std::unique_ptr<synthLib::Device::StateTransaction> beginStateTransaction(
@@ -245,6 +250,32 @@ namespace md
 			std::string m_error;
 			// Disposed with the transaction outside the realtime device lock.
 			std::vector<uint8_t> m_retiredSysex;
+		};
+
+		class StateCaptureImpl final : public synthLib::Device::StateCapture
+		{
+		public:
+			bool encode(std::vector<uint8_t>& _state) override;
+
+		private:
+			friend class Device;
+			StateCaptureImpl(const MachineModel _model, const synthLib::StateType _type)
+				: m_model(_model), m_type(_type)
+			{
+			}
+
+			const MachineModel m_model;
+			const synthLib::StateType m_type;
+			// A restore in progress of this state type: saved as it was requested
+			std::shared_ptr<const std::vector<uint8_t>> m_requestedState;
+			std::vector<uint8_t> m_patchRam;
+			std::vector<uint8_t> m_userFlash;		// Monomachine
+			std::vector<uint8_t> m_flash;			// Machinedrum, unless only the pending overlay is saved
+			FlashSectorOverlay m_pendingOverlay;
+			// Shared and immutable, alive even when the device swaps its Hardware while this encodes
+			std::shared_ptr<FactoryFlashBaseline> m_factoryBaseline;
+			std::shared_ptr<const Rom> m_rom;
+			uint64_t m_romFingerprint = 0;
 		};
 
 		void clearProjectStateRestore();

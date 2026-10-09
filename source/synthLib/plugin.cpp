@@ -213,15 +213,28 @@ namespace synthLib
 #if !SYNTHLIB_DEMO_MODE
 	bool Plugin::getState(std::vector<uint8_t>& _state, StateType _type) const
 	{
-		std::lock_guard lock(m_lock);
+		std::unique_ptr<Device::StateCapture> capture;
+		{
+			std::lock_guard lock(m_lock);
 
-		if(!m_device)
-			return false;
+			if(!m_device)
+				return false;
 
+			capture = m_device->beginStateCapture(_type);
+			if(!capture)
+			{
+				_state.push_back(g_stateVersion);
+				_state.push_back(_type);
+
+				return m_device->getState(_state, _type);
+			}
+		}
+		// The device encodes from what it captured, without the process/device lock the audio thread needs. The
+		// capture may own copies of whole memories: it is destroyed here too, after the lock is released.
 		_state.push_back(g_stateVersion);
 		_state.push_back(_type);
 
-		return m_device->getState(_state, _type);
+		return capture->encode(_state);
 	}
 
 	bool Plugin::setState(const std::vector<uint8_t>& _state) const
