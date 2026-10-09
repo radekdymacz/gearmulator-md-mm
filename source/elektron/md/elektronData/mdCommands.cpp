@@ -23,6 +23,23 @@ namespace elektronData
 		return dumpIo::request(g_statusRequestId, static_cast<uint8_t>(_param));
 	}
 
+	bool mdIsRequest(const std::vector<uint8_t>& _m)
+	{
+		if(_m.size() != 9 || !isMdMessage(_m))
+			return false;
+		switch(_m[6])
+		{
+		case g_statusRequestId:
+		case 0x51:	// global
+		case 0x53:	// kit
+		case 0x68:	// pattern
+		case 0x6a:	// song
+			return true;
+		default:
+			return false;
+		}
+	}
+
 	std::vector<uint8_t> mdSetStatus(const MdStatus _param, const uint8_t _value)
 	{
 		return {0xf0, 0x00, 0x20, 0x3c, dumpIo::g_mdProductId, 0x00, g_setStatusId, static_cast<uint8_t>(_param),

@@ -27,6 +27,9 @@ namespace elektronData
 	};
 
 	std::vector<uint8_t> mdStatusRequest(MdStatus _param);
+	// A request the machine answers with a reply: a status (0x70) or the dump of one slot (global 0x51, kit 0x53,
+	// pattern 0x68, song 0x6a). The editor's stream queues each at most once (deskCore::Stream::ask, B-031).
+	bool mdIsRequest(const std::vector<uint8_t>& _sysex);
 	std::vector<uint8_t> mdSetStatus(MdStatus _param, uint8_t _value);
 	std::optional<MdStatusValue> parseMdStatusResponse(const std::vector<uint8_t>& _sysex);
 
