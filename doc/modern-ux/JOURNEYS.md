@@ -114,6 +114,7 @@ no journey yet); **not testable** (why). "—": the editor has no such feature.
 | Drag a value, undo restores the kit | md-sound-shape-undo PASS | mm-sound-shape-undo PASS |
 | A focused value: ↑ ↓ step it | md-sound-value-keys PASS (bug 2, fixed) | mm-sound-value-keys PASS (bug 3, fixed) |
 | Machine picker, undo | md-sound-machine-pick-undo PASS | mm-sound-machine-pick-undo PASS |
+| A picked machine stays after a step on Sequence, whose dump reloads the kit on the machine (B-027) | — (mdDeskFirmwareTest machine) | mm-sound-machine-stays |
 | Copy / paste a sound | md-sound-copy-paste PASS | mm-sound-copy-paste PASS |
 | Screens (curve editors): drag a handle | md-sound-screen-drag PASS | mm-sound-screen-drag PASS |
 | Control All (Alt-drag), one undo step | md-sound-control-all PASS | mm-sound-control-all PASS |

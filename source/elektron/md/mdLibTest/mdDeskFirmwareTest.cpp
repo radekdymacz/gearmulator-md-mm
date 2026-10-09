@@ -8,6 +8,7 @@
 //   mdDeskFirmwareTest <ROM> probe    also: telemetry RAM, group removal
 //   mdDeskFirmwareTest <ROM> playload PLAY while the desk loads in the background
 //   mdDeskFirmwareTest <ROM> samples  P9: WAV files into UW ROM slots (SDS), the waveforms read back
+//   mdDeskFirmwareTest <ROM> machine  B-039: a machine change stays (a trig, PLAY, another pattern with the kit)
 //
 // Exits 77 (skip) without arguments.
 
@@ -2665,6 +2666,115 @@ namespace
 		return ed::mdWorkingKitFromMemory(region);
 	}
 
+	// B-039: a track's machine changed on the Sound page stays, with the kit's other unsaved edits, after what a tester
+	// does next: back on the Sequence page a trig of the pattern that plays (its dump makes OS 1.63 load the kit the
+	// pattern links from its slot, B-025), stopped and while playing; PLAY and STOP; another pattern with the same kit
+	// and back. A stock (factory) pattern's kit, then a kit the user saved. The machine (memory) and the page (the
+	// working kit) must both hold the edited kit, all of it.
+	void machineStays(Rig& _rig)
+	{
+		std::puts("== MACHINE STAYS (B-039)");
+		auto& desk = _rig.desk();
+		const auto settle = [&](const double _ms) { _rig.runUntil([&] { return !desk.isBusy() && !_rig.pageTx(); }, 6000); _rig.run(_ms); };
+		const auto working = [&] { return _rig.machineDoc() ? _rig.machineDoc()->find("kit")->find("working")->asString() : std::string("?"); };
+		const auto efm = *ed::mdMachineModel("EFM-SD"), trx = *ed::mdMachineModel("TRX-SD");
+		const auto other = [&](const uint32_t _model) { return _model == efm ? trx : efm; };
+		const auto kitNow = [&] { return std::to_string(*desk.linkState().kit); };
+		int gesture = 7000;
+		const auto machine = [&](const int _t, const uint32_t _model)
+		{
+			_rig.page("{\"op\":\"machine\",\"g\":" + std::to_string(++gesture) + ",\"k\":" + kitNow() + ",\"t\":" + std::to_string(_t) + ",\"model\":"
+				+ std::to_string(_model) + ",\"keepFx\":true}");
+			check(resultOk(_rig), "machine command accepted");
+		};
+		// as the Sequence page sends a click on a step: on, then off again (two dumps of the pattern that plays)
+		const auto trigOnOff = [&](const int _t)
+		{
+			for(const bool on : {true, false})
+			{
+				_rig.page("{\"op\":\"trig\",\"g\":" + std::to_string(++gesture) + ",\"p\":" + std::to_string(*desk.linkState().pattern) + ",\"t\":"
+					+ std::to_string(_t) + ",\"s\":7,\"on\":" + (on ? "true" : "false") + "}");
+				settle(1500);
+			}
+		};
+		const auto stays = [&](const std::string& _when, const int _t, const uint32_t _model)
+		{
+			const auto mem = workingFromMemory(_rig);
+			const auto* w = desk.documents().working ? &desk.documents().working->kit : nullptr;
+			const uint32_t m = mem ? mem->models[static_cast<size_t>(_t)] : 0, d = w ? w->models[static_cast<size_t>(_t)] : 0;
+			check(mem && w && m == _model && d == _model, _when + ": T" + std::to_string(_t + 1) + " plays " + ed::mdMachineName(_model) + " (memory "
+				+ ed::mdMachineName(m) + ", page " + ed::mdMachineName(d) + ")");
+			check(mem && w && ed::mdSameKitSound(*mem, *w) && working() == "edited", _when + ": the machine holds the page's kit, " + working());
+		};
+		const auto round = [&](const std::string& _kit, const int _t)
+		{
+			const auto p = *desk.linkState().pattern;
+			const auto model = other(desk.documents().working->kit.models[static_cast<size_t>(_t)]);
+			std::printf("== %s: T%d becomes %s (pattern %s, kit %d)\n", _kit.c_str(), _t + 1, ed::mdMachineName(model).c_str(), ed::mdPatternName(p).c_str(),
+				*desk.linkState().kit + 1);
+			// the Sound page: the machine picker, then a value of the new machine (its DIST)
+			machine(_t, model);
+			settle(500);
+			const auto dist = (desk.documents().working->kit.params[static_cast<size_t>(_t)][16] + 17) & 0x7f;
+			_rig.page("{\"op\":\"param\",\"g\":" + std::to_string(++gesture) + ",\"k\":" + kitNow() + ",\"t\":" + std::to_string(_t) + ",\"i\":16,\"v\":"
+				+ std::to_string(dist) + "}");
+			settle(1000);
+			stays("on Sound", _t, model);
+			trigOnOff((_t + 2) % 16);
+			stays("a trig on Sequence, stopped", _t, model);
+			// playing: another track's machine, then a trig
+			const int t2 = (_t + 1) % 16;
+			const auto model2 = other(desk.documents().working->kit.models[static_cast<size_t>(t2)]);
+			_rig.page(R"({"op":"play"})");
+			_rig.run(1500);
+			machine(t2, model2);
+			settle(1000);
+			trigOnOff((_t + 2) % 16);
+			stays("a trig on Sequence, playing", _t, model);
+			stays("a trig on Sequence, playing", t2, model2);
+			_rig.page(R"({"op":"stop"})");
+			_rig.run(1000);
+			stays("stopped", _t, model);
+			// another pattern with the same kit (a stock pattern made to link it when none does), and back
+			std::optional<uint8_t> same;
+			for(const auto& [slot, pat] : desk.documents().patterns)
+				if(slot != p && pat.kit == *desk.linkState().kit && !same)
+					same = slot;
+			if(!same)
+			{
+				same = static_cast<uint8_t>((p + 1) & 127);
+				_rig.pageConfirmed("{\"op\":\"patternKit\",\"p\":" + std::to_string(*same) + ",\"v\":" + kitNow() + "}");
+				settle(500);
+			}
+			_rig.pageConfirmed("{\"op\":\"select\",\"p\":" + std::to_string(*same) + "}");
+			settle(1500);
+			stays(ed::mdPatternName(*same) + ", the same kit", _t, model);
+			_rig.pageConfirmed("{\"op\":\"select\",\"p\":" + std::to_string(p) + "}");
+			settle(1500);
+			stays(ed::mdPatternName(p) + " again", _t, model);
+		};
+		round("a stock pattern's kit", 1);
+		// another stock pattern, which links another kit (EXTENDED: the machine loads it; kit 1's edits go, as asked)
+		std::optional<uint8_t> next;
+		for(const auto& [slot, pat] : desk.documents().patterns)
+			if(pat.kit != *desk.linkState().kit && !next)
+				next = slot;
+		check(next.has_value(), "a stock pattern links another kit");
+		if(next)
+		{
+			_rig.pageConfirmed("{\"op\":\"select\",\"p\":" + std::to_string(*next) + "}");
+			settle(1500);
+			check(desk.linkState().pattern == next && working() == "clean", ed::mdPatternName(*next) + " plays with its kit " + std::to_string(*desk.linkState().kit + 1)
+				+ ", " + working());
+			round("another stock pattern's kit", 2);
+		}
+		// a kit the user saved: SAVE KIT, then the same on another track
+		_rig.page(R"({"op":"saveKit"})");
+		settle(1500);
+		check(working() == "clean", "SAVE KIT: the kit that plays is its slot (" + working() + ")");
+		round("a saved kit", 4);
+	}
+
 	// Undo of a Control All gesture (Alt-drag) reaches the machine: its memory is the kit before the gesture.
 	void undoControlAll(Rig& _rig)
 	{
@@ -3518,7 +3628,7 @@ int main(const int _argc, char** _argv)
 	std::setvbuf(stdout, nullptr, _IOLBF, 0);
 	if(_argc < 2)
 	{
-		std::puts("usage: mdDeskFirmwareTest <MD-1.63-ROM> [probe|hw|p4|tweak|sampler|keepedits|recordermix|samples|gen|hostclock|songrow|playload|syxexport|syximport|keymap]");
+		std::puts("usage: mdDeskFirmwareTest <MD-1.63-ROM> [probe|hw|p4|tweak|sampler|keepedits|machine|recordermix|samples|gen|hostclock|songrow|playload|syxexport|syximport|keymap]");
 		return 77;
 	}
 	try
@@ -3602,6 +3712,18 @@ int main(const int _argc, char** _argv)
 			valueAfterMachine(rig);
 			check(g_contract.loaded() && g_contract.bad() == 0, g_contract.summary());
 			std::printf("mdDeskFirmwareTest keepedits: %s (%d failure(s))\n", g_failures ? "FAIL" : "PASS", g_failures);
+			return g_failures ? 1 : 0;
+		}
+		if(mode == "machine")
+		{
+			Rig rig(rom, _argv[1]);
+			rig.page(R"({"op":"ready"})");
+			rig.runUntil([&] { return rig.desk().isReady() && rig.desk().linkState().kit && rig.desk().linkState().pattern && rig.desk().documents().working; }, 8000);
+			rig.runUntil([&] { return !rig.desk().isBusy(); }, 20000);
+			rig.pluginLike = true;	// the plug-in's delivery, as keepedits
+			machineStays(rig);
+			check(g_contract.loaded() && g_contract.bad() == 0, g_contract.summary());
+			std::printf("mdDeskFirmwareTest machine: %s (%d failure(s))\n", g_failures ? "FAIL" : "PASS", g_failures);
 			return g_failures ? 1 : 0;
 		}
 		if(mode == "gen")

@@ -544,6 +544,95 @@ void watchSteps()
 	check(!w.playing && !w.stepped, "standing still for three step times: stopped");
 }
 
+// B-027: the Monomachine loads the kit a pattern links when it takes a dump of the pattern that plays (measured,
+// mmDeskFirmwareTest machine), so the unsaved edits of the kit that plays go again once the dump is in: here a machine
+// change, its 0x5B a second time. A dump of another pattern reloads nothing.
+void kitAfterPatternDump()
+{
+	std::puts("B-027: the kit's edits after a dump of the pattern that plays");
+	FakeMachine m;
+	for(uint8_t s = 0; s < 128; ++s)
+	{
+		auto p = emptyPattern(s);
+		p.kit = 5;	// the kit that plays
+		m.slots[{0x67, s}] = ed::encodeMmPattern(p);
+		ed::MmKit k;
+		k.position = s;
+		k.machines.fill(1);
+		k.trigPos.fill(0xff);
+		m.slots[{0x52, s}] = ed::encodeMmKit(k);
+	}
+	for(uint8_t s = 0; s < 24; ++s)
+	{
+		ed::MmSong so;
+		so.position = s;
+		so.rows[0].bytes[0] = 0xff;
+		so.rows[0].bytes[ed::mmSongRow::g_tempo] = so.rows[0].bytes[ed::mmSongRow::g_tempo + 1] = 0xff;
+		m.slots[{0x69, s}] = ed::encodeMmSong(so);
+	}
+	for(uint8_t s = 0; s < 8; ++s)
+	{
+		ed::MmGlobal g;
+		g.position = s;
+		m.slots[{0x50, s}] = ed::encodeMmGlobal(g);
+	}
+	double now = 0;
+	std::vector<Bytes> machines;	// the 0x5B messages, in order
+	mmDesk::Desk::Port port;
+	port.device.sendSysex = [&](const Bytes& _b)
+	{
+		if(_b.size() > 6 && _b[6] == 0x5b)
+			machines.push_back(_b);
+		m.take(_b);
+	};
+	port.device.sendParam = [](uint8_t, uint8_t, uint8_t, uint8_t) {};
+	port.device.sendNrpn = [](uint8_t, uint8_t, uint8_t) {};
+	port.device.pressKeys = [&](const std::vector<mmDesk::Key>& _k)
+	{
+		if(_k == mmDesk::RecvSession::enterMacro())
+			m.screenWord = mmDesk::Screen::GlobalEdit;
+		else if(_k == mmDesk::RecvSession::exitKeys())
+			m.screenWord = mmDesk::Screen::Main;
+		return true;
+	};
+	port.toPage = [&](const Value& _v) { g_published.push_back(_v); };
+	port.device.nowMs = [&] { return now; };
+	mmDesk::Desk d(port);
+	const auto run = [&](const double _ms)
+	{
+		for(double t = 0; t < _ms; t += 10)
+		{
+			now += 10;
+			mmDesk::Telemetry tel = screen(m.screenWord);
+			tel.recvCount = m.recvTaken;
+			d.onTelemetry(tel);
+			d.tick();
+			auto replies = std::move(m.replies);
+			m.replies.clear();
+			for(const auto& r : replies)
+				d.onDeviceSysex(r);
+		}
+	};
+	const auto msg = [&](const std::string& _json) { d.onPageMessage(*ed::json::parse(_json)); };
+	msg(R"({"op":"ready"})");
+	d.setProbe(mmDesk::Desk::Probe::Running);
+	run(600);
+	check(d.currentPattern() == 3 && d.currentKit() == 5 && d.workingKit() && d.kit(5), "pattern 3 plays kit 5");
+	msg(R"({"op":"machine","g":1,"k":5,"t":0,"model":3,"keepFx":true})");
+	run(300);
+	check(machines.size() == 1 && machines[0] == ed::mmAssignMachine(0, 3, 0), "the machine change: 0x5B");
+	msg(R"({"op":"step","g":2,"p":3,"t":2,"s":7,"v":{"n":[60],"a":1,"f":1,"l":1}})");
+	run(2000);
+	check(ed::decodeMmPattern(m.slots[{0x67, 3}])->notes[2][7] == 60, "the step's dump taken on SYSEX RECV");
+	check(machines.size() == 2 && machines[1] == machines[0], "then the machine change again, after the dump (the machine reloaded the kit)");
+	for(int i = 0; i < 1000 && !d.pattern(4); ++i)
+		run(10);	// the library's background read
+	const auto sent = machines.size();
+	msg(R"({"op":"step","g":3,"p":4,"t":2,"s":7,"v":{"n":[60],"a":1,"f":1,"l":1}})");
+	run(2000);
+	check(ed::decodeMmPattern(m.slots[{0x67, 4}])->notes[2][7] == 60 && machines.size() == sent, "a dump of another pattern: nothing again");
+}
+
 // LOAD KIT of a never-written slot (name byte 0 is 0xff) plays it as NEW KIT (measured, mmDeskFirmwareTest p4).
 void kitAsLoaded()
 {
@@ -1526,6 +1615,7 @@ int main(const int _argc, char** _argv)
 	playingFromSteps();
 	watchSteps();
 	kitAsLoaded();
+	kitAfterPatternDump();
 	modulators();
 	asksAndErrors();
 	stuckDelivery();

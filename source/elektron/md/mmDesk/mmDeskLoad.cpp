@@ -288,6 +288,8 @@ namespace mmDesk
 	// says which kit plays; an image of another kit waits and asks for status.
 	void MmMachine::applyWorkingKit(const double _now, const Documents& _view)
 	{
+		if(reloadHolds())	// B-027: the region waits for the restore after a pattern dump's kit reload
+			return;
 		const auto& region = m_working.region;
 		if(!region || region->size() < 5 + ed::MmKit::g_rawSize)
 			return;

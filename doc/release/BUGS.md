@@ -4,6 +4,14 @@
 repository; the site sends reports to the contact address. Newest first. Each entry:
 where it came from, the setup, what happens, what should happen, status.*
 
+## B-039 · Machinedrum: changing a machine in the stock patterns does not work (message cut off)
+
+- **From:** Discord tester D, 2026-10-08, Machinedrum Editor (version not given, before 0.3.4): of three things that "didn't seem to work", the last was "when i went to change one of the machines in the stock patterns". The message ends there; nothing later says what happened.
+- **Checked (0.4.0, branch `fix/machine-change`), not reproduced:** `mdDeskFirmwareTest <MD ROM> machine` (the plug-in's parameter delivery): on stock pattern A01 (kit 1), on A05 (kit 2) after picking it, and on a kit the user saved, a machine and a value on Sound, a trig on Sequence stopped and while playing, a second machine while playing, PLAY and STOP, another pattern with the same kit and back: the machine's memory and the page hold the same edited kit every time, before and after the B-027 fix. The Monomachine's B-027 (a dump of the pattern that plays reloads its kit) was fixed on the Machinedrum in 0.3.0 (B-025), so every version the tester can have had sends the edits again. Also tried in the rig: LOAD KIT of another kit then a machine and a trig; it stays.
+- **What the firmware does:** a stock pattern links a kit (A01-A04 kit 1, A05-A08 kit 2 and so on; EXTENDED mode). Picking a pattern that links another kit loads that kit from its slot: unsaved kit edits go (the machine keeps them in its UNDO KIT), as on the hardware. The editor asks before such a pick when the kit has unsaved edits. It does not ask when the pick comes first (the kit still saved) and the machine is changed while the pick waits for the pattern's end: at the switch the other kit loads and the change is gone without a word. A possible reading of the report if the tester was playing the stock patterns; the editor could say so in the edit's note.
+- **Ask the tester:** the version; stopped or playing; what "did not work" was (the picker, the sound, the machine going back) and when; whether a pattern was picked before or after the change.
+- **Status:** open, waiting for the tester's facts.
+
 ## B-038 · Monomachine: a song's LOOP row goes back to row 1
 
 - **From:** found by the song playhead's firmware test, 2026-10-09 (0.3.5 work).
@@ -83,11 +91,12 @@ where it came from, the setup, what happens, what should happen, status.*
 
 ## B-027 · Monomachine: a machine change reverts when going back to Sequence
 
-- **From:** Discord tester, 2026-10-09, Monomachine Editor 0.3.4.
+- **From:** Discord tester G, 2026-10-09, Monomachine Editor 0.3.4.
 - **What happens:** change a track's machine, go back to the Sequence page, and the track has the previous machine again.
-- **Likely:** a kit dump/read-back or the working kit re-sent after the change overwrites it (same family as B-025 on the MD); 0.3.4's stream or the SYSEX RECV session (B-021) involved.
-- **0.3.5:** not reproduced: the new journey `mm-sound-machine-stays` (pick a machine on Sound, go to Sequence, wait, back to Sound; the machine read from the machine's memory) passes in the standalone and the VST3.
-- **Status:** open until the tester confirms with 0.3.5.
+- **0.3.5:** not reproduced at first: the journey `mm-sound-machine-stays` (pick a machine on Sound, go to Sequence, wait, back to Sound) passes in the standalone and the VST3. It only waited on Sequence.
+- **Cause:** not the Sequence page (going there sends nothing), but what a person does there: an edit of the pattern that plays (a step, a lock, LEN …) goes to the machine as a pattern dump on SYSEX RECV, and OS 1.32B, taking a dump of the pattern that plays, loads the kit the pattern links from its slot, also when that is the kit that plays (measured: memory shows the stored kit 20-40 ms after the dump is taken, stopped or playing). Every unsaved edit of the kit went with it, the machine change and the values alike; the desk read the reloaded kit from memory, so the page showed the old machine and the kit as saved. The Machinedrum's firmware does the same, and its desk has sent the kit's edits again after such a dump since 0.3.0 (B-025); the Monomachine's desk did not. Over HW MIDI too, and worse there: the page, with no memory to read, went on showing a machine the Monomachine no longer played.
+- **Fix (0.4.0, branch `fix/machine-change`):** as the Machinedrum's: a dump of the pattern that plays which links the kit that plays is followed, once the machine has read and applied it (the stream's after-work), by the kit's edits as live messages (0x55 name, 0x5B machine, 0x5C routing, CC, NRPN: from the stored slot to the working kit the page shows), pending until memory shows them; meanwhile no memory image of the kit is taken, so the page never shows the reload (`MmMachine::reloadFollows`, `restoreWorkingKit`). The machine plays the stored kit for about a quarter of a second before the edits are back. Over HW MIDI the edits follow the dumps the person sends on SYSEX RECV (SEND, `hwSend`). Tests: `mmDeskFirmwareTest <MM ROM> machine` (the factory kit, then a saved kit: a machine and a value on Sound, a step on Sequence stopped and while playing, a second machine while playing, PLAY and STOP, another pattern with the same kit and back, each time the machine's memory and the page holding the same edited kit; then a step sent on the person's SYSEX RECV over HW MIDI): 24 failures before, passes after; `mmDeskTest` (0x5B again after a dump of the pattern that plays, not after another pattern's: fails before); the journey `mm-sound-machine-stays` now clicks a step on Sequence (not yet run in the plug-in).
+- **Status:** fixed for 0.4.0; the tester to confirm.
 
 ## B-026 · Mutes don't work after a SysEx import with its globals (0.3.5 candidate)
 

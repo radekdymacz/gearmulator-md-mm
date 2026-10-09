@@ -117,6 +117,8 @@ namespace mmDesk
 		m_working = {};
 		m_pushes.clear();
 		m_stream.clear();
+		m_reloadsPending = 0;
+		m_restoreKit = -1;
 		m_loads = {};
 		m_backgroundQueued = false;
 		m_recv = {};
@@ -239,6 +241,8 @@ namespace mmDesk
 			m_activateGlobal = -1;
 		}
 		pumpLoads(_now);
+		if(m_restoreKit >= 0)
+			restoreWorkingKit(_view);
 		applyWorkingKit(_now, _view);
 		pumpPushes(_now);
 		publishTransport(_now, readWhileRecording(_now));
