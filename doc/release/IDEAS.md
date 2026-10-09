@@ -3,6 +3,23 @@
 *Feature ideas from beta testers and users (Discord, email). Not bugs: see
 [BUGS.md](BUGS.md). Newest first. Each entry: who and when, the idea, status.*
 
+## I-016 · Run a custom firmware (ems-monomachine-firmware, ems-machinedrum-firmware) in the editor
+
+- **From:** Radek, 2026-10-09, after the Octahackers Discord thread on custom firmwares. Decided: a spike after 0.4, not in 0.4.
+- **What exists:** github.com/emuyia/ems-monomachine-firmware (per-track lengths and speeds, trig conditions, clone
+  pattern, trig preview, page copy/randomise, BBOX sample banks; SONG slots 13-24 removed) and a Machinedrum one.
+  They ship as patches for a browser patcher (junes.website/goodies/fw-patcher): input Elektron's official OS .syx
+  (the MM one is `Elektron_SFX6-60_OS1.32B.syx`, SHA-256 checked), output a patched OS .syx for the machine's
+  OS-update mode. Signed manifest, WASM engine, nothing uploaded.
+- **What the editor needs:** (1) the patched OS inside an 8 MiB flash image: way A, let the emulated machine
+  update itself (boot with FUNC held, send the .syx, the emulated Am29F flash programs itself, save the image as a
+  ROM); way B, an offline writer that needs the OS .syx format; (2) the ROM loader accepts an unknown fingerprint
+  behind an "at your own risk" switch (today only OS 1.63 and 1.32B pass, mdromcheck.h); (3) a list of what the
+  desk gets wrong: it reads RAM at fixed addresses and knows the stock pattern/kit layouts.
+- **Spike (two days):** try way A headless with mdFirmwareSession; relax the loader behind the switch; boot the
+  custom OS; list what works and what breaks on the page. Decide the product shape after that.
+- **Status:** queued after 0.4.
+
 ## I-015 · Pattern length per track, and microtiming
 
 - **From:** Discord tester L, 2026-10-09, in #ideas: "pattern length per track and microtiming of course". Radek: "Nice one".
