@@ -225,7 +225,7 @@ namespace md
 			}
 			execToEvent(_cycles);
 		}
-		// Tester switch (GEARMULATOR_MDMM_SIM_DEFERRAL=0, md::Hardware): false steps the timers
+		// Tester switch (md::Hardware::setSpeedUps, GEARMULATOR_MDMM_SIM_DEFERRAL=0): false steps the timers
 		// and transmitters after every instruction instead of deferring (see exec). Both
 		// positions give the same machine state and the same audio; only the host CPU differs.
 		// May be called at any time, but only under the device lock, which is held for every

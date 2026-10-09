@@ -212,18 +212,31 @@ int main()
 		checkAudio(hardware, baseChannel);
 		std::vector<uint8_t> state;
 		require(machine->getState(state, synthLib::StateTypeGlobal) && !state.empty(), "MM state capture failed");
+		// The speed-ups switch belongs to the Device: the Hardware a restore brings in must follow it. The
+		// test flips it to the other position (GEARMULATOR_MDMM_SPEEDUPS=0 starts it off), lets a restore
+		// carry it, and flips it back at the end.
+		const bool speedUps = machine->speedUps();
+		machine->setSpeedUps(!speedUps);
+		require(hardware.speedUps() == !speedUps, "MM speed-ups switch did not reach the live hardware");
 		checkKit(hardware, kit, editKit(hardware, kit, baseChannel, 75));
 		const auto epoch = machine->hardwareEpoch();
 		require(machine->setState(state, synthLib::StateTypeGlobal), "MM state restoration failed");
 		require(machine->hardwareEpoch() != epoch, "MM state restore did not replace hardware");
 		// setState replaces Hardware: do not retain the pre-reset reference.
 		auto& restored = machine->getHardware();
+		require(machine->speedUps() == !speedUps && restored.speedUps() == !speedUps,
+			"MM state restore lost the speed-ups switch");
 		boot(restored);
 		require(status(restored, sysex::StatusParameter::Kit) == kit, "MM restored wrong kit");
 		checkKit(restored, kit, saved);
 		checkAudio(restored, baseChannel);
 		checkKit(restored, kit, editKit(restored, kit, baseChannel, 45));
 		testPanelProgress(restored);
+		// Switching the speed-ups while the machine runs changes nothing it does.
+		machine->setSpeedUps(speedUps);
+		require(restored.speedUps() == speedUps, "MM speed-ups did not switch back");
+		checkKit(restored, kit, editKit(restored, kit, baseChannel, 55));
+		checkAudio(restored, baseChannel);
 		std::cout << "mmBootFirmwareTest: PASS, cold boot, edited kit and state-restored boot\n";
 		return 0;
 	}

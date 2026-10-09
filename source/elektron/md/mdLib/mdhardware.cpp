@@ -145,13 +145,15 @@ namespace md
 	{
 		// Ship the validated bounded dispatcher by default while retaining the
 		// established path as a field fallback and exact A/B control. The switch covers the
-		// background DSP slices and, on the Machinedrum, the DSP catch-ups (schedCatchUpDsp,
-		// schedCatchUpDspToDsp).
+		// background DSP slices.
 		const auto* const boundedJit = std::getenv("GEARMULATOR_MDMM_BOUNDED_JIT");
 		m_schedBoundedJit = boundedJit == nullptr || std::strcmp(boundedJit, "0") != 0;
-		// The same for the SIM's deferred timer and UART stepping (L5): "0" steps every instruction.
+		// The step 1 speed-ups (setSpeedUps), on by default: "0" runs the code they replaced.
+		// GEARMULATOR_MDMM_SIM_DEFERRAL=0 turns off the SIM's event-driven stepping (L5) alone.
 		const auto* const simDeferral = std::getenv("GEARMULATOR_MDMM_SIM_DEFERRAL");
-		setSimStepDeferral(simDeferral == nullptr || std::strcmp(simDeferral, "0") != 0);
+		m_simDeferral = simDeferral == nullptr || std::strcmp(simDeferral, "0") != 0;
+		const auto* const speedUps = std::getenv("GEARMULATOR_MDMM_SPEEDUPS");
+		setSpeedUps(speedUps == nullptr || std::strcmp(speedUps, "0") != 0);
 
 		if(!m_rom.isValid())
 			return;
@@ -1480,16 +1482,31 @@ namespace md
 							maxCycles = static_cast<uint32_t>(std::min<uint64_t>(maxCycles,
 								m_sysexIngressNextCycle - m_schedUcCyclesDone));
 						const auto limit = m_uc.idleSelfBranchInstructions(maxCycles);
-						// The external inputs are tested once for the whole batch, not at each
-						// omitted instruction: Plugin::process holds the device lock for the whole
-						// call and the panel and SysEx producers take the same lock, so none of
-						// them can change while this batch runs. A producer that arrives later
-						// wakes the ordinary path at the next probe. A future lock-free producer
-						// would wait at most one batch (about 110 microseconds of machine time).
-						const bool inputPending = m_panelIn.hasPending() || (!m_midiIn.empty() && !sysexWaits)
-							|| !m_midiClockBypass.empty() || m_realtimeMidiIn.size() != 0
-							|| m_midiSysexTransfer.ownsMidiWire();
-						const uint32_t instructions = inputPending ? 0 : limit;
+						const auto inputPending = [this, sysexWaits]
+						{
+							return m_panelIn.hasPending() || (!m_midiIn.empty() && !sysexWaits)
+								|| !m_midiClockBypass.empty() || m_realtimeMidiIn.size() != 0
+								|| m_midiSysexTransfer.ownsMidiWire();
+						};
+						uint32_t instructions = 0;
+						if(m_speedUps)
+						{
+							// L1: the external inputs are tested once for the whole batch, not at
+							// each omitted instruction: Plugin::process holds the device lock for the
+							// whole call and the panel and SysEx producers take the same lock, so none
+							// of them can change while this batch runs. A producer that arrives later
+							// wakes the ordinary path at the next probe. A future lock-free producer
+							// would wait at most one batch (about 110 microseconds of machine time).
+							instructions = inputPending() ? 0 : limit;
+						}
+						else
+						{
+							// Speed-ups off: keep external input polling at each omitted instruction
+							// boundary, as before L1; a producer still wakes the ordinary path.
+							for(; instructions < limit; ++instructions)
+								if(inputPending())
+									break;
+						}
 						if(instructions)
 						{
 							MD_TRANSPORT_RECORD(m_transportScorecard.idleSelfBranchInstructions
@@ -1620,9 +1637,10 @@ namespace md
 		// (see the schedStep backpressure comment). The MM therefore keeps its per-block loop,
 		// which tests the backlog between blocks. The MD has no such test, so it runs the whole
 		// catch-up under one execUntilCycles entry, like the background slice in schedStep: the
-		// same blocks with the same checks before each, minus one trampoline entry per block.
+		// same blocks with the same checks before each, minus one trampoline entry per block (L2b;
+		// with the speed-ups off, setSpeedUps, the MD keeps the per-block loop too).
 		const bool s_mmBp = isMonomachine();
-		if(!s_mmBp && m_schedBoundedJit)
+		if(!s_mmBp && m_speedUps)
 			d.dsp().execUntilCycles(std::min(targetCyc, clampStop));
 		else
 		{
@@ -1697,8 +1715,8 @@ namespace md
 		m_schedInLinkDelivery = true;
 		const bool bpGate = isMonomachine();
 		// Same split as in schedCatchUpDsp: the MM keeps its per-block backpressure loop, the MD
-		// runs the catch-up under one execUntilCycles entry.
-		if(!bpGate && m_schedBoundedJit)
+		// runs the catch-up under one execUntilCycles entry (L2b, with the speed-ups on).
+		if(!bpGate && m_speedUps)
 			d.dsp().execUntilCycles(std::min(targetCyc, clampStop));
 		else
 		{

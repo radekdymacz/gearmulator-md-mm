@@ -243,12 +243,24 @@ namespace md
 		// sends (a pattern read-back: about 17 ms the sequencer stands).
 		static constexpr uint32_t g_defaultMidiTransmitBytesPerSecond = 125000;
 		void setMidiTransmitRate(const uint32_t _bytesPerSecond) { m_uc.setMidiTransmitRate(_bytesPerSecond); }
-		// Tester switch for the SIM's deferred stepping (md::Sim::exec). Off: the timers and the UART
-		// transmitters step after every ColdFire instruction, as before L5. Both positions give the same
-		// audio and machine state; only the host CPU differs. GEARMULATOR_MDMM_SIM_DEFERRAL=0 turns it off
-		// at construction. Call under the owning Plugin device lock, like the other control operations.
-		void setSimStepDeferral(const bool _defer) { m_uc.getSim().setDeferStepping(_defer); }
-		bool simStepDeferral() const { return m_uc.getSim().deferStepping(); }
+		// The one tester switch for the step 1 speed-ups of the emulation (doc/md_mm_performance_diagnostics.md):
+		//   L1  the UC idle skip tests its inputs once per batch (schedStep),
+		//   L11 the ColdFire memory fast lane (Microcontroller::setMemoryFastLane),
+		//   L2b the Machinedrum DSP catch-ups run under one execUntilCycles entry,
+		//   L5  the SIM steps its timers and UART transmitters at their next event (Sim::setDeferStepping).
+		// Off, every one runs the code it replaced: the same audio and machine state, bit for bit, at a
+		// higher host CPU. GEARMULATOR_MDMM_SPEEDUPS=0 turns them off at construction. The finer
+		// GEARMULATOR_MDMM_SIM_DEFERRAL=0 turns off L5 alone (read once; it keeps L5 off whatever is set
+		// here). The deferred processUC gating and inline exec of L5 have no switch: they only skip work
+		// that cannot change state. Call under the owning Plugin device lock, like the other control
+		// operations.
+		void setSpeedUps(const bool _on)
+		{
+			m_speedUps = _on;
+			m_uc.setMemoryFastLane(_on);
+			m_uc.getSim().setDeferStepping(_on && m_simDeferral);
+		}
+		bool speedUps() const { return m_speedUps; }
 		void readMidiOut(std::vector<synthLib::SMidiEvent>& _midiOut)
 		{
 			m_uc.readMidiOut(_midiOut, m_midiOutputNativeOrigin.load(std::memory_order_relaxed));
@@ -392,9 +404,14 @@ namespace md
 		RealtimeHostAudioQueue m_schedHostAudio;
 		std::atomic<uint64_t> m_schedHostAudioOverflow{0};
 		bool     m_schedHostAudioActive = false;	// retain drained frames for a host callback
-		// Cycle-bounded DSP background slices and, on the Machinedrum, the one-entry catch-ups
-		// (schedCatchUpDsp, schedCatchUpDspToDsp). Off: the instruction-by-instruction loops.
+		// Cycle-bounded DSP background slices (GEARMULATOR_MDMM_BOUNDED_JIT=0: the
+		// instruction-by-instruction loop). Not part of the speed-ups switch.
 		bool     m_schedBoundedJit = true;
+		// The step 1 speed-ups switch (setSpeedUps). L1 and L2b read it here; L11 and L5 live in the
+		// Microcontroller and the Sim, which setSpeedUps drives. m_simDeferral is the separate
+		// GEARMULATOR_MDMM_SIM_DEFERRAL switch for L5 alone, fixed at construction.
+		bool     m_speedUps = true;
+		bool     m_simDeferral = true;
 		std::array<RealtimeHostAudioInputTimeline, 2> m_hostAudioInput;
 		std::array<int64_t, 2> m_hostAudioInputClockOrigin{};
 		std::array<uint64_t, 2> m_hostAudioInputNextRxIndex{};

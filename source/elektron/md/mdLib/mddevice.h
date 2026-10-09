@@ -149,11 +149,11 @@ namespace md
 		}
 		void setRamRecordingMode(RamRecordingMode _mode);
 		RamRecordingMode ramRecordingMode() const { return m_ramRecordingMode; }
-		// Tester switch for the SIM's deferred stepping (Hardware::setSimStepDeferral; the starting
-		// value follows GEARMULATOR_MDMM_SIM_DEFERRAL). Kept across project state restores, which
-		// replace the Hardware. Requires the owning Plugin device lock.
-		void setSimStepDeferral(bool _defer);
-		bool simStepDeferral() const { return m_simStepDeferral; }
+		// Tester switch for the step 1 speed-ups (Hardware::setSpeedUps; the starting value follows
+		// GEARMULATOR_MDMM_SPEEDUPS). Kept across project state restores, which replace the Hardware.
+		// Requires the owning Plugin device lock.
+		void setSpeedUps(bool _on);
+		bool speedUps() const { return m_speedUps; }
 		uint64_t hardwareEpoch() const { return m_hardwareEpoch; }
 		// All import lifecycle calls require the owning Plugin/processor lock.
 		// Payload ownership remains in TurboMidiTransfer; dialogs carry only tickets.
@@ -261,7 +261,7 @@ namespace md
 		std::string m_restoreError;
 		bool m_nativeProgramChangesEnabled = true;
 		RamRecordingMode m_ramRecordingMode = RamRecordingMode::Original;
-		bool m_simStepDeferral = true;
+		bool m_speedUps = true;
 		std::string m_mdFlashCacheFilename;
 		uint64_t m_hardwareEpoch = 0;
 		const uint64_t m_sysexDeviceId;

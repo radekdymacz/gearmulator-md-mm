@@ -86,6 +86,13 @@ namespace md
 		void     write32(uint32_t _addr, uint32_t _val);
 		uint32_t readImm32(uint32_t _addr);
 
+		// The memory fast lane (L11: fastRam and the native 32 bit accesses) can be turned off, which
+		// sends every access through the full memory map, in two 16 bit steps for the 32 bit ones,
+		// as before it. Same results either way; md::Hardware::setSpeedUps drives it, under the
+		// owning Plugin device lock. The instruction page cache (readImm16) is not part of it.
+		void setMemoryFastLane(const bool _on) { m_memoryFastLane = _on; }
+		bool memoryFastLane() const { return m_memoryFastLane; }
+
 		uint32_t getResetPC() override;
 		uint32_t getResetSP() override;
 
@@ -222,7 +229,8 @@ namespace md
 
 		// Fast lane for the plain RAM windows (main RAM and its two aliases, the ColdFire
 		// SRAM, the upper loader RAM): host pointer to _addr if the whole _length byte
-		// access lies inside one of them, else null. No side effects and no locks.
+		// access lies inside one of them, else null (always null with the lane off). No side
+		// effects and no locks.
 		// Patch RAM (state-transfer lock), flash (command decoder), the SIM and the HI08
 		// windows are never served here; they and every access that leaves a window take
 		// the *Slow functions, which are the complete memory map.
@@ -286,6 +294,8 @@ namespace md
 		// writes remain immediately visible to self-modifying RAM code.
 		uint32_t m_immPageAddress = 0xffffffffu;
 		const uint8_t* m_immPageData = nullptr;
+
+		bool     m_memoryFastLane = true;	// see setMemoryFastLane
 
 		uint8_t  m_panelProbeIndex = 0;	// progress matching the UART2 startup probe
 		uint8_t  m_mmPanelProbeIndex = 0;

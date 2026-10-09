@@ -63,10 +63,10 @@ namespace mdJucePlugin
 		// B-035: the host's audio calls counted, the start-up log's lines and the rates (mdBootDiagnostics.h)
 		void processBlockStarted(int _frames, bool _bypassed) override;
 		BootDiagnostics& bootDiagnostics() { return m_boot; }
-		// Tester switch (doc/md_mm_performance_diagnostics.md): step the emulated SIM timers after every
-		// instruction, as before L5. Identical audio, more host CPU. Kept in the plug-in's config.
-		void setLegacySimStepping(bool _legacy);
-		bool isLegacySimStepping();
+		// Tester switch (doc/md_mm_performance_diagnostics.md): run the emulation as before the step 1
+		// speed-ups (md::Device::setSpeedUps). Identical audio, more host CPU. Kept in the plug-in's config.
+		void setLegacyEmulation(bool _legacy);
+		bool isLegacyEmulation();
 		// The Machinedrum/Monomachine Editors' setup and session (mdDeskHost.h, doc/modern-ux/UPSTREAM.md).
 		class DeskHost* getDeskHost() const { return m_desk.get(); }
 

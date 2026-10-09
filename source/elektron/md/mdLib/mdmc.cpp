@@ -570,6 +570,11 @@ namespace md
 
 	inline uint8_t* Microcontroller::fastRam(const uint32_t _addr, const uint32_t _length)
 	{
+		// One predictable test for the switch (setMemoryFastLane): with the lane off nothing is
+		// served here, so every access takes the complete memory map, as before the lane.
+		if(!m_memoryFastLane)
+			return nullptr;
+
 		// The window sizes equal the sizes of the backing vectors (fixed at construction),
 		// so one unsigned compare per window is both the range check and the guarantee that
 		// the whole access stays inside it (below the window the subtraction wraps).
@@ -821,9 +826,11 @@ namespace md
 
 	uint32_t Microcontroller::readImm32(const uint32_t _addr)
 	{
-		// A long extension word is the common case of two fetches from the cached page.
+		// A long extension word is the common case of two fetches from the cached page. With the
+		// lane off (setMemoryFastLane) it is always the two fetches, as before.
 		const uint32_t pageOffset = _addr & g_immPageMask;
-		if(pageOffset + 3 < g_immPageSize && (_addr & ~g_immPageMask) == m_immPageAddress)
+		if(m_memoryFastLane && pageOffset + 3 < g_immPageSize
+			&& (_addr & ~g_immPageMask) == m_immPageAddress)
 			return loadBe32(m_immPageData + pageOffset);
 
 		// Cache miss or a word pair that crosses the page: two fetches in order, as before.
