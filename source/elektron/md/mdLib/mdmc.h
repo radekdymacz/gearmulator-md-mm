@@ -21,6 +21,7 @@
 #include "mdturbomidi.h"
 #include "mdtypes.h"
 
+#include "baseLib/compilerdefs.h"
 #include "synthLib/midiBufferParser.h"
 
 namespace md
@@ -70,6 +71,13 @@ namespace md
 		uint16_t read16(uint32_t _addr) override;
 		void     write8 (uint32_t _addr, uint8_t  _val) override;
 		void     write16(uint32_t _addr, uint16_t _val) override;
+
+		// Native 32 bit accesses, picked up by mc68k::memoryOps instead of its two-16-bit
+		// default. Plain RAM is served in one step; everything else (flash, SIM, HI08,
+		// patch RAM) is still two 16 bit accesses, high word first.
+		uint32_t read32(uint32_t _addr);
+		void     write32(uint32_t _addr, uint32_t _val);
+		uint32_t readImm32(uint32_t _addr);
 
 		uint32_t getResetPC() override;
 		uint32_t getResetSP() override;
@@ -203,6 +211,18 @@ namespace md
 		};
 
 		Region resolve(uint32_t _addr);
+
+		// Fast lane for the plain RAM windows (main RAM and its two aliases, the ColdFire
+		// SRAM, the upper loader RAM): host pointer to _addr if the whole _length byte
+		// access lies inside one of them, else null. No side effects and no locks.
+		// Patch RAM (state-transfer lock), flash (command decoder), the SIM and the HI08
+		// windows are never served here; they and every access that leaves a window take
+		// the *Slow functions, which are the complete memory map.
+		uint8_t* fastRam(uint32_t _addr, uint32_t _length);
+		BASELIB_NOINLINE uint8_t  read8Slow(uint32_t _addr);
+		BASELIB_NOINLINE uint16_t read16Slow(uint32_t _addr);
+		BASELIB_NOINLINE void     write8Slow(uint32_t _addr, uint8_t _val);
+		BASELIB_NOINLINE void     write16Slow(uint32_t _addr, uint16_t _val);
 		void logPeripheral(uint32_t _addr, uint32_t _value, uint8_t _size, bool _write);
 		void onPanelTransmit(uint8_t _byte);	// minimal response from the absent panel controller
 
