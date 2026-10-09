@@ -30,15 +30,15 @@ where it came from, the setup, what happens, what should happen, status.*
 - **Should:** the editor says so at start, once, and the report says whether the run was translated, so a performance report settles it.
 - **Fix (0.4.0, branch `feat/rosetta-notice`):** the editor detects it (`mdProcessArch.h`: `sysctl.proc_translated` on macOS, `IsWow64Process2` on Windows, an x64 build on Windows on Arm) and records `process_arch`, `machine_arch` and `translated` in the performance report's session record and in the first line of the start-up log (`..., CPU VirtualApple @ 2.50GHz, process x86_64 on arm64, translated`). At start, once a session, a translated editor shows "Running under Rosetta" (Windows on Arm: "Running in emulation") with **Don't show again** (config key `rosettaNoticeDismissed`) and **OK**; it replaces upstream's box. Tests: `mdProcessArchTest`, `mdRosettaNoticeTest`, `mdDeskPageTest`, `mmViewTest`. Fields: `doc/md_mm_performance_diagnostics.md`, "The session record".
 - **To check:** ask testers I and A for a performance report: `translated` should read `true`. If it reads `false`, the cause is something else. Run the standalone with **Open using Rosetta** ticked (Get Info) and see the notice; untick it and see none.
-- **Status:** fixed for 0.4.0 (not merged); the cause stays unconfirmed until tester I or A sends a report.
+- **Status:** fixed for 0.4.0; the cause stays unconfirmed until tester I or A sends a report.
 
 ## B-042 · The Windows and Linux READMEs send reports to GitHub issues, which are off
 
 - **From:** this round-up, 2026-10-09 (a Linux tester's blank window, B-033, and the READMEs everyone on Windows and Linux gets).
 - **What happens:** `scripts/linux/README-Linux.txt` and `scripts/windows/README-Windows-mdmm.txt` say "Reports are welcome: https://github.com/radekdymacz/gearmulator-md-mm/issues". Issues are off on the repository (`has_issues: false`), so the link leads nowhere a tester can report. The release notes and the site say https://mdmm.dev/contact/ and the Discord.
 - **Should:** both READMEs point to mdmm.dev/contact and the Discord invite (and say what to send: the OS, the DAW, the version, the `editor-*.log` of Open Log Folder on Windows).
-- **Fix (0.4.0, branch `docs/discord-roundup-2026-10-09`):** both READMEs now say "Bugs: https://mdmm.dev/contact/" (as the macOS installer's readme does) and "Discord (#bugs): https://discord.gg/8xwXwBHbtn", what to include (editor and version, OS and desktop or Windows version, standalone or VST3 and DAW; on Windows the `editor-*.log`), and the no-firmware-requests line the macOS readme has. `fix/codex-review-2026-10` still carries the old link; merge this branch after it.
-- **Status:** fixed for 0.4.0 (not merged).
+- **Fix (0.4.0, branch `docs/discord-roundup-2026-10-09`):** both READMEs now say "Bugs: https://mdmm.dev/contact/" (as the macOS installer's readme does) and "Discord (#bugs): https://discord.gg/8xwXwBHbtn", what to include (editor and version, OS and desktop or Windows version, standalone or VST3 and DAW; on Windows the `editor-*.log`), and the no-firmware-requests line the macOS readme has. `fix/codex-review-2026-10` carried the old link; this branch is merged after it.
+- **Status:** fixed for 0.4.0.
 
 ## B-041 · ROM card: a zip with Elektron's OS update said "The .zip holds no .bin file" (0.3.4)
 
@@ -55,7 +55,7 @@ where it came from, the setup, what happens, what should happen, status.*
 - **Fix (0.4.0, branch fix/mac-packaging):** (1) the download page's big button says what it is on macOS, "Download the installer (.pkg)" (`config.js` `downloads.mac.button`, `get.js`; Windows and Linux keep "Download"); the secondary link reads ".dmg, loose files" and says it has no installer in it; step 1 says that on macOS 12 to 14 right-click > Open gets past the unnotarised installer (the page only described macOS 15's Open Anyway). (2) The release workflow adds a "macOS: take the .pkg ..." line to every release's notes on GitHub, as it does for Windows and Linux (`mdmm-editors-release.yml`). (3) The .dmg's `Install.txt` now opens by saying it is loose files, where the installer is and what it does extra (removes the old plug-ins).
 - **Not verified:** that this is what the tester did (the file name and browser were not asked); a real install of the .pkg on macOS 12: the release gate installs the packages on macos-14 and macos-15 only, so nothing installs them on macOS 12 or 13 before a release. If the tester did take the .pkg and it would not install, the cause is something else: ask for the exact message.
 - **Ask the tester:** the file name downloaded (.pkg or .dmg), the browser, and where the download link was clicked (the site's button, the GitHub release page, a Discord link).
-- **Status:** fixed for 0.4.0 (branch `fix/mac-packaging`); open until the tester confirms (not reproduced).
+- **Status:** fixed for 0.4.0; open until the tester confirms (not reproduced).
 
 ## B-039 · Machinedrum: changing a machine in the stock patterns does not work (message cut off)
 
@@ -118,8 +118,8 @@ where it came from, the setup, what happens, what should happen, status.*
 - **Cause:** `synthLib::Plugin::getState` holds the plug-in's lock, the one `processAudio` takes; inside it the Machinedrum's state (`md::Device::getState` -> `makeFlashOverlay`, `validFlashOverlay`) fingerprinted the 8 MiB ROM twice and the 8 MiB factory baseline once (FNV), besides 8 MiB copies: 26-30 ms with the audio thread blocked (2-3 buffers at 512). JUCE's standalone saves while the audio runs and then stops it at once.
 - **Fix (release 0.3.5):** the ROM's and the factory baseline's fingerprints are computed once (the ROM's at load, the baseline's when its capture completes or a cached one is first decoded), kept by `md::Hardware` and passed to the state encoder; the state bytes are the same (`mdStateTest`: same bytes, read back). Measured (`mdStateTest`, an 8 MiB synthetic ROM and baseline): the state encode under the lock 33.4 ms -> 7.9 ms. The standalone quits in order, for the close button and the system's quit alike: the output fades to silence over about 30 ms, the audio stops at about 60 ms, then the state is saved (with the gain it had), then the app quits (`jucePluginEditorLib/standaloneApp.h`, both editors).
 - **Not yet in 0.3.5:** the remaining copy, sector compare and encode still ran under the lock.
-- **Fix (0.4.0, branch `fix/codex-review-2026-10`):** `43f1e40d0` (the state is captured under the lock and encoded after it: MD 0.13-0.24 ms under the lock, MM 0.04-0.45 ms; bytes identical to the old `getState`; `synthLibStateTransactionTest`, `mdStateTest`) and `dd267e0c8` (the factory cache decoded once, slicing-by-8 CRC-32: MD 48-59 ms -> about 1 ms under the lock, first save 37 ms, MM 21-25 ms -> 1.5 ms). Not merged.
-- **Status:** fixed for 0.3.5 (the rest on `fix/codex-review-2026-10`, for 0.4.0).
+- **Fix (0.4.0, branch `fix/codex-review-2026-10`):** `43f1e40d0` (the state is captured under the lock and encoded after it: MD 0.13-0.24 ms under the lock, MM 0.04-0.45 ms; bytes identical to the old `getState`; `synthLibStateTransactionTest`, `mdStateTest`) and `dd267e0c8` (the factory cache decoded once, slicing-by-8 CRC-32: MD 48-59 ms -> about 1 ms under the lock, first save 37 ms, MM 21-25 ms -> 1.5 ms).
+- **Status:** fixed for 0.3.5; the rest fixed for 0.4.0.
 
 ## B-033 · Linux: blank window, no editor page
 
@@ -136,7 +136,7 @@ where it came from, the setup, what happens, what should happen, status.*
 - **Fix (0.4.0, branch fix/mac-packaging):** the packages' preinstall (`pkg-resources/remove-old-bundles`, one per component, rendered by `render_remove_old_bundles.sh` from `scripts/mdmm-product.env`, which now also holds the four bundle identifiers) removes, by exact path: `Gearmulator MD|MM.vst3`, `.component` and `.app`, in the install location and in the home folders of the person installing (`$HOME`, the person at the console, `$SUDO_USER`; never another user's), when the bundle is ours: the editor's identifier, or (VST3 and AU only: same plug-in codes) upstream's old identifier, or our receipt lists it; never a symbolic link, never anything at another name, never an old-named app with upstream's identifier (somebody's own copy). Unchanged: a bundle at the current name whose executable is the old one is replaced. It logs what it removed and always exits 0. The disk image's `Install.txt` (and the zip's `INSTALL-macOS.txt`) now say that the installer is a separate download, name the three old items and the six places to delete them from; the installer's welcome and read-me pages and the site (download page, FAQ, guide) say the same, and that a DAW may list the VST3 and the AU separately. `verify_mdmm_pkg_install.sh` also fails on a leftover with the old identifier. Tests: `scripts/release/test_release_scripts.py` (names and identifiers pinned against the env file and `mdmmPlugins.cmake`; the rendered script run against a temporary root and home with stand-in tools: every kind of copy above, symbolic links, foreign identifiers, receipts, the console user's home, no property-list reader, nothing to do).
 - **Not verified:** a real package run: the script has not run under the real Installer (what `$HOME`, `$USER` and `$2` are there, `pkgutil --files` for a "for me only" install), nor on macOS 12; the rendered script and the page texts were checked in a temporary folder and a browser only. A same-named copy in the other domain (an all-users install and a per-user one of the same version) is still the person's to remove (the read-me says so).
 - **Ask the tester:** `ls` of `/Library/Audio/Plug-Ins/{VST3,Components}` and the same under `~/Library`, and the version of the AU in Live's plug-in list.
-- **Status:** fixed on the branch for 0.4.0; open until the tester confirms with a 0.4.0 installer.
+- **Status:** fixed for 0.4.0; open until the tester confirms with a 0.4.0 installer.
 
 ## B-031 · After a SysEx import the pattern can't be changed (0.3.4)
 
@@ -166,7 +166,7 @@ where it came from, the setup, what happens, what should happen, status.*
 - **From:** Discord tester A, 2026-10-08, M1, macOS 12, 0.3.4: "Glitch while P-locking still there, no improvement".
 - **To check:** this tester's Mac is already at 65-70 % CPU with upstream Gearmulator; the B-014 stream cut the extra work 5-7×, but the emulation's own load may leave no headroom on an M1; check the buffer size, whether the page graphics (still heavy for fast gestures) is the remaining cost, and measure with the rt-check on an M1-like budget.
 - **Fix (0.4.0, merged in main as `cba2ace1f`, branch `perf/step1-quick-wins`):** the CPU research's step 1 (L1, L11, L2b, L5), bit-exact: host work per frame MD -15 % stopped / -16 % playing, MM -19 % / -21 %; the worst buffer during edits -17 to -25 % (MD) and -19 to -27 % (MM) on an M4 Pro, from the headless rigs and firmware tests. Not yet run in a DAW or heard by ear on an M1. `GEARMULATOR_MDMM_SPEEDUPS=0` / Developer > Speed-ups off turns it off to compare.
-- **Status:** open (related: B-014, CPU research); step 1 is in main for the next release, to be checked by tester A on an M1.
+- **Status:** open (related: B-014, CPU research); step 1 is in 0.4.0 (in main), to be checked by tester A on an M1.
 
 ## B-027 · Monomachine: a machine change reverts when going back to Sequence
 
@@ -380,7 +380,7 @@ where it came from, the setup, what happens, what should happen, status.*
 - **Should:** as low as the emulation allows; the page costs little, and nothing when its window is closed.
 - **More reports, 2026-10-08 and 09:** tester E (Windows 11, Live 12): 65 % at 44.1 kHz, same at 4096 and 1024, glitches at 48 kHz and above (B-029). Tester I (macOS M1, 2026-10-09, before 0.3.5): "performance issues running both together standalone. Buffer at 1024 helps"; upstream's original (joelanders) "seems ok" on the same Mac. Tester A (2026-10-09): both editors in one Ableton project on a MacBook Pro M2 Pro 16 GB "working flawlessly" (version not stated). Tester A (Windows 10 PC): the Monomachine standalone crackles at 8 % CPU (B-036).
 - **Fix (0.4.0, merged in main as `cba2ace1f`, branch `perf/step1-quick-wins`):** step 1 of the CPU research (see B-028): host work per frame -15 to -21 %, CPU for one instance -16 to -19 % on an M4 Pro. Steps 2 (a DSP idle skip, moves the MD serial timing; Radek listens and signs off) and 3 (compiler profile) are not built.
-- **Status:** open; step 1 is in main for the next release.
+- **Status:** open; step 1 is in 0.4.0 (in main).
 
 ## B-004 · MIX faders look far too big at some window sizes
 
