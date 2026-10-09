@@ -505,10 +505,20 @@ static int runFirmwareTest(const char* const firmwarePath)
 		return fail("could not capture interacted first-run UW state");
 	auto firstRunReboot = md::Device::prepareState(device.getPreparationContext(),
 		initializedState, synthLib::StateTypeGlobal);
+	// The speed-ups switch belongs to the Device, not to the Hardware an exchange replaces. The test
+	// flips it to the other position (GEARMULATOR_MDMM_SPEEDUPS=0 starts it off) at each kind of exchange
+	// and back afterwards.
+	const bool speedUps = device.speedUps();
+	device.setSpeedUps(!speedUps);
 	if(!firstRunReboot || !device.commitPreparedState(*firstRunReboot)
 		|| device.getHardware().copyFlashData() != initializedFlash
 		|| device.getHardware().isFactoryFlashInitializationExpected())
 		return fail("interacted first-run UW state did not cold-boot coherently");
+	if(device.getHardware().speedUps() == speedUps)
+		return fail("a state exchange lost the speed-ups switch");
+	device.setSpeedUps(speedUps);
+	if(device.getHardware().speedUps() != speedUps)
+		return fail("the speed-ups did not switch back");
 	firstRunReboot.reset();
 
 	// The known-good initialized image supplies the fixture baseline for subsequent
@@ -589,6 +599,13 @@ static int runFirmwareTest(const char* const firmwarePath)
 	auto* const deferred = md::DevicePreparedStateTestAccess::deferredHardware(device);
 	if(!deferred)
 		return fail("deferred UW project state did not create an isolated candidate");
+	// The candidate follows the Device's speed-ups switch while it initialises, like the live machine.
+	device.setSpeedUps(!speedUps);
+	if(deferred->speedUps() == speedUps || device.getHardware().speedUps() == speedUps)
+		return fail("the speed-ups switch did not reach the deferred candidate");
+	device.setSpeedUps(speedUps);
+	if(deferred->speedUps() != speedUps || device.getHardware().speedUps() != speedUps)
+		return fail("the speed-ups did not switch back in the deferred candidate");
 	md::FlashSectorOverlay pendingCheck;
 	if(!deferred->copyPendingFlashOverlay(pendingCheck)
 		|| pendingCheck.data != decodedProject.flashOverlay.data)
@@ -660,12 +677,16 @@ static int runFirmwareTest(const char* const firmwarePath)
 		return fail("validated UW project state could not be cold-booted");
 	auto* const rebootHardware =
 		md::DevicePreparedStateTestAccess::preparedHardware(*reboot);
+	device.setSpeedUps(!speedUps);
 	if(!device.commitDeferredStateRestore(*reboot, deferredGeneration)
 		|| &device.getHardware() != rebootHardware
 		|| md::DevicePreparedStateTestAccess::preparedHardware(*reboot)
 			!= liveBeforeRestore
 		|| device.isProjectStateRestorePending())
 		return fail("validated UW project state was not exchanged atomically");
+	if(device.getHardware().speedUps() == speedUps)
+		return fail("the cold-booted replacement did not take the speed-ups switch");
+	device.setSpeedUps(speedUps);
 	std::vector<uint8_t> deferredFactory;
 	const auto deferredCache = device.getHardware().copyFactoryFlashCache();
 	if(!md::decodeFactoryFlashCache(deferredFactory, deferredCache, rom)

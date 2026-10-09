@@ -72,6 +72,9 @@ namespace
 	constexpr auto g_defaultModel = md::MachineModel::Machinedrum;
 	#endif
 
+	// The tester switch for the step 1 speed-ups (setLegacyEmulation): true runs the code they replaced.
+	constexpr auto g_legacyEmulationKey = "legacyEmulation";
+
 	const char* productName(const md::MachineModel _model)
 	{
 		return _model == md::MachineModel::Monomachine ? MDMM_PRODUCT_NAME_MM : MDMM_PRODUCT_NAME_MD;	// scripts/mdmm-product.env
@@ -930,6 +933,8 @@ namespace mdJucePlugin
 		if(!d->isValid())
 			return makeNoRomDevice();	// no ROM is the page's to ask for, not an alert (mdDeskHost.h, UPSTREAM.md)
 		d->setRamRecordingMode(getRamRecordingMode());
+		if(getConfig().getBoolValue(g_legacyEmulationKey, false))
+			d->setSpeedUps(false);
 #ifdef __APPLE__
 		// a background run of the journeys on a person's Mac (mdBackgroundRun.h): the standalone's audio runs as
 		// ever, timing and all, but nothing reaches their speakers
@@ -947,6 +952,26 @@ namespace mdJucePlugin
 		{
 			if(auto* const device = dynamic_cast<md::Device*>(_device))
 				device->setRamRecordingMode(_mode);
+		});
+	}
+
+	void AudioPluginAudioProcessor::setLegacyEmulation(const bool _legacy)
+	{
+		getConfig().setValue(g_legacyEmulationKey, _legacy);
+		getConfig().saveIfNeeded();
+		getPlugin().withDeviceLocked([_legacy](synthLib::Device* const _device)
+		{
+			if(auto* const device = dynamic_cast<md::Device*>(_device))
+				device->setSpeedUps(!_legacy);
+		});
+	}
+
+	bool AudioPluginAudioProcessor::isLegacyEmulation()
+	{
+		return getPlugin().withDeviceLocked([](synthLib::Device* const _device)
+		{
+			const auto* const device = dynamic_cast<const md::Device*>(_device);
+			return device && !device->speedUps();
 		});
 	}
 

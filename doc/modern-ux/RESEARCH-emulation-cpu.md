@@ -185,6 +185,7 @@ Gains are % of today's emulation-thread CPU, after overlap with the levers befor
 - **Why weakened.** ThinLTO already inlines `ownsMidiWire`, the UART steppers, `processUC` and `pumpScheduledMidi`. The MD `pumpDsp2HostRequest` gate is already in the function (`mdhardware.cpp:1069-1074`). The largest profile pool is L1's loop.
 - **Risk.** Low to medium. The B-010 MIDI TX shifter (`mdsim.cpp:451-484`) is newer than PR #88. The sync deadline must be the timer reference latch, not the interrupt deadline (`mdsim.cpp:636-664` returns "none" when masked). Every SIM register access must sync first. A pad event kept while UART2 is full must retry each instruction.
 - **Cheapest experiment.** On top of L1, in scratch, with ThinLTO libraries. Kill it if MD < 2 % and MM < 4 %, or if any hash differs.
+- **Tester switch (landed).** L5 is one of four step 1 speed-ups (L1, L11, L2b, L5) that one switch turns off at run time: `GEARMULATOR_MDMM_SPEEDUPS=0`, or the menu item *Developer > Speed-ups off (legacy emulation, slower)*. Off runs the code each lever replaced (for L5, a step after every instruction), with identical audio and RAM hashes. `GEARMULATOR_MDMM_SIM_DEFERRAL=0` turns off L5 alone. The `processUC` gating and inline exec (part B) are equivalent by construction and have no switch. See `doc/md_mm_performance_diagnostics.md`.
 
 ### 3.6 L13a — Joe's DSP PR #20 (weakened: overlaps L4)
 
@@ -274,10 +275,12 @@ Already done (in main):
 
 Do L1, L11, L2 (b first, then a), L5, and evaluate PR #20 (L13a). If PR #20 lands here, step 1 shows a bigger stopped drop (PR #20 alone: MD −9 %, MM −14 %) and L4 later gains less. The end total does not change.
 
+Landed: L1, L11, L2b and L5 sit behind one run-time switch (`GEARMULATOR_MDMM_SPEEDUPS=0`, or *Developer > Speed-ups off (legacy emulation, slower)*), so a tester can compare against the pre-step-1 emulation in minutes; both positions are bit-exact. See `doc/md_mm_performance_diagnostics.md`.
+
 | Gate | Pass condition |
 |---|---|
-| Audio FNV hash and RAM hash, MD and MM, stopped and playing | identical before and after each change |
-| `mdCpuBenchTest` / `mmCpuBenchTest`, plus host cycles per frame from `thread_selfcounts` | ≤ 0.88 (MD) and ≤ 0.87 (MM) of the same build's baseline |
+| `mdmmPerfGateTest` audio FNV hash and RAM hash, MD and MM, stopped and playing | identical before and after each change |
+| `mdCpuBenchTest` / `mmCpuBenchTest`, plus host cycles per frame from `thread_selfcounts` (`mdmmPerfGateTest`) | ≤ 0.88 (MD) and ≤ 0.87 (MM) of the same build's baseline |
 | Firmware tests | `idleSelfBranchTest`, `idleSchedulerFirmwareTest`, `transportScorecardFirmwareTest`, `mdAudioFirmwareTest`, `mdMidiTimingTest`, `mdHostRxTimingTest` green |
 | `scripts/mdmm-rt-check.sh --plock` | idle 128-frame buffers below today's ~27 M instructions; no action over budget |
 

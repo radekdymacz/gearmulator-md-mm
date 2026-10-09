@@ -137,6 +137,15 @@ namespace mdJucePlugin
 					processor.setRamRecordingMode(md::RamRecordingMode::Original);
 				}, {}, mode == md::RamRecordingMode::Original, available));
 		}
+		// For testers: tells in minutes whether a problem comes from the step 1 speed-ups of the emulation.
+		// Same audio either way; ticked is the slower emulation of before.
+		developer.push_back(separator());
+		const bool legacyEmulation = processor.isLegacyEmulation();
+		developer.push_back(action("legacy-emulation", "Speed-ups off (legacy emulation, slower)",
+			[&processor, legacyEmulation]
+			{
+				processor.setLegacyEmulation(!legacyEmulation);
+			}, {}, legacyEmulation));
 		m.items.push_back(submenu("developer", "Developer", std::move(developer)));
 		return m;
 	}

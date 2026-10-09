@@ -12,6 +12,7 @@
 #include <cstddef>
 #include <cstdio>
 #include <cstdlib>
+#include <cstring>
 #include <limits>
 
 // Provide the Musashi memory-access callbacks (m68k_read_memory_*, _pcrelative_*, etc.)
@@ -67,6 +68,24 @@ namespace md
 		static_assert(g_mmPanelStartupProbe[27] == 0xff);
 		static_assert(g_mmPanelStartupProbe[28] == 0x30);
 		static_assert(g_mmPanelStartupProbe.back() == 0x00);
+
+		// Instruction fetches are served from one cached host page (see readImm16).
+		constexpr uint32_t g_immPageSize = 4096;
+		constexpr uint32_t g_immPageMask = g_immPageSize - 1;
+
+		// Firmware bytes are stored big-endian; the accesses may be unaligned, hence memcpy.
+		uint32_t loadBe32(const uint8_t* const _ptr)
+		{
+			uint32_t value;
+			std::memcpy(&value, _ptr, sizeof(value));
+			return mc68k::endianSwap32IfLittle(value);
+		}
+
+		void storeBe32(uint8_t* const _ptr, const uint32_t _value)
+		{
+			const uint32_t value = mc68k::endianSwap32IfLittle(_value);
+			std::memcpy(_ptr, &value, sizeof(value));
+		}
 	}
 
 	Microcontroller::Microcontroller(const Rom& _rom, const MachineModel _model,
@@ -429,15 +448,6 @@ namespace md
 				getCycles());
 	}
 
-	uint32_t Microcontroller::exec()
-	{
-
-		// Step the CPU one instruction, then advance the derived SIM and interrupt wiring.
-		const auto cycles = execInstruction();
-		advanceAfterCpu(cycles);
-		return cycles;
-	}
-
 	uint32_t Microcontroller::idleSelfBranchInstructions(uint32_t _maxCycles)
 	{
 #if M68K_INSTRUCTION_HOOK != OPT_OFF || M68K_EMULATE_TRACE != OPT_OFF \
@@ -534,10 +544,8 @@ namespace md
 		}
 	}
 
-	void Microcontroller::advanceAfterCpu(const uint32_t _cycles)
+	void Microcontroller::deliverInterrupts()
 	{
-		m_sim.exec(_cycles);
-
 		// Deliver any pending SIM interrupts to the CPU. takeNextInterrupt consumes each edge
 		// internally (the RTOS timer tick, the UART transmitter-ready that drains the panel/
 		// LCD and MIDI TX rings), so we drain them all here; injectInterrupt/raiseIPL gate on
@@ -560,7 +568,99 @@ namespace md
 		return 0;
 	}
 
+	inline uint8_t* Microcontroller::fastRam(const uint32_t _addr, const uint32_t _length)
+	{
+		// One predictable test for the switch (setMemoryFastLane): with the lane off nothing is
+		// served here, so every access takes the complete memory map, as before the lane.
+		if(!m_memoryFastLane)
+			return nullptr;
+
+		// The window sizes equal the sizes of the backing vectors (fixed at construction),
+		// so one unsigned compare per window is both the range check and the guarantee that
+		// the whole access stays inside it (below the window the subtraction wraps).
+		// Hottest window first: the RTOS runs from main RAM, the Monomachine keeps its
+		// data in the SRAM.
+		uint32_t offset = _addr - memorymap::g_mainRam.begin;
+		if(offset <= memorymap::g_mainRam.size() - _length)
+			return m_mainRam.data() + offset;
+
+		offset = _addr - memorymap::g_internalSram.begin;
+		if(offset <= memorymap::g_internalSram.size() - _length)
+			return m_internalSram.data() + offset;
+
+		offset = _addr - memorymap::g_mainExecAlias.begin;
+		if(offset <= memorymap::g_mainExecAlias.size() - _length)
+			return m_mainRam.data() + offset;
+
+		offset = _addr - memorymap::g_mainHighAlias.begin;
+		if(offset <= memorymap::g_mainHighAlias.size() - _length)
+			return m_mainRam.data() + offset;
+
+		offset = _addr - memorymap::g_loaderRam.begin;
+		if(offset <= memorymap::g_loaderRam.size() - _length)
+			return m_loaderRam.data() + offset;
+
+		return nullptr;
+	}
+
 	uint8_t Microcontroller::read8(const uint32_t _addr)
+	{
+		if(const auto* const ram = fastRam(_addr, 1))
+			return *ram;
+		return read8Slow(_addr);
+	}
+
+	uint16_t Microcontroller::read16(const uint32_t _addr)
+	{
+		if(const auto* const ram = fastRam(_addr, 2))
+			return mc68k::memoryOps::readU16(ram, 0);
+		return read16Slow(_addr);
+	}
+
+	uint32_t Microcontroller::read32(const uint32_t _addr)
+	{
+		if(const auto* const ram = fastRam(_addr, 4))
+			return loadBe32(ram);
+
+		// Same two accesses, in the same order, as mc68k::memoryOps does without this hook.
+		const uint32_t high = read16(_addr);
+		return (high << 16) | read16(_addr + 2);
+	}
+
+	void Microcontroller::write8(const uint32_t _addr, const uint8_t _val)
+	{
+		if(auto* const ram = fastRam(_addr, 1))
+		{
+			*ram = _val;
+			return;
+		}
+		write8Slow(_addr, _val);
+	}
+
+	void Microcontroller::write16(const uint32_t _addr, const uint16_t _val)
+	{
+		if(auto* const ram = fastRam(_addr, 2))
+		{
+			mc68k::memoryOps::writeU16(ram, 0, _val);
+			return;
+		}
+		write16Slow(_addr, _val);
+	}
+
+	void Microcontroller::write32(const uint32_t _addr, const uint32_t _val)
+	{
+		if(auto* const ram = fastRam(_addr, 4))
+		{
+			storeBe32(ram, _val);
+			return;
+		}
+
+		// Same two accesses, in the same order, as mc68k::memoryOps does without this hook.
+		write16(_addr, static_cast<uint16_t>(_val >> 16));
+		write16(_addr + 2, static_cast<uint16_t>(_val & 0xffff));
+	}
+
+	uint8_t Microcontroller::read8Slow(const uint32_t _addr)
 	{
 		if(m_model == MachineModel::Machinedrum)
 		{
@@ -585,7 +685,7 @@ namespace md
 		return r.data[r.offset];
 	}
 
-	uint16_t Microcontroller::read16(const uint32_t _addr)
+	uint16_t Microcontroller::read16Slow(const uint32_t _addr)
 	{
 		if(m_model == MachineModel::Machinedrum)
 		{
@@ -610,7 +710,7 @@ namespace md
 		return mc68k::memoryOps::readU16(r.data, r.offset);
 	}
 
-	void Microcontroller::write8(const uint32_t _addr, const uint8_t _val)
+	void Microcontroller::write8Slow(const uint32_t _addr, const uint8_t _val)
 	{
 		if(memorymap::g_sim.contains(_addr))		{ m_sim.write8(memorymap::g_sim.offset(_addr), _val); return; }
 		if(memorymap::g_dsp1Hdi08.contains(_addr))	{ m_hdi08Dsp1.write8(static_cast<mc68k::PeriphAddress>(memorymap::g_dsp1Hdi08.offset(_addr)), _val); return; }
@@ -625,7 +725,7 @@ namespace md
 		r.data[r.offset] = _val;
 	}
 
-	void Microcontroller::write16(const uint32_t _addr, const uint16_t _val)
+	void Microcontroller::write16Slow(const uint32_t _addr, const uint16_t _val)
 	{
 		if(m_model == MachineModel::Machinedrum)
 		{
@@ -703,11 +803,9 @@ namespace md
 	uint16_t Microcontroller::readImm16(const uint32_t _addr)
 	{
 		// Instruction fetch: always from ROM/RAM, never a peripheral - do not log.
-		static constexpr uint32_t pageSize = 4096;
-		static constexpr uint32_t pageMask = pageSize - 1;
-		const uint32_t pageAddress = _addr & ~pageMask;
-		const uint32_t pageOffset = _addr & pageMask;
-		if(pageOffset + 1 < pageSize && pageAddress == m_immPageAddress)
+		const uint32_t pageAddress = _addr & ~g_immPageMask;
+		const uint32_t pageOffset = _addr & g_immPageMask;
+		if(pageOffset + 1 < g_immPageSize && pageAddress == m_immPageAddress)
 			return mc68k::memoryOps::readU16(m_immPageData, pageOffset);
 
 		const auto r = resolve(_addr);
@@ -715,15 +813,29 @@ namespace md
 
 		// All normal backing windows are page-aligned, but keep the cache
 		// conditional so an unusual future mapping retains the resolve() result.
-		if(pageOffset + 1 < pageSize && r.offset >= pageOffset
-			&& (r.offset & pageMask) == pageOffset
-			&& r.offset - pageOffset + pageSize <= r.size)
+		if(pageOffset + 1 < g_immPageSize && r.offset >= pageOffset
+			&& (r.offset & g_immPageMask) == pageOffset
+			&& r.offset - pageOffset + g_immPageSize <= r.size)
 		{
 			m_immPageAddress = pageAddress;
 			m_immPageData = r.data + r.offset - pageOffset;
 			return mc68k::memoryOps::readU16(m_immPageData, pageOffset);
 		}
 		return mc68k::memoryOps::readU16(r.data, r.offset);
+	}
+
+	uint32_t Microcontroller::readImm32(const uint32_t _addr)
+	{
+		// A long extension word is the common case of two fetches from the cached page. With the
+		// lane off (setMemoryFastLane) it is always the two fetches, as before.
+		const uint32_t pageOffset = _addr & g_immPageMask;
+		if(m_memoryFastLane && pageOffset + 3 < g_immPageSize
+			&& (_addr & ~g_immPageMask) == m_immPageAddress)
+			return loadBe32(m_immPageData + pageOffset);
+
+		// Cache miss or a word pair that crosses the page: two fetches in order, as before.
+		const uint32_t high = readImm16(_addr);
+		return (high << 16) | readImm16(_addr + 2);
 	}
 
 	uint32_t Microcontroller::getResetSP()

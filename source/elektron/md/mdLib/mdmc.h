@@ -21,6 +21,7 @@
 #include "mdturbomidi.h"
 #include "mdtypes.h"
 
+#include "baseLib/compilerdefs.h"
 #include "synthLib/midiBufferParser.h"
 
 namespace md
@@ -59,7 +60,14 @@ namespace md
 			const std::vector<uint8_t>& _initialUserFlash);
 
 		// mc68k::Mc68k overrides
-		uint32_t exec() override;
+		// One instruction, then the SIM and interrupt wiring it advanced. Inline: the
+		// scheduler runs it for every ColdFire instruction.
+		uint32_t exec() override
+		{
+			const auto cycles = execInstruction();
+			advanceAfterCpu(cycles);
+			return cycles;
+		}
 		uint32_t readIrqUserVector(uint8_t _level) override;
 		uint16_t readImm16(uint32_t _addr) override;
 
@@ -71,6 +79,20 @@ namespace md
 		void     write8 (uint32_t _addr, uint8_t  _val) override;
 		void     write16(uint32_t _addr, uint16_t _val) override;
 
+		// Native 32 bit accesses, picked up by mc68k::memoryOps instead of its two-16-bit
+		// default. Plain RAM is served in one step; everything else (flash, SIM, HI08,
+		// patch RAM) is still two 16 bit accesses, high word first.
+		uint32_t read32(uint32_t _addr);
+		void     write32(uint32_t _addr, uint32_t _val);
+		uint32_t readImm32(uint32_t _addr);
+
+		// The memory fast lane (L11: fastRam and the native 32 bit accesses) can be turned off, which
+		// sends every access through the full memory map, in two 16 bit steps for the 32 bit ones,
+		// as before it. Same results either way; md::Hardware::setSpeedUps drives it, under the
+		// owning Plugin device lock. The instruction page cache (readImm16) is not part of it.
+		void setMemoryFastLane(const bool _on) { m_memoryFastLane = _on; }
+		bool memoryFastLane() const { return m_memoryFastLane; }
+
 		uint32_t getResetPC() override;
 		uint32_t getResetSP() override;
 
@@ -81,6 +103,7 @@ namespace md
 		mc68k::Hdi08& getHdi08Dsp2() { return m_hdi08Dsp2; }	// DSP2 = voice producer
 
 		Sim& getSim() { return m_sim; }
+		const Sim& getSim() const { return m_sim; }
 
 		// Attach a front-panel decoder to receive the post-handshake UART2 host->panel
 		// stream (LCD framebuffer + LED banks). Owned by the caller (md::Hardware).
@@ -203,6 +226,19 @@ namespace md
 		};
 
 		Region resolve(uint32_t _addr);
+
+		// Fast lane for the plain RAM windows (main RAM and its two aliases, the ColdFire
+		// SRAM, the upper loader RAM): host pointer to _addr if the whole _length byte
+		// access lies inside one of them, else null (always null with the lane off). No side
+		// effects and no locks.
+		// Patch RAM (state-transfer lock), flash (command decoder), the SIM and the HI08
+		// windows are never served here; they and every access that leaves a window take
+		// the *Slow functions, which are the complete memory map.
+		uint8_t* fastRam(uint32_t _addr, uint32_t _length);
+		BASELIB_NOINLINE uint8_t  read8Slow(uint32_t _addr);
+		BASELIB_NOINLINE uint16_t read16Slow(uint32_t _addr);
+		BASELIB_NOINLINE void     write8Slow(uint32_t _addr, uint8_t _val);
+		BASELIB_NOINLINE void     write16Slow(uint32_t _addr, uint16_t _val);
 		void logPeripheral(uint32_t _addr, uint32_t _value, uint8_t _size, bool _write);
 		void onPanelTransmit(uint8_t _byte);	// minimal response from the absent panel controller
 
@@ -259,13 +295,22 @@ namespace md
 		uint32_t m_immPageAddress = 0xffffffffu;
 		const uint8_t* m_immPageData = nullptr;
 
+		bool     m_memoryFastLane = true;	// see setMemoryFastLane
+
 		uint8_t  m_panelProbeIndex = 0;	// progress matching the UART2 startup probe
 		uint8_t  m_mmPanelProbeIndex = 0;
 		bool     m_mmPanelHandshakeDone = false;
 
 		bool     m_panelDisplayReady = false;	// enabled once the panel startup handshake completes
 
-		void advanceAfterCpu(uint32_t _cycles);
+		void advanceAfterCpu(const uint32_t _cycles)
+		{
+			m_sim.exec(_cycles);
+			// Most instructions raise no interrupt: one test here, the delivery out of line.
+			if(m_sim.needsInterruptCheck() || m_externalIrq4Pending || m_sim.externalIrq4Asserted())
+				deliverInterrupts();
+		}
+		BASELIB_NOINLINE void deliverInterrupts();
 		uint32_t idleSelfBranchInstructions(uint32_t _maxCycles);
 		void advanceIdleSelfBranch(uint32_t _instructions);
 		void decodePanelByte(uint8_t _byte);

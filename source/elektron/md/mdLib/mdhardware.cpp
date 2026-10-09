@@ -69,6 +69,29 @@ namespace md
 		return dsp56k::sample2dsp(_inputs[_channel][_cursor]);
 	}
 
+	namespace
+	{
+		// The first UC cycle count whose frame position, cycles / _ucPerFrame in binary64 as
+		// the scheduler computes it, is not below _frame. The conversion and the division are
+		// both monotonic, so the counts below _frame form one run [0, result): done < result
+		// is the same test as done / _ucPerFrame < _frame, without a division per instruction.
+		uint64_t firstUcCycleAtFrame(const double _frame, const double _ucPerFrame)
+		{
+			const auto below = [&](const uint64_t _cycles)
+			{
+				return static_cast<double>(_cycles) / _ucPerFrame < _frame;
+			};
+			// The product is within a cycle or two of the answer; the exact test settles it.
+			const double estimate = std::ceil(_frame * _ucPerFrame);
+			uint64_t cycles = estimate > 0.0 ? static_cast<uint64_t>(estimate) : 0;
+			while(cycles > 0 && !below(cycles - 1))
+				--cycles;
+			while(below(cycles))
+				++cycles;
+			return cycles;
+		}
+	}
+
 	Hardware::Hardware(const std::vector<uint8_t>& _romData,
 		const std::string& _romName, const MachineModel _model,
 		const std::vector<uint8_t>& _initialPatchRam,
@@ -121,9 +144,16 @@ namespace md
 		, m_dspProducer(*this, m_uc.getHdi08Dsp2(), 1)	// DSP2, producer
 	{
 		// Ship the validated bounded dispatcher by default while retaining the
-		// established path as a field fallback and exact A/B control.
+		// established path as a field fallback and exact A/B control. The switch covers the
+		// background DSP slices.
 		const auto* const boundedJit = std::getenv("GEARMULATOR_MDMM_BOUNDED_JIT");
 		m_schedBoundedJit = boundedJit == nullptr || std::strcmp(boundedJit, "0") != 0;
+		// The step 1 speed-ups (setSpeedUps), on by default: "0" runs the code they replaced.
+		// GEARMULATOR_MDMM_SIM_DEFERRAL=0 turns off the SIM's event-driven stepping (L5) alone.
+		const auto* const simDeferral = std::getenv("GEARMULATOR_MDMM_SIM_DEFERRAL");
+		m_simDeferral = simDeferral == nullptr || std::strcmp(simDeferral, "0") != 0;
+		const auto* const speedUps = std::getenv("GEARMULATOR_MDMM_SPEEDUPS");
+		setSpeedUps(speedUps == nullptr || std::strcmp(speedUps, "0") != 0);
 
 		if(!m_rom.isValid())
 			return;
@@ -1026,17 +1056,54 @@ namespace md
 
 	void Hardware::processUC()
 	{
-		// Deliver queued panel input to firmware over UART2 RX. The existing
-		// release/acquire pending count is a counted-work wake, not a second dirty
-		// bit: a racing producer can make us defer once, but the count cannot clear
-		// until this single consumer drains the published packet.
+		// Almost every instruction has no input to deliver: one test of every input source,
+		// and the delivery out of line. A producer racing the test is seen at the next
+		// instruction boundary, as it was when each source was tested on its own.
 		// Do not let input mutate the bootstrap machine and then disappear when the
 		// coherent project images are published. Queues remain intact until restore.
 		const bool projectRestorePending =
 			m_pendingFlashRestoreActive.load(std::memory_order_acquire);
-		if(!projectRestorePending)
-			pumpScheduledMidi();
-		if(!projectRestorePending && m_panelIn.hasPending())
+		if(!projectRestorePending && ucInputPending())
+			deliverUcInput();
+
+		// Drive DSP2's HI08 HREQ into the ColdFire external IRQ4 BEFORE stepping the CPU, so the
+		// interrupt this pump raises is visible to the instruction m_uc.exec() runs (SIM interrupts
+		// are injected inside exec()). The pump returns at once unless a wake or a deferred word is
+		// pending, so that test is made here, for both machines. See pumpDsp2HostRequest.
+		if(m_schedulerHostPumpDirty.load(std::memory_order_acquire)
+			|| m_dspMixer.hasDeferredHostRx() || m_dspProducer.hasDeferredHostRx())
+			pumpDsp2HostRequest();
+
+		const auto deltaCycles = m_uc.exec();
+		if(!projectRestorePending && m_midiSysexTransfer.ownsMidiWire())
+			serviceMidiSysexTransfer(deltaCycles);
+
+		m_schedUcCyclesDone += deltaCycles;
+	}
+
+	bool Hardware::ucInputPending() const
+	{
+		return m_scheduledMidi.ready(m_schedUcCyclesDone) || m_panelIn.hasPending()
+			|| midiIngressPending();
+	}
+
+	bool Hardware::midiIngressPending() const
+	{
+		return m_midiSysexTransfer.ownsMidiWire() || m_midiInByteCursor != 0
+			|| !m_midiIn.empty() || !m_midiClockBypass.empty()
+			|| m_realtimeMidiIn.size() != 0;
+	}
+
+	void Hardware::deliverUcInput()
+	{
+		// Due host MIDI first: it presses MD pads on UART2 and fills the MIDI ingress queues.
+		pumpScheduledMidi();
+
+		// Deliver queued panel input to firmware over UART2 RX. The existing
+		// release/acquire pending count is a counted-work wake, not a second dirty
+		// bit: a racing producer can make us defer once, but the count cannot clear
+		// until this single consumer drains the published packet.
+		if(m_panelIn.hasPending())
 		{
 			PanelInputQueue::DrainBuffer panelInput;
 			const auto availablePackets = m_uc.availablePanelRxBytes() / 2;
@@ -1053,35 +1120,25 @@ namespace md
 			}
 		}
 
-		// Avoid entering MIDI arbitration when every source is idle; a producer
-		// racing this observation is visible at the next instruction boundary.
-		if(!projectRestorePending && (m_midiSysexTransfer.ownsMidiWire()
-			|| m_midiInByteCursor != 0
-			|| !m_midiIn.empty() || !m_midiClockBypass.empty()
-			|| m_realtimeMidiIn.size() != 0))
+		// Avoid entering MIDI arbitration when every source is idle (the scheduled
+		// MIDI above may just have filled one).
+		if(midiIngressPending())
 			pumpMidiIngress();
+	}
 
-		// Drive DSP2's HI08 HREQ into the ColdFire external IRQ4 BEFORE stepping the CPU, so the
-		// interrupt this pump raises is visible to the instruction m_uc.exec() runs (SIM interrupts
-		// are injected inside exec()). See pumpDsp2HostRequest.
-		if(!isMonomachine()
-			|| m_schedulerHostPumpDirty.load(std::memory_order_acquire)
-			|| m_dspMixer.hasDeferredHostRx() || m_dspProducer.hasDeferredHostRx())
-			pumpDsp2HostRequest();
-
-		const auto deltaCycles = m_uc.exec();
-		if(!projectRestorePending && m_midiSysexTransfer.ownsMidiWire())
-			m_midiSysexTransfer.service(deltaCycles,
-				m_midiInByteCursor == 0
-					&& m_realtimeMidiIn.sizeBefore(
-						m_midiSysexTransfer.realtimeWriteBoundary()) == 0,
-				m_uc);
-
-		m_schedUcCyclesDone += deltaCycles;
+	void Hardware::serviceMidiSysexTransfer(const uint32_t _cycles)
+	{
+		m_midiSysexTransfer.service(_cycles,
+			m_midiInByteCursor == 0
+				&& m_realtimeMidiIn.sizeBefore(
+					m_midiSysexTransfer.realtimeWriteBoundary()) == 0,
+			m_uc);
 	}
 
 	void Hardware::pumpDsp2HostRequest()
 	{
+		// The early return below is this function's own contract. processUC tests the same
+		// condition before the call, so the settled path does not even enter the function.
 		// The settled path executes millions of ColdFire instructions between meaningful
 		// host-port edges. Keep that overwhelmingly common clean check read-only; reserve the
 		// cache-line-writing RMW for a producer/consumer/ICR wake. A wake racing the exchange
@@ -1376,21 +1433,24 @@ namespace md
 			// Advance the UC toward subTarget; each processUC() runs one m_uc.exec() (and its HI08
 			// callbacks, which catch the target DSP up inline). Guaranteed at least one step; clamped.
 			const uint64_t clampStop = m_schedUcCyclesDone + clampCycles;
+			const uint64_t sliceEnd = firstUcCycleAtFrame(subTarget, ucPerFrame);
 
 			uint32_t probeCount = 0;
 			do
 			{
 			processUC();
-			// Probe periodically within the existing UC slice. A
-			// pending host word/wake, restore or MIDI transfer disables skipping.
+			// Probe periodically within the existing UC slice; the steps in between
+			// only test the end of the slice. A pending host word/wake, restore or
+			// MIDI transfer disables skipping.
+			if((probeCount++ & 15u) != 0)
+				continue;
 			// The Monomachine path skips its ColdFire idle loop (BRA.B -2) in
-			// chunks. The Machinedrum idles the same way, but its unconditional
-			// per-step host pump must not be skipped while a DSP holds an
-			// unpumped transmit word: delaying that word would delay the
-			// HREQ->IRQ4 edge the idle firmware may be waiting for. With both
-			// transmit registers empty the pump is a no-op (no UC reads happen
-			// mid-skip, so the latched queue state cannot be observed), and the
-			// skip stays transparent.
+			// chunks. The Machinedrum idles the same way, but only while neither
+			// DSP holds a word in its transmit register. The host pump itself runs
+			// only when it is dirty or a word is deferred (processUC tests both), and
+			// the skip condition below tests the same two, so an idle step has no pump
+			// work to lose; the transmit test is the older, stricter gate. Whether it
+			// can go is a separate lever that needs its own gate run.
 			const bool dspTxClear = !m_dspMixer.hdi08().hasTX()
 				&& !m_dspProducer.hdi08().hasTX();
 			// A paced SysEx between two of its bytes (B-010) waits for a cycle, not for the
@@ -1398,7 +1458,7 @@ namespace md
 			const bool sysexWaits = m_midiInByteCursor != 0 && m_sysexIngressCyclesPerByte
 				&& m_sysexIngressNextCycle > m_schedUcCyclesDone && m_midiClockBypass.empty()
 				&& !m_midiIn.empty() && !m_midiIn.front().sysex.empty();
-			if(((probeCount++ & 15u) == 0) && (isMonomachine() || dspTxClear)
+			if((isMonomachine() || dspTxClear)
 				&& m_schedUcCyclesDone < clampStop
 					&& !m_pendingFlashRestoreActive.load(std::memory_order_acquire)
 					&& !m_schedulerHostPumpDirty.load(std::memory_order_acquire)
@@ -1422,14 +1482,31 @@ namespace md
 							maxCycles = static_cast<uint32_t>(std::min<uint64_t>(maxCycles,
 								m_sysexIngressNextCycle - m_schedUcCyclesDone));
 						const auto limit = m_uc.idleSelfBranchInstructions(maxCycles);
+						const auto inputPending = [this, sysexWaits]
+						{
+							return m_panelIn.hasPending() || (!m_midiIn.empty() && !sysexWaits)
+								|| !m_midiClockBypass.empty() || m_realtimeMidiIn.size() != 0
+								|| m_midiSysexTransfer.ownsMidiWire();
+						};
 						uint32_t instructions = 0;
-						// Keep external input polling at each omitted instruction
-						// boundary; a producer still wakes the ordinary path.
-						for(; instructions < limit; ++instructions)
-							if(m_panelIn.hasPending() || (!m_midiIn.empty() && !sysexWaits) || !m_midiClockBypass.empty()
-								|| m_realtimeMidiIn.size() != 0
-								|| m_midiSysexTransfer.ownsMidiWire())
-								break;
+						if(m_speedUps)
+						{
+							// L1: the external inputs are tested once for the whole batch, not at
+							// each omitted instruction: Plugin::process holds the device lock for the
+							// whole call and the panel and SysEx producers take the same lock, so none
+							// of them can change while this batch runs. A producer that arrives later
+							// wakes the ordinary path at the next probe. A future lock-free producer
+							// would wait at most one batch (about 110 microseconds of machine time).
+							instructions = inputPending() ? 0 : limit;
+						}
+						else
+						{
+							// Speed-ups off: keep external input polling at each omitted instruction
+							// boundary, as before L1; a producer still wakes the ordinary path.
+							for(; instructions < limit; ++instructions)
+								if(inputPending())
+									break;
+						}
 						if(instructions)
 						{
 							MD_TRANSPORT_RECORD(m_transportScorecard.idleSelfBranchInstructions
@@ -1443,8 +1520,7 @@ namespace md
 					}
 				}
 			}
-			while(static_cast<double>(m_schedUcCyclesDone) / ucPerFrame < subTarget
-				&& m_schedUcCyclesDone < clampStop);
+			while(m_schedUcCyclesDone < sliceEnd && m_schedUcCyclesDone < clampStop);
 #if MD_TRANSPORT_DIAGNOSTICS
 			const auto diagnosticExecuted = m_schedUcCyclesDone - diagnosticStart;
 			score.executedCycles += diagnosticExecuted;
@@ -1558,12 +1634,21 @@ namespace md
 			score.maximumRequestedCycles = std::max(score.maximumRequestedCycles, requested););
 		// MM flow control: a host-TX-backlogged DSP does not advance in catch-up either - the
 		// catch-up loops are how a DSP outruns the UC by thousands of words in the first place
-		// (see the schedStep backpressure comment). MD path untouched.
+		// (see the schedStep backpressure comment). The MM therefore keeps its per-block loop,
+		// which tests the backlog between blocks. The MD has no such test, so it runs the whole
+		// catch-up under one execUntilCycles entry, like the background slice in schedStep: the
+		// same blocks with the same checks before each, minus one trampoline entry per block (L2b;
+		// with the speed-ups off, setSpeedUps, the MD keeps the per-block loop too).
 		const bool s_mmBp = isMonomachine();
-		while(d.dsp().getCycles() < targetCyc && d.dsp().getCycles() < clampStop
-			&& (!s_mmBp
-				|| d.hostTxBacklog() <= policy.hostTransmitBackpressureThresholdWords))
-			d.dsp().exec();
+		if(!s_mmBp && m_speedUps)
+			d.dsp().execUntilCycles(std::min(targetCyc, clampStop));
+		else
+		{
+			while(d.dsp().getCycles() < targetCyc && d.dsp().getCycles() < clampStop
+				&& (!s_mmBp
+					|| d.hostTxBacklog() <= policy.hostTransmitBackpressureThresholdWords))
+				d.dsp().exec();
+		}
 		MD_TRANSPORT_RECORD(const auto executed = d.dsp().getCycles() - startCyc;
 			score.executedCycles += executed;
 			score.maximumExecutedCycles = std::max(score.maximumExecutedCycles, executed);
@@ -1629,10 +1714,17 @@ namespace md
 			score.maximumRequestedCycles = std::max(score.maximumRequestedCycles, requested););
 		m_schedInLinkDelivery = true;
 		const bool bpGate = isMonomachine();
-		while(d.dsp().getCycles() < targetCyc && d.dsp().getCycles() < clampStop
-			&& (!bpGate
-				|| d.hostTxBacklog() <= policy.hostTransmitBackpressureThresholdWords))
-			d.dsp().exec();
+		// Same split as in schedCatchUpDsp: the MM keeps its per-block backpressure loop, the MD
+		// runs the catch-up under one execUntilCycles entry (L2b, with the speed-ups on).
+		if(!bpGate && m_speedUps)
+			d.dsp().execUntilCycles(std::min(targetCyc, clampStop));
+		else
+		{
+			while(d.dsp().getCycles() < targetCyc && d.dsp().getCycles() < clampStop
+				&& (!bpGate
+					|| d.hostTxBacklog() <= policy.hostTransmitBackpressureThresholdWords))
+				d.dsp().exec();
+		}
 		m_schedInLinkDelivery = false;
 		MD_TRANSPORT_RECORD(const auto executed = d.dsp().getCycles() - startCyc;
 			score.executedCycles += executed;

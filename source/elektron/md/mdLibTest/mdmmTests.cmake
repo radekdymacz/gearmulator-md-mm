@@ -54,6 +54,12 @@ function(mdmm_add_lib_tests _dir)
 	target_link_libraries(mmCpuBenchTest PRIVATE mdLib elektronData)
 	set_property(TARGET mmCpuBenchTest PROPERTY FOLDER "Elektron/test")
 
+	# The gate of the emulation CPU plan (doc/modern-ux/RESEARCH-emulation-cpu.md, section 5): bit-exact audio and
+	# RAM hashes plus host instructions and cycles per frame, MD or MM, stopped and playing. Manual: needs a ROM.
+	add_executable(mdmmPerfGateTest ${_dir}/mdmmPerfGateTest.cpp ${_dir}/mdFirmwareSession.h)
+	target_link_libraries(mdmmPerfGateTest PRIVATE mdLib elektronData)
+	set_property(TARGET mdmmPerfGateTest PROPERTY FOLDER "Elektron/test")
+
 	# P4 Machinedrum Editor discovery probes (start-up animation, chaining,
 	# mutes, kit and pattern library). Manual: needs a user-supplied ROM.
 	add_executable(mdP4ProbeFirmwareTest ${_dir}/mdP4ProbeFirmwareTest.cpp ${_dir}/mdFirmwareSession.h)

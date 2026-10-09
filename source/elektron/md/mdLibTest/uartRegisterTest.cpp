@@ -1,8 +1,10 @@
 #include "mdLib/mdsim.h"
 
 #include <array>
+#include <cstdint>
 #include <iostream>
 #include <stdexcept>
+#include <vector>
 
 namespace
 {
@@ -11,6 +13,14 @@ namespace
 		if(!_condition)
 			throw std::runtime_error(_message);
 	}
+
+	// Every case below runs once per stepping mode (md::Sim::setDeferStepping): both must give the same result.
+	bool g_deferStepping = true;
+
+	struct Sim : md::Sim
+	{
+		Sim() { setDeferStepping(g_deferStepping); }
+	};
 
 	uint32_t configureUart(md::Sim& _sim, const unsigned _uart)
 	{
@@ -28,7 +38,7 @@ namespace
 
 	void sourceStatus(const unsigned _uart)
 	{
-		md::Sim sim;
+		Sim sim;
 		const auto base = configureUart(sim, _uart);
 		// MCF5206EUM 12.4.1.10/.11: UIMR gates delivery, not UISR source status.
 		sim.write8(base + md::Sim::g_uartIsr, 0);
@@ -61,7 +71,7 @@ namespace
 
 	void receiveUnmask(const unsigned _uart)
 	{
-		md::Sim sim;
+		Sim sim;
 		const auto base = configureUart(sim, _uart);
 		sim.write8(base + md::Sim::g_uartIsr, 0);
 		sim.queueRx(_uart, 0x57);
@@ -80,7 +90,7 @@ namespace
 
 	void pendingMaskChanges(const unsigned _uart)
 	{
-		md::Sim sim;
+		Sim sim;
 		const auto base = configureUart(sim, _uart);
 		const auto source = _uart == md::Sim::g_uartPanel ? md::Sim::g_irqSrcUart2 : md::Sim::g_irqSrcUart1;
 		sim.write16(md::Sim::g_imr, static_cast<uint16_t>(1u << source));
@@ -111,7 +121,7 @@ namespace
 
 	void maskedDrain(const unsigned _uart)
 	{
-		md::Sim sim;
+		Sim sim;
 		const auto base = configureUart(sim, _uart);
 		sim.queueRx(_uart, 0x41);
 		sim.queueRx(_uart, 0x42);
@@ -147,7 +157,7 @@ namespace
 
 	void panelTransmitPacing()
 	{
-		md::Sim sim;
+		Sim sim;
 		constexpr auto uart = md::Sim::g_uartPanel;
 		constexpr auto base = md::Sim::g_uart2Base;
 		std::array<uint8_t, 3> received{};
@@ -200,7 +210,7 @@ namespace
 
 	void panelTransmitInterruptTiming()
 	{
-		md::Sim sim;
+		Sim sim;
 		constexpr auto uart = md::Sim::g_uartPanel;
 		constexpr auto base = md::Sim::g_uart2Base;
 		unsigned received = 0;
@@ -234,39 +244,249 @@ namespace
 		require(!sim.takeNextInterrupt(level, vector),
 			"one holding-register transition offered duplicate interrupts");
 	}
+
+	// A seeded xorshift: the mirrors below draw the same program from the same seed.
+	class Rng
+	{
+	public:
+		explicit Rng(const uint64_t _seed) : m_state(_seed * 0x9e3779b97f4a7c15ull + 1) {}
+		uint32_t next()
+		{
+			m_state ^= m_state << 13;
+			m_state ^= m_state >> 7;
+			m_state ^= m_state << 17;
+			return static_cast<uint32_t>(m_state >> 11);
+		}
+
+	private:
+		uint64_t m_state;
+	};
+
+	// One Sim driven by a random program of what the emulator does to it (instructions of 1 to 24 cycles, now and
+	// then a long one; timer and UART register reads and writes; transmit bytes; interrupt delivery as processUC
+	// does it; deadline queries; resets) and a trace of everything the program can see. The program depends only on
+	// the seed, so mirrors of the same seed must leave the same trace, whatever their stepping mode.
+	class Mirror
+	{
+	public:
+		Mirror(const uint64_t _seed, const bool _defer, const bool _toggle)
+			: m_rng(_seed), m_toggleRng(_seed + 1000), m_toggle(_toggle)
+		{
+			m_sim.setDeferStepping(_defer);
+			m_sim.setTransmitCallback(md::Sim::g_uartPanel, [this](const uint8_t _byte) { note(1, _byte); });
+			m_sim.setTransmitCallback(md::Sim::g_uartMidi, [this](const uint8_t _byte) { note(2, _byte); });
+			configure();
+		}
+
+		const std::vector<uint64_t>& trace() const { return m_trace; }
+
+		void step()
+		{
+			++m_action;
+			// The mode changes at any point of the run, as the menu entry does.
+			if(m_toggle && (m_toggleRng.next() & 15) == 0)
+				m_sim.setDeferStepping((m_toggleRng.next() & 1) != 0);
+
+			const auto op = m_rng.next() % 100;
+			const auto timer = (m_rng.next() & 1) ? md::Sim::g_timer1Base : md::Sim::g_timer2Base;
+			const auto base = (m_rng.next() & 1) ? md::Sim::g_uart1Base : md::Sim::g_uart2Base;
+			const auto value = m_rng.next();
+			if(op < 50)
+			{
+				// processUC: the instruction's cycles, then the interrupt scan when the SIM asks for it.
+				m_sim.exec((value % 64) == 0 ? 1 + (value >> 6) % 6000 : 1 + (value >> 6) % 24);
+				note(5, m_sim.needsInterruptCheck());
+				if(m_sim.needsInterruptCheck())
+				{
+					uint8_t level = 0, vector = 0;
+					while(m_sim.takeNextInterrupt(level, vector))
+						note(3, static_cast<uint32_t>(level) << 8 | vector);
+				}
+			}
+			else if(op < 56)
+				note(4, m_sim.read16(timer + md::Sim::g_timerTcn));
+			else if(op < 60)
+				note(4, m_sim.read8(timer + md::Sim::g_timerTer));
+			else if(op < 66)
+				note(4, m_sim.read8(base + md::Sim::g_uartUsr));
+			else if(op < 68)
+				note(4, m_sim.read8(base + md::Sim::g_uartIsr));
+			else if(op < 74)
+				m_sim.write8(base + md::Sim::g_uartRxTx, static_cast<uint8_t>(value));
+			else if(op < 78)
+			{
+				// RST (mostly on), ICLK master or master/16 or stopped, FRR, ORI, a small prescaler.
+				const uint16_t tmr = static_cast<uint16_t>(((value & 7) != 0 ? 1 : 0) | ((value >> 3) % 3) << 1
+					| ((value >> 5) & 1) << 3 | ((value >> 6) & 1) << 4 | ((value >> 7) % 5) << 8);
+				m_sim.write16(timer + md::Sim::g_timerTmr, tmr);
+			}
+			else if(op < 82)
+				m_sim.write16(timer + md::Sim::g_timerTrr, static_cast<uint16_t>((value & 3) == 0 ? value % 8 : value % 3000));
+			else if(op < 84)
+				m_sim.write8(timer + md::Sim::g_timerTer, static_cast<uint8_t>(value));
+			else if(op < 86)
+				m_sim.write16(timer + md::Sim::g_timerTcn, static_cast<uint16_t>(value));
+			else if(op < 88)
+				m_sim.write8(base + md::Sim::g_uartIsr, static_cast<uint8_t>(value & 3));
+			else if(op < 89)
+				m_sim.write16(md::Sim::g_imr, (value & 1) ? 0 : static_cast<uint16_t>(value & 0x3ffe));
+			else if(op < 92)
+			{
+				note(6, m_sim.cyclesUntilNextTimerInterrupt());
+				note(7, m_sim.cyclesUntilNextUartTransmit());
+			}
+			else if(op < 94)
+				m_sim.setMidiTransmitCharacterCycles((value & 3) == 0 ? 0 : 80 << (value >> 2) % 6);
+			else if(op < 96)
+				m_sim.queueRx((value & 1) ? md::Sim::g_uartPanel : md::Sim::g_uartMidi, static_cast<uint8_t>(value >> 1));
+			else if(op < 97)
+				observeAll();
+			else if(op == 97 && (value & 7) == 0)
+			{
+				m_sim.reset();
+				configure();
+			}
+			else
+				m_sim.exec(1 + value % 16);
+		}
+
+	private:
+		void note(const uint64_t _kind, const uint64_t _value)
+		{
+			m_trace.push_back(_kind << 56 | (m_action & 0xffffff) << 32 | (_value & 0xffffffff));
+		}
+
+		void observeAll()
+		{
+			for(const auto timer : {md::Sim::g_timer1Base, md::Sim::g_timer2Base})
+			{
+				note(8, m_sim.read16(timer + md::Sim::g_timerTcn));
+				note(8, m_sim.read8(timer + md::Sim::g_timerTer));
+			}
+			for(const auto base : {md::Sim::g_uart1Base, md::Sim::g_uart2Base})
+			{
+				note(9, m_sim.read8(base + md::Sim::g_uartUsr));
+				note(9, m_sim.read8(base + md::Sim::g_uartIsr));
+			}
+			note(10, m_sim.read16(md::Sim::g_ipr));
+		}
+
+		// The panel UART as the MD firmware programs it, the MIDI UART the same, Timer 1 as its tick.
+		void configure()
+		{
+			for(const auto base : {md::Sim::g_uart1Base, md::Sim::g_uart2Base})
+			{
+				m_sim.write8(base + md::Sim::g_uartMr, 0xb3);
+				m_sim.write8(base + md::Sim::g_uartMr, 0x07);
+				m_sim.write8(base + md::Sim::g_uartUsr, 0xdd);
+				m_sim.write8(base + md::Sim::g_uartBg1, 0x00);
+				m_sim.write8(base + md::Sim::g_uartBg2, 0x08);
+				m_sim.write8(base + md::Sim::g_uartCr, 0x04);
+				m_sim.write8(base + md::Sim::g_uartIvr, 0x60);
+				m_sim.write8(base + md::Sim::g_uartIsr, md::Sim::g_uimrTxRdy);
+			}
+			m_sim.write8(md::Sim::g_icrUart1, 3 << 2);
+			m_sim.write8(md::Sim::g_icrUart2, 3 << 2);
+			m_sim.write8(md::Sim::g_icrTimer1, md::Sim::g_icrAutovector | 1 << 2);
+			m_sim.write8(md::Sim::g_icrTimer2, md::Sim::g_icrAutovector | 1 << 2);
+			m_sim.write16(md::Sim::g_imr, 0);
+			m_sim.setMidiTransmitCharacterCycles(2560);
+			m_sim.write16(md::Sim::g_timer1Base + md::Sim::g_timerTrr, 700);
+			m_sim.write16(md::Sim::g_timer1Base + md::Sim::g_timerTmr, 0x0101 | md::Sim::g_tmrOri);
+		}
+
+		Sim m_sim;
+		Rng m_rng;
+		Rng m_toggleRng;
+		const bool m_toggle;
+		uint64_t m_action = 0;
+		std::vector<uint64_t> m_trace;
+	};
+
+	// The deferred stepping, the per-instruction stepping and a Sim that changes between the two at random points
+	// must be indistinguishable: the same register reads, the same interrupts after the same instructions, the same
+	// transmitted bytes at the same instruction, the same deadlines.
+	void steppingModesAgree()
+	{
+		for(uint64_t seed = 1; seed <= 6; ++seed)
+		{
+			Mirror deferred(seed, true, false);
+			Mirror perInstruction(seed, false, false);
+			Mirror toggling(seed, true, true);
+			size_t checked = 0;
+			for(unsigned action = 0; action < 60000; ++action)
+			{
+				deferred.step();
+				perInstruction.step();
+				toggling.step();
+				const auto& reference = perInstruction.trace();
+				require(deferred.trace().size() == reference.size() && toggling.trace().size() == reference.size(),
+					"a stepping mode saw a different number of events");
+				for(; checked < reference.size(); ++checked)
+				{
+					require(deferred.trace()[checked] == reference[checked],
+						"deferred stepping differs from per-instruction stepping");
+					require(toggling.trace()[checked] == reference[checked],
+						"switching the stepping mode changed what the SIM did");
+				}
+			}
+			// Guard against a program that never gets anywhere: interrupts, bytes and reads must all occur.
+			size_t interrupts = 0, bytes = 0;
+			for(const auto entry : perInstruction.trace())
+			{
+				interrupts += entry >> 56 == 3;
+				bytes += entry >> 56 == 1 || entry >> 56 == 2;
+			}
+			require(interrupts > 50 && bytes > 50, "the random program did not exercise timers and transmitters");
+		}
+	}
 }
 
 int main()
 {
 	unsigned failures = 0;
-	for(unsigned uart = 0; uart < md::Sim::g_uartCount; ++uart)
+	for(const bool defer : {true, false})
 	{
-		// Run independently so a status failure cannot hide the unmasking regression.
-		for(const auto test : {sourceStatus, receiveUnmask, pendingMaskChanges, maskedDrain})
+		g_deferStepping = defer;
+		const char* const mode = defer ? "deferred" : "per-instruction";
+		for(unsigned uart = 0; uart < md::Sim::g_uartCount; ++uart)
 		{
-			try
+			// Run independently so a status failure cannot hide the unmasking regression.
+			for(const auto test : {sourceStatus, receiveUnmask, pendingMaskChanges, maskedDrain})
 			{
-				test(uart);
+				try
+				{
+					test(uart);
+				}
+				catch(const std::exception& error)
+				{
+					std::cerr << mode << " stepping, UART " << uart << ": " << error.what() << '\n';
+					++failures;
+				}
 			}
-			catch(const std::exception& error)
-			{
-				std::cerr << "UART " << uart << ": " << error.what() << '\n';
-				++failures;
-			}
+		}
+		try
+		{
+			panelTransmitPacing();
+			panelTransmitInterruptTiming();
+		}
+		catch(const std::exception& error)
+		{
+			std::cerr << mode << " stepping, panel transmit pacing: " << error.what() << '\n';
+			++failures;
 		}
 	}
 	try
 	{
-		panelTransmitPacing();
-		panelTransmitInterruptTiming();
+		steppingModesAgree();
 	}
 	catch(const std::exception& error)
 	{
-		std::cerr << "panel transmit pacing: " << error.what() << '\n';
+		std::cerr << "stepping modes: " << error.what() << '\n';
 		++failures;
 	}
 	if(failures)
 		return 1;
-	std::cout << "UART register, receive-unmask, and panel transmit timing tests passed\n";
+	std::cout << "UART register, receive-unmask, and panel transmit timing tests passed, in both stepping modes\n";
 	return 0;
 }

@@ -73,12 +73,20 @@ namespace
 
 namespace
 {
+	// Every case runs once per stepping mode (md::Sim::setDeferStepping): both must give the same result.
+	bool g_deferStepping = true;
+
+	struct Sim : md::Sim
+	{
+		Sim() { setDeferStepping(g_deferStepping); }
+	};
+
 	enum class PendingChange { None, SameMask, UartMaskToggle, GlobalMaskToggle, AppendByte };
 
 	void pendingReceive(const unsigned _uart, const PendingChange _change)
 	{
 		Cpu cpu;
-		md::Sim sim;
+		Sim sim;
 		const auto base = _uart == md::Sim::g_uartPanel ? md::Sim::g_uart2Base : md::Sim::g_uart1Base;
 		const auto icr = _uart == md::Sim::g_uartPanel ? md::Sim::g_icrUart2 : md::Sim::g_icrUart1;
 		sim.write16(md::Sim::g_imr, 0);
@@ -145,19 +153,24 @@ namespace
 int main()
 {
 	unsigned failures = 0;
-	for(unsigned uart = 0; uart < md::Sim::g_uartCount; ++uart)
+	for(const bool defer : {true, false})
 	{
-		for(const auto change : {PendingChange::None, PendingChange::SameMask, PendingChange::UartMaskToggle,
-			PendingChange::GlobalMaskToggle, PendingChange::AppendByte})
+		g_deferStepping = defer;
+		for(unsigned uart = 0; uart < md::Sim::g_uartCount; ++uart)
 		{
-			try
+			for(const auto change : {PendingChange::None, PendingChange::SameMask, PendingChange::UartMaskToggle,
+				PendingChange::GlobalMaskToggle, PendingChange::AppendByte})
 			{
-				pendingReceive(uart, change);
-			}
-			catch(const std::exception& error)
-			{
-				std::cerr << "UART " << uart << " case " << static_cast<unsigned>(change) << ": " << error.what() << '\n';
-				++failures;
+				try
+				{
+					pendingReceive(uart, change);
+				}
+				catch(const std::exception& error)
+				{
+					std::cerr << (defer ? "deferred" : "per-instruction") << " stepping, UART " << uart << " case "
+						<< static_cast<unsigned>(change) << ": " << error.what() << '\n';
+					++failures;
+				}
 			}
 		}
 	}

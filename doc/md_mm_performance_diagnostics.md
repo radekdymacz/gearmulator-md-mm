@@ -7,7 +7,7 @@ project restore. It is off by default and never uploads a report.
 ## Collect a report
 
 1. Right-click the instrument background in the Machinedrum Editor or the Monomachine Editor and open
-   **Performance diagnostics**. Knobs may have their own parameter menu.
+   **Developer** (the Performance diagnostics entries moved there in 0.3.5). Knobs may have their own parameter menu.
 2. Click **Start performance capture**. Reopen the submenu to check its status.
 3. Reproduce the crackling or slow playback using your normal host settings.
 4. Click **Stop performance capture**, then **Open logs folder**.
@@ -29,6 +29,47 @@ For hosts without an open editor, set `GEARMULATOR_RT_INSTRUMENTATION=1` (also
 accepts `true`/`TRUE`) **before starting the host**. MD/MM then automatically starts
 an exported capture for each instance. Remove the environment variable to prevent
 this on later launches. The context menu can stop an environment-started capture.
+
+## Switches for testers
+
+The editors run the emulated Machinedrum and Monomachine faster than they used to (step 1 of the emulation
+CPU work: four speed-ups, listed below). One switch turns all of them off, so you can find out in minutes
+whether a CPU problem, a click or a timing difference comes from them. **Both positions produce the same
+audio, bit for bit**, checked on both firmwares (audio, RAM, SRAM, loader RAM, patch RAM and MIDI out are
+compared); only the host CPU differs. With the speed-ups off the emulation runs the code that the
+speed-ups replaced, and costs about what it did before step 1: a few per cent less, because the one thing
+that stays on is the `processUC` gating (part B of L5; it only skips work that cannot change anything, so
+it has no switch).
+
+- **Menu: Developer > Speed-ups off (legacy emulation, slower).** Ticked is the old
+  emulation. The choice applies at once, without restarting, and is kept in the plug-in's settings (key
+  `legacyEmulation`) and across project loads.
+- **`GEARMULATOR_MDMM_SPEEDUPS=0`** starts every new session with the speed-ups off. Set it as an
+  environment variable **before starting the host**; remove it to go back to the default. It only sets the
+  starting position: a ticked menu item also starts a session with the speed-ups off, and the menu can
+  change either at run time.
+
+The speed-ups the switch controls:
+
+- **L1** the idle skip of the ColdFire's wait loop tests its inputs once per batch instead of at every
+  skipped instruction.
+- **L11** the ColdFire memory fast lane: plain RAM is read and written directly and 32-bit accesses take
+  one step. Off, every access goes through the complete memory map, as two 16-bit steps for a long word.
+- **L2b** the Machinedrum DSP catch-ups run under one cycle-bounded entry instead of block by block.
+- **L5** the ColdFire's timers and UART transmitters are stepped when they reach an event, not after
+  every instruction.
+
+Two finer environment variables exist for narrowing a problem down further. Both are environment
+variables only:
+
+- **`GEARMULATOR_MDMM_SIM_DEFERRAL=0`** turns off L5 alone (timers and UART transmitters stepped after
+  every instruction). It also holds when the menu leaves the speed-ups on.
+- **`GEARMULATOR_MDMM_BOUNDED_JIT=0`** is older than the speed-ups and unrelated to them: it runs the DSP
+  background slices instruction by instruction instead of in cycle-bounded entries. The speed-ups switch
+  does not change it, and it does not change L2b.
+
+If a problem goes away with the speed-ups off, send the performance report from a capture with them off
+and one with them on.
 
 ## Contents and interpretation
 

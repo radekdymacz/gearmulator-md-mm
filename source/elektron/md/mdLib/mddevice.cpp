@@ -133,6 +133,7 @@ namespace md
 		m_hardware = std::make_unique<Hardware>(_params.romData, _params.romName, m_model,
 			loadInitialPatchRam(_params, m_model, _initialPatchRam), m_frontPanelPublisher,
 			initialFlash.flash, initialFlash.cache);
+		m_speedUps = m_hardware->speedUps();
 	}
 
 	bool Device::captureFactoryFlashCachePersistence(std::string& _filename,
@@ -334,6 +335,7 @@ namespace md
 			return false;
 		}
 		transaction->m_prepared->m_hardware->requestRamRecordingMode(m_ramRecordingMode);
+		transaction->m_prepared->m_hardware->setSpeedUps(m_speedUps);
 		if(transaction->m_prepared->m_hardware->isProjectStateRestorePending())
 		{
 			m_deferredPreparedState = std::move(transaction->m_prepared);
@@ -492,6 +494,7 @@ namespace md
 
 		const auto clockPercent = getDspClockPercent();
 		_prepared.m_hardware->requestRamRecordingMode(m_ramRecordingMode);
+		_prepared.m_hardware->setSpeedUps(m_speedUps);
 		_prepared.m_hardware->getDspMixer().getPeriph().getEssiClock()
 			.setSpeedPercent(clockPercent);
 		if(m_model == MachineModel::Machinedrum && !_prepared.m_containsFlash)
@@ -519,6 +522,15 @@ namespace md
 			m_hardware->requestRamRecordingMode(m_ramRecordingMode);
 		if(m_deferredPreparedState && m_deferredPreparedState->m_hardware)
 			m_deferredPreparedState->m_hardware->requestRamRecordingMode(m_ramRecordingMode);
+	}
+
+	void Device::setSpeedUps(const bool _on)
+	{
+		m_speedUps = _on;
+		if(m_hardware)
+			m_hardware->setSpeedUps(_on);
+		if(m_deferredPreparedState && m_deferredPreparedState->m_hardware)
+			m_deferredPreparedState->m_hardware->setSpeedUps(_on);
 	}
 
 	bool Device::commitDeferredStateRestore(PreparedState& _prepared,

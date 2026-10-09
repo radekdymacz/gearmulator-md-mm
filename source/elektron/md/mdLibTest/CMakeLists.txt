@@ -193,6 +193,12 @@ add_test(NAME mdFlashTest COMMAND mdFlashTest)
 set_tests_properties(mdFlashTest PROPERTIES LABELS "UnitTest")
 set_property(TARGET mdFlashTest PROPERTY FOLDER "Elektron")
 
+add_executable(mdMemoryFastLaneTest memoryFastLaneTest.cpp)
+target_link_libraries(mdMemoryFastLaneTest PRIVATE mdLib)
+add_test(NAME mdMemoryFastLaneTest COMMAND mdMemoryFastLaneTest)
+set_tests_properties(mdMemoryFastLaneTest PROPERTIES LABELS "UnitTest")
+set_property(TARGET mdMemoryFastLaneTest PROPERTY FOLDER "Elektron")
+
 add_executable(mdStateTest mdStateTest.cpp)
 target_link_libraries(mdStateTest PRIVATE mdLib)
 add_test(NAME mdStateTest COMMAND mdStateTest)

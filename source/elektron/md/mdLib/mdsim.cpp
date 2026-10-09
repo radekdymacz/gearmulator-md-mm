@@ -1,5 +1,6 @@
 #include "mdsim.h"
 
+#include <algorithm>
 #include <utility>
 
 // md::Sim - MCF5206e SIM peripheral model. See mdsim.h for the register map and
@@ -52,6 +53,9 @@ namespace md
 			u.txBacklog.clear();
 			// u.txCallback is wiring, deliberately preserved across reset.
 		}
+
+		m_deferredCycles = 0;
+		m_cyclesUntilEvent = eventHorizon();
 	}
 
 	// -------------------------------------------------------------------------
@@ -63,6 +67,9 @@ namespace md
 	{
 		if(_offset >= g_windowSize)
 			return 0;
+
+		// TCN and the UART status read the stepped state.
+		catchUp();
 
 		// Parallel port data (UM 10.3.2.2): input pins read their pin level (idle
 		// HIGH on the MD), output pins read back the driven latch value. This is the
@@ -109,6 +116,15 @@ namespace md
 		if(_offset >= g_windowSize)
 			return;
 
+		// The cycles before the write run under the old configuration; the write can start
+		// or stop a timer or a transmitter, so the next event is found again afterwards.
+		catchUp();
+		applyWrite8(_offset, _value);
+		m_cyclesUntilEvent = eventHorizon();
+	}
+
+	void Sim::applyWrite8(const uint32_t _offset, const uint8_t _value)
+	{
 		// A register write can unmask or configure a source.  Be conservative here;
 		// takeNextInterrupt() clears the gate after one full scan when the write was
 		// unrelated to interrupt state.
@@ -443,9 +459,11 @@ namespace md
 
 	void Sim::setMidiTransmitCharacterCycles(const uint32_t _cycles)
 	{
+		catchUp();
 		if(!_cycles)
 			flushMidiTransmitter();
 		m_midiTxCharacterCycles = _cycles;
+		m_cyclesUntilEvent = eventHorizon();
 	}
 
 	void Sim::startMidiShiftRegister()
@@ -607,7 +625,7 @@ namespace md
 		timer.freeRunning = (tmr & g_tmrFrr) == 0;
 	}
 
-	void Sim::exec(const uint32_t _cycles)
+	void Sim::step(const uint32_t _cycles)
 	{
 		stepTimer(0, g_timer1Base, _cycles);
 		stepTimer(1, g_timer2Base, _cycles);
@@ -616,12 +634,75 @@ namespace md
 			stepMidiTransmitter(_cycles);
 	}
 
+	void Sim::execToEvent(const uint32_t _cycles)
+	{
+		// The deferred cycles end before the event and the instruction that reaches it is
+		// stepped on its own, exactly as when every instruction was stepped.
+		catchUp();
+		step(_cycles);
+		m_cyclesUntilEvent = eventHorizon();
+	}
+
+	void Sim::setDeferStepping(const bool _defer)
+	{
+		if(_defer == m_deferStepping)
+			return;
+		// The cycles before the switch run under the old mode; both modes leave the same state.
+		catchUp();
+		m_deferStepping = _defer;
+		m_cyclesUntilEvent = eventHorizon();
+	}
+
+	void Sim::catchUp()
+	{
+		const uint32_t cycles = m_deferredCycles;
+		if(!cycles)
+			return;
+		m_deferredCycles = 0;
+		step(cycles);
+		// Still a lower bound: cycles < m_cyclesUntilEvent, and no event lay in between.
+		m_cyclesUntilEvent -= cycles;
+	}
+
+	uint32_t Sim::ticksUntilMatch(const Timer& _timer)
+	{
+		// Restart mode matches when the counter reaches the period (at once if a smaller
+		// TRR was written above it); free-run mode when it passes the reference again.
+		if(!_timer.freeRunning)
+			return _timer.counter >= _timer.period ? 1 : _timer.period - _timer.counter;
+		const uint32_t ticks = (static_cast<uint32_t>(_timer.reference) - _timer.counter) & 0xffff;
+		return ticks ? ticks : 0x10000;
+	}
+
+	uint32_t Sim::cyclesUntilNextEvent() const
+	{
+		uint32_t cycles = g_noEvent;
+		for(const auto& timer : m_timer)
+		{
+			if(!timer.running)
+				continue;
+			// A remainder at or past the match (a smaller prescaler was just written) makes
+			// the match due with the next instruction.
+			const uint64_t match = static_cast<uint64_t>(ticksUntilMatch(timer)) * timer.div;
+			const uint64_t due = match > timer.frac ? match - timer.frac : 0;
+			cycles = static_cast<uint32_t>(std::min<uint64_t>(cycles, due));
+		}
+		const auto& panel = m_uart[g_uartPanel];
+		if(panel.txShiftBusy)
+			cycles = std::min(cycles, panel.txCyclesRemaining);
+		const auto& midi = m_uart[g_uartMidi];
+		if(midiTransmitPaced() && midi.txShiftBusy)
+			cycles = std::min(cycles, midi.txCyclesRemaining);
+		return cycles;
+	}
+
 	uint32_t Sim::cyclesUntilNextUartTransmit() const
 	{
+		// Deferred cycles end before any character does (they never contain an event).
 		const auto& uart = m_uart[g_uartPanel];
 		const auto& midi = m_uart[g_uartMidi];
-		return std::min(uart.txShiftBusy ? uart.txCyclesRemaining : g_noTimerInterruptDeadline,
-			midi.txShiftBusy ? midi.txCyclesRemaining : g_noTimerInterruptDeadline);
+		return std::min(uart.txShiftBusy ? uart.txCyclesRemaining - m_deferredCycles : g_noTimerInterruptDeadline,
+			midi.txShiftBusy ? midi.txCyclesRemaining - m_deferredCycles : g_noTimerInterruptDeadline);
 	}
 
 	uint32_t Sim::cyclesUntilNextTimerInterrupt() const
@@ -648,19 +729,10 @@ namespace md
 		if(iclk == 0 || iclk == 3)
 			return g_noTimerInterruptDeadline;
 
+		// The deferred cycles were spent on the way to the match without reaching it, so
+		// the caught-up counter would be that much closer.
 		const auto& timer = m_timer[_index];
-		uint32_t ticksUntilMatch;
-		if(!timer.freeRunning)
-			ticksUntilMatch = timer.counter >= timer.period
-				? 1 : timer.period - timer.counter;
-		else
-		{
-			ticksUntilMatch =
-				(static_cast<uint32_t>(timer.reference) - timer.counter) & 0xffff;
-			if(!ticksUntilMatch)
-				ticksUntilMatch = 0x10000;
-		}
-		return ticksUntilMatch * timer.div - timer.frac;
+		return ticksUntilMatch(timer) * timer.div - timer.frac - m_deferredCycles;
 	}
 
 	void Sim::stepTimer(const unsigned _index, const uint32_t _base, const uint32_t _cycles)
@@ -738,6 +810,10 @@ namespace md
 	{
 		if(!m_interruptCheckNeeded)
 			return false;
+
+		// The sources below change only at events, which are never deferred; catch up anyway
+		// so the scan sees the machine exactly at this instruction boundary.
+		catchUp();
 
 		// Highest-priority sources first. The UARTs (level 3) outrank the timers (level 1).
 
