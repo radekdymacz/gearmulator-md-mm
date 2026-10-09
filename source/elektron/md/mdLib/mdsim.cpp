@@ -55,7 +55,7 @@ namespace md
 		}
 
 		m_deferredCycles = 0;
-		m_cyclesUntilEvent = cyclesUntilNextEvent();
+		m_cyclesUntilEvent = eventHorizon();
 	}
 
 	// -------------------------------------------------------------------------
@@ -120,7 +120,7 @@ namespace md
 		// or stop a timer or a transmitter, so the next event is found again afterwards.
 		catchUp();
 		applyWrite8(_offset, _value);
-		m_cyclesUntilEvent = cyclesUntilNextEvent();
+		m_cyclesUntilEvent = eventHorizon();
 	}
 
 	void Sim::applyWrite8(const uint32_t _offset, const uint8_t _value)
@@ -463,7 +463,7 @@ namespace md
 		if(!_cycles)
 			flushMidiTransmitter();
 		m_midiTxCharacterCycles = _cycles;
-		m_cyclesUntilEvent = cyclesUntilNextEvent();
+		m_cyclesUntilEvent = eventHorizon();
 	}
 
 	void Sim::startMidiShiftRegister()
@@ -640,7 +640,17 @@ namespace md
 		// stepped on its own, exactly as when every instruction was stepped.
 		catchUp();
 		step(_cycles);
-		m_cyclesUntilEvent = cyclesUntilNextEvent();
+		m_cyclesUntilEvent = eventHorizon();
+	}
+
+	void Sim::setDeferStepping(const bool _defer)
+	{
+		if(_defer == m_deferStepping)
+			return;
+		// The cycles before the switch run under the old mode; both modes leave the same state.
+		catchUp();
+		m_deferStepping = _defer;
+		m_cyclesUntilEvent = eventHorizon();
 	}
 
 	void Sim::catchUp()

@@ -30,6 +30,24 @@ accepts `true`/`TRUE`) **before starting the host**. MD/MM then automatically st
 an exported capture for each instance. Remove the environment variable to prevent
 this on later launches. The context menu can stop an environment-started capture.
 
+## Switches for testers
+
+Two switches let you find out in minutes whether a CPU problem comes from one of the speed-ups. Set an
+environment variable **before starting the host**; remove it to go back to the default.
+
+- **`GEARMULATOR_MDMM_SIM_DEFERRAL=0`** steps the emulated ColdFire's timers and UART transmitters after
+  every instruction, as the editors did before the event-driven stepping (L5). The default steps them
+  when a timer reaches its reference or a character ends. The same switch is in the right-click menu:
+  **Performance diagnostics > Legacy ColdFire timer stepping (slower)**. Ticked is the old stepping. The
+  menu choice applies at once, without restarting, and is kept in the plug-in's settings; the
+  environment variable only sets the starting position of a new session. Both positions produce the same
+  audio, bit for bit (checked on both firmwares); only the host CPU differs.
+- **`GEARMULATOR_MDMM_BOUNDED_JIT=0`** runs the DSP background slices (and, on the Machinedrum, the DSP
+  catch-ups) instruction by instruction instead of in cycle-bounded entries. Environment variable only.
+
+If a problem goes away with a switch off, send the performance report from a capture with the switch off
+and one with it on.
+
 ## Contents and interpretation
 
 The file is JSON Lines: every complete line is independently parseable JSON.

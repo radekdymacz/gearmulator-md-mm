@@ -212,6 +212,10 @@ namespace md
 		// never contain an event, so applying them at once leaves the same counters as applying
 		// them instruction by instruction, and every event still happens after the same
 		// instruction as before.
+		//
+		// With the deferral off (setDeferStepping) the event horizon stays at zero, so every
+		// call takes the out-of-line path and steps at once: the per-instruction stepping of
+		// before L5, with identical results.
 		void exec(const uint32_t _cycles)
 		{
 			if(_cycles < m_cyclesUntilEvent - m_deferredCycles)
@@ -221,6 +225,14 @@ namespace md
 			}
 			execToEvent(_cycles);
 		}
+		// Tester switch (GEARMULATOR_MDMM_SIM_DEFERRAL=0, md::Hardware): false steps the timers
+		// and transmitters after every instruction instead of deferring (see exec). Both
+		// positions give the same machine state and the same audio; only the host CPU differs.
+		// May be called at any time, but only under the device lock, which is held for every
+		// control operation, so no instruction is in flight: the deferred cycles are applied,
+		// the mode changes, and the next event is found again. A reset keeps the mode.
+		void setDeferStepping(bool _defer);
+		bool deferStepping() const { return m_deferStepping; }
 		bool needsInterruptCheck() const { return m_interruptCheckNeeded; }
 		bool externalIrq4Asserted() const { return m_extIrq4Level; }
 
@@ -372,7 +384,11 @@ namespace md
 		// counters and the remaining character time: a timer reference match or the end of
 		// the character in a transmit shift register. g_noEvent when nothing runs.
 		uint32_t cyclesUntilNextEvent() const;
+		// The value of m_cyclesUntilEvent: the next event while deferring, zero (every
+		// instruction is an event) when it is off.
+		uint32_t eventHorizon() const { return m_deferStepping ? cyclesUntilNextEvent() : 0; }
 		static constexpr uint32_t g_noEvent = ~uint32_t{0};
+		bool     m_deferStepping = true;
 		uint32_t m_deferredCycles = 0;
 		// Lower bound of the cycles until the next event, counted from the caught-up state.
 		// Between calls m_deferredCycles < m_cyclesUntilEvent, or both are zero.

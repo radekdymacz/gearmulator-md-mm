@@ -243,6 +243,12 @@ namespace md
 		// sends (a pattern read-back: about 17 ms the sequencer stands).
 		static constexpr uint32_t g_defaultMidiTransmitBytesPerSecond = 125000;
 		void setMidiTransmitRate(const uint32_t _bytesPerSecond) { m_uc.setMidiTransmitRate(_bytesPerSecond); }
+		// Tester switch for the SIM's deferred stepping (md::Sim::exec). Off: the timers and the UART
+		// transmitters step after every ColdFire instruction, as before L5. Both positions give the same
+		// audio and machine state; only the host CPU differs. GEARMULATOR_MDMM_SIM_DEFERRAL=0 turns it off
+		// at construction. Call under the owning Plugin device lock, like the other control operations.
+		void setSimStepDeferral(const bool _defer) { m_uc.getSim().setDeferStepping(_defer); }
+		bool simStepDeferral() const { return m_uc.getSim().deferStepping(); }
 		void readMidiOut(std::vector<synthLib::SMidiEvent>& _midiOut)
 		{
 			m_uc.readMidiOut(_midiOut, m_midiOutputNativeOrigin.load(std::memory_order_relaxed));

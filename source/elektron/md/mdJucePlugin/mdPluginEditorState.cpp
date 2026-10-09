@@ -137,6 +137,15 @@ namespace mdJucePlugin
 					processor.setRamRecordingMode(md::RamRecordingMode::Original);
 				}, {}, mode == md::RamRecordingMode::Original, available));
 		}
+		// For testers: tells in minutes whether a CPU problem comes from the event-driven SIM stepping (L5).
+		// Same audio either way; ticked is the slower per-instruction stepping of before.
+		developer.push_back(separator());
+		const bool legacySimStepping = processor.isLegacySimStepping();
+		developer.push_back(action("legacy-sim-stepping", "Legacy ColdFire timer stepping (slower)",
+			[&processor, legacySimStepping]
+			{
+				processor.setLegacySimStepping(!legacySimStepping);
+			}, {}, legacySimStepping));
 		m.items.push_back(submenu("developer", "Developer", std::move(developer)));
 		return m;
 	}

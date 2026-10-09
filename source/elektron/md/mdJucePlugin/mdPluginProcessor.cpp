@@ -72,6 +72,9 @@ namespace
 	constexpr auto g_defaultModel = md::MachineModel::Machinedrum;
 	#endif
 
+	// The tester switch for the SIM's deferred stepping (setLegacySimStepping): true steps every instruction.
+	constexpr auto g_legacySimSteppingKey = "legacySimStepping";
+
 	const char* productName(const md::MachineModel _model)
 	{
 		return _model == md::MachineModel::Monomachine ? MDMM_PRODUCT_NAME_MM : MDMM_PRODUCT_NAME_MD;	// scripts/mdmm-product.env
@@ -930,6 +933,8 @@ namespace mdJucePlugin
 		if(!d->isValid())
 			return makeNoRomDevice();	// no ROM is the page's to ask for, not an alert (mdDeskHost.h, UPSTREAM.md)
 		d->setRamRecordingMode(getRamRecordingMode());
+		if(getConfig().getBoolValue(g_legacySimSteppingKey, false))
+			d->setSimStepDeferral(false);
 #ifdef __APPLE__
 		// a background run of the journeys on a person's Mac (mdBackgroundRun.h): the standalone's audio runs as
 		// ever, timing and all, but nothing reaches their speakers
@@ -947,6 +952,26 @@ namespace mdJucePlugin
 		{
 			if(auto* const device = dynamic_cast<md::Device*>(_device))
 				device->setRamRecordingMode(_mode);
+		});
+	}
+
+	void AudioPluginAudioProcessor::setLegacySimStepping(const bool _legacy)
+	{
+		getConfig().setValue(g_legacySimSteppingKey, _legacy);
+		getConfig().saveIfNeeded();
+		getPlugin().withDeviceLocked([_legacy](synthLib::Device* const _device)
+		{
+			if(auto* const device = dynamic_cast<md::Device*>(_device))
+				device->setSimStepDeferral(!_legacy);
+		});
+	}
+
+	bool AudioPluginAudioProcessor::isLegacySimStepping()
+	{
+		return getPlugin().withDeviceLocked([](synthLib::Device* const _device)
+		{
+			const auto* const device = dynamic_cast<const md::Device*>(_device);
+			return device && !device->simStepDeferral();
 		});
 	}
 

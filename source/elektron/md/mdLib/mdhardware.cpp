@@ -149,6 +149,9 @@ namespace md
 		// schedCatchUpDspToDsp).
 		const auto* const boundedJit = std::getenv("GEARMULATOR_MDMM_BOUNDED_JIT");
 		m_schedBoundedJit = boundedJit == nullptr || std::strcmp(boundedJit, "0") != 0;
+		// The same for the SIM's deferred timer and UART stepping (L5): "0" steps every instruction.
+		const auto* const simDeferral = std::getenv("GEARMULATOR_MDMM_SIM_DEFERRAL");
+		setSimStepDeferral(simDeferral == nullptr || std::strcmp(simDeferral, "0") != 0);
 
 		if(!m_rom.isValid())
 			return;

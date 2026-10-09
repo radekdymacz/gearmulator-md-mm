@@ -96,6 +96,7 @@ namespace md
 		mc68k::Hdi08& getHdi08Dsp2() { return m_hdi08Dsp2; }	// DSP2 = voice producer
 
 		Sim& getSim() { return m_sim; }
+		const Sim& getSim() const { return m_sim; }
 
 		// Attach a front-panel decoder to receive the post-handshake UART2 host->panel
 		// stream (LCD framebuffer + LED banks). Owned by the caller (md::Hardware).
