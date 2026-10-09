@@ -249,7 +249,9 @@ if(pattern)
 **Song playhead (0.3.5).** `songRow` (telemetry) is the song row the Monomachine plays, one byte at
 RAM 0x2bdba1 (`md::MmTelemetry::g_songRowAddress`; found with `mmEditorProbeFirmwareTest songrow`,
 checked by `mmDeskFirmwareTest songrow`: at every pass the row's pattern is the one the machine
-reports by status, a repeated row shows twice, a loop goes back). A LOOP row is never the row. It is
+reports by status, a repeated row shows twice, a loop goes back). A LOOP row is never the row. As on the
+Machinedrum the desk publishes the row heard (`deskCore::SongRowHeard`: the byte at PLAY and at each wrap
+of the playhead), so a byte that queues the next row early never moves the mark before the pass ends. It is
 the machine's only while `song.songMode` is true and the machine plays; the page marks a row only
 then, without a render. Measured on the way: with a LOOP row the song went back to row 1 whatever
 the row's target byte (+1) said, and in the desk-written song the row before the LOOP was skipped;

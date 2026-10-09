@@ -283,7 +283,11 @@ sequencer plays, 0-based, from main RAM 0x2b18f5 (`md::SongPosition`, one byte; 
 with `mdP4ProbeFirmwareTest songrow`: a song A02, A03 ×2, A04, LOOP to row 2, sampled in
 the middle of every pass; checked by `mdDeskFirmwareTest songrow`: the row's pattern is
 the pattern that plays at every pass, through repeats and round the loop). A LOOP or
-JUMP row is never the row: the byte goes straight to its target. It is the machine's
+JUMP row is never the row: the byte goes straight to its target. The byte runs ahead:
+it moves to the next row about two steps before the pass ends (it queues it, as the
+pattern byte does; `SONGROW_TRACE=1 mdP4ProbeFirmwareTest <ROM> songrow`), so the desk
+publishes the row heard: the byte as it was at PLAY and at each wrap of the playhead
+(`deskCore::SongRowHeard`). It is the machine's
 only while `machine.songMode` is true and the machine plays: pattern mode and STOP
 leave it as it was (STOP twice sets it to 0), so the page marks a row only then. `null`
 where the engine cannot read it (HW MIDI). The page moves the mark without a render

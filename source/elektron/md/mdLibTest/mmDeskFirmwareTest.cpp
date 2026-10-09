@@ -714,20 +714,27 @@ namespace
 		r.msg(R"({"op":"seqMode","song":true})");
 		r.run(1500);
 		r.msg(R"({"op":"play"})");
-		std::vector<int> rows, patterns;
+		std::vector<int> rows, patterns, lateRows;
 		int last = -1;
+		const auto pageRow = [&]
+		{
+			for(auto it = r.page.rbegin(); it != r.page.rend(); ++it)
+				if(it->find("type")->asString() == "telemetry")
+				{
+					const auto* sr = it->find("songRow");
+					return sr && sr->isNumber() ? static_cast<int>(sr->asNumber()) : -1;
+				}
+			return -1;
+		};
 		for(int i = 0; i < 6000 && rows.size() < 10; ++i)
 		{
 			r.run(5);
 			const int st = r.tel.step.load();
+			if(r.tel.running.load() == 1 && st == 7 && last != 7 && !rows.empty())
+				lateRows.push_back(pageRow());
 			if(r.tel.running.load() == 1 && st == 3 && last != 3)
 			{
-				Value t;
-				for(auto it = r.page.rbegin(); it != r.page.rend() && !t.isObject(); ++it)
-					if(it->find("type")->asString() == "telemetry")
-						t = *it;
-				const auto* sr = t.isObject() ? t.find("songRow") : nullptr;
-				rows.push_back(sr && sr->isNumber() ? static_cast<int>(sr->asNumber()) : -1);
+				rows.push_back(pageRow());
 				const auto reply = ed::parseMmStatusResponse(r.m.request(ed::mmStatusRequest(ed::MmStatus::Pattern), 0x72));
 				patterns.push_back(reply ? reply->value : -1);
 			}
@@ -745,6 +752,10 @@ namespace
 		std::printf("  rows (one-based) at each pass, with the pattern the machine reports (0-based):%s\n", seen.c_str());
 		check(match, "the row the page is told is the row whose pattern plays, at every pass");
 		check(twice && back, "a row with a repeat shows twice, and the loop goes back");
+		bool late = !lateRows.empty();
+		for(size_t k = 0; k < lateRows.size() && k < rows.size(); ++k)
+			late = late && lateRows[k] == rows[k];
+		check(late, "at the last step of each pass the page is still told that pass's row");
 		r.msg(R"({"op":"stop"})");
 		r.run(600);
 		r.msg(R"({"op":"seqMode","song":false})");

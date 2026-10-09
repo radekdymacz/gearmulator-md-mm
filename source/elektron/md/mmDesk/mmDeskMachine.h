@@ -1,6 +1,7 @@
 #pragma once
 
 #include "mmDeskAdapter.h"
+#include "deskCore/deskSongRow.h"
 #include "mmDeskModel.h"
 #include "mmRecv.h"
 #include "mmDeskWatch.h"
@@ -197,6 +198,7 @@ namespace mmDesk
 		bool m_backgroundQueued = false;
 
 		Telemetry m_tel;
+		deskCore::SongRowHeard m_songRow;	// 0.3.5: the row heard (the RAM byte runs ahead of the pass)
 		// "playing" is the RAM flag or the step byte advancing (watchStep, onTelemetry)
 		bool m_playing = false;
 		StepWatch m_steps;

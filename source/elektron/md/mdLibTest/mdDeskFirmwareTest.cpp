@@ -2379,7 +2379,9 @@ namespace
 		rig.page(R"({"op":"seqMode","song":true,"id":1})");
 		rig.runUntil([&] { const auto* d = rig.machineDoc() ? rig.machineDoc()->find("songMode") : nullptr; return d && d->isBool() && d->asBool(); }, 3000);
 		rig.page(R"({"op":"play","id":2})");
-		std::vector<int> rows, patterns;
+		// the middle of each pass (step 3) and its last step (7): the RAM byte has queued the next row by then
+		// (two steps early), the page is still told the row heard
+		std::vector<int> rows, patterns, lateRows;
 		int lastStep = -1;
 		for(int i = 0; i < 4000 && rows.size() < 10; ++i)
 		{
@@ -2390,8 +2392,14 @@ namespace
 				rows.push_back(t.songRow);
 				patterns.push_back(m.read8(0x28d205));
 			}
+			if(t.playing && t.step == 7 && lastStep != 7 && !rows.empty())
+				lateRows.push_back(t.songRow);
 			lastStep = t.step;
 		}
+		bool late = !lateRows.empty();
+		for(size_t k = 0; k < lateRows.size() && k < rows.size(); ++k)
+			late = late && lateRows[k] == rows[k];
+		check(late, "at the last step of each pass the page is still told that pass's row (the RAM byte runs two steps ahead)");
 		std::string seen;
 		bool match = rows.size() == 10;
 		for(size_t k = 0; k < rows.size(); ++k)

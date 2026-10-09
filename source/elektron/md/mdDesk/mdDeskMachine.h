@@ -1,6 +1,7 @@
 #pragma once
 
 #include "mdDeskAdapter.h"
+#include "deskCore/deskSongRow.h"
 #include "mdDeskDelivery.h"
 #include "mdDeskModel.h"
 #include "mdDeskRecord.h"
@@ -283,6 +284,8 @@ namespace mdDesk
 		std::optional<uint8_t> m_lastKit;
 		std::optional<uint8_t> m_lastPattern;
 		Telemetry m_telemetry;
+		deskCore::SongRowHeard m_songRow;	// 0.3.5: the row heard (the RAM byte runs ahead by about two steps)
+		int m_songRowHeard = -1;
 		std::array<bool, 16> m_mutes{};
 		// The page's keyboard: per track, the note sounding (one at a time; a later key replaces it). The kit
 		// value a key holds is the working copy's held layer (m_working.held).

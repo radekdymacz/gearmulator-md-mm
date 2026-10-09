@@ -11,6 +11,7 @@
 #include "deskPush.h"
 #include "deskRef.h"
 #include "deskSequence.h"
+#include "deskSongRow.h"
 #include "deskWorkingCopy.h"
 
 #include <cstdio>
@@ -27,6 +28,20 @@ namespace
 		std::printf("  %s %s\n", _ok ? "ok  " : "FAIL", _what);
 		if(!_ok)
 			++g_failures;
+	}
+
+	// 0.3.5, the song playhead (deskSongRow.h): the RAM byte runs ahead (it queues the next row about two steps
+	// before the pass ends); the row heard changes at PLAY and at the playhead's wrap only.
+	void songRowHeard()
+	{
+		SongRowHeard h;
+		check(h.update(3, 0, false) == 3, "song row, stopped: the byte as it is");
+		check(h.update(0, 1, true) == 0, "PLAY: the row the byte says");
+		check(h.update(1, 6, true) == 0, "the byte queues the next row two steps early: the first row is still heard");
+		check(h.update(1, 7, true) == 0, "until the pass ends");
+		check(h.update(1, 0, true) == 1, "the wrap: the second row is heard");
+		check(h.update(2, 6, true) == 1 && h.update(2, 0, true) == 2, "and so on, round a loop too");
+		check(h.update(0, 0, false) == 0 && h.update(5, 1, true) == 5, "STOP, then PLAY: the byte as PLAY found it");
 	}
 
 	// The note intent and the held layer (deskNotes.h).
@@ -546,6 +561,7 @@ namespace
 
 int main()
 {
+	songRowHeard();
 	workingCopy();
 	noteIntent();
 	{

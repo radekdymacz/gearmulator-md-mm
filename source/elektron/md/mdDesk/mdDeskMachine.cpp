@@ -1692,6 +1692,7 @@ namespace mdDesk
 			m_session.noteChained();
 		}
 		m_telemetrySeen = true;
+		m_songRowHeard = m_songRow.update(_t.songRow, _t.step, _t.playing);
 		// The keys' fact: the device reports them pending, then none left.
 		m_keys.onPending(_t.panelPending);
 		if(!e.any)
@@ -1735,7 +1736,7 @@ namespace mdDesk
 		t.set("playing", _t.playing);
 		t.set("recording", _t.recording);
 		t.set("valid", _t.valid);
-		t.set("songRow", _t.songRow >= 0 ? Value(_t.songRow) : Value());
+		t.set("songRow", m_songRowHeard >= 0 ? Value(m_songRowHeard) : Value());
 		publishTelemetry(std::move(t));
 		return e;
 	}

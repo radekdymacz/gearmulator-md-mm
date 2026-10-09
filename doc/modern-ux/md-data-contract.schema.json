@@ -2186,7 +2186,7 @@
               "type": ["integer", "null"],
               "minimum": 0,
               "maximum": 255,
-              "description": "0.3.5: the song row the sequencer plays (RAM 0x2b18f5, md::SongPosition), null where the engine cannot read it. Meaningful while machine.songMode is true and the machine plays."
+              "description": "0.3.5: the song row heard (RAM 0x2b18f5, md::SongPosition, as it was at PLAY and at the last wrap: the byte queues the next row two steps early), null where the engine cannot read it. Meaningful while machine.songMode is true and the machine plays."
             }
           }
         },

@@ -1791,8 +1791,12 @@ img,svg,canvas{-webkit-user-drag:none}
 /* the song playhead: the row the machine plays (telemetry songRow), the soft playhead's language (#phcol) */
 .slotgrid .scell.ph{z-index:1;outline:2px solid var(--led);outline-offset:1px;box-shadow:0 0 0 4px color-mix(in srgb,var(--led) 35%,transparent),0 0 14px color-mix(in srgb,var(--led) 55%,transparent)}
 .slotgrid .scell.ph b{text-decoration:underline;text-underline-offset:2px}
-.songmode .durbar .db.past{opacity:1}
-.songmode .durbar .db.now{opacity:1;background:var(--led);box-shadow:0 0 6px var(--led)}
+/* the time bar in SONG mode: the rows played up to the one that plays now lit in the LED's red (the playing colour),
+   the rest unlit */
+.songmode .durbar .db{background:color-mix(in srgb,var(--ink) 22%,transparent);opacity:1}
+.songmode .durbar .db.past,.songmode .durbar .db.now{background:var(--led)}
+.songmode .durbar .db.now{box-shadow:0 0 6px var(--led)}
+.songmode .durbar .db.sel:not(.past):not(.now){background:color-mix(in srgb,var(--ink) 45%,transparent)}
 /* the LCD's pattern slot in SONG mode: SONG 01 · 017 */
 .patf.songlcd #pat{width:6.4ch}
 .patf.songlcd .lcdbtn{visibility:hidden}

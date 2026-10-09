@@ -36,14 +36,16 @@ const MdJourneys = (() => {
 	/* free steps of a track from a step on, spaced like a person picks them */
 	const freeSteps = (t, n, from = 0) => { const busy = trigsOf(t), out = []; for (let s = from; s < V.len && out.length < n; s++) if (!busy.includes(s) && !out.some(x => Math.abs(x - s) < 2)) out.push(s); return out; };
 	/* the machine's telemetry and the plug-in's command results, as they come */
-	const tele = { last: null, steps: [] }, results = [];
+	const tele = { last: null, steps: [], rows: [] }, results = [];
 	/* the documents of one slot as they arrive (a failing step says what came) */
 	const trace = { kind: null, slot: null, seen: [] };
 	const traceDocs = (kind, slot) => Object.assign(trace, { kind, slot, seen: [] });
 	const traced = () => trace.seen.join(" | ") || "no document arrived";
 	Bridge.onMessage(m => {
 		if (m.type === "doc" && m.kind === trace.kind && m.slot === trace.slot && trace.seen.length < 12) trace.seen.push(`${Math.round(performance.now())} ms${m.pending ? " pending" : ""}: ${trace.kind === "kit" ? JSON.stringify(m.doc?.name) : (m.doc?.tracks || []).reduce((n, t) => n + t.trigs.length, 0) + " trigs"}`);
-		if (m.type === "telemetry") { tele.last = m; if (m.playing) { tele.steps.push(m.step); if (tele.steps.length > 64) tele.steps.shift(); } }
+		if (m.type === "telemetry") { const was = tele.last; tele.last = m; if (m.playing) { tele.steps.push(m.step); if (tele.steps.length > 64) tele.steps.shift(); }
+			/* the song row as it came, with the transport and the step, when it changed (the song playhead's failures say it) */
+			if (!was || was.songRow !== m.songRow || was.playing !== m.playing) { tele.rows.push(`${m.playing ? "P" : "S"}${m.step}:${m.songRow}`); if (tele.rows.length > 24) tele.rows.shift(); } }
 		if (m.type === "result") { results.push(m); if (results.length > 50) results.shift(); }
 		if (m.type === "audition") results.push({ heard: "audition", state: m.state });
 	});
@@ -1018,13 +1020,13 @@ const MdJourneys = (() => {
 			machine: () => ok(songRows().length === 3 && songRows()[0].pattern === 0 && songRows()[1].pattern === 1, "rows " + songRows().map(r => r.kind === "pattern" ? r.pattern : r.kind).join(",")), within: 8000 },
 		{ say: "click PATTERN: the arrangement is dimmed (not playing)", act: async u => { u.click('[data-seqmode="pattern"]'); await until(() => V.songMode === false, 4000); await sleep(400); shot("song-1-pattern-mode"); },
 			screen: () => ok(!!$1(".songui.patmode") && pressed('[data-seqmode="pattern"]') && /^PATTERN /.test($1("#songPlays")?.textContent || ""), "plays " + $1("#songPlays")?.textContent), machine: () => ok(V.songMode === false, "songMode " + V.songMode) },
-		{ say: "click SONG (and Reload song when it asks): the arrangement is lit", act: async u => { u.click('[data-seqmode="song"]'); await until(() => V.songMode === true, 4000); await sleep(300); if ($1("[data-reloadsong]")) u.click("[data-reloadsong]"); await sleep(300); shot("song-2-song-mode-stopped"); },
+		{ say: "click SONG: the arrangement is lit", act: async u => { u.click('[data-seqmode="song"]'); await until(() => V.songMode === true, 4000); await sleep(400); shot("song-2-song-mode-stopped"); },
 			screen: () => ok(!!$1(".songui.songmode") && pressed('[data-seqmode="song"]') && $1("#lcd2 [data-l2=seqmode] b")?.textContent === "SONG", "LCD " + $1("#lcd2 [data-l2=seqmode]")?.textContent), machine: () => ok(V.songMode === true, "songMode " + V.songMode) },
-		{ say: "press PLAY: row 001 is marked", act: (u, c) => { c.seen = new Set(); u.click("#play"); },
-			screen: c => ok(marked(c).length > 0 && c.seen.has(0) && /row 001 of 2/.test($1("#songPlays")?.textContent || ""), `marked ${[...c.seen]}; plays ${$1("#songPlays")?.textContent}`), machine: () => ok(tele.last?.playing && tele.last.songRow === 0, "songRow " + tele.last?.songRow), within: 8000 },
+		{ say: "click Reload song when the edits ask for it, then PLAY: row 001 is marked", act: async (u, c) => { c.seen = new Set(); if ($1("[data-reloadsong]")) { u.click("[data-reloadsong]"); await until(() => !$1("[data-reloadsong]"), 3000); await sleep(300); } if (!V.playing) u.click("#play"); },
+			screen: c => ok(marked(c).length > 0 && c.seen.has(0) && /row 001 of 2/.test($1("#songPlays")?.textContent || ""), `marked ${[...c.seen]}; plays ${$1("#songPlays")?.textContent}`), machine: () => ok(tele.last?.playing && tele.last.songRow === 0, `songRow ${tele.last?.songRow}, rows seen ${tele.rows.join(" ")}`), within: 8000 },
 		{ say: "the mark moves on to row 002 (the LCD reads 01·002)", act: async (u, c) => { await until(() => (marked(c), c.seen.has(1)), 30000); await sleep(150); shot("song-3-song-playing"); },
 			screen: c => ok((marked(c), c.seen.has(1)) && /·002$/.test($1("#pat")?.textContent || ""), `marked ${[...c.seen]}; LCD ${$1("#pat")?.textContent}`), machine: () => ok(tele.last?.songRow === 1, "songRow " + tele.last?.songRow), within: 30000 },
-		{ say: "press STOP: no row is marked", act: u => { if (V.playing) u.click("#play"); }, screen: () => ok(!$1("#tl .scell.ph"), "still marked"), machine: () => ok(!V.playing, "playing") }
+		{ say: "press STOP (or the song ends): no row is marked", act: u => { if (V.playing) u.click("#play"); }, screen: () => ok(!$1("#tl .scell.ph"), "still marked"), machine: () => ok(!V.playing, "playing") }
 	];
 	const songPlayheadTidy = async (u, c) => {
 		if (V.playing) { u.click("#play"); await until(() => !V.playing, 3000); }

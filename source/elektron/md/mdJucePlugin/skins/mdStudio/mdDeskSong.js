@@ -52,6 +52,8 @@ function chainRows(d, bn, active, state) {
 }
 document.addEventListener("click", e => { const b = e.target.closest?.("[data-seqmode]"); if (b) cmd("seqMode", { song: b.dataset.seqmode === "song" }); });
 function renderSong() {
+	/* another song (the song card, the LCD, the machine): the selection stays inside it */
+	S.songSel = Math.max(0, Math.min(S.songSel, V.song.length - 1));
 	const sel = V.song[S.songSel] || V.song[0], chain = S.songPick === "chain", plays = playsOf(Docs);
 	/* a chain is one bank's: another bank starts the draft over */
 	S.chainDraft = S.chainDraft.filter(p => p >> 4 === S.bank);

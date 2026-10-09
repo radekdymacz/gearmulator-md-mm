@@ -18,6 +18,7 @@
 
 #include "mdLib/mdautomation.h"
 #include "mdLib/mdfrontpanel.h"
+#include "mdLib/mdsequencerstate.h"
 
 #include <algorithm>
 #include <functional>
@@ -810,6 +811,22 @@ namespace
 		};
 		const auto addressOf = [](const size_t _i) { return _i < 0x100000 ? uint32_t(_i + 0x200000) : uint32_t(_i - 0x100000 + 0x1000000); };
 		const auto stoppedSnap = snap();
+		if(std::getenv("SONGROW_TRACE"))
+		{
+			// when does the row byte move, against the step and the pattern byte (from PLAY, 6 s)
+			std::printf("  stopped: row %d pattern %d\n", m.read8(md::SongPosition::g_rowAddress), m.read8(0x28d205));
+			press(m, md::PanelControl::Play);
+			int lr = -1, lp = -1, ls = -1;
+			for(double t = 0; t < 6000; t += 2)
+			{
+				m.run(2);
+				const int r = m.read8(md::SongPosition::g_rowAddress), pt = m.read8(0x28d205), st = m.playhead();
+				if(r != lr || pt != lp || (st == 0 && ls != 0))
+					std::printf("  %6.0f ms step %2d row %d pattern %d\n", t, st, r, pt);
+				lr = r; lp = pt; ls = st;
+			}
+			return;
+		}
 		press(m, md::PanelControl::Play);
 		std::vector<Bytes> snaps;
 		std::vector<int> rows, patterns;
