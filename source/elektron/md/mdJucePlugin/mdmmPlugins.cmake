@@ -40,7 +40,7 @@ list(APPEND SOURCES
 	mdBootDiagnostics.cpp mdBootDiagnostics.h
 	mdDeskSession.cpp mdDeskSession.h
 	mdMidiLearnCommands.cpp mdMidiLearnCommands.h
-	mdPageEditor.cpp mdPageEditor.h mdPageZoom.h
+	mdPageEditor.cpp mdPageEditor.h mdPageZoom.h mdEditorMenu.h
 	mdRomInstall.cpp mdRomInstall.h
 	mdSettingsMigration.cpp mdSettingsMigration.h
 	mdSessionMd.cpp mdSessionMm.cpp mdSessions.h
@@ -92,7 +92,7 @@ list(APPEND SOURCES
 	skins/mdStudio/mdDeskKeys.js
 	skins/mdStudio/mdDeskGlobal.js
 	skins/mdStudio/mdDeskAudio.js
-	skins/shared/deskModal.js skins/shared/deskModal.css skins/shared/deskModalTest.js skins/shared/deskMenu.js
+	skins/shared/deskModal.js skins/shared/deskModal.css skins/shared/deskModalTest.js skins/shared/deskMenu.js skins/shared/deskMenuTest.js
 	skins/shared/deskCaps.js
 	skins/shared/deskBoot.js skins/shared/deskBoot.css
 	skins/shared/deskSyx.js skins/shared/deskSyx.css skins/shared/deskSyxTest.js
@@ -166,7 +166,7 @@ set(MM_NODE_TESTS "skins/mmStudio/mmConvertTest.js" "skins/mmStudio/mmKeysTest.j
 	"skins/mmStudio/mmViewTest.js" "skins/mmStudio/mmViewFixture.json")
 # the shared page files' node tests (never in a glob, so never shipped); checked to be there
 set(SHARED_NODE_TESTS "skins/shared/deskGenTest.js" "skins/shared/deskOverlayTest.js" "skins/shared/deskBridgeTest.js"
-	"skins/shared/deskTogglePaintTest.js" "skins/shared/deskKeysTest.js" "skins/shared/deskModalTest.js" "skins/shared/deskCompatTest.js"
+	"skins/shared/deskTogglePaintTest.js" "skins/shared/deskKeysTest.js" "skins/shared/deskModalTest.js" "skins/shared/deskMenuTest.js" "skins/shared/deskCompatTest.js"
 	"skins/shared/deskKeymapTest.js" "skins/shared/deskKeyViewTest.js" "skins/shared/deskAboutTest.js" "skins/shared/deskSyxTest.js")
 foreach(test ${MD_NODE_TESTS} ${MD_SELF_TESTS} ${MM_SELF_TESTS} ${MM_NODE_TESTS} ${SHARED_NODE_TESTS} ${MD_SHARED_PAGE_FILES})
 	if(NOT EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/${test}")
@@ -439,6 +439,14 @@ function(mdmm_plugin_targets)
 	set_tests_properties(mdPageBridgeTest PROPERTIES LABELS "UnitTest")
 	set_property(TARGET mdPageBridgeTest PROPERTY FOLDER "Elektron/test")
 
+	# I-008: the editor's menu as data (mdEditorMenu.h): the page's editorMenu message and the numbers its entries run by
+	add_executable(mdEditorMenuTest mdEditorMenuTest.cpp mdEditorMenu.h)
+	target_link_libraries(mdEditorMenuTest PRIVATE elektronJson)
+	target_include_directories(mdEditorMenuTest PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/..)
+	add_test(NAME mdEditorMenuTest COMMAND mdEditorMenuTest)
+	set_tests_properties(mdEditorMenuTest PROPERTIES LABELS "UnitTest")
+	set_property(TARGET mdEditorMenuTest PROPERTY FOLDER "Elektron/test")
+
 	# 0.3.4: the editor menu's first line and the About box: the build's product names and version (mdAbout.h)
 	add_executable(mdAboutTest mdAboutTest.cpp mdAbout.h)
 	target_link_libraries(mdAboutTest PRIVATE mdmmVersion)
@@ -484,6 +492,9 @@ function(mdmm_plugin_targets)
 		# the SysEx import panel (both editors): the machine's slot grids, the counts, Shift-click ranges, the report per slot
 		add_test(NAME deskSyxPageTest COMMAND ${GEARMULATOR_NODE} ${CMAKE_CURRENT_SOURCE_DIR}/skins/shared/deskSyxTest.js)
 		set_tests_properties(deskSyxPageTest PROPERTIES LABELS "UnitTest" TIMEOUT 60)
+		# I-008: the menu drawn in the page (placement, keys, the editor menu's message and picks) and its wiring
+		add_test(NAME deskMenuPageTest COMMAND ${GEARMULATOR_NODE} ${CMAKE_CURRENT_SOURCE_DIR}/skins/shared/deskMenuTest.js)
+		set_tests_properties(deskMenuPageTest PROPERTIES LABELS "UnitTest" TIMEOUT 60)
 		# the pages on an older WebKit (B-001, macOS 12): the stylesheets without color-mix() and :focus-visible
 		add_test(NAME deskCompatPageTest COMMAND ${GEARMULATOR_NODE} ${CMAKE_CURRENT_SOURCE_DIR}/skins/shared/deskCompatTest.js)
 		set_tests_properties(deskCompatPageTest PROPERTIES LABELS "UnitTest" TIMEOUT 60)

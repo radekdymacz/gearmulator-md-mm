@@ -49,6 +49,7 @@ namespace mdJucePlugin
 		void setUserZoom(double _zoom);
 		double userZoom() const { return m_userZoom; }
 		bool pageReady() const { return m_pageReady; }
+		bool failed() const { return m_failure != nullptr; }	// B-022: the window shows why the page cannot start
 		const juce::String& selfTest() const { return m_selfTest; }
 		// A line of this instance's log (diagnostics builds only: a release build writes no file).
 		void log(const juce::String& _line) const;
@@ -61,6 +62,8 @@ namespace mdJucePlugin
 		void note(const juce::String& _line) const;
 		// The page has not said it is up in time: the window says what failed and what to do (the editor's timer).
 		void checkStarted();
+		// I-008: what a right-click on that message does (the editor's menu as a native menu: no page draws it).
+		void setFallbackMenu(std::function<void()> _open) { m_fallbackMenu = std::move(_open); }
 
 	private:
 		void onBridge(const std::string& _url);
@@ -97,6 +100,7 @@ namespace mdJucePlugin
 		double m_loadMs = 0;		// when load() asked for the page
 		bool m_noStartTest = false;	// GEARMULATOR_MDMM_PAGE_TEST=nostart (load())
 		std::unique_ptr<juce::Component> m_failure;	// B-022: what the window shows when the page cannot start
+		std::function<void()> m_fallbackMenu;		// I-008 (setFallbackMenu)
 		std::shared_ptr<int> m_alive = std::make_shared<int>(0);	// what runs later asks whether this host is still there
 	};
 }

@@ -80,6 +80,7 @@
 	let modInFlight = 0;	// the id of a modSet command not answered yet
 	let clip = null;	// the page's copy of what the core's clipboard holds (MmView.copied): a paste shows at once
 	let audioDocument = null, audioError = "";
+	let menuAt = { x: 24, y: 24 };	/* I-008: where the editor's menu was asked for (its editorMenu answer opens there) */
 	let lcdBits = null, lcdShown = null;	// the firmware's last LCD picture, and the one the view shows
 	let noRomShown = false;
 	let libDirty = false;	// a library slot changed: drawn when no gesture holds the page
@@ -543,8 +544,9 @@
 			else if (globalNow()?.controlIn?.tempoSync === 1 && globalNow()?.controlIn?.transport === 1) V().setPst("Host", "Follows the host's tempo and transport (GLOBAL › CONTROL IN: EXT MIDI CLK, TRANSPORT ACCEPT).", false);
 			else V().setPst("", "", false);
 		},
-		/* the editor's menu (skins, GUI scale, settings) */
-		menu() { send({ op: "openMenu" }); },
+		/* the editor's menu (zoom, updates, the log folder, Developer) at the point x, y: the plug-in sends its entries
+		   (editorMenu), the page draws them (I-008, DeskMenu.showEditor in shared/deskMenu.js) */
+		menu(x, y) { if (x != null) menuAt = { x, y }; send({ op: "openMenu" }); },
 		/* the AUDIO / MIDI panel: the plug-in's devices (mdAudioMidiLink.cpp); in a plug-in the
 		   document says standalone false, and the engine menu has no entry for it. A change's error is
 		   only in its result: the panel shows the last one until the next change. */
@@ -614,6 +616,7 @@
 			else if (m.type === "romInstall") { V().bootRom(m); V().toast(m.text); }
 			else if (m.type === "romInfo") onRomInfo(m);
 			else if (m.type === "notice") onNotice(m);
+			else if (m.type === "editorMenu") DeskMenu.showEditor(m, menuAt.x, menuAt.y, c => send(c));
 			else if (m.type === "syxPreview") V().syxPreview(m);
 			else if (m.type === "syxProgress") V().syxProgress(m);
 			else if (m.type === "syxExport") V().toast(m.text);

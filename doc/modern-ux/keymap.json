@@ -236,12 +236,12 @@
 			"id": "header-menu",
 			"scope": "any",
 			"keys": [
-				"right-click the header"
+				"right-click"
 			],
 			"mod": "",
 			"group": "Anywhere",
-			"does": "The editor's menu: skins, page zoom, updates, settings",
-			"area": "Top bar"
+			"does": "The editor's menu: zoom and window size, updates, the log folder, Developer",
+			"area": "Anywhere"
 		},
 		{
 			"id": "gen-value",

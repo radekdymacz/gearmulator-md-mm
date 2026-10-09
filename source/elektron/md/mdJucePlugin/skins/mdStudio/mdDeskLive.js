@@ -176,12 +176,16 @@ function tweakEditor(to, vals) {
 	return true;
 }
 
-/* ===== The editor's menu (skins, GUI scale, settings): right-click an empty part of the header
-   (P4; the standalone also has it in the native menu bar). ===== */
+/* ===== The editor's menu (zoom, updates, the log folder, Developer): right-click anywhere the page has no menu of
+   its own (DeskMenu.wantsEditor; P4; the standalone also has it in the native menu bar). I-008: the plug-in sends its entries (editorMenu), the
+   page draws them where it was right-clicked (DeskMenu.showEditor, shared/deskMenu.js). ===== */
+let editorMenuAt = { x: 24, y: 24 };
+function openEditorMenu(x, y) { editorMenuAt = { x, y }; Bridge.send({ op: "openMenu" }); }
 document.addEventListener("contextmenu", e => {
-	if (!e.target.closest(".top") || e.target.closest("button,[role=slider],[role=button],select,input,b,.lcdpanel")) return;
-	e.preventDefault(); Bridge.send({ op: "openMenu" });
+	if (!DeskMenu.wantsEditor(e)) return;
+	e.preventDefault(); openEditorMenu(e.clientX, e.clientY);
 });
+Bridge.onMessage(m => { if (m.type === "editorMenu") DeskMenu.showEditor(m, editorMenuAt.x, editorMenuAt.y, c => Bridge.send(c)); });
 
 /* The pattern chain (manual p.37) is made in the Song page's palette, CHAIN (mdDeskSong.js renderSong,
    chainFooter); what the machine plays (playsOf) shows in its header. A new chain or sequencer mode
