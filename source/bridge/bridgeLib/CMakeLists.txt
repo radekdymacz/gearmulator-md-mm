@@ -24,3 +24,11 @@ target_link_libraries(bridgeLib PUBLIC networkLib synthLib)
 
 target_include_directories(bridgeLib PUBLIC ../)
 set_property(TARGET bridgeLib PROPERTY FOLDER "Bridge")
+
+if(BUILD_TESTING)
+	add_executable(bridgeLibTest bridgeLibTest.cpp)
+	target_link_libraries(bridgeLibTest PRIVATE bridgeLib)
+	add_test(NAME bridgeLibTest COMMAND bridgeLibTest)
+	set_tests_properties(bridgeLibTest PROPERTIES LABELS "UnitTest" TIMEOUT 60)
+	set_property(TARGET bridgeLibTest PROPERTY FOLDER "Tests")
+endif()

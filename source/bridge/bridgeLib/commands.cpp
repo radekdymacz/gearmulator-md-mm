@@ -1,11 +1,33 @@
 #include "commands.h"
 
 #include <array>
+#include <stdexcept>
 
 #include "baseLib/binarystream.h"
 
 namespace bridgeLib
 {
+	namespace
+	{
+		// Enums arrive as plain numbers from the peer. A value outside the enum is rejected here, where it is
+		// read, instead of travelling on as an enum value that no switch or lookup downstream expects.
+		synthLib::StateType readStateType(baseLib::BinaryStream& _s)
+		{
+			const auto type = _s.read<uint32_t>();
+			if(type != synthLib::StateTypeGlobal && type != synthLib::StateTypeCurrentProgram)
+				throw std::range_error("invalid state type " + std::to_string(type));
+			return static_cast<synthLib::StateType>(type);
+		}
+
+		ErrorCode readErrorCode(baseLib::BinaryStream& _s)
+		{
+			const auto code = _s.read<uint32_t>();
+			if(code > static_cast<uint32_t>(ErrorCode::FailedToCreateDevice))
+				throw std::range_error("invalid error code " + std::to_string(code));
+			return static_cast<ErrorCode>(code);
+		}
+	}
+
 	std::string commandToString(const Command _command)
 	{
 		std::array<char, 5> temp;
@@ -32,7 +54,7 @@ namespace bridgeLib
 
 	baseLib::BinaryStream& Error::read(baseLib::BinaryStream& _s)
 	{
-		code = static_cast<ErrorCode>(_s.read<uint32_t>());
+		code = readErrorCode(_s);
 		msg = _s.readString();
 		return _s;
 	}
@@ -131,7 +153,7 @@ namespace bridgeLib
 
 	baseLib::BinaryStream& RequestDeviceState::read(baseLib::BinaryStream& _s)
 	{
-		type = static_cast<synthLib::StateType>(_s.read<uint32_t>());
+		type = readStateType(_s);
 		return _s;
 	}
 
@@ -144,7 +166,7 @@ namespace bridgeLib
 
 	baseLib::BinaryStream& DeviceState::read(baseLib::BinaryStream& _s)
 	{
-		type = static_cast<synthLib::StateType>(_s.read<uint32_t>());
+		type = readStateType(_s);
 		_s.read(state);
 		return _s;
 	}

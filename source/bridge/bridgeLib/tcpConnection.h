@@ -26,6 +26,8 @@ namespace bridgeLib
 	class TcpConnection : CommandReader, protected networkLib::NetworkThread
 	{
 	public:
+		// Does not start the receive thread: the most derived class calls start() at the end of its constructor,
+		// so that the thread never calls a handler of an object that is still being built.
 		TcpConnection(std::unique_ptr<networkLib::TcpStream>&& _stream);
 		~TcpConnection() override;
 
@@ -63,7 +65,9 @@ namespace bridgeLib
 		// AUDIO
 		void sendAudio(const float* const* _data, uint32_t _numChannels, uint32_t _numSamplesPerChannel);
 		void sendAudio(AudioBuffers& _buffers, uint32_t _numChannels, uint32_t _numSamplesPerChannel);
-		static uint32_t handleAudio(float* const* _output, baseLib::BinaryStream& _in);
+		// The channel and sample counts come from the peer: both throw std::range_error for counts that do not fit
+		// the receiver (_maxChannels buffers of _capacity samples each), which ends the connection (threadFunc).
+		static uint32_t handleAudio(float* const* _output, uint32_t _maxChannels, uint32_t _capacity, baseLib::BinaryStream& _in);
 		void handleAudio(AudioBuffers& _buffers, baseLib::BinaryStream& _in);
 		virtual void handleAudio(baseLib::BinaryStream& _in);
 

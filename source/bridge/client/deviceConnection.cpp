@@ -17,6 +17,9 @@ namespace bridgeClient
 
 		// do not send rom data now but only if the server asks for it
 		sendDeviceCreateParams(false);
+
+		// Last: the receive thread may call any handler as soon as it runs. The server's replies wait in the socket.
+		start();
 	}
 
 	DeviceConnection::~DeviceConnection()

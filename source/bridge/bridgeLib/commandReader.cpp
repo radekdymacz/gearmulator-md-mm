@@ -1,11 +1,26 @@
 #include "commandReader.h"
 
 #include "command.h"
+#include "types.h"
 #include "dsp56kBase/logging.h"
 #include "networkLib/stream.h"
 
+#include <stdexcept>
+#include <string>
+
 namespace bridgeLib
 {
+	namespace
+	{
+		// Checked before the payload buffer is resized: the size comes from the peer.
+		void checkCommandSize(const uint32_t _size)
+		{
+			if(_size <= g_maxCommandSize)
+				return;
+			throw std::length_error("command size " + std::to_string(_size) + " exceeds the limit of " + std::to_string(g_maxCommandSize) + " bytes");
+		}
+	}
+
 	CommandReader::CommandReader(CommandCallback&& _callback) : m_stream(512 * 1024), m_commandCallback(std::move(_callback))
 	{
 	}
@@ -21,6 +36,7 @@ namespace bridgeLib
 		// read size (4 bytes)
 		uint32_t size;
 		_stream.read(&size, sizeof(size));
+		checkCommandSize(size);
 
 		// read data (n bytes)
 		m_stream.getVector().resize(size);
@@ -45,6 +61,7 @@ namespace bridgeLib
 
 		// read size (4 bytes)
 		const uint32_t size = _in.read<uint32_t>();
+		checkCommandSize(size);
 
 		// read data (n bytes)
 		m_stream.getVector().resize(size);

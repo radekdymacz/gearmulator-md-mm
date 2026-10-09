@@ -11,7 +11,8 @@ namespace bridgeServer
 {
 	class Server;
 
-	class ClientConnection : public bridgeLib::TcpConnection
+	// final: the constructor starts the receive thread, which is only safe in the most derived class
+	class ClientConnection final : public bridgeLib::TcpConnection
 	{
 	public:
 		ClientConnection(Server& _server, std::unique_ptr<networkLib::TcpStream>&& _stream, std::string _name);

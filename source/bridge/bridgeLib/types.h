@@ -11,6 +11,10 @@ namespace bridgeLib
 
 	static constexpr uint32_t g_protocolVersion = 1'00'03;
 
+	// The largest command payload a peer may announce. The biggest real ones are a ROM upload (the server pools
+	// ROMs up to 16 MiB) and a device state; the size field itself is peer data and allows up to 4 GiB.
+	static constexpr uint32_t g_maxCommandSize = 64 * 1024 * 1024;
+
 	using SessionId = uint64_t;
 
 	enum class Platform
