@@ -792,7 +792,12 @@ namespace
 		r.run(600);
 		const auto t0 = r.ms();
 		while(r.desk->loaded() < 288 && r.ms() - t0 < 60000) r.run(100);
-		const auto bytes = ed::writeSyx(machineDocs(*r.desk));
+		auto docs = machineDocs(*r.desk);
+		// B-026: SYX_BASE_CHANNEL=n (0-15, or 127 = OFF) writes the export's globals with another MIDI base channel
+		if(const char* ch = std::getenv("SYX_BASE_CHANNEL"))
+			for(auto& [slot, g] : docs.globals)
+				g.baseChannel = static_cast<uint8_t>(std::atoi(ch));
+		const auto bytes = ed::writeSyx(docs);
 		std::ofstream out(to, std::ios::binary);
 		out.write(reinterpret_cast<const char*>(bytes.data()), static_cast<std::streamsize>(bytes.size()));
 		check(out.good() && !bytes.empty(), "wrote " + std::to_string(bytes.size()) + " bytes to " + to);
@@ -942,6 +947,36 @@ namespace
 		}
 		check(same == total, "the desk's documents are what the machine took (" + std::to_string(same) + " of " + std::to_string(total) + ")" + off);
 		check(r.desk->coreState().history().size() == 0, "an import is no undo step (the machine took a dump, nothing was edited)");
+		// B-026: the editor still plays the machine after the import (a synth track's mute is CC 3 on its channel)
+		if(!hw)
+		{
+			r.run(1000);
+			const auto& gs = r.desk->documents().globals;
+			const auto doc = lastMachine(r);
+			const auto* g = doc.find("global");
+			const auto* active = g ? g->find("current") : nullptr;
+			int base = -1;
+			if(active && active->isNumber() && gs.count(static_cast<uint8_t>(active->asNumber())))
+				base = gs.at(static_cast<uint8_t>(active->asNumber())).baseChannel;
+			r.msg(R"({"op":"mute","t":2,"on":true})");
+			const bool taken = r.lastResult().find("ok")->asBool();
+			r.run(600);
+			const bool landed = ((r.tel.mutes.load() >> 2) & 1) == 1;
+			std::printf("  after the import: base channel %d, mute %s, machine mutes %04x\n", base, taken ? "taken" : "refused", unsigned(r.tel.mutes.load()));
+			if(base > 15)
+				check(!taken && !landed, "base channel OFF: the page's mute is refused with the reason, not shown as taken");
+			else
+			{
+				check(taken && landed, "after the import a page mute lands in the machine's mute set");
+				r.msg(R"({"op":"play"})");
+				r.run(1500);
+				check(((r.tel.mutes.load() >> 2) & 1) == 1, "and stays muted while the machine plays");
+				r.msg(R"({"op":"stop"})");
+				r.run(400);
+				r.msg(R"({"op":"mute","t":2,"on":false})");
+				r.run(600);
+			}
+		}
 	}
 
 	// Zero crossings per second / 2 over a window of the left channel.

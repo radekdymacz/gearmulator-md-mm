@@ -413,17 +413,6 @@
 			"area": "GEN bar"
 		},
 		{
-			"id": "fn-key",
-			"scope": "any",
-			"keys": [
-				"FN key"
-			],
-			"mod": "",
-			"group": "All",
-			"does": "Click: the next click, drag or key gets ⌥, every track (FN then R randomises all, FN then drag a value is Control All, FN then Delete clears the pattern). Double-click: stays on until clicked again. Esc: off",
-			"area": "Top bar"
-		},
-		{
 			"id": "rotate",
 			"scope": "seq",
 			"keys": [
@@ -1218,6 +1207,17 @@
 			"mod": "",
 			"group": "Kit library, pattern chooser",
 			"does": "Close"
+		},
+		{
+			"id": "global-key",
+			"scope": "any",
+			"keys": [
+				"GLOBAL key"
+			],
+			"mod": "",
+			"group": "Anywhere",
+			"does": "The machine's own settings, kept in its memory: MIDI channel, sync, the note map, routing (also the engine menu: GLOBAL…)",
+			"area": "Top bar"
 		},
 		{
 			"id": "close-global",

@@ -185,6 +185,11 @@ namespace mmDesk
 			afterDumps(_message);
 		else
 			m_port.sendSysex(_message);
+		// B-026: a dump of the active global is stored, not applied, until its slot is made active (0x56): without it
+		// the machine keeps its old channels while every document says the new ones. As after the editor's own global
+		// writes, once SYSEX RECV is left.
+		if(_message.size() > 9 && _message[0] == 0xf0 && _message[6] == 0x50 && m_curGlobal >= 0 && _message[9] == m_curGlobal)
+			m_activateGlobal = m_curGlobal;
 		return {};
 	}
 

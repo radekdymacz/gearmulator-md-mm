@@ -4,6 +4,57 @@
 repository; the site sends reports to the contact address. Newest first. Each entry:
 where it came from, the setup, what happens, what should happen, status.*
 
+## B-033 · Linux: blank window, no editor page
+
+- **From:** Discord tester, 2026-10-08, Linux (distribution not given), 0.3.4.
+- **What happens:** the editor window stays blank; nothing works.
+- **To check:** WebKitGTK version/packages on the tester's system, the start-up log, the file-based bridge (LINUX.md); CI's Ubuntu 22.04/24.04 start tests pass.
+- **Status:** open.
+
+## B-032 · Old AU plug-ins still show next to the new ones (macOS)
+
+- **From:** Discord tester, 2026-10-08, M1 Pro, Ableton Live: "Monomachine Editor appears twice: one runs the old emulator (AU), one the editor (VST3)"; same for the Machinedrum.
+- **To check:** whether these are our own 0.2.x/0.3.x AUs (old bundle id local.gearmulator.preview.*) that the 0.3.2 clean-up missed, or upstream Gearmulator's; tell users which to remove; extend the clean-up if they are ours.
+- **Status:** open.
+
+## B-031 · After a SysEx import the pattern can't be changed (0.3.4)
+
+- **From:** Discord tester A, 2026-10-08, 0.3.4: after importing patterns by SysEx, patterns get stuck; the next pattern can't be selected.
+- **Likely:** 0.3.4's import read-back flood (B-020) leaving pushes pending; 0.3.5's new import should fix it — verify pattern select after an import.
+- **Status:** open, check in 0.3.5.
+
+## B-030 · Tempo doesn't follow the DAW
+
+- **From:** Discord tester A, 2026-10-08: tempo stays on the machine's internal BPM although the plug-in is set to follow the host.
+- **Status:** open.
+
+## B-029 · Windows: closing and reopening the plug-in window leaves it blank
+
+- **From:** Discord tester, 2026-10-08, Windows 11, Ableton Live 12, Machinedrum VST3: the window opens fine the first time; after closing and reopening it, everything in it has gone and the plug-in has to be reloaded. Also: 65 % CPU at 44.1 kHz; audible glitches at 48 kHz and above (CPU research, see B-005).
+- **To check:** WebView2 controller/environment teardown and re-creation when the editor is destroyed and created again (mdWebView2Page); the start-up log (0.3.5).
+- **Status:** open.
+
+## B-028 · Glitches while p-locking still there in 0.3.4 (one tester)
+
+- **From:** Discord tester A, 2026-10-08, M1, macOS 12, 0.3.4: "Glitch while P-locking still there, no improvement".
+- **To check:** this tester's Mac is already at 65-70 % CPU with upstream Gearmulator; the B-014 stream cut the extra work 5-7×, but the emulation's own load may leave no headroom on an M1; check the buffer size, whether the page graphics (still heavy for fast gestures) is the remaining cost, and measure with the rt-check on an M1-like budget.
+- **Status:** open (related: B-014, CPU research).
+
+## B-027 · Monomachine: a machine change reverts when going back to Sequence
+
+- **From:** Discord tester, 2026-10-09, Monomachine Editor 0.3.4.
+- **What happens:** change a track's machine, go back to the Sequence page, and the track has the previous machine again.
+- **Likely:** a kit dump/read-back or the working kit re-sent after the change overwrites it (same family as B-025 on the MD); 0.3.4's stream or the SYSEX RECV session (B-021) involved.
+- **0.3.5:** not reproduced: the new journey `mm-sound-machine-stays` (pick a machine on Sound, go to Sequence, wait, back to Sound; the machine read from the machine's memory) passes in the standalone and the VST3.
+- **Status:** open until the tester confirms with 0.3.5.
+
+## B-026 · Mutes don't work after a SysEx import with its globals (0.3.5 candidate)
+
+- **From:** Radek's manual test of the packaged 0.3.5, 2026-10-09: after importing a backup with its globals, M on the track list lights, but the machine does not mute; on PLAY the mutes are gone.
+- **Cause:** a global dump is stored at once but applied only when its slot is made active (SysEx 0x56; P5, measured). The import sent the active global's dump and nothing else: the machine kept running on its old settings while every document, and so the editor, used the new ones. The editor then sent its mutes (CCs) on the new base channel where the machine was not listening (`mdDeskFirmwareTest syximport` with an export whose global has base channel 4-7: T3's mute landed on T15), and the page showed the mute until the machine's memory said otherwise. The Autechre 2008 backup's globals have the MIDI base channel OFF (127): the editor's mutes, notes and sound values cannot reach a machine set so at all. Not in 0.3.4: it left those globals out ("wrong OS", B-019).
+- **Fix (release 0.3.5):** an imported dump of the active global is made active right after it (0x56), as the editor's own GLOBAL edits are (both editors; the Monomachine once SYSEX RECV is left), so the machine, the documents and the editor agree on the channels; the editor sends on the active global's channels as read back. With the base channel OFF the editor refuses mutes and notes with the reason ("The machine's MIDI base channel is OFF … Set a base channel in GLOBAL"), so the page never shows a mute the machine did not take; the GLOBAL panel shows OFF and its +/− set 1-4. The import report says what each imported global changed ("Global 1 changed: MIDI base channel 1-4 -> OFF, tempo, the note map, …"); Globals stay unticked by default in the preview, now with "changes MIDI channels and machine settings". Tests: `md/mmDeskFirmwareTest syximport` mutes after the import and checks the machine's mute set while it plays (own export with base channel 4-7, with OFF, the AE backup); `syxexport` takes `SYX_BASE_CHANNEL` to make such files; journey `md-lib-syx-import-mute` (import with globals, M on the rail, PLAY: the machine's memory holds the mute; with OFF the M stays dark).
+- **Status:** fixed for 0.3.5.
+
 ## B-025 · Chopping right after Set up sampling loses RAM-R / RAM-P (machine stopped)
 
 - **From:** the firmware tests (`mdDeskFirmwareTest <MD ROM> sampler`), 2026-10-08, while checking 0.3.5. Not reported by a user.

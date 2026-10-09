@@ -51,7 +51,7 @@ const Syx = (() => {
 			const over = list.filter(i => i.overwrites).length;
 			const formats = [...new Set(list.map(i => i.format).filter(Boolean))];
 			const names = list.map(i => chip(k, i)).join("");
-			return `<label class="syxrow"><input type="checkbox" data-syxkind="${k}" ${OFF[k] ? "" : "checked"}><b>${label}</b><span class="syxn">${list.length}${over ? ` · ${over} overwrite` : ""}${formats.length ? ` · format ${formats.join(", ")}` : ""}</span></label><div class="syxnames">${names}</div>`;
+			return `<label class="syxrow"><input type="checkbox" data-syxkind="${k}" ${OFF[k] ? "" : "checked"}><b>${label}</b><span class="syxn">${list.length}${over ? ` · ${over} overwrite` : ""}${formats.length ? ` · format ${formats.join(", ")}` : ""}${k === "global" ? " · changes MIDI channels and machine settings; the active one is made active at once" : ""}</span></label><div class="syxnames">${names}</div>`;
 		}).join("");
 	}
 	function preview(m) {

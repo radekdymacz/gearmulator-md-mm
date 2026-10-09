@@ -580,29 +580,7 @@ const Modifiers = (() => {
 	}
 	if (typeof document !== "undefined" && document.addEventListener) { if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", localise); else localise(); }
 
-	/* FN (K4, DESIGN-keymap.md P5): the machine's FUNCTION key on the screen, for a mouse or a touch screen, for a
-	   host or a desktop that takes Alt (Windows' menu bar, Linux's Alt-drag): while it is on, every pointer and key
-	   event the page sees says ⌥ (altKey), so every ⌥ gesture and key has a route without a held key. "once": the next
-	   click, drag or key gets it, then it goes off; "latch" (a double-click on its key) until it is clicked again or
-	   Esc. Events on the FN key itself are left as they are. fn(state) sets it; onFn(f) hears every change. */
-	let fn = "off";
-	const fnHear = [];
-	const setFn = s => { if (s === fn) return; fn = s; fnHear.forEach(f => f(fn)); };
-	const onFnKey = e => !!e.target?.closest?.("[data-fnkey]");
-	const MODKEYS = new Set(["Alt", "Shift", "Meta", "Control", "CapsLock", "Fn", "AltGraph"]);
-	let spend = 0;
-	/* "once" is spent after the action it was for: a click, the end of a drag, a key (a timer: after the page's own handlers) */
-	const spendSoon = () => { if (fn !== "once" || spend) return; spend = setTimeout(() => { spend = 0; if (fn === "once") setFn("off"); }, 0); };
-	if (typeof addEventListener === "function") {
-		for (const type of ["pointerdown", "pointermove", "pointerup", "mousedown", "mousemove", "mouseup", "click", "dblclick", "contextmenu", "wheel", "keydown", "keyup"]) addEventListener(type, e => {
-			if (fn === "off" || onFnKey(e)) return;
-			if (type === "keydown" && e.key === "Escape") { setFn("off"); e.preventDefault(); e.stopImmediatePropagation(); return; }
-			if (!e.altKey) Object.defineProperty(e, "altKey", { value: true, configurable: true });
-			if (type === "click" || type === "pointerup" || (type === "keydown" && !MODKEYS.has(e.key))) spendSoon();
-		}, true);
-	}
-	return { get mac() { return mac; }, setPlatform(m) { mac = !!m; }, cmd, of, say,
-		get fn() { return fn; }, setFn, onFn: f => { fnHear.push(f); } };
+	return { get mac() { return mac; }, setPlatform(m) { mac = !!m; }, cmd, of, say };
 })();
 /* The key map's dispatcher (P5), one file for both editors and the MM mockup (skins/shared/): every shortcut
    is a Keys.bind entry; the pages' own maps are mdDeskKeys.js and the MM mockup's 56-keys.js. */
@@ -963,7 +941,7 @@ const WS_NAMES={seq:"Sequence",sound:"Sound",mix:"Mix",perform:"Perform",song:"S
 let keyView=null;
 function drawKeys(){const pop=$("#keyspop");if(!pop)return;
  if(!keyView)keyView=KeyView.mount(pop,{entries:()=>Keys.list(),page:()=>S.ws,pageName:()=>WS_NAMES[S.ws]||"This page",mapping:()=>S.mapping,
-  mac:()=>Modifiers.mac,fn:()=>Modifiers.fn!=="off",groups:KEY_GROUPS,note:()=>Modifiers.say("? or Esc closes. Click a key for what it does.")});
+  mac:()=>Modifiers.mac,groups:KEY_GROUPS,note:()=>Modifiers.say("? or Esc closes. Click a key for what it does.")});
  pop.classList.add("kview");keyView.draw();pop.hidden=false;
  const r=$(".lcdpanel").getBoundingClientRect(),top=Math.max(16,r.bottom+8);
  pop.style.top=(top+scrollY)+"px";pop.style.maxHeight=Math.max(240,innerHeight-top-12)+"px";pop.style.left=Math.max(16,(document.documentElement.clientWidth-pop.offsetWidth)/2+scrollX)+"px"}
@@ -1454,7 +1432,7 @@ const Syx = (() => {
 			const over = list.filter(i => i.overwrites).length;
 			const formats = [...new Set(list.map(i => i.format).filter(Boolean))];
 			const names = list.map(i => chip(k, i)).join("");
-			return `<label class="syxrow"><input type="checkbox" data-syxkind="${k}" ${OFF[k] ? "" : "checked"}><b>${label}</b><span class="syxn">${list.length}${over ? ` · ${over} overwrite` : ""}${formats.length ? ` · format ${formats.join(", ")}` : ""}</span></label><div class="syxnames">${names}</div>`;
+			return `<label class="syxrow"><input type="checkbox" data-syxkind="${k}" ${OFF[k] ? "" : "checked"}><b>${label}</b><span class="syxn">${list.length}${over ? ` · ${over} overwrite` : ""}${formats.length ? ` · format ${formats.join(", ")}` : ""}${k === "global" ? " · changes MIDI channels and machine settings; the active one is made active at once" : ""}</span></label><div class="syxnames">${names}</div>`;
 		}).join("");
 	}
 	function preview(m) {
@@ -3326,7 +3304,7 @@ function drawAudio(){const pop=$("#audiopop");if(!pop)return;if(!AP.open){pop.hi
    <div class="grow2"><span class="ilab">Latency</span><b class="mono">${D.latencyMs?D.latencyMs+" ms":"--"}</b></div></section>
   <section class="card amwide"><header><h3>MIDI</h3><span>inputs, output, Bluetooth</span></header>
    <div class="grow2 amtop"><span class="ilab">Inputs</span><span class="amins" title="${AMTIP.midiIn}">${(D.midiInputs||[]).map(m=>`<button class="amled" data-am="midiIn" data-id="${amEsc(m.id)}" aria-pressed="${!!m.on}"><i class="led${m.on?" on":""}"></i>${amEsc(m.name)}</button>`).join("")||`<span class="note">No MIDI inputs.</span>`}</span></div>
-   <div class="grow2"><span class="ilab">Output</span>${sel("midiOut",D.midiOutput?.id||"",D.midiOutput?.list||[],AMTIP.midiOut,"NONE")}${D.bluetooth?`<button class="amkey" data-am="bt" title="${AMTIP.bt}">BLUETOOTH MIDI…</button>`:""}</div></section>
+   <div class="grow2"><span class="ilab">Output</span>${sel("midiOut",D.midiOutput?.id||"",D.midiOutput?.list||[],AMTIP.midiOut,"NONE")}${D.bluetooth?`<button class="amkey" data-am="bt" title="${AMTIP.bt}">BLUETOOTH MIDI…</button>`:""}</div>${typeof openGlobal==="function"?`<div class="grow2"><span class="ilab"></span><button class="amlink" data-am="global" title="GLOBAL: the machine's own settings, kept in its memory">The machine's MIDI channel and sync are in GLOBAL</button></div>`:""}</section>
  </div>
  <div class="libfoot"><span>Also in the engine menu · Esc closes · a change applies at once and is kept</span><span class="fw">${amEsc(D.output?.id||"no output")}</span></div>`;
  if(typeof enhanceSelects==="function")enhanceSelects(pop);pop.hidden=false;placeAudio()}
@@ -3336,6 +3314,7 @@ function closeAudio(){if(!AP.open)return;AP.open=false;audioMeter(false);drawAud
 function audioLevel(v){AP.level=v;const l=document.getElementById("amlevel");if(l)l.style.width=Math.round(Math.min(1,Math.sqrt(Math.max(0,v)))*100)+"%"}
 function audioClick(a){const f=a.dataset.am;
  if(f==="close"){closeAudio();return}
+ if(f==="global"){closeAudio();openGlobal();return}
  if(f==="test"){audioSend({do:"test"});return}
  if(f==="bt"){audioSend({do:"bluetooth"});return}
  if(f==="mute"){audioSend({set:"mute",on:a.dataset.v==="1"});return}

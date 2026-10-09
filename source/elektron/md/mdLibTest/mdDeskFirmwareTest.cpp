@@ -1822,7 +1822,12 @@ namespace
 		auto& desk = rig.desk();
 		rig.page(R"({"op":"ready"})");
 		rig.runUntil([&] { return desk.isReady() && desk.documents().global && desk.documents().patterns.size() == 128 && desk.documents().kits.size() == 64 && desk.documents().songs.size() == 32; }, 60000);
-		const auto bytes = ed::writeSyx(machineDocs(desk));
+		auto docs = machineDocs(desk);
+		// B-026: SYX_BASE_CHANNEL=n (0-12, or 127 = OFF) writes the export's global with another MIDI base channel
+		if(const char* ch = std::getenv("SYX_BASE_CHANNEL"))
+			for(auto& [slot, g] : docs.globals)
+				g.baseChannel = static_cast<uint8_t>(std::atoi(ch));
+		const auto bytes = ed::writeSyx(docs);
 		std::ofstream out(_to, std::ios::binary);
 		out.write(reinterpret_cast<const char*>(bytes.data()), static_cast<std::streamsize>(bytes.size()));
 		check(out.good() && !bytes.empty(), "wrote " + std::to_string(bytes.size()) + " bytes to " + _to);
@@ -1940,6 +1945,36 @@ namespace
 		}
 		check(same == total, "the desk's documents are what the machine took (" + std::to_string(same) + " of " + std::to_string(total) + ")" + off);
 		check(desk.coreState().history().size() == 0, "an import is no undo step (the machine took a dump, nothing was edited)");
+		// B-026: the editor still plays the machine after the import (mutes and kit values are CCs on the base channel)
+		if constexpr(std::is_same_v<R, Rig>)
+		{
+			rig.runUntil([&] { return !desk.isBusy(); }, 3000);
+			rig.run(1000);
+			const auto m0 = rig.telemetry().mutes;
+			const int base = desk.documents().global ? desk.documents().global->baseChannel : -1;
+			const bool off = base > 12;
+			rig.page(R"({"op":"mute","t":2,"on":true,"id":993})");
+			const bool taken = resultOk(rig);
+			const bool landed = rig.runUntil([&] { return rig.telemetry().mutes >= 0 && (rig.telemetry().mutes & 0x0004); }, 2000);
+			std::printf("  after the import: base channel %d, mute %s, machine mutes %04x (before %04x)\n", base, taken ? "taken" : "refused", rig.telemetry().mutes, m0);
+			const auto shown = [&] { const auto* l = rig.machineDoc() ? rig.machineDoc()->find("desk")->find("mutes") : nullptr; bool m = false; if(l) for(const auto& v : l->asArray()) m |= int(v.asNumber()) == 2; return m; };
+			if(off)
+			{
+				check(!taken && !landed, "base channel OFF: the page's mute is refused with the reason, not shown as taken");
+			}
+			else
+			{
+				check(taken && landed, "after the import a page mute lands in the machine's mute set (base channel " + std::to_string(base + 1) + ")");
+				rig.page(R"({"op":"play","id":995})");
+				rig.runUntil([&] { return rig.pageTelemetry().playing; }, 2000);
+				rig.run(1500);
+				check((rig.telemetry().mutes & 0x0004) && shown(), "and stays muted while the machine plays");
+				rig.page(R"({"op":"stop","id":996})");
+				rig.run(400);
+				rig.page(R"({"op":"mute","t":2,"on":false,"id":994})");
+				rig.runUntil([&] { return rig.telemetry().mutes >= 0 && !(rig.telemetry().mutes & 0x0004); }, 2000);
+			}
+		}
 	}
 
 	// SYX_HW=1: over the HW MIDI engine (the plug-in's wire at DIN speed both ways), as a real Machinedrum.

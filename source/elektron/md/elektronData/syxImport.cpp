@@ -787,4 +787,54 @@ namespace elektronData
 		}
 		return {};
 	}
+
+	std::vector<std::string> syxGlobalChanges(const SyxModel _model, const std::optional<std::vector<uint8_t>>& _before,
+		const std::optional<std::vector<uint8_t>>& _after)
+	{
+		if(!_before || !_after || *_before == *_after)
+			return {};
+		const auto b = json::parse(std::string(_before->begin(), _before->end()));
+		const auto a = json::parse(std::string(_after->begin(), _after->end()));
+		if(!b || !a || !b->isObject() || !a->isObject())
+			return {};
+		std::vector<std::string> out;
+		// The MIDI base channel: where the editor's notes, mutes and sound values go.
+		const auto channels = [&](const json::Value& _g) -> std::string
+		{
+			const json::Value* v = nullptr;
+			if(_model == SyxModel::Md)
+				v = _g.find("baseChannel");
+			else if(const auto* c = _g.find("channels"))
+				v = c->find("base");
+			if(!v || !v->isNumber())
+				return {};
+			const int n = static_cast<int>(v->asNumber());
+			if(_model == SyxModel::Md)
+				return n <= 12 ? std::to_string(n + 1) + "-" + std::to_string(n + 4) : "OFF";
+			return n <= 15 ? std::to_string(n + 1) : "OFF";
+		};
+		const auto cb = channels(*b), ca = channels(*a);
+		if(cb != ca)
+			out.push_back("MIDI base channel " + cb + " -> " + ca);
+		for(const auto& [key, value] : a->asObject())
+		{
+			if(key == "slot" || key == "name" || key == "baseChannel" || key == "schema" || key == "version")
+				continue;
+			const auto* before = b->find(key);
+			if(before && *before == value)
+				continue;
+			if(key == "channels" && value.isObject() && before && before->isObject())
+			{
+				for(const auto& [k, v] : value.asObject())
+					if(k != "base" && !(before->find(k) && *before->find(k) == v))
+						out.push_back("channels." + k);
+				continue;
+			}
+			static const std::map<std::string, std::string> names{{"keymap", "the note map"}, {"control", "MIDI sync and program change"},
+				{"settings", "trig inputs and other settings"}, {"extendedMode", "EXTENDED mode"}, {"routing", "track outputs"}, {"tempo", "tempo"}};
+			const auto n = names.find(key);
+			out.push_back(n != names.end() ? n->second : key);
+		}
+		return out;
+	}
 }

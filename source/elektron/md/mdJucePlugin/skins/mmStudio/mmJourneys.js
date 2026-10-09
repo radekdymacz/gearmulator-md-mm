@@ -263,6 +263,20 @@ const MmJourneys = (() => {
 			{ ...undoKey, act: u => { blur(); u.key("z", { cmd: true }); }, machine: c => ok(kitT(0) === c.k0, "kit not back"), screen: c => ok(S().tracks[0].m === c.m0, "view " + S().tracks[0].m), within: 10000 }
 		]
 	};
+	/* B-027: a machine picked on Sound stays when the person goes back to Sequence (it reverted in 0.3.4) */
+	const machineStays = {
+		name: "mm-sound-machine-stays",
+		steps: [
+			go("sound"), sel(0),
+			{ say: "pick another machine", act: async (u, c) => { c.k0 = kitT(0); c.m0 = S().tracks[0].m; u.click("#machbtn"); await sleep(300); const m = $all("#machpop .mk").find(b => b.dataset.mach !== c.m0 && !b.disabled); c.m1 = m.dataset.mach; u.click(m); },
+				screen: c => ok(S().tracks[0].m === c.m1, "view " + S().tracks[0].m), machine: c => ok(kitT(0) !== c.k0, "kit unchanged"), within: 10000 },
+			go("seq"),
+			{ say: "wait on Sequence: the machine stays", act: () => sleep(5000), screen: c => ok(S().tracks[0].m === c.m1, "view " + S().tracks[0].m), machine: c => ok(kitT(0) !== c.k0, "kit back to " + kitT(0)), within: 2000 },
+			go("sound"),
+			{ say: "and on Sound again", act: () => sleep(1000), screen: c => ok(S().tracks[0].m === c.m1, "view " + S().tracks[0].m), machine: c => ok(kitT(0) !== c.k0, "kit back to " + kitT(0)), within: 2000 }
+		],
+		async tidy(u, c) { if (c.k0 != null && kitT(0) !== c.k0) { blur(); u.key("z", { cmd: true }); await sleep(3000); } }
+	};
 	const midiSide = {
 		name: "mm-sound-midi-side",
 		steps: [
@@ -877,7 +891,7 @@ const MmJourneys = (() => {
 		]
 	};
 	const all = [bootCard, firstBeat, spaceKey, tempoDrag, patNext, wsKeys, helpKeys, plate, undoRedo, gridRecord, slidePaint, lenKey, lockLane, arpDock, arpRange, trnKeys,
-		genMut, shapeSound, machinePick, midiSide, controlAll, mixStrip, mixSolo, shiftMutes, routing, panTrim, msOff,
+		genMut, shapeSound, machinePick, machineStays, midiSide, controlAll, mixStrip, mixSolo, shiftMutes, routing, panTrim, msOff,
 		poly, multiTrig, multiMap, kbPlay, songRows, songPicker, songChain, kitLoad, kitCopy, patGo, dialogEsc,
 		audioPanel, romCard, notePlay,
 		tapTempo, queue, dialogKeys, trackKeys, muteKeys, lockRamp, pages, copyPaste, clearAll, fill, rotate, pasteMany, liveRec, genKeys, mutScope,

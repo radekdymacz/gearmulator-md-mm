@@ -421,6 +421,19 @@ namespace mdJucePlugin
 				m.set("report", report);
 				if(text.empty())
 					text = summaryText(counts, sentOther);
+				// B-026: what an imported global changed (its MIDI base channel first: where the editor sends)
+				for(const auto& i : m_items)
+				{
+					if(!i.chosen || !i.sent || i.kind != elektronData::SyxKind::Global)
+						continue;
+					const auto changes = elektronData::syxGlobalChanges(Traits::model, i.before, i.after);
+					if(changes.empty())
+						continue;
+					text += " Global " + std::to_string(i.slot + 1) + " changed: ";
+					for(size_t c = 0; c < changes.size(); ++c)
+						text += (c ? ", " : "") + changes[c];
+					text += ".";
+				}
 			}
 			m.set("text", text);
 			return m;

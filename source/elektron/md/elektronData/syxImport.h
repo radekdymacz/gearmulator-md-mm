@@ -243,4 +243,9 @@ namespace elektronData
 	SyxOutcome syxOutcome(const std::vector<uint8_t>& _file, const std::optional<std::vector<uint8_t>>& _before,
 		const std::optional<std::vector<uint8_t>>& _after);
 	const char* syxOutcomeName(SyxOutcome _outcome);
+
+	// B-026: what an imported global changed (its canonical before and read-back), in words for the report: "MIDI
+	// base channel 1-4 -> OFF", then the other settings by name. Empty when nothing changed or either is not known.
+	std::vector<std::string> syxGlobalChanges(SyxModel _model, const std::optional<std::vector<uint8_t>>& _before,
+		const std::optional<std::vector<uint8_t>>& _after);
 }

@@ -185,6 +185,7 @@ namespace mdDesk
 		deskCore::KitState kitState(const Documents& _view) const;
 		const elektronData::MdKit* heldKit(const Documents& _view) const;
 		void setBaseChannel(const elektronData::MdGlobal& _g);
+		std::string channelsOff(const Documents& _view) const;
 		void pumpLoads(double _now);
 		void gaveUpLoad(const DocRef& _ref);
 		bool current(const DocRef& _ref) const;

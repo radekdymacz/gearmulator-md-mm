@@ -1215,6 +1215,8 @@ html,body{min-width:1280px}
 .amnote{font:500 11px var(--sans);color:var(--print2);padding-left:100px}
 .amerr{color:var(--led);font-weight:600}
 @media (max-width:900px){.amgrid{grid-template-columns:1fr}.amnote{padding-left:0}}
+/* 0.3.5: the line to the machine's own MIDI settings (GLOBAL, the Machinedrum Editor) */
+.amlink{background:none;border:0;padding:0;font:inherit;color:var(--print);text-decoration:underline;text-underline-offset:2px;cursor:pointer}
 /* ===== P7 LAYOUT: the page fills the window and scales with it =====
    One column of fixed bars (the header, the page's own bars) and fluid rows: the Sequence's 16 track
    rows share the height the lock lane leaves (the lane keeps at least the lock parameter list's height,
@@ -1768,5 +1770,3 @@ img,svg,canvas{-webkit-user-drag:none}
 /* K2 (DESIGN-keymap.md): the LCD's COPY CLR PASTE while they act on the selected steps: underlined, as the
    selection is outlined (mdDeskComforts.js secLabels) */
 .lcdsec button.onsel{opacity:1;text-decoration:underline;text-underline-offset:2px}
-/* K4: the FN key while it is on (once: lit; latched: outlined too) */
-.skey.fnkey.latch{outline:2px solid var(--cream);outline-offset:-3px}

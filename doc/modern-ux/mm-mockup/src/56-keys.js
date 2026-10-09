@@ -17,7 +17,7 @@ const WS_NAMES={seq:"Sequence",sound:"Sound",mix:"Mix",perform:"Perform",song:"S
 let keyView=null;
 function drawKeys(){const pop=$("#keyspop");if(!pop)return;
  if(!keyView)keyView=KeyView.mount(pop,{entries:()=>Keys.list(),page:()=>S.ws,pageName:()=>WS_NAMES[S.ws]||"This page",mapping:()=>S.mapping,
-  mac:()=>Modifiers.mac,fn:()=>Modifiers.fn!=="off",groups:KEY_GROUPS,note:()=>Modifiers.say("? or Esc closes. Click a key for what it does.")});
+  mac:()=>Modifiers.mac,groups:KEY_GROUPS,note:()=>Modifiers.say("? or Esc closes. Click a key for what it does.")});
  pop.classList.add("kview");keyView.draw();pop.hidden=false;
  const r=$(".lcdpanel").getBoundingClientRect(),top=Math.max(16,r.bottom+8);
  pop.style.top=(top+scrollY)+"px";pop.style.maxHeight=Math.max(240,innerHeight-top-12)+"px";pop.style.left=Math.max(16,(document.documentElement.clientWidth-pop.offsetWidth)/2+scrollX)+"px"}

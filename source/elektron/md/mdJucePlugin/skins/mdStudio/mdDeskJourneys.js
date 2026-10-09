@@ -509,20 +509,13 @@ const MdJourneys = (() => {
 			{ ...undoKey, say: "press Cmd+Z: one step back for all", machine: c => ok(same(allKitVals(), c.k0), "not all back: " + kitDiff(c.k0, allKitVals())), within: 10000 }
 		]
 	};
-	/* K4 (DESIGN-keymap.md): the FN key gives the next drag ⌥, without a held key (a mouse, a touch screen, Linux's Alt-drag) */
-	const fnControlAll = {
-		name: "md-fn-control-all",
+	/* 0.3.5: the top bar's GLOBAL key (where FN was) opens the machine's global settings; lit while open, Esc closes */
+	const globalKey = {
+		name: "md-global-key",
 		steps: [
-			go("sound"), sel(() => soundTrack()),
-			{ say: "click FN: it is lit", act: u => u.click("#fnkey"), screen: () => ok(Modifiers.fn === "once" && $1("#fnkey").getAttribute("aria-pressed") === "true", "FN " + Modifiers.fn) },
-			{ say: "drag an effects value (no key held): every track's knob moves, and FN goes off", act: async (u, c) => { c.k0 = allKitVals(); const el = $1('#main .pc[data-g="fx"]'), d = getV(el) > 64 ? -1 : 1; await u.drag(el, [[d * 4, 0], [d * 8, 0], [d * 16, 0], [d * 24, 0]]); },
-				screen: () => ok(Modifiers.fn === "off" && $1("#fnkey").getAttribute("aria-pressed") === "false", "FN still " + Modifiers.fn),
-				machine: c => { const moved = allKitVals().filter((v, t) => !same(v, c.k0[t])).length; return ok(moved >= 2, moved + " tracks moved"); }, within: 10000 },
-			{ ...undoKey, say: "press Cmd+Z: one step back for all", machine: c => ok(same(allKitVals(), c.k0), "not all back: " + kitDiff(c.k0, allKitVals())), within: 10000 },
-			{ say: "double-click FN, then press Escape: latched, then off", act: async u => { u.dblclick("#fnkey"); await sleep(100); if (Modifiers.fn !== "latch") throw new Error("not latched: " + Modifiers.fn); u.key("Escape"); },
-				screen: () => ok(Modifiers.fn === "off", "FN " + Modifiers.fn) }
-		],
-		async tidy() { Modifiers.setFn("off"); }
+			{ say: "click GLOBAL in the top bar: the panel opens, the key is lit", act: u => u.click("#globkey"), screen: () => ok(!$1("#globpop").hidden && pressed("#globkey"), "panel " + ($1("#globpop").hidden ? "closed" : "open") + ", key " + $1("#globkey")?.getAttribute("aria-pressed")) },
+			{ say: "press Escape: it closes, the key goes dark", act: u => u.key("Escape"), screen: () => ok($1("#globpop").hidden && !pressed("#globkey"), "still open") }
+		]
 	};
 
 	/* ---------- Mix ---------- */
@@ -970,15 +963,38 @@ const MdJourneys = (() => {
 			esc
 		]
 	};
+	/* B-026: import a file with its globals, then mute on the rail and play: the machine must hold the mute (its memory,
+	   not the page's wish). With the file's base channel OFF the M is refused, with the reason, and never lit. The file
+	   is the run's (GEARMULATOR_MDMM_SYX_FILE; mdDeskFirmwareTest syxexport with SYX_BASE_CHANNEL makes one). */
+	const syxImportMute = {
+		name: "md-lib-syx-import-mute",
+		needs: () => new URLSearchParams(location.search).get("syxfile") ? null : "no .syx for the run (GEARMULATOR_MDMM_SYX_FILE)",
+		steps: [
+			openKits,
+			{ say: "click Import SysEx…, tick Globals too", act: async u => { u.click('#libpop [data-syx="import"]'); await until(() => !$1("#syxpop").hidden && $all("#syxpop [data-syxkind]").length, 8000); const g = $1('#syxpop [data-syxkind="global"]'); if (g && !g.checked) u.click(g); },
+				screen: () => ok(!$1("#syxpop").hidden && !!$1('#syxpop [data-syxkind="global"]')?.checked, "no Globals in the preview"), within: 8000 },
+			{ say: "click Import: sent, read back, reported", act: u => u.click('#syxpop [data-syxgo="start"]'), screen: () => ok(/imported/.test($1("#syxpop .syxsum")?.textContent || ""), "progress: " + ($1("#syxpop .syxbar span")?.textContent || "")), within: 180000 },
+			{ say: "click Done, then the Sequence tab", act: async u => { u.click('#syxpop [data-syxgo="close"]'); await sleep(300); u.key("Escape"); await sleep(300); u.click(tab("seq")); },
+				screen: () => onTab("seq"), machine: () => ok(!!Docs.global && desk().mutesSource === "memory", "global " + !!Docs.global + ", mutes from " + desk().mutesSource), within: 8000 },
+			{ say: "click M on a track of the rail: its mute flips on the machine", act: (u, c) => { c.off = Docs.global.baseChannel > 12; c.m0 = mutes(); c.t = soundTracks().find(t => !c.m0.includes(t)) ?? soundTrack(); c.want = !c.m0.includes(c.t); u.click(railM(c.t)); },
+				machine: c => ok(c.off ? same(mutes(), c.m0) : mutes().includes(c.t) === c.want, `base ${Docs.global.baseChannel}, track ${c.t}, machine mutes ${mutes()} (before ${c.m0})`),
+				screen: c => ok(pressed(railM(c.t)) === (c.off ? c.m0.includes(c.t) : c.want), "M " + (pressed(railM(c.t)) ? "lit" : "not lit")), within: 6000 },
+			{ say: "press PLAY: the mute holds", act: u => { tele.steps = []; u.click("#play"); },
+				machine: c => ok(new Set(tele.steps).size >= 4 && (c.off ? same(mutes(), c.m0) : mutes().includes(c.t) === c.want), `machine mutes ${mutes()}, steps ${tele.steps.length}`),
+				screen: c => ok(pressed(railM(c.t)) === (c.off ? c.m0.includes(c.t) : c.want), "M " + (pressed(railM(c.t)) ? "lit" : "not lit")), within: 8000 },
+			{ say: "press STOP", act: u => u.click("#play"), machine: () => ok(tele.last && !tele.last.playing, "still playing") }
+		],
+		async tidy(u, c) { if (V.playing) u.click("#play"); await sleep(300); if (c.t != null && !c.off && mutes().includes(c.t) !== c.m0.includes(c.t)) u.click(railM(c.t)); await sleep(500); }
+	};
 	const all = [bootCard, firstBeat, spaceTransport, tempoDrag, tapTempo, tapTempoB, patStep, queuePattern, plate, wsKeys, helpKeys, osHelp, undoRedo,
 		paintUndo, accentSlide, lockLane, pagesJ, copyPaste, selectCopyPaste, stepMenuJ, osCopyPaste, buttonsCopyPaste, clearPatternJ, fillEveryJ, rotateJ, rotateUndo, trackKeys, muteKeys, liveRec,
 		genJourney("md-gen-mutate-undo", false), genJourney("md-gen-defaults-mutate-undo", true), genKeys,
-		shapeSound, arrows, machinePick, soundCopy, editorDrag, controlAll, fnControlAll,
+		shapeSound, arrows, machinePick, soundCopy, editorDrag, controlAll, globalKey,
 		mixSolo, shiftMutes, allOff, fader, outKey, masterFx,
 		songArrange, songChain, samplerSlots, samplerSetup, audition,
 		libDialog, kitCopy, kitRename, kitClear, patGo, patClear, dialogEsc,
 		globalJ, globalRouting, globalMapNote, audioPanel, romCard, notePlay,
-		lockRamp, pasteMany, mutScope, songInspector, songDrag, ramView, setupChop, panBox, hwNoMachine, syxImportJ, shots];
+		lockRamp, pasteMany, mutScope, songInspector, songDrag, ramView, setupChop, panBox, hwNoMachine, syxImportJ, syxImportMute, shots];
 
 	/* ---------- demos: journeys played for a camera (doc/modern-ux/DEMO-VIDEOS.md) ---------- */
 	/* Not in `all`: ?selftest=journey never runs them; ?selftest=demo-md-<name> does (Journey.demo), at a person's pace

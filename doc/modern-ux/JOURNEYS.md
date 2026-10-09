@@ -116,7 +116,7 @@ no journey yet); **not testable** (why). "—": the editor has no such feature.
 | Copy / paste a sound | md-sound-copy-paste PASS | mm-sound-copy-paste PASS |
 | Screens (curve editors): drag a handle | md-sound-screen-drag PASS | mm-sound-screen-drag PASS |
 | Control All (Alt-drag), one undo step | md-sound-control-all PASS | mm-sound-control-all PASS |
-| The FN key (K4): FN, then a plain drag is Control All; latch, Esc | md-fn-control-all PASS | — (K7) |
+| The GLOBAL key in the top bar (where FN was until 0.3.5): opens the panel, lit, Esc closes | md-global-key | — (the Monomachine Editor has no GLOBAL panel) |
 
 ## Mix
 

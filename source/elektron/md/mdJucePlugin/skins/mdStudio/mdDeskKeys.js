@@ -18,7 +18,7 @@ let keyView = null;
 function drawKeys() {
 	const pop = $("#keyspop"); if (!pop) return;
 	if (!keyView) keyView = KeyView.mount(pop, { entries: () => Keys.list(), page: () => S.ws, pageName: () => WS_NAMES[S.ws] || "This page", mapping: () => S.mapping,
-		mac: () => Modifiers.mac, fn: () => Modifiers.fn !== "off", groups: KEY_GROUPS, note: () => Modifiers.say("? or Esc closes. Click a key for what it does.") });
+		mac: () => Modifiers.mac, groups: KEY_GROUPS, note: () => Modifiers.say("? or Esc closes. Click a key for what it does.") });
 	pop.classList.add("kview");
 	keyView.draw();
 	pop.hidden = false;

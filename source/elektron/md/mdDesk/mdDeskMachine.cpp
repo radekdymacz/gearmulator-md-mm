@@ -226,6 +226,13 @@ namespace mdDesk
 		if(!canSendSysex())
 			return "This engine cannot send SysEx to the machine.";
 		sendSysex(_message);
+		// B-026: a global dump is stored at once but applied only when its slot is made active (P5, measured). An
+		// imported dump of the active global would leave the machine running on its old settings (MIDI base channel,
+		// sync, the map) while every document says the new ones, and the editor would send its mutes, notes and
+		// sound values where the machine does not listen. As the editor's own GLOBAL edits: 0x56 right after it.
+		if(ed::mdDumpCommand(_message) == ed::g_mdGlobalDump && _message.size() > 9 && m_session.state().globalSlot
+			&& *m_session.state().globalSlot == _message[9])
+			sendSysex(ed::mdSetActiveGlobal(_message[9]));
 		return {};
 	}
 
@@ -981,6 +988,8 @@ namespace mdDesk
 				return refuse("TRIG keys need the local emulated machine");
 			return ok("Recording: a key records a plain trig on the track, at the kit's pitch.");
 		}
+		if(const auto why = channelsOff(_view); !why.empty())
+			return refuse(why);
 		const auto note = keys::trackNote(_view.global ? &*_view.global : nullptr, t);
 		if(!note)
 			return refuse("Track " + std::to_string(t + 1) + " has no MIDI note in the MAP EDITOR (GLOBAL settings)");
@@ -1222,8 +1231,20 @@ namespace mdDesk
 		return ok("The machine follows the host's tempo and transport (GLOBAL " + std::to_string(*slot + 1) + ": TEMPO IN external)");
 	}
 
-	Outcome MdMachine::cmdMute(const Value& _m, const Documents&)
+	// B-026: the machine's MIDI base channel is where the editor's mutes, notes and sound values go. With it OFF
+	// (an imported global: 127) the machine takes none of them: say so instead of showing a mute it never took.
+	std::string MdMachine::channelsOff(const Documents& _view) const
 	{
+		if(!_view.global || _view.global->baseChannel <= ed::mdGlobalBits::g_maxBaseChannel)
+			return {};
+		return "The machine's MIDI base channel is OFF (GLOBAL " + std::to_string(_view.global->position + 1)
+			+ "): it takes no mutes, notes or sound values over MIDI. Set a base channel in GLOBAL (G).";
+	}
+
+	Outcome MdMachine::cmdMute(const Value& _m, const Documents& _view)
+	{
+		if(const auto why = channelsOff(_view); !why.empty())
+			return refuse(why);
 		const auto t = static_cast<uint8_t>(*intOf(_m, "t"));
 		const bool on = flagOf(_m, "on");
 		m_mutes[t] = on;
@@ -1642,7 +1663,7 @@ namespace mdDesk
 	void MdMachine::setBaseChannel(const ed::MdGlobal& _g)
 	{
 		if(m_port.baseChannel)
-			m_port.baseChannel(static_cast<uint8_t>(_g.baseChannel & 0x0f));
+			m_port.baseChannel(_g.baseChannel <= ed::mdGlobalBits::g_maxBaseChannel ? _g.baseChannel : uint8_t{0x7f});	// 0x7f: OFF
 	}
 
 	TelemetryEvents MdMachine::onTelemetry(const Telemetry& _t)

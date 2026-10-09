@@ -344,9 +344,14 @@ namespace mmDesk
 		return ok("The machine follows the host's tempo and transport (GLOBAL " + std::to_string(ref.slot + 1) + ": MIDI SYNC CLOCK IN, TRANSPORT IN)");
 	}
 
-	Outcome MmMachine::cmdMute(const Value& _m, const Documents&)
+	Outcome MmMachine::cmdMute(const Value& _m, const Documents& _view)
 	{
 		const auto t = num(_m, "t");
+		// B-026: a mute is the track's CC on the machine's channels: none when the base channel is OFF, and then the
+		// page must not show a mute the machine never took
+		if(const auto* g = activeGlobal(_view, m_curGlobal); g && g->baseChannel > 15)
+			return refuse("The machine's MIDI base channel is OFF (GLOBAL " + std::to_string(g->position + 1)
+				+ "): it takes no mutes, notes or sound values over MIDI. GLOBAL › MIDI › CHANNELS on the machine.");
 		const bool mute = flag(_m, "on");
 		m_port.sendParam(static_cast<uint8_t>(t), 8, 0, mute ? 1 : 0);
 		m_expectMute[static_cast<size_t>(t)] = deskCore::FieldExpectation<bool>::sent(mute, clock());
