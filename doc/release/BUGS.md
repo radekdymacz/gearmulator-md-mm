@@ -4,6 +4,13 @@
 repository; the site sends reports to the contact address. Newest first. Each entry:
 where it came from, the setup, what happens, what should happen, status.*
 
+## B-038 · Monomachine: a song's LOOP row goes back to row 1
+
+- **From:** found by the song playhead's firmware test, 2026-10-09 (0.3.5 work).
+- **What happens:** in a song written by the Monomachine Editor, a LOOP row goes back to row 1 instead of the row it names, and the row before the LOOP is skipped. The machine plays it so; the playhead shows it.
+- **To check:** where the MM song row stores the loop target (inferred in MM-P1, never probed); probe it on the firmware as the Machinedrum's was. Noted in mm-data-contract.md.
+- **Status:** open, for 0.3.6.
+
 ## B-037 · Windows: MIDI in/out don't work in the standalone
 
 - **From:** Discord tester D, 2026-10-09, Windows 10, i9, 32 GB, 0.3.4: "MIDI ins/outs don't work, or I didn't figure out how to make them work".
