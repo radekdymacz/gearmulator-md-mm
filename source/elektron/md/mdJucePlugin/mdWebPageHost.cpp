@@ -528,13 +528,14 @@ namespace mdJucePlugin
 		if(m_recvSeq == 1)
 			return;
 		// A page that loaded again: what it has not read, or not been written yet, is for the old one; number from 1
-		// for this one, which has nothing: everything once more (its ready may have come first, and what that sent
-		// went out under the old numbers).
+		// for this one, which has nothing: its zoom and everything else once more (its ready may have come first, and
+		// what that sent went out under the old numbers).
 		note("page started again: batches numbered from 1, everything sent once more");
 		deleteRecvFiles(std::numeric_limits<uint64_t>::max());
 		m_recvSeq = 1;
 		if(m_files)
 			m_files->restart();
+		m_cssZoom = 1.0;
 		if(m_onRestart)
 			m_onRestart();
 	}
@@ -691,12 +692,18 @@ namespace mdJucePlugin
 			{m_spec.designWidth, m_spec.designHeight, m_spec.minHeight});
 		if(setWebPageZoom(*m_web, zoom) >= 0)
 			return;
-		// No native page zoom (macOS 10.15 and older, the other platforms' web views): the page's own CSS zoom,
-		// which lays it out the same way. Sent when it changes and again when the page (re)loads.
+		// No native page zoom (Linux's webkit2gtk, macOS 10.15 and older, JUCE's Windows control): the page's own CSS
+		// zoom, which lays it out the same way (skins/shared/deskZoom.js), as a message by whatever carries the others,
+		// never a javascript: URL of its own (on Linux one crashes webkit2gtk's web process next to the bridge
+		// iframes, mdPageBridge.h). Sent when it changes and again when the page starts again (onAck).
 		if(!m_pageReady || std::abs(zoom - m_cssZoom) < 0.001)
 			return;
 		m_cssZoom = zoom;
-		m_web->goToURL("javascript:document.documentElement.style.zoom='" + juce::String(zoom, 4) + "';void 0");
+		auto m = Value::object();
+		m.set("type", "zoom");
+		m.set("zoom", zoom);
+		send(std::move(m));
+		flush();
 	}
 
 	void WebPageHost::setUserZoom(const double _zoom)

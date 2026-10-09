@@ -1797,6 +1797,21 @@
         },
         {
           "type": "object",
+          "description": "Where the web view has no page zoom of its own (Linux's webkit2gtk): the page's CSS zoom, the zoom that fits the page's design size into the window times the user's zoom (mdPageZoom.h), sent when it changes and again when the page starts again; the page sets document.documentElement.style.zoom (skins/shared/deskZoom.js). Never sent where the web view zooms itself (macOS, WebView2).",
+          "required": ["type", "zoom"],
+          "properties": {
+            "type": {
+              "const": "zoom"
+            },
+            "zoom": {
+              "type": "number",
+              "minimum": 0,
+              "description": "greater than 0; 1: the page's own size"
+            }
+          }
+        },
+        {
+          "type": "object",
           "description": "P7, B-019: a .syx file the user chose or dropped, parsed by the plug-in: what it holds (per kind the items with their slot, name, format bytes, whether they overwrite data or play now) and what cannot be sent and why. It informs; the import sends the chosen messages to the machine as they are.",
           "required": ["type", "ok", "file", "text"],
           "properties": {

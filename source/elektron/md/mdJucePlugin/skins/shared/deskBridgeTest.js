@@ -3,7 +3,8 @@
    gmbridge://c/ URL while it fits, else pieces never cut inside an escape that join (in index order) to the one
    encoded text; Bridge hands batches to the transport and what the plug-in says to its handlers. Over the real
    bridge (codex review 2026-10): a notice's answer keeps the notice's number apart from the request's id (deskModal.js
-   noticeAnswer), and on Linux the page reads the plug-in's batch files in order however long one takes to appear.
+   noticeAnswer), the plug-in's zoom message zooms the page (deskZoom.js), and on Linux the page reads the plug-in's
+   batch files in order however long one takes to appear.
      node deskBridgeTest.js */
 const fs = require("fs"), path = require("path"), vm = require("vm");
 
@@ -113,6 +114,22 @@ function standIn(files, extra = {}) {
 	const own = p.Bridge.send({ op: "noticeAnswer", id: 77, button: 0 });
 	check(p.posted[p.posted.length - 1].id === own && own !== 77 && p.logged.some(l => /send noticeAnswer: its own id 77 is replaced/.test(l)),
 		"a message with its own id: the bridge's id goes out, and the log says the caller's was lost");
+}
+/* ---- the plug-in's zoom (no native page zoom: Linux): the page zooms itself (deskZoom.js) ---- */
+{
+	const p = standIn(["deskBridge.js", "deskZoom.js"]);
+	p.recv([{ type: "zoom", zoom: 1.25 }], 1);
+	check(p.document.documentElement.style.zoom === "1.25", "gm.recv([{type: zoom, zoom: 1.25}], 1) sets the page's CSS zoom to 1.25: " + p.document.documentElement.style.zoom);
+	p.recv([{ type: "zoom", zoom: 0.8 }], 2);
+	check(p.document.documentElement.style.zoom === "0.8", "a new zoom replaces it");
+	p.recv([{ type: "zoom", zoom: "big" }, { type: "zoom", zoom: 0 }, { type: "zoom" }], 3);
+	check(p.document.documentElement.style.zoom === "0.8", "a zoom that is not a number above 0 is ignored");
+	/* the message is both editors' contract ($defs/message) */
+	const { execFileSync } = require("child_process");
+	const root = path.join(__dirname, "..", "..", "..", "..", "..", "..");
+	const onContract = (schema, m) => { try { execFileSync("python3", [path.join(root, "doc/modern-ux/page_contract_check.py"), path.join(root, "doc/modern-ux", schema), "message"], { input: JSON.stringify(m) }); return true; } catch (e) { return false; } };
+	check(["md-data-contract.schema.json", "mm-data-contract.schema.json"].every(f => onContract(f, { type: "zoom", zoom: 1.25 }) && !onContract(f, { type: "zoom" })),
+		"{type: zoom, zoom} is on both editors' contract (and zoom is required)");
 }
 /* ---- Linux (?recv=file): the page reads the plug-in's batch files in order, polling for the next however long it takes
    (the plug-in writes them strictly in order: mdPageBridge.h FileOutbox), and says how far it got ---- */

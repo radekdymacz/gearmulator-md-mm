@@ -102,7 +102,7 @@ namespace mdJucePlugin
 		double m_nextResyncTry = 0;	// when to try that reload (again)
 		std::function<void()> m_onRestart;	// setOnRestart
 		double m_userZoom = 1.0;	// the user's page zoom (the editor's menu, Cmd - / Cmd + / Cmd 0)
-		double m_cssZoom = 1.0;		// the CSS zoom sent, where the web view has no native page zoom
+		double m_cssZoom = 1.0;		// the CSS zoom sent (a zoom message), where the web view has no native page zoom
 		bool m_keptDrawn = false;	// a background run (mdBackgroundRun.h): the page draws while covered
 		mutable juce::File m_logFile;	// created on the first line
 		juce::File m_startupLog;	// B-022 (setStartupLog)

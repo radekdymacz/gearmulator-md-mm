@@ -42,8 +42,10 @@ The editor is a web page in JUCE 7's `WebBrowserComponent`. On Linux JUCE runs w
   (`FileOutbox` in `mdPageBridge.h`): one that cannot be written (a full disk for a moment) holds back the later ones
   and is tried again on every tick; with 8 MiB waiting, or 2 s without a file written, they are dropped and the page
   is loaded again once a file can be written. The start-up log says each of these in every build. The page loads
-  from a `file://` temp file as on macOS. The zoom that fits the design width is macOS-only
-  (`mdStudioWebZoom.mm`), as on Windows.
+  from a `file://` temp file as on macOS.
+- **The zoom.** webkit2gtk has no page zoom of its own, so the zoom that fits the window (times the user's zoom) goes
+  to the page as a `zoom` message by the same files, never as a `javascript:` URL, and the page sets its CSS zoom
+  (`skins/shared/deskZoom.js`). macOS (`mdStudioWebZoom.mm`) and Windows (WebView2) zoom the web view itself.
 
 ## Checked by CI, and not
 
@@ -51,8 +53,9 @@ The editor is a web page in JUCE 7's `WebBrowserComponent`. On Linux JUCE runs w
 (`ctest -E "Plugin|_AU|VST|FirmwareTest|synthLibMidiClockTimingTest"`), packages, and starts each packaged
 standalone and VST3 (in `scripts/vst3EditorHost`) under Xvfb on Ubuntu 22.04 and 24.04 with runtime packages only
 (`scripts/linux/smoke_mdmm.sh`): the app keeps running, WebKit's `WebKitWebProcess` starts, the bridge goes both
-ways and the page shows "<machine> firmware needed" (read through AT-SPI), and screenshots are kept as an
-artifact. The three systems' start tests side by side: [FOUNDATION.md](../modern-ux/FOUNDATION.md), "CI start
+ways and the page shows "<machine> firmware needed" (read through AT-SPI), real keys reach the page, the page's zoom
+(125 % from the editor's config, then Ctrl+= to 150 %) leaves the same web process running, and screenshots are kept
+as an artifact. The three systems' start tests side by side: [FOUNDATION.md](../modern-ux/FOUNDATION.md), "CI start
 tests". Not checked: the VST3 in a Linux DAW, audio and MIDI devices, a ROM, Wayland, any distribution but Ubuntu.
 
 On Linux `synthLib::SysexBuffer` is a `std::pmr::vector` (a macOS build with a deployment target below 14, which
