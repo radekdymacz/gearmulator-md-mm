@@ -10,6 +10,7 @@
 #include "mdRomInstall.h"
 
 #include "mdController.h"
+#include "mdMachineMidiOut.h"
 #include "mdPluginEditorState.h"
 #include "mdSettingsMigration.h"
 #include "mdStorageImage.h"
@@ -199,6 +200,7 @@ namespace mdJucePlugin
 
 	bool AudioPluginAudioProcessor::loadCustomData(const std::vector<uint8_t>& _sourceBuffer)
 	{
+		const machineMidiOut::RouteAfterLoad machineMidiRoute(getMidiRoutingMatrix());	// B-037: a state carries the whole matrix
 		const auto previous = getRamRecordingMode();
 		m_ramRecordingModeChunkSeen = false;
 		m_desk->beginProjectLoad();
@@ -448,6 +450,7 @@ namespace mdJucePlugin
 		}
 
 		getController();
+		machineMidiOut::route(getMidiRoutingMatrix());	// B-037: the machine's own MIDI out to the host (mdMachineMidiOut.h)
 		setRamRecordingMode(getRamRecordingMode());
 		const auto latencyBlocks = getConfig().getIntValue("latencyBlocks", static_cast<int>(getPlugin().getLatencyBlocks()));
 		Processor::setLatencyBlocks(latencyBlocks);
@@ -912,8 +915,13 @@ namespace mdJucePlugin
 
 	void AudioPluginAudioProcessor::timerCallback()
 	{
-		if(++m_bootTicks % 4 == 1)
+		// B-035: a start-up line once a second by the clock, not every 4th tick: serviceFactoryInitialization sets this
+		// timer to 250 ms, 1 s or 2 s (the Machinedrum's lines came every 4 s in 0.3.5). A little early still counts.
+		if(const auto now = juce::Time::getMillisecondCounterHiRes(); now - m_lastBootRecordMs >= 900.0)
+		{
+			m_lastBootRecordMs = now;
 			recordBoot();
+		}
 		recordStandaloneStartupDiagnostics();
 		if(serviceProjectStateRestore())
 			return;

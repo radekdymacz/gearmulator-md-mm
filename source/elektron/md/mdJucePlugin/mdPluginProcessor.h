@@ -115,7 +115,7 @@ namespace mdJucePlugin
 		std::atomic<double> m_hostBpm{0.0};
 		BootDiagnostics m_boot;
 		void recordBoot();
-		int m_bootTicks = 0;
+		double m_lastBootRecordMs = 0;	// when recordBoot last ran
 		const double m_bootStartMs = juce::Time::getMillisecondCounterHiRes();
 		std::string m_bootRom;
 		std::unique_ptr<class DeskHost> m_desk;

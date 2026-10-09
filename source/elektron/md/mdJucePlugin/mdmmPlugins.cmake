@@ -50,8 +50,8 @@ list(APPEND SOURCES
 	$<$<PLATFORM_ID:Darwin>:mdStudioWebZoom.mm> mdWebFocus.h
 	$<$<PLATFORM_ID:Darwin>:mdBackgroundRun.mm> mdBackgroundRun.h
 	$<$<PLATFORM_ID:Windows>:mdWebView2Page.cpp>
-	mdWebView2Page.h
-	mdAudioMidiLink.cpp mdAudioMidiLink.h
+	mdWebView2Page.h mdWebView2Window.h
+	mdAudioMidiLink.cpp mdAudioMidiLink.h mdMidiPortRefusal.h mdMachineMidiOut.h
 	mdUpdater.cpp mdUpdater.h
 
 	skins/mdStudio/mdStudio.rml
@@ -456,6 +456,14 @@ function(mdmm_plugin_targets)
 	set_tests_properties(mdWindowFitTest PROPERTIES LABELS "UnitTest")
 	set_property(TARGET mdWindowFitTest PROPERTY FOLDER "Elektron/test")
 
+	# The Windows editors' decisions as plain values, tested on every system: B-029 and B-022, what the WebView2
+	# controller does when the page's window changes (mdWebView2Window.h); B-037, what the AUDIO / MIDI panel says when a
+	# MIDI port did not open (mdMidiPortRefusal.h).
+	add_executable(mdWindowsPolicyTest mdWindowsPolicyTest.cpp mdWebView2Window.h mdMidiPortRefusal.h)
+	add_test(NAME mdWindowsPolicyTest COMMAND mdWindowsPolicyTest)
+	set_tests_properties(mdWindowsPolicyTest PROPERTIES LABELS "UnitTest")
+	set_property(TARGET mdWindowsPolicyTest PROPERTY FOLDER "Elektron/test")
+
 	# The page bridge's transport (mdPageBridge.h, pure): long batches in pieces, the outbox split into numbered calls,
 	# Linux's files written in order (FileOutbox) and its reload after a drop; the notice route
 	# (juceUiLib/messageRoute.h): a sink per window; and a window's notices and their answers (mdNoticeBook.h).
@@ -614,6 +622,23 @@ function(mdmm_plugin_targets)
 		set_tests_properties(mdSessionNoRomManageFirmwareTest_${m} PROPERTIES LABELS "Integration;FirmwareTest" SKIP_RETURN_CODE 77 TIMEOUT 400)
 		add_test(NAME mdSessionNoRomInstallFirmwareTest_${m} COMMAND mdSessionNoRomTest ${m} install)
 		set_tests_properties(mdSessionNoRomInstallFirmwareTest_${m} PROPERTIES LABELS "Integration;FirmwareTest" SKIP_RETURN_CODE 77 TIMEOUT 300)
+	endforeach()
+
+	# B-037: the machine's own MIDI out at the host (mdMachineMidiOut.h): the route as values, then the processor with each
+	# machine's firmware (it skips, 77, without GEARMULATOR_MD_FIRMWARE_BIN / GEARMULATOR_MM_FIRMWARE_BIN)
+	add_executable(mdMachineMidiOutTest mdMachineMidiOutTest.cpp mdMachineMidiOut.h)
+	target_link_libraries(mdMachineMidiOutTest PRIVATE
+		mdJucePlugin jucePluginEditorLib mdLib juce_plugin_modules
+		juce::juce_opengl)
+	target_include_directories(mdMachineMidiOutTest PRIVATE
+		${CMAKE_CURRENT_SOURCE_DIR}/../../..)
+	target_compile_definitions(mdMachineMidiOutTest PRIVATE JUCE_GLOBAL_MODULE_SETTINGS_INCLUDED=1)
+	set_property(TARGET mdMachineMidiOutTest PROPERTY FOLDER "Elektron/test")
+	add_test(NAME mdMachineMidiOutTest COMMAND mdMachineMidiOutTest)
+	set_tests_properties(mdMachineMidiOutTest PROPERTIES LABELS "UnitTest" TIMEOUT 60)
+	foreach(m md mm)
+		add_test(NAME mdMachineMidiOutFirmwareTest_${m} COMMAND mdMachineMidiOutTest ${m})
+		set_tests_properties(mdMachineMidiOutFirmwareTest_${m} PROPERTIES LABELS "Integration;FirmwareTest" SKIP_RETURN_CODE 77 TIMEOUT 400)
 	endforeach()
 endfunction()
 
