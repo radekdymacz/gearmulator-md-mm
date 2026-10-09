@@ -74,6 +74,9 @@ namespace mdJucePlugin
 		void layout() const;
 		// The update banner (DESIGN-updates.md 4): the Updater's state as a non-modal notice, sent when it changes.
 		void showUpdateBanner();
+		// The notice for an editor that runs translated (Rosetta), once the page is up: its dialog, never twice in a
+		// process, and never again once the user chose "Don't show again" (mdRosettaNotice.h).
+		void offerRosettaNotice();
 
 		DeskSession* m_session = nullptr;
 		std::unique_ptr<WebPageHost> m_page;
@@ -92,6 +95,7 @@ namespace mdJucePlugin
 		int m_bannerId = 0;				// the notice number of the banner shown, 0: none
 		std::string m_bannerShown;		// what it says (sent again only when that changes)
 		juce::int64 m_nextUpdatePoll = 0;
+		bool m_rosettaOffered = false;	// offerRosettaNotice ran for this window
 		int m_menuSerial = 0;							// the editor's menu last sent to the page (editorMenu's menu)
 		std::vector<std::function<void()>> m_menuActions;	// its entries' actions, by their n
 	};

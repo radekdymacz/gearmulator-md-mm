@@ -53,7 +53,8 @@ namespace mdJucePlugin
 		const juce::String& selfTest() const { return m_selfTest; }
 		// A line of this instance's log (diagnostics builds only: a release build writes no file).
 		void log(const juce::String& _line) const;
-		// B-022: the start-up log every build keeps (the editor's version, the system, the web engine and its
+		// B-022: the start-up log every build keeps (the editor's version, the system and whether the editor runs
+		// translated (Rosetta, mdProcessArch.h), the web engine and its
 		// version, loading, the bridge up, what failed), for a user to send: <data folder>/logs/editor-<page>.log, the
 		// start before beside it. Set before load().
 		void setStartupLog(const juce::File& _file);

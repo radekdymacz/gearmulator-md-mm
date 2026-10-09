@@ -38,6 +38,7 @@ list(APPEND SOURCES
 	mdDeskHost.cpp mdDeskHost.h
 	mdStandaloneApp.cpp
 	mdBootDiagnostics.cpp mdBootDiagnostics.h
+	mdProcessArch.cpp mdProcessArch.h mdRosettaNotice.h
 	mdDeskSession.cpp mdDeskSession.h
 	mdMidiLearnCommands.cpp mdMidiLearnCommands.h
 	mdPageEditor.cpp mdPageEditor.h mdPageZoom.h mdEditorMenu.h mdNoticeBook.h
@@ -424,6 +425,22 @@ function(mdmm_plugin_targets)
 	add_test(NAME mdSettingsMigrationTest COMMAND mdSettingsMigrationTest)
 	set_tests_properties(mdSettingsMigrationTest PROPERTIES LABELS "UnitTest")
 	set_property(TARGET mdSettingsMigrationTest PROPERTY FOLDER "Elektron/test")
+
+	# Rosetta: whether the editor runs translated (mdProcessArch.h, pure, no JUCE: also builds as an x86_64 program for a
+	# run under Rosetta) and its notice with "Don't show again" kept in the config (mdRosettaNotice.h).
+	add_executable(mdProcessArchTest mdProcessArchTest.cpp mdProcessArch.cpp)
+	target_compile_definitions(mdProcessArchTest PRIVATE MDMM_DIAGNOSTICS=1)	# the diagnostics builds' GEARMULATOR_MDMM_FAKE_ROSETTA
+	add_test(NAME mdProcessArchTest COMMAND mdProcessArchTest)
+	set_tests_properties(mdProcessArchTest PROPERTIES LABELS "UnitTest")
+	set_property(TARGET mdProcessArchTest PROPERTY FOLDER "Elektron/test")
+
+	add_executable(mdRosettaNoticeTest mdRosettaNoticeTest.cpp mdProcessArch.cpp)
+	target_include_directories(mdRosettaNoticeTest PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/../../..)	# juceUiLib/messageRoute.h
+	target_link_libraries(mdRosettaNoticeTest PRIVATE juce::juce_data_structures)
+	target_compile_definitions(mdRosettaNoticeTest PRIVATE JUCE_GLOBAL_MODULE_SETTINGS_INCLUDED=1 JUCE_STANDALONE_APPLICATION=1 JUCE_USE_CURL=0)
+	add_test(NAME mdRosettaNoticeTest COMMAND mdRosettaNoticeTest)
+	set_tests_properties(mdRosettaNoticeTest PROPERTIES LABELS "UnitTest")
+	set_property(TARGET mdRosettaNoticeTest PROPERTY FOLDER "Elektron/test")
 
 	add_executable(mdWindowFitTest mdWindowFitTest.cpp)
 	target_include_directories(mdWindowFitTest PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/../../..)

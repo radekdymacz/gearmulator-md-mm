@@ -2,6 +2,7 @@
 #include "mdPageBridge.h"
 #include "mdWebFocus.h"
 #include "mdPageZoom.h"
+#include "mdProcessArch.h"
 
 #include "juce_gui_extra/juce_gui_extra.h"
 
@@ -566,7 +567,7 @@ namespace mdJucePlugin
 		note(juce::String("Gearmulator ") + m_spec.page + " " + juce::String(mdmm::editorVersion()) + ", "
 			+ juce::SystemStats::getOperatingSystemName() + (juce::SystemStats::isOperatingSystem64Bit() ? " 64-bit" : "")
 			+ ", " + (juce::JUCEApplicationBase::isStandaloneApp() ? "standalone" : "plug-in in " + juce::File::getSpecialLocation(juce::File::hostApplicationPath).getFileName())
-			+ ", CPU " + juce::SystemStats::getCpuModel());
+			+ ", CPU " + juce::SystemStats::getCpuModel() + ", " + processArch::describe(processArch::current()));
 		// what the web view said while it was being made, before this file was named
 		for(const auto& line : std::exchange(m_early, {}))
 			m_startupLog.appendText(line);

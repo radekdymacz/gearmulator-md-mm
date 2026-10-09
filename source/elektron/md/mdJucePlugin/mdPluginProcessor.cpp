@@ -11,6 +11,7 @@
 
 #include "mdController.h"
 #include "mdPluginEditorState.h"
+#include "mdProcessArch.h"
 #include "mdSettingsMigration.h"
 #include "mdStorageImage.h"
 
@@ -568,6 +569,7 @@ namespace mdJucePlugin
 			{"resampler_modes", "0=Legacy,1=MameHq,2=MameLofi"},
 			{"notes", "Nested timings are inclusive. JIT values are counts, not compilation durations. Deadline overruns are estimates, not host xrun reports. MIDI counts contain no payload."}
 		};
+		processArch::addSessionFields(context);	// whether the editor runs translated (Rosetta): mdProcessArch.h
 		m_performanceReport->start(m_performanceReportFile.getFullPathName().toStdString(), std::move(context));
 	}
 

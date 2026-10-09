@@ -10,6 +10,7 @@
    And, on the page with the real bridge (deskBridge.js) against a model of the plug-in's notice book (mdNoticeBook.h):
    a notice's key answers that notice, never another, the update banner's too (codex review 2026-10: the bridge's
    request id had replaced the notice's number since 0.3.0), and a refused answer is only logged.
+   The Rosetta notice (mdRosettaNotice.h) has "Don't show again" first and OK last: closed another way it answers OK.
      node mdDeskPageTest.js */
 const fs = require("fs"), path = require("path");
 const FILES = [...fs.readFileSync(path.join(__dirname, "mdStudio.html"), "utf8").matchAll(/<script src="([\w.]+)"><\/script>/g)].map(m => m[1])
@@ -385,7 +386,7 @@ check(P.Boot.audioWord({ plugin: true, seconds: 9, blocks: 900, realtime: 1.0 })
 	const native = (() => {
 		let last = 0; const waiting = new Map(), toPage = [], ran = [], answers = [];
 		return {
-			notice(title, buttons, modal) { const id = ++last; waiting.set(id, { buttons: Math.max(1, buttons.length), title }); toPage.push(Object.assign({ type: "notice", id, title, text: "", buttons }, modal === false ? { modal } : {})); return id; },
+			notice(title, buttons, modal, text) { const id = ++last; waiting.set(id, { buttons: Math.max(1, buttons.length), title }); toPage.push(Object.assign({ type: "notice", id, title, text: text || "", buttons }, modal === false ? { modal } : {})); return id; },
 			onPageMessage(m) {
 				if (m.op !== "noticeAnswer") { toPage.push({ type: "result", op: m.op, id: m.id, ok: true, errors: [] }); return; }
 				answers.push(m);
@@ -449,11 +450,33 @@ return { Bridge, cmd, asked, errors, banners }; }`)(scope2);
 	deliver();
 	check(native.ran.length === 4 && Q.errors.length === shownBefore && logged.some(l => /noticeAnswer refused: notice \d+ is not waiting/.test(l)),
 		"an answer the plug-in refuses runs nothing, shows nothing, and is logged");
+	/* Rosetta (mdRosettaNotice.h, mdProcessArch.h): a dialog with "Don't show again" first and OK last. Closed any other way
+	   (Esc, a click outside) the page answers with the last key, OK, which keeps nothing; only its own key sends the
+	   first button, which the plug-in keeps in its config. */
+	const rosettaText = "This is the Intel version of the editor running translated on an Apple silicon Mac. It uses about twice the CPU. Open your DAW as an Apple silicon app (uncheck 'Open using Rosetta'), or use the Apple silicon standalone app.";
+	const askedBefore = Q.asked.length;
+	const rosetta1 = native.notice("Running under Rosetta", ["Don't show again", "OK"], undefined, rosettaText);
+	deliver();
+	const dialog = Q.asked.slice(askedBefore).find(a => /Running under Rosetta/.test(a.html));
+	check(dialog && /uses about twice the CPU/.test(dialog.html) && dialog.item.notice && dialog.btns.length === 2
+		&& dialog.btns[0][0] === "Don't show again" && dialog.btns[1][0] === "OK", "the Rosetta notice is a dialog the plug-in waits on: its text, Don't show again and OK");
+	dialog.item.cancel();
+	deliver();
+	const closed = native.answers[native.answers.length - 1];
+	check(closed.notice === rosetta1 && closed.button === 1 && native.ran[native.ran.length - 1] === "Running under Rosetta:1",
+		"closed with Esc or a click outside: answered by OK (the last key), so nothing is kept");
+	const rosetta2 = native.notice("Running under Rosetta", ["Don't show again", "OK"], undefined, rosettaText);
+	deliver();
+	Q.asked[Q.asked.length - 1].btns[0][2]();
+	deliver();
+	const never = native.answers[native.answers.length - 1];
+	check(never.notice === rosetta2 && never.button === 0 && native.ran[native.ran.length - 1] === "Running under Rosetta:0",
+		"Don't show again answers its own notice with button 0 (the plug-in keeps it)");
 	/* what the page sends is the command the plug-in's table takes ($defs/command is generated from it, mdDeskTest) */
 	const { execFileSync } = require("child_process");
 	const root = path.join(__dirname, "..", "..", "..", "..", "..", "..");
 	const onContract = m => { try { execFileSync("python3", [path.join(root, "doc/modern-ux/page_contract_check.py"), path.join(root, "doc/modern-ux/md-data-contract.schema.json"), "command"], { input: JSON.stringify(m) }); return true; } catch (e) { return false; } };
-	check(onContract(a1) && onContract(ab) && !onContract({ op: "noticeAnswer", id: a1.notice, button: 0 }),
+	check(onContract(a1) && onContract(ab) && onContract(closed) && onContract(never) && !onContract({ op: "noticeAnswer", id: a1.notice, button: 0 }),
 		"the answers are the contract's noticeAnswer ({notice, button}); the old shape (the notice's number as id) is not");
 }
 
