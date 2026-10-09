@@ -376,6 +376,24 @@ namespace mdJucePlugin
 			m.set("done", static_cast<int>(m_phase == Phase::Done ? toRead : reading ? std::min(m_reading, toRead) : m_done));
 			m.set("total", static_cast<int>(reading ? toRead : m_total));
 			m.set("running", running());
+			// 0.3.5: per kind, the phase's items done of its total, and the kind of the item at work (data only)
+			if(running())
+			{
+				Value kinds = Value::object();
+				for(const auto kind : {ed::SyxKind::Kit, ed::SyxKind::Pattern, ed::SyxKind::Song, ed::SyxKind::Global, ed::SyxKind::Other})
+				{
+					const auto [done, total] = kindProgress(kind);
+					if(!total)
+						continue;
+					Value k = Value::object();
+					k.set("done", static_cast<int>(done));
+					k.set("total", static_cast<int>(total));
+					kinds.set(kindKey(kind), k);
+				}
+				m.set("kinds", kinds);
+				if(const auto* c = atWork())
+					m.set("kind", kindKey(c->kind));
+			}
 			std::string text = m_text;
 			if(text.empty() && m_phase == Phase::Before)
 				text = "Reading what the machine holds in the slots the editor has not read yet: " + std::to_string(std::min(m_reading + 1, toRead))
@@ -569,6 +587,51 @@ namespace mdJucePlugin
 				return &i;
 			}
 			return nullptr;
+		}
+
+		// The item the job works on: sending, the one the next queued message belongs to; reading, the one read now.
+		const Item* atWork() const
+		{
+			if(m_phase == Phase::Sending)
+			{
+				if(m_queue.empty())
+					return nullptr;
+				for(const auto& i : m_items)
+					if(i.chosen && std::find(i.messages.begin(), i.messages.end(), m_queue.front()) != i.messages.end())
+						return &i;
+				return nullptr;
+			}
+			size_t n = 0;
+			for(const auto& i : m_items)
+				if(reads(i, m_phase) && n++ == m_reading)
+					return &i;
+			return nullptr;
+		}
+
+		// A kind's items done of its total in this phase: sending, the chosen items whose every message went; reading
+		// (before or after), the items of the phase read so far.
+		std::pair<size_t, size_t> kindProgress(const elektronData::SyxKind _kind) const
+		{
+			size_t done = 0, total = 0, n = 0;
+			for(const auto& i : m_items)
+			{
+				if(m_phase == Phase::Sending)
+				{
+					if(!i.chosen || i.kind != _kind)
+						continue;
+					++total;
+					done += i.sent >= i.messages.size();
+					continue;
+				}
+				if(!reads(i, m_phase))
+					continue;
+				const bool read = n++ < m_reading;
+				if(i.kind != _kind)
+					continue;
+				++total;
+				done += read;
+			}
+			return {done, total};
 		}
 
 		size_t readCount(const Phase _phase) const

@@ -944,7 +944,9 @@ const MdJourneys = (() => {
 	/* B-019: a .syx imported as from a cable. The file is the run's (GEARMULATOR_MDMM_SYX_FILE, diagnostics builds: the
 	   plug-in opens it where the chooser would be). Kits only; afterwards every kit the report does not list (taken as
 	   in the file) has the file's name on the machine. It writes the machine's kits and an import has no Undo: last. */
-	const syxKitIds = () => $all('#syxpop [data-syxitem^="kit:"]');
+	const syxKitIds = () => $all('#syxpop button[data-syxitem^="kit:"]');
+	/* the report: the slots of a kind the machine did not take as in the file (every reported item carries its outcome) */
+	const syxNotTaken = kind => new Set($all(`#syxpop [data-syxitem^="${kind}:"][data-syxout]`).filter(d => d.dataset.syxout !== "taken").map(d => +d.dataset.syxitem.split(":")[1]));
 	const syxImportJ = {
 		name: "md-lib-syx-import",
 		needs: () => new URLSearchParams(location.search).get("syxfile") ? null : "no .syx for the run (GEARMULATOR_MDMM_SYX_FILE)",
@@ -953,12 +955,12 @@ const MdJourneys = (() => {
 			{ say: "click Import SysEx…: the file's preview", act: u => u.click('#libpop [data-syx="import"]'), screen: () => ok(!$1("#syxpop").hidden && syxKitIds().length > 0, "no preview with kits"), within: 8000 },
 			{ say: "leave Kits ticked only, click Import: sent, read back, reported", act: (u, c) => {
 				for (const b of $all("#syxpop [data-syxkind]")) if (b.checked !== (b.dataset.syxkind === "kit")) u.click(b);
-				c.names = syxKitIds().map(b => [+b.dataset.syxitem.split(":")[1], b.textContent.replace(/^▶ /, "").trim()]);
+				c.names = syxKitIds().map(b => [+b.dataset.syxitem.split(":")[1], (b.dataset.syxname || "").trim()]);
 				u.click('#syxpop [data-syxgo="start"]');
 			}, screen: () => ok(/imported/.test($1("#syxpop .syxsum")?.textContent || ""), "progress: " + ($1("#syxpop .syxbar span")?.textContent || "")),
 			machine: c => {
-				const notTaken = new Set($all("#syxpop .syxreport .syxprob div").map(d => (/^kit (\d+)/.exec(d.textContent) || [])[1]).filter(Boolean).map(n => +n - 1));
-				const off = c.names.filter(([k, n]) => !notTaken.has(k) && n !== "(no name)" && (kitName(k) || "").trim() !== n);
+				const notTaken = syxNotTaken("kit");
+				const off = c.names.filter(([k, n]) => !notTaken.has(k) && n && (kitName(k) || "").trim() !== n);
 				return ok(!off.length, off.length + " kits not as in the file: " + off.slice(0, 4).map(([k, n]) => `K${k + 1} "${kitName(k)}" not "${n}"`).join(", "));
 			}, within: 180000 },
 			{ say: "click Done: the panel closes", act: u => u.click('#syxpop [data-syxgo="close"]'), screen: () => ok($1("#syxpop").hidden, "still open") },
@@ -1043,6 +1045,24 @@ const MdJourneys = (() => {
 	/* the same, as screenshots for a design review (scripts/mdmm-shots.sh with MDMM_SHOTS_JOURNEY=md-shots-song) */
 	const shotsSong = { name: "md-shots-song", needs: () => /md-shots/.test(location.search) ? null : "screenshots only when asked by name",
 		steps: [...songPlayheadSteps(name => Bridge.log("SHOT " + name)).map(s => s.act && /SHOT|shot/.test(String(s.act)) ? Object.assign({}, s, { hold: 2500 }) : s), { say: "done", act: () => Bridge.log("SHOT done") }], tidy: songPlayheadTidy };
+	/* the SysEx import panel as screenshots for a design review (scripts/mdmm-shots.sh with MDMM_SHOTS_JOURNEY=md-shots-import
+	   and GEARMULATOR_MDMM_SYX_FILE): the preview's tabs, then kits, patterns and songs imported (importing, the report) */
+	const shotsImport = { name: "md-shots-import", needs: () => !/md-shots/.test(location.search) ? "screenshots only when asked by name" : syxImportJ.needs(),
+		steps: [
+			openKits,
+			{ say: "click Import SysEx…: the preview, the Kits tab", act: async u => { u.click('#libpop [data-syx="import"]'); await until(() => syxKitIds().length > 0, 8000); await sleep(400); shot("import-1-md-kits"); },
+				screen: () => ok(!$1("#syxpop").hidden && syxKitIds().length > 0, "no preview with kits"), within: 10000, hold },
+			{ say: "the Patterns tab", act: async u => { u.click('#syxpop [data-syxtab="pattern"]'); await sleep(400); shot("import-2-md-patterns"); }, hold },
+			{ say: "the Globals tab", act: async u => { u.click('#syxpop [data-syxtab="global"]'); await sleep(400); shot("import-3-md-globals"); }, hold },
+			{ say: "click Import: importing", act: async u => { u.click('#syxpop [data-syxtab="pattern"]'); u.click('#syxpop [data-syxgo="start"]');
+				await until(() => parseFloat($1("#syxpop .syxbar i")?.style.width || "0") > 30, 120000); shot("import-4-md-importing"); },
+				screen: () => ok(!!$1("#syxpop .syxbar") || !!$1("#syxpop .syxsum"), "not importing"), within: 125000, hold: 1500 },
+			{ say: "the report", act: async () => { await until(() => !!$1("#syxpop .syxsum"), 400000); await sleep(500); shot("import-5-md-report"); },
+				screen: () => ok(/imported/.test($1("#syxpop .syxsum")?.textContent || ""), "no report"), within: 405000, hold },
+			{ say: "the report, the Patterns tab", act: async u => { u.click('#syxpop [data-syxtab="pattern"]'); await sleep(400); shot("import-6-md-report-patterns"); }, hold },
+			{ say: "click Done", act: u => { u.click('#syxpop .syxfoot [data-syxgo="close"]'); shot("done"); }, screen: () => ok($1("#syxpop").hidden, "still open") },
+			esc
+		] };
 	const all = [bootCard, firstBeat, spaceTransport, tempoDrag, tapTempo, tapTempoB, patStep, queuePattern, plate, wsKeys, helpKeys, osHelp, undoRedo,
 		paintUndo, accentSlide, lockLane, pagesJ, copyPaste, selectCopyPaste, stepMenuJ, osCopyPaste, buttonsCopyPaste, clearPatternJ, fillEveryJ, rotateJ, rotateUndo, trackKeys, muteKeys, liveRec,
 		genJourney("md-gen-mutate-undo", false), genJourney("md-gen-defaults-mutate-undo", true), genKeys,
@@ -1051,7 +1071,7 @@ const MdJourneys = (() => {
 		songArrange, songChain, songPlayhead, samplerSlots, samplerSetup, audition,
 		libDialog, kitCopy, kitRename, kitClear, patGo, patClear, dialogEsc,
 		globalJ, globalRouting, globalMapNote, audioPanel, romCard, notePlay,
-		lockRamp, pasteMany, mutScope, songInspector, songDrag, ramView, setupChop, panBox, hwNoMachine, syxImportJ, syxImportMute, shots, shotsSong];
+		lockRamp, pasteMany, mutScope, songInspector, songDrag, ramView, setupChop, panBox, hwNoMachine, syxImportJ, syxImportMute, shots, shotsSong, shotsImport];
 
 	/* ---------- demos: journeys played for a camera (doc/modern-ux/DEMO-VIDEOS.md) ---------- */
 	/* Not in `all`: ?selftest=journey never runs them; ?selftest=demo-md-<name> does (Journey.demo), at a person's pace
