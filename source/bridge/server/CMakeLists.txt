@@ -27,3 +27,12 @@ set_target_properties(bridgeServer PROPERTIES TUS_PRODUCT_NAME "DSPBridge")
 tus_exportTarget(bridgeServer)
 
 install(TARGETS bridgeServer DESTINATION . COMPONENT DSPBridgeServer)
+
+if(BUILD_TESTING)
+	# The pool's sources directly: bridgeServer is a program, not a library
+	add_executable(bridgeServerRomPoolTest romPoolTest.cpp romPool.cpp romPool.h config.cpp config.h)
+	target_link_libraries(bridgeServerRomPoolTest PRIVATE bridgeLib)
+	add_test(NAME bridgeServerRomPoolTest COMMAND bridgeServerRomPoolTest)
+	set_tests_properties(bridgeServerRomPoolTest PROPERTIES LABELS "UnitTest" TIMEOUT 60)
+	set_property(TARGET bridgeServerRomPoolTest PROPERTY FOLDER "Tests")
+endif()

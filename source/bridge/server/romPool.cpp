@@ -30,14 +30,26 @@ namespace bridgeServer
 
 	void RomPool::addRom(const std::string& _name, const RomData& _data)
 	{
+		if(_data.empty() || _data.size() > g_maxRomSize)
+		{
+			LOGNET(networkLib::LogLevel::Warning, "Not caching ROM " << _name << ": size " << _data.size() << " is outside 1.." << g_maxRomSize);
+			return;
+		}
+
 		std::scoped_lock lock(m_mutex);
 
 		const auto hash = baseLib::MD5(_data);
 		if(m_roms.find(hash) != m_roms.end())
 			return;
 
-		if(baseLib::filesystem::writeFile(getRootPath() + _name + '_' + hash.toString() + ".bin", _data))
+		// The name is the hash alone: a peer-sent name could hold "..", a separator or a NUL and so write
+		// outside the ROM folder or under a different name. Exclusive: never replace a file that is there.
+		const auto filename = getRootPath() + hash.toString() + ".bin";
+
+		if(baseLib::filesystem::writeFileExclusive(filename, _data))
 			m_roms.insert({hash, _data});
+		else
+			LOGNET(networkLib::LogLevel::Warning, "Failed to write ROM cache file " << filename);
 	}
 
 	std::string RomPool::getRootPath() const
@@ -48,7 +60,7 @@ namespace bridgeServer
 	void RomPool::findRoms()
 	{
 		std::vector<std::string> files;
-		baseLib::filesystem::findFiles(files, getRootPath(), {}, 0, 16 * 1024 * 1024);
+		baseLib::filesystem::findFiles(files, getRootPath(), {}, 0, g_maxRomSize);
 
 		for (const auto& file : files)
 		{
