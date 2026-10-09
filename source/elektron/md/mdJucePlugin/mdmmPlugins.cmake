@@ -466,7 +466,7 @@ function(mdmm_plugin_targets)
 
 	add_executable(mdRosettaNoticeTest mdRosettaNoticeTest.cpp mdProcessArch.cpp)
 	target_include_directories(mdRosettaNoticeTest PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/../../..)	# juceUiLib/messageRoute.h
-	target_link_libraries(mdRosettaNoticeTest PRIVATE juce::juce_data_structures)
+	target_link_libraries(mdRosettaNoticeTest PRIVATE juce::juce_data_structures elektronJson)	# elektronJson: mdNoticeBook.h
 	target_compile_definitions(mdRosettaNoticeTest PRIVATE JUCE_GLOBAL_MODULE_SETTINGS_INCLUDED=1 JUCE_STANDALONE_APPLICATION=1 JUCE_USE_CURL=0)
 	add_test(NAME mdRosettaNoticeTest COMMAND mdRosettaNoticeTest)
 	set_tests_properties(mdRosettaNoticeTest PROPERTIES LABELS "UnitTest")

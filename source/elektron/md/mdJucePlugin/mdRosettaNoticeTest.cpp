@@ -36,7 +36,7 @@ namespace
 			: owner(_owner), attachment(route::attach(_owner, [this](route::Notice _n)
 			{
 				shown.push_back({_n.title, _n.text, _n.buttons});
-				ids.push_back(book.add(_n.buttons.size(), std::move(_n.answered)));
+				ids.push_back(book.add(NoticeShown{_n.title, _n.text, _n.buttons, true}, std::move(_n.answered)));
 			})) {}
 		// The page's answer to the last notice it was given.
 		std::string press(const int _button) { return book.answer(ids.back(), _button); }
