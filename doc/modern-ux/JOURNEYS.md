@@ -173,6 +173,7 @@ no journey yet); **not testable** (why). "—": the editor has no such feature.
 | GLOBAL: a setting read back (TEMPO OUT) | md-global-tempo-out PASS | — (MM globals: the Perform and Mix journeys) |
 | GLOBAL › ROUTING fits its dialog, a route read back | md-global-routing PASS | — |
 | Song page: PATTERN | SONG switch, lit from the machine's status (0.3.5) | md-song-mode | mm-song-mode |
+| Song page: the song playhead (the row the machine plays, from RAM), What plays, PAT/SONG on the LCD (0.3.5) | md-song-playhead | mm-song-playhead |
 | GLOBAL › Map a note: a note to a pattern of bank C-H and to STOP (the MAP EDITOR's 16-145, 0.3.5), read back | md-global-map-note | — |
 
 ## Bugs the journeys found (all four fixed on this branch)

@@ -18,6 +18,7 @@
 #include "juce_events/juce_events.h"
 
 #include <algorithm>
+#include <cmath>
 #include <cstdint>
 #include <functional>
 #include <memory>
@@ -39,13 +40,35 @@ namespace mdJucePlugin
 	constexpr double g_lcdMs = 64;				// the machine's screen while it starts, about 15 Hz
 	constexpr double g_engineChoicesMs = 1000;	// whether the engines are available (a MIDI out appeared)
 	constexpr double g_followHostMs = 2000;		// in a DAW: the machine's global follows the host (followHost)
+	constexpr double g_hostTempoMs = 100;		// B-030: the host's tempo, published to the page when it changed
+
+	// B-030: the host's tempo for the page (a "host" message: {bpm, follows}), when the host reports one and it
+	// moved, or the page is new. Pure: the decision only (mdDeskSetupStateTest checks it).
+	struct HostTempo
+	{
+		double published = -1;	// the last bpm sent, -1 none (a new page)
+
+		// The message to send now, or nothing: _bpm 0 = no host reports a tempo.
+		std::optional<double> next(const double _bpm)
+		{
+			if(_bpm <= 0 || !(_bpm < 1000))
+				return std::nullopt;
+			const double rounded = std::round(_bpm * 100) / 100;
+			if(published >= 0 && std::abs(rounded - published) < 0.005)
+				return std::nullopt;
+			published = rounded;
+			return rounded;
+		}
+	};
+
+	bool followsHost(AudioPluginAudioProcessor& _processor);
+	double hostBpmOf(AudioPluginAudioProcessor& _processor);
 
 	// P7: a model's SysEx import traits (mdSessionMd.cpp, mdSessionMm.cpp): the documents' type, the
 	// file's and the desk's documents, one document as the contract's JSON, and what may be imported.
 	template<typename DeskT> struct SyxTraits;
 
 	// P7: whether the machine follows the host's tempo and transport: in a DAW's plug-in only.
-	bool followsHost(AudioPluginAudioProcessor& _processor);
 
 	// Due on the session's first step, then once every _periodMs (_tick counts steps from 1).
 	constexpr bool due(const uint64_t _tick, const double _periodMs)
@@ -315,12 +338,26 @@ namespace mdJucePlugin
 					toPage(*p);
 				m_desk->flush();
 			}
-			if(m_followHost && m_desk->lifecycle() == deskCore::Lifecycle::Ready && due(t, g_followHostMs))
+			// B-030: at once when the machine becomes ready (not up to 2 s later), then on the cadence. A refusal is a
+			// result (op followHost) the page shows and logs.
+			const bool ready = m_desk->lifecycle() == deskCore::Lifecycle::Ready;
+			if(m_followHost && ready && (!m_followReady || due(t, g_followHostMs)))
 			{
 				Value m = Value::object();
 				m.set("op", "followHost");
 				m_desk->onPageMessage(m);
 			}
+			m_followReady = ready;
+			// B-030: the host's tempo (a DAW's playhead, also while it is stopped) for the LCD's TEMPO
+			if(m_desk->pageSeen() && due(t, g_hostTempoMs))
+				if(const auto bpm = m_hostTempo.next(hostBpmOf(processor())))
+				{
+					Value h = Value::object();
+					h.set("type", "host");
+					h.set("bpm", *bpm);
+					h.set("follows", m_followHost);
+					toPage(h);
+				}
 		}
 
 		std::string status() const override
@@ -350,8 +387,8 @@ namespace mdJucePlugin
 			p.device.nowMs = [] { return sessionNowMs(); };
 			p.toPage = [this](const Value& _m) { toPage(_m); };
 			p.saveSetup = [this](const Value& _setup) { m_setup.save(_setup); };
-			// After the page's ready the plug-in publishes its own document too.
-			p.ready = [this] { m_learn.publish(); };
+			// After the page's ready the plug-in publishes its own document too, and the host's tempo again.
+			p.ready = [this] { m_learn.publish(); m_hostTempo = {}; };
 			return p;
 		}
 
@@ -497,6 +534,8 @@ namespace mdJucePlugin
 		// A plug-in in a host (a DAW): not the standalone app, which has no host transport, and not a
 		// processor without a plug-in wrapper (the tests).
 		const bool m_followHost;
+		bool m_followReady = false;
+		HostTempo m_hostTempo;
 		SyxJob<SyxTraits<DeskT>> m_syx;
 	};
 

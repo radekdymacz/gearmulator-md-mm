@@ -278,6 +278,26 @@ one bit per pixel, row-major, 16 bytes a row, bit 7 = the left pixel, base64), w
 the page draws in its LCD with the plate's `--lcd` / `--ink`, then fades out. The
 host must call `onTelemetry` every tick, also without telemetry (`valid = false`).
 
+**Song playhead (0.3.5).** The telemetry message carries `songRow`: the song row the
+sequencer plays, 0-based, from main RAM 0x2b18f5 (`md::SongPosition`, one byte; found
+with `mdP4ProbeFirmwareTest songrow`: a song A02, A03 ×2, A04, LOOP to row 2, sampled in
+the middle of every pass; checked by `mdDeskFirmwareTest songrow`: the row's pattern is
+the pattern that plays at every pass, through repeats and round the loop). A LOOP or
+JUMP row is never the row: the byte goes straight to its target. It is the machine's
+only while `machine.songMode` is true and the machine plays: pattern mode and STOP
+leave it as it was (STOP twice sets it to 0), so the page marks a row only then. `null`
+where the engine cannot read it (HW MIDI). The page moves the mark without a render
+(the arrangement cell, the time bar, the What plays line, the LCD's pattern slot).
+
+**The host's tempo (B-030).** In a DAW the plug-in sends `{"type":"host","bpm","follows"}`:
+the host's tempo as its playhead reports it (also while the host's transport is stopped),
+when it changed (by 0.01 BPM) or a page is new; `follows` is true in a DAW (the plug-in
+sets the machine's global to follow the host's clock with `followHost`, at once when the
+machine becomes ready, then every 2 s; a refusal is a `result` with `op` `followHost`
+that the page logs and shows). While `follows` and the global's `control.tempoIn` is
+`external`, the page shows the host's BPM as TEMPO and refuses tempo edits. The
+standalone sends no `host` message.
+
 **Chaining and mutes (P4).** `machine.desk.chain` is the firmware's own pattern
 chain, read from the MC68331 internal SRAM (`md::ChainAndMutes`: 0x1001f5c active,
 0x1001f60 next, 0x1001f64 length, 32-bit patterns from 0x1001f68). The page asks

@@ -25,13 +25,15 @@ namespace mdDesk
 		// P6: panel packets the device has not sent yet (keys and encoder steps on their way); -1 when
 		// the device does not report it (then keys are not held back).
 		int panelPending = -1;
+		// 0.3.5: the song row the sequencer plays (md::SongPosition), -1 unknown; meaningful in SONG mode only
+		int songRow = -1;
 
 		bool operator==(const Telemetry& _o) const
 		{
 			return step == _o.step && pattern == _o.pattern && playing == _o.playing && recording == _o.recording
 				&& gridEdit == _o.gridEdit && knobPage == _o.knobPage && valid == _o.valid && bootAnimation == _o.bootAnimation
 				&& mutes == _o.mutes && chainKnown == _o.chainKnown && chain == _o.chain && bankGroup == _o.bankGroup
-				&& panelPending == _o.panelPending;
+				&& panelPending == _o.panelPending && songRow == _o.songRow;
 		}
 		bool operator!=(const Telemetry& _o) const { return !(*this == _o); }
 	};

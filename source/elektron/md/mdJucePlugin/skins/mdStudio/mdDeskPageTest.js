@@ -45,7 +45,7 @@ const src = FILES.map(f => fs.readFileSync(path.join(__dirname, f), "utf8").repl
 const P = new Function("scope", "with (scope) {\n" + src + `
 ;let renders = 0;
 render = () => { renders++; }; syncControls = () => { }; renderTop = () => { }; renderSub = () => { }; redraw = () => { }; refreshAudible = () => { };
-return { S, Docs, Overlay, Held, PREP, scheduleRender, clickSteps, secAction, selStart, stepMenu, stepMenuItems, Modifiers, selCut, selDuplicate, clearSel, setSel, endSelect, interacting, genEnsure, genSpec, setGenSpec, clickTrackKeys, userMute, soloWrites, muteSel, msSet, prepToggle, unmuteAll, Keys,
+return { hostTempoRefused, l2step, playsText, songLcd, S, Docs, Overlay, Held, PREP, scheduleRender, clickSteps, secAction, selStart, stepMenu, stepMenuItems, Modifiers, selCut, selDuplicate, clearSel, setSel, endSelect, interacting, genEnsure, genSpec, setGenSpec, clickTrackKeys, userMute, soloWrites, muteSel, msSet, prepToggle, unmuteAll, Keys,
 	get V() { return V; }, setV(v) { V = v; }, view, get renders() { return renders; }, get pending() { return pendingRender; } }; }`)(scope);
 
 /* the machine document: its mutes (machine.desk.mutes) as the machine has them */
@@ -346,6 +346,24 @@ run(); { const before = P.renders; P.Held.begin("gv", {}); P.Held.end("gv"); run
 P.S.soloSet = new Set([2]); P.S.userMutes = new Set([4]);
 bridgeListeners.forEach(f => { try { f({ type: "reset" }); } catch (_) { } });
 check(P.S.soloSet.size === 0 && P.S.userMutes.size === 0, "a reset clears the page's solos and its record of the user's mutes");
+
+/* ---- B-030: TEMPO while the DAW sets it: an edit is refused (drag, arrows and tap go through hostTempoRefused) ---- */
+P.setV(Object.assign({}, P.V, { hostTempo: true, bpm: 72 }));
+sent.length = 0;
+check(P.hostTempoRefused() === true && !sent.some(m => m.op === "tempo"), "the DAW's tempo: a tempo edit is refused, nothing is sent");
+P.setV(Object.assign({}, P.V, { hostTempo: false }));
+check(P.hostTempoRefused() === false, "the machine's own tempo: edits go through");
+/* ---- 0.3.5: LCD line 2's PLAY field switches the mode; the What plays line says the song row the machine plays ---- */
+P.setV(Object.assign({}, P.V, { songMode: false }));
+sent.length = 0; P.l2step("seqmode", 1);
+check(sent.some(m => m.op === "seqMode" && m.song === true), "PLAY PAT clicked: seqMode song (what is lit stays the machine's report)");
+P.Docs.machine = Object.assign({}, P.Docs.machine || {}, { songMode: true, song: { current: 0 }, desk: {} });
+P.Docs.telemetry = { type: "telemetry", step: 3, pattern: 17, playing: true, recording: false, valid: true, songRow: 1 };
+P.setV(Object.assign({}, P.V, { songMode: true, playing: true, songSlot: 0, song: [{ pat: 0, rep: 1 }, { pat: 17, rep: 2 }, { type: "end" }] }));
+check(P.playsText() === "SONG 01 · row 002 of 2 · B02", "the What plays line: " + P.playsText());
+P.Docs.telemetry = Object.assign({}, P.Docs.telemetry, { playing: false });
+P.setV(Object.assign({}, P.V, { playing: false }));
+check(P.playsText() === "SONG 01 · 2 rows · stopped", "stopped: no row is said (" + P.playsText() + ")");
 
 console.log(failures ? `${failures} failure(s)` : "mdDeskPageTest: all passed");
 process.exit(failures ? 1 : 0);

@@ -11,9 +11,14 @@ function renderTop() {
 	const pk = $("#platekey"); if (pk) pk.querySelector("span").textContent = S.plate === "mk2" ? "MKII" : "MKI";
 	const n = V.locks.size, m = $("#meter"); $("#lockn").textContent = String(n).padStart(2, "0") + "/64"; m.className = "f meter" + (n >= 64 ? " full" : n >= 52 ? " warn" : ""); syncLockBudget();
 	$("#bpm").textContent = (+V.bpm).toFixed(1);
+	/* B-030: the host's tempo (in a DAW the machine follows): marked, and not edited here */
+	const bf = $("#bpm").parentElement; bf.classList.toggle("hosttempo", !!V.hostTempo);
+	$("#bpm").title = V.hostTempo ? "The DAW's tempo: the machine follows the host. Change it in the DAW." : "Drag up or down";
+	$("#bpm").setAttribute("aria-readonly", V.hostTempo ? "true" : "false");
 	/* Mockup v49: only the target's name, blinking while it waits for the pattern end; one short
 	   flash when the machine really switches (the desk clears the queue at the playhead wrap). */
 	$("#pat").textContent = patName(V.queued ?? V.pat);
+	songLcd();
 	$("#pat").parentElement.classList.toggle("queued", V.queued != null);
 	if (lastQueued != null && V.queued == null && V.pat === lastQueued) { const pf = $(".patf"); if (pf) { pf.classList.remove("flash"); void pf.offsetWidth; pf.classList.add("flash"); } }
 	lastQueued = V.queued;
@@ -154,12 +159,15 @@ function renderSub() {
 	else if (S.ws === "sampler") { const used = V.tracks.filter(t => machineFacts(t.m, Cat).family === "ROM").length; const b = smpBank(); h = L2("", "MEM", b ? Math.round(b.used / b.capacity * 100) + "%" : "n/a", b ? `Sample memory: the ROM slots hold ${b.used} of ${b.capacity} samples (${(b.used / 44100).toFixed(1)} of ${(b.capacity / 44100).toFixed(1)} s at 44.1 kHz); the four RAM buffers share the rest.` : canDo(V, "sampleAudio") ? "Reading the samples from the machine…" : NA.memory) + L2("", "KIT", used + " ROM", "Tracks in this kit that play a ROM slot") + L2("", "SLOT", S.smpSlot.replace(/^RAM/, "RAM ").replace(/^ROM/, "ROM ")); }
 	else if (S.ws === "control") h = L2("", "IN", "MIDI LEARN") + L2("", "MAPS", (Docs.learn?.mappings || []).length);
 	else h = L2("song", "SONG", String(V.songSlot + 1).padStart(2, "0"), "Song slot. Click, drag or scroll; shift-click for the previous (the machine loads it when stopped).", 1) + L2("", "ROWS", V.song.length) + L2("", "BARS", Math.round(songSteps() / 16)) + L2("", "TIME", songTime());
+	/* 0.3.5, every workspace: PATTERN or SONG mode, as the machine reports it; a click switches (the Song page's switch) */
+	h += L2("seqmode", "PLAY", V.songMode === true ? "SONG" : V.songMode === false ? "PAT" : "—", "What the machine plays: PAT (the pattern and its chain) or SONG (the song). Click to switch; it shows what the machine reports.", 1);
 	$("#lcd2").innerHTML = h;
 }
 /* LCD line 2 editing: a click or the wheel steps a value (a drag of any of them: mdDeskGestures.js) */
 function l2step(k, d, alt) {
 	if (k === "len") { if (alt) cmd("length", { p: V.pat, v: ((V.length - 1 + d + V.len) % V.len) + 1 }); else { const o = [16, 32, 48, 64], v = o[(o.indexOf(V.len) + d + 4) % 4]; cmd("totalLength", { p: V.pat, v }, undefined, [[["len"], v]]); } }
 	if (k === "song") { cmd("selectSong", { s: (V.songSlot + d + 32) % 32 }); return; }
+	if (k === "seqmode") { cmd("seqMode", { song: V.songMode !== true }); return; }
 	if (k === "dbl") { doublePattern(); return; }
 	if (k === "mult") { const o = Enums().tempoMultipliers; if (!o.length) return; const v = o[(o.indexOf(V.mult) + d + o.length) % o.length]; cmd("speed", { p: V.pat, v }, undefined, [[["mult"], v]]); }
 	if (k === "mode") { const v = V.mode === "EXTENDED" ? "CLASSIC" : "EXTENDED"; cmd("extended", { on: v === "EXTENDED" }, undefined, [[["mode"], v]]); }
@@ -172,7 +180,51 @@ function l2set(k, v) {
 	cmd(k === "swing" ? "swing" : "accentAmount", { p: V.pat, v }, k, [[[k], v]]);
 }
 document.addEventListener("click", e => { const el = e.target.closest(".l2.ed"); if (!el) return; const k = el.dataset.l2; if (k !== "swing" && k !== "accAmt") l2step(k, e.shiftKey ? -1 : 1, e.altKey); });
-document.addEventListener("wheel", e => { const el = e.target.closest(".l2.ed"); if (!el) return; e.preventDefault(); l2step(el.dataset.l2, (e.deltaY || e.deltaX) < 0 ? 1 : -1, e.altKey); }, { passive: false });
+document.addEventListener("wheel", e => { const el = e.target.closest(".l2.ed"); if (!el) return; e.preventDefault(); if (el.dataset.l2 === "seqmode") return; l2step(el.dataset.l2, (e.deltaY || e.deltaX) < 0 ? 1 : -1, e.altKey); }, { passive: false });
+/* B-030: an edit of the tempo while the DAW sets it is refused with a word (drag, arrows, tap) */
+function hostTempoRefused() { if (!V.hostTempo) return false; toast("The DAW sets the tempo. Change it there."); return true; }
+/* a refused followHost (the machine's global could not be set to follow the host): said once per reason, and logged */
+let hostRefusedText = "";
+function hostRefused(m) {
+	const t = (m.errors || []).join(" · ") || "refused";
+	Bridge.log("followHost refused: " + t);
+	if (t === hostRefusedText) return;
+	hostRefusedText = t; toast("The machine could not be set to follow the DAW's tempo: " + t);
+}
+
+/* ===== Song playhead (0.3.5): the song row the machine plays (telemetry songRow, RAM), shown without a render:
+   the arrangement cell, the time bar up to it, the What plays line and the LCD's pattern slot ===== */
+let songRowShown = -2;
+function songRowNow() { const t = Docs.telemetry; return V.songMode === true && V.playing && t && t.songRow != null && t.songRow >= 0 ? t.songRow : -1; }
+const nn3 = n => String(n + 1).padStart(3, "0");
+const songRows = () => V.song.filter(r => r.type !== "end").length;
+/* the What plays line: PATTERN B07 / SONG 01 · row 017 of 65 · B01 / CHAIN A03»A05 */
+function playsText() {
+	const plays = playsOf(Docs);
+	if (plays.kind !== "song") return plays.label;
+	const row = songRowNow(), r = row >= 0 ? V.song[row] : null;
+	return `SONG ${String(V.songSlot + 1).padStart(2, "0")} · ` + (row >= 0 ? `row ${nn3(row)} of ${songRows()}${r && !r.type ? " · " + patName(r.pat) : ""}` : `${songRows()} rows · ${V.playing ? "…" : "stopped"}`);
+}
+/* the LCD's pattern slot reads SONG 01 · 017 in song mode */
+function songLcd() {
+	const p = $("#pat"), lab = p?.closest(".patf")?.querySelector("small"); if (!p) return;
+	const song = V.songMode === true, row = songRowNow();
+	if (lab) lab.textContent = song ? "Song" : "Pattern";
+	if (song) p.textContent = String(V.songSlot + 1).padStart(2, "0") + (row >= 0 ? "·" + nn3(row) : "");
+	p.closest(".patf")?.classList.toggle("songlcd", song);
+}
+function markSongRow(force) {
+	const row = songRowNow();
+	if (row === songRowShown && !force) return;
+	songRowShown = row;
+	songLcd();
+	const pl = document.getElementById("songPlays"); if (pl) pl.textContent = playsText();
+	if (S.ws !== "song") return;
+	$$(".scell.ph").forEach(c => c.classList.remove("ph"));
+	if (row >= 0) document.querySelector(`.scell[data-i="${row}"]`)?.classList.add("ph");
+	$$(".durbar .db").forEach(d => { const i = +d.dataset.i; d.classList.toggle("past", row >= 0 && i < row); d.classList.toggle("now", i === row); });
+}
+
 /* Transport: the playhead comes from the machine (telemetry), moved by class only */
 let lastStep = -1;
 function onTelemetry(m) {
@@ -182,6 +234,7 @@ function onTelemetry(m) {
 	if (tp.playing !== wasPlaying || tp.rec !== wasRec) { Base = deriveView(Docs, S); V = view(); }
 	if (V.rec !== wasRec) { renderTop(); if (V.rec) toast("Live recording: click a track's steps to play it, move a value to lock it."); }
 	S.step = V.playing ? m.step : -1;
+	markSongRow();
 	if (wasPlaying !== V.playing) { renderTop(); $$(".ph").forEach(c => c.classList.remove("ph")); setPos(); phLast = -1; movePH(); }
 	const prev = lastStep; lastStep = S.step;
 	if (S.step === prev) return;

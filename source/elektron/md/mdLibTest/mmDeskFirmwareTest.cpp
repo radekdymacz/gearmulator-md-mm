@@ -236,6 +236,7 @@ namespace
 			t.mutes = tel.mutes.load();
 			t.recording = tel.recording.load();
 			t.bankGroup = tel.bankGroup.load();
+			t.songRow = tel.songRow.load();
 			t.chainKnown = tel.readChain(t.chain.active, t.chain.next, t.chain.patterns);
 			return t;
 		}
@@ -674,6 +675,80 @@ namespace
 		midi(0xfc);
 		_r.run(300);
 		return steps;
+	}
+
+	// 0.3.5, the Song page's playhead: the song row the page is told (telemetry songRow, RAM 0x2bdba1) is the row the
+	// machine plays. Song 24: A02, A03 x2, A04 (8 steps each), a LOOP (forever), END; SONG mode, PLAY: at the middle of
+	// each pass the row's pattern is the pattern the machine reports, a row played twice shows twice, the loop goes
+	// back.
+	void songRowPlayhead(const Bytes& _rom)
+	{
+		std::puts("song row: the Song page's playhead");
+		Rig r(_rom);
+		r.msg(R"({"op":"ready"})");
+		r.desk->setProbe(mmDesk::Desk::Probe::Running);
+		r.run(600);
+		while(r.desk->loaded() < 288)
+			r.run(100);
+		auto s = *r.desk->song(23);
+		const auto row = [&](const size_t _i, const uint8_t _pattern, const uint8_t _repeats, const uint8_t _target = 0)
+		{
+			auto& b = s.rows[_i].bytes;
+			b = {};
+			b[ed::mmSongRow::g_pattern] = _pattern;
+			b[ed::mmSongRow::g_repeats] = _repeats;
+			b[ed::mmSongRow::g_target] = _target;
+			b[ed::mmSongRow::g_length] = _pattern < 0xfe ? 8 : 0;
+			b[ed::mmSongRow::g_tempo] = b[ed::mmSongRow::g_tempo + 1] = 0xff;
+		};
+		row(0, 1, 0); row(1, 2, 1); row(2, 3, 0); row(3, ed::MmSong::g_loop, 0, 1); row(4, ed::MmSong::g_end, 0);
+		r.msg(R"({"op":"set","kind":"song","doc":)" + ed::json::write(ed::mmSongToJson(s)) + "}");
+		r.run(1500);
+		check(r.desk->song(23) && r.desk->song(23)->rows[1].bytes[0] == 2, "song 24 written and read back");
+		if(const auto back = r.desk->song(23))
+			for(size_t i = 0; i < 5; ++i)
+				std::printf("  row %zu read back: %02x %02x %02x %02x .. length %d\n", i + 1, back->rows[i].bytes[0], back->rows[i].bytes[1], back->rows[i].bytes[2],
+					back->rows[i].bytes[3], back->rows[i].bytes[ed::mmSongRow::g_length]);
+		r.msg(R"({"op":"loadSong","s":23})");
+		r.run(1500);
+		r.msg(R"({"op":"seqMode","song":true})");
+		r.run(1500);
+		r.msg(R"({"op":"play"})");
+		std::vector<int> rows, patterns;
+		int last = -1;
+		for(int i = 0; i < 6000 && rows.size() < 10; ++i)
+		{
+			r.run(5);
+			const int st = r.tel.step.load();
+			if(r.tel.running.load() == 1 && st == 3 && last != 3)
+			{
+				Value t;
+				for(auto it = r.page.rbegin(); it != r.page.rend() && !t.isObject(); ++it)
+					if(it->find("type")->asString() == "telemetry")
+						t = *it;
+				const auto* sr = t.isObject() ? t.find("songRow") : nullptr;
+				rows.push_back(sr && sr->isNumber() ? static_cast<int>(sr->asNumber()) : -1);
+				const auto reply = ed::parseMmStatusResponse(r.m.request(ed::mmStatusRequest(ed::MmStatus::Pattern), 0x72));
+				patterns.push_back(reply ? reply->value : -1);
+			}
+			last = st;
+		}
+		std::string seen;
+		bool match = rows.size() == 10, twice = false, back = false;
+		for(size_t k = 0; k < rows.size(); ++k)
+		{
+			seen += " " + std::to_string(rows[k] + 1) + "(" + std::to_string(patterns[k]) + ")";
+			match = match && rows[k] >= 0 && rows[k] < 3 && s.rows[static_cast<size_t>(rows[k])].bytes[0] == patterns[k];
+			twice = twice || (k && rows[k] == rows[k - 1]);
+			back = back || (k && rows[k] < rows[k - 1]);
+		}
+		std::printf("  rows (one-based) at each pass, with the pattern the machine reports (0-based):%s\n", seen.c_str());
+		check(match, "the row the page is told is the row whose pattern plays, at every pass");
+		check(twice && back, "a row with a repeat shows twice, and the loop goes back");
+		r.msg(R"({"op":"stop"})");
+		r.run(600);
+		r.msg(R"({"op":"seqMode","song":false})");
+		r.run(1000);
 	}
 
 	void hostClock(const Bytes& _rom)
@@ -2103,6 +2178,8 @@ int main(const int _argc, char** _argv)
 			syxExport(rom);
 		if(only.empty() || only == "hostclock")
 			hostClock(rom);
+		if(only.empty() || only == "songrow")
+			songRowPlayhead(rom);
 		if(only.empty() || only == "patterns")
 			patterns(rom);
 		if(only.empty() || only == "library")

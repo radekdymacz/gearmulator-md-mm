@@ -1735,6 +1735,7 @@ namespace mdDesk
 		t.set("playing", _t.playing);
 		t.set("recording", _t.recording);
 		t.set("valid", _t.valid);
+		t.set("songRow", _t.songRow >= 0 ? Value(_t.songRow) : Value());
 		publishTelemetry(std::move(t));
 		return e;
 	}

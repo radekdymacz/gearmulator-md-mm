@@ -160,8 +160,10 @@ disagrees after the engine's `settleMs` (1.5 s) wins, so a change on the machine
 
 Other messages to the page: `doc` (`kind`, `slot`, `pending` = sent but not yet
 read back, `working` = the current kit's working copy, `doc`), `telemetry` (`step`,
-`playing`, at most every 25 ms, and `record`: `off`, `grid`, `live` or `null`; the transport is
-only here, never in the machine document), `lcd` (the firmware's 128 x 64 LCD as 2048 hex
+`playing`, at most every 25 ms, `record`: `off`, `grid`, `live` or `null`, and `songRow`: the song
+row the sequencer plays, 0-based, RAM 0x2bdba1, or `null` where the engine cannot read it; the
+transport is only here, never in the machine document), `host` (`bpm`, `follows`: in a DAW the host's
+tempo, also while it is stopped; see the Machinedrum's data-contract.md, B-030), `lcd` (the firmware's 128 x 64 LCD as 2048 hex
 digits, row by row, MSB = left pixel, while the engine is not ready),
 `catalogue`, `learn` and `result` (`op`, `id`, `ok`, `errors`, `note`).
 
@@ -243,6 +245,15 @@ if(pattern)
 ```
 
 `mmDataCorpusTest [--json <dir>] <dir>` checks byte-exact, JSON-exact and valid on every MM dump under a directory.
+
+**Song playhead (0.3.5).** `songRow` (telemetry) is the song row the Monomachine plays, one byte at
+RAM 0x2bdba1 (`md::MmTelemetry::g_songRowAddress`; found with `mmEditorProbeFirmwareTest songrow`,
+checked by `mmDeskFirmwareTest songrow`: at every pass the row's pattern is the one the machine
+reports by status, a repeated row shows twice, a loop goes back). A LOOP row is never the row. It is
+the machine's only while `song.songMode` is true and the machine plays; the page marks a row only
+then, without a render. Measured on the way: with a LOOP row the song went back to row 1 whatever
+the row's target byte (+1) said, and in the desk-written song the row before the LOOP was skipped;
+the target's offset in `MmSongRow` is inferred (MM-P1) and worth a probe of its own.
 
 **Chaining (MM-P8).** `machine.desk.chain` is the firmware's own pattern chain (manual 1-46: hold
 BANK, press the TRIG keys), read from RAM (`md::MmTelemetry`, measured with

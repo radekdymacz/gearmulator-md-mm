@@ -1588,6 +1588,29 @@
                 }
               ],
               "description": "MM-P4: the recording mode (RAM): GRID RECORDING, LIVE RECORDING or off; null where the engine cannot read it."
+            },
+            "songRow": {
+              "type": ["integer", "null"],
+              "minimum": 0,
+              "maximum": 199,
+              "description": "0.3.5: the song row the sequencer plays (RAM 0x2bdba1, md::MmTelemetry), null where the engine cannot read it. Meaningful while song.songMode is true and the machine plays."
+            }
+          }
+        },
+        {
+          "type": "object",
+          "description": "B-030: the host's tempo (a DAW's playhead, also while its transport is stopped), when it changed or the page is new. follows: the plug-in sets the machine to follow the host's clock (a DAW, not the standalone).",
+          "required": ["type", "bpm", "follows"],
+          "properties": {
+            "type": {
+              "const": "host"
+            },
+            "bpm": {
+              "type": "number",
+              "exclusiveMinimum": 0
+            },
+            "follows": {
+              "type": "boolean"
             }
           }
         },

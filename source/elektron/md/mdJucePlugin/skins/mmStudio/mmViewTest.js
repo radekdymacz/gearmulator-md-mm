@@ -115,6 +115,18 @@ const result = (m, ok = true, errors = []) => ({ type: "result", id: m.id, op: m
 	check(!none.ready && none.tracks === undefined && none.pat === 0 && none.bpm === 121.5, "without the current pattern and kit: the machine's members only");
 	const edited = p.MmView.derive(docs, { songEdit: 1 });
 	check(edited.songSlot === 1 && edited.song === undefined && edited.songs.slot === 1 && edited.songs.current === 2, "the song the Song workspace edits (not read yet: none)");
+	/* B-030: in a DAW whose clock the machine follows (CONTROL IN TEMPO SYNC external), TEMPO is the host's */
+	const g = docs.globals[1];
+	if (g) {
+		const follow = Object.assign({}, docs, { globals: Object.assign({}, docs.globals, { 1: Object.assign({}, g, { controlIn: Object.assign({}, g.controlIn, { tempoSync: 1 }) }) }) });
+		const own = Object.assign({}, docs, { globals: Object.assign({}, docs.globals, { 1: Object.assign({}, g, { controlIn: Object.assign({}, g.controlIn, { tempoSync: 0 }) }) }) });
+		const host = { type: "host", bpm: 72, follows: true };
+		const daw = p.MmView.derive(follow, { host });
+		check(daw.bpm === 72 && daw.hostTempo === true, "the machine follows the DAW: TEMPO is the host's 72 (" + daw.bpm + "), marked");
+		check(p.MmView.derive(own, { host }).bpm === 121.5 && !p.MmView.derive(own, { host }).hostTempo, "TEMPO SYNC internal: the machine's own tempo");
+		check(p.MmView.derive(follow, { host: Object.assign({}, host, { follows: false }) }).bpm === 121.5, "a host that is not followed (the standalone): the machine's tempo");
+		check(p.MmView.derive(follow).bpm === 121.5, "no host message: the machine's tempo");
+	} else check(false, "the fixture has the active global 2");
 }
 
 /* ---- echoes by command id ---- */

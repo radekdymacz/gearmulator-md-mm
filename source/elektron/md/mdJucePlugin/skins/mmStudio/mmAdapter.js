@@ -70,10 +70,12 @@
 	/* the song the Song workspace edits (MM-P4): any of the 24; null = the machine's current one */
 	let songEdit = null;
 	const songSlot = () => songEdit ?? cur("song");
-	const view = () => { const v = MmView.derive(docs(), { songEdit }); return Overlay.over(Overlay.size() ? MmView.own(v) : v); };
+	/* B-030: the plug-in's "host" message (a DAW's tempo); the plug-in's, so it stays when the engine changes */
+	let hostTempo = null;
+	const view = () => { const v = MmView.derive(docs(), { songEdit, host: hostTempo }); return Overlay.over(Overlay.size() ? MmView.own(v) : v); };
 	/* the view shows the machine: the catalogue (MmConvert's enumerations), the current pattern and the kit that plays */
 	const ready = () => !!catalogue && !!(docs().patterns[cur("pattern")] && kitNow());
-	const last = { record: null, ready: false, readyLabel: "", caps: null, modSent: null, note: { g: 0, text: "" } };
+	const last = { record: null, ready: false, readyLabel: "", caps: null, modSent: null, note: { g: 0, text: "" }, songRow: -1, hostRefused: "" };
 	let gesture = Bridge.gesture();
 	let modInFlight = 0;	// the id of a modSet command not answered yet
 	let clip = null;	// the page's copy of what the core's clipboard holds (MmView.copied): a paste shows at once
@@ -594,7 +596,11 @@
 			if (V().playing()) V().setStep(m.step);
 			/* MM-P4: the machine's recording mode */
 			if (m.record !== undefined && m.record !== last.record) { last.record = m.record; V().setRecord(m.record || "off"); }
+			/* 0.3.5: the song row that plays (RAM): the Song page's playhead, without a render */
+			const row = m.songRow ?? -1;
+			if (row !== last.songRow) { last.songRow = row; V().setSongRow(row); }
 		}
+		else if (m.type === "host") { hostTempo = m; refresh(); }
 		else if (m.type === "lcd") { lcdBits = Uint8Array.from(atob(m.bits || ""), c => c.charCodeAt(0)); showLcd(); }
 		else if (m.type === "mod") onMod(m);
 		else if (m.type === "catalogue") onCatalogue(m.doc);
@@ -611,6 +617,12 @@
 			else if (m.type === "syxProgress") V().syxProgress(m);
 			else if (m.type === "syxExport") V().toast(m.text);
 		else if (m.type === "error") onError(m);
+		else if (m.type === "result" && m.op === "followHost" && !m.ok) {
+			/* a refused followHost (B-030): logged, and said once per reason */
+			const t = (m.errors || []).join(" · ") || "refused";
+			log("followHost refused: " + t);
+			if (t !== last.hostRefused) { last.hostRefused = t; V().toast("The machine could not be set to follow the DAW's tempo: " + t); }
+		}
 		else if (m.type === "result" && !m.ok && m.errors?.length && m.op !== "set" && m.op !== "modSet") V().toast(m.errors[0]);
 	}
 })();

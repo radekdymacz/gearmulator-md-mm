@@ -132,6 +132,7 @@ const TAP = [];
 Keys.bind({ id: "tap-tempo", short: "Tap / Tap", scope: "any", keys: ["T", "B"], group: "Transport", does: "Tap tempo (the average of the last taps; B as in the Monomachine Editor)", when: () => kbOn(), run: () => {
 	const now = performance.now(); if (TAP.length && now - TAP[TAP.length - 1] > 2000) TAP.length = 0;
 	TAP.push(now); if (TAP.length > 5) TAP.shift();
+	if (hostTempoRefused()) { TAP.length = 0; return; }
 	if (TAP.length >= 2) { const bpm = clamp(Math.round(60000 / ((TAP[TAP.length - 1] - TAP[0]) / (TAP.length - 1)) * 10) / 10, 30, 300); cmd("tempo", { bpm }, "tempo", [[["bpm"], bpm]]); renderTop(); toast("Tap tempo: " + bpm.toFixed(1) + " BPM"); }
 	else toast("Tap tempo: keep tapping T");
 } });

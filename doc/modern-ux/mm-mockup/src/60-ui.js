@@ -77,7 +77,9 @@ function renderTop(){
  const lkk=$("#learnkey");if(lkk){lkk.setAttribute("aria-pressed",S.learn);lkk.classList.toggle("on",!!S.learn)}
  $("#platekey span").textContent=S.plate==="mk1"?"MKI":"MKII";
  const n=S.locks.size,m=$("#meter");$("#lockn").textContent=String(n).padStart(2,"0")+"/62";m.className="f meter"+(n>=62?" full":n>=52?" warn":"");
- $("#bpm").textContent=S.bpm.toFixed(1);$("#pat").textContent=patName(S.queued??S.pat);$("#pat").parentElement.classList.toggle("queued",S.queued!=null);
+ $("#bpm").textContent=S.bpm.toFixed(1);$("#pat").textContent=patName(S.queued??S.pat);$("#pat").parentElement.classList.toggle("queued",S.queued!=null);songLcd();
+ /* B-030: the host's tempo (in a DAW the machine follows): marked, and not edited here */
+ $("#bpm").parentElement.classList.toggle("hosttempo",!!S.hostTempo);$("#bpm").title=S.hostTempo?"The DAW's tempo: the machine follows the host. Change it in the DAW.":"Drag up or down";
  $("#kitname").textContent=S.eng==="hwwait"?"—":kitName(S.kit);const hc=HOST.history?HOST.history():{undo:0,redo:0};$("#undo").disabled=!hc.undo;$("#redo").disabled=!hc.redo;$("#undon").textContent=hc.undo||"";$("#redon").textContent=hc.redo||"";
  $("#play").setAttribute("aria-pressed",S.playing);$("#playico").textContent=S.playing?"■":"▶";$("#play").setAttribute("aria-label",S.playing?"Stop":"Play");$("#rec").setAttribute("aria-pressed",!!S.rec);$("#recled").classList.toggle("on",!!S.rec);
  renderPst();syncLockBudget()}
@@ -90,7 +92,11 @@ function renderSub(){const t=S.sel,tr=trk(t);let h="";
  else if(S.ws==="perform")h=L2("pmode","MODE",{normal:"AUTO",multi:"MULTI",map:"MAP",poly:"POLY"}[S.mode],"Keyboard mode: auto track, multi trig, multi map or poly. Click to step.",1,10)+L2("","",S.mode==="multi"?["ALL TRK","SPLIT","SEQ STRT","SEQ TRNS"][S.multi.mode]:"","",0,9)+L2("","CH",{normal:"09",multi:"07",map:"08",poly:"09"}[S.mode],"MIDI channel of this keyboard mode","",5);
  else if(S.ws==="control")h=L2("","IN","CH1","Controller input channel",0,6)+L2("","CC OUT","0/s","CCs sent to the machine per second",0,11,"ccrate")+L2("","MAX","300/s","The editor thins CC output above this rate",0,10);
  else h=L2("","SONG",String((S.songSlot??0)+1).padStart(2,"0"),"",0,7)+L2("","ROWS",S.song.length,"",0,7)+L2("","BARS",Math.round(songSteps()/16),"",0,7)+L2("","TIME",songTime(),"",0,8);
+ /* 0.3.5, every workspace: PATTERN or SONG mode, as the machine reports it; a click switches (the Song page's switch) */
+ h+=L2("seqmode","PLAY",S.plays.songMode?"SONG":"PAT","What the machine plays: PAT (the pattern and its chain) or SONG (the song). Click to switch; it shows what the machine reports.",1,9);
  $("#lcd2").innerHTML=h}
+/* B-030: an edit of the tempo while the DAW sets it is refused with a word (drag, arrows, tap) */
+function tempoLocked(){if(!S.hostTempo)return false;toast("The DAW sets the tempo. Change it there.");return true}
 
 /* ===== Controls: one key-style value control for everything ===== */
 function ref(el){const d=el.dataset,t=d.t!=null?+d.t:S.sel,tr=trk(t),g=d.g;

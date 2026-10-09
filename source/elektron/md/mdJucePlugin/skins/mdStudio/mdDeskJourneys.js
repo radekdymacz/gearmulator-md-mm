@@ -1004,15 +1004,47 @@ const MdJourneys = (() => {
 		],
 		async tidy(u, c) { if (c.m0 && machineState().songMode !== true) { u.click('[data-seqmode="song"]'); await sleep(1500); } }
 	};
+	/* 0.3.5: the Song page's playhead. An empty song slot (the song card's ‹ ›) gets two rows, A01 and A02; SONG mode,
+	   PLAY: the arrangement marks the row the machine plays (telemetry songRow, RAM), the What plays line and the LCD
+	   say it, and the mark moves on to the next row; STOP takes it away. The steps are shared with the screenshots. */
+	const emptySong = () => { const cur = V.songSlot; for (let d = 1; d < 32; d++) for (const s of [(cur + d) % 32, (cur - d + 32) % 32]) { const g = Docs.songs[s]; if (g && g.rows.length === 1 && g.rows[0].kind === "end") return s; } return null; };
+	const songTo = async (u, s) => { for (let n = 0; n < 40 && V.songSlot !== s; n++) { const was = V.songSlot; u.click(`[data-songslot="${(s - was + 32) % 32 <= 16 ? 1 : -1}"]`); await until(() => V.songSlot !== was, 3000); } };
+	const marked = c => { const i = $1("#tl .scell.ph")?.dataset.i; if (i != null) c.seen.add(+i); return [...c.seen].join(","); };
+	const songPlayheadSteps = shot => [
+		go("song"),
+		{ say: "stop, then pick an empty song with the song card's ‹ ›", act: async (u, c) => { if (V.playing) { u.click("#play"); await until(() => !V.playing, 3000); } c.s0 = V.songSlot; c.m0 = V.songMode; await until(() => Object.keys(Docs.songs).length >= 32, 20000); c.s = emptySong(); if (c.s == null) throw new Error("no empty song slot"); await songTo(u, c.s); },
+			screen: c => ok(V.songSlot === c.s, "song " + (V.songSlot + 1)), machine: c => ok(songSlotOf(Docs) === c.s, "machine song " + (songSlotOf(Docs) + 1)), within: 20000 },
+		{ say: "Arrange: click pads A01 and A02, two rows", act: async u => { u.click('[data-set="songpick"] button[data-v="arrange"]'); await sleep(200); u.click('[data-addpat="0"]'); await until(() => songRows().length === 2, 4000); u.click('[data-addpat="1"]'); },
+			machine: () => ok(songRows().length === 3 && songRows()[0].pattern === 0 && songRows()[1].pattern === 1, "rows " + songRows().map(r => r.kind === "pattern" ? r.pattern : r.kind).join(",")), within: 8000 },
+		{ say: "click PATTERN: the arrangement is dimmed (not playing)", act: async u => { u.click('[data-seqmode="pattern"]'); await until(() => V.songMode === false, 4000); await sleep(400); shot("song-1-pattern-mode"); },
+			screen: () => ok(!!$1(".songui.patmode") && pressed('[data-seqmode="pattern"]') && /^PATTERN /.test($1("#songPlays")?.textContent || ""), "plays " + $1("#songPlays")?.textContent), machine: () => ok(V.songMode === false, "songMode " + V.songMode) },
+		{ say: "click SONG (and Reload song when it asks): the arrangement is lit", act: async u => { u.click('[data-seqmode="song"]'); await until(() => V.songMode === true, 4000); await sleep(300); if ($1("[data-reloadsong]")) u.click("[data-reloadsong]"); await sleep(300); shot("song-2-song-mode-stopped"); },
+			screen: () => ok(!!$1(".songui.songmode") && pressed('[data-seqmode="song"]') && $1("#lcd2 [data-l2=seqmode] b")?.textContent === "SONG", "LCD " + $1("#lcd2 [data-l2=seqmode]")?.textContent), machine: () => ok(V.songMode === true, "songMode " + V.songMode) },
+		{ say: "press PLAY: row 001 is marked", act: (u, c) => { c.seen = new Set(); u.click("#play"); },
+			screen: c => ok(marked(c).length > 0 && c.seen.has(0) && /row 001 of 2/.test($1("#songPlays")?.textContent || ""), `marked ${[...c.seen]}; plays ${$1("#songPlays")?.textContent}`), machine: () => ok(tele.last?.playing && tele.last.songRow === 0, "songRow " + tele.last?.songRow), within: 8000 },
+		{ say: "the mark moves on to row 002 (the LCD reads 01·002)", act: async (u, c) => { await until(() => (marked(c), c.seen.has(1)), 30000); await sleep(150); shot("song-3-song-playing"); },
+			screen: c => ok((marked(c), c.seen.has(1)) && /·002$/.test($1("#pat")?.textContent || ""), `marked ${[...c.seen]}; LCD ${$1("#pat")?.textContent}`), machine: () => ok(tele.last?.songRow === 1, "songRow " + tele.last?.songRow), within: 30000 },
+		{ say: "press STOP: no row is marked", act: u => { if (V.playing) u.click("#play"); }, screen: () => ok(!$1("#tl .scell.ph"), "still marked"), machine: () => ok(!V.playing, "playing") }
+	];
+	const songPlayheadTidy = async (u, c) => {
+		if (V.playing) { u.click("#play"); await until(() => !V.playing, 3000); }
+		if (c.s != null && V.songSlot === c.s) await undoUntil(u, () => songRows().length === 1, 4);
+		if (c.s0 != null) await songTo(u, c.s0);
+		if (c.m0 != null && V.songMode !== c.m0) { u.click(`[data-seqmode="${c.m0 ? "song" : "pattern"}"]`); await sleep(1000); }
+	};
+	const songPlayhead = { name: "md-song-playhead", steps: songPlayheadSteps(() => { }), tidy: songPlayheadTidy };
+	/* the same, as screenshots for a design review (scripts/mdmm-shots.sh with MDMM_SHOTS_JOURNEY=md-shots-song) */
+	const shotsSong = { name: "md-shots-song", needs: () => /md-shots/.test(location.search) ? null : "screenshots only when asked by name",
+		steps: [...songPlayheadSteps(name => Bridge.log("SHOT " + name)).map(s => s.act && /SHOT|shot/.test(String(s.act)) ? Object.assign({}, s, { hold: 2500 }) : s), { say: "done", act: () => Bridge.log("SHOT done") }], tidy: songPlayheadTidy };
 	const all = [bootCard, firstBeat, spaceTransport, tempoDrag, tapTempo, tapTempoB, patStep, queuePattern, plate, wsKeys, helpKeys, osHelp, undoRedo,
 		paintUndo, accentSlide, lockLane, pagesJ, copyPaste, selectCopyPaste, stepMenuJ, osCopyPaste, buttonsCopyPaste, clearPatternJ, fillEveryJ, rotateJ, rotateUndo, trackKeys, muteKeys, liveRec,
 		genJourney("md-gen-mutate-undo", false), genJourney("md-gen-defaults-mutate-undo", true), genKeys,
 		shapeSound, arrows, machinePick, soundCopy, editorDrag, controlAll, globalKey, songModeJ,
 		mixSolo, shiftMutes, allOff, fader, outKey, masterFx,
-		songArrange, songChain, samplerSlots, samplerSetup, audition,
+		songArrange, songChain, songPlayhead, samplerSlots, samplerSetup, audition,
 		libDialog, kitCopy, kitRename, kitClear, patGo, patClear, dialogEsc,
 		globalJ, globalRouting, globalMapNote, audioPanel, romCard, notePlay,
-		lockRamp, pasteMany, mutScope, songInspector, songDrag, ramView, setupChop, panBox, hwNoMachine, syxImportJ, syxImportMute, shots];
+		lockRamp, pasteMany, mutScope, songInspector, songDrag, ramView, setupChop, panBox, hwNoMachine, syxImportJ, syxImportMute, shots, shotsSong];
 
 	/* ---------- demos: journeys played for a camera (doc/modern-ux/DEMO-VIDEOS.md) ---------- */
 	/* Not in `all`: ?selftest=journey never runs them; ?selftest=demo-md-<name> does (Journey.demo), at a person's pace

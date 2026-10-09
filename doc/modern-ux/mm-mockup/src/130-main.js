@@ -48,6 +48,7 @@ function l2step(k,d,fine){
   if(k==="ptrn"){S.patTrn=clamp(S.patTrn+d,0,127);edit("transpose",{v:S.patTrn-64})}
  if(k==="route"){S.routing=ROUTES[(ROUTES.indexOf(S.routing)+d+3)%3];edit("routing",{v:S.routing})}
  if(k==="side"){setSide(S.side==="midi"?"int":"midi");return}
+ if(k==="seqmode"){seqMode(!S.plays.songMode);return}
  if(k==="dbl"){if(!fine)doublePattern();return}
  if(k==="pmode"){const o=PMODES.map(p=>p[0]);S.mode=o[(o.indexOf(S.mode)+d+4)%4]}
  render()}
@@ -56,7 +57,7 @@ document.addEventListener("pointerdown",e=>{const el=e.target.closest(".l2.ed");
 document.addEventListener("pointermove",e=>{if(!l2drag)return;if(e.buttons===0&&e.pointerType==="mouse"){l2drag=null;return}const d=Math.round((l2drag.y-e.clientY)/4);if(d)l2drag.moved=true;if(l2drag.k==="swing")S.swingAmt=clamp(l2drag.v+d,50,80);else S.patTrn=clamp(l2drag.v+d,0,127);renderSub()});
 document.addEventListener("pointerup",()=>{if(!l2drag)return;const k=l2drag;l2drag=null;if(!k.moved)l2step(k.k,1);else{if(k.k==="swing")edit("swing",{v:S.swingAmt});else edit("transpose",{v:S.patTrn-64});render()}});
 document.addEventListener("click",e=>{const el=e.target.closest(".l2.ed");if(!el)return;const k=el.dataset.l2;if(k!=="swing"&&k!=="ptrn")l2step(k,e.shiftKey?-1:1)});
-document.addEventListener("wheel",e=>{const el=e.target.closest(".l2.ed");if(!el)return;e.preventDefault();l2step(el.dataset.l2,(e.deltaY||e.deltaX)<0?1:-1,true)},{passive:false});
+document.addEventListener("wheel",e=>{const el=e.target.closest(".l2.ed");if(!el)return;e.preventDefault();if(el.dataset.l2==="seqmode")return;l2step(el.dataset.l2,(e.deltaY||e.deltaX)<0?1:-1,true)},{passive:false});
 
 /* P7, as the MD Editor (v54): Shift + M prepares a mute ("+" unmute, "X" mute, blinking); the prepared
    mutes apply together when Shift comes up. Leaving the window drops them. */
@@ -295,9 +296,9 @@ document.addEventListener("selectstart",e=>{if(!textField(e.target))e.preventDef
 document.addEventListener("dragstart",e=>{if(e.target.closest?.("img,svg,canvas")&&!e.target.closest?.("[draggable=true]"))e.preventDefault()},true);
 
 /* BPM: drag or arrows */
-(()=>{const b=$("#bpm");let d=null;b.addEventListener("pointerdown",e=>{d={y:e.clientY,v:S.bpm};b.setPointerCapture(e.pointerId)});
+(()=>{const b=$("#bpm");let d=null;b.addEventListener("pointerdown",e=>{if(tempoLocked())return;d={y:e.clientY,v:S.bpm};b.setPointerCapture(e.pointerId)});
  b.addEventListener("pointermove",e=>{if(!d)return;if(e.buttons===0&&e.pointerType==="mouse"){d=null;return}S.bpm=clamp(Math.round((d.v+(d.y-e.clientY)*(e.shiftKey?.1:.5))*10)/10,30,300);if(HOST.tempo)HOST.tempo(S.bpm);renderTop();if(S.playing)restartClock()});
- b.addEventListener("pointerup",()=>d=null);b.addEventListener("keydown",e=>{const k={ArrowUp:1,ArrowDown:-1}[e.key];if(!k)return;e.preventDefault();S.bpm=clamp(S.bpm+k*(e.shiftKey?.1:1),30,300);if(HOST.tempo)HOST.tempo(S.bpm);renderTop();if(S.playing)restartClock()})})();
+ b.addEventListener("pointerup",()=>d=null);b.addEventListener("keydown",e=>{const k={ArrowUp:1,ArrowDown:-1}[e.key];if(!k)return;e.preventDefault();if(tempoLocked())return;S.bpm=clamp(S.bpm+k*(e.shiftKey?.1:1),30,300);if(HOST.tempo)HOST.tempo(S.bpm);renderTop();if(S.playing)restartClock()})})();
 
 
 /* ===== Engine status (from the MD Editor v48): the LCD says what the engine is doing; editing waits until it is ready ===== */
@@ -365,7 +366,7 @@ addEventListener("scroll",()=>{if(S.playing)movePH(false)},true);addEventListene
 function setPos(){$("#pos").textContent=S.playing&&S.step>=0?String(Math.floor(S.step/16)+1).padStart(2,"0")+"."+String(S.step%16+1).padStart(2,"0"):"--.--"}
 /* A host's transport (P6): the machine's step and whether it plays, shown. */
 function setStep(step){const prev=S.step;S.step=step;stepShown(prev)}
-function setPlaying(on){if(S.playing===on)return;S.playing=on;if(!on){$$(".pl").forEach(b=>b.classList.remove("play"));$("#tempoled").classList.remove("on");$$(".ph").forEach(c=>c.classList.remove("ph"));S.step=-1}setPos();renderTop();redraw();movePH(false)}
+function setPlaying(on){if(S.playing===on)return;S.playing=on;if(!on){$$(".pl").forEach(b=>b.classList.remove("play"));$("#tempoled").classList.remove("on");$$(".ph").forEach(c=>c.classList.remove("ph"));S.step=-1}setPos();renderTop();redraw();movePH(false);markSongRow()}
 function togglePlay(){if(HOST.togglePlay)return HOST.togglePlay();if(!S.playing&&S.eng&&!engReady())return;S.playing=!S.playing;clearInterval(clock);$$(".pl").forEach(b=>b.classList.remove("play"));$("#tempoled").classList.remove("on");$$(".ph").forEach(c=>c.classList.remove("ph"));if(S.playing){S.step=-1;tick();restartClock()}else S.queued=null;setPos();renderTop();redraw();movePH(false)}
 
 /* ===== Render ===== */
@@ -448,7 +449,7 @@ function show(v,all){
   for(const k of["len","mult","swingAmt","patTrn","locks"])if(put(S,k,v[k],was[k])){doc=true;seq=true}
   for(const k of["multi","menv","routing","plays"])if(put(S,k,v[k],was[k]))doc=true;
   if(put(S,"workName",v.workName,was.workName))top=true;
-  for(const k of["pat","kit","queued","bpm"])if(put(S,k,v[k],was[k]))top=true;
+  for(const k of["pat","kit","queued","bpm","hostTempo"])if(put(S,k,v[k],was[k]))top=true;
   if(v.kitState!==undefined&&v.kitState!==was.kitState){setKitState(v.kitState);top=true}
   if(v.patSlot&&!sameV(v.patSlot,was.patSlot)){S.patKit[v.patSlot.p]=v.patSlot.kit;S.patInfo[v.patSlot.p]={has:v.patSlot.has,len:v.patSlot.len}}
   if(put(S,"song",v.song,was.song)||v.song!==undefined&&v.songSlot!==was.songSlot){S.songSlot=v.songSlot;S.songSel=Math.min(S.songSel||0,S.song.length-1);doc=true}
@@ -527,7 +528,7 @@ window.MMView={
  /* the machine's documents: show(view) is the one writer of S's document members (DESIGN-UNIFY.md phase 1); the
     library's other slots keep their own cheap setters; setTempo is the BPM gesture's own write (the self-test's) */
  show,startEmpty,setPatternSlot,setKitSlot,setReading,setTempo:bpm=>{S.bpm=bpm},
- setInput,setPlaying,setStep,
+ setInput,setPlaying,setStep,setSongRow:r=>{S.songRow=r;markSongRow()},
  setEng,dlgOpen:()=>!$("#dlg").hidden,setEngineLabel,setEngineTip,setEngines,setAudioEntry,clearLearnTarget:()=>{S.learnT=null},setMapping,setModulation,setCtlSetup,disable,
  setRecord,
  setLcd,setKeyDown,setPst,closeFirmwareDialog,bootRom:r=>Boot.rom(r),bootInstalled:o=>Boot.showInstalled(o),syxPreview:m=>Syx.preview(m),syxProgress:m=>Syx.progress(m),

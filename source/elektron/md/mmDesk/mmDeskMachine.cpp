@@ -257,6 +257,7 @@ namespace mmDesk
 		t.set("step", m_tel.step);
 		t.set("playing", m_playing);
 		t.set("record", m_tel.recording < 0 || m_tel.recording > 2 ? Value() : Value(modes[m_tel.recording]));
+		t.set("songRow", m_tel.songRow >= 0 ? Value(m_tel.songRow) : Value());
 		publishTelemetry(std::move(t));
 	}
 

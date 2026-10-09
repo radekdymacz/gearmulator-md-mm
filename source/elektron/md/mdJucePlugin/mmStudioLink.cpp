@@ -213,6 +213,7 @@ namespace mdJucePlugin
 		t.mutes = m_telemetry->mutes.load(std::memory_order_relaxed);
 		t.recording = m_telemetry->recording.load(std::memory_order_relaxed);
 		t.bankGroup = m_telemetry->bankGroup.load(std::memory_order_relaxed);
+		t.songRow = m_telemetry->songRow.load(std::memory_order_relaxed);
 		t.chainKnown = m_telemetry->readChain(t.chain.active, t.chain.next, t.chain.patterns);
 		return t;
 	}

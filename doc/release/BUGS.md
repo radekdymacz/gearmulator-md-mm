@@ -36,7 +36,9 @@ where it came from, the setup, what happens, what should happen, status.*
 ## B-030 · Tempo doesn't follow the DAW
 
 - **From:** Discord tester A, 2026-10-08: tempo stays on the machine's internal BPM although the plug-in is set to follow the host.
-- **Status:** open.
+- **Cause:** the machine did play at the host's tempo (the plug-in's `followHost` sets TEMPO IN external and the host's MIDI clock drives it), but the LCD's TEMPO showed the machine's stored global tempo (HOST, TEMPO 120.0 with Ableton at 72), and edits to it did nothing audible. The host's BPM never reached the page. `followHost` went out only on its 2 s cadence, and a refused one said nothing.
+- **Fix (0.3.5):** the plug-in publishes the host's tempo (its playhead, also while the host is stopped) to the page (`host` message: `bpm`, `follows`). When the machine follows the host, TEMPO shows the host's BPM, marked DAW; a drag, the arrows or tap tempo are refused with "The DAW sets the tempo. Change it there." The standalone is unchanged. `followHost` goes out as soon as the machine is ready, then on its cadence; a refused one is logged and shown. Checked by mdDeskModelTest and mmViewTest (the host's BPM shown, the lock), mdDeskPageTest (an edit refused, nothing sent) and mdSessionNoRomTest (a DAW stopped at 72 BPM: the page is told 72).
+- **Status:** fixed in 0.3.5, to be checked in a DAW by hand.
 
 ## B-029 · Windows: closing and reopening the plug-in window leaves it blank
 

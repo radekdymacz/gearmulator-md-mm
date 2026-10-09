@@ -228,6 +228,7 @@ namespace
 			int pattern = -1;
 			bool playing = false;
 			bool recording = false;
+			int songRow = -1;
 		};
 		PageTelemetry pageTelemetry() const
 		{
@@ -240,6 +241,7 @@ namespace
 			if(const auto* p = v.find("pattern")) t.pattern = static_cast<int>(p->asNumber());
 			if(const auto* p = v.find("playing")) t.playing = p->asBool();
 			if(const auto* p = v.find("recording")) t.recording = p->asBool();
+			if(const auto* p = v.find("songRow"); p && p->isNumber()) t.songRow = static_cast<int>(p->asNumber());
 			return t;
 		}
 
@@ -375,6 +377,7 @@ namespace
 			t.gridEdit = m_leds.gridEdit();
 			t.knobPage = m_machine.read8(md::SequencerState::g_knobPageAddress);
 			t.panelPending = static_cast<int>(m_keys.size());	// the rig's key queue, as md::Device reports its own
+			t.songRow = m_machine.read8(md::SongPosition::g_rowAddress);	// 0.3.5, as md::DeskDevice publishes it
 			// P4, as md::Device publishes them.
 			m_boot.update(m_machine.read8(md::BootAnimation::g_mainScreenAddress), now - m_bootAt);
 			m_bootAt = now;
@@ -2335,6 +2338,78 @@ namespace
 		check(firstCtrl == ed::MdGlobal::g_keymapStart && lastMeaningful == ed::MdGlobal::g_keymapStop, "the transport targets are 144-145");
 	}
 
+	// 0.3.5, the Song page's playhead: the song row the page is told (telemetry songRow, RAM 0x2b18f5) is the row the
+	// machine plays. A song A02, A03 x2, A04, LOOP to row 2 (forever), END, short patterns, SONG mode, PLAY: at
+	// the middle of each pattern pass the row's pattern is the pattern that plays, and the rows go 1 2 2 3, then
+	// round the loop 2 2 3 2 2 3 (one-based). The page marks a row only while the machine plays in SONG mode.
+	void songRow(const Bytes& _rom, const std::string& _romName)
+	{
+		std::puts("song row: the Song page's playhead");
+		Rig rig(_rom, _romName);
+		rig.page(R"({"op":"ready"})");
+		rig.runUntil([&] { return rig.desk().isInputReady() && rig.desk().linkState().pattern; }, 5000);
+		auto& m = rig.machine();
+		const auto base = rig.readPattern(0);
+		require(base.has_value(), "no pattern A01");
+		for(uint8_t s = 1; s < 4; ++s)
+		{
+			auto p = *base;
+			p.position = s;
+			p.length = 8;
+			p.trigs.fill(0);
+			p.lockMasks.fill(0);
+			p.trigs[s] = 0x11;
+			m.send(ed::encodeMdPattern(p));
+		}
+		ed::MdSong song;
+		song.position = 6;
+		const auto row = [](const uint8_t _pattern, const uint8_t _repeats, const uint8_t _target = 0)
+		{
+			ed::MdSongRow r;
+			r.pattern = _pattern;
+			r.repeats = _repeats;
+			r.target = _target;
+			r.end = 8;
+			return r;
+		};
+		song.rows = {row(1, 0), row(2, 1), row(3, 0), row(ed::MdSongRow::g_loopRow, 0, 1), row(ed::MdSongRow::g_endRow, 0)};
+		m.send(ed::encodeMdSong(song));
+		m.send(ed::mdLoadSong(6));
+		rig.run(300);
+		rig.page(R"({"op":"seqMode","song":true,"id":1})");
+		rig.runUntil([&] { const auto* d = rig.machineDoc() ? rig.machineDoc()->find("songMode") : nullptr; return d && d->isBool() && d->asBool(); }, 3000);
+		rig.page(R"({"op":"play","id":2})");
+		std::vector<int> rows, patterns;
+		int lastStep = -1;
+		for(int i = 0; i < 4000 && rows.size() < 10; ++i)
+		{
+			rig.run(5);
+			const auto t = rig.pageTelemetry();
+			if(t.playing && t.step == 3 && lastStep != 3)
+			{
+				rows.push_back(t.songRow);
+				patterns.push_back(m.read8(0x28d205));
+			}
+			lastStep = t.step;
+		}
+		std::string seen;
+		bool match = rows.size() == 10;
+		for(size_t k = 0; k < rows.size(); ++k)
+		{
+			seen += " " + std::to_string(rows[k] + 1) + "(" + ed::mdPatternName(static_cast<uint8_t>(patterns[k])) + ")";
+			match = match && rows[k] >= 0 && rows[k] < 3 && song.rows[static_cast<size_t>(rows[k])].pattern == patterns[k];
+		}
+		std::printf("  rows (one-based) at each pass, with the pattern that plays:%s\n", seen.c_str());
+		check(match, "the row the page is told is the row whose pattern plays, at every pass");
+		check(rows == std::vector<int>{0, 1, 1, 2, 1, 1, 2, 1, 1, 2}, "the rows go 1 2 2 3, then round the loop (LOOP to row 2) 2 2 3 2 2 3 2");
+		rig.page(R"({"op":"stop","id":3})");
+		rig.run(600);
+		check(!rig.pageTelemetry().playing, "STOP: the page is told the machine stopped (no row is marked then)");
+		std::printf("  after STOP: songRow %d\n", rig.pageTelemetry().songRow);
+		rig.page(R"({"op":"seqMode","song":false,"id":4})");
+		rig.run(400);
+	}
+
 	void hostClock(const Bytes& _rom, const std::string& _romName)
 	{
 		std::puts("host clock");
@@ -3411,7 +3486,7 @@ int main(const int _argc, char** _argv)
 	std::setvbuf(stdout, nullptr, _IOLBF, 0);
 	if(_argc < 2)
 	{
-		std::puts("usage: mdDeskFirmwareTest <MD-1.63-ROM> [probe|hw|p4|tweak|sampler|keepedits|recordermix|samples|gen|hostclock|playload|syxexport|syximport|keymap]");
+		std::puts("usage: mdDeskFirmwareTest <MD-1.63-ROM> [probe|hw|p4|tweak|sampler|keepedits|recordermix|samples|gen|hostclock|songrow|playload|syxexport|syximport|keymap]");
 		return 77;
 	}
 	try
@@ -3543,6 +3618,13 @@ int main(const int _argc, char** _argv)
 		{
 			keymapRange(rom, _argv[1]);
 			std::printf("mdDeskFirmwareTest keymap: %s (%d failure(s))\n", g_failures ? "FAIL" : "PASS", g_failures);
+			return g_failures ? 1 : 0;
+		}
+		if(mode == "songrow")
+		{
+			songRow(rom, _argv[1]);
+			check(g_contract.loaded() && g_contract.bad() == 0, g_contract.summary());
+			std::printf("mdDeskFirmwareTest songrow: %s (%d failure(s))\n", g_failures ? "FAIL" : "PASS", g_failures);
 			return g_failures ? 1 : 0;
 		}
 		if(mode == "hostclock")

@@ -156,6 +156,19 @@ int main(const int _argc, char** const _argv)
 	auto processor = std::make_unique<mdJucePlugin::AudioPluginAudioProcessor>(model, config, false);
 	juce::AudioProcessor& ap = *processor;
 	ap.prepareToPlay(44100.0, 128);
+	// B-030: a DAW whose transport is stopped at 72 BPM (its playhead reports the tempo then too)
+	struct StoppedHost : juce::AudioPlayHead
+	{
+		juce::Optional<PositionInfo> getPosition() const override
+		{
+			PositionInfo p;
+			p.setBpm(72.0);
+			p.setIsPlaying(false);
+			p.setPpqPosition(0.0);
+			return p;
+		}
+	} host;
+	ap.setPlayHead(&host);
 	std::atomic<bool> run{true};
 	std::thread audio([&]
 	{
@@ -205,6 +218,20 @@ int main(const int _argc, char** const _argv)
 		pump(100);
 	check(stand(), "no ROM: the processor runs the silent stand-in (no exception, so no alert)");
 	check(lifecycleOf(published) == "missing", "the page is told the ROM is missing (lifecycle '" + lifecycleOf(published) + "'), not left loading");
+	// B-030: the host's tempo reaches the page while the host is stopped (the LCD's TEMPO shows it)
+	{
+		double bpm = -1;
+		for(int i = 0; i < 20 && bpm < 0; ++i)
+		{
+			for(const auto& m : published)
+				if(str(m, "type") == "host")
+					if(const auto* b = m.find("bpm"); b && b->isNumber())
+						bpm = b->asNumber();
+			if(bpm < 0)
+				pump(100);
+		}
+		check(bpm == 72.0, "the host's tempo is published to the page while its transport is stopped (" + std::to_string(bpm) + ")");
+	}
 
 	// The project the app was opened with is kept while there is no ROM (saving must not overwrite it
 	// with the stand-in's empty state) and nothing is saved when there was none.

@@ -22,6 +22,11 @@ namespace mdJucePlugin
 		return p.wrapperType != juce::AudioProcessor::wrapperType_Undefined && p.wrapperType != juce::AudioProcessor::wrapperType_Standalone;
 	}
 
+	double hostBpmOf(AudioPluginAudioProcessor& _processor)
+	{
+		return _processor.getHostBpm();
+	}
+
 	pluginLib::Processor& pluginProcessorOf(AudioPluginAudioProcessor& _processor)
 	{
 		return _processor;

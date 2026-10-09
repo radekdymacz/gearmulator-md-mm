@@ -11,7 +11,8 @@
    The catalogue and the MIDI learn document are the model's and the plug-in's: they stay. */
 const emptyDocs = () => ({ patterns: {}, kits: {}, songs: {}, global: null, machine: null, workingKit: null, sources: {}, telemetry: null, samples: null });
 const EMPTY_DOCS = Object.freeze(emptyDocs());
-const Docs = Object.assign(emptyDocs(), { catalogue: null, learn: null });
+/* host: the plug-in's "host" message (B-030: a DAW's tempo, {bpm, follows}); like the catalogue it stays */
+const Docs = Object.assign(emptyDocs(), { catalogue: null, learn: null, host: null });
 /* the engine changed: its documents start over */
 function resetDocs(docs) { Object.assign(docs, emptyDocs()); }
 /* storeDoc and DOC_STORE (where an incoming document is kept) are skins/shared/deskDocs.js */
@@ -236,11 +237,17 @@ function deriveView(docs, ui) {
 		patKit: Array.from({ length: 128 }, (_, p) => docs.patterns[p] ? docs.patterns[p].kit : null),
 		mode: (G ? G.extendedMode : true) ? "EXTENDED" : "CLASSIC",
 		bpm: G ? G.tempo : 120, playing: transport.playing, rec: transport.rec, gridEdit: !!desk.gridEdit, tx: !!desk.tx,
+		songMode: M.songMode === true ? true : M.songMode === false ? false : null,
 		roundTrip: desk.roundTripMs, lifecycle: M.lifecycle || "booting", lifecycleText: M.lifecycleText || "",
 		input: !!M.input, midi: !!M.midi, caps,
 		clipboard: Object.assign({ steps: false, sound: false, songRow: false, kit: null, pattern: null }, M.clipboard || {}),
 		canUndo: !!hist.undo, canRedo: !!hist.redo, undoCount: hist.undoCount || 0, redoCount: hist.redoCount || 0,
 		songReload: !!(M.song && M.song.reloadNeeded), len: 16, length: 16, mult: "1X", swing: 50, accAmt: 0, accAll: false, slideAll: false };
+	/* B-030: in a DAW whose clock the machine follows (its global: TEMPO IN external, set by the plug-in), the tempo
+	   is the host's: TEMPO shows it (also while the host is stopped) and is not edited here */
+	const H = docs.host;
+	v.hostTempo = !!(H && H.follows && H.bpm > 0 && G && G.control && G.control.tempoIn === "external");
+	if (v.hostTempo) v.bpm = H.bpm;
 	for (const k in docs.kits) v.kitNames[k] = kitNameText(docs.kits[k].name);
 	if (K) v.kitNames[kit] = kitNameText(K.name);
 	const mutes = new Set(desk.mutes || []), soloing = !!(ui.soloSet && ui.soloSet.size);
