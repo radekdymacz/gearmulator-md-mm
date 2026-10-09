@@ -3,12 +3,54 @@
 *Feature ideas from beta testers and users (Discord, email). Not bugs: see
 [BUGS.md](BUGS.md). Newest first. Each entry: who and when, the idea, status.*
 
-## I-012 · Drag and drop files onto the editor
+## I-017 · Drag and drop files onto the editor
 
 - **From:** Radek, 2026-10-09.
 - **Idea:** drop files from the Finder onto the editor window: a ROM installs it, a `.syx` opens the SysEx import window, samples load into the Sampler.
 - **What can be dropped where (macOS only for now):** anywhere on the window. A **ROM** (`.bin`, or a `.zip` with it): asked first ("Install … as the firmware? The machine starts again with it."), at once on the start-up card when no firmware runs yet. A **SysEx file** (`.syx`): the SysEx import window opens with its preview, as **Import SysEx…** does; one file a drop. **Samples** (`.wav`, `.aif`, `.aiff`; Machinedrum UW): open the Sampler and select a ROM slot (or drop onto a ROM slot's tile): the sample goes into that slot; several go into that slot and the ones after it, one after another, after one question. Anything else is named in a note. While files are over the window a frame says what it takes. Windows and Linux: not yet (the web view there takes the file first; it is not opened).
 - **Status:** built on `feat/drag-and-drop` (2026-10-09), design in [FOUNDATION.md](../modern-ux/FOUNDATION.md), "Files dropped on the window". To be checked by hand from the Finder before it ships.
+
+## I-016 · Run a custom firmware (ems-monomachine-firmware, ems-machinedrum-firmware) in the editor
+
+- **From:** Radek, 2026-10-09, after the Octahackers Discord thread on custom firmwares. Decided: a spike after 0.4, not in 0.4.
+- **What exists:** github.com/emuyia/ems-monomachine-firmware (per-track lengths and speeds, trig conditions, clone
+  pattern, trig preview, page copy/randomise, BBOX sample banks; SONG slots 13-24 removed) and a Machinedrum one.
+  They ship as patches for a browser patcher (junes.website/goodies/fw-patcher): input Elektron's official OS .syx
+  (the MM one is `Elektron_SFX6-60_OS1.32B.syx`, SHA-256 checked), output a patched OS .syx for the machine's
+  OS-update mode. Signed manifest, WASM engine, nothing uploaded.
+- **What the editor needs:** (1) the patched OS inside an 8 MiB flash image: way A, let the emulated machine
+  update itself (boot with FUNC held, send the .syx, the emulated Am29F flash programs itself, save the image as a
+  ROM); way B, an offline writer that needs the OS .syx format; (2) the ROM loader accepts an unknown fingerprint
+  behind an "at your own risk" switch (today only OS 1.63 and 1.32B pass, mdromcheck.h); (3) a list of what the
+  desk gets wrong: it reads RAM at fixed addresses and knows the stock pattern/kit layouts.
+- **Spike (two days):** try way A headless with mdFirmwareSession; relax the loader behind the switch; boot the
+  custom OS; list what works and what breaks on the page. Decide the product shape after that.
+- **Status:** queued after 0.4.
+
+## I-015 · Pattern length per track, and microtiming
+
+- **From:** Discord tester L, 2026-10-09, in #ideas: "pattern length per track and microtiming of course". Radek: "Nice one".
+- **Note:** not in the firmware's pattern: the Machinedrum has no per-track length (`DESIGN-generators.md`) and the Monomachine's tracks share one scale length (`manual-mapping.md`). It would be an editor feature on top of the machine (or a new sequencer), not a mapping of what the firmware does. Microtiming is not in the mapped pattern format either (to check).
+- **Status:** new.
+
+## I-014 · Make the EXT / CLASSIC mode and LOAD ROM easier to find
+
+- **From:** Discord tester D, 2026-10-08: "everything I tried to do didn't seem to work. The binary loaded automatically and I don't see where to add a different firmware." Tester A, 2026-10-09: "Seems MD editor is in Advanced Mode Always? kits and patterns are always connected? Havent seen an option to select mode."
+- **What happened:** both were answered in the channel. LOAD ROM is in the engine menu in the header (Radek posted a screenshot); the mode is the small MODE EXT field in the LCD's second row (click for CLASSIC: patterns do not load their kits, locks stay in the pattern but do not play, the lock lane says "CLASSIC: locks muted").
+- **Idea:** say it where people look: the mode in the guide (no word on EXT / CLASSIC today; the guide still describes version 0.3.2) and a tooltip on the field; LOAD ROM also in the editor menu next to Open Log Folder.
+- **Status:** new.
+
+## I-013 · Windows: an installer instead of copying folders
+
+- **From:** Discord tester A, 2026-10-08, 0.3.4, on a Windows 10 PC: "there no installer on 0.3.4 / only manual install to folders". The Windows build is a zip (the app and the VST3 folder) with a README for the install paths.
+- **Idea:** a setup program (app, VST3, shortcuts, uninstall), signed when the signing account exists ([SIGNING.md](SIGNING.md)).
+- **Status:** new.
+
+## I-012 · Switch from song mode to pattern mode
+
+- **From:** Discord tester J, 2026-10-08 (0.3.4), in #bugs: "how do we switch from song mode to just pattern?" Radek: "may not be implemented fully yet".
+- **Done:** 0.3.5 has the PATTERN | SONG switch on the Song page ("What plays") and PAT / SONG on the LCD's second line, on every page; the switch lights what the machine reports.
+- **Status:** shipped in 0.3.5; tester J has not said whether it is what was meant.
 
 ## I-011 · A song library pop-up instead of stepping the SONG field
 
@@ -19,6 +61,7 @@
 ## I-010 · Monomachine: note length like Ableton/Digitakt
 
 - **From:** Discord tester C, 2026-10-08: dropping notes in the MM piano roll, a note runs until the next one; wants explicit trig/note length (place 1/16, then 1/8 notes as in Ableton).
+- **More:** the notes run on until the next one and are then cut off (tester C's words); Radek on 2026-10-09 in #bugs: the Monomachine piano roll "needs to be better as well". C is used to the Digitakt's trig length and Ableton.
 - **Status:** new.
 
 ## I-009 · Option to turn off the "kit has unsaved edits" warning on pattern change

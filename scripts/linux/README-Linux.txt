@@ -3,8 +3,13 @@
 
 NOT TESTED: this build comes from CI. It compiles, passes the unit tests
 and was started on a virtual X11 display, but no person has used it on a
-Linux desktop or in a Linux DAW yet. Reports are welcome:
-https://github.com/radekdymacz/gearmulator-md-mm/issues
+Linux desktop or in a Linux DAW yet. Reports are welcome.
+
+Bugs: https://mdmm.dev/contact/
+Discord (#bugs): https://discord.gg/8xwXwBHbtn
+Say which editor and version, your distribution and desktop (X11 or
+Wayland), and whether it is the standalone or the VST3 (and in which DAW).
+Please do not ask anyone, in any channel, for firmware files.
 
 What is in here
 ---------------
