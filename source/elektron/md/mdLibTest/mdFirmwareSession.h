@@ -96,6 +96,8 @@ namespace mdFirmwareSession
 		uint64_t now() const { return m_frames; }
 		const std::vector<float>& left() const { return m_left; }
 		const std::vector<float>& right() const { return m_right; }
+		// The block just rendered, all six outputs (g_block frames each): read it in onBlock.
+		const std::array<std::vector<float>, 6>& blockOutputs() const { return m_out; }
 		md::Hardware& hardware() { return m_hw; }
 
 		// Called once per rendered block (after audio, after SysEx collection).
