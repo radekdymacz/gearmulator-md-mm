@@ -190,7 +190,7 @@ and selects the active slot with `{"op":"globalSlot","slot"}`.
 | `pattern.queued` | Requested with `selectPattern` while playing. Becomes current at the end of the current pattern (P1-RESULT §4) |
 | `kit.current` | The current kit number |
 | `kit.working` | `clean`: the kit equals its stored slot. `edited`: **not saved on the machine**. `unknown`: nothing observed yet |
-| `song.current`, `song.reloadNeeded` | A song was written into the current song's slot. It is heard after STOP, LOAD SONG and PLAY |
+| `song.current`, `song.reloadNeeded` | A song was written into the current song's slot and is not loaded again yet. 0.3.5: the desk loads it again by itself (LOAD SONG of the current slot, `MdMachine::pumpSongReload`) once nothing is on the wire and the machine is stopped in SONG mode: an edit made while it plays is heard from the next start, one made in PATTERN mode when SONG mode is entered. Reload song only where the desk has no telemetry (HW MIDI) |
 | `songMode`, `extendedMode`, `globalSlot`, `track` | Status values. `null` until reported |
 | `patternKits` | `[pattern, kit]` links seen in pattern dumps. `Session::selectWouldDiscardKitEdits(p)` uses them |
 | `desk` | Added by `mdDesk::Desk` for the page: firmware state, TX, round trip, undo counts, the audible queue, mutes, and `kitSource` (below) |

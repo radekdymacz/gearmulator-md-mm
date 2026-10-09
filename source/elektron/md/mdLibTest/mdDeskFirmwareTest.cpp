@@ -2414,6 +2414,30 @@ namespace
 		rig.run(600);
 		check(!rig.pageTelemetry().playing, "STOP: the page is told the machine stopped (no row is marked then)");
 		std::printf("  after STOP: songRow %d\n", rig.pageTelemetry().songRow);
+		// 0.3.5: an edit of the machine's song is heard without Reload song. Stopped in SONG mode: row 1 becomes A08;
+		// the desk loads the song again by itself (MdMachine::pumpSongReload), and PLAY plays A08 first.
+		rig.page(R"({"op":"stop","id":5})");	// STOP twice: the song from its first row
+		rig.run(300);
+		rig.page(R"({"op":"selectSong","s":6,"id":6})");
+		rig.runUntil([&] { return rig.desk().documents().songs.count(6) > 0; }, 4000);
+		const auto loads = rig.messageKinds[0x6c];
+		rig.page(R"({"op":"rowSet","s":6,"i":0,"row":{"kind":"pattern","pattern":7,"repeats":0,"start":0,"end":8,"tempo":null,"mutes":[]},"id":7})");
+		const bool needed = rig.runUntil([&] { return rig.desk().linkState().songReloadNeeded; }, 1500);
+		const bool reloaded = rig.runUntil([&] { return !rig.desk().linkState().songReloadNeeded; }, 4000);
+		check(needed && reloaded && rig.messageKinds[0x6c] > loads, "stopped in SONG mode: the edited song is loaded again by the desk (LOAD SONG), no Reload song");
+		rig.page(R"({"op":"play","id":8})");
+		int first = -1;
+		for(int i = 0; i < 1000 && first < 0; ++i)
+		{
+			rig.run(5);
+			const auto t = rig.pageTelemetry();
+			if(t.playing && t.step == 3)
+				first = m.read8(0x28d205);
+		}
+		std::printf("  after the edit, PLAY plays %s first\n", first >= 0 ? ed::mdPatternName(static_cast<uint8_t>(first)).c_str() : "nothing");
+		check(first == 7, "and PLAY plays the edited row (A08) without pressing Reload song");
+		rig.page(R"({"op":"stop","id":9})");
+		rig.run(600);
 		rig.page(R"({"op":"seqMode","song":false,"id":4})");
 		rig.run(400);
 	}

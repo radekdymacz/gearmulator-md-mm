@@ -1011,6 +1011,8 @@ const MdJourneys = (() => {
 	   say it, and the mark moves on to the next row; STOP takes it away. The steps are shared with the screenshots. */
 	const emptySong = () => { const cur = V.songSlot; for (let d = 1; d < 32; d++) for (const s of [(cur + d) % 32, (cur - d + 32) % 32]) { const g = Docs.songs[s]; if (g && g.rows.length === 1 && g.rows[0].kind === "end") return s; } return null; };
 	const songTo = async (u, s) => { for (let n = 0; n < 40 && V.songSlot !== s; n++) { const was = V.songSlot; u.click(`[data-songslot="${(s - was + 32) % 32 <= 16 ? 1 : -1}"]`); await until(() => V.songSlot !== was, 3000); } };
+	/* the LCD's box and the places of its fields (0.3.5: the same in PATTERN and SONG mode) */
+	const lcdGeo = () => [$1(".lcdpanel"), $1('#lcd2 [data-l2="seqmode"]'), $1("#kitname"), $1("#bpm")].map(e => { const r = e?.getBoundingClientRect(); return r ? `${Math.round(r.left)}/${Math.round(r.width)}` : "-"; }).join(" ");
 	const marked = c => { const i = $1("#tl .scell.ph")?.dataset.i; if (i != null) c.seen.add(+i); return [...c.seen].join(","); };
 	const songPlayheadSteps = shot => [
 		go("song"),
@@ -1018,11 +1020,14 @@ const MdJourneys = (() => {
 			screen: c => ok(V.songSlot === c.s, "song " + (V.songSlot + 1)), machine: c => ok(songSlotOf(Docs) === c.s, "machine song " + (songSlotOf(Docs) + 1)), within: 20000 },
 		{ say: "Arrange: click pads A01 and A02, two rows", act: async u => { u.click('[data-set="songpick"] button[data-v="arrange"]'); await sleep(200); u.click('[data-addpat="0"]'); await until(() => songRows().length === 2, 4000); u.click('[data-addpat="1"]'); },
 			machine: () => ok(songRows().length === 3 && songRows()[0].pattern === 0 && songRows()[1].pattern === 1, "rows " + songRows().map(r => r.kind === "pattern" ? r.pattern : r.kind).join(",")), within: 8000 },
-		{ say: "click PATTERN: the arrangement is dimmed (not playing)", act: async u => { u.click('[data-seqmode="pattern"]'); await until(() => V.songMode === false, 4000); await sleep(400); shot("song-1-pattern-mode"); },
-			screen: () => ok(!!$1(".songui.patmode") && pressed('[data-seqmode="pattern"]') && /^PATTERN /.test($1("#songPlays")?.textContent || ""), "plays " + $1("#songPlays")?.textContent), machine: () => ok(V.songMode === false, "songMode " + V.songMode) },
-		{ say: "click SONG: the arrangement is lit", act: async u => { u.click('[data-seqmode="song"]'); await until(() => V.songMode === true, 4000); await sleep(400); shot("song-2-song-mode-stopped"); },
-			screen: () => ok(!!$1(".songui.songmode") && pressed('[data-seqmode="song"]') && $1("#lcd2 [data-l2=seqmode] b")?.textContent === "SONG", "LCD " + $1("#lcd2 [data-l2=seqmode]")?.textContent), machine: () => ok(V.songMode === true, "songMode " + V.songMode) },
-		{ say: "click Reload song when the edits ask for it, then PLAY: row 001 is marked", act: async (u, c) => { c.seen = new Set(); if ($1("[data-reloadsong]")) { u.click("[data-reloadsong]"); await until(() => !$1("[data-reloadsong]"), 3000); await sleep(300); } if (!V.playing) u.click("#play"); },
+		{ say: "click PATTERN: the header says pattern mode, the grid looks as ever, no reload asked", act: async u => { u.click('[data-seqmode="pattern"]'); await until(() => V.songMode === false, 4000); await sleep(400); shot("song-1-pattern-mode"); },
+			screen: c => ok(!!$1(".songui.patmode") && pressed('[data-seqmode="pattern"]') && /^PATTERN /.test($1("#songPlays")?.textContent || "") && /pattern mode/i.test($1("#arrstate")?.textContent || "")
+				&& !$1("[data-reloadsong]") && (c.geo = lcdGeo()), `plays ${$1("#songPlays")?.textContent}; header ${$1("#arrstate")?.textContent}; reload ${!!$1("[data-reloadsong]")}`), machine: () => ok(V.songMode === false, "songMode " + V.songMode), within: 8000 },
+		{ say: "click SONG: the LCD keeps its size and every field its place; the desk loads the edited song by itself", act: async u => { u.click('[data-seqmode="song"]'); await until(() => V.songMode === true, 4000); await sleep(400); shot("song-2-song-mode-stopped"); },
+			screen: c => ok(!!$1(".songui.songmode") && pressed('[data-seqmode="song"]') && $1("#lcd2 [data-l2=seqmode] b")?.textContent === "SONG" && lcdGeo() === c.geo && /song mode/i.test($1("#arrstate")?.textContent || "") && !$1("[data-reloadsong]"),
+				`LCD ${lcdGeo()} (was ${c.geo}); ${$1("#lcd2 [data-l2=seqmode]")?.textContent}; header ${$1("#arrstate")?.textContent}`),
+			machine: () => ok(V.songMode === true && !V.songReload, "songMode " + V.songMode + ", reload needed " + V.songReload), within: 8000 },
+		{ say: "press PLAY (no Reload song): row 001 is marked, the edited song plays", act: (u, c) => { c.seen = new Set(); u.click("#play"); },
 			screen: c => ok(marked(c).length > 0 && c.seen.has(0) && /row 001 of 2/.test($1("#songPlays")?.textContent || ""), `marked ${[...c.seen]}; plays ${$1("#songPlays")?.textContent}`), machine: () => ok(tele.last?.playing && tele.last.songRow === 0, `songRow ${tele.last?.songRow}, rows seen ${tele.rows.join(" ")}`), within: 8000 },
 		{ say: "the mark moves on to row 002 (the LCD reads 01·002)", act: async (u, c) => { await until(() => (marked(c), c.seen.has(1)), 30000); await sleep(150); shot("song-3-song-playing"); },
 			screen: c => ok((marked(c), c.seen.has(1)) && /·002$/.test($1("#pat")?.textContent || ""), `marked ${[...c.seen]}; LCD ${$1("#pat")?.textContent}`), machine: () => ok(tele.last?.songRow === 1, "songRow " + tele.last?.songRow), within: 30000 },

@@ -5200,7 +5200,11 @@ function playsText(){const plays=playsOf();if(plays.kind!=="song")return plays.l
 /* the LCD's pattern slot reads SONG 01 · 017 in song mode */
 function songLcd(){const p=$("#pat"),f=p?.closest(".patf"),lab=f?.querySelector("small");if(!p)return;const song=!!S.plays.songMode,row=songRowNow();
  if(lab)lab.textContent=song?"Song":"Pattern";if(song)p.textContent=nn2(S.plays.song??0)+(row>=0?"·"+nn3(row):"");f?.classList.toggle("songlcd",song)}
-function markSongRow(force){const row=songRowNow();if(row===songRowShown&&!force)return;songRowShown=row;songLcd();
+/* the arrangement's header and frame: the mode and the transport apart (PLAYING only while the song really plays) */
+function arrState(){return S.plays.songMode?(S.playing?"Playing":"Song mode · stopped"):"Pattern mode · song not playing"}
+function markSongRow(force){const st=document.getElementById("arrstate");if(st&&st.textContent!==arrState())st.textContent=arrState();
+ document.querySelector(".songui")?.classList.toggle("songplaying",!!S.plays.songMode&&S.playing);
+ const row=songRowNow();if(row===songRowShown&&!force)return;songRowShown=row;songLcd();
  const pl=document.getElementById("songPlays");if(pl)pl.textContent=playsText();if(S.ws!=="song")return;
  $$(".scell.ph").forEach(c=>c.classList.remove("ph"));if(row>=0)document.querySelector(`.scell[data-i="${row}"]`)?.classList.add("ph");
  $$(".durbar .db").forEach(d=>{const i=+d.dataset.i;d.classList.toggle("past",row>=0&&i<row);d.classList.toggle("now",i===row)})}
@@ -5244,9 +5248,9 @@ function renderSong(){S.songSel=Math.max(0,Math.min(S.songSel,S.song.length-1));
    ${sel.type==="loop"?`<div class="irow"><span class="ilab">Times</span><span class="stepper"><button data-step="count" data-d="-1">−</button><b class="mono">${sel.count===Infinity?"∞":sel.count}</b><button data-step="count" data-d="1">+</button></span><button class="ptog ${sel.count===Infinity?"on":""}" data-inf="1"><i class="led"></i>Forever</button></div>`:""}
    <div class="irow"><span class="ilab"></span><span class="note">${sel.type==="loop"?"Loops nest. Loops also stretch a part past the 64-step pattern limit.":sel.type==="jump"?"Jumps the song pointer forward.":"Pauses until you pick a row to go on from."}</span></div>`;
  const lines=Math.ceil(200/16);
- $("#main").innerHTML=`<div class="songui lay2 ${S.plays.songMode?"songmode":"patmode"}"><div class="songleft">${whatPlays(plays)}${songCard()}<section class="card ${chain?"chainmode":""}">${head}${palette}</section>
+ $("#main").innerHTML=`<div class="songui lay2 ${S.plays.songMode?"songmode":"patmode"}${S.plays.songMode&&S.playing?" songplaying":""}"><div class="songleft">${whatPlays(plays)}${songCard()}<section class="card ${chain?"chainmode":""}">${head}${palette}</section>
    <section class="card"><header><h3>Selected row</h3><span class="rowacts"><button data-rowact="up" title="Move left">←</button><button data-rowact="down" title="Move right">→</button><button data-rowact="dup">Duplicate</button><button data-rowact="loop">Add loop</button><button data-rowact="del" class="danger">Delete</button></span></header><div class="insp">${insp}</div></section></div>
-  <section class="card arrcard"><header><h3>Arrangement</h3><span class="arrstate">${S.plays.songMode?"Playing":"Not playing: pattern mode"}</span><span class="note" title="${S.song.length} of 200 rows · T track transpose · M mutes · B tempo · ~ part">${S.song.length} of 200 rows · T track transpose · M mutes · B tempo</span></header>
+  <section class="card arrcard"><header><h3>Arrangement</h3><span class="arrstate" id="arrstate">${arrState()}</span><span class="note" title="${S.song.length} of 200 rows · T track transpose · M mutes · B tempo · ~ part">${S.song.length} of 200 rows · T track transpose · M mutes · B tempo</span></header>
    <div class="durbar" title="Song shape by time (length × repeats); in SONG mode it fills up to the row that plays">${S.song.map((r,i)=>r.type?`<i class="db dbm" data-i="${i}"></i>`:`<i class="db ${i===S.songSel?"sel":""}" data-row="${i}" data-i="${i}" style="flex:${rowLen(r)*r.rep} 1 0"></i>`).join("")}</div>
    <div class="slotgrid" id="tl">${Array.from({length:lines},(_,line)=>`<span class="sglab">${String(line*16+1).padStart(3,"0")}</span>${Array.from({length:16},(_,c)=>{const i=line*16+c,r=S.song[i];if(i>=200)return`<span></span>`;
      if(!r)return`<div class="scell empty" data-i="${i}"></div>`;

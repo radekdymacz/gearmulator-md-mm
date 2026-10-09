@@ -19,8 +19,10 @@ JOURNEY=${MDMM_SHOTS_JOURNEY:-md-shots}
 RUN=$!
 LOG=""; n=0
 while [ -z "$LOG" ] && [ $n -lt 300 ] && kill -0 $RUN 2>/dev/null; do
-	# the journeys run the editor in a sandbox of its own (mdmm-journeys.sh: its home under $TMPDIR/mdmm-journey.*)
-	LOG=$(find "$LOGDIR" "${TMPDIR:-/tmp}"/mdmm-journey.*/home/Library/Caches -name 'gearmulator-mdStudio-*.log' -newer "$STAMP" 2>/dev/null | head -1); sleep 1; n=$((n + 1))
+	# the journeys run the editor in a sandbox of its own (mdmm-journeys.sh: its home under $TMPDIR/mdmm-journey.*);
+	# ours is the log that names our journey (another run may be going at the same time)
+	LOG=$(find "$LOGDIR" "${TMPDIR:-/tmp}"/mdmm-journey.*/home/Library/Caches -name 'gearmulator-mdStudio-*.log' -newer "$STAMP" 2>/dev/null \
+		| while read -r f; do grep -qE "JOURNEYS start: .* $JOURNEY([[:space:]]|\$)" "$f" 2>/dev/null && { echo "$f"; break; }; done); sleep 1; n=$((n + 1))
 done
 [ -n "$LOG" ] || { echo "no page log"; wait $RUN; cat "$OUT/journeys.log"; exit 1; }
 WID=""
@@ -29,7 +31,8 @@ tail -n +1 -f "$LOG" | while read -r line; do
 		*"SHOT done"*|*"JOURNEYS DONE"*) echo "$line"; pkill -P $$ tail 2>/dev/null; break ;;
 		*"SHOT "*)
 			name=$(printf '%s' "${line##*SHOT }" | tr -d '\r')	# the page's log ends its lines with CR LF
-			[ -n "$WID" ] || WID=$("$OUT/.window-id" "Machinedrum Editor")
+			BOXPID=$(cat "${LOG%%/home/Library/*}/pid" 2>/dev/null)
+			[ -n "$WID" ] || WID=$("$OUT/.window-id" "Machinedrum Editor" $BOXPID)
 			screencapture -x -o -l "$WID" "$OUT/$name.png" && echo "captured $name ($WID)" ;;
 		*"JOURNEY $JOURNEY "*FAIL*|*"JOURNEY $JOURNEY "*SKIP*) echo "$line" ;;
 	esac

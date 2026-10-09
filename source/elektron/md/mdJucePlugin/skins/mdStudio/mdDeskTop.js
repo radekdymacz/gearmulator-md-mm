@@ -214,6 +214,10 @@ function songLcd() {
 	p.closest(".patf")?.classList.toggle("songlcd", song);
 }
 function markSongRow(force) {
+	/* the arrangement's header and frame follow the transport (no render on PLAY / STOP) */
+	const st = document.getElementById("arrstate");
+	if (st && st.textContent !== arrState()) st.textContent = arrState();
+	document.querySelector(".songui")?.classList.toggle("songplaying", V.songMode === true && V.playing);
 	const row = songRowNow();
 	if (row === songRowShown && !force) return;
 	songRowShown = row;

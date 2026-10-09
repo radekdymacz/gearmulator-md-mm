@@ -255,6 +255,8 @@ namespace mmDesk
 		if(m_playing)
 			return refuse("The machine loads a song only while stopped.");
 		m_port.sendSysex(ed::mmLoadSong(static_cast<uint8_t>(s)));
+		if(s == m_curSong)
+			m_songReloadNeeded = false;
 		requestStatus();	// the current song is what the machine reports
 		m_lastStatusMs = now();
 		return ok();

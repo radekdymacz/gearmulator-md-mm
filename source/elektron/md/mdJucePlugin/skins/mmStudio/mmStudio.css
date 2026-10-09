@@ -2178,8 +2178,8 @@ body.dockother #rail .railparams>:is(.lpspace,.pagetabs,.pkcol),body.dockother #
 .lcdt .lt{flex:0 0 var(--ltk)!important;width:var(--ltk)!important;height:var(--ltk)!important;min-width:var(--ltk)!important;min-height:var(--ltk)!important;aspect-ratio:auto!important;box-sizing:border-box!important;display:flex!important;align-items:center!important;justify-content:center!important;padding:0!important}
 /* 0.3.5, the Song page's left column by hierarchy (120-song.js, as the Machinedrum Editor's): (a) What plays: the
    PATTERN | SONG switch, big, and one live line from the machine; (b) the song; (c) the palette; (d) the selected
-   row. The mode is lit by what the machine reports; in SONG mode the arrangement is framed as playing, in PATTERN
-   mode dimmed */
+   row. The mode is lit by what the machine reports; the arrangement is framed in red while the song plays, and looks
+   as ever otherwise */
 .whatplays .modebig .seg{display:grid;grid-template-columns:1fr 1fr;gap:6px;width:100%}
 .whatplays .modebig .seg button{justify-content:center;padding:10px 6px;font:600 14px var(--sans);letter-spacing:.14em;border-radius:4px;box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--print) 35%,transparent)}
 .whatplays .modebig .seg button::before{width:10px;height:10px}
@@ -2189,11 +2189,11 @@ body.dockother #rail .railparams>:is(.lpspace,.pagetabs,.pkcol),body.dockother #
 .whatplays.song .playsline .playschip{box-shadow:inset 0 0 0 2px var(--led)}
 .songslot header{flex-wrap:wrap;align-items:center}
 .songslot .songpick{display:inline-flex;gap:6px;flex-wrap:wrap}
-.arrcard .arrstate{font:11px var(--pix);text-transform:uppercase;letter-spacing:.06em;display:inline-flex;align-items:center;gap:6px}
-.songmode .arrcard .arrstate::before{content:"";width:8px;height:8px;border-radius:50%;background:var(--led);box-shadow:0 0 6px 1px var(--led)}
-.songmode .arrcard .arrstate{color:var(--print)}
-.songmode .arrcard .slotgrid{box-shadow:0 0 0 2px var(--led),0 0 14px -2px color-mix(in srgb,var(--led) 60%,transparent)}
-.patmode .arrcard .slotgrid,.patmode .arrcard .durbar{opacity:.55;filter:saturate(.6)}
+.arrcard .arrstate{font:11px var(--pix);text-transform:uppercase;letter-spacing:.06em;display:inline-flex;align-items:center;gap:6px;white-space:nowrap}
+.songplaying .arrcard .arrstate::before{content:"";width:8px;height:8px;border-radius:50%;background:var(--led);box-shadow:0 0 6px 1px var(--led)}
+.songplaying .arrcard .arrstate{color:var(--print)}
+/* the red frame only while the song really plays; pattern mode looks as ever (songs are edited while patterns play) */
+.songplaying .arrcard .slotgrid{box-shadow:0 0 0 2px var(--led),0 0 14px -2px color-mix(in srgb,var(--led) 60%,transparent)}
 /* the song playhead: the row the machine plays (telemetry songRow), the soft playhead's language */
 .slotgrid .scell.ph{z-index:1;outline:2px solid var(--led);outline-offset:1px;box-shadow:0 0 0 4px color-mix(in srgb,var(--led) 35%,transparent),0 0 14px color-mix(in srgb,var(--led) 55%,transparent)}
 .slotgrid .scell.ph b{text-decoration:underline;text-underline-offset:2px}
@@ -2203,9 +2203,11 @@ body.dockother #rail .railparams>:is(.lpspace,.pagetabs,.pkcol),body.dockother #
 .songmode .durbar .db.past,.songmode .durbar .db.now{background:var(--led)}
 .songmode .durbar .db.now{box-shadow:0 0 6px var(--led)}
 .songmode .durbar .db.sel:not(.past):not(.now){background:color-mix(in srgb,var(--ink) 45%,transparent)}
-/* the LCD's pattern slot in SONG mode: SONG 01 · 017 */
-.patf.songlcd #pat{width:6.4ch}
+/* the LCD's pattern slot reads SONG 01 · 017 in SONG mode: one width in both modes (the arrows keep their place,
+   unseen), so the LCD and line 2 never move when PLAY switches */
+.lcdpanel .patf #pat{width:6.4ch}
 .patf.songlcd .lcdbtn{visibility:hidden}
+.l2[data-l2="seqmode"] b{display:inline-block;width:4ch;text-align:left}
 /* B-030: TEMPO is the DAW's (the machine follows the host): marked, not editable here */
 .f.hosttempo #bpm{cursor:not-allowed}
 .f.hosttempo small::after{content:"DAW";margin-left:5px;padding:0 3px;border-radius:2px;background:var(--ink);color:var(--lcd);font:8px var(--pix);vertical-align:1px}

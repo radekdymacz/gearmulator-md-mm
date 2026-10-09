@@ -199,6 +199,7 @@ namespace mmDesk
 			if(m_curSong != _value)
 			{
 				m_curSong = _value;
+				m_songReloadNeeded = false;	// another song: what was edited is not what plays
 				if(!known({Kind::Song, deskCore::slotIn<MmModel>(Kind::Song, _value)}))
 					request({Kind::Song, deskCore::slotIn<MmModel>(Kind::Song, _value)}, true);
 			}

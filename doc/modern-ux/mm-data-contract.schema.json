@@ -1159,6 +1159,10 @@
                   "type": "boolean"
                 }
               ]
+            },
+            "reloadNeeded": {
+              "type": "boolean",
+              "description": "0.3.5: the machine's song was edited and is not loaded again yet: the desk does it by itself once the machine is stopped in SONG mode (LOAD SONG)."
             }
           }
         },

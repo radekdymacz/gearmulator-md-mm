@@ -1831,6 +1831,28 @@ namespace mdDesk
 		pumpTweak(_now);
 		pumpCoalesced(_now);
 		pumpPushes(_now, _view);
+		pumpSongReload(_now);
+	}
+
+	// 0.3.5: the firmware plays the song it loaded; a dump into the current song's slot is heard only after LOAD SONG,
+	// and it takes LOAD SONG only while stopped (P1). So once the edits have gone (nothing on the wire, the stream's
+	// latest dump read back) and the machine is stopped in SONG mode, the desk loads the song again by itself; a
+	// playing machine gets it at its next stop. Reload song stays as the fallback (the machine reported otherwise).
+	void MdMachine::pumpSongReload(const double _now)
+	{
+		const auto& st = m_session.state();
+		if(!st.songReloadNeeded || !st.song)
+		{
+			m_songEditedMs = -1;
+			return;
+		}
+		if(m_songEditedMs < 0)
+			m_songEditedMs = _now;
+		if(!m_telemetry.valid || m_telemetry.playing || st.songMode != true || _now - m_songEditedMs < g_songReloadQuietMs || busy()
+			|| keysOnTheirWay() || m_sequence.running() || !canSendSysex())
+			return;
+		m_session.loadSong(*st.song);
+		m_songEditedMs = -1;
 	}
 
 	std::optional<uint8_t> MdMachine::tweakLead(const ed::MdKit& _kit, const std::optional<uint8_t> _preferred)

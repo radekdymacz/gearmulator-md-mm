@@ -730,9 +730,9 @@ namespace
 		{
 			r.run(5);
 			const int st = r.tel.step.load();
-			if(r.tel.running.load() == 1 && st == 7 && last != 7 && !rows.empty())
+			if(st == 7 && last != 7 && !rows.empty())
 				lateRows.push_back(pageRow());
-			if(r.tel.running.load() == 1 && st == 3 && last != 3)
+			if(st == 3 && last != 3)
 			{
 				rows.push_back(pageRow());
 				const auto reply = ed::parseMmStatusResponse(r.m.request(ed::mmStatusRequest(ed::MmStatus::Pattern), 0x72));
@@ -758,6 +758,42 @@ namespace
 		check(late, "at the last step of each pass the page is still told that pass's row");
 		r.msg(R"({"op":"stop"})");
 		r.run(600);
+		// 0.3.5: an edit of the machine's song is heard without LOAD SONG by hand. Stopped in SONG mode: row 1 becomes
+		// A06; once the dump has landed (SYSEX RECV) the desk loads the song again (MmMachine::pumpSongReload).
+		{
+			r.msg(R"({"op":"stop"})");	// STOP twice: the song from its first row
+			r.run(600);
+			const auto reloadNeeded = [&] { const auto d = lastMachine(r); const auto* s = d.isObject() ? d.find("song") : nullptr; const auto* n = s ? s->find("reloadNeeded") : nullptr; return n && n->isBool() && n->asBool(); };
+			row(0, 5, 0);
+			r.msg(R"({"op":"set","kind":"song","doc":)" + ed::json::write(ed::mmSongToJson(s)) + "}");
+			bool needed = false;
+			for(int i = 0; i < 100 && !needed; ++i) { r.run(20); needed = reloadNeeded(); }
+			bool reloaded = false;
+			for(int i = 0; i < 400 && !reloaded; ++i) { r.run(25); reloaded = !reloadNeeded(); }
+			check(needed && reloaded, "stopped in SONG mode: the edited song is loaded again by the desk (LOAD SONG)");
+			r.msg(R"({"op":"play"})");
+			// the Monomachine goes on from the row where it stopped (STOP and LOAD SONG keep its place, measured): the
+			// edited first row is heard when the song comes round to it
+			int first = -1, last = -1;
+			std::string seen;
+			for(int i = 0; i < 8000 && first < 0; ++i)
+			{
+				r.run(5);
+				const int st = r.tel.step.load();
+				if(st == 3 && last != 3 && seen.size() < 200)
+					seen += " " + std::to_string(r.tel.running.load()) + ":" + std::to_string(pageRow());
+				if(st == 3 && last != 3 && pageRow() == 0)
+				{
+					const auto reply = ed::parseMmStatusResponse(r.m.request(ed::mmStatusRequest(ed::MmStatus::Pattern), 0x72));
+					first = reply ? reply->value : -2;
+				}
+				last = st;
+			}
+			std::printf("  after the edit, the song's first row plays pattern %d (0-based); running:row at each pass%s\n", first, seen.c_str());
+			check(first == 5, "and the edited row (A06) is heard, without LOAD SONG by hand");
+			r.msg(R"({"op":"stop"})");
+			r.run(600);
+		}
 		r.msg(R"({"op":"seqMode","song":false})");
 		r.run(1000);
 	}

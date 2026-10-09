@@ -87,10 +87,10 @@ function renderSong() {
    ${sel.type !== "halt" ? `<div class="irow"><span class="ilab">${sel.type === "loop" ? "Back to" : "Jump to"}</span><span class="stepper"><button data-step="to" data-d="-1">−</button><b class="mono">${String(sel.to + 1).padStart(3, "0")}</b><button data-step="to" data-d="1">+</button></span></div>` : ""}
    ${sel.type === "loop" ? `<div class="irow"><span class="ilab">Times</span><span class="stepper"><button data-step="count" data-d="-1">−</button><b class="mono">${sel.count === Infinity ? "∞" : sel.count}</b><button data-step="count" data-d="1">+</button></span><button class="ptog ${sel.count === Infinity ? "on" : ""}" data-inf="1"><i class="led"></i>Forever</button></div>` : ""}
    <div class="irow"><span class="ilab"></span><span class="note">${sel.type === "loop" ? "Loops can be nested. Forever loops are good live: pick the next row while it plays." : sel.type === "jump" ? "Jumps the song pointer to another row." : "Pauses playback until you pick a row to go on from."}</span></div>`;
-	const mode = V.songMode === true ? "songmode" : V.songMode === false ? "patmode" : "";
+	const mode = (V.songMode === true ? "songmode" : V.songMode === false ? "patmode" : "") + (V.songMode === true && V.playing ? " songplaying" : "");
 	$("#main").innerHTML = `<div class="songui lay2 ${mode}"><div class="songleft">${whatPlays(plays)}${songCard()}<section class="card ${chain ? "chainmode" : ""}">${head}${palette}</section>
    <section class="card"><header><h3>Selected row</h3><span class="rowacts"><button data-rowact="up" title="Move left">←</button><button data-rowact="down" title="Move right">→</button><button data-rowact="dup">Duplicate</button><button data-rowact="loop">Add loop</button><button data-rowact="del" class="danger">Delete</button></span></header><div class="insp">${insp}</div></section></div>
-  <section class="card arrcard"><header><h3>Arrangement</h3><span class="arrstate">${V.songMode === true ? "Playing" : V.songMode === false ? "Not playing: pattern mode" : ""}</span><span class="note">${V.song.length} of 256 rows · drag patterns onto the grid · drag cells to move · Delete removes</span></header>
+  <section class="card arrcard"><header><h3>Arrangement</h3><span class="arrstate" id="arrstate">${arrState()}</span><span class="note">${V.song.length} of 256 rows · drag patterns onto the grid · drag cells to move · Delete removes</span></header>
     <div class="durbar" title="Song shape by time (length × repeats); in SONG mode it fills up to the row that plays">${V.song.map((r, i) => r.type ? `<i class="db dbm" data-i="${i}"></i>` : `<i class="db ${i === S.songSel ? "sel" : ""}" data-row="${i}" data-i="${i}" style="flex:${rowLen(r) * r.rep} 1 0"></i>`).join("")}</div>
     <div class="slotgrid" id="tl">${Array.from({ length: 16 }, (_, line) => `<span class="sglab">${String(line * 16 + 1).padStart(3, "0")}</span>${Array.from({ length: 16 }, (_, c) => {
 		const i = line * 16 + c, r = V.song[i];
@@ -105,17 +105,23 @@ function renderSong() {
 /* (a) What plays: the PATTERN | SONG switch first, then one live line from the machine (playsText, mdDeskTop.js;
    the song row is moved by markSongRow without a render) */
 function whatPlays(plays) {
-	const tip = { chain: "The machine plays its own chain (live, one bank, loops). Clear it in CHAIN, or pick a pattern.", song: "SONG mode: the machine plays the stored song (edits are heard after STOP + reload).", pattern: "PATTERN mode: the machine plays this pattern and stays on it." }[plays.kind];
+	const tip = { chain: "The machine plays its own chain (live, one bank, loops). Clear it in CHAIN, or pick a pattern.", song: "SONG mode: the machine plays the stored song (an edit made while it plays is heard from the next start).", pattern: "PATTERN mode: the machine plays this pattern and stays on it." }[plays.kind];
 	return `<section class="card whatplays ${V.songMode === true ? "song" : V.songMode === false ? "pattern" : ""}"><header><h3>What plays</h3></header>
    <div class="modebig">${seqModeKeys()}</div>
    <div class="chainrow playsline"><span class="lcdchip playschip ${plays.kind}" id="songPlays" title="${tip}">${playsText()}</span></div></section>`;
 }
-/* (b) the song itself: its slot (the machine loads it when stopped) and the reload its edits need */
+/* (b) the song itself: its slot (the machine loads it when stopped). 0.3.5: an edit of the machine's song is loaded
+   again by the desk (stopped in SONG mode, or at the next stop: MdMachine::pumpSongReload); Reload song only where
+   the desk cannot see the transport (no telemetry: HW MIDI) */
 function songCard() {
-	const n = String(V.songSlot + 1).padStart(2, "0");
+	const n = String(V.songSlot + 1).padStart(2, "0"), manual = (machineState().desk || {}).telemetry === false;
+	const state = V.songReload && manual ? `<span class="songwarn"><span class="lcdchip warnchip">Edits heard after STOP + reload</span><button class="cream" data-reloadsong="1">Reload song</button></span>`
+		: `<span class="note">${V.songReload && V.songMode === true && V.playing ? "Edits heard from the next start · " : ""}${songRows()} rows · ${Math.round(songSteps() / 16)} bars · ${songTime()}</span>`;
 	return `<section class="card songslot"><header><h3>Song</h3><span class="stepper"><button data-songslot="-1" aria-label="Previous song" title="Previous song (the machine loads it when stopped)">‹</button><b class="lcdchip">SONG ${n}</b><button data-songslot="1" aria-label="Next song" title="Next song (the machine loads it when stopped)">›</button></span>
-   ${V.songReload ? `<span class="songwarn"><span class="lcdchip warnchip">Edits heard after STOP + reload</span><button class="cream" data-reloadsong="1">Reload song</button></span>` : `<span class="note">${songRows()} rows · ${Math.round(songSteps() / 16)} bars · ${songTime()}</span>`}</header></section>`;
+   ${state}</header></section>`;
 }
+/* the arrangement's header and frame: the mode and the transport apart (PLAYING only while the song really plays) */
+function arrState() { return V.songMode === true ? (V.playing ? "Playing" : "Song mode · stopped") : V.songMode === false ? "Pattern mode · song not playing" : ""; }
 function songAction(a) {
 	const i = S.songSel, r = V.song[i];
 	if (a === "del") { if (r.type === "end") return; songCmd("rowDelete", { i }); S.songSel = Math.max(0, Math.min(i, V.song.length - 2)); }

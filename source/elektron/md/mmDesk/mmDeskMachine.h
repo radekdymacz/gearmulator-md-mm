@@ -166,6 +166,11 @@ namespace mmDesk
 		// CLEAR: BANK + the TRIG key of the pattern that plays (false: the panel did not take them).
 		bool clearChain();
 		void pumpChain();
+		// 0.3.5: an edited current song is heard without LOAD SONG by hand (pumpSongReload)
+		void pumpSongReload(double _now);
+		bool m_songReloadNeeded = false;
+		double m_songEditedMs = -1;
+		static constexpr double g_songReloadQuietMs = 300;
 		// BANK (+ BANK GROUP from the half the machine is in) and the TRIG keys of _patterns (one bank).
 		bool pressBankTrigs(const std::vector<int>& _patterns);
 		// Panel keys the desk pressed are still on their way (their own hold times), or the panel is

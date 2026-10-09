@@ -232,6 +232,7 @@ namespace mmDesk
 		pumpRecv(_now);
 		pumpTransport(_now);
 		pumpChain();
+		pumpSongReload(_now);
 		if(m_activateGlobal >= 0 && (m_profile.wire || m_recv.state() == RecvSession::State::Idle))
 		{
 			m_port.sendSysex(ed::mmSetActiveGlobal(static_cast<uint8_t>(m_activateGlobal)));
@@ -241,6 +242,22 @@ namespace mmDesk
 		applyWorkingKit(_now, _view);
 		pumpPushes(_now);
 		publishTransport(_now, readWhileRecording(_now));
+	}
+
+	// 0.3.5: the firmware plays the song it loaded; a dump into the current song's slot is heard after LOAD SONG,
+	// which it takes only while stopped. Once the dumps have landed (SYSEX RECV done, nothing pending) and the machine
+	// is stopped in SONG mode, the desk loads the song again by itself; a playing machine gets it at its next stop.
+	void MmMachine::pumpSongReload(const double _now)
+	{
+		if(!m_songReloadNeeded || m_curSong < 0)
+			return;
+		if(m_playing || m_songMode != 1 || _now - m_songEditedMs < g_songReloadQuietMs || busy() || !m_stream.open()
+			|| m_recv.state() != RecvSession::State::Idle || m_stream.waiting() > 0 || m_recv.queued() > 0)
+			return;
+		m_port.sendSysex(ed::mmLoadSong(static_cast<uint8_t>(m_curSong)));
+		m_songReloadNeeded = false;
+		requestStatus();
+		m_lastStatusMs = _now;
 	}
 
 	// The playhead, at most every g_telemetryMinMs, and the recording mode when it changes (the transport).
@@ -280,6 +297,7 @@ namespace mmDesk
 		Value s = Value::object();
 		s.set("current", m_curSong < 0 ? Value() : Value(m_curSong));
 		s.set("songMode", m_songMode < 0 ? Value() : Value(m_songMode == 1));
+		s.set("reloadNeeded", m_songReloadNeeded);
 		d.set("song", std::move(s));
 		Value g = Value::object();
 		g.set("current", m_curGlobal < 0 ? Value() : Value(m_curGlobal));

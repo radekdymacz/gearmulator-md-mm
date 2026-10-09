@@ -171,6 +171,9 @@ namespace mdDesk
 		// CLEAR: LOAD PATTERN of the current pattern (false: it is not known).
 		bool clearChain();
 		void pumpChain();
+		// 0.3.5: an edited current song is heard without Reload song (pumpSongReload)
+		void pumpSongReload(double _now);
+		double m_songEditedMs = -1;
 		void load(const DocRef& _ref, bool _urgent);
 		void request(const DocRef& _ref);
 		std::optional<uint8_t> currentKit() const { return m_session.state().kit; }
@@ -269,6 +272,7 @@ namespace mdDesk
 		int m_reloadsPending = 0;
 		double m_reloadQueuedMs = 0;
 		static constexpr double g_reloadHoldMs = 10000;	// a reload not restored by then holds nothing any more
+		static constexpr double g_songReloadQuietMs = 300;	// a song edit, then this long before the song loads again
 		bool reloadHolds() const { return m_reloadsPending > 0 && now() - m_reloadQueuedMs < g_reloadHoldMs; }
 
 		Probe m_probe = Probe::Running;

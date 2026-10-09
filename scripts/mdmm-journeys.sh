@@ -130,6 +130,7 @@ run_unit() {
 	if [ "$HOST" = standalone ]; then
 		env $PERF $BG CFFIXED_USER_HOME="$SHOME" GEARMULATOR_DATA_ROOT="$DROOT" "$VAR=$S" "$APPS/$NAME.app/Contents/MacOS/$NAME" >"$UNIT/app.out" 2>&1 &
 		PID=$!
+		echo "$PID" > "$BOX/pid"	# for whoever watches this box (scripts/mdmm-shots.sh: this process's window)
 		# Without --background the page draws its canvases on animation frames and runs its timers at full rate only
 		# while its window is visible (WebKit pauses a covered page's frames): this process (not any other copy of the
 		# app, the person's own included) is brought to the front once it is up. Do not type into it while it runs.

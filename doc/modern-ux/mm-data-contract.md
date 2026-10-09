@@ -255,7 +255,8 @@ Machinedrum the desk publishes the row heard (`deskCore::SongRowHeard`: the byte
 of the playhead), so a byte that queues the next row early never moves the mark before the pass ends. It is
 the machine's only while `song.songMode` is true and the machine plays; the page marks a row only
 then, without a render. Measured on the way: with a LOOP row the song went back to row 1 whatever
-the row's target byte (+1) said, and in the desk-written song the row before the LOOP was skipped;
+the row's target byte (+1) said (B-038; a skipped row seen at first was the test's: RAM 0x26b46e, the "running" byte, reads 0
+during some passes of a playing song, so the test samples on the step alone);
 the target's offset in `MmSongRow` is inferred (MM-P1) and worth a probe of its own.
 
 **Chaining (MM-P8).** `machine.desk.chain` is the firmware's own pattern chain (manual 1-46: hold
