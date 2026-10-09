@@ -60,28 +60,62 @@ HOME="${build_home}" cmake --build "${build_dir}" --config "${config}" --paralle
 	mdJucePlugin_VST3 mmJucePlugin_VST3 mdJucePlugin_Standalone mmJucePlugin_Standalone
 
 if [[ "${skip_tests}" != 1 ]]; then
-	# Then everything else (the tests). -k 0: every compile error in one run. A few of upstream's firmware
-	# tests do not compile on Linux (std::pmr SysexBuffer against std::vector, doc/release/LINUX.md); their
-	# tests are reported and left out below instead of stopping the build.
-	if ! HOME="${build_home}" cmake --build "${build_dir}" --config "${config}" --parallel "${parallel}" -- -k 0; then
-		echo "::warning title=Some targets did not build::Tests whose program is missing are skipped (listed below)"
-	fi
+	# Then everything else, the tests included. A program that does not build fails the job here. -k 0 only keeps
+	# the build going after the first error, so that every compile error is listed in one run.
+	HOME="${build_home}" cmake --build "${build_dir}" --config "${config}" --parallel "${parallel}" -- -k 0
 	# The unit tests (doc/modern-ux/FOUNDATION.md, "Build and check"): no plug-in hosting, no firmware.
-	# synthLibMidiClockTimingTest is a known failure (-Ofast and isfinite, release notes' history).
 	# A display for the tests that make JUCE components: xvfb-run in the workflow.
+	# synthLibMidiClockTimingTest was a known failure (-Ofast and isfinite, release notes' history). midiClock.cpp
+	# and the test have been built with -fno-fast-math since 2026-10-07 (51183a9fc), so retry it on Linux CI: take
+	# it out of the pattern below, and put it back only if it still fails there.
 	exclude="Plugin|_AU|VST|FirmwareTest|synthLibMidiClockTimingTest"
-	missing="$(ctest --test-dir "${build_dir}" -C "${config}" -N --show-only=json-v1 -E "${exclude}" | python3 -c '
+	# Tests (by ctest name) whose program is allowed to be missing from this build, each with its reason. Empty:
+	# the firmware tests that once did not compile here (a std::pmr SysexBuffer assigned to a std::vector) are
+	# fixed. A program that is missing and not named here fails the job, so an entry is a debt, not a habit.
+	known_unbuilt=()
+	# ctest -N lists a test whose program does not exist, and would only fail it at run time (or, with a stale
+	# program from an earlier build, not at all). Tests marked DISABLED are not run and are not checked.
+	ctest --test-dir "${build_dir}" -C "${config}" -N --show-only=json-v1 -E "${exclude}" | python3 -c '
 import json, os, sys
+known = set(sys.argv[1:])
+unexpected, tolerated = [], []
 for t in json.load(sys.stdin)["tests"]:
+	props = {p["name"]: p["value"] for p in t.get("properties", [])}
+	if props.get("DISABLED"):
+		continue
 	cmd = t.get("command") or []
-	if not cmd or not os.path.exists(cmd[0]):
-		print(t["name"])
-')"
-	if [[ -n "${missing}" ]]; then
-		echo "::warning title=Tests not run (program did not build)::$(echo "${missing}" | tr '\n' ' ')"
-		exclude="${exclude}|^($(echo "${missing}" | paste -sd '|' -))\$"
+	if cmd and os.path.exists(cmd[0]):
+		continue
+	(tolerated if t["name"] in known else unexpected).append(t["name"])
+if tolerated:
+	print("Known not to build here, not run: " + " ".join(tolerated), file=sys.stderr)
+if unexpected:
+	print("::error title=Tests whose program is missing::" + " ".join(unexpected))
+	sys.exit(1)
+' ${known_unbuilt[@]+"${known_unbuilt[@]}"}
+	# --no-tests=error: a pattern that selects nothing is a failure. The JUnit file feeds the summary below.
+	junit="${build_dir}/ctest-junit.xml"
+	rm -f "${junit}"
+	ctest_status=0
+	ctest --test-dir "${build_dir}" -C "${config}" --output-on-failure --timeout 600 --no-tests=error \
+		--output-junit "${junit}" -E "${exclude}" || ctest_status=$?
+	# What ran, so that a quiet pass cannot hide tests that did not (a test that skips itself exits as skipped).
+	python3 -c '
+import sys, xml.etree.ElementTree as ET
+try:
+	cases = ET.parse(sys.argv[1]).getroot().findall("testcase")
+except (OSError, ET.ParseError) as error:
+	print("::warning title=No ctest summary::" + str(error))
+	sys.exit(0)
+skipped = [c.get("name") for c in cases if c.find("skipped") is not None]
+failed = [c.get("name") for c in cases if c.find("failure") is not None or c.find("error") is not None]
+ran = [c for c in cases if c.find("skipped") is None and c.get("status") != "disabled"]
+print("ctest: %d executed, %d failed, %d skipped%s" % (len(ran), len(failed), len(skipped),
+	(": " + " ".join(skipped)) if skipped else ""))
+' "${junit}"
+	if [[ "${ctest_status}" != 0 ]]; then
+		exit "${ctest_status}"
 	fi
-	ctest --test-dir "${build_dir}" -C "${config}" --output-on-failure --timeout 600 --no-tests=error -E "${exclude}"
 fi
 
 # One archive per machine: the standalone, the VST3 bundle, the two shims (in both places), licence and README.

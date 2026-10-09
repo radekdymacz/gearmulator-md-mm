@@ -51,12 +51,16 @@ ways and the page shows "<machine> firmware needed" (read through AT-SPI), and s
 artifact. The three systems' start tests side by side: [FOUNDATION.md](../modern-ux/FOUNDATION.md), "CI start
 tests". Not checked: the VST3 in a Linux DAW, audio and MIDI devices, a ROM, Wayland, any distribution but Ubuntu.
 
-On Linux `synthLib::SysexBuffer` is a `std::pmr::vector` (macOS 10.13 builds have no `<memory_resource>`, so
-there it is a plain `std::vector`): a few of upstream's firmware test programs assign one to the other and do not
-compile on Linux (`sysexContentOracle.h`, `sdsFirmwareTest.cpp`, `userSysexFirmwareTest.cpp`,
-`mmSysexExportFirmwareTest.cpp`). The build script builds everything with `-k 0`, warns, and leaves the tests of
-programs that did not build out of the ctest run (they need a ROM anyway, but for the two `mmSysexWorkflowTest`
-oracle tests). The fix belongs upstream.
+On Linux `synthLib::SysexBuffer` is a `std::pmr::vector` (a macOS build with a deployment target below 14, which
+the releases have, takes a plain `std::vector`). Four of the firmware test programs assigned one to the other and
+did not compile on Linux, and the build script used to leave their tests out and carry on. That is fixed: they copy
+the bytes (`sysexContentOracle.h`, `sdsFirmwareTest.cpp`, `mmSysexExportFirmwareTest.cpp`), and a test program that
+does not build now fails the job (`-k 0` lists every compile error in one run). The script also fails when a ctest
+test's program is missing, unless its name is in the script's `known_unbuilt` list (empty), runs `ctest` with
+`--no-tests=error`, and prints how many tests ran, failed and were skipped, and which. A macOS build configured
+with `-DCMAKE_OSX_DEPLOYMENT_TARGET=14.0` takes the same `std::pmr` path, so it shows this kind of error without a
+Linux machine. `synthLibMidiClockTimingTest` is still left out of the run, from before `midiClock.cpp` and the test
+were built with `-fno-fast-math` (2026-10-07); retry it on Linux CI.
 
 ## Windows: known risk
 

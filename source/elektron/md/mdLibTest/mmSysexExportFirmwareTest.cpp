@@ -104,7 +104,7 @@ namespace
 			for(const auto& event : events)
 				if(event.sysex.size() > 14 && event.sysex[4] == 3
 					&& event.sysex[6] == _command && event.sysex[9] == _slot)
-					host = event.sysex;
+					host.assign(event.sysex.begin(), event.sysex.end());
 		}
 		_hardware.getUC().setMidiTransmitTap({});
 		const auto rawMessage = findMessage(raw, _command, _slot);
