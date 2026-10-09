@@ -60,7 +60,14 @@ namespace md
 			const std::vector<uint8_t>& _initialUserFlash);
 
 		// mc68k::Mc68k overrides
-		uint32_t exec() override;
+		// One instruction, then the SIM and interrupt wiring it advanced. Inline: the
+		// scheduler runs it for every ColdFire instruction.
+		uint32_t exec() override
+		{
+			const auto cycles = execInstruction();
+			advanceAfterCpu(cycles);
+			return cycles;
+		}
 		uint32_t readIrqUserVector(uint8_t _level) override;
 		uint16_t readImm16(uint32_t _addr) override;
 
@@ -285,7 +292,14 @@ namespace md
 
 		bool     m_panelDisplayReady = false;	// enabled once the panel startup handshake completes
 
-		void advanceAfterCpu(uint32_t _cycles);
+		void advanceAfterCpu(const uint32_t _cycles)
+		{
+			m_sim.exec(_cycles);
+			// Most instructions raise no interrupt: one test here, the delivery out of line.
+			if(m_sim.needsInterruptCheck() || m_externalIrq4Pending || m_sim.externalIrq4Asserted())
+				deliverInterrupts();
+		}
+		BASELIB_NOINLINE void deliverInterrupts();
 		uint32_t idleSelfBranchInstructions(uint32_t _maxCycles);
 		void advanceIdleSelfBranch(uint32_t _instructions);
 		void decodePanelByte(uint8_t _byte);

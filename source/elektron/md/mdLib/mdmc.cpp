@@ -448,15 +448,6 @@ namespace md
 				getCycles());
 	}
 
-	uint32_t Microcontroller::exec()
-	{
-
-		// Step the CPU one instruction, then advance the derived SIM and interrupt wiring.
-		const auto cycles = execInstruction();
-		advanceAfterCpu(cycles);
-		return cycles;
-	}
-
 	uint32_t Microcontroller::idleSelfBranchInstructions(uint32_t _maxCycles)
 	{
 #if M68K_INSTRUCTION_HOOK != OPT_OFF || M68K_EMULATE_TRACE != OPT_OFF \
@@ -553,10 +544,8 @@ namespace md
 		}
 	}
 
-	void Microcontroller::advanceAfterCpu(const uint32_t _cycles)
+	void Microcontroller::deliverInterrupts()
 	{
-		m_sim.exec(_cycles);
-
 		// Deliver any pending SIM interrupts to the CPU. takeNextInterrupt consumes each edge
 		// internally (the RTOS timer tick, the UART transmitter-ready that drains the panel/
 		// LCD and MIDI TX rings), so we drain them all here; injectInterrupt/raiseIPL gate on

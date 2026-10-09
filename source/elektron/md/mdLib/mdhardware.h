@@ -318,9 +318,15 @@ namespace md
 		void advanceFactoryFlashCapture();
 		void serviceRamRecordingMode();
 		void registerExternalInteraction();
-		void pumpDsp2HostRequest();		// DSP2 HI08 HREQ -> ColdFire external IRQ4 (see .cpp)
+		// DSP2 HI08 HREQ -> ColdFire external IRQ4 (see .cpp). Out of line: processUC tests its gate.
+		BASELIB_NOINLINE void pumpDsp2HostRequest();
 		void onEssiCallbackMixer();		// master clock: advance the ESSI frame counter
 		void pumpMidiIngress();
+		// processUC's per-instruction test and its out-of-line work (see .cpp).
+		bool ucInputPending() const;
+		bool midiIngressPending() const;
+		BASELIB_NOINLINE void deliverUcInput();
+		BASELIB_NOINLINE void serviceMidiSysexTransfer(uint32_t _cycles);
 
 		const MachineModel m_model;
 		Rom m_rom;

@@ -69,6 +69,29 @@ namespace md
 		return dsp56k::sample2dsp(_inputs[_channel][_cursor]);
 	}
 
+	namespace
+	{
+		// The first UC cycle count whose frame position, cycles / _ucPerFrame in binary64 as
+		// the scheduler computes it, is not below _frame. The conversion and the division are
+		// both monotonic, so the counts below _frame form one run [0, result): done < result
+		// is the same test as done / _ucPerFrame < _frame, without a division per instruction.
+		uint64_t firstUcCycleAtFrame(const double _frame, const double _ucPerFrame)
+		{
+			const auto below = [&](const uint64_t _cycles)
+			{
+				return static_cast<double>(_cycles) / _ucPerFrame < _frame;
+			};
+			// The product is within a cycle or two of the answer; the exact test settles it.
+			const double estimate = std::ceil(_frame * _ucPerFrame);
+			uint64_t cycles = estimate > 0.0 ? static_cast<uint64_t>(estimate) : 0;
+			while(cycles > 0 && !below(cycles - 1))
+				--cycles;
+			while(below(cycles))
+				++cycles;
+			return cycles;
+		}
+	}
+
 	Hardware::Hardware(const std::vector<uint8_t>& _romData,
 		const std::string& _romName, const MachineModel _model,
 		const std::vector<uint8_t>& _initialPatchRam,
@@ -1026,17 +1049,54 @@ namespace md
 
 	void Hardware::processUC()
 	{
-		// Deliver queued panel input to firmware over UART2 RX. The existing
-		// release/acquire pending count is a counted-work wake, not a second dirty
-		// bit: a racing producer can make us defer once, but the count cannot clear
-		// until this single consumer drains the published packet.
+		// Almost every instruction has no input to deliver: one test of every input source,
+		// and the delivery out of line. A producer racing the test is seen at the next
+		// instruction boundary, as it was when each source was tested on its own.
 		// Do not let input mutate the bootstrap machine and then disappear when the
 		// coherent project images are published. Queues remain intact until restore.
 		const bool projectRestorePending =
 			m_pendingFlashRestoreActive.load(std::memory_order_acquire);
-		if(!projectRestorePending)
-			pumpScheduledMidi();
-		if(!projectRestorePending && m_panelIn.hasPending())
+		if(!projectRestorePending && ucInputPending())
+			deliverUcInput();
+
+		// Drive DSP2's HI08 HREQ into the ColdFire external IRQ4 BEFORE stepping the CPU, so the
+		// interrupt this pump raises is visible to the instruction m_uc.exec() runs (SIM interrupts
+		// are injected inside exec()). The pump returns at once unless a wake or a deferred word is
+		// pending, so that test is made here, for both machines. See pumpDsp2HostRequest.
+		if(m_schedulerHostPumpDirty.load(std::memory_order_acquire)
+			|| m_dspMixer.hasDeferredHostRx() || m_dspProducer.hasDeferredHostRx())
+			pumpDsp2HostRequest();
+
+		const auto deltaCycles = m_uc.exec();
+		if(!projectRestorePending && m_midiSysexTransfer.ownsMidiWire())
+			serviceMidiSysexTransfer(deltaCycles);
+
+		m_schedUcCyclesDone += deltaCycles;
+	}
+
+	bool Hardware::ucInputPending() const
+	{
+		return m_scheduledMidi.ready(m_schedUcCyclesDone) || m_panelIn.hasPending()
+			|| midiIngressPending();
+	}
+
+	bool Hardware::midiIngressPending() const
+	{
+		return m_midiSysexTransfer.ownsMidiWire() || m_midiInByteCursor != 0
+			|| !m_midiIn.empty() || !m_midiClockBypass.empty()
+			|| m_realtimeMidiIn.size() != 0;
+	}
+
+	void Hardware::deliverUcInput()
+	{
+		// Due host MIDI first: it presses MD pads on UART2 and fills the MIDI ingress queues.
+		pumpScheduledMidi();
+
+		// Deliver queued panel input to firmware over UART2 RX. The existing
+		// release/acquire pending count is a counted-work wake, not a second dirty
+		// bit: a racing producer can make us defer once, but the count cannot clear
+		// until this single consumer drains the published packet.
+		if(m_panelIn.hasPending())
 		{
 			PanelInputQueue::DrainBuffer panelInput;
 			const auto availablePackets = m_uc.availablePanelRxBytes() / 2;
@@ -1053,31 +1113,19 @@ namespace md
 			}
 		}
 
-		// Avoid entering MIDI arbitration when every source is idle; a producer
-		// racing this observation is visible at the next instruction boundary.
-		if(!projectRestorePending && (m_midiSysexTransfer.ownsMidiWire()
-			|| m_midiInByteCursor != 0
-			|| !m_midiIn.empty() || !m_midiClockBypass.empty()
-			|| m_realtimeMidiIn.size() != 0))
+		// Avoid entering MIDI arbitration when every source is idle (the scheduled
+		// MIDI above may just have filled one).
+		if(midiIngressPending())
 			pumpMidiIngress();
+	}
 
-		// Drive DSP2's HI08 HREQ into the ColdFire external IRQ4 BEFORE stepping the CPU, so the
-		// interrupt this pump raises is visible to the instruction m_uc.exec() runs (SIM interrupts
-		// are injected inside exec()). See pumpDsp2HostRequest.
-		if(!isMonomachine()
-			|| m_schedulerHostPumpDirty.load(std::memory_order_acquire)
-			|| m_dspMixer.hasDeferredHostRx() || m_dspProducer.hasDeferredHostRx())
-			pumpDsp2HostRequest();
-
-		const auto deltaCycles = m_uc.exec();
-		if(!projectRestorePending && m_midiSysexTransfer.ownsMidiWire())
-			m_midiSysexTransfer.service(deltaCycles,
-				m_midiInByteCursor == 0
-					&& m_realtimeMidiIn.sizeBefore(
-						m_midiSysexTransfer.realtimeWriteBoundary()) == 0,
-				m_uc);
-
-		m_schedUcCyclesDone += deltaCycles;
+	void Hardware::serviceMidiSysexTransfer(const uint32_t _cycles)
+	{
+		m_midiSysexTransfer.service(_cycles,
+			m_midiInByteCursor == 0
+				&& m_realtimeMidiIn.sizeBefore(
+					m_midiSysexTransfer.realtimeWriteBoundary()) == 0,
+			m_uc);
 	}
 
 	void Hardware::pumpDsp2HostRequest()
@@ -1376,16 +1424,20 @@ namespace md
 			// Advance the UC toward subTarget; each processUC() runs one m_uc.exec() (and its HI08
 			// callbacks, which catch the target DSP up inline). Guaranteed at least one step; clamped.
 			const uint64_t clampStop = m_schedUcCyclesDone + clampCycles;
+			const uint64_t sliceEnd = firstUcCycleAtFrame(subTarget, ucPerFrame);
 
 			uint32_t probeCount = 0;
 			do
 			{
 			processUC();
-			// Probe periodically within the existing UC slice. A
-			// pending host word/wake, restore or MIDI transfer disables skipping.
+			// Probe periodically within the existing UC slice; the steps in between
+			// only test the end of the slice. A pending host word/wake, restore or
+			// MIDI transfer disables skipping.
+			if((probeCount++ & 15u) != 0)
+				continue;
 			// The Monomachine path skips its ColdFire idle loop (BRA.B -2) in
-			// chunks. The Machinedrum idles the same way, but its unconditional
-			// per-step host pump must not be skipped while a DSP holds an
+			// chunks. The Machinedrum idles the same way, but its per-step host
+			// pump must not be skipped while a DSP holds an
 			// unpumped transmit word: delaying that word would delay the
 			// HREQ->IRQ4 edge the idle firmware may be waiting for. With both
 			// transmit registers empty the pump is a no-op (no UC reads happen
@@ -1398,7 +1450,7 @@ namespace md
 			const bool sysexWaits = m_midiInByteCursor != 0 && m_sysexIngressCyclesPerByte
 				&& m_sysexIngressNextCycle > m_schedUcCyclesDone && m_midiClockBypass.empty()
 				&& !m_midiIn.empty() && !m_midiIn.front().sysex.empty();
-			if(((probeCount++ & 15u) == 0) && (isMonomachine() || dspTxClear)
+			if((isMonomachine() || dspTxClear)
 				&& m_schedUcCyclesDone < clampStop
 					&& !m_pendingFlashRestoreActive.load(std::memory_order_acquire)
 					&& !m_schedulerHostPumpDirty.load(std::memory_order_acquire)
@@ -1445,8 +1497,7 @@ namespace md
 					}
 				}
 			}
-			while(static_cast<double>(m_schedUcCyclesDone) / ucPerFrame < subTarget
-				&& m_schedUcCyclesDone < clampStop);
+			while(m_schedUcCyclesDone < sliceEnd && m_schedUcCyclesDone < clampStop);
 #if MD_TRANSPORT_DIAGNOSTICS
 			const auto diagnosticExecuted = m_schedUcCyclesDone - diagnosticStart;
 			score.executedCycles += diagnosticExecuted;

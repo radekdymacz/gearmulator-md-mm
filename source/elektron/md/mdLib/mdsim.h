@@ -203,13 +203,30 @@ namespace md
 		// 0xffff and wraps, so REF recurs once per full 0x10000-count cycle. With ORI set
 		// and the source unmasked in IMR this asserts the timer interrupt (level/vector
 		// from the timer's ICR - the MD's tick is Timer 1: autovectored, level 1).
-		void exec(uint32_t _cycles);
+		//
+		// Called after every ColdFire instruction, so the common case only counts: cycles
+		// that cannot reach the next event (a timer reference match or the end of a UART
+		// character) are deferred and applied in one step when that event falls due or when
+		// anything observes the stepped state (a register access, a deadline query). The
+		// deferred cycles never contain an event, so applying them at once leaves the same
+		// counters as applying them instruction by instruction, and every event still
+		// happens after the same instruction as before.
+		void exec(const uint32_t _cycles)
+		{
+			if(_cycles < m_cyclesUntilEvent - m_deferredCycles)
+			{
+				m_deferredCycles += _cycles;
+				return;
+			}
+			execToEvent(_cycles);
+		}
 		bool needsInterruptCheck() const { return m_interruptCheckNeeded; }
 		bool externalIrq4Asserted() const { return m_extIrq4Level; }
 
 		// Number of master-clock cycles until exec() can first make a new, currently
-		// unmasked timer interrupt injectable. Zero means a REF event is already
-		// latched and has not yet been injected; g_noTimerInterruptDeadline means
+		// unmasked timer interrupt injectable, counted from the last exec() (deferred
+		// cycles included, as in cyclesUntilNextUartTransmit). Zero means a REF event is
+		// already latched and has not yet been injected; g_noTimerInterruptDeadline means
 		// neither timer can publish a new interrupt without a register write.
 		//
 		// A bounded CPU fast path may advance through this many cycles only when it
@@ -305,6 +322,7 @@ namespace md
 			ByteQueue<256> txBacklog;
 		};
 
+		void    applyWrite8(uint32_t _offset, uint8_t _value);
 		uint8_t computeParallelData() const;
 		uint8_t computeUartStatus(unsigned _uart) const;
 		uint8_t computeUartInterruptStatus(unsigned _uart) const;
@@ -340,6 +358,24 @@ namespace md
 
 		void     stepTimer(unsigned _index, uint32_t _base, uint32_t _cycles);
 		void     refreshTimerConfiguration(unsigned _index, uint32_t _base);
+		static uint32_t ticksUntilMatch(const Timer& _timer);
+
+		// --- Deferred stepping (see exec) -----------------------------------------
+		// Step the timers and the transmitters by _cycles: what exec() did on every call.
+		void     step(uint32_t _cycles);
+		// The deferred cycles plus _cycles reach the next event: step them, then find the next one.
+		void     execToEvent(uint32_t _cycles);
+		// Apply the deferred cycles before anything reads or changes the stepped state.
+		void     catchUp();
+		// Cycles from the caught-up state until step() can change more than the timer
+		// counters and the remaining character time: a timer reference match or the end of
+		// the character in a transmit shift register. g_noEvent when nothing runs.
+		uint32_t cyclesUntilNextEvent() const;
+		static constexpr uint32_t g_noEvent = ~uint32_t{0};
+		uint32_t m_deferredCycles = 0;
+		// Lower bound of the cycles until the next event, counted from the caught-up state.
+		// Between calls m_deferredCycles < m_cyclesUntilEvent, or both are zero.
+		uint32_t m_cyclesUntilEvent = 0;
 		uint32_t cyclesUntilTimerInterrupt(
 			unsigned _index, uint32_t _base, uint32_t _sourceBit) const;
 		bool     timerAssertsIrq(uint32_t _base) const;	// TER REF && TMR ORI (IRQ line to the controller)
