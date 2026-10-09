@@ -65,7 +65,7 @@ if [[ "${skip_tests}" != 1 ]]; then
 	HOME="${build_home}" cmake --build "${build_dir}" --config "${config}" --parallel "${parallel}" -- -k 0
 	# The unit tests (doc/modern-ux/FOUNDATION.md, "Build and check"): no plug-in hosting, no firmware.
 	# A display for the tests that make JUCE components: xvfb-run in the workflow.
-	# synthLibMidiClockTimingTest stays out: a known failure under -Ofast (isfinite); retrying it is B-039 in
+	# synthLibMidiClockTimingTest stays out: a known failure under -Ofast (isfinite); retrying it is B-044 in
 	# doc/release/BUGS.md.
 	exclude="Plugin|_AU|VST|FirmwareTest|synthLibMidiClockTimingTest"
 	# Tests (by ctest name) whose program is allowed to be missing from this build, each with its reason. Empty:

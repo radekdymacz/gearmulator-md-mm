@@ -263,7 +263,8 @@ const MmJourneys = (() => {
 			{ ...undoKey, act: u => { blur(); u.key("z", { cmd: true }); }, machine: c => ok(kitT(0) === c.k0, "kit not back"), screen: c => ok(S().tracks[0].m === c.m0, "view " + S().tracks[0].m), within: 10000 }
 		]
 	};
-	/* B-027: a machine picked on Sound stays when the person goes back to Sequence (it reverted in 0.3.4) */
+	/* B-027: a machine picked on Sound stays when the person goes back to Sequence and clicks a step there: the step's
+	   dump makes the Monomachine load the pattern's kit from its slot, and the editor sends the kit's edits again */
 	const machineStays = {
 		name: "mm-sound-machine-stays",
 		steps: [
@@ -271,11 +272,17 @@ const MmJourneys = (() => {
 			{ say: "pick another machine", act: async (u, c) => { c.k0 = kitT(0); c.m0 = S().tracks[0].m; u.click("#machbtn"); await sleep(300); const m = $all("#machpop .mk").find(b => b.dataset.mach !== c.m0 && !b.disabled); c.m1 = m.dataset.mach; u.click(m); },
 				screen: c => ok(S().tracks[0].m === c.m1, "view " + S().tracks[0].m), machine: c => ok(kitT(0) !== c.k0, "kit unchanged"), within: 10000 },
 			go("seq"),
-			{ say: "wait on Sequence: the machine stays", act: () => sleep(5000), screen: c => ok(S().tracks[0].m === c.m1, "view " + S().tracks[0].m), machine: c => ok(kitT(0) !== c.k0, "kit back to " + kitT(0)), within: 2000 },
+			{ say: "click an empty cell of the piano roll (a dump of the pattern that plays)", act: (u, c) => { c.n = rollCell(0, 0).n; c.s = freeSteps(0, 1, 0, c.n)[0]; if (c.s == null) throw new Error("no free step"); const p = rollCell(0, c.s); u.click(p.c, {}, p.fx, p.fy); },
+				machine: c => ok(trigsOf(0).includes(c.s), "pattern trigs " + trigsOf(0).join(",")), within: 15000 },
+			{ say: "wait on Sequence: the machine stays", act: () => sleep(5000), screen: c => ok(S().tracks[0].m === c.m1, "view " + S().tracks[0].m), machine: c => ok(kitT(0) !== c.k0 && machine().kit?.working === "edited", "kit back to " + kitT(0) + ", " + machine().kit?.working), within: 2000 },
 			go("sound"),
 			{ say: "and on Sound again", act: () => sleep(1000), screen: c => ok(S().tracks[0].m === c.m1, "view " + S().tracks[0].m), machine: c => ok(kitT(0) !== c.k0, "kit back to " + kitT(0)), within: 2000 }
 		],
-		async tidy(u, c) { if (c.k0 != null && kitT(0) !== c.k0) { blur(); u.key("z", { cmd: true }); await sleep(3000); } }
+		async tidy(u, c) {
+			blur();
+			if (c.s != null && trigsOf(0).includes(c.s)) { u.key("z", { cmd: true }); await sleep(3000); }
+			if (c.k0 != null && kitT(0) !== c.k0) { u.key("z", { cmd: true }); await sleep(3000); }
+		}
 	};
 	/* 0.3.5: the Song page's PATTERN | SONG switch: what is lit is the status the machine reports */
 	const songModeJ = {

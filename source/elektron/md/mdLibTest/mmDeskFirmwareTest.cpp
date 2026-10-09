@@ -2,7 +2,7 @@
 // real MM OS 1.32B firmware, headless. The same Desk code as the plug-in; the
 // Port here drives an emulated machine. Manual: needs a user-supplied ROM.
 //
-//   mmDeskFirmwareTest <MM-ROM>
+//   mmDeskFirmwareTest <MM-ROM> [only]   only one part, e.g. machine (B-027: a machine change stays)
 //
 // Exits 77 (skip) without arguments.
 
@@ -12,6 +12,7 @@
 #include "elektronData/mmCommands.h"
 #include "elektronData/mmJson.h"
 #include "elektronData/mmKit.h"
+#include "elektronData/mmMachines.h"
 #include "elektronData/mmPattern.h"
 #include "elektronData/mmValidate.h"
 #include "elektronData/syxImport.h"
@@ -2196,6 +2197,152 @@ namespace
 	}
 }
 
+namespace
+{
+	// The kit that plays as the machine holds it (its memory, the test's own oracle).
+	std::optional<ed::MmKit> workingKitInMemory(const Rig& _r)
+	{
+		Bytes region;
+		uint32_t seq = 0;
+		if(!_r.tel.readWorkingKit(region, seq) || region.size() < 5 + ed::MmKit::g_rawSize)
+			return std::nullopt;
+		return ed::mmKitFromRaw(Bytes(region.begin() + 5, region.begin() + 5 + ed::MmKit::g_rawSize), static_cast<uint8_t>(region[0] & 127));
+	}
+
+	std::string machineName(const int _id)
+	{
+		const auto* m = ed::mmMachine(static_cast<uint8_t>(_id));
+		return m ? std::string(m->name) : std::to_string(_id);
+	}
+
+	int anotherMachine(const int _model) { return _model == 3 ? 5 : 3; }	// SID-6581 or SWAVE-PULS
+
+	// B-027: a track's machine changed on the Sound page stays, with the kit's other unsaved edits, after what the tester
+	// did next: back on the Sequence page a step of the pattern that plays (its dump, taken on SYSEX RECV, makes the
+	// OS 1.32B load the kit the pattern links from its slot), stopped and while playing; PLAY and STOP; another pattern
+	// with the same kit and back. The factory kit, then a kit the user saved. The machine (memory) and the page (the
+	// working kit) must both hold the edited kit, all of it.
+	void machineStays(const Bytes& _rom)
+	{
+		std::puts("machine stays (B-027)");
+		Rig r(_rom);
+		r.msg(R"({"op":"ready"})");
+		r.desk->setProbe(mmDesk::Desk::Probe::Running);
+		r.run(600);
+		while(r.desk->loaded() < 288)
+			r.run(100);
+		r.run(1500);
+		int gesture = 7000;
+		const auto machine = [&](const int _t, const int _model)
+		{
+			r.msg("{\"op\":\"machine\",\"g\":" + std::to_string(++gesture) + ",\"k\":" + std::to_string(r.desk->currentKit()) + ",\"t\":" + std::to_string(_t)
+				+ ",\"model\":" + std::to_string(_model) + ",\"keepFx\":true}");
+		};
+		// as the Sequence page sends a click on a step: on, then off again (two dumps of the pattern that plays)
+		const auto stepOnOff = [&](const int _t)
+		{
+			for(const bool on : {true, false})
+			{
+				r.msg("{\"op\":\"step\",\"g\":" + std::to_string(++gesture) + ",\"p\":" + std::to_string(r.desk->currentPattern()) + ",\"t\":"
+					+ std::to_string(_t) + ",\"s\":7,\"v\":" + (on ? std::string(R"({"n":[60],"a":1,"f":1,"l":1})") : std::string("null")) + "}");
+				r.run(6000);
+			}
+		};
+		const auto stays = [&](const std::string& _when, const int _t, const int _model)
+		{
+			const auto mem = workingKitInMemory(r);
+			const auto w = r.desk->workingKit();
+			const int m = mem ? mem->machines[static_cast<size_t>(_t)] : -1, d = w ? w->machines[static_cast<size_t>(_t)] : -1;
+			check(m == _model && d == _model, _when + ": T" + std::to_string(_t + 1) + " plays " + machineName(_model) + " (memory " + machineName(m) + ", page "
+				+ machineName(d) + ")");
+			check(mem && w && ed::mmKitRaw(*mem) == ed::mmKitRaw(*w) && kitWorking(r) == "edited",
+				_when + ": the machine holds the page's kit, " + kitWorking(r));
+		};
+		const auto round = [&](const std::string& _kit, const int _t)
+		{
+			const int p = r.desk->currentPattern();
+			const int model = anotherMachine(r.desk->workingKit()->machines[static_cast<size_t>(_t)]);
+			std::printf("== %s: T%d becomes %s (pattern %d, kit %d)\n", _kit.c_str(), _t + 1, machineName(model).c_str(), p + 1, r.desk->currentKit() + 1);
+			// the Sound page: the machine picker, then a value of the new machine (FLT BASE)
+			machine(_t, model);
+			r.run(1500);
+			const auto base = r.desk->workingKit()->tracks[static_cast<size_t>(_t)].pages[2][0] ^ 0x10;
+			r.msg("{\"op\":\"param\",\"g\":" + std::to_string(++gesture) + ",\"k\":" + std::to_string(r.desk->currentKit()) + ",\"t\":" + std::to_string(_t)
+				+ ",\"page\":2,\"i\":0,\"v\":" + std::to_string(base) + "}");
+			r.run(1500);
+			stays("on Sound", _t, model);
+			stepOnOff((_t + 2) % 6);
+			stays("a step on Sequence, stopped", _t, model);
+			// playing: another track's machine, then a step
+			const int t2 = (_t + 1) % 6, model2 = anotherMachine(r.desk->workingKit()->machines[static_cast<size_t>(t2)]);
+			r.msg(R"({"op":"play"})");
+			r.run(2000);
+			machine(t2, model2);
+			r.run(1500);
+			stepOnOff((_t + 2) % 6);
+			stays("a step on Sequence, playing", _t, model);
+			stays("a step on Sequence, playing", t2, model2);
+			r.msg(R"({"op":"stop"})");
+			r.run(1500);
+			stays("stopped", _t, model);
+			// another pattern with the same kit, and back
+			int same = -1;
+			for(int q = 0; q < 128 && same < 0; ++q)
+				if(q != p && r.desk->pattern(static_cast<uint8_t>(q)) && r.desk->pattern(static_cast<uint8_t>(q))->kit == r.desk->currentKit())
+					same = q;
+			check(same >= 0, "another pattern links kit " + std::to_string(r.desk->currentKit() + 1));
+			if(same < 0)
+				return;
+			r.msgConfirmed("{\"op\":\"select\",\"p\":" + std::to_string(same) + "}");
+			r.run(2500);
+			stays("pattern " + std::to_string(same + 1) + ", the same kit", _t, model);
+			r.msgConfirmed("{\"op\":\"select\",\"p\":" + std::to_string(p) + "}");
+			r.run(2500);
+			stays("pattern " + std::to_string(p + 1) + " again", _t, model);
+		};
+		round("the factory kit", 0);
+		// a kit the user saved: SAVE KIT, then the same on another track
+		r.msg(R"({"op":"saveKit"})");
+		r.run(3000);
+		check(kitWorking(r) == "clean", "SAVE KIT: the kit that plays is its slot");
+		round("a saved kit", 3);
+	}
+
+	// B-027 over HW MIDI (MM-P4): the step's dump waits for the person's SYSEX RECV (hwSend), and the machine reloads the
+	// kit when it takes it. The page has no memory to read there: without the restore it would go on showing the machine
+	// change the Monomachine no longer plays.
+	void machineStaysHw(const Bytes& _rom)
+	{
+		std::puts("machine stays over HW MIDI (B-027)");
+		Rig r(_rom, true);
+		r.msg(R"({"op":"ready"})");
+		const auto t0 = r.ms();
+		while(r.ms() - t0 < 20000 && !(r.desk->currentPattern() >= 0 && r.desk->pattern(static_cast<uint8_t>(r.desk->currentPattern())) && r.desk->workingKit()
+			&& r.desk->kit(static_cast<uint8_t>(std::max(0, r.desk->currentKit())))))
+			r.run(50);
+		check(r.desk->workingKit() && r.desk->kit(static_cast<uint8_t>(std::max(0, r.desk->currentKit()))), "the current pattern and its kit arrive over DIN");
+		if(!r.desk->workingKit())
+			return;
+		const int model = anotherMachine(r.desk->workingKit()->machines[0]);
+		r.msg("{\"op\":\"machine\",\"g\":1,\"k\":" + std::to_string(r.desk->currentKit()) + ",\"t\":0,\"model\":" + std::to_string(model) + ",\"keepFx\":true}");
+		r.run(1500);
+		r.msg("{\"op\":\"step\",\"g\":2,\"p\":" + std::to_string(r.desk->currentPattern()) + R"(,"t":2,"s":7,"v":{"n":[60],"a":1,"f":1,"l":1}})");
+		r.run(500);
+		r.userKeys(mmDesk::RecvSession::enterMacro());
+		r.run(1500);
+		r.msg(R"({"op":"hwSend"})");
+		r.run(2000);
+		r.userKeys(mmDesk::RecvSession::exitKeys());
+		r.run(2000);
+		const auto mem = workingKitInMemory(r);
+		const auto w = r.desk->workingKit();
+		const int m = mem ? mem->machines[0] : -1, d = w ? w->machines[0] : -1;
+		check(m == model && d == model, "a step sent on the person's SYSEX RECV: T1 plays " + machineName(model) + " (memory " + machineName(m) + ", page "
+			+ machineName(d) + ")");
+		check(mem && w && ed::mmKitRaw(*mem) == ed::mmKitRaw(*w), "the machine holds the page's kit");
+	}
+}
+
 int main(const int _argc, char** _argv)
 {
 	std::setvbuf(stdout, nullptr, _IOLBF, 0);
@@ -2241,6 +2388,11 @@ int main(const int _argc, char** _argv)
 			recording(rom);
 		if(only.empty() || only == "parked")
 			parkedKeys(rom);
+		if(only == "machine")
+		{
+			machineStays(rom);
+			machineStaysHw(rom);
+		}
 		check(g_contract.loaded() && g_contract.bad() == 0, g_contract.summary());
 		std::printf("%s (%d failures)\n", g_failures ? "FAIL" : "PASS", g_failures);
 		return g_failures ? 1 : 0;
