@@ -2849,7 +2849,8 @@ namespace
 		{
 			std::vector<std::vector<uint8_t>> sent;
 			SysexOut s([&](const std::vector<uint8_t>& _b) { sent.push_back(_b); }, policy);
-			const auto status = [](const uint8_t _param) { return std::vector<uint8_t>{0xf0, 0x00, 0x20, 0x3c, 0x02, 0x00, 0x70, _param, 0xf7}; };
+			const auto status = [](const uint8_t _param) { return std::vector<uint8_t>{0xf0, 0x00, 0x20, 0x3c, 0x02,
+				0x00, 0x70, _param, 0xf7}; };
 			const std::vector<uint8_t> load9{0xf0, 0x00, 0x20, 0x3c, 0x02, 0x00, 0x57, 0x09, 0xf7};
 			for(uint8_t p = 0; p < 4; ++p)
 				s.send(dump(p, 1), false, 0);
@@ -2860,7 +2861,8 @@ namespace
 			s.ask(status(0x04), false, 50);
 			s.ask(request, false, 60);
 			s.ask(request, false, 70);
-			check(sent.size() == 1 && s.waiting() == 3 + 2 + 1 + 1, "behind dumps, 20 polls of two requests wait as two, the same dump request as one");
+			check(sent.size() == 1 && s.waiting() == 3 + 2 + 1 + 1,
+				"behind dumps, 20 polls of two requests wait as two, the same dump request as one");
 			s.send(load9, false, 80);
 			check(s.waiting() == 3 + 2 + 2 + 1, "a command is no request: sent twice, it goes twice");
 			for(double t = 100; t < 20000; t += 10)

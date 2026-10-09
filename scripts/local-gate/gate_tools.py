@@ -219,7 +219,8 @@ def cmd_capacity(args: argparse.Namespace) -> int:
         if not gate["core_microgate_passed"]:
             notes.append(f"{model} over the capacity limit")
         if gate["paced_render_overruns"]:
-            notes.append(f"{model}: {gate['paced_render_overruns']} paced callbacks over their render budget (observation, not a gate)")
+            notes.append(f"{model}: {gate['paced_render_overruns']} paced callbacks over their render budget "
+                         "(observation, not a gate)")
     passed = bool(receipt.get("core_microgate_passed"))
     emit("; ".join(parts) or "no models in the receipt", "; ".join(notes))
     return 0 if passed else 1
@@ -248,7 +249,8 @@ def cmd_journeys(args: argparse.Namespace) -> int:
             "run again with the window uncovered and the Mac awake")
     if other:
         names = sorted({line.split()[1] for line in other})
-        notes.append(f"{len(names)} skipped for other reasons (tolerated): " + " ".join(names[:12]) + (" ..." if len(names) > 12 else ""))
+        notes.append(f"{len(names)} skipped for other reasons (tolerated): " + " ".join(names[:12])
+                     + (" ..." if len(names) > 12 else ""))
     emit(totals.replace("JOURNEYS: ", ""), "; ".join(notes))
     return 1 if failed or problems or covered or "no totals" in totals else 0
 
@@ -260,7 +262,8 @@ def cmd_pluginval(args: argparse.Namespace) -> int:
     except OSError as error:
         emit("no pluginval summary", str(error))
         return 1
-    rows = [[c.strip() for c in line.strip("|").split("|")] for line in lines if line.startswith("| ") and "Plug-in" not in line]
+    rows = [[c.strip() for c in line.strip("|").split("|")]
+            for line in lines if line.startswith("| ") and "Plug-in" not in line]
     rows = [row for row in rows if len(row) >= 3]
     bad = [f"{row[0]} s{row[1]}: {row[2]}" for row in rows if row[2] != "PASS"]
     emit(f"{len(rows) - len(bad)} of {len(rows)} runs passed (plug-in x strictness)", "; ".join(bad))
@@ -321,15 +324,17 @@ def cmd_summary(args: argparse.Namespace) -> int:
         verdict += "; manual steps still open: " + ", ".join(f"{row[0]} {row[1]}" for row in manual)
     lines = [f"# MD/MM local release gate: {verdict}", ""]
     if recorded:
-        lines += ["> **The goldens were re-recorded in this run** (`" + info.get("goldens_file", "") + "`). Read `git diff` of that "
-            "file; the new numbers need Radek's sign-off before they are committed (doc/release/LOCAL-GATE.md, Goldens).", ""]
+        lines += ["> **The goldens were re-recorded in this run** (`" + info.get("goldens_file", "")
+                  + "`). Read `git diff` of that file; the new numbers need Radek's sign-off before they are committed "
+                  "(doc/release/LOCAL-GATE.md, Goldens).", ""]
     identity = [
         ("Commit", f"{info.get('describe', '?')} ({info.get('commit', '?')}), branch {info.get('branch', '?')}, "
             f"{'working tree DIRTY' if info.get('dirty') == '1' else 'working tree clean'}"),
         ("Mode", info.get("mode", "?")),
         ("Build", f"{info.get('build_dir', '?')} ({info.get('arch', '?')}, {info.get('build_type') or '?'}, "
             f"ThinLTO {info.get('thinlto') or '?'}, DSP optimisation {info.get('dsp_optimised') or '?'})"),
-        ("Host", f"{info.get('host', '?')}, macOS {info.get('macos', '?')}, {info.get('xcode', '?')}, {info.get('cmake', '?')}"),
+        ("Host", f"{info.get('host', '?')}, macOS {info.get('macos', '?')}, {info.get('xcode', '?')}, "
+            f"{info.get('cmake', '?')}"),
         ("MD ROM", f"{info.get('md_rom', 'none')} sha256 {info.get('md_rom_sha256', '-')}"),
         ("MM ROM", f"{info.get('mm_rom', 'none')} sha256 {info.get('mm_rom_sha256', '-')}"),
         ("Goldens", f"{info.get('goldens_file', '?')} sha256 {info.get('goldens_sha256', '-')}"
@@ -344,9 +349,11 @@ def cmd_summary(args: argparse.Namespace) -> int:
         lines += ["", "ROM fingerprints as the tests print them:"] + [f"- `{line}`" for line in fingerprints]
     lines += ["", "| Stage | Result | Time | Numbers | Failures and skips |", "|---|---|---|---|---|"]
     for stage_id, name, result, seconds, numbers, notes in stages:
-        lines.append(f"| {cell(stage_id)} {cell(name)} | **{cell(result)}** | {cell(seconds)} s | {cell(numbers)} | {cell(notes)} |")
+        lines.append(f"| {cell(stage_id)} {cell(name)} | **{cell(result)}** | {cell(seconds)} s | {cell(numbers)} | "
+                     f"{cell(notes)} |")
     if goldens:
-        lines += ["", "## Goldens compared", "", "| Scenario | Outputs | Speed-ups | Seconds | Result | Detail |", "|---|---|---|---|---|---|"]
+        lines += ["", "## Goldens compared", "",
+                  "| Scenario | Outputs | Speed-ups | Seconds | Result | Detail |", "|---|---|---|---|---|---|"]
         for row in goldens:
             lines.append("| " + " | ".join(cell(field) for field in row) + " |")
     if cannot:

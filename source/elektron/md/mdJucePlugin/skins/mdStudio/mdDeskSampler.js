@@ -130,19 +130,22 @@ function smpDropSlot(x, y) {
 function dropSamples(drop, items, x, y) {
 	if (S.ws !== "sampler") return "Open the Sampler and select a ROM slot, then drop the samples.";
 	if (!canDo(V, "sampleLoad")) return V.caps.reasons.sampleLoad || "This engine cannot load samples.";
-	if (smpDrops.length || smpDropWait != null || (smpLoad && smpLoad.state === "sending")) return "A sample is on its way: drop the next ones when it is in.";
+	if (smpDrops.length || smpDropWait != null || (smpLoad && smpLoad.state === "sending"))
+		return "A sample is on its way: drop the next ones when it is in.";
 	const first = smpDropSlot(x, y);
 	if (first < 0) return "Select a ROM slot, then drop the samples: a RAM slot holds only what RAM-R records.";
 	const fit = items.slice(0, 48 - first), left = items.length - fit.length;
 	const go = () => { smpDrops = fit.map((it, i) => ({ drop, n: it.n, slot: first + i })); nextSmpDrop(); };
 	if (fit.length === 1) go();
-	else ask(`Load ${fit.length} samples into ${romCode(first + 1)} to ${romCode(first + fit.length)}? Each replaces what its slot holds.`,
+	else ask(`Load ${fit.length} samples into ${romCode(first + 1)} to ${romCode(first + fit.length)}? `
+		+ "Each replaces what its slot holds.",
 		[["Load", "danger", go], ["Cancel", "", () => { }]]);
 	return left ? `ROM-48 is the last slot: ${left} sample${left === 1 ? "" : "s"} not loaded.` : "";
 }
 function nextSmpDrop() {
 	const d = smpDrops.shift(); smpDropWait = d ? d.slot : null; if (!d) return;
-	cmd("dropSample", { drop: d.drop, n: d.n, slot: d.slot }, undefined, undefined, r => { if (!r.ok) { smpDrops = []; smpDropWait = null; } });
+	cmd("dropSample", { drop: d.drop, n: d.n, slot: d.slot }, undefined, undefined,
+		r => { if (!r.ok) { smpDrops = []; smpDropWait = null; } });
 }
 function smpLoadCard(k) {
 	const m = smpLoad; if (!m || m.slot !== k - 1) return "";

@@ -636,6 +636,7 @@
 			if (t !== last.hostRefused) { last.hostRefused = t; V().toast("The machine could not be set to follow the DAW's tempo: " + t); }
 		}
 		/* a refused noticeAnswer is the log's only (noticeRefused): nothing for the user to do */
-		else if (m.type === "result" && !m.ok && m.errors?.length && m.op !== "set" && m.op !== "modSet" && m.op !== "noticeAnswer") V().toast(m.errors[0]);
+		else if (m.type === "result" && !m.ok && m.errors?.length && m.op !== "set" && m.op !== "modSet"
+			&& m.op !== "noticeAnswer") V().toast(m.errors[0]);
 	}
 })();

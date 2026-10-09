@@ -32,7 +32,8 @@ namespace
 		return "?";
 	}
 
-	void step(const mdJucePlugin::webView2Window::Facts& _f, const mdJucePlugin::webView2Window::Step _want, const char* _what)
+	void step(const mdJucePlugin::webView2Window::Facts& _f, const mdJucePlugin::webView2Window::Step _want,
+		const char* _what)
 	{
 		const auto got = mdJucePlugin::webView2Window::next(_f);
 		check(got == _want, _what);
@@ -50,16 +51,20 @@ int main()
 	// The first window: made once the page has one, not while one is being made (its completion decides).
 	step({false, false, false, false, false}, S::Nothing, "no controller, no window: wait for a window");
 	step({false, false, true, false, false}, S::Create, "no controller, a window: make one in it");
-	step({false, true, true, false, false}, S::Nothing, "one being made: its completion decides (E_ABORT makes it again)");
+	step({false, true, true, false, false}, S::Nothing,
+		"one being made: its completion decides (E_ABORT makes it again)");
 	step({true, false, true, true, true}, S::Nothing, "in its own window: as it is");
 
 	// B-029: a VST3 host closes the editor (JUCE's removed() deletes the peer: its window and WebView2's in it are
 	// destroyed) while the processor keeps the page; the host opens it again in a new window.
-	step({true, false, false, false, false}, S::Close, "the editor closed: its window was destroyed, the controller is closed");
+	step({true, false, false, false, false}, S::Close,
+		"the editor closed: its window was destroyed, the controller is closed");
 	step({false, false, false, false, false}, S::Nothing, "closed, no window: nothing until the editor opens again");
-	step({false, false, true, false, false}, S::Create, "opened again: a new controller in the new window (the page loads again)");
+	step({false, false, true, false, false}, S::Create,
+		"opened again: a new controller in the new window (the page loads again)");
 	// What 0.3.5 did instead: the old controller moved into the new window, whose WebView2 window was gone
-	step({true, false, true, false, false}, S::Remake, "a new window and the controller's was destroyed: never moved, made again");
+	step({true, false, true, false, false}, S::Remake,
+		"a new window and the controller's was destroyed: never moved, made again");
 
 	// B-022: the standalone makes its window again while it starts (its native title bar, setResizable): JUCE tells the
 	// page before the old window goes (no window), then again in the new one, after the old one was destroyed.
@@ -86,7 +91,8 @@ int main()
 		const auto mac = text(Kind::Output, "IAC Bus 1", true, false, false);
 		check(mac.find("could not be opened") != std::string::npos && mac.find("one program") == std::string::npos,
 			"another system: refused, without Windows' reason");
-		check(text(Kind::Input, "", true, false, true).find("The MIDI input port could not be opened") == 0, "a port without a name");
+		check(text(Kind::Input, "", true, false, true).find("The MIDI input port could not be opened") == 0,
+			"a port without a name");
 	}
 
 	if(g_failures)

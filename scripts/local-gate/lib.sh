@@ -34,11 +34,17 @@ stage_begin() {	# <id> <name>
 	printf '[%s] %s\n' "$1" "$2"
 }
 
-busy_note() {	# something when the Mac is busy: the timing checks (and the firmware tests that time) fail from load alone
+# something when the Mac is busy: the timing checks (and the firmware tests that time) fail from load alone
+busy_note() {
 	local load cores
 	load="$(sysctl -n vm.loadavg 2> /dev/null | awk '{print $2}')"
 	cores="$(sysctl -n hw.ncpu 2> /dev/null)"
-	awk -v l="${load:-0}" -v c="${cores:-1}" 'BEGIN { if (l > c / 2) printf "the Mac is busy (load %.0f on %d cores): the timing checks and some firmware tests fail from load alone, run again when it is quiet", l, c }'
+	awk -v l="${load:-0}" -v c="${cores:-1}" '
+		BEGIN {
+			if (l > c / 2)
+				printf "the Mac is busy (load %.0f on %d cores): the timing checks and some firmware tests fail " \
+					"from load alone, run again when it is quiet", l, c
+		}'
 }
 
 stage_end() {	# <PASS|FAIL|SKIP|PENDING|MANUAL> <numbers> [notes]
@@ -88,8 +94,15 @@ rom_for() {	# md|mm -> the ROM path
 have_roms() {	# md|mm|both: succeeds when the ROMs asked for are files; says which is not
 	local ok=0
 	MISSING_WHAT=""
-	{ [ "$1" = mm ] || [ -f "${MD_ROM}" ]; } || { MISSING_WHAT="no Machinedrum ROM (GEARMULATOR_MD_FIRMWARE_BIN, or a file in ${PREVIEW}/Machinedrum/roms)"; ok=1; }
-	{ [ "$1" = md ] || [ -f "${MM_ROM}" ]; } || { MISSING_WHAT="${MISSING_WHAT:+${MISSING_WHAT}; }no Monomachine ROM (GEARMULATOR_MM_FIRMWARE_BIN, or a file in ${PREVIEW}/Monomachine/roms)"; ok=1; }
+	if [ "$1" != mm ] && [ ! -f "${MD_ROM}" ]; then
+		MISSING_WHAT="no Machinedrum ROM (GEARMULATOR_MD_FIRMWARE_BIN, or a file in ${PREVIEW}/Machinedrum/roms)"
+		ok=1
+	fi
+	if [ "$1" != md ] && [ ! -f "${MM_ROM}" ]; then
+		MISSING_WHAT="${MISSING_WHAT:+${MISSING_WHAT}; }no Monomachine ROM (GEARMULATOR_MM_FIRMWARE_BIN,"
+		MISSING_WHAT+=" or a file in ${PREVIEW}/Monomachine/roms)"
+		ok=1
+	fi
 	return "${ok}"
 }
 
@@ -109,10 +122,13 @@ sandbox_new() {	# <name> [norom]: with "norom" the ROM folders stay empty
 	SB_DATA="${SB_HOME}/Documents"
 	SB_WORK="${SB_HOME}/work"
 	rm -rf "${SB_HOME}"
-	mkdir -p "${SB_DATA}/Gearmulator Preview/Machinedrum/roms" "${SB_DATA}/Gearmulator Preview/Monomachine/roms" "${SB_WORK}"
+	mkdir -p "${SB_DATA}/Gearmulator Preview/Machinedrum/roms" "${SB_DATA}/Gearmulator Preview/Monomachine/roms" \
+		"${SB_WORK}"
 	if [ "${2:-}" != norom ]; then
-		[ -f "${MD_ROM}" ] && ln -s "${MD_ROM}" "${SB_DATA}/Gearmulator Preview/Machinedrum/roms/$(basename "${MD_ROM}")"
-		[ -f "${MM_ROM}" ] && ln -s "${MM_ROM}" "${SB_DATA}/Gearmulator Preview/Monomachine/roms/$(basename "${MM_ROM}")"
+		[ -f "${MD_ROM}" ] \
+			&& ln -s "${MD_ROM}" "${SB_DATA}/Gearmulator Preview/Machinedrum/roms/$(basename "${MD_ROM}")"
+		[ -f "${MM_ROM}" ] \
+			&& ln -s "${MM_ROM}" "${SB_DATA}/Gearmulator Preview/Monomachine/roms/$(basename "${MM_ROM}")"
 	fi
 	return 0
 }

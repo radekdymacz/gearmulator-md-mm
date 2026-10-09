@@ -35,8 +35,16 @@ namespace
 @interface MdmmTestWindowView : NSView
 @end
 @implementation MdmmTestWindowView
-- (NSDragOperation)draggingEntered:(id<NSDraggingInfo>)_info { called("window:entered"); return NSDragOperationGeneric; }
-- (NSDragOperation)draggingUpdated:(id<NSDraggingInfo>)_info { called("window:updated"); return NSDragOperationGeneric; }
+- (NSDragOperation)draggingEntered:(id<NSDraggingInfo>)_info
+{
+	called("window:entered");
+	return NSDragOperationGeneric;
+}
+- (NSDragOperation)draggingUpdated:(id<NSDraggingInfo>)_info
+{
+	called("window:updated");
+	return NSDragOperationGeneric;
+}
 - (void)draggingExited:(id<NSDraggingInfo>)_info { called("window:exited"); }
 - (BOOL)prepareForDragOperation:(id<NSDraggingInfo>)_info { called("window:prepare"); return YES; }
 - (BOOL)performDragOperation:(id<NSDraggingInfo>)_info { called("window:perform"); return YES; }
@@ -63,7 +71,8 @@ namespace
 @implementation MdmmTestPasteboard
 - (BOOL)canReadObjectForClasses:(NSArray*)_classes options:(NSDictionary*)_options
 {
-	return self.files && [_classes containsObject:[NSURL class]] && [_options[NSPasteboardURLReadingFileURLsOnlyKey] boolValue];
+	return self.files && [_classes containsObject:[NSURL class]]
+		&& [_options[NSPasteboardURLReadingFileURLsOnlyKey] boolValue];
 }
 @end
 
@@ -80,7 +89,8 @@ namespace
 @interface MdmmTestObserver : NSObject
 @end
 @implementation MdmmTestObserver
-- (void)observeValueForKeyPath:(NSString*)_path ofObject:(id)_object change:(NSDictionary*)_change context:(void*)_context {}
+- (void)observeValueForKeyPath:(NSString*)_path ofObject:(id)_object change:(NSDictionary*)_change
+	context:(void*)_context {}
 @end
 
 namespace
@@ -94,8 +104,8 @@ namespace
 		return [d autorelease];
 	}
 
-	// every dragging method, in AppKit's order for a drop, then draggingEnded: when the view has it (AppKit asks first);
-	// what the views were told
+	// every dragging method, in AppKit's order for a drop, then draggingEnded: when the view has it (AppKit asks
+	// first); what the views were told
 	std::string dropOn(NSView* _web, MdmmTestDrag* _drag)
 	{
 		g_calls.clear();
@@ -130,21 +140,30 @@ int main()
 		[web addSubview:inPage];
 
 		check(dropOn(web, drag(true, nil)) == g_toWeb, "before: a file from the Finder is the web view's");
-		check(mdJucePlugin::webFileDrop::install(web) == -1 && object_getClass(web) == [MdmmTestWebView class], "install: a view that is not a WKWebView is left alone");
+		check(mdJucePlugin::webFileDrop::install(web) == -1 && object_getClass(web) == [MdmmTestWebView class],
+			"install: a view that is not a WKWebView is left alone");
 		check(mdJucePlugin::webFileDrop::extend(web) == 1, "extended");
 		const char* name = class_getName(object_getClass(web));
-		check(std::strncmp(name, "MdmmFileDrop_", 13) == 0 && [web isKindOfClass:[MdmmTestWebView class]] && class_getSuperclass(object_getClass(web)) == [MdmmTestWebView class],
+		check(std::strncmp(name, "MdmmFileDrop_", 13) == 0 && [web isKindOfClass:[MdmmTestWebView class]]
+			&& class_getSuperclass(object_getClass(web)) == [MdmmTestWebView class],
 			std::string("its class is a subclass of its own made for it: ") + name);
-		check(mdJucePlugin::webFileDrop::extend(web) == 1 && std::strcmp(class_getName(object_getClass(web)), name) == 0, "extended again: nothing changes");
+		check(mdJucePlugin::webFileDrop::extend(web) == 1
+			&& std::strcmp(class_getName(object_getClass(web)), name) == 0, "extended again: nothing changes");
 
-		check(dropOn(web, drag(true, nil)) == g_toWindow, "files from the Finder: every method goes to the window's view (" + dropOn(web, drag(true, nil)) + ")");
+		check(dropOn(web, drag(true, nil)) == g_toWindow,
+			"files from the Finder: every method goes to the window's view (" + dropOn(web, drag(true, nil)) + ")");
 		g_calls.clear();
 		[(id)web draggingExited:(id<NSDraggingInfo>)drag(true, nil)];
 		check(g_calls == "window:exited", "and their leaving");
-		check(dropOn(web, drag(true, window)) == g_toWindow, "files from another view of the app (a DAW's browser): the window's");
-		check(dropOn(web, drag(false, nil)) == g_toWeb, "a drag without a file URL (text from another app): the web view's");
-		check(dropOn(web, drag(false, web)) == g_toWeb, "the page's own drag (a kit to a slot, its source the web view): the web view's, draggingEnded: it lacks not called");
-		check(dropOn(web, drag(true, inPage)) == g_toWeb, "a drag that starts in a view inside the page, with a file URL: the web view's");
+		check(dropOn(web, drag(true, window)) == g_toWindow,
+			"files from another view of the app (a DAW's browser): the window's");
+		check(dropOn(web, drag(false, nil)) == g_toWeb,
+			"a drag without a file URL (text from another app): the web view's");
+		check(dropOn(web, drag(false, web)) == g_toWeb,
+			"the page's own drag (a kit to a slot, its source the web view): the web view's, draggingEnded: it lacks "
+			"not called");
+		check(dropOn(web, drag(true, inPage)) == g_toWeb,
+			"a drag that starts in a view inside the page, with a file URL: the web view's");
 		const NSDragOperation op = [(id)web draggingEntered:(id<NSDraggingInfo>)drag(true, nil)];
 		const NSDragOperation own = [(id)web draggingEntered:(id<NSDraggingInfo>)drag(false, nil)];
 		check(op == NSDragOperationGeneric && own == NSDragOperationCopy, "each answers with its own operation");
@@ -155,8 +174,10 @@ int main()
 
 		MdmmTestWebView* other = [[MdmmTestWebView alloc] initWithFrame:NSMakeRect(0, 0, 10, 10)];
 		[window addSubview:other];
-		check(object_getClass(other) == [MdmmTestWebView class] && dropOn(other, drag(true, nil)) == g_toWeb, "another view of the same class is not touched");
-		check(mdJucePlugin::webFileDrop::extend(other) == 1 && object_getClass(other) == object_getClass(web), "extended, it shares the subclass");
+		check(object_getClass(other) == [MdmmTestWebView class] && dropOn(other, drag(true, nil)) == g_toWeb,
+			"another view of the same class is not touched");
+		check(mdJucePlugin::webFileDrop::extend(other) == 1 && object_getClass(other) == object_getClass(web),
+			"extended, it shares the subclass");
 
 		// key-value observing: a view observed before is left alone; one observed after still routes
 		MdmmTestObserver* observer = [[MdmmTestObserver alloc] init];
@@ -164,14 +185,17 @@ int main()
 		[window addSubview:observed];
 		[observed addObserver:observer forKeyPath:@"frame" options:0 context:nullptr];
 		const char* kvo = class_getName(object_getClass(observed));
-		check(mdJucePlugin::webFileDrop::extend(observed) == -1 && std::strcmp(class_getName(object_getClass(observed)), kvo) == 0,
+		check(mdJucePlugin::webFileDrop::extend(observed) == -1
+			&& std::strcmp(class_getName(object_getClass(observed)), kvo) == 0,
 			std::string("a view observed before (") + kvo + "): left alone");
 		[observed removeObserver:observer forKeyPath:@"frame"];
 		[web addObserver:observer forKeyPath:@"frame" options:0 context:nullptr];
 		check(dropOn(web, drag(true, nil)) == g_toWindow && dropOn(web, drag(false, nil)) == g_toWeb,
-			std::string("observed after it was extended (") + class_getName(object_getClass(web)) + "): still routes both ways");
+			std::string("observed after it was extended (") + class_getName(object_getClass(web))
+			+ "): still routes both ways");
 		[web removeObserver:observer forKeyPath:@"frame"];
-		check(std::strcmp(class_getName(object_getClass(web)), name) == 0, "the observer gone: its class is ours again");
+		check(std::strcmp(class_getName(object_getClass(web)), name) == 0,
+			"the observer gone: its class is ours again");
 
 		[observer release];
 		[observed release];

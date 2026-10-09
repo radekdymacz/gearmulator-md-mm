@@ -85,7 +85,9 @@ for a, b in HONEST:
 APP = ['mdDeskApp.js', 'mdDeskSoundGroups.js', 'mdDeskTop.js', 'mdDeskSeq.js', 'mdDeskSound.js', 'mdDeskEditors.js', 'mdDeskMix.js',
        'mdDeskSampler.js', 'mdDeskSong.js', 'mdDeskPicker.js', 'mdDeskControl.js', 'mdDeskGenUi.js', 'mdDeskComforts.js', 'mdDeskSelect.js', 'mdDeskRom.js',
        'mdDeskGestures.js', 'mdDeskRender.js']
-SCRIPTS = ['deskModal.js', 'deskMenu.js', 'deskCaps.js', 'deskBoot.js', 'deskSyx.js', 'deskBridge.js', 'deskDrop.js', 'deskZoom.js', 'deskAbout.js', 'deskDocs.js', 'deskOverlay.js', 'mdDeskModel.js', 'deskGen.js', 'mdDeskGen.js',
+SCRIPTS = ['deskModal.js', 'deskMenu.js', 'deskCaps.js', 'deskBoot.js', 'deskSyx.js', 'deskBridge.js', 'deskDrop.js',
+           'deskZoom.js', 'deskAbout.js', 'deskDocs.js', 'deskOverlay.js', 'mdDeskModel.js', 'deskGen.js',
+           'mdDeskGen.js',
            'deskKeys.js', 'deskKeyView.js', 'mdDeskKeys.js', 'mdDeskMod.js', 'deskTogglePaint.js'] + APP + ['mdDeskLive.js', 'mdDeskLibrary.js', 'mdDeskGlobal.js', 'deskAudio.js', 'mdDeskAudio.js',
            'deskAudioSelfTest.js', 'mdDeskSelfTest.js', 'deskJourney.js', 'mdDeskJourneys.js']
 for f in APP:

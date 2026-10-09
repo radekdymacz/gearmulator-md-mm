@@ -318,9 +318,9 @@ namespace mdJucePlugin
 		{
 			if(!webView)
 			{
-				// Before the first page: run once the web view is there. B-029: a page whose window was destroyed is gone,
-				// and what was meant for it too (the next one is sent everything); nothing piles up while a host has the
-				// editor closed.
+				// Before the first page: run once the web view is there. B-029: a page whose window was destroyed is
+				// gone, and what was meant for it too (the next one is sent everything); nothing piles up while a host
+				// has the editor closed.
 				if(!pageLost)
 					scripts.push_back(_script);
 				return;
@@ -380,9 +380,9 @@ namespace mdJucePlugin
 				controller->put_IsVisible(owner.isShowing() ? TRUE : FALSE);
 		}
 
-		// B-029, B-022: the page's native window changed (mdWebView2Window.h): a controller whose window was destroyed is
-		// closed (WebView2's own window went with it) and a new one made in the new window; one whose window lives on is
-		// moved into the new one; none yet: made once there is a window.
+		// B-029, B-022: the page's native window changed (mdWebView2Window.h): a controller whose window was destroyed
+		// is closed (WebView2's own window went with it) and a new one made in the new window; one whose window lives
+		// on is moved into the new one; none yet: made once there is a window.
 		void followWindow()
 		{
 			using namespace webView2Window;
@@ -425,11 +425,13 @@ namespace mdJucePlugin
 			}
 		}
 
-		// B-029: the controller's page is gone (its window was destroyed, and WebView2's own window with it): closed, so
-		// its browser processes can end while the editor is closed; the next controller loads the page again (ready).
+		// B-029: the controller's page is gone (its window was destroyed, and WebView2's own window with it): closed,
+		// so its browser processes can end while the editor is closed; the next controller loads the
+		// page again (ready).
 		void closeLostController()
 		{
-			event("the page's window was destroyed (the editor was closed, or its window made again): its web view is closed; a new one loads the page in the next window");
+			event("the page's window was destroyed (the editor was closed, or its window made again): its web view is "
+				"closed; a new one loads the page in the next window");
 			controller->Close();
 			controller = nullptr;
 			webView = nullptr;
@@ -460,7 +462,8 @@ namespace mdJucePlugin
 		juce::String url;
 		std::deque<juce::String> scripts;	// asked for before the web view was there
 		double zoom = 1.0;
-		HWND controllerWindow = nullptr;	// B-029: the window the controller was made in or moved to (its own window is in it)
+		// B-029: the window the controller was made in or moved to (its own window is in it)
+		HWND controllerWindow = nullptr;
 		bool pageLost = false;				// B-029: a controller was closed with its page; the next one loads it again
 		bool creating = false;
 		bool focusWanted = false;
@@ -485,7 +488,10 @@ namespace mdJucePlugin
 	void WebView2Page::goToURL(const juce::String& _url) { m_impl->goToURL(_url); }
 	void WebView2Page::executeScript(const juce::String& _script) { m_impl->executeScript(_script); }
 	void WebView2Page::setZoom(const double _zoom) { m_impl->setZoom(_zoom); }
-	void WebView2Page::setOnReload(std::function<void()> _onReload) { m_impl->callbacks.onReload = std::move(_onReload); }
+	void WebView2Page::setOnReload(std::function<void()> _onReload)
+	{
+		m_impl->callbacks.onReload = std::move(_onReload);
+	}
 
 	void WebView2Page::paint(juce::Graphics& _g)
 	{

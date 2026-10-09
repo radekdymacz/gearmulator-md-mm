@@ -44,8 +44,9 @@ namespace mdJucePlugin
 	inline int setWebPageZoom(juce::Component&, double) { return -1; }
 #endif
 
-	// Files dragged onto the page: the web view inside _web hands them to the window (mdWebFileDrop.mm). 1: it does; 0: no
-	// web view yet (try again); -1: it cannot, or no WKWebView here (the web view keeps them, its navigation is cancelled).
+	// Files dragged onto the page: the web view inside _web hands them to the window (mdWebFileDrop.mm). 1: it does; 0:
+	// no web view yet (try again); -1: it cannot, or no WKWebView here (the web view keeps them, its
+	// navigation is cancelled).
 	int passFileDropsToWindow([[maybe_unused]] juce::Component& _web)
 	{
 #if JUCE_MAC && JUCE_WEB_BROWSER
@@ -101,9 +102,11 @@ namespace mdJucePlugin
 	class FileDropTarget : public juce::FileDragAndDropTarget
 	{
 	public:
-		WebPageHost::FileDrop fileDrop;	// x and y in the view's pixels here (WebPageHost::setFileDrop makes them the page's)
+		// x and y in the view's pixels here (WebPageHost::setFileDrop makes them the page's)
+		WebPageHost::FileDrop fileDrop;
 
-		bool isInterestedInFileDrag(const juce::StringArray& _files) override { return fileDrop.takes && fileDrop.takes(paths(_files)); }
+		bool isInterestedInFileDrag(const juce::StringArray& _files) override { return fileDrop.takes
+			&& fileDrop.takes(paths(_files)); }
 		void fileDragEnter(const juce::StringArray&, int, int) override
 		{
 			if(fileDrop.over)
@@ -134,10 +137,11 @@ namespace mdJucePlugin
 	// Windows: WebView2 driven directly (mdWebView2Page.h). Page -> C++ as postMessage texts (the same
 	// gmbridge://... strings, deskBridge.js), C++ -> page as executed scripts. A top-level navigation to a
 	// gmbridge:// URL still reaches the bridge, and a file dragged onto the page is not opened.
-	// TODO(file drops on Windows): WebView2's own window takes a file dropped on the page (AllowExternalDrop), so JUCE's
-	// window never sees it and FileDropTarget stays unused here. WebView2Page is ours: ICoreWebView2Controller4's
-	// put_AllowExternalDrop(FALSE) should let the drop through to the editor's window, as the macOS hook does; not tried
-	// (no Windows build to test it on yet). Until then a dropped file is cancelled (onNavigation) and the page says nothing.
+	// TODO(file drops on Windows): WebView2's own window takes a file dropped on the page (AllowExternalDrop), so
+	// JUCE's window never sees it and FileDropTarget stays unused here. WebView2Page is ours:
+	// ICoreWebView2Controller4's put_AllowExternalDrop(FALSE) should let the drop through to the editor's window, as
+	// the macOS hook does; not tried (no Windows build to test it on yet). Until then a dropped file is cancelled
+	// (onNavigation) and the page says nothing.
 	class PageWebView final : public WebView2Page, public FileDropTarget
 	{
 	public:
@@ -181,8 +185,9 @@ namespace mdJucePlugin
 	// navigations to gmbridge://..., cancelled here; the page makes them in throw-away iframes so
 	// one never cancels another. C++ -> page uses javascript: URLs (WKWebView evaluateJavaScript); on Linux script
 	// files (mdPageBridge.h).
-	// TODO(file drops on Linux): webkit2gtk takes a file dropped on the page itself (JUCE runs it in a window of its own
-	// process); reaching its drag signals means changing JUCE, so a dropped file is only cancelled (pageAboutToLoad).
+	// TODO(file drops on Linux): webkit2gtk takes a file dropped on the page itself (JUCE runs it in a window of its
+	// own process); reaching its drag signals means changing JUCE, so a dropped file is only cancelled
+	// (pageAboutToLoad).
 	class PageWebView final : public juce::WebBrowserComponent, public FileDropTarget
 	{
 	public:
@@ -328,8 +333,11 @@ namespace mdJucePlugin
 		view.takes = [this](const std::vector<std::string>& _paths)
 		{
 			const bool takes = m_fileDrop.takes && m_fileDrop.takes(_paths);
-			log("drop: " + juce::String(static_cast<int>(_paths.size())) + " files over the page, " + (takes ? "taken" : "not taken")
-				+ (_paths.empty() ? juce::String() : " (" + juce::File(juce::String::fromUTF8(_paths.front().c_str())).getFileName() + (_paths.size() > 1 ? ", ...)" : ")")));
+			log("drop: " + juce::String(static_cast<int>(_paths.size())) + " files over the page, "
+				+ (takes ? "taken" : "not taken")
+				+ (_paths.empty() ? juce::String() : " ("
+					+ juce::File(juce::String::fromUTF8(_paths.front().c_str())).getFileName()
+					+ (_paths.size() > 1 ? ", ...)" : ")")));
 			return takes;
 		};
 		view.over = [this](const bool _over)
@@ -339,7 +347,8 @@ namespace mdJucePlugin
 		};
 		view.dropped = [this](const std::vector<std::string>& _paths, const double _x, const double _y)
 		{
-			log("drop: " + juce::String(static_cast<int>(_paths.size())) + " files dropped at " + juce::String(_x) + ", " + juce::String(_y));
+			log("drop: " + juce::String(static_cast<int>(_paths.size())) + " files dropped at " + juce::String(_x)
+				+ ", " + juce::String(_y));
 			if(m_fileDrop.dropped)
 				m_fileDrop.dropped(_paths, _x / m_pageZoom, _y / m_pageZoom);
 		};
@@ -452,11 +461,13 @@ namespace mdJucePlugin
 				});
 #endif
 #if MDMM_DIAGNOSTICS
-			// A journey's drop ("dropfiles <x> <y> syx wav", mdDeskJourneys.js): the files the run names in its environment
-			// (GEARMULATOR_MDMM_SYX_FILE, GEARMULATOR_MDMM_WAV_FILE), dropped at x, y (the page's CSS pixels) as if from the
-			// Finder: from here on the same way as a real drop (the owner's FileDrop). The page names no path.
+			// A journey's drop ("dropfiles <x> <y> syx wav", mdDeskJourneys.js): the files the run names in its
+			// environment (GEARMULATOR_MDMM_SYX_FILE, GEARMULATOR_MDMM_WAV_FILE), dropped at x, y (the page's CSS
+			// pixels) as if from the Finder: from here on the same way as a real drop (the owner's FileDrop). The
+			// page names no path.
 			if(line.startsWith("dropfiles "))
-				juce::MessageManager::callAsync([this, alive = std::weak_ptr<int>(m_alive), spec = line.fromFirstOccurrenceOf(" ", false, false)]
+				juce::MessageManager::callAsync([this, alive = std::weak_ptr<int>(m_alive),
+					spec = line.fromFirstOccurrenceOf(" ", false, false)]
 				{
 					if(alive.expired())
 						return;
@@ -464,13 +475,15 @@ namespace mdJucePlugin
 					std::vector<std::string> paths;
 					for(int i = 2; i < words.size(); ++i)
 					{
-						const auto var = words[i] == "syx" ? "GEARMULATOR_MDMM_SYX_FILE" : words[i] == "wav" ? "GEARMULATOR_MDMM_WAV_FILE" : "";
+						const auto var = words[i] == "syx" ? "GEARMULATOR_MDMM_SYX_FILE" : words[i] == "wav"
+							? "GEARMULATOR_MDMM_WAV_FILE" : "";
 						const juce::File f(*var ? juce::SystemStats::getEnvironmentVariable(var, {}) : juce::String());
 						if(f.existsAsFile())
 							paths.push_back(f.getFullPathName().toStdString());
 					}
 					const bool takes = m_fileDrop.takes && m_fileDrop.takes(paths);
-					log("drop (journey): " + spec + ": " + juce::String(static_cast<int>(paths.size())) + " files, " + (takes ? "taken" : "not taken"));
+					log("drop (journey): " + spec + ": " + juce::String(static_cast<int>(paths.size())) + " files, "
+						+ (takes ? "taken" : "not taken"));
 					if(takes && m_fileDrop.dropped)
 						m_fileDrop.dropped(paths, words[0].getDoubleValue(), words[1].getDoubleValue());
 				});
@@ -664,11 +677,11 @@ namespace mdJucePlugin
 			m_onRestart();
 	}
 
-	// B-029 (Windows, mdWebView2Page.h): the web view was made again in a new window, because the window it lived in was
-	// destroyed (a host closed the editor, the standalone made its window again), and loads the page from its start.
-	// Nothing goes to it until it speaks (it would be lost while it loads); then it gets everything, as a first page
-	// does: its ready, and the owner's restart (the session's documents, the notices still waiting for an answer, the
-	// update banner). The window says so if it does not start in time (checkStarted), as for the first page.
+	// B-029 (Windows, mdWebView2Page.h): the web view was made again in a new window, because the window it lived in
+	// was destroyed (a host closed the editor, the standalone made its window again), and loads the page from its
+	// start. Nothing goes to it until it speaks (it would be lost while it loads); then it gets everything, as a first
+	// page does: its ready, and the owner's restart (the session's documents, the notices still waiting for an answer,
+	// the update banner). The window says so if it does not start in time (checkStarted), as for the first page.
 	void WebPageHost::pageLoadsAgain()
 	{
 		note("the page loads again in a new web view (the window it was in was closed or made again)");
@@ -839,7 +852,8 @@ namespace mdJucePlugin
 		{
 			m_fileDrops = passFileDropsToWindow(*m_web);
 			if(m_fileDrops != 0)
-				note(m_fileDrops > 0 ? "file drops: the window takes files dragged onto the page" : "file drops: the web view keeps them (its class could not be extended)");
+				note(m_fileDrops > 0 ? "file drops: the window takes files dragged onto the page"
+					: "file drops: the web view keeps them (its class could not be extended)");
 		}
 		m_keyWatch->follow(*m_web);	// B-018: the window it is in now
 #endif

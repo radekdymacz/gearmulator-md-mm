@@ -21,8 +21,8 @@ namespace mdJucePlugin::rosettaNotice
 	constexpr const char* g_dismissedKey = "rosettaNoticeDismissed";
 
 	// Upstream's own Rosetta warning ("<product> - Rosetta detected", jucePluginEditorLib/pluginEditor.cpp,
-	// Editor::onDisclaimerFinished). The editor's constructor raises it through this same route every time a window is made,
-	// with no way to dismiss it. This notice is the editors' word on it, so a window's sink drops that one
+	// Editor::onDisclaimerFinished). The editor's constructor raises it through this same route every time a window is
+	// made, with no way to dismiss it. This notice is the editors' word on it, so a window's sink drops that one
 	// (PageEditor::create; no edit of upstream's file: doc/modern-ux/UPSTREAM.md). Matched by its title: if upstream
 	// words it differently, both show, which is untidy and harmless.
 	inline bool isUpstreamWarning(const std::string& _title)
@@ -46,7 +46,8 @@ namespace mdJucePlugin::rosettaNotice
 	// Only "Don't show again" is kept; OK, and the dialog closed another way (the last button answers), keep nothing,
 	// so the notice comes back with the next session. _config outlives the notice: it is the plug-in's own, and the
 	// route drops a notice whose plug-in is gone (messageRoute::forget).
-	inline std::optional<genericUI::messageRoute::Notice> make(const processArch::ProcessArch& _arch, const processArch::Os _os,
+	inline std::optional<genericUI::messageRoute::Notice> make(const processArch::ProcessArch& _arch,
+		const processArch::Os _os,
 		const bool _standalone, juce::PropertiesFile& _config, std::atomic<bool>& _offered)
 	{
 		const auto notice = processArch::translatedNotice(_arch, _os, _standalone);

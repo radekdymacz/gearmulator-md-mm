@@ -73,15 +73,19 @@ int main()
 	Window window(&instance);
 
 	// upstream's own warning is recognised, ours and the others are not
-	check(rosettaNotice::isUpstreamWarning("Machinedrum Editor - Rosetta detected") && rosettaNotice::isUpstreamWarning("Monomachine Editor - Rosetta detected"),
+	check(rosettaNotice::isUpstreamWarning("Machinedrum Editor - Rosetta detected")
+		&& rosettaNotice::isUpstreamWarning("Monomachine Editor - Rosetta detected"),
 		"upstream's warning (\"<product> - Rosetta detected\") is told apart, to be replaced by this notice");
-	check(!rosettaNotice::isUpstreamWarning("Running under Rosetta") && !rosettaNotice::isUpstreamWarning("Running in emulation")
-		&& !rosettaNotice::isUpstreamWarning("Overwrite K05?") && !rosettaNotice::isUpstreamWarning(""), "...and none of this notice's titles, nor another notice, is taken for it");
+	check(!rosettaNotice::isUpstreamWarning("Running under Rosetta")
+		&& !rosettaNotice::isUpstreamWarning("Running in emulation")
+		&& !rosettaNotice::isUpstreamWarning("Overwrite K05?") && !rosettaNotice::isUpstreamWarning(""),
+		"...and none of this notice's titles, nor another notice, is taken for it");
 
 	// nothing to say about a native run, and it does not use up the session's one notice
 	{
 		std::atomic<bool> offered{false};
-		check(!rosettaNotice::make(native, Os::Mac, false, *config, offered) && !offered.load(), "a native run: no notice, the session's one is still there");
+		check(!rosettaNotice::make(native, Os::Mac, false, *config, offered) && !offered.load(),
+			"a native run: no notice, the session's one is still there");
 	}
 
 	// a translated run: one notice, once a session
@@ -90,29 +94,38 @@ int main()
 		auto notice = rosettaNotice::make(rosetta, Os::Mac, false, *config, offered);
 		check(notice && offered.load(), "an editor running under Rosetta: a notice, and the session's one is taken");
 		check(!rosettaNotice::make(rosetta, Os::Mac, false, *config, offered), "a second window of the session: none");
-		check(offerTo(&instance, std::move(notice)) && window.shown.size() == 1, "the route takes it to its instance's window");
+		check(offerTo(&instance, std::move(notice)) && window.shown.size() == 1,
+			"the route takes it to its instance's window");
 		const auto& n = window.shown.back();
-		check(n.title == "Running under Rosetta" && n.text.find("Open your DAW as an Apple silicon app") != std::string::npos,
+		check(n.title == "Running under Rosetta"
+			&& n.text.find("Open your DAW as an Apple silicon app") != std::string::npos,
 			"the page gets the title and the text");
-		check(n.buttons.size() == 2 && n.buttons[0] == "Don't show again" && n.buttons[1] == "OK", "and two buttons, OK last");
+		check(n.buttons.size() == 2 && n.buttons[0] == "Don't show again" && n.buttons[1] == "OK",
+			"and two buttons, OK last");
 		check(window.book.waiting(window.ids.back()), "the notice waits for an answer in the window's book");
 
 		// OK keeps nothing; neither does the page closing the dialog another way (it answers with the last button)
-		check(window.press(static_cast<int>(n.buttons.size()) - 1).empty(), "OK, or the dialog closed (Esc, a click outside): answered");
-		check(!config->containsKey(rosettaNotice::g_dismissedKey) && !rosettaNotice::dismissed(*config), "...and nothing is kept");
-		check(window.press(0) == "notice " + std::to_string(window.ids.back()) + " is not waiting for an answer", "a notice answers once");
+		check(window.press(static_cast<int>(n.buttons.size()) - 1).empty(),
+			"OK, or the dialog closed (Esc, a click outside): answered");
+		check(!config->containsKey(rosettaNotice::g_dismissedKey) && !rosettaNotice::dismissed(*config),
+			"...and nothing is kept");
+		check(window.press(0) == "notice " + std::to_string(window.ids.back()) + " is not waiting for an answer",
+			"a notice answers once");
 		check(!rosettaNotice::dismissed(*config), "...the second answer kept nothing either");
 	}
 
 	// the next session: the notice is back; a button it does not have keeps nothing; Don't show again is kept
 	{
 		std::atomic<bool> nextSession{false};
-		check(offerTo(&instance, rosettaNotice::make(rosetta, Os::Mac, false, *config, nextSession)) && window.shown.size() == 2,
+		check(offerTo(&instance, rosettaNotice::make(rosetta, Os::Mac, false, *config, nextSession))
+			&& window.shown.size() == 2,
 			"the next session (OK keeps nothing): the notice comes back");
-		check(!window.press(2).empty() && !window.press(-1).empty() && !rosettaNotice::dismissed(*config) && window.book.waiting(window.ids.back()),
+		check(!window.press(2).empty() && !window.press(-1).empty() && !rosettaNotice::dismissed(*config)
+			&& window.book.waiting(window.ids.back()),
 			"a button the notice does not have: refused, nothing kept, the notice still waits");
 		check(window.press(0).empty(), "Don't show again: answered");
-		check(rosettaNotice::dismissed(*config) && config->getBoolValue(rosettaNotice::g_dismissedKey, false), "...and kept in the config");
+		check(rosettaNotice::dismissed(*config) && config->getBoolValue(rosettaNotice::g_dismissedKey, false),
+			"...and kept in the config");
 	}
 
 	// and it stays kept: written to the file, read by the next session, which neither shows it nor uses its one up
@@ -131,10 +144,14 @@ int main()
 		auto fresh = openConfig(dir.getChildFile("windows.settings"));
 		std::atomic<bool> session{false};
 		const size_t before = window.shown.size();
-		check(offerTo(&instance, rosettaNotice::make(rosetta, Os::Windows, false, *fresh, session)) && window.shown.size() == before + 1
-			&& window.shown.back().title == "Running in emulation" && window.shown.back().text.find("Windows on Arm") != std::string::npos
-			&& window.shown.back().buttons.size() == 2, "Windows on Arm: the notice in the Windows words, the same buttons");
-		check(window.press(0).empty() && rosettaNotice::dismissed(*fresh), "...and Don't show again is kept the same way");
+		check(offerTo(&instance, rosettaNotice::make(rosetta, Os::Windows, false, *fresh, session))
+			&& window.shown.size() == before + 1
+			&& window.shown.back().title == "Running in emulation"
+			&& window.shown.back().text.find("Windows on Arm") != std::string::npos
+			&& window.shown.back().buttons.size() == 2,
+			"Windows on Arm: the notice in the Windows words, the same buttons");
+		check(window.press(0).empty() && rosettaNotice::dismissed(*fresh),
+			"...and Don't show again is kept the same way");
 	}
 
 	// a notice of another instance goes to that instance's window only
@@ -144,9 +161,11 @@ int main()
 		auto fresh = openConfig(dir.getChildFile("other.settings"));
 		std::atomic<bool> session{false};
 		const size_t mine = window.shown.size();
-		check(offerTo(&other, rosettaNotice::make(rosetta, Os::Mac, true, *fresh, session)) && otherWindow.shown.size() == 1 && window.shown.size() == mine,
+		check(offerTo(&other, rosettaNotice::make(rosetta, Os::Mac, true, *fresh, session))
+			&& otherWindow.shown.size() == 1 && window.shown.size() == mine,
 			"the notice goes to the window of the instance that offered it, not to another's");
-		check(otherWindow.shown.back().text.find("Open this app as an Apple silicon app") != std::string::npos, "the standalone's words");
+		check(otherWindow.shown.back().text.find("Open this app as an Apple silicon app") != std::string::npos,
+			"the standalone's words");
 	}
 
 	window.attachment.reset();

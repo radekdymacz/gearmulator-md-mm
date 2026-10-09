@@ -158,7 +158,8 @@ DSCL_STUB = r"""#!/bin/sh
 """
 
 PLIST = ('<?xml version="1.0" encoding="UTF-8"?>\n<plist version="1.0"><dict>\n'
-         '<key>CFBundleIdentifier</key>\n<string>%s</string>\n<key>CFBundleExecutable</key>\n<string>%s</string>\n</dict></plist>\n')
+         '<key>CFBundleIdentifier</key>\n<string>%s</string>\n<key>CFBundleExecutable</key>\n'
+         '<string>%s</string>\n</dict></plist>\n')
 
 # The expected names, written out here on purpose: the installer deletes by these, so a change to the product env
 # file (or to the renderer) that moves them must be a visible change to this test.
@@ -179,19 +180,23 @@ for machine, e in EXPECT.items():
     up = machine.upper()
     check(env_file.get("MDMM_PRODUCT_NAME_" + up) == e["new"] and env_file.get("MDMM_LEGACY_NAME_" + up) == e["old"],
           "%s: the product env file names %r (old %r)" % (machine, e["new"], e["old"]))
-    check(env_file.get("MDMM_BUNDLE_ID_" + up) == e["id"] and env_file.get("MDMM_LEGACY_BUNDLE_ID_" + up) == e["old_id"],
+    check(env_file.get("MDMM_BUNDLE_ID_" + up) == e["id"]
+          and env_file.get("MDMM_LEGACY_BUNDLE_ID_" + up) == e["old_id"],
           "%s: the product env file's bundle identifiers (%s, old %s)" % (machine, e["id"], e["old_id"]))
 with open(os.path.join(REPO, "source", "elektron", "md", "mdJucePlugin", "mdmmPlugins.cmake")) as f:
     cmake_text = f.read()
 for machine, e in EXPECT.items():
     found = re.search(r'GEARMULATOR_PLUGIN_BUNDLE_ID_%sJucePlugin "([^"]+)"' % machine, cmake_text)
-    check(found is not None and found.group(1) == e["id"], "%s: the build's bundle identifier is the env file's" % machine)
+    check(found is not None and found.group(1) == e["id"],
+          "%s: the build's bundle identifier is the env file's" % machine)
 with open(os.path.join(MACOS, "build_mdmm_pkg.sh")) as f:
     build_pkg = f.read()
-check("render_remove_old_bundles.sh" in build_pkg and "write_preinstall" in build_pkg and build_pkg.count("write_preinstall \"") >= 3,
+check("render_remove_old_bundles.sh" in build_pkg and "write_preinstall" in build_pkg
+      and build_pkg.count("write_preinstall \"") >= 3,
       "build_mdmm_pkg.sh renders the preinstall for the app, the VST3 and the AU")
 
-if os.name == "posix" and os.path.exists("/bin/sh") and os.path.exists("/usr/bin/sed") and os.path.exists("/usr/bin/grep"):
+if (os.name == "posix" and os.path.exists("/bin/sh") and os.path.exists("/usr/bin/sed")
+        and os.path.exists("/usr/bin/grep")):
     with tempfile.TemporaryDirectory() as tmp:
         tools = os.path.join(tmp, "tools")
         os.makedirs(tools)
@@ -204,11 +209,13 @@ if os.name == "posix" and os.path.exists("/bin/sh") and os.path.exists("/usr/bin
                 f.write(text)
             os.chmod(os.path.join(tools, name), 0o755)
         render_env = dict(os.environ,
-                          MDMM_RENDER_PLISTBUDDY=real_plistbuddy if os.path.exists(real_plistbuddy) else os.path.join(tools, "PlistBuddy"),
+                          MDMM_RENDER_PLISTBUDDY=(real_plistbuddy if os.path.exists(real_plistbuddy)
+                                                  else os.path.join(tools, "PlistBuddy")),
                           MDMM_RENDER_PKGUTIL=os.path.join(tools, "pkgutil"),
                           MDMM_RENDER_STAT=os.path.join(tools, "stat"),
                           MDMM_RENDER_DSCL=os.path.join(tools, "dscl"))
-        print("  (the property-list reader: %s)" % ("the real PlistBuddy" if os.path.exists(real_plistbuddy) else "a stand-in"))
+        print("  (the property-list reader: %s)"
+              % ("the real PlistBuddy" if os.path.exists(real_plistbuddy) else "a stand-in"))
 
         def make_bundle(root, folder, name, ext, identifier, executable, link_to=None):
             path = os.path.join(root, folder, "%s.%s" % (name, ext))
@@ -244,8 +251,10 @@ if os.name == "posix" and os.path.exists("/bin/sh") and os.path.exists("/usr/bin
                         with open(script) as f:
                             text = f.read()
                         with open(rendered, "w") as f:
-                            f.write(re.sub(r'^plistbuddy=".*"$', 'plistbuddy="/nonexistent/PlistBuddy"', text, flags=re.M))
-                    return subprocess.run(["/bin/sh", rendered, "/pkg.pkg", root, "/", "/"], capture_output=True, text=True, env=senv)
+                            f.write(re.sub(r'^plistbuddy=".*"$', 'plistbuddy="/nonexistent/PlistBuddy"', text,
+                                           flags=re.M))
+                    return subprocess.run(["/bin/sh", rendered, "/pkg.pkg", root, "/", "/"], capture_output=True,
+                                          text=True, env=senv)
 
                 # ---- the install root and the home folder (as an all-users install by a person whose home is known)
                 case = os.path.join(tmp, "case-" + label.replace(" ", "-"))
@@ -254,15 +263,21 @@ if os.name == "posix" and os.path.exists("/bin/sh") and os.path.exists("/usr/bin
                 os.makedirs(home)
                 os.makedirs(os.path.join(case, "elsewhere"))
                 gone = [
-                    make_bundle(root, folder, e["old"], ext, e["id"], e["old"]),                  # 0.3.1: old name, our identifier
-                    make_bundle(home, folder, e["old"], ext, e["id"], e["old"]),                  # the same, by hand in the home folder
+                    # 0.3.1: old name, our identifier
+                    make_bundle(root, folder, e["old"], ext, e["id"], e["old"]),
+                    # the same, by hand in the home folder
+                    make_bundle(home, folder, e["old"], ext, e["id"], e["old"]),
                 ]
                 kept = [
-                    make_bundle(root, folder, e["new"], ext, e["id"], e["new"]),                  # the current bundle
+                    # the current bundle
+                    make_bundle(root, folder, e["new"], ext, e["id"], e["new"]),
                     make_bundle(home, folder, e["new"], ext, e["id"], e["new"]),
-                    make_bundle(root, folder, e["other_old"], ext, e["old_id"], e["other_old"]),  # the other machine's old one
-                    make_bundle(root, folder, "Osirus", ext, "local.gearmulator.preview.Osirus", "Osirus"),  # an unrelated bundle
-                    make_bundle(root, folder, e["old"] + " 2", ext, e["id"], e["old"]),           # a name that only starts the same
+                    # the other machine's old one
+                    make_bundle(root, folder, e["other_old"], ext, e["old_id"], e["other_old"]),
+                    # an unrelated bundle
+                    make_bundle(root, folder, "Osirus", ext, "local.gearmulator.preview.Osirus", "Osirus"),
+                    # a name that only starts the same
+                    make_bundle(root, folder, e["old"] + " 2", ext, e["id"], e["old"]),
                 ]
                 foreign_home = os.path.join(case, "foreign-home")
                 os.makedirs(foreign_home)
@@ -272,8 +287,11 @@ if os.name == "posix" and os.path.exists("/bin/sh") and os.path.exists("/usr/bin
                 kept.append(make_bundle(root, folder + "/sub", e["old"], ext, e["id"], e["old"]))
                 r = run_script(root, home)
                 check(r.returncode == 0, "%s: exit 0 (%s)" % (label, r.stderr.strip()))
-                check(all(not os.path.exists(p) for p in gone), "%s: the old-named bundles with our identifier are removed" % label)
-                check(all(os.path.exists(p) for p in kept), "%s: the current, the other machine's, unrelated, other-path and other users' bundles stay" % label)
+                check(all(not os.path.exists(p) for p in gone),
+                      "%s: the old-named bundles with our identifier are removed" % label)
+                check(all(os.path.exists(p) for p in kept),
+                      "%s: the current, the other machine's, unrelated, other-path and other users' bundles stay"
+                      % label)
 
                 # ---- upstream's identifier (0.3.0 and earlier) at the exact old path
                 case2 = os.path.join(tmp, "case2-" + label.replace(" ", "-"))
@@ -285,7 +303,8 @@ if os.name == "posix" and os.path.exists("/bin/sh") and os.path.exists("/usr/bin
                 r = run_script(root2, home2)
                 if old_id_counts:
                     check(not os.path.exists(a) and not os.path.exists(b),
-                          "%s: a copy with upstream's identifier is removed, in the root and in the home folder" % label)
+                          "%s: a copy with upstream's identifier is removed, in the root and in the home folder"
+                          % label)
                 else:
                     check(os.path.exists(a) and os.path.exists(b),
                           "%s: a copy with upstream's identifier stays (an app of upstream's own)" % label)
@@ -300,7 +319,8 @@ if os.name == "posix" and os.path.exists("/bin/sh") and os.path.exists("/usr/bin
                 link = make_bundle(home3, folder, e["old"], ext, None, None, link_to=target)
                 r = run_script(root3, home3)
                 check(os.path.exists(foreign), "%s: a bundle with a foreign identifier stays" % label)
-                check(os.path.islink(link) and os.path.exists(target), "%s: a symbolic link at the old name, and what it points to, stay" % label)
+                check(os.path.islink(link) and os.path.exists(target),
+                      "%s: a symbolic link at the old name, and what it points to, stay" % label)
 
                 # ---- our receipt lists a copy with a foreign identifier: it is ours
                 case4 = os.path.join(tmp, "case4-" + label.replace(" ", "-"))
@@ -317,13 +337,15 @@ if os.name == "posix" and os.path.exists("/bin/sh") and os.path.exists("/usr/bin
 
                 # ---- a root-run installer: its home is unusable, the person at the console is found
                 case5 = os.path.join(tmp, "case5-" + label.replace(" ", "-"))
-                root5, console_home, stranger_home = (os.path.join(case5, n) for n in ("root", "console-home", "stranger-home"))
+                root5, console_home, stranger_home = (
+                    os.path.join(case5, n) for n in ("root", "console-home", "stranger-home"))
                 for d in (root5, console_home, stranger_home):
                     os.makedirs(d)
                 at_console = make_bundle(console_home, folder, e["old"], ext, e["id"], e["old"])
                 stranger = make_bundle(stranger_home, folder, e["old"], ext, e["id"], e["old"])
                 r = run_script(root5, "/var/root", console=("tester", console_home))
-                check(not os.path.exists(at_console), "%s: the old copy in the console user's home folder is removed" % label)
+                check(not os.path.exists(at_console),
+                      "%s: the old copy in the console user's home folder is removed" % label)
                 check(os.path.exists(stranger), "%s: another user's home folder is left alone" % label)
 
                 # ---- built before the rename: the current name, an old executable
@@ -334,7 +356,8 @@ if os.name == "posix" and os.path.exists("/bin/sh") and os.path.exists("/usr/bin
                 stale = make_bundle(root6, folder, e["new"], ext, e["old_id"], e["old"])
                 fresh = make_bundle(home6, folder, e["new"], ext, e["id"], e["new"])
                 r = run_script(root6, home6)
-                check(not os.path.exists(stale), "%s: a bundle at the new name with the old executable is removed" % label)
+                check(not os.path.exists(stale),
+                      "%s: a bundle at the new name with the old executable is removed" % label)
                 check(os.path.exists(fresh), "%s: a current bundle is not touched" % label)
 
                 # ---- no property-list reader: nothing is removed by identifier, the exit is still 0
@@ -344,7 +367,8 @@ if os.name == "posix" and os.path.exists("/bin/sh") and os.path.exists("/usr/bin
                 os.makedirs(home7)
                 unreadable = make_bundle(root7, folder, e["old"], ext, e["id"], e["old"])
                 r = run_script(root7, home7, hide_plist=True)
-                check(r.returncode == 0 and os.path.exists(unreadable), "%s: without a property-list reader nothing is removed, and the exit is 0" % label)
+                check(r.returncode == 0 and os.path.exists(unreadable),
+                      "%s: without a property-list reader nothing is removed, and the exit is 0" % label)
 
                 # ---- nothing there at all
                 case8 = os.path.join(tmp, "case8-" + label.replace(" ", "-"))
@@ -352,7 +376,8 @@ if os.name == "posix" and os.path.exists("/bin/sh") and os.path.exists("/usr/bin
                 os.makedirs(root8)
                 os.makedirs(home8)
                 r = run_script(root8, home8)
-                check(r.returncode == 0 and "Removing" not in r.stdout, "%s: with no old copy there is nothing to do, and the exit is 0" % label)
+                check(r.returncode == 0 and "Removing" not in r.stdout,
+                      "%s: with no old copy there is nothing to do, and the exit is 0" % label)
 else:
     print("  (no /bin/sh here: the installer clean-up is not run)")
 

@@ -21,10 +21,13 @@ namespace mdJucePlugin::processArch
 	// What the system says, nothing decided yet. A value that could not be read stays unknown.
 	struct Facts
 	{
-		std::string compiledArch;		// the build that runs: "arm64", "x86_64", "x86" or "unknown" (a universal binary: the slice that loaded)
-		int procTranslated = -1;		// macOS sysctl.proc_translated: 1 translated, 0 native, -1 unreadable (absent before macOS 11)
+		// the build that runs: "arm64", "x86_64", "x86" or "unknown" (a universal binary: the slice that loaded)
+		std::string compiledArch;
+		// macOS sysctl.proc_translated: 1 translated, 0 native, -1 unreadable (absent before macOS 11)
+		int procTranslated = -1;
 		std::string cpuBrand;			// macOS machdep.cpu.brand_string: "VirtualApple @ 2.50GHz" under Rosetta
-		std::string nativeMachine;		// Windows IsWow64Process2's native machine: "arm64", "x86_64", "x86"; "" when unknown
+		// Windows IsWow64Process2's native machine: "arm64", "x86_64", "x86"; "" when unknown
+		std::string nativeMachine;
 	};
 
 	// What the rest of the editor needs to know.
@@ -47,7 +50,8 @@ namespace mdJucePlugin::processArch
 	const char* compiledArch();
 	Os thisOs();
 
-	// Reads the facts from the system (never throws; what cannot be read stays unknown), and what classify makes of them.
+	// Reads the facts from the system (never throws; what cannot be read stays unknown), and what
+	// classify makes of them.
 	Facts readFacts();
 	ProcessArch detect();
 	// detect() once per process (it cannot change while the process runs).

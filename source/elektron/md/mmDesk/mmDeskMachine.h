@@ -123,7 +123,8 @@ namespace mmDesk
 		void deliverKitLive(const elektronData::MmKit& _from, const elektronData::MmKit& _to, std::vector<std::string>& _notes);
 		// The live messages (0x55, 0x5B, 0x5C, CC, NRPN) that turn the working kit _from into _to; nothing else.
 		void sendKitLive(const elektronData::MmKit& _from, const elektronData::MmKit& _to);
-		// B-027: a dump of the pattern that plays went into the stream; the kit reload it makes is followed by the edits.
+		// B-027: a dump of the pattern that plays went into the stream; the kit reload it makes is
+		// followed by the edits.
 		void reloadFollows(const Bytes& _patternDump);
 		void restoreWorkingKit(const Documents& _view);
 		void onDump(const Ref& _ref, const Bytes& _sysex);
@@ -199,7 +200,8 @@ namespace mmDesk
 		double m_reloadQueuedMs = 0;
 		int m_restoreKit = -1;
 		static constexpr double g_reloadHoldMs = 10000;	// a reload not restored by then holds nothing any more
-		bool reloadHolds() const { return m_restoreKit >= 0 || (m_reloadsPending > 0 && clock() - m_reloadQueuedMs < g_reloadHoldMs); }
+		bool reloadHolds() const { return m_restoreKit >= 0
+			|| (m_reloadsPending > 0 && clock() - m_reloadQueuedMs < g_reloadHoldMs); }
 		uint32_t m_nextRecvTag = 1;
 		std::map<uint32_t, Ref> m_recvRefs;		// a dump on the RECV session -> the push it is
 		Pushes m_pushes;

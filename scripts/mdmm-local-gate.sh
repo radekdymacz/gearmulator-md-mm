@@ -2,10 +2,11 @@
 # The local release gate (doc/release/LOCAL-GATE.md): one command that says red or green for a release candidate on
 # this Mac, with the firmware that GitHub CI never has. Build as shipped, every registered test, ROM loading,
 # SysEx round trips, the playing goldens, timing, then the plug-in checks and the user journeys. It builds on the
-# repo's own scripts (mdmm-rt-check.sh, mdmm-pluginval.sh, mdmm-journeys.sh, mdmm-dev.sh, macos/check_mdmm_core_capacity.py)
-# and adds only the glue: sandboxes, a time limit per run, the summary.
+# repo's own scripts (mdmm-rt-check.sh, mdmm-pluginval.sh, mdmm-journeys.sh, mdmm-dev.sh,
+# macos/check_mdmm_core_capacity.py) and adds only the glue: sandboxes, a time limit per run, the summary.
 #
-#   scripts/mdmm-local-gate.sh [--quick] [--skip-plugin] [--skip-journeys] [--record-goldens] [--build <dir>] [--out <dir>]
+#   scripts/mdmm-local-gate.sh [--quick] [--skip-plugin] [--skip-journeys] [--record-goldens] [--build <dir>]
+#                              [--out <dir>]
 #
 #   --quick            no plug-ins: configure with JUCE off and run what needs no window or bundle (stages 1 to 6a).
 #                      Not a release gate: the verdict says so
@@ -19,11 +20,11 @@
 # Inputs, all overridable: GEARMULATOR_MD_FIRMWARE_BIN / GEARMULATOR_MM_FIRMWARE_BIN (default: the first file in
 # <preview>/<machine>/roms), MDMM_GATE_PREVIEW (default ~/Documents/Gearmulator Preview), MDMM_GATE_MD_CACHE (the
 # Machinedrum factory cache), MDMM_GATE_MM_PATCH (the Monomachine factory patch RAM), MDMM_GATE_FIXTURES (the SysEx
-# fixtures, default <preview>/fixtures/sysex), MDMM_GATE_JOBS (build jobs), MDMM_GATE_GOLDEN_JOBS (golden runs at once), MDMM_GATE_JOURNEY_ARGS
-# (options for mdmm-journeys.sh, default --host both), MDMM_GATE_COMPONENTS_DIR (where the AU bundles are installed),
-# MDMM_GATE_SCENARIOS (extra golden scenarios, for --record-goldens). For working on the gate itself: MDMM_GATE_SKIP_BUILD=1
-# (use the build tree as it is), MDMM_GATE_ONLY="3 5" (only those stages) and MDMM_GATE_GOLDENS (another goldens file);
-# the summary calls such a run partial.
+# fixtures, default <preview>/fixtures/sysex), MDMM_GATE_JOBS (build jobs), MDMM_GATE_GOLDEN_JOBS (golden runs at
+# once), MDMM_GATE_JOURNEY_ARGS (options for mdmm-journeys.sh, default --host both), MDMM_GATE_COMPONENTS_DIR (where
+# the AU bundles are installed), MDMM_GATE_SCENARIOS (extra golden scenarios, for --record-goldens). For working on
+# the gate itself: MDMM_GATE_SKIP_BUILD=1 (use the build tree as it is), MDMM_GATE_ONLY="3 5" (only those stages) and
+# MDMM_GATE_GOLDENS (another goldens file); the summary calls such a run partial.
 # Exit status: 0 green (also partial green and recorded goldens), 1 red, 2 bad usage.
 
 # shellcheck source-path=SCRIPTDIR
@@ -66,7 +67,8 @@ fi
 BUILD="$(absolute "${BUILD}")"
 DIAG_BUILD="${GATE_HOME}/build-diag"
 mkdir -p "${GATE_HOME}" "${OUT}/logs"
-: > "${OUT}/stages.tsv"; : > "${OUT}/info.txt"; : > "${OUT}/goldens.tsv"; : > "${OUT}/cannot-run.txt"; : > "${OUT}/fingerprints.txt"
+: > "${OUT}/stages.tsv"; : > "${OUT}/info.txt"; : > "${OUT}/goldens.tsv"; : > "${OUT}/cannot-run.txt"
+: > "${OUT}/fingerprints.txt"
 ln -sfn "${OUT}" "${GATE_HOME}/latest" 2>/dev/null || true
 
 # shellcheck source=local-gate/lib.sh
@@ -78,7 +80,8 @@ MM_ROM="${GEARMULATOR_MM_FIRMWARE_BIN:-$(first_file "${PREVIEW}/Monomachine/roms
 MD_CACHE="${MDMM_GATE_MD_CACHE:-${PREVIEW}/Machinedrum/nvram/md-uw-1.63-factory-v2.cache}"
 MM_PATCH="${MDMM_GATE_MM_PATCH:-${PREVIEW}/Monomachine/nvram/mm-factory-live3-be.bin}"
 FIXTURES="${MDMM_GATE_FIXTURES:-${PREVIEW}/fixtures/sysex}"
-GOLDENS="${MDMM_GATE_GOLDENS:-${ROOT}/source/elektron/md/mdLibTest/goldens/mdmm-goldens.json}"	# the override is for testing the gate
+# the override is for testing the gate
+GOLDENS="${MDMM_GATE_GOLDENS:-${ROOT}/source/elektron/md/mdLibTest/goldens/mdmm-goldens.json}"
 GATE_MIN_SCENARIOS="md-busy md-factory md-song mm-a01 mm-busy mm-song"	# a goldens file must cover at least these
 JOBS="${MDMM_GATE_JOBS:-$(sysctl -n hw.ncpu 2>/dev/null || echo 4)}"
 JOURNEY_ARGS="${MDMM_GATE_JOURNEY_ARGS:---host both}"
@@ -107,7 +110,8 @@ AU_INSTALLED=(); AU_ASIDE=(); AU_ACTIVE=0; AU_PROBLEM=""
 au_swap_in() {	# put this build's AU bundles where macOS looks, the owner's own set aside until au_swap_out
 	local name built installed
 	if [ -d "${AU_SWAP_DIR}" ] && [ -n "$(ls -A "${AU_SWAP_DIR}" 2>/dev/null)" ]; then
-		AU_PROBLEM="${AU_SWAP_DIR} still holds components an earlier run set aside (it was killed): move them back into ${COMPONENTS} by hand, then run again"
+		AU_PROBLEM="${AU_SWAP_DIR} still holds components an earlier run set aside (it was killed): move them back"
+		AU_PROBLEM+=" into ${COMPONENTS} by hand, then run again"
 		return 1
 	fi
 	mkdir -p "${COMPONENTS}" "${AU_SWAP_DIR}"
@@ -135,7 +139,8 @@ au_swap_out() {	# remove what au_swap_in installed, put the owner's own back. Sa
 	local item
 	for item in ${AU_INSTALLED[@]+"${AU_INSTALLED[@]}"}; do rm -rf "${item}"; done
 	for item in ${AU_ASIDE[@]+"${AU_ASIDE[@]}"}; do
-		mv "${AU_SWAP_DIR}/${item}" "${COMPONENTS}/${item}" || echo "!!! could not put ${item} back: it is in ${AU_SWAP_DIR}" >&2
+		mv "${AU_SWAP_DIR}/${item}" "${COMPONENTS}/${item}" \
+			|| echo "!!! could not put ${item} back: it is in ${AU_SWAP_DIR}" >&2
 	done
 	rmdir "${AU_SWAP_DIR}" 2> /dev/null
 	AU_ACTIVE=0; AU_INSTALLED=(); AU_ASIDE=()
@@ -179,15 +184,28 @@ stage_inputs() {
 		[ -f "${f}" ] || continue
 		[ "$(stat -f %z "${f}")" = 8388608 ] || problems="${problems:+${problems}; }${f} is not an 8 MiB image"
 	done
-	[ -f "${MD_ROM}" ] && info_set md_rom "${MD_ROM}" && info_set md_rom_sha256 "$(shasum -a 256 "${MD_ROM}" | awk '{print $1}')"
-	[ -f "${MM_ROM}" ] && info_set mm_rom "${MM_ROM}" && info_set mm_rom_sha256 "$(shasum -a 256 "${MM_ROM}" | awk '{print $1}')"
-	while IFS= read -r f; do MD_FIXTURES+=("${f}"); done < <(find "${FIXTURES}" -type f -iname 'md*.syx' 2> /dev/null | sort)
-	while IFS= read -r f; do MM_FIXTURES+=("${f}"); done < <(find "${FIXTURES}" -type f -iname 'mm*.syx' 2> /dev/null | sort)
+	[ -f "${MD_ROM}" ] && info_set md_rom "${MD_ROM}" \
+		&& info_set md_rom_sha256 "$(shasum -a 256 "${MD_ROM}" | awk '{print $1}')"
+	[ -f "${MM_ROM}" ] && info_set mm_rom "${MM_ROM}" \
+		&& info_set mm_rom_sha256 "$(shasum -a 256 "${MM_ROM}" | awk '{print $1}')"
+	while IFS= read -r f; do MD_FIXTURES+=("${f}"); done \
+		< <(find "${FIXTURES}" -type f -iname 'md*.syx' 2> /dev/null | sort)
+	while IFS= read -r f; do MM_FIXTURES+=("${f}"); done \
+		< <(find "${FIXTURES}" -type f -iname 'mm*.syx' 2> /dev/null | sort)
 	[ ${#MD_FIXTURES[@]} -gt 0 ] && FIXTURE_MD="${MD_FIXTURES[0]}"
 	[ ${#MM_FIXTURES[@]} -gt 0 ] && FIXTURE_MM="${MM_FIXTURES[0]}"
-	[ ${#MD_FIXTURES[@]} -gt 0 ] && [ ${#MM_FIXTURES[@]} -gt 0 ] || problems="${problems:+${problems}; }SysEx fixtures missing in ${FIXTURES} (md*.syx: ${#MD_FIXTURES[@]}, mm*.syx: ${#MM_FIXTURES[@]})"
-	numbers="ROMs $(basename "${MD_ROM:-none}"), $(basename "${MM_ROM:-none}"); ${#MD_FIXTURES[@]} md and ${#MM_FIXTURES[@]} mm SysEx fixtures; load $(sysctl -n vm.loadavg 2> /dev/null | awk '{print $2}') on $(sysctl -n hw.ncpu 2> /dev/null) cores"
-	if [ -n "${problems}" ]; then stage_end FAIL "${numbers}" "${problems}"; else stage_end PASS "${numbers}" "$(busy_note)"; fi
+	if [ ${#MD_FIXTURES[@]} -eq 0 ] || [ ${#MM_FIXTURES[@]} -eq 0 ]; then
+		problems="${problems:+${problems}; }SysEx fixtures missing in ${FIXTURES}"
+		problems+=" (md*.syx: ${#MD_FIXTURES[@]}, mm*.syx: ${#MM_FIXTURES[@]})"
+	fi
+	numbers="ROMs $(basename "${MD_ROM:-none}"), $(basename "${MM_ROM:-none}");"
+	numbers+=" ${#MD_FIXTURES[@]} md and ${#MM_FIXTURES[@]} mm SysEx fixtures;"
+	numbers+=" load $(sysctl -n vm.loadavg 2> /dev/null | awk '{print $2}') on $(sysctl -n hw.ncpu 2> /dev/null) cores"
+	if [ -n "${problems}" ]; then
+		stage_end FAIL "${numbers}" "${problems}"
+	else
+		stage_end PASS "${numbers}" "$(busy_note)"
+	fi
 }
 
 # =====================================================================================================================
@@ -235,29 +253,37 @@ stage_build() {
 		# Targets that are not part of "all" but have tests or are used below (the list of scripts/macos/build_mdmm.sh).
 		gate_run --append --timeout 7200 --log "${log}" -- HOME="${home}" GEARMULATOR_DATA_ROOT="${home}/Documents" \
 			cmake --build "${BUILD}" --parallel "${JOBS}" --target \
-			mdJucePlugin_VST3 mmJucePlugin_VST3 mdJucePlugin_AU mmJucePlugin_AU mdJucePlugin_Standalone mmJucePlugin_Standalone \
+			mdJucePlugin_VST3 mmJucePlugin_VST3 mdJucePlugin_AU mmJucePlugin_AU mdJucePlugin_Standalone \
+			mmJucePlugin_Standalone \
 			pluginTester latency_host vst3ProgramChangeTest mdProgramChangeProbe_VST3 mdAudioProbePlugin_VST3 \
 			|| { stage_end FAIL "" "the plug-in and host targets failed (${log})"; show_tail "${log}" 25; return; }
 	fi
 	# Every registered test must have its program: ctest would only fail a missing one at run time, or run a stale one.
 	local registered missing=0
-	answer="$(ctest --test-dir "${BUILD}" -C Release -N --show-only=json-v1 -E "${CTEST_EXCLUDE}" | gate_py ctest-missing)" || missing=1
+	answer="$(ctest --test-dir "${BUILD}" -C Release -N --show-only=json-v1 -E "${CTEST_EXCLUDE}" |
+		gate_py ctest-missing)" || missing=1
 	registered="$(printf '%s\n' "${answer}" | key numbers)"
 	if [ "${missing}" = 1 ]; then
 		stage_end FAIL "${registered}" "$(printf '%s\n' "${answer}" | key notes)"
 		return
 	fi
 	if [ "${QUICK}" != 1 ]; then
-		# The cache read back: ThinLTO, the DSP optimisation and the architecture are really on (the release script's check).
+		# The cache read back: ThinLTO, the DSP optimisation and the architecture are really on (the release script's
+		# check).
 		if ! python3 -B "${ROOT}/scripts/macos/write_mdmm_receipt.py" --source "${ROOT}" \
 			--validate-build-optimization "${BUILD}/CMakeCache.txt" --expected-architecture "${ARCH}" \
 			--expected-products-root "${BUILD}/products" > "${LOG_DIR}/1-optimization.json" 2>> "${log}"; then
-			stage_end FAIL "${registered}" "the build is not the optimised one (see ${log}, ${LOG_DIR}/1-optimization.json)"
+			stage_end FAIL "${registered}" \
+				"the build is not the optimised one (see ${log}, ${LOG_DIR}/1-optimization.json)"
 			show_tail "${log}" 8
 			return
 		fi
 	fi
-	stage_end PASS "$(cache_value CMAKE_BUILD_TYPE:STRING) ${ARCH}, ThinLTO $(cache_value GEARMULATOR_MDMM_APPLE_THINLTO:BOOL), DSP optimisation $(cache_value GEARMULATOR_MDMM_APPLE_OPTIMIZE_DSP:BOOL)$( [ "${QUICK}" = 1 ] && echo ", NO plug-ins (--quick)" ); ${registered}"
+	local built
+	built="$(cache_value CMAKE_BUILD_TYPE:STRING) ${ARCH}, ThinLTO $(cache_value GEARMULATOR_MDMM_APPLE_THINLTO:BOOL)"
+	built+=", DSP optimisation $(cache_value GEARMULATOR_MDMM_APPLE_OPTIMIZE_DSP:BOOL)"
+	if [ "${QUICK}" = 1 ]; then built+=", NO plug-ins (--quick)"; fi
+	stage_end PASS "${built}; ${registered}"
 }
 
 # =====================================================================================================================
@@ -268,10 +294,13 @@ stage_ctest() {
 	have_roms both || { stage_end FAIL "" "${MISSING_WHAT}"; return; }
 	sandbox_new ctest
 	local junit="${OUT}/ctest-junit.xml" log="${LOG_DIR}/2-ctest.log" name answer status=0 args=() item
-	for name in $(ctest --test-dir "${BUILD}" -C Release -N -R "${CTEST_EXCLUDE}" | sed -n 's/^ *Test *#[0-9]*: *//p'); do
+	for name in $(ctest --test-dir "${BUILD}" -C Release -N -R "${CTEST_EXCLUDE}" |
+		sed -n 's/^ *Test *#[0-9]*: *//p'); do
 		case "${name}" in
 			mmDeskFirmwareTest|mdSysexLifecycleTest) ;;	# run directly in 2b
-			*_AU_Validate) cannot_run "${name}" "zip-package AU validation (needs the CPack zip); auval runs on the built AU in 7b" ;;
+			*_AU_Validate)
+				cannot_run "${name}" \
+					"zip-package AU validation (needs the CPack zip); auval runs on the built AU in 7b" ;;
 			*) cannot_run "${name}" "VST2 plug-in test; the VST2 build is off" ;;
 		esac
 	done
@@ -284,8 +313,10 @@ stage_ctest() {
 	if [ "${status}" = 0 ] && [ "${judged}" = 0 ]; then
 		stage_end PASS "$(printf '%s\n' "${answer}" | key numbers)" "$(printf '%s\n' "${answer}" | key notes)"
 	else
-		stage_end FAIL "$(printf '%s\n' "${answer}" | key numbers)" "ctest exit ${status}; $(printf '%s\n' "${answer}" | key notes); log ${log}"
-		grep -E '^\s*[0-9]+/[0-9]+ Test +#[0-9]+: .*(Failed|\*\*\*|Timeout)' "${log}" | head -n 12 | sed 's/^/        | /'
+		stage_end FAIL "$(printf '%s\n' "${answer}" | key numbers)" \
+			"ctest exit ${status}; $(printf '%s\n' "${answer}" | key notes); log ${log}"
+		grep -E '^\s*[0-9]+/[0-9]+ Test +#[0-9]+: .*(Failed|\*\*\*|Timeout)' "${log}" | head -n 12 |
+			sed 's/^/        | /'
 	fi
 }
 
@@ -299,7 +330,11 @@ direct_run() {	# <label> <timeout> <ERE the log must match> <command...>: one fi
 		DIRECT_NOTE="${label} PASS"
 		return 0
 	fi
-	if [ "${status}" = 124 ]; then DIRECT_NOTE="${label} FAILED (time limit ${limit} s)"; else DIRECT_NOTE="${label} FAILED (exit ${status}, or no pass line)"; fi
+	if [ "${status}" = 124 ]; then
+		DIRECT_NOTE="${label} FAILED (time limit ${limit} s)"
+	else
+		DIRECT_NOTE="${label} FAILED (exit ${status}, or no pass line)"
+	fi
 	show_tail "${log}" 8
 	return 1
 }
@@ -333,13 +368,19 @@ stage_direct() {
 			notes="${notes}; mdSysexLifecycleTest not built"; bad=1
 		fi
 	elif [ ! -f "${MD_CACHE}" ] || [ ! -f "${MM_PATCH}" ]; then
-		cannot_run mdSysexLifecycleTest "needs the Machinedrum factory cache (${MD_CACHE}) and the Monomachine factory patch RAM (${MM_PATCH}); absent on this Mac"
+		local lifecycle_reason="needs the Machinedrum factory cache (${MD_CACHE}) and the Monomachine factory patch RAM"
+		cannot_run mdSysexLifecycleTest "${lifecycle_reason} (${MM_PATCH}); absent on this Mac"
 		notes="${notes}; mdSysexLifecycleTest cannot run here (fixtures absent, named in the summary)"
 	else
-		direct_run mdSysexLifecycleTest 2400 'LIFECYCLE ALL PASS' "${tool}" "${MD_ROM}" "${MD_CACHE}" "${MM_ROM}" "${MM_PATCH}" || bad=1
+		direct_run mdSysexLifecycleTest 2400 'LIFECYCLE ALL PASS' "${tool}" "${MD_ROM}" "${MD_CACHE}" "${MM_ROM}" \
+			"${MM_PATCH}" || bad=1
 		notes="${notes}; ${DIRECT_NOTE}"
 	fi
-	if [ "${bad}" = 0 ]; then stage_end PASS "desk smoke tests with the contract checks" "${notes}"; else stage_end FAIL "" "${notes}"; fi
+	if [ "${bad}" = 0 ]; then
+		stage_end PASS "desk smoke tests with the contract checks" "${notes}"
+	else
+		stage_end FAIL "" "${notes}"
+	fi
 }
 
 # =====================================================================================================================
@@ -367,7 +408,8 @@ stage_romload() {
 		log="${LOG_DIR}/3-romload-${model}.log"
 		if run_box 900 "${log}" "${tool}" "${rom}" && last_line "${log}" | grep -q 'mdmmRomLoadTest: PASS'; then
 			line="$(grep -m1 'fingerprint=' "${log}")"
-			numbers="${numbers:+${numbers}; }$(label "${model}") $(printf '%s\n' "${line}" | sed -n 's/.*\(boot_s=[^ ]*\).*/\1/p')"
+			numbers="${numbers:+${numbers}; }$(label "${model}")"
+			numbers+=" $(printf '%s\n' "${line}" | sed -n 's/.*\(boot_s=[^ ]*\).*/\1/p')"
 		else
 			bad=1
 			numbers="${numbers:+${numbers}; }$(label "${model}") FAILED: $(last_line "${log}")"
@@ -410,15 +452,22 @@ stage_sysex() {
 # =====================================================================================================================
 # 5. playing goldens   5b CPU bench sanity
 # =====================================================================================================================
-golden_one() {	# <index> <record|compare> <scenario> <outputs> <speedups> <seconds> <model>: result in goldens/<index>.result
-	local index="$1" mode="$2" scenario="$3" outputs="$4" speedups="$5" seconds="$6" model="$7" log extra=() status=0 verdict detail
+# <index> <record|compare> <scenario> <outputs> <speedups> <seconds> <model>: result in goldens/<index>.result
+golden_one() {
+	local index="$1" mode="$2" scenario="$3" outputs="$4" speedups="$5" seconds="$6" model="$7"
+	local log extra=() status=0 verdict detail
 	log="${OUT}/goldens/${index}.log"
 	[ "${speedups}" = off ] && extra=(GEARMULATOR_MDMM_SPEEDUPS=0)
 	local flags=(--scenario "${scenario}" --outputs "${outputs}" --golden "${GOLDENS}")
 	[ "${mode}" = record ] && flags+=(--record)
-	run_box 1800 "${log}" ${extra[@]+"${extra[@]}"} "${PERF}" "$(rom_for "${model}")" "${model}" "${seconds}" "${flags[@]}" || status=$?
+	run_box 1800 "${log}" ${extra[@]+"${extra[@]}"} "${PERF}" "$(rom_for "${model}")" "${model}" "${seconds}" \
+		"${flags[@]}" || status=$?
 	detail="$(last_line "${log}")"
-	if [ "${status}" = 0 ] && { [ "${mode}" = record ] || printf '%s' "${detail}" | grep -q 'golden: PASS'; }; then verdict=PASS; else verdict=FAIL; fi
+	if [ "${status}" = 0 ] && { [ "${mode}" = record ] || printf '%s' "${detail}" | grep -q 'golden: PASS'; }; then
+		verdict=PASS
+	else
+		verdict=FAIL
+	fi
 	printf '%s\t%s\t%s\t%s\t%s\t%s\n' "${scenario}" "${outputs}" "speedups-${speedups}" "${seconds}" "${verdict}" \
 		"$(scrub "${detail}" | cut -c1-160)" > "${OUT}/goldens/${index}.result"
 }
@@ -440,16 +489,18 @@ golden_pass() {	# <record|compare> <combos file>: every RUN line; compare mode r
 stage_goldens() {
 	stage_begin 5 "Playing goldens"
 	local mode=compare combos="${OUT}/goldens-combos.tsv" bad=0 pass=0 total=0
-	local kind a b c line notes="" tab=$'\t'
+	local kind a b c line notes="" tab=$'\t' equal
 	PERF=""
 	tool_or_pending "${PERF_TOOL}" PERF || return
 	have_roms both || { stage_end FAIL "" "${MISSING_WHAT}"; return; }
 	[ "${RECORD}" = 1 ] && mode=record
 	if [ "${mode}" = compare ] && [ ! -f "${GOLDENS}" ]; then
-		stage_end PENDING "" "no goldens file at ${GOLDENS#"${ROOT}"/}: record it once with --record-goldens and get it signed off"
+		stage_end PENDING "" \
+			"no goldens file at ${GOLDENS#"${ROOT}"/}: record it once with --record-goldens and get it signed off"
 		return
 	fi
-	gate_py goldens "${GOLDENS}" --mode "${mode}" --defaults "${GATE_MIN_SCENARIOS}" --extra "${MDMM_GATE_SCENARIOS:-}" > "${combos}"
+	gate_py goldens "${GOLDENS}" --mode "${mode}" --defaults "${GATE_MIN_SCENARIOS}" \
+		--extra "${MDMM_GATE_SCENARIOS:-}" > "${combos}"
 	if grep -q '^BAD' "${combos}"; then
 		stage_end FAIL "" "$(grep '^BAD' "${combos}" | head -n 1 | cut -f2)"
 		return
@@ -475,13 +526,15 @@ BANNER
 		done
 		[ "${bad}" = 0 ] || { stage_end FAIL "" "a recording run failed (logs in ${OUT}/goldens)"; return; }
 		echo "    recorded; now comparing the file against fresh runs"
-		gate_py goldens "${GOLDENS}" --mode compare --defaults "${GATE_MIN_SCENARIOS}" --extra "${MDMM_GATE_SCENARIOS:-}" > "${combos}"
+		gate_py goldens "${GOLDENS}" --mode compare --defaults "${GATE_MIN_SCENARIOS}" \
+			--extra "${MDMM_GATE_SCENARIOS:-}" > "${combos}"
 		mode=compare
 	fi
 	while IFS="${tab}" read -r kind a b c _ _; do
 		if [ "${kind}" = MISSING ]; then
 			total=$((total + 1)); bad=1
-			printf '%s\t%s\t%s\t%s\t%s\t%s\n' "${a}" "${b}" "speedups-${c}" "-" "FAIL" "no entry in the goldens file for this run (record it: --record-goldens)" >> "${OUT}/goldens.tsv"
+			printf '%s\t%s\t%s\t%s\t%s\t%s\n' "${a}" "${b}" "speedups-${c}" "-" "FAIL" \
+				"no entry in the goldens file for this run (record it: --record-goldens)" >> "${OUT}/goldens.tsv"
 		fi
 	done < "${combos}"
 	golden_pass compare "${combos}"
@@ -494,9 +547,11 @@ BANNER
 		total=$((total + 1))
 		if grep -q "${tab}PASS${tab}" "${line}"; then pass=$((pass + 1)); else bad=1; fi
 	done
-	notes="$(grep "${tab}FAIL${tab}" "${OUT}/goldens.tsv" | head -n 4 | cut -f1-3,6 | tr '\t' ' ' | tr '\n' ';' | sed 's/;*$//')"
+	notes="$(grep "${tab}FAIL${tab}" "${OUT}/goldens.tsv" | head -n 4 | cut -f1-3,6 | tr '\t' ' ' | tr '\n' ';' |
+		sed 's/;*$//')"
 	if [ "${bad}" = 0 ] && [ "${total}" -gt 0 ]; then
-		stage_end PASS "${pass} of ${total} runs equal their golden (scenarios x stereo/all x speed-ups on/off, bit-exact)"
+		equal="${pass} of ${total} runs equal their golden"
+		stage_end PASS "${equal} (scenarios x stereo/all x speed-ups on/off, bit-exact)"
 	else
 		stage_end FAIL "${pass} of ${total} runs equal their golden" "${notes:-no runs}; logs ${OUT}/goldens"
 	fi
@@ -521,8 +576,16 @@ stage_bench() {
 	have_roms both || { stage_end FAIL "" "${MISSING_WHAT}"; return; }
 	sandbox_new bench
 	# "<ROM> 1 6": one instance, six seconds. They exit 1 when the machine does not play (the play head stands still).
-	if run_box 900 "${LOG_DIR}/5b-bench-md.log" "${md_tool}" "${MD_ROM}" 1 6; then numbers="MD plays"; else bad=1; numbers="MD FAILED"; show_tail "${LOG_DIR}/5b-bench-md.log" 6; fi
-	if run_box 900 "${LOG_DIR}/5b-bench-mm.log" "${mm_tool}" "${MM_ROM}" 1 6; then numbers="${numbers}; MM plays"; else bad=1; numbers="${numbers}; MM FAILED"; show_tail "${LOG_DIR}/5b-bench-mm.log" 6; fi
+	if run_box 900 "${LOG_DIR}/5b-bench-md.log" "${md_tool}" "${MD_ROM}" 1 6; then
+		numbers="MD plays"
+	else
+		bad=1; numbers="MD FAILED"; show_tail "${LOG_DIR}/5b-bench-md.log" 6
+	fi
+	if run_box 900 "${LOG_DIR}/5b-bench-mm.log" "${mm_tool}" "${MM_ROM}" 1 6; then
+		numbers="${numbers}; MM plays"
+	else
+		bad=1; numbers="${numbers}; MM FAILED"; show_tail "${LOG_DIR}/5b-bench-mm.log" 6
+	fi
 	if [ "${bad}" = 0 ]; then stage_end PASS "${numbers}"; else stage_end FAIL "${numbers}"; fi
 }
 
@@ -536,7 +599,8 @@ stage_rt() {
 	sandbox_new rt
 	# scripts/mdmm-rt-check.sh counts retired instructions, so what else runs does not move it; --plock adds B-010's
 	# sequencer timing. It makes its own scratch data root; HOME stays the sandbox's.
-	run_box 7200 "${log}" "${here}/mdmm-rt-check.sh" --md "${MD_ROM}" --mm "${MM_ROM}" --build "${BUILD}" --plock || status=$?
+	run_box 7200 "${log}" "${here}/mdmm-rt-check.sh" --md "${MD_ROM}" --mm "${MM_ROM}" --build "${BUILD}" \
+		--plock || status=$?
 	fails="$(grep -c 'FAIL' "${log}")"
 	if [ "${status}" = 0 ] && last_line "${log}" | grep -q '^rt-check: PASS'; then
 		stage_end PASS "$(last_line "${log}"); $(grep -c '^  [a-zA-Z]* *[0-9]* |' "${log}") actions measured"
@@ -557,7 +621,8 @@ stage_capacity() {
 	# 0.90 of the block budget at the median; the paced tail is reported, not judged. Needs the pinned release ROMs.
 	run_plain 3600 "${log}" python3 -B "${ROOT}/scripts/macos/check_mdmm_core_capacity.py" \
 		--host "${host}" --host-architecture "${ARCH}" \
-		--md-plugin "${PRODUCTS}/VST3/${MDMM_PRODUCT_NAME_MD}.vst3" --mm-plugin "${PRODUCTS}/VST3/${MDMM_PRODUCT_NAME_MM}.vst3" \
+		--md-plugin "${PRODUCTS}/VST3/${MDMM_PRODUCT_NAME_MD}.vst3" \
+		--mm-plugin "${PRODUCTS}/VST3/${MDMM_PRODUCT_NAME_MM}.vst3" \
 		--md-firmware "${MD_ROM}" --mm-firmware "${MM_ROM}" --work-root "${OUT}/core-capacity" --output "${receipt}" \
 		--rate 48000 --block 128 --seconds 20 --warm-start-seconds 12 --capacity-repeats 3 --paced-repeats 3 \
 		--capacity-p50-limit 0.90 || status=$?
@@ -566,7 +631,8 @@ stage_capacity() {
 		if [ "${status}" = 0 ] && gate_py capacity "${receipt}" > /dev/null; then
 			stage_end PASS "$(printf '%s\n' "${answer}" | key numbers)" "$(printf '%s\n' "${answer}" | key notes)"
 		else
-			stage_end FAIL "$(printf '%s\n' "${answer}" | key numbers)" "exit ${status}; $(printf '%s\n' "${answer}" | key notes)"
+			stage_end FAIL "$(printf '%s\n' "${answer}" | key numbers)" \
+				"exit ${status}; $(printf '%s\n' "${answer}" | key notes)"
 		fi
 	else
 		stage_end FAIL "" "no receipt (exit ${status}); $(last_line "${log}")"
@@ -590,9 +656,11 @@ stage_vst3_start() {
 		sandbox_new "start-${model}"
 		log="${LOG_DIR}/7a-${model}-firmware.log"
 		status=0
-		run_box 900 "${log}" "${tester}" -verify-audio-buses -blocks 256 -plugin "${PRODUCTS}/VST3/${product}.vst3" || status=$?
+		run_box 900 "${log}" "${tester}" -verify-audio-buses -blocks 256 \
+			-plugin "${PRODUCTS}/VST3/${product}.vst3" || status=$?
 		if [ "${status}" = 0 ] && grep -Fq "Progress: 100% (256/256 blocks)" "${log}" \
-			&& ! grep -Eiq 'Failed to create device|Device Initialization failed|firmware rom .* required|DSP execution fault' "${log}"; then
+			&& ! grep -Eiq -e 'Failed to create device|Device Initialization failed' \
+				-e 'firmware rom .* required|DSP execution fault' "${log}"; then
 			numbers="${numbers:+${numbers}; }${model} 256 blocks with firmware"
 		else
 			bad=1; numbers="${numbers:+${numbers}; }${model} FAILED (exit ${status})"; show_tail "${log}" 8
@@ -601,8 +669,13 @@ stage_vst3_start() {
 		sandbox_new "start-${model}-norom" norom
 		log="${LOG_DIR}/7a-${model}-norom.log"
 		status=0
-		run_box 600 "${log}" "${tester}" -blocks 16 -verify-audio-buses -automation-smoke -plugin "${PRODUCTS}/VST3/${product}.vst3" || status=$?
-		if [ "${status}" = 0 ]; then numbers="${numbers}, automation smoke without ROM"; else bad=1; numbers="${numbers}, automation smoke FAILED (exit ${status})"; show_tail "${log}" 8; fi
+		run_box 600 "${log}" "${tester}" -blocks 16 -verify-audio-buses -automation-smoke \
+			-plugin "${PRODUCTS}/VST3/${product}.vst3" || status=$?
+		if [ "${status}" = 0 ]; then
+			numbers="${numbers}, automation smoke without ROM"
+		else
+			bad=1; numbers="${numbers}, automation smoke FAILED (exit ${status})"; show_tail "${log}" 8
+		fi
 	done
 	if [ "${bad}" = 0 ]; then stage_end PASS "${numbers}"; else stage_end FAIL "${numbers}"; fi
 }
@@ -624,7 +697,8 @@ stage_auval() {
 		manufacturer="$(plutil -extract AudioComponents.0.manufacturer raw -o - "${plist}")"
 		log="${LOG_DIR}/7b-auval-${short}.log"
 		# As CI runs it (smoke_mdmm.sh): auval -v, a scratch data root with no ROM.
-		if gate_run --timeout 900 --log "${log}" -- GEARMULATOR_DATA_ROOT="${scratch}" auval -v "${type}" "${subtype}" "${manufacturer}"; then
+		if gate_run --timeout 900 --log "${log}" -- GEARMULATOR_DATA_ROOT="${scratch}" auval -v "${type}" "${subtype}" \
+			"${manufacturer}"; then
 			numbers="${numbers:+${numbers}; }${name} AU: auval -v ${type} ${subtype} ${manufacturer} passed"
 		else
 			bad=1; numbers="${numbers:+${numbers}; }${name} AU: auval FAILED"; show_tail "${log}" 12
@@ -637,9 +711,9 @@ stage_pluginval() {
 	stage_begin "7c" "pluginval on the built VST3 and AU"
 	have_roms both || { stage_end FAIL "" "${MISSING_WHAT}"; return; }
 	local out="${OUT}/pluginval" log="${LOG_DIR}/7c-pluginval.log" status=0 answer judged=0 au_skipped=0
-	# scripts/mdmm-pluginval.sh: strictness 5 and 8, the firmware copied into its own scratch data root, the owner's config
-	# files checksummed and restored. It validates an AU only when the installed one is this build, which 7b's swap
-	# arranges. It checks that against the owner's real HOME, so it runs in the owner's environment.
+	# scripts/mdmm-pluginval.sh: strictness 5 and 8, the firmware copied into its own scratch data root, the owner's
+	# config files checksummed and restored. It validates an AU only when the installed one is this build, which 7b's
+	# swap arranges. It checks that against the owner's real HOME, so it runs in the owner's environment.
 	run_plain 7200 "${log}" "${PLUGINVAL_CMD}" --products "${PRODUCTS}" --out "${out}" || status=$?
 	[ "${AU_READY}" = 1 ] || au_skipped=1
 	grep -q 'SKIP: .*component' "${log}" && au_skipped=1
@@ -652,7 +726,10 @@ stage_pluginval() {
 	if [ "${status}" = 0 ] && [ "${judged}" = 0 ] && [ "${au_skipped}" = 0 ]; then
 		stage_end PASS "$(printf '%s\n' "${answer}" | key numbers)"
 	else
-		stage_end FAIL "$(printf '%s\n' "${answer}" | key numbers)" "exit ${status}; $(printf '%s\n' "${answer}" | key notes)$( [ "${au_skipped}" = 1 ] && echo '; the AU was NOT validated (not this build, or the swap failed)'); log ${log}"
+		local not_validated=""
+		[ "${au_skipped}" = 1 ] && not_validated="; the AU was NOT validated (not this build, or the swap failed)"
+		stage_end FAIL "$(printf '%s\n' "${answer}" | key numbers)" \
+			"exit ${status}; $(printf '%s\n' "${answer}" | key notes)${not_validated}; log ${log}"
 		show_tail "${log}" 10
 	fi
 }
@@ -681,7 +758,8 @@ stage_journeys() {
 		if [ "${status}" = 0 ] && gate_py journeys "${report}" > /dev/null; then
 			stage_end PASS "$(printf '%s\n' "${answer}" | key numbers)" "$(printf '%s\n' "${answer}" | key notes)"
 		else
-			stage_end FAIL "$(printf '%s\n' "${answer}" | key numbers)" "exit ${status}; $(printf '%s\n' "${answer}" | key notes); report ${report}"
+			stage_end FAIL "$(printf '%s\n' "${answer}" | key numbers)" \
+				"exit ${status}; $(printf '%s\n' "${answer}" | key notes); report ${report}"
 		fi
 	else
 		stage_end FAIL "" "no report (exit ${status}); log ${log}"
@@ -696,19 +774,25 @@ stage_updater() {
 	stage_begin "M1" "Updater end to end (manual)"
 	local log="${LOG_DIR}/M1-updater-check.log" status=0 facts
 	"${GATE_DIR}/updater-manual.sh" check > "${log}" 2>&1 || status=$?
-	facts="$(grep -E '^(candidate version|update public key|published manifest)' "${log}" | sed 's/  */ /g; s/ (source[^)]*)//' | paste -sd'|' - | sed 's/|/; /g')"
+	facts="$(grep -E '^(candidate version|update public key|published manifest)' "${log}" |
+		sed 's/  */ /g; s/ (source[^)]*)//' | paste -sd'|' - | sed 's/|/; /g')"
 	{
 		echo "Updater end to end: needs a window and a person (about 10 minutes). State now:"
 		sed 's/^/  /' "${log}"
 		echo
-		echo "  scripts/local-gate/updater-manual.sh prepare    # a copy of this tree with an older version, standalones built"
-		echo "  scripts/local-gate/updater-manual.sh run md     # then: run mm. Press Update, watch the download, the Installer, Quit"
-		echo "  The steps are printed by 'run' and written in doc/release/LOCAL-GATE.md. Put the outcome in the release review."
+		echo "  scripts/local-gate/updater-manual.sh prepare    # a copy of this tree with an older version," \
+			"standalones built"
+		echo "  scripts/local-gate/updater-manual.sh run md     # then: run mm. Press Update, watch the download," \
+			"the Installer, Quit"
+		echo "  The steps are printed by 'run' and written in doc/release/LOCAL-GATE.md. Put the outcome in the" \
+			"release review."
 	} > "${OUT}/manual.txt"
 	case "${status}" in
-		0) stage_end MANUAL "${facts}" "can be run now: scripts/local-gate/updater-manual.sh prepare, then run md / run mm" ;;
+		0) stage_end MANUAL "${facts}" \
+			"can be run now: scripts/local-gate/updater-manual.sh prepare, then run md / run mm" ;;
 		3) stage_end MANUAL "${facts}" "Update cannot be exercised yet (see manual steps); Download only" ;;
-		*) stage_end MANUAL "${facts}" "could not read the published manifest; run scripts/local-gate/updater-manual.sh check later" ;;
+		*) stage_end MANUAL "${facts}" \
+			"could not read the published manifest; run scripts/local-gate/updater-manual.sh check later" ;;
 	esac
 }
 
@@ -716,14 +800,17 @@ stage_updater() {
 # the run
 # =====================================================================================================================
 record_identity() {
-	local describe commit branch dirty=0 modified=0
+	local describe commit branch dirty=0 modified=0 run_mode
 	describe="$(git -C "${ROOT}" describe --tags --always --dirty 2> /dev/null || echo unknown)"
 	commit="$(git -C "${ROOT}" rev-parse --short=12 HEAD 2> /dev/null || echo unknown)"
 	branch="$(git -C "${ROOT}" rev-parse --abbrev-ref HEAD 2> /dev/null || echo unknown)"
 	[ -n "$(git -C "${ROOT}" status --porcelain --untracked-files=no 2> /dev/null)" ] && dirty=1
 	[ -n "$(git -C "${ROOT}" status --porcelain -- "${GOLDENS}" 2> /dev/null)" ] && modified=1
 	info_set describe "${describe}"; info_set commit "${commit}"; info_set branch "${branch}"; info_set dirty "${dirty}"
-	info_set mode "$([ "${QUICK}" = 1 ] && echo 'quick (no plug-ins; not a release gate)' || echo 'full')$([ "${SKIP_PLUGIN}" = 1 ] && echo ', plug-in checks skipped')$([ "${SKIP_JOURNEYS}" = 1 ] && echo ', journeys skipped')"
+	run_mode="$([ "${QUICK}" = 1 ] && echo 'quick (no plug-ins; not a release gate)' || echo 'full')"
+	if [ "${SKIP_PLUGIN}" = 1 ]; then run_mode+=', plug-in checks skipped'; fi
+	if [ "${SKIP_JOURNEYS}" = 1 ]; then run_mode+=', journeys skipped'; fi
+	info_set mode "${run_mode}"
 	info_set build_dir "${BUILD}"; info_set arch "${ARCH}"; info_set started "${STARTED}"
 	info_set thinlto "$(cache_value GEARMULATOR_MDMM_APPLE_THINLTO:BOOL)"
 	info_set dsp_optimised "$(cache_value GEARMULATOR_MDMM_APPLE_OPTIMIZE_DSP:BOOL)"
@@ -743,8 +830,8 @@ echo "   build ${BUILD}"
 echo "   run   ${OUT}"
 record_identity
 
-# MDMM_GATE_ONLY="3 5" runs only those stages on the tree as it is (stage 0 always runs): for working on one stage of the
-# gate; the summary calls such a run partial.
+# MDMM_GATE_ONLY="3 5" runs only those stages on the tree as it is (stage 0 always runs): for working on one stage
+# of the gate; the summary calls such a run partial.
 ONLY="${MDMM_GATE_ONLY:-}"
 wanted() { [ -z "${ONLY}" ] || [[ " ${ONLY} " == *" $1 "* ]]; }
 [ -n "${ONLY}" ] && info_set only "${ONLY}"
@@ -762,12 +849,14 @@ if [ "${BUILD_OK}" = 1 ]; then
 	wanted 5b && stage_bench
 	wanted 6a && stage_rt
 else
-	for pair in "2:ctest, every registered test" "2b:Firmware tests ctest cannot run" "3:ROM loading" "4:SysEx round trip" "5:Playing goldens" "5b:CPU bench sanity" "6a:Real-time work while editing (rt-check)"; do
+	for pair in "2:ctest, every registered test" "2b:Firmware tests ctest cannot run" "3:ROM loading" \
+		"4:SysEx round trip" "5:Playing goldens" "5b:CPU bench sanity" "6a:Real-time work while editing (rt-check)"; do
 		stage_begin "${pair%%:*}" "${pair#*:}"
 		stage_end FAIL "" "not run: the build failed"
 	done
 fi
-PLUGIN_STAGES="6b:Core capacity of the built VST3|7a:VST3 start with firmware|7b:auval on the built AU|7c:pluginval on the built VST3 and AU|7d:User journeys, both editors"
+PLUGIN_STAGES="6b:Core capacity of the built VST3|7a:VST3 start with firmware|7b:auval on the built AU"
+PLUGIN_STAGES+="|7c:pluginval on the built VST3 and AU|7d:User journeys, both editors"
 leave_out() {	# <reason> <FAIL|SKIP>: every stage of the plug-in group, not run
 	local pair
 	IFS='|'
@@ -807,7 +896,8 @@ stage_updater
 
 if [ "${RECORD}" = 1 ]; then
 	echo
-	echo "!!! GOLDENS WERE RECORDED: ${GOLDENS#"${ROOT}"/} changed. Read 'git diff' of it and get Radek's sign-off before it is committed."
+	echo "!!! GOLDENS WERE RECORDED: ${GOLDENS#"${ROOT}"/} changed. Read 'git diff' of it and get Radek's sign-off" \
+		"before it is committed."
 fi
 FINISHED=1
 write_summary

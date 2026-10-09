@@ -177,11 +177,11 @@ namespace mmDesk
 		}
 	}
 
-	// B-027: the OS 1.32B takes a dump of the pattern that plays and loads the kit the pattern links from its slot, also
-	// when that is the kit that plays (measured, mmDeskFirmwareTest machine: memory shows the stored kit some 20-40 ms
-	// after the dump is taken on SYSEX RECV): the kit's unsaved edits, a machine change or a value, are gone. As the
-	// Machinedrum's (B-025): once the machine has read and applied the dump (the stream's after-work), the edits go
-	// again (restoreWorkingKit); until then no memory image of the kit is taken, it shows the stored slot.
+	// B-027: the OS 1.32B takes a dump of the pattern that plays and loads the kit the pattern links from its slot,
+	// also when that is the kit that plays (measured, mmDeskFirmwareTest machine: memory shows the stored kit some
+	// 20-40 ms after the dump is taken on SYSEX RECV): the kit's unsaved edits, a machine change or a value, are gone.
+	// As the Machinedrum's (B-025): once the machine has read and applied the dump (the stream's after-work), the edits
+	// go again (restoreWorkingKit); until then no memory image of the kit is taken, it shows the stored slot.
 	void MmMachine::reloadFollows(const Bytes& _patternDump)
 	{
 		const auto pattern = ed::decodeMmPattern(_patternDump);

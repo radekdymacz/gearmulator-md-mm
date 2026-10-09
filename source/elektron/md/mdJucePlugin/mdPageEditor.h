@@ -72,8 +72,9 @@ namespace mdJucePlugin
 		void chooseRom();
 		void chooseSyx(bool _save);
 		void chooseSample(uint8_t _slot);
-		// Files dropped on the window (mdDroppedFiles.h): the page hears what they are and answers with dropRom, dropSyx or
-		// dropSample, which hand the file to the session as its chooser would. The reason when the file cannot be used.
+		// Files dropped on the window (mdDroppedFiles.h): the page hears what they are and answers with dropRom,
+		// dropSyx or dropSample, which hand the file to the session as its chooser would. The reason when the
+		// file cannot be used.
 		void filesDropped(const std::vector<std::string>& _paths, double _x, double _y);
 		std::string useDrop(droppedFiles::Kind _kind, const elektronData::json::Value& _message);
 		void layout() const;

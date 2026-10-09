@@ -272,9 +272,14 @@ const MmJourneys = (() => {
 			{ say: "pick another machine", act: async (u, c) => { c.k0 = kitT(0); c.m0 = S().tracks[0].m; u.click("#machbtn"); await sleep(300); const m = $all("#machpop .mk").find(b => b.dataset.mach !== c.m0 && !b.disabled); c.m1 = m.dataset.mach; u.click(m); },
 				screen: c => ok(S().tracks[0].m === c.m1, "view " + S().tracks[0].m), machine: c => ok(kitT(0) !== c.k0, "kit unchanged"), within: 10000 },
 			go("seq"),
-			{ say: "click an empty cell of the piano roll (a dump of the pattern that plays)", act: (u, c) => { c.n = rollCell(0, 0).n; c.s = freeSteps(0, 1, 0, c.n)[0]; if (c.s == null) throw new Error("no free step"); const p = rollCell(0, c.s); u.click(p.c, {}, p.fx, p.fy); },
+			{ say: "click an empty cell of the piano roll (a dump of the pattern that plays)",
+				act: (u, c) => { c.n = rollCell(0, 0).n; c.s = freeSteps(0, 1, 0, c.n)[0]; if (c.s == null)
+				throw new Error("no free step"); const p = rollCell(0, c.s); u.click(p.c, {}, p.fx, p.fy); },
 				machine: c => ok(trigsOf(0).includes(c.s), "pattern trigs " + trigsOf(0).join(",")), within: 15000 },
-			{ say: "wait on Sequence: the machine stays", act: () => sleep(5000), screen: c => ok(S().tracks[0].m === c.m1, "view " + S().tracks[0].m), machine: c => ok(kitT(0) !== c.k0 && machine().kit?.working === "edited", "kit back to " + kitT(0) + ", " + machine().kit?.working), within: 2000 },
+			{ say: "wait on Sequence: the machine stays", act: () => sleep(5000),
+				screen: c => ok(S().tracks[0].m === c.m1, "view " + S().tracks[0].m),
+				machine: c => ok(kitT(0) !== c.k0 && machine().kit?.working === "edited", "kit back to " + kitT(0)
+				+ ", " + machine().kit?.working), within: 2000 },
 			go("sound"),
 			{ say: "and on Sound again", act: () => sleep(1000), screen: c => ok(S().tracks[0].m === c.m1, "view " + S().tracks[0].m), machine: c => ok(kitT(0) !== c.k0, "kit back to " + kitT(0)), within: 2000 }
 		],
@@ -931,11 +936,16 @@ const MmJourneys = (() => {
 	   md-drop-syx): its import window opens */
 	const dropSyxJ = {
 		name: "mm-drop-syx",
-		needs: () => new URLSearchParams(location.search).get("syxfile") ? null : "no .syx for the run (GEARMULATOR_MDMM_SYX_FILE)",
+		needs: () => new URLSearchParams(location.search).get("syxfile") ? null
+			: "no .syx for the run (GEARMULATOR_MDMM_SYX_FILE)",
 		steps: [
-			{ say: "drop the run's .syx on the page: its import window opens with the file's preview", act: () => Bridge.log(`dropfiles ${Math.round(innerWidth / 2)} ${Math.round(innerHeight / 2)} syx`),
-				screen: () => ok(!$1("#syxpop").hidden && $all("#syxpop [data-syxkind]").length > 0, "no preview"), within: 8000 },
-			{ say: "click Cancel: it closes, nothing is sent", act: u => u.click('#syxpop .syxfoot [data-syxgo="close"]'), screen: () => ok($1("#syxpop").hidden, "still open") }
+			{ say: "drop the run's .syx on the page: its import window opens with the file's preview",
+				act: () => Bridge.log(`dropfiles ${Math.round(innerWidth / 2)} ${Math.round(innerHeight / 2)} syx`),
+				screen: () => ok(!$1("#syxpop").hidden && $all("#syxpop [data-syxkind]").length > 0, "no preview"),
+					within: 8000 },
+			{ say: "click Cancel: it closes, nothing is sent",
+				act: u => u.click('#syxpop .syxfoot [data-syxgo="close"]'),
+				screen: () => ok($1("#syxpop").hidden, "still open") }
 		],
 		async tidy(u) { if (!$1("#syxpop").hidden) u.key("Escape"); }
 	};

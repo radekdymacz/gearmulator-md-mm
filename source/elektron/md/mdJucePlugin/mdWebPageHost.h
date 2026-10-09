@@ -65,9 +65,10 @@ namespace mdJucePlugin
 		void checkStarted();
 		// I-008: what a right-click on that message does (the editor's menu as a native menu: no page draws it).
 		void setFallbackMenu(std::function<void()> _open) { m_fallbackMenu = std::move(_open); }
-		// The page started again with batches already sent (Linux: it says a/0 when it starts, mdPageBridge.h; Windows, B-029:
-		// WebView2 was made again in a new window and loads it again): what it had is gone, so the owner sends everything
-		// once more (the page's ready may have come before this, and what it answered went out under the old page's numbers).
+		// The page started again with batches already sent (Linux: it says a/0 when it starts, mdPageBridge.h; Windows,
+		// B-029: WebView2 was made again in a new window and loads it again): what it had is gone, so the owner sends
+		// everything once more (the page's ready may have come before this, and what it answered went out under the
+		// old page's numbers).
 		void setOnRestart(std::function<void()> _restarted) { m_onRestart = std::move(_restarted); }
 		// Files dragged onto the page: whether the owner takes them (their full paths), that they came over the page
 		// (true) or left it (false), and where they were dropped, in the page's CSS pixels. macOS only for now: there
@@ -121,7 +122,8 @@ namespace mdJucePlugin
 		double m_userZoom = 1.0;	// the user's page zoom (the editor's menu, Cmd - / Cmd + / Cmd 0)
 		double m_cssZoom = 1.0;		// the CSS zoom sent (a zoom message), where the web view has no native page zoom
 		double m_pageZoom = 1.0;	// the page's zoom now (native or CSS): a CSS pixel is this many of the view's
-		int m_fileDrops = 0;		// macOS: 1 once the web view hands file drags to the window (mdWebFileDrop.mm), -1 it cannot
+		// macOS: 1 once the web view hands file drags to the window (mdWebFileDrop.mm), -1 it cannot
+		int m_fileDrops = 0;
 		bool m_keptDrawn = false;	// a background run (mdBackgroundRun.h): the page draws while covered
 		mutable juce::File m_logFile;	// created on the first line
 		juce::File m_startupLog;	// B-022 (setStartupLog)

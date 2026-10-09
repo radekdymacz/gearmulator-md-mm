@@ -624,13 +624,15 @@ void kitAfterPatternDump()
 	msg(R"({"op":"step","g":2,"p":3,"t":2,"s":7,"v":{"n":[60],"a":1,"f":1,"l":1}})");
 	run(2000);
 	check(ed::decodeMmPattern(m.slots[{0x67, 3}])->notes[2][7] == 60, "the step's dump taken on SYSEX RECV");
-	check(machines.size() == 2 && machines[1] == machines[0], "then the machine change again, after the dump (the machine reloaded the kit)");
+	check(machines.size() == 2 && machines[1] == machines[0],
+		"then the machine change again, after the dump (the machine reloaded the kit)");
 	for(int i = 0; i < 1000 && !d.pattern(4); ++i)
 		run(10);	// the library's background read
 	const auto sent = machines.size();
 	msg(R"({"op":"step","g":3,"p":4,"t":2,"s":7,"v":{"n":[60],"a":1,"f":1,"l":1}})");
 	run(2000);
-	check(ed::decodeMmPattern(m.slots[{0x67, 4}])->notes[2][7] == 60 && machines.size() == sent, "a dump of another pattern: nothing again");
+	check(ed::decodeMmPattern(m.slots[{0x67, 4}])->notes[2][7] == 60 && machines.size() == sent,
+		"a dump of another pattern: nothing again");
 }
 
 // LOAD KIT of a never-written slot (name byte 0 is 0xff) plays it as NEW KIT (measured, mmDeskFirmwareTest p4).

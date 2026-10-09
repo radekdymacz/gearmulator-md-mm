@@ -149,7 +149,8 @@ namespace mdJucePlugin::processArch
 
 	std::string describe(const ProcessArch& _arch)
 	{
-		return "process " + _arch.processArch + " on " + _arch.machineArch + (_arch.translated ? ", translated" : ", native");
+		return "process " + _arch.processArch + " on " + _arch.machineArch
+			+ (_arch.translated ? ", translated" : ", native");
 	}
 
 	Fields sessionFields(const ProcessArch& _arch)
@@ -182,7 +183,8 @@ namespace mdJucePlugin::processArch
 				"It uses about twice the CPU. ";
 			notice.text += _standalone
 				? "Open this app as an Apple silicon app (uncheck 'Open using Rosetta' in its Get Info window)."
-				: "Open your DAW as an Apple silicon app (uncheck 'Open using Rosetta'), or use the Apple silicon standalone app.";
+				: "Open your DAW as an Apple silicon app (uncheck 'Open using Rosetta'), or use the Apple silicon "
+					"standalone app.";
 			return notice;
 		case Os::Windows:
 			notice.title = "Running in emulation";

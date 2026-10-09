@@ -379,33 +379,47 @@ check(P.Boot.audioWord({ plugin: true, seconds: 3, blocks: 0, realtime: null }) 
 check(P.Boot.audioWord({ plugin: true, seconds: 9, blocks: 900, realtime: 0.6 }) === "The machine runs at 0.6× real time: try a larger buffer.", "slower than real time: says how slow");
 check(P.Boot.audioWord({ plugin: true, seconds: 9, blocks: 900, realtime: 1.0 }) === "", "in real time: nothing to say");
 
-/* ---- the plug-in's notices over the real bridge (codex review 2026-10): the page's own scripts, deskBridge.js included,
-   against a model of the plug-in's notice book (mdNoticeBook.h: a notice answers once, by its number, with one of its
-   buttons; anything else is refused and runs nothing) ---- */
+/* ---- the plug-in's notices over the real bridge (codex review 2026-10): the page's own scripts, deskBridge.js
+   included, against a model of the plug-in's notice book (mdNoticeBook.h: a notice answers once, by its number, with
+   one of its buttons; anything else is refused and runs nothing) ---- */
 {
-	const files = [...fs.readFileSync(path.join(__dirname, "mdStudio.html"), "utf8").matchAll(/<script src="([\w.]+)"><\/script>/g)].map(m => m[1])
-		.filter(f => !/SelfTest\.js$|Journeys?\.js$|deskJourney\.js$/.test(f)).map(f => f.startsWith("desk") ? "../shared/" + f : f);
-	check(files.includes("../shared/deskBridge.js") && files.includes("../shared/deskModal.js"), "this page runs the real bridge and modal layer");
+	const files = [...fs.readFileSync(path.join(__dirname, "mdStudio.html"), "utf8")
+		.matchAll(/<script src="([\w.]+)"><\/script>/g)].map(m => m[1])
+		.filter(f => !/SelfTest\.js$|Journeys?\.js$|deskJourney\.js$/.test(f))
+		.map(f => f.startsWith("desk") ? "../shared/" + f : f);
+	check(files.includes("../shared/deskBridge.js") && files.includes("../shared/deskModal.js"),
+		"this page runs the real bridge and modal layer");
 	const native = (() => {
 		let last = 0; const waiting = new Map(), toPage = [], ran = [], answers = [];
 		return {
-			notice(title, buttons, modal, text) { const id = ++last; waiting.set(id, { buttons: Math.max(1, buttons.length), title }); toPage.push(Object.assign({ type: "notice", id, title, text: text || "", buttons }, modal === false ? { modal } : {})); return id; },
+			notice(title, buttons, modal, text) {
+				const id = ++last;
+				waiting.set(id, { buttons: Math.max(1, buttons.length), title });
+				toPage.push(Object.assign({ type: "notice", id, title, text: text || "", buttons },
+					modal === false ? { modal } : {}));
+				return id;
+			},
 			onPageMessage(m) {
 				if (this.onDrop && /^drop(Rom|Syx|Sample)$/.test(m.op)) { this.onDrop(m); return; }
-				if (m.op !== "noticeAnswer") { toPage.push({ type: "result", op: m.op, id: m.id, ok: true, errors: [] }); return; }
+				if (m.op !== "noticeAnswer") { toPage.push({ type: "result", op: m.op, id: m.id, ok: true,
+					errors: [] }); return; }
 				answers.push(m);
 				const w = waiting.get(m.notice), ok = !!w && m.button >= 0 && m.button < w.buttons;
 				if (ok) { waiting.delete(m.notice); ran.push(w.title + ":" + m.button); }
-				toPage.push({ type: "result", op: m.op, id: m.id, ok, errors: ok ? [] : ["notice " + m.notice + " is not waiting for an answer"] });
+				toPage.push({ type: "result", op: m.op, id: m.id, ok, errors: ok ? []
+					: ["notice " + m.notice + " is not waiting for an answer"] });
 			},
 			toPage, ran, answers, waiting
 		};
 	})();
 	const timers2 = [], logged = [];
-	let pointAt = () => null;	/* what is under a point of the page (document.elementFromPoint): nothing, unless a test says */
+	/* what is under a point of the page (document.elementFromPoint): nothing, unless a test says */
+	let pointAt = () => null;
 	const win = { addEventListener() { }, gmDev: batch => { for (const m of batch) native.onPageMessage(m); } };
-	const scope2 = new Proxy({ setTimeout: f => { timers2.push(f); return timers2.length; }, clearTimeout() { }, window: win, location: { protocol: "http:", search: "" },
-		document: orAny({ addEventListener() { }, activeElement: null, readyState: "complete", elementFromPoint: (x, y) => pointAt(x, y) }), addEventListener() { },
+	const scope2 = new Proxy({ setTimeout: f => { timers2.push(f); return timers2.length; }, clearTimeout() { },
+		window: win, location: { protocol: "http:", search: "" },
+		document: orAny({ addEventListener() { }, activeElement: null, readyState: "complete",
+			elementFromPoint: (x, y) => pointAt(x, y) }), addEventListener() { },
 		console: { log: (...a) => logged.push(a.join(" ")), error() { }, warn() { } } }, {
 		has: () => true,
 		get: (t, k) => k === Symbol.unscopables ? undefined : k in t ? t[k] : k in real ? real[k] : any,
@@ -421,24 +435,29 @@ const banners = []; Banner.show = (m, answer) => { banners.push({ m, answer }); 
 return { Bridge, cmd, asked, errors, banners, S, Drop, get V() { return V; }, setV(v) { V = v; } }; }`)(scope2);
 	const deliver = () => { win.gm.recv(native.toPage.splice(0)); };
 	Q.cmd("romInfo"); deliver();	/* a command first: the bridge's request numbers are on */
-	const first = native.notice("Delete preset?", ["Yes", "No"]), second = native.notice("Overwrite?", ["Overwrite", "Cancel"]);
+	const first = native.notice("Delete preset?", ["Yes", "No"]),
+		second = native.notice("Overwrite?", ["Overwrite", "Cancel"]);
 	deliver();
 	Q.asked.find(a => /Delete preset/.test(a.html)).btns[0][2]();
 	deliver();
 	const a1 = native.answers[native.answers.length - 1];
-	check(a1 && a1.notice === first && typeof a1.id === "number" && a1.id !== a1.notice && native.ran.join() === "Delete preset?:0",
-		"Yes on notice " + first + ": the answer names notice " + first + " (its own request id " + (a1 && a1.id) + " apart), and that notice runs");
+	check(a1 && a1.notice === first && typeof a1.id === "number" && a1.id !== a1.notice
+		&& native.ran.join() === "Delete preset?:0",
+		"Yes on notice " + first + ": the answer names notice " + first + " (its own request id " + (a1 && a1.id)
+		+ " apart), and that notice runs");
 	for (let i = 0; i < 40; i++) Q.cmd("romInfo");
 	deliver();
 	Q.asked.find(a => /Overwrite\?/.test(a.html)).item.cancel();	/* closed another way: its last key */
 	deliver();
-	check(native.ran.join() === "Delete preset?:0,Overwrite?:1" && native.answers[native.answers.length - 1].notice === second,
+	check(native.ran.join() === "Delete preset?:0,Overwrite?:1"
+		&& native.answers[native.answers.length - 1].notice === second,
 		"40 commands later, the other notice closed by its last key: notice " + second + " takes it");
 	for (let i = 3; i <= 30; i++) native.notice("Q" + i, ["Yes", "No"]);
 	deliver();
 	Q.asked.find(a => /<b>Q7<\/b>/.test(a.html)).btns[0][2]();
 	deliver();
-	check(native.ran[native.ran.length - 1] === "Q7:0" && native.ran.length === 3 && native.waiting.size === 27, "a key on notice 7 among 28 waiting answers notice 7 only");
+	check(native.ran[native.ran.length - 1] === "Q7:0" && native.ran.length === 3 && native.waiting.size === 27,
+		"a key on notice 7 among 28 waiting answers notice 7 only");
 	/* the update banner ("modal": false): its keys answer the banner's notice */
 	const banner = native.notice("Update available: 9.9.9", ["Update", "Later", "Don't check"], false);
 	deliver();
@@ -447,81 +466,103 @@ return { Bridge, cmd, asked, errors, banners, S, Drop, get V() { return V; }, se
 	b.answer(0);
 	deliver();
 	const ab = native.answers[native.answers.length - 1];
-	check(ab.notice === banner && ab.button === 0 && ab.id !== banner && native.ran[native.ran.length - 1] === "Update available: 9.9.9:0",
+	check(ab.notice === banner && ab.button === 0 && ab.id !== banner
+		&& native.ran[native.ran.length - 1] === "Update available: 9.9.9:0",
 		"Update on the banner reaches the banner's notice (its action runs in the plug-in)");
 	/* answered again (a second click, a replayed batch): refused by the plug-in, only logged on the page */
 	const shownBefore = Q.errors.length;
 	b.answer(0);
 	deliver();
-	check(native.ran.length === 4 && Q.errors.length === shownBefore && logged.some(l => /noticeAnswer refused: notice \d+ is not waiting/.test(l)),
+	check(native.ran.length === 4 && Q.errors.length === shownBefore
+		&& logged.some(l => /noticeAnswer refused: notice \d+ is not waiting/.test(l)),
 		"an answer the plug-in refuses runs nothing, shows nothing, and is logged");
-	/* Rosetta (mdRosettaNotice.h, mdProcessArch.h): a dialog with "Don't show again" first and OK last. Closed any other way
-	   (Esc, a click outside) the page answers with the last key, OK, which keeps nothing; only its own key sends the
-	   first button, which the plug-in keeps in its config. */
-	const rosettaText = "This is the Intel version of the editor running translated on an Apple silicon Mac. It uses about twice the CPU. Open your DAW as an Apple silicon app (uncheck 'Open using Rosetta'), or use the Apple silicon standalone app.";
+	/* Rosetta (mdRosettaNotice.h, mdProcessArch.h): a dialog with "Don't show again" first and OK last. Closed any
+	   other way (Esc, a click outside) the page answers with the last key, OK, which keeps nothing; only its own key
+	   sends the first button, which the plug-in keeps in its config. */
+	const rosettaText = "This is the Intel version of the editor running translated on an Apple silicon Mac. It uses " +
+		"about twice the CPU. Open your DAW as an Apple silicon app (uncheck 'Open using Rosetta'), or use the Apple " +
+		"silicon standalone app.";
 	const askedBefore = Q.asked.length;
 	const rosetta1 = native.notice("Running under Rosetta", ["Don't show again", "OK"], undefined, rosettaText);
 	deliver();
 	const dialog = Q.asked.slice(askedBefore).find(a => /Running under Rosetta/.test(a.html));
 	check(dialog && /uses about twice the CPU/.test(dialog.html) && dialog.item.notice && dialog.btns.length === 2
-		&& dialog.btns[0][0] === "Don't show again" && dialog.btns[1][0] === "OK", "the Rosetta notice is a dialog the plug-in waits on: its text, Don't show again and OK");
+		&& dialog.btns[0][0] === "Don't show again" && dialog.btns[1][0] === "OK",
+			"the Rosetta notice is a dialog the plug-in waits on: its text, Don't show again and OK");
 	dialog.item.cancel();
 	deliver();
 	const closed = native.answers[native.answers.length - 1];
-	check(closed.notice === rosetta1 && closed.button === 1 && native.ran[native.ran.length - 1] === "Running under Rosetta:1",
+	check(closed.notice === rosetta1 && closed.button === 1
+		&& native.ran[native.ran.length - 1] === "Running under Rosetta:1",
 		"closed with Esc or a click outside: answered by OK (the last key), so nothing is kept");
 	const rosetta2 = native.notice("Running under Rosetta", ["Don't show again", "OK"], undefined, rosettaText);
 	deliver();
 	Q.asked[Q.asked.length - 1].btns[0][2]();
 	deliver();
 	const never = native.answers[native.answers.length - 1];
-	check(never.notice === rosetta2 && never.button === 0 && native.ran[native.ran.length - 1] === "Running under Rosetta:0",
+	check(never.notice === rosetta2 && never.button === 0
+		&& native.ran[native.ran.length - 1] === "Running under Rosetta:0",
 		"Don't show again answers its own notice with button 0 (the plug-in keeps it)");
 	/* what the page sends is the command the plug-in's table takes ($defs/command is generated from it, mdDeskTest) */
 	const { execFileSync } = require("child_process");
 	const root = path.join(__dirname, "..", "..", "..", "..", "..", "..");
-	const onContract = m => { try { execFileSync("python3", [path.join(root, "doc/modern-ux/page_contract_check.py"), path.join(root, "doc/modern-ux/md-data-contract.schema.json"), "command"], { input: JSON.stringify(m) }); return true; } catch (e) { return false; } };
-	check(onContract(a1) && onContract(ab) && onContract(closed) && onContract(never) && !onContract({ op: "noticeAnswer", id: a1.notice, button: 0 }),
-		"the answers are the contract's noticeAnswer ({notice, button}); the old shape (the notice's number as id) is not");
+	const onContract = m => { try { execFileSync("python3",
+		[path.join(root, "doc/modern-ux/page_contract_check.py"),
+		path.join(root, "doc/modern-ux/md-data-contract.schema.json"), "command"],
+		{ input: JSON.stringify(m) }); return true; } catch (e) { return false; } };
+	check(onContract(a1) && onContract(ab) && onContract(closed) && onContract(never)
+		&& !onContract({ op: "noticeAnswer", id: a1.notice, button: 0 }),
+		"the answers are the contract's noticeAnswer ({notice, button}); the old shape (the notice's number as id) " +
+		"is not");
 
-	/* ---- files dropped on the window (shared/deskDrop.js, the Sampler's queue in mdDeskSampler.js) over the real bridge,
-	   against a model of the window's drop book (mdDroppedFiles.h: each file serves once, as the kind it was dropped as);
-	   a sample the window takes is sampleLoad sending, then done when the test says ---- */
+	/* ---- files dropped on the window (shared/deskDrop.js, the Sampler's queue in mdDeskSampler.js) over the real
+	   bridge, against a model of the window's drop book (mdDroppedFiles.h: each file serves once, as the kind it was
+	   dropped as); a sample the window takes is sampleLoad sending, then done when the test says ---- */
 	{
 		let book = null, nextDrop = 0;
 		const KIND = { dropRom: "rom", dropSyx: "sysex", dropSample: "sample" }, cmds = [];
 		native.onDrop = m => {
 			cmds.push(m);
-			const f = book && book.drop === m.drop ? book.files[m.n] : null, ok = !!f && !f.used && f.kind === KIND[m.op];
+			const f = book && book.drop === m.drop ? book.files[m.n] : null, ok = !!f && !f.used
+				&& f.kind === KIND[m.op];
 			if (ok) f.used = true;
-			if (ok && m.op === "dropSample") native.toPage.push({ type: "sampleLoad", slot: m.slot, state: "sending", file: f.name, text: "" });
-			native.toPage.push({ type: "result", op: m.op, id: m.id, ok, errors: ok ? [] : ["The window no longer holds that file: drop it again."] });
+			if (ok && m.op === "dropSample") native.toPage.push({ type: "sampleLoad", slot: m.slot, state: "sending",
+				file: f.name, text: "" });
+			native.toPage.push({ type: "result", op: m.op, id: m.id, ok, errors: ok ? []
+				: ["The window no longer holds that file: drop it again."] });
 		};
 		const kinds = { bin: "rom", syx: "sysex", wav: "sample", txt: "unknown" };
 		/* the window's drop message for these files, at x, y */
 		const dropFiles = (names, x = 300, y = 200) => {
-			book = { drop: ++nextDrop, files: names.map(name => ({ name, kind: kinds[name.split(".").pop()], used: false })) };
-			native.toPage.push({ type: "drop", drop: book.drop, items: book.files.map((f, n) => ({ n, kind: f.kind, name: f.name })), x, y });
+			book = { drop: ++nextDrop, files: names.map(name => ({ name, kind: kinds[name.split(".").pop()],
+				used: false })) };
+			native.toPage.push({ type: "drop", drop: book.drop,
+				items: book.files.map((f, n) => ({ n, kind: f.kind, name: f.name })), x, y });
 			cmds.length = 0; Q.asked.length = 0; Q.errors.length = 0;
 			deliver();
 		};
-		const done = slot => { native.toPage.push({ type: "sampleLoad", slot, state: "done", file: "", text: "ROM-" + String(slot + 1).padStart(2, "0") + " loaded." }); deliver(); };
+		const done = slot => { native.toPage.push({ type: "sampleLoad", slot, state: "done", file: "", text: "ROM-"
+			+ String(slot + 1).padStart(2, "0") + " loaded." }); deliver(); };
 		const sent = () => cmds.map(c => c.op + (c.slot != null ? "@" + c.slot : "")).join(" ");
-		const can = Object.assign({}, Q.V.caps, { can: Object.assign({}, Q.V.caps.can, { sampleLoad: true }), reasons: {} });
+		const can = Object.assign({}, Q.V.caps, { can: Object.assign({}, Q.V.caps.can, { sampleLoad: true }),
+			reasons: {} });
 		Q.setV(Object.assign({}, Q.V, { lifecycle: "ready", caps: can }));
 
 		/* a sample with the Sampler closed: the toast, no command */
 		Q.S.ws = "seq";
 		dropFiles(["kick.wav"]);
-		check(!cmds.length && Q.errors.join() === "Open the Sampler and select a ROM slot, then drop the samples.", "a sample with the Sampler closed: the toast, no command (" + (Q.errors.join() || "none") + ")");
+		check(!cmds.length && Q.errors.join() === "Open the Sampler and select a ROM slot, then drop the samples.",
+			"a sample with the Sampler closed: the toast, no command (" + (Q.errors.join() || "none") + ")");
 		/* the Sampler open on a RAM slot: no ROM slot to load into */
 		Q.S.ws = "sampler"; Q.S.smpSlot = "RAM1";
 		dropFiles(["kick.wav"]);
-		check(!cmds.length && /Select a ROM slot, then drop the samples/.test(Q.errors.join()), "on a RAM slot: the toast, no command");
+		check(!cmds.length && /Select a ROM slot, then drop the samples/.test(Q.errors.join()),
+			"on a RAM slot: the toast, no command");
 		/* ROM-05 selected: the sample goes there at once (as Load sample…) */
 		Q.S.smpSlot = "ROM5";
 		dropFiles(["kick.wav"]);
-		check(sent() === "dropSample@4" && cmds[0].drop === nextDrop && cmds[0].n === 0 && !Q.asked.length, "ROM-05 selected: dropSample {drop, n, slot 4}, nothing asked");
+		check(sent() === "dropSample@4" && cmds[0].drop === nextDrop && cmds[0].n === 0 && !Q.asked.length,
+			"ROM-05 selected: dropSample {drop, n, slot 4}, nothing asked");
 		done(4);
 		/* dropped on a ROM tile: that slot, whatever is selected */
 		pointAt = () => ({ closest: () => ({ dataset: { romtile: "9" } }) });
@@ -532,18 +573,22 @@ return { Bridge, cmd, asked, errors, banners, S, Drop, get V() { return V; }, se
 		/* three onto ROM-47: two fit; asked once; one at a time, the next when the machine has the one before */
 		Q.S.smpSlot = "ROM47";
 		dropFiles(["a.wav", "b.wav", "c.wav"]);
-		check(!cmds.length && Q.asked.length === 1 && /Load 2 samples into ROM-47 to ROM-48\?/.test(Q.asked[0].html) && /ROM-48 is the last slot: 1 sample not loaded\./.test(Q.errors.join()),
+		check(!cmds.length && Q.asked.length === 1 && /Load 2 samples into ROM-47 to ROM-48\?/.test(Q.asked[0].html)
+			&& /ROM-48 is the last slot: 1 sample not loaded\./.test(Q.errors.join()),
 			"three onto ROM-47: asked about the two that fit, the third said");
 		Q.asked[0].btns.find(b => b[0] === "Load")[2]();
 		deliver();
 		check(sent() === "dropSample@46", "Load: the first only, while it is on its way (" + sent() + ")");
 		done(46);
-		check(sent() === "dropSample@46 dropSample@47" && cmds[1].n === 1, "its sampleLoad done: the next one, file 1 into ROM-48");
+		check(sent() === "dropSample@46 dropSample@47" && cmds[1].n === 1,
+			"its sampleLoad done: the next one, file 1 into ROM-48");
 		done(47);
 		check(cmds.length === 2, "then nothing more");
-		/* a .syx: its import window (the window's preview follows); a ROM while a firmware runs: asked, then installed */
+		/* a .syx: its import window (the window's preview follows); a ROM while a firmware runs:
+		   asked, then installed */
 		dropFiles(["kits.syx", "OS.bin"]);
-		check(!cmds.length && Q.asked.length === 1 && /Install <b>OS\.bin<\/b>/.test(Q.asked[0].html), "a ROM and a .syx: the ROM's question first");
+		check(!cmds.length && Q.asked.length === 1 && /Install <b>OS\.bin<\/b>/.test(Q.asked[0].html),
+			"a ROM and a .syx: the ROM's question first");
 		Q.asked[0].btns.find(b => b[0] === "Cancel")[2]();
 		deliver();
 		check(sent() === "dropSyx" && cmds[0].n === 0, "Cancel: the .syx opens (dropSyx {drop, n 0})");
@@ -557,15 +602,18 @@ return { Bridge, cmd, asked, errors, banners, S, Drop, get V() { return V; }, se
 		book.files[0].used = true;
 		Q.asked[0].btns.find(b => b[0] === "Load")[2]();
 		deliver();
-		check(sent() === "dropSample@0" && Q.errors.some(e => /no longer holds that file/.test(String(e))), "refused: said (" + Q.errors.join(" | ") + ")");
+		check(sent() === "dropSample@0" && Q.errors.some(e => /no longer holds that file/.test(String(e))),
+			"refused: said (" + Q.errors.join(" | ") + ")");
 		done(0);
 		check(cmds.length === 1, "and nothing more is sent for that drop");
 		/* unknown files: named */
 		dropFiles(["notes.txt", "k.syx"]);
-		check(sent() === "dropSyx" && /Not a ROM .*notes\.txt/.test(Q.errors.join()), "an unknown file beside a .syx: named; the .syx opens");
+		check(sent() === "dropSyx" && /Not a ROM .*notes\.txt/.test(Q.errors.join()),
+			"an unknown file beside a .syx: named; the .syx opens");
 		check(cmds.length && onContract(Object.assign({}, cmds[0])), "what the page sent is the contract's command");
 		const s5 = { op: "dropSample", id: 9, drop: 1, n: 0, slot: 4 };
-		check(onContract(s5) && !onContract(Object.assign({}, s5, { slot: 48 })), "dropSample's slot is a ROM slot (0-47)");
+		check(onContract(s5) && !onContract(Object.assign({}, s5, { slot: 48 })),
+			"dropSample's slot is a ROM slot (0-47)");
 		native.onDrop = null;
 	}
 }

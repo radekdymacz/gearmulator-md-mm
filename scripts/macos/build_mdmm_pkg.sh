@@ -72,9 +72,11 @@ trap 'rm -rf -- "${work_dir}"' EXIT
 # the Installer receipts. They have been the same since 0.1.0 and stay so: a
 # new package upgrades the receipts of an earlier one in place. They are not
 # the bundles' identifiers (SIGNING.md, "Identifiers").
+md_names="${MDMM_PRODUCT_NAME_MD}|${MDMM_LEGACY_NAME_MD}|md|Machinedrum|Machinedrum"
+mm_names="${MDMM_PRODUCT_NAME_MM}|${MDMM_LEGACY_NAME_MM}|mm|Monomachine|Monomachine"
 machines=(
-  "${MDMM_PRODUCT_NAME_MD}|${MDMM_LEGACY_NAME_MD}|md|Machinedrum|Machinedrum|Machinedrum-Editor-macOS.pkg|${MDMM_BUNDLE_ID_MD}"
-  "${MDMM_PRODUCT_NAME_MM}|${MDMM_LEGACY_NAME_MM}|mm|Monomachine|Monomachine|Monomachine-Editor-macOS.pkg|${MDMM_BUNDLE_ID_MM}"
+  "${md_names}|Machinedrum-Editor-macOS.pkg|${MDMM_BUNDLE_ID_MD}"
+  "${mm_names}|Monomachine-Editor-macOS.pkg|${MDMM_BUNDLE_ID_MM}"
 )
 
 require_bundle() {

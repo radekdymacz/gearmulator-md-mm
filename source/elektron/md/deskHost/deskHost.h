@@ -45,8 +45,10 @@ namespace deskHost
 		NoticeAnswer,		// the button the user pressed on a notice (a message the plug-in has for the user)
 		ChooseSample,		// P9: the native file chooser for a sample (WAV, AIFF) for a UW ROM slot
 		PageZoom,			// B-001: the page's zoom one step smaller, larger or back to 100 % (Cmd - / Cmd + / Cmd 0)
-		MenuPick,			// I-008: the entry of the editor's menu the page chose (the menu the window sent as editorMenu)
-		DropRom,			// a ROM dropped on the window (its drop message's number and the file's): installed as a chosen one
+		// I-008: the entry of the editor's menu the page chose (the menu the window sent as editorMenu)
+		MenuPick,
+		// a ROM dropped on the window (its drop message's number and the file's): installed as a chosen one
+		DropRom,
 		DropSyx,			// a .syx dropped on the window: its import preview, as a chosen one's
 		DropSample			// a sample dropped on the window: into a UW ROM slot, as a chosen one
 	};

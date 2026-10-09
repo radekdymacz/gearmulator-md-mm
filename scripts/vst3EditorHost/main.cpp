@@ -114,7 +114,8 @@ namespace
 				args.removeRange(i, 2);
 			}
 			if(args.size() < 1)
-				return fail("usage: mdmmVst3EditorHost <plug-in.vst3> [seconds] [--background] [--state <file>] [--reopen <seconds>]");
+				return fail("usage: mdmmVst3EditorHost <plug-in.vst3> [seconds] [--background] [--state <file>] "
+					"[--reopen <seconds>]");
 			const auto path = args[0].unquoted();
 			const auto seconds = args.size() > 1 ? args[1].getIntValue() : 60;
 #if JUCE_MAC
@@ -210,7 +211,8 @@ namespace
 		void timerCallback() override
 		{
 			const auto now = juce::Time::getMillisecondCounter();
-			// --reopen: the window and its editor go (the plug-in's view is removed), and a second later a new one comes
+			// --reopen: the window and its editor go (the plug-in's view is removed), and a second
+			// later a new one comes
 			if(m_closeAt != 0 && now >= m_closeAt)
 			{
 				m_closeAt = 0;

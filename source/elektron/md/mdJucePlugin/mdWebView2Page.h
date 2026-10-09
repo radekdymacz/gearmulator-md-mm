@@ -18,9 +18,9 @@ namespace mdJucePlugin
 	//   - the profile (cache, local storage) lives in a per-user folder that is writable (a VST3 host may run
 	//     from a read-only folder, and WebView2's default is beside the host's executable);
 	//   - B-029: the page outlives its windows (a host closing and opening the editor, the standalone making its
-	//     window again): when the window WebView2 lived in was destroyed, its controller is closed and a new one made in
-	//     the next window, which loads the page again (mdWebView2Window.h); while that window still exists, the
-	//     controller is moved into the new one instead (the page keeps running).
+	//     window again): when the window WebView2 lived in was destroyed, its controller is closed and a new one
+	//     made in the next window, which loads the page again (mdWebView2Window.h); while that window still
+	//     exists, the controller is moved into the new one instead (the page keeps running).
 	// The runtime itself comes with Windows 10 and 11 (the Evergreen WebView2 Runtime); without it the
 	// component paints what to install. Only for Windows builds (mdmmWindowsWebView.cmake).
 	class WebView2Page : public juce::Component
@@ -32,8 +32,8 @@ namespace mdJucePlugin
 			std::function<bool(const juce::String&)> onNavigation;	// a top-level navigation: false cancels it
 			std::function<void(const juce::String&)> onEvent;		// a line for the log (loads, errors)
 			std::function<void(const juce::String&)> onFailed;		// B-022: the web view cannot start (why, in words)
-			// B-029: a new web view replaced one whose window was destroyed and loads the page from its start (just before
-			// it navigates): what the old page had is gone
+			// B-029: a new web view replaced one whose window was destroyed and loads the page from its start (just
+			// before it navigates): what the old page had is gone
 			std::function<void()> onReload;
 		};
 

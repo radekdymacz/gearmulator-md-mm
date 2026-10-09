@@ -2056,13 +2056,17 @@ namespace
 		};
 		const auto same = [&]
 		{
-			return ed::syxCanonical(machineDocs(desk), ed::SyxKind::Pattern, slot) == ed::syxCanonical(_file, ed::SyxKind::Pattern, slot);
+			return ed::syxCanonical(machineDocs(desk), ed::SyxKind::Pattern, slot) == ed::syxCanonical(_file,
+				ed::SyxKind::Pattern, slot);
 		};
 		const int link = _file.patterns.count(slot) ? _file.patterns.at(slot).kit : -1;
-		const auto kitRight = [&] { return desk.linkState().extendedMode != true || link < 0 || desk.linkState().kit == link; };
-		_rig.runUntil([&] { return desk.linkState().pattern == slot && _rig.pageTelemetry().pattern == _slot && !queued() && same() && kitRight(); }, 3000);
+		const auto kitRight = [&] { return desk.linkState().extendedMode != true || link < 0
+			|| desk.linkState().kit == link; };
+		_rig.runUntil([&] { return desk.linkState().pattern == slot && _rig.pageTelemetry().pattern == _slot
+			&& !queued() && same() && kitRight(); }, 3000);
 		if(desk.linkState().pattern != slot)
-			return name + ": the machine plays it, the desk says " + (desk.linkState().pattern ? ed::mdPatternName(*desk.linkState().pattern) : "nothing");
+			return name + ": the machine plays it, the desk says "
+				+ (desk.linkState().pattern ? ed::mdPatternName(*desk.linkState().pattern) : "nothing");
 		if(_rig.pageTelemetry().pattern != _slot)
 			return name + ": the page's telemetry says " + std::to_string(_rig.pageTelemetry().pattern);
 		if(queued())
@@ -2070,7 +2074,8 @@ namespace
 		if(!same())
 			return name + ": the page's pattern is not the file's";
 		if(!kitRight())
-			return name + ": the machine plays kit " + std::to_string(desk.linkState().kit ? *desk.linkState().kit + 1 : 0) + ", it links kit " + std::to_string(link + 1);
+			return name + ": the machine plays kit " + std::to_string(desk.linkState().kit ? *desk.linkState().kit + 1
+				: 0) + ", it links kit " + std::to_string(link + 1);
 		return {};
 	}
 
@@ -2097,7 +2102,8 @@ namespace
 		auto& desk = rig.desk();
 		auto& m = rig.machine();
 		rig.page(R"({"op":"ready"})");
-		rig.runUntil([&] { return desk.isReady() && desk.documents().global && desk.documents().patterns.size() == 128 && desk.documents().kits.size() == 64 && desk.documents().songs.size() == 32; }, 60000);
+		rig.runUntil([&] { return desk.isReady() && desk.documents().global && desk.documents().patterns.size() == 128
+			&& desk.documents().kits.size() == 64 && desk.documents().songs.size() == 32; }, 60000);
 		int id = 5000;
 		std::vector<std::string> asks;
 		const auto pickAll = [&](const std::vector<int>& _slots, const double _waitMs)
@@ -2123,11 +2129,13 @@ namespace
 		{
 			mdJucePlugin::SyxJob<MdSyxTraits> job;
 			const auto& st = desk.linkState();
-			job.open(_bytes, _fileName, machineDocs(desk), {st.pattern ? *st.pattern : -1, st.kit ? *st.kit : -1, st.song ? *st.song : -1, st.globalSlot ? *st.globalSlot : -1});
+			job.open(_bytes, _fileName, machineDocs(desk), {st.pattern ? *st.pattern : -1, st.kit ? *st.kit : -1,
+				st.song ? *st.song : -1, st.globalSlot ? *st.globalSlot : -1});
 			desk.setSysexTap([&job](const Bytes& _m) { job.onMachineSysex(_m); });
 			check(job.start(_kinds, {}, machineDocs(desk)).empty(), "the import starts");
 			const double t0 = ms(m.now());
-			const auto step = [&] { if(desk.lifecycle() == deskCore::Lifecycle::Ready) job.step(desk.machine(), ms(m.now()), false); rig.run(4); };
+			const auto step = [&] { if(desk.lifecycle() == deskCore::Lifecycle::Ready)
+				job.step(desk.machine(), ms(m.now()), false); rig.run(4); };
 			std::vector<std::string> wrong;
 			int picks = 0;
 			// a pick every 4 s while the import sends and reads back; each must reach the machine within 5 s
@@ -2142,27 +2150,36 @@ namespace
 				while(m.read8(0x28d205) != p && ms(m.now()) - tp < 5000)
 					step();
 				if(m.read8(0x28d205) != p)
-					wrong.push_back(ed::mdPatternName(p) + " picked " + std::to_string(static_cast<int>((tp - t0) / 1000)) + " s into the import: the machine stays on "
+					wrong.push_back(ed::mdPatternName(p) + " picked "
+						+ std::to_string(static_cast<int>((tp - t0) / 1000))
+						+ " s into the import: the machine stays on "
 						+ ed::mdPatternName(m.read8(0x28d205)));
 			}
 			const auto report = job.progress();
 			std::map<std::string, int> outcomes;
 			for(const auto& [item, o] : job.outcomes())
 				++outcomes[ed::syxOutcomeName(o)];
-			std::printf("  import %s in %.1f s (emulated), %d picks while it ran: %s\n", _kinds.size() > 1 ? "of kits, patterns and songs" : "of patterns",
+			std::printf("  import %s in %.1f s (emulated), %d picks while it ran: %s\n", _kinds.size() > 1
+				? "of kits, patterns and songs" : "of patterns",
 				(ms(m.now()) - t0) / 1000, picks, report.find("text")->asString().c_str());
-			check(report.find("phase")->asString() == "done" && outcomes["no reply"] == 0, "the import ends and every document is read back");
+			check(report.find("phase")->asString() == "done" && outcomes["no reply"] == 0,
+				"the import ends and every document is read back");
 			if(_pickWhile)
-				check(wrong.empty(), "every pick while the import runs reaches the machine (" + std::to_string(picks - static_cast<int>(wrong.size())) + " of "
+				check(wrong.empty(), "every pick while the import runs reaches the machine ("
+					+ std::to_string(picks - static_cast<int>(wrong.size())) + " of "
 					+ std::to_string(picks) + ")" + list(wrong));
 			rig.runUntil([&] { return !desk.isBusy(); }, 10000);
 			rig.run(1000);
 		};
 
-		// 1. 0.3.4's import as it reached the desk: every kit, pattern and song a "set" of one gesture, four every 8 ms,
-		// so the stream holds the whole file (as a long backlog of any kind would); A10 picked 2 s later
+		// 1. 0.3.4's import as it reached the desk: every kit, pattern and song a "set" of one gesture, four every 8
+		// ms, so the stream holds the whole file (as a long backlog of any kind would); A10 picked 2 s later
 		std::vector<std::string> sets;
-		const auto set = [&](const char* _kind, const Value& _doc) { sets.push_back(std::string(R"({"op":"set","g":4777,"kind":")") + _kind + R"(","doc":)" + ed::json::write(_doc) + "}"); };
+		const auto set = [&](const char* _kind, const Value& _doc)
+		{
+			sets.push_back(std::string(R"({"op":"set","g":4777,"kind":")") + _kind + R"(","doc":)"
+				+ ed::json::write(_doc) + "}");
+		};
 		for(const auto& [slot, k] : file.md.kits) set("kit", ed::kitToJson(k));
 		for(const auto& [slot, p] : file.md.patterns) set("pattern", ed::patternToJson(p));
 		for(const auto& [slot, g] : file.md.songs) set("song", ed::songToJson(g));
@@ -2178,11 +2195,15 @@ namespace
 		const int before = m.read8(0x28d205);
 		pickPattern(rig, 9, id);
 		const auto why = pickedWrong(rig, file.md, 9, 180000);
-		std::printf("  %zu documents set at once; A10 picked 2 s later (the machine on %s): %s after %.1f s\n", sets.size(),
-			ed::mdPatternName(static_cast<uint8_t>(before)).c_str(), why.empty() ? "switched" : why.c_str(), (ms(m.now()) - tp) / 1000);
-		check(why.empty(), "a pick while the stream holds a whole backup reaches the machine once the dumps have passed" + (why.empty() ? std::string() : ": " + why));
+		std::printf("  %zu documents set at once; A10 picked 2 s later (the machine on %s): %s after %.1f s\n",
+			sets.size(),
+			ed::mdPatternName(static_cast<uint8_t>(before)).c_str(), why.empty() ? "switched" : why.c_str(),
+				(ms(m.now()) - tp) / 1000);
+		check(why.empty(), "a pick while the stream holds a whole backup reaches the machine once the dumps have passed"
+			+ (why.empty() ? std::string() : ": " + why));
 		rig.runUntil([&] { return !desk.isBusy(); }, 120000);
-		check(rig.pageErrors == errors, "and no read-back is lost in the burst (\"Push failed\", tester H): " + std::to_string(rig.pageErrors - errors) + " errors");
+		check(rig.pageErrors == errors, "and no read-back is lost in the burst (\"Push failed\", tester H): "
+			+ std::to_string(rig.pageErrors - errors) + " errors");
 		auto wrong = pickAll({10, 0}, 4000);
 		check(wrong.empty(), "and the picks after it" + list(wrong));
 
@@ -2195,7 +2216,9 @@ namespace
 		for(const int p : {32, 63, 64, 100, 127, 0})
 			slots.push_back(p);
 		wrong = pickAll(slots, 4000);
-		check(wrong.empty(), "after the import, A01..B16 and some of every bank picked stopped: each reaches the machine, the desk and the page ("
+		check(wrong.empty(),
+			"after the import, A01..B16 and some of every bank picked stopped: each reaches the machine, the desk and "
+			"the page ("
 			+ std::to_string(slots.size() - wrong.size()) + " of " + std::to_string(slots.size()) + ")" + list(wrong));
 		rig.page(R"({"op":"play","id":4990})");
 		rig.runUntil([&] { return rig.pageTelemetry().playing; }, 2000);
@@ -2207,7 +2230,8 @@ namespace
 		import({"pattern"}, false);
 		wrong = pickAll({3, 20, 0}, 4000);
 		check(wrong.empty(), "after a second import too" + list(wrong));
-		check(asks.empty(), "no pick after an import asks a question (" + std::to_string(asks.size()) + ")" + list(asks));
+		check(asks.empty(), "no pick after an import asks a question (" + std::to_string(asks.size()) + ")"
+			+ list(asks));
 	}
 
 	// P7: in a DAW the plug-in sends the host's transport and tempo as MIDI Start, clock and Stop; the
@@ -2864,15 +2888,18 @@ namespace
 	{
 		std::puts("== MACHINE STAYS (B-039)");
 		auto& desk = _rig.desk();
-		const auto settle = [&](const double _ms) { _rig.runUntil([&] { return !desk.isBusy() && !_rig.pageTx(); }, 6000); _rig.run(_ms); };
-		const auto working = [&] { return _rig.machineDoc() ? _rig.machineDoc()->find("kit")->find("working")->asString() : std::string("?"); };
+		const auto settle = [&](const double _ms) { _rig.runUntil([&] { return !desk.isBusy() && !_rig.pageTx(); },
+			6000); _rig.run(_ms); };
+		const auto working = [&] { return _rig.machineDoc()
+			? _rig.machineDoc()->find("kit")->find("working")->asString() : std::string("?"); };
 		const auto efm = *ed::mdMachineModel("EFM-SD"), trx = *ed::mdMachineModel("TRX-SD");
 		const auto other = [&](const uint32_t _model) { return _model == efm ? trx : efm; };
 		const auto kitNow = [&] { return std::to_string(*desk.linkState().kit); };
 		int gesture = 7000;
 		const auto machine = [&](const int _t, const uint32_t _model)
 		{
-			_rig.page("{\"op\":\"machine\",\"g\":" + std::to_string(++gesture) + ",\"k\":" + kitNow() + ",\"t\":" + std::to_string(_t) + ",\"model\":"
+			_rig.page("{\"op\":\"machine\",\"g\":" + std::to_string(++gesture) + ",\"k\":" + kitNow() + ",\"t\":"
+				+ std::to_string(_t) + ",\"model\":"
 				+ std::to_string(_model) + ",\"keepFx\":true}");
 			check(resultOk(_rig), "machine command accepted");
 		};
@@ -2881,7 +2908,8 @@ namespace
 		{
 			for(const bool on : {true, false})
 			{
-				_rig.page("{\"op\":\"trig\",\"g\":" + std::to_string(++gesture) + ",\"p\":" + std::to_string(*desk.linkState().pattern) + ",\"t\":"
+				_rig.page("{\"op\":\"trig\",\"g\":" + std::to_string(++gesture) + ",\"p\":"
+					+ std::to_string(*desk.linkState().pattern) + ",\"t\":"
 					+ std::to_string(_t) + ",\"s\":7,\"on\":" + (on ? "true" : "false") + "}");
 				settle(1500);
 			}
@@ -2890,22 +2918,27 @@ namespace
 		{
 			const auto mem = workingFromMemory(_rig);
 			const auto* w = desk.documents().working ? &desk.documents().working->kit : nullptr;
-			const uint32_t m = mem ? mem->models[static_cast<size_t>(_t)] : 0, d = w ? w->models[static_cast<size_t>(_t)] : 0;
-			check(mem && w && m == _model && d == _model, _when + ": T" + std::to_string(_t + 1) + " plays " + ed::mdMachineName(_model) + " (memory "
+			const uint32_t m = mem ? mem->models[static_cast<size_t>(_t)] : 0, d = w
+				? w->models[static_cast<size_t>(_t)] : 0;
+			check(mem && w && m == _model && d == _model, _when + ": T" + std::to_string(_t + 1) + " plays "
+				+ ed::mdMachineName(_model) + " (memory "
 				+ ed::mdMachineName(m) + ", page " + ed::mdMachineName(d) + ")");
-			check(mem && w && ed::mdSameKitSound(*mem, *w) && working() == "edited", _when + ": the machine holds the page's kit, " + working());
+			check(mem && w && ed::mdSameKitSound(*mem, *w) && working() == "edited", _when
+				+ ": the machine holds the page's kit, " + working());
 		};
 		const auto round = [&](const std::string& _kit, const int _t)
 		{
 			const auto p = *desk.linkState().pattern;
 			const auto model = other(desk.documents().working->kit.models[static_cast<size_t>(_t)]);
-			std::printf("== %s: T%d becomes %s (pattern %s, kit %d)\n", _kit.c_str(), _t + 1, ed::mdMachineName(model).c_str(), ed::mdPatternName(p).c_str(),
+			std::printf("== %s: T%d becomes %s (pattern %s, kit %d)\n", _kit.c_str(), _t + 1,
+				ed::mdMachineName(model).c_str(), ed::mdPatternName(p).c_str(),
 				*desk.linkState().kit + 1);
 			// the Sound page: the machine picker, then a value of the new machine (its DIST)
 			machine(_t, model);
 			settle(500);
 			const auto dist = (desk.documents().working->kit.params[static_cast<size_t>(_t)][16] + 17) & 0x7f;
-			_rig.page("{\"op\":\"param\",\"g\":" + std::to_string(++gesture) + ",\"k\":" + kitNow() + ",\"t\":" + std::to_string(_t) + ",\"i\":16,\"v\":"
+			_rig.page("{\"op\":\"param\",\"g\":" + std::to_string(++gesture) + ",\"k\":" + kitNow() + ",\"t\":"
+				+ std::to_string(_t) + ",\"i\":16,\"v\":"
 				+ std::to_string(dist) + "}");
 			settle(1000);
 			stays("on Sound", _t, model);
@@ -2932,7 +2965,8 @@ namespace
 			if(!same)
 			{
 				same = static_cast<uint8_t>((p + 1) & 127);
-				_rig.pageConfirmed("{\"op\":\"patternKit\",\"p\":" + std::to_string(*same) + ",\"v\":" + kitNow() + "}");
+				_rig.pageConfirmed("{\"op\":\"patternKit\",\"p\":" + std::to_string(*same) + ",\"v\":" + kitNow()
+					+ "}");
 				settle(500);
 			}
 			_rig.pageConfirmed("{\"op\":\"select\",\"p\":" + std::to_string(*same) + "}");
@@ -2953,7 +2987,8 @@ namespace
 		{
 			_rig.pageConfirmed("{\"op\":\"select\",\"p\":" + std::to_string(*next) + "}");
 			settle(1500);
-			check(desk.linkState().pattern == next && working() == "clean", ed::mdPatternName(*next) + " plays with its kit " + std::to_string(*desk.linkState().kit + 1)
+			check(desk.linkState().pattern == next && working() == "clean", ed::mdPatternName(*next)
+				+ " plays with its kit " + std::to_string(*desk.linkState().kit + 1)
 				+ ", " + working());
 			round("another stock pattern's kit", 2);
 		}
@@ -3817,8 +3852,11 @@ int main(const int _argc, char** _argv)
 	std::setvbuf(stdout, nullptr, _IOLBF, 0);
 	if(_argc < 2)
 	{
-		std::puts("usage: mdDeskFirmwareTest <MD-1.63-ROM> [probe|hw|p4|tweak|sampler|keepedits|machine|recordermix|samples|gen|hostclock|songrow|playload|syxexport|syximport|syxpick|keymap]");
-		std::puts("       mdDeskFirmwareTest --env syxpick   (ctest: the ROM from GEARMULATOR_MD_FIRMWARE_BIN, the backup from MD_SYX)");
+		std::puts("usage: mdDeskFirmwareTest <MD-1.63-ROM> "
+			"[probe|hw|p4|tweak|sampler|keepedits|machine|recordermix|samples|gen|hostclock|songrow|playload|syxexport|"
+			"syximport|syxpick|keymap]");
+		std::puts("       mdDeskFirmwareTest --env syxpick   (ctest: the ROM from GEARMULATOR_MD_FIRMWARE_BIN, the "
+			"backup from MD_SYX)");
 		return 77;
 	}
 	// ctest's form: the ROM from the environment, as the other firmware tests take it; skipped without it
@@ -3873,7 +3911,8 @@ int main(const int _argc, char** _argv)
 			std::ifstream in(path, std::ios::binary);
 			if(path.empty() || !in)
 			{
-				std::printf("mdDeskFirmwareTest syxpick: SKIP (no backup: MD_SYX%s)\n", path.empty() ? "" : (", " + path + " not found").c_str());
+				std::printf("mdDeskFirmwareTest syxpick: SKIP (no backup: MD_SYX%s)\n", path.empty() ? ""
+					: (", " + path + " not found").c_str());
 				return 77;
 			}
 			const Bytes bytes((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
@@ -3936,7 +3975,8 @@ int main(const int _argc, char** _argv)
 		{
 			Rig rig(rom, _argv[1]);
 			rig.page(R"({"op":"ready"})");
-			rig.runUntil([&] { return rig.desk().isReady() && rig.desk().linkState().kit && rig.desk().linkState().pattern && rig.desk().documents().working; }, 8000);
+			rig.runUntil([&] { return rig.desk().isReady() && rig.desk().linkState().kit
+				&& rig.desk().linkState().pattern && rig.desk().documents().working; }, 8000);
 			rig.runUntil([&] { return !rig.desk().isBusy(); }, 20000);
 			rig.pluginLike = true;	// the plug-in's delivery, as keepedits
 			machineStays(rig);

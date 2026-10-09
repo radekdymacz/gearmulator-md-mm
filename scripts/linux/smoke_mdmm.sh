@@ -81,8 +81,8 @@ run() {
 	echo "== ${label}: $*"
 	# the page's zoom at 125 % from the start (PageEditor's pageZoom, the editor's config in the data folder)
 	mkdir -p "${home}/data/Gearmulator Preview/${machine}/config"
-	printf '<?xml version="1.0" encoding="UTF-8"?>\n<PROPERTIES>\n  <VALUE name="pageZoom" val="1.25"/>\n</PROPERTIES>\n' \
-		> "${home}/data/Gearmulator Preview/${machine}/config/${product_name}.xml"
+	printf '%s\n' '<?xml version="1.0" encoding="UTF-8"?>' '<PROPERTIES>' '  <VALUE name="pageZoom" val="1.25"/>' \
+		'</PROPERTIES>' > "${home}/data/Gearmulator Preview/${machine}/config/${product_name}.xml"
 	local events_before
 	events_before="$(wc -l < "${out}/temp-events.txt")"
 	HOME="${home}" XDG_CONFIG_HOME="${home}/.config" GEARMULATOR_DATA_ROOT="${home}/data/" \
@@ -197,7 +197,7 @@ run() {
 		fi
 		# The zoom (started at 125 %): Ctrl+= makes it 150 %, sent to the page as a message. The same web process must
 		# run afterwards, and the bridge still deliver (the page read and deleted a batch file after the key).
-		local web_before web_after read_before read_after
+		local web_before web_after read_before read_after zoom_detail
 		web_before="$(pgrep -f WebKitWebProcess | sort | tr '\n' ' ')"
 		read_before="$(grep -c -E '^DELETE gearmulator-.*\.recv-[0-9]+\.js$' "${out}/temp-events.txt" || true)"
 		xdotool key --delay 400 ctrl+equal
@@ -205,11 +205,14 @@ run() {
 		web_after="$(pgrep -f WebKitWebProcess | sort | tr '\n' ' ')"
 		read_after="$(grep -c -E '^DELETE gearmulator-.*\.recv-[0-9]+\.js$' "${out}/temp-events.txt" || true)"
 		import -display "${display}" -window root "${out}/${name}-zoom.png" 2>/dev/null || true
-		if kill -0 "${pid}" 2>/dev/null && [[ -n "${web_after}" && "${web_after}" == "${web_before}" ]] && (( read_after > read_before )); then
+		if kill -0 "${pid}" 2>/dev/null && [[ -n "${web_after}" && "${web_after}" == "${web_before}" ]] \
+			&& (( read_after > read_before )); then
 			echo "${label}: zoom 125 % -> 150 %: the web process lives on (${web_after}), the bridge delivers"
 			record "${label}" "page zoom by message (Ctrl+=)" "yes"
 		else
-			fail "${label}: after Ctrl+= (page zoom) the web process changed or the bridge stopped (before: ${web_before:-none}, after: ${web_after:-none}; batches read ${read_before} -> ${read_after})"
+			zoom_detail="before: ${web_before:-none}, after: ${web_after:-none}"
+			zoom_detail+="; batches read ${read_before} -> ${read_after}"
+			fail "${label}: after Ctrl+= (page zoom) the web process changed or the bridge stopped (${zoom_detail})"
 			record "${label}" "page zoom by message (Ctrl+=)" "no"
 		fi
 	fi

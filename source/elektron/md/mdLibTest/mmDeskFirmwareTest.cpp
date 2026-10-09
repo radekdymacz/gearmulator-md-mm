@@ -1137,7 +1137,8 @@ namespace
 		while(_r.machinePattern != _slot && _r.ms() - t0 < _waitMs)
 			_r.run(10);
 		if(_r.machinePattern != _slot)
-			return name + ": the machine stays on " + (_r.machinePattern >= 0 ? ed::mmPatternName(static_cast<uint8_t>(_r.machinePattern)) : "?");
+			return name + ": the machine stays on " + (_r.machinePattern >= 0
+				? ed::mmPatternName(static_cast<uint8_t>(_r.machinePattern)) : "?");
 		const auto queued = [&]
 		{
 			const auto doc = lastMachine(_r);
@@ -1147,7 +1148,8 @@ namespace
 		};
 		const auto same = [&]
 		{
-			return ed::syxCanonical(machineDocs(*_r.desk), ed::SyxKind::Pattern, slot) == ed::syxCanonical(_file, ed::SyxKind::Pattern, slot);
+			return ed::syxCanonical(machineDocs(*_r.desk), ed::SyxKind::Pattern, slot) == ed::syxCanonical(_file,
+				ed::SyxKind::Pattern, slot);
 		};
 		const auto t1 = _r.ms();
 		while(!(_r.desk->currentPattern() == _slot && !queued() && same()) && _r.ms() - t1 < 3000)
@@ -1161,11 +1163,12 @@ namespace
 		return {};
 	}
 
-	// B-031 on the Monomachine (mdDeskFirmwareTest syxpick has the story): the user's own backup (MM_SYX, read in place)
-	// on a fresh machine. 1. 0.3.4's import as it reached the desk (every kit, pattern and song a "set" of one gesture,
-	// four every 10 ms) and a pick 2 s later: it reaches the machine once the dumps have passed. 2. The editor's import
-	// as the session runs it (kits, patterns, songs) with a pick every few seconds while it runs; then A01..B16 and
-	// some of every bank stopped, three while playing, and a second import: each pick reaches the machine and the desk.
+	// B-031 on the Monomachine (mdDeskFirmwareTest syxpick has the story): the user's own backup (MM_SYX, read in
+	// place) on a fresh machine. 1. 0.3.4's import as it reached the desk (every kit, pattern and song a "set" of one
+	// gesture, four every 10 ms) and a pick 2 s later: it reaches the machine once the dumps have passed. 2. The
+	// editor's import as the session runs it (kits, patterns, songs) with a pick every few seconds while it runs; then
+	// A01..B16 and some of every bank stopped, three while playing, and a second import: each pick reaches the
+	// machine and the desk.
 	void syxPick(const Bytes& _rom, const Bytes& _bytes, const std::string& _fileName)
 	{
 		std::puts("syx import, then patterns picked (B-031)");
@@ -1204,7 +1207,8 @@ namespace
 		std::set<int> patternsSet;
 		const auto set = [&](const char* _kind, const Value& _doc, const int _pattern)
 		{
-			r.msg(std::string(R"({"op":"set","g":4777,"kind":")") + _kind + R"(","doc":)" + ed::json::write(_doc) + "}");
+			r.msg(std::string(R"({"op":"set","g":4777,"kind":")") + _kind + R"(","doc":)" + ed::json::write(_doc)
+				+ "}");
 			// what the editor's checks refuse stays out, as 0.3.4 left it out
 			if(!r.lastResult().find("ok")->asBool())
 				++refused;
@@ -1223,9 +1227,13 @@ namespace
 		const int pick = target == patternsSet.end() ? 9 : *target;
 		pickPattern(r, pick);
 		const auto why = pickedWrong(r, file.mm, pick, 300000);
-		std::printf("  %zu documents set at once (%zu refused); %s picked 2 s later (the machine on %d): %s after %.1f s\n", sets, refused,
-			ed::mmPatternName(static_cast<uint8_t>(pick)).c_str(), before, why.empty() ? "switched" : why.c_str(), (r.ms() - tp) / 1000);
-		check(why.empty(), "a pick while the editor's stream holds a whole backup reaches the machine once the dumps have passed" + (why.empty() ? std::string() : ": " + why));
+		std::printf("  %zu documents set at once (%zu refused); %s picked 2 s later (the machine on %d): %s after %.1f "
+			"s\n", sets, refused,
+			ed::mmPatternName(static_cast<uint8_t>(pick)).c_str(), before, why.empty() ? "switched" : why.c_str(),
+			(r.ms() - tp) / 1000);
+		check(why.empty(),
+			"a pick while the editor's stream holds a whole backup reaches the machine once the dumps have passed"
+			+ (why.empty() ? std::string() : ": " + why));
 		for(int i = 0; i < 600 && r.desk->machine().busy(); ++i)
 			r.run(100);
 
@@ -1233,7 +1241,8 @@ namespace
 		const auto import = [&](const std::vector<std::string>& _kinds, const bool _pickWhile)
 		{
 			mdJucePlugin::SyxJob<MmSyxTraits> job;
-			job.open(_bytes, _fileName, machineDocs(*r.desk), {r.desk->currentPattern(), r.desk->currentKit(), r.desk->currentSong(), r.desk->currentGlobal()});
+			job.open(_bytes, _fileName, machineDocs(*r.desk), {r.desk->currentPattern(), r.desk->currentKit(),
+				r.desk->currentSong(), r.desk->currentGlobal()});
 			r.desk->setSysexTap([&job](const Bytes& _m) { job.onMachineSysex(_m); });
 			check(job.start(_kinds, {}, machineDocs(*r.desk)).empty(), "the import starts");
 			const auto t0 = r.ms();
@@ -1252,18 +1261,22 @@ namespace
 				while(r.machinePattern != p && r.ms() - tq < 5000)
 					step();
 				if(r.machinePattern != p)
-					wrong.push_back(ed::mmPatternName(static_cast<uint8_t>(p)) + " picked " + std::to_string(static_cast<int>((tq - t0) / 1000))
+					wrong.push_back(ed::mmPatternName(static_cast<uint8_t>(p)) + " picked "
+						+ std::to_string(static_cast<int>((tq - t0) / 1000))
 						+ " s into the import: the machine stays on " + std::to_string(r.machinePattern));
 			}
 			const auto report = job.progress();
 			std::map<std::string, int> outcomes;
 			for(const auto& [item, o] : job.outcomes())
 				++outcomes[ed::syxOutcomeName(o)];
-			std::printf("  import %s in %.1f s (emulated), %d picks while it ran: %s\n", _kinds.size() > 1 ? "of kits, patterns and songs" : "of patterns",
+			std::printf("  import %s in %.1f s (emulated), %d picks while it ran: %s\n", _kinds.size() > 1
+				? "of kits, patterns and songs" : "of patterns",
 				(r.ms() - t0) / 1000, picks, report.find("text")->asString().c_str());
-			check(report.find("phase")->asString() == "done" && outcomes["no reply"] == 0, "the import ends and every document is read back");
+			check(report.find("phase")->asString() == "done" && outcomes["no reply"] == 0,
+				"the import ends and every document is read back");
 			if(_pickWhile)
-				check(wrong.empty(), "every pick while the import runs reaches the machine (" + std::to_string(picks - static_cast<int>(wrong.size())) + " of "
+				check(wrong.empty(), "every pick while the import runs reaches the machine ("
+					+ std::to_string(picks - static_cast<int>(wrong.size())) + " of "
 					+ std::to_string(picks) + ")" + list(wrong));
 			for(int i = 0; i < 100 && r.desk->machine().busy(); ++i)
 				r.run(100);
@@ -1277,7 +1290,8 @@ namespace
 		for(const int p : {32, 63, 64, 100, 127, 0})
 			slots.push_back(p);
 		auto wrong = pickAll(slots, 4000);
-		check(wrong.empty(), "after the import, A01..B16 and some of every bank picked stopped: each reaches the machine and the desk ("
+		check(wrong.empty(),
+			"after the import, A01..B16 and some of every bank picked stopped: each reaches the machine and the desk ("
 			+ std::to_string(slots.size() - wrong.size()) + " of " + std::to_string(slots.size()) + ")" + list(wrong));
 		r.msg(R"({"op":"play"})");
 		r.run(1500);
@@ -1288,7 +1302,8 @@ namespace
 		import({"pattern"}, false);
 		wrong = pickAll({3, 20, 0}, 4000);
 		check(wrong.empty(), "after a second import too" + list(wrong));
-		check(asks.empty(), "no pick after an import asks a question (" + std::to_string(asks.size()) + ")" + list(asks));
+		check(asks.empty(), "no pick after an import asks a question (" + std::to_string(asks.size()) + ")"
+			+ list(asks));
 	}
 
 	// Zero crossings per second / 2 over a window of the left channel.
@@ -2392,7 +2407,8 @@ namespace
 		uint32_t seq = 0;
 		if(!_r.tel.readWorkingKit(region, seq) || region.size() < 5 + ed::MmKit::g_rawSize)
 			return std::nullopt;
-		return ed::mmKitFromRaw(Bytes(region.begin() + 5, region.begin() + 5 + ed::MmKit::g_rawSize), static_cast<uint8_t>(region[0] & 127));
+		return ed::mmKitFromRaw(Bytes(region.begin() + 5, region.begin() + 5 + ed::MmKit::g_rawSize),
+			static_cast<uint8_t>(region[0] & 127));
 	}
 
 	std::string machineName(const int _id)
@@ -2403,11 +2419,11 @@ namespace
 
 	int anotherMachine(const int _model) { return _model == 3 ? 5 : 3; }	// SID-6581 or SWAVE-PULS
 
-	// B-027: a track's machine changed on the Sound page stays, with the kit's other unsaved edits, after what the tester
-	// did next: back on the Sequence page a step of the pattern that plays (its dump, taken on SYSEX RECV, makes the
-	// OS 1.32B load the kit the pattern links from its slot), stopped and while playing; PLAY and STOP; another pattern
-	// with the same kit and back. The factory kit, then a kit the user saved. The machine (memory) and the page (the
-	// working kit) must both hold the edited kit, all of it.
+	// B-027: a track's machine changed on the Sound page stays, with the kit's other unsaved edits, after what the
+	// tester did next: back on the Sequence page a step of the pattern that plays (its dump, taken on SYSEX RECV, makes
+	// the OS 1.32B load the kit the pattern links from its slot), stopped and while playing; PLAY and STOP; another
+	// pattern with the same kit and back. The factory kit, then a kit the user saved. The machine (memory) and the page
+	// (the working kit) must both hold the edited kit, all of it.
 	void machineStays(const Bytes& _rom)
 	{
 		std::puts("machine stays (B-027)");
@@ -2421,7 +2437,8 @@ namespace
 		int gesture = 7000;
 		const auto machine = [&](const int _t, const int _model)
 		{
-			r.msg("{\"op\":\"machine\",\"g\":" + std::to_string(++gesture) + ",\"k\":" + std::to_string(r.desk->currentKit()) + ",\"t\":" + std::to_string(_t)
+			r.msg("{\"op\":\"machine\",\"g\":" + std::to_string(++gesture) + ",\"k\":"
+				+ std::to_string(r.desk->currentKit()) + ",\"t\":" + std::to_string(_t)
 				+ ",\"model\":" + std::to_string(_model) + ",\"keepFx\":true}");
 		};
 		// as the Sequence page sends a click on a step: on, then off again (two dumps of the pattern that plays)
@@ -2429,8 +2446,10 @@ namespace
 		{
 			for(const bool on : {true, false})
 			{
-				r.msg("{\"op\":\"step\",\"g\":" + std::to_string(++gesture) + ",\"p\":" + std::to_string(r.desk->currentPattern()) + ",\"t\":"
-					+ std::to_string(_t) + ",\"s\":7,\"v\":" + (on ? std::string(R"({"n":[60],"a":1,"f":1,"l":1})") : std::string("null")) + "}");
+				r.msg("{\"op\":\"step\",\"g\":" + std::to_string(++gesture) + ",\"p\":"
+					+ std::to_string(r.desk->currentPattern()) + ",\"t\":"
+					+ std::to_string(_t) + ",\"s\":7,\"v\":" + (on ? std::string(R"({"n":[60],"a":1,"f":1,"l":1})")
+						: std::string("null")) + "}");
 				r.run(6000);
 			}
 		};
@@ -2438,8 +2457,10 @@ namespace
 		{
 			const auto mem = workingKitInMemory(r);
 			const auto w = r.desk->workingKit();
-			const int m = mem ? mem->machines[static_cast<size_t>(_t)] : -1, d = w ? w->machines[static_cast<size_t>(_t)] : -1;
-			check(m == _model && d == _model, _when + ": T" + std::to_string(_t + 1) + " plays " + machineName(_model) + " (memory " + machineName(m) + ", page "
+			const int m = mem ? mem->machines[static_cast<size_t>(_t)] : -1, d = w
+				? w->machines[static_cast<size_t>(_t)] : -1;
+			check(m == _model && d == _model, _when + ": T" + std::to_string(_t + 1) + " plays " + machineName(_model)
+				+ " (memory " + machineName(m) + ", page "
 				+ machineName(d) + ")");
 			check(mem && w && ed::mmKitRaw(*mem) == ed::mmKitRaw(*w) && kitWorking(r) == "edited",
 				_when + ": the machine holds the page's kit, " + kitWorking(r));
@@ -2448,19 +2469,22 @@ namespace
 		{
 			const int p = r.desk->currentPattern();
 			const int model = anotherMachine(r.desk->workingKit()->machines[static_cast<size_t>(_t)]);
-			std::printf("== %s: T%d becomes %s (pattern %d, kit %d)\n", _kit.c_str(), _t + 1, machineName(model).c_str(), p + 1, r.desk->currentKit() + 1);
+			std::printf("== %s: T%d becomes %s (pattern %d, kit %d)\n", _kit.c_str(), _t + 1,
+				machineName(model).c_str(), p + 1, r.desk->currentKit() + 1);
 			// the Sound page: the machine picker, then a value of the new machine (FLT BASE)
 			machine(_t, model);
 			r.run(1500);
 			const auto base = r.desk->workingKit()->tracks[static_cast<size_t>(_t)].pages[2][0] ^ 0x10;
-			r.msg("{\"op\":\"param\",\"g\":" + std::to_string(++gesture) + ",\"k\":" + std::to_string(r.desk->currentKit()) + ",\"t\":" + std::to_string(_t)
+			r.msg("{\"op\":\"param\",\"g\":" + std::to_string(++gesture) + ",\"k\":"
+				+ std::to_string(r.desk->currentKit()) + ",\"t\":" + std::to_string(_t)
 				+ ",\"page\":2,\"i\":0,\"v\":" + std::to_string(base) + "}");
 			r.run(1500);
 			stays("on Sound", _t, model);
 			stepOnOff((_t + 2) % 6);
 			stays("a step on Sequence, stopped", _t, model);
 			// playing: another track's machine, then a step
-			const int t2 = (_t + 1) % 6, model2 = anotherMachine(r.desk->workingKit()->machines[static_cast<size_t>(t2)]);
+			const int t2 = (_t + 1) % 6,
+				model2 = anotherMachine(r.desk->workingKit()->machines[static_cast<size_t>(t2)]);
 			r.msg(R"({"op":"play"})");
 			r.run(2000);
 			machine(t2, model2);
@@ -2474,7 +2498,8 @@ namespace
 			// another pattern with the same kit, and back
 			int same = -1;
 			for(int q = 0; q < 128 && same < 0; ++q)
-				if(q != p && r.desk->pattern(static_cast<uint8_t>(q)) && r.desk->pattern(static_cast<uint8_t>(q))->kit == r.desk->currentKit())
+				if(q != p && r.desk->pattern(static_cast<uint8_t>(q))
+					&& r.desk->pattern(static_cast<uint8_t>(q))->kit == r.desk->currentKit())
 					same = q;
 			check(same >= 0, "another pattern links kit " + std::to_string(r.desk->currentKit() + 1));
 			if(same < 0)
@@ -2494,25 +2519,29 @@ namespace
 		round("a saved kit", 3);
 	}
 
-	// B-027 over HW MIDI (MM-P4): the step's dump waits for the person's SYSEX RECV (hwSend), and the machine reloads the
-	// kit when it takes it. The page has no memory to read there: without the restore it would go on showing the machine
-	// change the Monomachine no longer plays.
+	// B-027 over HW MIDI (MM-P4): the step's dump waits for the person's SYSEX RECV (hwSend), and the machine reloads
+	// the kit when it takes it. The page has no memory to read there: without the restore it would go on showing the
+	// machine change the Monomachine no longer plays.
 	void machineStaysHw(const Bytes& _rom)
 	{
 		std::puts("machine stays over HW MIDI (B-027)");
 		Rig r(_rom, true);
 		r.msg(R"({"op":"ready"})");
 		const auto t0 = r.ms();
-		while(r.ms() - t0 < 20000 && !(r.desk->currentPattern() >= 0 && r.desk->pattern(static_cast<uint8_t>(r.desk->currentPattern())) && r.desk->workingKit()
+		while(r.ms() - t0 < 20000 && !(r.desk->currentPattern() >= 0
+			&& r.desk->pattern(static_cast<uint8_t>(r.desk->currentPattern())) && r.desk->workingKit()
 			&& r.desk->kit(static_cast<uint8_t>(std::max(0, r.desk->currentKit())))))
 			r.run(50);
-		check(r.desk->workingKit() && r.desk->kit(static_cast<uint8_t>(std::max(0, r.desk->currentKit()))), "the current pattern and its kit arrive over DIN");
+		check(r.desk->workingKit() && r.desk->kit(static_cast<uint8_t>(std::max(0, r.desk->currentKit()))),
+			"the current pattern and its kit arrive over DIN");
 		if(!r.desk->workingKit())
 			return;
 		const int model = anotherMachine(r.desk->workingKit()->machines[0]);
-		r.msg("{\"op\":\"machine\",\"g\":1,\"k\":" + std::to_string(r.desk->currentKit()) + ",\"t\":0,\"model\":" + std::to_string(model) + ",\"keepFx\":true}");
+		r.msg("{\"op\":\"machine\",\"g\":1,\"k\":" + std::to_string(r.desk->currentKit()) + ",\"t\":0,\"model\":"
+			+ std::to_string(model) + ",\"keepFx\":true}");
 		r.run(1500);
-		r.msg("{\"op\":\"step\",\"g\":2,\"p\":" + std::to_string(r.desk->currentPattern()) + R"(,"t":2,"s":7,"v":{"n":[60],"a":1,"f":1,"l":1}})");
+		r.msg("{\"op\":\"step\",\"g\":2,\"p\":" + std::to_string(r.desk->currentPattern())
+			+ R"(,"t":2,"s":7,"v":{"n":[60],"a":1,"f":1,"l":1}})");
 		r.run(500);
 		r.userKeys(mmDesk::RecvSession::enterMacro());
 		r.run(1500);
@@ -2523,7 +2552,8 @@ namespace
 		const auto mem = workingKitInMemory(r);
 		const auto w = r.desk->workingKit();
 		const int m = mem ? mem->machines[0] : -1, d = w ? w->machines[0] : -1;
-		check(m == model && d == model, "a step sent on the person's SYSEX RECV: T1 plays " + machineName(model) + " (memory " + machineName(m) + ", page "
+		check(m == model && d == model, "a step sent on the person's SYSEX RECV: T1 plays " + machineName(model)
+			+ " (memory " + machineName(m) + ", page "
 			+ machineName(d) + ")");
 		check(mem && w && ed::mmKitRaw(*mem) == ed::mmKitRaw(*w), "the machine holds the page's kit");
 	}
@@ -2535,7 +2565,8 @@ int main(const int _argc, char** _argv)
 	if(_argc < 2)
 	{
 		std::puts("usage: mmDeskFirmwareTest <MM-ROM> [section]");
-		std::puts("       mmDeskFirmwareTest --env syxpick   (ctest: the ROM from GEARMULATOR_MM_FIRMWARE_BIN, the backup from MM_SYX)");
+		std::puts("       mmDeskFirmwareTest --env syxpick   (ctest: the ROM from GEARMULATOR_MM_FIRMWARE_BIN, the "
+			"backup from MM_SYX)");
 		return 77;
 	}
 	// ctest's form: the ROM from the environment, as the other firmware tests take it; skipped without it

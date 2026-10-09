@@ -1,9 +1,9 @@
-// Files dragged from the Finder (or from a DAW's own browser: not tried) onto the editor's page go to JUCE's window, not
-// to the web view (macOS; mdWebFileDrop.h, FOUNDATION.md "Files dropped on the window"). The web view would take them
-// itself: WKWebView answers AppKit's drag hit test with itself for any drag over it, whatever types it registered, and
-// then opens a dropped file as a page (the page host refuses that navigation). So taking its drag types away, as tried in
-// September 2026 (0b0762618), left a dropped file with nobody: the web view stayed the destination and no longer knew
-// the types.
+// Files dragged from the Finder (or from a DAW's own browser: not tried) onto the editor's page go to JUCE's window,
+// not to the web view (macOS; mdWebFileDrop.h, FOUNDATION.md "Files dropped on the window"). The web view would take
+// them itself: WKWebView answers AppKit's drag hit test with itself for any drag over it, whatever types it registered,
+// and then opens a dropped file as a page (the page host refuses that navigation). So taking its drag types away, as
+// tried in September 2026 (0b0762618), left a dropped file with nobody: the web view stayed the destination and no
+// longer knew the types.
 //
 // Here the web view stays the destination, and this one web view's class is given a subclass (made at run time, as
 // key-value observing does) whose dragging methods hand a drag of files from outside the page to the view JUCE draws
@@ -73,10 +73,12 @@ namespace mdJucePlugin::webFileDrop
 		NSView* windowFor(NSView* _web, id<NSDraggingInfo> _info)
 		{
 			const id source = [_info draggingSource];
-			if(source != nil && [source isKindOfClass:[NSView class]] && ((NSView*)source == _web || [(NSView*)source isDescendantOf:_web]))
+			if(source != nil && [source isKindOfClass:[NSView class]]
+				&& ((NSView*)source == _web || [(NSView*)source isDescendantOf:_web]))
 				return nil;
 			NSPasteboard* pasteboard = [_info draggingPasteboard];
-			if(![pasteboard canReadObjectForClasses:@[[NSURL class]] options:@{NSPasteboardURLReadingFileURLsOnlyKey: @YES}])
+			if(![pasteboard canReadObjectForClasses:@[[NSURL class]]
+				options:@{NSPasteboardURLReadingFileURLsOnlyKey: @YES}])
 				return nil;
 			// NSPasteboardTypeFileURL, which JUCE's view registers (the name is macOS 10.13's; the build targets older)
 			NSString* fileUrl = @"public.file-url";
@@ -100,7 +102,11 @@ namespace mdJucePlugin::webFileDrop
 					return;
 				}
 				else
-					return [window respondsToSelector:_cmd] ? reinterpret_cast<R (*)(id, SEL, id)>(objc_msgSend)(window, _cmd, _info) : R{};
+				{
+					if(![window respondsToSelector:_cmd])
+						return R{};
+					return reinterpret_cast<R (*)(id, SEL, id)>(objc_msgSend)(window, _cmd, _info);
+				}
 			}
 			Class base = baseOf(_self);
 			if(base == nil || !class_respondsToSelector(base, _cmd))
@@ -114,8 +120,14 @@ namespace mdJucePlugin::webFileDrop
 			return reinterpret_cast<R (*)(struct objc_super*, SEL, id)>(objc_msgSendSuper)(&up, _cmd, _info);
 		}
 
-		NSDragOperation entered(id _self, SEL _cmd, id<NSDraggingInfo> _info) { return route<NSDragOperation>(_self, _cmd, _info); }
-		NSDragOperation updated(id _self, SEL _cmd, id<NSDraggingInfo> _info) { return route<NSDragOperation>(_self, _cmd, _info); }
+		NSDragOperation entered(id _self, SEL _cmd, id<NSDraggingInfo> _info)
+		{
+			return route<NSDragOperation>(_self, _cmd, _info);
+		}
+		NSDragOperation updated(id _self, SEL _cmd, id<NSDraggingInfo> _info)
+		{
+			return route<NSDragOperation>(_self, _cmd, _info);
+		}
 		void exited(id _self, SEL _cmd, id<NSDraggingInfo> _info) { route<void>(_self, _cmd, _info); }
 		BOOL prepare(id _self, SEL _cmd, id<NSDraggingInfo> _info) { return route<BOOL>(_self, _cmd, _info); }
 		BOOL perform(id _self, SEL _cmd, id<NSDraggingInfo> _info) { return route<BOOL>(_self, _cmd, _info); }
@@ -130,13 +142,15 @@ namespace mdJucePlugin::webFileDrop
 			if(const auto it = m.classes.find(_base); it != m.classes.end())
 				return it->second;
 			char code[24];
-			std::snprintf(code, sizeof(code), "%llx", static_cast<unsigned long long>(reinterpret_cast<uintptr_t>(&entered)));
+			std::snprintf(code, sizeof(code), "%llx",
+				static_cast<unsigned long long>(reinterpret_cast<uintptr_t>(&entered)));
 			const std::string name = std::string(g_prefix) + code + "_" + class_getName(_base);
 			Class c = objc_allocateClassPair(_base, name.c_str(), 0);
 			if(c == nil)
 				return nil;
 			// the methods' types: the result, then self, _cmd and the dragging info
-			const std::string operation = std::string(@encode(NSDragOperation)) + "@:@", flag = std::string(@encode(BOOL)) + "@:@", none = "v@:@";
+			const std::string operation = std::string(@encode(NSDragOperation)) + "@:@",
+				flag = std::string(@encode(BOOL)) + "@:@", none = "v@:@";
 			class_addMethod(c, @selector(draggingEntered:), reinterpret_cast<IMP>(entered), operation.c_str());
 			class_addMethod(c, @selector(draggingUpdated:), reinterpret_cast<IMP>(updated), operation.c_str());
 			class_addMethod(c, @selector(draggingExited:), reinterpret_cast<IMP>(exited), none.c_str());

@@ -93,14 +93,16 @@ namespace mdJucePlugin
 			return {};
 		auto& dm = h->deviceManager;
 		auto* dev = dm.getCurrentAudioDevice();
-		juce::String line = "audio: " + (dm.getCurrentAudioDeviceType().isNotEmpty() ? dm.getCurrentAudioDeviceType() : juce::String("no driver"));
+		juce::String line = "audio: " + (dm.getCurrentAudioDeviceType().isNotEmpty() ? dm.getCurrentAudioDeviceType()
+			: juce::String("no driver"));
 		if(dev)
 		{
 			const auto rate = dev->getCurrentSampleRate();
 			const auto buffer = dev->getCurrentBufferSizeSamples();
 			line << ", " << dev->getName() << ", " << juce::String(rate, 0) << " Hz, buffer " << buffer
 				<< (rate > 0 ? " (" + juce::String(1000.0 * buffer / rate, 1) + " ms)" : juce::String())
-				<< ", output latency " << dev->getOutputLatencyInSamples() << ", " << (dev->isPlaying() ? "running" : "NOT running");
+				<< ", output latency " << dev->getOutputLatencyInSamples() << ", "
+					<< (dev->isPlaying() ? "running" : "NOT running");
 		}
 		else
 		{
@@ -327,7 +329,8 @@ namespace mdJucePlugin
 			dm.setMidiInputDeviceEnabled(juce::String(*device), onValue);
 			saved();
 			// B-037: a port the system did not open stays off without a word from JUCE (on Windows: in use elsewhere)
-			const auto refused = midiPortRefusal::text(midiPortRefusal::Kind::Input, portName(juce::MidiInput::getAvailableDevices(), *device),
+			const auto refused = midiPortRefusal::text(midiPortRefusal::Kind::Input,
+				portName(juce::MidiInput::getAvailableDevices(), *device),
 				onValue, dm.isMidiInputDeviceEnabled(juce::String(*device)), g_windows);
 			if(!refused.empty() && m_log)
 				m_log("MIDI: " + refused);
@@ -341,7 +344,8 @@ namespace mdJucePlugin
 			h->player.setMidiOutput(dm.getDefaultMidiOutput());
 			saved();
 			// B-037: JUCE goes back to no output when the port did not open
-			const auto refused = midiPortRefusal::text(midiPortRefusal::Kind::Output, portName(juce::MidiOutput::getAvailableDevices(), *device),
+			const auto refused = midiPortRefusal::text(midiPortRefusal::Kind::Output,
+				portName(juce::MidiOutput::getAvailableDevices(), *device),
 				!device->empty(), dm.getDefaultMidiOutputIdentifier() == juce::String(*device), g_windows);
 			if(!refused.empty() && m_log)
 				m_log("MIDI: " + refused);

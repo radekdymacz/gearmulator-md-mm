@@ -1,8 +1,8 @@
 #pragma once
 
-// Files dropped on the editor's window (FOUNDATION.md, "Files dropped on the window"): what each is, by its extension, and
-// the files of the last drop, which the window keeps. The page never sees a path: it hears {"type":"drop", drop, items:
-// [{n, kind, name}], x, y} and answers with the window's commands, which name a file by its drop and its number
+// Files dropped on the editor's window (FOUNDATION.md, "Files dropped on the window"): what each is, by its extension,
+// and the files of the last drop, which the window keeps. The page never sees a path: it hears {"type":"drop", drop,
+// items: [{n, kind, name}], x, y} and answers with the window's commands, which name a file by its drop and its number
 // (dropRom, dropSyx, dropSample: deskHost.cpp); the window hands the file to the session as its chooser would. Pure: no
 // JUCE; mdDroppedFilesTest.
 
@@ -54,7 +54,8 @@ namespace mdJucePlugin::droppedFiles
 		if(dot == std::string::npos || dot == 0)
 			return Kind::Unknown;
 		std::string ext = name.substr(dot + 1);
-		std::transform(ext.begin(), ext.end(), ext.begin(), [](const unsigned char _c) { return static_cast<char>(std::tolower(_c)); });
+		std::transform(ext.begin(), ext.end(), ext.begin(),
+			[](const unsigned char _c) { return static_cast<char>(std::tolower(_c)); });
 		if(ext == "bin" || ext == "zip")
 			return Kind::Rom;
 		if(ext == "syx")
@@ -81,14 +82,17 @@ namespace mdJucePlugin::droppedFiles
 	}
 
 	// Whether the window takes a drag of these files: one of them at least is a kind it knows (the others are said
-	// to be unknown once dropped). A drag of none it knows is refused while it is over the window (the pointer says so).
+	// to be unknown once dropped). A drag of none it knows is refused while it is over the window
+	// (the pointer says so).
 	inline bool accepts(const std::vector<std::string>& _paths)
 	{
-		return std::any_of(_paths.begin(), _paths.end(), [](const std::string& _p) { return kindOf(_p) != Kind::Unknown; });
+		return std::any_of(_paths.begin(), _paths.end(),
+			[](const std::string& _p) { return kindOf(_p) != Kind::Unknown; });
 	}
 
 	// {"type":"drop", drop, items:[{n, kind, name}], x, y}: x and y where it was dropped, in the page's CSS pixels.
-	inline elektronData::json::Value dropMessage(const int _drop, const std::vector<Item>& _items, const double _x, const double _y)
+	inline elektronData::json::Value dropMessage(const int _drop, const std::vector<Item>& _items, const double _x,
+		const double _y)
 	{
 		using elektronData::json::Value;
 		auto items = Value::array();
@@ -109,7 +113,8 @@ namespace mdJucePlugin::droppedFiles
 		return m;
 	}
 
-	// {"type":"dragFiles", active}: files the window takes are over it (true), or have left it (false; a drop says so too).
+	// {"type":"dragFiles", active}: files the window takes are over it (true), or have left it (false; a
+	// drop says so too).
 	inline elektronData::json::Value dragMessage(const bool _active)
 	{
 		auto m = elektronData::json::Value::object();
@@ -155,7 +160,8 @@ namespace mdJucePlugin::droppedFiles
 		// How many files of the current drop are still to be used.
 		size_t held() const
 		{
-			return static_cast<size_t>(std::count_if(m_files.begin(), m_files.end(), [](const Held& _f) { return !_f.used; }));
+			return static_cast<size_t>(std::count_if(m_files.begin(), m_files.end(),
+				[](const Held& _f) { return !_f.used; }));
 		}
 
 	private:

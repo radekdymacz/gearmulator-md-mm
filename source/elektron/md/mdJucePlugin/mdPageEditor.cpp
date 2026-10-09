@@ -78,7 +78,8 @@ namespace mdJucePlugin
 			[this](const json::Value& _m) { onPageMessage(_m); });
 		m_page->setUserZoom(getProcessor().getConfig().getDoubleValue(g_zoomKey, 1.0));
 		// B-036, B-037: the standalone's audio and MIDI devices, and a MIDI port that did not open, in the start-up log
-		m_audio = std::make_unique<AudioMidiLink>(getProcessor(), [this](json::Value _m) { m_page->send(std::move(_m)); },
+		m_audio = std::make_unique<AudioMidiLink>(getProcessor(),
+			[this](json::Value _m) { m_page->send(std::move(_m)); },
 			[this](const std::string& _line) { if(m_page) m_page->note(juce::String(_line)); });
 		if(m_session)
 			m_session->setLog([this](const std::string& _l) { if(m_page) m_page->log(juce::String(_l)); });
@@ -195,9 +196,11 @@ namespace mdJucePlugin
 				|| row->handler.action == deskHost::Action::DropSample)
 			{
 				const auto kind = row->handler.action == deskHost::Action::DropRom ? droppedFiles::Kind::Rom
-					: row->handler.action == deskHost::Action::DropSyx ? droppedFiles::Kind::Sysex : droppedFiles::Kind::Sample;
+					: row->handler.action == deskHost::Action::DropSyx ? droppedFiles::Kind::Sysex
+						: droppedFiles::Kind::Sample;
 				const auto why = useDrop(kind, _message);
-				m_page->send(deskCore::resultMessage(_message, why.empty() ? std::vector<std::string>{} : std::vector<std::string>{why}, {}));
+				m_page->send(deskCore::resultMessage(_message, why.empty() ? std::vector<std::string>{}
+					: std::vector<std::string>{why}, {}));
 			}
 			else if(row->handler.action == deskHost::Action::ChooseSyx || row->handler.action == deskHost::Action::SyxExport)
 			{
@@ -332,21 +335,22 @@ namespace mdJucePlugin
 		});
 	}
 
-	// Files dropped on the window: kept here by their number (the page never sees a path), and the page told what each is
-	// and where they were dropped (its CSS pixels): it decides what each becomes (deskDrop.js).
+	// Files dropped on the window: kept here by their number (the page never sees a path), and the page told what each
+	// is and where they were dropped (its CSS pixels): it decides what each becomes (deskDrop.js).
 	void PageEditor::filesDropped(const std::vector<std::string>& _paths, const double _x, const double _y)
 	{
 		if(!m_page)
 			return;
 		const int drop = m_drops.add(_paths, juce::Time::getMillisecondCounterHiRes());
 		const auto items = droppedFiles::classify(_paths);
-		m_page->log("drop " + juce::String(drop) + ": " + juce::String(static_cast<int>(items.size())) + " files at " + juce::String(_x, 1) + ", " + juce::String(_y, 1));
+		m_page->log("drop " + juce::String(drop) + ": " + juce::String(static_cast<int>(items.size())) + " files at "
+			+ juce::String(_x, 1) + ", " + juce::String(_y, 1));
 		m_page->send(droppedFiles::dropMessage(drop, items, _x, _y));
 		m_page->flush();
 	}
 
-	// The file the page chose of a drop, as its chooser would give it: a ROM to install, a .syx to preview, a sample for a
-	// UW ROM slot. Each file serves once, as the kind it was dropped as.
+	// The file the page chose of a drop, as its chooser would give it: a ROM to install, a .syx to preview, a sample
+	// for a UW ROM slot. Each file serves once, as the kind it was dropped as.
 	std::string PageEditor::useDrop(const droppedFiles::Kind _kind, const json::Value& _message)
 	{
 		const auto drop = static_cast<int>(_message.find("drop")->asNumber());
@@ -359,12 +363,15 @@ namespace mdJucePlugin
 			return file.getFileName().toStdString() + " is no longer there.";
 		if(!m_session)
 			return "The editor has no machine to give it to.";
-		m_page->log("drop " + juce::String(drop) + ": file " + juce::String(static_cast<int>(n)) + " (" + file.getFileName() + ") used as " + droppedFiles::kindName(_kind));
+		m_page->log("drop " + juce::String(drop) + ": file " + juce::String(static_cast<int>(n)) + " ("
+			+ file.getFileName() + ") used as " + droppedFiles::kindName(_kind));
 		switch(_kind)
 		{
 		case droppedFiles::Kind::Rom:		m_session->installRom(file); break;
 		case droppedFiles::Kind::Sysex:		m_session->openSyx(file); break;
-		case droppedFiles::Kind::Sample:	m_session->loadSampleFile(static_cast<uint8_t>(_message.find("slot")->asNumber()), file); break;
+		case droppedFiles::Kind::Sample:
+			m_session->loadSampleFile(static_cast<uint8_t>(_message.find("slot")->asNumber()), file);
+			break;
 		case droppedFiles::Kind::Unknown:	break;
 		}
 		return {};

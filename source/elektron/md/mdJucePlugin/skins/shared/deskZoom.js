@@ -23,5 +23,6 @@
 		e.preventDefault(); e.stopPropagation();
 		if (!e.repeat || step !== 0) Bridge.send({ op: "pageZoom", step });
 	}, true);
-	Bridge.onMessage(m => { if (m.type === "zoom" && typeof m.zoom === "number" && m.zoom > 0) document.documentElement.style.zoom = String(m.zoom); });
+	Bridge.onMessage(m => { if (m.type === "zoom" && typeof m.zoom === "number" && m.zoom > 0)
+		document.documentElement.style.zoom = String(m.zoom); });
 })();

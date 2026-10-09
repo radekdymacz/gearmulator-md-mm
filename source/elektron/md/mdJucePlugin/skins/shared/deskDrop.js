@@ -30,20 +30,24 @@ const Drop = (() => {
 		const rest = () => {
 			if (syx.length) {
 				h.send({ op: "dropSyx", drop: m.drop, n: syx[0].n });
-				if (syx.length > 1) notes.push(`One SysEx file at a time: ${syx[0].name} opens; drop ${names(syx.slice(1))} after its import.`);
+				if (syx.length > 1)
+					notes.push(`One SysEx file at a time: ${syx[0].name} opens; `
+						+ `drop ${names(syx.slice(1))} after its import.`);
 			}
 			if (samples.length) {
 				const note = h.samples ? h.samples(m.drop, samples, m.x, m.y) : "This editor takes no samples.";
 				if (note) notes.push(note);
 			}
-			if (unknown.length) notes.push(`Not a ROM (.bin, .zip), a SysEx file (.syx) or a sample (.wav, .aif): ${names(unknown)}.`);
+			if (unknown.length)
+				notes.push(`Not a ROM (.bin, .zip), a SysEx file (.syx) or a sample (.wav, .aif): ${names(unknown)}.`);
 			say();
 		};
 		if (!roms.length) { rest(); return; }
 		if (roms.length > 1) notes.push(`One ROM at a time: ${names(roms.slice(1))} not used.`);
 		const install = () => {
 			h.send({ op: "dropRom", drop: m.drop, n: roms[0].n });
-			if (syx.length + samples.length + unknown.length) notes.push("The machine starts again with the new ROM: drop the other files once it runs.");
+			if (syx.length + samples.length + unknown.length)
+				notes.push("The machine starts again with the new ROM: drop the other files once it runs.");
 			say();
 		};
 		if (h.romWanted()) { install(); return; }
@@ -56,16 +60,21 @@ const Drop = (() => {
 		if (!frame && !on) return;
 		if (!frame) {
 			const style = document.createElement("style");
-			style.textContent = ".deskdrop{position:fixed;inset:6px;z-index:90;pointer-events:none;border:2px dashed var(--print,#ccc);border-radius:8px;display:grid;place-items:end center;padding-bottom:32px;box-sizing:border-box}"
+			style.textContent = ".deskdrop{position:fixed;inset:6px;z-index:90;pointer-events:none;border:2px dashed "
+				+ "var(--print,#ccc);border-radius:8px;display:grid;place-items:end center;padding-bottom:32px;"
+				+ "box-sizing:border-box}"
 				+ ".deskdrop[hidden]{display:none}"
-				+ ".deskdrop span{font:600 15px/1.3 var(--sans,system-ui,sans-serif);padding:8px 14px;border-radius:6px;background:var(--plate,#222);color:var(--body,var(--print,#eee));box-shadow:0 8px 24px rgba(0,0,0,.35)}";
+				+ ".deskdrop span{font:600 15px/1.3 var(--sans,system-ui,sans-serif);padding:8px 14px;"
+				+ "border-radius:6px;background:var(--plate,#222);color:var(--body,var(--print,#eee));"
+				+ "box-shadow:0 8px 24px rgba(0,0,0,.35)}";
 			document.head.appendChild(style);
 			frame = document.createElement("div");
 			frame.className = "deskdrop"; frame.hidden = true; frame.setAttribute("role", "status");
 			frame.appendChild(document.createElement("span"));
 			document.body.appendChild(frame);
 		}
-		if (on) frame.firstChild.textContent = (Drop.host && Drop.host.hint) || "Drop a ROM (.bin, .zip) or a SysEx file (.syx)";
+		if (on) frame.firstChild.textContent = (Drop.host && Drop.host.hint)
+			|| "Drop a ROM (.bin, .zip) or a SysEx file (.syx)";
 		frame.hidden = !on;
 	}
 	Bridge.onMessage(m => {

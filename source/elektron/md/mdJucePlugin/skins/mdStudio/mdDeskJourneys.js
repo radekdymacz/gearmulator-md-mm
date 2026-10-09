@@ -1081,32 +1081,45 @@ const MdJourneys = (() => {
 	};
 	/* ---------- files dropped on the window (FOUNDATION.md, "Files dropped on the window") ---------- */
 	/* A drop from the Finder cannot be played from the page. The run's own files are dropped at a point of the page
-	   through the window's drop path from the native side on ("dropfiles <x> <y> syx|wav" in the page's log, diagnostics
-	   builds: mdWebPageHost.cpp): the drop message, the page's choice, the window's command and the session are the real
-	   ones; only AppKit's drag (mdWebFileDrop.mm) is not played. The files: GEARMULATOR_MDMM_SYX_FILE, GEARMULATOR_MDMM_WAV_FILE. */
-	const dropAt = (q, what) => { const r = $1(q).getBoundingClientRect(); Bridge.log(`dropfiles ${Math.round(r.left + r.width / 2)} ${Math.round(r.top + r.height / 2)} ${what}`); };
+	   through the window's drop path from the native side on ("dropfiles <x> <y> syx|wav" in the page's log,
+	   diagnostics builds: mdWebPageHost.cpp): the drop message, the page's choice, the window's command and the session
+	   are the real ones; only AppKit's drag (mdWebFileDrop.mm) is not played. The files: GEARMULATOR_MDMM_SYX_FILE,
+	   GEARMULATOR_MDMM_WAV_FILE. */
+	const dropAt = (q, what) => { const r = $1(q).getBoundingClientRect();
+		Bridge.log(`dropfiles ${Math.round(r.left + r.width / 2)} ${Math.round(r.top + r.height / 2)} ${what}`); };
 	const dropSyxJ = {
 		name: "md-drop-syx",
-		needs: () => new URLSearchParams(location.search).get("syxfile") ? null : "no .syx for the run (GEARMULATOR_MDMM_SYX_FILE)",
+		needs: () => new URLSearchParams(location.search).get("syxfile") ? null
+			: "no .syx for the run (GEARMULATOR_MDMM_SYX_FILE)",
 		steps: [
-			{ say: "drop the run's .syx on the page: its import window opens with the file's preview", act: () => Bridge.log(`dropfiles ${Math.round(innerWidth / 2)} ${Math.round(innerHeight / 2)} syx`),
-				screen: () => ok(!$1("#syxpop").hidden && $all("#syxpop [data-syxkind]").length > 0, "no preview"), within: 8000 },
-			{ say: "click Cancel: it closes, nothing is sent", act: u => u.click('#syxpop .syxfoot [data-syxgo="close"]'), screen: () => ok($1("#syxpop").hidden, "still open") }
+			{ say: "drop the run's .syx on the page: its import window opens with the file's preview",
+				act: () => Bridge.log(`dropfiles ${Math.round(innerWidth / 2)} ${Math.round(innerHeight / 2)} syx`),
+				screen: () => ok(!$1("#syxpop").hidden && $all("#syxpop [data-syxkind]").length > 0, "no preview"),
+					within: 8000 },
+			{ say: "click Cancel: it closes, nothing is sent",
+				act: u => u.click('#syxpop .syxfoot [data-syxgo="close"]'),
+				screen: () => ok($1("#syxpop").hidden, "still open") }
 		],
 		async tidy(u) { if (!$1("#syxpop").hidden) u.key("Escape"); }
 	};
 	const dropSampleJ = {
 		name: "md-drop-sample",
-		needs: () => new URLSearchParams(location.search).get("wavfile") ? null : "no sample for the run (GEARMULATOR_MDMM_WAV_FILE)",
+		needs: () => new URLSearchParams(location.search).get("wavfile") ? null
+			: "no sample for the run (GEARMULATOR_MDMM_WAV_FILE)",
 		steps: [
 			go("sampler"),
 			{ say: "click an empty ROM slot (the last one if none is)", act: (u, c) => {
-				const keys = $all(".slotk.rom"), k = keys.find(b => smpSlotOf("rom", +b.dataset.slot.slice(3) - 1)?.empty) || keys[keys.length - 1];
+				const keys = $all(".slotk.rom"), k = keys.find(b => smpSlotOf("rom",
+					+b.dataset.slot.slice(3) - 1)?.empty) || keys[keys.length - 1];
 				c.slot = +k.dataset.slot.slice(3) - 1; u.click(k); },
 				screen: c => ok(S.smpSlot === "ROM" + (c.slot + 1), "selected " + S.smpSlot) },
-			{ say: "drop the run's WAV on the slot's waveform: it is sent to the slot and the slot holds it", act: () => dropAt(".romsel canvas", "wav"),
-				machine: c => ok(smpLoad?.slot === c.slot && smpLoad.state === "done", "sampleLoad " + JSON.stringify(smpLoad && { slot: smpLoad.slot, state: smpLoad.state, text: smpLoad.text })),
-				screen: c => ok(smpSlotOf("rom", c.slot) && !smpSlotOf("rom", c.slot).empty, "the slot " + JSON.stringify(smpSlotOf("rom", c.slot) && { empty: smpSlotOf("rom", c.slot).empty })), within: 90000 }
+			{ say: "drop the run's WAV on the slot's waveform: it is sent to the slot and the slot holds it",
+				act: () => dropAt(".romsel canvas", "wav"),
+				machine: c => ok(smpLoad?.slot === c.slot && smpLoad.state === "done", "sampleLoad "
+					+ JSON.stringify(smpLoad && { slot: smpLoad.slot, state: smpLoad.state, text: smpLoad.text })),
+				screen: c => ok(smpSlotOf("rom", c.slot) && !smpSlotOf("rom", c.slot).empty, "the slot "
+					+ JSON.stringify(smpSlotOf("rom", c.slot) && { empty: smpSlotOf("rom", c.slot).empty })),
+					within: 90000 }
 		]
 	};
 	const all = [bootCard, firstBeat, spaceTransport, tempoDrag, tapTempo, tapTempoB, patStep, queuePattern, plate, wsKeys, helpKeys, osHelp, undoRedo,
@@ -1117,7 +1130,8 @@ const MdJourneys = (() => {
 		songArrange, songChain, songPlayhead, samplerSlots, samplerSetup, audition,
 		libDialog, kitCopy, kitRename, kitClear, patGo, patClear, dialogEsc,
 		globalJ, globalRouting, globalMapNote, audioPanel, romCard, notePlay,
-		lockRamp, pasteMany, mutScope, songInspector, songDrag, ramView, setupChop, panBox, hwNoMachine, syxImportJ, syxImportMute, shots, shotsSong, shotsImport, editorMenuJ, shotsMenu,
+		lockRamp, pasteMany, mutScope, songInspector, songDrag, ramView, setupChop, panBox, hwNoMachine, syxImportJ,
+		syxImportMute, shots, shotsSong, shotsImport, editorMenuJ, shotsMenu,
 		dropSyxJ, dropSampleJ];
 
 	/* ---------- demos: journeys played for a camera (doc/modern-ux/DEMO-VIDEOS.md) ---------- */

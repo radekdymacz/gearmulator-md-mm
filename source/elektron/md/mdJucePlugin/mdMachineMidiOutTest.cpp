@@ -88,7 +88,8 @@ namespace
 	{
 		std::puts("the route (mdMachineMidiOut.h)");
 		synthLib::MidiRoutingMatrix upstream;
-		check(!route::toHost(upstream, event(Source::Device, 0x90, 36, 100)), "upstream's default matrix: the machine's notes never reach the host (B-037)");
+		check(!route::toHost(upstream, event(Source::Device, 0x90, 36, 100)),
+			"upstream's default matrix: the machine's notes never reach the host (B-037)");
 
 		synthLib::MidiRoutingMatrix m;
 		route::route(m);
@@ -105,7 +106,8 @@ namespace
 			{event(Source::Device, 0xfa), "start"},
 			{event(Source::Device, 0xfb), "continue"},
 			{event(Source::Device, 0xfc), "stop"},
-			{event(Source::Device, 0xf2, 0, 0), "song position (the matrix's bucket for system messages; neither firmware sends one)"},
+			{event(Source::Device, 0xf2, 0, 0),
+				"song position (the matrix's bucket for system messages; neither firmware sends one)"},
 		}};
 		for(const auto& k : go)
 			check(route::toHost(m, k.e), std::string("the machine's ") + k.name + " goes to the host");
@@ -120,18 +122,23 @@ namespace
 		for(const auto& k : stay)
 			check(!route::toHost(m, k.e), std::string("the machine's SysEx (") + k.name + ") never goes to the host");
 		// The desk's own traffic is the editor's (the requests, its edits): not the device's output
-		check(!route::toHost(m, sysex(Source::Editor, {0xf0, 0x00, 0x20, 0x3c, 0x03, 0x00, 0x70, 0x01, 0xf7})), "the desk's own SysEx request never goes to the host");
+		check(!route::toHost(m, sysex(Source::Editor, {0xf0, 0x00, 0x20, 0x3c, 0x03, 0x00, 0x70, 0x01, 0xf7})),
+			"the desk's own SysEx request never goes to the host");
 		check(!route::toHost(m, event(Source::Editor, 0xb0, 16, 64)), "the desk's own CC edit never goes to the host");
-		check(!route::toHost(m, event(Source::Internal, 0xf8)), "the plug-in's internal clock to the machine never goes to the host");
+		check(!route::toHost(m, event(Source::Internal, 0xf8)),
+			"the plug-in's internal clock to the machine never goes to the host");
 		// The editor still gets all of the machine's MIDI, its SysEx too
-		check(m.enabled(sysex(Source::Device, {0xf0, 0x7e, 0xf7}), Source::Editor), "the editor still gets the machine's SysEx");
+		check(m.enabled(sysex(Source::Device, {0xf0, 0x7e, 0xf7}), Source::Editor),
+			"the editor still gets the machine's SysEx");
 
-		// A project's state carries the whole matrix: one saved before 0.4.0 has no route, a hand-edited one may send SysEx
+		// A project's state carries the whole matrix: one saved before 0.4.0 has no route, a hand-edited
+		// one may send SysEx
 		{
 			const route::RouteAfterLoad r(m);
 			m = synthLib::MidiRoutingMatrix();	// what loading an old project's "MiRM" chunk does
 		}
-		check(route::toHost(m, event(Source::Device, 0xf8)), "after loading a project saved without the route, it is there again");
+		check(route::toHost(m, event(Source::Device, 0xf8)),
+			"after loading a project saved without the route, it is there again");
 		m.setEnabled(Source::Device, Source::Host, synthLib::MidiRoutingMatrix::EventType::SysEx, true);
 		try
 		{
@@ -141,7 +148,8 @@ namespace
 		catch(const std::range_error&)
 		{
 		}
-		check(!route::toHost(m, stay[1].e) && route::toHost(m, go[0].e), "a load that throws still ends with the route, SysEx off");
+		check(!route::toHost(m, stay[1].e) && route::toHost(m, go[0].e),
+			"a load that throws still ends with the route, SysEx off");
 		return g_failures;
 	}
 
@@ -256,14 +264,19 @@ namespace
 			return std::string();
 		};
 		int id = 100;
-		const auto op = [&](const char* _op) { session->onPageMessage(*elektronData::json::parse(std::string(R"({"op":")") + _op + R"(","id":)" + std::to_string(++id) + "}")); };
+		const auto op = [&](const char* _op)
+		{
+			session->onPageMessage(*elektronData::json::parse(
+				std::string(R"({"op":")") + _op + R"(","id":)" + std::to_string(++id) + "}"));
+		};
 
 		// The machine up (its start-up animation over: the desk takes commands), up to 180 s
 		for(int i = 0; i < 1800 && lifecycle() != "ready"; ++i)
 			pump(100);
 		check(lifecycle() == "ready", "the machine is up (lifecycle " + lifecycle() + ")");
 
-		// PLAY until the machine's MIDI comes out (a machine the processor started again asks for PLAY again), up to 30 s
+		// PLAY until the machine's MIDI comes out (a machine the processor started again asks for PLAY
+		// again), up to 30 s
 		const auto played = [&] { return _mm ? out.starts > 0 && out.clocks > 10 : out.notes > 5; };
 		out.reset();
 		for(int i = 0; i < 15 && !played(); ++i)
@@ -274,11 +287,14 @@ namespace
 		pump(3000);
 		op("stop");
 		pump(1000);
-		std::printf("  at the host: %d notes, %d CCs, %d clocks, %d starts, %d stops, %d SysEx, %d others; the machine sent the editor %d SysEx\n",
-			out.notes.load(), out.ccs.load(), out.clocks.load(), out.starts.load(), out.stops.load(), out.sysex.load(), out.others.load(),
+		std::printf("  at the host: %d notes, %d CCs, %d clocks, %d starts, %d stops, %d SysEx, %d others; the machine "
+			"sent the editor %d SysEx\n",
+			out.notes.load(), out.ccs.load(), out.clocks.load(), out.starts.load(), out.stops.load(), out.sysex.load(),
+			out.others.load(),
 			deviceSysex.load());
 		if(_mm)
-			check(out.clocks > 50 && out.starts > 0 && out.stops > 0, "the Monomachine's clock, start and stop come out at the host while it plays");
+			check(out.clocks > 50 && out.starts > 0 && out.stops > 0,
+				"the Monomachine's clock, start and stop come out at the host while it plays");
 		else
 			check(out.notes > 5, "the Machinedrum's notes come out at the host while it plays");
 		check(deviceSysex > 0, "the machine answered the desk in SysEx meanwhile");
@@ -294,13 +310,15 @@ namespace
 		const int unrouted = out.notes + out.ccs + out.clocks + out.starts + out.stops;
 		op("stop");
 		pump(500);
-		check(unrouted == 0, "without the route nothing reaches the host (" + std::to_string(unrouted) + " messages): processBlock reads it");
+		check(unrouted == 0, "without the route nothing reaches the host (" + std::to_string(unrouted)
+			+ " messages): processBlock reads it");
 
 		// A project saved without the route (before 0.4.0) gets it back when loaded
 		juce::MemoryBlock saved;
 		ap.getStateInformation(saved);
 		ap.setStateInformation(saved.getData(), static_cast<int>(saved.getSize()));
-		check(route::toHost(processor->getMidiRoutingMatrix(), event(Source::Device, 0xf8)), "a project saved without the route has it again once loaded");
+		check(route::toHost(processor->getMidiRoutingMatrix(), event(Source::Device, 0xf8)),
+			"a project saved without the route has it again once loaded");
 
 		run = false;
 		audio.join();
