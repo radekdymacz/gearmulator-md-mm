@@ -1560,12 +1560,20 @@ namespace md
 			score.maximumRequestedCycles = std::max(score.maximumRequestedCycles, requested););
 		// MM flow control: a host-TX-backlogged DSP does not advance in catch-up either - the
 		// catch-up loops are how a DSP outruns the UC by thousands of words in the first place
-		// (see the schedStep backpressure comment). MD path untouched.
+		// (see the schedStep backpressure comment). The MM therefore keeps its per-block loop,
+		// which tests the backlog between blocks. The MD has no such test, so it runs the whole
+		// catch-up under one execUntilCycles entry, like the background slice in schedStep: the
+		// same blocks with the same checks before each, minus one trampoline entry per block.
 		const bool s_mmBp = isMonomachine();
-		while(d.dsp().getCycles() < targetCyc && d.dsp().getCycles() < clampStop
-			&& (!s_mmBp
-				|| d.hostTxBacklog() <= policy.hostTransmitBackpressureThresholdWords))
-			d.dsp().exec();
+		if(!s_mmBp && m_schedBoundedJit)
+			d.dsp().execUntilCycles(std::min(targetCyc, clampStop));
+		else
+		{
+			while(d.dsp().getCycles() < targetCyc && d.dsp().getCycles() < clampStop
+				&& (!s_mmBp
+					|| d.hostTxBacklog() <= policy.hostTransmitBackpressureThresholdWords))
+				d.dsp().exec();
+		}
 		MD_TRANSPORT_RECORD(const auto executed = d.dsp().getCycles() - startCyc;
 			score.executedCycles += executed;
 			score.maximumExecutedCycles = std::max(score.maximumExecutedCycles, executed);
@@ -1631,10 +1639,17 @@ namespace md
 			score.maximumRequestedCycles = std::max(score.maximumRequestedCycles, requested););
 		m_schedInLinkDelivery = true;
 		const bool bpGate = isMonomachine();
-		while(d.dsp().getCycles() < targetCyc && d.dsp().getCycles() < clampStop
-			&& (!bpGate
-				|| d.hostTxBacklog() <= policy.hostTransmitBackpressureThresholdWords))
-			d.dsp().exec();
+		// Same split as in schedCatchUpDsp: the MM keeps its per-block backpressure loop, the MD
+		// runs the catch-up under one execUntilCycles entry.
+		if(!bpGate && m_schedBoundedJit)
+			d.dsp().execUntilCycles(std::min(targetCyc, clampStop));
+		else
+		{
+			while(d.dsp().getCycles() < targetCyc && d.dsp().getCycles() < clampStop
+				&& (!bpGate
+					|| d.hostTxBacklog() <= policy.hostTransmitBackpressureThresholdWords))
+				d.dsp().exec();
+		}
 		m_schedInLinkDelivery = false;
 		MD_TRANSPORT_RECORD(const auto executed = d.dsp().getCycles() - startCyc;
 			score.executedCycles += executed;
