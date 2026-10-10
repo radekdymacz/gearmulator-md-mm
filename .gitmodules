@@ -7,9 +7,6 @@
 [submodule "source/cpp-terminal"]
 	path = source/cpp-terminal
 	url = https://github.com/dsp56300/cpp-terminal
-[submodule "source/mc68k"]
-	path = source/mc68k
-	url = https://github.com/joelanders/mc68k-md-mm.git
 [submodule "source/clap-juce-extensions"]
 	path = source/clap-juce-extensions
 	url = https://github.com/dsp56300/clap-juce-extensions.git
