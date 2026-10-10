@@ -4,6 +4,14 @@
 repository; the site sends reports to the contact address. Newest first. Each entry:
 where it came from, the setup, what happens, what should happen, status.*
 
+## B-050 · Monomachine: a note added in the piano roll puts another track's sound back to the stored kit
+
+- **From:** a tester on Discord, 2026-10-09, Monomachine Editor 0.3.5: adding a note in a track's piano roll changed another track's sound back to the "original preset"; saving made the problem go away.
+- **What happens (0.3.5):** a track's sound edited on the Sound page (unsaved), then a note added in another track's piano roll: the edited track sounds as the stored kit again, and the page shows the stored values.
+- **Cause:** B-027. The roll sends its note as the Sequence page's step (op `step` with a pitch), a dump of the pattern that plays on SYSEX RECV, and OS 1.32B, taking such a dump, loads the kit the pattern links from its slot: every unsaved edit of the kit goes, the other tracks' values too. Saving the kit made the stored kit the edited one, which is why saving "fixed" it.
+- **Checked:** `mmDeskFirmwareTest <MM ROM> pianoroll` (new, also run by `machine` and by ctest `mmKitEditsStayFirmwareTest`): T2's SYN, AMP and FILTER values edited on Sound, then a note in T1's roll, stopped and while playing, then STOP: the machine's memory and the page hold T2's edits and the whole edited kit. On main (0.4.0's fix): passes. With the B-027 restore turned off (what 0.3.5 did): 6 failures, T2's edits gone from memory and from the page, the kit shown as saved.
+- **Status:** fixed in 0.4.0 by B-027; the tester to retry on 0.4.0 or later.
+
 ## B-049 · Monomachine: the amp envelope the editor draws is not the one the machine plays
 
 - **From:** a tester on Discord, 2026-10-10 (version not stated, 0.4.0 or 0.3.5): "amp envelopes on monomachine seem to be all wrong".

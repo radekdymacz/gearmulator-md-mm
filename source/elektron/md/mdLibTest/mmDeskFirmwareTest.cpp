@@ -2,8 +2,8 @@
 // real MM OS 1.32B firmware, headless. The same Desk code as the plug-in; the
 // Port here drives an emulated machine. Manual: needs a user-supplied ROM.
 //
-//   mmDeskFirmwareTest <MM-ROM> [only]   only one part, e.g. machine (B-027: a machine change stays),
-//                                        ampenv (B-049: the amp envelope the editor draws is the firmware's)
+//   mmDeskFirmwareTest <MM-ROM> [only]   only one part, e.g. machine (B-027: a machine change stays), pianoroll
+//                                        (B-050), ampenv (B-049: the amp envelope the editor draws is the firmware's)
 //
 // Exits 77 (skip) without arguments.
 
@@ -2667,6 +2667,66 @@ namespace
 		}
 	}
 
+	// B-050 (a tester on Discord, 0.3.5): a note added in the piano roll of one track while another track's sound has
+	// unsaved edits (values only, no machine change): the other track keeps them. The roll sends the note as the
+	// Sequence page's step (op step with a pitch), a dump of the pattern that plays: the B-027 path. Stopped and playing,
+	// on the factory kit.
+	void pianoRollKeepsSound(const Bytes& _rom)
+	{
+		std::puts("piano roll keeps another track's sound (B-050)");
+		Rig r(_rom);
+		r.msg(R"({"op":"ready"})");
+		r.desk->setProbe(mmDesk::Desk::Probe::Running);
+		r.run(600);
+		while(r.desk->loaded() < 288)
+			r.run(100);
+		r.run(1500);
+		int gesture = 9000;
+		const auto param = [&](const int _t, const int _page, const int _i, const int _v)
+		{
+			r.msg("{\"op\":\"param\",\"g\":" + std::to_string(++gesture) + ",\"k\":" + std::to_string(r.desk->currentKit()) + ",\"t\":" + std::to_string(_t)
+				+ ",\"page\":" + std::to_string(_page) + ",\"i\":" + std::to_string(_i) + ",\"v\":" + std::to_string(_v) + "}");
+			r.run(400);
+		};
+		const auto rollNote = [&](const int _t, const int _s, const int _note)
+		{
+			r.msg("{\"op\":\"step\",\"g\":" + std::to_string(++gesture) + ",\"p\":" + std::to_string(r.desk->currentPattern()) + ",\"t\":" + std::to_string(_t)
+				+ ",\"s\":" + std::to_string(_s) + ",\"v\":{\"n\":[" + std::to_string(_note) + "],\"a\":1,\"f\":1,\"l\":1}}");
+			r.run(6000);
+		};
+		const auto keeps = [&](const std::string& _when, const int _t, const ed::MmKitTrack& _want)
+		{
+			const auto mem = workingKitInMemory(r);
+			const auto w = r.desk->workingKit();
+			const bool memOk = mem && mem->tracks[static_cast<size_t>(_t)].pages == _want.pages;
+			const bool pageOk = w && w->tracks[static_cast<size_t>(_t)].pages == _want.pages;
+			check(memOk && pageOk, _when + ": T" + std::to_string(_t + 1) + " keeps its sound edits (memory " + (memOk ? "yes" : "no") + ", page "
+				+ (pageOk ? "yes" : "no") + ")");
+			check(mem && w && ed::mmKitRaw(*mem) == ed::mmKitRaw(*w) && kitWorking(r) == "edited", _when + ": the machine holds the page's kit, " + kitWorking(r));
+		};
+		const int b = 1;	// T2: the sound edited
+		// SYN slot 8, AMP ATK HOLD DEC REL, FILTER BASE: unsaved, on the Sound page
+		const auto& before = r.desk->workingKit()->tracks[static_cast<size_t>(b)];
+		param(b, 0, 7, before.pages[0][7] ^ 0x08);
+		param(b, 1, 0, 70);
+		param(b, 1, 1, 24);
+		param(b, 1, 2, 100);
+		param(b, 1, 3, 90);
+		param(b, 2, 0, before.pages[2][0] ^ 0x10);
+		r.run(1500);
+		const auto want = r.desk->workingKit()->tracks[static_cast<size_t>(b)];
+		check(want.pages[1][0] == 70 && want.pages[1][2] == 100, "the Sound page's edits are in the page's kit");
+		keeps("on Sound", b, want);
+		rollNote(0, 4, 64);
+		keeps("a note in T1's piano roll, stopped", b, want);
+		r.msg(R"({"op":"play"})");
+		r.run(2000);
+		rollNote(0, 10, 67);
+		keeps("a note in T1's piano roll, playing", b, want);
+		r.msg(R"({"op":"stop"})");
+		r.run(1500);
+		keeps("stopped", b, want);
+	}
 }
 
 int main(const int _argc, char** _argv)
@@ -2749,6 +2809,8 @@ int main(const int _argc, char** _argv)
 			machineStays(rom);
 			machineStaysHw(rom);
 		}
+		if(only == "machine" || only == "pianoroll")
+			pianoRollKeepsSound(rom);
 		if(only == "ampenv")
 			ampEnvelope(rom);
 		check(g_contract.loaded() && g_contract.bad() == 0, g_contract.summary());
