@@ -209,7 +209,7 @@ sudo apt install -y libgl1-mesa-dev xorg-dev libasound2-dev
 
 ### Jenkins (Private CI)
 
-Private Jenkins instance. Three jobs belong to this project:
+Not in this repository since 0.5 (the editors' CI is the `mdmm-*` GitHub workflows); kept as a record of upstream's setup. Private Jenkins instance. Three jobs belong to this project:
 
 - **`dsp56300_main`** — Single-platform build job (Jenkinsfile from SCM: `scripts/Jenkinsfile`)
   - Stages: Checkout → Compile → Pack → Integration Tests → Deploy → Upload → GitHub
@@ -461,8 +461,8 @@ When `Device::getState()` is called, `Plugin::getState()` has already pushed hea
 - `gearmulator` — public OSS repo (dsp56300/gearmulator on GitHub)
 - `private` — private development repo on GitHub
 - Also: `nas`, `codeberg`, `EvilDragon`
-- **DSP submodule** (`source/dsp56300/`) — also owned by the user, changes can be made there freely
-- Jenkins SCM points to `private` remote
+- **DSP emulator** (`source/dsp56300/`) — a plain folder of this repository since 0.5, changes can be made there freely
+- (upstream's) Jenkins SCM points to `private` remote; none of these remotes exist in this repository since 0.5 (only `origin`)
 
 ## Git Conventions
 

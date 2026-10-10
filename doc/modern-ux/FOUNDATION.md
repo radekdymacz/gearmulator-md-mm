@@ -204,7 +204,7 @@ The editors ship without MIDI mapping (MIDI Learn and the CONTROL workspace) unt
 
 ## Build and check
 
-Code of ours goes in files of ours; upstream's files carry hooks only ([UPSTREAM.md](UPSTREAM.md), checked by `scripts/mdmm-upstream-footprint.sh`).
+Until 0.5, code of ours went in files of ours and upstream's files carried hooks only ([UPSTREAM.md](UPSTREAM.md)); since 0.5 all the code is ours (doc/release/PLAN-0.5.md).
 
 ### The fast paths
 

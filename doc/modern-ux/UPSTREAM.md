@@ -1,5 +1,12 @@
 # Living on top of upstream
 
+> **History since 0.5.** The editors no longer live on top of upstream (doc/release/PLAN-0.5.md, doc/ROADMAP.md
+> D3-D5): the DSP emulator, the 68k core, JUCE and RmlUi are folders we own; the `upstream` and `gearmulator`
+> remotes, `scripts/mdmm-sync-upstream.sh`, `scripts/mdmm-upstream-footprint.sh`, the integration-policy workflow
+> and the Jenkins files are gone; upstream fixes are copied one commit at a time, never merged. The rules below
+> (hooks only, never delete an upstream file) applied until then; they stay as the record of why the code looks
+> the way it does.
+
 This fork keeps merging joelanders' work (`upstream`, [joelanders/gearmulator-md-mm](https://github.com/joelanders/gearmulator-md-mm))
 with `git merge`, never a rebase. He in turn merges dsp56300/gearmulator, which moves whole folders
 (for example `source/jucePluginLib` to `source/framework/juce/jucePluginLib`). Every line we change

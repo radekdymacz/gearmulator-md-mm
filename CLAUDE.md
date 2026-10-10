@@ -2,21 +2,21 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-## This fork: Machinedrum Editor + Monomachine Editor
+## This project: Machinedrum Editor + Monomachine Editor
 
-`origin` (radekdymacz/mdmm, default branch `main`) is a fork of joelanders' Machinedrum/Monomachine emulation (`upstream`), which is built on dsp56300/gearmulator (`gearmulator`). The product is two editors (standalone, VST3, AU on macOS; Windows and Linux builds exist, not tested) that run the user's own Elektron firmware behind one web page. ROMs are never committed. The "Upstream guide" below is upstream's, for the shared code.
+`origin` (radekdymacz/mdmm, default branch `main`) started as a fork of joelanders' Machinedrum/Monomachine emulation (joelanders/gearmulator-md-mm), which is built on dsp56300/gearmulator. Since 0.5 it stands alone (doc/release/PLAN-0.5.md, doc/ROADMAP.md D3-D5): the DSP56300 emulator (`source/dsp56300`), the 68k core (`source/mc68k`), JUCE (`source/JUCE`) and RmlUi (`source/3rdparty/RmlUi`) are plain folders we own (each README says where it came from); upstream fixes are copied one commit at a time, never merged. The product is two editors (standalone, VST3, AU on macOS; Windows and Linux builds exist, not tested) that run the user's own Elektron firmware behind one web page. ROMs are never committed. The "Upstream guide" below is upstream's, for the shared code.
 
-- **Read first:** doc/modern-ux/FOUNDATION.md (the layers; how to add an engine, document kind, command, workspace or dialog; "Build and check"), doc/modern-ux/DESIGN-P6-simple-core.md (why), doc/modern-ux/UPSTREAM.md (our code lives in our files, upstream's files get hooks only).
+- **Read first:** doc/modern-ux/FOUNDATION.md (the layers; how to add an engine, document kind, command, workspace or dialog; "Build and check"), doc/modern-ux/DESIGN-P6-simple-core.md (why), doc/modern-ux/UPSTREAM.md (history: how the fork lived on top of upstream until 0.5).
 - **Where:** source/elektron/md/: elektronData, deskCore, deskHost, deskWire, mdDesk, mmDesk, mdDataLink, mdmmUpdate, mdLib (the emulated machines), mdJucePlugin (plug-ins, bridge, skins/ page files), mdLibTest, upstreamTests (our tests for his bridge, networkLib, MCP server and synthLib). Version: `MDMM_EDITOR_VERSION` in mdJucePlugin/mdmmPlugins.cmake; product names: scripts/mdmm-product.env.
 - **Build:** `scripts/mdmm-dev.sh configure|build [target...]|tests|stats` (tree temp/dev, ccache, diagnostics on). Release packages: scripts/macos/build_mdmm.sh, scripts/linux/build_mdmm.sh, scripts/windows/build_mdmm.ps1. CMake 3.22 or newer.
-- **Check:** `scripts/mdmm-dev.sh tests` (`ctest -E "Plugin|_AU|VST|FirmwareTest"`); **before a tag `scripts/mdmm-local-gate.sh` green** (the firmware-backed gate CI cannot run: doc/release/LOCAL-GATE.md); firmware tests need your ROM (`GEARMULATOR_MD_FIRMWARE_BIN`, `GEARMULATOR_MM_FIRMWARE_BIN`); scripts/mdmm-journeys.sh, scripts/mdmm-pluginval.sh; before a merge or PR scripts/mdmm-upstream-footprint.sh; upstream sync scripts/mdmm-sync-upstream.sh (merge, never rebase).
+- **Check:** `scripts/mdmm-dev.sh tests` (`ctest -E "Plugin|_AU|VST|FirmwareTest"`); **before a tag `scripts/mdmm-local-gate.sh` green** (the firmware-backed gate CI cannot run: doc/release/LOCAL-GATE.md); firmware tests need your ROM (`GEARMULATOR_MD_FIRMWARE_BIN`, `GEARMULATOR_MM_FIRMWARE_BIN`); scripts/mdmm-journeys.sh, scripts/mdmm-pluginval.sh.
 - **Floats:** Release builds are `-Ofast` (`/fp:fast`): `std::isfinite`/`std::isnan` can fold to constants. Use `baseLib::isFinite` and put code that must see NaN on `-fno-fast-math` (examples: source/elektron/md/elektronData/CMakeLists.txt).
 - **Emulation CPU:** the plan and findings are in doc/modern-ux/RESEARCH-emulation-cpu.md; the speed-ups have one tester switch (`GEARMULATOR_MDMM_SPEEDUPS=0`, or Developer > Speed-ups off): doc/md_mm_performance_diagnostics.md, "Switches for testers".
 - **Releases:** `release/0.x.y` branches are merged into `main`; run `scripts/mdmm-local-gate.sh` green before tagging; the tag `mdmm-v0.x.y` runs .github/workflows/mdmm-editors-release.yml; notes in doc/release/vX.Y.Z.md; bugs and ideas in doc/release/BUGS.md and IDEAS.md (testers are never named).
 
 ## Upstream guide (shared emulation, JUCE and CMake code)
 
-Everything from here to the Community section is upstream's: his Windows setup, his Jenkins and his remotes included.
+Everything from here to the Community section is upstream's: his Windows setup included. His Jenkins files and remotes are gone (0.5).
 
 ## Project Overview
 
@@ -83,15 +83,14 @@ Convenience scripts: `build_win64.bat`, `build_linux.sh`, `build_mac.sh`.
 
 - Do NOT include `Co-authored-by` trailers in commit messages
 - Do NOT commit without explicit user approval
-- Remotes here: `origin` (radekdymacz), `upstream` (joelanders), `gearmulator` (dsp56300). The list that was here (`private`, `nas`, `codeberg`, `EvilDragon`) is the upstream author's.
-- DSP submodule (`source/dsp56300/`) is also owned by user — changes there are fine
+- Remote here: `origin` (radekdymacz) only. The `upstream` (joelanders) and `gearmulator` (dsp56300) remotes were dropped in 0.5; the list that was here (`private`, `nas`, `codeberg`, `EvilDragon`) is the upstream author's.
+- The DSP emulator (`source/dsp56300/`), the 68k core, JUCE and RmlUi are plain folders of this repository (no longer submodules): changes there are fine
 
 ## Key Build Files
 
 - `base.cmake` — Compiler flags, platform-specific optimization settings
 - `source/juce.cmake` — JUCE plugin configuration and multi-format support
 - `source/skins.cmake` — Skin asset compilation
-- `scripts/Jenkinsfile` / `JenkinsfileMulti` — Private CI (Jenkins)
 - `.github/workflows/cmake.yml` — Public CI (GitHub Actions)
 
 ## Where to Make Changes
