@@ -119,7 +119,7 @@ no journey yet); **not testable** (why). "—": the editor has no such feature.
 | Copy / paste a sound | md-sound-copy-paste PASS | mm-sound-copy-paste PASS |
 | Screens (curve editors): drag a handle | md-sound-screen-drag PASS | mm-sound-screen-drag PASS |
 | Control All (Alt-drag), one undo step | md-sound-control-all PASS | mm-sound-control-all PASS |
-| The GLOBAL key in the top bar (where FN was until 0.3.5): opens the panel, lit, Esc closes | md-global-key | — (the Monomachine Editor has no GLOBAL panel) |
+| The GLOBAL key in the top bar (where FN was until 0.3.5): opens the panel, lit, Esc closes | md-global-key | mm-global-channels (B-051: the MIDI part only) |
 
 ## Mix
 
@@ -176,6 +176,7 @@ no journey yet); **not testable** (why). "—": the editor has no such feature.
 | Clear a pattern slot (with its question), undo | md-lib-pattern-clear-undo PASS | mm-lib-pattern-clear-undo PASS |
 | GLOBAL: a setting read back (TEMPO OUT) | md-global-tempo-out PASS | — (MM globals: the Perform and Mix journeys) |
 | GLOBAL › ROUTING fits its dialog, a route read back | md-global-routing PASS | — |
+| GLOBAL › MIDI: CHANNEL SPAN 0 refuses a track's mute, its sound value still reaches the machine; span back, the mute lands (B-051) | — | mm-global-channels |
 | Song page: PATTERN | SONG switch, lit from the machine's status (0.3.5) | md-song-mode | mm-song-mode |
 | Song page: the song playhead (the row the machine plays, from RAM), What plays, PAT/SONG on the LCD (0.3.5) | md-song-playhead | mm-song-playhead |
 | GLOBAL › Map a note: a note to a pattern of bank C-H and to STOP (the MAP EDITOR's 16-145, 0.3.5), read back | md-global-map-note | — |

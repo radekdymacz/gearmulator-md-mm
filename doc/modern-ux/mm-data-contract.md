@@ -120,7 +120,7 @@ after it ride in `hidden.rowsAfterEnd`.
 
 | Member | Meaning | Evidence |
 |---|---|---|
-| `channels` | auto track, base, span, multi trig, multi map (0-based) | the MIDI CHANNELS screen's values |
+| `channels` | auto track, base, span, multi trig, multi map (0-based; OFF 127). Track t takes its CCs, mute and notes on base + t while t < span and base + t is 0-14 (channel 16 reaches no track); span 0, a 2008 backup's, gives no track one (B-051, `mmDeskFirmwareTest spanprobe`) | the MIDI CHANNELS screen's values; firmware |
 | `routingMode` | `3xSTEREO+AB=MIX`, `3xSTEREO`, `6xMONO` | panel |
 | `masterTune` | tenths of Hz | panel |
 | `midiSeq.channels`, `midiSeq.ccs` | the MIDI sequencer tracks' channels and CL1-4 CC numbers | factory set (10-15; 1 2 7 10) |
@@ -175,6 +175,8 @@ active global; the library's ops name their slots. A track `t` of a pattern edit
 the six MIDI sequencer tracks. Values in firmware units.
 - Mix: `level`, `route` (`out`: AB 1, CD 2, EF 4), `input`, `param` (`page` 0-6 a synth track's, 7 a MIDI track's MIDI
   page), `trigPos`, `legato`, `portamento`, `routing`, `midiTrack` (`ch`, `cc`).
+- GLOBAL › MIDI (B-051): `globalMidi` (`base`, `auto`, `multiTrig`, `multiMap`: a channel 0-15, null OFF; `span` 0-16;
+  `clockIn`, `transportIn`), the active global's MIDI CHANNELS and CONTROL IN.
 - Sequence: `step` (`v`: null, `{off:true}` or `{n, a, f, l, notrig?}`), `slide`, `swingStep`, `lock` (`v` null
   clears), `clearLane`, `clearLocks`, `clearPattern`, `steps` (a range of tracks made exactly the rows given: the
   generators), `rotate`, `doublePattern`, `length`, `speed`, `swing` (percent), `transpose`, `arp` (`field`, `v`, `i`
@@ -228,7 +230,7 @@ is IGNORE; confirmed, it writes TRANSPORT ACCEPT (a global dump, so it waits for
 | pattern | slot 0-127; length 2-64; multiplier 0-3; kit 0-127; swing 0-30; transposes -64..63; scale 0-3, key 0-11; arp play 0-4, mode 0-3, range 0-8, length 1-16, trigs 0-7; notes 0-127 (a note on a step without its trig is kept: OS 1.32B takes it, old backups hold it); **lock rows = locked parameters ≤ 62**, lock values 0-127; MIDI notes ≤ 400, chord notes ≤ 192, tracks 0-5 |
 | kit | slot 0-127; levels and page values 0-127; an OS 1.32 machine; input 0-6; trigPos a track or none; assign page/dest 0-127 |
 | song | slot 0-23; pattern 0-127, LOOP or END; pattern rows: repeats 0-63, 1 ≤ length ≤ 64, offset < length, tempo 30-300 or keep; loops: target < 200 |
-| global | slot 0-7; channels 0-15 or off; span 1-16; routing mode 0-2 |
+| global | slot 0-7; channels 0-15 or off; span 0-16 (0 in an OS 1.x backup); routing mode 0-2 |
 
 Every factory dump and every programmed read-back validates clean (575 documents).
 

@@ -149,7 +149,7 @@ reached at all.
 |---|---|---|---|---|
 | F1 | HW MIDI proven on a real MD **and** a real MM, separately: connect/reconnect, edits both ways, mutes, transport, transfers, imported globals; Windows MIDI (B-037). FR-09 is the MD demo only | both | L | before 1.0 |
 | F2 | Stability: MM crackle (B-036), Windows blank window/freeze (B-029, B-035), Linux blank window (B-033), CPU in Live (B-005), save/autosave stalls (B-034). Gate in §7 | both | L | before 1.0 |
-| F3 | GLOBAL page: MIDI channels, 8 global slots, master tune (a wrong channel span blocks mutes with no fix in the editor, B-026), plus any CONTROL IN/OUT setting F1 needs | MM | L | before 1.0 |
+| F3 | GLOBAL page: ~~MIDI channels~~ (done for 0.4.1, B-051: base, span, auto track, multi trig, multi map, CONTROL IN), 8 global slots, master tune, CONTROL OUT (the global's `control` bytes, not decoded yet), plus any setting F1 needs | MM | M | before 1.0 |
 | F4 | Step selection, step menu and keyboard shortcuts, as in the MD editor (I-001) | MM | L | before 1.0 |
 | F5 | Song management: names, copy, clear, save-as, a song library (I-011); the MM song LOOP target (B-038) | both | M | B-038 before 1.0, the rest 1.x |
 | F6 | CTR-AL kits: the guide lists a limit no code enforces; test on the firmware, then fix or drop it | MD | S-M | before 1.0 |
