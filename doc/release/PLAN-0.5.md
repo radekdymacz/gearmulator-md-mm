@@ -70,7 +70,20 @@ The gap list is [MM-PARITY-2026-10-09.md](../modern-ux/MM-PARITY-2026-10-09.md);
 | 4 | The live-recording lock marker, the keyboard view's missing tips, the MD journeys the MM lacks | S-M |
 | 5 | The Sound page layout and GEN/MUTATE as on the MD, where the parity list marks them "a" | M |
 
-CPU step 2 moves to 0.6.
+## Emulation CPU step 2 (in 0.5, Radek 2026-10-10)
+
+On top of the clean-up, each lever alone, behind the speed-ups switch, gated by the goldens
+([RESEARCH-emulation-cpu.md](../modern-ux/RESEARCH-emulation-cpu.md) §3, §5):
+
+| # | Lever | Gain (estimate) | Gate |
+|---|---|---|---|
+| 1 | Upstream batch: DSP loop-end check, serial-poll fast-forward (`7d69d7a9`, `e8989e41`) | ~5 % | bit-exact |
+| 2 | CMPM JIT fix (helica1 review: `cmpm a,b` turns A into \|A\|) | correctness | goldens; if they change, Radek listens |
+| 3 | L3: exact MD ESSI deadlines | ~10 % MD | changes MD audio once: Radek's listening sign-off |
+| 4 | L4: DSP idle-loop fast-forward (after L3; the NOP stubs first) | ~10-15 % | bit-exact against the L3 goldens |
+| 5 | L7, L9, L10: scheduler glue | ~5 % | bit-exact |
+| 6 | PGO in the release build | ~8 % | the release gate |
+| 7 | Try: render ahead (helica1), opt-in, with real-time priority and the audio workgroup | DAW thread lighter | delayed output equal |
 
 ## User fixes beside it
 
