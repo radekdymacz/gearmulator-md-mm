@@ -64,7 +64,7 @@ namespace mdJucePlugin
 		// The working-kit region (elektronData::mdWorkingKitFromMemory) when it changed
 		// since the last call; lock-free, MD OS 1.63 only.
 		bool readWorkingKit(Bytes& _region);
-		// P9: the UW sample bank (md::DeskDevice::readSampleBank) when the device published a new one since
+		// P9: the UW sample bank (md::DeskDevice::sampleExchange) when the device published a new one since
 		// the last call (_again: also when it did not, if there is one). Asking is what makes the device read its
 		// samples.
 		bool readSampleBank(std::shared_ptr<const elektronData::MdSampleBank>& _bank, bool _again = false);

@@ -33,6 +33,7 @@ unset(_mdmmMdLibSources)
 # encoded after it (md::Device's and md::Hardware's hooks: the capture, the factory baseline decoded once).
 target_sources(mdLib PRIVATE
 	mdLib/mddeskdevice.cpp mdLib/mddeskdevice.h
+	mdLib/mdsamplesnapshot.cpp mdLib/mdsamplesnapshot.h
 	mdLib/mdfactorybaseline.cpp mdLib/mdfactorybaseline.h
 	mdLib/mdstatecapture.cpp mdLib/mdstatecapture.h
 	mdLib/mdpanelsequence.cpp mdLib/mdpanelsequence.h
