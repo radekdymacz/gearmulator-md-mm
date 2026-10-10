@@ -135,3 +135,22 @@ Repository: a single-branch bare clone of `cleanup/0.5` is 273 MB (pack 260 MiB)
 Clean build, fresh tree, 12 jobs, on the busy Mac: configure 20 s; **the six editor targets
 (`md|mmJucePlugin_VST3`, `_AU`, `_Standalone`) 154 s** (2.6 min); the rest of `all` (every test target) a further
 353 s (5.9 min), 8.8 min in all.
+
+## After Phase 1 (detach), 2026-10-10
+
+dsp56300 (with asmjit), mc68k, JUCE and RmlUi are plain folders (each README says where it came from and what was
+left out); the upstream plumbing is gone. Checked on a fresh `git clone --recurse-submodules` of `cleanup/0.5`
+with every `github.com/joelanders/` and `github.com/dsp56300/` URL blocked: the clone has the four folders, only
+`cpp-terminal` and `clap-juce-extensions` fail to fetch (still dsp56300's; used only by the Vavra console and CLAP,
+both off, Phase 2 deletes them), and a fresh tree configures and builds.
+
+| | Before | After |
+|---|---|---|
+| Goldens | 24 of 24 | 24 of 24, same file |
+| ctest | 159 pass | the same 159 names pass |
+| Identities (bundles, IDs, AU codes, VST3 class IDs) | section 4 | identical, read from the new bundles |
+| CPU, MD / MM whole process (one instance, load ~7) | 37.6, 36.8 / 46.2, 48.2 % | 38.3, 38.8 / 47.0, 47.2 % (same code; noise) |
+| Editors clean build (busy Mac) | 154 s | 107 s (load differs; not comparable) |
+| Superproject pack (single-branch bare clone) | 260 MiB, plus four submodule clones | 273 MiB, nothing more to fetch for them |
+| Files of the four in a checkout | 285 MB (dsp56300 192, JUCE 69, RmlUi 22, mc68k 2) | 68 MB (dsp56300 10, JUCE 35, RmlUi 22, mc68k 2) |
+| Lines (C/C++/ObjC) dsp56300 / JUCE / RmlUi / mc68k | 2,229,086 / 998,166 / 200,194 / 69,259 | 205,013 / 824,444 / 200,194 / 69,259 |
