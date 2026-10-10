@@ -122,6 +122,8 @@ namespace dsp56k
 
 		uint32_t getDelayCycles() const { return m_delayCycles; }
 		auto getTargetClock() const { return m_targetClock; }
+		const bool& hasCycleDeadline() const { return m_hasCycleDeadline; }	// references: read by the JIT too
+		const uint64_t& getTargetCycle() const { return m_targetCycle; }
 		bool isDue(const uint64_t _instructions, const uint64_t _cycles) const
 		{
 			return _instructions >= m_targetClock || (m_hasCycleDeadline && _cycles >= m_targetCycle);

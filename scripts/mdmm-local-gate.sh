@@ -474,6 +474,7 @@ golden_one() {
 	local log extra=() status=0 verdict detail
 	log="${OUT}/goldens/${index}.log"
 	[ "${speedups}" = off ] && extra=(GEARMULATOR_MDMM_SPEEDUPS=0)
+	[ "${speedups}" = on+exact-essi ] && extra=(GEARMULATOR_MDMM_EXACT_ESSI=1)	# L3's opt-in, own goldens
 	local flags=(--scenario "${scenario}" --outputs "${outputs}" --golden "${GOLDENS}")
 	[ "${mode}" = record ] && flags+=(--record)
 	run_box 1800 "${log}" ${extra[@]+"${extra[@]}"} "${PERF}" "$(rom_for "${model}")" "${model}" "${seconds}" \
@@ -567,7 +568,7 @@ BANNER
 		sed 's/;*$//')"
 	if [ "${bad}" = 0 ] && [ "${total}" -gt 0 ]; then
 		equal="${pass} of ${total} runs equal their golden"
-		stage_end PASS "${equal} (scenarios x stereo/all x speed-ups on/off, bit-exact)"
+		stage_end PASS "${equal} (scenarios x stereo/all x speed-ups on/off, plus the L3 opt-in where recorded; each bit-exact to its golden)"
 	else
 		stage_end FAIL "${pass} of ${total} runs equal their golden" "${notes:-no runs}; logs ${OUT}/goldens"
 	fi

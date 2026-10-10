@@ -1,4 +1,8 @@
+#include <array>
 #include <iostream>
+#include <sstream>
+#include <string>
+#include <vector>
 #include "jitdspregpool.h"
 #include "jitunittests.h"
 
@@ -68,6 +72,9 @@ namespace dsp56k
 
 		parallelMoveXY();
 		boundedDispatch();
+		nopLoopFastForward();
+		pollLoopFastForward();
+		cmpmLegacy();
 	}
 
 	void JitUnittests::runtimeUnnormalizedFlag()
@@ -271,6 +278,262 @@ namespace dsp56k
 		verify(dsp.getCycles() >= 32);
 		if(needsGrowth)
 			verify(dsp.getJitEntriesSize() > highPC);
+	}
+
+	void JitUnittests::cmpmLegacy()
+	{
+		// UnitTests::cmpm checks the fixed cmpm with the other accumulator as source. With the fix off (the MD/MM
+		// speed-ups switch off) the JIT must still behave as it did before the fix: the source's live register takes
+		// |S| for the rest of the block (the tfr copies 5, not -5), while the accumulator in memory keeps -5.
+		for(const bool bIsDest : {true, false})
+		{
+			for(const bool fix : {false, true})
+			{
+				constexpr auto minusFive = static_cast<TReg56::MyType>(0xff'ffffff'fffffb);
+				constexpr auto five = static_cast<TReg56::MyType>(5);
+				runTest([&]()
+				{
+					dsp.setJitCmpmFix(fix);
+					dsp.sr_clear(CCR_C);
+					dsp.setALU(!bIsDest, TReg56(minusFive));
+					dsp.setALU(bIsDest , TReg56(static_cast<TReg56::MyType>(3)));
+					emit(bIsDest ? 0x20000f : 0x200007);	// cmpm a,b / cmpm b,a
+					emit(bIsDest ? 0x200009 : 0x200001);	// tfr a,b / tfr b,a
+				},
+				[&]()
+				{
+					verify(dsp.sr_test(CCR_C));
+					const auto source = bIsDest ? dsp.aluA().var : dsp.aluB().var;
+					const auto copied = bIsDest ? dsp.aluB().var : dsp.aluA().var;
+					verify(source == minusFive);
+					verify(copied == (fix ? minusFive : five));
+				});
+			}
+		}
+		dsp.setJitCmpmFix(true);
+	}
+
+	void JitUnittests::nopLoopFastForward()
+	{
+		// A NOP-only DO loop body, then a jump back to the DO: run it in slices, the way the hosts do (execUntilCycles,
+		// and exec() block by block under a published limit), with peripheral deadlines in instructions and in cycles
+		// that fall inside the loops. The state after every slice must be the same without the fast-forward code, with
+		// it switched off, and with it on; and on must actually skip. Each run gets a fresh DSP: the peripherals keep
+		// clock state across a reset.
+		constexpr TWord loopPC = 0x100;
+
+		struct Case { TWord count; TWord bodyNops; uint32_t instructionTarget; uint32_t cycleDeadline; };
+		const Case cases[] =
+		{
+			{1, 1, 100000, 0}, {2, 1, 13, 0}, {3, 2, 100000, 0}, {5, 1, 7, 0}, {50, 2, 61, 0}, {1000, 2, 997, 0},
+			{3200, 1, 1234, 0}, {3200, 1, 100000, 333}, {50, 2, 5, 17}, {4095, 3, 2049, 4093}, {4, 1, 100000, 0}
+		};
+
+		enum class Mode { Legacy, Off, On };
+		uint64_t skippedTotal = 0;
+
+		for(const auto& c : cases)
+		{
+			const auto run = [&](const Mode _mode)
+			{
+				DefaultMemoryValidator validator;
+				Peripherals56367 testPeripheralsY;
+				Peripherals56362 testPeripheralsX(&testPeripheralsY);
+				Memory testMemory(validator, 0x080000, 0x800000, 0x200000);
+				DSP testDsp(testMemory, &testPeripheralsX, &testPeripheralsY);
+
+				auto config = testDsp.getJit().getConfig();
+				config.maxDoIterations = 4;
+				config.nopLoopFastForward = _mode != Mode::Legacy;
+				testDsp.getJit().setConfig(config);
+
+				const auto emitTest = [&](const std::string& _text, const TWord _pc)
+				{
+					const auto result = assembler.assemble(_text.c_str());
+					verify(result.success());
+					testDsp.memWriteP(_pc, result.word[0]);
+					if(result.wordCount > 1)
+						testDsp.memWriteP(_pc + 1, result.word[1]);
+					return result.wordCount > 1 ? _pc + 2 : _pc + 1;
+				};
+
+				testDsp.resetHW();
+
+				std::stringstream doText;
+				doText << "do #" << c.count << ",>$" << std::hex << (loopPC + 2 + c.bodyNops);
+				TWord pc = emitTest(doText.str(), loopPC);
+				for(TWord i = 0; i < c.bodyNops; ++i)
+					pc = emitTest("nop", pc);
+				emitTest("jmp $100", pc);
+
+				testDsp.setPC(loopPC);
+				testDsp.setIdleFastForward(_mode == Mode::On);
+				testPeripheralsX.resetDelayCycles(testDsp.getInstructionCounter(), c.instructionTarget);
+				if(c.cycleDeadline)
+					testPeripheralsX.setCycleDeadline(c.cycleDeadline);
+
+				std::vector<uint64_t> states;
+				const auto record = [&]
+				{
+					const auto& r = testDsp.regs();
+					states.insert(states.end(), {uint64_t{testDsp.getPC().toWord()}, uint64_t{r.lc.toWord()},
+						uint64_t{r.la.toWord()}, uint64_t{r.sr.toWord()}, uint64_t{r.sp.toWord()},
+						testDsp.getInstructionCounter(), testDsp.getCycles(), testPeripheralsX.getTargetClock()});
+				};
+
+				uint64_t target = testDsp.getCycles();
+				for(const uint64_t step : {37ull, 500ull, 1ull, 4999ull, 12345ull, 3ull, 40000ull})
+				{
+					target += step;
+					testDsp.execUntilCycles(target);
+					record();
+
+					// block by block, as a host's inline loop, under its own limit
+					const auto stop = testDsp.getCycles() + step / 2 + 1;
+					const DSP::ScopedFastForwardLimit limit(testDsp, stop);
+					while(testDsp.getCycles() < stop)
+						testDsp.execJit();
+					record();
+				}
+
+				// without a published limit nothing is skipped
+				const auto skipped = testDsp.getFastForwardedTurns();
+				for(int i = 0; i < 200; ++i)
+					testDsp.execJit();
+				verify(testDsp.getFastForwardedTurns() == skipped);
+				record();
+
+				if(_mode != Mode::On)
+					verify(skipped == 0);
+				skippedTotal += skipped;
+				return states;
+			};
+
+			const auto legacy = run(Mode::Legacy);
+			verify(run(Mode::Legacy) == legacy);
+			verify(run(Mode::Off) == legacy);
+			verify(run(Mode::On) == legacy);
+		}
+
+		verify(skippedTotal > 0);
+	}
+
+	void JitUnittests::pollLoopFastForward()
+	{
+		// The Monomachine's two DMA poll loops, word for word (DSP1 p:17f, DSP2 p:18d), and a jset on a DMA register
+		// that jumps to itself (the Machinedrum's p:cf has one, below P:$100), on a DSP56303, run in slices as in
+		// nopLoopFastForward. Between slices the host moves the polled DMA register, so the loop is left and entered
+		// again; with an ESSI deadline in cycles and an instruction target. The state after every slice must be the
+		// same without the fast-forward code, with it off and with it on; and on must skip. A block that is not an
+		// idle poll (a loop-carried register) must never be fast-forwarded.
+		struct Program { TWord base; std::vector<TWord> words; TWord dmaRegister; TWord idleValue; TWord leaveValue; bool idle; };
+		const Program programs[] =
+		{
+			// movep x:DSR1,a; sub y0,a; nop; cmp x0,a; blt *-4 (loops while the register is below x0 = $100)
+			{0x100, {0x084e2b, 0x200054, 0x000000, 0x200045, 0x0597dc}, XIO_DSR1, 0x10, 0x180, true},
+			// movep x:DDR0,a; sub y0,a; add x1,a ifmi; cmp x0,a; blt *-4
+			{0x100, {0x084e2e, 0x200054, 0x202b60, 0x200045, 0x0597dc}, XIO_DDR0, 0x10, 0x180, true},
+			// movep x:DDR0,b; add y0,a; nop; cmp x0,a; blt *-4: a carries from the turn before
+			{0x100, {0x084f2e, 0x200050, 0x000000, 0x200045, 0x0597dc}, XIO_DDR0, 0x10, 0x180, false},
+			// jset #4,x:DCR0,* (loops while bit 4 is set; DE stays clear, so no transfer starts)
+			{0x100, {0x0aaca4, 0x000100}, XIO_DCR0, 0x10, 0x00, true},
+			// the same below P:$100, where blocks may also run as fast interrupts
+			{0x0cf, {0x0aaca4, 0x0000cf}, XIO_DCR0, 0x10, 0x00, true},
+		};
+
+		struct Case { uint32_t instructionTarget; uint32_t cycleDeadline; };
+		const Case cases[] = {{100000, 0}, {13, 0}, {1234, 0}, {100000, 333}, {61, 17}, {7, 4093}};
+
+		enum class Mode { Legacy, Off, On };
+
+		for(const auto& program : programs)
+		{
+			uint64_t skippedTotal = 0;
+
+			for(const auto& c : cases)
+			{
+				const auto run = [&](const Mode _mode)
+				{
+					DefaultMemoryValidator validator;
+					Memory testMemory(validator, 0x10000);
+					Peripherals56303 testPeripheralsX;
+					PeripheralsNop testPeripheralsY;
+					DSP testDsp(testMemory, &testPeripheralsX, &testPeripheralsY);
+
+					auto config = testDsp.getJit().getConfig();
+					config.maxDoIterations = 4;
+					config.dynamicFastInterrupts = true;
+					config.pollLoopFastForward = _mode != Mode::Legacy;
+					testDsp.getJit().setConfig(config);
+
+					testDsp.resetHW();
+
+					TWord pc = program.base;
+					for(const auto w : program.words)
+						testDsp.memWriteP(pc++, w);
+					std::stringstream jmpText;
+					jmpText << "jmp $" << std::hex << program.base;
+					const auto jmp = assembler.assemble(jmpText.str().c_str());
+					verify(jmp.success());
+					testDsp.memWriteP(pc, jmp.word[0]);
+
+					// a = reg - y0 (+ x1 if negative), looping while a < x0
+					testDsp.x0(0x000100);
+					testDsp.x1(0);
+					testDsp.y0(0);
+					testPeripheralsX.write(program.dmaRegister, program.idleValue);
+
+					testDsp.setPC(program.base);
+					testDsp.setIdleFastForward(_mode == Mode::On);
+					testPeripheralsX.resetDelayCycles(testDsp.getInstructionCounter(), c.instructionTarget);
+					if(c.cycleDeadline)
+						testPeripheralsX.setCycleDeadline(c.cycleDeadline);
+
+					std::vector<uint64_t> states;
+					const auto record = [&]
+					{
+						const auto& r = testDsp.regs();
+						states.insert(states.end(), {uint64_t{testDsp.getPC().toWord()}, static_cast<uint64_t>(r.a.var), uint64_t{r.sr.toWord()},
+							testDsp.getInstructionCounter(), testDsp.getCycles(), testPeripheralsX.getTargetClock()});
+					};
+
+					uint64_t target = testDsp.getCycles();
+					bool leave = false;
+					for(const uint64_t step : {37ull, 500ull, 1ull, 4999ull, 12345ull, 3ull, 40000ull})
+					{
+						target += step;
+						testDsp.execUntilCycles(target);
+						record();
+
+						// the host moves the register: out of the loop, or back in
+						leave = !leave;
+						testPeripheralsX.write(program.dmaRegister, leave ? program.leaveValue : program.idleValue);
+
+						const auto stop = testDsp.getCycles() + step / 2 + 1;
+						const DSP::ScopedFastForwardLimit limit(testDsp, stop);
+						while(testDsp.getCycles() < stop)
+							testDsp.execJit();
+						record();
+
+						if(leave)
+							testPeripheralsX.write(program.dmaRegister, program.idleValue);
+					}
+
+					const auto skipped = testDsp.getFastForwardedTurns();
+					if(_mode != Mode::On || !program.idle)
+						verify(skipped == 0);
+					skippedTotal += skipped;
+					return states;
+				};
+
+				const auto legacy = run(Mode::Legacy);
+				verify(run(Mode::Legacy) == legacy);
+				verify(run(Mode::Off) == legacy);
+				verify(run(Mode::On) == legacy);
+			}
+
+			verify(program.idle == (skippedTotal > 0));
+		}
 	}
 
 	void JitUnittests::programMemoryInvalidation()

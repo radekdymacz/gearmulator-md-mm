@@ -153,6 +153,8 @@ namespace md
 		// GEARMULATOR_MDMM_SIM_DEFERRAL=0 turns off the SIM's event-driven stepping (L5) alone.
 		const auto* const simDeferral = std::getenv("GEARMULATOR_MDMM_SIM_DEFERRAL");
 		m_simDeferral = simDeferral == nullptr || std::strcmp(simDeferral, "0") != 0;
+		const auto* const exactEssi = std::getenv("GEARMULATOR_MDMM_EXACT_ESSI");
+		m_exactEssiTiming = exactEssi != nullptr && std::strcmp(exactEssi, "1") == 0;
 		const auto* const speedUps = std::getenv("GEARMULATOR_MDMM_SPEEDUPS");
 		setSpeedUps(speedUps == nullptr || std::strcmp(speedUps, "0") != 0);
 
@@ -1550,6 +1552,7 @@ namespace md
 				d.dsp().execUntilCycles(stopCyc);
 			else
 			{
+				const dsp56k::DSP::ScopedFastForwardLimit limit(d.dsp(), stopCyc);
 				d.dsp().exec();
 				while(d.dsp().getCycles() < stopCyc)
 					d.dsp().exec();
@@ -1638,6 +1641,9 @@ namespace md
 			d.dsp().execUntilCycles(std::min(targetCyc, clampStop));
 		else
 		{
+			// The backlog cannot change while the DSP only runs NOPs (the DSP writes HTX in an instruction, the
+			// UC does not run), so the cycle stop is the only one an idle fast-forward must not skip over.
+			const dsp56k::DSP::ScopedFastForwardLimit limit(d.dsp(), std::min(targetCyc, clampStop));
 			while(d.dsp().getCycles() < targetCyc && d.dsp().getCycles() < clampStop
 				&& (!s_mmBp
 					|| d.hostTxBacklog() <= policy.hostTransmitBackpressureThresholdWords))
@@ -1655,6 +1661,15 @@ namespace md
 				++score.stoppedByBackpressure;
 			else
 				++score.unexpectedShort;);
+	}
+
+	void Hardware::applyEssiCycleDeadlines()
+	{
+		// Takes effect at each DSP's next peripheral run: the deadline already scheduled is kept (in cycles
+		// when it was exact, in instructions when not) and the next one uses the new mode.
+		const bool exact = transportPolicy(m_model).exactEssiCycleDeadlinesFor(exactEssiTimingActive());
+		m_dspMixer.getPeriph().getEssiClock().setExactCycleDeadlineEnabled(exact);
+		m_dspProducer.getPeriph().getEssiClock().setExactCycleDeadlineEnabled(exact);
 	}
 
 	void Hardware::schedCatchUpDspToDsp(const uint32_t _consumer, const uint32_t _producer)
@@ -1714,6 +1729,8 @@ namespace md
 			d.dsp().execUntilCycles(std::min(targetCyc, clampStop));
 		else
 		{
+			// see schedCatchUpDsp
+			const dsp56k::DSP::ScopedFastForwardLimit limit(d.dsp(), std::min(targetCyc, clampStop));
 			while(d.dsp().getCycles() < targetCyc && d.dsp().getCycles() < clampStop
 				&& (!bpGate
 					|| d.hostTxBacklog() <= policy.hostTransmitBackpressureThresholdWords))

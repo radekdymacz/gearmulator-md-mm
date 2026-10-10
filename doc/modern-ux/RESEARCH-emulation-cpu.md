@@ -290,6 +290,66 @@ Step 1 measured (2026-10-09, `cba2ace1f`, M4 Pro, `mdmmPerfGateTest`): the shipp
 
 Do L3 first, then L4 (signature table first, generic detector later), then L9 and L10. Do L7 last, only if its measured residual is ≥ 1.5 %.
 
+Step 2 measured (2026-10-10, branch `perf/step2`, M4 Pro under other load, `mdmmPerfGateTest` md-busy / mm-a01,
+speed-ups on, medians of 4 paired ABBA rounds; host instructions and cycles per frame, each row against the row
+before it):
+
+| Lever | Commit | MD stopped | MD playing | MM stopped | MM playing | Bit-exact |
+|---|---|---|---|---|---|---|
+| Upstream 7d69d7a9 (loop-end assert) | not taken | – | – | – | – | – |
+| Upstream e8989e41 (serial-status poll fast-forward) | not taken | – | – | – | – | – |
+| CMPM JIT fix | `79f2ee6e2` | 0 | 0 | 0 | 0 | yes (goldens 24/24) |
+| L3 exact MD ESSI deadlines | `fcb7a9b11` | −2.0 % / −5.1 % | −1.0 % / −5.7 % | 0 | 0 | MD no (by design), MM yes |
+| L4 NOP stubs | `438b8c882` | −5.3 % / −5.4 % | −0.4 % / +0.8 % | −14.0 % / −15.1 % | 0.0 % / +0.4 % | yes |
+| L4 DMA poll loops (movep) | `c93d9098c` | 0 | 0 | −4.4 % / −3.5 % | −7.2 % / −3.7 % | yes |
+| L4 DMA bit-test polls (jset) | `990f85436` | −3.4 % / −2.9 % | −3.4 % / −2.8 % | 0 | 0 | yes |
+| **Step 2 against main (step 1), with L3 (as first built)** | | **−9.3 % / −12.3 %** | **−3.7 % / −6.5 %** | **−17.7 % / −17.7 %** | **−7.3 % / −5.7 %** | MD changes (L3) |
+
+**Shipped shape (Radek, 2026-10-10): no lever that changes the sound is on by default.** Every bit-exact lever (step 1,
+L4, the CMPM fix) sits under the speed-ups switch and is on by default; off is the legacy emulation exactly, CMPM
+bug included. L3 stays in the code, **opt-in and off by default** (`GEARMULATOR_MDMM_EXACT_ESSI=1` or Developer >
+"Exact MD audio timing (experimental, changes the sound)", config key `exactEssiTiming`), acting only with the
+speed-ups on; its goldens have their own keys (`speedups-on+exact-essi`, MD only). Measured on the final branch
+(main merged in), same method:
+
+| Configuration | MD stopped | MD playing | MM stopped | MM playing | Bit-exact |
+|---|---|---|---|---|---|
+| **Default (step 2 without L3) against main** | **−4.9 % / −3.7 %** | **−2.9 % / −2.8 %** | **−17.9 % / −18.7 %** | **−7.4 % / −6.2 %** | yes, committed goldens 24/24 both positions |
+| L3 opted in, on top of the default | −5.1 % / −7.4 % | −1.4 % / −3.2 % | 0 | 0 | no (MD, by design) |
+
+Without L3 the MD gains less from L4's NOP stubs: the skips are bounded by the next peripheral due, and without L3
+the MD's dues are several times closer together (the halving instruction delays of §3.4).
+
+Notes:
+- **Upstream batch.** 7d69d7a9 only relaxes an `assert` (Debug builds); no gain, skipped. e8989e41 widens the
+  ESAI/ESSI status-poll fast-forward to TDE/RDF and brclr/brset: a probe on the JIT saw no block in either firmware
+  (all six golden scenarios) that tests an ESSI or ESAI status register at all, so it cannot change anything here;
+  skipped. (It also fixes `op_Jset_qq` passing `Jclr_qq` as its template argument; harmless for our firmwares.)
+- **CMPM.** `cmpm S,D` with S the other accumulator took |S| in its live JIT register (A became |A| for the rest of
+  the block). Fixed with a unit test, behind the speed-ups switch (`DSP::setJitCmpmFix`, read at run time: off writes
+  |S| back as before). A probe saw only `cmpm y0,b` (MM p:9c1) in our firmwares, whose source is a
+  temporary, so nothing changes (goldens 24/24).
+- **L3** changes the MD's audio, RAM, SRAM and MIDI-out timing (playhead moves and MIDI event counts equal; the
+  firmware tests and `plocktiming-strict` pass with it). Radek listened and kept it, then decided that nothing that
+  changes the sound ships on by default: L3 is opt-in (above), and its goldens are recorded under their own keys.
+- **L4** is two mechanisms, both bit-exact by construction (they skip only block executions after which the
+  dispatcher would find nothing due, and land on a boundary where it still finds nothing): NOP-only DO bodies
+  (`JitConfig::nopLoopFastForward`, `DSP::fastForwardNopLoop`) and self-looping blocks that poll a DMA register
+  and repeat their own state (`JitConfig::pollLoopFastForward`, `JitBlock::isIdlePollLoop`, `DSP::fastForwardPollLoop`).
+  An inline test in the block calls only when a whole block fits before the stop and the deadline: an unconditional
+  call cost +3.9 % cycles with the switch off. Not covered: the Port C polls (MD p:bb, MM p:195; their reads go
+  through Hardware's edge logic) and the MD's DDR0 poll at p:3c, a loop of five two-word blocks below P:$100 (with L7
+  it would become one block, which L4 would then cover).
+- **L7** is not bit-exact by nature (block boundaries move), so it is outside "each bit-exact" and was not done.
+  **L9** was measured, not built: on the step 2 build `HDI08::exec`, `Timers::exec` and `Dma::exec` together are
+  about 1.6 % (MD playing) and 2 % (MM playing) of samples, below the kill line of §3.7 (3 % / 2 %) before any
+  overlap. **L10** was not started (1–2.5 % forecast, within the noise of these runs).
+- (With L3, as first built.) Against the forecast table in §1 (after step 2: 63 / 71 / 67 / 75.5 % of the shipped cost), chaining step 1's
+  figures (0.85 / 0.84 / 0.81 / 0.79) with step 2's cycles (0.88 / 0.94 / 0.82 / 0.94) gives roughly 75 % (MD
+  stopped), 79 % (MD playing), 67 % (MM stopped) and 75 % (MM playing). The MM is on the forecast; the MD is behind it
+  because its idle time is in the Port C and p:3c polls that L4 cannot reach yet. Approximate: different runs, a
+  loaded machine.
+
 | Gate | Pass condition |
 |---|---|
 | L3 audio change | Radek signs off after a 16 s listening A/B; new reference hashes recorded; `mdRuntimeTest.cpp:76` updated |

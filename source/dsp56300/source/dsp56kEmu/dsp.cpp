@@ -327,6 +327,85 @@ namespace dsp56k
 			perif[i]->terminate();
 	}
 
+	void DSP::fastForwardNopLoop(const uint32_t _instructionsPerTurn, const uint32_t _cyclesPerTurn, const uint32_t _turnsPerExit) noexcept
+	{
+		if(!m_idleFastForward || !m_fastForwardCycleLimit)
+			return;
+
+		// a pending interrupt is taken at the next boundary, so that boundary must be reached by running
+		if(m_interruptFunc != m_execPeripheralsFunc)
+			return;
+
+		// the block's loop end only loops while LF is set
+		if(!(reg.sr.var & SR_LF))
+			return;
+
+		const uint64_t lc = reg.lc.var;
+		const uint64_t k = _turnsPerExit;
+
+		// After t turns LC is lc - t. The block exits to the dispatcher after turn t when lc - t is a multiple of k
+		// (and at least k, else the loop has ended or ends with the next turns): t = first, first + k, ... <= lc - k.
+		if(!k || !_instructionsPerTurn || !_cyclesPerTurn || lc <= k)
+			return;
+
+		const uint64_t first = (lc - 1) % k + 1;
+
+		// the most turns t after which the dispatcher's tests still all pass: count + t * perTurn < target
+		const auto turnsBefore = [](const uint64_t _now, const uint64_t _target, const uint64_t _perTurn) -> uint64_t
+		{
+			return _target > _now ? (_target - _now - 1) / _perTurn : 0;
+		};
+
+		const auto* p = perif[0];
+
+		uint64_t maxTurns = lc - k;
+		maxTurns = std::min(maxTurns, turnsBefore(m_instructions, p->getTargetClock(), _instructionsPerTurn));
+		maxTurns = std::min(maxTurns, turnsBefore(m_cycles, m_fastForwardCycleLimit, _cyclesPerTurn));
+		if(p->hasCycleDeadline())
+			maxTurns = std::min(maxTurns, turnsBefore(m_cycles, p->getTargetCycle(), _cyclesPerTurn));
+
+		if(maxTurns < first)
+			return;
+
+		// land on the last passing boundary
+		const uint64_t turns = first + (maxTurns - first) / k * k;
+
+		m_instructions += turns * _instructionsPerTurn;
+		m_cycles += turns * _cyclesPerTurn;
+		reg.lc.var = static_cast<TWord>(lc - turns);
+		m_fastForwardedTurns += turns;
+	}
+
+	void DSP::fastForwardPollLoop(const uint32_t _instructionsPerTurn, const uint32_t _cyclesPerTurn) noexcept
+	{
+		if(!m_idleFastForward || !m_fastForwardCycleLimit || !_instructionsPerTurn || !_cyclesPerTurn)
+			return;
+
+		// a block below P:$100 that just ran as a fast interrupt is no loop
+		if(m_interruptFunc != m_execPeripheralsFunc || m_processingMode != Default)
+			return;
+
+		// the most turns t with every boundary 0..t passing: count + t * perTurn < target (0 if this one fails)
+		const auto turnsBefore = [](const uint64_t _now, const uint64_t _target, const uint64_t _perTurn) -> uint64_t
+		{
+			return _target > _now ? (_target - _now - 1) / _perTurn : 0;
+		};
+
+		const auto* p = perif[0];
+
+		uint64_t turns = turnsBefore(m_instructions, p->getTargetClock(), _instructionsPerTurn);
+		turns = std::min(turns, turnsBefore(m_cycles, m_fastForwardCycleLimit, _cyclesPerTurn));
+		if(p->hasCycleDeadline())
+			turns = std::min(turns, turnsBefore(m_cycles, p->getTargetCycle(), _cyclesPerTurn));
+
+		if(!turns)
+			return;
+
+		m_instructions += turns * _instructionsPerTurn;
+		m_cycles += turns * _cyclesPerTurn;
+		m_fastForwardedTurns += turns;
+	}
+
 	void DSP::onInvalidPC(const TWord _pc) noexcept
 	{
 		// execJit() bounds-checks the PC against the SIZE OF THE DISPATCH TABLE, which is what makes indexing it

@@ -30,6 +30,8 @@ from pathlib import Path
 
 OUTPUTS = ("stereo", "all")
 SPEEDUPS = ("on", "off")
+# opt-in positions, compared only where the goldens file has an entry for them (L3: GEARMULATOR_MDMM_EXACT_ESSI=1)
+OPTIONAL_SPEEDUPS = ("on+exact-essi",)
 ENV_ASSIGNMENT = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*=")
 
 
@@ -266,6 +268,10 @@ def cmd_goldens(args: argparse.Namespace) -> int:
                     missing += 1
                     continue
                 print(f"RUN\t{scenario}\t{outputs}\t{speedups}\t{seconds or args.seconds}\t{scenario[:2]}")
+            for speedups in OPTIONAL_SPEEDUPS:
+                seconds = known.get((scenario, outputs, speedups))
+                if seconds is not None:
+                    print(f"RUN\t{scenario}\t{outputs}\t{speedups}\t{seconds}\t{scenario[:2]}")
     print("FINGERPRINTS\t" + " ".join(sorted(fingerprints)))
     return 1 if missing else 0
 

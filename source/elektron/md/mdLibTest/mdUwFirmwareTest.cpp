@@ -516,9 +516,21 @@ static int runFirmwareTest(const char* const firmwarePath)
 		return fail("interacted first-run UW state did not cold-boot coherently");
 	if(device.getHardware().speedUps() == speedUps)
 		return fail("a state exchange lost the speed-ups switch");
+	// L3: both DSPs' serial clocks run on exact cycle deadlines only while it is opted in and the speed-ups are on.
+	const auto exactDeadlines = [&device]
+	{
+		auto& hw = device.getHardware();
+		const bool mixer = hw.getDspMixer().getPeriph().getEssiClock().isExactCycleDeadlineEnabled();
+		const bool producer = hw.getDspProducer().getPeriph().getEssiClock().isExactCycleDeadlineEnabled();
+		return mixer == producer && mixer == hw.exactEssiTimingActive();
+	};
+	if(!exactDeadlines())
+		return fail("the serial-clock deadlines do not follow the speed-ups switch after a state exchange");
 	device.setSpeedUps(speedUps);
 	if(device.getHardware().speedUps() != speedUps)
 		return fail("the speed-ups did not switch back");
+	if(!exactDeadlines())
+		return fail("the serial-clock deadlines did not follow the speed-ups switch back");
 	firstRunReboot.reset();
 
 	// The known-good initialized image supplies the fixture baseline for subsequent

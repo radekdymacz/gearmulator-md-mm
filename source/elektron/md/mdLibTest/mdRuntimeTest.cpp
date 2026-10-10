@@ -1,10 +1,15 @@
 #include "mdLib/mdfrontpanel.h"
+#include "mdLib/mdhardware.h"
 #include "mdLib/mdpanel.h"
 #include "mdLib/mdsim.h"
 #include "mdLib/mdtransportpolicy.h"
 #include "dsp56kEmu/memory.h"
 
 #include <array>
+#include <vector>
+#include <string>
+#include <memory>
+#include <cstdlib>
 #include <cstdint>
 #include <iostream>
 #include <optional>
@@ -73,7 +78,9 @@ namespace
 			&& md.hostReceiveQueueCapacityWords == 16
 			&& md.hostTransmitBackpressureThresholdWords == 4
 			&& md.hostTransmitBackpressureReleaseUcCycles == 200'000
-			&& !md.exactEssiCycleDeadlines,
+			&& !md.exactEssiCycleDeadlines
+			&& md.exactEssiCycleDeadlinesL3
+			&& !md.exactEssiCycleDeadlinesFor(false) && md.exactEssiCycleDeadlinesFor(true),
 			"Machinedrum transport policy changed during consolidation")
 			&& check(mm.backgroundQuantumMicroseconds == 30.0
 				&& mm.catchUpMaxDspCycles == 100'000
@@ -81,8 +88,51 @@ namespace
 				&& mm.hostReceiveQueueCapacityWords == 16
 				&& mm.hostTransmitBackpressureThresholdWords == 4
 				&& mm.hostTransmitBackpressureReleaseUcCycles == 200'000
-				&& mm.exactEssiCycleDeadlines,
+				&& mm.exactEssiCycleDeadlines
+				&& mm.exactEssiCycleDeadlinesL3,
 				"Monomachine transport policy changed during consolidation");
+	}
+
+	// What a machine runs with nothing set: every speed-up of the umbrella switch on, L3 (its own opt-in) off. A
+	// Device takes these from its Hardware (Device::Device). Skipped when the environment chooses otherwise.
+	bool testDefaultSwitches()
+	{
+		if(std::getenv("GEARMULATOR_MDMM_SPEEDUPS") || std::getenv("GEARMULATOR_MDMM_EXACT_ESSI")
+			|| std::getenv("GEARMULATOR_MDMM_SIM_DEFERRAL"))
+		{
+			std::cout << "default switches: SKIP (set in the environment)\n";
+			return true;
+		}
+		for(const auto model : {md::MachineModel::Machinedrum, md::MachineModel::Monomachine})
+		{
+			const auto hw = std::make_unique<md::Hardware>(std::vector<uint8_t>{}, std::string{}, model);
+			auto& h = *hw;
+			const bool mm = model == md::MachineModel::Monomachine;
+			const char* name = mm ? "Monomachine" : "Machinedrum";
+			bool ok = h.speedUps()										// step 1: L1, L2b
+				&& h.getUC().memoryFastLane()							// L11
+				&& h.getUC().getSim().deferStepping()					// L5
+				&& h.getDspMixer().dsp().getIdleFastForward()			// L4
+				&& h.getDspProducer().dsp().getIdleFastForward()
+				&& h.getDspMixer().dsp().getJitCmpmFix()				// the CMPM fix
+				&& h.getDspProducer().dsp().getJitCmpmFix()
+				&& !h.exactEssiTiming() && !h.exactEssiTimingActive();	// L3 off
+			// L3 off leaves the MD's serial clocks as before; the MM's have always been exact
+			for(auto* d : {&h.getDspMixer(), &h.getDspProducer()})
+				ok = ok && d->getPeriph().getEssiClock().isExactCycleDeadlineEnabled() == mm;
+			if(!check(ok, (std::string(name) + ": a default machine does not have every speed-up on and L3 off").c_str()))
+				return false;
+			// opting in to L3 acts only with the speed-ups on
+			h.setExactEssiTiming(true);
+			ok = h.exactEssiTimingActive() && h.getDspMixer().getPeriph().getEssiClock().isExactCycleDeadlineEnabled();
+			h.setSpeedUps(false);
+			ok = ok && !h.exactEssiTimingActive()
+				&& h.getDspMixer().getPeriph().getEssiClock().isExactCycleDeadlineEnabled() == mm
+				&& !h.getDspMixer().dsp().getIdleFastForward() && !h.getDspMixer().dsp().getJitCmpmFix();
+			if(!check(ok, (std::string(name) + ": L3 or the speed-ups switch does not reach the DSPs").c_str()))
+				return false;
+		}
+		return true;
 	}
 
 	bool testDspMemoryFallback()
@@ -463,7 +513,7 @@ namespace
 
 int main()
 {
-	if(!testTransportPolicy() || !testDspMemoryFallback() || !testMk2PortAInvertedLoopback()
+	if(!testTransportPolicy() || !testDefaultSwitches() || !testDspMemoryFallback() || !testMk2PortAInvertedLoopback()
 		|| !testFrontPanelStepLeds() || !testMachinedrumPanelLedBanks()
 		|| !testFrontPanelTransitionPublication()
 		|| !testPanelInputReleaseRecovery()

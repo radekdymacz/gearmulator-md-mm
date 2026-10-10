@@ -26,6 +26,15 @@ namespace dsp56k
 		// maximum number of iterations of a do loop before the Jit block is exited (and later re-entered), giving a time slice for interrupts/peripherals
 		uint32_t maxDoIterations = 0;
 
+		// Emit the idle fast-forward call at the head of DO loop bodies that hold only NOPs (needs maxDoIterations).
+		// It skips whole turns at run time when the DSP allows it (DSP::fastForwardNopLoop, DSP::setIdleFastForward);
+		// with that switch off the call returns at once and the loop runs as it always did.
+		bool nopLoopFastForward = false;
+
+		// Emit the idle fast-forward call at the end of a block that polls a DMA register and branches back to itself,
+		// and whose turns repeat the same state (JitBlock::isIdlePollLoop, DSP::fastForwardPollLoop). Switched as above.
+		bool pollLoopFastForward = false;
+
 		// needs to be true if there is code that executes code in interrupt regions as regular jumps
 		bool dynamicFastInterrupts = false;
 

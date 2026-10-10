@@ -250,9 +250,14 @@ namespace md
 		//   L1  the UC idle skip tests its inputs once per batch (schedStep),
 		//   L11 the ColdFire memory fast lane (Microcontroller::setMemoryFastLane),
 		//   L2b the Machinedrum DSP catch-ups run under one execUntilCycles entry,
-		//   L5  the SIM steps its timers and UART transmitters at their next event (Sim::setDeferStepping).
-		// Off, every one runs the code it replaced: the same audio and machine state, bit for bit, at a
-		// higher host CPU. GEARMULATOR_MDMM_SPEEDUPS=0 turns them off at construction. The finer
+		//   L5  the SIM steps its timers and UART transmitters at their next event (Sim::setDeferStepping),
+		// and of step 2:
+		//   L4  both DSPs skip the turns of idle loops (NOP-only DO bodies, DMA polls) that the dispatcher
+		//       would only pass through (dsp56k::DSP::setIdleFastForward; bit-exact),
+		//   and the JIT's cmpm fix (dsp56k::DSP::setJitCmpmFix: cmpm with the other accumulator as source no
+		//   longer leaves |S| in it; the firmwares never run that form, so it changes nothing they do).
+		// Off, every one runs the code it replaced: the same machine state, bit for bit, at a higher host CPU.
+		// On is the default. L3 has its own opt-in switch (setExactEssiTiming) and acts only with these on. GEARMULATOR_MDMM_SPEEDUPS=0 turns them off at construction. The finer
 		// GEARMULATOR_MDMM_SIM_DEFERRAL=0 turns off L5 alone (read once; it keeps L5 off whatever is set
 		// here). The deferred processUC gating and inline exec of L5 have no switch: they only skip work
 		// that cannot change state. Call under the owning Plugin device lock, like the other control
@@ -262,8 +267,25 @@ namespace md
 			m_speedUps = _on;
 			m_uc.setMemoryFastLane(_on);
 			m_uc.getSim().setDeferStepping(_on && m_simDeferral);
+			applyEssiCycleDeadlines();
+			m_dspMixer.dsp().setIdleFastForward(_on);
+			m_dspProducer.dsp().setIdleFastForward(_on);
+			m_dspMixer.dsp().setJitCmpmFix(_on);
+			m_dspProducer.dsp().setJitCmpmFix(_on);
 		}
 		bool speedUps() const { return m_speedUps; }
+		// L3, opt-in and off by default, separate from the speed-ups because it changes the Machinedrum's audio: its
+		// serial clock wakes the DSPs at the exact cycle of the next slot (TransportPolicy::exactEssiCycleDeadlinesL3;
+		// the Monomachine always runs so). Acts only while the speed-ups are on. GEARMULATOR_MDMM_EXACT_ESSI=1 turns
+		// it on at construction. Same locking as setSpeedUps.
+		void setExactEssiTiming(const bool _on)
+		{
+			m_exactEssiTiming = _on;
+			applyEssiCycleDeadlines();
+		}
+		bool exactEssiTiming() const { return m_exactEssiTiming; }
+		// L3 acting now: opted in and the speed-ups on
+		bool exactEssiTimingActive() const { return m_exactEssiTiming && m_speedUps; }
 		void readMidiOut(std::vector<synthLib::SMidiEvent>& _midiOut)
 		{
 			m_uc.readMidiOut(_midiOut, m_midiOutputNativeOrigin.load(std::memory_order_relaxed));
@@ -403,6 +425,8 @@ namespace md
 		double   schedDspFramePos(uint32_t _dspIndex);	// a runnable DSP's machine-frame position
 		void     schedDrainCodecOutput();		// pop the mixer ESSI1 output ring so its TX never blocks
 		void     schedCatchUpDspToDsp(uint32_t _consumer, uint32_t _producer);
+		// The serial-clock deadline mode of both DSPs for the current L3 and speed-ups positions.
+		void     applyEssiCycleDeadlines();
 		// Compact, preallocated host-facing storage keeps codec draining bounded.
 		// Overflow retains the newest frames and is explicit telemetry; processAudio
 		// drains the queue every callback so stale audio cannot accumulate between blocks.
@@ -417,6 +441,7 @@ namespace md
 		// GEARMULATOR_MDMM_SIM_DEFERRAL switch for L5 alone, fixed at construction.
 		bool     m_speedUps = true;
 		bool     m_simDeferral = true;
+		bool     m_exactEssiTiming = false;	// L3 opt-in (setExactEssiTiming)
 		std::array<RealtimeHostAudioInputTimeline, 2> m_hostAudioInput;
 		std::array<int64_t, 2> m_hostAudioInputClockOrigin{};
 		std::array<uint64_t, 2> m_hostAudioInputNextRxIndex{};

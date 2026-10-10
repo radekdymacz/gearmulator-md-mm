@@ -32,24 +32,25 @@ this on later launches. The context menu can stop an environment-started capture
 
 ## Switches for testers
 
-The editors run the emulated Machinedrum and Monomachine faster than they used to (step 1 of the emulation
-CPU work: four speed-ups, listed below). One switch turns all of them off, so you can find out in minutes
-whether a CPU problem, a click or a timing difference comes from them. **Both positions produce the same
-audio, bit for bit**, checked on both firmwares (audio, RAM, SRAM, loader RAM, patch RAM and MIDI out are
-compared); only the host CPU differs. With the speed-ups off the emulation runs the code that the
-speed-ups replaced, and costs about what it did before step 1: a few per cent less, because the one thing
-that stays on is the `processUC` gating (part B of L5; it only skips work that cannot change anything, so
-it has no switch).
+The editors run the emulated Machinedrum and Monomachine faster than they used to (the emulation CPU work, steps 1
+and 2). There are two switches. With nothing set, every speed-up is on and the experimental L3 is off.
+
+**The speed-ups switch** turns all the speed-ups off at once (and one emulator fix that came with them), so you can
+find out in minutes whether a CPU problem, a click or a timing difference comes from them. Off, the emulation is the
+one from before them, exactly: it runs the code that the speed-ups replaced, and costs about what it did then (a few
+per cent less, because the one thing that stays on is the `processUC` gating, part B of L5; it only skips work that
+cannot change anything, so it has no switch). **Both positions produce the same audio, bit for bit**, checked on
+both firmwares (audio, RAM, SRAM, loader RAM, patch RAM and MIDI out are compared); only the host CPU differs.
 
 - **Menu: Developer > Speed-ups off (legacy emulation, slower).** Ticked is the old
   emulation. The choice applies at once, without restarting, and is kept in the plug-in's settings (key
   `legacyEmulation`) and across project loads.
 - **`GEARMULATOR_MDMM_SPEEDUPS=0`** starts every new session with the speed-ups off. Set it as an
-  environment variable **before starting the host**; remove it to go back to the default. It only sets the
+  environment variable **before starting the host**; remove it to go back to the default (on). It only sets the
   starting position: a ticked menu item also starts a session with the speed-ups off, and the menu can
   change either at run time.
 
-The speed-ups the switch controls:
+Everything the speed-ups switch turns off:
 
 - **L1** the idle skip of the ColdFire's wait loop tests its inputs once per batch instead of at every
   skipped instruction.
@@ -58,6 +59,24 @@ The speed-ups the switch controls:
 - **L2b** the Machinedrum DSP catch-ups run under one cycle-bounded entry instead of block by block.
 - **L5** the ColdFire's timers and UART transmitters are stepped when they reach an event, not after
   every instruction.
+- **L4** (step 2, both machines) the DSPs skip the turns of their idle loops that would only pass through the
+  dispatcher, up to the next moment anything is due: the silent-voice NOP loops and the loops that wait on a DMA
+  register (not the loops that wait on Port C).
+- **CMPM fix** (step 2, both machines) the DSP compiler's `cmpm` with the other accumulator as its source no longer
+  leaves that accumulator's magnitude behind in it (an emulator bug). Neither firmware runs that form of the
+  instruction, so this changes nothing they do; off keeps the old behaviour so that off is the old emulation
+  exactly.
+- **L3**, when opted in (below): it only acts while the speed-ups are on.
+
+**The L3 switch (experimental, off by default, changes the sound).** L3 makes the Machinedrum's serial ports wake
+its DSPs at the exact cycle of each slot, as the Monomachine always has, instead of at half the remaining cycles
+converted to instructions. That saves host CPU (about 5 % of a frame's cycles), but it moves notes and DSP work by
+microseconds, so the Machinedrum sounds slightly different (the same patterns and sounds). The Monomachine is not
+affected. It acts only while the speed-ups are on.
+
+- **Menu: Developer > Exact MD audio timing (experimental, changes the sound)** (Machinedrum Editor only). Ticked
+  is L3 on; applies at once, kept in the plug-in's settings (key `exactEssiTiming`) and across project loads.
+- **`GEARMULATOR_MDMM_EXACT_ESSI=1`** starts every new session with L3 on.
 
 Two finer environment variables exist for narrowing a problem down further. Both are environment
 variables only:
@@ -242,8 +261,11 @@ hashes of everything the emulation produced next to its host cost per audio fram
 
 ```
 mdmmPerfGateTest <ROM> md|mm [seconds-per-phase=8] [--scenario <name>] [--outputs stereo|all]
-                 [--golden <goldens.json> [--record]]
+                 [--golden <goldens.json> [--record]] [--wav <file.wav>]
 ```
+
+`--wav` also writes the hashed stream (stopped phase, the PLAY press, playing phase; left and right) as a 32-bit
+float WAV at 44.1 kHz, for listening to two builds or two switch positions side by side.
 
 **Scenarios.** Without `--scenario` the tool does what it always did (`md-busy` for md, `mm-a01` for mm), with
 the same hashes.
@@ -278,7 +300,8 @@ hash of `md-busy` and `mm-a01` are the values the step 1 work was checked agains
 `mdmmPerfGateTest golden: differs <field> golden=... run=...` line per difference, when any compared field
 differs or is missing on either side, or when the file has no entry for the key. The speed-ups position is the
 machine's own (`GEARMULATOR_MDMM_SPEEDUPS=0` gives `speedups-off`); both positions have their own entries, which
-hold the same hashes. The last line is `mdmmPerfGateTest golden: PASS (...)` or `... FAIL (...)`.
+hold the same hashes. With L3 opted in (`GEARMULATOR_MDMM_EXACT_ESSI=1`, speed-ups on) a Machinedrum run is keyed
+`speedups-on+exact-essi`, entries of its own with L3's hashes. The last line is `mdmmPerfGateTest golden: PASS (...)` or `... FAIL (...)`.
 `--golden <file> --record` writes or replaces that one entry and keeps the others. An entry's `compare` object holds
 every hash and count (`frames`, `nonsilent_frames`, `playhead_moves`, `midi_out_events`, `press_frame`,
 `press_frames`, `stream_frames`); its `info` object holds the recording run's instruction figures and guest cycles

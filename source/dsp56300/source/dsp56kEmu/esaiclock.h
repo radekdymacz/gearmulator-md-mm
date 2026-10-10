@@ -42,6 +42,7 @@ namespace dsp56k
 		// tick. Zero preserves the existing base-plus-divider clock.
 		void setEsaiFinePeriod(Esxi* _esai, uint32_t _finePeriod);
 		void setExactCycleDeadlineEnabled(bool _enabled) { m_exactCycleDeadlineEnabled = _enabled; }
+		bool isExactCycleDeadlineEnabled() const { return m_exactCycleDeadlineEnabled; }
 		bool usesExactCycleDeadline() const;
 		uint32_t getNextCycleDeadline() const { return m_nextCycleDeadline; }
 		bool setEsaiCounter(const Esxi* _esai, int _counter)

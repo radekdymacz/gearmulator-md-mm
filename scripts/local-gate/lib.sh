@@ -183,7 +183,7 @@ run_box() {
 		GEARMULATOR_MD_FIRMWARE_BIN="${MD_ROM}" GEARMULATOR_MM_FIRMWARE_BIN="${MM_ROM}" \
 		GEARMULATOR_REQUIRE_FIRMWARE_TESTS=1 MD_AUTOMATION_REQUIRE_FIRMWARE=1 ${fixtures[@]+"${fixtures[@]}"} \
 		python3 -B "${GATE_TOOLS}" run --timeout "${limit}" --log "${log}" --cwd "${SB_WORK}" \
-		--unset GEARMULATOR_MDMM_SPEEDUPS --unset GEARMULATOR_MDMM_SIM_DEFERRAL -- "$@" &
+		--unset GEARMULATOR_MDMM_SPEEDUPS --unset GEARMULATOR_MDMM_SIM_DEFERRAL --unset GEARMULATOR_MDMM_EXACT_ESSI -- "$@" &
 	wait $!
 }
 

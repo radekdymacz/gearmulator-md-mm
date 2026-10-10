@@ -732,7 +732,32 @@ namespace dsp56k
 		const auto D = getFieldValue<Cmpm_S1S2, Field_d>(op);
 		const auto JJJ = getFieldValue<Cmpm_S1S2, Field_JJJ>(op);
 		const auto r = decode_JJJ_read_56(JJJ, !D);
-		alu_cmp(D, r64(r.get()), true);
+
+		// alu_cmp takes the magnitudes in place. Any source but the other accumulator is a temporary already.
+		if(JJJ >= 2)
+		{
+			alu_cmp(D, r64(r.get()), true);
+			return;
+		}
+
+		// The other accumulator comes back as its live register: compare on a copy, or "cmpm a,b" turns A into |A|
+		// for the rest of the block. The emulation before the fix did just that, and it is kept, chosen at run
+		// time, for DSP::setJitCmpmFix(false) (the MD/MM speed-ups switch off): there the live register takes |S|.
+		DspValue copy(m_block);
+		copy.temp(DspValue::Temp56);
+		m_asm.mov(r64(copy.get()), r64(r.get()));
+
+		const RegGP fixed(m_block);
+		m_block.mem().mov(r32(fixed), reinterpret_cast<const uint8_t&>(m_block.dsp().getJitCmpmFix()));
+
+		alu_cmp(D, r64(copy.get()), true);
+
+		{
+			const SkipLabel skip(m_asm);
+			m_asm.test_(r32(fixed));
+			m_asm.jnz(skip);
+			m_asm.mov(r64(r.get()), r64(copy.get()));
+		}
 	}
 
 	void JitOps::op_Dec(TWord op)

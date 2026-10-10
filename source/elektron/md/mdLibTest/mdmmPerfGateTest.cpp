@@ -4,7 +4,7 @@
 // hashes of the old and the new binary are identical and the instructions and cycles per frame drop by the amount the
 // lever promises; a release build passes only if its hashes equal the recorded goldens.
 //   mdmmPerfGateTest <ROM> md|mm [seconds-per-phase=8] [--scenario <name>] [--outputs stereo|all]
-//                    [--golden <goldens.json> [--record]]
+//                    [--golden <goldens.json> [--record]] [--wav <file.wav>]
 // Boots the machine (MD OS 1.63 or MM OS 1.32B) headless, sets up the scenario, then renders two phases in 64-frame
 // blocks at 44.1 kHz: "stopped" and, after a press of PLAY, "playing". The scenarios
 // (doc/md_mm_performance_diagnostics.md):
@@ -56,9 +56,12 @@
 // HI08 windows are never read, reads there have side effects.
 // Compare those hashes across builds; compare the per-frame costs as medians of a few paired runs (old, new, old, new).
 // --golden compares the hashes and counts with the entry of the goldens file for (ROM fingerprint, scenario, outputs,
-// GEARMULATOR_MDMM_SPEEDUPS position, seconds per phase) and exits 1 on any difference, field by field; with --record
+// GEARMULATOR_MDMM_SPEEDUPS position (on, off, or on+exact-essi with GEARMULATOR_MDMM_EXACT_ESSI=1 on the MD), seconds
+// per phase) and exits 1 on any difference, field by field; with --record
 // it writes or replaces that entry instead (the file keeps the others). The goldens hold hashes, counts and, as
 // information only, the instruction figures and guest cycles of the recording run: nothing from the firmware.
+// --wav writes the hashed stream (stopped, the press, playing; left and right) as a 32-bit float WAV at 44.1 kHz, for
+// listening to two builds or two switch positions side by side; it changes nothing that is hashed.
 // The tool uses only what main has, so one source builds against both an old and a new emulator.
 // Manual: needs a user-supplied ROM (no firmware is bundled). Exits 77 without one. The counters need macOS; on
 // other systems they print as 0 and only the hashes and cpu_pct mean something.
@@ -669,12 +672,34 @@ namespace
 	void usage()
 	{
 		std::puts("usage: mdmmPerfGateTest <ROM> md|mm [seconds-per-phase=8] [--scenario <name>] "
-			"[--outputs stereo|all] [--golden <goldens.json> [--record]]");
+			"[--outputs stereo|all] [--golden <goldens.json> [--record]] [--wav <file.wav>]");
 		std::string names;
 		for(const auto& s : g_scenarios)
 			names += std::string(" ") + s.name;
 		std::printf("  scenarios:%s\n", names.c_str());
 	}
+}
+
+// 32-bit float, two channels, interleaved, little-endian (the hosts this runs on).
+static bool writeStereoWav(const std::string& _path, const std::vector<float>& _left, const std::vector<float>& _right,
+	const size_t _first, const size_t _count)
+{
+	std::ofstream out(_path, std::ios::binary | std::ios::trunc);
+	if(!out)
+		return false;
+	const auto u32 = [&out](const uint32_t _v) { out.write(reinterpret_cast<const char*>(&_v), 4); };
+	const auto u16 = [&out](const uint16_t _v) { out.write(reinterpret_cast<const char*>(&_v), 2); };
+	const auto dataBytes = static_cast<uint32_t>(_count * 2 * sizeof(float));
+	out.write("RIFF", 4); u32(36 + dataBytes); out.write("WAVE", 4);
+	out.write("fmt ", 4); u32(16); u16(3); u16(2); u32(g_rate); u32(g_rate * 2 * sizeof(float)); u16(2 * sizeof(float));
+	u16(32);
+	out.write("data", 4); u32(dataBytes);
+	for(size_t i = _first; i < _first + _count; ++i)
+	{
+		const float frame[2] = {_left[i], _right[i]};
+		out.write(reinterpret_cast<const char*>(frame), sizeof(frame));
+	}
+	return static_cast<bool>(out);
 }
 
 int main(const int _argc, char** _argv)
@@ -697,6 +722,7 @@ int main(const int _argc, char** _argv)
 	bool allOutputs = false;
 	std::string goldenPath;
 	bool recordGolden = false;
+	std::string wavPath;
 	for(int i = 3; i < _argc; ++i)
 	{
 		const std::string arg = _argv[i];
@@ -717,6 +743,8 @@ int main(const int _argc, char** _argv)
 			goldenPath = _argv[++i];
 		else if(arg == "--record")
 			recordGolden = true;
+		else if(arg == "--wav" && hasValue)
+			wavPath = _argv[++i];
 		else if(i == 3 && arg.rfind("--", 0) != 0)
 			seconds = std::atof(arg.c_str());
 		else
@@ -760,6 +788,10 @@ int main(const int _argc, char** _argv)
 
 		const char* const name = mm ? "MM" : "MD";
 		const bool speedUps = m.hardware().speedUps();
+		// The position the goldens are keyed by: "on", "off", or "on+exact-essi" when L3 is opted in
+		// (GEARMULATOR_MDMM_EXACT_ESSI=1) on the Machinedrum; on the Monomachine L3 changes nothing, so it stays "on".
+		const std::string position = !speedUps ? "off"
+			: (!mm && m.hardware().exactEssiTimingActive()) ? "on+exact-essi" : "on";
 		const auto fingerprint = m.hardware().firmwareFingerprint();
 		uint64_t combined = g_fnvOffset;
 
@@ -830,7 +862,7 @@ int main(const int _argc, char** _argv)
 
 		std::printf("mdmmPerfGateTest: %s, %.1f s per phase, %u-frame blocks at %u Hz, scenario=%s outputs=%s "
 			"speedups=%s fingerprint=%s\n", name, seconds, g_block, g_rate, scenario->name,
-			allOutputs ? "all" : "stereo", speedUps ? "on" : "off", hex(fingerprint).c_str());
+			allOutputs ? "all" : "stereo", position.c_str(), hex(fingerprint).c_str());
 		if(const char* pacing = std::getenv("GEARMULATOR_MDMM_MIDI_PACING"))
 			std::printf("mdmmPerfGateTest: GEARMULATOR_MDMM_MIDI_PACING=%s is set: MIDI timing, and so the hashes, "
 				"follow it\n", pacing);
@@ -868,6 +900,11 @@ int main(const int _argc, char** _argv)
 		}
 		last.write();
 		lines.push_back(std::move(last));
+		if(!wavPath.empty() && !writeStereoWav(wavPath, m.left(), m.right(), streamFirst, streamCount))
+		{
+			std::printf("mdmmPerfGateTest: could not write %s\n", wavPath.c_str());
+			return 2;
+		}
 
 		if(playingMoves == 0)
 		{
@@ -879,7 +916,7 @@ int main(const int _argc, char** _argv)
 		char secondsText[32];
 		std::snprintf(secondsText, sizeof(secondsText), "%gs", seconds);
 		const auto key = hex(fingerprint) + "/" + scenario->name + "/" + (allOutputs ? "all" : "stereo") + "/speedups-"
-			+ (speedUps ? "on" : "off") + "/" + secondsText;
+			+ position + "/" + secondsText;
 		const auto firmware = md::firmwareName(mm ? md::MachineModel::Monomachine : md::MachineModel::Machinedrum);
 		const auto entry = entryOf(lines, firmware);
 		return recordGolden ? record(goldenPath, key, entry) : compareGolden(goldenPath, key, entry);

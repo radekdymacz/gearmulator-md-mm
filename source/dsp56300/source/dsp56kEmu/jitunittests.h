@@ -76,6 +76,9 @@ namespace dsp56k
 		// host register pressure test
 		void parallelMoveXY();
 		void boundedDispatch();
+		void nopLoopFastForward();
+		void cmpmLegacy();
+		void pollLoopFastForward();
 		void programMemoryInvalidation();
 
 		void emit(TWord _opA, TWord _opB = 0, TWord _pc = 0) override;
