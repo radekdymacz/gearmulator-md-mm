@@ -132,7 +132,7 @@ namespace mmDesk
 			// A global is stored at once but applied only when its slot is made active, and not while the
 			// machine is on SYSEX RECV (P7, measured with MIDI SYNC's CLOCK IN, mmDeskFirmwareTest
 			// hostclock): the active slot's push ends with 0x56 once the panel is back on its main screen.
-			if(_r.kind == Kind::Global && static_cast<int>(_r.slot) == (m_curGlobal & 7))
+			if(_r.kind == Kind::Global && activeSlot() >= 0 && static_cast<int>(_r.slot) == (activeSlot() & 7))
 			{
 				m_activateGlobal = static_cast<int>(_r.slot);
 				m_reactivateGlobal = manualDumps();	// the person may still be on SYSEX RECV: again before PLAY
@@ -210,6 +210,8 @@ namespace mmDesk
 			}
 			break;
 		case ed::MmStatus::Global:
+			if(m_chosenGlobal >= 0 && (_value == m_chosenGlobal || (m_chosenSentMs >= 0 && clock() - m_chosenSentMs > g_chosenGlobalMs)))
+				m_chosenGlobal = -1;	// the machine shows the choice (or never took it)
 			if(m_curGlobal != _value)
 			{
 				m_curGlobal = _value;

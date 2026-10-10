@@ -37,6 +37,10 @@ const MmJourneys = (() => {
 	const PAGES = ["SYN", "AMP", "FLT", "EFX", "LF1", "LF2", "LF3"];
 	const go = ws => ({ say: `click the ${{ seq: "Sequence", sound: "Sound", mix: "Mix", perform: "Perform", song: "Song" }[ws]} tab`, act: u => u.click(tab(ws)), screen: () => onTab(ws) });
 	const sel = t => ({ say: `pick track ${t + 1} on the rail`, act: (u, c) => { c.t = t; if (S().side === "midi" && t < 6) u.click('[data-side="int"]'); u.click(rail(t)); }, screen: () => ok(S().sel === t, "selected " + S().sel) });
+	/* the piano roll's Draw on (B on Sequence; Off: a press drags a selection box), as the journeys that click notes in
+	   need it whatever an earlier journey left; drawBack in their tidy puts it as it was */
+	const drawOn = { say: "the piano roll's Draw on", act: (u, c) => { c.d0 = S().rollDraw; if (!S().rollDraw) u.click("#rolldraw"); }, screen: () => ok(S().rollDraw && pressed("#rolldraw"), "Draw off") };
+	const drawBack = c => { if (c.d0 != null && S().rollDraw !== c.d0) setRollDraw(c.d0); };
 	const undoKey = { say: "press Cmd+Z", act: u => u.key("z", { cmd: true }) };
 	const blur = () => document.activeElement?.blur?.();
 	const confirmIfAsked = async u => { if (await until(dlgShown, 1200)) u.click($1("#dlg .danger") || dlgButton("Cancel")); };
@@ -556,13 +560,16 @@ const MmJourneys = (() => {
 	const undoUntil = async (u, done, n = 6) => { for (let i = 0; i < n && !done(); i++) { blur(); u.key("z", { cmd: true }); await until(done, 4000); } };
 	const pat0 = () => JSON.stringify(patDoc()?.tracks);
 	const roll = (t, s, m = {}) => async u => { const p = rollCell(t, s); u.click(p.c, m, p.fx, p.fy); };
+	/* B taps the tempo on every workspace but Sequence, where it is the piano roll's Draw (Radek 2026-10-10;
+	   mm-keys-tap-tempo-shift: Shift+B there): tapped on Mix, Draw left as it was */
 	const tapTempo = {
 		name: "mm-keys-tap-tempo",
 		steps: [
-			{ say: "tap B five times, about 0.5 s apart (T is a black key on the Monomachine Editor)", act: async (u, c) => { c.b0 = machine().tempo; blur(); const at = []; for (let i = 0; i < 5; i++) { at.push(performance.now()); u.key("b"); await sleep(500); } c.want = Math.round(60000 / ((at[4] - at[0]) / 4) * 10) / 10; c.note = c.want + " BPM"; },
-				screen: c => ok(Math.abs(S().bpm - c.want) <= 1.5, "BPM " + S().bpm + ", want " + c.want), machine: c => ok(Math.abs(machine().tempo - c.want) <= 1.5, "tempo " + machine().tempo + ", want " + c.want), within: 8000 }
+			go("mix"),
+			{ say: "tap B five times, about 0.5 s apart (T is a black key on the Monomachine Editor): the tempo follows, Draw stays as it was", act: async (u, c) => { c.b0 = machine().tempo; c.d0 = S().rollDraw; blur(); const at = []; for (let i = 0; i < 5; i++) { at.push(performance.now()); u.key("b"); await sleep(500); } c.want = Math.round(60000 / ((at[4] - at[0]) / 4) * 10) / 10; c.note = c.want + " BPM"; },
+				screen: c => ok(Math.abs(S().bpm - c.want) <= 1.5 && S().rollDraw === c.d0, "BPM " + S().bpm + ", want " + c.want + ", Draw " + S().rollDraw), machine: c => ok(Math.abs(machine().tempo - c.want) <= 1.5, "tempo " + machine().tempo + ", want " + c.want), within: 8000 }
 		],
-		async tidy(u, c) { if (c.b0 != null) { const d = c.b0 > machine().tempo ? -1 : 1; await u.drag("#bpm", [[0, d * 2 * (c.b0 - machine().tempo)]]); } }
+		async tidy(u, c) { if (c.b0 != null) { const d = c.b0 > machine().tempo ? -1 : 1; await u.drag("#bpm", [[0, d * 2 * (c.b0 - machine().tempo)]]); } if (c.d0 != null && S().rollDraw !== c.d0) setRollDraw(c.d0); }
 	};
 	const queue = {
 		name: "mm-seq-queue-while-playing",
@@ -660,7 +667,9 @@ const MmJourneys = (() => {
 				if (S().stepSel) clearSel(); const p = rollCell(0, c.s); u.rightClick(p.c, {}, p.fx, p.fy); await sleep(150); u.click('#deskmenu [data-mid="step-fill-2"]'); },
 				machine: c => { const want = []; for (let s = c.s; s < S().len; s += 2) if (!S().tracks[0].steps[s]?.off) want.push(s); return ok(want.every(s => trigsOf(0).includes(s)), "notes " + trigsOf(0).join(",")); }, within: 15000 },
 			{ ...undoKey, act: u => { blur(); u.key("z", { cmd: true }); }, machine: c => ok(same(trigsOf(0), c.t0), "notes " + trigsOf(0).join(",")), within: 15000 }
-		]
+		],
+		/* the right-click selected the step (the Machinedrum's md-seq-fill-every clears it too) */
+		async tidy() { if (S().stepSel) clearSel(); }
 	};
 	const rotate = {
 		name: "mm-seq-rotate",
@@ -675,7 +684,8 @@ const MmJourneys = (() => {
 		name: "mm-seq-paste-many",
 		steps: [
 			go("seq"),
-			{ say: "pick a track with notes and press Cmd+C", act: async (u, c) => { c.a = [0, 1, 2, 3, 4, 5].find(t => trigsOf(t).length) ?? 0; c.bs = [0, 1, 2, 3, 4, 5].filter(t => t !== c.a && !same(trigsOf(t), trigsOf(c.a))).slice(0, 2); c.b0 = c.bs.map(trigsOf); c.ta = trigsOf(c.a); u.click(rail(c.a)); await sleep(200); blur(); u.key("c", { cmd: true }); } },
+			/* no step selected: Cmd+C copies the page (with a selection it copies the selected steps) */
+			{ say: "pick a track with notes and press Cmd+C (no step selected: the page)", act: async (u, c) => { if (S().stepSel) clearSel(); c.a = [0, 1, 2, 3, 4, 5].find(t => trigsOf(t).length) ?? 0; c.bs = [0, 1, 2, 3, 4, 5].filter(t => t !== c.a && !same(trigsOf(t), trigsOf(c.a))).slice(0, 2); c.b0 = c.bs.map(trigsOf); c.ta = trigsOf(c.a); u.click(rail(c.a)); await sleep(200); blur(); u.key("c", { cmd: true }); }, screen: () => ok(/COPY PAGE/.test($1("#toast")?.textContent || ""), "toast " + $1("#toast")?.textContent) },
 			{ say: "Shift-click two other headers: marked", act: async (u, c) => { for (const t of c.bs) { u.click(rail(t), { shift: true }); await sleep(150); } }, screen: c => ok(c.bs.every(t => $1(`#rail .th[data-sel="${t}"]`)?.classList.contains("marked")), "not marked") },
 			{ say: "press Cmd+V: both get the notes", act: u => { blur(); u.key("v", { cmd: true }); }, machine: c => ok(c.bs.every(t => same(trigsOf(t), c.ta)), c.bs.map(t => `T${t + 1} ${trigsOf(t).join(",")}`).join("; ")), within: 20000 },
 			{ ...undoKey, say: "press Cmd+Z once: both are back", act: u => { blur(); u.key("z", { cmd: true }); }, machine: c => ok(c.bs.every((t, k) => same(trigsOf(t), c.b0[k])), c.bs.map(t => `T${t + 1} ${trigsOf(t).join(",")}`).join("; ")), within: 20000 }
@@ -688,7 +698,9 @@ const MmJourneys = (() => {
 			go("seq"), sel(0),
 			{ say: "press Alt+Space: live recording, playing (pressed again when the plug-in says the panel is busy: an earlier journey's dumps on their way, as mm-seq-grid-record)", act: async (u, c) => { c.n0 = trigsOf(0).length; c.p0 = pat0(); blur(); results.length = 0; u.key(" ", { alt: true }, "Space");
 				for (let i = 0; i < 5 && await until(() => results.some(r => r.op === "record" && r.ok === false), 1500); i++) { c.note = "the plug-in said the panel was busy (SYSEX RECV); pressed again"; results.length = 0; await sleep(1500); blur(); u.key(" ", { alt: true }, "Space"); }
-				await sleep(400); if (!S().playing) u.click("#play"); },
+				/* RECORD held + PLAY: the machine plays by itself. No PLAY of the journey's own: pressed while the chord
+				   still waited for a busy panel (an earlier journey's dumps) it reached the machine around the chord and
+				   left it playing with RECORD off (the 0.5.0 gate) */ },
 				machine: () => ok(tele.last?.record === "live" && tele.last?.playing, `record ${tele.last?.record}, playing ${tele.last?.playing}`), within: 8000 },
 			{ say: "play A, S, D on the keyboard while it records: the machine records notes", act: async u => { for (const k of ["a", "s", "d"]) { u.key(k); await sleep(450); } },
 				machine: c => ok(pat0() !== c.p0, "pattern unchanged (" + c.n0 + " notes)"), within: 15000 },
@@ -755,12 +767,17 @@ const MmJourneys = (() => {
 			{ say: "click M/S off on the Sequence rail", act: async u => { u.click(tab("seq")); await sleep(300); u.click("#allon"); }, machine: c => ok(same(synthMutes(), c.m0), "machine mutes " + synthMutes()) }
 		]
 	};
+	/* a MIDI track's mute is the MUTE window's keys: refused while the panel takes an earlier journey's dumps on SYSEX
+	   RECV ("The panel is busy"); clicked again then, as mm-seq-first-beat's PLAY (B-014) */
+	const clickMidiMute = async (u, c) => { results.length = 0; u.click('[data-gmute="6"]');
+		for (let i = 0; i < 5 && await until(() => results.some(r => r.op === "muteMidi" && r.ok === false && /busy/.test(r.errors?.[0] || "")), 1500); i++) {
+			c.note = "the plug-in said the panel was busy (SYSEX RECV); clicked again"; results.length = 0; await sleep(1500); u.click('[data-gmute="6"]'); } };
 	const midiMutes = {
 		name: "mm-perform-midi-mutes",
 		steps: [
 			go("perform"),
-			{ say: "click M1 in the Mutes card: MIDI track 1 is muted (the MUTE window)", act: (u, c) => { c.m0 = machine().mutes?.midi ?? 0; u.click('[data-gmute="6"]'); }, machine: c => ok(((machine().mutes?.midi ?? 0) & 1) !== (c.m0 & 1), "MIDI mutes " + machine().mutes?.midi), screen: c => ok(pressed('[data-gmute="6"]') === !!(c.m0 & 1), "key " + $1('[data-gmute="6"]')?.getAttribute("aria-pressed")), within: 10000 },
-			{ say: "click it again", act: u => u.click('[data-gmute="6"]'), machine: c => ok(((machine().mutes?.midi ?? 0) & 1) === (c.m0 & 1), "MIDI mutes " + machine().mutes?.midi), within: 10000 }
+			{ say: "click M1 in the Mutes card: MIDI track 1 is muted (the MUTE window; clicked again when the plug-in says the panel is busy)", act: async (u, c) => { c.m0 = machine().mutes?.midi ?? 0; await clickMidiMute(u, c); }, machine: c => ok(((machine().mutes?.midi ?? 0) & 1) !== (c.m0 & 1), "MIDI mutes " + machine().mutes?.midi), screen: c => ok(pressed('[data-gmute="6"]') === !!(c.m0 & 1), "key " + $1('[data-gmute="6"]')?.getAttribute("aria-pressed")), within: 10000 },
+			{ say: "click it again", act: clickMidiMute, machine: c => ok(((machine().mutes?.midi ?? 0) & 1) === (c.m0 & 1), "MIDI mutes " + machine().mutes?.midi), within: 10000 }
 		]
 	};
 	const joyAssign = {
@@ -915,7 +932,7 @@ const MmJourneys = (() => {
 	const rollPaint = {
 		name: "mm-seq-roll-paint",
 		steps: [
-			go("seq"),
+			go("seq"), drawOn,
 			{ say: "pick a synth track with four empty steps in a row", act: (u, c) => { c.t = [0, 1, 2, 3, 4, 5].find(t => freeRun(t)); if (c.t == null) throw new Error("no synth track has four free steps in a row"); if (S().side === "midi") u.click('[data-side="int"]'); u.click(rail(c.t)); }, screen: c => ok(S().sel === c.t, "selected " + S().sel) },
 			{ say: "press an empty roll cell and drag sideways over three more steps: four notes at that pitch", act: async (u, c) => {
 				c.run = freeRun(c.t); c.n = rollCell(c.t, c.run[0]).n; c.t0 = trigsOf(c.t); await dragRoll(u, c.t, c.run); },
@@ -928,7 +945,7 @@ const MmJourneys = (() => {
 			{ say: "Cmd+Z: the erase was one undo step, all four are back", act: u => { blur(); u.key("z", { cmd: true }); }, machine: c => ok(c.run.every(s => trigsOf(c.t).includes(s)), "pattern trigs " + trigsOf(c.t).join(",")), within: 15000 },
 			{ say: "Cmd+Z: the paint was one undo step, the track is as before", act: u => { blur(); u.key("z", { cmd: true }); }, machine: c => ok(same(trigsOf(c.t), c.t0), "pattern trigs " + trigsOf(c.t).join(",") + ", was " + c.t0.join(",")), within: 15000 }
 		],
-		async tidy(u, c) { if (c.t0 && !same(trigsOf(c.t), c.t0)) await undoUntil(u, () => same(trigsOf(c.t), c.t0)); }
+		async tidy(u, c) { if (c.t0 && !same(trigsOf(c.t), c.t0)) await undoUntil(u, () => same(trigsOf(c.t), c.t0)); drawBack(c); }
 	};
 	/* ---------- 0.5 slice 3: the piano roll's note lengths, draw and select (I-007, I-010) ---------- */
 	const offsOf = t => (t < 6 ? patDoc()?.tracks[t]?.noteOff : patDoc()?.midiTracks?.[t - 6]?.noteOff || []).slice().sort((a, b) => a - b);
@@ -1044,7 +1061,7 @@ const MmJourneys = (() => {
 	const stepMenuJ = {
 		name: "mm-seq-step-menu",
 		steps: [
-			go("seq"), sel(0),
+			go("seq"), sel(0), drawOn,
 			{ say: "click an empty roll cell: a note to work on", act: async (u, c) => {
 				c.t0 = trigsOf(c.t); c.l0 = slidesOf(c.t); c.n = rollCell(c.t, 0).n;
 				const free = freeSteps(c.t, 2, 0, c.n); if (free.length < 2) throw new Error("no two free steps"); [c.s, c.d] = free.slice().sort((a, b) => b - a);
@@ -1061,7 +1078,7 @@ const MmJourneys = (() => {
 			{ say: "press Escape: no selection; Cmd+Z three times (paste, slide, note): the track as before", act: async (u, c) => { blur(); u.key("Escape"); await sleep(150); await undoUntil(u, () => same(trigsOf(c.t), c.t0) && same(slidesOf(c.t), c.l0), 4); },
 				machine: c => ok(same(trigsOf(c.t), c.t0) && same(slidesOf(c.t), c.l0), `pattern ${trigsOf(c.t).join(",")}, slides ${slidesOf(c.t).join(",")}`), within: 15000 }
 		],
-		async tidy(u, c) { if (!$1("#deskmenu")?.hidden) closeDeskMenu(); if (S().stepSel) clearSel(); if (c.t0 && !same(trigsOf(c.t), c.t0)) await undoUntil(u, () => same(trigsOf(c.t), c.t0)); }
+		async tidy(u, c) { if (!$1("#deskmenu")?.hidden) closeDeskMenu(); if (S().stepSel) clearSel(); if (c.t0 && !same(trigsOf(c.t), c.t0)) await undoUntil(u, () => same(trigsOf(c.t), c.t0)); drawBack(c); }
 	};
 	/* the Machinedrum's md-seq-copy-paste-buttons: one note copied and pasted with the top bar's Copy, Paste and Clr */
 	const buttonsCopyPaste = {

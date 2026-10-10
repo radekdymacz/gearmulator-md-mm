@@ -296,11 +296,11 @@ namespace mmDesk
 			pushDump(ref, ed::encodeMmGlobal(accept));
 			return ok("TRANSPORT ACCEPT waits for SYSEX RECV (SEND in the pattern field). Press PLAY again once it is in.");
 		}
-		if(m_reactivateGlobal && m_curGlobal >= 0)
+		if(m_reactivateGlobal && activeSlot() >= 0)
 		{
 			// HW MIDI: the active global was written while the machine was on SYSEX RECV, which applies
 			// it only when made active again (P7): now, before MIDI Start
-			m_port.sendSysex(ed::mmSetActiveGlobal(static_cast<uint8_t>(m_curGlobal & 7)));
+			sendActiveGlobal(activeSlot() & 7);
 			m_reactivateGlobal = false;
 		}
 		if(!pressKeys({Key::Play}))
@@ -362,10 +362,12 @@ namespace mmDesk
 	Outcome MmMachine::cmdGlobalSlot(const Value& _m, const Documents&)
 	{
 		const auto slot = static_cast<uint8_t>(num(_m, "slot") & 7);
+		m_chosenGlobal = slot;
+		m_chosenSentMs = -1;
 		if(m_profile.wire || m_recv.state() == RecvSession::State::Idle)
-			m_port.sendSysex(ed::mmSetActiveGlobal(slot));
+			sendActiveGlobal(slot);
 		else
-			m_activateGlobal = slot;
+			m_activateGlobal = slot;	// over any re-activation of the old active global still waiting
 		m_port.sendSysex(ed::mmStatusRequest(ed::MmStatus::Global));
 		if(!known({Kind::Global, slot}))
 			request({Kind::Global, slot}, true);
