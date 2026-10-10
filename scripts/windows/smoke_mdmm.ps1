@@ -1,5 +1,5 @@
 # Starts each standalone of the Windows package, and each VST3 in a minimal host (scripts/vst3EditorHost, when -Vst3Host
-# is given), (elektron-windows.yml's Gearmulator-Elektron-Windows-x64.zip,
+# is given), (mdmm-editors-windows.yml's Gearmulator-Elektron-Windows-x64.zip,
 # unpacked) with no ROM and a scratch data root (GEARMULATOR_DATA_ROOT), and checks what can be checked without a person (doc/release/WINDOWS.md):
 #   - the app is still running after a while;
 #   - its page runs in WebView2 (msedgewebview2.exe processes with the editors' profile folder), not in the

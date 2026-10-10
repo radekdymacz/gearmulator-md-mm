@@ -8,9 +8,6 @@ name: MD/MM Editors
 # The packages stay as this run's artifacts (macos-mdmm-universal, windows-mdmm, linux-mdmm, 14 days). A tag's
 # release (mdmm-editors-release.yml) takes them from the successful run of the tag's commit instead of building
 # again, and calls this workflow only when there is none.
-#
-# Upstream's elektron-macos.yml and elektron-windows.yml still run on their own triggers (main, release/md-mm-*);
-# nothing of ours calls them (doc/modern-ux/UPSTREAM.md).
 
 on:
   workflow_call:

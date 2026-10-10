@@ -1,5 +1,5 @@
 #!/bin/bash
-# Splits elektron-windows.yml's package (Gearmulator-Elektron-Windows-x64.zip: both standalones, both VST3
+# Splits mdmm-editors-windows.yml's package (Gearmulator-Elektron-Windows-x64.zip: both standalones, both VST3
 # bundles, LICENSE.md) into one zip per machine for the release (mdmm-editors-release.yml), each with a README and
 # the WebView2 loader's licence.
 # Runs on Linux (unzip, zip).

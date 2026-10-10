@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## This project: Machinedrum Editor + Monomachine Editor
 
-`origin` (radekdymacz/mdmm, default branch `main`) started as a fork of joelanders' Machinedrum/Monomachine emulation (joelanders/gearmulator-md-mm), which is built on dsp56300/gearmulator. Since 0.5 it stands alone (doc/release/PLAN-0.5.md, doc/ROADMAP.md D3-D5): the DSP56300 emulator (`source/dsp56300`), the 68k core (`source/mc68k`), JUCE (`source/JUCE`) and RmlUi (`source/3rdparty/RmlUi`) are plain folders we own (each README says where it came from); upstream fixes are copied one commit at a time, never merged. The product is two editors (standalone, VST3, AU on macOS; Windows and Linux builds exist, not tested) that run the user's own Elektron firmware behind one web page. ROMs are never committed. The "Upstream guide" below is upstream's, for the shared code.
+`origin` (radekdymacz/mdmm, default branch `main`) started as a fork of joelanders' Machinedrum/Monomachine emulation (joelanders/gearmulator-md-mm), which is built on dsp56300/gearmulator. Since 0.5 it stands alone (doc/release/PLAN-0.5.md, doc/ROADMAP.md D3-D5): the DSP56300 emulator (`source/dsp56300`), the 68k core (`source/mc68k`), JUCE (`source/JUCE`) and RmlUi (`source/3rdparty/RmlUi`) are plain folders we own (each README says where it came from); upstream fixes are copied one commit at a time, never merged. The product is two editors (standalone, VST3, AU on macOS; Windows and Linux builds exist, not tested) that run the user's own Elektron firmware behind one web page. ROMs are never committed. 
 
 - **Read first:** doc/modern-ux/FOUNDATION.md (the layers; how to add an engine, document kind, command, workspace or dialog; "Build and check"), doc/modern-ux/DESIGN-P6-simple-core.md (why), doc/modern-ux/UPSTREAM.md (history: how the fork lived on top of upstream until 0.5).
 - **Where:** source/elektron/md/: elektronData, deskCore, deskHost, deskWire, mdDesk, mmDesk, mdDataLink, mdmmUpdate, mdLib (the emulated machines), mdJucePlugin (plug-ins, bridge, skins/ page files), mdLibTest, upstreamTests (our tests for his bridge, networkLib, MCP server and synthLib). Version: `MDMM_EDITOR_VERSION` in mdJucePlugin/mdmmPlugins.cmake; product names: scripts/mdmm-product.env.
@@ -14,67 +14,35 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - **Emulation CPU:** the plan and findings are in doc/modern-ux/RESEARCH-emulation-cpu.md; the speed-ups have one tester switch (`GEARMULATOR_MDMM_SPEEDUPS=0`, or Developer > Speed-ups off): doc/md_mm_performance_diagnostics.md, "Switches for testers".
 - **Releases:** `release/0.x.y` branches are merged into `main`; run `scripts/mdmm-local-gate.sh` green before tagging; the tag `mdmm-v0.x.y` runs .github/workflows/mdmm-editors-release.yml; notes in doc/release/vX.Y.Z.md; bugs and ideas in doc/release/BUGS.md and IDEAS.md (testers are never named).
 
-## Upstream guide (shared emulation, JUCE and CMake code)
+## Shared code (emulation, JUCE and CMake)
 
-Everything from here to the Community section is upstream's: his Windows setup included. His Jenkins files and remotes are gone (0.5).
+Since 0.5 the tree holds only the two editors and what they need; the other synths, VST2/CLAP/LV2, the consoles
+and upstream's deploy scripts and workflows are gone (their history is in the tag `pre-cleanup-0.5`).
 
-## Project Overview
-
-Gearmulator is a low-level IC emulator that recreates classic virtual analog synthesizers (Access Virus, Waldorf microQ/XT, Clavia Nord Lead 2x, Roland JP-8000, Ensoniq VFX/TS-10) by emulating original DSP56300 and MC68K processors and running authentic firmware ROMs as audio plugins (FST, VST3, AU, CLAP, LV2).
-
-## Build Commands
-
-**Current dev setup uses `temp/cmake_vs26` with Visual Studio 2026.**
-
-```bash
-# Configure (Windows)
-cmake . -B temp/cmake_vs26 -G "Visual Studio 17 2022"
-
-# Build (use Debug for quick compile checks, Release for full optimization)
-cmake --build temp/cmake_vs26 --config Debug -j 4
-cmake --build temp/cmake_vs26 --config Release -j 4
-
-# Package
-cd temp/cmake_vs26 && cpack -G ZIP
-
-# Run tests
-ctest -C Release
-```
-
-Per-synth CMake flags: `-Dgearmulator_SYNTH_OSIRUS=ON`, `_OSTIRUS`, `_VAVRA`, `_XENIA`, `_NODALRED2X`, `_JE8086`, `_VFX`, `_TS10`. Plugin format flags: `gearmulator_BUILD_JUCEPLUGIN`, `_CLAP`, `_LV2`, `gearmulator_BUILD_FX_PLUGIN`.
-
-Convenience scripts: `build_win64.bat`, `build_linux.sh`, `build_mac.sh`.
-
-## Architecture
-
-**Emulation stack:** DSP56300 emulator (`source/dsp56300/`, JIT via asmjit) + MC68K emulator (`source/mc68k/`, Musashi) form the core. Each synth has a device library that loads firmware ROMs, initializes processor memory, and handles MIDI/audio via HDI08.
-
-**Per-synth pattern:**
-| Emulator | Hardware | Device Lib | Plugin Dir |
-|---|---|---|---|
-| Osirus | Virus A/B/C | `virusLib/` | `osirusJucePlugin/` |
-| OsTIrus | Virus TI/TI2/Snow | `virusLib/` | `osTIrusJucePlugin/` |
-| Vavra | Waldorf microQ | `mqLib/` | `mqJucePlugin/` |
-| Xenia | Waldorf MW II/XT | `xtLib/` | `xtJucePlugin/` |
-| Nodal Red 2x | Nord Lead/Rack 2x | `nord/n2x/` | `nord/n2x/n2xJucePlugin/` |
-| JE-8086 | Roland JP-8000 | `ronaldo/je8086/` | `ronaldo/je8086/jeJucePlugin/` |
+**Emulation stack:** DSP56300 emulator (`source/dsp56300/`, JIT via asmjit) + ColdFire/68k core (`source/mc68k/`,
+Musashi). `source/elektron/md/mdLib` loads the firmware ROM, sets up processor memory and handles MIDI and audio
+via HDI08.
 
 **Shared libraries:**
 - `synthLib/` — Device base class, DAC, resampling, MIDI routing
 - `jucePluginLib/` — Parameter system, MIDI Learn, Patch Manager, program change routing
 - `jucePluginEditorLib/` — Plugin editor UI, parameter overlays, settings pages
-- `juceRmlUi/` — RmlUi integration (HTML/CSS-like UI framework)
+- `juceRmlUi/`, `juceRmlPlugin/`, `juceUiLib/` — RmlUi integration (HTML/CSS-like UI framework)
 - `baseLib/` — Filesystem, logging, events, binary streams
 - `hardwareLib/` — LCD, buttons, encoders abstractions
+- `bridge/`, `networkLib/`, `ptypes/` — upstream's remote-DSP bridge (still linked by jucePluginLib)
+- `pluginTester/`, `midiLearnTest/` — plug-in host and MIDI-learn tests
 
-**Plugin build flow:** `createJucePluginWithFX()` macro in `source/juce.cmake` → links device lib → Processor inherits `synthLib::Plugin` wrapping `synthLib::Device` → skins via RML/RCSS compiled into binary data.
+**Plugin build flow:** `createJucePlugin()` in `source/juce.cmake` (VST3, AU, Standalone), called from
+`source/elektron/md/mdJucePlugin/CMakeLists.txt` → Processor inherits `synthLib::Plugin` wrapping
+`synthLib::Device` → skins compiled into binary data.
 
 ## Code Conventions
 
 - **Tabs for indentation** (tab size 4, UseTab: Always), 120 char column limit
 - **Braces on new lines** for all constructs; namespace content indented
 - **Naming:** PascalCase classes, camelCase functions/vars, `m_` member prefix, `_` parameter prefix (`void func(int _param)`)
-- **Namespaces:** camelCase (`virusLib`, `synthLib`, `dsp56k`)
+- **Namespaces:** camelCase (`mdLib`, `synthLib`, `dsp56k`)
 - **Early returns** preferred over deep nesting
 - `.clang-format` in `source/` directory
 - C++17 required
@@ -91,26 +59,24 @@ Convenience scripts: `build_win64.bat`, `build_linux.sh`, `build_mac.sh`.
 - `base.cmake` — Compiler flags, platform-specific optimization settings
 - `source/juce.cmake` — JUCE plugin configuration and multi-format support
 - `source/skins.cmake` — Skin asset compilation
-- `.github/workflows/cmake.yml` — Public CI (GitHub Actions)
+- `.github/workflows/mdmm-*.yml` — CI (GitHub Actions), doc/release/CI.md
 
 ## Where to Make Changes
 
-1. **Device-level changes** → `<synth>Lib/` (e.g., `virusLib/device.cpp`)
-2. **Plugin UI** → `<synth>JucePlugin/` (RML/RCSS for layout, processor for logic)
+1. **The machines** → `source/elektron/md/mdLib/`
+2. **Plugin and page** → `source/elektron/md/mdJucePlugin/` (processor, skins/ page files), the desk libraries beside it
 3. **Shared plugin infra** → `jucePluginLib/` or `synthLib/`
 4. **DSP emulator** → `dsp56300/source/dsp56kEmu/`
-5. **New parameter** → update `parameterDescriptions_*.json`, map MIDI in processor, update skin RML
 
 ## Critical Implementation Details
 
 - **State save/restore:** Device `getState()` MUST append to `_state` vector with `insert()`, never `assign()` — the Plugin layer prepends version headers
 - **RmlUi threading:** DOM modifications MUST happen on JUCE message thread. Use `juce::MessageManager::callAsync` from audio/MIDI callbacks
 - **callAsync safety:** Use static instance-set pattern to guard lambdas against use-after-free
-- **Voice expansion (Xenia/Vavra):** Multiple DSP56300 instances connected via ESSI1 ring bus; main DSP is last (`g_mainDspIdx = g_dspCount - 1`)
 
 ## Detailed Reference
 
-See `.github/copilot-instructions.md` for comprehensive documentation on MIDI Learn, Patch Manager, program change routing, Jenkins CI details, YouTrack workflow, release process, and voice expansion internals.
+MIDI Learn: doc/midilearn/. Upstream's long AI notes (`.github/copilot-instructions.md`: Jenkins, YouTrack, the other synths) were deleted in 0.5; they are in the tag `pre-cleanup-0.5`.
 
 ## Development lifecycle (since 0.4.0; details: doc/release/CI.md)
 

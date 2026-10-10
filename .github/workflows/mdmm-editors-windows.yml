@@ -1,10 +1,10 @@
 name: MD/MM Editors Windows x64
 
-# This fork's Windows build and start test (doc/release/WINDOWS.md, doc/modern-ux/UPSTREAM.md: a workflow of ours;
-# upstream's elektron-windows.yml stays as it is and is no longer called). Called by mdmm-editors.yml on every push
+# This fork's Windows build and start test (doc/release/WINDOWS.md; upstream's elektron-windows.yml was deleted
+# in 0.5). Called by mdmm-editors.yml on every push
 # (and by mdmm-editors-release.yml when no tested build of the tag's commit exists).
 #
-#   build     the package, once: upstream's scripts/windows/build_mdmm.ps1 as elektron-windows.yml runs it (Release,
+#   build     the package, once: scripts/windows/build_mdmm.ps1 (Release,
 #             /GL and /LTCG only when `ltcg` is set, i.e. for a tag's release; a push builds with _CL_=/GL-,
 #             Ninja Multi-Config, sccache), products only: the two standalones, the two VST3s and
 #             pluginTester, which then loads each VST3 (audio buses, automation smoke) before the zip is made. Its

@@ -1,8 +1,7 @@
 # Windows x64
 
 The editors' Windows build: `.github/workflows/mdmm-editors-windows.yml` (ours, called by `mdmm-editors.yml` on every
-push) runs upstream's `scripts/windows/build_mdmm.ps1` (unchanged; upstream's `elektron-windows.yml` runs it the same
-way) to build and package both machines' standalones and VST3s once, with sccache, starts what is in the package and
+push) runs `scripts/windows/build_mdmm.ps1` to build and package both machines' standalones and VST3s once, with sccache, starts what is in the package and
 runs pluginval on it; the unit tests run beside it in a job of their own, compiled without `/GL` (their links took
 most of the old 43 minutes). `scripts/windows/package_mdmm_editors.sh` splits that tested package into one zip per
 machine for a release (`mdmm-editors-release.yml`).
