@@ -184,6 +184,7 @@ namespace dsp56k
 
 		if(interrupt >= Vba_End)
 		{
+			m_pollCycleMarker = 0;
 			m_customInterrupts[interrupt - Vba_End]();
 
 			{
@@ -227,6 +228,7 @@ namespace dsp56k
 
 	void DSP::execInterrupt(const TWord vba)
 	{
+		m_pollCycleMarker = 0;	// a turn that an interrupt broke into is not straight (fastForwardPollCycle)
 		pcCurrentInstruction = vba;
 		m_processingMode = FastInterrupt;
 
@@ -403,6 +405,40 @@ namespace dsp56k
 
 		m_instructions += turns * _instructionsPerTurn;
 		m_cycles += turns * _cyclesPerTurn;
+		m_fastForwardedTurns += turns;
+	}
+
+	void DSP::fastForwardPollCycle(const JitPollCycle& _cycle) noexcept
+	{
+		if(!m_idleFastForward || !m_fastForwardCycleLimit || !_cycle.instructions || !_cycle.cycles)
+			return;
+
+		if(m_interruptFunc != m_execPeripheralsFunc || m_processingMode != Default)
+			return;
+
+		// the turn that ended was straight: the marker, and the counters since the head entered equal one turn's
+		if(m_pollCycleMarker != _cycle.marker(_cycle.head))
+			return;
+		if(m_instructions - m_pollCycleHeadInstructions != _cycle.instructions || m_cycles - m_pollCycleHeadCycles != _cycle.cycles)
+			return;
+
+		const auto turnsBefore = [](const uint64_t _now, const uint64_t _target, const uint64_t _perTurn) -> uint64_t
+		{
+			return _target > _now ? (_target - _now - 1) / _perTurn : 0;
+		};
+
+		const auto* p = perif[0];
+
+		uint64_t turns = turnsBefore(m_instructions, p->getTargetClock(), _cycle.instructions);
+		turns = std::min(turns, turnsBefore(m_cycles, m_fastForwardCycleLimit, _cycle.cycles));
+		if(p->hasCycleDeadline())
+			turns = std::min(turns, turnsBefore(m_cycles, p->getTargetCycle(), _cycle.cycles));
+
+		if(!turns)
+			return;
+
+		m_instructions += turns * _cycle.instructions;
+		m_cycles += turns * _cycle.cycles;
 		m_fastForwardedTurns += turns;
 	}
 

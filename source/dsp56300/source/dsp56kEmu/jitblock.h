@@ -29,6 +29,7 @@ namespace dsp56k
 {
 	struct JitBlockInfo;
 	struct JitConfig;
+	struct JitPollCycle;
 
 	class DSP;
 	class JitBlockChain;
@@ -46,7 +47,8 @@ namespace dsp56k
 
 		bool isNopLoopBody(const JitBlockInfo& _info, TWord _pc, bool _isFastInterrupt) const;
 		bool isIdlePollLoop(const JitBlockInfo& _info, TWord _pc, bool _isFastInterrupt, const std::set<TWord>& _loopEnds) const;
-		void emitFastForwardGate(const asmjit::Label& _skip, uint64_t _cyclesAhead);
+		bool findPollCycle(JitPollCycle& _cycle, TWord _pc, const std::map<TWord, TWord>& _loopStarts, const std::set<TWord>& _loopEnds) const;
+		void emitFastForwardGate(const asmjit::Label& _skip, uint64_t _cyclesAhead, uint64_t _instructionsAhead = 0);
 		bool emit(JitBlockRuntimeData& _rt, JitBlockChain* _chain, TWord _pc, const PagedArray<JitCacheEntry>& _cache, const std::set<TWord>& _volatileP, const std::map<TWord, TWord>& _loopStarts, const std::set<TWord>& _loopEnds, bool _profilingSupport);
 
 		JitEmitter& asm_() { return m_asm; }

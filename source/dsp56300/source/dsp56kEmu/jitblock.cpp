@@ -1,4 +1,6 @@
 #include "dsp.h"
+
+#include <algorithm>
 #include "interrupts.h"
 #include "jitemitter.h"
 #include "jitblock.h"
@@ -113,15 +115,109 @@ namespace dsp56k
 				return false;	// a write, or Y space
 			return isDmaRegister(getFieldValue<Movep_Spp, Field_pppppp>(_op) + 0xffffc0);
 		}
+
+		// a read of one of the host's pure registers (JitConfig::pollLoopPureReads), by movep or by a move from an
+		// absolute address
+		bool isPureRegisterRead(const Instruction _instA, const Instruction _instB, const TWord _opA, const TWord _opB, const std::vector<TWord>& _pure)
+		{
+			if(_pure.empty() || _instB != Invalid)
+				return false;
+
+			TWord addr;
+			switch(_instA)
+			{
+			case Movep_Spp:
+				if(getFieldValue<Movep_Spp, Field_W>(_opA) || getFieldValue<Movep_Spp, Field_s>(_opA))
+					return false;	// a write, or Y space
+				addr = getFieldValue<Movep_Spp, Field_pppppp>(_opA) + 0xffffc0;
+				break;
+			case Movep_SXqq:
+				if(getFieldValue<Movep_SXqq, Field_W>(_opA))
+					return false;	// a write
+				addr = getFieldValue<Movep_SXqq, Field_q, Field_qqqqq>(_opA) + 0xffff80;
+				break;
+			case Movex_ea:
+				if(!getFieldValue<Movex_ea, Field_W>(_opA) || getFieldValue<Movex_ea, Field_MMM, Field_RRR>(_opA) != MMMRRR_AbsAddr)
+					return false;	// a write, or not an absolute address
+				addr = _opB;
+				break;
+			default:
+				return false;
+			}
+			return std::find(_pure.begin(), _pure.end(), addr) != _pure.end();
+		}
+
+		// an op of a poll loop other than its branches
+		bool isPollLoopBodyOp(const Instruction _instA, const Instruction _instB, const TWord _opA, const TWord _opB, const std::vector<TWord>& _pure)
+		{
+			if(_instA == Nop)
+				return true;
+			if(isPureRegisterRead(_instA, _instB, _opA, _opB, _pure))
+				return true;
+			if(isDmaRegisterRead(_instA, _opA) || isPollLoopImmediateAlu(_instA))
+				return _instB == Invalid;
+			if(isPollLoopAlu(_instA))
+				return _instB == Move_Nop || _instB == Ifcc || _instB == Ifcc_U;
+			return false;
+		}
+
+		// a branch that may end a poll loop or leave it: to a fixed address, on a condition code or a DMA register bit
+		bool isPollLoopConditionalBranch(const Instruction _instA, const Instruction _instB, const TWord _opA)
+		{
+			if(_instB != Invalid)
+				return false;
+			return _instA == Bcc_xxxx || _instA == Bcc_xxx || _instA == Jcc_xxx || isDmaBitTestBranch(_instA, _opA);
+		}
+
+		bool isPollLoopJump(const Instruction _instA, const Instruction _instB)
+		{
+			return _instB == Invalid && (_instA == Bra_xxxx || _instA == Bra_xxx || _instA == Jmp_xxx);
+		}
+
+		RegisterMask notMask(const RegisterMask _m)
+		{
+			return static_cast<RegisterMask>(~static_cast<uint64_t>(_m));
+		}
+
+		// Track, over a turn, the registers read before the turn writes them: a turn repeats the one before only if
+		// none of those is written in the turn (then each carries a value from the turn before).
+		void trackPollLoopRegisters(RegisterMask& _carried, RegisterMask& _writtenSoFar, const Instruction _instA, const Instruction _instB, const TWord _opA)
+		{
+			auto written = RegisterMask::None;
+			auto read = RegisterMask::None;
+			if(_instA == Movep_Spp)
+				written = getRegisters(Movep_Spp, Field_dddddd, _opA);	// getRegisters() leaves out a movep's destination
+			else if(_instA == Movep_SXqq)
+				written = getRegisters(Movep_SXqq, Field_dddddd, _opA);
+			else
+				Opcodes::getRegisters(written, read, _opA, _instA, _instB);
+
+			_carried |= read & notMask(_writtenSoFar);
+			_writtenSoFar |= written;
+		}
+
+		void callFastForwardPollCycle(DSP* _dsp, const JitPollCycle* _cycle)
+		{
+			_dsp->fastForwardPollCycle(*_cycle);
+		}
 	}
 
-	void JitBlock::emitFastForwardGate(const asmjit::Label& _skip, const uint64_t _cyclesAhead)
+	void JitBlock::emitFastForwardGate(const asmjit::Label& _skip, const uint64_t _cyclesAhead, const uint64_t _instructionsAhead)
 	{
-		// Skip the call unless _cyclesAhead more cycles stay below the run's stop and the peripherals' cycle deadline.
+		// Skip the call unless _cyclesAhead more cycles stay below the run's stop and the peripherals' cycle deadline,
+		// and, when given, _instructionsAhead more instructions below the peripherals' instruction target.
 		// Signed compares: a limit of 0 (none published, or the fast-forward off) always skips.
 		const auto* periph = m_dsp.getPeriph(0);
 		const RegGP value(*this);
 		const RegGP horizon(*this);
+		if(_instructionsAhead)
+		{
+			mem().mov(r64(horizon), m_dsp.getInstructionCounter());
+			m_asm.add(r64(horizon), asmjit::Imm(_instructionsAhead));
+			mem().mov(r64(value), *reinterpret_cast<const uint64_t*>(periph->getTargetClockPtr()));
+			m_asm.cmp(r64(value), r64(horizon));
+			m_asm.jle(_skip);
+		}
 		mem().mov(r64(horizon), m_dsp.getCycles());
 		m_asm.add(r64(horizon), asmjit::Imm(_cyclesAhead));
 		mem().mov(r64(value), m_dsp.getFastForwardCycleLimit());
@@ -156,8 +252,6 @@ namespace dsp56k
 
 		const auto& opcodes = m_dsp.opcodes();
 
-		const auto notMask = [](const RegisterMask _m) { return static_cast<RegisterMask>(~static_cast<uint64_t>(_m)); };
-
 		auto writtenSoFar = RegisterMask::None;
 		auto carried = RegisterMask::None;
 
@@ -180,44 +274,150 @@ namespace dsp56k
 
 			if(last)
 			{
-				if(instB != Invalid)
-					return false;
-				if(instA != Bcc_xxxx && instA != Bcc_xxx && instA != Jcc_xxx && !isDmaBitTestBranch(instA, opA))
+				if(!isPollLoopConditionalBranch(instA, instB, opA))
 					return false;
 			}
-			else if(instA == Nop)
-			{
-			}
-			else if(isDmaRegisterRead(instA, opA) || isPollLoopImmediateAlu(instA))
-			{
-				if(instB != Invalid)
-					return false;
-			}
-			else if(isPollLoopAlu(instA))
-			{
-				if(instB != Move_Nop && instB != Ifcc && instB != Ifcc_U)
-					return false;
-			}
-			else
+			else if(!isPollLoopBodyOp(instA, instB, opA, opB, m_config.pollLoopPureReads))
 			{
 				return false;
 			}
 
-			auto written = RegisterMask::None;
-			auto read = RegisterMask::None;
-			if(instA == Movep_Spp)
-				written = getRegisters(Movep_Spp, Field_dddddd, opA);	// getRegisters() leaves out a movep's destination
-			else
-				Opcodes::getRegisters(written, read, opA, instA, instB);
-
-			carried |= read & notMask(writtenSoFar);
-			writtenSoFar |= written;
+			trackPollLoopRegisters(carried, writtenSoFar, instA, instB, opA);
 
 			q += len;
 		}
 
 		// the PC is the branch's; every other register written must not be read before it is written
 		return (carried & writtenSoFar & notMask(RegisterMask::PC)) == RegisterMask::None;
+	}
+
+	bool JitBlock::findPollCycle(JitPollCycle& _cycle, const TWord _pc, const std::map<TWord, TWord>& _loopStarts, const std::set<TWord>& _loopEnds) const
+	{
+		// A poll loop over several blocks that holds the block starting at _pc: from its head to a branch back to the
+		// head, ops as in isIdlePollLoop, and in between only conditional branches out of the loop (its exits). Found
+		// from the words in P memory now, the same way from each of its blocks; the blocks keep a marker of the turn
+		// (emit), named by a hash of the words. Linked blocks call each other without the
+		// dispatcher, whose boundaries the fast-forward lands on: not with them.
+		if(!m_config.pollCycleFastForward || m_config.linkJitBlocks)
+			return false;
+
+		constexpr TWord maxWords = 32;
+
+		const auto& opcodes = m_dsp.opcodes();
+
+		struct Op { Instruction instA, instB; TWord opA, opB, len; };
+		const auto decode = [&](const TWord _addr, Op& _op)
+		{
+			m_dsp.memory().getOpcode(_addr, _op.opA, _op.opB);
+			opcodes.getInstructionTypes(_op.opA, _op.instA, _op.instB);
+			_op.len = Opcodes::getOpcodeLength(_op.opA, _op.instA, _op.instB);
+			return _op.len != 0;
+		};
+
+		// forward from _pc to the branch back to it or before it: the closing branch, its target the head
+		TWord head = g_invalidAddress;
+		TWord end = 0;
+
+		for(TWord a = _pc; a < _pc + maxWords;)
+		{
+			Op op;
+			if(!decode(a, op))
+				return false;
+
+			const bool conditional = isPollLoopConditionalBranch(op.instA, op.instB, op.opA);
+			const bool jump = isPollLoopJump(op.instA, op.instB);
+
+			if(conditional || jump)
+			{
+				const auto target = getBranchTarget(op.instA, op.opA, op.opB, a);
+				if(target <= _pc)
+				{
+					head = target;
+					end = a + op.len;
+					break;
+				}
+				if(jump)
+					return false;
+			}
+			else if(!isPollLoopBodyOp(op.instA, op.instB, op.opA, op.opB, m_config.pollLoopPureReads))
+			{
+				return false;
+			}
+			a += op.len;
+		}
+
+		if(head == g_invalidAddress || end - head > maxWords)
+			return false;
+
+		// below P:$100 a block may run as a fast interrupt: only with the processing mode tested at run time
+		if(head < Vba_End && !m_config.dynamicFastInterrupts)
+			return false;
+
+		// from the head: _pc must start an op, the exits must leave the loop, the turns must repeat each other
+		auto writtenSoFar = RegisterMask::None;
+		auto carried = RegisterMask::None;
+		bool hasPc = false;
+		uint32_t instructions = 0;
+		uint32_t cycles = 0;
+
+		for(TWord a = head; a < end;)
+		{
+			Op op;
+			if(!decode(a, op))
+				return false;
+
+			hasPc |= a == _pc;
+
+			// no DO loop begins or ends inside
+			if(_loopEnds.find(a + op.len) != _loopEnds.end() || (a >= 2 && _loopStarts.find(a - 2) != _loopStarts.end()))
+				return false;
+
+			const bool last = a + op.len == end;
+			const bool conditional = isPollLoopConditionalBranch(op.instA, op.instB, op.opA);
+
+			if(last)
+			{
+				if(!conditional && !isPollLoopJump(op.instA, op.instB))
+					return false;
+				if(getBranchTarget(op.instA, op.opA, op.opB, a) != head)
+					return false;
+			}
+			else if(conditional)
+			{
+				const auto target = getBranchTarget(op.instA, op.opA, op.opB, a);
+				if(target >= head && target < end)
+					return false;
+			}
+			else if(!isPollLoopBodyOp(op.instA, op.instB, op.opA, op.opB, m_config.pollLoopPureReads))
+			{
+				return false;
+			}
+
+			trackPollLoopRegisters(carried, writtenSoFar, op.instA, op.instB, op.opA);
+
+			++instructions;
+			cycles += calcCycles(op.instA, op.instB, a, op.opA, m_dsp.memory().getBridgedMemoryAddress(), 1);
+
+			a += op.len;
+		}
+
+		if(!hasPc || (carried & writtenSoFar & notMask(RegisterMask::PC)) != RegisterMask::None)
+			return false;
+
+		_cycle.head = head;
+		_cycle.end = end;
+		_cycle.instructions = instructions;
+		_cycle.cycles = cycles;
+
+		// the id: a hash of the words, so that a block made from other words never passes the marker on
+		uint32_t id = 2166136261u;
+		const auto hash = [&](const TWord _w) { id = (id ^ _w) * 16777619u; };
+		hash(head);
+		hash(end);
+		for(TWord a = head; a < end; ++a)
+			hash(m_dsp.memory().get(MemArea_P, a));
+		_cycle.id = id ? id : 1;
+		return true;
 	}
 
 	bool JitBlock::isNopLoopBody(const JitBlockInfo& _info, const TWord _pc, const bool _isFastInterrupt) const
@@ -545,6 +745,57 @@ namespace dsp56k
 
 		const auto pcNext = _pc + info.memSize;
 
+		// A block of a poll loop over several blocks (findPollCycle; a loop in one block is isIdlePollLoop's). Its head
+		// arms the marker of a straight turn before it runs, each block passes it on to the next at its end, and when
+		// it comes back round to the head, the head calls the fast-forward before it arms it again.
+		JitPollCycle pollCycle;
+		const bool inPollCycle = !isFastInterrupt || fastInterruptMode == JitOps::FastInterruptMode::Dynamic
+			? findPollCycle(pollCycle, _pc, _loopStarts, _loopEnds) && pcNext <= pollCycle.end
+				&& !(_pc == pollCycle.head && pcNext == pollCycle.end)
+				&& !info.hasFlag(JitBlockInfo::Flags::ModeChange) && !info.hasFlag(JitBlockInfo::Flags::IsLoopBodyBegin)
+			: false;
+
+		if(inPollCycle && _pc == pollCycle.head)
+		{
+			// Before the counters count this block, where nothing is loaded into host registers yet. When the marker
+			// came round, a straight turn has just ended here: its next turns repeat it (DSP::fastForwardPollCycle).
+			// Call only when a whole turn fits before the run's stop and the peripherals' deadlines (as for the NOP
+			// loops: the call tests everything again, exactly). Then this turn starts: arm the marker.
+			auto* const cursor = m_asm.cursor();
+			m_asm.setCursor(cursorBeforeLoopBegin);
+
+			_rt.m_pollCycle = std::make_unique<JitPollCycle>(pollCycle);
+
+			const auto arm = m_asm.newLabel();
+			{
+				const RegGP value(*this);
+				const RegGP expected(*this);
+				mem().mov(r64(value), m_dsp.pollCycleMarker());
+				m_asm.mov(r64(expected), asmjit::Imm(pollCycle.marker(_pc)));
+				m_asm.cmp(r64(value), r64(expected));
+				m_asm.jnz(arm);
+			}
+			emitFastForwardGate(arm, pollCycle.cycles, pollCycle.instructions);
+			{
+				const FuncArg r0(*this, 0);
+				const FuncArg r1(*this, 1);
+				mem().makeDspPtr(r0);
+				m_asm.mov(r64(r1), asmjit::Imm(reinterpret_cast<uint64_t>(_rt.m_pollCycle.get())));
+				stack().call(asmjit::func_as_ptr(&callFastForwardPollCycle));
+			}
+			m_asm.bind(arm);
+			{
+				const RegGP value(*this);
+				m_asm.mov(r64(value), asmjit::Imm(pollCycle.marker(_pc)));
+				mem().mov(m_dsp.pollCycleMarker(), r64(value));
+				mem().mov(r64(value), m_dsp.getInstructionCounter());
+				mem().mov(m_dsp.pollCycleHeadInstructions(), r64(value));
+				mem().mov(r64(value), m_dsp.getCycles());
+				mem().mov(m_dsp.pollCycleHeadCycles(), r64(value));
+			}
+			m_asm.setCursor(cursor);
+		}
+
 		if(fastInterruptMode != JitOps::FastInterruptMode::Static && info.terminationReason != JitBlockInfo::TerminationReason::PopPC)
 		{
 			if(info.branchTarget == g_invalidAddress || info.branchIsConditional)
@@ -695,6 +946,37 @@ namespace dsp56k
 				stack().call(asmjit::func_as_ptr(&callFastForwardPollLoop));
 			}
 			m_asm.bind(noCall);
+		}
+
+		if(inPollCycle)
+		{
+			// Pass the marker on when it names this block and the block went on in the loop (the fall-through, or the
+			// head after the closing branch); clear it otherwise: an exit taken, or a turn that did not come this way.
+			const TWord next = pcNext == pollCycle.end ? pollCycle.head : pcNext;
+			const auto clear = m_asm.newLabel();
+			const auto done = m_asm.newLabel();
+			{
+				const auto pc = r32(m_dspRegPool.get(PoolReg::DspPC, true, false));
+				const RegGP value(*this);
+				const RegGP expected(*this);
+				mem().mov(r64(value), m_dsp.pollCycleMarker());
+				m_asm.mov(r64(expected), asmjit::Imm(pollCycle.marker(_pc)));
+				m_asm.cmp(r64(value), r64(expected));
+				m_asm.jnz(clear);
+				m_asm.mov(r32(expected), asmjit::Imm(next));
+				m_asm.cmp(pc, r32(expected));
+				m_asm.jnz(clear);
+				m_asm.mov(r64(expected), asmjit::Imm(pollCycle.marker(next)));
+				mem().mov(m_dsp.pollCycleMarker(), r64(expected));
+			}
+			m_asm.jmp(done);
+			m_asm.bind(clear);
+			{
+				const RegGP zero(*this);
+				m_asm.clr(r64(zero));
+				mem().mov(m_dsp.pollCycleMarker(), r64(zero));
+			}
+			m_asm.bind(done);
 		}
 
 		if (info.terminationReason == JitBlockInfo::TerminationReason::PopPC)

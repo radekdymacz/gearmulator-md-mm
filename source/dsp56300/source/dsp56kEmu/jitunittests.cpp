@@ -74,6 +74,8 @@ namespace dsp56k
 		boundedDispatch();
 		nopLoopFastForward();
 		pollLoopFastForward();
+		pollCycleFastForward();
+		pollPortFastForward();
 		cmpmLegacy();
 	}
 
@@ -517,6 +519,245 @@ namespace dsp56k
 
 						if(leave)
 							testPeripheralsX.write(program.dmaRegister, program.idleValue);
+					}
+
+					const auto skipped = testDsp.getFastForwardedTurns();
+					if(_mode != Mode::On || !program.idle)
+						verify(skipped == 0);
+					skippedTotal += skipped;
+					return states;
+				};
+
+				const auto legacy = run(Mode::Legacy);
+				verify(run(Mode::Legacy) == legacy);
+				verify(run(Mode::Off) == legacy);
+				verify(run(Mode::On) == legacy);
+			}
+
+			verify(program.idle == (skippedTotal > 0));
+		}
+	}
+
+	void JitUnittests::pollCycleFastForward()
+	{
+		// The Machinedrum's DDR0 poll at DSP1 p:3c, word for word: five blocks below P:$100, where blocks are at most
+		// two words and may run as fast interrupts. movep x:DDR0,a; cmp #$13f,a; beq exit1; cmp #$17f,a; beq exit2;
+		// bra p:3c. The same words at p:100, where the branches still cut it into three blocks. The first exit jumps
+		// back to the head, the second into the middle of the loop (a turn that does not start at the head). Run in
+		// slices as in pollLoopFastForward, the host moving the polled register out of the loop and back between
+		// slices, or a DMA transfer moving it in a peripheral run. The state after every slice must be the same without the code, with it off and with it on; on must
+		// skip. A loop whose turns carry a register (add a,b where the cmp was) must never be fast-forwarded.
+		const auto beq = [](const int _offset) { return 0x05a400u | ((static_cast<TWord>(_offset) >> 5 & 0xf) << 6) | (static_cast<TWord>(_offset) & 0x1f); };
+		const auto bra = [](const int _offset) { return 0x050c00u | ((static_cast<TWord>(_offset) >> 5 & 0xf) << 6) | (static_cast<TWord>(_offset) & 0x1f); };
+		const auto jmp = [](const TWord _addr) { return 0x0c0000u | _addr; };
+
+		struct Program { TWord base; std::vector<TWord> loop; bool idle; };
+		const std::vector<TWord> ddr0Poll = {0x084e2e, 0x0140c5, 0x00013f, beq(5), 0x0140c5, 0x00017f, beq(7), bra(-7)};
+		const std::vector<TWord> carried = {0x084e2e, 0x200018, 0x000000, beq(5), 0x0140c5, 0x00017f, beq(7), bra(-7)};
+		verify(ddr0Poll[3] == 0x05a405 && ddr0Poll[6] == 0x05a407 && ddr0Poll[7] == 0x050fd9);	// the firmware's words
+		const Program programs[] = {{0x3c, ddr0Poll, true}, {0x100, ddr0Poll, true}, {0x3c, carried, false}, {0x100, carried, false}};
+
+		struct Case { uint32_t instructionTarget; uint32_t cycleDeadline; };
+		const Case cases[] = {{100000, 0}, {13, 0}, {1234, 0}, {100000, 333}, {61, 17}, {7, 4093}};
+		const TWord leaveValues[] = {0x13f, 0x17f};
+
+		enum class Mode { Legacy, Off, On };
+
+		for(const auto& program : programs)
+		{
+			uint64_t skippedTotal = 0;
+
+			for(const auto& c : cases)
+			{
+				const auto run = [&](const Mode _mode)
+				{
+					DefaultMemoryValidator validator;
+					Memory testMemory(validator, 0x10000);
+					Peripherals56303 testPeripheralsX;
+					PeripheralsNop testPeripheralsY;
+					DSP testDsp(testMemory, &testPeripheralsX, &testPeripheralsY);
+
+					auto config = testDsp.getJit().getConfig();
+					config.maxDoIterations = 4;
+					config.dynamicFastInterrupts = true;
+					config.linkJitBlocks = false;
+					config.pollCycleFastForward = _mode != Mode::Legacy;
+					testDsp.getJit().setConfig(config);
+
+					testDsp.resetHW();
+
+					TWord pc = program.base;
+					for(const auto w : program.loop)
+						testDsp.memWriteP(pc++, w);
+					testDsp.memWriteP(program.base + 8, jmp(program.base));		// exit 1: back to the head
+					testDsp.memWriteP(program.base + 13, jmp(program.base + 4));	// exit 2: into the middle
+
+					testDsp.regs().b.var = 1;
+					testPeripheralsX.write(XIO_DDR0, 0x10);
+
+					testDsp.setPC(program.base);
+					testDsp.setIdleFastForward(_mode == Mode::On);
+					testPeripheralsX.resetDelayCycles(testDsp.getInstructionCounter(), c.instructionTarget);
+					if(c.cycleDeadline)
+						testPeripheralsX.setCycleDeadline(c.cycleDeadline);
+
+					std::vector<uint64_t> states;
+					const auto record = [&]
+					{
+						const auto& r = testDsp.regs();
+						states.insert(states.end(), {uint64_t{testDsp.getPC().toWord()}, static_cast<uint64_t>(r.a.var),
+							static_cast<uint64_t>(r.b.var), uint64_t{r.sr.toWord()},
+							testDsp.getInstructionCounter(), testDsp.getCycles(), testPeripheralsX.getTargetClock()});
+					};
+
+					uint64_t target = testDsp.getCycles();
+					uint32_t slice = 0;
+					for(const uint64_t step : {37ull, 500ull, 1ull, 4999ull, 12345ull, 3ull, 40000ull, 777ull, 2ull, 91ull, 260ull, 45ull, 1500ull, 33ull, 64ull})
+					{
+						target += step;
+						testDsp.execUntilCycles(target);
+						record();
+
+						// The host moves the register: out of the loop at one of its exits, or back in; or it starts a
+						// DMA block transfer that moves it out of the loop eight instructions later, in a peripheral
+						// run that may fall between two blocks of a turn: the turn has read the old value, the next
+						// turns read the new one.
+						const auto action = slice % 3;
+						if(action == 2)
+						{
+							testPeripheralsX.write(XIO_DSR0, 0x200);
+							testPeripheralsX.write(XIO_DDR0, leaveValues[(slice >> 1) & 1] - 4);
+							testPeripheralsX.write(XIO_DCO0, 3);
+							testPeripheralsX.write(XIO_DCR0, 0x9802d0);	// DE, block on DE, X to X, both +1
+						}
+						else
+						{
+							testPeripheralsX.write(XIO_DDR0, action == 0 ? leaveValues[(slice >> 1) & 1] : 0x10);
+						}
+
+						// long enough for whole turns after the change, and for the transfer to land inside this run
+						const auto stop = testDsp.getCycles() + (action == 1 ? step / 2 + 1 : 400);
+						const DSP::ScopedFastForwardLimit limit(testDsp, stop);
+						while(testDsp.getCycles() < stop)
+							testDsp.execJit();
+						record();
+
+						if(action != 1)
+							testPeripheralsX.write(XIO_DDR0, 0x10);
+						++slice;
+					}
+
+					const auto skipped = testDsp.getFastForwardedTurns();
+					if(_mode != Mode::On || !program.idle)
+						verify(skipped == 0);
+					skippedTotal += skipped;
+					return states;
+				};
+
+				const auto legacy = run(Mode::Legacy);
+				verify(run(Mode::Legacy) == legacy);
+				verify(run(Mode::Off) == legacy);
+				verify(run(Mode::On) == legacy);
+			}
+
+			verify(program.idle == (skippedTotal > 0));
+		}
+	}
+
+	void JitUnittests::pollPortFastForward()
+	{
+		// The two Port C polls (the block sync from the other DSP), word for word: the Machinedrum's DSP2 at p:bb, three
+		// blocks below P:$100 (move x:PDRC,b; and #2,b; cmp b,a; beq p:bb), and the Monomachine's DSP2 at p:195, one
+		// block (movep x:PDRC,b; and #2,b; cmp b,a; beq p:195). Port C is declared pure (JitConfig::pollLoopPureReads);
+		// the host sets the pin between slices, so the loop is left and entered again. The same loops on Port D, which is
+		// not declared, must never be fast-forwarded. The state after every slice must be the same without the code,
+		// with it off and with it on.
+		struct Program { TWord base; std::vector<TWord> loop; bool idle; };
+		const Program programs[] =
+		{
+			{0xbb, {0x57f000, 0xffffbd, 0x01428e, 0x200005, 0x05a7dc}, true},
+			{0x195, {0x044fdd, 0x01428e, 0x200005, 0x05a7dd}, true},
+			{0xbb, {0x57f000, 0xffffad, 0x01428e, 0x200005, 0x05a7dc}, false},	// Port D
+			{0x195, {0x044fcd, 0x01428e, 0x200005, 0x05a7dd}, false},			// Port D
+		};
+
+		struct Case { uint32_t instructionTarget; uint32_t cycleDeadline; };
+		const Case cases[] = {{100000, 0}, {13, 0}, {1234, 0}, {100000, 333}, {61, 17}, {7, 4093}};
+
+		enum class Mode { Legacy, Off, On };
+
+		for(const auto& program : programs)
+		{
+			uint64_t skippedTotal = 0;
+
+			for(const auto& c : cases)
+			{
+				const auto run = [&](const Mode _mode)
+				{
+					DefaultMemoryValidator validator;
+					Memory testMemory(validator, 0x10000);
+					Peripherals56303 testPeripheralsX;
+					PeripheralsNop testPeripheralsY;
+					DSP testDsp(testMemory, &testPeripheralsX, &testPeripheralsY);
+
+					auto config = testDsp.getJit().getConfig();
+					config.maxDoIterations = 4;
+					config.dynamicFastInterrupts = true;
+					config.linkJitBlocks = false;
+					config.pollLoopFastForward = _mode != Mode::Legacy;
+					config.pollCycleFastForward = _mode != Mode::Legacy;
+					if(_mode != Mode::Legacy)
+						config.pollLoopPureReads = {Essi::ESSI_PDRC};
+					testDsp.getJit().setConfig(config);
+
+					testDsp.resetHW();
+
+					TWord pc = program.base;
+					for(const auto w : program.loop)
+						testDsp.memWriteP(pc++, w);
+					testDsp.memWriteP(pc, 0x0c0000 | program.base);	// the exit: back to the head
+
+					testDsp.regs().a.var = 0;
+					testPeripheralsX.getPortC().hostWrite(0);
+					testPeripheralsX.getPortD().hostWrite(0);
+
+					testDsp.setPC(program.base);
+					testDsp.setIdleFastForward(_mode == Mode::On);
+					testPeripheralsX.resetDelayCycles(testDsp.getInstructionCounter(), c.instructionTarget);
+					if(c.cycleDeadline)
+						testPeripheralsX.setCycleDeadline(c.cycleDeadline);
+
+					std::vector<uint64_t> states;
+					const auto record = [&]
+					{
+						const auto& r = testDsp.regs();
+						states.insert(states.end(), {uint64_t{testDsp.getPC().toWord()}, static_cast<uint64_t>(r.a.var),
+							static_cast<uint64_t>(r.b.var), uint64_t{r.sr.toWord()},
+							testDsp.getInstructionCounter(), testDsp.getCycles(), testPeripheralsX.getTargetClock()});
+					};
+
+					uint64_t target = testDsp.getCycles();
+					uint32_t slice = 0;
+					for(const uint64_t step : {37ull, 500ull, 1ull, 4999ull, 12345ull, 3ull, 40000ull, 777ull, 2ull})
+					{
+						target += step;
+						testDsp.execUntilCycles(target);
+						record();
+
+						// the host moves the pin: the sync edge comes (out of the loop), or goes again
+						const bool leave = (slice & 1) == 0;
+						testPeripheralsX.getPortC().hostWrite(leave ? 2 : 0);
+						testPeripheralsX.getPortD().hostWrite(leave ? 2 : 0);
+
+						const auto stop = testDsp.getCycles() + step / 2 + 1;
+						const DSP::ScopedFastForwardLimit limit(testDsp, stop);
+						while(testDsp.getCycles() < stop)
+							testDsp.execJit();
+						record();
+
+						testPeripheralsX.getPortC().hostWrite(0);
+						testPeripheralsX.getPortD().hostWrite(0);
+						++slice;
 					}
 
 					const auto skipped = testDsp.getFastForwardedTurns();

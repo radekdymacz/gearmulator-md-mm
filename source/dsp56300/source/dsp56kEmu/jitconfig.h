@@ -3,6 +3,7 @@
 #include <cstdint>
 #include <optional>
 #include <functional>
+#include <vector>
 
 #include "types.h"
 
@@ -34,6 +35,18 @@ namespace dsp56k
 		// Emit the idle fast-forward call at the end of a block that polls a DMA register and branches back to itself,
 		// and whose turns repeat the same state (JitBlock::isIdlePollLoop, DSP::fastForwardPollLoop). Switched as above.
 		bool pollLoopFastForward = false;
+
+		// The same for poll loops that span several blocks (JitBlock::findPollCycle, DSP::fastForwardPollCycle): the
+		// blocks of the loop pass a marker of the straight turn on, and the head calls the fast-forward when it came
+		// round. Below P:$100 blocks are at most two words, so such a loop is always cut into several. Needs
+		// linkJitBlocks off. Switched as above.
+		bool pollCycleFastForward = false;
+
+		// X peripheral addresses (as on the bus: $ffff80-$ffffff) whose reads a poll loop may hold besides the DMA
+		// registers: reads that, repeated, return the same value and change nothing more than the first one did, until
+		// a peripheral run of this DSP or the end of the run (the host's run loop returns). The host knows which of its
+		// pins qualify; a pin whose value follows the DSP's own counters (a clock derived from them) does not.
+		std::vector<TWord> pollLoopPureReads;
 
 		// needs to be true if there is code that executes code in interrupt regions as regular jumps
 		bool dynamicFastInterrupts = false;

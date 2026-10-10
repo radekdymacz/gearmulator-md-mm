@@ -12,6 +12,7 @@
 #include "opcodes.h"
 #include "jit.h"
 #include "jittypes.h"
+#include "jitpollcycle.h"
 
 #if 0
 #	define LOGJITPC(PC)		LOG(HEX(reinterpret_cast<uint64_t>(this)) << " exec @ " << HEX(PC))
@@ -134,6 +135,13 @@ namespace dsp56k
 		bool							m_idleFastForward = false;
 		uint64_t						m_fastForwardCycleLimit = 0;
 		uint64_t						m_fastForwardedTurns = 0;
+		// The straight-turn marker of a poll loop that spans several blocks (fastForwardPollCycle): the loop's id and
+		// the address of the block that may run next in a straight turn (JitPollCycle::marker), 0 when none; and the
+		// counters when its head block was entered. Written by those blocks; a peripheral run, an interrupt, a PC set
+		// from outside and the start of a run clear it.
+		uint64_t						m_pollCycleMarker = 0;
+		uint64_t						m_pollCycleHeadInstructions = 0;
+		uint64_t						m_pollCycleHeadCycles = 0;
 		bool							m_jitCmpmFix = true;
 
 		Opcodes							m_opcodes;
@@ -196,7 +204,7 @@ namespace dsp56k
 		void	jsr								( const TWord _val )						{ jsr(TReg24(_val)); }
 
 		void 	setPC							( const TWord _val )						{ setPC(TReg24(_val)); }
-		void 	setPC							( const TReg24& _val )						{ reg.pc = _val; }
+		void 	setPC							( const TReg24& _val )						{ reg.pc = _val; m_pollCycleMarker = 0; }
 
 		TReg24	getPC							() const									{ return reg.pc; }
 
@@ -332,6 +340,10 @@ namespace dsp56k
 
 		template<typename Ta, typename Tb> ASMJIT_NOINLINE void execPeripherals() noexcept
 		{
+			// a peripheral run may change what a poll loop reads: a turn it falls into is not one the next turns
+			// repeat (fastForwardPollCycle)
+			m_pollCycleMarker = 0;
+
 			// we do not have any Y peripherals that need processing atm
 			const auto delayA = static_cast<Ta*>(perif[0])->exec();
 //			const auto delayB = static_cast<Tb*>(perif[1])->exec();
@@ -503,6 +515,9 @@ namespace dsp56k
 
 		uint64_t getFastForwardedTurns() const { return m_fastForwardedTurns; }	// all loop turns skipped so far
 		const uint64_t& getFastForwardCycleLimit() const { return m_fastForwardCycleLimit; }	// read by the JIT
+		uint64_t& pollCycleMarker() { return m_pollCycleMarker; }								// read and written by the JIT
+		uint64_t& pollCycleHeadInstructions() { return m_pollCycleHeadInstructions; }
+		uint64_t& pollCycleHeadCycles() { return m_pollCycleHeadCycles; }
 
 		// The code that runs this DSP block by block stops at the first block boundary whose cycle count is at or
 		// past _limit (it may stop earlier for reasons that cannot change while the DSP only runs NOPs). Published
@@ -515,6 +530,9 @@ namespace dsp56k
 			{
 				// with the fast-forward off no limit is published, so the blocks' inline test already says no
 				_dsp.m_fastForwardCycleLimit = _dsp.m_idleFastForward ? _limit : 0;
+				// between two runs the host may have changed what a poll loop reads: a turn the run starts within
+				// is not one the next turns repeat (fastForwardPollCycle)
+				_dsp.m_pollCycleMarker = 0;
 			}
 			~ScopedFastForwardLimit() noexcept { m_dsp.m_fastForwardCycleLimit = m_previous; }
 			ScopedFastForwardLimit(const ScopedFastForwardLimit&) = delete;
@@ -538,6 +556,15 @@ namespace dsp56k
 		// counters. The block returns to the dispatcher after every turn; the turns are skipped up to the last
 		// boundary at which the dispatcher's tests all pass (as in fastForwardNopLoop).
 		ASMJIT_NOINLINE void fastForwardPollLoop(uint32_t _instructionsPerTurn, uint32_t _cyclesPerTurn) noexcept;
+
+		// Called by the head block of a poll loop of several blocks (JitBlock::findPollCycle) when it is entered and the
+		// marker says the turn that just ended was straight: entered at the head, through every block of the loop in
+		// order (each made from the loop's words as they are now: a write destroys a block, and each block checks the
+		// loop's id, a hash of those words), no exit taken, no interrupt, no peripheral run, inside one run
+		// (m_pollCycleMarker). The counters since the head are tested again here. The next turns then repeat that one
+		// exactly, as in fastForwardPollLoop, and are skipped the same way, up to the last turn boundary at which the
+		// dispatcher's tests all pass; the head then runs on from there.
+		ASMJIT_NOINLINE void fastForwardPollCycle(const JitPollCycle& _cycle) noexcept;
 
 	private:
 
