@@ -7,7 +7,7 @@ the terms of the GNU General Public License as published by the Free Software
 Foundation, version 3 of the License. It is distributed WITHOUT ANY WARRANTY;
 without even the implied warranty of MERCHANTABILITY or FITNESS FOR A
 PARTICULAR PURPOSE. The complete source code is at
-https://github.com/radekdymacz/gearmulator-md-mm
+https://github.com/radekdymacz/mdmm
 
 Accepting this licence is not a purchase and grants you the GPL's rights.
 It does not grant any rights to Elektron firmware, which is not included.

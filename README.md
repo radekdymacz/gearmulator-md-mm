@@ -6,7 +6,7 @@ chains, mutes, a sampler view, and a beta HW MIDI mode for a real machine). They
 as a standalone app, VST3 and AU on macOS (Windows x64 and Linux x64 builds exist, not tested).
 
 - **Site, screenshots, download:** https://mdmm.dev
-- **Releases:** https://github.com/radekdymacz/gearmulator-md-mm/releases
+- **Releases:** https://github.com/radekdymacz/mdmm/releases
   (latest: [0.4.0 notes](doc/release/v0.4.0.md); all release notes are in [doc/release/](doc/release/))
 - **User guide** (install, ROM, DAW use, workspaces, every keyboard shortcut): https://mdmm.dev/guide/
 - **Bring your own ROM.** No firmware is included. With no ROM the editor shows a start-up card:
@@ -48,7 +48,7 @@ There is a Discord channel [here](https://discord.gg/BnkTKpmp8) at #gearmulator-
 **Do NOT discuss firmware or ROMs in Discord.**
 **DO NOT ask us for the .bin files / firmware! They're under Elektron's copyright. This emulator is for people who own the original hardware.**
 
-[Downloads](https://github.com/radekdymacz/gearmulator-md-mm/releases) ·
+[Downloads](https://github.com/radekdymacz/mdmm/releases) ·
 [Report a bug](https://mdmm.dev/contact/)
 
 Link to a short demo on Youtube:

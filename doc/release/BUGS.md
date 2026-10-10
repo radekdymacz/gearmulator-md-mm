@@ -43,7 +43,7 @@ where it came from, the setup, what happens, what should happen, status.*
 ## B-042 · The Windows and Linux READMEs send reports to GitHub issues, which are off
 
 - **From:** this round-up, 2026-10-09 (a Linux tester's blank window, B-033, and the READMEs everyone on Windows and Linux gets).
-- **What happens:** `scripts/linux/README-Linux.txt` and `scripts/windows/README-Windows-mdmm.txt` say "Reports are welcome: https://github.com/radekdymacz/gearmulator-md-mm/issues". Issues are off on the repository (`has_issues: false`), so the link leads nowhere a tester can report. The release notes and the site say https://mdmm.dev/contact/ and the Discord.
+- **What happens:** `scripts/linux/README-Linux.txt` and `scripts/windows/README-Windows-mdmm.txt` say "Reports are welcome: https://github.com/radekdymacz/mdmm/issues". Issues are off on the repository (`has_issues: false`), so the link leads nowhere a tester can report. The release notes and the site say https://mdmm.dev/contact/ and the Discord.
 - **Should:** both READMEs point to mdmm.dev/contact and the Discord invite (and say what to send: the OS, the DAW, the version, the `editor-*.log` of Open Log Folder on Windows).
 - **Fix (0.4.0, branch `docs/discord-roundup-2026-10-09`):** both READMEs now say "Bugs: https://mdmm.dev/contact/" (as the macOS installer's readme does) and "Discord (#bugs): https://discord.gg/8xwXwBHbtn", what to include (editor and version, OS and desktop or Windows version, standalone or VST3 and DAW; on Windows the `editor-*.log`), and the no-firmware-requests line the macOS readme has. `fix/codex-review-2026-10` carried the old link; this branch is merged after it.
 - **Status:** fixed for 0.4.0.

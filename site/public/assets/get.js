@@ -49,7 +49,7 @@
   }
   if (step !== "2") return;
 
-  var rel = ready(C.releasesPage) ? C.releasesPage : "https://github.com/radekdymacz/gearmulator-md-mm/releases";
+  var rel = ready(C.releasesPage) ? C.releasesPage : "https://github.com/radekdymacz/mdmm/releases";
   var fileUrl = rel;
   var name = ed === "mm" ? "Monomachine Editor" : "Machinedrum Editor";
   document.querySelector("[data-name]").textContent = name;

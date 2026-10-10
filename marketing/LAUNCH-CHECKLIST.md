@@ -9,7 +9,7 @@ Owner: **R** = Radek, **C** = Claude. Tick items as they land.*
 - [ ] **R** Apple Developer Program, $99 a year, as the Account Holder (developer.apple.com/programs/enroll).
 - [ ] **R** Two certificates: Developer ID Application and Developer ID Installer ([doc/release/SIGNING.md](../doc/release/SIGNING.md) § 1–2).
 - [ ] **R** One App Store Connect API key for notarization (SIGNING.md § 3).
-- [ ] **R** The 5 GitHub secrets on `radekdymacz/gearmulator-md-mm` (SIGNING.md, table).
+- [ ] **R** The 5 GitHub secrets on `radekdymacz/mdmm` (SIGNING.md, table).
 - [ ] **R** Before every tag: `scripts/mdmm-local-gate.sh` green on this Mac, the firmware-backed gate CI cannot run ([doc/release/LOCAL-GATE.md](../doc/release/LOCAL-GATE.md)).
 - [ ] **R** Updater end to end, by hand (the gate prints it as MANUAL; [LOCAL-GATE.md](../doc/release/LOCAL-GATE.md#updater-end-to-end-manual)): `scripts/local-gate/updater-manual.sh check`, then `prepare` and `run md` / `run mm`; press Update, watch the download, the verification, the Installer. It needs the real public key in `updateKey.h` and a signed published release; `check` says which is missing.
 - [ ] **C** Tag the next release, check the build is signed, notarized and stapled (`verify_mdmm_signed.sh`).

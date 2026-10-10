@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## This fork: Machinedrum Editor + Monomachine Editor
 
-`origin` (radekdymacz/gearmulator-md-mm, default branch `main`) is a fork of joelanders' Machinedrum/Monomachine emulation (`upstream`), which is built on dsp56300/gearmulator (`gearmulator`). The product is two editors (standalone, VST3, AU on macOS; Windows and Linux builds exist, not tested) that run the user's own Elektron firmware behind one web page. ROMs are never committed. The "Upstream guide" below is upstream's, for the shared code.
+`origin` (radekdymacz/mdmm, default branch `main`) is a fork of joelanders' Machinedrum/Monomachine emulation (`upstream`), which is built on dsp56300/gearmulator (`gearmulator`). The product is two editors (standalone, VST3, AU on macOS; Windows and Linux builds exist, not tested) that run the user's own Elektron firmware behind one web page. ROMs are never committed. The "Upstream guide" below is upstream's, for the shared code.
 
 - **Read first:** doc/modern-ux/FOUNDATION.md (the layers; how to add an engine, document kind, command, workspace or dialog; "Build and check"), doc/modern-ux/DESIGN-P6-simple-core.md (why), doc/modern-ux/UPSTREAM.md (our code lives in our files, upstream's files get hooks only).
 - **Where:** source/elektron/md/: elektronData, deskCore, deskHost, deskWire, mdDesk, mmDesk, mdDataLink, mdmmUpdate, mdLib (the emulated machines), mdJucePlugin (plug-ins, bridge, skins/ page files), mdLibTest, upstreamTests (our tests for his bridge, networkLib, MCP server and synthLib). Version: `MDMM_EDITOR_VERSION` in mdJucePlugin/mdmmPlugins.cmake; product names: scripts/mdmm-product.env.

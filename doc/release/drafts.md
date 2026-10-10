@@ -21,7 +21,7 @@ message 2). Post only after the release is published and the site's download but
 > hear how it goes.
 >
 > Download and screenshots: https://mdmm.dev
-> Release notes and source (GPL-3): https://github.com/radekdymacz/gearmulator-md-mm/releases
+> Release notes and source (GPL-3): https://github.com/radekdymacz/mdmm/releases
 >
 > Bring your own ROM: nothing is bundled. Please don't ask for or share firmware here.
 > Huge thanks to joelanders for the MD/MM emulation and to The Usual Suspects for Gearmulator.
@@ -35,7 +35,7 @@ Channel: a GitHub issue or discussion on joelanders/gearmulator-md-mm, or a Disc
 > Hi,
 >
 > I'm Radek. I've been working on a fork of gearmulator-md-mm
-> (https://github.com/radekdymacz/gearmulator-md-mm) and wanted to tell you about it before I
+> (https://github.com/radekdymacz/mdmm) and wanted to tell you about it before I
 > announce anything.
 >
 > I love what you've built. Running the real MD and MM firmware is what makes this possible. On top

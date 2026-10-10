@@ -10,8 +10,8 @@ window.MDMM_CONFIG = {
   // Contact address. The pages carry it statically (entity-encoded mailto); keep this in sync.
   contact: { email: "radekdymacz@gmail.com" },
 
-  source: "https://github.com/radekdymacz/gearmulator-md-mm",
-  releasesPage: "https://github.com/radekdymacz/gearmulator-md-mm/releases",
+  source: "https://github.com/radekdymacz/mdmm",
+  releasesPage: "https://github.com/radekdymacz/mdmm/releases",
 
   // Downloads per operating system, then per machine. GitHub's stable "latest release" redirect:
   // the release build must publish exactly these asset names. The download page picks the
@@ -25,20 +25,20 @@ window.MDMM_CONFIG = {
       label: "macOS",
       line: "macOS (Intel and Apple silicon) · the app, VST3 and AU in one installer",
       button: "Download the installer (.pkg)",
-      md: { name: "Machinedrum Editor", url: "https://github.com/radekdymacz/gearmulator-md-mm/releases/latest/download/Machinedrum-Editor-macOS.pkg", dmg: "https://github.com/radekdymacz/gearmulator-md-mm/releases/latest/download/Machinedrum-Editor-macOS.dmg" },
-      mm: { name: "Monomachine Editor", url: "https://github.com/radekdymacz/gearmulator-md-mm/releases/latest/download/Monomachine-Editor-macOS.pkg", dmg: "https://github.com/radekdymacz/gearmulator-md-mm/releases/latest/download/Monomachine-Editor-macOS.dmg" }
+      md: { name: "Machinedrum Editor", url: "https://github.com/radekdymacz/mdmm/releases/latest/download/Machinedrum-Editor-macOS.pkg", dmg: "https://github.com/radekdymacz/mdmm/releases/latest/download/Machinedrum-Editor-macOS.dmg" },
+      mm: { name: "Monomachine Editor", url: "https://github.com/radekdymacz/mdmm/releases/latest/download/Monomachine-Editor-macOS.pkg", dmg: "https://github.com/radekdymacz/mdmm/releases/latest/download/Monomachine-Editor-macOS.dmg" }
     },
     win: {
       label: "Windows",
       line: "Windows x64 · not tested yet · the app and VST3 in one zip",
-      md: { name: "Machinedrum Editor", url: "https://github.com/radekdymacz/gearmulator-md-mm/releases/latest/download/Machinedrum-Editor-Windows-x64-not-tested.zip" },
-      mm: { name: "Monomachine Editor", url: "https://github.com/radekdymacz/gearmulator-md-mm/releases/latest/download/Monomachine-Editor-Windows-x64-not-tested.zip" }
+      md: { name: "Machinedrum Editor", url: "https://github.com/radekdymacz/mdmm/releases/latest/download/Machinedrum-Editor-Windows-x64-not-tested.zip" },
+      mm: { name: "Monomachine Editor", url: "https://github.com/radekdymacz/mdmm/releases/latest/download/Monomachine-Editor-Windows-x64-not-tested.zip" }
     },
     linux: {
       label: "Linux",
       line: "Linux x64 · not tested yet · the app and VST3 · needs WebKitGTK",
-      md: { name: "Machinedrum Editor", url: "https://github.com/radekdymacz/gearmulator-md-mm/releases/latest/download/Machinedrum-Editor-Linux-x64-not-tested.tar.gz" },
-      mm: { name: "Monomachine Editor", url: "https://github.com/radekdymacz/gearmulator-md-mm/releases/latest/download/Monomachine-Editor-Linux-x64-not-tested.tar.gz" }
+      md: { name: "Machinedrum Editor", url: "https://github.com/radekdymacz/mdmm/releases/latest/download/Machinedrum-Editor-Linux-x64-not-tested.tar.gz" },
+      mm: { name: "Monomachine Editor", url: "https://github.com/radekdymacz/mdmm/releases/latest/download/Monomachine-Editor-Linux-x64-not-tested.tar.gz" }
     }
   },
 

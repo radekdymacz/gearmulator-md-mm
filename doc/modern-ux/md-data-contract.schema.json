@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://github.com/radekdymacz/gearmulator-md-mm/doc/modern-ux/md-data-contract.schema.json",
+  "$id": "https://github.com/radekdymacz/mdmm/doc/modern-ux/md-data-contract.schema.json",
   "title": "MD Desk data contract, version 2 (Machinedrum OS 1.63)",
   "description": "Plain-data documents exchanged between MD Desk's UI and its data layer. Produced and checked by elektronData (patternToJson/patternFromJson etc.) and mdDataLink::Session::stateToJson. Values are firmware units; see data-contract.md for display units and the mockup mapping. Cross-field limits (length <= totalLength, lock budget, song structure) are checked by elektronData::validate and listed in data-contract.md. Readers must ignore unknown members.",
   "oneOf": [

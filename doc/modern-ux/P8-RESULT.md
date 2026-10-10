@@ -4,7 +4,7 @@
 - **Why:** the MM-P4 work (`mm/editor`: 05e4ef47, efdbfc3a, 17a36648) landed after the P5 merge, so
   v0.2.0 still greyed out the Monomachine features MM-P4 had made real. P8 re-implements them the
   P6 way instead of merging the old structure back. The evidence (byte offsets, RAM addresses) is
-  MM-P4's: [MM-P4-RESULT on `mm/editor`](https://github.com/radekdymacz/gearmulator-md-mm/blob/mm/editor/doc/modern-ux/MM-P4-RESULT.md).
+  MM-P4's: [MM-P4-RESULT on `mm/editor`](https://github.com/radekdymacz/mdmm/blob/mm/editor/doc/modern-ux/MM-P4-RESULT.md).
 
 ## What was ported, and where it lives now
 

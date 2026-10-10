@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://github.com/radekdymacz/gearmulator-md-mm/doc/modern-ux/mm-data-contract.schema.json",
+  "$id": "https://github.com/radekdymacz/mdmm/doc/modern-ux/mm-data-contract.schema.json",
   "title": "Monomachine Editor data contract, version 2 (MM OS 1.32B)",
   "description": "Plain-data documents between the Monomachine Editor page and the machine. Firmware units throughout. Cross-field limits (lock row count, offsets inside lengths, sorted locks) are enforced by elektronData::validate in C++, not here. See mm-data-contract.md.",
   "oneOf": [

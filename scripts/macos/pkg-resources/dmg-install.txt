@@ -53,7 +53,7 @@ touched.
 
 Licence: free software under the GNU GPL version 3; the text is in LICENSE.txt
 on this disk image.
-Source code: https://github.com/radekdymacz/gearmulator-md-mm
+Source code: https://github.com/radekdymacz/mdmm
 Copyright (C) The Usual Suspects (Gearmulator), joelanders (Machinedrum and
 Monomachine emulation), and NativeKloud Consulting Radoslaw Dymacz (editors).
 

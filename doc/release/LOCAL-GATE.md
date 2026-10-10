@@ -167,7 +167,7 @@ the JUCE side in `mdJucePlugin/mdUpdater.*`. Its pure parts (versions, `latest.j
 check) are in ctest (`mdmmUpdateTest`), and the release scripts that sign and write `latest.json` too
 (`mdmmReleaseScriptsTest`); there is no headless rig for curl, the download and the swap, so a person has to press the
 buttons. The gate cannot serve a test manifest: the app asks only `https://mdmm.dev/latest.json` and downloads only from
-`https://github.com/radekdymacz/gearmulator-md-mm/releases/download/…` (curl runs with `-q`, HTTPS only; no setting or
+`https://github.com/radekdymacz/mdmm/releases/download/…` (curl runs with `-q`, HTTPS only; no setting or
 variable changes that), and it offers an update only when the manifest is **newer than itself**. So the test needs a copy of
 the candidate with an older version number: everything is the candidate's code but one line.
 
