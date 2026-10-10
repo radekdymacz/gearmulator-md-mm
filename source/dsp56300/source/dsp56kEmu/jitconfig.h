@@ -35,6 +35,12 @@ namespace dsp56k
 		// and whose turns repeat the same state (JitBlock::isIdlePollLoop, DSP::fastForwardPollLoop). Switched as above.
 		bool pollLoopFastForward = false;
 
+		// The same for poll loops that span several blocks (JitBlock::findPollCycle, DSP::fastForwardPollCycle): the
+		// blocks of the loop pass a marker of the straight turn on, and the head calls the fast-forward when it came
+		// round. Below P:$100 blocks are at most two words, so such a loop is always cut into several. Needs
+		// linkJitBlocks off. Switched as above.
+		bool pollCycleFastForward = false;
+
 		// needs to be true if there is code that executes code in interrupt regions as regular jumps
 		bool dynamicFastInterrupts = false;
 

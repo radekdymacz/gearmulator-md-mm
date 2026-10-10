@@ -80,7 +80,7 @@ On top of the clean-up, each lever alone, behind the speed-ups switch, gated by 
 | 1 | Upstream batch: DSP loop-end check, serial-poll fast-forward (`7d69d7a9`, `e8989e41`) | ~5 % | bit-exact |
 | 2 | CMPM JIT fix (helica1 review: `cmpm a,b` turns A into \|A\|) | correctness | goldens; if they change, Radek listens |
 | 3 | L3: exact MD ESSI deadlines | ~10 % MD | changes MD audio once: Radek's listening sign-off |
-| 4 | L4: DSP idle-loop fast-forward (after L3; the NOP stubs first) | ~10-15 % | bit-exact against the L3 goldens |
+| 4 | L4: DSP idle-loop fast-forward (after L3; the NOP stubs first). Finished on perf/l4-sync-waits: the MD's two waits (p:3c over five blocks, the Port C sync at p:bb) estimated 14.6-14.9 % if skipped perfectly (go); measured: RESEARCH "L4 finished" | ~10-15 % | bit-exact against the L3 goldens |
 | 5 | L7, L9, L10: scheduler glue | ~5 % | bit-exact |
 | 6 | PGO in the release build: committed profile, both macOS slices, done on perf/pgo (RESEARCH "L6 measured") | MD −7.5 %, MM −5.5 % (measured) | goldens 24 + 6 equal; retrain when stale (CI.md "PGO") |
 | 7 | Try: render ahead (helica1), opt-in, with real-time priority and the audio workgroup | DAW thread lighter | delayed output equal |

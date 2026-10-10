@@ -56,6 +56,7 @@ set(SOURCES_JIT
 jit.cpp jit.h
 jitasmjithelpers.cpp jitasmjithelpers.h
 jitconfig.h
+jitpollcycle.h
 jitdspmode.cpp jitdspmode.h
 jitemitter.cpp jitemitter.h
 jitblock.cpp jitblock.h

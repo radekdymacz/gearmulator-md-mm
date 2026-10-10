@@ -385,9 +385,9 @@ Notes:
   (`JitConfig::nopLoopFastForward`, `DSP::fastForwardNopLoop`) and self-looping blocks that poll a DMA register
   and repeat their own state (`JitConfig::pollLoopFastForward`, `JitBlock::isIdlePollLoop`, `DSP::fastForwardPollLoop`).
   An inline test in the block calls only when a whole block fits before the stop and the deadline: an unconditional
-  call cost +3.9 % cycles with the switch off. Not covered: the Port C polls (MD p:bb, MM p:195; their reads go
-  through Hardware's edge logic) and the MD's DDR0 poll at p:3c, a loop of five two-word blocks below P:$100 (with L7
-  it would become one block, which L4 would then cover).
+  call cost +3.9 % cycles with the switch off. Not covered at first: the Port C polls (MD p:bb, MM p:195; their reads
+  go through Hardware's edge logic) and the MD's DDR0 poll at p:3c, a loop of five two-word blocks below P:$100.
+  Both are covered since, without L7: "L4 finished" below.
 - **L7** is not bit-exact by nature (block boundaries move), so it is outside "each bit-exact" and was not done.
   **L9** was measured, not built: on the step 2 build `HDI08::exec`, `Timers::exec` and `Dma::exec` together are
   about 1.6 % (MD playing) and 2 % (MM playing) of samples, below the kill line of §3.7 (3 % / 2 %) before any
@@ -395,8 +395,60 @@ Notes:
 - (With L3, as first built.) Against the forecast table in §1 (after step 2: 63 / 71 / 67 / 75.5 % of the shipped cost), chaining step 1's
   figures (0.85 / 0.84 / 0.81 / 0.79) with step 2's cycles (0.88 / 0.94 / 0.82 / 0.94) gives roughly 75 % (MD
   stopped), 79 % (MD playing), 67 % (MM stopped) and 75 % (MM playing). The MM is on the forecast; the MD is behind it
-  because its idle time is in the Port C and p:3c polls that L4 cannot reach yet. Approximate: different runs, a
-  loaded machine.
+  because its idle time is in the Port C and p:3c polls that L4 could not reach yet (now covered, with less than
+  hoped: "L4 finished" below). Approximate: different runs, a loaded machine.
+
+#### L4 finished: the two Machinedrum waits (2026-10-10, branch `perf/l4-sync-waits`)
+
+**Go/no-go, measured first.** Exact counts from a per-block hook (a scratch build, not committed; the hashes with the
+hook equal the goldens), `mdmmPerfGateTest md 8` (md-busy), per audio frame (352,832 frames per phase), on main
+(`49a3a7aff`, speed-ups on, L3 off):
+
+| | MD stopped | MD playing |
+|---|---|---|
+| DSP1 p:3c-43 (DDR0 poll, five blocks: 3c, 3f, 40, 42, 43; 6 instructions, 17 cycles a turn): block runs, DSP cycles | 134.7 of 299, 458 (19.9 %) | 135.1 of 302, 460 (19.9 %) |
+| DSP2 p:bb-bf (Port C bit 1 poll, three blocks: bb, bd, bf; 4 instructions, 9 cycles a turn): block runs, DSP cycles | 230.0 of 341, 690 (30.0 %) | 233.2 of 320, 700 (30.1 %) |
+| Block runs a perfect skip saves (every turn but one between two peripheral dues), p:3c + p:bb | 101.9 + 203.0 | 103.5 + 205.0 |
+| Host cycles per skipped block (calibrated on the jset poll skip at p:cf, 4 ABBA rounds of it off and on) | 13.7 | 14.1 |
+| Estimate if both were skipped perfectly (of 28.0 k / 29.7 k host cycles per frame) | 5.0 % + 9.9 % = **14.9 %** | 4.9 % + 9.7 % = **14.6 %** |
+
+Over the 8 % line: go. The MM has the same kind of Port C wait at DSP2 p:195, one block above P:$100 (27.9 / 50.7
+skippable block runs per frame stopped / playing: about 1 % of the MM).
+
+**Design.** No block boundary moves (not L7), so the levers keep the goldens:
+- *Poll loops over several blocks* (`JitConfig::pollCycleFastForward`, `JitBlock::findPollCycle`,
+  `DSP::fastForwardPollCycle`, `jitpollcycle.h`). Found from the opcodes in P memory, from each block: a head, the
+  ops `isIdlePollLoop` allows, conditional branches out of the loop (its exits) and a branch back to the head; the
+  turns must repeat (no register read before the turn writes it). Each block of the loop passes a marker on (the
+  loop's id, a hash of its words, and the next block's address) when it went on in the loop, and clears it otherwise;
+  a peripheral run, an interrupt, a PC set from outside and the start of a run clear it too. When the marker comes
+  round to the head, the last turn was straight and nothing could change what it read since: the head (before its own
+  turn, where no host register is live, so the call is cheap) skips the turns that fit before the next due, the run's
+  stop and the cycle deadline, as `fastForwardPollLoop` does. A gate in the head calls only when a whole turn fits.
+  Needs `linkJitBlocks` off (the MD/MM's setting): the skip lands on dispatcher boundaries.
+- Why the gain is about half the estimate: after every peripheral due the loop must run one straight turn again
+  before it may skip (a due may change what it reads), and the MD's dues are about 43 DSP cycles apart (without
+  L3): a 17-cycle turn at p:3c leaves room to skip about one turn in two and a half.
+
+| Lever | Commit | MD stopped | MD playing | MM stopped | MM playing | Bit-exact |
+|---|---|---|---|---|---|---|
+| L4 poll loops over several blocks (MD p:3c) | see branch | −1.8 % / −1.9 % | −1.9 % / −2.4 % | −0.4 % / −0.5 % | −0.9 % / −2.0 % | yes (goldens 30/30) |
+
+Measured as in "Step 2 measured" (host instructions / cycles per frame, `mdmmPerfGateTest` md-busy / mm-a01, stereo,
+speed-ups on, release configuration: ThinLTO, the committed PGO profile, arm64), medians of 4 paired ABBA rounds
+against main on a loaded Mac (load 12-20). The PGO profile goes stale for `source/dsp56300` with these levers (the
+build warns; the changed functions get no profile data) and should be retrained before the release that ships them
+(`scripts/macos/train_mdmm_pgo.sh`).
+
+Gates, each lever: the committed goldens 30/30 (MD and MM, all scenarios, stereo and six outputs, speed-ups on and
+off, and the MD's exact-ESSI keys); the firmware tests `mdIdleSelfBranchTest`, `mdIdleSchedulerFirmwareTest`,
+`mdTransportScorecardTest`, `mdAudioFirmwareTest`, `mdMidiTimingTest` (+ firmware), `mdHostRxTimingTest` (+
+firmware), `mdUwFirmwareTest`, `mmSineFirmwareTest`, `mmSineMidiFirmwareTest`, `mmDigiproFirmwareTest` (+ ensemble)
+green; the JIT unit tests `pollCycleFastForward` (the MD's p:3c words at p:3c and at p:100, exits back to the head
+and into the middle, the polled register moved by the host between runs and by a DMA transfer inside a run; the
+state after every slice equal without the code, off and on) and a carried-register loop that must never skip.
+Broken on purpose, the test fails: without the clear on a peripheral run, and without the clear at the start of a
+run.
 
 | Gate | Pass condition |
 |---|---|

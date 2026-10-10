@@ -1,10 +1,12 @@
 #pragma once
 
+#include <memory>
 #include <set>
 
 #include "interrupts.h"
 #include "jitblock.h"
 #include "jitblockinfo.h"
+#include "jitpollcycle.h"
 #include "types.h"
 
 namespace dsp56k
@@ -102,5 +104,6 @@ namespace dsp56k
 		bool m_establishesPc = false;
 		bool m_generating = false;
 		std::vector<InstructionProfilingInfo> m_profilingInfo;
+		std::unique_ptr<JitPollCycle> m_pollCycle;	// the loop this block closes (JitBlock::findPollCycle), read by its code
 	};
 }
