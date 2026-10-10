@@ -181,7 +181,8 @@ namespace
 		std::map<std::pair<uint8_t, uint8_t>, Bytes> slots;
 		mmDesk::Screen screenWord = mmDesk::Screen::Main;
 		int keysPressed = 0;
-		uint8_t pattern = 3, kit = 5;
+		uint8_t pattern = 3, kit = 5, global = 0;
+		std::vector<uint8_t> activations;	// every SET ACTIVE GLOBAL (0x56) taken, in order
 		uint32_t recvTaken = 0;	// dumps taken on SYSEX RECV (the RECV count, RAM 0x26a3c4)
 		bool slow = false;		// dumps stay on their way (inFlight) until taken by hand
 		int recording = -1;		// the recording mode the telemetry says (-1 unknown)
@@ -219,6 +220,12 @@ namespace
 					replies.push_back(it->second);
 				return;
 			}
+			if(cmd == 0x56 && _m.size() > 7)
+			{
+				global = _m[7];
+				activations.push_back(_m[7]);
+				return;
+			}
 			if(cmd == 0x57 && _m.size() > 7)
 			{
 				pattern = _m[7];	// LOAD PATTERN while stopped: the machine switches at once
@@ -226,7 +233,7 @@ namespace
 			}
 			if(cmd == 0x70)
 			{
-				const uint8_t v = _m[7] == 0x04 ? pattern : _m[7] == 0x02 ? kit : 0;
+				const uint8_t v = _m[7] == 0x04 ? pattern : _m[7] == 0x02 ? kit : _m[7] == 0x01 ? global : 0;
 				replies.push_back({0xf0, 0, 0x20, 0x3c, 3, 0, 0x72, _m[7], v, 0xf7});
 			}
 		}
@@ -473,6 +480,33 @@ namespace
 			msg(R"({"op":"param","id":45,"k":5,"t":2,"page":1,"i":3,"v":98})");
 			run(500);
 			check(params.size() == 1 && std::get<0>(params[0]) == 2 && std::get<3>(params[0]) == 98, "span 6: T3's value is its CC again");
+		}
+
+		// The 0.5.0 gate (mm-global-slot): another GLOBAL slot made active while a dump of the active one is on its way
+		// on SYSEX RECV. Its read-back makes the slot active again once RECV is left; that must be the one chosen, not
+		// the old one over it.
+		{
+			run(4000);
+			check(d.currentGlobal() == 0 && !d.recvParked(), "GLOBAL 1 active, RECV left");
+			m.slow = true;
+			msg(R"({"op":"globalMidi","id":46,"span":5})");
+			for(int i = 0; i < 200 && m.inFlight.empty(); ++i)
+				run(10);
+			check(d.recvParked() && !m.inFlight.empty(), "an edit of GLOBAL 1: its dump on its way on SYSEX RECV");
+			m.activations.clear();
+			msg(R"({"op":"globalSlot","id":47,"slot":1})");
+			check(lastResult().find("ok")->asBool() && m.activations.empty(), ("GLOBAL 2 chosen: waits for RECV to be left " + error()).c_str());
+			m.slow = false;
+			for(auto& b : std::exchange(m.inFlight, {}))
+				m.take(b);
+			run(6000);
+			std::string order;
+			for(const auto a : m.activations) order += " " + std::to_string(a + 1);
+			order += "; machine " + std::to_string(m.global + 1) + ", desk " + std::to_string(d.currentGlobal() + 1);
+			check(m.global == 1 && d.currentGlobal() == 1, ("GLOBAL 2 stays active after GLOBAL 1's read-back (0x56:" + order + ")").c_str());
+			msg(R"({"op":"globalSlot","id":48,"slot":0})");
+			run(2000);
+			check(m.global == 0 && d.currentGlobal() == 0, "back to GLOBAL 1");
 		}
 	}
 }
