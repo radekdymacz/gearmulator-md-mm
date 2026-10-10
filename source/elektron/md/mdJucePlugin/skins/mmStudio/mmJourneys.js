@@ -767,12 +767,17 @@ const MmJourneys = (() => {
 			{ say: "click M/S off on the Sequence rail", act: async u => { u.click(tab("seq")); await sleep(300); u.click("#allon"); }, machine: c => ok(same(synthMutes(), c.m0), "machine mutes " + synthMutes()) }
 		]
 	};
+	/* a MIDI track's mute is the MUTE window's keys: refused while the panel takes an earlier journey's dumps on SYSEX
+	   RECV ("The panel is busy"); clicked again then, as mm-seq-first-beat's PLAY (B-014) */
+	const clickMidiMute = async (u, c) => { results.length = 0; u.click('[data-gmute="6"]');
+		for (let i = 0; i < 5 && await until(() => results.some(r => r.op === "muteMidi" && r.ok === false && /busy/.test(r.errors?.[0] || "")), 1500); i++) {
+			c.note = "the plug-in said the panel was busy (SYSEX RECV); clicked again"; results.length = 0; await sleep(1500); u.click('[data-gmute="6"]'); } };
 	const midiMutes = {
 		name: "mm-perform-midi-mutes",
 		steps: [
 			go("perform"),
-			{ say: "click M1 in the Mutes card: MIDI track 1 is muted (the MUTE window)", act: (u, c) => { c.m0 = machine().mutes?.midi ?? 0; u.click('[data-gmute="6"]'); }, machine: c => ok(((machine().mutes?.midi ?? 0) & 1) !== (c.m0 & 1), "MIDI mutes " + machine().mutes?.midi), screen: c => ok(pressed('[data-gmute="6"]') === !!(c.m0 & 1), "key " + $1('[data-gmute="6"]')?.getAttribute("aria-pressed")), within: 10000 },
-			{ say: "click it again", act: u => u.click('[data-gmute="6"]'), machine: c => ok(((machine().mutes?.midi ?? 0) & 1) === (c.m0 & 1), "MIDI mutes " + machine().mutes?.midi), within: 10000 }
+			{ say: "click M1 in the Mutes card: MIDI track 1 is muted (the MUTE window; clicked again when the plug-in says the panel is busy)", act: async (u, c) => { c.m0 = machine().mutes?.midi ?? 0; await clickMidiMute(u, c); }, machine: c => ok(((machine().mutes?.midi ?? 0) & 1) !== (c.m0 & 1), "MIDI mutes " + machine().mutes?.midi), screen: c => ok(pressed('[data-gmute="6"]') === !!(c.m0 & 1), "key " + $1('[data-gmute="6"]')?.getAttribute("aria-pressed")), within: 10000 },
+			{ say: "click it again", act: clickMidiMute, machine: c => ok(((machine().mutes?.midi ?? 0) & 1) === (c.m0 & 1), "MIDI mutes " + machine().mutes?.midi), within: 10000 }
 		]
 	};
 	const joyAssign = {
