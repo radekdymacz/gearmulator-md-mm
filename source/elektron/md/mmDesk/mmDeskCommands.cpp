@@ -361,13 +361,9 @@ namespace mmDesk
 		const auto t = num(_m, "t");
 		// B-026: a mute is the track's CC on the machine's channels: none when the base channel is OFF, and then the
 		// page must not show a mute the machine never took
-		if(const auto* g = activeGlobal(_view, m_curGlobal); g && g->baseChannel > 15)
-			return refuse("The machine's MIDI base channel is OFF (GLOBAL " + std::to_string(g->position + 1)
-				+ "): it takes no mutes, notes or sound values over MIDI. GLOBAL › MIDI › CHANNELS on the machine.");
-		else if(g && (t >= g->channelSpan || g->baseChannel + t > 15))
-			// measured with a 2008 backup's global (CHANNEL SPAN 0): T3's mute CC muted T1
-			return refuse("T" + std::to_string(t + 1) + " has no MIDI channel of its own: CHANNEL SPAN is " + std::to_string(g->channelSpan)
-				+ " (GLOBAL › MIDI › CHANNELS), so the machine takes no mute for it over MIDI.");
+		// measured with a 2008 backup's global (CHANNEL SPAN 0): T3's mute CC muted T1 (elektronData::mmTrackChannel)
+		if(const auto why = noChannelReason(_view, t); !why.empty())
+			return refuse(why);
 		const bool mute = flag(_m, "on");
 		m_port.sendParam(static_cast<uint8_t>(t), 8, 0, mute ? 1 : 0);
 		m_expectMute[static_cast<size_t>(t)] = deskCore::FieldExpectation<bool>::sent(mute, clock());

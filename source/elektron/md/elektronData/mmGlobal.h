@@ -53,6 +53,15 @@ namespace elektronData
 		bool operator!=(const MmGlobal& _o) const { return !(*this == _o); }
 	};
 
+	// B-051: the MIDI channel the machine takes track _track's CCs, notes and mutes on, or none. Measured on OS 1.32B
+	// (mmDeskFirmwareTest spanprobe, a CC on each channel under a global): track t is base + t while t < CHANNEL SPAN
+	// and base + t is 0-14; channel 16 (15) reaches no track whatever the base, a base past 14 (OFF is 127) none.
+	// With CHANNEL SPAN 0 no track has one. One more channel past the span reached T1, the selected track (base + span + 2
+	// in every global tried: B-026's "T3's mute muted T1" under span 0), so nothing is sent outside the span.
+	std::optional<uint8_t> mmTrackChannel(const MmGlobal& _global, uint8_t _track);
+	// NRPN goes on the base channel with the track in its MSB: none while the base channel is past 14.
+	bool mmBaseChannelOn(const MmGlobal& _global);
+
 	std::optional<MmGlobal> decodeMmGlobal(const std::vector<uint8_t>& _sysex);
 	std::vector<uint8_t> encodeMmGlobal(const MmGlobal& _global);
 	std::optional<MmGlobal> mmGlobalFromRaw(const std::vector<uint8_t>& _raw, uint8_t _position);

@@ -35,6 +35,16 @@ namespace elektronData
 			&& position == _o.position;
 	}
 
+	bool mmBaseChannelOn(const MmGlobal& _global) { return _global.baseChannel <= 14; }
+
+	std::optional<uint8_t> mmTrackChannel(const MmGlobal& _global, const uint8_t _track)
+	{
+		const int ch = _global.baseChannel + _track;
+		if(!mmBaseChannelOn(_global) || _track >= _global.channelSpan || ch > 14)
+			return std::nullopt;
+		return static_cast<uint8_t>(ch);
+	}
+
 	std::optional<MmGlobal> mmGlobalFromRaw(const std::vector<uint8_t>& _raw, const uint8_t _position)
 	{
 		if(_raw.size() != MmGlobal::g_rawSize)

@@ -2559,6 +2559,177 @@ namespace
 	}
 }
 
+namespace
+{
+	// B-051: an imported global with no channel for a track (CHANNEL SPAN 0, or the base channel OFF, as in a 2008
+	// backup) leaves the editor's sound values on T2-T6 unheard: they went as CCs on the track's channel. A sound edit
+	// must reach the machine (its memory) whatever the global's MIDI channels, and must not land on another track.
+	// The globals go in as an import does (SyxJob: the dump, then 0x56 for the active one); MM_SYX adds the user's own
+	// backup's globals, read in place (never copied).
+	void importGlobals(Rig& _r, const Bytes& _file, const std::string& _name)
+	{
+		mdJucePlugin::SyxJob<MmSyxTraits> job;
+		job.open(_file, _name, machineDocs(*_r.desk), {_r.desk->currentPattern(), _r.desk->currentKit(), _r.desk->currentSong(), _r.desk->currentGlobal()});
+		_r.desk->setSysexTap([&job](const Bytes& _m) { job.onMachineSysex(_m); });
+		const auto why = job.start({"global"}, {}, machineDocs(*_r.desk));
+		check(why.empty(), "the import of the globals starts" + (why.empty() ? std::string() : ": " + why));
+		const auto t0 = _r.ms();
+		while(job.running() && _r.ms() - t0 < 120000)
+		{
+			if(_r.desk->isInputReady())
+				if(auto p = job.step(_r.desk->machine(), _r.ms(), false))
+					g_contract(*p);
+			_r.run(10);
+		}
+		_r.desk->setSysexTap({});
+		_r.run(2000);
+	}
+
+	// B-051, measuring: which track a CC on each MIDI channel reaches, under a global with these channels (SPAN_PROBE=
+	// "base,span" 0-based, e.g. "12,6" or "0,0"). Prints a line per channel: the track whose AMP value moved.
+	void channelProbe(const Bytes& _rom)
+	{
+		const std::string spec = std::getenv("SPAN_PROBE") ? std::getenv("SPAN_PROBE") : "0,6";
+		const int base = std::atoi(spec.c_str()), span = std::atoi(spec.substr(spec.find(',') + 1).c_str());
+		std::printf("channel probe: base %d span %d\n", base, span);
+		Rig r(_rom);
+		r.msg(R"({"op":"ready"})");
+		r.desk->setProbe(mmDesk::Desk::Probe::Running);
+		r.run(600);
+		const auto tLoad = r.ms();
+		while(r.desk->loaded() < 288 && r.ms() - tLoad < 60000)
+			r.run(100);
+		const auto cur = static_cast<uint8_t>(r.desk->currentGlobal());
+		ed::MmDocuments docs;
+		auto g = r.desk->documents().globals.at(cur);
+		g.baseChannel = static_cast<uint8_t>(base);
+		g.channelSpan = static_cast<uint8_t>(span);
+		docs.globals[cur] = g;
+		importGlobals(r, ed::writeSyx(docs), "probe");
+		r.run(5000);
+		for(uint8_t ch = 0; ch < 16; ++ch)
+		{
+			const auto before = workingKitInMemory(r);
+			uint8_t v = static_cast<uint8_t>(50 + ch);
+			while(std::any_of(before->tracks.begin(), before->tracks.end(), [&](const auto& _t) { return _t.pages[1][3] == v; }))
+				v = static_cast<uint8_t>((v + 1) & 127);
+			r.out.push_back({static_cast<uint8_t>(0xb0 | ch), 59, v});	// AMP page index 3
+			r.run(300);
+			const auto after = workingKitInMemory(r);
+			std::string hit;
+			for(size_t t = 0; t < 6; ++t)
+				if(after->tracks[t].pages[1][3] != before->tracks[t].pages[1][3])
+					hit += " T" + std::to_string(t + 1);
+			std::printf("    channel %2d (0-based %2d):%s\n", ch + 1, ch, hit.empty() ? " -" : hit.c_str());
+		}
+	}
+
+	void channelSpan(const Bytes& _rom)
+	{
+		std::puts("sound edits whatever the MIDI channels (B-051)");
+		struct Variant { std::string name; std::function<void(ed::MmGlobal&)> change; Bytes file; };
+		std::vector<Variant> variants{
+			{"CHANNEL SPAN 0", [](ed::MmGlobal& _g) { _g.channelSpan = 0; }, {}},
+			{"base channel OFF", [](ed::MmGlobal& _g) { _g.baseChannel = 127; }, {}},
+			{"base channel 13, span 6", [](ed::MmGlobal& _g) { _g.baseChannel = 12; _g.channelSpan = 6; }, {}},
+		};
+		if(const char* path = std::getenv("MM_SYX"); path && *path)
+		{
+			std::ifstream in(path, std::ios::binary);
+			if(in)
+				variants.push_back({"the backup's globals (MM_SYX)", {}, Bytes((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>())});
+		}
+		const std::string only = std::getenv("SPAN_ONLY") ? std::getenv("SPAN_ONLY") : "";	// a part of a variant's name
+		for(const auto& v : variants)
+		{
+			if(!only.empty() && v.name.find(only) == std::string::npos)
+				continue;
+			std::printf("  %s\n", v.name.c_str());
+			Rig r(_rom);
+			r.msg(R"({"op":"ready"})");
+			r.desk->setProbe(mmDesk::Desk::Probe::Running);
+			r.run(600);
+			const auto tLoad = r.ms();
+			while(r.desk->loaded() < 288 && r.ms() - tLoad < 60000)
+				r.run(100);
+			r.run(1000);
+			if(v.change)
+			{
+				const auto cur = static_cast<uint8_t>(r.desk->currentGlobal());
+				ed::MmDocuments docs;
+				auto g = r.desk->documents().globals.at(cur);
+				v.change(g);
+				docs.globals[cur] = g;
+				importGlobals(r, ed::writeSyx(docs), v.name);
+			}
+			else
+				importGlobals(r, v.file, v.name);
+			const auto& gs = r.desk->documents().globals;
+			const auto gi = gs.find(static_cast<uint8_t>(r.desk->currentGlobal()));
+			check(gi != gs.end(), "the active global is read back");
+			if(gi == gs.end())
+				continue;
+			std::printf("    active global %d: base channel %d, span %d, auto %d, multi trig %d, multi map %d\n", gi->first + 1, gi->second.baseChannel,
+				gi->second.channelSpan, gi->second.autoChannel, gi->second.multiTrigChannel, gi->second.multiMapChannel);
+			const auto k = std::to_string(r.desk->currentKit());
+			int gesture = 5100;
+			for(int t = 0; t < 6; ++t)
+			{
+				const auto before = workingKitInMemory(r);
+				if(!before)
+				{
+					check(false, "the kit that plays is in memory");
+					break;
+				}
+				const int want = (before->tracks[static_cast<size_t>(t)].pages[1][3] + 41) % 128;
+				const int level = (before->levels[static_cast<size_t>(t)] + 23) % 128;
+				r.msg("{\"op\":\"param\",\"g\":" + std::to_string(++gesture) + ",\"k\":" + k + ",\"t\":" + std::to_string(t)
+					+ ",\"page\":1,\"i\":3,\"v\":" + std::to_string(want) + "}");
+				r.msg("{\"op\":\"level\",\"g\":" + std::to_string(++gesture) + ",\"k\":" + k + ",\"t\":" + std::to_string(t)
+					+ ",\"v\":" + std::to_string(level) + "}");
+				r.run(4000);
+				const auto after = workingKitInMemory(r);
+				const int got = after ? after->tracks[static_cast<size_t>(t)].pages[1][3] : -1;
+				const int gotLevel = after ? after->levels[static_cast<size_t>(t)] : -1;
+				std::string others;
+				for(size_t o = 0; after && o < 6; ++o)
+					if(static_cast<int>(o) != t && (after->tracks[o].pages[1][3] != before->tracks[o].pages[1][3] || after->levels[o] != before->levels[o]))
+						others += " T" + std::to_string(o + 1);
+				check(got == want && gotLevel == level, v.name + ": T" + std::to_string(t + 1) + "'s AMP value and level reach the machine (memory "
+					+ std::to_string(got) + "/" + std::to_string(gotLevel) + ", sent " + std::to_string(want) + "/" + std::to_string(level) + ")");
+				check(others.empty(), v.name + ": T" + std::to_string(t + 1) + "'s edit changes no other track" + (others.empty() ? "" : " (changed:" + others + ")"));
+				const auto w = r.desk->workingKit();
+				check(w && after && ed::mmKitRaw(*w) == ed::mmKitRaw(*after), v.name + ": the page's kit is the machine's");
+			}
+			// MULTI ENV: NRPN on the base channel (the track in the MSB), every track's
+			if(const auto before = workingKitInMemory(r))
+			{
+				const int want = (before->tracks[0].multiEnv[1] + 29) % 128;
+				r.msg("{\"op\":\"multiEnv\",\"g\":" + std::to_string(++gesture) + ",\"k\":" + k + ",\"i\":1,\"v\":" + std::to_string(want) + "}");
+				r.run(4000);
+				const auto after = workingKitInMemory(r);
+				const bool all = after && std::all_of(after->tracks.begin(), after->tracks.end(), [&](const auto& _t) { return _t.multiEnv[1] == want; });
+				check(all, v.name + ": a MULTI ENV value reaches every track (memory T1 " + std::to_string(after ? after->tracks[0].multiEnv[1] : -1)
+					+ ", sent " + std::to_string(want) + ")");
+			}
+			// the mute: CC 3 on the track's channel, refused with the reason where there is none (B-026)
+			for(int t = 0; t < 6; ++t)
+			{
+				const bool channel = ed::mmTrackChannel(gi->second, static_cast<uint8_t>(t)).has_value();
+				r.msg("{\"op\":\"mute\",\"t\":" + std::to_string(t) + ",\"on\":true}");
+				const bool taken = r.lastResult().find("ok")->asBool();
+				r.run(600);
+				const bool landed = ((r.tel.mutes.load() >> t) & 1) == 1;
+				check(taken == channel && landed == channel && (r.tel.mutes.load() & ~(1 << t) & 0x3f) == 0, v.name + ": T" + std::to_string(t + 1) + "'s mute "
+					+ (channel ? "lands" : "is refused, nothing muted") + " (" + (taken ? "taken" : "refused") + ", machine mutes "
+					+ std::to_string(r.tel.mutes.load()) + ")");
+				r.msg("{\"op\":\"mute\",\"t\":" + std::to_string(t) + ",\"on\":false}");
+				r.run(600);
+			}
+		}
+	}
+}
+
 int main(const int _argc, char** _argv)
 {
 	std::setvbuf(stdout, nullptr, _IOLBF, 0);
@@ -2634,6 +2805,10 @@ int main(const int _argc, char** _argv)
 			recording(rom);
 		if(only.empty() || only == "parked")
 			parkedKeys(rom);
+		if(only.empty() || only == "span")
+			channelSpan(rom);
+		if(only == "spanprobe")
+			channelProbe(rom);
 		if(only == "machine")
 		{
 			machineStays(rom);

@@ -7,7 +7,7 @@ namespace mmDesk
 	using namespace parts;
 
 	// The page's keyboard (the home row, the piano roll's keys, the transpose keyboard): synth track t's
-	// note on its own MIDI channel (GLOBAL › MIDI › CHANNELS: base + t, while t < CHANNEL SPAN), MIDI note
+	// note on its own MIDI channel (elektronData::mmTrackChannel: base + t, while t < CHANNEL SPAN and up to channel 15), MIDI note
 	// 48 + pitch. A second note on of the same pitch ends the first; the note off goes where its note on
 	// went. Notes are the machine's to sound: nothing in the documents changes.
 	Outcome MmMachine::cmdNoteOn(const Value& _m, const Documents& _view)
@@ -21,10 +21,10 @@ namespace mmDesk
 		const auto* g = activeGlobal(_view, m_curGlobal);
 		if(!g)
 			return refuse("The global is not read yet.");
-		const int ch = g->baseChannel + on.track;
-		if(on.track >= g->channelSpan || ch < 0 || ch > 15)
-			return refuse("T" + std::to_string(on.track + 1) + " has no MIDI channel of its own: CHANNEL SPAN is " + std::to_string(g->channelSpan)
-				+ " (GLOBAL › MIDI › CHANNELS).");
+		const auto channel = on.track < 6 ? ed::mmTrackChannel(*g, static_cast<uint8_t>(on.track)) : std::nullopt;
+		if(const auto why = noChannelReason(_view, on.track); !why.empty() || !channel)
+			return refuse(why.empty() ? "T" + std::to_string(on.track + 1) + " has no MIDI channel of its own." : why);
+		const int ch = *channel;
 		auto r = pressNote(std::move(m_notes), on.track, on.pitch, static_cast<uint8_t>(ch), static_cast<uint8_t>(note), on.velocity);
 		m_notes = std::move(r.next);
 		for(const auto& n : r.sends)

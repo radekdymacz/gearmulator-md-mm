@@ -27,6 +27,17 @@ namespace mmDesk
 	// Every byte that differs between _before and _after has _after's value in _image (raw kits).
 	bool reflects(const elektronData::MmKit& _image, const elektronData::MmKit& _before, const elektronData::MmKit& _after);
 
+	// B-051: which of the editor's channel messages the machine takes now. A track's CCs (its sound values, level,
+	// mute) and notes need its own channel (elektronData::mmTrackChannel); NRPN needs the base channel. Without the
+	// active global (not read yet) everything goes, as it always did.
+	struct ChannelReach
+	{
+		std::array<bool, 6> track{true, true, true, true, true, true};
+		bool nrpn = true;
+		static ChannelReach none() { ChannelReach r; r.track.fill(false); r.nrpn = false; return r; }
+		static ChannelReach of(const elektronData::MmGlobal* _global);
+	};
+
 	// The Monomachine adapter (P6) behind deskCore's Machine protocol. Its sources are split along the MD's seams:
 	// mmDeskMachine.cpp (facts, capabilities, tick, the machine document), mmDeskDelivery.cpp, mmDeskLoad.cpp,
 	// mmDeskCommands.cpp, mmDeskChain.cpp, mmDeskNotes.cpp, mmDeskRecord.cpp; small state values with pure steps
@@ -36,7 +47,8 @@ namespace mmDesk
 	//     request to confirm what the firmware holds;
 	//   the working kit: CC per changed parameter and level, NRPN for the MIDI page, 0x5B machine,
 	//     0x5C routing, 0x55 name; what has no live path is a kit dump to the current slot plus
-	//     LOAD KIT (which also saves it there). It is pending until memory shows it.
+	//     LOAD KIT (which also saves it there). It is pending until memory shows it. A track the
+	//     active global gives no MIDI channel (ChannelReach, B-051) has no live path for its values.
 	// Without the panel (HW MIDI) only the person can open SYSEX RECV: the dumps wait (the machine
 	// document's recv.waiting, "SEND n") until the page says the machine is on it ("hwSend").
 	class MmMachine final : public deskCore::AdapterBase<MmModel, MmAdapter>
@@ -120,9 +132,17 @@ namespace mmDesk
 		void afterDumps(Bytes _message);
 		// The dumps wait for the person to open SYSEX RECV (no panel keys: HW MIDI).
 		bool manualDumps() const { return !m_profile.panel; }
-		void deliverKitLive(const elektronData::MmKit& _from, const elektronData::MmKit& _to, std::vector<std::string>& _notes);
-		// The live messages (0x55, 0x5B, 0x5C, CC, NRPN) that turn the working kit _from into _to; nothing else.
-		void sendKitLive(const elektronData::MmKit& _from, const elektronData::MmKit& _to);
+		void deliverKitLive(const elektronData::MmKit& _from, const elektronData::MmKit& _to, const ChannelReach& _reach,
+			std::vector<std::string>& _notes);
+		// The live messages (0x55, 0x5B, 0x5C, CC, NRPN) that turn the working kit _from into _to; nothing else. CC and
+		// NRPN only where _reach says the machine takes them.
+		void sendKitLive(const elektronData::MmKit& _from, const elektronData::MmKit& _to, const ChannelReach& _reach);
+		// B-051: what the machine takes over MIDI channels now: the active global's, none for a while after its base
+		// channel changed (the machine applies it once SYSEX RECV is left; the emulator's parameter layer learns it by its
+		// own poll, every 5 s).
+		ChannelReach reach(const Documents& _view) const;
+		// Why track _t takes no CC, mute or note now; empty when it does.
+		std::string noChannelReason(const Documents& _view, int _t) const;
 		// B-027: a dump of the pattern that plays went into the stream; the kit reload it makes is
 		// followed by the edits.
 		void reloadFollows(const Bytes& _patternDump);
@@ -227,6 +247,9 @@ namespace mmDesk
 		deskCore::WireFacts m_wire;
 		int m_curPattern = -1, m_curKit = -1, m_curSong = -1, m_curGlobal = -1, m_songMode = -1;
 		int m_activateGlobal = -1;	// the active global's slot to make active again (0x56) once RECV is left
+		int m_baseChannel = -1;		// the active global's base channel as last read (-1: not yet)
+		double m_channelsSettleUntilMs = -1e9;	// B-051: after a base channel change, no channel messages until then
+		static constexpr double g_channelsSettleMs = 6000;
 		int m_poly = -1;			// the audio mode (SET STATUS 0x20): 0 mono, 1 POLY; -1 unknown
 		// DESIGN-UNIFY.md 4.4: what the editor set and memory has not shown yet: the twelve mutes (bit t of
 		// Telemetry::mutes), POLY and the tempo (BPM x 24). The machine document says these until then.
