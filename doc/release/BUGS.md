@@ -4,6 +4,13 @@
 repository; the site sends reports to the contact address. Newest first. Each entry:
 where it came from, the setup, what happens, what should happen, status.*
 
+## B-047 · Windows CI: bridgeLibTest and the machine MIDI out tests crash
+
+- **From:** the 0.4.0 tag build, 2026-10-10 (first Windows run of these tests).
+- **What happens:** on the Windows runner `bridgeLibTest` ends with a segmentation fault after 0.01 s, and `mdMachineMidiOutTest`, `mdMachineMidiOutFirmwareTest_md` and `_mm` end with 0xc0000409 (a fail-fast, e.g. an exception through `noexcept` or `abort`). All pass on macOS and Linux. The packaged Windows standalones and VST3s start and close in CI, so the plug-ins themselves are not shown to crash.
+- **For 0.4.0:** the four are built on Windows but left out of its test run (`scripts/windows/build_mdmm.ps1`).
+- **Status:** open, for 0.4.1: needs a Windows debugger (the `operator new` replacement in bridgeLibTest, the throwing `loadCustomData` case in mdMachineMidiOutTest).
+
 ## B-046 · Monomachine: picking H16 of the Autechre backup leaves the machine on kit 58, not its linked kit 74
 
 - **From:** found by the B-031 work, 2026-10-09.

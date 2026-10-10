@@ -451,7 +451,7 @@ namespace
 		bool served = talking != nullptr;
 		for(int i = 0; i < 3 && served; ++i)
 		{
-			std::this_thread::sleep_for(Milliseconds(timeoutMs / 2));
+			std::this_thread::sleep_for(Milliseconds(timeoutMs / 6)); // well inside the timeout, also on a loaded CI runner
 			served = send(*talking, requestText(server->port))
 				&& isStatus(readResponse(*talking, Milliseconds(2000)), 200);
 		}

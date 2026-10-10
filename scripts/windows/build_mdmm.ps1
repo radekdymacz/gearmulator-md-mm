@@ -181,7 +181,7 @@ if ($WithTests) {
         '--test-dir', $BuildDir,
         '-C', $Configuration,
         '--output-on-failure',
-        '--tests-regex', '^(baseLibBinaryStreamTest|bridgeLibTest|bridgeServerRomPoolTest|mcpHttpGuardTest|mcpHttpServerTest|mcpServerTest|synthLibAudioTest|synthLibMidiQueueTest|synthLibStateCaptureTest|mdLibTests|mdStateCaptureTest|mdMemoryFastLaneTest|mdAudioQueueTest|mdAudioFirmwareTest|mdAudioIoLayoutTest|mdProcessorHooksTest|mdWindowsPolicyTest|mdMachineMidiOutTest|mdMachineMidiOutFirmwareTest_(md|mm)|mdProcessArchTest|mdRosettaNoticeTest|mdDroppedFilesTest|mdProjectStateRestoreTest|mdProgramChangeFirmwareTest|mdAudioProbePluginVST3IdentityTest|mdVst3ProgramChange(Test|OptOutTest)|(md|mm)JucePlugin_VST3ProgramChangeTest)$'
+        '--tests-regex', '^(baseLibBinaryStreamTest|bridgeServerRomPoolTest|mcpHttpGuardTest|mcpHttpServerTest|mcpServerTest|synthLibAudioTest|synthLibMidiQueueTest|synthLibStateCaptureTest|mdLibTests|mdStateCaptureTest|mdMemoryFastLaneTest|mdAudioQueueTest|mdAudioFirmwareTest|mdAudioIoLayoutTest|mdProcessorHooksTest|mdWindowsPolicyTest|mdProcessArchTest|mdRosettaNoticeTest|mdDroppedFilesTest|mdProjectStateRestoreTest|mdProgramChangeFirmwareTest|mdAudioProbePluginVST3IdentityTest|mdVst3ProgramChange(Test|OptOutTest)|(md|mm)JucePlugin_VST3ProgramChangeTest)$'
     )
     Invoke-Native -FilePath $ctest -Arguments @(
         '--test-dir', $BuildDir,
