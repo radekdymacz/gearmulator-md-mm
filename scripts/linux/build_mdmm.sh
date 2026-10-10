@@ -40,20 +40,9 @@ cmake -S "${source_dir}" -B "${build_dir}" -G Ninja \
 	-Dgearmulator_MDMM_DIAGNOSTICS="$([[ "${diagnostics}" == 1 ]] && echo ON || echo OFF)" \
 	-Dgearmulator_JUCE_WEB_BROWSER=ON \
 	-Dgearmulator_BUILD_JUCEPLUGIN=ON \
-	-Dgearmulator_BUILD_FX_PLUGIN=OFF \
-	-Dgearmulator_BUILD_JUCEPLUGIN_VST2=OFF \
 	-Dgearmulator_BUILD_JUCEPLUGIN_VST3=ON \
-	-Dgearmulator_BUILD_JUCEPLUGIN_CLAP=OFF \
-	-Dgearmulator_BUILD_JUCEPLUGIN_LV2=OFF \
 	-Dgearmulator_BUILD_JUCEPLUGIN_AU=OFF \
-	-Dgearmulator_BUILD_JUCEPLUGIN_Standalone=ON \
-	-Dgearmulator_SYNTH_ELEKTRON=ON \
-	-Dgearmulator_SYNTH_OSIRUS=OFF \
-	-Dgearmulator_SYNTH_OSTIRUS=OFF \
-	-Dgearmulator_SYNTH_VAVRA=OFF \
-	-Dgearmulator_SYNTH_XENIA=OFF \
-	-Dgearmulator_SYNTH_NODALRED2X=OFF \
-	-Dgearmulator_SYNTH_JE8086=OFF
+	-Dgearmulator_BUILD_JUCEPLUGIN_Standalone=ON
 
 # The products first: they must build.
 HOME="${build_home}" cmake --build "${build_dir}" --config "${config}" --parallel "${parallel}" --target \

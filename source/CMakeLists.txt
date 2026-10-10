@@ -1,7 +1,5 @@
 cmake_minimum_required(VERSION 3.15)
 
-option(${CMAKE_PROJECT_NAME}_SYNTH_ELEKTRON "Build Machinedrum and Monomachine" on)
-
 # ----------------- Add our cmake scripts to IDE
 
 add_custom_target(cmakeScripts SOURCES 
@@ -22,7 +20,7 @@ set(BUILD_SHARED_LIBS OFF)
 
 add_subdirectory(dsp56300/source)
 
-# ----------------- Common libraries used by all synths
+# ----------------- Common libraries
 
 add_subdirectory(baseLib)
 add_subdirectory(synthLib)
@@ -75,6 +73,6 @@ endif()
 add_subdirectory(mc68k EXCLUDE_FROM_ALL)
 add_subdirectory(hardwareLib EXCLUDE_FROM_ALL)
 
-# ----------------- all elektrons
+# ----------------- the Machinedrum and Monomachine editors
 
 add_subdirectory(elektron)

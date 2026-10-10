@@ -251,17 +251,12 @@ stage_build() {
 		-DCMAKE_OSX_SYSROOT="${SDKROOT}" -DXCODE_VERSION="${XCODE_VERSION:-16}"
 		-DGEARMULATOR_MDMM_APPLE_THINLTO=ON -DGEARMULATOR_MDMM_APPLE_OPTIMIZE_DSP=ON
 		-DGEARMULATOR_MDMM_APPLE_PGO_MODE=none -DGEARMULATOR_MDMM_APPLE_PGO_PROFILE=
-		-DGEARMULATOR_JUCE_PRODUCTS_ROOT="${BUILD}/products" -DBUILD_TESTING=ON
-		-Dgearmulator_BUILD_FX_PLUGIN=OFF -Dgearmulator_SYNTH_ELEKTRON=ON -Dgearmulator_SYNTH_OSIRUS=OFF
-		-Dgearmulator_SYNTH_OSTIRUS=OFF -Dgearmulator_SYNTH_VAVRA=OFF -Dgearmulator_SYNTH_XENIA=OFF
-		-Dgearmulator_SYNTH_NODALRED2X=OFF -Dgearmulator_SYNTH_JE8086=OFF)
+		-DGEARMULATOR_JUCE_PRODUCTS_ROOT="${BUILD}/products" -DBUILD_TESTING=ON)
 	if [ "${QUICK}" = 1 ]; then
 		flags+=(-Dgearmulator_BUILD_JUCEPLUGIN=OFF)
 	else
-		flags+=(-Dgearmulator_BUILD_JUCEPLUGIN=ON -Dgearmulator_BUILD_JUCEPLUGIN_VST2=OFF
-			-Dgearmulator_BUILD_JUCEPLUGIN_VST3=ON -Dgearmulator_BUILD_JUCEPLUGIN_CLAP=OFF
-			-Dgearmulator_BUILD_JUCEPLUGIN_LV2=OFF -Dgearmulator_BUILD_JUCEPLUGIN_AU=ON
-			-Dgearmulator_BUILD_JUCEPLUGIN_Standalone=ON)
+		flags+=(-Dgearmulator_BUILD_JUCEPLUGIN=ON -Dgearmulator_BUILD_JUCEPLUGIN_VST3=ON
+			-Dgearmulator_BUILD_JUCEPLUGIN_AU=ON -Dgearmulator_BUILD_JUCEPLUGIN_Standalone=ON)
 	fi
 	# JUCE runs each VST3 while it builds it: that load gets a data root inside the build tree (no ROM in it).
 	mkdir -p "${home}/Documents"
