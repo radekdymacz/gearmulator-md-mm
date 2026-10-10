@@ -6,7 +6,7 @@ as a standalone app, VST3 and AU on macOS (Windows x64 and Linux x64 builds exis
 
 - **Site, screenshots, download:** https://mdmm.dev
 - **Releases:** https://github.com/radekdymacz/mdmm/releases
-  (latest: [0.4.0 notes](doc/release/v0.4.0.md); all release notes are in [doc/release/](doc/release/))
+  (latest: [0.5.0 notes](doc/release/v0.5.0.md); all release notes are in [doc/release/](doc/release/))
 - **User guide** (install, ROM, DAW use, workspaces, every keyboard shortcut): https://mdmm.dev/guide/
 - **Bring your own ROM.** No firmware is included. With no ROM the editor shows a start-up card:
   choose your machine's image with its file chooser (on macOS you can also drop the `.bin` or `.zip` on the window; on Windows and Linux use the chooser) and the editor
