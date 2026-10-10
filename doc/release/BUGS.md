@@ -9,7 +9,8 @@ where it came from, the setup, what happens, what should happen, status.*
 - **From:** the 0.4.0 tag build, 2026-10-10 (first Windows run of these tests).
 - **What happens:** on the Windows runner `bridgeLibTest` ends with a segmentation fault after 0.01 s, and `mdMachineMidiOutTest`, `mdMachineMidiOutFirmwareTest_md` and `_mm` end with 0xc0000409 (a fail-fast, e.g. an exception through `noexcept` or `abort`). All pass on macOS and Linux. The packaged Windows standalones and VST3s start and close in CI, so the plug-ins themselves are not shown to crash.
 - **For 0.4.0:** the four are built on Windows but left out of its test run (`scripts/windows/build_mdmm.ps1`).
-- **Status:** open, for 0.4.1: needs a Windows debugger (the `operator new` replacement in bridgeLibTest, the throwing `loadCustomData` case in mdMachineMidiOutTest).
+- **Cause (test-only, the plug-ins are not affected):** `bridgeLibTest` made `bridgeLib::AudioBuffers` on the stack; its sixteen 16384-sample rings are held inline, a megabyte, the whole default stack of a Windows thread (8 MB on macOS and Linux; reproduced on macOS with `ulimit -s 1024`). The client keeps its one inside a heap object. `mdMachineMidiOutTest` began with `setvbuf(stdout, nullptr, _IOLBF, 0)`: the MSVC CRT has no line buffering and takes a size of 0 as an invalid parameter, a fail-fast before anything runs.
+- **Status:** fixed for 0.4.1, waiting on a Windows run: the test makes its buffers on the heap, the MIDI out test's stdout is unbuffered (`_IONBF`), both print each step as it happens, and the four are back in the Windows run. Other tests still use `_IOLBF, 0` (none of them runs on Windows yet): change them before they do.
 
 ## B-046 · Monomachine: picking H16 of the Autechre backup leaves the machine on kit 58, not its linked kit 74
 

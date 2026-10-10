@@ -333,7 +333,10 @@ namespace
 
 int main(const int _argc, char** const _argv)
 {
-	std::setvbuf(stdout, nullptr, _IOLBF, 0);	// every line in a CI log, also when the process dies
+	// Every line in a CI log, also when the process dies. Unbuffered, not line-buffered: the MSVC CRT has no line
+	// buffering and takes _IOLBF with a size of 0 as an invalid parameter, a fail-fast (0xc0000409) before main's
+	// next line (B-047)
+	std::setvbuf(stdout, nullptr, _IONBF, 0);
 	const bool md = _argc > 1 && std::strcmp(_argv[1], "md") == 0;
 	const bool mm = _argc > 1 && std::strcmp(_argv[1], "mm") == 0;
 	const int result = md || mm ? firmware(mm) : values();
