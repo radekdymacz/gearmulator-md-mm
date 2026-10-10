@@ -8,9 +8,9 @@ project restore. It is off by default and never uploads a report.
 
 1. Right-click the instrument background in the Machinedrum Editor or the Monomachine Editor and open
    **Developer** (the Performance diagnostics entries moved there in 0.3.5). Knobs may have their own parameter menu.
-2. Click **Start performance capture**. Reopen the submenu to check its status.
+2. Click **Start Performance Capture**. Reopen the submenu to check its status.
 3. Reproduce the crackling or slow playback using your normal host settings.
-4. Click **Stop performance capture**, then **Open logs folder**.
+4. Click **Stop Performance Capture**, then **Open Log Folder**.
 5. Share the `performance-<timestamp>-<unique-id>.jsonl` file and whether you heard
    the problem. Panel actions are recorded automatically. If there were several
    incidents, approximate audible-problem times still help identify which one.

@@ -69,10 +69,6 @@ with `-DCMAKE_OSX_DEPLOYMENT_TARGET=14.0` takes the same `std::pmr` path, so it 
 Linux machine. `synthLibMidiClockTimingTest` is still left out of the run, from before `midiClock.cpp` and the test
 were built with `-fno-fast-math` (2026-10-07); retry it on Linux CI.
 
-## Windows: known risk
+## Windows
 
-JUCE 7's default Windows web view is the Internet Explorer control (`WebBrowserComponent::Options::Backend::
-defaultBackend`), not WebView2, and the pages use modern JavaScript. The Windows editor window has never been
-seen; it may well stay empty or show script errors. WebView2 would need its SDK in the build
-(`JUCE_USE_WIN_WEBVIEW2`), `withBackend(webview2)` in `mdWebPageHost.cpp`, and a check that WebView2 passes the
-bridge's iframe navigations and `javascript:` URLs, on a Windows machine.
+See [WINDOWS.md](WINDOWS.md): the Windows editor has used WebView2 since 0.3.2.

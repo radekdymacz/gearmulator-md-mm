@@ -8,7 +8,7 @@
 - **From:** Radek, 2026-10-09.
 - **Idea:** drop files from the Finder onto the editor window: a ROM installs it, a `.syx` opens the SysEx import window, samples load into the Sampler.
 - **What can be dropped where (macOS only for now):** anywhere on the window. A **ROM** (`.bin`, or a `.zip` with it): asked first ("Install … as the firmware? The machine starts again with it."), at once on the start-up card when no firmware runs yet. A **SysEx file** (`.syx`): the SysEx import window opens with its preview, as **Import SysEx…** does; one file a drop. **Samples** (`.wav`, `.aif`, `.aiff`; Machinedrum UW): open the Sampler and select a ROM slot (or drop onto a ROM slot's tile): the sample goes into that slot; several go into that slot and the ones after it, one after another, after one question. Anything else is named in a note. While files are over the window a frame says what it takes. Windows and Linux: not yet (the web view there takes the file first; it is not opened).
-- **Status:** built on `feat/drag-and-drop` (2026-10-09), design in [FOUNDATION.md](../modern-ux/FOUNDATION.md), "Files dropped on the window". To be checked by hand from the Finder before it ships.
+- **Status:** shipped in 0.4.0 (macOS), design in [FOUNDATION.md](../modern-ux/FOUNDATION.md), "Files dropped on the window"; tried by the page tests and the journeys, the Finder drop by hand still to be confirmed by testers. Windows and Linux open: the web view takes the file first (WebView2: `put_AllowExternalDrop(FALSE)` should hand it to the window, as the macOS hook does; webkit2gtk: the drop lands on the page), see the two TODO notes in `mdWebPageHost.cpp`.
 
 ## I-016 · Run a custom firmware (ems-monomachine-firmware, ems-machinedrum-firmware) in the editor
 
@@ -73,7 +73,7 @@
 
 - **From:** Radek, 2026-10-08.
 - **Idea:** the right-click / editor menu (GUI Scale, Page Zoom, RAM recording, Updates) is JUCE's default dark-blue menu. Draw it in the page with the themed menu from the key map (deskMenu.js): plate colours and fonts, light/dark and MK1/MK2, the same in every DAW and OS. First line "Machinedrum Editor <version>"; Performance diagnostics into a Developer submenu.
-- **Status:** in progress for 0.3.5 (branch `wip/0.3.5-menu`): option A, the menu drawn in the page. The window sends the entries as data (`mdEditorMenu.h`, one tree: the page, the menu bar, and a native menu only when no page is up), the page draws them (`deskMenu.js`: submenus, ticks, keyboard, placement) and the window runs the one chosen. Content: the editor and version as the title; Zoom (the page's zoom steps, with Window Size inside: upstream's GUI Scale, the window at a size of the design); Updates; Open Log Folder; Audio/MIDI Settings (standalone); Developer (performance capture, RAM recording). Screenshots for review first.
+- **Status:** shipped in 0.3.5: option A, the menu drawn in the page. The window sends the entries as data (`mdEditorMenu.h`, one tree: the page, the menu bar, and a native menu only when no page is up), the page draws them (`deskMenu.js`: submenus, ticks, keyboard, placement) and the window runs the one chosen. Content: the editor and version as the title; Zoom (the page's zoom steps, with Window Size inside: upstream's GUI Scale, the window at a size of the design); Updates; Open Log Folder; Audio/MIDI Settings (standalone); Developer (performance capture, RAM recording). Screenshots for review first.
 
 ## I-007 · Ableton-style editing on the Monomachine piano roll
 
@@ -110,4 +110,4 @@
 
 - **From:** Discord tester A, 2026-10-07: "copy only one step and paste it, same track".
 - **Idea:** select one or more steps with a modifier-drag; copy, cut, paste, duplicate, delete.
-- **Status:** being built (`feat/step-selection`).
+- **Status:** shipped in 0.3.4 (select, copy, cut, paste, duplicate, delete; B-015).

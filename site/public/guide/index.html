@@ -48,7 +48,7 @@
   <div class="wrap">
     <span class="eyebrow">User guide</span>
     <h1>User guide</h1>
-    <p>Everything a first-time user needs for the Machinedrum Editor and the Monomachine Editor, version 0.3.2. Tested on macOS (Intel and Apple silicon builds, macOS 12 or later). Windows x64 and Linux x64 builds are available but not tested yet.</p>
+    <p>Everything a first-time user needs for the Machinedrum Editor and the Monomachine Editor, <span data-version></span>. Tested on macOS (Intel and Apple silicon builds, macOS 12 or later). Windows x64 and Linux x64 builds are available but not tested yet.</p>
     <ul class="toc">
       <li><a href="#start">Getting started</a></li>
       <li><a href="#rom">Add your ROM</a></li>
@@ -71,7 +71,7 @@
     <p>The editors run the machine's real firmware. You bring your own: <b>Machinedrum OS 1.63</b> or <b>Monomachine SFX-60 OS 1.32B</b>, an 8 MiB image. No firmware is included and we cannot supply it.</p>
     <ol>
       <li>Open the editor. With no ROM there is no error pop-up. A start-up card says <b>Machinedrum firmware needed</b> (or Monomachine).</li>
-      <li>Click the large area on the card: <b>Choose your Machinedrum OS 1.63 ROM (.bin or .zip, 8 MB)</b> (for the Monomachine, <b>Choose your Monomachine SFX-60 OS 1.32B ROM</b>). Under it, <b>Click here to choose the file</b>. The file chooser opens. Pick the <code>.bin</code>, or a <code>.zip</code> that holds it. Drag and drop is not supported.</li>
+      <li>Click the large area on the card: <b>Choose your Machinedrum OS 1.63 ROM (.bin or .zip, 8 MB)</b> (for the Monomachine, <b>Choose your Monomachine SFX-60 OS 1.32B ROM</b>). Under it, <b>Click here to choose the file</b>. The file chooser opens. Pick the <code>.bin</code>, or a <code>.zip</code> that holds it. On macOS you can also drop the <code>.bin</code> or <code>.zip</code> onto the window; a dropped <code>.syx</code> opens the SysEx import window and dropped samples go into the Sampler. On Windows and Linux use the file chooser.</li>
       <li>The editor checks the file and copies it into its ROM folder: on macOS <code>~/Documents/Gearmulator Preview/Machinedrum/roms/</code>, on Windows <code>Documents\Gearmulator Preview\Machinedrum\roms\</code> (or the <code>Monomachine</code> folder). The firmware stays on your computer and is sent nowhere. The machine then starts, which takes 10–15 seconds.</li>
     </ol>
     <p>You can also copy the image into that folder yourself. On the card, the links <b>Show the ROM folder</b> and <b>Check again</b> open the folder and look again. A file that is the wrong OS or a damaged dump is refused, with the reason on the card.</p>
@@ -334,7 +334,7 @@
       <tr><th scope="row">VST3</th><td><code>Machinedrum Editor.vst3</code> and <code>Monomachine Editor.vst3</code> in <code>/Library/Audio/Plug-Ins/VST3</code> (or <code>~/Library/Audio/Plug-Ins/VST3</code>)</td></tr>
       <tr><th scope="row">AU</th><td><code>Machinedrum Editor.component</code> and <code>Monomachine Editor.component</code> in <code>/Library/Audio/Plug-Ins/Components</code> (or <code>~/Library/Audio/Plug-Ins/Components</code>)</td></tr>
     </tbody></table></div>
-    <p class="small">Questions or bugs: <a href="/contact/">contact</a>. Release notes: <a href="https://github.com/radekdymacz/gearmulator-md-mm/blob/main/doc/release/v0.3.0.md">0.3.0</a>, <a href="https://github.com/radekdymacz/gearmulator-md-mm/blob/main/doc/release/v0.3.1.md">0.3.1</a>.</p>
+    <p class="small">Questions or bugs: <a href="/contact/">contact</a>. Release notes: <a href="/releases/">every version</a>.</p>
   </div>
 </main>
 

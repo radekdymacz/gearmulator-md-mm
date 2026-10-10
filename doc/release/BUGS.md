@@ -71,7 +71,7 @@ where it came from, the setup, what happens, what should happen, status.*
 - **From:** found by the song playhead's firmware test, 2026-10-09 (0.3.5 work).
 - **What happens:** in a song written by the Monomachine Editor, a LOOP row goes back to row 1 instead of the row it names. The machine plays it so; the playhead shows it. (The "row before the LOOP is skipped" first noted here was the test's: it sampled only while RAM 0x26b46e, taken as "running", read 1, and that byte reads 0 during some passes; sampled on the step alone, every row plays.)
 - **To check:** where the MM song row stores the loop target (inferred in MM-P1, never probed); probe it on the firmware as the Machinedrum's was. Noted in mm-data-contract.md.
-- **Status:** open, for 0.3.6.
+- **Status:** open (listed under Known in the 0.4.0 notes).
 
 ## B-037 · Windows: MIDI in/out don't work in the standalone
 
