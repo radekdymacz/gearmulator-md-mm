@@ -68,7 +68,8 @@ m = open(SRC + body_file).read()
 # mmSelfTest.js before the mockup: the self-tests, in the plug-in only with the diagnostics (an empty
 # script otherwise); it sets window.MMDiagnostics, where the mockup puts what only tests may touch.
 # deskJourney.js and mmJourneys.js last: the user journeys, diagnostics builds only too (FOUNDATION.md, Build and check).
-SCRIPTS = ['deskBridge.js', 'deskZoom.js', 'deskAbout.js', 'deskDocs.js', 'deskOverlay.js', 'mmAdapter.js', 'mmSelfTest.js', 'mmMockup.js', 'mmConvert.js', 'mmView.js',
+SCRIPTS = ['deskBridge.js', 'deskZoom.js', 'deskAbout.js', 'deskDocs.js', 'deskOverlay.js', 'deskDrop.js',
+           'mmAdapter.js', 'mmSelfTest.js', 'mmMockup.js', 'mmConvert.js', 'mmView.js',
            'deskJourney.js', 'mmJourneys.js']
 page = '''<!doctype html>
 <html lang="en">
@@ -234,7 +235,12 @@ if life is None:
     problems.append('mmAdapter.js: no LIFE')
 else:
     problems += pc.check_lifecycle(pc.object_keys(life) or set(), schema, 'mmAdapter.js')
-problems += pc.check_message_types(pc.message_types_handled(adapter), schema, 'mmAdapter.js')
+# the shared page files the page loads beside the adapter handle some types themselves (deskZoom.js: zoom; deskDrop.js:
+# drop, dragFiles) and send commands of their own (deskZoom.js: pageZoom; deskDrop.js: dropRom, dropSyx)
+beside = ''.join(open(SHARED + f).read() for f in SCRIPTS if f.startswith('desk') and f != 'deskJourney.js')
+problems += pc.check_message_types(pc.message_types_handled(adapter + beside), schema,
+                                   'mmAdapter.js and the shared page files')
+problems += pc.check_sends(list(pc.literals_with_op(beside)), table, 'the shared page files')
 if problems:
     print('contract check: ' + '; '.join(problems))
     sys.exit(1)

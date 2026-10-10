@@ -213,10 +213,14 @@ namespace mdDesk
 		m_wire = deskCore::WireFacts(m_port.nowMs ? m_port.nowMs() : 0);
 	}
 
-	// P9: while a sample goes out (SDS) nothing else may come between its packets; other SysEx waits.
+	// P9: while a sample goes out (SDS) nothing else may come between its packets; other SysEx waits. B-031: a request
+	// already waiting in the stream is not queued twice (the status polls behind a long backlog).
 	void MdMachine::sendSysex(const Bytes& _message)
 	{
-		m_out.send(_message, m_sds.active(), now());
+		if(ed::mdIsRequest(_message))
+			m_out.ask(_message, m_sds.active(), now());
+		else
+			m_out.send(_message, m_sds.active(), now());
 	}
 
 	// B-019: an imported file's message as it is, in the stream like the editor's own (a dump at the machine's read

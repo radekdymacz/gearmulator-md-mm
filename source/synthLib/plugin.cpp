@@ -41,7 +41,11 @@ namespace synthLib
 		if(m_midiInRingBuffer.full())
 		{
 			std::lock_guard l(m_lock);
-			processMidiInEvent(m_midiInRingBuffer.pop_front(), false);
+			// The audio thread may have drained the ring while we waited for m_lock. Popping an
+			// empty Lock=false ring hands out a stale slot and corrupts the counters, so check
+			// again: with both locks held nobody else pushes or pops.
+			if(m_midiInRingBuffer.full())
+				processMidiInEvent(m_midiInRingBuffer.pop_front(), false);
 		}
 		m_midiInRingBuffer.push_back(_ev);
 	}
@@ -209,15 +213,28 @@ namespace synthLib
 #if !SYNTHLIB_DEMO_MODE
 	bool Plugin::getState(std::vector<uint8_t>& _state, StateType _type) const
 	{
-		std::lock_guard lock(m_lock);
+		std::unique_ptr<Device::StateCapture> capture;
+		{
+			std::lock_guard lock(m_lock);
 
-		if(!m_device)
-			return false;
+			if(!m_device)
+				return false;
 
+			capture = m_device->beginStateCapture(_type);
+			if(!capture)
+			{
+				_state.push_back(g_stateVersion);
+				_state.push_back(_type);
+
+				return m_device->getState(_state, _type);
+			}
+		}
+		// The device encodes from what it captured, without the process/device lock the audio thread needs. The
+		// capture may own copies of whole memories: it is destroyed here too, after the lock is released.
 		_state.push_back(g_stateVersion);
 		_state.push_back(_type);
 
-		return m_device->getState(_state, _type);
+		return capture->encode(_state);
 	}
 
 	bool Plugin::setState(const std::vector<uint8_t>& _state) const

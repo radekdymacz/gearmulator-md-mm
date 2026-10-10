@@ -148,7 +148,8 @@ jobs:
         run: |
           /bin/bash -n scripts/macos/build_mdmm_pkg.sh scripts/macos/build_mdmm_dmg.sh \
             scripts/macos/sign_mdmm.sh scripts/macos/notarize_mdmm.sh scripts/macos/package_mdmm_installers.sh \
-            scripts/macos/verify_mdmm_signed.sh scripts/macos/verify_mdmm_pkg_install.sh
+            scripts/macos/verify_mdmm_signed.sh scripts/macos/verify_mdmm_pkg_install.sh \
+            scripts/macos/render_remove_old_bundles.sh
           plutil -lint scripts/macos/entitlements/mdmm-standalone.entitlements
 
       - name: Signing mode
@@ -447,6 +448,10 @@ jobs:
         run: |
           set -euo pipefail
           notes="doc/release/v${TAG#mdmm-v}.md"
+          # Which macOS file to take: the release page lists the .dmg first (alphabetical), and a person who
+          # took it got loose files and wrote "no installer on Mac" (doc/release/BUGS.md, B-040).
+          # shellcheck disable=SC2016  # the backticks are Markdown, not command substitution
+          macos_line='**macOS: take the `.pkg`.** `Machinedrum-Editor-macOS.pkg` and `Monomachine-Editor-macOS.pkg` are the installers (the app, the VST3 and the AU; they also remove the old Gearmulator MD / MM plug-ins). The `.dmg` files hold the same files loose, to drag into place by hand, with no installer in them.'
           assets=("${MDMM_OUT}/Machinedrum-Editor-macOS.pkg" \
                   "${MDMM_OUT}/Monomachine-Editor-macOS.pkg" \
                   "${MDMM_OUT}/Machinedrum-Editor-macOS.dmg" \
@@ -473,6 +478,7 @@ jobs:
                   gh api --method DELETE "repos/${GITHUB_REPOSITORY}/releases/${release_id}/assets/${asset_id}"
                 done
                 if [[ -f "${notes}" ]]; then body="$(cat "${notes}")"; else body=""; fi
+                body="${body}"$'\n\n'"${macos_line}"
                 gh api --method PATCH "repos/${GITHUB_REPOSITORY}/releases/${release_id}" \
                   -f name="Machinedrum Editor + Monomachine Editor ${TAG#mdmm-v}" \
                   -f body="${body}" \
@@ -500,6 +506,7 @@ jobs:
             fi
             if [[ -f "${notes}" ]]; then
               cat "${notes}" >> "${notes_file}"
+              printf '\n\n%s\n' "${macos_line}" >> "${notes_file}"
               notes_args=(--notes-file "${notes_file}")
             elif [[ -s "${notes_file}" ]]; then
               notes_args=(--notes-file "${notes_file}" --generate-notes)

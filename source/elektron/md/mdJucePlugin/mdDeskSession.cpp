@@ -83,6 +83,13 @@ namespace mdJucePlugin
 		m_toPage = nullptr;
 	}
 
+	void DeskSession::republish()
+	{
+		Value ready = Value::object();
+		ready.set("op", "ready");	// no id: nobody waits for its result
+		onPageMessage(ready);
+	}
+
 	void DeskSession::toPage(const Value& _message) const
 	{
 		if(m_toPage)
@@ -240,9 +247,10 @@ namespace mdJucePlugin
 	Availability midiOutAvailability(const DeskSession& _session)
 	{
 		auto& p = _session.processor();
-		// The standalone's MIDI output is chosen in its AUDIO / MIDI panel, after the engine. A plug-in
-		// declares no MIDI out to its host (NEEDS_MIDI_OUTPUT FALSE), so there only the plug-in's own
-		// MIDI port reaches a machine.
+		// The standalone's MIDI output is chosen in its AUDIO / MIDI panel, after the engine. The editors' plug-ins
+		// declare a MIDI out to their host (juce.cmake, NEEDS_MIDI_OUTPUT TRUE: producesMidi), where the host routes it
+		// (B-037: the emulated machine's own MIDI goes there too, mdMachineMidiOut.h); a plug-in without one reaches a
+		// machine only through its own MIDI port.
 		if(p.wrapperType == juce::AudioProcessor::wrapperType_Standalone || static_cast<const juce::AudioProcessor&>(p).producesMidi()
 			|| p.getMidiPorts().getOutputId().isNotEmpty())
 			return {};

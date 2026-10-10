@@ -8,6 +8,7 @@
 //   mdDeskFirmwareTest <ROM> probe    also: telemetry RAM, group removal
 //   mdDeskFirmwareTest <ROM> playload PLAY while the desk loads in the background
 //   mdDeskFirmwareTest <ROM> samples  P9: WAV files into UW ROM slots (SDS), the waveforms read back
+//   mdDeskFirmwareTest <ROM> machine  B-039: a machine change stays (a trig, PLAY, another pattern with the kit)
 //
 // Exits 77 (skip) without arguments.
 
@@ -436,6 +437,7 @@ namespace
 	public:
 		// B-014: what the page is sent, as JSON text (bytes the bridge carries and the page parses)
 		size_t pageBytes = 0, pagePatternDocBytes = 0, pagePatternDocs = 0;
+		size_t pageErrors = 0;	// {"type":"error"} messages (a push that failed, a read given up)
 	private:
 		void onPage(const Value& _m)
 		{
@@ -459,6 +461,7 @@ namespace
 				m_lastAsk = _m;
 			else if(t == "error")
 			{
+				++pageErrors;
 				m_lastError = _m;
 				std::printf("  page error: %s\n", _m.find("message")->asString().c_str());
 			}
@@ -2020,6 +2023,217 @@ namespace
 		importWith(rig, bytes, _file, false);
 	}
 
+	// B-031: a pick as the page makes it ("select"); a question is answered as the person would, with the plug-in's
+	// own confirm. The question's name, or nothing.
+	std::string pickPattern(Rig& _rig, const int _slot, int& _id)
+	{
+		_rig.clearAsk();
+		_rig.page("{\"op\":\"select\",\"p\":" + std::to_string(_slot) + ",\"id\":" + std::to_string(_id++) + "}");
+		if(!_rig.lastAsk())
+			return {};
+		const auto ask = _rig.lastAsk()->find("ask")->asString();
+		Value c = *_rig.lastAsk()->find("command");
+		c.put("force", true);
+		_rig.page(ed::json::write(c));
+		return ask;
+	}
+
+	// What is wrong after a pick of _slot, or nothing: the machine plays it within _waitMs (its RAM), the desk says so
+	// (its state, the page's telemetry, no pattern left queued), the page's pattern is the file's and, in EXTENDED
+	// mode, the machine plays the kit the pattern links.
+	std::string pickedWrong(Rig& _rig, const ed::MdDocuments& _file, const int _slot, const double _waitMs)
+	{
+		auto& desk = _rig.desk();
+		auto& m = _rig.machine();
+		const auto slot = static_cast<uint8_t>(_slot);
+		const auto name = ed::mdPatternName(slot);
+		if(!_rig.runUntil([&] { return m.read8(0x28d205) == slot; }, _waitMs))
+			return name + ": the machine stays on " + ed::mdPatternName(m.read8(0x28d205));
+		const auto queued = [&]
+		{
+			const auto* q = _rig.machineDoc() ? _rig.machineDoc()->find("desk")->find("queued") : nullptr;
+			return q && !q->isNull();
+		};
+		const auto same = [&]
+		{
+			return ed::syxCanonical(machineDocs(desk), ed::SyxKind::Pattern, slot) == ed::syxCanonical(_file,
+				ed::SyxKind::Pattern, slot);
+		};
+		const int link = _file.patterns.count(slot) ? _file.patterns.at(slot).kit : -1;
+		const auto kitRight = [&] { return desk.linkState().extendedMode != true || link < 0
+			|| desk.linkState().kit == link; };
+		_rig.runUntil([&] { return desk.linkState().pattern == slot && _rig.pageTelemetry().pattern == _slot
+			&& !queued() && same() && kitRight(); }, 3000);
+		if(desk.linkState().pattern != slot)
+			return name + ": the machine plays it, the desk says "
+				+ (desk.linkState().pattern ? ed::mdPatternName(*desk.linkState().pattern) : "nothing");
+		if(_rig.pageTelemetry().pattern != _slot)
+			return name + ": the page's telemetry says " + std::to_string(_rig.pageTelemetry().pattern);
+		if(queued())
+			return name + ": a pattern stays queued on the page";
+		if(!same())
+			return name + ": the page's pattern is not the file's";
+		if(!kitRight())
+			return name + ": the machine plays kit " + std::to_string(desk.linkState().kit ? *desk.linkState().kit + 1
+				: 0) + ", it links kit " + std::to_string(link + 1);
+		return {};
+	}
+
+	// B-031: after a SysEx import tester A (0.3.4, the Autechre backup) could not change the pattern any more.
+	// Measured with 0.3.4's code: its import put the whole file into the editor's stream at once. The status polls
+	// (seven requests a second) piled up behind the dumps, and once those had passed they went to the firmware in one
+	// burst, with the read-back requests. OS 1.63 loses input when that much comes while it builds a dump reply (a
+	// dump request, then 1.8 KB of status requests with a LOAD PATTERN among them: it is dropped), so a pick made
+	// during the import never reached the machine and the page waited for a switch that never came; read-backs were
+	// lost the same way ("Push failed"). The user's own backup (MD_SYX, read in place, never copied), fresh machine:
+	//   1. the stream holding the whole file (0.3.4's import as it reached the desk; a long backlog of any kind): a
+	//      pick made meanwhile reaches the machine once the dumps have passed and no read-back is lost
+	//      (deskCore::Stream::ask: a request already waiting is not queued again). Failed before the fix: the machine
+	//      stayed on A01 and one push failed;
+	//   2. the editor's import as the session runs it (mdSyxSession.h, the preview's kits, patterns and songs), with a
+	//      pick every few seconds while it runs; then A01..B16 and some of every bank stopped, three while playing,
+	//      and a second import: each pick reaches the machine, the desk and the page, as pickedWrong says.
+	void syxPick(const Bytes& _rom, const std::string& _romName, const Bytes& _bytes, const std::string& _fileName)
+	{
+		std::puts("syx import, then patterns picked (B-031)");
+		const auto file = ed::parseSyx(_bytes);
+		Rig rig(_rom, _romName);
+		rig.postOnly = true;	// as the plug-in hands the machine its MIDI: the desk goes on at once
+		auto& desk = rig.desk();
+		auto& m = rig.machine();
+		rig.page(R"({"op":"ready"})");
+		rig.runUntil([&] { return desk.isReady() && desk.documents().global && desk.documents().patterns.size() == 128
+			&& desk.documents().kits.size() == 64 && desk.documents().songs.size() == 32; }, 60000);
+		int id = 5000;
+		std::vector<std::string> asks;
+		const auto pickAll = [&](const std::vector<int>& _slots, const double _waitMs)
+		{
+			std::vector<std::string> wrong;
+			for(const int p : _slots)
+			{
+				if(const auto ask = pickPattern(rig, p, id); !ask.empty())
+					asks.push_back(ed::mdPatternName(static_cast<uint8_t>(p)) + " " + ask);
+				if(const auto why = pickedWrong(rig, file.md, p, _waitMs); !why.empty())
+					wrong.push_back(why);
+			}
+			return wrong;
+		};
+		const auto list = [](const std::vector<std::string>& _items)
+		{
+			std::string t;
+			for(size_t i = 0; i < _items.size() && i < 6; ++i)
+				t += (i ? "; " : ": ") + _items[i];
+			return t;
+		};
+		const auto import = [&](const std::vector<std::string>& _kinds, const bool _pickWhile)
+		{
+			mdJucePlugin::SyxJob<MdSyxTraits> job;
+			const auto& st = desk.linkState();
+			job.open(_bytes, _fileName, machineDocs(desk), {st.pattern ? *st.pattern : -1, st.kit ? *st.kit : -1,
+				st.song ? *st.song : -1, st.globalSlot ? *st.globalSlot : -1});
+			desk.setSysexTap([&job](const Bytes& _m) { job.onMachineSysex(_m); });
+			check(job.start(_kinds, {}, machineDocs(desk)).empty(), "the import starts");
+			const double t0 = ms(m.now());
+			const auto step = [&] { if(desk.lifecycle() == deskCore::Lifecycle::Ready)
+				job.step(desk.machine(), ms(m.now()), false); rig.run(4); };
+			std::vector<std::string> wrong;
+			int picks = 0;
+			// a pick every 4 s while the import sends and reads back; each must reach the machine within 5 s
+			while(job.running() && ms(m.now()) - t0 < 3600000)
+			{
+				step();
+				if(!_pickWhile || ms(m.now()) - t0 < 2000.0 + 4000.0 * picks)
+					continue;
+				const auto p = static_cast<uint8_t>((picks++ * 5 + 9) % 64);
+				pickPattern(rig, p, id);
+				const double tp = ms(m.now());
+				while(m.read8(0x28d205) != p && ms(m.now()) - tp < 5000)
+					step();
+				if(m.read8(0x28d205) != p)
+					wrong.push_back(ed::mdPatternName(p) + " picked "
+						+ std::to_string(static_cast<int>((tp - t0) / 1000))
+						+ " s into the import: the machine stays on "
+						+ ed::mdPatternName(m.read8(0x28d205)));
+			}
+			const auto report = job.progress();
+			std::map<std::string, int> outcomes;
+			for(const auto& [item, o] : job.outcomes())
+				++outcomes[ed::syxOutcomeName(o)];
+			std::printf("  import %s in %.1f s (emulated), %d picks while it ran: %s\n", _kinds.size() > 1
+				? "of kits, patterns and songs" : "of patterns",
+				(ms(m.now()) - t0) / 1000, picks, report.find("text")->asString().c_str());
+			check(report.find("phase")->asString() == "done" && outcomes["no reply"] == 0,
+				"the import ends and every document is read back");
+			if(_pickWhile)
+				check(wrong.empty(), "every pick while the import runs reaches the machine ("
+					+ std::to_string(picks - static_cast<int>(wrong.size())) + " of "
+					+ std::to_string(picks) + ")" + list(wrong));
+			rig.runUntil([&] { return !desk.isBusy(); }, 10000);
+			rig.run(1000);
+		};
+
+		// 1. 0.3.4's import as it reached the desk: every kit, pattern and song a "set" of one gesture, four every 8
+		// ms, so the stream holds the whole file (as a long backlog of any kind would); A10 picked 2 s later
+		std::vector<std::string> sets;
+		const auto set = [&](const char* _kind, const Value& _doc)
+		{
+			sets.push_back(std::string(R"({"op":"set","g":4777,"kind":")") + _kind + R"(","doc":)"
+				+ ed::json::write(_doc) + "}");
+		};
+		for(const auto& [slot, k] : file.md.kits) set("kit", ed::kitToJson(k));
+		for(const auto& [slot, p] : file.md.patterns) set("pattern", ed::patternToJson(p));
+		for(const auto& [slot, g] : file.md.songs) set("song", ed::songToJson(g));
+		const auto errors = rig.pageErrors;
+		for(size_t i = 0; i < sets.size(); ++i)
+		{
+			rig.page(sets[i]);
+			if(i % 4 == 3)
+				rig.run(8);
+		}
+		rig.run(2000);
+		const double tp = ms(m.now());
+		const int before = m.read8(0x28d205);
+		pickPattern(rig, 9, id);
+		const auto why = pickedWrong(rig, file.md, 9, 180000);
+		std::printf("  %zu documents set at once; A10 picked 2 s later (the machine on %s): %s after %.1f s\n",
+			sets.size(),
+			ed::mdPatternName(static_cast<uint8_t>(before)).c_str(), why.empty() ? "switched" : why.c_str(),
+				(ms(m.now()) - tp) / 1000);
+		check(why.empty(), "a pick while the stream holds a whole backup reaches the machine once the dumps have passed"
+			+ (why.empty() ? std::string() : ": " + why));
+		rig.runUntil([&] { return !desk.isBusy(); }, 120000);
+		check(rig.pageErrors == errors, "and no read-back is lost in the burst (\"Push failed\", tester H): "
+			+ std::to_string(rig.pageErrors - errors) + " errors");
+		auto wrong = pickAll({10, 0}, 4000);
+		check(wrong.empty(), "and the picks after it" + list(wrong));
+
+		// 2. the editor's import (0.3.5), then picks
+		asks.clear();
+		import({"kit", "pattern", "song"}, true);
+		std::vector<int> slots;
+		for(int p = 0; p < 32; ++p)
+			slots.push_back(p);
+		for(const int p : {32, 63, 64, 100, 127, 0})
+			slots.push_back(p);
+		wrong = pickAll(slots, 4000);
+		check(wrong.empty(),
+			"after the import, A01..B16 and some of every bank picked stopped: each reaches the machine, the desk and "
+			"the page ("
+			+ std::to_string(slots.size() - wrong.size()) + " of " + std::to_string(slots.size()) + ")" + list(wrong));
+		rig.page(R"({"op":"play","id":4990})");
+		rig.runUntil([&] { return rig.pageTelemetry().playing; }, 2000);
+		rig.run(500);
+		wrong = pickAll({1, 17, 5}, 30000);
+		check(wrong.empty(), "and three picked while it plays, each at the pattern's end" + list(wrong));
+		rig.page(R"({"op":"stop","id":4991})");
+		rig.runUntil([&] { return !rig.pageTelemetry().playing; }, 2000);
+		import({"pattern"}, false);
+		wrong = pickAll({3, 20, 0}, 4000);
+		check(wrong.empty(), "after a second import too" + list(wrong));
+		check(asks.empty(), "no pick after an import asks a question (" + std::to_string(asks.size()) + ")"
+			+ list(asks));
+	}
+
 	// P7: in a DAW the plug-in sends the host's transport and tempo as MIDI Start, clock and Stop; the
 	// session sends followHost so the machine's active global takes them (TEMPO IN external), without an
 	// undo step. Steps counted over 4 s of a 100 BPM clock, before and after.
@@ -2663,6 +2877,126 @@ namespace
 		for(size_t i = 0; i < region.size(); ++i)
 			region[i] = _rig.machine().read8(ed::g_mdWorkingKitRegionAddress + static_cast<uint32_t>(i));
 		return ed::mdWorkingKitFromMemory(region);
+	}
+
+	// B-039: a track's machine changed on the Sound page stays, with the kit's other unsaved edits, after what a tester
+	// does next: back on the Sequence page a trig of the pattern that plays (its dump makes OS 1.63 load the kit the
+	// pattern links from its slot, B-025), stopped and while playing; PLAY and STOP; another pattern with the same kit
+	// and back. A stock (factory) pattern's kit, then a kit the user saved. The machine (memory) and the page (the
+	// working kit) must both hold the edited kit, all of it.
+	void machineStays(Rig& _rig)
+	{
+		std::puts("== MACHINE STAYS (B-039)");
+		auto& desk = _rig.desk();
+		const auto settle = [&](const double _ms) { _rig.runUntil([&] { return !desk.isBusy() && !_rig.pageTx(); },
+			6000); _rig.run(_ms); };
+		const auto working = [&] { return _rig.machineDoc()
+			? _rig.machineDoc()->find("kit")->find("working")->asString() : std::string("?"); };
+		const auto efm = *ed::mdMachineModel("EFM-SD"), trx = *ed::mdMachineModel("TRX-SD");
+		const auto other = [&](const uint32_t _model) { return _model == efm ? trx : efm; };
+		const auto kitNow = [&] { return std::to_string(*desk.linkState().kit); };
+		int gesture = 7000;
+		const auto machine = [&](const int _t, const uint32_t _model)
+		{
+			_rig.page("{\"op\":\"machine\",\"g\":" + std::to_string(++gesture) + ",\"k\":" + kitNow() + ",\"t\":"
+				+ std::to_string(_t) + ",\"model\":"
+				+ std::to_string(_model) + ",\"keepFx\":true}");
+			check(resultOk(_rig), "machine command accepted");
+		};
+		// as the Sequence page sends a click on a step: on, then off again (two dumps of the pattern that plays)
+		const auto trigOnOff = [&](const int _t)
+		{
+			for(const bool on : {true, false})
+			{
+				_rig.page("{\"op\":\"trig\",\"g\":" + std::to_string(++gesture) + ",\"p\":"
+					+ std::to_string(*desk.linkState().pattern) + ",\"t\":"
+					+ std::to_string(_t) + ",\"s\":7,\"on\":" + (on ? "true" : "false") + "}");
+				settle(1500);
+			}
+		};
+		const auto stays = [&](const std::string& _when, const int _t, const uint32_t _model)
+		{
+			const auto mem = workingFromMemory(_rig);
+			const auto* w = desk.documents().working ? &desk.documents().working->kit : nullptr;
+			const uint32_t m = mem ? mem->models[static_cast<size_t>(_t)] : 0, d = w
+				? w->models[static_cast<size_t>(_t)] : 0;
+			check(mem && w && m == _model && d == _model, _when + ": T" + std::to_string(_t + 1) + " plays "
+				+ ed::mdMachineName(_model) + " (memory "
+				+ ed::mdMachineName(m) + ", page " + ed::mdMachineName(d) + ")");
+			check(mem && w && ed::mdSameKitSound(*mem, *w) && working() == "edited", _when
+				+ ": the machine holds the page's kit, " + working());
+		};
+		const auto round = [&](const std::string& _kit, const int _t)
+		{
+			const auto p = *desk.linkState().pattern;
+			const auto model = other(desk.documents().working->kit.models[static_cast<size_t>(_t)]);
+			std::printf("== %s: T%d becomes %s (pattern %s, kit %d)\n", _kit.c_str(), _t + 1,
+				ed::mdMachineName(model).c_str(), ed::mdPatternName(p).c_str(),
+				*desk.linkState().kit + 1);
+			// the Sound page: the machine picker, then a value of the new machine (its DIST)
+			machine(_t, model);
+			settle(500);
+			const auto dist = (desk.documents().working->kit.params[static_cast<size_t>(_t)][16] + 17) & 0x7f;
+			_rig.page("{\"op\":\"param\",\"g\":" + std::to_string(++gesture) + ",\"k\":" + kitNow() + ",\"t\":"
+				+ std::to_string(_t) + ",\"i\":16,\"v\":"
+				+ std::to_string(dist) + "}");
+			settle(1000);
+			stays("on Sound", _t, model);
+			trigOnOff((_t + 2) % 16);
+			stays("a trig on Sequence, stopped", _t, model);
+			// playing: another track's machine, then a trig
+			const int t2 = (_t + 1) % 16;
+			const auto model2 = other(desk.documents().working->kit.models[static_cast<size_t>(t2)]);
+			_rig.page(R"({"op":"play"})");
+			_rig.run(1500);
+			machine(t2, model2);
+			settle(1000);
+			trigOnOff((_t + 2) % 16);
+			stays("a trig on Sequence, playing", _t, model);
+			stays("a trig on Sequence, playing", t2, model2);
+			_rig.page(R"({"op":"stop"})");
+			_rig.run(1000);
+			stays("stopped", _t, model);
+			// another pattern with the same kit (a stock pattern made to link it when none does), and back
+			std::optional<uint8_t> same;
+			for(const auto& [slot, pat] : desk.documents().patterns)
+				if(slot != p && pat.kit == *desk.linkState().kit && !same)
+					same = slot;
+			if(!same)
+			{
+				same = static_cast<uint8_t>((p + 1) & 127);
+				_rig.pageConfirmed("{\"op\":\"patternKit\",\"p\":" + std::to_string(*same) + ",\"v\":" + kitNow()
+					+ "}");
+				settle(500);
+			}
+			_rig.pageConfirmed("{\"op\":\"select\",\"p\":" + std::to_string(*same) + "}");
+			settle(1500);
+			stays(ed::mdPatternName(*same) + ", the same kit", _t, model);
+			_rig.pageConfirmed("{\"op\":\"select\",\"p\":" + std::to_string(p) + "}");
+			settle(1500);
+			stays(ed::mdPatternName(p) + " again", _t, model);
+		};
+		round("a stock pattern's kit", 1);
+		// another stock pattern, which links another kit (EXTENDED: the machine loads it; kit 1's edits go, as asked)
+		std::optional<uint8_t> next;
+		for(const auto& [slot, pat] : desk.documents().patterns)
+			if(pat.kit != *desk.linkState().kit && !next)
+				next = slot;
+		check(next.has_value(), "a stock pattern links another kit");
+		if(next)
+		{
+			_rig.pageConfirmed("{\"op\":\"select\",\"p\":" + std::to_string(*next) + "}");
+			settle(1500);
+			check(desk.linkState().pattern == next && working() == "clean", ed::mdPatternName(*next)
+				+ " plays with its kit " + std::to_string(*desk.linkState().kit + 1)
+				+ ", " + working());
+			round("another stock pattern's kit", 2);
+		}
+		// a kit the user saved: SAVE KIT, then the same on another track
+		_rig.page(R"({"op":"saveKit"})");
+		settle(1500);
+		check(working() == "clean", "SAVE KIT: the kit that plays is its slot (" + working() + ")");
+		round("a saved kit", 4);
 	}
 
 	// Undo of a Control All gesture (Alt-drag) reaches the machine: its memory is the kit before the gesture.
@@ -3518,25 +3852,41 @@ int main(const int _argc, char** _argv)
 	std::setvbuf(stdout, nullptr, _IOLBF, 0);
 	if(_argc < 2)
 	{
-		std::puts("usage: mdDeskFirmwareTest <MD-1.63-ROM> [probe|hw|p4|tweak|sampler|keepedits|recordermix|samples|gen|hostclock|songrow|playload|syxexport|syximport|keymap]");
+		std::puts("usage: mdDeskFirmwareTest <MD-1.63-ROM> "
+			"[probe|hw|p4|tweak|sampler|keepedits|machine|recordermix|samples|gen|hostclock|songrow|playload|syxexport|"
+			"syximport|syxpick|keymap]");
+		std::puts("       mdDeskFirmwareTest --env syxpick   (ctest: the ROM from GEARMULATOR_MD_FIRMWARE_BIN, the "
+			"backup from MD_SYX)");
 		return 77;
+	}
+	// ctest's form: the ROM from the environment, as the other firmware tests take it; skipped without it
+	std::string romPath = _argv[1];
+	if(romPath == "--env")
+	{
+		const char* bin = std::getenv("GEARMULATOR_MD_FIRMWARE_BIN");
+		if(!bin || !*bin)
+		{
+			std::puts("mdDeskFirmwareTest: SKIP (GEARMULATOR_MD_FIRMWARE_BIN not set)");
+			return 77;
+		}
+		romPath = bin;
 	}
 	try
 	{
-		const auto rom = load(_argv[1]);
+		const auto rom = load(romPath);
 		require(rom.size() == md::g_romSize, "ROM must be the 8 MiB MD 1.63 image");
 		const std::string mode = _argc > 2 ? _argv[2] : "";
 		if(mode == "hw")
 		{
-			hardwareMidi(rom, _argv[1]);
+			hardwareMidi(rom, romPath);
 			check(g_contract.loaded() && g_contract.bad() == 0, g_contract.summary());
 			std::printf("mdDeskFirmwareTest hw: %s (%d failure(s))\n", g_failures ? "FAIL" : "PASS", g_failures);
 			return g_failures ? 1 : 0;
 		}
 		if(mode == "p4")
 		{
-			bootHold(rom, _argv[1]);
-			Rig rig(rom, _argv[1]);
+			bootHold(rom, romPath);
+			Rig rig(rom, romPath);
 			rig.page(R"({"op":"ready"})");
 			rig.runUntil([&] { return rig.desk().isInputReady() && rig.desk().linkState().pattern; }, 5000);
 			mutesTruth(rig);
@@ -3550,20 +3900,37 @@ int main(const int _argc, char** _argv)
 		}
 		if(mode == "syxexport")
 		{
-			syxExport(rom, _argv[1], std::getenv("SYX_EXPORT_TO") ? std::getenv("SYX_EXPORT_TO") : "md-export.syx");
+			syxExport(rom, romPath, std::getenv("SYX_EXPORT_TO") ? std::getenv("SYX_EXPORT_TO") : "md-export.syx");
 			std::printf("mdDeskFirmwareTest syxexport: %s (%d failure(s))\n", g_failures ? "FAIL" : "PASS", g_failures);
+			return g_failures ? 1 : 0;
+		}
+		if(mode == "syxpick")
+		{
+			// B-031: the user's own backup, read in place (MD_SYX or argument 3); skipped without it
+			const std::string path = _argc > 3 ? _argv[3] : std::getenv("MD_SYX") ? std::getenv("MD_SYX") : "";
+			std::ifstream in(path, std::ios::binary);
+			if(path.empty() || !in)
+			{
+				std::printf("mdDeskFirmwareTest syxpick: SKIP (no backup: MD_SYX%s)\n", path.empty() ? ""
+					: (", " + path + " not found").c_str());
+				return 77;
+			}
+			const Bytes bytes((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
+			syxPick(rom, romPath, bytes, path);
+			check(g_contract.loaded() && g_contract.bad() == 0, g_contract.summary());
+			std::printf("mdDeskFirmwareTest syxpick: %s (%d failure(s))\n", g_failures ? "FAIL" : "PASS", g_failures);
 			return g_failures ? 1 : 0;
 		}
 		if(mode == "syximport")
 		{
-			syxImport(rom, _argv[1], _argc > 3 ? _argv[3] : std::getenv("MD_SYX") ? std::getenv("MD_SYX") : "");
+			syxImport(rom, romPath, _argc > 3 ? _argv[3] : std::getenv("MD_SYX") ? std::getenv("MD_SYX") : "");
 			check(g_contract.loaded() && g_contract.bad() == 0, g_contract.summary());
 			std::printf("mdDeskFirmwareTest syximport: %s (%d failure(s))\n", g_failures ? "FAIL" : "PASS", g_failures);
 			return g_failures ? 1 : 0;
 		}
 		if(mode == "tweak")
 		{
-			Rig rig(rom, _argv[1]);
+			Rig rig(rom, romPath);
 			rig.page(R"({"op":"ready"})");
 			rig.runUntil([&] { return rig.desk().isInputReady() && rig.desk().linkState().kit && rig.desk().documents().working; }, 8000);
 			controlAllTruth(rig);
@@ -3573,7 +3940,7 @@ int main(const int _argc, char** _argv)
 		}
 		if(mode == "sampler")
 		{
-			Rig rig(rom, _argv[1]);
+			Rig rig(rom, romPath);
 			rig.page(R"({"op":"ready"})");
 			rig.runUntil([&] { return rig.desk().isReady() && rig.desk().linkState().kit && rig.desk().linkState().pattern && rig.desk().documents().working; }, 8000);
 			samplerSetup(rig);
@@ -3583,7 +3950,7 @@ int main(const int _argc, char** _argv)
 		}
 		if(mode == "recordermix")
 		{
-			Rig rig(rom, _argv[1]);
+			Rig rig(rom, romPath);
 			rig.page(R"({"op":"ready"})");
 			rig.runUntil([&] { return rig.desk().isReady() && rig.desk().linkState().kit && rig.desk().linkState().pattern && rig.desk().documents().working; }, 8000);
 			recorderInTheMix(rig);
@@ -3593,7 +3960,7 @@ int main(const int _argc, char** _argv)
 		}
 		if(mode == "keepedits")
 		{
-			Rig rig(rom, _argv[1]);
+			Rig rig(rom, romPath);
 			rig.page(R"({"op":"ready"})");
 			rig.runUntil([&] { return rig.desk().isReady() && rig.desk().linkState().kit && rig.desk().linkState().pattern && rig.desk().documents().working; }, 8000);
 			rig.pluginLike = true;
@@ -3604,9 +3971,22 @@ int main(const int _argc, char** _argv)
 			std::printf("mdDeskFirmwareTest keepedits: %s (%d failure(s))\n", g_failures ? "FAIL" : "PASS", g_failures);
 			return g_failures ? 1 : 0;
 		}
-		if(mode == "gen")
+		if(mode == "machine")
 		{
 			Rig rig(rom, _argv[1]);
+			rig.page(R"({"op":"ready"})");
+			rig.runUntil([&] { return rig.desk().isReady() && rig.desk().linkState().kit
+				&& rig.desk().linkState().pattern && rig.desk().documents().working; }, 8000);
+			rig.runUntil([&] { return !rig.desk().isBusy(); }, 20000);
+			rig.pluginLike = true;	// the plug-in's delivery, as keepedits
+			machineStays(rig);
+			check(g_contract.loaded() && g_contract.bad() == 0, g_contract.summary());
+			std::printf("mdDeskFirmwareTest machine: %s (%d failure(s))\n", g_failures ? "FAIL" : "PASS", g_failures);
+			return g_failures ? 1 : 0;
+		}
+		if(mode == "gen")
+		{
+			Rig rig(rom, romPath);
 			rig.page(R"({"op":"ready"})");
 			rig.runUntil([&] { return rig.desk().isInputReady() && rig.desk().linkState().pattern && rig.desk().documents().patterns.count(*rig.desk().linkState().pattern); }, 8000);
 			generatorsTruth(rig);
@@ -3616,7 +3996,7 @@ int main(const int _argc, char** _argv)
 		}
 		if(mode == "samples")
 		{
-			Rig rig(rom, _argv[1]);
+			Rig rig(rom, romPath);
 			rig.page(R"({"op":"ready"})");
 			rig.runUntil([&] { return rig.desk().isReady() && rig.desk().linkState().kit && rig.desk().linkState().pattern && rig.desk().documents().working; }, 8000);
 			samples(rig);
@@ -3626,7 +4006,7 @@ int main(const int _argc, char** _argv)
 		}
 		if(mode == "actions")
 		{
-			Rig rig(rom, _argv[1]);
+			Rig rig(rom, romPath);
 			rig.page(R"({"op":"ready"})");
 			rig.runUntil([&] { return rig.desk().isReady() && rig.desk().linkState().kit && rig.desk().linkState().pattern && rig.desk().documents().working; }, 8000);
 			rig.runUntil([&] { return !rig.desk().isBusy(); }, 20000);
@@ -3637,7 +4017,7 @@ int main(const int _argc, char** _argv)
 		}
 		if(mode == "plocktiming" || mode == "plocktiming-strict")
 		{
-			Rig rig(rom, _argv[1]);
+			Rig rig(rom, romPath);
 			rig.page(R"({"op":"ready"})");
 			rig.runUntil([&] { return rig.desk().isReady() && rig.desk().linkState().kit && rig.desk().linkState().pattern && rig.desk().documents().working
 				&& rig.desk().documents().patterns.count(*rig.desk().linkState().pattern); }, 8000);
@@ -3648,25 +4028,25 @@ int main(const int _argc, char** _argv)
 		}
 		if(mode == "keymap")
 		{
-			keymapRange(rom, _argv[1]);
+			keymapRange(rom, romPath);
 			std::printf("mdDeskFirmwareTest keymap: %s (%d failure(s))\n", g_failures ? "FAIL" : "PASS", g_failures);
 			return g_failures ? 1 : 0;
 		}
 		if(mode == "songrow")
 		{
-			songRow(rom, _argv[1]);
+			songRow(rom, romPath);
 			check(g_contract.loaded() && g_contract.bad() == 0, g_contract.summary());
 			std::printf("mdDeskFirmwareTest songrow: %s (%d failure(s))\n", g_failures ? "FAIL" : "PASS", g_failures);
 			return g_failures ? 1 : 0;
 		}
 		if(mode == "hostclock")
 		{
-			hostClock(rom, _argv[1]);
+			hostClock(rom, romPath);
 			check(g_contract.loaded() && g_contract.bad() == 0, g_contract.summary());
 			std::printf("mdDeskFirmwareTest hostclock: %s (%d failure(s))\n", g_failures ? "FAIL" : "PASS", g_failures);
 			return g_failures ? 1 : 0;
 		}
-		Rig rig(rom, _argv[1]);
+		Rig rig(rom, romPath);
 		if(_argc > 2 && std::string(_argv[2]) == "playload")
 		{
 			// PLAY while the desk loads patterns and songs in the background.
@@ -3699,7 +4079,7 @@ int main(const int _argc, char** _argv)
 		{
 			const auto kit = *rig.desk().linkState().kit;
 			const auto patch = workingKitTruth(rig);
-			restoredKitTruth(rom, _argv[1], patch, kit, rig.desk().documents().working->kit.params[0][2]);
+			restoredKitTruth(rom, romPath, patch, kit, rig.desk().documents().working->kit.params[0][2]);
 		}
 		liveRecording(rig);
 		keyboard(rig);

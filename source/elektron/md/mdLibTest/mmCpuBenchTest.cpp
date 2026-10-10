@@ -5,6 +5,8 @@
 // current pattern (the factory A01 "SUPERWAVES": six synth tracks, 116 trigs over 64 steps), in
 // 64-frame blocks. Reported per instance: thread CPU time per second of audio = the share of one
 // core it needs in real time. Instances run in parallel threads (a host with several instances).
+// A playing result counts only if the machine played: its step counter (MmTelemetry::g_stepAddress)
+// must move while it renders the playing part, read every 50 ms; else the run exits 1.
 // Exits 77 without a ROM.
 
 #include "mdFirmwareSession.h"
@@ -37,6 +39,10 @@ namespace
 	}
 
 	std::atomic<double> g_procStart{0};
+
+	// A machine that plays moves its step counter many times a second: two moves are the
+	// least that is not a single jump.
+	constexpr int g_minSteps = 2;
 
 	struct Result { double stopped = 0, playing = 0; int steps = 0; };
 
@@ -101,5 +107,14 @@ int main(const int _argc, char** _argv)
 			results[static_cast<size_t>(i)].stopped * 100, results[static_cast<size_t>(i)].playing * 100, results[static_cast<size_t>(i)].steps);
 	std::printf("  whole process (every thread, e.g. DSP threads too): %.1f %% of one core per instance, averaged over stopped + playing\n",
 		proc / (seconds * n) * 100);
-	return 0;
+	int failures = 0;
+	for(int i = 0; i < n; ++i)
+	{
+		if(results[static_cast<size_t>(i)].steps >= g_minSteps)
+			continue;
+		std::printf("  FAIL instance %d did not play: its step counter moved %d time(s) after PLAY\n", i + 1,
+			results[static_cast<size_t>(i)].steps);
+		++failures;
+	}
+	return failures ? 1 : 0;
 }

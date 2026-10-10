@@ -37,9 +37,15 @@ The editor is a web page in JUCE 7's `WebBrowserComponent`. On Linux JUCE runs w
   each `gm.recv([...], seq)` call as a script file beside the page file (`<page>.recv-<seq>.js`), the page (loaded
   with `?recv=file`) loads them in order with `<script>` tags, polling every 8 ms for the next one, and reports
   `gmbridge://a/<seq>` every 250 ms so the plug-in deletes what was read (`a/0` when it starts: a page that loaded
-  again reads from 1). The same probe in that mode (`file`) passed 5 of 5 runs of 300 round trips under the same
-  load. The page loads from a `file://` temp file as on macOS. The zoom that fits the design width is macOS-only
-  (`mdStudioWebZoom.mm`), as on Windows.
+  again reads from 1, and the plug-in sends it everything once more, as on its ready). The same probe in that mode
+  (`file`) passed 5 of 5 runs of 300 round trips under the same load. The plug-in writes the files strictly in order
+  (`FileOutbox` in `mdPageBridge.h`): one that cannot be written (a full disk for a moment) holds back the later ones
+  and is tried again on every tick; with 8 MiB waiting, or 2 s without a file written, they are dropped and the page
+  is loaded again once a file can be written. The start-up log says each of these in every build. The page loads
+  from a `file://` temp file as on macOS.
+- **The zoom.** webkit2gtk has no page zoom of its own, so the zoom that fits the window (times the user's zoom) goes
+  to the page as a `zoom` message by the same files, never as a `javascript:` URL, and the page sets its CSS zoom
+  (`skins/shared/deskZoom.js`). macOS (`mdStudioWebZoom.mm`) and Windows (WebView2) zoom the web view itself.
 
 ## Checked by CI, and not
 
@@ -47,21 +53,22 @@ The editor is a web page in JUCE 7's `WebBrowserComponent`. On Linux JUCE runs w
 (`ctest -E "Plugin|_AU|VST|FirmwareTest|synthLibMidiClockTimingTest"`), packages, and starts each packaged
 standalone and VST3 (in `scripts/vst3EditorHost`) under Xvfb on Ubuntu 22.04 and 24.04 with runtime packages only
 (`scripts/linux/smoke_mdmm.sh`): the app keeps running, WebKit's `WebKitWebProcess` starts, the bridge goes both
-ways and the page shows "<machine> firmware needed" (read through AT-SPI), and screenshots are kept as an
-artifact. The three systems' start tests side by side: [FOUNDATION.md](../modern-ux/FOUNDATION.md), "CI start
+ways and the page shows "<machine> firmware needed" (read through AT-SPI), real keys reach the page, the page's zoom
+(125 % from the editor's config, then Ctrl+= to 150 %) leaves the same web process running, and screenshots are kept
+as an artifact. The three systems' start tests side by side: [FOUNDATION.md](../modern-ux/FOUNDATION.md), "CI start
 tests". Not checked: the VST3 in a Linux DAW, audio and MIDI devices, a ROM, Wayland, any distribution but Ubuntu.
 
-On Linux `synthLib::SysexBuffer` is a `std::pmr::vector` (macOS 10.13 builds have no `<memory_resource>`, so
-there it is a plain `std::vector`): a few of upstream's firmware test programs assign one to the other and do not
-compile on Linux (`sysexContentOracle.h`, `sdsFirmwareTest.cpp`, `userSysexFirmwareTest.cpp`,
-`mmSysexExportFirmwareTest.cpp`). The build script builds everything with `-k 0`, warns, and leaves the tests of
-programs that did not build out of the ctest run (they need a ROM anyway, but for the two `mmSysexWorkflowTest`
-oracle tests). The fix belongs upstream.
+On Linux `synthLib::SysexBuffer` is a `std::pmr::vector` (a macOS build with a deployment target below 14, which
+the releases have, takes a plain `std::vector`). Four of the firmware test programs assigned one to the other and
+did not compile on Linux, and the build script used to leave their tests out and carry on. That is fixed: they copy
+the bytes (`sysexContentOracle.h`, `sdsFirmwareTest.cpp`, `mmSysexExportFirmwareTest.cpp`), and a test program that
+does not build now fails the job (`-k 0` lists every compile error in one run). The script also fails when a ctest
+test's program is missing, unless its name is in the script's `known_unbuilt` list (empty), runs `ctest` with
+`--no-tests=error`, and prints how many tests ran, failed and were skipped, and which. A macOS build configured
+with `-DCMAKE_OSX_DEPLOYMENT_TARGET=14.0` takes the same `std::pmr` path, so it shows this kind of error without a
+Linux machine. `synthLibMidiClockTimingTest` is still left out of the run, from before `midiClock.cpp` and the test
+were built with `-fno-fast-math` (2026-10-07); retry it on Linux CI.
 
-## Windows: known risk
+## Windows
 
-JUCE 7's default Windows web view is the Internet Explorer control (`WebBrowserComponent::Options::Backend::
-defaultBackend`), not WebView2, and the pages use modern JavaScript. The Windows editor window has never been
-seen; it may well stay empty or show script errors. WebView2 would need its SDK in the build
-(`JUCE_USE_WIN_WEBVIEW2`), `withBackend(webview2)` in `mdWebPageHost.cpp`, and a check that WebView2 passes the
-bridge's iframe navigations and `javascript:` URLs, on a Windows machine.
+See [WINDOWS.md](WINDOWS.md): the Windows editor has used WebView2 since 0.3.2.

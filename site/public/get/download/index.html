@@ -70,29 +70,29 @@
           <p class="supporters" id="supporters" hidden></p>
         </div>
         <div id="plain">
-          <div class="btns"><a class="btn btn-key" data-download href="https://github.com/radekdymacz/gearmulator-md-mm/releases">Download</a></div>
+          <div class="btns"><a class="btn btn-key" data-download data-dl-label href="https://github.com/radekdymacz/gearmulator-md-mm/releases">Download</a></div>
         </div>
         <div class="support thanks" id="thanks" hidden>
           <span class="eyebrow">Thanks for supporting</span>
           <h2>Thank you.</h2>
           <p class="why">It goes straight into real-hardware testing and new features. Your download is below.</p>
-          <div class="btns"><a class="btn btn-key" data-download href="https://github.com/radekdymacz/gearmulator-md-mm/releases">Download</a></div>
+          <div class="btns"><a class="btn btn-key" data-download data-dl-label href="https://github.com/radekdymacz/gearmulator-md-mm/releases">Download</a></div>
         </div>
       </div>
       <div>
         <p class="started" id="started" hidden>Your download has started. <span id="nudge" hidden>If the editor earns a place in your setup, you can <a href="#support" id="nudgelink">name your price</a> any time.</span></p>
         <div data-os="mac">
         <p class="small">The installer puts the app in Applications and the VST3 and AU plug-ins in <code>/Library/Audio/Plug-Ins</code>. No administrator password? Choose <b>Install for me only</b>: then they go to <code>~/Applications</code> and <code>~/Library/Audio/Plug-Ins</code> in your home folder.</p>
-        <p class="small dmgline" data-dmg><a data-dmg-link href="https://github.com/radekdymacz/gearmulator-md-mm/releases">.dmg instead</a> (a drag-and-drop disk image).</p>
+        <p class="small dmgline" data-dmg>Prefer to place the files yourself? <a data-dmg-link href="https://github.com/radekdymacz/gearmulator-md-mm/releases">.dmg, loose files</a>: the same app, VST3 and AU in a disk image, with no installer in it.</p>
         <div class="notes">
           <details open><summary>1 · Install</summary><ol>
-            <li>Double-click the <code>.pkg</code>. It is not notarised by Apple, so macOS 15 and later blocks it. Open <b>System Settings → Privacy &amp; Security</b>, scroll down to the message about the installer, click <b>Open Anyway</b> and confirm with your password or Touch ID. (Right-click → Open no longer works for installers.)</li>
+            <li>Double-click the <code>.pkg</code>. It is not notarised by Apple, so macOS 15 and later blocks it. Open <b>System Settings → Privacy &amp; Security</b>, scroll down to the message about the installer, click <b>Open Anyway</b> and confirm with your password or Touch ID. (Right-click → Open no longer works for installers there. On macOS 12 to 14 it does: right-click the <code>.pkg</code> and choose <b>Open</b>.)</li>
             <li>At <b>Destination Select</b> (or <b>Change Install Location…</b>) pick <b>Install for all users</b> (needs an administrator) or <b>Install for me only</b> (works on a standard or managed account).</li>
-            <li>Rescan plug-ins in your DAW.</li>
+            <li>Rescan plug-ins in your DAW. Upgrading from 0.3.1 or earlier: the installer removes the old <b>Gearmulator MD</b> and <b>Gearmulator MM</b> plug-ins. If your DAW still lists the editor twice, delete the old-named <code>.vst3</code> and <code>.component</code> by hand from <code>/Library/Audio/Plug-Ins</code> and <code>~/Library/Audio/Plug-Ins</code>.</li>
           </ol></details>
           <details open><summary>2 · Add your ROM</summary><ol>
             <li>Use your own firmware image: <b>Machinedrum OS 1.63</b> or <b>Monomachine OS 1.32B</b>, 8 MiB. It is not included.</li>
-            <li>Open the editor. With no ROM it shows a start-up card, <b>Machinedrum firmware needed</b> (or Monomachine). Click the large area, <b>Choose your Machinedrum OS 1.63 ROM (.bin or .zip, 8 MB)</b>, and pick the file in the file chooser. Drag and drop does not work.</li>
+            <li>Open the editor. With no ROM it shows a start-up card, <b>Machinedrum firmware needed</b> (or Monomachine). Click the large area, <b>Choose your Machinedrum OS 1.63 ROM (.bin or .zip, 8 MB)</b>, and pick the file in the file chooser. On macOS you can also drop the file onto the window; on Windows and Linux use the file chooser.</li>
             <li>The editor checks the file and copies it into its ROM folder, <code>~/Documents/Gearmulator Preview/&lt;machine&gt;/roms/</code>. You can also put the image there yourself and click the <b>Check again</b> link. It then starts the machine, which takes 10–15 seconds.</li>
             <li>Details and keys: <a href="/guide/">the user guide</a>.</li>
           </ol></details>
@@ -146,6 +146,6 @@
 
 <script src="/config.js"></script>
 <script src="/assets/main.js?v=20261008" defer></script>
-<script src="/assets/get.js?v=20261009" defer></script>
+<script src="/assets/get.js?v=20261010" defer></script>
 </body>
 </html>

@@ -1,7 +1,7 @@
 "use strict";
 /* The Monomachine Editor page's documents and view (DESIGN-UNIFY.md phase 1), on the page as the plug-in loads it
-   (deskBridge.js, deskDocs.js, deskOverlay.js, mmAdapter.js, the generated mmMockup.js, mmConvert.js, mmView.js) on
-   a stand-in DOM that answers everything and does nothing, with the plug-in's messages played in:
+   (deskBridge.js, deskDocs.js, deskOverlay.js, deskDrop.js, mmAdapter.js, the generated mmMockup.js, mmConvert.js,
+   mmView.js) on a stand-in DOM that answers everything and does nothing, with the plug-in's messages played in:
    - derive: the view of the fixture's documents (mmViewFixture.json) is what the adapter before phase 1 showed
      (golden values captured once from its applyPending), and the background read of other slots costs nothing;
    - echoes by command id: an edit intent sent (DESIGN-UNIFY.md 4.1: every gesture), an older document arrives, the
@@ -16,7 +16,12 @@
    - the mutes, POLY and the tempo: the page's value until the command is answered (Overlay), then the machine
      document's (the core says the expected value until memory shows it, mmDeskTest); a later change on the
      machine's panel shows;
-   - no clock in the page: the adapter reads no time.
+   - no clock in the page: the adapter reads no time;
+   - the plug-in's notices (codex review 2026-10): a notice's key, the dialog's and the update banner's, answers that
+     notice by its number (noticeAnswer's notice), the request's own id apart; a refused answer is not shown.
+     The Rosetta notice (mdRosettaNotice.h): "Don't show again" first, OK last; closed another way it answers OK.
+   - files dropped on the window (shared/deskDrop.js through the adapter's Drop.host): a .syx opens its import window,
+     a ROM is asked about while the machine runs, samples are said to have no place on a Monomachine.
      node mmViewTest.js */
 const fs = require("fs"), path = require("path");
 const SK = path.join(__dirname, ".."), R = path.join(__dirname, "../../../../../..");
@@ -24,7 +29,8 @@ let failures = 0;
 const check = (ok, what) => { console.log((ok ? "  ok   " : "  FAIL ") + what); if (!ok) failures++; };
 const fixture = JSON.parse(fs.readFileSync(path.join(__dirname, "mmViewFixture.json"), "utf8"));
 const catalogue = JSON.parse(fs.readFileSync(path.join(R, "doc/modern-ux/mm-catalogue.json"), "utf8"));
-const FILES = ["shared/deskBridge.js", "shared/deskDocs.js", "shared/deskOverlay.js", "mmStudio/mmAdapter.js", "mmStudio/mmMockup.js",
+const FILES = ["shared/deskBridge.js", "shared/deskDocs.js", "shared/deskOverlay.js", "shared/deskDrop.js",
+	"mmStudio/mmAdapter.js", "mmStudio/mmMockup.js",
 	"mmStudio/mmConvert.js", "mmStudio/mmView.js"].map(f => path.join(SK, f));
 
 /* ---- the page on a stand-in: every unknown name is "any" (callable, constructible, every property any); timers
@@ -53,7 +59,8 @@ function page() {
 	   plug-in, where start() waits for them): here it is held until they are */
 	const hold = "\n;const __start = window.MMHost.start; window.MMHost.start = () => { };\n";
 	const src = FILES.map(f => fs.readFileSync(f, "utf8").replace(/^"use strict";/, "") + (/mmAdapter/.test(f) ? hold : "")).join("\n;\n")
-		+ "\n;__start();\nreturn { S: () => S, Overlay, MmView, docStore, storeDoc, MM_SEAM, mockup: { mutApply, genLive, genEnd, setMachine, songAction, secAction } };";
+		+ "\n;__start();\nreturn { S: () => S, Overlay, MmView, docStore, storeDoc, MM_SEAM, Dlg, Banner, mockup: { " +
+			"mutApply, genLive, genEnd, setMachine, songAction, secAction } };";
 	const out = new Function("scope", "with (scope) {\n" + src + "\n}")(scope);
 	const run = () => { for (let n = 0; timers.length && n < 10000; n++) timers.shift()(); };
 	run();
@@ -413,6 +420,84 @@ const result = (m, ok = true, errors = []) => ({ type: "result", id: m.id, op: m
 	for (let s = 0; s < 32; s++) { V.setStep(s); V.setStep(s); p.run(); }
 	check(p.frames.n === 0, `32 steps playing: ${p.frames.n} canvas redraws (none: only the soft playhead moves)`);
 	V.setPlaying(false); p.run();
+}
+
+/* ---- the plug-in's notices over the real bridge (codex review 2026-10: Bridge.send's request id had replaced the
+   notice's number since 0.3.0, so no key reached the plug-in): the dialog's and the banner's answers name
+   the notice ---- */
+{
+	const p = loaded(), items = [], banners = [], toasts = [];
+	/* the dialog's queue: the item the adapter asks (its cancel is its last key) */
+	p.Dlg.show = item => items.push(item);
+	p.Banner.show = (m, answer) => banners.push({ m, answer });
+	p.win.MMView.toast = t => toasts.push(t);
+	p.recv([{ type: "notice", id: 41, title: "Overwrite K05?", text: "", buttons: ["Overwrite", "Cancel"] }]);
+	check(items.length === 1 && items[0].notice, "a notice is a dialog item the plug-in waits on");
+	p.sent.length = 0;
+	items[0].cancel();
+	const a = p.sent.find(m => m.op === "noticeAnswer");
+	check(a && a.notice === 41 && a.button === 1 && typeof a.id === "number" && a.id !== 41,
+		"closed another way, the notice is answered by its last key: notice 41, the request's own id apart: "
+		+ JSON.stringify(a));
+	p.recv([{ type: "notice", id: 42, title: "Update available: 9.9.9", text: "", buttons: ["Update", "Later"],
+		modal: false }]);
+	check(banners.length === 1 && banners[0].m.id === 42 && items.length === 1,
+		"\"modal\": false is the banner, not the dialog");
+	p.sent.length = 0;
+	banners[0].answer(0);
+	const b = p.sent.find(m => m.op === "noticeAnswer");
+	check(b && b.notice === 42 && b.button === 0 && b.id !== 42, "Update on the banner answers notice 42: "
+		+ JSON.stringify(b));
+	p.recv([{ type: "result", op: "noticeAnswer", id: b.id, ok: false,
+		errors: ["notice 42 is not waiting for an answer"], note: "" }]);
+	check(toasts.length === 0, "a refused answer shows nothing (the log only)");
+	/* Rosetta (mdRosettaNotice.h): "Don't show again" first, OK last. Closed another way (Esc, a click outside) the
+	   page answers with the last key, OK, which keeps nothing; only its own key sends the first button, which
+	   the plug-in keeps */
+	const asked = [];
+	p.win.MMView.ask = (html, btns, cls, item) => asked.push({ html, btns, item });
+	const rosetta = { type: "notice", id: 43, title: "Running under Rosetta",
+		text: "This is the Intel version of the editor running translated on an Apple silicon Mac. It uses about " +
+		"twice the CPU.", buttons: ["Don't show again", "OK"] };
+	p.recv([rosetta]);
+	check(asked.length === 1 && /uses about twice the CPU/.test(asked[0].html) && asked[0].item.notice
+		&& asked[0].btns.length === 2
+		&& asked[0].btns[0][0] === "Don't show again" && asked[0].btns[1][0] === "OK",
+			"the Rosetta notice is a dialog the plug-in waits on: its text, Don't show again and OK");
+	p.sent.length = 0;
+	asked[0].item.cancel();
+	const closedRosetta = p.sent.find(m => m.op === "noticeAnswer");
+	check(closedRosetta && closedRosetta.notice === 43 && closedRosetta.button === 1,
+		"closed another way: answered by OK, the last key (nothing is kept): " + JSON.stringify(closedRosetta));
+	p.recv([Object.assign({}, rosetta, { id: 44 })]);
+	p.sent.length = 0;
+	asked[1].btns[0][2]();
+	const neverRosetta = p.sent.find(m => m.op === "noticeAnswer");
+	check(neverRosetta && neverRosetta.notice === 44 && neverRosetta.button === 0,
+		"Don't show again answers its own notice with button 0 (the plug-in keeps it): "
+		+ JSON.stringify(neverRosetta));
+}
+
+/* ---- files dropped on the window (shared/deskDrop.js, the adapter's Drop.host) ---- */
+{
+	const p = loaded(), asked = [], toasts = [];
+	p.win.MMView.toast = t => toasts.push(t);
+	p.win.MMView.ask = (html, btns) => asked.push({ html, btns });
+	p.recv([{ type: "drop", drop: 4, items: [{ n: 0, kind: "sample", name: "kick.wav" },
+		{ n: 1, kind: "sysex", name: "kits.syx" }, { n: 2, kind: "unknown", name: "a.txt" }], x: 10, y: 20 }]);
+	const drops = p.sent.filter(m => /^drop/.test(m.op));
+	check(drops.length === 1 && drops[0].op === "dropSyx" && drops[0].drop === 4 && drops[0].n === 1,
+		"a .syx among a sample and a text file: dropSyx {drop 4, n 1} only: " + JSON.stringify(drops));
+	check(toasts.length === 1 && /^The Monomachine has no samples\. Not a ROM .*: a\.txt\.$/.test(toasts[0]),
+		"one toast: no samples on a Monomachine, the text file named: " + toasts.join(" | "));
+	p.sent.length = 0;
+	p.recv([{ type: "drop", drop: 5, items: [{ n: 0, kind: "rom", name: "mm.bin" }], x: 0, y: 0 }]);
+	check(!p.sent.some(m => m.op === "dropRom") && asked.length === 1
+		&& /Install <b>mm\.bin<\/b> as the firmware\?/.test(asked[0].html),
+		"a ROM while the machine runs: asked first");
+	asked[0].btns.find(b => b[0] === "Install")[2]();
+	p.run();
+	check(p.sent.some(m => m.op === "dropRom" && m.drop === 5 && m.n === 0), "Install: dropRom {drop 5, n 0}");
 }
 
 console.log(failures ? `mmViewTest: ${failures} failure(s)` : "mmViewTest: PASS");

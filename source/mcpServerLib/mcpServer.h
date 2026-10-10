@@ -5,6 +5,7 @@
 #include "mcpTool.h"
 #include "mcpTypes.h"
 
+#include <condition_variable>
 #include <map>
 #include <memory>
 #include <mutex>
@@ -67,5 +68,7 @@ namespace mcpServer
 
 		std::mutex m_sseMutex;
 		std::vector<networkLib::Stream*> m_sseClients;
+		std::condition_variable m_sseWake;	// SSE handlers wait on it between keep-alives; stop() wakes them
+		bool m_sseStop = false;				// guarded by m_sseMutex
 	};
 }

@@ -13,7 +13,8 @@ namespace bridgeClient
 {
 	class RemoteDevice;
 
-	class DeviceConnection : public bridgeLib::TcpConnection
+	// final: the constructor starts the receive thread, which is only safe in the most derived class
+	class DeviceConnection final : public bridgeLib::TcpConnection
 	{
 	public:
 		DeviceConnection(RemoteDevice& _device, std::unique_ptr<networkLib::TcpStream>&& _stream);

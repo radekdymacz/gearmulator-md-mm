@@ -6,10 +6,13 @@
 #include "juceUiLib/messageRoute.h"
 #include "mdDeskHost.h"
 #include "mdDeskSession.h"
+#include "deskHost/deskHost.h"
 #include "mdRomInstall.h"
 
 #include "mdController.h"
+#include "mdMachineMidiOut.h"
 #include "mdPluginEditorState.h"
+#include "mdProcessArch.h"
 #include "mdSettingsMigration.h"
 #include "mdStorageImage.h"
 
@@ -198,6 +201,8 @@ namespace mdJucePlugin
 
 	bool AudioPluginAudioProcessor::loadCustomData(const std::vector<uint8_t>& _sourceBuffer)
 	{
+		// B-037: a state carries the whole matrix
+		const machineMidiOut::RouteAfterLoad machineMidiRoute(getMidiRoutingMatrix());
 		const auto previous = getRamRecordingMode();
 		m_ramRecordingModeChunkSeen = false;
 		m_desk->beginProjectLoad();
@@ -447,6 +452,8 @@ namespace mdJucePlugin
 		}
 
 		getController();
+		// B-037: the machine's own MIDI out to the host (mdMachineMidiOut.h)
+		machineMidiOut::route(getMidiRoutingMatrix());
 		setRamRecordingMode(getRamRecordingMode());
 		const auto latencyBlocks = getConfig().getIntValue("latencyBlocks", static_cast<int>(getPlugin().getLatencyBlocks()));
 		Processor::setLatencyBlocks(latencyBlocks);
@@ -567,6 +574,7 @@ namespace mdJucePlugin
 			{"resampler_modes", "0=Legacy,1=MameHq,2=MameLofi"},
 			{"notes", "Nested timings are inclusive. JIT values are counts, not compilation durations. Deadline overruns are estimates, not host xrun reports. MIDI counts contain no payload."}
 		};
+		processArch::addSessionFields(context);	// whether the editor runs translated (Rosetta): mdProcessArch.h
 		m_performanceReport->start(m_performanceReportFile.getFullPathName().toStdString(), std::move(context));
 	}
 
@@ -911,8 +919,13 @@ namespace mdJucePlugin
 
 	void AudioPluginAudioProcessor::timerCallback()
 	{
-		if(++m_bootTicks % 4 == 1)
+		// B-035: a start-up line once a second by the clock, not every 4th tick: serviceFactoryInitialization sets this
+		// timer to 250 ms, 1 s or 2 s (the Machinedrum's lines came every 4 s in 0.3.5). A little early still counts.
+		if(const auto now = juce::Time::getMillisecondCounterHiRes(); now - m_lastBootRecordMs >= 900.0)
+		{
+			m_lastBootRecordMs = now;
 			recordBoot();
+		}
 		recordStandaloneStartupDiagnostics();
 		if(serviceProjectStateRestore())
 			return;
@@ -1003,5 +1016,12 @@ namespace mdJucePlugin
 	pluginLib::Controller* AudioPluginAudioProcessor::createController()
 	{
 		return new mdJucePlugin::Controller(*this);
+	}
+
+	bool AudioPluginAudioProcessor::usesMidiLearn() const
+	{
+		// The translator reads and swaps its mappings on the audio, MIDI-input and message threads without
+		// synchronisation (doc/midilearn/THREADING.md); it is made only once that is redesigned and mapping is on.
+		return deskHost::midiMappingEnabled;
 	}
 }

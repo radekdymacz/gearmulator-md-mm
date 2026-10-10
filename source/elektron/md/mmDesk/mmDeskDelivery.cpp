@@ -4,6 +4,9 @@
 
 #include "elektronData/mmCommands.h"
 #include "elektronData/mmDump.h"
+#include "elektronData/mmPattern.h"
+
+#include <utility>
 
 namespace mmDesk
 {
@@ -130,6 +133,20 @@ namespace mmDesk
 
 	void MmMachine::deliverKitLive(const ed::MmKit& _from, const ed::MmKit& _to, std::vector<std::string>& _notes)
 	{
+		sendKitLive(_from, _to);
+		// What no live message reaches: a kit dump to the current slot, then LOAD KIT.
+		if(ed::mmKitRaw(liveFields(_from)) != ed::mmKitRaw(liveFields(_to)))
+		{
+			auto k = _to;
+			k.position = static_cast<uint8_t>(m_curKit);
+			const Ref slot{Kind::Kit, k.position};
+			loadKitAfter(slot, pushDump(slot, ed::encodeMmKit(k)));
+			_notes.push_back("Written to the kit slot and loaded (no live SysEx for this setting).");
+		}
+	}
+
+	void MmMachine::sendKitLive(const ed::MmKit& _from, const ed::MmKit& _to)
+	{
 		if(_from.name != _to.name)
 		{
 			std::string n;
@@ -158,15 +175,49 @@ namespace mmDesk
 				if(_from.tracks[t].multiEnv[i] != _to.tracks[t].multiEnv[i])
 					m_port.sendNrpn(t, static_cast<uint8_t>(0x40 + i), _to.tracks[t].multiEnv[i]);
 		}
-		// What no live message reaches: a kit dump to the current slot, then LOAD KIT.
-		if(ed::mmKitRaw(liveFields(_from)) != ed::mmKitRaw(liveFields(_to)))
+	}
+
+	// B-027: the OS 1.32B takes a dump of the pattern that plays and loads the kit the pattern links from its slot,
+	// also when that is the kit that plays (measured, mmDeskFirmwareTest machine: memory shows the stored kit some
+	// 20-40 ms after the dump is taken on SYSEX RECV): the kit's unsaved edits, a machine change or a value, are gone.
+	// As the Machinedrum's (B-025): once the machine has read and applied the dump (the stream's after-work), the edits
+	// go again (restoreWorkingKit); until then no memory image of the kit is taken, it shows the stored slot.
+	void MmMachine::reloadFollows(const Bytes& _patternDump)
+	{
+		const auto pattern = ed::decodeMmPattern(_patternDump);
+		if(!pattern || m_curKit < 0 || static_cast<int>(pattern->kit) != m_curKit)
+			return;	// another kit loads: the edits of the kit that played are lost, as on the machine
+		++m_reloadsPending;
+		m_reloadQueuedMs = clock();
+		m_stream.after([this, kit = m_curKit]
 		{
-			auto k = _to;
-			k.position = static_cast<uint8_t>(m_curKit);
-			const Ref slot{Kind::Kit, k.position};
-			loadKitAfter(slot, pushDump(slot, ed::encodeMmKit(k)));
-			_notes.push_back("Written to the kit slot and loaded (no live SysEx for this setting).");
-		}
+			m_reloadsPending = std::max(0, m_reloadsPending - 1);
+			m_restoreKit = kit;
+		}, clock());
+	}
+
+	// The machine loaded the kit that plays from its slot: what the editor shows of it (its unsaved edits, and those
+	// sent since the dump) goes again as live edits, pending until memory shows it. From the tick, which has the view:
+	// the after-work only marks it due.
+	void MmMachine::restoreWorkingKit(const Documents& _view)
+	{
+		const int kit = std::exchange(m_restoreKit, -1);
+		if(kit < 0 || kit != m_curKit)
+			return;	// another kit plays now, loaded from its slot
+		const auto* working = _view.workingKitOf(kit);
+		const auto stored = _view.kits.find(static_cast<uint8_t>(kit));
+		if(!working || stored == _view.kits.end())
+			return;
+		const auto loaded = ed::mmKitAsLoaded(stored->second);
+		if(ed::mmKitRaw(loaded) == ed::mmKitRaw(*working))
+			return;	// clean: the reload changed nothing
+		// Live edits only: what no live message reaches is in the slot already (deliverKitLive wrote it there).
+		sendKitLive(loaded, *working);
+		if(!m_profile.memory)
+			return;
+		// From the slot the machine now holds, not from before the edits that were on their way.
+		m_working.expect.clear();
+		m_working.expect.sent(loaded, *working, now());
 	}
 
 	deskCore::PushPolicy MmMachine::pushPolicy(const Kind _kind) const
@@ -297,6 +348,8 @@ namespace mmDesk
 				push->slot.askedBack(now());
 				request(*w.ref, true);
 			}
+			if(w.ref->kind == Kind::Pattern && static_cast<int>(w.ref->slot) == m_curPattern)
+				reloadFollows(w.bytes);
 		}
 		m_manual.clear();
 		return ok(std::to_string(n) + (n == 1 ? " message" : " messages") + " sent. Press EXIT on the Monomachine when the editor has read"
@@ -330,6 +383,8 @@ namespace mmDesk
 			// On the wire now; its read-back waits for the gesture's quiet (pumpPushes).
 			if(auto* push = m_pushes.find(ref); push && push->parked)
 				push->parked = false;
+			if(ref.kind == Kind::Pattern && static_cast<int>(ref.slot) == m_curPattern)
+				reloadFollows(s.bytes);
 		}
 		// The machine never showed SYSEX RECV: the session dropped what it held. Those pushes fail (the
 		// page shows the error, the edit is no longer pending) and the document is read again.

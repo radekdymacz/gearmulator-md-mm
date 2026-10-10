@@ -362,10 +362,12 @@
 	   waits for the answer, so a notice goes before the page's own questions, is never replaced by one, and is
 	   always answered: closed any other way, by its last key (Dlg, skins/shared/deskModal.js; as the MD page) */
 	function onNotice(m) {
+		/* the answer: noticeAnswer (skins/shared/deskModal.js, in mmMockup.js); a refusal is only logged */
+		const sendAnswer = i => send(noticeAnswer(m, i), { onResult: noticeRefused });
 		/* "modal": false (the update banner, DESIGN-updates.md): a strip, not the dialog; the page plays on under it */
-		if (m.modal === false) { Banner.show(m, i => send({ op: "noticeAnswer", id: m.id, button: i })); return; }
+		if (m.modal === false) { Banner.show(m, sendAnswer); return; }
 		const names = m.buttons && m.buttons.length ? m.buttons : ["OK"], item = { notice: true };
-		const answer = i => { if (item.done) return; item.done = true; send({ op: "noticeAnswer", id: m.id, button: i }); };
+		const answer = i => { if (item.done) return; item.done = true; sendAnswer(i); };
 		item.cancel = () => answer(names.length - 1);
 		const esc = t => String(t).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
 		V().ask(`<b>${esc(m.title)}</b><br>${esc(m.text).replace(/\n/g, "<br>")}`,
@@ -555,6 +557,12 @@
 		audioMeter(on) { send({ op: "audioMeter", on: !!on }); }
 	};
 
+	/* files dropped on the window (shared/deskDrop.js): the page's question and toast, the start-up card asking for a
+	   firmware; the Monomachine has no samples */
+	Drop.host = { send: c => send(c), ask: (html, btns) => V().ask(html, btns), toast: t => V().toast(t),
+		romWanted: () => machine?.lifecycle === "missing" || machine?.lifecycle === "unsupported",
+		samples: () => "The Monomachine has no samples.", hint: "Drop a ROM (.bin, .zip) or a SysEx file (.syx)" };
+
 	/* What the page holds, read-only, for whoever looks (a diagnostics build's self-tests register
 	   here; the page does not know them): copies of the documents, and a call once the machine is
 	   ready. */
@@ -627,6 +635,8 @@
 			log("followHost refused: " + t);
 			if (t !== last.hostRefused) { last.hostRefused = t; V().toast("The machine could not be set to follow the DAW's tempo: " + t); }
 		}
-		else if (m.type === "result" && !m.ok && m.errors?.length && m.op !== "set" && m.op !== "modSet") V().toast(m.errors[0]);
+		/* a refused noticeAnswer is the log's only (noticeRefused): nothing for the user to do */
+		else if (m.type === "result" && !m.ok && m.errors?.length && m.op !== "set" && m.op !== "modSet"
+			&& m.op !== "noticeAnswer") V().toast(m.errors[0]);
 	}
 })();

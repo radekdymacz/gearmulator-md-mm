@@ -35,6 +35,7 @@ namespace md
 	inline constexpr uint32_t g_hostAudioInputSafetyFrames = 64;
 
 	class Device;
+	class FactoryFlashBaseline;	// mdfactorybaseline.h, the fork's
 
 	struct FactoryFlashSnapshot
 	{
@@ -127,7 +128,9 @@ namespace md
 		std::vector<uint8_t> copyPatchRam() const;
 		std::vector<uint8_t> copyFlashData() const { return m_uc.copyFlashData(); }
 		std::vector<uint8_t> copyUserFlash() const { return m_uc.copyUserFlash(); }
-		const std::vector<uint8_t>& flashBaseline() const { return m_rom.data(); }
+		const std::vector<uint8_t>& flashBaseline() const { return m_rom->data(); }
+		// The ROM image, shared: a state capture keeps it alive while it encodes outside the device lock
+		std::shared_ptr<const Rom> sharedRom() const { return m_rom; }
 		bool flashDirty() const { return m_uc.flashDirty(); }
 		bool factoryFlashCacheReady();
 		bool isFactoryFlashCacheReady() const
@@ -154,9 +157,9 @@ namespace md
 			return m_pendingFlashRestoreActive.load(std::memory_order_acquire);
 		}
 		bool copyFactoryFlashBaseline(std::vector<uint8_t>& _baseline);
-		// B-034: the same, with the baseline's fingerprint (FNV-1a 64), computed once per baseline (when the capture
-		// completes, or the first time a cached baseline is decoded) instead of on every state save
-		bool copyFactoryFlashBaseline(std::vector<uint8_t>& _baseline, uint64_t& _fingerprint);
+		// The factory baseline once the factory flash is ready (null before), shared and built at most once per
+		// cache or capture (FactoryFlashBaseline). Call under the owning Plugin device lock. mdfactorybaseline.cpp.
+		std::shared_ptr<FactoryFlashBaseline> factoryFlashBaseline();
 		std::vector<uint8_t> copyFactoryFlashCache();
 		// Capture immutable source bytes while the machine is pinned. Cache encoding
 		// scans the complete flash image and belongs after the outer Device lock is
@@ -308,7 +311,7 @@ namespace md
 		PanelInputQueueStatus getPanelInputStatus() const;
 
 		const auto& getAudioOutputs() const { return m_audioOutputs; }
-		const std::string& getRomFilename() const { return m_rom.getFilename(); }
+		const std::string& getRomFilename() const { return m_rom->getFilename(); }
 
 		// Last complete front-panel value published by the emulation thread. Returning
 		// by value prevents consumers from retaining a reference to live decoder state.
@@ -348,7 +351,7 @@ namespace md
 		BASELIB_NOINLINE void serviceMidiSysexTransfer(uint32_t _cycles);
 
 		const MachineModel m_model;
-		Rom m_rom;
+		const std::shared_ptr<const Rom> m_rom;
 		const uint64_t m_firmwareFingerprint;
 		bool m_factoryFlashInitializationExpected;
 		Microcontroller m_uc;
@@ -357,7 +360,8 @@ namespace md
 		std::atomic<bool> m_factoryFlashPreparationReady{false};
 		mutable std::mutex m_factoryFlashMutex;
 		std::vector<uint8_t> m_factoryFlashCache;
-		std::vector<uint8_t> m_factoryFlashBaseline;
+		// Never null; immutable once its capture completes, so a state save shares it (FactoryFlashBaseline)
+		std::shared_ptr<std::vector<uint8_t>> m_factoryFlashBaseline;
 		std::vector<uint8_t> m_pendingFlashImage;
 		FlashSectorOverlay m_pendingFlashOverlay;
 		std::vector<uint8_t> m_pendingPatchRam;
@@ -365,7 +369,8 @@ namespace md
 		std::atomic<bool> m_pendingFlashRestoreFailed{false};
 		size_t m_factoryFlashCaptureOffset = 0;
 		uint64_t m_factoryFlashCaptureFingerprint = 14695981039346656037ull;
-		std::optional<uint64_t> m_factoryBaselineFingerprint;	// B-034: of the baseline copyFactoryFlashBaseline gives
+		std::optional<uint64_t> m_factoryBaselineFingerprint;	// B-034: of the captured m_factoryFlashBaseline
+		std::shared_ptr<FactoryFlashBaseline> m_factoryBaseline;	// made on first use from the cache or capture
 		bool m_factoryFlashCaptureComplete = false;
 		size_t m_pendingFlashSectorIndex = 0;
 		FrontPanel m_frontPanel;	// writer-owned UART2 LCD/LED decoder

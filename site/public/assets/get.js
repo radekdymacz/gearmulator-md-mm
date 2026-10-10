@@ -61,6 +61,10 @@
     hasFile = ready(D.url);
     fileUrl = ready(D.url) ? D.url : rel;
     document.querySelectorAll("[data-download]").forEach(function (el) { if (el.tagName === "A") el.href = fileUrl; });
+    /* the big button says what the file is (macOS: the installer), so the .dmg of loose files is not taken for it */
+    document.querySelectorAll("[data-dl-label]").forEach(function (el) {
+        el.textContent = hasFile && (OS[os] || {}).button || "Download";
+    });
     var dmg = document.querySelector("[data-dmg-link]");
     if (dmg) { dmg.href = ready(D.dmg) ? D.dmg : rel; dmg.parentNode.hidden = !ready(D.dmg); }
     /* no download for this OS (Linux): offer no payment either, only the releases link */

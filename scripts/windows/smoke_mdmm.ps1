@@ -14,6 +14,9 @@
 #     runtime (GEARMULATOR_MDMM_WEBVIEW2_TEST=old: no ICoreWebView2Settings3, the page must still work), as on a machine
 #     without one (=fail) and with no page (GEARMULATOR_MDMM_PAGE_TEST=nostart): those two must say in the window
 #     that the editor page could not start (read through UI Automation);
+#   - B-029: the Machinedrum VST3 once more, its editor closed and opened again in the host (--reopen, as a DAW closing
+#     and opening the plug-in's window): the page must come back (it stayed blank in 0.3.5), loaded again in a new web view
+#     (the start-up log says so), keys and all;
 #   - a screenshot of the screen (md-standalone.png, md-vst3.png, ...; an artifact, to look at) and summary.md.
 #
 #   scripts/windows/smoke_mdmm.ps1 -PackageDir <unpacked zip> -OutputDir <dir> [-Vst3Host <mdmmVst3EditorHost.exe>]
@@ -153,6 +156,15 @@ $runs.Add(@{ Label = 'MD standalone, no WebView2 runtime (test)'; File = $mdExe;
     Env = @{ GEARMULATOR_MDMM_WEBVIEW2_TEST = 'fail' }; Failure = $true })
 $runs.Add(@{ Label = 'MD standalone, page that never starts (test)'; File = $mdExe; Arguments = @(); Machine = 'Machinedrum'; Name = 'md-page-nostart'
     Env = @{ GEARMULATOR_MDMM_PAGE_TEST = 'nostart' }; Failure = $true })
+# B-029: the editor closed after 30 s and opened again; the page is looked for only after that (After), so the first
+# window's page does not count
+if ($Vst3Host) {
+    $mdVst3 = @($runs | Where-Object { $_.Name -eq 'md-vst3' })[0]
+    $reopenAt = 30
+    $runs.Add(@{ Label = "$($productNames['MDMM_PRODUCT_NAME_MD']) VST3, editor closed and opened again"; File = $Vst3Host
+        Arguments = @($mdVst3.Arguments[0], "$($TimeoutSeconds + 30 + $reopenAt + 5)", '--reopen', "$reopenAt"); Machine = 'Machinedrum'
+        Name = 'md-vst3-reopen'; After = $reopenAt + 5; LogWants = 'the page loads again' })
+}
 
 $status = 0
 $summary = New-Object System.Collections.Generic.List[string]
@@ -168,6 +180,7 @@ foreach ($run in $runs) {
     Get-ChildItem -LiteralPath $dataRoot -Recurse -File -Filter 'editor-*.log' -ErrorAction SilentlyContinue | Remove-Item -Force -ErrorAction SilentlyContinue
     $process = Start-Process @start
     foreach ($k in $runEnv.Keys) { Remove-Item -Path "env:$k" -ErrorAction SilentlyContinue }
+    if ($run.ContainsKey('After')) { Start-Sleep -Seconds $run.After }
     $failureRun = $run.ContainsKey('Failure') -and $run.Failure
     $wanted = if ($failureRun) { 'The editor page could not start' } else { "$($run.Machine) firmware needed" }
     $found = $false

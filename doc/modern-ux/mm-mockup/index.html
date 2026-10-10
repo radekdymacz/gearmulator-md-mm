@@ -3426,6 +3426,13 @@ const Banner = (() => {
 	}
 	return { show, hide, get shown() { return !!el && !el.hidden; } };
 })();
+/* The answer to a plug-in notice m (deskHost.cpp noticeAnswer), the dialog's and the banner's, both editors: the
+   button pressed, on the notice numbered m.id. That number goes as "notice", never as "id": "id" is the request's own,
+   which Bridge.send gives every request, so a notice number sent as "id" would be overwritten. The plug-in refuses an
+   answer to a notice that waits for none (answered already, replaced by a newer banner): nothing for the user to do,
+   so a page sends it with noticeRefused as its onResult (the log only). */
+const noticeAnswer = (m, button) => ({ op: "noticeAnswer", notice: m.id, button });
+const noticeRefused = r => { if (!r.ok) Bridge.log("noticeAnswer refused: " + (r.errors || []).join("; ")); };
 "use strict";
 /* A context menu (K3, doc/modern-ux/DESIGN-keymap.md P5), one for both editors: a short list of actions at the
    pointer, each with the key that does the same, so nothing is only behind a key (a host that eats ⌘C, a person
@@ -5962,7 +5969,7 @@ const AMTIP={
  rate:"The device's sample rate. The machine's own rate is fixed; the plug-in resamples",
  buffer:"Smaller: less latency, more CPU. Larger: safer on a busy computer",
  midiIn:"MIDI inputs that play and control the machine",
- midiOut:"Where the machine's MIDI goes (clock, notes, SysEx)",
+ midiOut:"Where the machine's own MIDI goes: its notes, CCs, program changes, clock and transport (never its SysEx)",
  bt:"Pair a Bluetooth MIDI device (the system's dialog)" };
 const amEsc=t=>String(t??"").replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"})[c]);
 function drawAudio(){const pop=$("#audiopop");if(!pop)return;if(!AP.open){pop.hidden=true;return}const D=audioDoc();

@@ -89,6 +89,8 @@ namespace md
 		float getSamplerate() const override;
 		bool isValid() const override;
 		bool getState(std::vector<uint8_t>& _state, synthLib::StateType _type) override;
+		// The fork's (mdstatecapture.h): copied under synthLib::Plugin's lock, encoded after it (getState: at once)
+		std::unique_ptr<synthLib::Device::StateCapture> beginStateCapture(synthLib::StateType _type) override;
 		bool setState(const std::vector<uint8_t>& _state, synthLib::StateType _type) override;
 		bool supportsStateTransactions() const override { return true; }
 		std::unique_ptr<synthLib::Device::StateTransaction> beginStateTransaction(

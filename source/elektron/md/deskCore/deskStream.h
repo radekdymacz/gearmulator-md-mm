@@ -62,7 +62,8 @@ namespace deskCore
 	// through the stream (StreamPolicy), in order, in lanes:
 	//   send     SysEx (held while a sample is on its way). A bulk message waits until the one before it has had
 	//            its time on the wire, and a newer dump of the same document replaces one still waiting (latest
-	//            wins); anything after a bulk message waits until the machine has read and applied it.
+	//            wins); anything after a bulk message waits until the machine has read and applied it. A request
+	//            (ask) already waiting is not queued twice (B-031).
 	//   latest   a value-setting SysEx (tempo, LFO, master effect...): at most one every latestIntervalMs per key,
 	//            the newest waiting value replaces an older one.
 	//   value    a CC (a kit value, a mute): the value budget; the newest value of a key replaces a waiting one.
@@ -125,6 +126,31 @@ namespace deskCore
 			}
 			Item i;
 			i.lane = Lane::Sysex;
+			i.bytes = _message;
+			enqueue(std::move(i));
+			pump(_nowMs);
+		}
+
+		// B-031: a request (a question the machine answers with a reply: a status, the dump of one slot). One already
+		// waiting is not queued again: the waiting one moves to the newest place, so the answer covers everything sent
+		// before it now. A stream held up behind dumps (0.3.4's import, which queued a whole backup at once) otherwise
+		// piled up the editor's status polls, seven requests a second, and let them go in one burst once the dumps had
+		// passed; OS 1.63 loses input when that much comes while it builds a dump reply, and a pick's LOAD PATTERN in
+		// that burst never reached the machine.
+		void ask(const Bytes& _message, const bool _sampleActive, const double _nowMs)
+		{
+			if(!m_wire)
+				return;
+			if(_sampleActive)
+			{
+				send(_message, true, _nowMs);
+				return;
+			}
+			const auto same = [&](const Item& _i) { return _i.request && _i.bytes == _message; };
+			m_queue.erase(std::remove_if(m_queue.begin(), m_queue.end(), same), m_queue.end());
+			Item i;
+			i.lane = Lane::Sysex;
+			i.request = true;
 			i.bytes = _message;
 			enqueue(std::move(i));
 			pump(_nowMs);
@@ -288,6 +314,7 @@ namespace deskCore
 			Bytes bytes;
 			std::function<void()> then;
 			size_t cost = 0;
+			bool request = false;	// ask(): one of its kind waits at most once
 		};
 
 		bool paced() const { return m_policy.bytesPerSecond > 0; }

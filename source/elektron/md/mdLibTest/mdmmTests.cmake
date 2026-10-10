@@ -32,6 +32,11 @@ function(mdmm_add_lib_tests _dir)
 	target_link_libraries(mdDeskFirmwareTest PRIVATE mdLib mdDesk deskWire)
 	target_compile_definitions(mdDeskFirmwareTest PRIVATE MDDESK_SCHEMA="${_dir}/../../../../doc/modern-ux/md-data-contract.schema.json")
 	set_property(TARGET mdDeskFirmwareTest PROPERTY FOLDER "Elektron/test")
+	# B-031: the user's own backup imported, then patterns picked while and after it runs. The backup from MD_SYX
+	# (never in the repo), the ROM from GEARMULATOR_MD_FIRMWARE_BIN; skipped without them (the local gate gives both).
+	add_test(NAME mdSyxPickFirmwareTest COMMAND mdDeskFirmwareTest --env syxpick)
+	set_tests_properties(mdSyxPickFirmwareTest PROPERTIES
+		LABELS "Integration;FirmwareTest" SKIP_RETURN_CODE 77 TIMEOUT 1200)
 
 	# P3 Machinedrum Editor discovery probes (working kit in memory, live
 	# recording, sample names, SDS). Manual: needs a user-supplied ROM.
@@ -56,9 +61,24 @@ function(mdmm_add_lib_tests _dir)
 
 	# The gate of the emulation CPU plan (doc/modern-ux/RESEARCH-emulation-cpu.md, section 5): bit-exact audio and
 	# RAM hashes plus host instructions and cycles per frame, MD or MM, stopped and playing. Manual: needs a ROM.
-	add_executable(mdmmPerfGateTest ${_dir}/mdmmPerfGateTest.cpp ${_dir}/mdFirmwareSession.h)
-	target_link_libraries(mdmmPerfGateTest PRIVATE mdLib elektronData)
+	# The local release gate (doc/release/LOCAL-GATE.md) runs it against recorded goldens (--golden, goldens/).
+	add_executable(mdmmPerfGateTest ${_dir}/mdmmPerfGateTest.cpp ${_dir}/mdFirmwareSession.h ${_dir}/mmSysexRecv.h)
+	target_link_libraries(mdmmPerfGateTest PRIVATE mdLib mmDesk)
 	set_property(TARGET mdmmPerfGateTest PROPERTY FOLDER "Elektron/test")
+
+	# The local release gate's ROM check: each supported image boots and answers SysEx, a truncated and a garbage
+	# image are refused. Manual: needs a user-supplied ROM.
+	add_executable(mdmmRomLoadTest ${_dir}/mdmmRomLoadTest.cpp ${_dir}/mdFirmwareSession.h)
+	target_link_libraries(mdmmRomLoadTest PRIVATE mdLib elektronData)
+	set_property(TARGET mdmmRomLoadTest PROPERTY FOLDER "Elektron/test")
+
+	# The local release gate's SysEx round trip: a machine's full dump imported into a fresh one as the editors
+	# import a file, dumped again, byte for byte; real backups (fixtures, never in the repo) document by document.
+	# Manual: needs a user-supplied ROM.
+	add_executable(mdmmSysexRoundTripTest
+		${_dir}/mdmmSysexRoundTripTest.cpp ${_dir}/mdFirmwareSession.h ${_dir}/mmSysexRecv.h)
+	target_link_libraries(mdmmSysexRoundTripTest PRIVATE mdLib mmDesk)
+	set_property(TARGET mdmmSysexRoundTripTest PROPERTY FOLDER "Elektron/test")
 
 	# P4 Machinedrum Editor discovery probes (start-up animation, chaining,
 	# mutes, kit and pattern library). Manual: needs a user-supplied ROM.
@@ -87,6 +107,10 @@ function(mdmm_add_lib_tests _dir)
 	# -DGEARMULATOR_MM_ROM=<OS 1.32B image> runs it in ctest; without it the test skips.
 	add_test(NAME mmDeskFirmwareTest COMMAND mmDeskFirmwareTest ${GEARMULATOR_MM_ROM})
 	set_tests_properties(mmDeskFirmwareTest PROPERTIES LABELS "Integration;FirmwareTest" SKIP_RETURN_CODE 77 TIMEOUT 400)
+	# B-031 on the Monomachine: the backup from MM_SYX, the ROM from GEARMULATOR_MM_FIRMWARE_BIN; skipped without them.
+	add_test(NAME mmSyxPickFirmwareTest COMMAND mmDeskFirmwareTest --env syxpick)
+	set_tests_properties(mmSyxPickFirmwareTest PROPERTIES
+		LABELS "Integration;FirmwareTest" SKIP_RETURN_CODE 77 TIMEOUT 1200)
 
 	# Unit test: mdDesk::wirePort and mmDesk::wirePort send the right bytes (kit param, mute, NRPN,
 	# panel keys) on the base channel. No ROM, no emulator - links the two wirePort INTERFACE
@@ -96,6 +120,15 @@ function(mdmm_add_lib_tests _dir)
 	add_test(NAME deskWirePortTest COMMAND deskWirePortTest)
 	set_tests_properties(deskWirePortTest PROPERTIES LABELS "UnitTest;Midi")
 	set_property(TARGET deskWirePortTest PROPERTY FOLDER "Elektron/test")
+
+	# A state save captured under the plug-in's lock and encoded after it (codex review 2026-10, item 3): the
+	# table-driven CRC-32, and the capture's bytes against the encoder's (the firmware part needs
+	# GEARMULATOR_MD_FIRMWARE_BIN / GEARMULATOR_MM_FIRMWARE_BIN and says SKIP without them).
+	add_executable(mdStateCaptureTest ${_dir}/mdStateCaptureTest.cpp)
+	target_link_libraries(mdStateCaptureTest PRIVATE mdLib)
+	add_test(NAME mdStateCaptureTest COMMAND mdStateCaptureTest)
+	set_tests_properties(mdStateCaptureTest PROPERTIES LABELS "UnitTest")
+	set_property(TARGET mdStateCaptureTest PROPERTY FOLDER "Elektron/test")
 
 	# .syx import and export (P7): synthetic dumps; no firmware.
 	add_executable(syxImportTest ${_dir}/syxImportTest.cpp)

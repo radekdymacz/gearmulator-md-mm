@@ -17,7 +17,7 @@ namespace mdJucePlugin
 {
 	class PageWebView;
 	class KeyWindowWatch;
-	namespace pageBridge { class Pieces; }
+	namespace pageBridge { class Pieces; class FileOutbox; }
 
 	// A web page in the plug-in (P6: one host for both editors): bundling (stylesheets, scripts
 	// and fonts inlined into one file, which WKWebView may read), the bridge (page -> C++ as
@@ -53,7 +53,8 @@ namespace mdJucePlugin
 		const juce::String& selfTest() const { return m_selfTest; }
 		// A line of this instance's log (diagnostics builds only: a release build writes no file).
 		void log(const juce::String& _line) const;
-		// B-022: the start-up log every build keeps (the editor's version, the system, the web engine and its
+		// B-022: the start-up log every build keeps (the editor's version, the system and whether the editor runs
+		// translated (Rosetta, mdProcessArch.h), the web engine and its
 		// version, loading, the bridge up, what failed), for a user to send: <data folder>/logs/editor-<page>.log, the
 		// start before beside it. Set before load().
 		void setStartupLog(const juce::File& _file);
@@ -64,6 +65,22 @@ namespace mdJucePlugin
 		void checkStarted();
 		// I-008: what a right-click on that message does (the editor's menu as a native menu: no page draws it).
 		void setFallbackMenu(std::function<void()> _open) { m_fallbackMenu = std::move(_open); }
+		// The page started again with batches already sent (Linux: it says a/0 when it starts, mdPageBridge.h; Windows,
+		// B-029: WebView2 was made again in a new window and loads it again): what it had is gone, so the owner sends
+		// everything once more (the page's ready may have come before this, and what it answered went out under the
+		// old page's numbers).
+		void setOnRestart(std::function<void()> _restarted) { m_onRestart = std::move(_restarted); }
+		// Files dragged onto the page: whether the owner takes them (their full paths), that they came over the page
+		// (true) or left it (false), and where they were dropped, in the page's CSS pixels. macOS only for now: there
+		// the web view hands the window the drags of files from outside the page (mdWebFileDrop.mm); WebView2 and
+		// webkit2gtk keep them (the page is not replaced: their navigation to the file is cancelled).
+		struct FileDrop
+		{
+			std::function<bool(const std::vector<std::string>&)> takes;
+			std::function<void(bool)> over;
+			std::function<void(const std::vector<std::string>&, double, double)> dropped;
+		};
+		void setFileDrop(FileDrop _drop);
 
 	private:
 		void onBridge(const std::string& _url);
@@ -72,7 +89,12 @@ namespace mdJucePlugin
 		void focusPage(bool _always);
 		void globalFocusChanged(juce::Component* _focused) override;
 		void onAck(uint64_t _seq);
-		void deleteRecvFiles(uint64_t _upTo);
+		// B-029 (Windows): a new web view loads the page from its start (its old window was destroyed)
+		void pageLoadsAgain();
+		// The batch files up to _upTo; true when none of them is left (one that cannot be deleted stays registered)
+		bool deleteRecvFiles(uint64_t _upTo);
+		// Linux: the outbox as script files beside the page, strictly in order (mdPageBridge.h FileOutbox).
+		void flushFiles();
 		std::string bundle() const;
 
 		const Spec m_spec;
@@ -91,8 +113,17 @@ namespace mdJucePlugin
 		// Windows (WebView2, mdWebView2Page.h): plug-in -> page as executed scripts, not javascript: URLs.
 		const bool m_scriptRecv;
 		std::map<uint64_t, juce::File> m_recvFiles;	// written and not yet read by the page, by batch number
+		// Linux: the batches not written yet (a write failed), in order
+		std::unique_ptr<pageBridge::FileOutbox> m_files;
+		juce::String m_pageUrl;		// what load() went to: a page that lost batches is loaded again (FileOutbox resync)
+		double m_nextResyncTry = 0;	// when to try that reload (again)
+		std::function<void()> m_onRestart;	// setOnRestart
+		FileDrop m_fileDrop;	// setFileDrop: the owner's, in the page's CSS pixels
 		double m_userZoom = 1.0;	// the user's page zoom (the editor's menu, Cmd - / Cmd + / Cmd 0)
-		double m_cssZoom = 1.0;		// the CSS zoom sent, where the web view has no native page zoom
+		double m_cssZoom = 1.0;		// the CSS zoom sent (a zoom message), where the web view has no native page zoom
+		double m_pageZoom = 1.0;	// the page's zoom now (native or CSS): a CSS pixel is this many of the view's
+		// macOS: 1 once the web view hands file drags to the window (mdWebFileDrop.mm), -1 it cannot
+		int m_fileDrops = 0;
 		bool m_keptDrawn = false;	// a background run (mdBackgroundRun.h): the page draws while covered
 		mutable juce::File m_logFile;	// created on the first line
 		juce::File m_startupLog;	// B-022 (setStartupLog)

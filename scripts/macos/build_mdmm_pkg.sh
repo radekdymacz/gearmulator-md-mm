@@ -23,9 +23,11 @@
 # domain the person picks decides the root. Firmware is never packaged; the
 # script refuses to build if a firmware-like file is found in any bundle.
 #
-# Upgrades: each component's preinstall (pkg-resources/remove-old-bundles)
-# removes the bundles installed under the old names (MDMM_LEGACY_NAME_*:
-# Gearmulator MD.vst3 / .component up to 0.3.1), only when they are ours, so a
+# Upgrades: each component's preinstall (pkg-resources/remove-old-bundles,
+# rendered by render_remove_old_bundles.sh) removes the bundles left under the
+# old names (MDMM_LEGACY_NAME_*: Gearmulator MD.vst3 / .component up to 0.3.1, and
+# a standalone app of that name) in the install location and in the installing
+# person's home folder, only when they are ours (by identifier or receipt), so a
 # DAW does not list the editor twice.
 #
 # Signing (doc/release/SIGNING.md): the bundles are packaged as they are, so
@@ -41,7 +43,7 @@ script_dir="$(cd "$(dirname "$0")" && pwd)"
 source_dir="$(cd "${script_dir}/../.." && pwd)"
 bundle_dir="$(cd "${1:?usage: build_mdmm_pkg.sh BUNDLE_DIR OUTPUT_DIR [VERSION]}" && pwd)"
 output_dir_input="${2:?usage: build_mdmm_pkg.sh BUNDLE_DIR OUTPUT_DIR [VERSION]}"
-version="${3:-0.3.5}"
+version="${3:-$(sed -n 's/^set(MDMM_EDITOR_VERSION \([0-9.]*\))$/\1/p' "${source_dir}/source/elektron/md/mdJucePlugin/mdmmPlugins.cmake")}"
 resources_src="${script_dir}/pkg-resources"
 installer_identity="${MDMM_INSTALLER_IDENTITY:-}"
 sign_args=()
@@ -70,9 +72,11 @@ trap 'rm -rf -- "${work_dir}"' EXIT
 # the Installer receipts. They have been the same since 0.1.0 and stay so: a
 # new package upgrades the receipts of an earlier one in place. They are not
 # the bundles' identifiers (SIGNING.md, "Identifiers").
+md_names="${MDMM_PRODUCT_NAME_MD}|${MDMM_LEGACY_NAME_MD}|md|Machinedrum|Machinedrum"
+mm_names="${MDMM_PRODUCT_NAME_MM}|${MDMM_LEGACY_NAME_MM}|mm|Monomachine|Monomachine"
 machines=(
-  "${MDMM_PRODUCT_NAME_MD}|${MDMM_LEGACY_NAME_MD}|md|Machinedrum|Machinedrum|Machinedrum-Editor-macOS.pkg|com.nativekloud.machinedrum-editor"
-  "${MDMM_PRODUCT_NAME_MM}|${MDMM_LEGACY_NAME_MM}|mm|Monomachine|Monomachine|Monomachine-Editor-macOS.pkg|com.nativekloud.monomachine-editor"
+  "${md_names}|Machinedrum-Editor-macOS.pkg|${MDMM_BUNDLE_ID_MD}"
+  "${mm_names}|Monomachine-Editor-macOS.pkg|${MDMM_BUNDLE_ID_MM}"
 )
 
 require_bundle() {
@@ -155,21 +159,13 @@ render() {
       "${template}" > "${output}"
 }
 
-# A component's scripts folder with the preinstall that removes the bundle
-# 0.3.1 and earlier installed at OLD_PATH (relative to the install root) before
-# NEW_PATH is installed.
+# A component's scripts folder with the preinstall that removes what 0.3.1 and
+# earlier left under the old name (render_remove_old_bundles.sh: md|mm, then
+# app|vst3|au) before the new bundle is installed.
 write_preinstall() {
-  local scripts="$1" old_path="$2" new_path="$3"
+  local scripts="$1" machine="$2" kind="$3"
   mkdir -p "${scripts}"
-  sed -e "s|{{APP_NAME}}|${app_name}|g" \
-      -e "s|{{OLD_NAME}}|${old_name}|g" \
-      -e "s|{{OLD_PATH}}|${old_path}|g" \
-      -e "s|{{NEW_PATH}}|${new_path}|g" \
-      -e "s|{{BUNDLE_ID}}|${bundle_id}|g" \
-      -e "s|{{RECEIPT_ID}}|${receipt_id}|g" \
-      "${resources_src}/remove-old-bundles" > "${scripts}/preinstall"
-  chmod 755 "${scripts}/preinstall"
-  /bin/sh -n "${scripts}/preinstall"
+  "${script_dir}/render_remove_old_bundles.sh" "${machine}" "${kind}" "${scripts}/preinstall"
 }
 
 # Never rewrite the permissions of directories that already exist on the
@@ -197,11 +193,10 @@ for row in "${machines[@]}"; do
 
   # Component 1: the standalone app. It was built under the old name and
   # only renamed here up to 0.3.1, so an installed one may hold the old
-  # executable: its preinstall replaces it whole.
+  # executable (or still carry the old name): its preinstall removes both.
   stage_bundle "${app}" "${machine_dir}/root-app" "Applications" "${app_name}.app"
   write_component_plist "${machine_dir}/app.plist" "Applications/${app_name}.app"
-  receipt_id="${identifier}.app"
-  write_preinstall "${machine_dir}/app-scripts" "Applications/${app_name}.app" "Applications/${app_name}.app"
+  write_preinstall "${machine_dir}/app-scripts" "${id_suffix}" app
   pkgbuild --root "${machine_dir}/root-app" \
     --component-plist "${machine_dir}/app.plist" \
     --scripts "${machine_dir}/app-scripts" \
@@ -212,9 +207,7 @@ for row in "${machines[@]}"; do
   # Component 2: the VST3, with a preinstall that removes the old-named one.
   stage_bundle "${vst3}" "${machine_dir}/root-vst3" "Library/Audio/Plug-Ins/VST3" "${app_name}.vst3"
   write_component_plist "${machine_dir}/vst3.plist" "Library/Audio/Plug-Ins/VST3/${app_name}.vst3"
-  receipt_id="${identifier}.vst3"
-  write_preinstall "${machine_dir}/vst3-scripts" "Library/Audio/Plug-Ins/VST3/${old_name}.vst3" \
-    "Library/Audio/Plug-Ins/VST3/${app_name}.vst3"
+  write_preinstall "${machine_dir}/vst3-scripts" "${id_suffix}" vst3
   pkgbuild --root "${machine_dir}/root-vst3" \
     --component-plist "${machine_dir}/vst3.plist" \
     --scripts "${machine_dir}/vst3-scripts" \
@@ -226,9 +219,7 @@ for row in "${machines[@]}"; do
   # a postinstall that makes hosts rescan.
   stage_bundle "${au}" "${machine_dir}/root-au" "Library/Audio/Plug-Ins/Components" "${app_name}.component"
   write_component_plist "${machine_dir}/au.plist" "Library/Audio/Plug-Ins/Components/${app_name}.component"
-  receipt_id="${identifier}.au"
-  write_preinstall "${machine_dir}/au-scripts" "Library/Audio/Plug-Ins/Components/${old_name}.component" \
-    "Library/Audio/Plug-Ins/Components/${app_name}.component"
+  write_preinstall "${machine_dir}/au-scripts" "${id_suffix}" au
   /usr/bin/ditto "${resources_src}/au-postinstall" "${machine_dir}/au-scripts/postinstall"
   chmod 755 "${machine_dir}/au-scripts/postinstall"
   pkgbuild --root "${machine_dir}/root-au" \

@@ -29,9 +29,12 @@ set_property(TARGET mdLib PROPERTY SOURCES ${_mdmmMdLibSources})
 unset(_mdmmMdLibSources)
 
 # The editors' parts of mdLib: the machine's state for the editor pages (md::DeskDevice, the MD and
-# MM telemetry), the named panel key presses and the ROM check.
+# MM telemetry), the named panel key presses and the ROM check; a state save captured under the plug-in's lock and
+# encoded after it (md::Device's and md::Hardware's hooks: the capture, the factory baseline decoded once).
 target_sources(mdLib PRIVATE
 	mdLib/mddeskdevice.cpp mdLib/mddeskdevice.h
+	mdLib/mdfactorybaseline.cpp mdLib/mdfactorybaseline.h
+	mdLib/mdstatecapture.cpp mdLib/mdstatecapture.h
 	mdLib/mdpanelsequence.cpp mdLib/mdpanelsequence.h
 	mdLib/mdsequencerstate.h
 	mdLib/mmtelemetry.h
@@ -91,4 +94,5 @@ endif()
 
 if(BUILD_TESTING)
 	include(mdLibTest/mdmmTests.cmake)
+	add_subdirectory(upstreamTests)	# the tests the fork carries for upstream's code (bridge, network, MCP, synthLib)
 endif()

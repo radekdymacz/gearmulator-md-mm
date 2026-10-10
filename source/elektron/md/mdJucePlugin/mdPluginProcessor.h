@@ -75,6 +75,8 @@ namespace mdJucePlugin
 		void getRemoteDeviceParams(synthLib::DeviceCreateParams& _params) const override;
 
 	    pluginLib::Controller* createController() override;
+		// MIDI mapping switched off (deskHost::midiMappingEnabled): no translator, so no learn code on the MIDI threads
+		bool usesMidiLearn() const override;
 		void saveChunkData(baseLib::BinaryStream& _stream) override;
 		void loadChunkData(baseLib::ChunkReader& _reader) override;
 		bool loadCustomData(const std::vector<uint8_t>& _sourceBuffer) override;
@@ -113,7 +115,7 @@ namespace mdJucePlugin
 		std::atomic<double> m_hostBpm{0.0};
 		BootDiagnostics m_boot;
 		void recordBoot();
-		int m_bootTicks = 0;
+		double m_lastBootRecordMs = 0;	// when recordBoot last ran
 		const double m_bootStartMs = juce::Time::getMillisecondCounterHiRes();
 		std::string m_bootRom;
 		std::unique_ptr<class DeskHost> m_desk;

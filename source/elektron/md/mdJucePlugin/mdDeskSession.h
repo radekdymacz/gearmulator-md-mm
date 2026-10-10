@@ -110,6 +110,9 @@ namespace mdJucePlugin
 		// A page message: the desk's commands (the model's table) and the plug-in's session rows
 		// (deskHost's table, actor Session).
 		virtual void onPageMessage(const Value& _message) = 0;
+		// The page started again without saying so in a message (Linux: WebPageHost's restart): everything once more,
+		// as on its ready.
+		void republish();
 		// One step of the session: the engine's facts in, the desk's work, the page's messages out.
 		// The timer calls it; tests call it directly.
 		virtual void step() = 0;

@@ -277,6 +277,8 @@ Do L1, L11, L2 (b first, then a), L5, and evaluate PR #20 (L13a). If PR #20 land
 
 Landed: L1, L11, L2b and L5 sit behind one run-time switch (`GEARMULATOR_MDMM_SPEEDUPS=0`, or *Developer > Speed-ups off (legacy emulation, slower)*), so a tester can compare against the pre-step-1 emulation in minutes; both positions are bit-exact. See `doc/md_mm_performance_diagnostics.md`.
 
+Step 1 measured (2026-10-09, `cba2ace1f`, M4 Pro, `mdmmPerfGateTest`): the shipped set is L1, L11, L2b and L5 (L2a and L13a/PR #20 not taken; step 2 starts from this set). Host work per frame: MD −15 % stopped / −16 % playing, MM −19 % / −21 %; CPU of one instance −16 to −19 %; the longest buffer while editing −17 to −27 %. The forecast row above (87 %) was beaten because L2b alone removed more scheduler glue than L2 was credited with.
+
 | Gate | Pass condition |
 |---|---|
 | `mdmmPerfGateTest` audio FNV hash and RAM hash, MD and MM, stopped and playing | identical before and after each change |

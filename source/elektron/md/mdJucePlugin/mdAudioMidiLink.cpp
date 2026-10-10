@@ -1,4 +1,5 @@
 #include "mdAudioMidiLink.h"
+#include "mdMidiPortRefusal.h"
 
 #include "deskCore/deskCommands.h"
 
@@ -36,17 +37,35 @@ namespace mdJucePlugin
 				v.push(str(s));
 			return v;
 		}
+
+		// A MIDI port's name for its identifier (what the page sends), or the identifier when it is not listed.
+		std::string portName(const juce::Array<juce::MidiDeviceInfo>& _ports, const std::string& _identifier)
+		{
+			for(const auto& p : _ports)
+				if(p.identifier == juce::String(_identifier))
+					return str(p.name);
+			return _identifier;
+		}
+
+		constexpr bool g_windows =
+#if JUCE_WINDOWS
+			true;
+#else
+			false;
+#endif
 	}
 
-	AudioMidiLink::AudioMidiLink(juce::AudioProcessor& _processor, ToPage _toPage)
+	AudioMidiLink::AudioMidiLink(juce::AudioProcessor& _processor, ToPage _toPage, Log _log)
 		: m_processor(_processor)
 		, m_toPage(std::move(_toPage))
+		, m_log(std::move(_log))
 	{
 		if(auto* h = holder())
 		{
 			m_listening = &h->deviceManager;
 			m_listening->addChangeListener(this);
 		}
+		logDevices();
 	}
 
 	AudioMidiLink::~AudioMidiLink()
@@ -64,6 +83,53 @@ namespace mdJucePlugin
 	void AudioMidiLink::changeListenerCallback(juce::ChangeBroadcaster*)
 	{
 		publish();
+		logDevices();
+	}
+
+	std::string AudioMidiLink::summary() const
+	{
+		auto* h = holder();
+		if(!h)
+			return {};
+		auto& dm = h->deviceManager;
+		auto* dev = dm.getCurrentAudioDevice();
+		juce::String line = "audio: " + (dm.getCurrentAudioDeviceType().isNotEmpty() ? dm.getCurrentAudioDeviceType()
+			: juce::String("no driver"));
+		if(dev)
+		{
+			const auto rate = dev->getCurrentSampleRate();
+			const auto buffer = dev->getCurrentBufferSizeSamples();
+			line << ", " << dev->getName() << ", " << juce::String(rate, 0) << " Hz, buffer " << buffer
+				<< (rate > 0 ? " (" + juce::String(1000.0 * buffer / rate, 1) + " ms)" : juce::String())
+				<< ", output latency " << dev->getOutputLatencyInSamples() << ", "
+					<< (dev->isPlaying() ? "running" : "NOT running");
+		}
+		else
+		{
+			line << ", no device open";
+		}
+		line << "; MIDI in:";
+		const auto inputs = juce::MidiInput::getAvailableDevices();
+		if(inputs.isEmpty())
+			line << " none";
+		for(const auto& m : inputs)
+			line << " " << m.name << (dm.isMidiInputDeviceEnabled(m.identifier) ? " (on)" : " (off)");
+		const auto outputs = juce::MidiOutput::getAvailableDevices();
+		const auto out = dm.getDefaultMidiOutputIdentifier();
+		line << "; MIDI out: " << (out.isEmpty() ? juce::String("none") : juce::String(portName(outputs, str(out))))
+			<< " (of " << outputs.size() << ")";
+		return str(line);
+	}
+
+	void AudioMidiLink::logDevices()
+	{
+		if(!m_log)
+			return;
+		auto line = summary();
+		if(line.empty() || line == m_logged)
+			return;
+		m_logged = line;
+		m_log(line);
 	}
 
 	void AudioMidiLink::publish()
@@ -257,16 +323,34 @@ namespace mdJucePlugin
 				return needs("value");
 			return setup([&](auto& _s) { _s.bufferSize = static_cast<int>(value->asNumber()); });
 		case S::MidiInput:
+		{
 			if(!device || !on)
 				return needs("device and on");
 			dm.setMidiInputDeviceEnabled(juce::String(*device), onValue);
-			return saved();
+			saved();
+			// B-037: a port the system did not open stays off without a word from JUCE (on Windows: in use elsewhere)
+			const auto refused = midiPortRefusal::text(midiPortRefusal::Kind::Input,
+				portName(juce::MidiInput::getAvailableDevices(), *device),
+				onValue, dm.isMidiInputDeviceEnabled(juce::String(*device)), g_windows);
+			if(!refused.empty() && m_log)
+				m_log("MIDI: " + refused);
+			return refused;
+		}
 		case S::MidiOutput:
+		{
 			if(!device)
 				return needs("device");
 			dm.setDefaultMidiOutputDevice(juce::String(*device));
 			h->player.setMidiOutput(dm.getDefaultMidiOutput());
-			return saved();
+			saved();
+			// B-037: JUCE goes back to no output when the port did not open
+			const auto refused = midiPortRefusal::text(midiPortRefusal::Kind::Output,
+				portName(juce::MidiOutput::getAvailableDevices(), *device),
+				!device->empty(), dm.getDefaultMidiOutputIdentifier() == juce::String(*device), g_windows);
+			if(!refused.empty() && m_log)
+				m_log("MIDI: " + refused);
+			return refused;
+		}
 		case S::Count: break;
 		}
 		return "audioSet: unknown setting " + *what;

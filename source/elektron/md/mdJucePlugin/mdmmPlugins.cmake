@@ -7,7 +7,7 @@
 
 # The Machinedrum and Monomachine Editors have their own release version, apart from
 # Gearmulator's (the bundles, the AU version, the installers and the site use it).
-set(MDMM_EDITOR_VERSION 0.3.5)
+set(MDMM_EDITOR_VERSION 0.4.0)
 string(REPLACE "." ";" _mdmmVersionParts "${MDMM_EDITOR_VERSION}")
 list(GET _mdmmVersionParts 0 _mdmmVersionMajor)
 list(GET _mdmmVersionParts 1 _mdmmVersionMinor)
@@ -38,9 +38,10 @@ list(APPEND SOURCES
 	mdDeskHost.cpp mdDeskHost.h
 	mdStandaloneApp.cpp
 	mdBootDiagnostics.cpp mdBootDiagnostics.h
+	mdProcessArch.cpp mdProcessArch.h mdRosettaNotice.h
 	mdDeskSession.cpp mdDeskSession.h
 	mdMidiLearnCommands.cpp mdMidiLearnCommands.h
-	mdPageEditor.cpp mdPageEditor.h mdPageZoom.h mdEditorMenu.h
+	mdPageEditor.cpp mdPageEditor.h mdPageZoom.h mdEditorMenu.h mdNoticeBook.h mdDroppedFiles.h
 	mdRomInstall.cpp mdRomInstall.h
 	mdSettingsMigration.cpp mdSettingsMigration.h
 	mdSessionMd.cpp mdSessionMm.cpp mdSessions.h
@@ -49,9 +50,10 @@ list(APPEND SOURCES
 	mmStudioLink.cpp mmStudioLink.h
 	$<$<PLATFORM_ID:Darwin>:mdStudioWebZoom.mm> mdWebFocus.h
 	$<$<PLATFORM_ID:Darwin>:mdBackgroundRun.mm> mdBackgroundRun.h
+	$<$<PLATFORM_ID:Darwin>:mdWebFileDrop.mm> mdWebFileDrop.h
 	$<$<PLATFORM_ID:Windows>:mdWebView2Page.cpp>
-	mdWebView2Page.h
-	mdAudioMidiLink.cpp mdAudioMidiLink.h
+	mdWebView2Page.h mdWebView2Window.h
+	mdAudioMidiLink.cpp mdAudioMidiLink.h mdMidiPortRefusal.h mdMachineMidiOut.h
 	mdUpdater.cpp mdUpdater.h
 
 	skins/mdStudio/mdStudio.rml
@@ -99,6 +101,7 @@ list(APPEND SOURCES
 	skins/shared/deskAudio.js skins/shared/deskAudio.css skins/shared/deskAudioSelfTest.js
 	skins/shared/deskLcd.css skins/shared/deskFonts.css
 	skins/shared/deskBridge.js skins/shared/deskBridgeTest.js
+	skins/shared/deskDrop.js skins/shared/deskDropTest.js
 	skins/shared/deskDocs.js
 	skins/shared/deskOverlay.js skins/shared/deskOverlayTest.js
 	skins/shared/deskGen.js skins/shared/deskGenTest.js
@@ -136,7 +139,8 @@ option(MDMM_INSTALL_DEV_PLUGINS "Copy the built editors to ~/Library/Audio/Plug-
 # mmMockup.js (sync-mmstudio-skin.py) but for the bridge.
 set(MD_SHARED_PAGE_FILES
 	"skins/shared/deskModal.js" "skins/shared/deskMenu.js" "skins/shared/deskCaps.js" "skins/shared/deskBoot.js" "skins/shared/deskSyx.js" "skins/shared/deskBridge.js"
-	"skins/shared/deskDocs.js" "skins/shared/deskOverlay.js" "skins/shared/deskGen.js" "skins/shared/deskKeys.js" "skins/shared/deskKeyView.js" "skins/shared/deskTogglePaint.js"
+	"skins/shared/deskDrop.js" "skins/shared/deskDocs.js" "skins/shared/deskOverlay.js" "skins/shared/deskGen.js"
+	"skins/shared/deskKeys.js" "skins/shared/deskKeyView.js" "skins/shared/deskTogglePaint.js"
 	"skins/shared/deskAudio.js" "skins/shared/deskCompat.js" "skins/shared/deskZoom.js" "skins/shared/deskAbout.js")
 file(GLOB MD_SKIN_ASSETS CONFIGURE_DEPENDS
 	"skins/mdStudio/*.rml" "skins/mdStudio/*.html" "skins/mdStudio/mdDesk.css" "skins/mdStudio/*.js"
@@ -150,7 +154,9 @@ file(GLOB MM_SKIN_ASSETS CONFIGURE_DEPENDS
 	# the older-WebKit rewrite (B-001), first in the page's <head>; the page's zoom keys
 	"skins/shared/deskCompat.js" "skins/shared/deskZoom.js"
 	# the version the page shows (0.3.4)
-	"skins/shared/deskAbout.js")
+	"skins/shared/deskAbout.js"
+	# files dropped on the window (macOS): what the page does with them
+	"skins/shared/deskDrop.js")
 # The tests are not the page, named one by one, not by a file-name pattern: the node tests never
 # ship, the self-tests only with the diagnostics. A test that was renamed or moved stops the
 # configure, so it cannot slip into the glob. The MM glob lists its page files already.
@@ -167,7 +173,8 @@ set(MM_NODE_TESTS "skins/mmStudio/mmConvertTest.js" "skins/mmStudio/mmKeysTest.j
 # the shared page files' node tests (never in a glob, so never shipped); checked to be there
 set(SHARED_NODE_TESTS "skins/shared/deskGenTest.js" "skins/shared/deskOverlayTest.js" "skins/shared/deskBridgeTest.js"
 	"skins/shared/deskTogglePaintTest.js" "skins/shared/deskKeysTest.js" "skins/shared/deskModalTest.js" "skins/shared/deskMenuTest.js" "skins/shared/deskCompatTest.js"
-	"skins/shared/deskKeymapTest.js" "skins/shared/deskKeyViewTest.js" "skins/shared/deskAboutTest.js" "skins/shared/deskSyxTest.js")
+	"skins/shared/deskKeymapTest.js" "skins/shared/deskKeyViewTest.js" "skins/shared/deskAboutTest.js"
+	"skins/shared/deskSyxTest.js" "skins/shared/deskDropTest.js")
 foreach(test ${MD_NODE_TESTS} ${MD_SELF_TESTS} ${MM_SELF_TESTS} ${MM_NODE_TESTS} ${SHARED_NODE_TESTS} ${MD_SHARED_PAGE_FILES})
 	if(NOT EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/${test}")
 		message(FATAL_ERROR "${test} is not there: update the editors' test lists in ${CMAKE_CURRENT_LIST_FILE}")
@@ -408,6 +415,31 @@ function(mdmm_plugin_targets)
 		target_compile_definitions(mdAudioIoLayoutTest PRIVATE JUCE_USE_CUSTOM_PLUGIN_STANDALONE_APP=1)
 	endif()
 
+	# The fork's hooks in upstream's Processor (jucePluginLib/processor.*, doc/modern-ux/UPSTREAM.md): the host latency
+	# after a resampler mode change, and no MIDI learn translator while MIDI mapping is off. No firmware.
+	add_executable(mdProcessorHooksTest mdProcessorHooksTest.cpp)
+	target_link_libraries(mdProcessorHooksTest PRIVATE
+		mdJucePlugin jucePluginEditorLib mdLib juce_plugin_modules juce::juce_opengl)
+	target_include_directories(mdProcessorHooksTest PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/../../..)
+	target_compile_definitions(mdProcessorHooksTest PRIVATE JUCE_GLOBAL_MODULE_SETTINGS_INCLUDED=1)
+	add_test(NAME mdProcessorHooksTest COMMAND mdProcessorHooksTest)
+	set_tests_properties(mdProcessorHooksTest PROPERTIES LABELS "UnitTest;AudioIo" TIMEOUT 120)
+	set_property(TARGET mdProcessorHooksTest PROPERTY FOLDER "Elektron/test")
+
+	# upstreamTests/mcpServerTest.cpp: the MCP server above the HTTP layer (stop() wakes an SSE client's wait, a slow
+	# tool does not hold up tools/list, send_note's duration is clamped). Its JSON values are juce::var, so it is built
+	# here, with juce_core; it needs no plug-in.
+	set(_mdmmMcp ${CMAKE_CURRENT_SOURCE_DIR}/../../../mcpServerLib)
+	add_executable(mcpServerTest ../upstreamTests/mcpServerTest.cpp ../upstreamTests/loopbackClient.h
+		${_mdmmMcp}/mcpServer.cpp ${_mdmmMcp}/mcpServer.h ${_mdmmMcp}/httpServer.cpp ${_mdmmMcp}/httpServer.h)
+	target_link_libraries(mcpServerTest PRIVATE networkLib juce::juce_core)
+	target_compile_definitions(mcpServerTest PRIVATE
+		JUCE_GLOBAL_MODULE_SETTINGS_INCLUDED=1 JUCE_STANDALONE_APPLICATION=1 JUCE_USE_CURL=0)
+	add_test(NAME mcpServerTest COMMAND mcpServerTest)
+	set_tests_properties(mcpServerTest PROPERTIES LABELS "UnitTest" TIMEOUT 120)
+	set_property(TARGET mcpServerTest PROPERTY FOLDER "Tests")
+	unset(_mdmmMcp)
+
 	add_executable(mdRomInstallTest mdRomInstallTest.cpp mdRomInstall.cpp)
 	target_include_directories(mdRomInstallTest PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/..)
 	target_link_libraries(mdRomInstallTest PRIVATE juce::juce_core)
@@ -425,13 +457,43 @@ function(mdmm_plugin_targets)
 	set_tests_properties(mdSettingsMigrationTest PROPERTIES LABELS "UnitTest")
 	set_property(TARGET mdSettingsMigrationTest PROPERTY FOLDER "Elektron/test")
 
+	# Rosetta: whether the editor runs translated (mdProcessArch.h, pure, no JUCE: also builds as an x86_64 program
+	# for a run under Rosetta) and its notice with "Don't show again" kept in the config (mdRosettaNotice.h).
+	add_executable(mdProcessArchTest mdProcessArchTest.cpp mdProcessArch.cpp)
+	# the diagnostics builds' GEARMULATOR_MDMM_FAKE_ROSETTA
+	target_compile_definitions(mdProcessArchTest PRIVATE MDMM_DIAGNOSTICS=1)
+	add_test(NAME mdProcessArchTest COMMAND mdProcessArchTest)
+	set_tests_properties(mdProcessArchTest PROPERTIES LABELS "UnitTest")
+	set_property(TARGET mdProcessArchTest PROPERTY FOLDER "Elektron/test")
+
+	add_executable(mdRosettaNoticeTest mdRosettaNoticeTest.cpp mdProcessArch.cpp)
+	# juceUiLib/messageRoute.h
+	target_include_directories(mdRosettaNoticeTest PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/../../..)
+	# elektronJson: mdNoticeBook.h
+	target_link_libraries(mdRosettaNoticeTest PRIVATE juce::juce_data_structures elektronJson)
+	target_compile_definitions(mdRosettaNoticeTest PRIVATE
+		JUCE_GLOBAL_MODULE_SETTINGS_INCLUDED=1 JUCE_STANDALONE_APPLICATION=1 JUCE_USE_CURL=0)
+	add_test(NAME mdRosettaNoticeTest COMMAND mdRosettaNoticeTest)
+	set_tests_properties(mdRosettaNoticeTest PROPERTIES LABELS "UnitTest")
+	set_property(TARGET mdRosettaNoticeTest PROPERTY FOLDER "Elektron/test")
+
 	add_executable(mdWindowFitTest mdWindowFitTest.cpp)
 	target_include_directories(mdWindowFitTest PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/../../..)
 	add_test(NAME mdWindowFitTest COMMAND mdWindowFitTest)
 	set_tests_properties(mdWindowFitTest PROPERTIES LABELS "UnitTest")
 	set_property(TARGET mdWindowFitTest PROPERTY FOLDER "Elektron/test")
 
-	# The page bridge's transport (mdPageBridge.h, pure): long batches in pieces, the outbox split into numbered calls; and the notice route (juceUiLib/messageRoute.h): a sink per window.
+	# The Windows editors' decisions as plain values, tested on every system: B-029 and B-022, what the WebView2
+	# controller does when the page's window changes (mdWebView2Window.h); B-037, what the AUDIO / MIDI panel says
+	# when a MIDI port did not open (mdMidiPortRefusal.h).
+	add_executable(mdWindowsPolicyTest mdWindowsPolicyTest.cpp mdWebView2Window.h mdMidiPortRefusal.h)
+	add_test(NAME mdWindowsPolicyTest COMMAND mdWindowsPolicyTest)
+	set_tests_properties(mdWindowsPolicyTest PROPERTIES LABELS "UnitTest")
+	set_property(TARGET mdWindowsPolicyTest PROPERTY FOLDER "Elektron/test")
+
+	# The page bridge's transport (mdPageBridge.h, pure): long batches in pieces, the outbox split into numbered calls,
+	# Linux's files written in order (FileOutbox) and its reload after a drop; the notice route
+	# (juceUiLib/messageRoute.h): a sink per window; and a window's notices and their answers (mdNoticeBook.h).
 	add_executable(mdPageBridgeTest mdPageBridgeTest.cpp)
 	target_link_libraries(mdPageBridgeTest PRIVATE elektronJson)
 	target_include_directories(mdPageBridgeTest PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/.. ${CMAKE_CURRENT_SOURCE_DIR}/../../..)	# ../../..: juceUiLib/messageRoute.h
@@ -446,6 +508,28 @@ function(mdmm_plugin_targets)
 	add_test(NAME mdEditorMenuTest COMMAND mdEditorMenuTest)
 	set_tests_properties(mdEditorMenuTest PROPERTIES LABELS "UnitTest")
 	set_property(TARGET mdEditorMenuTest PROPERTY FOLDER "Elektron/test")
+
+	# Files dropped on the window (mdDroppedFiles.h): what each is, the drop and drag messages and the drop commands
+	# against both contracts, the book of the last drop's files
+	add_executable(mdDroppedFilesTest mdDroppedFilesTest.cpp mdDroppedFiles.h)
+	target_link_libraries(mdDroppedFilesTest PRIVATE elektronJson)
+	target_include_directories(mdDroppedFilesTest PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/..)
+	target_compile_definitions(mdDroppedFilesTest PRIVATE
+		MDDESK_SCHEMA="${CMAKE_CURRENT_SOURCE_DIR}/../../../../doc/modern-ux/md-data-contract.schema.json"
+		MMDESK_SCHEMA="${CMAKE_CURRENT_SOURCE_DIR}/../../../../doc/modern-ux/mm-data-contract.schema.json")
+	add_test(NAME mdDroppedFilesTest COMMAND mdDroppedFilesTest)
+	set_tests_properties(mdDroppedFilesTest PROPERTIES LABELS "UnitTest")
+	set_property(TARGET mdDroppedFilesTest PROPERTY FOLDER "Elektron/test")
+
+	# Files dropped on the window, macOS (mdWebFileDrop.mm): the web view's dragging methods route a drag of files from
+	# outside the page to the window's view and every other drag to the web view's own (run on plain views, no window)
+	if(APPLE)
+		add_executable(mdWebFileDropTest mdWebFileDropTest.mm mdWebFileDrop.mm mdWebFileDrop.h)
+		target_link_libraries(mdWebFileDropTest PRIVATE "-framework AppKit")
+		add_test(NAME mdWebFileDropTest COMMAND mdWebFileDropTest)
+		set_tests_properties(mdWebFileDropTest PROPERTIES LABELS "UnitTest")
+		set_property(TARGET mdWebFileDropTest PROPERTY FOLDER "Elektron/test")
+	endif()
 
 	# 0.3.4: the editor menu's first line and the About box: the build's product names and version (mdAbout.h)
 	add_executable(mdAboutTest mdAboutTest.cpp mdAbout.h)
@@ -492,6 +576,11 @@ function(mdmm_plugin_targets)
 		# the SysEx import panel (both editors): the machine's slot grids, the counts, Shift-click ranges, the report per slot
 		add_test(NAME deskSyxPageTest COMMAND ${GEARMULATOR_NODE} ${CMAKE_CURRENT_SOURCE_DIR}/skins/shared/deskSyxTest.js)
 		set_tests_properties(deskSyxPageTest PROPERTIES LABELS "UnitTest" TIMEOUT 60)
+		# files dropped on the window (both editors): what each kind becomes, in order, the ROM's question, the notes,
+		# the frame
+		add_test(NAME deskDropPageTest
+			COMMAND ${GEARMULATOR_NODE} ${CMAKE_CURRENT_SOURCE_DIR}/skins/shared/deskDropTest.js)
+		set_tests_properties(deskDropPageTest PROPERTIES LABELS "UnitTest" TIMEOUT 60)
 		# I-008: the menu drawn in the page (placement, keys, the editor menu's message and picks) and its wiring
 		add_test(NAME deskMenuPageTest COMMAND ${GEARMULATOR_NODE} ${CMAKE_CURRENT_SOURCE_DIR}/skins/shared/deskMenuTest.js)
 		set_tests_properties(deskMenuPageTest PROPERTIES LABELS "UnitTest" TIMEOUT 60)
@@ -587,6 +676,24 @@ function(mdmm_plugin_targets)
 		set_tests_properties(mdSessionNoRomManageFirmwareTest_${m} PROPERTIES LABELS "Integration;FirmwareTest" SKIP_RETURN_CODE 77 TIMEOUT 400)
 		add_test(NAME mdSessionNoRomInstallFirmwareTest_${m} COMMAND mdSessionNoRomTest ${m} install)
 		set_tests_properties(mdSessionNoRomInstallFirmwareTest_${m} PROPERTIES LABELS "Integration;FirmwareTest" SKIP_RETURN_CODE 77 TIMEOUT 300)
+	endforeach()
+
+	# B-037: the machine's own MIDI out at the host (mdMachineMidiOut.h): the route as values, then the processor with
+	# each machine's firmware (it skips, 77, without GEARMULATOR_MD_FIRMWARE_BIN / GEARMULATOR_MM_FIRMWARE_BIN)
+	add_executable(mdMachineMidiOutTest mdMachineMidiOutTest.cpp mdMachineMidiOut.h)
+	target_link_libraries(mdMachineMidiOutTest PRIVATE
+		mdJucePlugin jucePluginEditorLib mdLib juce_plugin_modules
+		juce::juce_opengl)
+	target_include_directories(mdMachineMidiOutTest PRIVATE
+		${CMAKE_CURRENT_SOURCE_DIR}/../../..)
+	target_compile_definitions(mdMachineMidiOutTest PRIVATE JUCE_GLOBAL_MODULE_SETTINGS_INCLUDED=1)
+	set_property(TARGET mdMachineMidiOutTest PROPERTY FOLDER "Elektron/test")
+	add_test(NAME mdMachineMidiOutTest COMMAND mdMachineMidiOutTest)
+	set_tests_properties(mdMachineMidiOutTest PROPERTIES LABELS "UnitTest" TIMEOUT 60)
+	foreach(m md mm)
+		add_test(NAME mdMachineMidiOutFirmwareTest_${m} COMMAND mdMachineMidiOutTest ${m})
+		set_tests_properties(mdMachineMidiOutFirmwareTest_${m} PROPERTIES
+			LABELS "Integration;FirmwareTest" SKIP_RETURN_CODE 77 TIMEOUT 400)
 	endforeach()
 endfunction()
 

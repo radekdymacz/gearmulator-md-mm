@@ -5,7 +5,15 @@ NOT TESTED: this build comes from CI. It compiles and passes the unit
 tests, a VST3 load test and a start test (the standalone and the VST3
 open their editor window on a clean Windows machine and show the "firmware
 needed" card), but no person has used it in a DAW on Windows yet. Reports
-are welcome: https://github.com/radekdymacz/gearmulator-md-mm/issues
+are welcome.
+
+Bugs: https://mdmm.dev/contact/
+Discord (#bugs): https://discord.gg/8xwXwBHbtn
+Say which editor and version, your Windows version, and whether it is the
+standalone or the VST3 (and in which DAW). If the editor window stays empty
+or the start-up fails, send its log: Open Log Folder in the right-click menu,
+or Documents\Gearmulator Preview\<machine>\logs\editor-*.log.
+Please do not ask anyone, in any channel, for firmware files.
 
 What is in here
 ---------------

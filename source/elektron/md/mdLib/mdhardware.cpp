@@ -1,4 +1,5 @@
 #include "mdhardware.h"
+#include "mdfactorybaseline.h"
 #include "mdhostclock.h"
 #include "mdrampacking.h"
 #include "mdtransportpolicy.h"
@@ -113,11 +114,11 @@ namespace md
 		const FlashSectorOverlay& _pendingFlashOverlay,
 		const std::vector<uint8_t>& _initialUserFlash)
 		: m_model(_model)
-		, m_rom(initRom(_romData, _romName, _model))
-		, m_firmwareFingerprint(fingerprintRom(m_rom.data()))
+		, m_rom(std::make_shared<const Rom>(initRom(_romData, _romName, _model)))
+		, m_firmwareFingerprint(fingerprintRom(m_rom->data()))
 		, m_factoryFlashInitializationExpected(_model == MachineModel::Machinedrum
 			&& _initialFlash.empty() && _factoryFlashCache.empty())
-		, m_uc(m_rom, m_model,
+		, m_uc(*m_rom, m_model,
 			_pendingFlashOverlay.valid ? std::vector<uint8_t>{} : _initialPatchRam,
 			_initialFlash, _initialUserFlash)
 		// A complete project image can boot directly without a local factory cache,
@@ -129,8 +130,8 @@ namespace md
 		, m_factoryFlashPreparationReady(!_factoryFlashCache.empty()
 			|| !_initialFlash.empty())
 		, m_factoryFlashCache(_factoryFlashCache)
-		, m_factoryFlashBaseline(_model == MachineModel::Machinedrum
-			&& _factoryFlashCache.empty() ? g_romSize : 0)
+		, m_factoryFlashBaseline(std::make_shared<std::vector<uint8_t>>(_model == MachineModel::Machinedrum
+			&& _factoryFlashCache.empty() ? g_romSize : 0))
 		, m_pendingFlashImage(_pendingFlashOverlay.valid ? g_romSize : 0)
 		, m_pendingFlashOverlay(_pendingFlashOverlay)
 		, m_pendingPatchRam(_pendingFlashOverlay.valid
@@ -155,7 +156,7 @@ namespace md
 		const auto* const speedUps = std::getenv("GEARMULATOR_MDMM_SPEEDUPS");
 		setSpeedUps(speedUps == nullptr || std::strcmp(speedUps, "0") != 0);
 
-		if(!m_rom.isValid())
+		if(!m_rom->isValid())
 			return;
 		// B-010: the MIDI UART at a pace the firmware keeps time at. GEARMULATOR_MDMM_MIDI_PACING=0 turns
 		// it off (bytes in and out at once, as before) to compare; "in" or "out" keeps only that side.
@@ -646,7 +647,7 @@ namespace md
 
 	bool Hardware::isValid() const
 	{
-		return m_rom.isValid()
+		return m_rom->isValid()
 			&& !m_pendingFlashRestoreFailed.load(std::memory_order_acquire);
 	}
 
@@ -687,10 +688,10 @@ namespace md
 				return;
 			}
 
-			const auto remaining = m_factoryFlashBaseline.size()
+			const auto remaining = m_factoryFlashBaseline->size()
 				- m_factoryFlashCaptureOffset;
 			const auto count = std::min(sliceSize, remaining);
-			auto* const destination = m_factoryFlashBaseline.data()
+			auto* const destination = m_factoryFlashBaseline->data()
 				+ m_factoryFlashCaptureOffset;
 			if(!m_uc.copyFlashDataRangeRealtime(destination,
 				m_factoryFlashCaptureOffset, count))
@@ -704,7 +705,7 @@ namespace md
 				m_factoryFlashCaptureFingerprint *= 1099511628211ull;
 			}
 			m_factoryFlashCaptureOffset += count;
-			if(m_factoryFlashCaptureOffset != m_factoryFlashBaseline.size())
+			if(m_factoryFlashCaptureOffset != m_factoryFlashBaseline->size())
 				return;
 			m_factoryFlashCaptureComplete = true;
 			{
@@ -718,7 +719,7 @@ namespace md
 			if(m_pendingFlashOverlay.valid
 				&& m_pendingFlashOverlay.baselineFingerprint
 					!= m_factoryFlashCaptureFingerprint
-				&& m_pendingFlashOverlay.baselineFingerprint != fingerprintRom(m_rom.data()))
+				&& m_pendingFlashOverlay.baselineFingerprint != fingerprintRom(m_rom->data()))
 			{
 				m_pendingFlashRestoreFailed.store(true, std::memory_order_release);
 				m_pendingFlashRestoreActive.store(false, std::memory_order_release);
@@ -788,18 +789,7 @@ namespace md
 			_baseline = std::move(snapshot.baseline);
 			return true;
 		}
-		return decodeFactoryFlashCache(_baseline, snapshot.cache, m_rom.data());
-	}
-
-	bool Hardware::copyFactoryFlashBaseline(std::vector<uint8_t>& _baseline, uint64_t& _fingerprint)
-	{
-		if(!copyFactoryFlashBaseline(_baseline))
-			return false;
-		std::lock_guard lock(m_factoryFlashMutex);
-		if(!m_factoryBaselineFingerprint)
-			m_factoryBaselineFingerprint = fingerprintRom(_baseline);
-		_fingerprint = *m_factoryBaselineFingerprint;
-		return true;
+		return decodeFactoryFlashCache(_baseline, snapshot.cache, m_rom->data());
 	}
 
 	std::vector<uint8_t> Hardware::copyFactoryFlashCache()
@@ -809,7 +799,7 @@ namespace md
 			return {};
 		if(snapshot.cache.empty()
 			&& !encodeFactoryFlashCache(snapshot.cache,
-				snapshot.baseline, m_rom.data()))
+				snapshot.baseline, m_rom->data()))
 			return {};
 		return snapshot.cache;
 	}
@@ -822,7 +812,7 @@ namespace md
 		std::lock_guard lock(m_factoryFlashMutex);
 		_snapshot.cache = m_factoryFlashCache;
 		if(_snapshot.cache.empty())
-			_snapshot.baseline = m_factoryFlashBaseline;
+			_snapshot.baseline = *m_factoryFlashBaseline;
 		return !_snapshot.cache.empty() || !_snapshot.baseline.empty();
 	}
 
@@ -837,13 +827,16 @@ namespace md
 
 	bool Hardware::replaceFactoryFlashCache(const std::vector<uint8_t>& _cache)
 	{
-		std::vector<uint8_t> ignored;
-		if(_cache.empty() || !decodeFactoryFlashCache(ignored, _cache, m_rom.data()))
+		std::vector<uint8_t> decoded;
+		if(_cache.empty() || !decodeFactoryFlashCache(decoded, _cache, m_rom->data()))
 			return false;
+		// The validation decoded the new baseline already: keep it for the state saves
+		auto baseline = std::make_shared<FactoryFlashBaseline>(std::move(decoded), std::nullopt);
 		std::lock_guard lock(m_factoryFlashMutex);
 		m_factoryFlashCache = _cache;
-		m_factoryFlashBaseline.clear();
+		m_factoryFlashBaseline = std::make_shared<std::vector<uint8_t>>();	// a new one: a state save may share the old
 		m_factoryBaselineFingerprint.reset();
+		m_factoryBaseline = std::move(baseline);
 		m_factoryFlashReady.store(true, std::memory_order_release);
 		return true;
 	}
@@ -868,6 +861,7 @@ namespace md
 		std::swap(m_factoryFlashCaptureFingerprint,
 			_other.m_factoryFlashCaptureFingerprint);
 		std::swap(m_factoryBaselineFingerprint, _other.m_factoryBaselineFingerprint);
+		m_factoryBaseline.swap(_other.m_factoryBaseline);
 		std::swap(m_factoryFlashCaptureComplete,
 			_other.m_factoryFlashCaptureComplete);
 

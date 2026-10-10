@@ -16,6 +16,6 @@ namespace bridgeLib
 
 		UnexpectedCommand,
 
-		FailedToCreateDevice,
+		FailedToCreateDevice,	// the last one: Error::read rejects higher values (commands.cpp)
 	};
 }

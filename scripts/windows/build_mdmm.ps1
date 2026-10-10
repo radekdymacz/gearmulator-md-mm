@@ -145,8 +145,12 @@ if (-not $TestOnly) {
         'pluginTester'
     )
     if ($WithTests) {
-        $targets += @('baseLibBinaryStreamTest', 'synthLibAudioTest', 'mdLibTest', 'mdAudioQueueTest',
-            'mdAudioFirmwareTest', 'mdAudioIoLayoutTest', 'mdProjectStateRestoreTest', 'mdProgramChangeFirmwareTest',
+        $targets += @('baseLibBinaryStreamTest', 'bridgeLibTest', 'bridgeServerRomPoolTest', 'mcpHttpGuardTest',
+            'mcpHttpServerTest', 'mcpServerTest', 'synthLibAudioTest', 'synthLibMidiQueueTest',
+            'synthLibStateCaptureTest', 'mdLibTest', 'mdStateCaptureTest', 'mdMemoryFastLaneTest',
+            'mdAudioQueueTest', 'mdAudioFirmwareTest', 'mdAudioIoLayoutTest', 'mdProcessorHooksTest',
+            'mdWindowsPolicyTest', 'mdMachineMidiOutTest', 'mdProcessArchTest', 'mdRosettaNoticeTest',
+            'mdDroppedFilesTest', 'mdProjectStateRestoreTest', 'mdProgramChangeFirmwareTest',
             'mdAudioProbePlugin_VST3', 'vst3ProgramChangeTest', 'mdProgramChangeProbe_VST3')
     }
     Invoke-Native -FilePath $cmake -Arguments (@(
@@ -177,7 +181,7 @@ if ($WithTests) {
         '--test-dir', $BuildDir,
         '-C', $Configuration,
         '--output-on-failure',
-        '--tests-regex', '^(baseLibBinaryStreamTest|synthLibAudioTest|mdLibTests|mdAudioQueueTest|mdAudioFirmwareTest|mdAudioIoLayoutTest|mdProjectStateRestoreTest|mdProgramChangeFirmwareTest|mdAudioProbePluginVST3IdentityTest|mdVst3ProgramChange(Test|OptOutTest)|(md|mm)JucePlugin_VST3ProgramChangeTest)$'
+        '--tests-regex', '^(baseLibBinaryStreamTest|bridgeLibTest|bridgeServerRomPoolTest|mcpHttpGuardTest|mcpHttpServerTest|mcpServerTest|synthLibAudioTest|synthLibMidiQueueTest|synthLibStateCaptureTest|mdLibTests|mdStateCaptureTest|mdMemoryFastLaneTest|mdAudioQueueTest|mdAudioFirmwareTest|mdAudioIoLayoutTest|mdProcessorHooksTest|mdWindowsPolicyTest|mdMachineMidiOutTest|mdMachineMidiOutFirmwareTest_(md|mm)|mdProcessArchTest|mdRosettaNoticeTest|mdDroppedFilesTest|mdProjectStateRestoreTest|mdProgramChangeFirmwareTest|mdAudioProbePluginVST3IdentityTest|mdVst3ProgramChange(Test|OptOutTest)|(md|mm)JucePlugin_VST3ProgramChangeTest)$'
     )
     Invoke-Native -FilePath $ctest -Arguments @(
         '--test-dir', $BuildDir,

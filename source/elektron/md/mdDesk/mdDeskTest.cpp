@@ -2611,7 +2611,9 @@ namespace
 	for(const auto& gap : contract::docKindGaps(*root, kinds))
 		check(false, gap.c_str());
 		// The plug-in's host sends these; this test has no host.
-		const auto r = contract::checkMessages(*root, g_published, {"learn", "audio", "audioLevel", "openAudio", "romInstall", "romInfo", "notice", "syxPreview", "syxProgress", "syxExport", "host", "audioRun", "editorMenu"});
+		const auto r = contract::checkMessages(*root, g_published, {"learn", "audio", "audioLevel", "openAudio",
+			"romInstall", "romInfo", "notice", "syxPreview", "syxProgress", "syxExport", "host", "audioRun",
+			"editorMenu", "zoom", "drop", "dragFiles"});
 		for(const auto& p : r.off)
 			std::printf("    %s\n", p.c_str());
 		for(const auto& u : r.unseen)
@@ -2839,6 +2841,37 @@ namespace
 			check(sent.size() == 4, "the request still waits for the read and the settle after the last dump");
 			s.pump(1e6);
 			check(sent.size() == 5 && sent[4] == request && !s.sending(1e6), "then it goes");
+		}
+
+		// B-031: a request already waiting is not queued again; the waiting one moves to the newest place. Behind a
+		// long backlog the status polls (seven requests a second) piled up and then reached OS 1.63 in one burst, which
+		// it loses input to while it builds a dump reply: a LOAD PATTERN among them never arrived.
+		{
+			std::vector<std::vector<uint8_t>> sent;
+			SysexOut s([&](const std::vector<uint8_t>& _b) { sent.push_back(_b); }, policy);
+			const auto status = [](const uint8_t _param) { return std::vector<uint8_t>{0xf0, 0x00, 0x20, 0x3c, 0x02,
+				0x00, 0x70, _param, 0xf7}; };
+			const std::vector<uint8_t> load9{0xf0, 0x00, 0x20, 0x3c, 0x02, 0x00, 0x57, 0x09, 0xf7};
+			for(uint8_t p = 0; p < 4; ++p)
+				s.send(dump(p, 1), false, 0);
+			for(int poll = 0; poll < 20; ++poll)
+				for(const uint8_t param : {uint8_t{0x01}, uint8_t{0x04}})
+					s.ask(status(param), false, 10.0 + poll);
+			s.send(load9, false, 40);
+			s.ask(status(0x04), false, 50);
+			s.ask(request, false, 60);
+			s.ask(request, false, 70);
+			check(sent.size() == 1 && s.waiting() == 3 + 2 + 1 + 1,
+				"behind dumps, 20 polls of two requests wait as two, the same dump request as one");
+			s.send(load9, false, 80);
+			check(s.waiting() == 3 + 2 + 2 + 1, "a command is no request: sent twice, it goes twice");
+			for(double t = 100; t < 20000; t += 10)
+				s.pump(t);
+			std::vector<int> ids;
+			for(size_t i = 1; i < sent.size(); ++i)
+				ids.push_back(sent[i].size() > 9 ? -sent[i][9] : sent[i][6] * 256 + sent[i][7]);
+			check(ids == std::vector<int>{-1, -2, -3, 0x7001, 0x5709, 0x7004, 0x6801, 0x5709},
+				"in order, a request at its newest place: the status of pattern after the LOAD PATTERN sent before it");
 		}
 
 		// No pacing (bytesPerSecond 0): at once, in order, as before.

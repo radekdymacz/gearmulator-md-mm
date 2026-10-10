@@ -8,6 +8,16 @@ namespace elektronData
 {
 	std::vector<uint8_t> mmStatusRequest(const MmStatus _param) { return mmRequest(0x70, static_cast<uint8_t>(_param)); }
 
+	bool mmIsRequest(const std::vector<uint8_t>& _sysex)
+	{
+		if(_sysex.size() != 9)
+			return false;
+		for(const uint8_t command : {uint8_t{0x70}, uint8_t{0x51}, uint8_t{0x53}, uint8_t{0x68}, uint8_t{0x6a}})
+			if(isMmMessage(_sysex, command))
+				return true;
+		return false;
+	}
+
 	std::vector<uint8_t> mmSetStatus(const MmStatus _param, const uint8_t _value)
 	{
 		return mmMessage(0x71, {static_cast<uint8_t>(_param), _value});

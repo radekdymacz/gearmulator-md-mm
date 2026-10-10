@@ -1,38 +1,90 @@
 #include "httpServer.h"
 
+#include "httpGuard.h"
+
 #include "networkLib/exception.h"
 #include "networkLib/logging.h"
 #include "networkLib/tcpServer.h"
 #include "networkLib/tcpStream.h"
 
 #include <algorithm>
+#include <cctype>
+#include <limits>
 #include <sstream>
+#include <system_error>
 
 namespace mcpServer
 {
-	HttpServer::HttpServer(const int _port, RequestHandler _handler)
+	namespace
+	{
+		std::string trimWhitespace(const std::string& _s)
+		{
+			const auto first = _s.find_first_not_of(" \t");
+			if (first == std::string::npos)
+				return {};
+			const auto last = _s.find_last_not_of(" \t");
+			return _s.substr(first, last - first + 1);
+		}
+
+		// Content-Length is decimal digits only. Anything else (a sign, garbage, a number too big to hold) is
+		// rejected without throwing and before any allocation is sized from it.
+		bool parseContentLength(const std::string& _value, size_t& _length)
+		{
+			if (_value.empty())
+				return false;
+
+			size_t length = 0;
+			for (const char c : _value)
+			{
+				if (c < '0' || c > '9')
+					return false;
+				const auto digit = static_cast<size_t>(c - '0');
+				if (length > (std::numeric_limits<size_t>::max() - digit) / 10)
+					return false;
+				length = length * 10 + digit;
+			}
+			_length = length;
+			return true;
+		}
+	}
+
+	HttpServer::HttpServer(const int _port, RequestHandler _handler, const uint32_t _idleReadTimeoutMs)
 		: m_port(_port)
+		, m_idleReadTimeoutMs(_idleReadTimeoutMs)
 		, m_handler(std::move(_handler))
 	{
 		m_tcpServer = std::make_unique<networkLib::TcpServer>([this](std::unique_ptr<networkLib::TcpStream> _stream)
 		{
 			onClientConnected(std::move(_stream));
-		}, _port);
+		}, _port, networkLib::BindScope::Loopback);
 
-		LOGNET(networkLib::LogLevel::Info, "MCP HTTP server started on port " << _port);
+		LOGNET(networkLib::LogLevel::Info, "MCP HTTP server started on 127.0.0.1:" << _port);
 	}
 
 	HttpServer::~HttpServer()
 	{
+		// No new clients after this: the accept thread has been joined
 		m_tcpServer.reset();
 
-		std::lock_guard lock(m_clientsMutex);
-		for (auto& t : m_clientThreads)
+		std::vector<std::unique_ptr<Client>> clients;
 		{
-			if (t && t->joinable())
-				t->join();
+			std::lock_guard lock(m_clientsMutex);
+			clients.swap(m_clients);
 		}
-		m_clientThreads.clear();
+
+		// A client thread blocks reading its socket (an idle keep-alive connection) or writing to it. Joining
+		// it as it is would wait for the peer; interrupting the socket returns both at once.
+		for (const auto& client : clients)
+		{
+			std::lock_guard streamLock(client->streamMutex);
+			client->stream->interrupt();
+		}
+
+		for (const auto& client : clients)
+		{
+			if (client->thread.joinable())
+				client->thread.join();
+		}
 	}
 
 	bool HttpServer::isRunning() const
@@ -44,42 +96,96 @@ namespace mcpServer
 	{
 		LOGNET(networkLib::LogLevel::Info, "New TCP connection accepted");
 
-		auto shared = std::shared_ptr<networkLib::TcpStream>(std::move(_stream));
-
 		std::lock_guard lock(m_clientsMutex);
 
-		// Clean up finished threads
-		m_clientThreads.erase(
-			std::remove_if(m_clientThreads.begin(), m_clientThreads.end(),
-				[](const std::shared_ptr<std::thread>& _t) { return false; }),
-			m_clientThreads.end());
+		reapFinishedClients();
 
-		auto thread = std::make_shared<std::thread>([this, s = shared]()
+		if (m_clients.size() >= g_maxClients)
 		{
-			handleClient(s);
-		});
+			// Closing here is safe: no other thread has seen this stream
+			LOGNET(networkLib::LogLevel::Warning, "Refusing connection, " << m_clients.size()
+				<< " clients are connected already");
+			_stream->close();
+			return;
+		}
 
-		m_clientThreads.push_back(thread);
+		_stream->setReadTimeout(m_idleReadTimeoutMs);
+
+		try
+		{
+			auto client = std::make_unique<Client>();
+			client->stream = std::move(_stream);
+			auto* c = client.get();
+			m_clients.reserve(m_clients.size() + 1);	// the push below cannot throw once the thread runs
+			c->thread = std::thread([this, c]()
+			{
+				handleClient(*c->stream);
+				{
+					// Closed now, not when the entry is reaped: the peer sees the end of the connection at once
+					std::lock_guard streamLock(c->streamMutex);
+					c->stream->close();
+				}
+				c->done = true;
+			});
+			m_clients.push_back(std::move(client));
+		}
+		catch (const std::exception& e)
+		{
+			// Out of threads or memory: drop this client (its stream closes with it) and keep serving the others. An
+			// exception that left here would end the accept thread, and with it the host.
+			LOGNET(networkLib::LogLevel::Error, "Failed to start a client: " << e.what());
+		}
 	}
 
-	void HttpServer::handleClient(std::shared_ptr<networkLib::TcpStream> _stream)
+	void HttpServer::reapFinishedClients()
 	{
-		networkLib::Stream& stream = *_stream;
+		// Caller holds m_clientsMutex. A finished thread is past its last use of the client, so join returns at once.
+		for (auto it = m_clients.begin(); it != m_clients.end();)
+		{
+			auto& client = *it;
+			if (!client->done)
+			{
+				++it;
+				continue;
+			}
+			if (client->thread.joinable())
+				client->thread.join();
+			it = m_clients.erase(it);
+		}
+	}
 
-		while (_stream->isValid())
+	void HttpServer::handleClient(networkLib::TcpStream& _stream)
+	{
+		networkLib::Stream& stream = _stream;
+
+		while (_stream.isValid())
 		{
 			try
 			{
 				HttpRequest request;
 				if (!parseRequest(request, stream))
 				{
-					LOGNET(networkLib::LogLevel::Debug, "Client disconnected (no more data)");
+					LOGNET(networkLib::LogLevel::Debug, "Client disconnected or sent a malformed request");
 					break;
 				}
 
 				LOGNET(networkLib::LogLevel::Info, "HTTP " << request.method << " " << request.path
-					<< " (Content-Length: " << request.getContentLength()
+					<< " (Content-Length: " << request.body.size()
 					<< ", Accept: " << request.getHeader("accept") << ")");
+
+				// First, before any handler: a request a browser page could have made is refused
+				if (!isRequestAllowed(request, m_port))
+				{
+					LOGNET(networkLib::LogLevel::Warning, "Refused request with Host '" << request.getHeader("host")
+						<< "', Origin '" << request.getHeader("origin") << "'");
+					HttpResponse forbidden;
+					forbidden.statusCode = 403;
+					forbidden.statusText = "Forbidden";
+					forbidden.headers["Connection"] = "close";
+					forbidden.headers["Content-Length"] = "0";
+					sendResponse(forbidden, stream);
+					break;
+				}
 
 				auto response = m_handler(request, stream);
 
@@ -124,36 +230,56 @@ namespace mcpServer
 		if (_request.method.empty() || _request.path.empty())
 			return false;
 
-		// Read headers
+		// Read headers, up to the empty line that ends them
 		std::string headerLine;
-		while (readLine(headerLine, _stream))
+		size_t headerCount = 0;
+		while (true)
 		{
+			if (!readLine(headerLine, _stream))
+				return false;
+
 			if (headerLine.empty())
 				break;
+
+			if (++headerCount > g_maxHeaderCount)
+			{
+				LOGNET(networkLib::LogLevel::Warning, "Request has more than " << g_maxHeaderCount << " headers");
+				return false;
+			}
 
 			const auto colonPos = headerLine.find(':');
 			if (colonPos == std::string::npos)
 				continue;
 
 			auto key = headerLine.substr(0, colonPos);
-			auto value = headerLine.substr(colonPos + 1);
-
-			// Trim leading space from value
-			if (!value.empty() && value[0] == ' ')
-				value = value.substr(1);
+			const auto value = trimWhitespace(headerLine.substr(colonPos + 1));
 
 			// Lowercase key for case-insensitive lookup
-			std::transform(key.begin(), key.end(), key.begin(), ::tolower);
+			std::transform(key.begin(), key.end(), key.begin(), [](const unsigned char _c)
+			{
+				return static_cast<char>(std::tolower(_c));	// a char of 0x80 and up is negative: undefined for tolower
+			});
 			_request.headers[key] = value;
 		}
 
 		// Read body if content-length present
-		const int contentLength = _request.getContentLength();
-		if (contentLength > 0)
+		const auto contentLengthHeader = _request.headers.find("content-length");
+		if (contentLengthHeader != _request.headers.end())
 		{
-			_request.body.resize(contentLength);
-			if (!_stream.read(_request.body.data(), contentLength))
+			size_t contentLength = 0;
+			if (!parseContentLength(contentLengthHeader->second, contentLength) || contentLength > g_maxBodySize)
+			{
+				LOGNET(networkLib::LogLevel::Warning, "Invalid or too large Content-Length '"
+					<< contentLengthHeader->second << "'");
 				return false;
+			}
+
+			if (contentLength > 0)
+			{
+				_request.body.resize(contentLength);
+				if (!_stream.read(_request.body.data(), static_cast<uint32_t>(contentLength)))
+					return false;
+			}
 		}
 
 		return true;
@@ -173,6 +299,12 @@ namespace mcpServer
 			}
 			if (c == '\n')
 				return true;
+			// A line that never ends must not grow without bound
+			if (_line.size() >= g_maxLineLength)
+			{
+				LOGNET(networkLib::LogLevel::Warning, "Request line longer than " << g_maxLineLength << " bytes");
+				return false;
+			}
 			_line += c;
 		}
 		return false;

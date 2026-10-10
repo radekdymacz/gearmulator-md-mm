@@ -4,10 +4,13 @@
 #include "mdDeskSession.h"
 #include "mdPluginEditorState.h"
 #include "mdPluginProcessor.h"
+#include "mdProcessArch.h"
+#include "mdRosettaNotice.h"
 #include "mdDeskHost.h"
 #include "mdWebPageHost.h"
 #include "mdPageZoom.h"
 
+#include <atomic>
 #include <cmath>
 
 #if MDMM_DIAGNOSTICS
@@ -74,7 +77,10 @@ namespace mdJucePlugin
 			},
 			[this](const json::Value& _m) { onPageMessage(_m); });
 		m_page->setUserZoom(getProcessor().getConfig().getDoubleValue(g_zoomKey, 1.0));
-		m_audio = std::make_unique<AudioMidiLink>(getProcessor(), [this](json::Value _m) { m_page->send(std::move(_m)); });
+		// B-036, B-037: the standalone's audio and MIDI devices, and a MIDI port that did not open, in the start-up log
+		m_audio = std::make_unique<AudioMidiLink>(getProcessor(),
+			[this](json::Value _m) { m_page->send(std::move(_m)); },
+			[this](const std::string& _line) { if(m_page) m_page->note(juce::String(_line)); });
 		if(m_session)
 			m_session->setLog([this](const std::string& _l) { if(m_page) m_page->log(juce::String(_l)); });
 		if(m_session)
@@ -84,6 +90,8 @@ namespace mdJucePlugin
 		m_noticeRoute = genericUI::messageRoute::attach(m_noticeOwner,
 			[this, alive = std::weak_ptr<int>(m_alive), noticeOwner = m_noticeOwner](genericUI::messageRoute::Notice _n)
 		{
+			if(rosettaNotice::isUpstreamWarning(_n.title))
+				return;		// replaced by offerRosettaNotice's: once a session, and it can be put away
 			juce::MessageManager::callAsync([this, alive, noticeOwner, n = std::move(_n)]() mutable
 			{
 				if(alive.expired() || !m_page)
@@ -96,19 +104,10 @@ namespace mdJucePlugin
 						genericUI::MessageBox::showOk(genericUI::MessageBox::Icon::Warning, title, text);
 					return;
 				}
-				const int id = ++m_noticeId;
-				json::Value m = json::Value::object();
-				m.set("type", "notice");
-				m.set("id", id);
-				m.set("title", n.title);
-				m.set("text", n.text);
-				auto buttons = json::Value::array();
-				for(const auto& b : n.buttons)
-					buttons.push(json::Value(b));
-				m.set("buttons", std::move(buttons));
-				m_notices[id] = std::move(n.answered);
+				NoticeShown shown{n.title, n.text, n.buttons, true};
+				const int id = m_notices.add(shown, std::move(n.answered));
 				m_page->log("notice " + juce::String(id) + ": " + juce::String(n.title) + " - " + juce::String(n.text).substring(0, 200));
-				m_page->send(std::move(m));
+				m_page->send(noticeMessage(id, shown));
 			});
 		});
 		// I-005: the update banner follows the process's one Updater (its first check once the page is ready, timerCallback).
@@ -120,6 +119,39 @@ namespace mdJucePlugin
 			"editor-" + juce::File::createLegalFileName(juce::String(m_session ? m_session->pageSpec().page : "page")).upToLastOccurrenceOf(".", false, false) + ".log");
 		m_page->setStartupLog(startupLog);
 		m_page->setFallbackMenu([this] { openMenu(); });	// I-008: no page up, the native menu
+		// Files dragged onto the window (macOS): taken when the page is up and one of them is a kind it knows; the page
+		// shows where they go while they are over it, and decides what each becomes once dropped
+		m_page->setFileDrop({[this](const std::vector<std::string>& _paths)
+			{
+				return m_page->pageReady() && !m_page->failed() && droppedFiles::accepts(_paths);
+			},
+			[this](const bool _over)
+			{
+				m_page->send(droppedFiles::dragMessage(_over));
+				m_page->flush();
+			},
+			[this](const std::vector<std::string>& _paths, const double _x, const double _y)
+			{
+				const genericUI::messageRoute::OwnerScope owner(m_noticeOwner);
+				filesDropped(_paths, _x, _y);
+			}});
+		// A page that started again has nothing (Linux: WebPageHost::onAck; Windows, B-029: a new web view after its
+		// window was destroyed): the session's documents once more, as on its ready; the questions still waiting for an
+		// answer, by their numbers, so an answer still runs its callback (the user decides, as before); and the update
+		// banner (the old one's answer is no longer wanted)
+		m_page->setOnRestart([this]
+		{
+			const genericUI::messageRoute::OwnerScope owner(m_noticeOwner);
+			if(m_bannerId)
+				m_notices.forget(m_bannerId);
+			m_bannerId = 0;
+			m_bannerShown.clear();
+			if(m_session)
+				m_session->republish();
+			for(const auto& [notice, shown] : m_notices.waitingNotices())
+				m_page->send(noticeMessage(notice, shown));
+			showUpdateBanner();
+		});
 		// B-035: the processor's start-up lines (the host's audio calls, the machine's boot) go into the same log
 		processor.bootDiagnostics().setLog(startupLog);
 		m_page->load();
@@ -146,21 +178,29 @@ namespace mdJucePlugin
 			}
 			else if(row->handler.action == deskHost::Action::NoticeAnswer)
 			{
-				const auto id = static_cast<int>(_message.find("id")->asNumber());
+				// "notice" names the notice; "id" is this request's (its result's)
+				const auto notice = static_cast<int>(_message.find("notice")->asNumber());
 				const auto button = static_cast<int>(_message.find("button")->asNumber());
-				if(const auto it = m_notices.find(id); it != m_notices.end())
-				{
-					auto answered = std::move(it->second);
-					m_notices.erase(it);
-					if(answered)
-						answered(button);
-				}
-				m_page->send(deskCore::resultMessage(_message, {}, {}));
+				const auto refused = m_notices.answer(notice, button);
+				if(!refused.empty())
+					m_page->log("noticeAnswer: " + juce::String(refused));
+				m_page->send(deskCore::resultMessage(_message, refused.empty() ? std::vector<std::string>{}
+					: std::vector<std::string>{refused}, {}));
 			}
 			else if(row->handler.action == deskHost::Action::ChooseSample)
 			{
 				chooseSample(static_cast<uint8_t>(_message.find("slot")->asNumber()));
 				m_page->send(deskCore::resultMessage(_message, {}, {}));
+			}
+			else if(row->handler.action == deskHost::Action::DropRom || row->handler.action == deskHost::Action::DropSyx
+				|| row->handler.action == deskHost::Action::DropSample)
+			{
+				const auto kind = row->handler.action == deskHost::Action::DropRom ? droppedFiles::Kind::Rom
+					: row->handler.action == deskHost::Action::DropSyx ? droppedFiles::Kind::Sysex
+						: droppedFiles::Kind::Sample;
+				const auto why = useDrop(kind, _message);
+				m_page->send(deskCore::resultMessage(_message, why.empty() ? std::vector<std::string>{}
+					: std::vector<std::string>{why}, {}));
 			}
 			else if(row->handler.action == deskHost::Action::ChooseSyx || row->handler.action == deskHost::Action::SyxExport)
 			{
@@ -295,6 +335,48 @@ namespace mdJucePlugin
 		});
 	}
 
+	// Files dropped on the window: kept here by their number (the page never sees a path), and the page told what each
+	// is and where they were dropped (its CSS pixels): it decides what each becomes (deskDrop.js).
+	void PageEditor::filesDropped(const std::vector<std::string>& _paths, const double _x, const double _y)
+	{
+		if(!m_page)
+			return;
+		const int drop = m_drops.add(_paths, juce::Time::getMillisecondCounterHiRes());
+		const auto items = droppedFiles::classify(_paths);
+		m_page->log("drop " + juce::String(drop) + ": " + juce::String(static_cast<int>(items.size())) + " files at "
+			+ juce::String(_x, 1) + ", " + juce::String(_y, 1));
+		m_page->send(droppedFiles::dropMessage(drop, items, _x, _y));
+		m_page->flush();
+	}
+
+	// The file the page chose of a drop, as its chooser would give it: a ROM to install, a .syx to preview, a sample
+	// for a UW ROM slot. Each file serves once, as the kind it was dropped as.
+	std::string PageEditor::useDrop(const droppedFiles::Kind _kind, const json::Value& _message)
+	{
+		const auto drop = static_cast<int>(_message.find("drop")->asNumber());
+		const auto n = static_cast<size_t>(_message.find("n")->asNumber());
+		const auto path = m_drops.take(drop, n, _kind, juce::Time::getMillisecondCounterHiRes());
+		if(!path)
+			return "The window no longer holds that file: drop it again.";
+		const juce::File file(juce::String::fromUTF8(path->c_str()));
+		if(!file.existsAsFile())
+			return file.getFileName().toStdString() + " is no longer there.";
+		if(!m_session)
+			return "The editor has no machine to give it to.";
+		m_page->log("drop " + juce::String(drop) + ": file " + juce::String(static_cast<int>(n)) + " ("
+			+ file.getFileName() + ") used as " + droppedFiles::kindName(_kind));
+		switch(_kind)
+		{
+		case droppedFiles::Kind::Rom:		m_session->installRom(file); break;
+		case droppedFiles::Kind::Sysex:		m_session->openSyx(file); break;
+		case droppedFiles::Kind::Sample:
+			m_session->loadSampleFile(static_cast<uint8_t>(_message.find("slot")->asNumber()), file);
+			break;
+		case droppedFiles::Kind::Unknown:	break;
+		}
+		return {};
+	}
+
 	bool PageEditor::openAudioMidiSettings()
 	{
 		const genericUI::messageRoute::OwnerScope owner(m_noticeOwner);
@@ -319,6 +401,11 @@ namespace mdJucePlugin
 		// I-005: ask the Updater every minute whether the daily check is due (it decides; DESIGN-updates.md 3.3)
 		if(m_page->pageReady())
 		{
+			if(!m_rosettaOffered)
+			{
+				m_rosettaOffered = true;
+				offerRosettaNotice();
+			}
 			const auto now = juce::Time::currentTimeMillis();
 			if(m_nextUpdatePoll == 0)
 			{
@@ -336,6 +423,18 @@ namespace mdJucePlugin
 		m_page->flush();
 	}
 
+	void PageEditor::offerRosettaNotice()
+	{
+		// One a process (a host with several instances shows it once), taken only when there is a notice to show.
+		static std::atomic<bool> offered{false};
+		auto notice = rosettaNotice::make(processArch::current(), processArch::thisOs(),
+			juce::JUCEApplicationBase::isStandaloneApp(), getProcessor().getConfig(), offered);
+		if(!notice)
+			return;
+		const genericUI::messageRoute::OwnerScope owner(m_noticeOwner);
+		genericUI::messageRoute::offer(std::move(*notice));	// the dialog goes before the page's own questions
+	}
+
 	void PageEditor::showUpdateBanner()
 	{
 		if(!m_page)
@@ -348,37 +447,26 @@ namespace mdJucePlugin
 			return;
 		m_bannerShown = shown;
 		if(m_bannerId)
-			m_notices.erase(m_bannerId);	// a newer banner replaces it on the page: its answer is no longer wanted
+			m_notices.forget(m_bannerId);	// a newer banner replaces it on the page: its answer is no longer wanted
 		// A notice with "modal": false is the page's banner, not its dialog (FOUNDATION.md, the notice route); one
-		// with no title and no text takes the banner away.
-		const int id = ++m_noticeId;
-		json::Value m = json::Value::object();
-		m.set("type", "notice");
-		m.set("id", id);
-		m.set("title", banner.title);
-		m.set("text", banner.text);
-		auto buttons = json::Value::array();
+		// with no title and no text takes the banner away (number 0: it waits for no answer).
+		NoticeShown notice{banner.title, banner.text, {}, false};
 		std::vector<updates::Action> actions;
 		for(const auto& button : banner.buttons)
 		{
-			buttons.push(json::Value(button.first));
+			notice.buttons.push_back(button.first);
 			actions.push_back(button.second);
 		}
-		m.set("buttons", std::move(buttons));
-		m.set("modal", false);
-		m_bannerId = banner.title.empty() ? 0 : id;
-		if(m_bannerId)
+		const auto answered = [this, alive = std::weak_ptr<int>(m_alive), actions](const int _button)
 		{
-			m_notices[id] = [this, alive = std::weak_ptr<int>(m_alive), actions](const int _button)
-			{
-				if(alive.expired() || _button < 0 || static_cast<size_t>(_button) >= actions.size())
-					return;
-				m_bannerId = 0;		// the page closed it
-				m_bannerShown.clear();
-				m_updater->act(actions[static_cast<size_t>(_button)], getProcessor().getConfig());
-			};
-		}
-		m_page->send(std::move(m));
+			if(alive.expired() || _button < 0 || static_cast<size_t>(_button) >= actions.size())
+				return;
+			m_bannerId = 0;		// the page closed it
+			m_bannerShown.clear();
+			m_updater->act(actions[static_cast<size_t>(_button)], getProcessor().getConfig());
+		};
+		m_bannerId = banner.title.empty() ? 0 : m_notices.add(notice, answered);
+		m_page->send(noticeMessage(m_bannerId, notice));
 	}
 
 	editorMenu::Item PageEditor::updateMenu()
