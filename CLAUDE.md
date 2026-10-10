@@ -113,9 +113,16 @@ Convenience scripts: `build_win64.bat`, `build_linux.sh`, `build_mac.sh`.
 
 See `.github/copilot-instructions.md` for comprehensive documentation on MIDI Learn, Patch Manager, program change routing, Jenkins CI details, YouTrack workflow, release process, and voice expansion internals.
 
-## Dev loop and CI (since 0.4.0)
+## Development lifecycle (since 0.4.0; details: doc/release/CI.md)
 
-During development run no test suites unless Radek asks: build with `scripts/mdmm-dev.sh play md|mm`, Radek plays and accepts, merge to main. The full CI and the local gate run once per release, on the `release/0.x.y` branch; tag the tested branch head so the tag reuses that build. Details: `doc/release/CI.md`.
+Four levels. Use the lowest one that answers the question; never stack them without Radek asking.
+
+1. **Dev loop (minutes).** A branch, `scripts/mdmm-dev.sh play md|mm` (builds one standalone and opens it), Radek plays and accepts, merge to main. No test suites. One targeted test for the code just changed is fine (seconds).
+2. **Fast local check (a few minutes, on request).** The unit tests (`scripts/mdmm-dev.sh tests`) and a few user journeys in the background, silent: `scripts/mdmm-journeys.sh --background --jobs 4 both '<selector>'`. Before merging something risky.
+3. **Full local test (once per release).** `scripts/mdmm-local-gate.sh` on a quiet Mac with the ROMs. The 21-minute soak is off by default: `--soak` only when a report points at drop-outs over time. A failed stage: fix, then re-run only it (`MDMM_GATE_ONLY=<stage>`).
+4. **Release CI (once per release).** Push `release/0.x.y`: the full suite on macOS, Windows and Linux runs once. Tag the tested branch head (the tag reuses that build), merge to main, push, then publish the release yourself when the files are attached (no draft left). Push to main only runs one light Linux job; nobody waits for it.
+
+Do not add audits or verification rounds before a cut unless asked.
 
 ## Community: the mdmm.dev Discord server
 

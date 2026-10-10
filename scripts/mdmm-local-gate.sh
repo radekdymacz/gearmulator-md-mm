@@ -5,13 +5,14 @@
 # repo's own scripts (mdmm-rt-check.sh, mdmm-pluginval.sh, mdmm-journeys.sh, mdmm-dev.sh,
 # macos/check_mdmm_core_capacity.py) and adds only the glue: sandboxes, a time limit per run, the summary.
 #
-#   scripts/mdmm-local-gate.sh [--quick] [--skip-plugin] [--skip-soak] [--skip-journeys] [--record-goldens]
+#   scripts/mdmm-local-gate.sh [--quick] [--skip-plugin] [--soak] [--skip-journeys] [--record-goldens]
 #                              [--build <dir>] [--out <dir>]
 #
 #   --quick            no plug-ins: configure with JUCE off and run what needs no window or bundle (stages 1 to 6a).
 #                      Not a release gate: the verdict says so
 #   --skip-plugin      build everything, but leave out the core-capacity run, the soak and stage 7 (the plug-in checks)
-#   --skip-soak        leave out only the soak (ten minutes of busy play per machine, 6c: 21 minutes)
+#   --soak             also run the soak (ten minutes of busy play per machine, 6c: 21 minutes). Off by default since
+#                      0.4.0: run it when a report points at drop-outs over time (doc/release/CI.md). --skip-soak: the default
 #   --skip-journeys    leave out only the user journeys (8 to 16 minutes, in the background of the Mac)
 #   --record-goldens   stage 5 records the goldens (mdmmPerfGateTest --record) instead of comparing; the new numbers
 #                      are then compared once more, and the summary says the goldens changed and need sign-off
@@ -49,12 +50,13 @@ usage() {
 	exit "${1:-2}"
 }
 
-QUICK=0; SKIP_PLUGIN=0; SKIP_SOAK=0; SKIP_JOURNEYS=0; RECORD=0; BUILD=""; OUT=""
+QUICK=0; SKIP_PLUGIN=0; SKIP_SOAK=1; SKIP_JOURNEYS=0; RECORD=0; BUILD=""; OUT=""
 while [ $# -gt 0 ]; do
 	case "$1" in
 		--quick) QUICK=1; shift ;;
 		--skip-plugin) SKIP_PLUGIN=1; shift ;;
 		--skip-soak) SKIP_SOAK=1; shift ;;
+		--soak) SKIP_SOAK=0; shift ;;
 		--skip-journeys) SKIP_JOURNEYS=1; shift ;;
 		--record-goldens) RECORD=1; shift ;;
 		--build) [ $# -ge 2 ] || usage; BUILD="$2"; shift 2 ;;
@@ -1006,7 +1008,7 @@ elif [ "${BUILD_OK}" = 0 ]; then
 else
 	stage_capacity
 	if [ "${SKIP_SOAK}" = 1 ]; then
-		stage_skip "6c" "Soak, busy play with the performance capture" "--skip-soak"
+		cannot_run "6c soak" "off by default (--soak runs it, 21 minutes)"
 	else
 		stage_soak
 	fi

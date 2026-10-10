@@ -9,7 +9,7 @@ on the shipped files ([FOUNDATION.md](../modern-ux/FOUNDATION.md), CI start test
 ```sh
 scripts/mdmm-local-gate.sh                       # the release gate: everything; plan on about two and a half hours (timings below)
 scripts/mdmm-local-gate.sh --quick               # no plug-ins, no window: stages 1 to 6a, for working on the emulator
-scripts/mdmm-local-gate.sh --skip-soak           # everything but the soak (6c: 21 minutes of play)
+scripts/mdmm-local-gate.sh --soak                # everything plus the soak (6c: 21 minutes of play; off by default)
 scripts/mdmm-local-gate.sh --skip-journeys       # everything but the user journeys (8 to 16 minutes)
 scripts/mdmm-local-gate.sh --skip-plugin         # build the plug-ins, but leave out 6b, 6c (the soak) and stage 7
 scripts/mdmm-local-gate.sh --record-goldens      # record the playing goldens instead of comparing (see Goldens)
