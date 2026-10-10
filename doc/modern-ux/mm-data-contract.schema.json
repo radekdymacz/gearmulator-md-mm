@@ -1398,6 +1398,39 @@
           "type": "integer",
           "minimum": 1,
           "description": "P6: the kit's tracks (synth tracks)."
+        },
+        "ampEnvelope": {
+          "type": "object",
+          "description": "B-049: the AMPLIFICATION envelope as OS 1.32B plays it, one entry per value 0-127 (measured; mmDeskFirmwareTest ampenv). attackMs: NOTE ON to 90 % of the level. holdSixteenths: full level after the attack, in sixteenths of the tempo (value / 8). fallMs: DEC (after HOLD) and REL (after a NOTE OFF) share one curve, the ms to fall 20 dB (exponential); null at 127: DEC 127 holds until the NOTE OFF, REL 127 never fades.",
+          "required": ["attackMs", "holdSixteenths", "fallMs"],
+          "properties": {
+            "attackMs": {
+              "type": "array",
+              "items": {
+                "type": "number",
+                "minimum": 0
+              },
+              "minItems": 128,
+              "maxItems": 128
+            },
+            "holdSixteenths": {
+              "type": "array",
+              "items": {
+                "type": "number",
+                "minimum": 0
+              },
+              "minItems": 128,
+              "maxItems": 128
+            },
+            "fallMs": {
+              "type": "array",
+              "items": {
+                "type": ["number", "null"]
+              },
+              "minItems": 128,
+              "maxItems": 128
+            }
+          }
         }
       }
     },

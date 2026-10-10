@@ -1,5 +1,8 @@
 #include "mmMachines.h"
 
+#include <algorithm>
+#include <cmath>
+#include <limits>
 #include <string>
 
 namespace elektronData
@@ -83,6 +86,63 @@ namespace elektronData
 		// SYN 48, AMP 56, FILTER 72, EFFECTS 80, LFO1 88, LFO2 104, LFO3 112.
 		static constexpr uint8_t bases[7]{48, 56, 72, 80, 88, 104, 112};
 		return _page < 7 && _param < 8 ? static_cast<uint8_t>(bases[_page] + _param) : 0;
+	}
+
+	namespace
+	{
+		struct EnvPoint
+		{
+			uint8_t value;
+			double ms;
+		};
+
+		// between two measured points the time grows geometrically (the curves double about every 8 or 10)
+		template<size_t N> double envAt(const std::array<EnvPoint, N>& _points, const uint8_t _v)
+		{
+			if(_v <= _points.front().value)
+				return _points.front().ms;
+			for(size_t i = 1; i < N; ++i)
+			{
+				const auto& a = _points[i - 1];
+				const auto& b = _points[i];
+				if(_v > b.value)
+					continue;
+				const double f = static_cast<double>(_v - a.value) / static_cast<double>(b.value - a.value);
+				return a.ms * std::pow(b.ms / a.ms, f);
+			}
+			return _points.back().ms;
+		}
+	}
+
+	double mmAmpAttackMs(const uint8_t _atk)
+	{
+		// ms from the NOTE ON to 90 %; up to 40 the rise is within the measurement's own 10-20 ms (the values there
+		// only keep the curve rising)
+		static constexpr std::array<EnvPoint, 33> points{{
+			{0, 1}, {4, 1.2}, {8, 1.5}, {12, 2}, {16, 2.5}, {20, 3}, {24, 4}, {28, 5.5}, {32, 7.5}, {36, 10}, {40, 15},
+			{44, 27}, {48, 40}, {52, 54}, {56, 73}, {60, 101}, {64, 139}, {68, 193}, {72, 269}, {76, 378}, {80, 518},
+			{84, 719}, {88, 1006}, {92, 1416}, {96, 1953}, {100, 2752}, {104, 3791}, {108, 5299}, {112, 7487},
+			{116, 10269}, {120, 14666}, {124, 20509}, {127, 26831}}};
+		return envAt(points, std::min<uint8_t>(_atk, 127));
+	}
+
+	double mmAmpHoldSixteenths(const uint8_t _hold)
+	{
+		// measured: HOLD 16 0.25 s, 32 0.5 s, 64 1 s, 127 2 s at 120 BPM; HOLD 64 2 s at 60 BPM
+		return std::min<uint8_t>(_hold, 127) / 8.0;
+	}
+
+	double mmAmpFallMs(const uint8_t _decOrRel)
+	{
+		if(_decOrRel >= 127)
+			return std::numeric_limits<double>::infinity();
+		// ms to -20 dB: REL from the NOTE OFF (DEC from the end of HOLD gives the same within a few per cent)
+		static constexpr std::array<EnvPoint, 33> points{{
+			{0, 12}, {4, 15}, {8, 18}, {12, 21}, {16, 26}, {20, 33}, {24, 41}, {28, 52}, {32, 68}, {36, 87}, {40, 114},
+			{44, 146}, {48, 191}, {52, 251}, {56, 323}, {60, 422}, {64, 555}, {68, 719}, {72, 940}, {76, 1238},
+			{80, 1613}, {84, 2106}, {88, 2764}, {92, 3606}, {96, 4720}, {100, 6156}, {104, 8044}, {108, 10556},
+			{112, 13796}, {116, 18052}, {120, 23627}, {124, 30726}, {126, 35040}}};
+		return envAt(points, _decOrRel);
 	}
 
 	std::vector<std::string> mmSynthEnum(const uint8_t _machine, const uint8_t _slot)

@@ -37,6 +37,21 @@ namespace elektronData
 	uint8_t mmParamCc(uint8_t _page, uint8_t _param);
 	constexpr uint8_t g_mmLevelCc = 7;
 
+	// The AMPLIFICATION page's envelope (ATK HOLD DEC REL) as OS 1.32B plays it (B-049). Measured on the emulator
+	// (mmEditorProbeFirmwareTest ampenv: one note, the output's level in 10 ms windows), the same on every synthesis
+	// machine tried (GND, SID, SWAVE, DPRO, FM+, VO); mmDeskFirmwareTest ampenv holds these against the firmware.
+	// ATK, DEC and REL are times, not the tempo's, each 8 more about doubling; HOLD counts the tempo's sixteenths.
+	// After HOLD the level falls to nothing (no sustain level); a NOTE OFF starts REL from where the level is,
+	// also during ATK or HOLD. Not measured: whether HOLD follows the pattern's speed multiplier.
+	// ATK: from the trig to 90 % of the level, in ms (0-40 about at once, 64 about 0.14 s, 127 about 27 s).
+	double mmAmpAttackMs(uint8_t _atk);
+	// HOLD: how long the level stays full after the attack, in sixteenths of the tempo: HOLD / 8 (127 about a bar).
+	double mmAmpHoldSixteenths(uint8_t _hold);
+	// DEC (after HOLD) and REL (after a NOTE OFF) share one curve: the ms to fall 20 dB (to 10 %; the fall is
+	// exponential, 40 dB takes twice that). 0 about 12 ms, 64 about 0.55 s, 126 about 35 s. 127 is infinity:
+	// DEC 127 holds the level until the NOTE OFF, and REL 127 never fades.
+	double mmAmpFallMs(uint8_t _decOrRel);
+
 	// Enumerated values. The firmware stores them as 0-127 and shows the n names in
 	// equal bands: index = floor(v * n / 128) (measured by sweeping each CC and
 	// grouping the screens, mmEditorProbeFirmwareTest enums). mmEnumValue gives the

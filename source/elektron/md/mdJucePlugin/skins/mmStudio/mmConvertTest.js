@@ -145,6 +145,24 @@ edits.push(["catalogue: DPRO-WAVE WAVE is 32 waveforms", C.enumN("DPRO-WAVE", "S
 	edits.push(["a never-written kit slot (first name byte 0xff) has no name and is empty", C.kitName(unused) === "" && C.kitEmpty(unused) && C.kitName(junk) === "" && C.kitEmpty(junk)]);
 	edits.push(["a written kit slot keeps its name and is not empty", C.kitName({ name: "ACID BATH" }) === "ACID BATH" && !C.kitEmpty({ name: "ACID BATH" })]);
 }
+/* B-049: the amp envelope the page draws is the catalogue's, the firmware's times (mmDeskFirmwareTest ampenv holds the
+   catalogue against the firmware): ATK 64 about 0.14 s, DEC 64 down 20 dB in about 0.55 s, HOLD 64 four steps at any
+   tempo, DEC and REL 127 endless; each time rises with its value; a dragged handle finds the value back. */
+{
+	const E = C.ampEnv, A = catalogue.ampEnvelope;
+	edits.push(["the catalogue has the amp envelope, 128 values each", !!A && A.attackMs.length === 128 && A.holdSixteenths.length === 128 && A.fallMs.length === 128 && E.ready()]);
+	edits.push(["ATK, DEC/REL are the firmware's times (ATK 64 about 139 ms, DEC 64 about 555 ms; not 64/127 of a bar)",
+		Math.abs(E.attackMs(64) - 139) < 10 && Math.abs(E.fallMs(64) - 555) < 20 && E.attackMs(40) < 20 && E.fallMs(96) > 4000]);
+	edits.push(["HOLD counts sixteenths: HOLD 64 = 8 steps, 1000 ms at 120 BPM, 2000 ms at 60", E.holdMs(64, 120) === 1000 && E.holdMs(64, 60) === 2000]);
+	edits.push(["DEC 127 holds and REL 127 never fades (Infinity); 126 ends", E.fallMs(127) === Infinity && isFinite(E.fallMs(126))]);
+	let rising = true;
+	for (let v = 1; v < 128; v++) if (E.attackMs(v) < E.attackMs(v - 1) || E.fallMs(v) < E.fallMs(v - 1) || E.holdMs(v, 120) <= E.holdMs(v - 1, 120)) rising = false;
+	edits.push(["each time rises with its value", rising]);
+	let back = true;
+	for (const v of [0, 50, 64, 90, 126]) if (E.valueFor("fall", E.fallMs(v)) !== v || E.valueFor("hold", E.holdMs(v, 120), 120) !== v) back = false;
+	for (const v of [50, 64, 100, 127]) if (E.valueFor("attack", E.attackMs(v)) !== v) back = false;
+	edits.push(["a dragged handle's time finds its value back", back]);
+}
 for (const [what, ok] of edits) { n++; if (!ok) { fails++; console.log("FAIL edit:", what); } }
 
 const counts = Object.entries(docs).map(([k, l]) => l.length + " " + k.split("/")[1]).join(", ");

@@ -166,7 +166,10 @@ transport is only here, never in the machine document), `host` (`bpm`, `follows`
 tempo, also while it is stopped; see the Machinedrum's data-contract.md, B-030), `audioRun` (B-035: the host's
 audio calls and the machine's speed while it starts; see data-contract.md), `lcd` (the firmware's 128 x 64 LCD as 2048 hex
 digits, row by row, MSB = left pixel, while the engine is not ready),
-`catalogue`, `learn` and `result` (`op`, `id`, `ok`, `errors`, `note`).
+`catalogue` (the machines, the fixed pages, the enumerations, and since B-049 `ampEnvelope`: the AMPLIFICATION
+envelope's times per value 0-127 as OS 1.32B plays them, measured: `attackMs`, `holdSixteenths`, `fallMs` for DEC and
+REL, null at 127; `elektronData::mmAmp*`, held against the firmware by `mmDeskFirmwareTest ampenv`), `learn` and
+`result` (`op`, `id`, `ok`, `errors`, `note`).
 
 Edit intents (DESIGN-UNIFY.md 4.1, `mmDesk/mmDeskEdit.cpp`): every edit the page makes, in small steps, applied by the
 core to its own documents (so a step the machine recorded meanwhile stays). Pattern edits name the pattern (`p`); the

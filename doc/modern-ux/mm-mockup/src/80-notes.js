@@ -12,8 +12,17 @@ function noteSpans(t){const tr=trk(t),out=[],L=S.len;
   if(isMidiT(t)){const d=midiLenSteps(t,s);if(d===Infinity){e=L;for(let k=s+1;k<L;k++)if(tr.steps[k]?.off){e=k;break}}else e=Math.min(L,s+d)}
   else{while(e<L&&!tr.steps[e])e++}
   out.push({s,e,n:st.n?st.n:[lastNote(t,s)],st,kind:stepKind(st),pitchless:!st.n,endOff:!!tr.steps[e]?.off})}return out}
-/* honest gate: the amp envelope may die before the gate ends (HOLD, then DEC). Estimate, in steps. */
-function ampSteps(t){if(isMidiT(t))return Infinity;const a=trk(t).v.AMP;if(a[2]>=127)return Infinity;return(a[0]+a[1]+a[2])/127*16}
+/* B-049: the AMP envelope in steps after the trig, as the firmware plays it (MmConvert.ampEnv: the catalogue's
+   measured times). ATK (to 90 %), DEC and REL (to -20 dB, an exponential fall) are times, not the tempo's: each 8
+   more about doubles them (ATK 64 ≈ 0.14 s, DEC 64 ≈ 0.55 s). HOLD counts sixteenths of the tempo (HOLD 8 = one).
+   DEC 127 holds to the NOTE OFF and REL 127 never fades (Infinity). A step is the roll's (stepMs: the tempo and the
+   pattern's speed multiplier; whether HOLD follows the multiplier is not measured). null before the catalogue. */
+const AENV=()=>typeof MmConvert!=="undefined"&&MmConvert.ampEnv&&MmConvert.ampEnv.ready()?MmConvert.ampEnv:null;
+function ampTimes(a){const E=AENV();if(!E)return null;const sm=stepMs();return{at:E.attackMs(a[0])/sm,ho:E.holdMs(a[1],S.bpm||120)/sm,de:E.fallMs(a[2])/sm,re:E.fallMs(a[3])/sm}}
+/* steps (from a handle's place) back to the value whose time is nearest */
+const ampValue=(kind,steps)=>{const E=AENV();return E?E.valueFor(kind,Math.max(0,steps)*stepMs(),S.bpm||120):null};
+/* honest gate: where the amp envelope has died (40 dB down: twice DEC's -20 dB) before the gate ends, in steps */
+function ampSteps(t){if(isMidiT(t))return Infinity;const e=ampTimes(trk(t).v.AMP);if(!e||e.de===Infinity)return Infinity;return e.at+e.ho+2*e.de}
 function arpSeq(tr,chord){const a=tr.arp;let c=[...chord];if(a.PLAY===1)c.sort((x,y)=>x-y);if(a.PLAY===2)c.sort((x,y)=>y-x);if(a.PLAY===3){c.sort((x,y)=>x-y);c=[...c,...c.slice(1,-1).reverse()]}
  let seq=[];for(let o=0;o<Math.max(1,a.RNGE);o++)seq=seq.concat(c.map(n=>n+12*o));if(a.PLAY===4){let h=7;seq=seq.map(()=>seq[(h=(h*31+11)%97)%seq.length])}return seq}
 function arpTicks(t,span){const tr=trk(t),a=tr.arp;if(!a.MODE||!a.SPD)return[];if(a.MODE===2&&span.n.length<2)return[];const tl=a.SPD/6,seq=arpSeq(tr,span.n),out=[];
@@ -50,19 +59,21 @@ const TRNHELP=["<b>---</b> no transpose scale: track, pattern, song and multi-tr
 function dockHelp(t,d){const tr=trk(t);
  if(d==="arp"){const h=dkPlain(ARPHELP[tr.arp.MODE]);return[h,h+" SPD 6 = a 16th. Chords come from the trig: shift-click in the roll. The light notes in the roll are what it plays. In the strip: click a step to mute it, drag it up or down for an offset, click past the end or the LEN row under it to set the length. FUNCTION + ARP: one per track, 12 per pattern."]}
  if(d==="trn"){const h=dkPlain(TRNHELP[tr.tr.SCALE]);return[h,h+" Transpose is live: the programmed notes do not change. Song rows and multi trig add their own. FUNCTION + TRANSPOSE."]}
- if(d==="trig")return["Drag the dots or the values · A F L: the envelopes an overlapping note restarts (LEGATO)","ATK, HOLD and DEC shape how long a gate really sounds, in steps after the trig (the light part of a bar in the roll); DEC 127 holds to the NOTE OFF. PORT is the glide to the next note: ALWAYS, or only when notes overlap. LEGATO picks the envelopes that still fire when notes overlap (filled A F L): all on = staccato bass, all off = a smooth lead. TRIG POSITION forwards this track's notes to another track. KIT › TRIG."];
+ if(d==="trig")return["Drag the dots or the values · A F L: the envelopes an overlapping note restarts (LEGATO)","ATK, HOLD and DEC shape how long a gate really sounds, in steps after the trig at this tempo (the light part of a bar in the roll: 40 dB down). ATK and DEC are times, each 8 more about doubling (ATK 64 ≈ 0.14 s, DEC 64 ≈ 0.55 s to -20 dB); HOLD counts sixteenths (HOLD 8 = one step); DEC 127 holds to the NOTE OFF. PORT is the glide to the next note: ALWAYS, or only when notes overlap. LEGATO picks the envelopes that still fire when notes overlap (filled A F L): all on = staccato bass, all off = a smooth lead. TRIG POSITION forwards this track's notes to another track. KIT › TRIG."];
  return["LEN 127 = until a NOTE OFF · PCHG only sends when locked","LEN 127 = until a NOTE OFF; drag a note's end in the roll to lock its LEN. PCHG only sends when it is locked. CL1-4 pick the CC numbers (or AFT) of the four CC values above them. Internal tracks can also send MIDI (GLOBAL › CONTROL OUT1), but without these values. GLOBAL › MIDI SEQ › MIDISEQ SET: the page is stored in the kit."]}
 /* the body: value boxes on eight columns, then the picture */
 const dkVals=(cells,cls="")=>`<div class="dkvals ${cls}">${cells.join("")}</div>`;
 /* TRIG SETUP and TRANSPOSE are not per step, so their pictures are LCD plates (the Sound page's small plots),
    not lane bars: one gate's envelope on its own time axis, and a one-octave keyboard. */
-const u16=v=>v/127*16;	/* AMP ATK, HOLD, DEC in steps (ampSteps' estimate: 127 = a bar) */
 const dkSteps=a=>a<10?a.toFixed(1):String(Math.round(a));
-/* one gate: ATK up, HOLD flat, DEC down (DEC 127 holds to the NOTE OFF), against steps after the trig. On the
-   right two overlapping notes: the glide between them (PORT, ALWAYS or only LEGATO) and, where the second one
-   starts, which envelopes fire again (LEGATO's A F L). The axis grows while a dot is dragged past its end. */
-ED.dktrig={geo(W,H,c){const a=trk(S.sel).v.AMP,at=u16(a[0]),ho=u16(a[1]),inf=a[2]>=127,de=inf?Infinity:u16(a[2]),tot=at+ho+(inf?0:de);
-  const need=clamp(Math.ceil(((inf?at+ho+2:tot)*1.12+.3)/4)*4,4,52),span=active&&active.c===c&&c._span?Math.max(c._span,need):need;c._span=span;
+/* the fall after HOLD (DEC) or a NOTE OFF (REL): -20 dB per fall time f, from level l0; u steps in */
+const ampFall=(u,f,l0=1)=>f===Infinity?l0:l0*Math.pow(10,-u/Math.max(f,1e-3));
+/* one gate: ATK up, HOLD flat, DEC's exponential fall to 40 dB down (DEC 127 holds to the NOTE OFF), against steps
+   after the trig at this tempo (ampTimes: the firmware's times). On the right two overlapping notes: the glide
+   between them (PORT, ALWAYS or only LEGATO) and, where the second one starts, which envelopes fire again
+   (LEGATO's A F L). The axis grows while a dot is dragged past its end; a gate longer than the axis runs off it. */
+ED.dktrig={geo(W,H,c){const a=trk(S.sel).v.AMP,e=ampTimes(a)||{at:0,ho:0,de:Infinity},at=e.at,ho=e.ho,inf=e.de===Infinity,de=e.de,tot=at+ho+(inf?0:2*de);
+  const need=clamp(Math.ceil(((inf?at+ho+2:tot)*1.12+.3)/4)*4,4,64),span=active&&active.c===c&&c._span?Math.max(c._span,need):need;c._span=span;
   const gw=clamp(Math.round(W*.26),170,300),x0=12,x1=W-gw-30,T=24,B=H-17;
   return{a,at,ho,de,inf,tot,span,x0,x1,T,B,X:s=>x0+s/span*(x1-x0),S:x=>(x-x0)/(x1-x0)*span,Y:v=>B-v*(B-T),g0:W-gw-8,g1:W-10}},
  draw(g,W,H,c){const G=this.geo(W,H,c),ink=cssv("--ink"),lcd=cssv("--lcd"),tr=trk(S.sel);g.font=SFONT;
@@ -71,7 +82,8 @@ ED.dktrig={geo(W,H,c){const a=trk(S.sel).v.AMP,at=u16(a[0]),ho=u16(a[1]),inf=a[2
   for(let k=1;k<=G.span;k++){const xa=Math.round(G.X(k));g.fillStyle=inkA(k%4?.07:.14);g.fillRect(xa,G.T-6,1,G.B-G.T+6);if(k%ev)continue;g.fillStyle=inkA(.4);g.fillRect(xa,G.B,1,4);g.fillStyle=inkA(.75);const tx=String(k);g.fillText(tx,xa-tx.length*2.5,H-3)}
   g.fillStyle=inkA(.75);g.fillText("TRIG",G.x0-2,H-3);
   /* the envelope */
-  const end=G.inf?G.x1:G.X(G.tot),pts=[[G.x0,G.Y(0)],[G.X(G.at),G.Y(1)],[G.X(G.at+G.ho),G.Y(1)],[end,G.inf?G.Y(1):G.Y(0)]];
+  const end=G.inf?G.x1:Math.min(G.x1,G.X(G.tot)),pts=[[G.x0,G.Y(0)],[Math.min(G.x1,G.X(G.at)),G.Y(G.at>G.span?G.span/G.at:1)],[Math.min(G.x1,G.X(G.at+G.ho)),G.Y(G.at>G.span?G.span/G.at:1)]];
+  if(G.inf)pts.push([end,G.Y(1)]);else{const d0=G.at+G.ho;for(let k=1;k<=24;k++){const u=k/24*2*G.de;if(d0+u>G.span){pts.push([G.x1,G.Y(ampFall(G.span-d0,G.de))]);break}pts.push([G.X(d0+u),G.Y(ampFall(u,G.de))])}}
   g.beginPath();pts.forEach(([x,y],i)=>i?g.lineTo(x,y):g.moveTo(x,y));g.lineTo(end,G.B);g.closePath();g.fillStyle=inkA(.13);g.fill();
   g.beginPath();pts.forEach(([x,y],i)=>i?g.lineTo(x,y):g.moveTo(x,y));g.strokeStyle=ink;g.lineWidth=2.2;g.stroke();
   if(G.inf){g.fillStyle=ink;g.beginPath();g.moveTo(G.x1+7,G.Y(1));g.lineTo(G.x1,G.Y(1)-4);g.lineTo(G.x1,G.Y(1)+4);g.fill()}
@@ -91,11 +103,11 @@ ED.dktrig={geo(W,H,c){const a=trk(S.sel).v.AMP,at=u16(a[0]),ho=u16(a[1]),inf=a[2
   ["amp","flt","lfo"].forEach((k,i)=>{const x=L.s2+i*15,y=L.ym,f=!!tr.leg[k];g.lineWidth=1.2;g.strokeStyle=ink;g.strokeRect(x+.5,y+.5,12,12);if(f){g.fillStyle=ink;g.fillRect(x+.5,y+.5,12,12)}g.fillStyle=f?lcd:ink;g.fillText(k[0].toUpperCase(),x+3.5,y+10)});
   g.fillStyle=inkA(.75);g.fillText(on.length?on.join(" ").toUpperCase()+" FIRE AGAIN":"NONE FIRE AGAIN: SMOOTH",L.s2+50,L.ym+10)},
  leg(W,H){const G=this.geo(W,H,{}),w=G.g1-G.g0;return{n1:G.g0,e1:G.g0+w*.5,s2:G.g0+w*.36,n2:G.g1,yl:H-44,yh:32,ym:H-17,pw:trk(S.sel).v.AMP[7]/127*w*.5}},
- handles(W,H,c){const G=this.geo(W,H,c),a=G.a,L=this.leg(W,H),st=x=>clamp(Math.round(u16inv(Math.max(0,G.S(x)))),0,127);
-  return[{x:G.X(G.at),y:G.Y(1),k:"ATK",drag:x=>a[0]=st(x)},{x:G.X(G.at+G.ho),y:G.Y(1),k:"HOLD",drag:x=>a[1]=clamp(Math.round(u16inv(Math.max(0,G.S(x)-G.at))),0,127)},
-   {x:G.inf?G.x1:G.X(G.tot),y:G.inf?G.Y(1):G.Y(0),k:"DEC",drag:x=>a[2]=x>=G.x1-1?127:clamp(Math.round(u16inv(Math.max(0,G.S(x)-G.at-G.ho))),0,126)},
-   {x:L.s2+L.pw,y:L.yh,k:"PORT",drag:x=>a[7]=clamp(Math.round((x-L.s2)/((L.n2-L.n1)*.5)*127),0,127)}]}};
-function u16inv(s){return s/16*127}
+ handles(W,H,c){const G=this.geo(W,H,c),a=G.a,L=this.leg(W,H),port={x:L.s2+L.pw,y:L.yh,k:"PORT",drag:x=>a[7]=clamp(Math.round((x-L.s2)/((L.n2-L.n1)*.5)*127),0,127)};
+  if(!AENV())return[port];	/* no times before the catalogue */
+  const set=(i,v)=>{if(v!=null)a[i]=v};
+  return[{x:Math.min(G.x1,G.X(G.at)),y:G.Y(1),k:"ATK",drag:x=>set(0,ampValue("attack",G.S(x)))},{x:Math.min(G.x1,G.X(G.at+G.ho)),y:G.Y(1),k:"HOLD",drag:x=>set(1,ampValue("hold",G.S(x)-G.at))},
+   {x:G.inf?G.x1:Math.min(G.x1,G.X(G.tot)),y:G.inf?G.Y(1):G.Y(0),k:"DEC",drag:x=>set(2,x>=G.x1-1?127:Math.min(126,ampValue("fall",(G.S(x)-G.at-G.ho)/2)))},port]}};
 /* TRANSPOSE: C to C on an LCD plate. MAJ/MIN: the scale's keys lit, the others hatched (as the roll's rows), the
    root (KEY) marked; a click on a key sets KEY. --- and FIX: the shift the track plays, as an arrow from C (from
    the upper C when it goes down). */
