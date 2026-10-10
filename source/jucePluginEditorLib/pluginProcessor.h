@@ -4,7 +4,6 @@
 
 #include <memory>
 #include <optional>
-namespace mcpServer { class McpPluginServer; }
 
 namespace jucePluginEditorLib
 {
@@ -15,8 +14,7 @@ namespace jucePluginEditorLib
 	public:
 		Processor(const BusesProperties& _busesProperties,
 			const juce::PropertiesFile::Options& _configOptions,
-			const pluginLib::Processor::Properties& _properties,
-			bool _allowMcpServer = true);
+			const pluginLib::Processor::Properties& _properties);
 		~Processor() override;
 
 		juce::PropertiesFile::Options& getConfigOptions() { return m_configOptions; }
@@ -48,9 +46,6 @@ namespace jucePluginEditorLib
 		bool loadCustomData(const std::vector<uint8_t>& _sourceBuffer) override;
 		void loadChunkData(baseLib::ChunkReader& _cr) override;
 
-		mcpServer::McpPluginServer* getMcpServer() const { return m_mcpServer.get(); }
-		void setMcpServerEnabled(bool _enabled);
-
 	protected:
 		enum class ConfigMode
 		{
@@ -61,13 +56,11 @@ namespace jucePluginEditorLib
 		Processor(const BusesProperties& _busesProperties,
 			const juce::PropertiesFile::Options& _configOptions,
 			const pluginLib::Processor::Properties& _properties,
-			bool _allowMcpServer, ConfigMode _configMode);
+			ConfigMode _configMode);
 
 	private:
 		juce::File initConfigFile(const juce::PropertiesFile::Options& _o) const;
 		void savePluginLoadPath();
-		void startMcpServer();
-		void stopMcpServer();
 
 		std::unique_ptr<PluginEditorState> m_editorState;
 
@@ -76,7 +69,5 @@ namespace jucePluginEditorLib
 
 		std::vector<uint8_t> m_editorStateData;
 		std::optional<bool> m_forceSoftwareRendererForSession;
-
-		std::unique_ptr<mcpServer::McpPluginServer> m_mcpServer;
 	};
 }

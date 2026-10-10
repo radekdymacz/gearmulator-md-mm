@@ -161,7 +161,7 @@ namespace
 			const auto home = juce::File::getSpecialLocation(juce::File::tempDirectory).getChildFile("mdEditFlowPluginTest");
 			home.createDirectory();
 			config.deviceHomePath = home.getFullPathName().toStdString() + "/";
-			processor = std::make_unique<mdJucePlugin::AudioPluginAudioProcessor>(model, config, false);
+			processor = std::make_unique<mdJucePlugin::AudioPluginAudioProcessor>(model, config);
 			ap = processor.get();
 			ap->addListener(&host);
 			ap->prepareToPlay(rate, block);

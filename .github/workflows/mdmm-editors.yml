@@ -61,7 +61,6 @@ on:
       - "source/juceRmlUi/**"
       - "source/juceRmlPlugin/**"
       - "source/libresample/**"
-      - "source/mcpServerLib/**"
       - "source/networkLib/**"
       - "source/pluginTester/**"
       - "source/ptypes/**"

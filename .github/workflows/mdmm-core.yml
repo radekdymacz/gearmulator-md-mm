@@ -28,7 +28,6 @@ on:
       - "source/libresample/**"
       - "source/mc68k"
       - "source/mc68k/**"
-      - "source/mcpServerLib/**"
       - "source/networkLib/**"
       - "source/pluginTester/**"
       - "source/ptypes/**"
@@ -65,7 +64,6 @@ on:
       - "source/libresample/**"
       - "source/mc68k"
       - "source/mc68k/**"
-      - "source/mcpServerLib/**"
       - "source/networkLib/**"
       - "source/pluginTester/**"
       - "source/ptypes/**"
@@ -146,8 +144,6 @@ jobs:
           baseLibBinaryStreamTest
           bridgeLibTest
           bridgeServerRomPoolTest
-          mcpHttpGuardTest
-          mcpHttpServerTest
           midiRoutingMatrixTest
           mdAutomationMidiTest
           synthLibAudioTest
@@ -177,7 +173,6 @@ jobs:
           mdFrontPanelPresentationTest
           mdAudioIoLayoutTest
           mdProcessorHooksTest
-          mcpServerTest
           mdWindowsPolicyTest
           mdMachineMidiOutTest
           mdProcessArchTest
@@ -192,7 +187,7 @@ jobs:
           ctest --test-dir build-mdmm-core -C Release --output-on-failure
           --no-tests=error
           --tests-regex
-          '^(baseLibBinaryStreamTest|bridgeLibTest|bridgeServerRomPoolTest|mcpHttpGuardTest|mcpHttpServerTest|midiRoutingMatrixTest|mdAutomationMidiTest|synthLibAudioTest|synthLibMidiQueueTest|synthLibStateCaptureTest|mdAudioQueueTest|mdAudioFirmwareTest|mdStateTest|mdStateCaptureTest|mdMemoryFastLaneTest|mdFlashTest)$'
+          '^(baseLibBinaryStreamTest|bridgeLibTest|bridgeServerRomPoolTest|midiRoutingMatrixTest|mdAutomationMidiTest|synthLibAudioTest|synthLibMidiQueueTest|synthLibStateCaptureTest|mdAudioQueueTest|mdAudioFirmwareTest|mdStateTest|mdStateCaptureTest|mdMemoryFastLaneTest|mdFlashTest)$'
 
       - name: Build and run realtime instrumentation gate
         env:
@@ -212,7 +207,7 @@ jobs:
           ctest --test-dir build-mdmm-core -C Release --output-on-failure
           --no-tests=error
           --tests-regex
-          '^(midiOutputDispatcherTest|mdAutomationParameterTest|mdAutomationArchitectureTest|mdAudioIoLayoutTest|mdProcessorHooksTest|mdFrontPanelPresentationTests|mcpServerTest|mdWindowsPolicyTest|mdMachineMidiOutTest|mdProcessArchTest|mdRosettaNoticeTest|mdDroppedFilesTest|deskDropPageTest)$'
+          '^(midiOutputDispatcherTest|mdAutomationParameterTest|mdAutomationArchitectureTest|mdAudioIoLayoutTest|mdProcessorHooksTest|mdFrontPanelPresentationTests|mdWindowsPolicyTest|mdMachineMidiOutTest|mdProcessArchTest|mdRosettaNoticeTest|mdDroppedFilesTest|deskDropPageTest)$'
 
       - name: Build and run Shift panel chording regression
         run: |

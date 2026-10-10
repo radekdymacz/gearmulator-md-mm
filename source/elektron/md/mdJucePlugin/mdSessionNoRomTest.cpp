@@ -153,7 +153,7 @@ int main(const int _argc, char** const _argv)
 	const auto home = root.getChildFile("home");
 	home.createDirectory();
 	config.deviceHomePath = home.getFullPathName().toStdString() + "/";
-	auto processor = std::make_unique<mdJucePlugin::AudioPluginAudioProcessor>(model, config, false);
+	auto processor = std::make_unique<mdJucePlugin::AudioPluginAudioProcessor>(model, config);
 	juce::AudioProcessor& ap = *processor;
 	ap.prepareToPlay(44100.0, 128);
 	// B-030: a DAW whose transport is stopped at 72 BPM (its playhead reports the tempo then too)

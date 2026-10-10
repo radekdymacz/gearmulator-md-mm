@@ -107,7 +107,7 @@ namespace
 	{
 		mdJucePlugin::AudioPluginAudioProcessor::EphemeralConfig config;
 		config.deviceHomePath = _home.getFullPathName().toStdString() + "/";
-		auto processor = std::make_unique<mdJucePlugin::AudioPluginAudioProcessor>(md::MachineModel::Machinedrum, config, false);
+		auto processor = std::make_unique<mdJucePlugin::AudioPluginAudioProcessor>(md::MachineModel::Machinedrum, config);
 		juce::AudioProcessor& ap = *processor;
 		ap.prepareToPlay(44100.0, 128);
 		std::atomic<bool> run{true};

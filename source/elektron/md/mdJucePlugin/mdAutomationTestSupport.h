@@ -79,7 +79,7 @@ namespace mdAutomationTest
 		explicit Harness(const md::MachineModel _model)
 			: model(_model)
 			, processor(_model,
-				mdJucePlugin::AudioPluginAudioProcessor::EphemeralConfig{}, false)
+				mdJucePlugin::AudioPluginAudioProcessor::EphemeralConfig{})
 			, audioProcessor(static_cast<juce::AudioProcessor&>(processor))
 			, controller(dynamic_cast<mdJucePlugin::Controller&>(
 				processor.getController()))

@@ -211,7 +211,7 @@ namespace
 	void verifyModel(const md::MachineModel _model)
 	{
 		mdJucePlugin::AudioPluginAudioProcessor processor(_model,
-			mdJucePlugin::AudioPluginAudioProcessor::EphemeralConfig{}, false);
+			mdJucePlugin::AudioPluginAudioProcessor::EphemeralConfig{});
 
 		require(processor.getBusCount(true) == 1,
 			"expected one audio input bus");
@@ -318,7 +318,7 @@ namespace
 		juce::AudioProcessor::setTypeOfNextNewPlugin(
 			juce::AudioProcessor::wrapperType_Standalone);
 		auto processor = std::make_unique<mdJucePlugin::AudioPluginAudioProcessor>(
-			_model, mdJucePlugin::AudioPluginAudioProcessor::EphemeralConfig{}, false);
+			_model, mdJucePlugin::AudioPluginAudioProcessor::EphemeralConfig{});
 		juce::AudioProcessor::setTypeOfNextNewPlugin(
 			juce::AudioProcessor::wrapperType_Undefined);
 		juce::PluginHostType::jucePlugInClientCurrentWrapperType = previousWrapper;

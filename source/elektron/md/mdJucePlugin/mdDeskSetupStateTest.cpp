@@ -41,7 +41,7 @@ int main()
 		R"("links":[{"source":"lfo1","track":3,"param":12,"min":5,"max":90,"curve":"exp","invert":true}]},"knobCcs":[30,31,32,33,34,35,36,37]})";
 	juce::MemoryBlock withSetup, without;
 	{
-		mdJucePlugin::AudioPluginAudioProcessor a(md::MachineModel::Machinedrum, isolated(), false);
+		mdJucePlugin::AudioPluginAudioProcessor a(md::MachineModel::Machinedrum, isolated());
 		juce::AudioProcessor& ja = a;
 		a.getDeskHost()->setSetup(setup);
 		ja.getStateInformation(withSetup);
@@ -52,7 +52,7 @@ int main()
 		ja.getStateInformation(without);
 	}
 	check(!withSetup.isEmpty() && !without.isEmpty() && withSetup != without, "both projects are saved, one with the setup");
-	mdJucePlugin::AudioPluginAudioProcessor b(md::MachineModel::Machinedrum, isolated(), false);
+	mdJucePlugin::AudioPluginAudioProcessor b(md::MachineModel::Machinedrum, isolated());
 	juce::AudioProcessor& jb = b;
 	const auto g0 = b.getDeskHost()->setupVersion();
 	jb.setStateInformation(withSetup.getData(), static_cast<int>(withSetup.getSize()));
@@ -93,7 +93,7 @@ int main()
 	// crashes here rather than passing by luck. macOS only: it opens a real editor (a web view).
 	for(const bool withWindow : {true, false})
 	{
-		auto c = std::make_unique<mdJucePlugin::AudioPluginAudioProcessor>(md::MachineModel::Machinedrum, isolated(), false);
+		auto c = std::make_unique<mdJucePlugin::AudioPluginAudioProcessor>(md::MachineModel::Machinedrum, isolated());
 		std::unique_ptr<juce::AudioProcessorEditor> window;
 		if(withWindow)
 			window.reset(static_cast<juce::AudioProcessor&>(*c).createEditorIfNeeded());

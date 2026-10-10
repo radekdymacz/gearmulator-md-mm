@@ -156,7 +156,7 @@ namespace
 	void verifyNoMidiLearnTranslatorWhileMappingIsOff(const md::MachineModel _model)
 	{
 		mdJucePlugin::AudioPluginAudioProcessor processor(_model,
-			mdJucePlugin::AudioPluginAudioProcessor::EphemeralConfig{}, false);
+			mdJucePlugin::AudioPluginAudioProcessor::EphemeralConfig{});
 		require((processor.getMidiLearnTranslator() != nullptr) == deskHost::midiMappingEnabled,
 			"the MIDI learn translator does not follow the MIDI mapping switch");
 	}
