@@ -25,9 +25,9 @@ template="${script_dir}/pkg-resources/remove-old-bundles"
 
 case "${machine}" in
   md) app_name="${MDMM_PRODUCT_NAME_MD}"; old_name="${MDMM_LEGACY_NAME_MD}"
-      bundle_id="${MDMM_BUNDLE_ID_MD}"; old_bundle_id="${MDMM_LEGACY_BUNDLE_ID_MD}" ;;
+      bundle_id="${MDMM_BUNDLE_ID_MD}"; old_bundle_id="${MDMM_LEGACY_BUNDLE_ID_MD}"; au_subtype="${MDMM_AU_SUBTYPE_MD}" ;;
   mm) app_name="${MDMM_PRODUCT_NAME_MM}"; old_name="${MDMM_LEGACY_NAME_MM}"
-      bundle_id="${MDMM_BUNDLE_ID_MM}"; old_bundle_id="${MDMM_LEGACY_BUNDLE_ID_MM}" ;;
+      bundle_id="${MDMM_BUNDLE_ID_MM}"; old_bundle_id="${MDMM_LEGACY_BUNDLE_ID_MM}"; au_subtype="${MDMM_AU_SUBTYPE_MM}" ;;
   *) echo "unknown machine: ${machine} (use md or mm)" >&2; exit 2 ;;
 esac
 # The package identifiers (the Installer receipts' names) are not the bundles': build_mdmm_pkg.sh.
@@ -41,6 +41,13 @@ case "${kind}" in
   au)   kind_text="Audio Unit"; extension="component"; folder="Library/Audio/Plug-Ins/Components"; old_id_counts=1 ;;
   *) echo "unknown component: ${kind} (use app, vst3 or au)" >&2; exit 2 ;;
 esac
+# The AU only (B-048): its codes, to find an old copy of ours at any name in the folder. Empty for the app and VST3.
+au_manufacturer=""
+if [[ "${kind}" == au ]]; then
+  au_manufacturer="${MDMM_AU_MANUFACTURER}"
+else
+  au_subtype=""
+fi
 old_path="${folder}/${old_name}.${extension}"
 new_path="${folder}/${app_name}.${extension}"
 receipt_id="${identifier}.${kind}"
@@ -54,6 +61,17 @@ for value in "${app_name}" "${old_name}" "${old_path}" "${new_path}"; do
     exit 3
   fi
 done
+code_re='^([A-Za-z0-9]{4})?$'
+for value in "${au_subtype}" "${au_manufacturer}"; do
+  if [[ ! "${value}" =~ ${code_re} ]]; then
+    echo "refusing an AU code that is not four letters or digits: ${value}" >&2
+    exit 3
+  fi
+done
+if [[ "${kind}" == au && ( -z "${au_subtype}" || -z "${au_manufacturer}" ) ]]; then
+  echo "the AU codes are missing from scripts/mdmm-product.env" >&2
+  exit 3
+fi
 for value in "${bundle_id}" "${old_bundle_id}" "${receipt_id}"; do
   if [[ ! "${value}" =~ ${id_re} ]]; then
     echo "refusing an identifier with other characters than letters, digits and ._-: ${value}" >&2
@@ -80,6 +98,8 @@ sed -e "s|{{KIND}}|${kind_text}|g" \
     -e "s|{{OLD_BUNDLE_ID}}|${old_bundle_id}|g" \
     -e "s|{{OLD_ID_COUNTS}}|${old_id_counts}|g" \
     -e "s|{{RECEIPT_ID}}|${receipt_id}|g" \
+    -e "s|{{AU_SUBTYPE}}|${au_subtype}|g" \
+    -e "s|{{AU_MANUFACTURER}}|${au_manufacturer}|g" \
     -e "s|{{PLISTBUDDY}}|${plistbuddy}|g" \
     -e "s|{{PKGUTIL}}|${pkgutil}|g" \
     -e "s|{{STAT}}|${stat_tool}|g" \

@@ -140,7 +140,9 @@ def read_env(path):
 
 PLISTBUDDY_STUB = r"""#!/bin/sh
 # Print :KEY of FILE (-c "Print :KEY" FILE) for an XML plist, like PlistBuddy does (the real one is used on a Mac).
+# A nested key (AudioComponents:0:subtype) reads its last part, the first one in the file: the test plists hold one.
 key="${2#Print :}"
+key="${key##*:}"
 /usr/bin/sed -n "/<key>${key}<\/key>/{n;s/.*<string>\(.*\)<\/string>.*/\1/p;}" "$3"
 """
 PKGUTIL_STUB = r"""#!/bin/sh
@@ -159,16 +161,23 @@ DSCL_STUB = r"""#!/bin/sh
 
 PLIST = ('<?xml version="1.0" encoding="UTF-8"?>\n<plist version="1.0"><dict>\n'
          '<key>CFBundleIdentifier</key>\n<string>%s</string>\n<key>CFBundleExecutable</key>\n'
-         '<string>%s</string>\n</dict></plist>\n')
+         '<string>%s</string>\n%s</dict></plist>\n')
+# An Audio Unit's registration, as JUCE writes it (B-048: the AU preinstall finds an old copy by these codes).
+AU_COMPONENTS = ('<key>AudioComponents</key>\n<array>\n<dict>\n<key>type</key>\n<string>aumu</string>\n'
+                 '<key>subtype</key>\n<string>%s</string>\n<key>manufacturer</key>\n<string>%s</string>\n'
+                 '</dict>\n</array>\n')
 
 # The expected names, written out here on purpose: the installer deletes by these, so a change to the product env
 # file (or to the renderer) that moves them must be a visible change to this test.
 EXPECT = {
     "md": {"new": "Machinedrum Editor", "old": "Gearmulator MD", "id": "com.nativekloud.machinedrum-editor",
-           "old_id": "local.gearmulator.preview.GearmulatorMD", "other_old": "Gearmulator MM"},
+           "old_id": "local.gearmulator.preview.GearmulatorMD", "other_old": "Gearmulator MM",
+           "subtype": "Tmdr", "other_subtype": "Tmno"},
     "mm": {"new": "Monomachine Editor", "old": "Gearmulator MM", "id": "com.nativekloud.monomachine-editor",
-           "old_id": "local.gearmulator.preview.GearmulatorMM", "other_old": "Gearmulator MD"},
+           "old_id": "local.gearmulator.preview.GearmulatorMM", "other_old": "Gearmulator MD",
+           "subtype": "Tmno", "other_subtype": "Tmdr"},
 }
+AU_MANUFACTURER = "GmPv"
 KINDS = {  # kind -> (folder below the install root, bundle extension, may the old upstream identifier remove it)
     "app": ("Applications", "app", False),
     "vst3": ("Library/Audio/Plug-Ins/VST3", "vst3", True),
@@ -185,6 +194,18 @@ for machine, e in EXPECT.items():
           "%s: the product env file's bundle identifiers (%s, old %s)" % (machine, e["id"], e["old_id"]))
 with open(os.path.join(REPO, "source", "elektron", "md", "mdJucePlugin", "mdmmPlugins.cmake")) as f:
     cmake_text = f.read()
+# The AU codes the preinstall looks for (B-048) are the build's: the env file, the plug-ins' CMakeLists, juce.cmake.
+check(env_file.get("MDMM_AU_MANUFACTURER") == AU_MANUFACTURER, "the product env file's AU manufacturer is GmPv")
+with open(os.path.join(REPO, "source", "elektron", "md", "mdJucePlugin", "CMakeLists.txt")) as f:
+    plugins_cmake = f.read()
+with open(os.path.join(REPO, "source", "juce.cmake")) as f:
+    check(re.search(r"PLUGIN_MANUFACTURER_CODE %s\b" % AU_MANUFACTURER, f.read()) is not None,
+          "juce.cmake's manufacturer code is the env file's")
+for machine, e in EXPECT.items():
+    check(env_file.get("MDMM_AU_SUBTYPE_" + machine.upper()) == e["subtype"],
+          "%s: the product env file's AU subtype is %s" % (machine, e["subtype"]))
+    check(re.search(r'createJucePlugin\(%sJucePlugin "[^"]*" TRUE "%s"' % (machine, e["subtype"]), plugins_cmake)
+          is not None, "%s: the build's plug-in code is the env file's AU subtype" % machine)
 for machine, e in EXPECT.items():
     found = re.search(r'GEARMULATOR_PLUGIN_BUNDLE_ID_%sJucePlugin "([^"]+)"' % machine, cmake_text)
     check(found is not None and found.group(1) == e["id"],
@@ -217,7 +238,7 @@ if (os.name == "posix" and os.path.exists("/bin/sh") and os.path.exists("/usr/bi
         print("  (the property-list reader: %s)"
               % ("the real PlistBuddy" if os.path.exists(real_plistbuddy) else "a stand-in"))
 
-        def make_bundle(root, folder, name, ext, identifier, executable, link_to=None):
+        def make_bundle(root, folder, name, ext, identifier, executable, link_to=None, au_subtype=None):
             path = os.path.join(root, folder, "%s.%s" % (name, ext))
             os.makedirs(os.path.dirname(path), exist_ok=True)
             if link_to:
@@ -225,7 +246,8 @@ if (os.name == "posix" and os.path.exists("/bin/sh") and os.path.exists("/usr/bi
                 return path
             os.makedirs(os.path.join(path, "Contents", "MacOS"))
             with open(os.path.join(path, "Contents", "Info.plist"), "w") as f:
-                f.write(PLIST % (identifier, executable))
+                f.write(PLIST % (identifier, executable,
+                                 AU_COMPONENTS % (au_subtype, AU_MANUFACTURER) if au_subtype else ""))
             with open(os.path.join(path, "Contents", "MacOS", executable), "w") as f:
                 f.write("x")
             return path
@@ -369,6 +391,36 @@ if (os.name == "posix" and os.path.exists("/bin/sh") and os.path.exists("/usr/bi
                 r = run_script(root7, home7, hide_plist=True)
                 check(r.returncode == 0 and os.path.exists(unreadable),
                       "%s: without a property-list reader nothing is removed, and the exit is 0" % label)
+
+                # ---- B-048: an old copy at another name that registers our AU codes (the AU only)
+                case9 = os.path.join(tmp, "case9-" + label.replace(" ", "-"))
+                root9, home9 = os.path.join(case9, "root"), os.path.join(case9, "home")
+                os.makedirs(root9)
+                os.makedirs(home9)
+                renamed_old = make_bundle(root9, folder, "MD preview", ext, e["old_id"], e["old"],
+                                          au_subtype=e["subtype"])
+                renamed_ours = make_bundle(home9, folder, "Copy of " + e["new"], ext, e["id"], e["new"],
+                                           au_subtype=e["subtype"])
+                current9 = make_bundle(root9, folder, e["new"], ext, e["id"], e["new"], au_subtype=e["subtype"])
+                foreign9 = make_bundle(root9, folder, "Somebody's", ext, "com.example.somebody-else", "x",
+                                       au_subtype=e["subtype"])
+                other9 = make_bundle(root9, folder, "Other machine preview", ext, e["old_id"], e["old"],
+                                     au_subtype=e["other_subtype"])
+                plain9 = make_bundle(root9, folder, "No codes", ext, e["old_id"], e["old"])
+                deeper9 = make_bundle(root9, folder + "/sub", "MD preview", ext, e["old_id"], e["old"],
+                                      au_subtype=e["subtype"])
+                r = run_script(root9, home9)
+                check(r.returncode == 0, "%s: exit 0 with AU-coded copies around (%s)" % (label, r.stderr.strip()))
+                if kind == "au":
+                    check(not os.path.exists(renamed_old) and not os.path.exists(renamed_ours),
+                          "%s: an old copy of ours at another name that registers our codes is removed, in the "
+                          "root and in the home folder" % label)
+                else:
+                    check(os.path.exists(renamed_old) and os.path.exists(renamed_ours),
+                          "%s: no search by AU codes outside the AU" % label)
+                check(all(os.path.exists(p) for p in (current9, foreign9, other9, plain9, deeper9)),
+                      "%s: the current AU, a foreign one with our codes, the other machine's, one without codes and "
+                      "one a folder deeper stay" % label)
 
                 # ---- nothing there at all
                 case8 = os.path.join(tmp, "case8-" + label.replace(" ", "-"))
