@@ -90,20 +90,9 @@ if (-not $TestOnly) {
         '-G', $Generator,
         "-DBUILD_TESTING=$(if ($WithTests) { 'ON' } else { 'OFF' })",
         '-Dgearmulator_BUILD_JUCEPLUGIN=ON',
-        '-Dgearmulator_BUILD_FX_PLUGIN=OFF',
-        '-Dgearmulator_BUILD_JUCEPLUGIN_VST2=OFF',
         '-Dgearmulator_BUILD_JUCEPLUGIN_VST3=ON',
-        '-Dgearmulator_BUILD_JUCEPLUGIN_CLAP=OFF',
-        '-Dgearmulator_BUILD_JUCEPLUGIN_LV2=OFF',
         '-Dgearmulator_BUILD_JUCEPLUGIN_AU=OFF',
         '-Dgearmulator_BUILD_JUCEPLUGIN_Standalone=ON',
-        '-Dgearmulator_SYNTH_ELEKTRON=ON',
-        '-Dgearmulator_SYNTH_OSIRUS=OFF',
-        '-Dgearmulator_SYNTH_OSTIRUS=OFF',
-        '-Dgearmulator_SYNTH_VAVRA=OFF',
-        '-Dgearmulator_SYNTH_XENIA=OFF',
-        '-Dgearmulator_SYNTH_NODALRED2X=OFF',
-        '-Dgearmulator_SYNTH_JE8086=OFF',
         "-DGEARMULATOR_MDMM_MSVC_PGO_MODE=$PgoMode"
     )
     if ($PgoMode -ne 'none') {
@@ -145,8 +134,8 @@ if (-not $TestOnly) {
         'pluginTester'
     )
     if ($WithTests) {
-        $targets += @('baseLibBinaryStreamTest', 'bridgeLibTest', 'bridgeServerRomPoolTest', 'mcpHttpGuardTest',
-            'mcpHttpServerTest', 'mcpServerTest', 'synthLibAudioTest', 'synthLibMidiQueueTest',
+        $targets += @('baseLibBinaryStreamTest', 'bridgeLibTest', 'bridgeServerRomPoolTest',
+            'synthLibAudioTest', 'synthLibMidiQueueTest',
             'synthLibStateCaptureTest', 'mdLibTest', 'mdStateCaptureTest', 'mdMemoryFastLaneTest',
             'mdAudioQueueTest', 'mdAudioFirmwareTest', 'mdAudioIoLayoutTest', 'mdProcessorHooksTest',
             'mdWindowsPolicyTest', 'mdMachineMidiOutTest', 'mdProcessArchTest', 'mdRosettaNoticeTest',
@@ -181,7 +170,7 @@ if ($WithTests) {
         '--test-dir', $BuildDir,
         '-C', $Configuration,
         '--output-on-failure',
-        '--tests-regex', '^(baseLibBinaryStreamTest|bridgeLibTest|bridgeServerRomPoolTest|mcpHttpGuardTest|mcpHttpServerTest|mcpServerTest|synthLibAudioTest|synthLibMidiQueueTest|synthLibStateCaptureTest|mdLibTests|mdStateCaptureTest|mdMemoryFastLaneTest|mdAudioQueueTest|mdAudioFirmwareTest|mdAudioIoLayoutTest|mdProcessorHooksTest|mdWindowsPolicyTest|mdMachineMidiOutTest|mdMachineMidiOutFirmwareTest_(md|mm)|mdProcessArchTest|mdRosettaNoticeTest|mdDroppedFilesTest|mdProjectStateRestoreTest|mdProgramChangeFirmwareTest|mdAudioProbePluginVST3IdentityTest|mdVst3ProgramChange(Test|OptOutTest)|(md|mm)JucePlugin_VST3ProgramChangeTest)$'
+        '--tests-regex', '^(baseLibBinaryStreamTest|bridgeLibTest|bridgeServerRomPoolTest|synthLibAudioTest|synthLibMidiQueueTest|synthLibStateCaptureTest|mdLibTests|mdStateCaptureTest|mdMemoryFastLaneTest|mdAudioQueueTest|mdAudioFirmwareTest|mdAudioIoLayoutTest|mdProcessorHooksTest|mdWindowsPolicyTest|mdMachineMidiOutTest|mdMachineMidiOutFirmwareTest_(md|mm)|mdProcessArchTest|mdRosettaNoticeTest|mdDroppedFilesTest|mdProjectStateRestoreTest|mdProgramChangeFirmwareTest|mdAudioProbePluginVST3IdentityTest|mdVst3ProgramChange(Test|OptOutTest)|(md|mm)JucePlugin_VST3ProgramChangeTest)$'
     )
     Invoke-Native -FilePath $ctest -Arguments @(
         '--test-dir', $BuildDir,

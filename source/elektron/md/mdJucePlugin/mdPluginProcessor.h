@@ -28,13 +28,8 @@ namespace mdJucePlugin
 
 	    AudioPluginAudioProcessor();
 		explicit AudioPluginAudioProcessor(md::MachineModel _model);
-		AudioPluginAudioProcessor(md::MachineModel _model, bool _allowMcpServer);
-		AudioPluginAudioProcessor(md::MachineModel _model, EphemeralConfig,
-			bool _allowMcpServer = false);
-		// The MCP server (upstream's AI-tool remote control) is off in the editors since 0.5: nothing of ours uses it,
-		// and an open local port is risk without value (doc/release/PLAN-0.5.md).
-		AudioPluginAudioProcessor(md::MachineModel _model,
-			std::vector<uint8_t> _initialPatchRam, bool _allowMcpServer = false);
+		AudioPluginAudioProcessor(md::MachineModel _model, EphemeralConfig);
+		AudioPluginAudioProcessor(md::MachineModel _model, std::vector<uint8_t> _initialPatchRam);
 	    ~AudioPluginAudioProcessor() override;
 
 		md::MachineModel getModel() const { return m_model; }
@@ -91,8 +86,7 @@ namespace mdJucePlugin
 		static BusesProperties createBusesProperties();
 		bool isBusesLayoutSupported(const BusesLayout& _layout) const override;
 		AudioPluginAudioProcessor(md::MachineModel _model,
-			std::vector<uint8_t> _initialPatchRam, bool _allowMcpServer,
-			bool _ephemeralConfig,
+			std::vector<uint8_t> _initialPatchRam, bool _ephemeralConfig,
 			std::optional<std::string> _deviceHomePath = std::nullopt);
 		bool serviceDeferredStateRestore();
 		bool serviceStateRestoreFailure();

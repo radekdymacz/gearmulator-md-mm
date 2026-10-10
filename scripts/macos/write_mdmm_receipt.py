@@ -450,42 +450,27 @@ def require_clean(
         )
 
 
-def submodule_commit(source: pathlib.Path, name: str) -> str:
-    relative = pathlib.PurePosixPath(
-        git(source, "config", "-f", ".gitmodules", "--get", f"submodule.{name}.path")
-    )
-    if relative.is_absolute() or ".." in relative.parts:
-        raise RuntimeError(f"unsafe path for submodule {name}: {relative}")
+def owned_tree(source: pathlib.Path, relative: str) -> str:
+    """The Git tree id of a folder we own (dsp56300, mc68k, JUCE: submodules until 0.5, plain folders since).
 
-    checkout = (source / pathlib.Path(*relative.parts)).resolve()
-    try:
-        checkout.relative_to(source)
-    except ValueError as error:
-        raise RuntimeError(f"submodule {name} resolves outside the source tree: {checkout}") from error
-
-    expected = git(source, "rev-parse", f"HEAD:{relative.as_posix()}")
-    actual_root = pathlib.Path(git(checkout, "rev-parse", "--show-toplevel")).resolve()
-    if actual_root != checkout:
-        raise RuntimeError(
-            f"submodule {name} is not initialized at {relative} "
-            f"(Git resolved it to {actual_root})"
-        )
-
-    actual = git(checkout, "rev-parse", "HEAD")
-    if actual != expected:
-        raise RuntimeError(
-            f"submodule {name} checkout does not match the parent gitlink: "
-            f"expected {expected}, found {actual}"
-        )
-    return actual
+    It names the folder's committed content exactly; the clean-tree check covers uncommitted changes in it.
+    """
+    path = pathlib.PurePosixPath(relative)
+    if path.is_absolute() or ".." in path.parts:
+        raise RuntimeError(f"unsafe path for an owned folder: {relative}")
+    entry = git(source, "ls-tree", "HEAD", "--", path.as_posix())
+    if not entry.split() or entry.split()[1] != "tree":
+        raise RuntimeError(f"{relative} is not a folder of this repository at HEAD: {entry or 'absent'}")
+    return git(source, "rev-parse", f"HEAD:{path.as_posix()}")
 
 
 def source_tuple(source: pathlib.Path) -> dict[str, str]:
     return {
         "source_commit": git(source, "rev-parse", "HEAD"),
-        "dsp56300_commit": submodule_commit(source, "source/dsp56300"),
-        "mc68k_commit": submodule_commit(source, "source/mc68k"),
-        "juce_commit": submodule_commit(source, "source/JUCE"),
+        # the tree ids of the folders we own (they were submodule commits up to 0.4)
+        "dsp56300_commit": owned_tree(source, "source/dsp56300"),
+        "mc68k_commit": owned_tree(source, "source/mc68k"),
+        "juce_commit": owned_tree(source, "source/JUCE"),
     }
 
 

@@ -54,13 +54,8 @@ EOF
 	cmake -S "$ROOT" -B "$BUILD" -G Ninja -DCMAKE_BUILD_TYPE=Release \
 		"$@" $formats ${MDMM_DEV_ARGS:-} \
 		-DBUILD_TESTING=ON -Dgearmulator_MDMM_DIAGNOSTICS=ON \
-		-Dgearmulator_BUILD_JUCEPLUGIN=ON -Dgearmulator_BUILD_FX_PLUGIN=OFF \
-		-Dgearmulator_BUILD_JUCEPLUGIN_VST2=OFF -Dgearmulator_BUILD_JUCEPLUGIN_VST3=ON \
-		-Dgearmulator_BUILD_JUCEPLUGIN_CLAP=OFF -Dgearmulator_BUILD_JUCEPLUGIN_LV2=OFF \
-		-Dgearmulator_BUILD_JUCEPLUGIN_Standalone=ON \
-		-Dgearmulator_SYNTH_ELEKTRON=ON -Dgearmulator_SYNTH_OSIRUS=OFF -Dgearmulator_SYNTH_OSTIRUS=OFF \
-		-Dgearmulator_SYNTH_VAVRA=OFF -Dgearmulator_SYNTH_XENIA=OFF -Dgearmulator_SYNTH_NODALRED2X=OFF \
-		-Dgearmulator_SYNTH_JE8086=OFF
+		-Dgearmulator_BUILD_JUCEPLUGIN=ON -Dgearmulator_BUILD_JUCEPLUGIN_VST3=ON \
+		-Dgearmulator_BUILD_JUCEPLUGIN_Standalone=ON
 }
 
 build() {

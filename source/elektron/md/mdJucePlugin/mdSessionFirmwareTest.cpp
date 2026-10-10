@@ -168,7 +168,7 @@ int main()
 	const auto home = juce::File::getSpecialLocation(juce::File::tempDirectory).getChildFile("mdModRunnerFirmwareTest");
 	home.createDirectory();
 	config.deviceHomePath = home.getFullPathName().toStdString() + "/";
-	auto processor = std::make_unique<mdJucePlugin::AudioPluginAudioProcessor>(md::MachineModel::Machinedrum, config, false);
+	auto processor = std::make_unique<mdJucePlugin::AudioPluginAudioProcessor>(md::MachineModel::Machinedrum, config);
 	juce::AudioProcessor& ap = *processor;
 	ap.prepareToPlay(44100.0, 128);
 	std::atomic<bool> run{true};

@@ -28,7 +28,7 @@ namespace
 		mdJucePlugin::AudioPluginAudioProcessor processor;
 		juce::AudioProcessor& audioProcessor;
 		ProcessorHarness(md::MachineModel model, const std::string& directory)
-			: processor(model, mdJucePlugin::AudioPluginAudioProcessor::EphemeralConfig{directory}, false)
+			: processor(model, mdJucePlugin::AudioPluginAudioProcessor::EphemeralConfig{directory})
 			, audioProcessor(processor)
 		{
 			audioProcessor.setPlayHead(&playHead);

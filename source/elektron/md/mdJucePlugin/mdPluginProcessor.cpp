@@ -400,31 +400,24 @@ namespace mdJucePlugin
 	}
 
 	AudioPluginAudioProcessor::AudioPluginAudioProcessor(const md::MachineModel _model,
-		const bool _allowMcpServer)
-		: AudioPluginAudioProcessor(_model, std::vector<uint8_t>{}, _allowMcpServer)
+		std::vector<uint8_t> _initialPatchRam) :
+		AudioPluginAudioProcessor(_model, std::move(_initialPatchRam), false)
 	{
 	}
 
 	AudioPluginAudioProcessor::AudioPluginAudioProcessor(const md::MachineModel _model,
-		std::vector<uint8_t> _initialPatchRam, const bool _allowMcpServer) :
-		AudioPluginAudioProcessor(_model, std::move(_initialPatchRam), _allowMcpServer, false)
-	{
-	}
-
-	AudioPluginAudioProcessor::AudioPluginAudioProcessor(const md::MachineModel _model,
-		EphemeralConfig _config, const bool _allowMcpServer) :
-		AudioPluginAudioProcessor(_model, std::vector<uint8_t>{}, _allowMcpServer, true,
+		EphemeralConfig _config) :
+		AudioPluginAudioProcessor(_model, std::vector<uint8_t>{}, true,
 			std::move(_config.deviceHomePath))
 	{
 	}
 
 	AudioPluginAudioProcessor::AudioPluginAudioProcessor(const md::MachineModel _model,
-		std::vector<uint8_t> _initialPatchRam, const bool _allowMcpServer,
-		const bool _ephemeralConfig,
+		std::vector<uint8_t> _initialPatchRam, const bool _ephemeralConfig,
 		std::optional<std::string> _deviceHomePath) :
 		Processor(createBusesProperties(),
 			prepareConfig(_model, _ephemeralConfig), makeProcessorProperties(_model),
-			_allowMcpServer, _ephemeralConfig
+			_ephemeralConfig
 				? jucePluginEditorLib::Processor::ConfigMode::Ephemeral
 				: jucePluginEditorLib::Processor::ConfigMode::Persistent)
 		, m_model(_model)

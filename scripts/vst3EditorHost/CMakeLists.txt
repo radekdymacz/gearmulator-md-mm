@@ -1,8 +1,8 @@
 # A minimal VST3 host that opens a plug-in's editor in a window for a while: the CI start test of the editors'
 # VST3s on Windows (mdmm-editors-windows.yml, scripts/windows/smoke_mdmm.ps1) and macOS (mdmm-editors-macos.yml,
 # scripts/macos/smoke_mdmm.sh); doc/modern-ux/FOUNDATION.md, "CI start tests". Also the user journeys in the VST3s
-# (scripts/mdmm-journeys.sh --host vst3, with --background: hostMac.mm). Its own project on the fork's JUCE
-# submodule, apart from the product build.
+# (scripts/mdmm-journeys.sh --host vst3, with --background: hostMac.mm). Its own project on the repository's JUCE
+# (source/JUCE), apart from the product build.
 #
 #   cmake -S scripts/vst3EditorHost -B <build> && cmake --build <build> --config Release
 #   mdmmVst3EditorHost.exe "<path to .vst3 bundle>" <seconds>

@@ -28,10 +28,10 @@ source_group("source" FILES ${SOURCES})
 target_link_libraries(pluginTester PUBLIC baseLib)
 
 target_compile_definitions(pluginTester PRIVATE
-	JUCE_PLUGINHOST_VST=1
+	JUCE_PLUGINHOST_VST=0	# the editors ship VST3 and AU only (no VST2 SDK in the tree)
 	JUCE_PLUGINHOST_VST3=1
-	JUCE_PLUGINHOST_CLAP=1
-	JUCE_PLUGINHOST_LV2=1
+	JUCE_PLUGINHOST_CLAP=0
+	JUCE_PLUGINHOST_LV2=0
 	JUCE_PLUGINHOST_AU=1
     JUCE_USE_CURL=0
     JUCE_WEB_BROWSER=0

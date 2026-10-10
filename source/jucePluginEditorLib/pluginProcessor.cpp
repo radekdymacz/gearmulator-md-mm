@@ -7,10 +7,6 @@
 
 #include "synthLib/os.h"
 
-#include "mcpServerLib/mcpPluginServer.h"
-#include "mcpDomTools.h"
-#include "mcpPatchManagerTools.h"
-#include "networkLib/logging.h"
 
 #ifdef ZYNTHIAN
 #include "dsp56kBase/logging.h"
@@ -26,20 +22,6 @@ namespace jucePluginEditorLib
 			// https://discourse.zynthian.org/t/deadlock-when-attempting-to-log-to-stdout/10169
 		}
 #endif
-
-		// True when the plugin DLL is hosted by a JUCE build-time helper
-		// (juce_vst3_helper / juce_lv2_helper / juce_au_helper). Those exes
-		// load the plugin only to enumerate metadata; they do not run an audio
-		// host and have no use for the MCP server. Starting it there is pure
-		// overhead and was provoking a port-13710 race that crashed n2x builds.
-		bool isJuceHelperProcess()
-		{
-			const auto exeName = juce::File::getSpecialLocation(
-				juce::File::currentExecutableFile).getFileNameWithoutExtension().toLowerCase();
-			return exeName.contains("juce_vst3_helper")
-				|| exeName.contains("juce_lv2_helper")
-				|| exeName.contains("juce_au_helper");
-		}
 
 		std::string getPluginFormatName(const juce::AudioProcessor::WrapperType _wrapperType, const std::string& _moduleFilePath)
 		{
@@ -64,17 +46,15 @@ namespace jucePluginEditorLib
 
 	Processor::Processor(const BusesProperties& _busesProperties,
 		const juce::PropertiesFile::Options& _configOptions,
-		const pluginLib::Processor::Properties& _properties,
-		const bool _allowMcpServer) :
-		Processor(_busesProperties, _configOptions, _properties, _allowMcpServer,
-			ConfigMode::Persistent)
+		const pluginLib::Processor::Properties& _properties) :
+		Processor(_busesProperties, _configOptions, _properties, ConfigMode::Persistent)
 	{
 	}
 
 	Processor::Processor(const BusesProperties& _busesProperties,
 		const juce::PropertiesFile::Options& _configOptions,
 		const pluginLib::Processor::Properties& _properties,
-		const bool _allowMcpServer, const ConfigMode _configMode)
+		const ConfigMode _configMode)
 	: pluginLib::Processor(_busesProperties, _properties)
 	, m_configOptions(_configOptions)
 	, m_config(_configMode == ConfigMode::Ephemeral ? _configOptions.getDefaultFile()
@@ -84,15 +64,10 @@ namespace jucePluginEditorLib
 		Logging::setLogFunc(&noLoggingFunc);
 #endif
 		savePluginLoadPath();
-
-		if (_allowMcpServer && m_config.getBoolValue("enableMcpServer", false)
-			&& !isJuceHelperProcess())
-			startMcpServer();
 	}
 
 	Processor::~Processor()
 	{
-		stopMcpServer();
 		assert(!m_editorState && "call destroyEditorState in destructor of derived class");
 	}
 
@@ -238,56 +213,5 @@ namespace jucePluginEditorLib
 			return newFile;
 		}
 		return newFile;
-	}
-
-	void Processor::startMcpServer()
-	{
-		if (m_mcpServer)
-			return;
-
-		try
-		{
-			m_mcpServer = std::make_unique<mcpServer::McpPluginServer>(*this);
-			registerDomTools(m_mcpServer->getServer(), *this);
-			registerPatchManagerTools(m_mcpServer->getServer(), *this);
-			if (m_mcpServer->start())
-			{
-				LOGNET(networkLib::LogLevel::Info, "MCP server started on port " << m_mcpServer->getPort() << " for plugin " << getProperties().name);
-			}
-			else
-			{
-				LOGNET(networkLib::LogLevel::Warning, "Failed to start MCP server for plugin " << getProperties().name);
-				m_mcpServer.reset();
-			}
-		}
-		catch (const std::exception& e)
-		{
-			LOGNET(networkLib::LogLevel::Warning, "MCP server creation failed: " << e.what());
-			m_mcpServer.reset();
-		}
-		catch (...)
-		{
-			// Plugin startup must never crash the host. Swallow any non-
-			// std::exception and continue without MCP.
-			LOGNET(networkLib::LogLevel::Warning, "MCP server creation failed with unknown exception");
-			m_mcpServer.reset();
-		}
-	}
-
-	void Processor::stopMcpServer()
-	{
-		if (m_mcpServer)
-		{
-			LOGNET(networkLib::LogLevel::Info, "MCP server stopped for plugin " << getProperties().name);
-			m_mcpServer.reset();
-		}
-	}
-
-	void Processor::setMcpServerEnabled(const bool _enabled)
-	{
-		if (_enabled)
-			startMcpServer();
-		else
-			stopMcpServer();
 	}
 }

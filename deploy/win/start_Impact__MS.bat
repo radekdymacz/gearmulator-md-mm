@@ -1,1 +1,0 @@
-virusTestConsole "Impact  MS"

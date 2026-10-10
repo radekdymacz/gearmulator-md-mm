@@ -1,10 +1,10 @@
 name: MD/MM Editors Windows x64
 
-# This fork's Windows build and start test (doc/release/WINDOWS.md, doc/modern-ux/UPSTREAM.md: a workflow of ours;
-# upstream's elektron-windows.yml stays as it is and is no longer called). Called by mdmm-editors.yml on every push
+# This fork's Windows build and start test (doc/release/WINDOWS.md; upstream's elektron-windows.yml was deleted
+# in 0.5). Called by mdmm-editors.yml on every push
 # (and by mdmm-editors-release.yml when no tested build of the tag's commit exists).
 #
-#   build     the package, once: upstream's scripts/windows/build_mdmm.ps1 as elektron-windows.yml runs it (Release,
+#   build     the package, once: scripts/windows/build_mdmm.ps1 (Release,
 #             /GL and /LTCG only when `ltcg` is set, i.e. for a tag's release; a push builds with _CL_=/GL-,
 #             Ninja Multi-Config, sccache), products only: the two standalones, the two VST3s and
 #             pluginTester, which then loads each VST3 (audio buses, automation smoke) before the zip is made. Its
@@ -191,7 +191,6 @@ jobs:
       - name: Build the host
         shell: pwsh
         run: |
-          git submodule update --init --depth 1 source/JUCE
           cmake -S scripts/vst3EditorHost -B "${{ runner.temp }}\vst3host" -G "Visual Studio 17 2022" -A x64
           cmake --build "${{ runner.temp }}\vst3host" --config Release --parallel 4 -- /verbosity:minimal
           $exe = Get-ChildItem -LiteralPath "${{ runner.temp }}\vst3host" -Recurse -File -Filter 'mdmmVst3EditorHost.exe' | Select-Object -First 1

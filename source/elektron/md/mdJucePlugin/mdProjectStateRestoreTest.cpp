@@ -188,7 +188,7 @@ namespace
 	public:
 		explicit Harness(const md::MachineModel _model = md::MachineModel::Machinedrum,
 			const bool _prepareAudio = true)
-			: processor(_model, isolatedConfig(), false)
+			: processor(_model, isolatedConfig())
 			, audioProcessor(processor), audio(2, blockSize)
 		{
 			if(_prepareAudio)

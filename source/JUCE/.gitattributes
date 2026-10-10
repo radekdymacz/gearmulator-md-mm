@@ -1,0 +1,3 @@
+# Ours (0.5): keep every file of this owned copy byte for byte as it came (no line-ending normalisation;
+# the repository root says text=auto).
+* -text

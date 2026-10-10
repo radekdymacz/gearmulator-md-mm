@@ -296,7 +296,7 @@ int main()
 
 		mdJucePlugin::AudioPluginAudioProcessor processor(
 			model,
-			mdJucePlugin::AudioPluginAudioProcessor::EphemeralConfig{std::string{}}, false);
+			mdJucePlugin::AudioPluginAudioProcessor::EphemeralConfig{std::string{}});
 		processor.setForceSoftwareRendererForSession(true);
 		require(!processor.getConfig().containsKey(
 			mdJucePlugin::lcdInteraction::configKey),

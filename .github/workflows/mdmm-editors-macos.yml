@@ -1,10 +1,10 @@
 name: MD/MM Editors macOS
 
 # This fork's macOS build and start test (doc/modern-ux/FOUNDATION.md, "Build and check" and "CI start tests";
-# doc/modern-ux/UPSTREAM.md: a workflow of ours, upstream's elektron-macos.yml stays as it is). Called by
+# upstream's elektron-macos.yml was deleted in 0.5). Called by
 # mdmm-editors.yml on every push (and by mdmm-editors-release.yml when no tested build of the tag's commit exists).
 #
-#   build     the fixture-free universal package, once: upstream's scripts/macos/build_mdmm.sh with the release
+#   build     the fixture-free universal package, once: scripts/macos/build_mdmm.sh with the release
 #             settings (ThinLTO, arm64 + x86_64, unit and plug-in tests, package check), on Ninja with ccache. Its
 #             zip (artifact macos-mdmm-universal) is what the start test below and the release installers use.
 #   installers unsigned .pkg + .dmg from that zip (the release's script): an artifact minutes after the build.
@@ -167,7 +167,6 @@ jobs:
       - name: Build the host
         run: |
           set -euo pipefail
-          git submodule update --init --depth 1 source/JUCE
           host="$(./scripts/macos/build_vst3_host.sh "${RUNNER_TEMP}/vst3host" | sed -n 's/^VST3_HOST=//p')"
           app="${host%/Contents/MacOS/*}"
           mkdir -p "${RUNNER_TEMP}/out"

@@ -215,7 +215,7 @@ namespace
 		home.createDirectory();
 		config.deviceHomePath = home.getFullPathName().toStdString() + "/";
 		auto processor = std::make_unique<mdJucePlugin::AudioPluginAudioProcessor>(
-			_mm ? md::MachineModel::Monomachine : md::MachineModel::Machinedrum, config, false);
+			_mm ? md::MachineModel::Monomachine : md::MachineModel::Machinedrum, config);
 		juce::AudioProcessor& ap = *processor;
 		ap.prepareToPlay(44100.0, 128);
 
