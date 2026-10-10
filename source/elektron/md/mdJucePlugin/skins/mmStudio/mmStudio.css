@@ -2131,6 +2131,24 @@ img,svg,canvas{-webkit-user-drag:none}
    title loses its target (the rail shows the track) */
 @media (max-width:1520px){.genbar>.genband{gap:7px}.genbar{gap:8px}.genbar .gbt{min-width:0}.genbar .gbc{gap:4px}.genbar .gv{min-width:44px;padding:0 5px}.genbar .gbc .seg{gap:5px;margin-right:0}.genbar .gbc .seg button{letter-spacing:.03em}.genbar .gkeys{gap:5px}}
 @media (max-width:1380px){.genbar .gbt span{display:none}.genbar .gbc .seg{gap:5px}.genbar .gbc .seg button{letter-spacing:.04em}.genbar .gbl{letter-spacing:.1em}}
+/* B-056: the groups in a row of their own (.gflow, 76-gen.js) that is cut at its end, so R and Defaults always show;
+   genBarFit() adds fit1..fit3 while the groups do not fit (a page zoomed below 100 % has its small text raised by WebKit):
+   fit1 drops the title's target and R's "⌥R all" (both in the tooltips), fit2 narrows spacing and windows, fit3 sets
+   the windows' labels at Silkscreen's own 8 px (below the sizes WebKit raises) */
+.genbar .gflow{display:flex;align-items:flex-end;gap:inherit;flex:1 1 auto;min-width:0;overflow:hidden}
+.genbar.fit1 .gbt span,.genbar.fit1 .kc small em{display:none}
+.genbar.fit1 .gbt{min-width:0}
+.genbar.fit2>.genband{gap:5px}
+.genbar.fit2 .gbt b{letter-spacing:.1em}
+.genbar.fit2 .gbl{letter-spacing:.04em;gap:4px}
+.genbar.fit2 .gbl::after{min-width:6px}
+.genbar.fit2 .gbc{gap:3px}
+.genbar.fit2 .gbc .seg{gap:4px}
+.genbar.fit2 .gbc .seg button{letter-spacing:0}
+.genbar.fit2 .gv{min-width:36px;padding:0 3px}
+.genbar.fit2 .kc small{letter-spacing:.02em}
+.genbar.fit2 .gkeys{gap:4px}
+.genbar.fit3 .gv small{font-size:8px;letter-spacing:0}
 /* the rail's spec tags: the machine's name comes first, the tag takes what is left (gone under 1380 px) */
 .th .nm.tagged b{flex:none}
 .th .nm .gtag{flex:0 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis}

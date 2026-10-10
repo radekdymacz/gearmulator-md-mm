@@ -4,6 +4,14 @@
 repository; the site sends reports to the contact address. Newest first. Each entry:
 where it came from, the setup, what happens, what should happen, status.*
 
+## B-056 · Monomachine: the GEN bar's R and Defaults cut off when the page is zoomed below 100 %
+
+- **From:** the journey `mm-shots-sound`, 2026-10-10, in a `--background` run (it passed in the slice 5 run, at full size).
+- **What happens:** on Sequence the GEN bar's keys, R and Defaults, run past the bar's end and are cut off on a synth track: 243-248 px in the background run's small window, 72-124 px in a 1000x650 window. MIDI tracks fit; 1440x900 and 1280x760 windows fit, with no room to spare.
+- **Cause:** not the settings nor a later merge: the page's zoom. A window under 1440 x 720 points zooms the page below 100 % (mdPageZoom.h), and on a zoomed-out page WebKit raises every 9 to 15 px text to 9 points on screen, its minimum logical font size (WKPreferences has no setting for it): in the background run's 864x554 window (zoom 0.6) all of it becomes 15 px, at 1000x650 (0.69) 12.96 px, at 1280x760 (0.89) 9 and 10 px become 10.13. The GEN bar's labels, values and LED rows are 9 to 14 px, the MM's bar holds NOTES and the roll's Draw and length keys too, and its groups and keys were one row cut at its end, keys last.
+- **Fix (0.5, `fix/mm-genbar-fit`):** the groups in a row of their own (`.gflow`) that is cut at its end, the keys after it, so R and Defaults always show; `genBarFit()` (76-gen.js) tightens the bar in measured steps while the groups do not fit: fit1 drops the title's target and R's "⌥R all" (both in the tooltips), fit2 narrows spacing and windows, fit3 sets the windows' labels at Silkscreen's own 8 px. Run on every render of the bar, the roll keys' change, a resize and the fonts' load. No `:has()`; the Machinedrum's bar unchanged. Check: the journey `mm-gen-bar-fit` (every run: Random and Euclid on a synth and a MIDI track, a MEASURE line each with the room, the fit step, the groups' cut and the text floor); `mm-shots-sound` the same with snapshots. Measured after: 1440x900 and 1280x760 fit0, 1000x650 fit1-2, the background window fit1-3 (fresh and copied settings), keys inside and no group cut in every case.
+- **Status:** fixed on `fix/mm-genbar-fit` for 0.5.
+
 ## B-055 · macOS 12: the Sound page's rows stretched, the screens short at the foot (Monomachine 0.4.0)
 
 - **From:** Radek, 2026-10-10: Monomachine Editor 0.4.0, VST3 and AU in Ableton Live, macOS 12, window about 1620x1060.
