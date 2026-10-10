@@ -389,5 +389,62 @@ const Journey = (() => {
 		const text = JSON.stringify("<!doctype html>\n" + doc.outerHTML), size = 120000, n = Math.ceil(text.length / size);
 		for (let i = 0; i < n; i++) Bridge.log(`SNAP ${name} ${i + 1}/${n} ${text.slice(i * size, (i + 1) * size)}`);
 	}
-	return { run, demo, ok, sleep, until, u, onScreen, osKeyPath, menu, editorMenuJourney, snapshot };
+	/* B-054: the page as macOS 12's WebKit 15 lays it out, measured in this engine. Every <style> is read as WebKit 15
+	   reads it (DeskCompat.safari15: no subgrid, no :has(), the colour rewrite), the boxes measured, the stylesheets
+	   put back. What moved or changed size is listed, outermost first (an element inside one already listed and
+	   moved with it is left out): [] when the old engine lays the page out as this one. */
+	async function safari15Diff(slack = 2, tries = 3) {
+		const all = [...document.body.querySelectorAll("*")].filter(e => !e.closest("#journey-pointer"));
+		const boxes = () => all.map(e => { const r = e.getClientRects().length ? e.getBoundingClientRect() : null; return r && [r.left, r.top, r.width, r.height]; });
+		/* two frames and the fonts (a stylesheet read again declares its fonts again) */
+		const frame = async () => { await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r))); if (document.fonts) await document.fonts.ready; await sleep(60); };
+		const before = boxes(), sheets = [...document.querySelectorAll("style")], kept = sheets.map(x => x.textContent);
+		let after;
+		try { sheets.forEach(x => { x.textContent = DeskCompat.safari15(x.textContent); }); await frame(); after = boxes(); }
+		finally { sheets.forEach((x, i) => { x.textContent = kept[i]; }); await frame(); }
+		/* the page drew itself again meanwhile (its elements replaced): measure again */
+		if (all.some(e => !e.isConnected) && tries > 1) { await sleep(400); return safari15Diff(slack, tries - 1); }
+		const moved = [], seen = new Map();
+		all.forEach((e, i) => {
+			const a = before[i], b = after[i];
+			if (!a && !b) return;
+			if (!a || !b) { moved.push([e, b ? "shown" : "gone"]); seen.set(e, null); return; }
+			const d = b.map((v, k) => Math.round(v - a[k]));
+			if (d.every(v => Math.abs(v) <= slack)) return;
+			seen.set(e, d);
+			/* one already listed holds it and it only moved along (same size, same shift) */
+			for (let p = e.parentElement; p; p = p.parentElement) if (seen.has(p)) { const q = seen.get(p); if (!q || (Math.abs(d[2]) <= slack && Math.abs(d[3]) <= slack) || (q[0] === d[0] && q[1] === d[1])) return; }
+			moved.push([e, `${Math.round(a[2])}x${Math.round(a[3])} at ${Math.round(a[0])},${Math.round(a[1])} -> ${Math.round(b[2])}x${Math.round(b[3])} at ${Math.round(b[0])},${Math.round(b[1])}`]);
+		});
+		return moved.map(([e, what]) => describe(e) + " " + what);
+	}
+	/* Every view of an editor, two journeys from one list of {name, open(u, c), close(u, c), wait}:
+	     <prefix>-old-webkit   in every run: each view laid out as WebKit 15 does is the same as here (safari15Diff)
+	     <prefix>-shots-views  asked by name only: each view as a snapshot (scripts/mdmm-snap.py [--safari15] [--size])
+	   A view that cannot open here (needs) is skipped. */
+	function viewJourneys(prefix, views) {
+		/* each view: open, look, close (in one step, so the next view starts from a closed page); every view's
+		   differences are logged ("OLDWEBKIT <view> ...") and the last step fails on any of them */
+		const step = (v, shots) => ({ say: v.name, act: async (u, c) => {
+			c.diffs = c.diffs || {};
+			const why = v.needs ? v.needs() : null;
+			if (why) { Bridge.log(`OLDWEBKIT ${prefix}-${v.name} skipped: ${why}`); return; }
+			try {
+				await v.open(u, c); await sleep(v.wait ?? 700);
+				if (shots) snapshot(`${prefix}-${v.name}`);
+				else {
+					const d = await safari15Diff();
+					if (d.length) c.diffs[v.name] = d;
+					Bridge.log(`OLDWEBKIT ${prefix}-${v.name} ${d.length ? d.length + ": " + d.join("; ") : "same"}`);
+				}
+			} finally { if (v.close) { await v.close(u, c); await sleep(300); } }
+		} });
+		const verdict = { say: "every view as here", screen: c => { const k = Object.keys(c.diffs || {});
+			return ok(!k.length, k.map(n => `${n}: ${c.diffs[n].length} boxes laid out otherwise by WebKit 15 (${c.diffs[n].slice(0, 3).join("; ")})`).join(" | ")); } };
+		return [
+			{ name: `${prefix}-old-webkit`, needs: () => typeof DeskCompat === "undefined" || !DeskCompat.safari15 ? "no DeskCompat.safari15" : null, steps: [...views.map(v => step(v, false)), verdict] },
+			{ name: `${prefix}-shots-views`, needs: () => location.search.includes(`${prefix}-shots`) ? null : "screenshots only when asked by name", steps: views.map(v => step(v, true)) }
+		];
+	}
+	return { run, demo, ok, sleep, until, u, onScreen, osKeyPath, menu, editorMenuJourney, snapshot, safari15Diff, viewJourneys };
 })();

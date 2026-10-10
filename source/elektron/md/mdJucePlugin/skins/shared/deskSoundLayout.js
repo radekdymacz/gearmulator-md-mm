@@ -34,4 +34,26 @@ function soundRow(list, cls, o) {
 		return `<div class="sgcol${kind}">${c.map(x => o.group(x, cn, first(x), kind === " lone" ? o.lone(x) : "")).join("")}</div>`;
 	}).join("")}</div>`;
 }
-if (typeof module !== "undefined") module.exports = { soundRow };
+/* The rows as drawn (a journey's or scripts/mdmm-snap.py's check, B-054): in a row with screens the screens take the
+   row's free height, the title and the box line keep theirs. A problem each: a screen more than `slack` px below its
+   title or above its boxes (0.4.0 on WebKit 15: the title at the top of a tall row, an empty band, a short screen),
+   or screens of one page not as tall as each other. Rows laid out as wrapping boxes (a narrow window) are skipped. */
+function soundRowsCheck(root, slack = 12) {
+	const out = [], hs = [];
+	const r = e => e.getBoundingClientRect();
+	for (const row of root.querySelectorAll(".snd .sgrow:not(.flat)")) {
+		if (getComputedStyle(row).display !== "grid" || !row.getClientRects().length) continue;
+		for (const plot of row.querySelectorAll(".sg>.plot")) {
+			/* the title's words, not its header: a stretched header reaches down to the screen */
+			const sg = plot.parentElement, head = sg.querySelector(":scope>header h3"), boxes = sg.querySelector(":scope>.ctl,:scope>.sgline,:scope>.sgsel,:scope>.lfobody");
+			const name = (head && head.textContent.trim()) || "?", p = r(plot);
+			hs.push([name, Math.round(p.height)]);
+			if (head && p.top - r(head).bottom > slack) out.push(`${name}: screen ${Math.round(p.top - r(head).bottom)} px below its title`);
+			if (boxes && r(boxes).top - p.bottom > slack) out.push(`${name}: screen ${Math.round(r(boxes).top - p.bottom)} px above its boxes`);
+		}
+	}
+	const lo = Math.min(...hs.map(x => x[1])), hi = Math.max(...hs.map(x => x[1]));
+	if (hs.length && hi - lo > 2) out.push(`screens from ${lo} to ${hi} px tall: ${hs.map(x => x.join(" ")).join(", ")}`);
+	return { screens: hs.map(x => x[1]), problems: out };
+}
+if (typeof module !== "undefined") module.exports = { soundRow, soundRowsCheck };

@@ -63,7 +63,7 @@ img,svg,canvas{-webkit-user-drag:none}
 @media (max-width:1520px){.genbar>.genband{gap:7px}.genbar{gap:8px}.genbar .gbt{min-width:0}.genbar .gbc{gap:4px}.genbar .gv{min-width:44px;padding:0 5px}.genbar .gbc .seg{gap:5px;margin-right:0}.genbar .gbc .seg button{letter-spacing:.03em}.genbar .gkeys{gap:5px}}
 @media (max-width:1380px){.genbar .gbt span{display:none}.genbar .gbc .seg{gap:5px}.genbar .gbc .seg button{letter-spacing:.04em}.genbar .gbl{letter-spacing:.1em}}
 /* the rail's spec tags: the machine's name comes first, the tag takes what is left (gone under 1380 px) */
-.th .nm:has(.gtag) b{flex:none}
+.th .nm.tagged b{flex:none}
 .th .nm .gtag{flex:0 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis}
 @media (max-width:1380px){.th .nm .gtag{display:none}}
 /* ===== Sound by function (MM-PORT-PLAN e; 90-sound.js renderSound): the Machinedrum Editor's page and layout
@@ -184,7 +184,7 @@ body.dockother #rail .railparams>:is(.lpspace,.pagetabs,.pkcol),body.dockother #
 .perf3 .menvcard .menvplot>canvas.ed{position:absolute;inset:0;width:100%;height:100%!important;min-height:0!important}
 .perf3 .asgcard{--joy:clamp(200px,calc(100vh - 500px),440px);grid-template-rows:auto auto minmax(0,1fr)}
 .perf3 .asgcard .asgn{grid-template-columns:var(--joy) 270px;align-items:start}
-.perf3 .asgcard .asgn:not(:has(.joy)){grid-template-columns:calc(var(--joy) + 284px)}
+.perf3 .asgcard .asgn.nojoy{grid-template-columns:calc(var(--joy) + 284px)}
 .perf3 .asgcard .joy{width:var(--joy)!important;height:var(--joy)!important}
 /* Multi map: the map table and the keyboard below keep their height, so the stick gets what is left of the window
    (about 100vh minus the page's other rows) and never more than its card's row. */
