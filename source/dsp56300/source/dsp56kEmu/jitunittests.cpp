@@ -75,6 +75,7 @@ namespace dsp56k
 		nopLoopFastForward();
 		pollLoopFastForward();
 		pollCycleFastForward();
+		pollPortFastForward();
 		cmpmLegacy();
 	}
 
@@ -643,6 +644,119 @@ namespace dsp56k
 
 						if(action != 1)
 							testPeripheralsX.write(XIO_DDR0, 0x10);
+						++slice;
+					}
+
+					const auto skipped = testDsp.getFastForwardedTurns();
+					if(_mode != Mode::On || !program.idle)
+						verify(skipped == 0);
+					skippedTotal += skipped;
+					return states;
+				};
+
+				const auto legacy = run(Mode::Legacy);
+				verify(run(Mode::Legacy) == legacy);
+				verify(run(Mode::Off) == legacy);
+				verify(run(Mode::On) == legacy);
+			}
+
+			verify(program.idle == (skippedTotal > 0));
+		}
+	}
+
+	void JitUnittests::pollPortFastForward()
+	{
+		// The two Port C polls (the block sync from the other DSP), word for word: the Machinedrum's DSP2 at p:bb, three
+		// blocks below P:$100 (move x:PDRC,b; and #2,b; cmp b,a; beq p:bb), and the Monomachine's DSP2 at p:195, one
+		// block (movep x:PDRC,b; and #2,b; cmp b,a; beq p:195). Port C is declared pure (JitConfig::pollLoopPureReads);
+		// the host sets the pin between slices, so the loop is left and entered again. The same loops on Port D, which is
+		// not declared, must never be fast-forwarded. The state after every slice must be the same without the code,
+		// with it off and with it on.
+		struct Program { TWord base; std::vector<TWord> loop; bool idle; };
+		const Program programs[] =
+		{
+			{0xbb, {0x57f000, 0xffffbd, 0x01428e, 0x200005, 0x05a7dc}, true},
+			{0x195, {0x044fdd, 0x01428e, 0x200005, 0x05a7dd}, true},
+			{0xbb, {0x57f000, 0xffffad, 0x01428e, 0x200005, 0x05a7dc}, false},	// Port D
+			{0x195, {0x044fcd, 0x01428e, 0x200005, 0x05a7dd}, false},			// Port D
+		};
+
+		struct Case { uint32_t instructionTarget; uint32_t cycleDeadline; };
+		const Case cases[] = {{100000, 0}, {13, 0}, {1234, 0}, {100000, 333}, {61, 17}, {7, 4093}};
+
+		enum class Mode { Legacy, Off, On };
+
+		for(const auto& program : programs)
+		{
+			uint64_t skippedTotal = 0;
+
+			for(const auto& c : cases)
+			{
+				const auto run = [&](const Mode _mode)
+				{
+					DefaultMemoryValidator validator;
+					Memory testMemory(validator, 0x10000);
+					Peripherals56303 testPeripheralsX;
+					PeripheralsNop testPeripheralsY;
+					DSP testDsp(testMemory, &testPeripheralsX, &testPeripheralsY);
+
+					auto config = testDsp.getJit().getConfig();
+					config.maxDoIterations = 4;
+					config.dynamicFastInterrupts = true;
+					config.linkJitBlocks = false;
+					config.pollLoopFastForward = _mode != Mode::Legacy;
+					config.pollCycleFastForward = _mode != Mode::Legacy;
+					if(_mode != Mode::Legacy)
+						config.pollLoopPureReads = {Essi::ESSI_PDRC};
+					testDsp.getJit().setConfig(config);
+
+					testDsp.resetHW();
+
+					TWord pc = program.base;
+					for(const auto w : program.loop)
+						testDsp.memWriteP(pc++, w);
+					testDsp.memWriteP(pc, 0x0c0000 | program.base);	// the exit: back to the head
+
+					testDsp.regs().a.var = 0;
+					testPeripheralsX.getPortC().hostWrite(0);
+					testPeripheralsX.getPortD().hostWrite(0);
+
+					testDsp.setPC(program.base);
+					testDsp.setIdleFastForward(_mode == Mode::On);
+					testPeripheralsX.resetDelayCycles(testDsp.getInstructionCounter(), c.instructionTarget);
+					if(c.cycleDeadline)
+						testPeripheralsX.setCycleDeadline(c.cycleDeadline);
+
+					std::vector<uint64_t> states;
+					const auto record = [&]
+					{
+						const auto& r = testDsp.regs();
+						states.insert(states.end(), {uint64_t{testDsp.getPC().toWord()}, static_cast<uint64_t>(r.a.var),
+							static_cast<uint64_t>(r.b.var), uint64_t{r.sr.toWord()},
+							testDsp.getInstructionCounter(), testDsp.getCycles(), testPeripheralsX.getTargetClock()});
+					};
+
+					uint64_t target = testDsp.getCycles();
+					uint32_t slice = 0;
+					for(const uint64_t step : {37ull, 500ull, 1ull, 4999ull, 12345ull, 3ull, 40000ull, 777ull, 2ull})
+					{
+						target += step;
+						testDsp.execUntilCycles(target);
+						record();
+
+						// the host moves the pin: the sync edge comes (out of the loop), or goes again
+						const bool leave = (slice & 1) == 0;
+						testPeripheralsX.getPortC().hostWrite(leave ? 2 : 0);
+						testPeripheralsX.getPortD().hostWrite(leave ? 2 : 0);
+
+						const auto stop = testDsp.getCycles() + step / 2 + 1;
+						const DSP::ScopedFastForwardLimit limit(testDsp, stop);
+						while(testDsp.getCycles() < stop)
+							testDsp.execJit();
+						record();
+
+						testPeripheralsX.getPortC().hostWrite(0);
+						testPeripheralsX.getPortD().hostWrite(0);
 						++slice;
 					}
 

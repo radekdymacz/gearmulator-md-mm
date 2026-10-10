@@ -80,6 +80,7 @@ namespace dsp56k
 		void cmpmLegacy();
 		void pollLoopFastForward();
 		void pollCycleFastForward();
+		void pollPortFastForward();
 		void programMemoryInvalidation();
 
 		void emit(TWord _opA, TWord _opB = 0, TWord _pc = 0) override;

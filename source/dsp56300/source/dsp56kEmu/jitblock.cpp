@@ -1,4 +1,6 @@
 #include "dsp.h"
+
+#include <algorithm>
 #include "interrupts.h"
 #include "jitemitter.h"
 #include "jitblock.h"
@@ -114,10 +116,43 @@ namespace dsp56k
 			return isDmaRegister(getFieldValue<Movep_Spp, Field_pppppp>(_op) + 0xffffc0);
 		}
 
+		// a read of one of the host's pure registers (JitConfig::pollLoopPureReads), by movep or by a move from an
+		// absolute address
+		bool isPureRegisterRead(const Instruction _instA, const Instruction _instB, const TWord _opA, const TWord _opB, const std::vector<TWord>& _pure)
+		{
+			if(_pure.empty() || _instB != Invalid)
+				return false;
+
+			TWord addr;
+			switch(_instA)
+			{
+			case Movep_Spp:
+				if(getFieldValue<Movep_Spp, Field_W>(_opA) || getFieldValue<Movep_Spp, Field_s>(_opA))
+					return false;	// a write, or Y space
+				addr = getFieldValue<Movep_Spp, Field_pppppp>(_opA) + 0xffffc0;
+				break;
+			case Movep_SXqq:
+				if(getFieldValue<Movep_SXqq, Field_W>(_opA))
+					return false;	// a write
+				addr = getFieldValue<Movep_SXqq, Field_q, Field_qqqqq>(_opA) + 0xffff80;
+				break;
+			case Movex_ea:
+				if(!getFieldValue<Movex_ea, Field_W>(_opA) || getFieldValue<Movex_ea, Field_MMM, Field_RRR>(_opA) != MMMRRR_AbsAddr)
+					return false;	// a write, or not an absolute address
+				addr = _opB;
+				break;
+			default:
+				return false;
+			}
+			return std::find(_pure.begin(), _pure.end(), addr) != _pure.end();
+		}
+
 		// an op of a poll loop other than its branches
-		bool isPollLoopBodyOp(const Instruction _instA, const Instruction _instB, const TWord _opA)
+		bool isPollLoopBodyOp(const Instruction _instA, const Instruction _instB, const TWord _opA, const TWord _opB, const std::vector<TWord>& _pure)
 		{
 			if(_instA == Nop)
+				return true;
+			if(isPureRegisterRead(_instA, _instB, _opA, _opB, _pure))
 				return true;
 			if(isDmaRegisterRead(_instA, _opA) || isPollLoopImmediateAlu(_instA))
 				return _instB == Invalid;
@@ -152,6 +187,8 @@ namespace dsp56k
 			auto read = RegisterMask::None;
 			if(_instA == Movep_Spp)
 				written = getRegisters(Movep_Spp, Field_dddddd, _opA);	// getRegisters() leaves out a movep's destination
+			else if(_instA == Movep_SXqq)
+				written = getRegisters(Movep_SXqq, Field_dddddd, _opA);
 			else
 				Opcodes::getRegisters(written, read, _opA, _instA, _instB);
 
@@ -240,7 +277,7 @@ namespace dsp56k
 				if(!isPollLoopConditionalBranch(instA, instB, opA))
 					return false;
 			}
-			else if(!isPollLoopBodyOp(instA, instB, opA))
+			else if(!isPollLoopBodyOp(instA, instB, opA, opB, m_config.pollLoopPureReads))
 			{
 				return false;
 			}
@@ -302,7 +339,7 @@ namespace dsp56k
 				if(jump)
 					return false;
 			}
-			else if(!isPollLoopBodyOp(op.instA, op.instB, op.opA))
+			else if(!isPollLoopBodyOp(op.instA, op.instB, op.opA, op.opB, m_config.pollLoopPureReads))
 			{
 				return false;
 			}
@@ -351,7 +388,7 @@ namespace dsp56k
 				if(target >= head && target < end)
 					return false;
 			}
-			else if(!isPollLoopBodyOp(op.instA, op.instB, op.opA))
+			else if(!isPollLoopBodyOp(op.instA, op.instB, op.opA, op.opB, m_config.pollLoopPureReads))
 			{
 				return false;
 			}

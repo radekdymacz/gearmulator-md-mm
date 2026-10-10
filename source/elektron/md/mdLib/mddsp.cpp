@@ -121,9 +121,14 @@ namespace md
 		// p:17f and p:18d, the MD's jset #23,x:DCR0,* at p:cf). Same switch.
 		config.pollLoopFastForward = true;
 		// And into poll loops over several blocks (JitBlock::findPollCycle: the MD's DDR0 poll at p:3c, five blocks
-		// because blocks below P:$100 are two words). Same switch. Needs linkJitBlocks off, as above. Not covered
-		// yet: the Port C polls, which read through Hardware's edge logic.
+		// because blocks below P:$100 are two words). Same switch. Needs linkJitBlocks off, as above.
 		config.pollCycleFastForward = true;
+		// The Port C data register may be polled too (the MD's DSP2 at p:bb, the MM's DSP2 at p:195: the block sync
+		// from DSP1). Hardware sets that pin from DSP1's writes (hostWrite), or, in the MD's on-demand link, through a
+		// read that releases a pending edge once DSP1's DMA4 is on (setHostInputSource in mdLinkWindowFlushed): a
+		// second read releases nothing more. Either changes only while DSP1 runs, which happens in a peripheral run of
+		// this DSP (the link's callbacks) or between its runs. Port D is not pure: it follows this DSP's counter.
+		config.pollLoopPureReads = {dsp56k::Essi::ESSI_PDRC};
 #if defined(__APPLE__) && defined(__aarch64__)
 		// JIT blocks are first compiled synchronously by the audio thread. On Apple
 		// silicon, the optimizer's cold cost exceeds its measured steady-state gain.
