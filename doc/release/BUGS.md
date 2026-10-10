@@ -4,7 +4,7 @@
 repository; the site sends reports to the contact address. Newest first. Each entry:
 where it came from, the setup, what happens, what should happen, status.*
 
-## B-054 · macOS 12: the Sound page's rows stretched, the screens short at the foot (Monomachine 0.4.0)
+## B-055 · macOS 12: the Sound page's rows stretched, the screens short at the foot (Monomachine 0.4.0)
 
 - **From:** Radek, 2026-10-10: Monomachine Editor 0.4.0, VST3 and AU in Ableton Live, macOS 12, window about 1620x1060.
 - **What happens:** on the Sound workspace each group's title sits at the top of a tall row, then an empty band, then a short screen (about 60 px) and its value boxes at the row's foot.
