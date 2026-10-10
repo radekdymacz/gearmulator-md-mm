@@ -57,6 +57,21 @@ In small slices, one commit each, each checked before the next (build, unit test
   three synthLib audio-thread fixes, the resampler latency).
 - Watch: upstream's new ColdFire V2 / MCF5206e model (the MD/MM main chip).
 
+## Monomachine at the Machinedrum's level (decided 2026-10-10: 0.5 = clean-up + MM parity)
+
+The gap list is [MM-PARITY-2026-10-09.md](../modern-ux/MM-PARITY-2026-10-09.md); the port order is
+[MM-PORT-PLAN.md](../modern-ux/MM-PORT-PLAN.md). On top of the clean-up, in this order:
+
+| # | Slice | Size |
+|---|---|---|
+| 1 | GLOBAL: the top-bar key and panel; MIDI channels first (B-051: an imported global left tracks without a channel, so sound edits were lost), then control in/out, master tune | M |
+| 2 | Step selection, ⌘C/V/X/D/A, move and extend, ⌘-drag copy, the step menu, fill moved to the menu, Delete and the LCD COPY/CLR/PASTE on the selection | M-L |
+| 3 | Piano roll: note length like Ableton/Digitakt (I-010), draw toggle and box select (I-007) | M |
+| 4 | The live-recording lock marker, the keyboard view's missing tips, the MD journeys the MM lacks | S-M |
+| 5 | The Sound page layout and GEN/MUTATE as on the MD, where the parity list marks them "a" | M |
+
+CPU step 2 moves to 0.6.
+
 ## User fixes beside it
 
 From the Discord cross-check of 2026-10-10:
