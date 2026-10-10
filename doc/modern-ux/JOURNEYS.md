@@ -80,13 +80,13 @@ no journey yet); **not testable** (why). "—": the editor has no such feature.
 | Lock lane: pick a parameter, draw locks, clear | md-seq-lock-lane PASS | mm-seq-lock-lane PASS |
 | Lock lane ramp (Shift-drag), erase (Alt-drag), wheel on a step | md-seq-lock-ramp-erase-wheel PASS | mm-seq-lock-ramp-erase-wheel PASS |
 | Pages: ALL, PAGE, [ ] | md-seq-pages PASS | mm-seq-pages PASS |
-| Copy, paste, clear steps (Cmd+C, Cmd+V; MD since K2: Delete with no selection does nothing, Clr clears the page) | md-seq-copy-paste-clear PASS | mm-seq-copy-paste-clear PASS |
-| Select steps with ⌘-click / ⌘-drag (K2), the LCD's PASTE and CLR on the selection, ⌘D | md-seq-select-copy-paste PASS | — (K7) |
-| The step menu (right-click a step, K3): accent, copy, paste here | md-seq-step-menu PASS | — (K7) |
+| Copy, paste, clear steps (Cmd+C, Cmd+V; since K2 (MD) and K7 (MM): Delete with no selection does nothing, Clr clears the page) | md-seq-copy-paste-clear PASS | mm-seq-copy-paste-clear PASS (2026-10-10, K7) |
+| Select steps with ⌘-click / ⌘-drag (K2; MM K7: the piano roll, ⌘⇧-click on the next track's roll for a two-track block), the LCD's PASTE and CLR on the selection, ⌘D | md-seq-select-copy-paste PASS | mm-seq-select-copy-paste PASS (2026-10-10) |
+| The step menu (right-click a step, K3; MM K7: in the roll or a trig row): accent (MM: slide), copy, paste here | md-seq-step-menu PASS | mm-seq-step-menu PASS (2026-10-10) |
 | Cmd+C, Cmd+V, Cmd+Z as the operating system delivers them (real `NSEvent`s through AppKit's key path, `u.osKey`; B-015), standalone and VST3, 2026-10-08 | md-seq-os-copy-paste PASS (FAIL without the fix: no key reached the page) | not covered |
-| A selected step copied and pasted with the mouse (the top bar's Copy, Paste, Clr), 2026-10-08 | md-seq-copy-paste-buttons PASS | — (no step selection yet) |
+| A selected step copied and pasted with the mouse (the top bar's Copy, Paste, Clr), 2026-10-08 | md-seq-copy-paste-buttons PASS | mm-seq-copy-paste-buttons PASS (2026-10-10) |
 | Clear the whole pattern (Alt+Delete), undo | md-seq-clear-pattern-undo PASS | mm-seq-clear-pattern-undo PASS |
-| Every-N fill (MD: the step menu since K3; MM: Cmd-click) | md-seq-fill-every PASS | mm-seq-fill-every PASS |
+| Every-N fill (the step menu: MD since K3, MM since K7) | md-seq-fill-every PASS | mm-seq-fill-every PASS (2026-10-10, the step menu) |
 | Rotate (Alt+← →) | md-seq-rotate PASS | mm-seq-rotate PASS |
 | A rotate run ends when Alt is seen up in any event: the next rotate is its own undo step (2026-10-05) | md-seq-rotate-undo PASS | mm-seq-roll-paint PASS (after mm-seq-rotate, its paint and erase are their own undo steps) |
 | Paste to many marked tracks (Shift-click headers) | md-seq-paste-many PASS | mm-seq-paste-many PASS |
