@@ -51,7 +51,8 @@ const MmJourneys = (() => {
 		return { c, n, fx: (q.x0 + q.x1) / 2 / r.width, fy: (G.top + (row + 0.5) * G.rh) / r.height };
 	}
 	/* the bar of note pitch on step s: the step before it that holds anything is a note whose first pitch it is */
-	const underBar = (t, s, pitch) => { const st = S().tracks[t].steps; for (let k = s - 1; k >= 0; k--) if (st[k]) return !st[k].off && st[k].n?.[0] === pitch; return false; };
+	const trkOf = t => t < 6 ? S().tracks[t] : S().midi[t - 6];
+	const underBar = (t, s, pitch) => { const st = trkOf(t).steps; for (let k = s - 1; k >= 0; k--) if (st[k]) return !st[k].off && st[k].n?.[0] === pitch; return false; };
 	const freeSteps = (t, n, from = 0, pitch = null) => { const busy = trigsOf(t), out = []; for (let s = from; s < S().len && out.length < n; s++) if (!busy.includes(s) && !S().tracks[t].steps[s] && (pitch == null || !underBar(t, s, pitch)) && !out.some(x => Math.abs(x - s) < 2)) out.push(s); return out; };
 
 	/* ---------- start-up ---------- */
@@ -907,7 +908,7 @@ const MmJourneys = (() => {
 		]
 	};
 	/* four empty steps in a row (no note, no NOTE OFF) on track t */
-	const freeRun = (t, n = 4) => { const tr = S().tracks[t], busy = trigsOf(t); for (let s = 0; s + n <= S().len; s++) if ([...Array(n).keys()].every(k => !tr.steps[s + k] && !busy.includes(s + k))) return [...Array(n).keys()].map(k => s + k); return null; };
+	const freeRun = (t, n = 4) => { const tr = trkOf(t), busy = t < 6 ? trigsOf(t) : midiTrigsOf(t); for (let s = 0; s + n <= S().len; s++) if ([...Array(n).keys()].every(k => !tr.steps[s + k] && !busy.includes(s + k))) return [...Array(n).keys()].map(k => s + k); return null; };
 	/* a drag in the roll from step a through steps b..., at the roll's middle row */
 	const dragRoll = async (u, t, run, m = {}) => { const p = rollCell(t, run[0]), w = p.c.getBoundingClientRect().width;
 		await u.drag(p.c, run.slice(1).map(s => [(rollCell(t, s).fx - p.fx) * w, 0]), m, { fx: p.fx, fy: p.fy }); };
@@ -920,13 +921,88 @@ const MmJourneys = (() => {
 				c.run = freeRun(c.t); c.n = rollCell(c.t, c.run[0]).n; c.t0 = trigsOf(c.t); await dragRoll(u, c.t, c.run); },
 				screen: c => ok(c.run.every(s => same(S().tracks[c.t].steps[s]?.n, [c.n])), "roll " + c.run.map(s => JSON.stringify(S().tracks[c.t].steps[s]?.n || null)).join(",")),
 				machine: c => ok(c.run.every(s => trigsOf(c.t).includes(s)), "pattern trigs " + trigsOf(c.t).join(",")), within: 15000 },
+			/* I-010: the note before them keeps its length: a NOTE OFF on the first step when it ran into it */
 			{ say: "Alt-press the first and drag over the others: all four erased", act: (u, c) => dragRoll(u, c.t, c.run, { alt: true }),
-				screen: c => ok(c.run.every(s => !S().tracks[c.t].steps[s]), "roll " + c.run.map(s => JSON.stringify(S().tracks[c.t].steps[s] || null)).join(",")),
+				screen: c => ok(c.run.every((s, k) => !S().tracks[c.t].steps[s] || k === 0 && S().tracks[c.t].steps[s].off), "roll " + c.run.map(s => JSON.stringify(S().tracks[c.t].steps[s] || null)).join(",")),
 				machine: c => ok(c.run.every(s => !trigsOf(c.t).includes(s)), "pattern trigs " + trigsOf(c.t).join(",")), within: 15000 },
 			{ say: "Cmd+Z: the erase was one undo step, all four are back", act: u => { blur(); u.key("z", { cmd: true }); }, machine: c => ok(c.run.every(s => trigsOf(c.t).includes(s)), "pattern trigs " + trigsOf(c.t).join(",")), within: 15000 },
 			{ say: "Cmd+Z: the paint was one undo step, the track is as before", act: u => { blur(); u.key("z", { cmd: true }); }, machine: c => ok(same(trigsOf(c.t), c.t0), "pattern trigs " + trigsOf(c.t).join(",") + ", was " + c.t0.join(",")), within: 15000 }
 		],
 		async tidy(u, c) { if (c.t0 && !same(trigsOf(c.t), c.t0)) await undoUntil(u, () => same(trigsOf(c.t), c.t0)); }
+	};
+	/* ---------- 0.5 slice 3: the piano roll's note lengths, draw and select (I-007, I-010) ---------- */
+	const offsOf = t => (t < 6 ? patDoc()?.tracks[t]?.noteOff : patDoc()?.midiTracks?.[t - 6]?.noteOff || []).slice().sort((a, b) => a - b);
+	const midiTrigsOf = t => (patDoc()?.midiTracks?.[t - 6]?.trig || []).slice().sort((a, b) => a - b);
+	const lenLock = (t, s) => (patDoc()?.locks || []).find(l => l.track === t - 6 && l.page === 7 && l.param === 0)?.steps.find(([x]) => x === s)?.[1];
+	/* a point of the roll: step s (fx: its middle, or its right edge less 2 px), pitch n (the row's middle) */
+	const rollAt = (t, s, n, edge) => { const c = $1(`#seq canvas.roll[data-big][data-t="${t}"]`), G = laneGeom(c), r = c.getBoundingClientRect(), q = G.col[s];
+		if (!q || n < G.lo || n > G.hi) throw new Error(`step ${s + 1} / ${noteName(n)} is not shown`);
+		return { c, fx: (edge ? q.x1 - 2 : (q.x0 + q.x1) / 2) / r.width, fy: (G.y(n) + G.rh / 2) / r.height, w: r.width, h: r.height }; };
+	/* a press at (s, n) dragged to (s2, n2) (and px more to the right: past a column's middle, where a length counts it) */
+	const dragAt = async (u, t, from, to, m = {}, edge = false) => { const a = rollAt(t, from[0], from[1], edge), b = rollAt(t, to[0], to[1]), dx = (b.fx - a.fx) * a.w + (to[2] || 0), dy = (b.fy - a.fy) * a.h;
+		await u.drag(a.c, [[dx / 2, dy / 2], [dx, dy]], m, { fx: a.fx, fy: a.fy }); };
+	/* Draw on and the Len key at a length (it goes round 1/16 1/8 1/4 1/2 1 bar) */
+	const drawLen = async (u, L) => { if (!S().rollDraw) u.click("#rolldraw"); for (let i = 0; i < 6 && S().rollLen !== L; i++) { u.click("#rolllen"); await sleep(80); } };
+	/* the middle row's pitch, or one next to it, with no note's bar over step s (a press there would take that note) */
+	const freePitch = (t, s) => { const n = rollCell(t, s).n; return [n, n + 1, n - 1, n + 2, n - 2].find(x => !underBar(t, s, x)) ?? n; };
+	const clickAt = (u, t, s, n) => { const p = rollAt(t, s, n); u.click(p.c, {}, p.fx, p.fy); };
+	const rollDrawLength = {
+		name: "mm-roll-draw-length",
+		steps: [
+			go("seq"),
+			{ say: "pick a synth track with six empty steps in a row", act: (u, c) => { c.t = [0, 1, 2, 3, 4, 5].find(t => freeRun(t, 6)); if (c.t == null) throw new Error("no synth track has six free steps in a row"); if (S().side === "midi") u.click('[data-side="int"]'); u.click(rail(c.t)); }, screen: c => ok(S().sel === c.t, "selected " + S().sel) },
+			{ say: "Draw on, the Len key at 1/16", act: async (u, c) => { c.d0 = S().rollDraw; c.l0 = S().rollLen; await drawLen(u, 1); }, screen: () => ok(pressed("#rolldraw") && $1("#rolllen").textContent === "1/16", "Draw " + pressed("#rolldraw") + ", Len " + $1("#rolllen").textContent) },
+			{ say: "click the run's first cell: a 1/16 note, a NOTE OFF on the next step (it does not run into the next note)", act: (u, c) => {
+				c.run = freeRun(c.t, 6); c.n = freePitch(c.t, c.run[0]); c.t0 = trigsOf(c.t); c.o0 = offsOf(c.t); if (S().stepSel) clearSel(); clickAt(u, c.t, c.run[0], c.n); },
+				screen: c => ok(!!S().tracks[c.t].steps[c.run[0]]?.n && !!S().tracks[c.t].steps[c.run[1]]?.off, "roll " + JSON.stringify(S().tracks[c.t].steps.slice(c.run[0], c.run[0] + 2))),
+				machine: c => ok(trigsOf(c.t).includes(c.run[0]) && offsOf(c.t).includes(c.run[1]), `pattern trigs ${trigsOf(c.t).join(",")}, NOTE OFFs ${offsOf(c.t).join(",")}`), within: 15000 },
+			{ say: "click the Len key (1/8), then the run's fourth cell: a note two steps long", act: async (u, c) => { u.click("#rolllen"); await sleep(150); clickAt(u, c.t, c.run[3], c.n); },
+				screen: c => ok($1("#rolllen").textContent === "1/8" && !!S().tracks[c.t].steps[c.run[5]]?.off, "Len " + $1("#rolllen").textContent + ", roll " + JSON.stringify(S().tracks[c.t].steps.slice(c.run[3], c.run[3] + 3))),
+				machine: c => ok(trigsOf(c.t).includes(c.run[3]) && offsOf(c.t).includes(c.run[5]), `pattern trigs ${trigsOf(c.t).join(",")}, NOTE OFFs ${offsOf(c.t).join(",")}`), within: 15000 },
+			{ say: "drag the first note's end over two more steps: it lasts three steps, up to the next note (its NOTE OFF goes); new notes get 3/16", act: (u, c) => dragAt(u, c.t, [c.run[0], c.n], [c.run[2], c.n, 5], {}, true),
+				screen: c => ok(!S().tracks[c.t].steps[c.run[1]] && $1("#rolllen").textContent === "3/16", "roll " + JSON.stringify(S().tracks[c.t].steps.slice(c.run[0], c.run[0] + 3)) + ", Len " + $1("#rolllen").textContent),
+				machine: c => ok(!offsOf(c.t).includes(c.run[1]) && trigsOf(c.t).includes(c.run[0]), `NOTE OFFs ${offsOf(c.t).join(",")}`), within: 15000 },
+			{ say: "Cmd+Z three times: the track as before", act: async (u, c) => { await undoUntil(u, () => same(trigsOf(c.t), c.t0) && same(offsOf(c.t), c.o0), 4); },
+				machine: c => ok(same(trigsOf(c.t), c.t0) && same(offsOf(c.t), c.o0), `pattern trigs ${trigsOf(c.t).join(",")}, NOTE OFFs ${offsOf(c.t).join(",")}`), within: 15000 }
+		],
+		async tidy(u, c) { if (c.t0 && !(same(trigsOf(c.t), c.t0) && same(offsOf(c.t), c.o0))) await undoUntil(u, () => same(trigsOf(c.t), c.t0) && same(offsOf(c.t), c.o0)); if (c.l0) setRollLen(c.l0); if (c.d0 != null && S().rollDraw !== c.d0) setRollDraw(c.d0); }
+	};
+	const rollBoxMove = {
+		name: "mm-roll-box-move",
+		steps: [
+			go("seq"),
+			{ say: "pick a synth track with eight empty steps in a row, Draw on at 1/16, click the first: a note", act: async (u, c) => {
+				c.t = [0, 1, 2, 3, 4, 5].find(t => freeRun(t, 8)); if (c.t == null) throw new Error("no synth track has eight free steps in a row"); if (S().side === "midi") u.click('[data-side="int"]'); u.click(rail(c.t)); await sleep(300);
+				c.d0 = S().rollDraw; c.l0 = S().rollLen; await drawLen(u, 1); c.run = freeRun(c.t, 8); c.n = freePitch(c.t, c.run[0]); c.t0 = trigsOf(c.t); c.o0 = offsOf(c.t); if (S().stepSel) clearSel(); clickAt(u, c.t, c.run[0], c.n); },
+				machine: c => ok(trigsOf(c.t).includes(c.run[0]) && offsOf(c.t).includes(c.run[1]), `pattern trigs ${trigsOf(c.t).join(",")}, NOTE OFFs ${offsOf(c.t).join(",")}`), within: 15000 },
+			{ say: "press B: Draw off (select)", act: u => { blur(); u.key("b"); }, screen: () => ok(!S().rollDraw && !pressed("#rolldraw"), "Draw " + S().rollDraw) },
+			{ say: "drag a box from an empty place round the note: the note is selected, its NOTE OFF too", act: (u, c) => dragAt(u, c.t, [c.run[2], c.n + 1], [c.run[0], c.n - 1]),
+				screen: c => ok(same(S().stepSel, { t: c.t, n: 1, from: c.run[0], to: c.run[0] + 2 }), "selection " + JSON.stringify(S().stepSel)), machine: c => ok(trigsOf(c.t).includes(c.run[0]), "a box changed the pattern") },
+			{ say: "drag the note four steps right: it moves, its NOTE OFF with it (one undo step)", act: (u, c) => dragAt(u, c.t, [c.run[0], c.n], [c.run[4], c.n]),
+				screen: c => ok(!!S().tracks[c.t].steps[c.run[4]]?.n && !S().tracks[c.t].steps[c.run[0]]?.n && same(S().stepSel, { t: c.t, n: 1, from: c.run[4], to: c.run[4] + 2 }), "roll " + JSON.stringify(S().tracks[c.t].steps.slice(c.run[0], c.run[0] + 6)) + ", selection " + JSON.stringify(S().stepSel)),
+				machine: c => ok(trigsOf(c.t).includes(c.run[4]) && !trigsOf(c.t).includes(c.run[0]) && offsOf(c.t).includes(c.run[5]), `pattern trigs ${trigsOf(c.t).join(",")}, NOTE OFFs ${offsOf(c.t).join(",")}`), within: 15000 },
+			{ say: "press Delete: the selected note goes", act: u => { blur(); u.key("Delete"); }, machine: c => ok(!trigsOf(c.t).includes(c.run[4]), `pattern trigs ${trigsOf(c.t).join(",")}`), within: 15000 },
+			{ say: "press B: Draw on; Cmd+Z three times (delete, move, note): the track as before", act: async (u, c) => { blur(); u.key("b"); await sleep(150); await undoUntil(u, () => same(trigsOf(c.t), c.t0) && same(offsOf(c.t), c.o0), 4); },
+				screen: () => ok(S().rollDraw, "Draw off"), machine: c => ok(same(trigsOf(c.t), c.t0) && same(offsOf(c.t), c.o0), `pattern trigs ${trigsOf(c.t).join(",")}, NOTE OFFs ${offsOf(c.t).join(",")}`), within: 15000 }
+		],
+		async tidy(u, c) { if (S().stepSel) clearSel(); if (c.t0 && !(same(trigsOf(c.t), c.t0) && same(offsOf(c.t), c.o0))) await undoUntil(u, () => same(trigsOf(c.t), c.t0) && same(offsOf(c.t), c.o0)); if (c.l0) setRollLen(c.l0); if (c.d0 != null && S().rollDraw !== c.d0) setRollDraw(c.d0); }
+	};
+	const rollMidiLen = {
+		name: "mm-roll-midi-len",
+		steps: [
+			go("seq"),
+			{ say: "click MIDI and pick a MIDI track with six empty steps in a row", act: async (u, c) => { if (S().side !== "midi") u.click('[data-side="midi"]'); await sleep(300); c.t = [6, 7, 8, 9, 10, 11].find(t => freeRun(t, 6)); if (c.t == null) throw new Error("no MIDI track has six free steps in a row"); u.click(rail(c.t)); },
+				screen: c => ok(S().sel === c.t, "selected " + S().sel) },
+			{ say: "Draw on at 1/16, click the run's first cell: a MIDI note 6 ticks long (LEN 6)", act: async (u, c) => {
+				c.d0 = S().rollDraw; c.l0 = S().rollLen; await drawLen(u, 1); c.run = freeRun(c.t, 6); c.n = freePitch(c.t, c.run[0]); c.t0 = midiTrigsOf(c.t); c.kit = S().midi[c.t - 6].v.MID[0]; if (S().stepSel) clearSel(); clickAt(u, c.t, c.run[0], c.n); },
+				machine: c => ok(midiTrigsOf(c.t).includes(c.run[0]) && (lenLock(c.t, c.run[0]) ?? c.kit) === 6, `MIDI trigs ${midiTrigsOf(c.t).join(",")}, LEN ${lenLock(c.t, c.run[0]) ?? "kit " + c.kit}`), within: 15000 },
+			{ say: "drag its end over two more steps: LEN 18 (three steps)", act: (u, c) => dragAt(u, c.t, [c.run[0], c.n], [c.run[2], c.n, 5], {}, true),
+				screen: c => ok(S().locks.get(c.t + "|MID.0")?.get(c.run[0]) === 18, "LEN lock " + S().locks.get(c.t + "|MID.0")?.get(c.run[0])),
+				machine: c => ok(lenLock(c.t, c.run[0]) === 18, "LEN " + lenLock(c.t, c.run[0])), within: 15000 },
+			{ say: "Cmd+Z twice: the track as before", act: async (u, c) => { await undoUntil(u, () => same(midiTrigsOf(c.t), c.t0), 3); },
+				machine: c => ok(same(midiTrigsOf(c.t), c.t0), "MIDI trigs " + midiTrigsOf(c.t).join(",")), within: 15000 }
+		],
+		async tidy(u, c) { if (c.t0 && !same(midiTrigsOf(c.t), c.t0)) await undoUntil(u, () => same(midiTrigsOf(c.t), c.t0)); if (c.l0) setRollLen(c.l0); if (c.d0 != null && S().rollDraw !== c.d0) setRollDraw(c.d0); if (S().side === "midi") $1('[data-side="int"]')?.click(); }
 	};
 	/* K7 (DESIGN-step-selection.md §7, the Machinedrum's md-seq-select-copy-paste): one note copied to another step of
 	   its track (the LCD's PASTE on the selection), then a block of two tracks duplicated and cleared with the LCD's CLR */
@@ -1137,7 +1213,7 @@ const MmJourneys = (() => {
 		audioPanel, romCard, notePlay,
 		tapTempo, queue, dialogKeys, trackKeys, muteKeys, lockRamp, pages, copyPaste, clearAll, fill, rotate, pasteMany, liveRec, genKeys, mutScope,
 		valueKeys, soundCopy, screenDrag, dragM, midiMutes, joyAssign, menvPort, menvLayout, osHelp, songInspector, songDrag, kitSaveAs, kitRename, kitClear, patClear, hwNoMachine,
-		blackKeys, rollPaint, selectCopyPaste, stepMenuJ, buttonsCopyPaste, syxImportJ, shotsImport, editorMenuJ, dropSyxJ, globalChannels, globalReset, globalSlot, shotsGlobal];
+		blackKeys, rollPaint, rollDrawLength, rollBoxMove, rollMidiLen, selectCopyPaste, stepMenuJ, buttonsCopyPaste, syxImportJ, shotsImport, editorMenuJ, dropSyxJ, globalChannels, globalReset, globalSlot, shotsGlobal];
 
 	async function between(u) {
 		for (let i = 0; i < 3 && dlgShown(); i++) { u.key("Escape"); await sleep(200); }

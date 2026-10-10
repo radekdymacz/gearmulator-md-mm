@@ -2413,11 +2413,13 @@ ED.lane={draw(g,W,H,c){const G=laneGeom(c),t=G.t,tr=trk(t),ink=cssv("--ink");if(
 /* a span's x range in the roll ([x0, x1]), or null when it is not in the steps shown; a MIDI note's end can fall inside a step (LEN ticks) */
 function spanX(G,sp){const a=Math.max(sp.s,G.a),b=Math.min(sp.e,G.b);if(b<=a)return null;const bi=Math.ceil(b)-1,c0=G.col[a],c1=G.col[bi];if(!c0||!c1)return null;sp.clipR=sp.e>G.b||!!sp.wrap;return[c0.x0,c1.x0+(b-bi)*(c1.x1-c1.x0)]}
 let rollDrag=null;
+/* a bar's end that drags its length: 8 px, at most a third of the bar (a narrow 1/16 note keeps a body to press) */
+const endZone=(x0,x1)=>Math.min(8,(x1-x0)/3);
 function laneHit(c,e){const G=laneGeom(c),r=c.getBoundingClientRect(),x=e.clientX-r.left,y=e.clientY-r.top;let s=null;for(const k of G.vs){const q=G.col[k];if(q&&x>=q.x0-1.5&&x<=q.x1+1.5){s=k;break}}if(s==null)return null;
  const n=G.lo+G.rows-1-Math.floor((y-G.top)/G.rh),t=G.t;
- for(const sp of noteSpans(t)){const rr=spanX(G,sp);if(rr)for(let k=0;k<sp.n.length;k++){if(sp.n[k]!==n)continue;const c0=G.col[sp.s];const x1=k===0||isMidiT(t)?rr[1]:(c0?c0.x1:-1),x0=k===0||isMidiT(t)?rr[0]:(c0?c0.x0:-1);if(x>=x0&&x<=x1)return{s:sp.s,n,k,edge:k===0&&!sp.clipR&&x>x1-8,cell:s}}
+ for(const sp of noteSpans(t)){const rr=spanX(G,sp);if(rr)for(let k=0;k<sp.n.length;k++){if(sp.n[k]!==n)continue;const c0=G.col[sp.s];const x1=k===0||isMidiT(t)?rr[1]:(c0?c0.x1:-1),x0=k===0||isMidiT(t)?rr[0]:(c0?c0.x0:-1);if(x>=x0&&x<=x1)return{s:sp.s,n,k,edge:k===0&&!sp.clipR&&x>x1-endZone(x0,x1),cell:s}}
   /* the part of a gate past the pattern's end, at its start: its end sets the length */
-  const wr=sp.wrap&&sp.n[0]===n?spanX(G,{s:0,e:sp.wrap}):null;if(wr&&x>=wr[0]&&x<=wr[1]&&x>wr[1]-8)return{s:sp.s,n,k:0,edge:true,wrap:true,cell:s}}
+  const wr=sp.wrap&&sp.n[0]===n?spanX(G,{s:0,e:sp.wrap}):null;if(wr&&x>=wr[0]&&x<=wr[1]&&x>wr[1]-endZone(wr[0],wr[1]))return{s:sp.s,n,k:0,edge:true,wrap:true,cell:s}}
  return{s,n,k:-1,cell:s}}
 /* the row under the pointer (hover light) and a press on the keys: play that note on the track, as the home-row keys do */
 S.rollHov=null;

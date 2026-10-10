@@ -4,6 +4,13 @@
 repository; the site sends reports to the contact address. Newest first. Each entry:
 where it came from, the setup, what happens, what should happen, status.*
 
+## B-053 · Monomachine: after picking a pattern that links another kit, the editor still counts the old kit as playing
+
+- **From:** the 0.5 slice-3 firmware test (`mmDeskFirmwareTest notelength`, first draft), 2026-10-10, on the emulator; not seen by a tester yet.
+- **What happens:** pattern E01 (it links K064) set and picked with `select` (the page's pattern chooser; its "edits to K001 will be lost" question confirmed). For 4 s after, the desk's current kit stays K001 (`currentKit() == 0`). A machine change and values sent then on the Sound page land in the kit that plays (memory shows them). The first roll edit (op `step` or `steps`, a dump of E01) then loads K064 from its slot and the edits are gone, on the machine and on the page, which shows the kit as saved. B-027's restore does not run: it only follows a dump whose pattern links the kit the desk thinks plays.
+- **To check:** whether the MM loads a pattern's kit on SX 0x57 LOAD PATTERN at all (the status poll says it did not), and so whether the page's question and the kit it shows are right; then the same on hardware.
+- **Status:** open. The note-length test works on the pattern that plays instead (its own kit).
+
 ## B-052 · mdFirstStartFirmwareTest fails now and then
 
 - **From:** the 0.5 clean-up checks, 2026-10-10: 2 of 5 full ctest runs and 1 of 10 runs alone, on a loaded Mac.
