@@ -1367,6 +1367,7 @@ namespace dsp56k
 			constexpr auto minusFive = static_cast<TReg56::MyType>(0xff'ffffff'fffffb);
 			runTest([&]()
 			{
+				dsp.setJitCmpmFix(true);	// the JIT's fixed position (the interpreter has no other)
 				dsp.sr_clear(CCR_C);
 				dsp.setALU(!bIsDest, TReg56(minusFive));							// source: -5
 				dsp.setALU(bIsDest , TReg56(static_cast<TReg56::MyType>(3)));	// destination: 3

@@ -254,8 +254,10 @@ namespace md
 		// and of step 2:
 		//   L3  the Machinedrum's serial clock wakes its DSPs at the exact cycle of the next slot
 		//       (TransportPolicy::exactEssiCycleDeadlinesSpeedUps; the Monomachine always runs so),
-		//   L4  both DSPs skip the turns of NOP-only DO loops that the dispatcher would only pass through
-		//       (dsp56k::DSP::setIdleFastForward; bit-exact).
+		//   L4  both DSPs skip the turns of idle loops (NOP-only DO bodies, DMA polls) that the dispatcher
+		//       would only pass through (dsp56k::DSP::setIdleFastForward; bit-exact),
+		//   and the JIT's cmpm fix (dsp56k::DSP::setJitCmpmFix: cmpm with the other accumulator as source no
+		//   longer leaves |S| in it; the firmwares never run that form, so it changes nothing they do).
 		// Off, every one runs the code it replaced: the same machine state as before the speed-ups, at a
 		// higher host CPU. Step 1 is bit-exact in both positions; L3 is not: it moves the Machinedrum's DSP
 		// wake-ups, so its audio differs (once, by design) between the positions. GEARMULATOR_MDMM_SPEEDUPS=0 turns them off at construction. The finer
@@ -271,6 +273,8 @@ namespace md
 			applyEssiCycleDeadlines();
 			m_dspMixer.dsp().setIdleFastForward(_on);
 			m_dspProducer.dsp().setIdleFastForward(_on);
+			m_dspMixer.dsp().setJitCmpmFix(_on);
+			m_dspProducer.dsp().setJitCmpmFix(_on);
 		}
 		bool speedUps() const { return m_speedUps; }
 		void readMidiOut(std::vector<synthLib::SMidiEvent>& _midiOut)

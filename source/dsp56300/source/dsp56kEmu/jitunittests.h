@@ -77,6 +77,7 @@ namespace dsp56k
 		void parallelMoveXY();
 		void boundedDispatch();
 		void nopLoopFastForward();
+		void cmpmLegacy();
 		void pollLoopFastForward();
 		void programMemoryInvalidation();
 

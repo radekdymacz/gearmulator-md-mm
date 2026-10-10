@@ -74,6 +74,7 @@ namespace dsp56k
 		boundedDispatch();
 		nopLoopFastForward();
 		pollLoopFastForward();
+		cmpmLegacy();
 	}
 
 	void JitUnittests::runtimeUnnormalizedFlag()
@@ -277,6 +278,39 @@ namespace dsp56k
 		verify(dsp.getCycles() >= 32);
 		if(needsGrowth)
 			verify(dsp.getJitEntriesSize() > highPC);
+	}
+
+	void JitUnittests::cmpmLegacy()
+	{
+		// UnitTests::cmpm checks the fixed cmpm with the other accumulator as source. With the fix off (the MD/MM
+		// speed-ups switch off) the JIT must still behave as it did before the fix: the source's live register takes
+		// |S| for the rest of the block (the tfr copies 5, not -5), while the accumulator in memory keeps -5.
+		for(const bool bIsDest : {true, false})
+		{
+			for(const bool fix : {false, true})
+			{
+				constexpr auto minusFive = static_cast<TReg56::MyType>(0xff'ffffff'fffffb);
+				constexpr auto five = static_cast<TReg56::MyType>(5);
+				runTest([&]()
+				{
+					dsp.setJitCmpmFix(fix);
+					dsp.sr_clear(CCR_C);
+					dsp.setALU(!bIsDest, TReg56(minusFive));
+					dsp.setALU(bIsDest , TReg56(static_cast<TReg56::MyType>(3)));
+					emit(bIsDest ? 0x20000f : 0x200007);	// cmpm a,b / cmpm b,a
+					emit(bIsDest ? 0x200009 : 0x200001);	// tfr a,b / tfr b,a
+				},
+				[&]()
+				{
+					verify(dsp.sr_test(CCR_C));
+					const auto source = bIsDest ? dsp.aluA().var : dsp.aluB().var;
+					const auto copied = bIsDest ? dsp.aluB().var : dsp.aluA().var;
+					verify(source == minusFive);
+					verify(copied == (fix ? minusFive : five));
+				});
+			}
+		}
+		dsp.setJitCmpmFix(true);
 	}
 
 	void JitUnittests::nopLoopFastForward()

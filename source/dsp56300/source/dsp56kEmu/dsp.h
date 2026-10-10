@@ -134,6 +134,7 @@ namespace dsp56k
 		bool							m_idleFastForward = false;
 		uint64_t						m_fastForwardCycleLimit = 0;
 		uint64_t						m_fastForwardedTurns = 0;
+		bool							m_jitCmpmFix = true;
 
 		Opcodes							m_opcodes;
 
@@ -494,6 +495,12 @@ namespace dsp56k
 		// Idle fast-forward of DO loops whose body is only NOPs (JitConfig::nopLoopFastForward). Off by default.
 		void setIdleFastForward(const bool _on) { m_idleFastForward = _on; }
 		bool getIdleFastForward() const { return m_idleFastForward; }
+		// The JIT's cmpm with the other accumulator as source compares on a copy (true, the default) or, as the
+		// emulation before the fix did, leaves |S| in the source's live register for the rest of the block (false).
+		// The MD/MM speed-ups switch drives it, so that "off" is the legacy emulation exactly. Read at run time.
+		void setJitCmpmFix(const bool _on) { m_jitCmpmFix = _on; }
+		const bool& getJitCmpmFix() const { return m_jitCmpmFix; }
+
 		uint64_t getFastForwardedTurns() const { return m_fastForwardedTurns; }	// all loop turns skipped so far
 		const uint64_t& getFastForwardCycleLimit() const { return m_fastForwardCycleLimit; }	// read by the JIT
 
