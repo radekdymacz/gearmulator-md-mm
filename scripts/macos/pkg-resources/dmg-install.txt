@@ -26,9 +26,11 @@ plug-in, not one in /Library and another in ~/Library, or the DAW lists two.
 
 Upgrading from 0.3.1 or earlier: the plug-ins were called {{OLD_NAME}}.vst3
 and {{OLD_NAME}}.component then (and the app {{OLD_NAME}}.app, when it came from
-the zip). Dragging the new ones in does not remove the old ones, and a DAW then
-lists the editor twice. Delete the old ones from every place they are in, in
-Finder > Go > Go to Folder:
+the zip), and so were the earlier preview builds. Dragging the new ones in does
+not remove the old ones: a DAW then lists the editor twice, and an old Audio
+Unit can even take the new one's place (same plug-in codes; macOS keeps one), so
+the AU opens the old panel instead of the editor. Delete the old ones from every
+place they are in, in Finder > Go > Go to Folder:
 
   /Library/Audio/Plug-Ins/VST3/{{OLD_NAME}}.vst3
   /Library/Audio/Plug-Ins/Components/{{OLD_NAME}}.component
