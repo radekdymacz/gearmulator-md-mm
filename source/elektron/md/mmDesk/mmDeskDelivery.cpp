@@ -119,8 +119,16 @@ namespace mmDesk
 		switch(ref.kind)
 		{
 		case Kind::Pattern:
-			pushDump(ref, ed::encodeMmPattern(std::get<ed::MmPattern>(_change.after)));
-			return ok();
+		{
+			// B-053: a dump of the pattern that plays keeps the kit that plays (dumpKeepsKit)
+			auto pattern = std::get<ed::MmPattern>(_change.after);
+			const auto* before = std::get_if<ed::MmPattern>(&_change.before);
+			const auto keep = dumpKeepsKit(static_cast<int>(ref.slot) == m_curPattern, m_curKit, before ? before->kit : pattern.kit, pattern.kit);
+			if(keep)
+				pattern.kit = *keep;
+			pushDump(ref, ed::encodeMmPattern(pattern));
+			return ok(keep ? "The pattern now links " + kitLabel(_view, *keep) + ", the kit that plays (the machine loaded no kit when it was picked)." : "");
+		}
 		case Kind::Song:
 			pushDump(ref, ed::encodeMmSong(std::get<ed::MmSong>(_change.after)));
 			if(static_cast<int>(ref.slot) != m_curSong)

@@ -4,7 +4,8 @@
 //
 //   mmDeskFirmwareTest <MM-ROM> [only]   only one part, e.g. machine (B-027: a machine change stays), pianoroll
 //                                        (B-050), ampenv (B-049: the amp envelope the editor draws is the firmware's),
-//                                        notelength (I-010: the piano roll's note lengths, stored and played)
+//                                        notelength (I-010: the piano roll's note lengths, stored and played),
+//                                        kitlink (B-053: the kit a pick of an A-D or E-H pattern plays)
 //
 // Exits 77 (skip) without arguments.
 
@@ -26,6 +27,7 @@
 #include <functional>
 
 #include "mmDesk/mmDesk.h"
+#include "mmDesk/mmDeskModel.h"
 #include "mmDesk/mmDeskWirePort.h"
 #include "mmDesk/mmRecv.h"
 
@@ -130,6 +132,8 @@ namespace
 				// the pattern the machine reports (to the desk's status polls), whatever the desk makes of it (B-031)
 				if(const auto s = ed::parseMmStatusResponse(_b); s && s->param == ed::MmStatus::Pattern)
 					machinePattern = s->value;
+				else if(s && s->param == ed::MmStatus::Kit)
+					machineKit = s->value;
 				if(tap)
 					tap(_b);
 				if(!hw)
@@ -231,6 +235,7 @@ namespace
 		std::vector<Bytes> replies;
 		std::function<void(const Bytes&)> tap;	// every SysEx the machine sends, for a test's own read (patternInMemory)
 		int machinePattern = -1;	// the last status reply's pattern
+		int machineKit = -1;		// the last status reply's kit (B-053)
 		size_t bytesSent = 0, dumpsSent = 0, ccsSent = 0;	// B-014: what the desk sent the machine
 		double ms() const { return m.now() * 1000.0 / g_rate; }
 
@@ -3379,6 +3384,74 @@ namespace
 	}
 }
 
+namespace
+{
+	// B-053: the kit the machine plays after a pattern pick, and after a roll edit of the pattern picked. Measured on the
+	// OS 1.32B: a pick in banks A-D (LOAD PATTERN 0x57 or the panel) loads the kit the pattern links, a pick in banks E-H
+	// loads none (the kit that played goes on). The editor asks before an A-D pick that loses the kit's unsaved edits,
+	// not before an E-H pick; a roll edit of the E-H pattern (its dump; the firmware loads the kit a dump of the
+	// pattern that plays links, B-027) keeps the kit that plays and its edits.
+	void kitLink(const Bytes& _rom)
+	{
+		std::puts("kit link (B-053)");
+		Rig r(_rom);
+		const int& statusKit = r.machineKit;
+		r.msg(R"({"op":"ready"})");
+		r.desk->setProbe(mmDesk::Desk::Probe::Running);
+		r.run(600);
+		while(r.desk->loaded() < 288)
+			r.run(100);
+		r.run(1500);
+		const auto linkOf = [&](const int _p) { const auto p = r.desk->pattern(static_cast<uint8_t>(_p)); return p ? static_cast<int>(p->kit) : -1; };
+		const auto memKit = [&] { const auto k = workingKitInMemory(r); return k ? static_cast<int>(k->position) : -1; };
+		const auto asks = [&](const size_t _from)
+		{
+			std::string a;
+			for(size_t i = _from; i < r.page.size(); ++i)
+				if(r.page[i].find("type")->asString() == "ask")
+					a += (a.empty() ? "" : ", ") + r.page[i].find("ask")->asString();
+			return a;
+		};
+		require(r.desk->currentPattern() == 0 && r.desk->currentKit() == 0 && memKit() == 0, "A01 plays K001");
+		require(linkOf(1) == 1 && linkOf(64) != 0, "A02 links K002, E01 another kit than K001 (the emulator's own memory)");
+		std::printf("  E01 links K%03d\n", linkOf(64) + 1);
+
+		// K001 edited: T1's first AMP value
+		const auto mem0 = workingKitInMemory(r);
+		const int value = mem0->tracks[0].pages[1][0] == 40 ? 41 : 40;
+		r.msg("{\"op\":\"param\",\"g\":9601,\"k\":0,\"t\":0,\"page\":1,\"i\":0,\"v\":" + std::to_string(value) + "}");
+		r.run(1500);
+		const auto edited = [&] { const auto k = workingKitInMemory(r); return k && k->position == 0 && k->tracks[0].pages[1][0] == value; };
+		require(edited(), "the edit is in the kit that plays");
+
+		// an E-H pick: the machine keeps K001, nothing to ask
+		auto from = r.page.size();
+		r.msgConfirmed(R"({"op":"select","p":64})");	// confirmed if asked: the test goes on as a person would
+		r.run(1500);
+		check(asks(from).empty(), "picking E01 asks nothing (the machine loads no kit for E-H): " + asks(from));
+		check(r.machinePattern == 64 && statusKit == 0 && memKit() == 0 && r.desk->currentKit() == 0 && edited(),
+			"E01 picked: the machine plays K001 with its edit, and the editor says so (status kit " + std::to_string(statusKit) + ", memory "
+				+ std::to_string(memKit()) + ", desk " + std::to_string(r.desk->currentKit()) + ")");
+
+		// a roll edit of E01: its dump; the machine still plays K001 with its edit
+		r.msg(R"({"op":"steps","g":9602,"p":64,"from":0,"to":16,"rows":[{"t":0,"steps":[[4,{"n":[48],"a":1,"f":1,"l":1}]],"slide":[]}]})");
+		r.run(6000);
+		check(memKit() == 0 && r.desk->currentKit() == 0 && statusKit == 0, "after the roll edit of E01 the machine still plays K001 (memory "
+			+ std::to_string(memKit()) + ", status " + std::to_string(statusKit) + ")");
+		check(edited(), "and K001's unsaved edit is still there (B-027's restore)");
+		const auto e01 = patternInMemory(r, 64);
+		check(e01 && e01->notes[0][4] == 48 && e01->kit == 0, "E01 holds the note and now links K001, the kit that plays");
+		check(linkOf(64) == 0, "the editor shows E01 linking K001");
+
+		// an A-D pick that links another kit: asked (the edit is lost), then the machine plays K002
+		from = r.page.size();
+		r.msgConfirmed(R"({"op":"select","p":1})");
+		check(asks(from) == "discardKit", "picking A02 (K002) with K001 edited asks first: " + asks(from));
+		r.run(1500);
+		check(statusKit == 1 && memKit() == 1 && r.desk->currentKit() == 1, "A02 picked: the machine and the editor play K002");
+	}
+}
+
 int main(const int _argc, char** _argv)
 {
 	std::setvbuf(stdout, nullptr, _IOLBF, 0);
@@ -3473,6 +3546,8 @@ int main(const int _argc, char** _argv)
 			ampEnvelope(rom);
 		if(only == "notelength")
 			noteLength(rom);
+		if(only.empty() || only == "kitlink")
+			kitLink(rom);
 		if(only == "lenprobe")
 			midiLenProbe(rom);
 		check(g_contract.loaded() && g_contract.bad() == 0, g_contract.summary());

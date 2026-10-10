@@ -344,7 +344,9 @@ namespace
 		check(lastResult().find("ok")->asBool(), "set pattern accepted");
 		run(800);
 		check(m.keysPressed >= 28 && d.recvParked(), "the desk drove the machine to SYSEX RECV");
-		check(m.slots[{0x67, 3}] == ed::encodeMmPattern(p), "the machine holds the edited pattern");
+		auto stored = p;
+		stored.kit = m.kit;	// B-053: the dump of the pattern that plays links the kit that plays
+		check(m.slots[{0x67, 3}] == ed::encodeMmPattern(stored), "the machine holds the edited pattern");
 		run(300);
 		check(d.lastRoundTripMs() > 0, "read back and confirmed");
 		run(3500);
@@ -577,14 +579,14 @@ void watchSteps()
 // B-027: the Monomachine loads the kit a pattern links when it takes a dump of the pattern that plays (measured,
 // mmDeskFirmwareTest machine), so the unsaved edits of the kit that plays go again once the dump is in: here a machine
 // change, its 0x5B a second time. A dump of another pattern reloads nothing.
-void kitAfterPatternDump()
+void kitAfterPatternDump(const uint8_t _link3 = 5)
 {
-	std::puts("B-027: the kit's edits after a dump of the pattern that plays");
+	std::printf("B-027: the kit's edits after a dump of the pattern that plays%s\n", _link3 != 5 ? " (B-053: it links another kit)" : "");
 	FakeMachine m;
 	for(uint8_t s = 0; s < 128; ++s)
 	{
 		auto p = emptyPattern(s);
-		p.kit = 5;	// the kit that plays
+		p.kit = s == 3 ? _link3 : 5;	// the kit that plays; B-053: pattern 3 may link another (an E-H pick loads none)
 		m.slots[{0x67, s}] = ed::encodeMmPattern(p);
 		ed::MmKit k;
 		k.position = s;
@@ -654,6 +656,19 @@ void kitAfterPatternDump()
 	msg(R"({"op":"step","g":2,"p":3,"t":2,"s":7,"v":{"n":[60],"a":1,"f":1,"l":1}})");
 	run(2000);
 	check(ed::decodeMmPattern(m.slots[{0x67, 3}])->notes[2][7] == 60, "the step's dump taken on SYSEX RECV");
+	check(ed::decodeMmPattern(m.slots[{0x67, 3}])->kit == 5, "the dump links the kit that plays (B-053: else the machine loads the linked kit)");
+	if(_link3 != 5)
+	{
+		check(d.pattern(3) && d.pattern(3)->kit == 5, "the read-back shows the pattern linking the kit that plays");
+		const auto relinkOk = d.pattern(3);
+		auto changed = *relinkOk;
+		changed.kit = 9;
+		// a link the person changes is the person's: the dump keeps it (the machine loads that kit)
+		msg(R"({"op":"set","kind":"pattern","doc":)" + ed::json::write(ed::mmPatternToJson(changed)) + "}");
+		run(2000);
+		check(ed::decodeMmPattern(m.slots[{0x67, 3}])->kit == 9, "a link the edit changes is sent as it is");
+		return;
+	}
 	check(machines.size() == 2 && machines[1] == machines[0],
 		"then the machine change again, after the dump (the machine reloaded the kit)");
 	for(int i = 0; i < 1000 && !d.pattern(4); ++i)
@@ -663,6 +678,20 @@ void kitAfterPatternDump()
 	run(2000);
 	check(ed::decodeMmPattern(m.slots[{0x67, 4}])->notes[2][7] == 60 && machines.size() == sent,
 		"a dump of another pattern: nothing again");
+}
+
+// B-053: the OS 1.32B loads a pattern's kit on a pick in banks A-D only (mmDeskFirmwareTest kitlink); a dump of the pattern
+// that plays links the kit that plays unless the edit changed the link.
+void kitPickRules()
+{
+	std::puts("B-053: the kit a pick or a dump makes the machine play");
+	check(mmDesk::pickLoadsKit(0) && mmDesk::pickLoadsKit(63) && !mmDesk::pickLoadsKit(64) && !mmDesk::pickLoadsKit(127) && !mmDesk::pickLoadsKit(-1),
+		"A01-D16 load their kit, E01-H16 none");
+	check(mmDesk::dumpKeepsKit(true, 0, 63, 63) == std::optional<uint8_t>(0), "the pattern that plays, linking another kit: the kit that plays");
+	check(!mmDesk::dumpKeepsKit(true, 0, 0, 0), "it links the kit that plays: as it is");
+	check(!mmDesk::dumpKeepsKit(true, 0, 63, 5), "the edit changes the link: as it is");
+	check(!mmDesk::dumpKeepsKit(false, 0, 63, 63), "another pattern: as it is");
+	check(!mmDesk::dumpKeepsKit(true, -1, 63, 63), "the kit that plays not known: as it is");
 }
 
 // LOAD KIT of a never-written slot (name byte 0 is 0xff) plays it as NEW KIT (measured, mmDeskFirmwareTest p4).
@@ -1660,6 +1689,8 @@ int main(const int _argc, char** _argv)
 	watchSteps();
 	kitAsLoaded();
 	kitAfterPatternDump();
+	kitAfterPatternDump(9);
+	kitPickRules();
 	modulators();
 	asksAndErrors();
 	stuckDelivery();

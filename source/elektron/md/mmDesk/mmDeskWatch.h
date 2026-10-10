@@ -56,6 +56,24 @@ namespace mmDesk
 		return r;
 	}
 
+	// ---- B-053: the kit a pattern pick or a pattern dump makes the machine play ----
+	// Measured on the OS 1.32B (mmDeskFirmwareTest kitlink): a pick of a pattern in banks A-D, LOAD PATTERN (0x57) or
+	// the panel's BANK + TRIG, loads the kit it links (stopped: at once; playing: at the switch); a pick in banks E-H
+	// loads no kit: the kit that played goes on playing (B-046 is the same rule). So only an A-D pick can lose the
+	// unsaved edits of the kit that plays.
+	inline bool pickLoadsKit(const int _pattern) { return _pattern >= 0 && _pattern < 64; }
+
+	// A dump of the pattern that plays makes the firmware load the kit the dump links (B-027), so a dump of an E-H
+	// pattern that links another kit than the one that plays (it was picked with no kit load) would load that kit and
+	// lose what plays. The dump links the kit that plays instead (as LOAD KIT and SAVE KIT relink it), unless the
+	// edit itself changed the link. The kit to write, or nothing when the dump stays as it is.
+	inline std::optional<uint8_t> dumpKeepsKit(const bool _patternPlays, const int _kitPlays, const uint8_t _linkBefore, const uint8_t _linkAfter)
+	{
+		if(!_patternPlays || _kitPlays < 0 || _kitPlays > 127 || _linkAfter != _linkBefore || _linkAfter == _kitPlays)
+			return std::nullopt;
+		return static_cast<uint8_t>(_kitPlays);
+	}
+
 	// ---- RECORD: the current pattern read back while the machine records ----
 	// The machine writes the current pattern while it records (MM-P4): read it back this often while it
 	// records, and once when it stops, so what the keyboard or the machine's TRIG keys recorded shows.
