@@ -963,8 +963,14 @@ namespace elektronData
 		controlIn.set("tempoSync", _g.tempoSync);
 		controlIn.set("transport", _g.transportIn);
 		v.set("controlIn", std::move(controlIn));
+		Value controlOut = Value::object();
+		controlOut.set("clock", _g.clockOut);
+		controlOut.set("transport", _g.transportOut);
+		controlOut.set("programChange", _g.programChangeOut);
+		v.set("controlOut", std::move(controlOut));
 		Value hidden = Value::object();
 		hidden.set("x07", hex(_g.x07));
+		hidden.set("x0d", hex(_g.x0d));
 		hidden.set("x30", hex(_g.x30));
 		hidden.set("xfd", hex(_g.xfd));
 		v.set("hidden", std::move(hidden));
@@ -1033,7 +1039,26 @@ namespace elektronData
 		controlIn.integer("tempoSync", g.tempoSync, 0, 255);
 		controlIn.integer("transport", g.transportIn, 0, 255);
 		const auto hidden = in.child("hidden");
-		hidden.hexBytes("x07", g.x07);
+		if(in.value().find("controlOut"))
+		{
+			const auto controlOut = in.child("controlOut");
+			controlOut.integer("clock", g.clockOut, 0, 255);
+			controlOut.integer("transport", g.transportOut, 0, 255);
+			controlOut.integer("programChange", g.programChangeOut, 0, 255);
+			hidden.hexBytes("x07", g.x07);
+			hidden.hexBytes("x0d", g.x0d);
+		}
+		else
+		{
+			// before B-051 the eleven bytes from 0x07 were one undecoded run
+			std::array<uint8_t, 11> run{};
+			hidden.hexBytes("x07", run);
+			std::copy(run.begin(), run.begin() + 3, g.x07.begin());
+			g.transportOut = run[3];
+			g.clockOut = run[4];
+			g.programChangeOut = run[5];
+			std::copy(run.begin() + 6, run.end(), g.x0d.begin());
+		}
 		hidden.hexBytes("x30", g.x30);
 		hidden.hexBytes("xfd", g.xfd);
 		if(_errors.size() != before)

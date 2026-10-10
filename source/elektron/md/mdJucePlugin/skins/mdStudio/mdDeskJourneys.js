@@ -751,6 +751,20 @@ const MdJourneys = (() => {
 			esc
 		]
 	};
+	/* B-051, F3: GLOBAL › Reset to defaults (the shared panel): asked first, then the factory global read back */
+	const globalReset = {
+		name: "md-global-reset",
+		steps: [
+			{ say: "open GLOBAL, click TEMPO OUT ON and base channel +", act: async u => { await u.pick("engsel", "global"); await sleep(300); u.click(tog("tempoOut", true)); await sleep(300); u.click('#globpop [data-ga="base"][data-d="1"]'); },
+				machine: () => ok(Docs.global?.control?.tempoOut === true && Docs.global.baseChannel !== 0, "tempoOut " + Docs.global?.control?.tempoOut + ", base " + Docs.global?.baseChannel), within: 10000 },
+			{ say: "click Reset to defaults: it asks", act: u => u.click('#globpop [data-ga="reset"]'), screen: () => ok(dlgShown() && /Reset GLOBAL \d to the factory settings/.test($1("#dlg").textContent), "no question") },
+			{ say: "click Reset: the factory global, read back, on the page", act: u => u.click(dlgButton("Reset")),
+				machine: () => ok(Docs.global?.control?.tempoOut === false && Docs.global.baseChannel === 0, "tempoOut " + Docs.global?.control?.tempoOut + ", base " + Docs.global?.baseChannel),
+				screen: () => ok(pressed(tog("tempoOut", false)), "TEMPO OUT not OFF"), within: 10000 },
+			esc
+		],
+		async tidy(u) { if (dlgShown()) u.click(dlgButton("Cancel")); if (!$1("#globpop").hidden) u.key("Escape"); }
+	};
 	const globalRouting = {
 		name: "md-global-routing",
 		steps: [
@@ -1047,6 +1061,10 @@ const MdJourneys = (() => {
 		steps: [...songPlayheadSteps(name => Bridge.log("SHOT " + name)).map(s => s.act && /SHOT|shot/.test(String(s.act)) ? Object.assign({}, s, { hold: 2500 }) : s), { say: "done", act: () => Bridge.log("SHOT done") }], tidy: songPlayheadTidy };
 	/* the SysEx import panel as screenshots for a design review (scripts/mdmm-shots.sh with MDMM_SHOTS_JOURNEY=md-shots-import
 	   and GEARMULATOR_MDMM_SYX_FILE): the preview's tabs, then kits, patterns and songs imported (importing, the report) */
+	/* B-051: the GLOBAL panel as a screenshot (scripts/mdmm-shots.sh with MDMM_SHOTS_JOURNEY=md-shots-global) */
+	const shotsGlobal = { name: "md-shots-global", needs: () => !/md-shots/.test(location.search) ? "screenshots only when asked by name" : null,
+		steps: [{ say: "open GLOBAL", act: async u => { await u.pick("engsel", "global"); await sleep(800); shot("global-md"); }, screen: () => ok(!$1("#globpop").hidden, "closed"), hold },
+			{ say: "Esc", act: u => { u.key("Escape"); shot("done"); } }] };
 	const shotsImport = { name: "md-shots-import", needs: () => !/md-shots/.test(location.search) ? "screenshots only when asked by name" : syxImportJ.needs(),
 		steps: [
 			openKits,
@@ -1131,7 +1149,7 @@ const MdJourneys = (() => {
 		libDialog, kitCopy, kitRename, kitClear, patGo, patClear, dialogEsc,
 		globalJ, globalRouting, globalMapNote, audioPanel, romCard, notePlay,
 		lockRamp, pasteMany, mutScope, songInspector, songDrag, ramView, setupChop, panBox, hwNoMachine, syxImportJ,
-		syxImportMute, shots, shotsSong, shotsImport, editorMenuJ, shotsMenu,
+		syxImportMute, globalReset, shotsGlobal, shots, shotsSong, shotsImport, editorMenuJ, shotsMenu,
 		dropSyxJ, dropSampleJ];
 
 	/* ---------- demos: journeys played for a camera (doc/modern-ux/DEMO-VIDEOS.md) ---------- */

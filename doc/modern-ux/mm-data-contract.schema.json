@@ -839,6 +839,22 @@
             }
           }
         },
+        "controlOut": {
+          "type": "object",
+          "description": "B-051, measured (mmDeskFirmwareTest globalprobe): clock 1 sends MIDI clock; transport 1 sends MIDI Start/Stop; programChange not 0 sends a program change on the base channel when a pattern is picked. Missing in documents from before: then hidden.x07 holds all eleven bytes from 0x07.",
+          "additionalProperties": true,
+          "properties": {
+            "clock": {
+              "$ref": "#/$defs/byte"
+            },
+            "transport": {
+              "$ref": "#/$defs/byte"
+            },
+            "programChange": {
+              "$ref": "#/$defs/byte"
+            }
+          }
+        },
         "firmware": {
           "type": "object",
           "description": "P6, contract version 2: what the firmware carries that the editor passes through untouched (dump format bytes, residue, opaque state, undecoded bytes). Readers also take version 1, where these members sit at the top level.",
@@ -2635,6 +2651,116 @@
             },
             "cc": {
               "type": "array"
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "description": "core: GLOBAL › MIDI: the active global's channels (0-15, null OFF; base + t is track t's while t < span), CONTROL IN (clockIn: TEMPO SYNC EXT MIDI CLK, transportIn: TRANSPORT ACCEPT) and OUT (clock, Start/Stop, program change)",
+          "required": ["op"],
+          "properties": {
+            "op": {
+              "const": "globalMidi"
+            },
+            "id": {
+              "type": "integer"
+            },
+            "g": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "force": {
+              "type": ["boolean", "integer"]
+            },
+            "base": {
+              "oneOf": [
+                {
+                  "type": "null"
+                },
+                {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 15
+                }
+              ]
+            },
+            "span": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 16
+            },
+            "auto": {
+              "oneOf": [
+                {
+                  "type": "null"
+                },
+                {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 15
+                }
+              ]
+            },
+            "multiTrig": {
+              "oneOf": [
+                {
+                  "type": "null"
+                },
+                {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 15
+                }
+              ]
+            },
+            "multiMap": {
+              "oneOf": [
+                {
+                  "type": "null"
+                },
+                {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 15
+                }
+              ]
+            },
+            "clockIn": {
+              "type": ["boolean", "integer"]
+            },
+            "transportIn": {
+              "type": ["boolean", "integer"]
+            },
+            "clockOut": {
+              "type": ["boolean", "integer"]
+            },
+            "transportOut": {
+              "type": ["boolean", "integer"]
+            },
+            "programChangeOut": {
+              "type": ["boolean", "integer"]
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "description": "core: GLOBAL › Reset to defaults: the active global becomes the one the machine ships with (measured, mmDeskFirmwareTest factoryglobal)",
+          "required": ["op"],
+          "properties": {
+            "op": {
+              "const": "globalReset"
+            },
+            "id": {
+              "type": "integer"
+            },
+            "g": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "force": {
+              "type": ["boolean", "integer"]
             }
           },
           "additionalProperties": false
@@ -4630,6 +4756,32 @@
             },
             "force": {
               "type": ["boolean", "integer"]
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "description": "machine: the active GLOBAL slot (SET ACTIVE GLOBAL 0x56)",
+          "required": ["op", "slot"],
+          "properties": {
+            "op": {
+              "const": "globalSlot"
+            },
+            "id": {
+              "type": "integer"
+            },
+            "g": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "force": {
+              "type": ["boolean", "integer"]
+            },
+            "slot": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 7
             }
           },
           "additionalProperties": false

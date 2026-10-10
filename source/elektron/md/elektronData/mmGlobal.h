@@ -16,7 +16,12 @@ namespace elektronData
 	//              (panel, MM-P4; measured by mmDeskFirmwareTest hostclock, P7)
 	//   0x06   1  CONTROL IN TRANSPORT (TRANSPORT IN): 0 IGNORE, 1 ACCEPT (MIDI Start/Stop)
 	//              (panel, MM-P4); both 0 as booted
-	//   0x07  11  unknown (kept)
+	//   0x07   3  unknown (kept; flipping each changed no MIDI in or out, mmDeskFirmwareTest globalprobe)
+	//   0x0a   1  CONTROL OUT TRANSPORT: 1 sends MIDI Start/Stop, 0 not (B-051, globalprobe: factory 1)
+	//   0x0b   1  CONTROL OUT CLOCK: 1 sends MIDI clock, 0 not (globalprobe: factory 1)
+	//   0x0c   1  PROGRAM CHANGE OUT: not 0 sends a program change on the base channel when a pattern is picked
+	//              (globalprobe: factory 0). PROGRAM CHANGE IN is taken on the base channel; no byte turned it off
+	//   0x0d   5  unknown (kept)
 	//   0x12   6  MIDI sequencer track channels (inferred)
 	//   0x18  24  MIDI sequencer CC numbers CL1-4, 6 x 4 (inferred)
 	//   0x30   6  unknown (kept)
@@ -39,7 +44,9 @@ namespace elektronData
 
 		uint8_t autoChannel = 8, baseChannel = 0, channelSpan = 6, multiTrigChannel = 6, multiMapChannel = 7;
 		uint8_t tempoSync = 0, transportIn = 0;
-		std::array<uint8_t, 11> x07{};
+		std::array<uint8_t, 3> x07{};
+		uint8_t transportOut = 1, clockOut = 1, programChangeOut = 0;
+		std::array<uint8_t, 5> x0d{};
 		std::array<uint8_t, 6> midiSeqChannels{};
 		std::array<std::array<uint8_t, 4>, 6> midiSeqCcs{};
 		std::array<uint8_t, 6> x30{};
@@ -52,6 +59,15 @@ namespace elektronData
 		bool operator==(const MmGlobal& _o) const;
 		bool operator!=(const MmGlobal& _o) const { return !(*this == _o); }
 	};
+
+	// B-051: the MIDI channel the machine takes track _track's CCs, notes and mutes on, or none. Measured on OS 1.32B
+	// (mmDeskFirmwareTest spanprobe, a CC on each channel under a global): track t is base + t while t < CHANNEL SPAN
+	// and base + t is 0-14; channel 16 (15) reaches no track whatever the base, a base past 14 (OFF is 127) none.
+	// With CHANNEL SPAN 0 no track has one. One more channel past the span reached T1, the selected track (base + span + 2
+	// in every global tried: B-026's "T3's mute muted T1" under span 0), so nothing is sent outside the span.
+	std::optional<uint8_t> mmTrackChannel(const MmGlobal& _global, uint8_t _track);
+	// NRPN goes on the base channel with the track in its MSB: none while the base channel is past 14.
+	bool mmBaseChannelOn(const MmGlobal& _global);
 
 	std::optional<MmGlobal> decodeMmGlobal(const std::vector<uint8_t>& _sysex);
 	std::vector<uint8_t> encodeMmGlobal(const MmGlobal& _global);

@@ -74,6 +74,16 @@ const MmView = (() => {
 		return Array.from({ length: 12 }, (_, i) => { const b = bits[i < 6 ? 0 : 1]; return b == null ? null : !!((b >> (i % 6)) & 1); });
 	}
 
+	const chOf = c => c != null && c >= 0 && c <= 15 ? c : null;
+	function globPage(slot, g) {
+		const c = g.channels || {}, i = g.controlIn || {}, o = g.controlOut || {};
+		return { slot, base: chOf(c.base), span: c.span ?? 0, auto: chOf(c.auto), multiTrig: chOf(c.multiTrig), multiMap: chOf(c.multiMap),
+			clockIn: i.tempoSync === 1, transportIn: i.transport === 1, clockOut: o.clock !== 0, transportOut: o.transport !== 0, programChangeOut: !!o.programChange };
+	}
+	/* B-051: the channel the machine takes track t's CCs, mutes and notes on, or null (elektronData::mmTrackChannel,
+	   measured on OS 1.32B: base + t while t < CHANNEL SPAN and base + t is 0-14; channel 16 reaches no track) */
+	const trackChannel = (glob, t) => glob && glob.base != null && t < glob.span && glob.base + t <= 14 ? glob.base + t : null;
+
 	function derive(docs, ui = {}) {
 		const m = docs.machine || null;
 		const pat = slotIn(m, "pattern"), kit = slotIn(m, "kit"), song = ui.songEdit ?? slotIn(m, "song"), glob = slotIn(m, "global");
@@ -93,6 +103,8 @@ const MmView = (() => {
 		const H = ui.host;
 		v.hostTempo = !!(H && H.follows && H.bpm > 0 && global && global.controlIn && global.controlIn.tempoSync === 1);
 		if (v.hostTempo) v.bpm = H.bpm;
+		/* B-051, F3: the GLOBAL page's MIDI part, the active global's (a channel 0-15, null OFF) */
+		if (global) v.glob = globPage(glob, global);
 		const kd = kitDocOf(docs, kit), pd = pat != null ? docs.patterns[pat] || null : null;
 		/* the view shows the machine once the current pattern and the kit that plays are there */
 		v.ready = !!(kd && pd);
@@ -165,6 +177,9 @@ const MmView = (() => {
 		legato: (v, c) => [[["tracks", c.t, "leg", { amp: "amp", filter: "flt", lfo: "lfo" }[c.env]], c.on ? 1 : 0]],
 		portamento: (v, c) => [[["tracks", c.t, "port"], c.v === "always" ? 0 : 1]],
 		routing: (v, c) => [[["routing"], c.v]],
+		globalMidi: (v, c) => ["base", "span", "auto", "multiTrig", "multiMap", "clockIn", "transportIn", "clockOut", "transportOut", "programChangeOut"]
+			.filter(k => c[k] !== undefined).map(k => [["glob", k], k === "span" ? c[k] : typeof c[k] === "boolean" ? c[k] : chOf(c[k])]),
+		globalReset: () => [],
 		midiTrack: (v, c) => [...(c.ch != null ? [[["midi", c.t, "ch"], c.ch + 1]] : []), ...(c.cc ? [[["midi", c.t, "cc"], c.cc.map(Number)]] : [])],
 		step: (v, c) => stepWrites(v, c.t, c.s, c.v),
 		slide: (v, c) => [[[...trackPath(c.t), "slide", c.s], !!c.on]],
@@ -434,12 +449,12 @@ const MmView = (() => {
 	const OPS = {
 		kit: ["level", "route", "input", "param", "trigPos", "legato", "portamento", "machine", "clearSound", "copySound", "pasteSound", "params",
 			"assign", "multiEnv", "multiTrig", "kitName"],
-		global: ["routing", "midiTrack", "multiMap", "multiMapSplit", "multiMapDelete"],
+		global: ["routing", "midiTrack", "globalMidi", "globalReset", "multiMap", "multiMapSplit", "multiMapDelete"],
 		song: ["rowSet", "rowInsert", "rowDelete", "rowMove", "copyRow", "pasteRow"],
 		library: ["patCopy", "patPaste", "patCopyTo", "patClear", "kitCopy", "kitPaste", "kitCopyTo", "kitClear", "kitRename"]
 	};
 	const KIND = new Map(Object.entries(OPS).flatMap(([kind, ops]) => ops.map(op => [op, kind])));
 	const kindOf = op => KIND.get(op) || "pattern";
 
-	return { derive, slotIn, queuedIn, kitDocOf, writes, copied, toFw, kindOf, own };
+	return { derive, slotIn, queuedIn, kitDocOf, writes, copied, toFw, kindOf, own, trackChannel };
 })();

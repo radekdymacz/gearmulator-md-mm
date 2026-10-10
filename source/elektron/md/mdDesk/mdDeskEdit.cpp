@@ -1,4 +1,6 @@
 #include "mdDeskEdit.h"
+
+#include "elektronData/factoryGlobals.h"
 #include "mdDeskLibrary.h"
 #include "mdDeskModel.h"
 
@@ -1088,9 +1090,16 @@ namespace mdDesk
 			return _g;
 		}
 
+		// B-051, F3: GLOBAL › Reset to defaults: the global the machine ships with, measured (elektronData::mdFactoryGlobal)
+		std::optional<ed::MdGlobal> globalReset(ed::MdGlobal _g, const In&)
+		{
+			return ed::mdFactoryGlobal(_g.position);
+		}
+
 		const Edits<ed::MdGlobal>& globalEdits()
 		{
-			static const Edits<ed::MdGlobal> edits{{"route", route}, {"tempo", tempo}, {"extended", extended}, {"globalSet", globalSet}};
+			static const Edits<ed::MdGlobal> edits{{"route", route}, {"tempo", tempo}, {"extended", extended}, {"globalSet", globalSet},
+				{"globalReset", globalReset}};
 			return edits;
 		}
 

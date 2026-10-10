@@ -19,6 +19,7 @@ target_sources(elektronData PRIVATE
 	mdAudition.cpp mdAudition.h
 	jsonFirmware.cpp jsonFirmware.h
 	mdCommands.cpp mdCommands.h
+	factoryGlobals.cpp factoryGlobals.h
 	mdGlobal.cpp mdGlobal.h
 	mdJson.cpp mdJson.h
 	mdKit.cpp mdKit.h

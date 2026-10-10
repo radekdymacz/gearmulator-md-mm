@@ -165,6 +165,11 @@ namespace mmDesk
 
 	void MmMachine::setBaseChannel(const ed::MmGlobal& _g)
 	{
+		// B-051: a new base channel is the machine's once the global is made active (after SYSEX RECV), and the
+		// emulator's parameter layer learns it by its own poll: no channel messages until both have it
+		if(m_baseChannel >= 0 && m_baseChannel != _g.baseChannel)
+			m_channelsSettleUntilMs = clock() + g_channelsSettleMs;
+		m_baseChannel = _g.baseChannel;
 		if(m_port.baseChannel)
 			m_port.baseChannel(static_cast<uint8_t>(_g.baseChannel & 0x0f));
 	}
@@ -274,6 +279,8 @@ namespace mmDesk
 		const auto page = static_cast<uint8_t>(_param / 8), index = static_cast<uint8_t>(_param % 8);
 		if(m_curKit < 0 || _track > 5 || page > 7 || (page == 7 && index != 0) || !m_port.sendParam)
 			return;
+		if(!reach(_view).track[_track])
+			return;	// B-051: no channel of its own; an app modulator is too fast for kit dumps
 		m_port.sendParam(_track, page, index, _value);
 		const auto* w = _view.workingKitOf(m_curKit);
 		if(!w)

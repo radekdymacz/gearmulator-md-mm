@@ -277,3 +277,4 @@ body.dockother #rail .railparams>:is(.lpspace,.pagetabs,.pkcol),body.dockother #
 
 /* A narrow window (1280): the top bar fits, so MKII is not cut off: tighter gaps and workspace keys */
 @media (max-width:1340px){header.top{column-gap:8px!important}header.top .left{gap:8px!important}header.top .tabs>button{min-width:0!important;padding-left:6px!important;padding-right:6px!important}}
+

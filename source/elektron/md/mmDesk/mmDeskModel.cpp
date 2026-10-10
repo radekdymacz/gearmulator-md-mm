@@ -321,6 +321,14 @@ namespace mmDesk
 			{"routing", Owner::Core, Gate::Input, G, {{"v", ArgType::Text, 0, 0, false, {"3xSTEREO+AB=MIX", "3xSTEREO", "6xMONO"}}}, "the routing mode"},
 			{"midiTrack", Owner::Core, Gate::Input, G, {t6, {"ch", ArgType::Integer, 0, 15, true}, {"cc", ArgType::Array, 0, 0, true}},
 				"a MIDI sequencer track's channel and its CL1-4 CC numbers (four of 0-127, 128 = AFT)"},
+			// B-051, F3: the GLOBAL page's MIDI part (manual 1-89, 1-91): the active global's MIDI CHANNELS and CONTROL IN
+			{"globalMidi", Owner::Core, Gate::Input, G, {{"base", ArgType::IntegerOrNull, 0, 15, true}, {"span", ArgType::Integer, 0, 16, true},
+				{"auto", ArgType::IntegerOrNull, 0, 15, true}, {"multiTrig", ArgType::IntegerOrNull, 0, 15, true},
+				{"multiMap", ArgType::IntegerOrNull, 0, 15, true}, {"clockIn", ArgType::Bool, 0, 0, true}, {"transportIn", ArgType::Bool, 0, 0, true},
+				{"clockOut", ArgType::Bool, 0, 0, true}, {"transportOut", ArgType::Bool, 0, 0, true}, {"programChangeOut", ArgType::Bool, 0, 0, true}},
+				"GLOBAL › MIDI: the active global's channels (0-15, null OFF; base + t is track t's while t < span), CONTROL IN"
+				" (clockIn: TEMPO SYNC EXT MIDI CLK, transportIn: TRANSPORT ACCEPT) and OUT (clock, Start/Stop, program change)"},
+			{"globalReset", Owner::Core, Gate::Input, G, {}, "GLOBAL › Reset to defaults: the active global becomes the one the machine ships with (measured, mmDeskFirmwareTest factoryglobal)"},
 			// ---- the edit intents: Sequence (a pattern) ----
 			{"step", Owner::Core, Gate::Input, P, {p, t12, step, {"v", ArgType::Any}},
 				"a step's value: null empty, {off:true} a NOTE OFF, {n:[note...], a, f, l, notrig?} a trig (n: its pitch, chord notes after the base; a f l: AMP FILTER LFO)"},
@@ -416,6 +424,7 @@ namespace mmDesk
 				"GRID RECORDING (RECORD), LIVE RECORDING (RECORD + PLAY) or off"},
 			{"hwSend", Owner::Machine, Gate::Input, -1, {}, "HW MIDI: the machine is on SYSEX RECV; send the dumps that wait for it"},
 			{"followHost", Owner::Machine, Gate::Input, -1, {}, "in a DAW: the active GLOBAL follows the host's clock and transport"},
+			{"globalSlot", Owner::Machine, Gate::Input, -1, {deskCore::slotArg<MmModel>("slot", Kind::Global)}, "the active GLOBAL slot (SET ACTIVE GLOBAL 0x56)"},
 			// MM-P8
 			{"chain", Owner::Machine, Gate::Input, -1, {{"patterns", ArgType::Array}}, "BANK held + TRIG keys: the machine's pattern chain"},
 			{"chainClear", Owner::Machine, Gate::Input, -1, {}, "BANK + the TRIG key of the pattern that plays: ends the chain"},

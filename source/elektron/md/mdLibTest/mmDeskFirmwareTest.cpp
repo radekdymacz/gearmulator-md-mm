@@ -10,6 +10,7 @@
 #include "contractCheck.h"
 #include "mdFirmwareSession.h"
 
+#include "elektronData/factoryGlobals.h"
 #include "elektronData/mmCommands.h"
 #include "elektronData/mmJson.h"
 #include "elektronData/mmKit.h"
@@ -2562,6 +2563,312 @@ namespace
 
 namespace
 {
+	// B-051: an imported global with no channel for a track (CHANNEL SPAN 0, or the base channel OFF, as in a 2008
+	// backup) leaves the editor's sound values on T2-T6 unheard: they went as CCs on the track's channel. A sound edit
+	// must reach the machine (its memory) whatever the global's MIDI channels, and must not land on another track.
+	// The globals go in as an import does (SyxJob: the dump, then 0x56 for the active one); MM_SYX adds the user's own
+	// backup's globals, read in place (never copied).
+	void importGlobals(Rig& _r, const Bytes& _file, const std::string& _name)
+	{
+		mdJucePlugin::SyxJob<MmSyxTraits> job;
+		job.open(_file, _name, machineDocs(*_r.desk), {_r.desk->currentPattern(), _r.desk->currentKit(), _r.desk->currentSong(), _r.desk->currentGlobal()});
+		_r.desk->setSysexTap([&job](const Bytes& _m) { job.onMachineSysex(_m); });
+		const auto why = job.start({"global"}, {}, machineDocs(*_r.desk));
+		check(why.empty(), "the import of the globals starts" + (why.empty() ? std::string() : ": " + why));
+		const auto t0 = _r.ms();
+		while(job.running() && _r.ms() - t0 < 120000)
+		{
+			if(_r.desk->isInputReady())
+				if(auto p = job.step(_r.desk->machine(), _r.ms(), false))
+					g_contract(*p);
+			_r.run(10);
+		}
+		_r.desk->setSysexTap({});
+		_r.run(2000);
+	}
+
+	// B-051, F3: the global the machine ships with (every slot of a fresh machine is elektronData::mmFactoryGlobal; FACTORY_PRINT=1
+	// prints it raw), GLOBAL › Reset to defaults (span 0, base 4 and TEMPO SYNC changed, then globalReset: the factory global
+	// reads back, a mute reaches T1-T6), and the slot keys (globalSlot: the machine says the slot is active).
+	void factoryGlobal(const Bytes& _rom)
+	{
+		std::puts("factory global, Reset to defaults, the slot keys (B-051, F3)");
+		Rig r(_rom);
+		r.msg(R"({"op":"ready"})");
+		r.desk->setProbe(mmDesk::Desk::Probe::Running);
+		r.run(600);
+		const auto tLoad = r.ms();
+		while(r.desk->loaded() < 288 && r.ms() - tLoad < 60000)
+			r.run(100);
+		r.run(1000);
+		for(uint8_t s = 0; s < ed::MmGlobal::g_slots; ++s)
+		{
+			const auto g = r.desk->global(s);
+			if(g && std::getenv("FACTORY_PRINT"))
+			{
+				const auto raw = ed::mmGlobalRaw(*g);
+				std::printf("  MM factory global %d raw:", s + 1);
+				for(size_t i = 0; i < raw.size(); ++i) std::printf("%s0x%02x,", i % 16 ? " " : "\n    ", raw[i]);
+				std::printf("\n");
+			}
+			std::string diff;
+			if(g)
+			{
+				const auto a = ed::mmGlobalRaw(*g), b = ed::mmGlobalRaw(ed::mmFactoryGlobal(s));
+				for(size_t i = 0; i < a.size() && diff.size() < 120; ++i)
+					if(a[i] != b[i]) { char x[24]; std::snprintf(x, sizeof x, " %03zx:%02x/%02x", i, a[i], b[i]); diff += x; }
+				if(g->version != 3 || g->revision != 1) diff += " format " + std::to_string(g->version) + "." + std::to_string(g->revision);
+			}
+			check(g && *g == ed::mmFactoryGlobal(s), "global " + std::to_string(s + 1) + " of a fresh machine is elektronData::mmFactoryGlobal" + diff);
+		}
+		const auto cur = static_cast<uint8_t>(r.desk->currentGlobal());
+		r.msg(R"({"op":"globalMidi","g":7301,"span":0,"base":3,"clockIn":true})");
+		r.run(6000);
+		const auto g = r.desk->global(cur);
+		check(g && g->channelSpan == 0 && g->baseChannel == 3 && g->tempoSync == 1, "span 0, base 4, TEMPO SYNC EXT read back");
+		r.msg(R"({"op":"globalReset","g":7302})");
+		check(r.lastResult().find("ok")->asBool(), "globalReset taken");
+		r.run(6000);
+		const auto back = r.desk->global(cur);
+		check(back && *back == ed::mmFactoryGlobal(cur), "the active global reads back as the factory global (GLOBAL " + std::to_string(cur + 1) + ")");
+		r.run(7000);	// the channels settle (ChannelReach)
+		int landed = 0;
+		for(int t = 0; t < 6; ++t)
+		{
+			r.msg("{\"op\":\"mute\",\"t\":" + std::to_string(t) + ",\"on\":true}");
+			r.run(600);
+			landed += ((r.tel.mutes.load() >> t) & 1) == 1;
+			r.msg("{\"op\":\"mute\",\"t\":" + std::to_string(t) + ",\"on\":false}");
+			r.run(600);
+		}
+		check(landed == 6, "after the reset a mute reaches each of T1-T6 (" + std::to_string(landed) + " of 6)");
+		// the slot keys: GLOBAL 3 active, then back
+		const int to = cur == 2 ? 3 : 2;
+		r.msg("{\"op\":\"globalSlot\",\"slot\":" + std::to_string(to) + "}");
+		r.run(3000);
+		check(r.desk->currentGlobal() == to && r.desk->global(static_cast<uint8_t>(to)).has_value(), "globalSlot: GLOBAL " + std::to_string(to + 1) + " is active, read");
+		r.msg("{\"op\":\"globalSlot\",\"slot\":" + std::to_string(cur) + "}");
+		r.run(3000);
+		check(r.desk->currentGlobal() == cur, "and back to GLOBAL " + std::to_string(cur + 1));
+	}
+
+	// B-051, F3, measuring: what the global's undecoded bytes do (x07-x11, x30-x35, the 6 "control" bytes x36-x3b). Each byte
+	// set to 1 (0 when it is not 0; GPROBE_VAL another value), the global made active, then: the machine's MIDI out while it
+	// plays 1 s (clock F8, Start FA, Stop FC), a pattern picked (program change out), and a program change sent in on
+	// each channel (does the pattern follow).
+	void globalProbe(const Bytes& _rom)
+	{
+		std::puts("global probe (undecoded bytes)");
+		Rig r(_rom);
+		r.msg(R"({"op":"ready"})");
+		r.desk->setProbe(mmDesk::Desk::Probe::Running);
+		r.run(600);
+		const auto tLoad = r.ms();
+		while(r.desk->loaded() < 288 && r.ms() - tLoad < 60000)
+			r.run(100);
+		r.run(1000);
+		const auto cur = static_cast<uint8_t>(r.desk->currentGlobal());
+		const auto g0 = *r.desk->global(cur);
+		const auto raw0 = ed::mmGlobalRaw(g0);
+		std::printf("  factory raw:");
+		for(size_t i = 0; i < raw0.size(); ++i) std::printf("%s%02x", i % 32 ? " " : "\n   ", raw0[i]);
+		std::printf("\n");
+		int f8 = 0, fa = 0, fc = 0, pcs = 0, pcCh = -1, pcV = -1;
+		r.m.onMidi = [&](const synthLib::SMidiEvent& _e)
+		{
+			if(_e.a == 0xf8) ++f8; else if(_e.a == 0xfa) ++fa; else if(_e.a == 0xfc) ++fc;
+			else if((_e.a & 0xf0) == 0xc0) { ++pcs; pcCh = _e.a & 15; pcV = _e.b; }
+		};
+		const auto measure = [&](const char* _what)
+		{
+			f8 = fa = fc = pcs = 0; pcCh = pcV = -1;
+			r.msg(R"({"op":"play"})"); r.run(1000); r.msg(R"({"op":"stop"})"); r.run(600);
+			const int p0 = r.desk->currentPattern();
+			r.msg("{\"op\":\"select\",\"p\":" + std::to_string(p0 == 3 ? 4 : 3) + "}"); r.run(800);
+			const int pcOut = pcs, outCh = pcCh;
+			// program change in: on each channel in turn, a pattern the machine is not on
+			int inCh = -1;
+			for(int ch = 0; ch < 16 && inCh < 0; ++ch)
+			{
+				const int want = 10 + ch, before = r.desk->currentPattern();
+				r.out.push_back({static_cast<uint8_t>(0xc0 | ch), static_cast<uint8_t>(want)});
+				r.run(400);
+				if(r.desk->currentPattern() == want && before != want) inCh = ch;
+			}
+			std::printf("  %-22s clock out %3d, start %d, stop %d; PC out %d (ch %d); PC in: %s\n", _what, f8, fa, fc, pcOut, outCh + 1,
+				inCh < 0 ? "no" : ("ch " + std::to_string(inCh + 1)).c_str());
+			r.msg(R"({"op":"select","p":0})"); r.run(800);
+		};
+		measure("as booted");
+		std::vector<size_t> cand;
+		for(size_t i = 0x07; i < 0x12; ++i) cand.push_back(i);
+		for(size_t i = 0x30; i < 0x3c; ++i) cand.push_back(i);
+		if(const char* only = std::getenv("GPROBE_BYTES")) { cand.clear(); for(const char* q = only; *q;) { cand.push_back(std::strtoul(q, const_cast<char**>(&q), 16)); if(*q == ',') ++q; } }
+		for(const auto i : cand)
+		{
+			auto raw = raw0;
+			raw[i] = raw0[i] ? 0 : 1;
+			if(const char* v = std::getenv("GPROBE_VAL")) raw[i] = static_cast<uint8_t>(std::strtoul(v, nullptr, 16));
+			if(const char* also = std::getenv("GPROBE_ALSO"))	// "0c=1": another byte set with it
+				raw[std::strtoul(also, nullptr, 16)] = static_cast<uint8_t>(std::strtoul(std::strchr(also, '=') + 1, nullptr, 16));
+			r.msg(R"({"op":"set","kind":"global","doc":)" + ed::json::write(ed::mmGlobalToJson(*ed::mmGlobalFromRaw(raw, cur))) + "}");
+			r.run(5000);
+			char what[40];
+			std::snprintf(what, sizeof what, "byte %02zx %02x -> %02x:", i, raw0[i], raw[i]);
+			measure(what);
+			r.msg(R"({"op":"set","kind":"global","doc":)" + ed::json::write(ed::mmGlobalToJson(g0)) + "}");
+			r.run(5000);
+		}
+		r.m.onMidi = nullptr;
+	}
+
+	// B-051, measuring: which track a CC on each MIDI channel reaches, under a global with these channels (SPAN_PROBE=
+	// "base,span" 0-based, e.g. "12,6" or "0,0"). Prints a line per channel: the track whose AMP value moved.
+	void channelProbe(const Bytes& _rom)
+	{
+		const std::string spec = std::getenv("SPAN_PROBE") ? std::getenv("SPAN_PROBE") : "0,6";
+		const int base = std::atoi(spec.c_str()), span = std::atoi(spec.substr(spec.find(',') + 1).c_str());
+		std::printf("channel probe: base %d span %d\n", base, span);
+		Rig r(_rom);
+		r.msg(R"({"op":"ready"})");
+		r.desk->setProbe(mmDesk::Desk::Probe::Running);
+		r.run(600);
+		const auto tLoad = r.ms();
+		while(r.desk->loaded() < 288 && r.ms() - tLoad < 60000)
+			r.run(100);
+		const auto cur = static_cast<uint8_t>(r.desk->currentGlobal());
+		ed::MmDocuments docs;
+		auto g = r.desk->documents().globals.at(cur);
+		g.baseChannel = static_cast<uint8_t>(base);
+		g.channelSpan = static_cast<uint8_t>(span);
+		docs.globals[cur] = g;
+		importGlobals(r, ed::writeSyx(docs), "probe");
+		r.run(5000);
+		for(uint8_t ch = 0; ch < 16; ++ch)
+		{
+			const auto before = workingKitInMemory(r);
+			uint8_t v = static_cast<uint8_t>(50 + ch);
+			while(std::any_of(before->tracks.begin(), before->tracks.end(), [&](const auto& _t) { return _t.pages[1][3] == v; }))
+				v = static_cast<uint8_t>((v + 1) & 127);
+			r.out.push_back({static_cast<uint8_t>(0xb0 | ch), 59, v});	// AMP page index 3
+			r.run(300);
+			const auto after = workingKitInMemory(r);
+			std::string hit;
+			for(size_t t = 0; t < 6; ++t)
+				if(after->tracks[t].pages[1][3] != before->tracks[t].pages[1][3])
+					hit += " T" + std::to_string(t + 1);
+			std::printf("    channel %2d (0-based %2d):%s\n", ch + 1, ch, hit.empty() ? " -" : hit.c_str());
+		}
+	}
+
+	void channelSpan(const Bytes& _rom)
+	{
+		std::puts("sound edits whatever the MIDI channels (B-051)");
+		struct Variant { std::string name; std::function<void(ed::MmGlobal&)> change; Bytes file; };
+		std::vector<Variant> variants{
+			{"CHANNEL SPAN 0", [](ed::MmGlobal& _g) { _g.channelSpan = 0; }, {}},
+			{"base channel OFF", [](ed::MmGlobal& _g) { _g.baseChannel = 127; }, {}},
+			{"base channel 13, span 6", [](ed::MmGlobal& _g) { _g.baseChannel = 12; _g.channelSpan = 6; }, {}},
+		};
+		if(const char* path = std::getenv("MM_SYX"); path && *path)
+		{
+			std::ifstream in(path, std::ios::binary);
+			if(in)
+				variants.push_back({"the backup's globals (MM_SYX)", {}, Bytes((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>())});
+		}
+		const std::string only = std::getenv("SPAN_ONLY") ? std::getenv("SPAN_ONLY") : "";	// a part of a variant's name
+		for(const auto& v : variants)
+		{
+			if(!only.empty() && v.name.find(only) == std::string::npos)
+				continue;
+			std::printf("  %s\n", v.name.c_str());
+			Rig r(_rom);
+			r.msg(R"({"op":"ready"})");
+			r.desk->setProbe(mmDesk::Desk::Probe::Running);
+			r.run(600);
+			const auto tLoad = r.ms();
+			while(r.desk->loaded() < 288 && r.ms() - tLoad < 60000)
+				r.run(100);
+			r.run(1000);
+			if(v.change)
+			{
+				const auto cur = static_cast<uint8_t>(r.desk->currentGlobal());
+				ed::MmDocuments docs;
+				auto g = r.desk->documents().globals.at(cur);
+				v.change(g);
+				docs.globals[cur] = g;
+				importGlobals(r, ed::writeSyx(docs), v.name);
+			}
+			else
+				importGlobals(r, v.file, v.name);
+			const auto& gs = r.desk->documents().globals;
+			const auto gi = gs.find(static_cast<uint8_t>(r.desk->currentGlobal()));
+			check(gi != gs.end(), "the active global is read back");
+			if(gi == gs.end())
+				continue;
+			std::printf("    active global %d: base channel %d, span %d, auto %d, multi trig %d, multi map %d\n", gi->first + 1, gi->second.baseChannel,
+				gi->second.channelSpan, gi->second.autoChannel, gi->second.multiTrigChannel, gi->second.multiMapChannel);
+			const auto k = std::to_string(r.desk->currentKit());
+			int gesture = 5100;
+			for(int t = 0; t < 6; ++t)
+			{
+				const auto before = workingKitInMemory(r);
+				if(!before)
+				{
+					check(false, "the kit that plays is in memory");
+					break;
+				}
+				const int want = (before->tracks[static_cast<size_t>(t)].pages[1][3] + 41) % 128;
+				const int level = (before->levels[static_cast<size_t>(t)] + 23) % 128;
+				r.msg("{\"op\":\"param\",\"g\":" + std::to_string(++gesture) + ",\"k\":" + k + ",\"t\":" + std::to_string(t)
+					+ ",\"page\":1,\"i\":3,\"v\":" + std::to_string(want) + "}");
+				r.msg("{\"op\":\"level\",\"g\":" + std::to_string(++gesture) + ",\"k\":" + k + ",\"t\":" + std::to_string(t)
+					+ ",\"v\":" + std::to_string(level) + "}");
+				r.run(4000);
+				const auto after = workingKitInMemory(r);
+				const int got = after ? after->tracks[static_cast<size_t>(t)].pages[1][3] : -1;
+				const int gotLevel = after ? after->levels[static_cast<size_t>(t)] : -1;
+				std::string others;
+				for(size_t o = 0; after && o < 6; ++o)
+					if(static_cast<int>(o) != t && (after->tracks[o].pages[1][3] != before->tracks[o].pages[1][3] || after->levels[o] != before->levels[o]))
+						others += " T" + std::to_string(o + 1);
+				check(got == want && gotLevel == level, v.name + ": T" + std::to_string(t + 1) + "'s AMP value and level reach the machine (memory "
+					+ std::to_string(got) + "/" + std::to_string(gotLevel) + ", sent " + std::to_string(want) + "/" + std::to_string(level) + ")");
+				check(others.empty(), v.name + ": T" + std::to_string(t + 1) + "'s edit changes no other track" + (others.empty() ? "" : " (changed:" + others + ")"));
+				const auto w = r.desk->workingKit();
+				check(w && after && ed::mmKitRaw(*w) == ed::mmKitRaw(*after), v.name + ": the page's kit is the machine's");
+			}
+			// MULTI ENV: NRPN on the base channel (the track in the MSB), every track's
+			if(const auto before = workingKitInMemory(r))
+			{
+				const int want = (before->tracks[0].multiEnv[1] + 29) % 128;
+				r.msg("{\"op\":\"multiEnv\",\"g\":" + std::to_string(++gesture) + ",\"k\":" + k + ",\"i\":1,\"v\":" + std::to_string(want) + "}");
+				r.run(4000);
+				const auto after = workingKitInMemory(r);
+				const bool all = after && std::all_of(after->tracks.begin(), after->tracks.end(), [&](const auto& _t) { return _t.multiEnv[1] == want; });
+				check(all, v.name + ": a MULTI ENV value reaches every track (memory T1 " + std::to_string(after ? after->tracks[0].multiEnv[1] : -1)
+					+ ", sent " + std::to_string(want) + ")");
+			}
+			// the mute: CC 3 on the track's channel, refused with the reason where there is none (B-026)
+			for(int t = 0; t < 6; ++t)
+			{
+				const bool channel = ed::mmTrackChannel(gi->second, static_cast<uint8_t>(t)).has_value();
+				r.msg("{\"op\":\"mute\",\"t\":" + std::to_string(t) + ",\"on\":true}");
+				const bool taken = r.lastResult().find("ok")->asBool();
+				r.run(600);
+				const bool landed = ((r.tel.mutes.load() >> t) & 1) == 1;
+				check(taken == channel && landed == channel && (r.tel.mutes.load() & ~(1 << t) & 0x3f) == 0, v.name + ": T" + std::to_string(t + 1) + "'s mute "
+					+ (channel ? "lands" : "is refused, nothing muted") + " (" + (taken ? "taken" : "refused") + ", machine mutes "
+					+ std::to_string(r.tel.mutes.load()) + ")");
+				r.msg("{\"op\":\"mute\",\"t\":" + std::to_string(t) + ",\"on\":false}");
+				r.run(600);
+			}
+		}
+	}
+}
+
+namespace
+{
 	// B-049: the AMPLIFICATION envelope the editor draws (the catalogue's ampEnvelope, from ed::mmAmpAttackMs,
 	// mmAmpHoldSixteenths, mmAmpFallMs) is the one the firmware plays. GND-SIN on track 1, the filter open, one note;
 	// the output's level (RMS over 10 ms) against the level of a note with ATK 0 DEC 127 (the reference).
@@ -2804,6 +3111,14 @@ int main(const int _argc, char** _argv)
 			recording(rom);
 		if(only.empty() || only == "parked")
 			parkedKeys(rom);
+		if(only.empty() || only == "span")
+			channelSpan(rom);
+		if(only == "spanprobe")
+			channelProbe(rom);
+		if(only == "globalprobe")
+			globalProbe(rom);
+		if(only.empty() || only == "factoryglobal")
+			factoryGlobal(rom);
 		if(only == "machine")
 		{
 			machineStays(rom);

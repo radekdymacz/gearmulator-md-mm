@@ -15,7 +15,7 @@ window.MMDemoHost=window.MMHost?null:(()=>{
  function viewOf(){const F=(t,f)=>Object.fromEntries(f.map(n=>[n,copyV(t[n])]));
   return{ready:true,pat:S.pat,kit:S.kit,songSlot:S.songSlot??0,queued:S.queued,kitState:S.kitState,bpm:S.bpm,workName:S.workName,routing:S.routing,
    tracks:S.tracks.map(t=>F(t,[...KIT_F,...SEQ_F])),midi:S.midi.map(t=>F(t,[...MIDI_KIT_F,...SEQ_F])),locks:copyV(S.locks),len:S.len,mult:S.mult,swingAmt:S.swingAmt,
-   patTrn:S.patTrn,multi:copyV(S.multi),menv:copyV(S.menv),song:copyV(S.song),mmap:copyV(S.mmap),plays:copyV(S.plays),
+   patTrn:S.patTrn,multi:copyV(S.multi),menv:copyV(S.menv),song:copyV(S.song),mmap:copyV(S.mmap),plays:copyV(S.plays),glob:copyV(S.glob),
    patLens:Object.fromEntries(S.patInfo.map((x,p)=>[p,p===S.pat?S.len:x.len]))}}
  function put(e){base=structuredClone(e.base);rev=e.rev;const o=JSON.parse(e.lib,(k,v)=>v==="∞"?Infinity:v);Object.assign(S,o);show(base,true);drawLib()}
  const host={
