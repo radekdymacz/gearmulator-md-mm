@@ -40,6 +40,35 @@ namespace dsp56k
 			JitBlockInfo::Flags::PeripheralAccess);
 	}
 
+	namespace
+	{
+		void callFastForwardNopLoop(DSP* _dsp, const uint32_t _instructionsPerTurn, const uint32_t _cyclesPerTurn, const uint32_t _turnsPerExit)
+		{
+			_dsp->fastForwardNopLoop(_instructionsPerTurn, _cyclesPerTurn, _turnsPerExit);
+		}
+	}
+
+	bool JitBlock::isNopLoopBody(const JitBlockInfo& _info, const TWord _pc, const bool _isFastInterrupt) const
+	{
+		// a DO loop body (the block starts at the loop start and ends at the loop end) that returns to the dispatcher
+		// every maxDoIterations turns, made of NOPs only (the words as they are in P memory now: a write to them
+		// destroys the block)
+		if(!m_config.nopLoopFastForward || !m_config.maxDoIterations || _isFastInterrupt)
+			return false;
+		if(!_info.hasFlag(JitBlockInfo::Flags::IsLoopBodyBegin) || _info.terminationReason != JitBlockInfo::TerminationReason::LoopEnd)
+			return false;
+		if(!_info.memSize || _info.instructionCount != _info.memSize)
+			return false;
+		for(TWord i = 0; i < _info.memSize; ++i)
+		{
+			TWord opA, opB;
+			m_dsp.memory().getOpcode(_pc + i, opA, opB);
+			if(opA != 0)	// nop
+				return false;
+		}
+		return true;
+	}
+
 	void JitBlock::getInfo(JitBlockInfo& _info, const DSP& _dsp, const TWord _pc, const JitConfig& _config, const PagedArray<JitCacheEntry>& _cache, const std::set<TWord>& _volatileP, const std::map<TWord, TWord>& _loopStarts, const std::set<TWord>& _loopEnds)
 	{
 		const auto& opcodes = _dsp.opcodes();
@@ -294,6 +323,8 @@ namespace dsp56k
 
 		PushAllUsed pm(*this);
 
+		asmjit::BaseNode* cursorBeforeLoopBegin = m_asm.cursor();	// the idle fast-forward call goes here, see below
+
 		auto loopBegin = m_asm.newNamedLabel("loopBegin");
 		m_asm.bind(loopBegin);
 
@@ -302,6 +333,57 @@ namespace dsp56k
 		uint32_t blockFlags = 0;
 
 		getInfo(info, dsp(), _pc, m_config, _cache, _volatileP, _loopStarts, _loopEnds);
+
+		if(isNopLoopBody(info, _pc, isFastInterrupt))
+		{
+			// Once per entry of the block, before its first turn (the turns it runs inside jump to loopBegin): skip
+			// whole block executions while the dispatcher would only find nothing to do (DSP::fastForwardNopLoop).
+			// Nothing is loaded into host registers yet, so the call sees the registers in memory and the turns load
+			// them afresh. Per turn: one instruction per NOP word, and the cycles getInfo counted for the body.
+			auto* const cursor = m_asm.cursor();
+			m_asm.setCursor(cursorBeforeLoopBegin);
+
+			// Call only when a whole block of turns fits before the run's stop and the peripherals' cycle deadline,
+			// and LC still has a boundary ahead. These are the tests that fail most of the time (a playing machine
+			// has a serial slot every 96 cycles), and the call costs more than the turns of one block. The call
+			// tests everything again, exactly; this only saves calls that could not skip anything. Signed compares:
+			// a limit of 0 (none published, or the fast-forward off) fails the first test.
+			const auto noCall = m_asm.newLabel();
+			{
+				const auto* periph = m_dsp.getPeriph(0);
+				const RegGP value(*this);
+				const RegGP horizon(*this);
+				mem().mov(r64(horizon), m_dsp.getCycles());
+				m_asm.add(r64(horizon), asmjit::Imm(static_cast<uint64_t>(m_config.maxDoIterations) * info.cycleCount));
+				mem().mov(r64(value), m_dsp.getFastForwardCycleLimit());
+				m_asm.cmp(r64(value), r64(horizon));
+				m_asm.jle(noCall);
+				const auto noDeadline = m_asm.newLabel();
+				mem().mov(r32(value), reinterpret_cast<const uint8_t&>(periph->hasCycleDeadline()));
+				m_asm.test_(r32(value));
+				m_asm.jz(noDeadline);
+				mem().mov(r64(value), periph->getTargetCycle());
+				m_asm.cmp(r64(value), r64(horizon));
+				m_asm.jle(noCall);
+				m_asm.bind(noDeadline);
+				mem().mov(r32(value), reinterpret_cast<const uint32_t&>(m_dsp.regs().lc.var));
+				m_asm.cmp(r32(value), asmjit::Imm(m_config.maxDoIterations));
+				m_asm.jle(noCall);
+			}
+			{
+				const FuncArg r0(*this, 0);
+				const FuncArg r1(*this, 1);
+				const FuncArg r2(*this, 2);
+				const FuncArg r3(*this, 3);
+				mem().makeDspPtr(r0);
+				m_asm.mov(r32(r1), asmjit::Imm(info.memSize));
+				m_asm.mov(r32(r2), asmjit::Imm(info.cycleCount));
+				m_asm.mov(r32(r3), asmjit::Imm(m_config.maxDoIterations));
+				stack().call(asmjit::func_as_ptr(&callFastForwardNopLoop));
+			}
+			m_asm.bind(noCall);
+			m_asm.setCursor(cursor);
+		}
 
 		const auto pcNext = _pc + info.memSize;
 

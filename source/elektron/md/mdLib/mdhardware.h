@@ -253,7 +253,9 @@ namespace md
 		//   L5  the SIM steps its timers and UART transmitters at their next event (Sim::setDeferStepping),
 		// and of step 2:
 		//   L3  the Machinedrum's serial clock wakes its DSPs at the exact cycle of the next slot
-		//       (TransportPolicy::exactEssiCycleDeadlinesSpeedUps; the Monomachine always runs so).
+		//       (TransportPolicy::exactEssiCycleDeadlinesSpeedUps; the Monomachine always runs so),
+		//   L4  both DSPs skip the turns of NOP-only DO loops that the dispatcher would only pass through
+		//       (dsp56k::DSP::setIdleFastForward; bit-exact).
 		// Off, every one runs the code it replaced: the same machine state as before the speed-ups, at a
 		// higher host CPU. Step 1 is bit-exact in both positions; L3 is not: it moves the Machinedrum's DSP
 		// wake-ups, so its audio differs (once, by design) between the positions. GEARMULATOR_MDMM_SPEEDUPS=0 turns them off at construction. The finer
@@ -267,6 +269,8 @@ namespace md
 			m_uc.setMemoryFastLane(_on);
 			m_uc.getSim().setDeferStepping(_on && m_simDeferral);
 			applyEssiCycleDeadlines();
+			m_dspMixer.dsp().setIdleFastForward(_on);
+			m_dspProducer.dsp().setIdleFastForward(_on);
 		}
 		bool speedUps() const { return m_speedUps; }
 		void readMidiOut(std::vector<synthLib::SMidiEvent>& _midiOut)

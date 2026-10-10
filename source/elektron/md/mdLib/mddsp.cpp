@@ -114,6 +114,9 @@ namespace md
 		config.maxInstructionsPerBlock = 32;
 		// Likewise return from hardware DO loops regularly to service peripherals.
 		config.maxDoIterations = 4;
+		// Compile the idle fast-forward call into NOP-only DO loop bodies (the silent-voice stubs). Whether it skips
+		// anything is the speed-ups switch's (L4, Hardware::setSpeedUps); off, the call returns at once.
+		config.nopLoopFastForward = true;
 #if defined(__APPLE__) && defined(__aarch64__)
 		// JIT blocks are first compiled synchronously by the audio thread. On Apple
 		// silicon, the optimizer's cold cost exceeds its measured steady-state gain.

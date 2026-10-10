@@ -1,4 +1,7 @@
 #include <iostream>
+#include <sstream>
+#include <string>
+#include <vector>
 #include "jitdspregpool.h"
 #include "jitunittests.h"
 
@@ -68,6 +71,7 @@ namespace dsp56k
 
 		parallelMoveXY();
 		boundedDispatch();
+		nopLoopFastForward();
 	}
 
 	void JitUnittests::runtimeUnnormalizedFlag()
@@ -271,6 +275,111 @@ namespace dsp56k
 		verify(dsp.getCycles() >= 32);
 		if(needsGrowth)
 			verify(dsp.getJitEntriesSize() > highPC);
+	}
+
+	void JitUnittests::nopLoopFastForward()
+	{
+		// A NOP-only DO loop body, then a jump back to the DO: run it in slices, the way the hosts do (execUntilCycles,
+		// and exec() block by block under a published limit), with peripheral deadlines in instructions and in cycles
+		// that fall inside the loops. The state after every slice must be the same without the fast-forward code, with
+		// it switched off, and with it on; and on must actually skip. Each run gets a fresh DSP: the peripherals keep
+		// clock state across a reset.
+		constexpr TWord loopPC = 0x100;
+
+		struct Case { TWord count; TWord bodyNops; uint32_t instructionTarget; uint32_t cycleDeadline; };
+		const Case cases[] =
+		{
+			{1, 1, 100000, 0}, {2, 1, 13, 0}, {3, 2, 100000, 0}, {5, 1, 7, 0}, {50, 2, 61, 0}, {1000, 2, 997, 0},
+			{3200, 1, 1234, 0}, {3200, 1, 100000, 333}, {50, 2, 5, 17}, {4095, 3, 2049, 4093}, {4, 1, 100000, 0}
+		};
+
+		enum class Mode { Legacy, Off, On };
+		uint64_t skippedTotal = 0;
+
+		for(const auto& c : cases)
+		{
+			const auto run = [&](const Mode _mode)
+			{
+				DefaultMemoryValidator validator;
+				Peripherals56367 testPeripheralsY;
+				Peripherals56362 testPeripheralsX(&testPeripheralsY);
+				Memory testMemory(validator, 0x080000, 0x800000, 0x200000);
+				DSP testDsp(testMemory, &testPeripheralsX, &testPeripheralsY);
+
+				auto config = testDsp.getJit().getConfig();
+				config.maxDoIterations = 4;
+				config.nopLoopFastForward = _mode != Mode::Legacy;
+				testDsp.getJit().setConfig(config);
+
+				const auto emitTest = [&](const std::string& _text, const TWord _pc)
+				{
+					const auto result = assembler.assemble(_text.c_str());
+					verify(result.success());
+					testDsp.memWriteP(_pc, result.word[0]);
+					if(result.wordCount > 1)
+						testDsp.memWriteP(_pc + 1, result.word[1]);
+					return result.wordCount > 1 ? _pc + 2 : _pc + 1;
+				};
+
+				testDsp.resetHW();
+
+				std::stringstream doText;
+				doText << "do #" << c.count << ",>$" << std::hex << (loopPC + 2 + c.bodyNops);
+				TWord pc = emitTest(doText.str(), loopPC);
+				for(TWord i = 0; i < c.bodyNops; ++i)
+					pc = emitTest("nop", pc);
+				emitTest("jmp $100", pc);
+
+				testDsp.setPC(loopPC);
+				testDsp.setIdleFastForward(_mode == Mode::On);
+				testPeripheralsX.resetDelayCycles(testDsp.getInstructionCounter(), c.instructionTarget);
+				if(c.cycleDeadline)
+					testPeripheralsX.setCycleDeadline(c.cycleDeadline);
+
+				std::vector<uint64_t> states;
+				const auto record = [&]
+				{
+					const auto& r = testDsp.regs();
+					states.insert(states.end(), {uint64_t{testDsp.getPC().toWord()}, uint64_t{r.lc.toWord()},
+						uint64_t{r.la.toWord()}, uint64_t{r.sr.toWord()}, uint64_t{r.sp.toWord()},
+						testDsp.getInstructionCounter(), testDsp.getCycles(), testPeripheralsX.getTargetClock()});
+				};
+
+				uint64_t target = testDsp.getCycles();
+				for(const uint64_t step : {37ull, 500ull, 1ull, 4999ull, 12345ull, 3ull, 40000ull})
+				{
+					target += step;
+					testDsp.execUntilCycles(target);
+					record();
+
+					// block by block, as a host's inline loop, under its own limit
+					const auto stop = testDsp.getCycles() + step / 2 + 1;
+					const DSP::ScopedFastForwardLimit limit(testDsp, stop);
+					while(testDsp.getCycles() < stop)
+						testDsp.execJit();
+					record();
+				}
+
+				// without a published limit nothing is skipped
+				const auto skipped = testDsp.getFastForwardedTurns();
+				for(int i = 0; i < 200; ++i)
+					testDsp.execJit();
+				verify(testDsp.getFastForwardedTurns() == skipped);
+				record();
+
+				if(_mode != Mode::On)
+					verify(skipped == 0);
+				skippedTotal += skipped;
+				return states;
+			};
+
+			const auto legacy = run(Mode::Legacy);
+			verify(run(Mode::Legacy) == legacy);
+			verify(run(Mode::Off) == legacy);
+			verify(run(Mode::On) == legacy);
+		}
+
+		verify(skippedTotal > 0);
 	}
 
 	void JitUnittests::programMemoryInvalidation()

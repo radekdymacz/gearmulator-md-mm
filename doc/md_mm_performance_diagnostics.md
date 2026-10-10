@@ -38,7 +38,7 @@ click or a timing difference comes from them. With the speed-ups off the emulati
 speed-ups replaced, and costs about what it did before them: a few per cent less, because the one thing that stays
 on is the `processUC` gating (part B of L5; it only skips work that cannot change anything, so it has no switch).
 
-- **Step 1 (L1, L11, L2b, L5) produces the same audio in both positions, bit for bit**, checked on both firmwares
+- **Step 1 (L1, L11, L2b, L5) and step 2's L4 produce the same audio in both positions, bit for bit**, checked on both firmwares
   (audio, RAM, SRAM, loader RAM, patch RAM and MIDI out are compared); only the host CPU differs.
 - **Step 2's L3 changes the Machinedrum's audio between the positions, by design**: with the speed-ups on its
   serial ports wake the DSPs at the exact cycle of each slot, as the Monomachine always has; off, as before. The
@@ -66,6 +66,9 @@ The speed-ups the switch controls:
 - **L3** (step 2, Machinedrum only) the serial clock wakes the DSPs at the exact cycle of their next slot instead
   of at half the remaining cycles converted to instructions, so the DSPs are no longer stopped several times on
   the way to each slot. This one changes the Machinedrum's audio (above).
+- **L4** (step 2, both machines) the DSPs skip the turns of their idle NOP loops (the silent-voice stubs) that
+  would only pass through the dispatcher, up to the next moment anything is due. Bit-exact: the same audio as
+  without it, in both positions.
 
 Two finer environment variables exist for narrowing a problem down further. Both are environment
 variables only:

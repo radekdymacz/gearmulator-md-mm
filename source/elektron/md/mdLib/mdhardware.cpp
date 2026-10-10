@@ -1550,6 +1550,7 @@ namespace md
 				d.dsp().execUntilCycles(stopCyc);
 			else
 			{
+				const dsp56k::DSP::ScopedFastForwardLimit limit(d.dsp(), stopCyc);
 				d.dsp().exec();
 				while(d.dsp().getCycles() < stopCyc)
 					d.dsp().exec();
@@ -1638,6 +1639,9 @@ namespace md
 			d.dsp().execUntilCycles(std::min(targetCyc, clampStop));
 		else
 		{
+			// The backlog cannot change while the DSP only runs NOPs (the DSP writes HTX in an instruction, the
+			// UC does not run), so the cycle stop is the only one an idle fast-forward must not skip over.
+			const dsp56k::DSP::ScopedFastForwardLimit limit(d.dsp(), std::min(targetCyc, clampStop));
 			while(d.dsp().getCycles() < targetCyc && d.dsp().getCycles() < clampStop
 				&& (!s_mmBp
 					|| d.hostTxBacklog() <= policy.hostTransmitBackpressureThresholdWords))
@@ -1723,6 +1727,8 @@ namespace md
 			d.dsp().execUntilCycles(std::min(targetCyc, clampStop));
 		else
 		{
+			// see schedCatchUpDsp
+			const dsp56k::DSP::ScopedFastForwardLimit limit(d.dsp(), std::min(targetCyc, clampStop));
 			while(d.dsp().getCycles() < targetCyc && d.dsp().getCycles() < clampStop
 				&& (!bpGate
 					|| d.hostTxBacklog() <= policy.hostTransmitBackpressureThresholdWords))

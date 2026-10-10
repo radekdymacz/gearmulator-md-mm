@@ -128,6 +128,13 @@ namespace dsp56k
 		std::function<bool()>						m_externalInterruptAbort;	// see setExternalInterruptAbortPredicate
 		std::function<void(TWord)>					m_interruptServicedCallback;	// see setInterruptServicedCallback
 
+		// Idle fast-forward (fastForwardNopLoop): the switch, and the cycle count at which the code that runs this DSP
+		// stops (0: unknown, nothing is skipped). execUntilCycles publishes its target; a host loop that runs exec()
+		// block by block publishes its own with ScopedFastForwardLimit.
+		bool							m_idleFastForward = false;
+		uint64_t						m_fastForwardCycleLimit = 0;
+		uint64_t						m_fastForwardedTurns = 0;
+
 		Opcodes							m_opcodes;
 
 		struct OpcodeCacheEntry
@@ -211,6 +218,10 @@ namespace dsp56k
 		{
 			if(m_cycles >= _targetCycles)
 				return;
+
+			// The loop below stops at the first block boundary at or past the target: an idle fast-forward must not
+			// skip over it
+			const ScopedFastForwardLimit limit(*this, _targetCycles);
 
 			if constexpr(g_useJIT)
 			{
@@ -479,6 +490,40 @@ namespace dsp56k
 			m_instructions += _instructions;
 			m_cycles += _cycles;
 		}
+
+		// Idle fast-forward of DO loops whose body is only NOPs (JitConfig::nopLoopFastForward). Off by default.
+		void setIdleFastForward(const bool _on) { m_idleFastForward = _on; }
+		bool getIdleFastForward() const { return m_idleFastForward; }
+		uint64_t getFastForwardedTurns() const { return m_fastForwardedTurns; }	// all loop turns skipped so far
+		const uint64_t& getFastForwardCycleLimit() const { return m_fastForwardCycleLimit; }	// read by the JIT
+
+		// The code that runs this DSP block by block stops at the first block boundary whose cycle count is at or
+		// past _limit (it may stop earlier for reasons that cannot change while the DSP only runs NOPs). Published
+		// for the scope of the run; the previous limit comes back afterwards (runs can nest across the two DSPs'
+		// link, never on one DSP, but restoring costs nothing).
+		class ScopedFastForwardLimit
+		{
+		public:
+			ScopedFastForwardLimit(DSP& _dsp, const uint64_t _limit) noexcept : m_dsp(_dsp), m_previous(_dsp.m_fastForwardCycleLimit)
+			{
+				// with the fast-forward off no limit is published, so the blocks' inline test already says no
+				_dsp.m_fastForwardCycleLimit = _dsp.m_idleFastForward ? _limit : 0;
+			}
+			~ScopedFastForwardLimit() noexcept { m_dsp.m_fastForwardCycleLimit = m_previous; }
+			ScopedFastForwardLimit(const ScopedFastForwardLimit&) = delete;
+			ScopedFastForwardLimit& operator=(const ScopedFastForwardLimit&) = delete;
+		private:
+			DSP& m_dsp;
+			const uint64_t m_previous;
+		};
+
+		// Called by a NOP-only DO loop body block when it is entered (not between the turns it runs inside). The block
+		// returns to the dispatcher after every _turnsPerExit turns (when LC, decremented, is a multiple of it), and the
+		// dispatcher then tests the peripherals and the run's stop. While that test cannot fire, the turns change
+		// nothing but LC and the two counters, so whole block executions are skipped here, up to the last boundary
+		// before the first one at which the peripherals are due, the run stops, an interrupt is pending or the loop
+		// ends. The block then runs on from that boundary as usual: every test that can fire runs at the same count.
+		ASMJIT_NOINLINE void fastForwardNopLoop(uint32_t _instructionsPerTurn, uint32_t _cyclesPerTurn, uint32_t _turnsPerExit) noexcept;
 
 	private:
 
