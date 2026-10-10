@@ -154,3 +154,45 @@ both off, Phase 2 deletes them), and a fresh tree configures and builds.
 | Superproject pack (single-branch bare clone) | 260 MiB, plus four submodule clones | 273 MiB, nothing more to fetch for them |
 | Files of the four in a checkout | 285 MB (dsp56300 192, JUCE 69, RmlUi 22, mc68k 2) | 68 MB (dsp56300 10, JUCE 35, RmlUi 22, mc68k 2) |
 | Lines (C/C++/ObjC) dsp56300 / JUCE / RmlUi / mc68k | 2,229,086 / 998,166 / 200,194 / 69,259 | 205,013 / 824,444 / 200,194 / 69,259 |
+
+## After Phase 2 (delete what is not MD or MM), 2026-10-10
+
+Five slices on `cleanup/0.5`, each checked before the next on a fresh tree with the local gate's stages 1, 2 and 5
+(build, ctest, goldens) and the identities read from the built bundles:
+
+| Commit | Slice | Deleted (lines in the diff; C/C++/ObjC lines in brackets) |
+|---|---|---|
+| `c5533efd3` | 1. The other synths: virus*, osirus*, osTIrus*, mq*, xt*, nord, ronaldo, wLib, Android, their consoles, upstream's NSIS installer and Virus launchers, mdmm-shared-controller.yml | 119,022 (50,273) |
+| `4f15a4c92` | 2. VST2 (vstsdk2.4.2, mqVst2, fst), CLAP and cpp-terminal (both submodules), LV2 packaging, portaudio, portmidi, changelogGenerator, upstream's deploy/pack/rclone/products cmake scripts and root build scripts | 239,332 (127,020 + 25,426 in the two submodules) |
+| `a27d1c707` | 3. Upstream's workflows (cmake, elektron-*, nightly, release), AI notes, issue template, changelog and synth notes | 4,148 (0) |
+| `416f114cb` | 4. One product set: no SYNTH_* switches, no FX plug-in option; callers updated | 94 (0) |
+| `48bf68c90` | 5. The MCP server (mcpServerLib, the editor's MCP tools, the settings toggle, the constructor flag) | 5,847 (4,875) |
+
+Kept: pluginTester and midiLearnTest (the editors' tests and CI use them; pluginTester now hosts VST3 and AU
+only), bridge/networkLib/ptypes (jucePluginLib links bridgeClient and the plug-in state stores the device type
+with a remote host and port: removing the bridge changes how old projects load, a decision for Radek), CPack
+and the install rules in the root CMakeLists (the two `_AU_Validate` tests use them; nothing of ours runs cpack),
+LICENSE.md and README.upstream.md (credit), doc/lua_scripting.md and doc/midilearn (code we keep).
+
+| | Before (end of Phase 1, `86010f6d0`) | After (`48bf68c90`) |
+|---|---|---|
+| Goldens | 24 of 24 | 24 of 24, same file (after every slice but 3, which changed no code) |
+| ctest | 159 pass | 156 pass: the same names minus `mcpHttpGuardTest`, `mcpHttpServerTest`, `mcpServerTest` (deleted with the MCP server) |
+| Identities (bundles, IDs, AU codes, VST3 class IDs, version) | section 4 | identical after every slice, and in the fresh clone |
+| Lines (C/C++/ObjC) of the repository | 1,720,848 | 1,538,544 |
+| of which outside dsp56300, JUCE, RmlUi and mc68k | 421,916 | 239,612 (-43 %) |
+| of which `source/elektron` | 109,591 | 108,677 (the MCP constructor flag and its tests) |
+| Tracked files / bytes in a checkout (without freetype and lunasvg) | 7,314 / 278 MB | 5,761 / 94 MB |
+| Submodules | freetype, lunasvg, cpp-terminal, clap-juce-extensions | freetype, lunasvg |
+| Single-branch clone (pack) | 273 MiB | 278 MiB (history keeps the deleted files) |
+| Clean build on a fresh clone, 12 jobs: configure / six editor targets / rest of `all` | 20 s / 154 s / 353 s (Phase 0, busy Mac) | 19 s / 126 s / 506 s (load 16 at the start, 250 at the end: other agents; not comparable) |
+
+Fresh clone: `git clone --recurse-submodules --single-branch --branch cleanup/0.5` from GitHub with every
+`github.com/dsp56300/` and `github.com/joelanders/` URL rewritten to an unreachable host: it fetches only freetype
+and lunasvg, configures without a warning about unused options, and builds everything (editors and all test
+programs); its bundles carry the identities of section 4.
+
+One flaky test: `mdFirstStartFirmwareTest` failed 2 of 5 full ctest runs on these trees (after slices 1 and 4)
+and 1 of 10 runs alone; it passed every other time, also on the same build. When it fails, the second start goes
+"booting > ready" with 1 LCD frame and 0 resets, so the page never sees "animating". No deleted code is linked
+into it; it looks like a timing race in the first-start lifecycle that load makes likelier. Watch it in Phase 3.
