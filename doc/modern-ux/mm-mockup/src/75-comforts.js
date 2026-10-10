@@ -95,8 +95,8 @@ function liveRecord(){if(HOST.record)return HOST.record(true);S.rec=!S.rec;if(S.
 
 /* ---- the keyboard: two rows play the selected synth track chromatically, from any workspace, as a DAW's typing
    keyboard: A S D F G H J K L are the white keys C D E F G A B C D from C-3, W E · T Y U · O P the black keys above
-   them (C♯ D♯ · F♯ G♯ A♯ · C♯ D♯; R and I sit where a piano has no black key) (Z / X: the octave, −3 to +3; B taps
-   the tempo, since T is F♯ here; MM-PORT-PLAN.md 2026-10-05), real MIDI notes on the track's own channel
+   them (C♯ D♯ · F♯ G♯ A♯ · C♯ D♯; R and I sit where a piano has no black key) (Z / X: the octave, −3 to +3; ⇧B taps
+   the tempo everywhere, B off Sequence, since T is F♯ here; MM-PORT-PLAN.md 2026-10-05), real MIDI notes on the track's own channel
    (GLOBAL › MIDI › CHANNELS: base + track), at KB.vel (C / V: 20 40 60 80 100 127; the machine hears it through
    ASSIGN › VEL). Each key is its own note on and off, so legato and the machine's note priority work as on a
    keyboard; while LIVE RECORDING the machine records them. MIDI tracks are not played (their notes go to the
@@ -132,7 +132,9 @@ Keys.bind({id:"mute-track",scope:"any",keys:["M"],code:"KeyM",group:"Selected tr
 Keys.bind({id:"mute-all",scope:"any",keys:["M"],code:"KeyM",mod:"alt",group:"All",does:"Mute every track; when none is audible, unmute every track",when:kbOn,run:()=>muteAllToggle()});
 Keys.bind({id:"track-prev-next",scope:"any",keys:["ArrowUp","ArrowDown"],group:"Selected track",does:"Select the previous / next track of the side shown (a focused value keeps ↑ / ↓ for itself). Sequence with selected steps: move the selection a track",
  when:()=>kbOn()&&$("#kpop").hidden&&S.ws!=="song",run:e=>{if(selKeys()){selMove(e.key==="ArrowDown"?1:-1,0);return}const sd=side(),i=sd.indexOf(S.sel);select(sd[((i<0?0:i)+(e.key==="ArrowDown"?1:5))%6])}});
-Keys.bind({id:"tap-tempo",scope:"any",keys:["B"],group:"Transport",does:"Tap tempo (the average of the last taps; T plays F♯ here). On Sequence B is the piano roll's Draw",when:()=>kbOn()&&S.ws!=="seq",run:()=>tapTempo()});
+Keys.bind({id:"tap-tempo",scope:"any",keys:["B"],group:"Transport",does:"Tap tempo (the average of the last taps; T plays F♯ here). On Sequence B is the piano roll's Draw: tap with ⇧B",when:()=>kbOn()&&S.ws!=="seq",run:()=>tapTempo()});
+/* ⇧B taps on every workspace, Sequence included: the one tap chord of both editors (Radek, 2026-10-10) */
+Keys.bind({id:"tap-tempo-shift",short:"Tap",scope:"any",keys:["B"],mod:"shift",group:"Transport",does:"Tap tempo: ⇧B taps on every workspace of both editors",when:kbOn,run:()=>tapTempo()});
 Keys.bind({id:"rotate",scope:"seq",keys:["ArrowLeft","ArrowRight"],mod:"alt",group:"Selected track",does:"Sequence: rotate the selected track one step earlier / later: notes, slides and locks, wrapping at the length. Presses while ⌥ is down are one undo step. The one Alt that is not \"all\": FUNCTION + arrows on the machine",when:seqKeys,run:e=>rotateTrack(e.key==="ArrowRight"?1:-1)});
 Keys.bind({id:"unmute-all",scope:"any",keys:["0"],group:"All",does:"Unmute and unsolo every track",when:kbOn,run:()=>unmuteAll()});
 Keys.bind({id:"unmark-paste",scope:"seq",keys:["Escape"],group:"Sequence",does:"Unmark the tracks marked for paste",when:()=>seqKeys()&&S.marks.size>0,run:()=>{S.marks.clear();renderRail()}});

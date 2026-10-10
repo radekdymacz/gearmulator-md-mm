@@ -89,6 +89,7 @@ canvas.ed,.edblank,#lanescroll,.lcdroll,.slotgrid,.lcdbox{box-shadow:0 0 0 2px v
 .mst .nt em{font-style:normal;color:var(--keydim);font-size:9px}
 .mst.lk::before{content:"";position:absolute;right:4px;top:12px;width:5px;height:5px;background:var(--cream)}
 .mst.sl::after{content:"";position:absolute;left:3px;top:12px;width:9px;height:5px;background:linear-gradient(135deg,transparent 45%,var(--cream) 45% 60%,transparent 60%)}
+.tc.lkpend,.lb.lkpend{outline:2px dashed var(--led);outline-offset:-2px}
 .mst.ph{box-shadow:0 0 0 2px var(--cream)!important}
 .mst.dim{opacity:.35}
 .mrowg.off .mst.on{filter:saturate(0) brightness(.7)}

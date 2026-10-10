@@ -40,9 +40,9 @@ const run = list.filter(b => b.run), name = b => `${Keys.label(b)} (${b.group})`
 
 /* ---- rule: no ⇧ chords, ⌘ only for the standard edit keys ---- */
 /* the standard edit keys, and the selection's (K7, as the Machinedrum Editor: ⌘X ⌘D ⌘A, ⇧← ⇧→ extend) */
-const STD_CMD = new Set(["cmd KeyZ", "cmd+shift KeyZ", "cmd KeyY", "cmd KeyC", "cmd KeyV", "cmd KeyX", "cmd KeyD", "cmd KeyA", "shift ArrowLeft", "shift ArrowRight"]);
+const STD_CMD = new Set(["cmd KeyZ", "cmd+shift KeyZ", "cmd KeyY", "cmd KeyC", "cmd KeyV", "cmd KeyX", "cmd KeyD", "cmd KeyA", "shift ArrowLeft", "shift ArrowRight", "shift KeyB"]);
 const badMod = run.filter(b => ids(b).some(id => { const m = b.mod || ""; return m.includes("shift") && !STD_CMD.has(m + " " + id) || m.includes("cmd") && !STD_CMD.has(m + " " + id); }));
-check(!badMod.length, "no ⇧ or ⌘ commands but ⌘Z ⌘⇧Z ⌘Y ⌘C ⌘V, the selection's ⌘X ⌘D ⌘A ⇧← ⇧→" + (badMod.length ? ": " + badMod.map(name).join(", ") : ""));
+check(!badMod.length, "no ⇧ or ⌘ commands but ⇧B (tap tempo), ⌘Z ⌘⇧Z ⌘Y ⌘C ⌘V, the selection's ⌘X ⌘D ⌘A ⇧← ⇧→" + (badMod.length ? ": " + badMod.map(name).join(", ") : ""));
 
 /* ---- rule: no two dispatched entries on one key and modifiers, unless both are conditional and known exclusive ---- */
 /* Escape: each closes what is open (the help, a dialog, LEARN, the paste marks, the selection, GLOBAL), one at a time;
@@ -56,8 +56,8 @@ check(!clash.length, "no two dispatched entries share a key and modifiers" + (cl
 /* ---- the approved map is there (RULE 1-3) ---- */
 const has = (m, id) => run.some(b => (b.mod || "") === m && ids(b).includes(id));
 /* R / Alt+R: randomise the selected track / every track (GEN, on Sound MUTATE; MM-PORT-PLAN.md d) */
-const WANT = [["", "KeyR", "randomise the selected track"], ["alt", "KeyR", "randomise every track"], ["", "KeyA", "a note"], ["", "KeyL", "a note"], ["", "KeyZ", "octave down"], ["", "KeyX", "octave up"], ["", "KeyC", "velocity down"], ["", "KeyV", "velocity up"],
-	["", "Space", "play / stop"], ["alt", "Space", "record + play"], ["", "KeyM", "mute the selected track"], ["", "KeyB", "tap tempo (and Draw on Sequence)"], ["", "KeyW", "a black key (C♯)"], ["", "KeyT", "a black key (F♯)"], ["", "KeyP", "a black key (D♯)"],
+const WANT = [["shift", "KeyB", "tap tempo on every workspace"], ["", "KeyR", "randomise the selected track"], ["alt", "KeyR", "randomise every track"], ["", "KeyA", "a note"], ["", "KeyL", "a note"], ["", "KeyZ", "octave down"], ["", "KeyX", "octave up"], ["", "KeyC", "velocity down"], ["", "KeyV", "velocity up"],
+	["", "Space", "play / stop"], ["alt", "Space", "record + play"], ["", "KeyM", "mute the selected track"], ["", "KeyB", "tap tempo off Sequence (Draw on Sequence)"], ["", "KeyW", "a black key (C♯)"], ["", "KeyT", "a black key (F♯)"], ["", "KeyP", "a black key (D♯)"],
 	["", "ArrowUp", "previous track"], ["", "ArrowDown", "next track"], ["alt", "KeyM", "mute / unmute all"], ["alt", "Delete", "clear the pattern"],
 	["alt", "ArrowLeft", "rotate"], ["alt", "ArrowRight", "rotate"], ["", "Digit0", "unmute / unsolo all"], ["cmd", "KeyZ", "undo"], ["cmd", "KeyC", "copy"], ["cmd", "KeyV", "paste"],
 	["", "?", "the list of keys"]];

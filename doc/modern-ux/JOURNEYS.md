@@ -50,6 +50,7 @@ no journey yet); **not testable** (why). "—": the editor has no such feature.
 | Space plays and stops | md-keys-space-play PASS | mm-keys-space-play PASS (see note 2) |
 | Tempo: drag the BPM | md-top-tempo-drag PASS | mm-top-tempo-drag PASS |
 | Tap tempo (MD: T or B; MM: B, since T is a black key there, 2026-10-05) | md-keys-tap-tempo PASS, md-keys-tap-tempo-b PASS | mm-keys-tap-tempo PASS (B) |
+| ⇧B taps on every workspace of both editors, MM Sequence included where B is Draw (Radek, 2026-10-10) | md-keys-tap-tempo-shift PASS (2026-10-10) | mm-keys-tap-tempo-shift PASS (2026-10-10, on Sequence, Draw unchanged) |
 | Pattern ‹ › on the LCD | md-top-pattern-next PASS | mm-top-pattern-next PASS |
 | A pattern picked while playing is queued, starts at the end | md-seq-queue-while-playing PASS | mm-seq-queue-while-playing PASS |
 | Plate MK1 / MK2 | md-top-plate PASS | mm-top-plate PASS |
@@ -71,6 +72,7 @@ no journey yet); **not testable** (why). "—": the editor has no such feature.
 | Window fits the screen, remembers its size; top bar fits 1280 px | not testable: the window size is the host's | same |
 | MIDI mapping (Control workspace, LEARN) | skipped: hidden by design until the controller feature exists | same |
 | SysEx import | md-lib-syx-import (with GEARMULATOR_MDMM_SYX_FILE: the file the native chooser would give; kits, as from a cable, read back) | mm-lib-syx-import (the same, on SYSEX RECV) |
+| SysEx import with globals, then M on the rail and PLAY (the mute holds), then the pattern ‹ › stopped and playing (B-026, B-031) | md-lib-syx-import-mute | mm-lib-syx-import-mute PASS (2026-10-10, the Autechre backup: its global has CHANNEL SPAN 0, so the M is refused, the notice's "Give each track its own channel" taken, then M mutes and holds while playing) |
 | A file dropped on the window (macOS, 2026-10-09): a .syx opens its import window | md-drop-syx (with GEARMULATOR_MDMM_SYX_FILE, dropped through the window's drop path; not run yet) | mm-drop-syx (the same; not run yet) |
 
 ## Sequence
@@ -89,12 +91,12 @@ no journey yet); **not testable** (why). "—": the editor has no such feature.
 | Copy, paste, clear steps (Cmd+C, Cmd+V; since K2 (MD) and K7 (MM): Delete with no selection does nothing, Clr clears the page) | md-seq-copy-paste-clear PASS | mm-seq-copy-paste-clear PASS (2026-10-10, K7) |
 | Select steps with ⌘-click / ⌘-drag (K2; MM K7: the piano roll, ⌘⇧-click on the next track's roll for a two-track block), the LCD's PASTE and CLR on the selection, ⌘D | md-seq-select-copy-paste PASS | mm-seq-select-copy-paste PASS (2026-10-10) |
 | The step menu (right-click a step, K3; MM K7: in the roll or a trig row): accent (MM: slide), copy, paste here | md-seq-step-menu PASS | mm-seq-step-menu PASS (2026-10-10) |
-| Cmd+C, Cmd+V, Cmd+Z as the operating system delivers them (real `NSEvent`s through AppKit's key path, `u.osKey`; B-015), standalone and VST3, 2026-10-08 | md-seq-os-copy-paste PASS (FAIL without the fix: no key reached the page) | not covered |
+| Cmd+C, Cmd+V, Cmd+Z as the operating system delivers them (real `NSEvent`s through AppKit's key path, `u.osKey`; B-015), standalone and VST3, 2026-10-08 | md-seq-os-copy-paste PASS (FAIL without the fix: no key reached the page) | mm-seq-os-copy-paste PASS (2026-10-10, standalone) |
 | A selected step copied and pasted with the mouse (the top bar's Copy, Paste, Clr), 2026-10-08 | md-seq-copy-paste-buttons PASS | mm-seq-copy-paste-buttons PASS (2026-10-10) |
 | Clear the whole pattern (Alt+Delete), undo | md-seq-clear-pattern-undo PASS | mm-seq-clear-pattern-undo PASS |
 | Every-N fill (the step menu: MD since K3, MM since K7) | md-seq-fill-every PASS | mm-seq-fill-every PASS (2026-10-10, the step menu) |
 | Rotate (Alt+← →) | md-seq-rotate PASS | mm-seq-rotate PASS |
-| A rotate run ends when Alt is seen up in any event: the next rotate is its own undo step (2026-10-05) | md-seq-rotate-undo PASS | mm-seq-roll-paint PASS (after mm-seq-rotate, its paint and erase are their own undo steps) |
+| A rotate run ends when Alt is seen up in any event: the next rotate is its own undo step (2026-10-05) | md-seq-rotate-undo PASS | mm-seq-rotate-undo PASS (2026-10-10); mm-seq-roll-paint PASS (after mm-seq-rotate, its paint and erase are their own undo steps) |
 | Paste to many marked tracks (Shift-click headers) | md-seq-paste-many PASS | mm-seq-paste-many PASS |
 | Live recording (REC / Alt+Space) | md-seq-live-record PASS | mm-seq-live-record PASS |
 | GRID RECORDING (MM RECORD stopped) | — | mm-seq-grid-record PASS (bug 4, fixed; see note 2) |
@@ -135,7 +137,7 @@ no journey yet); **not testable** (why). "—": the editor has no such feature.
 | Drag across M keys | md-mix-mute-solo PASS | mm-mix-drag-m-keys PASS |
 | Shift-armed mutes | md-mix-shift-mutes PASS | mm-mix-shift-mutes PASS |
 | M/S off | md-mix-ms-off PASS | mm-mix-ms-off PASS |
-| Volume / LEVEL fader, undo | md-mix-fader-undo PASS | mm-mix-level-mute PASS |
+| Volume / LEVEL fader, undo | md-mix-fader-undo PASS | mm-mix-level-mute PASS (Undo key), mm-mix-fader-undo PASS (⌘Z, 2026-10-10) |
 | Strip mute | md-mix-mute-solo PASS | mm-mix-level-mute PASS |
 | PAN / trim boxes | md-mix-pan-undo PASS | mm-mix-pan-undo PASS |
 | Outputs: OUT key / routing mode | md-mix-out-route PASS | mm-mix-routing PASS |

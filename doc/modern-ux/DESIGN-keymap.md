@@ -33,7 +33,8 @@ concept, **H** a key that hosts or the OS commonly take (§1.6).
 | W E T Y U O P | black keys | anywhere | — | yes | mm:1668,1674 | ≠ |
 | Z / X | octave −/+ (MD ±2, MM ±3) | anywhere | yes | yes | mdDeskLive.js:264-269; mm:1669-1675 | ≠ range |
 | C / V | velocity −/+ | anywhere | yes | yes | mdDeskLive.js:266-270; mm:1671-1676 | |
-| T, B | tap tempo | anywhere | T and B | B only (T is F♯) | mdDeskLive.js:131; mm:1683 | ≠ |
+| T, B | tap tempo | anywhere | T and B | B only (T is F♯); on Sequence B is the roll's Draw (0.5) | mdDeskLive.js:131; mm:1683 | ≠ |
+| ⇧B | tap tempo (Radek, 2026-10-10: the one tap chord of both editors, every workspace) | anywhere | yes | yes, Sequence included | mdDeskLive.js `tap-tempo-shift`; mm 75-comforts.js | |
 | M / ⌥M | mute selected / all (none audible: unmute all) | anywhere | yes | yes | mdDeskLive.js:49-50; mm:1679-1680 | |
 | 0 | unmute and unsolo all | anywhere | yes | yes | mdDeskComforts.js:126; mm:1685 | H (Logic screensets) |
 | R / ⌥R | randomise selected / all (Sound: MUTATE; else GEN) | anywhere | yes | yes | mdDeskGenUi.js:263-264; mm:1881-1883 | |

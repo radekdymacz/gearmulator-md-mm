@@ -30,6 +30,16 @@ function renderRail(){const r=$("#rail"),withSide=S.ws==="seq"||S.ws==="sound";
  r.innerHTML=`<div class="railhead">Track<button class="iconkey allon" id="allon" ${anyMs?"":"disabled"} title="Unmute and unsolo every track (0)">M/S off</button></div>`+side().map(th).join("")+(withSide?`<div style="margin-top:4px">${sideSw()}</div>`:"")+(S.ws==="seq"?lockPicker(S.sel):"");altLabels()}
 function rowStatus(t){const tr=trk(t),arp=tr.arp.MODE>0,trn=tr.tr.TRACK-64;return[arp?"ARP":"",t<6&&tr.tr.SCALE?["","FIX","MAJ","MIN"][tr.tr.SCALE]:(trn?(trn>0?"+":"")+trn:"")].filter(Boolean).join(" ")}
 const ROLL_TIP=t=>`${tLabel(t)} notes. ${S.rollDraw?`Draw (B): click adds a note of ${MmRoll.say(S.rollLen)}, drag sideways paints · up or down: pitch · shift-click adds a chord note`:`Select (B: draw): drag a box round notes · click a note selects it · drag the selection moves it (⌘-drag: a copy) · double-click adds a note · shift-click a note extends the selection`} · drag a note's end: its length (new notes get it too; a ${isMidiT(t)?"MIDI note's LEN, 6 a step":"NOTE OFF where it ends"}) · alt-click deletes a note (the one before keeps its length), or sets a NOTE OFF on an empty step · ⌘-click or ⌘-drag selects steps · right-click: the step menu · scroll = pitch${isMidiT(t)?"":" · the keys on the left play the note"}${(()=>{const a=trk(t).arp;return a.MODE&&a.SPD?` · light notes: what the arpeggiator plays${a.PLAY===4?" (random order: outlined, the pitches vary)":""}`:""})()}`;
+/* ===== Values while live recording (as the MD Editor's): the firmware locks the step that plays when a value arrives (CC; a
+   step without a trig gets a trigless lock); the plug-in names it (machine.desk.recLock: track, page.value, step) and
+   the trig row's cell and the lock lane's bar show it until the read-back brings the real lock. ===== */
+let recLockKey="";
+function markRecLock(){$$(".lkpend").forEach(c=>c.classList.remove("lkpend"));const l=S.recLock;if(!l||S.ws!=="seq"||l.t!==S.sel)return;
+ const c=document.querySelector(`#tlanes .tlane.env [data-s="${l.s}"]`);if(c)c.classList.add("lkpend");
+ if(S.lane===l.pid){const b=document.querySelector(`#lane .lb[data-s="${l.s}"]`);if(b)b.classList.add("lkpend")}}
+function setRecLock(l){S.recLock=l||null;const key=l?l.t+":"+l.pid+":"+l.s:"";
+ if(key&&key!==recLockKey)toast(`Locks ${tLabel(l.t)} ${pidLabel(l.t,l.pid)} on step ${l.s+1}: the step that plays when the value arrives.`);
+ recLockKey=key;setTimeout(markRecLock,20)}
 function renderSeq(){const t=S.sel,tr=trk(t),midi=isMidiT(t);dockOf(t);
  const rows=[["env",midi?"VEL":"Env"],["sld","Slide"],["swg","Swing"]];
  let h=`<div class="scroll" id="seqscroll"><div class="mstack ${S.viewAll?"all":""}" id="seq"><div class="mrowg ruler" style="grid-template-columns:${cols()}"><div class="rul"></div>${steps().map(s=>`<div class="rul ${gapC(s)} ${rulSel(s)}" data-s="${s}">${s%4===0?s+1:""}</div>`).join("")}</div>
@@ -42,7 +52,7 @@ function renderSeq(){const t=S.sel,tr=trk(t),midi=isMidiT(t);dockOf(t);
  <div class="lanewrap"><div class="lanetop">${S.dock==="locks"?`<span class="cap">Lock lane · ${tLabel(t)} ${midi?"CH"+String(tr.ch).padStart(2,"0"):tr.m} · <b id="lanename">${pidLabel(t,S.lane)}</b> <span class="lanescale" id="lanescale"></span></span>
   <span class="lockbudget" id="lockbudget"></span><span class="lanehelp" title="Draw across the bars to lock this parameter per step. Alt-drag erases. Shift-drag draws a ramp, a straight line from where you press to where you let go. The wheel over a step with a trig moves its lock (Shift: fine). Hatched steps have no trig, so they cannot hold a lock. Dashed line = kit value. A slide step glides to the next lock.">Draw to lock · ⇧ ramp · alt erases</span>`:(()=>{const[h,hl]=dockHelp(t,S.dock);return`<span class="cap">${DOCKN[S.dock]} · ${tLabel(t)} ${midi?"CH"+String(tr.ch).padStart(2,"0"):tr.m}</span><span class="lockbudget dkread" id="dkread">${dockRead(t,S.dock)}</span><span class="lanehelp dkhelp" title="${dkAttr(hl)}">${h}</span>`})()}${dockTabs(t)}</div>
   ${S.dock==="locks"?dockBody(t):`<div class="dockbody" id="dock">${dockBody(t)}</div>`}</div>`;
- $("#main").innerHTML=h;document.body.classList.toggle("dockother",S.dock!=="locks");fitLane();renderLane();syncScroll();syncControls();alignLock();syncLockBudget()}
+ $("#main").innerHTML=h;document.body.classList.toggle("dockother",S.dock!=="locks");fitLane();renderLane();syncScroll();syncControls();alignLock();syncLockBudget();markRecLock()}
 /* as in the MD Editor: the rail's LOCK PARAMETER block starts on the line above the lock lane (the lane's top border, under the GEN bar) and ends at its bottom edge */
 function alignLock(){const rp=$("#rail .railparams"),lt=$(".lanetop"),ls=$("#lanescroll")||$("#main>.lanewrap>.dockbody");if(!rp||!lt||!ls||S.ws!=="seq")return;
  const roll=$("#seq canvas.roll[data-big]"),tb=rp.querySelector(".pagetabs");
@@ -186,7 +196,7 @@ function setRollDraw(on){S.rollDraw=!!on;S.rollBox=null;rollPrefs();syncRollKeys
 function setRollLen(L,say){L=clamp(Math.round(L),1,64);if(L!==S.rollLen){S.rollLen=L;rollPrefs();syncRollKeys()}if(say)toast(`New notes: ${MmRoll.say(L)}.`)}
 /* the Len key: the next (shift: the one before) of 1/16 1/8 1/4 1/2 1 bar, from where it is */
 function stepRollLen(back){const Ls=MmRoll.LENGTHS,n=back?[...Ls].reverse().find(x=>x<S.rollLen)??Ls[Ls.length-1]:Ls.find(x=>x>S.rollLen)??Ls[0];setRollLen(n,true)}
-Keys.bind({id:"roll-draw",short:"Draw",scope:"seq",keys:["B"],group:"Sequence",does:"Piano roll: draw notes on / off (off: drag a box round notes to select them, drag them to move, double-click adds one). B taps the tempo on the other workspaces",when:()=>seqKeys()&&kbOn(),run:()=>setRollDraw(!S.rollDraw)});
+Keys.bind({id:"roll-draw",short:"Draw",scope:"seq",keys:["B"],group:"Sequence",does:"Piano roll: draw notes on / off (off: drag a box round notes to select them, drag them to move, double-click adds one). ⇧B taps the tempo here, B on the other workspaces",when:()=>seqKeys()&&kbOn(),run:()=>setRollDraw(!S.rollDraw)});
 Keys.bind({id:"roll-box",scope:"seq",area:"Roll",keys:["drag in an empty place"],group:"Sequence",does:"Select (Draw off): box notes; the selection takes them from the first trig to the last one's end. Drag the selection: move it"});
 Keys.bind({id:"roll-length",scope:"seq",area:"Roll",keys:["drag a note's end"],group:"Sequence",does:"The note's length (a NOTE OFF where it ends; a MIDI note's LEN, 6 a step); new notes get it too. Up to the track's next trig, past the pattern's end onto its start"});
 const midiOf=t=>isMidiT(t)?{kitLen:trk(t).v.MID[0]}:null;

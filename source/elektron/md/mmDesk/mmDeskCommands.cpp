@@ -69,7 +69,8 @@ namespace mmDesk
 			chain.ask->details.set("p", p);
 		}
 		const auto it = _view.patterns.find(static_cast<uint8_t>(p));
-		if(it == _view.patterns.end() || static_cast<int>(it->second.kit) == m_curKit || kitState(_view) != deskCore::KitState::Edited)
+		// B-053: only a pick in banks A-D loads the kit it links (pickLoadsKit)
+		if(it == _view.patterns.end() || !pickLoadsKit(p) || static_cast<int>(it->second.kit) == m_curKit || kitState(_view) != deskCore::KitState::Edited)
 			return chain;
 		Outcome o = ask("discardKit", "<b>" + ed::mmPatternName(static_cast<uint8_t>(p)) + "</b> uses kit <b>" + kitLabel(_view, it->second.kit)
 			+ "</b>. Your edits to <b>" + kitLabel(_view, m_curKit) + "</b> are not saved on the machine and will be lost.", "Switch and lose edits");

@@ -161,7 +161,8 @@
     <div class="tablewrap"><table><tbody>
       <tr><th scope="row"><kbd>Space</kbd></th><td>Play / stop</td></tr>
       <tr><th scope="row"><kbd>⌥</kbd> <kbd>Space</kbd></th><td>MD: Live recording (RECORD + PLAY): Alt + play, the other Alt that is not "all"<br>MM: Live recording (RECORD + PLAY): Alt + play, the other Alt that is not "all". Again: recording off</td></tr>
-      <tr><th scope="row"><kbd>T</kbd> / <kbd>B</kbd> <small>(MM: <kbd>B</kbd>)</small></th><td>MD: Tap tempo (the average of the last taps; B as in the Monomachine Editor)<br>MM: Tap tempo (the average of the last taps; T plays F♯ here). On Sequence B is the piano roll's Draw</td></tr>
+      <tr><th scope="row"><kbd>T</kbd> / <kbd>B</kbd> <small>(MM: <kbd>B</kbd>)</small></th><td>MD: Tap tempo (the average of the last taps; B as in the Monomachine Editor)<br>MM: Tap tempo (the average of the last taps; T plays F♯ here). On Sequence B is the piano roll's Draw: tap with ⇧B</td></tr>
+      <tr><th scope="row"><kbd>⇧</kbd> <kbd>B</kbd></th><td>Tap tempo: ⇧B taps on every workspace of both editors</td></tr>
     </tbody></table></div>
 
     <h3>Workspaces</h3>
@@ -185,7 +186,7 @@
       <tr><th scope="row"><kbd>Esc</kbd></th><td>Clear the step selection</td></tr>
       <tr><th scope="row"><kbd>[</kbd> / <kbd>]</kbd></th><td>Previous / next page</td></tr>
       <tr><th scope="row"><kbd>Delete</kbd> / <kbd>Backspace</kbd></th><td>Clear the selected steps; with none selected nothing (Clr clears the page shown, ⌥Delete the pattern). Song: delete the row</td></tr>
-      <tr><th scope="row"><kbd>B</kbd></th><td>MM: Piano roll: draw notes on / off (off: drag a box round notes to select them, drag them to move, double-click adds one). B taps the tempo on the other workspaces</td></tr>
+      <tr><th scope="row"><kbd>B</kbd></th><td>MM: Piano roll: draw notes on / off (off: drag a box round notes to select them, drag them to move, double-click adds one). ⇧B taps the tempo here, B on the other workspaces</td></tr>
     </tbody></table></div>
 
     <h3>Song</h3>
@@ -201,9 +202,9 @@
 
     <h3>Anywhere</h3>
     <div class="tablewrap"><table><tbody>
-      <tr><th scope="row"><kbd>⌘</kbd> <kbd>-</kbd></th><td>MD: Page zoom: smaller (also in the editor's menu)</td></tr>
-      <tr><th scope="row"><kbd>⌘</kbd> <kbd>=</kbd></th><td>MD: Page zoom: larger (⌘+ too)</td></tr>
-      <tr><th scope="row"><kbd>⌘</kbd> <kbd>0</kbd></th><td>MD: Page zoom: back to 100 %</td></tr>
+      <tr><th scope="row"><kbd>⌘</kbd> <kbd>-</kbd></th><td>Page zoom: smaller (also in the editor's menu)</td></tr>
+      <tr><th scope="row"><kbd>⌘</kbd> <kbd>=</kbd></th><td>Page zoom: larger (⌘+ too)</td></tr>
+      <tr><th scope="row"><kbd>⌘</kbd> <kbd>0</kbd></th><td>Page zoom: back to 100 %</td></tr>
       <tr><th scope="row"><kbd>Esc</kbd></th><td>Close the dialog</td></tr>
       <tr><th scope="row"><kbd>⌘</kbd> <kbd>Z</kbd></th><td>Undo</td></tr>
       <tr><th scope="row"><kbd>⌘</kbd> <kbd>⇧</kbd> <kbd>Z</kbd></th><td>Redo</td></tr>
@@ -261,7 +262,7 @@
 
     <h3>Mouse: Lock lane</h3>
     <div class="tablewrap"><table><tbody>
-      <tr><th scope="row">lock lane</th><td>MD: Drag over the bars: lock the lane's parameter on each step with a trig</td></tr>
+      <tr><th scope="row">lock lane</th><td>Drag over the bars: lock the lane's parameter on each step with a trig</td></tr>
       <tr><th scope="row"><kbd>⇧</kbd> lock lane</th><td>Drag: a ramp, a straight line from the press to the release (one undo step)</td></tr>
       <tr><th scope="row"><kbd>⌥</kbd> lock lane</th><td>Drag: erase locks</td></tr>
       <tr><th scope="row"><kbd>⌥</kbd> lock lane clear</th><td>Click: clear every lock of the track (all its parameters)</td></tr>
@@ -270,15 +271,15 @@
 
     <h3>Mouse: GEN bar</h3>
     <div class="tablewrap"><table><tbody>
-      <tr><th scope="row">GEN value</th><td>MD: Click: +1; ⇧-click: −1; drag up or down, or the wheel (⇧: 10)</td></tr>
-      <tr><th scope="row">R key</th><td>MD: Click: randomise the selected track, as R</td></tr>
+      <tr><th scope="row">GEN value</th><td>Click: +1; ⇧-click: −1; drag up or down, or the wheel (⇧: 10)</td></tr>
+      <tr><th scope="row">R key</th><td>MD: Click: randomise the selected track, as R<br>MM: Click: randomise the selected track, as R (⌥-click: every track)</td></tr>
       <tr><th scope="row"><kbd>⌥</kbd> GEN value</th><td>MD: Change a GEN value: every track's spec, the whole pattern (one pattern change, one undo step per run)<br>MM: Change a GEN value: every track of the side shown, the whole pattern (one undo step per run)</td></tr>
       <tr><th scope="row"><kbd>⌥</kbd> R key</th><td>MD: Click: randomise every track (Sound: the whole kit; MIDI and CTR tracks are left alone, VOL is kept)<br>MM: Click: randomise every track (Sound: every synth track; VOL and TUNE stay)</td></tr>
     </tbody></table></div>
 
     <h3>Mouse: Tracks</h3>
     <div class="tablewrap"><table><tbody>
-      <tr><th scope="row">M / S key</th><td>MD: Click: mute / solo that track</td></tr>
+      <tr><th scope="row">M / S key</th><td>Click: mute / solo that track</td></tr>
       <tr><th scope="row"><kbd>⇧</kbd> track header</th><td>Click: mark the track for paste; ⌘V then pastes into every marked track (one undo step)</td></tr>
       <tr><th scope="row"><kbd>⇧</kbd> M key</th><td>Click: prepare that track's mute (+ / X); applied when ⇧ is let go</td></tr>
       <tr><th scope="row">drag M / S keys</th><td>Mute (solo) or unmute every track the drag crosses, as the first key became</td></tr>
@@ -286,30 +287,30 @@
 
     <h3>Mouse: Values</h3>
     <div class="tablewrap"><table><tbody>
-      <tr><th scope="row">value</th><td>MD: Drag up / down or sideways: change it, a value a pixel</td></tr>
-      <tr><th scope="row"><kbd>⇧</kbd> value</th><td>MD: Drag: fine, a quarter as fast</td></tr>
-      <tr><th scope="row">wheel on a value</th><td>MD: One step a notch (⇧: 10)</td></tr>
-      <tr><th scope="row">double-click a value</th><td>MD: Back to its default (64; VOL 100)</td></tr>
+      <tr><th scope="row">value</th><td>Drag up / down or sideways: change it, a value a pixel</td></tr>
+      <tr><th scope="row"><kbd>⇧</kbd> value</th><td>Drag: fine, a quarter as fast</td></tr>
+      <tr><th scope="row">wheel on a value</th><td>One step a notch (⇧: 10)</td></tr>
+      <tr><th scope="row">double-click a value</th><td>MD: Back to its default (64; VOL 100)<br>MM: Back to its default (64; a list's first entry)</td></tr>
       <tr><th scope="row"><kbd>⌥</kbd> drag a value</th><td>MD: Control All: move that knob on every track (FUNCTION + knob on the machine)<br>MM: Control All: move that value on every synth track (an editor feature; the Monomachine has no such key)</td></tr>
     </tbody></table></div>
 
     <h3>Mouse: Top bar</h3>
     <div class="tablewrap"><table><tbody>
-      <tr><th scope="row">tempo</th><td>MD: Drag up or down: the tempo, half a BPM a pixel (⇧: a tenth)</td></tr>
+      <tr><th scope="row">tempo</th><td>Drag up or down: the tempo, half a BPM a pixel (⇧: a tenth)</td></tr>
       <tr><th scope="row"><kbd>⌥</kbd> CLR</th><td>MD: Click: clear the whole pattern, every track's trigs and locks (one undo step)<br>MM: Click: clear the whole pattern, every track's notes, slides and locks (one undo step)</td></tr>
       <tr><th scope="row">GLOBAL key</th><td>The machine's own settings, kept in its memory: MIDI channels, sync and the rest (also the engine menu: GLOBAL…)</td></tr>
     </tbody></table></div>
 
     <h3>Mouse: LCD</h3>
     <div class="tablewrap"><table><tbody>
-      <tr><th scope="row">LCD value</th><td>MD: Click: its next value; ⇧-click the previous one. LEN, SPD, SONG: drag up or down to step through them</td></tr>
+      <tr><th scope="row">LCD value</th><td>MD: Click: its next value; ⇧-click the previous one. LEN, SPD, SONG: drag up or down to step through them<br>MM: Click: its next value; ⇧-click the previous one; the wheel steps through them. SWING and PTRN: drag up or down</td></tr>
       <tr><th scope="row"><kbd>⌥</kbd> LEN</th><td>MD: Click or drag: the pattern's inner length instead of its total</td></tr>
     </tbody></table></div>
 
     <h3>Mouse: Song</h3>
     <div class="tablewrap"><table><tbody>
-      <tr><th scope="row"><kbd>⇧</kbd> row value − / +</th><td>MD: Click: ten at a time</td></tr>
-      <tr><th scope="row">drag a pattern pad or a row</th><td>MD: Onto the arrangement: a new row there, or the row moved</td></tr>
+      <tr><th scope="row"><kbd>⇧</kbd> row value − / +</th><td>Click: ten at a time</td></tr>
+      <tr><th scope="row">drag a pattern pad or a row</th><td>Onto the arrangement: a new row there, or the row moved</td></tr>
     </tbody></table></div>
 
     <h3>Mouse: Sampler</h3>
@@ -321,14 +322,14 @@
 
     <h3>Mouse: Library</h3>
     <div class="tablewrap"><table><tbody>
-      <tr><th scope="row">kit slot</th><td>MD: Click: load it (⌥-click: only select it). Double-click: rename</td></tr>
-      <tr><th scope="row"><kbd>⇧</kbd> pattern slot</th><td>MD: Click: go there at once, not at the end of the pattern</td></tr>
-      <tr><th scope="row">drag a slot onto another</th><td>MD: Copy it there</td></tr>
+      <tr><th scope="row">kit slot</th><td>Click: load it (⌥-click: only select it). Double-click: rename</td></tr>
+      <tr><th scope="row"><kbd>⇧</kbd> pattern slot</th><td>Click: go there at once, not at the end of the pattern</td></tr>
+      <tr><th scope="row">drag a slot onto another</th><td>Copy it there</td></tr>
     </tbody></table></div>
 
     <h3>Mouse: Anywhere</h3>
     <div class="tablewrap"><table><tbody>
-      <tr><th scope="row">right-click</th><td>MD: The editor's menu: zoom and window size, updates, the log folder, Developer</td></tr>
+      <tr><th scope="row">right-click</th><td>The editor's menu: zoom and window size, updates, the log folder, Developer</td></tr>
     </tbody></table></div>
     <!-- keymap:end -->
 

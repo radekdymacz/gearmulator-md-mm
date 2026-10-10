@@ -157,6 +157,9 @@
 		V().setEngines(d.engines || [], d.capabilities?.engine);
 		markCapabilities(d.capabilities);
 		refresh();
+		/* live recording: the step the value sent locks (desk.recLock {track, param = page x 8 + value, step}) */
+		const rl = d.desk?.recLock, rk = rl ? rl.track + ":" + rl.param + ":" + rl.step : "";
+		if (rk !== last.recLock) { last.recLock = rk; V().setRecLock(rl ? { t: rl.track, pid: PAGES[rl.param >> 3] + "." + (rl.param & 7), s: rl.step } : null); }
 		showEngine();
 		V().renderTop();
 	}

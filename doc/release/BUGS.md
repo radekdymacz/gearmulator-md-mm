@@ -8,8 +8,10 @@ where it came from, the setup, what happens, what should happen, status.*
 
 - **From:** the 0.5 slice-3 firmware test (`mmDeskFirmwareTest notelength`, first draft), 2026-10-10, on the emulator; not seen by a tester yet.
 - **What happens:** pattern E01 (it links K064) set and picked with `select` (the page's pattern chooser; its "edits to K001 will be lost" question confirmed). For 4 s after, the desk's current kit stays K001 (`currentKit() == 0`). A machine change and values sent then on the Sound page land in the kit that plays (memory shows them). The first roll edit (op `step` or `steps`, a dump of E01) then loads K064 from its slot and the edits are gone, on the machine and on the page, which shows the kit as saved. B-027's restore does not run: it only follows a dump whose pattern links the kit the desk thinks plays.
-- **To check:** whether the MM loads a pattern's kit on SX 0x57 LOAD PATTERN at all (the status poll says it did not), and so whether the page's question and the kit it shows are right; then the same on hardware.
-- **Status:** open. The note-length test works on the pattern that plays instead (its own kit).
+- **Cause (measured, 0.5 slice 4, `mmDeskFirmwareTest kitlink`):** the editor was right about the kit, the question and the dump were wrong. OS 1.32B loads the kit a pattern links on a pick of a pattern in **banks A-D** (LOAD PATTERN 0x57 or the panel's BANK + TRIG; stopped at once, playing at the switch; status and memory 0x700023 both say so within 100 ms), and on a pick in **banks E-H it loads no kit**: the kit that played goes on playing, also for an E-H pattern written with another link, and also from the panel (BANK GROUP, BANK + TRIG). So after E01 the machine played K001 and the desk counted K001; the page's question ("will be lost") was false. Then the first roll edit's dump of E01, the pattern that plays, made the firmware load the kit the dump links (B-027's rule), K064, and K001's edits were gone. The Machinedrum's LOAD PATTERN loads the linked kit in EXTENDED mode, so its editor needs neither rule.
+- **Fix (0.5, `feat/mm-slice4`):** the question before a pick only for an A-D pattern (`pickLoadsKit`); a dump of the pattern that plays links the kit that plays unless the edit itself changed the link (`dumpKeepsKit`; as LOAD KIT and SAVE KIT relink it), so the firmware's reload reloads the kit that plays and B-027's restore brings back its edits. The page is told "The pattern now links K001, the kit that plays". Tests: `mmDeskFirmwareTest <MM ROM> kitlink` (K001 edited; pick E01: no question, the machine and the editor on K001; a roll edit of E01: still K001 with its edit, E01 stored with the note and linking K001; pick A02: asked, then K002): 6 failures before, passes after; `mmDeskTest` (the rules; the dump of a pattern that plays linking another kit carries the kit that plays, a changed link is sent as it is).
+- **To check:** the same on hardware (E-H picks load no kit), with B-046.
+- **Status:** fixed on `feat/mm-slice4` for 0.5.
 
 ## B-052 · mdFirstStartFirmwareTest fails now and then
 
@@ -67,7 +69,8 @@ where it came from, the setup, what happens, what should happen, status.*
 
 - **From:** found by the B-031 work, 2026-10-09.
 - **What happens:** with a real backup imported (the Autechre fixture), picking pattern H16 leaves the machine on kit 58 instead of kit 74, the kit the pattern links. The firmware decides this.
-- **Status:** open, not investigated.
+- **Cause (B-053, measured 2026-10-10):** OS 1.32B loads a pattern's kit on a pick in banks A-D only; H16 is in bank H, so the kit that played (58) goes on, from the editor or from the panel. Not the editor's to change; since B-053 the editor no longer asks about lost edits before such a pick and a roll edit of the pattern keeps the kit that plays.
+- **Status:** explained (the firmware's rule); to confirm on hardware.
 
 ## B-045 · Machinedrum: a pattern pick during a SysEx import asks about unsaved kit edits that were never made
 

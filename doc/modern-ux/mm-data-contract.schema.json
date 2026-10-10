@@ -1303,6 +1303,36 @@
               "minimum": -1,
               "maximum": 1,
               "description": "The machine's BANK GROUP: 0 A-D, 1 E-H, -1 unknown (RAM 0x70000b)."
+            },
+            "recLock": {
+              "oneOf": [
+                {
+                  "type": "null"
+                },
+                {
+                  "type": "object",
+                  "required": ["track", "param", "step"],
+                  "properties": {
+                    "track": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 5
+                    },
+                    "param": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 55,
+                      "description": "page x 8 + value: SYN AMP FLT EFX LF1 LF2 LF3"
+                    },
+                    "step": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 63
+                    }
+                  }
+                }
+              ],
+              "description": "Live recording: the step the value last sent locks (the step that plays when it arrives, measured), for about 3 s; as the Machinedrum's."
             }
           }
         },

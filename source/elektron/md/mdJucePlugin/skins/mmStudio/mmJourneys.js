@@ -1128,6 +1128,101 @@ const MmJourneys = (() => {
 			{ say: "press Escape", act: u => u.key("Escape"), screen: () => ok($1("#libpop").hidden, "open") }
 		]
 	};
+	/* B-026 / B-031 (the Machinedrum's md-lib-syx-import-mute): import a file with its globals, then mute on the rail and
+	   play: the machine holds the mute (its memory, not the page's wish); a track the active global gives no MIDI channel
+	   (B-051: base OFF, or beyond CHANNEL SPAN) is refused, and the notice's fix (each track its own channel) makes the next M work. Then the pattern still changes, stopped and
+	   playing. The file is the run's (GEARMULATOR_MDMM_SYX_FILE). */
+	const globalNow = () => I().doc("global", machine().global?.current ?? 0);
+	const reaches = t => { const g = globalNow(); return !!g && g.baseChannel <= 14 && t < g.channelSpan && g.baseChannel + t <= 14; };
+	const railM = t => `#rail .th[data-sel="${t}"] .ms.m`;
+	const syxImportMute = {
+		name: "mm-lib-syx-import-mute",
+		needs: () => new URLSearchParams(location.search).get("syxfile") ? null : "no .syx for the run (GEARMULATOR_MDMM_SYX_FILE)",
+		steps: [
+			openKits2,
+			{ say: "click Import SysEx…, tick Globals too", act: async u => { u.click('#libpop [data-syx="import"]'); await until(() => !$1("#syxpop").hidden && $all("#syxpop [data-syxkind]").length, 8000); const g = $1('#syxpop [data-syxkind="global"]'); if (g && !g.checked) u.click(g); },
+				screen: () => ok(!$1("#syxpop").hidden && !!$1('#syxpop [data-syxkind="global"]')?.checked, "no Globals in the preview"), within: 8000 },
+			{ say: "click Import: sent on SYSEX RECV, read back, reported", act: u => u.click('#syxpop [data-syxgo="start"]'), screen: () => ok(/imported/.test($1("#syxpop .syxsum")?.textContent || ""), "progress: " + ($1("#syxpop .syxbar span")?.textContent || "")), within: 900000 },
+			{ say: "click Done, Escape, then the Sequence tab", act: async u => { u.click('#syxpop [data-syxgo="close"]'); await sleep(300); u.key("Escape"); await sleep(300); u.click(tab("seq")); if (S().side === "midi") u.click('[data-side="int"]'); },
+				screen: () => onTab("seq"), machine: () => ok(!!globalNow() && machine().mutes?.synth != null, "global " + !!globalNow() + ", mutes " + machine().mutes?.synth), within: 8000 },
+			{ say: "click M on a track of the rail: its mute flips on the machine; a track with no MIDI channel (B-051) is refused, the notice offers the fix: take it, then M again",
+				act: async (u, c) => { c.m0 = synthMutes(); c.t = [0, 1, 2, 3, 4, 5].find(t => !c.m0.includes(t)) ?? 0; c.want = !c.m0.includes(c.t); c.fixed = !reaches(c.t); await sleep(1500); u.click(railM(c.t));
+					if (c.fixed) { if (!await until(dlgShown, 4000)) throw new Error("no notice for the refused mute"); u.click(dlgButton("Give each track its own channel")); await until(() => reaches(c.t), 15000); await sleep(3000); u.click(railM(c.t)); } },
+				machine: c => ok(synthMuted(c.t) === c.want, `base ${globalNow()?.baseChannel}, span ${globalNow()?.channelSpan}, track ${c.t + 1}${c.fixed ? " (channels given)" : ""}, machine mutes ${synthMutes()} (before ${c.m0})`),
+				screen: c => ok(pressed(railM(c.t)) === c.want && !dlgShown(), "M " + (pressed(railM(c.t)) ? "lit" : "not lit")), within: 30000 },
+			{ say: "press PLAY: the mute holds", act: u => { tele.steps = []; u.click("#play"); },
+				machine: c => ok(new Set(tele.steps).size >= 4 && synthMuted(c.t) === c.want, `machine mutes ${synthMutes()}, steps ${tele.steps.length}`),
+				screen: c => ok(pressed(railM(c.t)) === c.want, "M " + (pressed(railM(c.t)) ? "lit" : "not lit")), within: 10000 },
+			{ say: "press STOP", act: u => u.click("#play"), machine: () => ok(tele.last && !tele.last.playing, "still playing"), within: 6000 },
+			/* B-031: after an import the pattern still changes, stopped and playing */
+			{ say: "click › next to the pattern: the machine selects it (stopped)", act: async (u, c) => { c.p0 = cur(); u.click("#patNext"); await confirmIfAsked(u); },
+				machine: c => ok(cur() === c.p0 + 1, "machine pattern " + cur()), within: 8000 },
+			{ say: "press PLAY, click ‹: the machine moves to it at the pattern's end (playing)", act: async u => { u.click("#play"); await sleep(500); u.click("#patPrev"); await confirmIfAsked(u); },
+				machine: c => ok(cur() === c.p0 && S().playing, "machine pattern " + cur() + (S().playing ? ", playing" : ", stopped")), within: 30000 },
+			{ say: "press STOP", act: u => u.click("#play"), machine: () => ok(tele.last && !tele.last.playing, "still playing"), within: 6000 }
+		],
+		async tidy(u, c) { if (dlgShown()) u.key("Escape"); if (S().playing) u.click("#play"); await sleep(300); if (c.t != null && synthMuted(c.t) !== c.m0.includes(c.t)) u.click(railM(c.t)); await sleep(500); }
+	};
+	/* the Machinedrum's md-seq-os-copy-paste: one note copied and pasted on its track with ⌘C / ⌘V as the operating system
+	   delivers them (on macOS JUCE's web view turns them into the copy: and paste: commands, never a keydown), and ⌘Z the
+	   same way in */
+	const osCopyPaste = {
+		name: "mm-seq-os-copy-paste", needs: Journey.osKeyPath,
+		steps: [
+			go("seq"),
+			{ say: "pick a synth track with a note and Cmd-click the note: it is selected", act: async (u, c) => {
+				c.t = [0, 1, 2, 3, 4, 5].find(t => trigsOf(t).some(inPat)) ?? 0; if (S().side === "midi") u.click('[data-side="int"]'); u.click(rail(c.t)); await sleep(300);
+				c.t0 = trigsOf(c.t); c.s = c.t0.find(inPat); c.d = [...Array(S().len).keys()].find(s => !S().tracks[c.t].steps[s] && Math.abs(s - c.s) > 1);
+				if (c.d == null) throw new Error("no free step to paste to");
+				if (S().stepSel) clearSel(); const p = rollCell(c.t, c.s); u.click(p.c, { cmd: true }, p.fx, p.fy); },
+				screen: c => ok(same(S().stepSel, { t: c.t, n: 1, from: c.s, to: c.s + 1 }), "selection " + JSON.stringify(S().stepSel)) },
+			{ say: "press Cmd+C on the keyboard (the operating system's way in)", act: async u => { blur(); await u.osKey("focus cmd+c"); },
+				screen: () => ok(Keys.seen().includes("cmd+C") && /Copied/.test($1("#toast")?.textContent || ""), "keys that reached the page: " + Keys.seen().join(" ") + "; toast " + $1("#toast")?.textContent), within: 4000 },
+			{ say: "Cmd-click an empty step of the same track", act: (u, c) => { const p = rollCell(c.t, c.d); u.click(p.c, { cmd: true }, p.fx, p.fy); }, screen: c => ok(same(S().stepSel, { t: c.t, n: 1, from: c.d, to: c.d + 1 }), "selection " + JSON.stringify(S().stepSel)) },
+			{ say: "press Cmd+V on the keyboard: the note lands there", act: u => u.osKey("cmd+v"), screen: c => ok(!!S().tracks[c.t].steps[c.d]?.n, "roll shows nothing there"),
+				machine: c => ok(trigsOf(c.t).includes(c.d), "pattern " + trigsOf(c.t).join(",")), within: 15000 },
+			{ say: "press Escape, then Cmd+Z on the keyboard: the track as before", act: async u => { blur(); u.key("Escape"); await sleep(200); await u.osKey("cmd+z"); },
+				machine: c => ok(same(trigsOf(c.t), c.t0), "pattern " + trigsOf(c.t).join(",")), within: 15000 }
+		],
+		async tidy(u, c) { if (S().stepSel) clearSel(); if (c.t0 && !same(trigsOf(c.t), c.t0)) await undoUntil(u, () => same(trigsOf(c.t), c.t0)); }
+	};
+	/* the Machinedrum's md-seq-rotate-undo: a rotate run ends when the page sees Alt up in any event, not only in Alt's own
+	   keyup (which may never come: these synthetic chords send none, as a window switch can lose it); the next rotate is
+	   then its own undo step */
+	const rotateUndo = {
+		name: "mm-seq-rotate-undo",
+		steps: [
+			go("seq"),
+			{ say: "pick a synth track with notes that a rotate changes", act: (u, c) => { const L = S().len, r = a => a.map(s => s >= L ? s : (s + 1) % L).sort((x, y) => x - y);
+				c.t = [0, 1, 2, 3, 4, 5].find(t => trigsOf(t).length && !same(r(trigsOf(t)), trigsOf(t)) && !same(r(r(trigsOf(t))), r(trigsOf(t)))); if (c.t == null) throw new Error("no track a rotate changes");
+				c.t0 = trigsOf(c.t); c.t1 = r(c.t0); if (S().side === "midi") u.click('[data-side="int"]'); u.click(rail(c.t)); }, screen: c => ok(S().sel === c.t, "selected " + S().sel) },
+			{ say: "press Alt+→: one step later", act: u => { blur(); u.key("ArrowRight", { alt: true }); }, machine: c => ok(same(trigsOf(c.t), c.t1), "notes " + trigsOf(c.t).join(",")), within: 15000 },
+			{ say: "press Shift (Alt is up now), then Alt+→ again: another rotate", act: async u => { u.key("Shift"); await sleep(300); u.key("ArrowRight", { alt: true }); }, machine: c => ok(!same(trigsOf(c.t), c.t1), "notes " + trigsOf(c.t).join(",")), within: 15000 },
+			{ say: "Cmd+Z: only the second rotate is undone", act: u => { blur(); u.key("z", { cmd: true }); }, machine: c => ok(same(trigsOf(c.t), c.t1), "notes " + trigsOf(c.t).join(",") + ", want " + c.t1.join(",")), within: 15000 },
+			{ say: "Cmd+Z: and then the first", act: u => u.key("z", { cmd: true }), machine: c => ok(same(trigsOf(c.t), c.t0), "notes " + trigsOf(c.t).join(",") + ", want " + c.t0.join(",")), within: 15000 }
+		],
+		async tidy(u, c) { if (c.t0 && !same(trigsOf(c.t), c.t0)) await undoUntil(u, () => same(trigsOf(c.t), c.t0), 4); }
+	};
+	/* the Machinedrum's md-mix-fader-undo: a LEVEL fader dragged, then Cmd+Z: the kit's level as before */
+	const faderUndo = {
+		name: "mm-mix-fader-undo",
+		steps: [
+			go("mix"),
+			{ say: "drag track 2's LEVEL fader", act: async (u, c) => { c.l0 = wk().levels[1]; const d = c.l0 > 64 ? 1 : -1; await u.drag(strip(1, '.fader[data-g="lev"]'), [[0, d * 8], [0, d * 16], [0, d * 24]]); },
+				screen: c => ok($1(strip(1, ".lread")).textContent === String(S().tracks[1].lev) && S().tracks[1].lev !== c.l0, "shows " + $1(strip(1, ".lread")).textContent), machine: c => ok(wk().levels[1] !== c.l0, "kit level " + wk().levels[1]), within: 8000 },
+			{ ...undoKey, act: u => { blur(); u.key("z", { cmd: true }); }, machine: c => ok(wk().levels[1] === c.l0, "kit level " + wk().levels[1]), screen: c => ok($1(strip(1, ".lread")).textContent === String(c.l0), "shows " + $1(strip(1, ".lread")).textContent), within: 8000 }
+		]
+	};
+	/* Radek 2026-10-10: ⇧B taps the tempo on every workspace of both editors, Sequence included (B is Draw there) */
+	const tapTempoShift = {
+		name: "mm-keys-tap-tempo-shift",
+		steps: [
+			go("seq"),
+			{ say: "on Sequence tap Shift+B five times, about 0.5 s apart: the tempo follows, Draw stays as it was", act: async (u, c) => { c.b0 = machine().tempo; c.d0 = S().rollDraw; blur(); const at = []; for (let i = 0; i < 5; i++) { at.push(performance.now()); u.key("B", { shift: true }); await sleep(500); } c.want = Math.round(60000 / ((at[4] - at[0]) / 4) * 10) / 10; c.note = c.want + " BPM"; },
+				screen: c => ok(Math.abs(S().bpm - c.want) <= 1.5 && S().rollDraw === c.d0, "BPM " + S().bpm + ", want " + c.want + ", Draw " + S().rollDraw), machine: c => ok(Math.abs(machine().tempo - c.want) <= 1.5, "tempo " + machine().tempo + ", want " + c.want), within: 8000 }
+		],
+		async tidy(u, c) { if (c.b0 != null) { const d = c.b0 > machine().tempo ? -1 : 1; await u.drag("#bpm", [[0, d * 2 * (c.b0 - machine().tempo)]]); } }
+	};
 	/* the SysEx import panel as screenshots for a design review (scripts/mdmm-shots.sh with MDMM_SHOTS_JOURNEY=mm-shots-import
 	   and GEARMULATOR_MDMM_SYX_FILE): the preview's tabs, then the default kinds imported (importing, the report).
 	   Each step logs "SHOT <name>" and holds while the script captures the window. */
@@ -1213,7 +1308,7 @@ const MmJourneys = (() => {
 		audioPanel, romCard, notePlay,
 		tapTempo, queue, dialogKeys, trackKeys, muteKeys, lockRamp, pages, copyPaste, clearAll, fill, rotate, pasteMany, liveRec, genKeys, mutScope,
 		valueKeys, soundCopy, screenDrag, dragM, midiMutes, joyAssign, menvPort, menvLayout, osHelp, songInspector, songDrag, kitSaveAs, kitRename, kitClear, patClear, hwNoMachine,
-		blackKeys, rollPaint, rollDrawLength, rollBoxMove, rollMidiLen, selectCopyPaste, stepMenuJ, buttonsCopyPaste, syxImportJ, shotsImport, editorMenuJ, dropSyxJ, globalChannels, globalReset, globalSlot, shotsGlobal];
+		blackKeys, rollPaint, rollDrawLength, rollBoxMove, rollMidiLen, selectCopyPaste, stepMenuJ, buttonsCopyPaste, syxImportJ, syxImportMute, osCopyPaste, rotateUndo, faderUndo, tapTempoShift, shotsImport, editorMenuJ, dropSyxJ, globalChannels, globalReset, globalSlot, shotsGlobal];
 
 	async function between(u) {
 		for (let i = 0; i < 3 && dlgShown(); i++) { u.key("Escape"); await sleep(200); }
