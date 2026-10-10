@@ -988,6 +988,36 @@ const MmJourneys = (() => {
 			{ say: "click Done", act: u => { u.click('#syxpop .syxfoot [data-syxgo="close"]'); shot("done"); }, screen: () => ok($1("#syxpop").hidden, "still open") },
 			{ say: "press Escape", act: u => u.key("Escape"), screen: () => ok($1("#libpop").hidden, "open") }
 		] };
+	/* B-051, F3: GLOBAL › MIDI. CHANNEL SPAN 0 (as an imported 2008 backup has it): T3 has no channel, its mute is refused
+	   and its sound value still reaches the machine (a kit dump); span back: the mute lands again. */
+	const gSpan = () => I().doc("global", machine().global?.current ?? 0)?.channels?.span;
+	const spanTo = async (u, n) => { for (let i = 0; i < 17 && S().glob && S().glob.span !== n; i++) { u.click(`#globpop [data-ga="span"][data-d="${S().glob.span > n ? -1 : 1}"]`); await sleep(120); } };
+	const globalChannels = {
+		name: "mm-global-channels",
+		steps: [
+			{ say: "click GLOBAL in the top bar: the panel opens with the MIDI channels, the key is lit", act: u => u.click("#globkey"),
+				screen: () => ok(!$1("#globpop").hidden && pressed("#globkey") && $all("#globpop .gtk").length === 6, "panel " + ($1("#globpop").hidden ? "closed" : "open")),
+				machine: c => { c.s0 = gSpan(); return ok(c.s0 != null, "no global"); } },
+			{ say: "click − beside Channel span down to 0: no track has a channel, the panel says so", act: u => spanTo(u, 0),
+				machine: () => ok(gSpan() === 0, "span " + gSpan()), screen: () => ok($all("#globpop .gtk.none").length === 6 && !$1("#globpop .gwarn").hidden, $all("#globpop .gtk.none").length + " tracks without"), within: 20000 },
+			{ say: "press Escape, click track 3's M on the rail: refused, nothing muted", act: async (u, c) => { u.key("Escape"); await sleep(200); u.click(tab("seq")); await sleep(300); c.m0 = synthMutes(); u.click('#rail .th[data-sel="2"] .ms.m'); await sleep(1500); },
+				machine: c => ok(same(synthMutes(), c.m0), "machine mutes " + synthMutes()), screen: () => ok(!pressed('#rail .th[data-sel="2"] .ms.m'), "M lit"), within: 8000 },
+			go("mix"),
+			{ say: "drag track 3's PAN bar: the machine takes it (a kit dump, no channel)", act: async (u, c) => { c.p0 = wk().tracks[2].pages[1][6]; const d = c.p0 > 64 ? -1 : 1; await u.drag(strip(2, ".pc.pan"), [[d * 8, 0], [d * 16, 0], [d * 24, 0]]); },
+				machine: c => ok(wk().tracks[2].pages[1][6] !== c.p0, "PAN " + wk().tracks[2].pages[1][6]), within: 15000 },
+			{ ...undoKey, act: u => { blur(); u.key("z", { cmd: true }); }, machine: c => ok(wk().tracks[2].pages[1][6] === c.p0, "PAN " + wk().tracks[2].pages[1][6]), within: 15000 },
+			{ say: "open GLOBAL, click + beside Channel span back", act: async (u, c) => { u.click("#globkey"); await sleep(300); await spanTo(u, c.s0); },
+				machine: c => ok(gSpan() === c.s0, "span " + gSpan()), screen: () => ok(!$all("#globpop .gtk.none").length || gSpan() < 6, "tracks without a channel"), within: 20000 },
+			{ say: "press Escape, wait for the channels, click track 3's M: it mutes", act: async u => { u.key("Escape"); await sleep(6500); u.click(tab("seq")); await sleep(300); u.click('#rail .th[data-sel="2"] .ms.m'); },
+				machine: () => ok(synthMuted(2), "machine mutes " + synthMutes()), within: 8000 },
+			{ say: "click M again", act: u => u.click('#rail .th[data-sel="2"] .ms.m'), machine: () => ok(!synthMuted(2), "machine mutes " + synthMutes()) }
+		],
+		async tidy(u, c) {
+			if (c.s0 != null && gSpan() !== c.s0) { if ($1("#globpop").hidden) { u.click("#globkey"); await sleep(300); } await spanTo(u, c.s0); await until(() => gSpan() === c.s0, 15000); }
+			if (!$1("#globpop").hidden) u.key("Escape");
+			if (synthMuted(2)) u.click('#rail .th[data-sel="2"] .ms.m');
+		}
+	};
 	/* I-008: the editor's menu (shared/deskJourney.js editorMenuJourney), as the Machinedrum's */
 	const editorMenuJ = Journey.editorMenuJourney("mm-top-editor-menu", "Monomachine Editor");
 	const all = [bootCard, firstBeat, spaceKey, tempoDrag, patNext, wsKeys, helpKeys, plate, undoRedo, gridRecord, slidePaint, lenKey, lockLane, arpDock, arpRange, trnKeys,
@@ -996,7 +1026,7 @@ const MmJourneys = (() => {
 		audioPanel, romCard, notePlay,
 		tapTempo, queue, dialogKeys, trackKeys, muteKeys, lockRamp, pages, copyPaste, clearAll, fill, rotate, pasteMany, liveRec, genKeys, mutScope,
 		valueKeys, soundCopy, screenDrag, dragM, midiMutes, joyAssign, menvPort, menvLayout, osHelp, songInspector, songDrag, kitSaveAs, kitRename, kitClear, patClear, hwNoMachine,
-		blackKeys, rollPaint, syxImportJ, shotsImport, editorMenuJ, dropSyxJ];
+		blackKeys, rollPaint, syxImportJ, shotsImport, editorMenuJ, dropSyxJ, globalChannels];
 
 	async function between(u) {
 		for (let i = 0; i < 3 && dlgShown(); i++) { u.key("Escape"); await sleep(200); }

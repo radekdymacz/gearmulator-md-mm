@@ -2608,6 +2608,86 @@
         },
         {
           "type": "object",
+          "description": "core: GLOBAL › MIDI: the active global's channels (0-15, null OFF; base + t is track t's while t < span) and CONTROL IN (clockIn: TEMPO SYNC EXT MIDI CLK, transportIn: TRANSPORT ACCEPT)",
+          "required": ["op"],
+          "properties": {
+            "op": {
+              "const": "globalMidi"
+            },
+            "id": {
+              "type": "integer"
+            },
+            "g": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "force": {
+              "type": ["boolean", "integer"]
+            },
+            "base": {
+              "oneOf": [
+                {
+                  "type": "null"
+                },
+                {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 15
+                }
+              ]
+            },
+            "span": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 16
+            },
+            "auto": {
+              "oneOf": [
+                {
+                  "type": "null"
+                },
+                {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 15
+                }
+              ]
+            },
+            "multiTrig": {
+              "oneOf": [
+                {
+                  "type": "null"
+                },
+                {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 15
+                }
+              ]
+            },
+            "multiMap": {
+              "oneOf": [
+                {
+                  "type": "null"
+                },
+                {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 15
+                }
+              ]
+            },
+            "clockIn": {
+              "type": ["boolean", "integer"]
+            },
+            "transportIn": {
+              "type": ["boolean", "integer"]
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
           "description": "core: a step's value: null empty, {off:true} a NOTE OFF, {n:[note...], a, f, l, notrig?} a trig (n: its pitch, chord notes after the base; a f l: AMP FILTER LFO)",
           "required": ["op", "p", "t", "s", "v"],
           "properties": {

@@ -442,6 +442,35 @@ namespace
 			none.onPageMessage(*ed::json::parse(R"({"op":"noteOn","id":27,"t":0,"vel":100,"pitch":0})"));
 			check(!lastResult().find("ok")->asBool(), "noteOn: an engine without notes refuses");
 		}
+
+		// B-051: CHANNEL SPAN 0 in the active global (GLOBAL › MIDI on the page): no track has a MIDI channel of its own.
+		// A sound value goes as a kit dump to the slot (then LOAD KIT), never as a CC another track might take; mutes and
+		// notes are refused with the reason. Back to 6: CCs again.
+		{
+			msg(R"({"op":"globalMidi","id":40,"span":0})");
+			check(lastResult().find("ok")->asBool(), ("globalMidi: CHANNEL SPAN 0 taken " + error()).c_str());
+			run(4000);
+			const auto* g = d.documents().globals.count(0) ? &d.documents().globals.at(0) : nullptr;
+			check(g && g->channelSpan == 0 && m.slots[{0x50, 0}] == ed::encodeMmGlobal(*g), "the machine's global holds CHANNEL SPAN 0");
+			params.clear();
+			const auto kitDumps = m.seen[0x52];
+			msg(R"({"op":"param","id":41,"k":5,"t":2,"page":1,"i":3,"v":99})");
+			check(lastResult().find("ok")->asBool(), ("param on T3 taken " + error()).c_str());
+			run(4000);
+			check(params.empty(), "span 0: no CC for T3's value");
+			check(m.seen[0x52] > kitDumps && ed::decodeMmKit(m.slots[{0x52, 5}])->tracks[2].pages[1][3] == 99, "span 0: T3's value reaches the kit slot as a dump");
+			msg(R"({"op":"mute","id":42,"t":2,"on":true})");
+			check(!lastResult().find("ok")->asBool() && error().find("no MIDI channel of its own") != std::string::npos, "span 0: T3's mute is refused with the reason");
+			const auto n0 = notes.size();
+			msg(R"({"op":"noteOn","id":43,"t":0,"vel":90,"pitch":7})");
+			check(!lastResult().find("ok")->asBool() && notes.size() == n0, "span 0: no note for T1");
+			msg(R"({"op":"globalMidi","id":44,"span":6})");
+			run(4000);
+			params.clear();
+			msg(R"({"op":"param","id":45,"k":5,"t":2,"page":1,"i":3,"v":98})");
+			run(500);
+			check(params.size() == 1 && std::get<0>(params[0]) == 2 && std::get<3>(params[0]) == 98, "span 6: T3's value is its CC again");
+		}
 	}
 }
 

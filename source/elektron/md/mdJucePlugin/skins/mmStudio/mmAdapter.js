@@ -301,10 +301,11 @@
 	function keyChannel() {
 		const c = chan();
 		if (!c) return null;
-		const ch = V().mode() === "multi" ? c.multiTrig : V().mode() === "map" ? c.multiMap : c.base + V().asgT();
-		return ch >= 0 && ch < 16 ? ch : null;
+		const ch = V().mode() === "multi" ? c.multiTrig : V().mode() === "map" ? c.multiMap : trackChannel(V().asgT());
+		return ch != null && ch >= 0 && ch < 16 ? ch : null;
 	}
-	const trackChannel = t => { const c = chan(); const ch = c ? c.base + t : -1; return ch >= 0 && ch < 16 ? ch : null; };
+	/* B-051: a track's own channel by the machine's rule (base + t inside CHANNEL SPAN, up to channel 15), else null */
+	const trackChannel = t => { const c = chan(); return c ? MmView.trackChannel({ base: c.base <= 15 ? c.base : null, span: c.span }, t) : null; };
 	const midi = (b, key) => send({ op: "midi", b }, key ? { key } : {});
 	let held = null;
 	function noteOff() { if (held) { midi([0x80 | held.ch, held.n, 0]); held = null; } }
@@ -478,7 +479,7 @@
 		sendNow() { send({ op: "hwSend" }, { onResult: r => V().toast(r.ok ? r.note : r.errors[0]) }); },
 		playKey(n) {
 			const ch = keyChannel();
-			if (ch == null) { V().setKeyDown(n, "That MIDI channel is OFF in the global (GLOBAL › MIDI › CHANNELS)."); return; }
+			if (ch == null) { V().setKeyDown(n, "No MIDI channel for this in the active global: GLOBAL › MIDI (the GLOBAL key)."); return; }
 			if (held && held.n === n && held.ch === ch) return;
 			noteOff();
 			midi([0x90 | ch, n, 100]);

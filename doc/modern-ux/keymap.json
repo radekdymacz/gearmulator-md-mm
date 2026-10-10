@@ -1576,6 +1576,29 @@
 			"area": "GEN bar"
 		},
 		{
+			"id": "global-key",
+			"scope": "any",
+			"keys": [
+				"GLOBAL key"
+			],
+			"mod": "",
+			"group": "Anywhere",
+			"does": "The machine's MIDI settings, kept in its active global: the channels each track listens on, sync in (also the engine menu: GLOBAL…)",
+			"area": "Top bar"
+		},
+		{
+			"id": "close-global",
+			"scope": "any",
+			"keys": [
+				"Escape"
+			],
+			"mod": "",
+			"group": "Anywhere",
+			"does": "Close the GLOBAL settings",
+			"short": "Close",
+			"dispatched": true
+		},
+		{
 			"id": "lib-open",
 			"scope": "library",
 			"keys": [

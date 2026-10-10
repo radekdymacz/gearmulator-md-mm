@@ -1295,6 +1295,27 @@ namespace mmDesk
 		}
 
 
+		// GLOBAL › MIDI: the MIDI CHANNELS (a channel 0-15, null OFF: 0x7f, as the machine stores it) and CONTROL IN
+		std::optional<MmGlobal> globalMidi(MmGlobal _g, const In& _in)
+		{
+			const auto channel = [&](const char* _key, uint8_t& _to)
+			{
+				if(const auto* v = _in.a.value(_key))
+					_to = v->isNull() ? uint8_t{0x7f} : static_cast<uint8_t>(v->asNumber());
+			};
+			channel("base", _g.baseChannel);
+			channel("auto", _g.autoChannel);
+			channel("multiTrig", _g.multiTrigChannel);
+			channel("multiMap", _g.multiMapChannel);
+			if(_in.a.has("span"))
+				_g.channelSpan = static_cast<uint8_t>(_in.a.integer("span"));
+			if(_in.a.has("clockIn"))
+				_g.tempoSync = _in.a.flag("clockIn") ? 1 : 0;
+			if(_in.a.has("transportIn"))
+				_g.transportIn = _in.a.flag("transportIn") ? 1 : 0;
+			return _g;
+		}
+
 		// ---- the MULTI MAP: up to 32 key ranges [upper key, pattern (255 CUR), offset (255 ---), length, transpose, timing];
 		// the ranges in use end where an upper key repeats (the ones past it repeat the last upper key) ----
 		size_t mapRows(const MmGlobal& _g)
@@ -1428,7 +1449,7 @@ namespace mmDesk
 
 		const Edits<MmGlobal>& globalEdits()
 		{
-			static const Edits<MmGlobal> edits{{"routing", routing}, {"midiTrack", midiTrack}, {"multiMap", multiMap},
+			static const Edits<MmGlobal> edits{{"routing", routing}, {"midiTrack", midiTrack}, {"globalMidi", globalMidi}, {"multiMap", multiMap},
 				{"multiMapSplit", multiMapSplit}, {"multiMapDelete", multiMapDelete}};
 			return edits;
 		}

@@ -302,6 +302,12 @@ namespace mmDesk
 			{"routing", Owner::Core, Gate::Input, G, {{"v", ArgType::Text, 0, 0, false, {"3xSTEREO+AB=MIX", "3xSTEREO", "6xMONO"}}}, "the routing mode"},
 			{"midiTrack", Owner::Core, Gate::Input, G, {t6, {"ch", ArgType::Integer, 0, 15, true}, {"cc", ArgType::Array, 0, 0, true}},
 				"a MIDI sequencer track's channel and its CL1-4 CC numbers (four of 0-127, 128 = AFT)"},
+			// B-051, F3: the GLOBAL page's MIDI part (manual 1-89, 1-91): the active global's MIDI CHANNELS and CONTROL IN
+			{"globalMidi", Owner::Core, Gate::Input, G, {{"base", ArgType::IntegerOrNull, 0, 15, true}, {"span", ArgType::Integer, 0, 16, true},
+				{"auto", ArgType::IntegerOrNull, 0, 15, true}, {"multiTrig", ArgType::IntegerOrNull, 0, 15, true},
+				{"multiMap", ArgType::IntegerOrNull, 0, 15, true}, {"clockIn", ArgType::Bool, 0, 0, true}, {"transportIn", ArgType::Bool, 0, 0, true}},
+				"GLOBAL › MIDI: the active global's channels (0-15, null OFF; base + t is track t's while t < span) and CONTROL IN"
+				" (clockIn: TEMPO SYNC EXT MIDI CLK, transportIn: TRANSPORT ACCEPT)"},
 			// ---- the edit intents: Sequence (a pattern) ----
 			{"step", Owner::Core, Gate::Input, P, {p, t12, step, {"v", ArgType::Any}},
 				"a step's value: null empty, {off:true} a NOTE OFF, {n:[note...], a, f, l, notrig?} a trig (n: its pitch, chord notes after the base; a f l: AMP FILTER LFO)"},

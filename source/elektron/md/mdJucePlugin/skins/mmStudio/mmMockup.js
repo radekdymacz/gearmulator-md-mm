@@ -78,7 +78,7 @@ function newMidi(ch){return{m:"MIDI",name:"MIDI "+ch,ch,v:{MID:[...DEFV.MID]},cc
 const note=(n,bits=[1,1,1])=>({n:Array.isArray(n)?n:[n],a:bits[0],f:bits[1],l:bits[2]});
 
 const S={ws:"seq",sel:0,side:"int",len:32,mult:"1X",swingAmt:58,playing:false,step:-1,bpm:120,pat:0,kit:0,kitState:"clean",queued:null,trigSel:"ALL",
- lane:"FLT.1",lanePage:"FLT",locks:new Map(),patTrn:64,routing:"3xSTEREO+AB=MIX",plate:"mk2",engine:"emu",pend:0,patSent:"live",rec:false,
+ lane:"FLT.1",lanePage:"FLT",locks:new Map(),patTrn:64,routing:"3xSTEREO+AB=MIX",glob:{slot:0,base:0,span:6,auto:8,multiTrig:6,multiMap:7,clockIn:false,transportIn:false},plate:"mk2",engine:"emu",pend:0,patSent:"live",rec:false,
  mode:"normal",songs:{names:["DEMO SONG",...Array(23).fill("EMPTY")],slot:0,current:0},multi:{mode:0,splitKey:60,splitTrack:3,timing:4},menv:{ATK:0,DEC:127,SUS:127,REL:127,PORT:0},kbOct:3,
  mmap:[{hi:47,pat:0,ofs:0,len:0,trn:64,tim:4},{hi:59,pat:1,ofs:0,len:16,trn:64,tim:4},{hi:71,pat:0,ofs:0,len:0,trn:69,tim:4},{hi:127,pat:2,ofs:8,len:8,trn:64,tim:1}],mmapSel:1,
  gmutes:null,rollLo:36,ghost:true,asTab:"JOY RL",joy:{x:0,y:0},
@@ -446,7 +446,7 @@ window.MMDemoHost=window.MMHost?null:(()=>{
  function viewOf(){const F=(t,f)=>Object.fromEntries(f.map(n=>[n,copyV(t[n])]));
   return{ready:true,pat:S.pat,kit:S.kit,songSlot:S.songSlot??0,queued:S.queued,kitState:S.kitState,bpm:S.bpm,workName:S.workName,routing:S.routing,
    tracks:S.tracks.map(t=>F(t,[...KIT_F,...SEQ_F])),midi:S.midi.map(t=>F(t,[...MIDI_KIT_F,...SEQ_F])),locks:copyV(S.locks),len:S.len,mult:S.mult,swingAmt:S.swingAmt,
-   patTrn:S.patTrn,multi:copyV(S.multi),menv:copyV(S.menv),song:copyV(S.song),mmap:copyV(S.mmap),plays:copyV(S.plays),
+   patTrn:S.patTrn,multi:copyV(S.multi),menv:copyV(S.menv),song:copyV(S.song),mmap:copyV(S.mmap),plays:copyV(S.plays),glob:copyV(S.glob),
    patLens:Object.fromEntries(S.patInfo.map((x,p)=>[p,p===S.pat?S.len:x.len]))}}
  function put(e){base=structuredClone(e.base);rev=e.rev;const o=JSON.parse(e.lib,(k,v)=>v==="∞"?Infinity:v);Object.assign(S,o);show(base,true);drawLib()}
  const host={
@@ -1723,7 +1723,7 @@ const Syx = (() => {
 		const list = last.items[k], g = layout(last.model, k, list);
 		const style = g.cols ? `grid-template-columns:${k === "global" ? "" : "26px "}repeat(${g.cols},minmax(0,1fr))` : "grid-template-columns:repeat(auto-fill,minmax(110px,1fr))";
 		const body = g.rows.map(r => (g.cols && k !== "global" ? `<span class="syxrl">${r.label}</span>` : "") + r.cells.map(c => cell(k, c)).join("")).join("");
-		const note = k === "global" ? `<p class="syxnote"><b>Globals</b> hold the machine's MIDI channels, sync and settings: off unless you tick them, and the active one becomes active at once.</p>`
+		const note = k === "global" ? `<p class="syxnote"><b>Globals</b> hold the machine's MIDI channels, sync and settings: importing one changes the MIDI channels the machine listens on, and so which tracks the editor can mute, play and edit live (GLOBAL shows them). Off unless you tick them; the active one becomes active at once.</p>`
 			: k === "other" ? `<p class="syxnote">Messages that are no kit, pattern, song or global (commands, sounds): sent as they are when ticked.</p>` : "";
 		return `<div class="syxpane${on[k] ? "" : " kindoff"}" data-syxpane="${k}" role="tabpanel"${k === tab ? "" : " hidden"}>${note}<div class="syxgrid${k === "global" ? " g8" : ""}" style="${style}">${body}</div></div>`;
 	}
@@ -3351,6 +3351,65 @@ document.addEventListener("click",e=>{if(S.ws!=="control")return;const C=S.ctl;
  const as=e.target.closest("[data-addsrc]");if(as){const k=as.dataset.addsrc,n=C.sources.filter(x=>x.kind===k).length;const id=k+"X"+Date.now();C.sources.push(k==="lfo"?{id,kind:"lfo",label:"LFO "+"ABCDEFGH"[n],val:64,SHAPE:2,RATE:"1",DEPTH:80}:{id,kind:"rnd",label:"Random "+"ABCDEFGH"[n],val:64,RATE:"1/8",SMOOTH:0,_t:64});C.sel=id;ctlChanged();render();return}});
 document.addEventListener("change",e=>{if(e.target.id==="lt"){S.ctl.addT=+e.target.value;render()}});
 
+/* ---- 117-global.js ---- */
+/* ===== GLOBAL: the machine's MIDI settings (B-051, ROADMAP F3: the MIDI part) =====
+   The Machinedrum Editor's GLOBAL panel (mdDeskGlobal.js) for the Monomachine's GLOBAL › MIDI (manual 1-89, 1-91):
+   the MIDI CHANNELS screen and CONTROL IN, of the active global. S.glob is the view (MmView's globPage: a channel
+   0-15, null OFF); every change is the globalMidi intent, a dump of the active global the machine stores and makes
+   active. A track the global gives no channel of its own (CHANNEL SPAN, or a base near 16) takes no mute or note over
+   MIDI, and its sound values go as kit dumps. Not here yet (F3): the 8 global slots, CONTROL OUT, master tune. */
+var GP={open:false};
+const GCH=c=>c==null?"OFF":String(c+1);
+/* the machine's rule, as the core's (elektronData::mmTrackChannel): base + t inside the span, up to channel 15 */
+const gTrackCh=(g,t)=>g&&g.base!=null&&t<g.span&&g.base+t<=14?g.base+t:null;
+const GTIP={
+ base:"BASE CHANNEL: track t listens on base + t, for its sound values, mute and notes. OFF: no track takes any over MIDI",
+ span:"CHANNEL SPAN: how many tracks, from T1, have a channel of their own. 0: none (as in some old backups)",
+ auto:"AUTO TRACK: notes on this channel play the selected track",
+ multiTrig:"MULTI TRIG: notes on this channel play the tracks as the kit's MULTI TRIG says (Perform)",
+ multiMap:"MULTI MAP: notes on this channel start patterns as the MULTI MAP says (Perform)",
+ clockIn:"TEMPO SYNC: INT plays at its own tempo, EXT follows MIDI clock. In a DAW the plug-in sets EXT itself (it follows the host)",
+ transportIn:"TRANSPORT: ACCEPT reacts to MIDI Start, Stop and Continue. In a DAW the plug-in sets ACCEPT itself",
+ tracks:"Each track's own MIDI channel under these settings; — has none: its mute and notes cannot reach it, the editor sends its sound values as kit dumps (slower)"};
+function drawGlobal(){const pop=$("#globpop");if(!pop)return;if(!GP.open){pop.hidden=true;return}const G=S.glob;
+ if(!G){pop.innerHTML=`<div class="libhead"><span class="cap">Global</span><span class="note">Reading the global settings from the machine…</span><button class="libx" data-ga="close">Esc</button></div>`;pop.hidden=false;placeGlobal();return}
+ const step=(f,label,tip)=>`<span class="stepper" title="${tip}"><button data-ga="${f}" data-d="-1" aria-label="Less">−</button><b class="mono" data-gv="${f}">${label}</b><button data-ga="${f}" data-d="1" aria-label="More">+</button></span>`;
+ const tog=(f,on,tip,a,b)=>`<span class="seg" title="${tip}"><button data-ga="${f}" data-v="1" aria-pressed="${on}">${a}</button><button data-ga="${f}" data-v="0" aria-pressed="${!on}">${b}</button></span>`;
+ const chs=[0,1,2,3,4,5].map(t=>gTrackCh(G,t)),none=chs.map((c,t)=>c==null?"T"+(t+1):null).filter(Boolean);
+ pop.innerHTML=`<div class="libhead"><span class="cap">Global</span><span class="lcdchip">GLOBAL ${G.slot+1}</span><span class="note">GLOBAL › MIDI on the machine (FUNCTION + KIT/SONG). A change is stored in the active global and made active at once.</span><button class="libx" data-ga="close" title="Close (Esc)">Esc</button></div>
+ <div class="globgrid">
+  <section class="card"><header><h3>MIDI channels</h3><span>GLOBAL › MIDI › CHANNELS</span></header>
+   <div class="grow2"><span class="ilab">Base channel</span>${step("base",GCH(G.base),GTIP.base)}</div>
+   <div class="grow2"><span class="ilab">Channel span</span>${step("span",String(G.span),GTIP.span)}</div>
+   <div class="gtracks" title="${GTIP.tracks}">${chs.map((c,t)=>`<span class="gtk${c==null?" none":""}" data-gt="${t}"><small>T${t+1}</small><b>${c==null?"—":c+1}</b></span>`).join("")}</div>
+   <p class="gwarn"${none.length?"":" hidden"}>${none.length===6?"No track":none.join(" ")} ${none.length===1?"has":"have"} no MIDI channel of ${none.length===1?"its":"their"} own: mutes and notes cannot reach ${none.length===1?"it":"them"}, and the editor sends ${none.length===1?"its":"their"} sound values as kit dumps.</p>
+   <div class="grow2"><span class="ilab">Auto track</span>${step("auto",GCH(G.auto),GTIP.auto)}</div>
+   <div class="grow2"><span class="ilab">Multi trig</span>${step("multiTrig",GCH(G.multiTrig),GTIP.multiTrig)}</div>
+   <div class="grow2"><span class="ilab">Multi map</span>${step("multiMap",GCH(G.multiMap),GTIP.multiMap)}</div></section>
+  <section class="card"><header><h3>Sync in</h3><span>GLOBAL › MIDI › CONTROL IN</span></header>
+   <div class="grow2"><span class="ilab">Tempo sync</span>${tog("clockIn",G.clockIn,GTIP.clockIn,"EXT","INT")}</div>
+   <div class="grow2"><span class="ilab">Transport</span>${tog("transportIn",G.transportIn,GTIP.transportIn,"ACCEPT","IGNORE")}</div></section>
+ </div>
+ <div class="libfoot"><span>The GLOBAL key or the engine menu opens it · Esc closes · every change is stored on the machine and made active</span><span class="fw" title="Still on the machine only: the other global slots, CONTROL OUT, master tune">MIDI settings of GLOBAL ${G.slot+1}</span></div>`;
+ pop.hidden=false;placeGlobal()}
+function placeGlobal(){const pop=$("#globpop"),r=$(".lcdpanel").getBoundingClientRect(),top=Math.max(16,r.bottom+8);pop.style.top=(top+scrollY)+"px";pop.style.maxHeight=Math.max(240,innerHeight-top-12)+"px";pop.style.left=Math.max(16,(document.documentElement.clientWidth-pop.offsetWidth)/2+scrollX)+"px"}
+function globKeyLit(){const k=$("#globkey");if(k){k.setAttribute("aria-pressed",String(GP.open));k.classList.toggle("on",GP.open);k.querySelector(".led")?.classList.toggle("on",GP.open)}}
+function openGlobal(){if(typeof closeLib==="function")closeLib(false);GP.open=true;drawGlobal();globKeyLit()}
+function closeGlobal(){GP.open=false;drawGlobal();globKeyLit()}
+/* a channel stepper: OFF, 1 … 16 */
+const gStep=(c,d)=>{const i=Math.max(0,Math.min(16,(c==null?0:c+1)+d));return i===0?null:i-1};
+function globalClick(a){const G=S.glob,f=a.dataset.ga;if(f==="close"){closeGlobal();return}if(!G)return;
+ const d=a.dataset.d!=null?+a.dataset.d:0,v=a.dataset.v!=null?+a.dataset.v:null;let args=null;
+ if(f==="span")args={span:Math.max(0,Math.min(16,G.span+d))};
+ else if(["base","auto","multiTrig","multiMap"].includes(f))args={[f]:gStep(G[f],d)};
+ else if(f==="clockIn"||f==="transportIn")args={[f]:v===1};
+ if(!args||Object.entries(args).every(([k,x])=>G[k]===x))return;
+ Object.assign(G,args);edit("globalMidi",args);drawGlobal()}
+document.addEventListener("click",e=>{if(e.target.closest?.("#globkey")){GP.open?closeGlobal():openGlobal();e.stopPropagation();return}if(!GP.open)return;const pop=$("#globpop");if(pop.contains(e.target)){const a=e.target.closest("[data-ga]");if(a)globalClick(a);return}if(!e.target.closest?.("#dlg,.kpop,#kpop,.lcdeng"))closeGlobal()},true);
+addEventListener("resize",()=>{if(GP.open)placeGlobal()});
+Keys.bind({id:"global-key",scope:"any",area:"Top bar",keys:["GLOBAL key"],group:"Anywhere",does:"The machine's MIDI settings, kept in its active global: the channels each track listens on, sync in (also the engine menu: GLOBAL…)"});
+Keys.bind({id:"close-global",short:"Close",scope:"any",keys:["Escape"],group:"Anywhere",does:"Close the GLOBAL settings",when:()=>GP.open,run:()=>closeGlobal()});
+
 /* ---- 120-song.js ---- */
 
 /* ===== Song (from the MD Editor, with the MM's per-row transpose, 6 + 6 mutes, 200 rows) ===== */
@@ -4073,7 +4132,7 @@ document.addEventListener("click",e=>{
 document.addEventListener("change",e=>{const id=e.target.id,v=e.target.value,tr=trk(S.sel);
  if(id==="romfile"){checkRom(e.target.files[0]);return}
  if(id==="songsel"){if(HOST.songSlot)return HOST.songSlot(+v);S.songs.slot=+v;S.songSlot=+v;render();return}
- if(id==="engsel"){const btn=document.querySelector(".lcdeng");if(v==="audio"){e.target.value=S.engine;btn.querySelector("span").textContent=e.target.selectedOptions[0].text;openAudio();return}if(v==="rom"){e.target.value=S.engine;btn.querySelector("span").textContent=e.target.selectedOptions[0].text;if(HOST.romManage)HOST.romManage();else firstRun();return}
+ if(id==="engsel"){const btn=document.querySelector(".lcdeng");if(v==="global"){e.target.value=S.engine;btn.querySelector("span").textContent=e.target.selectedOptions[0].text;openGlobal();return}if(v==="audio"){e.target.value=S.engine;btn.querySelector("span").textContent=e.target.selectedOptions[0].text;openAudio();return}if(v==="rom"){e.target.value=S.engine;btn.querySelector("span").textContent=e.target.selectedOptions[0].text;if(HOST.romManage)HOST.romManage();else firstRun();return}
   S.engine=v;S.pend=0;renderPst();if(HOST.engine)HOST.engine(v);else startEngine(v);return}
  let m=id.match(/^lp(\d)$/);if(m){editTrack(S.sel,()=>{const l=V("LF"+m[1]);l[0]=+v;l[1]=0});render();return}
  m=id.match(/^ld(\d)$/);if(m){editTrack(S.sel,()=>{V("LF"+m[1])[1]=+v});render();return}
@@ -4287,6 +4346,7 @@ function show(v,all){
   for(const[k,f] of [["tracks",[...KIT_F,...SEQ_F]],["midi",[...MIDI_KIT_F,...SEQ_F]]])if(v[k])v[k].forEach((x,t)=>{const y=was[k]?.[t]||{};for(const n of f)if(put(S[k][t],n,x[n],y[n])){doc=true;if(SEQ_F.includes(n))seq=true}});
   for(const k of["len","mult","swingAmt","patTrn","locks"])if(put(S,k,v[k],was[k])){doc=true;seq=true}
   for(const k of["multi","menv","routing","plays"])if(put(S,k,v[k],was[k]))doc=true;
+  if(put(S,"glob",v.glob,was.glob)&&GP.open)drawGlobal();
   if(put(S,"workName",v.workName,was.workName))top=true;
   for(const k of["pat","kit","queued","bpm","hostTempo"])if(put(S,k,v[k],was[k]))top=true;
   if(v.kitState!==undefined&&v.kitState!==was.kitState){setKitState(v.kitState);top=true}
@@ -4312,7 +4372,7 @@ function setRecord(mode){const on=mode==="grid"||mode==="live";S.recMode=mode;if
 /* an engine state's LCD label: [text, led "on" | "blink" | "off", tooltip] */
 function setEngineLabel(st,label){ENG[st]=label;if(S.eng===st)setEng(st)}
 /* a host's engine map ([{id, label, available, reason}]) in the engine menu, before the menu's own entries */
-function setEngines(list,current){const sel=$("#engsel");if(!sel)return;const own=["audio","rom"];
+function setEngines(list,current){const sel=$("#engsel");if(!sel)return;const own=["audio","global","rom"];
  for(const o of [...sel.options])if(!own.includes(o.value)&&!list.some(e=>e.id===o.value))o.remove();
  const first=[...sel.options].find(o=>own.includes(o.value))||null;
  for(const e of list){let o=sel.querySelector(`option[value="${e.id}"]`);if(!o){o=document.createElement("option");o.value=e.id}sel.insertBefore(o,first);o.textContent=e.label;o.disabled=!e.available;o.title=e.available?"":e.reason||""}
