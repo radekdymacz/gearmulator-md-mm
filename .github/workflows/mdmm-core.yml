@@ -13,7 +13,6 @@ on:
       - "source/3rdparty/**"
       - "source/JUCE"
       - "source/baseLib/**"
-      - "source/bridge/**"
       - "source/dsp56300"
       - "source/dsp56300/**"
       - "source/elektron/CMakeLists.txt"
@@ -28,9 +27,7 @@ on:
       - "source/libresample/**"
       - "source/mc68k"
       - "source/mc68k/**"
-      - "source/networkLib/**"
       - "source/pluginTester/**"
-      - "source/ptypes/**"
       - "source/synthLib/**"
   workflow_dispatch:
   push:
@@ -49,7 +46,6 @@ on:
       - "source/3rdparty/**"
       - "source/JUCE"
       - "source/baseLib/**"
-      - "source/bridge/**"
       - "source/dsp56300"
       - "source/dsp56300/**"
       - "source/elektron/CMakeLists.txt"
@@ -64,9 +60,7 @@ on:
       - "source/libresample/**"
       - "source/mc68k"
       - "source/mc68k/**"
-      - "source/networkLib/**"
       - "source/pluginTester/**"
-      - "source/ptypes/**"
       - "source/synthLib/**"
 
 permissions:
@@ -142,8 +136,6 @@ jobs:
         run: >-
           cmake --build build-mdmm-core --parallel 4 --target
           baseLibBinaryStreamTest
-          bridgeLibTest
-          bridgeServerRomPoolTest
           midiRoutingMatrixTest
           mdAutomationMidiTest
           synthLibAudioTest
@@ -187,7 +179,7 @@ jobs:
           ctest --test-dir build-mdmm-core -C Release --output-on-failure
           --no-tests=error
           --tests-regex
-          '^(baseLibBinaryStreamTest|bridgeLibTest|bridgeServerRomPoolTest|midiRoutingMatrixTest|mdAutomationMidiTest|synthLibAudioTest|synthLibMidiQueueTest|synthLibStateCaptureTest|mdAudioQueueTest|mdAudioFirmwareTest|mdStateTest|mdStateCaptureTest|mdMemoryFastLaneTest|mdFlashTest)$'
+          '^(baseLibBinaryStreamTest|midiRoutingMatrixTest|mdAutomationMidiTest|synthLibAudioTest|synthLibMidiQueueTest|synthLibStateCaptureTest|mdAudioQueueTest|mdAudioFirmwareTest|mdStateTest|mdStateCaptureTest|mdMemoryFastLaneTest|mdFlashTest)$'
 
       - name: Build and run realtime instrumentation gate
         env:

@@ -7,8 +7,6 @@
 
 #include "baseLib/event.h"
 
-#include "client/serverList.h"
-
 #include "skin.h"
 
 namespace pluginLib
@@ -98,9 +96,6 @@ namespace jucePluginEditorLib
 
 		Editor* getEditor() const;
 
-		void enableDspBridge(bool _enable);
-		bridgeClient::ServerList* getRemoteServerList() const { return m_remoteServerList.get(); }
-
 	protected:
 		virtual Editor* createEditor(const Skin& _skin) = 0;
 
@@ -115,6 +110,5 @@ namespace jucePluginEditorLib
 		std::vector<Skin> m_includedSkins;
 		std::vector<uint8_t> m_instanceConfig;
 		std::string m_skinFolderName;
-		std::unique_ptr<bridgeClient::ServerList> m_remoteServerList;
 	};
 }

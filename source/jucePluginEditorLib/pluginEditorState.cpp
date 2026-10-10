@@ -16,24 +16,11 @@
 
 #include "RmlUi/Core/ElementDocument.h"
 
-namespace
-{
-	bridgeLib::PluginDesc getPluginDesc(const pluginLib::Processor& _p)
-	{
-		bridgeLib::PluginDesc pd;
-		_p.getPluginDesc(pd);
-		return pd;
-	}
-}
-
 namespace jucePluginEditorLib
 {
 PluginEditorState::PluginEditorState(Processor& _processor, pluginLib::Controller& _controller, std::vector<Skin> _includedSkins)
 	: m_processor(_processor), m_includedSkins(std::move(_includedSkins))
 {
-	if (m_processor.getConfig().getBoolValue("supportDspBridge", false))
-		m_remoteServerList.reset(new bridgeClient::ServerList(getPluginDesc(_processor)));
-
 	juce::File(getSkinFolder()).createDirectory();
 
 	// point embedded skins to public data folder if they're not embedded
@@ -312,18 +299,6 @@ std::string PluginEditorState::exportSkinToFolder(const Skin& _skin, const std::
 Editor* PluginEditorState::getEditor() const
 {
 	return m_editor.get();
-}
-
-void PluginEditorState::enableDspBridge(const bool _enable)
-{
-	if (_enable && !m_remoteServerList)
-	{
-		m_remoteServerList.reset(new bridgeClient::ServerList(getPluginDesc(m_processor)));
-	}
-	else if (!_enable && m_remoteServerList)
-	{
-		m_remoteServerList.reset();
-	}
 }
 
 void PluginEditorState::openMenu(const Rml::Event& _event)

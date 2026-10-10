@@ -1,20 +1,15 @@
 #include "processor.h"
 
 #include <algorithm>
-#include <chrono>
+#include <limits>
 
 #include "dummydevice.h"
 #include "midiLearnManager.h"
-#include "pluginVersion.h"
 #include "tools.h"
 #include "types.h"
 
 #include "baseLib/binarystream.h"
 #include "baseLib/filesystem.h"
-
-#include "bridgeLib/commands.h"
-
-#include "client/remoteDevice.h"
 
 #include "synthLib/deviceException.h"
 #include "synthLib/os.h"
@@ -37,16 +32,10 @@ namespace pluginLib
 	constexpr uint32_t g_saveVersion = 2;
 	constexpr const char* const g_defaultProgramName = "default";
 
-	bridgeLib::SessionId generateRemoteSessionId()
-	{
-		return std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::system_clock::now().time_since_epoch()).count();
-	}
-
 	Processor::Processor(const BusesProperties& _busesProperties, Properties _properties)
 		: juce::AudioProcessor(_busesProperties)
 		, m_properties(std::move(_properties))
 		, m_midiPorts(*this)
-		, m_remoteSessionId(generateRemoteSessionId())
 		, m_programName(g_defaultProgramName)
 	{
 		juce::File(getPublicRomFolder()).createDirectory();
@@ -248,32 +237,11 @@ namespace pluginLib
 		return *m_plugin;
 	}
 
-	bridgeClient::RemoteDevice* Processor::createRemoteDevice(const synthLib::DeviceCreateParams& _params)
-	{
-		bridgeLib::PluginDesc desc;
-		getPluginDesc(desc);
-		return new bridgeClient::RemoteDevice(_params, std::move(desc), m_remoteHost, m_remotePort);
-	}
-
-	void Processor::getRemoteDeviceParams(synthLib::DeviceCreateParams& _params) const
-	{
-		_params.preferredSamplerate = getPreferredDeviceSamplerate();
-		_params.hostSamplerate = getHostSamplerate();
-	}
-
-	bridgeClient::RemoteDevice* Processor::createRemoteDevice()
-	{
-		synthLib::DeviceCreateParams params;
-		getRemoteDeviceParams(params);
-		return createRemoteDevice(params);
-	}
-
 	synthLib::Device* Processor::createDevice(const DeviceType _type)
 	{
 		switch (_type)
 		{
 		case DeviceType::Local:		return createDevice();
-		case DeviceType::Remote:	return createRemoteDevice();
 		case DeviceType::Dummy:		return new DummyDevice({});
 		}
 		return nullptr;
@@ -344,15 +312,6 @@ namespace pluginLib
 
 	void Processor::saveChunkData(baseLib::BinaryStream& s)
 	{
-		// it is important that this is stored before other chunks to restore state to the remote properly
-		if (m_deviceType == DeviceType::Remote)
-		{
-			baseLib::ChunkWriter cw(s, "REMO", 1);
-			s.write(static_cast<int32_t>(m_deviceType));
-			s.write(m_remoteHost);
-			s.write(m_remotePort);
-		}
-
 		{
 			std::vector<uint8_t> buffer;
 			getPlugin().getState(buffer, synthLib::StateTypeGlobal);
@@ -437,14 +396,10 @@ namespace pluginLib
 			m_programName = _binaryStream.readString();
 		});
 
-		_cr.add("REMO", 1, [this](baseLib::BinaryStream& _binaryStream, uint32_t _version)
-		{
-			const auto type = static_cast<DeviceType>(_binaryStream.read<int32_t>());
-			const auto host = _binaryStream.readString();
-			const auto port = _binaryStream.read<uint32_t>();
-			if (type == DeviceType::Remote)
-				setRemoteDevice(host, port);
-		});
+		// Projects saved by an upstream build with its DSP bridge ("remote device") carry a REMO chunk first: device
+		// type, host and port. The bridge is gone, so the project loads on the local device. The payload is not
+		// read at all, so even a damaged one cannot fail the load; the version is open for the same reason.
+		_cr.add("REMO", std::numeric_limits<uint32_t>::max(), [](baseLib::BinaryStream&, uint32_t) {});
 
 		m_midiPorts.loadChunkData(_cr);
 		m_midiRoutingMatrix.loadChunkData(_cr);
@@ -620,14 +575,6 @@ namespace pluginLib
 		return getConfigFolder() + "midilearn";
 	}
 
-	void Processor::getPluginDesc(bridgeLib::PluginDesc& _desc) const
-	{
-		_desc.plugin4CC = getProperties().plugin4CC;
-		_desc.pluginName = getProperties().name;
-		_desc.pluginVersion = Version::getVersionNumber();
-		_desc.sessionId = m_remoteSessionId;
-	}
-
 	void Processor::setDeviceType(const DeviceType _type, const bool _forceChange/* = false*/)
 	{
 		if(m_deviceType == _type && !_forceChange)
@@ -651,19 +598,6 @@ namespace pluginLib
 				std::string("Failed to create device:\n\n") + 
 				e.what() + "\n\n");
 		}
-
-		if(_type != DeviceType::Remote)
-			m_remoteSessionId = generateRemoteSessionId();
-	}
-
-	void Processor::setRemoteDevice(const std::string& _host, const uint32_t _port)
-	{
-		if(m_remotePort == _port && m_remoteHost == _host && m_deviceType == DeviceType::Remote)
-			return;
-
-		m_remoteHost = _host;
-		m_remotePort = _port;
-		setDeviceType(DeviceType::Remote, true);
 	}
 
 	void Processor::destroyController()
@@ -1142,37 +1076,9 @@ namespace pluginLib
 
 	void Processor::recoverInvalidDevice()
 	{
-		bool recovered = false;
-		if(m_deviceType == DeviceType::Remote)
-		{
-			try
-			{
-				// attempt one reconnect
-				std::unique_ptr<synthLib::Device> newDevice(createRemoteDevice());
-				if(newDevice && newDevice->isValid())
-				{
-					getPlugin().setDevice(newDevice.get());
-					(void)m_device.release();
-					m_device = std::move(newDevice);
-					recovered = true;
-				}
-			}
-			catch (synthLib::DeviceException& e)
-			{
-				juce::MessageManager::callAsync([e]
-				{
-					genericUI::MessageBox::showOk(genericUI::MessageBox::Icon::Warning,
-						"Device creation failed:",
-						std::string("The connection to the remote server has been lost and a reconnect failed. Processing mode has been switched to local processing\n\n") + 
-						e.what() + "\n\n");
-				});
-			}
-		}
-
 		// Force this even if the failed device was already local. The previous code's
 		// ordinary Local -> Local transition was a no-op and left it invalid forever.
-		if(!recovered)
-			setDeviceType(DeviceType::Local, true);
+		setDeviceType(DeviceType::Local, true);
 
 		if(hasController())
 			getController().onStateLoaded();

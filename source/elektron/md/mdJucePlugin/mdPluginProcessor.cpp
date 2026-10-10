@@ -992,20 +992,6 @@ namespace mdJucePlugin
 		});
 	}
 
-	void AudioPluginAudioProcessor::getRemoteDeviceParams(synthLib::DeviceCreateParams& _params) const
-	{
-		Processor::getRemoteDeviceParams(_params);
-		_params.customData = md::deviceCustomData(m_model);
-
-		auto rom = md::RomLoader::findROM(m_model);
-
-		if(rom.isValid())
-		{
-			_params.romData.assign(rom.data().begin(), rom.data().end());
-			_params.romName = rom.getFilename();
-		}
-	}
-
 	pluginLib::Controller* AudioPluginAudioProcessor::createController()
 	{
 		return new mdJucePlugin::Controller(*this);

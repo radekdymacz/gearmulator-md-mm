@@ -51,7 +51,6 @@ on:
       - "source/3rdparty/**"
       - "source/elektron/**"
       - "source/baseLib/**"
-      - "source/bridge/**"
       - "source/hardwareLib/**"
       - "source/synthLib/**"
       - "source/jucePluginData/**"
@@ -61,9 +60,7 @@ on:
       - "source/juceRmlUi/**"
       - "source/juceRmlPlugin/**"
       - "source/libresample/**"
-      - "source/networkLib/**"
       - "source/pluginTester/**"
-      - "source/ptypes/**"
       - "source/dsp56300"
       - "source/mc68k"
 

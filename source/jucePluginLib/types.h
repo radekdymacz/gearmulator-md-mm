@@ -19,7 +19,7 @@ namespace pluginLib
 	{
 		// note: these values are stored in the plugin state, do not change them!
 		Local = 0,
-		Remote = 1,
+		// 1 was Remote (upstream's DSP bridge, deleted in 0.5); an old project's REMO chunk is ignored
 		Dummy = 2
 	};
 }
